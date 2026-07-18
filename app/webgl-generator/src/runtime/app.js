@@ -94,7 +94,7 @@ import {createPatchLabelStyleCommand, createResetAllLabelStylesCommand, createRe
 import {LABEL_STYLE_TYPES, readLabelStyleOverride, resolveLabelStyle} from "./label-style-registry.js";
 import {createPatchLabelLayoutCommand} from "./label-layout-edit-commands.js";
 import {readLabelLayoutOverride} from "./label-layout-registry.js";
-import {createAddMarkerCommand, createDeleteMarkerCommand, createMoveMarkerCommand, createRegenerateResourceMarkersCommand, createSetMarkerNoteCommand, createSetMarkerVisualCommand} from "./marker-edit-commands.js";
+import {createAddMarkerCommand, createDeleteMarkerCommand, createMoveMarkerCommand, createRegenerateResourceMarkersCommand, createSetMarkerNoteCommand, createSetMarkerVisualCommand, regenerateResourceMarkersInChunks} from "./marker-edit-commands.js";
 import {createDeleteMeasurementCommand, createImportMeasurementsCommand, createRenameMeasurementCommand, createSaveMeasurementCommand, createUpdateMeasurementPointsCommand} from "./measurement-edit-commands.js";
 import {measurementHighlightObject, measurementShapeClass} from "./measurement-highlights.js";
 import {
@@ -5294,7 +5294,7 @@ async function applyClimateDownstreamRebuildViaApi(state, documentRef, options =
       editHistory: state.editHistory,
       systems: options.systems || options.selectedSystems || [],
       seed: options.seed,
-      executeSystem: systemId => executeClimateDownstreamSystem(state, documentRef, systemId),
+      executeSystem: (systemId, context) => executeClimateDownstreamSystem(state, documentRef, systemId, context),
       executeCommand: command => executeEditCommand(state, documentRef, command, {
         context: {map: state.map},
         refresh: () => {},
@@ -5319,7 +5319,7 @@ async function applyClimateDownstreamRebuildViaApi(state, documentRef, options =
     }
     updateGenerationLoading(documentRef, true, "正在刷新气候下游结果");
     await yieldToBrowser(documentRef);
-    refreshClimateDownstreamRebuildState(state, documentRef, execution.command);
+    await refreshClimateDownstreamRebuildState(state, documentRef, execution.command);
     const result = {
       executed: true,
       seed: execution.seed,
@@ -5341,7 +5341,7 @@ async function applyClimateDownstreamRebuildViaApi(state, documentRef, options =
     setFileOperationStatus(documentRef, `已完成气候下游重算：${result.executionOrder.join(" -> ")}`);
     return result;
   } catch (error) {
-    refreshClimateDownstreamRebuildState(state, documentRef, {
+    await refreshClimateDownstreamRebuildState(state, documentRef, {
       effects: {
         render: "draw",
         selection: "refresh",
@@ -5357,10 +5357,35 @@ async function applyClimateDownstreamRebuildViaApi(state, documentRef, options =
   }
 }
 
-function executeClimateDownstreamSystem(state, documentRef, systemId) {
-  if (systemId === "markers") return regenerateMarkerResources(state, documentRef, {deferRefresh: true});
+async function executeClimateDownstreamSystem(state, documentRef, systemId, context = {}) {
+  if (systemId === "markers") return regenerateMarkerResourcesForClimate(state, documentRef, context.regenerationSalt);
   if (systemId === "economy") return rebuildEconomyViaAction(state, documentRef, {label: "气候下游重算：经济", deferRefresh: true});
   return regenerateMapAttribute(state, systemId, documentRef);
+}
+
+async function regenerateMarkerResourcesForClimate(state, documentRef, regenerationSalt) {
+  const map = state.map;
+  const beforeResources = map.markers?.metadata?.resourceMarkers || 0;
+  const beforePotential = map.markers?.metadata?.resourcePotential || 0;
+  const salt = nextRegenerationSalt(map, "markers");
+  if (Number.isInteger(regenerationSalt) && regenerationSalt !== salt) throw new Error("气候资源点重算扰动序号不一致");
+  const execution = await regenerateResourceMarkersInChunks(map, {
+    salt,
+    yieldToMain: () => yieldToBrowser(documentRef)
+  });
+  if (!execution.executed) return regenerationResult("markers", "未执行", "当前地图缺少可用 pack 语义图或标记集合，无法重生成资源点。");
+  markDerivedFresh(map, ["markers", "economy"]);
+  markDerivedStale(map, ["military", "diplomacy"]);
+  refreshGenerationSummary(map);
+  appendGenerationLog(map, `regenerate resources: salt=${salt}, resources=${map.markers.metadata.resourceMarkers}, resourcePotential=${map.markers.metadata.resourcePotential}, markerResourceDeals=${map.economy?.metadata?.resourceTrade?.markerResourceDeals || 0}`);
+  return {
+    ...regenerationResult(
+      "markers",
+      `资源点已按当前地形、河流、生物群系、温度和降水约束重算（扰动 #${salt}）：${beforeResources} -> ${map.markers.metadata.resourceMarkers}；资源潜力 ${beforePotential} -> ${map.markers.metadata.resourcePotential}`,
+      "已刷新资源 marker、正式货物来源、市场库存、交易、国家/省份资源潜力、点图层、对象索引和统计；军事与外交已标记为待派生。"
+    ),
+    timings: execution.timings
+  };
 }
 
 function climateDownstreamPublicStep(step) {
@@ -5373,13 +5398,16 @@ function climateDownstreamPublicStep(step) {
   };
 }
 
-function refreshClimateDownstreamRebuildState(state, documentRef, commandOrEffects) {
+async function refreshClimateDownstreamRebuildState(state, documentRef, commandOrEffects) {
   state.renderer.refreshObjectPickingIndex?.();
+  await yieldToBrowser(documentRef);
   state.selectionStore.batch(() => {
     reconcilePersistentObjectHighlights(state, documentRef, {refreshUi: false});
     refreshAfterEdit(state, commandOrEffects);
   });
+  await yieldToBrowser(documentRef);
   refreshPanelsForEdit(state, commandOrEffects);
+  await yieldToBrowser(documentRef);
   updateClimatePanel(state);
   updateRuntimePanel(documentRef, state);
   updateEditingInteractionLock(state, documentRef);

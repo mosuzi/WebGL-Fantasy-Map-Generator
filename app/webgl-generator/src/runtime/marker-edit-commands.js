@@ -258,6 +258,32 @@ export function createRegenerateResourceMarkersCommand({salt = 0} = {}) {
   };
 }
 
+export async function regenerateResourceMarkersInChunks(map, {salt = 0, yieldToMain = async () => {}, now = currentTime} = {}) {
+  if (!map?.pack?.cells?.i?.length || !map?.markers?.markers?.length) return {executed: false, timings: {chunks: []}};
+  const chunks = [];
+  const preserved = markerRows(map).filter(marker => marker.category !== "resource");
+  const resources = await markerRegenerationChunk("generate-resources", () => regenerateResourceMarkers(map.grid, map.pack, map.politics, map.rivers, {
+    ...map.options,
+    resourceRegenerationSalt: salt
+  }, preserved), {chunks, now, yieldToMain});
+  const normalized = await markerRegenerationChunk("write-markers", () => {
+    const nextId = preserved.reduce((max, marker) => Math.max(max, marker.id), -1) + 1;
+    const identifiedResources = resources.map((marker, index) => ({...marker, id: nextId + index, i: nextId + index}));
+    const collection = normalizeMarkerIds([...preserved, ...identifiedResources]);
+    const previousMetadata = map.markers?.metadata || {};
+    map.markers = createMarkerResult(collection);
+    map.markers.metadata = {...previousMetadata, ...map.markers.metadata, stale: false};
+    map.pack.markers = collection;
+    return collection;
+  }, {chunks, now, yieldToMain});
+  await markerRegenerationChunk("resource-economy", () => refreshMarkerResourceEconomy(map.pack, normalized), {chunks, now, yieldToMain});
+  await markerRegenerationChunk("build-economy", () => {
+    if (map.options) map.economy = buildEconomy(map.pack, map.options);
+    else refreshPoliticalEconomicPower(map.pack);
+  }, {chunks, now, yieldToMain});
+  return {executed: true, timings: {chunks}};
+}
+
 function readMarker(map, markerId) {
   const marker = findMarker(map, markerId);
   if (!marker) throw new Error(`找不到标记 #${markerId}`);
@@ -342,6 +368,19 @@ function writeMarkerCollection(map, markers) {
     if (map.options) map.economy = buildEconomy(map.pack, map.options);
     else refreshPoliticalEconomicPower(map.pack);
   }
+}
+
+async function markerRegenerationChunk(id, task, {chunks, now, yieldToMain}) {
+  const startedAt = now();
+  const result = task();
+  const blockingMs = Math.max(0, now() - startedAt);
+  chunks.push({id, blockingMs: Math.round(blockingMs * 100) / 100});
+  await yieldToMain({id, blockingMs});
+  return result;
+}
+
+function currentTime() {
+  return globalThis.performance?.now?.() ?? Date.now();
 }
 
 function normalizeMarkerIds(markers) {

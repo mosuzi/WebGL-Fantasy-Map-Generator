@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import {readFileSync} from "node:fs";
 import {generatePlaceholderMap} from "../app/webgl-generator/src/generator/index.js";
 import {
   defaultGoodDisplayProperties,
@@ -73,6 +74,12 @@ assert.deepEqual(normalizeMarketDisplayProperties(oldImported.pack.markets[oldMa
 
 assert(API_METHODS.edit.includes("economy.setGoodDisplay"));
 assert(API_METHODS.edit.includes("economy.setMarketDisplay"));
+const economyPanelControllerSource = readFileSync(new URL("../app/webgl-generator/src/ui/panels/economy-panel.js", import.meta.url), "utf8");
+assert.match(economyPanelControllerSource, /onGoodDisplayApply:\s*\(goodId, patch\)\s*=>/);
+assert.match(economyPanelControllerSource, /callbacks\.onGoodDisplayApply\?\.\(goodId, patch\)/);
+assert.match(economyPanelControllerSource, /onMarketDisplayApply:\s*\(marketId, patch\)\s*=>/);
+assert.match(economyPanelControllerSource, /callbacks\.onMarketDisplayApply\?\.\(marketId, patch\)/);
+assert.match(economyPanelControllerSource, /panelState\.version\+\+/);
 assert.throws(() => createSetGoodDisplayCommand(good.i, {color: "invalid"}).isNoop({map}), /商品颜色/);
 assert.throws(() => createSetMarketDisplayCommand(market.i, {name: "   "}).isNoop({map}), /市场名称/);
 

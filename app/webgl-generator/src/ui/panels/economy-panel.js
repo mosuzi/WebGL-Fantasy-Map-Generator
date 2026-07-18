@@ -143,6 +143,16 @@ export function createEconomyPanel(documentRef, manager, callbacks = {}) {
     },
     onApplyMarketAssignment: () => callbacks.onApplyMarketAssignment?.(),
     onCancelMarketAssignment: () => callbacks.onCancelMarketAssignment?.(),
+    onGoodDisplayApply: (goodId, patch) => {
+      const result = callbacks.onGoodDisplayApply?.(goodId, patch);
+      panelState.version++;
+      return result;
+    },
+    onMarketDisplayApply: (marketId, patch) => {
+      const result = callbacks.onMarketDisplayApply?.(marketId, patch);
+      panelState.version++;
+      return result;
+    },
     onRebuildEconomy: () => callbacks.onRebuildEconomy?.()
   };
 

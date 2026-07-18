@@ -11,7 +11,7 @@ import {
 } from "../app/webgl-generator/src/runtime/climate-downstream-rebuild.js";
 import {EditHistory} from "../app/webgl-generator/src/runtime/edit-history.js";
 import {createMapDocument, parseMapDocument, stringifyMapDocument} from "../app/webgl-generator/src/runtime/map-file-io.js";
-import {createRegenerateResourceMarkersCommand} from "../app/webgl-generator/src/runtime/marker-edit-commands.js";
+import {createRegenerateResourceMarkersCommand, regenerateResourceMarkersInChunks} from "../app/webgl-generator/src/runtime/marker-edit-commands.js";
 
 const allSystems = ["cities", "states", "provinces", "religions", "markers", "economy", "diplomacy", "military", "zones"];
 const preview = inspectClimateDownstreamRebuild(sampleMap(), {systems: ["zones"], seed: 41});
@@ -141,6 +141,7 @@ assert.equal(parsedFullDocument.map.metadata.derivedStale.systems.includes("citi
 assert.equal(parsedFullDocument.map.metadata.derivedStale.systems.includes("markers"), true, "完整地图往返后未选系统没有保持 stale");
 assert.equal(Object.prototype.hasOwnProperty.call(parsedFullDocument.map, "climateDownstreamRebuild"), false, "旧图兼容不应依赖新顶层字段");
 
+await verifyChunkedMarkerEquivalence();
 const chunkedPerformance = await runChunkedPerformanceTransaction();
 assert.deepEqual(chunkedPerformance.result.executionOrder, ["markers"], "经济候选没有收敛为资源 marker / 经济组合步骤");
 assert.equal(chunkedPerformance.history.undo, 1, "分阶段气候重算没有收拢为一条历史");
@@ -159,7 +160,8 @@ assert.match(appSource, /inspectDownstreamRebuild: \(options = \{\}\) => inspect
 assert.match(appSource, /applyDownstreamRebuild: \(options = \{\}\) => applyClimateDownstreamRebuildViaApi/);
 assert.match(appSource, /await executeClimateDownstreamRebuildAsync\(\{/);
 assert.match(appSource, /yieldToMain: \(\) => yieldToBrowser\(documentRef\)/);
-assert.match(appSource, /regenerateMarkerResources\(state, documentRef, \{deferRefresh: true\}\)/);
+assert.match(appSource, /regenerateMarkerResourcesForClimate\(state, documentRef, context\.regenerationSalt\)/);
+assert.match(appSource, /regenerateResourceMarkersInChunks\(map, \{/);
 assert.match(panelModelSource, /downstreamSystems: \[\]/, "气候面板不应默认全选");
 assert.match(panelModelSource, /confirm: true/);
 assert.match(panelModelSource, /onApplyDownstream: async/);
@@ -245,6 +247,7 @@ async function runSuccessfulAsyncTransaction(map, systems, seed) {
 async function runChunkedPerformanceTransaction() {
   const map = generatePlaceholderMap({seed: "climate-downstream-10k", cellsTarget: 10000, heightmapTemplate: "continents"});
   map.metadata.derivedStale = {systems: [...allSystems], updatedAt: "before"};
+  const before = structuredClone(map);
   const history = new EditHistory();
   const yields = [];
   const progress = [];
@@ -253,10 +256,16 @@ async function runChunkedPerformanceTransaction() {
     editHistory: history,
     systems: ["economy"],
     seed: 41,
-    executeSystem(systemId, {regenerationSalt}) {
+    async executeSystem(systemId, {regenerationSalt}) {
       assert.equal(systemId, "markers", "经济候选执行了意外系统");
-      history.execute(createRegenerateResourceMarkersCommand({salt: regenerationSalt}), {map});
-      return {executed: true, status: "资源 marker 与经济已重算"};
+      const execution = await regenerateResourceMarkersInChunks(map, {
+        salt: regenerationSalt,
+        async yieldToMain(item) {
+          yields.push(`marker:${item.id}`);
+          await new Promise(resolve => setImmediate(resolve));
+        }
+      });
+      return {...execution, status: "资源 marker 与经济已重算"};
     },
     executeCommand(command) {
       history.execute(command, {map});
@@ -274,7 +283,30 @@ async function runChunkedPerformanceTransaction() {
       await new Promise(resolve => setImmediate(resolve));
     }
   });
+  const after = structuredClone(map);
+  history.undo({map});
+  assert.deepEqual(map, before, "分阶段 10k 重算撤销未恢复完整地图");
+  history.redo({map});
+  assert.deepEqual(map, after, "分阶段 10k 重算重做未恢复完整地图");
+  assert.equal(map.pack.goods, map.economy.goods, "分段快照破坏了 pack / economy 商品共享引用");
+  assert.equal(map.pack.markets, map.economy.markets, "分段快照破坏了 pack / economy 市场共享引用");
   return {result, history: history.getStats(), yields, progress};
+}
+
+async function verifyChunkedMarkerEquivalence() {
+  const syncMap = generatePlaceholderMap({seed: "climate-marker-equivalence", cellsTarget: 1000, heightmapTemplate: "continents"});
+  const asyncMap = generatePlaceholderMap({seed: "climate-marker-equivalence", cellsTarget: 1000, heightmapTemplate: "continents"});
+  const syncHistory = new EditHistory();
+  syncHistory.execute(createRegenerateResourceMarkersCommand({salt: 7}), {map: syncMap});
+  const chunked = await regenerateResourceMarkersInChunks(asyncMap, {
+    salt: 7,
+    yieldToMain: () => new Promise(resolve => setImmediate(resolve))
+  });
+  assert.equal(chunked.executed, true);
+  assert.deepEqual(asyncMap.markers, syncMap.markers, "分段资源 marker 结果与同步命令不一致");
+  assert.deepEqual(asyncMap.economy, syncMap.economy, "分段经济结果与同步命令不一致");
+  assert.deepEqual(asyncMap.pack.markers, syncMap.pack.markers, "分段 pack marker 镜像与同步命令不一致");
+  assert.deepEqual(asyncMap.pack.deals, syncMap.pack.deals, "分段 pack 交易镜像与同步命令不一致");
 }
 
 function applyInnerMutation(map, history, systemId) {

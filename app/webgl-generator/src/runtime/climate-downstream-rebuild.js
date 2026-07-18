@@ -148,18 +148,21 @@ export async function executeClimateDownstreamRebuildAsync({
   let before = null;
   try {
     onProgress?.({phase: "snapshot-before", message: "正在保存重算前状态"});
-    before = await runBlockingChunk("snapshot-before", () => cloneMap(map), {chunks, now, yieldToMain});
+    before = await cloneMapInChunks(map, {id: "snapshot-before", chunks, now, yieldToMain});
     for (const step of preview.steps) {
       onProgress?.({phase: "system", system: step.system, message: `正在重算${systemLabel(step.system)}`});
       const regenerationSalt = prepareRegenerationSalt(map, preview.seed, step.system);
       const result = await runBlockingChunk(`system:${step.system}`, () => executeSystem(step.system, {step, preview, regenerationSalt}), {chunks, now, yieldToMain});
       if (!result || result.executed === false) throw new Error(`气候下游重算未完成：${step.system}`);
+      for (const chunk of result.timings?.chunks || []) {
+        chunks.push({id: `system:${step.system}:${chunk.id}`, blockingMs: roundTiming(chunk.blockingMs)});
+      }
       stepResults.push({system: step.system, covers: [...step.covers], regenerationSalt, result});
     }
     markSelectedFresh(map, preview.selectedSystems);
     refreshSummary?.(map);
     onProgress?.({phase: "snapshot-after", message: "正在保存重算结果"});
-    const after = await runBlockingChunk("snapshot-after", () => cloneMap(map), {chunks, now, yieldToMain});
+    const after = await cloneMapInChunks(map, {id: "snapshot-after", chunks, now, yieldToMain});
     editHistory.restoreSnapshot(historySnapshot);
     const command = createSnapshotCommand(before, after, preview, stepResults);
     onProgress?.({phase: "commit", message: "正在登记重算历史"});
@@ -344,6 +347,85 @@ async function runBlockingChunk(id, task, {chunks, now, yieldToMain}) {
   chunks.push({id, blockingMs: roundTiming(blockingMs)});
   await yieldToMain({id, blockingMs});
   return result;
+}
+
+async function cloneMapInChunks(source, {id, chunks, now, yieldToMain, budgetMs = 24}) {
+  const seen = new WeakMap();
+  const root = createCloneShell(source, seen);
+  const stack = cloneFrames(source, root);
+  let chunkIndex = 0;
+  let chunkStartedAt = now();
+  let operations = 0;
+
+  while (stack.length) {
+    const frame = stack.at(-1);
+    if (frame.index >= frame.entries.length) {
+      stack.pop();
+      continue;
+    }
+    const entry = frame.entries[frame.index++];
+    cloneFrameEntry(frame, entry, seen, stack);
+    operations++;
+    if ((operations & 127) !== 0 || now() - chunkStartedAt < budgetMs) continue;
+    const blockingMs = Math.max(0, now() - chunkStartedAt);
+    chunks.push({id: `${id}:${chunkIndex++}`, blockingMs: roundTiming(blockingMs)});
+    await yieldToMain({id, chunkIndex: chunkIndex - 1, blockingMs});
+    chunkStartedAt = now();
+  }
+
+  const blockingMs = Math.max(0, now() - chunkStartedAt);
+  chunks.push({id: `${id}:${chunkIndex}`, blockingMs: roundTiming(blockingMs)});
+  await yieldToMain({id, chunkIndex, blockingMs});
+  return root;
+}
+
+function createCloneShell(value, seen) {
+  if (!value || typeof value !== "object") return value;
+  if (seen.has(value)) return seen.get(value);
+  let clone;
+  if (Array.isArray(value)) clone = new Array(value.length);
+  else if (value instanceof Date) clone = new Date(value.getTime());
+  else if (value instanceof RegExp) clone = new RegExp(value.source, value.flags);
+  else if (value instanceof Map) clone = new Map();
+  else if (value instanceof Set) clone = new Set();
+  else if (value instanceof ArrayBuffer) clone = value.slice(0);
+  else if (ArrayBuffer.isView(value)) {
+    const buffer = createCloneShell(value.buffer, seen);
+    clone = value instanceof DataView
+      ? new DataView(buffer, value.byteOffset, value.byteLength)
+      : new value.constructor(buffer, value.byteOffset, value.length);
+  } else clone = Object.create(Object.getPrototypeOf(value));
+  seen.set(value, clone);
+  return clone;
+}
+
+function cloneFrames(source, target) {
+  if (!source || typeof source !== "object" || ArrayBuffer.isView(source) || source instanceof ArrayBuffer || source instanceof Date || source instanceof RegExp) return [];
+  if (source instanceof Map) return [{kind: "map", source, target, entries: [...source.entries()], index: 0}];
+  if (source instanceof Set) return [{kind: "set", source, target, entries: [...source.values()], index: 0}];
+  return [{kind: "object", source, target, entries: Object.keys(source), index: 0}];
+}
+
+function cloneFrameEntry(frame, entry, seen, stack) {
+  if (frame.kind === "map") {
+    const key = cloneValue(entry[0], seen, stack);
+    const value = cloneValue(entry[1], seen, stack);
+    frame.target.set(key, value);
+    return;
+  }
+  if (frame.kind === "set") {
+    frame.target.add(cloneValue(entry, seen, stack));
+    return;
+  }
+  frame.target[entry] = cloneValue(frame.source[entry], seen, stack);
+}
+
+function cloneValue(value, seen, stack) {
+  if (!value || typeof value !== "object") return value;
+  if (seen.has(value)) return seen.get(value);
+  const clone = createCloneShell(value, seen);
+  stack.push(...cloneFrames(value, clone));
+  return clone;
 }
 
 function summarizeTimings(chunks, totalMs) {
