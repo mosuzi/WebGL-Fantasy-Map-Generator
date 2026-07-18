@@ -290,6 +290,7 @@ const WATER_SUFFIXES = ["溪", "水", "河", "江", "湖", "泽", "湾", "港", 
 const HIGHLAND_SUFFIXES = ["山", "岭", "岳", "峰", "陵", "关"];
 const PORT_SUFFIXES = ["港", "津", "浦", "湾"];
 const LAKE_SUFFIXES = ["湖", "泽", "泊", "潭", "海"];
+const COMMON_LAKE_SUFFIXES = ["湖", "湖", "湖", "湖", "湖", "湖", "湖", "泽", "泊", "潭", "海"];
 const CULTURE_STYLE_CONFIG = {
   European: {place: WESTERN_PLACE_STEMS, hydro: WESTERN_HYDRO_STEMS, forms: ["国", "王国", "共和国", "帝国"], suffixes: ["堡", "顿", "维尔", "港", "城", "郡"]},
   Generic: null,
@@ -417,7 +418,8 @@ export function createChineseNameGenerator(seed = "map", context = {}) {
       const prefix = boundHydroSource.records.length
         ? generateNamebaseCandidate(rng, boundHydroSource, {maxLength: 5})
         : cultureStyle?.hydro && hasExplicitCultureStyle(options) ? pick(rng, hydro) : rng.next() < 0.78 ? pick(rng, hydro) : pick(rng, LIGHT_FANTASY_PREFIXES);
-      return makeUnique(used, "lake", makeHydroName(prefix, rng, LAKE_SUFFIXES), rng);
+      const suffixes = options.preferCommonSuffix ? COMMON_LAKE_SUFFIXES : LAKE_SUFFIXES;
+      return makeUnique(used, "lake", makeHydroName(prefix, rng, suffixes), rng);
     },
 
     makeStateRoot(options = {}) {

@@ -745,7 +745,8 @@ function defineLakeNames(pack, nameGenerator) {
       culture: cultureId,
       cultureType: culture?.nameStyle || culture?.type,
       type: feature.group || "lake",
-      major: (feature.cells || 0) >= 10
+      major: (feature.cells || 0) >= 10,
+      preferCommonSuffix: true
     });
   }
 }
