@@ -1,5 +1,11 @@
 # 开发历史
 
+## 2026-07-18：完成权威任务第 89 项——去除 Feature 回归的过期 API 总数副本
+
+- 调查确认全局 API 精确基线已由 `webgl-generator-api-stability-contract-regression.mjs` 唯一冻结，Feature 领域脚本内的 `196 / 98` 断言和结果常量是重复副本，且会在其它领域合法新增 API 后阻断本领域动态断言。
+- 开发删除两条领域级总数断言，报告值改为从当前 `API_METHODS` 现场计算；Feature 方法目录、确认门禁、面板 / Console 接线、renderer-only 预览与动态 UI/API 一致性均保持。
+- 审查测试确认 Feature UI/API 脚本完整运行到海岸雕刻、确认拒绝、提交、选择恢复、撤销 / 重做和旧 patch 转发，现场报告 `204 / 106`。Feature 核心、API inventory / stability / edit coverage、语法、生产构建和差异检查全部通过；本项无用户可见交互变化，按统一门禁未启动浏览器。
+
 ## 2026-07-18：完成权威任务第 88 项——修正高度笔刷结束语义
 
 - 调查确认普通高度 stroke 的提交命令、preview 写入和统一回滚 helper 均正确，唯一直接原因是 `bindHeightEditing()` 把 `pointerup` 接到回滚、把 `pointercancel` 接到提交；地形选区 paint 具有独立结束分支，不受本项影响。

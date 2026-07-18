@@ -247,10 +247,11 @@
   - 验收：有效 stroke 在 `pointerup` 后保留变化且只写一条历史，`pointercancel` 完整恢复且不写历史；撤销 / 重做精确，专项与相关高度回归、生产构建和差异检查通过。浏览器留到第 88～93 项统一阶段。
   - 实现与审查记录：普通高度笔刷现在在 `pointerup` 调用既有 `finishHeightStroke()` 提交单条高度命令，在 `pointercancel` 调用 `rollbackCanvasToolStroke()` 恢复 grid / pack 预览；地形选区绘制、线工具、模板、工作台和高度算法未改。画布工具回归新增高度事件正反断言，并在固定 3000 cells 生成图上验证预览零历史、提交一条历史、grid / pack 同步、撤销 / 重做和取消完整回滚。`regress:canvas-tools`、`regress:height-brush`、`regress:height-derived-rebuild`、语法检查、生产构建及 `git diff --check` 通过；按统一门禁未启动浏览器。
 
-- **权威任务第 89 项：清除 Feature 拓扑回归中的过期 API 总数副本。** `待执行；来源：Q-13 / FOLLOWUPS`
+- **权威任务第 89 项：清除 Feature 拓扑回归中的过期 API 总数副本。** `已完成；来源：Q-13 / FOLLOWUPS`
   - 痛点：Feature 领域回归仍硬编码 `196 / 98`，当前权威基线为 `204 / 106`，导致脚本在动态 Feature 断言前失败。
   - 范围：领域回归只验证本领域方法、确认门禁、UI 接线和动态行为；全局精确总数只由 API inventory / stability 契约负责。不修改公开 API 或 Feature 行为。
   - 验收：Feature 回归完成全部动态断言且不保存第二份全局总数；Feature 专项、API inventory / stability / edit coverage、生产构建和差异检查通过。浏览器留到统一阶段。
+  - 完成记录：删除 Feature 领域回归中的 `196 / 98` 固定断言，结果摘要改为从当前 `API_METHODS` 现场计算 `204 / 106`；本领域方法成员、确认门禁、UI 接线、预览纯度和 UI / Console 动态一致性断言完整保留。脚本已实际运行到固定 seed 海岸雕刻、缺确认拒绝、单历史提交、选择目标、撤销 / 重做和旧 patch 转发；Feature 核心、API inventory / stability / edit coverage、语法检查、生产构建及差异检查通过。本项不含用户可见功能变化，按统一门禁未启动浏览器。
 
 - **权威任务第 90 项：治理气候下游重算的主线程长任务。** `待执行；来源：Q-14 / 第 72 项性能记录`
   - 痛点：固定 10k 浏览器样本的 `economy -> markers` 阶段约 `1216ms`，产生本项来源的输入处理阻塞与主线程长任务 warning。
