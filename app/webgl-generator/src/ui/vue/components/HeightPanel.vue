@@ -82,6 +82,24 @@
     <p class="height-action-help">0 只柔化选区边缘；数值越高，越会抑制范围内的尖峰和深谷。平滑不会改变海陆分界。</p>
   </section>
 
+  <section class="height-player-smoothing height-seafloor-reset" aria-labelledby="height-seafloor-reset-title">
+    <div class="height-transform-heading">
+      <strong id="height-seafloor-reset-title">重设海底</strong>
+      <span>保持当前陆地与湖泊</span>
+    </div>
+    <div class="height-terrain-selection-actions">
+      <UiButton variant="secondary" @click="callbacks.onSeafloorResetPreview?.()">预览新海底</UiButton>
+      <UiButton :disabled="!state.seafloorResetPreview?.valid" @click="callbacks.onSeafloorResetApply?.()">应用重设</UiButton>
+    </div>
+    <p v-if="state.seafloorResetPreview" class="height-transform-preview" :class="{valid: state.seafloorResetPreview.valid}" aria-live="polite">
+      {{ state.seafloorResetPreview.notice }}
+    </p>
+    <p v-if="state.seafloorResetPreview?.valid" class="height-action-help">
+      大陆架 {{ state.seafloorResetPreview.shelfCells }} · 陆坡 {{ state.seafloorResetPreview.slopeCells }} · 洋中脊 {{ state.seafloorResetPreview.ridgeCells }} · 海沟 {{ state.seafloorResetPreview.trenchCells }}
+    </p>
+    <p class="height-action-help">只改变开放海洋深度，不移动海岸或产生新的陆地；应用后需更新气候及相关地图内容。</p>
+  </section>
+
   <div v-if="debugEnabled" class="height-expert-controls">
   <p class="height-control-label">全局微调</p>
   <div class="height-global-actions">
@@ -811,12 +829,14 @@ const heightAssignmentPresets = Object.freeze([
   {value: 92, label: "峰值"}
 ]);
 const derivedSystemLabels = Object.freeze({
+  climate: "气候",
   rivers: "河流",
   routes: "路线",
   biomes: "生物群系",
   cities: "聚落",
   states: "国家",
   provinces: "省份",
+  cultures: "文化",
   religions: "宗教",
   markers: "标记",
   zones: "地区",
@@ -904,7 +924,8 @@ const activePreviewState = computed(() => {
     [props.state.transformPreview, "条件变换预览中"],
     [props.state.terrainProgramPreview, "多步骤地形程序预览中"],
     [props.state.terrainTemplatePreview, "地形模板预览中"],
-    [props.state.globalToolPreview, "全局高度工具预览中"]
+    [props.state.globalToolPreview, "全局高度工具预览中"],
+    [props.state.seafloorResetPreview, "海底重设预览中"]
   ];
   const current = candidates.find(([preview]) => Boolean(preview));
   if (!current) return null;
@@ -1297,10 +1318,11 @@ function setTransformOperand(value) {
 }
 
 function clearTransformPreview() {
-  const hadPreview = Boolean(props.state.transformPreview || props.state.globalToolPreview || props.state.terrainTemplatePreview);
+  const hadPreview = Boolean(props.state.transformPreview || props.state.globalToolPreview || props.state.terrainTemplatePreview || props.state.seafloorResetPreview);
   props.state.transformPreview = null;
   props.state.globalToolPreview = null;
   props.state.terrainTemplatePreview = null;
+  props.state.seafloorResetPreview = null;
   if (hadPreview) props.callbacks.onConditionalTransformChange?.();
 }
 

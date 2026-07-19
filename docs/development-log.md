@@ -28191,3 +28191,10 @@ full 矩阵结果：
 - 检索并核对 Chaikin、Catmull-Rom、B-spline、Douglas-Peucker、Visvalingam-Whyatt 的原论文 / 官方说明，以及 JTS / GEOS CoverageSimplifier、PostGIS CoverageSimplify、CGAL topology-preserving polyline simplification、TopoJSON、topojson-simplify 与 Mapshaper 的一手文档、共享边保证、失败模式和许可证。JTS / GEOS / CGAL 只建议作为离线 oracle；Mapshaper 只作 MPL 2.0 黑盒基准；ISC 的 TopoJSON 数据模型可作轻量参照。
 - 新增中文专题 `boundary-smoothing-topology-research.md`，推荐共享弧线优先的管线：共享 Voronoi edge → 锁定三岔 / 世界边 / 闭环节点的最大 arc → coverage 级加权 Visvalingam → 有位移上限的一次 Chaikin / 二次采样 → fill、stroke、picking 和 export 同一不可变快照。相邻区域只以正反 `ArcRef` 引用同一个 arc，禁止 polygon 消费端再次独立平滑。
 - 报告冻结 snapshot / node / raw edge / arc / ring 数据结构、terrain / state / province / geometryStyle revision、缓存依赖、预览与正式提交的原子替换时序、异步旧结果守卫、海岸 → 国界 → 省界 → 局部失效的 P0～P4 原型顺序，以及共享引用、屏幕误差、节点位移、自交 / gap / overlap、面积 / Hausdorff、狭窄通道和三档性能指标。本项只修改文档并同步专题索引，未改 renderer、地图几何、依赖或存档。
+
+## 2026-07-20：完成权威任务第 129 项——保持海陆拓扑的重设海底
+
+- 调查确认普通高度命令虽然可同步 grid / pack，但跨海平面时会把 Feature 与整条世界派生链标脏，不适合“只重排开放海洋深度”；高度面板和 renderer 已有成熟的高度变化 GPU 预览通道，可复用而无需新增图层。开放海洋以 `grid.cells.f` 指向 `type=ocean` 且高度低于 20 为唯一边界，湖泊和陆地不进入方案。
+- 新增 `seafloor-reset.js`：从海岸共享边执行 BFS 距离场，以近岸 1～2 圈形成大陆架、3～6 圈形成陆坡；海盆通过确定性最远点板块分区、每板块漂移向量和板块边界分段生成洋中脊 / 海沟，再叠加双线性低频噪声与两轮仅海盆、`3～8` 有界邻接平滑。全部输出夹在 `0～19`，不写 Feature、岸线、land mask 或湖泊。
+- 玩家高度面板新增“预览新海底 / 应用重设”。预览使用现有高度 transform GPU overlay；应用时以相同 seed 重建方案，并同时复核拓扑 checksum 与结果 checksum，旧地图状态不能套用预览。专用命令只以 `Uint32` cell id 和 `Uint8` before / after 保存开放海洋 grid / pack 历史，单条撤销恢复原高度及原派生陈旧标记，重做恢复结果并把气候、河流、生物群系及相关世界系统标记为待更新，但不触发 Feature / 岸线重建。
+- 新增 `regress:seafloor-reset`，固定同 seed / 异 seed、架 / 坡 / 盆 / 脊 / 槽计数、预览变化、陆地与湖泊逐 cell 不变、Feature / 岸线完整快照不变、grid / pack 镜像、单条撤销 / 重做和派生标记。真实 5k 生成图通过；102,400-cell 夹具包含 88,124 个开放海洋 cells，紧凑历史 `1,057,488 bytes`，本机多次方案生成约 `187～195ms`。高度笔刷、模板程序、派生重建、生产构建与 `git diff --check` 同时通过；本项未启动浏览器，留待第 110～133 项统一验收。

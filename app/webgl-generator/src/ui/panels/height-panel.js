@@ -43,6 +43,7 @@ export function createHeightPanel(documentRef, manager, callbacks = {}) {
     terrainProgramId: HEIGHT_TERRAIN_TEMPLATE_PROGRAM_PRESETS[0].id,
     terrainProgramOptions: [],
     terrainProgramPreview: null,
+    seafloorResetPreview: null,
     terrainProgramDraftName: "我的地形模板",
     terrainProgramDraftSteps: [],
     terrainProgramCanDelete: false,
@@ -102,6 +103,8 @@ export function createHeightPanel(documentRef, manager, callbacks = {}) {
     onTerrainSelectionCancel: () => callbacks.onTerrainSelectionCancel?.(),
     onTerrainSelectionUseChange: value => callbacks.onTerrainSelectionUseChange?.(value),
     onTerrainSelectionSmooth: () => callbacks.onTerrainSelectionSmooth?.(panelState.selectionSmoothness),
+    onSeafloorResetPreview: () => callbacks.onSeafloorResetPreview?.(),
+    onSeafloorResetApply: () => callbacks.onSeafloorResetApply?.(),
     onRegenerateRivers: () => callbacks.onRegenerateRivers?.(),
     onRegenerateBase: () => callbacks.onRegenerateBase?.(),
     onRegenerateDownstream: () => callbacks.onRegenerateDownstream?.()
@@ -320,6 +323,7 @@ export function createHeightPanel(documentRef, manager, callbacks = {}) {
       globalToolPreview = panelState.globalToolPreview,
       terrainTemplatePreview = panelState.terrainTemplatePreview,
       terrainProgramPreview = panelState.terrainProgramPreview,
+      seafloorResetPreview = panelState.seafloorResetPreview,
       terrainSelection = panelState.terrainSelection,
       terrainSelectionSaved = panelState.terrainSelectionSaved,
       terrainSelectionFeather = panelState.terrainSelectionFeather,
@@ -340,6 +344,7 @@ export function createHeightPanel(documentRef, manager, callbacks = {}) {
       panelState.globalToolPreview = cloneTransformPreview(globalToolPreview);
       panelState.terrainTemplatePreview = cloneTransformPreview(terrainTemplatePreview);
       panelState.terrainProgramPreview = cloneTransformPreview(terrainProgramPreview);
+      panelState.seafloorResetPreview = cloneTransformPreview(seafloorResetPreview);
       panelState.terrainSelection = cloneTerrainSelection(terrainSelection);
       panelState.terrainSelectionSaved = cloneTerrainSelection(terrainSelectionSaved);
       panelState.terrainSelectionFeather = Math.max(0, Math.min(8, Math.trunc(Number(terrainSelectionFeather) || 0)));
@@ -395,6 +400,9 @@ export function createHeightPanel(documentRef, manager, callbacks = {}) {
     getTerrainProgramPreview() {
       return cloneTransformPreview(panelState.terrainProgramPreview);
     },
+    getSeafloorResetPreview() {
+      return cloneTransformPreview(panelState.seafloorResetPreview);
+    },
     getTerrainTemplateSnapshot() {
       return {
         templateId: panelState.terrainTemplateId,
@@ -433,6 +441,9 @@ export function createHeightPanel(documentRef, manager, callbacks = {}) {
     },
     updateTerrainProgramPreview(terrainProgramPreview) {
       panelState.terrainProgramPreview = cloneTransformPreview(terrainProgramPreview);
+    },
+    updateSeafloorResetPreview(seafloorResetPreview) {
+      panelState.seafloorResetPreview = cloneTransformPreview(seafloorResetPreview);
     },
     updateTerrainSelection(terrainSelection, useForTools = panelState.useTerrainSelection) {
       panelState.terrainSelection = cloneTerrainSelection(terrainSelection);

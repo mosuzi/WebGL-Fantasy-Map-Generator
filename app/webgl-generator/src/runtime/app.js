@@ -90,6 +90,7 @@ import {getHeightSelectionSmoothingChanges, inspectHeightSelectionSmoothing} fro
 import {getHeightTerrainTemplateChanges, heightTerrainTemplateLabel, heightTerrainTemplateUsesSeed, inspectHeightTerrainTemplate} from "./height-terrain-templates.js";
 import {getHeightTerrainTemplateProgramChanges, heightTerrainTemplateProgramUsesSeed, inspectHeightTerrainTemplateProgram} from "./height-terrain-template-programs.js";
 import {createRegenerationResult, rebuildHeightBaseDerived, rebuildHeightDownstreamDerived} from "./height-derived-rebuild.js";
+import {buildSeafloorResetPlan, createResetSeafloorCommand, seafloorResetPreviewChanges} from "./seafloor-reset.js";
 import {createAddCustomLabelCommand, createDeleteLabelCommand, createMoveCustomLabelCommand, createRenameCustomLabelCommand, createRestoreGeneratedLabelCommand, createSetLabelNoteCommand, ensureLabelStore} from "./label-edit-commands.js";
 import {createPatchLabelStyleCommand, createResetAllLabelStylesCommand, createResetLabelStyleCommand} from "./label-style-edit-commands.js";
 import {LABEL_STYLE_TYPES, readLabelStyleOverride, resolveLabelStyle} from "./label-style-registry.js";
@@ -314,6 +315,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       strokeSeed: 0,
       globalToolSeed: 0,
       terrainTemplateSeed: 0,
+      seafloorResetSeed: 0,
       terrainSelection: null,
       terrainSelectionSaved: null,
       terrainSelectionFeather: 0,
@@ -963,6 +965,65 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       updateHeightPanel(state);
       updateEditingInteractionLock(state, documentRef);
       return {...inspection, executed: result.executed};
+    },
+    onSeafloorResetPreview: () => {
+      cancelHeightLine(state, documentRef);
+      clearHeightTransformPreview(state);
+      const seed = `${state.map?.metadata?.seed || state.map?.options?.seed || "map"}|seafloor|${state.heightEdit.seafloorResetSeed + 1}`;
+      try {
+        const plan = buildSeafloorResetPlan(state.map, {seed});
+        const preview = plan.stats.changedCells
+          ? {...plan.stats, valid: true, seed: plan.seed, topologyChecksum: plan.topologyChecksum, resultChecksum: plan.resultChecksum, notice: `可重设 ${plan.stats.oceanCells} 处开放海洋，形成大陆架、陆坡、洋中脊与海沟。`}
+          : {...plan.stats, valid: false, seed: plan.seed, topologyChecksum: plan.topologyChecksum, resultChecksum: plan.resultChecksum, notice: plan.stats.oceanCells ? "当前海底无需调整。" : "当前地图没有可重设的开放海洋。"};
+        const rendererPreview = preview.valid
+          ? state.renderer?.setHeightTransformPreview?.(seafloorResetPreviewChanges(plan)) || null
+          : null;
+        heightPanel.updateSeafloorResetPreview({...preview, rendererPreview});
+        updateEditingInteractionLock(state, documentRef);
+        return preview;
+      } catch (error) {
+        const preview = {valid: false, notice: error.message || "无法预览重设海底。"};
+        heightPanel.updateSeafloorResetPreview(preview);
+        return preview;
+      }
+    },
+    onSeafloorResetApply: () => {
+      const reserved = heightPanel.getSeafloorResetPreview();
+      cancelHeightLine(state, documentRef);
+      if (!reserved?.valid) {
+        state.heightEdit.lastNotice = "请先生成有效的海底预览。";
+        updateHeightPanel(state);
+        return false;
+      }
+      try {
+        const plan = buildSeafloorResetPlan(state.map, {seed: reserved.seed});
+        if (plan.topologyChecksum !== reserved.topologyChecksum || plan.resultChecksum !== reserved.resultChecksum) {
+          clearHeightTransformPreview(state);
+          state.heightEdit.lastNotice = "地图已变化，请重新预览海底。";
+          updateHeightPanel(state);
+          return false;
+        }
+        const result = executeEditCommand(state, documentRef, createResetSeafloorCommand(plan), {
+          context: {map: state.map},
+          refresh: refreshAfterEdit,
+          refreshPanels: false
+        });
+        state.heightEdit.lastAffected = plan.stats.changedCells;
+        state.heightEdit.lastHeight = `${plan.stats.minHeight}..${plan.stats.maxHeight}`;
+        state.heightEdit.lastDelta = "none";
+        state.heightEdit.lastNotice = result.executed
+          ? `已重设 ${plan.stats.oceanCells} 处开放海洋；气候及相关内容需要更新。`
+          : "当前海底无需调整。";
+        if (result.executed) state.heightEdit.seafloorResetSeed++;
+        clearHeightTransformPreview(state);
+        updateHeightPanel(state);
+        updateEditingInteractionLock(state, documentRef);
+        return result.executed;
+      } catch (error) {
+        state.heightEdit.lastNotice = error.message || "重设海底失败。";
+        updateHeightPanel(state);
+        return false;
+      }
     },
     onRegenerateRivers: () => {
       cancelHeightLine(state, documentRef);
@@ -3506,6 +3567,7 @@ async function loadMapIntoRuntime(state, documentRef, map, {loadingMessages = []
   state.heightEdit.strokeSeed = 0;
   state.heightEdit.globalToolSeed = 0;
   state.heightEdit.terrainTemplateSeed = 0;
+  state.heightEdit.seafloorResetSeed = 0;
   state.heightEdit.lastAffected = 0;
   state.heightEdit.lastHeight = "none";
   state.heightEdit.lastDelta = "none";
@@ -10524,6 +10586,7 @@ function clearHeightTransformPreview(state, {draw = true} = {}) {
   state.panels.height?.updateGlobalToolPreview?.(null);
   state.panels.height?.updateTerrainTemplatePreview?.(null);
   state.panels.height?.updateTerrainProgramPreview?.(null);
+  state.panels.height?.updateSeafloorResetPreview?.(null);
   state.renderer?.clearHeightTransformPreview?.({draw});
 }
 
