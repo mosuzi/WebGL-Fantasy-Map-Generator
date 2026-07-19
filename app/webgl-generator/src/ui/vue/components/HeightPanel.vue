@@ -1,19 +1,19 @@
 <template>
-  <UiMetricGrid :metrics="summaryMetrics" class-name="height-panel-summary" />
+  <UiMetricGrid :metrics="visibleSummaryMetrics" class-name="height-panel-summary" />
 
   <UiStateBanner
     v-if="state.derivedStaleSystems?.length"
     kind="stale"
-    title="存在待派生结果"
-    :message="formatDerivedStaleSystems(state.derivedStaleSystems)"
-    action-label="重算下游派生"
-    secondary-action-label="重算基础派生"
+    :title="debugEnabled ? '存在待派生结果' : '部分地图内容需要更新'"
+    :message="formatDerivedUpdateHint(state.derivedStaleSystems)"
+    :action-label="debugEnabled ? '重算下游派生' : '更新后续地图内容'"
+    :secondary-action-label="debugEnabled ? '重算基础派生' : '更新地形关联内容'"
     @action="callbacks.onRegenerateDownstream?.()"
     @secondary-action="callbacks.onRegenerateBase?.()"
   />
 
   <UiStateBanner
-    v-if="activePreviewState"
+    v-if="debugEnabled && activePreviewState"
     kind="preview"
     :title="activePreviewState.title"
     :message="activePreviewState.message"
@@ -25,29 +25,29 @@
     {{ state.active ? "停止高度编辑" : "启用高度编辑" }}
   </UiButton>
 
-  <div class="segmented height-action-group" role="group" aria-label="高度编辑动作">
+  <div class="segmented height-action-group" :class="{'is-player': !debugEnabled}" role="group" aria-label="高度编辑动作">
     <button
-      v-for="action in actions"
+      v-for="action in visibleActions"
       :key="action.value"
       type="button"
       :class="{active: state.action === action.value}"
       :data-mode="action.value"
-      @click="setAction(action.value)"
+      @click="selectHeightAction(action.value)"
     >
       {{ action.label }}
     </button>
   </div>
-  <p v-if="state.action === 'flatten'" class="height-action-help">以每次落笔起点高度为目标，拖动时逐步整平范围内地形。</p>
-  <p v-else-if="state.action === 'disrupt'" class="height-action-help">按强度生成稳定的局部起伏，同一笔划连续拖动时会继续塑造崎岖地形。</p>
-  <p v-else-if="state.action === 'fill'" class="height-action-help">单击等高陆地区域或封闭水域，按边缘距离生成中心更高的锥形地貌。</p>
-  <p v-else-if="state.action === 'line'" class="height-action-help">依次单击起点和终点，以正增量生成山脊、负增量生成沟槽。</p>
-  <p v-if="state.action === 'fill' && state.fillPreview" class="height-fill-preview" :class="{valid: state.fillPreview.valid}" aria-live="polite">
+  <p v-if="debugEnabled && state.action === 'flatten'" class="height-action-help">以每次落笔起点高度为目标，拖动时逐步整平范围内地形。</p>
+  <p v-else-if="debugEnabled && state.action === 'disrupt'" class="height-action-help">按强度生成稳定的局部起伏，同一笔划连续拖动时会继续塑造崎岖地形。</p>
+  <p v-else-if="debugEnabled && state.action === 'fill'" class="height-action-help">单击等高陆地区域或封闭水域，按边缘距离生成中心更高的锥形地貌。</p>
+  <p v-else-if="debugEnabled && state.action === 'line'" class="height-action-help">依次单击起点和终点，以正增量生成山脊、负增量生成沟槽。</p>
+  <p v-if="debugEnabled && state.action === 'fill' && state.fillPreview" class="height-fill-preview" :class="{valid: state.fillPreview.valid}" aria-live="polite">
     {{ state.fillPreview.notice }}
   </p>
-  <p v-if="state.lastNotice" class="height-action-notice" aria-live="polite">{{ state.lastNotice }}</p>
+  <p v-if="state.lastNotice" class="height-action-notice" aria-live="polite">{{ visibleLastNotice }}</p>
 
-  <p class="height-control-label">作用范围</p>
-  <div class="segmented height-scope-group" role="group" aria-label="高度笔刷作用范围">
+  <p v-if="debugEnabled" class="height-control-label">作用范围</p>
+  <div v-if="debugEnabled" class="segmented height-scope-group" role="group" aria-label="高度笔刷作用范围">
     <button
       v-for="scope in scopes"
       :key="scope.value"
@@ -60,14 +60,29 @@
     </button>
   </div>
 
-  <UiSliderField v-if="state.action !== 'fill' && state.action !== 'line'" label="画笔大小" :model-value="state.radius" :min="heightRadius.min" :max="heightRadius.max" :step="heightRadius.step" unit-label="地图单位" @input="setRadius" />
-  <UiSliderField v-if="state.action !== 'line'" label="强度" :model-value="state.strength" :min="1" :max="18" :step="1" @input="setStrength" />
-  <UiSliderField v-if="state.action === 'fill'" label="高度容差" :model-value="state.fillTolerance" :min="0" :max="12" :step="1" @input="setFillTolerance" />
-  <UiSliderField v-if="state.action === 'line'" label="线宽" :model-value="state.lineWidth" :min="2" :max="48" :step="1" @input="setLineWidth" />
-  <UiSliderField v-if="state.action === 'line'" label="线段增量" :model-value="state.linePower" :min="-30" :max="30" :step="1" @input="setLinePower" />
+  <UiSliderField v-if="!debugEnabled || (state.action !== 'fill' && state.action !== 'line')" label="画笔大小" :model-value="state.radius" :min="heightRadius.min" :max="heightRadius.max" :step="heightRadius.step" unit-label="地图单位" @input="setRadius" />
+  <UiSliderField v-if="!debugEnabled || state.action !== 'line'" label="强度" :model-value="state.strength" :min="1" :max="18" :step="1" @input="setStrength" />
+  <UiSliderField v-if="debugEnabled && state.action === 'fill'" label="高度容差" :model-value="state.fillTolerance" :min="0" :max="12" :step="1" @input="setFillTolerance" />
+  <UiSliderField v-if="debugEnabled && state.action === 'line'" label="线宽" :model-value="state.lineWidth" :min="2" :max="48" :step="1" @input="setLineWidth" />
+  <UiSliderField v-if="debugEnabled && state.action === 'line'" label="线段增量" :model-value="state.linePower" :min="-30" :max="30" :step="1" @input="setLinePower" />
 
-  <UiSwitchField v-if="state.action !== 'fill'" label="中心衰减" field-class="height-check-row" :checked="state.falloff" @change="setFalloff" />
+  <UiSwitchField v-if="debugEnabled && state.action !== 'fill'" label="中心衰减" field-class="height-check-row" :checked="state.falloff" @change="setFalloff" />
 
+  <section v-if="!debugEnabled" class="height-player-smoothing" aria-labelledby="height-player-smoothing-title">
+    <div class="height-transform-heading">
+      <strong id="height-player-smoothing-title">平滑所选范围</strong>
+      <span>{{ state.terrainSelection?.valid ? `已选 ${state.terrainSelection.count} 处陆地` : "尚未选择范围" }}</span>
+    </div>
+    <div class="height-terrain-selection-actions">
+      <UiButton variant="secondary" :disabled="!state.active" @click="startPlayerSmoothingSelection">在地图涂选范围</UiButton>
+      <UiButton variant="secondary" :disabled="!state.terrainSelection?.valid" @click="callbacks.onTerrainSelectionClear?.()">清除选择</UiButton>
+    </div>
+    <UiSliderField label="平滑度" :model-value="state.selectionSmoothness" :min="0" :max="1" :step="0.01" @input="setSelectionSmoothness" />
+    <UiButton :disabled="!state.active || !state.terrainSelection?.valid" @click="callbacks.onTerrainSelectionSmooth?.()">平滑所选范围</UiButton>
+    <p class="height-action-help">0 只柔化选区边缘；数值越高，越会抑制范围内的尖峰和深谷。平滑不会改变海陆分界。</p>
+  </section>
+
+  <div v-if="debugEnabled" class="height-expert-controls">
   <p class="height-control-label">全局微调</p>
   <div class="height-global-actions">
     <UiButton variant="secondary" :disabled="!state.active" @click="callbacks.onGlobalToolPreview?.('smooth')">预览全局平滑</UiButton>
@@ -85,8 +100,9 @@
   </p>
   <UiButton class="height-global-apply" variant="secondary" :disabled="!state.active || !state.globalToolPreview?.valid" @click="callbacks.onGlobalToolApply?.()">应用全局预览</UiButton>
   <p class="height-action-help">预览与应用都作用于当前“全部 / 仅陆地 / 仅水域”范围，并进入同一撤销历史。</p>
+  </div>
 
-  <section class="height-transform-panel" aria-labelledby="height-selection-title">
+  <section v-if="debugEnabled" class="height-transform-panel" aria-labelledby="height-selection-title">
     <div class="height-transform-heading">
       <strong id="height-selection-title">常用选区</strong>
       <span>锁定后可组合与羽化</span>
@@ -177,7 +193,7 @@
     </div>
   </section>
 
-  <details class="panel-advanced-section height-advanced-section">
+  <details v-if="debugEnabled" class="panel-advanced-section height-advanced-section">
     <summary>高级地形程序与条件变换</summary>
     <div class="panel-advanced-section-body">
   <section class="height-transform-panel" aria-labelledby="height-template-title">
@@ -349,14 +365,14 @@
   </details>
 
   <div class="height-history-actions">
-    <UiButton variant="secondary" @click="callbacks.onUndo?.()">撤销上次</UiButton>
-    <UiButton variant="secondary" @click="callbacks.onRedo?.()">重做上次</UiButton>
-    <UiButton variant="secondary" @click="callbacks.onRegenerateRivers?.()">重算河流</UiButton>
-    <UiButton variant="secondary" @click="callbacks.onRegenerateBase?.()">重算基础派生</UiButton>
-    <UiButton variant="secondary" @click="callbacks.onRegenerateDownstream?.()">重算下游派生</UiButton>
+    <UiButton variant="secondary" :disabled="!state.history?.undo" @click="callbacks.onUndo?.()">撤销上次</UiButton>
+    <UiButton variant="secondary" :disabled="!state.history?.redo" @click="callbacks.onRedo?.()">重做上次</UiButton>
+    <UiButton v-if="debugEnabled" variant="secondary" @click="callbacks.onRegenerateRivers?.()">重算河流</UiButton>
+    <UiButton v-if="debugEnabled" variant="secondary" @click="callbacks.onRegenerateBase?.()">重算基础派生</UiButton>
+    <UiButton v-if="debugEnabled" variant="secondary" @click="callbacks.onRegenerateDownstream?.()">重算下游派生</UiButton>
   </div>
 
-  <section class="heightmap-import-launcher" aria-labelledby="heightmap-import-title">
+  <section v-if="debugEnabled" class="heightmap-import-launcher" aria-labelledby="heightmap-import-title">
     <div>
       <h2 id="heightmap-import-title">高度图导入</h2>
       <p>在独立工作台预览灰度图，再应用到当前地图。</p>
@@ -367,7 +383,7 @@
 
   <Teleport to="body">
     <section
-      v-if="workbenchOpen"
+      v-if="debugEnabled && workbenchOpen"
       ref="workbenchRef"
       class="heightmap-import-workbench"
       :style="workbenchStyle"
@@ -701,6 +717,7 @@ import UiSliderField from "./base/UiSliderField.vue";
 import UiSwitchField from "./base/UiSwitchField.vue";
 import UiStateBanner from "./base/UiStateBanner.vue";
 import {formatHeight, formatNumber} from "../../display-units.js";
+import {useDebugMode} from "../composables/use-debug-mode.js";
 import {useUnitPreferences} from "../composables/use-unit-preferences.js";
 import {useManagedOverlay} from "../composables/use-managed-overlay.js";
 import {BRUSH_RADIUS_ID, normalizeBrushRadius, readBrushRadiusContract} from "../../../runtime/brush-radius-contract.js";
@@ -731,6 +748,10 @@ const actions = Object.freeze([
   {value: "disrupt", label: "扰动"},
   {value: "fill", label: "填充"},
   {value: "line", label: "线段"}
+]);
+const playerActions = Object.freeze([
+  {value: "raise", label: "抬升陆地"},
+  {value: "lower", label: "降低陆地"}
 ]);
 const scopes = Object.freeze([
   {value: "all", label: "全部"},
@@ -825,6 +846,18 @@ const heightPreviewStops = Object.freeze([
   {height: 100, color: [236, 232, 218]}
 ]);
 const unitPreferences = useUnitPreferences();
+const debugEnabled = useDebugMode();
+props.state.preserveSurface = !debugEnabled.value;
+const visibleActions = computed(() => debugEnabled.value ? actions : playerActions);
+const visibleLastNotice = computed(() => {
+  const notice = String(props.state.lastNotice || "");
+  if (debugEnabled.value) return notice;
+  return notice
+    .replace(/grid cells?/gi, "处地图区域")
+    .replace(/pack cells?/gi, "处地图区域")
+    .replace(/cells?/gi, "处地图区域")
+    .replace(/stamps?/gi, "次落笔");
+});
 const heightmapImportMin = ref(0);
 const heightmapImportMax = ref(100);
 const heightmapImportInvert = ref(false);
@@ -895,6 +928,16 @@ const summaryMetrics = computed(() => {
     {label: "低地", value: current ? formatPercent(current.lowland / current.total) : "-"},
     {label: "山地", value: current ? formatPercent(current.mountain / current.total) : "-"},
     {label: "海平面带", value: current ? formatPercent(current.seaLevelBand / current.total) : "-"}
+  ];
+});
+const visibleSummaryMetrics = computed(() => {
+  if (debugEnabled.value) return summaryMetrics.value;
+  const current = props.state.currentHeightStats;
+  return [
+    {label: "状态", value: props.state.active ? "编辑中" : "未启用"},
+    {label: "最近影响", value: formatNumber(props.state.lastAffected, unitPreferences.value)},
+    {label: "当前均高", value: current ? formatHeight(current.average, unitPreferences.value) : "-"},
+    {label: "历史", value: props.state.history ? `可撤销 ${props.state.history.undo} / 可重做 ${props.state.history.redo}` : "无"}
   ];
 });
 const transformOperandConfig = computed(() => {
@@ -1050,13 +1093,34 @@ watch(() => props.state.currentHeightPreview, () => {
   drawHeightDifferencePreview(latestHeightBandSamples);
 });
 
+watch(debugEnabled, enabled => {
+  if (enabled) {
+    props.state.preserveSurface = false;
+    return;
+  }
+  normalizePlayerHeightState();
+  closeImportWorkbench();
+});
+
 onBeforeUnmount(() => {
   removeDragListeners();
 });
 
 function setActive(active) {
+  if (!debugEnabled.value) normalizePlayerHeightState();
   props.state.active = active;
   props.callbacks.onActiveChange?.(active);
+}
+
+function selectHeightAction(action) {
+  if (!debugEnabled.value) {
+    props.state.scope = "land";
+    props.state.preserveSurface = true;
+    setAction(action === "lower" ? "lower" : "raise");
+    return;
+  }
+  props.state.preserveSurface = false;
+  setAction(action);
 }
 
 function setAction(action) {
@@ -1168,6 +1232,31 @@ function terrainSelectionRequest(operation) {
 
 function setStrength(strength) {
   props.state.strength = strength;
+}
+
+function setSelectionSmoothness(value) {
+  props.state.selectionSmoothness = Math.round(Math.max(0, Math.min(1, Number(value) || 0)) * 100) / 100;
+}
+
+function startPlayerSmoothingSelection() {
+  normalizePlayerHeightState();
+  props.state.terrainSelectionSource = "paint";
+  props.state.terrainSelectionRadius = normalizeBrushRadius(BRUSH_RADIUS_ID.HEIGHT_SELECTION, props.state.radius);
+  props.callbacks.onTerrainSelectionLock?.({
+    operation: "replace",
+    source: "paint",
+    scope: "land",
+    lower: 20,
+    upper: 100,
+    radius: props.state.terrainSelectionRadius,
+    tolerance: 0
+  });
+}
+
+function normalizePlayerHeightState() {
+  props.state.scope = "land";
+  props.state.preserveSurface = true;
+  if (props.state.action !== "raise" && props.state.action !== "lower") setAction("raise");
 }
 
 function setFillTolerance(tolerance) {
@@ -2306,7 +2395,12 @@ function formatSignedHeightDelta(value) {
 
 function formatDerivedStaleSystems(systems) {
   if (!Array.isArray(systems) || !systems.length) return "无";
-  const preview = systems.slice(0, 3).map(system => derivedSystemLabels[system] || system).join("、");
+  const preview = systems.slice(0, 3).map(system => derivedSystemLabels[system] || "相关内容").join("、");
   return `${systems.length} 项：${preview}${systems.length > 3 ? "等" : ""}`;
+}
+
+function formatDerivedUpdateHint(systems) {
+  if (!Array.isArray(systems) || !systems.length) return "地图内容均已更新。";
+  return `地形变化后，${formatDerivedStaleSystems(systems)}需要更新。可现在更新，也可继续编辑后再统一处理。`;
 }
 </script>

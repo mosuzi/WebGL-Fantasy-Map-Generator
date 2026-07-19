@@ -2962,6 +2962,10 @@ select:disabled {
   margin: 10px 0;
 }
 
+.segmented.height-action-group.is-player {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 .height-line-preview {
   position: absolute;
   z-index: 18;
@@ -3129,6 +3133,24 @@ select:disabled {
 .height-global-apply {
   width: 100%;
   margin: 8px 0;
+}
+
+.height-expert-controls {
+  display: contents;
+}
+
+.height-player-smoothing {
+  display: grid;
+  gap: 8px;
+  margin: 12px 0;
+  padding: 10px;
+  border: 1px solid rgba(189, 206, 213, 0.14);
+  border-radius: 8px;
+  background: rgba(12, 18, 22, 0.46);
+}
+
+.height-player-smoothing .height-action-help {
+  margin: 0;
 }
 
 .height-transform-panel {

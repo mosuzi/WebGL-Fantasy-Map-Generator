@@ -86,6 +86,7 @@ import {createRegenerateDiplomacyCommand, createSetDiplomacyRelationCommand} fro
 import {applyHeightBrushPreview, createApplyHeightBrushCommand} from "./height-edit-commands.js";
 import {getGlobalHeightChanges, getHeightBrushChanges, getHeightLineChanges, getHeightRangeTransformChanges, inspectGlobalHeightChanges, inspectHeightFillTarget, inspectHeightRangeTransform} from "./height-brush.js";
 import {composeHeightCellSelection, createHeightCellSelectionFeather, createHeightCellSelectionSet, createHeightCellSelectionSnapshot, createHeightCursorRadiusSelection, restoreHeightCellSelectionSnapshot, transformHeightCellSelection} from "./height-cell-selection.js";
+import {getHeightSelectionSmoothingChanges, inspectHeightSelectionSmoothing} from "./height-selection-smoothing.js";
 import {getHeightTerrainTemplateChanges, heightTerrainTemplateLabel, heightTerrainTemplateUsesSeed, inspectHeightTerrainTemplate} from "./height-terrain-templates.js";
 import {getHeightTerrainTemplateProgramChanges, heightTerrainTemplateProgramUsesSeed, inspectHeightTerrainTemplateProgram} from "./height-terrain-template-programs.js";
 import {createRegenerationResult, rebuildHeightBaseDerived, rebuildHeightDownstreamDerived} from "./height-derived-rebuild.js";
@@ -932,6 +933,36 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       state.heightEdit.terrainSelection.useForTools = Boolean(value);
       heightPanel.updateTerrainSelection(state.heightEdit.terrainSelection.summary, value);
       updateEditingInteractionLock(state, documentRef);
+    },
+    onTerrainSelectionSmooth: smoothness => {
+      cancelHeightLine(state, documentRef);
+      clearHeightTransformPreview(state);
+      const options = {
+        cellIds: state.heightEdit.terrainSelection?.cellIds,
+        smoothness
+      };
+      const inspection = inspectHeightSelectionSmoothing(state.map, options);
+      if (!inspection.valid) {
+        state.heightEdit.lastAffected = 0;
+        state.heightEdit.lastHeight = "none";
+        state.heightEdit.lastDelta = "none";
+        state.heightEdit.lastNotice = inspection.notice;
+        updateHeightPanel(state);
+        return inspection;
+      }
+      const changes = getHeightSelectionSmoothingChanges(state.map, options);
+      const result = executeEditCommand(state, documentRef, createApplyHeightBrushCommand(changes, {label: "平滑所选范围"}), {
+        context: {map: state.map},
+        refresh: refreshAfterEdit,
+        refreshPanels: false
+      });
+      state.heightEdit.lastAffected = changes.length;
+      state.heightEdit.lastHeight = summarizeChangedHeights(changes);
+      state.heightEdit.lastDelta = summarizeChangedHeightDelta(changes);
+      state.heightEdit.lastNotice = result.executed ? `已平滑所选范围，共调整 ${changes.length} 处陆地。` : "所选范围没有变化。";
+      updateHeightPanel(state);
+      updateEditingInteractionLock(state, documentRef);
+      return {...inspection, executed: result.executed};
     },
     onRegenerateRivers: () => {
       cancelHeightLine(state, documentRef);

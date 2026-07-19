@@ -1,9 +1,11 @@
 #!/usr/bin/env node
+import {readFile} from "node:fs/promises";
 import {EditHistory} from "../app/webgl-generator/src/runtime/edit-history.js";
 import {BRUSH_RADIUS_ID, normalizeBrushRadius, readBrushRadiusContract} from "../app/webgl-generator/src/runtime/brush-radius-contract.js";
 import {getGlobalHeightChanges, getHeightBrushChanges, getHeightLineChanges, getHeightRangeTransformChanges, inspectGlobalHeightChanges, inspectHeightFillTarget, inspectHeightRangeTransform} from "../app/webgl-generator/src/runtime/height-brush.js";
 import {applyHeightBrushPreview, createApplyHeightBrushCommand} from "../app/webgl-generator/src/runtime/height-edit-commands.js";
 import {composeHeightCellSelection, createHeightCellSelection, createHeightCellSelectionFeather, createHeightCellSelectionSet, createHeightCellSelectionSnapshot, createHeightConnectedSelection, createHeightCursorRadiusSelection, createHeightPaintSelection, createHeightRectangleSelection, inspectHeightCellSelection, inspectHeightCellSelectionComposition, inspectHeightCellSelectionFeather, inspectHeightCellSelectionTransform, inspectHeightConnectedSelection, inspectHeightCursorRadiusSelection, inspectHeightPaintSelection, inspectHeightRectangleSelection, restoreHeightCellSelectionSnapshot, transformHeightCellSelection} from "../app/webgl-generator/src/runtime/height-cell-selection.js";
+import {getHeightSelectionSmoothingChanges, inspectHeightSelectionSmoothing} from "../app/webgl-generator/src/runtime/height-selection-smoothing.js";
 import {getHeightTerrainTemplateChanges, HEIGHT_TERRAIN_TEMPLATE_PRESETS, heightTerrainTemplateUsesSeed, inspectHeightTerrainTemplate} from "../app/webgl-generator/src/runtime/height-terrain-templates.js";
 import {buildHeightCellSelectionMesh, buildHeightTransformPreviewMesh} from "../app/webgl-generator/src/renderer/height-transform-preview-layer.js";
 
@@ -11,6 +13,58 @@ const heightRadiusContract = readBrushRadiusContract(BRUSH_RADIUS_ID.HEIGHT);
 assert(heightRadiusContract.defaultValue === 28 && normalizeBrushRadius(BRUSH_RADIUS_ID.HEIGHT, -1) === 6 && normalizeBrushRadius(BRUSH_RADIUS_ID.HEIGHT, 999) === 96, "高度画笔半径契约异常");
 const heightSelectionRadiusContract = readBrushRadiusContract(BRUSH_RADIUS_ID.HEIGHT_SELECTION);
 assert(heightSelectionRadiusContract.defaultValue === 48 && normalizeBrushRadius(BRUSH_RADIUS_ID.HEIGHT_SELECTION, -1) === 8 && normalizeBrushRadius(BRUSH_RADIUS_ID.HEIGHT_SELECTION, 999) === 160, "高度选区半径契约异常");
+const protectedLandMap = createSquareMap(3, () => 20);
+const protectedLandLower = getHeightBrushChanges(protectedLandMap, {x: 1, y: 1}, {action: "lower", scope: "land", preserveSurface: true, radius: 20, strength: 18, falloff: false}, {originals: new Map()});
+assert(protectedLandLower.length === 0, "普通陆地下降跨越了海平面");
+const compatibleLandLower = getHeightBrushChanges(protectedLandMap, {x: 1, y: 1}, {action: "lower", scope: "land", preserveSurface: false, radius: 20, strength: 18, falloff: false}, {originals: new Map()});
+assert(compatibleLandLower.some(change => change.after === 2), "专家兼容入口不再允许原有跨海平面高度命令");
+
+const smoothingMap = createSquareMap(5, (x, y) => {
+  if (x === 0 && y === 1) return 10;
+  if (x === 2 && y === 2) return 20;
+  if (x >= 1 && x <= 3 && y >= 1 && y <= 3) return (x + y) % 2 ? 70 : 30;
+  return 50;
+});
+const smoothingSelection = [6, 7, 8, 11, 12, 13, 16, 17, 18];
+const smoothingLevels = [0, 0.5, 1].map(smoothness => ({
+  smoothness,
+  inspection: inspectHeightSelectionSmoothing(smoothingMap, {cellIds: smoothingSelection, smoothness}),
+  changes: getHeightSelectionSmoothingChanges(smoothingMap, {cellIds: smoothingSelection, smoothness})
+}));
+assert(smoothingLevels.every(level => level.inspection.valid), `范围平滑预检异常：${JSON.stringify(smoothingLevels)}`);
+assert(JSON.stringify(smoothingLevels[1].changes) === JSON.stringify(getHeightSelectionSmoothingChanges(smoothingMap, {cellIds: smoothingSelection, smoothness: 0.5})), "相同范围和平滑度没有得到确定结果");
+assert(!smoothingLevels[0].changes.some(change => change.gridCell === 12), "平滑度 0 不应重塑选区内部深谷");
+assert(smoothingLevels[2].changes.some(change => change.gridCell === 12 && change.after > change.before), "平滑度 1 没有抑制选区内部深谷");
+const smoothingMagnitude = smoothingLevels.map(level => level.changes.reduce((sum, change) => sum + Math.abs(change.after - change.before), 0));
+assert(smoothingMagnitude[0] <= smoothingMagnitude[1] && smoothingMagnitude[1] <= smoothingMagnitude[2], `平滑强度不单调：${smoothingMagnitude}`);
+const smoothingAllowed = new Set(smoothingSelection.flatMap(cell => [cell, ...(smoothingMap.grid.cells.c[cell] || [])]));
+assert(smoothingLevels.every(level => level.changes.every(change => smoothingAllowed.has(change.gridCell))), "范围平滑修改了选区及过渡环以外的 cell");
+assert(smoothingLevels.every(level => level.changes.every(change => change.before >= 20 && change.after >= 20 && change.after <= 100)), "范围平滑跨越海陆或高度范围");
+assert(smoothingLevels.every(level => level.changes.every(change => change.after >= 10 && change.after <= 70)), "范围平滑产生了新的全局极值");
+const smoothingHistory = new EditHistory();
+smoothingHistory.execute(createApplyHeightBrushCommand(smoothingLevels[2].changes, {label: "平滑所选范围"}), {map: smoothingMap});
+assert(smoothingHistory.getStats().undo === 1, "一次范围平滑没有形成一条历史");
+const smoothedSnapshot = Array.from(smoothingMap.grid.cells.h);
+smoothingHistory.undo({map: smoothingMap});
+assert(smoothingMap.grid.cells.h[12] === 20 && smoothingMap.grid.cells.h[5] === 10, "范围平滑撤销没有恢复高度或误改水域");
+smoothingHistory.redo({map: smoothingMap});
+assert(JSON.stringify(Array.from(smoothingMap.grid.cells.h)) === JSON.stringify(smoothedSnapshot), "范围平滑重做没有恢复结果");
+
+const [heightPanelSource, heightPanelModelSource, appSource] = await Promise.all([
+  readFile(new URL("../app/webgl-generator/src/ui/vue/components/HeightPanel.vue", import.meta.url), "utf8"),
+  readFile(new URL("../app/webgl-generator/src/ui/panels/height-panel.js", import.meta.url), "utf8"),
+  readFile(new URL("../app/webgl-generator/src/runtime/app.js", import.meta.url), "utf8")
+]);
+assert(/useDebugMode/.test(heightPanelSource), "高度面板没有复用统一调试模式");
+assert(/const playerActions = Object\.freeze\(\[\s*\{value: "raise", label: "抬升陆地"\},\s*\{value: "lower", label: "降低陆地"\}/.test(heightPanelSource), "普通高度动作没有收敛为陆地升降");
+assert(/label="平滑度"[^>]+:min="0"[^>]+:max="1"[^>]+:step="0\.01"/.test(heightPanelSource), "范围平滑度契约异常");
+assert(/<details v-if="debugEnabled" class="panel-advanced-section height-advanced-section">/.test(heightPanelSource), "专家地形程序仍在普通模式显示");
+assert(/<section v-if="debugEnabled" class="heightmap-import-launcher"/.test(heightPanelSource), "高度图导入仍在普通模式显示");
+assert(/scope: "land"/.test(heightPanelModelSource), "高度面板默认范围不是陆地");
+assert(/selectionSmoothness: 0/.test(heightPanelModelSource), "范围平滑度默认值不是 0");
+assert(/onTerrainSelectionSmooth/.test(heightPanelModelSource), "高度面板 wrapper 缺少范围平滑入口");
+assert(/inspectHeightSelectionSmoothing\(state\.map, options\)/.test(appSource), "范围平滑提交前没有复检");
+assert(/createApplyHeightBrushCommand\(changes, \{label: "平滑所选范围"\}\)/.test(appSource), "范围平滑没有复用单条高度历史命令");
 
 const map = createSyntheticMap();
 const stroke = {originals: new Map()};
@@ -442,6 +496,7 @@ console.log(JSON.stringify({
   disruptAfter: disrupt.map(change => change.after),
   landScope: landScope.map(change => change.gridCell),
   waterScope: waterScope.map(change => change.gridCell),
+  selectionSmoothing: {magnitude: smoothingMagnitude, history: smoothingHistory.getStats()},
   globalSmooth: {cells: globalSmooth.length, center: globalSmooth.find(change => change.gridCell === 4)?.after},
   globalSmoothPreview,
   globalDisrupt: {cells: globalDisrupt.length, first: globalDisrupt[0]?.after},

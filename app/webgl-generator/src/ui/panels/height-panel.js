@@ -20,9 +20,11 @@ export function createHeightPanel(documentRef, manager, callbacks = {}) {
   const panelState = reactive({
     active: false,
     action: "raise",
-    scope: "all",
+    scope: "land",
+    preserveSurface: true,
     radius: HEIGHT_RADIUS.defaultValue,
     strength: 4,
+    selectionSmoothness: 0,
     fillTolerance: 6,
     lineWidth: 12,
     linePower: 12,
@@ -99,6 +101,7 @@ export function createHeightPanel(documentRef, manager, callbacks = {}) {
     onTerrainSelectionFeatherChange: value => callbacks.onTerrainSelectionFeatherChange?.(value),
     onTerrainSelectionCancel: () => callbacks.onTerrainSelectionCancel?.(),
     onTerrainSelectionUseChange: value => callbacks.onTerrainSelectionUseChange?.(value),
+    onTerrainSelectionSmooth: () => callbacks.onTerrainSelectionSmooth?.(panelState.selectionSmoothness),
     onRegenerateRivers: () => callbacks.onRegenerateRivers?.(),
     onRegenerateBase: () => callbacks.onRegenerateBase?.(),
     onRegenerateDownstream: () => callbacks.onRegenerateDownstream?.()
@@ -353,6 +356,7 @@ export function createHeightPanel(documentRef, manager, callbacks = {}) {
         active: panelState.active,
         action: panelState.action,
         scope: panelState.scope,
+        preserveSurface: panelState.preserveSurface,
         radius: normalizeBrushRadius(BRUSH_RADIUS_ID.HEIGHT, panelState.radius),
         strength: panelState.strength,
         fillTolerance: panelState.fillTolerance,

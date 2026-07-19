@@ -62,7 +62,10 @@ export function getHeightBrushChanges(map, point, brush, stroke) {
 
   const strength = Math.max(1, Number(brush.strength) || 1);
   const delta = brush.action === "lower" ? -strength : strength;
-  return affected.map(({gridCell, factor}) => heightChange(cells, originals, gridCell, cells.h[gridCell] + delta * factor)).filter(Boolean);
+  return affected.map(({gridCell, factor}) => {
+    const next = cells.h[gridCell] + delta * factor;
+    return heightChange(cells, originals, gridCell, brush?.preserveSurface ? clampHeightToScope(next, scope) : next);
+  }).filter(Boolean);
 }
 
 export function getHeightLineChanges(map, fromPoint, toPoint, brush, stroke) {
