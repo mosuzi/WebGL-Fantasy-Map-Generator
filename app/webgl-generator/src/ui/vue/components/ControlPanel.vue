@@ -374,7 +374,13 @@
       />
       <div class="label-style-preview" :style="labelStylePreviewCss" aria-live="polite">山河有名 · {{ activeLabelStyleLabel }}</div>
       <p class="label-style-inheritance">{{ labelStyleInheritanceHint }}</p>
-      <UiSelectField label="字体" input-id="label-style-font" :model-value="activeLabelStyle.fontFamilyId" :options="labelFontOptions" @update:model-value="value => commitLabelStyle('fontFamilyId', value)" />
+      <div class="label-font-source-row">
+        <UiSelectField label="字体" input-id="label-style-font" :model-value="activeLabelFontValue" :options="labelFontOptions" @update:model-value="commitLabelFont" />
+        <UiButton id="load-local-label-fonts" variant="secondary" :disabled="localFontsLoading" @click="loadLocalLabelFonts">
+          {{ localFontsLoading ? "读取中" : "读取本机字体" }}
+        </UiButton>
+      </div>
+      <p class="label-font-status" role="status">{{ labelFontStatus }}</p>
       <UiSelectField label="字重" input-id="label-style-weight" :model-value="String(activeLabelStyle.fontWeight)" :options="labelWeightOptions" @update:model-value="value => commitLabelStyle('fontWeight', Number(value))" />
       <UiSwitchField label="斜体" input-id="label-style-italic" :checked="activeLabelStyle.italic" @change="value => commitLabelStyle('italic', value)" />
       <UiSliderField label="字号" input-id="label-style-font-size" :model-value="activeLabelStyle.fontSize" :min="8" :max="72" :step="1" unit-label="px" @change="value => commitLabelStyle('fontSize', value)" />
@@ -575,7 +581,7 @@ import {Lock, Unlock} from "@element-plus/icons-vue";
 import {useDraggableFloatingPanel} from "../composables/use-draggable-floating-panel.js";
 import {useManagedOverlay} from "../composables/use-managed-overlay.js";
 import {visualThemeOptions} from "../../../renderer/themes.js";
-import {LABEL_FONT_FAMILIES, LABEL_STYLE_TYPES, resolveLabelStyle} from "../../../runtime/label-style-registry.js";
+import {LABEL_FONT_FAMILIES, LABEL_STYLE_TYPES, LOCAL_LABEL_FONT_ID, normalizeLocalFontFamilyName, resolveLabelStyle} from "../../../runtime/label-style-registry.js";
 import {
   DISTANCE_UNIT_OPTIONS,
   NUMBER_ABBREVIATION_OPTIONS,
@@ -727,13 +733,43 @@ const labelStyleTypeOptions = Object.freeze([
   {value: "city", label: "城市名称"},
   {value: "custom", label: "手工标签"}
 ]);
-const labelFontOptions = Object.freeze(Object.keys(LABEL_FONT_FAMILIES).map(value => ({value, label: labelFontLabel(value)})));
+const localFontFamilies = ref([]);
+const localFontsLoaded = ref(false);
+const localFontsLoading = ref(false);
+const localFontsMessage = ref("");
+const builtInLabelFontOptions = Object.freeze(Object.keys(LABEL_FONT_FAMILIES).map(value => ({value, label: labelFontLabel(value)})));
 const labelWeightOptions = Object.freeze([300, 400, 500, 600, 650, 700, 800, 900].map(value => ({value: String(value), label: String(value)})));
 const selectedLabelStyleType = ref(LABEL_STYLE_TYPES[0]);
 const labelStyleSnapshot = ref(createDefaultLabelStyleSnapshot());
 const activeLabelStyleEntry = computed(() => labelStyleSnapshot.value.styles?.[selectedLabelStyleType.value] || createDefaultLabelStyleEntry(selectedLabelStyleType.value));
 const activeLabelStyle = computed(() => activeLabelStyleEntry.value.resolved);
 const activeLabelStyleLabel = computed(() => labelStyleTypeOptions.find(option => option.value === selectedLabelStyleType.value)?.label || "标签");
+const activeLabelFontValue = computed(() => activeLabelStyle.value.fontFamilyId === LOCAL_LABEL_FONT_ID
+  ? localFontOptionValue(activeLabelStyle.value.fontFamilyName)
+  : activeLabelStyle.value.fontFamilyId);
+const labelFontOptions = computed(() => {
+  const options = [...builtInLabelFontOptions];
+  for (const family of localFontFamilies.value) options.push({value: localFontOptionValue(family), label: `本机 · ${family}`});
+  const activeFamily = normalizeLocalFontFamilyName(activeLabelStyle.value.fontFamilyName);
+  if (activeLabelStyle.value.fontFamilyId === LOCAL_LABEL_FONT_ID && activeFamily && !localFontFamilies.value.includes(activeFamily)) {
+    options.push({
+      value: localFontOptionValue(activeFamily),
+      label: localFontsLoaded.value ? `缺失 · ${activeFamily}（系统回退）` : `存档 · ${activeFamily}`
+    });
+  }
+  return options;
+});
+const labelFontStatus = computed(() => {
+  const family = normalizeLocalFontFamilyName(activeLabelStyle.value.fontFamilyName);
+  if (activeLabelStyle.value.fontFamilyId === LOCAL_LABEL_FONT_ID && localFontsLoaded.value) {
+    return localFontFamilies.value.includes(family)
+      ? `本机已检测到“${family}”。`
+      : `本机未检测到“${family}”，当前自动使用系统字体。`;
+  }
+  if (localFontsMessage.value) return localFontsMessage.value;
+  if (activeLabelStyle.value.fontFamilyId !== LOCAL_LABEL_FONT_ID) return "可读取浏览器获准访问的本机字体；存档不会嵌入字体文件。";
+  return `存档字体“${family}”；若本机不可用，将自动使用系统字体。`;
+});
 const labelStyleInheritanceHint = computed(() => {
   const fields = Object.keys(activeLabelStyleEntry.value.override || {});
   return fields.length ? `当前有 ${fields.length} 个地图级覆盖字段；其余沿用默认与主题。` : "当前未设地图级覆盖，沿用默认与主题。";
@@ -1040,6 +1076,48 @@ function commitLabelStyle(field, value) {
   }));
 }
 
+function commitLabelFont(value) {
+  const token = String(value || "");
+  if (token.startsWith("local:")) {
+    const family = normalizeLocalFontFamilyName(token.slice(6));
+    if (!family) return;
+    commitLabelStylePatch({fontFamilyId: LOCAL_LABEL_FONT_ID, fontFamilyName: family});
+    return;
+  }
+  commitLabelStylePatch({fontFamilyId: token, fontFamilyName: null});
+}
+
+function commitLabelStylePatch(patch) {
+  document.dispatchEvent(new CustomEvent("webgl-generator-label-style-patch", {
+    detail: {styleType: selectedLabelStyleType.value, patch}
+  }));
+}
+
+async function loadLocalLabelFonts() {
+  localFontsMessage.value = "";
+  if (typeof window.queryLocalFonts !== "function") {
+    localFontsMessage.value = "当前浏览器不支持读取本机字体；仍可使用内置字体，存档中的缺失字体会自动回退。";
+    return;
+  }
+  localFontsLoading.value = true;
+  try {
+    const fonts = await window.queryLocalFonts();
+    localFontFamilies.value = [...new Set(fonts.map(font => normalizeLocalFontFamilyName(font?.family)).filter(Boolean))]
+      .sort((left, right) => left.localeCompare(right, "zh-CN"));
+    localFontsLoaded.value = true;
+    localFontsMessage.value = localFontFamilies.value.length
+      ? `已读取 ${localFontFamilies.value.length} 个本机字体族。`
+      : "浏览器没有返回可用的本机字体；仍可使用内置字体。";
+  } catch (error) {
+    localFontsLoaded.value = false;
+    localFontsMessage.value = error?.name === "NotAllowedError"
+      ? "未获得本机字体访问权限；仍可使用内置字体。"
+      : "读取本机字体失败；仍可使用内置字体。";
+  } finally {
+    localFontsLoading.value = false;
+  }
+}
+
 function resetCurrentLabelStyle() {
   document.dispatchEvent(new CustomEvent("webgl-generator-label-style-reset", {detail: {styleType: selectedLabelStyleType.value}}));
 }
@@ -1062,6 +1140,10 @@ function createDefaultLabelStyleEntry(styleType) {
 
 function labelFontLabel(fontFamilyId) {
   return {system: "系统界面", serif: "衬线", sans: "无衬线", condensed: "窄体", mono: "等宽"}[fontFamilyId] || fontFamilyId;
+}
+
+function localFontOptionValue(family) {
+  return `local:${normalizeLocalFontFamilyName(family)}`;
 }
 
 function applyVisualThemeColor(color) {

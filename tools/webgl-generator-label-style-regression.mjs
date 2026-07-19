@@ -7,10 +7,14 @@ import {createPatchLabelStyleCommand, createResetAllLabelStylesCommand, createRe
 import {ensureLabelStore, isGeneratedLabelHidden} from "../app/webgl-generator/src/runtime/label-edit-commands.js";
 import {
   LABEL_FONT_FAMILIES,
+  LABEL_FONT_FALLBACK,
   LABEL_STYLE_TYPES,
+  LOCAL_LABEL_FONT_ID,
   estimateLabelTextBox,
   labelStyleTypeForTarget,
+  normalizeLocalFontFamilyName,
   patchLabelStyle,
+  resolveLabelFontFamily,
   resolveLabelStyle
 } from "../app/webgl-generator/src/runtime/label-style-registry.js";
 import {createCompressedMapDocumentBlob, createMapDocument, parseMapDocument, parseMapDocumentPayload, stringifyMapDocument} from "../app/webgl-generator/src/runtime/map-file-io.js";
@@ -47,6 +51,17 @@ assert.equal(resolveLabelStyle(map, "province", theme).fontSize, 72, "字号没�
 assert.equal(resolveLabelStyle(map, "province", theme).opacity, 0, "不透明度没有 clamp");
 assert.equal(resolveLabelStyle(map, "province", theme).color, "#123456", "地图覆盖没有高于主题层");
 assert.throws(() => patchLabelStyle(map, "city", {fontFamilyId: "remote-font"}), /不支持的标签字体/);
+assert.throws(() => patchLabelStyle(map, "city", {fontFamilyId: LOCAL_LABEL_FONT_ID, fontFamilyName: ""}), /本机字体/);
+patchLabelStyle(map, "city", {fontFamilyId: LOCAL_LABEL_FONT_ID, fontFamilyName: "  Example   Local Font  "});
+const localCityStyle = resolveLabelStyle(map, "city");
+assert.equal(localCityStyle.fontFamilyId, LOCAL_LABEL_FONT_ID);
+assert.equal(localCityStyle.fontFamilyName, "Example Local Font");
+assert.equal(localCityStyle.fontFamily, `"Example Local Font", ${LABEL_FONT_FALLBACK}`, "本机字体没有追加系统 fallback");
+assert.equal(resolveLabelFontFamily(LOCAL_LABEL_FONT_ID, "Missing Font").endsWith(LABEL_FONT_FALLBACK), true);
+assert.equal(normalizeLocalFontFamilyName("bad\u0000font"), "", "控制字符字体名没有拒绝");
+patchLabelStyle(map, "city", {fontFamilyId: "sans", fontFamilyName: null});
+assert.equal(resolveLabelStyle(map, "city").fontFamilyId, "sans");
+assert.equal(resolveLabelStyle(map, "city").fontFamilyName, null, "切回内置字体仍残留本机字体名");
 
 const history = new EditHistory();
 const context = {map};
@@ -62,6 +77,12 @@ assert.equal(resolveLabelStyle(map, "state").fontSize, 30, "重置重做没有�
 history.execute(createResetAllLabelStylesCommand(), context);
 assert.deepEqual(map.labels.styles.overrides, {});
 assert.equal(map.metadata.checksum, checksum, "样式命令不应改写地图 checksum");
+history.execute(createPatchLabelStyleCommand("custom", {fontFamilyId: LOCAL_LABEL_FONT_ID, fontFamilyName: "Archive Only Font"}), context);
+assert.equal(resolveLabelStyle(map, "custom").fontFamilyName, "Archive Only Font");
+history.undo(context);
+assert.equal(resolveLabelStyle(map, "custom").fontFamilyId, "serif", "本机字体撤销没有恢复内置字体");
+history.redo(context);
+assert.equal(resolveLabelStyle(map, "custom").fontFamilyName, "Archive Only Font", "本机字体重做没有恢复字体族名称");
 
 assert.equal(labelStyleTypeForTarget(LABEL_TARGET_KIND.CITY, map.settlements.cities[0]), "capital", "首都样式拆分改变了 city target identity");
 assert.equal(LABEL_TARGET_KIND.CITY, "city");
@@ -78,6 +99,7 @@ assert.ok(largeBox.width > smallBox.width && largeBox.height > smallBox.height, 
 const document = createMapDocument(map, map.options);
 const roundTrip = parseMapDocument(stringifyMapDocument(document));
 assert.equal(roundTrip.map.labels.styles.version, 1);
+assert.equal(roundTrip.map.labels.styles.overrides.custom.fontFamilyName, "Archive Only Font", "完整地图没有保存本机字体族名称");
 const oldV2 = structuredClone(document);
 delete oldV2.map.labels.styles;
 delete oldV2.map.labels.hidden.province;
@@ -97,6 +119,7 @@ const compressed = await createCompressedMapDocumentBlob(documentRef, document);
 const gzipBase64 = Buffer.from(await compressed.blob.arrayBuffer()).toString("base64");
 const parsedGzip = await parseMapDocumentPayload(documentRef, {encoding: "gzip-base64", data: gzipBase64});
 assert.equal(parsedGzip.map.labels.styles.version, 1, "gzip 全图链没有保留标签样式");
+assert.equal(parsedGzip.map.labels.styles.overrides.custom.fontFamilyName, "Archive Only Font", "gzip 没有保存本机字体族名称");
 
 const [rendererSource, controlPanelSource, mapIoSource] = await Promise.all([
   readFile(new URL("../app/webgl-generator/src/renderer/placeholder-renderer.js", import.meta.url), "utf8"),
@@ -107,6 +130,8 @@ assert.match(rendererSource, /getLabelStates\(map\), \.\.\.getLabelProvinces\(ma
 assert.match(rendererSource, /isWorldPoint\(province\.pole\)[\s\S]*province\.center/, "省份标签没有 pole→center 回退");
 assert.match(rendererSource, /provinceLabel[\s\S]*boxesOverlapAny\(occupiedStates/, "省份标签没有避让国家名称");
 assert.match(controlPanelSource, /data-control-panel="styles"[\s\S]*reset-all-label-styles/, "样式页或全部重置入口缺失");
+assert.match(controlPanelSource, /load-local-label-fonts[\s\S]*queryLocalFonts/, "样式页没有用户触发的本机字体读取入口");
+assert.match(controlPanelSource, /本机未检测到[\s\S]*系统字体/, "样式页没有缺失字体 fallback 状态");
 assert.match(mapIoSource, /\.province-label\.visible/, "PNG overlay 没有纳入省份名称");
 assert.match(mapIoSource, /context\.strokeText\([\s\S]*context\.fillText\(/, "PNG 文字没有按描边→填充绘制");
 

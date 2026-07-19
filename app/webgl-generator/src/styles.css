@@ -407,6 +407,25 @@ select {
   line-height: 1.5;
 }
 
+.label-font-source-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 8px;
+}
+
+.label-font-source-row > .el-button {
+  min-height: 36px;
+  white-space: nowrap;
+}
+
+.label-font-status {
+  margin: -4px 0 0;
+  color: #9fadb3;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
 .label-style-color-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

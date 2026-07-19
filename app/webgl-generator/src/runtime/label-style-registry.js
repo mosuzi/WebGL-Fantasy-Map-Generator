@@ -18,12 +18,15 @@ export const LABEL_FONT_FAMILIES = Object.freeze({
   mono: "Consolas, \"Courier New\", monospace"
 });
 
+export const LOCAL_LABEL_FONT_ID = "local";
+export const LABEL_FONT_FALLBACK = LABEL_FONT_FAMILIES.system;
+
 export const LABEL_STYLE_DEFAULTS = Object.freeze({
-  [LABEL_STYLE_TYPE.STATE]: freezeStyle({fontFamilyId: "serif", fontSize: 30, fontWeight: 700, italic: false, letterSpacing: 2, color: "#fff0b8", opacity: 0.92, strokeColor: "#16202a", strokeWidth: 0, shadowColor: "#16202a", shadowOffsetX: 0, shadowOffsetY: 1, shadowBlur: 2}),
-  [LABEL_STYLE_TYPE.PROVINCE]: freezeStyle({fontFamilyId: "serif", fontSize: 18, fontWeight: 650, italic: false, letterSpacing: 1.2, color: "#fff0b8", opacity: 0.86, strokeColor: "#16202a", strokeWidth: 0, shadowColor: "#16202a", shadowOffsetX: 0, shadowOffsetY: 1, shadowBlur: 2}),
-  [LABEL_STYLE_TYPE.CAPITAL]: freezeStyle({fontFamilyId: "serif", fontSize: 16, fontWeight: 800, italic: false, letterSpacing: 0.2, color: "#ffffff", opacity: 0.96, strokeColor: "#0d141b", strokeWidth: 0, shadowColor: "#0d141b", shadowOffsetX: 0, shadowOffsetY: 1, shadowBlur: 2}),
-  [LABEL_STYLE_TYPE.CITY]: freezeStyle({fontFamilyId: "sans", fontSize: 13, fontWeight: 650, italic: false, letterSpacing: 0, color: "#ffffff", opacity: 0.94, strokeColor: "#0d141b", strokeWidth: 0, shadowColor: "#0d141b", shadowOffsetX: 0, shadowOffsetY: 1, shadowBlur: 2}),
-  [LABEL_STYLE_TYPE.CUSTOM]: freezeStyle({fontFamilyId: "serif", fontSize: 15, fontWeight: 700, italic: false, letterSpacing: 0.4, color: "#f8ead0", opacity: 0.98, strokeColor: "#6a4d2f", strokeWidth: 0, shadowColor: "#0d141b", shadowOffsetX: 0, shadowOffsetY: 1, shadowBlur: 2})
+  [LABEL_STYLE_TYPE.STATE]: freezeStyle({fontFamilyId: "serif", fontFamilyName: null, fontSize: 30, fontWeight: 700, italic: false, letterSpacing: 2, color: "#fff0b8", opacity: 0.92, strokeColor: "#16202a", strokeWidth: 0, shadowColor: "#16202a", shadowOffsetX: 0, shadowOffsetY: 1, shadowBlur: 2}),
+  [LABEL_STYLE_TYPE.PROVINCE]: freezeStyle({fontFamilyId: "serif", fontFamilyName: null, fontSize: 18, fontWeight: 650, italic: false, letterSpacing: 1.2, color: "#fff0b8", opacity: 0.86, strokeColor: "#16202a", strokeWidth: 0, shadowColor: "#16202a", shadowOffsetX: 0, shadowOffsetY: 1, shadowBlur: 2}),
+  [LABEL_STYLE_TYPE.CAPITAL]: freezeStyle({fontFamilyId: "serif", fontFamilyName: null, fontSize: 16, fontWeight: 800, italic: false, letterSpacing: 0.2, color: "#ffffff", opacity: 0.96, strokeColor: "#0d141b", strokeWidth: 0, shadowColor: "#0d141b", shadowOffsetX: 0, shadowOffsetY: 1, shadowBlur: 2}),
+  [LABEL_STYLE_TYPE.CITY]: freezeStyle({fontFamilyId: "sans", fontFamilyName: null, fontSize: 13, fontWeight: 650, italic: false, letterSpacing: 0, color: "#ffffff", opacity: 0.94, strokeColor: "#0d141b", strokeWidth: 0, shadowColor: "#0d141b", shadowOffsetX: 0, shadowOffsetY: 1, shadowBlur: 2}),
+  [LABEL_STYLE_TYPE.CUSTOM]: freezeStyle({fontFamilyId: "serif", fontFamilyName: null, fontSize: 15, fontWeight: 700, italic: false, letterSpacing: 0.4, color: "#f8ead0", opacity: 0.98, strokeColor: "#6a4d2f", strokeWidth: 0, shadowColor: "#0d141b", shadowOffsetX: 0, shadowOffsetY: 1, shadowBlur: 2})
 });
 
 const STYLE_FIELDS = Object.freeze(Object.keys(LABEL_STYLE_DEFAULTS[LABEL_STYLE_TYPE.CITY]));
@@ -87,7 +90,7 @@ export function resolveLabelStyle(mapOrStore, styleType, visualTheme = null) {
     ...themeStyleForType(visualTheme, styleType),
     ...override
   };
-  return Object.freeze({...resolved, fontFamily: LABEL_FONT_FAMILIES[resolved.fontFamilyId]});
+  return Object.freeze({...resolved, fontFamily: resolveLabelFontFamily(resolved.fontFamilyId, resolved.fontFamilyName)});
 }
 
 export function readLabelStyleOverride(mapOrStore, styleType) {
@@ -99,8 +102,9 @@ export function readLabelStyleOverride(mapOrStore, styleType) {
 export function patchLabelStyle(map, styleType, patch) {
   assertLabelStyleType(styleType);
   const store = ensureLabelStyleStore(map);
-  const normalizedPatch = normalizeLabelStyleOverride(patch, {strict: true});
-  const next = {...(store.overrides[styleType] || {}), ...normalizedPatch};
+  const nextSource = {...(store.overrides[styleType] || {}), ...(patch || {})};
+  if (Object.hasOwn(patch || {}, "fontFamilyName") && patch.fontFamilyName === null) delete nextSource.fontFamilyName;
+  const next = normalizeLabelStyleOverride(nextSource, {strict: true});
   if (Object.keys(next).length) store.overrides[styleType] = next;
   else delete store.overrides[styleType];
   return readLabelStyleOverride(store, styleType);
@@ -152,11 +156,20 @@ function normalizeLabelStyleOverride(source, {strict = false} = {}) {
       continue;
     }
     if (field === "fontFamilyId") {
-      if (!Object.hasOwn(LABEL_FONT_FAMILIES, value)) {
+      if (!Object.hasOwn(LABEL_FONT_FAMILIES, value) && value !== LOCAL_LABEL_FONT_ID) {
         if (strict) throw new Error(`不支持的标签字体：${value}`);
         continue;
       }
       result[field] = value;
+      continue;
+    }
+    if (field === "fontFamilyName") {
+      const family = normalizeLocalFontFamilyName(value);
+      if (!family) {
+        if (value !== null && strict) throw new Error("本机字体名称无效");
+        continue;
+      }
+      result[field] = family;
       continue;
     }
     if (field === "fontWeight") {
@@ -193,7 +206,31 @@ function normalizeLabelStyleOverride(source, {strict = false} = {}) {
     }
     result[field] = clamp(numeric, range[0], range[1]);
   }
+  if (result.fontFamilyId === LOCAL_LABEL_FONT_ID && !result.fontFamilyName) {
+    if (strict) throw new Error("本机字体缺少字体族名称");
+    delete result.fontFamilyId;
+    delete result.fontFamilyName;
+  }
+  if (result.fontFamilyId !== LOCAL_LABEL_FONT_ID) delete result.fontFamilyName;
   return result;
+}
+
+export function resolveLabelFontFamily(fontFamilyId, fontFamilyName = null) {
+  if (fontFamilyId === LOCAL_LABEL_FONT_ID) {
+    const family = normalizeLocalFontFamilyName(fontFamilyName);
+    if (family) return `${quoteCssFontFamily(family)}, ${LABEL_FONT_FALLBACK}`;
+  }
+  return LABEL_FONT_FAMILIES[fontFamilyId] || LABEL_FONT_FALLBACK;
+}
+
+export function normalizeLocalFontFamilyName(value) {
+  const family = String(value ?? "").trim().replace(/\s+/g, " ");
+  if (!family || family.length > 128 || /[\u0000-\u001f\u007f]/u.test(family)) return "";
+  return family;
+}
+
+function quoteCssFontFamily(value) {
+  return `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
 }
 
 function themeStyleForType(theme, styleType) {
