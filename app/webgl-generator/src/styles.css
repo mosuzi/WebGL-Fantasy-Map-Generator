@@ -3162,6 +3162,26 @@ select:disabled {
   margin: 0;
 }
 
+.ocean-current-panel-controls,
+.ocean-current-panel-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0;
+}
+
+.ocean-current-panel-controls > :first-child {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+@media (max-width: 620px) {
+  .ocean-current-panel-controls {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}
+
 .height-transform-panel {
   display: grid;
   gap: 7px;
@@ -9183,6 +9203,7 @@ input.ui-switch-native {
 .diplomacy-panel-summary,
 .military-panel-summary,
 .river-panel-summary,
+.ocean-current-panel-summary,
 .lake-panel-summary,
 .measurement-panel-summary,
 .height-panel-summary,

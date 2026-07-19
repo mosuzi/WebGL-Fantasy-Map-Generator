@@ -13,7 +13,7 @@ const [controlPanelSource, toolbarSource, shortcutSource, runtimePanelSource, ru
 ]);
 
 const expectedGroups = Object.freeze({
-  terrain: {label: "地形环境", actions: ["open-height-panel", "open-climate-panel", "open-biome-panel", "open-feature-panel", "open-river-panel", "open-lake-panel"]},
+  terrain: {label: "地形环境", actions: ["open-height-panel", "open-climate-panel", "open-biome-panel", "open-feature-panel", "open-river-panel", "open-ocean-current-panel", "open-lake-panel"]},
   politics: {label: "政治社会", actions: ["open-state-panel", "open-government-panel", "open-province-panel", "open-city-panel", "open-population-panel", "open-culture-panel", "open-religion-panel", "open-diplomacy-panel"]},
   network: {label: "网络经济", actions: ["open-economy-panel", "open-military-panel", "open-route-panel"]},
   annotation: {label: "标注对象", actions: ["open-zone-panel", "open-marker-panel", "open-label-naming-panel", "open-notes-panel", "open-measurement-panel"]},
@@ -34,7 +34,7 @@ for (const [groupId, group] of Object.entries(expectedGroups)) {
     actionIds.push(actionId);
   }
 }
-assert.equal(actionIds.length, 24, "管理首层入口数量漂移");
+assert.equal(actionIds.length, 25, "管理首层入口数量漂移");
 assert.equal(new Set(actionIds).size, actionIds.length, "管理入口被重复分组");
 assert.equal(countMatches(groupSource, /\["open-[^"]+"/g), actionIds.length, "存在未登记或重复的管理入口");
 assert(!groupSource.includes("fit-view"), "适配视图仍在管理入口中");

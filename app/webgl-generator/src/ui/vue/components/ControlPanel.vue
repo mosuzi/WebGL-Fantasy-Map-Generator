@@ -832,6 +832,7 @@ const themes = Object.freeze([
 const layers = Object.freeze([
   {id: "routes", label: "道路"},
   {id: "rivers", label: "河流"},
+  {id: "oceanCurrents", label: "洋流"},
   {id: "cities", label: "城市"},
   {id: "resources", label: "资源点"},
   {id: "markers", label: "通用标记"},
@@ -855,6 +856,7 @@ const managementGroups = Object.freeze([
     ["open-biome-panel", "生物群系"],
     ["open-feature-panel", "水体与地貌"],
     ["open-river-panel", "河流管理"],
+    ["open-ocean-current-panel", "洋流管理"],
     ["open-lake-panel", "湖泊管理"]
   ]),
   managementGroup("politics", "政治社会", [

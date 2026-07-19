@@ -134,6 +134,7 @@ export function bindRuntimePanel(documentRef, handlers) {
   documentRef.getElementById("open-military-panel")?.addEventListener("click", handlers.onOpenMilitaryPanel);
   documentRef.getElementById("open-route-panel")?.addEventListener("click", handlers.onOpenRoutePanel);
   documentRef.getElementById("open-river-panel")?.addEventListener("click", handlers.onOpenRiverPanel);
+  documentRef.getElementById("open-ocean-current-panel")?.addEventListener("click", handlers.onOpenOceanCurrentPanel);
   documentRef.getElementById("open-lake-panel")?.addEventListener("click", handlers.onOpenLakePanel);
   documentRef.getElementById("open-zone-panel")?.addEventListener("click", handlers.onOpenZonePanel);
   documentRef.getElementById("open-marker-panel")?.addEventListener("click", handlers.onOpenMarkerPanel);
@@ -252,6 +253,7 @@ function editLockControls(documentRef) {
     "#open-military-panel",
     "#open-route-panel",
     "#open-river-panel",
+    "#open-ocean-current-panel",
     "#open-lake-panel",
     "#open-marker-panel",
     "#open-label-naming-panel",

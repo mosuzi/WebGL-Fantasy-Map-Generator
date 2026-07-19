@@ -50,6 +50,7 @@ import {createMeasurementPanel} from "../ui/panels/measurement-panel.js";
 import {createMilitaryPanel} from "../ui/panels/military-panel.js";
 import {createNamebasePanel} from "../ui/panels/namebase-panel.js";
 import {createNotesPanel} from "../ui/panels/notes-panel.js";
+import {createOceanCurrentPanel} from "../ui/panels/ocean-current-panel.js";
 import {createObjectDetailsPanel} from "../ui/panels/object-details-panel.js";
 import {createPopulationPanel} from "../ui/panels/population-panel.js";
 import {createProvincePanel} from "../ui/panels/province-panel.js";
@@ -91,6 +92,8 @@ import {getHeightTerrainTemplateChanges, heightTerrainTemplateLabel, heightTerra
 import {getHeightTerrainTemplateProgramChanges, heightTerrainTemplateProgramUsesSeed, inspectHeightTerrainTemplateProgram} from "./height-terrain-template-programs.js";
 import {createRegenerationResult, rebuildHeightBaseDerived, rebuildHeightDownstreamDerived} from "./height-derived-rebuild.js";
 import {buildSeafloorResetPlan, createResetSeafloorCommand, seafloorResetPreviewChanges} from "./seafloor-reset.js";
+import {createRegenerateOceanCurrentsCommand, createRenameOceanCurrentCommand} from "./ocean-current-edit-commands.js";
+import {oceanCurrentBounds} from "../renderer/ocean-current-layer.js";
 import {createAddCustomLabelCommand, createDeleteLabelCommand, createMoveCustomLabelCommand, createRenameCustomLabelCommand, createRestoreGeneratedLabelCommand, createSetLabelNoteCommand, ensureLabelStore} from "./label-edit-commands.js";
 import {createPatchLabelStyleCommand, createResetAllLabelStylesCommand, createResetLabelStyleCommand} from "./label-style-edit-commands.js";
 import {LABEL_STYLE_TYPES, readLabelStyleOverride, resolveLabelStyle} from "./label-style-registry.js";
@@ -256,6 +259,7 @@ const CONTROL_PANEL_CHILD_OPEN_HANDLERS = Object.freeze([
   "onOpenEconomyPanel",
   "onOpenMilitaryPanel",
   "onOpenRiverPanel",
+  "onOpenOceanCurrentPanel",
   "onOpenLakePanel",
   "onOpenZonePanel",
   "onOpenRoutePanel",
@@ -460,6 +464,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
   let economyPanel = null;
   let militaryPanel = null;
   let riverPanel = null;
+  let oceanCurrentPanel = null;
   let lakePanel = null;
   let routePanel = null;
   let zonePanel = null;
@@ -2170,6 +2175,34 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     }
   });
   state.panels.river = riverPanel;
+  oceanCurrentPanel = createOceanCurrentPanel(documentRef, panelManager, {
+    onLocate: current => {
+      const bounds = oceanCurrentBounds(current);
+      if (!bounds) return;
+      const located = state.renderer.locateBounds(bounds, {status: `洋流 ${current.name || current.id}`});
+      if (!located) return;
+      oceanCurrentPanel.setSelectedId(current.id);
+      refreshRuntimeAndPickPanels(documentRef, state);
+    },
+    onRename: (currentId, name) => {
+      executeEditCommand(state, documentRef, createRenameOceanCurrentCommand(currentId, name), {
+        context: {map: state.map},
+        status: command => `已将洋流重命名为“${command.getResult?.().name || name}”。`,
+        noopStatus: "洋流名称没有变化。"
+      });
+    },
+    onRegenerate: () => {
+      executeEditCommand(state, documentRef, createRegenerateOceanCurrentsCommand(state.map), {
+        context: {map: state.map},
+        status: command => `已重新计算 ${command.getResult?.().currents || 0} 条洋流。`,
+        noopStatus: "当前洋流无需重新计算。"
+      });
+    },
+    onHighlight: ids => state.renderer.setOceanCurrentHighlights(ids),
+    onUndo: () => executeHistoryCommand(state, documentRef, "undo", {afterRefresh: () => updateOceanCurrentPanel(state)}),
+    onRedo: () => executeHistoryCommand(state, documentRef, "redo", {afterRefresh: () => updateOceanCurrentPanel(state)})
+  });
+  state.panels.oceanCurrent = oceanCurrentPanel;
   lakePanel = createLakePanel(documentRef, panelManager, {
     onCreateMode: active => {
       if (active) enterCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.LAKE_EXCAVATE, {radius: 0});
@@ -2494,6 +2527,9 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     },
     onOpenRiverPanel: () => {
       state.panels.river.open(state.map, state.selection, state.editHistory.getStats(), state.editingObject);
+    },
+    onOpenOceanCurrentPanel: () => {
+      state.panels.oceanCurrent.open(state.map, state.editHistory.getStats());
     },
     onOpenLakePanel: () => {
       state.panels.lake.open(state.map, state.selection, state.editHistory.getStats());
@@ -3685,6 +3721,7 @@ function refreshRuntimeAfterMapLoad(state, documentRef, {restorePanels = false} 
   state.panels.namebase.update(state.map, state.editHistory.getStats());
   state.panels.route.update(state.map, state.selection, state.editHistory.getStats());
   state.panels.river.update(state.map, state.selection, state.editHistory.getStats(), state.editingObject);
+  state.panels.oceanCurrent.update(state.map, state.editHistory.getStats());
   updateLakePanel(state);
   updateMeasurementPanel(state);
   if (restorePanels) restorePersistedPanels(state);
@@ -3777,6 +3814,7 @@ function openPersistedPanel(state, panelId) {
     "military-panel": () => state.panels.military?.open(map, selection, history),
     "route-panel": () => state.panels.route?.open(map, selection, history),
     "river-panel": () => state.panels.river?.open(map, selection, history, state.editingObject),
+    "ocean-current-panel": () => state.panels.oceanCurrent?.open(map, history),
     "lake-panel": () => state.panels.lake?.open(map, selection, history),
     "zone-panel": () => state.panels.zone?.open(map, selection, history),
     "marker-panel": () => state.panels.marker?.open(map, selection, history),
@@ -8431,6 +8469,9 @@ function updatePanelForAffectedKind(state, kind) {
     case OBJECT_KIND.RIVER:
       updateRiverPanel(state);
       break;
+    case "ocean-current":
+      updateOceanCurrentPanel(state);
+      break;
     case OBJECT_KIND.LAKE:
       updateLakePanel(state);
       break;
@@ -12074,6 +12115,7 @@ function updateAllObjectPanels(state) {
   updateNamebasePanel(state);
   updateRoutePanel(state);
   updateRiverPanel(state);
+  updateOceanCurrentPanel(state);
   updateLakePanel(state);
   updateZonePanel(state);
   updateNotesPanel(state);
@@ -12102,6 +12144,10 @@ function updateRoutePanel(state) {
 
 function updateRiverPanel(state) {
   if (isPanelOpen(state.panels.river)) state.panels.river?.update(state.map, state.selection, state.editHistory.getStats(), state.editingObject);
+}
+
+function updateOceanCurrentPanel(state) {
+  if (isPanelOpen(state.panels.oceanCurrent)) state.panels.oceanCurrent?.update(state.map, state.editHistory.getStats());
 }
 
 function isPanelOpen(panel) {

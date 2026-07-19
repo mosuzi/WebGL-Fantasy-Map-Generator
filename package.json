@@ -57,6 +57,7 @@
     "regress:height-derived-rebuild": "node --no-warnings ./tools/webgl-generator-height-derived-rebuild-regression.mjs",
     "regress:seafloor-reset": "node --no-warnings ./tools/webgl-generator-seafloor-reset-regression.mjs",
     "regress:ocean-currents": "node --no-warnings ./tools/webgl-generator-ocean-current-regression.mjs",
+    "regress:ocean-current-ui": "node --no-warnings ./tools/webgl-generator-ocean-current-ui-layer-regression.mjs",
     "regress:river-delete": "node --no-warnings ./tools/webgl-generator-river-delete-regression.mjs",
     "regress:delete-impact": "node --no-warnings ./tools/webgl-generator-delete-impact-regression.mjs",
     "regress:object-creation": "node --no-warnings ./tools/webgl-generator-object-creation-regression.mjs",

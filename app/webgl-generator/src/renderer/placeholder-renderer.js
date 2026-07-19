@@ -59,6 +59,7 @@ import {resolveStateLabelPlacement} from "./state-label-territory.js";
 import {formatMilitary, normalizeUnitPreferences} from "../ui/display-units.js";
 import {militaryIconLabelForVariant, militaryIconUrlForVariant, normalizeMilitaryIconVariant} from "./military-icon-assets.js";
 import {DEFAULT_VISUAL_THEME_ID, resolveVisualTheme} from "./themes.js";
+import {emptyOceanCurrentLayerStats, pushOceanCurrentLayer} from "./ocean-current-layer.js";
 import {
   ROUTE_SELECTION_HALO_CSS_PX,
   createLineWidthProjection,
@@ -218,6 +219,8 @@ export class PlaceholderMapRenderer {
     this.stateVisualPaths = emptyPoliticalVisualPaths();
     this.provinceVisualPaths = emptyPoliticalVisualPaths();
     this.politicalVisualMeshes = emptyPoliticalVisualMeshes();
+    this.oceanCurrentHighlights = new Set();
+    this.oceanCurrentLayerStats = emptyOceanCurrentLayerStats();
     this.locateStatus = "none";
     this.locateFlash = null;
     this.locateFlashFrame = 0;
@@ -230,6 +233,7 @@ export class PlaceholderMapRenderer {
       routes: true,
       tradeFlows: false,
       rivers: true,
+      oceanCurrents: true,
       cities: true,
       labels: true,
       stateLabels: true,
@@ -273,6 +277,7 @@ export class PlaceholderMapRenderer {
     const profile = createRendererLoadProfile();
     this.map = map;
     this.objectHighlights = [];
+    this.oceanCurrentHighlights = new Set();
     applyMapStageBackground(this.stage, map, this.visualTheme);
     this.objectPickingIndex = profile.stage("object-picking-index", "构建对象索引", () => buildObjectPickingIndex(map));
     profile.stage("cell-visual-mesh", "构建视觉 cell mesh", () => this.rebuildCellVisualMesh());
@@ -281,7 +286,9 @@ export class PlaceholderMapRenderer {
     profile.stage("province-boundaries", "构建省份边界缓存", () => this.rebuildProvinceVisualCache());
     profile.stage("political-meshes", "构建政治视觉 mesh", () => this.rebuildPoliticalVisualMeshesIfNeeded());
     const vertices = profile.stage("surface-vertices", "构建 surface 顶点", () => buildPlaceholderVertices(map, this.colorMode, this.viewOptions, this.shoreVisualPaths, this.stateVisualPaths, this.provinceVisualPaths, this.politicalVisualMeshes, this.cellVisualMesh));
-    const lineVertices = profile.stage("line-vertices", "构建线层顶点", () => buildLineVertices(map, this.layerVisibility, this.colorMode, this.shoreVisualPaths, this.stateVisualPaths, this.provinceVisualPaths, this.cellVisualMesh, this.viewOptions));
+    const lineLayer = profile.stage("line-vertices", "构建线层顶点", () => buildLineVertices(map, this.layerVisibility, this.colorMode, this.shoreVisualPaths, this.stateVisualPaths, this.provinceVisualPaths, this.cellVisualMesh, this.viewOptions));
+    const lineVertices = lineLayer.vertices;
+    this.oceanCurrentLayerStats = lineLayer.oceanCurrents;
     const pointVertices = profile.stage("point-vertices", "构建点图层顶点", () => buildPointVertices(map, this.layerVisibility));
     this.vertexCount = vertices.length / 6;
     this.routeVertexCount = 0;
@@ -351,6 +358,7 @@ export class PlaceholderMapRenderer {
 
     this.map = map;
     this.objectHighlights = [];
+    this.oceanCurrentHighlights = new Set();
     applyMapStageBackground(this.stage, map, this.visualTheme);
     this.objectPickingIndex = await stage("object-picking-index", "构建对象索引", () => buildObjectPickingIndex(map));
     await stage("cell-visual-mesh", "构建视觉 cell mesh", () => this.rebuildCellVisualMesh());
@@ -359,7 +367,9 @@ export class PlaceholderMapRenderer {
     await stage("province-boundaries", "构建省份边界缓存", () => this.rebuildProvinceVisualCache());
     await stage("political-meshes", "构建政治视觉 mesh", () => this.rebuildPoliticalVisualMeshesIfNeeded());
     const vertices = await stage("surface-vertices", "构建 surface 顶点", () => buildPlaceholderVertices(map, this.colorMode, this.viewOptions, this.shoreVisualPaths, this.stateVisualPaths, this.provinceVisualPaths, this.politicalVisualMeshes, this.cellVisualMesh));
-    const lineVertices = await stage("line-vertices", "构建线层顶点", () => buildLineVertices(map, this.layerVisibility, this.colorMode, this.shoreVisualPaths, this.stateVisualPaths, this.provinceVisualPaths, this.cellVisualMesh, this.viewOptions));
+    const lineLayer = await stage("line-vertices", "构建线层顶点", () => buildLineVertices(map, this.layerVisibility, this.colorMode, this.shoreVisualPaths, this.stateVisualPaths, this.provinceVisualPaths, this.cellVisualMesh, this.viewOptions));
+    const lineVertices = lineLayer.vertices;
+    this.oceanCurrentLayerStats = lineLayer.oceanCurrents;
     const pointVertices = await stage("point-vertices", "构建点图层顶点", () => buildPointVertices(map, this.layerVisibility));
     this.vertexCount = vertices.length / 6;
     this.routeVertexCount = 0;
@@ -553,7 +563,9 @@ export class PlaceholderMapRenderer {
 
   refreshLineLayers({draw = true} = {}) {
     if (!this.map) return;
-    const lineVertices = buildLineVertices(this.map, this.layerVisibility, this.colorMode, this.shoreVisualPaths, this.stateVisualPaths, this.provinceVisualPaths, this.cellVisualMesh, this.viewOptions);
+    const lineLayer = buildLineVertices(this.map, this.layerVisibility, this.colorMode, this.shoreVisualPaths, this.stateVisualPaths, this.provinceVisualPaths, this.cellVisualMesh, this.viewOptions, this.oceanCurrentHighlights);
+    const lineVertices = lineLayer.vertices;
+    this.oceanCurrentLayerStats = lineLayer.oceanCurrents;
     this.lineVertexCount = lineVertices.length / 6;
     this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.lineBuffer);
     this.gl.bufferData(this.gl.ARRAY_BUFFER, lineVertices, this.gl.STATIC_DRAW);
@@ -574,6 +586,11 @@ export class PlaceholderMapRenderer {
     this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.pointBuffer);
     this.gl.bufferData(this.gl.ARRAY_BUFFER, pointVertices, this.gl.STATIC_DRAW);
     if (draw) this.draw();
+  }
+
+  setOceanCurrentHighlights(ids, {draw = true} = {}) {
+    this.oceanCurrentHighlights = new Set((ids || []).map(String));
+    this.refreshLineLayers({draw});
   }
 
   refreshObjectPickingIndex() {
@@ -659,7 +676,7 @@ export class PlaceholderMapRenderer {
     if (!changed) return;
     if (layer === "tradeFlows") this.dynamicBuffersDirty.tradeFlows = true;
     if (layer === "cities" || layer === "population" || layer === "markers" || layer === "resources" || layer === "military") this.refreshPointLayers({draw: false});
-    if (layers.some(item => item === "coastline" || item === "lakeShore" || item === "stateBorders" || item === "provinceBorders" || item === "warFronts" || item === "zones")) this.refreshLineLayers({draw: false});
+    if (layers.some(item => item === "coastline" || item === "lakeShore" || item === "stateBorders" || item === "provinceBorders" || item === "warFronts" || item === "zones" || item === "oceanCurrents")) this.refreshLineLayers({draw: false});
     this.draw();
   }
 
@@ -853,6 +870,7 @@ export class PlaceholderMapRenderer {
       unitPreferences: {...this.unitPreferences},
       labelOptions: {...this.labelOptions},
       layerVisibility: {...this.layerVisibility},
+      oceanCurrentLayer: {...this.oceanCurrentLayerStats, minWidth: Number.isFinite(this.oceanCurrentLayerStats.minWidth) ? this.oceanCurrentLayerStats.minWidth : 0},
       canvasSize: {...this.canvasSize},
       camera: {...this.camera},
       loadMap: this.lastLoad,
@@ -3046,7 +3064,7 @@ function combineVertexBuffers(primary, extra) {
   return result;
 }
 
-function buildLineVertices(map, visibility = {}, colorMode = "height", shoreVisualPaths = null, stateVisualPaths = null, provinceVisualPaths = null, cellVisualMesh = null, viewOptions = {}) {
+function buildLineVertices(map, visibility = {}, colorMode = "height", shoreVisualPaths = null, stateVisualPaths = null, provinceVisualPaths = null, cellVisualMesh = null, viewOptions = {}, oceanCurrentHighlights = new Set()) {
   const context = createRenderContext(map);
   const vertices = [];
   const statePaths = stateVisualPaths || buildStateVisualPaths(map);
@@ -3055,10 +3073,11 @@ function buildLineVertices(map, visibility = {}, colorMode = "height", shoreVisu
   pushMapEdgeFade(vertices, context, map, viewOptions.visualTheme);
   pushShoreLineLayers(vertices, context, visibility, cellVisualMesh, viewOptions);
   pushZoneTextureLayer(vertices, context, map, visibility);
+  const oceanCurrents = pushOceanCurrentLayer(vertices, context, map, visibility, oceanCurrentHighlights);
   if (visibility.provinceBorders !== false) pushPoliticalBoundaryStrokes(vertices, provincePaths, context, themeLines.provinceBorder || PROVINCE_VISUAL_STYLE.borderStroke, PROVINCE_VISUAL_STYLE.borderWidthWorld, PROVINCE_VISUAL_STYLE.borderDashWorld);
   if (visibility.stateBorders !== false) pushPoliticalBoundaryStrokes(vertices, statePaths, context, themeLines.stateBorder || STATE_VISUAL_STYLE.borderStroke, STATE_VISUAL_STYLE.borderWidthWorld);
   if (visibility.warFronts !== false) pushMilitaryFrontLines(vertices, context, map, visibility);
-  return new Float32Array(vertices);
+  return {vertices: new Float32Array(vertices), oceanCurrents};
 }
 
 function pushMapEdgeFade(vertices, context, map, visualTheme) {
