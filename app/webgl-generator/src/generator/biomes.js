@@ -1,21 +1,8 @@
 import {prepareInitialGoods} from "./economy.js";
 import {applySuitabilityOverrides, captureSuitabilityBase} from "./suitability.js";
+import {BIOMES} from "./biome-registry.js";
 
-export const BIOMES = [
-  {id: 0, name: "Marine", color: [0.27, 0.43, 0.67, 1], habitability: 0},
-  {id: 1, name: "Hot desert", color: [0.98, 0.91, 0.62, 1], habitability: 4},
-  {id: 2, name: "Cold desert", color: [0.71, 0.72, 0.53, 1], habitability: 10},
-  {id: 3, name: "Savanna", color: [0.82, 0.82, 0.51, 1], habitability: 22},
-  {id: 4, name: "Grassland", color: [0.78, 0.84, 0.56, 1], habitability: 30},
-  {id: 5, name: "Tropical seasonal forest", color: [0.71, 0.85, 0.36, 1], habitability: 50},
-  {id: 6, name: "Temperate deciduous forest", color: [0.16, 0.74, 0.34, 1], habitability: 100},
-  {id: 7, name: "Tropical rainforest", color: [0.49, 0.8, 0.21, 1], habitability: 80},
-  {id: 8, name: "Temperate rainforest", color: [0.25, 0.61, 0.26, 1], habitability: 90},
-  {id: 9, name: "Taiga", color: [0.29, 0.42, 0.2, 1], habitability: 12},
-  {id: 10, name: "Tundra", color: [0.59, 0.47, 0.29, 1], habitability: 4},
-  {id: 11, name: "Glacier", color: [0.84, 0.91, 0.92, 1], habitability: 0},
-  {id: 12, name: "Wetland", color: [0.04, 0.57, 0.19, 1], habitability: 12}
-];
+export {BIOMES} from "./biome-registry.js";
 
 const BIOME_MATRIX = [
   [1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 10],

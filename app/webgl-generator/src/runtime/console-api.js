@@ -3,6 +3,7 @@ import {areaUnitForDistanceUnit, formatArea as formatDisplayArea, formatDistance
 import {createCanvasPngBlob, createCompressedMapDocumentBlob, createMapDocument, createMapFeatureGeoJson, createMapGeoJson, downloadCanvasPng, downloadCompressedMapDocument, downloadText, mapFileBaseName, stringifyMapDocument} from "./map-file-io.js";
 import {apiCall} from "./api-result.js";
 import {NAMEBASE_BINDING_TARGETS, createLegacyNamebaseText, createNamebaseDocument, getNamebaseBindingStatus, getNamebaseSummariesForMap} from "../generator/namebase-store.js";
+import {listBiomeDescriptors} from "../generator/biome-registry.js";
 import {measurementArea, measurementDisplayPoints, measurementDistance} from "./measurement-objects.js";
 import {MEASUREMENT_ROUTE_FIT_ROADS, normalizeMeasurementRouteFit} from "./measurement-route-fit.js";
 import {OBJECT_KIND_LABEL} from "./object-kinds.js";
@@ -997,10 +998,19 @@ function buildClimateAtmosphereSnapshot(state) {
 }
 
 function buildClimateBiomeSnapshot(state) {
-  const {metadata} = buildClimateContext(state);
+  const {climate, metadata} = buildClimateContext(state);
+  const counts = {...(metadata.biomeCounts || {})};
+  const entries = listBiomeDescriptors(climate.biomes).map(biome => ({
+    id: biome.id,
+    name: biome.name,
+    canonicalName: biome.canonicalName,
+    description: biome.description,
+    count: Number(counts[biome.id] ?? counts[biome.canonicalName]) || 0
+  }));
   return {
-    counts: {...(metadata.biomeCounts || {})},
-    total: Object.values(metadata.biomeCounts || {}).reduce((sum, value) => sum + (Number(value) || 0), 0)
+    counts,
+    entries,
+    total: Object.values(counts).reduce((sum, value) => sum + (Number(value) || 0), 0)
   };
 }
 

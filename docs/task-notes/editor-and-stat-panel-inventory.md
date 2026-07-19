@@ -78,7 +78,7 @@
 - 面板性质：统计与局部归属编辑。
 - 需要编辑器：已完成目标 biome、陆水范围和半径笔刷第一刀。
 - 需要统计面板：是。
-- 当前状态：生物群系面板支持管理页入口、筛选、排序、选中详情，以及按 pack 语义层汇总 biome cells、面积、适居度、人口和城市覆盖；归属笔刷可按目标 biome、陆水范围和半径预览并在抬手时提交单条历史，UI 与 `api.edit.biomes.assignCells()` 共用命令。数值适居度动作支持整数 `0～100` 直接设值、恢复自动基准、`land / water / all` 范围和共享半径光标，UI 与 `api.edit.biomes.inspectSuitability / applySuitability` 共用命令。提交后同步 grid / pack 适居度、人口承载和区域统计，并标记下游系统待派生；水域人口承载恒为 0。
+- 当前状态：生物群系面板支持管理页入口、筛选、排序、选中详情，以及按 pack 语义层汇总 biome cells、面积、适居度、人口和城市覆盖；13 个稳定 ID 已共用中文专业名称与生态说明 registry，面板详情 / 搜索、颜色模式图例、拾取 / 悬停、气候 API 可读统计和 pack cell GeoJSON 均使用同一展示层，英文 canonical name 与数值 ID 继续保持兼容。归属笔刷可按目标 biome、陆水范围和半径预览并在抬手时提交单条历史，UI 与 `api.edit.biomes.assignCells()` 共用命令。数值适居度动作支持整数 `0～100` 直接设值、恢复自动基准、`land / water / all` 范围和共享半径光标，UI 与 `api.edit.biomes.inspectSuitability / applySuitability` 共用命令。提交后同步 grid / pack 适居度、人口承载和区域统计，并标记下游系统待派生；水域人口承载恒为 0。
 - 统计范围：各 biome cell 数、人口承载、适居度分布、异常无人区。
 - 优先级：中。
 

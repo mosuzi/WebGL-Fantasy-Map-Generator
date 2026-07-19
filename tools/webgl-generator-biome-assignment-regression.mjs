@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {readFileSync} from "node:fs";
 
 import {generatePlaceholderMap} from "../app/webgl-generator/src/generator/index.js";
+import {BIOMES, listBiomeDescriptors, resolveBiomeDescriptor} from "../app/webgl-generator/src/generator/biome-registry.js";
 import {
   applyBiomeAssignmentPreview,
   buildBiomeAssignmentChanges,
@@ -17,12 +18,27 @@ import {createMapDocument, createMapGeoJson, parseMapDocument, stringifyMapDocum
 const appSource = readFileSync(new URL("../app/webgl-generator/src/runtime/app.js", import.meta.url), "utf8");
 const apiSource = readFileSync(new URL("../app/webgl-generator/src/runtime/console-api.js", import.meta.url), "utf8");
 const panelSource = readFileSync(new URL("../app/webgl-generator/src/ui/vue/components/BiomePanel.vue", import.meta.url), "utf8");
+const mapPanelSource = readFileSync(new URL("../app/webgl-generator/src/ui/panel.js", import.meta.url), "utf8");
+const pickingSource = readFileSync(new URL("../app/webgl-generator/src/renderer/picking.js", import.meta.url), "utf8");
 assert.match(appSource, /BIOME_ASSIGN: "biome:assign"/, "缺少生物群系画布模式");
 assert.match(appSource, /createApplyBiomeAssignmentCommand\(changes/, "UI 与 API 没有共用生物群系命令");
 assert.match(apiSource, /biomes: Object\.freeze\(\{/, "控制台 API 缺少 biomes 命名空间");
 assert.match(panelSource, /<template #assign>/, "生物群系面板缺少归属笔刷入口");
+assert.match(panelSource, /resolveBiomeDescriptor[\s\S]*生态说明/, "生物群系面板没有共用中文名称与生态说明");
+assert.match(mapPanelSource, /colorMode === "biomes"[\s\S]*biomeLegendList/, "生物群系视图没有中文图例");
+assert.match(pickingSource, /biomeDescription[\s\S]*packBiome/, "拾取结果没有中文群系名称与说明");
+assert.match(apiSource, /listBiomeDescriptors\(climate\.biomes\)[\s\S]*canonicalName:[\s\S]*description:[\s\S]*entries,/, "气候 API 没有附加人类可读群系清单");
 assert.equal(normalizeBrushRadius(BRUSH_RADIUS_ID.BIOME, -1), 4, "生物群系画笔半径下界异常");
 assert.equal(normalizeBrushRadius(BRUSH_RADIUS_ID.BIOME, 999), 120, "生物群系画笔半径上界异常");
+assert.equal(BIOMES.length, 13, "生物群系 registry 分母不是 13");
+assert.deepEqual(listBiomeDescriptors().map(biome => biome.name), ["海洋", "热带荒漠", "寒冷荒漠", "稀树草原", "草原", "热带季雨林", "温带落叶阔叶林", "热带雨林", "温带雨林", "北方针叶林", "苔原", "冰川", "湿地"]);
+for (const biome of listBiomeDescriptors()) {
+  assert.match(biome.name, /[\u3400-\u9fff]/u, `群系 #${biome.id} 缺少中文名称`);
+  assert.ok(biome.description.length >= 20, `群系 #${biome.id} 缺少专业生态说明`);
+}
+const legacyBiomes = BIOMES.map(({id, name, color, habitability}) => ({id, name, color, habitability}));
+assert.equal(resolveBiomeDescriptor(6, legacyBiomes).name, "温带落叶阔叶林", "旧英文 canonical name 没有宽容映射");
+assert.match(resolveBiomeDescriptor({id: 99, name: "Unknown custom biome"}).name, /Unknown custom biome|未知生物群系/, "未知群系没有安全回退");
 
 const map = generatePlaceholderMap({seed: "biome-assignment-a", cellsTarget: 5000, heightmapTemplate: "continents"});
 const landGridCell = map.grid.cells.i.find(cell => map.grid.cells.h[cell] >= 20 && packCellsForGrid(map, cell).length);
@@ -89,10 +105,13 @@ const roundTrip = parseMapDocument(stringifyMapDocument(createMapDocument(map, m
 assert.equal(roundTrip.grid.cells.biome[landGridCell], targetBiome);
 assert(changes[0].packBefore.every(entry => roundTrip.pack.cells.biome[entry.packCell] === targetBiome));
 assert.equal(roundTrip.climate.metadata.positiveSuitabilityCells, map.climate.metadata.positiveSuitabilityCells);
+assert.equal(resolveBiomeDescriptor(targetBiome, roundTrip.climate.biomes).name, BIOMES[targetBiome].displayName, "完整地图往返后中文名称解析失败");
 const geo = createMapGeoJson(map);
 for (const entry of changes[0].packBefore) {
   const feature = geo.features.find(item => item.properties.cell === entry.packCell);
   assert.equal(feature?.properties.biome, targetBiome, `pack cell #${entry.packCell} 导出生物群系未同步`);
+  assert.equal(feature?.properties.biomeName, BIOMES[targetBiome].displayName, `pack cell #${entry.packCell} 缺少中文群系名`);
+  assert.equal(feature?.properties.biomeCanonicalName, BIOMES[targetBiome].name, `pack cell #${entry.packCell} 缺少兼容 canonical name`);
 }
 
 console.log(JSON.stringify({

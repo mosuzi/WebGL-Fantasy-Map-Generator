@@ -5,6 +5,7 @@ import {DIPLOMACY_RELATIONS} from "../generator/diplomacy.js";
 import {GOVERNMENT_FAMILY_LEGEND} from "../renderer/color-modes.js";
 import {normalizeVisualThemeId} from "../renderer/themes.js";
 import {windDirectionLabelFromAngle} from "../generator/climate-options.js";
+import {listBiomeDescriptors} from "../generator/biome-registry.js";
 import {
   formatDistance as formatDisplayDistance,
   formatHeight as formatDisplayHeight,
@@ -737,6 +738,15 @@ function updateMapLegend(documentRef, map, stats) {
     return;
   }
 
+  if (colorMode === "biomes") {
+    legend.hidden = false;
+    legend.replaceChildren(
+      legendTitle(documentRef, "生物群系"),
+      biomeLegendList(documentRef, map)
+    );
+    return;
+  }
+
   if (colorMode === "diplomacy") {
     const subjectId = Number(stats.viewOptions?.diplomacySubjectId) || firstDiplomacyStateId(map);
     const subject = map.politics.states?.[subjectId];
@@ -857,6 +867,21 @@ function governmentLegendList(documentRef, map) {
     list.append(legendSwatch(documentRef, row.color, `${row.label} ${row.count}`));
   }
   return list;
+}
+
+function biomeLegendList(documentRef, map) {
+  const list = documentRef.createElement("div");
+  list.className = "legend-list biomes";
+  for (const biome of listBiomeDescriptors(map?.climate?.biomes)) {
+    list.append(legendSwatch(documentRef, biomeColorCss(biome.color), biome.name));
+  }
+  return list;
+}
+
+function biomeColorCss(color) {
+  if (!Array.isArray(color)) return "#808080";
+  const [red, green, blue, alpha = 1] = color;
+  return `rgba(${Math.round(Number(red || 0) * 255)}, ${Math.round(Number(green || 0) * 255)}, ${Math.round(Number(blue || 0) * 255)}, ${Number(alpha) || 0})`;
 }
 
 function governmentFamilyCounts(map) {

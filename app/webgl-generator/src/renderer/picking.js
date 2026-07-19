@@ -1,3 +1,5 @@
+import {resolveBiomeDescriptor} from "../generator/biome-registry.js";
+
 export function pickGridCell(map, worldX, worldY) {
   if (!map || worldX < 0 || worldY < 0 || worldX > map.metadata.graphWidth || worldY > map.metadata.graphHeight) {
     return null;
@@ -443,6 +445,9 @@ function buildPickResult(map, gridCell, worldX, worldY, candidates) {
   const packCell = Number.isInteger(mappedPackCell) && mappedPackCell >= 0 ? mappedPackCell : null;
   const packCells = map.pack?.cells;
   const packBiomeId = packCell === null ? null : packCells?.biome?.[packCell];
+  const gridBiomeId = Number(map.grid.cells.biome[gridCell]) || 0;
+  const gridBiome = resolveBiomeDescriptor(gridBiomeId, map.climate?.biomes);
+  const packBiome = packBiomeId === null ? null : resolveBiomeDescriptor(packBiomeId, map.climate?.biomes);
   const goodId = packCell === null ? 0 : packCells?.good?.[packCell] || 0;
   const good = goodId ? map.pack?.goods?.[goodId] : null;
   const flux = packCell === null ? 0 : (packCells?.fl?.[packCell] || 0) + (packCells?.conf?.[packCell] || 0);
@@ -459,8 +464,11 @@ function buildPickResult(map, gridCell, worldX, worldY, candidates) {
     height: map.grid.cells.h[gridCell],
     temperature: map.grid.cells.temp[gridCell],
     precipitation: map.grid.cells.prec[gridCell],
-    biome: map.climate.biomes[map.grid.cells.biome[gridCell]]?.name || "unknown",
-    packBiome: packBiomeId === null ? "none" : map.climate.biomes[packBiomeId]?.name || `#${packBiomeId}`,
+    biomeId: gridBiomeId,
+    biome: gridBiome.name,
+    biomeCanonicalName: gridBiome.canonicalName,
+    biomeDescription: gridBiome.description,
+    packBiome: packBiome?.name || "none",
     packHeight: packCell === null ? null : packCells?.h?.[packCell] ?? null,
     suitability: packCell === null ? 0 : packCells?.s?.[packCell] || 0,
     flux,

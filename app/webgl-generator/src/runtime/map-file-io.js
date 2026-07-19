@@ -4,6 +4,7 @@ import {normalizeLabelStyleStore, validateLabelStyleStore} from "./label-style-r
 import {normalizeLabelLayoutStore, validateLabelLayoutStore} from "./label-layout-registry.js";
 import {normalizeSocialExpansionMap} from "./social-expansion-edit-commands.js";
 import {backfillEconomyDisplayProperties, normalizeEconomyDisplayMap} from "../generator/economy-display-properties.js";
+import {resolveBiomeDescriptor} from "../generator/biome-registry.js";
 import {
   NETWORK_GEOJSON_PROPERTY_SCHEMA_ID,
   NETWORK_GEOJSON_PROPERTY_SCHEMA_VERSION,
@@ -193,6 +194,8 @@ export function createMapGeoJson(map, options = {}) {
     const provinceId = Number(cells.province?.[index]) || 0;
     const cultureId = Number(cells.culture?.[index]) || 0;
     const religionId = Number(cells.religion?.[index]) || 0;
+    const biomeId = Number(cells.biome?.[index]) || 0;
+    const biome = resolveBiomeDescriptor(biomeId, map.climate?.biomes);
     const feature = {
       type: "Feature",
       id: Number(cells.i[index]) || index,
@@ -201,7 +204,9 @@ export function createMapGeoJson(map, options = {}) {
         height: Number(cells.h?.[index]) || 0,
         isWater: (Number(cells.h?.[index]) || 0) < 20,
         feature: Number(cells.f?.[index]) || 0,
-        biome: Number(cells.biome?.[index]) || 0,
+        biome: biomeId,
+        biomeName: biome.name,
+        biomeCanonicalName: biome.canonicalName,
         state: stateId,
         stateName: map.politics?.states?.[stateId]?.name || "",
         province: provinceId,

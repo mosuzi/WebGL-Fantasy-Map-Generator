@@ -9,7 +9,7 @@
 | 导出图片 | `.png` | PNG | WebGL 画布、1x～4x、视口/全幅/像素/世界坐标裁剪、七类 overlay 白名单、图外透明 | 否 | 已完成裁剪与细粒度 overlay |
 | 导出地图数据 | `.webgl-map.json` | JSON | `webgl-generator-map v2` 完整文档：options、map 全量数据、typed arrays、notes 等 | 是 | 已完成跨版本迁移 |
 | 导出压缩地图数据 | `.webgl-map.json.gz` | gzip JSON | 与完整地图 JSON 相同，使用浏览器 `CompressionStream` 压缩 | 是 | 已完成第一刀 |
-| 导出 GeoJSON | `.geojson` | GeoJSON FeatureCollection | pack cell Polygon，每个 cell 带高度、水陆、国家、省份、文化、宗教、生物群系和人口等属性 | 否 | 已完成第一刀 |
+| 导出 GeoJSON | `.geojson` | GeoJSON FeatureCollection | pack cell Polygon，每个 cell 带高度、水陆、国家、省份、文化、宗教、生物群系和人口等属性；生物群系保留数值 ID 并附中文名称与英文 canonical name | 否 | 已完成第一刀 |
 | 导出要素 GeoJSON | `.features.geojson` | GeoJSON FeatureCollection | city Point、route/river LineString、marker Point、zone/state/province MultiPolygon；可选图层与政治面 dissolve | 否 | 已完成外部 GIS 验证 |
 | 导出备注摘要 | `.notes.json` | JSON | `webgl-generator-notes-summary v1`：当前筛选备注、正文、对象 id、孤儿状态和时间戳 | 否 | 已完成第一刀 |
 | 导出测量结果 | `.measurement.json` | JSON | `webgl-generator-measurement v1`：当前测量点列、比例尺单位、距离和面积摘要 | 否 | 已完成第一刀 |

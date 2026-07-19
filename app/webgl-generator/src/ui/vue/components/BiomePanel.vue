@@ -117,6 +117,7 @@ import {findByObjectId} from "../../object-id.js";
 import {compareRowsByKey} from "../../sort-utils.js";
 import {useUnitPreferences} from "../composables/use-unit-preferences.js";
 import {BRUSH_RADIUS_ID, readBrushRadiusContract} from "../../../runtime/brush-radius-contract.js";
+import {resolveBiomeDescriptor} from "../../../generator/biome-registry.js";
 import {SUITABILITY_VALUE_RANGE} from "../../../generator/suitability.js";
 
 const brushRadius = readBrushRadiusContract(BRUSH_RADIUS_ID.BIOME);
@@ -232,6 +233,7 @@ const summaryMetrics = computed(() => [
 
 const detailRows = computed(() => selected.value ? [
   {label: "名称", value: selected.value.name},
+  {label: "生态说明", value: selected.value.description},
   {label: "颜色", value: selected.value.colorText},
   {label: "基准适居", value: formatNumber(selected.value.habitability)},
   {label: "pack cells", value: formatNumber(selected.value.cells)},
@@ -261,6 +263,7 @@ function buildBiomeMetrics(map) {
 
 function createBiomeRow(map, biome) {
   const id = biome.id;
+  const descriptor = resolveBiomeDescriptor(biome, map?.climate?.biomes);
   const packCells = map?.pack?.cells;
   const cellIds = packCells?.i || [];
   let cells = 0;
@@ -290,7 +293,9 @@ function createBiomeRow(map, biome) {
 
   return {
     id,
-    name: biome.name || `Biome #${id}`,
+    name: descriptor.name,
+    canonicalName: descriptor.canonicalName,
+    description: descriptor.description,
     colorText: formatBiomeColor(biome.color),
     habitability: Number(biome.habitability || 0),
     cells,
@@ -318,6 +323,7 @@ function filterRows(sourceRows, filter) {
   return sourceRows.filter(row =>
     String(row.id).includes(query)
     || row.name.toLowerCase().includes(query)
+    || row.canonicalName.toLowerCase().includes(query)
   );
 }
 
