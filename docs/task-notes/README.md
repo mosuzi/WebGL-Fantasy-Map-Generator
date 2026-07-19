@@ -21,6 +21,7 @@
 - 权威任务第 88～93 项来源登记于 `next-quasi-authoritative-tasks-2026-07-18.md`：原 `Q-12～Q-17` 已获用户整体批准并按顺序转正；当前状态与验收以权威任务清单为准。
 - 权威任务第 101～107 项来源登记于 `next-quasi-authoritative-interaction-audit-tasks-2026-07-19.md`：原 `Q-18～Q-24` 已获用户整体批准并按顺序转正，依次冻结交互分母与夹具、审计高频闭环、直接操控、复杂面板、危险恢复、键盘响应式，并在最后统一进行浏览器验证。
 - 第 101～107 项完成后形成的下一批交互整改候选登记于 `next-quasi-authoritative-interaction-remediation-tasks-2026-07-20.md`：包含 `Q-25～Q-33`，当前均未获批准，不属于权威任务清单。
+- 权威任务第 128 项对应 `boundary-smoothing-topology-research.md`：比较边界简化 / spline / coverage 算法，冻结共享弧线数据结构、填充与描边同源不变量、缓存失效、编辑提交时序、许可边界和海岸线 → 国界 → 省界的分阶段原型建议；本项只调研，不改 renderer。
 
 以上只是专题入口映射，范围、顺序和验收仍以权威任务清单为准。
 
@@ -62,6 +63,7 @@
 - `suitability-brush-product-rules.md`：权威任务第 77 项的直接设值范围、基础值 / 手工 override、陆水边界、人口承载、旧图回填和单 stroke 事务冻结稿。
 - `population-adjustment-product-rules.md`：权威任务第 78 项的单一区域人口增减、城乡比例分摊、零人口 / 上限拒绝、统计与经济摘要同步和单事务冻结稿。
 - `world-space-network-width.md`：权威任务第 66 项的道路 / 河流世界尺度宽度、缩放投影、亚像素表现、高亮与 picking 分层契约。
+- `boundary-smoothing-topology-research.md`：权威任务第 128 项的边界平滑与拓扑调研，记录 Chaikin、Catmull-Rom / B-spline、Douglas-Peucker、Visvalingam、共享 coverage 实现的取舍及推荐共享弧线管线。
 - `visual-theme-preset-plan.md`：视觉主题与样式预设计划。
 - `console-extension-api-system-plan.md`：控制台与扩展 API 系统计划，记录 API 命名空间、返回格式、副作用边界和分阶段实施。
 - `console-api-capability-inventory.md`：控制台 API 全量能力盘点，记录公开基线、现有 runtime / command 分类和第 29～33 项冻结范围。

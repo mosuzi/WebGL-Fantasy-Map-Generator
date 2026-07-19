@@ -28184,3 +28184,10 @@ full 矩阵结果：
 - 新增对象详情专用 `object-detail-values.js`。标量只接受字符串、有限数值、布尔和 bigint；结构值只有行显式声明 `structured: true` 才会形成有限 JSON 摘要，限制递归深度、对象条目、数组项和总字符数，并覆盖普通对象、数组、TypedArray、Set / Map、日期与循环引用。未 opt-in 的结构值、空结构、函数、Symbol、空标签及无玩家价值字段会省略，既有坏字符串 `[object Object]` 安全回退。
 - marker data、测量点位与外交方向改用显式结构摘要；对象标题、路线端点、marker 组合字段等改用拒绝隐式对象字符串化的 helper。为全部 17 类 `OBJECT_KIND` 建立领域详情行，补齐国家、文化、宗教、地区、独立备注、测量和外交关系，不再依赖未知类型的隐式对象输出。
 - 新增 `regress:object-detail-values` 覆盖嵌套普通对象、数组、TypedArray、循环 / 空结构、旧坏字符串、17 类领域行完整性和共享网格未扩散；selection 面板策略、生产构建和 `git diff --check` 通过。本项未启动浏览器，真实 DOM 全类型抽查留到第 110～133 项统一验收。
+
+## 2026-07-20：完成权威任务第 128 项——边界平滑与共享拓扑调研
+
+- 调查现有 renderer 后确认：`cell-visual-layer` 已按排序 Voronoi 顶点对缓存共享 `edgeCurves`，视觉 cell 填充与 `shore-layer` 的海岸 stroke 会读取同一曲线，方向正确；政治填充带、政治边界 stroke 与政治 mesh 仍分别派生和平滑，无法从结构上证明永不分离。现有刷新调度也把 terrain、political boundaries、line layers 和 cell colors 分成多类缓存，后续需要统一 snapshot revision。
+- 检索并核对 Chaikin、Catmull-Rom、B-spline、Douglas-Peucker、Visvalingam-Whyatt 的原论文 / 官方说明，以及 JTS / GEOS CoverageSimplifier、PostGIS CoverageSimplify、CGAL topology-preserving polyline simplification、TopoJSON、topojson-simplify 与 Mapshaper 的一手文档、共享边保证、失败模式和许可证。JTS / GEOS / CGAL 只建议作为离线 oracle；Mapshaper 只作 MPL 2.0 黑盒基准；ISC 的 TopoJSON 数据模型可作轻量参照。
+- 新增中文专题 `boundary-smoothing-topology-research.md`，推荐共享弧线优先的管线：共享 Voronoi edge → 锁定三岔 / 世界边 / 闭环节点的最大 arc → coverage 级加权 Visvalingam → 有位移上限的一次 Chaikin / 二次采样 → fill、stroke、picking 和 export 同一不可变快照。相邻区域只以正反 `ArcRef` 引用同一个 arc，禁止 polygon 消费端再次独立平滑。
+- 报告冻结 snapshot / node / raw edge / arc / ring 数据结构、terrain / state / province / geometryStyle revision、缓存依赖、预览与正式提交的原子替换时序、异步旧结果守卫、海岸 → 国界 → 省界 → 局部失效的 P0～P4 原型顺序，以及共享引用、屏幕误差、节点位移、自交 / gap / overlap、面积 / Hausdorff、狭窄通道和三档性能指标。本项只修改文档并同步专题索引，未改 renderer、地图几何、依赖或存档。
