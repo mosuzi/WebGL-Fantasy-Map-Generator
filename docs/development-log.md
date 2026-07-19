@@ -1,5 +1,12 @@
 # 开发历史
 
+## 2026-07-20：完成权威任务第 113 项——关闭次级面板后恢复控制面板
+
+- 调查确认控制面板和 24 个编辑 / 管理面板都登记为 `main`；打开后者时 `closeOtherMainPanels` 会自动关闭控制面板，但旧 PanelManager 没有记录这是来源于控制面板的一次临时替换，所以关闭后无处返回。
+- PanelManager 新增纯运行时的一次性父关系。只有真实点击事件来源位于 `generation-panel` 且父面板当时可见时，次级面板才记录 `returnParentId`；关闭时先恢复控制面板，再把焦点交还原入口。控制面板的活动 Tab 继续来自既有 preference，位置继续来自既有手动 / 自动偏好，没有新增存档字段。
+- 主面板互相替换、窄屏 coexistence 自动关闭都显式禁止恢复并清除旧父关系；快捷键、selection、API 和存档恢复没有控制面板点击源，因而不会误建关系；地图完成载入时统一清理待恢复关系。生命周期回归覆盖正常返回、次级互换、直接打开和地图替换，另通过 panel overlay policy 与 selection panel policy。
+- 三个目标文件 `node --check`、`regress:panel-manual-position / panel-overlay-policy / selection-panel-policy`、生产构建和 `git diff --check` 通过。本项不单独启动浏览器，24 个入口中的代表性真实点击、Tab 与位置恢复留到批次终验。
+
 ## 2026-07-20：完成权威任务第 112 项——控制面板 Tab 文本居中
 
 - 调查确认控制面板继续使用 Element Plus `ElTabs` 的 `stretch` 均分七项宽度，但项目样式只定义尺寸、边框与标签省略，没有显式约束按钮内容和标签内盒的水平对齐，因而实际文字可受组件内部样式漂移影响。

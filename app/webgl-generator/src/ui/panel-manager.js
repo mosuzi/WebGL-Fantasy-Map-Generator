@@ -16,6 +16,7 @@ export class PanelManager {
     this.host = host;
     this.panels = new Map();
     this.openSequence = 0;
+    this.returnParentContext = null;
     this.storagePrefix = "webgl-generator-panel:";
     this.lastMainStorageKey = `${this.storagePrefix}last-main`;
     this.overlayRegistry = getOverlayRegistry(documentRef);
@@ -95,6 +96,7 @@ export class PanelManager {
       headerButtons: {undo, redo},
       headerRefreshTimer: 0,
       headerStateKey: "",
+      returnParentId: null,
       refreshHeaderActions: () => refreshHeaderActions(record)
     };
     const ResizeObserverCtor = this.documentRef.defaultView?.ResizeObserver;
@@ -148,10 +150,11 @@ export class PanelManager {
     restoreFocusState(record.body, focusState);
   }
 
-  open(id) {
+  open(id, {returnFocus = this.documentRef.activeElement} = {}) {
     const record = this.panels.get(id);
     if (!record) return;
-    const returnFocus = this.documentRef.activeElement;
+    const wasOpen = !record.panel.classList.contains("hidden");
+    if (!wasOpen) record.returnParentId = this.resolveReturnParentId(id, record);
     if (record.role === "main") this.closeOtherMainPanels(id);
     record.openSequence = ++this.openSequence;
     record.panel.classList.remove("hidden");
@@ -163,16 +166,48 @@ export class PanelManager {
     this.savePanelState(id);
   }
 
-  close(id, {restoreFocus = true, fromRegistry = false} = {}) {
+  close(id, {restoreFocus = true, fromRegistry = false, restoreParent = true} = {}) {
     const record = this.panels.get(id);
     if (!record) return;
     const wasOpen = !record.panel.classList.contains("hidden");
+    const returnParentId = wasOpen && restoreParent ? record.returnParentId : null;
+    record.returnParentId = null;
     record.panel.classList.add("hidden");
     this.stopHeaderRefresh(record);
-    if (!fromRegistry) this.overlayRegistry?.hide(record.overlayId, {restoreFocus});
     this.savePanelState(id);
     if (wasOpen) record.onClose();
+    if (returnParentId) this.restoreReturnParent(returnParentId);
+    if (!fromRegistry) this.overlayRegistry?.hide(record.overlayId, {restoreFocus});
     this.reflowPanels();
+  }
+
+  withReturnParent(parentId, callback) {
+    const previous = this.returnParentContext;
+    this.returnParentContext = parentId || null;
+    try {
+      return callback?.();
+    } finally {
+      this.returnParentContext = previous;
+    }
+  }
+
+  clearReturnParents() {
+    this.returnParentContext = null;
+    for (const record of this.panels.values()) record.returnParentId = null;
+  }
+
+  resolveReturnParentId(openedId, openedRecord) {
+    const parentId = this.returnParentContext;
+    const parent = parentId ? this.panels.get(parentId) : null;
+    if (!parent || parentId === openedId || openedRecord.role !== "main" || parent.role !== "main") return null;
+    return parent.panel.classList.contains("hidden") ? null : parentId;
+  }
+
+  restoreReturnParent(parentId) {
+    const parent = this.panels.get(parentId);
+    if (!parent || !parent.panel.classList.contains("hidden") || this.visiblePanelByRole("main")) return false;
+    this.open(parentId, {returnFocus: this.documentRef.getElementById?.("open-generation-panel") || null});
+    return true;
   }
 
   activate(id) {
@@ -308,7 +343,7 @@ export class PanelManager {
   closeOtherMainPanels(exceptId) {
     for (const [id, record] of this.panels) {
       if (id === exceptId || record.role !== "main" || record.panel.classList.contains("hidden")) continue;
-      this.close(id, {restoreFocus: false});
+      this.close(id, {restoreFocus: false, restoreParent: false});
     }
   }
 
@@ -322,8 +357,8 @@ export class PanelManager {
       return;
     }
     if (!panelsCanCoexist(this.host.clientWidth || this.host.getBoundingClientRect().width, panelWidth(main.panel), panelWidth(detail.panel))) {
-      if (opened.role === "detail") this.close(this.panelIdForRecord(main), {restoreFocus: false});
-      else this.close(this.panelIdForRecord(detail), {restoreFocus: false});
+      if (opened.role === "detail") this.close(this.panelIdForRecord(main), {restoreFocus: false, restoreParent: false});
+      else this.close(this.panelIdForRecord(detail), {restoreFocus: false, restoreParent: false});
       return;
     }
     this.dockPanelPair(main, detail);
@@ -340,7 +375,7 @@ export class PanelManager {
       }
       const keepRole = chooseLaterOpenedPanelRole(main.openSequence, detail.openSequence);
       const closed = keepRole === "main" ? detail : main;
-      this.close(this.panelIdForRecord(closed), {restoreFocus: false});
+      this.close(this.panelIdForRecord(closed), {restoreFocus: false, restoreParent: false});
       return;
     }
     if (main) this.keepPanelClearOfToolbar(main);

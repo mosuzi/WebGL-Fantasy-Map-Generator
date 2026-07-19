@@ -237,6 +237,32 @@ const CLIMATE_OPTION_KEYS = Object.freeze([
 ]);
 const CLIMATE_DERIVED_STALE_SYSTEMS = Object.freeze(["cities", "states", "provinces", "religions", "markers", "zones", "military", "economy", "diplomacy"]);
 const FEATURE_TOPOLOGY_UI_HISTORY = new WeakMap();
+const CONTROL_PANEL_CHILD_OPEN_HANDLERS = Object.freeze([
+  "onOpenHeightPanel",
+  "onOpenStatePanel",
+  "onOpenGovernmentPanel",
+  "onOpenProvincePanel",
+  "onOpenCityPanel",
+  "onOpenBiomePanel",
+  "onOpenClimatePanel",
+  "onOpenPopulationPanel",
+  "onOpenEmblemPanel",
+  "onOpenFeaturePanel",
+  "onOpenCulturePanel",
+  "onOpenReligionPanel",
+  "onOpenDiplomacyPanel",
+  "onOpenEconomyPanel",
+  "onOpenMilitaryPanel",
+  "onOpenRiverPanel",
+  "onOpenLakePanel",
+  "onOpenZonePanel",
+  "onOpenRoutePanel",
+  "onOpenMarkerPanel",
+  "onOpenLabelNamingPanel",
+  "onOpenNotesPanel",
+  "onOpenMeasurementPanel",
+  "onOpenNamebasePanel"
+]);
 export const CANVAS_TOOL_MODE = Object.freeze({
   HEIGHT_BRUSH: "height:brush",
   STATE_BRUSH: "state:brush",
@@ -2435,6 +2461,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     onRegenerate: kind => runtimeActions.generate.regenerate(kind, {confirm: true}),
     onMode: mode => runtimeActions.layers.setViewMode(mode)
   };
+  wrapControlPanelChildOpeners(runtimePanelHandlers, panelManager);
   bindRuntimePanel(documentRef, runtimePanelHandlers);
 
   const view = documentRef.defaultView || window;
@@ -3544,6 +3571,7 @@ async function loadMapIntoRuntime(state, documentRef, map, {loadingMessages = []
 }
 
 function refreshRuntimeAfterMapLoad(state, documentRef, {restorePanels = false} = {}) {
+  state.panelManager?.clearReturnParents?.();
   updateHeightPanel(state);
   updateStatePanel(state);
   updateGovernmentPanel(state);
@@ -5833,6 +5861,18 @@ function openSelectionAwarePanelForState(state, {kind = null, beforeOpen = null,
   open?.(object);
   if (object) afterOpen?.(object);
   return object;
+}
+
+function wrapControlPanelChildOpeners(handlers, panelManager) {
+  for (const name of CONTROL_PANEL_CHILD_OPEN_HANDLERS) {
+    const open = handlers[name];
+    if (typeof open !== "function") continue;
+    handlers[name] = event => {
+      const sourcePanelId = event?.currentTarget?.closest?.(".floating-panel")?.dataset?.panelId || null;
+      const returnParentId = sourcePanelId === "generation-panel" ? sourcePanelId : null;
+      return panelManager.withReturnParent(returnParentId, () => open(event));
+    };
+  }
 }
 
 function handleSelectionPanel(state, selection, editingObject, context) {

@@ -170,8 +170,10 @@ assert.equal(Object.hasOwn(writes[0].state, "open"), false, "persistOpen:false �
 assert.equal(runNarrowReflow({mainSequence: 1, detailSequence: 2}), "main-panel", "桌面共存缩窄后必须关闭较早打开的主面板");
 assert.equal(runNarrowReflow({mainSequence: 3, detailSequence: 2}), "object-details", "桌面共存缩窄后必须关闭较早打开的详情");
 assert.equal(runNarrowReflow({mainSequence: 0, detailSequence: 0}), "main-panel", "同序号必须按稳定规则关闭主面板");
+assertReturnParentLifecycle();
 
 const managerSource = await readFile(new URL("../app/webgl-generator/src/ui/panel-manager.js", import.meta.url), "utf8");
+const appSource = await readFile(new URL("../app/webgl-generator/src/runtime/app.js", import.meta.url), "utf8");
 const pointerUpSource = sourceBetween(managerSource, 'handle.addEventListener("pointerup"', 'handle.addEventListener("pointercancel"');
 const pointerCancelSource = sourceBetween(managerSource, 'handle.addEventListener("pointercancel"', "function writePanelRuntimePosition");
 const saveSource = sourceBetween(managerSource, "  savePanelState(id) {", "  readPanelState(id");
@@ -189,6 +191,10 @@ assert.match(managerSource, /record\.openSequence = \+\+this\.openSequence/, "�
 assert.match(managerSource, /chooseLaterOpenedPanelRole\(main\.openSequence, detail\.openSequence\)[\s\S]{0,180}?restoreFocus: false/, "缩窄重排必须按打开序号关闭较早面板");
 assert.match(managerSource, /panel\.addEventListener\("pointerdown"[\s\S]{0,180}?restoreManagedPanelViewportOrigin/, "受管面板 pointerdown 必须恢复 document viewport 原点");
 assert.match(managerSource, /reflowPanels\(\) \{[\s\S]{0,100}?restoreManagedPanelViewportOrigin/, "reflow 必须兜底恢复 document viewport 原点");
+assert.match(managerSource, /closeOtherMainPanels[\s\S]*restoreParent:\s*false/, "主面板互相替换不得触发父面板恢复");
+assert.match(managerSource, /clearReturnParents\(\)[\s\S]*returnParentId = null/, "地图替换必须能清除待恢复父面板");
+assert.match(appSource, /CONTROL_PANEL_CHILD_OPEN_HANDLERS[\s\S]*wrapControlPanelChildOpeners/, "控制面板次级入口没有统一建立父面板上下文");
+assert.match(appSource, /refreshRuntimeAfterMapLoad[\s\S]{0,180}?clearReturnParents/, "地图载入没有取消旧父面板恢复关系");
 
 console.log(JSON.stringify({
   ok: true,
@@ -213,6 +219,74 @@ function runNarrowReflow({mainSequence, detailSequence}) {
   resizeManager.reflowPanels();
   assert.equal(closed.length, 1, "缩窄重排必须只关闭一个面板");
   return closed[0];
+}
+
+function assertReturnParentLifecycle() {
+  const manager = createPanelLifecycleManager(["generation-panel", "height-panel", "state-panel"]);
+  const generation = manager.panels.get("generation-panel");
+  const height = manager.panels.get("height-panel");
+  const state = manager.panels.get("state-panel");
+
+  manager.open("generation-panel");
+  manager.withReturnParent("generation-panel", () => manager.open("height-panel"));
+  assert.equal(generation.panel.classList.contains("hidden"), true, "打开次级面板必须暂时隐藏控制面板");
+  assert.equal(height.returnParentId, "generation-panel", "次级面板没有记录控制面板父关系");
+  manager.close("height-panel");
+  assert.equal(generation.panel.classList.contains("hidden"), false, "关闭次级面板没有恢复控制面板");
+
+  manager.withReturnParent("generation-panel", () => manager.open("height-panel"));
+  manager.open("state-panel");
+  assert.equal(height.returnParentId, null, "次级面板互相替换后仍残留父关系");
+  manager.close("state-panel");
+  assert.equal(generation.panel.classList.contains("hidden"), true, "直接打开的面板关闭后不应幽灵重开控制面板");
+
+  manager.open("generation-panel");
+  manager.withReturnParent("generation-panel", () => manager.open("height-panel"));
+  manager.clearReturnParents();
+  manager.close("height-panel");
+  assert.equal(generation.panel.classList.contains("hidden"), true, "地图替换清理后仍恢复了旧控制面板");
+
+  manager.open("state-panel");
+  assert.equal(state.returnParentId, null, "无控制面板来源的直开不应建立父关系");
+  manager.close("state-panel");
+  assert.equal(generation.panel.classList.contains("hidden"), true, "直开面板关闭后不应恢复控制面板");
+}
+
+function createPanelLifecycleManager(ids) {
+  const manager = Object.create(PanelManager.prototype);
+  manager.documentRef = {activeElement: null, defaultView: {scrollX: 0, scrollY: 0}};
+  manager.panels = new Map();
+  manager.openSequence = 0;
+  manager.returnParentContext = null;
+  manager.overlayRegistry = {show() {}, hide() {}};
+  manager.applyPreferredPosition = () => {};
+  manager.resolvePanelCoexistence = () => {};
+  manager.startHeaderRefresh = () => {};
+  manager.stopHeaderRefresh = () => {};
+  manager.savePanelState = () => {};
+  manager.reflowPanels = () => {};
+  for (const id of ids) {
+    manager.panels.set(id, {
+      panel: fakePanelClassList(),
+      role: "main",
+      returnParentId: null,
+      openSequence: 0,
+      overlayId: `panel:${id}`,
+      onClose() {}
+    });
+  }
+  return manager;
+}
+
+function fakePanelClassList() {
+  const classes = new Set(["hidden"]);
+  return {
+    classList: {
+      add: value => classes.add(value),
+      remove: value => classes.delete(value),
+      contains: value => classes.has(value)
+    }
+  };
 }
 
 function sourceBetween(source, start, end) {
