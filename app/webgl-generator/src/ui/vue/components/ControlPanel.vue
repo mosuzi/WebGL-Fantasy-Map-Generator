@@ -447,7 +447,6 @@
               <UiButton variant="secondary" @click="closeCustomUnitEditor">取消</UiButton>
             </div>
           </form>
-          <div class="unit-scale-readout">{{ scaleLabel }}</div>
           <UiSliderField
             label="比例尺"
             input-id="map-scale-km-per-cm"
@@ -612,7 +611,6 @@ import {
   customUnitDefinitionForDistanceUnit,
   deleteCustomUnitDefinition,
   distanceUnitOptionsForPreferences,
-  formatScaleLabel,
   normalizeUnitPreferences,
   upsertCustomUnitDefinition
 } from "../../display-units.js";
@@ -674,7 +672,6 @@ const temperatureSouthPole = ref(-15);
 const temperatureRange = TEMPERATURE_RANGE;
 const climateMapSizeRange = CLIMATE_MAP_SIZE_RANGE;
 const unitPreferences = computed(() => normalizeUnitPreferences(preferences.value.units));
-const scaleLabel = computed(() => formatScaleLabel(unitPreferences.value));
 const areaUnitLabel = computed(() => areaUnitLabelForDistanceUnit(unitPreferences.value.distanceUnit, unitPreferences.value));
 const distanceUnitOptions = computed(() => distanceUnitOptionsForPreferences(unitPreferences.value));
 const activeCustomUnit = computed(() => customUnitDefinitionForDistanceUnit(unitPreferences.value.distanceUnit, unitPreferences.value));

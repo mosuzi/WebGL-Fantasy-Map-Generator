@@ -5642,19 +5642,6 @@ select:disabled {
   color: #ff9f9f;
 }
 
-.unit-scale-readout {
-  display: flex;
-  min-height: 28px;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid #273640;
-  border-radius: 6px;
-  background: #10171b;
-  color: #ffe0a1;
-  font-size: 12px;
-  font-weight: 700;
-}
-
 .unit-scale-field {
   display: grid;
   grid-template-columns: 92px minmax(0, 1fr) 88px max-content;

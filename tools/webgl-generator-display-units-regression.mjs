@@ -82,11 +82,13 @@ const legacyDocument = createMapDocument(sourceMap, sourceMap.options);
 const legacyRoundtrip = parseMapDocument(stringifyMapDocument(legacyDocument));
 assert.equal(legacyRoundtrip.map.display, undefined, "旧地图没有显示配置时不应覆盖当前用户单位偏好");
 
-const [consoleApiSource, appSource, controlPanelSource, economyPanelSource] = await Promise.all([
+const [consoleApiSource, appSource, controlPanelSource, economyPanelSource, panelSource, mapFileSource] = await Promise.all([
   readFile(new URL("../app/webgl-generator/src/runtime/console-api.js", import.meta.url), "utf8"),
   readFile(new URL("../app/webgl-generator/src/runtime/app.js", import.meta.url), "utf8"),
   readFile(new URL("../app/webgl-generator/src/ui/vue/components/ControlPanel.vue", import.meta.url), "utf8"),
-  readFile(new URL("../app/webgl-generator/src/ui/vue/components/EconomyPanel.vue", import.meta.url), "utf8")
+  readFile(new URL("../app/webgl-generator/src/ui/vue/components/EconomyPanel.vue", import.meta.url), "utf8"),
+  readFile(new URL("../app/webgl-generator/src/ui/panel.js", import.meta.url), "utf8"),
+  readFile(new URL("../app/webgl-generator/src/runtime/map-file-io.js", import.meta.url), "utf8")
 ]);
 assert.equal((consoleApiSource.match(/display: \{units\}/g) || []).length, 2, "JSON 与 gzip 完整地图导出没有共用单位显示配置");
 assert.match(consoleApiSource, /customUnits: units\.customUnits/, "测量集合导出缺少自定义单位定义");
@@ -97,6 +99,10 @@ assert.match(controlPanelSource, /编辑当前单位/);
 assert.match(controlPanelSource, /删除当前单位/);
 assert.match(economyPanelSource, /units: unitPreferences\.value/, "距离相关表格 JSON 没有保存单位定义");
 assert.match(economyPanelSource, /key: "distanceLabel", label: "距离（显示单位）"/, "距离相关表格没有使用共享换算结果");
+assert.doesNotMatch(controlPanelSource, /unit-scale-readout|1 cm =/, "单位面板仍显示重复厘米换算关系");
+assert.match(controlPanelSource, /unit-label="km\/cm"/, "比例滑动条没有保留唯一 km\/cm 单位说明");
+assert.match(panelSource, /label\.textContent = formatDisplayDistance\(distance, unitPreferences\)/, "实时画布比例尺没有继续使用共享单位换算");
+assert.match(mapFileSource, /element\.querySelector\("\.map-scale-label"\)/, "PNG 没有继续复刻实时比例尺标签");
 
 console.log(JSON.stringify({
   ok: true,
