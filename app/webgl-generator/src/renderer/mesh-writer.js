@@ -15,13 +15,15 @@ export function pushWorldLine(vertices, context, segment, color) {
   pushWorldVertex(vertices, context, segment[1], color);
 }
 
-export function pushWorldPolylineMesh(vertices, context, points, color, widthWorld, {closed = false, joinSegments = 10, maxSegmentWorld = Infinity, joinMode = "round"} = {}) {
+export function pushWorldPolylineMesh(vertices, context, points, color, widthWorld, {closed = false, joinSegments = 10, maxSegmentWorld = Infinity, joinMode = "round", dashWorld = null} = {}) {
   const source = normalizeWorldPathPoints(points);
   if (source.length < 2) return;
   const ringClosed = closed && source.length > 2;
   const path = ringClosed && pointsNear(source[0], source[source.length - 1]) ? source.slice(0, -1) : source;
   const radius = Math.max(0.05, widthWorld / 2);
   const segmentCount = ringClosed ? path.length : path.length - 1;
+
+  if (dashWorld && pushDashedWorldPolylineMesh(vertices, context, path, segmentCount, color, radius, maxSegmentWorld, dashWorld)) return;
 
   for (let index = 0; index < segmentCount; index++) {
     const start = path[index];
@@ -37,6 +39,39 @@ export function pushWorldPolylineMesh(vertices, context, points, color, widthWor
     if (joinMode === "caps" && !isCap) continue;
     pushWorldCircle(vertices, context, path[index], radius, color, isCap ? Math.max(8, joinSegments) : joinSegments);
   }
+}
+
+function pushDashedWorldPolylineMesh(vertices, context, path, segmentCount, color, radius, maxSegmentWorld, dash) {
+  const dashLength = Math.max(0, Number(dash.dashWorld) || 0);
+  const gapLength = Math.max(0, Number(dash.gapWorld) || 0);
+  const patternLength = dashLength + gapLength;
+  if (!Number.isFinite(patternLength) || patternLength <= 0.0001) return false;
+
+  let phase = 0;
+  for (let index = 0; index < segmentCount; index++) {
+    const start = path[index];
+    const end = path[(index + 1) % path.length];
+    const dx = end[0] - start[0];
+    const dy = end[1] - start[1];
+    const length = Math.hypot(dx, dy);
+    if (length <= 0.000001 || length > maxSegmentWorld) continue;
+    let position = 0;
+    while (position < length) {
+      const phaseInPattern = phase % patternLength;
+      const drawing = phaseInPattern < dashLength;
+      const remainingPattern = (drawing ? dashLength : patternLength) - phaseInPattern;
+      const step = Math.min(remainingPattern, length - position);
+      if (!Number.isFinite(step) || step <= 0.000001) break;
+      if (drawing) {
+        const from = position / length;
+        const to = (position + step) / length;
+        pushWorldLineQuad(vertices, context, [start[0] + dx * from, start[1] + dy * from], [start[0] + dx * to, start[1] + dy * to], color, radius);
+      }
+      position += step;
+      phase = (phase + step) % patternLength;
+    }
+  }
+  return true;
 }
 
 function normalizeWorldPathPoints(points) {

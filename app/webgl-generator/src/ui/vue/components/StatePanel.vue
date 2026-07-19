@@ -197,6 +197,7 @@ import UiTextEditField from "./base/UiTextEditField.vue";
 import {formatArea, formatMilitary, formatNumber as formatDisplayNumber, formatPopulation} from "../../display-units.js";
 import {findByObjectId, sameObjectId} from "../../object-id.js";
 import {compareRowsByKey} from "../../sort-utils.js";
+import {buildStateCapitalOptions} from "../../state-capital-options.js";
 import {GOVERNMENT_OPTIONS} from "../../../generator/governments.js";
 import {readObjectNote} from "../../../runtime/object-notes.js";
 import {useUnitPreferences} from "../composables/use-unit-preferences.js";
@@ -281,7 +282,7 @@ const selected = computed(() => findByObjectId(metrics.value.rows, props.state.t
 const canDeleteSelected = computed(() => Boolean(selected.value && !selected.value.neutral));
 const editActive = computed(() => Boolean(selected.value && props.state.active && selected.value.id === props.state.targetStateId));
 const modalActionActive = computed(() => Boolean(props.state.addMode || props.state.deleteMode));
-const capitalOptions = computed(() => stateCities(props.state.map, selected.value?.id));
+const capitalOptions = computed(() => buildStateCapitalOptions(props.state.map, selected.value?.id));
 const governmentOptions = computed(() => GOVERNMENT_OPTIONS.map(option => ({
   value: option.value,
   label: `${option.label} / ${option.category}`
@@ -306,7 +307,7 @@ const stateActions = computed(() => [
   {key: "edit", label: editActive.value ? "退出国家编辑" : "进入国家编辑", icon: "◎", panel: false, disabled: modalActionActive.value || !canDeleteSelected.value, active: editActive.value},
   {key: "rename", label: "重命名", icon: "✎", disabled: modalActionActive.value || !canDeleteSelected.value},
   {key: "color", label: "调整颜色", icon: "◐", disabled: modalActionActive.value || !canDeleteSelected.value},
-  {key: "government", label: "调整政体", icon: "⚖", disabled: modalActionActive.value || !canDeleteSelected.value},
+  {key: "government", label: "调整政体", icon: "⚖", panelWidth: 460, disabled: modalActionActive.value || !canDeleteSelected.value},
   {key: "capital", label: "设置首都", icon: "♛", disabled: modalActionActive.value || !canDeleteSelected.value || !capitalOptions.value.length},
   {key: "note", label: "编辑备注", icon: "☰", disabled: modalActionActive.value || !canDeleteSelected.value},
   {key: "merge", label: "合并相邻国家", icon: "⇄", panelWidth: 380, panelHeight: 390, disabled: modalActionActive.value || !canDeleteSelected.value || !activeStateNeighbors(props.state.map, selected.value?.id).length},
@@ -353,7 +354,7 @@ const detailRows = computed(() => selected.value ? [
 ] : []);
 
 watch(() => selected.value?.capitalBurgId, next => {
-  capitalDraft.value = Number(next) || capitalOptions.value[0]?.burgId || 0;
+  capitalDraft.value = Number(next) || capitalOptions.value[0]?.value || 0;
 }, {immediate: true});
 
 watch(() => selected.value?.governmentKey, next => {

@@ -28,6 +28,9 @@ docs/local-preview-images/
 docs/generated/
 docs/local-logs/
 
+# Local scratch workspace unrelated to project sources.
+/work/
+
 # Guard rails for misplaced generated reports in docs root.
 docs/source-baselines/
 docs/webgl-generator-snapshot-*/

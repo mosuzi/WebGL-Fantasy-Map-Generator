@@ -44,6 +44,7 @@ assert.equal(events.at(-1).snapshot.selection, null, "进入不存在对象的�
 assert.equal(events.at(-1).snapshot.editingObject, null, "进入不存在对象的编辑态时不得保留旧编辑对象");
 
 const appSource = await readFile(new URL("../app/webgl-generator/src/runtime/app.js", import.meta.url), "utf8");
+const statePanelSource = await readFile(new URL("../app/webgl-generator/src/ui/panels/state-panel.js", import.meta.url), "utf8");
 assert.match(appSource, /selectionStore\.startEditing\(object, \{select\}\)/, "进入编辑应原子设置选择与编辑态");
 assert.match(appSource, /selectionStore\.setSelection\(\{object\}, \{sourcePanelId: panelId\}\)/, "批次选择应把来源面板作为通知元数据保存");
 assert.match(
@@ -62,13 +63,23 @@ assert.match(markerStart, /CANVAS_TOOL_MODE\.MARKER_MOVE[\s\S]*?CANVAS_TOOL_MODE
 assert.match(markerStart, /enterCanvasToolMode\(state, documentRef, modeId, \{type, markerId\}\)/, "标记应进入统一画布模式管理器");
 assert.match(appSource, /register\(CANVAS_TOOL_MODE\.MEASUREMENT_DRAW[\s\S]*?register\(CANVAS_TOOL_MODE\.MARKER_ADD[\s\S]*?register\(CANVAS_TOOL_MODE\.MARKER_MOVE/, "测量与标记必须注册到同一模式管理器");
 
+const stateEditorEntry = sourceBetween("const enterStateEditor", "state.startObjectEditing");
+assert.match(stateEditorEntry, /state\.panels\.state\.setTargetStateId\(object\.id\)/, "国家编辑入口必须锁定当前国家");
+assert.match(stateEditorEntry, /state\.panels\.state\.open\(state\.map, state\.editHistory\.getStats\(\)\)/, "国家编辑入口必须打开国家面板");
+assert.match(stateEditorEntry, /enterCanvasToolMode\(state, documentRef, CANVAS_TOOL_MODE\.STATE_BRUSH\)/, "国家编辑入口必须启用国家归属画笔");
+assert.match(stateEditorEntry, /startObjectEditing\(object, \{select: false\}\)/, "国家编辑入口必须同步当前编辑对象且不得重复选择");
+assert.match(appSource, /onEdit: object => \{\s*if \(object\?\.kind === OBJECT_KIND\.STATE\) \{\s*enterStateEditor\(object\);\s*return;\s*\}\s*startObjectEditing\(object, \{select: false\}\);\s*\}/, "对象详情中的国家编辑必须路由到国家编辑器，其他对象保持原入口");
+assert.match(statePanelSource, /onEdit: row => \{[\s\S]*?callbacks\.onActiveChange\?\.\(nextActive\);[\s\S]*?if \(nextActive\) callbacks\.onEdit\?\.\(stateObject\(row\)\);[\s\S]*?\}/, "国家面板必须由 active 变化统一进入 / 退出画笔，只在进入时同步编辑对象");
+assert.match(appSource, /statePanel = createStatePanel[\s\S]*?onActiveChange: active => \{[\s\S]*?CANVAS_TOOL_MODE\.STATE_BRUSH[\s\S]*?onEdit: object => \{\s*startObjectEditing\(object, \{/, "国家面板入口必须保持画笔与编辑对象的单向职责分工");
+
 console.log(JSON.stringify({
   selectionEvents: events.length,
   directSelectionCalls: 2,
   batchEvents: 1,
   deletedObjectSelection: events.at(-3).snapshot.selection,
   preservedSourcePanelId: events.at(3).metadata.sourcePanelId,
-  unifiedCanvasModeEntry: true
+  unifiedCanvasModeEntry: true,
+  stateEditorEntry: "state-panel + state:brush + editingObject"
 }, null, 2));
 
 function sourceBetween(start, end) {

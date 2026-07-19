@@ -50,6 +50,11 @@ import {CITY_ICON_PALETTES, resolveCityVisual} from "../runtime/city-visuals.js"
 import {isGeneratedLabelHidden} from "../runtime/label-edit-commands.js";
 import {estimateLabelTextBox, labelStyleTypeForTarget, resolveLabelStyle} from "../runtime/label-style-registry.js";
 import {hasManualLabelPriorities, resolveLabelLayout, sortLabelItemsByPriority} from "../runtime/label-layout-registry.js";
+import {
+  PROVINCE_COLLISION_OPACITY,
+  automaticPoliticalLabelOrder,
+  resolvePoliticalLabelPlacement
+} from "./political-label-layout.js";
 import {formatMilitary, normalizeUnitPreferences} from "../ui/display-units.js";
 import {militaryIconLabelForVariant, militaryIconUrlForVariant, normalizeMilitaryIconVariant} from "./military-icon-assets.js";
 import {DEFAULT_VISUAL_THEME_ID, resolveVisualTheme} from "./themes.js";
@@ -1354,7 +1359,7 @@ export class PlaceholderMapRenderer {
     const labels = [...getLabelStates(map), ...getLabelProvinces(map), ...getLabelCities(map, this.labelOptions), ...getCustomLabels(map)].map(item => {
       const node = documentRef.createElement("span");
       node.className = labelClassName(item);
-      node.textContent = item.text;
+      const glyphNodes = appendLabelNodeText(node, item, documentRef);
       node.dataset.labelTargetKind = item.targetKind;
       node.dataset.labelTargetId = String(item.targetId);
       const styleType = labelStyleTypeForTarget(item.targetKind, item.city);
@@ -1372,7 +1377,7 @@ export class PlaceholderMapRenderer {
       node.classList.toggle("position-locked", layout.locked);
       applyResolvedLabelStyle(node, resolvedStyle);
       fragment.append(node);
-      return {...item, x: layout.position.x, y: layout.position.y, minScale: layout.minScale, styleType, resolvedStyle, layout, metrics: estimateLabelTextBox(item.text, resolvedStyle), node, box: null, visible: false};
+      return {...item, x: layout.position.x, y: layout.position.y, minScale: layout.minScale, styleType, resolvedStyle, layout, metrics: estimateLabelTextBox(item.text, resolvedStyle), node, glyphNodes, box: null, visible: false};
     });
     this.labelItems = hasManualLabelPriorities(map) ? sortLabelItemsByPriority(labels) : labels;
     this.cityIconItems = getCityIconItems(map).map(item => {
@@ -1458,12 +1463,14 @@ export class PlaceholderMapRenderer {
     let visibleCities = 0;
     let visibleStates = 0;
     let visibleProvinces = 0;
+    let fallbackProvinces = 0;
+    let stateCityOverlaps = 0;
     const scale = this.camera.scale;
     const maxVisible = labelLimitForScale(scale, this.labelOptions.maxCityLabels);
     const padding = labelPaddingForScale(scale);
     const stateLabelScale = stateLabelScaleBehavior(scale);
-    const labelItems = this.labelItems;
     const priorityLayout = hasManualLabelPriorities(this.map);
+    const labelItems = priorityLayout ? this.labelItems : automaticPoliticalLabelOrder(this.labelItems);
 
     const labelStartedAt = performance.now();
     for (const item of labelItems) {
@@ -1472,32 +1479,52 @@ export class PlaceholderMapRenderer {
       item.node.classList.toggle("selected", selected);
       const stateLabel = item.targetKind === LABEL_TARGET_KIND.STATE;
       const provinceLabel = item.targetKind === LABEL_TARGET_KIND.PROVINCE;
+      const politicalLabel = stateLabel || provinceLabel;
       const layerVisible = this.isLabelItemLayerVisible(item);
       const withinLimit = item.targetKind === LABEL_TARGET_KIND.CITY ? visibleCities < maxVisible : true;
       if (!forceVisible && (!layerVisible || !withinLimit || scale < item.minScale || (stateLabel && !stateLabelScale.visible))) {
         item.node.classList.toggle("visible", false);
         item.visible = false;
         item.box = null;
+        item.node.classList.remove("collision-fallback", "city-overlap");
         continue;
       }
-      const screen = this.worldToScreen(item.x, item.y, rect);
-      const box = labelBoxForItem(item, screen);
+      const baseScreen = this.worldToScreen(item.x, item.y, rect);
+      const politicalPlacement = politicalLabel ? resolvePoliticalLabelPlacement({
+        item,
+        screen: baseScreen,
+        obstacles: occupied,
+        peers: stateLabel ? occupiedStates : [...occupiedStates, ...occupiedProvinces],
+        viewport: {width: rect.width, height: rect.height},
+        padding,
+        locked: item.layout?.locked
+      }) : null;
+      const screen = politicalPlacement?.anchor || baseScreen;
+      const box = politicalPlacement?.box || labelBoxForItem(item, screen);
       const onScreen = box.right > 8 && box.bottom > 8 && box.left < rect.width - 8 && box.top < rect.height - 8;
       const canShow = onScreen;
       const blocked = canShow && (priorityLayout
         ? boxesOverlapAny(occupiedByPriority, box, padding)
         : stateLabel
-        ? boxesOverlapAny(occupiedStates, box, padding)
+        ? Boolean(politicalPlacement?.peerCollides)
         : provinceLabel
-          ? boxesOverlapAny(occupiedStates, box, padding) || boxesOverlapAny(occupiedProvinces, box, padding)
+          ? false
           : (stateLabelScale.blocksCities && boxesOverlapAny(occupiedStates, box, padding)) || boxesOverlapAny(occupiedProvinces, box, padding) || boxesOverlapAny(occupied, box, padding));
       const shouldShow = canShow && (forceVisible || !blocked);
       item.node.classList.toggle("visible", shouldShow);
       item.visible = shouldShow;
       item.box = shouldShow ? box : null;
       if (!shouldShow) continue;
-      setOverlayNodePosition(item.node, screen.x, stateLabel || provinceLabel ? screen.y : screen.y - 6);
-      item.node.style.setProperty("--label-rotation", `${item.rotation || 0}deg`);
+      if (politicalPlacement) applyPoliticalLabelPlacement(item, politicalPlacement);
+      else setOverlayNodePosition(item.node, screen.x, screen.y - 6);
+      item.node.style.setProperty("--label-rotation", `${politicalPlacement ? 0 : item.rotation || 0}deg`);
+      const provinceFallback = provinceLabel && Boolean(politicalPlacement?.collides);
+      const stateCityOverlap = stateLabel && Boolean(politicalPlacement?.cityCollides);
+      item.node.classList.toggle("collision-fallback", provinceFallback);
+      item.node.classList.toggle("city-overlap", stateCityOverlap);
+      item.node.dataset.labelPath = politicalPlacement?.bend ? "quadratic" : "line";
+      item.node.dataset.labelCandidate = String(politicalPlacement?.candidateIndex ?? 0);
+      item.node.style.setProperty("--province-label-collision-opacity", String(PROVINCE_COLLISION_OPACITY));
       if (stateLabel) item.node.style.setProperty("--state-label-opacity", String(stateLabelScale.opacity));
       if (stateLabel) occupiedStates.push(box);
       else if (provinceLabel) occupiedProvinces.push(box);
@@ -1506,7 +1533,11 @@ export class PlaceholderMapRenderer {
       visible++;
       if (item.targetKind === LABEL_TARGET_KIND.CITY) visibleCities++;
       if (item.targetKind === LABEL_TARGET_KIND.STATE) visibleStates++;
-      if (item.targetKind === LABEL_TARGET_KIND.PROVINCE) visibleProvinces++;
+      if (item.targetKind === LABEL_TARGET_KIND.PROVINCE) {
+        visibleProvinces++;
+        if (provinceFallback) fallbackProvinces++;
+      }
+      if (stateCityOverlap) stateCityOverlaps++;
     }
 
     this.visibleLabelCount = visible;
@@ -1536,6 +1567,10 @@ export class PlaceholderMapRenderer {
       overlayChildren: this.overlay.childElementCount,
       labelItems: this.labelItems.length,
       visibleLabels: this.visibleLabelCount,
+      visibleStateLabels: visibleStates,
+      visibleProvinceLabels: visibleProvinces,
+      fallbackProvinceLabels: fallbackProvinces,
+      stateCityOverlapLabels: stateCityOverlaps,
       cityIconItems: this.cityIconItems.length,
       visibleCityIcons: this.visibleCityIconCount,
       markerIconItems: this.markerIconItems.length,
@@ -2028,6 +2063,37 @@ function pointBounds(x, y, padding) {
 function setOverlayNodePosition(node, x, y) {
   setStylePropertyIfChanged(node, "--overlay-x", overlayCoordinateValue(x));
   setStylePropertyIfChanged(node, "--overlay-y", overlayCoordinateValue(y));
+}
+
+function appendLabelNodeText(node, item, documentRef) {
+  const political = item.targetKind === LABEL_TARGET_KIND.STATE || item.targetKind === LABEL_TARGET_KIND.PROVINCE;
+  if (!political) {
+    node.textContent = item.text;
+    return [];
+  }
+  node.setAttribute("aria-label", item.text);
+  return Array.from(item.text || "").map(character => {
+    const glyph = documentRef.createElement("span");
+    glyph.className = "political-label-glyph";
+    glyph.setAttribute("aria-hidden", "true");
+    glyph.textContent = character;
+    node.append(glyph);
+    return glyph;
+  });
+}
+
+function applyPoliticalLabelPlacement(item, placement) {
+  setOverlayNodePosition(item.node, placement.anchor.x, placement.anchor.y);
+  setStylePropertyIfChanged(item.node, "--label-box-width", `${placement.rootSize.width}px`);
+  setStylePropertyIfChanged(item.node, "--label-box-height", `${placement.rootSize.height}px`);
+  for (let index = 0; index < item.glyphNodes.length; index++) {
+    const glyph = item.glyphNodes[index];
+    const layout = placement.glyphs[index];
+    if (!layout) continue;
+    setStylePropertyIfChanged(glyph, "--glyph-x", overlayCoordinateValue(layout.x));
+    setStylePropertyIfChanged(glyph, "--glyph-y", overlayCoordinateValue(layout.y));
+    setStylePropertyIfChanged(glyph, "--label-rotation", `${layout.angle}deg`);
+  }
 }
 
 function setOverlayItemClassFlag(item, cacheKey, className, enabled) {
@@ -3043,7 +3109,7 @@ function buildLineVertices(map, visibility = {}, colorMode = "height", shoreVisu
   pushMapEdgeFade(vertices, context, map, viewOptions.visualTheme);
   pushShoreLineLayers(vertices, context, visibility, cellVisualMesh, viewOptions);
   pushZoneTextureLayer(vertices, context, map, visibility);
-  if (visibility.provinceBorders !== false) pushPoliticalBoundaryStrokes(vertices, provincePaths, context, themeLines.provinceBorder || PROVINCE_VISUAL_STYLE.borderStroke, PROVINCE_VISUAL_STYLE.borderWidthWorld);
+  if (visibility.provinceBorders !== false) pushPoliticalBoundaryStrokes(vertices, provincePaths, context, themeLines.provinceBorder || PROVINCE_VISUAL_STYLE.borderStroke, PROVINCE_VISUAL_STYLE.borderWidthWorld, PROVINCE_VISUAL_STYLE.borderDashWorld);
   if (visibility.stateBorders !== false) pushPoliticalBoundaryStrokes(vertices, statePaths, context, themeLines.stateBorder || STATE_VISUAL_STYLE.borderStroke, STATE_VISUAL_STYLE.borderWidthWorld);
   if (visibility.warFronts !== false) pushMilitaryFrontLines(vertices, context, map, visibility);
   return new Float32Array(vertices);
@@ -3962,6 +4028,10 @@ function emptyOverlayUpdateStats() {
     overlayChildren: 0,
     labelItems: 0,
     visibleLabels: 0,
+    visibleStateLabels: 0,
+    visibleProvinceLabels: 0,
+    fallbackProvinceLabels: 0,
+    stateCityOverlapLabels: 0,
     cityIconItems: 0,
     visibleCityIcons: 0,
     markerIconItems: 0,

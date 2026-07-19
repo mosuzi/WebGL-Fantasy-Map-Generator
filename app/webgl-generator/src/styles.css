@@ -1423,15 +1423,27 @@ select:disabled {
 
 .state-label,
 .province-label {
-  transform: translate(var(--overlay-x, 0px), var(--overlay-y, 0px)) translate(-50%, -50%) rotate(var(--label-rotation, 0deg));
+  width: var(--label-box-width, 1px);
+  height: var(--label-box-height, 1px);
+  transform: translate(var(--overlay-x, 0px), var(--overlay-y, 0px)) translate(-50%, -50%);
   will-change: transform, opacity;
-  max-width: 280px;
+  max-width: none;
   line-height: 1.1;
   opacity: 0;
   text-align: center;
   transition: opacity 240ms cubic-bezier(0.22, 0.61, 0.36, 1), visibility 0s linear 240ms;
   visibility: hidden;
   z-index: 2;
+}
+
+.political-label-glyph {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  line-height: 1;
+  transform: translate(var(--glyph-x, 0px), var(--glyph-y, 0px)) translate(-50%, -50%) rotate(var(--label-rotation, 0deg));
+  transform-origin: center;
+  white-space: pre;
 }
 
 .state-label.visible {
@@ -1441,9 +1453,16 @@ select:disabled {
 }
 
 .province-label {
-  max-width: 220px;
   transition-duration: 180ms;
   z-index: 2;
+}
+
+.province-label.collision-fallback {
+  z-index: 1;
+}
+
+.province-label.visible.collision-fallback {
+  opacity: calc(var(--label-opacity, 1) * var(--province-label-collision-opacity, 0.42));
 }
 
 .province-label.selected {

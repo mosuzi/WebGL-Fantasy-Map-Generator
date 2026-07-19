@@ -475,6 +475,13 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     if (sameObject) return stopObjectEditing({afterStop: options.afterStop});
     return startObjectEditing(object, options);
   };
+  const enterStateEditor = object => {
+    if (object?.kind !== OBJECT_KIND.STATE || !state.panels.state) return false;
+    state.panels.state.setTargetStateId(object.id);
+    state.panels.state.open(state.map, state.editHistory.getStats());
+    enterCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.STATE_BRUSH);
+    return startObjectEditing(object, {select: false});
+  };
   state.startObjectEditing = startObjectEditing;
   state.stopObjectEditing = stopObjectEditing;
   state.toggleObjectEditing = toggleObjectEditing;
@@ -482,6 +489,10 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
   state.openSelectionAwarePanel = openSelectionAwarePanel;
   const objectDetailsPanel = createObjectDetailsPanel(documentRef, panelManager, {
     onEdit: object => {
+      if (object?.kind === OBJECT_KIND.STATE) {
+        enterStateEditor(object);
+        return;
+      }
       startObjectEditing(object, {select: false});
     },
     onCancelEdit: () => {

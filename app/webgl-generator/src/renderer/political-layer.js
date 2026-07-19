@@ -19,16 +19,18 @@ export const PROVINCE_VISUAL_STYLE = Object.freeze({
   bandWidthWorld: 4,
   smoothing: Object.freeze({iterations: 1, factor: 0.14}),
   borderWidthWorld: 0.24,
+  borderDashWorld: Object.freeze({dashWorld: 2, gapWorld: 2}),
   borderStroke: Object.freeze([0.45, 0.43, 0.38, 0.22]),
   meshAlpha: 0.68,
   colorForValue: colorForProvince
 });
 
-export function pushPoliticalBoundaryStrokes(vertices, paths, context, color, widthWorld) {
+export function pushPoliticalBoundaryStrokes(vertices, paths, context, color, widthWorld, dashWorld = null) {
   for (const path of paths?.boundaries || []) {
     pushWorldPolylineMesh(vertices, context, path.points, color, widthWorld, {
       closed: pointsNear(path.points?.[0], path.points?.[path.points.length - 1]),
-      joinMode: "none"
+      joinMode: "none",
+      dashWorld
     });
   }
 }
@@ -109,6 +111,7 @@ export function summarizePoliticalVisualPaths(paths, style) {
     points: countPathPoints(paths?.boundaries),
     bandWidthWorld: style.bandWidthWorld,
     smoothing: {...style.smoothing},
+    borderDashWorld: style.borderDashWorld ? {...style.borderDashWorld} : null,
     borderStroke: [...style.borderStroke]
   };
 }

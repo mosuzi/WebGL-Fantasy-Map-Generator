@@ -1958,13 +1958,14 @@ function overlayZIndex(element) {
 function drawTextOverlayElement(context, element, canvasRect, scale) {
   const text = element.textContent?.trim();
   if (!text) return;
-  const box = elementBox(element, canvasRect, scale);
+  const isStateLabel = element.classList.contains("state-label");
+  const isProvinceLabel = element.classList.contains("province-label");
+  const politicalGlyphs = isStateLabel || isProvinceLabel ? Array.from(element.querySelectorAll(".political-label-glyph")) : [];
+  const box = politicalGlyphs.length ? unionElementBoxes(politicalGlyphs, canvasRect, scale) : elementBox(element, canvasRect, scale);
   if (!box || !boxIntersectsCanvas(box, context.canvas)) return;
   const style = element.ownerDocument.defaultView.getComputedStyle(element);
   const opacity = exportOverlayOpacity(element, style);
   if (opacity <= 0) return;
-  const isStateLabel = element.classList.contains("state-label");
-  const isProvinceLabel = element.classList.contains("province-label");
   const isCustomLabel = element.classList.contains("custom-label");
   const background = style.backgroundColor;
   const borderColor = style.borderColor;
@@ -1980,7 +1981,18 @@ function drawTextOverlayElement(context, element, canvasRect, scale) {
   context.textBaseline = "middle";
   context.textAlign = "center";
 
-  if (isStateLabel || isProvinceLabel) {
+  if (politicalGlyphs.length) {
+    const glyphMaxWidth = Math.max(12, cssPixelValue(style.fontSize, scale.y) * 1.35);
+    for (const glyph of politicalGlyphs) {
+      const glyphBox = elementBox(glyph, canvasRect, scale);
+      if (!glyphBox) continue;
+      context.save();
+      context.translate(glyphBox.x + glyphBox.width / 2, glyphBox.y + glyphBox.height / 2);
+      context.rotate(cssRotationDegrees(glyph) * Math.PI / 180);
+      drawTextWithResolvedStyle(context, element, glyph.textContent || "", 0, 0, glyphMaxWidth, scale);
+      context.restore();
+    }
+  } else if (isStateLabel || isProvinceLabel) {
     const rotation = cssRotationDegrees(element);
     context.translate(box.x + box.width / 2, box.y + box.height / 2);
     context.rotate(rotation * Math.PI / 180);
@@ -2196,6 +2208,24 @@ function elementBox(element, canvasRect, scale) {
     width: rect.width * scale.x,
     height: rect.height * scale.y
   };
+}
+
+function unionElementBoxes(elements, canvasRect, scale) {
+  let result = null;
+  for (const element of elements) {
+    const box = elementBox(element, canvasRect, scale);
+    if (!box) continue;
+    if (!result) result = {...box};
+    else {
+      const right = Math.max(result.x + result.width, box.x + box.width);
+      const bottom = Math.max(result.y + result.height, box.y + box.height);
+      result.x = Math.min(result.x, box.x);
+      result.y = Math.min(result.y, box.y);
+      result.width = right - result.x;
+      result.height = bottom - result.y;
+    }
+  }
+  return result;
 }
 
 function drawPanel(context, box, radius, fillStyle, strokeStyle) {
