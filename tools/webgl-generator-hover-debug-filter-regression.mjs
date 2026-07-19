@@ -36,7 +36,7 @@ assert.equal(normalRows.some(row => !String(row.label).trim() || !String(row.val
 
 const debugRows = buildHoverRowEntries(pick, {}, {debugEnabled: true});
 const debugText = JSON.stringify(debugRows);
-assert.deepEqual(debugRows.slice(-3).map(row => row.label), ["内部位置", "内部地形", "调试"]);
+assert.deepEqual(debugRows.slice(-3).map(row => row.label), ["诊断·位置", "诊断·地形", "诊断·原始值"]);
 for (const diagnostic of ["grid 81", "pack 42", "island #7", "h 1,521 米", "s 88", "流量 186 m³/s", "resource 铁矿 v12 x3", "state"]) {
   assert.match(debugText, new RegExp(diagnostic));
 }

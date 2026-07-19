@@ -2915,6 +2915,7 @@ function setRuntimeViewMode(state, documentRef, mode) {
     updateControlPreferences(documentRef, {colorMode: nextMode});
     state.renderer?.setColorMode?.(nextMode);
     updateRuntimePanel(documentRef, state);
+    updatePickPanel(documentRef, state);
     return runtimeDisplayActionResult(state, documentRef, ["display-preference", "renderer", "runtime-panel"]);
   });
 }

@@ -18,7 +18,7 @@ import {
   normalizeUnitPreferences
 } from "./display-units.js";
 import {formatHistoryStats} from "./history-format.js";
-import {buildHoverRowEntries, formatHoverObjectTitle, isNamedHoverRoute} from "./hover-overlay-content.js";
+import {buildHoverRowEntries, formatHoverObjectTitle, hoverViewTitle, isNamedHoverRoute} from "./hover-overlay-content.js";
 
 export const CONTROL_PREFERENCES_KEY = "webgl-generator-control-preferences";
 const CRITICAL_CONTROL_CHANGE_DEBOUNCE_MS = 180;
@@ -924,10 +924,10 @@ export function updatePickPanel(documentRef, state) {
       ]
     : [statRow(documentRef, "选中对象", "none"), statRow(documentRef, "编辑对象", state.editingObject ? formatObjectTitle(state.editingObject) : "none")];
   documentRef.getElementById("pick-stats").replaceChildren(...selectionRows);
-  updateHoverOverlay(documentRef, pick);
+  updateHoverOverlay(documentRef, pick, state);
 }
 
-function updateHoverOverlay(documentRef, pick) {
+function updateHoverOverlay(documentRef, pick, state) {
   const overlay = documentRef.getElementById("hover-overlay");
   if (!overlay) return;
   const preferences = readControlPreferences(documentRef);
@@ -937,18 +937,21 @@ function updateHoverOverlay(documentRef, pick) {
   if (!visible) return;
 
   const debugEnabled = Boolean(documentRef.defaultView?.__webglGeneratorDebug?.enabled);
+  const rendererStats = state?.renderer?.getStats?.() || {};
+  const colorMode = rendererStats.colorMode || preferences.colorMode || "height";
   const title = documentRef.createElement("div");
   title.className = "hover-overlay-title";
-  title.textContent = formatHoverTitle(pick, preferences.units, debugEnabled);
+  title.textContent = formatHoverTitle(pick, preferences.units, debugEnabled, colorMode);
   const rows = documentRef.createElement("dl");
   rows.className = "hover-overlay-list";
-  rows.replaceChildren(...buildHoverRowEntries(pick, preferences.units, {debugEnabled})
+  rows.replaceChildren(...buildHoverRowEntries(pick, preferences.units, {debugEnabled, colorMode, map: state?.map, viewOptions: rendererStats.viewOptions})
     .map(entry => hoverRow(documentRef, entry.label, entry.value)));
   overlay.replaceChildren(title, rows);
 }
 
-function formatHoverTitle(pick, unitPreferences = {}, debugEnabled = false) {
+function formatHoverTitle(pick, unitPreferences = {}, debugEnabled = false, colorMode = "") {
   if (pick.invalidMapArea) return "未开发区域";
+  if (colorMode) return hoverViewTitle(colorMode);
   if (pick.label) return `标签 ${pick.label.text}`;
   if (pick.city && pick.city !== "none") return `城市 ${pick.city}`;
   if (pick.marker) return `标记 ${debugEnabled ? formatMarkerObjectSummary(pick.marker, unitPreferences) : formatMarkerTitle(pick.marker)}`;

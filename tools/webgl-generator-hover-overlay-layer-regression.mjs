@@ -37,7 +37,7 @@ assert(mapOverlayIndex >= 0 && hoverOverlayIndex > mapOverlayIndex, "悬停信�
 
 const hoverRule = ruleBody(stylesSource, ".hover-overlay");
 assert.match(hoverRule, /pointer-events:\s*none;/, "只读悬停信息层不应截获地图操作");
-assert.match(panelSource, /function updateHoverOverlay\(documentRef, pick\)/, "悬停信息更新入口缺失");
+assert.match(panelSource, /function updateHoverOverlay\(documentRef, pick, state\)/, "悬停信息更新入口缺失");
 assert.match(panelSource, /overlay\.hidden = !visible;[\s\S]*overlay\.replaceChildren\(title, rows\);/, "悬停信息显示与内容更新契约异常");
 
 console.log(JSON.stringify({

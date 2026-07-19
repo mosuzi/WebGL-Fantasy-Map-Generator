@@ -448,6 +448,11 @@ function buildPickResult(map, gridCell, worldX, worldY, candidates) {
   const gridBiomeId = Number(map.grid.cells.biome[gridCell]) || 0;
   const gridBiome = resolveBiomeDescriptor(gridBiomeId, map.climate?.biomes);
   const packBiome = packBiomeId === null ? null : resolveBiomeDescriptor(packBiomeId, map.climate?.biomes);
+  const cultureId = Number(map.grid.cells.culture?.[gridCell]) || 0;
+  const religionId = Number(map.grid.cells.religion?.[gridCell]) || 0;
+  const stateId = Number(map.grid.cells.state?.[gridCell]) || 0;
+  const provinceId = Number(map.grid.cells.province?.[gridCell]) || 0;
+  const regionId = Number(map.grid.cells.region?.[gridCell]) || 0;
   const goodId = packCell === null ? 0 : packCells?.good?.[packCell] || 0;
   const good = goodId ? map.pack?.goods?.[goodId] : null;
   const flux = packCell === null ? 0 : (packCells?.fl?.[packCell] || 0) + (packCells?.conf?.[packCell] || 0);
@@ -469,6 +474,7 @@ function buildPickResult(map, gridCell, worldX, worldY, candidates) {
     biomeCanonicalName: gridBiome.canonicalName,
     biomeDescription: gridBiome.description,
     packBiome: packBiome?.name || "none",
+    packBiomeDescription: packBiome?.description || "",
     packHeight: packCell === null ? null : packCells?.h?.[packCell] ?? null,
     suitability: packCell === null ? 0 : packCells?.s?.[packCell] || 0,
     flux,
@@ -478,11 +484,16 @@ function buildPickResult(map, gridCell, worldX, worldY, candidates) {
       value: Number(good.value || 0),
       supply: Number(packCells?.goodSupply?.[packCell] || 1)
     } : null,
-    culture: map.society.cultures[map.grid.cells.culture[gridCell]]?.name || "unknown",
-    religion: map.society.religions[map.grid.cells.religion[gridCell]]?.name || "unknown",
-    state: map.politics.states[map.grid.cells.state[gridCell]]?.name || "none",
-    province: map.politics.provinces[map.grid.cells.province[gridCell]]?.name || "none",
-    region: map.politics.regions[map.grid.cells.region[gridCell]]?.name || "none",
+    cultureId,
+    religionId,
+    stateId,
+    provinceId,
+    regionId,
+    culture: map.society.cultures[cultureId]?.name || "unknown",
+    religion: map.society.religions[religionId]?.name || "unknown",
+    state: map.politics.states[stateId]?.name || "none",
+    province: map.politics.provinces[provinceId]?.name || "none",
+    region: map.politics.regions[regionId]?.name || "none",
     city: map.settlements.cities[map.grid.cells.burg[gridCell]]?.name || "none",
     population: map.grid.cells.pop[gridCell] || 0,
     worldX,
