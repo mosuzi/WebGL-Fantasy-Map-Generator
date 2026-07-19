@@ -172,7 +172,9 @@ assert.match(switchFieldSource, /if \(event\.target\.closest\?\.\("\.el-switch"\
 assert.match(switchFieldSource, /<ElSwitch[\s\S]*:aria-label="label"[\s\S]*@change="commitValue"/, "Element Plus 开关的键盘与可访问入口丢失");
 const stylePanelSource = controlPanelSource.match(/class="control-panel-section label-style-panel"[\s\S]*?data-control-panel="units"/)?.[0] || "";
 assert.equal(stylePanelSource.match(/unit-label="px"/g)?.length, 6, "样式页 px 滑动条数量发生漂移");
-assert.match(stylesSource, /\.label-style-panel \.ui-slider-field-has-unit\s*\{[^}]*grid-template-columns:\s*44px minmax\(0, 1fr\) 84px max-content;/, "样式页没有为单位保留第四列");
+assert.match(stylesSource, /\.label-style-panel \.ui-slider-field\s*\{[^}]*grid-template-columns:\s*72px minmax\(0, 1fr\) 84px;/, "样式页无单位滑动条没有为长标签保留列宽");
+assert.match(stylesSource, /\.label-style-panel \.ui-slider-field-has-unit\s*\{[^}]*grid-template-columns:\s*72px minmax\(0, 1fr\) 84px max-content;/, "样式页带单位滑动条没有保持数值与单位独立列");
+assert.match(stylesSource, /\.label-style-panel \.ui-slider-field > span:first-child\s*\{[^}]*white-space:\s*nowrap;/, "样式页滑动条标签仍可能折行");
 assert.match(mapIoSource, /\.province-label\.visible/, "PNG overlay 没有纳入省份名称");
 assert.match(rendererSource, /--label-stroke-width[\s\S]*--label-shadow-offset-x[\s\S]*--label-shadow-blur/, "实时标签没有把细效果值写入共享 CSS 变量");
 assert.match(mapIoSource, /--label-stroke-width[\s\S]*--label-shadow-blur[\s\S]*--label-shadow-offset-x[\s\S]*--label-shadow-offset-y/, "PNG 没有读取实时标签的共享效果值");

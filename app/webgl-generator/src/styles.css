@@ -387,8 +387,17 @@ select {
   gap: 10px;
 }
 
+.label-style-panel .ui-slider-field {
+  grid-template-columns: 72px minmax(0, 1fr) 84px;
+}
+
 .label-style-panel .ui-slider-field-has-unit {
-  grid-template-columns: 44px minmax(0, 1fr) 84px max-content;
+  grid-template-columns: 72px minmax(0, 1fr) 84px max-content;
+}
+
+.label-style-panel .ui-slider-field > span:first-child {
+  min-width: 0;
+  white-space: nowrap;
 }
 
 .label-style-preview {

@@ -28164,3 +28164,9 @@ full 矩阵结果：
 - 调查确认共享 `UiSwitchField` 在根节点统一监听 click，除 Element Plus switch 本体外的整行区域都会反转状态；样式页斜体项因此把行尾空白也当成控制入口。共享组件同时被生成、视图、导出等多处使用，不能全局改变默认语义。
 - 给共享组件增加默认 `false` 的 `compactHitArea` 策略：开启时只允许紧邻 `.ui-switch-label` 文字触发根行切换，开关本体继续由自身 `change` 处理，行尾及其它空白忽略；默认整行热区保持兼容。样式页只在斜体项启用，并用局部 CSS 让根行恢复默认光标、可见 switch 与文字保留 pointer 光标。
 - Element Plus switch 的 `aria-label`、原生 focus / Space 能力、隐藏兼容 input 与 change 分发没有改变；一次有效点击仍只触发一次 `commitLabelStyle` 和单条样式命令。`regress:label-styles` 新增紧凑热区、默认兼容、空白过滤、本体去重与可访问入口静态门禁；专项、生产构建和 `git diff --check` 通过。本项未启动浏览器。
+
+## 2026-07-20：完成权威任务第 125 项——样式滑动条长标签单行化
+
+- 调查确认第 109 项已经把 `px` 从数值框中拆为独立第四列，但样式页仍把标签首列固定为 `44px`；“不透明度、阴影横移、阴影纵移、阴影模糊”因此在首列折行，与单位列无关。
+- 仅在 `.label-style-panel` 下把全部滑动条标签列调整为 `72px`：无单位不透明度使用三列，六个 `px` 控件使用四列；首列明确 `min-width:0` 和 `white-space:nowrap`。滑轨继续使用 `minmax(0,1fr)`，数值框保持 `84px`，单位保持 `max-content`，因此窄视口优先收缩滑轨而不换行或扩大其它面板。
+- `regress:label-styles` 固定六个 `px` 控件、无单位 / 带单位两类网格与标签 nowrap；专项、生产构建和 `git diff --check` 通过。常规、720 与 576 视口留到本批统一浏览器验收。
