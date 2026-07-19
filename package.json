@@ -32,6 +32,8 @@
     "regress:interaction-core-flows": "node --no-warnings ./tools/webgl-generator-interaction-core-flow-regression.mjs",
     "audit:interaction-direct-manipulation": "node --no-warnings ./tools/webgl-generator-interaction-direct-manipulation-audit.mjs --check",
     "regress:interaction-direct-manipulation": "node --no-warnings ./tools/webgl-generator-interaction-direct-manipulation-regression.mjs",
+    "audit:interaction-complex-workspaces": "node --no-warnings ./tools/webgl-generator-interaction-complex-workspace-audit.mjs --check",
+    "regress:interaction-complex-workspaces": "node --no-warnings ./tools/webgl-generator-interaction-complex-workspace-regression.mjs",
     "profile:generation": "node ./tools/webgl-generator-generation-profile.mjs",
     "regress:geo": "node ./tools/webgl-generator-geo-import-regression.mjs",
     "regress:measurement": "node ./tools/webgl-generator-measurement-import-regression.mjs",
