@@ -3890,6 +3890,9 @@ select:disabled {
 }
 
 .control-panel-tabs .el-tabs__item {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   height: 30px;
   min-width: 0;
   border: 1px solid #33444f;
@@ -3904,9 +3907,11 @@ select:disabled {
 
 .control-panel-tabs .el-tabs__item span {
   display: block;
+  width: 100%;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+  text-align: center;
   white-space: nowrap;
 }
 
