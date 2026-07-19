@@ -1,0 +1,10 @@
+{
+  "type": "webgl-generator-map",
+  "version": 99,
+  "map": {
+    "seed": "interaction-audit-invalid",
+    "grid": null,
+    "pack": null
+  },
+  "invalidReason": "交互审计 F4 固定失败输入：暂不支持的地图格式版本 99"
+}
