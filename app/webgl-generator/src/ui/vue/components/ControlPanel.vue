@@ -74,13 +74,14 @@
           <strong class="project-export-section-label">快速导出</strong>
           <div class="project-export-action-grid">
             <UiButton id="export-map-image" variant="secondary" @click="closeExportPanel">图片</UiButton>
-            <UiButton id="export-map-data" variant="secondary" @click="closeExportPanel">地图数据</UiButton>
+            <UiButton id="export-map-data" variant="secondary" @click="closeExportPanel">完整地图数据</UiButton>
           </div>
+          <p class="visual-theme-editor-note project-export-format-note">完整地图数据（JSON）与压缩完整地图数据（gzip）包含外交关系、战争和历史，可重新导入；GeoJSON 只含空间要素，图片只含当前画面。</p>
           <details class="panel-advanced-section project-export-advanced-section">
             <summary>高级导出选项</summary>
             <div class="panel-advanced-section-body">
               <div class="project-export-action-grid project-export-advanced-actions">
-                <UiButton id="export-map-data-compressed" variant="secondary" @click="closeExportPanel">压缩地图数据</UiButton>
+                <UiButton id="export-map-data-compressed" variant="secondary" @click="closeExportPanel">压缩完整地图数据</UiButton>
                 <UiButton id="export-map-geojson" variant="secondary" @click="closeExportPanel">GeoJSON</UiButton>
                 <UiButton id="export-map-features-geojson" variant="secondary" @click="closeExportPanel">要素 GeoJSON</UiButton>
               </div>

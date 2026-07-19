@@ -1,5 +1,12 @@
 # 开发历史
 
+## 2026-07-20：完成权威任务第 118 项——完整地图保证外交关系往返
+
+- 调查确认“地图数据”和“压缩地图数据”都通过 `createMapDocument()` 序列化整张 map，现有 root / pack diplomacy、国家双向关系数组、campaigns、chronicle 与 metadata 已在普通 JSON 和 gzip 中；普通 / 要素 GeoJSON 只表达空间对象，PNG 只表达画面，均不应新增外交矩阵。真实缺口是旧 v2 缺失外交字段没有统一回填，且导出界面没有说明格式责任。
+- 新增外交地图兼容归一化：现有双方关系、国家摘要、战争与元数据逐项克隆保留；只有字段缺失时才补 Unknown 双向关系、Vassal / Suzerain 逆关系、空 campaigns、派生摘要、chronicle 和 root / pack diplomacy。当前地图文档校验同步要求外交根存储、国家关系数组与战争数组完整；浏览器缓存、普通 JSON、gzip 和旧 v1 / v2 均经过同一 parse / normalize 链。
+- 导出浮层把“地图数据 / 压缩地图数据”明确为“完整地图数据 / 压缩完整地图数据”，并说明 JSON / gzip 包含外交关系、战争和历史且可重新导入，GeoJSON 只含空间要素、图片只含当前画面。外交面板的 CSV / JSON 附注为只读摘要，避免用户误当完整存档。
+- 新增 `regress:diplomacy-export`：固定 Enemy / Enemy、Vassal / Suzerain、1 条 campaign、3 条 chronicle 与自定义 metadata，普通 JSON `8,769,460` bytes、gzip `1,119,922` bytes 往返摘要精确一致；缺外交字段 v2 与旧 v1 安全回填，两类 GeoJSON 外交字段为 `0`。该门禁已纳入总导出套件，套件扩为 `8 / 8`；地图迁移、API 数据兼容、控制 / UI 契约、100k dissolve 性能、生产构建、语法和差异检查通过，本项未启动浏览器。
+
 ## 2026-07-20：完成权威任务第 117 项——跨海国家名称锚定首都本土
 
 - 调查确认国家名旧锚点与主轴直接使用全国全部 land cells 的面积加权统计；跨海领土会把质心拉到海上或其它国家，随后政治标签的 13 个避让候选还可能继续把锚点移出国土。手工锁定由后置 layout override 覆盖，PNG 则读取实时可见标签 DOM。

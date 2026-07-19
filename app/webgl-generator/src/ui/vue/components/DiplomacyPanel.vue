@@ -73,6 +73,7 @@
     @export="handleDiplomacyExport"
     @action="handleDiplomacyHighlightAction"
   />
+  <p class="visual-theme-editor-note diplomacy-export-note">此处 CSV / JSON 是外交摘要；要完整保存并恢复双方关系、战争和历史，请使用控制面板“导出 → 完整地图数据”。</p>
 
   <UiDetailGrid class-name="diplomacy-panel-details" empty-text="未选中外交对象" :rows="detailRows" />
 

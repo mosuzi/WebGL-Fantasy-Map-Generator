@@ -6,6 +6,7 @@ import {normalizeSocialExpansionMap} from "./social-expansion-edit-commands.js";
 import {backfillEconomyDisplayProperties, normalizeEconomyDisplayMap} from "../generator/economy-display-properties.js";
 import {resolveBiomeDescriptor} from "../generator/biome-registry.js";
 import {backfillProvinceNames} from "../generator/province-naming.js";
+import {normalizeDiplomacyMap} from "./diplomacy-map-compatibility.js";
 import {
   NETWORK_GEOJSON_PROPERTY_SCHEMA_ID,
   NETWORK_GEOJSON_PROPERTY_SCHEMA_VERSION,
@@ -114,6 +115,7 @@ export function migrateMapDocument(document) {
   });
   backfillEconomyDisplayProperties(migrated.map);
   backfillProvinceNames(migrated.map);
+  migrated.map = normalizeDiplomacyMap(migrated.map);
   validateCurrentMapDocument(migrated);
   return migrated;
 }
@@ -456,6 +458,15 @@ function validateCurrentMapDocument(document) {
     throw new Error("地图数据的 visualTheme 存储不完整");
   }
   if (document.map.visualTheme.userThemes !== undefined && !Array.isArray(document.map.visualTheme.userThemes)) throw new Error("地图数据的用户主题列表无效");
+  if (!document.map.diplomacy || !Array.isArray(document.map.diplomacy.chronicle) || typeof document.map.diplomacy.relations !== "object") {
+    throw new Error("地图数据缺少 diplomacy 存储");
+  }
+  for (const states of [document.map.politics?.states, document.map.pack?.states]) {
+    for (const state of states || []) {
+      if (!state || state.removed || Number(state.i ?? state.id) <= 0) continue;
+      if (!Array.isArray(state.diplomacy) || !Array.isArray(state.campaigns)) throw new Error(`国家 #${state.i ?? state.id} 的 diplomacy 存储不完整`);
+    }
+  }
 }
 
 function normalizeMapSchemaV2(map, documentOptions = {}) {
@@ -476,7 +487,7 @@ function normalizeMapSchemaV2(map, documentOptions = {}) {
     labels: normalizeLabelStoreV2(source.labels),
     visualTheme: normalizeVisualThemeStoreV2(source.visualTheme, options.visualTheme)
   };
-  return normalizeEconomyDisplayMap(normalizeSocialExpansionMap(normalized));
+  return normalizeDiplomacyMap(normalizeEconomyDisplayMap(normalizeSocialExpansionMap(normalized)));
 }
 
 function cloneSocialStore(store) {
