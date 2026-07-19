@@ -18,6 +18,7 @@ import {
   resolveLabelStyle
 } from "../app/webgl-generator/src/runtime/label-style-registry.js";
 import {createCompressedMapDocumentBlob, createMapDocument, parseMapDocument, parseMapDocumentPayload, stringifyMapDocument} from "../app/webgl-generator/src/runtime/map-file-io.js";
+import {createLocalFontFamilyOptions} from "../app/webgl-generator/src/runtime/local-font-catalog.js";
 import {LABEL_TARGET_KIND} from "../app/webgl-generator/src/runtime/object-kinds.js";
 
 const map = {
@@ -62,6 +63,17 @@ assert.equal(normalizeLocalFontFamilyName("bad\u0000font"), "", "控制字符字
 patchLabelStyle(map, "city", {fontFamilyId: "sans", fontFamilyName: null});
 assert.equal(resolveLabelStyle(map, "city").fontFamilyId, "sans");
 assert.equal(resolveLabelStyle(map, "city").fontFamilyName, null, "切回内置字体仍残留本机字体名");
+
+const localFontOptions = createLocalFontFamilyOptions([
+  {family: "KaiTi", fullName: "楷体", postscriptName: "KaiTi", style: "Regular"},
+  {family: "KaiTi", fullName: "楷体 粗体", postscriptName: "KaiTi-Bold", style: "Bold"},
+  {family: "Fallback Sans", fullName: "", postscriptName: "FallbackSans-Regular", style: "Regular"},
+  {family: "", fullName: "", postscriptName: "IdOnly-Regular", style: "Regular"}
+]);
+assert.equal(localFontOptions.length, 3, "本机字体没有按字体族去重");
+assert.deepEqual(localFontOptions.find(font => font.family === "KaiTi"), {family: "KaiTi", displayName: "楷体", id: "KaiTi"}, "本机字体没有优先使用可读完整名称");
+assert.equal(localFontOptions.find(font => font.family === "Fallback Sans")?.displayName, "Fallback Sans", "缺少完整名称时没有回退字体族标识");
+assert.equal(localFontOptions.find(font => font.family === "IdOnly-Regular")?.displayName, "IdOnly-Regular", "缺少名称和字体族时没有回退字体 ID");
 
 const history = new EditHistory();
 const context = {map};

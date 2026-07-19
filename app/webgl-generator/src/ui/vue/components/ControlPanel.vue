@@ -582,6 +582,7 @@ import {useDraggableFloatingPanel} from "../composables/use-draggable-floating-p
 import {useManagedOverlay} from "../composables/use-managed-overlay.js";
 import {visualThemeOptions} from "../../../renderer/themes.js";
 import {LABEL_FONT_FAMILIES, LABEL_STYLE_TYPES, LOCAL_LABEL_FONT_ID, normalizeLocalFontFamilyName, resolveLabelStyle} from "../../../runtime/label-style-registry.js";
+import {createLocalFontFamilyOptions} from "../../../runtime/local-font-catalog.js";
 import {
   DISTANCE_UNIT_OPTIONS,
   NUMBER_ABBREVIATION_OPTIONS,
@@ -733,7 +734,7 @@ const labelStyleTypeOptions = Object.freeze([
   {value: "city", label: "城市名称"},
   {value: "custom", label: "手工标签"}
 ]);
-const localFontFamilies = ref([]);
+const localFontCatalog = ref([]);
 const localFontsLoaded = ref(false);
 const localFontsLoading = ref(false);
 const localFontsMessage = ref("");
@@ -749,9 +750,9 @@ const activeLabelFontValue = computed(() => activeLabelStyle.value.fontFamilyId 
   : activeLabelStyle.value.fontFamilyId);
 const labelFontOptions = computed(() => {
   const options = [...builtInLabelFontOptions];
-  for (const family of localFontFamilies.value) options.push({value: localFontOptionValue(family), label: `本机 · ${family}`});
+  for (const font of localFontCatalog.value) options.push({value: localFontOptionValue(font.family), label: `本机 · ${font.displayName}`});
   const activeFamily = normalizeLocalFontFamilyName(activeLabelStyle.value.fontFamilyName);
-  if (activeLabelStyle.value.fontFamilyId === LOCAL_LABEL_FONT_ID && activeFamily && !localFontFamilies.value.includes(activeFamily)) {
+  if (activeLabelStyle.value.fontFamilyId === LOCAL_LABEL_FONT_ID && activeFamily && !findLocalFont(activeFamily)) {
     options.push({
       value: localFontOptionValue(activeFamily),
       label: localFontsLoaded.value ? `缺失 · ${activeFamily}（系统回退）` : `存档 · ${activeFamily}`
@@ -762,8 +763,9 @@ const labelFontOptions = computed(() => {
 const labelFontStatus = computed(() => {
   const family = normalizeLocalFontFamilyName(activeLabelStyle.value.fontFamilyName);
   if (activeLabelStyle.value.fontFamilyId === LOCAL_LABEL_FONT_ID && localFontsLoaded.value) {
-    return localFontFamilies.value.includes(family)
-      ? `本机已检测到“${family}”。`
+    const localFont = findLocalFont(family);
+    return localFont
+      ? `本机已检测到“${localFont.displayName}”。`
       : `本机未检测到“${family}”，当前自动使用系统字体。`;
   }
   if (localFontsMessage.value) return localFontsMessage.value;
@@ -1102,11 +1104,10 @@ async function loadLocalLabelFonts() {
   localFontsLoading.value = true;
   try {
     const fonts = await window.queryLocalFonts();
-    localFontFamilies.value = [...new Set(fonts.map(font => normalizeLocalFontFamilyName(font?.family)).filter(Boolean))]
-      .sort((left, right) => left.localeCompare(right, "zh-CN"));
+    localFontCatalog.value = createLocalFontFamilyOptions(fonts);
     localFontsLoaded.value = true;
-    localFontsMessage.value = localFontFamilies.value.length
-      ? `已读取 ${localFontFamilies.value.length} 个本机字体族。`
+    localFontsMessage.value = localFontCatalog.value.length
+      ? `已读取 ${localFontCatalog.value.length} 个本机字体族。`
       : "浏览器没有返回可用的本机字体；仍可使用内置字体。";
   } catch (error) {
     localFontsLoaded.value = false;
@@ -1144,6 +1145,11 @@ function labelFontLabel(fontFamilyId) {
 
 function localFontOptionValue(family) {
   return `local:${normalizeLocalFontFamilyName(family)}`;
+}
+
+function findLocalFont(family) {
+  const normalized = normalizeLocalFontFamilyName(family).toLocaleLowerCase("en-US");
+  return localFontCatalog.value.find(font => font.family.toLocaleLowerCase("en-US") === normalized) || null;
 }
 
 function applyVisualThemeColor(color) {
