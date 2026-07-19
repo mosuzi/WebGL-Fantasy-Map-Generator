@@ -1,5 +1,5 @@
 <template>
-  <div :class="[fieldClass, {'toggle-button-switch': buttonStyle, 'is-checked': currentChecked}]" @click="toggleFromRow">
+  <div :class="[fieldClass, {'toggle-button-switch': buttonStyle, 'is-checked': currentChecked, 'compact-hit-area': compactHitArea}]" @click="toggleFromRow">
     <input
       :id="inputId || null"
       ref="nativeInput"
@@ -16,7 +16,7 @@
       :aria-label="label"
       @change="commitValue"
     />
-    <span>{{ label }}</span>
+    <span class="ui-switch-label">{{ label }}</span>
   </div>
 </template>
 
@@ -47,6 +47,10 @@ const props = defineProps({
   buttonStyle: {
     type: Boolean,
     default: false
+  },
+  compactHitArea: {
+    type: Boolean,
+    default: false
   }
 });
 
@@ -61,6 +65,7 @@ watch(() => props.checked, next => {
 
 function toggleFromRow(event) {
   if (event.target.closest?.(".el-switch")) return;
+  if (props.compactHitArea && !event.target.closest?.(".ui-switch-label")) return;
   commitValue(!currentChecked.value);
 }
 

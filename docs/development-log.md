@@ -28158,3 +28158,9 @@ full 矩阵结果：
 - 调查确认单位页同时显示独立 `1 cm = xx km` 文本和比例滑动条的当前数值 / `km/cm` 单位，表达的是同一关系；画布右下比例尺则根据视口选取世界距离，再通过共享 `formatDistance` 输出当前距离单位，职责不同。
 - 删除控制面板 `unit-scale-readout` 节点、仅用于它的 `scaleLabel` computed / import 和孤立样式。比例滑动条 id、范围、步长、值、`km/cm` 单位列和变更回调不动；实时比例尺的选档 / 宽度算法、内置与自定义单位格式化以及 PNG 对 DOM 比例尺的复刻路径也不动。
 - 扩展 `regress:display-units` 静态门禁，确认单位页不再含重复 readout 或 `1 cm =`，滑动条仍保留唯一 `km/cm`，实时比例尺仍调用共享换算器且 PNG 仍读取 `.map-scale-label`；专项、生产构建和 `git diff --check` 通过。本项未启动浏览器。
+
+## 2026-07-20：完成权威任务第 124 项——收窄斜体开关误触热区
+
+- 调查确认共享 `UiSwitchField` 在根节点统一监听 click，除 Element Plus switch 本体外的整行区域都会反转状态；样式页斜体项因此把行尾空白也当成控制入口。共享组件同时被生成、视图、导出等多处使用，不能全局改变默认语义。
+- 给共享组件增加默认 `false` 的 `compactHitArea` 策略：开启时只允许紧邻 `.ui-switch-label` 文字触发根行切换，开关本体继续由自身 `change` 处理，行尾及其它空白忽略；默认整行热区保持兼容。样式页只在斜体项启用，并用局部 CSS 让根行恢复默认光标、可见 switch 与文字保留 pointer 光标。
+- Element Plus switch 的 `aria-label`、原生 focus / Space 能力、隐藏兼容 input 与 change 分发没有改变；一次有效点击仍只触发一次 `commitLabelStyle` 和单条样式命令。`regress:label-styles` 新增紧凑热区、默认兼容、空白过滤、本体去重与可访问入口静态门禁；专项、生产构建和 `git diff --check` 通过。本项未启动浏览器。

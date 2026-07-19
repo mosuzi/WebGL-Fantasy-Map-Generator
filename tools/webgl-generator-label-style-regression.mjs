@@ -148,11 +148,12 @@ const parsedGzip = await parseMapDocumentPayload(documentRef, {encoding: "gzip-b
 assert.equal(parsedGzip.map.labels.styles.version, 1, "gzip 全图链没有保留标签样式");
 assert.equal(parsedGzip.map.labels.styles.overrides.custom.fontFamilyName, "Archive Only Font", "gzip 没有保存本机字体族名称");
 
-const [rendererSource, controlPanelSource, mapIoSource, stylesSource] = await Promise.all([
+const [rendererSource, controlPanelSource, mapIoSource, stylesSource, switchFieldSource] = await Promise.all([
   readFile(new URL("../app/webgl-generator/src/renderer/placeholder-renderer.js", import.meta.url), "utf8"),
   readFile(new URL("../app/webgl-generator/src/ui/vue/components/ControlPanel.vue", import.meta.url), "utf8"),
   readFile(new URL("../app/webgl-generator/src/runtime/map-file-io.js", import.meta.url), "utf8"),
-  readFile(new URL("../app/webgl-generator/src/styles.css", import.meta.url), "utf8")
+  readFile(new URL("../app/webgl-generator/src/styles.css", import.meta.url), "utf8"),
+  readFile(new URL("../app/webgl-generator/src/ui/vue/components/base/UiSwitchField.vue", import.meta.url), "utf8")
 ]);
 assert.match(rendererSource, /getLabelStates\(map\), \.\.\.getLabelProvinces\(map\), \.\.\.getLabelCities/, "标签固定层序不是国家→省份→城市");
 assert.match(rendererSource, /isWorldPoint\(province\.pole\)[\s\S]*province\.center/, "省份标签没有 pole→center 回退");
@@ -164,6 +165,11 @@ assert.match(controlPanelSource, /input-id="label-style-stroke-width"[^>]*:step=
 assert.match(controlPanelSource, /input-id="label-style-shadow-x"[^>]*:step="0\.1"/, "阴影横移步长不是 0.1");
 assert.match(controlPanelSource, /input-id="label-style-shadow-y"[^>]*:step="0\.1"/, "阴影纵移步长不是 0.1");
 assert.match(controlPanelSource, /input-id="label-style-shadow-blur"[^>]*:step="0\.1"/, "阴影模糊步长不是 0.1");
+assert.match(controlPanelSource, /input-id="label-style-italic"[^>]*compact-hit-area/, "斜体开关没有启用紧凑热区");
+assert.match(switchFieldSource, /compactHitArea:[\s\S]*default: false/, "共享开关的紧凑热区没有保持默认兼容");
+assert.match(switchFieldSource, /compactHitArea && !event\.target\.closest\?\.\("\.ui-switch-label"\)/, "紧凑热区没有忽略行尾空白");
+assert.match(switchFieldSource, /if \(event\.target\.closest\?\.\("\.el-switch"\)\) return;/, "开关本体点击可能被根行重复切换");
+assert.match(switchFieldSource, /<ElSwitch[\s\S]*:aria-label="label"[\s\S]*@change="commitValue"/, "Element Plus 开关的键盘与可访问入口丢失");
 const stylePanelSource = controlPanelSource.match(/class="control-panel-section label-style-panel"[\s\S]*?data-control-panel="units"/)?.[0] || "";
 assert.equal(stylePanelSource.match(/unit-label="px"/g)?.length, 6, "样式页 px 滑动条数量发生漂移");
 assert.match(stylesSource, /\.label-style-panel \.ui-slider-field-has-unit\s*\{[^}]*grid-template-columns:\s*44px minmax\(0, 1fr\) 84px max-content;/, "样式页没有为单位保留第四列");

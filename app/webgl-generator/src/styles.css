@@ -4347,6 +4347,15 @@ select:disabled {
   user-select: none;
 }
 
+.generation-check-row.compact-hit-area {
+  cursor: default;
+}
+
+.compact-hit-area .ui-switch-el,
+.compact-hit-area .ui-switch-label {
+  cursor: pointer;
+}
+
 .generation-check-row input {
   width: 16px;
   height: 16px;

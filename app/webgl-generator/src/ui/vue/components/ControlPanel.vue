@@ -383,7 +383,7 @@
       </div>
       <p class="label-font-status" role="status">{{ labelFontStatus }}</p>
       <UiSelectField label="字重" input-id="label-style-weight" :model-value="String(activeLabelStyle.fontWeight)" :options="labelWeightOptions" @update:model-value="value => commitLabelStyle('fontWeight', Number(value))" />
-      <UiSwitchField label="斜体" input-id="label-style-italic" :checked="activeLabelStyle.italic" @change="value => commitLabelStyle('italic', value)" />
+      <UiSwitchField label="斜体" input-id="label-style-italic" field-class="generation-check-row label-style-italic-switch" compact-hit-area :checked="activeLabelStyle.italic" @change="value => commitLabelStyle('italic', value)" />
       <UiSliderField label="字号" input-id="label-style-font-size" :model-value="activeLabelStyle.fontSize" :min="8" :max="72" :step="1" unit-label="px" @change="value => commitLabelStyle('fontSize', value)" />
       <UiSliderField label="字距" input-id="label-style-letter-spacing" :model-value="activeLabelStyle.letterSpacing" :min="-2" :max="12" :step="0.1" unit-label="px" @change="value => commitLabelStyle('letterSpacing', value)" />
       <UiSliderField label="不透明度" input-id="label-style-opacity" :model-value="activeLabelStyle.opacity" :min="0" :max="1" :step="0.05" @change="value => commitLabelStyle('opacity', value)" />
