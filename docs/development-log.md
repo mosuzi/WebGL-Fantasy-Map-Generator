@@ -28127,3 +28127,9 @@ full 矩阵结果：
 - 湖泊填平不再清空 Feature 或删除备注；pack / grid 旧 Feature 退役为保留旧 ID、名称、type、group、备注与 `redirectTo` 的 tombstone。LakePanel、对象解析和统计只读取活动 Feature，完整地图 JSON 往返、撤销 / 重做和重复删除 no-op 均通过。
 - `regress:feature-topology / feature-topology-ui-api / lake-delete / height-derived-rebuild`、API inventory / edit coverage / stability / capabilities、生产构建和 `git diff --check` 全部通过；给事中最终复审 RELEASE，观察使终验 PASS。独立 headless Chrome capabilities 的 checksum 为 `3cbf11d3`，WebGL / health / console / page error 为 0。
 - 同一 Chrome 新建并关闭临时验收标签：固定种子地图完整 grid cell #3978 先以开海峡从陆地连通分量 `16 → 17`，再以闭海峡从 `17 → 16`，两次均完成画布预览、只读预检和明确确认。主标签先前用于验证海岸雕刻的 #8097 已通过填岸恢复，面板与临时标签清理完毕。应用页面没有自身来源的 console error；唯一可见错误级日志来自 React DevTools 扩展注入的 input-handler-stall / main-thread-long-task 健康告警。
+## 2026-07-20：完成权威任务第 119 项——气候派生更新玩家化
+
+- 调查确认气候面板原“受约束下游重算”混合展示了玩家选择、派生陈旧状态和开发诊断：普通界面直接出现 `stale / fresh`、依赖闭包、执行顺序、固定 seed、checksum 和原始 JSON，但这些并非玩家完成气候编辑所必需；底层九系统依赖、覆盖去重和陈旧标记则是正确事务约束。
+- 普通模式改为“更新受气候影响的内容”，候选状态统一为“建议更新 / 当前已更新 / 将一并更新 / 已包含”，并用“查看更新范围 / 更新所选内容”、预计影响数、已更新内容、剩余建议与自动回滚提示形成非阻塞闭环。未知内部系统不会回退显示 id，失败只显示玩家可理解的对象名和恢复结果。
+- 复用现有 `useDebugMode`，把固定 seed、原始错误、requested / required / selected / executionOrder、checksum、staleSystems、history 等原始诊断收进仅调试模式可见的折叠区；调试开关仍可即时恢复完整依赖诊断，不新增存档字段或配置。
+- `regress:climate-downstream-rebuild` 继续通过九候选、依赖闭包、确定性 checksum、未选系统保持陈旧、失败回滚、单历史撤销 / 重做、分块性能和完整地图往返，并新增普通模板不含开发文案、调试区保留执行顺序的静态契约；`regress:ui-terminology-state`、生产构建和 `git diff --check` 通过。本项未启动浏览器，留待第 110～133 项统一验收。

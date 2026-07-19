@@ -24,12 +24,13 @@
     @column-resize="callbacks.onColumnResize"
   />
 
-  <section class="climate-downstream-rebuild" aria-label="气候下游重算">
+  <section class="climate-downstream-rebuild" aria-label="更新受气候影响的内容">
     <header class="climate-downstream-heading">
-      <strong>受约束下游重算</strong>
-      <span>默认不选，必需依赖会自动加入</span>
+      <strong>更新受气候影响的内容</strong>
+      <span>气候变化后，可按需更新相关地图内容</span>
     </header>
     <UiNumberField
+      v-if="debugEnabled"
       class-name="climate-downstream-seed"
       label="固定 seed"
       action-label="设置 seed"
@@ -54,22 +55,28 @@
           <strong>{{ candidate.label }}</strong>
           <small>预计 {{ formatNumber(candidate.estimatedAffected) }} 对象</small>
         </span>
-        <em v-if="candidate.required">依赖</em>
-        <em v-else-if="candidate.coveredBy && candidate.coveredBy !== candidate.id">由 {{ systemLabel(candidate.coveredBy) }} 覆盖</em>
-        <em v-else>{{ candidate.stale ? "stale" : "fresh" }}</em>
+        <em v-if="candidate.required">将一并更新</em>
+        <em v-else-if="candidate.coveredBy && candidate.coveredBy !== candidate.id">已包含在 {{ systemLabel(candidate.coveredBy) }} 中</em>
+        <em v-else>{{ candidate.stale ? "建议更新" : "当前已更新" }}</em>
       </label>
     </div>
     <p class="climate-downstream-dependencies">{{ dependencyHint }}</p>
     <div class="climate-downstream-actions">
-      <UiButton variant="secondary" :disabled="state.downstreamRunning" @click="callbacks.onInspectDownstream">预检</UiButton>
+      <UiButton variant="secondary" :disabled="state.downstreamRunning" @click="callbacks.onInspectDownstream">查看更新范围</UiButton>
       <UiButton :disabled="!canApplyDownstream || state.downstreamRunning" @click="callbacks.onApplyDownstream">
-        {{ state.downstreamRunning ? "重算中…" : "应用选中重算" }}
+        {{ state.downstreamRunning ? "更新中…" : "更新所选内容" }}
       </UiButton>
     </div>
-    <p v-if="state.downstreamRunning" class="climate-downstream-progress">正在分阶段重算，下游数据将在完成后统一刷新。</p>
-    <p v-if="state.downstreamError" class="climate-downstream-error">{{ state.downstreamError }}</p>
-    <pre v-if="state.downstreamPreview" class="climate-downstream-result">{{ formattedPreview }}</pre>
-    <pre v-if="state.downstreamResult" class="climate-downstream-result is-applied">{{ formattedResult }}</pre>
+    <p v-if="state.downstreamRunning" class="climate-downstream-progress">正在更新相关地图内容，完成后会统一刷新。</p>
+    <p v-if="state.downstreamError" class="climate-downstream-error">{{ downstreamErrorText }}</p>
+    <p v-if="state.downstreamPreview" class="climate-downstream-result">{{ previewSummary }}</p>
+    <p v-if="state.downstreamResult" class="climate-downstream-result is-applied">{{ resultSummary }}</p>
+    <details v-if="debugEnabled" class="climate-downstream-diagnostics">
+      <summary>开发诊断</summary>
+      <pre v-if="state.downstreamError" class="climate-downstream-result">{{ state.downstreamError }}</pre>
+      <pre v-if="state.downstreamPreview" class="climate-downstream-result">{{ formattedPreview }}</pre>
+      <pre v-if="state.downstreamResult" class="climate-downstream-result is-applied">{{ formattedResult }}</pre>
+    </details>
   </section>
 
   <UiDetailGrid class-name="climate-panel-details" empty-text="未选中温度带" :rows="detailRows" />
@@ -86,6 +93,7 @@ import UiObjectTable from "./base/UiObjectTable.vue";
 import {formatNumber as formatDisplayNumber, formatPrecipitation} from "../../display-units.js";
 import {findByObjectId} from "../../object-id.js";
 import {compareRowsByKey} from "../../sort-utils.js";
+import {useDebugMode} from "../composables/use-debug-mode.js";
 import {useUnitPreferences} from "../composables/use-unit-preferences.js";
 
 defineOptions({
@@ -131,6 +139,7 @@ const columns = Object.freeze([
 ]);
 
 const unitPreferences = useUnitPreferences();
+const debugEnabled = useDebugMode();
 const metrics = computed(() => {
   props.state.version;
   return buildClimateMetrics(props.state.map);
@@ -147,10 +156,29 @@ const downstreamCandidates = computed(() => {
 const canApplyDownstream = computed(() => Boolean(props.state.downstreamPreview?.requestedSystems?.length));
 const dependencyHint = computed(() => {
   const preview = props.state.downstreamPreview;
-  if (!preview?.requestedSystems?.length) return "请勾选至少一个 stale 系统；未选系统保持 stale。";
-  const required = preview.requiredSystems?.map(systemLabel).join("、") || "无";
-  const order = preview.executionOrder?.map(systemLabel).join(" -> ") || "无";
-  return `必需依赖：${required}；实际顺序：${order}`;
+  if (!preview?.requestedSystems?.length) return "请选择要更新的内容；未选择的内容不会改变。";
+  const selected = preview.selectedSystems?.map(systemLabel).join("、") || "无";
+  return `将更新：${selected}。相关内容会按安全顺序一并处理。`;
+});
+const previewSummary = computed(() => {
+  const preview = props.state.downstreamPreview;
+  if (!preview?.requestedSystems?.length) return "尚未选择需要更新的内容。";
+  return `预计影响 ${formatNumber(preview.estimatedAffected || 0)} 个对象。`;
+});
+const resultSummary = computed(() => {
+  const result = props.state.downstreamResult;
+  if (!result?.executed) return "未执行更新。";
+  const updated = result.selectedSystems?.map(systemLabel).join("、") || "相关地图内容";
+  const remaining = result.staleSystems?.map(systemLabel).filter(Boolean) || [];
+  return remaining.length
+    ? `已更新：${updated}。仍建议更新：${remaining.join("、")}。`
+    : `已更新：${updated}。所有相关内容均为最新状态。`;
+});
+const downstreamErrorText = computed(() => {
+  const message = String(props.state.downstreamError || "");
+  const failedSystem = message.match(/未完成：([^\s]+)/)?.[1];
+  if (failedSystem) return `未能更新${systemLabel(failedSystem)}，地图已恢复到更新前状态。`;
+  return "更新未完成，地图已恢复到更新前状态，请重试。";
 });
 const formattedPreview = computed(() => JSON.stringify({
   seed: props.state.downstreamPreview?.seed,
@@ -345,6 +373,6 @@ function formatNumber(value) {
 }
 
 function systemLabel(systemId) {
-  return downstreamCandidates.value.find(item => item.id === systemId)?.label || systemId;
+  return downstreamCandidates.value.find(item => item.id === systemId)?.label || "相关内容";
 }
 </script>

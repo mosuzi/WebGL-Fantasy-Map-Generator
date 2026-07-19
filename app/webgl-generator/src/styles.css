@@ -9332,6 +9332,17 @@ input.ui-switch-native {
   border: 1px solid rgba(94, 197, 143, 0.34);
 }
 
+.climate-downstream-diagnostics {
+  display: grid;
+  gap: 6px;
+  color: #91a6af;
+  font-size: 11px;
+}
+
+.climate-downstream-diagnostics summary {
+  cursor: pointer;
+}
+
 .climate-downstream-error {
   margin: 0;
   color: #ff9b93;
