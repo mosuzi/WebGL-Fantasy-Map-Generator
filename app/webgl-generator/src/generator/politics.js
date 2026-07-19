@@ -115,6 +115,162 @@ export function regeneratePackProvincesWithinStates(grid, society, options, pack
   };
 }
 
+export function reexpandPackPoliticsPreservingIdentity(grid, society, pack, settlements) {
+  const states = pack?.states;
+  const provinces = pack?.provinces;
+  if (!pack?.cells?.i?.length || !Array.isArray(states) || !Array.isArray(provinces)) return null;
+  const stateIdentity = snapshotPoliticalIdentity(states);
+  const provinceIdentity = snapshotPoliticalIdentity(provinces);
+  repairStateCapitalAnchors(pack, states);
+  const stateAnchors = preservedProvinceStateAnchors(pack, provinces);
+  expandPackStates(pack, states, society, stateAnchors);
+  normalizePackStates(pack, states, stateAnchors.cells);
+  claimInhabitedNeutralCells(pack, states);
+  smoothPackStateBoundarySpikes(pack, states, stateAnchors.cells);
+  syncBurgStates(pack);
+  collectStateStatistics(pack, states);
+  findStateNeighbors(pack, states);
+  grid.cells.state = mirrorPackStateToGrid(grid, pack);
+
+  const provinceIds = seedPreservedProvinceCenters(pack, states, provinces);
+  expandPackProvinces(pack, provinces, provinceIds, Infinity);
+  fillPreservedProvinceGaps(pack, provinces, provinceIds);
+  justifyPackProvinces(pack, provinces, provinceIds);
+  smoothPackProvinceBoundarySpikes(pack, provinces, provinceIds);
+  collectProvinceStatistics(pack, provinces, provinceIds);
+  assignProvincePoles(pack, provinces, provinceIds);
+  findPackProvinceNeighbors(pack, provinces, provinceIds);
+  pack.cells.province = provinceIds;
+  pack.provinces = provinces;
+  grid.cells.province = mirrorPackProvinceToGrid(grid, pack);
+  syncBurgProvinces(pack);
+  assertPoliticalIdentity(states, stateIdentity, "国家");
+  assertPoliticalIdentity(provinces, provinceIdentity, "省份");
+  return {
+    states,
+    provinces,
+    metadata: {
+      states: states.filter(state => state?.i && !state.removed).length,
+      provinces: provinces.filter(province => province?.i && !province.removed).length,
+      stateNames: states.filter(state => state?.i && !state.removed).map(state => state.fullName || state.name),
+      provinceNames: provinces.filter(province => province?.i && !province.removed).map(province => province.fullName || province.name),
+      preservedStateIds: stateIdentity.size,
+      preservedProvinceIds: provinceIdentity.size
+    }
+  };
+}
+
+function preservedProvinceStateAnchors(pack, provinces) {
+  const anchors = [];
+  const cells = new Set();
+  for (const province of provinces) {
+    const cell = Number(province?.center);
+    if (!province?.i || province.removed || !Number.isInteger(cell) || pack.cells.h?.[cell] < 20 || cells.has(cell)) continue;
+    anchors.push({cell, stateId: Number(province.state)});
+    cells.add(cell);
+  }
+  return {anchors, cells};
+}
+
+function repairStateCapitalAnchors(pack, states) {
+  const oldStateByBurg = new Map((pack.burgs || []).filter(burg => burg?.i && !burg.removed).map(burg => [burg.i, Number(burg.state) || 0]));
+  const used = new Set();
+  for (const state of states) {
+    if (!state?.i || state.removed) continue;
+    let capital = pack.burgs?.[state.capital];
+    if (!capital?.i || capital.removed || pack.cells.h[capital.cell] < 20 || used.has(capital.cell)) {
+      capital = (pack.burgs || [])
+        .filter(burg => burg?.i && !burg.removed && pack.cells.h[burg.cell] >= 20 && !used.has(burg.cell) && oldStateByBurg.get(burg.i) === state.i)
+        .sort((a, b) => Number(b.population || 0) - Number(a.population || 0))[0];
+    }
+    if (!capital) throw new Error(`国家 #${state.i} 没有可保留的首都锚点`);
+    state.capital = capital.i;
+    state.center = capital.cell;
+    state.gridCenter = pack.cells.g?.[capital.cell] ?? state.gridCenter;
+    capital.capital = 1;
+    used.add(capital.cell);
+  }
+}
+
+function seedPreservedProvinceCenters(pack, states, provinces) {
+  const provinceIds = new Uint16Array(pack.cells.i.length);
+  const used = new Set();
+  const landCellsByState = new Map();
+  for (const cell of pack.cells.i) {
+    const stateId = pack.cells.state[cell];
+    if (pack.cells.h[cell] < 20 || !stateId) continue;
+    if (!landCellsByState.has(stateId)) landCellsByState.set(stateId, []);
+    landCellsByState.get(stateId).push(cell);
+  }
+  for (const state of states) if (state?.i && !state.removed) state.provinces = [];
+  for (const province of provinces) {
+    if (!province?.i || province.removed) continue;
+    const stateCells = (landCellsByState.get(province.state) || []).filter(cell => !used.has(cell));
+    if (!stateCells.length) throw new Error(`省份 #${province.i} 的所属国家没有可用中心`);
+    const originalPoint = pack.cells.p?.[province.center] || pack.cells.p?.[states[province.state]?.center] || [0, 0];
+    const center = stateCells.includes(province.center)
+      ? province.center
+      : stateCells.reduce((best, cell) => provinceCenterScore(pack, cell, originalPoint) > provinceCenterScore(pack, best, originalPoint) ? cell : best, stateCells[0]);
+    province.center = center;
+    province.gridCenter = pack.cells.g?.[center] ?? province.gridCenter;
+    province.burg = pack.cells.burg?.[center] || 0;
+    provinceIds[center] = province.i;
+    states[province.state]?.provinces?.push(province.i);
+    used.add(center);
+  }
+  return provinceIds;
+}
+
+function provinceCenterScore(pack, cell, origin) {
+  const point = pack.cells.p[cell];
+  const proximity = -distanceSquared(point, origin);
+  const burg = pack.burgs?.[pack.cells.burg?.[cell]];
+  return proximity + Number(pack.cells.s?.[cell] || 0) * 20 + Number(burg?.population || 0) * 0.05;
+}
+
+function fillPreservedProvinceGaps(pack, provinces, provinceIds) {
+  const centersByState = new Map();
+  for (const province of provinces) {
+    if (!province?.i || province.removed) continue;
+    if (!centersByState.has(province.state)) centersByState.set(province.state, []);
+    centersByState.get(province.state).push(province);
+  }
+  for (const cell of pack.cells.i) {
+    const stateId = pack.cells.state[cell];
+    if (pack.cells.h[cell] < 20 || !stateId || provinceIds[cell]) continue;
+    const candidates = centersByState.get(stateId) || [];
+    if (!candidates.length) continue;
+    let best = candidates[0];
+    let bestDistance = distanceSquared(pack.cells.p[cell], pack.cells.p[best.center]);
+    for (const province of candidates.slice(1)) {
+      const nextDistance = distanceSquared(pack.cells.p[cell], pack.cells.p[province.center]);
+      if (nextDistance >= bestDistance) continue;
+      best = province;
+      bestDistance = nextDistance;
+    }
+    provinceIds[cell] = best.i;
+  }
+}
+
+function syncBurgProvinces(pack) {
+  for (const burg of pack.burgs || []) {
+    if (!burg?.i || burg.removed) continue;
+    burg.province = pack.cells.province?.[burg.cell] || 0;
+  }
+}
+
+function snapshotPoliticalIdentity(items) {
+  return new Map(items.filter(item => item?.i && !item.removed).map(item => [item.i, {name: item.name, fullName: item.fullName, formName: item.formName}]));
+}
+
+function assertPoliticalIdentity(items, snapshot, label) {
+  for (const [id, identity] of snapshot) {
+    const item = items[id];
+    if (!item || item.removed) throw new Error(`${label} #${id} 的稳定身份在重算中丢失`);
+    if (item.name !== identity.name || item.fullName !== identity.fullName || item.formName !== identity.formName) throw new Error(`${label} #${id} 的名称在重算中被改写`);
+  }
+}
+
 function buildPackPolitics(grid, features, society, rivers, random, options, pack) {
   const profile = createStageProfile();
   const riverCells = profile.stage("river-cell-index", "建立河流 cell 索引", () => new Set(rivers.rivers.flatMap(river => river.gridCells || river.cells)));
@@ -476,22 +632,31 @@ function defineStateGovernments(states, options = {}) {
   }
 }
 
-function expandPackStates(pack, states, society) {
+function expandPackStates(pack, states, society, preservedAnchors = null) {
   const {cells, burgs} = pack;
   cells.state = new Uint16Array(cells.i.length);
   const costs = new Float64Array(cells.i.length).fill(Infinity);
   const queue = new MinPriorityQueue();
   const growthRate = cells.i.length / 2;
 
+  const nativeBiomes = new Map();
   for (const state of states) {
     if (!state?.i) continue;
     const capital = burgs[state.capital];
     const capitalCell = capital.cell;
     const cultureCenter = society.cultures[state.culture]?.center ?? capitalCell;
     const nativeBiome = cells.biome[cultureCenter] ?? cells.biome[capitalCell];
+    nativeBiomes.set(state.i, nativeBiome);
     cells.state[capitalCell] = state.i;
     costs[capitalCell] = 1;
-    queue.push({cell: state.center, stateId: state.i, nativeBiome, cost: 0}, 0);
+    queue.push({cell: capitalCell, stateId: state.i, nativeBiome, cost: 0}, 0);
+  }
+  for (const anchor of preservedAnchors?.anchors || []) {
+    const state = states[anchor.stateId];
+    if (!state?.i || state.removed || cells.h[anchor.cell] < 20) continue;
+    cells.state[anchor.cell] = state.i;
+    costs[anchor.cell] = 1;
+    queue.push({cell: anchor.cell, stateId: state.i, nativeBiome: nativeBiomes.get(state.i) ?? cells.biome[anchor.cell], cost: 0}, 0);
   }
 
   while (queue.length) {
@@ -526,10 +691,11 @@ function expandPackStates(pack, states, society) {
   }
 }
 
-function normalizePackStates(pack, states) {
+function normalizePackStates(pack, states, protectedCells = new Set()) {
   const {cells, burgs} = pack;
 
   for (const cell of cells.i) {
+    if (protectedCells.has(cell)) continue;
     if (cells.h[cell] < 20 || cells.burg[cell]) continue;
     if ((cells.c[cell] || []).some(neighbor => burgs[cells.burg[neighbor]]?.capital)) continue;
     const landNeighbors = (cells.c[cell] || []).filter(neighbor => cells.h[neighbor] >= 20);
@@ -545,13 +711,14 @@ function normalizePackStates(pack, states) {
   }
 }
 
-function smoothPackStateBoundarySpikes(pack, states) {
+function smoothPackStateBoundarySpikes(pack, states, additionalProtectedCells = new Set()) {
   const {cells, burgs} = pack;
   const protectedCells = new Set(
     burgs
       .filter(burg => burg?.i && !burg.removed && cells.h[burg.cell] >= 20)
       .map(burg => burg.cell)
   );
+  for (const cell of additionalProtectedCells) protectedCells.add(cell);
 
   absorbBoundarySpikes(cells, cells.state, {
     passes: 3,

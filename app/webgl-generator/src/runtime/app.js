@@ -93,6 +93,8 @@ import {getHeightTerrainTemplateProgramChanges, heightTerrainTemplateProgramUses
 import {createRegenerationResult, rebuildHeightBaseDerived, rebuildHeightDownstreamDerived} from "./height-derived-rebuild.js";
 import {buildSeafloorResetPlan, createResetSeafloorCommand, seafloorResetPreviewChanges} from "./seafloor-reset.js";
 import {createRegenerateOceanCurrentsCommand, createRenameOceanCurrentCommand} from "./ocean-current-edit-commands.js";
+import {assertOceanCurrentWorldIdentity, rebuildOceanCurrentWorldStage, snapshotOceanCurrentWorldIdentity} from "../generator/ocean-current-world.js";
+import {executeOceanCurrentWorldRebuild, inspectOceanCurrentWorldRebuild} from "./ocean-current-world-rebuild.js";
 import {oceanCurrentBounds} from "../renderer/ocean-current-layer.js";
 import {createAddCustomLabelCommand, createDeleteLabelCommand, createMoveCustomLabelCommand, createRenameCustomLabelCommand, createRestoreGeneratedLabelCommand, createSetLabelNoteCommand, ensureLabelStore} from "./label-edit-commands.js";
 import {createPatchLabelStyleCommand, createResetAllLabelStylesCommand, createResetLabelStyleCommand} from "./label-style-edit-commands.js";
@@ -992,7 +994,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
         return preview;
       }
     },
-    onSeafloorResetApply: () => {
+    onSeafloorResetApply: async () => {
       const reserved = heightPanel.getSeafloorResetPreview();
       cancelHeightLine(state, documentRef);
       if (!reserved?.valid) {
@@ -1008,16 +1010,14 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
           updateHeightPanel(state);
           return false;
         }
-        const result = executeEditCommand(state, documentRef, createResetSeafloorCommand(plan), {
-          context: {map: state.map},
-          refresh: refreshAfterEdit,
-          refreshPanels: false
-        });
+        const confirmed = documentRef.defaultView?.confirm?.("重设海底将连同洋流、气候和全部世界派生一起重算，是否继续？") ?? false;
+        if (!confirmed) return false;
+        const result = await runtimeActions.oceanCurrents.rebuildWorld({confirm: true, seafloorPlan: plan});
         state.heightEdit.lastAffected = plan.stats.changedCells;
         state.heightEdit.lastHeight = `${plan.stats.minHeight}..${plan.stats.maxHeight}`;
         state.heightEdit.lastDelta = "none";
         state.heightEdit.lastNotice = result.executed
-          ? `已重设 ${plan.stats.oceanCells} 处开放海洋；气候及相关内容需要更新。`
+          ? `已重设 ${plan.stats.oceanCells} 处开放海洋，并完成洋流、气候及世界派生重算。`
           : "当前海底无需调整。";
         if (result.executed) state.heightEdit.seafloorResetSeed++;
         clearHeightTransformPreview(state);
@@ -2198,6 +2198,12 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
         noopStatus: "当前洋流无需重新计算。"
       });
     },
+    onWorldRebuild: async () => {
+      const confirmed = documentRef.defaultView?.confirm?.("完整重算会更新气候、河流、人口、城镇、政区、外交和军事，并保留现有文化、国家、省份与宗教的名称和 ID。是否继续？") ?? false;
+      if (!confirmed) return false;
+      return runtimeActions.oceanCurrents.rebuildWorld({confirm: true});
+    },
+    onCancelWorldRebuild: () => state.runtimeOperation?.cancelCurrent?.("用户取消洋流世界重算"),
     onHighlight: ids => state.renderer.setOceanCurrentHighlights(ids),
     onUndo: () => executeHistoryCommand(state, documentRef, "undo", {afterRefresh: () => updateOceanCurrentPanel(state)}),
     onRedo: () => executeHistoryCommand(state, documentRef, "redo", {afterRefresh: () => updateOceanCurrentPanel(state)})
@@ -2390,6 +2396,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     onStateChange: snapshot => {
       state.runtimeOperationSnapshot = snapshot;
       state.keyboardShortcuts?.refreshAvailability?.();
+      state.panels.oceanCurrent?.updateWorldRebuild?.(snapshot);
     }
   });
   runtimeActions = createRuntimeActions(state, documentRef, {
@@ -2672,6 +2679,13 @@ function createRuntimeActions(state, documentRef, options = {}) {
       setWind: (index, direction, options = {}) => setClimateWindViaApi(state, documentRef, index, direction, options),
       inspectDownstreamRebuild: (options = {}) => inspectClimateDownstreamRebuildViaApi(state, options),
       applyDownstreamRebuild: (options = {}) => applyClimateDownstreamRebuildViaApi(state, documentRef, options)
+    },
+    oceanCurrents: {
+      inspectWorldRebuild: (options = {}) => inspectOceanCurrentWorldRebuild(state.map, options),
+      rebuildWorld: (options = {}) => operation.run("oceanCurrents.rebuildWorld", context => applyOceanCurrentWorldRebuildViaAction(state, documentRef, options, context), {
+        message: "正在重算洋流与世界"
+      }),
+      cancelWorldRebuild: () => operation.cancelCurrent("用户取消洋流世界重算")
     },
     namebases: {
       export: (options = {}) => exportNamebasesData(state, documentRef, options),
@@ -5538,6 +5552,52 @@ async function executeClimateDownstreamSystem(state, documentRef, systemId, cont
   if (systemId === "markers") return regenerateMarkerResourcesForClimate(state, documentRef, context.regenerationSalt);
   if (systemId === "economy") return rebuildEconomyViaAction(state, documentRef, {label: "气候下游重算：经济", deferRefresh: true});
   return regenerateMapAttribute(state, systemId, documentRef);
+}
+
+async function applyOceanCurrentWorldRebuildViaAction(state, documentRef, options = {}, operationContext) {
+  assertMapAvailable(state);
+  if (options.confirm !== true) throw new Error("完整洋流世界重算会改写全部派生数据，需要显式传入 {confirm: true}");
+  const map = state.map;
+  const identity = snapshotOceanCurrentWorldIdentity(map);
+  const seafloorPlan = options.seafloorPlan || null;
+  const execution = await executeOceanCurrentWorldRebuild({
+    map,
+    editHistory: state.editHistory,
+    seed: options.seed,
+    signal: operationContext.signal,
+    assertCurrent: () => state.map === map && operationContext.isCurrent(),
+    faultAt: options.faultAt,
+    yieldToMain: () => yieldToBrowser(documentRef),
+    onProgress: progress => operationContext.report(progress.system || progress.phase, {message: progress.message}),
+    executePrepare: seafloorPlan ? () => {
+      const command = createResetSeafloorCommand(seafloorPlan);
+      if (command.isNoop?.({map})) return {executed: false};
+      command.apply({map});
+      return {executed: true, result: command.getResult?.()};
+    } : null,
+    executeStage: (system, context) => rebuildOceanCurrentWorldStage(map, system, context),
+    executeCommand: command => executeEditCommand(state, documentRef, command, {
+      context: {map},
+      refresh: () => {},
+      refreshPanels: false
+    }),
+    refreshSummary: () => {
+      assertOceanCurrentWorldIdentity(map, identity);
+      syncMilitaryStateMirrors(map);
+      reconcileWarDerivedData(map);
+      clearGeneratedCityLabelHides(map);
+      markDerivedFresh(map, ["ocean-currents", "climate", "rivers", "biomes", "population", "cultures", "cities", "routes", "states", "provinces", "religions", "markers", "economy", "diplomacy", "military", "zones"]);
+      refreshGenerationSummary(map);
+      appendGenerationLog(map, `rebuild ocean current world: seed=${options.seed || "auto"}, seafloor=${Boolean(seafloorPlan)}`);
+    },
+    onRestore: () => {
+      state.options = map.options;
+    }
+  });
+  await refreshClimateDownstreamRebuildState(state, documentRef, execution.command);
+  updateOceanCurrentPanel(state);
+  setFileOperationStatus(documentRef, seafloorPlan ? "已重设海底并完成整链世界重算。" : "已完成洋流、气候与整链世界重算。");
+  return execution;
 }
 
 async function regenerateMarkerResourcesForClimate(state, documentRef, regenerationSalt) {

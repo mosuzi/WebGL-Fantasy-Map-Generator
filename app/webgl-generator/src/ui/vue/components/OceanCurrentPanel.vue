@@ -3,8 +3,12 @@
 
   <div class="ocean-current-panel-controls">
     <UiFilterInput :model-value="state.filter" placeholder="筛选洋流名称 / 冷暖类型" @update:model-value="callbacks.onFilter" />
-    <UiButton variant="secondary" @click="callbacks.onRegenerate?.()">重新计算洋流</UiButton>
+    <UiButton variant="secondary" :disabled="worldRebuildBusy" @click="callbacks.onRegenerate?.()">仅重新计算洋流</UiButton>
+    <UiButton v-if="!worldRebuildBusy" :disabled="worldRebuildBusy" @click="callbacks.onWorldRebuild?.()">重算气候与世界</UiButton>
+    <UiButton v-else variant="danger" @click="callbacks.onCancelWorldRebuild?.()">取消重算</UiButton>
   </div>
+
+  <p v-if="worldRebuildBusy" class="ocean-current-world-status" role="status">{{ worldRebuildMessage }}</p>
 
   <UiObjectTable
     :columns="columns"
@@ -51,6 +55,8 @@ const props = defineProps({
 });
 
 const selectedRowIds = ref([]);
+const worldRebuildBusy = computed(() => props.state.worldRebuild?.busy && props.state.worldRebuild?.current?.name === "oceanCurrents.rebuildWorld");
+const worldRebuildMessage = computed(() => props.state.worldRebuild?.current?.message || "正在重算洋流与世界");
 const columns = Object.freeze([
   {key: "name", label: "名称"},
   {key: "temperatureLabel", label: "性质"},

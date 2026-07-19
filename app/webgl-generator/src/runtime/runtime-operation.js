@@ -30,7 +30,8 @@ export function createRuntimeOperationManager(options = {}) {
   const manager = {
     getSnapshot,
     run,
-    runSync
+    runSync,
+    cancelCurrent
   };
   publish();
   return manager;
@@ -110,15 +111,21 @@ export function createRuntimeOperationManager(options = {}) {
       message: String(config.message || ""),
       startedAt,
       loading: config.loading !== false,
-      stages: []
+      stages: [],
+      abortController: new AbortController()
     };
     const context = {
       id: operation.id,
       name: operation.name,
+      signal: operation.abortController.signal,
       get stage() {
         return operation.stage;
       },
-      report: (stage, detail = {}) => report(operation, stage, detail)
+      report: (stage, detail = {}) => report(operation, stage, detail),
+      isCurrent: () => current === operation && !operation.abortController.signal.aborted,
+      throwIfCancelled: () => {
+        if (operation.abortController.signal.aborted) throw new DOMException(operation.abortController.signal.reason || "运行时任务已取消", "AbortError");
+      }
     };
     operation.context = context;
     operation.health = operation.loading ? null : options.beginHealthOperation?.(operation.name, {operationId: operation.id}) || null;
@@ -181,6 +188,14 @@ export function createRuntimeOperationManager(options = {}) {
       current: current ? snapshotOperation(current) : null,
       last: last ? cloneSnapshot(last) : null
     };
+  }
+
+  function cancelCurrent(reason = "用户取消") {
+    if (!current || current.abortController.signal.aborted) return false;
+    current.abortController.abort(String(reason || "用户取消"));
+    options.recordHealth?.("operation-cancel-requested", {name: current.name, operationId: current.id}, "info");
+    publish();
+    return true;
   }
 
   function publish() {

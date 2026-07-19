@@ -1,4 +1,4 @@
-import {buildClimate} from "./climate.js";
+import {applyOceanCurrentClimateInfluence, buildClimate} from "./climate.js";
 import {defineBiomesAndPopulation} from "./biomes.js";
 import {buildEconomy} from "./economy.js";
 import {buildDiplomacy} from "./diplomacy.js";
@@ -42,6 +42,7 @@ export function generatePlaceholderMap(inputOptions = {}, overrides = {}) {
     features,
     mapCoordinates: climate.mapCoordinates
   }));
+  profile.stage("ocean-current-climate", "应用洋流气候影响", () => applyOceanCurrentClimateInfluence(grid, features, climate, oceanCurrents));
   const pack = profile.stage("pack", "构建 pack 语义图", () => buildPack(grid, features));
   const rivers = profile.stage("rivers", "生成河流", () => buildRivers(grid, features, pack, stageOptions));
   const biomes = profile.stage("biomes-population", "生成生物群系与人口评分", () => defineBiomesAndPopulation(grid, pack, generationOptions));

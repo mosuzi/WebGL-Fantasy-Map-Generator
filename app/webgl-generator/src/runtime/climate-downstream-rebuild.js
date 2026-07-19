@@ -451,3 +451,5 @@ function roundTiming(value) {
 function systemLabel(systemId) {
   return SYSTEM_SPECS.find(item => item.id === systemId)?.label || systemId;
 }
+
+export {cloneMapInChunks as cloneMapSnapshotInChunks, restoreMap as restoreMapSnapshot};

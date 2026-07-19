@@ -11,6 +11,7 @@ export function createOceanCurrentPanel(documentRef, manager, callbacks = {}) {
     filter: "",
     selectedId: null,
     highlightedIds: [],
+    worldRebuild: null,
     version: 0
   });
   const panelCallbacks = {
@@ -30,6 +31,8 @@ export function createOceanCurrentPanel(documentRef, manager, callbacks = {}) {
     },
     onRename: (id, name) => callbacks.onRename?.(id, name),
     onRegenerate: () => callbacks.onRegenerate?.(),
+    onWorldRebuild: () => callbacks.onWorldRebuild?.(),
+    onCancelWorldRebuild: () => callbacks.onCancelWorldRebuild?.(),
     onHighlight: ids => {
       panelState.highlightedIds = [...new Set((ids || []).map(String))];
       callbacks.onHighlight?.(panelState.highlightedIds);
@@ -92,6 +95,10 @@ export function createOceanCurrentPanel(documentRef, manager, callbacks = {}) {
     },
     setSelectedId(id) {
       panelState.selectedId = id === null || id === undefined ? null : String(id);
+    },
+    updateWorldRebuild(snapshot) {
+      panelState.worldRebuild = snapshot ? markRaw(snapshot) : null;
+      panelState.version++;
     },
     isOpen() {
       return panelState.open;

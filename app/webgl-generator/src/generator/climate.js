@@ -5,6 +5,7 @@ import {
   resolveAtmosphereWindProfile,
   resolveClimateLatitudePreset
 } from "./climate-options.js";
+import {sampleOceanCurrent} from "./ocean-currents.js";
 
 const CLIMATE_OPTIONS = {
   winds: [225, 45, 225, 315, 135, 315],
@@ -58,6 +59,160 @@ export function buildClimate(grid, features, options, random) {
       biomeCounts: Object.fromEntries([...biomeCounts.entries()].map(([id, count]) => [BIOMES[id]?.name || id, count]))
     }
   };
+}
+
+export function applyOceanCurrentClimateInfluence(grid, features, climate, oceanCurrents) {
+  const currents = oceanCurrents?.currents || [];
+  const count = grid?.points?.length || 0;
+  const baseTemp = grid?.cells?.temp;
+  const basePrec = grid?.cells?.prec;
+  if (!count || !baseTemp || !basePrec) return emptyOceanCurrentInfluence(currents.length);
+
+  const temperatureDelta = new Float32Array(count);
+  const precipitationDelta = new Float32Array(count);
+  const locateCell = createNearestGridCellLocator(grid);
+  const propagationFloor = 0.045;
+  let tracedCells = 0;
+
+  for (const current of currents) {
+    const thermalSign = current.temperature === "warm" ? 1 : current.temperature === "cold" ? -1 : 0;
+    if (!thermalSign) continue;
+    const samples = sampleOceanCurrent(current, 20);
+    if (samples.length < 2) continue;
+    const weights = new Float32Array(count);
+    const queue = [];
+    let head = 0;
+    let tail = 0;
+    for (let index = 0; index < samples.length; index++) {
+      const cell = locateCell(samples[index]);
+      if (cell < 0) continue;
+      const directionWeight = 0.72 + (index / Math.max(1, samples.length - 1)) * 0.48;
+      const sourceWeight = Math.max(weights[cell], directionWeight);
+      if (sourceWeight === weights[cell]) continue;
+      weights[cell] = sourceWeight;
+      queue[tail++] = cell;
+    }
+    const strength = Math.max(0.05, Math.min(1, Number(current.strength) || 0.5));
+    while (head < tail) {
+      const cell = queue[head++];
+      const weight = weights[cell];
+      const magnitude = strength * weight;
+      temperatureDelta[cell] += thermalSign * 4.2 * magnitude;
+      precipitationDelta[cell] += thermalSign > 0 ? 22 * magnitude : -15 * magnitude;
+      tracedCells++;
+      const nextWeight = weight * 0.76;
+      if (nextWeight < propagationFloor) continue;
+      for (const neighbor of grid.cells.c[cell] || []) {
+        if (nextWeight <= weights[neighbor] + 0.001) continue;
+        weights[neighbor] = nextWeight;
+        queue[tail++] = neighbor;
+      }
+    }
+  }
+
+  let affectedCells = 0;
+  let affectedLandCells = 0;
+  let warmCells = 0;
+  let coldCells = 0;
+  let temperatureDeltaTotal = 0;
+  let precipitationDeltaTotal = 0;
+  for (let cell = 0; cell < count; cell++) {
+    const tempDelta = clamp(temperatureDelta[cell], -8, 8);
+    const precDelta = clamp(precipitationDelta[cell], -40, 40);
+    if (Math.abs(tempDelta) < 0.25 && Math.abs(precDelta) < 0.5) continue;
+    grid.cells.temp[cell] = clamp(Math.round(Number(baseTemp[cell]) + tempDelta), -128, 127);
+    grid.cells.prec[cell] = clamp(Math.round(Number(basePrec[cell]) + precDelta), 0, 255);
+    const feature = features?.features?.[grid.cells.f[cell]];
+    if (feature?.land) affectedLandCells++;
+    affectedCells++;
+    if (tempDelta > 0) warmCells++;
+    else if (tempDelta < 0) coldCells++;
+    temperatureDeltaTotal += tempDelta;
+    precipitationDeltaTotal += precDelta;
+  }
+
+  refreshClimateBiomeMetadata(grid, features, climate);
+  const influence = {
+    version: 1,
+    algorithm: "coastal-advection-v1",
+    currents: currents.length,
+    affectedCells,
+    affectedLandCells,
+    warmCells,
+    coldCells,
+    tracedCells,
+    meanTemperatureDelta: round(affectedCells ? temperatureDeltaTotal / affectedCells : 0, 3),
+    meanPrecipitationDelta: round(affectedCells ? precipitationDeltaTotal / affectedCells : 0, 3),
+    checksum: climateInfluenceChecksum(grid.cells.temp, grid.cells.prec)
+  };
+  climate.metadata.oceanCurrentInfluence = influence;
+  return influence;
+}
+
+function emptyOceanCurrentInfluence(currents = 0) {
+  return {version: 1, algorithm: "coastal-advection-v1", currents, affectedCells: 0, affectedLandCells: 0, warmCells: 0, coldCells: 0, tracedCells: 0, meanTemperatureDelta: 0, meanPrecipitationDelta: 0, checksum: "00000000"};
+}
+
+function createNearestGridCellLocator(grid) {
+  const columns = Math.max(1, Number(grid.metadata?.columns) || 1);
+  const rows = Math.max(1, Number(grid.metadata?.rows) || Math.ceil(grid.points.length / columns));
+  let width = Number(grid.metadata?.graphWidth || grid.metadata?.width) || 0;
+  let height = Number(grid.metadata?.graphHeight || grid.metadata?.height) || 0;
+  if (!width || !height) {
+    for (const point of grid.points) {
+      width = Math.max(width, Number(point?.[0]) || 0);
+      height = Math.max(height, Number(point?.[1]) || 0);
+    }
+  }
+  return point => {
+    const column = clamp(Math.round((point[0] / Math.max(1, width)) * (columns - 1)), 0, columns - 1);
+    const row = clamp(Math.round((point[1] / Math.max(1, height)) * (rows - 1)), 0, rows - 1);
+    let best = -1;
+    let bestDistance = Infinity;
+    for (let dy = -2; dy <= 2; dy++) {
+      const y = row + dy;
+      if (y < 0 || y >= rows) continue;
+      for (let dx = -2; dx <= 2; dx++) {
+        const x = column + dx;
+        const cell = y * columns + x;
+        if (x < 0 || x >= columns || cell >= grid.points.length) continue;
+        const candidate = grid.points[cell];
+        const distance = (candidate[0] - point[0]) ** 2 + (candidate[1] - point[1]) ** 2;
+        if (distance >= bestDistance) continue;
+        best = cell;
+        bestDistance = distance;
+      }
+    }
+    return best;
+  };
+}
+
+function refreshClimateBiomeMetadata(grid, features, climate) {
+  const biomeCounts = new Map();
+  for (let cell = 0; cell < grid.points.length; cell++) {
+    const feature = features?.features?.[grid.cells.f[cell]];
+    const biomeId = classifyBiome(grid.cells.temp[cell], grid.cells.prec[cell], grid.cells.h[cell], feature);
+    grid.cells.biome[cell] = biomeId;
+    biomeCounts.set(biomeId, (biomeCounts.get(biomeId) || 0) + 1);
+  }
+  const temperatureRange = valueRange(grid.cells.temp);
+  const precipitationRange = valueRange(grid.cells.prec);
+  climate.metadata.temperatureMin = temperatureRange.min;
+  climate.metadata.temperatureMax = temperatureRange.max;
+  climate.metadata.precipitationMin = precipitationRange.min;
+  climate.metadata.precipitationMax = precipitationRange.max;
+  climate.metadata.biomeCounts = Object.fromEntries([...biomeCounts.entries()].map(([id, count]) => [BIOMES[id]?.name || id, count]));
+}
+
+function climateInfluenceChecksum(temp, prec) {
+  let hash = 2166136261;
+  for (let index = 0; index < temp.length; index++) {
+    hash ^= (Number(temp[index]) + 128) & 255;
+    hash = Math.imul(hash, 16777619);
+    hash ^= Number(prec[index]) & 255;
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(16).padStart(8, "0");
 }
 
 function valueRange(values) {

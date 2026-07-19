@@ -58,6 +58,21 @@ releaseBusy();
 await active;
 assert.equal(loading.at(-1).visible, false);
 
+let cancelContext;
+const cancelling = apiCall(() => manager.run("cancelled", context => {
+  cancelContext = context;
+  return new Promise((resolve, reject) => {
+    context.signal.addEventListener("abort", () => reject(new DOMException(context.signal.reason || "已取消", "AbortError")), {once: true});
+  });
+}));
+await Promise.resolve();
+assert.equal(manager.cancelCurrent("测试取消"), true);
+const cancelled = await cancelling;
+assert.equal(cancelled.ok, false);
+assert.equal(cancelled.error.code, "operation_cancelled");
+assert.equal(cancelContext.isCurrent(), false);
+assert.equal(manager.getSnapshot().busy, false);
+
 transactionValue = "before";
 const failed = await apiCall(() => manager.run("runtime-failure", () => {
   transactionValue = "partial";
@@ -112,7 +127,8 @@ for (const operationName of [
   "data.exportPNG",
   "data.exportCompressedAll",
   "data.saveBrowserMap",
-  "data.restoreBrowserMap"
+  "data.restoreBrowserMap",
+  "oceanCurrents.rebuildWorld"
 ]) {
   assert.match(appSource, new RegExp(`operation\\.run(?:Sync)?\\(\"${operationName.replaceAll(".", "\\.")}\"`));
 }
@@ -121,10 +137,10 @@ assert.match(appSource, /rollback: \(snapshot, error, context\) => restoreMapRep
 assert.match(appSource, /state\.editHistory\.restoreSnapshot\(snapshot\.history\)/);
 
 console.log(JSON.stringify({
-  scenarios: ["success", "noop", "invalid-input", "busy-conflict", "runtime-failure", "retry", "non-loading-health"],
+  scenarios: ["success", "noop", "invalid-input", "busy-conflict", "cancelled", "runtime-failure", "retry", "non-loading-health"],
   loadingClosed: loading.at(-1).visible === false,
-  stableErrorCodes: [invalid.error.code, busy.error.code, failed.error.code],
+  stableErrorCodes: [invalid.error.code, busy.error.code, cancelled.error.code, failed.error.code],
   healthRule: {expected: "info", unexpected: "error"},
-  integratedOperations: 10,
+  integratedOperations: 11,
   mapReplaceRollback: true
 }, null, 2));
