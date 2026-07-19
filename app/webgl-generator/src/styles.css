@@ -387,6 +387,10 @@ select {
   gap: 10px;
 }
 
+.label-style-panel .ui-slider-field-has-unit {
+  grid-template-columns: 44px minmax(0, 1fr) 84px max-content;
+}
+
 .label-style-preview {
   display: grid;
   min-height: 76px;
