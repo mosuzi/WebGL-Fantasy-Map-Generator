@@ -1006,6 +1006,7 @@ function exportJson(rows = exportRows(), {selectedOnly = false} = {}) {
     tab: props.state.tab,
     filter: props.state.filter || "",
     tradeQuery: {...tradeQuery},
+    units: unitPreferences.value,
     sortKey: props.state.sortKey,
     sortDir: props.state.sortDir,
     summary: metrics.value.summary,
@@ -1090,7 +1091,8 @@ function exportColumns() {
     {key: "price", label: "单价"},
     {key: "value", label: "金额"},
     {key: "tax", label: "税额"},
-    {key: "distance", label: "距离"},
+    {key: "distance", label: "距离（地图单位）"},
+    {key: "distanceLabel", label: "距离（显示单位）"},
     {key: "distanceCost", label: "运距成本"},
     {key: "distanceMultiplier", label: "距离倍率"}
   ];

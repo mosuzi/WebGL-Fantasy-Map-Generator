@@ -13,6 +13,7 @@ export const RIVER_RUNOFF_COEFFICIENTS = Object.freeze({
 export const DEFAULT_UNIT_PREFERENCES = Object.freeze({
   distanceUnit: "km-cn",
   areaUnit: "km2-cn",
+  customUnits: Object.freeze([]),
   numberAbbreviation: "wan",
   mapScaleKmPerCm: 100,
   populationScale: 1,
@@ -28,18 +29,30 @@ export const UNIT_SCALE_LIMITS = Object.freeze({
 });
 
 export const DISTANCE_UNIT_OPTIONS = Object.freeze([
-  Object.freeze({value: "m-cn", label: "米"}),
-  Object.freeze({value: "km-cn", label: "千米"}),
-  Object.freeze({value: "m", label: "m"}),
-  Object.freeze({value: "km", label: "km"})
+  distanceUnitOption("mm-cn", "毫米", "毫米", 0.000001, "mm2-cn", "平方毫米", "平方毫米"),
+  distanceUnitOption("cm-cn", "厘米", "厘米", 0.00001, "cm2-cn", "平方厘米", "平方厘米"),
+  distanceUnitOption("m-cn", "米", "米", 0.001, "m2-cn", "平方米", "平方米"),
+  distanceUnitOption("km-cn", "千米", "千米", 1, "km2-cn", "平方公里", "平方公里"),
+  distanceUnitOption("mm", "mm", "mm", 0.000001, "mm2", "mm²", "mm²"),
+  distanceUnitOption("cm", "cm", "cm", 0.00001, "cm2", "cm²", "cm²"),
+  distanceUnitOption("m", "m", "m", 0.001, "m2", "m²", "m²"),
+  distanceUnitOption("km", "km", "km", 1, "km2", "km²", "km²"),
+  distanceUnitOption("mi-cn", "英里", "英里", 1.609344, "mi2-cn", "平方英里", "平方英里"),
+  distanceUnitOption("mi", "mi", "mi", 1.609344, "mi2", "mi²", "mi²"),
+  distanceUnitOption("ft-cn", "英尺", "英尺", 0.0003048, "ft2-cn", "平方英尺", "平方英尺"),
+  distanceUnitOption("ft", "ft", "ft", 0.0003048, "ft2", "ft²", "ft²"),
+  distanceUnitOption("yd-cn", "码", "码", 0.0009144, "yd2-cn", "平方码", "平方码"),
+  distanceUnitOption("yd", "yd", "yd", 0.0009144, "yd2", "yd²", "yd²"),
+  distanceUnitOption("nmi-cn", "海里", "海里", 1.852, "nmi2-cn", "平方海里", "平方海里"),
+  distanceUnitOption("nmi", "nmi", "nmi", 1.852, "nmi2", "nmi²", "nmi²")
 ]);
 
-export const AREA_UNIT_OPTIONS = Object.freeze([
-  Object.freeze({value: "m2-cn", label: "平方米"}),
-  Object.freeze({value: "km2-cn", label: "平方公里"}),
-  Object.freeze({value: "m2", label: "m²"}),
-  Object.freeze({value: "km2", label: "km²"})
-]);
+export const AREA_UNIT_OPTIONS = Object.freeze(DISTANCE_UNIT_OPTIONS.map(option => Object.freeze({
+  value: option.areaValue,
+  label: option.areaLabel,
+  symbol: option.areaSymbol,
+  squareKmPerUnit: option.kmPerUnit ** 2
+})));
 
 export const NUMBER_ABBREVIATION_OPTIONS = Object.freeze([
   Object.freeze({value: "wan", label: "万"}),
@@ -54,10 +67,12 @@ const NUMBER_ABBREVIATIONS = new Map(NUMBER_ABBREVIATION_OPTIONS.map(option => [
 export function normalizeUnitPreferences(input = {}) {
   const source = input && typeof input === "object" ? input : {};
   const fallback = DEFAULT_UNIT_PREFERENCES;
-  const distanceUnit = DISTANCE_UNITS.has(source.distanceUnit) ? source.distanceUnit : fallback.distanceUnit;
+  const customUnits = normalizeCustomUnitDefinitions(source.customUnits);
+  const distanceUnit = resolveDistanceUnit(source.distanceUnit, customUnits)?.value || fallback.distanceUnit;
   return {
     distanceUnit,
-    areaUnit: areaUnitForDistanceUnit(distanceUnit, source.areaUnit),
+    areaUnit: areaUnitForDistanceUnit(distanceUnit, source.areaUnit, {customUnits}),
+    customUnits,
     numberAbbreviation: NUMBER_ABBREVIATIONS.has(source.numberAbbreviation) ? source.numberAbbreviation : fallback.numberAbbreviation,
     mapScaleKmPerCm: clampNumber(source.mapScaleKmPerCm, UNIT_SCALE_LIMITS.mapScaleKmPerCm, fallback.mapScaleKmPerCm),
     populationScale: clampNumber(source.populationScale, UNIT_SCALE_LIMITS.populationScale, fallback.populationScale),
@@ -66,17 +81,45 @@ export function normalizeUnitPreferences(input = {}) {
   };
 }
 
-export function areaUnitForDistanceUnit(distanceUnit, fallbackAreaUnit = DEFAULT_UNIT_PREFERENCES.areaUnit) {
-  if (distanceUnit === "m-cn") return "m2-cn";
-  if (distanceUnit === "m") return "m2";
-  if (distanceUnit === "km") return "km2";
-  if (distanceUnit === "km-cn") return "km2-cn";
+export function areaUnitForDistanceUnit(distanceUnit, fallbackAreaUnit = DEFAULT_UNIT_PREFERENCES.areaUnit, preferences = {}) {
+  const resolved = resolveDistanceUnit(distanceUnit, normalizeCustomUnitDefinitions(preferences.customUnits));
+  if (resolved?.areaValue) return resolved.areaValue;
   return AREA_UNITS.has(fallbackAreaUnit) ? fallbackAreaUnit : DEFAULT_UNIT_PREFERENCES.areaUnit;
 }
 
-export function areaUnitLabelForDistanceUnit(distanceUnit) {
-  const areaUnit = areaUnitForDistanceUnit(distanceUnit);
-  return AREA_UNITS.get(areaUnit)?.label || AREA_UNITS.get(DEFAULT_UNIT_PREFERENCES.areaUnit).label;
+export function areaUnitLabelForDistanceUnit(distanceUnit, preferences = {}) {
+  const resolved = resolveDistanceUnit(distanceUnit, normalizeCustomUnitDefinitions(preferences.customUnits));
+  return resolved?.areaLabel || AREA_UNITS.get(DEFAULT_UNIT_PREFERENCES.areaUnit).label;
+}
+
+export function distanceUnitOptionsForPreferences(preferences = {}) {
+  const units = normalizeUnitPreferences(preferences);
+  return [
+    ...DISTANCE_UNIT_OPTIONS,
+    ...units.customUnits.map(unit => ({value: customDistanceUnitValue(unit.id), label: `${unit.name}（${unit.symbol}）`}))
+  ];
+}
+
+export function upsertCustomUnitDefinition(preferences = {}, definition = {}) {
+  const units = normalizeUnitPreferences(preferences);
+  const normalized = normalizeCustomUnitDefinition(definition);
+  if (!normalized) throw new Error("自定义单位需要名称、符号和大于 0 的千米换算系数");
+  const customUnits = units.customUnits.filter(unit => unit.id !== normalized.id);
+  customUnits.push(normalized);
+  return normalizeUnitPreferences({...units, customUnits, distanceUnit: customDistanceUnitValue(normalized.id)});
+}
+
+export function deleteCustomUnitDefinition(preferences = {}, id) {
+  const units = normalizeUnitPreferences(preferences);
+  const targetId = normalizeCustomUnitId(id);
+  const customUnits = units.customUnits.filter(unit => unit.id !== targetId);
+  const distanceUnit = units.distanceUnit === customDistanceUnitValue(targetId) ? DEFAULT_UNIT_PREFERENCES.distanceUnit : units.distanceUnit;
+  return normalizeUnitPreferences({...units, customUnits, distanceUnit});
+}
+
+export function customUnitDefinitionForDistanceUnit(distanceUnit, preferences = {}) {
+  const id = customUnitIdFromValue(distanceUnit);
+  return id ? normalizeCustomUnitDefinitions(preferences.customUnits).find(unit => unit.id === id) || null : null;
 }
 
 export function mapUnitsToKm(value, preferences = {}) {
@@ -93,19 +136,15 @@ export function mapUnitsToSquareKm(value, preferences = {}) {
 export function formatDistance(value, preferences = {}) {
   const units = normalizeUnitPreferences(preferences);
   const km = mapUnitsToKm(value, units);
-  if (units.distanceUnit === "m-cn") return `${formatNumber(km * 1000, units, {maximumFractionDigits: 1})} 米`;
-  if (units.distanceUnit === "m") return `${formatNumber(km * 1000, units, {maximumFractionDigits: 1})} m`;
-  if (units.distanceUnit === "km") return `${formatNumber(km, units, {maximumFractionDigits: 1})} km`;
-  return `${formatNumber(km, units, {maximumFractionDigits: 1})} 千米`;
+  const definition = resolveDistanceUnit(units.distanceUnit, units.customUnits) || DISTANCE_UNITS.get(DEFAULT_UNIT_PREFERENCES.distanceUnit);
+  return `${formatNumber(km / definition.kmPerUnit, units, {maximumFractionDigits: 1})} ${definition.symbol}`;
 }
 
 export function formatArea(value, preferences = {}) {
   const units = normalizeUnitPreferences(preferences);
   const squareKm = mapUnitsToSquareKm(value, units);
-  if (units.areaUnit === "m2-cn") return `${formatNumber(squareKm * 1000000, units, {maximumFractionDigits: 1})} 平方米`;
-  if (units.areaUnit === "m2") return `${formatNumber(squareKm * 1000000, units, {maximumFractionDigits: 1})} m²`;
-  if (units.areaUnit === "km2") return `${formatNumber(squareKm, units, {maximumFractionDigits: 1})} km²`;
-  return `${formatNumber(squareKm, units, {maximumFractionDigits: 1})} 平方公里`;
+  const definition = resolveDistanceUnit(units.distanceUnit, units.customUnits) || DISTANCE_UNITS.get(DEFAULT_UNIT_PREFERENCES.distanceUnit);
+  return `${formatNumber(squareKm / definition.squareKmPerUnit, units, {maximumFractionDigits: 1})} ${definition.areaSymbol}`;
 }
 
 export function formatPopulation(value, preferences = {}) {
@@ -235,6 +274,85 @@ function compactNumber(value, mode, {maximumFractionDigits = 1, minimumCompactVa
   const scaled = value / config.divisor;
   const digits = Math.abs(scaled) >= 100 ? 0 : maximumFractionDigits;
   return `${scaled.toLocaleString("zh-CN", {maximumFractionDigits: digits})}${config.suffix}`;
+}
+
+function distanceUnitOption(value, label, symbol, kmPerUnit, areaValue, areaLabel, areaSymbol) {
+  return Object.freeze({value, label, symbol, kmPerUnit, areaValue, areaLabel, areaSymbol, squareKmPerUnit: kmPerUnit ** 2});
+}
+
+function resolveDistanceUnit(value, customUnits = []) {
+  const builtIn = DISTANCE_UNITS.get(value);
+  if (builtIn) return builtIn;
+  const id = customUnitIdFromValue(value);
+  if (!id) return null;
+  const custom = customUnits.find(unit => unit.id === id);
+  if (!custom) return null;
+  return {
+    value: customDistanceUnitValue(custom.id),
+    label: custom.name,
+    symbol: custom.symbol,
+    kmPerUnit: custom.kmPerUnit,
+    areaValue: `custom-area:${custom.id}`,
+    areaLabel: custom.areaName,
+    areaSymbol: custom.areaSymbol,
+    squareKmPerUnit: custom.squareKmPerUnit
+  };
+}
+
+function normalizeCustomUnitDefinitions(input) {
+  if (!Array.isArray(input)) return [];
+  const seen = new Set();
+  const normalized = [];
+  for (const value of input.slice(0, 24)) {
+    const unit = normalizeCustomUnitDefinition(value);
+    if (!unit || seen.has(unit.id)) continue;
+    seen.add(unit.id);
+    normalized.push(unit);
+  }
+  return normalized;
+}
+
+function normalizeCustomUnitDefinition(input = {}) {
+  if (!input || typeof input !== "object") return null;
+  const id = normalizeCustomUnitId(input.id);
+  const name = normalizeUnitText(input.name, 32);
+  const symbol = normalizeUnitText(input.symbol, 12);
+  const kmPerUnit = positiveFiniteNumber(input.kmPerUnit ?? input.kmFactor);
+  if (!id || !name || !symbol || !kmPerUnit) return null;
+  const hasExplicitArea = input.areaMode === "custom" || input.areaMode !== "derived" && Boolean(
+    normalizeUnitText(input.areaName, 40)
+    || normalizeUnitText(input.areaSymbol, 16)
+    || positiveFiniteNumber(input.squareKmPerUnit ?? input.areaSquareKmFactor)
+  );
+  const areaMode = hasExplicitArea ? "custom" : "derived";
+  const areaName = hasExplicitArea ? normalizeUnitText(input.areaName, 40) || `平方${name}` : `平方${name}`;
+  const areaSymbol = hasExplicitArea ? normalizeUnitText(input.areaSymbol, 16) || `${symbol}²` : `${symbol}²`;
+  const squareKmPerUnit = hasExplicitArea
+    ? positiveFiniteNumber(input.squareKmPerUnit ?? input.areaSquareKmFactor) || kmPerUnit ** 2
+    : kmPerUnit ** 2;
+  return {id, name, symbol, kmPerUnit, areaMode, areaName, areaSymbol, squareKmPerUnit};
+}
+
+function normalizeCustomUnitId(value) {
+  return String(value || "").trim().toLowerCase().replace(/[^a-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 48);
+}
+
+function customDistanceUnitValue(id) {
+  return `custom:${normalizeCustomUnitId(id)}`;
+}
+
+function customUnitIdFromValue(value) {
+  const match = /^custom:([a-z0-9_-]+)$/.exec(String(value || "").trim().toLowerCase());
+  return match?.[1] || "";
+}
+
+function normalizeUnitText(value, maxLength) {
+  return String(value || "").trim().replace(/\s+/g, " ").slice(0, maxLength);
+}
+
+function positiveFiniteNumber(value) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) && numeric > 0 && numeric <= 1e12 ? numeric : 0;
 }
 
 function clampNumber(value, limit, fallback) {

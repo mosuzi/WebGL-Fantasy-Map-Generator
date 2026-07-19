@@ -877,7 +877,7 @@ function setAreaUnitPreference(state, documentRef, unit) {
   const requested = String(unit || "").trim();
   if (!requested) throw new Error("缺少面积单位");
   const current = buildUnitSnapshot(state, documentRef).units;
-  const expected = areaUnitForDistanceUnit(current.distanceUnit, current.areaUnit);
+  const expected = areaUnitForDistanceUnit(current.distanceUnit, current.areaUnit, current);
   if (requested !== expected) {
     throw new Error(`面积单位 ${requested} 与当前距离单位 ${current.distanceUnit} 不匹配，应为 ${expected}`);
   }
@@ -1172,9 +1172,11 @@ function normalizeNamebaseApiBaseIds(baseIds) {
 
 export function exportAllMapData(state, documentRef, options = {}) {
   const map = assertApiMap(state);
+  const units = normalizeUnitPreferences(readControlPreferences(documentRef).units);
   const document = createMapDocument(map, {
     ...(state.options || {}),
-    visualTheme: currentVisualThemeId(state, documentRef)
+    visualTheme: currentVisualThemeId(state, documentRef),
+    display: {units}
   });
   const text = stringifyMapDocument(document);
   const filename = `${mapFileBaseName(map)}.webgl-map.json`;
@@ -1225,9 +1227,11 @@ export function exportPackGeoJson(state, documentRef, options = {}) {
 
 export async function exportCompressedAllMapData(state, documentRef, options = {}) {
   const map = assertApiMap(state);
+  const units = normalizeUnitPreferences(readControlPreferences(documentRef).units);
   const document = createMapDocument(map, {
     ...(state.options || {}),
-    visualTheme: currentVisualThemeId(state, documentRef)
+    visualTheme: currentVisualThemeId(state, documentRef),
+    display: {units}
   });
   const filename = `${mapFileBaseName(map)}.webgl-map.json.gz`;
   const metadata = {
@@ -1363,7 +1367,8 @@ export function exportMeasurementsData(state, documentRef, options = {}) {
     units: {
       distanceUnit: units.distanceUnit,
       areaUnit: units.areaUnit,
-      mapScaleKmPerCm: units.mapScaleKmPerCm
+      mapScaleKmPerCm: units.mapScaleKmPerCm,
+      customUnits: units.customUnits
     },
     measurements
   };

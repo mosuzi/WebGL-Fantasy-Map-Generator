@@ -7,6 +7,7 @@ import {backfillEconomyDisplayProperties, normalizeEconomyDisplayMap} from "../g
 import {resolveBiomeDescriptor} from "../generator/biome-registry.js";
 import {backfillProvinceNames} from "../generator/province-naming.js";
 import {normalizeDiplomacyMap} from "./diplomacy-map-compatibility.js";
+import {normalizeUnitPreferences} from "../ui/display-units.js";
 import {
   NETWORK_GEOJSON_PROPERTY_SCHEMA_ID,
   NETWORK_GEOJSON_PROPERTY_SCHEMA_VERSION,
@@ -40,19 +41,22 @@ const TYPED_ARRAYS = Object.freeze({
 
 export function createMapDocument(map, options = {}) {
   if (!map) throw new Error("当前没有可导出的地图");
-  const normalizedMap = normalizeMapSchemaV2(map, options);
+  const documentOptions = {...(options || {})};
+  const display = documentOptions.display;
+  delete documentOptions.display;
+  const normalizedMap = normalizeMapSchemaV2(map, {...documentOptions, display});
   return {
     type: MAP_DOCUMENT_TYPE,
     version: MAP_DOCUMENT_VERSION,
     exportedAt: new Date().toISOString(),
     app: "fmg-webgl-reimplementation",
     metadata: {
-      seed: normalizedMap.metadata?.seed || options.seed,
+      seed: normalizedMap.metadata?.seed || documentOptions.seed,
       checksum: normalizedMap.metadata?.checksum || null,
       generatorStage: normalizedMap.metadata?.generatorStage || null,
       mapSchemaVersion: MAP_SCHEMA_VERSION
     },
-    options: {...options},
+    options: documentOptions,
     map: normalizedMap
   };
 }
@@ -109,10 +113,10 @@ export async function createCompressedMapDocumentBlob(documentRef, document) {
 }
 
 export function migrateMapDocument(document) {
-  const migrated = migrateMapDocumentWithRegistry(document, {
+  const migrated = normalizeMapDocumentDisplay(migrateMapDocumentWithRegistry(document, {
     targetVersion: MAP_DOCUMENT_VERSION,
     registry: MAP_DOCUMENT_MIGRATORS
-  });
+  }));
   backfillEconomyDisplayProperties(migrated.map);
   backfillProvinceNames(migrated.map);
   migrated.map = normalizeDiplomacyMap(migrated.map);
@@ -461,6 +465,7 @@ function validateCurrentMapDocument(document) {
   if (!document.map.diplomacy || !Array.isArray(document.map.diplomacy.chronicle) || typeof document.map.diplomacy.relations !== "object") {
     throw new Error("地图数据缺少 diplomacy 存储");
   }
+  if (document.map.display?.units && !Array.isArray(document.map.display.units.customUnits)) throw new Error("地图数据的自定义单位列表无效");
   for (const states of [document.map.politics?.states, document.map.pack?.states]) {
     for (const state of states || []) {
       if (!state || state.removed || Number(state.i ?? state.id) <= 0) continue;
@@ -472,6 +477,8 @@ function validateCurrentMapDocument(document) {
 function normalizeMapSchemaV2(map, documentOptions = {}) {
   const source = map && typeof map === "object" ? map : {};
   const options = {...(documentOptions || {}), ...(source.options || {})};
+  delete options.display;
+  const displaySource = documentOptions.display ?? source.display;
   const societyCultures = cloneSocialStore(source.society?.cultures);
   const societyReligions = cloneSocialStore(source.society?.religions);
   const packCultures = source.pack?.cultures === source.society?.cultures ? societyCultures : cloneSocialStore(source.pack?.cultures);
@@ -480,6 +487,7 @@ function normalizeMapSchemaV2(map, documentOptions = {}) {
     ...source,
     metadata: {...(source.metadata || {}), schemaVersion: MAP_SCHEMA_VERSION},
     options,
+    ...(displaySource && typeof displaySource === "object" ? {display: normalizeMapDisplayConfig(displaySource)} : {}),
     society: source.society ? {...source.society, cultures: societyCultures, religions: societyReligions, metadata: {...(source.society.metadata || {})}} : source.society,
     pack: source.pack ? {...source.pack, cultures: packCultures, religions: packReligions} : source.pack,
     notes: normalizeNotesStoreV2(source.notes),
@@ -488,6 +496,26 @@ function normalizeMapSchemaV2(map, documentOptions = {}) {
     visualTheme: normalizeVisualThemeStoreV2(source.visualTheme, options.visualTheme)
   };
   return normalizeDiplomacyMap(normalizeEconomyDisplayMap(normalizeSocialExpansionMap(normalized)));
+}
+
+function normalizeMapDocumentDisplay(document) {
+  const display = document?.map?.display ?? document?.display;
+  if (!display || typeof display !== "object") return document;
+  return {
+    ...document,
+    map: {
+      ...document.map,
+      display: normalizeMapDisplayConfig(display)
+    }
+  };
+}
+
+function normalizeMapDisplayConfig(input = {}) {
+  const source = input && typeof input === "object" ? input : {};
+  return {
+    ...source,
+    units: normalizeUnitPreferences(source.units)
+  };
 }
 
 function cloneSocialStore(store) {

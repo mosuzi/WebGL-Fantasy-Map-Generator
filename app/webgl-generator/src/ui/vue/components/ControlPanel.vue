@@ -427,6 +427,26 @@
             <span>面积单位</span>
             <strong>{{ areaUnitLabel }}</strong>
           </div>
+          <div class="unit-custom-actions">
+            <UiButton variant="secondary" @click="openCreateCustomUnit">新增自定义单位</UiButton>
+            <UiButton v-if="activeCustomUnit" variant="secondary" @click="openEditCustomUnit">编辑当前单位</UiButton>
+            <UiButton v-if="activeCustomUnit" variant="danger" @click="deleteActiveCustomUnit">删除当前单位</UiButton>
+          </div>
+          <form v-if="customUnitEditorOpen" class="unit-custom-editor" @submit.prevent="saveCustomUnit">
+            <h3>{{ editingCustomUnitId ? "编辑自定义单位" : "新增自定义单位" }}</h3>
+            <label><span>单位名称</span><input v-model="customUnitDraft.name" maxlength="32" required /></label>
+            <label><span>单位符号</span><input v-model="customUnitDraft.symbol" maxlength="12" required /></label>
+            <label><span>1 单位等于</span><input v-model="customUnitDraft.kmPerUnit" type="number" min="0.000000000001" max="1000000000000" step="any" required /><em>km</em></label>
+            <p>面积信息留空时，会按距离单位自动生成平方名称、符号和换算系数。</p>
+            <label><span>面积名称</span><input v-model="customUnitDraft.areaName" maxlength="40" placeholder="自动派生" /></label>
+            <label><span>面积符号</span><input v-model="customUnitDraft.areaSymbol" maxlength="16" placeholder="自动派生" /></label>
+            <label><span>1 面积单位等于</span><input v-model="customUnitDraft.squareKmPerUnit" type="number" min="0.000000000001" max="1000000000000" step="any" placeholder="自动平方" /><em>km²</em></label>
+            <p v-if="customUnitError" class="unit-custom-error" role="alert">{{ customUnitError }}</p>
+            <div class="unit-custom-editor-actions">
+              <UiButton button-type="submit">保存并使用</UiButton>
+              <UiButton variant="secondary" @click="closeCustomUnitEditor">取消</UiButton>
+            </div>
+          </form>
           <div class="unit-scale-readout">{{ scaleLabel }}</div>
           <UiSliderField
             label="比例尺"
@@ -566,7 +586,7 @@
 </template>
 
 <script setup>
-import {computed, nextTick, onBeforeUnmount, onMounted, ref, watch} from "vue";
+import {computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch} from "vue";
 import {storeToRefs} from "pinia";
 import UiButton from "./base/UiButton.vue";
 import UiActionDock from "./base/UiActionDock.vue";
@@ -585,13 +605,16 @@ import {visualThemeOptions} from "../../../renderer/themes.js";
 import {LABEL_FONT_FAMILIES, LABEL_STYLE_TYPES, LOCAL_LABEL_FONT_ID, normalizeLocalFontFamilyName, resolveLabelStyle} from "../../../runtime/label-style-registry.js";
 import {createLocalFontFamilyOptions} from "../../../runtime/local-font-catalog.js";
 import {
-  DISTANCE_UNIT_OPTIONS,
   NUMBER_ABBREVIATION_OPTIONS,
   UNIT_SCALE_LIMITS,
   areaUnitForDistanceUnit,
   areaUnitLabelForDistanceUnit,
+  customUnitDefinitionForDistanceUnit,
+  deleteCustomUnitDefinition,
+  distanceUnitOptionsForPreferences,
   formatScaleLabel,
-  normalizeUnitPreferences
+  normalizeUnitPreferences,
+  upsertCustomUnitDefinition
 } from "../../display-units.js";
 import {
   WIND_BAND_OPTIONS,
@@ -652,8 +675,13 @@ const temperatureRange = TEMPERATURE_RANGE;
 const climateMapSizeRange = CLIMATE_MAP_SIZE_RANGE;
 const unitPreferences = computed(() => normalizeUnitPreferences(preferences.value.units));
 const scaleLabel = computed(() => formatScaleLabel(unitPreferences.value));
-const areaUnitLabel = computed(() => areaUnitLabelForDistanceUnit(unitPreferences.value.distanceUnit));
-const distanceUnitOptions = DISTANCE_UNIT_OPTIONS;
+const areaUnitLabel = computed(() => areaUnitLabelForDistanceUnit(unitPreferences.value.distanceUnit, unitPreferences.value));
+const distanceUnitOptions = computed(() => distanceUnitOptionsForPreferences(unitPreferences.value));
+const activeCustomUnit = computed(() => customUnitDefinitionForDistanceUnit(unitPreferences.value.distanceUnit, unitPreferences.value));
+const customUnitEditorOpen = ref(false);
+const editingCustomUnitId = ref("");
+const customUnitError = ref("");
+const customUnitDraft = reactive(emptyCustomUnitDraft());
 const numberAbbreviationOptions = NUMBER_ABBREVIATION_OPTIONS;
 const unitScaleLimits = UNIT_SCALE_LIMITS;
 const windBandOptions = WIND_BAND_OPTIONS;
@@ -887,8 +915,73 @@ function isLayerVisible(layer) {
 
 function patchUnitPreference(patch) {
   const next = normalizeUnitPreferences({...unitPreferences.value, ...patch});
-  if (patch.distanceUnit) next.areaUnit = areaUnitForDistanceUnit(patch.distanceUnit);
+  if (patch.distanceUnit) next.areaUnit = areaUnitForDistanceUnit(patch.distanceUnit, next.areaUnit, next);
   config.patchPreferences({units: next});
+}
+
+function openCreateCustomUnit() {
+  editingCustomUnitId.value = "";
+  Object.assign(customUnitDraft, emptyCustomUnitDraft());
+  customUnitError.value = "";
+  customUnitEditorOpen.value = true;
+}
+
+function openEditCustomUnit() {
+  const unit = activeCustomUnit.value;
+  if (!unit) return;
+  editingCustomUnitId.value = unit.id;
+  Object.assign(customUnitDraft, {
+    name: unit.name,
+    symbol: unit.symbol,
+    kmPerUnit: String(unit.kmPerUnit),
+    areaName: unit.areaMode === "custom" ? unit.areaName : "",
+    areaSymbol: unit.areaMode === "custom" ? unit.areaSymbol : "",
+    squareKmPerUnit: unit.areaMode === "custom" ? String(unit.squareKmPerUnit) : ""
+  });
+  customUnitError.value = "";
+  customUnitEditorOpen.value = true;
+}
+
+function closeCustomUnitEditor() {
+  customUnitEditorOpen.value = false;
+  editingCustomUnitId.value = "";
+  customUnitError.value = "";
+}
+
+function saveCustomUnit() {
+  const id = editingCustomUnitId.value || `unit-${Date.now().toString(36)}`;
+  try {
+    const next = upsertCustomUnitDefinition(unitPreferences.value, {
+      id,
+      name: customUnitDraft.name,
+      symbol: customUnitDraft.symbol,
+      kmPerUnit: customUnitDraft.kmPerUnit,
+      areaMode: customUnitDraft.areaName || customUnitDraft.areaSymbol || customUnitDraft.squareKmPerUnit ? "custom" : "derived",
+      areaName: customUnitDraft.areaName,
+      areaSymbol: customUnitDraft.areaSymbol,
+      squareKmPerUnit: customUnitDraft.squareKmPerUnit
+    });
+    commitCustomUnitPreferences(next);
+    closeCustomUnitEditor();
+  } catch (error) {
+    customUnitError.value = error instanceof Error ? error.message : String(error);
+  }
+}
+
+function deleteActiveCustomUnit() {
+  const unit = activeCustomUnit.value;
+  if (!unit) return;
+  commitCustomUnitPreferences(deleteCustomUnitDefinition(unitPreferences.value, unit.id));
+  closeCustomUnitEditor();
+}
+
+function commitCustomUnitPreferences(units) {
+  config.patchPreferences({units});
+  nextTick(() => document.getElementById("distance-unit")?.dispatchEvent(new Event("change", {bubbles: true})));
+}
+
+function emptyCustomUnitDraft() {
+  return {name: "", symbol: "", kmPerUnit: "", areaName: "", areaSymbol: "", squareKmPerUnit: ""};
 }
 
 function toggleLatitudeMode() {

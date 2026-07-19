@@ -4821,6 +4821,12 @@ async function importParsedMapDocumentViaApi(state, documentRef, document, optio
     const normalizedOptions = normalizeOptions(document.map.options || document.options || state.options);
     document.map.options = normalizedOptions;
     state.options = normalizedOptions;
+    const importedUnits = document.map.display?.units;
+    if (importedUnits && typeof importedUnits === "object") {
+      const units = normalizeUnitPreferences(importedUnits);
+      updateControlPreferences(documentRef, {units});
+      state.renderer?.setUnitPreferences?.(units);
+    }
     applyPersistedVisualTheme(state, documentRef, document);
     syncGenerationInputs(documentRef, normalizedOptions);
     state.pendingGenerateId = (state.pendingGenerateId || 0) + 1;
@@ -4850,7 +4856,7 @@ async function importParsedMapDocumentViaApi(state, documentRef, document, optio
       },
       persistedNamebases,
       history: state.editHistory.getStats(),
-      effects: ["replace-map", "clear-history", "renderer", "runtime-panel", "object-panels", "object-index"]
+      effects: ["replace-map", "clear-history", "display-preferences", "renderer", "runtime-panel", "object-panels", "object-index"]
     };
   } catch (error) {
     updateGenerationLoading(documentRef, false);
@@ -9944,7 +9950,8 @@ function exportMeasurement(state, documentRef) {
     units: {
       distanceUnit: units.distanceUnit,
       areaUnit: units.areaUnit,
-      mapScaleKmPerCm: units.mapScaleKmPerCm
+      mapScaleKmPerCm: units.mapScaleKmPerCm,
+      customUnits: units.customUnits
     },
     summary: {
       distanceMapUnits: roundMeasurementExport(distance),
