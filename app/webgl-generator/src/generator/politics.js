@@ -1,11 +1,11 @@
 import {MinPriorityQueue} from "./priority-queue.js";
 import {chooseStateGovernment, applyStateGovernment, summarizeStateGovernments} from "./governments.js";
 import {createChineseNameGenerator, getStateFullName, isAncientStateNameRoot} from "./names.js";
+import {legacyProvinceForm, provinceFormForState} from "./province-naming.js";
 import {createStageProfile} from "./profile.js";
 import {createRandom} from "./random.js";
 
 const STATE_ROOTS = ["昭宁", "雁川", "青岚", "星渚", "南衡", "白麓", "清河", "苍原", "岚湾", "云麓", "河洛", "云渡", "栖梧", "北辰", "东衡", "西麓", "南浦", "霜川", "泽阳", "柏原", "海津", "长岚", "玄丘", "玉津"];
-const PROVINCE_SUFFIXES = ["郡", "州", "道", "府", "领", "司"];
 const REGION_NAMES = ["北境", "南陆", "西岭", "东湾", "中原", "湖泽"];
 const STATE_CARDINAL_PREFIXES = ["东", "西", "南", "北"];
 const STATE_NEUTRAL_VARIANT_PREFIXES = ["新", "古", "上", "中"];
@@ -840,13 +840,16 @@ function buildProvinces(grid, landCells, states, society, random) {
       .sort((a, b) => b.score - a.score);
     const minDistance = Math.min(grid.metadata.graphWidth, grid.metadata.graphHeight) / 9;
     const centers = pickSpacedCenters(candidates, grid, target, minDistance);
+    const provinceForm = provinceFormForState(state, society.cultures) || legacyProvinceForm(provinces.length);
 
     for (const center of centers) {
       const id = provinces.length;
       const cultureRoot = society.cultures[grid.cells.culture[center.cell]]?.name?.replace("文化", "") || STATE_ROOTS[id % STATE_ROOTS.length];
       provinces.push({
         id,
-        name: `${cultureRoot}${PROVINCE_SUFFIXES[id % PROVINCE_SUFFIXES.length]}`,
+        name: cultureRoot,
+        formName: provinceForm,
+        fullName: `${cultureRoot}${provinceForm}`,
         state: state.id,
         center: center.cell
       });
@@ -872,6 +875,7 @@ function buildPackProvinces(pack, society, random, options, nameGenerator) {
         .sort((a, b) => b.population * gauss(random, 1, 0.2, 0.5, 1.5, 3) - a.population)
         .sort((a, b) => Number(b.capital) - Number(a.capital));
       if (stateBurgs.length < 2) continue;
+      const provinceForm = provinceFormForState(state, society.cultures || pack.cultures);
 
       const provincesNumber = Math.max(Math.ceil((stateBurgs.length * provincesRatio) / 100), 2);
       for (let index = 0; index < provincesNumber; index++) {
@@ -885,7 +889,8 @@ function buildPackProvinces(pack, society, random, options, nameGenerator) {
           culture: burg.culture,
           cultureType: culture?.nameStyle || culture?.type,
           state: state.i,
-          baseName: sourceRoot
+          baseName: sourceRoot,
+          formName: provinceForm
         });
         const province = {
           id: provinceId,
@@ -1169,7 +1174,8 @@ function fillUnassignedProvinceCells(pack, provinces, provinceIds, random, maxGr
         culture: burg?.culture || state.culture,
         cultureType: pack.cultures?.[burg?.culture || state.culture]?.nameStyle || pack.cultures?.[burg?.culture || state.culture]?.type,
         state: state.i,
-        baseName: burg?.name || state.name
+        baseName: burg?.name || state.name,
+        formName: provinceFormForState(state, pack.cultures)
       });
       if (!burg) provinceName.formName = "边地";
       provinceName.fullName = `${provinceName.name}${provinceName.formName}`;

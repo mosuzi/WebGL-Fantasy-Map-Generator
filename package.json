@@ -137,6 +137,7 @@
     "regress:state-government-width": "node --no-warnings ./tools/webgl-generator-state-government-panel-width-regression.mjs",
     "regress:state-topology": "node --no-warnings ./tools/webgl-generator-state-topology-regression.mjs",
     "regress:state-topology-ui-api": "node --no-warnings ./tools/webgl-generator-state-topology-ui-api-regression.mjs",
+    "regress:province-naming-policy": "node --no-warnings ./tools/webgl-generator-province-naming-policy-regression.mjs",
     "regress:geojson-range": "node --no-warnings ./tools/webgl-generator-geojson-range-regression.mjs",
     "regress:geojson-range-qgis": "node --no-warnings ./tools/webgl-generator-geojson-range-qgis-regression.mjs",
     "regress:geojson-range-browser": "node --no-warnings ./tools/webgl-generator-geojson-range-browser-regression.mjs",

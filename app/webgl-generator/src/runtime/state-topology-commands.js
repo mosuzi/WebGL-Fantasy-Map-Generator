@@ -1,4 +1,5 @@
 import {systemAffected} from "./edit-command-effects.js";
+import {provinceFormForState} from "../generator/province-naming.js";
 
 const STATE_TOPOLOGY_EFFECTS = Object.freeze({
   render: "draw",
@@ -59,7 +60,8 @@ export function inspectStateMerge(map, options = {}) {
   if (!cityIds.length) return invalidInspection("state-without-city", "合并后的国家至少需要一座城市");
 
   const nextProvinceId = nextPoliticalId(map, "provinces");
-  const provinceCount = targetProvinceCount(cityIds.length, map?.options?.provincesRatio);
+  const preservedProvinceNames = affectedOldProvinceIds.map(id => provinceNameSnapshot(readProvince(map, id)));
+  const provinceCount = Math.max(targetProvinceCount(cityIds.length, map?.options?.provincesRatio), preservedProvinceNames.length);
   if (nextProvinceId + provinceCount - 1 > MAX_PROVINCE_ID) {
     return invalidInspection("province-id-overflow", `新省份编号不能超过 ${MAX_PROVINCE_ID}`);
   }
@@ -71,6 +73,7 @@ export function inspectStateMerge(map, options = {}) {
     selectedStateIds: [survivorStateId, victimStateId],
     resultStateIds: [survivorStateId],
     affectedOldProvinceIds,
+    preservedProvinceNames,
     newProvinceIds: sequence(nextProvinceId, provinceCount),
     boundaryStateIds: collectBoundaryStateIds(map, landPackCells(map).filter(cell => numberId(map.pack.cells.state[cell]) === victimStateId), new Set([survivorStateId, victimStateId])),
     gridCells: cells.gridCells,
@@ -385,12 +388,25 @@ function rebuildAffectedProvinces(map, plan) {
     const cells = landPackCells(map).filter(cell => numberId(map.pack.cells.state[cell]) === stateId);
     const cities = activeCities(map).filter(city => numberId(city.state) === stateId && cells.includes(cityPackCell(city)));
     if (!cells.length || !cities.length) throw new Error(`国家 #${stateId} 缺少可重新分省的陆地或城市`);
-    const count = targetProvinceCount(cities.length, map?.options?.provincesRatio);
+    const count = plan.operation === "merge"
+      ? plan.newProvinceIds.length
+      : targetProvinceCount(cities.length, map?.options?.provincesRatio);
     const provinceIds = sequence(provinceCursor, count);
     provinceCursor += count;
-    const centers = chooseProvinceCenters(map, stateId, cities, count);
+    const preservedProvinceNames = plan.operation === "merge" && stateId === plan.survivorStateId ? plan.preservedProvinceNames || [] : [];
+    const centers = preservedProvinceNames.length
+      ? chooseMergeProvinceCenters(map, stateId, cells, cities, count, preservedProvinceNames)
+      : chooseProvinceCenters(map, stateId, cities, count);
     const assignment = assignConnectedProvinces(map.pack.cells, cells, centers.map((city, index) => ({cell: cityPackCell(city), provinceId: provinceIds[index]})));
-    plans.push({stateId, cells, cities, centers, provinceIds, assignment});
+    plans.push({
+      stateId,
+      cells,
+      cities,
+      centers,
+      provinceIds,
+      assignment,
+      preservedProvinceNames
+    });
   }
 
   const expectedIds = plans.flatMap(item => item.provinceIds);
@@ -407,7 +423,7 @@ function rebuildAffectedProvinces(map, plan) {
       const centerCity = item.centers[index];
       const centerCell = cityPackCell(centerCity);
       const provinceCells = item.cells.filter(cell => numberId(map.pack.cells.province[cell]) === provinceId);
-      const record = buildProvinceRecord(map, item.stateId, provinceId, centerCity, centerCell, provinceCells);
+      const record = buildProvinceRecord(map, item.stateId, provinceId, centerCity, centerCell, provinceCells, item.preservedProvinceNames[index]);
       writeMirroredPoliticalItem(map, "provinces", provinceId, record);
       setCityProvincial(map, centerCity.id, true);
     }
@@ -427,6 +443,40 @@ function chooseProvinceCenters(map, stateId, cities, count) {
       || numberId(a.id) - numberId(b.id);
   });
   return ranked.slice(0, count);
+}
+
+function chooseMergeProvinceCenters(map, stateId, stateCells, cities, count, preservedProvinceNames) {
+  const allowed = new Set(stateCells);
+  const usedCells = new Set();
+  const centers = [];
+  for (const preserved of preservedProvinceNames) {
+    const preferredCell = numberId(preserved.center);
+    const centerCell = allowed.has(preferredCell)
+      ? preferredCell
+      : stateCells.find(cell => numberId(map.pack.cells.province?.[cell]) === numberId(preserved.id));
+    if (!Number.isInteger(centerCell) || usedCells.has(centerCell)) continue;
+    const city = cities.find(item => numberId(item.burgId) === numberId(preserved.burg))
+      || cities.find(item => cityPackCell(item) === centerCell);
+    centers.push(city || {
+      id: null,
+      burgId: numberId(preserved.burg),
+      name: preserved.name,
+      state: stateId,
+      packCell: centerCell,
+      cell: numberId(map.pack.cells.g?.[centerCell])
+    });
+    usedCells.add(centerCell);
+  }
+
+  for (const city of centers.length >= count ? [] : chooseProvinceCenters(map, stateId, cities, cities.length)) {
+    const cell = cityPackCell(city);
+    if (!Number.isInteger(cell) || usedCells.has(cell)) continue;
+    centers.push(city);
+    usedCells.add(cell);
+    if (centers.length >= count) break;
+  }
+  if (centers.length !== count) throw new Error(`合并后找不到足够的唯一省份中心以保留全部既有省名：${centers.length} / ${count}`);
+  return centers;
 }
 
 function assignConnectedProvinces(cells, ownedCells, seeds) {
@@ -489,9 +539,11 @@ function synchronizeCityProvinces(map, stateIds) {
   }
 }
 
-function buildProvinceRecord(map, stateId, provinceId, centerCity, centerCell, cells) {
-  const name = String(centerCity?.name || `新省${provinceId}`);
+function buildProvinceRecord(map, stateId, provinceId, centerCity, centerCell, cells, preservedName = null) {
   const state = readState(map, stateId);
+  const name = String(preservedName?.name || centerCity?.name || `新省${provinceId}`);
+  const formName = String(preservedName?.formName || provinceFormForState(state, map?.society?.cultures || map?.pack?.cultures) || "州");
+  const fullName = String(preservedName?.fullName || `${name}${formName}`);
   const area = roundValue(cells.reduce((sum, cell) => sum + Number(map.pack.cells.area?.[cell] || 0), 0), 2);
   const provinceCities = activeCities(map).filter(city => cells.includes(cityPackCell(city)));
   const urban = roundValue(provinceCities.reduce((sum, city) => sum + Number(city.population || 0), 0), 2);
@@ -504,8 +556,8 @@ function buildProvinceRecord(map, stateId, provinceId, centerCity, centerCell, c
     gridCenter: numberId(map.pack.cells.g?.[centerCell] ?? centerCity?.cell),
     burg: numberId(centerCity?.burgId),
     name,
-    formName: "州",
-    fullName: `${name}州`,
+    formName,
+    fullName,
     color: deterministicColor(`${map?.options?.seed}:province:${provinceId}:${stateId}`),
     cells: cells.length,
     area,
@@ -515,6 +567,17 @@ function buildProvinceRecord(map, stateId, provinceId, centerCity, centerCell, c
     rural,
     urban,
     religion: numberId(map.pack.cells.religion?.[centerCell] ?? state?.religion)
+  };
+}
+
+function provinceNameSnapshot(province) {
+  return {
+    id: numberId(province?.i ?? province?.id),
+    center: numberId(province?.center),
+    burg: numberId(province?.burg),
+    name: String(province?.name || ""),
+    formName: String(province?.formName || ""),
+    fullName: String(province?.fullName || province?.name || "")
   };
 }
 

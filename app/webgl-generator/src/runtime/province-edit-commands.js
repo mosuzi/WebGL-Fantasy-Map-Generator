@@ -1,4 +1,5 @@
 import {createChineseNameGenerator} from "../generator/names.js";
+import {provinceFormForState} from "../generator/province-naming.js";
 import {newObjectAffected, objectAffected, systemAffected} from "./edit-command-effects.js";
 
 const PROVINCE_CELL_SURFACE_EFFECTS = Object.freeze({
@@ -155,7 +156,8 @@ function addProvinceAtGridCell(map, gridCell) {
     culture: cultureId,
     cultureType: culture?.nameStyle || culture?.type,
     state: stateId,
-    baseName: state?.name || state?.fullName || `国家 #${stateId}`
+    baseName: state?.name || state?.fullName || `国家 #${stateId}`,
+    formName: provinceFormForState(state, map?.society?.cultures || map?.pack?.cultures)
   });
   const province = {
     id: provinceId,

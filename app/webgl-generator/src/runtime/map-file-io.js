@@ -5,6 +5,7 @@ import {normalizeLabelLayoutStore, validateLabelLayoutStore} from "./label-layou
 import {normalizeSocialExpansionMap} from "./social-expansion-edit-commands.js";
 import {backfillEconomyDisplayProperties, normalizeEconomyDisplayMap} from "../generator/economy-display-properties.js";
 import {resolveBiomeDescriptor} from "../generator/biome-registry.js";
+import {backfillProvinceNames} from "../generator/province-naming.js";
 import {
   NETWORK_GEOJSON_PROPERTY_SCHEMA_ID,
   NETWORK_GEOJSON_PROPERTY_SCHEMA_VERSION,
@@ -112,6 +113,7 @@ export function migrateMapDocument(document) {
     registry: MAP_DOCUMENT_MIGRATORS
   });
   backfillEconomyDisplayProperties(migrated.map);
+  backfillProvinceNames(migrated.map);
   validateCurrentMapDocument(migrated);
   return migrated;
 }

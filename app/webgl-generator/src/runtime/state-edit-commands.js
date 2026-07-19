@@ -1,5 +1,6 @@
 import {GOVERNMENT_BY_KEY, applyStateGovernment, setStateGovernment} from "../generator/governments.js";
 import {createChineseNameGenerator, getStateFullName} from "../generator/names.js";
+import {provinceFormForState} from "../generator/province-naming.js";
 import {createRandom} from "../generator/random.js";
 import {defaultCityVisual} from "./city-visuals.js";
 import {namebaseRenameAffected, newObjectAffected, objectAffected, systemAffected} from "./edit-command-effects.js";
@@ -487,7 +488,8 @@ function addStateAtGridCell(map, gridCell) {
     culture: cultureId,
     cultureType: culture?.nameStyle || culture?.type,
     state: stateId,
-    baseName: root
+    baseName: root,
+    formName: provinceFormForState(state, map?.society?.cultures || map?.pack?.cultures)
   });
   const province = {
     id: provinceId,

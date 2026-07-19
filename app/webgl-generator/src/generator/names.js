@@ -1,6 +1,7 @@
 import {createRandom} from "./random.js";
 import {K170_BURG_NAMES} from "./namebase-k170-burgs.js";
 import {CHINESE_PROVINCE_NAMES} from "./namebase-chinese-provinces.js";
+import {CHINESE_PROVINCE_FORMS} from "./province-naming.js";
 
 // 词素策略参考 zoningjs@3.2024.0 的县级以上中文地名韵脚，并保留项目内可 seed 的轻量词池。
 const PLACE_STEMS = [
@@ -312,7 +313,7 @@ const STATE_FORMS = {
   Hunting: ["林国", "诸部", "林盟"],
   Generic: ["国", "王国", "共和国", "帝国"]
 };
-const PROVINCE_FORMS = ["郡", "州", "道", "府", "领", "司"];
+const PROVINCE_FORMS = CHINESE_PROVINCE_FORMS;
 const DIRECTION_PREFIXES = ["东", "西", "南", "北", "上", "下", "新", "古"];
 const STATE_VARIANT_PREFIXES = ["东", "西", "南", "北", "前", "后", "新", "古"];
 const CARDINAL_PREFIXES = new Set(["东", "西", "南", "北"]);
@@ -457,7 +458,7 @@ export function createChineseNameGenerator(seed = "map", context = {}) {
       const baseRoot = trimStateForm(options.baseName);
       const initialRoot = baseRoot && rng.next() < 0.55 ? baseRoot : makePrimaryCandidate();
       const root = makeUniqueGenerated(used, "province", initialRoot, rng, makeCollisionCandidate, 128);
-      const formName = PROVINCE_FORMS[(options.id || 0) % PROVINCE_FORMS.length];
+      const formName = String(options.formName || "").trim() || PROVINCE_FORMS[(options.id || 0) % PROVINCE_FORMS.length];
       return {
         name: root,
         formName,
