@@ -12,6 +12,7 @@ import {buildPack} from "./pack.js";
 import {buildPolitics} from "./politics.js";
 import {createStageProfile} from "./profile.js";
 import {createRandom, stableHash} from "./random.js";
+import {buildOceanCurrents} from "./ocean-currents.js";
 import {buildRivers, renameHydronymsByCulture} from "./rivers.js";
 import {buildSettlements, finalizeSettlements} from "./settlements.js";
 import {buildSociety, finalizeSocietyReligions} from "./society.js";
@@ -34,6 +35,13 @@ export function generatePlaceholderMap(inputOptions = {}, overrides = {}) {
   const features = profile.stage("features", "提取水陆 feature", () => extractFeatures(grid));
   const climateRandom = profile.stage("random-climate", "初始化气候随机源", () => createRandom(generationOptions.seed));
   const climate = profile.stage("climate", "生成气候", () => buildClimate(grid, features, generationOptions, climateRandom));
+  const oceanCurrents = profile.stage("ocean-currents", "生成主要表层洋流", () => buildOceanCurrents({
+    metadata: {seed: generationOptions.seed, graphWidth: generationOptions.graphWidth, graphHeight: generationOptions.graphHeight},
+    options: generationOptions,
+    grid,
+    features,
+    mapCoordinates: climate.mapCoordinates
+  }));
   const pack = profile.stage("pack", "构建 pack 语义图", () => buildPack(grid, features));
   const rivers = profile.stage("rivers", "生成河流", () => buildRivers(grid, features, pack, stageOptions));
   const biomes = profile.stage("biomes-population", "生成生物群系与人口评分", () => defineBiomesAndPopulation(grid, pack, generationOptions));
@@ -78,6 +86,7 @@ export function generatePlaceholderMap(inputOptions = {}, overrides = {}) {
     heightmap,
     grid,
     climate,
+    oceanCurrents,
     mapCoordinates: climate.mapCoordinates,
     society,
     politics,
@@ -100,6 +109,7 @@ export function generatePlaceholderMap(inputOptions = {}, overrides = {}) {
       `build grid: ${grid.metadata.actualCells} cells, ${grid.metadata.vertexCount} vertices, ${grid.metadata.triangles} triangles`,
       `extract features: land=${features.metadata.landFeatures}, ocean=${features.metadata.oceanFeatures}, lakes=${features.metadata.lakeFeatures}`,
       `build climate: ${climate.metadata.latitudeLabel}, ${climate.metadata.atmosphereLabel}, temp=${climate.metadata.temperatureMin}..${climate.metadata.temperatureMax}, prec=${climate.metadata.precipitationMin}..${climate.metadata.precipitationMax}`,
+      `build ocean currents: currents=${oceanCurrents.metadata.count}, basins=${oceanCurrents.metadata.basins}, algorithm=${oceanCurrents.algorithm}`,
       `build pack: ${pack.metadata.cells} semantic cells, mapping=${pack.metadata.mapping}`,
       `trace rivers: rivers=${rivers.metadata.rivers}, segments=${rivers.metadata.segments}`,
       `define biomes and rank cells: biomes=${Object.keys(biomes.metadata.biomeCounts).length}, populationCells=${biomes.metadata.positivePopulationCells}`,

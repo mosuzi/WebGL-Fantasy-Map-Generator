@@ -8,6 +8,7 @@ import {resolveBiomeDescriptor} from "../generator/biome-registry.js";
 import {backfillProvinceNames} from "../generator/province-naming.js";
 import {normalizeDiplomacyMap} from "./diplomacy-map-compatibility.js";
 import {normalizeUnitPreferences} from "../ui/display-units.js";
+import {normalizeOceanCurrentModel, OCEAN_CURRENT_MODEL_VERSION} from "../generator/ocean-currents.js";
 import {
   NETWORK_GEOJSON_PROPERTY_SCHEMA_ID,
   NETWORK_GEOJSON_PROPERTY_SCHEMA_VERSION,
@@ -120,6 +121,7 @@ export function migrateMapDocument(document) {
   backfillEconomyDisplayProperties(migrated.map);
   backfillProvinceNames(migrated.map);
   migrated.map = normalizeDiplomacyMap(migrated.map);
+  migrated.map.oceanCurrents = normalizeOceanCurrentModel(migrated.map.oceanCurrents);
   validateCurrentMapDocument(migrated);
   return migrated;
 }
@@ -466,6 +468,9 @@ function validateCurrentMapDocument(document) {
     throw new Error("地图数据缺少 diplomacy 存储");
   }
   if (document.map.display?.units && !Array.isArray(document.map.display.units.customUnits)) throw new Error("地图数据的自定义单位列表无效");
+  if (Number(document.map.oceanCurrents?.version) !== OCEAN_CURRENT_MODEL_VERSION || !Array.isArray(document.map.oceanCurrents?.currents)) {
+    throw new Error("地图数据缺少 oceanCurrents 存储");
+  }
   for (const states of [document.map.politics?.states, document.map.pack?.states]) {
     for (const state of states || []) {
       if (!state || state.removed || Number(state.i ?? state.id) <= 0) continue;
@@ -493,7 +498,8 @@ function normalizeMapSchemaV2(map, documentOptions = {}) {
     notes: normalizeNotesStoreV2(source.notes),
     measurements: normalizeMeasurementStoreV2(source.measurements),
     labels: normalizeLabelStoreV2(source.labels),
-    visualTheme: normalizeVisualThemeStoreV2(source.visualTheme, options.visualTheme)
+    visualTheme: normalizeVisualThemeStoreV2(source.visualTheme, options.visualTheme),
+    oceanCurrents: normalizeOceanCurrentModel(source.oceanCurrents)
   };
   return normalizeDiplomacyMap(normalizeEconomyDisplayMap(normalizeSocialExpansionMap(normalized)));
 }
