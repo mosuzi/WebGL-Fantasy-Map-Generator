@@ -95,6 +95,17 @@ history.undo(context);
 assert.equal(resolveLabelStyle(map, "custom").fontFamilyId, "serif", "本机字体撤销没有恢复内置字体");
 history.redo(context);
 assert.equal(resolveLabelStyle(map, "custom").fontFamilyName, "Archive Only Font", "本机字体重做没有恢复字体族名称");
+history.execute(createPatchLabelStyleCommand("custom", {strokeWidth: 0.05, shadowOffsetX: 0.1, shadowOffsetY: -0.1, shadowBlur: 0.1}), context);
+const fineEffectStyle = resolveLabelStyle(map, "custom");
+assert.equal(fineEffectStyle.strokeWidth, 0.05, "细描边被归零或四舍五入");
+assert.equal(fineEffectStyle.shadowOffsetX, 0.1, "阴影横移细步长没有保留");
+assert.equal(fineEffectStyle.shadowOffsetY, -0.1, "阴影纵移细步长没有保留负值");
+assert.equal(fineEffectStyle.shadowBlur, 0.1, "阴影模糊细步长没有保留");
+history.undo(context);
+assert.equal(resolveLabelStyle(map, "custom").strokeWidth, 0, "细效果撤销没有恢复描边");
+history.redo(context);
+assert.equal(resolveLabelStyle(map, "custom").strokeWidth, 0.05, "细效果重做没有恢复描边");
+assert.equal(resolveLabelStyle(map, "custom").shadowOffsetY, -0.1, "细效果重做没有恢复阴影");
 
 assert.equal(labelStyleTypeForTarget(LABEL_TARGET_KIND.CITY, map.settlements.cities[0]), "capital", "首都样式拆分改变了 city target identity");
 assert.equal(LABEL_TARGET_KIND.CITY, "city");
@@ -112,6 +123,10 @@ const document = createMapDocument(map, map.options);
 const roundTrip = parseMapDocument(stringifyMapDocument(document));
 assert.equal(roundTrip.map.labels.styles.version, 1);
 assert.equal(roundTrip.map.labels.styles.overrides.custom.fontFamilyName, "Archive Only Font", "完整地图没有保存本机字体族名称");
+assert.equal(roundTrip.map.labels.styles.overrides.custom.strokeWidth, 0.05, "完整地图没有保留细描边");
+assert.equal(roundTrip.map.labels.styles.overrides.custom.shadowOffsetX, 0.1, "完整地图没有保留细阴影横移");
+assert.equal(roundTrip.map.labels.styles.overrides.custom.shadowOffsetY, -0.1, "完整地图没有保留细阴影纵移");
+assert.equal(roundTrip.map.labels.styles.overrides.custom.shadowBlur, 0.1, "完整地图没有保留细阴影模糊");
 const oldV2 = structuredClone(document);
 delete oldV2.map.labels.styles;
 delete oldV2.map.labels.hidden.province;
@@ -145,10 +160,16 @@ assert.match(rendererSource, /provinceLabel[\s\S]*boxesOverlapAny\(occupiedState
 assert.match(controlPanelSource, /data-control-panel="styles"[\s\S]*reset-all-label-styles/, "样式页或全部重置入口缺失");
 assert.match(controlPanelSource, /load-local-label-fonts[\s\S]*queryLocalFonts/, "样式页没有用户触发的本机字体读取入口");
 assert.match(controlPanelSource, /本机未检测到[\s\S]*系统字体/, "样式页没有缺失字体 fallback 状态");
+assert.match(controlPanelSource, /input-id="label-style-stroke-width"[^>]*:step="0\.05"/, "描边步长不是 0.05");
+assert.match(controlPanelSource, /input-id="label-style-shadow-x"[^>]*:step="0\.1"/, "阴影横移步长不是 0.1");
+assert.match(controlPanelSource, /input-id="label-style-shadow-y"[^>]*:step="0\.1"/, "阴影纵移步长不是 0.1");
+assert.match(controlPanelSource, /input-id="label-style-shadow-blur"[^>]*:step="0\.1"/, "阴影模糊步长不是 0.1");
 const stylePanelSource = controlPanelSource.match(/class="control-panel-section label-style-panel"[\s\S]*?data-control-panel="units"/)?.[0] || "";
 assert.equal(stylePanelSource.match(/unit-label="px"/g)?.length, 6, "样式页 px 滑动条数量发生漂移");
 assert.match(stylesSource, /\.label-style-panel \.ui-slider-field-has-unit\s*\{[^}]*grid-template-columns:\s*44px minmax\(0, 1fr\) 84px max-content;/, "样式页没有为单位保留第四列");
 assert.match(mapIoSource, /\.province-label\.visible/, "PNG overlay 没有纳入省份名称");
+assert.match(rendererSource, /--label-stroke-width[\s\S]*--label-shadow-offset-x[\s\S]*--label-shadow-blur/, "实时标签没有把细效果值写入共享 CSS 变量");
+assert.match(mapIoSource, /--label-stroke-width[\s\S]*--label-shadow-blur[\s\S]*--label-shadow-offset-x[\s\S]*--label-shadow-offset-y/, "PNG 没有读取实时标签的共享效果值");
 assert.match(mapIoSource, /context\.strokeText\([\s\S]*context\.fillText\(/, "PNG 文字没有按描边→填充绘制");
 
 console.log(JSON.stringify({

@@ -391,10 +391,10 @@
         <label>描边色<input id="label-style-stroke-color" type="color" :value="activeLabelStyle.strokeColor" @change="event => commitLabelStyle('strokeColor', event.target.value)" /></label>
         <label>阴影色<input id="label-style-shadow-color" type="color" :value="activeLabelStyle.shadowColor" @change="event => commitLabelStyle('shadowColor', event.target.value)" /></label>
       </div>
-      <UiSliderField label="描边" input-id="label-style-stroke-width" :model-value="activeLabelStyle.strokeWidth" :min="0" :max="8" :step="0.25" unit-label="px" @change="value => commitLabelStyle('strokeWidth', value)" />
-      <UiSliderField label="阴影横移" input-id="label-style-shadow-x" :model-value="activeLabelStyle.shadowOffsetX" :min="-20" :max="20" :step="0.5" unit-label="px" @change="value => commitLabelStyle('shadowOffsetX', value)" />
-      <UiSliderField label="阴影纵移" input-id="label-style-shadow-y" :model-value="activeLabelStyle.shadowOffsetY" :min="-20" :max="20" :step="0.5" unit-label="px" @change="value => commitLabelStyle('shadowOffsetY', value)" />
-      <UiSliderField label="阴影模糊" input-id="label-style-shadow-blur" :model-value="activeLabelStyle.shadowBlur" :min="0" :max="30" :step="0.5" unit-label="px" @change="value => commitLabelStyle('shadowBlur', value)" />
+      <UiSliderField label="描边" input-id="label-style-stroke-width" :model-value="activeLabelStyle.strokeWidth" :min="0" :max="8" :step="0.05" unit-label="px" @change="value => commitLabelStyle('strokeWidth', value)" />
+      <UiSliderField label="阴影横移" input-id="label-style-shadow-x" :model-value="activeLabelStyle.shadowOffsetX" :min="-20" :max="20" :step="0.1" unit-label="px" @change="value => commitLabelStyle('shadowOffsetX', value)" />
+      <UiSliderField label="阴影纵移" input-id="label-style-shadow-y" :model-value="activeLabelStyle.shadowOffsetY" :min="-20" :max="20" :step="0.1" unit-label="px" @change="value => commitLabelStyle('shadowOffsetY', value)" />
+      <UiSliderField label="阴影模糊" input-id="label-style-shadow-blur" :model-value="activeLabelStyle.shadowBlur" :min="0" :max="30" :step="0.1" unit-label="px" @change="value => commitLabelStyle('shadowBlur', value)" />
       <div class="visual-theme-action-row">
         <UiButton id="reset-current-label-style" variant="secondary" @click="resetCurrentLabelStyle">重置当前类型</UiButton>
         <UiButton id="reset-all-label-styles" variant="danger" @click="resetAllLabelStyles">重置全部</UiButton>
