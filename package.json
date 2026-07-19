@@ -38,6 +38,8 @@
     "regress:interaction-danger-recovery": "node --no-warnings ./tools/webgl-generator-interaction-danger-recovery-regression.mjs",
     "audit:interaction-keyboard-visual": "node --no-warnings ./tools/webgl-generator-interaction-keyboard-visual-audit.mjs --check",
     "regress:interaction-keyboard-visual": "node --no-warnings ./tools/webgl-generator-interaction-keyboard-visual-regression.mjs",
+    "audit:interaction-final": "node --no-warnings ./tools/webgl-generator-interaction-final-audit.mjs --check",
+    "regress:interaction-final": "node --no-warnings ./tools/webgl-generator-interaction-final-regression.mjs",
     "profile:generation": "node ./tools/webgl-generator-generation-profile.mjs",
     "regress:geo": "node ./tools/webgl-generator-geo-import-regression.mjs",
     "regress:measurement": "node ./tools/webgl-generator-measurement-import-regression.mjs",

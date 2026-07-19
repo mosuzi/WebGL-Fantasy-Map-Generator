@@ -1,0 +1,2296 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-07-19T16:36:45.016Z",
+  "cases": [
+    {
+      "schemaVersion": 1,
+      "caseId": "KV-106-css-stress-baseline",
+      "suite": "visual",
+      "variant": "baseline",
+      "ok": true,
+      "url": "http://127.0.0.1:5410/?healthClear=1&auditSuite=visual&auditNonce=1784478212621",
+      "viewport": {
+        "width": 576,
+        "height": 576,
+        "devicePixelRatio": 1.0000000149011612
+      },
+      "fixture": "F1",
+      "checks": {
+        "documentOverflowX": false,
+        "documentOverflowY": true,
+        "visibleElements": 86,
+        "outsideViewport": [
+          {
+            "tag": "SECTION",
+            "id": "",
+            "className": "floating-panel",
+            "rect": {
+              "x": 8,
+              "y": 128,
+              "left": 8,
+              "top": 128,
+              "right": 568,
+              "bottom": 686.7,
+              "width": 560,
+              "height": 558.7
+            },
+            "clipped": false,
+            "fontSize": "16px",
+            "zIndex": "902"
+          },
+          {
+            "tag": "BUTTON",
+            "id": "",
+            "className": "object-table-column-resize-handle",
+            "rect": {
+              "x": 578.6,
+              "y": 383.4,
+              "left": 578.6,
+              "top": 383.4,
+              "right": 586.6,
+              "bottom": 413.4,
+              "width": 8,
+              "height": 30
+            },
+            "clipped": false,
+            "fontSize": "12px",
+            "zIndex": "4"
+          },
+          {
+            "tag": "BUTTON",
+            "id": "",
+            "className": "object-table-sort-button",
+            "rect": {
+              "x": 591.6,
+              "y": 389.4,
+              "left": 591.6,
+              "top": 389.4,
+              "right": 639.6,
+              "bottom": 407.4,
+              "width": 48,
+              "height": 18
+            },
+            "clipped": false,
+            "fontSize": "12px",
+            "zIndex": "auto"
+          },
+          {
+            "tag": "BUTTON",
+            "id": "",
+            "className": "object-table-column-resize-handle",
+            "rect": {
+              "x": 642.6,
+              "y": 383.4,
+              "left": 642.6,
+              "top": 383.4,
+              "right": 650.6,
+              "bottom": 413.4,
+              "width": 8,
+              "height": 30
+            },
+            "clipped": false,
+            "fontSize": "12px",
+            "zIndex": "4"
+          },
+          {
+            "tag": "BUTTON",
+            "id": "",
+            "className": "object-table-sort-button",
+            "rect": {
+              "x": 655.6,
+              "y": 389.4,
+              "left": 655.6,
+              "top": 389.4,
+              "right": 703.6,
+              "bottom": 407.4,
+              "width": 48,
+              "height": 18
+            },
+            "clipped": false,
+            "fontSize": "12px",
+            "zIndex": "auto"
+          },
+          {
+            "tag": "BUTTON",
+            "id": "",
+            "className": "object-table-column-resize-handle",
+            "rect": {
+              "x": 706.6,
+              "y": 383.4,
+              "left": 706.6,
+              "top": 383.4,
+              "right": 714.6,
+              "bottom": 413.4,
+              "width": 8,
+              "height": 30
+            },
+            "clipped": false,
+            "fontSize": "12px",
+            "zIndex": "4"
+          },
+          {
+            "tag": "INPUT",
+            "id": "",
+            "className": "object-table-selection-checkbox object-table-row-selection-checkbox",
+            "rect": {
+              "x": 31.6,
+              "y": 591.8,
+              "left": 31.6,
+              "top": 591.8,
+              "right": 45.6,
+              "bottom": 605.8,
+              "width": 14,
+              "height": 14
+            },
+            "clipped": false,
+            "fontSize": "12px",
+            "zIndex": "auto"
+          },
+          {
+            "tag": "BUTTON",
+            "id": "",
+            "className": "table-icon-action",
+            "rect": {
+              "x": 488,
+              "y": 583.4,
+              "left": 488,
+              "top": 583.4,
+              "right": 516,
+              "bottom": 611.4,
+              "width": 28,
+              "height": 28
+            },
+            "clipped": false,
+            "fontSize": "13px",
+            "zIndex": "auto"
+          },
+          {
+            "tag": "INPUT",
+            "id": "",
+            "className": "object-table-selection-checkbox object-table-row-selection-checkbox",
+            "rect": {
+              "x": 31.6,
+              "y": 632.5,
+              "left": 31.6,
+              "top": 632.5,
+              "right": 45.6,
+              "bottom": 646.5,
+              "width": 14,
+              "height": 14
+            },
+            "clipped": false,
+            "fontSize": "12px",
+            "zIndex": "auto"
+          },
+          {
+            "tag": "BUTTON",
+            "id": "",
+            "className": "table-icon-action",
+            "rect": {
+              "x": 488,
+              "y": 624.2,
+              "left": 488,
+              "top": 624.2,
+              "right": 516,
+              "bottom": 652.2,
+              "width": 28,
+              "height": 28
+            },
+            "clipped": false,
+            "fontSize": "13px",
+            "zIndex": "auto"
+          },
+          {
+            "tag": "INPUT",
+            "id": "",
+            "className": "object-table-selection-checkbox object-table-row-selection-checkbox",
+            "rect": {
+              "x": 31.6,
+              "y": 673.4,
+              "left": 31.6,
+              "top": 673.4,
+              "right": 45.6,
+              "bottom": 687.4,
+              "width": 14,
+              "height": 14
+            },
+            "clipped": false,
+            "fontSize": "12px",
+            "zIndex": "auto"
+          },
+          {
+            "tag": "BUTTON",
+            "id": "",
+            "className": "table-icon-action",
+            "rect": {
+              "x": 488,
+              "y": 665,
+              "left": 488,
+              "top": 665,
+              "right": 516,
+              "bottom": 693,
+              "width": 28,
+              "height": 28
+            },
+            "clipped": false,
+            "fontSize": "13px",
+            "zIndex": "auto"
+          }
+        ],
+        "clippedElements": [
+          {
+            "tag": "SELECT",
+            "id": "",
+            "className": "ui-select-native",
+            "rect": {
+              "x": 118.8,
+              "y": 1078.9,
+              "left": 118.8,
+              "top": 1078.9,
+              "right": 540,
+              "bottom": 1080.5,
+              "width": 421.2,
+              "height": 1.6
+            },
+            "clipped": true,
+            "fontSize": "12px",
+            "zIndex": "auto"
+          },
+          {
+            "tag": "INPUT",
+            "id": "",
+            "className": "ui-slider-native",
+            "rect": {
+              "x": 94.8,
+              "y": 1180.4,
+              "left": 94.8,
+              "top": 1180.4,
+              "right": 95.8,
+              "bottom": 1181.4,
+              "width": 1,
+              "height": 1
+            },
+            "clipped": true,
+            "fontSize": "12px",
+            "zIndex": "auto"
+          }
+        ],
+        "smallTargets": [
+          {
+            "tag": "BUTTON",
+            "id": "",
+            "className": "object-table-sort-button",
+            "rect": {
+              "x": 63.6,
+              "y": 389.4,
+              "left": 63.6,
+              "top": 389.4,
+              "right": 103.6,
+              "bottom": 407.4,
+              "width": 40,
+              "height": 18
+            },
+            "clipped": false,
+            "fontSize": "12px",
+            "zIndex": "auto"
+          },
+          {
+            "tag": "BUTTON",
+            "id": "",
+            "className": "object-table-column-resize-handle",
+            "rect": {
+              "x": 106.6,
+              "y": 383.4,
+              "left": 106.6,
+              "top": 383.4,
+              "right": 114.6,
+              "bottom": 413.4,
+              "width": 8,
+              "height": 30
+            },
+            "clipped": false,
+            "fontSize": "12px",
+            "zIndex": "4"
+          },
+          {
+            "tag": "BUTTON",
+            "id": "",
+            "className": "object-table-column-resize-handle",
+            "rect": {
+              "x": 226.6,
+              "y": 383.4,
+              "left": 226.6,
+              "top": 383.4,
+              "right": 234.6,
+              "bottom": 413.4,
+              "width": 8,
+              "height": 30
+            },
+            "clipped": false,
+            "fontSize": "12px",
+            "zIndex": "4"
+          },
+          {
+            "tag": "BUTTON",
+            "id": "",
+            "className": "object-table-column-resize-handle",
+            "rect": {
+              "x": 310.6,
+              "y": 383.4,
+              "left": 310.6,
+              "top": 383.4,
+              "right": 318.6,
+              "bottom": 413.4,
+              "width": 8,
+              "height": 30
+            },
+            "clipped": false,
+            "fontSize": "12px",
+            "zIndex": "4"
+          },
+          {
+            "tag": "BUTTON",
+            "id": "",
+            "className": "object-table-column-resize-handle",
+            "rect": {
+              "x": 422.6,
+              "y": 383.4,
+              "left": 422.6,
+              "top": 383.4,
+              "right": 430.6,
+              "bottom": 413.4,
+              "width": 8,
+              "height": 30
+            },
+            "clipped": false,
+            "fontSize": "12px",
+            "zIndex": "4"
+          },
+          {
+            "tag": "BUTTON",
+            "id": "",
+            "className": "object-table-sort-button",
+            "rect": {
+              "x": 435.6,
+              "y": 389.4,
+              "left": 435.6,
+              "top": 389.4,
+              "right": 483.6,
+              "bottom": 407.4,
+              "width": 48,
+              "height": 18
+            },
+            "clipped": false,
+            "fontSize": "12px",
+            "zIndex": "auto"
+          },
+          {
+            "tag": "BUTTON",
+            "id": "",
+            "className": "object-table-column-resize-handle",
+            "rect": {
+              "x": 486.6,
+              "y": 383.4,
+              "left": 486.6,
+              "top": 383.4,
+              "right": 494.6,
+              "bottom": 413.4,
+              "width": 8,
+              "height": 30
+            },
+            "clipped": false,
+            "fontSize": "12px",
+            "zIndex": "4"
+          },
+          {
+            "tag": "BUTTON",
+            "id": "",
+            "className": "object-table-sort-button",
+            "rect": {
+              "x": 499.6,
+              "y": 389.4,
+              "left": 499.6,
+              "top": 389.4,
+              "right": 575.6,
+              "bottom": 407.4,
+              "width": 76,
+              "height": 18
+            },
+            "clipped": false,
+            "fontSize": "12px",
+            "zIndex": "auto"
+          },
+          {
+            "tag": "BUTTON",
+            "id": "",
+            "className": "object-table-column-resize-handle",
+            "rect": {
+              "x": 578.6,
+              "y": 383.4,
+              "left": 578.6,
+              "top": 383.4,
+              "right": 586.6,
+              "bottom": 413.4,
+              "width": 8,
+              "height": 30
+            },
+            "clipped": false,
+            "fontSize": "12px",
+            "zIndex": "4"
+          },
+          {
+            "tag": "BUTTON",
+            "id": "",
+            "className": "object-table-sort-button",
+            "rect": {
+              "x": 591.6,
+              "y": 389.4,
+              "left": 591.6,
+              "top": 389.4,
+              "right": 639.6,
+              "bottom": 407.4,
+              "width": 48,
+              "height": 18
+            },
+            "clipped": false,
+            "fontSize": "12px",
+            "zIndex": "auto"
+          },
+          {
+            "tag": "BUTTON",
+            "id": "",
+            "className": "object-table-column-resize-handle",
+            "rect": {
+              "x": 642.6,
+              "y": 383.4,
+              "left": 642.6,
+              "top": 383.4,
+              "right": 650.6,
+              "bottom": 413.4,
+              "width": 8,
+              "height": 30
+            },
+            "clipped": false,
+            "fontSize": "12px",
+            "zIndex": "4"
+          },
+          {
+            "tag": "BUTTON",
+            "id": "",
+            "className": "object-table-sort-button",
+            "rect": {
+              "x": 655.6,
+              "y": 389.4,
+              "left": 655.6,
+              "top": 389.4,
+              "right": 703.6,
+              "bottom": 407.4,
+              "width": 48,
+              "height": 18
+            },
+            "clipped": false,
+            "fontSize": "12px",
+            "zIndex": "auto"
+          },
+          {
+            "tag": "BUTTON",
+            "id": "",
+            "className": "object-table-column-resize-handle",
+            "rect": {
+              "x": 706.6,
+              "y": 383.4,
+              "left": 706.6,
+              "top": 383.4,
+              "right": 714.6,
+              "bottom": 413.4,
+              "width": 8,
+              "height": 30
+            },
+            "clipped": false,
+            "fontSize": "12px",
+            "zIndex": "4"
+          }
+        ],
+        "focusables": 80,
+        "positiveTabIndex": 0,
+        "activeElement": "section.floating-panel",
+        "managedOverlays": 1,
+        "stateBannerKinds": [],
+        "glError": 0,
+        "healthErrors": 0
+      },
+      "generatedAt": "2026-07-19T16:23:34.785Z"
+    },
+    {
+      "schemaVersion": 1,
+      "caseId": "KV-106-css-stress-expanded-options",
+      "suite": "visual",
+      "variant": "expanded-options",
+      "ok": true,
+      "url": "http://127.0.0.1:5410/?healthClear=1&auditSuite=visual&auditNonce=1784478220775",
+      "viewport": {
+        "width": 576,
+        "height": 576,
+        "devicePixelRatio": 1.0000000149011612
+      },
+      "fixture": "F1",
+      "checks": {
+        "documentOverflowX": false,
+        "documentOverflowY": false,
+        "visibleElements": 7,
+        "outsideViewport": [],
+        "clippedElements": [],
+        "smallTargets": [],
+        "focusables": 1,
+        "positiveTabIndex": 0,
+        "activeElement": "section.floating-panel.editing-panel-disabled",
+        "managedOverlays": 1,
+        "stateBannerKinds": [],
+        "glError": 0,
+        "healthErrors": 0
+      },
+      "generatedAt": "2026-07-19T16:23:43.041Z"
+    },
+    {
+      "schemaVersion": 1,
+      "caseId": "KV-106-css-stress-font-and-states",
+      "suite": "visual",
+      "variant": "font-and-states",
+      "ok": true,
+      "url": "http://127.0.0.1:5410/?healthClear=1&auditSuite=visual&auditNonce=1784478224841",
+      "viewport": {
+        "width": 576,
+        "height": 576,
+        "devicePixelRatio": 1.0000000149011612
+      },
+      "fixture": "F6",
+      "checks": {
+        "documentOverflowX": false,
+        "documentOverflowY": false,
+        "visibleElements": 7,
+        "outsideViewport": [],
+        "clippedElements": [
+          {
+            "tag": "BUTTON",
+            "id": "",
+            "className": "floating-panel-history-button floating-panel-history-undo",
+            "rect": {
+              "x": 467.2,
+              "y": 133.4,
+              "left": 467.2,
+              "top": 133.4,
+              "right": 495.2,
+              "bottom": 161.4,
+              "width": 28,
+              "height": 28
+            },
+            "clipped": true,
+            "fontSize": "30px",
+            "zIndex": "auto"
+          },
+          {
+            "tag": "BUTTON",
+            "id": "",
+            "className": "floating-panel-history-button floating-panel-history-redo",
+            "rect": {
+              "x": 499.2,
+              "y": 133.4,
+              "left": 499.2,
+              "top": 133.4,
+              "right": 527.2,
+              "bottom": 161.4,
+              "width": 28,
+              "height": 28
+            },
+            "clipped": true,
+            "fontSize": "30px",
+            "zIndex": "auto"
+          },
+          {
+            "tag": "BUTTON",
+            "id": "",
+            "className": "ui-close-button floating-panel-close",
+            "rect": {
+              "x": 531.2,
+              "y": 133.4,
+              "left": 531.2,
+              "top": 133.4,
+              "right": 559.2,
+              "bottom": 161.4,
+              "width": 28,
+              "height": 28
+            },
+            "clipped": true,
+            "fontSize": "27px",
+            "zIndex": "auto"
+          }
+        ],
+        "smallTargets": [],
+        "focusables": 4,
+        "positiveTabIndex": 0,
+        "activeElement": "section.floating-panel",
+        "managedOverlays": 1,
+        "stateBannerKinds": [],
+        "glError": 0,
+        "healthErrors": 0
+      },
+      "generatedAt": "2026-07-19T16:23:46.961Z"
+    },
+    {
+      "schemaVersion": 1,
+      "caseId": "KV-106-css-stress-long-zh",
+      "suite": "visual",
+      "variant": "long-zh",
+      "ok": true,
+      "url": "http://127.0.0.1:5410/?healthClear=1&auditSuite=visual&auditNonce=1784478216694",
+      "viewport": {
+        "width": 576,
+        "height": 576,
+        "devicePixelRatio": 1.0000000149011612
+      },
+      "fixture": "F1",
+      "checks": {
+        "documentOverflowX": true,
+        "documentOverflowY": false,
+        "visibleElements": 7,
+        "outsideViewport": [
+          {
+            "tag": "BUTTON",
+            "id": "fit-view",
+            "className": "el-button secondary-action",
+            "rect": {
+              "x": 349,
+              "y": 18,
+              "left": 349,
+              "top": 18,
+              "right": 673.6,
+              "bottom": 52,
+              "width": 324.6,
+              "height": 34
+            },
+            "clipped": false,
+            "fontSize": "13px",
+            "zIndex": "auto"
+          },
+          {
+            "tag": "BUTTON",
+            "id": "toggle-measurement",
+            "className": "el-button secondary-action",
+            "rect": {
+              "x": 681.6,
+              "y": 18,
+              "left": 681.6,
+              "top": 18,
+              "right": 980.2,
+              "bottom": 52,
+              "width": 298.6,
+              "height": 34
+            },
+            "clipped": false,
+            "fontSize": "13px",
+            "zIndex": "auto"
+          }
+        ],
+        "clippedElements": [
+          {
+            "tag": "SECTION",
+            "id": "",
+            "className": "floating-panel",
+            "rect": {
+              "x": 8,
+              "y": 128,
+              "left": 8,
+              "top": 128,
+              "right": 568,
+              "bottom": 328,
+              "width": 560,
+              "height": 200
+            },
+            "clipped": true,
+            "fontSize": "16px",
+            "zIndex": "902"
+          },
+          {
+            "tag": "BUTTON",
+            "id": "",
+            "className": "floating-panel-history-button floating-panel-history-undo",
+            "rect": {
+              "x": 467.2,
+              "y": 133.4,
+              "left": 467.2,
+              "top": 133.4,
+              "right": 495.2,
+              "bottom": 161.4,
+              "width": 28,
+              "height": 28
+            },
+            "clipped": true,
+            "fontSize": "16px",
+            "zIndex": "auto"
+          },
+          {
+            "tag": "BUTTON",
+            "id": "",
+            "className": "floating-panel-history-button floating-panel-history-redo",
+            "rect": {
+              "x": 499.2,
+              "y": 133.4,
+              "left": 499.2,
+              "top": 133.4,
+              "right": 527.2,
+              "bottom": 161.4,
+              "width": 28,
+              "height": 28
+            },
+            "clipped": true,
+            "fontSize": "16px",
+            "zIndex": "auto"
+          },
+          {
+            "tag": "BUTTON",
+            "id": "",
+            "className": "ui-close-button floating-panel-close",
+            "rect": {
+              "x": 531.2,
+              "y": 133.4,
+              "left": 531.2,
+              "top": 133.4,
+              "right": 559.2,
+              "bottom": 161.4,
+              "width": 28,
+              "height": 28
+            },
+            "clipped": true,
+            "fontSize": "18px",
+            "zIndex": "auto"
+          }
+        ],
+        "smallTargets": [],
+        "focusables": 4,
+        "positiveTabIndex": 0,
+        "activeElement": "section.floating-panel",
+        "managedOverlays": 1,
+        "stateBannerKinds": [],
+        "glError": 0,
+        "healthErrors": 0
+      },
+      "generatedAt": "2026-07-19T16:23:39.350Z"
+    },
+    {
+      "schemaVersion": 1,
+      "caseId": "KV-106-desktop-baseline",
+      "suite": "visual",
+      "variant": "baseline",
+      "ok": true,
+      "url": "http://127.0.0.1:5410/?healthClear=1&auditSuite=visual&auditNonce=1784478158403",
+      "viewport": {
+        "width": 1280,
+        "height": 720,
+        "devicePixelRatio": 1.0000000149011612
+      },
+      "fixture": "F1",
+      "checks": {
+        "documentOverflowX": false,
+        "documentOverflowY": false,
+        "visibleElements": 7,
+        "outsideViewport": [],
+        "clippedElements": [],
+        "smallTargets": [],
+        "focusables": 4,
+        "positiveTabIndex": 0,
+        "activeElement": "section.floating-panel",
+        "managedOverlays": 1,
+        "stateBannerKinds": [],
+        "glError": 0,
+        "healthErrors": 0
+      },
+      "generatedAt": "2026-07-19T16:22:40.611Z"
+    },
+    {
+      "schemaVersion": 1,
+      "caseId": "KV-106-desktop-expanded-options",
+      "suite": "visual",
+      "variant": "expanded-options",
+      "ok": true,
+      "url": "http://127.0.0.1:5410/?healthClear=1&auditSuite=visual&auditNonce=1784478166571",
+      "viewport": {
+        "width": 1280,
+        "height": 720,
+        "devicePixelRatio": 1.0000000149011612
+      },
+      "fixture": "F1",
+      "checks": {
+        "documentOverflowX": false,
+        "documentOverflowY": false,
+        "visibleElements": 7,
+        "outsideViewport": [],
+        "clippedElements": [],
+        "smallTargets": [],
+        "focusables": 1,
+        "positiveTabIndex": 0,
+        "activeElement": "section.floating-panel.editing-panel-disabled",
+        "managedOverlays": 1,
+        "stateBannerKinds": [],
+        "glError": 0,
+        "healthErrors": 0
+      },
+      "generatedAt": "2026-07-19T16:22:48.970Z"
+    },
+    {
+      "schemaVersion": 1,
+      "caseId": "KV-106-desktop-font-and-states",
+      "suite": "visual",
+      "variant": "font-and-states",
+      "ok": true,
+      "url": "http://127.0.0.1:5410/?healthClear=1&auditSuite=visual&auditNonce=1784478170657",
+      "viewport": {
+        "width": 1280,
+        "height": 720,
+        "devicePixelRatio": 1.0000000149011612
+      },
+      "fixture": "F6",
+      "checks": {
+        "documentOverflowX": false,
+        "documentOverflowY": false,
+        "visibleElements": 7,
+        "outsideViewport": [],
+        "clippedElements": [
+          {
+            "tag": "BUTTON",
+            "id": "",
+            "className": "floating-panel-history-button floating-panel-history-undo",
+            "rect": {
+              "x": 859.2,
+              "y": 133.4,
+              "left": 859.2,
+              "top": 133.4,
+              "right": 887.2,
+              "bottom": 161.4,
+              "width": 28,
+              "height": 28
+            },
+            "clipped": true,
+            "fontSize": "30px",
+            "zIndex": "auto"
+          },
+          {
+            "tag": "BUTTON",
+            "id": "",
+            "className": "floating-panel-history-button floating-panel-history-redo",
+            "rect": {
+              "x": 891.2,
+              "y": 133.4,
+              "left": 891.2,
+              "top": 133.4,
+              "right": 919.2,
+              "bottom": 161.4,
+              "width": 28,
+              "height": 28
+            },
+            "clipped": true,
+            "fontSize": "30px",
+            "zIndex": "auto"
+          },
+          {
+            "tag": "BUTTON",
+            "id": "",
+            "className": "ui-close-button floating-panel-close",
+            "rect": {
+              "x": 923.2,
+              "y": 133.4,
+              "left": 923.2,
+              "top": 133.4,
+              "right": 951.2,
+              "bottom": 161.4,
+              "width": 28,
+              "height": 28
+            },
+            "clipped": true,
+            "fontSize": "27px",
+            "zIndex": "auto"
+          }
+        ],
+        "smallTargets": [],
+        "focusables": 4,
+        "positiveTabIndex": 0,
+        "activeElement": "section.floating-panel",
+        "managedOverlays": 1,
+        "stateBannerKinds": [],
+        "glError": 0,
+        "healthErrors": 0
+      },
+      "generatedAt": "2026-07-19T16:22:52.780Z"
+    },
+    {
+      "schemaVersion": 1,
+      "caseId": "KV-106-desktop-long-zh",
+      "suite": "visual",
+      "variant": "long-zh",
+      "ok": true,
+      "url": "http://127.0.0.1:5410/?healthClear=1&auditSuite=visual&auditNonce=1784478162478",
+      "viewport": {
+        "width": 1280,
+        "height": 720,
+        "devicePixelRatio": 1.0000000149011612
+      },
+      "fixture": "F1",
+      "checks": {
+        "documentOverflowX": false,
+        "documentOverflowY": false,
+        "visibleElements": 7,
+        "outsideViewport": [],
+        "clippedElements": [
+          {
+            "tag": "SECTION",
+            "id": "",
+            "className": "floating-panel",
+            "rect": {
+              "x": 400,
+              "y": 128,
+              "left": 400,
+              "top": 128,
+              "right": 960,
+              "bottom": 328,
+              "width": 560,
+              "height": 200
+            },
+            "clipped": true,
+            "fontSize": "16px",
+            "zIndex": "902"
+          },
+          {
+            "tag": "BUTTON",
+            "id": "",
+            "className": "floating-panel-history-button floating-panel-history-undo",
+            "rect": {
+              "x": 859.2,
+              "y": 133.4,
+              "left": 859.2,
+              "top": 133.4,
+              "right": 887.2,
+              "bottom": 161.4,
+              "width": 28,
+              "height": 28
+            },
+            "clipped": true,
+            "fontSize": "16px",
+            "zIndex": "auto"
+          },
+          {
+            "tag": "BUTTON",
+            "id": "",
+            "className": "floating-panel-history-button floating-panel-history-redo",
+            "rect": {
+              "x": 891.2,
+              "y": 133.4,
+              "left": 891.2,
+              "top": 133.4,
+              "right": 919.2,
+              "bottom": 161.4,
+              "width": 28,
+              "height": 28
+            },
+            "clipped": true,
+            "fontSize": "16px",
+            "zIndex": "auto"
+          },
+          {
+            "tag": "BUTTON",
+            "id": "",
+            "className": "ui-close-button floating-panel-close",
+            "rect": {
+              "x": 923.2,
+              "y": 133.4,
+              "left": 923.2,
+              "top": 133.4,
+              "right": 951.2,
+              "bottom": 161.4,
+              "width": 28,
+              "height": 28
+            },
+            "clipped": true,
+            "fontSize": "18px",
+            "zIndex": "auto"
+          }
+        ],
+        "smallTargets": [],
+        "focusables": 4,
+        "positiveTabIndex": 0,
+        "activeElement": "section.floating-panel",
+        "managedOverlays": 1,
+        "stateBannerKinds": [],
+        "glError": 0,
+        "healthErrors": 0
+      },
+      "generatedAt": "2026-07-19T16:22:45.088Z"
+    },
+    {
+      "schemaVersion": 1,
+      "caseId": "KV-106-narrow-baseline",
+      "suite": "visual",
+      "variant": "baseline",
+      "ok": true,
+      "url": "http://127.0.0.1:5410/?healthClear=1&auditSuite=visual&auditNonce=1784478180804",
+      "viewport": {
+        "width": 720,
+        "height": 720,
+        "devicePixelRatio": 1.0000000149011612
+      },
+      "fixture": "F1",
+      "checks": {
+        "documentOverflowX": false,
+        "documentOverflowY": true,
+        "visibleElements": 86,
+        "outsideViewport": [
+          {
+            "tag": "SECTION",
+            "id": "",
+            "className": "floating-panel",
+            "rect": {
+              "x": 152,
+              "y": 128,
+              "left": 152,
+              "top": 128,
+              "right": 712,
+              "bottom": 826.4,
+              "width": 560,
+              "height": 698.4
+            },
+            "clipped": false,
+            "fontSize": "16px",
+            "zIndex": "902"
+          },
+          {
+            "tag": "BUTTON",
+            "id": "",
+            "className": "object-table-column-resize-handle",
+            "rect": {
+              "x": 722.6,
+              "y": 383.4,
+              "left": 722.6,
+              "top": 383.4,
+              "right": 730.6,
+              "bottom": 413.4,
+              "width": 8,
+              "height": 30
+            },
+            "clipped": false,
+            "fontSize": "12px",
+            "zIndex": "4"
+          },
+          {
+            "tag": "BUTTON",
+            "id": "",
+            "className": "object-table-sort-button",
+            "rect": {
+              "x": 735.6,
+              "y": 389.4,
+              "left": 735.6,
+              "top": 389.4,
+              "right": 783.6,
+              "bottom": 407.4,
+              "width": 48,
+              "height": 18
+            },
+            "clipped": false,
+            "fontSize": "12px",
+            "zIndex": "auto"
+          },
+          {
+            "tag": "BUTTON",
+            "id": "",
+            "className": "object-table-column-resize-handle",
+            "rect": {
+              "x": 786.6,
+              "y": 383.4,
+              "left": 786.6,
+              "top": 383.4,
+              "right": 794.6,
+              "bottom": 413.4,
+              "width": 8,
+              "height": 30
+            },
+            "clipped": false,
+            "fontSize": "12px",
+            "zIndex": "4"
+          },
+          {
+            "tag": "BUTTON",
+            "id": "",
+            "className": "object-table-sort-button",
+            "rect": {
+              "x": 799.6,
+              "y": 389.4,
+              "left": 799.6,
+              "top": 389.4,
+              "right": 847.6,
+              "bottom": 407.4,
+              "width": 48,
+              "height": 18
+            },
+            "clipped": false,
+            "fontSize": "12px",
+            "zIndex": "auto"
+          },
+          {
+            "tag": "BUTTON",
+            "id": "",
+            "className": "object-table-column-resize-handle",
+            "rect": {
+              "x": 850.6,
+              "y": 383.4,
+              "left": 850.6,
+              "top": 383.4,
+              "right": 858.6,
+              "bottom": 413.4,
+              "width": 8,
+              "height": 30
+            },
+            "clipped": false,
+            "fontSize": "12px",
+            "zIndex": "4"
+          },
+          {
+            "tag": "INPUT",
+            "id": "",
+            "className": "object-table-selection-checkbox object-table-row-selection-checkbox",
+            "rect": {
+              "x": 175.6,
+              "y": 714.2,
+              "left": 175.6,
+              "top": 714.2,
+              "right": 189.6,
+              "bottom": 728.2,
+              "width": 14,
+              "height": 14
+            },
+            "clipped": false,
+            "fontSize": "12px",
+            "zIndex": "auto"
+          },
+          {
+            "tag": "BUTTON",
+            "id": "",
+            "className": "table-icon-action",
+            "rect": {
+              "x": 632,
+              "y": 705.8,
+              "left": 632,
+              "top": 705.8,
+              "right": 660,
+              "bottom": 733.8,
+              "width": 28,
+              "height": 28
+            },
+            "clipped": false,
+            "fontSize": "13px",
+            "zIndex": "auto"
+          },
+          {
+            "tag": "INPUT",
+            "id": "",
+            "className": "object-table-selection-checkbox object-table-row-selection-checkbox",
+            "rect": {
+              "x": 175.6,
+              "y": 755,
+              "left": 175.6,
+              "top": 755,
+              "right": 189.6,
+              "bottom": 769,
+              "width": 14,
+              "height": 14
+            },
+            "clipped": false,
+            "fontSize": "12px",
+            "zIndex": "auto"
+          },
+          {
+            "tag": "BUTTON",
+            "id": "",
+            "className": "table-icon-action",
+            "rect": {
+              "x": 632,
+              "y": 746.5,
+              "left": 632,
+              "top": 746.5,
+              "right": 660,
+              "bottom": 774.5,
+              "width": 28,
+              "height": 28
+            },
+            "clipped": false,
+            "fontSize": "13px",
+            "zIndex": "auto"
+          },
+          {
+            "tag": "INPUT",
+            "id": "",
+            "className": "object-table-selection-checkbox object-table-row-selection-checkbox",
+            "rect": {
+              "x": 175.6,
+              "y": 795.8,
+              "left": 175.6,
+              "top": 795.8,
+              "right": 189.6,
+              "bottom": 809.8,
+              "width": 14,
+              "height": 14
+            },
+            "clipped": false,
+            "fontSize": "12px",
+            "zIndex": "auto"
+          },
+          {
+            "tag": "BUTTON",
+            "id": "",
+            "className": "table-icon-action",
+            "rect": {
+              "x": 632,
+              "y": 787.4,
+              "left": 632,
+              "top": 787.4,
+              "right": 660,
+              "bottom": 815.4,
+              "width": 28,
+              "height": 28
+            },
+            "clipped": false,
+            "fontSize": "13px",
+            "zIndex": "auto"
+          }
+        ],
+        "clippedElements": [
+          {
+            "tag": "SELECT",
+            "id": "",
+            "className": "ui-select-native",
+            "rect": {
+              "x": 262.8,
+              "y": 1078.9,
+              "left": 262.8,
+              "top": 1078.9,
+              "right": 684,
+              "bottom": 1080.5,
+              "width": 421.2,
+              "height": 1.6
+            },
+            "clipped": true,
+            "fontSize": "12px",
+            "zIndex": "auto"
+          },
+          {
+            "tag": "INPUT",
+            "id": "",
+            "className": "ui-slider-native",
+            "rect": {
+              "x": 238.8,
+              "y": 1180.4,
+              "left": 238.8,
+              "top": 1180.4,
+              "right": 239.8,
+              "bottom": 1181.4,
+              "width": 1,
+              "height": 1
+            },
+            "clipped": true,
+            "fontSize": "12px",
+            "zIndex": "auto"
+          }
+        ],
+        "smallTargets": [
+          {
+            "tag": "BUTTON",
+            "id": "",
+            "className": "object-table-sort-button",
+            "rect": {
+              "x": 207.6,
+              "y": 389.4,
+              "left": 207.6,
+              "top": 389.4,
+              "right": 247.6,
+              "bottom": 407.4,
+              "width": 40,
+              "height": 18
+            },
+            "clipped": false,
+            "fontSize": "12px",
+            "zIndex": "auto"
+          },
+          {
+            "tag": "BUTTON",
+            "id": "",
+            "className": "object-table-column-resize-handle",
+            "rect": {
+              "x": 250.6,
+              "y": 383.4,
+              "left": 250.6,
+              "top": 383.4,
+              "right": 258.6,
+              "bottom": 413.4,
+              "width": 8,
+              "height": 30
+            },
+            "clipped": false,
+            "fontSize": "12px",
+            "zIndex": "4"
+          },
+          {
+            "tag": "BUTTON",
+            "id": "",
+            "className": "object-table-column-resize-handle",
+            "rect": {
+              "x": 370.6,
+              "y": 383.4,
+              "left": 370.6,
+              "top": 383.4,
+              "right": 378.6,
+              "bottom": 413.4,
+              "width": 8,
+              "height": 30
+            },
+            "clipped": false,
+            "fontSize": "12px",
+            "zIndex": "4"
+          },
+          {
+            "tag": "BUTTON",
+            "id": "",
+            "className": "object-table-column-resize-handle",
+            "rect": {
+              "x": 454.6,
+              "y": 383.4,
+              "left": 454.6,
+              "top": 383.4,
+              "right": 462.6,
+              "bottom": 413.4,
+              "width": 8,
+              "height": 30
+            },
+            "clipped": false,
+            "fontSize": "12px",
+            "zIndex": "4"
+          },
+          {
+            "tag": "BUTTON",
+            "id": "",
+            "className": "object-table-column-resize-handle",
+            "rect": {
+              "x": 566.6,
+              "y": 383.4,
+              "left": 566.6,
+              "top": 383.4,
+              "right": 574.6,
+              "bottom": 413.4,
+              "width": 8,
+              "height": 30
+            },
+            "clipped": false,
+            "fontSize": "12px",
+            "zIndex": "4"
+          },
+          {
+            "tag": "BUTTON",
+            "id": "",
+            "className": "object-table-sort-button",
+            "rect": {
+              "x": 579.6,
+              "y": 389.4,
+              "left": 579.6,
+              "top": 389.4,
+              "right": 627.6,
+              "bottom": 407.4,
+              "width": 48,
+              "height": 18
+            },
+            "clipped": false,
+            "fontSize": "12px",
+            "zIndex": "auto"
+          },
+          {
+            "tag": "BUTTON",
+            "id": "",
+            "className": "object-table-column-resize-handle",
+            "rect": {
+              "x": 630.6,
+              "y": 383.4,
+              "left": 630.6,
+              "top": 383.4,
+              "right": 638.6,
+              "bottom": 413.4,
+              "width": 8,
+              "height": 30
+            },
+            "clipped": false,
+            "fontSize": "12px",
+            "zIndex": "4"
+          },
+          {
+            "tag": "BUTTON",
+            "id": "",
+            "className": "object-table-sort-button",
+            "rect": {
+              "x": 643.6,
+              "y": 389.4,
+              "left": 643.6,
+              "top": 389.4,
+              "right": 719.6,
+              "bottom": 407.4,
+              "width": 76,
+              "height": 18
+            },
+            "clipped": false,
+            "fontSize": "12px",
+            "zIndex": "auto"
+          },
+          {
+            "tag": "BUTTON",
+            "id": "",
+            "className": "object-table-column-resize-handle",
+            "rect": {
+              "x": 722.6,
+              "y": 383.4,
+              "left": 722.6,
+              "top": 383.4,
+              "right": 730.6,
+              "bottom": 413.4,
+              "width": 8,
+              "height": 30
+            },
+            "clipped": false,
+            "fontSize": "12px",
+            "zIndex": "4"
+          },
+          {
+            "tag": "BUTTON",
+            "id": "",
+            "className": "object-table-sort-button",
+            "rect": {
+              "x": 735.6,
+              "y": 389.4,
+              "left": 735.6,
+              "top": 389.4,
+              "right": 783.6,
+              "bottom": 407.4,
+              "width": 48,
+              "height": 18
+            },
+            "clipped": false,
+            "fontSize": "12px",
+            "zIndex": "auto"
+          },
+          {
+            "tag": "BUTTON",
+            "id": "",
+            "className": "object-table-column-resize-handle",
+            "rect": {
+              "x": 786.6,
+              "y": 383.4,
+              "left": 786.6,
+              "top": 383.4,
+              "right": 794.6,
+              "bottom": 413.4,
+              "width": 8,
+              "height": 30
+            },
+            "clipped": false,
+            "fontSize": "12px",
+            "zIndex": "4"
+          },
+          {
+            "tag": "BUTTON",
+            "id": "",
+            "className": "object-table-sort-button",
+            "rect": {
+              "x": 799.6,
+              "y": 389.4,
+              "left": 799.6,
+              "top": 389.4,
+              "right": 847.6,
+              "bottom": 407.4,
+              "width": 48,
+              "height": 18
+            },
+            "clipped": false,
+            "fontSize": "12px",
+            "zIndex": "auto"
+          },
+          {
+            "tag": "BUTTON",
+            "id": "",
+            "className": "object-table-column-resize-handle",
+            "rect": {
+              "x": 850.6,
+              "y": 383.4,
+              "left": 850.6,
+              "top": 383.4,
+              "right": 858.6,
+              "bottom": 413.4,
+              "width": 8,
+              "height": 30
+            },
+            "clipped": false,
+            "fontSize": "12px",
+            "zIndex": "4"
+          }
+        ],
+        "focusables": 80,
+        "positiveTabIndex": 0,
+        "activeElement": "section.floating-panel",
+        "managedOverlays": 1,
+        "stateBannerKinds": [],
+        "glError": 0,
+        "healthErrors": 0
+      },
+      "generatedAt": "2026-07-19T16:23:02.931Z"
+    },
+    {
+      "schemaVersion": 1,
+      "caseId": "KV-106-narrow-expanded-options",
+      "suite": "visual",
+      "variant": "expanded-options",
+      "ok": true,
+      "url": "http://127.0.0.1:5410/?healthClear=1&auditSuite=visual&auditNonce=1784478188965",
+      "viewport": {
+        "width": 720,
+        "height": 720,
+        "devicePixelRatio": 1.0000000149011612
+      },
+      "fixture": "F1",
+      "checks": {
+        "documentOverflowX": false,
+        "documentOverflowY": false,
+        "visibleElements": 7,
+        "outsideViewport": [],
+        "clippedElements": [],
+        "smallTargets": [],
+        "focusables": 1,
+        "positiveTabIndex": 0,
+        "activeElement": "section.floating-panel.editing-panel-disabled",
+        "managedOverlays": 1,
+        "stateBannerKinds": [],
+        "glError": 0,
+        "healthErrors": 0
+      },
+      "generatedAt": "2026-07-19T16:23:11.188Z"
+    },
+    {
+      "schemaVersion": 1,
+      "caseId": "KV-106-narrow-font-and-states",
+      "suite": "visual",
+      "variant": "font-and-states",
+      "ok": true,
+      "url": "http://127.0.0.1:5410/?healthClear=1&auditSuite=visual&auditNonce=1784478193040",
+      "viewport": {
+        "width": 720,
+        "height": 720,
+        "devicePixelRatio": 1.0000000149011612
+      },
+      "fixture": "F6",
+      "checks": {
+        "documentOverflowX": false,
+        "documentOverflowY": false,
+        "visibleElements": 7,
+        "outsideViewport": [],
+        "clippedElements": [
+          {
+            "tag": "BUTTON",
+            "id": "",
+            "className": "floating-panel-history-button floating-panel-history-undo",
+            "rect": {
+              "x": 611.2,
+              "y": 133.4,
+              "left": 611.2,
+              "top": 133.4,
+              "right": 639.2,
+              "bottom": 161.4,
+              "width": 28,
+              "height": 28
+            },
+            "clipped": true,
+            "fontSize": "30px",
+            "zIndex": "auto"
+          },
+          {
+            "tag": "BUTTON",
+            "id": "",
+            "className": "floating-panel-history-button floating-panel-history-redo",
+            "rect": {
+              "x": 643.2,
+              "y": 133.4,
+              "left": 643.2,
+              "top": 133.4,
+              "right": 671.2,
+              "bottom": 161.4,
+              "width": 28,
+              "height": 28
+            },
+            "clipped": true,
+            "fontSize": "30px",
+            "zIndex": "auto"
+          },
+          {
+            "tag": "BUTTON",
+            "id": "",
+            "className": "ui-close-button floating-panel-close",
+            "rect": {
+              "x": 675.2,
+              "y": 133.4,
+              "left": 675.2,
+              "top": 133.4,
+              "right": 703.2,
+              "bottom": 161.4,
+              "width": 28,
+              "height": 28
+            },
+            "clipped": true,
+            "fontSize": "27px",
+            "zIndex": "auto"
+          }
+        ],
+        "smallTargets": [],
+        "focusables": 4,
+        "positiveTabIndex": 0,
+        "activeElement": "section.floating-panel",
+        "managedOverlays": 1,
+        "stateBannerKinds": [],
+        "glError": 0,
+        "healthErrors": 0
+      },
+      "generatedAt": "2026-07-19T16:23:15.187Z"
+    },
+    {
+      "schemaVersion": 1,
+      "caseId": "KV-106-narrow-long-zh",
+      "suite": "visual",
+      "variant": "long-zh",
+      "ok": true,
+      "url": "http://127.0.0.1:5410/?healthClear=1&auditSuite=visual&auditNonce=1784478184890",
+      "viewport": {
+        "width": 720,
+        "height": 720,
+        "devicePixelRatio": 1.0000000149011612
+      },
+      "fixture": "F1",
+      "checks": {
+        "documentOverflowX": true,
+        "documentOverflowY": false,
+        "visibleElements": 7,
+        "outsideViewport": [
+          {
+            "tag": "BUTTON",
+            "id": "toggle-measurement",
+            "className": "el-button secondary-action",
+            "rect": {
+              "x": 681.6,
+              "y": 18,
+              "left": 681.6,
+              "top": 18,
+              "right": 980.2,
+              "bottom": 52,
+              "width": 298.6,
+              "height": 34
+            },
+            "clipped": false,
+            "fontSize": "13px",
+            "zIndex": "auto"
+          }
+        ],
+        "clippedElements": [
+          {
+            "tag": "SECTION",
+            "id": "",
+            "className": "floating-panel",
+            "rect": {
+              "x": 152,
+              "y": 128,
+              "left": 152,
+              "top": 128,
+              "right": 712,
+              "bottom": 328,
+              "width": 560,
+              "height": 200
+            },
+            "clipped": true,
+            "fontSize": "16px",
+            "zIndex": "902"
+          },
+          {
+            "tag": "BUTTON",
+            "id": "",
+            "className": "floating-panel-history-button floating-panel-history-undo",
+            "rect": {
+              "x": 611.2,
+              "y": 133.4,
+              "left": 611.2,
+              "top": 133.4,
+              "right": 639.2,
+              "bottom": 161.4,
+              "width": 28,
+              "height": 28
+            },
+            "clipped": true,
+            "fontSize": "16px",
+            "zIndex": "auto"
+          },
+          {
+            "tag": "BUTTON",
+            "id": "",
+            "className": "floating-panel-history-button floating-panel-history-redo",
+            "rect": {
+              "x": 643.2,
+              "y": 133.4,
+              "left": 643.2,
+              "top": 133.4,
+              "right": 671.2,
+              "bottom": 161.4,
+              "width": 28,
+              "height": 28
+            },
+            "clipped": true,
+            "fontSize": "16px",
+            "zIndex": "auto"
+          },
+          {
+            "tag": "BUTTON",
+            "id": "",
+            "className": "ui-close-button floating-panel-close",
+            "rect": {
+              "x": 675.2,
+              "y": 133.4,
+              "left": 675.2,
+              "top": 133.4,
+              "right": 703.2,
+              "bottom": 161.4,
+              "width": 28,
+              "height": 28
+            },
+            "clipped": true,
+            "fontSize": "18px",
+            "zIndex": "auto"
+          }
+        ],
+        "smallTargets": [],
+        "focusables": 4,
+        "positiveTabIndex": 0,
+        "activeElement": "section.floating-panel",
+        "managedOverlays": 1,
+        "stateBannerKinds": [],
+        "glError": 0,
+        "healthErrors": 0
+      },
+      "generatedAt": "2026-07-19T16:23:07.562Z"
+    },
+    {
+      "schemaVersion": 1,
+      "caseId": "Q107-main-accepted",
+      "suite": "main",
+      "variant": "baseline",
+      "ok": true,
+      "url": "http://127.0.0.1:5410/?healthClear=1&auditSuite=main&auditNonce=1784478925039",
+      "viewport": {
+        "width": 1422,
+        "height": 800,
+        "devicePixelRatio": 0.9000000134110451
+      },
+      "fixture": {
+        "id": "F1",
+        "seed": "interaction-audit-f1",
+        "checksum": "ec39389a"
+      },
+      "cases": [
+        {
+          "id": "HF-01-02",
+          "target": "E-S",
+          "passed": true,
+          "seed": "interaction-audit-f1",
+          "checksum": "ec39389a",
+          "gridCells": 10004,
+          "operation": "success"
+        },
+        {
+          "id": "HF-03-06",
+          "target": "E-S",
+          "passed": true,
+          "jsonBytes": 15195853,
+          "pngReady": true
+        },
+        {
+          "id": "HF-04",
+          "target": "E-S",
+          "passed": true,
+          "changedNotes": 1,
+          "restoredNotes": 0,
+          "restoredChecksum": "ec39389a"
+        },
+        {
+          "id": "HF-05",
+          "target": "E-S",
+          "passed": true,
+          "changedChecksum": "bdac0641",
+          "restoredChecksum": "ec39389a"
+        },
+        {
+          "id": "HF-07-08",
+          "target": "E-S",
+          "passed": true,
+          "before": {
+            "scale": 1,
+            "offsetX": 0,
+            "offsetY": 0
+          },
+          "zoomed": {
+            "scale": 1.8221188003905089,
+            "offsetX": 0,
+            "offsetY": 0
+          },
+          "fitted": {
+            "scale": 1,
+            "offsetX": 0,
+            "offsetY": 0
+          }
+        },
+        {
+          "id": "HF-09-10",
+          "target": "E-S",
+          "passed": true,
+          "detailsVisible": true,
+          "selectedId": 1,
+          "expectedStateId": 1
+        },
+        {
+          "id": "HF-11",
+          "target": "E-S",
+          "passed": true,
+          "emptyVisible": true
+        },
+        {
+          "id": "HF-12-14",
+          "target": "E-S",
+          "passed": true,
+          "cityId": 0,
+          "originalName": "青月",
+          "historyDelta": 0
+        },
+        {
+          "id": "DM-103-MODES",
+          "target": "E-S",
+          "passed": true,
+          "registered": 28,
+          "liveDataModes": 12
+        },
+        {
+          "id": "CW-104-PANELS",
+          "target": "E-S",
+          "passed": true,
+          "discoveredOpeners": 27,
+          "opened": 27,
+          "liveFields": 790,
+          "liveTables": 22
+        },
+        {
+          "id": "KV-106-ESCAPE",
+          "target": "E-F",
+          "passed": true,
+          "reproducedDoubleConsumption": true,
+          "before": {
+            "selection": {
+              "object": {
+                "kind": "state",
+                "id": 0,
+                "name": "中立"
+              },
+              "cell": null,
+              "x": null,
+              "y": null
+            },
+            "editingObject": {
+              "kind": "state",
+              "id": 0,
+              "name": "中立"
+            },
+            "highlights": []
+          },
+          "after": {
+            "selection": null,
+            "editingObject": null,
+            "highlights": []
+          }
+        },
+        {
+          "id": "DR-105-F4-INVALID-MAP",
+          "target": "E-F",
+          "passed": true,
+          "error": {
+            "code": "operation_invalid_input",
+            "name": "RuntimeOperationError",
+            "message": "暂不支持的地图格式版本：99",
+            "stage": "parse",
+            "suggestion": "检查参数或导入内容后重试。"
+          }
+        },
+        {
+          "id": "DR-105-F4-GEO-PICKER-CANCEL",
+          "target": "E-F",
+          "passed": true,
+          "observed": "提交前取消与缺少显式确认均未进入 operation"
+        },
+        {
+          "id": "DR-105-F5-DELETE-CANCEL",
+          "target": "E-F",
+          "passed": true,
+          "requiresConfirm": true,
+          "summary": "删除 1 个河流；关联：河道 cells 8。"
+        },
+        {
+          "id": "DR-105-F5-DELETE-UNDO",
+          "target": "E-F",
+          "passed": true,
+          "history": {
+            "undo": 0,
+            "redo": 0,
+            "lastLabel": "none",
+            "lastDomain": "none",
+            "affectedLimit": 3,
+            "lastAffected": [],
+            "lastAffectedCount": 0,
+            "lastAffectedKinds": [],
+            "lastAffectedSummary": "none",
+            "lastAffectedTruncated": false
+          }
+        },
+        {
+          "id": "DR-105-F5-TOPOLOGY-ROLLBACK",
+          "target": "E-F",
+          "passed": true,
+          "faultStages": 9,
+          "pair": [
+            13,
+            5
+          ]
+        },
+        {
+          "id": "DR-105-F5-MAP-REPLACE-FAIL",
+          "target": "E-F",
+          "passed": true,
+          "errorCode": "operation_failed"
+        },
+        {
+          "id": "DR-105-F5-CLIMATE-ROLLBACK",
+          "target": "E-F",
+          "passed": true,
+          "history": {
+            "undo": 0,
+            "redo": 0,
+            "lastLabel": "none",
+            "lastDomain": "none",
+            "affectedLimit": 3,
+            "lastAffected": [],
+            "lastAffectedCount": 0,
+            "lastAffectedKinds": [],
+            "lastAffectedSummary": "none",
+            "lastAffectedTruncated": false
+          }
+        },
+        {
+          "id": "DR-105-F5-CLIMATE-LATE-RESULT",
+          "target": "E-F",
+          "passed": true,
+          "reproducedFinding": true,
+          "findingId": "IA-105-003",
+          "mapIdentityChanged": true,
+          "lateResult": {
+            "ok": false,
+            "error": {
+              "code": "api_error",
+              "name": "Error",
+              "message": "气候资源点重算扰动序号不一致"
+            }
+          }
+        },
+        {
+          "id": "DR-105-F5-HEIGHT-CHAIN-FAIL",
+          "target": "E-F",
+          "passed": true,
+          "baseCalls": [
+            "features",
+            "rivers"
+          ],
+          "downstreamCalls": [
+            "religions",
+            "markers",
+            "diplomacy",
+            "military"
+          ]
+        },
+        {
+          "id": "DR-105-F6-BUSY",
+          "target": "E-F",
+          "passed": true,
+          "error": {
+            "code": "operation_busy",
+            "name": "RuntimeOperationError",
+            "message": "当前正在执行 data.importMap，不能同时启动 generate.newMap",
+            "stage": "start",
+            "suggestion": "等待当前任务结束后重试。"
+          }
+        },
+        {
+          "id": "DR-105-F6-NEUTRAL",
+          "target": "E-F",
+          "passed": true,
+          "result": {
+            "executed": false,
+            "preview": {
+              "valid": false,
+              "seed": 700133656,
+              "requestedSystems": [],
+              "requiredSystems": [],
+              "selectedSystems": [],
+              "executionOrder": [],
+              "steps": [],
+              "candidates": [
+                {
+                  "id": "cities",
+                  "label": "城市",
+                  "estimatedAffected": 821,
+                  "requested": false,
+                  "required": false,
+                  "selected": false,
+                  "stale": false,
+                  "dependencies": [],
+                  "coveredBy": null
+                },
+                {
+                  "id": "states",
+                  "label": "国家",
+                  "estimatedAffected": 20,
+                  "requested": false,
+                  "required": false,
+                  "selected": false,
+                  "stale": false,
+                  "dependencies": [],
+                  "coveredBy": null
+                },
+                {
+                  "id": "provinces",
+                  "label": "省份",
+                  "estimatedAffected": 201,
+                  "requested": false,
+                  "required": false,
+                  "selected": false,
+                  "stale": false,
+                  "dependencies": [],
+                  "coveredBy": null
+                },
+                {
+                  "id": "religions",
+                  "label": "宗教",
+                  "estimatedAffected": 18,
+                  "requested": false,
+                  "required": false,
+                  "selected": false,
+                  "stale": false,
+                  "dependencies": [],
+                  "coveredBy": null
+                },
+                {
+                  "id": "markers",
+                  "label": "资源标记",
+                  "estimatedAffected": 43,
+                  "requested": false,
+                  "required": false,
+                  "selected": false,
+                  "stale": false,
+                  "dependencies": [],
+                  "coveredBy": null
+                },
+                {
+                  "id": "economy",
+                  "label": "经济",
+                  "estimatedAffected": 15096,
+                  "requested": false,
+                  "required": false,
+                  "selected": false,
+                  "stale": false,
+                  "dependencies": [
+                    "markers"
+                  ],
+                  "coveredBy": null
+                },
+                {
+                  "id": "diplomacy",
+                  "label": "外交",
+                  "estimatedAffected": 190,
+                  "requested": false,
+                  "required": false,
+                  "selected": false,
+                  "stale": false,
+                  "dependencies": [
+                    "states",
+                    "provinces",
+                    "religions",
+                    "economy"
+                  ],
+                  "coveredBy": null
+                },
+                {
+                  "id": "military",
+                  "label": "军事",
+                  "estimatedAffected": 113,
+                  "requested": false,
+                  "required": false,
+                  "selected": false,
+                  "stale": false,
+                  "dependencies": [
+                    "states",
+                    "provinces",
+                    "economy",
+                    "diplomacy"
+                  ],
+                  "coveredBy": null
+                },
+                {
+                  "id": "zones",
+                  "label": "区域",
+                  "estimatedAffected": 3,
+                  "requested": false,
+                  "required": false,
+                  "selected": false,
+                  "stale": false,
+                  "dependencies": [
+                    "religions",
+                    "military",
+                    "diplomacy"
+                  ],
+                  "coveredBy": null
+                }
+              ],
+              "estimatedAffected": 0,
+              "staleSystems": []
+            },
+            "before": {
+              "checksum": "ec39389a",
+              "states": 20,
+              "provinces": 201,
+              "cities": 821,
+              "routes": 565,
+              "rivers": 213,
+              "markers": 43,
+              "resourceMarkers": 5,
+              "religions": 18,
+              "militaryRegiments": 113,
+              "militaryFronts": 0,
+              "militaryCampaigns": 0,
+              "zones": 3,
+              "economyDeals": 15068,
+              "diplomacyPairs": 190,
+              "diplomacyEnemies": 0
+            },
+            "after": {
+              "checksum": "ec39389a",
+              "states": 20,
+              "provinces": 201,
+              "cities": 821,
+              "routes": 565,
+              "rivers": 213,
+              "markers": 43,
+              "resourceMarkers": 5,
+              "religions": 18,
+              "militaryRegiments": 113,
+              "militaryFronts": 0,
+              "militaryCampaigns": 0,
+              "zones": 3,
+              "economyDeals": 15068,
+              "diplomacyPairs": 190,
+              "diplomacyEnemies": 0
+            },
+            "history": {
+              "undo": 0,
+              "redo": 0,
+              "lastLabel": "none",
+              "lastDomain": "none",
+              "affectedLimit": 3,
+              "lastAffected": [],
+              "lastAffectedCount": 0,
+              "lastAffectedKinds": [],
+              "lastAffectedSummary": "none",
+              "lastAffectedTruncated": false
+            },
+            "effects": []
+          }
+        },
+        {
+          "id": "DR-105-F5-REGENERATE",
+          "target": "E-S",
+          "passed": true,
+          "historyDelta": 1
+        },
+        {
+          "id": "DR-105-F5-GEO-APPLY-FAIL",
+          "target": "E-F",
+          "passed": true,
+          "reproducedFinding": true,
+          "findingId": "IA-105-002",
+          "history": {
+            "undo": 0,
+            "redo": 0,
+            "lastLabel": "none",
+            "lastDomain": "none",
+            "affectedLimit": 3,
+            "lastAffected": [],
+            "lastAffectedCount": 0,
+            "lastAffectedKinds": [],
+            "lastAffectedSummary": "none",
+            "lastAffectedTruncated": false
+          }
+        },
+        {
+          "id": "DR-105-F5-REGENERATE-MID-FAIL",
+          "target": "E-N",
+          "passed": true,
+          "gap": "九类原地重生成没有稳定公开 fault seam，不声明 E-F 通过"
+        }
+      ],
+      "totals": {
+        "cases": 25,
+        "passed": 25,
+        "failed": 0,
+        "eS": 11,
+        "eF": 13,
+        "eN": 1
+      },
+      "runtime": {
+        "webgl2": true,
+        "glError": 0,
+        "operationBusy": false,
+        "loadingVisible": false,
+        "healthErrors": 0,
+        "history": {
+          "undo": 0,
+          "redo": 0,
+          "lastLabel": "none",
+          "lastDomain": "none",
+          "affectedLimit": 3,
+          "lastAffected": [],
+          "lastAffectedCount": 0,
+          "lastAffectedKinds": [],
+          "lastAffectedSummary": "none",
+          "lastAffectedTruncated": false
+        },
+        "selection": {
+          "selection": null,
+          "editingObject": null,
+          "highlights": []
+        }
+      },
+      "generatedAt": "2026-07-19T16:36:45.010Z"
+    }
+  ],
+  "totals": {
+    "cases": 13,
+    "main": 1,
+    "visual": 12,
+    "passed": 13,
+    "failed": 0
+  }
+}

@@ -1,0 +1,3380 @@
+{
+  "schemaVersion": 1,
+  "scope": "权威任务第 107 项统一浏览器验证与交互整改候选",
+  "sourceDigest": "aea85aa4767b6b2b97468746851768a3ae0bc9385f6263718545324a744d7587",
+  "totals": {
+    "surfaces": 102,
+    "includedSurfaces": 85,
+    "excludedSurfaces": 17,
+    "unclassifiedSurfaces": 0,
+    "unknownResults": 0,
+    "browserCases": 13,
+    "browserPassed": 13,
+    "browserFailed": 0,
+    "mainEvidenceCases": 25,
+    "normalEvidence": 11,
+    "failureEvidence": 13,
+    "notConstructibleEvidence": 1,
+    "findings": 29,
+    "behaviorFindings": 21,
+    "uiFindings": 8,
+    "candidates": 9
+  },
+  "browser": {
+    "url": "http://127.0.0.1:5410/?healthClear=1&auditSuite=main&auditNonce=1784478925039",
+    "fixture": {
+      "id": "F1",
+      "seed": "interaction-audit-f1",
+      "checksum": "ec39389a"
+    },
+    "mainRuntime": {
+      "webgl2": true,
+      "glError": 0,
+      "operationBusy": false,
+      "loadingVisible": false,
+      "healthErrors": 0,
+      "history": {
+        "undo": 0,
+        "redo": 0,
+        "lastLabel": "none",
+        "lastDomain": "none",
+        "affectedLimit": 3,
+        "lastAffected": [],
+        "lastAffectedCount": 0,
+        "lastAffectedKinds": [],
+        "lastAffectedSummary": "none",
+        "lastAffectedTruncated": false
+      },
+      "selection": {
+        "selection": null,
+        "editingObject": null,
+        "highlights": []
+      }
+    },
+    "mainCases": [
+      {
+        "id": "HF-01-02",
+        "target": "E-S",
+        "passed": true,
+        "seed": "interaction-audit-f1",
+        "checksum": "ec39389a",
+        "gridCells": 10004,
+        "operation": "success"
+      },
+      {
+        "id": "HF-03-06",
+        "target": "E-S",
+        "passed": true,
+        "jsonBytes": 15195853,
+        "pngReady": true
+      },
+      {
+        "id": "HF-04",
+        "target": "E-S",
+        "passed": true,
+        "changedNotes": 1,
+        "restoredNotes": 0,
+        "restoredChecksum": "ec39389a"
+      },
+      {
+        "id": "HF-05",
+        "target": "E-S",
+        "passed": true,
+        "changedChecksum": "bdac0641",
+        "restoredChecksum": "ec39389a"
+      },
+      {
+        "id": "HF-07-08",
+        "target": "E-S",
+        "passed": true,
+        "before": {
+          "scale": 1,
+          "offsetX": 0,
+          "offsetY": 0
+        },
+        "zoomed": {
+          "scale": 1.8221188003905089,
+          "offsetX": 0,
+          "offsetY": 0
+        },
+        "fitted": {
+          "scale": 1,
+          "offsetX": 0,
+          "offsetY": 0
+        }
+      },
+      {
+        "id": "HF-09-10",
+        "target": "E-S",
+        "passed": true,
+        "detailsVisible": true,
+        "selectedId": 1,
+        "expectedStateId": 1
+      },
+      {
+        "id": "HF-11",
+        "target": "E-S",
+        "passed": true,
+        "emptyVisible": true
+      },
+      {
+        "id": "HF-12-14",
+        "target": "E-S",
+        "passed": true,
+        "cityId": 0,
+        "originalName": "青月",
+        "historyDelta": 0
+      },
+      {
+        "id": "DM-103-MODES",
+        "target": "E-S",
+        "passed": true,
+        "registered": 28,
+        "liveDataModes": 12
+      },
+      {
+        "id": "CW-104-PANELS",
+        "target": "E-S",
+        "passed": true,
+        "discoveredOpeners": 27,
+        "opened": 27,
+        "liveFields": 790,
+        "liveTables": 22
+      },
+      {
+        "id": "KV-106-ESCAPE",
+        "target": "E-F",
+        "passed": true,
+        "reproducedDoubleConsumption": true,
+        "before": {
+          "selection": {
+            "object": {
+              "kind": "state",
+              "id": 0,
+              "name": "中立"
+            },
+            "cell": null,
+            "x": null,
+            "y": null
+          },
+          "editingObject": {
+            "kind": "state",
+            "id": 0,
+            "name": "中立"
+          },
+          "highlights": []
+        },
+        "after": {
+          "selection": null,
+          "editingObject": null,
+          "highlights": []
+        }
+      },
+      {
+        "id": "DR-105-F4-INVALID-MAP",
+        "target": "E-F",
+        "passed": true,
+        "error": {
+          "code": "operation_invalid_input",
+          "name": "RuntimeOperationError",
+          "message": "暂不支持的地图格式版本：99",
+          "stage": "parse",
+          "suggestion": "检查参数或导入内容后重试。"
+        }
+      },
+      {
+        "id": "DR-105-F4-GEO-PICKER-CANCEL",
+        "target": "E-F",
+        "passed": true,
+        "observed": "提交前取消与缺少显式确认均未进入 operation"
+      },
+      {
+        "id": "DR-105-F5-DELETE-CANCEL",
+        "target": "E-F",
+        "passed": true,
+        "requiresConfirm": true,
+        "summary": "删除 1 个河流；关联：河道 cells 8。"
+      },
+      {
+        "id": "DR-105-F5-DELETE-UNDO",
+        "target": "E-F",
+        "passed": true,
+        "history": {
+          "undo": 0,
+          "redo": 0,
+          "lastLabel": "none",
+          "lastDomain": "none",
+          "affectedLimit": 3,
+          "lastAffected": [],
+          "lastAffectedCount": 0,
+          "lastAffectedKinds": [],
+          "lastAffectedSummary": "none",
+          "lastAffectedTruncated": false
+        }
+      },
+      {
+        "id": "DR-105-F5-TOPOLOGY-ROLLBACK",
+        "target": "E-F",
+        "passed": true,
+        "faultStages": 9,
+        "pair": [
+          13,
+          5
+        ]
+      },
+      {
+        "id": "DR-105-F5-MAP-REPLACE-FAIL",
+        "target": "E-F",
+        "passed": true,
+        "errorCode": "operation_failed"
+      },
+      {
+        "id": "DR-105-F5-CLIMATE-ROLLBACK",
+        "target": "E-F",
+        "passed": true,
+        "history": {
+          "undo": 0,
+          "redo": 0,
+          "lastLabel": "none",
+          "lastDomain": "none",
+          "affectedLimit": 3,
+          "lastAffected": [],
+          "lastAffectedCount": 0,
+          "lastAffectedKinds": [],
+          "lastAffectedSummary": "none",
+          "lastAffectedTruncated": false
+        }
+      },
+      {
+        "id": "DR-105-F5-CLIMATE-LATE-RESULT",
+        "target": "E-F",
+        "passed": true,
+        "reproducedFinding": true,
+        "findingId": "IA-105-003",
+        "mapIdentityChanged": true,
+        "lateResult": {
+          "ok": false,
+          "error": {
+            "code": "api_error",
+            "name": "Error",
+            "message": "气候资源点重算扰动序号不一致"
+          }
+        }
+      },
+      {
+        "id": "DR-105-F5-HEIGHT-CHAIN-FAIL",
+        "target": "E-F",
+        "passed": true,
+        "baseCalls": [
+          "features",
+          "rivers"
+        ],
+        "downstreamCalls": [
+          "religions",
+          "markers",
+          "diplomacy",
+          "military"
+        ]
+      },
+      {
+        "id": "DR-105-F6-BUSY",
+        "target": "E-F",
+        "passed": true,
+        "error": {
+          "code": "operation_busy",
+          "name": "RuntimeOperationError",
+          "message": "当前正在执行 data.importMap，不能同时启动 generate.newMap",
+          "stage": "start",
+          "suggestion": "等待当前任务结束后重试。"
+        }
+      },
+      {
+        "id": "DR-105-F6-NEUTRAL",
+        "target": "E-F",
+        "passed": true,
+        "result": {
+          "executed": false,
+          "preview": {
+            "valid": false,
+            "seed": 700133656,
+            "requestedSystems": [],
+            "requiredSystems": [],
+            "selectedSystems": [],
+            "executionOrder": [],
+            "steps": [],
+            "candidates": [
+              {
+                "id": "cities",
+                "label": "城市",
+                "estimatedAffected": 821,
+                "requested": false,
+                "required": false,
+                "selected": false,
+                "stale": false,
+                "dependencies": [],
+                "coveredBy": null
+              },
+              {
+                "id": "states",
+                "label": "国家",
+                "estimatedAffected": 20,
+                "requested": false,
+                "required": false,
+                "selected": false,
+                "stale": false,
+                "dependencies": [],
+                "coveredBy": null
+              },
+              {
+                "id": "provinces",
+                "label": "省份",
+                "estimatedAffected": 201,
+                "requested": false,
+                "required": false,
+                "selected": false,
+                "stale": false,
+                "dependencies": [],
+                "coveredBy": null
+              },
+              {
+                "id": "religions",
+                "label": "宗教",
+                "estimatedAffected": 18,
+                "requested": false,
+                "required": false,
+                "selected": false,
+                "stale": false,
+                "dependencies": [],
+                "coveredBy": null
+              },
+              {
+                "id": "markers",
+                "label": "资源标记",
+                "estimatedAffected": 43,
+                "requested": false,
+                "required": false,
+                "selected": false,
+                "stale": false,
+                "dependencies": [],
+                "coveredBy": null
+              },
+              {
+                "id": "economy",
+                "label": "经济",
+                "estimatedAffected": 15096,
+                "requested": false,
+                "required": false,
+                "selected": false,
+                "stale": false,
+                "dependencies": [
+                  "markers"
+                ],
+                "coveredBy": null
+              },
+              {
+                "id": "diplomacy",
+                "label": "外交",
+                "estimatedAffected": 190,
+                "requested": false,
+                "required": false,
+                "selected": false,
+                "stale": false,
+                "dependencies": [
+                  "states",
+                  "provinces",
+                  "religions",
+                  "economy"
+                ],
+                "coveredBy": null
+              },
+              {
+                "id": "military",
+                "label": "军事",
+                "estimatedAffected": 113,
+                "requested": false,
+                "required": false,
+                "selected": false,
+                "stale": false,
+                "dependencies": [
+                  "states",
+                  "provinces",
+                  "economy",
+                  "diplomacy"
+                ],
+                "coveredBy": null
+              },
+              {
+                "id": "zones",
+                "label": "区域",
+                "estimatedAffected": 3,
+                "requested": false,
+                "required": false,
+                "selected": false,
+                "stale": false,
+                "dependencies": [
+                  "religions",
+                  "military",
+                  "diplomacy"
+                ],
+                "coveredBy": null
+              }
+            ],
+            "estimatedAffected": 0,
+            "staleSystems": []
+          },
+          "before": {
+            "checksum": "ec39389a",
+            "states": 20,
+            "provinces": 201,
+            "cities": 821,
+            "routes": 565,
+            "rivers": 213,
+            "markers": 43,
+            "resourceMarkers": 5,
+            "religions": 18,
+            "militaryRegiments": 113,
+            "militaryFronts": 0,
+            "militaryCampaigns": 0,
+            "zones": 3,
+            "economyDeals": 15068,
+            "diplomacyPairs": 190,
+            "diplomacyEnemies": 0
+          },
+          "after": {
+            "checksum": "ec39389a",
+            "states": 20,
+            "provinces": 201,
+            "cities": 821,
+            "routes": 565,
+            "rivers": 213,
+            "markers": 43,
+            "resourceMarkers": 5,
+            "religions": 18,
+            "militaryRegiments": 113,
+            "militaryFronts": 0,
+            "militaryCampaigns": 0,
+            "zones": 3,
+            "economyDeals": 15068,
+            "diplomacyPairs": 190,
+            "diplomacyEnemies": 0
+          },
+          "history": {
+            "undo": 0,
+            "redo": 0,
+            "lastLabel": "none",
+            "lastDomain": "none",
+            "affectedLimit": 3,
+            "lastAffected": [],
+            "lastAffectedCount": 0,
+            "lastAffectedKinds": [],
+            "lastAffectedSummary": "none",
+            "lastAffectedTruncated": false
+          },
+          "effects": []
+        }
+      },
+      {
+        "id": "DR-105-F5-REGENERATE",
+        "target": "E-S",
+        "passed": true,
+        "historyDelta": 1
+      },
+      {
+        "id": "DR-105-F5-GEO-APPLY-FAIL",
+        "target": "E-F",
+        "passed": true,
+        "reproducedFinding": true,
+        "findingId": "IA-105-002",
+        "history": {
+          "undo": 0,
+          "redo": 0,
+          "lastLabel": "none",
+          "lastDomain": "none",
+          "affectedLimit": 3,
+          "lastAffected": [],
+          "lastAffectedCount": 0,
+          "lastAffectedKinds": [],
+          "lastAffectedSummary": "none",
+          "lastAffectedTruncated": false
+        }
+      },
+      {
+        "id": "DR-105-F5-REGENERATE-MID-FAIL",
+        "target": "E-N",
+        "passed": true,
+        "gap": "九类原地重生成没有稳定公开 fault seam，不声明 E-F 通过"
+      }
+    ],
+    "viewports": [
+      {
+        "id": "desktop",
+        "width": 1280,
+        "height": 720,
+        "zoom": 1,
+        "rootFontPx": 16
+      },
+      {
+        "id": "narrow",
+        "width": 720,
+        "height": 720,
+        "zoom": 1,
+        "rootFontPx": 16
+      },
+      {
+        "id": "css-stress",
+        "width": 720,
+        "height": 720,
+        "zoom": 1.25,
+        "effectiveWidth": 576,
+        "effectiveHeight": 576,
+        "rootFontPx": 20
+      }
+    ],
+    "visualCases": [
+      {
+        "caseId": "KV-106-css-stress-baseline",
+        "variant": "baseline",
+        "viewport": {
+          "width": 576,
+          "height": 576,
+          "devicePixelRatio": 1.0000000149011612
+        },
+        "ok": true,
+        "checks": {
+          "documentOverflowX": false,
+          "documentOverflowY": true,
+          "visibleElements": 86,
+          "outsideViewport": [
+            {
+              "tag": "SECTION",
+              "id": "",
+              "className": "floating-panel",
+              "rect": {
+                "x": 8,
+                "y": 128,
+                "left": 8,
+                "top": 128,
+                "right": 568,
+                "bottom": 686.7,
+                "width": 560,
+                "height": 558.7
+              },
+              "clipped": false,
+              "fontSize": "16px",
+              "zIndex": "902"
+            },
+            {
+              "tag": "BUTTON",
+              "id": "",
+              "className": "object-table-column-resize-handle",
+              "rect": {
+                "x": 578.6,
+                "y": 383.4,
+                "left": 578.6,
+                "top": 383.4,
+                "right": 586.6,
+                "bottom": 413.4,
+                "width": 8,
+                "height": 30
+              },
+              "clipped": false,
+              "fontSize": "12px",
+              "zIndex": "4"
+            },
+            {
+              "tag": "BUTTON",
+              "id": "",
+              "className": "object-table-sort-button",
+              "rect": {
+                "x": 591.6,
+                "y": 389.4,
+                "left": 591.6,
+                "top": 389.4,
+                "right": 639.6,
+                "bottom": 407.4,
+                "width": 48,
+                "height": 18
+              },
+              "clipped": false,
+              "fontSize": "12px",
+              "zIndex": "auto"
+            },
+            {
+              "tag": "BUTTON",
+              "id": "",
+              "className": "object-table-column-resize-handle",
+              "rect": {
+                "x": 642.6,
+                "y": 383.4,
+                "left": 642.6,
+                "top": 383.4,
+                "right": 650.6,
+                "bottom": 413.4,
+                "width": 8,
+                "height": 30
+              },
+              "clipped": false,
+              "fontSize": "12px",
+              "zIndex": "4"
+            },
+            {
+              "tag": "BUTTON",
+              "id": "",
+              "className": "object-table-sort-button",
+              "rect": {
+                "x": 655.6,
+                "y": 389.4,
+                "left": 655.6,
+                "top": 389.4,
+                "right": 703.6,
+                "bottom": 407.4,
+                "width": 48,
+                "height": 18
+              },
+              "clipped": false,
+              "fontSize": "12px",
+              "zIndex": "auto"
+            },
+            {
+              "tag": "BUTTON",
+              "id": "",
+              "className": "object-table-column-resize-handle",
+              "rect": {
+                "x": 706.6,
+                "y": 383.4,
+                "left": 706.6,
+                "top": 383.4,
+                "right": 714.6,
+                "bottom": 413.4,
+                "width": 8,
+                "height": 30
+              },
+              "clipped": false,
+              "fontSize": "12px",
+              "zIndex": "4"
+            },
+            {
+              "tag": "INPUT",
+              "id": "",
+              "className": "object-table-selection-checkbox object-table-row-selection-checkbox",
+              "rect": {
+                "x": 31.6,
+                "y": 591.8,
+                "left": 31.6,
+                "top": 591.8,
+                "right": 45.6,
+                "bottom": 605.8,
+                "width": 14,
+                "height": 14
+              },
+              "clipped": false,
+              "fontSize": "12px",
+              "zIndex": "auto"
+            },
+            {
+              "tag": "BUTTON",
+              "id": "",
+              "className": "table-icon-action",
+              "rect": {
+                "x": 488,
+                "y": 583.4,
+                "left": 488,
+                "top": 583.4,
+                "right": 516,
+                "bottom": 611.4,
+                "width": 28,
+                "height": 28
+              },
+              "clipped": false,
+              "fontSize": "13px",
+              "zIndex": "auto"
+            },
+            {
+              "tag": "INPUT",
+              "id": "",
+              "className": "object-table-selection-checkbox object-table-row-selection-checkbox",
+              "rect": {
+                "x": 31.6,
+                "y": 632.5,
+                "left": 31.6,
+                "top": 632.5,
+                "right": 45.6,
+                "bottom": 646.5,
+                "width": 14,
+                "height": 14
+              },
+              "clipped": false,
+              "fontSize": "12px",
+              "zIndex": "auto"
+            },
+            {
+              "tag": "BUTTON",
+              "id": "",
+              "className": "table-icon-action",
+              "rect": {
+                "x": 488,
+                "y": 624.2,
+                "left": 488,
+                "top": 624.2,
+                "right": 516,
+                "bottom": 652.2,
+                "width": 28,
+                "height": 28
+              },
+              "clipped": false,
+              "fontSize": "13px",
+              "zIndex": "auto"
+            },
+            {
+              "tag": "INPUT",
+              "id": "",
+              "className": "object-table-selection-checkbox object-table-row-selection-checkbox",
+              "rect": {
+                "x": 31.6,
+                "y": 673.4,
+                "left": 31.6,
+                "top": 673.4,
+                "right": 45.6,
+                "bottom": 687.4,
+                "width": 14,
+                "height": 14
+              },
+              "clipped": false,
+              "fontSize": "12px",
+              "zIndex": "auto"
+            },
+            {
+              "tag": "BUTTON",
+              "id": "",
+              "className": "table-icon-action",
+              "rect": {
+                "x": 488,
+                "y": 665,
+                "left": 488,
+                "top": 665,
+                "right": 516,
+                "bottom": 693,
+                "width": 28,
+                "height": 28
+              },
+              "clipped": false,
+              "fontSize": "13px",
+              "zIndex": "auto"
+            }
+          ],
+          "clippedElements": [
+            {
+              "tag": "SELECT",
+              "id": "",
+              "className": "ui-select-native",
+              "rect": {
+                "x": 118.8,
+                "y": 1078.9,
+                "left": 118.8,
+                "top": 1078.9,
+                "right": 540,
+                "bottom": 1080.5,
+                "width": 421.2,
+                "height": 1.6
+              },
+              "clipped": true,
+              "fontSize": "12px",
+              "zIndex": "auto"
+            },
+            {
+              "tag": "INPUT",
+              "id": "",
+              "className": "ui-slider-native",
+              "rect": {
+                "x": 94.8,
+                "y": 1180.4,
+                "left": 94.8,
+                "top": 1180.4,
+                "right": 95.8,
+                "bottom": 1181.4,
+                "width": 1,
+                "height": 1
+              },
+              "clipped": true,
+              "fontSize": "12px",
+              "zIndex": "auto"
+            }
+          ],
+          "smallTargets": [
+            {
+              "tag": "BUTTON",
+              "id": "",
+              "className": "object-table-sort-button",
+              "rect": {
+                "x": 63.6,
+                "y": 389.4,
+                "left": 63.6,
+                "top": 389.4,
+                "right": 103.6,
+                "bottom": 407.4,
+                "width": 40,
+                "height": 18
+              },
+              "clipped": false,
+              "fontSize": "12px",
+              "zIndex": "auto"
+            },
+            {
+              "tag": "BUTTON",
+              "id": "",
+              "className": "object-table-column-resize-handle",
+              "rect": {
+                "x": 106.6,
+                "y": 383.4,
+                "left": 106.6,
+                "top": 383.4,
+                "right": 114.6,
+                "bottom": 413.4,
+                "width": 8,
+                "height": 30
+              },
+              "clipped": false,
+              "fontSize": "12px",
+              "zIndex": "4"
+            },
+            {
+              "tag": "BUTTON",
+              "id": "",
+              "className": "object-table-column-resize-handle",
+              "rect": {
+                "x": 226.6,
+                "y": 383.4,
+                "left": 226.6,
+                "top": 383.4,
+                "right": 234.6,
+                "bottom": 413.4,
+                "width": 8,
+                "height": 30
+              },
+              "clipped": false,
+              "fontSize": "12px",
+              "zIndex": "4"
+            },
+            {
+              "tag": "BUTTON",
+              "id": "",
+              "className": "object-table-column-resize-handle",
+              "rect": {
+                "x": 310.6,
+                "y": 383.4,
+                "left": 310.6,
+                "top": 383.4,
+                "right": 318.6,
+                "bottom": 413.4,
+                "width": 8,
+                "height": 30
+              },
+              "clipped": false,
+              "fontSize": "12px",
+              "zIndex": "4"
+            },
+            {
+              "tag": "BUTTON",
+              "id": "",
+              "className": "object-table-column-resize-handle",
+              "rect": {
+                "x": 422.6,
+                "y": 383.4,
+                "left": 422.6,
+                "top": 383.4,
+                "right": 430.6,
+                "bottom": 413.4,
+                "width": 8,
+                "height": 30
+              },
+              "clipped": false,
+              "fontSize": "12px",
+              "zIndex": "4"
+            },
+            {
+              "tag": "BUTTON",
+              "id": "",
+              "className": "object-table-sort-button",
+              "rect": {
+                "x": 435.6,
+                "y": 389.4,
+                "left": 435.6,
+                "top": 389.4,
+                "right": 483.6,
+                "bottom": 407.4,
+                "width": 48,
+                "height": 18
+              },
+              "clipped": false,
+              "fontSize": "12px",
+              "zIndex": "auto"
+            },
+            {
+              "tag": "BUTTON",
+              "id": "",
+              "className": "object-table-column-resize-handle",
+              "rect": {
+                "x": 486.6,
+                "y": 383.4,
+                "left": 486.6,
+                "top": 383.4,
+                "right": 494.6,
+                "bottom": 413.4,
+                "width": 8,
+                "height": 30
+              },
+              "clipped": false,
+              "fontSize": "12px",
+              "zIndex": "4"
+            },
+            {
+              "tag": "BUTTON",
+              "id": "",
+              "className": "object-table-sort-button",
+              "rect": {
+                "x": 499.6,
+                "y": 389.4,
+                "left": 499.6,
+                "top": 389.4,
+                "right": 575.6,
+                "bottom": 407.4,
+                "width": 76,
+                "height": 18
+              },
+              "clipped": false,
+              "fontSize": "12px",
+              "zIndex": "auto"
+            },
+            {
+              "tag": "BUTTON",
+              "id": "",
+              "className": "object-table-column-resize-handle",
+              "rect": {
+                "x": 578.6,
+                "y": 383.4,
+                "left": 578.6,
+                "top": 383.4,
+                "right": 586.6,
+                "bottom": 413.4,
+                "width": 8,
+                "height": 30
+              },
+              "clipped": false,
+              "fontSize": "12px",
+              "zIndex": "4"
+            },
+            {
+              "tag": "BUTTON",
+              "id": "",
+              "className": "object-table-sort-button",
+              "rect": {
+                "x": 591.6,
+                "y": 389.4,
+                "left": 591.6,
+                "top": 389.4,
+                "right": 639.6,
+                "bottom": 407.4,
+                "width": 48,
+                "height": 18
+              },
+              "clipped": false,
+              "fontSize": "12px",
+              "zIndex": "auto"
+            },
+            {
+              "tag": "BUTTON",
+              "id": "",
+              "className": "object-table-column-resize-handle",
+              "rect": {
+                "x": 642.6,
+                "y": 383.4,
+                "left": 642.6,
+                "top": 383.4,
+                "right": 650.6,
+                "bottom": 413.4,
+                "width": 8,
+                "height": 30
+              },
+              "clipped": false,
+              "fontSize": "12px",
+              "zIndex": "4"
+            },
+            {
+              "tag": "BUTTON",
+              "id": "",
+              "className": "object-table-sort-button",
+              "rect": {
+                "x": 655.6,
+                "y": 389.4,
+                "left": 655.6,
+                "top": 389.4,
+                "right": 703.6,
+                "bottom": 407.4,
+                "width": 48,
+                "height": 18
+              },
+              "clipped": false,
+              "fontSize": "12px",
+              "zIndex": "auto"
+            },
+            {
+              "tag": "BUTTON",
+              "id": "",
+              "className": "object-table-column-resize-handle",
+              "rect": {
+                "x": 706.6,
+                "y": 383.4,
+                "left": 706.6,
+                "top": 383.4,
+                "right": 714.6,
+                "bottom": 413.4,
+                "width": 8,
+                "height": 30
+              },
+              "clipped": false,
+              "fontSize": "12px",
+              "zIndex": "4"
+            }
+          ],
+          "focusables": 80,
+          "positiveTabIndex": 0,
+          "activeElement": "section.floating-panel",
+          "managedOverlays": 1,
+          "stateBannerKinds": [],
+          "glError": 0,
+          "healthErrors": 0
+        }
+      },
+      {
+        "caseId": "KV-106-css-stress-expanded-options",
+        "variant": "expanded-options",
+        "viewport": {
+          "width": 576,
+          "height": 576,
+          "devicePixelRatio": 1.0000000149011612
+        },
+        "ok": true,
+        "checks": {
+          "documentOverflowX": false,
+          "documentOverflowY": false,
+          "visibleElements": 7,
+          "outsideViewport": [],
+          "clippedElements": [],
+          "smallTargets": [],
+          "focusables": 1,
+          "positiveTabIndex": 0,
+          "activeElement": "section.floating-panel.editing-panel-disabled",
+          "managedOverlays": 1,
+          "stateBannerKinds": [],
+          "glError": 0,
+          "healthErrors": 0
+        }
+      },
+      {
+        "caseId": "KV-106-css-stress-font-and-states",
+        "variant": "font-and-states",
+        "viewport": {
+          "width": 576,
+          "height": 576,
+          "devicePixelRatio": 1.0000000149011612
+        },
+        "ok": true,
+        "checks": {
+          "documentOverflowX": false,
+          "documentOverflowY": false,
+          "visibleElements": 7,
+          "outsideViewport": [],
+          "clippedElements": [
+            {
+              "tag": "BUTTON",
+              "id": "",
+              "className": "floating-panel-history-button floating-panel-history-undo",
+              "rect": {
+                "x": 467.2,
+                "y": 133.4,
+                "left": 467.2,
+                "top": 133.4,
+                "right": 495.2,
+                "bottom": 161.4,
+                "width": 28,
+                "height": 28
+              },
+              "clipped": true,
+              "fontSize": "30px",
+              "zIndex": "auto"
+            },
+            {
+              "tag": "BUTTON",
+              "id": "",
+              "className": "floating-panel-history-button floating-panel-history-redo",
+              "rect": {
+                "x": 499.2,
+                "y": 133.4,
+                "left": 499.2,
+                "top": 133.4,
+                "right": 527.2,
+                "bottom": 161.4,
+                "width": 28,
+                "height": 28
+              },
+              "clipped": true,
+              "fontSize": "30px",
+              "zIndex": "auto"
+            },
+            {
+              "tag": "BUTTON",
+              "id": "",
+              "className": "ui-close-button floating-panel-close",
+              "rect": {
+                "x": 531.2,
+                "y": 133.4,
+                "left": 531.2,
+                "top": 133.4,
+                "right": 559.2,
+                "bottom": 161.4,
+                "width": 28,
+                "height": 28
+              },
+              "clipped": true,
+              "fontSize": "27px",
+              "zIndex": "auto"
+            }
+          ],
+          "smallTargets": [],
+          "focusables": 4,
+          "positiveTabIndex": 0,
+          "activeElement": "section.floating-panel",
+          "managedOverlays": 1,
+          "stateBannerKinds": [],
+          "glError": 0,
+          "healthErrors": 0
+        }
+      },
+      {
+        "caseId": "KV-106-css-stress-long-zh",
+        "variant": "long-zh",
+        "viewport": {
+          "width": 576,
+          "height": 576,
+          "devicePixelRatio": 1.0000000149011612
+        },
+        "ok": true,
+        "checks": {
+          "documentOverflowX": true,
+          "documentOverflowY": false,
+          "visibleElements": 7,
+          "outsideViewport": [
+            {
+              "tag": "BUTTON",
+              "id": "fit-view",
+              "className": "el-button secondary-action",
+              "rect": {
+                "x": 349,
+                "y": 18,
+                "left": 349,
+                "top": 18,
+                "right": 673.6,
+                "bottom": 52,
+                "width": 324.6,
+                "height": 34
+              },
+              "clipped": false,
+              "fontSize": "13px",
+              "zIndex": "auto"
+            },
+            {
+              "tag": "BUTTON",
+              "id": "toggle-measurement",
+              "className": "el-button secondary-action",
+              "rect": {
+                "x": 681.6,
+                "y": 18,
+                "left": 681.6,
+                "top": 18,
+                "right": 980.2,
+                "bottom": 52,
+                "width": 298.6,
+                "height": 34
+              },
+              "clipped": false,
+              "fontSize": "13px",
+              "zIndex": "auto"
+            }
+          ],
+          "clippedElements": [
+            {
+              "tag": "SECTION",
+              "id": "",
+              "className": "floating-panel",
+              "rect": {
+                "x": 8,
+                "y": 128,
+                "left": 8,
+                "top": 128,
+                "right": 568,
+                "bottom": 328,
+                "width": 560,
+                "height": 200
+              },
+              "clipped": true,
+              "fontSize": "16px",
+              "zIndex": "902"
+            },
+            {
+              "tag": "BUTTON",
+              "id": "",
+              "className": "floating-panel-history-button floating-panel-history-undo",
+              "rect": {
+                "x": 467.2,
+                "y": 133.4,
+                "left": 467.2,
+                "top": 133.4,
+                "right": 495.2,
+                "bottom": 161.4,
+                "width": 28,
+                "height": 28
+              },
+              "clipped": true,
+              "fontSize": "16px",
+              "zIndex": "auto"
+            },
+            {
+              "tag": "BUTTON",
+              "id": "",
+              "className": "floating-panel-history-button floating-panel-history-redo",
+              "rect": {
+                "x": 499.2,
+                "y": 133.4,
+                "left": 499.2,
+                "top": 133.4,
+                "right": 527.2,
+                "bottom": 161.4,
+                "width": 28,
+                "height": 28
+              },
+              "clipped": true,
+              "fontSize": "16px",
+              "zIndex": "auto"
+            },
+            {
+              "tag": "BUTTON",
+              "id": "",
+              "className": "ui-close-button floating-panel-close",
+              "rect": {
+                "x": 531.2,
+                "y": 133.4,
+                "left": 531.2,
+                "top": 133.4,
+                "right": 559.2,
+                "bottom": 161.4,
+                "width": 28,
+                "height": 28
+              },
+              "clipped": true,
+              "fontSize": "18px",
+              "zIndex": "auto"
+            }
+          ],
+          "smallTargets": [],
+          "focusables": 4,
+          "positiveTabIndex": 0,
+          "activeElement": "section.floating-panel",
+          "managedOverlays": 1,
+          "stateBannerKinds": [],
+          "glError": 0,
+          "healthErrors": 0
+        }
+      },
+      {
+        "caseId": "KV-106-desktop-baseline",
+        "variant": "baseline",
+        "viewport": {
+          "width": 1280,
+          "height": 720,
+          "devicePixelRatio": 1.0000000149011612
+        },
+        "ok": true,
+        "checks": {
+          "documentOverflowX": false,
+          "documentOverflowY": false,
+          "visibleElements": 7,
+          "outsideViewport": [],
+          "clippedElements": [],
+          "smallTargets": [],
+          "focusables": 4,
+          "positiveTabIndex": 0,
+          "activeElement": "section.floating-panel",
+          "managedOverlays": 1,
+          "stateBannerKinds": [],
+          "glError": 0,
+          "healthErrors": 0
+        }
+      },
+      {
+        "caseId": "KV-106-desktop-expanded-options",
+        "variant": "expanded-options",
+        "viewport": {
+          "width": 1280,
+          "height": 720,
+          "devicePixelRatio": 1.0000000149011612
+        },
+        "ok": true,
+        "checks": {
+          "documentOverflowX": false,
+          "documentOverflowY": false,
+          "visibleElements": 7,
+          "outsideViewport": [],
+          "clippedElements": [],
+          "smallTargets": [],
+          "focusables": 1,
+          "positiveTabIndex": 0,
+          "activeElement": "section.floating-panel.editing-panel-disabled",
+          "managedOverlays": 1,
+          "stateBannerKinds": [],
+          "glError": 0,
+          "healthErrors": 0
+        }
+      },
+      {
+        "caseId": "KV-106-desktop-font-and-states",
+        "variant": "font-and-states",
+        "viewport": {
+          "width": 1280,
+          "height": 720,
+          "devicePixelRatio": 1.0000000149011612
+        },
+        "ok": true,
+        "checks": {
+          "documentOverflowX": false,
+          "documentOverflowY": false,
+          "visibleElements": 7,
+          "outsideViewport": [],
+          "clippedElements": [
+            {
+              "tag": "BUTTON",
+              "id": "",
+              "className": "floating-panel-history-button floating-panel-history-undo",
+              "rect": {
+                "x": 859.2,
+                "y": 133.4,
+                "left": 859.2,
+                "top": 133.4,
+                "right": 887.2,
+                "bottom": 161.4,
+                "width": 28,
+                "height": 28
+              },
+              "clipped": true,
+              "fontSize": "30px",
+              "zIndex": "auto"
+            },
+            {
+              "tag": "BUTTON",
+              "id": "",
+              "className": "floating-panel-history-button floating-panel-history-redo",
+              "rect": {
+                "x": 891.2,
+                "y": 133.4,
+                "left": 891.2,
+                "top": 133.4,
+                "right": 919.2,
+                "bottom": 161.4,
+                "width": 28,
+                "height": 28
+              },
+              "clipped": true,
+              "fontSize": "30px",
+              "zIndex": "auto"
+            },
+            {
+              "tag": "BUTTON",
+              "id": "",
+              "className": "ui-close-button floating-panel-close",
+              "rect": {
+                "x": 923.2,
+                "y": 133.4,
+                "left": 923.2,
+                "top": 133.4,
+                "right": 951.2,
+                "bottom": 161.4,
+                "width": 28,
+                "height": 28
+              },
+              "clipped": true,
+              "fontSize": "27px",
+              "zIndex": "auto"
+            }
+          ],
+          "smallTargets": [],
+          "focusables": 4,
+          "positiveTabIndex": 0,
+          "activeElement": "section.floating-panel",
+          "managedOverlays": 1,
+          "stateBannerKinds": [],
+          "glError": 0,
+          "healthErrors": 0
+        }
+      },
+      {
+        "caseId": "KV-106-desktop-long-zh",
+        "variant": "long-zh",
+        "viewport": {
+          "width": 1280,
+          "height": 720,
+          "devicePixelRatio": 1.0000000149011612
+        },
+        "ok": true,
+        "checks": {
+          "documentOverflowX": false,
+          "documentOverflowY": false,
+          "visibleElements": 7,
+          "outsideViewport": [],
+          "clippedElements": [
+            {
+              "tag": "SECTION",
+              "id": "",
+              "className": "floating-panel",
+              "rect": {
+                "x": 400,
+                "y": 128,
+                "left": 400,
+                "top": 128,
+                "right": 960,
+                "bottom": 328,
+                "width": 560,
+                "height": 200
+              },
+              "clipped": true,
+              "fontSize": "16px",
+              "zIndex": "902"
+            },
+            {
+              "tag": "BUTTON",
+              "id": "",
+              "className": "floating-panel-history-button floating-panel-history-undo",
+              "rect": {
+                "x": 859.2,
+                "y": 133.4,
+                "left": 859.2,
+                "top": 133.4,
+                "right": 887.2,
+                "bottom": 161.4,
+                "width": 28,
+                "height": 28
+              },
+              "clipped": true,
+              "fontSize": "16px",
+              "zIndex": "auto"
+            },
+            {
+              "tag": "BUTTON",
+              "id": "",
+              "className": "floating-panel-history-button floating-panel-history-redo",
+              "rect": {
+                "x": 891.2,
+                "y": 133.4,
+                "left": 891.2,
+                "top": 133.4,
+                "right": 919.2,
+                "bottom": 161.4,
+                "width": 28,
+                "height": 28
+              },
+              "clipped": true,
+              "fontSize": "16px",
+              "zIndex": "auto"
+            },
+            {
+              "tag": "BUTTON",
+              "id": "",
+              "className": "ui-close-button floating-panel-close",
+              "rect": {
+                "x": 923.2,
+                "y": 133.4,
+                "left": 923.2,
+                "top": 133.4,
+                "right": 951.2,
+                "bottom": 161.4,
+                "width": 28,
+                "height": 28
+              },
+              "clipped": true,
+              "fontSize": "18px",
+              "zIndex": "auto"
+            }
+          ],
+          "smallTargets": [],
+          "focusables": 4,
+          "positiveTabIndex": 0,
+          "activeElement": "section.floating-panel",
+          "managedOverlays": 1,
+          "stateBannerKinds": [],
+          "glError": 0,
+          "healthErrors": 0
+        }
+      },
+      {
+        "caseId": "KV-106-narrow-baseline",
+        "variant": "baseline",
+        "viewport": {
+          "width": 720,
+          "height": 720,
+          "devicePixelRatio": 1.0000000149011612
+        },
+        "ok": true,
+        "checks": {
+          "documentOverflowX": false,
+          "documentOverflowY": true,
+          "visibleElements": 86,
+          "outsideViewport": [
+            {
+              "tag": "SECTION",
+              "id": "",
+              "className": "floating-panel",
+              "rect": {
+                "x": 152,
+                "y": 128,
+                "left": 152,
+                "top": 128,
+                "right": 712,
+                "bottom": 826.4,
+                "width": 560,
+                "height": 698.4
+              },
+              "clipped": false,
+              "fontSize": "16px",
+              "zIndex": "902"
+            },
+            {
+              "tag": "BUTTON",
+              "id": "",
+              "className": "object-table-column-resize-handle",
+              "rect": {
+                "x": 722.6,
+                "y": 383.4,
+                "left": 722.6,
+                "top": 383.4,
+                "right": 730.6,
+                "bottom": 413.4,
+                "width": 8,
+                "height": 30
+              },
+              "clipped": false,
+              "fontSize": "12px",
+              "zIndex": "4"
+            },
+            {
+              "tag": "BUTTON",
+              "id": "",
+              "className": "object-table-sort-button",
+              "rect": {
+                "x": 735.6,
+                "y": 389.4,
+                "left": 735.6,
+                "top": 389.4,
+                "right": 783.6,
+                "bottom": 407.4,
+                "width": 48,
+                "height": 18
+              },
+              "clipped": false,
+              "fontSize": "12px",
+              "zIndex": "auto"
+            },
+            {
+              "tag": "BUTTON",
+              "id": "",
+              "className": "object-table-column-resize-handle",
+              "rect": {
+                "x": 786.6,
+                "y": 383.4,
+                "left": 786.6,
+                "top": 383.4,
+                "right": 794.6,
+                "bottom": 413.4,
+                "width": 8,
+                "height": 30
+              },
+              "clipped": false,
+              "fontSize": "12px",
+              "zIndex": "4"
+            },
+            {
+              "tag": "BUTTON",
+              "id": "",
+              "className": "object-table-sort-button",
+              "rect": {
+                "x": 799.6,
+                "y": 389.4,
+                "left": 799.6,
+                "top": 389.4,
+                "right": 847.6,
+                "bottom": 407.4,
+                "width": 48,
+                "height": 18
+              },
+              "clipped": false,
+              "fontSize": "12px",
+              "zIndex": "auto"
+            },
+            {
+              "tag": "BUTTON",
+              "id": "",
+              "className": "object-table-column-resize-handle",
+              "rect": {
+                "x": 850.6,
+                "y": 383.4,
+                "left": 850.6,
+                "top": 383.4,
+                "right": 858.6,
+                "bottom": 413.4,
+                "width": 8,
+                "height": 30
+              },
+              "clipped": false,
+              "fontSize": "12px",
+              "zIndex": "4"
+            },
+            {
+              "tag": "INPUT",
+              "id": "",
+              "className": "object-table-selection-checkbox object-table-row-selection-checkbox",
+              "rect": {
+                "x": 175.6,
+                "y": 714.2,
+                "left": 175.6,
+                "top": 714.2,
+                "right": 189.6,
+                "bottom": 728.2,
+                "width": 14,
+                "height": 14
+              },
+              "clipped": false,
+              "fontSize": "12px",
+              "zIndex": "auto"
+            },
+            {
+              "tag": "BUTTON",
+              "id": "",
+              "className": "table-icon-action",
+              "rect": {
+                "x": 632,
+                "y": 705.8,
+                "left": 632,
+                "top": 705.8,
+                "right": 660,
+                "bottom": 733.8,
+                "width": 28,
+                "height": 28
+              },
+              "clipped": false,
+              "fontSize": "13px",
+              "zIndex": "auto"
+            },
+            {
+              "tag": "INPUT",
+              "id": "",
+              "className": "object-table-selection-checkbox object-table-row-selection-checkbox",
+              "rect": {
+                "x": 175.6,
+                "y": 755,
+                "left": 175.6,
+                "top": 755,
+                "right": 189.6,
+                "bottom": 769,
+                "width": 14,
+                "height": 14
+              },
+              "clipped": false,
+              "fontSize": "12px",
+              "zIndex": "auto"
+            },
+            {
+              "tag": "BUTTON",
+              "id": "",
+              "className": "table-icon-action",
+              "rect": {
+                "x": 632,
+                "y": 746.5,
+                "left": 632,
+                "top": 746.5,
+                "right": 660,
+                "bottom": 774.5,
+                "width": 28,
+                "height": 28
+              },
+              "clipped": false,
+              "fontSize": "13px",
+              "zIndex": "auto"
+            },
+            {
+              "tag": "INPUT",
+              "id": "",
+              "className": "object-table-selection-checkbox object-table-row-selection-checkbox",
+              "rect": {
+                "x": 175.6,
+                "y": 795.8,
+                "left": 175.6,
+                "top": 795.8,
+                "right": 189.6,
+                "bottom": 809.8,
+                "width": 14,
+                "height": 14
+              },
+              "clipped": false,
+              "fontSize": "12px",
+              "zIndex": "auto"
+            },
+            {
+              "tag": "BUTTON",
+              "id": "",
+              "className": "table-icon-action",
+              "rect": {
+                "x": 632,
+                "y": 787.4,
+                "left": 632,
+                "top": 787.4,
+                "right": 660,
+                "bottom": 815.4,
+                "width": 28,
+                "height": 28
+              },
+              "clipped": false,
+              "fontSize": "13px",
+              "zIndex": "auto"
+            }
+          ],
+          "clippedElements": [
+            {
+              "tag": "SELECT",
+              "id": "",
+              "className": "ui-select-native",
+              "rect": {
+                "x": 262.8,
+                "y": 1078.9,
+                "left": 262.8,
+                "top": 1078.9,
+                "right": 684,
+                "bottom": 1080.5,
+                "width": 421.2,
+                "height": 1.6
+              },
+              "clipped": true,
+              "fontSize": "12px",
+              "zIndex": "auto"
+            },
+            {
+              "tag": "INPUT",
+              "id": "",
+              "className": "ui-slider-native",
+              "rect": {
+                "x": 238.8,
+                "y": 1180.4,
+                "left": 238.8,
+                "top": 1180.4,
+                "right": 239.8,
+                "bottom": 1181.4,
+                "width": 1,
+                "height": 1
+              },
+              "clipped": true,
+              "fontSize": "12px",
+              "zIndex": "auto"
+            }
+          ],
+          "smallTargets": [
+            {
+              "tag": "BUTTON",
+              "id": "",
+              "className": "object-table-sort-button",
+              "rect": {
+                "x": 207.6,
+                "y": 389.4,
+                "left": 207.6,
+                "top": 389.4,
+                "right": 247.6,
+                "bottom": 407.4,
+                "width": 40,
+                "height": 18
+              },
+              "clipped": false,
+              "fontSize": "12px",
+              "zIndex": "auto"
+            },
+            {
+              "tag": "BUTTON",
+              "id": "",
+              "className": "object-table-column-resize-handle",
+              "rect": {
+                "x": 250.6,
+                "y": 383.4,
+                "left": 250.6,
+                "top": 383.4,
+                "right": 258.6,
+                "bottom": 413.4,
+                "width": 8,
+                "height": 30
+              },
+              "clipped": false,
+              "fontSize": "12px",
+              "zIndex": "4"
+            },
+            {
+              "tag": "BUTTON",
+              "id": "",
+              "className": "object-table-column-resize-handle",
+              "rect": {
+                "x": 370.6,
+                "y": 383.4,
+                "left": 370.6,
+                "top": 383.4,
+                "right": 378.6,
+                "bottom": 413.4,
+                "width": 8,
+                "height": 30
+              },
+              "clipped": false,
+              "fontSize": "12px",
+              "zIndex": "4"
+            },
+            {
+              "tag": "BUTTON",
+              "id": "",
+              "className": "object-table-column-resize-handle",
+              "rect": {
+                "x": 454.6,
+                "y": 383.4,
+                "left": 454.6,
+                "top": 383.4,
+                "right": 462.6,
+                "bottom": 413.4,
+                "width": 8,
+                "height": 30
+              },
+              "clipped": false,
+              "fontSize": "12px",
+              "zIndex": "4"
+            },
+            {
+              "tag": "BUTTON",
+              "id": "",
+              "className": "object-table-column-resize-handle",
+              "rect": {
+                "x": 566.6,
+                "y": 383.4,
+                "left": 566.6,
+                "top": 383.4,
+                "right": 574.6,
+                "bottom": 413.4,
+                "width": 8,
+                "height": 30
+              },
+              "clipped": false,
+              "fontSize": "12px",
+              "zIndex": "4"
+            },
+            {
+              "tag": "BUTTON",
+              "id": "",
+              "className": "object-table-sort-button",
+              "rect": {
+                "x": 579.6,
+                "y": 389.4,
+                "left": 579.6,
+                "top": 389.4,
+                "right": 627.6,
+                "bottom": 407.4,
+                "width": 48,
+                "height": 18
+              },
+              "clipped": false,
+              "fontSize": "12px",
+              "zIndex": "auto"
+            },
+            {
+              "tag": "BUTTON",
+              "id": "",
+              "className": "object-table-column-resize-handle",
+              "rect": {
+                "x": 630.6,
+                "y": 383.4,
+                "left": 630.6,
+                "top": 383.4,
+                "right": 638.6,
+                "bottom": 413.4,
+                "width": 8,
+                "height": 30
+              },
+              "clipped": false,
+              "fontSize": "12px",
+              "zIndex": "4"
+            },
+            {
+              "tag": "BUTTON",
+              "id": "",
+              "className": "object-table-sort-button",
+              "rect": {
+                "x": 643.6,
+                "y": 389.4,
+                "left": 643.6,
+                "top": 389.4,
+                "right": 719.6,
+                "bottom": 407.4,
+                "width": 76,
+                "height": 18
+              },
+              "clipped": false,
+              "fontSize": "12px",
+              "zIndex": "auto"
+            },
+            {
+              "tag": "BUTTON",
+              "id": "",
+              "className": "object-table-column-resize-handle",
+              "rect": {
+                "x": 722.6,
+                "y": 383.4,
+                "left": 722.6,
+                "top": 383.4,
+                "right": 730.6,
+                "bottom": 413.4,
+                "width": 8,
+                "height": 30
+              },
+              "clipped": false,
+              "fontSize": "12px",
+              "zIndex": "4"
+            },
+            {
+              "tag": "BUTTON",
+              "id": "",
+              "className": "object-table-sort-button",
+              "rect": {
+                "x": 735.6,
+                "y": 389.4,
+                "left": 735.6,
+                "top": 389.4,
+                "right": 783.6,
+                "bottom": 407.4,
+                "width": 48,
+                "height": 18
+              },
+              "clipped": false,
+              "fontSize": "12px",
+              "zIndex": "auto"
+            },
+            {
+              "tag": "BUTTON",
+              "id": "",
+              "className": "object-table-column-resize-handle",
+              "rect": {
+                "x": 786.6,
+                "y": 383.4,
+                "left": 786.6,
+                "top": 383.4,
+                "right": 794.6,
+                "bottom": 413.4,
+                "width": 8,
+                "height": 30
+              },
+              "clipped": false,
+              "fontSize": "12px",
+              "zIndex": "4"
+            },
+            {
+              "tag": "BUTTON",
+              "id": "",
+              "className": "object-table-sort-button",
+              "rect": {
+                "x": 799.6,
+                "y": 389.4,
+                "left": 799.6,
+                "top": 389.4,
+                "right": 847.6,
+                "bottom": 407.4,
+                "width": 48,
+                "height": 18
+              },
+              "clipped": false,
+              "fontSize": "12px",
+              "zIndex": "auto"
+            },
+            {
+              "tag": "BUTTON",
+              "id": "",
+              "className": "object-table-column-resize-handle",
+              "rect": {
+                "x": 850.6,
+                "y": 383.4,
+                "left": 850.6,
+                "top": 383.4,
+                "right": 858.6,
+                "bottom": 413.4,
+                "width": 8,
+                "height": 30
+              },
+              "clipped": false,
+              "fontSize": "12px",
+              "zIndex": "4"
+            }
+          ],
+          "focusables": 80,
+          "positiveTabIndex": 0,
+          "activeElement": "section.floating-panel",
+          "managedOverlays": 1,
+          "stateBannerKinds": [],
+          "glError": 0,
+          "healthErrors": 0
+        }
+      },
+      {
+        "caseId": "KV-106-narrow-expanded-options",
+        "variant": "expanded-options",
+        "viewport": {
+          "width": 720,
+          "height": 720,
+          "devicePixelRatio": 1.0000000149011612
+        },
+        "ok": true,
+        "checks": {
+          "documentOverflowX": false,
+          "documentOverflowY": false,
+          "visibleElements": 7,
+          "outsideViewport": [],
+          "clippedElements": [],
+          "smallTargets": [],
+          "focusables": 1,
+          "positiveTabIndex": 0,
+          "activeElement": "section.floating-panel.editing-panel-disabled",
+          "managedOverlays": 1,
+          "stateBannerKinds": [],
+          "glError": 0,
+          "healthErrors": 0
+        }
+      },
+      {
+        "caseId": "KV-106-narrow-font-and-states",
+        "variant": "font-and-states",
+        "viewport": {
+          "width": 720,
+          "height": 720,
+          "devicePixelRatio": 1.0000000149011612
+        },
+        "ok": true,
+        "checks": {
+          "documentOverflowX": false,
+          "documentOverflowY": false,
+          "visibleElements": 7,
+          "outsideViewport": [],
+          "clippedElements": [
+            {
+              "tag": "BUTTON",
+              "id": "",
+              "className": "floating-panel-history-button floating-panel-history-undo",
+              "rect": {
+                "x": 611.2,
+                "y": 133.4,
+                "left": 611.2,
+                "top": 133.4,
+                "right": 639.2,
+                "bottom": 161.4,
+                "width": 28,
+                "height": 28
+              },
+              "clipped": true,
+              "fontSize": "30px",
+              "zIndex": "auto"
+            },
+            {
+              "tag": "BUTTON",
+              "id": "",
+              "className": "floating-panel-history-button floating-panel-history-redo",
+              "rect": {
+                "x": 643.2,
+                "y": 133.4,
+                "left": 643.2,
+                "top": 133.4,
+                "right": 671.2,
+                "bottom": 161.4,
+                "width": 28,
+                "height": 28
+              },
+              "clipped": true,
+              "fontSize": "30px",
+              "zIndex": "auto"
+            },
+            {
+              "tag": "BUTTON",
+              "id": "",
+              "className": "ui-close-button floating-panel-close",
+              "rect": {
+                "x": 675.2,
+                "y": 133.4,
+                "left": 675.2,
+                "top": 133.4,
+                "right": 703.2,
+                "bottom": 161.4,
+                "width": 28,
+                "height": 28
+              },
+              "clipped": true,
+              "fontSize": "27px",
+              "zIndex": "auto"
+            }
+          ],
+          "smallTargets": [],
+          "focusables": 4,
+          "positiveTabIndex": 0,
+          "activeElement": "section.floating-panel",
+          "managedOverlays": 1,
+          "stateBannerKinds": [],
+          "glError": 0,
+          "healthErrors": 0
+        }
+      },
+      {
+        "caseId": "KV-106-narrow-long-zh",
+        "variant": "long-zh",
+        "viewport": {
+          "width": 720,
+          "height": 720,
+          "devicePixelRatio": 1.0000000149011612
+        },
+        "ok": true,
+        "checks": {
+          "documentOverflowX": true,
+          "documentOverflowY": false,
+          "visibleElements": 7,
+          "outsideViewport": [
+            {
+              "tag": "BUTTON",
+              "id": "toggle-measurement",
+              "className": "el-button secondary-action",
+              "rect": {
+                "x": 681.6,
+                "y": 18,
+                "left": 681.6,
+                "top": 18,
+                "right": 980.2,
+                "bottom": 52,
+                "width": 298.6,
+                "height": 34
+              },
+              "clipped": false,
+              "fontSize": "13px",
+              "zIndex": "auto"
+            }
+          ],
+          "clippedElements": [
+            {
+              "tag": "SECTION",
+              "id": "",
+              "className": "floating-panel",
+              "rect": {
+                "x": 152,
+                "y": 128,
+                "left": 152,
+                "top": 128,
+                "right": 712,
+                "bottom": 328,
+                "width": 560,
+                "height": 200
+              },
+              "clipped": true,
+              "fontSize": "16px",
+              "zIndex": "902"
+            },
+            {
+              "tag": "BUTTON",
+              "id": "",
+              "className": "floating-panel-history-button floating-panel-history-undo",
+              "rect": {
+                "x": 611.2,
+                "y": 133.4,
+                "left": 611.2,
+                "top": 133.4,
+                "right": 639.2,
+                "bottom": 161.4,
+                "width": 28,
+                "height": 28
+              },
+              "clipped": true,
+              "fontSize": "16px",
+              "zIndex": "auto"
+            },
+            {
+              "tag": "BUTTON",
+              "id": "",
+              "className": "floating-panel-history-button floating-panel-history-redo",
+              "rect": {
+                "x": 643.2,
+                "y": 133.4,
+                "left": 643.2,
+                "top": 133.4,
+                "right": 671.2,
+                "bottom": 161.4,
+                "width": 28,
+                "height": 28
+              },
+              "clipped": true,
+              "fontSize": "16px",
+              "zIndex": "auto"
+            },
+            {
+              "tag": "BUTTON",
+              "id": "",
+              "className": "ui-close-button floating-panel-close",
+              "rect": {
+                "x": 675.2,
+                "y": 133.4,
+                "left": 675.2,
+                "top": 133.4,
+                "right": 703.2,
+                "bottom": 161.4,
+                "width": 28,
+                "height": 28
+              },
+              "clipped": true,
+              "fontSize": "18px",
+              "zIndex": "auto"
+            }
+          ],
+          "smallTargets": [],
+          "focusables": 4,
+          "positiveTabIndex": 0,
+          "activeElement": "section.floating-panel",
+          "managedOverlays": 1,
+          "stateBannerKinds": [],
+          "glError": 0,
+          "healthErrors": 0
+        }
+      }
+    ],
+    "screenshots": [
+      {
+        "caseId": "KV-106-desktop-font-and-states",
+        "viewport": "1280x720",
+        "bytes": 106266
+      },
+      {
+        "caseId": "KV-106-narrow-font-and-states",
+        "viewport": "720x720",
+        "bytes": 59878
+      },
+      {
+        "caseId": "KV-106-css-stress-font-and-states",
+        "viewport": "576x576",
+        "bytes": 43915
+      }
+    ],
+    "consoleEvidence": {
+      "collected": false,
+      "note": "未把控制台与 page error 作为结构化证据单独采集；故障注入期间允许出现预期 operation-failed 健康日志。"
+    }
+  },
+  "surfaceSummary": {
+    "surfaces": 102,
+    "included": 85,
+    "excluded": 17,
+    "unclassified": 0,
+    "missingExclusionReason": 0,
+    "bySourceType": {
+      "vue-panel-detail": 26,
+      "non-vue-panel": 2,
+      "resident-readout": 3,
+      "fixed-overlay": 22,
+      "canvas-overlay": 7,
+      "shared-component": 30,
+      "global-event": 12
+    }
+  },
+  "flowSummary": {
+    "flows": 14,
+    "visibleActions": 126,
+    "codeConfirmed": 14,
+    "browserPending": 14,
+    "unknownResults": 0,
+    "missingDecisions": 0,
+    "findings": 2,
+    "unresolvedSurfaceRefs": 0
+  },
+  "directSummary": {
+    "runtimeModes": 28,
+    "registeredModes": 28,
+    "entryModes": 28,
+    "modeContracts": 28,
+    "missingModeContracts": 0,
+    "extraModeContracts": 0,
+    "missingRegistrations": 0,
+    "extraRegistrations": 0,
+    "missingEntries": 0,
+    "extraEntries": 0,
+    "legacyRegressionModes": 24,
+    "legacyMissingModes": 4,
+    "directFamilies": 19,
+    "directManipulations": 88,
+    "directHosts": 88,
+    "missingDirectClassifications": 0,
+    "unresolvedSurfaceRefs": 0,
+    "findings": 7,
+    "codeConfirmed": 47,
+    "browserPending": 47
+  },
+  "complexSummary": {
+    "panelProfiles": 26,
+    "complexWorkspaces": 10,
+    "complexWorkspaceFields": 131,
+    "sharedFields": 83,
+    "exceptionFields": 20,
+    "exportParameterFields": 28,
+    "fieldCommitClasses": {
+      "draft-confirm": 56,
+      "explicit-apply": 11,
+      "immediate-change": 39,
+      "live-local-parameter": 25
+    },
+    "fieldEffects": {
+      "deferred-command": 27,
+      "map-command": 13,
+      "ui-local": 91
+    },
+    "tableHosts": 23,
+    "tableInstances": 26,
+    "independentlyFilterable": 25,
+    "sortable": 25,
+    "primarySelection": 26,
+    "globalSelection": 16,
+    "localSelection": 10,
+    "locate": 19,
+    "doubleClickEdit": 11,
+    "resizable": 26,
+    "virtualCapable": 26,
+    "emptyState": 26,
+    "actionableEmptyState": 25,
+    "batchSelection": 20,
+    "persistentHighlight": 17,
+    "selectedExport": 9,
+    "actionDockHosts": 18,
+    "actionDockActions": 68,
+    "uniqueActionKeys": 32,
+    "toggleModeActions": 12,
+    "directActions": 1,
+    "secondaryPanelActions": 55,
+    "crossResultActionKeys": 2,
+    "findings": 5,
+    "unknownFields": 0,
+    "unresolvedTables": 0,
+    "unresolvedActions": 0,
+    "browserPending": 225
+  },
+  "dangerSummary": {
+    "destructiveUiActions": 24,
+    "destructiveSemantics": 19,
+    "deleteImpactActions": 8,
+    "canvasDeleteBypasses": 3,
+    "topologyTransactions": 2,
+    "regenerationKinds": 11,
+    "regenerationUiKinds": 8,
+    "mapReplacementFlows": 5,
+    "derivedFlows": 4,
+    "geoImportFlows": 2,
+    "relatedMutationFlows": 4,
+    "findings": 8,
+    "unresolved": 0,
+    "browserScenarios": 14,
+    "efScenarios": 12,
+    "enScenarios": 1
+  },
+  "visualSummary": {
+    "shortcuts": 22,
+    "shortcutBindings": 23,
+    "shortcutConflicts": 0,
+    "keyboardListeners": 5,
+    "keyboardActionConsumers": 4,
+    "keyboardInputTrackers": 1,
+    "localKeyboardActions": 2,
+    "localKeyboardBindings": 3,
+    "focusDefinitions": 12,
+    "focusEntries": 8,
+    "focusExcluded": 4,
+    "focusSinkDefinitions": 3,
+    "managedOverlayInstances": 49,
+    "managedDialogInstances": 22,
+    "dynamicFocusableFactories": 1,
+    "escapeConsumers": 2,
+    "escapeExcluded": 1,
+    "responsiveBreakpoints": 2,
+    "responsiveContainerQueries": 2,
+    "layerContracts": 8,
+    "targetSizeContracts": 8,
+    "stateBannerKinds": 7,
+    "findings": 5,
+    "pureUiFindings": 2,
+    "behaviorFindings": 3,
+    "browserCases": 12,
+    "unresolved": 0
+  },
+  "unknownResultBreakdown": {
+    "coreUnknownResults": 0,
+    "coreUnresolvedSurfaceRefs": 0,
+    "directMissingClassifications": 0,
+    "directUnresolvedSurfaceRefs": 0,
+    "complexUnknownFields": 0,
+    "complexUnresolvedTables": 0,
+    "complexUnresolvedActions": 0,
+    "dangerUnresolved": 0,
+    "visualUnresolved": 0
+  },
+  "findings": [
+    {
+      "id": "IA-102-001",
+      "title": "列表定位失败可能缺少用户可见反馈",
+      "severity": "P2",
+      "confidence": "中",
+      "intB": true,
+      "recommendation": "第 107 项验证无效 / 孤儿对象路径；若确认为静默失败，后续候选需增加反馈，属于行为变化。",
+      "reproduction": "在 F1 / F6 依次执行定位、重命名、空态和历史操作，观察结果反馈与 history 变化。",
+      "sourceTask": "第 102 项",
+      "sourceRefs": [
+        "app/webgl-generator/src/runtime/app.js"
+      ],
+      "codeObservation": "统一定位 helper 在 locateObject 返回 false 时只刷新面板并返回 false，当前静态链未发现通用 toast 或状态文案。",
+      "browserCaseIds": [
+        "HF-12-14",
+        "DR-105-F6-NEUTRAL"
+      ],
+      "browserConclusion": "浏览器上下文通过，静态反馈风险保留",
+      "changeClass": "INT-B",
+      "codeEvidence": "E-C",
+      "browserEvidence": "E-S-context"
+    },
+    {
+      "id": "IA-102-002",
+      "title": "部分重命名 no-op 可能静默返回",
+      "severity": "P3",
+      "confidence": "中",
+      "intB": true,
+      "recommendation": "第 107 项验证空名和未变化名称；若缺少反馈，后续候选需统一 no-op 反馈，属于行为变化。",
+      "reproduction": "在 F1 / F6 依次执行定位、重命名、空态和历史操作，观察结果反馈与 history 变化。",
+      "sourceTask": "第 102 项",
+      "sourceRefs": [
+        "app/webgl-generator/src/runtime/app.js"
+      ],
+      "codeObservation": "executeEditCommand 仅在调用方传入 noopStatus 时显示状态，部分领域重命名没有统一传入该字段。",
+      "browserCaseIds": [
+        "HF-12-14"
+      ],
+      "browserConclusion": "正常重命名通过，no-op 反馈风险保留",
+      "changeClass": "INT-B",
+      "codeEvidence": "E-C",
+      "browserEvidence": "E-S-context"
+    },
+    {
+      "id": "IA-103-001",
+      "title": "既有画布模式回归分母落后于运行时",
+      "severity": "P1",
+      "confidence": "高",
+      "intB": false,
+      "recommendation": "后续整改批次让既有回归从运行时真实清单派生或同步补齐；本批不修改旧门禁。",
+      "reproduction": "在 F1 激活对应画布模式或直接拖动表面，触发 Escape / pointercancel / 捕获丢失并比较 active mode、草稿和历史。",
+      "sourceTask": "第 103 项",
+      "sourceRefs": [
+        "app/webgl-generator/src/runtime/app.js",
+        "tools/webgl-generator-canvas-tool-mode-manager-regression.mjs"
+      ],
+      "codeObservation": "运行时有 28 个注册模式，既有回归仅冻结 24 个，缺少 culture:center、religion:center、biome:suitability、feature:topology-select。",
+      "browserCaseIds": [
+        "DM-103-MODES"
+      ],
+      "browserConclusion": "浏览器确认运行时注册 28 项",
+      "changeClass": "UI-only",
+      "codeEvidence": "E-C",
+      "browserEvidence": "E-S-context"
+    },
+    {
+      "id": "IA-103-002",
+      "title": "Escape 只显式退出城镇移动模式",
+      "severity": "P2",
+      "confidence": "中",
+      "intB": true,
+      "recommendation": "第 107 项验证典型持续 / 一次性 / 草稿模式；若确认不合人类预期，另立 INT-B 任务设计统一优先级。",
+      "reproduction": "在 F1 激活对应画布模式或直接拖动表面，触发 Escape / pointercancel / 捕获丢失并比较 active mode、草稿和历史。",
+      "sourceTask": "第 103 项",
+      "sourceRefs": [
+        "app/webgl-generator/src/runtime/keyboard-shortcuts.js",
+        "app/webgl-generator/src/runtime/app.js"
+      ],
+      "codeObservation": "selection.cancel 的可执行条件和 handler 只把 city:move 视为活动画布模式；其它活动模式不由该快捷键退出。",
+      "browserCaseIds": [
+        "KV-106-ESCAPE"
+      ],
+      "browserConclusion": "Escape 双消费已复现，模式统一退出仍待整改",
+      "changeClass": "INT-B",
+      "codeEvidence": "E-C",
+      "browserEvidence": "E-S-context"
+    },
+    {
+      "id": "IA-103-003",
+      "title": "手工标签 pointercancel 仍提交位置且切图未统一清理拖动",
+      "severity": "P1",
+      "confidence": "高",
+      "intB": true,
+      "recommendation": "后续 INT-B 任务区分提交与取消，并在地图替换前统一终止标签拖动。",
+      "reproduction": "在 F1 激活对应画布模式或直接拖动表面，触发 Escape / pointercancel / 捕获丢失并比较 active mode、草稿和历史。",
+      "sourceTask": "第 103 项",
+      "sourceRefs": [
+        "app/webgl-generator/src/runtime/app.js"
+      ],
+      "codeObservation": "pointerup 与 pointercancel 共用 finishCustomLabelDrag；loadMapIntoRuntime 的切图清理未显式终止 customLabelDrag / pendingCustomLabelPlacement 及其 window 监听。",
+      "browserCaseIds": [
+        "DM-103-MODES"
+      ],
+      "browserConclusion": "浏览器上下文通过，切图取消风险保留",
+      "changeClass": "INT-B",
+      "codeEvidence": "E-C",
+      "browserEvidence": "E-S-context"
+    },
+    {
+      "id": "IA-103-004",
+      "title": "测量控制点 pointercancel 不恢复拖动前坐标",
+      "severity": "P2",
+      "confidence": "中",
+      "intB": true,
+      "recommendation": "第 107 项验证用户可见取消结果；若需回滚，另立 INT-B 任务保存起点并区分结束原因。",
+      "reproduction": "在 F1 激活对应画布模式或直接拖动表面，触发 Escape / pointercancel / 捕获丢失并比较 active mode、草稿和历史。",
+      "sourceTask": "第 103 项",
+      "sourceRefs": [
+        "app/webgl-generator/src/runtime/app.js"
+      ],
+      "codeObservation": "测量控制点的 pointerup 与 pointercancel 共用 drag.end；该函数只清理监听，不保存起点或回滚草稿坐标。",
+      "browserCaseIds": [
+        "DM-103-MODES"
+      ],
+      "browserConclusion": "浏览器上下文通过，pointercancel 语义风险保留",
+      "changeClass": "INT-B",
+      "codeEvidence": "E-C",
+      "browserEvidence": "E-S-context"
+    },
+    {
+      "id": "IA-103-005",
+      "title": "指针捕获路径没有 lostpointercapture 恢复消费者",
+      "severity": "P2",
+      "confidence": "高",
+      "intB": true,
+      "recommendation": "第 107 项覆盖可构造路径；后续统一拖动基础设施时补 lostpointercapture 收口。",
+      "reproduction": "在 F1 激活对应画布模式或直接拖动表面，触发 Escape / pointercancel / 捕获丢失并比较 active mode、草稿和历史。",
+      "sourceTask": "第 103 项",
+      "sourceRefs": [
+        "app/webgl-generator/src/ui/panel-manager.js",
+        "app/webgl-generator/src/ui/vue/composables/use-draggable-floating-panel.js"
+      ],
+      "codeObservation": "当前应用源码使用 setPointerCapture / releasePointerCapture，但没有注册 lostpointercapture。",
+      "browserCaseIds": [
+        "DM-103-MODES"
+      ],
+      "browserConclusion": "浏览器上下文通过，缺失消费者由 E-C 确认",
+      "changeClass": "INT-B",
+      "codeEvidence": "E-C",
+      "browserEvidence": "E-S-context"
+    },
+    {
+      "id": "IA-103-006",
+      "title": "共享拖动的 pointercancel 结果不一致",
+      "severity": "P3",
+      "confidence": "高",
+      "intB": true,
+      "recommendation": "第 107 项记录实际可见差异；后续按交互类型决定统一语义，不在审计批次修改。",
+      "reproduction": "在 F1 激活对应画布模式或直接拖动表面，触发 Escape / pointercancel / 捕获丢失并比较 active mode、草稿和历史。",
+      "sourceTask": "第 103 项",
+      "sourceRefs": [
+        "app/webgl-generator/src/ui/panel-manager.js",
+        "app/webgl-generator/src/ui/vue/components/base/UiActionDock.vue",
+        "app/webgl-generator/src/ui/vue/composables/use-draggable-floating-panel.js",
+        "app/webgl-generator/src/ui/vue/components/base/UiObjectTable.vue"
+      ],
+      "codeObservation": "主面板回到起点；动作坞、高度工作台和未传 storageKey 的树状浮层仅在会话内保留末位置；项目导出浮层会持久化末位置；表格列宽保留最后一次 emit。",
+      "browserCaseIds": [
+        "CW-104-PANELS"
+      ],
+      "browserConclusion": "多类浮层可达，取消语义差异保留",
+      "changeClass": "INT-B",
+      "codeEvidence": "E-C",
+      "browserEvidence": "E-S-context"
+    },
+    {
+      "id": "IA-103-007",
+      "title": "十九个拾取 / 创建 / 移动模式使用默认画布光标",
+      "severity": "P2",
+      "confidence": "中",
+      "intB": false,
+      "recommendation": "第 107 项观察典型模式的可发现性；如不足，后续纯 UI 候选可增加 cursor / overlay 提示。",
+      "reproduction": "在 F1 激活对应画布模式或直接拖动表面，触发 Escape / pointercancel / 捕获丢失并比较 active mode、草稿和历史。",
+      "sourceTask": "第 103 项",
+      "sourceRefs": [
+        "app/webgl-generator/src/runtime/app.js"
+      ],
+      "codeObservation": "只有八个连续笔刷使用 brush overlay，measurement 使用 crosshair；其余十九个模式没有模式专属光标。",
+      "browserCaseIds": [
+        "DM-103-MODES"
+      ],
+      "browserConclusion": "28 模式可达，默认光标问题保留",
+      "changeClass": "UI-only",
+      "codeEvidence": "E-C",
+      "browserEvidence": "E-S-context"
+    },
+    {
+      "id": "IA-104-001",
+      "title": "动作坞模式激活视觉与 aria-pressed 不一致",
+      "severity": "P1",
+      "confidence": "高",
+      "intB": false,
+      "recommendation": "后续纯 UI 任务把 aria-pressed 与视觉 active 使用同一判定。",
+      "reproduction": "在 F1 / F2 打开对应复杂工作区，执行动作坞、筛选、表格滚动或双击，比较视觉状态、aria、selection 与行几何。",
+      "sourceTask": "第 104 项",
+      "sourceRefs": [
+        "app/webgl-generator/src/ui/vue/components/base/UiActionDock.vue"
+      ],
+      "codeObservation": "12 个 panel:false 模式动作通过 action.active 呈现视觉 active，但 aria-pressed 只比较 action.key === active；直接模式动作不会把 dock active 设置为动作 key。",
+      "browserCaseIds": [
+        "CW-104-PANELS"
+      ],
+      "browserConclusion": "动作坞可达，aria 与视觉不同源由 E-C 确认",
+      "changeClass": "UI-only",
+      "codeEvidence": "E-C",
+      "browserEvidence": "E-S-context"
+    },
+    {
+      "id": "IA-104-002",
+      "title": "文化名称库动作的元数据与最终结果不一致",
+      "severity": "P2",
+      "confidence": "高",
+      "intB": true,
+      "recommendation": "后续把 direct/open-other-panel 结果写入统一动作元数据。",
+      "reproduction": "在 F1 / F2 打开对应复杂工作区，执行动作坞、筛选、表格滚动或双击，比较视觉状态、aria、selection 与行几何。",
+      "sourceTask": "第 104 项",
+      "sourceRefs": [
+        "app/webgl-generator/src/ui/vue/components/CulturePanel.vue",
+        "app/webgl-generator/src/ui/vue/components/base/UiActionDock.vue"
+      ],
+      "codeObservation": "Culture namebase 动作未声明 panel:false；UiActionDock 会先尝试打开同名二级面板，宿主 handler 再清 active 并打开名称库绑定。",
+      "browserCaseIds": [
+        "CW-104-PANELS"
+      ],
+      "browserConclusion": "面板入口通过，动作元数据偏差保留",
+      "changeClass": "INT-B",
+      "codeEvidence": "E-C",
+      "browserEvidence": "E-S-context"
+    },
+    {
+      "id": "IA-104-003",
+      "title": "表格虚拟行高与 CSS 几何模型不一致",
+      "severity": "P1",
+      "confidence": "高",
+      "intB": false,
+      "recommendation": "第 107 项用长列表与字体放大实测；后续将虚拟行高和 CSS 行高收敛到同一 token 或实测。",
+      "reproduction": "在 F1 / F2 打开对应复杂工作区，执行动作坞、筛选、表格滚动或双击，比较视觉状态、aria、selection 与行几何。",
+      "sourceTask": "第 104 项",
+      "sourceRefs": [
+        "app/webgl-generator/src/ui/vue/components/base/UiObjectTable.vue",
+        "app/webgl-generator/src/styles.css"
+      ],
+      "codeObservation": "UiObjectTable 固定按 32px 计算 spacer 和居中；19 个带定位列的表格行至少包含 28px 高按钮、上下各 6px 的 td padding 和 1px border，最小行高约 41px，其余 7 个表格也没有固定 32px CSS。",
+      "browserCaseIds": [
+        "KV-106-narrow-baseline"
+      ],
+      "browserConclusion": "窄视口表格几何偏差已观察",
+      "changeClass": "UI-only",
+      "codeEvidence": "E-C",
+      "browserEvidence": "E-S-context"
+    },
+    {
+      "id": "IA-104-004",
+      "title": "双击编辑重复触发主选中",
+      "severity": "P2",
+      "confidence": "中",
+      "intB": true,
+      "recommendation": "第 107 项核对用户可见影响；如有代价，后续去除 dblclick 内重复 select 或抑制双击 click 副作用。",
+      "reproduction": "在 F1 / F2 打开对应复杂工作区，执行动作坞、筛选、表格滚动或双击，比较视觉状态、aria、selection 与行几何。",
+      "sourceTask": "第 104 项",
+      "sourceRefs": [
+        "app/webgl-generator/src/ui/vue/components/base/UiObjectTable.vue"
+      ],
+      "codeObservation": "11 个 edit 表格先收到浏览器 click 序列，每次 click emit select；dblclick handler 又 emit select + edit。",
+      "browserCaseIds": [
+        "HF-12-14"
+      ],
+      "browserConclusion": "选择与编辑链通过，重复派发风险保留",
+      "changeClass": "INT-B",
+      "codeEvidence": "E-C",
+      "browserEvidence": "E-S-context"
+    },
+    {
+      "id": "IA-104-005",
+      "title": "动作 key 不能作为全局结果语义",
+      "severity": "P2",
+      "confidence": "高",
+      "intB": true,
+      "recommendation": "继续以 host + key 作为动作身份，并在后续统一元数据时显式声明 resultClass。",
+      "reproduction": "在 F1 / F2 打开对应复杂工作区，执行动作坞、筛选、表格滚动或双击，比较视觉状态、aria、selection 与行几何。",
+      "sourceTask": "第 104 项",
+      "sourceRefs": [
+        "app/webgl-generator/src/ui/vue/components/BiomePanel.vue",
+        "app/webgl-generator/src/ui/vue/components/CityPanel.vue",
+        "app/webgl-generator/src/ui/vue/components/ControlPanel.vue",
+        "app/webgl-generator/src/ui/vue/components/CulturePanel.vue",
+        "app/webgl-generator/src/ui/vue/components/DiplomacyPanel.vue",
+        "app/webgl-generator/src/ui/vue/components/LabelNamingPanel.vue"
+      ],
+      "codeObservation": "68 个动作只有 32 个 unique key；assign 同时表示二级面板和画布模式，edit 同时表示画布模式和二级面板。",
+      "browserCaseIds": [
+        "CW-104-PANELS"
+      ],
+      "browserConclusion": "浏览器确认多宿主动作可达",
+      "changeClass": "INT-B",
+      "codeEvidence": "E-C",
+      "browserEvidence": "E-S-context"
+    },
+    {
+      "id": "IA-105-001",
+      "title": "国家、省份、城市的实际画布删除绕过共用影响预检与确认",
+      "severity": "P1",
+      "confidence": "高",
+      "intB": true,
+      "recommendation": "统一画布、面板和 API 的删除预检契约，并对实际 pointer handler 限域断言。",
+      "reproduction": "从 F5 指纹开始执行对应 DR-105 故障、取消或恢复 case，比较 checksum、history、selection、options、theme 与 derivedStale。",
+      "sourceTask": "第 105 项",
+      "sourceRefs": [
+        "tools/webgl-generator-interaction-danger-recovery-audit.mjs"
+      ],
+      "codeObservation": "面板控制器存在 executeDeleteWithPreflight 路径，但 pointerdown 实际直接创建删除命令；旧回归只证明死回调存在，未证明可见入口接线。",
+      "browserCaseIds": [
+        "DR-105-F5-DELETE-CANCEL"
+      ],
+      "browserConclusion": "取消路径保持指纹，绕过入口由 E-C 确认",
+      "changeClass": "INT-B",
+      "codeEvidence": "E-C",
+      "browserEvidence": "E-S-context"
+    },
+    {
+      "id": "IA-105-002",
+      "title": "FMG Cells GEO 命令 apply 中途失败可能留下部分地图变更且没有历史",
+      "severity": "P1",
+      "confidence": "高",
+      "intB": true,
+      "recommendation": "为多域 GEO 导入命令增加 apply 级事务快照与故障注入回归。",
+      "reproduction": "从 F5 指纹开始执行对应 DR-105 故障、取消或恢复 case，比较 checksum、history、selection、options、theme 与 derivedStale。",
+      "sourceTask": "第 105 项",
+      "sourceRefs": [
+        "tools/webgl-generator-interaction-danger-recovery-audit.mjs"
+      ],
+      "codeObservation": "命令先改高度再重建多域，自身没有 try/catch 快照恢复；EditHistory 只在 apply 完成后压栈。",
+      "browserCaseIds": [
+        "DR-105-F5-GEO-APPLY-FAIL"
+      ],
+      "browserConclusion": "已复现",
+      "changeClass": "INT-B",
+      "codeEvidence": "E-C",
+      "browserEvidence": "E-F"
+    },
+    {
+      "id": "IA-105-003",
+      "title": "气候下游异步重算不受运行时互斥与旧结果保护",
+      "severity": "P1",
+      "confidence": "高",
+      "intB": true,
+      "recommendation": "增加全局互斥、request id、map identity 或过期结果丢弃契约。",
+      "reproduction": "从 F5 指纹开始执行对应 DR-105 故障、取消或恢复 case，比较 checksum、history、selection、options、theme 与 derivedStale。",
+      "sourceTask": "第 105 项",
+      "sourceRefs": [
+        "tools/webgl-generator-interaction-danger-recovery-audit.mjs"
+      ],
+      "codeObservation": "公开 API 可并行触发并与地图替换交错；晚到任务仍会 onRestore 旧 map.options，失败回滚还可能覆盖并发合法变更。",
+      "browserCaseIds": [
+        "DR-105-F5-CLIMATE-LATE-RESULT"
+      ],
+      "browserConclusion": "已复现",
+      "changeClass": "INT-B",
+      "codeEvidence": "E-C",
+      "browserEvidence": "E-F"
+    },
+    {
+      "id": "IA-105-004",
+      "title": "11 类受约束重生成只有 2 类成功后可撤销，且全部缺少统一失败快照",
+      "severity": "P1",
+      "confidence": "高",
+      "intB": true,
+      "recommendation": "为重生成建立聚合快照命令或 RuntimeOperation rollback。",
+      "reproduction": "从 F5 指纹开始执行对应 DR-105 故障、取消或恢复 case，比较 checksum、history、selection、options、theme 与 derivedStale。",
+      "sourceTask": "第 105 项",
+      "sourceRefs": [
+        "tools/webgl-generator-interaction-danger-recovery-audit.mjs"
+      ],
+      "codeObservation": "markers、diplomacy 通过命令进入历史；其余 9 类直接原地改 map，runSync 配置没有 snapshot/rollback。",
+      "browserCaseIds": [
+        "DR-105-F5-REGENERATE",
+        "DR-105-F5-REGENERATE-MID-FAIL"
+      ],
+      "browserConclusion": "正常撤销通过；九类中途失败保留 E-N",
+      "changeClass": "INT-B",
+      "codeEvidence": "E-C",
+      "browserEvidence": "E-S-context"
+    },
+    {
+      "id": "IA-105-005",
+      "title": "高度基础与下游重建是非事务串行链",
+      "severity": "P1",
+      "confidence": "高",
+      "intB": true,
+      "recommendation": "为整条重建链建立单一快照、提交与回滚边界。",
+      "reproduction": "从 F5 指纹开始执行对应 DR-105 故障、取消或恢复 case，比较 checksum、history、selection、options、theme 与 derivedStale。",
+      "sourceTask": "第 105 项",
+      "sourceRefs": [
+        "tools/webgl-generator-interaction-danger-recovery-audit.mjs"
+      ],
+      "codeObservation": "它们逐个调用 generate.regenerate；后一步失败会保留前步，历史仅覆盖 markers/diplomacy，不能代表整链可恢复。",
+      "browserCaseIds": [
+        "DR-105-F5-HEIGHT-CHAIN-FAIL"
+      ],
+      "browserConclusion": "已复现",
+      "changeClass": "INT-B",
+      "codeEvidence": "E-C",
+      "browserEvidence": "E-F"
+    },
+    {
+      "id": "IA-105-006",
+      "title": "24 个持久删除、清空和全量重置入口的确认契约不一致",
+      "severity": "P2",
+      "confidence": "高",
+      "intB": true,
+      "recommendation": "按影响等级统一显示范围、是否可撤销与失败恢复说明。",
+      "reproduction": "从 F5 指纹开始执行对应 DR-105 故障、取消或恢复 case，比较 checksum、history、selection、options、theme 与 derivedStale。",
+      "sourceTask": "第 105 项",
+      "sourceRefs": [
+        "tools/webgl-generator-interaction-danger-recovery-audit.mjs"
+      ],
+      "codeObservation": "高影响删除有依赖摘要；多种可撤销入口仍是一击执行，route 单删还会按依赖数量动态决定是否确认。",
+      "browserCaseIds": [
+        "DR-105-F5-DELETE-CANCEL",
+        "DR-105-F5-DELETE-UNDO"
+      ],
+      "browserConclusion": "取消与失败回滚通过，跨入口表达仍不一致",
+      "changeClass": "INT-B",
+      "codeEvidence": "E-C",
+      "browserEvidence": "E-S-context"
+    },
+    {
+      "id": "IA-105-007",
+      "title": "用户高度模板删除无确认、无历史、无恢复",
+      "severity": "P2",
+      "confidence": "高",
+      "intB": true,
+      "recommendation": "增加确认与回收站、撤销或导出备份中的至少一种恢复契约。",
+      "reproduction": "从 F5 指纹开始执行对应 DR-105 故障、取消或恢复 case，比较 checksum、history、selection、options、theme 与 derivedStale。",
+      "sourceTask": "第 105 项",
+      "sourceRefs": [
+        "tools/webgl-generator-interaction-danger-recovery-audit.mjs"
+      ],
+      "codeObservation": "该入口直接过滤并持久化 localStorage，是 24 个入口中唯一完全不可撤销者。",
+      "browserCaseIds": [
+        "DR-105-F5-DELETE-CANCEL"
+      ],
+      "browserConclusion": "恢复缺口由 E-C 确认",
+      "changeClass": "INT-B",
+      "codeEvidence": "E-C",
+      "browserEvidence": "E-S-context"
+    },
+    {
+      "id": "IA-105-008",
+      "title": "名称库删除在 UI 与 API 的确认契约不一致",
+      "severity": "P2",
+      "confidence": "高",
+      "intB": true,
+      "recommendation": "统一同语义跨入口的预检与显式确认契约。",
+      "reproduction": "从 F5 指纹开始执行对应 DR-105 故障、取消或恢复 case，比较 checksum、history、selection、options、theme 与 derivedStale。",
+      "sourceTask": "第 105 项",
+      "sourceRefs": [
+        "tools/webgl-generator-interaction-danger-recovery-audit.mjs"
+      ],
+      "codeObservation": "UI deleteImportedNamebase 使用 native confirm；公开 namebases.delete 直接执行命令且不要求 confirm:true。",
+      "browserCaseIds": [
+        "DR-105-F5-DELETE-CANCEL"
+      ],
+      "browserConclusion": "跨入口确认偏差由 E-C 确认",
+      "changeClass": "INT-B",
+      "codeEvidence": "E-C",
+      "browserEvidence": "E-S-context"
+    },
+    {
+      "id": "IA-106-001",
+      "title": "同一次 Escape 可能同时关闭 managed overlay 并清除 selection / editing",
+      "severity": "P1",
+      "confidence": "高",
+      "intB": true,
+      "recommendation": "建立单一 Escape 仲裁器或让后续消费者尊重 defaultPrevented，并冻结 popup、二级浮层、主面板、画布编辑的逐级优先级。",
+      "reproduction": "在三档视口的对应 KV-106 变体执行焦点、Escape、长文本、字体和目标尺寸检查。",
+      "sourceTask": "第 106 项",
+      "sourceRefs": [
+        "app/webgl-generator/src/ui/overlay-registry.js",
+        "app/webgl-generator/src/runtime/keyboard-shortcuts.js",
+        "app/webgl-generator/src/runtime/app.js"
+      ],
+      "codeObservation": "OverlayRegistry 先注册 document capture 并执行 preventDefault + stopPropagation；这不会阻止同一 document 节点上后注册的快捷键 listener。快捷键 listener 又不检查 defaultPrevented，所以非 editable target 下同一事件仍可继续执行 selection.cancel。",
+      "browserCaseIds": [
+        "KV-106-ESCAPE"
+      ],
+      "browserConclusion": "已复现",
+      "changeClass": "INT-B",
+      "codeEvidence": "E-C",
+      "browserEvidence": "E-F"
+    },
+    {
+      "id": "IA-106-002",
+      "title": "Escape 结果随焦点是否位于可编辑控件而改变，内部 popup 还缺应用侧可证明优先级",
+      "severity": "P1",
+      "confidence": "中",
+      "intB": true,
+      "recommendation": "把 Escape 从普通快捷键守卫中单列，第107项分别记录 panel container、输入框和展开 popup 的单次实际消费者。",
+      "reproduction": "在三档视口的对应 KV-106 变体执行焦点、Escape、长文本、字体和目标尺寸检查。",
+      "sourceTask": "第 106 项",
+      "sourceRefs": [
+        "app/webgl-generator/src/runtime/keyboard-shortcuts.js",
+        "app/webgl-generator/src/ui/overlay-registry.js"
+      ],
+      "codeObservation": "editable target 会让全局快捷键提前返回，但先注册的 overlay capture 仍会运行；Element Plus select / dropdown 的 Escape 位于依赖侧并晚于 document capture，静态源码不能证明一次按键只关闭候选。",
+      "browserCaseIds": [
+        "KV-106-desktop-expanded-options",
+        "KV-106-narrow-expanded-options",
+        "KV-106-css-stress-expanded-options"
+      ],
+      "browserConclusion": "三档焦点上下文通过，popup 优先级风险保留",
+      "changeClass": "INT-B",
+      "codeEvidence": "E-C",
+      "browserEvidence": "E-S-context"
+    },
+    {
+      "id": "IA-106-003",
+      "title": "键盘焦点视觉表达在共享控件间不一致",
+      "severity": "P2",
+      "confidence": "高",
+      "intB": false,
+      "recommendation": "统一 focus-visible token，并在第107项用逐控件像素差确认替代焦点样式是否足够。",
+      "reproduction": "在三档视口的对应 KV-106 变体执行焦点、Escape、长文本、字体和目标尺寸检查。",
+      "sourceTask": "第 106 项",
+      "sourceRefs": [
+        "app/webgl-generator/src/styles.css"
+      ],
+      "codeObservation": "图标动作和 checkbox 有独立 outline；二级关闭、表格 sort / resize / empty 等把 focus 与 hover 合并并清除 outline，只依赖颜色或背景变化。",
+      "browserCaseIds": [
+        "KV-106-desktop-font-and-states",
+        "KV-106-narrow-font-and-states",
+        "KV-106-css-stress-font-and-states"
+      ],
+      "browserConclusion": "三档焦点可达，表达不一致保留",
+      "changeClass": "UI-only",
+      "codeEvidence": "E-C",
+      "browserEvidence": "E-S-context"
+    },
+    {
+      "id": "IA-106-004",
+      "title": "共享点击目标尺寸从 8px 到 32px，紧凑控件缺少统一命中区口径",
+      "severity": "P2",
+      "confidence": "高",
+      "intB": false,
+      "recommendation": "保留视觉尺寸时扩大透明命中区；精密拖柄、checkbox 与行级代理在浏览器报告中单列。",
+      "reproduction": "在三档视口的对应 KV-106 变体执行焦点、Escape、长文本、字体和目标尺寸检查。",
+      "sourceTask": "第 106 项",
+      "sourceRefs": [
+        "app/webgl-generator/src/styles.css"
+      ],
+      "codeObservation": "二级关闭 26px、表格空态动作 26px、checkbox 14px、列宽拖柄 8px；同一系统的图标动作是 32px、表格行动作与面板头按钮是 28px。",
+      "browserCaseIds": [
+        "KV-106-narrow-baseline"
+      ],
+      "browserConclusion": "8px 拖柄、14px checkbox 与紧凑按钮已实测",
+      "changeClass": "UI-only",
+      "codeEvidence": "E-C",
+      "browserEvidence": "E-S-context"
+    },
+    {
+      "id": "IA-106-005",
+      "title": "22 个 role=dialog 的 managed fixed overlay 都不会暂停全局快捷键",
+      "severity": "P2",
+      "confidence": "高",
+      "intB": true,
+      "recommendation": "逐类决定 dialog 是否非模态；若需独占，补明确属性并验证打开期间保存、视图和面板快捷键不误触。",
+      "reproduction": "在三档视口的对应 KV-106 变体执行焦点、Escape、长文本、字体和目标尺寸检查。",
+      "sourceTask": "第 106 项",
+      "sourceRefs": [
+        "app/webgl-generator/src/runtime/keyboard-shortcuts.js",
+        "app/webgl-generator/src/ui/vue/components/base/UiActionDock.vue",
+        "app/webgl-generator/src/ui/vue/components/ControlPanel.vue",
+        "app/webgl-generator/src/ui/vue/components/HeightPanel.vue",
+        "app/webgl-generator/src/ui/vue/components/base/UiTreeDisplayPanel.vue"
+      ],
+      "codeObservation": "18 个动作坞、项目导出、高度图工作台和 2 个树状展示均声明 role=dialog，但没有 aria-modal=true 或 data-keyboard-exclusive=true；全局快捷键只把后两种属性视为独占。",
+      "browserCaseIds": [
+        "KV-106-ESCAPE",
+        "KV-106-desktop-expanded-options",
+        "KV-106-narrow-expanded-options",
+        "KV-106-css-stress-expanded-options"
+      ],
+      "browserConclusion": "全局快捷键排他性缺口保留",
+      "changeClass": "INT-B",
+      "codeEvidence": "E-C",
+      "browserEvidence": "E-S-context"
+    },
+    {
+      "id": "IA-107-001",
+      "title": "720px 窄视口下高面板会撑高 document 并暴露表格越界内容",
+      "severity": "P1",
+      "confidence": "high",
+      "intB": false,
+      "recommendation": "让主面板高度受安全区约束、由面板 body 承担纵向滚动，并保持对象表格横向内容只在表格容器内滚动。",
+      "reproduction": "在 720×720 打开国家面板基线：面板 bottom=826.4px，document 出现纵向滚动，表格列按钮与数据行越出 720px 视口。",
+      "sourceTask": "第 107 项",
+      "sourceRefs": [
+        "app/webgl-generator/src/ui/panel-manager.js",
+        "app/webgl-generator/src/ui/vue/components/base/UiObjectTable.vue"
+      ],
+      "browserCaseIds": [
+        "KV-106-narrow-baseline"
+      ],
+      "browserConclusion": "已复现",
+      "codeObservation": "在 720×720 打开国家面板基线：面板 bottom=826.4px，document 出现纵向滚动，表格列按钮与数据行越出 720px 视口。",
+      "changeClass": "UI-only",
+      "codeEvidence": "E-C",
+      "browserEvidence": "E-F"
+    },
+    {
+      "id": "IA-107-002",
+      "title": "固定长中文会把常驻地图工具按钮横向撑出窄视口",
+      "severity": "P1",
+      "confidence": "high",
+      "intB": false,
+      "recommendation": "为常驻地图工具建立窄视口换行或收纳策略，并限制按钮长文本最大宽度；不能依赖 document 横向滚动兜底。",
+      "reproduction": "在 720×720 与 576×576 注入固定长中文，fit-view / toggle-measurement 的 right 分别达到 673.6px / 980.2px，document.scrollWidth 大于视口。",
+      "sourceTask": "第 107 项",
+      "sourceRefs": [
+        "app/webgl-generator/src/ui/vue/components/MapToolbar.vue",
+        "app/webgl-generator/src/styles.css"
+      ],
+      "browserCaseIds": [
+        "KV-106-narrow-long-zh",
+        "KV-106-css-stress-long-zh"
+      ],
+      "browserConclusion": "已复现",
+      "codeObservation": "在 720×720 与 576×576 注入固定长中文，fit-view / toggle-measurement 的 right 分别达到 673.6px / 980.2px，document.scrollWidth 大于视口。",
+      "changeClass": "UI-only",
+      "codeEvidence": "E-C",
+      "browserEvidence": "E-F"
+    }
+  ],
+  "principles": [
+    "一次输入只允许一个最高优先级消费者；Escape 按 popup → 二级浮层 → 主面板 → 画布编辑 → selection 逐级退出。",
+    "危险操作先展示影响，再进入单一事务边界；失败、取消、撤销和重载恢复不得混用同一措辞。",
+    "同一 host + action key 才是动作身份；动作元数据必须显式声明直接动作、画布模式或二级面板。",
+    "面板与表格分别承担外层可达性和内部滚动，不能把窄视口压力泄漏为 document 滚动。",
+    "焦点、选中、编辑、预览和运行中状态都必须可见且不只依赖颜色。",
+    "精密拖柄、原生 checkbox 和行级代理单列命中规则；其它普通动作统一透明命中区下限。",
+    "长文本、150% 字体和固定窄视口是共享组件契约，不由领域面板各自兜底。",
+    "功能结果、历史、selection、mode、持久化或恢复语义变化一律标 INT-B，等待用户批准。"
+  ],
+  "functionalChangeAppendix": [
+    {
+      "id": "IA-102-001",
+      "title": "列表定位失败可能缺少用户可见反馈",
+      "recommendation": "第 107 项验证无效 / 孤儿对象路径；若确认为静默失败，后续候选需增加反馈，属于行为变化。",
+      "candidateIds": [
+        "Q-31"
+      ]
+    },
+    {
+      "id": "IA-102-002",
+      "title": "部分重命名 no-op 可能静默返回",
+      "recommendation": "第 107 项验证空名和未变化名称；若缺少反馈，后续候选需统一 no-op 反馈，属于行为变化。",
+      "candidateIds": [
+        "Q-31"
+      ]
+    },
+    {
+      "id": "IA-103-002",
+      "title": "Escape 只显式退出城镇移动模式",
+      "recommendation": "第 107 项验证典型持续 / 一次性 / 草稿模式；若确认不合人类预期，另立 INT-B 任务设计统一优先级。",
+      "candidateIds": [
+        "Q-25"
+      ]
+    },
+    {
+      "id": "IA-103-003",
+      "title": "手工标签 pointercancel 仍提交位置且切图未统一清理拖动",
+      "recommendation": "后续 INT-B 任务区分提交与取消，并在地图替换前统一终止标签拖动。",
+      "candidateIds": [
+        "Q-28"
+      ]
+    },
+    {
+      "id": "IA-103-004",
+      "title": "测量控制点 pointercancel 不恢复拖动前坐标",
+      "recommendation": "第 107 项验证用户可见取消结果；若需回滚，另立 INT-B 任务保存起点并区分结束原因。",
+      "candidateIds": [
+        "Q-28"
+      ]
+    },
+    {
+      "id": "IA-103-005",
+      "title": "指针捕获路径没有 lostpointercapture 恢复消费者",
+      "recommendation": "第 107 项覆盖可构造路径；后续统一拖动基础设施时补 lostpointercapture 收口。",
+      "candidateIds": [
+        "Q-28"
+      ]
+    },
+    {
+      "id": "IA-103-006",
+      "title": "共享拖动的 pointercancel 结果不一致",
+      "recommendation": "第 107 项记录实际可见差异；后续按交互类型决定统一语义，不在审计批次修改。",
+      "candidateIds": [
+        "Q-28"
+      ]
+    },
+    {
+      "id": "IA-104-002",
+      "title": "文化名称库动作的元数据与最终结果不一致",
+      "recommendation": "后续把 direct/open-other-panel 结果写入统一动作元数据。",
+      "candidateIds": [
+        "Q-30"
+      ]
+    },
+    {
+      "id": "IA-104-004",
+      "title": "双击编辑重复触发主选中",
+      "recommendation": "第 107 项核对用户可见影响；如有代价，后续去除 dblclick 内重复 select 或抑制双击 click 副作用。",
+      "candidateIds": [
+        "Q-30"
+      ]
+    },
+    {
+      "id": "IA-104-005",
+      "title": "动作 key 不能作为全局结果语义",
+      "recommendation": "继续以 host + key 作为动作身份，并在后续统一元数据时显式声明 resultClass。",
+      "candidateIds": [
+        "Q-30"
+      ]
+    },
+    {
+      "id": "IA-105-001",
+      "title": "国家、省份、城市的实际画布删除绕过共用影响预检与确认",
+      "recommendation": "统一画布、面板和 API 的删除预检契约，并对实际 pointer handler 限域断言。",
+      "candidateIds": [
+        "Q-27"
+      ]
+    },
+    {
+      "id": "IA-105-002",
+      "title": "FMG Cells GEO 命令 apply 中途失败可能留下部分地图变更且没有历史",
+      "recommendation": "为多域 GEO 导入命令增加 apply 级事务快照与故障注入回归。",
+      "candidateIds": [
+        "Q-26"
+      ]
+    },
+    {
+      "id": "IA-105-003",
+      "title": "气候下游异步重算不受运行时互斥与旧结果保护",
+      "recommendation": "增加全局互斥、request id、map identity 或过期结果丢弃契约。",
+      "candidateIds": [
+        "Q-26"
+      ]
+    },
+    {
+      "id": "IA-105-004",
+      "title": "11 类受约束重生成只有 2 类成功后可撤销，且全部缺少统一失败快照",
+      "recommendation": "为重生成建立聚合快照命令或 RuntimeOperation rollback。",
+      "candidateIds": [
+        "Q-26"
+      ]
+    },
+    {
+      "id": "IA-105-005",
+      "title": "高度基础与下游重建是非事务串行链",
+      "recommendation": "为整条重建链建立单一快照、提交与回滚边界。",
+      "candidateIds": [
+        "Q-26"
+      ]
+    },
+    {
+      "id": "IA-105-006",
+      "title": "24 个持久删除、清空和全量重置入口的确认契约不一致",
+      "recommendation": "按影响等级统一显示范围、是否可撤销与失败恢复说明。",
+      "candidateIds": [
+        "Q-27"
+      ]
+    },
+    {
+      "id": "IA-105-007",
+      "title": "用户高度模板删除无确认、无历史、无恢复",
+      "recommendation": "增加确认与回收站、撤销或导出备份中的至少一种恢复契约。",
+      "candidateIds": [
+        "Q-27"
+      ]
+    },
+    {
+      "id": "IA-105-008",
+      "title": "名称库删除在 UI 与 API 的确认契约不一致",
+      "recommendation": "统一同语义跨入口的预检与显式确认契约。",
+      "candidateIds": [
+        "Q-27"
+      ]
+    },
+    {
+      "id": "IA-106-001",
+      "title": "同一次 Escape 可能同时关闭 managed overlay 并清除 selection / editing",
+      "recommendation": "建立单一 Escape 仲裁器或让后续消费者尊重 defaultPrevented，并冻结 popup、二级浮层、主面板、画布编辑的逐级优先级。",
+      "candidateIds": [
+        "Q-25"
+      ]
+    },
+    {
+      "id": "IA-106-002",
+      "title": "Escape 结果随焦点是否位于可编辑控件而改变，内部 popup 还缺应用侧可证明优先级",
+      "recommendation": "把 Escape 从普通快捷键守卫中单列，第107项分别记录 panel container、输入框和展开 popup 的单次实际消费者。",
+      "candidateIds": [
+        "Q-25"
+      ]
+    },
+    {
+      "id": "IA-106-005",
+      "title": "22 个 role=dialog 的 managed fixed overlay 都不会暂停全局快捷键",
+      "recommendation": "逐类决定 dialog 是否非模态；若需独占，补明确属性并验证打开期间保存、视图和面板快捷键不误触。",
+      "candidateIds": [
+        "Q-25"
+      ]
+    }
+  ],
+  "candidates": [
+    {
+      "id": "Q-25",
+      "priority": "P0",
+      "title": "统一 Escape、焦点与浮层键盘仲裁",
+      "findingIds": [
+        "IA-103-002",
+        "IA-106-001",
+        "IA-106-002",
+        "IA-106-005"
+      ],
+      "intB": true,
+      "status": "准权威；待用户批准",
+      "acceptance": "一次 Escape 只推进一级退出；输入、popup、dialog、主面板和画布编辑均有浏览器优先级回归。"
+    },
+    {
+      "id": "Q-26",
+      "priority": "P0",
+      "title": "为 GEO、气候、高度与重生成建立事务和旧结果保护",
+      "findingIds": [
+        "IA-105-002",
+        "IA-105-003",
+        "IA-105-004",
+        "IA-105-005"
+      ],
+      "intB": true,
+      "status": "准权威；待用户批准",
+      "acceptance": "所有已声明异常路径均保持完整指纹或明确拒绝旧结果；无部分变更和无历史残留。"
+    },
+    {
+      "id": "Q-27",
+      "priority": "P0",
+      "title": "统一危险删除、清空和资源删除的预检确认与恢复",
+      "findingIds": [
+        "IA-105-001",
+        "IA-105-006",
+        "IA-105-007",
+        "IA-105-008"
+      ],
+      "intB": true,
+      "status": "准权威；待用户批准",
+      "acceptance": "同影响等级入口共享预检、确认、可撤销性和失败恢复文案；UI / API 契约一致。"
+    },
+    {
+      "id": "Q-28",
+      "priority": "P1",
+      "title": "统一直接操控的 pointercancel、lostpointercapture 与切图清理",
+      "findingIds": [
+        "IA-103-003",
+        "IA-103-004",
+        "IA-103-005",
+        "IA-103-006"
+      ],
+      "intB": true,
+      "status": "准权威；待用户批准",
+      "acceptance": "pointerup、pointercancel、lostpointercapture、关面板和切图均有按交互类型冻结的结果。"
+    },
+    {
+      "id": "Q-29",
+      "priority": "P1",
+      "title": "收敛对象表格行高、面板安全区与窄视口滚动",
+      "findingIds": [
+        "IA-104-003",
+        "IA-106-004",
+        "IA-107-001"
+      ],
+      "intB": false,
+      "status": "准权威；待用户批准",
+      "acceptance": "三档视口无 document 溢出；表格虚拟行高与 CSS 几何一致；精密目标单列命中策略。"
+    },
+    {
+      "id": "Q-30",
+      "priority": "P1",
+      "title": "统一动作坞结果元数据、激活 aria 与双击选择",
+      "findingIds": [
+        "IA-104-001",
+        "IA-104-002",
+        "IA-104-004",
+        "IA-104-005"
+      ],
+      "intB": true,
+      "status": "准权威；待用户批准",
+      "acceptance": "视觉 active、aria-pressed、resultClass 和 host+key 身份一致；双击不重复派发无效选择。"
+    },
+    {
+      "id": "Q-31",
+      "priority": "P1",
+      "title": "补齐定位、重命名 no-op 与画布模式可发现反馈",
+      "findingIds": [
+        "IA-102-001",
+        "IA-102-002",
+        "IA-103-007"
+      ],
+      "intB": true,
+      "status": "准权威；待用户批准",
+      "acceptance": "失败/no-op 有稳定反馈，十九个默认光标模式至少有一致的下一步提示。"
+    },
+    {
+      "id": "Q-32",
+      "priority": "P1",
+      "title": "统一焦点视觉和常驻工具长文本响应式策略",
+      "findingIds": [
+        "IA-106-003",
+        "IA-107-002"
+      ],
+      "intB": false,
+      "status": "准权威；待用户批准",
+      "acceptance": "长中文和 150% 字体下常驻工具可达且不横向撑开文档；共享 focus-visible token 一致。"
+    },
+    {
+      "id": "Q-33",
+      "priority": "P2",
+      "title": "让画布模式回归从运行时清单派生",
+      "findingIds": [
+        "IA-103-001"
+      ],
+      "intB": false,
+      "status": "准权威；待用户批准",
+      "acceptance": "回归分母与运行时注册清单双向差集为 0，新增模式无需手工改固定数字。"
+    }
+  ],
+  "retainedDecisions": [
+    "控制面板集中重生成与领域面板上下文重生成继续合理并存。",
+    "高级能力保持渐进披露，不因低频直接删除。",
+    "精密列宽拖柄与原生 checkbox 不按视觉尺寸直接判定为普通按钮。",
+    "九类原地重生成中途失败继续保留 E-N；没有稳定 fault seam 前不伪造 E-F。",
+    "第 28～52、54～100 项既有验收不重新执行，本报告只观察其当前交互链表现。"
+  ]
+}

@@ -64,7 +64,7 @@
 
 ## 当前状态
 
-正式应用已经跨过早期占位原型阶段。权威任务第 28～52、54～100 项已完成，第 53 项按用户决定移除；公开 API 当前覆盖 11 个命名空间、208 个方法和 110 个编辑方法，稳定等级为 `200 / 7 / 1`。第 94 项已完成地图层级整改与浏览器重叠验收，第 95 项已完成省份备用名称库与生成期去重，第 96 项已修复国家对象详情的空编辑态，第 97 项已修复设置首都候选的名称与 `burgId` 映射，第 98 项已放宽国家政体弹框并验证最长候选完整显示，第 99 项已把省界改为 `2 / 2` 世界单位高频短虚线并保持国界为实线，第 100 项已完成国家 / 省份名称的城市避让、直线 / 二次曲线逐字排布和省份无解降级显示；当前权威任务清单为空，等待用户批准下一批。现有功能与界面信息架构审计及整改证据见 `docs/audits/ui-function-and-information-architecture-audit.md` 和 `docs/task-notes/ui-system-audit-gate.md`。批准范围统一查看 `docs/current-plan.md` 的“权威任务清单”；README、专题文档中的“下一步”只作候选或历史语义，不能覆盖权威清单。
+正式应用已经跨过早期占位原型阶段。权威任务第 28～52、54～107 项已完成，第 53 项按用户决定移除；公开 API 当前覆盖 11 个命名空间、208 个方法和 110 个编辑方法，稳定等级为 `200 / 7 / 1`。第 94～100 项完成地图层级、省份命名、国家详情编辑、首都候选、政体弹框、省界短虚线和政治标签避让；第 101～107 项完成全功能交互审计，固定 `102` 个交互表面，统一浏览器主套件 `25 / 25`、视觉矩阵 `12 / 12`，形成 `29` 个问题和未批准整改候选 `Q-25～Q-33`。当前权威任务清单为空，等待用户批准下一批。交互审计结果见 `docs/audits/interaction-usability-audit-results.md`，候选池见 `docs/task-notes/next-quasi-authoritative-interaction-remediation-tasks-2026-07-20.md`；候选不得自动入队。批准范围统一查看 `docs/current-plan.md` 的“权威任务清单”；README、专题文档中的“下一步”只作候选或历史语义，不能覆盖权威清单。
 
 以下内容是仍有参考价值的早期里程碑记录，不代表当前待办：
 
@@ -174,4 +174,4 @@ node .\tools\serve-prototype.mjs --port 5400
 10. `docs/task-notes/README.md`
 11. `docs/task-notes/editor-and-stat-panel-inventory.md`
 
-然后只按 `docs/current-plan.md` 的活动权威任务继续。当前清单为空；先等待用户批准下一波，不得从历史里程碑、README、FOLLOWUPS 或专题文档的“下一步”自行创造任务。历史第 88～93 项的来源映射仍见 `docs/task-notes/next-quasi-authoritative-tasks-2026-07-18.md`，第 94～100 项的规则与验收证据见 `docs/current-plan.md` 和 `docs/development-log.md`。
+然后只按 `docs/current-plan.md` 的活动权威任务继续。当前清单为空；先等待用户批准下一波，不得从历史里程碑、README、FOLLOWUPS 或专题文档的“下一步”自行创造任务。历史第 88～93 项的来源映射仍见 `docs/task-notes/next-quasi-authoritative-tasks-2026-07-18.md`，第 94～107 项的规则与验收证据见 `docs/current-plan.md` 和 `docs/development-log.md`；`Q-25～Q-33` 仍是未批准候选。
