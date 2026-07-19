@@ -32,6 +32,7 @@
 
 ## 编辑器与用户外壳
 
+- `interaction-usability-audit-plan.md`：全功能交互与可用性专项审计方案；以真实用户任务链排查冗余、无效、流程、状态、样式、恢复、键盘和响应式问题，纯交互建议与需要功能变更的提案分开，未获批准前不形成权威任务。
 - `editor-and-stat-panel-inventory.md`：正式版编辑器与统计面板清单。
 - `user-facing-shell-debug-export-and-naming-plan.md`：用户外壳、开发模式、导入导出和命名策略计划。
 - `initialization-loading-flow.md`：页面初始化与地图加载流程规约，记录阶段边界、预算和 Chrome 验证要求。
