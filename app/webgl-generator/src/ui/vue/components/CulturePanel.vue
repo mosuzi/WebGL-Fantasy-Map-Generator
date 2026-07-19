@@ -513,7 +513,13 @@ function cultureTypeLabel(type) {
 function cultureNameStyleLabel(style) {
   return {
     default: "默认",
-    European: "欧式"
+    oriental: "东方",
+    european: "欧陆",
+    European: "欧陆",
+    english: "英伦",
+    antique: "古典",
+    highFantasy: "高幻想",
+    darkFantasy: "暗黑幻想"
   }[style] || style || "默认";
 }
 

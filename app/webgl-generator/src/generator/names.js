@@ -2,6 +2,7 @@ import {createRandom} from "./random.js";
 import {K170_BURG_NAMES} from "./namebase-k170-burgs.js";
 import {CHINESE_PROVINCE_NAMES} from "./namebase-chinese-provinces.js";
 import {CHINESE_PROVINCE_FORMS} from "./province-naming.js";
+import {cultureNamingStyleConfig, isChineseCultureNameStyle} from "./culture-naming-styles.js";
 
 // 词素策略参考 zoningjs@3.2024.0 的县级以上中文地名韵脚，并保留项目内可 seed 的轻量词池。
 const PLACE_STEMS = [
@@ -261,29 +262,13 @@ const ANCIENT_STATE_COMPOUND_ROOTS = [
   "东晋", "西凉", "南越", "北燕", "后赵", "前秦", "西蜀", "东吴", "南楚", "北齐", "西秦", "后梁",
   "前燕", "南唐", "北汉", "东越", "西戎", "南陈", "北魏", "后蜀"
 ];
-const WESTERN_PLACE_STEMS = [
-  "阿尔文",
-  "布伦",
-  "卡斯特",
-  "维斯特",
-  "洛林",
-  "赛伦",
-  "格兰",
-  "赫尔",
-  "艾登",
-  "诺维",
-  "泰伦",
-  "沃伦",
-  "雷恩",
-  "奥斯",
-  "米兰",
-  "兰德",
-  "贝尔",
-  "弗洛",
-  "克莱",
-  "温德"
-];
-const WESTERN_HYDRO_STEMS = ["艾文", "洛恩", "赛尔", "布兰", "维尔", "莱茵", "欧伦", "诺恩", "密尔", "赫伦", "卡恩", "阿斯"];
+const EUROPEAN_NAMING_STYLE = cultureNamingStyleConfig("european");
+const ENGLISH_NAMING_STYLE = cultureNamingStyleConfig("english");
+const ANTIQUE_NAMING_STYLE = cultureNamingStyleConfig("antique");
+const HIGH_FANTASY_NAMING_STYLE = cultureNamingStyleConfig("highFantasy");
+const DARK_FANTASY_NAMING_STYLE = cultureNamingStyleConfig("darkFantasy");
+const WESTERN_PLACE_STEMS = EUROPEAN_NAMING_STYLE.placeRoots;
+const WESTERN_HYDRO_STEMS = EUROPEAN_NAMING_STYLE.hydroRoots;
 const NORTHERN_PLACE_STEMS = ["诺德", "斯卡尔", "弗罗斯", "乌尔夫", "霍尔姆", "冰湾", "霜谷", "洛克", "奥恩", "布约恩"];
 const STEPPE_PLACE_STEMS = ["阿兰", "钦察", "乌勒", "巴彦", "呼伦", "塔尔", "阿尔泰", "斡尔", "苍帐", "金帐"];
 const SOUTHERN_PLACE_STEMS = ["萨赫", "阿曼", "苏莱", "巴拉", "纳赛", "泽菲", "玛拉", "沙姆", "迦南", "金棕"];
@@ -294,7 +279,11 @@ const PORT_SUFFIXES = ["港", "津", "浦", "湾"];
 const LAKE_SUFFIXES = ["湖", "泽", "泊", "潭", "海"];
 const COMMON_LAKE_SUFFIXES = ["湖", "湖", "湖", "湖", "湖", "湖", "湖", "泽", "泊", "潭", "海"];
 const CULTURE_STYLE_CONFIG = {
-  European: {place: WESTERN_PLACE_STEMS, hydro: WESTERN_HYDRO_STEMS, forms: ["国", "王国", "共和国", "帝国"], suffixes: ["堡", "顿", "维尔", "港", "城", "郡"]},
+  European: generatorStyle(EUROPEAN_NAMING_STYLE),
+  English: generatorStyle(ENGLISH_NAMING_STYLE),
+  Antique: generatorStyle(ANTIQUE_NAMING_STYLE),
+  HighFantasy: generatorStyle(HIGH_FANTASY_NAMING_STYLE),
+  DarkFantasy: generatorStyle(DARK_FANTASY_NAMING_STYLE),
   Generic: null,
   Highland: {place: [...PLACE_STEMS, ...NORTHERN_PLACE_STEMS], hydro: [...HYDRO_PREFIXES, "霜", "冰", "洛恩"], forms: ["山国", "王国", "部盟", "帝国"], suffixes: HIGHLAND_SUFFIXES},
   Naval: {place: [...PLACE_STEMS, ...WESTERN_PLACE_STEMS], hydro: [...HYDRO_PREFIXES, ...WESTERN_HYDRO_STEMS], forms: ["海国", "王国", "共和国", "帝国"], suffixes: PORT_SUFFIXES},
@@ -992,7 +981,7 @@ function getCultureStyle(options = {}) {
 }
 
 function getTransliterationStyle(options = {}) {
-  const explicit = options.nameStyle || options.cultureNameStyle;
+  const explicit = options.nameStyle || options.cultureNameStyle || options.cultureType;
   return transliterationStyleFor(explicit);
 }
 
@@ -1003,22 +992,32 @@ function hasExplicitCultureStyle(options = {}) {
 function shouldUseChineseProvinceFallback(options = {}, boundPlaceSource = EMPTY_NAMEBASE_SOURCE) {
   if (boundPlaceSource.records.length) return false;
   const style = String(options.cultureType || options.nameStyle || options.cultureNameStyle || "");
-  return !/(?:europe|western|english|西方|音译|nomad|steppe|游牧|草原|desert|southern|沙漠)/iu.test(style);
+  return isChineseCultureNameStyle(style);
 }
 
 function transliterationStyleFor(type) {
   if (!type) return null;
-  if (/europe|western|english|西方|音译/i.test(type)) return CULTURE_STYLE_CONFIG.European;
-  return null;
+  const style = cultureNamingStyleConfig(type);
+  return style && !style.chinese ? generatorStyle(style) : null;
 }
 
 function cultureStyleFor(type) {
   if (!type) return null;
+  const namedStyle = cultureNamingStyleConfig(type);
+  if (namedStyle) return namedStyle.chinese ? null : generatorStyle(namedStyle);
   if (CULTURE_STYLE_CONFIG[type]) return CULTURE_STYLE_CONFIG[type];
-  if (/europe|western|english|西方/i.test(type)) return CULTURE_STYLE_CONFIG.European;
   if (/nomad|游牧/i.test(type)) return CULTURE_STYLE_CONFIG.Nomadic;
   if (/desert|沙漠/i.test(type)) return CULTURE_STYLE_CONFIG.Desert;
   return null;
+}
+
+function generatorStyle(style) {
+  return {
+    place: style.placeRoots,
+    hydro: style.hydroRoots,
+    forms: style.stateForms,
+    suffixes: style.placeSuffixes
+  };
 }
 
 function makeUnique(used, scope, name, rng) {

@@ -1,6 +1,7 @@
 import {MinPriorityQueue} from "./priority-queue.js";
 import {createStageProfile} from "./profile.js";
 import {normalizeInheritanceMode, rebuildInheritanceTree, summarizeInheritanceTree} from "./inheritance.js";
+import {cultureNamingProfileForSet, normalizeCultureSetId} from "./culture-naming-styles.js";
 
 const CULTURE_ROOTS = ["昭宁", "雁川", "栖梧", "青岚", "星渚", "南衡", "白麓", "清河", "苍原", "岚湾", "云麓", "河洛", "北辰", "东衡", "西陵", "海澜", "赤原", "沙洲", "霜庭", "松岳", "月湾", "石原", "晴川", "夜渡", "金台", "雨林", "岭南", "北海", "东渚", "朱明", "玄岭", "素川"];
 const RELIGION_ROOTS = ["天衡", "星渚", "青岚", "白麓", "南明", "清河", "玄曜", "苍极", "云章", "赤霄", "静澜", "昭灵"];
@@ -150,15 +151,16 @@ function buildGridFallbackCultures(grid, features, rivers, random, options) {
     .map((point, cell) => ({cell, height: grid.cells.h[cell], biome: grid.cells.biome[cell]}))
     .filter(item => isLandFeature(features, grid, item.cell));
   const riverCells = new Set(rivers.rivers.flatMap(river => river.gridCells || river.cells));
-  const cultureCenters = pickGridCenters(landCells, random, Math.min(8, CULTURE_DEFINITIONS.length), grid);
+  const cultureDefinitions = getDefaultCultureDefinitions(options);
+  const cultureCenters = pickGridCenters(landCells, random, Math.min(8, cultureDefinitions.length), grid);
   const cultures = [
     createWildlandsCulture(),
     ...cultureCenters.map((center, index) => ({
       id: index + 1,
       i: index + 1,
-      name: `${CULTURE_DEFINITIONS[index].root}文化`,
-      root: CULTURE_DEFINITIONS[index].root,
-      nameStyle: CULTURE_DEFINITIONS[index].nameStyle || null,
+      name: `${cultureDefinitions[index].root}文化`,
+      root: cultureDefinitions[index].root,
+      nameStyle: cultureDefinitions[index].nameStyle || null,
       center: center.cell,
       gridCenter: center.cell,
       type: CULTURE_TYPES.generic,
@@ -703,11 +705,17 @@ function uniqueName(name, usedNames) {
 }
 
 function getDefaultCultureDefinitions(options) {
-  if (options.culturesSet === "english") return createGenericCultureDefinitions(10);
-  if (options.culturesSet === "antique") return createAntiqueCultureDefinitions();
-  if (options.culturesSet === "european") return createEuropeanCultureDefinitions();
-  if (options.culturesSet === "world") return createWorldCultureDefinitions();
-  return createWorldCultureDefinitions();
+  const culturesSet = normalizeCultureSetId(options.culturesSet);
+  let definitions;
+  if (culturesSet === "english") definitions = createGenericCultureDefinitions(10);
+  else if (culturesSet === "oriental") definitions = createGenericCultureDefinitions(13);
+  else if (culturesSet === "antique") definitions = createAntiqueCultureDefinitions();
+  else if (culturesSet === "european") definitions = createEuropeanCultureDefinitions();
+  else definitions = createWorldCultureDefinitions();
+  return definitions.map((definition, index) => ({
+    ...definition,
+    ...cultureNamingProfileForSet(culturesSet, index)
+  }));
 }
 
 function selectCultureDefinitions(definitions, count, random) {
