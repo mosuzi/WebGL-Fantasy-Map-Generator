@@ -33,6 +33,7 @@ import UiTextEditField from "./base/UiTextEditField.vue";
 import {formatArea, formatDistance, formatMilitary, formatNumber, formatPopulation, formatPrecipitation, formatRiverFlow, formatRiverRunoffFlowRange} from "../../display-units.js";
 import {useUnitPreferences} from "../composables/use-unit-preferences.js";
 import {LABEL_TARGET_KIND, OBJECT_KIND, OBJECT_KIND_LABEL} from "../../../runtime/object-kinds.js";
+import {formatPlayerText, joinPlayerDetailValues, normalizeObjectDetailRows} from "../../object-detail-values.js";
 
 defineOptions({
   name: "ObjectDetailsPanel"
@@ -55,20 +56,30 @@ const canEdit = computed(() => canEditObject(props.state.object));
 const canRename = computed(() => canRenameObject(props.state.object));
 const canRenameFromNamebase = computed(() => canRenameObjectFromNamebase(props.state.object));
 const editableName = computed(() => props.state.object?.name || props.state.object?.text || props.state.object?.targetName || "");
-const detailRowsWithState = computed(() => [...detailRows(props.state.object), {label: "状态", value: editing.value ? "编辑" : "查看"}]);
+const detailRowsWithState = computed(() => normalizeObjectDetailRows([
+  ...detailRows(props.state.object),
+  {label: "状态", value: editing.value ? "编辑" : "查看"}
+]));
 const unitPreferences = useUnitPreferences();
 
 const OBJECT_TITLE_FORMATTERS = Object.freeze({
-  [OBJECT_KIND.CITY]: object => `城市 ${object.name}`,
-  [OBJECT_KIND.LABEL]: object => `标签 ${object.text}`,
+  [OBJECT_KIND.CITY]: object => `城市 ${playerText(object.name)}`,
+  [OBJECT_KIND.LABEL]: object => `标签 ${playerText(object.text)}`,
   [OBJECT_KIND.MARKER]: object => `标记 ${formatMarkerTitle(object)}`,
-  [OBJECT_KIND.ROUTE]: object => `路线 ${object.from} -> ${object.to}`,
-  [OBJECT_KIND.TRADE_FLOW]: object => `贸易流 ${object.goodName || `#${object.id}`}`,
-  [OBJECT_KIND.RIVER]: object => `河流 ${object.name || `#${object.id}`}`,
-  [OBJECT_KIND.LAKE]: object => `湖泊 ${object.name || `#${object.id}`}`,
-  [OBJECT_KIND.MILITARY]: object => `军团 ${object.name || `#${object.id}`}`,
-  [OBJECT_KIND.PROVINCE]: object => `省份 ${object.name}`,
-  [OBJECT_KIND.REGION]: object => `区域 ${object.name}`
+  [OBJECT_KIND.NOTE]: object => `独立备注 ${playerText(object.name)}`,
+  [OBJECT_KIND.ROUTE]: object => `路线 ${playerText(object.from)} -> ${playerText(object.to)}`,
+  [OBJECT_KIND.TRADE_FLOW]: object => `贸易流 ${playerText(object.goodName, `#${playerText(object.id)}`)}`,
+  [OBJECT_KIND.RIVER]: object => `河流 ${playerText(object.name, `#${playerText(object.id)}`)}`,
+  [OBJECT_KIND.LAKE]: object => `湖泊 ${playerText(object.name, `#${playerText(object.id)}`)}`,
+  [OBJECT_KIND.MEASUREMENT]: object => `测量 ${playerText(object.name)}`,
+  [OBJECT_KIND.MILITARY]: object => `军团 ${playerText(object.name, `#${playerText(object.id)}`)}`,
+  [OBJECT_KIND.DIPLOMACY_RELATION]: object => `外交 ${playerText(object.subjectName)} -> ${playerText(object.objectName)}`,
+  [OBJECT_KIND.STATE]: object => `国家 ${playerText(object.fullName || object.name)}`,
+  [OBJECT_KIND.PROVINCE]: object => `省份 ${playerText(object.name)}`,
+  [OBJECT_KIND.CULTURE]: object => `文化 ${playerText(object.name)}`,
+  [OBJECT_KIND.RELIGION]: object => `宗教 ${playerText(object.name)}`,
+  [OBJECT_KIND.REGION]: object => `区域 ${playerText(object.name)}`,
+  [OBJECT_KIND.ZONE]: object => `地区 ${playerText(object.name)}`
 });
 
 const OBJECT_DETAIL_ROWS = Object.freeze({
@@ -108,14 +119,14 @@ const OBJECT_DETAIL_ROWS = Object.freeze({
     {label: "deal id", value: object.id, debug: true}
   ],
   [OBJECT_KIND.MARKER]: object => [
-    {label: "类型", value: `${object.label || object.type} / ${object.type}`},
+    {label: "类型", value: joinPlayerDetailValues([object.label || object.type, object.type])},
     {label: "类别", value: object.categoryLabel || object.category || "未知"},
     {label: "资源", value: object.resourceLabel || "无"},
     {label: "经济潜力", value: formatNumberValue(object.economicValue)},
     {label: "国家", value: object.state || object.data?.state || "none"},
     {label: "省份", value: object.province || object.data?.province || "none"},
     {label: "cell", value: `${object.cell} / pack ${object.packCell ?? object.data?.packCell ?? "none"}`, debug: true},
-    {label: "数据", value: formatMarkerData(object.data), debug: true},
+    {label: "数据", value: object.data, structured: true, debug: true},
     {label: "对象 id", value: object.id, debug: true}
   ],
   [OBJECT_KIND.LABEL]: object => [
@@ -155,14 +166,69 @@ const OBJECT_DETAIL_ROWS = Object.freeze({
     {label: "cell", value: object.cell ?? "none", debug: true},
     {label: "对象 id", value: object.id, debug: true}
   ],
+  [OBJECT_KIND.NOTE]: object => [
+    {label: "名称", value: object.name},
+    {label: "内容", value: object.body, wide: true},
+    {label: "位置", value: object.packCell, debug: true},
+    {label: "对象 id", value: object.id, debug: true}
+  ],
+  [OBJECT_KIND.MEASUREMENT]: object => [
+    {label: "名称", value: object.name},
+    {label: "类型", value: measurementTypeLabel(object.type)},
+    {label: "点数", value: object.displayPointCount ?? object.pointCount},
+    {label: "距离", value: Number(object.distance) > 0 ? formatDistanceValue(object.distance) : null, omitEmpty: true},
+    {label: "面积", value: Number(object.area) > 0 ? formatAreaValue(object.area) : null, omitEmpty: true},
+    {label: "点位", value: object.points, structured: true, debug: true},
+    {label: "对象 id", value: object.id, debug: true}
+  ],
+  [OBJECT_KIND.DIPLOMACY_RELATION]: object => [
+    {label: "发起国", value: object.subjectName},
+    {label: "对象国", value: object.objectName},
+    {label: "关系", value: object.relationLabel || object.relation},
+    {label: "方向", value: {from: object.from, to: object.to}, structured: true, debug: true},
+    {label: "对象 id", value: object.id, debug: true}
+  ],
+  [OBJECT_KIND.STATE]: object => [
+    {label: "全称", value: object.fullName || object.name},
+    {label: "政体", value: object.government || object.formName},
+    {label: "首都", value: object.capitalName},
+    {label: "文化", value: object.culture},
+    {label: "宗教", value: object.religion},
+    {label: "中心 cell", value: object.centerCell, debug: true},
+    {label: "对象 id", value: object.id, debug: true}
+  ],
   [OBJECT_KIND.PROVINCE]: object => [
     {label: "所属国家", value: object.state},
     {label: "国家 id", value: object.stateId},
     {label: "中心 cell", value: object.centerCell, debug: true},
     {label: "对象 id", value: object.id, debug: true}
   ],
+  [OBJECT_KIND.CULTURE]: object => [
+    {label: "类型", value: object.type},
+    {label: "命名风格", value: object.nameStyle},
+    {label: "区域数", value: formatNumberValue(object.cells)},
+    {label: "人口", value: formatPopulationValue(object.population)},
+    {label: "中心 cell", value: object.centerCell, debug: true},
+    {label: "对象 id", value: object.id, debug: true}
+  ],
+  [OBJECT_KIND.RELIGION]: object => [
+    {label: "类型", value: object.type},
+    {label: "形态", value: object.form},
+    {label: "文化", value: object.culture},
+    {label: "区域数", value: formatNumberValue(object.cells)},
+    {label: "人口", value: formatPopulationValue(object.population)},
+    {label: "中心 cell", value: object.centerCell, debug: true},
+    {label: "对象 id", value: object.id, debug: true}
+  ],
   [OBJECT_KIND.REGION]: object => [
-    {label: "类型", value: "region"},
+    {label: "类型", value: object.type || "区域"},
+    {label: "对象 id", value: object.id, debug: true}
+  ],
+  [OBJECT_KIND.ZONE]: object => [
+    {label: "类型", value: object.type},
+    {label: "纹理", value: object.pattern},
+    {label: "颜色", value: object.color},
+    {label: "区域数", value: formatNumberValue(object.cells)},
     {label: "对象 id", value: object.id, debug: true}
   ]
 });
@@ -173,7 +239,7 @@ function isSameObject(a, b) {
 
 function formatObjectTitle(object) {
   if (!object) return "未知对象";
-  return OBJECT_TITLE_FORMATTERS[object.kind]?.(object) || `${OBJECT_KIND_LABEL[object.kind] || "对象"} ${object.name || object.fullName || object.text || `#${object.id}`}`;
+  return OBJECT_TITLE_FORMATTERS[object.kind]?.(object) || `${OBJECT_KIND_LABEL[object.kind] || "对象"} ${playerText(object.name || object.fullName || object.text, `#${playerText(object.id)}`)}`;
 }
 
 function detailRows(object) {
@@ -199,12 +265,8 @@ function canEditObject(object) {
 }
 
 function formatMarkerTitle(object) {
-  const icon = object.icon ? `${object.icon} ` : "";
-  return `${icon}${object.name || object.label || object.type || "unknown"}`;
-}
-
-function formatMarkerData(data = {}) {
-  return Object.entries(data).map(([key, value]) => `${key}: ${value}`).join(" / ") || "none";
+  const icon = formatPlayerText(object.icon, "");
+  return `${icon ? `${icon} ` : ""}${playerText(object.name || object.label || object.type)}`;
 }
 
 function lakeTypeLabel(type) {
@@ -221,6 +283,10 @@ function lakeTypeLabel(type) {
 
 function formatDistanceValue(value) {
   return formatDistance(value, unitPreferences.value);
+}
+
+function formatAreaValue(value) {
+  return formatArea(value, unitPreferences.value);
 }
 
 function formatOptionalDistanceValue(value) {
@@ -270,5 +336,13 @@ function hasHydrology(hydrology) {
 function formatSignedNumberValue(value) {
   const numeric = Number(value || 0);
   return `${numeric > 0 ? "+" : ""}${formatNumber(numeric, unitPreferences.value)}`;
+}
+
+function measurementTypeLabel(type) {
+  return {distance: "距离", area: "面积", curve: "曲线"}[type] || playerText(type, "测量");
+}
+
+function playerText(value, fallback = "未知") {
+  return formatPlayerText(value, fallback);
 }
 </script>

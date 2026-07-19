@@ -28177,3 +28177,10 @@ full 矩阵结果：
 - 将悬停行构造提取为无 DOM、无 Vue 依赖的 `hover-overlay-content.js`。普通分支只构造玩家可读的对象、中文地貌 / 生物群系、气候、政区、社会与人口；诊断分支才构造内部位置、内部地形及 biome / h / s / pack / flux / resource 原始摘要。未开发区域普通模式只说明状态与原因，世界坐标和图范围留给调试模式；所有返回行统一过滤空标签和空值。
 - 标题同步区分普通与调试语义：普通河流不显示 id，marker 不显示 cell，默认地表不显示 `cell`；调试模式保留原诊断能力。运行时监听既有调试变更事件并使用当前 pick 即时刷新，无需移动鼠标。
 - 新增 `regress:hover-debug-filter`，固定同一 pick 在普通模式无内部 key、调试模式恢复全部诊断、两种模式无空行、未开发区域分流及即时刷新接线；`regress:hover-overlay-layer`、生产构建和 `git diff --check` 通过。本项未启动浏览器，留待第 110～133 项统一验收。
+
+## 2026-07-20：完成权威任务第 127 项——对象详情结构值安全格式化
+
+- 调查确认 `[object Object]` 来自对象详情与共享 `UiKeyValueGrid` 的值边界：共享组件会直接 `String(value)`，对象详情的 marker data 还会先用模板字符串展开嵌套字段。异常 / 旧数据中的普通对象、数组或 TypedArray 因此可能在进入 DOM 前就失去结构。共享网格服务多个统计面板，本项不改变其默认行为。
+- 新增对象详情专用 `object-detail-values.js`。标量只接受字符串、有限数值、布尔和 bigint；结构值只有行显式声明 `structured: true` 才会形成有限 JSON 摘要，限制递归深度、对象条目、数组项和总字符数，并覆盖普通对象、数组、TypedArray、Set / Map、日期与循环引用。未 opt-in 的结构值、空结构、函数、Symbol、空标签及无玩家价值字段会省略，既有坏字符串 `[object Object]` 安全回退。
+- marker data、测量点位与外交方向改用显式结构摘要；对象标题、路线端点、marker 组合字段等改用拒绝隐式对象字符串化的 helper。为全部 17 类 `OBJECT_KIND` 建立领域详情行，补齐国家、文化、宗教、地区、独立备注、测量和外交关系，不再依赖未知类型的隐式对象输出。
+- 新增 `regress:object-detail-values` 覆盖嵌套普通对象、数组、TypedArray、循环 / 空结构、旧坏字符串、17 类领域行完整性和共享网格未扩散；selection 面板策略、生产构建和 `git diff --check` 通过。本项未启动浏览器，真实 DOM 全类型抽查留到第 110～133 项统一验收。
