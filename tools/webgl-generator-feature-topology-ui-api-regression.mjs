@@ -34,6 +34,8 @@ assert.match(appSource, /onTopologyInspect: options => state\.runtimeActions\.ed
 assert.match(appSource, /onTopologyApply: options => state\.runtimeActions\.edit\.features\.applyTopology\(options\)/, "Feature 面板提交未走公共 runtime action");
 assert.match(appSource, /FEATURE_TOPOLOGY_SELECT: "feature:topology-select"/, "缺少 Feature 拓扑画布模式");
 assert.match(appSource, /setHeightTransformPreview\?\.\(changes/, "Feature 拓扑预览未使用 renderer-only 高度预览");
+assert.match(appSource, /status: "已完成海岸修改，可通过撤销恢复。"/, "玩家侧提交反馈仍暴露内部拓扑术语");
+assert.match(appSource, /已将一处地图区域加入海岸编辑选区/, "画布选区反馈仍暴露 cell id");
 const topologyPreviewSource = appSource.slice(
   appSource.indexOf("function previewFeatureTopologyDraft"),
   appSource.indexOf("function clearFeatureTopologyPreview")
@@ -43,8 +45,19 @@ for (const token of ["setTopologyCell", "clearTopologyDraft", "setTopologySelect
   assert(controllerSource.includes(token), `Feature controller 缺少 ${token}`);
 }
 assert(panelSource.includes("feature => feature && !feature.removed"), "Feature 表格仍会显示 tombstone");
-assert(panelSource.includes("确认应用拓扑修改"), "Feature 面板缺少显式确认动作");
-assert(panelSource.includes("整湖填平沿用湖泊面板"), "Feature 面板没有说明整湖填平的既有入口");
+assert(panelSource.includes("应用海岸修改"), "Feature 面板缺少直接、可撤销的海岸提交动作");
+assert(panelSource.includes("整湖填平请使用湖泊面板"), "Feature 面板没有说明整湖填平的既有入口");
+assert(panelSource.includes("useDebugMode"), "Feature 面板没有复用统一调试模式");
+const ordinaryTemplate = panelSource.slice(0, panelSource.indexOf('<details v-if="debugEnabled"'));
+assert.doesNotMatch(ordinaryTemplate, /Feature 拓扑|只读预检|grid cells|陆地 → 19|海域 → 20/, "普通 Feature 面板仍暴露开发术语、cell id 或内部高度");
+assert.match(panelSource, /<summary>开发诊断<\/summary>/);
+assert.match(panelSource, /运行拓扑预检/);
+const automaticApplySource = controllerSource.slice(
+  controllerSource.indexOf("onTopologyApply: () =>"),
+  controllerSource.indexOf("onTopologyClear: () =>")
+);
+assert(automaticApplySource.indexOf("callbacks.onTopologyInspect") < automaticApplySource.indexOf("callbacks.onTopologyApply"), "玩家提交前没有自动运行安全检查");
+assert.match(automaticApplySource, /if \(!inspection\?\.valid\)/, "安全检查失败仍可能进入提交");
 assert(lakePanelSource.includes("填平并删除选中湖泊"), "既有湖泊面板缺少整湖填平入口");
 assert(lakeEditSource.includes("export function createDeleteLakeCommand"), "整湖填平没有复用完整湖泊删除命令");
 for (const mode of ["carve-coast", "reclaim-coast", "open-strait", "close-strait", "open-lake-to-sea"]) {

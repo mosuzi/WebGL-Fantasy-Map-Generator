@@ -6601,17 +6601,15 @@ export function applyFeatureTopologyViaApi(state, documentRef, options = {}, run
   const commandOptions = {...options};
   delete commandOptions.confirm;
   const undoFeatureId = state.panels?.feature?.getSelectedFeatureId?.() ?? null;
-  const command = createApplyFeatureTopologyCommand(commandOptions, {label: "API 编辑海岸与 Feature 拓扑"});
+  const command = createApplyFeatureTopologyCommand(commandOptions, {label: "编辑海岸"});
   const result = executeEditCommand(state, documentRef, command, {
     context: {map: state.map},
     preparePanelRefresh: (targetState, executed, topologyResult) => {
       const featureId = Number(topologyResult?.selectionTarget?.id);
       if (Number.isInteger(featureId) && featureId > 0) targetState.panels?.feature?.setSelectedFeatureId?.(featureId);
     },
-    status: executed => executed.getResult?.()?.mode
-      ? `已应用 Feature 拓扑编辑：${executed.getResult().mode}。`
-      : "已应用 Feature 拓扑编辑。",
-    noopStatus: "Feature 拓扑没有变化。",
+    status: "已完成海岸修改，可通过撤销恢复。",
+    noopStatus: "海岸没有变化。",
     throwOnError: false
   });
   if (result.executed) {
@@ -10990,7 +10988,7 @@ function bindObjectCreationTools(canvas, state, documentRef) {
       const pick = state.renderer?.pickClientPoint?.(event.clientX, event.clientY) || {};
       if (!Number.isInteger(pick.gridCell) || pick.gridCell < 0) return;
       const added = state.panels.feature?.setTopologyCell?.(pick.gridCell);
-      if (added) setFileOperationStatus(documentRef, `Feature 拓扑选区已加入 grid cell #${pick.gridCell}。`);
+      if (added) setFileOperationStatus(documentRef, "已将一处地图区域加入海岸编辑选区。");
       updateRuntimePanel(documentRef, state);
       return;
     }

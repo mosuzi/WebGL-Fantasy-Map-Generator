@@ -82,13 +82,20 @@ export function createFeaturePanel(documentRef, manager, callbacks = {}) {
       return panelState.topologyInspection;
     },
     onTopologyApply: () => {
-      const result = callbacks.onTopologyApply?.({...topologyDraft(panelState), confirm: true}) || null;
+      const draft = topologyDraft(panelState);
+      const inspection = callbacks.onTopologyInspect?.(draft) || null;
+      panelState.topologyInspection = inspection;
+      if (!inspection?.valid) {
+        panelState.version++;
+        return {executed: false, inspection};
+      }
+      const result = callbacks.onTopologyApply?.({...draft, confirm: true}) || null;
       if (result?.executed) clearTopologyDraft(panelState);
       else if (result?.error) {
         panelState.topologyInspection = {
           valid: false,
           code: "apply-failed",
-          reason: result.error.message || "Feature 拓扑应用失败"
+          reason: result.error.message || "海岸修改失败"
         };
       }
       panelState.version++;

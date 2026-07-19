@@ -28133,3 +28133,9 @@ full 矩阵结果：
 - 普通模式改为“更新受气候影响的内容”，候选状态统一为“建议更新 / 当前已更新 / 将一并更新 / 已包含”，并用“查看更新范围 / 更新所选内容”、预计影响数、已更新内容、剩余建议与自动回滚提示形成非阻塞闭环。未知内部系统不会回退显示 id，失败只显示玩家可理解的对象名和恢复结果。
 - 复用现有 `useDebugMode`，把固定 seed、原始错误、requested / required / selected / executionOrder、checksum、staleSystems、history 等原始诊断收进仅调试模式可见的折叠区；调试开关仍可即时恢复完整依赖诊断，不新增存档字段或配置。
 - `regress:climate-downstream-rebuild` 继续通过九候选、依赖闭包、确定性 checksum、未选系统保持陈旧、失败回滚、单历史撤销 / 重做、分块性能和完整地图往返，并新增普通模板不含开发文案、调试区保留执行顺序的静态契约；`regress:ui-terminology-state`、生产构建和 `git diff --check` 通过。本项未启动浏览器，留待第 110～133 项统一验收。
+## 2026-07-20：完成权威任务第 120 项——海岸编辑收起拓扑预检
+
+- 调查确认 Feature 面板原本要求玩家理解完整 grid cell、19 / 20 内部海平面、只读预检、连通分量及 Feature 拓扑；但 `createApplyFeatureTopologyCommand` 提交时本来就会重新检查同一套水陆连通、城市 / 河流 / 路线 / 港口保护与结果不变量，失败会回滚且不写历史，因此单独的玩家预检按钮属于重复入口。
+- 普通编辑区改名为“海岸编辑”，五类模式使用雕刻海岸、填补海岸、开辟海峡、封闭海峡和连接湖泊与海洋的玩家文案；只显示选中地图区域数，并提供“在地图选择范围 / 应用海岸修改”的直接流程。wrapper 在点击应用时自动运行安全检查，失败不进入命令，通过后命令仍二次校验；成功只形成一条可撤销历史。
+- 普通失败信息按结构化 code 转换为调整选择范围、保持范围连续、避免陆水混选、保留陆地 / 开放海洋、正确连接海峡 / 湖海、避开城市河流路线或维护港口等可执行原因，不显示 Feature、topology、preflight、cell id、内部高度和系统 code。画布选区状态、成功 / no-op 状态与历史标签同步改为玩家化文案。
+- 复用 `useDebugMode`，把 cell id、原始检查 JSON 和显式拓扑预检按钮收入开发诊断；稳定 `edit.features.inspectTopology / applyTopology` API、`confirm: true` 门禁及底层 domain / 数据结构均未改变。`regress:feature-topology`、`regress:feature-topology-ui-api`、`regress:ui-terminology-state`、生产构建和 `git diff --check` 通过；历史第 104 项复杂工作区报告的陈旧快照检查因第 110 项以来源码变化拒绝旧报告，不属于本项验收且未重开旧任务。本项未启动浏览器。

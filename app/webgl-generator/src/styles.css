@@ -6919,6 +6919,30 @@ input.ui-switch-native {
   gap: 8px;
 }
 
+.feature-topology-diagnostics {
+  display: grid;
+  gap: 6px;
+  color: #91a6af;
+  font-size: 11px;
+}
+
+.feature-topology-diagnostics summary {
+  cursor: pointer;
+}
+
+.feature-topology-diagnostics p,
+.feature-topology-diagnostics pre {
+  margin: 0;
+}
+
+.feature-topology-diagnostics pre {
+  max-height: 180px;
+  padding: 8px;
+  overflow: auto;
+  border-radius: 5px;
+  background: #0b1114;
+}
+
 .biome-assignment-editor {
   display: grid;
   gap: 10px;
