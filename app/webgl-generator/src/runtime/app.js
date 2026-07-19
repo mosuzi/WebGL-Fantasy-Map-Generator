@@ -2490,6 +2490,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     onImportGeoData: file => importGeoData(state, documentRef, file, runtimeActions.data.importGEO),
     onImportHeightmapImage: payload => importHeightmapImage(state, documentRef, payload, runtimeActions.data.importHeightmap),
     onRegenerate: kind => runtimeActions.generate.regenerate(kind, {confirm: true}),
+    onDebugModeChange: () => updatePickPanel(documentRef, state),
     onMode: mode => runtimeActions.layers.setViewMode(mode)
   };
   wrapControlPanelChildOpeners(runtimePanelHandlers, panelManager);

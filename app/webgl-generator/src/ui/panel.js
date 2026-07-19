@@ -8,7 +8,6 @@ import {windDirectionLabelFromAngle} from "../generator/climate-options.js";
 import {listBiomeDescriptors} from "../generator/biome-registry.js";
 import {
   formatDistance as formatDisplayDistance,
-  formatHeight as formatDisplayHeight,
   formatMilitary as formatDisplayMilitary,
   mapUnitsToKm,
   formatNumber as formatDisplayNumber,
@@ -19,6 +18,7 @@ import {
   normalizeUnitPreferences
 } from "./display-units.js";
 import {formatHistoryStats} from "./history-format.js";
+import {buildHoverRowEntries, formatHoverObjectTitle, isNamedHoverRoute} from "./hover-overlay-content.js";
 
 export const CONTROL_PREFERENCES_KEY = "webgl-generator-control-preferences";
 const CRITICAL_CONTROL_CHANGE_DEBOUNCE_MS = 180;
@@ -72,6 +72,7 @@ const DERIVED_STALE_LABELS = Object.freeze({
 
 export function bindRuntimePanel(documentRef, handlers) {
   applyControlPreferences(documentRef);
+  documentRef.defaultView?.addEventListener("webgl-generator-debug-change", () => handlers.onDebugModeChange?.());
   documentRef.getElementById("generate-map").addEventListener("click", handlers.onGenerate);
   documentRef.getElementById("random-seed").addEventListener("click", handlers.onRandomSeed);
   documentRef.getElementById("open-generation-panel")?.addEventListener("click", handlers.onOpenGenerationPanel);
@@ -933,80 +934,27 @@ function updateHoverOverlay(documentRef, pick) {
   overlay.replaceChildren();
   if (!visible) return;
 
+  const debugEnabled = Boolean(documentRef.defaultView?.__webglGeneratorDebug?.enabled);
   const title = documentRef.createElement("div");
   title.className = "hover-overlay-title";
-  title.textContent = formatHoverTitle(pick, preferences.units);
+  title.textContent = formatHoverTitle(pick, preferences.units, debugEnabled);
   const rows = documentRef.createElement("dl");
   rows.className = "hover-overlay-list";
-  rows.replaceChildren(...compactHoverRows(documentRef, pick, preferences.units));
+  rows.replaceChildren(...buildHoverRowEntries(pick, preferences.units, {debugEnabled})
+    .map(entry => hoverRow(documentRef, entry.label, entry.value)));
   overlay.replaceChildren(title, rows);
 }
 
-function formatHoverTitle(pick, unitPreferences = {}) {
+function formatHoverTitle(pick, unitPreferences = {}, debugEnabled = false) {
   if (pick.invalidMapArea) return "未开发区域";
   if (pick.label) return `标签 ${pick.label.text}`;
   if (pick.city && pick.city !== "none") return `城市 ${pick.city}`;
-  if (pick.marker) return `标记 ${formatMarkerObjectSummary(pick.marker, unitPreferences)}`;
-  if (pick.river) return `河流 #${pick.river.id}`;
-  if (isNamedRoute(pick.route)) return `路线 ${pick.route.from} -> ${pick.route.to}`;
-  if (pick.object && pick.object.kind !== OBJECT_KIND.ROUTE) return formatObjectTitle(pick.object);
-  if (pick.politicalObject) return formatObjectTitle(pick.politicalObject);
-  return pick.featureLand ? "陆地 cell" : "水域 cell";
-}
-
-function compactHoverRows(documentRef, pick, unitPreferences) {
-  if (pick.invalidMapArea) {
-    return [
-      hoverRow(documentRef, "状态", "未开发"),
-      hoverRow(documentRef, "位置", `x ${formatDisplayNumber(pick.worldX, unitPreferences)} / y ${formatDisplayNumber(pick.worldY, unitPreferences)}`),
-      hoverRow(documentRef, "范围", `${formatDisplayNumber(pick.graphWidth, unitPreferences)} x ${formatDisplayNumber(pick.graphHeight, unitPreferences)}`),
-      hoverRow(documentRef, "说明", pick.invalidReason === "outside-map" ? "地图有效范围外" : "未命中有效 cell")
-    ];
-  }
-
-  const rows = [
-    hoverRow(documentRef, "位置", `grid ${pick.gridCell} / pack ${pick.packCell ?? "none"}`),
-    hoverRow(documentRef, "地形", `${pick.featureType} #${pick.featureId} / 高度 ${formatDisplayHeight(pick.height, unitPreferences)}`),
-    hoverRow(documentRef, "气候", `${pick.temperature}°C / 降水 ${formatDisplayPrecipitation(pick.precipitation, unitPreferences)}`),
-    hoverRow(documentRef, "政区", `${pick.state} / ${pick.province}`),
-    hoverRow(documentRef, "社会", `${pick.culture} / ${pick.religion}`),
-    hoverRow(documentRef, "人口", formatDisplayPopulation(pick.population, unitPreferences)),
-    hoverRow(documentRef, "调试", formatHoverDebugLine(pick, unitPreferences))
-  ];
-
-  const objectText = formatHoverObjectLine(pick, unitPreferences);
-  if (objectText) rows.unshift(hoverRow(documentRef, "对象", objectText));
-  return rows;
-}
-
-function formatHoverDebugLine(pick, unitPreferences = {}) {
-  const resource = pick.resource
-    ? `${pick.resource.name} v${formatDisplayNumber(pick.resource.value, unitPreferences)} x${formatDisplayNumber(pick.resource.supply, unitPreferences)}`
-    : "none";
-  return [
-    `biome ${pick.packBiome || pick.biome || "unknown"}`,
-    `h ${formatDisplayHeight(pick.packHeight ?? pick.height, unitPreferences)}`,
-    `s ${formatDisplayNumber(pick.suitability, unitPreferences)}`,
-    `pack ${pick.packCell ?? "none"}`,
-    `流量 ${formatDisplayRiverFlow(pick.flux, unitPreferences)}`,
-    `resource ${resource}`
-  ].join(" / ");
-}
-
-function formatHoverObjectLine(pick, unitPreferences = {}) {
-  if (pick.label) return `${pick.label.text} / ${pick.label.targetKind}`;
-  if (pick.city && pick.city !== "none") return pick.city;
-  if (pick.marker) return formatMarkerObjectSummary(pick.marker, unitPreferences);
-  if (pick.tradeFlow) return `${pick.tradeFlow.goodName} / ${pick.tradeFlow.sellerName} -> ${pick.tradeFlow.buyerName} / ${pick.tradeFlow.priceSignalLabel || "平稳"} ${formatSignedDisplayNumber(pick.tradeFlow.priceDelta, unitPreferences)}`;
-  if (isNamedRoute(pick.route)) return `${pick.route.from} -> ${pick.route.to}`;
-  if (pick.river) return `河流 #${pick.river.id} / 流量 ${formatDisplayRiverFlow(pick.river.flux, unitPreferences)}`;
-  if (pick.object && pick.object.kind !== OBJECT_KIND.ROUTE) return formatObjectTitle(pick.object);
-  if (pick.politicalObject) return formatObjectTitle(pick.politicalObject);
-  return "";
-}
-
-function isNamedRoute(route) {
-  return Boolean(route?.from && route?.to && route.from !== "unknown" && route.to !== "unknown");
+  if (pick.marker) return `标记 ${debugEnabled ? formatMarkerObjectSummary(pick.marker, unitPreferences) : formatMarkerTitle(pick.marker)}`;
+  if (pick.river) return debugEnabled ? `河流 #${pick.river.id}` : "河流";
+  if (isNamedHoverRoute(pick.route)) return `路线 ${pick.route.from} -> ${pick.route.to}`;
+  if (pick.object && pick.object.kind !== OBJECT_KIND.ROUTE) return debugEnabled ? formatObjectTitle(pick.object) : formatHoverObjectTitle(pick.object);
+  if (pick.politicalObject) return debugEnabled ? formatObjectTitle(pick.politicalObject) : formatHoverObjectTitle(pick.politicalObject);
+  return pick.featureLand ? "陆地" : "水域";
 }
 
 function hoverRow(documentRef, label, value) {
