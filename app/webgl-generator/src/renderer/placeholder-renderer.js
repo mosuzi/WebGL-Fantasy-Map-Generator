@@ -55,6 +55,7 @@ import {
   automaticPoliticalLabelOrder,
   resolvePoliticalLabelPlacement
 } from "./political-label-layout.js";
+import {resolveStateLabelPlacement} from "./state-label-territory.js";
 import {formatMilitary, normalizeUnitPreferences} from "../ui/display-units.js";
 import {militaryIconLabelForVariant, militaryIconUrlForVariant, normalizeMilitaryIconVariant} from "./military-icon-assets.js";
 import {DEFAULT_VISUAL_THEME_ID, resolveVisualTheme} from "./themes.js";
@@ -1497,7 +1498,10 @@ export class PlaceholderMapRenderer {
         peers: stateLabel ? occupiedStates : [...occupiedStates, ...occupiedProvinces],
         viewport: {width: rect.width, height: rect.height},
         padding,
-        locked: item.layout?.locked
+        locked: item.layout?.locked,
+        anchorAllowed: stateLabel && !item.layout?.locked && item.componentCellSet?.size
+          ? anchor => stateLabelAnchorAllowed(this, item, anchor, rect)
+          : null
       }) : null;
       const screen = politicalPlacement?.anchor || baseScreen;
       const box = politicalPlacement?.box || labelBoxForItem(item, screen);
@@ -2182,6 +2186,10 @@ function getLabelStates(map) {
         x: placement.x,
         y: placement.y,
         rotation: placement.rotation,
+        componentCells: placement.componentCells,
+        componentCellSet: placement.componentCellSet,
+        placementSource: placement.source,
+        anchorCell: placement.cell,
         priority: Number(state.area || 0) + Number(state.burgs || 0) * 100,
         state,
         rank,
@@ -2835,25 +2843,7 @@ function markerIconScale(scale) {
 }
 
 function stateLabelPlacement(map, state, text = "") {
-  if (!state) return null;
-  const stateId = state.i ?? state.id;
-  const cells = map?.pack?.cells;
-  if (Number.isInteger(stateId) && cells?.p && cells?.state) {
-    const centroid = stateCentroid(cells, stateId);
-    if (centroid) return {...centroid, rotation: stateLabelRotation(cells, stateId, centroid, text)};
-  }
-
-  const center = Number.isInteger(state.center) ? state.center : null;
-  if (center !== null && map?.pack?.cells?.p?.[center]) {
-    const [x, y] = map.pack.cells.p[center];
-    return {x, y, rotation: 0};
-  }
-  const gridCenter = Number.isInteger(state.gridCenter) ? state.gridCenter : null;
-  if (gridCenter !== null) {
-    const point = map?.grid?.points?.[map.grid.cells.p?.[gridCenter]];
-    return point ? {x: point[0], y: point[1], rotation: 0} : null;
-  }
-  return null;
+  return resolveStateLabelPlacement(map, state, text);
 }
 
 function provinceLabelPlacement(map, province) {
@@ -2864,54 +2854,10 @@ function provinceLabelPlacement(map, province) {
   return isWorldPoint(point) ? {x: point[0], y: point[1], rotation: 0} : null;
 }
 
-function stateCentroid(cells, stateId) {
-  let weightSum = 0;
-  let xSum = 0;
-  let ySum = 0;
-
-  for (const cell of cells.i || []) {
-    if (cells.state[cell] !== stateId || cells.h[cell] < 20 || !isWorldPoint(cells.p[cell])) continue;
-    const weight = Math.max(0.0001, cells.area?.[cell] || 1);
-    weightSum += weight;
-    xSum += cells.p[cell][0] * weight;
-    ySum += cells.p[cell][1] * weight;
-  }
-
-  if (!weightSum) return null;
-  return {x: xSum / weightSum, y: ySum / weightSum};
-}
-
-function stateLabelRotation(cells, stateId, centroid, text) {
-  if (Array.from(text || "").length < 5) return 0;
-
-  let weightSum = 0;
-  let xx = 0;
-  let yy = 0;
-  let xy = 0;
-  for (const cell of cells.i || []) {
-    if (cells.state[cell] !== stateId || cells.h[cell] < 20 || !isWorldPoint(cells.p[cell])) continue;
-    const weight = Math.max(0.0001, cells.area?.[cell] || 1);
-    const dx = cells.p[cell][0] - centroid.x;
-    const dy = cells.p[cell][1] - centroid.y;
-    weightSum += weight;
-    xx += dx * dx * weight;
-    yy += dy * dy * weight;
-    xy += dx * dy * weight;
-  }
-
-  if (!weightSum) return 0;
-  const radians = 0.5 * Math.atan2(2 * xy, xx - yy);
-  const angle = clampLabelAngle((radians * 180) / Math.PI);
-  return Math.abs(angle) >= 8 ? angle : (stateId % 2 ? -12 : 12);
-}
-
-function clampLabelAngle(angle) {
-  let value = angle;
-  while (value > 90) value -= 180;
-  while (value < -90) value += 180;
-  if (value > 45) value -= 90;
-  if (value < -45) value += 90;
-  return Math.round(Math.max(-28, Math.min(28, value)) * 10) / 10;
+function stateLabelAnchorAllowed(renderer, item, anchor, rect) {
+  const world = renderer.screenToWorld(rect.left + anchor.x, rect.top + anchor.y);
+  const picked = pickGridCell(renderer.map, world.x, world.y);
+  return Number.isInteger(picked?.packCell) && item.componentCellSet.has(picked.packCell);
 }
 
 function labelClassName(item) {

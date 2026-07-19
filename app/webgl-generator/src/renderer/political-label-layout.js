@@ -49,7 +49,7 @@ export function createPoliticalLabelGlyphLayout(text, style, {targetKind = "prov
   };
 }
 
-export function resolvePoliticalLabelPlacement({item, screen, obstacles = [], peers = [], viewport, padding = 0, locked = false} = {}) {
+export function resolvePoliticalLabelPlacement({item, screen, obstacles = [], peers = [], viewport, padding = 0, locked = false, anchorAllowed = null} = {}) {
   const targetKind = item?.targetKind === "state" ? "state" : "province";
   const fontSize = positive(item?.resolvedStyle?.fontSize, targetKind === "state" ? 30 : 18);
   const rotation = finite(item?.rotation);
@@ -60,6 +60,7 @@ export function resolvePoliticalLabelPlacement({item, screen, obstacles = [], pe
     const spec = candidates[index];
     const layout = createPoliticalLabelGlyphLayout(item?.text, item?.resolvedStyle, {targetKind, rotation, bend: spec.bend});
     const anchor = {x: finite(screen?.x) + spec.x, y: finite(screen?.y) + spec.y};
+    if (!locked && typeof anchorAllowed === "function" && !anchorAllowed(anchor)) continue;
     const glyphs = layout.glyphs.map(glyph => ({...glyph, box: translateBox(glyph.box, anchor.x, anchor.y)}));
     const box = translateBox(layout.box, anchor.x, anchor.y);
     const obstacleOverlap = overlapSummary(glyphs, box, obstacles, padding);
@@ -85,7 +86,28 @@ export function resolvePoliticalLabelPlacement({item, screen, obstacles = [], pe
     if (!best || candidate.score < best.score) best = candidate;
   }
 
-  return best;
+  return best || fallbackPlacement(item, screen, targetKind, rotation);
+}
+
+function fallbackPlacement(item, screen, targetKind, rotation) {
+  const layout = createPoliticalLabelGlyphLayout(item?.text, item?.resolvedStyle, {targetKind, rotation, bend: 0});
+  const anchor = {x: finite(screen?.x), y: finite(screen?.y)};
+  const glyphs = layout.glyphs.map(glyph => ({...glyph, box: translateBox(glyph.box, anchor.x, anchor.y)}));
+  return {
+    anchor,
+    glyphs,
+    box: translateBox(layout.box, anchor.x, anchor.y),
+    rootSize: symmetricRootSize(layout.box, positive(item?.resolvedStyle?.fontSize, targetKind === "state" ? 30 : 18)),
+    bend: 0,
+    rotation,
+    spacing: layout.spacing,
+    candidateIndex: 0,
+    cityCollides: false,
+    peerCollides: false,
+    collides: false,
+    onScreen: true,
+    score: Infinity
+  };
 }
 
 function politicalCandidateSpecs(fontSize, rotation, locked) {
