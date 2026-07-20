@@ -2192,8 +2192,15 @@ async function drawMilitaryOverlayElement(context, element, canvasRect, scale) {
   context.shadowColor = "rgba(3, 6, 7, 0.42)";
   context.shadowBlur = 3 * Math.min(scale.x, scale.y);
   context.shadowOffsetY = 2 * scale.y;
-  if (isPaintedColor(background)) {
-    drawPanel(context, box, cssPixelValue(style.borderRadius, scale.x), background, isPaintedColor(borderColor) ? borderColor : "transparent");
+  if (isPaintedColor(background) || isPaintedColor(borderColor)) {
+    drawPanel(
+      context,
+      box,
+      cssPixelValue(style.borderRadius, scale.x),
+      isPaintedColor(background) ? background : "transparent",
+      isPaintedColor(borderColor) ? borderColor : "transparent",
+      cssPixelValue(style.borderTopWidth, Math.min(scale.x, scale.y))
+    );
   }
   context.shadowColor = "transparent";
   context.shadowBlur = 0;
@@ -2373,11 +2380,11 @@ function unionElementBoxes(elements, canvasRect, scale) {
   return result;
 }
 
-function drawPanel(context, box, radius, fillStyle, strokeStyle) {
+function drawPanel(context, box, radius, fillStyle, strokeStyle, lineWidth = 1) {
   context.save();
   context.fillStyle = fillStyle;
   context.strokeStyle = strokeStyle;
-  context.lineWidth = 1;
+  context.lineWidth = Math.max(0.5, lineWidth);
   roundedRectPath(context, box.x, box.y, box.width, box.height, radius);
   context.fill();
   context.stroke();

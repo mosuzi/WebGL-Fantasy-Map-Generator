@@ -3,11 +3,12 @@
 
   <UiStateBanner
     v-if="state.derivedStaleSystems?.length"
+    class="height-derived-banner"
     kind="stale"
-    :title="debugEnabled ? '存在待派生结果' : '部分地图内容需要更新'"
-    :message="formatDerivedUpdateHint(state.derivedStaleSystems)"
-    :action-label="debugEnabled ? '重算下游派生' : '更新后续地图内容'"
-    :secondary-action-label="debugEnabled ? '重算基础派生' : '更新地形关联内容'"
+    title="地图内容待更新"
+    message="可继续编辑，完成后再统一更新。"
+    action-label="更新后续内容"
+    secondary-action-label="更新地形关联"
     @action="callbacks.onRegenerateDownstream?.()"
     @secondary-action="callbacks.onRegenerateBase?.()"
   />
@@ -97,7 +98,7 @@
     <p v-if="state.seafloorResetPreview?.valid" class="height-action-help">
       大陆架 {{ state.seafloorResetPreview.shelfCells }} · 陆坡 {{ state.seafloorResetPreview.slopeCells }} · 洋中脊 {{ state.seafloorResetPreview.ridgeCells }} · 海沟 {{ state.seafloorResetPreview.trenchCells }}
     </p>
-    <p class="height-action-help">只改变开放海洋深度，不移动海岸或产生新的陆地；应用后需更新气候及相关地图内容。</p>
+    <p class="height-action-help">只改变开放海洋深度，不移动海岸或产生新的陆地；应用后会更新相关地图内容，并自动显示海底深浅。</p>
   </section>
 
   <div v-if="debugEnabled" class="height-expert-controls">
@@ -2421,8 +2422,4 @@ function formatDerivedStaleSystems(systems) {
   return `${systems.length} 项：${preview}${systems.length > 3 ? "等" : ""}`;
 }
 
-function formatDerivedUpdateHint(systems) {
-  if (!Array.isArray(systems) || !systems.length) return "地图内容均已更新。";
-  return `地形变化后，${formatDerivedStaleSystems(systems)}需要更新。可现在更新，也可继续编辑后再统一处理。`;
-}
 </script>

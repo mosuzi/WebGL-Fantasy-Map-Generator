@@ -58,6 +58,9 @@ import {
 import {resolveStateLabelPlacement} from "./state-label-territory.js";
 import {formatMilitary, normalizeUnitPreferences} from "../ui/display-units.js";
 import {militaryIconLabelForVariant, militaryIconUrlForVariant, normalizeMilitaryIconVariant} from "./military-icon-assets.js";
+import {resolveMilitaryLabelPalette} from "./military-label-palette.js";
+import {MILITARY_CITY_LABEL_AVOID_SCALE, militaryLabelBox, resolveMilitaryLabelPlacement} from "./military-label-layout.js";
+import {isSelectionForLabelItem, shouldShowDefaultSelectionMarker} from "./selection-marker-policy.js";
 import {DEFAULT_VISUAL_THEME_ID, resolveVisualTheme} from "./themes.js";
 import {emptyOceanCurrentLayerStats, pushOceanCurrentLayer} from "./ocean-current-layer.js";
 import {
@@ -1513,6 +1516,7 @@ export class PlaceholderMapRenderer {
     const startedAt = performance.now();
     const rect = this.canvas.getBoundingClientRect();
     const occupied = [];
+    const occupiedCityLabels = [];
     const occupiedStates = [];
     const occupiedProvinces = [];
     const occupiedByPriority = [];
@@ -1531,7 +1535,7 @@ export class PlaceholderMapRenderer {
 
     const labelStartedAt = performance.now();
     for (const item of labelItems) {
-      const selected = isSelectedLabelItem(this.selection, item) || this.objectHighlights.some(highlight => isSelectedLabelItem(highlight, item));
+      const selected = isSelectionForLabelItem(this.selection, item) || this.objectHighlights.some(highlight => isSelectionForLabelItem(highlight, item));
       const forceVisible = selected && item.targetKind === LABEL_TARGET_KIND.CUSTOM;
       item.node.classList.toggle("selected", selected);
       const stateLabel = item.targetKind === LABEL_TARGET_KIND.STATE;
@@ -1588,7 +1592,10 @@ export class PlaceholderMapRenderer {
       if (stateLabel) item.node.style.setProperty("--state-label-opacity", String(stateLabelScale.opacity));
       if (stateLabel) occupiedStates.push(box);
       else if (provinceLabel) occupiedProvinces.push(box);
-      else occupied.push(box);
+      else {
+        occupied.push(box);
+        if (item.targetKind === LABEL_TARGET_KIND.CITY) occupiedCityLabels.push(box);
+      }
       if (priorityLayout) occupiedByPriority.push(box);
       visible++;
       if (item.targetKind === LABEL_TARGET_KIND.CITY) visibleCities++;
@@ -1612,7 +1619,8 @@ export class PlaceholderMapRenderer {
     this.updateMarkerIcons(rect, [...occupied, ...occupiedStates, ...occupiedProvinces, ...cityIconBoxes], cityIconBoxes);
     const markerIconsMs = roundMs(performance.now() - markerStartedAt);
     const militaryStartedAt = performance.now();
-    this.updateMilitaryIcons(rect, [...occupied, ...occupiedStates, ...occupiedProvinces, ...cityIconBoxes]);
+    const cityCollisionBoxes = occupiedCityLabels.slice(-MAX_OVERLAY_COLLISION_BOXES);
+    this.updateMilitaryIcons(rect, [...occupied, ...occupiedStates, ...occupiedProvinces, ...cityIconBoxes], cityCollisionBoxes);
     const militaryIconsMs = roundMs(performance.now() - militaryStartedAt);
     const selectionStartedAt = performance.now();
     this.updateSelectionMarker(rect);
@@ -1648,7 +1656,13 @@ export class PlaceholderMapRenderer {
   }
 
   updateSelectionMarker(rect) {
-    if (!this.selectionMarker || !isPointObjectKind(this.selection?.kind)) {
+    const shouldShow = shouldShowDefaultSelectionMarker(this.selection, {
+      labels: this.labelItems,
+      cities: this.cityIconItems,
+      markers: this.markerIconItems,
+      military: this.militaryIconItems
+    });
+    if (!this.selectionMarker || !shouldShow) {
       if (this.selectionMarker) this.selectionMarker.style.display = "none";
       return;
     }
@@ -1753,7 +1767,7 @@ export class PlaceholderMapRenderer {
     this.visibleMarkerIconCount = visible;
   }
 
-  updateMilitaryIcons(rect, occupiedLabels = []) {
+  updateMilitaryIcons(rect, occupiedLabels = [], cityLabelBoxes = []) {
     if (!this.militaryIconItems.length) {
       this.visibleMilitaryIconCount = 0;
       return;
@@ -1766,6 +1780,7 @@ export class PlaceholderMapRenderer {
 
     for (const item of this.militaryIconItems) {
       const selected = isSelectedOrHighlighted(this.selection, this.objectHighlights, OBJECT_KIND.MILITARY, item.id);
+      applyMilitaryLabelStatePalette(item, this.map);
       if (this.layerVisibility.military === false || scale < item.minScale) {
         if (item.visible !== false) item.node.classList.toggle("visible", false);
         setOverlayItemClassFlag(item, "selectedClass", "selected", selected);
@@ -1776,21 +1791,39 @@ export class PlaceholderMapRenderer {
       }
       const screen = this.worldToScreen(item.x, item.y, rect);
       const sizeScale = militaryIconScale(scale, item);
-      const box = militaryIconBoxForItem(item, screen, sizeScale);
+      const width = (item.boxBaseWidth || MILITARY_ICON_BASE_WIDTH) * sizeScale;
+      const height = MILITARY_ICON_BASE_HEIGHT * sizeScale;
+      const placement = scale >= MILITARY_CITY_LABEL_AVOID_SCALE
+        ? resolveMilitaryLabelPlacement({
+            screen,
+            width,
+            height,
+            cityLabelBoxes,
+            viewport: {width: rect.width, height: rect.height},
+            padding: iconPadding,
+            item
+          })
+        : {screen, box: militaryLabelBox(screen, width, height, item), avoided: false, blocked: false};
+      const box = placement.box;
       const onScreen = box.right > 4 && box.bottom > 4 && box.left < rect.width - 4 && box.top < rect.height - 4;
       const canShow = onScreen;
-      const blocked = canShow && !selected && scale < MILITARY_ICON_RELAXED_SCALE && (
-        boxesOverlapAny(occupiedLabels, box, iconPadding) ||
-        boxesOverlapAny(occupiedIcons, box, iconPadding)
+      const blocked = canShow && !selected && (
+        placement.blocked ||
+        scale < MILITARY_ICON_RELAXED_SCALE && (
+          boxesOverlapAny(occupiedLabels, box, iconPadding) ||
+          boxesOverlapAny(occupiedIcons, box, iconPadding)
+        )
       );
       const shouldShow = canShow && !blocked;
       if (item.visible !== shouldShow) item.node.classList.toggle("visible", shouldShow);
       setOverlayItemClassFlag(item, "selectedClass", "selected", selected);
       setOverlayItemClassFlag(item, "fleetClass", "military-map-icon--fleet", item.type === "fleet");
+      setOverlayItemClassFlag(item, "cityAvoidedClass", "city-label-avoided", placement.avoided);
+      item.node.dataset.cityLabelAvoided = String(placement.avoided);
       item.visible = shouldShow;
       item.box = shouldShow ? box : null;
       if (!shouldShow) continue;
-      setOverlayNodePosition(item.node, screen.x, screen.y);
+      setOverlayNodePosition(item.node, placement.screen.x, placement.screen.y);
       setOverlayItemStyleValue(item, "scaleValue", "--military-icon-scale", String(sizeScale));
       occupiedIcons.push(box);
       visible++;
@@ -2585,6 +2618,16 @@ function militaryIconClassName(item) {
   return classes.join(" ");
 }
 
+function applyMilitaryLabelStatePalette(item, map) {
+  const state = map?.politics?.states?.[item.stateId] || map?.pack?.states?.[item.stateId];
+  const palette = resolveMilitaryLabelPalette(state?.color);
+  if (item.stateColorValue === palette.stateColor) return;
+  item.node.style.setProperty("--military-label-bg", palette.background);
+  item.node.style.setProperty("--military-label-border", palette.border);
+  item.node.dataset.stateColor = palette.stateColor;
+  item.stateColorValue = palette.stateColor;
+}
+
 function militaryObjectFromIconItem(item) {
   const regiment = item.regiment || {};
   return {
@@ -2609,18 +2652,6 @@ function militaryObjectFromIconItem(item) {
     y: regiment.y,
     distance: 0,
     candidateCount: 1
-  };
-}
-
-function militaryIconBoxForItem(item, screen, sizeScale) {
-  const width = (item.boxBaseWidth || MILITARY_ICON_BASE_WIDTH) * sizeScale;
-  const height = MILITARY_ICON_BASE_HEIGHT * sizeScale;
-  return {
-    left: screen.x - width / 2,
-    right: screen.x + width / 2,
-    top: screen.y - height * 0.55,
-    bottom: screen.y + height * 0.45,
-    item
   };
 }
 
@@ -2922,15 +2953,6 @@ function labelClassName(item) {
   if (item.targetKind === LABEL_TARGET_KIND.CUSTOM) return "custom-label";
   const city = item.city || {};
   return `city-label${city.capital ? " capital" : ""}`;
-}
-
-function isSelectedLabelItem(selection, item) {
-  if (!selection) return false;
-  if (selection.kind === item.targetKind && selection.id === item.targetId) return true;
-  if (selection.kind !== OBJECT_KIND.LABEL) return false;
-  const targetKind = selection.targetKind || LABEL_TARGET_KIND.CITY;
-  const targetId = selection.targetId ?? selection.id;
-  return targetKind === item.targetKind && targetId === item.targetId;
 }
 
 function isSelectedOrHighlighted(selection, highlights, kind, id) {

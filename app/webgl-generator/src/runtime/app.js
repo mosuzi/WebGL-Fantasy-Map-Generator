@@ -1019,7 +1019,10 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
         state.heightEdit.lastNotice = result.executed
           ? `已重设 ${plan.stats.oceanCells} 处开放海洋，并完成洋流、气候及世界派生重算。`
           : "当前海底无需调整。";
-        if (result.executed) state.heightEdit.seafloorResetSeed++;
+        if (result.executed) {
+          state.heightEdit.seafloorResetSeed++;
+          runtimeActions.layers.setShowOceanHeight(true);
+        }
         clearHeightTransformPreview(state);
         updateHeightPanel(state);
         updateEditingInteractionLock(state, documentRef);

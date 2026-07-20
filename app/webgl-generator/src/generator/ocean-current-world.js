@@ -56,6 +56,7 @@ export async function rebuildOceanCurrentWorldStage(map, system, {seed, signal} 
       result = {cities: map.settlements.metadata.cities, routes: map.settlements.metadata.routes};
       break;
     case "states-provinces": {
+      synchronizePoliticalMirrorsForRebuild(map);
       const politics = reexpandPackPoliticsPreservingIdentity(map.grid, map.society, map.pack, map.settlements);
       if (!politics) throw new Error("当前地图缺少可保留身份的国家与省份数据");
       map.politics.states = map.pack.states = politics.states;
@@ -176,6 +177,33 @@ function societyCenterScore(cells, cell, origin) {
 
 function snapshotIdentity(items = []) {
   return new Map(items.filter(item => item?.i && !item.removed).map(item => [Number(item.i), {name: item.name, fullName: item.fullName}]));
+}
+
+function synchronizePoliticalMirrorsForRebuild(map) {
+  map.politics ||= {};
+  map.pack ||= {};
+  const states = mergePoliticalMirrors(map.politics.states, map.pack.states);
+  const provinces = mergePoliticalMirrors(map.politics.provinces, map.pack.provinces);
+  map.politics.states = map.pack.states = states;
+  map.politics.provinces = map.pack.provinces = provinces;
+}
+
+function mergePoliticalMirrors(politicalItems, packItems) {
+  const primary = Array.isArray(politicalItems) ? politicalItems : [];
+  const fallback = Array.isArray(packItems) ? packItems : [];
+  if (primary === fallback) return primary;
+  const size = Math.max(primary.length, fallback.length);
+  return Array.from({length: size}, (_, id) => mergePoliticalItem(primary[id], fallback[id], id));
+}
+
+function mergePoliticalItem(primary, fallback, id) {
+  if (!primary && !fallback) return null;
+  if (!primary) return {...fallback};
+  const merged = {...(fallback || {}), ...primary};
+  merged.i = Number.isInteger(Number(primary.i)) ? Number(primary.i) : Number.isInteger(Number(primary.id)) ? Number(primary.id) : id;
+  merged.removed = Boolean(primary.removed);
+  for (const field of ["name", "fullName", "formName"]) merged[field] = primary[field];
+  return merged;
 }
 
 function activeCount(items = []) {

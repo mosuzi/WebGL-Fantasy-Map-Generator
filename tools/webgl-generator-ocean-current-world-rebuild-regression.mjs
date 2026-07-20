@@ -18,10 +18,11 @@ import {
 await verifyTransactionalContract();
 const climate = verifyClimateInfluence();
 const real = await verifyRealWorldRebuild();
+const legacyPolitics = await verifyLegacyPoliticalMirrorCompatibility();
 const performanceReports = await verifyPerformanceTiers();
 await verifyUiAndRuntimeWiring();
 
-console.log(JSON.stringify({ok: true, order: OCEAN_CURRENT_WORLD_REBUILD_ORDER, climate, real, performance: performanceReports}, null, 2));
+console.log(JSON.stringify({ok: true, order: OCEAN_CURRENT_WORLD_REBUILD_ORDER, climate, real, legacyPolitics, performance: performanceReports}, null, 2));
 
 async function verifyTransactionalContract() {
   const successful = transactionFixture();
@@ -104,6 +105,28 @@ async function verifyRealWorldRebuild() {
   const gzip = await parseMapDocumentFile({defaultView: globalThis}, new File([compressed.blob], "world.json.gz", {type: "application/gzip"}));
   assert.equal(gzip.map.oceanCurrents.currents.length, map.oceanCurrents.currents.length, "gzip 往返丢失洋流");
   return {currents: map.oceanCurrents.currents.length, affectedCells: map.climate.metadata.oceanCurrentInfluence.affectedCells, history: history.getStats(), totalMs: result.timings.totalMs};
+}
+
+async function verifyLegacyPoliticalMirrorCompatibility() {
+  const map = generatePlaceholderMap({seed: "ocean-world-legacy-politics", cellsTarget: 5000, heightmapTemplate: "continents"});
+  map.politics.states = structuredClone(map.politics.states);
+  map.politics.provinces = structuredClone(map.politics.provinces);
+  const state = map.politics.states.find(item => item?.i && !item.removed);
+  const province = map.politics.provinces.find(item => item?.i && !item.removed);
+  assert(state && province, "旧档镜像样本缺少国家或省份");
+  state.name = "旧档保留国名";
+  state.fullName = "旧档保留国全名";
+  province.name = "旧档保留省名";
+  province.fullName = "旧档保留省全名";
+  const identity = snapshotOceanCurrentWorldIdentity(map);
+
+  await rebuildOceanCurrentWorldStage(map, "states-provinces", {seed: "ocean-world-legacy-politics:rebuild"});
+  assertOceanCurrentWorldIdentity(map, identity);
+  assert.equal(map.pack.states, map.politics.states, "重算后国家双存储没有重新统一");
+  assert.equal(map.pack.provinces, map.politics.provinces, "重算后省份双存储没有重新统一");
+  assert.equal(map.politics.states[state.i]?.fullName, "旧档保留国全名", "旧档国家名称没有保留");
+  assert.equal(map.politics.provinces[province.i]?.fullName, "旧档保留省全名", "旧档省份名称没有保留");
+  return {stateId: state.i, provinceId: province.i};
 }
 
 async function verifyPerformanceTiers() {

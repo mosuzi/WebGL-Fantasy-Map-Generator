@@ -64,6 +64,12 @@ assert(appSource.includes("onPreviewCancel") && appSource.includes("clearHeightT
 assert(namebaseSource.includes('data-ui-state="preview"'), "名称库导入预览没有共享预览状态");
 
 assert(heightSource.includes('kind="stale"') && heightSource.includes("重算基础派生") && heightSource.includes("重算下游派生"), "待派生状态缺少稳定恢复动作");
+for (const signature of ['class="height-derived-banner"', 'title="地图内容待更新"', 'message="可继续编辑，完成后再统一更新。"', 'action-label="更新后续内容"', 'secondary-action-label="更新地形关联"']) {
+  assert(heightSource.includes(signature), `高度待更新提示缺少简化契约：${signature}`);
+}
+assert(!heightSource.includes("formatDerivedUpdateHint"), "高度待更新提示仍展开内部派生系统");
+assert(styleSource.includes(".height-derived-banner .ui-state-banner-actions"), "高度待更新按钮缺少局部防重叠布局");
+assert(styleSource.includes(".height-derived-banner .ui-state-token"), "高度待更新提示仍显示技术状态徽标");
 assert(notesSource.includes('kind="orphan"') && notesSource.includes("删除这条孤儿备注"), "孤儿备注缺少明确恢复动作");
 assert(controlTemplate.includes("file-operation-clear-error") && controlTemplate.includes("清除错误并重试"), "导入失败缺少恢复动作");
 assert(appSource.includes("fileOperationFeedbackState") && appSource.includes('return "error"'), "文件操作没有稳定错误状态");
