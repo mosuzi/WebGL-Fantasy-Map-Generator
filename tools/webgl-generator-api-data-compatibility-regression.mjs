@@ -102,6 +102,9 @@ assert.match(appSource, /onExportMapImportDiagnostic:[\s\S]*runtimeActions\.data
 assert.match(appSource, /operation\.run\("data\.restoreBrowserMap"/);
 assert.match(appSource, /operation\.run\("data\.importHeightmap"/);
 assert.match(appSource, /const exported = exportAllMapData\(state, documentRef, \{download: false, includeText: true\}\)/);
+assert.match(appSource, /restoreBrowserMap\(\{confirm: true, startup: true, toast: false\}\)/, "启动恢复没有使用非破坏性参数");
+assert.doesNotMatch(appSource, /storage\.removeItem\(BROWSER_MAP_STORAGE_KEY\)/, "恢复失败仍会删除浏览器原始存档");
+assert.match(appSource, /浏览器地图恢复失败，原存档已保留/, "恢复失败没有明确说明原存档仍保留");
 assert.doesNotMatch(appSource, /function createPersistableMapDocument/);
 assert.doesNotMatch(appSource, /lastMapImportDiagnostic:\s*state\.lastMapImportDiagnostic/);
 assert.match(diagnosticSource, /code, stage, suggestion/);
@@ -111,6 +114,7 @@ console.log(JSON.stringify({
   oldSample: {sourceVersion: 1, targetVersion: oldReimported.version, summary: oldSummary},
   currentSample: {version: currentReimported.version, summary: compatibilitySummary(currentReimported)},
   browserStorage: {legacy: true, envelope: true, encoding: plainEnvelope.encoding, compressedEnvelopeVerified},
+  failedRestorePreservesRawStorage: true,
   badInput: {code: badImport.error.code, stage: badImport.error.stage, loadingClosed: loading.at(-1) === false},
   publicDataMethodsAdded: 4
 }, null, 2));

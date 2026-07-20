@@ -94,19 +94,19 @@ function definitions() {
       entry: "打开应用",
       preconditions: "浏览器可能有、没有或持有损坏存档",
       chain: [
-        step("启动编排", FILES.runtime, ["restoreBrowserStoredMapOrGenerate", "restoreBrowserMap({confirm: true, startup: true, removeInvalid: true"]),
+        step("启动编排", FILES.runtime, ["restoreBrowserStoredMapOrGenerate", "restoreBrowserMap({confirm: true, startup: true, toast: false"]),
         step("恢复动作", FILES.runtime, ["restoreMapFromBrowserStorageViaApi", "正在读取浏览器保存的地图"]),
         step("运行时接入", FILES.runtime, ["loadMapIntoRuntime", "state.editHistory.clear()"]),
-        step("反馈", FILES.runtime, ["已恢复浏览器保存的地图", "浏览器地图恢复失败，已清除损坏存档"])
+        step("反馈", FILES.runtime, ["已恢复浏览器保存的地图", "浏览器地图恢复失败，原存档已保留"])
       ],
       expectedResult: "有效存档替换当前地图；缺失或损坏存档进入固定的新图生成路径",
       history: "地图替换时清空编辑历史",
       feedback: "加载气泡、文件状态和可选 toast",
-      exitRecovery: "损坏存档在 startup removeInvalid 路径清除，随后生成新地图",
+      exitRecovery: "损坏存档保留在 LocalStorage，当前会生成临时地图供继续使用",
       firstUse: "启动过程自动完成，状态文案应解释当前阶段",
       expertUse: "无需额外确认启动恢复；显式 API 恢复仍要求 confirm",
       decisions: [DECISIONS.loading, DECISIONS.dataCompatibility, DECISIONS.feedback, DECISIONS.audit],
-      browser: ["F0 有效存档恢复", "F0 无存档生成", "F4 损坏存档清除后生成"]
+      browser: ["F0 有效存档恢复", "F0 无存档生成", "F4 损坏存档保留后生成临时地图"]
     }),
     flow("HF-02", "生成并替换当前地图", {
       surfaces: ["panel:generation-panel", "canvas:generation-feedback"],

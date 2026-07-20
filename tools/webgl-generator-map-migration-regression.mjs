@@ -36,7 +36,7 @@ assert.deepEqual(migrated.map.labels.styles, {version: 1, overrides: {}});
 assert.deepEqual(migrated.map.visualTheme, {version: 2, preset: "ancient", overrides: {}, userThemes: []});
 assert.equal(migrated.map.options.visualTheme, "ancient");
 assert.equal(migrated.map.options.seed, "legacy-v1-sample", "map options 应优先于同名文档 options");
-assert.strictEqual(migrateMapDocument(migrated), migrated, "当前版本迁移应保持幂等且不复制文档");
+assert.deepEqual(migrateMapDocument(migrated), migrated, "当前版本重复迁移应保持数据幂等");
 
 const sourceMap = {metadata: {seed: "new-map"}, options: {visualTheme: "night"}, grid: {cells: {h: new Uint8Array([20, 21])}}};
 const current = createMapDocument(sourceMap, sourceMap.options);
@@ -50,17 +50,19 @@ assert.deepEqual([...currentRoundtrip.map.grid.cells.h], [20, 21], "v2 stringify
 
 assert.throws(() => migrateMapDocument({type: MAP_DOCUMENT_TYPE, version: 3, map: {}}), /暂不支持的地图格式版本：3/);
 assert.throws(() => migrateMapDocument({type: MAP_DOCUMENT_TYPE, version: 1}), /缺少 map 数据/);
-assert.throws(() => migrateMapDocument({type: MAP_DOCUMENT_TYPE, version: 2, metadata: {mapSchemaVersion: 2}, map: {metadata: {schemaVersion: 2}}}), /缺少 notes 存储/);
 const incompleteV2 = structuredClone(current);
 delete incompleteV2.map.labels.hidden.city;
-assert.throws(() => migrateMapDocument(incompleteV2), /labels 隐藏表不完整/);
+delete incompleteV2.map.labels.hidden.state;
+const normalizedIncompleteV2 = migrateMapDocument(incompleteV2);
+assert.deepEqual(normalizedIncompleteV2.map.labels.hidden.city, [], "旧 v2 缺少城市隐藏表时没有回填");
+assert.deepEqual(normalizedIncompleteV2.map.labels.hidden.state, [], "旧 v2 缺少国家隐藏表时没有回填");
 const oldCurrentV2 = structuredClone(current);
 delete oldCurrentV2.map.labels.styles;
 delete oldCurrentV2.map.labels.hidden.province;
-assert.strictEqual(migrateMapDocument(oldCurrentV2), oldCurrentV2, "旧 v2 缺少新增标签字段时应宽容读取");
-ensureLabelStore(oldCurrentV2.map);
-assert.deepEqual(oldCurrentV2.map.labels.hidden.province, [], "旧 v2 运行时装载没有回填省份隐藏表");
-assert.deepEqual(oldCurrentV2.map.labels.styles, {version: 1, overrides: {}}, "旧 v2 运行时装载没有回填标签样式存储");
+const normalizedOldCurrentV2 = migrateMapDocument(oldCurrentV2);
+ensureLabelStore(normalizedOldCurrentV2.map);
+assert.deepEqual(normalizedOldCurrentV2.map.labels.hidden.province, [], "旧 v2 迁移没有回填省份隐藏表");
+assert.deepEqual(normalizedOldCurrentV2.map.labels.styles, {version: 1, overrides: {}}, "旧 v2 迁移没有回填标签样式存储");
 
 const invalidProvinceHiddenV2 = structuredClone(current);
 invalidProvinceHiddenV2.map.labels.hidden.province = "1";
@@ -83,6 +85,29 @@ for (const invalidOverride of [null, false, 0, "", []]) {
   invalidStyleOverrideV2.map.labels.styles = {version: 1, overrides: {city: invalidOverride}};
   assert.throws(() => migrateMapDocument(invalidStyleOverrideV2), /标签样式覆盖无效/);
 }
+
+const sparseLegacyV2 = structuredClone(current);
+delete sparseLegacyV2.metadata.mapSchemaVersion;
+delete sparseLegacyV2.map.metadata.schemaVersion;
+delete sparseLegacyV2.map.notes;
+delete sparseLegacyV2.map.measurements;
+delete sparseLegacyV2.map.labels;
+delete sparseLegacyV2.map.visualTheme;
+delete sparseLegacyV2.map.diplomacy;
+delete sparseLegacyV2.map.oceanCurrents;
+sparseLegacyV2.map.display = {units: {distanceUnit: "km"}};
+const backfilledLegacyV2 = migrateMapDocument(sparseLegacyV2);
+assert.equal(backfilledLegacyV2.metadata.mapSchemaVersion, MAP_SCHEMA_VERSION, "旧 v2 文档 schema 标记没有回填");
+assert.equal(backfilledLegacyV2.map.metadata.schemaVersion, MAP_SCHEMA_VERSION, "旧 v2 地图 schema 标记没有回填");
+assert.ok(backfilledLegacyV2.map.grid.cells.h instanceof Uint8Array, "旧 v2 typed array 在回填时丢失");
+assert.deepEqual(backfilledLegacyV2.map.notes.notes, [], "旧 v2 notes 没有回填");
+assert.deepEqual(backfilledLegacyV2.map.measurements, {version: 1, items: [], metadata: {measurements: 0, nextId: 1}}, "旧 v2 measurements 没有回填");
+assert.deepEqual(backfilledLegacyV2.map.labels.hidden, {city: [], state: [], province: []}, "旧 v2 labels 没有回填");
+assert.equal(backfilledLegacyV2.map.visualTheme.preset, "night", "旧 v2 visualTheme 没有沿用原选项回填");
+assert.ok(Array.isArray(backfilledLegacyV2.map.oceanCurrents.currents), "旧 v2 oceanCurrents 没有回填");
+assert.ok(backfilledLegacyV2.map.diplomacy && Array.isArray(backfilledLegacyV2.map.diplomacy.chronicle), "旧 v2 diplomacy 没有回填");
+assert.ok(Array.isArray(backfilledLegacyV2.map.display.units.customUnits), "旧 v2 自定义单位表没有回填");
+assert.deepEqual(migrateMapDocument(backfilledLegacyV2), backfilledLegacyV2, "旧 v2 回填结果重复迁移不幂等");
 
 const futureRegistry = createMapDocumentMigrationRegistry({
   1: document => ({...document, version: 2, map: {...document.map, migrationPath: ["v1-v2"]}})

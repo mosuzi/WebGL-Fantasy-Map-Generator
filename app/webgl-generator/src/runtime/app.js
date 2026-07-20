@@ -3342,10 +3342,10 @@ function requestGenerate(state, documentRef, actions = state.runtimeActions) {
 
 async function restoreBrowserStoredMapOrGenerate(state, documentRef) {
   try {
-    const result = await state.runtimeActions.data.restoreBrowserMap({confirm: true, startup: true, removeInvalid: true, toast: false});
+    const result = await state.runtimeActions.data.restoreBrowserMap({confirm: true, startup: true, toast: false});
     if (result.restored) return;
   } catch {
-    // Startup continues with a fresh map after an invalid browser snapshot.
+    showMapToast(documentRef, "浏览器存档恢复失败，原存档已保留；当前将生成临时地图", 5200, {tone: "error"});
   }
   requestGenerate(state, documentRef, state.runtimeActions);
 }
@@ -3381,10 +3381,9 @@ async function restoreMapFromBrowserStorageViaApi(state, documentRef, options = 
     };
   } catch (error) {
     updateGenerationLoading(documentRef, false);
-    if (options.removeInvalid === true) storage.removeItem(BROWSER_MAP_STORAGE_KEY);
     reportMapImportError(state, documentRef, error, null, {
       source: "browser-storage",
-      prefix: options.removeInvalid === true ? "浏览器地图恢复失败，已清除损坏存档" : "浏览器地图恢复失败"
+      prefix: "浏览器地图恢复失败，原存档已保留"
     });
     throw error;
   }

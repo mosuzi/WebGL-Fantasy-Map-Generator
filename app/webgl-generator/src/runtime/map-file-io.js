@@ -114,10 +114,16 @@ export async function createCompressedMapDocumentBlob(documentRef, document) {
 }
 
 export function migrateMapDocument(document) {
-  const migrated = normalizeMapDocumentDisplay(migrateMapDocumentWithRegistry(document, {
+  const versioned = migrateMapDocumentWithRegistry(document, {
     targetVersion: MAP_DOCUMENT_VERSION,
     registry: MAP_DOCUMENT_MIGRATORS
-  }));
+  });
+  const migrated = normalizeMapDocumentDisplay({
+    ...versioned,
+    metadata: {...(versioned.metadata || {}), mapSchemaVersion: MAP_SCHEMA_VERSION},
+    options: {...(versioned.options || {})},
+    map: normalizeCurrentMapSchemaV2(versioned.map, versioned.options)
+  });
   backfillEconomyDisplayProperties(migrated.map);
   backfillProvinceNames(migrated.map);
   migrated.map = normalizeDiplomacyMap(migrated.map);
@@ -481,27 +487,39 @@ function validateCurrentMapDocument(document) {
 
 function normalizeMapSchemaV2(map, documentOptions = {}) {
   const source = map && typeof map === "object" ? map : {};
-  const options = {...(documentOptions || {}), ...(source.options || {})};
-  delete options.display;
-  const displaySource = documentOptions.display ?? source.display;
+  const normalizedCurrent = normalizeCurrentMapSchemaV2(source, documentOptions);
   const societyCultures = cloneSocialStore(source.society?.cultures);
   const societyReligions = cloneSocialStore(source.society?.religions);
   const packCultures = source.pack?.cultures === source.society?.cultures ? societyCultures : cloneSocialStore(source.pack?.cultures);
   const packReligions = source.pack?.religions === source.society?.religions ? societyReligions : cloneSocialStore(source.pack?.religions);
   const normalized = {
+    ...normalizedCurrent,
+    notes: normalizeNotesStoreV2(source.notes),
+    measurements: normalizeMeasurementStoreV2(source.measurements),
+    labels: normalizeLabelStoreV2(source.labels),
+    visualTheme: normalizeVisualThemeStoreV2(source.visualTheme, normalizedCurrent.options.visualTheme),
+    society: source.society ? {...source.society, cultures: societyCultures, religions: societyReligions, metadata: {...(source.society.metadata || {})}} : source.society,
+    pack: source.pack ? {...source.pack, cultures: packCultures, religions: packReligions} : source.pack
+  };
+  return normalizeDiplomacyMap(normalizeEconomyDisplayMap(normalizeSocialExpansionMap(normalized)));
+}
+
+function normalizeCurrentMapSchemaV2(map, documentOptions = {}) {
+  const source = map && typeof map === "object" ? map : {};
+  const options = {...(documentOptions || {}), ...(source.options || {})};
+  delete options.display;
+  const displaySource = documentOptions.display ?? source.display;
+  return {
     ...source,
     metadata: {...(source.metadata || {}), schemaVersion: MAP_SCHEMA_VERSION},
     options,
     ...(displaySource && typeof displaySource === "object" ? {display: normalizeMapDisplayConfig(displaySource)} : {}),
-    society: source.society ? {...source.society, cultures: societyCultures, religions: societyReligions, metadata: {...(source.society.metadata || {})}} : source.society,
-    pack: source.pack ? {...source.pack, cultures: packCultures, religions: packReligions} : source.pack,
-    notes: normalizeNotesStoreV2(source.notes),
-    measurements: normalizeMeasurementStoreV2(source.measurements),
-    labels: normalizeLabelStoreV2(source.labels),
-    visualTheme: normalizeVisualThemeStoreV2(source.visualTheme, options.visualTheme),
+    notes: backfillNotesStoreV2(source.notes),
+    measurements: backfillMeasurementStoreV2(source.measurements),
+    labels: backfillLabelStoreV2(source.labels),
+    visualTheme: backfillVisualThemeStoreV2(source.visualTheme, options.visualTheme),
     oceanCurrents: normalizeOceanCurrentModel(source.oceanCurrents)
   };
-  return normalizeDiplomacyMap(normalizeEconomyDisplayMap(normalizeSocialExpansionMap(normalized)));
 }
 
 function normalizeMapDocumentDisplay(document) {
@@ -547,6 +565,21 @@ function normalizeNotesStoreV2(source) {
   };
 }
 
+function backfillNotesStoreV2(source) {
+  if (source == null) return normalizeNotesStoreV2(source);
+  if (typeof source !== "object" || Array.isArray(source)) return source;
+  const notes = source.notes === undefined ? [] : source.notes;
+  return {
+    ...source,
+    notes,
+    metadata: {
+      ...(source.metadata || {}),
+      notes: Array.isArray(notes) ? notes.length : Number(source.metadata?.notes) || 0,
+      formatVersion: 1
+    }
+  };
+}
+
 function normalizeMeasurementStoreV2(source) {
   const items = Array.isArray(source?.items) ? [...source.items] : [];
   const maxId = items.reduce((max, item) => Math.max(max, measurementNumericId(item?.id)), 0);
@@ -558,6 +591,23 @@ function normalizeMeasurementStoreV2(source) {
       ...(source?.metadata || {}),
       measurements: items.length,
       nextId: Math.max(Number(source?.metadata?.nextId) || 1, maxId + 1)
+    }
+  };
+}
+
+function backfillMeasurementStoreV2(source) {
+  if (source == null) return normalizeMeasurementStoreV2(source);
+  if (typeof source !== "object" || Array.isArray(source)) return source;
+  const items = source.items === undefined ? [] : source.items;
+  const maxId = Array.isArray(items) ? items.reduce((max, item) => Math.max(max, measurementNumericId(item?.id)), 0) : 0;
+  return {
+    ...source,
+    version: source.version === undefined ? 1 : source.version,
+    items,
+    metadata: {
+      ...(source.metadata || {}),
+      measurements: Array.isArray(items) ? items.length : Number(source.metadata?.measurements) || 0,
+      nextId: source.metadata?.nextId === undefined ? maxId + 1 : source.metadata.nextId
     }
   };
 }
@@ -577,6 +627,37 @@ function normalizeLabelStoreV2(source) {
   };
 }
 
+function backfillLabelStoreV2(source) {
+  if (source == null) return normalizeLabelStoreV2(source);
+  if (typeof source !== "object" || Array.isArray(source)) return source;
+  const custom = source.custom === undefined ? [] : source.custom;
+  const hidden = source.hidden === undefined
+    ? {city: [], state: [], province: []}
+    : source.hidden && typeof source.hidden === "object" && !Array.isArray(source.hidden)
+      ? {
+          ...source.hidden,
+          city: source.hidden.city === undefined ? [] : source.hidden.city,
+          state: source.hidden.state === undefined ? [] : source.hidden.state,
+          province: source.hidden.province === undefined ? [] : source.hidden.province
+        }
+      : source.hidden;
+  const hiddenCount = hidden && typeof hidden === "object"
+    ? [hidden.city, hidden.state, hidden.province].reduce((sum, value) => sum + (Array.isArray(value) ? value.length : 0), 0)
+    : 0;
+  return {
+    ...source,
+    custom,
+    hidden,
+    styles: source.styles === undefined ? normalizeLabelStyleStore() : source.styles,
+    layout: source.layout === undefined ? normalizeLabelLayoutStore() : source.layout,
+    metadata: {
+      ...(source.metadata || {}),
+      custom: Array.isArray(custom) ? custom.length : Number(source.metadata?.custom) || 0,
+      hidden: hiddenCount
+    }
+  };
+}
+
 function normalizeVisualThemeStoreV2(source, fallbackPreset) {
   const userThemes = Array.isArray(source?.userThemes) ? source.userThemes.map(normalizeVisualThemeDocument) : [];
   return {
@@ -585,6 +666,18 @@ function normalizeVisualThemeStoreV2(source, fallbackPreset) {
     preset: String(source?.preset || fallbackPreset || "default"),
     overrides: source?.overrides && typeof source.overrides === "object" ? {...source.overrides} : {},
     userThemes
+  };
+}
+
+function backfillVisualThemeStoreV2(source, fallbackPreset) {
+  if (source == null) return normalizeVisualThemeStoreV2(source, fallbackPreset);
+  if (typeof source !== "object" || Array.isArray(source)) return source;
+  return {
+    ...source,
+    version: source.version === undefined ? 2 : source.version,
+    preset: source.preset === undefined ? String(fallbackPreset || "default") : source.preset,
+    overrides: source.overrides === undefined ? {} : source.overrides,
+    userThemes: source.userThemes === undefined ? [] : source.userThemes
   };
 }
 

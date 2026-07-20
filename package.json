@@ -87,6 +87,7 @@
     "regress:selection-actions": "node --no-warnings ./tools/webgl-generator-selection-action-regression.mjs",
     "regress:selection-panel-policy": "node --no-warnings ./tools/webgl-generator-selection-panel-policy-regression.mjs",
     "regress:map-migration": "node --no-warnings ./tools/webgl-generator-map-migration-regression.mjs",
+    "regress:browser-storage-compatibility": "node --no-warnings ./tools/webgl-generator-browser-storage-backward-compatibility-regression.mjs",
     "regress:display-units": "node --no-warnings ./tools/webgl-generator-display-units-regression.mjs",
     "regress:diplomacy-export": "node --no-warnings ./tools/webgl-generator-diplomacy-export-regression.mjs",
     "regress:map-import-diagnostics": "node --no-warnings ./tools/webgl-generator-map-import-diagnostics-regression.mjs",

@@ -76,7 +76,7 @@ assert.deepEqual(migratedOld.map.visualTheme.userThemes, [], "旧地图迁移没
 const oldV2 = createMapDocument(map, map.options);
 delete oldV2.map.visualTheme.userThemes;
 const parsedOldV2 = parseMapDocument(stringifyMapDocument(oldV2));
-assert.equal(parsedOldV2.map.visualTheme.userThemes, undefined, "旧 v2 地图不应因缺少新字段而拒绝");
+assert.deepEqual(parsedOldV2.map.visualTheme.userThemes, [], "旧 v2 地图没有补空用户主题列表");
 assert.deepEqual(createMapDocument(parsedOldV2.map, parsedOldV2.options).map.visualTheme.userThemes, [], "旧 v2 地图再导出没有补用户主题列表");
 
 const storageValues = new Map();
