@@ -196,7 +196,7 @@ function definitions() {
       entry: "项目“打开地图”文件输入",
       preconditions: "选择 JSON / gzip 完整地图；替换要求确认",
       chain: [
-        step("入口", FILES.control, ["id=\"import-map-file\"", "导入地图数据"]),
+        step("入口", FILES.control, ["id=\"import-map-file\"", "<span>导入</span>"]),
         step("DOM 接线", FILES.panelBindings, ["getElementById(\"import-map-file\")", "handlers.onImportMapData"]),
         step("runtime handler", FILES.runtime, ["onImportMapData: file => importMapData", "runtimeActions.data.importMap"]),
         step("解析与替换", FILES.runtime, ["async function importMapData", "importParsedMapDocumentViaApi"]),

@@ -5,6 +5,7 @@
 ## 2026-07-20 旧存档兼容验收期间发现
 
 - `tools/webgl-generator-interaction-core-flow-audit.mjs` 当前会在生成审计报告前因“缺少 OceanCurrent 重命名命令映射”失败；这与第 140 项存档恢复逻辑无关，旧版浏览器存档专项和相关运行时门禁均已通过。后续若维护交互审计基础设施，应把 `OceanCurrent` 纳入重命名宿主映射并重新生成 `docs/generated/interaction-audit/core-task-flows.*`，本项不顺手扩大整改范围。
+- 第 141 项复跑通用术语门禁时，静态回归报告 `OceanCurrentPanel.vue` 的筛选空态缺少恢复动作，综合浏览器回归则在高度面板找不到“预览全局平滑”按钮；二者均在地图导入按钮断言之外，最小 Chrome 检查已确认本项文案与 input 接线正确。后续应分别校准洋流空态契约和高度面板浏览器步骤，本项不修改无关面板。
 
 ## 2026-07-15 已转入权威任务清单
 

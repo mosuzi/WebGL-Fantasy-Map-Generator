@@ -83,6 +83,7 @@ try {
 
   await page.locator("#open-generation-panel").click();
   await page.getByRole("tab", {name: "简介", exact: true}).click();
+  assert.equal(await page.locator('label.file-import-action:has(#import-map-file) span').innerText(), "导入", "地图导入入口文案没有精简为“导入”");
   await page.locator("#import-map-file").setInputFiles({
     name: "invalid-map.json",
     mimeType: "application/json",

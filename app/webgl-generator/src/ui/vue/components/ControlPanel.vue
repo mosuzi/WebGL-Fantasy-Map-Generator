@@ -42,7 +42,7 @@
             </UiButton>
           </div>
           <label class="file-import-action secondary-action">
-            <span>导入地图数据</span>
+            <span>导入</span>
             <input id="import-map-file" type="file" accept=".json,.gz,.webgl-map.json,.webgl-map.json.gz,application/json,application/gzip,application/x-gzip" />
           </label>
           <label class="file-import-action secondary-action">
