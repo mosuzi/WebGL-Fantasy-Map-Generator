@@ -134,6 +134,7 @@
     "regress:population-transfer": "node --no-warnings ./tools/webgl-generator-population-transfer-regression.mjs",
     "regress:visual-themes": "node --no-warnings ./tools/webgl-generator-visual-theme-regression.mjs",
     "regress:label-styles": "node --no-warnings ./tools/webgl-generator-label-style-regression.mjs",
+    "regress:default-label-style-browser": "node --no-warnings ./tools/webgl-generator-default-label-style-browser-regression.mjs",
     "regress:label-layout": "node --no-warnings ./tools/webgl-generator-label-layout-regression.mjs",
     "regress:political-label-collision": "node --no-warnings ./tools/webgl-generator-political-label-collision-regression.mjs",
     "regress:map-text-selection": "node --no-warnings ./tools/webgl-generator-map-text-selection-regression.mjs",

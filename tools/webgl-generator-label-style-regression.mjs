@@ -22,6 +22,7 @@ import {
 import {createCompressedMapDocumentBlob, createMapDocument, parseMapDocument, parseMapDocumentPayload, stringifyMapDocument} from "../app/webgl-generator/src/runtime/map-file-io.js";
 import {createLocalFontFamilyOptions} from "../app/webgl-generator/src/runtime/local-font-catalog.js";
 import {LABEL_TARGET_KIND} from "../app/webgl-generator/src/runtime/object-kinds.js";
+import {resolveVisualTheme} from "../app/webgl-generator/src/renderer/themes.js";
 
 const map = {
   metadata: {seed: "label-style-regression", checksum: "checksum-must-stay"},
@@ -38,6 +39,8 @@ assert.equal(store.styles.version, 1);
 assert.deepEqual(Object.keys(store.styles.overrides), []);
 assert.deepEqual(map.labels.hidden.province, []);
 assert.equal(LABEL_STYLE_TYPES.length, 5);
+const cartographicFont = LABEL_FONT_FAMILIES.cartographic;
+assert.match(cartographicFont, /KaiTi[\s\S]*Noto Serif CJK SC[\s\S]*SimSun/, "舆图楷体没有提供跨平台中文楷宋回退");
 for (const styleType of LABEL_STYLE_TYPES) {
   const style = resolveLabelStyle(map, styleType);
   assert.ok(Object.hasOwn(LABEL_FONT_FAMILIES, style.fontFamilyId), `${styleType} 字体 id 不稳定`);
@@ -50,7 +53,21 @@ for (const styleType of LABEL_STYLE_TYPES) {
     [0, 0, 0],
     `${styleType} 默认阴影参数没有归零`
   );
+  assert.equal(style.fontFamilyId, "cartographic", `${styleType} 默认字体没有统一为舆图楷体`);
+  assert.ok(style.strokeWidth > 0 && style.strokeWidth <= 0.8, `${styleType} 默认细衬边超出古地图排印范围`);
 }
+assert.ok(LABEL_STYLE_DEFAULTS.state.fontSize > LABEL_STYLE_DEFAULTS.province.fontSize, "国家和省份字号层级不清");
+assert.ok(LABEL_STYLE_DEFAULTS.province.fontSize > LABEL_STYLE_DEFAULTS.city.fontSize, "省份和城市字号层级不清");
+assert.ok(LABEL_STYLE_DEFAULTS.state.letterSpacing > LABEL_STYLE_DEFAULTS.province.letterSpacing, "区域标签没有形成大而疏排的层级");
+assert.ok(LABEL_STYLE_DEFAULTS.province.letterSpacing > LABEL_STYLE_DEFAULTS.city.letterSpacing, "城市标签没有保持小而紧凑");
+
+const defaultTheme = resolveVisualTheme("default");
+const defaultStateStyle = resolveLabelStyle(map, "state", defaultTheme);
+const defaultCityStyle = resolveLabelStyle(map, "city", defaultTheme);
+assert.equal(defaultStateStyle.color, "#42260e", "默认国家标签没有使用深褐墨色");
+assert.equal(defaultCityStyle.color, "#1c130a", "默认城市标签没有使用深褐墨色");
+assert.equal(hasVisibleLabelShadow(defaultStateStyle), false, "默认主题重新引入了国家标签阴影");
+assert.ok(defaultTheme.labels.customBackground[3] < 0.5, "手工标签底板仍然过重");
 
 const theme = {labels: {state: [0.2, 0.4, 0.6, 0.7], stateShadow: [0.05, 0.1, 0.15, 1], city: [0.7, 0.8, 0.9, 0.85], cityHalo: [0.1, 0.1, 0.1, 1], custom: [0.9, 0.7, 0.5, 0.9], customBorder: [0.2, 0.1, 0.05, 1]}};
 assert.equal(resolveLabelStyle(map, "province", theme).color, resolveLabelStyle(map, "state", theme).color, "省份没有继承国家主题层");
@@ -89,18 +106,18 @@ const checksum = map.metadata.checksum;
 history.execute(createPatchLabelStyleCommand("state", {fontSize: 41}), context);
 assert.equal(resolveLabelStyle(map, "state").fontSize, 41);
 history.execute(createResetLabelStyleCommand("state"), context);
-assert.equal(resolveLabelStyle(map, "state").fontSize, 30);
+assert.equal(resolveLabelStyle(map, "state").fontSize, LABEL_STYLE_DEFAULTS.state.fontSize);
 history.undo(context);
 assert.equal(resolveLabelStyle(map, "state").fontSize, 41, "重置撤销没有恢复覆盖");
 history.redo(context);
-assert.equal(resolveLabelStyle(map, "state").fontSize, 30, "重置重做没有清除覆盖");
+assert.equal(resolveLabelStyle(map, "state").fontSize, LABEL_STYLE_DEFAULTS.state.fontSize, "重置重做没有清除覆盖");
 history.execute(createResetAllLabelStylesCommand(), context);
 assert.deepEqual(map.labels.styles.overrides, {});
 assert.equal(map.metadata.checksum, checksum, "样式命令不应改写地图 checksum");
 history.execute(createPatchLabelStyleCommand("custom", {fontFamilyId: LOCAL_LABEL_FONT_ID, fontFamilyName: "Archive Only Font"}), context);
 assert.equal(resolveLabelStyle(map, "custom").fontFamilyName, "Archive Only Font");
 history.undo(context);
-assert.equal(resolveLabelStyle(map, "custom").fontFamilyId, "serif", "本机字体撤销没有恢复内置字体");
+assert.equal(resolveLabelStyle(map, "custom").fontFamilyId, "cartographic", "本机字体撤销没有恢复舆图楷体");
 history.redo(context);
 assert.equal(resolveLabelStyle(map, "custom").fontFamilyName, "Archive Only Font", "本机字体重做没有恢复字体族名称");
 history.execute(createPatchLabelStyleCommand("custom", {strokeWidth: 0.01, shadowOffsetX: 0.1, shadowOffsetY: -0.1, shadowBlur: 0.1}), context);
@@ -111,7 +128,7 @@ assert.equal(fineEffectStyle.shadowOffsetY, -0.1, "阴影纵移细步长没有�
 assert.equal(fineEffectStyle.shadowBlur, 0.1, "阴影模糊细步长没有保留");
 assert.equal(hasVisibleLabelShadow(fineEffectStyle), true, "显式非零阴影被错误关闭");
 history.undo(context);
-assert.equal(resolveLabelStyle(map, "custom").strokeWidth, 0, "细效果撤销没有恢复描边");
+assert.equal(resolveLabelStyle(map, "custom").strokeWidth, LABEL_STYLE_DEFAULTS.custom.strokeWidth, "细效果撤销没有恢复默认细衬边");
 history.redo(context);
 assert.equal(resolveLabelStyle(map, "custom").strokeWidth, 0.01, "细效果重做没有恢复描边");
 assert.equal(resolveLabelStyle(map, "custom").shadowOffsetY, -0.1, "细效果重做没有恢复阴影");
@@ -171,6 +188,7 @@ assert.match(controlPanelSource, /data-control-panel="styles"[\s\S]*reset-all-la
 assert.match(controlPanelSource, /load-local-label-fonts[\s\S]*queryLocalFonts/, "样式页没有用户触发的本机字体读取入口");
 assert.match(controlPanelSource, /本机未检测到[\s\S]*系统字体/, "样式页没有缺失字体 fallback 状态");
 assert.match(controlPanelSource, /input-id="label-style-stroke-width"[^>]*:step="0\.01"/, "描边步长不是 0.01");
+assert.match(controlPanelSource, /cartographic:\s*"舆图楷体"/, "样式页没有显示舆图楷体名称");
 assert.match(controlPanelSource, /input-id="label-style-shadow-x"[^>]*:step="0\.1"/, "阴影横移步长不是 0.1");
 assert.match(controlPanelSource, /input-id="label-style-shadow-y"[^>]*:step="0\.1"/, "阴影纵移步长不是 0.1");
 assert.match(controlPanelSource, /input-id="label-style-shadow-blur"[^>]*:step="0\.1"/, "阴影模糊步长不是 0.1");
@@ -184,6 +202,7 @@ assert.equal(stylePanelSource.match(/unit-label="px"/g)?.length, 6, "样式页 p
 assert.match(stylesSource, /\.label-style-panel \.ui-slider-field\s*\{[^}]*grid-template-columns:\s*72px minmax\(0, 1fr\) 84px;/, "样式页无单位滑动条没有为长标签保留列宽");
 assert.match(stylesSource, /\.label-style-panel \.ui-slider-field-has-unit\s*\{[^}]*grid-template-columns:\s*72px minmax\(0, 1fr\) 84px max-content;/, "样式页带单位滑动条没有保持数值与单位独立列");
 assert.match(stylesSource, /\.label-style-panel \.ui-slider-field > span:first-child\s*\{[^}]*white-space:\s*nowrap;/, "样式页滑动条标签仍可能折行");
+assert.match(stylesSource, /\.custom-label\s*\{[^}]*padding:\s*1px 4px;[^}]*border-radius:\s*1px;/, "手工标签仍保留现代圆角胶囊外观");
 assert.match(mapIoSource, /\.province-label\.visible/, "PNG overlay 没有纳入省份名称");
 assert.match(rendererSource, /--label-stroke-width[\s\S]*--label-shadow-offset-x[\s\S]*--label-shadow-blur/, "实时标签没有把细效果值写入共享 CSS 变量");
 assert.match(rendererSource, /hasVisibleLabelShadow\(style\) \? style\.shadowColor : "transparent"/, "实时标签没有显式关闭零效果阴影");

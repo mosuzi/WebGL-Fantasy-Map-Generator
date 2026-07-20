@@ -1235,7 +1235,7 @@ function createDefaultLabelStyleEntry(styleType) {
 }
 
 function labelFontLabel(fontFamilyId) {
-  return {system: "系统界面", serif: "衬线", sans: "无衬线", condensed: "窄体", mono: "等宽"}[fontFamilyId] || fontFamilyId;
+  return {system: "系统界面", cartographic: "舆图楷体", serif: "衬线", sans: "无衬线", condensed: "窄体", mono: "等宽"}[fontFamilyId] || fontFamilyId;
 }
 
 function localFontOptionValue(family) {

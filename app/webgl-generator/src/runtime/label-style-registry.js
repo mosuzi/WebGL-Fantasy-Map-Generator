@@ -12,6 +12,7 @@ export const LABEL_STYLE_TYPES = Object.freeze(Object.values(LABEL_STYLE_TYPE));
 
 export const LABEL_FONT_FAMILIES = Object.freeze({
   system: "system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif",
+  cartographic: "\"STKaiti\", \"KaiTi\", \"Kaiti SC\", \"Noto Serif CJK SC\", \"Source Han Serif SC\", \"Songti SC\", SimSun, Georgia, serif",
   serif: "Georgia, \"Times New Roman\", serif",
   sans: "\"Segoe UI\", Arial, sans-serif",
   condensed: "\"Arial Narrow\", \"Segoe UI\", sans-serif",
@@ -22,11 +23,11 @@ export const LOCAL_LABEL_FONT_ID = "local";
 export const LABEL_FONT_FALLBACK = LABEL_FONT_FAMILIES.system;
 
 export const LABEL_STYLE_DEFAULTS = Object.freeze({
-  [LABEL_STYLE_TYPE.STATE]: freezeStyle({fontFamilyId: "serif", fontFamilyName: null, fontSize: 30, fontWeight: 700, italic: false, letterSpacing: 2, color: "#fff0b8", opacity: 0.92, strokeColor: "#16202a", strokeWidth: 0, shadowColor: "#16202a", shadowOffsetX: 0, shadowOffsetY: 0, shadowBlur: 0}),
-  [LABEL_STYLE_TYPE.PROVINCE]: freezeStyle({fontFamilyId: "serif", fontFamilyName: null, fontSize: 18, fontWeight: 650, italic: false, letterSpacing: 1.2, color: "#fff0b8", opacity: 0.86, strokeColor: "#16202a", strokeWidth: 0, shadowColor: "#16202a", shadowOffsetX: 0, shadowOffsetY: 0, shadowBlur: 0}),
-  [LABEL_STYLE_TYPE.CAPITAL]: freezeStyle({fontFamilyId: "serif", fontFamilyName: null, fontSize: 16, fontWeight: 800, italic: false, letterSpacing: 0.2, color: "#ffffff", opacity: 0.96, strokeColor: "#0d141b", strokeWidth: 0, shadowColor: "#0d141b", shadowOffsetX: 0, shadowOffsetY: 0, shadowBlur: 0}),
-  [LABEL_STYLE_TYPE.CITY]: freezeStyle({fontFamilyId: "sans", fontFamilyName: null, fontSize: 13, fontWeight: 650, italic: false, letterSpacing: 0, color: "#ffffff", opacity: 0.94, strokeColor: "#0d141b", strokeWidth: 0, shadowColor: "#0d141b", shadowOffsetX: 0, shadowOffsetY: 0, shadowBlur: 0}),
-  [LABEL_STYLE_TYPE.CUSTOM]: freezeStyle({fontFamilyId: "serif", fontFamilyName: null, fontSize: 15, fontWeight: 700, italic: false, letterSpacing: 0.4, color: "#f8ead0", opacity: 0.98, strokeColor: "#6a4d2f", strokeWidth: 0, shadowColor: "#0d141b", shadowOffsetX: 0, shadowOffsetY: 0, shadowBlur: 0})
+  [LABEL_STYLE_TYPE.STATE]: freezeStyle({fontFamilyId: "cartographic", fontFamilyName: null, fontSize: 26, fontWeight: 500, italic: false, letterSpacing: 5.2, color: "#4a2e16", opacity: 0.9, strokeColor: "#f0e4c4", strokeWidth: 0.3, shadowColor: "#4a2e16", shadowOffsetX: 0, shadowOffsetY: 0, shadowBlur: 0}),
+  [LABEL_STYLE_TYPE.PROVINCE]: freezeStyle({fontFamilyId: "cartographic", fontFamilyName: null, fontSize: 16, fontWeight: 400, italic: false, letterSpacing: 2.2, color: "#51371f", opacity: 0.78, strokeColor: "#eee2bf", strokeWidth: 0.2, shadowColor: "#51371f", shadowOffsetX: 0, shadowOffsetY: 0, shadowBlur: 0}),
+  [LABEL_STYLE_TYPE.CAPITAL]: freezeStyle({fontFamilyId: "cartographic", fontFamilyName: null, fontSize: 15, fontWeight: 600, italic: false, letterSpacing: 0.8, color: "#251a11", opacity: 0.98, strokeColor: "#f3e9ce", strokeWidth: 0.35, shadowColor: "#251a11", shadowOffsetX: 0, shadowOffsetY: 0, shadowBlur: 0}),
+  [LABEL_STYLE_TYPE.CITY]: freezeStyle({fontFamilyId: "cartographic", fontFamilyName: null, fontSize: 12, fontWeight: 400, italic: false, letterSpacing: 0.2, color: "#2c2118", opacity: 0.94, strokeColor: "#f0e5c8", strokeWidth: 0.25, shadowColor: "#2c2118", shadowOffsetX: 0, shadowOffsetY: 0, shadowBlur: 0}),
+  [LABEL_STYLE_TYPE.CUSTOM]: freezeStyle({fontFamilyId: "cartographic", fontFamilyName: null, fontSize: 14, fontWeight: 400, italic: false, letterSpacing: 0.8, color: "#442b18", opacity: 0.95, strokeColor: "#f0e3c1", strokeWidth: 0.25, shadowColor: "#442b18", shadowOffsetX: 0, shadowOffsetY: 0, shadowBlur: 0})
 });
 
 const STYLE_FIELDS = Object.freeze(Object.keys(LABEL_STYLE_DEFAULTS[LABEL_STYLE_TYPE.CITY]));
@@ -244,7 +245,7 @@ function themeStyleForType(theme, styleType) {
   const stateLike = styleType === LABEL_STYLE_TYPE.STATE || styleType === LABEL_STYLE_TYPE.PROVINCE;
   const custom = styleType === LABEL_STYLE_TYPE.CUSTOM;
   const color = stateLike ? labels.state : custom ? labels.custom : labels.city;
-  const halo = stateLike ? labels.stateShadow : custom ? labels.customBorder : labels.cityHalo;
+  const halo = stateLike ? labels.stateShadow : custom ? labels.customHalo || labels.customBorder : labels.cityHalo;
   const result = {};
   if (Array.isArray(color)) {
     result.color = rgbaToHex(color);

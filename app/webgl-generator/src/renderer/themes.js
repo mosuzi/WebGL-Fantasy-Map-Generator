@@ -15,13 +15,14 @@ export const VISUAL_THEME_PRESETS = Object.freeze([
       routeMinor: [0.43, 0.38, 0.31, 0.64]
     },
     labels: {
-      city: [0.06, 0.08, 0.07, 1],
-      cityHalo: [0.96, 0.94, 0.85, 0.72],
-      state: [1, 0.91, 0.68, 0.92],
-      stateShadow: [0.02, 0.03, 0.04, 0.82],
-      custom: [0.97, 0.91, 0.73, 1],
-      customBackground: [0.08, 0.11, 0.11, 0.74],
-      customBorder: [0.93, 0.84, 0.57, 0.34]
+      city: [0.11, 0.075, 0.04, 0.97],
+      cityHalo: [0.95, 0.9, 0.77, 0.58],
+      state: [0.26, 0.15, 0.055, 0.88],
+      stateShadow: [0.96, 0.9, 0.75, 0.54],
+      custom: [0.25, 0.14, 0.05, 0.96],
+      customHalo: [0.96, 0.9, 0.75, 0.58],
+      customBackground: [0.92, 0.84, 0.63, 0.48],
+      customBorder: [0.29, 0.18, 0.08, 0.32]
     },
     scaleBar: {
       foreground: [0.93, 0.96, 0.96, 1],

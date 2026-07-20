@@ -1439,8 +1439,8 @@ select:disabled {
 
 .custom-label {
   max-width: 160px;
-  padding: 2px 5px;
-  border-radius: 4px;
+  padding: 1px 4px;
+  border-radius: 1px;
   border: 1px solid var(--theme-custom-label-border, rgba(238, 213, 145, 0.34));
   background: var(--theme-custom-label-bg, rgba(20, 27, 28, 0.74));
   cursor: grab;
