@@ -85,7 +85,7 @@ const LAYER_CONTRACTS = Object.freeze([
   visualContract("hover-and-scale", "悬停面板与比例尺", "5", FILES.styles, [".hover-overlay", ".map-scale-bar", "z-index: 5"]),
   visualContract("marker-icons", "普通标记图标", "5；与 hover / scale 相等，实际叠放还取决于 stacking context 与 DOM 顺序", FILES.styles, [".marker-map-icon", "z-index: 5"]),
   visualContract("measurement", "测量线与控制点", "4", FILES.styles, [".measurement-overlay", "z-index: 4"]),
-  visualContract("city-custom-military-labels", "城市、自定义与军事标签", "3", FILES.styles, [".city-label", ".custom-label", ".military-map-icon", "z-index: 3"]),
+  visualContract("city-custom-military-labels", "城市与自定义标签高于军事标签", "城市 / 自定义 3；军事 2", FILES.styles, [".city-label", ".custom-label", ".military-map-icon", "z-index: 3", "z-index: 2"]),
   visualContract("political-labels", "国家与省份标签", "2；省份碰撞降级为 1", FILES.styles, [".political-label", ".province-label", ".province-label.collision-fallback", "z-index: 2", "z-index: 1"])
 ]);
 
@@ -549,7 +549,7 @@ function visualCssRefs(id) {
     "hover-and-scale": [cssRef("\n.hover-overlay {", ["z-index: 5"]), cssRef("\n.map-scale-bar {", ["z-index: 5"])],
     "marker-icons": [cssRef(".marker-map-icon", ["z-index: 5"])],
     measurement: [cssRef("\n\n.measurement-overlay {", ["z-index: 4"])],
-    "city-custom-military-labels": [cssRef("\n.city-label {", ["z-index: 3"]), cssRef("\n\n.custom-label {", ["z-index: 3"]), cssRef(".military-map-icon", ["z-index: 3"])],
+    "city-custom-military-labels": [cssRef("\n.city-label {", ["z-index: 3"]), cssRef("\n\n.custom-label {", ["z-index: 3"]), cssRef(".military-map-icon", ["z-index: 2"])],
     "political-labels": [cssRef("\n\n.state-label,\n.province-label {", ["z-index: 2"]), cssRef(".province-label.collision-fallback", ["z-index: 1"])],
     "explicit-outline": [cssRef(".ui-icon-action.el-button:focus-visible", ["outline: 2px solid"]), cssRef(".object-table-selection-checkbox:focus-visible", ["outline: 2px solid"])],
     "hover-focus-merged": [

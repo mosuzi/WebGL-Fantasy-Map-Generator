@@ -60,6 +60,7 @@ import {formatMilitary, normalizeUnitPreferences} from "../ui/display-units.js";
 import {militaryIconLabelForVariant, militaryIconUrlForVariant, normalizeMilitaryIconVariant} from "./military-icon-assets.js";
 import {resolveMilitaryLabelPalette} from "./military-label-palette.js";
 import {MILITARY_CITY_LABEL_AVOID_SCALE, militaryLabelBox, resolveMilitaryLabelPlacement} from "./military-label-layout.js";
+import {cityLabelAnchorOffset} from "./city-label-icon-layout.js";
 import {isSelectionForLabelItem, shouldShowDefaultSelectionMarker} from "./selection-marker-policy.js";
 import {DEFAULT_VISUAL_THEME_ID, resolveVisualTheme} from "./themes.js";
 import {emptyOceanCurrentLayerStats, pushOceanCurrentLayer} from "./ocean-current-layer.js";
@@ -1395,6 +1396,7 @@ export class PlaceholderMapRenderer {
     if (!this.overlay) {
       this.labelItems = [];
       this.cityIconItems = [];
+      this.cityIconItemsById = new Map();
       this.markerIconItems = [];
       this.militaryIconItems = [];
       this.labelCount = 0;
@@ -1452,6 +1454,7 @@ export class PlaceholderMapRenderer {
       fragment.append(node);
       return {...item, node, box: null, visible: false};
     });
+    this.cityIconItemsById = new Map(this.cityIconItems.map(item => [String(item.id), item]));
     this.markerIconItems = getMarkerIconItems(map).map(item => {
       const node = documentRef.createElement("span");
       node.className = markerIconClassName(item);
@@ -1564,7 +1567,8 @@ export class PlaceholderMapRenderer {
           : null
       }) : null;
       const screen = politicalPlacement?.anchor || baseScreen;
-      const box = politicalPlacement?.box || labelBoxForItem(item, screen);
+      const labelAnchor = politicalLabel ? screen : overlayLabelAnchor(this, item, screen, scale);
+      const box = politicalPlacement?.box || labelBoxForItem(item, screen, labelAnchor);
       const onScreen = box.right > 8 && box.bottom > 8 && box.left < rect.width - 8 && box.top < rect.height - 8;
       const canShow = onScreen;
       const blocked = canShow && (priorityLayout
@@ -1580,7 +1584,7 @@ export class PlaceholderMapRenderer {
       item.box = shouldShow ? box : null;
       if (!shouldShow) continue;
       if (politicalPlacement) applyPoliticalLabelPlacement(item, politicalPlacement);
-      else setOverlayNodePosition(item.node, screen.x, screen.y - 6);
+      else setOverlayNodePosition(item.node, labelAnchor.x, labelAnchor.y);
       item.node.style.setProperty("--label-rotation", `${politicalPlacement ? 0 : item.rotation || 0}deg`);
       const provinceFallback = provinceLabel && Boolean(politicalPlacement?.collides);
       const stateCityOverlap = stateLabel && Boolean(politicalPlacement?.cityCollides);
@@ -2498,6 +2502,20 @@ function cityIconBoxForItem(item, screen, sizeScale) {
 function cityIconScale(scale, item) {
   const kindBonus = item.kind === "capital" ? 0.16 : item.kind === "provincial" ? 0.1 : item.kind === "city" || item.kind === "port" ? 0.06 : 0;
   return clamp(0.72 + kindBonus + (scale - item.minScale) * 0.055, 0.72, 1.18);
+}
+
+function overlayLabelAnchor(renderer, item, screen, scale) {
+  if (item.targetKind !== LABEL_TARGET_KIND.CITY) return {x: screen.x, y: screen.y - 6};
+  const cityIcon = renderer.cityIconItemsById?.get(String(item.targetId));
+  const iconVisible = Boolean(cityIcon) && renderer.layerVisibility.cities !== false && scale >= cityIcon.minScale;
+  const iconScale = cityIcon ? cityIconScale(scale, cityIcon) : 0;
+  const offsetY = cityLabelAnchorOffset({
+    iconVisible,
+    iconHeight: CITY_ICON_BASE_HEIGHT,
+    iconScale
+  });
+  item.node.dataset.cityIconClearance = String(Math.round(-offsetY * 100) / 100);
+  return {x: screen.x, y: screen.y + offsetY};
 }
 
 function getMarkerIconItems(map) {
@@ -3899,7 +3917,7 @@ function stateLabelScaleBehavior(scale) {
   };
 }
 
-function labelBoxForItem(item, screen) {
+function labelBoxForItem(item, screen, anchor = null) {
   const metrics = item.metrics || estimateLabelTextBox(item.text, item.resolvedStyle);
   if (item.targetKind === LABEL_TARGET_KIND.STATE || item.targetKind === LABEL_TARGET_KIND.PROVINCE) {
     const estimatedWidth = metrics.width;
@@ -3916,6 +3934,15 @@ function labelBoxForItem(item, screen) {
   }
   const estimatedWidth = metrics.width;
   const estimatedHeight = metrics.height;
+  if (item.targetKind === LABEL_TARGET_KIND.CITY) {
+    const anchorY = anchor?.y ?? screen.y - 6;
+    return {
+      left: screen.x - estimatedWidth / 2,
+      right: screen.x + estimatedWidth / 2,
+      top: anchorY - estimatedHeight,
+      bottom: anchorY
+    };
+  }
   return {
     left: screen.x - estimatedWidth / 2,
     right: screen.x + estimatedWidth / 2,

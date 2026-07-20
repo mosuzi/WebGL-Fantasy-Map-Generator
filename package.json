@@ -144,6 +144,7 @@
     "regress:hover-overlay-layer": "node --no-warnings ./tools/webgl-generator-hover-overlay-layer-regression.mjs",
     "regress:military-label-state-color": "node --no-warnings ./tools/webgl-generator-military-label-state-color-regression.mjs",
     "regress:military-label-layout": "node --no-warnings ./tools/webgl-generator-military-label-layout-regression.mjs",
+    "regress:city-label-icon-clearance": "node --no-warnings ./tools/webgl-generator-city-label-icon-clearance-regression.mjs",
     "regress:hover-debug-filter": "node --no-warnings ./tools/webgl-generator-hover-debug-filter-regression.mjs",
     "regress:hover-view-content": "node --no-warnings ./tools/webgl-generator-hover-view-content-regression.mjs",
     "regress:object-detail-values": "node --no-warnings ./tools/webgl-generator-object-detail-value-regression.mjs",
