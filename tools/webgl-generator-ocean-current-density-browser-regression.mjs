@@ -10,7 +10,7 @@ import {waitForApiReady} from "./webgl-generator-api-browser-ready.mjs";
 const rootDir = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const sourceDir = join(rootDir, "source", "Fantasy-Map-Generator");
 const distDir = join(rootDir, "dist", "webgl-generator");
-const screenshotPath = join(rootDir, "docs", "generated", "screenshots", "ocean-current-arrow-stage-2-1.png");
+const screenshotPath = join(rootDir, "docs", "generated", "screenshots", "ocean-current-zoom-layer-stage-2-1.png");
 const host = "127.0.0.1";
 const port = 5468;
 assert.ok(existsSync(distDir), `构建产物不存在：${distDir}`);
@@ -41,8 +41,14 @@ try {
 
   const evidence = await page.evaluate(() => {
     const app = window.__webglGeneratorApp;
+    const renderer = app.renderer;
     const model = app.map.oceanCurrents;
-    const stats = app.renderer.getStats();
+    const baseStats = renderer.getStats();
+    const baseScale = renderer.camera.scale;
+    renderer.camera.scale = baseScale * 2;
+    renderer.markViewportBuffersDirty();
+    renderer.draw();
+    const stats = renderer.getStats();
     const gl = document.getElementById("map-canvas")?.getContext?.("webgl2");
     return {
       seed: app.map.metadata.seed,
@@ -50,12 +56,21 @@ try {
       currents: model.currents.length,
       arrows: stats.oceanCurrentLayer.arrowheads,
       vertices: stats.oceanCurrentLayer.vertexCount,
+      bufferVertices: stats.oceanCurrentVertexCount,
+      routeVertices: stats.routeVertexCount,
       layerVisible: stats.layerVisibility.oceanCurrents,
+      baseScale,
+      zoomScale: stats.draw.oceanCurrentScale,
+      baseScreenWidth: baseStats.draw.oceanCurrentScreenWidth,
+      zoomScreenWidth: stats.draw.oceanCurrentScreenWidth,
+      layerOrder: stats.draw.layerOrder,
       glError: stats.draw?.glError ?? gl?.getError?.() ?? 0,
       healthErrors: (window.__webglGeneratorHealth?.getEvents?.(200) || []).filter(event => event.level === "error").length
     };
   });
   const panelText = await panel.textContent();
+  await panel.locator('button[aria-label="定位"]').first().click();
+  await page.waitForFunction(() => window.__webglGeneratorApp?.renderer?.getStats?.().locateStatus?.startsWith("洋流 "));
   await page.screenshot({path: screenshotPath, fullPage: true});
 
   assert.deepEqual(
@@ -63,6 +78,12 @@ try {
     {seed: "stage-2-1", algorithm: "surface-gyres-v2", currents: 6, arrows: 6, layerVisible: true}
   );
   assert.ok(evidence.vertices > 0, "洋流图层没有生成可见顶点");
+  assert.equal(evidence.bufferVertices, evidence.vertices, "洋流独立缓冲没有完整上传箭头顶点");
+  assert.ok(evidence.routeVertices > 0, "默认地图没有可用于层级验收的航线");
+  assert.ok(Math.abs(evidence.zoomScale / evidence.baseScale - 2) < 0.001, "画布没有按两倍倍率缩放");
+  assert.ok(Math.abs(evidence.zoomScreenWidth.max / evidence.baseScreenWidth.max - 2) < 0.02, "洋流箭头宽度没有随画布缩放到两倍");
+  assert.ok(evidence.layerOrder.indexOf("surface") < evidence.layerOrder.indexOf("oceanCurrents"), "洋流没有绘制在基础地表之上");
+  assert.ok(evidence.layerOrder.indexOf("oceanCurrents") < evidence.layerOrder.indexOf("routes"), "洋流仍绘制在海洋航线之上");
   assert.equal(evidence.glError, 0, "洋流密度验收出现 WebGL 错误");
   assert.equal(evidence.healthErrors, 0, "洋流密度验收出现 health error");
   assert.match(panelText, /主要洋流\s*6/);

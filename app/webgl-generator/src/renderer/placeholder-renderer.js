@@ -161,6 +161,7 @@ export class PlaceholderMapRenderer {
     this.selectionBuffer = this.gl.createBuffer();
     this.heightTransformPreviewBuffer = this.gl.createBuffer();
     this.heightCellSelectionBuffer = this.gl.createBuffer();
+    this.oceanCurrentBuffer = this.gl.createBuffer();
     this.lineBuffer = this.gl.createBuffer();
     this.pointBuffer = this.gl.createBuffer();
     this.politicalMeshDebugBuffer = this.gl.createBuffer();
@@ -176,6 +177,7 @@ export class PlaceholderMapRenderer {
     this.heightCellSelectionVertexCount = 0;
     this.heightCellSelectionBuildMs = 0;
     this.heightCellSelectionStats = emptyHeightCellSelectionStats();
+    this.oceanCurrentVertexCount = 0;
     this.lineVertexCount = 0;
     this.pointVertexCount = 0;
     this.politicalMeshDebugMode = "none";
@@ -288,6 +290,7 @@ export class PlaceholderMapRenderer {
     const vertices = profile.stage("surface-vertices", "构建 surface 顶点", () => buildPlaceholderVertices(map, this.colorMode, this.viewOptions, this.shoreVisualPaths, this.stateVisualPaths, this.provinceVisualPaths, this.politicalVisualMeshes, this.cellVisualMesh));
     const lineLayer = profile.stage("line-vertices", "构建线层顶点", () => buildLineVertices(map, this.layerVisibility, this.colorMode, this.shoreVisualPaths, this.stateVisualPaths, this.provinceVisualPaths, this.cellVisualMesh, this.viewOptions));
     const lineVertices = lineLayer.vertices;
+    const oceanCurrentVertices = lineLayer.oceanCurrentVertices;
     this.oceanCurrentLayerStats = lineLayer.oceanCurrents;
     const pointVertices = profile.stage("point-vertices", "构建点图层顶点", () => buildPointVertices(map, this.layerVisibility));
     this.vertexCount = vertices.length / 6;
@@ -302,6 +305,7 @@ export class PlaceholderMapRenderer {
     this.heightCellSelectionVertexCount = 0;
     this.heightCellSelectionBuildMs = 0;
     this.heightCellSelectionStats = emptyHeightCellSelectionStats();
+    this.oceanCurrentVertexCount = oceanCurrentVertices.length / 6;
     this.lineVertexCount = lineVertices.length / 6;
     this.pointVertexCount = pointVertices.length / 6;
     profile.stage("gpu-upload", "上传静态 GPU buffer", () => {
@@ -319,6 +323,8 @@ export class PlaceholderMapRenderer {
       this.gl.bufferData(this.gl.ARRAY_BUFFER, new Float32Array(), this.gl.DYNAMIC_DRAW);
       this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.heightCellSelectionBuffer);
       this.gl.bufferData(this.gl.ARRAY_BUFFER, new Float32Array(), this.gl.DYNAMIC_DRAW);
+      this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.oceanCurrentBuffer);
+      this.gl.bufferData(this.gl.ARRAY_BUFFER, oceanCurrentVertices, this.gl.STATIC_DRAW);
       this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.lineBuffer);
       this.gl.bufferData(this.gl.ARRAY_BUFFER, lineVertices, this.gl.STATIC_DRAW);
       this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.pointBuffer);
@@ -369,6 +375,7 @@ export class PlaceholderMapRenderer {
     const vertices = await stage("surface-vertices", "构建 surface 顶点", () => buildPlaceholderVertices(map, this.colorMode, this.viewOptions, this.shoreVisualPaths, this.stateVisualPaths, this.provinceVisualPaths, this.politicalVisualMeshes, this.cellVisualMesh));
     const lineLayer = await stage("line-vertices", "构建线层顶点", () => buildLineVertices(map, this.layerVisibility, this.colorMode, this.shoreVisualPaths, this.stateVisualPaths, this.provinceVisualPaths, this.cellVisualMesh, this.viewOptions));
     const lineVertices = lineLayer.vertices;
+    const oceanCurrentVertices = lineLayer.oceanCurrentVertices;
     this.oceanCurrentLayerStats = lineLayer.oceanCurrents;
     const pointVertices = await stage("point-vertices", "构建点图层顶点", () => buildPointVertices(map, this.layerVisibility));
     this.vertexCount = vertices.length / 6;
@@ -383,6 +390,7 @@ export class PlaceholderMapRenderer {
     this.heightCellSelectionVertexCount = 0;
     this.heightCellSelectionBuildMs = 0;
     this.heightCellSelectionStats = emptyHeightCellSelectionStats();
+    this.oceanCurrentVertexCount = oceanCurrentVertices.length / 6;
     this.lineVertexCount = lineVertices.length / 6;
     this.pointVertexCount = pointVertices.length / 6;
     await stage("gpu-upload", "上传静态 GPU buffer", () => {
@@ -400,6 +408,8 @@ export class PlaceholderMapRenderer {
       this.gl.bufferData(this.gl.ARRAY_BUFFER, new Float32Array(), this.gl.DYNAMIC_DRAW);
       this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.heightCellSelectionBuffer);
       this.gl.bufferData(this.gl.ARRAY_BUFFER, new Float32Array(), this.gl.DYNAMIC_DRAW);
+      this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.oceanCurrentBuffer);
+      this.gl.bufferData(this.gl.ARRAY_BUFFER, oceanCurrentVertices, this.gl.STATIC_DRAW);
       this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.lineBuffer);
       this.gl.bufferData(this.gl.ARRAY_BUFFER, lineVertices, this.gl.STATIC_DRAW);
       this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.pointBuffer);
@@ -565,8 +575,12 @@ export class PlaceholderMapRenderer {
     if (!this.map) return;
     const lineLayer = buildLineVertices(this.map, this.layerVisibility, this.colorMode, this.shoreVisualPaths, this.stateVisualPaths, this.provinceVisualPaths, this.cellVisualMesh, this.viewOptions, this.oceanCurrentHighlights);
     const lineVertices = lineLayer.vertices;
+    const oceanCurrentVertices = lineLayer.oceanCurrentVertices;
     this.oceanCurrentLayerStats = lineLayer.oceanCurrents;
+    this.oceanCurrentVertexCount = oceanCurrentVertices.length / 6;
     this.lineVertexCount = lineVertices.length / 6;
+    this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.oceanCurrentBuffer);
+    this.gl.bufferData(this.gl.ARRAY_BUFFER, oceanCurrentVertices, this.gl.STATIC_DRAW);
     this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.lineBuffer);
     this.gl.bufferData(this.gl.ARRAY_BUFFER, lineVertices, this.gl.STATIC_DRAW);
     if (draw) this.draw();
@@ -699,6 +713,18 @@ export class PlaceholderMapRenderer {
     gl.uniform2f(this.locations.offset, this.camera.offsetX, this.camera.offsetY);
     bindVertexBuffer(gl, this.locations);
     gl.drawArrays(gl.TRIANGLES, 0, this.vertexCount);
+    const layerOrder = ["surface"];
+    if (this.oceanCurrentVertexCount > 0) {
+      gl.bindBuffer(gl.ARRAY_BUFFER, this.oceanCurrentBuffer);
+      gl.uniform1f(this.locations.scale, this.camera.scale);
+      gl.uniform2f(this.locations.offset, this.camera.offsetX, this.camera.offsetY);
+      bindVertexBuffer(gl, this.locations);
+      gl.enable(gl.BLEND);
+      gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+      gl.drawArrays(gl.TRIANGLES, 0, this.oceanCurrentVertexCount);
+      gl.disable(gl.BLEND);
+      layerOrder.push("oceanCurrents");
+    }
     if (this.heightCellSelectionVertexCount > 0) {
       gl.bindBuffer(gl.ARRAY_BUFFER, this.heightCellSelectionBuffer);
       gl.uniform1f(this.locations.scale, this.camera.scale);
@@ -735,7 +761,10 @@ export class PlaceholderMapRenderer {
     bindVertexBuffer(gl, this.locations);
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-    if (this.layerVisibility.routes && (drawDirtyDynamicBuffers || !this.dynamicBuffersDirty.routes)) gl.drawArrays(gl.TRIANGLES, 0, this.routeVertexCount);
+    if (this.layerVisibility.routes && (drawDirtyDynamicBuffers || !this.dynamicBuffersDirty.routes)) {
+      gl.drawArrays(gl.TRIANGLES, 0, this.routeVertexCount);
+      if (this.routeVertexCount > 0) layerOrder.push("routes");
+    }
     gl.disable(gl.BLEND);
     gl.bindBuffer(gl.ARRAY_BUFFER, this.tradeFlowBuffer);
     gl.uniform1f(this.locations.scale, 1);
@@ -749,6 +778,7 @@ export class PlaceholderMapRenderer {
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
     gl.drawArrays(gl.TRIANGLES, 0, this.lineVertexCount);
+    if (this.lineVertexCount > 0) layerOrder.push("lines");
     gl.disable(gl.BLEND);
     gl.bindBuffer(gl.ARRAY_BUFFER, this.riverBuffer);
     gl.uniform1f(this.locations.scale, 1);
@@ -777,9 +807,16 @@ export class PlaceholderMapRenderer {
     gl.disable(gl.BLEND);
     gl.uniform1i(this.locations.pointMode, 0);
 
+    const oceanCurrentProjection = createLineWidthProjection({map: this.map, camera: this.camera, canvas: this.canvas});
     this.lastDraw = {
       drawMs: roundMs(performance.now() - startedAt),
-      glError: gl.getError()
+      glError: gl.getError(),
+      layerOrder,
+      oceanCurrentScale: this.camera.scale,
+      oceanCurrentScreenWidth: {
+        min: projectWorldLineWidth(this.oceanCurrentLayerStats.minWidth, oceanCurrentProjection).backingWidth,
+        max: projectWorldLineWidth(this.oceanCurrentLayerStats.maxWidth, oceanCurrentProjection).backingWidth
+      }
     };
     if (updateOverlay) this.updateLabels();
   }
@@ -834,6 +871,7 @@ export class PlaceholderMapRenderer {
       objectCandidateCount: this.lastObjectCandidateCount,
       lineVertexCount: this.lineVertexCount,
       lineTriangleCount: this.lineVertexCount / 3,
+      oceanCurrentVertexCount: this.oceanCurrentVertexCount,
       cellVisualMesh: summarizeCellVisualMesh(this.cellVisualMesh),
       cellSurfaceMode: this.viewOptions.smoothCellBorders !== false ? "visual-cells" : "hard-cells",
       boundaryLineMode: boundaryLineModeForOptions(this.viewOptions, this.cellVisualMesh),
@@ -3067,17 +3105,18 @@ function combineVertexBuffers(primary, extra) {
 function buildLineVertices(map, visibility = {}, colorMode = "height", shoreVisualPaths = null, stateVisualPaths = null, provinceVisualPaths = null, cellVisualMesh = null, viewOptions = {}, oceanCurrentHighlights = new Set()) {
   const context = createRenderContext(map);
   const vertices = [];
+  const oceanCurrentVertices = [];
   const statePaths = stateVisualPaths || buildStateVisualPaths(map);
   const provincePaths = provinceVisualPaths || buildProvinceVisualPaths(map);
   const themeLines = viewOptions.visualTheme?.lines || {};
   pushMapEdgeFade(vertices, context, map, viewOptions.visualTheme);
   pushShoreLineLayers(vertices, context, visibility, cellVisualMesh, viewOptions);
   pushZoneTextureLayer(vertices, context, map, visibility);
-  const oceanCurrents = pushOceanCurrentLayer(vertices, context, map, visibility, oceanCurrentHighlights);
+  const oceanCurrents = pushOceanCurrentLayer(oceanCurrentVertices, context, map, visibility, oceanCurrentHighlights);
   if (visibility.provinceBorders !== false) pushPoliticalBoundaryStrokes(vertices, provincePaths, context, themeLines.provinceBorder || PROVINCE_VISUAL_STYLE.borderStroke, PROVINCE_VISUAL_STYLE.borderWidthWorld, PROVINCE_VISUAL_STYLE.borderDashWorld);
   if (visibility.stateBorders !== false) pushPoliticalBoundaryStrokes(vertices, statePaths, context, themeLines.stateBorder || STATE_VISUAL_STYLE.borderStroke, STATE_VISUAL_STYLE.borderWidthWorld);
   if (visibility.warFronts !== false) pushMilitaryFrontLines(vertices, context, map, visibility);
-  return {vertices: new Float32Array(vertices), oceanCurrents};
+  return {vertices: new Float32Array(vertices), oceanCurrentVertices: new Float32Array(oceanCurrentVertices), oceanCurrents};
 }
 
 function pushMapEdgeFade(vertices, context, map, visualTheme) {

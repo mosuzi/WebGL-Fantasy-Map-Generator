@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import {readFile} from "node:fs/promises";
 import {generatePlaceholderMap} from "../app/webgl-generator/src/generator/index.js";
 import {createRenderContext} from "../app/webgl-generator/src/renderer/render-context.js";
+import {createLineWidthProjection, projectWorldLineWidth} from "../app/webgl-generator/src/renderer/line-width-projection.js";
 import {oceanCurrentArrowStyle, oceanCurrentBounds, oceanCurrentWidth, pushOceanCurrentLayer} from "../app/webgl-generator/src/renderer/ocean-current-layer.js";
 import {EditHistory} from "../app/webgl-generator/src/runtime/edit-history.js";
 import {createRegenerateOceanCurrentsCommand, createRenameOceanCurrentCommand} from "../app/webgl-generator/src/runtime/ocean-current-edit-commands.js";
@@ -33,6 +34,12 @@ assert.ok(weakArrow.tailWidth < weakArrow.bodyWidth && weakArrow.bodyWidth < wea
 assert.ok(weakArrow.bodyWidth < strongArrow.bodyWidth && strongArrow.bodyWidth < highlightedArrow.bodyWidth, "箭身没有按强度与高亮递增");
 assert.ok(weakArrow.headWidth < strongArrow.headWidth && strongArrow.headWidth < highlightedArrow.headWidth, "箭头没有按强度与高亮递增");
 assert.ok(weakArrow.headLength < strongArrow.headLength && strongArrow.headLength < highlightedArrow.headLength, "箭头长度没有按强度与高亮递增");
+const projectionCanvas = {clientWidth: 1200, clientHeight: 800, width: 1200, height: 800};
+const baseProjection = createLineWidthProjection({map, camera: {scale: 1}, canvas: projectionCanvas});
+const zoomProjection = createLineWidthProjection({map, camera: {scale: 2}, canvas: projectionCanvas});
+const baseScreenWidth = projectWorldLineWidth(strongWidth, baseProjection).backingWidth;
+const zoomScreenWidth = projectWorldLineWidth(strongWidth, zoomProjection).backingWidth;
+assert.ok(Math.abs(zoomScreenWidth / baseScreenWidth - 2) < 0.001, "洋流箭身屏幕宽度没有随画布缩放同比变化");
 const highlightedVertices = [];
 const highlightedStats = pushOceanCurrentLayer(highlightedVertices, context, map, {oceanCurrents: true}, new Set([String(currents[0].id)]));
 assert.equal(highlightedStats.highlighted, 1, "洋流高亮没有写入独立箭头图层");
@@ -78,6 +85,12 @@ assert.match(controlSource, /\["open-ocean-current-panel", "洋流管理"\]/, "�
 assert.match(appSource, /onOpenOceanCurrentPanel[\s\S]{0,220}?panels\.oceanCurrent\.open/, "洋流管理入口没有接到运行时");
 assert.match(appSource, /createRenameOceanCurrentCommand[\s\S]{0,10000}?createRegenerateOceanCurrentsCommand/, "洋流面板没有接入改名和重算命令");
 assert.match(rendererSource, /pushOceanCurrentLayer\([\s\S]{0,300}?oceanCurrentHighlights/, "实时渲染器没有接入洋流箭头与高亮");
+const drawSource = rendererSource.slice(rendererSource.indexOf("draw({updateDynamicBuffers"), rendererSource.indexOf("getStats()"));
+const surfaceDrawIndex = drawSource.indexOf("gl.drawArrays(gl.TRIANGLES, 0, this.vertexCount)");
+const oceanCurrentDrawIndex = drawSource.indexOf("gl.bindBuffer(gl.ARRAY_BUFFER, this.oceanCurrentBuffer)");
+const routeDrawIndex = drawSource.indexOf("gl.bindBuffer(gl.ARRAY_BUFFER, this.routeBuffer)");
+assert.ok(surfaceDrawIndex >= 0 && surfaceDrawIndex < oceanCurrentDrawIndex && oceanCurrentDrawIndex < routeDrawIndex, "洋流实际绘制顺序不是基础地表之后、航线之前");
+assert.match(drawSource, /this\.oceanCurrentBuffer[\s\S]{0,180}?this\.camera\.scale/, "洋流独立缓冲没有使用相机缩放变换");
 assert.match(layerSource, /pushTaperedArrowMesh[\s\S]*tailWidth[\s\S]*headWidth/, "洋流图层没有使用尾尖、渐宽箭身和宽箭头的一体化网格");
 assert.match(layerSource, /normalizedDirection\(points\.at\(-2\), tip\)/, "洋流箭头没有沿路径终点切线定向");
 assert.doesNotMatch(layerSource, /pushWorldPolylineMesh|function pushArrowhead/, "洋流图层仍残留等宽细线或独立箭头实现");
@@ -95,6 +108,7 @@ console.log(JSON.stringify({
   arrows: visibleStats.arrowheads,
   vertices: visibleStats.vertexCount,
   width: {weak: weakWidth, strong: strongWidth, highlighted: highlightedWidth},
+  zoom: {baseScreenWidth, zoomScreenWidth, ratio: zoomScreenWidth / baseScreenWidth},
   arrowStyle: {weak: weakArrow, strong: strongArrow, highlighted: highlightedArrow},
   history: history.getStats()
 }, null, 2));
