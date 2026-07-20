@@ -10,7 +10,7 @@ import {waitForApiReady} from "./webgl-generator-api-browser-ready.mjs";
 const rootDir = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const sourceDir = join(rootDir, "source", "Fantasy-Map-Generator");
 const distDir = join(rootDir, "dist", "webgl-generator");
-const screenshotPath = join(rootDir, "docs", "generated", "screenshots", "ocean-current-density-stage-2-1.png");
+const screenshotPath = join(rootDir, "docs", "generated", "screenshots", "ocean-current-arrow-stage-2-1.png");
 const host = "127.0.0.1";
 const port = 5468;
 assert.ok(existsSync(distDir), `构建产物不存在：${distDir}`);
@@ -60,7 +60,7 @@ try {
 
   assert.deepEqual(
     {seed: evidence.seed, algorithm: evidence.algorithm, currents: evidence.currents, arrows: evidence.arrows, layerVisible: evidence.layerVisible},
-    {seed: "stage-2-1", algorithm: "surface-gyres-v2", currents: 6, arrows: 12, layerVisible: true}
+    {seed: "stage-2-1", algorithm: "surface-gyres-v2", currents: 6, arrows: 6, layerVisible: true}
   );
   assert.ok(evidence.vertices > 0, "洋流图层没有生成可见顶点");
   assert.equal(evidence.glError, 0, "洋流密度验收出现 WebGL 错误");
