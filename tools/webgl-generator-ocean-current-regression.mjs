@@ -13,7 +13,8 @@ import {
 import {createMapDocument, parseMapDocument, stringifyMapDocument} from "../app/webgl-generator/src/runtime/map-file-io.js";
 import {createBrowserMapStorageEnvelope, parseBrowserMapStorageEnvelope} from "../app/webgl-generator/src/runtime/browser-map-storage.js";
 
-const map = generatePlaceholderMap({seed: "ocean-current-real-map", cellsTarget: 10000, climateLatitudeMode: "custom", climateLatitudeCenter: 0, climateLatitudeSpan: 120});
+const map = generatePlaceholderMap({seed: "stage-2-1", cellsTarget: 10000, climateLatitudeMode: "custom", climateLatitudeCenter: 0, climateLatitudeSpan: 120});
+assert(map.oceanCurrents.currents.length >= 5 && map.oceanCurrents.currents.length <= 12, `stage-2-1 洋流密度仍过低或失控：${map.oceanCurrents.currents.length}`);
 const first = buildOceanCurrents(map, {seed: "ocean-current-fixed"});
 const repeated = buildOceanCurrents(map, {seed: "ocean-current-fixed"});
 const different = buildOceanCurrents(map, {seed: "ocean-current-next"});
@@ -65,6 +66,8 @@ assert(legacyGzipParsed.map.oceanCurrents.currents.length === 0, "旧 gzip 地�
 const legacyEnvelope = createBrowserMapStorageEnvelope(stringifyMapDocument(legacyDocument), legacyDocument.map, {encoding: "plain", data: stringifyMapDocument(legacyDocument)});
 assert(parseMapDocument(parseBrowserMapStorageEnvelope(JSON.stringify(legacyEnvelope)).data).map.oceanCurrents.currents.length === 0, "旧浏览器存档没有回填空洋流模型");
 assert(normalizeOceanCurrentModel(null).currents.length === 0 && createEmptyOceanCurrentModel().metadata.generated === false, "空模型规范化异常");
+const legacyV1Model = normalizeOceanCurrentModel({...first, algorithm: "surface-gyres-v1"});
+assert(legacyV1Model.algorithm === "surface-gyres-v1" && legacyV1Model.currents.length === first.currents.length, "旧 v1 洋流模型没有原样保留");
 assertThrows(() => normalizeOceanCurrentModel({version: 2, currents: []}), "未来洋流模型版本没有被拒绝");
 
 const disconnectedMap = createSyntheticMap(80, 40, {splitOcean: true});
@@ -76,13 +79,13 @@ for (const current of disconnectedModel.currents) {
 }
 
 const performanceRows = [];
-for (const [width, height] of [[100, 100], [250, 200], [320, 320]]) {
+for (const [width, height, minimumCurrents] of [[100, 100, 5], [250, 200, 8], [320, 320, 10]]) {
   const fixture = createSyntheticMap(width, height);
   const startedAt = performance.now();
   const model = buildOceanCurrents(fixture, {seed: `ocean-current-${width}x${height}`});
   const durationMs = performance.now() - startedAt;
   const jsonBytes = Buffer.byteLength(JSON.stringify(model));
-  assert(model.currents.length > 0 && model.currents.length <= 12, `${width}x${height} 洋流稀疏度异常：${model.currents.length}`);
+  assert(model.currents.length >= minimumCurrents && model.currents.length <= 12, `${width}x${height} 洋流稀疏度异常：${model.currents.length}`);
   assert(jsonBytes < 64 * 1024, `${width}x${height} 洋流模型持久化过大：${jsonBytes}`);
   assert(durationMs < 2000, `${width}x${height} 洋流生成超时：${durationMs.toFixed(1)}ms`);
   for (const current of model.currents) for (const point of sampleOceanCurrent(current, 24)) assert(syntheticPointIsOcean(fixture, point), `${width}x${height} 洋流穿陆`);
@@ -96,7 +99,7 @@ assert(generatorSource.includes("buildOceanCurrents") && generatorSource.include
 
 console.log(JSON.stringify({
   ok: true,
-  real: {gridCells: map.grid.cells.h.length, currents: first.currents.length, basins: first.metadata.basins, checksum: first.metadata.inputChecksum},
+  real: {seed: map.metadata.seed, gridCells: map.grid.cells.h.length, generatedCurrents: map.oceanCurrents.currents.length, rebuiltCurrents: first.currents.length, basins: first.metadata.basins, checksum: first.metadata.inputChecksum},
   roundtrip: {json: true, gzip: true, browserStorage: true, legacyBackfill: legacyParsed.map.oceanCurrents.metadata.reason},
   performance: performanceRows
 }, null, 2));

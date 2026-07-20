@@ -85,7 +85,9 @@ const coldCount = computed(() => rows.value.filter(row => row.temperature === "c
 const algorithmLabel = computed(() => {
   const algorithm = props.state.map?.oceanCurrents?.algorithm;
   if (!algorithm) return "未生成";
-  return algorithm === "surface-gyres-v1" ? "简化表层环流" : algorithm;
+  if (algorithm === "surface-gyres-v1") return "简化表层环流";
+  if (algorithm === "surface-gyres-v2") return "增强表层环流";
+  return algorithm;
 });
 const summaryMetrics = computed(() => [
   {label: "主要洋流", value: rows.value.length},

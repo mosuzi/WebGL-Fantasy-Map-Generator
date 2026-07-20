@@ -72,6 +72,7 @@ assert.match(appSource, /createRenameOceanCurrentCommand[\s\S]{0,10000}?createRe
 assert.match(rendererSource, /pushOceanCurrentLayer\([\s\S]{0,300}?oceanCurrentHighlights/, "实时渲染器没有接入洋流箭头与高亮");
 assert.match(rendererSource, /setLayerVisible\([\s\S]{0,1400}?oceanCurrents/, "洋流图层没有独立刷新路径");
 assert.match(panelSource, /empty-text="当前地图没有洋流"/, "洋流面板缺少旧地图空模型提示");
+assert.match(panelSource, /surface-gyres-v1[\s\S]{0,180}?简化表层环流[\s\S]{0,180}?surface-gyres-v2[\s\S]{0,180}?增强表层环流/, "洋流面板没有同时提供新旧算法的玩家名称");
 assert.doesNotMatch(panelSource, /control1|control2|path\.segments/, "洋流面板不得暴露路径控制点编辑");
 assert.match(panelWrapperSource, /onClose:[\s\S]{0,180}?onHighlight\?\.\(\[\]\)/, "关闭洋流面板时没有清除高亮");
 assert.match(pngSource, /copyWebglCanvasTo2d\([\s\S]{0,700}?renderer\.draw\(\)/, "PNG 没有复用实时 WebGL 画布语义");

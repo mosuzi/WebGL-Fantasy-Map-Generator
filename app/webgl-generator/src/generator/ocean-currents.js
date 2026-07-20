@@ -1,10 +1,12 @@
 import {createRandom, stableHash} from "./random.js";
 
 export const OCEAN_CURRENT_MODEL_VERSION = 1;
-export const OCEAN_CURRENT_ALGORITHM = "surface-gyres-v1";
+export const OCEAN_CURRENT_ALGORITHM = "surface-gyres-v2";
 
 const WATER_LEVEL = 20;
 const MAX_CURRENTS_PER_BASIN = 12;
+const LARGE_BASIN_CELL_THRESHOLD = 1200;
+const CURRENT_DENSITY_DIVISOR = 28;
 
 export function createEmptyOceanCurrentModel({reason = "empty"} = {}) {
   return {
@@ -118,7 +120,8 @@ function buildBasinCurrents(map, basin, coastDistance, spatialIndex, random, see
   const bounds = cellBounds(map.grid, basin.cells);
   const center = basinCentroid(map.grid, basin.cells);
   const basinSet = new Set(basin.cells);
-  const targetCount = clamp(Math.round(Math.sqrt(basin.cells.length) / 34), 2, MAX_CURRENTS_PER_BASIN);
+  const baseCount = basin.cells.length >= LARGE_BASIN_CELL_THRESHOLD ? 3 : 2;
+  const targetCount = clamp(Math.round(Math.sqrt(basin.cells.length) / CURRENT_DENSITY_DIVISOR) + baseCount, 2, MAX_CURRENTS_PER_BASIN);
   const starts = chooseSeparatedStarts(map.grid, candidates, center, bounds, targetCount, random, seed, basin.featureId);
   const currents = [];
 
