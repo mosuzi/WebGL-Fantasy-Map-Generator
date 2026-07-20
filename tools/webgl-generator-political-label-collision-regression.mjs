@@ -9,8 +9,8 @@ import {
   resolvePoliticalLabelPlacement
 } from "../app/webgl-generator/src/renderer/political-label-layout.js";
 
-const stateStyle = {fontSize: 30, letterSpacing: 2, strokeWidth: 0, shadowOffsetX: 0, shadowOffsetY: 1, shadowBlur: 2};
-const provinceStyle = {fontSize: 18, letterSpacing: 1.2, strokeWidth: 0, shadowOffsetX: 0, shadowOffsetY: 1, shadowBlur: 2};
+const stateStyle = {fontSize: 30, letterSpacing: 2, strokeWidth: 0, shadowOffsetX: 0, shadowOffsetY: 0, shadowBlur: 0};
+const provinceStyle = {fontSize: 18, letterSpacing: 1.2, strokeWidth: 0, shadowOffsetX: 0, shadowOffsetY: 0, shadowBlur: 0};
 const stateItem = {targetKind: "state", targetId: 1, text: "北境共和国", rotation: 0, resolvedStyle: stateStyle};
 const screen = {x: 320, y: 180};
 const viewport = {width: 640, height: 360};

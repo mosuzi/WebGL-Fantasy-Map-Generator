@@ -48,7 +48,7 @@ import {LABEL_TARGET_KIND, OBJECT_KIND, POLITICAL_OBJECT_FIELD, isPointObjectKin
 import {compositeConnectorPoints, pickCompositeConnector} from "./composite-connectors.js";
 import {CITY_ICON_PALETTES, resolveCityVisual} from "../runtime/city-visuals.js";
 import {isGeneratedLabelHidden} from "../runtime/label-edit-commands.js";
-import {estimateLabelTextBox, labelStyleTypeForTarget, resolveLabelStyle} from "../runtime/label-style-registry.js";
+import {estimateLabelTextBox, hasVisibleLabelShadow, labelStyleTypeForTarget, resolveLabelStyle} from "../runtime/label-style-registry.js";
 import {hasManualLabelPriorities, resolveLabelLayout, sortLabelItemsByPriority} from "../runtime/label-layout-registry.js";
 import {
   PROVINCE_COLLISION_OPACITY,
@@ -3873,7 +3873,7 @@ function applyResolvedLabelStyle(node, style) {
   node.style.setProperty("--label-opacity", String(style.opacity));
   node.style.setProperty("--label-stroke-color", style.strokeColor);
   node.style.setProperty("--label-stroke-width", `${style.strokeWidth}px`);
-  node.style.setProperty("--label-shadow-color", style.shadowColor);
+  node.style.setProperty("--label-shadow-color", hasVisibleLabelShadow(style) ? style.shadowColor : "transparent");
   node.style.setProperty("--label-shadow-offset-x", `${style.shadowOffsetX}px`);
   node.style.setProperty("--label-shadow-offset-y", `${style.shadowOffsetY}px`);
   node.style.setProperty("--label-shadow-blur", `${style.shadowBlur}px`);

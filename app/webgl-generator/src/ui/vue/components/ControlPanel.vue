@@ -392,7 +392,7 @@
         <label>描边色<input id="label-style-stroke-color" type="color" :value="activeLabelStyle.strokeColor" @change="event => commitLabelStyle('strokeColor', event.target.value)" /></label>
         <label>阴影色<input id="label-style-shadow-color" type="color" :value="activeLabelStyle.shadowColor" @change="event => commitLabelStyle('shadowColor', event.target.value)" /></label>
       </div>
-      <UiSliderField label="描边" input-id="label-style-stroke-width" :model-value="activeLabelStyle.strokeWidth" :min="0" :max="8" :step="0.05" unit-label="px" @change="value => commitLabelStyle('strokeWidth', value)" />
+      <UiSliderField label="描边" input-id="label-style-stroke-width" :model-value="activeLabelStyle.strokeWidth" :min="0" :max="8" :step="0.01" unit-label="px" @change="value => commitLabelStyle('strokeWidth', value)" />
       <UiSliderField label="阴影横移" input-id="label-style-shadow-x" :model-value="activeLabelStyle.shadowOffsetX" :min="-20" :max="20" :step="0.1" unit-label="px" @change="value => commitLabelStyle('shadowOffsetX', value)" />
       <UiSliderField label="阴影纵移" input-id="label-style-shadow-y" :model-value="activeLabelStyle.shadowOffsetY" :min="-20" :max="20" :step="0.1" unit-label="px" @change="value => commitLabelStyle('shadowOffsetY', value)" />
       <UiSliderField label="阴影模糊" input-id="label-style-shadow-blur" :model-value="activeLabelStyle.shadowBlur" :min="0" :max="30" :step="0.1" unit-label="px" @change="value => commitLabelStyle('shadowBlur', value)" />
@@ -601,7 +601,7 @@ import {Lock, Unlock} from "@element-plus/icons-vue";
 import {useDraggableFloatingPanel} from "../composables/use-draggable-floating-panel.js";
 import {useManagedOverlay} from "../composables/use-managed-overlay.js";
 import {visualThemeOptions} from "../../../renderer/themes.js";
-import {LABEL_FONT_FAMILIES, LABEL_STYLE_TYPES, LOCAL_LABEL_FONT_ID, normalizeLocalFontFamilyName, resolveLabelStyle} from "../../../runtime/label-style-registry.js";
+import {LABEL_FONT_FAMILIES, LABEL_STYLE_TYPES, LOCAL_LABEL_FONT_ID, hasVisibleLabelShadow, normalizeLocalFontFamilyName, resolveLabelStyle} from "../../../runtime/label-style-registry.js";
 import {createLocalFontFamilyOptions} from "../../../runtime/local-font-catalog.js";
 import {
   NUMBER_ABBREVIATION_OPTIONS,
@@ -811,7 +811,9 @@ const labelStylePreviewCss = computed(() => ({
   fontStyle: activeLabelStyle.value.italic ? "italic" : "normal",
   letterSpacing: `${activeLabelStyle.value.letterSpacing}px`,
   WebkitTextStroke: `${activeLabelStyle.value.strokeWidth}px ${activeLabelStyle.value.strokeColor}`,
-  textShadow: `${activeLabelStyle.value.shadowOffsetX}px ${activeLabelStyle.value.shadowOffsetY}px ${activeLabelStyle.value.shadowBlur}px ${activeLabelStyle.value.shadowColor}`
+  textShadow: hasVisibleLabelShadow(activeLabelStyle.value)
+    ? `${activeLabelStyle.value.shadowOffsetX}px ${activeLabelStyle.value.shadowOffsetY}px ${activeLabelStyle.value.shadowBlur}px ${activeLabelStyle.value.shadowColor}`
+    : "none"
 }));
 
 const themes = Object.freeze([

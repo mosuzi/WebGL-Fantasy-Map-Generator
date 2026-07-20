@@ -8,9 +8,11 @@ import {ensureLabelStore, isGeneratedLabelHidden} from "../app/webgl-generator/s
 import {
   LABEL_FONT_FAMILIES,
   LABEL_FONT_FALLBACK,
+  LABEL_STYLE_DEFAULTS,
   LABEL_STYLE_TYPES,
   LOCAL_LABEL_FONT_ID,
   estimateLabelTextBox,
+  hasVisibleLabelShadow,
   labelStyleTypeForTarget,
   normalizeLocalFontFamilyName,
   patchLabelStyle,
@@ -42,6 +44,12 @@ for (const styleType of LABEL_STYLE_TYPES) {
   for (const field of ["fontSize", "fontWeight", "letterSpacing", "opacity", "strokeWidth", "shadowOffsetX", "shadowOffsetY", "shadowBlur"]) {
     assert.ok(Number.isFinite(style[field]), `${styleType}.${field} 不是有限数值`);
   }
+  assert.equal(hasVisibleLabelShadow(style), false, `${styleType} 默认样式仍启用阴影`);
+  assert.deepEqual(
+    [LABEL_STYLE_DEFAULTS[styleType].shadowOffsetX, LABEL_STYLE_DEFAULTS[styleType].shadowOffsetY, LABEL_STYLE_DEFAULTS[styleType].shadowBlur],
+    [0, 0, 0],
+    `${styleType} 默认阴影参数没有归零`
+  );
 }
 
 const theme = {labels: {state: [0.2, 0.4, 0.6, 0.7], stateShadow: [0.05, 0.1, 0.15, 1], city: [0.7, 0.8, 0.9, 0.85], cityHalo: [0.1, 0.1, 0.1, 1], custom: [0.9, 0.7, 0.5, 0.9], customBorder: [0.2, 0.1, 0.05, 1]}};
@@ -95,16 +103,17 @@ history.undo(context);
 assert.equal(resolveLabelStyle(map, "custom").fontFamilyId, "serif", "本机字体撤销没有恢复内置字体");
 history.redo(context);
 assert.equal(resolveLabelStyle(map, "custom").fontFamilyName, "Archive Only Font", "本机字体重做没有恢复字体族名称");
-history.execute(createPatchLabelStyleCommand("custom", {strokeWidth: 0.05, shadowOffsetX: 0.1, shadowOffsetY: -0.1, shadowBlur: 0.1}), context);
+history.execute(createPatchLabelStyleCommand("custom", {strokeWidth: 0.01, shadowOffsetX: 0.1, shadowOffsetY: -0.1, shadowBlur: 0.1}), context);
 const fineEffectStyle = resolveLabelStyle(map, "custom");
-assert.equal(fineEffectStyle.strokeWidth, 0.05, "细描边被归零或四舍五入");
+assert.equal(fineEffectStyle.strokeWidth, 0.01, "0.01px 描边被归零或四舍五入");
 assert.equal(fineEffectStyle.shadowOffsetX, 0.1, "阴影横移细步长没有保留");
 assert.equal(fineEffectStyle.shadowOffsetY, -0.1, "阴影纵移细步长没有保留负值");
 assert.equal(fineEffectStyle.shadowBlur, 0.1, "阴影模糊细步长没有保留");
+assert.equal(hasVisibleLabelShadow(fineEffectStyle), true, "显式非零阴影被错误关闭");
 history.undo(context);
 assert.equal(resolveLabelStyle(map, "custom").strokeWidth, 0, "细效果撤销没有恢复描边");
 history.redo(context);
-assert.equal(resolveLabelStyle(map, "custom").strokeWidth, 0.05, "细效果重做没有恢复描边");
+assert.equal(resolveLabelStyle(map, "custom").strokeWidth, 0.01, "细效果重做没有恢复描边");
 assert.equal(resolveLabelStyle(map, "custom").shadowOffsetY, -0.1, "细效果重做没有恢复阴影");
 
 assert.equal(labelStyleTypeForTarget(LABEL_TARGET_KIND.CITY, map.settlements.cities[0]), "capital", "首都样式拆分改变了 city target identity");
@@ -123,7 +132,7 @@ const document = createMapDocument(map, map.options);
 const roundTrip = parseMapDocument(stringifyMapDocument(document));
 assert.equal(roundTrip.map.labels.styles.version, 1);
 assert.equal(roundTrip.map.labels.styles.overrides.custom.fontFamilyName, "Archive Only Font", "完整地图没有保存本机字体族名称");
-assert.equal(roundTrip.map.labels.styles.overrides.custom.strokeWidth, 0.05, "完整地图没有保留细描边");
+assert.equal(roundTrip.map.labels.styles.overrides.custom.strokeWidth, 0.01, "完整地图没有保留 0.01px 描边");
 assert.equal(roundTrip.map.labels.styles.overrides.custom.shadowOffsetX, 0.1, "完整地图没有保留细阴影横移");
 assert.equal(roundTrip.map.labels.styles.overrides.custom.shadowOffsetY, -0.1, "完整地图没有保留细阴影纵移");
 assert.equal(roundTrip.map.labels.styles.overrides.custom.shadowBlur, 0.1, "完整地图没有保留细阴影模糊");
@@ -161,7 +170,7 @@ assert.match(rendererSource, /provinceLabel[\s\S]*boxesOverlapAny\(occupiedState
 assert.match(controlPanelSource, /data-control-panel="styles"[\s\S]*reset-all-label-styles/, "样式页或全部重置入口缺失");
 assert.match(controlPanelSource, /load-local-label-fonts[\s\S]*queryLocalFonts/, "样式页没有用户触发的本机字体读取入口");
 assert.match(controlPanelSource, /本机未检测到[\s\S]*系统字体/, "样式页没有缺失字体 fallback 状态");
-assert.match(controlPanelSource, /input-id="label-style-stroke-width"[^>]*:step="0\.05"/, "描边步长不是 0.05");
+assert.match(controlPanelSource, /input-id="label-style-stroke-width"[^>]*:step="0\.01"/, "描边步长不是 0.01");
 assert.match(controlPanelSource, /input-id="label-style-shadow-x"[^>]*:step="0\.1"/, "阴影横移步长不是 0.1");
 assert.match(controlPanelSource, /input-id="label-style-shadow-y"[^>]*:step="0\.1"/, "阴影纵移步长不是 0.1");
 assert.match(controlPanelSource, /input-id="label-style-shadow-blur"[^>]*:step="0\.1"/, "阴影模糊步长不是 0.1");
@@ -177,6 +186,8 @@ assert.match(stylesSource, /\.label-style-panel \.ui-slider-field-has-unit\s*\{[
 assert.match(stylesSource, /\.label-style-panel \.ui-slider-field > span:first-child\s*\{[^}]*white-space:\s*nowrap;/, "样式页滑动条标签仍可能折行");
 assert.match(mapIoSource, /\.province-label\.visible/, "PNG overlay 没有纳入省份名称");
 assert.match(rendererSource, /--label-stroke-width[\s\S]*--label-shadow-offset-x[\s\S]*--label-shadow-blur/, "实时标签没有把细效果值写入共享 CSS 变量");
+assert.match(rendererSource, /hasVisibleLabelShadow\(style\) \? style\.shadowColor : "transparent"/, "实时标签没有显式关闭零效果阴影");
+assert.match(controlPanelSource, /textShadow:\s*hasVisibleLabelShadow\(activeLabelStyle\.value\)[\s\S]*:\s*"none"/, "样式预览没有显式关闭零效果阴影");
 assert.match(mapIoSource, /--label-stroke-width[\s\S]*--label-shadow-blur[\s\S]*--label-shadow-offset-x[\s\S]*--label-shadow-offset-y/, "PNG 没有读取实时标签的共享效果值");
 assert.match(mapIoSource, /context\.strokeText\([\s\S]*context\.fillText\(/, "PNG 文字没有按描边→填充绘制");
 

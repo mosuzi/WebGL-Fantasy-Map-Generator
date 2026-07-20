@@ -22,11 +22,11 @@ export const LOCAL_LABEL_FONT_ID = "local";
 export const LABEL_FONT_FALLBACK = LABEL_FONT_FAMILIES.system;
 
 export const LABEL_STYLE_DEFAULTS = Object.freeze({
-  [LABEL_STYLE_TYPE.STATE]: freezeStyle({fontFamilyId: "serif", fontFamilyName: null, fontSize: 30, fontWeight: 700, italic: false, letterSpacing: 2, color: "#fff0b8", opacity: 0.92, strokeColor: "#16202a", strokeWidth: 0, shadowColor: "#16202a", shadowOffsetX: 0, shadowOffsetY: 1, shadowBlur: 2}),
-  [LABEL_STYLE_TYPE.PROVINCE]: freezeStyle({fontFamilyId: "serif", fontFamilyName: null, fontSize: 18, fontWeight: 650, italic: false, letterSpacing: 1.2, color: "#fff0b8", opacity: 0.86, strokeColor: "#16202a", strokeWidth: 0, shadowColor: "#16202a", shadowOffsetX: 0, shadowOffsetY: 1, shadowBlur: 2}),
-  [LABEL_STYLE_TYPE.CAPITAL]: freezeStyle({fontFamilyId: "serif", fontFamilyName: null, fontSize: 16, fontWeight: 800, italic: false, letterSpacing: 0.2, color: "#ffffff", opacity: 0.96, strokeColor: "#0d141b", strokeWidth: 0, shadowColor: "#0d141b", shadowOffsetX: 0, shadowOffsetY: 1, shadowBlur: 2}),
-  [LABEL_STYLE_TYPE.CITY]: freezeStyle({fontFamilyId: "sans", fontFamilyName: null, fontSize: 13, fontWeight: 650, italic: false, letterSpacing: 0, color: "#ffffff", opacity: 0.94, strokeColor: "#0d141b", strokeWidth: 0, shadowColor: "#0d141b", shadowOffsetX: 0, shadowOffsetY: 1, shadowBlur: 2}),
-  [LABEL_STYLE_TYPE.CUSTOM]: freezeStyle({fontFamilyId: "serif", fontFamilyName: null, fontSize: 15, fontWeight: 700, italic: false, letterSpacing: 0.4, color: "#f8ead0", opacity: 0.98, strokeColor: "#6a4d2f", strokeWidth: 0, shadowColor: "#0d141b", shadowOffsetX: 0, shadowOffsetY: 1, shadowBlur: 2})
+  [LABEL_STYLE_TYPE.STATE]: freezeStyle({fontFamilyId: "serif", fontFamilyName: null, fontSize: 30, fontWeight: 700, italic: false, letterSpacing: 2, color: "#fff0b8", opacity: 0.92, strokeColor: "#16202a", strokeWidth: 0, shadowColor: "#16202a", shadowOffsetX: 0, shadowOffsetY: 0, shadowBlur: 0}),
+  [LABEL_STYLE_TYPE.PROVINCE]: freezeStyle({fontFamilyId: "serif", fontFamilyName: null, fontSize: 18, fontWeight: 650, italic: false, letterSpacing: 1.2, color: "#fff0b8", opacity: 0.86, strokeColor: "#16202a", strokeWidth: 0, shadowColor: "#16202a", shadowOffsetX: 0, shadowOffsetY: 0, shadowBlur: 0}),
+  [LABEL_STYLE_TYPE.CAPITAL]: freezeStyle({fontFamilyId: "serif", fontFamilyName: null, fontSize: 16, fontWeight: 800, italic: false, letterSpacing: 0.2, color: "#ffffff", opacity: 0.96, strokeColor: "#0d141b", strokeWidth: 0, shadowColor: "#0d141b", shadowOffsetX: 0, shadowOffsetY: 0, shadowBlur: 0}),
+  [LABEL_STYLE_TYPE.CITY]: freezeStyle({fontFamilyId: "sans", fontFamilyName: null, fontSize: 13, fontWeight: 650, italic: false, letterSpacing: 0, color: "#ffffff", opacity: 0.94, strokeColor: "#0d141b", strokeWidth: 0, shadowColor: "#0d141b", shadowOffsetX: 0, shadowOffsetY: 0, shadowBlur: 0}),
+  [LABEL_STYLE_TYPE.CUSTOM]: freezeStyle({fontFamilyId: "serif", fontFamilyName: null, fontSize: 15, fontWeight: 700, italic: false, letterSpacing: 0.4, color: "#f8ead0", opacity: 0.98, strokeColor: "#6a4d2f", strokeWidth: 0, shadowColor: "#0d141b", shadowOffsetX: 0, shadowOffsetY: 0, shadowBlur: 0})
 });
 
 const STYLE_FIELDS = Object.freeze(Object.keys(LABEL_STYLE_DEFAULTS[LABEL_STYLE_TYPE.CITY]));
@@ -142,6 +142,12 @@ export function estimateLabelTextBox(text, style) {
     width: Math.max(fontSize, width) + stroke * 2 + shadowX + shadowBlur,
     height: fontSize * 1.28 + stroke * 2 + shadowY + shadowBlur
   });
+}
+
+export function hasVisibleLabelShadow(style) {
+  return Math.abs(Number(style?.shadowOffsetX) || 0) > 0
+    || Math.abs(Number(style?.shadowOffsetY) || 0) > 0
+    || Math.max(0, Number(style?.shadowBlur) || 0) > 0;
 }
 
 function normalizeLabelStyleOverride(source, {strict = false} = {}) {
