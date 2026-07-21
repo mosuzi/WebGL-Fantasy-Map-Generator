@@ -96,6 +96,7 @@
     "regress:png-options": "node --no-warnings ./tools/webgl-generator-png-options-regression.mjs",
     "regress:png-crop-browser": "node ./tools/webgl-generator-png-crop-browser-regression.mjs",
     "regress:military-regeneration": "node --no-warnings ./tools/webgl-generator-military-regeneration-regression.mjs",
+    "regress:military-front-battle-point": "node --no-warnings ./tools/webgl-generator-military-front-battle-point-regression.mjs",
     "regress:warzone-consistency": "node --no-warnings ./tools/webgl-generator-warzone-consistency-regression.mjs",
     "regress:dissolve-compatibility": "node --no-warnings ./tools/webgl-generator-dissolve-compatibility-regression.mjs",
     "regress:dissolve-performance": "node --no-warnings ./tools/webgl-generator-dissolve-performance-regression.mjs",
