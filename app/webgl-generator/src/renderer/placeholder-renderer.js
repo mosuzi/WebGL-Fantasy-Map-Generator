@@ -253,6 +253,7 @@ export class PlaceholderMapRenderer {
       zones: true,
       measurements: true,
       scaleBar: true,
+      mapBadge: true,
       coastline: true,
       lakeShore: true,
       stateBorders: true,

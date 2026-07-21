@@ -91,6 +91,7 @@
     "regress:map-migration": "node --no-warnings ./tools/webgl-generator-map-migration-regression.mjs",
     "regress:browser-storage-compatibility": "node --no-warnings ./tools/webgl-generator-browser-storage-backward-compatibility-regression.mjs",
     "regress:display-units": "node --no-warnings ./tools/webgl-generator-display-units-regression.mjs",
+    "regress:map-badge-visibility": "node --no-warnings ./tools/webgl-generator-map-badge-visibility-regression.mjs",
     "regress:diplomacy-export": "node --no-warnings ./tools/webgl-generator-diplomacy-export-regression.mjs",
     "regress:map-import-diagnostics": "node --no-warnings ./tools/webgl-generator-map-import-diagnostics-regression.mjs",
     "regress:png-options": "node --no-warnings ./tools/webgl-generator-png-options-regression.mjs",
@@ -172,8 +173,10 @@
     "regress:canvas-tools": "node --no-warnings ./tools/webgl-generator-canvas-tool-mode-manager-regression.mjs",
     "regress:shoreline": "node ./tools/webgl-generator-shoreline-regression.mjs",
     "regress:rendering": "pnpm run regress:shoreline -- --max-switch-ms 1500",
+    "regress:boundary-topology-lab": "node --no-warnings ./tools/boundary-topology-lab-regression.mjs",
     "diagnose:source-warns": "node ./tools/source-candidate-warn-diagnostics.mjs",
-    "start:prototype": "node ./tools/serve-prototype.mjs --port 5400"
+    "start:prototype": "node ./tools/serve-prototype.mjs --port 5400",
+    "start:boundary-topology-lab": "node ./tools/serve-prototype.mjs --port 5401 --dir ./prototype/boundary-topology-lab"
   },
   "dependencies": {
     "@element-plus/icons-vue": "^2.3.2",

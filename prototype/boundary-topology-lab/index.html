@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>共享边界拓扑实验室</title>
+    <link rel="stylesheet" href="./src/styles.css">
+  </head>
+  <body>
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">BOUNDARY TOPOLOGY LAB</p>
+        <h1>共享边界拓扑实验室</h1>
+      </div>
+      <div class="status-pill" id="global-status">等待验证</div>
+    </header>
+
+    <main class="layout">
+      <aside class="sidebar">
+        <section>
+          <h2>固定夹具</h2>
+          <div class="fixture-list" id="fixture-list"></div>
+        </section>
+        <section>
+          <h2>算法</h2>
+          <div class="algorithm-list" id="algorithm-list"></div>
+        </section>
+        <section class="controls">
+          <h2>约束参数</h2>
+          <label>简化阈值 <output id="threshold-value"></output><input id="threshold" type="range" min="0" max="14" step="0.5" value="1"></label>
+          <label>平滑系数 <output id="smoothness-value"></output><input id="smoothness" type="range" min="0" max="0.5" step="0.01" value="0.04"></label>
+          <label>最大位移 <output id="displacement-value"></output><input id="max-displacement" type="range" min="0" max="18" step="0.5" value="7"></label>
+        </section>
+        <section>
+          <h2>诊断层</h2>
+          <div class="toggle-grid">
+            <label><input id="show-raw" type="checkbox" checked> 原始线</label>
+            <label><input id="show-nodes" type="checkbox" checked> 节点</label>
+            <label><input id="show-ids" type="checkbox"> arc id</label>
+            <label><input id="show-error" type="checkbox" checked> 误差层</label>
+          </div>
+        </section>
+        <button class="run-button" id="run-all" type="button">运行全部用例</button>
+      </aside>
+
+      <div class="workspace">
+        <section class="case-head">
+          <div><p class="eyebrow" id="case-category"></p><h2 id="case-name"></h2></div>
+          <p id="case-description"></p>
+        </section>
+
+        <section class="comparison-grid">
+          <article class="map-card danger">
+            <header><div><span class="card-index">A</span><h3>独立 polygon 失败对照</h3></div><span>逐区域处理</span></header>
+            <div class="map-stage" id="independent-view"></div>
+          </article>
+          <article class="map-card safe">
+            <header><div><span class="card-index">B</span><h3>共享 ArcRef 快照</h3></div><span>面线同源</span></header>
+            <div class="map-stage" id="shared-view"></div>
+          </article>
+        </section>
+
+        <section class="metrics" id="metrics"></section>
+
+        <section class="result-panel">
+          <header><div><p class="eyebrow">ACCEPTANCE MATRIX</p><h2>全部用例结果</h2></div><span id="result-summary">尚未运行</span></header>
+          <div class="result-grid" id="result-grid"></div>
+        </section>
+      </div>
+    </main>
+
+    <script type="module" src="./src/app.js"></script>
+  </body>
+</html>

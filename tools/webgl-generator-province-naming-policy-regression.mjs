@@ -42,7 +42,8 @@ assert.deepEqual(HUNTING_PROVINCE_FORMS, ["部落", "猎围", "林寨", "山场"
 assert.deepEqual(HIGHLAND_PROVINCE_FORMS, ["峒", "寨", "关", "土司"]);
 assert.deepEqual(RIVER_PROVINCE_FORMS, ["川", "津", "浦", "漕司"]);
 assert.deepEqual(LAKE_PROVINCE_FORMS, ["泽", "泊", "汊", "湖府"]);
-assert.deepEqual(NAVAL_PROVINCE_FORMS, ["港", "岛", "海府", "舶司"]);
+assert.deepEqual(NAVAL_PROVINCE_FORMS, ["海州", "海郡", "海道", "舶司"]);
+assert.ok(NAVAL_PROVINCE_FORMS.every(form => !["港", "岛"].includes(form)), "海洋文化省份仍使用地理对象充当行政后缀");
 assert.equal(isChineseProvinceNamingStyle({nameStyle: "oriental"}), true);
 assert.equal(isChineseProvinceNamingStyle({nameStyle: "english"}), false);
 assert.equal(isSteppeProvinceNamingStyle({state: {type: "Nomadic"}}), true);
@@ -221,7 +222,32 @@ async function testCompatibilityBackfill() {
 
   const direct = structuredClone(roundTrip);
   assert.deepEqual(backfillProvinceNames(direct), {changed: 0, collections: 2}, "重复回填必须保持幂等");
-  report.compatibility = {complete: complete.i, missing: missing.i, derived: derived.i, gzipBytes: gzip.compressedBytes};
+
+  const obsoleteMap = generatePlaceholderMap({...options, seed: "province-policy-c"});
+  const obsolete = (obsoleteMap.politics.provinces || []).find(province => {
+    const state = obsoleteMap.politics.states?.[province?.state];
+    const culture = obsoleteMap.society.cultures?.[state?.culture];
+    return province?.i && !province.removed && province.burg && culture?.type === "Naval";
+  });
+  assert.ok(obsolete, "兼容样本缺少海洋文化省份");
+  obsolete.formName = "岛";
+  obsolete.fullName = `${obsolete.name}岛`;
+  const obsoletePack = obsoleteMap.pack.provinces?.[obsolete.i];
+  obsoletePack.formName = "岛";
+  obsoletePack.fullName = `${obsoletePack.name}岛`;
+  const migratedObsolete = parseMapDocument(stringifyMapDocument(createMapDocument(obsoleteMap, obsoleteMap.options))).map;
+  const migratedProvince = migratedObsolete.politics.provinces[obsolete.i];
+  assert.ok(NAVAL_PROVINCE_FORMS.includes(migratedProvince.formName), "旧海洋省份的港 / 岛后缀没有迁移为行政形制");
+  assert.equal(migratedProvince.fullName, `${migratedProvince.name}${migratedProvince.formName}`);
+  assert.equal(migratedObsolete.pack.provinces[obsolete.i].fullName, migratedProvince.fullName, "旧海洋省份迁移没有同步 pack 镜像");
+
+  report.compatibility = {
+    complete: complete.i,
+    missing: missing.i,
+    derived: derived.i,
+    obsoleteNaval: {provinceId: obsolete.i, before: `${obsolete.name}岛`, after: migratedProvince.fullName},
+    gzipBytes: gzip.compressedBytes
+  };
 }
 
 function assertCultureStatePolicies(map) {
@@ -254,6 +280,7 @@ function assertCultureStatePolicies(map) {
       }
       assert.equal(province.formName, expected, `国家 #${state.i} 的普通省份后缀不统一`);
       assert.notEqual(province.formName, "领", `国家 #${state.i} 的中国风普通省份仍使用“领”`);
+      assert.equal(province.fullName, `${province.name}${province.formName}`, `省份 #${province.i} 的完整名称与行政后缀不一致`);
       typeProvinces[cultureType] = (typeProvinces[cultureType] || 0) + 1;
       typeForms[cultureType] ||= [];
       if (!typeForms[cultureType].includes(province.formName)) typeForms[cultureType].push(province.formName);
@@ -267,6 +294,7 @@ function assertCultureStatePolicies(map) {
         steppeForms.add(province.formName);
         assert.ok(STEPPE_PROVINCE_FORMS.includes(province.formName), `草原国家 #${state.i} 仍使用常规省份后缀`);
       }
+      if (cultureType === "Naval") assert.ok(!["港", "岛"].includes(province.formName), `海洋文化省份 #${province.i} 仍以地理对象作后缀`);
     }
   }
   assert.ok(states > 0 && provinces > 0);

@@ -843,6 +843,7 @@ const layers = Object.freeze([
   {id: "zones", label: "地区"},
   {id: "measurements", label: "测量对象"},
   {id: "scaleBar", label: "比例尺"},
+  {id: "mapBadge", label: "地图总尺寸"},
   {id: "labels", label: "城市标签"},
   {id: "stateLabels", label: "国家名称"},
   {id: "provinceLabels", label: "省份名称"},

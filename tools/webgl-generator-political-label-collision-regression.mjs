@@ -46,7 +46,7 @@ const provinceItem = {targetKind: "province", targetId: 2, text: "霜原行省",
 const impossibleObstacle = {left: -1000, right: 1000, top: -1000, bottom: 1000};
 const fallback = resolvePoliticalLabelPlacement({item: provinceItem, screen, obstacles: [impossibleObstacle], viewport, padding: 6});
 assert.equal(fallback.collides, true, "无解样本必须返回最佳碰撞候选供省份降级显示");
-assert.equal(PROVINCE_COLLISION_OPACITY, 0.42, "省份碰撞透明度必须保持可见且明显退后");
+assert.equal(PROVINCE_COLLISION_OPACITY, 0.76, "省份碰撞透明度必须保持清晰且仍低于正常标签");
 
 const orderedKinds = automaticPoliticalLabelOrder([
   {targetKind: "province", targetId: 1, priority: 90},

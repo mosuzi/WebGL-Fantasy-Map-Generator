@@ -1,6 +1,6 @@
 # 边界平滑算法与渲染不变量调研
 
-> 对应权威任务第 128 项。状态：调研完成；本项不修改 renderer、地图几何或存档结构。
+> 对应权威任务第 128、159 项。状态：调研与独立验证原型均已完成；不修改正式 renderer、地图几何或存档结构。
 
 ## 1. 结论先行
 
@@ -240,4 +240,15 @@ ArcRef {arcId, reversed}
 - 不在 pointermove 持久修改 canonical topology；预览与提交必须分层。
 - 不在第一个实现阶段同时追求局部增量、Worker、WASM 和多级 LOD；先证明共享弧线不变量。
 
-本报告只形成后续实现依据，不自动创建新的活动任务；是否进入 P0～P4 由后续权威任务决定。
+## 12. 独立验证原型
+
+权威任务第 159 项已把上述边界 case 落为 [`prototype/boundary-topology-lab/`](../../prototype/boundary-topology-lab/) 独立实验室。运行方式：
+
+```powershell
+pnpm run start:boundary-topology-lab
+pnpm run regress:boundary-topology-lab
+```
+
+原型验证共享 arc、正反 `ArcRef`、锁定节点、不可变快照、fill / stroke 同源、环与 coverage 有效性、分层形状误差和八类案例约束；候选算法允许失败并明确显示失败原因。它只验证数据结构和几何不变量，不代表 P0～P4 已进入正式渲染器。
+
+本报告与原型只形成后续实现依据，不自动创建新的活动任务；是否进入 P0～P4 由后续权威任务决定。

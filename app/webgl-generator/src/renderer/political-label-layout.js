@@ -1,7 +1,7 @@
 const STATE_MIN_LETTER_SPACING = 4;
 const PROVINCE_MIN_LETTER_SPACING = 2.5;
 
-export const PROVINCE_COLLISION_OPACITY = 0.42;
+export const PROVINCE_COLLISION_OPACITY = 0.76;
 
 export function automaticPoliticalLabelOrder(items = []) {
   const order = {city: 0, custom: 1, state: 2, province: 3};

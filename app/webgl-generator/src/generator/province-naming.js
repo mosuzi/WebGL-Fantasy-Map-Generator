@@ -6,7 +6,7 @@ export const HUNTING_PROVINCE_FORMS = Object.freeze(["部落", "猎围", "林寨
 export const HIGHLAND_PROVINCE_FORMS = Object.freeze(["峒", "寨", "关", "土司"]);
 export const RIVER_PROVINCE_FORMS = Object.freeze(["川", "津", "浦", "漕司"]);
 export const LAKE_PROVINCE_FORMS = Object.freeze(["泽", "泊", "汊", "湖府"]);
-export const NAVAL_PROVINCE_FORMS = Object.freeze(["港", "岛", "海府", "舶司"]);
+export const NAVAL_PROVINCE_FORMS = Object.freeze(["海州", "海郡", "海道", "舶司"]);
 
 export const CULTURE_TYPE_PROVINCE_FORMS = Object.freeze({
   Hunting: HUNTING_PROVINCE_FORMS,
@@ -22,6 +22,7 @@ const CULTURE_TYPE_PROVINCE_FORMS_BY_KEY = Object.freeze(
   Object.fromEntries(Object.entries(CULTURE_TYPE_PROVINCE_FORMS).map(([type, forms]) => [type.toLowerCase(), forms]))
 );
 const KNOWN_CULTURE_TYPE_KEYS = new Set(["generic", ...Object.keys(CULTURE_TYPE_PROVINCE_FORMS_BY_KEY)]);
+const OBSOLETE_NAVAL_PROVINCE_FORMS = new Set(["港", "岛"]);
 const EMPTY_PROVINCE_FORMS = Object.freeze([]);
 
 export function isChineseProvinceNamingStyle({state = null, culture = null, nameStyle = ""} = {}) {
@@ -77,10 +78,19 @@ function backfillProvinceRecord(province, map) {
   if (!name) return null;
   const existingForm = normalizeForm(province.formName);
   const existingFullName = String(province.fullName || "").trim();
-  if (existingForm && existingFullName && existingFullName !== name) return null;
-
   const state = stateById(map, province.state);
   const cultures = map?.society?.cultures || map?.pack?.cultures || [];
+  const culture = cultures?.[Number(state?.culture) || 0] || null;
+  if (
+    OBSOLETE_NAVAL_PROVINCE_FORMS.has(existingForm)
+    && existingFullName === `${name}${existingForm}`
+    && provinceCultureType({state, culture}) === "naval"
+  ) {
+    const formName = provinceFormForState(state, cultures) || NAVAL_PROVINCE_FORMS[0];
+    return {formName, fullName: `${name}${formName}`};
+  }
+  if (existingForm && existingFullName && existingFullName !== name) return null;
+
   const derivedForm = suffixFromFullName(name, existingFullName);
   const formName = existingForm
     || derivedForm

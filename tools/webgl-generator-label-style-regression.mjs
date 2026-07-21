@@ -61,7 +61,8 @@ for (const styleType of LABEL_STYLE_TYPES) {
   );
   const expectedFont = ["state", "capital", "custom"].includes(styleType) ? "historicalDisplay" : "historical";
   assert.equal(style.fontFamilyId, expectedFont, `${styleType} 默认字体没有使用现代历史图册分级字体`);
-  assert.ok(style.strokeWidth > 0 && style.strokeWidth <= 0.8, `${styleType} 默认净空边超出现代历史图册范围`);
+  if (["province", "capital", "city"].includes(styleType)) assert.equal(style.strokeWidth, 0, `${styleType} 默认标签仍有描边`);
+  else assert.ok(style.strokeWidth > 0 && style.strokeWidth <= 0.8, `${styleType} 默认净空边超出现代历史图册范围`);
 }
 assert.ok(LABEL_STYLE_DEFAULTS.state.fontSize > LABEL_STYLE_DEFAULTS.province.fontSize, "国家和省份字号层级不清");
 assert.ok(LABEL_STYLE_DEFAULTS.province.fontSize > LABEL_STYLE_DEFAULTS.city.fontSize, "省份和城市字号层级不清");
@@ -76,8 +77,12 @@ const defaultStateStyle = resolveLabelStyle(map, "state", defaultTheme);
 const defaultProvinceStyle = resolveLabelStyle(map, "province", defaultTheme);
 const defaultCityStyle = resolveLabelStyle(map, "city", defaultTheme);
 assert.equal(defaultStateStyle.color, "#293038", "默认国家标签没有使用炭黑墨色");
-assert.equal(defaultProvinceStyle.color, "#4b5258", "默认省份标签没有使用中性灰墨色");
-assert.ok(defaultProvinceStyle.opacity < defaultStateStyle.opacity, "默认省份标签没有弱化到国家名之下");
+assert.equal(defaultProvinceStyle.color, "#8a2434", "默认省份标签没有使用醒目深酒红色");
+assert.equal(defaultProvinceStyle.opacity, 0.94, "默认省份标签仍然过浅");
+assert.equal(LABEL_STYLE_DEFAULTS.province.strokeWidth, 0, "默认省份标签仍被浅色描边冲淡");
+assert.equal(LABEL_STYLE_DEFAULTS.city.fontWeight, 700, "默认普通城市名没有加粗到 700");
+assert.equal(LABEL_STYLE_DEFAULTS.capital.strokeWidth, 0, "默认首都名仍有描边");
+assert.equal(LABEL_STYLE_DEFAULTS.city.strokeWidth, 0, "默认普通城市名仍有描边");
 assert.equal(defaultCityStyle.color, "#20252a", "默认城市标签没有使用深色中性墨色");
 assert.equal(hasVisibleLabelShadow(defaultStateStyle), false, "默认主题重新引入了国家标签阴影");
 assert.ok(defaultTheme.labels.customBackground[3] >= 0.8, "手工标签没有使用稳定中性浅底");

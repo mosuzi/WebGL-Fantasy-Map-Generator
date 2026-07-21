@@ -615,7 +615,11 @@ export function updateRuntimePanel(documentRef, state) {
   const unitPreferences = readControlPreferences(documentRef).units;
   syncLabelLimitControlBounds(documentRef, map, stats);
   documentRef.getElementById("app-status").textContent = `${map.status.message}，seed ${map.metadata.seed}`;
-  documentRef.getElementById("map-badge").textContent = `${formatDisplayDistance(map.metadata.graphWidth, unitPreferences)} x ${formatDisplayDistance(map.metadata.graphHeight, unitPreferences)}`;
+  const mapBadge = documentRef.getElementById("map-badge");
+  if (mapBadge) {
+    mapBadge.textContent = `${formatDisplayDistance(map.metadata.graphWidth, unitPreferences)} x ${formatDisplayDistance(map.metadata.graphHeight, unitPreferences)}`;
+    mapBadge.hidden = stats.layerVisibility?.mapBadge === false;
+  }
   updateMapLegend(documentRef, map, stats);
   updateMapScaleBar(documentRef, map, stats, unitPreferences);
   documentRef.getElementById("runtime-stats").replaceChildren(
@@ -1077,6 +1081,7 @@ function formatLayerVisibility(visibility = {}) {
     resources: "资源点",
     markers: "标记",
     scaleBar: "比例尺",
+    mapBadge: "地图总尺寸",
     labels: "标签",
     stateLabels: "国家名",
     stateBorders: "国界",

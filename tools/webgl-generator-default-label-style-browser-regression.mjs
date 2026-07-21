@@ -59,6 +59,10 @@ try {
         opacity: Number(style.opacity),
         strokeWidth: Number.parseFloat(style.webkitTextStrokeWidth),
         textShadow: style.textShadow,
+        textRendering: style.textRendering,
+        webkitFontSmoothing: style.getPropertyValue("-webkit-font-smoothing"),
+        willChange: style.willChange,
+        transform: style.transform,
         backgroundColor: style.backgroundColor,
         borderRadius: style.borderRadius
       };
@@ -89,16 +93,21 @@ try {
       : /Source Han Serif SC|Noto Serif CJK SC|Songti SC|STSong|SimSun/;
     assert.match(style.fontFamily, expectedFamily, `${type} 没有使用现代历史图册分级字体栈`);
     assert.doesNotMatch(style.fontFamily, /KaiTi|Kaiti|STKaiti/, `${type} 仍在使用楷体`);
-    assert.ok(style.strokeWidth > 0 && style.strokeWidth <= 0.8, `${type} 净空边超出范围`);
+    assert.equal(style.textRendering.toLowerCase(), "optimizelegibility", `${type} 没有启用浏览器可读性优先渲染`);
+    assert.equal(style.webkitFontSmoothing, "antialiased", `${type} 没有启用 WebKit 字体平滑回退`);
+    assert.ok(!style.willChange.split(",").map(value => value.trim()).includes("transform"), `${type} 仍被长期预提升到 transform 合成层`);
+    assert.notEqual(style.transform, "none", `${type} 的既有地图定位 transform 被误删`);
+    if (["province", "capital", "city"].includes(type)) assert.equal(style.strokeWidth, 0, `${type} 默认标签仍有描边`);
+    else assert.ok(style.strokeWidth > 0 && style.strokeWidth <= 0.8, `${type} 净空边超出范围`);
     assert.ok(style.textShadow === "none" || /rgba\(0, 0, 0, 0\)/.test(style.textShadow), `${type} 默认阴影仍可见`);
   }
   assert.equal(styles.state.color, "rgb(41, 48, 56)", "国家标签不是炭黑墨色");
-  assert.equal(styles.province.color, "rgb(75, 82, 88)", "省份标签不是中性灰墨色");
-  assert.ok(styles.province.opacity < styles.state.opacity, "省份标签没有弱化到国家名之下");
+  assert.equal(styles.province.color, "rgb(138, 36, 52)", "省份标签不是醒目深酒红色");
+  assert.equal(styles.province.opacity, 0.94, "省份标签仍然过浅");
   assert.equal(styles.city.color, "rgb(32, 37, 42)", "城市标签不是深色中性墨色");
   assert.deepEqual(
     Object.fromEntries(Object.entries(styles).map(([type, style]) => [type, style.fontWeight])),
-    {state: 700, province: 600, capital: 700, city: 500, custom: 600},
+    {state: 700, province: 600, capital: 700, city: 700, custom: 600},
     "五类标签没有形成现代图册字重层级"
   );
   assert.ok(styles.state.fontSize > styles.province.fontSize && styles.province.fontSize > styles.city.fontSize, "区域到城市的字号层级不清");

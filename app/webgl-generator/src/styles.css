@@ -916,6 +916,7 @@ select:disabled {
   font-size: 12px;
 }
 
+.map-badge[hidden],
 .map-badge:empty {
   display: none;
 }
@@ -1398,6 +1399,9 @@ select:disabled {
   font-style: var(--label-font-style);
   font-weight: var(--label-font-weight);
   letter-spacing: var(--label-letter-spacing);
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
   -webkit-text-stroke: var(--label-stroke-width) var(--label-stroke-color);
   text-shadow: var(--label-shadow-offset-x) var(--label-shadow-offset-y) var(--label-shadow-blur) var(--label-shadow-color);
   white-space: nowrap;
@@ -1406,7 +1410,6 @@ select:disabled {
 .city-label,
 .custom-label {
   transform: translate(var(--overlay-x, 0px), var(--overlay-y, 0px)) translate(-50%, -100%);
-  will-change: transform, opacity;
   max-width: 120px;
   line-height: 1.25;
   opacity: 0;
@@ -1458,7 +1461,6 @@ select:disabled {
   width: var(--label-box-width, 1px);
   height: var(--label-box-height, 1px);
   transform: translate(var(--overlay-x, 0px), var(--overlay-y, 0px)) translate(-50%, -50%);
-  will-change: transform, opacity;
   max-width: none;
   line-height: 1.1;
   opacity: 0;
@@ -1494,7 +1496,7 @@ select:disabled {
 }
 
 .province-label.visible.collision-fallback {
-  opacity: calc(var(--label-opacity, 1) * var(--province-label-collision-opacity, 0.42));
+  opacity: calc(var(--label-opacity, 1) * var(--province-label-collision-opacity, 0.76));
 }
 
 .province-label.selected {

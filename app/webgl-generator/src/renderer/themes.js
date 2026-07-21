@@ -21,7 +21,7 @@ export const VISUAL_THEME_PRESETS = Object.freeze([
       capitalHalo: [0.96, 0.96, 0.93, 0.82],
       state: [0.16, 0.19, 0.22, 0.94],
       stateShadow: [0.96, 0.95, 0.91, 0.8],
-      province: [0.294, 0.322, 0.345, 0.72],
+      province: [0.541, 0.141, 0.204, 0.94],
       provinceShadow: [0.96, 0.95, 0.91, 0.74],
       custom: [0.15, 0.18, 0.2, 0.96],
       customHalo: [0.96, 0.96, 0.93, 0.84],

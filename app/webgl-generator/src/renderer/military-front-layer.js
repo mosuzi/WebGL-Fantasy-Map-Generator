@@ -2,14 +2,13 @@ import {clamp, isWorldPoint} from "./geometry.js";
 import {pushWorldVertex} from "./mesh-writer.js";
 
 export const MILITARY_FRONT_BATTLE_POINT_LENGTH_FACTOR = 2.4;
+export const MILITARY_FRONT_BATTLE_POINT_RADIUS_FACTOR = 0.2;
+export const MILITARY_FRONT_BATTLE_POINT_CROSS_HALF_LENGTH_FACTOR = 1.12;
 
 const BATTLE_POINT_COLORS = Object.freeze({
-  halo: [0.04, 0.05, 0.06, 0.34],
-  ring: [0.96, 0.74, 0.28, 0.96],
-  center: [0.08, 0.1, 0.12, 0.96],
+  circle: [0.08, 0.1, 0.12, 0.92],
   attack: [0.95, 0.24, 0.12, 0.98],
-  defense: [0.2, 0.58, 1, 0.98],
-  pin: [1, 0.9, 0.58, 1]
+  defense: [0.2, 0.58, 1, 0.98]
 });
 
 export function pushMilitaryFrontLayer(vertices, context, map) {
@@ -133,45 +132,24 @@ function pushMilitaryFrontArrow(vertices, context, front, source, widthWorld) {
 }
 
 function pushMilitaryBattlePoint(vertices, context, center, widthWorld) {
-  const radius = widthWorld * 0.56;
-  pushWorldDisc(vertices, context, center, radius * 1.18, BATTLE_POINT_COLORS.halo, 20);
-  pushWorldRing(vertices, context, center, radius, radius * 0.72, BATTLE_POINT_COLORS.ring, 18);
-  pushWorldDisc(vertices, context, center, radius * 0.72, BATTLE_POINT_COLORS.center, 18);
-  pushBattleBlade(vertices, context, center, radius, -Math.PI / 4, BATTLE_POINT_COLORS.attack);
-  pushBattleBlade(vertices, context, center, radius, Math.PI / 4, BATTLE_POINT_COLORS.defense);
-  pushWorldDisc(vertices, context, center, radius * 0.13, BATTLE_POINT_COLORS.pin, 10);
+  const radius = widthWorld * MILITARY_FRONT_BATTLE_POINT_RADIUS_FACTOR;
+  pushWorldRing(vertices, context, center, radius, radius * 0.76, BATTLE_POINT_COLORS.circle, 18);
+  pushBattleCrossArm(vertices, context, center, radius, -Math.PI / 4, BATTLE_POINT_COLORS.attack);
+  pushBattleCrossArm(vertices, context, center, radius, Math.PI / 4, BATTLE_POINT_COLORS.defense);
 }
 
-function pushBattleBlade(vertices, context, center, radius, angle, color) {
+function pushBattleCrossArm(vertices, context, center, radius, angle, color) {
   const direction = [Math.cos(angle), Math.sin(angle)];
   const normal = [-direction[1], direction[0]];
-  const start = [center[0] - direction[0] * radius * 0.48, center[1] - direction[1] * radius * 0.48];
-  const end = [center[0] + direction[0] * radius * 0.31, center[1] + direction[1] * radius * 0.31];
-  const halfWidth = radius * 0.095;
+  const halfLength = radius * MILITARY_FRONT_BATTLE_POINT_CROSS_HALF_LENGTH_FACTOR;
+  const start = [center[0] - direction[0] * halfLength, center[1] - direction[1] * halfLength];
+  const end = [center[0] + direction[0] * halfLength, center[1] + direction[1] * halfLength];
+  const halfWidth = radius * 0.14;
   const a = [start[0] + normal[0] * halfWidth, start[1] + normal[1] * halfWidth];
   const b = [end[0] + normal[0] * halfWidth, end[1] + normal[1] * halfWidth];
   const c = [end[0] - normal[0] * halfWidth, end[1] - normal[1] * halfWidth];
   const d = [start[0] - normal[0] * halfWidth, start[1] - normal[1] * halfWidth];
   pushWorldQuad(vertices, context, a, b, c, d, color);
-
-  const tip = [center[0] + direction[0] * radius * 0.58, center[1] + direction[1] * radius * 0.58];
-  pushWorldTriangle(vertices, context, b, tip, c, color);
-}
-
-function pushWorldDisc(vertices, context, center, radius, color, segments) {
-  const count = Math.max(6, Math.round(segments));
-  for (let index = 0; index < count; index++) {
-    const startAngle = (index / count) * Math.PI * 2;
-    const endAngle = ((index + 1) / count) * Math.PI * 2;
-    pushWorldTriangle(
-      vertices,
-      context,
-      center,
-      [center[0] + Math.cos(startAngle) * radius, center[1] + Math.sin(startAngle) * radius],
-      [center[0] + Math.cos(endAngle) * radius, center[1] + Math.sin(endAngle) * radius],
-      color
-    );
-  }
 }
 
 function pushWorldRing(vertices, context, center, outerRadius, innerRadius, color, segments) {
