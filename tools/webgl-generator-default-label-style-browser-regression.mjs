@@ -10,7 +10,7 @@ import {waitForApiReady} from "./webgl-generator-api-browser-ready.mjs";
 const rootDir = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const sourceDir = join(rootDir, "source", "Fantasy-Map-Generator");
 const distDir = join(rootDir, "dist", "webgl-generator");
-const screenshotPath = join(rootDir, "docs", "generated", "screenshots", "default-label-style-kunyu-stage-2-1.png");
+const screenshotPath = join(rootDir, "docs", "generated", "screenshots", "default-label-style-modern-history-stage-2-1.png");
 const host = "127.0.0.1";
 const port = 5471;
 assert.ok(existsSync(distDir), `构建产物不存在：${distDir}`);
@@ -54,7 +54,7 @@ try {
         fontFamily: style.fontFamily,
         fontSize: Number.parseFloat(style.fontSize),
         fontWeight: Number(style.fontWeight),
-        letterSpacing: Number.parseFloat(style.letterSpacing),
+        letterSpacing: Number.parseFloat(style.letterSpacing) || 0,
         color: style.color,
         opacity: Number(style.opacity),
         strokeWidth: Number.parseFloat(style.webkitTextStrokeWidth),
@@ -74,7 +74,8 @@ try {
         custom: document.querySelectorAll('.custom-label.visible').length
       },
       total: Object.fromEntries(["state", "province", "capital", "city", "custom"].map(type => [type, document.querySelectorAll(`[data-label-style-type="${type}"]`).length])),
-      kaiTiAvailable: document.fonts.check('16px "KaiTi"'),
+      historicalSerifAvailable: ["Source Han Serif SC", "Noto Serif CJK SC", "Songti SC", "STSong", "SimSun"].some(font => document.fonts.check(`16px "${font}"`)),
+      historicalDisplayAvailable: ["Source Han Sans SC", "Noto Sans CJK SC", "Microsoft YaHei", "PingFang SC", "Heiti SC"].some(font => document.fonts.check(`16px "${font}"`)),
       glError: renderer.getStats().draw?.glError ?? gl?.getError?.() ?? 0,
       healthErrors: (window.__webglGeneratorHealth?.getEvents?.(200) || []).filter(event => event.level === "error").length
     };
@@ -83,15 +84,26 @@ try {
 
   const {styles} = evidence;
   for (const [type, style] of Object.entries(styles)) {
-    assert.match(style.fontFamily, /KaiTi|Kaiti/, `${type} 没有使用舆图楷体字体栈`);
-    assert.ok(style.strokeWidth > 0 && style.strokeWidth <= 0.8, `${type} 细衬边超出范围`);
+    const expectedFamily = ["state", "capital", "custom"].includes(type)
+      ? /Source Han Sans SC|Noto Sans CJK SC|Microsoft YaHei|PingFang SC|Heiti SC/
+      : /Source Han Serif SC|Noto Serif CJK SC|Songti SC|STSong|SimSun/;
+    assert.match(style.fontFamily, expectedFamily, `${type} 没有使用现代历史图册分级字体栈`);
+    assert.doesNotMatch(style.fontFamily, /KaiTi|Kaiti|STKaiti/, `${type} 仍在使用楷体`);
+    assert.ok(style.strokeWidth > 0 && style.strokeWidth <= 0.8, `${type} 净空边超出范围`);
     assert.ok(style.textShadow === "none" || /rgba\(0, 0, 0, 0\)/.test(style.textShadow), `${type} 默认阴影仍可见`);
   }
-  assert.equal(styles.state.color, "rgb(66, 38, 14)", "国家标签不是深褐墨色");
-  assert.equal(styles.city.color, "rgb(28, 19, 10)", "城市标签不是深褐墨色");
+  assert.equal(styles.state.color, "rgb(41, 48, 56)", "国家标签不是炭黑墨色");
+  assert.equal(styles.province.color, "rgb(75, 82, 88)", "省份标签不是中性灰墨色");
+  assert.ok(styles.province.opacity < styles.state.opacity, "省份标签没有弱化到国家名之下");
+  assert.equal(styles.city.color, "rgb(32, 37, 42)", "城市标签不是深色中性墨色");
+  assert.deepEqual(
+    Object.fromEntries(Object.entries(styles).map(([type, style]) => [type, style.fontWeight])),
+    {state: 700, province: 600, capital: 700, city: 500, custom: 600},
+    "五类标签没有形成现代图册字重层级"
+  );
   assert.ok(styles.state.fontSize > styles.province.fontSize && styles.province.fontSize > styles.city.fontSize, "区域到城市的字号层级不清");
   assert.ok(styles.state.letterSpacing > styles.province.letterSpacing && styles.province.letterSpacing > styles.city.letterSpacing, "区域到城市的疏密层级不清");
-  assert.equal(styles.custom.borderRadius, "1px", "手工标签仍是现代圆角胶囊");
+  assert.equal(styles.custom.borderRadius, "2px", "手工标签没有使用现代图册窄注记底板");
   assert.ok(Object.values(evidence.total).every(count => count > 0), "五类标签没有在真实地图中完整生成");
   assert.ok(evidence.visible.states + evidence.visible.provinces + evidence.visible.cities > 0, "默认视口没有显示任何地图标签");
   assert.equal(evidence.glError, 0, "默认标签样式验收出现 WebGL 错误");

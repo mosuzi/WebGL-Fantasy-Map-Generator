@@ -12,6 +12,8 @@ export const LABEL_STYLE_TYPES = Object.freeze(Object.values(LABEL_STYLE_TYPE));
 
 export const LABEL_FONT_FAMILIES = Object.freeze({
   system: "system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif",
+  historical: "\"Source Han Serif SC\", \"Noto Serif CJK SC\", \"Songti SC\", STSong, SimSun, Georgia, \"Times New Roman\", serif",
+  historicalDisplay: "\"Source Han Sans SC\", \"Noto Sans CJK SC\", \"Microsoft YaHei\", \"PingFang SC\", \"Heiti SC\", Arial, sans-serif",
   cartographic: "\"STKaiti\", \"KaiTi\", \"Kaiti SC\", \"Noto Serif CJK SC\", \"Source Han Serif SC\", \"Songti SC\", SimSun, Georgia, serif",
   serif: "Georgia, \"Times New Roman\", serif",
   sans: "\"Segoe UI\", Arial, sans-serif",
@@ -23,11 +25,11 @@ export const LOCAL_LABEL_FONT_ID = "local";
 export const LABEL_FONT_FALLBACK = LABEL_FONT_FAMILIES.system;
 
 export const LABEL_STYLE_DEFAULTS = Object.freeze({
-  [LABEL_STYLE_TYPE.STATE]: freezeStyle({fontFamilyId: "cartographic", fontFamilyName: null, fontSize: 26, fontWeight: 500, italic: false, letterSpacing: 5.2, color: "#4a2e16", opacity: 0.9, strokeColor: "#f0e4c4", strokeWidth: 0.3, shadowColor: "#4a2e16", shadowOffsetX: 0, shadowOffsetY: 0, shadowBlur: 0}),
-  [LABEL_STYLE_TYPE.PROVINCE]: freezeStyle({fontFamilyId: "cartographic", fontFamilyName: null, fontSize: 16, fontWeight: 400, italic: false, letterSpacing: 2.2, color: "#51371f", opacity: 0.78, strokeColor: "#eee2bf", strokeWidth: 0.2, shadowColor: "#51371f", shadowOffsetX: 0, shadowOffsetY: 0, shadowBlur: 0}),
-  [LABEL_STYLE_TYPE.CAPITAL]: freezeStyle({fontFamilyId: "cartographic", fontFamilyName: null, fontSize: 15, fontWeight: 600, italic: false, letterSpacing: 0.8, color: "#251a11", opacity: 0.98, strokeColor: "#f3e9ce", strokeWidth: 0.35, shadowColor: "#251a11", shadowOffsetX: 0, shadowOffsetY: 0, shadowBlur: 0}),
-  [LABEL_STYLE_TYPE.CITY]: freezeStyle({fontFamilyId: "cartographic", fontFamilyName: null, fontSize: 12, fontWeight: 400, italic: false, letterSpacing: 0.2, color: "#2c2118", opacity: 0.94, strokeColor: "#f0e5c8", strokeWidth: 0.25, shadowColor: "#2c2118", shadowOffsetX: 0, shadowOffsetY: 0, shadowBlur: 0}),
-  [LABEL_STYLE_TYPE.CUSTOM]: freezeStyle({fontFamilyId: "cartographic", fontFamilyName: null, fontSize: 14, fontWeight: 400, italic: false, letterSpacing: 0.8, color: "#442b18", opacity: 0.95, strokeColor: "#f0e3c1", strokeWidth: 0.25, shadowColor: "#442b18", shadowOffsetX: 0, shadowOffsetY: 0, shadowBlur: 0})
+  [LABEL_STYLE_TYPE.STATE]: freezeStyle({fontFamilyId: "historicalDisplay", fontFamilyName: null, fontSize: 24, fontWeight: 700, italic: false, letterSpacing: 3.2, color: "#293038", opacity: 0.94, strokeColor: "#f5f2e8", strokeWidth: 0.03, shadowColor: "#293038", shadowOffsetX: 0, shadowOffsetY: 0, shadowBlur: 0}),
+  [LABEL_STYLE_TYPE.PROVINCE]: freezeStyle({fontFamilyId: "historical", fontFamilyName: null, fontSize: 14, fontWeight: 600, italic: false, letterSpacing: 1, color: "#4b5258", opacity: 0.72, strokeColor: "#f5f2e8", strokeWidth: 0.02, shadowColor: "#4b5258", shadowOffsetX: 0, shadowOffsetY: 0, shadowBlur: 0}),
+  [LABEL_STYLE_TYPE.CAPITAL]: freezeStyle({fontFamilyId: "historicalDisplay", fontFamilyName: null, fontSize: 13, fontWeight: 700, italic: false, letterSpacing: 0.15, color: "#20262c", opacity: 0.98, strokeColor: "#f5f3eb", strokeWidth: 0.04, shadowColor: "#20262c", shadowOffsetX: 0, shadowOffsetY: 0, shadowBlur: 0}),
+  [LABEL_STYLE_TYPE.CITY]: freezeStyle({fontFamilyId: "historical", fontFamilyName: null, fontSize: 11, fontWeight: 500, italic: false, letterSpacing: 0, color: "#343a40", opacity: 0.94, strokeColor: "#f5f3eb", strokeWidth: 0.03, shadowColor: "#343a40", shadowOffsetX: 0, shadowOffsetY: 0, shadowBlur: 0}),
+  [LABEL_STYLE_TYPE.CUSTOM]: freezeStyle({fontFamilyId: "historicalDisplay", fontFamilyName: null, fontSize: 13, fontWeight: 600, italic: false, letterSpacing: 0.15, color: "#2c3339", opacity: 0.96, strokeColor: "#f5f3eb", strokeWidth: 0.03, shadowColor: "#2c3339", shadowOffsetX: 0, shadowOffsetY: 0, shadowBlur: 0})
 });
 
 const STYLE_FIELDS = Object.freeze(Object.keys(LABEL_STYLE_DEFAULTS[LABEL_STYLE_TYPE.CITY]));
@@ -242,10 +244,21 @@ function quoteCssFontFamily(value) {
 
 function themeStyleForType(theme, styleType) {
   const labels = theme?.labels || {};
-  const stateLike = styleType === LABEL_STYLE_TYPE.STATE || styleType === LABEL_STYLE_TYPE.PROVINCE;
-  const custom = styleType === LABEL_STYLE_TYPE.CUSTOM;
-  const color = stateLike ? labels.state : custom ? labels.custom : labels.city;
-  const halo = stateLike ? labels.stateShadow : custom ? labels.customHalo || labels.customBorder : labels.cityHalo;
+  let color = labels.city;
+  let halo = labels.cityHalo;
+  if (styleType === LABEL_STYLE_TYPE.STATE) {
+    color = labels.state;
+    halo = labels.stateShadow;
+  } else if (styleType === LABEL_STYLE_TYPE.PROVINCE) {
+    color = labels.province || labels.state;
+    halo = labels.provinceShadow || labels.stateShadow;
+  } else if (styleType === LABEL_STYLE_TYPE.CAPITAL) {
+    color = labels.capital || labels.city;
+    halo = labels.capitalHalo || labels.cityHalo;
+  } else if (styleType === LABEL_STYLE_TYPE.CUSTOM) {
+    color = labels.custom;
+    halo = labels.customHalo || labels.customBorder;
+  }
   const result = {};
   if (Array.isArray(color)) {
     result.color = rgbaToHex(color);
