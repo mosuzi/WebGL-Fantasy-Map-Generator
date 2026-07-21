@@ -1,5 +1,5 @@
 export const CITY_LABEL_BASE_OFFSET = 6;
-export const CITY_LABEL_ICON_GAP = 4;
+export const CITY_LABEL_ICON_GAP = 2;
 export const CITY_ICON_TOP_ANCHOR_RATIO = 0.8;
 
 export function cityLabelAnchorOffset({
