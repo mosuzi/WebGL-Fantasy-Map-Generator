@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Mosuzi's Fantasy Map Generator</title>
+    <title>莫苏子的架空地图生成器</title>
     <link rel="icon" href="data:," />
     <style>
       .app-loading-screen {
@@ -14,13 +14,23 @@
         place-items: center;
         overflow: hidden;
         background:
-          radial-gradient(circle at 50% 46%, rgba(41, 72, 88, 0.08) 0 17%, transparent 17.2%),
-          repeating-conic-gradient(from -1deg at 50% 46%, rgba(33, 58, 72, 0.19) 0 0.35deg, transparent 0.35deg 11.25deg),
-          linear-gradient(145deg, #9eb9ca, #789aad 58%, #5f8196);
-        color: #f8edcf;
-        font-family: Inter, "Noto Sans SC", "Microsoft YaHei UI", sans-serif;
+          radial-gradient(ellipse at 50% 44%, rgba(94, 76, 50, 0.12), transparent 43%),
+          repeating-linear-gradient(116deg, rgba(139, 127, 96, 0.014) 0 1px, transparent 1px 7px),
+          #18231f;
+        color: #cfc4a5;
+        font-family: "Noto Serif SC", "Source Han Serif SC", "Songti SC", SimSun, serif;
         opacity: 1;
         transition: opacity 260ms ease, visibility 260ms ease;
+        isolation: isolate;
+      }
+
+      .app-loading-screen::after {
+        content: "";
+        position: absolute;
+        z-index: -1;
+        inset: 0;
+        background: radial-gradient(ellipse at center, transparent 34%, rgba(2, 8, 8, 0.52));
+        pointer-events: none;
       }
 
       .app-loading-screen[hidden] {
@@ -35,123 +45,438 @@
 
       .app-loading-card {
         display: grid;
+        width: min(98vw, 1180px);
         justify-items: center;
-        gap: clamp(18px, 3vh, 30px);
-        width: min(92vw, 720px);
+        gap: clamp(13px, 2.2vh, 22px);
       }
 
-      .app-loading-compass {
+      .app-loading-scroll {
+        --scroll-edge: clamp(42px, 5.2vw, 66px);
         position: relative;
-        display: grid;
-        width: clamp(280px, 48vw, 560px);
-        aspect-ratio: 1;
-        place-items: center;
-        border: clamp(5px, 0.65vw, 9px) solid #2d634f;
-        border-radius: 50%;
-        background:
-          radial-gradient(circle, transparent 0 19%, rgba(28, 54, 68, 0.58) 19.3% 20.5%, transparent 20.8% 42%, rgba(28, 54, 68, 0.42) 42.3% 43%, transparent 43.3%),
-          repeating-conic-gradient(from 0deg, rgba(31, 57, 70, 0.58) 0 0.65deg, transparent 0.65deg 15deg),
-          rgba(137, 174, 194, 0.68);
-        box-shadow: 0 24px 80px rgba(12, 29, 39, 0.34), inset 0 0 0 3px rgba(235, 214, 159, 0.2);
+        width: min(95vw, 1120px);
+        height: clamp(270px, min(38vw, 50vh), 460px);
+        filter: drop-shadow(0 22px 22px rgba(3, 9, 8, 0.48));
       }
 
-      .app-loading-compass::before,
-      .app-loading-compass::after {
+      .app-loading-paper-window {
+        position: absolute;
+        inset: 5.5% calc(var(--scroll-edge) * 0.62);
+        overflow: hidden;
+        clip-path: inset(0 50%);
+        animation: app-scroll-unfurl 1550ms cubic-bezier(0.18, 0.74, 0.17, 1) 100ms both;
+      }
+
+      .app-loading-paper {
+        position: absolute;
+        inset: 2.5% 0 3.5%;
+        overflow: hidden;
+        border: 0;
+        background:
+          linear-gradient(90deg, rgba(77, 52, 28, 0.3), transparent 8% 91%, rgba(77, 52, 28, 0.32)),
+          radial-gradient(ellipse at 18% 28%, rgba(114, 84, 46, 0.1), transparent 21%),
+          radial-gradient(ellipse at 83% 72%, rgba(101, 70, 38, 0.11), transparent 24%),
+          repeating-linear-gradient(3deg, rgba(71, 53, 32, 0.04) 0 1px, transparent 1px 4px),
+          #cbbd96;
+        box-shadow: inset 0 0 52px rgba(70, 45, 22, 0.34), 0 7px 11px rgba(21, 12, 6, 0.28);
+        clip-path: polygon(0 3%, 2% 1.6%, 5% 2.4%, 8% 1.2%, 12% 2.1%, 17% 1%, 22% 2%, 28% 1.3%, 34% 2.2%, 40% 1.1%, 47% 2%, 54% 1.4%, 61% 2.3%, 68% 1.2%, 75% 2%, 82% 1.1%, 89% 2.1%, 95% 1.4%, 100% 2.8%, 100% 96.8%, 96% 98.3%, 91% 97.5%, 85% 98.7%, 78% 97.8%, 71% 98.9%, 64% 97.6%, 57% 98.6%, 50% 97.7%, 43% 98.8%, 36% 97.5%, 29% 98.5%, 22% 97.6%, 15% 98.8%, 9% 97.4%, 4% 98.5%, 0 97%);
+      }
+
+      .app-loading-paper::before,
+      .app-loading-paper::after {
         content: "";
         position: absolute;
-        inset: 8%;
-        background: conic-gradient(from 0deg, #27455c 0 10deg, transparent 10deg 35deg, #56a6cc 35deg 45deg, transparent 45deg 80deg, #27455c 80deg 100deg, transparent 100deg 125deg, #56a6cc 125deg 135deg, transparent 135deg 170deg, #27455c 170deg 190deg, transparent 190deg 215deg, #56a6cc 215deg 225deg, transparent 225deg 260deg, #27455c 260deg 280deg, transparent 280deg 305deg, #56a6cc 305deg 315deg, transparent 315deg 350deg, #27455c 350deg 360deg);
-        clip-path: polygon(50% 0, 58% 39%, 100% 50%, 58% 61%, 50% 100%, 42% 61%, 0 50%, 42% 39%);
-        opacity: 0.9;
+        z-index: 3;
+        pointer-events: none;
       }
 
-      .app-loading-compass::after {
-        inset: 18%;
-        transform: rotate(45deg);
-        background: #bd644d;
-        opacity: 0.82;
+      .app-loading-paper::before {
+        inset: 2.4% 1.2%;
+        border: 1px solid rgba(99, 71, 37, 0.12);
+        box-shadow: inset 0 0 0 1px rgba(83, 62, 36, 0.04);
       }
 
-      .app-loading-brand {
-        position: relative;
-        z-index: 1;
-        display: grid;
-        width: min(90%, 500px);
-        padding: clamp(30px, 5vw, 54px) clamp(12px, 3vw, 30px);
-        text-align: center;
-        filter: drop-shadow(0 2px 2px rgba(22, 34, 40, 0.78));
+      .app-loading-paper::after {
+        inset: 0;
+        opacity: 0.24;
+        background: repeating-linear-gradient(88deg, transparent 0 16px, rgba(95, 67, 31, 0.055) 16px 17px);
+        mix-blend-mode: multiply;
       }
 
-      .app-loading-owner {
+      .app-loading-landscape {
         position: absolute;
-        top: clamp(6px, 1vw, 14px);
-        left: clamp(18px, 4vw, 52px);
-        font-size: clamp(16px, 2.4vw, 28px);
-        font-weight: 500;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+      }
+
+      .app-loading-landscape-far { opacity: 0.82; }
+      .app-loading-landscape-mid { opacity: 0.9; }
+      .app-loading-landscape-near { opacity: 0.92; }
+
+      .app-loading-mist {
+        position: absolute;
+        z-index: 1;
+        bottom: 20%;
+        width: 42%;
+        height: 17%;
+        border-radius: 50%;
+        background: rgba(196, 186, 151, 0.3);
+        filter: blur(14px);
+        opacity: 0.38;
+        animation: app-scroll-mist 4.8s ease-in-out 1300ms infinite alternate;
+      }
+
+      .app-loading-mist-left { left: 10%; }
+      .app-loading-mist-right { right: 4%; bottom: 28%; width: 36%; }
+
+      .app-loading-title-card {
+        position: absolute;
+        z-index: 4;
+        top: 47%;
+        left: 50%;
+        display: grid;
+        width: min(69%, 720px);
+        justify-items: center;
+        transform: translate(-50%, -50%);
+        animation: app-scroll-copy-reveal 700ms ease 1020ms both;
+      }
+
+      .app-loading-title-card::before {
+        content: "";
+        position: absolute;
+        z-index: -1;
+        inset: -18% -9% -14%;
+        border-radius: 50%;
+        background: radial-gradient(ellipse, rgba(190, 177, 136, 0.54), rgba(181, 166, 124, 0.13) 58%, transparent 76%);
+        filter: blur(5px);
+      }
+
+      .app-loading-title-eyebrow {
+        margin: 0 0 clamp(6px, 1vw, 11px);
+        color: rgba(111, 72, 32, 0.76);
+        font-size: clamp(9px, 1.25vw, 15px);
+        font-weight: 700;
+        letter-spacing: 0.55em;
+        text-indent: 0.55em;
       }
 
       .app-loading-title {
+        position: relative;
+        margin: 0;
+        color: #29382f;
+        font-family: "STKaiti", KaiTi, "Noto Serif SC", serif;
+        font-size: clamp(31px, 5.45vw, 68px);
+        font-weight: 700;
+        line-height: 1.06;
+        letter-spacing: 0.075em;
+        text-indent: 0.075em;
+        white-space: nowrap;
+        -webkit-text-stroke: 0.2px rgba(21, 34, 28, 0.66);
+        text-shadow: 0.7px 0.6px rgba(24, 36, 30, 0.24), -0.4px 0 rgba(72, 53, 31, 0.12), 0 2px 3px rgba(48, 39, 25, 0.16);
+      }
+
+      .app-loading-title::before,
+      .app-loading-title::after {
+        content: attr(data-title);
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+      }
+
+      .app-loading-title::before {
+        z-index: -1;
+        color: rgba(25, 45, 37, 0.34);
+        filter: blur(1.8px);
+        transform: translate(0.7px, 1px) scale(1.008);
+      }
+
+      .app-loading-title::after {
+        color: rgba(31, 48, 39, 0.2);
+        -webkit-text-stroke: 0;
+        transform: translate(-0.35px, 0.45px);
+        mask-image: repeating-linear-gradient(101deg, #000 0 3px, transparent 3px 5px, #000 5px 9px);
+      }
+
+      .app-loading-brush-line {
+        width: min(88%, 420px);
+        height: clamp(8px, 1.3vw, 15px);
+        margin-top: clamp(2px, 0.45vw, 6px);
+        overflow: visible;
+        fill: rgba(38, 56, 47, 0.58);
+        transform-origin: 50% 50%;
+        animation: app-scroll-brush-reveal 620ms ease-out 1180ms both;
+      }
+
+      .app-loading-title-subline {
+        margin: clamp(3px, 0.6vw, 7px) 0 0;
+        color: rgba(55, 67, 52, 0.82);
+        font-size: clamp(10px, 1.38vw, 16px);
+        font-weight: 600;
+        letter-spacing: 0.24em;
+        text-indent: 0.24em;
+      }
+
+      .app-loading-tags {
         display: grid;
-        font-family: Georgia, "Times New Roman", serif;
-        font-size: clamp(36px, 6.2vw, 72px);
-        font-weight: 500;
-        line-height: 0.92;
-        letter-spacing: -0.035em;
+        grid-template-columns: repeat(4, auto);
+        gap: clamp(5px, 0.8vw, 10px);
+        margin-top: clamp(8px, 1.25vw, 14px);
+      }
+
+      .app-loading-tags span {
+        border: 1px solid rgba(126, 92, 46, 0.34);
+        padding: 2px clamp(5px, 0.9vw, 10px) 1px;
+        color: rgba(73, 66, 48, 0.72);
+        background: rgba(168, 150, 110, 0.12);
+        font-size: clamp(8px, 1.05vw, 12px);
+        letter-spacing: 0.18em;
+        text-indent: 0.18em;
+      }
+
+      .app-loading-seal {
+        position: absolute;
+        z-index: 6;
+        right: 6.4%;
+        bottom: 20%;
+        width: clamp(35px, 5.2vw, 57px);
+        aspect-ratio: 1;
+        overflow: visible;
+        transform: rotate(-3deg);
+        animation: app-scroll-seal-set 480ms cubic-bezier(0.23, 1.7, 0.42, 1) 1390ms both;
       }
 
       .app-loading-version {
         position: absolute;
-        right: clamp(18px, 4vw, 52px);
-        bottom: clamp(6px, 1vw, 14px);
-        font-size: clamp(13px, 1.8vw, 21px);
-        font-weight: 700;
+        z-index: 5;
+        right: 5.7%;
+        bottom: 8.5%;
+        display: flex;
+        align-items: baseline;
+        gap: 7px;
+        border-block: 1px solid rgba(103, 78, 43, 0.42);
+        padding: 4px 7px 3px;
+        color: rgba(55, 60, 47, 0.75);
+        background: linear-gradient(90deg, transparent, rgba(154, 137, 99, 0.19) 18% 82%, transparent);
+        font-size: clamp(8px, 1vw, 12px);
+        letter-spacing: 0.12em;
+        animation: app-scroll-copy-reveal 700ms ease 1020ms both;
+      }
+
+      .app-loading-version span:first-child { color: rgba(119, 80, 34, 0.72); }
+      .app-loading-version strong { font-family: Georgia, "Times New Roman", serif; font-size: 1.08em; letter-spacing: 0.08em; }
+
+      .app-loading-roller {
+        position: absolute;
+        z-index: 9;
+        top: 0;
+        left: 50%;
+        width: var(--scroll-edge);
+        height: 100%;
+        border: 1px solid rgba(91, 65, 36, 0.62);
+        border-radius: 42% / 4%;
+        background:
+          linear-gradient(90deg, rgba(68, 45, 23, 0.42), rgba(196, 172, 124, 0.22) 28%, rgba(221, 207, 166, 0.18) 58%, rgba(75, 49, 25, 0.48)),
+          repeating-linear-gradient(2deg, transparent 0 5px, rgba(83, 58, 31, 0.05) 5px 6px),
+          #bda77b;
+        box-shadow: inset 10px 0 16px rgba(67, 42, 20, 0.2), inset -8px 0 12px rgba(75, 48, 24, 0.24), 0 12px 16px rgba(3, 8, 7, 0.46);
+      }
+
+      .app-loading-roller::before,
+      .app-loading-roller::after {
+        content: "";
+        position: absolute;
+        left: 50%;
+        border: 1px solid rgba(91, 65, 36, 0.54);
+      }
+
+      .app-loading-roller::before {
+        top: -2.2%;
+        width: 58%;
+        height: 9%;
+        min-height: 18px;
+        border-radius: 48% 48% 18% 18% / 32% 32% 12% 12%;
+        background: repeating-linear-gradient(2deg, transparent 0 4px, rgba(83, 58, 31, 0.06) 4px 5px), #b8a175;
+        transform: translateX(-50%) rotate(-1deg);
+      }
+
+      .app-loading-roller::after {
+        bottom: -2.2%;
+        width: 112%;
+        height: 8%;
+        min-height: 16px;
+        border-radius: 42% 52% 45% 55% / 32% 38% 62% 68%;
+        background: linear-gradient(180deg, #8c7049 0 34%, #5b3d22 60%, #291911 100%);
+        box-shadow: 0 3px 4px rgba(23, 13, 7, 0.36);
+        transform: translateX(-50%) rotate(0.8deg);
+      }
+
+      .app-loading-roller-left {
+        animation: app-scroll-roller-left 1550ms cubic-bezier(0.18, 0.74, 0.17, 1) 100ms both;
+      }
+
+      .app-loading-roller-right {
+        animation: app-scroll-roller-right 1550ms cubic-bezier(0.18, 0.74, 0.17, 1) 100ms both;
+      }
+
+      .app-loading-copy {
+        display: grid;
+        min-height: 54px;
+        width: min(88vw, 680px);
+        justify-items: center;
+        align-content: start;
+      }
+
+      .app-loading-progress {
+        position: relative;
+        width: min(48vw, 330px);
+        height: 1px;
+        margin-bottom: 11px;
+        background: rgba(132, 112, 76, 0.24);
+        overflow: visible;
+      }
+
+      .app-loading-progress::before,
+      .app-loading-progress::after {
+        content: "◆";
+        position: absolute;
+        top: 50%;
+        color: rgba(145, 121, 76, 0.58);
+        font-size: 7px;
+        transform: translateY(-50%);
+      }
+
+      .app-loading-progress::before { left: -13px; }
+      .app-loading-progress::after { right: -13px; }
+
+      .app-loading-progress i {
+        position: absolute;
+        inset: 0 auto 0 0;
+        width: 42%;
+        background: linear-gradient(90deg, rgba(101, 82, 53, 0.34), #8d7750);
+        animation: app-scroll-progress 2.4s ease-in-out infinite alternate;
       }
 
       .app-loading-status {
         min-height: 1.5em;
         margin: 0;
-        color: rgba(255, 244, 213, 0.94);
-        font-size: clamp(13px, 1.8vw, 18px);
-        font-weight: 700;
-        letter-spacing: 0.16em;
-        text-shadow: 0 1px 2px rgba(20, 35, 43, 0.8);
+        color: rgba(211, 201, 174, 0.9);
+        font-family: "STKaiti", KaiTi, "Noto Serif SC", serif;
+        font-size: clamp(14px, 1.55vw, 18px);
+        font-weight: 600;
+        letter-spacing: 0.14em;
+        text-align: center;
+        text-shadow: 0 1px 2px rgba(2, 8, 7, 0.72);
       }
 
       .app-loading-screen[data-state="error"] .app-loading-status {
-        max-width: min(88vw, 680px);
-        color: #ffe1d5;
+        color: #e7a494;
         letter-spacing: 0.04em;
-        text-align: center;
       }
 
-      @media (max-width: 520px) {
-        .app-loading-compass {
-          width: min(88vw, 380px);
-        }
+      .app-loading-screen[data-state="error"] .app-loading-progress i {
+        width: 100%;
+        background: linear-gradient(90deg, rgba(142, 46, 34, 0.2), #bc6554);
+        animation: none;
+      }
 
-        .app-loading-brand {
-          width: 94%;
-        }
+      @keyframes app-scroll-unfurl { from { clip-path: inset(0 50%); } to { clip-path: inset(0); } }
+      @keyframes app-scroll-roller-left { from { left: 50%; transform: translateX(-50%); } to { left: 0; transform: translateX(0); } }
+      @keyframes app-scroll-roller-right { from { left: 50%; transform: translateX(-50%); } to { left: 100%; transform: translateX(-100%); } }
+      @keyframes app-scroll-copy-reveal { from { opacity: 0; filter: blur(4px); } to { opacity: 1; filter: blur(0); } }
+      @keyframes app-scroll-brush-reveal { from { opacity: 0; transform: scaleX(0); } to { opacity: 1; transform: scaleX(1); } }
+      @keyframes app-scroll-seal-set { from { opacity: 0; transform: rotate(-3deg) scale(1.28); filter: blur(2px); } to { opacity: 1; transform: rotate(-3deg) scale(1); filter: blur(0); } }
+      @keyframes app-scroll-mist { from { transform: translateX(-2%); opacity: 0.28; } to { transform: translateX(3%); opacity: 0.48; } }
+      @keyframes app-scroll-progress { from { width: 18%; } to { width: 78%; } }
+
+      @media (max-width: 520px) {
+        .app-loading-card { width: 100vw; }
+        .app-loading-scroll { --scroll-edge: clamp(30px, 9vw, 42px); width: 96vw; height: clamp(250px, min(70vw, 46vh), 310px); }
+        .app-loading-title-card { top: 45.5%; width: 72%; }
+        .app-loading-title { font-size: clamp(25px, 8vw, 34px); letter-spacing: 0.035em; text-indent: 0.035em; }
+        .app-loading-title-eyebrow { margin-bottom: 5px; }
+        .app-loading-title-subline { letter-spacing: 0.12em; text-indent: 0.12em; }
+        .app-loading-tags { gap: 4px; margin-top: 8px; }
+        .app-loading-tags span { padding-inline: 4px; letter-spacing: 0.08em; text-indent: 0.08em; }
+        .app-loading-seal { right: 4.6%; bottom: 18%; }
+        .app-loading-version { right: 4%; bottom: 7%; gap: 4px; padding-inline: 4px; }
+        .app-loading-progress { width: min(62vw, 250px); }
+        .app-loading-status { max-width: 88vw; }
+      }
+
+      @media (max-width: 340px) {
+        .app-loading-tags { grid-template-columns: repeat(2, auto); }
+        .app-loading-title-card { top: 44%; }
+        .app-loading-seal { bottom: 22%; }
       }
 
       @media (prefers-reduced-motion: reduce) {
-        .app-loading-screen {
-          transition-duration: 1ms;
-        }
+        .app-loading-screen { transition-duration: 1ms; }
+        .app-loading-paper-window,
+        .app-loading-roller-left,
+        .app-loading-roller-right,
+        .app-loading-title-card,
+        .app-loading-brush-line,
+        .app-loading-seal,
+        .app-loading-version,
+        .app-loading-mist,
+        .app-loading-progress i { animation: none; }
+        .app-loading-paper-window { clip-path: inset(0); }
+        .app-loading-roller-left { left: 0; transform: translateX(0); }
+        .app-loading-roller-right { left: 100%; transform: translateX(-100%); }
       }
     </style>
   </head>
   <body>
     <div class="app-loading-screen" id="app-loading-screen" role="status" aria-live="polite" aria-labelledby="app-loading-title" aria-describedby="app-loading-status" data-state="loading">
       <div class="app-loading-card">
-        <div class="app-loading-compass">
-          <div class="app-loading-brand">
-            <span class="app-loading-owner">Mosuzi's</span>
-            <strong class="app-loading-title" id="app-loading-title"><span>Fantasy Map</span><span>Generator</span></strong>
-            <span class="app-loading-version">v__FMG_APP_VERSION__</span>
+        <div class="app-loading-scroll">
+          <div class="app-loading-paper-window">
+            <div class="app-loading-paper">
+              <svg class="app-loading-landscape app-loading-landscape-far" viewBox="0 0 1200 520" preserveAspectRatio="none" aria-hidden="true">
+                <path d="M0 365c114-68 189-88 273-58 73 26 120 7 182-46 79-68 140-68 224 2 66 55 116 55 201-5 101-71 188-56 320 56v206H0Z" fill="#6f806f" opacity=".2" />
+                <path d="M50 370c92-46 152-104 215-172 14 73 48 116 111 170m190-25c70-134 124-213 178-267 11 115 50 205 129 291m57-19c57-79 96-126 145-162 4 77 31 134 92 190" fill="none" stroke="#263d35" stroke-width="12" stroke-linecap="round" stroke-linejoin="round" opacity=".13" />
+              </svg>
+              <svg class="app-loading-landscape app-loading-landscape-mid" viewBox="0 0 1200 520" preserveAspectRatio="none" aria-hidden="true">
+                <path d="M0 422c124-31 231-21 329 19 105 43 207 31 321-30 154-82 326-72 550 23v86H0Z" fill="#536b5e" opacity=".14" />
+                <path d="M0 440c137-38 250-24 347 16 120 49 232 25 349-33 139-69 288-64 504 27" fill="none" stroke="#20362f" stroke-width="7" opacity=".22" />
+                <path d="M95 165c23-21 47-21 71 0m764-29c29-23 58-23 86 1M410 104c17-16 35-16 52 0" fill="none" stroke="#283b34" stroke-width="4" stroke-linecap="round" opacity=".34" />
+              </svg>
+              <svg class="app-loading-landscape app-loading-landscape-near" viewBox="0 0 1200 520" preserveAspectRatio="none" aria-hidden="true">
+                <path d="M0 476c129-28 240-13 342 19 114 36 205 23 315-16 159-56 326-52 543 8v33H0Z" fill="#273f36" opacity=".2" />
+                <path d="M104 452c33-60 50-103 54-151 29 52 36 99 24 142m62 14c12-55 35-91 68-120 5 52-3 91-26 121m730 9c18-58 42-99 77-123 0 52-8 92-30 125" fill="none" stroke="#21382f" stroke-width="8" opacity=".26" />
+              </svg>
+              <span class="app-loading-mist app-loading-mist-left" aria-hidden="true"></span>
+              <span class="app-loading-mist app-loading-mist-right" aria-hidden="true"></span>
+              <div class="app-loading-title-card">
+                <p class="app-loading-title-eyebrow">舆图演算</p>
+                <strong class="app-loading-title" id="app-loading-title" data-title="架空地图生成器">架空地图生成器</strong>
+                <svg class="app-loading-brush-line" viewBox="0 0 420 24" preserveAspectRatio="none" aria-hidden="true">
+                  <path d="M7 13c80-5 151-5 216-2 67 3 126 2 190-5-45 10-91 14-139 13-91-2-178-6-267-6Z" />
+                </svg>
+                <p class="app-loading-title-subline">铺陈山河 <span aria-hidden="true">·</span> 推演万邦</p>
+                <div class="app-loading-tags" aria-label="舆图内容">
+                  <span>山川</span><span>郡国</span><span>城邑</span><span>风物</span>
+                </div>
+              </div>
+              <svg class="app-loading-seal" viewBox="0 0 800 800" role="img" aria-label="莫苏子印">
+                <defs>
+                  <filter id="app-loading-seal-cutout" color-interpolation-filters="sRGB">
+                    <feColorMatrix type="matrix" values="0 0 0 0 0.588 0 0 0 0 0.22 0 0 0 0 0.176 2 -1 -1 0 0" />
+                  </filter>
+                </defs>
+                <image href="/assets/mosuzi-seal.png" width="800" height="800" preserveAspectRatio="xMidYMid meet" filter="url(#app-loading-seal-cutout)" />
+              </svg>
+              <span class="app-loading-version"><span>卷次</span><strong>v__FMG_APP_VERSION__</strong></span>
+            </div>
           </div>
+          <span class="app-loading-roller app-loading-roller-left" aria-hidden="true"></span>
+          <span class="app-loading-roller app-loading-roller-right" aria-hidden="true"></span>
         </div>
-        <p class="app-loading-status" id="app-loading-status">正在加载地图资源</p>
+        <div class="app-loading-copy">
+          <span class="app-loading-progress" aria-hidden="true"><i></i></span>
+          <p class="app-loading-status" id="app-loading-status">正在加载地图资源</p>
+        </div>
       </div>
     </div>
     <main class="app-shell">

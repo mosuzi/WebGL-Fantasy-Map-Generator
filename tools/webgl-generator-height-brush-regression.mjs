@@ -6,6 +6,7 @@ import {getGlobalHeightChanges, getHeightBrushChanges, getHeightLineChanges, get
 import {applyHeightBrushPreview, createApplyHeightBrushCommand} from "../app/webgl-generator/src/runtime/height-edit-commands.js";
 import {composeHeightCellSelection, createHeightCellSelection, createHeightCellSelectionFeather, createHeightCellSelectionSet, createHeightCellSelectionSnapshot, createHeightConnectedSelection, createHeightCursorRadiusSelection, createHeightPaintSelection, createHeightRectangleSelection, inspectHeightCellSelection, inspectHeightCellSelectionComposition, inspectHeightCellSelectionFeather, inspectHeightCellSelectionTransform, inspectHeightConnectedSelection, inspectHeightCursorRadiusSelection, inspectHeightPaintSelection, inspectHeightRectangleSelection, restoreHeightCellSelectionSnapshot, transformHeightCellSelection} from "../app/webgl-generator/src/runtime/height-cell-selection.js";
 import {getHeightSelectionSmoothingChanges, inspectHeightSelectionSmoothing} from "../app/webgl-generator/src/runtime/height-selection-smoothing.js";
+import {queryHeightCellsInRadius} from "../app/webgl-generator/src/runtime/height-cell-spatial-index.js";
 import {getHeightTerrainTemplateChanges, HEIGHT_TERRAIN_TEMPLATE_PRESETS, heightTerrainTemplateUsesSeed, inspectHeightTerrainTemplate} from "../app/webgl-generator/src/runtime/height-terrain-templates.js";
 import {buildHeightCellSelectionMesh, buildHeightTransformPreviewMesh} from "../app/webgl-generator/src/renderer/height-transform-preview-layer.js";
 
@@ -13,11 +14,30 @@ const heightRadiusContract = readBrushRadiusContract(BRUSH_RADIUS_ID.HEIGHT);
 assert(heightRadiusContract.defaultValue === 28 && normalizeBrushRadius(BRUSH_RADIUS_ID.HEIGHT, -1) === 6 && normalizeBrushRadius(BRUSH_RADIUS_ID.HEIGHT, 999) === 96, "高度画笔半径契约异常");
 const heightSelectionRadiusContract = readBrushRadiusContract(BRUSH_RADIUS_ID.HEIGHT_SELECTION);
 assert(heightSelectionRadiusContract.defaultValue === 48 && normalizeBrushRadius(BRUSH_RADIUS_ID.HEIGHT_SELECTION, -1) === 8 && normalizeBrushRadius(BRUSH_RADIUS_ID.HEIGHT_SELECTION, 999) === 160, "高度选区半径契约异常");
+const spatialMap = createSquareMap(5, () => 50);
+const spatialBoundary = queryHeightCellsInRadius(spatialMap, {x: 0, y: 0}, 1);
+assert(spatialBoundary.map(item => item.gridCell).join(",") === "0,1,5", `空间查询没有包含圆边界或保持升序：${JSON.stringify(spatialBoundary)}`);
+assert(queryHeightCellsInRadius(spatialMap, {x: -1, y: -1}, Math.SQRT2).map(item => item.gridCell).join(",") === "0", "空间查询没有正确处理负坐标圆心");
+const spatialOriginalPoints = spatialMap.grid.points;
+spatialMap.grid.points = spatialOriginalPoints.map(([x, y]) => [x + 100, y]);
+assert(queryHeightCellsInRadius(spatialMap, {x: 100, y: 0}, 0).map(item => item.gridCell).join(",") === "0", "替换 grid points 后空间缓存没有重建");
 const protectedLandMap = createSquareMap(3, () => 20);
 const protectedLandLower = getHeightBrushChanges(protectedLandMap, {x: 1, y: 1}, {action: "lower", scope: "land", preserveSurface: true, radius: 20, strength: 18, falloff: false}, {originals: new Map()});
 assert(protectedLandLower.length === 0, "普通陆地下降跨越了海平面");
 const compatibleLandLower = getHeightBrushChanges(protectedLandMap, {x: 1, y: 1}, {action: "lower", scope: "land", preserveSurface: false, radius: 20, strength: 18, falloff: false}, {originals: new Map()});
 assert(compatibleLandLower.some(change => change.after === 2), "专家兼容入口不再允许原有跨海平面高度命令");
+const playerFalloffRaise = getHeightBrushChanges(createSyntheticMap(), {x: 10, y: 0}, {action: "raise", scope: "all", radius: 20, strength: 10, falloff: true}, {originals: new Map()});
+assert(playerFalloffRaise.map(change => `${change.gridCell}:${change.after - change.before}`).join(",") === "0:5,1:10,2:5", `普通抬升没有按中心距离单调衰减：${JSON.stringify(playerFalloffRaise)}`);
+const compatibleUniformRaise = getHeightBrushChanges(createSyntheticMap(), {x: 10, y: 0}, {action: "raise", scope: "all", radius: 20, strength: 10, falloff: false}, {originals: new Map()});
+assert(compatibleUniformRaise.map(change => change.after - change.before).join(",") === "10,10,10,10", "专家关闭衰减后不再保持统一强度");
+const radialFalloffMap = createSquareMap(13, () => 50);
+const radialFalloffRaise = getHeightBrushChanges(radialFalloffMap, {x: 6, y: 6}, {action: "raise", scope: "all", radius: 6, strength: 12, falloff: true}, {originals: new Map()});
+const radialFalloffDeltas = new Map(radialFalloffRaise.map(change => [change.gridCell, change.after - change.before]));
+assert(radialFalloffDeltas.get(84) === 12 && radialFalloffDeltas.get(87) === 6 && radialFalloffDeltas.get(89) === 1, `柔和画笔没有形成中心 > 中段 > 外段的强度层级：${JSON.stringify([...radialFalloffDeltas])}`);
+assert(!radialFalloffDeltas.has(90), "柔和画笔在半径边界仍产生了高度变化");
+const radialUniformRaise = getHeightBrushChanges(createSquareMap(13, () => 50), {x: 6, y: 6}, {action: "raise", scope: "all", radius: 6, strength: 12, falloff: false}, {originals: new Map()});
+const radialUniformDeltas = new Map(radialUniformRaise.map(change => [change.gridCell, change.after - change.before]));
+assert([84, 87, 89, 90].every(gridCell => radialUniformDeltas.get(gridCell) === 12), "范围均匀模式没有在半径内保持等强度");
 
 const smoothingMap = createSquareMap(5, (x, y) => {
   if (x === 0 && y === 1) return 10;
@@ -50,21 +70,39 @@ assert(smoothingMap.grid.cells.h[12] === 20 && smoothingMap.grid.cells.h[5] === 
 smoothingHistory.redo({map: smoothingMap});
 assert(JSON.stringify(Array.from(smoothingMap.grid.cells.h)) === JSON.stringify(smoothedSnapshot), "范围平滑重做没有恢复结果");
 
-const [heightPanelSource, heightPanelModelSource, appSource] = await Promise.all([
+const [heightPanelSource, heightPanelModelSource, appSource, rendererSource, refreshSchedulerSource, stylesSource] = await Promise.all([
   readFile(new URL("../app/webgl-generator/src/ui/vue/components/HeightPanel.vue", import.meta.url), "utf8"),
   readFile(new URL("../app/webgl-generator/src/ui/panels/height-panel.js", import.meta.url), "utf8"),
-  readFile(new URL("../app/webgl-generator/src/runtime/app.js", import.meta.url), "utf8")
+  readFile(new URL("../app/webgl-generator/src/runtime/app.js", import.meta.url), "utf8"),
+  readFile(new URL("../app/webgl-generator/src/renderer/placeholder-renderer.js", import.meta.url), "utf8"),
+  readFile(new URL("../app/webgl-generator/src/runtime/edit-refresh-scheduler.js", import.meta.url), "utf8"),
+  readFile(new URL("../app/webgl-generator/src/styles.css", import.meta.url), "utf8")
 ]);
 assert(/useDebugMode/.test(heightPanelSource), "高度面板没有复用统一调试模式");
-assert(/const playerActions = Object\.freeze\(\[\s*\{value: "raise", label: "抬升陆地"\},\s*\{value: "lower", label: "降低陆地"\}/.test(heightPanelSource), "普通高度动作没有收敛为陆地升降");
+assert(/const playerActions = Object\.freeze\(\[\s*\{value: "raise", label: "抬升陆地", icon: Top\},\s*\{value: "lower", label: "降低陆地", icon: Bottom\}/.test(heightPanelSource), "普通高度动作没有收敛为图标化陆地升降");
 assert(/label="平滑度"[^>]+:min="0"[^>]+:max="1"[^>]+:step="0\.01"/.test(heightPanelSource), "范围平滑度契约异常");
 assert(/<details v-if="debugEnabled" class="panel-advanced-section height-advanced-section">/.test(heightPanelSource), "专家地形程序仍在普通模式显示");
 assert(/<section v-if="debugEnabled" class="heightmap-import-launcher"/.test(heightPanelSource), "高度图导入仍在普通模式显示");
 assert(/scope: "land"/.test(heightPanelModelSource), "高度面板默认范围不是陆地");
 assert(/selectionSmoothness: 0/.test(heightPanelModelSource), "范围平滑度默认值不是 0");
 assert(/onTerrainSelectionSmooth/.test(heightPanelModelSource), "高度面板 wrapper 缺少范围平滑入口");
-assert(/inspectHeightSelectionSmoothing\(state\.map, options\)/.test(appSource), "范围平滑提交前没有复检");
+assert(/createHeightSelectionSmoothingPlan\(state\.map, options\)/.test(appSource), "范围平滑没有复用单次分析计划");
 assert(/createApplyHeightBrushCommand\(changes, \{label: "平滑所选范围"\}\)/.test(appSource), "范围平滑没有复用单条高度历史命令");
+assert(/terrainSelectionPaintState/.test(heightPanelSource) && /:class="\{active: !isPlayerSmoothingSelection && state\.action === action\.value\}"/.test(heightPanelSource), "普通升降与范围涂选没有互斥高亮");
+assert(/props\.callbacks\.onTerrainSelectionCancel\?\.\(\);[\s\S]+setAction/.test(heightPanelSource), "切回普通升降没有取消范围涂选");
+assert(!/function selectHeightAction\([\s\S]+?props\.state\.falloff = true;[\s\S]+?function setAction/.test(heightPanelSource), "切换抬升或降低仍会偷偷重置画笔强度模式");
+assert(heightPanelSource.includes("柔和渐弱") && heightPanelSource.includes("范围均匀") && heightPanelSource.includes("PLAYER_FALLOFF_MIN_RADIUS = 24"), "普通高度面板没有显式柔和 / 均匀模式或柔和最小半径");
+assert(/<details class="height-player-smoothing height-seafloor-reset">/.test(heightPanelSource) && /<div v-if="debugEnabled" class="height-history-actions">/.test(heightPanelSource), "普通高度面板仍默认展开海底重设或重复显示底部历史按钮");
+assert(/\.segmented\.height-player-falloff-mode\s*\{[^}]*gap:\s*10px;[^}]*margin:\s*10px 0;/.test(stylesSource), "普通高度模式按钮与启停按钮之间仍缺少明确留白");
+assert(/\.height-player-tool-row\s*\{[^}]*gap:\s*10px;/.test(stylesSource) && /\.height-player-operation-toolbar\s*\{[^}]*gap:\s*10px;/.test(stylesSource), "普通高度图标按钮组仍过于拥挤");
+assert(/scheduleHeightBrushAtEvent/.test(appSource) && /flushScheduledHeightBrush/.test(appSource), "高度画笔没有按动画帧合并并补刷末次落点");
+assert(/flushScheduledHeightBrush\(state, documentRef, event\)/.test(appSource) && /flushScheduledHeightSelectionPaint\(state, documentRef, event\)/.test(appSource), "高度画笔或范围涂选没有提交 pointerup 的真实末次坐标");
+assert(/state\.pick = state\.renderer\.pickClientPoint\(event\.clientX, event\.clientY\);\s*const point = state\.renderer\.screenToWorld/.test(appSource), "高度画笔拖动时没有同步当前悬停落点");
+assert(/if \(active\) releasePointer\(state\.renderer\?\.canvas, active\.pointerId\)/.test(appSource), "取消范围涂选时没有释放 pointer capture");
+assert(/changedGridCells: changes\.map\(change => change\.gridCell\)/.test(appSource), "高度预览没有携带局部 cell 列表");
+assert(/updateHeightPanel\(state, \{includeMapSummary: false\}\)/.test(appSource), "连续高度交互仍会逐帧统计整图摘要");
+assert(/refreshHeightCells\(gridCells/.test(rendererSource) && /bufferSubData/.test(rendererSource), "renderer 缺少受影响 surface 颜色增量更新");
+assert(/changedGridCells\.length && typeof state\.renderer\.refreshHeightCells/.test(refreshSchedulerSource), "刷新调度器没有优先使用高度局部 surface 更新");
 
 const map = createSyntheticMap();
 const stroke = {originals: new Map()};

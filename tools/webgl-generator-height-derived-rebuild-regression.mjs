@@ -3,6 +3,7 @@ import {
   createRegenerationResult,
   HEIGHT_BASE_REBUILD_STEPS,
   HEIGHT_DOWNSTREAM_REBUILD_STEPS,
+  rebuildHeightAllDerived,
   rebuildHeightBaseDerived,
   rebuildHeightDownstreamDerived
 } from "../app/webgl-generator/src/runtime/height-derived-rebuild.js";
@@ -91,6 +92,27 @@ assert(
 );
 assert(militaryFailure.steps.length === 4 && !militaryFailure.steps.at(-1).executed, "军事失败步骤摘要异常");
 
+const allSuccessCalls = [];
+const allSuccess = rebuildHeightAllDerived(kind => {
+  allSuccessCalls.push(kind);
+  return createRegenerationResult(kind, `${kind} done`, `${kind} constraints`);
+});
+assert(allSuccess.executed === true, "一键地图更新没有完整执行");
+assert(
+  JSON.stringify(allSuccessCalls) === JSON.stringify([...HEIGHT_BASE_REBUILD_STEPS, ...HEIGHT_DOWNSTREAM_REBUILD_STEPS]),
+  `一键地图更新顺序异常：${allSuccessCalls}`
+);
+assert(allSuccess.steps.length === 8 && allSuccess.steps.every(step => step.executed), "一键地图更新步骤摘要异常");
+
+const allBaseFailureCalls = [];
+const allBaseFailure = rebuildHeightAllDerived(kind => {
+  allBaseFailureCalls.push(kind);
+  return createRegenerationResult(kind, kind === "rivers" ? "未执行" : `${kind} done`, "constraints");
+});
+assert(allBaseFailure.executed === false, "一键地图更新基础失败没有返回 executed=false");
+assert(JSON.stringify(allBaseFailureCalls) === JSON.stringify(["features", "rivers"]), `基础失败后仍执行了世界内容：${allBaseFailureCalls}`);
+assert(allBaseFailure.constraint.includes("未执行依赖它的世界内容"), `一键地图更新失败说明不清楚：${allBaseFailure.constraint}`);
+
 console.log(JSON.stringify({
   ok: true,
   steps: HEIGHT_BASE_REBUILD_STEPS,
@@ -103,6 +125,10 @@ console.log(JSON.stringify({
     success: {executed: downstreamSuccess.executed, calls: downstreamSuccessCalls, summary: downstreamSuccess.constraint},
     markerFailure: {executed: markerFailure.executed, calls: markerFailureCalls, summary: markerFailure.constraint},
     militaryFailure: {executed: militaryFailure.executed, calls: militaryFailureCalls, summary: militaryFailure.constraint}
+  },
+  all: {
+    success: {executed: allSuccess.executed, calls: allSuccessCalls, summary: allSuccess.constraint},
+    baseFailure: {executed: allBaseFailure.executed, calls: allBaseFailureCalls, summary: allBaseFailure.constraint}
   }
 }, null, 2));
 

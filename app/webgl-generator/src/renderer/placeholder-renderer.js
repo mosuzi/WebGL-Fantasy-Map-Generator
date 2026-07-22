@@ -2,7 +2,7 @@ import {buildObjectPickingIndex, pickCity, pickGridCell, pickMarker, pickMilitar
 import {goodDisplayName} from "../generator/economy-display-properties.js";
 import {bindVertexBuffer, createProgram} from "./gl-utils.js";
 import {createRenderContext, worldToNdcPoint, worldToScreenPixel} from "./render-context.js";
-import {isLandCell} from "./color-modes.js";
+import {colorForCell, isLandCell} from "./color-modes.js";
 import {politicalSurfaceMeshForMode, pushGridCells, pushMeshSurfaceVertices, shouldDrawGridCellUnderPoliticalMesh} from "./cell-surface-layer.js";
 import {buildCellVisualGridVertices, buildCellVisualMesh, emptyCellVisualMesh, summarizeCellVisualMesh} from "./cell-visual-layer.js";
 import {buildSelectionMeshVertices, selectionHighlightMode} from "./selection-layer.js";
@@ -58,6 +58,7 @@ import {
 import {resolveStateLabelPlacement} from "./state-label-territory.js";
 import {formatMilitary, normalizeUnitPreferences} from "../ui/display-units.js";
 import {militaryIconLabelForVariant, militaryIconUrlForVariant, normalizeMilitaryIconVariant} from "./military-icon-assets.js";
+import {resizeCanvasToDisplaySize} from "./canvas-display-size.js";
 import {resolveMilitaryLabelPalette} from "./military-label-palette.js";
 import {MILITARY_CITY_LABEL_AVOID_SCALE, militaryLabelBox, resolveMilitaryLabelPlacement} from "./military-label-layout.js";
 import {cityLabelAnchorOffset} from "./city-label-icon-layout.js";
@@ -101,6 +102,7 @@ const MAP_EDGE_FADE_RATIO = 0.055;
 const MAP_EDGE_FADE_MIN_WORLD = 28;
 const MAP_EDGE_FADE_MAX_WORLD = 96;
 const MAP_EDGE_FADE_ALPHA = 0.9;
+const MAX_INCREMENTAL_SURFACE_GAP_FLOATS = 4096;
 
 const MARKER_ICON_PALETTES = Object.freeze({
   natural: {fill: "#7aa35f", stroke: "#203717", symbol: "#f6ffe8"},
@@ -141,7 +143,7 @@ export class PlaceholderMapRenderer {
     this.onViewChange = onViewChange;
     this.onHover = onHover;
     this.onSelect = onSelect;
-    this.canvasSize = lockCanvasToInitialDisplaySize(canvas, this.overlay);
+    this.canvasSize = resizeCanvasToDisplaySize(canvas, this.overlay, this.stage).size;
     this.gl = canvas.getContext("webgl2", {
       alpha: false,
       antialias: false,
@@ -171,6 +173,8 @@ export class PlaceholderMapRenderer {
     this.pointBuffer = this.gl.createBuffer();
     this.politicalMeshDebugBuffer = this.gl.createBuffer();
     this.vertexCount = 0;
+    this.surfaceVertices = new Float32Array();
+    this.surfaceCellRanges = new Map();
     this.routeVertexCount = 0;
     this.tradeFlowVertexCount = 0;
     this.tradeFlowPickItems = [];
@@ -279,6 +283,38 @@ export class PlaceholderMapRenderer {
     }, event => {
       this.onSelect(this.pickClientPoint(event.clientX, event.clientY));
     });
+    this.installDisplayResizeObserver();
+  }
+
+  installDisplayResizeObserver() {
+    const view = this.canvas.ownerDocument?.defaultView;
+    if (!view) return;
+    this.resizeFrame = 0;
+    this.handleDisplayResize = () => {
+      if (this.resizeFrame) return;
+      this.resizeFrame = view.requestAnimationFrame(() => {
+        this.resizeFrame = 0;
+        this.resizeToDisplaySize();
+      });
+    };
+    const ResizeObserverCtor = view.ResizeObserver;
+    if (ResizeObserverCtor && this.stage) {
+      this.resizeObserver = new ResizeObserverCtor(this.handleDisplayResize);
+      this.resizeObserver.observe(this.stage);
+    }
+    view.addEventListener("resize", this.handleDisplayResize, {passive: true});
+  }
+
+  resizeToDisplaySize({draw = true} = {}) {
+    const result = resizeCanvasToDisplaySize(this.canvas, this.overlay, this.stage);
+    this.canvasSize = result.size;
+    if (!result.changed) return false;
+    this.markViewportBuffersDirty();
+    if (draw) {
+      this.draw();
+      this.onViewChange();
+    }
+    return true;
   }
 
   loadMap(map) {
@@ -299,6 +335,8 @@ export class PlaceholderMapRenderer {
     const oceanCurrentVertices = lineLayer.oceanCurrentVertices;
     this.oceanCurrentLayerStats = lineLayer.oceanCurrents;
     const pointVertices = profile.stage("point-vertices", "构建点图层顶点", () => buildPointVertices(map, this.layerVisibility));
+    this.surfaceVertices = vertices;
+    this.surfaceCellRanges = buildSurfaceCellRanges(this.colorMode, this.viewOptions, this.cellVisualMesh, vertices.length);
     this.vertexCount = vertices.length / 6;
     this.routeVertexCount = 0;
     this.tradeFlowVertexCount = 0;
@@ -384,6 +422,8 @@ export class PlaceholderMapRenderer {
     const oceanCurrentVertices = lineLayer.oceanCurrentVertices;
     this.oceanCurrentLayerStats = lineLayer.oceanCurrents;
     const pointVertices = await stage("point-vertices", "构建点图层顶点", () => buildPointVertices(map, this.layerVisibility));
+    this.surfaceVertices = vertices;
+    this.surfaceCellRanges = buildSurfaceCellRanges(this.colorMode, this.viewOptions, this.cellVisualMesh, vertices.length);
     this.vertexCount = vertices.length / 6;
     this.routeVertexCount = 0;
     this.tradeFlowVertexCount = 0;
@@ -501,10 +541,44 @@ export class PlaceholderMapRenderer {
   refreshCellSurface({draw = true} = {}) {
     if (!this.map) return;
     const vertices = buildPlaceholderVertices(this.map, this.colorMode, this.viewOptions, this.shoreVisualPaths, this.stateVisualPaths, this.provinceVisualPaths, this.politicalVisualMeshes, this.cellVisualMesh);
+    this.surfaceVertices = vertices;
+    this.surfaceCellRanges = buildSurfaceCellRanges(this.colorMode, this.viewOptions, this.cellVisualMesh, vertices.length);
     this.vertexCount = vertices.length / 6;
     this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.vertexBuffer);
     this.gl.bufferData(this.gl.ARRAY_BUFFER, vertices, this.gl.STATIC_DRAW);
     if (draw) this.draw();
+  }
+
+  refreshHeightCells(gridCells, {draw = true} = {}) {
+    const normalizedCells = [...new Set((gridCells || []).map(Number).filter(cell => Number.isInteger(cell) && cell >= 0))].sort((a, b) => a - b);
+    if (!this.map || !normalizedCells.length) return {incremental: false, cells: 0, spans: 0};
+    if (this.colorMode !== "height" || !(this.surfaceVertices instanceof Float32Array) || !this.surfaceCellRanges.size) {
+      this.refreshCellSurface({draw});
+      return {incremental: false, cells: normalizedCells.length, spans: 1};
+    }
+
+    const spans = [];
+    let changedCells = 0;
+    for (const gridCell of normalizedCells) {
+      const range = this.surfaceCellRanges.get(gridCell);
+      if (!range) continue;
+      const color = colorForCell(gridCell, this.map, this.colorMode, this.viewOptions);
+      for (let offset = range.start; offset < range.end; offset += 6) {
+        this.surfaceVertices[offset + 2] = color[0];
+        this.surfaceVertices[offset + 3] = color[1];
+        this.surfaceVertices[offset + 4] = color[2];
+        this.surfaceVertices[offset + 5] = color[3];
+      }
+      spans.push(range);
+      changedCells++;
+    }
+    if (!spans.length) return {incremental: true, cells: 0, spans: 0};
+
+    const merged = mergeSurfaceRanges(spans);
+    this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.vertexBuffer);
+    for (const range of merged) this.gl.bufferSubData(this.gl.ARRAY_BUFFER, range.start * Float32Array.BYTES_PER_ELEMENT, this.surfaceVertices.subarray(range.start, range.end));
+    if (draw) this.draw();
+    return {incremental: true, cells: changedCells, spans: merged.length};
   }
 
   refreshLabels() {
@@ -2947,6 +3021,34 @@ function buildPlaceholderVertices(map, colorMode, viewOptions, shoreVisualPaths 
   return combineVertexBuffers(vertices, shoreVertices);
 }
 
+function buildSurfaceCellRanges(colorMode, viewOptions, cellVisualMesh, surfaceFloatLength) {
+  if (viewOptions?.smoothCellBorders === false || !cellVisualMesh?.cells?.length || !Number.isFinite(surfaceFloatLength)) return new Map();
+  const ranges = new Map();
+  let start = 0;
+  for (const cellMesh of cellVisualMesh.cells) {
+    const length = ((cellMesh?.ndcTriangles?.length || 0) / 2) * 6;
+    if (!length) continue;
+    ranges.set(cellMesh.cell, {start, end: start + length});
+    start += length;
+  }
+  if (start > surfaceFloatLength || !colorMode) return new Map();
+  return ranges;
+}
+
+function mergeSurfaceRanges(ranges) {
+  const sorted = [...ranges].sort((a, b) => a.start - b.start);
+  const merged = [];
+  for (const range of sorted) {
+    const previous = merged[merged.length - 1];
+    if (previous && range.start - previous.end <= MAX_INCREMENTAL_SURFACE_GAP_FLOATS) {
+      previous.end = Math.max(previous.end, range.end);
+      continue;
+    }
+    merged.push({...range});
+  }
+  return merged;
+}
+
 function shouldDrawShoreVisualBands(colorMode) {
   return false;
 }
@@ -3829,31 +3931,6 @@ function snapshotCamera(camera) {
     offsetX: Number(camera?.offsetX) || 0,
     offsetY: Number(camera?.offsetY) || 0
   };
-}
-
-function lockCanvasToInitialDisplaySize(canvas, overlay = null) {
-  const rect = canvas.getBoundingClientRect();
-  const cssWidth = Math.max(1, Math.round(rect.width || canvas.clientWidth || canvas.parentElement?.clientWidth || 1));
-  const cssHeight = Math.max(1, Math.round(rect.height || canvas.clientHeight || canvas.parentElement?.clientHeight || 1));
-  const pixelRatio = Math.min(window.devicePixelRatio || 1, 1.5);
-  const width = Math.max(1, Math.round(cssWidth * pixelRatio));
-  const height = Math.max(1, Math.round(cssHeight * pixelRatio));
-
-  canvas.style.width = `${cssWidth}px`;
-  canvas.style.height = `${cssHeight}px`;
-  canvas.width = width;
-  canvas.height = height;
-
-  if (overlay) {
-    overlay.style.left = "0";
-    overlay.style.top = "0";
-    overlay.style.right = "auto";
-    overlay.style.bottom = "auto";
-    overlay.style.width = `${cssWidth}px`;
-    overlay.style.height = `${cssHeight}px`;
-  }
-
-  return {cssWidth, cssHeight, width, height, pixelRatio};
 }
 
 function roundMs(value) {

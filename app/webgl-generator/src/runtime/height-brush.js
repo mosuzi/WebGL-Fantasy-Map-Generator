@@ -1,4 +1,5 @@
 import {BRUSH_RADIUS_ID, normalizeBrushRadius} from "./brush-radius-contract.js";
+import {queryHeightCellsInRadius} from "./height-cell-spatial-index.js";
 
 export function getHeightBrushChanges(map, point, brush, stroke) {
   const cells = map?.grid?.cells;
@@ -12,22 +13,15 @@ export function getHeightBrushChanges(map, point, brush, stroke) {
   }
 
   const radius = normalizeBrushRadius(BRUSH_RADIUS_ID.HEIGHT, brush?.radius);
-  const radiusSq = radius * radius;
   const scope = normalizeBrushScope(brush?.scope);
   const affected = [];
   let nearest = null;
 
-  for (let gridCell = 0; gridCell < cells.p.length; gridCell++) {
+  for (const candidate of queryHeightCellsInRadius(map, point, radius)) {
+    const {gridCell, distanceSq} = candidate;
     const scopeHeight = originals.has(gridCell) ? originals.get(gridCell) : cells.h[gridCell];
     if (!matchesBrushScope(scopeHeight, scope)) continue;
-    const cellPoint = points[cells.p[gridCell]];
-    if (!cellPoint) continue;
-    const dx = cellPoint[0] - point.x;
-    const dy = cellPoint[1] - point.y;
-    const distanceSq = dx * dx + dy * dy;
-    if (distanceSq > radiusSq) continue;
-    const distance = Math.sqrt(distanceSq);
-    const factor = brush.falloff && brush.action !== "smooth" ? brushFalloff(distance, radius) : 1;
+    const factor = brush.falloff && brush.action !== "smooth" ? brushFalloff(Math.sqrt(distanceSq), radius) : 1;
     const item = {gridCell, factor, distanceSq};
     affected.push(item);
     if (!nearest || distanceSq < nearest.distanceSq) nearest = item;
@@ -478,7 +472,10 @@ function heightChange(cells, originals, gridCell, nextValue) {
 }
 
 function brushFalloff(distance, radius) {
-  const t = Math.max(0, Math.min(1, 1 - distance / Math.max(1, radius)));
+  const safeRadius = Number(radius);
+  const safeDistance = Number(distance);
+  if (!Number.isFinite(safeDistance) || !Number.isFinite(safeRadius) || safeRadius <= 0) return safeDistance <= 0 ? 1 : 0;
+  const t = 1 - Math.max(0, Math.min(1, safeDistance / safeRadius));
   return t * t * (3 - 2 * t);
 }
 

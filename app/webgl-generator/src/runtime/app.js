@@ -87,10 +87,10 @@ import {createRegenerateDiplomacyCommand, createSetDiplomacyRelationCommand} fro
 import {applyHeightBrushPreview, createApplyHeightBrushCommand} from "./height-edit-commands.js";
 import {getGlobalHeightChanges, getHeightBrushChanges, getHeightLineChanges, getHeightRangeTransformChanges, inspectGlobalHeightChanges, inspectHeightFillTarget, inspectHeightRangeTransform} from "./height-brush.js";
 import {composeHeightCellSelection, createHeightCellSelectionFeather, createHeightCellSelectionSet, createHeightCellSelectionSnapshot, createHeightCursorRadiusSelection, restoreHeightCellSelectionSnapshot, transformHeightCellSelection} from "./height-cell-selection.js";
-import {getHeightSelectionSmoothingChanges, inspectHeightSelectionSmoothing} from "./height-selection-smoothing.js";
+import {createHeightSelectionSmoothingPlan} from "./height-selection-smoothing.js";
 import {getHeightTerrainTemplateChanges, heightTerrainTemplateLabel, heightTerrainTemplateUsesSeed, inspectHeightTerrainTemplate} from "./height-terrain-templates.js";
 import {getHeightTerrainTemplateProgramChanges, heightTerrainTemplateProgramUsesSeed, inspectHeightTerrainTemplateProgram} from "./height-terrain-template-programs.js";
-import {createRegenerationResult, rebuildHeightBaseDerived, rebuildHeightDownstreamDerived} from "./height-derived-rebuild.js";
+import {createRegenerationResult, rebuildHeightAllDerived, rebuildHeightBaseDerived, rebuildHeightDownstreamDerived} from "./height-derived-rebuild.js";
 import {buildSeafloorResetPlan, createResetSeafloorCommand, seafloorResetPreviewChanges} from "./seafloor-reset.js";
 import {createRegenerateOceanCurrentsCommand, createRenameOceanCurrentCommand} from "./ocean-current-edit-commands.js";
 import {assertOceanCurrentWorldIdentity, rebuildOceanCurrentWorldStage, snapshotOceanCurrentWorldIdentity} from "../generator/ocean-current-world.js";
@@ -321,6 +321,8 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       fillHoverCell: null,
       fillPreview: null,
       strokeSeed: 0,
+      brushFrame: 0,
+      pendingBrushPointer: null,
       globalToolSeed: 0,
       terrainTemplateSeed: 0,
       seafloorResetSeed: 0,
@@ -331,6 +333,8 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       terrainSelectionPoint: null,
       terrainSelectionPaintPending: null,
       terrainSelectionPaint: null,
+      selectionPaintFrame: 0,
+      pendingSelectionPaintPointer: null,
       lastAffected: 0,
       lastHeight: "none",
       lastDelta: "none",
@@ -555,6 +559,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     onActiveChange: active => {
       if (active) enterCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.HEIGHT_BRUSH);
       else cancelCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.HEIGHT_BRUSH, "panel-toggle");
+      updatePickPanel(documentRef, state);
     },
     onActionChange: action => {
       cancelHeightLine(state, documentRef);
@@ -952,7 +957,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
         cellIds: state.heightEdit.terrainSelection?.cellIds,
         smoothness
       };
-      const inspection = inspectHeightSelectionSmoothing(state.map, options);
+      const {inspection, changes} = createHeightSelectionSmoothingPlan(state.map, options);
       if (!inspection.valid) {
         state.heightEdit.lastAffected = 0;
         state.heightEdit.lastHeight = "none";
@@ -961,7 +966,6 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
         updateHeightPanel(state);
         return inspection;
       }
-      const changes = getHeightSelectionSmoothingChanges(state.map, options);
       const result = executeEditCommand(state, documentRef, createApplyHeightBrushCommand(changes, {label: "平滑所选范围"}), {
         context: {map: state.map},
         refresh: refreshAfterEdit,
@@ -1047,6 +1051,10 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     onRegenerateDownstream: () => {
       cancelHeightLine(state, documentRef);
       runtimeActions.edit.height.rebuildDownstreamDerived({confirm: true});
+    },
+    onRegenerateAll: () => {
+      cancelHeightLine(state, documentRef);
+      rebuildHeightDerivedViaAction(state, documentRef, "all", {confirm: true});
     }
   });
   state.panels.height = heightPanel;
@@ -7577,7 +7585,11 @@ function rebuildHeightDerivedViaAction(state, documentRef, scope, options = {}) 
   if (options?.confirm !== true) throw new Error("高度派生重建会改写当前地图派生数据，需要显式传入 {confirm: true}");
   const before = regenerationApiSummary(state.map);
   const regenerate = kind => state.runtimeActions.generate.regenerate(kind, {confirm: true});
-  const result = scope === "base" ? rebuildHeightBaseDerived(regenerate) : rebuildHeightDownstreamDerived(regenerate);
+  const result = scope === "all"
+    ? rebuildHeightAllDerived(regenerate)
+    : scope === "base"
+      ? rebuildHeightBaseDerived(regenerate)
+      : rebuildHeightDownstreamDerived(regenerate);
   updateRegenerationSection(documentRef, result);
   updateHeightPanel(state);
   updateEditingInteractionLock(state, documentRef);
@@ -9548,6 +9560,7 @@ function rollbackCanvasToolStroke(state, kind) {
   const editState = state[`${kind}Edit`];
   const stroke = editState?.activeStroke;
   if (!stroke) return false;
+  if (kind === "height") cancelScheduledHeightBrush(state, state.renderer?.canvas?.ownerDocument);
   editState.activeStroke = null;
   releasePointer(state.renderer?.canvas, stroke.pointerId);
   if (!stroke.originals?.size || !state.map) return false;
@@ -10380,15 +10393,19 @@ function bindHeightEditing(canvas, state, documentRef) {
     if (state.heightEdit.terrainSelectionPaint?.pointerId === event.pointerId) {
       event.preventDefault();
       event.stopImmediatePropagation();
-      applyHeightSelectionPaintAtEvent(state, event, documentRef);
+      scheduleHeightSelectionPaintAtEvent(state, event, documentRef);
       return;
+    }
+    if (!state.heightEdit.activeStroke && brush?.active) {
+      state.pick = state.renderer.pickClientPoint(event.clientX, event.clientY);
+      updatePickPanel(documentRef, state);
     }
     if (state.heightEdit.terrainSelectionBox?.start) {
       updateHeightSelectionBoxPreview(documentRef, state.heightEdit.terrainSelectionBox.start, event.clientX, event.clientY);
       return;
     }
     if (!state.heightEdit.activeStroke && brush?.active && brush.action === "fill") {
-      updateHeightFillPreviewAtEvent(state, event, brush);
+      updateHeightFillPreviewAtEvent(state, event, brush, documentRef);
       return;
     }
     if (!state.heightEdit.activeStroke && brush?.active && brush.action === "line" && state.heightEdit.lineStart) {
@@ -10398,13 +10415,14 @@ function bindHeightEditing(canvas, state, documentRef) {
     if (!state.heightEdit.activeStroke || state.heightEdit.activeStroke.pointerId !== event.pointerId) return;
     event.preventDefault();
     event.stopImmediatePropagation();
-    applyHeightBrushAtEvent(state, event, documentRef);
+    scheduleHeightBrushAtEvent(state, event, documentRef);
   }, true);
 
   canvas.addEventListener("pointerup", event => {
     if (state.heightEdit.terrainSelectionPaint?.pointerId === event.pointerId) {
       event.preventDefault();
       event.stopImmediatePropagation();
+      flushScheduledHeightSelectionPaint(state, documentRef, event);
       finishHeightSelectionPaint(state, documentRef);
       releasePointer(canvas, event.pointerId);
       return;
@@ -10412,6 +10430,7 @@ function bindHeightEditing(canvas, state, documentRef) {
     if (!state.heightEdit.activeStroke || state.heightEdit.activeStroke.pointerId !== event.pointerId) return;
     event.preventDefault();
     event.stopImmediatePropagation();
+    flushScheduledHeightBrush(state, documentRef, event);
     finishHeightStroke(state, documentRef);
     releasePointer(canvas, event.pointerId);
     updateHeightPanel(state);
@@ -10419,6 +10438,7 @@ function bindHeightEditing(canvas, state, documentRef) {
 
   canvas.addEventListener("pointercancel", event => {
     if (state.heightEdit.terrainSelectionPaint?.pointerId === event.pointerId) {
+      cancelScheduledHeightSelectionPaint(state, documentRef);
       cancelHeightSelectionPaint(state);
       releasePointer(canvas, event.pointerId);
       updateHeightPanel(state);
@@ -10428,6 +10448,7 @@ function bindHeightEditing(canvas, state, documentRef) {
     if (!state.heightEdit.activeStroke || state.heightEdit.activeStroke.pointerId !== event.pointerId) return;
     event.preventDefault();
     event.stopImmediatePropagation();
+    cancelScheduledHeightBrush(state, documentRef);
     rollbackCanvasToolStroke(state, "height");
     releasePointer(canvas, event.pointerId);
     updateHeightPanel(state);
@@ -10435,6 +10456,10 @@ function bindHeightEditing(canvas, state, documentRef) {
 
   canvas.addEventListener("pointerleave", () => {
     const brush = state.panels.height?.getBrush();
+    if (!state.heightEdit.activeStroke && brush?.active) {
+      state.pick = null;
+      updatePickPanel(documentRef, state);
+    }
     if (state.heightEdit.activeStroke || !brush?.active || brush.action !== "fill") return;
     state.heightEdit.fillHoverCell = null;
     state.heightEdit.fillPreview = null;
@@ -10442,8 +10467,10 @@ function bindHeightEditing(canvas, state, documentRef) {
   }, true);
 }
 
-function updateHeightFillPreviewAtEvent(state, event, brush) {
+function updateHeightFillPreviewAtEvent(state, event, brush, documentRef) {
   const pick = state.renderer.pickClientPoint(event.clientX, event.clientY);
+  state.pick = pick;
+  updatePickPanel(documentRef, state);
   const gridCell = Number.isInteger(pick?.gridCell) && pick.gridCell >= 0 ? pick.gridCell : null;
   if (state.heightEdit.fillHoverCell === gridCell) return;
   state.heightEdit.fillHoverCell = gridCell;
@@ -10458,7 +10485,7 @@ function handleHeightLineClick(state, event, brush, documentRef) {
     state.heightEdit.lineStart = {point, clientX: event.clientX, clientY: event.clientY};
     state.heightEdit.lastNotice = "已选择线段起点，移动指针预览并单击终点。";
     updateHeightLinePreview(documentRef, state.heightEdit.lineStart, event.clientX, event.clientY);
-    updateHeightPanel(state);
+    updateHeightPanel(state, {includeMapSummary: false});
     return;
   }
 
@@ -10470,7 +10497,7 @@ function handleHeightLineClick(state, event, brush, documentRef) {
     state.heightEdit.lastAffected = 0;
     state.heightEdit.lastHeight = "none";
     state.heightEdit.lastDelta = "none";
-    updateHeightPanel(state);
+    updateHeightPanel(state, {includeMapSummary: false});
     return;
   }
 
@@ -10483,7 +10510,7 @@ function handleHeightLineClick(state, event, brush, documentRef) {
     refresh: refreshAfterEdit,
     refreshPanels: false
   });
-  updateHeightPanel(state);
+  updateHeightPanel(state, {includeMapSummary: false});
 }
 
 function updateHeightLinePreview(documentRef, start, clientX, clientY) {
@@ -10578,10 +10605,42 @@ function startHeightSelectionPaint(state, event, documentRef, canvas) {
   updateEditingInteractionLock(state, documentRef);
 }
 
+function scheduleHeightSelectionPaintAtEvent(state, event, documentRef) {
+  state.heightEdit.pendingSelectionPaintPointer = {pointerId: event.pointerId, clientX: event.clientX, clientY: event.clientY};
+  if (state.heightEdit.selectionPaintFrame) return;
+  const view = documentRef.defaultView;
+  const run = () => {
+    state.heightEdit.selectionPaintFrame = 0;
+    const pointer = state.heightEdit.pendingSelectionPaintPointer;
+    state.heightEdit.pendingSelectionPaintPointer = null;
+    if (!pointer || state.heightEdit.terrainSelectionPaint?.pointerId !== pointer.pointerId) return;
+    applyHeightSelectionPaintAtEvent(state, pointer, documentRef);
+  };
+  state.heightEdit.selectionPaintFrame = typeof view?.requestAnimationFrame === "function" ? view.requestAnimationFrame(run) : view?.setTimeout?.(run, 0) || 0;
+}
+
+function flushScheduledHeightSelectionPaint(state, documentRef, finalPointer = null) {
+  const pointer = state.heightEdit.pendingSelectionPaintPointer;
+  cancelScheduledHeightSelectionPaint(state, documentRef);
+  const resolvedPointer = finalPointer && state.heightEdit.terrainSelectionPaint?.pointerId === finalPointer.pointerId ? finalPointer : pointer;
+  if (resolvedPointer && state.heightEdit.terrainSelectionPaint?.pointerId === resolvedPointer.pointerId) applyHeightSelectionPaintAtEvent(state, resolvedPointer, documentRef);
+}
+
+function cancelScheduledHeightSelectionPaint(state, documentRef) {
+  const frame = state.heightEdit.selectionPaintFrame;
+  const view = documentRef?.defaultView;
+  if (frame && typeof view?.cancelAnimationFrame === "function") view.cancelAnimationFrame(frame);
+  else if (frame) view?.clearTimeout?.(frame);
+  state.heightEdit.selectionPaintFrame = 0;
+  state.heightEdit.pendingSelectionPaintPointer = null;
+}
+
 function applyHeightSelectionPaintAtEvent(state, event, documentRef) {
   const active = state.heightEdit.terrainSelectionPaint;
   if (!active) return;
   const pick = state.renderer.pickClientPoint(event.clientX, event.clientY);
+  state.pick = pick;
+  updatePickPanel(documentRef, state);
   const gridCell = Number.isInteger(pick?.gridCell) && pick.gridCell >= 0 ? pick.gridCell : null;
   const centerPoint = state.renderer.screenToWorld(event.clientX, event.clientY);
   if (gridCell === null || !Number.isFinite(centerPoint?.x) || !Number.isFinite(centerPoint?.y)) return;
@@ -10596,7 +10655,7 @@ function applyHeightSelectionPaintAtEvent(state, event, documentRef) {
   if (!stamp.summary.valid) {
     active.invalidNotice = stamp.summary.notice;
     state.heightEdit.lastNotice = stamp.summary.notice;
-    updateHeightPanel(state);
+    updateHeightPanel(state, {includeMapSummary: false});
     return;
   }
   const previousCount = active.candidateCellIds.size;
@@ -10613,7 +10672,7 @@ function applyHeightSelectionPaintAtEvent(state, event, documentRef) {
     active.invalidNotice = selection.summary.notice;
     restoreHeightTerrainSelectionBuffer(state);
     state.heightEdit.lastNotice = selection.summary.notice;
-    updateHeightPanel(state);
+    updateHeightPanel(state, {includeMapSummary: false});
     return;
   }
   active.previewSelection = selection;
@@ -10621,7 +10680,7 @@ function applyHeightSelectionPaintAtEvent(state, event, documentRef) {
   const feather = createHeightCellSelectionFeather(state.map, selection.cellIds, {rings: state.heightEdit.terrainSelectionFeather});
   const rendererPreview = state.renderer?.setHeightCellSelection?.(selection.cellIds, {weights: feather.summary.valid ? feather.weights : null}) || null;
   state.heightEdit.lastNotice = `画笔选区预览 ${selection.summary.count} cells（${active.stampCount} stamps${rendererPreview ? ` / GPU ${rendererPreview.triangleCount} triangles` : ""}）。`;
-  updateHeightPanel(state);
+  updateHeightPanel(state, {includeMapSummary: false});
 }
 
 function finishHeightSelectionPaint(state, documentRef) {
@@ -10672,7 +10731,10 @@ function cancelHeightSelectionPoint(state) {
 }
 
 function cancelHeightSelectionPaint(state) {
-  const hadPreview = Boolean(state.heightEdit.terrainSelectionPaint?.previewSelection);
+  const active = state.heightEdit.terrainSelectionPaint;
+  const hadPreview = Boolean(active?.previewSelection);
+  cancelScheduledHeightSelectionPaint(state, state.renderer?.canvas?.ownerDocument);
+  if (active) releasePointer(state.renderer?.canvas, active.pointerId);
   state.heightEdit.terrainSelectionPaintPending = null;
   state.heightEdit.terrainSelectionPaint = null;
   state.brushCursorPreview?.clear();
@@ -11519,11 +11581,46 @@ function labelObjectFromCustomLabel(label) {
   };
 }
 
-function applyHeightBrushAtEvent(state, event) {
+function scheduleHeightBrushAtEvent(state, event, documentRef) {
+  state.heightEdit.pendingBrushPointer = {pointerId: event.pointerId, clientX: event.clientX, clientY: event.clientY};
+  if (state.heightEdit.brushFrame) return;
+  const view = documentRef.defaultView;
+  const run = () => {
+    state.heightEdit.brushFrame = 0;
+    const pointer = state.heightEdit.pendingBrushPointer;
+    state.heightEdit.pendingBrushPointer = null;
+    if (!pointer || state.heightEdit.activeStroke?.pointerId !== pointer.pointerId) return;
+    applyHeightBrushAtEvent(state, pointer, documentRef);
+  };
+  state.heightEdit.brushFrame = typeof view?.requestAnimationFrame === "function" ? view.requestAnimationFrame(run) : view?.setTimeout?.(run, 0) || 0;
+}
+
+function flushScheduledHeightBrush(state, documentRef, finalPointer = null) {
+  const pointer = state.heightEdit.pendingBrushPointer;
+  cancelScheduledHeightBrush(state, documentRef);
+  const resolvedPointer = finalPointer && state.heightEdit.activeStroke?.pointerId === finalPointer.pointerId ? finalPointer : pointer;
+  if (resolvedPointer && state.heightEdit.activeStroke?.pointerId === resolvedPointer.pointerId) applyHeightBrushAtEvent(state, resolvedPointer, documentRef);
+}
+
+function cancelScheduledHeightBrush(state, documentRef) {
+  const frame = state.heightEdit.brushFrame;
+  const view = documentRef?.defaultView;
+  if (frame && typeof view?.cancelAnimationFrame === "function") view.cancelAnimationFrame(frame);
+  else if (frame) view?.clearTimeout?.(frame);
+  state.heightEdit.brushFrame = 0;
+  state.heightEdit.pendingBrushPointer = null;
+}
+
+function applyHeightBrushAtEvent(state, event, documentRef) {
   const brush = state.panels.height.getBrush();
   const stroke = state.heightEdit.activeStroke;
   if (!brush.active || !stroke) return;
 
+  if (Number.isFinite(stroke.lastClientX) && Math.hypot(event.clientX - stroke.lastClientX, event.clientY - stroke.lastClientY) < 1.5) return;
+  stroke.lastClientX = event.clientX;
+  stroke.lastClientY = event.clientY;
+
+  state.pick = state.renderer.pickClientPoint(event.clientX, event.clientY);
   const point = state.renderer.screenToWorld(event.clientX, event.clientY);
   const changes = getHeightBrushChanges(state.map, point, brush, stroke);
   if (!changes.length) {
@@ -11534,6 +11631,7 @@ function applyHeightBrushAtEvent(state, event) {
       state.heightEdit.lastNotice = stroke.notice || "未找到可填充的连通区域。";
       updateHeightPanel(state);
     }
+    updatePickPanel(documentRef, state);
     return;
   }
 
@@ -11542,8 +11640,8 @@ function applyHeightBrushAtEvent(state, event) {
   state.heightEdit.lastHeight = summarizeChangedHeights(changes);
   state.heightEdit.lastDelta = summarizeChangedHeightDelta(changes);
   state.heightEdit.lastNotice = stroke.notice || "";
-  state.editRefreshScheduler.run(EDIT_REFRESH_PRESETS.HEIGHT_BRUSH_PREVIEW);
-  updateHeightPanel(state);
+  state.editRefreshScheduler.run({...EDIT_REFRESH_PRESETS.HEIGHT_BRUSH_PREVIEW, changedGridCells: changes.map(change => change.gridCell)});
+  updatePickPanel(documentRef, state);
 }
 
 function applyStateBrushAtEvent(state, event) {
@@ -11956,8 +12054,8 @@ function provinceChange(cells, originals, gridCell, nextValue) {
   };
 }
 
-function updateHeightPanel(state) {
-  state.panels.height?.update({
+function updateHeightPanel(state, {includeMapSummary = true} = {}) {
+  const update = {
     lastAffected: state.heightEdit.lastAffected,
     lastHeight: state.heightEdit.lastHeight,
     lastDelta: state.heightEdit.lastDelta,
@@ -11966,14 +12064,18 @@ function updateHeightPanel(state) {
     terrainSelection: state.heightEdit.terrainSelection?.summary || null,
     terrainSelectionSaved: state.heightEdit.terrainSelectionSaved?.summary || null,
     terrainSelectionFeather: state.heightEdit.terrainSelectionFeather,
+    terrainSelectionPaintState: state.heightEdit.terrainSelectionPaint ? "painting" : state.heightEdit.terrainSelectionPaintPending ? "pending" : null,
     useTerrainSelection: Boolean(state.heightEdit.terrainSelection?.useForTools),
     graphWidth: state.options?.graphWidth,
     graphHeight: state.options?.graphHeight,
-    currentHeightStats: summarizeCurrentHeightStats(state.map),
-    currentHeightPreview: buildCurrentHeightPreview(state.map),
     derivedStaleSystems: heightDerivedStaleSystems(state.map),
     history: state.editHistory.getStats()
-  });
+  };
+  if (includeMapSummary) {
+    update.currentHeightStats = summarizeCurrentHeightStats(state.map);
+    update.currentHeightPreview = buildCurrentHeightPreview(state.map);
+  }
+  state.panels.height?.update(update);
 }
 
 function heightDerivedStaleSystems(map) {

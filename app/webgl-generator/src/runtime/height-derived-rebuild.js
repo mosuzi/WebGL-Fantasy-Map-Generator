@@ -39,6 +39,30 @@ export function rebuildHeightDownstreamDerived(regenerate) {
   });
 }
 
+export function rebuildHeightAllDerived(regenerate) {
+  const base = rebuildHeightBaseDerived(regenerate);
+  if (!base.executed) {
+    return {
+      action: "高度派生全链重建",
+      executed: false,
+      status: base.status,
+      constraint: "地貌与聚落重建未完成，已停止且未执行依赖它的世界内容重建。",
+      steps: base.steps
+    };
+  }
+
+  const downstream = rebuildHeightDownstreamDerived(regenerate);
+  return {
+    action: "高度派生全链重建",
+    executed: downstream.executed,
+    status: [base.status, downstream.status].filter(Boolean).join("；"),
+    constraint: downstream.executed
+      ? "已先重建地貌与聚落，再重建全部世界内容。"
+      : downstream.constraint,
+    steps: [...base.steps, ...downstream.steps]
+  };
+}
+
 function rebuildHeightDerivedSteps(regenerate, orderedSteps, {action, successConstraint}) {
   if (typeof regenerate !== "function") throw new Error("高度派生重建缺少 regenerate 回调");
   const steps = [];

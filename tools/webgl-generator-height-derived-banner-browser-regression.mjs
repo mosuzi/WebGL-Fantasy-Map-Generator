@@ -52,9 +52,8 @@ try {
   const banner = panel.locator('.height-derived-banner[data-ui-state="stale"]');
   await banner.waitFor({state: "visible"});
   await banner.getByText("地图内容待更新", {exact: true}).waitFor();
-  await banner.getByText("可继续编辑，完成后再统一更新。", {exact: true}).waitFor();
-  await banner.getByRole("button", {name: "更新地形关联", exact: true}).waitFor();
-  await banner.getByRole("button", {name: "更新后续内容", exact: true}).waitFor();
+  await banner.getByText("完成后统一更新。", {exact: true}).waitFor();
+  await banner.getByRole("button", {name: "完成编辑并更新地图", exact: true}).waitFor();
 
   const layout = await banner.evaluate(node => {
     const copy = node.querySelector(".ui-state-banner-copy");
@@ -75,9 +74,9 @@ try {
     };
   });
 
-  assert.ok(layout.copy.bottom <= layout.actions.top + 0.5, "提示文案与操作按钮发生重叠");
+  assert.ok(!rectanglesOverlap(layout.copy, layout.actions), "提示文案与操作按钮发生重叠");
   assert.ok(layout.buttons.every(button => button.left >= layout.banner.left && button.right <= layout.banner.right + 0.5), "按钮超出待更新提示边界");
-  assert.ok(!rectanglesOverlap(layout.buttons[0], layout.buttons[1]), "两个更新按钮发生重叠");
+  assert.equal(layout.buttons.length, 1, "普通高度面板仍显示多个更新按钮");
   assert.ok(layout.scrollWidth <= layout.clientWidth + 1, "待更新提示产生横向溢出");
   assert.doesNotMatch(layout.text, /待派生|\d+\s*项：|宗教、|标记、|地区等/, "待更新提示仍暴露派生调试信息");
   assert.deepEqual(consoleErrors, []);

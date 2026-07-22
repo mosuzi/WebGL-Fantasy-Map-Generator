@@ -49,7 +49,7 @@ function testProjection() {
 function testResolverAllowlist() {
   let modeId = "height:brush";
   const brushes = {
-    height: {active: true, action: "raise", radius: 28},
+    height: {active: true, action: "raise", radius: 28, falloff: true},
     state: {active: true, radius: 28},
     province: {active: true, radius: 28},
     culture: {active: true, radius: 28},
@@ -74,6 +74,7 @@ function testResolverAllowlist() {
   for (const action of ["raise", "lower", "smooth", "flatten", "disrupt"]) {
     brushes.height.action = action;
     assert.equal(resolveBrushCursor(state)?.id, BRUSH_RADIUS_ID.HEIGHT, `高度 ${action} 未显示半径`);
+    assert.equal(resolveBrushCursor(state)?.falloff, true, `高度 ${action} 未携带柔和画笔状态`);
   }
   for (const action of ["fill", "line"]) {
     brushes.height.action = action;
@@ -154,7 +155,7 @@ async function testOverlayLifecycleAndIntegration() {
     editHistory: {undo: 2, redo: 0},
     canvasToolModes: {getActive: () => ({id: modeId})},
     heightEdit: {terrainSelectionPaint: null, terrainSelectionPaintPending: null},
-    panels: {height: {getBrush: () => ({active: true, action: "raise", radius: 28})}},
+    panels: {height: {getBrush: () => ({active: true, action: "raise", radius: 28, falloff: true})}},
     renderer: {
       screenToWorld: (clientX, clientY) => ({x: (clientX - 10) / scale, y: (clientY - 20) / scale}),
       worldToScreen: (x, y) => ({x: x * scale, y: y * scale})
@@ -168,15 +169,19 @@ async function testOverlayLifecycleAndIntegration() {
   assert.equal(preview.ellipse.getAttribute("pointer-events"), "none", "ellipse 会接收事件");
   assert.equal(preview.svg.listenerCount(), 0, "SVG overlay 注册了事件监听");
   assert.equal(preview.ellipse.listenerCount(), 0, "ellipse 注册了事件监听");
+  assert.equal(preview.svg.dataset.falloff, "true", "柔和画笔光标没有暴露衰减状态");
+  assert.match(preview.ellipse.style.fill, /^url\(#height-brush-cursor-falloff-/, "柔和画笔光标没有使用径向渐变");
   assert.equal(JSON.stringify({map: state.map, selection: state.selection, editHistory: state.editHistory}), before, "纯悬停修改了地图、选中态或历史");
 
   const radiusAtOne = Number(preview.ellipse.getAttribute("rx"));
   scale = 2;
   preview.refresh();
   assert.ok(Math.abs(Number(preview.ellipse.getAttribute("rx")) - radiusAtOne * 2) <= 2, "相机缩放后未原位重投影");
-  state.panels.height.getBrush = () => ({active: true, action: "raise", radius: 40});
+  state.panels.height.getBrush = () => ({active: true, action: "raise", radius: 40, falloff: false});
   documentRef.dispatch("input", {});
   assert.ok(Number(preview.ellipse.getAttribute("rx")) > radiusAtOne * 2, "滑杆变化后未原位重投影");
+  assert.equal(preview.svg.dataset.falloff, "false", "均匀画笔光标没有暴露关闭衰减状态");
+  assert.equal(preview.ellipse.style.fill, "rgba(255, 224, 161, 0.12)", "均匀画笔光标没有恢复均匀填充");
 
   modeId = "measurement:draw";
   documentRef.dispatch("click", {});
@@ -227,6 +232,7 @@ class FakeElement extends FakeTarget {
     this.name = name;
     this.attributes = new Map();
     this.dataset = {};
+    this.style = {};
     this.children = [];
     this.hidden = false;
     this.classList = {add: value => this.attributes.set("class", value)};

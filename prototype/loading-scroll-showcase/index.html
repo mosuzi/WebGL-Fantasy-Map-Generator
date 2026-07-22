@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="dark" />
+    <title>古代画卷加载页概念稿</title>
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="./src/styles.css" />
+  </head>
+  <body>
+    <main
+      class="showcase-root is-replaying"
+      id="showcase-root"
+      data-mode="normal"
+    >
+      <div class="ambient ambient-left" aria-hidden="true"></div>
+      <div class="ambient ambient-right" aria-hidden="true"></div>
+
+      <header class="showcase-heading" aria-label="概念稿说明">
+        <span class="prototype-mark">独立概念稿</span>
+        <span>古代画卷加载页 · 文字视觉深化</span>
+      </header>
+
+      <section class="scroll-stage" aria-label="画卷加载页预览">
+        <div class="scroll-shadow" aria-hidden="true"></div>
+        <div class="paper-window">
+          <div class="scroll-mount">
+            <div class="paper-sheet">
+              <svg class="landscape landscape-far" viewBox="0 0 1200 520" preserveAspectRatio="none" aria-hidden="true">
+                <defs>
+                  <linearGradient id="distant-mist" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0" stop-color="#7f9488" stop-opacity=".05" />
+                    <stop offset="1" stop-color="#294038" stop-opacity=".23" />
+                  </linearGradient>
+                </defs>
+                <circle cx="968" cy="94" r="58" fill="#aa6348" opacity=".12" />
+                <path d="M0 365c114-68 189-88 273-58 73 26 120 7 182-46 79-68 140-68 224 2 66 55 116 55 201-5 101-71 188-56 320 56v206H0Z" fill="url(#distant-mist)" />
+                <path d="M50 370c92-46 152-104 215-172 14 73 48 116 111 170m190-25c70-134 124-213 178-267 11 115 50 205 129 291m57-19c57-79 96-126 145-162 4 77 31 134 92 190" fill="none" stroke="#263d35" stroke-width="12" stroke-linecap="round" stroke-linejoin="round" opacity=".13" />
+              </svg>
+
+              <svg class="landscape landscape-mid" viewBox="0 0 1200 520" preserveAspectRatio="none" aria-hidden="true">
+                <path d="M0 422c124-31 231-21 329 19 105 43 207 31 321-30 154-82 326-72 550 23v86H0Z" fill="#536b5e" opacity=".14" />
+                <path d="M0 440c137-38 250-24 347 16 120 49 232 25 349-33 139-69 288-64 504 27" fill="none" stroke="#20362f" stroke-width="7" opacity=".22" />
+                <path d="M95 165c23-21 47-21 71 0m764-29c29-23 58-23 86 1M410 104c17-16 35-16 52 0" fill="none" stroke="#283b34" stroke-width="4" stroke-linecap="round" opacity=".34" />
+              </svg>
+
+              <svg class="landscape landscape-near" viewBox="0 0 1200 520" preserveAspectRatio="none" aria-hidden="true">
+                <path d="M0 476c129-28 240-13 342 19 114 36 205 23 315-16 159-56 326-52 543 8v33H0Z" fill="#273f36" opacity=".2" />
+                <path d="M104 452c33-60 50-103 54-151 29 52 36 99 24 142m62 14c12-55 35-91 68-120 5 52-3 91-26 121m730 9c18-58 42-99 77-123 0 52-8 92-30 125" fill="none" stroke="#21382f" stroke-width="8" opacity=".26" />
+              </svg>
+
+              <div class="paper-mist mist-one" aria-hidden="true"></div>
+              <div class="paper-mist mist-two" aria-hidden="true"></div>
+              <div class="paper-patina" aria-hidden="true"></div>
+
+              <div class="title-cartouche">
+                <p class="title-eyebrow">舆图演算</p>
+                <h1 class="main-title" id="showcase-title" data-title="架空地图生成器">架空地图生成器</h1>
+                <svg class="brush-line" viewBox="0 0 420 24" preserveAspectRatio="none" aria-hidden="true">
+                  <path d="M7 13c80-5 151-5 216-2 67 3 126 2 190-5-45 10-91 14-139 13-91-2-178-6-267-6Z" />
+                </svg>
+                <p class="title-subline">铺陈山河 <span aria-hidden="true">·</span> 推演万邦</p>
+                <div class="domain-tags" aria-label="内容范围">
+                  <span>山川</span><span>郡国</span><span>城邑</span><span>风物</span>
+                </div>
+              </div>
+
+              <svg class="seal" viewBox="0 0 800 800" role="img" aria-label="阴刻印章：莫苏子印">
+                <defs>
+                  <filter id="seal-ink-cutout" color-interpolation-filters="sRGB">
+                    <feColorMatrix
+                      type="matrix"
+                      values="0 0 0 0 0.588
+                              0 0 0 0 0.22
+                              0 0 0 0 0.176
+                              2 -1 -1 0 0"
+                    />
+                  </filter>
+                </defs>
+                <image
+                  class="seal-source"
+                  href="./assets/mosuzi-seal.png"
+                  width="800"
+                  height="800"
+                  preserveAspectRatio="xMidYMid meet"
+                  filter="url(#seal-ink-cutout)"
+                />
+              </svg>
+
+              <div class="version-plaque" aria-label="版本 v0.1.0">
+                <span>卷次</span>
+                <b>v0.1.0</b>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <span class="paper-roll roller roller-left" aria-hidden="true"><i></i></span>
+        <span class="paper-roll roller roller-right" aria-hidden="true"><i></i></span>
+      </section>
+
+      <section class="loading-copy" role="status" aria-live="polite" aria-atomic="true" aria-labelledby="showcase-title" aria-describedby="showcase-status">
+        <div class="progress-ornament" aria-hidden="true"><i id="progress-line"></i></div>
+        <p class="stage-kicker" id="stage-kicker">卷一 · 开卷</p>
+        <p class="stage-copy" id="showcase-status">启封舆图，静候山河舒展</p>
+        <div class="ink-dots" aria-hidden="true"><i></i><i></i><i></i></div>
+      </section>
+
+      <nav class="preview-controls" aria-label="概念稿预览控制">
+        <button type="button" id="replay-button">重新展开</button>
+        <button type="button" id="next-copy-button">下一文案</button>
+        <button type="button" id="error-button" aria-pressed="false">错误态</button>
+        <button type="button" id="static-button" aria-pressed="false">静态终态</button>
+      </nav>
+    </main>
+
+    <script type="module" src="./src/app.js"></script>
+  </body>
+</html>

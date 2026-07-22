@@ -54,6 +54,7 @@ export function createHeightPanel(documentRef, manager, callbacks = {}) {
     terrainSelection: null,
     terrainSelectionSaved: null,
     terrainSelectionFeather: 0,
+    terrainSelectionPaintState: null,
     useTerrainSelection: false,
     falloff: true,
     lastAffected: 0,
@@ -107,7 +108,8 @@ export function createHeightPanel(documentRef, manager, callbacks = {}) {
     onSeafloorResetApply: () => callbacks.onSeafloorResetApply?.(),
     onRegenerateRivers: () => callbacks.onRegenerateRivers?.(),
     onRegenerateBase: () => callbacks.onRegenerateBase?.(),
-    onRegenerateDownstream: () => callbacks.onRegenerateDownstream?.()
+    onRegenerateDownstream: () => callbacks.onRegenerateDownstream?.(),
+    onRegenerateAll: () => callbacks.onRegenerateAll?.()
   };
 
   const record = manager.registerPanel("height-panel", {
@@ -327,6 +329,7 @@ export function createHeightPanel(documentRef, manager, callbacks = {}) {
       terrainSelection = panelState.terrainSelection,
       terrainSelectionSaved = panelState.terrainSelectionSaved,
       terrainSelectionFeather = panelState.terrainSelectionFeather,
+      terrainSelectionPaintState = panelState.terrainSelectionPaintState,
       useTerrainSelection = panelState.useTerrainSelection,
       graphWidth = panelState.graphWidth,
       graphHeight = panelState.graphHeight,
@@ -348,6 +351,7 @@ export function createHeightPanel(documentRef, manager, callbacks = {}) {
       panelState.terrainSelection = cloneTerrainSelection(terrainSelection);
       panelState.terrainSelectionSaved = cloneTerrainSelection(terrainSelectionSaved);
       panelState.terrainSelectionFeather = Math.max(0, Math.min(8, Math.trunc(Number(terrainSelectionFeather) || 0)));
+      panelState.terrainSelectionPaintState = terrainSelectionPaintState === "painting" ? "painting" : terrainSelectionPaintState === "pending" ? "pending" : null;
       panelState.useTerrainSelection = Boolean(useTerrainSelection && terrainSelection?.valid);
       panelState.graphWidth = graphWidth;
       panelState.graphHeight = graphHeight;

@@ -913,8 +913,25 @@ select:disabled {
   width: 34px;
   min-width: 34px;
   padding: 0;
-  font-size: 22px;
-  line-height: 1;
+}
+
+.map-toolbar-chevron {
+  display: block;
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+  overflow: visible;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  pointer-events: none;
+  transform-origin: 8px 8px;
+}
+
+.map-toolbar-chevron-expand {
+  transform: rotate(180deg);
 }
 
 .map-toolbar-edge-trigger {
@@ -930,8 +947,6 @@ select:disabled {
   box-shadow: 0 10px 28px rgba(2, 6, 23, 0.28);
   color: #ffe0a1;
   cursor: pointer;
-  font-size: 22px;
-  line-height: 1;
   opacity: 0.46;
   transition: width 140ms ease, opacity 140ms ease, background-color 140ms ease;
 }
@@ -3128,6 +3143,55 @@ select:disabled {
   color: #ffe0a1;
 }
 
+.height-player-tool-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.segmented.height-player-falloff-mode {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin: 10px 0;
+}
+
+.segmented.height-player-falloff-mode button {
+  min-height: 30px;
+  font-size: 12px;
+}
+
+.segmented.height-player-falloff-mode button.active {
+  border-color: rgba(215, 168, 79, 0.78);
+  background: linear-gradient(180deg, #3a2f18 0%, #241d10 100%);
+  color: #ffe0a1;
+}
+
+.height-player-tool-button.ui-icon-action.el-button {
+  width: 38px;
+  height: 38px;
+  min-width: 38px;
+}
+
+.height-player-tool-state {
+  min-width: 0;
+  margin-left: 2px;
+  color: #cbd7dc;
+  font-size: 12px;
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.height-player-operation-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
 .height-control-label {
   margin: 8px 0 5px;
   color: #9eacb4;
@@ -3215,6 +3279,29 @@ select:disabled {
 
 .height-player-smoothing .height-action-help {
   margin: 0;
+}
+
+.height-seafloor-reset > summary {
+  cursor: pointer;
+  list-style-position: inside;
+}
+
+.height-seafloor-reset[open] > summary {
+  margin-bottom: 8px;
+}
+
+.vue-height-panel-root .ui-slider-field {
+  grid-template-columns: max-content minmax(40px, 1fr) 76px;
+  column-gap: 6px;
+}
+
+.vue-height-panel-root .ui-slider-field-has-unit {
+  grid-template-columns: max-content minmax(40px, 1fr) 76px max-content;
+}
+
+.vue-height-panel-root .ui-slider-field > span:first-child,
+.vue-height-panel-root .ui-slider-unit {
+  white-space: nowrap;
 }
 
 .ocean-current-panel-controls,
@@ -4600,6 +4687,9 @@ select:disabled {
 .height-derived-banner {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
+  gap: 6px;
+  margin: 4px 0 7px;
+  padding: 6px 7px;
 }
 
 .height-derived-banner .ui-state-token {
@@ -4610,6 +4700,16 @@ select:disabled {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 132px), 1fr));
   width: 100%;
+}
+
+.height-derived-banner:not(.is-debug) {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+}
+
+.height-derived-banner:not(.is-debug) .ui-state-banner-actions {
+  display: flex;
+  width: auto;
 }
 
 .height-derived-banner .ui-state-banner-actions .el-button {

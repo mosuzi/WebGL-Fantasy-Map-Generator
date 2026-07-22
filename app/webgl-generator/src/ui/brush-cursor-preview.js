@@ -2,6 +2,7 @@ import {BRUSH_RADIUS_ID, normalizeBrushRadius, projectWorldRadiusToScreen} from 
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 const HEIGHT_BRUSH_ACTIONS = new Set(["raise", "lower", "smooth", "flatten", "disrupt"]);
+let cursorGradientSequence = 0;
 
 export function resolveBrushCursor(state) {
   const modeId = state?.canvasToolModes?.getActive?.()?.id || null;
@@ -10,7 +11,7 @@ export function resolveBrushCursor(state) {
     if (paint?.request) return radiusResolution(BRUSH_RADIUS_ID.HEIGHT_SELECTION, paint.request.radius);
     if (state.heightEdit?.terrainSelectionBox || state.heightEdit?.terrainSelectionPoint) return null;
     const brush = state.panels?.height?.getBrush?.();
-    if (brush?.active && HEIGHT_BRUSH_ACTIONS.has(brush.action)) return radiusResolution(BRUSH_RADIUS_ID.HEIGHT, brush.radius);
+    if (brush?.active && HEIGHT_BRUSH_ACTIONS.has(brush.action)) return radiusResolution(BRUSH_RADIUS_ID.HEIGHT, brush.radius, brush.falloff);
     return null;
   }
   if (modeId === "state:brush") return panelResolution(state.panels?.state, "getBrush", BRUSH_RADIUS_ID.STATE);
@@ -30,10 +31,18 @@ export function createBrushCursorPreview(canvas, state, documentRef) {
   svg.setAttribute("focusable", "false");
   svg.setAttribute("pointer-events", "none");
   setOverlayVisible(svg, false);
+  const gradientId = `height-brush-cursor-falloff-${++cursorGradientSequence}`;
+  const defs = documentRef.createElementNS(SVG_NS, "defs");
+  const gradient = documentRef.createElementNS(SVG_NS, "radialGradient");
+  gradient.id = gradientId;
+  appendGradientStop(documentRef, gradient, "0%", "0.24");
+  appendGradientStop(documentRef, gradient, "68%", "0.1");
+  appendGradientStop(documentRef, gradient, "100%", "0");
+  defs.append(gradient);
   const ellipse = documentRef.createElementNS(SVG_NS, "ellipse");
   ellipse.setAttribute("vector-effect", "non-scaling-stroke");
   ellipse.setAttribute("pointer-events", "none");
-  svg.append(ellipse);
+  svg.append(defs, ellipse);
   documentRef.body.append(svg);
 
   let pointer = null;
@@ -58,6 +67,8 @@ export function createBrushCursorPreview(canvas, state, documentRef) {
     ellipse.setAttribute("ry", String(projection.radiusY));
     svg.dataset.radiusId = resolution.id;
     svg.dataset.worldRadius = String(resolution.radius);
+    svg.dataset.falloff = resolution.falloff ? "true" : "false";
+    ellipse.style.fill = resolution.falloff ? `url(#${gradientId})` : "rgba(255, 224, 161, 0.12)";
     setOverlayVisible(svg, true);
     return projection;
   };
@@ -92,6 +103,7 @@ export function createBrushCursorPreview(canvas, state, documentRef) {
     setOverlayVisible(svg, false);
     delete svg.dataset.radiusId;
     delete svg.dataset.worldRadius;
+    delete svg.dataset.falloff;
     return null;
   }
 
@@ -118,8 +130,18 @@ function panelResolution(panel, getter, id) {
   return brush?.active ? radiusResolution(id, brush.radius) : null;
 }
 
-function radiusResolution(id, radius) {
-  return {id, radius: normalizeBrushRadius(id, radius)};
+function radiusResolution(id, radius, falloff = false) {
+  const resolution = {id, radius: normalizeBrushRadius(id, radius)};
+  if (arguments.length >= 3) resolution.falloff = Boolean(falloff);
+  return resolution;
+}
+
+function appendGradientStop(documentRef, gradient, offset, opacity) {
+  const stop = documentRef.createElementNS(SVG_NS, "stop");
+  stop.setAttribute("offset", offset);
+  stop.setAttribute("stop-color", "#ffe0a1");
+  stop.setAttribute("stop-opacity", opacity);
+  gradient.append(stop);
 }
 
 function setOverlayVisible(svg, visible) {

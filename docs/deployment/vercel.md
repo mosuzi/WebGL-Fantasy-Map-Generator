@@ -31,6 +31,15 @@ pnpm run preview
 | 正式 WebGL 地图生成器 | `/` |
 | WebGL cells 历史原型 | `/prototype/webgl-cells/` |
 | 共享边界拓扑实验室 | `/prototype/boundary-topology-lab/` |
+| 画卷加载页文字视觉概念稿 | `/prototype/loading-scroll-showcase/` |
+
+当前生产自定义域名为 `https://fmg.mosuzi.top`。已有两个原型可直接访问，第 169 项概念稿随包含该代码的下一次 Vercel 部署进入第三条路径：
+
+- [WebGL cells 历史原型](https://fmg.mosuzi.top/prototype/webgl-cells/)
+- [共享边界拓扑实验室](https://fmg.mosuzi.top/prototype/boundary-topology-lab/)
+- [画卷加载页文字视觉概念稿](https://fmg.mosuzi.top/prototype/loading-scroll-showcase/)（下次部署后生效）
+
+Vercel 默认域名 `https://fmg-gl.vercel.app` 同样使用上述相对路径，作为备用入口。2026-07-22 已实测自定义域名与默认域名的前两个原型、WebGL 样本 JSON 和拓扑实验室主模块均返回 `200`；概念稿当前只完成本地生产产物验证，不能在代码推送和部署前宣称线上已生效。
 
 Vercel 会把不带尾斜杠的 `/prototype/<目录名>` 临时重定向到带尾斜杠入口，保证原型内的 `./src/`、`./data/` 等相对地址仍从自身目录解析。prototype 目录入口随后改写到对应 `index.html`；其它真实静态文件由 Vercel 的文件系统优先规则直接提供，最后的正式应用 SPA fallback 不会吞掉原型模块、样式或数据文件。该顺序依据 Vercel 官方说明：高层 `rewrites` 默认先检查文件系统，通配 fallback 应置于末尾；参见[项目配置](https://vercel.com/docs/project-configuration/vercel-json)和[Vite 部署说明](https://vercel.com/docs/frameworks/frontend/vite)。
 
@@ -40,8 +49,8 @@ Vercel 会把不带尾斜杠的 `/prototype/<目录名>` 临时重定向到带�
 2. Root Directory 保持仓库根目录。
 3. 保留 `vercel.json` 中的构建设置；控制台里不需要手动改 Root Directory。
 4. 当前应用不需要环境变量。
-5. 首次部署后访问 Vercel 给出的 Preview URL，确认根路径显示 `Mosuzi's Fantasy Map Generator` 加载页并能完成初始生成。
-6. 分别打开 `/prototype/webgl-cells/` 与 `/prototype/boundary-topology-lab/`，确认原型页面和关键数据 / 模块能直接加载。
+5. 首次部署后访问 Vercel 给出的 Preview URL，确认根路径显示从中央向两侧展开的中国古代画卷加载页，卷面包含“莫苏子”“架空地图生成器”和当前版本号，并能完成初始生成。
+6. 分别打开 `/prototype/webgl-cells/`、`/prototype/boundary-topology-lab/` 与 `/prototype/loading-scroll-showcase/`，确认原型页面和关键数据 / 模块能直接加载。
 
 ## 本地验证
 
@@ -59,6 +68,9 @@ dist/webgl-generator/index.html
 dist/webgl-generator/prototype/webgl-cells/index.html
 dist/webgl-generator/prototype/webgl-cells/data/sample-map.json
 dist/webgl-generator/prototype/boundary-topology-lab/index.html
+dist/webgl-generator/prototype/loading-scroll-showcase/index.html
+dist/webgl-generator/prototype/loading-scroll-showcase/src/app.js
+dist/webgl-generator/prototype/loading-scroll-showcase/src/styles.css
 ```
 
 当前构建仍会出现既有的 `@vueuse/core` pure annotation 和 chunk size warning；它们来自第三方依赖与当前 bundle 体积提示，不会阻断部署。

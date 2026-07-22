@@ -1,10 +1,15 @@
 export function inspectHeightSelectionSmoothing(map, options = {}) {
-  const {changes, ...inspection} = analyzeHeightSelectionSmoothing(map, options);
-  return inspection;
+  return createHeightSelectionSmoothingPlan(map, options).inspection;
 }
 
 export function getHeightSelectionSmoothingChanges(map, options = {}) {
-  return analyzeHeightSelectionSmoothing(map, options).changes;
+  return createHeightSelectionSmoothingPlan(map, options).changes;
+}
+
+export function createHeightSelectionSmoothingPlan(map, options = {}) {
+  const analyzed = analyzeHeightSelectionSmoothing(map, options);
+  const {changes, ...inspection} = analyzed;
+  return {inspection, changes};
 }
 
 function analyzeHeightSelectionSmoothing(map, {cellIds = [], smoothness = 0} = {}) {

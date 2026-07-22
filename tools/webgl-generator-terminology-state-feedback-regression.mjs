@@ -63,8 +63,8 @@ assert(heightPanelSource.includes("onPreviewCancel"), "高度面板桥接缺少�
 assert(appSource.includes("onPreviewCancel") && appSource.includes("clearHeightTransformPreview(state)"), "高度运行时没有清理全部预览");
 assert(namebaseSource.includes('data-ui-state="preview"'), "名称库导入预览没有共享预览状态");
 
-assert(heightSource.includes('kind="stale"') && heightSource.includes("重算基础派生") && heightSource.includes("重算下游派生"), "待派生状态缺少稳定恢复动作");
-for (const signature of ['class="height-derived-banner"', 'title="地图内容待更新"', 'message="可继续编辑，完成后再统一更新。"', 'action-label="更新后续内容"', 'secondary-action-label="更新地形关联"']) {
+assert(heightSource.includes('kind="stale"') && heightSource.includes("重建地貌与聚落") && heightSource.includes("重建世界内容"), "调试模式待派生状态缺少稳定分步恢复动作");
+for (const signature of ['class="height-derived-banner"', 'title="地图内容待更新"', "完成后统一更新。", "完成编辑并更新地图"]) {
   assert(heightSource.includes(signature), `高度待更新提示缺少简化契约：${signature}`);
 }
 assert(!heightSource.includes("formatDerivedUpdateHint"), "高度待更新提示仍展开内部派生系统");

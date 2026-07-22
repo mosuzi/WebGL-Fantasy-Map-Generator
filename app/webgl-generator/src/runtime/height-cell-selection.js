@@ -1,4 +1,5 @@
 import {BRUSH_RADIUS_ID, normalizeBrushRadius} from "./brush-radius-contract.js";
+import {queryHeightCellsInRadius} from "./height-cell-spatial-index.js";
 
 export function createHeightCellSelection(map, options = {}) {
   const heights = map?.grid?.cells?.h;
@@ -54,18 +55,12 @@ export function createHeightCursorRadiusSelection(map, centerCell, options = {})
   const centerPoint = normalizePoint(options.centerPoint) || normalizePoint(points[cells.p[normalizedCenter]]);
   if (!centerPoint) return {cellIds: new Uint32Array(), summary: {...base, notice: "当前光标 cell 缺少点位，无法生成圆形选区。"}};
 
-  const radiusSq = radius * radius;
   const cellIds = [];
   let minHeight = Infinity;
   let maxHeight = -Infinity;
-  for (let gridCell = 0; gridCell < cells.h.length; gridCell++) {
+  for (const {gridCell} of queryHeightCellsInRadius(map, centerPoint, radius)) {
     const height = Number(cells.h[gridCell]) || 0;
     if (!matchesScope(height, scope)) continue;
-    const point = points[cells.p[gridCell]];
-    if (!point) continue;
-    const dx = point[0] - centerPoint.x;
-    const dy = point[1] - centerPoint.y;
-    if (dx * dx + dy * dy > radiusSq) continue;
     cellIds.push(gridCell);
     if (cellIds.length > maxCells) {
       return {cellIds: new Uint32Array(), summary: {...base, notice: `光标圆形选区超过安全上限 ${maxCells} cells，已拒绝。`}};

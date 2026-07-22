@@ -15,7 +15,14 @@
         title="收起全局工具"
         @click="setCollapsed(true)"
       >
-        <span aria-hidden="true">‹</span>
+        <svg
+          class="map-toolbar-chevron map-toolbar-chevron-collapse"
+          viewBox="0 0 16 16"
+          aria-hidden="true"
+          focusable="false"
+        >
+          <path d="M10 3.5 5.5 8l4.5 4.5" />
+        </svg>
       </UiButton>
     </div>
     <button
@@ -29,7 +36,14 @@
       title="展开全局工具"
       @click="setCollapsed(false)"
     >
-      <span aria-hidden="true">›</span>
+      <svg
+        class="map-toolbar-chevron map-toolbar-chevron-expand"
+        viewBox="0 0 16 16"
+        aria-hidden="true"
+        focusable="false"
+      >
+        <path d="M10 3.5 5.5 8l4.5 4.5" />
+      </svg>
     </button>
   </div>
 </template>

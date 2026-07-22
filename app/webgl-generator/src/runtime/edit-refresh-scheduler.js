@@ -49,7 +49,9 @@ export const EDIT_REFRESH_PRESETS = Object.freeze({
 export function createEditRefreshScheduler({state, documentRef, updateRuntimePanel, updatePickPanel, applyVisualTheme}) {
   return {
     run(commandOrEffects = null) {
-      const effects = normalizeEditEffects(commandOrEffects?.effects || commandOrEffects);
+      const sourceEffects = commandOrEffects?.effects || commandOrEffects;
+      const effects = normalizeEditEffects(sourceEffects);
+      const changedGridCells = normalizeChangedGridCells(sourceEffects?.changedGridCells);
       state.lastEditRefresh = summarizeEditRefresh(effects);
       invalidateRendererBuffers(state.renderer, effects);
 
@@ -77,7 +79,9 @@ export function createEditRefreshScheduler({state, documentRef, updateRuntimePan
         state.renderer.refreshObjectPickingIndex();
       }
 
-      if (effects.derived.includes("cell-colors") && typeof state.renderer.refreshCellSurface === "function") {
+      if (effects.derived.includes("cell-colors") && changedGridCells.length && typeof state.renderer.refreshHeightCells === "function") {
+        state.renderer.refreshHeightCells(changedGridCells);
+      } else if (effects.derived.includes("cell-colors") && typeof state.renderer.refreshCellSurface === "function") {
         state.renderer.refreshCellSurface();
       } else if (effects.render === "draw") {
         state.renderer.draw();
@@ -102,6 +106,11 @@ export function createEditRefreshScheduler({state, documentRef, updateRuntimePan
       return state.lastEditRefresh;
     }
   };
+}
+
+function normalizeChangedGridCells(values) {
+  if (!Array.isArray(values)) return [];
+  return [...new Set(values.map(Number).filter(cell => Number.isInteger(cell) && cell >= 0))].sort((a, b) => a - b);
 }
 
 function invalidateRendererBuffers(renderer, effects) {

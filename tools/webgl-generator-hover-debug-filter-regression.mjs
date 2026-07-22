@@ -57,5 +57,10 @@ const panelSource = fs.readFileSync(new URL("../app/webgl-generator/src/ui/panel
 const appSource = fs.readFileSync(new URL("../app/webgl-generator/src/runtime/app.js", import.meta.url), "utf8");
 assert.match(panelSource, /addEventListener\("webgl-generator-debug-change", \(\) => handlers\.onDebugModeChange\?\.\(\)\)/);
 assert.match(appSource, /onDebugModeChange: \(\) => updatePickPanel\(documentRef, state\)/);
+assert.match(panelSource, /const forcedHeightCell = heightBrush\?\.active/);
+assert.match(panelSource, /preferences\.showHoverInfo !== false \|\| forcedHeightCell !== null/);
+assert.match(panelSource, /label: "画笔落点", value: formatDisplayHeight/);
+assert.match(appSource, /onActiveChange: active => \{[\s\S]*?updatePickPanel\(documentRef, state\);/);
+assert.match(appSource, /if \(!state\.heightEdit\.activeStroke && brush\?\.active\) \{\s*state\.pick = state\.renderer\.pickClientPoint\(event\.clientX, event\.clientY\);\s*updatePickPanel\(documentRef, state\);/);
 
-console.log("悬停面板调试过滤回归通过：普通模式仅保留玩家信息，调试模式恢复诊断且切换即时刷新。");
+console.log("悬停面板调试过滤回归通过：普通模式仅保留玩家信息，调试模式恢复诊断，高度编辑可临时强制显示落点高度。");

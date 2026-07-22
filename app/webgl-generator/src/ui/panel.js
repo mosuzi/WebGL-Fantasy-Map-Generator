@@ -8,6 +8,7 @@ import {windDirectionLabelFromAngle} from "../generator/climate-options.js";
 import {listBiomeDescriptors} from "../generator/biome-registry.js";
 import {
   formatDistance as formatDisplayDistance,
+  formatHeight as formatDisplayHeight,
   formatMilitary as formatDisplayMilitary,
   mapUnitsToKm,
   formatNumber as formatDisplayNumber,
@@ -937,7 +938,9 @@ function updateHoverOverlay(documentRef, pick, state) {
   const overlay = documentRef.getElementById("hover-overlay");
   if (!overlay) return;
   const preferences = readControlPreferences(documentRef);
-  const visible = preferences.showHoverInfo !== false && pick && (pick.invalidMapArea || pick.gridCell !== null);
+  const heightBrush = state?.panels?.height?.getBrush?.();
+  const forcedHeightCell = heightBrush?.active && Number.isInteger(pick?.gridCell) && pick.gridCell >= 0 ? pick.gridCell : null;
+  const visible = pick && (pick.invalidMapArea || pick.gridCell !== null) && (preferences.showHoverInfo !== false || forcedHeightCell !== null);
   overlay.hidden = !visible;
   overlay.replaceChildren();
   if (!visible) return;
@@ -947,11 +950,17 @@ function updateHoverOverlay(documentRef, pick, state) {
   const colorMode = rendererStats.colorMode || preferences.colorMode || "height";
   const title = documentRef.createElement("div");
   title.className = "hover-overlay-title";
-  title.textContent = formatHoverTitle(pick, preferences.units, debugEnabled, colorMode);
+  title.textContent = preferences.showHoverInfo === false && forcedHeightCell !== null ? `高度画笔 · ${heightBrush.action === "lower" ? "降低" : "抬升"}` : formatHoverTitle(pick, preferences.units, debugEnabled, colorMode);
   const rows = documentRef.createElement("dl");
   rows.className = "hover-overlay-list";
-  rows.replaceChildren(...buildHoverRowEntries(pick, preferences.units, {debugEnabled, colorMode, map: state?.map, viewOptions: rendererStats.viewOptions})
-    .map(entry => hoverRow(documentRef, entry.label, entry.value)));
+  let entries = preferences.showHoverInfo === false
+    ? []
+    : buildHoverRowEntries(pick, preferences.units, {debugEnabled, colorMode, map: state?.map, viewOptions: rendererStats.viewOptions});
+  if (forcedHeightCell !== null) {
+    const currentHeight = state?.map?.grid?.cells?.h?.[forcedHeightCell] ?? pick.packHeight ?? pick.height;
+    entries = [{label: "画笔落点", value: formatDisplayHeight(currentHeight, preferences.units)}, ...entries.filter(entry => entry.label !== "高度")];
+  }
+  rows.replaceChildren(...entries.map(entry => hoverRow(documentRef, entry.label, entry.value)));
   overlay.replaceChildren(title, rows);
 }
 
