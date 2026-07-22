@@ -50,14 +50,31 @@
         </section>
 
         <section class="comparison-grid">
-          <article class="map-card danger">
-            <header><div><span class="card-index">A</span><h3>独立 polygon 失败对照</h3></div><span>逐区域处理</span></header>
+          <article class="map-card comparison-card" id="independent-card">
+            <header><div><span class="card-index">A</span><h3 id="independent-title">逐区域独立处理</h3></div><span id="independent-note">边界两侧分别运算</span></header>
             <div class="map-stage" id="independent-view"></div>
           </article>
-          <article class="map-card safe">
-            <header><div><span class="card-index">B</span><h3>共享 ArcRef 快照</h3></div><span>面线同源</span></header>
+          <article class="map-card result-card" id="shared-card">
+            <header><div><span class="card-index">B</span><h3 id="shared-title">共享弧线处理</h3></div><span class="result-state" id="shared-status">等待验收</span></header>
             <div class="map-stage" id="shared-view"></div>
           </article>
+        </section>
+
+        <section class="diagnostic-summary">
+          <div class="visual-legend" id="visual-legend" aria-label="视图图例">
+            <h2>图例</h2>
+            <span><i class="legend-line side-first"></i>边界第一侧</span>
+            <span><i class="legend-line side-second"></i>边界第二侧</span>
+            <span><i class="legend-line deviation"></i>最大偏差连接</span>
+            <span><i class="legend-line raw"></i>原始轮廓</span>
+            <span><i class="legend-line same-source"></i>绿色仅表示共享同源</span>
+            <span><i class="legend-object town"></i>受保护城镇</span>
+            <span><i class="legend-line road"></i>受保护道路</span>
+            <span><i class="legend-line river"></i>受保护河流</span>
+            <span><i class="legend-object mouth"></i>锚定河口</span>
+            <span><i class="legend-diagnostic">!</i>海岸形状超限仅提示</span>
+          </div>
+          <div class="issue-panel" id="current-issues" aria-live="polite"></div>
         </section>
 
         <section class="metrics" id="metrics"></section>

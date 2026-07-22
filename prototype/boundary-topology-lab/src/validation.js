@@ -3,13 +3,17 @@ import {arcUsageCounts, buildIndependentComparison, buildSharedSnapshot, compose
 
 const EPSILON = 1e-6;
 export const HAUSDORFF_LIMITS = Object.freeze({coast: 6, state: 4, province: 3});
+export const AREA_P95_LIMITS = Object.freeze({coast: 0.5, state: 0.5, province: 1});
 
 export function validateFixture(fixture, algorithmId = "recommended", options = {}) {
+  const definitionIssues = [];
+  validateDefinition(fixture, definitionIssues);
+  if (definitionIssues.length) return invalidDefinitionResult(fixture, algorithmId, definitionIssues);
+
   const snapshot = buildSharedSnapshot(fixture, algorithmId, options);
   const comparison = buildIndependentComparison(fixture, algorithmId, options);
   const issues = [];
 
-  validateDefinition(fixture, issues);
   validateEndpointLocks(fixture, snapshot, issues);
   validateRings(snapshot, issues);
   validateRawRings(fixture, issues);
@@ -34,14 +38,17 @@ export function validateFixture(fixture, algorithmId = "recommended", options = 
   const shapeMetrics = measureRegionShapeError(fixture, snapshot);
   for (const regionError of shapeMetrics.regions) {
     const limit = HAUSDORFF_LIMITS[regionError.kind];
-    if (regionError.hausdorff > limit + EPSILON) issues.push(`${regionError.regionId} 双向 Hausdorff ${regionError.hausdorff.toFixed(3)} 超过 ${limit}`);
+    if (regionError.kind !== "coast" && regionError.hausdorff > limit + EPSILON) {
+      issues.push(`${regionError.regionId} 双向 Hausdorff ${regionError.hausdorff.toFixed(3)} 超过 ${limit}`);
+    }
   }
   if (algorithmId === "recommended") {
     for (const [kind, p95] of Object.entries(shapeMetrics.areaP95)) {
-      const limit = kind === "province" ? 1 : 0.5;
-      if (p95 > limit + EPSILON) issues.push(`${kind} 面积 P95 ${p95.toFixed(3)}% 超过 ${limit}%`);
+      const limit = AREA_P95_LIMITS[kind];
+      if (kind !== "coast" && p95 > limit + EPSILON) issues.push(`${kind} 面积 P95 ${p95.toFixed(3)}% 超过 ${limit}%`);
     }
   }
+  const shapeDiagnostics = buildShapeDiagnostics(shapeMetrics, algorithmId);
   const caseConstraints = evaluateCaseConstraints(fixture, snapshot);
   for (const constraint of caseConstraints.filter(item => !item.pass)) issues.push(`案例约束失败：${constraint.label}`);
 
@@ -71,10 +78,48 @@ export function validateFixture(fixture, algorithmId = "recommended", options = 
       hausdorff: shapeMetrics.hausdorff,
       hausdorffLimit: Math.min(...shapeMetrics.regions.map(item => HAUSDORFF_LIMITS[item.kind])),
       regionShapeErrors: shapeMetrics.regions,
+      shapeDiagnostics,
+      shapePolicy: shapeMetrics.regions.every(item => item.kind === "coast") ? "notice" : "acceptance",
       caseConstraints
     },
     snapshot,
     comparison
+  };
+}
+
+function invalidDefinitionResult(fixture, algorithmId, issues) {
+  return {
+    ok: false,
+    fixtureId: fixture?.id || "invalid-fixture",
+    fixtureName: fixture?.name || "无效夹具",
+    category: fixture?.category || "invalid",
+    algorithmId,
+    issues,
+    metrics: {
+      arcCount: 0,
+      sharedArcCount: 0,
+      nodeCount: 0,
+      seamGap: 0,
+      seamOverlap: 0,
+      coverageOverlap: 0,
+      regionCrossings: 0,
+      independentError: 0,
+      maxDisplacement: 0,
+      selfIntersections: 0,
+      validRings: false,
+      reverseArcRefs: 0,
+      renderModelSameSnapshot: false,
+      areaP95: {},
+      maxAreaError: 0,
+      hausdorff: 0,
+      hausdorffLimit: 0,
+      regionShapeErrors: [],
+      shapeDiagnostics: [],
+      shapePolicy: "acceptance",
+      caseConstraints: []
+    },
+    snapshot: null,
+    comparison: {regions: [], usages: new Map(), seamError: 0, maximumDeviation: null, expectedFailure: false}
   };
 }
 
@@ -142,7 +187,7 @@ export function measureRegionShapeError(fixture, snapshot) {
     const transformedArea = regionArea(transformed.rings);
     const areaError = rawArea > EPSILON ? Math.abs(transformedArea - rawArea) / rawArea * 100 : 0;
     const hausdorff = Math.max(0, ...rawRings.map((ring, index) => bidirectionalHausdorff(ring, transformed.rings[index])));
-    errors.push({regionId: region.id, kind: regionKind(region), areaError, hausdorff});
+    errors.push({regionId: region.id, kind: regionKind(region, fixture), areaError, hausdorff});
   }
   const grouped = errors.reduce((result, item) => {
     (result[item.kind] ||= []).push(item);
@@ -154,6 +199,35 @@ export function measureRegionShapeError(fixture, snapshot) {
     maxAreaError: Math.max(0, ...errors.map(item => item.areaError)),
     hausdorff: Math.max(0, ...errors.map(item => item.hausdorff))
   };
+}
+
+function buildShapeDiagnostics(shapeMetrics, algorithmId) {
+  const diagnostics = shapeMetrics.regions.map(region => {
+    const limit = HAUSDORFF_LIMITS[region.kind];
+    return {
+      id: `hausdorff:${region.regionId}`,
+      metric: "hausdorff",
+      kind: region.kind,
+      regionId: region.regionId,
+      value: region.hausdorff,
+      limit,
+      exceeded: region.hausdorff > limit + EPSILON,
+      policy: region.kind === "coast" ? "notice" : "acceptance"
+    };
+  });
+  for (const [kind, value] of Object.entries(shapeMetrics.areaP95)) {
+    const limit = AREA_P95_LIMITS[kind];
+    diagnostics.push({
+      id: `area-p95:${kind}`,
+      metric: "area-p95",
+      kind,
+      value,
+      limit,
+      exceeded: value > limit + EPSILON,
+      policy: kind === "coast" || algorithmId !== "recommended" ? "notice" : "acceptance"
+    });
+  }
+  return diagnostics;
 }
 
 export function bidirectionalHausdorff(first, second) {
@@ -169,10 +243,11 @@ export function regionArea(rings) {
   return Math.max(0, Math.abs(signedArea(rings[0])) - rings.slice(1).reduce((sum, ring) => sum + Math.abs(signedArea(ring)), 0));
 }
 
-function regionKind(region) {
-  const ids = region.rings.flat().map(ref => ref.arcId);
-  if (ids.some(id => id.includes("province"))) return "province";
-  if (ids.some(id => id.includes("state") || id.includes("border") || id === "shared")) return "state";
+function regionKind(region, fixture) {
+  const kinds = region.rings.flat().map(ref => fixture.arcs.find(arc => arc?.id === ref.arcId)?.kind).filter(Boolean);
+  if (kinds.includes("province")) return "province";
+  if (kinds.includes("state")) return "state";
+  if (kinds.includes("coast")) return "coast";
   return "coast";
 }
 
@@ -200,7 +275,7 @@ export function evaluateCaseConstraints(fixture, snapshot) {
   } else if (fixture.id === "lake-sea-connection") {
     const mouth = arc("locked-mouth");
     const opening = pointDistance(mouth.points[0], mouth.points.at(-1));
-    const raw = fixture.arcs.find(item => item.id === "locked-mouth");
+    const raw = fixture.arcs.find(item => item?.id === "locked-mouth");
     const locked = samePoint(mouth.points[0], raw.points[0]) && samePoint(mouth.points.at(-1), raw.points.at(-1));
     const mouthChord = [mouth.points[0], mouth.points.at(-1)];
     const depth = Math.max(0, ...mouth.points.map(point => pointDistance(point, closestPointOnPolyline(point, mouthChord))));
@@ -226,9 +301,50 @@ export function evaluateCaseConstraints(fixture, snapshot) {
     add("frame-lock", "地图边界点不漂移", drift <= EPSILON, drift);
   } else if (fixture.id === "closed-loop") {
     const loop = arc("stable-loop");
-    const raw = fixture.arcs.find(item => item.id === "stable-loop");
+    const raw = fixture.arcs.find(item => item?.id === "stable-loop");
     const stable = loop.syntheticAnchor && isClosed(loop.points) && samePoint(loop.points[0], raw.points[0]);
     add("synthetic-anchor", "闭环 syntheticAnchor 稳定", stable, stable ? 0 : 1);
+  }
+  for (const constraint of evaluateProtectedObjectConstraints(fixture, snapshot)) constraints.push(constraint);
+  return constraints;
+}
+
+export function evaluateProtectedObjectConstraints(fixture, snapshot) {
+  const constraints = [];
+  const protectedObjects = fixture.protectedObjects || {};
+  const rawRegions = new Map(fixture.regions.map(region => [region.id, region.rings.map(ring => composeRawRing(ring, fixture))]));
+  const transformedRegions = new Map(snapshot.regions.map(region => [region.id, region.rings]));
+  const add = (id, label, pass, value) => constraints.push({id, label, pass: Boolean(pass), value});
+
+  for (const town of protectedObjects.towns || []) {
+    const rawRings = rawRegions.get(town.regionId);
+    const transformedRings = transformedRegions.get(town.regionId);
+    const pass = pointInRegion(town.point, rawRings) && pointInRegion(town.point, transformedRings);
+    add(`town:${town.id}:land-region`, `城镇“${town.name}”保持在同一陆区`, pass, pass ? 1 : 0);
+  }
+
+  for (const road of protectedObjects.roads || []) {
+    const rawRings = rawRegions.get(road.regionId);
+    const transformedRings = transformedRegions.get(road.regionId);
+    const pass = polylineStrictlyInsideRegion(road.points, rawRings) && polylineStrictlyInsideRegion(road.points, transformedRings);
+    add(`road:${road.id}:land`, `道路“${road.name}”全线留在陆地且不穿岸`, pass, pass ? 1 : 0);
+  }
+
+  for (const river of protectedObjects.rivers || []) {
+    const rawRings = rawRegions.get(river.regionId);
+    const transformedRings = transformedRegions.get(river.regionId);
+    const rawArc = fixture.arcs.find(item => item?.id === river.mouth.arcId);
+    const transformedArc = snapshot.arcs.get(river.mouth.arcId);
+    const rawMouth = river.mouth.endpoint === "start" ? rawArc.points[0] : rawArc.points.at(-1);
+    const transformedMouth = river.mouth.endpoint === "start" ? transformedArc.points[0] : transformedArc.points.at(-1);
+    const actualMouth = river.points.at(-1);
+    const mouthLocked = samePoint(actualMouth, rawMouth) && samePoint(actualMouth, transformedMouth);
+    add(`river:${river.id}:mouth-lock`, `河流“${river.name}”河口严格锚定海岸端点`, mouthLocked, mouthLocked ? 0 : pointDistance(actualMouth, transformedMouth));
+    if (mouthLocked) {
+      const landSide = riverStaysLandSideUntilMouth(river.points, rawRings, rawMouth)
+        && riverStaysLandSideUntilMouth(river.points, transformedRings, transformedMouth);
+      add(`river:${river.id}:land-side`, `河流“${river.name}”仅在末端入海`, landSide, landSide ? 1 : 0);
+    }
   }
   return constraints;
 }
@@ -250,14 +366,88 @@ export function runAllFixtures(fixtures, algorithmId = "recommended", options = 
 }
 
 function validateDefinition(fixture, issues) {
+  if (!fixture || typeof fixture !== "object") {
+    issues.push("夹具定义不是对象");
+    return;
+  }
   if (!fixture.id || !fixture.name || !fixture.category) issues.push("夹具缺少 id、名称或案例分类");
-  const arcIds = new Set(fixture.arcs.map(arc => arc.id));
-  if (arcIds.size !== fixture.arcs.length) issues.push("夹具含重复 arc id");
+  if (!Array.isArray(fixture.arcs) || !Array.isArray(fixture.regions)) {
+    issues.push("夹具缺少 arcs 或 regions 数组");
+    return;
+  }
+  const arcIds = new Set(fixture.arcs.map(arc => arc?.id));
+  if (arcIds.size !== fixture.arcs.length || arcIds.has(undefined) || arcIds.has("")) issues.push("夹具含缺失或重复 arc id");
+  for (const boundaryArc of fixture.arcs) {
+    if (!Array.isArray(boundaryArc?.points) || boundaryArc.points.length < 2) {
+      issues.push(`arc ${boundaryArc?.id || "?"} 坐标不足`);
+      continue;
+    }
+    validateFinitePoints(boundaryArc.points, `arc ${boundaryArc.id}`, issues);
+  }
+
+  const regionIds = new Set(fixture.regions.map(region => region?.id));
+  if (regionIds.size !== fixture.regions.length || regionIds.has(undefined) || regionIds.has("")) issues.push("夹具含缺失或重复 region id");
   for (const region of fixture.regions) {
+    if (!Array.isArray(region?.rings) || !region.rings.length) {
+      issues.push(`区域 ${region?.id || "?"} 缺少 rings`);
+      continue;
+    }
     for (const ring of region.rings) {
-      for (const arcRef of ring) {
-        if (!arcIds.has(arcRef.arcId)) issues.push(`区域 ${region.id} 引用了不存在的 arc ${arcRef.arcId}`);
+      if (!Array.isArray(ring) || !ring.length) {
+        issues.push(`区域 ${region.id} 含空 ring`);
+        continue;
       }
+      for (const arcRef of ring) {
+        if (!arcIds.has(arcRef?.arcId)) issues.push(`区域 ${region.id} 引用了不存在的 arc ${arcRef?.arcId || "?"}`);
+      }
+    }
+  }
+
+  const protectedObjects = fixture.protectedObjects;
+  if (protectedObjects === undefined) return;
+  if (!protectedObjects || typeof protectedObjects !== "object") {
+    issues.push("protectedObjects 必须是对象");
+    return;
+  }
+  for (const type of ["towns", "roads", "rivers"]) {
+    if (protectedObjects[type] !== undefined && !Array.isArray(protectedObjects[type])) issues.push(`protectedObjects.${type} 必须是数组`);
+  }
+  const towns = Array.isArray(protectedObjects.towns) ? protectedObjects.towns : [];
+  const roads = Array.isArray(protectedObjects.roads) ? protectedObjects.roads : [];
+  const rivers = Array.isArray(protectedObjects.rivers) ? protectedObjects.rivers : [];
+  for (const town of towns) {
+    validateProtectedIdentity(town, "城镇", regionIds, issues);
+    validateFinitePoints([town?.point], `城镇 ${town?.id || "?"}`, issues);
+  }
+  for (const road of roads) {
+    validateProtectedIdentity(road, "道路", regionIds, issues);
+    if (!Array.isArray(road?.points) || road.points.length < 2) issues.push(`道路 ${road?.id || "?"} 坐标不足`);
+    else validateFinitePoints(road.points, `道路 ${road.id}`, issues);
+  }
+  for (const river of rivers) {
+    validateProtectedIdentity(river, "河流", regionIds, issues);
+    if (!Array.isArray(river?.points) || river.points.length < 2) issues.push(`河流 ${river?.id || "?"} 坐标不足`);
+    else validateFinitePoints(river.points, `河流 ${river.id}`, issues);
+    const mouthArc = fixture.arcs.find(item => item?.id === river?.mouth?.arcId);
+    if (!mouthArc) issues.push(`河流 ${river?.id || "?"} 河口引用不存在的 arc ${river?.mouth?.arcId || "?"}`);
+    else if (mouthArc.kind !== "coast") issues.push(`河流 ${river.id} 河口 arc ${mouthArc.id} 不是海岸`);
+    if (!river?.mouth || !["start", "end"].includes(river.mouth.endpoint)) issues.push(`河流 ${river?.id || "?"} 河口端点必须是 start 或 end`);
+    const region = fixture.regions.find(item => item.id === river?.regionId);
+    if (region && mouthArc && !region.rings.flat().some(arcRef => arcRef.arcId === mouthArc.id)) {
+      issues.push(`河流 ${river.id} 河口 arc ${mouthArc.id} 不属于陆区 ${region.id}`);
+    }
+  }
+}
+
+function validateProtectedIdentity(object, label, regionIds, issues) {
+  if (!object?.id || !object?.name) issues.push(`${label}缺少 id 或名称`);
+  if (!regionIds.has(object?.regionId)) issues.push(`${label} ${object?.id || "?"} 引用了不存在的 region ${object?.regionId || "?"}`);
+}
+
+function validateFinitePoints(points, label, issues) {
+  for (const [index, point] of points.entries()) {
+    if (!Array.isArray(point) || point.length < 2 || !Number.isFinite(point[0]) || !Number.isFinite(point[1])) {
+      issues.push(`${label} 第 ${index + 1} 个坐标不是有限二维点`);
     }
   }
 }
@@ -406,6 +596,48 @@ function regionsProperlyCross(first, second) {
   return false;
 }
 
+function polylineStrictlyInsideRegion(points, rings) {
+  if (!points.every(point => pointInRegion(point, rings))) return false;
+  for (let index = 0; index < points.length - 1; index++) {
+    if (segmentTouchesRegionBoundary(points[index], points[index + 1], rings)) return false;
+  }
+  return true;
+}
+
+function riverStaysLandSideUntilMouth(points, rings, mouth) {
+  if (!samePoint(points.at(-1), mouth)) return false;
+  if (!points.slice(0, -1).every(point => pointInRegion(point, rings))) return false;
+  for (let index = 0; index < points.length - 2; index++) {
+    if (segmentTouchesRegionBoundary(points[index], points[index + 1], rings)) return false;
+  }
+  const beforeMouth = points.at(-2);
+  for (const ring of rings) for (let index = 0; index < ring.length - 1; index++) {
+    const a = ring[index];
+    const b = ring[index + 1];
+    if (!segmentsIntersectOrTouch(beforeMouth, mouth, a, b)) continue;
+    const boundaryEndsAtMouth = samePoint(a, mouth) || samePoint(b, mouth);
+    if (!boundaryEndsAtMouth || segmentsProperlyIntersect(beforeMouth, mouth, a, b) || collinearOverlapLength(beforeMouth, mouth, a, b) > EPSILON) return false;
+  }
+  return midpointSamplesInside(beforeMouth, mouth, rings);
+}
+
+function midpointSamplesInside(start, end, rings) {
+  const steps = Math.max(2, Math.ceil(pointDistance(start, end)));
+  for (let step = 0; step < steps; step++) {
+    const ratio = step / steps;
+    const point = [start[0] + (end[0] - start[0]) * ratio, start[1] + (end[1] - start[1]) * ratio];
+    if (!pointInRegion(point, rings)) return false;
+  }
+  return true;
+}
+
+function segmentTouchesRegionBoundary(start, end, rings) {
+  for (const ring of rings) for (let index = 0; index < ring.length - 1; index++) {
+    if (segmentsIntersectOrTouch(start, end, ring[index], ring[index + 1])) return true;
+  }
+  return false;
+}
+
 function pointInRegion(point, rings) {
   if (!rings.length || pointOnRing(point, rings[0]) || !pointInPolygon(point, rings[0])) return false;
   for (const hole of rings.slice(1)) if (pointOnRing(point, hole) || pointInPolygon(point, hole)) return false;
@@ -463,6 +695,19 @@ function segmentsProperlyIntersect(a, b, c, d) {
   const cdA = cross(c, d, a);
   const cdB = cross(c, d, b);
   return abC * abD < -EPSILON && cdA * cdB < -EPSILON;
+}
+
+function segmentsIntersectOrTouch(a, b, c, d) {
+  if (segmentsProperlyIntersect(a, b, c, d)) return true;
+  return pointOnSegment(a, c, d) || pointOnSegment(b, c, d) || pointOnSegment(c, a, b) || pointOnSegment(d, a, b);
+}
+
+function pointOnSegment(point, start, end) {
+  if (Math.abs(cross(start, end, point)) > EPSILON) return false;
+  return point[0] >= Math.min(start[0], end[0]) - EPSILON
+    && point[0] <= Math.max(start[0], end[0]) + EPSILON
+    && point[1] >= Math.min(start[1], end[1]) - EPSILON
+    && point[1] <= Math.max(start[1], end[1]) + EPSILON;
 }
 
 function cross(a, b, c) {

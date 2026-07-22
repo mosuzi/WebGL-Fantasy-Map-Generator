@@ -39,11 +39,13 @@ export function buildIndependentComparison(fixture, algorithmId, options = {}) {
     rings: region.rings.map(ring => transformArc(composeRawRing(ring, fixture), algorithmId, options, true))
   }));
   const usages = collectIndependentSharedUsages(fixture, regions);
+  const maximumDeviation = measureIndependentSeamErrorDetails(usages);
   return {
     fixtureId: fixture.id,
     regions,
     usages,
-    seamError: measureIndependentSeamError(usages),
+    seamError: maximumDeviation?.distance || 0,
+    maximumDeviation,
     expectedFailure: algorithmId !== "raw" && [...arcUsageCounts(fixture).values()].some(count => count > 1)
   };
 }
@@ -114,19 +116,45 @@ export function sharedArcRefs(fixture) {
 }
 
 export function measureIndependentSeamError(usages) {
-  let maxError = 0;
-  for (const records of usages.values()) {
+  return measureIndependentSeamErrorDetails(usages)?.distance || 0;
+}
+
+export function measureIndependentSeamErrorDetails(usages) {
+  let maximum = null;
+  for (const [arcId, records] of usages) {
     if (records.length < 2) continue;
-    const baseline = normalizedUsage(records[0]);
-    for (const record of records.slice(1)) {
+    const baselineRecord = records[0];
+    const baseline = normalizedUsage(baselineRecord);
+    for (let recordIndex = 1; recordIndex < records.length; recordIndex++) {
+      const record = records[recordIndex];
       const candidate = normalizedUsage(record);
       for (let index = 0; index <= 24; index++) {
-        const t = index / 24;
-        maxError = Math.max(maxError, pointDistance(samplePolyline(baseline, t), samplePolyline(candidate, t)));
+        const ratio = index / 24;
+        const firstPoint = samplePolyline(baseline, ratio);
+        const secondPoint = samplePolyline(candidate, ratio);
+        const distance = pointDistance(firstPoint, secondPoint);
+        if (maximum && distance <= maximum.distance) continue;
+        maximum = {
+          arcId,
+          distance,
+          ratio,
+          first: {
+            usageIndex: 0,
+            regionId: baselineRecord.regionId,
+            reversed: baselineRecord.reversed,
+            point: firstPoint
+          },
+          second: {
+            usageIndex: recordIndex,
+            regionId: record.regionId,
+            reversed: record.reversed,
+            point: secondPoint
+          }
+        };
       }
     }
   }
-  return maxError;
+  return maximum;
 }
 
 function projectArcOntoRing(rawArc, ring) {

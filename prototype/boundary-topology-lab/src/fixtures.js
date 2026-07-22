@@ -17,7 +17,18 @@ const singleIsland = {
   arcs: [
     arc("coast", [point(55, 116), point(67, 72), point(105, 48), point(149, 55), point(184, 39), point(235, 64), point(266, 105), point(249, 151), point(206, 180), point(151, 171), point(105, 184), point(69, 157), point(55, 116)], {closed: true, kind: "coast"})
   ],
-  regions: [region("island", "孤岛", "#b8ad7d", [[ref("coast")]])]
+  regions: [region("island", "孤岛", "#b8ad7d", [[ref("coast")]])],
+  protectedObjects: {
+    towns: [{id: "island-town", name: "临潮镇", regionId: "island", point: point(78, 126)}],
+    roads: [{id: "island-road", name: "环岛路", regionId: "island", points: [point(82, 137), point(118, 151), point(158, 151), point(193, 139)]}],
+    rivers: [{
+      id: "island-river",
+      name: "西溪",
+      regionId: "island",
+      points: [point(143, 104), point(111, 112), point(80, 117), point(55, 116)],
+      mouth: {arcId: "coast", endpoint: "start"}
+    }]
+  }
 };
 
 const islandWithHole = {
@@ -44,7 +55,18 @@ const narrowStrait = {
   regions: [
     region("west", "西岸", "#9fa97e", [[ref("west-coast")]]),
     region("east", "东岸", "#c0a97d", [[ref("east-coast")]])
-  ]
+  ],
+  protectedObjects: {
+    towns: [{id: "strait-town", name: "峡西镇", regionId: "west", point: point(92, 99)}],
+    roads: [{id: "strait-road", name: "西岸驿道", regionId: "west", points: [point(48, 72), point(77, 84), point(96, 105), point(76, 136)]}],
+    rivers: [{
+      id: "strait-river",
+      name: "北湾河",
+      regionId: "west",
+      points: [point(66, 68), point(48, 57), point(32, 46), point(20, 38)],
+      mouth: {arcId: "west-coast", endpoint: "start"}
+    }]
+  }
 };
 
 const lakeSeaConnection = {
@@ -58,7 +80,18 @@ const lakeSeaConnection = {
     arc("locked-mouth", [point(193, 190), point(193, 151), point(211, 136), point(209, 92), point(187, 72), point(156, 75), point(135, 98), point(137, 133), point(151, 151), point(151, 190)], {kind: "coast", mouth: true}),
     arc("outer-west", [point(151, 190), point(24, 190), point(24, 35)], {kind: "coast"})
   ],
-  regions: [region("land", "潟湖海岸", "#b8ae83", [[ref("outer-east"), ref("locked-mouth"), ref("outer-west")]])]
+  regions: [region("land", "潟湖海岸", "#b8ae83", [[ref("outer-east"), ref("locked-mouth"), ref("outer-west")]])],
+  protectedObjects: {
+    towns: [{id: "lagoon-town", name: "潟湖镇", regionId: "land", point: point(230, 150)}],
+    roads: [{id: "lagoon-road", name: "东岸路", regionId: "land", points: [point(226, 119), point(250, 137), point(267, 161), point(274, 180)]}],
+    rivers: [{
+      id: "lagoon-river",
+      name: "东湾河",
+      regionId: "land",
+      points: [point(250, 151), point(230, 168), point(209, 183), point(193, 190)],
+      mouth: {arcId: "locked-mouth", endpoint: "start"}
+    }]
+  }
 };
 
 const triStateJunction = {
