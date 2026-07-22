@@ -19,6 +19,7 @@ import {
 } from "./display-units.js";
 import {formatHistoryStats} from "./history-format.js";
 import {buildHoverRowEntries, formatHoverObjectTitle, hoverViewTitle, isNamedHoverRoute} from "./hover-overlay-content.js";
+import {updateStartupLoadingStatus} from "./startup-loading.js";
 
 export const CONTROL_PREFERENCES_KEY = "webgl-generator-control-preferences";
 const CRITICAL_CONTROL_CHANGE_DEBOUNCE_MS = 180;
@@ -569,6 +570,7 @@ export function setGenerationLoading(documentRef, visible, message = "山海初�
   const text = documentRef.getElementById("generation-loading-text");
   if (text) text.textContent = message;
   bubble.hidden = !visible;
+  if (visible) updateStartupLoadingStatus(documentRef, message);
 }
 
 export function readOptionsFromPanel(documentRef, previousOptions) {

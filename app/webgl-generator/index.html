@@ -3,10 +3,157 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>WebGL 地图生成器</title>
+    <title>Mosuzi's Fantasy Map Generator</title>
     <link rel="icon" href="data:," />
+    <style>
+      .app-loading-screen {
+        position: fixed;
+        inset: 0;
+        z-index: 10000;
+        display: grid;
+        place-items: center;
+        overflow: hidden;
+        background:
+          radial-gradient(circle at 50% 46%, rgba(41, 72, 88, 0.08) 0 17%, transparent 17.2%),
+          repeating-conic-gradient(from -1deg at 50% 46%, rgba(33, 58, 72, 0.19) 0 0.35deg, transparent 0.35deg 11.25deg),
+          linear-gradient(145deg, #9eb9ca, #789aad 58%, #5f8196);
+        color: #f8edcf;
+        font-family: Inter, "Noto Sans SC", "Microsoft YaHei UI", sans-serif;
+        opacity: 1;
+        transition: opacity 260ms ease, visibility 260ms ease;
+      }
+
+      .app-loading-screen[hidden] {
+        display: none;
+      }
+
+      .app-loading-screen.is-leaving {
+        visibility: hidden;
+        opacity: 0;
+        pointer-events: none;
+      }
+
+      .app-loading-card {
+        display: grid;
+        justify-items: center;
+        gap: clamp(18px, 3vh, 30px);
+        width: min(92vw, 720px);
+      }
+
+      .app-loading-compass {
+        position: relative;
+        display: grid;
+        width: clamp(280px, 48vw, 560px);
+        aspect-ratio: 1;
+        place-items: center;
+        border: clamp(5px, 0.65vw, 9px) solid #2d634f;
+        border-radius: 50%;
+        background:
+          radial-gradient(circle, transparent 0 19%, rgba(28, 54, 68, 0.58) 19.3% 20.5%, transparent 20.8% 42%, rgba(28, 54, 68, 0.42) 42.3% 43%, transparent 43.3%),
+          repeating-conic-gradient(from 0deg, rgba(31, 57, 70, 0.58) 0 0.65deg, transparent 0.65deg 15deg),
+          rgba(137, 174, 194, 0.68);
+        box-shadow: 0 24px 80px rgba(12, 29, 39, 0.34), inset 0 0 0 3px rgba(235, 214, 159, 0.2);
+      }
+
+      .app-loading-compass::before,
+      .app-loading-compass::after {
+        content: "";
+        position: absolute;
+        inset: 8%;
+        background: conic-gradient(from 0deg, #27455c 0 10deg, transparent 10deg 35deg, #56a6cc 35deg 45deg, transparent 45deg 80deg, #27455c 80deg 100deg, transparent 100deg 125deg, #56a6cc 125deg 135deg, transparent 135deg 170deg, #27455c 170deg 190deg, transparent 190deg 215deg, #56a6cc 215deg 225deg, transparent 225deg 260deg, #27455c 260deg 280deg, transparent 280deg 305deg, #56a6cc 305deg 315deg, transparent 315deg 350deg, #27455c 350deg 360deg);
+        clip-path: polygon(50% 0, 58% 39%, 100% 50%, 58% 61%, 50% 100%, 42% 61%, 0 50%, 42% 39%);
+        opacity: 0.9;
+      }
+
+      .app-loading-compass::after {
+        inset: 18%;
+        transform: rotate(45deg);
+        background: #bd644d;
+        opacity: 0.82;
+      }
+
+      .app-loading-brand {
+        position: relative;
+        z-index: 1;
+        display: grid;
+        width: min(90%, 500px);
+        padding: clamp(30px, 5vw, 54px) clamp(12px, 3vw, 30px);
+        text-align: center;
+        filter: drop-shadow(0 2px 2px rgba(22, 34, 40, 0.78));
+      }
+
+      .app-loading-owner {
+        position: absolute;
+        top: clamp(6px, 1vw, 14px);
+        left: clamp(18px, 4vw, 52px);
+        font-size: clamp(16px, 2.4vw, 28px);
+        font-weight: 500;
+      }
+
+      .app-loading-title {
+        display: grid;
+        font-family: Georgia, "Times New Roman", serif;
+        font-size: clamp(36px, 6.2vw, 72px);
+        font-weight: 500;
+        line-height: 0.92;
+        letter-spacing: -0.035em;
+      }
+
+      .app-loading-version {
+        position: absolute;
+        right: clamp(18px, 4vw, 52px);
+        bottom: clamp(6px, 1vw, 14px);
+        font-size: clamp(13px, 1.8vw, 21px);
+        font-weight: 700;
+      }
+
+      .app-loading-status {
+        min-height: 1.5em;
+        margin: 0;
+        color: rgba(255, 244, 213, 0.94);
+        font-size: clamp(13px, 1.8vw, 18px);
+        font-weight: 700;
+        letter-spacing: 0.16em;
+        text-shadow: 0 1px 2px rgba(20, 35, 43, 0.8);
+      }
+
+      .app-loading-screen[data-state="error"] .app-loading-status {
+        max-width: min(88vw, 680px);
+        color: #ffe1d5;
+        letter-spacing: 0.04em;
+        text-align: center;
+      }
+
+      @media (max-width: 520px) {
+        .app-loading-compass {
+          width: min(88vw, 380px);
+        }
+
+        .app-loading-brand {
+          width: 94%;
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .app-loading-screen {
+          transition-duration: 1ms;
+        }
+      }
+    </style>
   </head>
   <body>
+    <div class="app-loading-screen" id="app-loading-screen" role="status" aria-live="polite" aria-labelledby="app-loading-title" aria-describedby="app-loading-status" data-state="loading">
+      <div class="app-loading-card">
+        <div class="app-loading-compass">
+          <div class="app-loading-brand">
+            <span class="app-loading-owner">Mosuzi's</span>
+            <strong class="app-loading-title" id="app-loading-title"><span>Fantasy Map</span><span>Generator</span></strong>
+            <span class="app-loading-version">v__FMG_APP_VERSION__</span>
+          </div>
+        </div>
+        <p class="app-loading-status" id="app-loading-status">正在加载地图资源</p>
+      </div>
+    </div>
     <main class="app-shell">
       <section class="map-stage" aria-label="地图画布">
         <canvas id="map-canvas"></canvas>
@@ -61,6 +208,12 @@
       window.__webglGeneratorPrebootHealth.record("document-boot", {readyState: document.readyState});
       window.setTimeout(() => {
         if (window.__webglGeneratorApp) return;
+        const startupLoading = document.getElementById("app-loading-screen");
+        const startupStatus = document.getElementById("app-loading-status");
+        if (startupLoading?.dataset.state !== "error") {
+          if (startupLoading) startupLoading.dataset.state = "error";
+          if (startupStatus) startupStatus.textContent = "脚本尚未启动，请检查网络或浏览器脚本设置";
+        }
         const loading = document.getElementById("generation-loading");
         const loadingText = document.getElementById("generation-loading-text");
         if (loadingText) loadingText.textContent = "星图未启";

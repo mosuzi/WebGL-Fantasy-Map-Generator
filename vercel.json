@@ -4,7 +4,18 @@
   "installCommand": "pnpm install --frozen-lockfile",
   "buildCommand": "pnpm run build:app",
   "outputDirectory": "dist/webgl-generator",
+  "redirects": [
+    {
+      "source": "/prototype/:prototype",
+      "destination": "/prototype/:prototype/",
+      "permanent": false
+    }
+  ],
   "rewrites": [
+    {
+      "source": "/prototype/:prototype/",
+      "destination": "/prototype/:prototype/index.html"
+    },
     {
       "source": "/(.*)",
       "destination": "/index.html"

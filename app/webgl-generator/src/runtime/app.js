@@ -153,6 +153,7 @@ import {captureVisualThemeState, createSetUserVisualThemesCommand} from "./visua
 import {mergePersistedUserVisualThemes, persistUserVisualThemes} from "./visual-theme-storage.js";
 import {collectionAffected, objectAffected, systemAffected} from "./edit-command-effects.js";
 import {syncEditorStateSnapshot} from "../ui/vue/state-bridge.js";
+import {completeStartupLoading, failStartupLoading} from "../ui/startup-loading.js";
 import {LABEL_TARGET_KIND, OBJECT_KIND} from "./object-kinds.js";
 import GenerationWorker from "./generation-worker.js?worker";
 import {getWebglGeneratorHealthMonitor} from "./health-monitor.js";
@@ -176,6 +177,7 @@ const LOADING_MESSAGES = Object.freeze({
   request: "星图启明",
   generate: "山海初开",
   "map-import-read": "启封舆图",
+  "map-import-decode": "辨读旧卷",
   "map-import-render": "山河归卷",
   "heightmap-read": "墨影探山",
   "heightmap-generate": "借影塑岳",
@@ -3335,7 +3337,9 @@ function requestGenerate(state, documentRef, actions = state.runtimeActions) {
     setMythicGenerationLoading(documentRef, true, "request");
     scheduleAfterPaint(documentRef, () => {
       if (requestId !== state.pendingGenerateRequestId) return;
-      void actions.generate.newMap({...options, confirm: true}).catch(() => {});
+      void actions.generate.newMap({...options, confirm: true}).catch(error => {
+        if (!state.map) failStartupLoading(documentRef, error);
+      });
     });
   } catch (error) {
     updateGenerationLoading(documentRef, false);
@@ -3362,11 +3366,11 @@ async function restoreMapFromBrowserStorageViaApi(state, documentRef, options = 
 
   try {
     resetLoadTrace(documentRef);
-    operation?.report("read-storage", {message: "正在读取浏览器存档"});
+    operation?.report("read-storage", {message: loadingMessage("map-import-read")});
     emitLoadTrace(documentRef, {phase: "request", id: "map-import-read", message: loadingMessage("map-import-read")});
     setFileOperationStatus(documentRef, "正在读取浏览器保存的地图...");
     setMythicGenerationLoading(documentRef, true, "map-import-read");
-    operation?.report("decode-storage", {message: "正在解码浏览器存档"});
+    operation?.report("decode-storage", {message: loadingMessage("map-import-decode")});
     const document = parseMapDocument(await decodeBrowserMapStoragePayload(documentRef, raw));
     const imported = await importParsedMapDocumentViaApi(state, documentRef, document, {
       source: "browser-storage",
@@ -3712,6 +3716,7 @@ async function loadMapIntoRuntime(state, documentRef, map, {loadingMessages = []
     packCells: state.map?.metadata?.packCells || state.map?.pack?.metadata?.cells || 0,
     loadMap: state.renderer?.getStats?.().loadMap || null
   });
+  completeStartupLoading(documentRef);
   updateGenerationLoading(documentRef, false);
   showMapToast(documentRef, completionToast);
   scheduleLazyPanelsAfterMapReady(state, documentRef);

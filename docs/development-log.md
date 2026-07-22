@@ -1,5 +1,19 @@
 # 开发历史
 
+## 2026-07-22：优化浏览器存档恢复加载文案
+
+- 将浏览器存档恢复流程的读取 / 解码阶段从技术性描述收为“启封舆图 / 辨读旧卷”，与生成、渲染阶段的加载文案保持同一风格。
+- 本次只调整运行时操作报告的用户可见文案；文件操作状态、错误诊断、存档读取与解码逻辑均保持不变。
+
+## 2026-07-22：完成权威任务第 162～164 项——全局加载页、贴边工具栏与 Vercel 统一部署
+
+- 用户要求参考原版构图新增全局资源加载页。文档首屏现以内联关键 HTML / CSS 立即显示项目自有罗盘构图：`Mosuzi's` 缩小放在主标题左上，`Fantasy Map Generator` 居中分行，版本号位于右下。根 `package.json` 首次固定应用版本 `0.1.0`，Vite 开发与生产 HTML 均从这一来源注入，不再维护页面硬编码版本。
+- 新增启动加载状态机，覆盖 Vue 装配、浏览器存档读取 / 解码、首次生成、renderer 分阶段接入和 ready 淡出；后续手动生成继续使用既有非阻塞气泡。同步启动异常、首次异步生成失败和三秒预启动超时均保留可读错误页，且超时兜底不会覆盖已经捕获的真实错误。审查发现品牌标题最初位于 `aria-hidden` 的装饰容器内，已移除错误隐藏并由可访问树回归固定。
+- 常驻全局工具栏现可把控制面板、适配视图、测量和开发模式整体收为左侧 `24×42px` 小按钮。闲置透明度 `0.46`，hover / 键盘焦点恢复 `1` 并适度扩宽；收起与展开均保留中文可访问名称和展开状态。`toolbarCollapsed` 复用 `webgl-generator-control-preferences`，旧偏好默认展开；隐藏只作用于工具组显示，不关闭面板、退出画布模式或破坏原按钮 / 快捷键契约。
+- 新增 `tools/prototype-deployment.mjs`，Vite 生产构建动态枚举 `prototype/` 子目录、检查入口并把整个原型目录复制到统一产物。当前正式入口为 `/`，WebGL cells 与共享边界实验室分别位于 `/prototype/webgl-cells/`、`/prototype/boundary-topology-lab/`；Vercel 对无尾斜杠入口先规范化，再在正式 SPA fallback 之前命中 prototype 的 `index.html`，真实模块、样式与 JSON 由文件系统直接提供。
+- `regress:global-shell`、`regress:deployment`、`regress:control-ia`、九个修改脚本的 `node --check`、两轮 `CI=true pnpm run build:app` 和 `git diff --check` 通过；生产构建为 `1248` modules，仅保留既有大 chunk 提示。部署回归确认构建产物包含正式入口、两个 prototype、WebGL 主模块、拓扑脚本和 `19,567,449` 字节样本 JSON，版本占位符已替换为 `v0.1.0`。
+- 真实浏览器在 `1280×720` 和 `390×700` 验证加载页，窄屏无横向溢出、标题缩至 `36px`，ready 后加载页 `hidden=true`；工具栏收起后原动作 `display:none`、刷新仍保持，恢复后三个普通入口重新可见，窄屏展开宽度 `334px`。生产主应用为单一 canvas 且来源错误为 `0`；拓扑实验室 `8/8`、WebGL cells 原型加载 `99846 grid / 72343 pack cells` 与 `56` 行统计。验收临时生产预览服务和浏览器测试页均已关闭。
+
 ## 2026-07-22：完成权威任务第 159 项——共享边界拓扑实验室
 
 - 根据第 128 项调研冻结的全部拓扑 case，在 `prototype/boundary-topology-lab/` 新增独立静态实验室，不接正式 renderer、生成器、地图存档或编辑事务。界面固定覆盖单岛、带洞岛屿、狭窄海峡、湖海连接、三国交界、跨国省界、地图边界和无天然分叉节点闭环，可对照原始折线、Douglas-Peucker、Visvalingam、有限 Chaikin、Catmull-Rom、B-spline 与推荐共享管线。
