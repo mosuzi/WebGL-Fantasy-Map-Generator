@@ -34,12 +34,30 @@ assert.match(loadingMarkup, /<feColorMatrix type="matrix" values="0 0 0 0 0\.588
 assert.doesNotMatch(loadingMarkup, /app-loading-inscription|writing-mode:\s*vertical-rl|<p[^>]*>\s*莫苏子\s*<\/p>/, "正式加载页仍保留小字款识");
 assert.doesNotMatch(loadingMarkup, /<span[^>]*class="app-loading-seal"[^>]*>[\s\S]*?莫/, "正式加载页仍使用文字印章");
 assert.match(loadingStyle, /\.app-loading-seal\s*\{[\s\S]*?transform:\s*rotate\(-3deg\)/, "正式印章没有保持 -3deg 落印角度");
-assert.match(indexSource, /@keyframes app-scroll-unfurl\s*\{\s*from\s*\{\s*clip-path: inset\(0 50%\);\s*\}\s*to\s*\{\s*clip-path: inset\(0\);/, "画卷纸面没有从中央向两侧展开");
-assert.match(indexSource, /@keyframes app-scroll-roller-left[\s\S]*?left: 50%;[\s\S]*?left: 0;/, "左侧滚轴没有从中央滑向卷首");
-assert.match(indexSource, /@keyframes app-scroll-roller-right[\s\S]*?left: 50%;[\s\S]*?left: 100%;/, "右侧滚轴没有从中央滑向卷尾");
-assert.doesNotMatch(loadingStyle, /@keyframes app-scroll-unfurl[^@]*scaleX\(/, "画卷展开仍通过横向缩放扭曲文字");
-assert.match(indexSource, /@media \(max-width: 520px\)[\s\S]*?\.app-loading-scroll\s*\{[^}]*width: 96vw;[\s\S]*?\.app-loading-status\s*\{[^}]*max-width: 88vw;/, "窄屏画卷或动态状态没有限制在视口内");
-assert.match(indexSource, /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.app-loading-paper-window,[\s\S]*?animation: none;[\s\S]*?\.app-loading-paper-window\s*\{\s*clip-path: inset\(0\);/, "减少动态偏好没有直接呈现画卷终态");
+assert.match(indexSource, /@keyframes app-scroll-unfurl\s*\{\s*from\s*\{\s*transform: scaleX\(0\.001\);\s*\}\s*to\s*\{\s*transform: scaleX\(1\);/, "画卷纸面没有通过独立合成变换从中央展开");
+assert.match(loadingStyle, /\.app-loading-scroll\s*\{[^}]*--scroll-width:\s*min\(95vw, 1120px\);[^}]*--roller-travel:[^}]*width:\s*var\(--scroll-width\);/, "画卷没有共享可复用的卷轴位移尺寸");
+assert.doesNotMatch(loadingStyle.match(/\.app-loading-scroll\s*\{[^}]*\}/)?.[0] ?? "", /\bfilter\s*:/, "整幅画卷祖先仍使用会放大重绘的滤镜");
+assert.match(loadingStyle, /\.app-loading-paper-window\s*\{[^}]*will-change:\s*transform;[^}]*contain:\s*paint;/, "纸面展开没有隔离为 transform 合成层");
+assert.match(indexSource, /\.app-loading-roller-left\s*\{\s*left:\s*0;[\s\S]*?\.app-loading-roller-right\s*\{\s*right:\s*0;/, "左右纸卷没有固定在最终卷首和卷尾位置");
+assert.match(indexSource, /@keyframes app-scroll-roller-left[^@]*translate3d\(var\(--roller-travel\), 0, 0\)[^@]*translate3d\(0, 0, 0\)/, "左侧纸卷没有通过 transform 从中央移到卷首");
+assert.match(indexSource, /@keyframes app-scroll-roller-right[^@]*translate3d\(calc\(0px - var\(--roller-travel\)\), 0, 0\)[^@]*translate3d\(0, 0, 0\)/, "右侧纸卷没有通过 transform 从中央移到卷尾");
+for (const keyframe of ["app-scroll-unfurl", "app-scroll-roller-left", "app-scroll-roller-right", "app-scroll-copy-reveal", "app-scroll-brush-reveal", "app-scroll-seal-set", "app-scroll-mist", "app-scroll-progress"]) {
+  const source = loadingStyle.match(new RegExp(`@keyframes ${keyframe}[^@]*`))?.[0] ?? "";
+  assert(source, `缺少加载动画关键帧 ${keyframe}`);
+  const properties = [...source.matchAll(/[;{]\s*([a-z-]+)\s*:/g)].map((match) => match[1]);
+  assert(properties.length > 0, `${keyframe} 没有可验证的动画属性`);
+  for (const property of properties) assert(["transform", "opacity"].includes(property), `${keyframe} 仍动画非合成友好属性 ${property}`);
+}
+const unfurlTiming = loadingStyle.match(/\.app-loading-paper-window\s*\{[^}]*animation:\s*app-scroll-unfurl\s+(\d+)ms[^;]*\s(\d+)ms\s+both;/);
+const titleTiming = loadingStyle.match(/\.app-loading-title-card\s*\{[^}]*animation:\s*app-scroll-copy-reveal\s+(\d+)ms[^;]*\s(\d+)ms\s+both;/);
+const versionTiming = loadingStyle.match(/\.app-loading-version\s*\{[^}]*animation:\s*app-scroll-copy-reveal\s+(\d+)ms[^;]*\s(\d+)ms\s+both;/);
+assert(unfurlTiming && titleTiming && versionTiming, "无法读取纸面、标题或版本动画时序");
+const unfurlEnd = Number(unfurlTiming[1]) + Number(unfurlTiming[2]);
+assert(Number(titleTiming[2]) >= unfurlEnd, "标题在纸面展开结束前显现，会产生可见横向拉伸");
+assert(Number(versionTiming[2]) >= unfurlEnd, "版本在纸面展开结束前显现，会产生可见横向拉伸");
+assert.match(loadingStyle, /\.app-loading-progress i\s*\{[^}]*width:\s*78%;[^}]*transform:\s*scaleX\(0\.2308\);[^}]*will-change:\s*transform;/, "进度装饰没有改为 transform 合成动画");
+assert.match(indexSource, /@media \(max-width: 520px\)[\s\S]*?\.app-loading-scroll\s*\{[^}]*--scroll-width: 96vw;[\s\S]*?\.app-loading-status\s*\{[^}]*max-width: 88vw;/, "窄屏画卷或动态状态没有限制在视口内");
+assert.match(indexSource, /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.app-loading-paper-window,[\s\S]*?animation: none;[\s\S]*?\.app-loading-paper-window\s*\{\s*transform: scaleX\(1\);/, "减少动态偏好没有直接呈现画卷终态");
 assert.doesNotMatch(loadingStyle, /@import\b/i, "画卷首屏 CSS 依赖外部字体");
 assert.equal(count(loadingMarkup, /class="app-loading-landscape app-loading-landscape-(?:far|mid|near)"[^>]*aria-hidden="true"/g), 3, "画卷缺少三层且从可访问树隐藏的山水装饰");
 assert.match(loadingMarkup, /class="app-loading-progress" aria-hidden="true"/, "加载页缺少非百分比进度装饰");
