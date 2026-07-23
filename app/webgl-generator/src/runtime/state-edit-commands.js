@@ -1,4 +1,4 @@
-import {GOVERNMENT_BY_KEY, applyStateGovernment, setStateGovernment} from "../generator/governments.js";
+import {GOVERNMENT_BY_KEY, applyStateGovernment, governmentAllowsSuffix, setStateGovernment} from "../generator/governments.js";
 import {createChineseNameGenerator, getStateFullName} from "../generator/names.js";
 import {provinceFormForState} from "../generator/province-naming.js";
 import {createRandom} from "../generator/random.js";
@@ -150,9 +150,10 @@ export function createSetStateColorCommand(stateId, color, {beforeColor = null, 
   };
 }
 
-export function createSetStateGovernmentCommand(stateId, governmentKey, {label = "国家政体"} = {}) {
+export function createSetStateGovernmentCommand(stateId, governmentKey, {formName = "", label = "国家政体"} = {}) {
   const normalizedStateId = normalizeStateId(stateId);
   const normalizedGovernmentKey = String(governmentKey || "").trim();
+  const normalizedFormName = String(formName || "").trim();
   let previous = null;
   return {
     label: `${label} #${normalizedStateId}`,
@@ -163,7 +164,7 @@ export function createSetStateGovernmentCommand(stateId, governmentKey, {label =
     },
     apply(context) {
       previous ??= snapshotStateGovernment(context.map, normalizedStateId);
-      setStateGovernment(context.map, normalizedStateId, normalizedGovernmentKey);
+      setStateGovernment(context.map, normalizedStateId, normalizedGovernmentKey, {formName: normalizedFormName});
       markDerivedStale(context.map, ["economy", "diplomacy", "military"]);
     },
     revert(context) {
@@ -173,7 +174,9 @@ export function createSetStateGovernmentCommand(stateId, governmentKey, {label =
     },
     isNoop(context) {
       const state = context.map?.politics?.states?.[normalizedStateId];
-      return normalizedStateId <= 0 || !state || !normalizedGovernmentKey || state.governmentKey === normalizedGovernmentKey;
+      if (normalizedStateId <= 0 || !state || !hasGovernmentKey(normalizedGovernmentKey)) return true;
+      if (normalizedFormName && !governmentAllowsSuffix(normalizedGovernmentKey, normalizedFormName)) return true;
+      return state.governmentKey === normalizedGovernmentKey && (!normalizedFormName || state.formName === normalizedFormName);
     }
   };
 }

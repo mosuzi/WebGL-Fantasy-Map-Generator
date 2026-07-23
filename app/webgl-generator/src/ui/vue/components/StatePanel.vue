@@ -66,7 +66,14 @@
           :options="governmentOptions"
           @update:model-value="governmentDraft = $event"
         />
-        <UiButton variant="secondary" @click="callbacks.onGovernmentChange(selected.id, governmentDraft)">套用政体</UiButton>
+        <UiSelectField
+          label="国号后缀"
+          class-name="state-government-suffix-select"
+          :model-value="governmentSuffixDraft"
+          :options="governmentSuffixOptions"
+          @update:model-value="governmentSuffixDraft = $event"
+        />
+        <UiButton variant="secondary" @click="callbacks.onGovernmentChange(selected.id, governmentDraft, governmentSuffixDraft)">套用政体与国号</UiButton>
         <p class="state-government-note">{{ governmentNote }}</p>
       </div>
     </template>
@@ -198,7 +205,7 @@ import {formatArea, formatMilitary, formatNumber as formatDisplayNumber, formatP
 import {findByObjectId, sameObjectId} from "../../object-id.js";
 import {compareRowsByKey} from "../../sort-utils.js";
 import {buildStateCapitalOptions} from "../../state-capital-options.js";
-import {GOVERNMENT_OPTIONS} from "../../../generator/governments.js";
+import {GOVERNMENT_OPTIONS, governmentSuffixOptions as readGovernmentSuffixOptions} from "../../../generator/governments.js";
 import {readObjectNote} from "../../../runtime/object-notes.js";
 import {useUnitPreferences} from "../composables/use-unit-preferences.js";
 import {useVisibleRowSelection} from "../composables/use-visible-row-selection.js";
@@ -255,6 +262,7 @@ const activeAction = ref(null);
 const renameRequestId = ref(null);
 const capitalDraft = ref(0);
 const governmentDraft = ref("monarchy");
+const governmentSuffixDraft = ref("王国");
 const topologySourceStateId = ref(null);
 const mergeOtherStateId = ref(null);
 const mergeSurvivorStateId = ref(null);
@@ -287,7 +295,8 @@ const governmentOptions = computed(() => GOVERNMENT_OPTIONS.map(option => ({
   value: option.value,
   label: `${option.label} / ${option.category}`
 })));
-const governmentNote = computed(() => selected.value?.governmentEffectSummary || "政体会影响国号后缀、税收、外交倾向和军事动员。");
+const governmentSuffixOptions = computed(() => readGovernmentSuffixOptions(governmentDraft.value).map(value => ({value, label: value})));
+const governmentNote = computed(() => selected.value?.governmentEffectSummary || "政体影响税收、外交倾向和军事动员；国号后缀可在当前政体允许范围内独立选择。");
 const topologySourceName = computed(() => formatStateName(props.state.map, topologySourceStateId.value));
 const mergeNeighborOptions = computed(() => activeStateNeighbors(props.state.map, topologySourceStateId.value));
 const mergeSurvivorOptions = computed(() => [topologySourceStateId.value, mergeOtherStateId.value]
@@ -357,9 +366,17 @@ watch(() => selected.value?.capitalBurgId, next => {
   capitalDraft.value = Number(next) || capitalOptions.value[0]?.value || 0;
 }, {immediate: true});
 
-watch(() => selected.value?.governmentKey, next => {
-  governmentDraft.value = next || "monarchy";
+watch(() => [selected.value?.id, selected.value?.governmentKey, selected.value?.formName], ([, nextGovernmentKey, nextFormName]) => {
+  governmentDraft.value = nextGovernmentKey || "monarchy";
+  const suffixes = readGovernmentSuffixOptions(governmentDraft.value);
+  governmentSuffixDraft.value = suffixes.includes(nextFormName) ? nextFormName : suffixes[0];
 }, {immediate: true});
+
+watch(governmentDraft, governmentKey => {
+  const suffixes = readGovernmentSuffixOptions(governmentKey);
+  if (suffixes.includes(governmentSuffixDraft.value)) return;
+  governmentSuffixDraft.value = suffixes[0];
+});
 
 watch(() => props.state.map, () => {
   activeAction.value = null;

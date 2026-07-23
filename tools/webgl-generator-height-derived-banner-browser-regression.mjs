@@ -35,6 +35,29 @@ try {
   await page.evaluate(() => document.getElementById("open-height-panel")?.click());
   const panel = page.locator('.floating-panel[data-panel-id="height-panel"]');
   await panel.waitFor({state: "visible"});
+  const persistentUpdate = panel.getByRole("button", {name: "完成编辑并更新地图", exact: true});
+  await persistentUpdate.waitFor({state: "visible"});
+  assert.equal(await persistentUpdate.isDisabled(), true, "地图内容已同步时永久更新入口没有禁用");
+  const affectSeafloor = panel.getByRole("switch", {name: "影响海底", exact: true});
+  await affectSeafloor.waitFor({state: "visible"});
+  const defaultBrush = await page.evaluate(() => window.__webglGeneratorApp.panels.height.getBrush());
+  assert.equal(defaultBrush.affectSeafloor, false, "影响海底没有默认关闭");
+  assert.equal(defaultBrush.scope, "land", "默认高度画笔没有限制在陆地");
+  assert.equal(defaultBrush.preserveSurface, true, "默认高度画笔没有保护海陆分界");
+  await affectSeafloor.evaluate(node => node.click());
+  const seabedBrush = await page.evaluate(() => window.__webglGeneratorApp.panels.height.getBrush());
+  assert.equal(seabedBrush.affectSeafloor, true, "影响海底开关没有写入会话状态");
+  assert.equal(seabedBrush.scope, "all", "影响海底开启后没有覆盖陆地与水域");
+  assert.equal(seabedBrush.preserveSurface, false, "影响海底开启后仍在阻止跨越海平面");
+  await panel.getByRole("button", {name: "降低地形", exact: true}).evaluate(node => node.click());
+  const switchedActionBrush = await page.evaluate(() => window.__webglGeneratorApp.panels.height.getBrush());
+  assert.equal(switchedActionBrush.affectSeafloor, true, "切换高度动作重置了影响海底开关");
+  assert.equal(switchedActionBrush.scope, "all", "切换高度动作重置了海底作用范围");
+  await affectSeafloor.evaluate(node => node.click());
+  const restoredLandBrush = await page.evaluate(() => window.__webglGeneratorApp.panels.height.getBrush());
+  assert.equal(restoredLandBrush.affectSeafloor, false, "影响海底开关无法关闭");
+  assert.equal(restoredLandBrush.scope, "land", "关闭影响海底后没有恢复陆地范围");
+  assert.equal(restoredLandBrush.preserveSurface, true, "关闭影响海底后没有恢复海陆保护");
 
   const heightChange = await page.evaluate(() => {
     const app = window.__webglGeneratorApp;
@@ -43,23 +66,25 @@ try {
     if (gridCell < 0) throw new Error("没有可测试的陆地高度单元");
     const before = Number(heights[gridCell]);
     const result = window.webglGeneratorApi.edit.height.applyChanges([{gridCell, before, after: before + 1}]);
-    const derivedStaleSystems = app.map.metadata?.derivedStale?.systems || ["religions", "markers", "diplomacy", "military", "zones"];
+    const derivedStaleSystems = app.map.metadata?.derivedStale?.systems || [];
     app.panels.height.update({derivedStaleSystems});
     return {gridCell, before, after: Number(heights[gridCell]), derivedStaleSystems, ok: result?.ok, error: result?.error?.message || ""};
   });
   assert.equal(heightChange.ok, true, heightChange.error || "高度变化没有应用");
+  assert.ok(heightChange.derivedStaleSystems.includes("features"), "普通非跨海高度变化没有登记待更新派生内容");
 
   const banner = panel.locator('.height-derived-banner[data-ui-state="stale"]');
   await banner.waitFor({state: "visible"});
   await banner.getByText("地图内容待更新", {exact: true}).waitFor();
   await banner.getByText("完成后统一更新。", {exact: true}).waitFor();
-  await banner.getByRole("button", {name: "完成编辑并更新地图", exact: true}).waitFor();
+  assert.equal(await persistentUpdate.isDisabled(), false, "高度变化后永久更新入口没有启用");
 
   const layout = await banner.evaluate(node => {
     const copy = node.querySelector(".ui-state-banner-copy");
     const actions = node.querySelector(".ui-state-banner-actions");
     const buttons = [...node.querySelectorAll(".ui-state-banner-actions button")];
     const rect = item => {
+      if (!item) return null;
       const box = item.getBoundingClientRect();
       return {left: box.left, right: box.right, top: box.top, bottom: box.bottom, width: box.width, height: box.height};
     };
@@ -74,11 +99,17 @@ try {
     };
   });
 
-  assert.ok(!rectanglesOverlap(layout.copy, layout.actions), "提示文案与操作按钮发生重叠");
+  assert.ok(!layout.actions || !rectanglesOverlap(layout.copy, layout.actions), "提示文案与操作按钮发生重叠");
   assert.ok(layout.buttons.every(button => button.left >= layout.banner.left && button.right <= layout.banner.right + 0.5), "按钮超出待更新提示边界");
-  assert.equal(layout.buttons.length, 1, "普通高度面板仍显示多个更新按钮");
+  assert.equal(layout.buttons.length, 0, "普通地图更新入口仍嵌在条件横幅内");
   assert.ok(layout.scrollWidth <= layout.clientWidth + 1, "待更新提示产生横向溢出");
   assert.doesNotMatch(layout.text, /待派生|\d+\s*项：|宗教、|标记、|地区等/, "待更新提示仍暴露派生调试信息");
+  await page.evaluate(() => window.__webglGeneratorApp.panels.height.update({derivedStaleSystems: []}));
+  await banner.waitFor({state: "hidden"});
+  await persistentUpdate.waitFor({state: "visible"});
+  assert.equal(await persistentUpdate.isDisabled(), true, "完成更新后永久入口消失或没有恢复禁用");
+  await page.evaluate(systems => window.__webglGeneratorApp.panels.height.update({derivedStaleSystems: systems}), heightChange.derivedStaleSystems);
+  await banner.waitFor({state: "visible"});
   assert.deepEqual(consoleErrors, []);
   assert.deepEqual(pageErrors, []);
 

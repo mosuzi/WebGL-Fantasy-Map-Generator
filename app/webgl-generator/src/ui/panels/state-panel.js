@@ -118,7 +118,7 @@ export function createStatePanel(documentRef, manager, callbacks = {}) {
       callbacks.onBrushRadiusChange?.();
     },
     onColorChange: (stateId, color) => callbacks.onColorChange?.(stateId, color),
-    onGovernmentChange: (stateId, governmentKey) => callbacks.onGovernmentChange?.(stateId, governmentKey),
+    onGovernmentChange: (stateId, governmentKey, formName) => callbacks.onGovernmentChange?.(stateId, governmentKey, formName),
     onCapitalChange: (stateId, burgId) => callbacks.onCapitalChange?.(stateId, burgId),
     onNoteChange: (stateId, body) => callbacks.onNoteChange?.(stateId, body),
     onInspectMerge: options => callbacks.onInspectMerge?.(options),

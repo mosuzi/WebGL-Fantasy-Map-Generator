@@ -43,7 +43,8 @@ function testProjection() {
     assert.deepEqual(projection.center, {x: center.x * scale + 13, y: center.y * scale - 7}, `${scale} 倍中心投影偏移`);
   }
   const anisotropic = projectWorldRadiusToScreen(center, radius, point => ({x: point.x * 3, y: point.y * 2}));
-  assert.notEqual(anisotropic.radiusX, anisotropic.radiusY, "投影错误地强制成屏幕圆形");
+  assert.equal(anisotropic.radiusX, 54);
+  assert.equal(anisotropic.radiusY, 36);
 }
 
 function testResolverAllowlist() {
@@ -71,7 +72,7 @@ function testResolverAllowlist() {
       economy: {getMarketBrush: () => brushes.economy}
     }
   };
-  for (const action of ["raise", "lower", "smooth", "flatten", "disrupt"]) {
+  for (const action of ["raise", "lower", "smooth", "flatten", "level", "disrupt"]) {
     brushes.height.action = action;
     assert.equal(resolveBrushCursor(state)?.id, BRUSH_RADIUS_ID.HEIGHT, `高度 ${action} 未显示半径`);
     assert.equal(resolveBrushCursor(state)?.falloff, true, `高度 ${action} 未携带柔和画笔状态`);
@@ -148,6 +149,7 @@ async function testOverlayLifecycleAndIntegration() {
   const canvas = new FakeElement("canvas");
   canvas.getBoundingClientRect = () => ({left: 10, top: 20, width: 800, height: 600});
   let scale = 1;
+  let scaleY = 0.6;
   let modeId = "height:brush";
   const state = {
     map: {id: "map"},
@@ -157,8 +159,8 @@ async function testOverlayLifecycleAndIntegration() {
     heightEdit: {terrainSelectionPaint: null, terrainSelectionPaintPending: null},
     panels: {height: {getBrush: () => ({active: true, action: "raise", radius: 28, falloff: true})}},
     renderer: {
-      screenToWorld: (clientX, clientY) => ({x: (clientX - 10) / scale, y: (clientY - 20) / scale}),
-      worldToScreen: (x, y) => ({x: x * scale, y: y * scale})
+      screenToWorld: (clientX, clientY) => ({x: (clientX - 10) / scale, y: (clientY - 20) / scaleY}),
+      worldToScreen: (x, y) => ({x: x * scale, y: y * scaleY})
     }
   };
   const before = JSON.stringify({map: state.map, selection: state.selection, editHistory: state.editHistory});
@@ -174,9 +176,17 @@ async function testOverlayLifecycleAndIntegration() {
   assert.equal(JSON.stringify({map: state.map, selection: state.selection, editHistory: state.editHistory}), before, "纯悬停修改了地图、选中态或历史");
 
   const radiusAtOne = Number(preview.ellipse.getAttribute("rx"));
+  assert.equal(Number(preview.ellipse.getAttribute("ry")), radiusAtOne, "高度画笔光标不是屏幕正圆");
   scale = 2;
+  scaleY = 1.2;
   preview.refresh();
   assert.ok(Math.abs(Number(preview.ellipse.getAttribute("rx")) - radiusAtOne * 2) <= 2, "相机缩放后未原位重投影");
+  assert.equal(Number(preview.ellipse.getAttribute("ry")), Number(preview.ellipse.getAttribute("rx")), "缩放后高度画笔光标不再是正圆");
+  modeId = "state:brush";
+  state.panels.state = {getBrush: () => ({active: true, radius: 28})};
+  preview.refresh();
+  assert.equal(Number(preview.ellipse.getAttribute("ry")), Number(preview.ellipse.getAttribute("rx")), "国家画笔仍按纵横投影画成椭圆");
+  modeId = "height:brush";
   state.panels.height.getBrush = () => ({active: true, action: "raise", radius: 40, falloff: false});
   documentRef.dispatch("input", {});
   assert.ok(Number(preview.ellipse.getAttribute("rx")) > radiusAtOne * 2, "滑杆变化后未原位重投影");

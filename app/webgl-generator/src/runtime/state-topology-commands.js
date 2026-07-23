@@ -186,6 +186,46 @@ export function createSplitStateCommand(options = {}) {
   return createTopologyCommand("split", options);
 }
 
+export function regenerateProvincesForStates(map, stateIds) {
+  const resultStateIds = uniquePositiveIntegers(stateIds).sort(ascending);
+  if (!resultStateIds.length) throw new Error("按国家重设省份时必须指定至少一个有效国家");
+  for (const stateIdValue of resultStateIds) {
+    if (!isActiveState(readState(map, stateIdValue))) throw new Error(`国家 #${stateIdValue} 不存在或已移除`);
+  }
+
+  const affectedOldProvinceIds = activeProvinces(map)
+    .filter(province => resultStateIds.includes(numberId(province.state)))
+    .map(provinceId)
+    .sort(ascending);
+  const provinceCounts = resultStateIds.map(stateIdValue => {
+    const cities = activeCities(map).filter(city => numberId(city.state) === stateIdValue);
+    const cells = landPackCells(map).filter(cell => numberId(map.pack.cells.state[cell]) === stateIdValue);
+    if (!cities.length || !cells.length) throw new Error(`国家 #${stateIdValue} 缺少可重新分省的城镇或陆地`);
+    return targetProvinceCount(cities.length, map?.options?.provincesRatio);
+  });
+  const nextProvinceId = nextPoliticalId(map, "provinces");
+  const totalProvinceCount = provinceCounts.reduce((sum, count) => sum + count, 0);
+  if (nextProvinceId + totalProvinceCount - 1 > MAX_PROVINCE_ID) {
+    throw new Error(`新省份编号不能超过 ${MAX_PROVINCE_ID}`);
+  }
+
+  const plan = {
+    operation: "regenerate",
+    selectedStateIds: resultStateIds,
+    resultStateIds,
+    affectedOldProvinceIds,
+    newProvinceIds: sequence(nextProvinceId, totalProvinceCount),
+    boundaryStateIds: []
+  };
+  const provinceResult = rebuildAffectedProvinces(map, plan);
+  refreshPoliticalTopology(map, plan);
+  return {
+    stateIds: [...resultStateIds],
+    provinceIds: [...provinceResult.newProvinceIds],
+    tombstonedProvinceIds: [...affectedOldProvinceIds]
+  };
+}
+
 function createTopologyCommand(operation, options) {
   let frozenPlan = null;
   let beforeSnapshot = null;

@@ -147,7 +147,7 @@ function createConsoleApi(documentRef, state, actions = {}) {
         split: (options = {}) => apiCall(() => requireApiAction(actions.edit?.states?.split, "edit.states.split")(options)),
         rename: (stateId, name) => apiCall(() => requireApiAction(actions.edit?.states?.rename, "edit.states.rename")(stateId, name)),
         setColor: (stateId, color) => apiCall(() => requireApiAction(actions.edit?.states?.setColor, "edit.states.setColor")(stateId, color)),
-        setGovernment: (stateId, governmentKey) => apiCall(() => requireApiAction(actions.edit?.states?.setGovernment, "edit.states.setGovernment")(stateId, governmentKey)),
+        setGovernment: (stateId, governmentKey, options = {}) => apiCall(() => requireApiAction(actions.edit?.states?.setGovernment, "edit.states.setGovernment")(stateId, governmentKey, options)),
         setCapital: (stateId, cityId) => apiCall(() => requireApiAction(actions.edit?.states?.setCapital, "edit.states.setCapital")(stateId, cityId)),
         setGovernmentBatch: (stateIds, governmentKey) => apiCall(() => requireApiAction(actions.edit?.states?.setGovernmentBatch, "edit.states.setGovernmentBatch")(stateIds, governmentKey)),
         applyChanges: changes => apiCall(() => requireApiAction(actions.edit?.states?.applyChanges, "edit.states.applyChanges")(changes))

@@ -1,7 +1,7 @@
 import {BRUSH_RADIUS_ID, normalizeBrushRadius, projectWorldRadiusToScreen} from "../runtime/brush-radius-contract.js";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
-const HEIGHT_BRUSH_ACTIONS = new Set(["raise", "lower", "smooth", "flatten", "disrupt"]);
+const HEIGHT_BRUSH_ACTIONS = new Set(["raise", "lower", "smooth", "flatten", "level", "disrupt"]);
 let cursorGradientSequence = 0;
 
 export function resolveBrushCursor(state) {
@@ -56,15 +56,16 @@ export function createBrushCursorPreview(canvas, state, documentRef) {
     if (!resolution) return clear();
     const center = state.renderer.screenToWorld(pointer.clientX, pointer.clientY);
     const rect = canvas.getBoundingClientRect();
-    const projection = projectWorldRadiusToScreen(center, resolution.radius, point => {
+    const project = point => {
       const local = state.renderer.worldToScreen(point.x, point.y, rect);
       return {x: rect.left + local.x, y: rect.top + local.y};
-    });
-    if (!projection || projection.radiusX <= 0 || projection.radiusY <= 0) return clear();
+    };
+    const projection = projectWorldRadiusToScreen(center, resolution.radius, project);
+    if (!projection || projection.radiusX <= 0) return clear();
     ellipse.setAttribute("cx", String(projection.center.x));
     ellipse.setAttribute("cy", String(projection.center.y));
     ellipse.setAttribute("rx", String(projection.radiusX));
-    ellipse.setAttribute("ry", String(projection.radiusY));
+    ellipse.setAttribute("ry", String(projection.radiusX));
     svg.dataset.radiusId = resolution.id;
     svg.dataset.worldRadius = String(resolution.radius);
     svg.dataset.falloff = resolution.falloff ? "true" : "false";

@@ -37,6 +37,7 @@ export function buildSettlements(grid, features, politics, rivers, random, pack,
 
 export function finalizeSettlements(grid, features, politics, settlements, pack, options = {}) {
   for (const city of settlements.cities) {
+    if (!city || city.removed) continue;
     if (pack?.cells && Number.isInteger(city.packCell) && city.packCell >= 0) {
       city.state = pack.cells.state?.[city.packCell] ?? city.state;
       city.province = pack.cells.province?.[city.packCell] ?? city.province;
@@ -69,7 +70,9 @@ export function regenerateSettlementsWithinPolitics(grid, features, politics, se
   if (!pack?.cells?.s || !settlements) return finalizeSettlements(grid, features, politics, settlements, pack, options);
 
   const random = createRandom(regenerationSeed(options, "regenerate-settlements", options.settlementRegenerationSalt));
-  const result = rebuildPackSettlementsWithAnchors(grid, politics, pack, random, options, settlements);
+  const result = options.settlementScope
+    ? rebuildPackSettlementsInScope(grid, politics, pack, random, options, settlements)
+    : rebuildPackSettlementsWithAnchors(grid, politics, pack, random, options, settlements);
   settlements.cities = result.cities;
   mirrorCitiesToGrid(grid, settlements.cities);
   syncPoliticalSettlementStats(pack, politics, settlements.cities);
@@ -138,12 +141,13 @@ function createSettlementResult({grid, features, population, cities, routes, pac
 }
 
 function createSettlementMetadata({grid, features, population, cities, routes, pack, populationPoints = null}) {
+  const activeCities = cities.filter(city => city && !city.removed);
   const routeResources = routeResourceStats(routes);
-  const cityResources = cityResourceStats(cities);
+  const cityResources = cityResourceStats(activeCities);
   return {
-    cities: cities.length,
-    capitals: cities.filter(city => city.capital).length,
-    ports: cities.filter(city => city.port).length,
+    cities: activeCities.length,
+    capitals: activeCities.filter(city => city.capital).length,
+    ports: activeCities.filter(city => city.port).length,
     citiesWithResources: cityResources.citiesWithResources,
     cityResourceCells: cityResources.resourceCells,
     cityMarkerResourceCells: cityResources.markerResourceCells,
@@ -154,8 +158,8 @@ function createSettlementMetadata({grid, features, population, cities, routes, p
     routesWithResources: routeResources.routesWithResources,
     populationCells: population.filter(value => value > 0).length,
     ruralPopulationPoints: (populationPoints || buildPopulationPoints(grid, features, population)).length,
-    maxPopulation: maxValue(cities.map(city => city.population)),
-    packBurgs: pack?.burgs ? Math.max(0, pack.burgs.length - 1) : 0
+    maxPopulation: maxValue(activeCities.map(city => city.population)),
+    packBurgs: pack?.burgs ? pack.burgs.filter(burg => burg?.i && !burg.removed).length : 0
   };
 }
 
@@ -302,6 +306,116 @@ function rebuildPackSettlementsWithAnchors(grid, politics, pack, random, options
   return {cities};
 }
 
+function rebuildPackSettlementsInScope(grid, politics, pack, random, options, settlements) {
+  const scope = normalizeSettlementScope(options.settlementScope, politics);
+  const {cells} = pack;
+  const previousCities = settlements?.cities || [];
+  const previousBurgs = pack.burgs || [];
+  const cities = previousCities.map(city => city ? {...city, visual: cloneVisual(city.visual)} : city);
+  const burgs = previousBurgs.map(burg => burg ? {...burg, visual: cloneVisual(burg.visual)} : burg);
+  const targetCell = cell => scope.kind === "state"
+    ? Number(cells.state?.[cell]) === scope.id
+    : Number(cells.province?.[cell]) === scope.id;
+  const provinceAnchors = new Set((politics?.provinces || [])
+    .filter(province => province?.i && !province.removed)
+    .map(province => Number(province.burg))
+    .filter(Number.isInteger));
+  const replaceable = previousCities.filter(city => city && !city.removed && targetCell(city.packCell)
+    && !city.capital && !provinceAnchors.has(Number(city.burgId)));
+  const replaceableIds = new Set(replaceable.map(city => Number(city.id)));
+  const occupied = new Set();
+  const occupiedGrid = new Set();
+  const spacingIndex = new SpacingIndex(16);
+
+  cells.burg = new Uint16Array(cells.i.length);
+  for (const city of cities) {
+    if (!city || city.removed || replaceableIds.has(Number(city.id))) continue;
+    const burg = burgs[city.burgId];
+    if (!burg || burg.removed || !Number.isInteger(city.packCell) || city.packCell < 0) continue;
+    cells.burg[city.packCell] = city.burgId;
+    occupied.add(city.packCell);
+    occupiedGrid.add(city.cell);
+    spacingIndex.add(city.x, city.y, city.id);
+  }
+
+  const populated = cells.i.filter(cell => targetCell(cell) && isPopulatedPackCell(cells, cell));
+  const nameGenerator = createChineseNameGenerator(options.seed, {namebases: options.namebases});
+  const generated = addScopedRegeneratedTowns({
+    grid,
+    pack,
+    cities,
+    burgs,
+    occupied,
+    occupiedGrid,
+    spacingIndex,
+    populated,
+    random,
+    nameGenerator,
+    reusable: replaceable.map(city => ({cityId: Number(city.id), burgId: Number(city.burgId)}))
+  });
+  if (generated.length !== replaceable.length) {
+    throw new Error(`目标政区可用城镇落点不足：需要 ${replaceable.length}，实际 ${generated.length}`);
+  }
+
+  pack.burgs = burgs;
+  const generatedBurgs = generated.map(city => burgs[city.burgId]).filter(Boolean);
+  shiftPortsAndRiverBurgs(grid, pack, cities, generatedBurgs, nameGenerator, options);
+  defineCityTypes(pack, generated, burgs);
+  specifyBurgs(pack, generated, burgs, nameGenerator);
+  return {cities};
+}
+
+function normalizeSettlementScope(scope, politics) {
+  const kind = String(scope?.kind || "").trim().toLowerCase();
+  const id = Number(scope?.id);
+  if (!["state", "province"].includes(kind) || !Number.isInteger(id) || id <= 0) {
+    throw new Error("城镇局部重设范围必须是有效的国家或省份");
+  }
+  const collection = kind === "state" ? politics?.states : politics?.provinces;
+  const record = collection?.[id];
+  if (!record || record.removed || Number(record.i ?? record.id) !== id) {
+    throw new Error(`${kind === "state" ? "国家" : "省份"} #${id} 不存在或已移除`);
+  }
+  return {kind, id};
+}
+
+function addScopedRegeneratedTowns({grid, pack, cities, burgs, occupied, occupiedGrid, spacingIndex, populated, random, nameGenerator, reusable}) {
+  if (!reusable.length) return [];
+  const {cells} = pack;
+  const score = new Float32Array(cells.i.length);
+  for (const cell of populated) score[cell] = citySiteScore(pack, cell) * gaussian(random, 1, 3, 0, 20, 3);
+  const sorted = [...populated].sort((a, b) => score[b] - score[a] || a - b);
+  const generated = [];
+  let spacing = ((grid.metadata.graphWidth + grid.metadata.graphHeight) / 150) / (reusable.length ** 0.7 / 66);
+
+  while (generated.length < reusable.length && spacing > 0.25) {
+    for (const packCell of sorted) {
+      if (generated.length >= reusable.length) break;
+      if (occupied.has(packCell) || cells.burg[packCell]) continue;
+      const [x, y] = cells.p[packCell];
+      const minSpacing = spacing * gaussian(random, 1, 0.3, 0.2, 2, 2);
+      if (spacingIndex.find(x, y, minSpacing)) continue;
+      const ids = reusable[generated.length];
+      const city = addPackCity({
+        grid,
+        pack,
+        cities,
+        burgs,
+        occupied,
+        occupiedGrid,
+        spacingIndex,
+        packCell,
+        random,
+        nameGenerator,
+        flags: {cityId: ids.cityId, burgId: ids.burgId}
+      });
+      if (city) generated.push(city);
+    }
+    spacing *= 0.5;
+  }
+  return generated;
+}
+
 function addRegeneratedTowns({grid, pack, cities, burgs, occupied, occupiedGrid, spacingIndex, populated, random, nameGenerator}) {
   const {cells} = pack;
   const targetTowns = getTownsNumber(populated.length, grid.points.length);
@@ -368,7 +482,7 @@ function addPackCity({grid, pack, cities, burgs, occupied, occupiedGrid, spacing
 
   const [x, y] = cells.p[packCell];
   const burgId = Number.isInteger(flags.burgId) && flags.burgId > 0 ? flags.burgId : burgs.length;
-  const cityId = cities.length;
+  const cityId = Number.isInteger(flags.cityId) && flags.cityId >= 0 ? flags.cityId : cities.length;
   const state = Number.isInteger(flags.state) ? flags.state : flags.capital ? burgId : grid.cells.state?.[gridCell] ?? 0;
   const province = grid.cells.province?.[gridCell] ?? -1;
   const type = getBurgType(pack, packCell, 0);
@@ -444,7 +558,7 @@ function addPackCity({grid, pack, cities, burgs, occupied, occupiedGrid, spacing
   assignCityCivilization(pack, city, sourceBurg);
 
   burgs[burgId] = sourceBurg;
-  cities.push(city);
+  cities[cityId] = city;
   cells.burg[packCell] = burgId;
   occupied.add(packCell);
   occupiedGrid.add(gridCell);
@@ -1638,12 +1752,16 @@ function pruneNeutralSettlements(grid, settlements, pack) {
 
 function mirrorCitiesToGrid(grid, cities) {
   grid.cells.burg = new Array(grid.points.length).fill(-1);
-  for (const city of cities) grid.cells.burg[city.cell] = city.id;
+  for (const city of cities) {
+    if (!city || city.removed) continue;
+    grid.cells.burg[city.cell] = city.id;
+  }
 }
 
 function mirrorGridBurgsToPack(pack, cities) {
   if (!pack.cells.burg) pack.cells.burg = new Uint16Array(pack.cells.i.length);
   for (const city of cities) {
+    if (!city || city.removed) continue;
     if (Number.isInteger(city.packCell) && city.packCell >= 0) pack.cells.burg[city.packCell] = city.burgId;
   }
 }
@@ -1652,6 +1770,7 @@ function syncPoliticalSettlementStats(pack, politics, cities) {
   syncStateSettlementStats(pack, politics?.states || []);
   syncProvinceSettlementStats(pack, politics?.provinces || []);
   for (const city of cities) {
+    if (!city || city.removed) continue;
     const burg = pack.burgs?.[city.burgId];
     if (!burg) continue;
     city.state = burg.state;

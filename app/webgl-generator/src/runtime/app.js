@@ -86,6 +86,7 @@ import {
 import {createRegenerateDiplomacyCommand, createSetDiplomacyRelationCommand} from "./diplomacy-edit-commands.js";
 import {applyHeightBrushPreview, createApplyHeightBrushCommand} from "./height-edit-commands.js";
 import {getGlobalHeightChanges, getHeightBrushChanges, getHeightLineChanges, getHeightRangeTransformChanges, inspectGlobalHeightChanges, inspectHeightFillTarget, inspectHeightRangeTransform} from "./height-brush.js";
+import {acceptHeightBrushSample} from "./height-brush-cadence.js";
 import {composeHeightCellSelection, createHeightCellSelectionFeather, createHeightCellSelectionSet, createHeightCellSelectionSnapshot, createHeightCursorRadiusSelection, restoreHeightCellSelectionSnapshot, transformHeightCellSelection} from "./height-cell-selection.js";
 import {createHeightSelectionSmoothingPlan} from "./height-selection-smoothing.js";
 import {getHeightTerrainTemplateChanges, heightTerrainTemplateLabel, heightTerrainTemplateUsesSeed, inspectHeightTerrainTemplate} from "./height-terrain-templates.js";
@@ -147,7 +148,7 @@ import {SelectionStore} from "./selection-store.js";
 import {decideSelectionPanelRoute, SELECTION_PANEL_BINDINGS, SELECTION_PANEL_ROUTE} from "./selection-panel-policy.js";
 import {installKeyboardShortcuts} from "./keyboard-shortcuts.js";
 import {applyStateBrushPreview, createAddStateAtCellCommand, createApplyStateBrushCommand, createDeleteStateCommand, createRenameStatesFromNamebaseCommand, createSetStateColorCommand, createSetStateGovernmentCommand, createSetStatesGovernmentBatchCommand, STATE_BRUSH_PREVIEW_EFFECTS} from "./state-edit-commands.js";
-import {createMergeStatesCommand, createSplitStateCommand, inspectStateMerge, inspectStateSplit} from "./state-topology-commands.js";
+import {createMergeStatesCommand, createSplitStateCommand, inspectStateMerge, inspectStateSplit, regenerateProvincesForStates} from "./state-topology-commands.js";
 import {createAddZoneCommand, createDeleteZoneCommand, createSetZoneStyleCommand} from "./zone-edit-commands.js";
 import {captureVisualThemeState, createSetUserVisualThemesCommand} from "./visual-theme-edit-commands.js";
 import {mergePersistedUserVisualThemes, persistUserVisualThemes} from "./visual-theme-storage.js";
@@ -1144,9 +1145,9 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       executeEditCommand(state, documentRef, command, {context, refresh: refreshAfterStateEdit});
       updateEditingInteractionLock(state, documentRef);
     },
-    onGovernmentChange: (stateId, governmentKey) => {
+    onGovernmentChange: (stateId, governmentKey, formName) => {
       const context = {map: state.map};
-      const command = createSetStateGovernmentCommand(stateId, governmentKey);
+      const command = createSetStateGovernmentCommand(stateId, governmentKey, {formName});
       executeEditCommand(state, documentRef, command, {context, refresh: refreshAfterStateEdit});
       updateEditingInteractionLock(state, documentRef);
     },
@@ -2606,7 +2607,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     onImportMapData: file => importMapData(state, documentRef, file, runtimeActions.data.importMap),
     onImportGeoData: file => importGeoData(state, documentRef, file, runtimeActions.data.importGEO),
     onImportHeightmapImage: payload => importHeightmapImage(state, documentRef, payload, runtimeActions.data.importHeightmap),
-    onRegenerate: kind => runtimeActions.generate.regenerate(kind, {confirm: true}),
+    onRegenerate: (kind, regenerationOptions = {}) => runtimeActions.generate.regenerate(kind, {confirm: true, ...regenerationOptions}),
     onDebugModeChange: () => updatePickPanel(documentRef, state),
     onMode: mode => runtimeActions.layers.setViewMode(mode)
   };
@@ -2790,7 +2791,7 @@ function createRuntimeActions(state, documentRef, options = {}) {
         split: options => splitStateViaApi(state, documentRef, options),
         rename: (stateId, name) => renameStateViaApi(state, documentRef, stateId, name),
         setColor: (stateId, color) => setStateColorViaApi(state, documentRef, stateId, color),
-        setGovernment: (stateId, governmentKey) => setStateGovernmentViaApi(state, documentRef, stateId, governmentKey),
+        setGovernment: (stateId, governmentKey, options = {}) => setStateGovernmentViaApi(state, documentRef, stateId, governmentKey, options),
         setCapital: (stateId, cityId) => setStateCapitalViaApi(state, documentRef, stateId, cityId),
         setGovernmentBatch: (stateIds, governmentKey) => setStatesGovernmentBatchViaApi(state, documentRef, stateIds, governmentKey),
         applyChanges: changes => applyStateChangesViaApi(state, documentRef, changes)
@@ -7380,11 +7381,11 @@ function setStateColorViaApi(state, documentRef, stateId, color) {
   return editApiResult(state, result);
 }
 
-function setStateGovernmentViaApi(state, documentRef, stateId, governmentKey) {
+function setStateGovernmentViaApi(state, documentRef, stateId, governmentKey, options = {}) {
   const id = normalizeApiInteger(stateId, "国家 ID");
   const key = String(governmentKey || "").trim();
   if (!key) throw new Error("政体 key 不能为空");
-  const command = createSetStateGovernmentCommand(id, key);
+  const command = createSetStateGovernmentCommand(id, key, {formName: options?.formName});
   const result = executeEditCommand(state, documentRef, command, {
     context: {map: state.map},
     refresh: refreshAfterStateEdit,
@@ -8596,7 +8597,7 @@ function refreshAfterProvinceEdit(state, commandOrEffects) {
   refreshAfterEdit(state, commandOrEffects);
 }
 
-function regenerateMapAttribute(state, kind, documentRef) {
+function regenerateMapAttribute(state, kind, documentRef, options = {}) {
   if (!state.map) return regenerationResult(kind, "未执行", "当前没有可重算的地图。");
   switch (kind) {
     case "features":
@@ -8606,11 +8607,11 @@ function regenerateMapAttribute(state, kind, documentRef) {
     case "rivers":
       return regenerateRivers(state, documentRef);
     case "cities":
-      return regenerateCities(state, documentRef);
+      return regenerateCities(state, documentRef, options);
     case "states":
       return regenerateStates(state, documentRef);
     case "provinces":
-      return regenerateProvinces(state, documentRef);
+      return regenerateProvinces(state, documentRef, options);
     case "markers":
       return regenerateMarkerResources(state, documentRef);
     case "diplomacy":
@@ -8652,7 +8653,8 @@ function regenerateMapAttributeViaApi(state, documentRef, kind, options = {}) {
   if (options?.confirm !== true) throw new Error("受约束重算会改写当前地图派生数据，需要显式传入 {confirm: true}");
   const targetKind = normalizeApiRegenerationKind(kind);
   const before = regenerationApiSummary(state.map);
-  const result = regenerateMapAttribute(state, targetKind, documentRef);
+  const scope = normalizeRegenerationScope(state.map, targetKind, options);
+  const result = regenerateMapAttribute(state, targetKind, documentRef, scope);
   updateRegenerationSection(documentRef, result);
   updateEditingInteractionLock(state, documentRef);
   return {
@@ -8684,6 +8686,44 @@ function normalizeApiRegenerationKind(kind) {
   if (["military", "army", "armies"].includes(value)) return "military";
   if (["zone", "zones", "region-event", "region-events"].includes(value)) return "zones";
   throw new Error("受约束重算类型必须是 features / routes / rivers / cities / states / provinces / markers / diplomacy / religions / military / zones");
+}
+
+function normalizeRegenerationScope(map, kind, options = {}) {
+  const rawScope = typeof options?.scope === "object" ? options.scope?.kind : options?.scope ?? options?.regenerationScope;
+  const scopeKind = String(rawScope || "all").trim().toLowerCase();
+  if (scopeKind === "all") return {kind: "all"};
+  if (!["provinces", "cities"].includes(kind)) throw new Error(`${kind} 暂不支持局部重设`);
+  if (kind === "provinces" && scopeKind !== "state") throw new Error("省份只能按全图或国家范围重设");
+  if (kind === "cities" && !["state", "province"].includes(scopeKind)) throw new Error("城镇只能按全图、国家或省份范围重设");
+
+  const objectScope = typeof options?.scope === "object" ? options.scope : null;
+  const id = Number(scopeKind === "state"
+    ? options?.stateId ?? objectScope?.id ?? options?.id
+    : options?.provinceId ?? objectScope?.id ?? options?.id);
+  if (!Number.isInteger(id) || id <= 0) throw new Error(`按${scopeKind === "state" ? "国家" : "省份"}重设时必须指定有效编号`);
+  const collection = scopeKind === "state" ? map?.politics?.states : map?.politics?.provinces;
+  const record = collection?.[id];
+  if (!record || record.removed || Number(record.i ?? record.id) !== id) {
+    throw new Error(`${scopeKind === "state" ? "国家" : "省份"} #${id} 不存在或已移除`);
+  }
+  return {kind: scopeKind, id};
+}
+
+function regenerationScopeLabel(map, scope) {
+  if (scope.kind === "all") return "全图";
+  const collection = scope.kind === "state" ? map?.politics?.states : map?.politics?.provinces;
+  const record = collection?.[scope.id];
+  return `“${record?.fullName || record?.name || `${scope.kind === "state" ? "国家" : "省份"} #${scope.id}`}”`;
+}
+
+function regenerationScopeLog(scope) {
+  return scope.kind === "all" ? "all" : `${scope.kind}:${scope.id}`;
+}
+
+function settlementScopeContainsCity(map, scope, city) {
+  if (scope.kind === "state") return Number(city.state) === scope.id;
+  const packCell = Number(city.packCell);
+  return Number(city.province) === scope.id || (Number.isInteger(packCell) && Number(map?.pack?.cells?.province?.[packCell]) === scope.id);
 }
 
 function regenerationApiSummary(map) {
@@ -8740,20 +8780,22 @@ function regenerateStates(state, documentRef) {
   );
 }
 
-function regenerateProvinces(state, documentRef) {
+function regenerateProvinces(state, documentRef, scope = {kind: "all"}) {
   const map = state.map;
   const beforeProvinces = map.politics?.metadata?.provinces || 0;
   const beforeRoutes = map.settlements?.routes?.length || 0;
   const provinceSalt = nextRegenerationSalt(map, "provinces");
-  const result = regeneratePackProvincesWithinStates(map.grid, map.society, {...map.options, namebases: map.namebases}, map.pack, {salt: provinceSalt});
+  const result = scope.kind === "state"
+    ? regenerateProvincesForStates(map, [scope.id])
+    : regeneratePackProvincesWithinStates(map.grid, map.society, {...map.options, namebases: map.namebases}, map.pack, {salt: provinceSalt});
   if (!result) return regenerationResult("provinces", "未执行", "当前地图缺少可用国家或 pack 语义图，无法在国家内重建省份。");
 
-  applyPoliticsRegenerationResult(map, result);
+  if (scope.kind === "all") applyPoliticsRegenerationResult(map, result);
   finalizeSettlements(map.grid, map.features, map.politics, map.settlements, map.pack, {...map.options, namebases: map.namebases, routeRegenerationSalt: provinceSalt});
   markDerivedFresh(map, ["provinces", "cities"]);
   markDerivedStale(map, ["markers", "zones", "military", "economy", "diplomacy"]);
   refreshGenerationSummary(map);
-  appendGenerationLog(map, `regenerate provinces: salt=${provinceSalt}, provinces=${map.politics.metadata.provinces}, routes=${map.settlements.metadata.routes}, stale=${map.metadata.derivedStale?.systems?.join(",") || "none"}`);
+  appendGenerationLog(map, `regenerate provinces: scope=${regenerationScopeLog(scope)}, salt=${provinceSalt}, provinces=${map.politics.metadata.provinces}, routes=${map.settlements.metadata.routes}, stale=${map.metadata.derivedStale?.systems?.join(",") || "none"}`);
 
   refreshRegeneratedLayers(state, documentRef, {
     derived: ["cell-colors", "political-boundaries", "point-layers", "labels", "route-mesh", "object-panels", "object-index"],
@@ -8766,7 +8808,7 @@ function regenerateProvinces(state, documentRef) {
 
   return regenerationResult(
     "provinces",
-    `省份已在当前国家内重算（扰动 #${provinceSalt}）：${beforeProvinces} -> ${map.politics.metadata.provinces}；道路 ${beforeRoutes} -> ${map.settlements.metadata.routes}`,
+    `省份已在${regenerationScopeLabel(map, scope)}内重算（扰动 #${provinceSalt}）：${beforeProvinces} -> ${map.politics.metadata.provinces}；道路 ${beforeRoutes} -> ${map.settlements.metadata.routes}`,
     "已刷新省份归属、省会/城市省份、路线、标签、边界和对象索引；标记、区域、军事、经济已标记为待派生。"
   );
 }
@@ -8820,19 +8862,29 @@ function regenerateRivers(state, documentRef) {
   );
 }
 
-function regenerateCities(state, documentRef) {
+function regenerateCities(state, documentRef, scope = {kind: "all"}) {
   const map = state.map;
-  const beforeCities = map.settlements?.cities?.length || 0;
+  const beforeCities = map.settlements?.cities?.filter(city => city && !city.removed).length || 0;
   const beforePorts = map.settlements?.cities?.filter(city => city?.port).length || 0;
   const beforeRoutes = map.settlements?.routes?.length || 0;
   const citySalt = nextRegenerationSalt(map, "cities");
 
-  regenerateSettlementsWithinPolitics(map.grid, map.features, map.politics, map.settlements, map.pack, {...map.options, namebases: map.namebases, settlementRegenerationSalt: citySalt, routeRegenerationSalt: citySalt});
-  clearGeneratedCityLabelHides(map);
+  const settlementScope = scope.kind === "all" ? null : {kind: scope.kind, id: scope.id};
+  const targetCityIds = settlementScope
+    ? map.settlements.cities.filter(city => city && !city.removed && settlementScopeContainsCity(map, settlementScope, city)).map(city => city.id)
+    : null;
+  regenerateSettlementsWithinPolitics(map.grid, map.features, map.politics, map.settlements, map.pack, {
+    ...map.options,
+    namebases: map.namebases,
+    settlementRegenerationSalt: citySalt,
+    routeRegenerationSalt: citySalt,
+    settlementScope
+  });
+  clearGeneratedCityLabelHides(map, targetCityIds);
   markDerivedFresh(map, ["cities"]);
   markDerivedStale(map, ["provinces", "states", "religions", "markers", "zones", "military", "diplomacy"]);
   refreshGenerationSummary(map);
-  appendGenerationLog(map, `regenerate settlements: salt=${citySalt}, cities=${map.settlements.metadata.cities}, ports=${map.settlements.metadata.ports}, routes=${map.settlements.metadata.routes}, stale=${map.metadata.derivedStale?.systems?.join(",") || "none"}`);
+  appendGenerationLog(map, `regenerate settlements: scope=${regenerationScopeLog(scope)}, salt=${citySalt}, cities=${map.settlements.metadata.cities}, ports=${map.settlements.metadata.ports}, routes=${map.settlements.metadata.routes}, stale=${map.metadata.derivedStale?.systems?.join(",") || "none"}`);
 
   refreshRegeneratedLayers(state, documentRef, {
     derived: ["point-layers", "labels", "route-mesh", "object-panels", "object-index"],
@@ -8844,8 +8896,8 @@ function regenerateCities(state, documentRef) {
 
   return regenerationResult(
     "cities",
-    `城镇已按当前适居度、文化、政区、港口和间距约束重算（扰动 #${citySalt}）：${beforeCities} -> ${map.settlements.metadata.cities}；港口 ${beforePorts} -> ${map.settlements.metadata.ports}；道路 ${beforeRoutes} -> ${map.settlements.metadata.routes}`,
-    "已保留国家首都 burg 引用，刷新省会、普通城镇、城市标签、人口点、道路和对象索引；省份、国家、宗教、标记、区域、军事仍标记为待派生。"
+    `${regenerationScopeLabel(map, scope)}城镇已按当前适居度、文化、政区、港口和间距约束重算（扰动 #${citySalt}）：${beforeCities} -> ${map.settlements.metadata.cities}；港口 ${beforePorts} -> ${map.settlements.metadata.ports}；道路 ${beforeRoutes} -> ${map.settlements.metadata.routes}`,
+    "已保留目标范围内的国家首都、省会锚点与目标范围外城镇身份，只替换目标范围内普通城镇；道路按全图关系同步重建。"
   );
 }
 
@@ -9104,9 +9156,14 @@ function markDerivedFresh(map, systems) {
   if (map?.diplomacy?.metadata) map.diplomacy.metadata.stale = nextSystems.includes("diplomacy");
 }
 
-function clearGeneratedCityLabelHides(map) {
+function clearGeneratedCityLabelHides(map, cityIds = null) {
   const store = ensureLabelStore(map);
-  store.hidden[LABEL_TARGET_KIND.CITY] = [];
+  if (Array.isArray(cityIds)) {
+    const targets = new Set(cityIds.map(Number));
+    store.hidden[LABEL_TARGET_KIND.CITY] = store.hidden[LABEL_TARGET_KIND.CITY].filter(id => !targets.has(Number(id)));
+  } else {
+    store.hidden[LABEL_TARGET_KIND.CITY] = [];
+  }
   store.metadata = {
     custom: store.custom.length,
     hidden: store.hidden[LABEL_TARGET_KIND.CITY].length + store.hidden[LABEL_TARGET_KIND.STATE].length
@@ -11582,7 +11639,7 @@ function labelObjectFromCustomLabel(label) {
 }
 
 function scheduleHeightBrushAtEvent(state, event, documentRef) {
-  state.heightEdit.pendingBrushPointer = {pointerId: event.pointerId, clientX: event.clientX, clientY: event.clientY};
+  state.heightEdit.pendingBrushPointer = {pointerId: event.pointerId, clientX: event.clientX, clientY: event.clientY, timeStamp: event.timeStamp};
   if (state.heightEdit.brushFrame) return;
   const view = documentRef.defaultView;
   const run = () => {
@@ -11599,7 +11656,7 @@ function flushScheduledHeightBrush(state, documentRef, finalPointer = null) {
   const pointer = state.heightEdit.pendingBrushPointer;
   cancelScheduledHeightBrush(state, documentRef);
   const resolvedPointer = finalPointer && state.heightEdit.activeStroke?.pointerId === finalPointer.pointerId ? finalPointer : pointer;
-  if (resolvedPointer && state.heightEdit.activeStroke?.pointerId === resolvedPointer.pointerId) applyHeightBrushAtEvent(state, resolvedPointer, documentRef);
+  if (resolvedPointer && state.heightEdit.activeStroke?.pointerId === resolvedPointer.pointerId) applyHeightBrushAtEvent(state, resolvedPointer, documentRef, {force: true});
 }
 
 function cancelScheduledHeightBrush(state, documentRef) {
@@ -11611,14 +11668,12 @@ function cancelScheduledHeightBrush(state, documentRef) {
   state.heightEdit.pendingBrushPointer = null;
 }
 
-function applyHeightBrushAtEvent(state, event, documentRef) {
+function applyHeightBrushAtEvent(state, event, documentRef, {force = false} = {}) {
   const brush = state.panels.height.getBrush();
   const stroke = state.heightEdit.activeStroke;
   if (!brush.active || !stroke) return;
 
-  if (Number.isFinite(stroke.lastClientX) && Math.hypot(event.clientX - stroke.lastClientX, event.clientY - stroke.lastClientY) < 1.5) return;
-  stroke.lastClientX = event.clientX;
-  stroke.lastClientY = event.clientY;
+  if (!acceptHeightBrushSample(stroke, event, {force})) return;
 
   state.pick = state.renderer.pickClientPoint(event.clientX, event.clientY);
   const point = state.renderer.screenToWorld(event.clientX, event.clientY);
@@ -11923,6 +11978,7 @@ function finishHeightStroke(state, documentRef) {
     refresh: refreshAfterEdit,
     refreshPanels: false
   });
+  updateHeightPanel(state, {includeMapSummary: false});
 }
 
 function finishStateStroke(state, documentRef) {

@@ -43,6 +43,19 @@ export function getHeightBrushChanges(map, point, brush, stroke) {
       return heightChange(cells, originals, gridCell, current + step);
     }).filter(Boolean);
   }
+  if (brush.action === "level") {
+    if (!Number.isFinite(stroke.targetHeight)) stroke.targetHeight = cells.h[nearest.gridCell];
+    if (!(stroke.levelFactors instanceof Map)) stroke.levelFactors = new Map();
+    const targetHeight = clampHeight(stroke.targetHeight);
+    const perturbation = Math.max(0, Number(brush.strength) || 0);
+    const seed = Number.isFinite(stroke.seed) ? Math.trunc(stroke.seed) : 0;
+    return affected.map(({gridCell, factor}) => {
+      if (!stroke.levelFactors.has(gridCell)) stroke.levelFactors.set(gridCell, factor);
+      const stableFactor = stroke.levelFactors.get(gridCell);
+      const offset = perturbation ? stableSignedNoise(gridCell, seed, 0) * perturbation * stableFactor : 0;
+      return heightChange(cells, originals, gridCell, targetHeight + offset);
+    }).filter(Boolean);
+  }
   if (brush.action === "disrupt") {
     const strength = Math.max(1, Number(brush.strength) || 1);
     const seed = Number.isFinite(stroke.seed) ? Math.trunc(stroke.seed) : 0;

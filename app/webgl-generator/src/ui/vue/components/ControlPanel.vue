@@ -556,7 +556,7 @@
       <section class="regeneration-section" aria-labelledby="regeneration-section-title">
         <div class="regeneration-section-header">
           <h2 id="regeneration-section-title">重新生成</h2>
-          <span id="regeneration-status"></span>
+          <span id="regeneration-status">{{ regenerationFeedback }}</span>
         </div>
 
         <div class="regeneration-control">
@@ -567,7 +567,39 @@
             :options="regenerationActions"
             @update:model-value="selectedRegenerationKind = $event"
           />
-          <UiButton variant="danger" :data-regenerate-kind="selectedRegenerationKind">
+          <UiSelectField
+            v-if="regenerationScopeOptions.length > 1"
+            label="重设范围"
+            input-id="regeneration-scope"
+            :model-value="selectedRegenerationScope"
+            :options="regenerationScopeOptions"
+            @update:model-value="selectedRegenerationScope = $event"
+          />
+          <UiSelectField
+            v-if="selectedRegenerationScope === 'state'"
+            label="目标国家"
+            input-id="regeneration-state"
+            :model-value="selectedRegenerationStateId"
+            :options="regenerationStateOptions"
+            @update:model-value="selectedRegenerationStateId = $event"
+          />
+          <UiSelectField
+            v-if="selectedRegenerationScope === 'province'"
+            label="目标省份"
+            input-id="regeneration-province"
+            :model-value="selectedRegenerationProvinceId"
+            :options="regenerationProvinceOptions"
+            @update:model-value="selectedRegenerationProvinceId = $event"
+          />
+          <UiButton
+            variant="danger"
+            :data-regenerate-kind="selectedRegenerationKind"
+            :data-regeneration-scope="selectedRegenerationScope"
+            :data-regeneration-state-id="selectedRegenerationScope === 'state' ? selectedRegenerationStateId : undefined"
+            :data-regeneration-province-id="selectedRegenerationScope === 'province' ? selectedRegenerationProvinceId : undefined"
+            :disabled="regenerationTargetMissing"
+            @click="requestRegeneration"
+          >
             重新生成{{ selectedRegenerationAction.label }}
           </UiButton>
         </div>
@@ -908,6 +940,23 @@ const regenerationActions = Object.freeze([
 ]);
 const selectedRegenerationKind = ref(regenerationActions[0].kind);
 const selectedRegenerationAction = computed(() => regenerationActions.find(action => action.kind === selectedRegenerationKind.value) || regenerationActions[0]);
+const selectedRegenerationScope = ref("all");
+const selectedRegenerationStateId = ref("");
+const selectedRegenerationProvinceId = ref("");
+const regenerationStateOptions = ref([]);
+const regenerationProvinceOptions = ref([]);
+const regenerationScopeOptions = computed(() => {
+  if (selectedRegenerationKind.value === "provinces") {
+    return [{value: "all", label: "全图"}, {value: "state", label: "指定国家"}];
+  }
+  if (selectedRegenerationKind.value === "cities") {
+    return [{value: "all", label: "全图"}, {value: "state", label: "指定国家"}, {value: "province", label: "指定省份"}];
+  }
+  return [{value: "all", label: "全图"}];
+});
+const regenerationTargetMissing = computed(() => (selectedRegenerationScope.value === "state" && !selectedRegenerationStateId.value)
+  || (selectedRegenerationScope.value === "province" && !selectedRegenerationProvinceId.value));
+const regenerationFeedback = ref("");
 
 function isLayerVisible(layer) {
   const config = layers.find(item => item.id === layer);
@@ -1168,6 +1217,35 @@ function handleLabelStylesChanged(event) {
   };
 }
 
+function handleRegenerationTargetsChanged(event) {
+  regenerationStateOptions.value = Array.isArray(event.detail?.states) ? event.detail.states.map(option => ({...option})) : [];
+  regenerationProvinceOptions.value = Array.isArray(event.detail?.provinces) ? event.detail.provinces.map(option => ({...option})) : [];
+  if (!regenerationStateOptions.value.some(option => option.value === selectedRegenerationStateId.value)) {
+    selectedRegenerationStateId.value = regenerationStateOptions.value[0]?.value || "";
+  }
+  if (!regenerationProvinceOptions.value.some(option => option.value === selectedRegenerationProvinceId.value)) {
+    selectedRegenerationProvinceId.value = regenerationProvinceOptions.value[0]?.value || "";
+  }
+}
+
+async function requestRegeneration() {
+  const regenerate = globalThis.window?.webglGeneratorApi?.generate?.regenerate;
+  if (typeof regenerate !== "function") {
+    regenerationFeedback.value = "重设服务尚未就绪";
+    return;
+  }
+  regenerationFeedback.value = "重设中…";
+  const response = await regenerate(selectedRegenerationKind.value, {
+    confirm: true,
+    scope: selectedRegenerationScope.value,
+    stateId: selectedRegenerationScope.value === "state" ? Number(selectedRegenerationStateId.value) : undefined,
+    provinceId: selectedRegenerationScope.value === "province" ? Number(selectedRegenerationProvinceId.value) : undefined
+  });
+  regenerationFeedback.value = response?.ok
+    ? response.data?.status || "重设完成"
+    : `重设失败：${response?.error?.message || "未知错误"}`;
+}
+
 function commitLabelStyle(field, value) {
   document.dispatchEvent(new CustomEvent("webgl-generator-label-style-patch", {
     detail: {styleType: selectedLabelStyleType.value, patch: {[field]: value}}
@@ -1281,11 +1359,21 @@ watch(activeTab, tab => {
   if (preferences.value.controlPanelTab !== normalized) config.patchPreferences({controlPanelTab: normalized});
 });
 
+watch(selectedRegenerationKind, () => {
+  selectedRegenerationScope.value = "all";
+  regenerationFeedback.value = "";
+});
+
+watch(regenerationScopeOptions, options => {
+  if (!options.some(option => option.value === selectedRegenerationScope.value)) selectedRegenerationScope.value = "all";
+});
+
 onMounted(() => {
   document.addEventListener("click", handleExportPanelOutsideClick, true);
   document.addEventListener("webgl-generator-sync-climate-options", handleClimateOptionsSync);
   document.addEventListener("webgl-generator-visual-themes-changed", handleVisualThemesChanged);
   document.addEventListener("webgl-generator-label-styles-changed", handleLabelStylesChanged);
+  document.addEventListener("webgl-generator-regeneration-targets", handleRegenerationTargetsChanged);
   window.addEventListener("resize", handleExportPanelReposition);
   window.addEventListener("scroll", handleExportPanelReposition, true);
 });
@@ -1295,6 +1383,7 @@ onBeforeUnmount(() => {
   document.removeEventListener("webgl-generator-sync-climate-options", handleClimateOptionsSync);
   document.removeEventListener("webgl-generator-visual-themes-changed", handleVisualThemesChanged);
   document.removeEventListener("webgl-generator-label-styles-changed", handleLabelStylesChanged);
+  document.removeEventListener("webgl-generator-regeneration-targets", handleRegenerationTargetsChanged);
   window.removeEventListener("resize", handleExportPanelReposition);
   window.removeEventListener("scroll", handleExportPanelReposition, true);
 });
