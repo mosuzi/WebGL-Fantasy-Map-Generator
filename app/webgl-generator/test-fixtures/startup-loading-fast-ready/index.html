@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>启动加载快路径验收</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        font-family: "Noto Serif SC", "Source Han Serif SC", SimSun, serif;
+        background: #18231f;
+        color: #d8cfb6;
+      }
+
+      body {
+        display: grid;
+        min-height: 100vh;
+        margin: 0;
+        place-items: center;
+      }
+
+      main {
+        width: min(760px, 88vw);
+        border: 1px solid rgba(203, 189, 150, 0.28);
+        padding: 28px;
+        background: rgba(33, 47, 41, 0.92);
+        box-shadow: 0 18px 48px rgba(0, 0, 0, 0.3);
+      }
+
+      h1 { margin-top: 0; font-size: 22px; }
+      [data-state="passed"] { color: #b7d7ac; }
+      [data-state="failed"] { color: #e7a494; }
+      pre { overflow: auto; line-height: 1.55; white-space: pre-wrap; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>正式启动加载状态机 · 快 ready 浏览器夹具</h1>
+      <p id="test-status" role="status" aria-live="polite" data-state="running">正在用浏览器真实计时器验证……</p>
+      <pre id="test-result">等待结果</pre>
+    </main>
+    <script type="module">
+      import {
+        completeStartupLoading,
+        STARTUP_LOADING_MIN_VISIBLE_MS
+      } from "../../src/ui/startup-loading.js";
+
+      const EXIT_DELAY_MS = 280;
+      const statusElement = document.getElementById("test-status");
+      const resultElement = document.getElementById("test-result");
+
+      run().catch(error => finish({passed: false, error: error instanceof Error ? error.message : String(error)}));
+
+      async function run() {
+        const startedAt = performance.now();
+        const classes = new Set();
+        const attributes = new Map();
+        const events = [];
+        let hidden = false;
+        let leavingAt = null;
+        let hiddenAt = null;
+
+        const view = {
+          __webglGeneratorStartupLoadingStartedAt: startedAt,
+          performance,
+          matchMedia: () => ({matches: false}),
+          setTimeout: window.setTimeout.bind(window),
+          clearTimeout: window.clearTimeout.bind(window)
+        };
+        const screen = {
+          dataset: {state: "loading"},
+          classList: {
+            add(value) {
+              classes.add(value);
+              if (value === "is-leaving" && leavingAt === null) {
+                leavingAt = performance.now() - startedAt;
+                events.push({event: "leaving", atMs: leavingAt});
+              }
+            },
+            remove: value => classes.delete(value)
+          },
+          setAttribute(key, value) {
+            attributes.set(key, value);
+          },
+          removeAttribute(key) {
+            attributes.delete(key);
+          }
+        };
+        Object.defineProperty(screen, "hidden", {
+          get: () => hidden,
+          set(value) {
+            hidden = Boolean(value);
+            if (hidden && hiddenAt === null) {
+              hiddenAt = performance.now() - startedAt;
+              events.push({event: "hidden", atMs: hiddenAt});
+            }
+          }
+        });
+        const loadingStatus = {textContent: "生成中"};
+        const fakeDocument = {
+          defaultView: view,
+          getElementById(id) {
+            if (id === "app-loading-screen") return screen;
+            if (id === "app-loading-status") return loadingStatus;
+            return null;
+          }
+        };
+
+        await waitUntil(startedAt + 100);
+        const readyCalledAt = performance.now() - startedAt;
+        const completed = completeStartupLoading(fakeDocument);
+        const immediate = {
+          state: screen.dataset.state,
+          status: loadingStatus.textContent,
+          hidden: screen.hidden,
+          leaving: classes.has("is-leaving"),
+          ariaHidden: attributes.get("aria-hidden") ?? null
+        };
+        events.push({event: "ready", atMs: readyCalledAt});
+
+        await waitUntil(startedAt + STARTUP_LOADING_MIN_VISIBLE_MS + EXIT_DELAY_MS + 180);
+        const passed = completed === true
+          && readyCalledAt < STARTUP_LOADING_MIN_VISIBLE_MS
+          && immediate.state === "ready"
+          && immediate.status === "地图已就绪"
+          && immediate.hidden === false
+          && immediate.leaving === false
+          && immediate.ariaHidden === null
+          && leavingAt >= STARTUP_LOADING_MIN_VISIBLE_MS
+          && hiddenAt >= leavingAt + EXIT_DELAY_MS - 8
+          && screen.hidden === true;
+
+        finish({
+          passed,
+          minimumVisibleMs: STARTUP_LOADING_MIN_VISIBLE_MS,
+          exitDelayMs: EXIT_DELAY_MS,
+          readyCalledAtMs: round(readyCalledAt),
+          leavingAtMs: round(leavingAt),
+          hiddenAtMs: round(hiddenAt),
+          immediate,
+          final: {
+            state: screen.dataset.state,
+            hidden: screen.hidden,
+            leaving: classes.has("is-leaving"),
+            ariaHidden: attributes.get("aria-hidden") ?? null
+          },
+          events: events.map(item => ({...item, atMs: round(item.atMs)}))
+        });
+      }
+
+      function waitUntil(target) {
+        return new Promise(resolve => window.setTimeout(resolve, Math.max(0, target - performance.now())));
+      }
+
+      function round(value) {
+        return Number.isFinite(value) ? Math.round(value * 10) / 10 : null;
+      }
+
+      function finish(result) {
+        document.documentElement.dataset.testState = result.passed ? "passed" : "failed";
+        statusElement.dataset.state = result.passed ? "passed" : "failed";
+        statusElement.textContent = result.passed ? "验收通过" : "验收失败";
+        resultElement.textContent = JSON.stringify(result, null, 2);
+      }
+    </script>
+  </body>
+</html>

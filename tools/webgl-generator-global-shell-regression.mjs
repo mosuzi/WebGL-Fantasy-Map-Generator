@@ -3,9 +3,14 @@ import assert from "node:assert/strict";
 import {createHash} from "node:crypto";
 import {readFile} from "node:fs/promises";
 
-import {completeStartupLoading, failStartupLoading, updateStartupLoadingStatus} from "../app/webgl-generator/src/ui/startup-loading.js";
+import {
+  completeStartupLoading,
+  failStartupLoading,
+  STARTUP_LOADING_MIN_VISIBLE_MS,
+  updateStartupLoadingStatus
+} from "../app/webgl-generator/src/ui/startup-loading.js";
 
-const [packageSource, indexSource, viteSource, mainSource, appSource, panelSource, toolbarSource, storeSource, stylesSource, sealSource] = await Promise.all([
+const [packageSource, indexSource, viteSource, mainSource, appSource, panelSource, toolbarSource, storeSource, stylesSource, sealSource, fastReadyFixtureSource] = await Promise.all([
   readFile(new URL("../package.json", import.meta.url), "utf8"),
   readFile(new URL("../app/webgl-generator/index.html", import.meta.url), "utf8"),
   readFile(new URL("../vite.config.mjs", import.meta.url), "utf8"),
@@ -15,7 +20,8 @@ const [packageSource, indexSource, viteSource, mainSource, appSource, panelSourc
   readFile(new URL("../app/webgl-generator/src/ui/vue/components/MapToolbar.vue", import.meta.url), "utf8"),
   readFile(new URL("../app/webgl-generator/src/ui/vue/stores/global-config-store.js", import.meta.url), "utf8"),
   readFile(new URL("../app/webgl-generator/src/styles.css", import.meta.url), "utf8"),
-  readFile(new URL("../app/webgl-generator/public/assets/mosuzi-seal.png", import.meta.url))
+  readFile(new URL("../app/webgl-generator/public/assets/mosuzi-seal.png", import.meta.url)),
+  readFile(new URL("../app/webgl-generator/test-fixtures/startup-loading-fast-ready/index.html", import.meta.url), "utf8")
 ]);
 
 const packageJson = JSON.parse(packageSource);
@@ -29,6 +35,7 @@ assert.equal(createHash("sha256").update(sealSource).digest("hex"), "367ad061211
 assert.match(loadingMarkup, /id="app-loading-screen" role="status" aria-live="polite" aria-labelledby="app-loading-title" aria-describedby="app-loading-status"/, "画卷加载页没有保留 role / aria 状态契约");
 assert.match(loadingMarkup, /class="app-loading-title" id="app-loading-title" data-title="架空地图生成器">架空地图生成器<\/strong>/, "画卷中央主标题或标题 ID 漂移");
 assert.match(loadingMarkup, /class="app-loading-status" id="app-loading-status">正在加载地图资源<\/p>/, "画卷下方动态状态或状态 ID 漂移");
+assert.match(loadingMarkup, /<script>\s*window\.__webglGeneratorStartupLoadingStartedAt = performance\.now\(\);\s*<\/script>\s*$/, "加载屏幕 DOM 完成后、主应用 DOM 之前没有记录单调可见起点");
 assert.match(loadingMarkup, /<image href="\/assets\/mosuzi-seal\.png"[\s\S]*?filter="url\(#app-loading-seal-cutout\)"/, "正式加载页没有使用同源阴刻印章资源");
 assert.match(loadingMarkup, /<feColorMatrix type="matrix" values="0 0 0 0 0\.588 0 0 0 0 0\.22 0 0 0 0 0\.176 2 -1 -1 0 0"/, "印章阴刻颜色矩阵漂移");
 assert.doesNotMatch(loadingMarkup, /app-loading-inscription|writing-mode:\s*vertical-rl|<p[^>]*>\s*莫苏子\s*<\/p>/, "正式加载页仍保留小字款识");
@@ -51,10 +58,26 @@ for (const keyframe of ["app-scroll-unfurl", "app-scroll-roller-left", "app-scro
 const unfurlTiming = loadingStyle.match(/\.app-loading-paper-window\s*\{[^}]*animation:\s*app-scroll-unfurl\s+(\d+)ms[^;]*\s(\d+)ms\s+both;/);
 const titleTiming = loadingStyle.match(/\.app-loading-title-card\s*\{[^}]*animation:\s*app-scroll-copy-reveal\s+(\d+)ms[^;]*\s(\d+)ms\s+both;/);
 const versionTiming = loadingStyle.match(/\.app-loading-version\s*\{[^}]*animation:\s*app-scroll-copy-reveal\s+(\d+)ms[^;]*\s(\d+)ms\s+both;/);
-assert(unfurlTiming && titleTiming && versionTiming, "无法读取纸面、标题或版本动画时序");
+const finiteAnimationTimings = [
+  ["纸面", unfurlTiming],
+  ["左纸卷", loadingStyle.match(/\.app-loading-roller-left\s*\{[^}]*animation:\s*app-scroll-roller-left\s+(\d+)ms[^;]*\s(\d+)ms\s+both;/)],
+  ["右纸卷", loadingStyle.match(/\.app-loading-roller-right\s*\{[^}]*animation:\s*app-scroll-roller-right\s+(\d+)ms[^;]*\s(\d+)ms\s+both;/)],
+  ["标题", titleTiming],
+  ["题线", loadingStyle.match(/\.app-loading-brush-line\s*\{[^}]*animation:\s*app-scroll-brush-reveal\s+(\d+)ms[^;]*\s(\d+)ms\s+both;/)],
+  ["印章", loadingStyle.match(/\.app-loading-seal\s*\{[^}]*animation:\s*app-scroll-seal-set\s+(\d+)ms[^;]*\s(\d+)ms\s+both;/)],
+  ["版本", versionTiming]
+];
+for (const [name, timing] of finiteAnimationTimings) assert(timing, `无法读取${name}动画时序`);
 const unfurlEnd = Number(unfurlTiming[1]) + Number(unfurlTiming[2]);
 assert(Number(titleTiming[2]) >= unfurlEnd, "标题在纸面展开结束前显现，会产生可见横向拉伸");
 assert(Number(versionTiming[2]) >= unfurlEnd, "版本在纸面展开结束前显现，会产生可见横向拉伸");
+const latestFiniteAnimationEnd = Math.max(...finiteAnimationTimings.map(([, timing]) => Number(timing[1]) + Number(timing[2])));
+assert.equal(latestFiniteAnimationEnd, 2400, "有限加载动画的最晚结束时点已漂移，需同步最短可见时长");
+assert.equal(STARTUP_LOADING_MIN_VISIBLE_MS, 2500, "启动加载页最短可见时长必须保持 2500ms");
+assert(STARTUP_LOADING_MIN_VISIBLE_MS >= latestFiniteAnimationEnd, "启动加载页会在有限动画完整播放前离场");
+assert.match(fastReadyFixtureSource, /from "\.\.\/\.\.\/src\/ui\/startup-loading\.js"/, "快 ready 浏览器夹具没有直接导入正式启动状态机");
+assert.match(fastReadyFixtureSource, /await waitUntil\(startedAt \+ 100\);[\s\S]*?completeStartupLoading\(fakeDocument\)/, "快 ready 浏览器夹具没有在 2500ms 门槛前调用正式完成入口");
+assert.match(fastReadyFixtureSource, /leavingAt >= STARTUP_LOADING_MIN_VISIBLE_MS[\s\S]*?hiddenAt >= leavingAt \+ EXIT_DELAY_MS - 8/, "快 ready 浏览器夹具没有验证离场和隐藏的真实浏览器时序");
 assert.match(loadingStyle, /\.app-loading-progress i\s*\{[^}]*width:\s*78%;[^}]*transform:\s*scaleX\(0\.2308\);[^}]*will-change:\s*transform;/, "进度装饰没有改为 transform 合成动画");
 assert.match(indexSource, /@media \(max-width: 520px\)[\s\S]*?\.app-loading-scroll\s*\{[^}]*--scroll-width: 96vw;[\s\S]*?\.app-loading-status\s*\{[^}]*max-width: 88vw;/, "窄屏画卷或动态状态没有限制在视口内");
 assert.match(indexSource, /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.app-loading-paper-window,[\s\S]*?animation: none;[\s\S]*?\.app-loading-paper-window\s*\{\s*transform: scaleX\(1\);/, "减少动态偏好没有直接呈现画卷终态");
@@ -93,18 +116,72 @@ assert.match(stylesSource, /\.map-toolbar-edge-trigger:hover,[\s\S]*?\.map-toolb
 assert.match(stylesSource, /\.map-toolbar-chevron\s*\{[\s\S]*?width: 16px;[\s\S]*?height: 16px;[\s\S]*?transform-origin: 8px 8px;/, "SVG 箭头没有固定 16 像素几何盒与中心变换原点");
 assert.match(stylesSource, /\.map-toolbar-chevron-expand\s*\{\s*transform: rotate\(180deg\);\s*\}/, "展开箭头没有围绕同一几何中心反向");
 
-const fakeDocument = createFakeDocument();
-assert.equal(updateStartupLoadingStatus(fakeDocument, "启封舆图"), true);
-assert.equal(fakeDocument.status.textContent, "启封舆图");
-assert.equal(completeStartupLoading(fakeDocument), true);
-assert.equal(fakeDocument.screen.dataset.state, "ready");
-assert.equal(fakeDocument.status.textContent, "地图已就绪");
-await new Promise(resolve => setTimeout(resolve, 300));
-assert.equal(fakeDocument.screen.hidden, true, "启动页完成过渡后没有退出交互层");
-assert.equal(failStartupLoading(fakeDocument, new Error("夹具错误")), true);
-assert.equal(fakeDocument.screen.hidden, false, "错误态没有恢复加载页");
-assert.equal(fakeDocument.screen.dataset.state, "error");
-assert.equal(fakeDocument.status.textContent, "启动失败：夹具错误");
+{
+  const fakeDocument = createFakeDocument({now: 500, startedAt: 0});
+  assert.equal(updateStartupLoadingStatus(fakeDocument, "启封舆图"), true);
+  assert.equal(fakeDocument.status.textContent, "启封舆图");
+  assert.equal(completeStartupLoading(fakeDocument), true);
+  assert.equal(fakeDocument.screen.dataset.state, "ready");
+  assert.equal(fakeDocument.status.textContent, "地图已就绪");
+  assert.equal(updateStartupLoadingStatus(fakeDocument, "不应覆盖"), false, "ready 等待期仍允许加载文案覆盖");
+  assert.equal(fakeDocument.classes.has("is-leaving"), false, "快速 ready 没有等待最短可见时长");
+  fakeDocument.clock.advanceBy(1999);
+  assert.equal(fakeDocument.classes.has("is-leaving"), false, "最短可见门槛前提前离场");
+  fakeDocument.clock.advanceBy(1);
+  assert.equal(fakeDocument.classes.has("is-leaving"), true, "到达最短可见门槛后没有开始淡出");
+  assert.equal(fakeDocument.attributes.get("aria-hidden"), "true");
+  fakeDocument.clock.advanceBy(279);
+  assert.equal(fakeDocument.screen.hidden, false, "离场过渡尚未结束时提前隐藏");
+  fakeDocument.clock.advanceBy(1);
+  assert.equal(fakeDocument.screen.hidden, true, "离场过渡结束后没有退出交互层");
+}
+
+{
+  const fakeDocument = createFakeDocument({now: 2499, startedAt: 0});
+  assert.equal(completeStartupLoading(fakeDocument), true);
+  assert.equal(fakeDocument.classes.has("is-leaving"), false, "门槛前 1ms 不应立即淡出");
+  fakeDocument.clock.advanceBy(1);
+  assert.equal(fakeDocument.classes.has("is-leaving"), true, "到达 2500ms 门槛时没有淡出");
+}
+
+for (const now of [2500, 3100]) {
+  const fakeDocument = createFakeDocument({now, startedAt: 0});
+  assert.equal(completeStartupLoading(fakeDocument), true);
+  assert.equal(fakeDocument.classes.has("is-leaving"), true, `${now}ms ready 应立即淡出`);
+}
+
+{
+  const fakeDocument = createFakeDocument({now: 300, startedAt: 0});
+  assert.equal(completeStartupLoading(fakeDocument), true);
+  fakeDocument.clock.advanceBy(400);
+  assert.equal(failStartupLoading(fakeDocument, new Error("等待期错误")), true);
+  assert.equal(updateStartupLoadingStatus(fakeDocument, "不应覆盖错误"), false);
+  assert.equal(fakeDocument.clock.pendingCount(), 0, "等待期错误没有清除最短可见计时器");
+  fakeDocument.clock.advanceBy(3000);
+  assertErrorState(fakeDocument, "启动失败：等待期错误");
+}
+
+{
+  const fakeDocument = createFakeDocument({now: 2800, startedAt: 0});
+  assert.equal(completeStartupLoading(fakeDocument), true);
+  fakeDocument.clock.advanceBy(100);
+  assert.equal(failStartupLoading(fakeDocument, new Error("淡出期错误")), true);
+  assert.equal(fakeDocument.clock.pendingCount(), 0, "淡出期错误没有清除隐藏计时器");
+  fakeDocument.clock.advanceBy(500);
+  assertErrorState(fakeDocument, "启动失败：淡出期错误");
+}
+
+{
+  const fakeDocument = createFakeDocument({now: 0, startedAt: 0, reducedMotion: true});
+  assert.equal(completeStartupLoading(fakeDocument), true);
+  assert.equal(fakeDocument.classes.has("is-leaving"), true, "减少动态偏好没有立即淡出");
+}
+
+for (const options of [{now: 100, omitStart: true}, {now: 100, startedAt: Number.NaN}, {now: 100, startedAt: 200}]) {
+  const fakeDocument = createFakeDocument(options);
+  assert.equal(completeStartupLoading(fakeDocument), true);
+  assert.equal(fakeDocument.classes.has("is-leaving"), true, "起点缺失或非法时没有 fail-open");
+}
 
 console.log(JSON.stringify({
   ok: true,
@@ -120,9 +197,11 @@ function count(source, pattern) {
   return [...source.matchAll(pattern)].length;
 }
 
-function createFakeDocument() {
+function createFakeDocument({now = 0, startedAt = 0, reducedMotion = false, omitStart = false} = {}) {
   const classes = new Set();
   const attributes = new Map();
+  const clock = createFakeClock(now, reducedMotion);
+  if (!omitStart) clock.view.__webglGeneratorStartupLoadingStartedAt = startedAt;
   const screen = {
     hidden: false,
     dataset: {state: "loading"},
@@ -137,11 +216,58 @@ function createFakeDocument() {
   return {
     screen,
     status,
-    defaultView: globalThis,
+    classes,
+    attributes,
+    clock,
+    defaultView: clock.view,
     getElementById(id) {
       if (id === "app-loading-screen") return screen;
       if (id === "app-loading-status") return status;
       return null;
     }
   };
+}
+
+function createFakeClock(initialNow, reducedMotion) {
+  let now = initialNow;
+  let nextId = 1;
+  const tasks = new Map();
+  const view = {
+    performance: {now: () => now},
+    matchMedia: query => ({matches: query === "(prefers-reduced-motion: reduce)" && reducedMotion}),
+    setTimeout(callback, delay = 0) {
+      const id = nextId++;
+      tasks.set(id, {callback, due: now + Math.max(0, Number(delay) || 0)});
+      return id;
+    },
+    clearTimeout(id) {
+      tasks.delete(id);
+    }
+  };
+  return {
+    view,
+    advanceBy(duration) {
+      const target = now + duration;
+      while (true) {
+        const next = [...tasks.entries()]
+          .filter(([, task]) => task.due <= target)
+          .sort((left, right) => left[1].due - right[1].due || left[0] - right[0])[0];
+        if (!next) break;
+        const [id, task] = next;
+        tasks.delete(id);
+        now = task.due;
+        task.callback();
+      }
+      now = target;
+    },
+    pendingCount: () => tasks.size
+  };
+}
+
+function assertErrorState(fakeDocument, message) {
+  assert.equal(fakeDocument.screen.hidden, false, "错误态没有保持加载页可见");
+  assert.equal(fakeDocument.screen.dataset.state, "error");
+  assert.equal(fakeDocument.classes.has("is-leaving"), false, "错误态仍保留离场类");
+  assert.equal(fakeDocument.attributes.has("aria-hidden"), false, "错误态仍从可访问树隐藏");
+  assert.equal(fakeDocument.status.textContent, message);
 }
