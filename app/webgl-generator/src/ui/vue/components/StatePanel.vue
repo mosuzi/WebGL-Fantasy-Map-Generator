@@ -316,7 +316,7 @@ const stateActions = computed(() => [
   {key: "edit", label: editActive.value ? "退出国家编辑" : "进入国家编辑", icon: "◎", panel: false, disabled: modalActionActive.value || !canDeleteSelected.value, active: editActive.value},
   {key: "rename", label: "重命名", icon: "✎", disabled: modalActionActive.value || !canDeleteSelected.value},
   {key: "color", label: "调整颜色", icon: "◐", disabled: modalActionActive.value || !canDeleteSelected.value},
-  {key: "government", label: "调整政体", icon: "⚖", panelWidth: 460, disabled: modalActionActive.value || !canDeleteSelected.value},
+  {key: "government", label: "调整政体", icon: "⚖", panelWidth: 620, disabled: modalActionActive.value || !canDeleteSelected.value},
   {key: "capital", label: "设置首都", icon: "♛", disabled: modalActionActive.value || !canDeleteSelected.value || !capitalOptions.value.length},
   {key: "note", label: "编辑备注", icon: "☰", disabled: modalActionActive.value || !canDeleteSelected.value},
   {key: "merge", label: "合并相邻国家", icon: "⇄", panelWidth: 380, panelHeight: 390, disabled: modalActionActive.value || !canDeleteSelected.value || !activeStateNeighbors(props.state.map, selected.value?.id).length},

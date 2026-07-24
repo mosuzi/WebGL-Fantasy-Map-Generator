@@ -1,5 +1,23 @@
 # 开发历史
 
+## 2026-07-24：完成权威任务第 196～197 项——政体弹框与对象列表列宽收敛
+
+- 用户截图确认“调整政体”二级弹框只有 `460px`，原两列网格把国号后缀字段压到 `96px`；字段自身标签已占 `88px`，选择控件实际宽度为 `0px`。国家编辑表格的首都列同时使用了偏宽的 `112px` 默认值。
+- 第 196 项把弹框建议宽度调整为 `620px`，字段区改为最小 `240px` 的响应式网格，字段内部统一为 `72px + 剩余空间`，提交按钮跨满整行。真实 Chrome 量测弹框宽 `620px`，两个字段各 `295.1px`，两个选择控件各 `213.1px`；国号后缀下拉完整显示“帝国 / 国”，选项内容区 `250px` 且没有裁切。窄窗口继续由响应式网格自动降为单列。
+- 第 197 项动态盘点当前 24 个 Vue 宿主中的 27 张 `UiObjectTable`。选择 / ID、短枚举、数值、普通名称、长文本和定位列的现有分档整体合理，唯一明确过宽的同语义业务列是国家编辑与政体管理中的 `capitalName`，两处均由 `112px` 收敛为 `80px`；没有借机批量压缩其它名称或长文本列。
+- 列宽偏好增加版本化逐列迁移，只把旧默认 `capitalName=112` 迁移为 `80`；用户主动设置的其它值保持。读取逻辑不再先把新版默认版本混入旧数据，避免跳过迁移；迁移完成后用户再次把首都列拖回 `112px` 也会保留。
+- 新增 `regress:object-table-column-widths`，覆盖动态表格分母、两处新默认值、旧默认迁移、自定义 `148px` 保留、迁移后 `112px` 保留和政体面板带前缀列 key；扩展 `regress:state-government-width` 固定 `620px` 弹框、响应式字段和按钮跨列契约。两项回归、相关语法检查、`CI=true pnpm.cmd run build:app` 与 `git diff --check` 通过，构建仅有既有大 chunk 警告。
+- 真实 Chrome 中国家表首都表头为 `80px`，表格总滚动宽度由 `738px` 降为 `706px`，其余列保持原值。控制台只看到浏览器扩展注入的既有 FMG health input-delay / long-task 记录，没有本项应用异常。`regress:interaction-complex-workspaces` 仍因既有 OceanCurrentPanel 静态审计缺少 `useVisibleRowSelection` 证据而失败，与本项弹框和列宽逻辑无关，未越界修复。
+
+## 2026-07-24：完成权威任务第 195 项——Cells 诊断图层与面向 AI 的可判定 API 设计
+
+- 用户指出当前问题定位过度依赖视觉：需要一个展示全部 cells 的诊断图层，并希望 AI 能通过类似 `api.state.createAtCell(cellID)` 的结构化调用判断某个 cell 为什么不能新建国家。本项按用户要求只形成设计，不修改正式应用功能。
+- 代码调查确认基础面由 Grid Voronoi cells 渲染，Pack cells 承载国家等业务语义并通过 `pack.cells.g` 映射到 Grid；当前公开 API 已有统一结果 envelope、图层显隐和 `edit.states.add`，国家创建内部预检也已有 `grid-cell-invalid / grid-cell-water / pack-cell-missing / capital-province-protected / ok`，但这些业务结果尚未形成稳定公开契约。
+- 设计把首期诊断图层固定为默认关闭的 `gridCells`：绘制全部 Grid cell 共享边，边线去重后惰性构建静态 GPU buffer，编号只在足够缩放且受视口预算约束时显示。Pack cells 不与它混称，若未来需要业务单元边界应另立图层。
+- 面向 AI 的接口分为纯只读预检与显式写入：规范入口为 `api.edit.states.inspectCreateAtCell(ref)` 和 `api.edit.states.createAtCell(ref, options)`，旧 `edit.states.add` 继续兼容。`ok` 只表示调用完成，能否执行由 `allowed + code + message + details` 表达；`mapRevision / inspectionToken` 防止预检后地图变化造成陈旧写入。
+- 方案同时新增 `api.cells` 的读取、点命中、邻接、查询、定位、动作预检和批量扫描能力，定义稳定业务 code、warning、自描述 schema、旧存档一致性诊断以及未来本地 AI bridge 的显式启用、白名单、默认只读和确认边界。完整方案见 `docs/task-notes/cell-diagnostics-and-ai-api-design.md`；其中 A～D 实施阶段均为未批准候选。
+- 本项只改中文文档，未运行生产构建或浏览器验证；以 `git diff --check` 和文档交叉引用检查作为门禁。
+
 ## 2026-07-24：完成权威任务第 194 项——修复真实旧存档无法创建国家
 
 - 用户在 `127.0.0.1:5410` 的真实浏览器存档中确认新增国家失灵。现场复现的真实异常不是第 191～193 项临时打断，而是旧存档把国家编辑器运行时 `Map` 缓存序列化成普通 `{}`；恢复后 `getPackCellsForGrid()` 只做真值判断，继而调用不存在的 `.get()`，国家创建在只读预检阶段即中断。存档中另有稀疏国家 ID `4009`，旧窄位 typed array 还会把下一个 ID 静默截断，形成零 cell 的幽灵国家。

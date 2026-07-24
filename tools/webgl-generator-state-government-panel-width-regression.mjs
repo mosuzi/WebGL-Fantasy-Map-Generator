@@ -15,8 +15,11 @@ const [panelSource, dockSource, styles] = await Promise.all([
 const governmentAction = panelSource.match(/\{key: "government", label: "调整政体", icon: "⚖", panelWidth: (\d+), disabled:/);
 assert(governmentAction, "国家政体动作必须声明专用面板宽度");
 const panelWidth = Number(governmentAction[1]);
-assert(panelWidth >= 460, "国家政体面板宽度不得小于 460px");
+assert(panelWidth >= 620, "国家政体面板宽度不得小于 620px");
 assert.match(dockSource, /Number\(activeAction\.value\?\.panelWidth\) \|\| 340/, "不得改变其它动作面板的通用默认宽度");
+assert.match(styles, /\.state-government-field\s*\{[^}]*grid-template-columns:\s*repeat\(auto-fit, minmax\(min\(100%, 240px\), 1fr\)\);/, "政体字段没有按可用宽度自适应为双列或单列");
+assert.match(styles, /\.state-government-field > \.ui-select-field\s*\{[^}]*grid-template-columns:\s*72px minmax\(0, 1fr\);/, "政体与国号后缀字段没有为选择框保留稳定宽度");
+assert.match(styles, /\.state-government-field > \.el-button\s*\{[^}]*grid-column:\s*1 \/ -1;/, "政体提交按钮没有跨越完整弹框内容宽度");
 assert.match(styles, /\.ui-select-popper\.el-popper \{[\s\S]*?min-width: 260px !important;/, "共享候选浮层最小宽度契约缺失");
 assert.match(styles, /\.ui-select-popper \.el-select-dropdown__item \{[\s\S]*?white-space: normal;/, "较长候选必须继续允许完整换行");
 assert.match(panelSource, /label="国号后缀"[\s\S]*?:options="governmentSuffixOptions"/, "政体动作缺少独立国号后缀选择");

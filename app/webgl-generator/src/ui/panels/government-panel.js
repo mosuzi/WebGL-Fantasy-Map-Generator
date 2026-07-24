@@ -17,12 +17,16 @@ const GOVERNMENT_COLUMN_WIDTHS = Object.freeze({
   "states.population": 92,
   "states.economicPower": 78,
   "states.militaryPower": 78,
-  "states.capitalName": 112
+  "states.capitalName": 80
 });
 const GOVERNMENT_LIST_DEFAULTS = Object.freeze({
   filter: "",
   familyFilter: "all",
   columnWidths: GOVERNMENT_COLUMN_WIDTHS,
+  columnWidthVersion: 2,
+  columnWidthMigrations: {
+    "states.capitalName": {from: 112, to: 80}
+  },
   sortKey: "count",
   sortDir: "desc"
 });

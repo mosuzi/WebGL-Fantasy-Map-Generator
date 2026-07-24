@@ -6,7 +6,7 @@ export function readPanelListPreferences(documentRef, panelId, defaults = {}) {
   try {
     const raw = documentRef.defaultView?.localStorage?.getItem(storageKey(panelId));
     if (!raw) return normalizePanelListPreferences(defaults, defaults);
-    return normalizePanelListPreferences({...defaults, ...JSON.parse(raw)}, defaults);
+    return normalizePanelListPreferences(JSON.parse(raw), defaults);
   } catch {
     return normalizePanelListPreferences(defaults, defaults);
   }
@@ -81,6 +81,13 @@ function normalizePanelListPreferences(value = {}, defaults = {}) {
   }
   if (isPlainObject(defaults.columnWidths)) {
     normalized.columnWidths = normalizeColumnWidths(value.columnWidths, defaults.columnWidths);
+    if (positiveInteger(defaults.columnWidthVersion)) {
+      const sourceVersion = positiveInteger(value.columnWidthVersion) || 0;
+      if (sourceVersion < defaults.columnWidthVersion) {
+        normalized.columnWidths = migrateColumnWidths(normalized.columnWidths, defaults.columnWidthMigrations);
+      }
+      normalized.columnWidthVersion = defaults.columnWidthVersion;
+    }
   }
   return normalized;
 }
@@ -119,6 +126,24 @@ function normalizeColumnWidth(value, fallback) {
   const base = Number.isFinite(width) ? width : fallbackWidth;
   if (!Number.isFinite(base)) return MIN_COLUMN_WIDTH;
   return Math.round(Math.min(MAX_COLUMN_WIDTH, Math.max(MIN_COLUMN_WIDTH, base)));
+}
+
+function migrateColumnWidths(widths, migrations) {
+  if (!isPlainObject(migrations)) return widths;
+  const migrated = {...widths};
+  for (const [key, migration] of Object.entries(migrations)) {
+    if (!isPlainObject(migration) || !Object.hasOwn(migrated, key)) continue;
+    const from = Number(migration.from);
+    const to = Number(migration.to);
+    if (!Number.isFinite(from) || !Number.isFinite(to) || migrated[key] !== Math.round(from)) continue;
+    migrated[key] = normalizeColumnWidth(to, migrated[key]);
+  }
+  return migrated;
+}
+
+function positiveInteger(value) {
+  const number = Number(value);
+  return Number.isInteger(number) && number > 0 ? number : 0;
 }
 
 function isPlainObject(value) {

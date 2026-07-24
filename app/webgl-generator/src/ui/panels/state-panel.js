@@ -10,7 +10,7 @@ const STATE_COLUMN_WIDTHS = Object.freeze({
   id: 56,
   name: 120,
   governmentLabel: 84,
-  capitalName: 112,
+  capitalName: 80,
   burgs: 64,
   population: 92,
   economicPower: 64,
@@ -19,6 +19,10 @@ const STATE_COLUMN_WIDTHS = Object.freeze({
 const STATE_LIST_DEFAULTS = Object.freeze({
   filter: "",
   columnWidths: STATE_COLUMN_WIDTHS,
+  columnWidthVersion: 2,
+  columnWidthMigrations: {
+    capitalName: {from: 112, to: 80}
+  },
   sortKey: "population",
   sortDir: "desc"
 });
