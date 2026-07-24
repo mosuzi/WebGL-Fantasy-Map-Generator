@@ -262,7 +262,12 @@ export function createAddStateAtCellCommand(gridCell, {label = "新增国家"} =
       inspection = inspectStateCreation(context.map, targetGridCell);
       if (!inspection.valid) throw new Error(inspection.summary);
       snapshot ??= captureStateCollectionSnapshot(context.map);
-      result = addStateAtGridCell(context.map, targetGridCell);
+      try {
+        result = addStateAtGridCell(context.map, targetGridCell);
+      } catch (error) {
+        restoreStateCollectionSnapshot(context.map, snapshot);
+        throw error;
+      }
       this.effects.affected = objectAffected("state", result.stateId);
     },
     revert(context) {
@@ -422,6 +427,7 @@ function addStateAtGridCell(map, gridCell) {
   const packCell = inspection.packCell;
   const stateId = nextPoliticalId(map?.politics?.states || map?.pack?.states || []);
   const provinceId = nextPoliticalId(map?.politics?.provinces || map?.pack?.provinces || []);
+  ensurePoliticalCellCapacity(map, {stateId, provinceId});
   const point = map.pack?.cells?.p?.[packCell] || map.grid?.points?.[map.grid.cells.p?.[gridCell]] || [0, 0];
   const cultureId = normalizeCultureId(map.pack?.cells?.culture?.[packCell] ?? map.grid?.cells?.culture?.[gridCell]);
   const religionId = normalizeCultureId(map.pack?.cells?.religion?.[packCell] ?? map.grid?.cells?.religion?.[gridCell]);
@@ -1069,7 +1075,7 @@ function uniquePackCellsForChanges(map, changes) {
 
 function getPackCellsForGrid(map, gridCell) {
   if (!map?.pack?.cells?.g || !map?.pack?.cells?.state) return [];
-  if (!map.__stateEditorPackCellsByGrid) {
+  if (!(map.__stateEditorPackCellsByGrid instanceof Map)) {
     const byGrid = new Map();
     for (let packCell = 0; packCell < map.pack.cells.g.length; packCell++) {
       const mappedGrid = map.pack.cells.g[packCell];
@@ -1077,7 +1083,11 @@ function getPackCellsForGrid(map, gridCell) {
       if (!byGrid.has(mappedGrid)) byGrid.set(mappedGrid, []);
       byGrid.get(mappedGrid).push(packCell);
     }
-    map.__stateEditorPackCellsByGrid = byGrid;
+    Object.defineProperty(map, "__stateEditorPackCellsByGrid", {
+      value: byGrid,
+      configurable: true,
+      writable: true
+    });
   }
   return map.__stateEditorPackCellsByGrid.get(gridCell) || [];
 }
@@ -1431,7 +1441,10 @@ function getGridPoint(map, gridCell) {
 }
 
 function isPackLandCell(map, packCell) {
-  return Number.isInteger(packCell) && packCell >= 0 && map?.pack?.cells?.h?.[packCell] >= 20;
+  if (!Number.isInteger(packCell) || packCell < 0) return false;
+  const featureId = map?.pack?.cells?.f?.[packCell];
+  const feature = map?.features?.features?.[featureId];
+  return feature ? Boolean(feature.land) : map?.pack?.cells?.h?.[packCell] >= 20;
 }
 
 function initialStateCells(map, centerGridCell) {
@@ -1486,6 +1499,7 @@ function createCapitalCity(map, {stateId, provinceId, packCell, gridCell, cultur
   }
   const burgId = map.pack.burgs.length;
   const cityId = map.settlements.cities.length;
+  ensureUnsignedCellCapacity(map.pack.cells, "burg", burgId);
   const [x, y] = map.pack.cells.p[packCell];
   const culture = map?.society?.cultures?.[cultureId] || map?.pack?.cultures?.[cultureId] || null;
   const population = Math.max(8, roundValue((map.pack.cells.pop?.[packCell] || map.grid?.cells?.pop?.[gridCell] || 8) + 18, 2));
@@ -1598,6 +1612,33 @@ function nextPoliticalId(items = []) {
   return max + 1;
 }
 
+function ensurePoliticalCellCapacity(map, {stateId, provinceId}) {
+  for (const cells of [map?.grid?.cells, map?.pack?.cells]) {
+    ensureUnsignedCellCapacity(cells, "state", stateId);
+    ensureUnsignedCellCapacity(cells, "province", provinceId);
+  }
+}
+
+function ensureUnsignedCellCapacity(cells, key, requiredValue) {
+  const current = cells?.[key];
+  if (!ArrayBuffer.isView(current) || current instanceof DataView) return;
+  const required = normalizePoliticalId(requiredValue);
+  if (typedArrayCanRepresentUnsigned(current, required)) return;
+  const TypedArray = required <= 0xffff ? Uint16Array : required <= 0xffffffff ? Uint32Array : null;
+  if (!TypedArray) throw new Error(`${key} ID 超出当前地图支持范围：${required}`);
+  cells[key] = TypedArray.from(current, value => normalizePoliticalId(value));
+}
+
+function typedArrayCanRepresentUnsigned(array, value) {
+  if (array instanceof Uint8Array || array instanceof Uint8ClampedArray) return value <= 0xff;
+  if (array instanceof Int8Array) return value <= 0x7f;
+  if (array instanceof Uint16Array) return value <= 0xffff;
+  if (array instanceof Int16Array) return value <= 0x7fff;
+  if (array instanceof Uint32Array) return value <= 0xffffffff;
+  if (array instanceof Int32Array) return value <= 0x7fffffff;
+  return array instanceof Float32Array || array instanceof Float64Array;
+}
+
 function normalizePoliticalId(value) {
   const numeric = Number(value);
   return Number.isInteger(numeric) ? Math.max(0, numeric) : 0;
@@ -1616,7 +1657,12 @@ function cloneArrayLike(value) {
 
 function restoreArrayLike(target, key, snapshot) {
   if (!target || !snapshot) return;
-  if (ArrayBuffer.isView(target[key]) && ArrayBuffer.isView(snapshot) && target[key].length === snapshot.length) {
+  if (
+    ArrayBuffer.isView(target[key])
+    && ArrayBuffer.isView(snapshot)
+    && target[key].constructor === snapshot.constructor
+    && target[key].length === snapshot.length
+  ) {
     target[key].set(snapshot);
     return;
   }
@@ -1624,10 +1670,9 @@ function restoreArrayLike(target, key, snapshot) {
 }
 
 function isGridLandCell(map, gridCell) {
-  if (map?.grid?.cells?.h?.[gridCell] < 20) return false;
   const featureId = map?.grid?.cells?.f?.[gridCell];
   const feature = map?.features?.features?.[featureId];
-  return feature ? Boolean(feature.land) : true;
+  return feature ? Boolean(feature.land) : map?.grid?.cells?.h?.[gridCell] >= 20;
 }
 
 function roundValue(value, digits = 1) {
