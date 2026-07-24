@@ -708,6 +708,7 @@
   - 设计约束：Grid 与 Pack cell 必须使用显式空间引用，`ok` 只表示 API 调用本身成功，业务不可执行使用 `allowed: false + code` 表达；诊断不得依赖“先执行再撤销”，写操作必须与只读预检分离并保留 `edit.states.add` 兼容入口。页面 API 与未来外部传输层解耦，默认不开放远程写入。
   - 最小验收：形成一份可独立评审的中文设计文档，覆盖图层范围 / 绘制顺序 / 性能策略、接口签名与结果示例、业务 code、并发陈旧检查、旧存档一致性、能力自描述、AI 调用流程、传输安全、分阶段实施建议与各阶段验收条件；明确本项不修改正式应用代码。
   - 完成记录：新增 `docs/task-notes/cell-diagnostics-and-ai-api-design.md`。方案把首期图层固定为全量 `gridCells` 边线，采用共享边去重、静态 GPU buffer、按缩放受控显示编号；新增 `api.cells.get / getAtPoint / neighbors / query / locate / inspectAction / scan` 设计。国家创建的规范入口拆为 `edit.states.inspectCreateAtCell` 与 `edit.states.createAtCell`，并用 `mapRevision / inspectionToken` 防止 AI 依据陈旧预检写入。业务拒绝、运行时故障和警告分别建模，页面 API 之外的本地 AI bridge 只作为未来显式启用、白名单和默认只读的候选。文档中的 A～D 实施阶段未获批准，不进入活动队列。
+  - 实施前置小任务：任何第 195 项代码实施开始前，必须先完成“按 cell 预检 / 创建动作矩阵审计与阶段重构”。该小任务要盘点国家、省份、城市及其它所有同类动作，逐项确认现有写入口、内部 inspector、目标 cell 空间、业务拒绝 code、撤销 / 回滚和兼容别名，再据此重写 A～D 阶段；不得继续采用只在阶段 B 实现 `states.createAtCell`、却把 `provinces.createAtCell` 等同类契约推迟到阶段 D 的不完备划分。此项现在只登记为第 195 项实施门禁，不立即调查、不重写现有 A～D 阶段、不进入活动开发队列。
 
 - **权威任务第 196 项：扩大“调整政体”弹框并恢复国号后缀选项可见性。** `已完成；来源：用户截图反馈`
   - 范围：只调整国家编辑器“调整政体”二级弹框的建议宽度与字段排布；政体、后缀候选、提交命令、政体效果和其它动作坞弹框保持原语义。
