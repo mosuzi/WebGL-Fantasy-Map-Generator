@@ -15,6 +15,7 @@ import {buildSociety, finalizeSocietyReligions} from "../generator/society.js";
 import {buildZones} from "../generator/zones.js";
 import {systemAffected} from "./edit-command-effects.js";
 import {EDIT_REFRESH_PRESETS} from "./edit-refresh-scheduler.js";
+import {ensureLabelStore} from "./label-edit-commands.js";
 
 const SPATIAL_BUCKETS = 64;
 
@@ -305,9 +306,9 @@ function refreshImportedMapSummary(map) {
 function resetMapUserObjectStores(map) {
   map.labels = {
     custom: [],
-    hidden: {city: [], state: []},
-    metadata: {custom: 0, hidden: 0}
+    hidden: {city: [], state: [], province: []}
   };
+  ensureLabelStore(map);
   map.notes = {
     notes: [],
     metadata: {notes: 0, formatVersion: 1}

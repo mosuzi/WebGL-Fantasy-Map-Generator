@@ -2762,7 +2762,7 @@ function createRuntimeActions(state, documentRef, options = {}) {
       importMap: (document, options = {}) => operation.run("data.importMap", context => importMapDocumentViaApi(state, documentRef, document, options, context), mapReplaceConfig(loadingMessage("map-import-read"))),
       importGEO: (document, options = {}) => operation.runSync("data.importGEO", context => {
         context.report("import", {message: "正在导入 GEO 数据"});
-        return importGeoDocumentViaApi(state, documentRef, document, options);
+        return importGeoDocumentTransactionViaApi(state, documentRef, document, options);
       }, {
         ...mapMutationConfig("正在导入 GEO 数据"),
         message: "正在导入 GEO 数据",
@@ -5150,6 +5150,32 @@ function importGeoDocumentViaApi(state, documentRef, document, options = {}) {
   }
 }
 
+function importGeoDocumentTransactionViaApi(state, documentRef, document, options = {}) {
+  assertMapAvailable(state);
+  const transaction = executeMapSnapshotTransaction({
+    map: state.map,
+    editHistory: state.editHistory,
+    label: "导入 GEO 数据",
+    domain: "geo-import",
+    effects: {
+      ...REGENERATION_TRANSACTION_EFFECTS,
+      affected: [{kind: "system", id: "geo-import"}]
+    },
+    execute: () => importGeoDocumentViaApi(state, documentRef, document, options),
+    executeCommand: command => executeEditCommand(state, documentRef, command, {
+      context: {map: state.map},
+      refresh: () => {},
+      refreshPanels: false
+    }),
+    isNoop: result => result?.imported === false,
+    onRestore: () => refreshMapMutationRollback(state, documentRef)
+  });
+  return {
+    ...transaction.result,
+    history: state.editHistory.getStats()
+  };
+}
+
 function importFmgCellsGeoViaApi(state, documentRef, command, options = {}) {
   if (command.isNoop({map: state.map})) {
     setFileOperationStatus(documentRef, "未导入 GEO 地形：当前地图与文件高度一致。");
@@ -5695,6 +5721,7 @@ async function applyClimateDownstreamRebuildViaApi(state, documentRef, options =
 async function executeClimateDownstreamSystem(state, documentRef, systemId, context = {}) {
   if (systemId === "markers") return regenerateMarkerResourcesForClimate(state, documentRef, context.regenerationSalt);
   if (systemId === "economy") return rebuildEconomyViaAction(state, documentRef, {label: "气候下游重算：经济", deferRefresh: true});
+  if (systemId === "cities" || systemId === "provinces") return regenerateMapAttribute(state, systemId, documentRef, {kind: "all"});
   return regenerateMapAttribute(state, systemId, documentRef);
 }
 
@@ -8934,6 +8961,7 @@ function regenerateMapAttributeViaApi(state, documentRef, kind, options = {}) {
     }),
     onRestore: () => refreshMapMutationRollback(state, documentRef)
   });
+  if (transaction.executed) refreshPanelsForEdit(state, {derived: ["object-panels"]});
   return {
     ...transaction.result,
     history: state.editHistory.getStats()

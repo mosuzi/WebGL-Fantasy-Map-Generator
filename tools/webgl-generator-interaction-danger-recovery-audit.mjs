@@ -1,6 +1,6 @@
 import {createHash} from "node:crypto";
-import {mkdirSync, readFileSync, writeFileSync} from "node:fs";
-import {dirname, join, resolve} from "node:path";
+import {mkdirSync, readFileSync, readdirSync, writeFileSync} from "node:fs";
+import {dirname, extname, join, relative, resolve, sep} from "node:path";
 import {fileURLToPath, pathToFileURL} from "node:url";
 import {API_METHODS, CONFIRM_REQUIRED_METHODS} from "../app/webgl-generator/src/runtime/api-contract.js";
 
@@ -47,46 +47,37 @@ const DESTRUCTIVE_UI_ACTIONS = Object.freeze([
   action("reset-seafloor", "重设海底", "seafloor", "preview", "native-confirm", "one-command", "undo-after-success", FILES.runtime, "onSeafloorResetApply")
 ]);
 
-const SOURCE_DISCOVERY_RULES = Object.freeze([
-  ["delete-state-canvas", FILES.runtime, "label: \"画布删除国家\""],
-  ["delete-province-canvas", FILES.runtime, "label: \"画布删除省份\""],
-  ["delete-city-canvas", FILES.runtime, "label: \"画布删除城市\""],
-  ["delete-culture", FILES.runtime, "label: \"删除文化\""],
-  ["delete-religion", FILES.runtime, "label: \"删除宗教\""],
-  ["delete-route", FILES.runtime, "label: \"删除路线\""],
-  ["delete-route-batch", FILES.runtime, "label: \"批量删除路线\""],
-  ["delete-river", FILES.runtime, "label: \"删除河流\""],
-  ["delete-river-batch", FILES.runtime, "label: \"批量删除河流\""],
-  ["delete-lake", FILES.runtime, "label: \"填平并删除湖泊\""],
-  ["delete-lake-batch", FILES.runtime, "label: \"批量填平并删除湖泊\""],
-  ["delete-marker", FILES.runtime, "deleteMarkerViaApi"],
-  ["delete-label", FILES.runtime, "deleteLabelViaApi"],
-  ["delete-orphan-note", FILES.runtime, "deleteNoteViaApi"],
-  ["delete-note-batch", "app/webgl-generator/src/ui/vue/components/NotesPanel.vue", "确定批量删除"],
-  ["delete-measurement", FILES.runtime, "deleteMeasurementViaApi"],
-  ["delete-zone", FILES.runtime, "deleteZoneViaApi"],
-  ["delete-visual-theme", FILES.runtime, "deleteRuntimeVisualTheme"],
-  ["reset-label-styles", FILES.controlPanel, "确定重置全部标签样式"],
-  ["delete-namebase", FILES.runtime, "deleteNamebaseViaAction"],
-  ["clear-namebases", FILES.runtime, "clearNamebasesViaApi"],
-  ["clear-battle-events-current", "app/webgl-generator/src/ui/vue/components/MilitaryPanel.vue", "function clearSelectedBattleEvents"],
-  ["clear-battle-events-filtered", "app/webgl-generator/src/ui/vue/components/MilitaryPanel.vue", "function clearFilteredBattleEvents"],
-  ["delete-height-template", FILES.heightPanel, "saveHeightTerrainTemplateRecycleRecord"],
-  ["delete-custom-unit", FILES.controlPanel, "CUSTOM_UNIT_RECYCLE_STORAGE_KEY"],
-  ["reset-seafloor", FILES.runtime, "onSeafloorResetApply"]
+const LOW_IMPACT_API_DANGER_POLICY_METHODS = Object.freeze([
+  "edit.labels.delete",
+  "edit.markers.delete",
+  "edit.measurements.delete",
+  "edit.notes.delete",
+  "edit.routes.delete",
+  "edit.zones.delete",
+  "layers.deleteTheme"
 ]);
+
+const API_DANGER_POLICY_METHODS = Object.freeze([
+  ...new Set([
+    ...CONFIRM_REQUIRED_METHODS.filter(isDangerApiMethodName),
+    ...LOW_IMPACT_API_DANGER_POLICY_METHODS
+  ])
+].sort());
 
 export function buildDangerRecoveryAudit() {
   const sources = Object.fromEntries(Object.entries(FILES).map(([key, file]) => [key, read(file)]));
-  const destructiveCandidates = discoverDestructiveUiActions();
-  const apiDangerActions = discoverApiDangerActions().map(qualifiedName => classifyApiAction(qualifiedName));
+  const sourceFiles = listApplicationSourceFiles();
+  const destructiveCandidates = discoverDestructiveUiActionsFromSources(
+    sourceFiles.map(sourceFile => ({sourceFile, source: read(sourceFile)}))
+  );
+  const apiDangerActions = API_DANGER_POLICY_METHODS.map(qualifiedName => classifyApiAction(qualifiedName));
   const registeredApiIds = apiDangerActions.map(item => item.actionId);
   const discoveredApiIds = discoverApiDangerActions().map(name => `api.${name}`);
   const registeredIds = DESTRUCTIVE_UI_ACTIONS.map(item => item.actionId);
   const discoveredIds = destructiveCandidates.map(item => item.actionId);
-  const sourceFiles = Object.values(FILES);
+  const destructiveCoverage = compareDestructiveDiscoveryPolicy(discoveredIds, registeredIds);
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     scope: "权威任务第 203 项：危险删除、清空、全量重置和本地资源恢复审计",
     sourceDigest: digestFiles(sourceFiles),
     totals: {
@@ -111,8 +102,7 @@ export function buildDangerRecoveryAudit() {
     discovery: {
       destructiveCandidates,
       apiDangerCandidates: discoveredApiIds,
-      undiscoveredDestructiveIds: difference(discoveredIds, registeredIds),
-      unknownDestructiveCandidates: difference(registeredIds, discoveredIds),
+      ...destructiveCoverage,
       unregisteredApiDangerIds: difference(discoveredApiIds, registeredApiIds),
       staleApiDangerIds: difference(registeredApiIds, discoveredApiIds)
     },
@@ -120,8 +110,7 @@ export function buildDangerRecoveryAudit() {
     browserScenarios: browserScenarios(),
     coverage: {
       unresolvedIds: [],
-      undiscoveredDestructiveIds: difference(discoveredIds, registeredIds),
-      unknownDestructiveCandidates: difference(registeredIds, discoveredIds),
+      ...destructiveCoverage,
       unregisteredApiDangerIds: difference(discoveredApiIds, registeredApiIds),
       staleApiDangerIds: difference(registeredApiIds, discoveredApiIds),
       unknownPolicyIds: [
@@ -185,18 +174,293 @@ function discoverApiDangerActions() {
   for (const [namespace, methods] of Object.entries(API_METHODS)) {
     for (const method of methods) {
       const name = `${namespace}.${method}`;
-      if (name === "selection.clear") continue;
-      if (name === "layers.deleteTheme" || /(^|\.)(delete|deleteBatch|clear|clearBattleEvents|resetStyles)$/.test(name)) result.push(name);
+      if (isDangerApiMethodName(name)) result.push(name);
     }
   }
   return result.sort();
 }
 
-function discoverDestructiveUiActions() {
-  return SOURCE_DISCOVERY_RULES.map(([actionId, sourceFile, sourceToken]) => {
-    if (!read(sourceFile).includes(sourceToken)) throw new Error(`危险入口独立发现失败：${actionId} -> ${sourceToken}`);
-    return {actionId, sourceFile, sourceToken};
+function isDangerApiMethodName(name) {
+  if (name === "selection.clear") return false;
+  return name === "layers.deleteTheme" || /(^|\.)(delete|deleteBatch|clear|clearBattleEvents|resetStyles)$/.test(name);
+}
+
+export function compareDestructiveDiscoveryPolicy(discoveredIds, registeredIds) {
+  return {
+    unregisteredDestructiveIds: difference(discoveredIds, registeredIds),
+    staleDestructivePolicyIds: difference(registeredIds, discoveredIds)
+  };
+}
+
+export function discoverDestructiveUiActionsFromSources(entries) {
+  const sourceIndex = new Map(entries.map(entry => [entry.sourceFile, entry.source]));
+  const candidates = new Map();
+  for (const {sourceFile, source} of entries) {
+    for (const container of discoverPanelCallbackContainers(source)) {
+      for (const callback of discoverObjectCallbacks(container.body)) {
+        if (!isDestructiveCallback(callback)) continue;
+        const actionId = actionIdForCallback(container, callback, sourceIndex);
+        if (!actionId) continue;
+        registerDiscoveredCandidate(candidates, {
+          actionId,
+          sourceFile,
+          sourceToken: `${container.name}.${callback.name}`,
+          discoveryKind: "panel-callback"
+        });
+      }
+    }
+    for (const confirmedFunction of sourceFile.includes("/ui/") ? discoverConfirmedDangerFunctions(source) : []) {
+      const actionId = actionIdForConfirmedFunction(confirmedFunction, sourceFile);
+      if (!actionId) continue;
+      registerDiscoveredCandidate(candidates, {
+        actionId,
+        sourceFile,
+        sourceToken: `function ${confirmedFunction.name}`,
+        discoveryKind: "confirmed-function"
+      });
+    }
+  }
+  return [...candidates.values()]
+    .map(candidate => ({
+      ...candidate,
+      sourceRefs: candidate.sourceRefs.sort((left, right) =>
+        left.file.localeCompare(right.file) || left.token.localeCompare(right.token)
+      )
+    }))
+    .sort((left, right) => left.actionId.localeCompare(right.actionId));
+}
+
+function listApplicationSourceFiles() {
+  const sourceRoot = join(REPO_ROOT, "app", "webgl-generator", "src");
+  const files = [];
+  const visit = directory => {
+    for (const entry of readdirSync(directory, {withFileTypes: true})) {
+      const absolute = join(directory, entry.name);
+      if (entry.isDirectory()) {
+        visit(absolute);
+        continue;
+      }
+      if (!entry.isFile() || ![".js", ".vue"].includes(extname(entry.name))) continue;
+      files.push(relative(REPO_ROOT, absolute).split(sep).join("/"));
+    }
+  };
+  visit(sourceRoot);
+  return files.sort();
+}
+
+function discoverPanelCallbackContainers(source) {
+  const containers = [];
+  const panelPattern = /\bcreate([A-Z][A-Za-z0-9]*)Panel\s*\([^,]+,\s*[^,]+,\s*\{/g;
+  for (const match of source.matchAll(panelPattern)) {
+    const openIndex = match.index + match[0].lastIndexOf("{");
+    const closeIndex = findMatchingDelimiter(source, openIndex, "{", "}");
+    if (closeIndex < 0) continue;
+    containers.push({
+      name: lowerFirst(match[1]),
+      body: source.slice(openIndex + 1, closeIndex)
+    });
+  }
+  const runtimeHandlersPattern = /\bconst\s+runtimePanelHandlers\s*=\s*\{/g;
+  for (const match of source.matchAll(runtimeHandlersPattern)) {
+    const openIndex = match.index + match[0].lastIndexOf("{");
+    const closeIndex = findMatchingDelimiter(source, openIndex, "{", "}");
+    if (closeIndex < 0) continue;
+    containers.push({
+      name: "control",
+      body: source.slice(openIndex + 1, closeIndex)
+    });
+  }
+  return containers;
+}
+
+function discoverObjectCallbacks(body) {
+  return splitTopLevel(body, ",").flatMap(entry => {
+    const match = entry.match(/^\s*(on[A-Z][A-Za-z0-9]*)\s*:/);
+    return match ? [{name: match[1], source: entry}] : [];
   });
+}
+
+function isDestructiveCallback(callback) {
+  const destructiveName = /^onDelete(?:$|[A-Z])/.test(callback.name)
+    || callback.name === "onClearUser"
+    || callback.name === "onResetAllLabelStyles"
+    || callback.name === "onSeafloorResetApply";
+  if (!destructiveName || callback.name === "onDeleteMode") return false;
+  return /executeDeleteWithPreflight|createDelete[A-Z][A-Za-z0-9]*Command|runtimeActions[\s\S]*?\.(?:delete|deleteBatch|deleteTheme|resetStyles)\s*\(|deleteImportedNamebase|clearImportedNamebases|defaultView\?\.confirm/.test(callback.source);
+}
+
+function actionIdForCallback(container, callback, sourceIndex) {
+  const panelTarget = normalizePanelTarget(container.name);
+  if (callback.name === "onSeafloorResetApply") return "reset-seafloor";
+  if (callback.name === "onResetAllLabelStyles") return "reset-label-styles";
+  if (callback.name === "onClearUser") return `clear-${pluralizeActionTarget(panelTarget)}`;
+  if (callback.name === "onDeleteUser") return `delete-${panelTarget}`;
+  if (/^onDelete(?:Many|Batch)$/.test(callback.name)) return `delete-${panelTarget}-batch`;
+  const namedTarget = callback.name.match(/^onDelete([A-Z][A-Za-z0-9]*)$/)?.[1];
+  if (namedTarget) {
+    const target = camelToKebab(namedTarget);
+    const canvasDelete = new RegExp(`\\bonDeleteMode\\s*:`).test(container.body) && target === panelTarget;
+    return `delete-${target}${canvasDelete ? "-canvas" : ""}`;
+  }
+  if (callback.name !== "onDelete") return null;
+  if (panelTarget === "note" && noteDeleteIsOrphanOnly(sourceIndex)) return "delete-orphan-note";
+  return `delete-${panelTarget}`;
+}
+
+function noteDeleteIsOrphanOnly(sourceIndex) {
+  const notesSource = sourceIndex.get("app/webgl-generator/src/ui/vue/components/NotesPanel.vue") || "";
+  return /<UiStateBanner[\s\S]{0,500}?v-if="[^"]*orphan[^"]*"[\s\S]{0,500}?@action="callbacks\.onDelete/.test(notesSource)
+    || /<UiStateBanner[\s\S]{0,500}?@action="callbacks\.onDelete[\s\S]{0,500}?v-if="[^"]*orphan[^"]*"/.test(notesSource);
+}
+
+function discoverConfirmedDangerFunctions(source) {
+  const functions = [];
+  const pattern = /\bfunction\s+((?:delete|clear|reset)[A-Z][A-Za-z0-9]*)\s*\([^)]*\)\s*\{/g;
+  for (const match of source.matchAll(pattern)) {
+    const openIndex = match.index + match[0].lastIndexOf("{");
+    const closeIndex = findMatchingDelimiter(source, openIndex, "{", "}");
+    if (closeIndex < 0) continue;
+    const body = source.slice(openIndex + 1, closeIndex);
+    if (!/(?:window|view|defaultView)\??\.(?:confirm|\s*confirm)|requestDeleteConfirmation/.test(body)) continue;
+    functions.push({name: match[1], body});
+  }
+  return functions;
+}
+
+function actionIdForConfirmedFunction({name, body}, sourceFile) {
+  const [verb, ...rawWords] = splitCamelWords(name);
+  if (!["delete", "clear", "reset"].includes(verb)) return null;
+  const words = rawWords.map(word => word.toLowerCase());
+  if (words.includes("terrain") && words.includes("program") && /HEIGHT_TERRAIN_TEMPLATE|TerrainTemplate/.test(body + sourceFile)) {
+    return `${verb}-height-template`;
+  }
+  if (words.includes("battle") && words.includes("events")) {
+    const scope = /筛选|Filtered/.test(body + name) ? "filtered" : /当前|Selected/.test(body + name) ? "current" : "";
+    return `${verb}-battle-events${scope ? `-${scope}` : ""}`;
+  }
+  const normalizedWords = words.filter(word => !["active", "all", "selected"].includes(word));
+  return `${verb}-${normalizedWords.join("-")}`;
+}
+
+function registerDiscoveredCandidate(candidates, candidate) {
+  const sourceRef = {file: candidate.sourceFile, token: candidate.sourceToken};
+  const existing = candidates.get(candidate.actionId);
+  if (existing) {
+    if (!existing.sourceRefs.some(ref => ref.file === sourceRef.file && ref.token === sourceRef.token)) {
+      existing.sourceRefs.push(sourceRef);
+    }
+    return;
+  }
+  candidates.set(candidate.actionId, {...candidate, sourceRefs: [sourceRef]});
+}
+
+function normalizePanelTarget(name) {
+  const normalized = camelToKebab(name)
+    .replace(/-naming$/, "")
+    .replace(/-panel$/, "");
+  return normalized === "notes" ? "note" : normalized;
+}
+
+function pluralizeActionTarget(value) {
+  if (value.endsWith("s")) return value;
+  return `${value}s`;
+}
+
+function splitCamelWords(value) {
+  return String(value).replace(/([a-z0-9])([A-Z])/g, "$1 $2").split(/\s+/).filter(Boolean);
+}
+
+function camelToKebab(value) {
+  return splitCamelWords(value).map(word => word.toLowerCase()).join("-");
+}
+
+function lowerFirst(value) {
+  return value ? `${value[0].toLowerCase()}${value.slice(1)}` : "";
+}
+
+function splitTopLevel(source, delimiter) {
+  const chunks = [];
+  let start = 0;
+  const depths = {"(": 0, "[": 0, "{": 0};
+  walkCode(source, (character, index) => {
+    if (character === "(") depths["("]++;
+    else if (character === ")") depths["("]--;
+    else if (character === "[") depths["["]++;
+    else if (character === "]") depths["["]--;
+    else if (character === "{") depths["{"]++;
+    else if (character === "}") depths["{"]--;
+    else if (character === delimiter && Object.values(depths).every(depth => depth === 0)) {
+      chunks.push(source.slice(start, index));
+      start = index + 1;
+    }
+  });
+  chunks.push(source.slice(start));
+  return chunks;
+}
+
+function findMatchingDelimiter(source, openIndex, openCharacter, closeCharacter) {
+  let depth = 0;
+  let result = -1;
+  walkCode(source, (character, index) => {
+    if (result >= 0 || index < openIndex) return;
+    if (character === openCharacter) depth++;
+    if (character !== closeCharacter) return;
+    depth--;
+    if (depth === 0) result = index;
+  });
+  return result;
+}
+
+function walkCode(source, visit) {
+  let mode = "code";
+  for (let index = 0; index < source.length; index++) {
+    const character = source[index];
+    const next = source[index + 1];
+    if (mode === "line-comment") {
+      if (character === "\n") mode = "code";
+      continue;
+    }
+    if (mode === "block-comment") {
+      if (character === "*" && next === "/") {
+        mode = "code";
+        index++;
+      }
+      continue;
+    }
+    if (mode !== "code") {
+      if (character === "\\") {
+        index++;
+        continue;
+      }
+      if ((mode === "single-quote" && character === "'")
+        || (mode === "double-quote" && character === "\"")
+        || (mode === "template" && character === "`")) mode = "code";
+      continue;
+    }
+    if (character === "/" && next === "/") {
+      mode = "line-comment";
+      index++;
+      continue;
+    }
+    if (character === "/" && next === "*") {
+      mode = "block-comment";
+      index++;
+      continue;
+    }
+    if (character === "'") {
+      mode = "single-quote";
+      continue;
+    }
+    if (character === "\"") {
+      mode = "double-quote";
+      continue;
+    }
+    if (character === "`") {
+      mode = "template";
+      continue;
+    }
+    visit(character, index);
+  }
 }
 
 function classifyApiAction(name) {
@@ -256,7 +520,7 @@ function digestFiles(files) {
 
 function renderMarkdown(report) {
   const rows = report.destructiveUiActions.map(item => `| ${item.actionId} | ${item.label} | ${item.preflight} | ${item.confirm} | ${item.successRecovery} |`).join("\n");
-  return `# 危险操作与恢复审计\n\n- UI / 画布入口：${report.totals.destructiveUiActions}\n- 逻辑策略：${report.totals.destructiveSemantics}\n- 公开 API：${report.totals.publicApiMethods}\n- 公开危险 API：${report.totals.publicApiDangerActions}\n- 未知 / 未分类：${report.coverage.unknownPolicyIds.length}\n- 登记差集：${report.coverage.undiscoveredDestructiveIds.length + report.coverage.unknownDestructiveCandidates.length + report.coverage.unregisteredApiDangerIds.length + report.coverage.staleApiDangerIds.length}\n\n| ID | 入口 | 预检 | 确认 | 成功恢复 |\n|---|---|---|---|---|\n${rows}\n`;
+  return `# 危险操作与恢复审计\n\n- UI / 画布入口：${report.totals.destructiveUiActions}\n- 逻辑策略：${report.totals.destructiveSemantics}\n- 公开 API：${report.totals.publicApiMethods}\n- 公开危险 API：${report.totals.publicApiDangerActions}\n- 未知 / 未分类：${report.coverage.unknownPolicyIds.length}\n- 登记差集：${report.coverage.unregisteredDestructiveIds.length + report.coverage.staleDestructivePolicyIds.length + report.coverage.unregisteredApiDangerIds.length + report.coverage.staleApiDangerIds.length}\n\n| ID | 入口 | 预检 | 确认 | 成功恢复 |\n|---|---|---|---|---|\n${rows}\n`;
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {

@@ -37,7 +37,7 @@ export function inspectDeleteImpact(map, kind, ids) {
   const details = inspectKindDependencies(map, kind, normalized);
   const deleteIds = details.deleteIds || normalized;
   const cascadeIds = deleteIds.filter(id => !normalized.includes(id));
-  const dependencyCount = Object.values(details.dependencies || {}).reduce((sum, value) => sum + (Number(value) || 0), 0);
+  const dependencyCount = countConfirmationDependencies(kind, details.dependencies);
   const requiresConfirm = Boolean(normalized.length && (ALWAYS_CONFIRM_KINDS.has(kind) || deleteIds.length > 1 || cascadeIds.length || dependencyCount));
   const preview = {
     kind,
@@ -57,6 +57,14 @@ export function inspectDeleteImpact(map, kind, ids) {
   preview.summary = formatDeleteImpactSummary(preview);
   preview.confirmationMessage = formatDeleteConfirmation(preview);
   return preview;
+}
+
+function countConfirmationDependencies(kind, dependencies = {}) {
+  const entries = Object.entries(dependencies);
+  const relevant = kind === OBJECT_KIND.ROUTE
+    ? entries.filter(([key]) => key !== "routeSegments" && key !== "routeCells")
+    : entries;
+  return relevant.reduce((sum, [, value]) => sum + (Number(value) || 0), 0);
 }
 
 export function formatDeleteImpactSummary(preview) {

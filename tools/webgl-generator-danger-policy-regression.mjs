@@ -59,6 +59,15 @@ assert.deepEqual(failure.error.preview, preview);
 assert.deepEqual(failure.error.details.preview, preview);
 assert.doesNotThrow(() => JSON.stringify(failure), "确认拒绝必须可序列化");
 
+const lowImpactRoutePreview = inspectDeleteImpact({
+  settlements: {
+    routes: [{id: 7, points: [[0, 0], [1, 1]], packCells: [3, 4]}]
+  },
+  notes: {notes: []}
+}, OBJECT_KIND.ROUTE, [7]);
+assert.equal(lowImpactRoutePreview.requiresConfirm, false, "普通单路线删除不得被自身几何升级为确认");
+assert.equal(lowImpactRoutePreview.impactLevel, "low", "普通单路线删除必须保持低影响");
+
 for (const kind of ["cities", "provinces", "states", "cultures", "religions", "routes", "rivers", "lakes"]) {
   assert.match(consoleApiSource, new RegExp(`${kind}[\\s\\S]{0,520}?delete: \\([^\\n]+options = \\{\\}`), `${kind}.delete 控制台 API 缺少可选 options`);
 }
@@ -108,6 +117,7 @@ console.log(JSON.stringify({
   deleteKinds: 8,
   explicitConfirmMethods: highImpactMethods.length,
   lowImpactUnpromoted: 6,
+  lowImpactRoute: lowImpactRoutePreview.impactLevel,
   confirmationCode: failure.error.code,
   localRecovery: ["height-template", "custom-unit"]
 }, null, 2));

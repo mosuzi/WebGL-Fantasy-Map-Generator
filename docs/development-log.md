@@ -1,5 +1,14 @@
 # 开发历史
 
+## 2026-07-25：完成权威任务第 201～203 项统一验收
+
+- 统一验收首先修正复审发现的四个阻断：危险操作审计不再由策略清单反向枚举，而是递归扫描当前正式应用源码，独立发现面板 callback、确认函数与危险 API 名称，再与策略登记做双向差集；合成未知 `delete-fief / clear-archived-treaties` 会稳定进入缺口。专题索引同步明确 `Q-25～Q-27` 已转为第 201～203 项，只有 `Q-28～Q-33` 继续留在未批准候选池。
+- 第 201 项真实浏览器门禁发现 Element Plus dropdown 在无头 Chrome 中不会稳定自行消费 Escape，因此不再只“检测后让行”，而是依据 popup 内受控 id 与展开控件的 `aria-controls` 关系显式关闭最上层 popup并消费本次事件。快捷键主套件与 `1280×720 / 720×720` 浮层矩阵通过，覆盖 popup → fixed → 主面板 → 对象编辑 → selection、全部 `28` 个画布模式、焦点返回、固定浮层安全区和输入 / dialog 键盘独占。
+- 第 202 项完整地图指纹门禁发现 FMG Cells GEO 的旧命令撤销会遗留 `grid.cells.t / f / temp / prec / biome / pack / s / pop / culture / religion / burg / state / province / region` 与 `grid.features`。`data.importGEO` 因此改由整图事务包住既有导入命令，成功时折叠为一条历史；导入重置立即调用当前标签仓规范化，避免 redo 后才补 `province / styles / layout`。气候下游的 cities / provinces 继续使用全图语义，不再把内部上下文误当局部 scope。
+- `regress:map-transaction-browser` 在固定地图逐一执行 `11` 类受约束重生成、`3` 条高度链、FMG Cells GEO、气候互斥与国家面板按钮；全部成功动作恰好增加一条历史，undo / redo 恢复完整 JSON 指纹与原地图 / `map.options` 引用，busy 返回 `operation_busy`，面板撤销按钮在动作完成后即时启用。
+- 第 203 项将普通单路线自身的 segment / cell 计数从“外部依赖”中排除，保持低影响免确认兼容；路线关联备注或批量删除仍需确认。扩展浏览器脚本用 native confirm 覆盖国家 / 省份 / 城市三类画布取消和确认、八类 API 的 `inspectOnly / confirmation_required / low-impact-compatible`、名称库 UI / API 删除与清空、高度模板真实文件输入后的跨刷新回收，以及自定义单位 UI 删除 / 刷新 / 恢复。最终地图恢复、历史为 `0`、selection / editing / mode 为空、运行时不忙，health / WebGL / application console / page error 均为 `0`。
+- 生产构建、危险入口审计及其合成缺口回归、危险策略、删除影响、地图事务、快捷键和浮层浏览器矩阵均通过。长串同步完整地图指纹会触发既有 `main-thread-long-task / render-frame-gap` 性能遥测，验收脚本将其与应用错误分列；没有把该已知性能类别扩展进第 201～203 项。独立复核最终给出 `RELEASE`，未发现新的 P0 / P1 / P2 阻断。统一验收后，第 201～203 项从活动状态转为完成，第 200 项仍是唯一待执行权威任务，第 195 项实施与 `Q-28～Q-33` 均未获额外授权。
+
 ## 2026-07-25：权威任务第 201 项代码完成——统一 Escape、焦点与浮层键盘仲裁
 
 - 从当前 checkout 重新核对 `28` 个注册画布模式、`28` 个 PanelManager 面板、`18` 个动作坞和 `4` 个固定工作台 / 树状弹框，冻结唯一退出顺序为框架 popup、fixed 二级浮层、普通受管面板、活动画布模式、对象编辑、selection；一次事件被上层消费后不得继续进入后续 listener。

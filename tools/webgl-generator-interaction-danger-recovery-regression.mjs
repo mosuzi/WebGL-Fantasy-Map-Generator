@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import {readFileSync} from "node:fs";
-import {buildDangerRecoveryAudit} from "./webgl-generator-interaction-danger-recovery-audit.mjs";
+import {
+  buildDangerRecoveryAudit,
+  compareDestructiveDiscoveryPolicy,
+  discoverDestructiveUiActionsFromSources
+} from "./webgl-generator-interaction-danger-recovery-audit.mjs";
 
 const report = buildDangerRecoveryAudit();
 const generated = JSON.parse(readFileSync(new URL("../docs/generated/interaction-audit/danger-and-recovery.json", import.meta.url), "utf8"));
@@ -39,6 +43,36 @@ assert.deepEqual(report.apiDangerActions.map(item => item.actionId), [
   "api.namebases.clear",
   "api.namebases.delete"
 ]);
+const syntheticDiscovery = discoverDestructiveUiActionsFromSources([
+  {
+    sourceFile: "app/webgl-generator/src/ui/panels/SyntheticPanel.js",
+    source: `
+      const syntheticPanel = createSyntheticPanel(documentRef, panelManager, {
+        onDeleteFief: fiefId => executeEditCommand(state, documentRef, createDeleteFiefCommand(fiefId))
+      });
+      function clearArchivedTreaties() {
+        if (!window.confirm("确定清空归档条约？")) return;
+        callbacks.onClearArchivedTreaties?.();
+      }
+    `
+  }
+]);
+assert.deepEqual(
+  syntheticDiscovery.map(item => item.actionId),
+  ["clear-archived-treaties", "delete-fief"],
+  "新增且未登记的可识别危险入口必须独立进入 discovered 集"
+);
+assert.deepEqual(
+  compareDestructiveDiscoveryPolicy(
+    syntheticDiscovery.map(item => item.actionId),
+    ["delete-known-policy"]
+  ),
+  {
+    unregisteredDestructiveIds: ["clear-archived-treaties", "delete-fief"],
+    staleDestructivePolicyIds: ["delete-known-policy"]
+  },
+  "源码发现与权威策略登记必须形成可复现的双向差集"
+);
 for (const value of Object.values(report.coverage)) assert.deepEqual(value, []);
 
 console.log(JSON.stringify({totals: report.totals, coverage: report.coverage}, null, 2));

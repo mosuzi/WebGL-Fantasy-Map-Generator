@@ -184,7 +184,7 @@ assert.match(managerSource, /chooseLaterOpenedPanelRole\(main\.openSequence, det
 assert.match(browserRegressionSource, /keyboard\.press\("Shift\+C"\)[\s\S]{0,180}?visibleMainPanelIds/, "城市面板重开必须使用真实 Shift+C 路径并验证唯一主面板");
 assert.match(browserRegressionSource, /setViewportSize\(\{width: 720[\s\S]{0,500}?object-details/, "浏览器回归必须覆盖桌面共存缩窄后保留对象详情");
 assert.doesNotMatch(browserRegressionSource, /locator\(`#\$\{triggerId\}`\)\.click/, "浏览器回归不得强点隐藏的面板入口");
-assert.match(browserRegressionSource, /keyboard\.press\("Shift\+H"\)[\s\S]*高级地形程序与条件变换[\s\S]*windowScroll/, "浏览器回归必须真实展开高度面板深层 summary 并检查 document viewport");
+assert.match(browserRegressionSource, /keyboard\.press\("Shift\+H"\)[\s\S]*重设海底[\s\S]*windowScroll/, "浏览器回归必须真实展开高度面板详情并检查 document viewport");
 assert.match(managerSource, /panel\.addEventListener\("pointerdown"[\s\S]{0,180}?restoreManagedPanelViewportOrigin/, "受管面板交互必须恢复 document viewport 原点");
 assert.match(managerSource, /reflowPanels\(\) \{[\s\S]{0,100}?restoreManagedPanelViewportOrigin/, "reflow 必须兜底恢复 document viewport 原点");
 assert(detailsSource.includes('role: "detail"'), "对象详情没有登记为可选详情面板");

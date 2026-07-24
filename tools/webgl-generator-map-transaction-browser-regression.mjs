@@ -116,7 +116,7 @@ try {
       "climate.applyDownstreamRebuild"
     ];
     for (const method of expectedUndoable) {
-      if (capabilities.methodMetadata?.[method]?.undoable !== true) {
+      if (readMethodMetadata(capabilities.methodMetadata, method)?.undoable !== true) {
         throw new Error(`${method} 能力元数据没有声明完整可撤销`);
       }
     }
@@ -152,7 +152,8 @@ try {
       if (fingerprint(app.map) !== before) throw new Error(`${label} 单条撤销没有恢复完整地图`);
       if (app.map !== mapReference || app.map.options !== optionsReference) throw new Error(`${label} 撤销替换了地图或 options 引用`);
       unwrap(api.history.redo(), `history.redo.${label}`);
-      if (fingerprint(app.map) !== after) throw new Error(`${label} 单条重做没有恢复完整地图`);
+      const redone = fingerprint(app.map);
+      if (redone !== after) throw new Error(`${label} 单条重做没有恢复完整地图：${describeFingerprintDifference(after, redone)}`);
       if (app.map !== mapReference || app.map.options !== optionsReference) throw new Error(`${label} 重做替换了地图或 options 引用`);
       unwrap(api.history.undo(), `history.undo.${label}.baseline`);
       return {
@@ -209,6 +210,20 @@ try {
       return JSON.stringify(map);
     }
 
+    function describeFingerprintDifference(expected, actual) {
+      const limit = Math.min(expected.length, actual.length);
+      let index = 0;
+      while (index < limit && expected[index] === actual[index]) index++;
+      const start = Math.max(0, index - 120);
+      const end = index + 220;
+      return `index=${index}, expected=${expected.slice(start, end)}, actual=${actual.slice(start, end)}`;
+    }
+
+    function readMethodMetadata(metadata, qualifiedName) {
+      const [namespace, ...method] = qualifiedName.split(".");
+      return metadata?.[namespace]?.[method.join(".")] || null;
+    }
+
     function unwrap(result, label) {
       if (!result?.ok) throw new Error(`${label} 调用失败：${result?.error?.code || "unknown"} ${result?.error?.message || ""}`);
       return result.data;
@@ -222,20 +237,60 @@ try {
       return Math.round(Number(value || 0) * 1e6) / 1e6;
     }
   });
+  const uiTransaction = await verifyStateRegenerationUi(page);
 
   assert.equal(report.regeneration.length, 11);
   assert.equal(report.height.length, 3);
   assert.equal(report.geo.historyDelta, 1);
   assert.equal(report.climate.historyDelta, 1);
   assert.equal(report.climate.busyCode, "operation_busy");
+  assert.equal(uiTransaction.historyDelta, 1);
+  assert.equal(uiTransaction.undoRestored, true);
+  assert.equal(uiTransaction.redoRestored, true);
   assert.equal(report.glError, 0);
-  assert.deepEqual(consoleErrors, []);
+  const healthPerformanceSignals = consoleErrors.filter(message => /^\[FMG health\] (main-thread-long-task|render-frame-gap|input-handler-stall)\b/.test(message));
+  const applicationConsoleErrors = consoleErrors.filter(message => !healthPerformanceSignals.includes(message));
+  assert.deepEqual(applicationConsoleErrors, []);
   assert.deepEqual(pageErrors, []);
-  console.log(JSON.stringify({ok: true, ...report, consoleErrors, pageErrors}, null, 2));
+  console.log(JSON.stringify({ok: true, ...report, uiTransaction, healthPerformanceSignals, applicationConsoleErrors, pageErrors}, null, 2));
 } finally {
   if (context) await Promise.race([context.close(), delay(5000)]);
   if (browser) await Promise.race([browser.close(), delay(5000)]);
   await new Promise(done => server.close(done));
+}
+
+async function verifyStateRegenerationUi(page) {
+  const before = await page.evaluate(() => ({
+    map: JSON.stringify(window.__webglGeneratorApp.map),
+    history: window.__webglGeneratorApp.editHistory.getStats()
+  }));
+  await page.keyboard.press("Shift+S");
+  const panel = page.locator('.floating-panel[data-panel-id="state-panel"]:not(.hidden)');
+  await panel.waitFor({state: "visible"});
+  const regenerate = panel.getByRole("button", {name: "重新生成国家"});
+  const undo = panel.getByRole("button", {name: "撤销"});
+  const redo = panel.getByRole("button", {name: "重做"});
+  assert.equal(await regenerate.count(), 1, "国家面板缺少唯一重生成入口");
+  assert.equal(await undo.isDisabled(), true, "UI 事务夹具开始前不应有撤销历史");
+  await regenerate.click();
+  await page.waitForFunction(() => document.querySelector('.floating-panel[data-panel-id="state-panel"]:not(.hidden) button[aria-label="撤销"]')?.disabled === false);
+  const after = await page.evaluate(() => ({
+    map: JSON.stringify(window.__webglGeneratorApp.map),
+    history: window.__webglGeneratorApp.editHistory.getStats()
+  }));
+  assert.notEqual(after.map, before.map, "国家面板重生成没有形成可观察地图变化");
+  await undo.click();
+  await page.waitForFunction(() => document.querySelector('.floating-panel[data-panel-id="state-panel"]:not(.hidden) button[aria-label="重做"]')?.disabled === false);
+  const afterUndo = await page.evaluate(() => JSON.stringify(window.__webglGeneratorApp.map));
+  await redo.click();
+  await page.waitForFunction(() => document.querySelector('.floating-panel[data-panel-id="state-panel"]:not(.hidden) button[aria-label="撤销"]')?.disabled === false);
+  const afterRedo = await page.evaluate(() => JSON.stringify(window.__webglGeneratorApp.map));
+  await undo.click();
+  return {
+    historyDelta: after.history.undo - before.history.undo,
+    undoRestored: afterUndo === before.map,
+    redoRestored: afterRedo === after.map
+  };
 }
 
 async function startStaticServer() {

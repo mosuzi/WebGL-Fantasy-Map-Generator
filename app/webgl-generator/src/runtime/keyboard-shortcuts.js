@@ -115,6 +115,22 @@ export function hasOpenFrameworkPopup(documentRef) {
   });
 }
 
+export function closeOpenFrameworkPopup(documentRef) {
+  if (typeof documentRef?.querySelectorAll !== "function") return false;
+  const popups = [...documentRef.querySelectorAll(FRAMEWORK_POPUP_SELECTOR)].filter(element => {
+    if (element.hidden || element.getAttribute?.("aria-hidden") === "true" || element.style?.display === "none") return false;
+    const style = documentRef.defaultView?.getComputedStyle?.(element);
+    return style?.display !== "none" && style?.visibility !== "hidden" && (typeof element.getClientRects !== "function" || element.getClientRects().length > 0);
+  });
+  const popup = popups.sort((left, right) => Number.parseInt(documentRef.defaultView?.getComputedStyle?.(right)?.zIndex, 10) - Number.parseInt(documentRef.defaultView?.getComputedStyle?.(left)?.zIndex, 10))[0];
+  if (!popup) return false;
+  const controlledIds = new Set([popup.id, ...[...popup.querySelectorAll("[id]")].map(element => element.id)].filter(Boolean));
+  const trigger = [...documentRef.querySelectorAll('[aria-controls][aria-expanded="true"]')].find(element => controlledIds.has(element.getAttribute("aria-controls")));
+  if (typeof trigger?.click !== "function") return false;
+  trigger.click();
+  return true;
+}
+
 export function installKeyboardShortcuts(documentRef, options = {}) {
   const registry = options.registry || KEYBOARD_SHORTCUTS;
   const platform = options.platform || shortcutPlatform(documentRef.defaultView?.navigator);
@@ -181,7 +197,17 @@ export function installKeyboardShortcuts(documentRef, options = {}) {
   };
 
   const onKeydown = event => {
-    if (event.defaultPrevented || event.repeat || event.isComposing || event.keyCode === 229 || hasOpenFrameworkPopup(documentRef) || hasExclusiveKeyboardModal(documentRef)) return;
+    if (event.defaultPrevented || event.repeat || event.isComposing || event.keyCode === 229) return;
+    if (hasOpenFrameworkPopup(documentRef)) {
+      if (event.key === "Escape" && closeOpenFrameworkPopup(documentRef)) {
+        event.preventDefault();
+        if (typeof event.stopImmediatePropagation === "function") event.stopImmediatePropagation();
+        else event.stopPropagation();
+        hideHint();
+      }
+      return;
+    }
+    if (hasExclusiveKeyboardModal(documentRef)) return;
     const item = resolveShortcut(event, registry, {platform, scopes: options.getActiveScopes?.(event) || ["global"]});
     if (!item || (item.id !== "selection.cancel" && isEditableShortcutTarget(event.target))) return;
     event.preventDefault();

@@ -154,6 +154,8 @@ async function inspectShortcuts(page) {
   await page.locator('[data-control-tab="management"]').click();
   await page.locator("#open-height-panel").click();
   await page.locator('.floating-panel[data-panel-id="height-panel"]:not(.hidden)').waitFor({state: "visible"});
+  await page.locator('.floating-panel[data-panel-id="height-panel"]:not(.hidden) .floating-panel-close').click();
+  await page.locator('.floating-panel[data-panel-id="generation-panel"]:not(.hidden) .floating-panel-close').click();
 
   const history = await page.evaluate(() => {
     const api = window.webglGeneratorApi;

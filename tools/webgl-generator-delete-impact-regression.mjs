@@ -40,6 +40,17 @@ assert(statePreview.requiresConfirm && statePreview.summary.includes("省份 1")
 
 const routeMap = createRouteFixture();
 const routeBefore = snapshotRouteMap(routeMap);
+const lowImpactRouteMap = createRouteFixture({withNotes: false});
+const lowImpactRoutePreview = inspectDeleteImpact(lowImpactRouteMap, OBJECT_KIND.ROUTE, [1]);
+assert.equal(lowImpactRoutePreview.dependencies.routeSegments, 1, "路线预检应继续报告自身线段");
+assert.equal(lowImpactRoutePreview.dependencies.routeCells, 2, "路线预检应继续报告自身 cells");
+assert.equal(lowImpactRoutePreview.requiresConfirm, false, "无外部依赖的单路线删除不得升级为确认");
+assert.equal(lowImpactRoutePreview.impactLevel, "low", "无外部依赖的单路线删除必须保持 low");
+const notedRoutePreview = inspectDeleteImpact(routeMap, OBJECT_KIND.ROUTE, [1]);
+assert.equal(notedRoutePreview.dependencies.notes, 1, "带备注路线必须报告外部依赖");
+assert.equal(notedRoutePreview.requiresConfirm, true, "带备注路线删除必须要求确认");
+const batchRoutePreview = inspectDeleteImpact(lowImpactRouteMap, OBJECT_KIND.ROUTE, [1, 2]);
+assert.equal(batchRoutePreview.requiresConfirm, true, "批量路线删除必须要求确认");
 const history = new EditHistory();
 const batch = createDeleteBatchCommand({
   kind: OBJECT_KIND.ROUTE,
@@ -104,6 +115,13 @@ console.log(JSON.stringify({
   cancellationPreservedMap: JSON.stringify(riverMap) === riverBefore,
   cancellationPreservedHistory: cancelledHistory.getStats().undo === 0,
   stateDependencies: statePreview.dependencies,
+  lowImpactRoute: {
+    impactLevel: lowImpactRoutePreview.impactLevel,
+    routeSegments: lowImpactRoutePreview.dependencies.routeSegments,
+    routeCells: lowImpactRoutePreview.dependencies.routeCells
+  },
+  notedRouteRequiresConfirm: notedRoutePreview.requiresConfirm,
+  batchRouteRequiresConfirm: batchRoutePreview.requiresConfirm,
   batchResult: batch.getResult(),
   singleTransaction: history.getStats().undo
 }, null, 2));
@@ -124,7 +142,7 @@ function createRiverPreviewFixture() {
   return map;
 }
 
-function createRouteFixture() {
+function createRouteFixture({withNotes = true} = {}) {
   const map = {
     settlements: {
       routes: [
@@ -143,8 +161,10 @@ function createRouteFixture() {
     },
     notes: {notes: [], metadata: {count: 0, pinned: 0}}
   };
-  restoreObjectNote(map, note("route", 1));
-  restoreObjectNote(map, note("route", 2));
+  if (withNotes) {
+    restoreObjectNote(map, note("route", 1));
+    restoreObjectNote(map, note("route", 2));
+  }
   return map;
 }
 
