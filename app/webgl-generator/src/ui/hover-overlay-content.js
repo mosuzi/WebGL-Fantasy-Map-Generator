@@ -88,7 +88,8 @@ export function buildHoverRowEntries(pick, unitPreferences = {}, options = {}) {
 
   const colorMode = HOVER_VIEW_MODES.includes(options.colorMode) ? options.colorMode : "unknown";
   const context = {pick, units: unitPreferences, map: options.map || null, viewOptions: options.viewOptions || {}};
-  const rows = HOVER_VIEW_ROW_REGISTRY[colorMode]?.(context) || genericRows(context);
+  const viewRows = HOVER_VIEW_ROW_REGISTRY[colorMode]?.(context);
+  const rows = viewRows ? mergeRowsByLabel(viewRows, basicGeographyRows(context)) : genericRows(context);
   if (colorMode !== "biomes") {
     const objectText = formatHoverObjectLine(pick, unitPreferences, debugEnabled);
     if (objectText && !duplicatesPrimaryObject(pick, colorMode)) rows.unshift({label: "对象", value: objectText});
@@ -137,6 +138,21 @@ function genericRows(context) {
     row("社会", `${playerValue(pick.culture)} / ${playerValue(pick.religion)}`),
     row("人口", formatDisplayPopulation(pick.population, units))
   ];
+}
+
+function basicGeographyRows(context) {
+  const {pick, units} = context;
+  return [
+    row("高度", formatDisplayHeight(pick.packHeight ?? pick.height, units)),
+    row("地貌", formatFeatureName(pick)),
+    row("温度", `${formatDisplayNumber(pick.temperature, units)}°C`),
+    row("降水", formatDisplayPrecipitation(pick.precipitation, units))
+  ];
+}
+
+function mergeRowsByLabel(primaryRows, sharedRows) {
+  const labels = new Set(primaryRows.map(entry => entry?.label));
+  return [...primaryRows, ...sharedRows.filter(entry => !labels.has(entry?.label))];
 }
 
 function diplomacyRows(context) {
