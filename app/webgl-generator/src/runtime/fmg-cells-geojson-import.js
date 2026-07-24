@@ -32,8 +32,14 @@ export function createImportFmgCellsHeightCommand(text, map, {label = "导入 FM
     },
     apply(context) {
       previousDerived ??= captureGeoImportDerivedSnapshot(context.map);
-      applyHeightChanges(context.map, changes, "after");
-      refreshImportedTerrainDerivatives(context.map, source);
+      try {
+        applyHeightChanges(context.map, changes, "after");
+        refreshImportedTerrainDerivatives(context.map, source);
+      } catch (error) {
+        applyHeightChanges(context.map, changes, "before");
+        restoreGeoImportDerivedSnapshot(context.map, previousDerived);
+        throw error;
+      }
     },
     revert(context) {
       applyHeightChanges(context.map, changes, "before");

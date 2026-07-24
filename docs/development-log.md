@@ -28675,3 +28675,11 @@ full 矩阵结果：
 - 本批流程冻结为真实“调查 → 逐项实施与本地提交 → 独立复审 → 同一 Chrome 统一验收”。第 200 项继续保留待执行，但按用户最新明确指令先执行第 201～203 项；`Q-28～Q-33` 仍为未批准候选。
 - 调查确认三项核心问题在当前 checkout 中仍存在，同时确认旧交互审计的 managed dialog、画布模式和危险入口固定分母已经漂移；实施时必须重新发现当前分母，并以未分类、未知项和登记双向差集为 `0` 收口，不能直接沿用旧报告数字。
 - 第 201 项冻结 Escape 优先级为“框架 popup → 最上层二级浮层 → 主面板 → 活动画布模式 → 对象编辑 → selection”；第 202 项冻结 GEO、气候、高度链和十一类受约束重生成的单事务 / 单历史边界；第 203 项冻结按影响等级统一预检、确认、撤销和失败恢复，不把所有低影响删除粗暴升级为确认弹框。
+
+# 2026-07-25：完成权威任务第 202 项代码——地图派生事务与旧结果保护
+
+- 调查确认 FMG Cells GEO 只有命令成功后的撤销，apply 中途异常会遗留部分变更；十一类受约束重生成中只有内层偶发命令历史且缺少统一失败快照；高度 base / downstream / all 会串行写入多域并保留内层历史碎片；气候下游异步链没有进入全局 RuntimeOperation，也没有地图身份门禁。现有运行时互斥、EditHistory 快照和气候整图恢复可以复用，但需要统一成功提交与失败恢复边界。
+- 新增完整地图快照事务：开始时克隆地图与历史，执行期间允许既有算法写入，成功后恢复原历史并只提交一条 first-apply-noop 聚合命令；未执行、步骤异常和历史提交失败均原位恢复整图、历史及原 `map.options` 引用。十一类受约束重生成、高度基础 / 下游 / 全部链全部接入，内层 markers、diplomacy 等命令不再泄露为多条用户历史；局部国家 / 省份范围和既有返回摘要保持。
+- FMG Cells GEO 命令在高度写入或派生刷新异常时先恢复高度与派生快照，`data.importGEO` 外层再以运行时地图快照兜底；普通 GEO 测量导入仍走既有单命令。气候下游异步链进入 RuntimeOperation，分段前后检查取消信号与原地图身份，稳定返回 `operation_busy / operation_cancelled / operation_obsolete`；旧地图可回滚，但不会用旧历史快照覆盖替换地图。失败恢复统一刷新 renderer、picking、selection、高亮与相关面板。
+- API 能力元数据将 `generate.regenerate`、两条公开高度重建与 `data.importGEO` 从 `partial` 改为完整可撤销。新增 `regress:map-snapshot-transaction`，覆盖十一类成功单历史、三种高度链首 / 中 / 末故障、no-op、提交失败、同图取消、替图 obsolete 和 busy；另新增真实 Chrome 脚本，准备在三项统一验收中逐一执行十一类重生成、三种高度链、FMG Cells GEO、气候互斥及完整撤销 / 重做。
+- `regress:map-snapshot-transaction`、`regress:climate-downstream-rebuild`、`regress:height-derived-rebuild`、`regress:scoped-regeneration`、`regress:api-operation`、`regress:api-action-convergence`、`regress:api-stability`、`regress:api-edit-coverage`、`regress:api-data-compatibility`、生产构建和 `git diff --check` 通过。真实 Chrome 留到第 201～203 项统一验收，不在本项代码提交前单独启动。

@@ -1,3 +1,5 @@
+import {createRuntimeOperationError} from "./runtime-operation.js";
+
 const SYSTEM_SPECS = Object.freeze([
   system("cities", "城市"),
   system("states", "国家"),
@@ -129,6 +131,9 @@ export async function executeClimateDownstreamRebuildAsync({
   refreshSummary,
   onRestore,
   onProgress,
+  signal,
+  assertCurrent,
+  shouldRestoreHistory = () => true,
   yieldToMain = async () => {},
   now = currentTime
 }) {
@@ -147,12 +152,16 @@ export async function executeClimateDownstreamRebuildAsync({
   const stepResults = [];
   let before = null;
   try {
+    assertRequestCurrent(signal, assertCurrent);
     onProgress?.({phase: "snapshot-before", message: "正在保存重算前状态"});
     before = await cloneMapInChunks(map, {id: "snapshot-before", chunks, now, yieldToMain});
+    assertRequestCurrent(signal, assertCurrent);
     for (const step of preview.steps) {
+      assertRequestCurrent(signal, assertCurrent);
       onProgress?.({phase: "system", system: step.system, message: `正在重算${systemLabel(step.system)}`});
       const regenerationSalt = prepareRegenerationSalt(map, preview.seed, step.system);
       const result = await runBlockingChunk(`system:${step.system}`, () => executeSystem(step.system, {step, preview, regenerationSalt}), {chunks, now, yieldToMain});
+      assertRequestCurrent(signal, assertCurrent);
       if (!result || result.executed === false) throw new Error(`气候下游重算未完成：${step.system}`);
       for (const chunk of result.timings?.chunks || []) {
         chunks.push({id: `system:${step.system}:${chunk.id}`, blockingMs: roundTiming(chunk.blockingMs)});
@@ -163,10 +172,12 @@ export async function executeClimateDownstreamRebuildAsync({
     refreshSummary?.(map);
     onProgress?.({phase: "snapshot-after", message: "正在保存重算结果"});
     const after = await cloneMapInChunks(map, {id: "snapshot-after", chunks, now, yieldToMain});
-    editHistory.restoreSnapshot(historySnapshot);
+    assertRequestCurrent(signal, assertCurrent);
+    if (shouldRestoreHistory()) editHistory.restoreSnapshot(historySnapshot);
     const command = createSnapshotCommand(before, after, preview, stepResults);
     onProgress?.({phase: "commit", message: "正在登记重算历史"});
     const commandExecution = await runBlockingChunk("history-command", () => executeCommand(command), {chunks, now, yieldToMain});
+    assertRequestCurrent(signal, assertCurrent);
     if (commandExecution?.executed === false) throw commandExecution.error || new Error("气候下游重算命令未执行");
     onRestore?.(map, "after-command");
     return {
@@ -188,7 +199,7 @@ export async function executeClimateDownstreamRebuildAsync({
       onProgress?.({phase: "rollback", message: "正在回滚重算状态"});
       await runBlockingChunk("rollback", () => restoreMap(map, before), {chunks, now, yieldToMain});
     }
-    editHistory.restoreSnapshot(historySnapshot);
+    if (shouldRestoreHistory()) editHistory.restoreSnapshot(historySnapshot);
     onRestore?.(map, "rollback");
     error.preview = preview;
     error.timings = summarizeTimings(chunks, now() - startedAt);
@@ -450,6 +461,16 @@ function roundTiming(value) {
 
 function systemLabel(systemId) {
   return SYSTEM_SPECS.find(item => item.id === systemId)?.label || systemId;
+}
+
+function assertRequestCurrent(signal, assertCurrent) {
+  if (signal?.aborted) throw new DOMException(signal.reason || "气候下游重算已取消", "AbortError");
+  if (typeof assertCurrent === "function" && assertCurrent() === false) {
+    throw createRuntimeOperationError("operation_obsolete", "气候下游重算请求对应的地图已被替换", {
+      stage: "identity",
+      expected: true
+    });
+  }
 }
 
 export {cloneMapInChunks as cloneMapSnapshotInChunks, restoreMap as restoreMapSnapshot};

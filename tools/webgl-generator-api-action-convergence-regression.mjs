@@ -21,7 +21,7 @@ for (const signature of [
 
 const uiActionSignatures = {
   generation: "onGenerate: () => requestGenerate(state, documentRef, runtimeActions)",
-  regeneration: "onRegenerate: kind => runtimeActions.generate.regenerate(kind, {confirm: true})",
+  regeneration: "onRegenerate: (kind, regenerationOptions = {}) => runtimeActions.generate.regenerate(kind, {confirm: true, ...regenerationOptions})",
   viewMode: "onMode: mode => runtimeActions.layers.setViewMode(mode)",
   layer: "onLayerVisible: (layer, visible) => runtimeActions.layers.setVisible(layer, visible)",
   display: "onShowOceanHeight: showOceanHeight => runtimeActions.layers.setShowOceanHeight(showOceanHeight)",
@@ -39,6 +39,7 @@ const uiActionSignatures = {
   namebaseExport: "onExport: rows => exportNamebases(state, documentRef, rows, runtimeActions.namebases.export)",
   heightBase: "runtimeActions.edit.height.rebuildBaseDerived({confirm: true})",
   heightDownstream: "runtimeActions.edit.height.rebuildDownstreamDerived({confirm: true})",
+  heightAll: "runtimeActions.edit.height.rebuildAllDerived({confirm: true})",
   selection: "locate: target => state.renderer.locateObject(target, locateOptions)"
 };
 for (const [name, signature] of Object.entries(uiActionSignatures)) assert(appSource.includes(signature), `${name} UI 没有接入公共 action`);

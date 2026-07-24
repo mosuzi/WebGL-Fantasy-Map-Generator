@@ -752,10 +752,11 @@
   - 最小验收：逐级 Escape 每次只改变一个状态，popup 首次只关闭候选，浮层关闭不同时清除编辑 / selection，画布模式取消不增加历史；输入、popup、dialog、主面板、画布编辑、对象编辑和 selection 均有确定性回归，最后在桌面与窄视口的真实 Chrome 中验证同一优先级。
   - 代码完成记录：当前 checkout 重新确认 `28` 个运行时注册画布模式、`28` 个 PanelManager 面板、`18` 个动作坞与 `4` 个固定工作台 / 树状弹框。Escape 现按框架 popup → fixed → panel → 活动画布模式 → 对象编辑 → selection 单级分派：popup 展开时应用侧让行，managed overlay 消费后阻断同节点后续 listener，所有画布模式走同一 active mode 取消入口，fixed dialog 打开时统一声明键盘独占。面板父子恢复增加 `focus:false` 接力，避免父面板延迟聚焦覆盖 registry 保存的返回焦点。`regress:shortcuts`、`regress:panel-overlay-policy`、`regress:panel-manual-position`、生产构建和 `git diff --check` 通过；浏览器回归已补齐 popup、fixed、主面板、模式、编辑、selection 及桌面 / 窄视口断言，留待三项统一 Chrome 验收执行。
 
-- **权威任务第 202 项：为 GEO、气候、高度与受约束重生成建立事务和旧结果保护。** `待执行；来源：Q-26，用户明确批准`
+- **权威任务第 202 项：为 GEO、气候、高度与受约束重生成建立事务和旧结果保护。** `代码完成，待第 201～203 项统一 Chrome 验收；来源：Q-26，用户明确批准`
   - 范围：从当前 checkout 重新核对 FMG Cells GEO、气候下游、高度 base / downstream / all 和十一类受约束重生成接线；复用现有运行时互斥和地图快照基础，统一为“开始快照 → 执行 → 单次提交 → 失败回滚”。气候异步链增加请求与地图身份检查，旧结果不得覆盖已替换地图。
   - 兼容约束：保持现有生成算法、seed、局部范围、返回摘要、地图对象及 `map.options` 引用，不新增存档字段。成功后的十一类重生成各形成一条历史；高度三种链各形成一条完整历史，不保留内部 markers / diplomacy 历史碎片。旧地图、浏览器缓存、完整 JSON / gzip 继续走既有迁移和序列化链。
   - 最小验收：GEO 在高度写入和派生链中途故障时完整指纹、历史与 options 引用恢复；十一类重生成成功均可单条撤销 / 重做，任一异常均无部分地图变更和历史残留；高度三种链首、中、末故障均整体回滚；并发气候或气候与地图替换得到稳定 busy / obsolete 结果，晚到结果不触碰新地图。专项、兼容、构建和真实 Chrome 代表链路通过。
+  - 代码完成记录：新增完整地图快照事务，成功时清除内层历史并只登记一条聚合命令，未执行、算法异常或历史提交失败时原位恢复地图、历史及 `map.options` 引用；十一类受约束重生成与高度 base / downstream / all 均接入该边界，控制面板“全部更新”也不再绕过运行时动作。FMG Cells GEO 命令补齐 apply 内部原子回滚，外层运行时快照同时保护整图与历史。气候下游异步链接入全局运行时互斥和取消 / 地图身份检查，稳定区分 `operation_busy / operation_cancelled / operation_obsolete`，过期旧图回滚不覆盖替换地图的历史。对外能力元数据同步将相关方法从 `partial` 收敛为完整可撤销；新增 Node 故障注入和真实 Chrome 事务往返脚本，后者将在三项统一验收时执行。`regress:map-snapshot-transaction`、气候 / 高度 / 局部重生成、API operation / convergence / stability / edit coverage / data compatibility、生产构建与 `git diff --check` 已通过。
 
 - **权威任务第 203 项：统一危险删除、清空和资源删除的预检确认与恢复。** `待执行；来源：Q-27，用户明确批准`
   - 范围：从当前 UI、画布、公开 API 和本地持久化重新发现全部删除、批量删除、清空与全量重置入口，冻结共享影响等级、预检摘要、确认要求、可撤销性、失败恢复和用户文案；未知 / 未分类及登记双向差集必须为 `0`。国家、省份、城市等同对象的面板、画布与 API 共用 `inspectDeleteImpact` 和执行器。

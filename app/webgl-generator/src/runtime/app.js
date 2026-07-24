@@ -91,7 +91,7 @@ import {composeHeightCellSelection, createHeightCellSelectionFeather, createHeig
 import {createHeightSelectionSmoothingPlan} from "./height-selection-smoothing.js";
 import {getHeightTerrainTemplateChanges, heightTerrainTemplateLabel, heightTerrainTemplateUsesSeed, inspectHeightTerrainTemplate} from "./height-terrain-templates.js";
 import {getHeightTerrainTemplateProgramChanges, heightTerrainTemplateProgramUsesSeed, inspectHeightTerrainTemplateProgram} from "./height-terrain-template-programs.js";
-import {createRegenerationResult, rebuildHeightAllDerived, rebuildHeightBaseDerived, rebuildHeightDownstreamDerived} from "./height-derived-rebuild.js";
+import {createRegenerationResult, HEIGHT_BASE_REBUILD_STEPS, HEIGHT_DOWNSTREAM_REBUILD_STEPS, rebuildHeightAllDerived, rebuildHeightBaseDerived, rebuildHeightDownstreamDerived} from "./height-derived-rebuild.js";
 import {buildSeafloorResetPlan, createResetSeafloorCommand, seafloorResetPreviewChanges} from "./seafloor-reset.js";
 import {createRegenerateOceanCurrentsCommand, createRenameOceanCurrentCommand} from "./ocean-current-edit-commands.js";
 import {assertOceanCurrentWorldIdentity, rebuildOceanCurrentWorldStage, snapshotOceanCurrentWorldIdentity} from "../generator/ocean-current-world.js";
@@ -144,6 +144,7 @@ import {createAddRiverCommand, createDeleteRiverCommand, createRenameRiversFromN
 import {createAddRouteCommand, createDeleteRouteCommand, createEditRouteCommand, createSetRouteNoteCommand, inspectRouteEdit} from "./route-edit-commands.js";
 import {createDeleteBatchCommand, inspectDeleteImpact, requestDeleteConfirmation} from "./delete-impact.js";
 import {executeClimateDownstreamRebuildAsync, inspectClimateDownstreamRebuild} from "./climate-downstream-rebuild.js";
+import {captureMapMutationSnapshot, executeMapSnapshotTransaction, restoreMapMutationSnapshot} from "./map-snapshot-transaction.js";
 import {SelectionStore} from "./selection-store.js";
 import {decideSelectionPanelRoute, SELECTION_PANEL_BINDINGS, SELECTION_PANEL_ROUTE} from "./selection-panel-policy.js";
 import {installKeyboardShortcuts} from "./keyboard-shortcuts.js";
@@ -158,7 +159,7 @@ import {completeStartupLoading, failStartupLoading} from "../ui/startup-loading.
 import {LABEL_TARGET_KIND, OBJECT_KIND} from "./object-kinds.js";
 import GenerationWorker from "./generation-worker.js?worker";
 import {getWebglGeneratorHealthMonitor} from "./health-monitor.js";
-import {createRuntimeOperationManager} from "./runtime-operation.js";
+import {createRuntimeOperationError, createRuntimeOperationManager} from "./runtime-operation.js";
 import {createCanvasToolModeManager} from "./canvas-tool-mode-manager.js";
 import {BRUSH_RADIUS_ID, normalizeBrushRadius} from "./brush-radius-contract.js";
 import {restoreCanvasToolStrokePreview} from "./canvas-tool-preview-rollback.js";
@@ -245,6 +246,13 @@ const CLIMATE_OPTION_KEYS = Object.freeze([
   "temperatureSouthPole",
   "precipitation"
 ]);
+const REGENERATION_TRANSACTION_EFFECTS = Object.freeze({
+  render: "draw",
+  selection: "refresh",
+  runtimeStats: true,
+  pickPanel: true,
+  derived: Object.freeze(["terrain-caches", "height-field", "cell-colors", "political-boundaries", "point-layers", "line-layers", "labels", "river-mesh", "route-mesh", "object-panels", "object-index"])
+});
 const CLIMATE_DERIVED_STALE_SYSTEMS = Object.freeze(["cities", "states", "provinces", "religions", "markers", "zones", "military", "economy", "diplomacy"]);
 const FEATURE_TOPOLOGY_UI_HISTORY = new WeakMap();
 const CONTROL_PANEL_CHILD_OPEN_HANDLERS = Object.freeze([
@@ -1055,7 +1063,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     },
     onRegenerateAll: () => {
       cancelHeightLine(state, documentRef);
-      rebuildHeightDerivedViaAction(state, documentRef, "all", {confirm: true});
+      runtimeActions.edit.height.rebuildAllDerived({confirm: true});
     }
   });
   state.panels.height = heightPanel;
@@ -2635,6 +2643,14 @@ function createRuntimeActions(state, documentRef, options = {}) {
     snapshot: () => captureMapReplaceSnapshot(state, documentRef),
     rollback: (snapshot, error, context) => restoreMapReplaceSnapshot(state, documentRef, snapshot, error, context)
   });
+  const mapMutationConfig = message => ({
+    message,
+    snapshot: () => captureMapMutationSnapshot(state.map, state.editHistory),
+    rollback: snapshot => {
+      restoreMapMutationSnapshot(state.map, state.editHistory, snapshot);
+      refreshMapMutationRollback(state, documentRef);
+    }
+  });
   return {
     history: {
       get: (options = {}) => state.editHistory.getStats(options),
@@ -2692,7 +2708,14 @@ function createRuntimeActions(state, documentRef, options = {}) {
       setPrecipitation: (scale, options = {}) => applyClimatePatchViaApi(state, documentRef, {precipitation: scale}, options),
       setWind: (index, direction, options = {}) => setClimateWindViaApi(state, documentRef, index, direction, options),
       inspectDownstreamRebuild: (options = {}) => inspectClimateDownstreamRebuildViaApi(state, options),
-      applyDownstreamRebuild: (options = {}) => applyClimateDownstreamRebuildViaApi(state, documentRef, options)
+      applyDownstreamRebuild: (options = {}) => operation.run(
+        "climate.applyDownstreamRebuild",
+        context => applyClimateDownstreamRebuildViaApi(state, documentRef, options, context),
+        {
+          message: "正在重算气候下游内容",
+          isNoop: result => !result?.executed
+        }
+      )
     },
     oceanCurrents: {
       inspectWorldRebuild: (options = {}) => inspectOceanCurrentWorldRebuild(state.map, options),
@@ -2741,6 +2764,7 @@ function createRuntimeActions(state, documentRef, options = {}) {
         context.report("import", {message: "正在导入 GEO 数据"});
         return importGeoDocumentViaApi(state, documentRef, document, options);
       }, {
+        ...mapMutationConfig("正在导入 GEO 数据"),
         message: "正在导入 GEO 数据",
         isNoop: result => result?.imported === false
       }),
@@ -2798,8 +2822,21 @@ function createRuntimeActions(state, documentRef, options = {}) {
       },
       height: {
         applyChanges: (changes, editOptions = {}) => applyHeightChangesViaApi(state, documentRef, changes, editOptions),
-        rebuildBaseDerived: (editOptions = {}) => rebuildHeightDerivedViaAction(state, documentRef, "base", editOptions),
-        rebuildDownstreamDerived: (editOptions = {}) => rebuildHeightDerivedViaAction(state, documentRef, "downstream", editOptions)
+        rebuildBaseDerived: (editOptions = {}) => operation.runSync(
+          "edit.height.rebuildBaseDerived",
+          () => rebuildHeightDerivedViaAction(state, documentRef, "base", editOptions),
+          {message: "正在重建高度基础派生", isNoop: result => !result?.executed}
+        ),
+        rebuildDownstreamDerived: (editOptions = {}) => operation.runSync(
+          "edit.height.rebuildDownstreamDerived",
+          () => rebuildHeightDerivedViaAction(state, documentRef, "downstream", editOptions),
+          {message: "正在重建高度下游派生", isNoop: result => !result?.executed}
+        ),
+        rebuildAllDerived: (editOptions = {}) => operation.runSync(
+          "edit.height.rebuildAllDerived",
+          () => rebuildHeightDerivedViaAction(state, documentRef, "all", editOptions),
+          {message: "正在重建全部高度派生", isNoop: result => !result?.executed}
+        )
       },
       biomes: {
         assignCells: (biomeId, gridCellIds, editOptions = {}) => assignBiomeCellsViaApi(state, documentRef, biomeId, gridCellIds, editOptions),
@@ -5494,31 +5531,50 @@ function inspectClimateDownstreamRebuildViaApi(state, options = {}) {
   });
 }
 
-async function applyClimateDownstreamRebuildViaApi(state, documentRef, options = {}) {
+async function applyClimateDownstreamRebuildViaApi(state, documentRef, options = {}, operationContext) {
   assertMapAvailable(state);
   if (options?.confirm !== true) throw new Error("气候下游重算会改写多个地图派生系统，需要显式传入 {confirm: true}");
-  const before = regenerationApiSummary(state.map);
+  const map = state.map;
+  const assertCurrent = () => {
+    operationContext?.throwIfCancelled?.();
+    if (state.map !== map || operationContext && !operationContext.isCurrent()) {
+      throw createRuntimeOperationError("operation_obsolete", "气候下游重算请求对应的地图已被替换", {
+        stage: "identity",
+        expected: true
+      });
+    }
+  };
+  assertCurrent();
+  const before = regenerationApiSummary(map);
   updateGenerationLoading(documentRef, true, "正在准备气候下游重算");
   try {
     await yieldToBrowser(documentRef);
+    assertCurrent();
     const execution = await executeClimateDownstreamRebuildAsync({
-      map: state.map,
+      map,
       editHistory: state.editHistory,
       systems: options.systems || options.selectedSystems || [],
       seed: options.seed,
-      executeSystem: (systemId, context) => executeClimateDownstreamSystem(state, documentRef, systemId, context),
+      executeSystem: (systemId, context) => {
+        assertCurrent();
+        return executeClimateDownstreamSystem(state, documentRef, systemId, context);
+      },
       executeCommand: command => executeEditCommand(state, documentRef, command, {
-        context: {map: state.map},
+        context: {map},
         refresh: () => {},
         refreshPanels: false
       }),
       refreshSummary: refreshGenerationSummary,
       onRestore: map => {
-        state.options = map.options;
+        if (state.map === map) state.options = map.options;
       },
       onProgress: progress => updateGenerationLoading(documentRef, true, progress.message),
-      yieldToMain: () => yieldToBrowser(documentRef)
+      yieldToMain: () => yieldToBrowser(documentRef),
+      signal: operationContext?.signal,
+      assertCurrent,
+      shouldRestoreHistory: () => state.map === map
     });
+    assertCurrent();
     if (!execution.executed) {
       return {
         executed: false,
@@ -5531,7 +5587,9 @@ async function applyClimateDownstreamRebuildViaApi(state, documentRef, options =
     }
     updateGenerationLoading(documentRef, true, "正在刷新气候下游结果");
     await yieldToBrowser(documentRef);
+    assertCurrent();
     await refreshClimateDownstreamRebuildState(state, documentRef, execution.command);
+    assertCurrent();
     const result = {
       executed: true,
       seed: execution.seed,
@@ -5546,22 +5604,16 @@ async function applyClimateDownstreamRebuildViaApi(state, documentRef, options =
       timings: execution.timings,
       staleSystems: execution.staleSystems,
       before,
-      after: regenerationApiSummary(state.map),
+      after: regenerationApiSummary(map),
       history: state.editHistory.getStats(),
       effects: ["map-derived", "renderer", "runtime-panel", "object-panels", "object-index"]
     };
     setFileOperationStatus(documentRef, `已完成气候下游重算：${result.executionOrder.join(" -> ")}`);
     return result;
   } catch (error) {
-    await refreshClimateDownstreamRebuildState(state, documentRef, {
-      effects: {
-        render: "draw",
-        selection: "refresh",
-        runtimeStats: true,
-        pickPanel: true,
-        derived: ["cell-colors", "political-boundaries", "point-layers", "line-layers", "labels", "route-mesh", "object-panels", "object-index"]
-      }
-    });
+    if (state.map === map) {
+      await refreshClimateDownstreamRebuildState(state, documentRef, {effects: REGENERATION_TRANSACTION_EFFECTS});
+    }
     setFileOperationStatus(documentRef, `气候下游重算失败并已回滚：${error.message}`);
     throw error;
   } finally {
@@ -7589,12 +7641,36 @@ function rebuildHeightDerivedViaAction(state, documentRef, scope, options = {}) 
   assertMapAvailable(state);
   if (options?.confirm !== true) throw new Error("高度派生重建会改写当前地图派生数据，需要显式传入 {confirm: true}");
   const before = regenerationApiSummary(state.map);
-  const regenerate = kind => state.runtimeActions.generate.regenerate(kind, {confirm: true});
-  const result = scope === "all"
-    ? rebuildHeightAllDerived(regenerate)
+  const kinds = scope === "all"
+    ? [...HEIGHT_BASE_REBUILD_STEPS, ...HEIGHT_DOWNSTREAM_REBUILD_STEPS]
     : scope === "base"
-      ? rebuildHeightBaseDerived(regenerate)
-      : rebuildHeightDownstreamDerived(regenerate);
+      ? [...HEIGHT_BASE_REBUILD_STEPS]
+      : [...HEIGHT_DOWNSTREAM_REBUILD_STEPS];
+  const transaction = executeMapSnapshotTransaction({
+    map: state.map,
+    editHistory: state.editHistory,
+    label: `高度${scope === "all" ? "全部" : scope === "base" ? "基础" : "下游"}派生重建`,
+    domain: "height-derived",
+    effects: {
+      ...REGENERATION_TRANSACTION_EFFECTS,
+      affected: kinds.map(id => ({kind: "system", id}))
+    },
+    execute: () => {
+      const regenerate = kind => regenerateMapAttributeCoreViaApi(state, documentRef, kind, {confirm: true});
+      return scope === "all"
+        ? rebuildHeightAllDerived(regenerate)
+        : scope === "base"
+          ? rebuildHeightBaseDerived(regenerate)
+          : rebuildHeightDownstreamDerived(regenerate);
+    },
+    executeCommand: command => executeEditCommand(state, documentRef, command, {
+      context: {map: state.map},
+      refresh: () => {},
+      refreshPanels: false
+    }),
+    onRestore: () => refreshMapMutationRollback(state, documentRef)
+  });
+  const result = transaction.result;
   updateRegenerationSection(documentRef, result);
   updateHeightPanel(state);
   updateEditingInteractionLock(state, documentRef);
@@ -8656,6 +8732,32 @@ function regenerateMapAttributeViaApi(state, documentRef, kind, options = {}) {
   assertMapAvailable(state);
   if (options?.confirm !== true) throw new Error("受约束重算会改写当前地图派生数据，需要显式传入 {confirm: true}");
   const targetKind = normalizeApiRegenerationKind(kind);
+  const transaction = executeMapSnapshotTransaction({
+    map: state.map,
+    editHistory: state.editHistory,
+    label: `受约束重生成 ${targetKind}`,
+    domain: "regeneration",
+    effects: {
+      ...REGENERATION_TRANSACTION_EFFECTS,
+      affected: [{kind: "system", id: targetKind}]
+    },
+    execute: () => regenerateMapAttributeCoreViaApi(state, documentRef, targetKind, options),
+    executeCommand: command => executeEditCommand(state, documentRef, command, {
+      context: {map: state.map},
+      refresh: () => {},
+      refreshPanels: false
+    }),
+    onRestore: () => refreshMapMutationRollback(state, documentRef)
+  });
+  return {
+    ...transaction.result,
+    history: state.editHistory.getStats()
+  };
+}
+
+function regenerateMapAttributeCoreViaApi(state, documentRef, kind, options = {}) {
+  assertMapAvailable(state);
+  const targetKind = normalizeApiRegenerationKind(kind);
   const before = regenerationApiSummary(state.map);
   const scope = normalizeRegenerationScope(state.map, targetKind, options);
   const result = regenerateMapAttribute(state, targetKind, documentRef, scope);
@@ -8674,6 +8776,20 @@ function regenerateMapAttributeViaApi(state, documentRef, kind, options = {}) {
     history: state.editHistory.getStats(),
     effects: ["map-derived", "renderer", "runtime-panel", "object-panels", "object-index"]
   };
+}
+
+function refreshMapMutationRollback(state, documentRef) {
+  state.options = state.map.options;
+  state.renderer?.refreshObjectPickingIndex?.();
+  const effects = {effects: REGENERATION_TRANSACTION_EFFECTS};
+  state.selectionStore.batch(() => {
+    reconcilePersistentObjectHighlights(state, documentRef, {refreshUi: false});
+    refreshAfterEdit(state, effects);
+  });
+  refreshPanelsForEdit(state, effects);
+  updateHeightPanel(state);
+  updateRuntimePanel(documentRef, state);
+  updateEditingInteractionLock(state, documentRef);
 }
 
 function normalizeApiRegenerationKind(kind) {

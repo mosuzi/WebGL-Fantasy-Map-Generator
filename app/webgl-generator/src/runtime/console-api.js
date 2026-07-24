@@ -413,7 +413,7 @@ function buildMethodMetadata() {
     generate: {
       getOptions: {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
       setOptions: {stable: "draft", mutates: "generation-options", undoable: false, async: false, requiresConfirm: false},
-      regenerate: {stable: "draft", mutates: "map-derived-data", undoable: "partial", async: true, requiresConfirm: true},
+      regenerate: {stable: "draft", mutates: "map-derived-data", undoable: true, async: true, requiresConfirm: true},
       newMap: {stable: "draft", mutates: "replace-map", undoable: false, async: true, requiresConfirm: true},
       rerollSeed: {stable: "draft", mutates: "replace-map", undoable: false, async: true, requiresConfirm: true}
     },
@@ -455,8 +455,8 @@ function buildMethodMetadata() {
       "states.setGovernmentBatch": {stable: "draft", mutates: "political-entities", undoable: true, async: false, requiresConfirm: false},
       "states.applyChanges": {stable: "draft", mutates: "political-entities", undoable: true, async: false, requiresConfirm: false},
       "height.applyChanges": {stable: "draft", mutates: "height", undoable: true, async: false, requiresConfirm: false},
-      "height.rebuildBaseDerived": {stable: "draft", mutates: "map-derived-data", undoable: "partial", async: false, requiresConfirm: true},
-      "height.rebuildDownstreamDerived": {stable: "draft", mutates: "map-derived-data", undoable: "partial", async: false, requiresConfirm: true},
+      "height.rebuildBaseDerived": {stable: "draft", mutates: "map-derived-data", undoable: true, async: false, requiresConfirm: true},
+      "height.rebuildDownstreamDerived": {stable: "draft", mutates: "map-derived-data", undoable: true, async: false, requiresConfirm: true},
       "biomes.assignCells": {stable: "draft", mutates: "biomes-and-suitability", undoable: true, async: false, requiresConfirm: false},
       "biomes.inspectSuitability": {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
       "biomes.applySuitability": {stable: "draft", mutates: "suitability-and-population", undoable: true, async: false, requiresConfirm: false},
@@ -542,7 +542,7 @@ function buildMethodMetadata() {
       saveBrowserMap: {stable: "draft", mutates: "browser-storage", undoable: false, async: true, requiresConfirm: false},
       restoreBrowserMap: {stable: "draft", mutates: "replace-map", undoable: false, async: true, requiresConfirm: true},
       importMap: {stable: "draft", mutates: "replace-map", undoable: false, async: true, requiresConfirm: true},
-      importGEO: {stable: "draft", mutates: "map-or-measurements", undoable: "partial", async: true, requiresConfirm: true},
+      importGEO: {stable: "draft", mutates: "map-or-measurements", undoable: true, async: true, requiresConfirm: true},
       importHeightmap: {stable: "draft", mutates: "replace-map", undoable: false, async: true, requiresConfirm: true}
     },
     namebases: {

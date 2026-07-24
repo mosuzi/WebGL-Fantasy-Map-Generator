@@ -176,6 +176,8 @@
     "regress:visible-row-selection": "node --no-warnings ./tools/webgl-generator-visible-row-selection-regression.mjs",
     "regress:selection-scroll-center": "node --no-warnings ./tools/webgl-generator-selection-scroll-center-regression.mjs",
     "regress:climate-downstream-rebuild": "node --no-warnings ./tools/webgl-generator-climate-downstream-rebuild-regression.mjs",
+    "regress:map-snapshot-transaction": "node --no-warnings ./tools/webgl-generator-map-snapshot-transaction-regression.mjs",
+    "regress:map-transaction-browser": "node --no-warnings ./tools/webgl-generator-map-transaction-browser-regression.mjs",
     "regress:city-relocation": "node --no-warnings ./tools/webgl-generator-city-relocation-regression.mjs",
     "regress:shortcuts": "node --no-warnings ./tools/webgl-generator-keyboard-shortcuts-regression.mjs",
     "regress:shortcuts-browser": "node --no-warnings ./tools/webgl-generator-keyboard-shortcuts-browser-regression.mjs",
