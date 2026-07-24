@@ -137,6 +137,18 @@ async function inspectShortcuts(page) {
   await pressCode(page, "KeyH", {shiftKey: true});
   await page.locator('.floating-panel[data-panel-id="height-panel"]:not(.hidden)').waitFor({state: "visible"});
   await page.locator('.floating-panel[data-panel-id="height-panel"] .floating-panel-close').click();
+  const canvasModeBefore = await page.evaluate(() => {
+    const app = window.__webglGeneratorApp;
+    const entered = app.canvasToolModes.enter("height:brush");
+    return {entered, mode: app.canvasToolModes.getSnapshot(), history: window.webglGeneratorApi.history.get().data};
+  });
+  await pressCode(page, "Escape");
+  const canvasModeAfter = await page.evaluate(() => ({
+    mode: window.__webglGeneratorApp.canvasToolModes.getSnapshot(),
+    history: window.webglGeneratorApi.history.get().data
+  }));
+  if (canvasModeBefore.mode.registeredModeIds.length !== 28 || !canvasModeBefore.entered?.changed || canvasModeBefore.mode.active?.id !== "height:brush" || canvasModeAfter.mode.active) failures.push("Escape 没有覆盖当前全部注册模式或未通过通用入口取消活动画布模式");
+  if (canvasModeAfter.history.undo !== canvasModeBefore.history.undo || canvasModeAfter.history.redo !== canvasModeBefore.history.redo) failures.push("取消画布模式错误写入历史");
   await pressCode(page, "KeyG", {shiftKey: true});
   await page.locator('.floating-panel[data-panel-id="generation-panel"]:not(.hidden)').waitFor({state: "visible"});
   await page.locator('[data-control-tab="management"]').click();
@@ -163,8 +175,11 @@ async function inspectShortcuts(page) {
     return api.selection.get().data;
   }, history.stateId);
   await pressCode(page, "Escape");
-  const cancelAfter = await page.evaluate(() => window.webglGeneratorApi.selection.get().data);
-  if (!cancelBefore.editingObject || cancelAfter.editingObject || cancelAfter.selection) failures.push("Escape 没有取消编辑并清除选择");
+  const cancelAfterEditing = await page.evaluate(() => window.webglGeneratorApi.selection.get().data);
+  if (!cancelBefore.editingObject || cancelAfterEditing.editingObject || !cancelAfterEditing.selection) failures.push("首次 Escape 没有只停止对象编辑");
+  await pressCode(page, "Escape");
+  const cancelAfterSelection = await page.evaluate(() => window.webglGeneratorApi.selection.get().data);
+  if (cancelAfterSelection.editingObject || cancelAfterSelection.selection) failures.push("第二次 Escape 没有清除 selection");
 
   await pressCode(page, "Digit4", {shiftKey: true});
   const viewMode = await page.evaluate(() => window.webglGeneratorApi.layers.get().data.colorMode);
@@ -214,7 +229,7 @@ async function inspectShortcuts(page) {
     sampledGroups: ["file", "generation", "history", "editing", "selection", "view", "layers", "panels"],
     hint: {...hint, beforeThresholdHidden: beforeThreshold, mapToastPriority: toastPriority},
     history: {afterEdit: history.afterEdit, afterUndo, afterRedo},
-    editing: {before: cancelBefore, after: cancelAfter},
+    editing: {before: cancelBefore, afterEditing: cancelAfterEditing, afterSelection: cancelAfterSelection, canvasModeBefore, canvasModeAfter},
     view: {mode: viewMode, zoomBeforeFit, zoomAfterFit},
     layers: {routesBefore: layerResult, routesAfter: layerAfter},
     glError: runtime.glError,

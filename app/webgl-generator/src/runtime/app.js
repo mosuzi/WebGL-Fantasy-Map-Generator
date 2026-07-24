@@ -4056,14 +4056,18 @@ function canExecuteKeyboardShortcut(state, item) {
   if (item.when === "map-ready") return Boolean(state.map);
   if (item.when === "undo") return !busy && Number(history.undo) > 0;
   if (item.when === "redo") return !busy && Number(history.redo) > 0;
-  if (item.when === "selection-or-editing") return Boolean(state.selection || state.editingObject || state.canvasToolModes.getActive()?.id === CANVAS_TOOL_MODE.CITY_MOVE);
+  if (item.when === "selection-or-editing") return Boolean(state.selection || state.editingObject || state.canvasToolModes.getActive());
   return true;
 }
 
 async function executeKeyboardShortcut(state, documentRef, item, runtimePanelHandlers) {
   const action = item.action || {};
-  if (item.id === "selection.cancel" && state.canvasToolModes.getActive()?.id === CANVAS_TOOL_MODE.CITY_MOVE) {
-    cancelCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.CITY_MOVE, "escape");
+  if (item.id === "selection.cancel") {
+    const activeModeId = state.canvasToolModes.getActive()?.id;
+    if (activeModeId) return cancelCanvasToolMode(state, documentRef, activeModeId, "escape");
+    if (state.editingObject) return invokePublicApi(documentRef, "selection.stopEditing");
+    if (state.selection) return invokePublicApi(documentRef, "selection.clear");
+    return null;
   }
   if (action.type === "panel") {
     const handler = runtimePanelHandlers[action.handler];

@@ -1,5 +1,13 @@
 # 开发历史
 
+## 2026-07-25：权威任务第 201 项代码完成——统一 Escape、焦点与浮层键盘仲裁
+
+- 从当前 checkout 重新核对 `28` 个注册画布模式、`28` 个 PanelManager 面板、`18` 个动作坞和 `4` 个固定工作台 / 树状弹框，冻结唯一退出顺序为框架 popup、fixed 二级浮层、普通受管面板、活动画布模式、对象编辑、selection；一次事件被上层消费后不得继续进入后续 listener。
+- 全局快捷键增加已消费事件、可见 Element Plus popup 与打开态 fixed dialog 守卫；Escape 从普通快捷动作单列，输入控件内仍参与逐级退出，其余快捷键继续跳过输入、组合输入和重复按键。所有注册画布模式通过 `getActive()` 的通用分支取消，不再保留城市移动白名单，取消本身不写历史。
+- OverlayRegistry 为 fixed entry 统一声明键盘独占和打开态，popup 可见时让框架先关闭候选；否则先关 fixed、再关最高普通面板，并用 `stopImmediatePropagation` 阻断同一 document 上的快捷键消费者。父子面板经 Escape 恢复时禁用父面板延迟聚焦，由 registry 唯一恢复原触发入口，避免焦点竞争。
+- 专项回归覆盖默认已消费事件、IME / repeat、输入、popup、独占 dialog、fixed 优先、每键一级、焦点返回和当前 `28` 个画布模式双向登记；浏览器回归已增加桌面 / 窄视口 popup → fixed → 主面板 → selection 链、managed dialog 阻断普通快捷键、画布模式取消无历史和对象编辑 / selection 两级退出。
+- `regress:shortcuts`、`regress:panel-overlay-policy`、`regress:panel-manual-position`、生产构建和 `git diff --check` 通过。旧 `regress:canvas-tools` 仍因高度动作白名单缺 `level`、旧键盘视觉审计仍因 OceanCurrentPanel 的 `useVisibleRowSelection` 静态假设失败；两者均为当前分支既存且不属于第 201 项的漂移，按封闭范围只记录、不顺带修复。真实 Chrome 留到第 201～203 项统一验收。
+
 ## 2026-07-25：登记权威任务第 200 项——控制台 API 全量复审与 AI 操作缺口补齐
 
 - 用户要求在第 195 项实施前增加新的 API 前置任务，目标从“API 方法三方一致”提升为“AI 能通过控制台操作几乎全部地图能力”。历史编号不倒排，因此登记为第 200 项；它与第 195 项既有 cell 动作矩阵门禁并列，二者未完成前不得启动原 A～D 实施阶段。

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {readFile} from "node:fs/promises";
 
 import {
+  hasOpenFrameworkPopup,
   installKeyboardShortcuts,
   isEditableShortcutTarget,
   KEYBOARD_SHORTCUTS,
@@ -99,8 +100,16 @@ assert.equal(executions, 1);
 for (const patch of [{repeat: true}, {isComposing: true}, {keyCode: 229}, {target: {tagName: "INPUT"}}]) {
   fake.dispatch("keydown", keyEvent("KeyS", {ctrlKey: true, target: fake.action, ...patch}));
 }
+fake.dispatch("keydown", keyEvent("KeyS", {ctrlKey: true, target: fake.action, defaultPrevented: true}));
+fake.frameworkPopups = [visiblePopup()];
+assert.equal(hasOpenFrameworkPopup(fake.documentRef), true);
+fake.dispatch("keydown", keyEvent("KeyS", {ctrlKey: true, target: fake.action}));
+fake.frameworkPopups = [];
+fake.exclusiveModals = [visiblePopup()];
+fake.dispatch("keydown", keyEvent("KeyS", {ctrlKey: true, target: fake.action}));
+fake.exclusiveModals = [];
 await tick();
-assert.equal(executions, 1, "repeat / IME / 输入控件触发了快捷键");
+assert.equal(executions, 1, "已消费事件、repeat / IME、输入控件、popup 或独占浮层触发了普通快捷键");
 
 enabled = false;
 const disabledKey = keyEvent("KeyS", {ctrlKey: true, target: fake.action});
@@ -141,6 +150,19 @@ assert.equal(fake.hint.hidden, true);
 assert.equal(lastError, null);
 controller.destroy();
 
+const cancel = KEYBOARD_SHORTCUTS.find(item => item.id === "selection.cancel");
+let cancelExecutions = 0;
+const cancelController = installKeyboardShortcuts(fake.documentRef, {
+  registry: [cancel],
+  execute: () => cancelExecutions++
+});
+const editableEscape = keyEvent("Escape", {key: "Escape", target: {tagName: "INPUT"}});
+fake.dispatch("keydown", editableEscape);
+await tick();
+assert.equal(editableEscape.defaultPrevented, true, "输入控件内 Escape 没有进入逐级退出仲裁");
+assert.equal(cancelExecutions, 1, "输入控件内 Escape 未执行唯一退出动作");
+cancelController.destroy();
+
 const [appSource, controlPanelSource, indexSource, stylesSource] = await Promise.all([
   readFile(new URL("../app/webgl-generator/src/runtime/app.js", import.meta.url), "utf8"),
   readFile(new URL("../app/webgl-generator/src/ui/vue/components/ControlPanel.vue", import.meta.url), "utf8"),
@@ -149,6 +171,17 @@ const [appSource, controlPanelSource, indexSource, stylesSource] = await Promise
 ]);
 assert.match(appSource, /installKeyboardShortcuts\(documentRef/);
 assert.match(appSource, /executeKeyboardShortcut\(state, documentRef, item, runtimePanelHandlers\)/);
+assert.match(appSource, /const activeModeId = state\.canvasToolModes\.getActive\(\)\?\.id/);
+assert.match(appSource, /if \(activeModeId\) return cancelCanvasToolMode\(state, documentRef, activeModeId, "escape"\)/);
+assert.match(appSource, /if \(state\.editingObject\) return invokePublicApi\(documentRef, "selection\.stopEditing"\)/);
+assert.match(appSource, /if \(state\.selection\) return invokePublicApi\(documentRef, "selection\.clear"\)/);
+assert.doesNotMatch(appSource.slice(appSource.indexOf("function canExecuteKeyboardShortcut"), appSource.indexOf("async function invokePublicApi")), /CANVAS_TOOL_MODE\./, "Escape 退出仍依赖具体画布模式白名单");
+const canvasModeBlock = appSource.slice(appSource.indexOf("export const CANVAS_TOOL_MODE"), appSource.indexOf("export function createGeneratorApp"));
+const canvasModeKeys = [...canvasModeBlock.matchAll(/^\s{2}([A-Z0-9_]+):\s*"[^"]+"/gm)].map(match => match[1]);
+const registrationScope = appSource.slice(appSource.indexOf("function registerCanvasToolModes"), appSource.indexOf("function enterCanvasToolMode"));
+const registeredCanvasModeKeys = [...registrationScope.matchAll(/CANVAS_TOOL_MODE\.([A-Z0-9_]+)/g)].map(match => match[1]);
+assert.equal(canvasModeKeys.length, 28, "当前运行时画布模式分母漂移时必须重新冻结 Escape 验收");
+assert.deepEqual([...new Set(registeredCanvasModeKeys)].sort(), [...canvasModeKeys].sort(), "存在未接入通用注册器的画布模式");
 assert.match(appSource, /invokePublicApi\(documentRef/);
 assert.doesNotMatch(appSource.slice(appSource.indexOf("async function executeKeyboardShortcut"), appSource.indexOf("async function invokePublicApi")), /\.click\(/, "快捷键通过 DOM click 执行动作");
 for (const item of KEYBOARD_SHORTCUTS.filter(item => item.action.type === "panel")) {
@@ -213,7 +246,12 @@ function createFakeDocument() {
     defaultView: view,
     body: {},
     getElementById: id => elements[id] || null,
-    querySelectorAll: selector => selector === "#save-browser-storage" ? [action] : [],
+    querySelectorAll: selector => {
+      if (selector === "#save-browser-storage") return [action];
+      if (selector.includes(".el-select__popper")) return fakeResult.frameworkPopups;
+      if (selector.includes("[aria-modal")) return fakeResult.exclusiveModals;
+      return [];
+    },
     querySelector: () => null,
     addEventListener(type, handler) {
       const handlers = listeners.get(type) || [];
@@ -224,15 +262,18 @@ function createFakeDocument() {
       listeners.set(type, (listeners.get(type) || []).filter(item => item !== handler));
     }
   };
-  return {
+  const fakeResult = {
     documentRef,
     hint,
     mapToast,
     action,
+    frameworkPopups: [],
+    exclusiveModals: [],
     dispatch(type, event) {
       for (const handler of listeners.get(type) || []) handler(event);
     }
   };
+  return fakeResult;
 }
 
 function tick() {
@@ -241,4 +282,14 @@ function tick() {
 
 function delay(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function visiblePopup() {
+  return {
+    hidden: false,
+    isConnected: true,
+    style: {},
+    getAttribute: () => "false",
+    getClientRects: () => [{}]
+  };
 }

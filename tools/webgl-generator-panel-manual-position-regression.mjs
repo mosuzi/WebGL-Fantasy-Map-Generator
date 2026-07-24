@@ -231,8 +231,9 @@ function assertReturnParentLifecycle() {
   manager.withReturnParent("generation-panel", () => manager.open("height-panel"));
   assert.equal(generation.panel.classList.contains("hidden"), true, "打开次级面板必须暂时隐藏控制面板");
   assert.equal(height.returnParentId, "generation-panel", "次级面板没有记录控制面板父关系");
-  manager.close("height-panel");
+  manager.close("height-panel", {fromRegistry: true});
   assert.equal(generation.panel.classList.contains("hidden"), false, "关闭次级面板没有恢复控制面板");
+  assert.equal(manager.overlayShows.at(-1).options.focus, false, "Escape 返回父面板时不得用延迟聚焦覆盖 registry 的 returnFocus");
 
   manager.withReturnParent("generation-panel", () => manager.open("height-panel"));
   manager.open("state-panel");
@@ -258,7 +259,13 @@ function createPanelLifecycleManager(ids) {
   manager.panels = new Map();
   manager.openSequence = 0;
   manager.returnParentContext = null;
-  manager.overlayRegistry = {show() {}, hide() {}};
+  manager.overlayShows = [];
+  manager.overlayRegistry = {
+    show(id, options) {
+      manager.overlayShows.push({id, options});
+    },
+    hide() {}
+  };
   manager.applyPreferredPosition = () => {};
   manager.resolvePanelCoexistence = () => {};
   manager.startHeaderRefresh = () => {};
