@@ -39,7 +39,9 @@ function normalizeApiError(error, code = "api_error") {
       name: error.name,
       message: error.message,
       ...(error.stage ? {stage: String(error.stage)} : {}),
-      ...(error.suggestion ? {suggestion: String(error.suggestion)} : {})
+      ...(error.suggestion ? {suggestion: String(error.suggestion)} : {}),
+      ...(error.preview !== undefined ? {preview: cloneApiValue(error.preview)} : {}),
+      ...(error.details !== undefined ? {details: cloneApiValue(error.details)} : {})
     };
   }
   return {

@@ -431,6 +431,7 @@
             <UiButton variant="secondary" @click="openCreateCustomUnit">新增自定义单位</UiButton>
             <UiButton v-if="activeCustomUnit" variant="secondary" @click="openEditCustomUnit">编辑当前单位</UiButton>
             <UiButton v-if="activeCustomUnit" variant="danger" @click="deleteActiveCustomUnit">删除当前单位</UiButton>
+            <UiButton v-if="customUnitCanRestore" variant="secondary" @click="restoreLastDeletedCustomUnit">恢复上次删除单位</UiButton>
           </div>
           <form v-if="customUnitEditorOpen" class="unit-custom-editor" @submit.prevent="saveCustomUnit">
             <h3>{{ editingCustomUnitId ? "编辑自定义单位" : "新增自定义单位" }}</h3>
@@ -665,6 +666,8 @@ defineOptions({
 
 const config = useGlobalConfigStore();
 const {preferences} = storeToRefs(config);
+const CUSTOM_UNIT_RECYCLE_STORAGE_KEY = "webgl-generator-custom-unit-recycle-v1";
+const customUnitCanRestore = ref(Boolean(readCustomUnitRecycleRecord()));
 const CONTROL_PANEL_TAB_IDS = Object.freeze(["about", "generation", "themes", "styles", "layers", "management", "units"]);
 const activeTab = ref(normalizeControlPanelTab(preferences.value.controlPanelTab));
 const exportPanelOpen = ref(false);
@@ -1022,8 +1025,50 @@ function saveCustomUnit() {
 function deleteActiveCustomUnit() {
   const unit = activeCustomUnit.value;
   if (!unit) return;
-  commitCustomUnitPreferences(deleteCustomUnitDefinition(unitPreferences.value, unit.id));
-  closeCustomUnitEditor();
+  if (typeof window.confirm === "function" && !window.confirm(`确定删除自定义单位“${unit.name}（${unit.symbol}）”？删除后可恢复上次删除。`)) return;
+  const storage = window.localStorage;
+  const previousRecycle = storage?.getItem(CUSTOM_UNIT_RECYCLE_STORAGE_KEY) ?? null;
+  try {
+    storage?.setItem(CUSTOM_UNIT_RECYCLE_STORAGE_KEY, JSON.stringify({
+      version: 1,
+      deletedAt: new Date().toISOString(),
+      unit
+    }));
+    commitCustomUnitPreferences(deleteCustomUnitDefinition(unitPreferences.value, unit.id));
+    customUnitCanRestore.value = true;
+    closeCustomUnitEditor();
+  } catch (error) {
+    if (previousRecycle === null) storage?.removeItem(CUSTOM_UNIT_RECYCLE_STORAGE_KEY);
+    else storage?.setItem(CUSTOM_UNIT_RECYCLE_STORAGE_KEY, previousRecycle);
+    customUnitError.value = error instanceof Error ? error.message : String(error);
+  }
+}
+
+function restoreLastDeletedCustomUnit() {
+  const record = readCustomUnitRecycleRecord();
+  if (!record?.unit) {
+    customUnitCanRestore.value = false;
+    return;
+  }
+  try {
+    commitCustomUnitPreferences(upsertCustomUnitDefinition(unitPreferences.value, record.unit));
+    window.localStorage?.removeItem(CUSTOM_UNIT_RECYCLE_STORAGE_KEY);
+    customUnitCanRestore.value = false;
+  } catch (error) {
+    customUnitError.value = error instanceof Error ? error.message : String(error);
+  }
+}
+
+function readCustomUnitRecycleRecord() {
+  try {
+    if (typeof window === "undefined") return null;
+    const raw = window.localStorage?.getItem(CUSTOM_UNIT_RECYCLE_STORAGE_KEY);
+    if (!raw) return null;
+    const record = JSON.parse(raw);
+    return record?.version === 1 && record.unit ? record : null;
+  } catch {
+    return null;
+  }
 }
 
 function commitCustomUnitPreferences(units) {
@@ -1298,6 +1343,7 @@ function resetCurrentLabelStyle() {
 }
 
 function resetAllLabelStyles() {
+  if (typeof window.confirm === "function" && !window.confirm("确定重置全部标签样式？确认后可通过一次撤销恢复。")) return;
   document.dispatchEvent(new CustomEvent("webgl-generator-label-styles-reset-all"));
 }
 

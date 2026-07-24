@@ -346,6 +346,7 @@ function handleNotesAction(key) {
     return;
   }
   if (key === "delete-batch") {
+    if (typeof window.confirm === "function" && !window.confirm(`确定批量删除 ${deleteTargetRows.value.length} 条备注？确认后可通过一次撤销恢复。`)) return;
     props.callbacks.onDeleteBatch?.(deleteTargetRows.value);
     selectedNoteIds.value = [];
     return;

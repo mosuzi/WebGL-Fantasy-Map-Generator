@@ -68,15 +68,18 @@ assert.deepEqual(snapshotRouteMap(routeMap), routeBefore, "一次撤销必须恢
 history.redo({map: routeMap});
 assert.deepEqual(routeMap.settlements.routes, [], "重做必须复现批量删除");
 
-const failureMap = {items: [1, 2]};
+const failureOptions = {seed: "delete-impact-failure"};
+const failureMap = {items: [1, 2], options: failureOptions, nested: {value: "before"}};
 const failureHistory = new EditHistory();
 const failingBatch = createDeleteBatchCommand({
   kind: "fixture",
   ids: [1, 2],
-  createCommand: id => fixtureDeleteCommand(id, {fail: id === 2})
+  createCommand: id => fixtureDeleteCommand(id, {failAfterWrite: id === 2})
 });
 assert.throws(() => failureHistory.execute(failingBatch, {map: failureMap}), /fixture failure 2/);
 assert.deepEqual(failureMap.items, [1, 2], "批次中途失败必须回滚此前已删对象");
+assert.equal(failureMap.options, failureOptions, "批次中途失败必须保留 map.options 引用");
+assert.deepEqual(failureMap.nested, {value: "before"}, "失败子命令先部分写入再抛错时必须恢复整图");
 assert.equal(failureHistory.getStats().undo, 0, "失败批次不得进入历史");
 assert.deepEqual(failingBatch.getResult().failed, [{id: 2, code: "delete-failed", reason: "fixture failure 2"}], "失败批次必须返回结构化失败摘要");
 
@@ -185,16 +188,18 @@ function snapshotRouteMap(map) {
   return snapshot;
 }
 
-function fixtureDeleteCommand(id, {fail = false} = {}) {
+function fixtureDeleteCommand(id, {failAfterWrite = false} = {}) {
   let index = -1;
   return {
     label: `fixture ${id}`,
     domain: "fixture",
     effects: {render: "none", selection: "refresh", affected: [{kind: "fixture", id}]},
     apply(context) {
-      if (fail) throw new Error(`fixture failure ${id}`);
       index = context.map.items.indexOf(id);
       context.map.items.splice(index, 1);
+      context.map.nested.value = `written-${id}`;
+      context.map.options = {seed: `written-${id}`};
+      if (failAfterWrite) throw new Error(`fixture failure ${id}`);
     },
     revert(context) {
       context.map.items.splice(index, 0, id);

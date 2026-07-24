@@ -28683,3 +28683,11 @@ full 矩阵结果：
 - FMG Cells GEO 命令在高度写入或派生刷新异常时先恢复高度与派生快照，`data.importGEO` 外层再以运行时地图快照兜底；普通 GEO 测量导入仍走既有单命令。气候下游异步链进入 RuntimeOperation，分段前后检查取消信号与原地图身份，稳定返回 `operation_busy / operation_cancelled / operation_obsolete`；旧地图可回滚，但不会用旧历史快照覆盖替换地图。失败恢复统一刷新 renderer、picking、selection、高亮与相关面板。
 - API 能力元数据将 `generate.regenerate`、两条公开高度重建与 `data.importGEO` 从 `partial` 改为完整可撤销。新增 `regress:map-snapshot-transaction`，覆盖十一类成功单历史、三种高度链首 / 中 / 末故障、no-op、提交失败、同图取消、替图 obsolete 和 busy；另新增真实 Chrome 脚本，准备在三项统一验收中逐一执行十一类重生成、三种高度链、FMG Cells GEO、气候互斥及完整撤销 / 重做。
 - `regress:map-snapshot-transaction`、`regress:climate-downstream-rebuild`、`regress:height-derived-rebuild`、`regress:scoped-regeneration`、`regress:api-operation`、`regress:api-action-convergence`、`regress:api-stability`、`regress:api-edit-coverage`、`regress:api-data-compatibility`、生产构建和 `git diff --check` 通过。真实 Chrome 留到第 201～203 项统一验收，不在本项代码提交前单独启动。
+
+# 2026-07-25：完成权威任务第 203 项代码——危险操作预检、确认与恢复
+
+- 当前源码重新发现并冻结 `26` 个 UI / 画布入口、`21` 个逻辑策略、`208` 个公开 API 和其中 `18` 个持久危险 API。危险审计分别核对源码发现规则与策略登记，未知、陈旧、未分类及双向差集均为 `0`；补入此前漏记的自定义单位删除和海底重设，并排除非持久的 selection 清理与未公开的标签全量样式重设 API。
+- 国家、省份、城市的面板启动画布删除与八类公开对象删除共用 `inspectDeleteImpact` 和统一执行器。预检新增稳定影响等级；高影响 API 支持 `inspectOnly`，未传 `confirm: true` 时以 `confirmation_required` 返回同一 preview 且不改变地图、历史、selection 或模式。成功包络保留原单对象 `result`，只追加 `preview / deleteSummary`。名称库 UI / API 共用中、高影响确认和既有单命令撤销。
+- 批量命令在 apply 前保存整图快照，任一子命令即使先部分写入再抛错也会原位恢复完整地图与原 `map.options` 引用，失败批次不进入历史。备注批删、战斗事件清空和全部标签样式重设按高影响补齐确认；marker、label、孤儿备注、measurement、zone 和用户视觉主题等低影响单对象删除继续免确认。
+- 高度用户模板和自定义单位各使用独立 LocalStorage 回收记录，确认删除后可跨刷新恢复上次删除，不写地图存档或 checksum；高度模板回收记录损坏时仍保留并加载有效用户模板。新增危险策略 Node 专项和真实 Chrome 脚本，浏览器脚本留到第 201～203 项统一验收。
+- `audit:interaction-danger-recovery`、`regress:interaction-danger-recovery`、`regress:danger-policy`、`regress:delete-impact`、`regress:height-template-programs`、API stability / convergence / edit coverage / data compatibility / suite contract、生产构建和 `git diff --check` 通过。

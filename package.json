@@ -66,6 +66,8 @@
     "regress:ocean-current-world": "node --no-warnings ./tools/webgl-generator-ocean-current-world-rebuild-regression.mjs",
     "regress:river-delete": "node --no-warnings ./tools/webgl-generator-river-delete-regression.mjs",
     "regress:delete-impact": "node --no-warnings ./tools/webgl-generator-delete-impact-regression.mjs",
+    "regress:danger-policy": "node --no-warnings ./tools/webgl-generator-danger-policy-regression.mjs",
+    "regress:danger-policy-browser": "node --no-warnings ./tools/webgl-generator-danger-policy-browser-regression.mjs",
     "regress:object-creation": "node --no-warnings ./tools/webgl-generator-object-creation-regression.mjs",
     "regress:auxiliary-object-creation": "node --no-warnings ./tools/webgl-generator-auxiliary-object-creation-regression.mjs",
     "regress:lake-delete": "node --no-warnings ./tools/webgl-generator-lake-delete-regression.mjs",

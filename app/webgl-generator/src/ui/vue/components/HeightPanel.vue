@@ -391,6 +391,7 @@
       </div>
       <div class="height-template-library-actions">
         <UiButton variant="secondary" :disabled="!state.terrainProgramCanDelete" @click="callbacks.onTerrainProgramDelete?.()">删除所选用户模板</UiButton>
+        <UiButton variant="secondary" :disabled="!state.terrainProgramCanRestore" @click="callbacks.onTerrainProgramRestore?.()">恢复上次删除</UiButton>
         <UiPanelIoActions
           label="用户地形模板导入导出"
           :export-actions="terrainProgramExportActions"

@@ -2,6 +2,7 @@ import {OBJECT_KIND, OBJECT_KIND_LABEL} from "./object-kinds.js";
 import {readObjectNote} from "./object-notes.js";
 import {resolveObject} from "./object-resolver.js";
 import {applyNestedEditCommand, revertNestedEditCommand} from "./edit-history.js";
+import {restoreMapSnapshot} from "./climate-downstream-rebuild.js";
 
 const PROTECTED_NEUTRAL_KINDS = new Set([OBJECT_KIND.STATE, OBJECT_KIND.PROVINCE, OBJECT_KIND.CULTURE, OBJECT_KIND.RELIGION]);
 const ALWAYS_CONFIRM_KINDS = new Set([OBJECT_KIND.STATE, OBJECT_KIND.PROVINCE, OBJECT_KIND.CITY, OBJECT_KIND.CULTURE, OBJECT_KIND.RELIGION, OBJECT_KIND.RIVER, OBJECT_KIND.LAKE]);
@@ -50,6 +51,7 @@ export function inspectDeleteImpact(map, kind, ids) {
     cascadeCount: cascadeIds.length,
     dependencies: details.dependencies || {},
     requiresConfirm,
+    impactLevel: requiresConfirm ? "high" : "low",
     valid: normalized.length > 0
   };
   preview.summary = formatDeleteImpactSummary(preview);
@@ -79,6 +81,20 @@ export function requestDeleteConfirmation(preview, confirmFn) {
   if (!preview?.valid) return false;
   if (!preview.requiresConfirm) return true;
   return typeof confirmFn === "function" && confirmFn(preview.confirmationMessage) === true;
+}
+
+export function createDeleteConfirmationRequiredError(preview) {
+  const error = new Error(preview?.confirmationMessage || "该删除操作需要显式确认");
+  error.name = "ConfirmationRequiredError";
+  error.code = "confirmation_required";
+  error.suggestion = "先使用 {inspectOnly: true} 读取影响摘要，再传入 {confirm: true} 执行。";
+  error.preview = clonePlain(preview);
+  error.details = {
+    operation: "delete",
+    requiresConfirm: true,
+    preview: clonePlain(preview)
+  };
+  return error;
 }
 
 export function createDeleteBatchCommand({kind, ids, createCommand, label = `批量删除${OBJECT_KIND_LABEL[kind] || kind}`} = {}) {
@@ -112,6 +128,8 @@ export function createDeleteBatchCommand({kind, ids, createCommand, label = `批
       affected: entries.map(entry => ({kind, id: entry.id}))
     },
     apply(context) {
+      const beforeMap = structuredClone(context.map);
+      const optionsReference = context.map?.options;
       appliedEntries = [];
       const skipped = [...initialSkipped];
       const subresults = [];
@@ -128,7 +146,8 @@ export function createDeleteBatchCommand({kind, ids, createCommand, label = `批
           subresults.push({id: entry.id, result: clonePlain(entry.command.getResult?.() ?? null)});
         }
       } catch (error) {
-        for (const entry of [...appliedEntries].reverse()) revertNestedEditCommand(entry.command, context);
+        restoreMapSnapshot(context.map, beforeMap);
+        preserveOptionsReference(context.map, optionsReference);
         appliedEntries = [];
         result = {
           ...emptyBatchResult(requested, skipped),
@@ -374,4 +393,12 @@ function emptyBatchResult(requested, skipped) {
 
 function clonePlain(value) {
   return value === undefined ? undefined : JSON.parse(JSON.stringify(value));
+}
+
+function preserveOptionsReference(map, optionsReference) {
+  if (!map || !optionsReference || typeof optionsReference !== "object" || map.options === optionsReference) return;
+  const replacement = map.options && typeof map.options === "object" ? map.options : {};
+  for (const key of Object.keys(optionsReference)) delete optionsReference[key];
+  Object.assign(optionsReference, replacement);
+  map.options = optionsReference;
 }

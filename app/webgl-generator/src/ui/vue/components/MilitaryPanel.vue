@@ -1029,6 +1029,7 @@ function applyBattleEvent(description) {
 
 function clearSelectedBattleEvents() {
   if (!selected.value || !selectedBattleEventTotal.value) return;
+  if (typeof window.confirm === "function" && !window.confirm("确定清空当前军团的全部战斗事件？确认后可通过一次撤销恢复。")) return;
   props.callbacks.onBattleEventsClear?.(militaryTarget(selected.value));
 }
 
@@ -1036,6 +1037,7 @@ function clearFilteredBattleEvents() {
   if (!selected.value || !selectedFilteredBattleEvents.value.length) return;
   const eventIds = selectedFilteredBattleEvents.value.map(event => event.id).filter(Boolean);
   if (!eventIds.length) return;
+  if (typeof window.confirm === "function" && !window.confirm(`确定清空筛选出的 ${eventIds.length} 条战斗事件？确认后可通过一次撤销恢复。`)) return;
   props.callbacks.onBattleEventsClear?.(militaryTarget(selected.value), eventIds);
 }
 
