@@ -1,5 +1,15 @@
 # 开发历史
 
+## 2026-07-24：完成权威任务第 198 项试验——平移与缩放保持道路、河流可见
+
+- 调查确认道路、河流使用按相机烘焙的屏幕空间三角网格；此前每次平移或缩放都会标记 dirty，并在预览帧直接跳过两层，`120ms` 空闲后才分片异步重建。纯平移没有必要重建几何，缩放也可以先用旧相机到新相机的仿射差值预览。
+- 新增 `viewport-buffer-transform.js`，由每类 buffer 的生成相机和当前相机计算统一 `scale / offset`。道路、河流成功同步或异步上传后分别更新基准相机；预览帧即使 dirty 也绘制旧网格并应用差值，现有空闲提交、版本令牌取消和正式重建路径保持。新进入视口但超出旧 `96` 世界单位裁剪余量的线路仍等待空闲重建补齐。
+- 复核补齐切图边界：同步、异步 `loadMap` 上传空 buffer 前后都会把道路和河流顶点计数同时清零，避免本次“dirty 仍绘制”策略让旧河流计数作用于新图的空 buffer。
+- 新增数学 / 静态回归与聚焦浏览器回归，并修正 overlay profile 对“dirty 等于隐藏”的过期统计。确定性用例覆盖单位、纯平移、缩放和五个 NDC 点的直接投影等价；浏览器用真实滚轮和中键拖动采集 dirty 帧。
+- 聚焦回归结果：默认图道路 `34,848` 顶点、河流 `25,266` 顶点；连续缩放 `10 / 10` 个 dirty 样本两层均可见，draw p95 `0.4ms`；中键平移 `12 / 12` 个 dirty 样本两层均可见，draw p95 `0.2ms`。停止后两类 dirty 均清零，buffer 相机与当前相机完全一致，WebGL error、console error 和 page error 均为 `0`。
+- `regress:viewport-line-preview`、`regress:viewport-line-preview-browser`、`regress:line-width-projection`、生产构建和 `git diff --check` 通过。旧 `profile:overlay` 在进入交互前停在“重新生成测试地图”等待并于 `240s` 超时，未作为本项性能证据；聚焦回归直接使用已构建默认图，隔离了该既有生成等待问题。
+- 用户同一 Chrome 的 `127.0.0.1:5410` 真实存档完成滚轮缩放视觉检查，缩放后的道路与河流保持可见；验收后点击“适配视图”恢复视角。本项按用户“尝试一下”的要求保留为未提交工作区变动。
+
 ## 2026-07-24：为第 195 项登记实施前置小任务
 
 - 用户指出原阶段划分不完备：阶段 B 只列出 `api.edit.states.createAtCell`，却把同类的 `api.edit.provinces.createAtCell`、`api.edit.cities.createAtCell` 推迟到阶段 D，无法保证公共 API 按完整动作族演进。

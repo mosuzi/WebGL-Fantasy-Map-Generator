@@ -1,0 +1,73 @@
+import assert from "node:assert/strict";
+import fs from "node:fs";
+
+import {
+  snapshotViewportCamera,
+  viewportBufferTransform
+} from "../app/webgl-generator/src/renderer/viewport-buffer-transform.js";
+
+const identity = viewportBufferTransform(
+  {scale: 2, offsetX: 0.25, offsetY: -0.4},
+  {scale: 2, offsetX: 0.25, offsetY: -0.4}
+);
+assert.deepEqual(identity, {scale: 1, offsetX: 0, offsetY: 0});
+
+const pan = viewportBufferTransform(
+  {scale: 2, offsetX: 0.25, offsetY: -0.4},
+  {scale: 2, offsetX: 0.55, offsetY: -0.1}
+);
+assert.deepEqual(pan, {scale: 1, offsetX: 0.30000000000000004, offsetY: 0.30000000000000004});
+
+const zoom = viewportBufferTransform(
+  {scale: 2, offsetX: 0.25, offsetY: -0.4},
+  {scale: 5, offsetX: -0.1, offsetY: 0.35}
+);
+assert.deepEqual(zoom, {scale: 2.5, offsetX: -0.725, offsetY: 1.35});
+
+const sourceCamera = snapshotViewportCamera({scale: 1.75, offsetX: 0.2, offsetY: -0.3});
+const targetCamera = snapshotViewportCamera({scale: 3.5, offsetX: -0.15, offsetY: 0.1});
+const transform = viewportBufferTransform(sourceCamera, targetCamera);
+for (const point of [[-1, -1], [-0.25, 0.7], [0, 0], [0.8, -0.4], [1, 1]]) {
+  const sourceNdc = [
+    point[0] * sourceCamera.scale + sourceCamera.offsetX,
+    point[1] * sourceCamera.scale + sourceCamera.offsetY
+  ];
+  const transformed = [
+    sourceNdc[0] * transform.scale + transform.offsetX,
+    sourceNdc[1] * transform.scale + transform.offsetY
+  ];
+  const direct = [
+    point[0] * targetCamera.scale + targetCamera.offsetX,
+    point[1] * targetCamera.scale + targetCamera.offsetY
+  ];
+  assert.ok(Math.abs(transformed[0] - direct[0]) < 1e-12);
+  assert.ok(Math.abs(transformed[1] - direct[1]) < 1e-12);
+}
+
+const rendererSource = fs.readFileSync(
+  new URL("../app/webgl-generator/src/renderer/placeholder-renderer.js", import.meta.url),
+  "utf8"
+);
+assert.match(rendererSource, /viewportBufferTransform\(this\.routeBufferCamera, this\.camera\)/);
+assert.match(rendererSource, /viewportBufferTransform\(this\.riverBufferCamera, this\.camera\)/);
+assert.match(rendererSource, /if \(this\.layerVisibility\.routes\) \{[\s\S]*layerOrder\.push\("routes"\)/);
+assert.match(rendererSource, /if \(this\.layerVisibility\.rivers\) \{[\s\S]*layerOrder\.push\("rivers"\)/);
+assert.match(rendererSource, /this\.routeBufferCamera = snapshotViewportCamera\(camera\)/);
+assert.match(rendererSource, /this\.riverBufferCamera = snapshotViewportCamera\(camera\)/);
+assert.equal(
+  [...rendererSource.matchAll(/this\.routeVertexCount = 0;\s+this\.riverVertexCount = 0;/g)].length,
+  2,
+  "同步与异步切图都必须同时清空道路、河流顶点计数"
+);
+assert.match(rendererSource, /const shouldContinue = \(\) => this\.viewportCommitVersion === version/);
+assert.match(rendererSource, /drawViewportPreview\(\)[\s\S]*updateDynamicBuffers: false[\s\S]*drawDirtyDynamicBuffers: false/);
+
+console.log(JSON.stringify({
+  ok: true,
+  identity,
+  pan,
+  zoom,
+  pointCases: 5,
+  staleCancellation: true,
+  dirtyPreviewLayers: ["routes", "rivers"]
+}, null, 2));
