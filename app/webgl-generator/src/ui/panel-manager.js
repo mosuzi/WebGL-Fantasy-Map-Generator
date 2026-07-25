@@ -150,7 +150,7 @@ export class PanelManager {
     restoreFocusState(record.body, focusState);
   }
 
-  open(id, {returnFocus = this.documentRef.activeElement} = {}) {
+  open(id, {returnFocus = this.documentRef.activeElement, focus = true} = {}) {
     const record = this.panels.get(id);
     if (!record) return;
     const wasOpen = !record.panel.classList.contains("hidden");
@@ -160,7 +160,7 @@ export class PanelManager {
     record.panel.classList.remove("hidden");
     this.applyPreferredPosition(record);
     this.resolvePanelCoexistence(id);
-    this.overlayRegistry?.show(record.overlayId, {returnFocus});
+    this.overlayRegistry?.show(record.overlayId, {returnFocus, focus});
     restoreManagedPanelViewportOrigin(this.documentRef?.defaultView);
     this.startHeaderRefresh(record);
     this.savePanelState(id);
@@ -176,7 +176,7 @@ export class PanelManager {
     this.stopHeaderRefresh(record);
     this.savePanelState(id);
     if (wasOpen) record.onClose();
-    if (returnParentId) this.restoreReturnParent(returnParentId);
+    if (returnParentId) this.restoreReturnParent(returnParentId, {focus: !fromRegistry});
     if (!fromRegistry) this.overlayRegistry?.hide(record.overlayId, {restoreFocus});
     this.reflowPanels();
   }
@@ -203,10 +203,10 @@ export class PanelManager {
     return parent.panel.classList.contains("hidden") ? null : parentId;
   }
 
-  restoreReturnParent(parentId) {
+  restoreReturnParent(parentId, {focus = true} = {}) {
     const parent = this.panels.get(parentId);
     if (!parent || !parent.panel.classList.contains("hidden") || this.visiblePanelByRole("main")) return false;
-    this.open(parentId, {returnFocus: this.documentRef.getElementById?.("open-generation-panel") || null});
+    this.open(parentId, {returnFocus: this.documentRef.getElementById?.("open-generation-panel") || null, focus});
     return true;
   }
 

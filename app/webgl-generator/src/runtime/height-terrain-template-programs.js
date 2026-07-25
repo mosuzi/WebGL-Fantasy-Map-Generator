@@ -10,6 +10,7 @@ import {createRandom} from "../generator/random.js";
 export const HEIGHT_TERRAIN_TEMPLATE_DOCUMENT_TYPE = "webgl-generator-height-terrain-templates";
 export const HEIGHT_TERRAIN_TEMPLATE_DOCUMENT_VERSION = 1;
 export const HEIGHT_TERRAIN_TEMPLATE_STORAGE_KEY = "webgl-generator-height-terrain-templates-v1";
+export const HEIGHT_TERRAIN_TEMPLATE_RECYCLE_STORAGE_KEY = "webgl-generator-height-terrain-template-recycle-v1";
 
 const SOURCE_OPERATION_ALIASES = Object.freeze({
   Add: "source-add",
@@ -171,6 +172,40 @@ export function saveHeightTerrainTemplateDocument(storage, templates = [], key =
   const document = createHeightTerrainTemplateDocument(templates);
   storage.setItem(key, JSON.stringify(document));
   return document;
+}
+
+export function loadHeightTerrainTemplateRecycleRecord(storage, key = HEIGHT_TERRAIN_TEMPLATE_RECYCLE_STORAGE_KEY) {
+  if (!storage?.getItem) throw new Error("当前环境不支持模板回收存储。");
+  const raw = storage.getItem(key);
+  if (!raw) return null;
+  let record;
+  try {
+    record = JSON.parse(raw);
+  } catch {
+    throw new Error("地形模板回收记录不是有效 JSON。");
+  }
+  if (!record || record.version !== 1 || !record.template) throw new Error("地形模板回收记录无效。");
+  return {
+    version: 1,
+    deletedAt: String(record.deletedAt || ""),
+    template: normalizeHeightTerrainTemplateProgram(record.template, {user: true})
+  };
+}
+
+export function saveHeightTerrainTemplateRecycleRecord(storage, template, key = HEIGHT_TERRAIN_TEMPLATE_RECYCLE_STORAGE_KEY) {
+  if (!storage?.setItem) throw new Error("当前环境不支持模板回收存储。");
+  const record = {
+    version: 1,
+    deletedAt: new Date().toISOString(),
+    template: normalizeHeightTerrainTemplateProgram(template, {user: true})
+  };
+  storage.setItem(key, JSON.stringify(record));
+  return record;
+}
+
+export function clearHeightTerrainTemplateRecycleRecord(storage, key = HEIGHT_TERRAIN_TEMPLATE_RECYCLE_STORAGE_KEY) {
+  if (!storage?.removeItem) throw new Error("当前环境不支持清理模板回收记录。");
+  storage.removeItem(key);
 }
 
 function analyzeHeightTerrainTemplateProgram(map, programValue, options) {

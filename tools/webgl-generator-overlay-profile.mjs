@@ -464,6 +464,7 @@ async function startFrameRecorder(page) {
       return {
         drawMs: renderer.lastDraw?.drawMs || 0,
         glError: renderer.lastDraw?.glError ?? null,
+        layerOrder: [...(renderer.lastDraw?.layerOrder || [])],
         camera: renderer.camera ? {...renderer.camera} : null,
         layerVisibility: renderer.layerVisibility ? {...renderer.layerVisibility} : {},
         overlay: renderer.lastOverlayUpdate ? {...renderer.lastOverlayUpdate} : {},
@@ -617,6 +618,7 @@ async function readStats(page) {
     return {
       drawMs: stats.draw?.drawMs || 0,
       glError: stats.draw?.glError ?? null,
+      layerOrder: [...(stats.draw?.layerOrder || [])],
       camera: stats.camera || null,
       layerVisibility: stats.layerVisibility || {},
       overlay: stats.overlay?.update || {},
@@ -743,8 +745,8 @@ function changedBuildSamples(samples, {layer = null, dirty, value}) {
 
 function summarizeCounts(samples) {
   const last = samples.at(-1) || {};
-  const routesVisible = last.layerVisibility?.routes !== false && !last.dynamicMeshCache?.routesDirty;
-  const riversVisible = last.layerVisibility?.rivers !== false && !last.dynamicMeshCache?.riversDirty;
+  const routesVisible = last.layerVisibility?.routes !== false && last.layerOrder?.includes("routes");
+  const riversVisible = last.layerVisibility?.rivers !== false && last.layerOrder?.includes("rivers");
   return {
     overlayChildCount: last.overlayChildCount || 0,
     routeVertices: routesVisible ? last.routeVertexCount || 0 : 0,

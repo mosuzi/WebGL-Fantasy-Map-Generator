@@ -9,7 +9,7 @@ export const KEYBOARD_SHORTCUTS = Object.freeze([
   shortcut({id: "file.export-png", group: "file", label: "导出 PNG", scope: "global", when: "map-idle", selector: "#export-map-image", bindings: [binding("KeyE", {mod: true, shift: true})], action: {type: "api", path: "data.exportPNG", args: [{download: true}], feedback: "PNG 导出成功"}}),
   shortcut({id: "history.undo", group: "history", label: "撤销", scope: "global", when: "undo", selector: ".floating-panel-history-undo", bindings: [binding("KeyZ", {mod: true})], action: {type: "api", path: "history.undo"}}),
   shortcut({id: "history.redo", group: "history", label: "重做", scope: "global", when: "redo", selector: ".floating-panel-history-redo", bindings: [binding("KeyZ", {mod: true, shift: true}), binding("KeyY", {mod: true})], action: {type: "api", path: "history.redo"}}),
-  shortcut({id: "selection.cancel", group: "editing", label: "取消编辑并清除选择", scope: "global", when: "selection-or-editing", bindings: [binding("Escape")], action: {type: "api-sequence", paths: ["selection.stopEditing", "selection.clear"]}}),
+  shortcut({id: "selection.cancel", group: "editing", label: "逐级退出当前操作", scope: "global", when: "selection-or-editing", bindings: [binding("Escape")], action: {type: "escape-level"}}),
   shortcut({id: "selection.fit-view", group: "selection", label: "适配地图视图", scope: "global", when: "map-idle", selector: "#fit-view", bindings: [binding("Home", {shift: true})], action: {type: "api", path: "layers.fitView"}}),
   shortcut({id: "view.height", group: "view", label: "高度视图", scope: "global", when: "map-idle", selector: ".view-mode-segmented .el-segmented__item:nth-child(1)", bindings: [binding("Digit1", {shift: true})], action: {type: "api", path: "layers.setViewMode", args: ["height"]}}),
   shortcut({id: "view.biomes", group: "view", label: "生物群系视图", scope: "global", when: "map-idle", selector: ".view-mode-segmented .el-segmented__item:nth-child(4)", bindings: [binding("Digit2", {shift: true})], action: {type: "api", path: "layers.setViewMode", args: ["biomes"]}}),
@@ -96,6 +96,41 @@ export function isEditableShortcutTarget(target) {
   return typeof target.closest === "function" && Boolean(target.closest("[contenteditable]:not([contenteditable=\"false\"]), [data-shortcut-input=\"true\"]"));
 }
 
+const FRAMEWORK_POPUP_SELECTOR = [
+  ".el-select__popper",
+  ".el-dropdown__popper",
+  ".el-picker__popper",
+  ".el-cascader__dropdown",
+  ".el-autocomplete-suggestion"
+].join(", ");
+
+export function hasOpenFrameworkPopup(documentRef) {
+  if (typeof documentRef?.querySelectorAll !== "function") return false;
+  return [...documentRef.querySelectorAll(FRAMEWORK_POPUP_SELECTOR)].some(element => {
+    if (element.hidden || element.getAttribute?.("aria-hidden") === "true" || element.style?.display === "none") return false;
+    const style = documentRef.defaultView?.getComputedStyle?.(element);
+    if (style?.display === "none" || style?.visibility === "hidden") return false;
+    if (typeof element.getClientRects === "function") return element.getClientRects().length > 0;
+    return element.isConnected !== false;
+  });
+}
+
+export function closeOpenFrameworkPopup(documentRef) {
+  if (typeof documentRef?.querySelectorAll !== "function") return false;
+  const popups = [...documentRef.querySelectorAll(FRAMEWORK_POPUP_SELECTOR)].filter(element => {
+    if (element.hidden || element.getAttribute?.("aria-hidden") === "true" || element.style?.display === "none") return false;
+    const style = documentRef.defaultView?.getComputedStyle?.(element);
+    return style?.display !== "none" && style?.visibility !== "hidden" && (typeof element.getClientRects !== "function" || element.getClientRects().length > 0);
+  });
+  const popup = popups.sort((left, right) => Number.parseInt(documentRef.defaultView?.getComputedStyle?.(right)?.zIndex, 10) - Number.parseInt(documentRef.defaultView?.getComputedStyle?.(left)?.zIndex, 10))[0];
+  if (!popup) return false;
+  const controlledIds = new Set([popup.id, ...[...popup.querySelectorAll("[id]")].map(element => element.id)].filter(Boolean));
+  const trigger = [...documentRef.querySelectorAll('[aria-controls][aria-expanded="true"]')].find(element => controlledIds.has(element.getAttribute("aria-controls")));
+  if (typeof trigger?.click !== "function") return false;
+  trigger.click();
+  return true;
+}
+
 export function installKeyboardShortcuts(documentRef, options = {}) {
   const registry = options.registry || KEYBOARD_SHORTCUTS;
   const platform = options.platform || shortcutPlatform(documentRef.defaultView?.navigator);
@@ -162,9 +197,19 @@ export function installKeyboardShortcuts(documentRef, options = {}) {
   };
 
   const onKeydown = event => {
-    if (event.repeat || event.isComposing || event.keyCode === 229 || isEditableShortcutTarget(event.target) || hasExclusiveKeyboardModal(documentRef)) return;
+    if (event.defaultPrevented || event.repeat || event.isComposing || event.keyCode === 229) return;
+    if (hasOpenFrameworkPopup(documentRef)) {
+      if (event.key === "Escape" && closeOpenFrameworkPopup(documentRef)) {
+        event.preventDefault();
+        if (typeof event.stopImmediatePropagation === "function") event.stopImmediatePropagation();
+        else event.stopPropagation();
+        hideHint();
+      }
+      return;
+    }
+    if (hasExclusiveKeyboardModal(documentRef)) return;
     const item = resolveShortcut(event, registry, {platform, scopes: options.getActiveScopes?.(event) || ["global"]});
-    if (!item) return;
+    if (!item || (item.id !== "selection.cancel" && isEditableShortcutTarget(event.target))) return;
     event.preventDefault();
     event.stopPropagation();
     hideHint();
@@ -267,7 +312,7 @@ function isDisabledShortcutElement(element) {
 
 function hasExclusiveKeyboardModal(documentRef) {
   const view = documentRef.defaultView || window;
-  const candidates = documentRef.querySelectorAll('[aria-modal="true"], [data-keyboard-exclusive="true"]');
+  const candidates = documentRef.querySelectorAll('[aria-modal="true"], [data-keyboard-exclusive="true"][data-overlay-open="true"]');
   return [...candidates].some(element => {
     if (element.hidden || element.getAttribute?.("aria-hidden") === "true") return false;
     const style = typeof view.getComputedStyle === "function" ? view.getComputedStyle(element) : null;

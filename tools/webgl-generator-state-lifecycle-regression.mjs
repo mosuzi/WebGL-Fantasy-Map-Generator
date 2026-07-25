@@ -44,6 +44,67 @@ assert.deepEqual(snapshotStateCollections(map), beforeAllowed, "撤销必须完�
 history.redo({map});
 assert.ok(map.politics.states[created.stateId], "重做必须恢复新建国家");
 
+const inconsistentLegacyMap = generatePlaceholderMap({seed: "state-lifecycle-inconsistent-land", cellsTarget: 3000, heightmapTemplate: "continents"});
+const inconsistentGridCell = findAllowedGridCell(inconsistentLegacyMap);
+const inconsistentFeature = inconsistentLegacyMap.features.features[inconsistentLegacyMap.grid.cells.f[inconsistentGridCell]];
+assert.equal(inconsistentFeature?.land, true, "旧图兼容样本必须由 feature 明确标记为陆地");
+inconsistentLegacyMap.grid.cells.h[inconsistentGridCell] = 19;
+for (const packCell of packCellsForGrid(inconsistentLegacyMap, inconsistentGridCell)) inconsistentLegacyMap.pack.cells.h[packCell] = 19;
+const inconsistentInspection = inspectStateCreation(inconsistentLegacyMap, inconsistentGridCell);
+assert.equal(inconsistentInspection.valid, true, "可视 feature 为陆地时不能因旧高度值低于海平面而拒绝创建国家");
+const inconsistentHistory = new EditHistory();
+const inconsistentCommand = createAddStateAtCellCommand(inconsistentGridCell);
+inconsistentHistory.execute(inconsistentCommand, {map: inconsistentLegacyMap});
+const inconsistentCreated = inconsistentCommand.getResult();
+assert.ok(inconsistentLegacyMap.politics.states[inconsistentCreated.stateId], "高度与 feature 不一致的旧图必须仍可创建国家");
+inconsistentHistory.undo({map: inconsistentLegacyMap});
+assert.equal(inconsistentLegacyMap.politics.states[inconsistentCreated.stateId], undefined, "旧图兼容创建仍必须完整支持撤销");
+
+const sparseLegacyMap = generatePlaceholderMap({seed: "state-lifecycle-sparse-legacy", cellsTarget: 3000, heightmapTemplate: "continents"});
+const sparseAllowedGridCell = findAllowedGridCell(sparseLegacyMap);
+const sparseStateTombstone = {i: 4009, id: 4009, name: "旧国家墓碑", removed: true};
+const sparseProvinceTombstone = {i: 70000, id: 70000, name: "旧省份墓碑", removed: true};
+sparseLegacyMap.politics.states[4009] = sparseStateTombstone;
+sparseLegacyMap.pack.states[4009] = sparseLegacyMap.pack.states === sparseLegacyMap.politics.states ? sparseStateTombstone : {...sparseStateTombstone};
+sparseLegacyMap.politics.provinces[70000] = sparseProvinceTombstone;
+sparseLegacyMap.pack.provinces[70000] = sparseLegacyMap.pack.provinces === sparseLegacyMap.politics.provinces ? sparseProvinceTombstone : {...sparseProvinceTombstone};
+sparseLegacyMap.grid.cells.state = Uint8Array.from(sparseLegacyMap.grid.cells.state);
+sparseLegacyMap.pack.cells.state = Uint8Array.from(sparseLegacyMap.pack.cells.state);
+sparseLegacyMap.grid.cells.province = Uint16Array.from(sparseLegacyMap.grid.cells.province);
+sparseLegacyMap.pack.cells.province = Uint16Array.from(sparseLegacyMap.pack.cells.province);
+sparseLegacyMap.__stateEditorPackCellsByGrid = {};
+const sparseHistory = new EditHistory();
+const sparseCommand = createAddStateAtCellCommand(sparseAllowedGridCell);
+sparseHistory.execute(sparseCommand, {map: sparseLegacyMap});
+const sparseCreated = sparseCommand.getResult();
+assert.ok(sparseLegacyMap.__stateEditorPackCellsByGrid instanceof Map, "旧存档中的普通对象缓存必须自动重建为 Map");
+assert.equal(Object.prototype.propertyIsEnumerable.call(sparseLegacyMap, "__stateEditorPackCellsByGrid"), false, "重建的运行时缓存不能再次进入存档");
+assert.equal(sparseCreated.stateId, 4010, "稀疏旧图必须沿用现有最大国家 ID");
+assert.equal(sparseCreated.provinceId, 70001, "稀疏旧图必须沿用现有最大省份 ID");
+assert.ok(sparseLegacyMap.grid.cells.state instanceof Uint16Array, "国家 ID 超过 Uint8 后必须扩容 grid 归属数组");
+assert.ok(sparseLegacyMap.pack.cells.state instanceof Uint16Array, "国家 ID 超过 Uint8 后必须扩容 pack 归属数组");
+assert.ok(sparseLegacyMap.grid.cells.province instanceof Uint32Array, "省份 ID 超过 Uint16 后必须扩容 grid 归属数组");
+assert.ok(sparseLegacyMap.pack.cells.province instanceof Uint32Array, "省份 ID 超过 Uint16 后必须扩容 pack 归属数组");
+assert.equal(sparseLegacyMap.grid.cells.state[sparseAllowedGridCell], sparseCreated.stateId, "扩容后 grid 国家归属不能截断高 ID");
+assert.ok(packCellsForGrid(sparseLegacyMap, sparseAllowedGridCell).every(packCell => sparseLegacyMap.pack.cells.state[packCell] === sparseCreated.stateId), "扩容后 pack 国家归属不能截断高 ID");
+sparseHistory.undo({map: sparseLegacyMap});
+assert.ok(sparseLegacyMap.grid.cells.state instanceof Uint8Array, "稀疏旧图撤销必须恢复原 grid 国家数组类型");
+assert.ok(sparseLegacyMap.pack.cells.state instanceof Uint8Array, "稀疏旧图撤销必须恢复原 pack 国家数组类型");
+assert.ok(sparseLegacyMap.grid.cells.province instanceof Uint16Array, "稀疏旧图撤销必须恢复原 grid 省份数组类型");
+assert.ok(sparseLegacyMap.pack.cells.province instanceof Uint16Array, "稀疏旧图撤销必须恢复原 pack 省份数组类型");
+sparseHistory.redo({map: sparseLegacyMap});
+assert.equal(sparseLegacyMap.grid.cells.state[sparseAllowedGridCell], sparseCreated.stateId, "稀疏旧图重做必须再次写入完整国家 ID");
+
+const faultMap = generatePlaceholderMap({seed: "state-lifecycle-fault-rollback", cellsTarget: 3000, heightmapTemplate: "continents"});
+const faultGridCell = findAllowedGridCell(faultMap);
+const frozenStates = Object.freeze([...faultMap.politics.states]);
+faultMap.politics.states = frozenStates;
+faultMap.pack.states = frozenStates;
+const beforeFault = snapshotStateCollections(faultMap);
+const faultCommand = createAddStateAtCellCommand(faultGridCell);
+assert.throws(() => faultCommand.apply({map: faultMap}), TypeError, "国家档案写入失败必须向上报告");
+assert.deepEqual(snapshotStateCollections(faultMap), beforeFault, "国家创建任一阶段失败都必须恢复国家、省份、城市和 cell 快照");
+
 const brushHistory = new EditHistory();
 const expansionGridCell = findExpansionGridCell(map, created.stateId);
 const expansionBefore = Number(map.grid.cells.state[expansionGridCell] || 0);
@@ -107,6 +168,18 @@ console.log(JSON.stringify({
   protected: protectedSample,
   allowed: {gridCell: allowedGridCell, provinceId: allowedInspection.provinceId},
   created,
+  inconsistentLegacy: {
+    gridCell: inconsistentGridCell,
+    created: inconsistentCreated,
+    history: inconsistentHistory.getStats()
+  },
+  sparseLegacy: {
+    created: sparseCreated,
+    stateType: sparseLegacyMap.grid.cells.state.constructor.name,
+    provinceType: sparseLegacyMap.grid.cells.province.constructor.name,
+    history: sparseHistory.getStats()
+  },
+  faultRollback: true,
   expansion: {gridCell: expansionGridCell, packCells: expansionPackCells, before: expansionBefore, after: created.stateId},
   deleted: {stateId: created.stateId, provinceIds: deletedProvinceIds},
   history: history.getStats(),

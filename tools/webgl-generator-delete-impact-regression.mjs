@@ -40,6 +40,17 @@ assert(statePreview.requiresConfirm && statePreview.summary.includes("省份 1")
 
 const routeMap = createRouteFixture();
 const routeBefore = snapshotRouteMap(routeMap);
+const lowImpactRouteMap = createRouteFixture({withNotes: false});
+const lowImpactRoutePreview = inspectDeleteImpact(lowImpactRouteMap, OBJECT_KIND.ROUTE, [1]);
+assert.equal(lowImpactRoutePreview.dependencies.routeSegments, 1, "路线预检应继续报告自身线段");
+assert.equal(lowImpactRoutePreview.dependencies.routeCells, 2, "路线预检应继续报告自身 cells");
+assert.equal(lowImpactRoutePreview.requiresConfirm, false, "无外部依赖的单路线删除不得升级为确认");
+assert.equal(lowImpactRoutePreview.impactLevel, "low", "无外部依赖的单路线删除必须保持 low");
+const notedRoutePreview = inspectDeleteImpact(routeMap, OBJECT_KIND.ROUTE, [1]);
+assert.equal(notedRoutePreview.dependencies.notes, 1, "带备注路线必须报告外部依赖");
+assert.equal(notedRoutePreview.requiresConfirm, true, "带备注路线删除必须要求确认");
+const batchRoutePreview = inspectDeleteImpact(lowImpactRouteMap, OBJECT_KIND.ROUTE, [1, 2]);
+assert.equal(batchRoutePreview.requiresConfirm, true, "批量路线删除必须要求确认");
 const history = new EditHistory();
 const batch = createDeleteBatchCommand({
   kind: OBJECT_KIND.ROUTE,
@@ -68,15 +79,18 @@ assert.deepEqual(snapshotRouteMap(routeMap), routeBefore, "一次撤销必须恢
 history.redo({map: routeMap});
 assert.deepEqual(routeMap.settlements.routes, [], "重做必须复现批量删除");
 
-const failureMap = {items: [1, 2]};
+const failureOptions = {seed: "delete-impact-failure"};
+const failureMap = {items: [1, 2], options: failureOptions, nested: {value: "before"}};
 const failureHistory = new EditHistory();
 const failingBatch = createDeleteBatchCommand({
   kind: "fixture",
   ids: [1, 2],
-  createCommand: id => fixtureDeleteCommand(id, {fail: id === 2})
+  createCommand: id => fixtureDeleteCommand(id, {failAfterWrite: id === 2})
 });
 assert.throws(() => failureHistory.execute(failingBatch, {map: failureMap}), /fixture failure 2/);
 assert.deepEqual(failureMap.items, [1, 2], "批次中途失败必须回滚此前已删对象");
+assert.equal(failureMap.options, failureOptions, "批次中途失败必须保留 map.options 引用");
+assert.deepEqual(failureMap.nested, {value: "before"}, "失败子命令先部分写入再抛错时必须恢复整图");
 assert.equal(failureHistory.getStats().undo, 0, "失败批次不得进入历史");
 assert.deepEqual(failingBatch.getResult().failed, [{id: 2, code: "delete-failed", reason: "fixture failure 2"}], "失败批次必须返回结构化失败摘要");
 
@@ -101,6 +115,13 @@ console.log(JSON.stringify({
   cancellationPreservedMap: JSON.stringify(riverMap) === riverBefore,
   cancellationPreservedHistory: cancelledHistory.getStats().undo === 0,
   stateDependencies: statePreview.dependencies,
+  lowImpactRoute: {
+    impactLevel: lowImpactRoutePreview.impactLevel,
+    routeSegments: lowImpactRoutePreview.dependencies.routeSegments,
+    routeCells: lowImpactRoutePreview.dependencies.routeCells
+  },
+  notedRouteRequiresConfirm: notedRoutePreview.requiresConfirm,
+  batchRouteRequiresConfirm: batchRoutePreview.requiresConfirm,
   batchResult: batch.getResult(),
   singleTransaction: history.getStats().undo
 }, null, 2));
@@ -121,7 +142,7 @@ function createRiverPreviewFixture() {
   return map;
 }
 
-function createRouteFixture() {
+function createRouteFixture({withNotes = true} = {}) {
   const map = {
     settlements: {
       routes: [
@@ -140,8 +161,10 @@ function createRouteFixture() {
     },
     notes: {notes: [], metadata: {count: 0, pinned: 0}}
   };
-  restoreObjectNote(map, note("route", 1));
-  restoreObjectNote(map, note("route", 2));
+  if (withNotes) {
+    restoreObjectNote(map, note("route", 1));
+    restoreObjectNote(map, note("route", 2));
+  }
   return map;
 }
 
@@ -185,16 +208,18 @@ function snapshotRouteMap(map) {
   return snapshot;
 }
 
-function fixtureDeleteCommand(id, {fail = false} = {}) {
+function fixtureDeleteCommand(id, {failAfterWrite = false} = {}) {
   let index = -1;
   return {
     label: `fixture ${id}`,
     domain: "fixture",
     effects: {render: "none", selection: "refresh", affected: [{kind: "fixture", id}]},
     apply(context) {
-      if (fail) throw new Error(`fixture failure ${id}`);
       index = context.map.items.indexOf(id);
       context.map.items.splice(index, 1);
+      context.map.nested.value = `written-${id}`;
+      context.map.options = {seed: `written-${id}`};
+      if (failAfterWrite) throw new Error(`fixture failure ${id}`);
     },
     revert(context) {
       context.map.items.splice(index, 0, id);

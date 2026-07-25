@@ -8,7 +8,7 @@
     kind="stale"
     title="地图内容待更新"
     :message="debugEnabled ? '按依赖分步重建。' : '完成后统一更新。'"
-    :action-label="debugEnabled ? '重建世界内容' : '完成编辑并更新地图'"
+    :action-label="debugEnabled ? '重建世界内容' : ''"
     :secondary-action-label="debugEnabled ? '重建地貌与聚落' : ''"
     @action="regenerateFromBanner"
     @secondary-action="callbacks.onRegenerateBase?.()"
@@ -22,6 +22,17 @@
     action-label="退出预览"
     @action="callbacks.onPreviewCancel?.()"
   />
+
+  <UiButton
+    v-if="!debugEnabled"
+    class="height-player-rebuild-action"
+    variant="secondary"
+    :disabled="!state.derivedStaleSystems?.length"
+    :title="state.derivedStaleSystems?.length ? '按当前高度重新生成关联地图内容' : '当前地图内容已与高度同步'"
+    @click="regenerateFromBanner"
+  >
+    完成编辑并更新地图
+  </UiButton>
 
   <UiButton :variant="state.active ? 'primary' : 'secondary'" @click="setActive(!state.active)">
     {{ state.active ? "停止高度编辑" : "启用高度编辑" }}
@@ -71,7 +82,8 @@
     </ElButton>
     <span class="height-player-tool-state" aria-live="polite">{{ currentPlayerToolLabel }}</span>
   </div>
-  <p v-if="debugEnabled && state.action === 'flatten'" class="height-action-help">以每次落笔起点高度为目标，拖动时逐步整平范围内地形。</p>
+  <p v-if="!debugEnabled && state.action === 'level'" class="height-action-help">按下时读取首个落点高度，并在这一笔拖动结束前应用到全部划过区域。</p>
+  <p v-else-if="debugEnabled && state.action === 'flatten'" class="height-action-help">以每次落笔起点高度为目标，拖动时逐步整平范围内地形。</p>
   <p v-else-if="debugEnabled && state.action === 'disrupt'" class="height-action-help">按强度生成稳定的局部起伏，同一笔划连续拖动时会继续塑造崎岖地形。</p>
   <p v-else-if="debugEnabled && state.action === 'fill'" class="height-action-help">单击等高陆地区域或封闭水域，按边缘距离生成中心更高的锥形地貌。</p>
   <p v-else-if="debugEnabled && state.action === 'line'" class="height-action-help">依次单击起点和终点，以正增量生成山脊、负增量生成沟槽。</p>
@@ -94,8 +106,11 @@
     </button>
   </div>
 
-  <UiSliderField v-if="!debugEnabled || (state.action !== 'fill' && state.action !== 'line')" label="画笔大小" :model-value="state.radius" :min="visibleHeightRadiusMin" :max="heightRadius.max" :step="heightRadius.step" unit-label="地图单位" @input="setRadius" />
-  <UiSliderField v-if="!debugEnabled || state.action !== 'line'" label="强度" :model-value="state.strength" :min="1" :max="18" :step="1" @input="setStrength" />
+  <UiSwitchField v-if="!debugEnabled" label="影响海底" field-class="height-check-row" compact-hit-area :checked="state.affectSeafloor" @change="setAffectSeafloor" />
+  <p v-if="!debugEnabled && state.affectSeafloor" class="height-action-help">画笔会同时作用于陆地和海底，并允许高度跨越海平面改变海陆分界。</p>
+
+  <UiSliderField v-if="!debugEnabled || (state.action !== 'fill' && state.action !== 'line')" label="画笔大小" :model-value="state.radius" :min="heightRadius.min" :max="heightRadius.max" :step="heightRadius.step" unit-label="地图单位" @input="setRadius" />
+  <UiSliderField v-if="!debugEnabled || state.action !== 'line'" :label="brushValueLabel" :model-value="brushValue" :min="brushValueMin" :max="18" :step="1" @input="setBrushValue" />
   <UiSliderField v-if="debugEnabled && state.action === 'fill'" label="高度容差" :model-value="state.fillTolerance" :min="0" :max="12" :step="1" @input="setFillTolerance" />
   <UiSliderField v-if="debugEnabled && state.action === 'line'" label="线宽" :model-value="state.lineWidth" :min="2" :max="48" :step="1" @input="setLineWidth" />
   <UiSliderField v-if="debugEnabled && state.action === 'line'" label="线段增量" :model-value="state.linePower" :min="-30" :max="30" :step="1" @input="setLinePower" />
@@ -376,6 +391,7 @@
       </div>
       <div class="height-template-library-actions">
         <UiButton variant="secondary" :disabled="!state.terrainProgramCanDelete" @click="callbacks.onTerrainProgramDelete?.()">删除所选用户模板</UiButton>
+        <UiButton variant="secondary" :disabled="!state.terrainProgramCanRestore" @click="callbacks.onTerrainProgramRestore?.()">恢复上次删除</UiButton>
         <UiPanelIoActions
           label="用户地形模板导入导出"
           :export-actions="terrainProgramExportActions"
@@ -774,7 +790,7 @@
 
 <script setup>
 import {computed, nextTick, onBeforeUnmount, ref, watch} from "vue";
-import {Bottom, Brush, Delete, MagicStick, Select, Top, View} from "@element-plus/icons-vue";
+import {Bottom, Brush, Delete, MagicStick, Minus, Select, Top, View} from "@element-plus/icons-vue";
 import UiButton from "./base/UiButton.vue";
 import UiMetricGrid from "./base/UiMetricGrid.vue";
 import UiPanelIoActions from "./base/UiPanelIoActions.vue";
@@ -790,7 +806,6 @@ import {BRUSH_RADIUS_ID, normalizeBrushRadius, readBrushRadiusContract} from "..
 
 const heightRadius = readBrushRadiusContract(BRUSH_RADIUS_ID.HEIGHT);
 const heightSelectionRadius = readBrushRadiusContract(BRUSH_RADIUS_ID.HEIGHT_SELECTION);
-const PLAYER_FALLOFF_MIN_RADIUS = 24;
 
 defineOptions({
   name: "HeightPanel"
@@ -817,8 +832,9 @@ const actions = Object.freeze([
   {value: "line", label: "线段"}
 ]);
 const playerActions = Object.freeze([
-  {value: "raise", label: "抬升陆地", icon: Top},
-  {value: "lower", label: "降低陆地", icon: Bottom}
+  {value: "raise", label: "抬升地形", icon: Top},
+  {value: "lower", label: "降低地形", icon: Bottom},
+  {value: "level", label: "等高地形", icon: Minus}
 ]);
 const scopes = Object.freeze([
   {value: "all", label: "全部"},
@@ -916,14 +932,20 @@ const heightPreviewStops = Object.freeze([
 ]);
 const unitPreferences = useUnitPreferences();
 const debugEnabled = useDebugMode();
-props.state.preserveSurface = !debugEnabled.value;
+if (debugEnabled.value) props.state.preserveSurface = false;
+else normalizePlayerHeightState();
 const visibleActions = computed(() => debugEnabled.value ? actions : playerActions);
-const visibleHeightRadiusMin = computed(() => !debugEnabled.value && props.state.falloff ? PLAYER_FALLOFF_MIN_RADIUS : heightRadius.min);
 const isPlayerSmoothingSelection = computed(() => !debugEnabled.value && Boolean(props.state.terrainSelectionPaintState));
+const isPlayerLevelAction = computed(() => !debugEnabled.value && props.state.action === "level");
+const brushValueLabel = computed(() => isPlayerLevelAction.value ? "扰动" : "强度");
+const brushValue = computed(() => isPlayerLevelAction.value ? props.state.levelPerturbation : props.state.strength);
+const brushValueMin = computed(() => isPlayerLevelAction.value ? 0 : 1);
 const currentPlayerToolLabel = computed(() => {
   if (props.state.terrainSelectionPaintState === "painting") return "正在涂选平滑范围";
   if (props.state.terrainSelectionPaintState === "pending") return "平滑范围：等待落笔";
-  return props.state.action === "lower" ? "当前：降低陆地" : "当前：抬升陆地";
+  const target = props.state.affectSeafloor ? "地形与海底" : "陆地";
+  if (props.state.action === "level") return `当前：等高${target}`;
+  return props.state.action === "lower" ? `当前：降低${target}` : `当前：抬升${target}`;
 });
 const playerSmoothingSelectionLabel = computed(() => {
   if (props.state.terrainSelectionPaintState === "painting") return "正在地图上涂选";
@@ -1197,9 +1219,8 @@ function setActive(active) {
 function selectHeightAction(action) {
   if (!debugEnabled.value) {
     props.callbacks.onTerrainSelectionCancel?.();
-    props.state.scope = "land";
-    props.state.preserveSurface = true;
-    setAction(action === "lower" ? "lower" : "raise");
+    syncPlayerTerrainScope();
+    setAction(action === "lower" || action === "level" ? action : "raise");
     return;
   }
   props.state.preserveSurface = false;
@@ -1217,8 +1238,13 @@ function setScope(scope) {
 }
 
 function setRadius(radius) {
-  props.state.radius = Math.max(visibleHeightRadiusMin.value, normalizeBrushRadius(BRUSH_RADIUS_ID.HEIGHT, radius));
+  props.state.radius = normalizeBrushRadius(BRUSH_RADIUS_ID.HEIGHT, radius);
   props.callbacks.onBrushRadiusChange?.();
+}
+
+function setAffectSeafloor(affectSeafloor) {
+  props.state.affectSeafloor = Boolean(affectSeafloor);
+  syncPlayerTerrainScope();
 }
 
 function setTerrainSelectionSource(source) {
@@ -1317,6 +1343,14 @@ function setStrength(strength) {
   props.state.strength = strength;
 }
 
+function setBrushValue(value) {
+  if (isPlayerLevelAction.value) {
+    props.state.levelPerturbation = Math.max(0, Math.min(18, Math.round(Number(value) || 0)));
+    return;
+  }
+  setStrength(value);
+}
+
 function setSelectionSmoothness(value) {
   props.state.selectionSmoothness = Math.round(Math.max(0, Math.min(1, Number(value) || 0)) * 100) / 100;
 }
@@ -1345,10 +1379,16 @@ function togglePlayerSmoothingSelection() {
 }
 
 function normalizePlayerHeightState() {
-  props.state.scope = "land";
-  props.state.preserveSurface = true;
-  if (props.state.falloff) props.state.radius = Math.max(PLAYER_FALLOFF_MIN_RADIUS, props.state.radius);
-  if (props.state.action !== "raise" && props.state.action !== "lower") setAction("raise");
+  props.state.affectSeafloor = Boolean(props.state.affectSeafloor);
+  props.state.levelPerturbation = Math.max(0, Math.min(18, Math.round(Number(props.state.levelPerturbation) || 0)));
+  syncPlayerTerrainScope();
+  props.state.radius = normalizeBrushRadius(BRUSH_RADIUS_ID.HEIGHT, props.state.radius);
+  if (props.state.action !== "raise" && props.state.action !== "lower" && props.state.action !== "level") setAction("raise");
+}
+
+function syncPlayerTerrainScope() {
+  props.state.scope = props.state.affectSeafloor ? "all" : "land";
+  props.state.preserveSurface = !props.state.affectSeafloor;
 }
 
 function setFillTolerance(tolerance) {
@@ -1365,10 +1405,6 @@ function setLinePower(power) {
 
 function setFalloff(falloff) {
   props.state.falloff = Boolean(falloff);
-  if (props.state.falloff && !debugEnabled.value && props.state.radius < PLAYER_FALLOFF_MIN_RADIUS) {
-    props.state.radius = PLAYER_FALLOFF_MIN_RADIUS;
-    props.callbacks.onBrushRadiusChange?.();
-  }
 }
 
 function regenerateFromBanner() {

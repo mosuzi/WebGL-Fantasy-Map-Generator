@@ -20,7 +20,7 @@
 - 权威任务第 87 项登记于 `authoritative-task-87.md`：只修正悬停菜单被国家、省份名称标签遮挡的堆叠层级，不扩展为全局浮层重构。
 - 权威任务第 88～93 项来源登记于 `next-quasi-authoritative-tasks-2026-07-18.md`：原 `Q-12～Q-17` 已获用户整体批准并按顺序转正；当前状态与验收以权威任务清单为准。
 - 权威任务第 101～107 项来源登记于 `next-quasi-authoritative-interaction-audit-tasks-2026-07-19.md`：原 `Q-18～Q-24` 已获用户整体批准并按顺序转正，依次冻结交互分母与夹具、审计高频闭环、直接操控、复杂面板、危险恢复、键盘响应式，并在最后统一进行浏览器验证。
-- 第 101～107 项完成后形成的下一批交互整改候选登记于 `next-quasi-authoritative-interaction-remediation-tasks-2026-07-20.md`：包含 `Q-25～Q-33`，当前均未获批准，不属于权威任务清单。
+- 第 101～107 项完成后形成的下一批交互整改来源登记于 `next-quasi-authoritative-interaction-remediation-tasks-2026-07-20.md`：其中 `Q-25～Q-27` 已获批准并转为权威任务第 201～203 项，当前状态与验收以权威任务清单为准；`Q-28～Q-33` 仍未获批准，不属于权威任务清单。
 - 权威任务第 128、159 项对应 `boundary-smoothing-topology-research.md`：比较边界简化 / spline / coverage 算法，冻结共享弧线数据结构、填充与描边同源不变量、缓存失效、编辑提交时序、许可边界和海岸线 → 国界 → 省界的分阶段建议，并链接已完成的独立拓扑实验室；不改正式 renderer。
 
 以上只是专题入口映射，范围、顺序和验收仍以权威任务清单为准。
@@ -36,11 +36,13 @@
 ## 编辑器与用户外壳
 
 - `interaction-usability-audit-plan.md`：全功能交互与可用性专项审计方案；以真实用户任务链排查冗余、无效、流程、状态、样式、恢复、键盘和响应式问题，纯交互建议与需要功能变更的提案分开，未获批准前不形成权威任务。
-- `next-quasi-authoritative-interaction-remediation-tasks-2026-07-20.md`：统一交互审计形成的 `Q-25～Q-33` 整改候选、来源问题、功能变化边界和最小验收；只作候选池，不自动入队。
+- `next-quasi-authoritative-interaction-remediation-tasks-2026-07-20.md`：统一交互审计形成的 `Q-25～Q-33` 来源问题、功能变化边界和最小验收；`Q-25～Q-27` 已转为权威任务第 201～203 项，`Q-28～Q-33` 仍只作候选池，不自动入队。
 - `editor-and-stat-panel-inventory.md`：正式版编辑器与统计面板清单。
 - `user-facing-shell-debug-export-and-naming-plan.md`：用户外壳、开发模式、导入导出和命名策略计划。
 - `initialization-loading-flow.md`：页面初始化与地图加载流程规约，记录阶段边界、预算和 Chrome 验证要求。
 - `render-health-monitoring.md`：渲染健康监测说明，记录本地卡顿日志、阈值、查询方式和限制。
+- `cell-diagnostics-and-ai-api-design.md`：权威任务第 195 项设计稿，统一规划 Grid Cells 诊断图层、cell 查询 / 定位 / 扫描 API、国家创建只读预检、稳定业务 code、revision 与未来 AI 受控传输；当前只完成设计，不代表实现阶段已获批准。
+- `object-table-column-width-audit-2026-07-24.md`：权威任务第 197 项对象列表默认列宽审计，以 24 个宿主 / 27 张表为分母，记录语义宽度分档、首都列收敛和一次性偏好迁移边界。
 - `object-notes-implementation-plan.md`：对象备注实现计划。
 - `measurement-rulers-plan.md`：测量对象与路线贴合计划。
 - `edit-command-contract.md`：编辑命令轻量契约，记录 `label / effects / affected / isNoop / getResult` 等统一约定。

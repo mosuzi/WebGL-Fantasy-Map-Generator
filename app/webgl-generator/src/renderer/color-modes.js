@@ -1,5 +1,6 @@
 import {mix} from "./geometry.js";
 import {diplomacyRelationColor} from "../generator/diplomacy.js";
+import {DEFAULT_HEIGHT_RAMP} from "./themes.js";
 
 export function colorForCell(cellIndex, map, colorMode, viewOptions = {}) {
   if (colorMode !== "height" && colorMode !== "temperature" && !isLandCell(cellIndex, map)) {
@@ -38,14 +39,7 @@ function colorForOceanHeight(height, layers) {
 }
 
 function colorForLandHeight(height, ramp) {
-  const stops = Array.isArray(ramp) && ramp.length >= 2 ? ramp : [
-    [20, [0.5, 0.63, 0.46, 1]],
-    [36, [0.62, 0.68, 0.5, 1]],
-    [56, [0.7, 0.67, 0.54, 1]],
-    [76, [0.75, 0.71, 0.62, 1]],
-    [92, [0.81, 0.79, 0.72, 1]],
-    [100, [0.87, 0.86, 0.82, 1]]
-  ];
+  const stops = Array.isArray(ramp) && ramp.length >= 2 ? ramp : DEFAULT_HEIGHT_RAMP;
   for (let index = 1; index < stops.length; index += 1) {
     const [previousHeight, previousColor] = stops[index - 1];
     const [nextHeight, nextColor] = stops[index];

@@ -21,6 +21,7 @@ class FakeDocument extends EventTarget {
     this.body = {};
     this.documentElement = {clientWidth: 1280, clientHeight: 720};
     this.activeElement = null;
+    this.frameworkPopups = [];
     this.defaultView = new EventTarget();
     this.defaultView.innerWidth = 1280;
     this.defaultView.innerHeight = 720;
@@ -28,6 +29,9 @@ class FakeDocument extends EventTarget {
   }
   querySelector() {
     return null;
+  }
+  querySelectorAll() {
+    return this.frameworkPopups;
   }
 }
 
@@ -49,6 +53,9 @@ class FakeElement extends EventTarget {
   setAttribute(name, value) {
     this.attributes.set(name, String(value));
   }
+  getAttribute(name) {
+    return this.attributes.get(name) ?? null;
+  }
   getBoundingClientRect() {
     const left = Number.parseFloat(this.style.left) || 0;
     const top = Number.parseFloat(this.style.top) || 0;
@@ -65,9 +72,10 @@ class FakeStyle {
   }
 }
 
-function keyEvent(key) {
+function keyEvent(key, patch = {}) {
   const event = new Event("keydown", {cancelable: true});
   Object.defineProperty(event, "key", {value: key});
+  for (const [name, value] of Object.entries(patch)) Object.defineProperty(event, name, {value});
   return event;
 }
 
@@ -105,6 +113,8 @@ const trigger = new FakeElement(focusDocument, "trigger");
 const panel = new FakeElement(focusDocument, "panel");
 focusDocument.activeElement = trigger;
 const registry = new OverlayRegistry(focusDocument);
+let leakedEscapeEvents = 0;
+focusDocument.addEventListener("keydown", () => leakedEscapeEvents++, true);
 let closeRequests = 0;
 const handle = registry.register("test-overlay", panel, {
   kind: "fixed",
@@ -117,10 +127,42 @@ handle.show();
 assert.equal(focusDocument.activeElement, panel, "打开浮层后焦点没有进入浮层");
 assert.equal(panel.dataset.overlayKind, "fixed");
 assert.equal(panel.dataset.overlayRole, "advanced");
+assert.equal(panel.getAttribute("data-keyboard-exclusive"), "true");
+assert.equal(panel.dataset.overlayOpen, "true");
 assert(Number(panel.style.zIndex) >= 900, "浮层没有使用统一层级");
+focusDocument.dispatchEvent(keyEvent("Escape", {repeat: true}));
+assert.equal(closeRequests, 0, "重复 Escape 不得关闭浮层");
+focusDocument.frameworkPopups = [{
+  hidden: false,
+  isConnected: true,
+  style: {},
+  getAttribute: () => "false",
+  getClientRects: () => [{}]
+}];
+focusDocument.dispatchEvent(keyEvent("Escape"));
+assert.equal(closeRequests, 0, "框架 popup 展开时 managed overlay 抢先关闭");
+focusDocument.frameworkPopups = [];
+leakedEscapeEvents = 0;
 focusDocument.dispatchEvent(keyEvent("Escape"));
 assert.equal(closeRequests, 1, "Esc 没有请求关闭顶层浮层");
+assert.equal(leakedEscapeEvents, 0, "已关闭浮层的 Escape 继续穿透到同节点后续消费者");
+assert.equal(panel.dataset.overlayOpen, "false");
 assert.equal(focusDocument.activeElement, trigger, "关闭浮层后焦点没有返回触发入口");
+
+const mainPanel = new FakeElement(focusDocument, "main-panel");
+const secondary = new FakeElement(focusDocument, "secondary");
+let mainCloseRequests = 0;
+let secondaryCloseRequests = 0;
+const mainHandle = registry.register("main-panel", mainPanel, {kind: "panel", role: "main", onRequestClose: () => mainCloseRequests++});
+const secondaryHandle = registry.register("secondary", secondary, {kind: "fixed", role: "advanced", onRequestClose: () => secondaryCloseRequests++});
+mainHandle.show({focus: false});
+secondaryHandle.show({focus: false});
+mainHandle.activate();
+focusDocument.dispatchEvent(keyEvent("Escape"));
+assert.equal(secondaryCloseRequests, 1, "fixed / secondary 浮层必须先于主面板关闭");
+assert.equal(mainCloseRequests, 0, "首次 Escape 不得同时关闭主面板");
+focusDocument.dispatchEvent(keyEvent("Escape"));
+assert.equal(mainCloseRequests, 1, "第二次 Escape 才能关闭主面板");
 
 const [managerSource, detailsSource, developmentSource, controlSource, heightSource, treeSource, styleSource, browserRegressionSource] = await Promise.all([
   readFile(new URL("../app/webgl-generator/src/ui/panel-manager.js", import.meta.url), "utf8"),
@@ -142,7 +184,7 @@ assert.match(managerSource, /chooseLaterOpenedPanelRole\(main\.openSequence, det
 assert.match(browserRegressionSource, /keyboard\.press\("Shift\+C"\)[\s\S]{0,180}?visibleMainPanelIds/, "城市面板重开必须使用真实 Shift+C 路径并验证唯一主面板");
 assert.match(browserRegressionSource, /setViewportSize\(\{width: 720[\s\S]{0,500}?object-details/, "浏览器回归必须覆盖桌面共存缩窄后保留对象详情");
 assert.doesNotMatch(browserRegressionSource, /locator\(`#\$\{triggerId\}`\)\.click/, "浏览器回归不得强点隐藏的面板入口");
-assert.match(browserRegressionSource, /keyboard\.press\("Shift\+H"\)[\s\S]*高级地形程序与条件变换[\s\S]*windowScroll/, "浏览器回归必须真实展开高度面板深层 summary 并检查 document viewport");
+assert.match(browserRegressionSource, /keyboard\.press\("Shift\+H"\)[\s\S]*重设海底[\s\S]*windowScroll/, "浏览器回归必须真实展开高度面板详情并检查 document viewport");
 assert.match(managerSource, /panel\.addEventListener\("pointerdown"[\s\S]{0,180}?restoreManagedPanelViewportOrigin/, "受管面板交互必须恢复 document viewport 原点");
 assert.match(managerSource, /reflowPanels\(\) \{[\s\S]{0,100}?restoreManagedPanelViewportOrigin/, "reflow 必须兜底恢复 document viewport 原点");
 assert(detailsSource.includes('role: "detail"'), "对象详情没有登记为可选详情面板");

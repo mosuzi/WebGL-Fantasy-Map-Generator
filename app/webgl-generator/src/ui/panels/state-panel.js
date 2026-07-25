@@ -10,7 +10,7 @@ const STATE_COLUMN_WIDTHS = Object.freeze({
   id: 56,
   name: 120,
   governmentLabel: 84,
-  capitalName: 112,
+  capitalName: 80,
   burgs: 64,
   population: 92,
   economicPower: 64,
@@ -19,6 +19,10 @@ const STATE_COLUMN_WIDTHS = Object.freeze({
 const STATE_LIST_DEFAULTS = Object.freeze({
   filter: "",
   columnWidths: STATE_COLUMN_WIDTHS,
+  columnWidthVersion: 2,
+  columnWidthMigrations: {
+    capitalName: {from: 112, to: 80}
+  },
   sortKey: "population",
   sortDir: "desc"
 });
@@ -118,7 +122,7 @@ export function createStatePanel(documentRef, manager, callbacks = {}) {
       callbacks.onBrushRadiusChange?.();
     },
     onColorChange: (stateId, color) => callbacks.onColorChange?.(stateId, color),
-    onGovernmentChange: (stateId, governmentKey) => callbacks.onGovernmentChange?.(stateId, governmentKey),
+    onGovernmentChange: (stateId, governmentKey, formName) => callbacks.onGovernmentChange?.(stateId, governmentKey, formName),
     onCapitalChange: (stateId, burgId) => callbacks.onCapitalChange?.(stateId, burgId),
     onNoteChange: (stateId, body) => callbacks.onNoteChange?.(stateId, body),
     onInspectMerge: options => callbacks.onInspectMerge?.(options),

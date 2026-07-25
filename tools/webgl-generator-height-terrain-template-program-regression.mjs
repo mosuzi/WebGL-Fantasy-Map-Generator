@@ -13,8 +13,11 @@ import {
   heightTerrainTemplateProgramUsesSeed,
   inspectHeightTerrainTemplateProgram,
   inspectSourceHeightTemplateOperations,
+  clearHeightTerrainTemplateRecycleRecord,
+  loadHeightTerrainTemplateRecycleRecord,
   loadHeightTerrainTemplateDocument,
   parseHeightTerrainTemplateDocument,
+  saveHeightTerrainTemplateRecycleRecord,
   saveHeightTerrainTemplateDocument,
   SOURCE_HEIGHT_TEMPLATE_COMPATIBILITY,
   stringifyHeightTerrainTemplateDocument
@@ -65,10 +68,16 @@ assert.deepEqual(parsed, document, "用户模板导出再导入必须保持规�
 const storageData = new Map();
 const storage = {
   getItem: key => storageData.get(key) || null,
-  setItem: (key, value) => storageData.set(key, value)
+  setItem: (key, value) => storageData.set(key, value),
+  removeItem: key => storageData.delete(key)
 };
 saveHeightTerrainTemplateDocument(storage, parsed.templates);
 assert.deepEqual(loadHeightTerrainTemplateDocument(storage), parsed, "用户模板保存与恢复必须保持文档一致");
+saveHeightTerrainTemplateRecycleRecord(storage, parsed.templates[0]);
+const refreshedRecycle = loadHeightTerrainTemplateRecycleRecord(storage);
+assert.deepEqual(refreshedRecycle.template, parsed.templates[0], "模板回收记录刷新后必须仍可恢复");
+clearHeightTerrainTemplateRecycleRecord(storage);
+assert.equal(loadHeightTerrainTemplateRecycleRecord(storage), null, "成功恢复后必须清空模板回收记录");
 
 const roundtripMap = createSquareMap(5, (x, y) => 30 + x + y);
 const roundtripOptions = {scope: "land", seed: 77, allowedCells: allCells};

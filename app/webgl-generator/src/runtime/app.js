@@ -86,11 +86,12 @@ import {
 import {createRegenerateDiplomacyCommand, createSetDiplomacyRelationCommand} from "./diplomacy-edit-commands.js";
 import {applyHeightBrushPreview, createApplyHeightBrushCommand} from "./height-edit-commands.js";
 import {getGlobalHeightChanges, getHeightBrushChanges, getHeightLineChanges, getHeightRangeTransformChanges, inspectGlobalHeightChanges, inspectHeightFillTarget, inspectHeightRangeTransform} from "./height-brush.js";
+import {acceptHeightBrushSample} from "./height-brush-cadence.js";
 import {composeHeightCellSelection, createHeightCellSelectionFeather, createHeightCellSelectionSet, createHeightCellSelectionSnapshot, createHeightCursorRadiusSelection, restoreHeightCellSelectionSnapshot, transformHeightCellSelection} from "./height-cell-selection.js";
 import {createHeightSelectionSmoothingPlan} from "./height-selection-smoothing.js";
 import {getHeightTerrainTemplateChanges, heightTerrainTemplateLabel, heightTerrainTemplateUsesSeed, inspectHeightTerrainTemplate} from "./height-terrain-templates.js";
 import {getHeightTerrainTemplateProgramChanges, heightTerrainTemplateProgramUsesSeed, inspectHeightTerrainTemplateProgram} from "./height-terrain-template-programs.js";
-import {createRegenerationResult, rebuildHeightAllDerived, rebuildHeightBaseDerived, rebuildHeightDownstreamDerived} from "./height-derived-rebuild.js";
+import {createRegenerationResult, HEIGHT_BASE_REBUILD_STEPS, HEIGHT_DOWNSTREAM_REBUILD_STEPS, rebuildHeightAllDerived, rebuildHeightBaseDerived, rebuildHeightDownstreamDerived} from "./height-derived-rebuild.js";
 import {buildSeafloorResetPlan, createResetSeafloorCommand, seafloorResetPreviewChanges} from "./seafloor-reset.js";
 import {createRegenerateOceanCurrentsCommand, createRenameOceanCurrentCommand} from "./ocean-current-edit-commands.js";
 import {assertOceanCurrentWorldIdentity, rebuildOceanCurrentWorldStage, snapshotOceanCurrentWorldIdentity} from "../generator/ocean-current-world.js";
@@ -141,13 +142,14 @@ import {resolveObject} from "./object-resolver.js";
 import {MAX_PERSISTENT_OBJECT_HIGHLIGHTS, isPersistentHighlightObjectKind, normalizePersistentHighlights, samePersistentHighlightMembership} from "./persistent-highlights.js";
 import {createAddRiverCommand, createDeleteRiverCommand, createRenameRiversFromNamebaseCommand, createSetRiverNoteCommand, createSetRiverWidthFactorCommand} from "./river-edit-commands.js";
 import {createAddRouteCommand, createDeleteRouteCommand, createEditRouteCommand, createSetRouteNoteCommand, inspectRouteEdit} from "./route-edit-commands.js";
-import {createDeleteBatchCommand, inspectDeleteImpact, requestDeleteConfirmation} from "./delete-impact.js";
+import {createDeleteBatchCommand, createDeleteConfirmationRequiredError, inspectDeleteImpact, requestDeleteConfirmation} from "./delete-impact.js";
 import {executeClimateDownstreamRebuildAsync, inspectClimateDownstreamRebuild} from "./climate-downstream-rebuild.js";
+import {captureMapMutationSnapshot, executeMapSnapshotTransaction, restoreMapMutationSnapshot} from "./map-snapshot-transaction.js";
 import {SelectionStore} from "./selection-store.js";
 import {decideSelectionPanelRoute, SELECTION_PANEL_BINDINGS, SELECTION_PANEL_ROUTE} from "./selection-panel-policy.js";
 import {installKeyboardShortcuts} from "./keyboard-shortcuts.js";
 import {applyStateBrushPreview, createAddStateAtCellCommand, createApplyStateBrushCommand, createDeleteStateCommand, createRenameStatesFromNamebaseCommand, createSetStateColorCommand, createSetStateGovernmentCommand, createSetStatesGovernmentBatchCommand, STATE_BRUSH_PREVIEW_EFFECTS} from "./state-edit-commands.js";
-import {createMergeStatesCommand, createSplitStateCommand, inspectStateMerge, inspectStateSplit} from "./state-topology-commands.js";
+import {createMergeStatesCommand, createSplitStateCommand, inspectStateMerge, inspectStateSplit, regenerateProvincesForStates} from "./state-topology-commands.js";
 import {createAddZoneCommand, createDeleteZoneCommand, createSetZoneStyleCommand} from "./zone-edit-commands.js";
 import {captureVisualThemeState, createSetUserVisualThemesCommand} from "./visual-theme-edit-commands.js";
 import {mergePersistedUserVisualThemes, persistUserVisualThemes} from "./visual-theme-storage.js";
@@ -157,7 +159,7 @@ import {completeStartupLoading, failStartupLoading} from "../ui/startup-loading.
 import {LABEL_TARGET_KIND, OBJECT_KIND} from "./object-kinds.js";
 import GenerationWorker from "./generation-worker.js?worker";
 import {getWebglGeneratorHealthMonitor} from "./health-monitor.js";
-import {createRuntimeOperationManager} from "./runtime-operation.js";
+import {createRuntimeOperationError, createRuntimeOperationManager} from "./runtime-operation.js";
 import {createCanvasToolModeManager} from "./canvas-tool-mode-manager.js";
 import {BRUSH_RADIUS_ID, normalizeBrushRadius} from "./brush-radius-contract.js";
 import {restoreCanvasToolStrokePreview} from "./canvas-tool-preview-rollback.js";
@@ -244,6 +246,13 @@ const CLIMATE_OPTION_KEYS = Object.freeze([
   "temperatureSouthPole",
   "precipitation"
 ]);
+const REGENERATION_TRANSACTION_EFFECTS = Object.freeze({
+  render: "draw",
+  selection: "refresh",
+  runtimeStats: true,
+  pickPanel: true,
+  derived: Object.freeze(["terrain-caches", "height-field", "cell-colors", "political-boundaries", "point-layers", "line-layers", "labels", "river-mesh", "route-mesh", "object-panels", "object-index"])
+});
 const CLIMATE_DERIVED_STALE_SYSTEMS = Object.freeze(["cities", "states", "provinces", "religions", "markers", "zones", "military", "economy", "diplomacy"]);
 const FEATURE_TOPOLOGY_UI_HISTORY = new WeakMap();
 const CONTROL_PANEL_CHILD_OPEN_HANDLERS = Object.freeze([
@@ -1054,7 +1063,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     },
     onRegenerateAll: () => {
       cancelHeightLine(state, documentRef);
-      rebuildHeightDerivedViaAction(state, documentRef, "all", {confirm: true});
+      runtimeActions.edit.height.rebuildAllDerived({confirm: true});
     }
   });
   state.panels.height = heightPanel;
@@ -1144,9 +1153,9 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       executeEditCommand(state, documentRef, command, {context, refresh: refreshAfterStateEdit});
       updateEditingInteractionLock(state, documentRef);
     },
-    onGovernmentChange: (stateId, governmentKey) => {
+    onGovernmentChange: (stateId, governmentKey, formName) => {
       const context = {map: state.map};
-      const command = createSetStateGovernmentCommand(stateId, governmentKey);
+      const command = createSetStateGovernmentCommand(stateId, governmentKey, {formName});
       executeEditCommand(state, documentRef, command, {context, refresh: refreshAfterStateEdit});
       updateEditingInteractionLock(state, documentRef);
     },
@@ -2048,7 +2057,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     onExport: rows => exportNotesSummary(state, documentRef, rows, runtimeActions.data.exportNotes),
     onImportPreview: (file, mode) => previewNotesImport(state, documentRef, file, mode),
     onImport: (file, mode) => importNotesFile(state, documentRef, file, mode, runtimeActions.edit.notes.import),
-    onDeleteBatch: rows => runtimeActions.edit.notes.deleteBatch(rows.map(row => row.id), {label: "批量删除备注"}),
+    onDeleteBatch: rows => runtimeActions.edit.notes.deleteBatch(rows.map(row => row.id), {confirm: true, label: "批量删除备注"}),
     onUndo: () => {
       return executeHistoryCommand(state, documentRef, "undo");
     },
@@ -2606,7 +2615,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     onImportMapData: file => importMapData(state, documentRef, file, runtimeActions.data.importMap),
     onImportGeoData: file => importGeoData(state, documentRef, file, runtimeActions.data.importGEO),
     onImportHeightmapImage: payload => importHeightmapImage(state, documentRef, payload, runtimeActions.data.importHeightmap),
-    onRegenerate: kind => runtimeActions.generate.regenerate(kind, {confirm: true}),
+    onRegenerate: (kind, regenerationOptions = {}) => runtimeActions.generate.regenerate(kind, {confirm: true, ...regenerationOptions}),
     onDebugModeChange: () => updatePickPanel(documentRef, state),
     onMode: mode => runtimeActions.layers.setViewMode(mode)
   };
@@ -2633,6 +2642,14 @@ function createRuntimeActions(state, documentRef, options = {}) {
     message,
     snapshot: () => captureMapReplaceSnapshot(state, documentRef),
     rollback: (snapshot, error, context) => restoreMapReplaceSnapshot(state, documentRef, snapshot, error, context)
+  });
+  const mapMutationConfig = message => ({
+    message,
+    snapshot: () => captureMapMutationSnapshot(state.map, state.editHistory),
+    rollback: snapshot => {
+      restoreMapMutationSnapshot(state.map, state.editHistory, snapshot);
+      refreshMapMutationRollback(state, documentRef);
+    }
   });
   return {
     history: {
@@ -2691,7 +2708,14 @@ function createRuntimeActions(state, documentRef, options = {}) {
       setPrecipitation: (scale, options = {}) => applyClimatePatchViaApi(state, documentRef, {precipitation: scale}, options),
       setWind: (index, direction, options = {}) => setClimateWindViaApi(state, documentRef, index, direction, options),
       inspectDownstreamRebuild: (options = {}) => inspectClimateDownstreamRebuildViaApi(state, options),
-      applyDownstreamRebuild: (options = {}) => applyClimateDownstreamRebuildViaApi(state, documentRef, options)
+      applyDownstreamRebuild: (options = {}) => operation.run(
+        "climate.applyDownstreamRebuild",
+        context => applyClimateDownstreamRebuildViaApi(state, documentRef, options, context),
+        {
+          message: "正在重算气候下游内容",
+          isNoop: result => !result?.executed
+        }
+      )
     },
     oceanCurrents: {
       inspectWorldRebuild: (options = {}) => inspectOceanCurrentWorldRebuild(state.map, options),
@@ -2706,7 +2730,7 @@ function createRuntimeActions(state, documentRef, options = {}) {
       create: payload => createNamebaseViaApi(state, documentRef, payload),
       copyBuiltin: (baseId, options = {}) => copyBuiltinNamebaseViaApi(state, documentRef, baseId, options),
       update: (baseId, patch = {}) => updateNamebaseViaApi(state, documentRef, baseId, patch),
-      delete: baseId => deleteNamebaseViaApi(state, documentRef, baseId),
+      delete: (baseId, options = {}) => deleteNamebaseViaAction(state, documentRef, baseId, options),
       clear: (options = {}) => clearNamebasesViaApi(state, documentRef, options),
       bind: (scope, target, baseId, options = {}) => bindNamebaseViaApi(state, documentRef, scope, target, baseId, options),
       renameObjects: (kind, ids, options = {}) => renameObjectsFromNamebaseViaApi(state, documentRef, kind, ids, options)
@@ -2738,8 +2762,9 @@ function createRuntimeActions(state, documentRef, options = {}) {
       importMap: (document, options = {}) => operation.run("data.importMap", context => importMapDocumentViaApi(state, documentRef, document, options, context), mapReplaceConfig(loadingMessage("map-import-read"))),
       importGEO: (document, options = {}) => operation.runSync("data.importGEO", context => {
         context.report("import", {message: "正在导入 GEO 数据"});
-        return importGeoDocumentViaApi(state, documentRef, document, options);
+        return importGeoDocumentTransactionViaApi(state, documentRef, document, options);
       }, {
+        ...mapMutationConfig("正在导入 GEO 数据"),
         message: "正在导入 GEO 数据",
         isNoop: result => result?.imported === false
       }),
@@ -2765,7 +2790,7 @@ function createRuntimeActions(state, documentRef, options = {}) {
       },
       cities: {
         add: gridCell => addCityViaApi(state, documentRef, gridCell),
-        delete: cityId => deleteCityViaApi(state, documentRef, cityId),
+        delete: (cityId, options = {}) => deleteCityViaApi(state, documentRef, cityId, options),
         inspectMove: (cityId, target) => inspectCityMoveViaApi(state, cityId, target),
         move: (cityId, target) => moveCityViaApi(state, documentRef, cityId, target),
         rename: (cityId, name) => renameCityViaApi(state, documentRef, cityId, name),
@@ -2776,29 +2801,42 @@ function createRuntimeActions(state, documentRef, options = {}) {
       },
       provinces: {
         add: gridCell => addProvinceViaApi(state, documentRef, gridCell),
-        delete: provinceId => deleteProvinceViaApi(state, documentRef, provinceId),
+        delete: (provinceId, options = {}) => deleteProvinceViaApi(state, documentRef, provinceId, options),
         rename: (provinceId, name) => renameProvinceViaApi(state, documentRef, provinceId, name),
         setColor: (provinceId, color) => setProvinceColorViaApi(state, documentRef, provinceId, color),
         applyChanges: changes => applyProvinceChangesViaApi(state, documentRef, changes)
       },
       states: {
         add: gridCell => addStateViaApi(state, documentRef, gridCell),
-        delete: stateId => deleteStateViaApi(state, documentRef, stateId),
+        delete: (stateId, options = {}) => deleteStateViaApi(state, documentRef, stateId, options),
         inspectMerge: options => inspectStateMergeViaApi(state, options),
         merge: options => mergeStatesViaApi(state, documentRef, options),
         inspectSplit: options => inspectStateSplitViaApi(state, options),
         split: options => splitStateViaApi(state, documentRef, options),
         rename: (stateId, name) => renameStateViaApi(state, documentRef, stateId, name),
         setColor: (stateId, color) => setStateColorViaApi(state, documentRef, stateId, color),
-        setGovernment: (stateId, governmentKey) => setStateGovernmentViaApi(state, documentRef, stateId, governmentKey),
+        setGovernment: (stateId, governmentKey, options = {}) => setStateGovernmentViaApi(state, documentRef, stateId, governmentKey, options),
         setCapital: (stateId, cityId) => setStateCapitalViaApi(state, documentRef, stateId, cityId),
         setGovernmentBatch: (stateIds, governmentKey) => setStatesGovernmentBatchViaApi(state, documentRef, stateIds, governmentKey),
         applyChanges: changes => applyStateChangesViaApi(state, documentRef, changes)
       },
       height: {
         applyChanges: (changes, editOptions = {}) => applyHeightChangesViaApi(state, documentRef, changes, editOptions),
-        rebuildBaseDerived: (editOptions = {}) => rebuildHeightDerivedViaAction(state, documentRef, "base", editOptions),
-        rebuildDownstreamDerived: (editOptions = {}) => rebuildHeightDerivedViaAction(state, documentRef, "downstream", editOptions)
+        rebuildBaseDerived: (editOptions = {}) => operation.runSync(
+          "edit.height.rebuildBaseDerived",
+          () => rebuildHeightDerivedViaAction(state, documentRef, "base", editOptions),
+          {message: "正在重建高度基础派生", isNoop: result => !result?.executed}
+        ),
+        rebuildDownstreamDerived: (editOptions = {}) => operation.runSync(
+          "edit.height.rebuildDownstreamDerived",
+          () => rebuildHeightDerivedViaAction(state, documentRef, "downstream", editOptions),
+          {message: "正在重建高度下游派生", isNoop: result => !result?.executed}
+        ),
+        rebuildAllDerived: (editOptions = {}) => operation.runSync(
+          "edit.height.rebuildAllDerived",
+          () => rebuildHeightDerivedViaAction(state, documentRef, "all", editOptions),
+          {message: "正在重建全部高度派生", isNoop: result => !result?.executed}
+        )
       },
       biomes: {
         assignCells: (biomeId, gridCellIds, editOptions = {}) => assignBiomeCellsViaApi(state, documentRef, biomeId, gridCellIds, editOptions),
@@ -2842,7 +2880,7 @@ function createRuntimeActions(state, documentRef, options = {}) {
         assignCells: (cultureId, gridCellIds) => assignSocialCellsViaApi(state, documentRef, "culture", cultureId, gridCellIds),
         inspectExpansion: (cultureId, options = {}) => inspectSocialExpansionViaApi(state, "culture", cultureId, options),
         applyExpansion: (cultureId, options = {}) => applySocialExpansionViaApi(state, documentRef, "culture", cultureId, options),
-        delete: cultureId => deleteCultureViaApi(state, documentRef, cultureId),
+        delete: (cultureId, options = {}) => deleteCultureViaApi(state, documentRef, cultureId, options),
         rename: (cultureId, name) => renameCultureViaApi(state, documentRef, cultureId, name),
         setColor: (cultureId, color) => setCultureColorViaApi(state, documentRef, cultureId, color),
         setParent: (cultureId, parentId) => setCultureParentViaApi(state, documentRef, cultureId, parentId)
@@ -2852,7 +2890,7 @@ function createRuntimeActions(state, documentRef, options = {}) {
         assignCells: (religionId, gridCellIds) => assignSocialCellsViaApi(state, documentRef, "religion", religionId, gridCellIds),
         inspectExpansion: (religionId, options = {}) => inspectSocialExpansionViaApi(state, "religion", religionId, options),
         applyExpansion: (religionId, options = {}) => applySocialExpansionViaApi(state, documentRef, "religion", religionId, options),
-        delete: religionId => deleteReligionViaApi(state, documentRef, religionId),
+        delete: (religionId, options = {}) => deleteReligionViaApi(state, documentRef, religionId, options),
         rename: (religionId, name) => renameReligionViaApi(state, documentRef, religionId, name),
         setColor: (religionId, color) => setReligionColorViaApi(state, documentRef, religionId, color),
         setParent: (religionId, parentId) => setReligionParentViaApi(state, documentRef, religionId, parentId)
@@ -2861,12 +2899,12 @@ function createRuntimeActions(state, documentRef, options = {}) {
         create: options => createRouteViaApi(state, documentRef, options),
         inspectEdit: (routeId, patch = {}) => inspectRouteEditViaApi(state, routeId, patch),
         update: (routeId, patch = {}) => updateRouteViaApi(state, documentRef, routeId, patch),
-        delete: routeId => deleteRouteViaApi(state, documentRef, routeId),
+        delete: (routeId, options = {}) => deleteRouteViaApi(state, documentRef, routeId, options),
         setNote: (routeId, body, options = {}) => setRouteNoteViaApi(state, documentRef, routeId, body, options)
       },
       rivers: {
         create: options => createRiverViaApi(state, documentRef, options),
-        delete: riverId => deleteRiverViaApi(state, documentRef, riverId),
+        delete: (riverId, options = {}) => deleteRiverViaApi(state, documentRef, riverId, options),
         rename: (riverId, name) => renameRiverViaApi(state, documentRef, riverId, name),
         setWidthFactor: (riverId, widthFactor) => setRiverWidthFactorViaApi(state, documentRef, riverId, widthFactor),
         setNote: (riverId, body, options = {}) => setRiverNoteViaApi(state, documentRef, riverId, body, options)
@@ -2875,7 +2913,7 @@ function createRuntimeActions(state, documentRef, options = {}) {
         create: options => createLakeViaApi(state, documentRef, options),
         inspectOutlet: (lakeId, outletRiverId) => inspectLakeOutletViaApi(state, lakeId, outletRiverId),
         setOutlet: (lakeId, outletRiverId) => setLakeOutletViaApi(state, documentRef, lakeId, outletRiverId),
-        delete: lakeId => deleteLakeViaApi(state, documentRef, lakeId),
+        delete: (lakeId, options = {}) => deleteLakeViaApi(state, documentRef, lakeId, options),
         rename: (lakeId, name) => renameLakeViaApi(state, documentRef, lakeId, name)
       },
       features: {
@@ -4055,14 +4093,18 @@ function canExecuteKeyboardShortcut(state, item) {
   if (item.when === "map-ready") return Boolean(state.map);
   if (item.when === "undo") return !busy && Number(history.undo) > 0;
   if (item.when === "redo") return !busy && Number(history.redo) > 0;
-  if (item.when === "selection-or-editing") return Boolean(state.selection || state.editingObject || state.canvasToolModes.getActive()?.id === CANVAS_TOOL_MODE.CITY_MOVE);
+  if (item.when === "selection-or-editing") return Boolean(state.selection || state.editingObject || state.canvasToolModes.getActive());
   return true;
 }
 
 async function executeKeyboardShortcut(state, documentRef, item, runtimePanelHandlers) {
   const action = item.action || {};
-  if (item.id === "selection.cancel" && state.canvasToolModes.getActive()?.id === CANVAS_TOOL_MODE.CITY_MOVE) {
-    cancelCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.CITY_MOVE, "escape");
+  if (item.id === "selection.cancel") {
+    const activeModeId = state.canvasToolModes.getActive()?.id;
+    if (activeModeId) return cancelCanvasToolMode(state, documentRef, activeModeId, "escape");
+    if (state.editingObject) return invokePublicApi(documentRef, "selection.stopEditing");
+    if (state.selection) return invokePublicApi(documentRef, "selection.clear");
+    return null;
   }
   if (action.type === "panel") {
     const handler = runtimePanelHandlers[action.handler];
@@ -4497,33 +4539,113 @@ function updateNamebaseViaApi(state, documentRef, baseId, patch = {}) {
   });
 }
 
-function deleteNamebaseViaApi(state, documentRef, baseId) {
+function deleteNamebaseViaAction(state, documentRef, baseId, options = {}, confirmation = "explicit", displayName = "") {
   assertMapAvailable(state);
+  if (!options || typeof options !== "object" || Array.isArray(options)) throw new Error("名称库删除参数必须是对象");
   const id = String(baseId || "").trim();
+  const base = state.map?.namebases?.bases?.find(item => item?.id === id && item?.builtin !== true) || null;
+  const name = String(displayName || base?.name || id).trim();
+  const preview = {
+    kind: "namebase",
+    kindLabel: "用户名称库",
+    valid: Boolean(base),
+    validIds: base ? [id] : [],
+    deleteIds: base ? [id] : [],
+    requestedCount: 1,
+    objectCount: base ? 1 : 0,
+    cascadeIds: [],
+    cascadeCount: 0,
+    dependencies: {bindings: countNamebaseBindings(state.map, id)},
+    skipped: base ? [] : [{id, code: "not-found", reason: "用户名称库不存在"}],
+    requiresConfirm: Boolean(base),
+    impactLevel: "medium",
+    summary: base ? `删除用户名称库“${name}”。` : "未找到可删除的用户名称库。",
+    confirmationMessage: `确定删除用户名称库“${name}”？确认后仍可通过一次撤销恢复。`
+  };
+  if (options.inspectOnly === true) return namebaseInspectionResult(state, preview);
+  if (preview.requiresConfirm && options.confirm !== true) {
+    if (confirmation === "explicit") throw createDeleteConfirmationRequiredError(preview);
+    if (!requestDeleteConfirmation(preview, message => documentRef.defaultView?.confirm?.(message))) {
+      return namebaseInspectionResult(state, preview, {cancelled: true});
+    }
+  }
   const command = createDeleteUserNamebaseCommand(id, {
-    name: id,
+    name,
     label: "API 删除名称库"
   });
-  return executeNamebaseCommandViaApi(state, documentRef, command, {
+  const result = executeNamebaseCommandViaApi(state, documentRef, command, {
     noopStatus: "未找到可删除的用户名称库。",
     status: command => {
       const payload = command.getResult?.() || {};
       return `已删除用户名称库“${payload.name || id}”。`;
     }
   });
+  return {...result, preview, inspectOnly: false, cancelled: false};
 }
 
-function clearNamebasesViaApi(state, documentRef, options = {}) {
+function clearNamebasesViaApi(state, documentRef, options = {}, confirmation = "explicit") {
   assertMapAvailable(state);
-  if (options?.confirm !== true) throw new Error("清空用户名称库需要显式传入 {confirm: true}");
+  if (!options || typeof options !== "object" || Array.isArray(options)) throw new Error("名称库清空参数必须是对象");
+  const users = (state.map?.namebases?.bases || []).filter(base => base?.builtin !== true);
+  const preview = {
+    kind: "namebase",
+    kindLabel: "用户名称库",
+    valid: users.length > 0,
+    validIds: users.map(base => base.id),
+    deleteIds: users.map(base => base.id),
+    requestedCount: users.length,
+    objectCount: users.length,
+    cascadeIds: [],
+    cascadeCount: 0,
+    dependencies: {bindings: users.reduce((sum, base) => sum + countNamebaseBindings(state.map, base.id), 0)},
+    skipped: [],
+    requiresConfirm: users.length > 0,
+    impactLevel: "high",
+    summary: `清空 ${users.length} 个用户名称库。`,
+    confirmationMessage: `确定清空 ${users.length} 个用户名称库？确认后仍可通过一次撤销恢复。`
+  };
+  if (options.inspectOnly === true) return namebaseInspectionResult(state, preview);
+  if (preview.requiresConfirm && options.confirm !== true) {
+    if (confirmation === "explicit") throw createDeleteConfirmationRequiredError(preview);
+    if (!requestDeleteConfirmation(preview, message => documentRef.defaultView?.confirm?.(message))) {
+      return namebaseInspectionResult(state, preview, {cancelled: true});
+    }
+  }
   const command = createClearUserNamebasesCommand({label: "API 清空用户名称库"});
-  return executeNamebaseCommandViaApi(state, documentRef, command, {
+  const result = executeNamebaseCommandViaApi(state, documentRef, command, {
     noopStatus: "当前没有可清空的用户名称库。",
     status: command => {
       const payload = command.getResult?.() || {};
       return `已清空 ${payload.removed || 0} 个用户名称库。`;
     }
   });
+  return {...result, preview, inspectOnly: false, cancelled: false};
+}
+
+function namebaseInspectionResult(state, preview, options = {}) {
+  return {
+    executed: false,
+    noop: !preview.valid,
+    label: "",
+    result: null,
+    affected: [],
+    stale: [],
+    effects: {render: "none", selection: "none", runtimeStats: false, pickPanel: false, derived: []},
+    error: null,
+    history: state.editHistory.getStats(),
+    preview,
+    inspectOnly: !options.cancelled,
+    cancelled: Boolean(options.cancelled)
+  };
+}
+
+function countNamebaseBindings(map, baseId) {
+  const bindings = map?.namebases?.bindings || {};
+  const values = [
+    ...Object.values(bindings.global || {}),
+    ...Object.values(bindings.cultures || {}).flatMap(binding => Object.values(binding || {}))
+  ];
+  return values.filter(value => value === baseId).length;
 }
 
 function bindNamebaseViaApi(state, documentRef, scope, target, baseId, options = {}) {
@@ -4812,18 +4934,13 @@ function updateImportedNamebaseOptions(state, documentRef, row, options) {
 
 function clearImportedNamebases(state, documentRef) {
   try {
-    assertMapAvailable(state);
-    const count = state.map.namebases?.bases?.length || 0;
-    if (!count) {
-      setFileOperationStatus(documentRef, "当前没有可清空的用户名称库。");
-      return;
-    }
-    const view = documentRef.defaultView || window;
-    if (typeof view.confirm === "function" && !view.confirm(`确定清空 ${count} 个用户名称库？`)) return;
-    const result = executeNamebaseEdit(state, documentRef, createClearUserNamebasesCommand());
-    setFileOperationStatus(documentRef, `已清空 ${result.removed} 个用户名称库。`);
+    const action = clearNamebasesViaApi(state, documentRef, {}, "native");
+    if (action.cancelled || !action.executed) return action;
+    setFileOperationStatus(documentRef, `已清空 ${action.result?.removed || 0} 个用户名称库。`);
+    return action;
   } catch (error) {
     reportFileOperationError(documentRef, "清空名称库失败", error);
+    return null;
   }
 }
 
@@ -4836,22 +4953,18 @@ function deleteImportedNamebase(state, documentRef, row) {
       setFileOperationStatus(documentRef, "内置名称库不能删除。");
       return;
     }
-    const view = documentRef.defaultView || window;
     const name = row.name || id;
-    if (typeof view.confirm === "function" && !view.confirm(`确定删除用户名称库“${name}”？`)) return;
-    const command = createDeleteUserNamebaseCommand(id, {name});
-    if (command.isNoop({map: state.map})) {
+    const action = deleteNamebaseViaAction(state, documentRef, id, {}, "native", name);
+    if (action.cancelled) return action;
+    if (!action.executed || !action.result?.removed) {
       setFileOperationStatus(documentRef, "未找到可删除的用户名称库。");
-      return;
+      return action;
     }
-    const result = executeNamebaseEdit(state, documentRef, command);
-    if (!result.removed) {
-      setFileOperationStatus(documentRef, "未找到可删除的用户名称库。");
-      return;
-    }
-    setFileOperationStatus(documentRef, `已删除用户名称库“${result.name || name}”，当前用户库 ${result.total} 个，已更新本地偏好。`);
+    setFileOperationStatus(documentRef, `已删除用户名称库“${action.result.name || name}”，当前用户库 ${action.result.total} 个，已更新本地偏好。`);
+    return action;
   } catch (error) {
     reportFileOperationError(documentRef, "删除名称库失败", error);
+    return null;
   }
 }
 
@@ -5035,6 +5148,32 @@ function importGeoDocumentViaApi(state, documentRef, document, options = {}) {
     reportImportDiagnostic(state, documentRef, diagnostic, options.source === "ui" ? "GEO 数据导入失败" : "API 导入 GEO 数据失败");
     throw attachImportDiagnostic(error, diagnostic);
   }
+}
+
+function importGeoDocumentTransactionViaApi(state, documentRef, document, options = {}) {
+  assertMapAvailable(state);
+  const transaction = executeMapSnapshotTransaction({
+    map: state.map,
+    editHistory: state.editHistory,
+    label: "导入 GEO 数据",
+    domain: "geo-import",
+    effects: {
+      ...REGENERATION_TRANSACTION_EFFECTS,
+      affected: [{kind: "system", id: "geo-import"}]
+    },
+    execute: () => importGeoDocumentViaApi(state, documentRef, document, options),
+    executeCommand: command => executeEditCommand(state, documentRef, command, {
+      context: {map: state.map},
+      refresh: () => {},
+      refreshPanels: false
+    }),
+    isNoop: result => result?.imported === false,
+    onRestore: () => refreshMapMutationRollback(state, documentRef)
+  });
+  return {
+    ...transaction.result,
+    history: state.editHistory.getStats()
+  };
 }
 
 function importFmgCellsGeoViaApi(state, documentRef, command, options = {}) {
@@ -5489,31 +5628,50 @@ function inspectClimateDownstreamRebuildViaApi(state, options = {}) {
   });
 }
 
-async function applyClimateDownstreamRebuildViaApi(state, documentRef, options = {}) {
+async function applyClimateDownstreamRebuildViaApi(state, documentRef, options = {}, operationContext) {
   assertMapAvailable(state);
   if (options?.confirm !== true) throw new Error("气候下游重算会改写多个地图派生系统，需要显式传入 {confirm: true}");
-  const before = regenerationApiSummary(state.map);
+  const map = state.map;
+  const assertCurrent = () => {
+    operationContext?.throwIfCancelled?.();
+    if (state.map !== map || operationContext && !operationContext.isCurrent()) {
+      throw createRuntimeOperationError("operation_obsolete", "气候下游重算请求对应的地图已被替换", {
+        stage: "identity",
+        expected: true
+      });
+    }
+  };
+  assertCurrent();
+  const before = regenerationApiSummary(map);
   updateGenerationLoading(documentRef, true, "正在准备气候下游重算");
   try {
     await yieldToBrowser(documentRef);
+    assertCurrent();
     const execution = await executeClimateDownstreamRebuildAsync({
-      map: state.map,
+      map,
       editHistory: state.editHistory,
       systems: options.systems || options.selectedSystems || [],
       seed: options.seed,
-      executeSystem: (systemId, context) => executeClimateDownstreamSystem(state, documentRef, systemId, context),
+      executeSystem: (systemId, context) => {
+        assertCurrent();
+        return executeClimateDownstreamSystem(state, documentRef, systemId, context);
+      },
       executeCommand: command => executeEditCommand(state, documentRef, command, {
-        context: {map: state.map},
+        context: {map},
         refresh: () => {},
         refreshPanels: false
       }),
       refreshSummary: refreshGenerationSummary,
       onRestore: map => {
-        state.options = map.options;
+        if (state.map === map) state.options = map.options;
       },
       onProgress: progress => updateGenerationLoading(documentRef, true, progress.message),
-      yieldToMain: () => yieldToBrowser(documentRef)
+      yieldToMain: () => yieldToBrowser(documentRef),
+      signal: operationContext?.signal,
+      assertCurrent,
+      shouldRestoreHistory: () => state.map === map
     });
+    assertCurrent();
     if (!execution.executed) {
       return {
         executed: false,
@@ -5526,7 +5684,9 @@ async function applyClimateDownstreamRebuildViaApi(state, documentRef, options =
     }
     updateGenerationLoading(documentRef, true, "正在刷新气候下游结果");
     await yieldToBrowser(documentRef);
+    assertCurrent();
     await refreshClimateDownstreamRebuildState(state, documentRef, execution.command);
+    assertCurrent();
     const result = {
       executed: true,
       seed: execution.seed,
@@ -5541,22 +5701,16 @@ async function applyClimateDownstreamRebuildViaApi(state, documentRef, options =
       timings: execution.timings,
       staleSystems: execution.staleSystems,
       before,
-      after: regenerationApiSummary(state.map),
+      after: regenerationApiSummary(map),
       history: state.editHistory.getStats(),
       effects: ["map-derived", "renderer", "runtime-panel", "object-panels", "object-index"]
     };
     setFileOperationStatus(documentRef, `已完成气候下游重算：${result.executionOrder.join(" -> ")}`);
     return result;
   } catch (error) {
-    await refreshClimateDownstreamRebuildState(state, documentRef, {
-      effects: {
-        render: "draw",
-        selection: "refresh",
-        runtimeStats: true,
-        pickPanel: true,
-        derived: ["cell-colors", "political-boundaries", "point-layers", "line-layers", "labels", "route-mesh", "object-panels", "object-index"]
-      }
-    });
+    if (state.map === map) {
+      await refreshClimateDownstreamRebuildState(state, documentRef, {effects: REGENERATION_TRANSACTION_EFFECTS});
+    }
     setFileOperationStatus(documentRef, `气候下游重算失败并已回滚：${error.message}`);
     throw error;
   } finally {
@@ -5567,6 +5721,7 @@ async function applyClimateDownstreamRebuildViaApi(state, documentRef, options =
 async function executeClimateDownstreamSystem(state, documentRef, systemId, context = {}) {
   if (systemId === "markers") return regenerateMarkerResourcesForClimate(state, documentRef, context.regenerationSalt);
   if (systemId === "economy") return rebuildEconomyViaAction(state, documentRef, {label: "气候下游重算：经济", deferRefresh: true});
+  if (systemId === "cities" || systemId === "provinces") return regenerateMapAttribute(state, systemId, documentRef, {kind: "all"});
   return regenerateMapAttribute(state, systemId, documentRef);
 }
 
@@ -6104,17 +6259,30 @@ function refreshAfterEdit(state, commandOrEffects) {
   state.editRefreshScheduler.run(commandOrEffects);
 }
 
-function executeDeleteWithPreflight(state, documentRef, {kind, ids, createCommand, label, executeOptions = {}}) {
+function executeDeleteWithPreflight(state, documentRef, {
+  kind,
+  ids,
+  createCommand,
+  label,
+  options = {},
+  confirmation = "native",
+  executeOptions = {}
+}) {
+  if (!options || typeof options !== "object" || Array.isArray(options)) throw new Error("删除参数必须是对象");
   const preview = inspectDeleteImpact(state.map, kind, ids);
   if (!preview.valid) {
     setFileOperationStatus(documentRef, preview.summary);
-    return {executed: false, cancelled: false, preview, result: null};
+    return {executed: false, cancelled: false, inspectOnly: Boolean(options.inspectOnly), preview, result: null};
   }
-  if (preview.requiresConfirm) {
+  if (options.inspectOnly === true) {
+    return {executed: false, cancelled: false, inspectOnly: true, preview, result: null};
+  }
+  if (preview.requiresConfirm && options.confirm !== true) {
+    if (confirmation === "explicit") throw createDeleteConfirmationRequiredError(preview);
     const confirmed = requestDeleteConfirmation(preview, message => documentRef.defaultView?.confirm?.(message));
     if (!confirmed) {
       setFileOperationStatus(documentRef, `已取消：${preview.summary}`);
-      return {executed: false, cancelled: true, preview, result: null};
+      return {executed: false, cancelled: true, inspectOnly: false, preview, result: null};
     }
   }
   const command = createDeleteBatchCommand({kind, ids, createCommand, label});
@@ -6128,7 +6296,33 @@ function executeDeleteWithPreflight(state, documentRef, {kind, ids, createComman
     noopStatus: executeOptions.noopStatus || "没有可删除的对象。",
     throwOnError: false
   });
-  return {executed: execution.executed, cancelled: false, preview, result: command.getResult?.() || null, execution};
+  return {executed: execution.executed, cancelled: false, inspectOnly: false, preview, result: command.getResult?.() || null, execution};
+}
+
+function deleteApiResult(state, deletion) {
+  const base = deletion.execution
+    ? editApiResult(state, deletion.execution)
+    : {
+        executed: false,
+        noop: false,
+        label: "",
+        result: null,
+        affected: [],
+        stale: [],
+        effects: {render: "none", selection: "none", runtimeStats: false, pickPanel: false, derived: []},
+        error: null,
+        history: state.editHistory.getStats()
+      };
+  const summary = deletion.result;
+  const legacyResult = summary?.subresults?.length === 1 ? summary.subresults[0].result : base.result;
+  return {
+    ...base,
+    result: legacyResult,
+    preview: deletion.preview,
+    deleteSummary: summary,
+    inspectOnly: Boolean(deletion.inspectOnly),
+    cancelled: Boolean(deletion.cancelled)
+  };
 }
 
 function executeEditCommand(state, documentRef, command, options = {}) {
@@ -6469,6 +6663,26 @@ function importNotesViaApi(state, documentRef, document, options = {}) {
 
 function deleteNotesBatchViaApi(state, documentRef, noteIds, options = {}) {
   if (!Array.isArray(noteIds)) throw new Error("批量删除备注必须提供 noteIds 数组");
+  if (!options || typeof options !== "object" || Array.isArray(options)) throw new Error("批量删除备注参数必须是对象");
+  const preview = {
+    kind: OBJECT_KIND.NOTE,
+    kindLabel: "备注",
+    valid: noteIds.length > 0,
+    requestedCount: noteIds.length,
+    objectCount: noteIds.length,
+    validIds: [...noteIds],
+    deleteIds: [...noteIds],
+    cascadeIds: [],
+    cascadeCount: 0,
+    dependencies: {},
+    skipped: [],
+    requiresConfirm: noteIds.length > 0,
+    impactLevel: "high",
+    summary: `批量删除 ${noteIds.length} 条备注。`,
+    confirmationMessage: `确定批量删除 ${noteIds.length} 条备注？确认后可通过一次撤销恢复。`
+  };
+  if (options.inspectOnly === true) return namebaseInspectionResult(state, preview);
+  if (preview.requiresConfirm && options.confirm !== true) throw createDeleteConfirmationRequiredError(preview);
   const command = createDeleteNotesBatchCommand(noteIds, {label: options.label || "批量删除备注"});
   const result = executeEditCommand(state, documentRef, command, {
     context: {map: state.map},
@@ -6477,7 +6691,7 @@ function deleteNotesBatchViaApi(state, documentRef, noteIds, options = {}) {
     throwOnError: false
   });
   updateEditingInteractionLock(state, documentRef);
-  return editApiResult(state, result);
+  return {...editApiResult(state, result), preview};
 }
 
 function saveMeasurementViaApi(state, documentRef, points, options = {}) {
@@ -6681,16 +6895,19 @@ function updateRouteViaApi(state, documentRef, routeId, patch = {}) {
   return editApiResult(state, result);
 }
 
-function deleteRouteViaApi(state, documentRef, routeId) {
-  const id = Number(routeId);
-  const command = createDeleteRouteCommand(id, {label: `删除路线 #${Number.isFinite(id) ? id : routeId}`});
-  const result = executeEditCommand(state, documentRef, command, {
-    noopStatus: "路线不存在或已被删除。",
-    status: `已删除路线 #${Number.isFinite(id) ? id : routeId}。`,
-    throwOnError: false
+function deleteRouteViaApi(state, documentRef, routeId, options = {}) {
+  const id = normalizeApiInteger(routeId, "路线 ID");
+  const deletion = executeDeleteWithPreflight(state, documentRef, {
+    kind: OBJECT_KIND.ROUTE,
+    ids: [id],
+    createCommand: targetId => createDeleteRouteCommand(targetId, {label: `删除路线 #${targetId}`}),
+    label: "API 删除路线",
+    options,
+    confirmation: "explicit",
+    executeOptions: {noopStatus: "路线不存在或已被删除。"}
   });
   updateEditingInteractionLock(state, documentRef);
-  return editApiResult(state, result);
+  return deleteApiResult(state, deletion);
 }
 
 function createRiverViaApi(state, documentRef, options = {}) {
@@ -6838,18 +7055,20 @@ export function applyFeatureTopologyViaApi(state, documentRef, options = {}, run
   return editApiResult(state, result);
 }
 
-function deleteRiverViaApi(state, documentRef, riverId) {
+function deleteRiverViaApi(state, documentRef, riverId, options = {}) {
   const id = normalizeApiInteger(riverId, "河流 ID");
-  const command = createDeleteRiverCommand(id);
-  const result = executeEditCommand(state, documentRef, command, {
-    context: {map: state.map},
-    noopStatus: "河流不存在，未执行删除。",
-    status: executed => `已删除河流 #${id} 及其支流，共 ${executed.getResult?.().removed || 0} 条。`,
-    throwOnError: false
+  const deletion = executeDeleteWithPreflight(state, documentRef, {
+    kind: OBJECT_KIND.RIVER,
+    ids: [id],
+    createCommand: targetId => createDeleteRiverCommand(targetId),
+    label: "API 删除河流",
+    options,
+    confirmation: "explicit",
+    executeOptions: {noopStatus: "河流不存在，未执行删除。"}
   });
   updateRuntimePanel(documentRef, state);
   updateEditingInteractionLock(state, documentRef);
-  return editApiResult(state, result);
+  return deleteApiResult(state, deletion);
 }
 
 function setRiverWidthFactorViaApi(state, documentRef, riverId, widthFactor) {
@@ -6891,18 +7110,20 @@ function renameLakeViaApi(state, documentRef, lakeId, name) {
   });
 }
 
-function deleteLakeViaApi(state, documentRef, lakeId) {
+function deleteLakeViaApi(state, documentRef, lakeId, options = {}) {
   const id = normalizeApiInteger(lakeId, "湖泊 ID");
-  const command = createDeleteLakeCommand(id);
-  const result = executeEditCommand(state, documentRef, command, {
-    context: {map: state.map},
-    noopStatus: "湖泊不存在，未执行删除。",
-    status: executed => `已填平并删除湖泊 #${id}，处理 ${executed.getResult?.().packCells || 0} 个 pack cells。`,
-    throwOnError: false
+  const deletion = executeDeleteWithPreflight(state, documentRef, {
+    kind: OBJECT_KIND.LAKE,
+    ids: [id],
+    createCommand: targetId => createDeleteLakeCommand(targetId),
+    label: "API 填平并删除湖泊",
+    options,
+    confirmation: "explicit",
+    executeOptions: {noopStatus: "湖泊不存在，未执行删除。"}
   });
   updateRuntimePanel(documentRef, state);
   updateEditingInteractionLock(state, documentRef);
-  return editApiResult(state, result);
+  return deleteApiResult(state, deletion);
 }
 
 function addCityViaApi(state, documentRef, gridCell) {
@@ -6929,21 +7150,26 @@ function addCityViaApi(state, documentRef, gridCell) {
   return editApiResult(state, result);
 }
 
-function deleteCityViaApi(state, documentRef, cityId) {
+function deleteCityViaApi(state, documentRef, cityId, options = {}) {
   const id = normalizeApiInteger(cityId, "城市 ID");
-  const command = createDeleteCityCommand(id);
-  const result = executeEditCommand(state, documentRef, command, {
-    noopStatus: "城市不存在或已被删除。",
-    status: `已删除城市 #${id}。`,
-    preparePanelRefresh: targetState => {
-      targetState.selectionStore.clear();
-      targetState.panels.city?.setSelectedCityId(null);
-    },
-    throwOnError: false
+  const deletion = executeDeleteWithPreflight(state, documentRef, {
+    kind: OBJECT_KIND.CITY,
+    ids: [id],
+    createCommand: targetId => createDeleteCityCommand(targetId),
+    label: "API 删除城市",
+    options,
+    confirmation: "explicit",
+    executeOptions: {
+      noopStatus: "城市不存在或已被删除。",
+      preparePanelRefresh: targetState => {
+        targetState.selectionStore.clear();
+        targetState.panels.city?.setSelectedCityId(null);
+      }
+    }
   });
   updateRuntimePanel(documentRef, state);
   updateEditingInteractionLock(state, documentRef);
-  return editApiResult(state, result);
+  return deleteApiResult(state, deletion);
 }
 
 function inspectCityMoveViaApi(state, cityId, target) {
@@ -6997,25 +7223,30 @@ function addProvinceViaApi(state, documentRef, gridCell) {
   return editApiResult(state, result);
 }
 
-function deleteProvinceViaApi(state, documentRef, provinceId) {
+function deleteProvinceViaApi(state, documentRef, provinceId, options = {}) {
   const id = normalizeApiInteger(provinceId, "省份 ID");
-  const command = createDeleteProvinceCommand(id);
-  const result = executeEditCommand(state, documentRef, command, {
-    noopStatus: "省份不存在、为中立省份或已被删除。",
-    status: `已删除省份 #${id}。`,
-    refresh: refreshAfterProvinceEdit,
-    preparePanelRefresh: targetState => {
-      targetState.provinceEdit.deleteMode = false;
-      targetState.provinceEdit.lastAffected = 0;
-      targetState.selectionStore.clear();
-      targetState.panels.province?.setSelectedProvinceId(0);
-    },
-    throwOnError: false
+  const deletion = executeDeleteWithPreflight(state, documentRef, {
+    kind: OBJECT_KIND.PROVINCE,
+    ids: [id],
+    createCommand: targetId => createDeleteProvinceCommand(targetId),
+    label: "API 删除省份",
+    options,
+    confirmation: "explicit",
+    executeOptions: {
+      noopStatus: "省份不存在、为中立省份或已被删除。",
+      refresh: refreshAfterProvinceEdit,
+      preparePanelRefresh: targetState => {
+        targetState.provinceEdit.deleteMode = false;
+        targetState.provinceEdit.lastAffected = 0;
+        targetState.selectionStore.clear();
+        targetState.panels.province?.setSelectedProvinceId(0);
+      }
+    }
   });
-  state.panels.province?.updateDeleteMode?.(false);
+  if (deletion.executed) state.panels.province?.updateDeleteMode?.(false);
   updateRuntimePanel(documentRef, state);
   updateEditingInteractionLock(state, documentRef);
-  return editApiResult(state, result);
+  return deleteApiResult(state, deletion);
 }
 
 function addStateViaApi(state, documentRef, gridCell) {
@@ -7047,25 +7278,30 @@ function addStateViaApi(state, documentRef, gridCell) {
   return editApiResult(state, result);
 }
 
-function deleteStateViaApi(state, documentRef, stateId) {
+function deleteStateViaApi(state, documentRef, stateId, options = {}) {
   const id = normalizeApiInteger(stateId, "国家 ID");
-  const command = createDeleteStateCommand(id);
-  const result = executeEditCommand(state, documentRef, command, {
-    noopStatus: "国家不存在、为中立国家或已被删除。",
-    status: `已删除国家 #${id}。`,
-    refresh: refreshAfterStateEdit,
-    preparePanelRefresh: targetState => {
-      targetState.stateEdit.deleteMode = false;
-      targetState.stateEdit.lastAffected = 0;
-      targetState.selectionStore.clear();
-      targetState.panels.state?.setTargetStateId(0);
-    },
-    throwOnError: false
+  const deletion = executeDeleteWithPreflight(state, documentRef, {
+    kind: OBJECT_KIND.STATE,
+    ids: [id],
+    createCommand: targetId => createDeleteStateCommand(targetId),
+    label: "API 删除国家",
+    options,
+    confirmation: "explicit",
+    executeOptions: {
+      noopStatus: "国家不存在、为中立国家或已被删除。",
+      refresh: refreshAfterStateEdit,
+      preparePanelRefresh: targetState => {
+        targetState.stateEdit.deleteMode = false;
+        targetState.stateEdit.lastAffected = 0;
+        targetState.selectionStore.clear();
+        targetState.panels.state?.setTargetStateId(0);
+      }
+    }
   });
-  state.panels.state?.updateDeleteMode?.(false);
+  if (deletion.executed) state.panels.state?.updateDeleteMode?.(false);
   updateRuntimePanel(documentRef, state);
   updateEditingInteractionLock(state, documentRef);
-  return editApiResult(state, result);
+  return deleteApiResult(state, deletion);
 }
 
 function inspectStateMergeViaApi(state, options = {}) {
@@ -7380,11 +7616,11 @@ function setStateColorViaApi(state, documentRef, stateId, color) {
   return editApiResult(state, result);
 }
 
-function setStateGovernmentViaApi(state, documentRef, stateId, governmentKey) {
+function setStateGovernmentViaApi(state, documentRef, stateId, governmentKey, options = {}) {
   const id = normalizeApiInteger(stateId, "国家 ID");
   const key = String(governmentKey || "").trim();
   if (!key) throw new Error("政体 key 不能为空");
-  const command = createSetStateGovernmentCommand(id, key);
+  const command = createSetStateGovernmentCommand(id, key, {formName: options?.formName});
   const result = executeEditCommand(state, documentRef, command, {
     context: {map: state.map},
     refresh: refreshAfterStateEdit,
@@ -7584,12 +7820,36 @@ function rebuildHeightDerivedViaAction(state, documentRef, scope, options = {}) 
   assertMapAvailable(state);
   if (options?.confirm !== true) throw new Error("高度派生重建会改写当前地图派生数据，需要显式传入 {confirm: true}");
   const before = regenerationApiSummary(state.map);
-  const regenerate = kind => state.runtimeActions.generate.regenerate(kind, {confirm: true});
-  const result = scope === "all"
-    ? rebuildHeightAllDerived(regenerate)
+  const kinds = scope === "all"
+    ? [...HEIGHT_BASE_REBUILD_STEPS, ...HEIGHT_DOWNSTREAM_REBUILD_STEPS]
     : scope === "base"
-      ? rebuildHeightBaseDerived(regenerate)
-      : rebuildHeightDownstreamDerived(regenerate);
+      ? [...HEIGHT_BASE_REBUILD_STEPS]
+      : [...HEIGHT_DOWNSTREAM_REBUILD_STEPS];
+  const transaction = executeMapSnapshotTransaction({
+    map: state.map,
+    editHistory: state.editHistory,
+    label: `高度${scope === "all" ? "全部" : scope === "base" ? "基础" : "下游"}派生重建`,
+    domain: "height-derived",
+    effects: {
+      ...REGENERATION_TRANSACTION_EFFECTS,
+      affected: kinds.map(id => ({kind: "system", id}))
+    },
+    execute: () => {
+      const regenerate = kind => regenerateMapAttributeCoreViaApi(state, documentRef, kind, {confirm: true});
+      return scope === "all"
+        ? rebuildHeightAllDerived(regenerate)
+        : scope === "base"
+          ? rebuildHeightBaseDerived(regenerate)
+          : rebuildHeightDownstreamDerived(regenerate);
+    },
+    executeCommand: command => executeEditCommand(state, documentRef, command, {
+      context: {map: state.map},
+      refresh: () => {},
+      refreshPanels: false
+    }),
+    onRestore: () => refreshMapMutationRollback(state, documentRef)
+  });
+  const result = transaction.result;
   updateRegenerationSection(documentRef, result);
   updateHeightPanel(state);
   updateEditingInteractionLock(state, documentRef);
@@ -7720,13 +7980,38 @@ function importMilitaryBattleEventsViaApi(state, documentRef, document) {
 }
 
 function clearMilitaryBattleEventsViaApi(state, documentRef, target, options = {}) {
+  if (!options || typeof options !== "object" || Array.isArray(options)) throw new Error("清空战斗事件参数必须是对象");
   const eventIds = options.eventIds === undefined || options.eventIds === null ? null : options.eventIds;
   if (eventIds !== null && !Array.isArray(eventIds)) throw new Error("eventIds 必须是数组");
+  const preview = {
+    kind: OBJECT_KIND.MILITARY,
+    kindLabel: "战斗事件",
+    valid: Boolean(target),
+    requestedCount: eventIds?.length || 1,
+    objectCount: eventIds?.length || 1,
+    validIds: eventIds ? [...eventIds] : [target?.id].filter(Boolean),
+    deleteIds: eventIds ? [...eventIds] : [target?.id].filter(Boolean),
+    cascadeIds: [],
+    cascadeCount: 0,
+    dependencies: {},
+    skipped: [],
+    requiresConfirm: Boolean(target),
+    impactLevel: "high",
+    summary: eventIds?.length ? `清空筛选出的 ${eventIds.length} 条战斗事件。` : "清空当前军团的全部战斗事件。",
+    confirmationMessage: eventIds?.length
+      ? `确定清空筛选出的 ${eventIds.length} 条战斗事件？确认后可通过一次撤销恢复。`
+      : "确定清空当前军团的全部战斗事件？确认后可通过一次撤销恢复。"
+  };
+  if (options.inspectOnly === true) return namebaseInspectionResult(state, preview);
+  if (preview.requiresConfirm && options.confirm !== true) throw createDeleteConfirmationRequiredError(preview);
   const command = createClearMilitaryBattleEventsCommand(target, {
     eventIds,
     label: eventIds?.length ? "清空筛选战斗事件" : "清空军团战斗事件"
   });
-  return executeMilitaryCommandViaApi(state, documentRef, command, `clear military battle events: regiment=${target?.id || ""}, scope=${eventIds?.length ? "filtered" : "selected"}`);
+  return {
+    ...executeMilitaryCommandViaApi(state, documentRef, command, `clear military battle events: regiment=${target?.id || ""}, scope=${eventIds?.length ? "filtered" : "selected"}`),
+    preview
+  };
 }
 
 function renameMilitaryRegimentViaApi(state, documentRef, target, name) {
@@ -7844,24 +8129,28 @@ function addCultureViaApi(state, documentRef, options = {}) {
   return editApiResult(state, result);
 }
 
-function deleteCultureViaApi(state, documentRef, cultureId) {
+function deleteCultureViaApi(state, documentRef, cultureId, options = {}) {
   const id = normalizeApiInteger(cultureId, "文化 ID");
-  const command = createDeleteCultureCommand(id);
-  const result = executeEditCommand(state, documentRef, command, {
-    context: {map: state.map},
-    noopStatus: "文化不存在或已删除。",
-    status: `已删除文化 #${id} 并清除相关归属。`,
-    preparePanelRefresh: targetState => {
-      const selectedObject = targetState.selectionStore.getSnapshot().selection?.object;
-      if (selectedObject?.kind !== OBJECT_KIND.CULTURE || Number(selectedObject.id) !== id) return;
-      targetState.selectionStore.clear();
-      targetState.panels.culture?.setSelectedCultureId(null);
-    },
-    throwOnError: false
+  const deletion = executeDeleteWithPreflight(state, documentRef, {
+    kind: OBJECT_KIND.CULTURE,
+    ids: [id],
+    createCommand: targetId => createDeleteCultureCommand(targetId),
+    label: "API 删除文化",
+    options,
+    confirmation: "explicit",
+    executeOptions: {
+      noopStatus: "文化不存在或已删除。",
+      preparePanelRefresh: targetState => {
+        const selectedObject = targetState.selectionStore.getSnapshot().selection?.object;
+        if (selectedObject?.kind !== OBJECT_KIND.CULTURE || Number(selectedObject.id) !== id) return;
+        targetState.selectionStore.clear();
+        targetState.panels.culture?.setSelectedCultureId(null);
+      }
+    }
   });
   updateRuntimePanel(documentRef, state);
   updateEditingInteractionLock(state, documentRef);
-  return editApiResult(state, result);
+  return deleteApiResult(state, deletion);
 }
 
 function assignSocialCellsViaApi(state, documentRef, kind, targetId, gridCellIds) {
@@ -8000,24 +8289,28 @@ function addReligionViaApi(state, documentRef, options = {}) {
   return editApiResult(state, result);
 }
 
-function deleteReligionViaApi(state, documentRef, religionId) {
+function deleteReligionViaApi(state, documentRef, religionId, options = {}) {
   const id = normalizeApiInteger(religionId, "宗教 ID");
-  const command = createDeleteReligionCommand(id);
-  const result = executeEditCommand(state, documentRef, command, {
-    context: {map: state.map},
-    noopStatus: "宗教不存在或已删除。",
-    status: `已删除宗教 #${id} 并清除相关归属。`,
-    preparePanelRefresh: targetState => {
-      const selectedObject = targetState.selectionStore.getSnapshot().selection?.object;
-      if (selectedObject?.kind !== OBJECT_KIND.RELIGION || Number(selectedObject.id) !== id) return;
-      targetState.selectionStore.clear();
-      targetState.panels.religion?.setSelectedReligionId(null);
-    },
-    throwOnError: false
+  const deletion = executeDeleteWithPreflight(state, documentRef, {
+    kind: OBJECT_KIND.RELIGION,
+    ids: [id],
+    createCommand: targetId => createDeleteReligionCommand(targetId),
+    label: "API 删除宗教",
+    options,
+    confirmation: "explicit",
+    executeOptions: {
+      noopStatus: "宗教不存在或已删除。",
+      preparePanelRefresh: targetState => {
+        const selectedObject = targetState.selectionStore.getSnapshot().selection?.object;
+        if (selectedObject?.kind !== OBJECT_KIND.RELIGION || Number(selectedObject.id) !== id) return;
+        targetState.selectionStore.clear();
+        targetState.panels.religion?.setSelectedReligionId(null);
+      }
+    }
   });
   updateRuntimePanel(documentRef, state);
   updateEditingInteractionLock(state, documentRef);
-  return editApiResult(state, result);
+  return deleteApiResult(state, deletion);
 }
 
 function renameReligionViaApi(state, documentRef, religionId, name) {
@@ -8596,7 +8889,7 @@ function refreshAfterProvinceEdit(state, commandOrEffects) {
   refreshAfterEdit(state, commandOrEffects);
 }
 
-function regenerateMapAttribute(state, kind, documentRef) {
+function regenerateMapAttribute(state, kind, documentRef, options = {}) {
   if (!state.map) return regenerationResult(kind, "未执行", "当前没有可重算的地图。");
   switch (kind) {
     case "features":
@@ -8606,11 +8899,11 @@ function regenerateMapAttribute(state, kind, documentRef) {
     case "rivers":
       return regenerateRivers(state, documentRef);
     case "cities":
-      return regenerateCities(state, documentRef);
+      return regenerateCities(state, documentRef, options);
     case "states":
       return regenerateStates(state, documentRef);
     case "provinces":
-      return regenerateProvinces(state, documentRef);
+      return regenerateProvinces(state, documentRef, options);
     case "markers":
       return regenerateMarkerResources(state, documentRef);
     case "diplomacy":
@@ -8651,8 +8944,36 @@ function regenerateMapAttributeViaApi(state, documentRef, kind, options = {}) {
   assertMapAvailable(state);
   if (options?.confirm !== true) throw new Error("受约束重算会改写当前地图派生数据，需要显式传入 {confirm: true}");
   const targetKind = normalizeApiRegenerationKind(kind);
+  const transaction = executeMapSnapshotTransaction({
+    map: state.map,
+    editHistory: state.editHistory,
+    label: `受约束重生成 ${targetKind}`,
+    domain: "regeneration",
+    effects: {
+      ...REGENERATION_TRANSACTION_EFFECTS,
+      affected: [{kind: "system", id: targetKind}]
+    },
+    execute: () => regenerateMapAttributeCoreViaApi(state, documentRef, targetKind, options),
+    executeCommand: command => executeEditCommand(state, documentRef, command, {
+      context: {map: state.map},
+      refresh: () => {},
+      refreshPanels: false
+    }),
+    onRestore: () => refreshMapMutationRollback(state, documentRef)
+  });
+  if (transaction.executed) refreshPanelsForEdit(state, {derived: ["object-panels"]});
+  return {
+    ...transaction.result,
+    history: state.editHistory.getStats()
+  };
+}
+
+function regenerateMapAttributeCoreViaApi(state, documentRef, kind, options = {}) {
+  assertMapAvailable(state);
+  const targetKind = normalizeApiRegenerationKind(kind);
   const before = regenerationApiSummary(state.map);
-  const result = regenerateMapAttribute(state, targetKind, documentRef);
+  const scope = normalizeRegenerationScope(state.map, targetKind, options);
+  const result = regenerateMapAttribute(state, targetKind, documentRef, scope);
   updateRegenerationSection(documentRef, result);
   updateEditingInteractionLock(state, documentRef);
   return {
@@ -8670,6 +8991,20 @@ function regenerateMapAttributeViaApi(state, documentRef, kind, options = {}) {
   };
 }
 
+function refreshMapMutationRollback(state, documentRef) {
+  state.options = state.map.options;
+  state.renderer?.refreshObjectPickingIndex?.();
+  const effects = {effects: REGENERATION_TRANSACTION_EFFECTS};
+  state.selectionStore.batch(() => {
+    reconcilePersistentObjectHighlights(state, documentRef, {refreshUi: false});
+    refreshAfterEdit(state, effects);
+  });
+  refreshPanelsForEdit(state, effects);
+  updateHeightPanel(state);
+  updateRuntimePanel(documentRef, state);
+  updateEditingInteractionLock(state, documentRef);
+}
+
 function normalizeApiRegenerationKind(kind) {
   const value = String(kind || "").trim().toLowerCase();
   if (["feature", "features", "shore", "shoreline"].includes(value)) return "features";
@@ -8684,6 +9019,44 @@ function normalizeApiRegenerationKind(kind) {
   if (["military", "army", "armies"].includes(value)) return "military";
   if (["zone", "zones", "region-event", "region-events"].includes(value)) return "zones";
   throw new Error("受约束重算类型必须是 features / routes / rivers / cities / states / provinces / markers / diplomacy / religions / military / zones");
+}
+
+function normalizeRegenerationScope(map, kind, options = {}) {
+  const rawScope = typeof options?.scope === "object" ? options.scope?.kind : options?.scope ?? options?.regenerationScope;
+  const scopeKind = String(rawScope || "all").trim().toLowerCase();
+  if (scopeKind === "all") return {kind: "all"};
+  if (!["provinces", "cities"].includes(kind)) throw new Error(`${kind} 暂不支持局部重设`);
+  if (kind === "provinces" && scopeKind !== "state") throw new Error("省份只能按全图或国家范围重设");
+  if (kind === "cities" && !["state", "province"].includes(scopeKind)) throw new Error("城镇只能按全图、国家或省份范围重设");
+
+  const objectScope = typeof options?.scope === "object" ? options.scope : null;
+  const id = Number(scopeKind === "state"
+    ? options?.stateId ?? objectScope?.id ?? options?.id
+    : options?.provinceId ?? objectScope?.id ?? options?.id);
+  if (!Number.isInteger(id) || id <= 0) throw new Error(`按${scopeKind === "state" ? "国家" : "省份"}重设时必须指定有效编号`);
+  const collection = scopeKind === "state" ? map?.politics?.states : map?.politics?.provinces;
+  const record = collection?.[id];
+  if (!record || record.removed || Number(record.i ?? record.id) !== id) {
+    throw new Error(`${scopeKind === "state" ? "国家" : "省份"} #${id} 不存在或已移除`);
+  }
+  return {kind: scopeKind, id};
+}
+
+function regenerationScopeLabel(map, scope) {
+  if (scope.kind === "all") return "全图";
+  const collection = scope.kind === "state" ? map?.politics?.states : map?.politics?.provinces;
+  const record = collection?.[scope.id];
+  return `“${record?.fullName || record?.name || `${scope.kind === "state" ? "国家" : "省份"} #${scope.id}`}”`;
+}
+
+function regenerationScopeLog(scope) {
+  return scope.kind === "all" ? "all" : `${scope.kind}:${scope.id}`;
+}
+
+function settlementScopeContainsCity(map, scope, city) {
+  if (scope.kind === "state") return Number(city.state) === scope.id;
+  const packCell = Number(city.packCell);
+  return Number(city.province) === scope.id || (Number.isInteger(packCell) && Number(map?.pack?.cells?.province?.[packCell]) === scope.id);
 }
 
 function regenerationApiSummary(map) {
@@ -8740,20 +9113,22 @@ function regenerateStates(state, documentRef) {
   );
 }
 
-function regenerateProvinces(state, documentRef) {
+function regenerateProvinces(state, documentRef, scope = {kind: "all"}) {
   const map = state.map;
   const beforeProvinces = map.politics?.metadata?.provinces || 0;
   const beforeRoutes = map.settlements?.routes?.length || 0;
   const provinceSalt = nextRegenerationSalt(map, "provinces");
-  const result = regeneratePackProvincesWithinStates(map.grid, map.society, {...map.options, namebases: map.namebases}, map.pack, {salt: provinceSalt});
+  const result = scope.kind === "state"
+    ? regenerateProvincesForStates(map, [scope.id])
+    : regeneratePackProvincesWithinStates(map.grid, map.society, {...map.options, namebases: map.namebases}, map.pack, {salt: provinceSalt});
   if (!result) return regenerationResult("provinces", "未执行", "当前地图缺少可用国家或 pack 语义图，无法在国家内重建省份。");
 
-  applyPoliticsRegenerationResult(map, result);
+  if (scope.kind === "all") applyPoliticsRegenerationResult(map, result);
   finalizeSettlements(map.grid, map.features, map.politics, map.settlements, map.pack, {...map.options, namebases: map.namebases, routeRegenerationSalt: provinceSalt});
   markDerivedFresh(map, ["provinces", "cities"]);
   markDerivedStale(map, ["markers", "zones", "military", "economy", "diplomacy"]);
   refreshGenerationSummary(map);
-  appendGenerationLog(map, `regenerate provinces: salt=${provinceSalt}, provinces=${map.politics.metadata.provinces}, routes=${map.settlements.metadata.routes}, stale=${map.metadata.derivedStale?.systems?.join(",") || "none"}`);
+  appendGenerationLog(map, `regenerate provinces: scope=${regenerationScopeLog(scope)}, salt=${provinceSalt}, provinces=${map.politics.metadata.provinces}, routes=${map.settlements.metadata.routes}, stale=${map.metadata.derivedStale?.systems?.join(",") || "none"}`);
 
   refreshRegeneratedLayers(state, documentRef, {
     derived: ["cell-colors", "political-boundaries", "point-layers", "labels", "route-mesh", "object-panels", "object-index"],
@@ -8766,7 +9141,7 @@ function regenerateProvinces(state, documentRef) {
 
   return regenerationResult(
     "provinces",
-    `省份已在当前国家内重算（扰动 #${provinceSalt}）：${beforeProvinces} -> ${map.politics.metadata.provinces}；道路 ${beforeRoutes} -> ${map.settlements.metadata.routes}`,
+    `省份已在${regenerationScopeLabel(map, scope)}内重算（扰动 #${provinceSalt}）：${beforeProvinces} -> ${map.politics.metadata.provinces}；道路 ${beforeRoutes} -> ${map.settlements.metadata.routes}`,
     "已刷新省份归属、省会/城市省份、路线、标签、边界和对象索引；标记、区域、军事、经济已标记为待派生。"
   );
 }
@@ -8820,19 +9195,29 @@ function regenerateRivers(state, documentRef) {
   );
 }
 
-function regenerateCities(state, documentRef) {
+function regenerateCities(state, documentRef, scope = {kind: "all"}) {
   const map = state.map;
-  const beforeCities = map.settlements?.cities?.length || 0;
+  const beforeCities = map.settlements?.cities?.filter(city => city && !city.removed).length || 0;
   const beforePorts = map.settlements?.cities?.filter(city => city?.port).length || 0;
   const beforeRoutes = map.settlements?.routes?.length || 0;
   const citySalt = nextRegenerationSalt(map, "cities");
 
-  regenerateSettlementsWithinPolitics(map.grid, map.features, map.politics, map.settlements, map.pack, {...map.options, namebases: map.namebases, settlementRegenerationSalt: citySalt, routeRegenerationSalt: citySalt});
-  clearGeneratedCityLabelHides(map);
+  const settlementScope = scope.kind === "all" ? null : {kind: scope.kind, id: scope.id};
+  const targetCityIds = settlementScope
+    ? map.settlements.cities.filter(city => city && !city.removed && settlementScopeContainsCity(map, settlementScope, city)).map(city => city.id)
+    : null;
+  regenerateSettlementsWithinPolitics(map.grid, map.features, map.politics, map.settlements, map.pack, {
+    ...map.options,
+    namebases: map.namebases,
+    settlementRegenerationSalt: citySalt,
+    routeRegenerationSalt: citySalt,
+    settlementScope
+  });
+  clearGeneratedCityLabelHides(map, targetCityIds);
   markDerivedFresh(map, ["cities"]);
   markDerivedStale(map, ["provinces", "states", "religions", "markers", "zones", "military", "diplomacy"]);
   refreshGenerationSummary(map);
-  appendGenerationLog(map, `regenerate settlements: salt=${citySalt}, cities=${map.settlements.metadata.cities}, ports=${map.settlements.metadata.ports}, routes=${map.settlements.metadata.routes}, stale=${map.metadata.derivedStale?.systems?.join(",") || "none"}`);
+  appendGenerationLog(map, `regenerate settlements: scope=${regenerationScopeLog(scope)}, salt=${citySalt}, cities=${map.settlements.metadata.cities}, ports=${map.settlements.metadata.ports}, routes=${map.settlements.metadata.routes}, stale=${map.metadata.derivedStale?.systems?.join(",") || "none"}`);
 
   refreshRegeneratedLayers(state, documentRef, {
     derived: ["point-layers", "labels", "route-mesh", "object-panels", "object-index"],
@@ -8844,8 +9229,8 @@ function regenerateCities(state, documentRef) {
 
   return regenerationResult(
     "cities",
-    `城镇已按当前适居度、文化、政区、港口和间距约束重算（扰动 #${citySalt}）：${beforeCities} -> ${map.settlements.metadata.cities}；港口 ${beforePorts} -> ${map.settlements.metadata.ports}；道路 ${beforeRoutes} -> ${map.settlements.metadata.routes}`,
-    "已保留国家首都 burg 引用，刷新省会、普通城镇、城市标签、人口点、道路和对象索引；省份、国家、宗教、标记、区域、军事仍标记为待派生。"
+    `${regenerationScopeLabel(map, scope)}城镇已按当前适居度、文化、政区、港口和间距约束重算（扰动 #${citySalt}）：${beforeCities} -> ${map.settlements.metadata.cities}；港口 ${beforePorts} -> ${map.settlements.metadata.ports}；道路 ${beforeRoutes} -> ${map.settlements.metadata.routes}`,
+    "已保留目标范围内的国家首都、省会锚点与目标范围外城镇身份，只替换目标范围内普通城镇；道路按全图关系同步重建。"
   );
 }
 
@@ -9104,9 +9489,14 @@ function markDerivedFresh(map, systems) {
   if (map?.diplomacy?.metadata) map.diplomacy.metadata.stale = nextSystems.includes("diplomacy");
 }
 
-function clearGeneratedCityLabelHides(map) {
+function clearGeneratedCityLabelHides(map, cityIds = null) {
   const store = ensureLabelStore(map);
-  store.hidden[LABEL_TARGET_KIND.CITY] = [];
+  if (Array.isArray(cityIds)) {
+    const targets = new Set(cityIds.map(Number));
+    store.hidden[LABEL_TARGET_KIND.CITY] = store.hidden[LABEL_TARGET_KIND.CITY].filter(id => !targets.has(Number(id)));
+  } else {
+    store.hidden[LABEL_TARGET_KIND.CITY] = [];
+  }
   store.metadata = {
     custom: store.custom.length,
     hidden: store.hidden[LABEL_TARGET_KIND.CITY].length + store.hidden[LABEL_TARGET_KIND.STATE].length
@@ -10833,19 +11223,24 @@ function bindStateEditing(canvas, state, documentRef) {
       event.stopImmediatePropagation();
       const stateId = getStateIdAtEvent(state, event);
       if (!Number.isInteger(stateId) || stateId <= 0) return;
-      const command = createDeleteStateCommand(stateId);
-      const result = executeEditCommand(state, canvas.ownerDocument || document, command, {
-        context: {map: state.map},
-        refresh: refreshAfterStateEdit,
-        preparePanelRefresh: targetState => {
-          targetState.stateEdit.deleteMode = false;
-          targetState.stateEdit.lastAffected = 0;
-          targetState.selectionStore.clear();
-          targetState.panels.state?.setTargetStateId(0);
+      const targetDocument = canvas.ownerDocument || document;
+      const result = executeDeleteWithPreflight(state, targetDocument, {
+        kind: OBJECT_KIND.STATE,
+        ids: [stateId],
+        createCommand: id => createDeleteStateCommand(id),
+        label: "画布删除国家",
+        executeOptions: {
+          refresh: refreshAfterStateEdit,
+          preparePanelRefresh: targetState => {
+            targetState.stateEdit.deleteMode = false;
+            targetState.stateEdit.lastAffected = 0;
+            targetState.selectionStore.clear();
+            targetState.panels.state?.setTargetStateId(0);
+          }
         }
       });
       if (!result.executed) return;
-      completeCanvasToolMode(state, canvas.ownerDocument || document, CANVAS_TOOL_MODE.STATE_DELETE, {command: result.command});
+      completeCanvasToolMode(state, targetDocument, CANVAS_TOOL_MODE.STATE_DELETE, {command: result.execution?.command});
       return;
     }
     if (state.stateEdit.addMode && state.map) {
@@ -10922,19 +11317,24 @@ function bindProvinceEditing(canvas, state, documentRef) {
       event.stopImmediatePropagation();
       const provinceId = getProvinceIdAtEvent(state, event);
       if (!Number.isInteger(provinceId) || provinceId <= 0) return;
-      const command = createDeleteProvinceCommand(provinceId);
-      const result = executeEditCommand(state, canvas.ownerDocument || document, command, {
-        context: {map: state.map},
-        refresh: refreshAfterProvinceEdit,
-        preparePanelRefresh: targetState => {
-          targetState.provinceEdit.deleteMode = false;
-          targetState.provinceEdit.lastAffected = 0;
-          targetState.selectionStore.clear();
-          targetState.panels.province?.setSelectedProvinceId(0);
+      const targetDocument = canvas.ownerDocument || document;
+      const result = executeDeleteWithPreflight(state, targetDocument, {
+        kind: OBJECT_KIND.PROVINCE,
+        ids: [provinceId],
+        createCommand: id => createDeleteProvinceCommand(id),
+        label: "画布删除省份",
+        executeOptions: {
+          refresh: refreshAfterProvinceEdit,
+          preparePanelRefresh: targetState => {
+            targetState.provinceEdit.deleteMode = false;
+            targetState.provinceEdit.lastAffected = 0;
+            targetState.selectionStore.clear();
+            targetState.panels.province?.setSelectedProvinceId(0);
+          }
         }
       });
       if (!result.executed) return;
-      completeCanvasToolMode(state, canvas.ownerDocument || document, CANVAS_TOOL_MODE.PROVINCE_DELETE, {command: result.command});
+      completeCanvasToolMode(state, targetDocument, CANVAS_TOOL_MODE.PROVINCE_DELETE, {command: result.execution?.command});
       return;
     }
     if (state.provinceEdit.addMode && state.map) {
@@ -11189,17 +11589,21 @@ function bindCityEditing(canvas, state, documentRef) {
       event.stopImmediatePropagation();
       const cityId = getCityIdAtEvent(state, event);
       if (!Number.isInteger(cityId) || cityId < 0) return;
-      const command = createDeleteCityCommand(cityId);
-      const execution = executeEditCommand(state, documentRef, command, {
-        context: {map: state.map},
-        preparePanelRefresh: targetState => {
-          targetState.cityEdit.deleteMode = false;
-          targetState.selectionStore.clear();
-          targetState.panels.city?.setSelectedCityId(null);
+      const execution = executeDeleteWithPreflight(state, documentRef, {
+        kind: OBJECT_KIND.CITY,
+        ids: [cityId],
+        createCommand: id => createDeleteCityCommand(id),
+        label: "画布删除城市",
+        executeOptions: {
+          preparePanelRefresh: targetState => {
+            targetState.cityEdit.deleteMode = false;
+            targetState.selectionStore.clear();
+            targetState.panels.city?.setSelectedCityId(null);
+          }
         }
       });
       if (!execution.executed) return;
-      completeCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.CITY_DELETE, {command: execution.command});
+      completeCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.CITY_DELETE, {command: execution.execution?.command});
       return;
     }
     if (!state.cityEdit.addMode || !state.map) return;
@@ -11582,7 +11986,7 @@ function labelObjectFromCustomLabel(label) {
 }
 
 function scheduleHeightBrushAtEvent(state, event, documentRef) {
-  state.heightEdit.pendingBrushPointer = {pointerId: event.pointerId, clientX: event.clientX, clientY: event.clientY};
+  state.heightEdit.pendingBrushPointer = {pointerId: event.pointerId, clientX: event.clientX, clientY: event.clientY, timeStamp: event.timeStamp};
   if (state.heightEdit.brushFrame) return;
   const view = documentRef.defaultView;
   const run = () => {
@@ -11599,7 +12003,7 @@ function flushScheduledHeightBrush(state, documentRef, finalPointer = null) {
   const pointer = state.heightEdit.pendingBrushPointer;
   cancelScheduledHeightBrush(state, documentRef);
   const resolvedPointer = finalPointer && state.heightEdit.activeStroke?.pointerId === finalPointer.pointerId ? finalPointer : pointer;
-  if (resolvedPointer && state.heightEdit.activeStroke?.pointerId === resolvedPointer.pointerId) applyHeightBrushAtEvent(state, resolvedPointer, documentRef);
+  if (resolvedPointer && state.heightEdit.activeStroke?.pointerId === resolvedPointer.pointerId) applyHeightBrushAtEvent(state, resolvedPointer, documentRef, {force: true});
 }
 
 function cancelScheduledHeightBrush(state, documentRef) {
@@ -11611,14 +12015,12 @@ function cancelScheduledHeightBrush(state, documentRef) {
   state.heightEdit.pendingBrushPointer = null;
 }
 
-function applyHeightBrushAtEvent(state, event, documentRef) {
+function applyHeightBrushAtEvent(state, event, documentRef, {force = false} = {}) {
   const brush = state.panels.height.getBrush();
   const stroke = state.heightEdit.activeStroke;
   if (!brush.active || !stroke) return;
 
-  if (Number.isFinite(stroke.lastClientX) && Math.hypot(event.clientX - stroke.lastClientX, event.clientY - stroke.lastClientY) < 1.5) return;
-  stroke.lastClientX = event.clientX;
-  stroke.lastClientY = event.clientY;
+  if (!acceptHeightBrushSample(stroke, event, {force})) return;
 
   state.pick = state.renderer.pickClientPoint(event.clientX, event.clientY);
   const point = state.renderer.screenToWorld(event.clientX, event.clientY);
@@ -11923,6 +12325,7 @@ function finishHeightStroke(state, documentRef) {
     refresh: refreshAfterEdit,
     refreshPanels: false
   });
+  updateHeightPanel(state, {includeMapSummary: false});
 }
 
 function finishStateStroke(state, documentRef) {

@@ -80,7 +80,25 @@ const requiredFromMetadata = metadataEntries
   .map(([qualifiedName]) => qualifiedName)
   .sort();
 assert.deepEqual(requiredFromMetadata, [...capabilities.safety.confirmRequiredMethods].sort(), "确认策略与方法元数据不一致");
-assert.deepEqual(groupQualifiedMethodNames(CONFIRM_REQUIRED_METHODS).edit, ["height.rebuildBaseDerived", "height.rebuildDownstreamDerived", "economy.assignCells", "economy.rebuild", "states.merge", "states.split", "features.applyTopology", "population.transfer"], "嵌套编辑确认分组丢失方法路径");
+assert.deepEqual(groupQualifiedMethodNames(CONFIRM_REQUIRED_METHODS).edit, [
+  "height.rebuildBaseDerived",
+  "height.rebuildDownstreamDerived",
+  "notes.deleteBatch",
+  "cities.delete",
+  "provinces.delete",
+  "states.delete",
+  "cultures.delete",
+  "religions.delete",
+  "rivers.delete",
+  "lakes.delete",
+  "military.clearBattleEvents",
+  "economy.assignCells",
+  "economy.rebuild",
+  "states.merge",
+  "states.split",
+  "features.applyTopology",
+  "population.transfer"
+], "嵌套编辑确认分组丢失方法路径");
 
 assert.throws(() => buildApiContract(API_METHODS, {...rawMetadata, info: {...rawMetadata.info, version: undefined}}), /缺少原始元数据：info\.version/, "缺失方法元数据没有阻止契约生成");
 assert.throws(() => buildApiContract(API_METHODS, {...rawMetadata, info: {...rawMetadata.info, ghost: rawMetadata.info.version}}), /未声明方法：info\.ghost/, "多余方法元数据没有阻止契约生成");

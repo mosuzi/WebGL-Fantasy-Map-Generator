@@ -1,3 +1,5 @@
+import {hasOpenFrameworkPopup} from "../runtime/keyboard-shortcuts.js";
+
 const registries = new WeakMap();
 
 export function getOverlayRegistry(documentRef = globalThis.document) {
@@ -41,6 +43,8 @@ export class OverlayRegistry {
     element.dataset.overlayId = id;
     element.dataset.overlayKind = kind;
     element.dataset.overlayRole = role;
+    element.dataset.overlayOpen = "false";
+    if (kind === "fixed") element.setAttribute("data-keyboard-exclusive", "true");
     if (!element.hasAttribute("tabindex")) element.setAttribute("tabindex", "-1");
     if (pointerHandler) element.addEventListener("pointerdown", pointerHandler);
     this.entries.set(id, entry);
@@ -65,6 +69,7 @@ export class OverlayRegistry {
     }
     entry.returnFocus = isRestorableFocusTarget(returnFocus) ? returnFocus : null;
     entry.open = true;
+    entry.element.dataset.overlayOpen = "true";
     this.activate(id);
     this.reflow(id);
     if (options.focus !== false) this.focusEntry(entry);
@@ -75,6 +80,7 @@ export class OverlayRegistry {
     const entry = this.entries.get(id);
     if (!entry || !entry.open) return false;
     entry.open = false;
+    entry.element.dataset.overlayOpen = "false";
     if (restoreFocus) restoreFocusTarget(entry.returnFocus);
     entry.returnFocus = null;
     return true;
@@ -85,6 +91,7 @@ export class OverlayRegistry {
     if (!entry || !entry.open) return false;
     const returnFocus = entry.returnFocus;
     entry.open = false;
+    entry.element.dataset.overlayOpen = "false";
     entry.returnFocus = null;
     entry.onRequestClose?.();
     if (restoreFocus) restoreFocusTarget(returnFocus);
@@ -133,13 +140,23 @@ export class OverlayRegistry {
   }
 
   closeTopmost(event) {
-    if (event.key !== "Escape" || event.defaultPrevented) return;
-    const topmost = [...this.entries.values()]
-      .filter(entry => entry.open)
-      .sort((a, b) => b.zIndex - a.zIndex)[0];
+    if (
+      event.key !== "Escape"
+      || event.defaultPrevented
+      || event.repeat
+      || event.isComposing
+      || event.keyCode === 229
+      || hasOpenFrameworkPopup(this.documentRef)
+    ) return;
+    const openEntries = [...this.entries.values()].filter(entry => entry.open);
+    const topmost = (openEntries.some(entry => entry.kind === "fixed")
+      ? openEntries.filter(entry => entry.kind === "fixed")
+      : openEntries
+    ).sort((a, b) => b.zIndex - a.zIndex)[0];
     if (!topmost) return;
     event.preventDefault();
-    event.stopPropagation();
+    if (typeof event.stopImmediatePropagation === "function") event.stopImmediatePropagation();
+    else event.stopPropagation();
     this.requestClose(topmost.id);
   }
 

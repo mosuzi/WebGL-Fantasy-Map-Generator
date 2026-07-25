@@ -431,6 +431,7 @@
             <UiButton variant="secondary" @click="openCreateCustomUnit">新增自定义单位</UiButton>
             <UiButton v-if="activeCustomUnit" variant="secondary" @click="openEditCustomUnit">编辑当前单位</UiButton>
             <UiButton v-if="activeCustomUnit" variant="danger" @click="deleteActiveCustomUnit">删除当前单位</UiButton>
+            <UiButton v-if="customUnitCanRestore" variant="secondary" @click="restoreLastDeletedCustomUnit">恢复上次删除单位</UiButton>
           </div>
           <form v-if="customUnitEditorOpen" class="unit-custom-editor" @submit.prevent="saveCustomUnit">
             <h3>{{ editingCustomUnitId ? "编辑自定义单位" : "新增自定义单位" }}</h3>
@@ -556,7 +557,7 @@
       <section class="regeneration-section" aria-labelledby="regeneration-section-title">
         <div class="regeneration-section-header">
           <h2 id="regeneration-section-title">重新生成</h2>
-          <span id="regeneration-status"></span>
+          <span id="regeneration-status">{{ regenerationFeedback }}</span>
         </div>
 
         <div class="regeneration-control">
@@ -567,7 +568,39 @@
             :options="regenerationActions"
             @update:model-value="selectedRegenerationKind = $event"
           />
-          <UiButton variant="danger" :data-regenerate-kind="selectedRegenerationKind">
+          <UiSelectField
+            v-if="regenerationScopeOptions.length > 1"
+            label="重设范围"
+            input-id="regeneration-scope"
+            :model-value="selectedRegenerationScope"
+            :options="regenerationScopeOptions"
+            @update:model-value="selectedRegenerationScope = $event"
+          />
+          <UiSelectField
+            v-if="selectedRegenerationScope === 'state'"
+            label="目标国家"
+            input-id="regeneration-state"
+            :model-value="selectedRegenerationStateId"
+            :options="regenerationStateOptions"
+            @update:model-value="selectedRegenerationStateId = $event"
+          />
+          <UiSelectField
+            v-if="selectedRegenerationScope === 'province'"
+            label="目标省份"
+            input-id="regeneration-province"
+            :model-value="selectedRegenerationProvinceId"
+            :options="regenerationProvinceOptions"
+            @update:model-value="selectedRegenerationProvinceId = $event"
+          />
+          <UiButton
+            variant="danger"
+            :data-regenerate-kind="selectedRegenerationKind"
+            :data-regeneration-scope="selectedRegenerationScope"
+            :data-regeneration-state-id="selectedRegenerationScope === 'state' ? selectedRegenerationStateId : undefined"
+            :data-regeneration-province-id="selectedRegenerationScope === 'province' ? selectedRegenerationProvinceId : undefined"
+            :disabled="regenerationTargetMissing"
+            @click="requestRegeneration"
+          >
             重新生成{{ selectedRegenerationAction.label }}
           </UiButton>
         </div>
@@ -633,6 +666,8 @@ defineOptions({
 
 const config = useGlobalConfigStore();
 const {preferences} = storeToRefs(config);
+const CUSTOM_UNIT_RECYCLE_STORAGE_KEY = "webgl-generator-custom-unit-recycle-v1";
+const customUnitCanRestore = ref(Boolean(readCustomUnitRecycleRecord()));
 const CONTROL_PANEL_TAB_IDS = Object.freeze(["about", "generation", "themes", "styles", "layers", "management", "units"]);
 const activeTab = ref(normalizeControlPanelTab(preferences.value.controlPanelTab));
 const exportPanelOpen = ref(false);
@@ -908,6 +943,23 @@ const regenerationActions = Object.freeze([
 ]);
 const selectedRegenerationKind = ref(regenerationActions[0].kind);
 const selectedRegenerationAction = computed(() => regenerationActions.find(action => action.kind === selectedRegenerationKind.value) || regenerationActions[0]);
+const selectedRegenerationScope = ref("all");
+const selectedRegenerationStateId = ref("");
+const selectedRegenerationProvinceId = ref("");
+const regenerationStateOptions = ref([]);
+const regenerationProvinceOptions = ref([]);
+const regenerationScopeOptions = computed(() => {
+  if (selectedRegenerationKind.value === "provinces") {
+    return [{value: "all", label: "全图"}, {value: "state", label: "指定国家"}];
+  }
+  if (selectedRegenerationKind.value === "cities") {
+    return [{value: "all", label: "全图"}, {value: "state", label: "指定国家"}, {value: "province", label: "指定省份"}];
+  }
+  return [{value: "all", label: "全图"}];
+});
+const regenerationTargetMissing = computed(() => (selectedRegenerationScope.value === "state" && !selectedRegenerationStateId.value)
+  || (selectedRegenerationScope.value === "province" && !selectedRegenerationProvinceId.value));
+const regenerationFeedback = ref("");
 
 function isLayerVisible(layer) {
   const config = layers.find(item => item.id === layer);
@@ -973,8 +1025,50 @@ function saveCustomUnit() {
 function deleteActiveCustomUnit() {
   const unit = activeCustomUnit.value;
   if (!unit) return;
-  commitCustomUnitPreferences(deleteCustomUnitDefinition(unitPreferences.value, unit.id));
-  closeCustomUnitEditor();
+  if (typeof window.confirm === "function" && !window.confirm(`确定删除自定义单位“${unit.name}（${unit.symbol}）”？删除后可恢复上次删除。`)) return;
+  const storage = window.localStorage;
+  const previousRecycle = storage?.getItem(CUSTOM_UNIT_RECYCLE_STORAGE_KEY) ?? null;
+  try {
+    storage?.setItem(CUSTOM_UNIT_RECYCLE_STORAGE_KEY, JSON.stringify({
+      version: 1,
+      deletedAt: new Date().toISOString(),
+      unit
+    }));
+    commitCustomUnitPreferences(deleteCustomUnitDefinition(unitPreferences.value, unit.id));
+    customUnitCanRestore.value = true;
+    closeCustomUnitEditor();
+  } catch (error) {
+    if (previousRecycle === null) storage?.removeItem(CUSTOM_UNIT_RECYCLE_STORAGE_KEY);
+    else storage?.setItem(CUSTOM_UNIT_RECYCLE_STORAGE_KEY, previousRecycle);
+    customUnitError.value = error instanceof Error ? error.message : String(error);
+  }
+}
+
+function restoreLastDeletedCustomUnit() {
+  const record = readCustomUnitRecycleRecord();
+  if (!record?.unit) {
+    customUnitCanRestore.value = false;
+    return;
+  }
+  try {
+    commitCustomUnitPreferences(upsertCustomUnitDefinition(unitPreferences.value, record.unit));
+    window.localStorage?.removeItem(CUSTOM_UNIT_RECYCLE_STORAGE_KEY);
+    customUnitCanRestore.value = false;
+  } catch (error) {
+    customUnitError.value = error instanceof Error ? error.message : String(error);
+  }
+}
+
+function readCustomUnitRecycleRecord() {
+  try {
+    if (typeof window === "undefined") return null;
+    const raw = window.localStorage?.getItem(CUSTOM_UNIT_RECYCLE_STORAGE_KEY);
+    if (!raw) return null;
+    const record = JSON.parse(raw);
+    return record?.version === 1 && record.unit ? record : null;
+  } catch {
+    return null;
+  }
 }
 
 function commitCustomUnitPreferences(units) {
@@ -1168,6 +1262,35 @@ function handleLabelStylesChanged(event) {
   };
 }
 
+function handleRegenerationTargetsChanged(event) {
+  regenerationStateOptions.value = Array.isArray(event.detail?.states) ? event.detail.states.map(option => ({...option})) : [];
+  regenerationProvinceOptions.value = Array.isArray(event.detail?.provinces) ? event.detail.provinces.map(option => ({...option})) : [];
+  if (!regenerationStateOptions.value.some(option => option.value === selectedRegenerationStateId.value)) {
+    selectedRegenerationStateId.value = regenerationStateOptions.value[0]?.value || "";
+  }
+  if (!regenerationProvinceOptions.value.some(option => option.value === selectedRegenerationProvinceId.value)) {
+    selectedRegenerationProvinceId.value = regenerationProvinceOptions.value[0]?.value || "";
+  }
+}
+
+async function requestRegeneration() {
+  const regenerate = globalThis.window?.webglGeneratorApi?.generate?.regenerate;
+  if (typeof regenerate !== "function") {
+    regenerationFeedback.value = "重设服务尚未就绪";
+    return;
+  }
+  regenerationFeedback.value = "重设中…";
+  const response = await regenerate(selectedRegenerationKind.value, {
+    confirm: true,
+    scope: selectedRegenerationScope.value,
+    stateId: selectedRegenerationScope.value === "state" ? Number(selectedRegenerationStateId.value) : undefined,
+    provinceId: selectedRegenerationScope.value === "province" ? Number(selectedRegenerationProvinceId.value) : undefined
+  });
+  regenerationFeedback.value = response?.ok
+    ? response.data?.status || "重设完成"
+    : `重设失败：${response?.error?.message || "未知错误"}`;
+}
+
 function commitLabelStyle(field, value) {
   document.dispatchEvent(new CustomEvent("webgl-generator-label-style-patch", {
     detail: {styleType: selectedLabelStyleType.value, patch: {[field]: value}}
@@ -1220,6 +1343,7 @@ function resetCurrentLabelStyle() {
 }
 
 function resetAllLabelStyles() {
+  if (typeof window.confirm === "function" && !window.confirm("确定重置全部标签样式？确认后可通过一次撤销恢复。")) return;
   document.dispatchEvent(new CustomEvent("webgl-generator-label-styles-reset-all"));
 }
 
@@ -1281,11 +1405,21 @@ watch(activeTab, tab => {
   if (preferences.value.controlPanelTab !== normalized) config.patchPreferences({controlPanelTab: normalized});
 });
 
+watch(selectedRegenerationKind, () => {
+  selectedRegenerationScope.value = "all";
+  regenerationFeedback.value = "";
+});
+
+watch(regenerationScopeOptions, options => {
+  if (!options.some(option => option.value === selectedRegenerationScope.value)) selectedRegenerationScope.value = "all";
+});
+
 onMounted(() => {
   document.addEventListener("click", handleExportPanelOutsideClick, true);
   document.addEventListener("webgl-generator-sync-climate-options", handleClimateOptionsSync);
   document.addEventListener("webgl-generator-visual-themes-changed", handleVisualThemesChanged);
   document.addEventListener("webgl-generator-label-styles-changed", handleLabelStylesChanged);
+  document.addEventListener("webgl-generator-regeneration-targets", handleRegenerationTargetsChanged);
   window.addEventListener("resize", handleExportPanelReposition);
   window.addEventListener("scroll", handleExportPanelReposition, true);
 });
@@ -1295,6 +1429,7 @@ onBeforeUnmount(() => {
   document.removeEventListener("webgl-generator-sync-climate-options", handleClimateOptionsSync);
   document.removeEventListener("webgl-generator-visual-themes-changed", handleVisualThemesChanged);
   document.removeEventListener("webgl-generator-label-styles-changed", handleLabelStylesChanged);
+  document.removeEventListener("webgl-generator-regeneration-targets", handleRegenerationTargetsChanged);
   window.removeEventListener("resize", handleExportPanelReposition);
   window.removeEventListener("scroll", handleExportPanelReposition, true);
 });

@@ -66,6 +66,7 @@ import {isSelectionForLabelItem, shouldShowDefaultSelectionMarker} from "./selec
 import {DEFAULT_VISUAL_THEME_ID, resolveVisualTheme} from "./themes.js";
 import {emptyOceanCurrentLayerStats, pushOceanCurrentLayer} from "./ocean-current-layer.js";
 import {pushMilitaryFrontLayer} from "./military-front-layer.js";
+import {snapshotViewportCamera, viewportBufferTransform} from "./viewport-buffer-transform.js";
 import {
   ROUTE_SELECTION_HALO_CSS_PX,
   createLineWidthProjection,
@@ -264,6 +265,8 @@ export class PlaceholderMapRenderer {
       provinceBorders: true
     };
     this.camera = {scale: 1, offsetX: 0, offsetY: 0};
+    this.routeBufferCamera = snapshotViewportCamera(this.camera);
+    this.riverBufferCamera = snapshotViewportCamera(this.camera);
     this.dynamicBuffersDirty = {
       routes: true,
       tradeFlows: false,
@@ -339,6 +342,7 @@ export class PlaceholderMapRenderer {
     this.surfaceCellRanges = buildSurfaceCellRanges(this.colorMode, this.viewOptions, this.cellVisualMesh, vertices.length);
     this.vertexCount = vertices.length / 6;
     this.routeVertexCount = 0;
+    this.riverVertexCount = 0;
     this.tradeFlowVertexCount = 0;
     this.tradeFlowPickItems = [];
     this.tradeFlowBuildMs = 0;
@@ -426,6 +430,7 @@ export class PlaceholderMapRenderer {
     this.surfaceCellRanges = buildSurfaceCellRanges(this.colorMode, this.viewOptions, this.cellVisualMesh, vertices.length);
     this.vertexCount = vertices.length / 6;
     this.routeVertexCount = 0;
+    this.riverVertexCount = 0;
     this.tradeFlowVertexCount = 0;
     this.tradeFlowPickItems = [];
     this.tradeFlowBuildMs = 0;
@@ -835,13 +840,14 @@ export class PlaceholderMapRenderer {
       gl.drawArrays(gl.TRIANGLES, 0, this.politicalMeshDebugVertexCount);
       gl.disable(gl.BLEND);
     }
+    const routePreviewTransform = viewportBufferTransform(this.routeBufferCamera, this.camera);
     gl.bindBuffer(gl.ARRAY_BUFFER, this.routeBuffer);
-    gl.uniform1f(this.locations.scale, 1);
-    gl.uniform2f(this.locations.offset, 0, 0);
+    gl.uniform1f(this.locations.scale, routePreviewTransform.scale);
+    gl.uniform2f(this.locations.offset, routePreviewTransform.offsetX, routePreviewTransform.offsetY);
     bindVertexBuffer(gl, this.locations);
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-    if (this.layerVisibility.routes && (drawDirtyDynamicBuffers || !this.dynamicBuffersDirty.routes)) {
+    if (this.layerVisibility.routes) {
       gl.drawArrays(gl.TRIANGLES, 0, this.routeVertexCount);
       if (this.routeVertexCount > 0) layerOrder.push("routes");
     }
@@ -860,13 +866,17 @@ export class PlaceholderMapRenderer {
     gl.drawArrays(gl.TRIANGLES, 0, this.lineVertexCount);
     if (this.lineVertexCount > 0) layerOrder.push("lines");
     gl.disable(gl.BLEND);
+    const riverPreviewTransform = viewportBufferTransform(this.riverBufferCamera, this.camera);
     gl.bindBuffer(gl.ARRAY_BUFFER, this.riverBuffer);
-    gl.uniform1f(this.locations.scale, 1);
-    gl.uniform2f(this.locations.offset, 0, 0);
+    gl.uniform1f(this.locations.scale, riverPreviewTransform.scale);
+    gl.uniform2f(this.locations.offset, riverPreviewTransform.offsetX, riverPreviewTransform.offsetY);
     bindVertexBuffer(gl, this.locations);
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-    if (this.layerVisibility.rivers && (drawDirtyDynamicBuffers || !this.dynamicBuffersDirty.rivers)) gl.drawArrays(gl.TRIANGLES, 0, this.riverVertexCount);
+    if (this.layerVisibility.rivers) {
+      gl.drawArrays(gl.TRIANGLES, 0, this.riverVertexCount);
+      if (this.riverVertexCount > 0) layerOrder.push("rivers");
+    }
     gl.disable(gl.BLEND);
     gl.bindBuffer(gl.ARRAY_BUFFER, this.selectionBuffer);
     gl.uniform1f(this.locations.scale, 1);
@@ -1002,7 +1012,11 @@ export class PlaceholderMapRenderer {
         routesDirty: this.dynamicBuffersDirty.routes,
         tradeFlowsDirty: this.dynamicBuffersDirty.tradeFlows,
         riversDirty: this.dynamicBuffersDirty.rivers,
-        selectionDirty: this.dynamicBuffersDirty.selection
+        selectionDirty: this.dynamicBuffersDirty.selection,
+        routeBufferCamera: {...this.routeBufferCamera},
+        riverBufferCamera: {...this.riverBufferCamera},
+        routePreviewTransform: viewportBufferTransform(this.routeBufferCamera, this.camera),
+        riverPreviewTransform: viewportBufferTransform(this.riverBufferCamera, this.camera)
       },
       webgl2: true
     };
@@ -1053,11 +1067,13 @@ export class PlaceholderMapRenderer {
 
   updateRouteBuffer() {
     const startedAt = performance.now();
-    const {vertices: routeVertices, stats} = buildRouteMeshVertices(this.map, snapshotCamera(this.camera), this.canvas, this.selection, this.objectHighlights, this.visualTheme);
+    const camera = snapshotCamera(this.camera);
+    const {vertices: routeVertices, stats} = buildRouteMeshVertices(this.map, camera, this.canvas, this.selection, this.objectHighlights, this.visualTheme);
     this.routeVertexCount = routeVertices.length / 6;
     this.routeRenderStats = stats;
     this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.routeBuffer);
     this.gl.bufferData(this.gl.ARRAY_BUFFER, routeVertices, this.gl.DYNAMIC_DRAW);
+    this.routeBufferCamera = snapshotViewportCamera(camera);
     this.routeBuildMs = roundMs(performance.now() - startedAt);
     this.dynamicBuffersDirty.routes = false;
   }
@@ -1077,6 +1093,7 @@ export class PlaceholderMapRenderer {
     this.routeRenderStats = stats;
     this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.routeBuffer);
     this.gl.bufferData(this.gl.ARRAY_BUFFER, routeVertices, this.gl.DYNAMIC_DRAW);
+    this.routeBufferCamera = snapshotViewportCamera(camera);
     this.routeBuildMs = roundMs(performance.now() - startedAt);
     this.dynamicBuffersDirty.routes = false;
     return true;
@@ -1087,6 +1104,7 @@ export class PlaceholderMapRenderer {
     this.routeRenderStats = normalizeRouteRenderStats(emptyRouteRenderStats());
     this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.routeBuffer);
     this.gl.bufferData(this.gl.ARRAY_BUFFER, new Float32Array(), this.gl.DYNAMIC_DRAW);
+    this.routeBufferCamera = snapshotViewportCamera(this.camera);
     this.routeBuildMs = 0;
     this.dynamicBuffersDirty.routes = false;
   }
@@ -1159,11 +1177,13 @@ export class PlaceholderMapRenderer {
 
   updateRiverBuffer() {
     const startedAt = performance.now();
-    const {vertices, stats} = buildRiverMeshVertices(this.map, snapshotCamera(this.camera), this.canvas);
+    const camera = snapshotCamera(this.camera);
+    const {vertices, stats} = buildRiverMeshVertices(this.map, camera, this.canvas);
     this.riverVertexCount = vertices.length / 6;
     this.riverWidthStats = stats;
     this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.riverBuffer);
     this.gl.bufferData(this.gl.ARRAY_BUFFER, vertices, this.gl.DYNAMIC_DRAW);
+    this.riverBufferCamera = snapshotViewportCamera(camera);
     this.riverBuildMs = roundMs(performance.now() - startedAt);
     this.dynamicBuffersDirty.rivers = false;
   }
@@ -1181,6 +1201,7 @@ export class PlaceholderMapRenderer {
     this.riverWidthStats = stats;
     this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.riverBuffer);
     this.gl.bufferData(this.gl.ARRAY_BUFFER, vertices, this.gl.DYNAMIC_DRAW);
+    this.riverBufferCamera = snapshotViewportCamera(camera);
     this.riverBuildMs = roundMs(performance.now() - startedAt);
     this.dynamicBuffersDirty.rivers = false;
     return true;

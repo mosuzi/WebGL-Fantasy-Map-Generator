@@ -1,6 +1,7 @@
 const DEFAULT_SUGGESTIONS = Object.freeze({
   operation_busy: "等待当前任务结束后重试。",
   operation_cancelled: "当前请求已取消，可在确认地图状态后重试。",
+  operation_obsolete: "地图已被替换，请在当前地图上重新发起请求。",
   operation_invalid_input: "检查参数或导入内容后重试。",
   operation_failed: "保留当前地图并查看错误详情后重试。",
   operation_rollback_failed: "运行时回滚失败，请重新载入当前地图。"

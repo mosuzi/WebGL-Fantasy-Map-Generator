@@ -42,24 +42,26 @@ const map = {
 };
 
 const expectedLabels = {
-  height: ["高度", "地貌"],
-  temperature: ["温度", "地貌"],
-  precipitation: ["降水", "地貌"],
-  biomes: ["生物群系", "说明"],
-  cultures: ["文化"],
-  religions: ["宗教", "文化"],
-  diplomacy: ["参照国家", "国家", "外交关系"],
-  governments: ["国家", "政体"],
-  states: ["国家", "省份"],
-  provinces: ["省份", "国家"],
-  regions: ["区域", "国家"],
-  population: ["人口", "适居度"]
+  height: ["高度", "地貌", "温度", "降水"],
+  temperature: ["温度", "地貌", "高度", "降水"],
+  precipitation: ["降水", "地貌", "高度", "温度"],
+  biomes: ["生物群系", "说明", "高度", "地貌", "温度", "降水"],
+  cultures: ["文化", "高度", "地貌", "温度", "降水"],
+  religions: ["宗教", "文化", "高度", "地貌", "温度", "降水"],
+  diplomacy: ["参照国家", "国家", "外交关系", "高度", "地貌", "温度", "降水"],
+  governments: ["国家", "政体", "高度", "地貌", "温度", "降水"],
+  states: ["国家", "省份", "高度", "地貌", "温度", "降水"],
+  provinces: ["省份", "国家", "高度", "地貌", "温度", "降水"],
+  regions: ["区域", "国家", "高度", "地貌", "温度", "降水"],
+  population: ["人口", "适居度", "高度", "地貌", "温度", "降水"]
 };
+const basicLabels = ["高度", "地貌", "温度", "降水"];
 
 assert.deepEqual(HOVER_VIEW_MODES, Object.keys(expectedLabels), "悬停 registry 与视图分母不一致");
 for (const mode of HOVER_VIEW_MODES) {
   const rows = buildHoverRowEntries(pick, {}, {colorMode: mode, map, viewOptions: {diplomacySubjectId: 6}});
   assert.deepEqual(rows.map(row => row.label), expectedLabels[mode], `${mode} 视图行集合不正确`);
+  for (const label of basicLabels) assert.equal(rows.filter(row => row.label === label).length, 1, `${mode} 视图没有恰好一条${label}基础信息`);
   assert(rows.every(row => String(row.value).trim() && !String(row.value).includes("[object Object]")), `${mode} 视图含空值或隐式对象文本`);
   assert(hoverViewTitle(mode) !== "地图信息", `${mode} 视图缺少标题`);
 }
@@ -67,8 +69,12 @@ for (const mode of HOVER_VIEW_MODES) {
 const biomeRows = buildHoverRowEntries({...pick, city: "临川城", object: {kind: "city", id: 8, name: "临川城"}}, {}, {colorMode: "biomes", map});
 assert.deepEqual(biomeRows, [
   {label: "生物群系", value: "温带落叶阔叶林"},
-  {label: "说明", value: "温带湿润地区的落叶阔叶森林。"}
-], "生物群系视图混入了对象或调试杂项");
+  {label: "说明", value: "温带湿润地区的落叶阔叶森林。"},
+  {label: "高度", value: "1,521 米"},
+  {label: "地貌", value: "岛屿"},
+  {label: "温度", value: "18°C"},
+  {label: "降水", value: "9,300 mm"}
+], "生物群系视图没有保留主题说明与统一基础信息");
 
 const stateWithCity = buildHoverRowEntries({...pick, city: "临川城", object: {kind: "city", id: 8, name: "临川城"}}, {}, {colorMode: "states", map});
 assert.equal(stateWithCity[0].label, "对象", "国家视图没有保留必要的城市对象摘要");
@@ -80,7 +86,7 @@ assert.deepEqual(fallback.map(row => row.label), ["地貌", "气候", "政区", 
 assert.doesNotMatch(JSON.stringify(buildHoverRowEntries({...pick, culture: {legacy: true}}, {}, {colorMode: "future-view", map})), /\[object Object\]/, "旧结构值被隐式字符串化");
 const debug = buildHoverRowEntries(pick, {}, {colorMode: "biomes", map, debugEnabled: true});
 assert.deepEqual(debug.slice(-3).map(row => row.label), ["诊断·位置", "诊断·地形", "诊断·原始值"], "调试诊断没有独立附加");
-assert.deepEqual(debug.slice(0, 2).map(row => row.label), ["生物群系", "说明"], "调试模式破坏了生物群系核心行");
+assert.deepEqual(debug.slice(0, 6).map(row => row.label), expectedLabels.biomes, "调试模式破坏了生物群系主题或基础行");
 
 const [controlSource, pickingSource, panelSource, appSource] = await Promise.all([
   readFile(new URL("../app/webgl-generator/src/ui/vue/components/ControlPanel.vue", import.meta.url), "utf8"),

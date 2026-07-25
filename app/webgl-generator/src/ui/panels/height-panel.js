@@ -3,11 +3,15 @@ import {createLazyVuePanel} from "./lazy-vue-panel.js";
 import {BRUSH_RADIUS_ID, normalizeBrushRadius, readBrushRadiusContract} from "../../runtime/brush-radius-contract.js";
 import {
   createHeightTerrainTemplateDocument,
+  clearHeightTerrainTemplateRecycleRecord,
   HEIGHT_TERRAIN_TEMPLATE_PROGRAM_PRESETS,
+  HEIGHT_TERRAIN_TEMPLATE_RECYCLE_STORAGE_KEY,
   HEIGHT_TERRAIN_TEMPLATE_STORAGE_KEY,
+  loadHeightTerrainTemplateRecycleRecord,
   loadHeightTerrainTemplateDocument,
   normalizeHeightTerrainTemplateProgram,
   parseHeightTerrainTemplateDocument,
+  saveHeightTerrainTemplateRecycleRecord,
   saveHeightTerrainTemplateDocument,
   stringifyHeightTerrainTemplateDocument
 } from "../../runtime/height-terrain-template-programs.js";
@@ -20,10 +24,12 @@ export function createHeightPanel(documentRef, manager, callbacks = {}) {
   const panelState = reactive({
     active: false,
     action: "raise",
+    affectSeafloor: false,
     scope: "land",
     preserveSurface: true,
     radius: HEIGHT_RADIUS.defaultValue,
-    strength: 4,
+    strength: 6,
+    levelPerturbation: 0,
     selectionSmoothness: 0,
     fillTolerance: 6,
     lineWidth: 12,
@@ -47,6 +53,7 @@ export function createHeightPanel(documentRef, manager, callbacks = {}) {
     terrainProgramDraftName: "我的地形模板",
     terrainProgramDraftSteps: [],
     terrainProgramCanDelete: false,
+    terrainProgramCanRestore: Boolean(loadedPrograms.recycle),
     terrainProgramNotice: loadedPrograms.notice,
     terrainSelectionSource: "height-band",
     terrainSelectionRadius: HEIGHT_SELECTION_RADIUS.defaultValue,
@@ -89,6 +96,7 @@ export function createHeightPanel(documentRef, manager, callbacks = {}) {
     onTerrainProgramDraftClear: () => clearTerrainProgramDraft(),
     onTerrainProgramSave: name => saveTerrainProgram(name),
     onTerrainProgramDelete: () => deleteSelectedTerrainProgram(),
+    onTerrainProgramRestore: () => restoreLastDeletedTerrainProgram(),
     onTerrainProgramExport: () => exportUserTerrainPrograms(),
     onTerrainProgramImport: text => importUserTerrainPrograms(text),
     onConditionalTransformPreview: () => callbacks.onConditionalTransformPreview?.(),
@@ -159,6 +167,7 @@ export function createHeightPanel(documentRef, manager, callbacks = {}) {
     tolerance: panelState.terrainSelectionTolerance
   });
   let userTerrainPrograms = loadedPrograms.templates;
+  let recycledTerrainProgram = loadedPrograms.recycle;
   refreshTerrainProgramOptions();
 
   function allTerrainPrograms() {
@@ -262,16 +271,69 @@ export function createHeightPanel(documentRef, manager, callbacks = {}) {
       panelState.terrainProgramNotice = "内置模板不能删除。";
       return false;
     }
+    const view = documentRef.defaultView;
+    if (typeof view?.confirm === "function" && !view.confirm(`确定删除用户模板“${selected.name}”？删除后可从本面板恢复上次删除。`)) {
+      panelState.terrainProgramNotice = `已取消删除用户模板“${selected.name}”。`;
+      return false;
+    }
     try {
       const nextPrograms = userTerrainPrograms.filter(template => template.id !== selected.id);
-      persistUserTerrainPrograms(documentRef, nextPrograms);
+      const storage = terrainProgramStorage(documentRef);
+      const previousRecycle = storage.getItem(HEIGHT_TERRAIN_TEMPLATE_RECYCLE_STORAGE_KEY);
+      try {
+        recycledTerrainProgram = saveHeightTerrainTemplateRecycleRecord(storage, selected);
+        persistUserTerrainPrograms(documentRef, nextPrograms);
+      } catch (error) {
+        if (previousRecycle === null) storage.removeItem(HEIGHT_TERRAIN_TEMPLATE_RECYCLE_STORAGE_KEY);
+        else storage.setItem(HEIGHT_TERRAIN_TEMPLATE_RECYCLE_STORAGE_KEY, previousRecycle);
+        throw error;
+      }
       userTerrainPrograms = nextPrograms;
       panelState.terrainProgramId = HEIGHT_TERRAIN_TEMPLATE_PROGRAM_PRESETS[0].id;
-      panelState.terrainProgramNotice = `已删除用户模板“${selected.name}”。`;
+      panelState.terrainProgramCanRestore = true;
+      panelState.terrainProgramNotice = `已删除用户模板“${selected.name}”，可恢复上次删除。`;
       refreshTerrainProgramOptions();
       clearTerrainProgramPreview();
       return true;
     } catch (error) {
+      panelState.terrainProgramNotice = error.message;
+      return false;
+    }
+  }
+
+  function restoreLastDeletedTerrainProgram() {
+    let storage = null;
+    let previousTemplates = null;
+    let previousRecycle = null;
+    try {
+      storage = terrainProgramStorage(documentRef);
+      previousTemplates = storage.getItem(HEIGHT_TERRAIN_TEMPLATE_STORAGE_KEY);
+      previousRecycle = storage.getItem(HEIGHT_TERRAIN_TEMPLATE_RECYCLE_STORAGE_KEY);
+      const recycle = loadHeightTerrainTemplateRecycleRecord(storage);
+      if (!recycle?.template) {
+        recycledTerrainProgram = null;
+        panelState.terrainProgramCanRestore = false;
+        panelState.terrainProgramNotice = "没有可恢复的用户模板。";
+        return false;
+      }
+      const merged = new Map(userTerrainPrograms.map(template => [template.id, template]));
+      merged.set(recycle.template.id, recycle.template);
+      const nextPrograms = createHeightTerrainTemplateDocument([...merged.values()]).templates;
+      persistUserTerrainPrograms(documentRef, nextPrograms);
+      clearHeightTerrainTemplateRecycleRecord(storage);
+      userTerrainPrograms = nextPrograms;
+      recycledTerrainProgram = null;
+      panelState.terrainProgramId = recycle.template.id;
+      panelState.terrainProgramCanRestore = false;
+      panelState.terrainProgramNotice = `已恢复用户模板“${recycle.template.name}”。`;
+      refreshTerrainProgramOptions();
+      clearTerrainProgramPreview();
+      return true;
+    } catch (error) {
+      if (storage) {
+        restoreStorageValue(storage, HEIGHT_TERRAIN_TEMPLATE_STORAGE_KEY, previousTemplates);
+        restoreStorageValue(storage, HEIGHT_TERRAIN_TEMPLATE_RECYCLE_STORAGE_KEY, previousRecycle);
+      }
       panelState.terrainProgramNotice = error.message;
       return false;
     }
@@ -364,10 +426,11 @@ export function createHeightPanel(documentRef, manager, callbacks = {}) {
       return {
         active: panelState.active,
         action: panelState.action,
+        affectSeafloor: panelState.affectSeafloor,
         scope: panelState.scope,
         preserveSurface: panelState.preserveSurface,
         radius: normalizeBrushRadius(BRUSH_RADIUS_ID.HEIGHT, panelState.radius),
-        strength: panelState.strength,
+        strength: panelState.action === "level" ? panelState.levelPerturbation : panelState.strength,
         fillTolerance: panelState.fillTolerance,
         lineWidth: panelState.lineWidth,
         linePower: panelState.linePower,
@@ -471,19 +534,46 @@ export function createHeightPanel(documentRef, manager, callbacks = {}) {
 function loadUserTerrainPrograms(documentRef) {
   try {
     const storage = documentRef.defaultView?.localStorage;
-    if (!storage) return {templates: [], notice: ""};
+    if (!storage) return {templates: [], recycle: null, notice: ""};
     const document = loadHeightTerrainTemplateDocument(storage, HEIGHT_TERRAIN_TEMPLATE_STORAGE_KEY);
-    if (!document.templates.length) return {templates: [], notice: ""};
-    return {templates: document.templates, notice: `已恢复 ${document.templates.length} 个用户模板。`};
+    let recycle = null;
+    let recycleNotice = "";
+    try {
+      recycle = loadHeightTerrainTemplateRecycleRecord(storage);
+    } catch (error) {
+      recycleNotice = `；上次删除记录未恢复：${error.message}`;
+    }
+    if (!document.templates.length) {
+      return {
+        templates: [],
+        recycle,
+        notice: recycle ? "可恢复上次删除的用户模板。" : recycleNotice.replace(/^；/, "")
+      };
+    }
+    return {
+      templates: document.templates,
+      recycle,
+      notice: `已恢复 ${document.templates.length} 个用户模板${recycle ? "，并可恢复上次删除" : ""}${recycleNotice}。`
+    };
   } catch (error) {
-    return {templates: [], notice: `用户模板未恢复：${error.message}`};
+    return {templates: [], recycle: null, notice: `用户模板未恢复：${error.message}`};
   }
 }
 
 function persistUserTerrainPrograms(documentRef, templates) {
+  const storage = terrainProgramStorage(documentRef);
+  saveHeightTerrainTemplateDocument(storage, templates, HEIGHT_TERRAIN_TEMPLATE_STORAGE_KEY);
+}
+
+function terrainProgramStorage(documentRef) {
   const storage = documentRef.defaultView?.localStorage;
   if (!storage) throw new Error("当前浏览器不支持 LocalStorage，无法保存用户模板。");
-  saveHeightTerrainTemplateDocument(storage, templates, HEIGHT_TERRAIN_TEMPLATE_STORAGE_KEY);
+  return storage;
+}
+
+function restoreStorageValue(storage, key, value) {
+  if (value === null) storage.removeItem(key);
+  else storage.setItem(key, value);
 }
 
 function userTemplateId(name) {

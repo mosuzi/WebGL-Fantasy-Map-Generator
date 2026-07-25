@@ -119,8 +119,8 @@ export function bindRuntimePanel(documentRef, handlers) {
   });
   bindUnitPreferenceControls(documentRef, handlers.onUnitPreferences);
   bindClimateControls(documentRef, handlers.onClimateControls);
-  documentRef.getElementById("open-height-panel")?.addEventListener("click", handlers.onOpenHeightPanel);
-  documentRef.getElementById("open-state-panel")?.addEventListener("click", handlers.onOpenStatePanel);
+  bindDelegatedButton(documentRef, "open-height-panel", handlers.onOpenHeightPanel);
+  bindDelegatedButton(documentRef, "open-state-panel", handlers.onOpenStatePanel);
   documentRef.getElementById("open-government-panel")?.addEventListener("click", handlers.onOpenGovernmentPanel);
   documentRef.getElementById("open-province-panel")?.addEventListener("click", handlers.onOpenProvincePanel);
   documentRef.getElementById("open-city-panel")?.addEventListener("click", handlers.onOpenCityPanel);
@@ -168,9 +168,6 @@ export function bindRuntimePanel(documentRef, handlers) {
     const file = event.detail?.file;
     if (file) handlers.onImportHeightmapImage?.(event.detail);
   });
-  for (const button of documentRef.querySelectorAll("[data-regenerate-kind]")) {
-    button.addEventListener("click", () => handlers.onRegenerate?.(button.dataset.regenerateKind));
-  }
   for (const control of documentRef.querySelectorAll("[data-layer]")) {
     if (control.tagName === "BUTTON") {
       control.addEventListener("click", () => {
@@ -192,6 +189,15 @@ export function bindRuntimePanel(documentRef, handlers) {
       handlers.onMode(button.dataset.mode);
     });
   }
+}
+
+function bindDelegatedButton(documentRef, id, handler) {
+  if (typeof handler !== "function") return;
+  documentRef.addEventListener("click", event => {
+    const button = event.target?.closest?.(`#${id}`);
+    if (!button || !documentRef.contains(button)) return;
+    handler({target: event.target, currentTarget: button});
+  });
 }
 
 export function setActiveModeButton(documentRef, mode) {
@@ -625,6 +631,7 @@ export function updateRuntimePanel(documentRef, state) {
   }
   updateMapLegend(documentRef, map, stats);
   updateMapScaleBar(documentRef, map, stats, unitPreferences);
+  dispatchRegenerationTargets(documentRef, map);
   documentRef.getElementById("runtime-stats").replaceChildren(
     statRow(documentRef, "阶段", map.metadata.generatorStage),
     statRow(documentRef, "生成耗时", formatGenerationTiming(map.metadata.generationTiming)),
@@ -696,6 +703,27 @@ export function updateRuntimePanel(documentRef, state) {
     statRow(documentRef, "快照依赖", map.status.snapshotDependency ? "是" : "否"),
     statRow(documentRef, "生成日志", map.generationLog.join(" / "))
   );
+}
+
+function dispatchRegenerationTargets(documentRef, map) {
+  const states = (map?.politics?.states || [])
+    .filter(state => state && !state.removed && Number(state.i ?? state.id) > 0)
+    .map(state => ({
+      value: String(state.i ?? state.id),
+      label: state.fullName || state.name || `国家 #${state.i ?? state.id}`
+    }));
+  const stateNames = new Map(states.map(state => [Number(state.value), state.label]));
+  const provinces = (map?.politics?.provinces || [])
+    .filter(province => province && !province.removed && Number(province.i ?? province.id) > 0)
+    .map(province => ({
+      value: String(province.i ?? province.id),
+      stateId: Number(province.state) || 0,
+      label: `${province.fullName || province.name || `省份 #${province.i ?? province.id}`}（${stateNames.get(Number(province.state)) || `国家 #${province.state}`}）`
+    }));
+  const CustomEventConstructor = documentRef.defaultView?.CustomEvent || CustomEvent;
+  documentRef.dispatchEvent(new CustomEventConstructor("webgl-generator-regeneration-targets", {
+    detail: {states, provinces}
+  }));
 }
 
 function syncLabelLimitControlBounds(documentRef, map, stats) {

@@ -26,6 +26,15 @@ const protectedLandLower = getHeightBrushChanges(protectedLandMap, {x: 1, y: 1},
 assert(protectedLandLower.length === 0, "普通陆地下降跨越了海平面");
 const compatibleLandLower = getHeightBrushChanges(protectedLandMap, {x: 1, y: 1}, {action: "lower", scope: "land", preserveSurface: false, radius: 20, strength: 18, falloff: false}, {originals: new Map()});
 assert(compatibleLandLower.some(change => change.after === 2), "专家兼容入口不再允许原有跨海平面高度命令");
+const seafloorRaiseMap = createSyntheticMap();
+const seafloorRaise = getHeightBrushChanges(seafloorRaiseMap, {x: 0, y: 0}, {action: "raise", scope: "all", preserveSurface: false, radius: 6, strength: 12, falloff: false}, {originals: new Map()});
+assertChanges(seafloorRaise, [{gridCell: 0, before: 10, after: 22}], "影响海底抬升");
+const seafloorHistory = new EditHistory();
+seafloorHistory.execute(createApplyHeightBrushCommand(seafloorRaise, {label: "填海造陆"}), {map: seafloorRaiseMap});
+assert(seafloorRaiseMap.grid.cells.h[0] === 22 && seafloorRaiseMap.pack.cells.h[0] === 22, "影响海底抬升没有同步 grid / pack");
+assert(seafloorRaiseMap.metadata.derivedStale?.systems?.includes("features"), "填海造陆没有标记高度派生内容待更新");
+const seafloorLower = getHeightBrushChanges(createSyntheticMap(), {x: 0, y: 0}, {action: "lower", scope: "all", preserveSurface: false, radius: 6, strength: 4, falloff: false}, {originals: new Map()});
+assertChanges(seafloorLower, [{gridCell: 0, before: 10, after: 6}], "影响海底降低");
 const playerFalloffRaise = getHeightBrushChanges(createSyntheticMap(), {x: 10, y: 0}, {action: "raise", scope: "all", radius: 20, strength: 10, falloff: true}, {originals: new Map()});
 assert(playerFalloffRaise.map(change => `${change.gridCell}:${change.after - change.before}`).join(",") === "0:5,1:10,2:5", `普通抬升没有按中心距离单调衰减：${JSON.stringify(playerFalloffRaise)}`);
 const compatibleUniformRaise = getHeightBrushChanges(createSyntheticMap(), {x: 10, y: 0}, {action: "raise", scope: "all", radius: 20, strength: 10, falloff: false}, {originals: new Map()});
@@ -79,11 +88,24 @@ const [heightPanelSource, heightPanelModelSource, appSource, rendererSource, ref
   readFile(new URL("../app/webgl-generator/src/styles.css", import.meta.url), "utf8")
 ]);
 assert(/useDebugMode/.test(heightPanelSource), "高度面板没有复用统一调试模式");
-assert(/const playerActions = Object\.freeze\(\[\s*\{value: "raise", label: "抬升陆地", icon: Top\},\s*\{value: "lower", label: "降低陆地", icon: Bottom\}/.test(heightPanelSource), "普通高度动作没有收敛为图标化陆地升降");
+assert(/const playerActions = Object\.freeze\(\[\s*\{value: "raise", label: "抬升地形", icon: Top\},\s*\{value: "lower", label: "降低地形", icon: Bottom\},\s*\{value: "level", label: "等高地形", icon: Minus\}/.test(heightPanelSource), "普通高度动作没有收敛为抬升、降低与等高图标工具");
+assert(/levelPerturbation: 0/.test(heightPanelModelSource), "等高扰动默认值不是 0");
+assert(/panelState\.action === "level" \? panelState\.levelPerturbation : panelState\.strength/.test(heightPanelModelSource), "等高工具没有复用画笔参数槽并隔离普通强度");
+assert(/:label="brushValueLabel"[^>]+:model-value="brushValue"[^>]+:min="brushValueMin"/.test(heightPanelSource), "高度画笔参数滑杆没有按工具切换标签、数值与下限");
+assert(/const brushValueLabel = computed\(\(\) => isPlayerLevelAction\.value \? "扰动" : "强度"\)/.test(heightPanelSource), "等高工具没有把强度滑杆改名为扰动");
+assert(/if \(isPlayerLevelAction\.value\) \{\s*props\.state\.levelPerturbation = Math\.max\(0, Math\.min\(18, Math\.round\(Number\(value\) \|\| 0\)\)\);/.test(heightPanelSource), "等高扰动没有保持独立的 0～18 整数状态");
+assert(/props\.state\.action !== "raise" && props\.state\.action !== "lower" && props\.state\.action !== "level"/.test(heightPanelSource), "普通模式没有接受等高动作");
 assert(/label="平滑度"[^>]+:min="0"[^>]+:max="1"[^>]+:step="0\.01"/.test(heightPanelSource), "范围平滑度契约异常");
 assert(/<details v-if="debugEnabled" class="panel-advanced-section height-advanced-section">/.test(heightPanelSource), "专家地形程序仍在普通模式显示");
 assert(/<section v-if="debugEnabled" class="heightmap-import-launcher"/.test(heightPanelSource), "高度图导入仍在普通模式显示");
 assert(/scope: "land"/.test(heightPanelModelSource), "高度面板默认范围不是陆地");
+assert(/strength: 6/.test(heightPanelModelSource), "受控节奏下的默认单次高度步长没有提高到 6");
+assert(/affectSeafloor: false/.test(heightPanelModelSource), "影响海底没有保持会话级默认关闭");
+assert(/label="影响海底"[^>]+compact-hit-area[^>]+:checked="state\.affectSeafloor"/.test(heightPanelSource), "影响海底开关没有启用只响应开关与标签的紧凑热区");
+assert(/\.height-check-row\.compact-hit-area\s*\{[^}]*cursor:\s*default;/.test(stylesSource), "影响海底开关的行尾空白仍显示可点击光标");
+assert(/props\.state\.scope = props\.state\.affectSeafloor \? "all" : "land";\s*props\.state\.preserveSurface = !props\.state\.affectSeafloor;/.test(heightPanelSource), "影响海底没有映射为 all / false 与 land / true");
+assert(/:disabled="!state\.derivedStaleSystems\?\.length"[\s\S]+完成编辑并更新地图/.test(heightPanelSource), "普通地图更新入口没有永久保留并按待更新状态禁用");
+assert(/class="height-player-rebuild-action"/.test(heightPanelSource) && /\.height-player-rebuild-action\.el-button\s*\{[^}]*margin-bottom:\s*10px;/.test(stylesSource), "普通地图更新按钮与高度编辑启停按钮之间仍缺少 10px 留白");
 assert(/selectionSmoothness: 0/.test(heightPanelModelSource), "范围平滑度默认值不是 0");
 assert(/onTerrainSelectionSmooth/.test(heightPanelModelSource), "高度面板 wrapper 缺少范围平滑入口");
 assert(/createHeightSelectionSmoothingPlan\(state\.map, options\)/.test(appSource), "范围平滑没有复用单次分析计划");
@@ -91,7 +113,8 @@ assert(/createApplyHeightBrushCommand\(changes, \{label: "平滑所选范围"\}\
 assert(/terrainSelectionPaintState/.test(heightPanelSource) && /:class="\{active: !isPlayerSmoothingSelection && state\.action === action\.value\}"/.test(heightPanelSource), "普通升降与范围涂选没有互斥高亮");
 assert(/props\.callbacks\.onTerrainSelectionCancel\?\.\(\);[\s\S]+setAction/.test(heightPanelSource), "切回普通升降没有取消范围涂选");
 assert(!/function selectHeightAction\([\s\S]+?props\.state\.falloff = true;[\s\S]+?function setAction/.test(heightPanelSource), "切换抬升或降低仍会偷偷重置画笔强度模式");
-assert(heightPanelSource.includes("柔和渐弱") && heightPanelSource.includes("范围均匀") && heightPanelSource.includes("PLAYER_FALLOFF_MIN_RADIUS = 24"), "普通高度面板没有显式柔和 / 均匀模式或柔和最小半径");
+assert(heightPanelSource.includes("柔和渐弱") && heightPanelSource.includes("范围均匀"), "普通高度面板没有显式柔和 / 均匀模式");
+assert(!heightPanelSource.includes("PLAYER_FALLOFF_MIN_RADIUS"), "普通柔和画笔仍保留额外的 24 最小半径");
 assert(/<details class="height-player-smoothing height-seafloor-reset">/.test(heightPanelSource) && /<div v-if="debugEnabled" class="height-history-actions">/.test(heightPanelSource), "普通高度面板仍默认展开海底重设或重复显示底部历史按钮");
 assert(/\.segmented\.height-player-falloff-mode\s*\{[^}]*gap:\s*10px;[^}]*margin:\s*10px 0;/.test(stylesSource), "普通高度模式按钮与启停按钮之间仍缺少明确留白");
 assert(/\.height-player-tool-row\s*\{[^}]*gap:\s*10px;/.test(stylesSource) && /\.height-player-operation-toolbar\s*\{[^}]*gap:\s*10px;/.test(stylesSource), "普通高度图标按钮组仍过于拥挤");
@@ -103,6 +126,39 @@ assert(/changedGridCells: changes\.map\(change => change\.gridCell\)/.test(appSo
 assert(/updateHeightPanel\(state, \{includeMapSummary: false\}\)/.test(appSource), "连续高度交互仍会逐帧统计整图摘要");
 assert(/refreshHeightCells\(gridCells/.test(rendererSource) && /bufferSubData/.test(rendererSource), "renderer 缺少受影响 surface 颜色增量更新");
 assert(/changedGridCells\.length && typeof state\.renderer\.refreshHeightCells/.test(refreshSchedulerSource), "刷新调度器没有优先使用高度局部 surface 更新");
+
+const levelMap = createSyntheticMap();
+const levelStroke = {originals: new Map(), seed: 23};
+const levelFirst = getHeightBrushChanges(levelMap, {x: 10, y: 0}, {action: "level", scope: "all", radius: 12, strength: 0, falloff: false}, levelStroke);
+assert(levelStroke.targetHeight === 20, `等高首个落点没有冻结目标高度：${levelStroke.targetHeight}`);
+assertChanges(levelFirst, [
+  {gridCell: 0, before: 10, after: 20},
+  {gridCell: 2, before: 30, after: 20}
+], "等高首次落笔");
+applyHeightBrushPreview(levelMap, levelFirst);
+const levelContinued = getHeightBrushChanges(levelMap, {x: 30, y: 0}, {action: "level", scope: "all", radius: 12, strength: 0, falloff: false}, levelStroke);
+assert(levelStroke.targetHeight === 20, "等高拖动途中被后续落点改写目标高度");
+assertChanges(levelContinued, [{gridCell: 3, before: 50, after: 20}], "等高持续拖动");
+applyHeightBrushPreview(levelMap, levelContinued);
+const levelFinalChanges = [...levelStroke.originals].map(([gridCell, before]) => ({gridCell, before, after: levelMap.grid.cells.h[gridCell]}));
+const levelHistory = new EditHistory();
+levelHistory.execute(createApplyHeightBrushCommand(levelFinalChanges, {label: "等高笔刷"}), {map: levelMap});
+assert(levelHistory.getStats().undo === 1 && [...levelMap.grid.cells.h].join(",") === "20,20,20,20", "一笔等高没有形成单条历史或完整统一高度");
+levelHistory.undo({map: levelMap});
+assert([...levelMap.grid.cells.h].join(",") === "10,20,30,50", "撤销等高没有恢复整笔原始高度");
+levelHistory.redo({map: levelMap});
+assert([...levelMap.grid.cells.h].join(",") === "20,20,20,20", "重做等高没有恢复整笔结果");
+
+const levelPerturbationMap = createSquareMap(7, () => 50);
+const levelPerturbationStroke = {originals: new Map(), seed: 17};
+const levelPerturbed = getHeightBrushChanges(levelPerturbationMap, {x: 3, y: 3}, {action: "level", scope: "all", radius: 20, strength: 8, falloff: false}, levelPerturbationStroke);
+const levelPerturbedAgain = getHeightBrushChanges(createSquareMap(7, () => 50), {x: 3, y: 3}, {action: "level", scope: "all", radius: 20, strength: 8, falloff: false}, {originals: new Map(), seed: 17});
+assert(JSON.stringify(levelPerturbed) === JSON.stringify(levelPerturbedAgain), "相同 seed 的等高扰动结果不可复现");
+assert(levelPerturbed.some(change => change.after < 50) && levelPerturbed.some(change => change.after > 50), "等高扰动没有在目标高度两侧产生变化");
+assert(levelPerturbed.every(change => Math.abs(change.after - 50) <= 8), "等高扰动超过滑杆指定幅度");
+applyHeightBrushPreview(levelPerturbationMap, levelPerturbed);
+const stableLevelRevisit = getHeightBrushChanges(levelPerturbationMap, {x: 3, y: 3}, {action: "level", scope: "all", radius: 20, strength: 8, falloff: false}, levelPerturbationStroke);
+assert(stableLevelRevisit.length === 0, "等高扰动在同一笔重复经过时发生漂移");
 
 const map = createSyntheticMap();
 const stroke = {originals: new Map()};
@@ -123,6 +179,7 @@ const history = new EditHistory();
 const command = createApplyHeightBrushCommand(flatten, {label: "整平笔刷"});
 history.execute(command, {map});
 assert(history.getStats().lastDomain === "height", "整平没有复用高度命令领域");
+assert(map.metadata.derivedStale?.systems?.includes("features"), "普通非跨海高度变化没有标记派生内容待更新");
 history.undo({map});
 assert([...map.grid.cells.h].join(",") === "10,20,30,50", `撤销整平没有恢复 grid：${[...map.grid.cells.h]}`);
 assert([...map.pack.cells.h].join(",") === "10,20,30,50", `撤销整平没有恢复 pack：${[...map.pack.cells.h]}`);

@@ -277,6 +277,29 @@ export const GOVERNMENT_OPTIONS = Object.freeze(
   }))
 );
 
+const GOVERNMENT_SUFFIXES = Object.freeze({
+  imperial_bureaucracy: Object.freeze(["帝国", "国"]),
+  monarchy: Object.freeze(["王国", "帝国", "国"]),
+  feudal_monarchy: Object.freeze(["王国", "帝国", "国"]),
+  republic: Object.freeze(["国", "共和国"]),
+  merchant_republic: Object.freeze(["国", "共和国"]),
+  federation: Object.freeze(["国", "联邦", "联邦共和国"]),
+  confederation: Object.freeze(["国", "邦联"]),
+  theocracy: Object.freeze(["国", "教国"]),
+  khanate: Object.freeze(["国", "汗国"]),
+  tribal_league: Object.freeze(["国", "部盟"]),
+  military_governorate: Object.freeze(["国", "帝国"]),
+  oligarchy: Object.freeze(["国", "共和国"])
+});
+
+export function governmentSuffixOptions(governmentKey) {
+  return GOVERNMENT_SUFFIXES[governmentKey] || GOVERNMENT_SUFFIXES.monarchy;
+}
+
+export function governmentAllowsSuffix(governmentKey, formName) {
+  return governmentSuffixOptions(governmentKey).includes(String(formName || "").trim());
+}
+
 export function chooseStateGovernment(state, context = {}) {
   const size = context.size || classifyStateSize(state, context);
   const random = context.random || createGovernmentRandom(state, context);
@@ -332,10 +355,12 @@ export function setStateGovernment(map, stateId, governmentKey, context = {}) {
   const id = Number(stateId);
   const state = map?.politics?.states?.[id] || map?.pack?.states?.[id];
   if (!state?.i && !state?.id) return false;
+  if (context.formName && !governmentAllowsSuffix(governmentKey, context.formName)) return false;
   const states = map?.politics?.states || map?.pack?.states || [];
-  applyStateGovernment(state, governmentKey, {...context, states});
+  const choice = context.formName ? {key: governmentKey, formName: context.formName} : governmentKey;
+  applyStateGovernment(state, choice, {...context, states});
   const packState = map?.pack?.states?.[id];
-  if (packState && packState !== state) applyStateGovernment(packState, governmentKey, {...context, states});
+  if (packState && packState !== state) applyStateGovernment(packState, choice, {...context, states});
   return true;
 }
 

@@ -157,7 +157,8 @@ const [appSource, panelModelSource, panelVueSource, consoleApiSource] = await Pr
   readFile(new URL("../app/webgl-generator/src/runtime/console-api.js", import.meta.url), "utf8")
 ]);
 assert.match(appSource, /inspectDownstreamRebuild: \(options = \{\}\) => inspectClimateDownstreamRebuildViaApi/);
-assert.match(appSource, /applyDownstreamRebuild: \(options = \{\}\) => applyClimateDownstreamRebuildViaApi/);
+assert.match(appSource, /applyDownstreamRebuild: \(options = \{\}\) => operation\.run\(/);
+assert.match(appSource, /context => applyClimateDownstreamRebuildViaApi\(state, documentRef, options, context\)/);
 assert.match(appSource, /await executeClimateDownstreamRebuildAsync\(\{/);
 assert.match(appSource, /yieldToMain: \(\) => yieldToBrowser\(documentRef\)/);
 assert.match(appSource, /regenerateMarkerResourcesForClimate\(state, documentRef, context\.regenerationSalt\)/);

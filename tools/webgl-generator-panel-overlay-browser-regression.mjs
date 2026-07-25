@@ -87,16 +87,44 @@ async function runViewportCase(browserInstance, viewport) {
     await page.locator("#open-generation-panel").click();
     await page.waitForSelector('.floating-panel[data-panel-id="generation-panel"]:not(.hidden)');
     await page.locator('[data-control-tab="about"]').click();
+    const selectionBeforeEscapeChain = await page.evaluate(() => window.webglGeneratorApi.selection.get().data);
+    assert.ok(selectionBeforeEscapeChain.selection, `${viewport.label} Escape 优先级链缺少 selection 夹具`);
+    const saveDropdownTrigger = page.locator(".project-save-dropdown button");
+    await saveDropdownTrigger.click();
+    await page.locator(".el-dropdown__popper:visible").waitFor({state: "visible"});
+    await saveDropdownTrigger.press("Escape");
+    await page.locator(".el-dropdown__popper:visible").waitFor({state: "hidden"});
+    assert.deepEqual(await page.evaluate(() => window.webglGeneratorApi.selection.get().data), selectionBeforeEscapeChain, `${viewport.label} popup Escape 误改 selection`);
+    assert.deepEqual(await visibleMainPanelIds(page), ["generation-panel"], `${viewport.label} popup Escape 误关主面板`);
+
     const exportTrigger = page.locator("#open-export-panel");
     await exportTrigger.click();
     await page.waitForSelector('[data-overlay-id="project-export"]:not([style*="display: none"])');
     const exportOverlay = await inspectFixedOverlay(page, "project-export");
     assertSafeOverlay(exportOverlay, viewport, "导出浮层");
+    assert.equal(exportOverlay.keyboardExclusive, "true", `${viewport.label} managed dialog 未阻断普通全局快捷键`);
+    assert.equal(exportOverlay.overlayOpen, "true", `${viewport.label} managed dialog 缺少打开态`);
+    await page.keyboard.press("Shift+H");
+    await page.waitForTimeout(80);
+    assert.equal(await page.locator('.floating-panel[data-panel-id="height-panel"]:not(.hidden)').count(), 0, `${viewport.label} managed dialog 打开时仍触发面板快捷键`);
     await page.keyboard.press("Escape");
     await page.waitForFunction(() => document.querySelector('[data-overlay-id="project-export"]')?.getAttribute("aria-hidden") === "true" || document.querySelector(".project-export-panel")?.style.display === "none");
     assert.equal(await page.evaluate(() => document.activeElement?.id), "open-export-panel", `${viewport.label} 导出浮层关闭后焦点没有返回入口`);
+    assert.deepEqual(await page.evaluate(() => window.webglGeneratorApi.selection.get().data), selectionBeforeEscapeChain, `${viewport.label} 浮层 Escape 穿透并清除 selection`);
+    assert.deepEqual(await visibleMainPanelIds(page), ["generation-panel"], `${viewport.label} 浮层 Escape 同时关闭主面板`);
+    await page.locator("#seed-input").focus();
+    await page.keyboard.press("Escape");
+    await page.waitForSelector('.floating-panel[data-panel-id="generation-panel"]', {state: "hidden"});
+    assert.deepEqual(await page.evaluate(() => window.webglGeneratorApi.selection.get().data), selectionBeforeEscapeChain, `${viewport.label} 输入内 Escape 关闭主面板时又清除 selection`);
+    await page.keyboard.press("Escape");
+    assert.equal((await page.evaluate(() => window.webglGeneratorApi.selection.get().data)).selection, null, `${viewport.label} 主面板关闭后的下一次 Escape 未清除 selection`);
 
-    await page.evaluate(() => document.getElementById("open-height-panel")?.click());
+    await page.evaluate(() => {
+      const result = window.webglGeneratorApi.debug.enable();
+      if (!result?.ok) throw new Error(result?.error?.message || "无法启用高度工作台验收所需的开发模式");
+      window.__webglGeneratorDebug?.collapse?.();
+      document.getElementById("open-height-panel")?.click();
+    });
     await page.waitForSelector('.floating-panel[data-panel-id="height-panel"]:not(.hidden)');
     await page.locator(".heightmap-workbench-open").click();
     await page.waitForSelector('[data-overlay-id="heightmap-import-workbench"]');
@@ -104,6 +132,7 @@ async function runViewportCase(browserInstance, viewport) {
     assertSafeOverlay(workbenchOverlay, viewport, "高度图工作台");
     await page.keyboard.press("Escape");
     await page.waitForSelector('[data-overlay-id="heightmap-import-workbench"]', {state: "detached"});
+    await page.evaluate(() => window.webglGeneratorApi.debug.disable());
 
     await page.evaluate(() => document.getElementById("open-culture-panel")?.click());
     await page.waitForSelector('.floating-panel[data-panel-id="culture-panel"]:not(.hidden)');
@@ -143,7 +172,7 @@ async function verifyHeightPanelViewportOrigin(page, viewport) {
   await page.waitForSelector(`${panelSelector}:not(.hidden)`);
   await page.waitForFunction(selector => {
     const body = document.querySelector(`${selector} .floating-panel-body`);
-    return body && !body.textContent.includes("正在加载") && body.textContent.includes("高级地形程序与条件变换");
+    return body && !body.textContent.includes("正在加载") && body.textContent.includes("重设海底");
   }, panelSelector);
   assert.deepEqual(await visibleMainPanelIds(page), [panelId], `${viewport.label} Shift+H 必须唯一打开高度面板`);
 
@@ -161,11 +190,11 @@ async function verifyHeightPanelViewportOrigin(page, viewport) {
   assertPanelPositionNear(before.runtime, target, viewport, "高度面板展开前");
   assert.equal(before.windowScroll.y, 0, `${viewport.label} 高度面板展开前 document viewport 已偏移`);
 
-  const summary = page.locator(`${panelSelector} details.height-advanced-section > summary`, {hasText: "高级地形程序与条件变换"});
-  assert.equal(await summary.count(), 1, `${viewport.label} 高级地形 summary 必须唯一`);
-  assert.equal(await summary.isVisible(), true, `${viewport.label} 高级地形 summary 必须可见`);
+  const summary = page.locator(`${panelSelector} details.height-seafloor-reset > summary`, {hasText: "重设海底"});
+  assert.equal(await summary.count(), 1, `${viewport.label} 高度面板详情 summary 必须唯一`);
+  assert.equal(await summary.isVisible(), true, `${viewport.label} 高度面板详情 summary 必须可见`);
   await summary.click();
-  await page.waitForFunction(selector => document.querySelector(`${selector} details.height-advanced-section`)?.open === true, panelSelector);
+  await page.waitForFunction(selector => document.querySelector(`${selector} details.height-seafloor-reset`)?.open === true, panelSelector);
   await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
   await page.waitForTimeout(50);
   const after = await inspectManagedPanelViewport(page, panelId);
@@ -339,6 +368,8 @@ async function inspectFixedOverlay(page, id) {
       bottom: rect.bottom,
       zIndex: Number(getComputedStyle(node).zIndex) || 0,
       safeArea: node.dataset.overlaySafeArea,
+      keyboardExclusive: node.getAttribute("data-keyboard-exclusive"),
+      overlayOpen: node.dataset.overlayOpen,
       closeVisible: Boolean(close && close.left >= 0 && close.top >= 0 && close.right <= innerWidth && close.bottom <= innerHeight),
       overlapsToolbar: Boolean(toolbar && rect.left < toolbar.right && rect.right > toolbar.left && rect.top < toolbar.bottom && rect.bottom > toolbar.top)
     };

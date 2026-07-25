@@ -5,6 +5,7 @@ import {readFile} from "node:fs/promises";
 import {generatePlaceholderMap} from "../app/webgl-generator/src/generator/index.js";
 import {colorForHeight} from "../app/webgl-generator/src/renderer/color-modes.js";
 import {
+  DEFAULT_HEIGHT_RAMP,
   createUserVisualThemeDocument,
   exportVisualThemeDocument,
   listUserVisualThemeDocuments,
@@ -18,6 +19,18 @@ import {EditHistory} from "../app/webgl-generator/src/runtime/edit-history.js";
 import {createMapDocument, parseMapDocument, stringifyMapDocument} from "../app/webgl-generator/src/runtime/map-file-io.js";
 import {captureVisualThemeState, createSetUserVisualThemesCommand} from "../app/webgl-generator/src/runtime/visual-theme-edit-commands.js";
 import {loadUserVisualThemes, persistUserVisualThemes} from "../app/webgl-generator/src/runtime/visual-theme-storage.js";
+
+assert.equal(DEFAULT_HEIGHT_RAMP.length, 18, "默认高度色带没有提供十八个停靠色");
+assert.ok(DEFAULT_HEIGHT_RAMP.every((stop, index) => index === 0 || stop[0] > DEFAULT_HEIGHT_RAMP[index - 1][0]), "默认高度停靠点没有严格递增");
+const defaultHeightStopRgb = DEFAULT_HEIGHT_RAMP.map(([, color]) => color.slice(0, 3).map(channel => Math.round(channel * 255)).join(","));
+assert.equal(new Set(defaultHeightStopRgb).size, 18, "默认高度停靠色存在重复");
+const defaultHeightStopSaturations = DEFAULT_HEIGHT_RAMP.map(([, color]) => channelSaturation(color));
+assert.ok(defaultHeightStopSaturations.every(saturation => saturation <= 0.45), "默认高度色带存在饱和度过高的停靠色");
+const defaultHeightColors = Array.from({length: 81}, (_, index) => colorForHeight(20 + index, {ocean: [0, 0, 0, 1]}));
+const defaultHeightRgb = defaultHeightColors.map(color => color.slice(0, 3).map(channel => Math.round(channel * 255)).join(","));
+assert.equal(new Set(defaultHeightRgb).size, 81, "默认高度色带存在无法区分的整数高度颜色");
+assert.ok(defaultHeightColors[0][1] > defaultHeightColors[0][0] && defaultHeightColors[0][1] > defaultHeightColors[0][2], "低地没有使用低饱和墨绿色");
+assert.ok(defaultHeightColors.at(-1)[0] > defaultHeightColors.at(-1)[1] && defaultHeightColors.at(-1)[0] > defaultHeightColors.at(-1)[2], "高地没有趋向低饱和暗红色");
 
 replaceUserVisualThemes([]);
 const beforeInvalid = JSON.stringify(listUserVisualThemeDocuments());
@@ -69,6 +82,13 @@ assert.equal(exportVisualThemeDocument(seedDocument.id).colors.land, "#123456", 
 const roundTrip = parseMapDocument(stringifyMapDocument(createMapDocument(map, map.options)));
 assert.equal(roundTrip.map.visualTheme.preset, seedDocument.id);
 assert.equal(roundTrip.map.visualTheme.userThemes[0].colors.land, "#123456");
+
+function channelSaturation(color) {
+  const channels = color.slice(0, 3);
+  const maximum = Math.max(...channels);
+  const minimum = Math.min(...channels);
+  return maximum > 0 ? (maximum - minimum) / maximum : 0;
+}
 
 const oldFixture = JSON.parse(await readFile(new URL("./fixtures/webgl-map-v1-minimal.json", import.meta.url), "utf8"));
 const migratedOld = parseMapDocument(JSON.stringify(oldFixture));
