@@ -15,7 +15,7 @@ const appSource = await readFile(path.join(root, "app/webgl-generator/src/runtim
 const markerPanelSource = await readFile(path.join(root, "app/webgl-generator/src/ui/panels/marker-panel.js"), "utf8");
 const measurementPanelSource = await readFile(path.join(root, "app/webgl-generator/src/ui/panels/measurement-panel.js"), "utf8");
 const brushCursorSource = await readFile(path.join(root, "app/webgl-generator/src/ui/brush-cursor-preview.js"), "utf8");
-assert.match(brushCursorSource, /HEIGHT_BRUSH_ACTIONS = new Set\(\["raise", "lower", "smooth", "flatten", "disrupt"\]\)/, "共享光标缺少高度动作白名单");
+assert.match(brushCursorSource, /HEIGHT_BRUSH_ACTIONS = new Set\(\["raise", "lower", "smooth", "flatten", "level", "disrupt"\]\)/, "共享光标缺少高度动作白名单");
 assert.ok(appSource.indexOf("state.brushCursorPreview = createBrushCursorPreview") < appSource.indexOf("bindHeightEditing(canvas, state, documentRef)"), "共享光标监听注册晚于编辑监听");
 
 const expectedModes = [
@@ -31,7 +31,10 @@ const expectedModes = [
   "city:move",
   "culture:assign",
   "religion:assign",
+  "culture:center",
+  "religion:center",
   "biome:assign",
+  "biome:suitability",
   "economy:market-assign",
   "measurement:draw",
   "marker:add",
@@ -41,6 +44,7 @@ const expectedModes = [
   "river:add",
   "lake:excavate",
   "feature:patch-select",
+  "feature:topology-select",
   "zone:add",
   "note:add"
 ];

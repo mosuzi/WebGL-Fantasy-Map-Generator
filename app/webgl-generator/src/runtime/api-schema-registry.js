@@ -1,0 +1,557 @@
+export const API_METHOD_SCHEMA_VERSION = "1.0.0";
+
+const ERROR_CODES = Object.freeze([
+  "api_error",
+  "invalid_argument",
+  "not_found",
+  "confirmation_required",
+  "operation_busy",
+  "operation_cancelled",
+  "operation_obsolete",
+  "operation_invalid_input",
+  "operation_failed",
+  "inspection_required"
+]);
+
+const REFERENCE_RULES = Object.freeze([
+  [/(cities|city)/, ["object:city", "gridCell"]],
+  [/(states|state)/, ["object:state", "gridCell"]],
+  [/(provinces|province)/, ["object:province", "gridCell"]],
+  [/(cultures|culture)/, ["object:culture", "gridCell"]],
+  [/(religions|religion)/, ["object:religion", "gridCell"]],
+  [/(rivers|river)/, ["object:river", "packCell"]],
+  [/(lakes|lake)/, ["object:lake", "packCell"]],
+  [/(routes|route)/, ["object:route", "worldPoint"]],
+  [/(markers|marker)/, ["object:marker", "packCell", "worldPoint"]],
+  [/(labels|label)/, ["object:label", "worldPoint"]],
+  [/(measurements|measurement)/, ["object:measurement", "worldPoint"]],
+  [/(military)/, ["object:military", "packCell", "worldPoint"]],
+  [/(zones|zone)/, ["object:zone", "packCell"]],
+  [/(selection|objects)/, ["object"]]
+]);
+
+const METHOD_OVERRIDES = Object.freeze({
+  "info.describe": {
+    arguments: [argument("method", stringSchema("公开方法全名，例如 edit.states.rename"))],
+    result: objectSchema(["method", "schemaVersion", "inputSchema", "resultSchema", "businessCodes"]),
+    examples: [["objects.list"], ["edit.states.rename"]]
+  },
+  "objects.types": {
+    arguments: [],
+    result: arraySchema(objectSchema(["type", "label", "fields"])),
+    examples: [[]]
+  },
+  "objects.get": {
+    arguments: [argument("reference", objectSchema(["kind", "id"]))],
+    result: objectSchema(["kind", "id"]),
+    examples: [[{kind: "state", id: 1}]]
+  },
+  "objects.list": {
+    arguments: [
+      argument("type", stringSchema("对象类型")),
+      argument("options", paginationSchema(), false)
+    ],
+    result: pageSchema(),
+    examples: [["state", {limit: 20}]]
+  },
+  "objects.query": {
+    arguments: [
+      argument("query", {
+        type: "object",
+        properties: {
+          type: stringSchema("对象类型"),
+          types: arraySchema(stringSchema("对象类型")),
+          text: stringSchema("名称或文本包含"),
+          where: {type: "object", additionalProperties: {type: ["string", "number", "boolean", "null"]}}
+        },
+        additionalProperties: false
+      }),
+      argument("options", paginationSchema(), false)
+    ],
+    result: pageSchema(),
+    examples: [[{type: "city", text: "港"}, {limit: 20}]]
+  },
+  "oceanCurrents.rename": {
+    arguments: [argument("currentId", stringSchema("洋流 ID")), argument("name", stringSchema("新名称"))],
+    result: objectSchema(["executed", "id", "name"]),
+    examples: [["current-1", "北海暖流"]]
+  },
+  "oceanCurrents.regenerate": {
+    arguments: [argument("options", {type: "object", properties: {seed: {type: ["string", "number"]}}, additionalProperties: false}, false)],
+    result: objectSchema(["executed", "currents"]),
+    examples: [[{}]]
+  },
+  "oceanCurrents.inspectWorldRebuild": {
+    arguments: [argument("options", {type: "object", properties: {seed: {type: ["string", "number"]}}, additionalProperties: false}, false)],
+    result: objectSchema(["valid", "systems"]),
+    examples: [[{}]]
+  },
+  "oceanCurrents.rebuildWorld": {
+    arguments: [argument("options", {
+      type: "object",
+      required: ["confirm"],
+      properties: {confirm: {const: true}, seed: {type: ["string", "number"]}},
+      additionalProperties: false
+    })],
+    result: objectSchema(["executed"]),
+    examples: [[{confirm: true}]]
+  },
+  "oceanCurrents.cancelWorldRebuild": {
+    arguments: [],
+    result: objectSchema(["cancelled"]),
+    examples: [[]]
+  },
+  "edit.height.inspectSeafloorReset": {
+    arguments: [argument("options", {type: "object", properties: {seed: {type: ["string", "number"]}}, additionalProperties: false}, false)],
+    result: objectSchema(["valid", "inspectionToken", "topologyChecksum", "resultChecksum"]),
+    examples: [[{}]]
+  },
+  "edit.height.applySeafloorReset": {
+    arguments: [argument("options", {
+      type: "object",
+      required: ["inspectionToken", "confirm"],
+      properties: {
+        inspectionToken: stringSchema("预检令牌"),
+        confirm: {const: true},
+        seed: {type: ["string", "number"]},
+        worldSeed: {type: ["string", "number"]}
+      },
+      additionalProperties: false
+    })],
+    result: objectSchema(["executed"]),
+    examples: [[{inspectionToken: "<inspect 返回值>", confirm: true}]]
+  },
+  "edit.height.inspectGlobalTransform": heightOptionsOverride("global", false),
+  "edit.height.applyGlobalTransform": heightOptionsOverride("global", true),
+  "edit.height.inspectTerrainTemplate": heightOptionsOverride("template", false),
+  "edit.height.applyTerrainTemplate": heightOptionsOverride("template", true),
+  "edit.height.inspectTerrainProgram": heightProgramOverride(false),
+  "edit.height.applyTerrainProgram": heightProgramOverride(true),
+  "edit.height.inspectRangeTransform": heightOptionsOverride("range", false),
+  "edit.height.applyRangeTransform": heightOptionsOverride("range", true),
+  "edit.height.inspectSelectionSmoothing": heightOptionsOverride("selection", false),
+  "edit.height.applySelectionSmoothing": heightOptionsOverride("selection", true),
+  "edit.labels.setLayout": {
+    arguments: [argument("label", labelTargetSchema()), argument("patch", {
+      type: "object",
+      properties: {
+        priority: {type: ["integer", "null"]},
+        position: {anyOf: [{type: "null"}, objectSchema(["x", "y"])]}
+      },
+      additionalProperties: false
+    })],
+    result: objectSchema(["executed", "layout"]),
+    examples: [[{kind: "label", targetKind: "state", targetId: 1}, {priority: 100}]]
+  },
+  "edit.labels.setPositionLock": {
+    arguments: [
+      argument("label", labelTargetSchema()),
+      argument("locked", {type: "boolean"}),
+      argument("options", {type: "object", properties: {position: objectSchema(["x", "y"])}, additionalProperties: false}, false)
+    ],
+    result: objectSchema(["executed", "locked", "layout"]),
+    examples: [[{kind: "label", targetKind: "state", targetId: 1}, true, {position: {x: 10, y: 20}}]]
+  },
+  "edit.labels.getStyles": {
+    arguments: [],
+    result: objectSchema(["version", "styles"]),
+    examples: [[]]
+  },
+  "edit.labels.setStyle": {
+    arguments: [argument("styleType", stringSchema("标签样式类型")), argument("patch", {type: "object", additionalProperties: {type: ["string", "number", "boolean", "null"]}})],
+    result: objectSchema(["executed", "history"]),
+    examples: [["state", {fontSize: 24}]]
+  },
+  "edit.labels.resetStyle": {
+    arguments: [argument("styleType", stringSchema("标签样式类型"))],
+    result: objectSchema(["executed", "history"]),
+    examples: [["state"]]
+  },
+  "edit.labels.resetStyles": {
+    arguments: [],
+    result: objectSchema(["executed", "history"]),
+    examples: [[]]
+  }
+});
+
+export function buildApiMethodDescriptionRegistry(methods, methodMetadata, runtimeApi = null) {
+  const descriptions = {};
+  for (const [namespace, methodNames] of Object.entries(methods || {})) {
+    for (const methodName of methodNames) {
+      const method = `${namespace}.${methodName}`;
+      const metadata = methodMetadata?.[namespace]?.[methodName];
+      if (!metadata) throw new Error(`API 描述缺少方法元数据：${method}`);
+      const override = METHOD_OVERRIDES[method] || {};
+      const argumentsList = override.arguments || inferArguments(method, metadata, runtimeApi);
+      descriptions[method] = {
+        method,
+        schemaVersion: API_METHOD_SCHEMA_VERSION,
+        inputSchema: inputSchema(argumentsList),
+        resultSchema: responseSchema(override.result || inferResultSchema(method)),
+        enumValues: cloneJson(override.enumValues || inferEnumValues(method)),
+        referenceSpaces: cloneJson(override.referenceSpaces || inferReferenceSpaces(method)),
+        businessCodes: cloneJson(override.businessCodes || inferBusinessCodes(metadata)),
+        examples: cloneJson((override.examples || [exampleForArguments(argumentsList)]).map(args => ({
+          call: method,
+          arguments: args
+        }))),
+        pagination: cloneJson(override.pagination || (/^objects\.(list|query)$/.test(method)
+          ? {supported: true, cursor: "opaque-stable-v1", defaultLimit: 50, maxLimit: 200}
+          : {supported: false})),
+        jsonSerializable: true,
+        metadata: cloneJson(metadata)
+      };
+    }
+  }
+  return Object.freeze(descriptions);
+}
+
+export function describeApiMethod(registry, method) {
+  const qualifiedName = String(method || "").trim();
+  const description = registry?.[qualifiedName];
+  if (!description) {
+    const error = new Error(`未知公开 API 方法：${qualifiedName || "(empty)"}`);
+    error.code = "not_found";
+    throw error;
+  }
+  return cloneJson(description);
+}
+
+export function buildApiDescriptionCoverage(methods, methodMetadata, registry, runtimeApi = null) {
+  const declared = Object.entries(methods || {}).flatMap(([namespace, methodNames]) => methodNames.map(method => `${namespace}.${method}`)).sort();
+  const described = Object.keys(registry || {}).sort();
+  const metadata = Object.entries(methodMetadata || {}).flatMap(([namespace, entries]) => Object.keys(entries || {}).map(method => `${namespace}.${method}`)).sort();
+  const missing = declared.filter(method => !described.includes(method));
+  const extra = described.filter(method => !declared.includes(method));
+  const metadataMissing = declared.filter(method => !metadata.includes(method));
+  const invalid = declared.filter(method => !validDescription(registry?.[method]));
+  const signatureMismatch = declared.filter(method => {
+    const callable = resolveRuntimeMethod(runtimeApi, method);
+    const signature = callable ? parseFunctionParameters(callable) : null;
+    if (!signature) return false;
+    const describedNames = registry?.[method]?.inputSchema?.prefixItems?.map(item => item.title) || [];
+    return signature.map(item => item.name).join("\n") !== describedNames.join("\n");
+  });
+  return {
+    complete: !missing.length && !extra.length && !metadataMissing.length && !invalid.length && !signatureMismatch.length,
+    declared: declared.length,
+    described: described.length,
+    metadata: metadata.length,
+    missing,
+    extra,
+    metadataMissing,
+    invalid,
+    signatureMismatch
+  };
+}
+
+function inferArguments(method, metadata, runtimeApi) {
+  const callable = resolveRuntimeMethod(runtimeApi, method);
+  const signature = callable ? parseFunctionParameters(callable) : null;
+  if (signature) return signature.map(item => ({
+    ...argument(item.name, parameterSchema(method, item.name, item.defaultValue, metadata)),
+    required: item.defaultValue === null && !item.rest
+  }));
+  if (/^info\.(version|capabilities|mapSummary|runtimeStats)$/.test(method)) return [];
+  if (/^(objects\.types|history\.(undo|redo)|selection\.(get|clear|clearHighlights)|layers\.(get|listThemes|fitView))$/.test(method)) return [];
+  return [argument("options", metadata.requiresConfirm ? confirmOptionsSchema() : optionalOptionsSchema(), false)];
+}
+
+function resolveRuntimeMethod(api, method) {
+  const [namespace, ...parts] = String(method).split(".");
+  let value = api?.[namespace];
+  for (const part of parts) value = value?.[part];
+  return typeof value === "function" ? value : null;
+}
+
+function parseFunctionParameters(callable) {
+  const source = Function.prototype.toString.call(callable).trim();
+  const arrow = source.indexOf("=>");
+  if (arrow < 0) return null;
+  let parameterSource = source.slice(0, arrow).trim();
+  if (parameterSource.startsWith("async ")) parameterSource = parameterSource.slice(6).trim();
+  if (parameterSource.startsWith("(") && parameterSource.endsWith(")")) parameterSource = parameterSource.slice(1, -1);
+  if (!parameterSource) return [];
+  return splitTopLevel(parameterSource).map(raw => {
+    const [nameSource, defaultValue] = splitDefault(raw);
+    const rest = nameSource.trim().startsWith("...");
+    const name = nameSource.trim().replace(/^\.\.\./, "");
+    return /^[A-Za-z_$][\w$]*$/.test(name) ? {name, defaultValue, rest} : null;
+  }).filter(Boolean);
+}
+
+function splitTopLevel(value) {
+  const result = [];
+  let start = 0;
+  let depth = 0;
+  let quote = "";
+  for (let index = 0; index < value.length; index++) {
+    const character = value[index];
+    if (quote) {
+      if (character === quote && value[index - 1] !== "\\") quote = "";
+      continue;
+    }
+    if (character === "'" || character === '"' || character === "`") {
+      quote = character;
+      continue;
+    }
+    if ("([{".includes(character)) depth++;
+    else if (")]}".includes(character)) depth--;
+    else if (character === "," && depth === 0) {
+      result.push(value.slice(start, index).trim());
+      start = index + 1;
+    }
+  }
+  result.push(value.slice(start).trim());
+  return result.filter(Boolean);
+}
+
+function splitDefault(value) {
+  let depth = 0;
+  for (let index = 0; index < value.length; index++) {
+    const character = value[index];
+    if ("([{".includes(character)) depth++;
+    else if (")]}".includes(character)) depth--;
+    else if (character === "=" && depth === 0) return [value.slice(0, index), value.slice(index + 1).trim()];
+  }
+  return [value, null];
+}
+
+function parameterSchema(method, name, defaultValue, metadata) {
+  if (name === "options" || /(?:Options|options)$/.test(name)) {
+    return metadata.requiresConfirm ? confirmOptionsSchema() : optionalOptionsSchema();
+  }
+  if (/^(changes|ids|noteIds|stateIds|riverIds|gridCellIds|packCellIds|targets|measurements|objects|points)$/.test(name)) {
+    return arraySchema(parameterItemSchema(name));
+  }
+  if (/^(reference|object|target|source|destination|query|patch|preferences|payload|document|event|ratios|program|body)$/.test(name)) {
+    return {type: ["object", "string"], description: `${method} 的 ${name} 参数`};
+  }
+  if (/^(visible|enabled|closed|locked)$/.test(name)) return {type: "boolean"};
+  if (/(Id|Cell|cell|index|limit|scale|population|widthFactor|kmPerCm|percent|direction|clientX|clientY|value)$/.test(name)) {
+    return {type: "number"};
+  }
+  if (/^(kind|name|text|mode|layer|unit|themeId|styleType|color|status|relation|scope|section|goodId|marketId|noteId|measurementId|cityId|provinceId|stateId|cultureId|religionId|routeId|riverId|lakeId|labelId|markerId|baseId|governmentKey)$/.test(name)) {
+    return {type: "string"};
+  }
+  if (defaultValue === "{}") return optionalOptionsSchema();
+  if (defaultValue === "[]") return arraySchema({type: ["object", "string", "number", "boolean", "null"]});
+  return {type: ["string", "number", "boolean", "object", "array", "null"], description: `${method} 的 ${name} 参数`};
+}
+
+function parameterItemSchema(name) {
+  if (name === "changes") return objectSchema(["gridCell", "after"]);
+  if (name === "points") return objectSchema(["x", "y"]);
+  if (/Ids$|Cells$/.test(name)) return {type: ["integer", "string"]};
+  return {type: ["object", "string", "number"]};
+}
+
+function inferResultSchema(method) {
+  if (/(\.list|\.types)$/.test(method) && !/^objects\./.test(method)) return arraySchema({});
+  return {type: ["object", "array", "string", "number", "boolean", "null"]};
+}
+
+function inferEnumValues(method) {
+  if (method === "layers.setViewMode") return {mode: ["height", "temperature", "precipitation", "biomes", "culture", "religion", "diplomacy", "government", "states", "provinces", "regions", "population"]};
+  if (method === "selection.startEditing" || method === "selection.toggleEditing") return {editing: [true, false]};
+  return {};
+}
+
+function inferReferenceSpaces(method) {
+  const spaces = [];
+  for (const [pattern, values] of REFERENCE_RULES) {
+    if (pattern.test(method)) spaces.push(...values);
+  }
+  return [...new Set(spaces)];
+}
+
+function inferBusinessCodes(metadata) {
+  return ["ok", ...ERROR_CODES, ...(metadata.requiresConfirm ? ["confirmation_required"] : [])].filter((code, index, values) => values.indexOf(code) === index);
+}
+
+function heightOptionsOverride(kind, apply) {
+  const common = {
+    scope: {enum: ["all", "land", "water"]},
+    allowedCells: {type: "array", items: {type: "integer"}},
+    includeChanges: {type: "boolean"},
+    changeOffset: {type: "integer", minimum: 0},
+    changeLimit: {type: "integer", minimum: 1, maximum: 200}
+  };
+  const properties = kind === "global"
+    ? {...common, action: {enum: ["smooth", "disrupt"]}, seed: {type: "integer"}}
+    : kind === "template"
+      ? {
+          ...common,
+          templateId: {type: "string"},
+          intensity: {type: "number"},
+          targetHeight: {type: "number"},
+          terraceStep: {type: "number"},
+          amplitude: {type: "number"},
+          seed: {type: "integer"}
+        }
+      : kind === "range"
+        ? {
+            ...common,
+            lower: {type: "number"},
+            upper: {type: "number"},
+            operator: {enum: ["add", "subtract", "multiply", "divide", "exponent"]},
+            operand: {type: "number"}
+          }
+        : {
+            cellIds: {type: "array", items: {type: "integer"}},
+            smoothness: {type: "number", minimum: 0, maximum: 1},
+            includeChanges: {type: "boolean"},
+            changeOffset: {type: "integer", minimum: 0},
+            changeLimit: {type: "integer", minimum: 1, maximum: 200}
+          };
+  if (apply) properties.inspectionToken = stringSchema("预检令牌");
+  return {
+    arguments: [argument("options", {
+      type: "object",
+      ...(apply ? {required: ["inspectionToken"]} : {}),
+      properties,
+      additionalProperties: false
+    }, false)],
+    result: objectSchema(apply ? ["executed"] : ["valid", "inspectionToken", "changeSample"]),
+    examples: [[apply ? {inspectionToken: "<inspect 返回值>"} : {}]]
+  };
+}
+
+function heightProgramOverride(apply) {
+  return {
+    arguments: [
+      argument("program", objectSchema(["id", "name", "steps"])),
+      argument("options", heightOptionsOverride("global", apply).arguments[0].schema, false)
+    ],
+    result: objectSchema(apply ? ["executed"] : ["valid", "inspectionToken", "changeSample"]),
+    examples: [[{id: "ai-rugged", name: "山地", steps: [{operation: "rugged"}]}, apply ? {inspectionToken: "<inspect 返回值>"} : {}]]
+  };
+}
+
+function exampleForArguments(argumentsList) {
+  return argumentsList.map(item => exampleForSchema(item.schema));
+}
+
+function exampleForSchema(schema) {
+  if (schema?.const !== undefined) return schema.const;
+  if (schema?.type === "string" || schema?.type?.includes?.("string")) return "";
+  if (schema?.type === "number" || schema?.type === "integer") return 0;
+  if (schema?.type === "boolean") return false;
+  if (schema?.type === "array") return [];
+  return {};
+}
+
+function validDescription(description) {
+  return Boolean(
+    description
+    && description.inputSchema
+    && description.resultSchema
+    && Array.isArray(description.businessCodes)
+    && description.businessCodes.length
+    && Array.isArray(description.examples)
+    && Array.isArray(description.referenceSpaces)
+    && description.pagination
+    && description.metadata?.capabilityGroup
+    && typeof description.metadata.requiresConfirm === "boolean"
+    && description.schemaVersion === API_METHOD_SCHEMA_VERSION
+    && description.inputSchema.prefixItems?.every(item => item.title && item.title !== "input" && (item.type || item.anyOf || item.oneOf || item.const))
+  );
+}
+
+function argument(name, schema, required = true) {
+  return {name, schema, required};
+}
+
+function inputSchema(argumentsList) {
+  return {
+    type: "array",
+    prefixItems: argumentsList.map(item => ({title: item.name, "x-required": item.required !== false, ...item.schema})),
+    minItems: argumentsList.filter(item => item.required !== false).length,
+    maxItems: argumentsList.length
+  };
+}
+
+function responseSchema(dataSchema) {
+  return {
+    type: "object",
+    required: ["ok", "metadata"],
+    properties: {
+      ok: {type: "boolean"},
+      data: dataSchema,
+      error: {
+        type: "object",
+        properties: {code: {type: "string"}, name: {type: "string"}, message: {type: "string"}}
+      },
+      metadata: {type: "object", properties: {at: {type: "string", format: "date-time"}}}
+    }
+  };
+}
+
+function objectSchema(required = []) {
+  return {type: "object", required, additionalProperties: true};
+}
+
+function labelTargetSchema() {
+  return {
+    type: "object",
+    properties: {
+      kind: {const: "label"},
+      id: {type: "integer"},
+      targetKind: {enum: ["city", "state", "province", "custom"]},
+      targetId: {type: "integer"}
+    },
+    anyOf: [
+      {required: ["id"]},
+      {required: ["targetKind", "targetId"]}
+    ],
+    additionalProperties: true
+  };
+}
+
+function arraySchema(items) {
+  return {type: "array", items};
+}
+
+function stringSchema(description) {
+  return {type: "string", ...(description ? {description} : {})};
+}
+
+function paginationSchema() {
+  return {
+    type: "object",
+    properties: {
+      limit: {type: "integer", minimum: 1, maximum: 200, default: 50},
+      cursor: {type: "string"},
+      fields: {type: "array", minItems: 1, uniqueItems: true, items: {type: "string"}, description: "对象类型白名单内的返回字段"}
+    },
+    additionalProperties: false
+  };
+}
+
+function pageSchema() {
+  return {
+    type: "object",
+    required: ["items", "page"],
+    properties: {
+      items: arraySchema(objectSchema(["kind", "id"])),
+      page: objectSchema(["limit", "returned", "hasMore", "nextCursor", "fields"])
+    }
+  };
+}
+
+function optionalOptionsSchema() {
+  return {type: "object", additionalProperties: true};
+}
+
+function confirmOptionsSchema() {
+  return {
+    type: "object",
+    required: ["confirm"],
+    properties: {confirm: {const: true}},
+    additionalProperties: true
+  };
+}
+
+function cloneJson(value) {
+  return JSON.parse(JSON.stringify(value));
+}

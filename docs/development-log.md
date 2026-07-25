@@ -1,5 +1,20 @@
 # 开发历史
 
+## 2026-07-25：完成第 200 项并依据真实矩阵重编排第 195 项
+
+- 第 200 项从当前 checkout 联合发现 `103` 个交互表面、`28` 个注册画布模式、`199` 个 runtime actions、`198` 个 API action bindings、`183` 个 command / inspector 导出和 `237` 个公开方法。机器矩阵共 `959` 行，结论为 `covered 884 / excluded 71 / deferred-owned:195 4 / gap 0 / unknown 0 / unclassified 0 / unownedParameterizableGap 0`。
+- 公开 API 由 `11 / 208 / 110` 扩展为 `13` 个命名空间、`237` 个方法、`129` 个编辑方法，稳定等级为 `229 / 7 / 1`。新增 `info.describe` 与逐方法真实参数 schema，`237 / 237` 方法均可发现；`objects` 支持 `17` 类对象、字段投影、稳定 cursor 和 JSON 副本。
+- 洋流重命名 / 重生成 / 世界重算、高度语义预检 / 应用 / 海底整链、标签样式 / 布局 / 位置锁定均与 UI 收口到同一 runtime action。公共世界重算拒绝内部 plan 参数，高度大范围预检默认只返回摘要与最多 `12` 个样本，显式详情也限制为 `200` 条，执行时在内部重算完整计划。
+- API 声明、真实 runtime、元数据、schema、业务 code、稳定性、确认策略和对象查询专项通过；生产构建、旧数据、事务、高度、海底、洋流、标签、机器矩阵与 `28` 模式门禁通过。`regress:api-suite` 最终为 `12 / 12 passed`（代码 `6`、真实 Chrome `6`、失败 / 跳过 `0 / 0`）；主 API 门为 `237 / 237`，UI / API 共路径成立，六条浏览器门的 WebGL / application health / console / page error 均为 `0`。
+- 六条 API 浏览器门把 `main-thread-long-task / render-frame-gap` 原样保留为性能遥测，并与应用 health / console 错误分列；没有调高阈值。名称库 clear 回归改为先创建真实用户库再验证未确认拒绝，避免把空集合 no-op 误判为危险写。
+- 发布前独立代码审查首轮发现 AI schema 的两个 P1：高度应用实际可能返回 `inspection_required / operation_invalid_input / operation_failed`，但方法描述未声明；地形程序示例缺必需 id，标签引用 schema 又与实际 `targetKind + targetId` 示例冲突。现已补齐稳定 business code，地形程序固定合法 id 示例，标签引用用 `id` 或 `targetKind + targetId` 二选一，并把这些契约写入 AI discovery 回归；同时删除未引用的空占位文件。针对性回归、生产构建与复审全部通过，发布审查最终为 `RELEASE`。
+- 第 195 项不再沿用旧 A～D：P0 以当前 `28 / 28` 画布模式及补充 point / path 入口冻结动作矩阵；新阶段依次为 A Cell 只读基础、B Grid Cells 诊断图层与定位扫描、C 全动作 inspector registry 与国家 / 省份 / 城市同族创建、D 只补机器差集证明缺失的受控写入口并统一验收。重编排复用第 200 项 `info.describe` / schema / objects，不建设远程 bridge，不开放通用任意写。
+- 首轮独立评审给出 `NOT RELEASE`，要求把 P0 从手写摘要提升为机器闭环，并补全 revision / token 和 inspector 签名。现已新增 `cell-action-replanning-matrix` 生成与回归：直接消费 `28` 个画布模式和 `19` 类非注册直接操控，共 `47` 行；模式 / 直接入口双向差集、重复 actionId、空目标、空源码引用均为 `0`。每行明确输入空间、源码入口、inspect / execute 目标、阶段、历史 / 回滚和旧兼容。
+- 唯一只读诊断签名冻结为 `cells.inspectAction(actionId, input, options = {})`，actionId 使用领域语义名，modeId 只作映射元数据；旧“三个创建动作首期 registry”文本已废止。revision 现覆盖所有既有成功地图写事务及 undo / redo，拒绝、取消、no-op 和完整回滚不递增；token 绑定 map identity、revision、actionId、规范化输入指纹和 inspector schema version，换图与异步陈旧提交边界均已写入最低验收。
+- 第二轮独立评审仍为 `NOT RELEASE`，指出权威清单残留“只设计不施工”旧口径，且 P0 没有把第 200 项矩阵作为真实上游。现已改为直接导入 `buildFullCapabilityMatrix()`：四类 `deferred-owned:195` 必须稳定归入 A、B、C、C+D，增加、删除或变更 owner 都会形成双向差集；source digest 同时绑定两份上游审计。矩阵还把 `89 / 89` 个直接操控宿主实例纳入摘要，并对 actionId、inputSpace、phase、status、history / rollback、compatibility 等全部必填字段建立统一缺口门禁。
+- 权威清单已把旧“只形成设计、不改代码”明确标为已完成的历史设计验收，另立当前 A～D 实施总验收；阶段 C 分母冻结为 `planned-registry 34 / 34`、`existing-api 1 / 1`、`excluded 12 / 12`，并明确用户本轮授权在评审 RELEASE、提交推送后尝试实施。
+- 第三轮独立评审结论为 `RELEASE`：确认第 200 项上游 deferred `4 / 4`、模式 `28 / 28`、直接操控 `19 / 19` 类与 `89 / 89` 宿主、`47` 行矩阵、阶段 C `34 / 34` 以及全部结构 gap `0`；第 195 项 A～D 编排正式成为唯一活动权威顺序。
+
 ## 2026-07-25：完成权威任务第 201～203 项统一验收
 
 - 统一验收首先修正复审发现的四个阻断：危险操作审计不再由策略清单反向枚举，而是递归扫描当前正式应用源码，独立发现面板 callback、确认函数与危险 API 名称，再与策略登记做双向差集；合成未知 `delete-fief / clear-archived-treaties` 会稳定进入缺口。专题索引同步明确 `Q-25～Q-27` 已转为第 201～203 项，只有 `Q-28～Q-33` 继续留在未批准候选池。

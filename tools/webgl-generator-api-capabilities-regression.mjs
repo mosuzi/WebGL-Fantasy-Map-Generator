@@ -4,7 +4,8 @@ import {createServer} from "node:http";
 import {createRequire} from "node:module";
 import {dirname, extname, join, normalize, resolve} from "node:path";
 import {fileURLToPath} from "node:url";
-import {waitForApiReady} from "./webgl-generator-api-browser-ready.mjs";
+import {CONFIRM_REQUIRED_METHODS} from "../app/webgl-generator/src/runtime/api-contract.js";
+import {partitionApiBrowserDiagnostics, waitForApiReady} from "./webgl-generator-api-browser-ready.mjs";
 
 const rootDir = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const sourceDir = join(rootDir, "source", "Fantasy-Map-Generator");
@@ -45,9 +46,16 @@ try {
   const baseUrl = `http://${host}:${port}`;
   await page.goto(`${baseUrl}?healthClear=1`, {waitUntil: "domcontentloaded", timeout: timeoutMs});
   await waitForApiReady(page, timeoutMs);
-  const result = await inspectCapabilities(page, {cells, seed, template});
+  const result = await inspectCapabilities(page, {
+    cells,
+    seed,
+    template,
+    expectedConfirmRequired: [...CONFIRM_REQUIRED_METHODS]
+  });
   const uiApiConvergence = await inspectUiApiConvergence(page);
-  const healthErrors = await inspectHealthErrors(page);
+  const observedHealthErrors = await inspectHealthErrors(page);
+  const diagnostics = partitionApiBrowserDiagnostics(observedHealthErrors, consoleErrors);
+  const healthErrors = diagnostics.healthErrors;
 
   const report = {
     metadata: {
@@ -59,13 +67,14 @@ try {
       template,
       viewport,
       browserChannel,
-      consoleErrors,
+      consoleErrors: diagnostics.consoleErrors,
+      performanceConsoleErrors: diagnostics.performanceConsoleErrors,
       pageErrors
     },
     ...result,
     uiApiConvergence,
     healthErrors,
-    passed: result.passed && uiApiConvergence.passed && healthErrors.total === 0 && consoleErrors.length === 0 && pageErrors.length === 0
+    passed: result.passed && uiApiConvergence.passed && healthErrors.total === 0 && diagnostics.consoleErrors.length === 0 && pageErrors.length === 0
   };
 
   writeFileSync(outPath, `${JSON.stringify(report, null, 2)}\n`, "utf8");
@@ -80,36 +89,14 @@ try {
   await new Promise(resolveClose => server.close(resolveClose));
 }
 
-async function inspectCapabilities(page, {cells, seed, template}) {
-  return page.evaluate(async ({cells, seed, template}) => {
+async function inspectCapabilities(page, {cells, seed, template, expectedConfirmRequired}) {
+  return page.evaluate(async ({cells, seed, template, expectedConfirmRequired}) => {
     const failures = [];
-    const expectedConfirmRequired = [
-      "generate.regenerate",
-      "generate.newMap",
-      "generate.rerollSeed",
-      "data.importMap",
-      "data.importGEO",
-      "data.importHeightmap",
-      "data.restoreBrowserMap",
-      "namebases.clear",
-      "namebases.renameObjects",
-      "climate.applyDownstreamRebuild",
-      "edit.height.rebuildBaseDerived",
-      "edit.height.rebuildDownstreamDerived",
-      "edit.economy.assignCells",
-      "edit.economy.rebuild",
-      "edit.states.merge",
-      "edit.states.split",
-      "edit.features.applyTopology",
-      "edit.population.transfer"
-    ];
-    const expectedConfirmGroups = {
-      generate: ["regenerate", "newMap", "rerollSeed"],
-      data: ["importMap", "importGEO", "importHeightmap", "restoreBrowserMap"],
-      namebases: ["clear", "renameObjects"],
-      climate: ["applyDownstreamRebuild"],
-      edit: ["height.rebuildBaseDerived", "height.rebuildDownstreamDerived", "economy.assignCells", "economy.rebuild", "states.merge", "states.split", "features.applyTopology", "population.transfer"]
-    };
+    const expectedConfirmGroups = expectedConfirmRequired.reduce((groups, qualifiedName) => {
+      const [namespace, ...parts] = qualifiedName.split(".");
+      (groups[namespace] ||= []).push(parts.join("."));
+      return groups;
+    }, {});
     const expectedRepresentativeMutates = {
       "generate.setOptions": "generation-options",
       "edit.notes.set": "notes",
@@ -150,8 +137,8 @@ async function inspectCapabilities(page, {cells, seed, template}) {
     if (version.capabilitySchemaVersion !== "1.0.0" || version.compatibilityPolicyVersion !== "1.0.0") failures.push("info.version 缺少能力或兼容策略版本");
     if (capabilities.contract?.stableCompatibility !== "same-major") failures.push("capabilities 缺少同主版本兼容策略");
     if (capabilities.contract?.deprecatedRemoval !== "next-major-only") failures.push("capabilities 缺少 deprecated 移除策略");
-    if (Object.keys(capabilities.capabilityGroups || {}).length !== 13) failures.push("capabilities 能力组不是 13 个");
-    if (JSON.stringify(capabilities.stabilitySummary) !== JSON.stringify({stable: 200, experimental: 7, deprecated: 1})) failures.push("稳定等级统计不是 200 / 7 / 1");
+    if (Object.keys(capabilities.capabilityGroups || {}).length !== 15) failures.push("capabilities 能力组不是 15 个");
+    if (JSON.stringify(capabilities.stabilitySummary) !== JSON.stringify({stable: 229, experimental: 7, deprecated: 1})) failures.push("稳定等级统计不是 229 / 7 / 1");
     if (!Object.prototype.hasOwnProperty.call(runtimeStats, "lastEditRefresh")) failures.push("runtimeStats 缺少 lastEditRefresh 字段");
     const coverage = capabilities.methodMetadataCoverage || {};
     if (coverage.complete !== true) failures.push("methodMetadataCoverage.complete 不是 true");
@@ -287,7 +274,7 @@ async function inspectCapabilities(page, {cells, seed, template}) {
       if (missing.length) output.push(`${label} 缺少：${missing.join(", ")}`);
       if (extra.length) output.push(`${label} 多出：${extra.join(", ")}`);
     }
-  }, {cells, seed, template});
+  }, {cells, seed, template, expectedConfirmRequired});
 }
 
 async function inspectUiApiConvergence(page) {

@@ -11,6 +11,8 @@ import {resolveObject} from "./object-resolver.js";
 import {buildHistoryPeek} from "./history-peek.js";
 import {buildApiMethodCoverage} from "./api-capability-coverage.js";
 import {API_METHODS, API_STABILITY, API_VERSION, CONFIRM_REQUIRED_METHODS, buildApiContract, buildApiVersionContract, groupQualifiedMethodNames} from "./api-contract.js";
+import {buildApiDescriptionCoverage, buildApiMethodDescriptionRegistry, describeApiMethod} from "./api-schema-registry.js";
+import {getObjectSnapshot, listObjectSnapshots, listObjectTypes, queryObjectSnapshots} from "./object-query-api.js";
 
 export function installConsoleApi(documentRef, state, options = {}) {
   const view = documentRef.defaultView || window;
@@ -20,16 +22,25 @@ export function installConsoleApi(documentRef, state, options = {}) {
   return api;
 }
 
-function createConsoleApi(documentRef, state, actions = {}) {
+export function createConsoleApi(documentRef, state, actions = {}) {
+  const methodMetadata = buildApiContract(API_METHODS, buildMethodMetadata()).methodMetadata;
+  let methodDescriptions = null;
   const api = {
     version: API_VERSION,
     stability: API_STABILITY,
     info: Object.freeze({
       version: () => apiCall(() => buildApiVersion()),
       capabilities: () => apiCall(() => buildCapabilities(api)),
+      describe: method => apiCall(() => describeApiMethod(methodDescriptions, method)),
       mapSummary: () => apiCall(() => buildMapSummary(state)),
       runtimeStats: () => apiCall(() => buildRuntimeStats(state, documentRef)),
       healthEvents: (options = {}) => apiCall(() => buildHealthEventsSnapshot(state, options))
+    }),
+    objects: Object.freeze({
+      types: () => apiCall(() => listObjectTypes()),
+      get: reference => apiCall(() => getObjectSnapshot(state.map, reference)),
+      list: (type, options = {}) => apiCall(() => listObjectSnapshots(state.map, type, options)),
+      query: (query = {}, options = {}) => apiCall(() => queryObjectSnapshots(state.map, query, options))
     }),
     generate: Object.freeze({
       getOptions: () => apiCall(() => requireApiAction(actions.generate?.getOptions, "generate.getOptions")()),
@@ -37,6 +48,13 @@ function createConsoleApi(documentRef, state, actions = {}) {
       newMap: (options = {}) => apiCall(() => requireApiAction(actions.generate?.newMap, "generate.newMap")(options)),
       rerollSeed: (options = {}) => apiCall(() => requireApiAction(actions.generate?.rerollSeed, "generate.rerollSeed")(options)),
       regenerate: (kind, options = {}) => apiCall(() => requireApiAction(actions.generate?.regenerate, "generate.regenerate")(kind, options))
+    }),
+    oceanCurrents: Object.freeze({
+      rename: (currentId, name) => apiCall(() => requireApiAction(actions.oceanCurrents?.rename, "oceanCurrents.rename")(currentId, name)),
+      regenerate: (options = {}) => apiCall(() => requireApiAction(actions.oceanCurrents?.regenerate, "oceanCurrents.regenerate")(normalizePublicOptions(options, ["seed"], "洋流重生成"))),
+      inspectWorldRebuild: (options = {}) => apiCall(() => requireApiAction(actions.oceanCurrents?.inspectWorldRebuild, "oceanCurrents.inspectWorldRebuild")(normalizePublicOptions(options, ["seed"], "洋流世界重算预检"))),
+      rebuildWorld: (options = {}) => apiCall(() => requireApiAction(actions.oceanCurrents?.rebuildWorld, "oceanCurrents.rebuildWorld")(normalizePublicOptions(options, ["confirm", "seed"], "洋流世界重算"))),
+      cancelWorldRebuild: () => apiCall(() => requireApiAction(actions.oceanCurrents?.cancelWorldRebuild, "oceanCurrents.cancelWorldRebuild")())
     }),
     selection: Object.freeze({
       get: () => apiCall(() => buildSelectionSnapshot(state)),
@@ -154,8 +172,21 @@ function createConsoleApi(documentRef, state, actions = {}) {
       }),
       height: Object.freeze({
         applyChanges: (changes, options = {}) => apiCall(() => requireApiAction(actions.edit?.height?.applyChanges, "edit.height.applyChanges")(changes, options)),
+        inspectGlobalTransform: (options = {}) => apiCall(() => requireApiAction(actions.edit?.height?.inspectGlobalTransform, "edit.height.inspectGlobalTransform")(normalizePublicHeightSemanticOptions(options))),
+        applyGlobalTransform: (options = {}) => apiCall(() => requireApiAction(actions.edit?.height?.applyGlobalTransform, "edit.height.applyGlobalTransform")(normalizePublicHeightSemanticOptions(options))),
+        inspectTerrainTemplate: (options = {}) => apiCall(() => requireApiAction(actions.edit?.height?.inspectTerrainTemplate, "edit.height.inspectTerrainTemplate")(normalizePublicHeightSemanticOptions(options))),
+        applyTerrainTemplate: (options = {}) => apiCall(() => requireApiAction(actions.edit?.height?.applyTerrainTemplate, "edit.height.applyTerrainTemplate")(normalizePublicHeightSemanticOptions(options))),
+        inspectTerrainProgram: (program, options = {}) => apiCall(() => requireApiAction(actions.edit?.height?.inspectTerrainProgram, "edit.height.inspectTerrainProgram")(program, normalizePublicHeightSemanticOptions(options))),
+        applyTerrainProgram: (program, options = {}) => apiCall(() => requireApiAction(actions.edit?.height?.applyTerrainProgram, "edit.height.applyTerrainProgram")(program, normalizePublicHeightSemanticOptions(options))),
+        inspectRangeTransform: (options = {}) => apiCall(() => requireApiAction(actions.edit?.height?.inspectRangeTransform, "edit.height.inspectRangeTransform")(normalizePublicHeightSemanticOptions(options))),
+        applyRangeTransform: (options = {}) => apiCall(() => requireApiAction(actions.edit?.height?.applyRangeTransform, "edit.height.applyRangeTransform")(normalizePublicHeightSemanticOptions(options))),
+        inspectSelectionSmoothing: (options = {}) => apiCall(() => requireApiAction(actions.edit?.height?.inspectSelectionSmoothing, "edit.height.inspectSelectionSmoothing")(normalizePublicHeightSemanticOptions(options))),
+        applySelectionSmoothing: (options = {}) => apiCall(() => requireApiAction(actions.edit?.height?.applySelectionSmoothing, "edit.height.applySelectionSmoothing")(normalizePublicHeightSemanticOptions(options))),
+        inspectSeafloorReset: (options = {}) => apiCall(() => requireApiAction(actions.edit?.height?.inspectSeafloorReset, "edit.height.inspectSeafloorReset")(normalizePublicOptions(options, ["seed"], "海底重设预检"))),
+        applySeafloorReset: (options = {}) => apiCall(() => requireApiAction(actions.edit?.height?.applySeafloorReset, "edit.height.applySeafloorReset")(normalizePublicOptions(options, ["inspectionToken", "confirm", "seed", "worldSeed"], "海底重设"))),
         rebuildBaseDerived: (options = {}) => apiCall(() => requireApiAction(actions.edit?.height?.rebuildBaseDerived, "edit.height.rebuildBaseDerived")(options)),
-        rebuildDownstreamDerived: (options = {}) => apiCall(() => requireApiAction(actions.edit?.height?.rebuildDownstreamDerived, "edit.height.rebuildDownstreamDerived")(options))
+        rebuildDownstreamDerived: (options = {}) => apiCall(() => requireApiAction(actions.edit?.height?.rebuildDownstreamDerived, "edit.height.rebuildDownstreamDerived")(options)),
+        rebuildAllDerived: (options = {}) => apiCall(() => requireApiAction(actions.edit?.height?.rebuildAllDerived, "edit.height.rebuildAllDerived")(options))
       }),
       biomes: Object.freeze({
         assignCells: (biomeId, gridCellIds, options = {}) => apiCall(() => requireApiAction(actions.edit?.biomes?.assignCells, "edit.biomes.assignCells")(biomeId, gridCellIds, options)),
@@ -242,6 +273,12 @@ function createConsoleApi(documentRef, state, actions = {}) {
         applyTopology: (options = {}) => apiCall(() => requireApiAction(actions.edit?.features?.applyTopology, "edit.features.applyTopology")(options))
       }),
       labels: Object.freeze({
+        getStyles: () => apiCall(() => requireApiAction(actions.edit?.labels?.getStyles, "edit.labels.getStyles")()),
+        setStyle: (styleType, patch) => apiCall(() => requireApiAction(actions.edit?.labels?.setStyle, "edit.labels.setStyle")(styleType, patch)),
+        resetStyle: styleType => apiCall(() => requireApiAction(actions.edit?.labels?.resetStyle, "edit.labels.resetStyle")(styleType)),
+        resetStyles: () => apiCall(() => requireApiAction(actions.edit?.labels?.resetStyles, "edit.labels.resetStyles")()),
+        setLayout: (label, patch) => apiCall(() => requireApiAction(actions.edit?.labels?.setLayout, "edit.labels.setLayout")(label, patch)),
+        setPositionLock: (label, locked, options = {}) => apiCall(() => requireApiAction(actions.edit?.labels?.setPositionLock, "edit.labels.setPositionLock")(label, locked, options)),
         addCustom: (options = {}) => apiCall(() => requireApiAction(actions.edit?.labels?.addCustom, "edit.labels.addCustom")(options)),
         delete: label => apiCall(() => requireApiAction(actions.edit?.labels?.delete, "edit.labels.delete")(label)),
         moveCustom: (labelId, point) => apiCall(() => requireApiAction(actions.edit?.labels?.moveCustom, "edit.labels.moveCustom")(labelId, point)),
@@ -295,6 +332,7 @@ function createConsoleApi(documentRef, state, actions = {}) {
       profileNextRender: (options = {}) => apiCall(() => profileDebugNextRender(state, options))
     })
   };
+  methodDescriptions = buildApiMethodDescriptionRegistry(API_METHODS, methodMetadata, api);
   return Object.freeze(api);
 }
 
@@ -302,6 +340,7 @@ function buildCapabilities(api) {
   const methods = API_METHODS;
   const apiContract = buildApiContract(methods, buildMethodMetadata());
   const methodMetadata = apiContract.methodMetadata;
+  const methodDescriptions = buildApiMethodDescriptionRegistry(methods, methodMetadata, api);
   return {
     apiVersion: API_VERSION,
     stability: API_STABILITY,
@@ -313,6 +352,8 @@ function buildCapabilities(api) {
     methods,
     methodMetadata,
     methodMetadataCoverage: buildApiMethodCoverage(methods, methodMetadata, api),
+    methodDescriptionSchemaVersion: methodDescriptions["info.version"]?.schemaVersion,
+    methodDescriptionCoverage: buildApiDescriptionCoverage(methods, methodMetadata, methodDescriptions, api),
     safety: {
       confirmationOption: "confirm: true",
       confirmRequiredMethods: [...CONFIRM_REQUIRED_METHODS],
@@ -320,7 +361,9 @@ function buildCapabilities(api) {
     },
     sideEffects: {
       info: "readonly",
+      objects: "readonly-object-discovery",
       generate: "map-regeneration",
+      oceanCurrents: "ocean-current-edit-and-world-rebuild",
       selection: "selection-camera-highlights-and-editing-state",
       layers: "display-preference-camera-and-theme-registry",
       units: "display-preference",
@@ -334,14 +377,28 @@ function buildCapabilities(api) {
   };
 }
 
-function buildMethodMetadata() {
+export function buildMethodMetadata() {
   return {
     info: {
       version: {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
       capabilities: {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
+      describe: {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
       mapSummary: {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
       runtimeStats: {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
       healthEvents: {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false}
+    },
+    objects: {
+      types: {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
+      get: {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
+      list: {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
+      query: {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false}
+    },
+    oceanCurrents: {
+      rename: {stable: "draft", mutates: "ocean-currents", undoable: true, async: false, requiresConfirm: false},
+      regenerate: {stable: "draft", mutates: "ocean-currents", undoable: true, async: false, requiresConfirm: false},
+      inspectWorldRebuild: {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
+      rebuildWorld: {stable: "draft", mutates: "map-derived-data", undoable: true, async: true, requiresConfirm: true},
+      cancelWorldRebuild: {stable: "draft", mutates: "runtime-operation", undoable: false, async: false, requiresConfirm: false}
     },
     layers: {
       get: {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
@@ -455,8 +512,21 @@ function buildMethodMetadata() {
       "states.setGovernmentBatch": {stable: "draft", mutates: "political-entities", undoable: true, async: false, requiresConfirm: false},
       "states.applyChanges": {stable: "draft", mutates: "political-entities", undoable: true, async: false, requiresConfirm: false},
       "height.applyChanges": {stable: "draft", mutates: "height", undoable: true, async: false, requiresConfirm: false},
+      "height.inspectGlobalTransform": {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
+      "height.applyGlobalTransform": {stable: "draft", mutates: "height", undoable: true, async: false, requiresConfirm: false},
+      "height.inspectTerrainTemplate": {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
+      "height.applyTerrainTemplate": {stable: "draft", mutates: "height", undoable: true, async: false, requiresConfirm: false},
+      "height.inspectTerrainProgram": {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
+      "height.applyTerrainProgram": {stable: "draft", mutates: "height", undoable: true, async: false, requiresConfirm: false},
+      "height.inspectRangeTransform": {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
+      "height.applyRangeTransform": {stable: "draft", mutates: "height", undoable: true, async: false, requiresConfirm: false},
+      "height.inspectSelectionSmoothing": {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
+      "height.applySelectionSmoothing": {stable: "draft", mutates: "height", undoable: true, async: false, requiresConfirm: false},
+      "height.inspectSeafloorReset": {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
+      "height.applySeafloorReset": {stable: "draft", mutates: "height-and-map-derived-data", undoable: true, async: true, requiresConfirm: true},
       "height.rebuildBaseDerived": {stable: "draft", mutates: "map-derived-data", undoable: true, async: false, requiresConfirm: true},
       "height.rebuildDownstreamDerived": {stable: "draft", mutates: "map-derived-data", undoable: true, async: false, requiresConfirm: true},
+      "height.rebuildAllDerived": {stable: "draft", mutates: "map-derived-data", undoable: true, async: false, requiresConfirm: true},
       "biomes.assignCells": {stable: "draft", mutates: "biomes-and-suitability", undoable: true, async: false, requiresConfirm: false},
       "biomes.inspectSuitability": {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
       "biomes.applySuitability": {stable: "draft", mutates: "suitability-and-population", undoable: true, async: false, requiresConfirm: false},
@@ -517,6 +587,12 @@ function buildMethodMetadata() {
       "features.applyPatch": {stable: "draft", mutates: "features-and-hydrology", undoable: true, async: false, requiresConfirm: false},
       "features.inspectTopology": {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
       "features.applyTopology": {stable: "draft", mutates: "features-topology-and-height", undoable: true, async: false, requiresConfirm: true},
+      "labels.getStyles": {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
+      "labels.setStyle": {stable: "draft", mutates: "labels", undoable: true, async: false, requiresConfirm: false},
+      "labels.resetStyle": {stable: "draft", mutates: "labels", undoable: true, async: false, requiresConfirm: false},
+      "labels.resetStyles": {stable: "draft", mutates: "labels", undoable: true, async: false, requiresConfirm: false},
+      "labels.setLayout": {stable: "draft", mutates: "labels", undoable: true, async: false, requiresConfirm: false},
+      "labels.setPositionLock": {stable: "draft", mutates: "labels", undoable: true, async: false, requiresConfirm: false},
       "labels.addCustom": {stable: "draft", mutates: "labels", undoable: true, async: false, requiresConfirm: false},
       "labels.delete": {stable: "draft", mutates: "labels", undoable: true, async: false, requiresConfirm: false},
       "labels.moveCustom": {stable: "draft", mutates: "labels", undoable: true, async: false, requiresConfirm: false},
@@ -572,6 +648,53 @@ function buildMethodMetadata() {
 function requireApiAction(action, name) {
   if (typeof action !== "function") throw new Error(`API action 未安装：${name}`);
   return action;
+}
+
+function normalizePublicOptions(value, allowedFields, label) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    const error = new Error(`${label}参数必须是对象`);
+    error.code = "invalid_argument";
+    throw error;
+  }
+  const unknown = Object.keys(value).filter(field => !allowedFields.includes(field));
+  if (unknown.length) {
+    const error = new Error(`${label}包含未公开字段：${unknown.join(", ")}`);
+    error.code = "invalid_argument";
+    throw error;
+  }
+  return {...value};
+}
+
+function normalizePublicHeightSemanticOptions(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    const error = new Error("高度语义工具参数必须是对象");
+    error.code = "invalid_argument";
+    throw error;
+  }
+  const privateFields = Object.keys(value).filter(field => field.startsWith("_") || ["changes", "faultAt", "seafloorPlan"].includes(field));
+  if (privateFields.length) {
+    const error = new Error(`高度语义工具包含未公开字段：${privateFields.join(", ")}`);
+    error.code = "invalid_argument";
+    throw error;
+  }
+  assertSerializableInput(value);
+  return {...value};
+}
+
+function assertSerializableInput(value, path = "options") {
+  if (value === null || value === undefined || ["string", "number", "boolean"].includes(typeof value)) return;
+  if (typeof value === "function" || typeof value === "symbol" || typeof value === "bigint" || value instanceof Map || value instanceof Set || ArrayBuffer.isView(value)) {
+    const error = new Error(`${path} 必须是 JSON 可序列化值`);
+    error.code = "invalid_argument";
+    throw error;
+  }
+  if (Array.isArray(value)) {
+    value.forEach((item, index) => assertSerializableInput(item, `${path}[${index}]`));
+    return;
+  }
+  if (typeof value === "object") {
+    for (const [key, item] of Object.entries(value)) assertSerializableInput(item, `${path}.${key}`);
+  }
 }
 
 function buildHistoryStats(state, actions = {}, options = {}) {

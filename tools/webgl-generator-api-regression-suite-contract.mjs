@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {readFile} from "node:fs/promises";
 
 import {runGateSequence} from "./regression-gate-runner.mjs";
+import {partitionApiBrowserDiagnostics} from "./webgl-generator-api-browser-ready.mjs";
 
 const calls = [];
 const synthetic = runGateSequence([
@@ -17,6 +18,25 @@ assert.equal(synthetic.failureCode, 17, "失败退出码没有原样传播");
 assert.deepEqual(calls, ["one", "two"], "失败后仍执行了后续门禁");
 assert.deepEqual(synthetic.steps.map(step => step.status), ["passed", "failed", "skipped"], "失败后的 skipped 状态错误");
 assert.equal(synthetic.steps[2].exitCode, null, "跳过步骤不应伪造退出码");
+
+const diagnostics = partitionApiBrowserDiagnostics({
+  total: 3,
+  counts: {"main-thread-long-task": 1, "render-frame-gap": 1, "operation-failed": 1},
+  events: [
+    {type: "main-thread-long-task", severity: "error"},
+    {type: "render-frame-gap", severity: "error"},
+    {type: "operation-failed", severity: "error"}
+  ]
+}, [
+  "[FMG health] main-thread-long-task {...}",
+  "[FMG health] operation-failed {...}",
+  "普通应用错误"
+]);
+assert.equal(diagnostics.healthErrors.observedTotal, 3, "性能遥测没有保留原 health 总数");
+assert.equal(diagnostics.healthErrors.performanceTelemetry.total, 2, "性能遥测分类错误");
+assert.equal(diagnostics.healthErrors.total, 1, "应用 health 错误分类错误");
+assert.deepEqual(diagnostics.performanceConsoleErrors, ["[FMG health] main-thread-long-task {...}"], "性能 console 分类错误");
+assert.deepEqual(diagnostics.consoleErrors, ["[FMG health] operation-failed {...}", "普通应用错误"], "应用 console 错误分类错误");
 
 const browserScripts = [
   "webgl-generator-api-capabilities-regression.mjs",
@@ -38,7 +58,8 @@ assert.match(suiteSource, /spawnSync\(process\.execPath/, "聚合门禁没有使
 assert.match(suiteSource, /CI: "true"/, "聚合门禁没有固定 CI 环境");
 assert.match(packageSource, /"regress:api-suite": "node --no-warnings \.\/tools\/webgl-generator-api-regression-suite\.mjs"/, "package.json 缺少聚合命令");
 for (let index = 0; index < browserScripts.length; index += 1) {
-  assert.match(browserSources[index], /import \{waitForApiReady\}/, `${browserScripts[index]} 没有导入统一就绪等待`);
+  assert.match(browserSources[index], /partitionApiBrowserDiagnostics, waitForApiReady/, `${browserScripts[index]} 没有导入统一诊断与就绪等待`);
+  assert.match(browserSources[index], /partitionApiBrowserDiagnostics\(observedHealthErrors, consoleErrors\)/, `${browserScripts[index]} 没有分列性能遥测与应用错误`);
   assert.match(browserSources[index], /await waitForApiReady\(page, timeoutMs\)/, `${browserScripts[index]} 没有等待 operation 空闲`);
 }
 assert.match(browserSources[0], /inspectUiApiConvergence/, "capabilities 浏览器门禁缺少 UI / API 共路径验收");

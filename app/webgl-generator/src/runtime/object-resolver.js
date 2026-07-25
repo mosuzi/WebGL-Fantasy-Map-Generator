@@ -38,6 +38,7 @@ function resolveCity(map, object) {
     name: city.name,
     type: city.capital ? "capital" : city.provincial ? "provincial" : city.port ? "port" : "city",
     population: city.population,
+    emblem: emblemSummary(city.coa),
     stateId: city.state,
     state: map.politics.states[city.state]?.name || "none",
     provinceId: city.province,
@@ -387,7 +388,8 @@ function resolveState(map, object) {
     culture: map.society.cultures[state.culture]?.name || "unknown",
     religionId: state.religion,
     religion: map.society.religions[state.religion]?.name || "unknown",
-    centerCell: state.center
+    centerCell: state.center,
+    emblem: emblemSummary(state.coa)
   };
 }
 
@@ -491,4 +493,21 @@ function routeLength(route) {
 
 function isPoint(point) {
   return Number.isFinite(point?.[0]) && Number.isFinite(point?.[1]);
+}
+
+function emblemSummary(coa) {
+  const charge = coa?.charges?.[0] || null;
+  return {
+    available: Boolean(coa?.shield && coa?.tinctures?.field && charge),
+    shield: coa?.shield || "none",
+    fieldColor: coa?.tinctures?.field || "none",
+    chargeColor: charge?.tincture || coa?.tinctures?.charge || "none",
+    charge: charge?.charge || "none",
+    chargeCount: coa?.charges?.length || 0,
+    size: Number(coa?.size || 0),
+    position: {
+      x: Number.isFinite(Number(coa?.x)) ? Number(coa.x) : null,
+      y: Number.isFinite(Number(coa?.y)) ? Number(coa.y) : null
+    }
+  };
 }

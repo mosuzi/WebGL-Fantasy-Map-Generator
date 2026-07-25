@@ -1,6 +1,6 @@
 # 独立 WebGL 地图生成器应用
 
-`app/webgl-generator/` 是正式 WebGL 地图生成器应用目录，与 `prototype/webgl-cells/` 的早期快照 demo 分开维护。这里已经不是占位地图阶段；截至 2026-07-16，当前活动范围为权威任务第 64～81 项共 18 项，覆盖现有维护收口、标签样式、夸克网盘调研以及由准权威池转正的下游重算、对象 / 地形编辑、标签布局和导出补全，详细状态只在[权威任务清单](../../docs/current-plan.md#权威任务清单)维护。
+`app/webgl-generator/` 是正式 WebGL 地图生成器应用目录，与 `prototype/webgl-cells/` 的早期快照 demo 分开维护。这里已经不是占位地图阶段；当前活动范围只以[权威任务清单](../../docs/current-plan.md#权威任务清单)为准。
 
 ## 目录职责
 
@@ -16,7 +16,7 @@
 - 可复现 seed/options 生成链路已经覆盖地形、气候、河流、文化、宗教、国家、省份、城市、路线、资源、经济、外交、静态军事和地区。
 - 地图对象使用统一 selection、定位、高亮、对象详情和领域面板；编辑进入 `EditHistory`，并通过 effects 驱动定向派生刷新。
 - 高度、国家、省份、文化、宗教及各类创建工具共用统一画布模式管理器，支持互斥、取消、完成、地图替换和未提交预览回滚。
-- `window.webglGeneratorApi` 当前覆盖 11 个命名空间、208 个公开方法和 110 个编辑方法；国家拓扑、数值适居度、区域人口增减 / 守恒转移和经济展示属性入口均同对应面板共用 runtime action 和数据契约。
+- `window.webglGeneratorApi` 当前覆盖 `13` 个命名空间、`237` 个公开方法和 `129` 个编辑方法；`237 / 237` 方法可自描述，`objects` 支持 `17` 类对象，UI 与 API 共用 runtime action 和数据契约。
 - 完整地图 JSON/gzip、浏览器存档、GEO、高度图、名称库、备注和测量具备兼容/诊断入口；旧数据变化必须补 migration/backfill。
 - PNG 支持倍率、四种裁剪模式和七类 overlay 白名单；pack 与分层 GeoJSON 支持全图、当前视口和世界坐标 bbox，政治面支持 dissolve，并有 Chrome、QGIS 与 geojson.io 验收证据。
 

@@ -19,7 +19,7 @@ assert.equal(report.totals.missingEntries, 0);
 assert.equal(report.totals.extraEntries, 0);
 
 assert.deepEqual([...report.legacyComparison.missingFromLegacy].sort(), runtimeIds.filter(id => !report.legacyComparison.legacyModeIds.includes(id)).sort(), "旧回归差异必须由当前集合计算");
-assert.deepEqual(report.legacyComparison.missingFromLegacy, ["culture:center", "religion:center", "biome:suitability", "feature:topology-select"], "当前旧门禁漂移快照变化时必须重新审计");
+assert.deepEqual(report.legacyComparison.missingFromLegacy, [], "当前模式回归分母必须覆盖全部运行时模式");
 
 assert.ok(report.modeContracts.every(item => item.entry && item.target && item.cursor && item.gesture && item.preview && item.complete && item.cancel && item.switch && item.escape && item.panelClose && item.mapReplace && item.history && item.recovery), "每个模式必须具有完整生命周期字段");
 assert.ok(report.modeContracts.every(item => item.evidenceStatus === "E-C" && item.browserEvidence === "pending-Q107" && item.sourceRefs.length >= 3), "模式静态证据与浏览器待验状态必须分开");
@@ -35,16 +35,16 @@ assert.equal(report.modeContracts.filter(item => item.cursor === "default").leng
 assert.deepEqual(report.modeContracts.filter(item => item.locksInteraction === false).map(item => item.modeId), ["measurement:draw"], "测量必须是唯一不锁基础交互的注册模式");
 
 assert.equal(report.totals.directFamilies, 19, "直接操控应为 13 条原生路径加 6 类展开宿主");
-assert.equal(report.totals.directManipulations, 88, "当前直接操控分母应展开为 88 行");
-assert.equal(report.expandedDirectRows.length, 88);
-assert.equal(new Set(report.expandedDirectRows.map(item => item.directRowId)).size, 88, "展开行 ID 不得重复");
+assert.equal(report.totals.directManipulations, 89, "当前直接操控分母应展开为 89 行");
+assert.equal(report.expandedDirectRows.length, 89);
+assert.equal(new Set(report.expandedDirectRows.map(item => item.directRowId)).size, 89, "展开行 ID 不得重复");
 assert.equal(report.totals.missingDirectClassifications, 0);
 assert.equal(report.totals.unresolvedSurfaceRefs, 0);
 assert.ok(report.directManipulations.every(item => item.start && item.move && item.complete && item.clickNoMove && item.cancel && item.pointerCancel && item.captureLost && item.conflicts && item.history && item.recovery), "每类直接操控必须明确完整事件生命周期");
 assert.ok(report.directManipulations.every(item => item.evidenceStatus === "E-C" && item.browserEvidence === "pending-Q107" && item.intB === false), "直接操控正常行为结论不得冒充浏览器通过或整改结论");
 
 const directById = new Map(report.directManipulations.map(item => [item.directId, item]));
-assert.equal(directById.get("DM-14").hostCount, 27, "PanelManager 拖动宿主分母漂移时必须更新审计");
+assert.equal(directById.get("DM-14").hostCount, 28, "PanelManager 拖动宿主分母漂移时必须更新审计");
 assert.equal(directById.get("DM-15").hostCount, 18, "动作坞拖动宿主分母漂移时必须更新审计");
 assert.equal(directById.get("DM-16").hostCount, 1);
 assert.equal(directById.get("DM-17").hostCount, 2);
@@ -56,8 +56,8 @@ assert.equal(new Set(directById.get("DM-19").hostLabels.map(item => item.split("
 assert.match(directById.get("DM-13").complete, /createUpdateMeasurementPointsCommand/, "测量 UI 编辑保存不得误写为公开 API 路径");
 assert.match(directById.get("DM-17").history, /未传 storageKey，不持久化/, "树状浮层没有 storageKey，只能记录会话内位置");
 
-assert.equal(report.findings.length, 7);
-assert.deepEqual(report.findings.map(item => item.findingId), ["IA-103-001", "IA-103-002", "IA-103-003", "IA-103-004", "IA-103-005", "IA-103-006", "IA-103-007"]);
+assert.equal(report.findings.length, 5);
+assert.deepEqual(report.findings.map(item => item.findingId), ["IA-103-003", "IA-103-004", "IA-103-005", "IA-103-006", "IA-103-007"]);
 assert.ok(report.findings.every(item => ["P0", "P1", "P2", "P3"].includes(item.severity) && ["代码确认", "浏览器复现", "用户反馈", "待验证"].includes(item.confidence) && typeof item.intB === "boolean"), "问题候选必须使用专题规定的严重度、信心与 INT-B 字段");
 assert.ok(report.findings.filter(item => item.intB).every(item => item.browserEvidence === "pending-Q107"), "行为变化候选必须保留给第 107 项验证");
 

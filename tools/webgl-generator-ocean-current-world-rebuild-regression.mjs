@@ -155,8 +155,8 @@ async function verifyUiAndRuntimeWiring() {
     readFile(new URL("../app/webgl-generator/src/generator/markers.js", import.meta.url), "utf8")
   ]);
   assert.match(app, /oceanCurrents\.rebuildWorld/);
-  assert.match(app, /seafloorPlan: plan/);
-  assert.match(app, /cancelCurrent\?\.\("用户取消洋流世界重算"\)/);
+  assert.match(app, /const seafloorPlan = buildSeafloorResetPlan/);
+  assert.match(app, /cancelWorldRebuild: \(\) => operation\.cancelCurrent\("用户取消洋流世界重算"\)/);
   assert.match(panel, />仅重新计算洋流</);
   assert.match(panel, />重算气候与世界</);
   assert.match(panel, />取消重算</);

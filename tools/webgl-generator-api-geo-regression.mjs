@@ -4,7 +4,7 @@ import {createServer} from "node:http";
 import {createRequire} from "node:module";
 import {dirname, extname, join, normalize, resolve} from "node:path";
 import {fileURLToPath} from "node:url";
-import {waitForApiReady} from "./webgl-generator-api-browser-ready.mjs";
+import {partitionApiBrowserDiagnostics, waitForApiReady} from "./webgl-generator-api-browser-ready.mjs";
 
 const rootDir = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const sourceDir = join(rootDir, "source", "Fantasy-Map-Generator");
@@ -67,7 +67,9 @@ try {
   const ordinary = await inspectOrdinaryGeoImport(page, ordinaryFixture);
   const fmgCellsFixture = await createFmgCellsGeoJsonFixture(page);
   const fmgCells = await inspectFmgCellsGeoImport(page, fmgCellsFixture.geoJson);
-  const healthErrors = await inspectHealthErrors(page);
+  const observedHealthErrors = await inspectHealthErrors(page);
+  const diagnostics = partitionApiBrowserDiagnostics(observedHealthErrors, consoleErrors);
+  const healthErrors = diagnostics.healthErrors;
 
   const report = {
     metadata: {
@@ -79,7 +81,8 @@ try {
       template,
       viewport,
       browserChannel,
-      consoleErrors,
+      consoleErrors: diagnostics.consoleErrors,
+      performanceConsoleErrors: diagnostics.performanceConsoleErrors,
       pageErrors
     },
     generation,
@@ -94,7 +97,7 @@ try {
       ordinary.passed &&
       fmgCells.passed &&
       healthErrors.total === 0 &&
-      consoleErrors.length === 0 &&
+      diagnostics.consoleErrors.length === 0 &&
       pageErrors.length === 0
   };
 
@@ -510,6 +513,7 @@ async function inspectHealthErrors(page) {
       total: result.data.total,
       counts: result.data.counts,
       events: result.data.events.map(event => ({
+        type: event.type || "",
         severity: event.severity || event.level || "",
         message: event.message || "",
         operation: event.operation || ""
