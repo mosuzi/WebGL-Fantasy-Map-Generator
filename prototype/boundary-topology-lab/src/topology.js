@@ -6,7 +6,9 @@ export function buildSharedSnapshot(fixture, algorithmId, options = {}) {
   const snapshotId = `${fixture.id}:${algorithmId}:${++snapshotSerial}`;
   const mutableArcs = new Map();
   for (const rawArc of fixture.arcs) {
-    const points = transformArc(rawArc.points, algorithmId, options, rawArc.closed);
+    const preserveClosedAnchor = Boolean(rawArc.syntheticAnchor) ||
+      Boolean(fixture.protectedObjects?.rivers?.some(river => river?.mouth?.arcId === rawArc.id));
+    const points = transformArc(rawArc.points, algorithmId, {...options, preserveClosedAnchor}, rawArc.closed);
     mutableArcs.set(rawArc.id, deepFreeze({
       id: rawArc.id,
       kind: rawArc.kind || "boundary",
@@ -46,7 +48,7 @@ export function buildIndependentComparison(fixture, algorithmId, options = {}) {
     usages,
     seamError: maximumDeviation?.distance || 0,
     maximumDeviation,
-    expectedFailure: algorithmId !== "raw" && [...arcUsageCounts(fixture).values()].some(count => count > 1)
+    expectedFailure: algorithmId !== "raw" && (maximumDeviation?.distance || 0) > 0.01
   };
 }
 

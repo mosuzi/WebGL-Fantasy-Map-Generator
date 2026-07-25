@@ -17,11 +17,13 @@ import {SHORE_TOPOLOGY_ALGORITHM, buildShoreTopologySnapshot} from "./coastline-
 import polygonClipping from "polygon-clipping";
 import earcut from "earcut";
 import {resolvedGridVertexPoint} from "./grid-vertex-geometry.js";
+import {withSurfaceSideAlpha} from "./surface-side-depth.js";
 
 const shoreSourceIndexCache = new WeakMap();
 const shoreRingIndexCache = new WeakMap();
 const shoreBandGeometryCache = new WeakMap();
 const shoreSurfaceCorrectionCache = new WeakMap();
+const shoreSurfaceDrawPacketCache = new WeakMap();
 
 export const SHORE_VISUAL_STYLE = Object.freeze({
   bandWidthWorld: 44,
@@ -124,35 +126,289 @@ export function sharedVoronoiEdgeVertexIds(map, cell, neighbor) {
 }
 
 export function pushShoreVisualBands(vertices, context, colorMode, viewOptions, paths) {
-  for (const path of [...paths.coastline, ...paths.lakeShore]) {
-    pushShoreSurfaceCorrections(vertices, path, context, colorMode, viewOptions);
-  }
+  const layers = buildShoreSurfaceVertexLayers(context, colorMode, viewOptions, paths);
+  for (const value of layers.landCorrections) vertices.push(value);
+  for (const value of layers.waterCorrections) vertices.push(value);
 }
 
-function pushShoreSurfaceCorrections(vertices, path, context, colorMode, viewOptions) {
+export function buildShoreSurfaceVertexLayers(context, colorMode, viewOptions, paths) {
+  const layers = {
+    landCorrections: [],
+    waterCorrections: [],
+    landCovers: [],
+    waterCovers: []
+  };
+  for (const path of [...paths.coastline, ...paths.lakeShore]) {
+    pushShoreSurfaceCorrections(layers, path, context, colorMode, viewOptions);
+  }
+  return Object.fromEntries(Object.entries(layers).map(([key, values]) => [key, new Float32Array(values)]));
+}
+
+function pushShoreSurfaceCorrections(layers, path, context, colorMode, viewOptions) {
   const {map} = context;
-  const boundaryEdgeCovers = [];
-  for (const triangle of buildShoreSurfaceCorrectionTriangles(path, map)) {
-    const cell = triangle.side === "land" ? triangle.landCell : triangle.waterCell;
-    const color = colorForCell(cell, map, colorMode, viewOptions);
-    pushWorldVertex(vertices, context, triangle.points[0], color);
-    pushWorldVertex(vertices, context, triangle.points[1], color);
-    pushWorldVertex(vertices, context, triangle.points[2], color);
-    for (const edge of triangle.boundaryEdges || []) {
-      boundaryEdgeCovers.push({edge, color, insidePoint: triangleCentroid(triangle.points)});
+  for (const command of buildShoreSurfaceDrawPacket(path, map).commands) {
+    const cell = command.side === "land" ? command.landCell : command.waterCell;
+    const color = withSurfaceSideAlpha(colorForCell(cell, map, colorMode, viewOptions), command.side);
+    const target = command.kind === "correction"
+      ? command.side === "land" ? layers.landCorrections : layers.waterCorrections
+      : command.side === "land" ? layers.landCovers : layers.waterCovers;
+    for (let index = 0; index < command.positions.length; index += 2) {
+      pushWorldVertex(target, context, [command.positions[index], command.positions[index + 1]], color);
     }
   }
-  for (const cover of deduplicateShoreBoundaryEdgeCovers(boundaryEdgeCovers)) {
-    pushShoreBoundaryEdgeCover(vertices, context, cover);
-  }
 }
 
-function pushShoreBoundaryEdgeCover(vertices, context, cover) {
+export function buildShoreSurfaceDrawPacket(path, map) {
+  const cached = shoreSurfaceDrawPacketCache.get(path);
+  if (cached?.map === map) return cached.packet;
+  const model = buildShoreSurfaceModel(path, map);
+  const correctionTriangles = model.triangles;
+  const commands = [];
+  const boundaryEdgeCovers = [];
+  const boundaryCoverFallbacks = [];
+  let skippedBoundaryCoverCount = 0;
+  let fallbackBoundaryCoverCount = 0;
+  for (const triangle of correctionTriangles) {
+    commands.push(shoreDrawCommand("correction", triangle.points, triangle));
+    for (const edge of triangle.boundaryEdges || []) {
+      boundaryEdgeCovers.push({
+        edge,
+        side: triangle.side,
+        landCell: triangle.landCell,
+        waterCell: triangle.waterCell,
+        insidePoint: triangleCentroid(triangle.points),
+        targetRings: [model.renderPoints],
+        landInside: model.landInside
+      });
+    }
+  }
+  const uniqueBoundaryEdgeCovers = deduplicateShoreBoundaryEdgeCovers(boundaryEdgeCovers);
+  const resolvedBoundaryEdgeCovers = [];
+  for (const cover of uniqueBoundaryEdgeCovers) {
+    try {
+      const result = buildShoreBoundaryEdgeCoverResult(cover);
+      resolvedBoundaryEdgeCovers.push({...cover, fallback: result.fallback});
+      if (result.fallback) {
+        fallbackBoundaryCoverCount++;
+        boundaryCoverFallbacks.push(Object.freeze({
+          side: cover.side,
+          landCell: cover.landCell,
+          waterCell: cover.waterCell,
+          edge: Object.freeze(cover.edge.map(point => Object.freeze([point[0], point[1]])))
+        }));
+      }
+      if (!result.triangles.length && worldDistance(cover.edge[0], cover.edge[1]) > 0.000001) skippedBoundaryCoverCount++;
+      const semantic = {...cover, coverMode: result.fallback ? "subdivided" : "direct"};
+      for (const points of result.triangles) commands.push(shoreDrawCommand("boundary-cover", points, semantic));
+    } catch {
+      skippedBoundaryCoverCount++;
+    }
+  }
+  const vertexCovers = buildShoreBoundaryVertexCoverTriangles(resolvedBoundaryEdgeCovers);
+  for (const vertexCover of vertexCovers) {
+    commands.push(shoreDrawCommand("boundary-cover", vertexCover.points, {
+      ...vertexCover,
+      coverMode: "vertex"
+    }));
+  }
+  const packet = Object.freeze({
+    coordinateType: "float32-world",
+    drawOrder: Object.freeze(["correction", "boundary-cover"]),
+    correctionTriangleCount: correctionTriangles.length,
+    boundaryCoverTriangleCount: commands.length - correctionTriangles.length,
+    skippedBoundaryCoverCount,
+    fallbackBoundaryCoverCount,
+    boundaryCoverFallbacks: Object.freeze(boundaryCoverFallbacks),
+    landInside: typeof model.landInside === "boolean" ? model.landInside : null,
+    surfaceFallbackReason: model.fallbackReason,
+    surfaceFallbackDetail: model.fallbackDetail,
+    surfaceFallbackLocation: model.fallbackReason === "surface-triangulation-fallback"
+      ? shoreSurfaceFallbackLocation(path, model)
+      : null,
+    commands: Object.freeze(commands)
+  });
+  shoreSurfaceDrawPacketCache.set(path, {map, packet});
+  return packet;
+}
+
+export function buildShoreBoundaryEdgeCoverTriangles(cover) {
+  return buildShoreBoundaryEdgeCoverResult(cover).triangles;
+}
+
+function buildShoreBoundaryEdgeCoverResult(cover) {
+  const needsFallback = shoreBoundaryCoverNeedsClippedFallback(cover);
+  if (needsFallback) {
+    try {
+      const clipped = buildClippedShoreBoundaryEdgeCoverTriangles(cover);
+      if (clipped.length) return {triangles: clipped, fallback: true};
+    } catch {
+      // 局部裁剪失败时继续走解析细分，不能让单边中断整张地图。
+    }
+  }
+  const direct = buildDirectShoreBoundaryEdgeCoverTriangles(cover);
+  if (direct.length || worldDistance(cover.edge[0], cover.edge[1]) <= 0.000001) {
+    return {triangles: direct, fallback: needsFallback};
+  }
+  const triangles = buildSubdividedShoreBoundaryEdgeCoverTriangles(cover);
+  return {triangles, fallback: true};
+}
+
+function shoreBoundaryCoverNeedsClippedFallback(cover) {
+  if (!cover.targetRings?.length || typeof cover.landInside !== "boolean") return false;
   const [start, end] = cover.edge;
   const dx = end[0] - start[0];
   const dy = end[1] - start[1];
   const length = Math.hypot(dx, dy);
-  if (length <= 0.000001) return;
+  if (length <= 0.000001) return false;
+  const middle = midpoint(start, end);
+  let nx = -dy / length;
+  let ny = dx / length;
+  const distance = SHORE_VISUAL_STYLE.surfaceBoundaryCoverWorld * 0.75;
+  const desiredLand = cover.side === "land";
+  const positive = [middle[0] + nx * distance, middle[1] + ny * distance];
+  const negative = [middle[0] - nx * distance, middle[1] - ny * distance];
+  const positiveMatches = (pointInShoreRegion(positive, cover.targetRings) === cover.landInside) === desiredLand;
+  const negativeMatches = (pointInShoreRegion(negative, cover.targetRings) === cover.landInside) === desiredLand;
+  if (!positiveMatches && !negativeMatches) return true;
+  if (positiveMatches && negativeMatches) {
+    const insideDx = cover.insidePoint[0] - middle[0];
+    const insideDy = cover.insidePoint[1] - middle[1];
+    if (insideDx * nx + insideDy * ny > 0) {
+      nx = -nx;
+      ny = -ny;
+    }
+  } else if (!positiveMatches) {
+    nx = -nx;
+    ny = -ny;
+  }
+  const tangentX = dx / length;
+  const tangentY = dy / length;
+  for (const width of [
+    SHORE_VISUAL_STYLE.surfaceBoundaryCoverWorld,
+    SHORE_VISUAL_STYLE.surfaceBoundaryCoverWorld * 0.5,
+    SHORE_VISUAL_STYLE.surfaceBoundaryCoverWorld * 0.25
+  ]) {
+    const cap = Math.min(width * 0.2, length * 0.05);
+    const startMatches = shoreBoundaryCoverPointMatchesTarget(start, nx, ny, width, cover);
+    const endMatches = shoreBoundaryCoverPointMatchesTarget(end, nx, ny, width, cover);
+    const cappedStart = startMatches ? start : [start[0] + tangentX * cap, start[1] + tangentY * cap];
+    const cappedEnd = endMatches ? end : [end[0] - tangentX * cap, end[1] - tangentY * cap];
+    if (shoreBoundaryCoverMatchesTarget(cappedStart, cappedEnd, nx, ny, width, cover)) return false;
+  }
+  return true;
+}
+
+function buildClippedShoreBoundaryEdgeCoverTriangles(cover) {
+  const [start, end] = cover.edge;
+  const dx = end[0] - start[0];
+  const dy = end[1] - start[1];
+  const length = Math.hypot(dx, dy);
+  if (length <= 0.000001) return [];
+  const tangentX = dx / length;
+  const tangentY = dy / length;
+  const nx = -tangentY;
+  const ny = tangentX;
+  const width = SHORE_VISUAL_STYLE.surfaceBoundaryCoverWorld * 2;
+  const cap = Math.min(width * 0.2, length * 0.1);
+  const origin = midpoint(start, end);
+  const local = point => [
+    Math.round((point[0] - origin[0]) * 1e7) / 1e7,
+    Math.round((point[1] - origin[1]) * 1e7) / 1e7
+  ];
+  const strip = [[
+    local([start[0] - tangentX * cap + nx * width, start[1] - tangentY * cap + ny * width]),
+    local([end[0] + tangentX * cap + nx * width, end[1] + tangentY * cap + ny * width]),
+    local([end[0] + tangentX * cap - nx * width, end[1] + tangentY * cap - ny * width]),
+    local([start[0] - tangentX * cap - nx * width, start[1] - tangentY * cap - ny * width]),
+    local([start[0] - tangentX * cap + nx * width, start[1] - tangentY * cap + ny * width])
+  ]];
+  const target = cover.targetRings.map(ring => ring.map(local));
+  const desiredInside = (cover.side === "land") === cover.landInside;
+  const clipped = desiredInside
+    ? polygonClipping.intersection(strip, target)
+    : polygonClipping.difference(strip, target);
+  const triangles = [];
+  for (const polygon of clipped || []) {
+    const flat = flattenShorePolygon(polygon);
+    const indices = earcut(flat.vertices, flat.holes, 2);
+    for (let index = 0; index < indices.length; index += 3) {
+      const points = [indices[index], indices[index + 1], indices[index + 2]].map(vertex => [
+        flat.vertices[vertex * 2] + origin[0],
+        flat.vertices[vertex * 2 + 1] + origin[1]
+      ]);
+      const area = triangleSignedArea(points);
+      if (Math.abs(area) <= 0.000000001) continue;
+      if (area < 0) [points[1], points[2]] = [points[2], points[1]];
+      triangles.push(points);
+    }
+  }
+  return triangles;
+}
+
+function buildDirectShoreBoundaryEdgeCoverTriangles(cover) {
+  const [start, end] = cover.edge;
+  const dx = end[0] - start[0];
+  const dy = end[1] - start[1];
+  const length = Math.hypot(dx, dy);
+  if (length <= 0.000001) return [];
+  const middle = midpoint(start, end);
+  const baseNx = -dy / length;
+  const baseNy = dx / length;
+  const insideDx = cover.insidePoint[0] - middle[0];
+  const insideDy = cover.insidePoint[1] - middle[1];
+  const preferredDirection = insideDx * baseNx + insideDy * baseNy > 0 ? -1 : 1;
+  const tangentX = dx / length;
+  const tangentY = dy / length;
+  for (const width of [
+    SHORE_VISUAL_STYLE.surfaceBoundaryCoverWorld,
+    SHORE_VISUAL_STYLE.surfaceBoundaryCoverWorld * 0.5,
+    SHORE_VISUAL_STYLE.surfaceBoundaryCoverWorld * 0.25,
+    SHORE_VISUAL_STYLE.surfaceBoundaryCoverWorld * 0.125,
+    SHORE_VISUAL_STYLE.surfaceBoundaryCoverWorld * 0.0625,
+    SHORE_VISUAL_STYLE.surfaceBoundaryCoverWorld * 0.03125
+  ]) {
+    for (const direction of [preferredDirection, -preferredDirection]) {
+      const nx = baseNx * direction;
+      const ny = baseNy * direction;
+      const cap = Math.min(width * 0.2, length * 0.05);
+      const startMatches = shoreBoundaryCoverPointMatchesTarget(start, nx, ny, width, cover);
+      const endMatches = shoreBoundaryCoverPointMatchesTarget(end, nx, ny, width, cover);
+      const cappedStart = startMatches ? start : [start[0] + tangentX * cap, start[1] + tangentY * cap];
+      const cappedEnd = endMatches ? end : [end[0] - tangentX * cap, end[1] - tangentY * cap];
+      const outerStart = [cappedStart[0] + nx * width, cappedStart[1] + ny * width];
+      const outerEnd = [cappedEnd[0] + nx * width, cappedEnd[1] + ny * width];
+      if (cover.targetRings?.length && typeof cover.landInside === "boolean"
+        && !shoreBoundaryCoverMatchesTarget(cappedStart, cappedEnd, nx, ny, width, cover)) continue;
+      return [
+        [cappedStart, cappedEnd, outerEnd],
+        [cappedStart, outerEnd, outerStart]
+      ];
+    }
+  }
+  return [];
+}
+
+function buildSubdividedShoreBoundaryEdgeCoverTriangles(cover, depth = 0) {
+  const [start, end] = cover.edge;
+  const length = worldDistance(start, end);
+  if (length <= 0.000001) return [];
+  const direct = buildDirectShoreBoundaryEdgeCoverTriangles(cover);
+  if (direct.length) return direct;
+  if (depth < 9 && length > 0.002) {
+    const middle = midpoint(start, end);
+    const first = buildSubdividedShoreBoundaryEdgeCoverTriangles({...cover, edge: [start, middle]}, depth + 1);
+    const second = buildSubdividedShoreBoundaryEdgeCoverTriangles({...cover, edge: [middle, end]}, depth + 1);
+    if (first.length && second.length) return [...first, ...second];
+  }
+  return buildTerminalShoreBoundaryEdgeCoverTriangle(cover);
+}
+
+function buildTerminalShoreBoundaryEdgeCoverTriangle(cover) {
+  const [start, end] = cover.edge;
+  const dx = end[0] - start[0];
+  const dy = end[1] - start[1];
+  const length = Math.hypot(dx, dy);
+  if (length <= 0.000001) return [];
   const middle = midpoint(start, end);
   let nx = -dy / length;
   let ny = dx / length;
@@ -162,16 +418,126 @@ function pushShoreBoundaryEdgeCover(vertices, context, cover) {
     nx = -nx;
     ny = -ny;
   }
-  const offsetX = nx * SHORE_VISUAL_STYLE.surfaceBoundaryCoverWorld;
-  const offsetY = ny * SHORE_VISUAL_STYLE.surfaceBoundaryCoverWorld;
-  const outerStart = [start[0] + offsetX, start[1] + offsetY];
-  const outerEnd = [end[0] + offsetX, end[1] + offsetY];
-  pushWorldVertex(vertices, context, start, cover.color);
-  pushWorldVertex(vertices, context, end, cover.color);
-  pushWorldVertex(vertices, context, outerEnd, cover.color);
-  pushWorldVertex(vertices, context, start, cover.color);
-  pushWorldVertex(vertices, context, outerEnd, cover.color);
-  pushWorldVertex(vertices, context, outerStart, cover.color);
+  const desiredLand = cover.side === "land";
+  for (let step = 6; step <= 18; step++) {
+    const width = SHORE_VISUAL_STYLE.surfaceBoundaryCoverWorld / 2 ** step;
+    for (const direction of [1, -1]) {
+      const apex = [middle[0] + nx * width * direction, middle[1] + ny * width * direction];
+      const points = [start, end, apex];
+      if (shoreBoundaryCoverTriangleMatchesTarget(points, desiredLand, cover)) return [points];
+    }
+  }
+  const width = Math.max(Number.EPSILON * Math.max(1, Math.abs(middle[0]), Math.abs(middle[1])) * 32, 0.00000001);
+  const apex = [middle[0] + nx * width, middle[1] + ny * width];
+  return [[start, end, apex]];
+}
+
+function shoreBoundaryCoverTriangleMatchesTarget(points, desiredLand, cover) {
+  const [start, end, apex] = points;
+  for (const [edgeRatio, apexRatio] of [
+    [0.5, 1],
+    [0.25, 0.5],
+    [0.5, 0.5],
+    [0.75, 0.5],
+    [0.4, 0.25],
+    [0.6, 0.25]
+  ]) {
+    const edgePoint = interpolateWorldPoint(start, end, edgeRatio);
+    const sample = interpolateWorldPoint(edgePoint, apex, apexRatio);
+    const sampleLand = pointInShoreRegion(sample, cover.targetRings) === cover.landInside;
+    if (sampleLand !== desiredLand) return false;
+  }
+  return true;
+}
+
+function shoreDrawCommand(kind, points, semantic) {
+  return Object.freeze({
+    kind,
+    side: semantic.side,
+    landCell: semantic.landCell,
+    waterCell: semantic.waterCell,
+    coverMode: semantic.coverMode || null,
+    boundaryEdge: kind === "boundary-cover" && semantic.edge
+      ? Object.freeze(semantic.edge.map(point => Object.freeze([point[0], point[1]])))
+      : null,
+    positions: new Float32Array(points.flat())
+  });
+}
+
+function shoreBoundaryCoverMatchesTarget(start, end, nx, ny, width, cover) {
+  const desiredLand = cover.side === "land";
+  for (const along of [0.08, 0.25, 0.5, 0.75, 0.92]) {
+    const edgePoint = interpolateWorldPoint(start, end, along);
+    for (const outward of [0.2, 0.5, 0.8]) {
+      const sample = [edgePoint[0] + nx * width * outward, edgePoint[1] + ny * width * outward];
+      const sampleLand = pointInShoreRegion(sample, cover.targetRings) === cover.landInside;
+      if (sampleLand !== desiredLand) return false;
+    }
+  }
+  return true;
+}
+
+function shoreBoundaryCoverPointMatchesTarget(point, nx, ny, width, cover) {
+  const desiredLand = cover.side === "land";
+  for (const outward of [0.2, 0.5, 0.8]) {
+    const sample = [point[0] + nx * width * outward, point[1] + ny * width * outward];
+    const sampleLand = pointInShoreRegion(sample, cover.targetRings) === cover.landInside;
+    if (sampleLand !== desiredLand) return false;
+  }
+  return true;
+}
+
+function buildShoreBoundaryVertexCoverTriangles(covers) {
+  const groups = new Map();
+  for (const cover of covers) {
+    for (const [vertex, other] of [[cover.edge[0], cover.edge[1]], [cover.edge[1], cover.edge[0]]]) {
+      const key = `${pointKey(vertex)}|${cover.side}:${cover.landCell}:${cover.waterCell}`;
+      const entries = groups.get(key) || [];
+      const length = worldDistance(vertex, other);
+      if (length > 0.000001) {
+        entries.push({
+          vertex,
+          cover
+        });
+      }
+      groups.set(key, entries);
+    }
+  }
+  const triangles = [];
+  for (const entries of groups.values()) {
+    if (entries.length < 2) continue;
+    if (!entries.some(entry => entry.cover.fallback)) continue;
+    const {vertex, cover} = entries[0];
+    const radius = SHORE_VISUAL_STYLE.surfaceBoundaryCoverWorld;
+    const local = point => [point[0] - vertex[0], point[1] - vertex[1]];
+    const diskRing = [];
+    for (let index = 0; index < 16; index++) {
+      const angle = Math.PI * 2 * index / 16;
+      diskRing.push([Math.cos(angle) * radius, Math.sin(angle) * radius]);
+    }
+    diskRing.push([...diskRing[0]]);
+    const disk = [diskRing];
+    const target = cover.targetRings.map(ring => ring.map(local));
+    const desiredInside = (cover.side === "land") === cover.landInside;
+    const clipped = desiredInside
+      ? polygonClipping.intersection(disk, target)
+      : polygonClipping.difference(disk, target);
+    for (const polygon of clipped || []) {
+      const flat = flattenShorePolygon(polygon);
+      const indices = earcut(flat.vertices, flat.holes, 2);
+      for (let index = 0; index < indices.length; index += 3) {
+        const points = [indices[index], indices[index + 1], indices[index + 2]].map(pointIndex => [
+          flat.vertices[pointIndex * 2] + vertex[0],
+          flat.vertices[pointIndex * 2 + 1] + vertex[1]
+        ]);
+        const area = triangleSignedArea(points);
+        if (Math.abs(area) <= 0.000000001) continue;
+        if (area < 0) [points[1], points[2]] = [points[2], points[1]];
+        triangles.push({points, side: cover.side, landCell: cover.landCell, waterCell: cover.waterCell});
+      }
+    }
+  }
+  return triangles;
 }
 
 export function shoreCorrectionTriangleAltitude(points) {
@@ -205,7 +571,8 @@ function buildShoreSurfaceModel(path, map) {
   let model = {
     renderPoints: path?.closed ? renderPoints : [...(path?.points || [])],
     triangles: [],
-    fallbackReason: path?.closed ? null : "open-arc-shared-source"
+    fallbackReason: path?.closed ? null : "open-arc-shared-source",
+    fallbackDetail: null
   };
   if (path?.closed && sourcePoints.length >= 4 && renderPoints.length >= 4) {
     try {
@@ -213,17 +580,27 @@ function buildShoreSurfaceModel(path, map) {
       const difference = polygonClipping.xor([sourcePoints], [renderPoints]);
       const triangles = triangulateShoreDifference(difference, sourcePoints, renderPoints, path, landInside);
       if (!validateShoreDifferenceArea(difference, triangles)) throw new Error("shore-difference-area-mismatch");
-      model = {renderPoints, triangles, landInside, fallbackReason: null};
-    } catch {
+      model = {renderPoints, triangles, landInside, fallbackReason: null, fallbackDetail: null};
+    } catch (error) {
       model = {
         renderPoints: [...sourcePoints],
         triangles: [],
-        fallbackReason: "surface-triangulation-fallback"
+        fallbackReason: "surface-triangulation-fallback",
+        fallbackDetail: error instanceof Error ? error.message : String(error)
       };
     }
   }
   shoreSurfaceCorrectionCache.set(path, {map, model});
   return model;
+}
+
+function shoreSurfaceFallbackLocation(path, model) {
+  const point = model.renderPoints?.[0] || path?.points?.[0] || null;
+  return Object.freeze({
+    landCell: Number.isInteger(path?.landCells?.[0]) ? path.landCells[0] : null,
+    waterCell: Number.isInteger(path?.waterCells?.[0]) ? path.waterCells[0] : null,
+    point: point ? Object.freeze([point[0], point[1]]) : null
+  });
 }
 
 function normalizeClosedShoreRing(points) {
@@ -322,8 +699,10 @@ function deduplicateShoreBoundaryEdgeCovers(covers) {
     const [start, end] = cover.edge;
     const forward = `${pointKey(start)}>${pointKey(end)}`;
     const reverse = `${pointKey(end)}>${pointKey(start)}`;
-    const colorKey = cover.color.map(value => Number(value).toFixed(5)).join(":");
-    const key = `${forward < reverse ? forward : reverse}|${colorKey}`;
+    const semanticKey = cover.color
+      ? cover.color.map(value => Number(value).toFixed(5)).join(":")
+      : `${cover.side}:${cover.landCell}:${cover.waterCell}`;
+    const key = `${forward < reverse ? forward : reverse}|${semanticKey}`;
     if (!unique.has(key)) unique.set(key, cover);
   }
   return [...unique.values()];
@@ -376,6 +755,11 @@ function pointInShoreRing(point, ring) {
     if (crosses) inside = !inside;
   }
   return inside;
+}
+
+function pointInShoreRegion(point, rings) {
+  if (!rings?.length || !pointInShoreRing(point, rings[0])) return false;
+  return !rings.slice(1).some(ring => pointInShoreRing(point, ring));
 }
 
 function validateShoreDifferenceArea(difference, triangles) {

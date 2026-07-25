@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import assert from "node:assert/strict";
+import {spawnSync} from "node:child_process";
 import {createReadStream, existsSync, mkdirSync, readFileSync, statSync, writeFileSync} from "node:fs";
 import {createServer} from "node:http";
 import {createRequire} from "node:module";
@@ -18,11 +19,14 @@ import {
   buildCellVisualMesh,
   countCellVisualFanLeaks,
   countCellVisualTriangulationLeaks,
-  triangulateCellVisualBoundary
+  triangulateCellVisualBoundary,
+  triangulateCellVisualBoundarySafely
 } from "../app/webgl-generator/src/renderer/cell-visual-layer.js";
 import {resolvedGridVertexPoints} from "../app/webgl-generator/src/renderer/grid-vertex-geometry.js";
 import {
   buildShoreRenderPoints,
+  buildShoreBoundaryEdgeCoverTriangles,
+  buildShoreSurfaceDrawPacket,
   buildShoreSurfaceCorrectionTriangles,
   buildShoreVisualPaths,
   inspectShoreBandTriangleGeometry,
@@ -30,6 +34,15 @@ import {
   shoreCorrectionTriangleAltitude,
   shouldCullShoreSurfaceNeedle
 } from "../app/webgl-generator/src/renderer/shore-layer.js";
+import {buildExactSurfaceCorrectionTriangles} from "../prototype/boundary-topology-lab/src/surface-correction.js";
+import {
+  analyzeFallbackSpliceStress,
+  analyzeFloat32DrawPacketPhaseMatrix,
+  analyzeMultiRingXorStress,
+  buildFloat32PacketFromCorrectionTriangles,
+  mutateDrawPacket,
+  rasterDrawPacketPhase
+} from "../prototype/boundary-topology-lab/src/stress-analysis.js";
 
 const rootDir = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const sourceDir = join(rootDir, "source", "Fantasy-Map-Generator");
@@ -52,6 +65,12 @@ const minSmoothLineTriangles = Number(args["min-smooth-line-triangles"] || 30000
 const minHardLineTriangles = Number(args["min-hard-line-triangles"] || 25000);
 const maxSwitchMs = Number(args["max-switch-ms"] || 1500);
 const maxShoreCacheMs = Number(args["max-shore-cache-ms"] || 1400);
+
+if (args["pure-formal"]) {
+  const formalMapPerformance = runFormalMapRegression();
+  console.log(JSON.stringify({passed: true, isolatedFormal: true, formalMapPerformance}, null, 2));
+  process.exit(0);
+}
 
 if (args.pure) {
   runPureRegression();
@@ -500,8 +519,28 @@ function runPureRegression() {
 
   const closed = [[0, 0], [8, 0], [9, 6], [4, 9], [-1, 5], [0, 0]];
   const closedRender = transformRecommendedShoreArc(closed);
-  assert.deepEqual(closedRender[0], closed[0], "闭环锚点必须锁定");
-  assert.deepEqual(closedRender.at(-1), closed[0], "闭环终点必须锁回锚点");
+  assert.notDeepEqual(closedRender[0], closed[0], "闭环不得把任意原始首点钉回平滑结果");
+  assert.deepEqual(closedRender.at(-1), closedRender[0], "闭环终点必须锁回平滑后的首点");
+
+  const singleCellCoast = {
+    id: "single-cell-coast",
+    points: [[210, 52], [221, 91], [211, 125], [178, 143], [139, 136], [112, 109], [128, 72], [164, 52], [210, 52]],
+    sideVectors: Array.from({length: 9}, () => ({x: 0, y: 1})),
+    landCells: new Array(9).fill(1),
+    waterCells: new Array(9).fill(2)
+  };
+  const nearbyMainland = {
+    id: "nearby-mainland",
+    points: [[28, 174], [82, 161], [126, 173], [163, 164], [203, 176], [248, 159], [294, 174], [294, 218], [28, 218], [28, 174]],
+    sideVectors: Array.from({length: 10}, () => ({x: 0, y: 1})),
+    landCells: new Array(10).fill(3),
+    waterCells: new Array(10).fill(2)
+  };
+  const isolatedSingleCell = buildShoreTopologySnapshot([singleCellCoast], null, {isSideSampleSafe: () => true}).paths[0];
+  const combinedSingleCell = buildShoreTopologySnapshot([nearbyMainland, singleCellCoast], null, {isSideSampleSafe: () => true}).paths[1];
+  assert.deepEqual(combinedSingleCell.renderPoints, isolatedSingleCell.renderPoints, "附近大陆不得改变独立单 cell 海岸的平滑结果");
+  assert.notDeepEqual(isolatedSingleCell.renderPoints[0], singleCellCoast.points[0], "单 cell 闭环不得残留原始首点毛刺");
+  assert.deepEqual(isolatedSingleCell.renderPoints.at(-1), isolatedSingleCell.renderPoints[0], "单 cell 平滑结果必须闭合在处理后的首点");
 
   const displacedSource = [[0, 0], [4, 0.2], [8, -0.2], [12, 0]];
   const displacedRender = transformRecommendedShoreArc(displacedSource, {threshold: 0, smoothness: 0.04, maxDisplacement: 0.5});
@@ -598,10 +637,10 @@ function runPureRegression() {
   assert.equal(shouldCullShoreSurfaceNeedle(normalCorrectionTriangle), false, "普通 XOR 修补面不得被误删");
   assert.equal(shouldCullShoreSurfaceNeedle({points: [[0, 0], [18, 0], [18, 0]]}), true, "真正退化的零面积三角形仍必须拒绝");
   assert.doesNotMatch(shoreLayerSource, /if \(shouldCullShoreSurfaceNeedle\(triangle\)\) continue;/, "GPU writer 不得再按单三角高度挖空精确 XOR 差区");
-  assert.match(shoreLayerSource, /triangle\.boundaryEdges[\s\S]*insidePoint: triangleCentroid[\s\S]*pushShoreBoundaryEdgeCover/, "GPU writer 必须沿新旧岸线边向修正面外侧追加同语义封口");
+  assert.match(shoreLayerSource, /triangle\.boundaryEdges[\s\S]*insidePoint: triangleCentroid[\s\S]*buildShoreBoundaryEdgeCoverTriangles/, "GPU writer 必须沿新旧岸线边向修正面外侧追加同语义封口");
   assert.match(shoreLayerSource, /insideDx \* nx \+ insideDy \* ny > 0[\s\S]*nx = -nx[\s\S]*surfaceBoundaryCoverWorld/, "岸线边缘封口必须依据修正三角内部点只向外侧偏移");
   const surfaceWriterSource = shoreLayerSource.match(/export function pushShoreVisualBands[\s\S]*?\n}\n/)?.[0] || "";
-  assert.match(surfaceWriterSource, /pushShoreSurfaceCorrections/, "正式 surface 必须写入 XOR 精确修补面");
+  assert.match(surfaceWriterSource, /buildShoreSurfaceVertexLayers/, "正式 surface 必须写入 XOR 精确修补面");
   assert.doesNotMatch(surfaceWriterSource, /pushShoreVisualBand\(/, "XOR 精确填色启用后不得再向 GPU 提交冗余四三角过渡带");
   const flippedBandFixture = inspectShoreBandTriangleGeometry({
     centerA: [369.92530965805054, 113.76141619682312],
@@ -617,6 +656,127 @@ function runPureRegression() {
   assert.match(rendererSource, /export function shouldDrawShoreVisualBands\(colorMode\) \{\s*return colorMode === "height" \|\| colorMode === "states" \|\| colorMode === "provinces";\s*\}/, "海岸窄带判定不得恒为 false");
   assert.match(shoreLayerSource, /if \(smoothCellBorders && paths\)[\s\S]*return;[\s\S]*sharedVoronoiEdge\(map, cell, neighbor\)/, "硬边模式必须完整回退共享 Voronoi 边");
 
+  runFormalMapRegressionInChild();
+  const formalMapPerformance = [{isolatedProcess: true}];
+
+  const phaseFixture = buildDrawPacketPhaseFixture();
+  const phasePacket = buildShoreSurfaceDrawPacket(phaseFixture.path, phaseFixture.map);
+  assert.ok(phasePacket.correctionTriangleCount > 0, "Float32 draw packet 固定输入必须实际生成 XOR 修正三角形");
+  assert.ok(phasePacket.boundaryCoverTriangleCount > 0, "Float32 draw packet 固定输入必须实际生成边界封口三角形");
+  assert.ok(phasePacket.commands.every(command => command.positions instanceof Float32Array), "正式 draw packet 必须以 Float32Array 固定 GPU 实际坐标");
+  assert.ok(
+    phasePacket.commands.slice(0, phasePacket.correctionTriangleCount).every(command => command.kind === "correction")
+      && phasePacket.commands.slice(phasePacket.correctionTriangleCount).every(command => command.kind === "boundary-cover"),
+    "正式 draw packet 必须保持修正面先画、边界封口后画"
+  );
+  const phaseMatrix = analyzeFloat32DrawPacketPhaseMatrix({
+    sourceRings: [phaseFixture.path.points],
+    baseRings: [phaseFixture.basePoints],
+    renderRings: [phaseFixture.path.renderPoints],
+    packet: phasePacket
+  });
+  assert.equal(phaseMatrix.phaseCount, 36, "像素相位矩阵必须覆盖 3 DPR × 3 zoom × 4 subpixel offset");
+  assert.deepEqual(phaseMatrix.dprs, [1, 1.5, 2], "像素相位矩阵必须覆盖 DPR 1 / 1.5 / 2");
+  assert.equal(phaseMatrix.projection.x === phaseMatrix.projection.y, false, "像素相位矩阵必须使用非等比投影");
+  assert.equal(phaseMatrix.wrongSidePixels, 0, "最终 Float32 draw packet 的 36 个像素相位不得出现错侧像素");
+  assert.equal(phaseMatrix.longestNeedlePixels, 0, "最终 Float32 draw packet 不得留下连续像素针");
+  assert.equal(phaseMatrix.conflictingPixels, 0, "最终 Float32 draw packet 不得出现陆水冲突覆盖");
+  assert.equal(phaseMatrix.duplicatePixels, 0, "最终 Float32 draw packet 不得出现重复像素 ownership");
+  assert.equal(phaseMatrix.seamPixels, 0, "最终 Float32 draw packet framebuffer 不得留下边缘裸露/错色");
+  const phaseMutations = Object.fromEntries(["delete-cover", "wrong-direction", "wrong-order", "endpoint-quantization"].map(kind => [
+    kind,
+    analyzeFloat32DrawPacketPhaseMatrix({
+      sourceRings: [phaseFixture.path.points],
+      baseRings: [phaseFixture.basePoints],
+      renderRings: [phaseFixture.path.renderPoints],
+      packet: mutateDrawPacket(phasePacket, kind)
+    })
+  ]));
+  assert.ok(phaseMatrix.wrongSidePixels <= phaseMutations["wrong-direction"].wrongSidePixels, "反向陆水语义破坏必须稳定放大错侧像素");
+  assert.ok(
+    (phaseMutations["delete-cover"].seamPixels > phaseMatrix.seamPixels
+      || phaseMutations["delete-cover"].wrongSidePixels > phaseMatrix.wrongSidePixels)
+      && phaseMutations["wrong-direction"].wrongSidePixels > phaseMatrix.wrongSidePixels
+      && (
+        phaseMutations["wrong-order"].wrongSidePixels > phaseMatrix.wrongSidePixels
+        || phaseMutations["endpoint-quantization"].wrongSidePixels > phaseMatrix.wrongSidePixels
+      ),
+    `删封口、反向、错序/端点量化三类破坏必须分别击穿像素相位门禁：${JSON.stringify({
+      final: summarizePhaseMetrics(phaseMatrix),
+      mutations: Object.fromEntries(Object.entries(phaseMutations).map(([key, value]) => [key, summarizePhaseMetrics(value)]))
+    })}`
+  );
+
+  const multiRingFixture = buildMultiRingStressFixture();
+  const multiRingTriangles = buildExactSurfaceCorrectionTriangles(multiRingFixture.sourceRings, multiRingFixture.renderRings);
+  const multiRingPacket = buildStressPacketWithBoundaryCovers(
+    multiRingTriangles,
+    [...multiRingFixture.sourceRings, ...multiRingFixture.renderRings],
+    multiRingFixture.renderRings
+  );
+  const multiRingResult = analyzeMultiRingXorStress({
+    ...multiRingFixture,
+    correctionTriangles: multiRingTriangles,
+    packet: multiRingPacket
+  });
+  assert.ok(multiRingResult.correctionTriangleCount > 0, "多环复合输入必须实际经过 polygon XOR + Earcut");
+  assert.ok(multiRingResult.holePreserved, "湖洞在平滑后必须保持为水面");
+  assert.ok(multiRingResult.channelPreserved, "狭窄水道在平滑后必须保持为水面");
+  assert.ok(multiRingResult.landConnected, "强凹外环在平滑后不得切断主体陆地");
+  assert.equal(multiRingResult.wrongSidePixels, 0, "多环 XOR 最终 framebuffer 不得有错侧像素");
+  assert.equal(multiRingResult.longestNeedlePixels, 0, "多环 XOR 最终 framebuffer 不得有连续像素针");
+  assert.equal(multiRingResult.conflictingPixels, 0, "多环 XOR 修补不得产生陆水冲突覆盖");
+  assert.equal(multiRingResult.duplicatePixels, 0, "多环 XOR 修补不得产生重复像素 ownership");
+  assert.equal(multiRingResult.seamPixels, 0, "多环 XOR 最终 framebuffer 不得有边缘裸露/错色");
+  const brokenHole = analyzeMultiRingXorStress({
+    ...multiRingFixture,
+    renderRings: [multiRingFixture.renderRings[0]],
+    correctionTriangles: buildExactSurfaceCorrectionTriangles(multiRingFixture.sourceRings, [multiRingFixture.renderRings[0]]),
+    packet: multiRingPacket
+  });
+  const brokenMultiRingSide = analyzeMultiRingXorStress({
+    ...multiRingFixture,
+    correctionTriangles: multiRingTriangles,
+    packet: mutateDrawPacket(multiRingPacket, "wrong-direction")
+  });
+  const brokenMultiRingCover = analyzeMultiRingXorStress({
+    ...multiRingFixture,
+    correctionTriangles: multiRingTriangles,
+    packet: mutateDrawPacket(multiRingPacket, "delete-cover")
+  });
+  assert.equal(brokenHole.holePreserved, false, "删除湖洞破坏必须被 hole gate 稳定检出");
+  assert.ok(brokenMultiRingSide.wrongSidePixels > multiRingResult.wrongSidePixels, "翻转 landInside/覆盖侧必须被错侧像素门禁检出");
+  assert.ok(
+    brokenMultiRingCover.wrongSidePixels > multiRingResult.wrongSidePixels
+      || brokenMultiRingCover.longestNeedlePixels > multiRingResult.longestNeedlePixels
+      || brokenMultiRingCover.seamPixels > multiRingResult.seamPixels,
+    "删除多环边界封口必须被像素针门禁检出"
+  );
+
+  const spliceFixture = buildFallbackSpliceStressFixture();
+  const spliceResult = analyzeFallbackSpliceStress(spliceFixture);
+  assert.equal(spliceResult.passed, true, "平滑段/原始回退段拼接必须同时守住端点、方向、canonical cell 和沿岸对象");
+  const brokenSplice = analyzeFallbackSpliceStress({
+    ...structuredClone(spliceFixture),
+    rawFallbackSegment: [[6, 2], [12, 2], [16, 0]]
+  });
+  assert.equal(brokenSplice.passed, false, "错接 fallback 端点破坏必须稳定失败");
+  assert.ok(brokenSplice.sharedEndpointDistance > 0 || brokenSplice.backtrackSegments > 0, "fallback 破坏必须给出可定位端点距离或回折段");
+
+  const duplicateMicroBoundary = [[0, 0], [8, 0], [8, 0.000000001], [8, 8], [4, 4], [0, 8], [0, 8], [0, 0]];
+  const concaveBoundary = [[0, 0], [10, 0], [10, 10], [7, 10], [7, 3], [3, 3], [3, 10], [0, 10]];
+  const irreparableBoundary = [[0, 0], [8, 8], [0, 8], [8, 0]];
+  const cleanedTriangulation = triangulateCellVisualBoundarySafely(duplicateMicroBoundary);
+  const concaveTriangulation = triangulateCellVisualBoundarySafely(concaveBoundary);
+  const skippedTriangulation = triangulateCellVisualBoundarySafely(irreparableBoundary);
+  assert.equal(cleanedTriangulation.status, "ok", "重复点和极短边必须清洗重试后安全三角化");
+  assert.equal(cleanedTriangulation.retried, true, "重复点和极短边必须留下 retry 统计");
+  assert.equal(concaveTriangulation.status, "ok", "强凹 cell 必须由 Earcut 安全三角化");
+  assert.equal(countCellVisualTriangulationLeaks(concaveTriangulation.points, concaveTriangulation.indices), 0, "强凹 cell 的 Earcut 三角形不得越界");
+  assert.equal(skippedTriangulation.status, "skipped", "不可修复边界必须安全 skip");
+  assert.equal(skippedTriangulation.reason, "self-intersecting-boundary", "安全 skip 必须提供可定位原因");
+  assert.ok(countCellVisualFanLeaks([5, 8], concaveBoundary) > 0, "强制恢复旧中心扇形的破坏反例必须稳定越界");
+
   const performanceResults = [];
   for (const [pointCount, limitMs] of [[10000, 1000], [50000, 3500]]) {
     const performancePath = buildSyntheticShorePath(pointCount);
@@ -628,6 +788,102 @@ function runPureRegression() {
     performanceResults.push({pointCount, elapsedMs: Math.round(elapsedMs * 10) / 10, buildMs: performanceSnapshot.stats.buildMs, limitMs});
   }
 
+
+
+  console.log(JSON.stringify({
+    passed: true,
+    algorithm: SHORE_TOPOLOGY_ALGORITHM.id,
+    defaults: [6, 0.25, 2, 18],
+    checks: [
+      "input-immutable",
+      "open-anchor-lock",
+      "closed-anchor-lock",
+      "bidirectional-max-displacement",
+      "removed-peak-fallback",
+      "invalid-fallback",
+      "degenerate-fallback",
+      "local-side-fallback",
+      "local-protected-fallback",
+      "near-town-side-switch",
+      "expanded-protection-radius",
+      "shared-render-points",
+      "hard-edge-fallback",
+      "actual-band-triangle-winding-counterexample",
+      "retired-redundant-band-writer",
+      "raw-snapshot-xor-surface-correction",
+      "exact-xor-boundary-edge-overlap",
+      "formal-pixel-residual-fixtures",
+      "float32-draw-packet-phase-matrix",
+      "multiring-xor-compound",
+      "fallback-splice-protected-objects",
+      "earcut-safe-retry-or-skip",
+      "surface-correction-independent-replay",
+      "surface-correction-performance",
+      "source-segment-cell-offset",
+      "synthetic-performance",
+      "formal-map-performance"
+    ],
+    stressGates: {
+      phaseMatrix: {
+        ...summarizePhaseMetrics(phaseMatrix),
+        phaseCount: phaseMatrix.phaseCount,
+        dprs: phaseMatrix.dprs,
+        zooms: phaseMatrix.zooms,
+        projection: phaseMatrix.projection,
+        offsetCount: phaseMatrix.offsetCount
+      },
+      destructivePhaseMutations: Object.fromEntries(
+        Object.entries(phaseMutations).map(([key, value]) => [key, summarizePhaseMetrics(value)])
+      ),
+      multiRing: {
+        correctionTriangleCount: multiRingResult.correctionTriangleCount,
+        wrongSidePixels: multiRingResult.wrongSidePixels,
+        conflictingPixels: multiRingResult.conflictingPixels,
+        duplicatePixels: multiRingResult.duplicatePixels,
+        holePreserved: multiRingResult.holePreserved,
+        channelPreserved: multiRingResult.channelPreserved,
+        landConnected: multiRingResult.landConnected
+      },
+      fallbackSplice: {
+        sharedEndpointDistance: spliceResult.sharedEndpointDistance,
+        zeroLengthSegments: spliceResult.zeroLengthSegments,
+        backtrackSegments: spliceResult.backtrackSegments,
+        canonicalCellsPreserved: spliceResult.canonicalCellsPreserved,
+        townProtected: spliceResult.townProtected,
+        roadProtected: spliceResult.roadProtected,
+        mouthProtected: spliceResult.mouthProtected
+      },
+      earcutSafety: {
+        cleanupRetried: cleanedTriangulation.retried,
+        concaveTriangleCount: concaveTriangulation.indices.length / 3,
+        concaveLeaks: countCellVisualTriangulationLeaks(concaveTriangulation.points, concaveTriangulation.indices),
+        skippedReason: skippedTriangulation.reason,
+        destructiveLegacyFanLeaks: countCellVisualFanLeaks([5, 8], concaveBoundary)
+      }
+    },
+    performance: performanceResults,
+    formalMapPerformance
+  }, null, 2));
+}
+
+function runFormalMapRegressionInChild() {
+  const result = spawnSync(process.execPath, [fileURLToPath(import.meta.url), "--pure-formal"], {
+    cwd: rootDir,
+    stdio: "inherit"
+  });
+  assert.equal(result.error, undefined, `独立 formal 回归启动失败：${result.error?.message || "unknown"}`);
+  assert.equal(result.status, 0, `独立 formal 回归退出码 ${result.status}`);
+}
+
+function runFormalMapRegression() {
+  const flippedBandFixture = inspectShoreBandTriangleGeometry({
+    centerA: [369.92530965805054, 113.76141619682312],
+    centerB: [369, 117],
+    landA: [370.850618295205, 108.84813618146437],
+    landB: [366.3517624733909, 116.25882660418803],
+    waterA: [369.0000010208961, 118.67469621218187],
+    waterB: [371.6482375266091, 117.74117339581197]
+  });
   const formalMapPerformance = [];
   for (const [cellsTarget, buildLimitMs] of [[10000, 1200], [50000, 4000]]) {
     const seed = "shore-review";
@@ -645,6 +901,115 @@ function runPureRegression() {
       buildLimitMs,
       arcCount: paths.topology.arcCount,
       fallbackArcCount: paths.topology.fallbackArcCount
+    });
+    const formalCellVisualMesh = buildCellVisualMesh(map);
+    assert.equal(formalCellVisualMesh.triangulationFallbackCells, 0, `${cellsTarget} cell 视觉层不得恢复未校验中心扇形`);
+    assert.equal(formalCellVisualMesh.triangulationUnfilledCells, 0, `${cellsTarget} cell 视觉层不得留下缺面`);
+    assert.equal(
+      formalCellVisualMesh.triangulationHardFallbackCells,
+      formalCellVisualMesh.triangulationSkippedCells,
+      `${cellsTarget} 平滑 Earcut 失败 cell 必须全部由安全硬边界补齐`
+    );
+    const drawPacketStartedAt = performance.now();
+    let drawPacketCommandCount = 0;
+    let drawPacketCorrectionCount = 0;
+    let drawPacketCoverCount = 0;
+    let drawPacketSkippedCoverCount = 0;
+    let drawPacketFallbackCoverCount = 0;
+    const formalPackets = [];
+    for (const [kind, shorePaths] of [["coastline", paths.coastline], ["lakeShore", paths.lakeShore]]) {
+      for (let pathIndex = 0; pathIndex < shorePaths.length; pathIndex++) {
+        const path = shorePaths[pathIndex];
+      const packet = buildShoreSurfaceDrawPacket(path, map);
+      drawPacketCommandCount += packet.commands.length;
+      drawPacketCorrectionCount += packet.correctionTriangleCount;
+      drawPacketCoverCount += packet.boundaryCoverTriangleCount;
+      drawPacketSkippedCoverCount += packet.skippedBoundaryCoverCount;
+        drawPacketFallbackCoverCount += packet.fallbackBoundaryCoverCount;
+        formalPackets.push({kind, pathIndex, path, packet});
+      }
+    }
+    const drawPacketBuildMs = Math.round((performance.now() - drawPacketStartedAt) * 100) / 100;
+    const drawPacketLimitMs = cellsTarget === 10000 ? 1800 : 5000;
+    assert.ok(drawPacketBuildMs <= drawPacketLimitMs, `${cellsTarget} Float32 draw packet 冷构建 ${drawPacketBuildMs}ms，超过 ${drawPacketLimitMs}ms`);
+    assert.equal(drawPacketCommandCount, drawPacketCorrectionCount + drawPacketCoverCount, `${cellsTarget} draw packet 命令统计不一致`);
+    assert.equal(drawPacketSkippedCoverCount, 0, `${cellsTarget} Float32 draw packet 不得跳过任何非退化封边`);
+    const surfaceFallbacks = formalPackets
+      .filter(item => item.packet.surfaceFallbackReason === "surface-triangulation-fallback")
+      .map(item => ({
+        kind: item.kind,
+        pathIndex: item.pathIndex,
+        reason: item.packet.surfaceFallbackReason,
+        detail: item.packet.surfaceFallbackDetail,
+        location: item.packet.surfaceFallbackLocation
+      }));
+    assert.equal(surfaceFallbacks.length, 0, `${cellsTarget} 正式海岸表面不得退回原始折线`);
+    assert.ok(
+      surfaceFallbacks.every(item => item.detail && item.location),
+      `${cellsTarget} 海岸表面降级必须保留原因详情与可定位摘要`
+    );
+    const effectiveSmoothedArcCount = Math.max(0, paths.topology.arcCount - paths.topology.fallbackArcCount - surfaceFallbacks.length);
+    const fallbackCoverTangentBounds = inspectFallbackCoverTangentBounds(formalPackets);
+    assert.equal(
+      fallbackCoverTangentBounds.violationCount,
+      0,
+      `${cellsTarget} 慢路封边有 ${fallbackCoverTangentBounds.violationCount} 个顶点超过 tangent cap`
+    );
+    const fallbackCoverReplay = replayFormalFallbackCovers(formalPackets, map, formalCellVisualMesh);
+    if (fallbackCoverReplay.introducedOwnerPixels > 0
+      || Object.values(summarizePhaseMetrics(fallbackCoverReplay)).some(value => value > 0)) {
+      const replayReport = {
+        ...summarizePhaseMetrics(fallbackCoverReplay),
+        introducedOwnerPixels: fallbackCoverReplay.introducedOwnerPixels,
+        baselineWrongPixels: fallbackCoverReplay.baselineWrongPixels,
+        remainingWrongPixels: fallbackCoverReplay.remainingWrongPixels,
+        repairedWrongPixels: fallbackCoverReplay.repairedWrongPixels,
+        fallbackEdgeCount: fallbackCoverReplay.fallbackEdgeCount,
+        affectedPathCount: fallbackCoverReplay.affectedPathCount,
+        remainingGroups: fallbackCoverReplay.affected.flatMap(path => path.edges
+          .filter(edge => edge.remainingWrongPixels > 0)
+          .map(edge => ({
+            kind: path.kind,
+            pathIndex: path.pathIndex,
+            edge: edge.edge,
+            side: edge.side,
+            landCell: edge.landCell,
+            waterCell: edge.waterCell,
+            remainingWrongPixels: edge.remainingWrongPixels
+          })))
+      };
+      console.error(JSON.stringify({cellsTarget, fallbackCoverReplay: replayReport}, null, 2));
+    }
+    assert.equal(fallbackCoverReplay.wrongSidePixels, 0, `${cellsTarget} 正式封边局部相位重放仍有 ${fallbackCoverReplay.wrongSidePixels} 个错侧像素`);
+    assert.equal(fallbackCoverReplay.longestNeedlePixels, 0, `${cellsTarget} 正式封边局部相位重放仍有 ${fallbackCoverReplay.longestNeedlePixels}px 连续针缝`);
+    assert.equal(fallbackCoverReplay.conflictingPixels, 0, `${cellsTarget} 正式封边局部相位重放仍有 ${fallbackCoverReplay.conflictingPixels} 个陆水冲突像素`);
+    assert.equal(fallbackCoverReplay.duplicatePixels, 0, `${cellsTarget} 正式封边局部相位重放仍有 ${fallbackCoverReplay.duplicatePixels} 个重复 ownership 像素`);
+    assert.equal(fallbackCoverReplay.seamPixels, 0, `${cellsTarget} 正式封边局部相位重放仍有 ${fallbackCoverReplay.seamPixels} 个 framebuffer 缝隙像素`);
+    assert.equal(fallbackCoverReplay.introducedWrongPixels, 0, `${cellsTarget} 正式慢路封边引入了 ${fallbackCoverReplay.introducedWrongPixels} 个新错侧像素`);
+    assert.equal(fallbackCoverReplay.introducedOwnerPixels, 0, `${cellsTarget} 正式慢路封边在端点/结点引入了 ${fallbackCoverReplay.introducedOwnerPixels} 个同侧 cell ownership 变化像素`);
+    assert.equal(fallbackCoverReplay.remainingWrongPixels, 0, `${cellsTarget} 正式慢路封边仍留下 ${fallbackCoverReplay.remainingWrongPixels} 个目标侧错色像素`);
+    Object.assign(formalMapPerformance.at(-1), {
+      drawPacketBuildMs,
+      drawPacketLimitMs,
+      drawPacketCommandCount,
+      drawPacketCorrectionCount,
+      drawPacketCoverCount,
+      drawPacketSkippedCoverCount,
+      drawPacketFallbackCoverCount,
+      fallbackCoverTangentBounds,
+      fallbackCoverReplay,
+      surfaceFallbackCount: surfaceFallbacks.length,
+      surfaceFallbacks,
+      effectiveSmoothedArcCount,
+      effectiveSmoothedArcRatio: paths.topology.arcCount
+        ? Math.round(effectiveSmoothedArcCount / paths.topology.arcCount * 10000) / 10000
+        : 0,
+      cellVisualSafety: {
+        smoothEarcutFailures: formalCellVisualMesh.triangulationSkippedCells,
+        hardBoundaryFallbacks: formalCellVisualMesh.triangulationHardFallbackCells,
+        validatedHardFanFallbacks: formalCellVisualMesh.triangulationHardFanFallbackCells,
+        unfilledCells: formalCellVisualMesh.triangulationUnfilledCells
+      }
     });
     if (cellsTarget === 10000) {
       const cellVisualMap = generatePlaceholderMap({seed: "stage-2-1", cellsTarget, heightmapTemplate: "continents"});
@@ -695,6 +1060,8 @@ function runPureRegression() {
       assert.ok(pinnedLegacyLeaks.every(item => item.finalRasterLeakSamples === 0), "Earcut 后两个正式反例的像素级异侧填色必须归零");
       assert.equal(finalCellTriangulationLeaks, 0, "Earcut 视觉 cell 三角面重心不得落到自身边界外");
       assert.equal(cellVisualMesh.triangulationFallbackCells, 0, "正式 10k 视觉 cell 不得回退旧中心扇形");
+      assert.equal(cellVisualMesh.triangulationUnfilledCells, 0, "正式 10k 视觉 cell 不得留下缺面");
+      assert.equal(cellVisualMesh.triangulationHardFallbackCells, cellVisualMesh.triangulationSkippedCells, "正式 10k 平滑失败 cell 必须全部由安全硬边界补齐");
       assert.ok(paths.topology.smoothedLengthRatio >= 0.5, `10k 安全平滑长度覆盖率 ${paths.topology.smoothedLengthRatio} 低于 50%`);
       assert.ok(paths.topology.smoothedSourceSegmentCount <= paths.topology.eligibleSourceSegmentCount, "实际平滑源段不得超过安全可处理源段");
       assert.ok(paths.topology.smoothedLengthRatio <= paths.topology.eligibleLengthRatio + 0.0001, "实际平滑长度不得超过安全可处理长度");
@@ -772,6 +1139,10 @@ function runPureRegression() {
           legacyFanLeaks: legacyCellFanLeaks,
           finalLeaks: finalCellTriangulationLeaks,
           fallbackCells: cellVisualMesh.triangulationFallbackCells,
+          smoothEarcutFailures: cellVisualMesh.triangulationSkippedCells,
+          hardBoundaryFallbacks: cellVisualMesh.triangulationHardFallbackCells,
+          validatedHardFanFallbacks: cellVisualMesh.triangulationHardFanFallbackCells,
+          unfilledCells: cellVisualMesh.triangulationUnfilledCells,
           pinnedLegacyLeaks
         },
         surfaceReplay,
@@ -783,39 +1154,355 @@ function runPureRegression() {
       });
     }
   }
+  return formalMapPerformance;
+}
 
-  console.log(JSON.stringify({
-    passed: true,
-    algorithm: SHORE_TOPOLOGY_ALGORITHM.id,
-    defaults: [6, 0.25, 2, 18],
-    checks: [
-      "input-immutable",
-      "open-anchor-lock",
-      "closed-anchor-lock",
-      "bidirectional-max-displacement",
-      "removed-peak-fallback",
-      "invalid-fallback",
-      "degenerate-fallback",
-      "local-side-fallback",
-      "local-protected-fallback",
-      "near-town-side-switch",
-      "expanded-protection-radius",
-      "shared-render-points",
-      "hard-edge-fallback",
-      "actual-band-triangle-winding-counterexample",
-      "retired-redundant-band-writer",
-      "raw-snapshot-xor-surface-correction",
-      "exact-xor-boundary-edge-overlap",
-      "formal-pixel-residual-fixtures",
-      "surface-correction-independent-replay",
-      "surface-correction-performance",
-      "source-segment-cell-offset",
-      "synthetic-performance",
-      "formal-map-performance"
+function inspectFallbackCoverTangentBounds(formalPackets) {
+  let vertexCount = 0;
+  let violationCount = 0;
+  let maxOverflow = 0;
+  let maxAllowedOverflow = 0;
+  for (const item of formalPackets) {
+    for (const command of item.packet.commands) {
+      if (command.coverMode !== "subdivided" || !command.boundaryEdge) continue;
+      const [start, end] = command.boundaryEdge;
+      const dx = end[0] - start[0];
+      const dy = end[1] - start[1];
+      const lengthSquared = dx * dx + dy * dy;
+      if (lengthSquared <= 1e-12) continue;
+      const length = Math.sqrt(lengthSquared);
+      const width = SHORE_VISUAL_STYLE.surfaceBoundaryCoverWorld * 2;
+      const cap = Math.min(width * 0.2, length * 0.1);
+      const magnitude = Math.max(
+        1,
+        Math.abs(start[0]),
+        Math.abs(start[1]),
+        Math.abs(end[0]),
+        Math.abs(end[1])
+      );
+      const float32Ulp = 2 ** (Math.floor(Math.log2(magnitude)) - 23);
+      const allowedOverflow = cap + float32Ulp;
+      maxAllowedOverflow = Math.max(maxAllowedOverflow, allowedOverflow);
+      for (let index = 0; index < command.positions.length; index += 2) {
+        vertexCount++;
+        const t = ((command.positions[index] - start[0]) * dx + (command.positions[index + 1] - start[1]) * dy) / lengthSquared;
+        const overflow = Math.max(0, -t, t - 1) * length;
+        maxOverflow = Math.max(maxOverflow, overflow);
+        if (overflow > allowedOverflow) violationCount++;
+      }
+    }
+  }
+  return {
+    vertexCount,
+    violationCount,
+    maxOverflow: Math.round(maxOverflow * 1e9) / 1e9,
+    maxAllowedOverflow: Math.round(maxAllowedOverflow * 1e9) / 1e9
+  };
+}
+
+function replayFormalFallbackCovers(formalPackets, map, cellVisualMesh) {
+  const viewports = [[1280, 820], [1440, 960]];
+  const dprs = [1, 1.5, 2];
+  const zooms = [1, 6, 12];
+  const summary = {
+    fallbackEdgeCount: 0,
+    affectedPathCount: 0,
+    phaseCount: 0,
+    dprs,
+    zooms,
+    viewports: viewports.map(([width, height]) => ({width, height})),
+    offsetCount: 4,
+    wrongSidePixels: 0,
+    longestNeedlePixels: 0,
+    conflictingPixels: 0,
+    duplicatePixels: 0,
+    seamPixels: 0,
+    baselineWrongPixels: 0,
+    introducedWrongPixels: 0,
+    introducedOwnerPixels: 0,
+    remainingWrongPixels: 0,
+    repairedWrongPixels: 0,
+    affected: []
+  };
+  const graphWidth = map.metadata.graphWidth;
+  const graphHeight = map.metadata.graphHeight;
+  for (const item of formalPackets) {
+    if (!item.packet.boundaryCoverFallbacks.length) continue;
+    summary.affectedPathCount++;
+    const sourceRing = item.path.points;
+    const renderRing = buildShoreRenderPoints(item.path, map);
+    const landInside = typeof item.packet.landInside === "boolean" ? item.packet.landInside : inferTestLandInside(item.path);
+    const affectedPath = {
+      kind: item.kind,
+      pathIndex: item.pathIndex,
+      fallbackEdgeCount: item.packet.boundaryCoverFallbacks.length,
+      edges: []
+    };
+    for (const fallback of item.packet.boundaryCoverFallbacks) {
+      summary.fallbackEdgeCount++;
+      const xs = fallback.edge.map(point => point[0]);
+      const ys = fallback.edge.map(point => point[1]);
+      const margin = Math.max(0.5, SHORE_VISUAL_STYLE.surfaceBoundaryCoverWorld * 4);
+      const bounds = {
+        minX: Math.min(...xs) - margin,
+        minY: Math.min(...ys) - margin,
+        maxX: Math.max(...xs) + margin,
+        maxY: Math.max(...ys) + margin
+      };
+      const basePacket = buildFormalLocalBasePacket(cellVisualMesh, map, bounds);
+      const edgeSummary = {
+        side: fallback.side,
+        landCell: fallback.landCell,
+        waterCell: fallback.waterCell,
+        edge: fallback.edge,
+        phaseCount: 0,
+        wrongSidePixels: 0,
+        longestNeedlePixels: 0,
+        conflictingPixels: 0,
+        duplicatePixels: 0,
+        seamPixels: 0,
+        baselineWrongPixels: 0,
+        introducedWrongPixels: 0,
+        introducedOwnerPixels: 0,
+        remainingWrongPixels: 0,
+        repairedWrongPixels: 0
+      };
+      for (const [width, height] of viewports) {
+        for (const dpr of dprs) {
+          for (const zoom of zooms) {
+            for (const offset of [[0.125, 0.125], [0.375, 0.625], [0.625, 0.375], [0.875, 0.875]]) {
+              const projection = {x: width / graphWidth, y: height / graphHeight};
+              const common = {
+                sourceRings: [sourceRing],
+                baseRings: [sourceRing],
+                renderRings: [renderRing],
+                basePacket,
+                landInside,
+                dpr,
+                zoom,
+                projection,
+                offset,
+                bounds,
+                focusSegments: [fallback.edge],
+                focusPixelRadius: 0.75,
+                focusSide: fallback.side
+              };
+              const baseline = rasterDrawPacketPhase({
+                ...common,
+                packet: {
+                  ...item.packet,
+                  commands: item.packet.commands.filter(command =>
+                    command.coverMode !== "subdivided" && command.coverMode !== "vertex"
+                  )
+                }
+              });
+              const final = rasterDrawPacketPhase({...common, packet: item.packet});
+              edgeSummary.phaseCount++;
+              edgeSummary.baselineWrongPixels += baseline.wrongSidePixels;
+              edgeSummary.wrongSidePixels += final.wrongSidePixels;
+              edgeSummary.longestNeedlePixels = Math.max(edgeSummary.longestNeedlePixels, final.longestNeedlePixels);
+              edgeSummary.conflictingPixels += final.conflictingPixels;
+              edgeSummary.duplicatePixels += final.duplicatePixels;
+              edgeSummary.seamPixels += final.seamPixels;
+              for (let pixel = 0; pixel < final.wrongMask.length; pixel++) {
+                if (final.wrongMask[pixel] && !baseline.wrongMask[pixel]) edgeSummary.introducedWrongPixels++;
+                if (final.wrongMask[pixel] && baseline.wrongMask[pixel]) edgeSummary.remainingWrongPixels++;
+                if (!final.wrongMask[pixel] && baseline.wrongMask[pixel]) edgeSummary.repairedWrongPixels++;
+                const baselineOwner = baseline.ownerMask[pixel];
+                const finalOwner = final.ownerMask[pixel];
+                if (baselineOwner < 0 || finalOwner < 0 || baselineOwner === finalOwner) continue;
+                if (finalOwner !== final.idealOwnerMask[pixel]) edgeSummary.introducedOwnerPixels++;
+              }
+            }
+          }
+        }
+      }
+      summary.phaseCount += edgeSummary.phaseCount;
+      summary.wrongSidePixels += edgeSummary.wrongSidePixels;
+      summary.longestNeedlePixels = Math.max(summary.longestNeedlePixels, edgeSummary.longestNeedlePixels);
+      summary.conflictingPixels += edgeSummary.conflictingPixels;
+      summary.duplicatePixels += edgeSummary.duplicatePixels;
+      summary.seamPixels += edgeSummary.seamPixels;
+      summary.baselineWrongPixels += edgeSummary.baselineWrongPixels;
+      summary.introducedWrongPixels += edgeSummary.introducedWrongPixels;
+      summary.introducedOwnerPixels += edgeSummary.introducedOwnerPixels;
+      summary.remainingWrongPixels += edgeSummary.remainingWrongPixels;
+      summary.repairedWrongPixels += edgeSummary.repairedWrongPixels;
+      affectedPath.edges.push(edgeSummary);
+    }
+    summary.affected.push(affectedPath);
+  }
+  return summary;
+}
+
+function buildFormalLocalBasePacket(cellVisualMesh, map, bounds) {
+  const graphWidth = map.metadata.graphWidth;
+  const graphHeight = map.metadata.graphHeight;
+  const commands = [];
+  for (const cellMesh of cellVisualMesh.cells) {
+    const points = cellMesh.points || [];
+    if (!points.length) continue;
+    const minX = Math.min(...points.map(point => point[0]));
+    const minY = Math.min(...points.map(point => point[1]));
+    const maxX = Math.max(...points.map(point => point[0]));
+    const maxY = Math.max(...points.map(point => point[1]));
+    if (maxX < bounds.minX || minX > bounds.maxX || maxY < bounds.minY || minY > bounds.maxY) continue;
+    const ndc = cellMesh.ndcTriangles;
+    for (let index = 0; index < ndc.length; index += 6) {
+      const positions = new Float32Array(6);
+      for (let vertex = 0; vertex < 3; vertex++) {
+        positions[vertex * 2] = (ndc[index + vertex * 2] + 1) * 0.5 * graphWidth;
+        positions[vertex * 2 + 1] = (1 - ndc[index + vertex * 2 + 1]) * 0.5 * graphHeight;
+      }
+      commands.push({
+        kind: "base-surface",
+        side: Number(map.grid.cells.h[cellMesh.cell]) >= 20 ? "land" : "water",
+        ownerCell: cellMesh.cell,
+        positions
+      });
+    }
+  }
+  return {outsideSide: "water", commands};
+}
+
+function buildDrawPacketPhaseFixture() {
+  const worldOffset = 0;
+  const points = [
+    [0, 0], [12, 0.12], [24, 0], [28, 8], [24, 16],
+    [14, 15.92], [8, 13], [0, 16], [-2, 8], [0, 0]
+  ].map(point => [point[0] + worldOffset, point[1] + worldOffset]);
+  const renderPoints = [
+    [0, -0.25], [12, -0.22], [24, -0.25], [28, 8], [24, 16],
+    [14, 15.92], [8, 13], [0, 16], [-2, 8], [0, -0.25]
+  ].map(point => [point[0] + worldOffset, point[1] + worldOffset]);
+  const basePoints = points.map((point, index) =>
+    index <= 2 || index === points.length - 1 ? [point[0], point[1] + 0.06] : [...point]
+  );
+  const sideVectors = points.map((point, index) => {
+    const next = points[Math.min(index + 1, points.length - 1)];
+    const dx = next[0] - point[0];
+    const dy = next[1] - point[1];
+    const length = Math.hypot(dx, dy) || 1;
+    return {x: -dy / length, y: dx / length};
+  });
+  return {
+    map: {},
+    basePoints,
+    path: {
+      closed: true,
+      points,
+      sourcePoints: points,
+      renderPoints,
+      sideVectors,
+      landCells: new Array(points.length).fill(10),
+      waterCells: new Array(points.length).fill(20)
+    }
+  };
+}
+
+function summarizePhaseMetrics(result) {
+  return {
+    wrongSidePixels: result.wrongSidePixels,
+    longestNeedlePixels: result.longestNeedlePixels,
+    conflictingPixels: result.conflictingPixels,
+    duplicatePixels: result.duplicatePixels,
+    seamPixels: result.seamPixels
+  };
+}
+
+function buildMultiRingStressFixture() {
+  const sourceRings = [
+      [[0, 0], [32, 0], [32, 22], [20, 22], [20, 14], [12, 14], [12, 22], [0, 22], [0, 0]],
+      [[4, 4], [10, 4], [10, 10], [4, 10], [4, 4]]
+    ];
+  return {
+    sourceRings,
+    baseRings: [
+      [[0, 0.06], [32, 0.06], [32, 22], [20, 22], [20, 14], [12, 14], [12, 22], [0, 22], [0, 0.06]],
+      sourceRings[1]
     ],
-    performance: performanceResults,
-    formalMapPerformance
-  }, null, 2));
+    renderRings: [
+      [[0, -0.25], [32, -0.25], [32, 22], [20, 22], [20, 14], [12, 14], [12, 22], [0, 22], [0, -0.25]],
+      [[4.2, 4.1], [9.8, 4.2], [9.9, 9.8], [4.1, 9.9], [4.2, 4.1]]
+    ],
+    probes: [
+      {kind: "hole", point: [7, 7]},
+      {kind: "channel", point: [16, 19]},
+      {kind: "land", point: [16, 8]}
+    ]
+  };
+}
+
+function buildStressPacketWithBoundaryCovers(correctionTriangles, boundaryRings, targetRings) {
+  const covers = new Map();
+  for (const triangle of correctionTriangles) {
+    for (const edge of [
+      [triangle.points[0], triangle.points[1]],
+      [triangle.points[1], triangle.points[2]],
+      [triangle.points[2], triangle.points[0]]
+    ]) {
+      if (!boundaryRings.some(ring => testSegmentLiesOnRing(edge, ring))) continue;
+      const endpoints = edge.map(point => point.map(value => Number(value).toFixed(7)).join(":")).sort();
+      const key = `${endpoints.join(">")}|${triangle.side}`;
+      if (!covers.has(key)) {
+        covers.set(key, {
+          edge,
+          side: triangle.side,
+          targetRings,
+          landInside: true,
+          insidePoint: [
+            (triangle.points[0][0] + triangle.points[1][0] + triangle.points[2][0]) / 3,
+            (triangle.points[0][1] + triangle.points[1][1] + triangle.points[2][1]) / 3
+          ]
+        });
+      }
+    }
+  }
+  const coverTriangles = [];
+  for (const cover of covers.values()) {
+    for (const points of buildShoreBoundaryEdgeCoverTriangles(cover)) {
+      coverTriangles.push({points, side: cover.side});
+    }
+  }
+  return buildFloat32PacketFromCorrectionTriangles(correctionTriangles, coverTriangles);
+}
+
+function buildFallbackSpliceStressFixture() {
+  return {
+    smoothSegment: [[0, 0], [4, 0], [8, 2]],
+    rawFallbackSegment: [[8, 2], [12, 2], [16, 0]],
+    sourceLandCells: [101, 102, 103, 104, 105],
+    stitchedLandCells: [101, 102, 103, 104, 105],
+    sourceWaterCells: [201, 202, 203, 204, 205],
+    stitchedWaterCells: [201, 202, 203, 204, 205],
+    protectedDistance: 1,
+    protected: {
+      towns: [[8, 2.5]],
+      roads: [[[12, 0], [12, 4]]],
+      rivers: [[[16, -4], [16, 0]]]
+    }
+  };
+}
+
+function testSegmentLiesOnRing(edge, ring) {
+  const middle = [(edge[0][0] + edge[1][0]) / 2, (edge[0][1] + edge[1][1]) / 2];
+  return [edge[0], middle, edge[1]].every(point => testPointToRingDistance(point, ring) <= 0.000001);
+}
+
+function testPointToRingDistance(point, ring) {
+  let minimum = Infinity;
+  for (let index = 0; index < ring.length - 1; index++) {
+    const a = ring[index];
+    const b = ring[index + 1];
+    const dx = b[0] - a[0];
+    const dy = b[1] - a[1];
+    const lengthSquared = dx * dx + dy * dy;
+    const t = lengthSquared <= 0.000000001
+      ? 0
+      : Math.max(0, Math.min(1, ((point[0] - a[0]) * dx + (point[1] - a[1]) * dy) / lengthSquared));
+    minimum = Math.min(minimum, Math.hypot(point[0] - (a[0] + dx * t), point[1] - (a[1] + dy * t)));
+  }
+  return minimum;
 }
 
 function buildSyntheticShorePath(pointCount) {

@@ -1,8 +1,17 @@
 import {closestPointOnPolyline, isClosed, maxDistanceFromPolyline, pointDistance, samePoint} from "./algorithms.js";
 import {arcUsageCounts, buildIndependentComparison, buildSharedSnapshot, composeRawRing, sharedArcRefs} from "./topology.js";
 import {buildExactSurfaceCorrectionTriangles, triangulateSimplePolygon} from "./surface-correction.js";
+import {
+  analyzeEarcutSafeFailureStress,
+  analyzeFallbackSpliceStress,
+  analyzeFloat32DrawPacketPhaseMatrix,
+  analyzeMultiRingXorStress,
+  buildStressPacketWithBoundaryCovers,
+  mutateDrawPacket
+} from "./stress-analysis.js";
 
 const EPSILON = 1e-6;
+const STRESS_ANALYSIS_CACHE = new WeakMap();
 export const HAUSDORFF_LIMITS = Object.freeze({coast: 6, state: 4, province: 3});
 export const AREA_P95_LIMITS = Object.freeze({coast: 0.5, state: 0.5, province: 1});
 
@@ -55,6 +64,8 @@ export function validateFixture(fixture, algorithmId = "recommended", options = 
   const cellFanGeometry = analyzeCellFanGeometry(fixture);
   const vertexCollapseGeometry = analyzeVertexCollapseGeometry(fixture);
   const pixelParityGeometry = analyzePixelParityGeometry(fixture);
+  const stressAnalysis = analyzeStressComparison(fixture);
+  if (stressAnalysis && !stressAnalysis.passed) issues.push(`高风险计算门禁失败：${stressAnalysis.kind}`);
   const caseConstraints = evaluateCaseConstraints(fixture, snapshot);
   for (const constraint of caseConstraints.filter(item => !item.pass)) issues.push(`案例约束失败：${constraint.label}`);
 
@@ -91,11 +102,73 @@ export function validateFixture(fixture, algorithmId = "recommended", options = 
       bandTriangleGeometry,
       cellFanGeometry,
       vertexCollapseGeometry,
-      pixelParityGeometry
+      pixelParityGeometry,
+      stressAnalysis
     },
     snapshot,
     comparison
   };
+}
+
+export function analyzeStressComparison(fixture) {
+  const model = fixture?.stressComparison;
+  if (!model) return null;
+  if (STRESS_ANALYSIS_CACHE.has(fixture)) return STRESS_ANALYSIS_CACHE.get(fixture);
+  const analysis = computeStressComparison(model);
+  STRESS_ANALYSIS_CACHE.set(fixture, analysis);
+  return analysis;
+}
+
+function computeStressComparison(model) {
+  if (model.kind === "phase-matrix" || model.kind === "multi-ring") {
+    const correctionTriangles = buildExactSurfaceCorrectionTriangles(model.sourceRings, model.renderRings);
+    const packet = buildStressPacketWithBoundaryCovers(
+      correctionTriangles,
+      [...model.sourceRings, ...model.renderRings],
+      model.renderRings
+    );
+    const final = model.kind === "multi-ring"
+      ? analyzeMultiRingXorStress({...model, correctionTriangles, packet})
+      : analyzeFloat32DrawPacketPhaseMatrix({...model, packet});
+    const deleteCover = model.kind === "multi-ring"
+      ? analyzeMultiRingXorStress({...model, correctionTriangles, packet: mutateDrawPacket(packet, "delete-cover")})
+      : analyzeFloat32DrawPacketPhaseMatrix({...model, packet: mutateDrawPacket(packet, "delete-cover")});
+    const wrongDirection = model.kind === "multi-ring"
+      ? analyzeMultiRingXorStress({...model, correctionTriangles, packet: mutateDrawPacket(packet, "wrong-direction")})
+      : analyzeFloat32DrawPacketPhaseMatrix({...model, packet: mutateDrawPacket(packet, "wrong-direction")});
+    const endpointQuantization = model.kind === "multi-ring"
+      ? analyzeMultiRingXorStress({...model, correctionTriangles, packet: mutateDrawPacket(packet, "endpoint-quantization")})
+      : analyzeFloat32DrawPacketPhaseMatrix({...model, packet: mutateDrawPacket(packet, "endpoint-quantization")});
+    const finalPassed = final.wrongSidePixels === 0
+      && final.longestNeedlePixels === 0
+      && final.conflictingPixels === 0
+      && final.duplicatePixels === 0
+      && final.seamPixels === 0
+      && (model.kind !== "multi-ring" || final.holePreserved && final.channelPreserved && final.landConnected);
+    return {
+      kind: model.kind,
+      final,
+      destructive: {deleteCover, wrongDirection, endpointQuantization},
+      correctionTriangleCount: correctionTriangles.length,
+      passed: finalPassed
+        && (deleteCover.wrongSidePixels > final.wrongSidePixels || deleteCover.seamPixels > final.seamPixels)
+        && wrongDirection.wrongSidePixels > final.wrongSidePixels
+        && endpointQuantization.wrongSidePixels > final.wrongSidePixels
+    };
+  }
+  if (model.kind === "fallback-splice") {
+    const final = analyzeFallbackSpliceStress(model);
+    const broken = analyzeFallbackSpliceStress({
+      ...structuredClone(model),
+      rawFallbackSegment: [[6, 2], [12, 2], [16, 0]]
+    });
+    return {kind: model.kind, final, destructive: {broken}, passed: final.passed && !broken.passed};
+  }
+  if (model.kind === "earcut-safe-failure") {
+    const final = analyzeEarcutSafeFailureStress(model);
+    return {kind: model.kind, final, destructive: {legacyLeakCount: final.legacyLeakCount}, passed: final.passed};
+  }
+  return {kind: model.kind, passed: false, final: {}, destructive: {}};
 }
 
 function invalidDefinitionResult(fixture, algorithmId, issues) {
@@ -277,6 +350,14 @@ export function evaluateCaseConstraints(fixture, snapshot) {
   const arc = id => snapshot.arcs.get(id);
   if (fixture.id === "single-island") {
     add("island-ring", "单岛闭环有效", arc("coast")?.closed && isClosed(arc("coast").points), arc("coast")?.points.length || 0);
+  } else if (fixture.id === "single-cell-seam-spike") {
+    const coast = arc("single-cell-coast");
+    const raw = fixture.arcs.find(item => item?.id === "single-cell-coast");
+    add("single-cell-ring", "单 cell 海岸闭环有效", coast?.closed && isClosed(coast.points), coast?.points.length || 0);
+    if (snapshot.algorithmId === "recommended") {
+      const released = !samePoint(coast.points[0], raw.points[0]);
+      add("closed-seam-released", "闭环不再硬锁任意原始首点", released, released ? 0 : 1);
+    }
   } else if (fixture.id === "island-with-hole") {
     const [outer, hole] = snapshot.regions[0].rings;
     const directionOpposite = Math.sign(signedArea(outer)) !== Math.sign(signedArea(hole));
@@ -772,13 +853,19 @@ function validateFinitePoints(points, label, issues) {
 }
 
 function validateEndpointLocks(fixture, snapshot, issues) {
+  const protectedClosedArcs = new Set(
+    (fixture.protectedObjects?.rivers || []).map(river => river?.mouth?.arcId).filter(Boolean)
+  );
   for (const rawArc of fixture.arcs) {
     const transformed = snapshot.arcs.get(rawArc.id).points;
-    if (!samePoint(rawArc.points[0], transformed[0])) issues.push(`arc ${rawArc.id} 起点漂移`);
     if (rawArc.closed) {
       if (!isClosed(transformed)) issues.push(`闭环 arc ${rawArc.id} 未闭合`);
-    } else if (!samePoint(rawArc.points.at(-1), transformed.at(-1))) {
-      issues.push(`arc ${rawArc.id} 终点漂移`);
+      if ((rawArc.syntheticAnchor || protectedClosedArcs.has(rawArc.id)) && !samePoint(rawArc.points[0], transformed[0])) {
+        issues.push(`闭环 arc ${rawArc.id} 受保护锚点漂移`);
+      }
+    } else {
+      if (!samePoint(rawArc.points[0], transformed[0])) issues.push(`arc ${rawArc.id} 起点漂移`);
+      if (!samePoint(rawArc.points.at(-1), transformed.at(-1))) issues.push(`arc ${rawArc.id} 终点漂移`);
     }
   }
 }

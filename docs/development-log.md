@@ -1,5 +1,20 @@
 # 开发历史
 
+## 2026-07-25：权威任务第 209 项补充——修复单 cell 闭环接缝毛刺
+
+- 用户提供同区域平滑开 / 关截图：关闭时上方孤岛是正常单 cell 多边形，开启后其余角已圆顺，但右上保留一个像素级尖角。代码与数据流调查确认 `buildShoreTopologySnapshot` 按 path 逐条调用 `buildShoreArcSnapshot`，附近大陆几何不会参与另一条闭环的 `Visvalingam + Chaikin`；只有地图中距岸保护半径内的城镇、道路、河流和河口可能触发语义化局部回退。
+- 根因位于闭环接缝：`lockAnchors` 在 Chaikin 和位移限制后仍把 `render[0] / render[-1]` 强行重置为 `source[0]`，于是闭环其余角被削圆，唯独任意数组首点恢复原始折角；`hasHardSpike` 对闭环仍从索引 `1` 开始，接缝索引 `0` 又逃过尖角门禁。正式实现现让普通闭环闭合在处理后的首点，开放 arc 继续锁定两个语义端点，并让闭环尖角检查覆盖全部顶点。
+- 共享边界拓扑实验室新增第十八项“单 cell 闭环接缝毛刺”，在同一画布固定上方孤岛与下方近邻大陆；回归同时建立仅孤岛副本，要求两种场景的 `single-cell-coast` 处理坐标逐点相同，并要求推荐管线不再保留任意原始首点。实验室对带河口闭环和 `syntheticAnchor` 闭环显式保留锚点，避免把普通闭环修复扩大成对象保护回归；独立 polygon 失败对照改为依据实际 seam error 判定，不再把“存在共享 arc”误报为必然失败。
+- `node tools/boundary-topology-lab-regression.mjs` 通过：总夹具 `18`，推荐拓扑夹具 `14/14`，全部 ring、seam、面积、Hausdorff、保护对象和高风险压力门禁保持通过；`pnpm run build:app` 完成 `1258` modules。正式 `node tools/webgl-generator-shoreline-regression.mjs --pure` 已越过新增的闭环、近邻大陆隔离断言，随后仍被第 209 项半成品 surface writer 静态契约阻断；后续 render junction owner 的 `20` 个残余像素也没有因本次独立闭环修复而被宣称解决。
+- 本地实验室服务已恢复在 `http://127.0.0.1:5401/`。浏览器连接在实验室服务恢复后受本地 URL 访问策略阻止，未伪造页面验收结论；本次以确定性坐标回归和生产构建作为已完成证据，权威任务第 209 项整体仍保持执行中，未提交、未推送。
+
+## 2026-07-25：权威任务第 209 项暂停决策——高风险实验矩阵揭露 render junction owner 冲突
+
+- 本轮重新审视共享边界拓扑实验室后，确认旧 `13/13` 存在系统性假阳性：部分 surface 夹具保存的是预期常量而非正式 writer 输出，世界坐标格点采样也没有覆盖 Float32 上传、WebGL top-left 边缘归属、DPR、非等比投影、子像素相位和批次绘制顺序。实验室已增加正式 draw packet 相位矩阵、多环湖洞 / 窄水道 XOR、平滑 / raw fallback 拼接与沿岸对象保护、Earcut 安全失败四类压力用例，推荐矩阵扩为 `17/17`；删除封边、反向语义、错序、端点量化和旧中心扇等破坏反例均能稳定击穿门禁。
+- 正式 cell visual 的 Earcut 失败不再回退会越界的中心扇：10k / 50k 样本分别有 `1 / 20` 个平滑三角化失败 cell，现全部改用安全硬 Voronoi 边界补齐，`unfilledCells=0`。正式 shore packet 同时公开 surface 整环回退原因、位置和有效平滑弧比例；性能回归与高压力像素矩阵拆到独立 `--pure-formal` 子进程，避免前置分配 / GC 把单次 wall-clock 抖动误判为算法退化。
+- 新门禁随后揭露旧回归未覆盖的正式缺陷：50k 有 `32` 条困难封边、分布于 `21` 条 path。局部裁剪让 `skippedBoundaryCoverCount` 从 `32` 降为 `0`，但无条件补片会覆盖大量同侧其它 cell；write-once side-depth 软件模型把 `introducedOwnerPixels` 降为 `0` 后，仍有 `20` 个异侧 / seam 像素未覆盖。逐像素定位确认它们全部位于 render edge junction：`19` 个没有命中任何 correction / direct / slow cover，另 `1` 个 strict junction disk 修复后仍留下 `20` 个；其中 `15` 个位于相邻 canonical owner 切换，`5` 个属于半径不足或 render target 的 top-left 边界。
+- 已证伪的方向包括：继续缩小 overlap、只恢复切向 cap、raw/source 对称窄条、严格同 owner 的单楔 / `0.18` 圆盘，以及逐困难边重建完整 cellVisual owner 布尔区。最后一项虽语义最严，但 50k packet 冷构建达到 `21466.97ms`，超过 `5000ms` 门槛。根据封闭计划的重复失败停止规则，本项暂停在架构决策：选择局部 owner 分区 junction 补片继续小步验证，或转为更大范围的 shore-aware cell mesh 一体化重三角化。当前回归仍红，未执行最终浏览器验收，未提交或推送。
+
 ## 2026-07-25：完成权威任务第 208 项第五次返工——新旧岸线边缘同色覆盖
 
 - 本轮保留并反复重载用户原 `stage-2-1 / 10k`、校验和 `d764cb54` 地图。相同 50 千米近景中依次关闭河流、省界和水陆线后，左下陆色长针仍在；重载当前模块并重新导入同图后确认它属于湖岸 `#6496/#6617` 的 shore correction surface。完整 XOR 补水三角并未缺失，而是在最终边 `[352.5,635] → [351,645]` 与基础 surface 共坐标时，由光栅边缘所有权留下单列旧陆色像素。此前将正常河流或省界重绘变化视为来源的判断已撤回。

@@ -264,7 +264,7 @@ function validateTransformedArc(source, render, closed, gates) {
   if (render.length < (closed ? 4 : 2) || render.some(point => !isWorldPoint(point))) return "degenerate-transform";
   if (closed !== isClosed(render)) return "anchor-lock";
   if (!closed && (!pointsNear(source[0], render[0]) || !pointsNear(source.at(-1), render.at(-1)))) return "anchor-lock";
-  if (closed && (!pointsNear(source[0], render[0]) || !pointsNear(render[0], render.at(-1)))) return "anchor-lock";
+  if (closed && !pointsNear(render[0], render.at(-1))) return "anchor-lock";
   if (maxShoreDisplacement(render, source) > gates.maxDisplacement + 1e-6) return "max-displacement";
 
   const sourceMaxSegment = maximumSegmentLength(source);
@@ -720,15 +720,18 @@ function limitDisplacement(points, source, maxDisplacement) {
 }
 
 function lockAnchors(points, source, closed) {
-  const result = closed ? closeRing(stripClosure(points)) : points.map(copyPoint);
+  if (closed) return closeRing(stripClosure(points));
+  const result = points.map(copyPoint);
   result[0] = copyPoint(source[0]);
-  result[result.length - 1] = copyPoint(closed ? source[0] : source.at(-1));
+  result[result.length - 1] = copyPoint(source.at(-1));
   return result;
 }
 
 function hasHardSpike(points, threshold, closed) {
   const unique = closed ? stripClosure(points) : points;
-  for (let index = 1; index < (closed ? unique.length : unique.length - 1); index++) {
+  const start = closed ? 0 : 1;
+  const end = closed ? unique.length : unique.length - 1;
+  for (let index = start; index < end; index++) {
     const previous = unique[(index - 1 + unique.length) % unique.length];
     const current = unique[index];
     const next = unique[(index + 1) % unique.length];

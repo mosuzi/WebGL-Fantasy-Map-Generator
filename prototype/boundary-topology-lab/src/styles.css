@@ -121,6 +121,8 @@ h2 { font-size: 16px; }
 .usage-side.side-first { stroke: var(--side-first); }
 .usage-side.side-second { stroke: var(--side-second); }
 .same-source-line { fill: none; stroke: var(--same-source); stroke-width: 5; opacity: .52; vector-effect: non-scaling-stroke; }
+.closed-seam-defect circle { fill: rgba(199, 57, 48, .22); stroke: #c73930; stroke-width: 1.5; }
+.closed-seam-defect path { fill: none; stroke: #c73930; stroke-width: 1.5; }
 .legacy-repair-band { fill: none; stroke: rgba(106, 180, 202, .24); stroke-width: 2; vector-effect: non-scaling-stroke; }
 .surface-mismatch { fill: rgba(247, 59, 54, .86); stroke: rgba(255, 196, 188, .8); stroke-width: .35; filter: drop-shadow(0 0 2px rgba(255, 48, 43, .7)); }
 .surface-mismatch text { fill: #ffd2cc; stroke: #44110e; stroke-width: 2px; paint-order: stroke; font: 700 8px ui-monospace, monospace; filter: none; }
@@ -175,6 +177,22 @@ h2 { font-size: 16px; }
 .zoom-background { fill: #0a1012; }
 .zoom-label { fill: #f1dfaa; font: 7px ui-monospace, monospace; letter-spacing: .02em; }
 .zoom-callout > svg { overflow: hidden; filter: none; }
+
+.stress-comparison { background: #f4ead2; }
+.stress-pixel-location circle { fill: rgba(196, 46, 39, .82); stroke: #6f1714; stroke-width: 1; }
+.stress-pixel-location text, .stress-probe text, .stress-status, .stress-skip-label { fill: #402f25; font-size: 9px; font-weight: 700; }
+.stress-probe circle { fill: #69b5c9; stroke: #1e6174; stroke-width: 1.2; }
+.stress-splice-line { fill: none; stroke: #287a61; stroke-width: 3; }
+.stress-splice-line.destructive, .stress-splice-gap { stroke: #be3f38; }
+.stress-splice-gap { stroke-width: 2; stroke-dasharray: 3 2; }
+.stress-splice-end { fill: #f6dcb3; stroke: #be3f38; stroke-width: 2; }
+.stress-town { fill: #8f3f2e; stroke: #fff1c9; stroke-width: 1.2; }
+.stress-road { fill: none; stroke: #7c6146; stroke-width: 2; }
+.stress-river { fill: none; stroke: #347da4; stroke-width: 2.4; }
+.stress-fan-triangle { fill: rgba(194, 56, 49, .16); stroke: #bd3b35; stroke-width: 1; }
+.stress-earcut-triangle { fill: rgba(52, 136, 105, .14); stroke: #347d65; stroke-width: 1; }
+.stress-cell-boundary { fill: none; stroke: #3f3229; stroke-width: 2; }
+.stress-safe-skip { fill: rgba(194, 56, 49, .08); stroke: #a53d38; stroke-width: 1.8; stroke-dasharray: 4 3; }
 
 @media (max-width: 1180px) {
   .metrics { grid-template-columns: repeat(3, 1fr); }

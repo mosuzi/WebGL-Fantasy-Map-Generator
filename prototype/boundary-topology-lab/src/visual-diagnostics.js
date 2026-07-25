@@ -1,6 +1,26 @@
 const AREA_KIND_LABELS = Object.freeze({coast: "海岸", state: "国界", province: "省界"});
 
 export function resolveComparisonPresentation(sharedArcCount, comparisonKind = false) {
+  if (comparisonKind === "closed-seam") {
+    return Object.freeze({
+      kind: "closed-seam",
+      firstMode: "legacy-closed-anchor",
+      secondMode: "processed",
+      firstTitle: "旧策略：闭环首点硬锁",
+      firstNote: "左侧直接重放平滑后把 source[0] 钉回首尾形成的单点毛刺",
+      secondTitle: "最终策略：闭环接缝均匀平滑"
+    });
+  }
+  if (comparisonKind === "stress") {
+    return Object.freeze({
+      kind: "stress",
+      firstMode: "raw",
+      secondMode: "processed",
+      firstTitle: "破坏反例",
+      firstNote: "左侧保留同一固定输入；具体失败相位与坐标见下方定位指标",
+      secondTitle: "最终生产同源计算"
+    });
+  }
   if (comparisonKind === "pixel-parity") {
     return Object.freeze({
       kind: "pixel-parity",

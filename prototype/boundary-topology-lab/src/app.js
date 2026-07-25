@@ -71,7 +71,11 @@ function bindLayer(elementId, key) {
 function render() {
   const fixture = FIXTURE_BY_ID.get(state.fixtureId);
   const result = validateFixture(fixture, state.algorithmId, state.options);
-  const comparisonKind = fixture.cellFanComparison
+  const comparisonKind = fixture.id === "single-cell-seam-spike"
+    ? "closed-seam"
+    : fixture.stressComparison
+    ? "stress"
+    : fixture.cellFanComparison
     ? "cell-fan"
     : fixture.vertexCollapseComparison
       ? "vertex-collapse"
@@ -94,6 +98,8 @@ function render() {
   elements["shared-card"].className = `map-card result-card ${result.ok ? "pass" : "fail"}`;
   const firstModel = presentation.kind === "shared"
     ? result.comparison
+    : presentation.kind === "closed-seam"
+      ? buildLegacyClosedAnchorModel(fixture, result.snapshot)
     : presentation.kind === "surface"
       ? {...result.snapshot, regions: buildRawModel(fixture).regions}
       : presentation.kind === "band"
@@ -119,14 +125,51 @@ function buildRawModel(fixture) {
   };
 }
 
+function buildLegacyClosedAnchorModel(fixture, snapshot) {
+  const arcs = new Map([...snapshot.arcs].map(([id, processed]) => {
+    const raw = fixture.arcs.find(item => item.id === id);
+    const points = processed.points.map(point => [...point]);
+    if (raw?.closed && points.length) {
+      points[0] = [...raw.points[0]];
+      points[points.length - 1] = [...raw.points[0]];
+    }
+    return [id, {...processed, points}];
+  }));
+  return {
+    arcs,
+    regions: fixture.regions.map(region => ({
+      ...region,
+      rings: region.rings.map(ring => composeModelRing(ring, arcs))
+    }))
+  };
+}
+
+function composeModelRing(refs, arcs) {
+  const ring = [];
+  for (const arcRef of refs) {
+    const points = arcRef.reversed ? arcs.get(arcRef.arcId).points.toReversed() : arcs.get(arcRef.arcId).points;
+    ring.push(...(ring.length ? points.slice(1) : points).map(point => [...point]));
+  }
+  return ring;
+}
+
 function renderSvg(model, fixture, mode, result) {
+  if (fixture.stressComparison) return stressComparisonSvg(fixture, mode === "raw" ? "destructive" : "final", result.metrics.stressAnalysis);
   const regions = model.regions.map(region => `<path class="region" fill="${region.fill}" fill-rule="evenodd" d="${region.rings.map(pathData).join(" ")}"><title>${region.name}</title></path>`).join("");
   const cellFanMode = mode === "legacy-cell-fan" || mode === "earcut-cell-surface";
   const vertexCollapseMode = mode === "collapsed-grid-surface" || mode === "resolved-grid-surface";
   const pixelParityMode = mode === "legacy-pixel-seams" || mode === "exact-pixel-parity";
   const raw = state.layers.raw && mode !== "raw" && !cellFanMode && !vertexCollapseMode && !pixelParityMode ? fixture.arcs.map(arc => `<path class="raw-line" d="${pathData(arc.points)}"/>`).join("") : "";
-  const arcs = mode === "shared" || mode === "processed" || mode === "legacy-surface" || mode === "shared-surface"
+  const arcs = mode === "shared" || mode === "processed" || mode === "legacy-closed-anchor" || mode === "legacy-surface" || mode === "shared-surface"
     ? [...model.arcs.values()].map(arc => `<path class="arc-line ${arc.kind}" d="${pathData(arc.points)}"/>`).join("")
+    : "";
+  const closedSeam = mode === "legacy-closed-anchor"
+    ? (() => {
+        const anchor = fixture.arcs.find(arc => arc.id === "single-cell-coast")?.points?.[0];
+        return anchor
+          ? `<g class="closed-seam-defect"><circle cx="${anchor[0]}" cy="${anchor[1]}" r="5"/><path d="M ${anchor[0] - 12} ${anchor[1] - 9} L ${anchor[0] - 2} ${anchor[1] - 2}"/></g>`
+          : "";
+      })()
     : "";
   const legacyRepair = mode === "legacy-surface"
     ? [...model.arcs.values()].map(arc => `<path class="legacy-repair-band" d="${pathData(arc.points)}"/>`).join("")
@@ -162,6 +205,7 @@ function renderSvg(model, fixture, mode, result) {
     shared: "共享弧线处理结果",
     raw: "原始轮廓",
     processed: "处理后轮廓",
+    "legacy-closed-anchor": "旧算法闭环首点毛刺",
     "legacy-surface": "旧策略原始填色与局部修补",
     "shared-surface": "XOR 修补后三角面与描边",
     "legacy-band": "旧策略四三角过渡带翻面",
@@ -173,7 +217,82 @@ function renderSvg(model, fixture, mode, result) {
     "legacy-pixel-seams": "正式旧策略长针与浅色带",
     "exact-pixel-parity": "正式边缘覆盖与细海岸线"
   };
-  return `<svg viewBox="-8 -8 336 236" role="img" aria-label="${labels[mode]}">${regions}${legacyRepair}${raw}${sides}${sameSource}${surfaceMismatch}${bandTriangles}${cellFan}${vertexCollapse}${pixelParity}${arcs}${protectedObjects}${deviation}${nodes}${ids}</svg>`;
+  return `<svg viewBox="-8 -8 336 236" role="img" aria-label="${labels[mode]}">${regions}${legacyRepair}${raw}${sides}${sameSource}${surfaceMismatch}${bandTriangles}${cellFan}${vertexCollapse}${pixelParity}${arcs}${closedSeam}${protectedObjects}${deviation}${nodes}${ids}</svg>`;
+}
+
+function stressComparisonSvg(fixture, variant, stress) {
+  const model = fixture.stressComparison;
+  if (model.kind === "phase-matrix" || model.kind === "multi-ring") {
+    const points = [...model.sourceRings.flat(), ...model.renderRings.flat()];
+    const project = stressProjector(points);
+    const sourcePaths = model.sourceRings.map(ring => pathData(ring.map(project))).join(" ");
+    const renderPaths = model.renderRings.map(ring => pathData(ring.map(project))).join(" ");
+    const destructive = stress.destructive.endpointQuantization;
+    const locations = variant === "destructive"
+      ? destructive.worstPhase?.wrongLocations || []
+      : stress.final.worstPhase?.wrongLocations || [];
+    const markers = locations.map((location, index) => {
+      const [x, y] = project(location.point);
+      return `<g class="stress-pixel-location"><circle cx="${round(x)}" cy="${round(y)}" r="3.4"/><text x="${round(x + 4)}" y="${round(y - 4)}">${index + 1}</text></g>`;
+    }).join("");
+    const probeMarkers = (model.probes || []).map(probe => {
+      const [x, y] = project(probe.point);
+      return `<g class="stress-probe"><circle cx="${round(x)}" cy="${round(y)}" r="3"/><text x="${round(x + 5)}" y="${round(y - 4)}">${probe.label}</text></g>`;
+    }).join("");
+    const status = variant === "destructive"
+      ? `端点量化错侧 ${destructive.wrongSidePixels} · 最长针 ${destructive.longestNeedlePixels}`
+      : `最终错侧 ${stress.final.wrongSidePixels} · 冲突 ${stress.final.conflictingPixels}`;
+    return `<svg class="stress-comparison stress-${model.kind}-${variant}" viewBox="0 0 320 220" role="img" aria-label="${variant === "destructive" ? "破坏反例与像素针定位" : "最终零错侧海岸"}"><path d="${sourcePaths}" fill="rgba(191,71,64,.12)" fill-rule="evenodd" stroke="#b44b45" stroke-width="1.2" stroke-dasharray="4 3"/><path d="${renderPaths}" fill="rgba(63,133,112,.2)" fill-rule="evenodd" stroke="${variant === "destructive" ? "#3d6f91" : "#287a61"}" stroke-width="2"/>${markers}${probeMarkers}<text class="stress-status ${variant}" x="22" y="205">${status}</text></svg>`;
+  }
+  if (model.kind === "fallback-splice") {
+    const final = stress.final;
+    const current = variant === "destructive" ? stress.destructive.broken : final;
+    const points = [
+      ...current.stitched,
+      ...model.protected.towns,
+      ...model.protected.roads.flat(),
+      ...model.protected.rivers.flat()
+    ];
+    const project = stressProjector(points);
+    const line = pathData(current.stitched.map(project));
+    const spliceA = project(model.smoothSegment.at(-1));
+    const spliceB = project(variant === "destructive" ? [6, 2] : model.rawFallbackSegment[0]);
+    const towns = model.protected.towns.map(point => {
+      const [x, y] = project(point);
+      return `<circle class="stress-town" cx="${round(x)}" cy="${round(y)}" r="4"><title>受保护城镇</title></circle>`;
+    }).join("");
+    const roads = model.protected.roads.map(road => `<path class="stress-road" d="${pathData(road.map(project))}"/>`).join("");
+    const rivers = model.protected.rivers.map(river => `<path class="stress-river" d="${pathData(river.map(project))}"/>`).join("");
+    return `<svg class="stress-comparison stress-fallback-${variant}" viewBox="0 0 320 220" role="img" aria-label="${variant === "destructive" ? "断裂回折拼接反例" : "连续拼接与沿岸对象保护"}"><path class="stress-splice-line ${variant}" d="${line}"/>${roads}${rivers}${towns}<line class="stress-splice-gap" x1="${round(spliceA[0])}" y1="${round(spliceA[1])}" x2="${round(spliceB[0])}" y2="${round(spliceB[1])}"/><circle class="stress-splice-end first" cx="${round(spliceA[0])}" cy="${round(spliceA[1])}" r="4"/><circle class="stress-splice-end second" cx="${round(spliceB[0])}" cy="${round(spliceB[1])}" r="4"/><text class="stress-status ${variant}" x="22" y="205">端点距离 ${current.sharedEndpointDistance.toFixed(2)} · 回折 ${current.backtrackSegments} · canonical ${current.canonicalCellsPreserved ? "保持" : "破坏"}</text></svg>`;
+  }
+  const final = stress.final;
+  const points = [...model.concaveBoundary, ...model.irreparableBoundary, ...model.hardBoundary];
+  const project = stressProjector(points);
+  const boundary = model.concaveBoundary.map(project);
+  let triangles = "";
+  if (variant === "destructive") {
+    const center = project(model.concaveLegacyCenter);
+    triangles = boundary.map((point, index) => `<path class="stress-fan-triangle" d="${pathData([center, point, boundary[(index + 1) % boundary.length], center])}"/>`).join("");
+  } else {
+    triangles = Array.from({length: final.concaveIndices.length / 3}, (_, index) => {
+      const triangle = [0, 1, 2].map(offset => boundary[final.concaveIndices[index * 3 + offset]]);
+      return `<path class="stress-earcut-triangle" d="${pathData([...triangle, triangle[0]])}"/>`;
+    }).join("");
+  }
+  const fallbackBoundary = (variant === "final" ? model.hardBoundary : model.irreparableBoundary).map(project);
+  return `<svg class="stress-comparison stress-earcut-${variant}" viewBox="0 0 320 220" role="img" aria-label="${variant === "destructive" ? "旧中心扇越界反例" : "清洗 Earcut 与安全硬边界补面"}">${triangles}<path class="stress-cell-boundary" d="${pathData([...boundary, boundary[0]])}"/><path class="stress-safe-skip" d="${pathData([...fallbackBoundary, fallbackBoundary[0]])}"/><text class="stress-skip-label" x="190" y="42">${variant === "final" ? `${final.safeSkipReason} → ${final.safeFallback}` : "强制中心扇"}</text><text class="stress-status ${variant}" x="22" y="205">${variant === "destructive" ? `旧中心扇越界 ${final.legacyLeakCount}` : `Earcut 越界 ${final.concaveLeakCount} · 硬边补面 ${final.hardFallbackTriangleCount} · 缺面 ${final.unfilledCells}`}</text></svg>`;
+}
+
+function stressProjector(points) {
+  const minX = Math.min(...points.map(point => point[0]));
+  const maxX = Math.max(...points.map(point => point[0]));
+  const minY = Math.min(...points.map(point => point[1]));
+  const maxY = Math.max(...points.map(point => point[1]));
+  const scale = Math.min(270 / Math.max(1, maxX - minX), 155 / Math.max(1, maxY - minY));
+  return point => [
+    25 + (point[0] - minX) * scale,
+    25 + (point[1] - minY) * scale
+  ];
 }
 
 function bandTriangleMarkup(fixture, geometry, mode) {
@@ -425,6 +544,51 @@ function metricsMarkup(metrics) {
       ["裸露边缘", `${metrics.pixelParityGeometry.legacyUncoveredBoundaryEdges} → ${metrics.pixelParityGeometry.finalUncoveredBoundaryEdges}`, metrics.pixelParityGeometry.finalUncoveredBoundaryEdges ? "bad" : "good"],
       ["海岸截图投影线宽", `${metrics.pixelParityGeometry.legacyProjectedStrokeCss.toFixed(2)} → ${metrics.pixelParityGeometry.finalProjectedStrokeCss.toFixed(2)} CSS px`, metrics.pixelParityGeometry.finalProjectedStrokeCss > metrics.pixelParityGeometry.maximumFinalCssWidth ? "bad" : "good"]
     );
+  }
+  if (metrics.stressAnalysis) {
+    const stress = metrics.stressAnalysis;
+    const final = stress.final;
+    values.push(
+      ["高风险类型", stress.kind, "notice"],
+      ["最终错侧像素", final.wrongSidePixels ?? 0, final.wrongSidePixels ? "bad" : "good"],
+      ["最终最长像素针", final.longestNeedlePixels ?? 0, final.longestNeedlePixels ? "bad" : "good"],
+      ["最终冲突覆盖", final.conflictingPixels ?? 0, final.conflictingPixels ? "bad" : "good"]
+    );
+    if (final.worstPhase) {
+      values.push(["最坏相位定位", `DPR ${final.worstPhase.dpr} / zoom ${final.worstPhase.zoom} / offset ${final.worstPhase.offset.join(",")}`, "notice"]);
+    }
+    if (stress.destructive?.deleteCover) {
+      values.push(["删封口 framebuffer 缝隙", `${final.seamPixels ?? 0} → ${stress.destructive.deleteCover.seamPixels ?? 0}`, "bad"]);
+    }
+    if (stress.destructive?.wrongDirection) {
+      values.push(["反向语义错侧像素", stress.destructive.wrongDirection.wrongSidePixels ?? 0, "bad"]);
+    }
+    if (stress.destructive?.endpointQuantization) {
+      values.push(["端点量化错侧像素", stress.destructive.endpointQuantization.wrongSidePixels ?? 0, "bad"]);
+    }
+    if (stress.kind === "multi-ring") {
+      values.push(
+        ["湖洞 / 水道 / 陆地连通", `${final.holePreserved ? "是" : "否"} / ${final.channelPreserved ? "是" : "否"} / ${final.landConnected ? "是" : "否"}`, final.holePreserved && final.channelPreserved && final.landConnected ? "good" : "bad"],
+        ["XOR / Earcut 三角形", stress.correctionTriangleCount, "notice"]
+      );
+    }
+    if (stress.kind === "fallback-splice") {
+      values.push(
+        ["拼接端点距离", final.sharedEndpointDistance, final.sharedEndpointDistance ? "bad" : "good"],
+        ["零长 / 回折段", `${final.zeroLengthSegments} / ${final.backtrackSegments}`, final.zeroLengthSegments || final.backtrackSegments ? "bad" : "good"],
+        ["canonical / 城镇 / 道路 / 河口", `${final.canonicalCellsPreserved ? "是" : "否"} / ${final.townProtected ? "是" : "否"} / ${final.roadProtected ? "是" : "否"} / ${final.mouthProtected ? "是" : "否"}`, final.passed ? "good" : "bad"],
+        ["破坏端点距离", stress.destructive.broken.sharedEndpointDistance, "bad"]
+      );
+    }
+    if (stress.kind === "earcut-safe-failure") {
+      values.push(
+        ["清洗点数", `${final.sourcePointCount} → ${final.cleanedPointCount}`, "good"],
+        ["强凹 Earcut / 越界", `${final.concaveTriangleCount} / ${final.concaveLeakCount}`, final.concaveLeakCount ? "bad" : "good"],
+        ["平滑失败 / 安全兜底", `${final.safeSkipReason} → ${final.safeFallback}`, final.unfilledCells ? "bad" : "good"],
+        ["硬边三角 / 越界 / 缺面", `${final.hardFallbackTriangleCount} / ${final.hardFallbackLeaks} / ${final.unfilledCells}`, final.hardFallbackLeaks || final.unfilledCells ? "bad" : "good"],
+        ["旧中心扇越界", final.legacyLeakCount, final.legacyLeakCount ? "bad" : "good"]
+      );
+    }
   }
   const cards = values.map(([label, value, className]) => `<div class="metric ${className}"><span>${label}</span><strong>${value}</strong></div>`).join("");
   const constraints = metrics.caseConstraints.map(item => `<div class="constraint ${item.pass ? "pass" : "fail"}"><span>${item.label}</span><strong>${formatConstraintValue(item.value)}</strong></div>`).join("");

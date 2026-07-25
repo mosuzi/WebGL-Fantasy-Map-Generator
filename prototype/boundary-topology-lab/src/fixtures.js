@@ -31,6 +31,42 @@ const singleIsland = {
   }
 };
 
+const singleCellSeamSpike = {
+  id: "single-cell-seam-spike",
+  name: "单 cell 闭环接缝毛刺",
+  category: "coast-seam",
+  description: "原样复刻独立单 cell 岛屿靠近大陆时，闭环首点被硬锁而残留尖角的案例；检验修复不受附近大陆影响。",
+  arcs: [
+    arc("single-cell-coast", [
+      point(210, 52),
+      point(221, 91),
+      point(211, 125),
+      point(178, 143),
+      point(139, 136),
+      point(112, 109),
+      point(128, 72),
+      point(164, 52),
+      point(210, 52)
+    ], {closed: true, kind: "coast"}),
+    arc("nearby-mainland", [
+      point(28, 174),
+      point(82, 161),
+      point(126, 173),
+      point(163, 164),
+      point(203, 176),
+      point(248, 159),
+      point(294, 174),
+      point(294, 218),
+      point(28, 218),
+      point(28, 174)
+    ], {closed: true, kind: "coast"})
+  ],
+  regions: [
+    region("single-cell-island", "单 cell 孤岛", "#b7d7a8", [[ref("single-cell-coast")]]),
+    region("mainland", "附近大陆", "#b7d7a8", [[ref("nearby-mainland")]])
+  ]
+};
+
 const islandWithHole = {
   id: "island-with-hole",
   name: "带洞岛屿",
@@ -411,8 +447,112 @@ const coastPixelParityResiduals = {
   }
 };
 
+function stressFixture(id, name, category, description, stressComparison) {
+  const frameId = `${id}-frame`;
+  return {
+    id,
+    name,
+    category,
+    description,
+    arcs: [arc(frameId, [
+      point(24, 24), point(296, 24), point(296, 196),
+      point(24, 196), point(24, 24)
+    ], {closed: true, kind: "coast"})],
+    regions: [region(`${id}-region`, "高风险定位画布", "#b8ad7d", [[ref(frameId)]])],
+    stressComparison
+  };
+}
+
+const coastDrawPacketPhaseMatrix = stressFixture(
+  "coast-draw-packet-phase-matrix",
+  "Float32 像素相位矩阵",
+  "surface-phase-matrix",
+  "以固定 raw/render 岸线重放 Float32 修正面与封口面，覆盖 DPR 1/1.5/2、三档 zoom、非等比投影和四组亚像素偏移，并显示最终值与破坏反例的最坏相位位置。",
+  {
+    kind: "phase-matrix",
+    sourceRings: [[
+      point(0, 0), point(12, 0.12), point(24, 0), point(28, 8), point(24, 16),
+      point(14, 15.92), point(8, 13), point(0, 16), point(-2, 8), point(0, 0)
+    ]],
+    baseRings: [[
+      point(0, 0.06), point(12, 0.18), point(24, 0.06), point(28, 8), point(24, 16),
+      point(14, 15.92), point(8, 13), point(0, 16), point(-2, 8), point(0, 0.06)
+    ]],
+    renderRings: [[
+      point(0, -0.25), point(12, -0.22), point(24, -0.25), point(28, 8), point(24, 16),
+      point(14, 15.92), point(8, 13), point(0, 16), point(-2, 8), point(0, -0.25)
+    ]]
+  }
+);
+
+const coastMultiRingXorCompound = stressFixture(
+  "coast-multiring-xor-compound",
+  "多环 XOR 复合海岸",
+  "surface-multiring",
+  "同一固定输入同时包含外海岸、湖洞、狭窄水道与强凹角，实际执行 polygon XOR 和 Earcut，并定位洞、水道、连通性与错侧覆盖。",
+  {
+    kind: "multi-ring",
+    sourceRings: [
+      [point(0, 0), point(32, 0), point(32, 22), point(20, 22), point(20, 14), point(12, 14), point(12, 22), point(0, 22), point(0, 0)],
+      [point(4, 4), point(10, 4), point(10, 10), point(4, 10), point(4, 4)]
+    ],
+    baseRings: [
+      [point(0, 0.06), point(32, 0.06), point(32, 22), point(20, 22), point(20, 14), point(12, 14), point(12, 22), point(0, 22), point(0, 0.06)],
+      [point(4, 4), point(10, 4), point(10, 10), point(4, 10), point(4, 4)]
+    ],
+    renderRings: [
+      [point(0, -0.25), point(32, -0.25), point(32, 22), point(20, 22), point(20, 14), point(12, 14), point(12, 22), point(0, 22), point(0, -0.25)],
+      [point(4.2, 4.1), point(9.8, 4.2), point(9.9, 9.8), point(4.1, 9.9), point(4.2, 4.1)]
+    ],
+    probes: [
+      {kind: "hole", label: "湖洞中心", point: point(7, 7)},
+      {kind: "channel", label: "狭窄水道", point: point(16, 19)},
+      {kind: "land", label: "凹角内陆", point: point(16, 8)}
+    ]
+  }
+);
+
+const coastFallbackSpliceProtected = stressFixture(
+  "coast-fallback-splice-protected",
+  "平滑/回退拼接保护",
+  "fallback-splice",
+  "固定平滑段与原始回退段的共享端点、方向、canonical cell，并同时核验城镇、道路与河口；破坏端点后显示缝隙距离和回折段。",
+  {
+    kind: "fallback-splice",
+    smoothSegment: [point(0, 0), point(4, 0), point(8, 2)],
+    rawFallbackSegment: [point(8, 2), point(12, 2), point(16, 0)],
+    sourceLandCells: [101, 102, 103, 104, 105],
+    stitchedLandCells: [101, 102, 103, 104, 105],
+    sourceWaterCells: [201, 202, 203, 204, 205],
+    stitchedWaterCells: [201, 202, 203, 204, 205],
+    protectedDistance: 1,
+    protected: {
+      towns: [point(8, 2.5)],
+      roads: [[point(12, 0), point(12, 4)]],
+      rivers: [[point(16, -4), point(16, 0)]]
+    }
+  }
+);
+
+const cellEarcutSafeFailure = stressFixture(
+  "cell-earcut-safe-failure",
+  "Earcut 安全失败",
+  "cell-triangulation-safety",
+  "固定重复点、极短边、强凹 cell 与平滑后自交输入；平滑 Earcut 失败必须切换到同一 cell 的安全硬边界并完整填面，旧中心扇形作为破坏对照。",
+  {
+    kind: "earcut-safe-failure",
+    duplicateMicroBoundary: [point(0, 0), point(8, 0), point(8, 0.000000001), point(8, 8), point(4, 4), point(0, 8), point(0, 8), point(0, 0)],
+    concaveBoundary: [point(0, 0), point(10, 0), point(10, 10), point(7, 10), point(7, 3), point(3, 3), point(3, 10), point(0, 10)],
+    concaveLegacyCenter: point(5, 8),
+    irreparableBoundary: [point(0, 0), point(8, 8), point(0, 8), point(8, 0)],
+    hardBoundary: [point(0, 0), point(8, 0), point(8, 8), point(0, 8)],
+    hardCenter: point(4, 4)
+  }
+);
+
 export const FIXTURES = Object.freeze([
   singleIsland,
+  singleCellSeamSpike,
   islandWithHole,
   narrowStrait,
   lakeSeaConnection,
@@ -424,7 +564,11 @@ export const FIXTURES = Object.freeze([
   coastBandTriangleFlip,
   coastXorSubpixelNeedle,
   coastVoronoiVertexCollapse,
-  coastPixelParityResiduals
+  coastPixelParityResiduals,
+  coastDrawPacketPhaseMatrix,
+  coastMultiRingXorCompound,
+  coastFallbackSpliceProtected,
+  cellEarcutSafeFailure
 ].map(fixture => Object.freeze(fixture)));
 
 export const FIXTURE_BY_ID = new Map(FIXTURES.map(fixture => [fixture.id, fixture]));

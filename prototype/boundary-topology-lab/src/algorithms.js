@@ -37,7 +37,7 @@ export function transformArc(points, algorithmId, options = {}, closed = isClose
   }
 
   transformed = limitDisplacement(transformed, source, settings.maxDisplacement);
-  return lockArcEndpoints(transformed, source, closed);
+  return lockArcEndpoints(transformed, source, closed, settings.preserveClosedAnchor);
 }
 
 export function douglasPeucker(points, tolerance, closed = isClosed(points)) {
@@ -188,11 +188,13 @@ function limitDisplacement(points, source, maxDisplacement) {
   });
 }
 
-function lockArcEndpoints(points, source, closed) {
+function lockArcEndpoints(points, source, closed, preserveClosedAnchor = false) {
   if (closed) {
     const ring = closeRing(stripClosure(points));
-    ring[0] = copyPoint(source[0]);
-    ring[ring.length - 1] = copyPoint(source[0]);
+    if (preserveClosedAnchor) {
+      ring[0] = copyPoint(source[0]);
+      ring[ring.length - 1] = copyPoint(source[0]);
+    }
     return ring;
   }
   const result = points.map(copyPoint);
