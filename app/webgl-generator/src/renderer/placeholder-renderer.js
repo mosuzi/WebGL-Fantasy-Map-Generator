@@ -954,7 +954,7 @@ export class PlaceholderMapRenderer {
       oceanCurrentVertexCount: this.oceanCurrentVertexCount,
       cellVisualMesh: summarizeCellVisualMesh(this.cellVisualMesh),
       cellSurfaceMode: this.viewOptions.smoothCellBorders !== false ? "visual-cells" : "hard-cells",
-      boundaryLineMode: boundaryLineModeForOptions(this.viewOptions, this.cellVisualMesh),
+      boundaryLineMode: boundaryLineModeForOptions(this.viewOptions, this.cellVisualMesh, this.shoreVisualPaths),
       shoreVisual: summarizeShoreVisualPaths(this.shoreVisualPaths),
       stateVisual: summarizePoliticalVisualPaths(this.stateVisualPaths, STATE_VISUAL_STYLE),
       provinceVisual: summarizePoliticalVisualPaths(this.provinceVisualPaths, PROVINCE_VISUAL_STYLE),
@@ -3012,7 +3012,7 @@ function buildPlaceholderVertices(map, colorMode, viewOptions, shoreVisualPaths 
     pushGridCells(vertices, context, colorMode, viewOptions);
   }
   const shoreVertices = [];
-  if (shouldDrawShoreVisualBands(colorMode) && shoreVisualPaths) pushShoreVisualBands(shoreVertices, context, colorMode, viewOptions, shoreVisualPaths);
+  if (smoothCellBorders && shouldDrawShoreVisualBands(colorMode) && shoreVisualPaths) pushShoreVisualBands(shoreVertices, context, colorMode, viewOptions, shoreVisualPaths);
   if (smoothCellBorders && !useCellVisualMesh) {
     if (colorMode === "states") pushPoliticalVisualBands(vertices, context, statePaths, STATE_VISUAL_STYLE);
     if (colorMode === "provinces") pushPoliticalVisualBands(vertices, context, provincePaths, PROVINCE_VISUAL_STYLE);
@@ -3049,8 +3049,8 @@ function mergeSurfaceRanges(ranges) {
   return merged;
 }
 
-function shouldDrawShoreVisualBands(colorMode) {
-  return false;
+export function shouldDrawShoreVisualBands(colorMode) {
+  return colorMode === "height" || colorMode === "states" || colorMode === "provinces";
 }
 
 function combineVertexBuffers(primary, extra) {
@@ -3070,7 +3070,7 @@ function buildLineVertices(map, visibility = {}, colorMode = "height", shoreVisu
   const provincePaths = provinceVisualPaths || buildProvinceVisualPaths(map);
   const themeLines = viewOptions.visualTheme?.lines || {};
   pushMapEdgeFade(vertices, context, map, viewOptions.visualTheme);
-  pushShoreLineLayers(vertices, context, visibility, cellVisualMesh, viewOptions);
+  pushShoreLineLayers(vertices, context, visibility, cellVisualMesh, viewOptions, shoreVisualPaths);
   pushZoneTextureLayer(vertices, context, map, visibility);
   const oceanCurrents = pushOceanCurrentLayer(oceanCurrentVertices, context, map, visibility, oceanCurrentHighlights);
   if (visibility.provinceBorders !== false) pushPoliticalBoundaryStrokes(vertices, provincePaths, context, themeLines.provinceBorder || PROVINCE_VISUAL_STYLE.borderStroke, PROVINCE_VISUAL_STYLE.borderWidthWorld, PROVINCE_VISUAL_STYLE.borderDashWorld);

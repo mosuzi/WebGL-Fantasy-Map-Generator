@@ -1,9 +1,11 @@
 import {colorForCell, isLandCell} from "./color-modes.js";
+import {resolvedGridVertexPoints} from "./grid-vertex-geometry.js";
 import {pushWorldVertex} from "./mesh-writer.js";
 
 export function pushGridCells(vertices, context, colorMode, viewOptions, shouldDrawCell = () => true) {
   const {map} = context;
   const grid = map.grid;
+  const vertexPoints = resolvedGridVertexPoints(grid);
   for (let cellIndex = 0; cellIndex < grid.cells.v.length; cellIndex++) {
     if (!shouldDrawCell(cellIndex)) continue;
     const vertexIds = grid.cells.v[cellIndex];
@@ -13,8 +15,8 @@ export function pushGridCells(vertices, context, colorMode, viewOptions, shouldD
     for (let index = 0; index < vertexIds.length; index++) {
       const nextIndex = (index + 1) % vertexIds.length;
       pushWorldVertex(vertices, context, center, color);
-      pushWorldVertex(vertices, context, grid.vertices.p[vertexIds[index]], color);
-      pushWorldVertex(vertices, context, grid.vertices.p[vertexIds[nextIndex]], color);
+      pushWorldVertex(vertices, context, vertexPoints[vertexIds[index]], color);
+      pushWorldVertex(vertices, context, vertexPoints[vertexIds[nextIndex]], color);
     }
   }
 }

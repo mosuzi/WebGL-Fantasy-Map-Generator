@@ -1,5 +1,6 @@
 import {closestPointOnPolyline, isClosed, maxDistanceFromPolyline, pointDistance, samePoint} from "./algorithms.js";
 import {arcUsageCounts, buildIndependentComparison, buildSharedSnapshot, composeRawRing, sharedArcRefs} from "./topology.js";
+import {buildExactSurfaceCorrectionTriangles, triangulateSimplePolygon} from "./surface-correction.js";
 
 const EPSILON = 1e-6;
 export const HAUSDORFF_LIMITS = Object.freeze({coast: 6, state: 4, province: 3});
@@ -49,6 +50,11 @@ export function validateFixture(fixture, algorithmId = "recommended", options = 
     }
   }
   const shapeDiagnostics = buildShapeDiagnostics(shapeMetrics, algorithmId);
+  const surfaceClassification = analyzeSurfaceClassification(fixture, snapshot);
+  const bandTriangleGeometry = analyzeBandTriangleGeometry(fixture);
+  const cellFanGeometry = analyzeCellFanGeometry(fixture);
+  const vertexCollapseGeometry = analyzeVertexCollapseGeometry(fixture);
+  const pixelParityGeometry = analyzePixelParityGeometry(fixture);
   const caseConstraints = evaluateCaseConstraints(fixture, snapshot);
   for (const constraint of caseConstraints.filter(item => !item.pass)) issues.push(`案例约束失败：${constraint.label}`);
 
@@ -80,7 +86,12 @@ export function validateFixture(fixture, algorithmId = "recommended", options = 
       regionShapeErrors: shapeMetrics.regions,
       shapeDiagnostics,
       shapePolicy: shapeMetrics.regions.every(item => item.kind === "coast") ? "notice" : "acceptance",
-      caseConstraints
+      caseConstraints,
+      surfaceClassification,
+      bandTriangleGeometry,
+      cellFanGeometry,
+      vertexCollapseGeometry,
+      pixelParityGeometry
     },
     snapshot,
     comparison
@@ -116,7 +127,10 @@ function invalidDefinitionResult(fixture, algorithmId, issues) {
       regionShapeErrors: [],
       shapeDiagnostics: [],
       shapePolicy: "acceptance",
-      caseConstraints: []
+      caseConstraints: [],
+      bandTriangleGeometry: null,
+      cellFanGeometry: null,
+      pixelParityGeometry: null
     },
     snapshot: null,
     comparison: {regions: [], usages: new Map(), seamError: 0, maximumDeviation: null, expectedFailure: false}
@@ -304,9 +318,314 @@ export function evaluateCaseConstraints(fixture, snapshot) {
     const raw = fixture.arcs.find(item => item?.id === "stable-loop");
     const stable = loop.syntheticAnchor && isClosed(loop.points) && samePoint(loop.points[0], raw.points[0]);
     add("synthetic-anchor", "闭环 syntheticAnchor 稳定", stable, stable ? 0 : 1);
+  } else if (fixture.id === "coast-fill-stroke-separation") {
+    const comparison = analyzeSurfaceClassification(fixture, snapshot);
+    if (snapshot.algorithmId === "recommended") {
+      add(
+        "legacy-surface-exposes-wedge",
+        "旧策略必须暴露可定位楔形",
+        comparison.legacyMismatchSamples >= fixture.surfaceComparison.minimumLegacyMismatchSamples,
+        comparison.legacyMismatchSamples
+      );
+    }
+    add(
+      "shared-surface-classification",
+      "XOR 修补填色与描边二维分类一致",
+      comparison.sharedMismatchSamples === 0,
+      comparison.sharedMismatchSamples
+    );
+  } else if (fixture.id === "coast-band-triangle-flip") {
+    const geometry = analyzeBandTriangleGeometry(fixture);
+    add(
+      "legacy-band-opposite-winding",
+      "旧四三角过渡带稳定复现翻面",
+      geometry.legacyOppositeWindingCount > 0,
+      geometry.legacyOppositeWindingCount
+    );
+    add(
+      "exact-surface-retires-band",
+      "最终 XOR 填色不再提交冗余过渡带",
+      geometry.finalTriangleCount === 0,
+      geometry.finalTriangleCount
+    );
+  } else if (fixture.id === "coast-xor-subpixel-needle") {
+    const geometry = analyzeCellFanGeometry(fixture);
+    add(
+      "formal-cell-fan-leaks-reproduced",
+      "正式地图两处凹单元的中心扇越界均被复刻",
+      geometry.legacyLeakCount === 5 && geometry.cases.every(item => item.legacyLeakCount === item.expectedLegacyLeaks),
+      geometry.legacyLeakCount
+    );
+    add(
+      "earcut-boundary-contained",
+      "边界 Earcut 三角面全部留在各自单元内",
+      geometry.finalLeakCount === 0 && geometry.finalRasterLeakSamples === 0,
+      geometry.finalRasterLeakSamples
+    );
+  } else if (fixture.id === "coast-voronoi-vertex-collapse") {
+    const geometry = analyzeVertexCollapseGeometry(fixture);
+    add(
+      "stored-voronoi-edge-collapsed",
+      "正式旧数据稳定复现零长度共享边",
+      geometry.storedEdgeLength === 0,
+      geometry.storedEdgeLength
+    );
+    add(
+      "precise-voronoi-edge-restored",
+      "vertices.c 精确回算恢复当前现场的连续水面",
+      geometry.resolvedEdgeLength > 0.1 && geometry.resolvedEdgeLength < 0.2 && geometry.projectedCssLength >= 0.9,
+      geometry.projectedCssLength
+    );
+  } else if (fixture.id === "coast-pixel-parity-residuals") {
+    const geometry = analyzePixelParityGeometry(fixture);
+    add(
+      "formal-lake-needle-reproduced",
+      "正式湖岸修补面边缘无覆盖时稳定复现陆色像素针",
+      geometry.legacyUncoveredBoundaryEdges === 1
+        && geometry.finalUncoveredBoundaryEdges === 0
+        && geometry.finalBoundaryCoverWorld > 0,
+      geometry.legacyUncoveredBoundaryEdges
+    );
+    add(
+      "formal-coast-stroke-pixel-capped",
+      "正式海岸描边在截图投影下收敛到 1.5 CSS px 内",
+      geometry.finalProjectedStrokeCss <= geometry.maximumFinalCssWidth
+        && geometry.finalProjectedStrokeCss < geometry.legacyProjectedStrokeCss,
+      geometry.finalProjectedStrokeCss
+    );
   }
   for (const constraint of evaluateProtectedObjectConstraints(fixture, snapshot)) constraints.push(constraint);
   return constraints;
+}
+
+export function analyzeBandTriangleGeometry(fixture) {
+  const model = fixture?.bandTriangleComparison;
+  if (!model) return null;
+  const legacyTriangles = bandTriangles(model);
+  const legacySignedAreas = legacyTriangles.map(points => signedArea(points));
+  const nonZeroAreas = legacySignedAreas.filter(area => Math.abs(area) > EPSILON);
+  const winding = Math.sign(nonZeroAreas[0] || 0);
+  const legacyOppositeWindingCount = nonZeroAreas.filter(area => Math.sign(area) !== winding).length;
+  return {
+    legacyTriangles,
+    legacySignedAreas,
+    legacyOppositeWindingCount,
+    legacyDegenerateCount: legacySignedAreas.length - nonZeroAreas.length,
+    finalTriangleCount: model.finalTriangles?.length || 0
+  };
+}
+
+export function analyzeCellFanGeometry(fixture) {
+  const model = fixture?.cellFanComparison;
+  if (!model) return null;
+  const cases = (model.cases || []).map(item => {
+    const legacyTriangles = item.points.map((point, index) => [
+      item.center,
+      point,
+      item.points[(index + 1) % item.points.length]
+    ]);
+    const legacyLeakIndices = legacyTriangles
+      .map((triangle, index) => pointInPolygon(triangleCentroid(triangle), item.points) ? -1 : index)
+      .filter(index => index >= 0);
+    const indices = triangulateSimplePolygon(item.points);
+    const finalTriangles = [];
+    for (let index = 0; index < indices.length; index += 3) {
+      finalTriangles.push([indices[index], indices[index + 1], indices[index + 2]].map(vertex => item.points[vertex]));
+    }
+    const finalLeakIndices = finalTriangles
+      .map((triangle, index) => pointInPolygon(triangleCentroid(triangle), item.points) ? -1 : index)
+      .filter(index => index >= 0);
+    const legacyRasterLeakSamples = countRasterLeakSamples(item.points, legacyTriangles);
+    const finalRasterLeakSamples = countRasterLeakSamples(item.points, finalTriangles);
+    return {
+      ...item,
+      legacyTriangles,
+      legacyLeakIndices,
+      legacyLeakCount: legacyLeakIndices.length,
+      legacyRasterLeakSamples,
+      finalTriangles,
+      finalLeakIndices,
+      finalLeakCount: finalLeakIndices.length,
+      finalRasterLeakSamples
+    };
+  });
+  return {
+    source: model.source,
+    cases,
+    legacyLeakCount: cases.reduce((sum, item) => sum + item.legacyLeakCount, 0),
+    finalLeakCount: cases.reduce((sum, item) => sum + item.finalLeakCount, 0),
+    legacyRasterLeakSamples: cases.reduce((sum, item) => sum + item.legacyRasterLeakSamples, 0),
+    finalRasterLeakSamples: cases.reduce((sum, item) => sum + item.finalRasterLeakSamples, 0),
+    sides: [...new Set(cases.map(item => item.side))]
+  };
+}
+
+export function analyzeVertexCollapseGeometry(fixture) {
+  const model = fixture?.vertexCollapseComparison;
+  if (!model) return null;
+  const storedEdgeLength = pointDistance(model.storedEdge[0], model.storedEdge[1]);
+  const resolvedEdgeLength = pointDistance(model.resolvedEdge[0], model.resolvedEdge[1]);
+  const projectedCssLength = Math.hypot(
+    (model.resolvedEdge[1][0] - model.resolvedEdge[0][0]) * model.projection.xCssPerWorld,
+    (model.resolvedEdge[1][1] - model.resolvedEdge[0][1]) * model.projection.yCssPerWorld
+  );
+  return {
+    source: model.source,
+    storedEdge: model.storedEdge,
+    resolvedEdge: model.resolvedEdge,
+    cells: model.cells,
+    storedEdgeLength,
+    resolvedEdgeLength,
+    projectedCssLength
+  };
+}
+
+export function analyzePixelParityGeometry(fixture) {
+  const model = fixture?.pixelParityComparison;
+  if (!model) return null;
+  const [start, end] = model.coastStroke.segment;
+  const dx = end[0] - start[0];
+  const dy = end[1] - start[1];
+  const length = Math.hypot(dx, dy);
+  const normal = length > EPSILON ? [-dy / length, dx / length] : [0, 0];
+  const projectedWorldNormal = Math.hypot(
+    normal[0] * model.projection.xCssPerWorld,
+    normal[1] * model.projection.yCssPerWorld
+  );
+  return {
+    source: model.source,
+    projection: model.projection,
+    lakeNeedle: model.lakeNeedle,
+    coastStroke: model.coastStroke,
+    legacyUncoveredBoundaryEdges: model.lakeNeedle.legacyBoundaryCoverWorld > 0 ? 0 : 1,
+    finalUncoveredBoundaryEdges: model.lakeNeedle.finalBoundaryCoverWorld > 0 ? 0 : 1,
+    finalBoundaryCoverWorld: model.lakeNeedle.finalBoundaryCoverWorld,
+    legacyProjectedStrokeCss: model.coastStroke.legacyWidthWorld * projectedWorldNormal,
+    finalProjectedStrokeCss: model.coastStroke.finalWidthWorld * projectedWorldNormal,
+    maximumFinalCssWidth: model.coastStroke.maximumFinalCssWidth
+  };
+}
+
+function triangleCentroid(points) {
+  return [
+    (points[0][0] + points[1][0] + points[2][0]) / 3,
+    (points[0][1] + points[1][1] + points[2][1]) / 3
+  ];
+}
+
+function countRasterLeakSamples(boundary, triangles, step = 0.1) {
+  const xs = boundary.map(point => point[0]);
+  const ys = boundary.map(point => point[1]);
+  let leaks = 0;
+  for (let y = Math.min(...ys) + step / 2; y < Math.max(...ys); y += step) {
+    for (let x = Math.min(...xs) + step / 2; x < Math.max(...xs); x += step) {
+      const sample = [x, y];
+      if (pointInPolygon(sample, boundary)) continue;
+      if (triangles.some(triangle => pointInTriangle(sample, triangle, false))) leaks++;
+    }
+  }
+  return leaks;
+}
+
+function bandTriangles(segment) {
+  return [
+    [segment.centerA, segment.waterA, segment.waterB],
+    [segment.centerA, segment.waterB, segment.centerB],
+    [segment.centerA, segment.centerB, segment.landB],
+    [segment.centerA, segment.landB, segment.landA]
+  ];
+}
+
+export function analyzeSurfaceClassification(fixture, snapshot) {
+  if (!fixture?.surfaceComparison || !snapshot?.regions?.length) return null;
+  const settings = fixture.surfaceComparison;
+  const rawRings = fixture.regions[0].rings.map(ring => composeRawRing(ring, fixture));
+  const processedRings = snapshot.regions[0].rings;
+  const processedBoundary = processedRings.flat();
+  const bounds = settings.bounds;
+  const step = Math.max(0.5, Number(settings.sampleStep) || 2);
+  const repairRadius = Math.max(0, Number(settings.legacyRepairRadius) || 0);
+  const legacyMismatchPoints = [];
+  const sharedMismatchPoints = [];
+  const correctionTriangles = settings.correctionMode === "exact-polygon-xor"
+    ? buildExactSurfaceCorrectionTriangles(rawRings, processedRings)
+    : [];
+  let correctionMultiCoveredSamples = 0;
+  let correctionConflictingSamples = 0;
+  let xorSamples = 0;
+  let totalSamples = 0;
+
+  for (let y = bounds.minY + step / 2; y < bounds.maxY; y += step) {
+    for (let x = bounds.minX + step / 2; x < bounds.maxX; x += step) {
+      const point = [x, y];
+      const rawInside = pointInRegion(point, rawRings);
+      const processedInside = pointInRegion(point, processedRings);
+      if (rawInside !== processedInside) xorSamples++;
+      const nearProcessedBoundary = pointDistance(point, closestPointOnPolyline(point, processedBoundary)) <= repairRadius;
+      const legacyInside = nearProcessedBoundary ? processedInside : rawInside;
+      if (legacyInside !== processedInside) legacyMismatchPoints.push(point);
+      totalSamples++;
+    }
+  }
+
+  const verificationStep = step / 2;
+  for (let y = bounds.minY + verificationStep / 2; y < bounds.maxY; y += verificationStep) {
+    for (let x = bounds.minX + verificationStep / 2; x < bounds.maxX; x += verificationStep) {
+      const point = [x, y];
+      const rawInside = pointInRegion(point, rawRings);
+      const processedInside = pointInRegion(point, processedRings);
+      if (rawInside === processedInside) continue;
+      const correctionHits = correctionTriangles.filter(triangle => pointInTriangle(point, triangle.points));
+      const strictHits = correctionHits.filter(triangle => pointInTriangle(point, triangle.points, false));
+      const correctionSides = new Set(strictHits.map(triangle => triangle.side));
+      let correctedInside = rawInside;
+      for (const triangle of correctionHits) correctedInside = triangle.side === "land";
+      if (correctedInside !== processedInside) sharedMismatchPoints.push(point);
+      if (strictHits.length > 1) correctionMultiCoveredSamples++;
+      if (correctionSides.size > 1) correctionConflictingSamples++;
+    }
+  }
+
+  return {
+    sampleStep: step,
+    sampleArea: step * step,
+    totalSamples,
+    xorSamples,
+    xorArea: xorSamples * step * step,
+    legacyRepairRadius: repairRadius,
+    legacyMismatchSamples: legacyMismatchPoints.length,
+    legacyMismatchArea: legacyMismatchPoints.length * step * step,
+    legacyMismatchPoints,
+    sharedMismatchSamples: sharedMismatchPoints.length,
+    sharedMismatchArea: sharedMismatchPoints.length * step * step,
+    sharedMismatchPoints,
+    correctionVerificationStep: verificationStep,
+    correctionTriangleCount: correctionTriangles.length,
+    correctionDegenerateTriangles: correctionTriangles.filter(triangle => Math.abs(triangleArea(triangle.points)) <= EPSILON).length,
+    correctionMultiCoveredSamples,
+    correctionConflictingSamples
+  };
+}
+
+function pointInTriangle(point, triangle, includeBoundary = true) {
+  const cross = (a, b) => (a[0] - point[0]) * (b[1] - point[1]) - (a[1] - point[1]) * (b[0] - point[0]);
+  const values = [
+    cross(triangle[0], triangle[1]),
+    cross(triangle[1], triangle[2]),
+    cross(triangle[2], triangle[0])
+  ];
+  const hasNegative = values.some(value => value < -EPSILON);
+  const hasPositive = values.some(value => value > EPSILON);
+  if (hasNegative && hasPositive) return false;
+  return includeBoundary || values.every(value => Math.abs(value) > EPSILON);
+}
+
+function triangleArea(triangle) {
+  return (
+    triangle[0][0] * (triangle[1][1] - triangle[2][1])
+    + triangle[1][0] * (triangle[2][1] - triangle[0][1])
+    + triangle[2][0] * (triangle[0][1] - triangle[1][1])
+  ) / 2;
 }
 
 export function evaluateProtectedObjectConstraints(fixture, snapshot) {

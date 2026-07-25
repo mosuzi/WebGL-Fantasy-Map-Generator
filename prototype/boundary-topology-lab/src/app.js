@@ -71,7 +71,16 @@ function bindLayer(elementId, key) {
 function render() {
   const fixture = FIXTURE_BY_ID.get(state.fixtureId);
   const result = validateFixture(fixture, state.algorithmId, state.options);
-  const presentation = resolveComparisonPresentation(result.metrics.sharedArcCount);
+  const comparisonKind = fixture.cellFanComparison
+    ? "cell-fan"
+    : fixture.vertexCollapseComparison
+      ? "vertex-collapse"
+    : fixture.pixelParityComparison
+      ? "pixel-parity"
+    : fixture.bandTriangleComparison
+      ? "band"
+      : Boolean(fixture.surfaceComparison);
+  const presentation = resolveComparisonPresentation(result.metrics.sharedArcCount, comparisonKind);
   document.querySelectorAll("[data-fixture]").forEach(button => button.classList.toggle("active", button.dataset.fixture === state.fixtureId));
   document.querySelectorAll("[data-algorithm]").forEach(button => button.classList.toggle("active", button.dataset.algorithm === state.algorithmId));
   elements["case-category"].textContent = `${fixture.category.toUpperCase()} · ${state.algorithmId}`;
@@ -83,7 +92,17 @@ function render() {
   elements["shared-status"].textContent = result.ok ? "几何验收通过" : `几何验收失败 · ${result.issues.length}`;
   elements["shared-status"].className = `result-state ${result.ok ? "pass" : "fail"}`;
   elements["shared-card"].className = `map-card result-card ${result.ok ? "pass" : "fail"}`;
-  const firstModel = presentation.kind === "shared" ? result.comparison : buildRawModel(fixture);
+  const firstModel = presentation.kind === "shared"
+    ? result.comparison
+    : presentation.kind === "surface"
+      ? {...result.snapshot, regions: buildRawModel(fixture).regions}
+      : presentation.kind === "band"
+        ? buildRawModel(fixture)
+        : presentation.kind === "cell-fan"
+          ? buildRawModel(fixture)
+          : presentation.kind === "vertex-collapse"
+            ? buildRawModel(fixture)
+          : buildRawModel(fixture);
   elements["independent-view"].innerHTML = renderSvg(firstModel, fixture, presentation.firstMode, result);
   elements["shared-view"].innerHTML = renderSvg(result.snapshot, fixture, presentation.secondMode, result);
   elements["current-issues"].innerHTML = issuesMarkup(result, presentation);
@@ -102,8 +121,29 @@ function buildRawModel(fixture) {
 
 function renderSvg(model, fixture, mode, result) {
   const regions = model.regions.map(region => `<path class="region" fill="${region.fill}" fill-rule="evenodd" d="${region.rings.map(pathData).join(" ")}"><title>${region.name}</title></path>`).join("");
-  const raw = state.layers.raw && mode !== "raw" ? fixture.arcs.map(arc => `<path class="raw-line" d="${pathData(arc.points)}"/>`).join("") : "";
-  const arcs = mode === "shared" || mode === "processed" ? [...model.arcs.values()].map(arc => `<path class="arc-line ${arc.kind}" d="${pathData(arc.points)}"/>`).join("") : "";
+  const cellFanMode = mode === "legacy-cell-fan" || mode === "earcut-cell-surface";
+  const vertexCollapseMode = mode === "collapsed-grid-surface" || mode === "resolved-grid-surface";
+  const pixelParityMode = mode === "legacy-pixel-seams" || mode === "exact-pixel-parity";
+  const raw = state.layers.raw && mode !== "raw" && !cellFanMode && !vertexCollapseMode && !pixelParityMode ? fixture.arcs.map(arc => `<path class="raw-line" d="${pathData(arc.points)}"/>`).join("") : "";
+  const arcs = mode === "shared" || mode === "processed" || mode === "legacy-surface" || mode === "shared-surface"
+    ? [...model.arcs.values()].map(arc => `<path class="arc-line ${arc.kind}" d="${pathData(arc.points)}"/>`).join("")
+    : "";
+  const legacyRepair = mode === "legacy-surface"
+    ? [...model.arcs.values()].map(arc => `<path class="legacy-repair-band" d="${pathData(arc.points)}"/>`).join("")
+    : "";
+  const surfaceMismatch = mode === "legacy-surface" ? surfaceMismatchMarkup(result.metrics.surfaceClassification) : "";
+  const bandTriangles = mode === "legacy-band" || mode === "exact-surface"
+    ? bandTriangleMarkup(fixture, result.metrics.bandTriangleGeometry, mode)
+    : "";
+  const cellFan = cellFanMode
+    ? cellFanMarkup(fixture, result.metrics.cellFanGeometry, mode)
+    : "";
+  const vertexCollapse = vertexCollapseMode
+    ? vertexCollapseMarkup(fixture, result.metrics.vertexCollapseGeometry, mode)
+    : "";
+  const pixelParity = pixelParityMode
+    ? pixelParityMarkup(fixture, result.metrics.pixelParityGeometry, mode)
+    : "";
   const sides = mode === "independent" && state.layers.error
     ? [...model.usages.values()].flatMap(usages => usages.slice(0, 2).map((usage, index) => `<path class="usage-side side-${index ? "second" : "first"}" d="${pathData(usage.points)}"/>`)).join("")
     : "";
@@ -112,7 +152,7 @@ function renderSvg(model, fixture, mode, result) {
     : "";
   const deviation = mode === "independent" && state.layers.error ? deviationMarkup(result.comparison) : "";
   const protectedObjects = protectedObjectsMarkup(fixture);
-  const nodes = state.layers.nodes ? fixture.arcs.flatMap(arc => [arc.points[0], arc.points.at(-1)]).map(point => `<circle class="node" cx="${point[0]}" cy="${point[1]}" r="2.8"/>`).join("") : "";
+  const nodes = state.layers.nodes && !cellFanMode && !vertexCollapseMode && !pixelParityMode ? fixture.arcs.flatMap(arc => [arc.points[0], arc.points.at(-1)]).map(point => `<circle class="node" cx="${point[0]}" cy="${point[1]}" r="2.8"/>`).join("") : "";
   const ids = state.layers.ids ? fixture.arcs.map(arc => {
     const midpoint = arc.points[Math.floor((arc.points.length - 1) / 2)];
     return `<text class="arc-id" x="${midpoint[0] + 4}" y="${midpoint[1] - 4}">${arc.id}</text>`;
@@ -121,9 +161,175 @@ function renderSvg(model, fixture, mode, result) {
     independent: "逐区域独立处理对照",
     shared: "共享弧线处理结果",
     raw: "原始轮廓",
-    processed: "处理后轮廓"
+    processed: "处理后轮廓",
+    "legacy-surface": "旧策略原始填色与局部修补",
+    "shared-surface": "XOR 修补后三角面与描边",
+    "legacy-band": "旧策略四三角过渡带翻面",
+    "exact-surface": "最终 XOR 填色与共享描边",
+    "legacy-cell-fan": "正式单元旧中心扇形越界",
+    "earcut-cell-surface": "正式单元边界 Earcut 三角化",
+    "collapsed-grid-surface": "正式旧数据零长度共享边",
+    "resolved-grid-surface": "正式新 writer 精确共享边",
+    "legacy-pixel-seams": "正式旧策略长针与浅色带",
+    "exact-pixel-parity": "正式边缘覆盖与细海岸线"
   };
-  return `<svg viewBox="-8 -8 336 236" role="img" aria-label="${labels[mode]}">${regions}${raw}${sides}${sameSource}${arcs}${protectedObjects}${deviation}${nodes}${ids}</svg>`;
+  return `<svg viewBox="-8 -8 336 236" role="img" aria-label="${labels[mode]}">${regions}${legacyRepair}${raw}${sides}${sameSource}${surfaceMismatch}${bandTriangles}${cellFan}${vertexCollapse}${pixelParity}${arcs}${protectedObjects}${deviation}${nodes}${ids}</svg>`;
+}
+
+function bandTriangleMarkup(fixture, geometry, mode) {
+  const model = fixture.bandTriangleComparison;
+  if (!model || !geometry) return "";
+  const centerline = `<path class="band-centerline" d="${pathData([model.centerA, model.centerB])}"/>`;
+  const endpoints = [model.centerA, model.centerB].map(point =>
+    `<circle class="band-centerpoint" cx="${round(point[0])}" cy="${round(point[1])}" r="3"/>`
+  ).join("");
+  if (mode === "exact-surface") {
+    return `<g class="band-final" aria-label="精确填色不再提交冗余过渡带">${centerline}${endpoints}<text x="170" y="92">0 个过渡带三角面</text><text x="170" y="106">XOR 填色与描边同源</text></g>`;
+  }
+  const nonZero = geometry.legacySignedAreas.filter(area => Math.abs(area) > 1e-6);
+  const winding = Math.sign(nonZero[0] || 0);
+  const triangles = geometry.legacyTriangles.map((points, index) => {
+    const opposite = Math.abs(geometry.legacySignedAreas[index]) > 1e-6 && Math.sign(geometry.legacySignedAreas[index]) !== winding;
+    return `<path class="band-triangle ${opposite ? "flipped" : "normal"}" d="${pathData([...points, points[0]])}"><title>${opposite ? "反向三角面" : "同向三角面"} · 有向面积 ${geometry.legacySignedAreas[index].toFixed(2)}</title></path>`;
+  }).join("");
+  return `<g aria-label="旧四三角过渡带">${triangles}${centerline}${endpoints}</g>`;
+}
+
+function surfaceMismatchMarkup(comparison) {
+  if (!comparison?.legacyMismatchPoints?.length) return "";
+  const size = Math.max(2.4, comparison.sampleStep);
+  const centroid = comparison.legacyMismatchPoints.reduce((sum, point) => [sum[0] + point[0], sum[1] + point[1]], [0, 0])
+    .map(value => value / comparison.legacyMismatchPoints.length);
+  return `<g class="surface-mismatch" aria-label="旧策略外露楔形">${comparison.legacyMismatchPoints.map(point =>
+    `<rect x="${round(point[0] - size / 2)}" y="${round(point[1] - size / 2)}" width="${size}" height="${size}"/>`
+  ).join("")}<text x="${round(centroid[0] + 8)}" y="${round(centroid[1] - 8)}">外露楔形 × ${comparison.legacyMismatchPoints.length}</text></g>`;
+}
+
+function cellFanMarkup(fixture, geometry, mode) {
+  const model = fixture.cellFanComparison;
+  if (!model || !geometry) return "";
+  const frames = [
+    {x: 16, y: 26, width: 136, height: 164},
+    {x: 168, y: 26, width: 136, height: 164}
+  ];
+  const scenes = geometry.cases.map((item, caseIndex) => {
+    const frame = frames[caseIndex];
+    const transform = fitPointsToFrame(item.points, frame);
+    const triangles = mode === "legacy-cell-fan" ? item.legacyTriangles : item.finalTriangles;
+    const leakIndices = new Set(mode === "legacy-cell-fan" ? item.legacyLeakIndices : item.finalLeakIndices);
+    const fill = item.side === "land" ? "#bde7ef" : "#5e8fc2";
+    const background = item.side === "land" ? "#5e8fc2" : "#bde7ef";
+    const triangleMarkup = triangles.map((triangle, index) => {
+      const points = triangle.map(transform);
+      return `<path class="cell-fan-triangle ${item.side} ${leakIndices.has(index) ? "leaked" : ""}" d="${pathData([...points, points[0]])}"><title>triangle ${index}${leakIndices.has(index) ? " · 越界" : ""}</title></path>`;
+    }).join("");
+    const boundary = item.points.map(transform);
+    const center = transform(item.center);
+    const leakCount = mode === "legacy-cell-fan" ? item.legacyLeakCount : item.finalLeakCount;
+    const sideLabel = item.side === "land" ? "陆单元" : "水单元";
+    const status = mode === "legacy-cell-fan" ? `越界 ${leakCount}` : `越界 ${leakCount}`;
+    return `<g><rect class="cell-fan-scene" x="${frame.x}" y="${frame.y}" width="${frame.width}" height="${frame.height}" rx="3" fill="${background}"/><g style="--cell-fill:${fill}">${triangleMarkup}<path class="cell-fan-boundary" d="${pathData([...boundary, boundary[0]])}"/>${mode === "legacy-cell-fan" ? `<circle class="cell-fan-center" cx="${round(center[0])}" cy="${round(center[1])}" r="2.2"/>` : ""}</g><rect class="cell-fan-frame" x="${frame.x}" y="${frame.y}" width="${frame.width}" height="${frame.height}" rx="3"/><text class="cell-fan-title" x="${frame.x + 5}" y="${frame.y + 12}">cell #${item.cell} · h${item.height} · ${sideLabel}</text><text class="cell-fan-status ${leakCount ? "fail" : "pass"}" x="${frame.x + 5}" y="${frame.y + frame.height - 7}">${status} · 邻高 ${item.neighborHeights.join("/")}</text></g>`;
+  }).join("");
+  const leakCount = mode === "legacy-cell-fan" ? geometry.legacyLeakCount : geometry.finalLeakCount;
+  return `<g class="cell-fan-comparison ${mode}" aria-label="stage-2-1 / 10k 正式单元，越界 ${leakCount}">${scenes}</g>`;
+}
+
+function vertexCollapseMarkup(fixture, geometry, mode) {
+  const model = fixture.vertexCollapseComparison;
+  if (!model || !geometry) return "";
+  const edge = mode === "collapsed-grid-surface" ? model.storedEdge : model.resolvedEdge;
+  const frame = {x: 42, y: 22, width: 236, height: 176};
+  const focus = [
+    (model.resolvedEdge[0][0] + model.resolvedEdge[1][0]) / 2,
+    (model.resolvedEdge[0][1] + model.resolvedEdge[1][1]) / 2
+  ];
+  const projectionScale = 0.9;
+  const transform = point => [
+    frame.x + frame.width / 2 + (point[0] - focus[0]) * model.projection.xCssPerWorld * projectionScale,
+    frame.y + frame.height / 2 + (point[1] - focus[1]) * model.projection.yCssPerWorld * projectionScale
+  ];
+  const start = transform(edge[0]);
+  const end = transform(edge[1]);
+  const cells = model.cells.map(cell => {
+    const precisePoints = cell.storedPoints.map((point, index) => {
+      if (mode === "collapsed-grid-surface") return point;
+      if (cell.vertexIds[index] === 5331) return model.resolvedEdge[0];
+      if (cell.vertexIds[index] === 5519) return model.resolvedEdge[1];
+      return point;
+    });
+    const points = precisePoints.map(transform);
+    return `<path class="vertex-collapse-cell ${cell.side}" d="${pathData([...points, points[0]])}"><title>cell #${cell.cell} · h${cell.height}</title></path>`;
+  }).join("");
+  const endpointMarkup = [start, end].map((point, index) =>
+    `<circle class="vertex-collapse-endpoint ${mode === "collapsed-grid-surface" ? "collapsed" : "resolved"}" cx="${round(point[0])}" cy="${round(point[1])}" r="${mode === "collapsed-grid-surface" ? 4.2 : 3}"><title>${index ? "v5519" : "v5331"}</title></circle>`
+  ).join("");
+  const cssLength = geometry.projectedCssLength.toFixed(2);
+  const label = mode === "collapsed-grid-surface"
+    ? "v5331 = v5519 · 水面仅单点相接"
+    : `精确共享边 · 当前现场 ${cssLength} CSS px`;
+  const clipId = `vertex-collapse-clip-${mode}`;
+  return `<g class="vertex-collapse-comparison ${mode}"><defs><clipPath id="${clipId}"><rect x="${frame.x}" y="${frame.y}" width="${frame.width}" height="${frame.height}" rx="3"/></clipPath></defs><rect class="vertex-collapse-scene" x="${frame.x}" y="${frame.y}" width="${frame.width}" height="${frame.height}" rx="3"/><g clip-path="url(#${clipId})">${cells}<path class="vertex-collapse-edge" d="${pathData([start, end])}"/>${endpointMarkup}</g><rect class="vertex-collapse-frame" x="${frame.x}" y="${frame.y}" width="${frame.width}" height="${frame.height}" rx="3"/><text class="vertex-collapse-label" x="${frame.x + 8}" y="${frame.y + 14}">${label}</text><text class="vertex-collapse-source" x="${frame.x + 8}" y="${frame.y + frame.height - 8}">stage-2-1 / 10k · cell #6255 + #6378</text></g>`;
+}
+
+function pixelParityMarkup(fixture, geometry, mode) {
+  const model = fixture.pixelParityComparison;
+  if (!model || !geometry) return "";
+  const legacy = mode === "legacy-pixel-seams";
+  const lakeFrame = {x: 18, y: 30, width: 132, height: 154};
+  const coastFrame = {x: 170, y: 30, width: 132, height: 154};
+  const lakePoints = [...model.lakeNeedle.oldBoundary, ...model.lakeNeedle.correctionTriangle, ...model.lakeNeedle.renderBoundaryEdge];
+  const lakeTransform = fitPointsToFrame(lakePoints, lakeFrame);
+  const oldBoundary = model.lakeNeedle.oldBoundary.map(lakeTransform);
+  const correctionTriangle = model.lakeNeedle.correctionTriangle.map(lakeTransform);
+  const renderBoundaryEdge = model.lakeNeedle.renderBoundaryEdge.map(lakeTransform);
+  const coastTransform = fitPointsToFrame(model.coastStroke.segment, coastFrame);
+  const coastSegment = model.coastStroke.segment.map(coastTransform);
+  const strokeWidth = legacy
+    ? Math.max(1, geometry.legacyProjectedStrokeCss)
+    : Math.max(1, geometry.finalProjectedStrokeCss);
+  const lakeCorrection = `<path class="pixel-parity-water-correction" d="${pathData([...oldBoundary, oldBoundary[0]])}"/><path class="pixel-parity-water-correction" d="${pathData([...correctionTriangle, correctionTriangle[0]])}"/>`;
+  const lakeSeam = legacy
+    ? `<path class="pixel-parity-missing" d="${pathData(renderBoundaryEdge)}"/>`
+    : `<path class="pixel-parity-boundary-cover" d="${pathData(renderBoundaryEdge)}"/>`;
+  const lakeLabel = legacy
+    ? `边缘裸露 1 · 陆色像素针`
+    : `同色覆盖 0.18 · 连续水面`;
+  const coastLabel = legacy
+    ? `海岸浅带 ${geometry.legacyProjectedStrokeCss.toFixed(2)}px`
+    : `海岸细线 ${geometry.finalProjectedStrokeCss.toFixed(2)}px`;
+  return `<g class="pixel-parity-comparison ${mode}">
+    <rect class="pixel-parity-water" x="${lakeFrame.x}" y="${lakeFrame.y}" width="${lakeFrame.width}" height="${lakeFrame.height}" rx="3"/>
+    ${lakeCorrection}
+    ${lakeSeam}
+    <rect class="pixel-parity-frame" x="${lakeFrame.x}" y="${lakeFrame.y}" width="${lakeFrame.width}" height="${lakeFrame.height}" rx="3"/>
+    <text class="pixel-parity-title" x="${lakeFrame.x + 5}" y="${lakeFrame.y + 13}">湖岸 #6496 / #6617</text>
+    <text class="pixel-parity-status ${legacy ? "fail" : "pass"}" x="${lakeFrame.x + 5}" y="${lakeFrame.y + lakeFrame.height - 8}">${lakeLabel}</text>
+    <rect class="pixel-parity-land-bg" x="${coastFrame.x}" y="${coastFrame.y}" width="${coastFrame.width / 2}" height="${coastFrame.height}" rx="3"/>
+    <rect class="pixel-parity-water" x="${coastFrame.x + coastFrame.width / 2}" y="${coastFrame.y}" width="${coastFrame.width / 2}" height="${coastFrame.height}" rx="3"/>
+    <path class="pixel-parity-coastline" d="${pathData(coastSegment)}" style="stroke-width:${round(strokeWidth)}"/>
+    <rect class="pixel-parity-frame" x="${coastFrame.x}" y="${coastFrame.y}" width="${coastFrame.width}" height="${coastFrame.height}" rx="3"/>
+    <text class="pixel-parity-title" x="${coastFrame.x + 5}" y="${coastFrame.y + 13}">海岸 #6377 / #6378</text>
+    <text class="pixel-parity-status ${legacy ? "fail" : "pass"}" x="${coastFrame.x + 5}" y="${coastFrame.y + coastFrame.height - 8}">${coastLabel}</text>
+  </g>`;
+}
+
+function fitPointsToFrame(points, frame) {
+  const xs = points.map(point => point[0]);
+  const ys = points.map(point => point[1]);
+  const minX = Math.min(...xs);
+  const maxX = Math.max(...xs);
+  const minY = Math.min(...ys);
+  const maxY = Math.max(...ys);
+  const paddingX = 10;
+  const paddingTop = 20;
+  const paddingBottom = 22;
+  const scale = Math.min(
+    (frame.width - paddingX * 2) / Math.max(1e-6, maxX - minX),
+    (frame.height - paddingTop - paddingBottom) / Math.max(1e-6, maxY - minY)
+  );
+  const offsetX = frame.x + (frame.width - (maxX - minX) * scale) / 2 - minX * scale;
+  const offsetY = frame.y + paddingTop + (frame.height - paddingTop - paddingBottom - (maxY - minY) * scale) / 2 - minY * scale;
+  return point => [point[0] * scale + offsetX, point[1] * scale + offsetY];
 }
 
 function protectedObjectsMarkup(fixture) {
@@ -190,6 +396,36 @@ function metricsMarkup(metrics) {
     ["案例约束", `${constraintsPassed}/${metrics.caseConstraints.length}`, constraintsPassed === metrics.caseConstraints.length ? "good" : "bad"],
     ["自交 / 非法环", `${metrics.selfIntersections} / ${metrics.validRings ? 0 : 1}`, metrics.selfIntersections || !metrics.validRings ? "bad" : "good"]
   ];
+  if (metrics.surfaceClassification) {
+    values.push(
+      ["raw XOR processed", `${metrics.surfaceClassification.xorSamples} 点 / ${metrics.surfaceClassification.xorArea.toFixed(0)} px²`, "notice"],
+      ["旧策略未覆盖", `${metrics.surfaceClassification.legacyMismatchSamples} 点`, metrics.surfaceClassification.legacyMismatchSamples ? "bad" : "good"],
+      ["XOR 修补三角形", `${metrics.surfaceClassification.correctionTriangleCount} 个`, metrics.surfaceClassification.correctionDegenerateTriangles ? "bad" : "good"],
+      ["修补后错分", `${metrics.surfaceClassification.sharedMismatchSamples} 点`, metrics.surfaceClassification.sharedMismatchSamples ? "bad" : "good"]
+    );
+  }
+  if (metrics.bandTriangleGeometry) {
+    values.push(
+      ["旧带反向三角面", metrics.bandTriangleGeometry.legacyOppositeWindingCount, metrics.bandTriangleGeometry.legacyOppositeWindingCount ? "bad" : "good"],
+      ["最终冗余过渡面", metrics.bandTriangleGeometry.finalTriangleCount, metrics.bandTriangleGeometry.finalTriangleCount ? "bad" : "good"]
+    );
+  }
+  if (metrics.cellFanGeometry) {
+    values.push(
+      ["正式来源", `${metrics.cellFanGeometry.source.seed} / ${metrics.cellFanGeometry.source.cellsTarget}`, "notice"],
+      ["正式原始 cell", metrics.cellFanGeometry.cases.map(item => `#${item.cell}`).join(" / "), "notice"],
+      ["旧中心扇越界", `${metrics.cellFanGeometry.legacyLeakCount} 个`, metrics.cellFanGeometry.legacyLeakCount ? "bad" : "good"],
+      ["旧 0.1 世界单位异侧采样", `${metrics.cellFanGeometry.legacyRasterLeakSamples} 点`, metrics.cellFanGeometry.legacyRasterLeakSamples ? "bad" : "good"],
+      ["Earcut 最终越界", `${metrics.cellFanGeometry.finalLeakCount} 个 / ${metrics.cellFanGeometry.finalRasterLeakSamples} 点`, metrics.cellFanGeometry.finalLeakCount || metrics.cellFanGeometry.finalRasterLeakSamples ? "bad" : "good"]
+    );
+  }
+  if (metrics.pixelParityGeometry) {
+    values.push(
+      ["正式来源", `${metrics.pixelParityGeometry.source.seed} / ${metrics.pixelParityGeometry.source.cellsTarget}`, "notice"],
+      ["裸露边缘", `${metrics.pixelParityGeometry.legacyUncoveredBoundaryEdges} → ${metrics.pixelParityGeometry.finalUncoveredBoundaryEdges}`, metrics.pixelParityGeometry.finalUncoveredBoundaryEdges ? "bad" : "good"],
+      ["海岸截图投影线宽", `${metrics.pixelParityGeometry.legacyProjectedStrokeCss.toFixed(2)} → ${metrics.pixelParityGeometry.finalProjectedStrokeCss.toFixed(2)} CSS px`, metrics.pixelParityGeometry.finalProjectedStrokeCss > metrics.pixelParityGeometry.maximumFinalCssWidth ? "bad" : "good"]
+    );
+  }
   const cards = values.map(([label, value, className]) => `<div class="metric ${className}"><span>${label}</span><strong>${value}</strong></div>`).join("");
   const constraints = metrics.caseConstraints.map(item => `<div class="constraint ${item.pass ? "pass" : "fail"}"><span>${item.label}</span><strong>${formatConstraintValue(item.value)}</strong></div>`).join("");
   return `${cards}<div class="constraint-strip">${constraints}</div>`;
