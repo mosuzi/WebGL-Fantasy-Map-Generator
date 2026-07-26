@@ -4,6 +4,15 @@ import {createStageProfile} from "./profile.js";
 import {MinPriorityQueue} from "./priority-queue.js";
 import {createRandom} from "./random.js";
 import {normalizeRiverNetwork} from "./river-network.js";
+import {
+  activateOverflowRoute,
+  applyLakeOverflowDiagnostics,
+  applyOverflowRouteOrdering,
+  buildLakeEscapeField,
+  createLakeOverflowPlan,
+  evaluateLakeOverflow,
+  lakeIncisionBudget
+} from "./lake-overflow.js";
 
 const WATER_LEVEL = 20;
 const MIN_FLUX_TO_FORM_RIVER = 30;
@@ -20,6 +29,7 @@ export function buildRivers(grid, features, pack, options = {}) {
   const cells = pack.cells;
   const riverPaths = new Map();
   const riverParents = new Map();
+  let incisedTransitions = 0;
   const variation = profile.stage("variation", "生成河流扰动", () => createRiverVariation(cells, options));
   let effectiveHeights = profile.stage("alter-heights", "构建河流有效高度", () => alterHeights(cells, variation));
   profile.stage("detect-closed-lakes", "识别闭合湖泊", () => detectCloseLakes(pack, effectiveHeights));
@@ -32,12 +42,12 @@ export function buildRivers(grid, features, pack, options = {}) {
     cells.conf = new Uint8Array(cells.i.length);
   });
   const hydrology = profile.stage("init-hydrology", "初始化河流水文诊断", () => createHydrologyBuffers(cells));
-  const lakeOutCells = profile.stage("lake-climate", "计算湖泊水文", () => defineLakeClimateData(grid, pack, effectiveHeights, options, variation));
+  const lakeDrainage = profile.stage("lake-climate", "计算湖泊水文与溢流路径", () => defineLakeClimateData(grid, pack, effectiveHeights, options, variation));
 
   const cellsNumberModifier = Math.max(1, (Number(options.cellsTarget || grid.metadata.cellsDesired || grid.points.length) / 10000) ** 0.25);
   const land = profile.stage("sort-land", "按高度排序陆地 cell", () => Array.from(cells.i)
     .filter(cell => cells.h[cell] >= WATER_LEVEL)
-    .sort((a, b) => effectiveHeights[b] - effectiveHeights[a]));
+    .sort((a, b) => lakeDrainage.processingHeights[b] - lakeDrainage.processingHeights[a]));
 
   profile.stage("flow-accumulation", "累计降水并追踪河道", () => {
     let nextRiverId = 1;
@@ -46,13 +56,13 @@ export function buildRivers(grid, features, pack, options = {}) {
       addCellHydrology(hydrology, cells, cell, precipitation);
       addFlux(cells.fl, cell, precipitation / cellsNumberModifier);
 
-      const outletLakes = lakeOutCells[cell]
-        ? (pack.features || []).filter(feature => feature && cell === feature.outCell && feature.flux > feature.evaporation)
-        : [];
+      const outletLakes = (lakeDrainage.plansByOutCell.get(cell) || [])
+        .filter(entry => entry.evaluation.overflows);
 
-      for (const lake of outletLakes) {
+      for (const {lake, plan} of outletLakes) {
         const lakeCell = (cells.c[cell] || []).find(neighbor => effectiveHeights[neighbor] < WATER_LEVEL && cells.f[neighbor] === lake.i);
         if (lakeCell === undefined) continue;
+        activateOverflowRoute(lakeDrainage.activeDownstream, plan);
 
         addFlux(cells.fl, lakeCell, Math.max(lake.flux - lake.evaporation, 0));
         addLakeHydrology(hydrology, grid, cells, lakeCell, lake, variation);
@@ -65,7 +75,6 @@ export function buildRivers(grid, features, pack, options = {}) {
             addCellToRiver(riverPaths, lake.river, lakeCell);
           } else {
             cells.r[lakeCell] = nextRiverId;
-            addCellToRiver(riverPaths, nextRiverId, lakeCell);
             nextRiverId++;
           }
         }
@@ -79,8 +88,8 @@ export function buildRivers(grid, features, pack, options = {}) {
         continue;
       }
 
-      const downhill = getDownhillCell(pack, effectiveHeights, cell, lakeOutCells, outletLakes);
-      if (downhill === null || effectiveHeights[cell] <= effectiveHeights[downhill]) continue;
+      const downhill = getDownhillCell(pack, effectiveHeights, cell, lakeDrainage.activeDownstream, outletLakes);
+      if (downhill === null || (!lakeDrainage.activeDownstream.has(cell) && effectiveHeights[cell] <= effectiveHeights[downhill])) continue;
 
       if (cells.fl[cell] < MIN_FLUX_TO_FORM_RIVER) {
         if (cells.h[downhill] >= WATER_LEVEL) {
@@ -89,6 +98,10 @@ export function buildRivers(grid, features, pack, options = {}) {
         }
         continue;
       }
+
+      const rawRise = Math.max(0, Number(cells.h[downhill]) - Number(cells.h[cell]));
+      if (rawRise > 0 && !lakeDrainage.activeDownstream.has(cell) && rawRise > lakeIncisionBudget(cells.fl[cell])) continue;
+      if (rawRise > 0) incisedTransitions++;
 
       if (!cells.r[cell]) {
         cells.r[cell] = nextRiverId;
@@ -130,9 +143,32 @@ export function buildRivers(grid, features, pack, options = {}) {
       depressionMode,
       variationSalt: variation?.salt || null,
       networkDiagnostics: normalizedNetwork.diagnostics,
+      incisedTransitions,
+      lakeOverflow: summarizeLakeOverflow(pack.features),
       buildMs: timing.totalMs
     }
   };
+}
+
+function summarizeLakeOverflow(features) {
+  const summary = {
+    lakes: 0,
+    naturalOutlets: 0,
+    overflowChannels: 0,
+    balancedTerminals: 0,
+    incisionLimited: 0,
+    noEscape: 0
+  };
+  for (const feature of features || []) {
+    if (!feature || feature.type !== "lake") continue;
+    summary.lakes++;
+    if (feature.overflow?.status === "natural-outlet") summary.naturalOutlets++;
+    else if (feature.overflow?.status === "overflow-channel") summary.overflowChannels++;
+    else if (feature.overflow?.status === "balanced-terminal") summary.balancedTerminals++;
+    else if (feature.overflow?.status === "incision-limited") summary.incisionLimited++;
+    else if (feature.overflow?.status === "no-escape") summary.noEscape++;
+  }
+  return summary;
 }
 
 export function renameHydronymsByCulture(rivers, pack, options = {}) {
@@ -543,8 +579,11 @@ function collectActiveLandAroundCells(pack, cells, landMask) {
 
 function defineLakeClimateData(grid, pack, heights, options = {}, variation = null) {
   const {cells, features} = pack;
-  const lakeOutCells = new Uint16Array(cells.i.length);
   const exponent = options.heightExponent ?? HEIGHT_EXPONENT;
+  const processingHeights = Array.from(heights);
+  const plansByOutCell = new Map();
+  const activeDownstream = new Map();
+  const escapeField = buildLakeEscapeField(pack, heights);
 
   for (const feature of features || []) {
     if (!feature || feature.type !== "lake") continue;
@@ -552,13 +591,47 @@ function defineLakeClimateData(grid, pack, heights, options = {}, variation = nu
     feature.flux = getLakeFlux(grid, cells, feature, variation);
     feature.temp = getLakeTemperature(grid, cells, feature);
     feature.evaporation = getLakeEvaporation(feature, exponent);
-    if (feature.closed || !feature.shoreline?.length) continue;
+    if (!feature.shoreline?.length) {
+      applyLakeOverflowDiagnostics(feature, null, evaluateLakeOverflow(feature, null));
+      continue;
+    }
 
-    feature.outCell = minHeightCell(feature.shoreline, heights);
-    lakeOutCells[feature.outCell] = feature.i;
+    const plan = feature.closed
+      ? createLakeOverflowPlan(pack, heights, feature, escapeField, {heightExponent: exponent})
+      : createNaturalLakeOverflowPlan(feature, minHeightCell(feature.shoreline, heights), heights);
+    if (!plan) {
+      applyLakeOverflowDiagnostics(feature, null, evaluateLakeOverflow(feature, null));
+      continue;
+    }
+
+    feature.outCell = plan.outCell;
+    const evaluation = evaluateLakeOverflow(feature, plan);
+    applyLakeOverflowDiagnostics(feature, plan, evaluation);
+    const entries = plansByOutCell.get(plan.outCell) || [];
+    entries.push({lake: feature, plan, evaluation});
+    plansByOutCell.set(plan.outCell, entries);
+    if (plan.geomorphicClosed && evaluation.overflows) applyOverflowRouteOrdering(processingHeights, plan, feature.height);
   }
 
-  return lakeOutCells;
+  return {processingHeights, plansByOutCell, activeDownstream};
+}
+
+function createNaturalLakeOverflowPlan(lake, outCell, heights) {
+  if (!Number.isInteger(outCell) || outCell < 0) return null;
+  const spillElevation = Number(heights?.[outCell]);
+  return {
+    lakeId: Number(lake.i ?? lake.id ?? 0),
+    outCell,
+    route: [outCell],
+    terminalCell: null,
+    spillElevation: Number.isFinite(spillElevation) ? round(spillElevation, 3) : null,
+    spillRise: 0,
+    spillRiseMeters: 0,
+    storageCapacity: 0,
+    requiredIncision: 0,
+    geomorphicClosed: false,
+    method: "natural-gradient"
+  };
 }
 
 function getLakeFlux(grid, cells, lake, variation = null) {
@@ -578,10 +651,12 @@ function getLakeEvaporation(lake, exponent) {
   return round(evaporation * lake.cells);
 }
 
-function getDownhillCell(pack, heights, cell, lakeOutCells, outletLakes) {
+function getDownhillCell(pack, heights, cell, activeDownstream, outletLakes) {
   const {cells, features} = pack;
-  if (lakeOutCells[cell]) {
-    const outletLakeIds = new Set(outletLakes.map(lake => lake.i));
+  if (activeDownstream.has(cell)) return activeDownstream.get(cell);
+
+  if (outletLakes.length) {
+    const outletLakeIds = new Set(outletLakes.map(entry => entry.lake.i));
     const downhill = minNeighborHeightCell(cells.c[cell] || [], heights, neighbor => !outletLakeIds.has(features[cells.f[neighbor]]?.i));
     return downhill ?? null;
   }
@@ -683,7 +758,7 @@ function defineRivers({grid, pack, riverPaths, riverParents, options, nameGenera
 
   for (const [riverId, rawCells] of riverPaths) {
     const riverCells = dedupeConsecutive(rawCells);
-    if (riverCells.length < MIN_RIVER_CELLS) continue;
+    if (riverCells.length < MIN_RIVER_CELLS && !(riverCells.length >= 2 && isLakeOutletRiver(pack, riverId))) continue;
     const source = riverCells[0];
     if (source < 0 || cells.h[source] < WATER_LEVEL) continue;
     const mouth = getRiverMouth(riverCells);
@@ -730,6 +805,10 @@ function defineRivers({grid, pack, riverPaths, riverParents, options, nameGenera
   }
 
   return rivers;
+}
+
+function isLakeOutletRiver(pack, riverId) {
+  return (pack.features || []).some(feature => feature?.type === "lake" && Number(feature.outlet) === Number(riverId));
 }
 
 function defineLakeNames(pack, nameGenerator) {
