@@ -884,7 +884,8 @@ const layers = Object.freeze([
   {id: "provinceLabels", label: "省份名称"},
   {id: "stateBorders", label: "国界"},
   {id: "provinceBorders", label: "省界"},
-  {id: "coastline", label: "水陆线"}
+  {id: "coastline", label: "水陆线"},
+  {id: "gridCells", label: "网格单元"}
 ]);
 
 const managementGroups = Object.freeze([

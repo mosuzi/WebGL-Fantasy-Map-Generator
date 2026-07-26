@@ -181,7 +181,7 @@
 
 > **执行门禁（2026-07-25）**：第 45～52、54～194、196～203 项已完成，第 53 项已移除；上述完成项不得重新执行各自原验收或重新计入待办。`Q-25～Q-27` 已转为第 201～203 项并完成，只有 `Q-28～Q-33` 仍未批准。
 
-当前未提交工作区 API 基线是：`window.webglGeneratorApi` 已覆盖 `14` 个命名空间、`241` 个公开方法和 `129` 个编辑方法，稳定等级为 `233 / 7 / 1`；`241 / 241` 方法可通过 `info.describe` 发现，`objects` 覆盖 `17` 类对象，`cells` 已提供阶段 A 的四个只读方法。
+当前未提交工作区 API 基线是：`window.webglGeneratorApi` 已覆盖 `14` 个命名空间、`251` 个公开方法和 `135` 个编辑方法，稳定等级为 `243 / 7 / 1`；`251 / 251` 方法可通过 `info.describe` 发现，`objects` 覆盖 `17` 类对象，`cells` 已提供八个读取、定位、扫描与动作预检方法。
 
 第 101～107 项统一采用“调查 → 开发 → 审查测试”：调查阶段以当前代码生成真实分母并冻结既有契约，开发阶段只形成审计工具、清单、夹具和证据文档，审查测试阶段运行直接相关的静态门禁。第 101～106 项完成后分别本地提交，中途不启动浏览器；第 107 项复用同一浏览器统一完成用户可见验证、形成整改候选并提交。全部七项完成后才统一推送。任何正式应用行为修改都不属于本批。
 
@@ -711,19 +711,20 @@
   - 最小验收：专项旧图夹具覆盖稀疏高 ID 和缺失 / 陈旧镜像，证明创建成功后国家、省份、首都、城市与 cell 归属完整，撤销 / 重做可往返；注入任一创建阶段失败时完整快照不变。生产构建通过，并在用户同一 `5410` 存档中真实创建一个国家、核对可见结果后恢复验收前状态。
   - 完成记录：真实存档异常堆栈确认 `__stateEditorPackCellsByGrid` 运行时 `Map` 曾被旧存档序列化为普通 `{}`，恢复后预检调用 `.get()` 直接中断。现在缓存仅在确认为 `Map` 时复用，否则从 `pack.cells.g` 自动重建，并以不可枚举属性挂载，避免后续再次写入存档；稀疏高 ID 创建会在写入前把国家 / 省份归属数组扩到可容纳的新类型，任一阶段异常则恢复完整快照。陆地判断同时以可视 feature 语义为准，兼容旧高度与地貌标记不一致的地图。专项覆盖普通对象缓存、高 ID 扩容、旧地貌不一致、撤销 / 重做和故障回滚。用户同一 `5410` 存档先在首都省份得到明确保护提示，随后在合法陆地成功创建 `#4010 鲁国`，国家数 `21 → 22`、首都“晴岳”、cell / 城镇 / 人口均有效；验收后已撤销，恢复为 `21` 个国家且测试国家消失。
 
-- **权威任务第 195 项：Cells 诊断图层与面向 AI 的可判定 API。** `阶段 A 未提交实现尝试已通过；B～D 待推进；来源：用户直接要求`
+- **权威任务第 195 项：Cells 诊断图层与面向 AI 的可判定 API。** `阶段 A～D 已完成统一验收，当前未提交；来源：用户直接要求`
   - 范围：调查现有 Grid / Pack cell 数据、WebGL 图层注册、公开 API、国家创建命令和内部预检结果；设计默认关闭的 Grid Cells 诊断图层，以及 `api.cells` 查询 / 定位 / 扫描能力、国家创建只读预检与执行接口、稳定业务 code、地图 revision 和未来 AI 受控传输边界。
   - 设计约束：Grid 与 Pack cell 必须使用显式空间引用，`ok` 只表示 API 调用本身成功，业务不可执行使用 `allowed: false + code` 表达；诊断不得依赖“先执行再撤销”，写操作必须与只读预检分离并保留 `edit.states.add` 兼容入口。页面 API 与未来外部传输层解耦，默认不开放远程写入。
   - 历史设计阶段最小验收（已完成）：形成一份可独立评审的中文设计文档，覆盖图层范围 / 绘制顺序 / 性能策略、接口签名与结果示例、业务 code、并发陈旧检查、旧存档一致性、能力自描述、AI 调用流程、传输安全、分阶段实施建议与各阶段验收条件；该历史阶段只要求文档，不修改正式应用代码。
   - 当前实施总验收：新智能体评审给出 `RELEASE` 后，严格依次完成 A～D。最终第 200 项四类 `deferred-owned:195` 全部转为 covered；Cell 只读、诊断图层、定位扫描、34 条 planned-registry inspector、三族 createAtCell 和机器差集证明的白名单写入口均通过专项、旧图、失败原子性、API 聚合、10k / 50k / 100k 性能、生产构建与真实 Chrome 验收。
-  - 完成记录：新增 `docs/task-notes/cell-diagnostics-and-ai-api-design.md`。方案把首期图层固定为全量 `gridCells` 边线，采用共享边去重、静态 GPU buffer、按缩放受控显示编号；新增 `api.cells.get / getAtPoint / neighbors / query / locate / inspectAction / scan` 设计。国家创建的规范入口拆为 `edit.states.inspectCreateAtCell` 与 `edit.states.createAtCell`，并用 `mapRevision / inspectionToken` 防止 AI 依据陈旧预检写入。业务拒绝、运行时故障和警告分别建模；本轮重编排已明确删除远程 bridge 施工范围，A～D 当前进入新智能体评审循环，通过后按顺序实施。
+  - 完成记录：新增 `docs/task-notes/cell-diagnostics-and-ai-api-design.md`。方案把首期图层固定为全量 `gridCells` 边线，采用共享边去重、静态 GPU buffer、按缩放受控显示编号；实现 `cells.get / getAtPoint / neighbors / query / locate / scan / actions / inspectAction`。国家、省份、城市均新增 `inspectCreateAtCell / createAtCell`，并用 `mapIdentity / mapRevision / inspectionToken` 防止 AI 依据陈旧预检写入；业务拒绝、运行时故障和警告分别建模，未建设远程 bridge 或通用任意写入口。
   - 重编排依据：第 200 项机器矩阵已把 `cell.read / cell.visual-diagnostics / cell.action-inspection / cell.controlled-write` 四类能力登记为 `deferred-owned: 195`，并确认当前公共 API 已有 `13` 个命名空间、`237` 个方法、逐方法 schema 与对象发现能力。第 195 项不得重复建设 `info.describe`、对象查询、标签 / 洋流 / 高度语义 API 或远程 bridge。
   - P0 动作矩阵：机器生成 `docs/audits/cell-action-replanning-matrix.json / .md`，直接消费第 200 项全量矩阵、当前画布模式和非注册直接操控审计。第 200 项 `deferred-owned:195` 为 `4 / 4`，分别归入 A、B、C、C+D；当前注册模式 `28 / 28`、非注册直接操控 `19 / 19`（展开宿主实例 `89 / 89`）、总计 `47` 行。每项记录 actionId、`grid / pack / world / client` 输入空间、源码入口、inspect / execute 目标、阶段、历史、回滚和兼容；双向差集、重复 actionId、任一必填字段、空目标与空源码引用缺口均为 `0`。
   - 阶段 A——Cell 只读基础：新增统一 `cells` 命名空间及 `get / getAtPoint / neighbors / query`，使用显式 Grid / Pack 引用、字段白名单、稳定 cursor、分页和 JSON 副本；建立运行时地图 identity / revision，但本阶段不改选择、相机、历史或地图。
-  - 阶段 A 当前记录：工作区已实现四个只读方法、`cells.read` 能力组、统一 schema / business code、带运行时 secret 的 cursor、Grid / Pack 双向映射与一致性诊断；identity / revision 只挂运行时 state，不进入地图和存档。普通命令、撤销 / 重做、复合地图事务、完整回滚、no-op 与换图已有专项门禁。代码专项覆盖陆地、水域、边界、非法引用、旧图缺映射 / polygon、分页与 cursor 篡改；真实 Chrome 中世界点 / client 点命中同一 Grid cell，调用前后 checksum、revision、历史、选择、相机和 pick 不变，既有写入 `0 → 1`、撤销 `1 → 2`、同名 no-op 保持 `2`，WebGL / application health / console / page error 均为 `0`。API 聚合门禁最终为 `12 / 12 passed`（代码 `6`、真实 Chrome `6`、失败 / 跳过 `0 / 0`），其中完整 JSON / gzip / base64 与失败恢复、GEO、导出和名称库链均通过。本批按用户要求没有暂存、提交或推送；第 200 项机器矩阵的四条 deferred 状态继续保留到阶段 D 统一切换。
+  - 阶段 A 当前记录：工作区已实现四个只读方法、`cells.read` 能力组、统一 schema / business code、带运行时 secret 的 cursor、Grid / Pack 双向映射与一致性诊断；identity / revision 只挂运行时 state，不进入地图和存档。普通命令、撤销 / 重做、复合地图事务、完整回滚、no-op 与换图已有专项门禁。代码专项覆盖陆地、水域、边界、非法引用、旧图缺映射 / polygon、分页与 cursor 篡改；真实 Chrome 中世界点 / client 点命中同一 Grid cell，调用前后 checksum、revision、历史、选择、相机和 pick 不变。
   - 阶段 B——诊断图层与定位扫描：新增默认关闭的 `gridCells` 共享边图层、受缩放控制的 ID、`cells.locate / scan` 与图层 API 共路径；10k / 50k / 100k 下分别验证缓存、draw call、地图替换和关闭零开销。
   - 阶段 C——动作 inspector 与创建同族：唯一签名冻结为 `cells.inspectAction(actionId, input, options = {})`，actionId 使用领域语义名，modeId 只作映射元数据；以机器矩阵全部 `planned-registry` 行为闭合分母，当前为 `34 / 34`，双向差集 `0`，另有 `existing-api 1 / 1`、`excluded 12 / 12`。同一阶段一次性提供 `states / provinces / cities` 三族 `inspectCreateAtCell / createAtCell`，共用 revision / inspectionToken、稳定业务 code、单历史和失败原子性，旧 `.add(gridCell)` 继续兼容。
   - 阶段 D——受控写缺口与统一验收：依据阶段 C 的机器差集，只对白名单中仍缺少规范写入口的动作增加薄适配；已有 `edit.*` 方法只登记引用，不复制算法，不开放通用任意写。最终 action registry 的未覆盖写入口、无 inspector 业务拒绝和兼容缺口均为 `0`，并完成旧图、稀疏高 ID、异常回滚、API 聚合、真实 Chrome 与性能验收。
+  - 阶段 B～D 完成记录：新增默认关闭的 `gridCells` 静态共享边图层、独立诊断高亮、缩放与视口预算 ID、`cells.locate / scan`；10k / 50k / 100k 诊断 buffer 分别约 `1.37 / 6.86 / 13.76 MiB`，构建约 `33.8 / 489.7 / 1509.6ms`，最长切片 `2.7 / 6.3 / 9.9ms`。动作 registry 实际实现与计划均为 `34 / 34`，双向差集、空输入误放行、重复 actionId、空 inspect / execute 目标和结构 gap 均为 `0`；三族创建证明合法写入恰好一条历史与 revision `+1`，陈旧 token 零写入，注入异常完整恢复。第 200 项当前矩阵为 `987` 行：`covered 916 / excluded 71 / deferred-owned 0 / gap 0 / unknown 0 / unclassified 0`；第 204 项仍保持 `68` 个规则事务与 `10` 个玩法配方，未越界实现其 `5` 个碎片事务、`6` 个缺失规则或配方。生产构建和真实系统 Chrome 通过，浏览器中 Grid / Pack 定位同一视觉 cell、图层关闭 `0` draw、开启 `1` draw、强制 ID 可见，三族创建与撤销闭环，WebGL / application health / console / page error 均为 `0`。当前批次尚未提交或推送。
   - 禁止范围：不建设 MCP / HTTP / 远程写入 bridge，不开放裸 map、typed array 或通用 `execute(action, arbitraryPayload)`，不把面板拖动、焦点、列宽和原生文件选择器纳入地图 API。阶段 A～D 必须按顺序实施；任一阶段达到最小验收后立即转下一阶段，不借机扩展其它领域功能。
   - Revision / token 契约：每个地图使用不透明 identity；任一既有成功地图事务和成功 undo / redo 都令 revision 恰好 `+1` 并使旧 token 失效，拒绝、取消、no-op 和完整回滚不递增。换图生成新 identity，异步提交前复核 identity + revision。token 绑定 identity、revision、actionId、规范化输入指纹和 inspector schema version，不写入存档。
   - 编排评审：全新评审智能体前两轮分别因机器分母、revision / token、签名、权威状态、第 200 项上游消费与必填字段门禁给出 `NOT RELEASE`；修订后第三轮给出 `RELEASE`。最终门禁为 deferred `4 / 4`、模式 `28 / 28`、直接操控 `19 / 19` 类与 `89 / 89` 宿主实例、`47` 行、`planned-registry 34 / 34`、结构 gap `0`。
@@ -783,13 +784,13 @@
 
 - **权威任务第 204 项：全游戏复合语义接口、规则动作与玩法配方审计。** `梳理完成；来源：用户直接要求；第 195 项阶段 B～D 新前置`
   - 目标：不再按单个按钮或单个 API 方法枚举能力，而是从当前游戏模型中识别“一个玩家意图、但需要跨对象/跨系统、条件分支、业务预检或原子回滚”的规则事务；同时把殖民、战争、行政改革等多事务战略目标单列为 AI 规划器配方，避免制造无边界的超级 API。
-  - 封闭分母：直接消费第 200 项全量能力矩阵、当前 `API_METHODS`、第 195 项 Cell 动作矩阵、runtime actions、command / inspector exports 和既有产品规则。当前工作区分母为能力矩阵 `963` 行、公开 API `241` 方法、Cell / 画布动作 `47` 行、注册画布模式 `28` 个、非注册直接操控 `19` 类 / `89` 个宿主；新增任一方法、模式、直接操控或规则领域都必须让 source digest 要求重新审计。
+  - 封闭分母：直接消费第 200 项全量能力矩阵、当前 `API_METHODS`、第 195 项 Cell 动作矩阵、runtime actions、command / inspector exports 和既有产品规则。第 195 项收口后的当前工作区分母为能力矩阵 `987` 行、公开 API `251` 方法、Cell / 画布动作 `47` 行、注册画布模式 `28` 个、非注册直接操控 `19` 类 / `89` 个宿主；新增任一方法、模式、直接操控或规则领域都必须让 source digest 要求重新审计。
   - 分层规则：事实与原子原语继续提供只读、单字段和编辑器服务；规则事务必须使用 `inspect + execute + stable code + expectedRevision / inspectionToken + 单历史 + 完整回滚`；AI 规划器配方逐步调用规则事务，每步重新读取 revision 和授权，不伪造跨步骤原子性。
-  - 梳理结果：机器矩阵共 `78` 个动作族，其中规则事务 `68`、玩法配方 `10`；已有完整事务 `33`、已有写命令但缺 AI inspector `24`、多 API 碎片待收敛 `5`、尚缺完整游戏规则 `6`、配方 `10`。`241 / 241` 公开方法和 `47 / 47` Cell 动作均已归类，结构缺口 `0`。
+  - 梳理结果：机器矩阵共 `78` 个动作族，其中规则事务 `68`、玩法配方 `10`；已有完整事务 `33`、已有写命令但缺 AI inspector `24`、多 API 碎片待收敛 `5`、尚缺完整游戏规则 `6`、配方 `10`。当前 `251 / 251` 公开方法和 `47 / 47` Cell 动作均已归类，结构缺口 `0`。
   - P0 多 API 碎片：领土征服/割让/中立化与最后领土灭国、确保省份并分配 Cell、整省转移、名称库绑定并范围重命名、名称库替换/删除时迁移绑定。它们当前不能由 AI 安全串联，后续需独立规则事务。
   - P2 规则空白：省份合并、拆分，宣战、议和、宗藩变更和真实战斗结算。以上不是简单补接口，必须先冻结玩家规则、对象生命周期和跨域联动，再授权实施。
   - 产物：`docs/audits/compound-semantic-action-matrix.json / .md`、`docs/task-notes/compound-semantic-api-and-gameplay-rules.md`、生成工具与结构回归。玩法文档按世界、地形水文、生态、政治、定居点、社会、设施、经济、外交、军事、编辑器和 AI 配方组织，不按面板抄按钮。
-  - 与第 195 项关系：阶段 A 的 Cell 事实层保持；`cells.inspectAction` 只负责空间动作和原子输入预检，不能代替领域规则事务。阶段 B～D 恢复前必须消费本矩阵，把 Cell 级 inspector、领域复合事务和 AI 配方分层；本项没有授权直接实现 `68` 个规则事务或 `10` 个配方。
+  - 与第 195 项关系：`cells.inspectAction` 只负责空间动作和原子输入预检，不能代替领域规则事务。第 195 项阶段 B～D 已消费本矩阵并保持 Cell inspector、领域复合事务和 AI 配方分层；本项没有授权直接实现 `68` 个规则事务或 `10` 个配方。
   - 最小验收：生成报告与当前 source digest 一致；上游 full matrix 的 unknown / unclassified / gap 为 `0 / 0 / 0`；API、Cell 动作和配方步骤不存在未分类、陈旧引用、重复 actionId 或缺失规则目标；针对性回归和 `git diff --check` 通过。
 
 - **2026-07-26 临时修正：控制面板顶层 Tab 文字水平居中。** `已完成；来源：用户直接要求`

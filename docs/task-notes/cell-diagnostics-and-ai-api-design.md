@@ -35,7 +35,7 @@
 ### 2.3 API 系统
 
 - 当前公共 API 根对象是 `window.webglGeneratorApi`，开发便利别名为 `window.api`。
-- 当前未提交工作区基线为 `14` 个命名空间、`241` 个方法，其中 `129` 个编辑方法；根版本为 `1.0.0 / stable`。
+- 当前未提交工作区基线为 `14` 个命名空间、`251` 个方法，其中 `135` 个编辑方法；根版本为 `1.0.0 / stable`。
 - API 使用统一外层结果：
 
 ```js
@@ -748,7 +748,7 @@ identity、revision 与 token 都不是保存格式字段，只存在运行时�
 
 ### 前置 P0：按 Cell / Point / Path / Range 动作矩阵重编排
 
-P0 已在本次重编排中完成。机器权威产物为 `docs/audits/cell-action-replanning-matrix.json`，人读摘要为同目录 Markdown；生成器直接消费第 200 项全量能力矩阵、当前 `CANVAS_TOOL_MODE` 与非注册直接操控审计，并以 `audit:cell-action-replan` / `regress:cell-action-replan` 固定双向差集。第 200 项四类 `deferred-owned:195` 被逐条归入 A、B、C、C+D；当前结果为 deferred `4 / 4`、注册模式 `28 / 28`、非注册直接操控 `19 / 19`、展开宿主实例 `89 / 89`、总计 `47` 行、差集 / 重复 actionId / 任一必填字段 / 空目标 / 空来源 `0`。每行均记录 actionId、输入空间、源码入口与引用、inspect / execute 目标、实施阶段、历史 / 回滚和旧兼容。
+P0 已在本次重编排中完成。机器权威产物为 `docs/audits/cell-action-replanning-matrix.json`，人读摘要为同目录 Markdown；生成器直接消费第 200 项全量能力矩阵、当前 `CANVAS_TOOL_MODE`、非注册直接操控审计和实际 Cell action registry，并以 `audit:cell-action-replan` / `regress:cell-action-replan` 固定双向差集。第 200 项四类能力已逐条归入 A、B、C、C+D 并全部转为 `covered`；当前结果为第 195 项能力 `4 / 4`、注册模式 `28 / 28`、非注册直接操控 `19 / 19`、展开宿主实例 `89 / 89`、planned / actual registry `34 / 34`、总计 `47` 行、差集 / 重复 actionId / 任一必填字段 / 空目标 / 空来源 `0`。每行均记录 actionId、输入空间、源码入口与引用、inspect / execute 目标、实施阶段、历史 / 回滚和旧兼容。
 
 下表是机器产物的注册模式摘要；状态“已有写 API”只说明可参数化执行路径存在，不代表已具备统一只读 inspector、稳定业务 code 或 revision 防陈旧能力。
 
@@ -810,7 +810,7 @@ P0 完成标准冻结为：第 200 项 `deferred-owned:195` 必须全部消费�
 
 ### 阶段 A：Cell 只读基础
 
-当前实现状态：四个只读方法、运行时 identity / revision、schema、稳定 cursor、旧图诊断与专项 / Chrome 验收已经落入工作区；本批按用户要求不暂存、不提交、不推送。阶段 B～D 没有随本次尝试提前施工，第 200 项四条 `deferred-owned:195` 仍保留到阶段 D 统一转为 covered。
+当前实现状态：阶段 A～D 已全部落入未提交工作区。八个 `cells` 方法、运行时 identity / revision、schema、稳定 cursor、Grid Cells 图层、定位扫描、34 条动作 registry 与三族受控创建均通过专项、三档规模和真实 Chrome 代表矩阵；第 200 项四条 `deferred-owned:195` 已全部转为 `covered`。本批尚未暂存、提交或推送。
 
 1. 新增统一 `cells` 命名空间：`get / getAtPoint / neighbors / query`。
 2. Cell 引用必须显式区分 `{space: "grid", id}` 与 `{space: "pack", id}`；旧数字参数只在旧 `.add(gridCell)` 兼容路径解释为 Grid。
@@ -873,6 +873,16 @@ P0 完成标准冻结为：第 200 项 `deferred-owned:195` 必须全部消费�
 - action registry 中无 inspector 的业务拒绝、无 execute target 的参数化写入口、未知、未分类、无归属和真实 gap 均为 `0`。
 - API 声明、runtime、元数据、schema、业务 code、稳定性和确认策略双向一致。
 - API 聚合、旧数据、失败原子性、10k / 50k / 100k、生产构建和真实 Chrome 代表矩阵通过；性能遥测与应用错误继续分列。
+
+### 阶段 A～D 实施结果
+
+- API：`14` 个命名空间、`251` 个公开方法、`135` 个编辑方法，稳定等级 `243 / 7 / 1`，`251 / 251` 可描述且声明 / 元数据 / runtime 三向一致。
+- 图层：Grid Voronoi 共享边去重后写入独立 `GL.LINES` 静态 buffer；地图替换才失效，普通编辑复用；诊断高亮使用独立动态 buffer，ID 受缩放阈值与 `240` 个视口预算约束。
+- 三档规模：10k / 50k / 100k 的实际 Grid Cells 为 `9933 / 49824 / 99960`，边数 `30004 / 149933 / 300533`，buffer `1,440,192 / 7,196,784 / 14,425,584` bytes，构建 `33.8 / 489.7 / 1509.6ms`，最长切片 `2.7 / 6.3 / 9.9ms`。
+- Registry：planned / actual 均为 `34 / 34`；空输入、非法 CellRef、未知 actionId 均稳定拒绝，所有条目明确为 `editor-primitive / compoundRulesCovered=false`。第 204 项规则事务和 planner recipe 分层保持不变。
+- 创建：国家、省份、城市 inspector 首次调用不修改地图或挂载缓存；合法执行恰好一条历史和 revision `+1`，陈旧 token 拒绝，命令注入异常恢复完整集合快照且 revision / undo 均不变。
+- 矩阵：全量能力矩阵 `987` 行，`covered 916 / excluded 71 / deferred-owned 0 / gap 0 / unknown 0 / unclassified 0`；复合语义审计仍为 `68` 个规则事务、`10` 个玩法配方和结构缺口 `0`。
+- 浏览器：系统 Chrome 中 Grid / Pack 引用定位到同一视觉 cell；控制面板和 API 都可开关“网格单元”，关闭时额外 draw 为 `0`、开启为 `1`，强制目标 ID 可见；扫描、34 条登记、三族创建、陈旧 token 与撤销均通过，WebGL / application health / console / page error 为 `0`。
 
 ## 十三、验收标准
 

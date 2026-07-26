@@ -13,7 +13,8 @@ import {buildApiMethodCoverage} from "./api-capability-coverage.js";
 import {API_METHODS, API_STABILITY, API_VERSION, CONFIRM_REQUIRED_METHODS, buildApiContract, buildApiVersionContract, groupQualifiedMethodNames} from "./api-contract.js";
 import {buildApiDescriptionCoverage, buildApiMethodDescriptionRegistry, describeApiMethod} from "./api-schema-registry.js";
 import {getObjectSnapshot, listObjectSnapshots, listObjectTypes, queryObjectSnapshots} from "./object-query-api.js";
-import {getCellAtPoint, getCellNeighbors, getCellSnapshot, queryCells} from "./cell-query-api.js";
+import {getCellAtPoint, getCellNeighbors, getCellSnapshot, queryCells, scanCells} from "./cell-query-api.js";
+import {inspectCellAction, listCellActions} from "./cell-action-inspector-registry.js";
 
 export function installConsoleApi(documentRef, state, options = {}) {
   const view = documentRef.defaultView || window;
@@ -58,6 +59,24 @@ export function createConsoleApi(documentRef, state, actions = {}) {
       query: (query = {}) => apiCall(
         () => queryCells(state.map, query, state.mapRevision),
         cellReadonlyApiMetadata(state, "cells.query")
+      ),
+      locate: (reference, options = {}) => apiCall(
+        () => locateCellViaApi(state, actions, reference, options),
+        cellReadonlyApiMetadata(state, "cells.locate")
+      ),
+      scan: (query = {}) => apiCall(
+        () => scanCells(state.map, query, state.mapRevision, {
+          viewportBounds: state.renderer?.getViewportWorldBounds?.(),
+          signal: query?.signal
+        }),
+        cellReadonlyApiMetadata(state, "cells.scan")
+      ),
+      actions: () => apiCall(() => listCellActions(), cellReadonlyApiMetadata(state, "cells.actions")),
+      inspectAction: (actionId, actionInput, options = {}) => apiCall(
+        () => inspectCellAction(state.map, state.mapRevision, actionId, actionInput, options, {
+          delegate: (action, normalizedInput, inspectOptions) => delegateCellActionInspection(actions, action, normalizedInput, inspectOptions)
+        }),
+        cellReadonlyApiMetadata(state, "cells.inspectAction")
       )
     }),
     generate: Object.freeze({
@@ -158,6 +177,8 @@ export function createConsoleApi(documentRef, state, actions = {}) {
       }),
       cities: Object.freeze({
         add: gridCell => apiCall(() => requireApiAction(actions.edit?.cities?.add, "edit.cities.add")(gridCell)),
+        inspectCreateAtCell: request => apiCall(() => requireApiAction(actions.edit?.cities?.inspectCreateAtCell, "edit.cities.inspectCreateAtCell")(request)),
+        createAtCell: request => apiCall(() => requireApiAction(actions.edit?.cities?.createAtCell, "edit.cities.createAtCell")(request)),
         delete: (cityId, options = {}) => apiCall(() => requireApiAction(actions.edit?.cities?.delete, "edit.cities.delete")(cityId, options)),
         inspectMove: (cityId, target) => apiCall(() => requireApiAction(actions.edit?.cities?.inspectMove, "edit.cities.inspectMove")(cityId, target)),
         move: (cityId, target) => apiCall(() => requireApiAction(actions.edit?.cities?.move, "edit.cities.move")(cityId, target)),
@@ -169,6 +190,8 @@ export function createConsoleApi(documentRef, state, actions = {}) {
       }),
       provinces: Object.freeze({
         add: gridCell => apiCall(() => requireApiAction(actions.edit?.provinces?.add, "edit.provinces.add")(gridCell)),
+        inspectCreateAtCell: request => apiCall(() => requireApiAction(actions.edit?.provinces?.inspectCreateAtCell, "edit.provinces.inspectCreateAtCell")(request)),
+        createAtCell: request => apiCall(() => requireApiAction(actions.edit?.provinces?.createAtCell, "edit.provinces.createAtCell")(request)),
         delete: (provinceId, options = {}) => apiCall(() => requireApiAction(actions.edit?.provinces?.delete, "edit.provinces.delete")(provinceId, options)),
         rename: (provinceId, name) => apiCall(() => requireApiAction(actions.edit?.provinces?.rename, "edit.provinces.rename")(provinceId, name)),
         setColor: (provinceId, color) => apiCall(() => requireApiAction(actions.edit?.provinces?.setColor, "edit.provinces.setColor")(provinceId, color)),
@@ -176,6 +199,8 @@ export function createConsoleApi(documentRef, state, actions = {}) {
       }),
       states: Object.freeze({
         add: gridCell => apiCall(() => requireApiAction(actions.edit?.states?.add, "edit.states.add")(gridCell)),
+        inspectCreateAtCell: request => apiCall(() => requireApiAction(actions.edit?.states?.inspectCreateAtCell, "edit.states.inspectCreateAtCell")(request)),
+        createAtCell: request => apiCall(() => requireApiAction(actions.edit?.states?.createAtCell, "edit.states.createAtCell")(request)),
         delete: (stateId, options = {}) => apiCall(() => requireApiAction(actions.edit?.states?.delete, "edit.states.delete")(stateId, options)),
         inspectMerge: (options = {}) => apiCall(() => requireApiAction(actions.edit?.states?.inspectMerge, "edit.states.inspectMerge")(options)),
         merge: (options = {}) => apiCall(() => requireApiAction(actions.edit?.states?.merge, "edit.states.merge")(options)),
@@ -416,7 +441,12 @@ export function buildMethodMetadata() {
       get: {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
       getAtPoint: {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
       neighbors: {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
-      query: {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false}
+      query: {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
+      locate: {stable: "draft", mutates: "camera-and-diagnostic-display", undoable: false, async: false, requiresConfirm: false},
+      scan: {stable: "draft", mutates: "none", undoable: false, async: true, requiresConfirm: false}
+      ,
+      actions: {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
+      inspectAction: {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false}
     },
     oceanCurrents: {
       rename: {stable: "draft", mutates: "ocean-currents", undoable: true, async: false, requiresConfirm: false},
@@ -511,6 +541,8 @@ export function buildMethodMetadata() {
       "measurements.delete": {stable: "draft", mutates: "measurements", undoable: true, async: false, requiresConfirm: false},
       "measurements.import": {stable: "draft", mutates: "measurements", undoable: true, async: false, requiresConfirm: false},
       "cities.add": {stable: "draft", mutates: "settlements", undoable: true, async: false, requiresConfirm: false},
+      "cities.inspectCreateAtCell": {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
+      "cities.createAtCell": {stable: "draft", mutates: "settlements", undoable: true, async: false, requiresConfirm: false},
       "cities.delete": {stable: "draft", mutates: "settlements", undoable: true, async: false, requiresConfirm: true},
       "cities.inspectMove": {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
       "cities.move": {stable: "draft", mutates: "settlements-routes", undoable: true, async: false, requiresConfirm: false},
@@ -520,11 +552,15 @@ export function buildMethodMetadata() {
       "cities.setVisual": {stable: "draft", mutates: "settlements", undoable: true, async: false, requiresConfirm: false},
       "cities.resetVisual": {stable: "draft", mutates: "settlements", undoable: true, async: false, requiresConfirm: false},
       "provinces.add": {stable: "draft", mutates: "political-entities", undoable: true, async: false, requiresConfirm: false},
+      "provinces.inspectCreateAtCell": {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
+      "provinces.createAtCell": {stable: "draft", mutates: "political-entities", undoable: true, async: false, requiresConfirm: false},
       "provinces.delete": {stable: "draft", mutates: "political-entities", undoable: true, async: false, requiresConfirm: true},
       "provinces.rename": {stable: "draft", mutates: "political-entities", undoable: true, async: false, requiresConfirm: false},
       "provinces.setColor": {stable: "draft", mutates: "political-entities", undoable: true, async: false, requiresConfirm: false},
       "provinces.applyChanges": {stable: "draft", mutates: "political-entities", undoable: true, async: false, requiresConfirm: false},
       "states.add": {stable: "draft", mutates: "political-entities", undoable: true, async: false, requiresConfirm: false},
+      "states.inspectCreateAtCell": {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
+      "states.createAtCell": {stable: "draft", mutates: "political-entities", undoable: true, async: false, requiresConfirm: false},
       "states.delete": {stable: "draft", mutates: "political-entities", undoable: true, async: false, requiresConfirm: true},
       "states.inspectMerge": {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
       "states.merge": {stable: "draft", mutates: "political-topology", undoable: true, async: false, requiresConfirm: true},
@@ -735,6 +771,102 @@ function cellReadonlyApiMetadata(state, action) {
     action,
     readonly: true,
     ...(state.mapRevision?.getSnapshot?.() || {mapIdentity: null, mapRevision: 0})
+  };
+}
+
+function locateCellViaApi(state, actions, reference, options = {}) {
+  const cell = getCellSnapshot(state.map, reference, {
+    includeGeometry: false,
+    includeNeighbors: false,
+    includeDiagnostics: false
+  });
+  const normalized = normalizeCellLocateOptions(options);
+  if (normalized.openLayer) requireApiAction(actions.layers?.setVisible, "layers.setVisible")("gridCells", true);
+  if (typeof state.renderer?.locateCell !== "function") {
+    const error = new Error("当前 renderer 不支持 Cell 定位");
+    error.code = "api_error";
+    throw error;
+  }
+  return state.renderer.locateCell(cell.ref, {...normalized, openLayer: false});
+}
+
+function delegateCellActionInspection(actions, action, input, options) {
+  const target = action.inspectTarget;
+  if (target.startsWith("cells.inspectAction:")) return null;
+  if (target === "edit.states.inspectCreateAtCell") return requireApiAction(actions.edit?.states?.inspectCreateAtCell, target)(input);
+  if (target === "edit.provinces.inspectCreateAtCell") return requireApiAction(actions.edit?.provinces?.inspectCreateAtCell, target)(input);
+  if (target === "edit.cities.inspectCreateAtCell") return requireApiAction(actions.edit?.cities?.inspectCreateAtCell, target)(input);
+  if (target === "edit.cities.inspectMove") {
+    return requireApiAction(actions.edit?.cities?.inspectMove, target)(
+      input.cityId ?? input.city?.id,
+      input.target ?? input.cell
+    );
+  }
+  if (target === "edit.cultures.inspectExpansion") {
+    return requireApiAction(actions.edit?.cultures?.inspectExpansion, target)(
+      input.cultureId ?? input.culture?.id,
+      input.options ?? input
+    );
+  }
+  if (target === "edit.religions.inspectExpansion") {
+    return requireApiAction(actions.edit?.religions?.inspectExpansion, target)(
+      input.religionId ?? input.religion?.id,
+      input.options ?? input
+    );
+  }
+  if (target === "edit.biomes.inspectSuitability") {
+    return requireApiAction(actions.edit?.biomes?.inspectSuitability, target)(
+      input.gridCellIds ?? input.cells ?? [],
+      input.options ?? options
+    );
+  }
+  if (target === "edit.economy.inspectAssignment") {
+    return requireApiAction(actions.edit?.economy?.inspectAssignment, target)(
+      input.marketId ?? input.market?.id,
+      input.packCellIds ?? input.cells ?? []
+    );
+  }
+  if (target === "edit.routes.inspectEdit") {
+    return requireApiAction(actions.edit?.routes?.inspectEdit, target)(
+      input.routeId ?? input.route?.id,
+      input.patch ?? input
+    );
+  }
+  if (target === "edit.features.inspectPatch") {
+    return requireApiAction(actions.edit?.features?.inspectPatch, target)(input);
+  }
+  if (target === "edit.features.inspectTopology") {
+    return requireApiAction(actions.edit?.features?.inspectTopology, target)(input);
+  }
+  const error = new Error(`Cell action registry 的 inspector target 无运行时委托：${target}`);
+  error.code = "action-not-inspectable";
+  throw error;
+}
+
+function normalizeCellLocateOptions(options) {
+  if (!options || typeof options !== "object" || Array.isArray(options)) {
+    const error = new Error("Cell 定位选项必须是对象");
+    error.code = "invalid_argument";
+    throw error;
+  }
+  const allowed = new Set(["fit", "flash", "openLayer"]);
+  const unknown = Object.keys(options).filter(key => !allowed.has(key));
+  if (unknown.length) {
+    const error = new Error(`Cell 定位选项包含未知字段：${unknown.join("、")}`);
+    error.code = "invalid_argument";
+    throw error;
+  }
+  for (const key of allowed) {
+    if (options[key] !== undefined && typeof options[key] !== "boolean") {
+      const error = new Error(`${key} 必须是布尔值`);
+      error.code = "invalid_argument";
+      throw error;
+    }
+  }
+  return {
+    fit: options.fit !== false,
+    flash: options.flash !== false,
+    openLayer: options.openLayer === true
   };
 }
 
@@ -1001,6 +1133,9 @@ function buildLayerSnapshot(state, documentRef) {
     colorMode: rendererStats.colorMode || preferences.colorMode || "height",
     visualTheme: rendererStats.viewOptions?.visualTheme?.id || rendererStats.visualTheme || preferences.visualTheme || state?.options?.visualTheme || "default",
     layers: {...(rendererStats.layerVisibility || preferences.layers || {})},
+    diagnostics: {
+      gridCells: {...(rendererStats.diagnostics?.gridCells || {})}
+    },
     display: {
       showOceanHeight: Boolean(preferences.showOceanHeight),
       smoothCellBorders: Boolean(preferences.smoothCellBorders),

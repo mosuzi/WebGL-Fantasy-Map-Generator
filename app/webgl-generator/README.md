@@ -16,7 +16,7 @@
 - 可复现 seed/options 生成链路已经覆盖地形、气候、河流、文化、宗教、国家、省份、城市、路线、资源、经济、外交、静态军事和地区。
 - 地图对象使用统一 selection、定位、高亮、对象详情和领域面板；编辑进入 `EditHistory`，并通过 effects 驱动定向派生刷新。
 - 高度、国家、省份、文化、宗教及各类创建工具共用统一画布模式管理器，支持互斥、取消、完成、地图替换和未提交预览回滚。
-- `window.webglGeneratorApi` 当前工作区覆盖 `14` 个命名空间、`241` 个公开方法和 `129` 个编辑方法；`241 / 241` 方法可自描述，`objects` 支持 `17` 类对象，新增 `cells` 提供 Grid / Pack 只读查询，UI 与 API 共用 runtime action 和数据契约。
+- `window.webglGeneratorApi` 当前工作区覆盖 `14` 个命名空间、`251` 个公开方法和 `135` 个编辑方法；`251 / 251` 方法可自描述，`objects` 支持 `17` 类对象，`cells` 提供 Grid / Pack 查询、诊断定位、动作登记与国家 / 省份 / 城市受控 `createAtCell`，UI 与 API 共用 runtime action 和数据契约。
 - 完整地图 JSON/gzip、浏览器存档、GEO、高度图、名称库、备注和测量具备兼容/诊断入口；旧数据变化必须补 migration/backfill。
 - PNG 支持倍率、四种裁剪模式和七类 overlay 白名单；pack 与分层 GeoJSON 支持全图、当前视口和世界坐标 bbox，政治面支持 dissolve，并有 Chrome、QGIS 与 geojson.io 验收证据。
 

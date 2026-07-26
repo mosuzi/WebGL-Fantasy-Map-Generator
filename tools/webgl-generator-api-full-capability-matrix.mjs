@@ -91,30 +91,73 @@ const COMMAND_DOMAIN_BY_FILE = Object.freeze({
   "seafloor-reset.js": "height"
 });
 
-const DEFERRED_CELL_CAPABILITIES = Object.freeze([
+const TASK_195_CELL_CAPABILITIES = Object.freeze([
   {
     capabilityId: "cell.read",
     title: "Grid / Pack Cell 读取、映射、邻接与分页查询",
     inputSpace: "grid-cell-ref / pack-cell-ref / world-point / client-point",
-    evidence: ["docs/task-notes/cell-diagnostics-and-ai-api-design.md"]
+    apiMethods: ["cells.get", "cells.getAtPoint", "cells.neighbors", "cells.query", "cells.scan"],
+    preflight: "CellRef 归一化、地图 identity / revision 与分页 cursor 校验",
+    undoOrRollback: "只读，不写历史；取消扫描不改变地图",
+    async: true,
+    evidence: [
+      "app/webgl-generator/src/runtime/cell-query-api.js",
+      "docs/task-notes/cell-diagnostics-and-ai-api-design.md"
+    ]
   },
   {
     capabilityId: "cell.visual-diagnostics",
     title: "Grid Cells 共享边诊断层、ID 与诊断高亮",
     inputSpace: "grid-cell-ref / viewport",
-    evidence: ["docs/task-notes/cell-diagnostics-and-ai-api-design.md"]
+    apiMethods: ["cells.locate", "layers.get", "layers.setVisible"],
+    preflight: "CellRef 解析与 renderer 诊断能力检查",
+    undoOrRollback: "只改变相机、图层与诊断高亮，不写地图历史",
+    async: true,
+    evidence: [
+      "app/webgl-generator/src/renderer/grid-cell-diagnostics-layer.js",
+      "app/webgl-generator/src/renderer/placeholder-renderer.js",
+      "docs/task-notes/cell-diagnostics-and-ai-api-design.md"
+    ]
   },
   {
     capabilityId: "cell.action-inspection",
     title: "按 Cell / Point / Path / Range 动作 registry 与只读预检",
     inputSpace: "grid-cell-ref / pack-cell-ref / point / path / range",
-    evidence: ["docs/task-notes/cell-diagnostics-and-ai-api-design.md"]
+    apiMethods: [
+      "cells.actions",
+      "cells.inspectAction",
+      "edit.cities.inspectCreateAtCell",
+      "edit.provinces.inspectCreateAtCell",
+      "edit.states.inspectCreateAtCell"
+    ],
+    preflight: "34 条编辑原语 registry、领域 inspector 与 revision-bound inspection token",
+    undoOrRollback: "只读预检，不写历史；拒绝码稳定",
+    async: false,
+    evidence: [
+      "app/webgl-generator/src/runtime/cell-action-inspector-registry.js",
+      "app/webgl-generator/src/runtime/cell-inspection-token.js",
+      "docs/task-notes/cell-diagnostics-and-ai-api-design.md"
+    ]
   },
   {
     capabilityId: "cell.controlled-write",
     title: "国家、省份、城市等同族 createAtCell 与受控写入",
     inputSpace: "grid-cell-ref / inspection-token / expected-revision",
-    evidence: ["docs/task-notes/cell-diagnostics-and-ai-api-design.md"]
+    apiMethods: [
+      "edit.cities.createAtCell",
+      "edit.provinces.createAtCell",
+      "edit.states.createAtCell"
+    ],
+    preflight: "同 action、同输入、同 mapIdentity / mapRevision 的 inspection token 复核",
+    undoOrRollback: "成功恰好一条历史与 revision +1；异常恢复集合快照且 revision 不变",
+    async: false,
+    evidence: [
+      "app/webgl-generator/src/runtime/app.js",
+      "app/webgl-generator/src/runtime/city-edit-commands.js",
+      "app/webgl-generator/src/runtime/province-edit-commands.js",
+      "app/webgl-generator/src/runtime/state-edit-commands.js",
+      "docs/task-notes/cell-diagnostics-and-ai-api-design.md"
+    ]
   }
 ]);
 
@@ -141,7 +184,7 @@ export function buildFullCapabilityMatrix({allowGaps = false} = {}) {
     ...buildApiActionBindingRows(consoleApiSource, runtimeActions, apiMethods),
     ...buildCommandRows(apiMethods),
     ...buildApiRows(apiMethods),
-    ...DEFERRED_CELL_CAPABILITIES.map(buildDeferredCellRow),
+    ...TASK_195_CELL_CAPABILITIES.map(buildTask195CellRow),
     ...EXPLICIT_EXCLUSIONS.map(buildExplicitExclusionRow)
   ].sort((a, b) => a.matrixId.localeCompare(b.matrixId, "en"));
   const totals = summarizeRows(rows, interaction);
@@ -503,23 +546,26 @@ function buildApiRows(apiMethods) {
   }));
 }
 
-function buildDeferredCellRow(item) {
+function buildTask195CellRow(item) {
   return createRow({
-    matrixId: `deferred:${item.capabilityId}`,
+    matrixId: `task-195:${item.capabilityId}`,
     capabilityId: item.capabilityId,
     title: item.title,
-    sourceKind: "deferred-capability",
+    sourceKind: "task-195-cell-capability",
     sourceFiles: item.evidence,
+    apiMethods: item.apiMethods,
     inputSpace: item.inputSpace,
     mutates: item.capabilityId.endsWith("write") ? "map-data" : "none-or-runtime-display",
-    preflight: "第 195 项动作矩阵",
-    businessCodes: [],
-    confirm: "第 195 项定义",
-    undoOrRollback: "第 195 项定义",
-    async: false,
+    preflight: item.preflight,
+    businessCodes: item.capabilityId === "cell.action-inspection" || item.capabilityId === "cell.controlled-write"
+      ? ["ok", "action-not-inspectable", "cell-not-found", "inspection-stale", "inspection-token-invalid", "inspection-token-mismatch"]
+      : [],
+    confirm: false,
+    undoOrRollback: item.undoOrRollback,
+    async: item.async,
     compatibility: "保留旧数字 gridCell 入参与旧图兼容",
     evidence: item.evidence,
-    status: "deferred-owned",
+    status: "covered",
     owner: "权威任务第 195 项"
   });
 }
@@ -667,6 +713,13 @@ function buildSourceDigest(interactionDigest) {
   hash.update(interactionDigest);
   for (const file of [APP_PATH, join(RUNTIME_ROOT, "api-contract.js"), CONSOLE_API_PATH]) hash.update(readFileSync(file));
   for (const filename of Object.keys(COMMAND_DOMAIN_BY_FILE).sort()) hash.update(readFileSync(join(RUNTIME_ROOT, filename)));
+  for (const file of [
+    join(RUNTIME_ROOT, "cell-action-inspector-registry.js"),
+    join(RUNTIME_ROOT, "cell-inspection-token.js"),
+    join(RUNTIME_ROOT, "cell-query-api.js"),
+    join(REPO_ROOT, "app", "webgl-generator", "src", "renderer", "grid-cell-diagnostics-layer.js"),
+    join(REPO_ROOT, "app", "webgl-generator", "src", "renderer", "placeholder-renderer.js")
+  ]) hash.update(readFileSync(file));
   return hash.digest("hex");
 }
 
@@ -708,9 +761,11 @@ function renderMarkdown(matrix) {
     "",
     ...(runtimeGaps.length ? runtimeGaps.map(row => `- \`${row.action}\``) : ["- 无。"]),
     "",
-    "## 明确归属第 195 项",
+    "## 第 195 项 Cell 能力收口",
     "",
-    ...deferred.map(row => `- \`${row.capabilityId}\`：${row.title}`),
+    ...matrix.rows
+      .filter(row => row.owner === "权威任务第 195 项")
+      .map(row => `- \`${row.capabilityId}\`：${row.title}（${row.status}；${row.apiMethods.join("、")}）`),
     "",
     "## 保留排除项",
     "",

@@ -6,7 +6,7 @@ export const API_COMPATIBILITY_POLICY_VERSION = "1.0.0";
 export const API_METHODS = Object.freeze({
   info: Object.freeze(["version", "capabilities", "describe", "mapSummary", "runtimeStats", "healthEvents"]),
   objects: Object.freeze(["types", "get", "list", "query"]),
-  cells: Object.freeze(["get", "getAtPoint", "neighbors", "query"]),
+  cells: Object.freeze(["get", "getAtPoint", "neighbors", "query", "locate", "scan", "actions", "inspectAction"]),
   generate: Object.freeze(["getOptions", "setOptions", "newMap", "rerollSeed", "regenerate"]),
   oceanCurrents: Object.freeze(["rename", "regenerate", "inspectWorldRebuild", "rebuildWorld", "cancelWorldRebuild"]),
   selection: Object.freeze(["get", "resolve", "select", "clear", "locate", "pick", "flash", "highlight", "clearHighlights", "startEditing", "stopEditing", "toggleEditing"]),
@@ -17,9 +17,9 @@ export const API_METHODS = Object.freeze({
   edit: Object.freeze([
     "notes.createStandalone", "notes.set", "notes.delete", "notes.import", "notes.deleteBatch",
     "measurements.save", "measurements.rename", "measurements.updatePoints", "measurements.delete", "measurements.import",
-    "cities.add", "cities.delete", "cities.inspectMove", "cities.move", "cities.rename", "cities.setPopulation", "cities.syncOwner", "cities.setVisual", "cities.resetVisual",
-    "provinces.add", "provinces.delete", "provinces.rename", "provinces.setColor", "provinces.applyChanges",
-    "states.add", "states.delete", "states.inspectMerge", "states.merge", "states.inspectSplit", "states.split", "states.rename", "states.setColor", "states.setGovernment", "states.setCapital", "states.setGovernmentBatch", "states.applyChanges",
+    "cities.add", "cities.inspectCreateAtCell", "cities.createAtCell", "cities.delete", "cities.inspectMove", "cities.move", "cities.rename", "cities.setPopulation", "cities.syncOwner", "cities.setVisual", "cities.resetVisual",
+    "provinces.add", "provinces.inspectCreateAtCell", "provinces.createAtCell", "provinces.delete", "provinces.rename", "provinces.setColor", "provinces.applyChanges",
+    "states.add", "states.inspectCreateAtCell", "states.createAtCell", "states.delete", "states.inspectMerge", "states.merge", "states.inspectSplit", "states.split", "states.rename", "states.setColor", "states.setGovernment", "states.setCapital", "states.setGovernmentBatch", "states.applyChanges",
     "height.applyChanges", "height.inspectGlobalTransform", "height.applyGlobalTransform", "height.inspectTerrainTemplate", "height.applyTerrainTemplate", "height.inspectTerrainProgram", "height.applyTerrainProgram", "height.inspectRangeTransform", "height.applyRangeTransform", "height.inspectSelectionSmoothing", "height.applySelectionSmoothing", "height.inspectSeafloorReset", "height.applySeafloorReset", "height.rebuildBaseDerived", "height.rebuildDownstreamDerived", "height.rebuildAllDerived", "biomes.assignCells", "biomes.inspectSuitability", "biomes.applySuitability", "population.inspectAdjustment", "population.applyAdjustment", "population.inspectTransfer", "population.transfer", "diplomacy.setRelation",
     "economy.inspectAssignment", "economy.assignCells", "economy.rebuild", "economy.setGoodDisplay", "economy.setMarketDisplay",
     "military.setRatios", "military.setStatus", "military.setStatusBatch", "military.moveStation", "military.setBase", "military.recordBattleEvent", "military.importBattleEvents", "military.clearBattleEvents", "military.rename",

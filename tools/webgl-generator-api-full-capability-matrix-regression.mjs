@@ -13,7 +13,10 @@ assert.equal(totals.unownedParameterizableGap, 0, "全量能力矩阵仍有未�
 assert.ok(matrix.denominator.interactionSurfaces >= 103, "交互表面分母回退");
 assert.ok(matrix.denominator.canvasModes >= 28, "画布模式分母回退");
 assert.ok(matrix.denominator.publicApiMethods >= 208, "公共 API 分母回退");
-assert.ok(matrix.rows.some(row => row.status === "deferred-owned" && row.owner === "权威任务第 195 项"), "Cell 专项没有明确归属第 195 项");
+const task195Rows = matrix.rows.filter(row => row.owner === "权威任务第 195 项");
+assert.equal(task195Rows.length, 4, "第 195 项四类 Cell 能力分母发生变化");
+assert.ok(task195Rows.every(row => row.status === "covered" && row.apiMethods.length > 0), "第 195 项 Cell 能力没有全部转为 covered");
+assert.equal(matrix.rows.filter(row => row.status === "deferred-owned" && row.owner === "权威任务第 195 项").length, 0, "仍残留 deferred-owned:195");
 
 const syntheticGap = structuredClone(matrix);
 syntheticGap.rows.push({

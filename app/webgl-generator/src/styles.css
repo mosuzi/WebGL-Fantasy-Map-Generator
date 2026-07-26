@@ -9865,3 +9865,31 @@ input.ui-switch-native {
 .city-move-preview-warning {
   color: #e8bd6d;
 }
+.grid-cell-diagnostic-label-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.grid-cell-diagnostic-label {
+  position: absolute;
+  z-index: 8;
+  transform: translate(-50%, -50%);
+  padding: 1px 3px;
+  border: 1px solid rgb(19 27 32 / 45%);
+  border-radius: 3px;
+  background: rgb(246 239 217 / 82%);
+  color: #152127;
+  font: 600 9px/1.15 ui-monospace, SFMono-Regular, Consolas, monospace;
+  text-shadow: 0 1px 0 rgb(255 255 255 / 72%);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.grid-cell-diagnostic-label.forced {
+  z-index: 9;
+  border-color: #f2a52b;
+  background: rgb(255 239 170 / 94%);
+  color: #4b2600;
+  font-size: 11px;
+}

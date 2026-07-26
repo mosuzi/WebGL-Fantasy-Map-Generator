@@ -37,6 +37,10 @@ const FILTER_FIELDS = new Set([
 const DEFAULT_QUERY_FIELDS = Object.freeze(["id", "height", "featureId", "stateId", "provinceId"]);
 const DEFAULT_QUERY_LIMIT = 100;
 const MAX_QUERY_LIMIT = 1000;
+const SCAN_CHECKS = new Set(["terrain-consistency", "pack-mapping", "political-owner-range"]);
+const DEFAULT_SCAN_CHECKS = Object.freeze([...SCAN_CHECKS]);
+const DEFAULT_SCAN_LIMIT = 200;
+const MAX_SCAN_LIMIT = 1000;
 
 export function getCellSnapshot(map, reference, options = {}) {
   assertMap(map);
@@ -188,6 +192,100 @@ export function queryCells(map, query = {}, revision = null) {
     total: matched.length,
     limit,
     nextCursor: nextOffset < matched.length ? encodeCursor(nextOffset, contextSignature, signCursor) : null
+  };
+}
+
+export async function scanCells(map, query = {}, revision = null, context = {}) {
+  assertMap(map);
+  if (!query || typeof query !== "object" || Array.isArray(query)) throw cellApiError("invalid_argument", "Cell 扫描参数必须是对象");
+  assertOnlyKeys(query, ["space", "checks", "filter", "fields", "limit", "cursor", "signal"], "Cell 扫描");
+  const space = normalizeSpace(query.space ?? "grid");
+  const checks = normalizeScanChecks(query.checks);
+  const filter = normalizeScanFilter(query.filter);
+  const fields = normalizeFields(query.fields);
+  const limit = integerInRange(query.limit ?? DEFAULT_SCAN_LIMIT, 1, MAX_SCAN_LIMIT, "limit");
+  const revisionSnapshot = normalizeRevision(revision);
+  const signCursor = cursorSigner(revision);
+  const contextSignature = fingerprint(stableStringify({
+    mapIdentity: revisionSnapshot.mapIdentity,
+    mapRevision: revisionSnapshot.mapRevision,
+    space,
+    checks,
+    filter,
+    fields
+  }));
+  const ids = cellIds(map, space);
+  const mapping = buildCellMapping(map);
+  const viewportBounds = filter.viewport ? normalizeBounds(context.viewportBounds, "viewport") : null;
+  const bounds = filter.bbox || viewportBounds;
+  const signal = query.signal || context.signal;
+  const yieldToBrowser = typeof context.yieldToBrowser === "function" ? context.yieldToBrowser : defaultYieldToBrowser;
+  const sliceMs = Number.isFinite(Number(context.sliceMs)) && Number(context.sliceMs) > 0 ? Number(context.sliceMs) : 5;
+  const hits = [];
+  const counts = {};
+  let sliceStartedAt = performanceNow();
+  let maxSliceMs = 0;
+  let scanned = 0;
+
+  for (const id of ids) {
+    if (signal?.aborted) {
+      return {
+        cancelled: true,
+        code: "scan-cancelled",
+        scanned,
+        totalCandidates: ids.length,
+        counts,
+        samples: buildScanSamples(hits),
+        items: [],
+        count: 0,
+        nextCursor: null,
+        maxSliceMs: roundMs(performanceNow() - sliceStartedAt)
+      };
+    }
+    const ref = {space, id};
+    const row = buildQueryRow(map, ref, mapping);
+    if (bounds && !pointInBounds(row, bounds)) continue;
+    scanned++;
+    const diagnostics = filterScanDiagnostics(buildDiagnostics(map, ref, mapping), checks);
+    if (diagnostics.length) {
+      for (const item of diagnostics) counts[item.code] = (counts[item.code] || 0) + 1;
+      hits.push({
+        ref,
+        codes: [...new Set(diagnostics.map(item => item.code))],
+        details: diagnostics.map(cloneJson),
+        row
+      });
+    }
+    const elapsed = performanceNow() - sliceStartedAt;
+    if (elapsed >= sliceMs) {
+      maxSliceMs = Math.max(maxSliceMs, elapsed);
+      await yieldToBrowser();
+      sliceStartedAt = performanceNow();
+    }
+  }
+
+  maxSliceMs = Math.max(maxSliceMs, performanceNow() - sliceStartedAt);
+  const offset = decodeScanCursor(query.cursor, contextSignature, hits.length, signCursor);
+  const page = hits.slice(offset, offset + limit);
+  const nextOffset = offset + page.length;
+  return {
+    cancelled: false,
+    code: "scan-complete",
+    scanned,
+    totalCandidates: ids.length,
+    totalHits: hits.length,
+    counts,
+    samples: buildScanSamples(hits),
+    items: page.map(hit => ({
+      ref: {...hit.ref},
+      codes: [...hit.codes],
+      details: cloneJson(hit.details),
+      fields: projectRow(hit.row, fields)
+    })),
+    count: page.length,
+    truncated: nextOffset < hits.length,
+    nextCursor: nextOffset < hits.length ? encodeScanCursor(nextOffset, contextSignature, signCursor) : null,
+    maxSliceMs: roundMs(maxSliceMs)
   };
 }
 
@@ -493,6 +591,59 @@ function normalizeFilter(filter = {}) {
   return normalized;
 }
 
+function normalizeScanChecks(checks) {
+  if (checks === undefined) return [...DEFAULT_SCAN_CHECKS];
+  if (!Array.isArray(checks) || !checks.length) throw cellApiError("invalid_argument", "checks 必须是非空字符串数组");
+  const normalized = [...new Set(checks.map(value => String(value || "").trim()))].sort();
+  const unknown = normalized.filter(value => !SCAN_CHECKS.has(value));
+  if (unknown.length) throw cellApiError("action-not-inspectable", `当前阶段不支持以下 Cell 扫描检查：${unknown.join("、")}`);
+  return normalized;
+}
+
+function normalizeScanFilter(filter = {}) {
+  if (!filter || typeof filter !== "object" || Array.isArray(filter)) throw cellApiError("invalid_argument", "Cell 扫描 filter 必须是对象");
+  assertOnlyKeys(filter, ["viewport", "bbox"], "Cell 扫描 filter");
+  return {
+    viewport: booleanOption(filter.viewport, false, "filter.viewport"),
+    bbox: filter.bbox === undefined ? null : normalizeBounds(filter.bbox, "filter.bbox")
+  };
+}
+
+function normalizeBounds(bounds, name) {
+  if (!bounds || typeof bounds !== "object" || Array.isArray(bounds)) throw cellApiError("invalid_argument", `${name} 必须是 bbox 对象`);
+  assertOnlyKeys(bounds, ["minX", "minY", "maxX", "maxY"], name);
+  const normalized = Object.fromEntries(["minX", "minY", "maxX", "maxY"].map(key => [key, Number(bounds[key])]));
+  if (Object.values(normalized).some(value => !Number.isFinite(value))) throw cellApiError("invalid_argument", `${name} 必须包含有限的 minX / minY / maxX / maxY`);
+  if (normalized.minX > normalized.maxX || normalized.minY > normalized.maxY) throw cellApiError("invalid_argument", `${name} 的最小值不能大于最大值`);
+  return normalized;
+}
+
+function pointInBounds(row, bounds) {
+  return row.x >= bounds.minX && row.x <= bounds.maxX && row.y >= bounds.minY && row.y <= bounds.maxY;
+}
+
+function filterScanDiagnostics(diagnostics, checks) {
+  const enabled = new Set(checks);
+  return diagnostics.filter(item => {
+    if (enabled.has("terrain-consistency") && ["invalid-polygon", "feature-missing", "height-feature-mismatch"].includes(item.code)) return true;
+    if (enabled.has("pack-mapping") && ["grid-pack-mapping-missing", "pack-grid-mapping-missing", "pack-feature-mismatch", "pack-state-mismatch", "pack-province-mismatch"].includes(item.code)) return true;
+    if (enabled.has("political-owner-range") && ["state-missing", "province-missing", "burg-missing"].includes(item.code)) return true;
+    return false;
+  });
+}
+
+function buildScanSamples(hits) {
+  const samples = {};
+  for (const hit of hits) {
+    for (const code of hit.codes) {
+      const list = samples[code] || [];
+      if (list.length < 12) list.push({...hit.ref});
+      samples[code] = list;
+    }
+  }
+  return samples;
+}
+
 function normalizeFields(fields) {
   if (fields === undefined) return [...DEFAULT_QUERY_FIELDS];
   if (!Array.isArray(fields) || !fields.length) throw cellApiError("invalid_argument", "fields 必须是非空字段数组");
@@ -531,6 +682,25 @@ function decodeCursor(cursor, contextSignature, total, signCursor) {
   if (encodedContext !== contextSignature) throw cellApiError("cursor-stale", "Cell 查询 cursor 不属于当前地图 revision 或查询条件");
   const offset = Number.parseInt(encodedOffset, 36);
   if (!Number.isSafeInteger(offset) || offset < 0 || offset > total) throw cellApiError("cursor-invalid", "Cell 查询 cursor 偏移无效");
+  return offset;
+}
+
+function encodeScanCursor(offset, contextSignature, signCursor) {
+  const encodedOffset = offset.toString(36);
+  const check = signCursor(`${contextSignature}:${encodedOffset}`);
+  return `cells1.${encodedOffset}.${contextSignature}.${check}`;
+}
+
+function decodeScanCursor(cursor, contextSignature, total, signCursor) {
+  if (cursor === null || cursor === undefined || cursor === "") return 0;
+  if (typeof cursor !== "string") throw cellApiError("invalid_argument", "cursor 必须是字符串或 null");
+  const match = /^cells1\.([0-9a-z]+)\.([0-9a-f]{8})\.([0-9a-f]{8})$/.exec(cursor);
+  if (!match) throw cellApiError("cursor-invalid", "Cell 扫描 cursor 格式无效");
+  const [, encodedOffset, encodedContext, encodedCheck] = match;
+  if (signCursor(`${encodedContext}:${encodedOffset}`) !== encodedCheck) throw cellApiError("cursor-invalid", "Cell 扫描 cursor 已被篡改");
+  if (encodedContext !== contextSignature) throw cellApiError("cursor-stale", "Cell 扫描 cursor 不属于当前地图 revision 或扫描条件");
+  const offset = Number.parseInt(encodedOffset, 36);
+  if (!Number.isSafeInteger(offset) || offset < 0 || offset > total) throw cellApiError("cursor-invalid", "Cell 扫描 cursor 偏移无效");
   return offset;
 }
 
@@ -700,4 +870,20 @@ function cellApiError(code, message) {
 
 function cloneJson(value) {
   return value === undefined ? null : JSON.parse(JSON.stringify(value));
+}
+
+function defaultYieldToBrowser() {
+  return new Promise(resolve => {
+    const view = globalThis.window || globalThis;
+    if (typeof view.requestAnimationFrame === "function") view.requestAnimationFrame(() => resolve());
+    else setTimeout(resolve, 0);
+  });
+}
+
+function performanceNow() {
+  return globalThis.performance?.now?.() ?? Date.now();
+}
+
+function roundMs(value) {
+  return Math.round(Number(value) * 10) / 10;
 }

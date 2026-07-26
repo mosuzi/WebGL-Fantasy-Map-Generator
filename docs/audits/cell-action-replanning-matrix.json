@@ -1,21 +1,32 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "scope": "权威任务第 195 项 P0：Cell / Point / Path / Range 动作重编排矩阵",
   "generatedFrom": [
     "tools/webgl-generator-api-full-capability-matrix.mjs",
-    "tools/webgl-generator-interaction-direct-manipulation-audit.mjs"
+    "tools/webgl-generator-interaction-direct-manipulation-audit.mjs",
+    "app/webgl-generator/src/runtime/cell-action-inspector-registry.js"
   ],
-  "upstreamApiMatrixDigest": "81ffecc1baf12b6328b0e60f4b9d794e0cb0f07ad968cfd19f266f1851f60ecc",
-  "upstreamDeferredCapabilities": [
+  "upstreamApiMatrixDigest": "1b4de393631822138706c1aa5eedb821d7a82c512a8ceb663cc7301c25756c13",
+  "upstreamTask195Capabilities": [
     {
       "capabilityId": "cell.action-inspection",
       "title": "按 Cell / Point / Path / Range 动作 registry 与只读预检",
       "inputSpace": "grid-cell-ref / pack-cell-ref / point / path / range",
       "owner": "权威任务第 195 项",
+      "status": "covered",
+      "apiMethods": [
+        "cells.actions",
+        "cells.inspectAction",
+        "edit.cities.inspectCreateAtCell",
+        "edit.provinces.inspectCreateAtCell",
+        "edit.states.inspectCreateAtCell"
+      ],
       "phases": [
         "C"
       ],
       "evidence": [
+        "app/webgl-generator/src/runtime/cell-action-inspector-registry.js",
+        "app/webgl-generator/src/runtime/cell-inspection-token.js",
         "docs/task-notes/cell-diagnostics-and-ai-api-design.md"
       ]
     },
@@ -24,11 +35,21 @@
       "title": "国家、省份、城市等同族 createAtCell 与受控写入",
       "inputSpace": "grid-cell-ref / inspection-token / expected-revision",
       "owner": "权威任务第 195 项",
+      "status": "covered",
+      "apiMethods": [
+        "edit.cities.createAtCell",
+        "edit.provinces.createAtCell",
+        "edit.states.createAtCell"
+      ],
       "phases": [
         "C",
         "D"
       ],
       "evidence": [
+        "app/webgl-generator/src/runtime/app.js",
+        "app/webgl-generator/src/runtime/city-edit-commands.js",
+        "app/webgl-generator/src/runtime/province-edit-commands.js",
+        "app/webgl-generator/src/runtime/state-edit-commands.js",
         "docs/task-notes/cell-diagnostics-and-ai-api-design.md"
       ]
     },
@@ -37,10 +58,19 @@
       "title": "Grid / Pack Cell 读取、映射、邻接与分页查询",
       "inputSpace": "grid-cell-ref / pack-cell-ref / world-point / client-point",
       "owner": "权威任务第 195 项",
+      "status": "covered",
+      "apiMethods": [
+        "cells.get",
+        "cells.getAtPoint",
+        "cells.neighbors",
+        "cells.query",
+        "cells.scan"
+      ],
       "phases": [
         "A"
       ],
       "evidence": [
+        "app/webgl-generator/src/runtime/cell-query-api.js",
         "docs/task-notes/cell-diagnostics-and-ai-api-design.md"
       ]
     },
@@ -49,15 +79,23 @@
       "title": "Grid Cells 共享边诊断层、ID 与诊断高亮",
       "inputSpace": "grid-cell-ref / viewport",
       "owner": "权威任务第 195 项",
+      "status": "covered",
+      "apiMethods": [
+        "cells.locate",
+        "layers.get",
+        "layers.setVisible"
+      ],
       "phases": [
         "B"
       ],
       "evidence": [
+        "app/webgl-generator/src/renderer/grid-cell-diagnostics-layer.js",
+        "app/webgl-generator/src/renderer/placeholder-renderer.js",
         "docs/task-notes/cell-diagnostics-and-ai-api-design.md"
       ]
     }
   ],
-  "sourceDigest": "dee794d5272e9df319f4508f46d1fa8e0419aebcaad6ebd4db6cdf6c8777d7ff",
+  "sourceDigest": "df9f69c94c49cd3123cbb22d7fb09ac769ff7ef749488de2433c1484543138f7",
   "canonicalInspectorSignature": "cells.inspectAction(actionId, input, options = {})",
   "actionIdConvention": "<domain>.<verb> 或 <domain>.<verb>AtCell；CANVAS_TOOL_MODE modeId 只作为映射元数据",
   "revisionContract": {
@@ -81,21 +119,24 @@
     "classifiedDirectFamilies": 19,
     "directInstances": 89,
     "classifiedDirectInstances": 89,
-    "deferredOwned195": 4,
-    "classifiedDeferredOwned195": 4,
+    "task195Capabilities": 4,
+    "classifiedTask195Capabilities": 4,
     "rows": 47,
     "excludedDirectFamilies": 12,
     "plannedRegistryRows": 34,
+    "implementedRegistryRows": 34,
     "existingApiRows": 1,
     "gaps": 0
   },
   "coverage": {
-    "missingDeferredPolicies": [],
-    "extraDeferredPolicies": [],
+    "missingTask195Policies": [],
+    "extraTask195Policies": [],
     "missingModePolicies": [],
     "extraModePolicies": [],
     "missingDirectPolicies": [],
     "extraDirectPolicies": [],
+    "missingRegistryActions": [],
+    "extraRegistryActions": [],
     "duplicateActionIds": [],
     "unresolvedTargets": [],
     "unresolvedSourceEntries": [],

@@ -6,17 +6,17 @@
 
 - 交互表面：103（纳入 86，交互审计排除 17）
 - 画布模式：28
-- runtime actions：199
-- API action 绑定：198
-- command / inspector 导出：183
-- 公共 API 方法：237
-- 矩阵总行数：959
+- runtime actions：205
+- API action 绑定：204
+- command / inspector 导出：185
+- 公共 API 方法：251
+- 矩阵总行数：987
 
 ## 分类结果
 
-- covered：884
+- covered：916
 - excluded：71
-- deferred-owned：4
+- deferred-owned：0
 - gap：0
 - unknown：0
 - unclassified：0
@@ -30,12 +30,12 @@
 
 - 无。
 
-## 明确归属第 195 项
+## 第 195 项 Cell 能力收口
 
-- `cell.action-inspection`：按 Cell / Point / Path / Range 动作 registry 与只读预检
-- `cell.controlled-write`：国家、省份、城市等同族 createAtCell 与受控写入
-- `cell.read`：Grid / Pack Cell 读取、映射、邻接与分页查询
-- `cell.visual-diagnostics`：Grid Cells 共享边诊断层、ID 与诊断高亮
+- `cell.action-inspection`：按 Cell / Point / Path / Range 动作 registry 与只读预检（covered；cells.actions、cells.inspectAction、edit.cities.inspectCreateAtCell、edit.provinces.inspectCreateAtCell、edit.states.inspectCreateAtCell）
+- `cell.controlled-write`：国家、省份、城市等同族 createAtCell 与受控写入（covered；edit.cities.createAtCell、edit.provinces.createAtCell、edit.states.createAtCell）
+- `cell.read`：Grid / Pack Cell 读取、映射、邻接与分页查询（covered；cells.get、cells.getAtPoint、cells.neighbors、cells.query、cells.scan）
+- `cell.visual-diagnostics`：Grid Cells 共享边诊断层、ID 与诊断高亮（covered；cells.locate、layers.get、layers.setVisible）
 
 ## 保留排除项
 

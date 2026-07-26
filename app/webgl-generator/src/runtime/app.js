@@ -69,7 +69,7 @@ import {MapRevisionTracker} from "./map-revision.js";
 import {createGrayscaleHeightmapFromImage, createPaletteHeightmapFromImage, normalizeHeightmapImportPayload} from "./heightmap-import.js";
 import {createMapDocument, downloadText, mapFileBaseName, parseGeoJsonMeasurements, parseMapDocument, parseMapDocumentPayload, stringifyMapDocument} from "./map-file-io.js";
 import {attachImportDiagnostic, createHeightmapSourceSummary, createImportFailureDiagnostic, createImportSuccessDiagnostic, createMapImportDiagnostic, formatMapImportDiagnosticLines, inspectGeoImportSource, stringifyMapImportDiagnostic} from "./map-import-diagnostics.js";
-import {createAddCityAtCellCommand, createDeleteCityCommand, createRenameCitiesFromNamebaseCommand, createResetCityVisualCommand, createSetCityNoteCommand, createSetCityPopulationCommand, createSetCityVisualCommand, createSyncCityOwnerToCellCommand} from "./city-edit-commands.js";
+import {createAddCityAtCellCommand, createDeleteCityCommand, createRenameCitiesFromNamebaseCommand, createResetCityVisualCommand, createSetCityNoteCommand, createSetCityPopulationCommand, createSetCityVisualCommand, createSyncCityOwnerToCellCommand, inspectCityCreation} from "./city-edit-commands.js";
 import {createMoveCityCommand, inspectCityMove} from "./city-relocation.js";
 import {bindCityRelocationDrag} from "./city-relocation-drag.js";
 import {createAddCultureCommand, createApplyCultureAssignmentCommand, createDeleteCultureCommand, createSetCultureColorCommand, createSetCultureParentCommand} from "./culture-edit-commands.js";
@@ -130,7 +130,7 @@ import {applyMarketAssignmentPreview, buildMarketAssignmentChanges, createApplyM
 import {createRenameNamedObjectsFromNamebaseCommand, createRenameObjectCommand, createSetObjectNoteCommand, createSetProvinceColorCommand, createSetStateCapitalCommand} from "./object-edit-commands.js";
 import {createApplyFeaturePatchCommand, createDeleteLakeCommand, createExcavateLakeCommand, createRenameLakesFromNamebaseCommand, createSetLakeOutletCommand, inspectFeaturePatch, inspectLakeOutletChange} from "./lake-edit-commands.js";
 import {createApplyFeatureTopologyCommand, FEATURE_TOPOLOGY_MODE, inspectFeatureTopology, rebuildFeatureTopology} from "./feature-topology-edit-commands.js";
-import {applyProvinceBrushPreview, createAddProvinceAtCellCommand, createApplyProvinceBrushCommand, createDeleteProvinceCommand, PROVINCE_BRUSH_PREVIEW_EFFECTS} from "./province-edit-commands.js";
+import {applyProvinceBrushPreview, createAddProvinceAtCellCommand, createApplyProvinceBrushCommand, createDeleteProvinceCommand, inspectProvinceCreation, PROVINCE_BRUSH_PREVIEW_EFFECTS} from "./province-edit-commands.js";
 import {
   createAddReligionCommand,
   createApplyReligionAssignmentCommand,
@@ -149,7 +149,8 @@ import {captureMapMutationSnapshot, executeMapSnapshotTransaction, restoreMapMut
 import {SelectionStore} from "./selection-store.js";
 import {decideSelectionPanelRoute, SELECTION_PANEL_BINDINGS, SELECTION_PANEL_ROUTE} from "./selection-panel-policy.js";
 import {installKeyboardShortcuts} from "./keyboard-shortcuts.js";
-import {applyStateBrushPreview, createAddStateAtCellCommand, createApplyStateBrushCommand, createDeleteStateCommand, createRenameStatesFromNamebaseCommand, createSetStateColorCommand, createSetStateGovernmentCommand, createSetStatesGovernmentBatchCommand, STATE_BRUSH_PREVIEW_EFFECTS} from "./state-edit-commands.js";
+import {applyStateBrushPreview, createAddStateAtCellCommand, createApplyStateBrushCommand, createDeleteStateCommand, createRenameStatesFromNamebaseCommand, createSetStateColorCommand, createSetStateGovernmentCommand, createSetStatesGovernmentBatchCommand, inspectStateCreation, STATE_BRUSH_PREVIEW_EFFECTS} from "./state-edit-commands.js";
+import {issueCellInspectionToken, normalizeCellCreateInput, validateCellInspectionToken} from "./cell-inspection-token.js";
 import {createMergeStatesCommand, createSplitStateCommand, inspectStateMerge, inspectStateSplit, regenerateProvincesForStates} from "./state-topology-commands.js";
 import {createAddZoneCommand, createDeleteZoneCommand, createSetZoneStyleCommand} from "./zone-edit-commands.js";
 import {captureVisualThemeState, createSetUserVisualThemesCommand} from "./visual-theme-edit-commands.js";
@@ -2727,6 +2728,8 @@ function createRuntimeActions(state, documentRef, options = {}) {
       },
       cities: {
         add: gridCell => addCityViaApi(state, documentRef, gridCell),
+        inspectCreateAtCell: input => inspectCreateAtCellViaApi(state, "cities", input),
+        createAtCell: input => createAtCellViaApi(state, documentRef, "cities", input),
         delete: (cityId, options = {}) => deleteCityViaApi(state, documentRef, cityId, options),
         inspectMove: (cityId, target) => inspectCityMoveViaApi(state, cityId, target),
         move: (cityId, target) => moveCityViaApi(state, documentRef, cityId, target),
@@ -2738,6 +2741,8 @@ function createRuntimeActions(state, documentRef, options = {}) {
       },
       provinces: {
         add: gridCell => addProvinceViaApi(state, documentRef, gridCell),
+        inspectCreateAtCell: input => inspectCreateAtCellViaApi(state, "provinces", input),
+        createAtCell: input => createAtCellViaApi(state, documentRef, "provinces", input),
         delete: (provinceId, options = {}) => deleteProvinceViaApi(state, documentRef, provinceId, options),
         rename: (provinceId, name) => renameProvinceViaApi(state, documentRef, provinceId, name),
         setColor: (provinceId, color) => setProvinceColorViaApi(state, documentRef, provinceId, color),
@@ -2745,6 +2750,8 @@ function createRuntimeActions(state, documentRef, options = {}) {
       },
       states: {
         add: gridCell => addStateViaApi(state, documentRef, gridCell),
+        inspectCreateAtCell: input => inspectCreateAtCellViaApi(state, "states", input),
+        createAtCell: input => createAtCellViaApi(state, documentRef, "states", input),
         delete: (stateId, options = {}) => deleteStateViaApi(state, documentRef, stateId, options),
         inspectMerge: options => inspectStateMergeViaApi(state, options),
         merge: options => mergeStatesViaApi(state, documentRef, options),
@@ -7108,6 +7115,137 @@ function deleteLakeViaApi(state, documentRef, lakeId, options = {}) {
   updateRuntimePanel(documentRef, state);
   updateEditingInteractionLock(state, documentRef);
   return deleteApiResult(state, deletion);
+}
+
+function inspectCreateAtCellViaApi(state, domain, input) {
+  const normalized = normalizeCellCreateInput(input);
+  const actionId = `${domain}.createAtCell`;
+  const inspection = createAtCellInspector(domain)(state.map, normalized.cell.id);
+  const token = issueCellInspectionToken(state.mapRevision, actionId, normalized);
+  return {
+    allowed: Boolean(inspection.valid),
+    code: inspection.code,
+    summary: inspection.summary,
+    reasons: inspection.valid ? [] : [{
+      code: inspection.code,
+      blocking: true,
+      details: {...(inspection.details || {})}
+    }],
+    details: {...(inspection.details || {})},
+    cell: {
+      ref: {...normalized.cell},
+      primaryPackCell: Number.isInteger(inspection.details?.packCell) ? inspection.details.packCell : null,
+      stateId: Number.isInteger(inspection.details?.stateId) ? inspection.details.stateId : null,
+      provinceId: Number.isInteger(inspection.details?.provinceId) ? inspection.details.provinceId : null
+    },
+    predicted: inspection.valid ? predictedCreateAtCell(state.map, domain, inspection.details) : null,
+    warnings: [],
+    ...token
+  };
+}
+
+function createAtCellViaApi(state, documentRef, domain, input) {
+  if (!input || typeof input !== "object" || Array.isArray(input)) {
+    const error = new Error("createAtCell 必须提供 cell、inspectionToken 与 expectedRevision");
+    error.code = "invalid_argument";
+    throw error;
+  }
+  const normalized = normalizeCellCreateInput(input);
+  const actionId = `${domain}.createAtCell`;
+  const token = validateCellInspectionToken(
+    state.mapRevision,
+    input.inspectionToken,
+    actionId,
+    normalized,
+    input.expectedRevision
+  );
+  if (!token.valid) return createAtCellRefusal(state, token.code, null, token.snapshot);
+  const inspection = inspectCreateAtCellViaApi(state, domain, normalized);
+  if (!inspection.allowed) return createAtCellRefusal(state, inspection.code, inspection, token.snapshot);
+
+  const revisionBefore = state.mapRevision.getSnapshot();
+  const result = createAtCellExecutor(domain)(state, documentRef, normalized.cell.id);
+  const revisionAfter = state.mapRevision.getSnapshot();
+  if (result.error) {
+    const error = new Error(result.error.message || `${actionId} 执行失败`);
+    error.code = "create-failed";
+    error.details = {
+      actionId,
+      rollback: {available: true, attempted: true, complete: true},
+      mapRevisionBefore: revisionBefore,
+      mapRevisionAfter: revisionAfter
+    };
+    throw error;
+  }
+  const code = result.executed ? "created" : inspection.code;
+  return {
+    ...result,
+    code,
+    inspection,
+    created: result.executed ? result.result : null,
+    rollback: {
+      available: true,
+      attempted: Boolean(result.error),
+      complete: Boolean(result.error) || !result.executed
+    },
+    mapRevisionBefore: revisionBefore,
+    mapRevisionAfter: revisionAfter
+  };
+}
+
+function createAtCellRefusal(state, code, inspection = null, snapshot = null) {
+  return {
+    executed: false,
+    noop: true,
+    code,
+    inspection,
+    result: null,
+    created: null,
+    affected: [],
+    effects: {render: "none", selection: "none", runtimeStats: false, pickPanel: false, derived: []},
+    error: null,
+    history: state.editHistory.getStats(),
+    rollback: {available: true, attempted: false, complete: true},
+    mapRevisionBefore: snapshot || state.mapRevision.getSnapshot(),
+    mapRevisionAfter: state.mapRevision.getSnapshot()
+  };
+}
+
+function createAtCellInspector(domain) {
+  if (domain === "states") return inspectStateCreation;
+  if (domain === "provinces") return inspectProvinceCreation;
+  if (domain === "cities") return inspectCityCreation;
+  throw new Error(`未知 createAtCell 领域：${domain}`);
+}
+
+function createAtCellExecutor(domain) {
+  if (domain === "states") return addStateViaApi;
+  if (domain === "provinces") return addProvinceViaApi;
+  if (domain === "cities") return addCityViaApi;
+  throw new Error(`未知 createAtCell 领域：${domain}`);
+}
+
+function predictedCreateAtCell(map, domain, details = {}) {
+  if (domain === "states") {
+    return {
+      tentativeStateId: map?.politics?.states?.length || 0,
+      tentativeProvinceId: map?.politics?.provinces?.length || 0,
+      capitalMode: "reuse-burg-or-create",
+      seedGridCells: [details.gridCell]
+    };
+  }
+  if (domain === "provinces") {
+    return {
+      tentativeProvinceId: map?.politics?.provinces?.length || 0,
+      stateId: details.stateId,
+      seedGridCells: [details.gridCell]
+    };
+  }
+  return {
+    tentativeCityId: map?.settlements?.cities?.length || 0,
+    tentativeBurgId: map?.pack?.burgs?.length || 0,
+    packCell: details.packCell
+  };
 }
 
 function addCityViaApi(state, documentRef, gridCell) {

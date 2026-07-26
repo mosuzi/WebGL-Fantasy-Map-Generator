@@ -2,6 +2,7 @@ import {createHash} from "node:crypto";
 import {readFileSync, writeFileSync} from "node:fs";
 import {dirname, join, resolve} from "node:path";
 import {fileURLToPath, pathToFileURL} from "node:url";
+import {listCellActions} from "../app/webgl-generator/src/runtime/cell-action-inspector-registry.js";
 import {buildDirectManipulationAudit} from "./webgl-generator-interaction-direct-manipulation-audit.mjs";
 import {buildFullCapabilityMatrix} from "./webgl-generator-api-full-capability-matrix.mjs";
 
@@ -9,7 +10,7 @@ const TOOL_DIR = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(TOOL_DIR, "..");
 const OUTPUT_JSON = join(REPO_ROOT, "docs", "audits", "cell-action-replanning-matrix.json");
 const OUTPUT_MD = join(REPO_ROOT, "docs", "audits", "cell-action-replanning-matrix.md");
-const DEFERRED_195_PHASES = Object.freeze({
+const TASK_195_PHASES = Object.freeze({
   "cell.read": Object.freeze(["A"]),
   "cell.visual-diagnostics": Object.freeze(["B"]),
   "cell.action-inspection": Object.freeze(["C"]),
@@ -85,11 +86,11 @@ const DIRECT_POLICIES = Object.freeze([
 export function buildCellActionReplanningMatrix() {
   const audit = buildDirectManipulationAudit();
   const apiMatrix = buildFullCapabilityMatrix();
-  const deferred195 = apiMatrix.rows.filter(row => row.status === "deferred-owned" && row.owner === "权威任务第 195 项");
-  const deferredIds = deferred195.map(row => row.capabilityId);
-  const deferredPolicyIds = Object.keys(DEFERRED_195_PHASES);
-  const missingDeferredPolicies = deferredIds.filter(id => !DEFERRED_195_PHASES[id]);
-  const extraDeferredPolicies = deferredPolicyIds.filter(id => !deferredIds.includes(id));
+  const task195Capabilities = apiMatrix.rows.filter(row => row.owner === "权威任务第 195 项");
+  const task195CapabilityIds = task195Capabilities.map(row => row.capabilityId);
+  const task195PolicyIds = Object.keys(TASK_195_PHASES);
+  const missingTask195Policies = task195CapabilityIds.filter(id => !TASK_195_PHASES[id]);
+  const extraTask195Policies = task195PolicyIds.filter(id => !task195CapabilityIds.includes(id));
   const modePolicies = new Map(MODE_POLICIES.map(item => [item.modeId, item]));
   const directPolicies = new Map(DIRECT_POLICIES.map(item => [item.directId, item]));
   const runtimeModeIds = audit.modeContracts.map(item => item.modeId);
@@ -102,6 +103,10 @@ export function buildCellActionReplanningMatrix() {
   const modeRows = audit.modeContracts.map(contract => buildModeRow(contract, modePolicies.get(contract.modeId)));
   const directRows = audit.directManipulations.map(contract => buildDirectRow(contract, directPolicies.get(contract.directId)));
   const rows = [...modeRows, ...directRows];
+  const plannedRegistryActionIds = rows.filter(row => row.status === "planned-registry").map(row => row.actionId).sort();
+  const implementedRegistryActionIds = listCellActions().map(item => item.actionId).sort();
+  const missingRegistryActions = plannedRegistryActionIds.filter(id => !implementedRegistryActionIds.includes(id));
+  const extraRegistryActions = implementedRegistryActionIds.filter(id => !plannedRegistryActionIds.includes(id));
   const actionIds = rows.map(row => row.actionId);
   const duplicateActionIds = [...new Set(actionIds.filter((id, index) => actionIds.indexOf(id) !== index))].sort();
   const unresolvedTargets = rows
@@ -115,12 +120,14 @@ export function buildCellActionReplanningMatrix() {
     .filter(item => item.fields.length);
 
   const coverage = {
-    missingDeferredPolicies,
-    extraDeferredPolicies,
+    missingTask195Policies,
+    extraTask195Policies,
     missingModePolicies,
     extraModePolicies,
     missingDirectPolicies,
     extraDirectPolicies,
+    missingRegistryActions,
+    extraRegistryActions,
     duplicateActionIds,
     unresolvedTargets,
     unresolvedSourceEntries,
@@ -130,27 +137,31 @@ export function buildCellActionReplanningMatrix() {
   const sourceDigest = createHash("sha256")
     .update(audit.sourceDigest)
     .update(apiMatrix.sourceDigest)
-    .update(JSON.stringify(deferred195))
+    .update(JSON.stringify(task195Capabilities))
+    .update(JSON.stringify(implementedRegistryActionIds))
     .update(JSON.stringify({modePolicies: MODE_POLICIES, directPolicies: DIRECT_POLICIES}))
     .digest("hex");
-  const upstreamDeferredCapabilities = deferred195.map(row => ({
+  const upstreamTask195Capabilities = task195Capabilities.map(row => ({
     capabilityId: row.capabilityId,
     title: row.title,
     inputSpace: row.inputSpace,
     owner: row.owner,
-    phases: [...(DEFERRED_195_PHASES[row.capabilityId] || [])],
+    status: row.status,
+    apiMethods: [...row.apiMethods],
+    phases: [...(TASK_195_PHASES[row.capabilityId] || [])],
     evidence: [...row.evidence]
   }));
 
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     scope: "权威任务第 195 项 P0：Cell / Point / Path / Range 动作重编排矩阵",
     generatedFrom: [
       "tools/webgl-generator-api-full-capability-matrix.mjs",
-      "tools/webgl-generator-interaction-direct-manipulation-audit.mjs"
+      "tools/webgl-generator-interaction-direct-manipulation-audit.mjs",
+      "app/webgl-generator/src/runtime/cell-action-inspector-registry.js"
     ],
     upstreamApiMatrixDigest: apiMatrix.sourceDigest,
-    upstreamDeferredCapabilities,
+    upstreamTask195Capabilities,
     sourceDigest,
     canonicalInspectorSignature: "cells.inspectAction(actionId, input, options = {})",
     actionIdConvention: "<domain>.<verb> 或 <domain>.<verb>AtCell；CANVAS_TOOL_MODE modeId 只作为映射元数据",
@@ -169,11 +180,12 @@ export function buildCellActionReplanningMatrix() {
       classifiedDirectFamilies: directRows.length,
       directInstances: audit.expandedDirectRows.length,
       classifiedDirectInstances: audit.expandedDirectRows.filter(row => directPolicies.has(row.familyId)).length,
-      deferredOwned195: deferred195.length,
-      classifiedDeferredOwned195: upstreamDeferredCapabilities.filter(item => item.phases.length).length,
+      task195Capabilities: task195Capabilities.length,
+      classifiedTask195Capabilities: upstreamTask195Capabilities.filter(item => item.phases.length).length,
       rows: rows.length,
       excludedDirectFamilies: directRows.filter(row => row.status === "excluded").length,
       plannedRegistryRows: rows.filter(row => row.status === "planned-registry").length,
+      implementedRegistryRows: implementedRegistryActionIds.length,
       existingApiRows: rows.filter(row => row.status === "existing-api").length,
       gaps: gapCount
     },
@@ -278,17 +290,18 @@ function renderMarkdown(report) {
     `- 注册画布模式：${report.totals.classifiedModes} / ${report.totals.runtimeModes}`,
     `- 非注册直接操控：${report.totals.classifiedDirectFamilies} / ${report.totals.directFamilies}`,
     `- 非注册直接操控宿主实例：${report.totals.classifiedDirectInstances} / ${report.totals.directInstances}`,
-    `- 第 200 项 deferred-owned:195：${report.totals.classifiedDeferredOwned195} / ${report.totals.deferredOwned195}`,
+    `- 第 195 项四类 Cell 能力：${report.totals.classifiedTask195Capabilities} / ${report.totals.task195Capabilities}`,
+    `- planned-registry / 实际 registry：${report.totals.plannedRegistryRows} / ${report.totals.implementedRegistryRows}`,
     `- 总行数：${report.totals.rows}`,
     `- 排除直接操控：${report.totals.excludedDirectFamilies}`,
     `- 双向差集、重复 actionId、空目标和空来源合计：${report.totals.gaps}`,
     `- 唯一 inspector 签名：\`${report.canonicalInspectorSignature}\``,
     "",
-    "## 第 200 项上游归属",
+    "## 第 200 项上游归属与第 195 项收口",
     "",
     "| capabilityId | 输入空间 | 第 195 项阶段 |",
     "|---|---|---|",
-    ...report.upstreamDeferredCapabilities.map(item => `| \`${item.capabilityId}\` | ${item.inputSpace} | ${item.phases.join(" → ")} |`),
+    ...report.upstreamTask195Capabilities.map(item => `| \`${item.capabilityId}\` | ${item.inputSpace} | ${item.phases.join(" → ")}（${item.status}） |`),
     "",
     "## 动作映射",
     "",

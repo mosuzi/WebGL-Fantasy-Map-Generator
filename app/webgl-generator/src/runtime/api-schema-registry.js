@@ -150,6 +150,60 @@ const METHOD_OVERRIDES = Object.freeze({
     businessCodes: ["ok", "invalid_argument", "cursor-invalid", "cursor-stale"],
     responseMetadata: cellReadonlyMetadataSchema()
   },
+  "cells.locate": {
+    arguments: [
+      argument("reference", cellRefSchema()),
+      argument("options", {
+        type: "object",
+        properties: {
+          fit: {type: "boolean", default: true},
+          flash: {type: "boolean", default: true},
+          openLayer: {type: "boolean", default: false}
+        },
+        additionalProperties: false
+      }, false)
+    ],
+    result: objectSchema(["found", "code", "ref", "gridRef", "camera", "layerVisible", "highlighted"]),
+    examples: [[{space: "grid", id: 0}, {fit: true, flash: true, openLayer: true}]],
+    referenceSpaces: ["gridCell", "packCell"],
+    businessCodes: ["ok", "cell-located", "cell-not-found", "map-not-ready", "invalid_argument", "not_found"],
+    responseMetadata: cellReadonlyMetadataSchema()
+  },
+  "cells.scan": {
+    arguments: [argument("query", cellScanSchema(), false)],
+    result: objectSchema(["cancelled", "code", "scanned", "totalCandidates", "totalHits", "counts", "samples", "items", "count", "truncated", "nextCursor", "maxSliceMs"]),
+    examples: [[{
+      space: "grid",
+      checks: ["terrain-consistency", "pack-mapping", "political-owner-range"],
+      filter: {viewport: true},
+      fields: ["id", "height", "stateId"],
+      limit: 200
+    }]],
+    pagination: {supported: true, cursor: "opaque-signed-cells1", defaultLimit: 200, maxLimit: 1000},
+    referenceSpaces: ["gridCell", "packCell"],
+    businessCodes: ["ok", "scan-complete", "scan-cancelled", "action-not-inspectable", "invalid_argument", "cursor-invalid", "cursor-stale"],
+    responseMetadata: cellReadonlyMetadataSchema()
+  },
+  "cells.actions": {
+    arguments: [],
+    result: arraySchema(objectSchema(["actionId", "title", "inputSpace", "inspectTarget", "executeTarget", "semanticLayer", "compoundRulesCovered"])),
+    examples: [[]],
+    businessCodes: ["ok"],
+    responseMetadata: cellReadonlyMetadataSchema()
+  },
+  "cells.inspectAction": {
+    arguments: [
+      argument("actionId", stringSchema("registry 中的稳定 actionId")),
+      argument("actionInput", {type: "object"}),
+      argument("options", {type: "object", additionalProperties: true}, false)
+    ],
+    result: objectSchema(["allowed", "code", "summary", "details", "action", "normalizedInput", "inspectionToken", "expectedRevision", "inspectorSchemaVersion"]),
+    examples: [["states.createAtCell", {cell: {space: "grid", id: 0}}, {}]],
+    referenceSpaces: ["gridCell", "packCell", "worldPoint", "path", "range"],
+    businessCodes: ["ok", "action-not-inspectable", "invalid-input", "cell-not-found", "point-invalid", "business-rule-rejected"],
+    responseMetadata: cellReadonlyMetadataSchema()
+  },
+  ...createAtCellMethodOverrides(),
   "oceanCurrents.rename": {
     arguments: [argument("currentId", stringSchema("洋流 ID")), argument("name", stringSchema("新名称"))],
     result: objectSchema(["executed", "id", "name"]),
@@ -688,6 +742,110 @@ function cellQuerySchema() {
       },
       limit: {type: "integer", minimum: 1, maximum: 1000, default: 100},
       cursor: {type: ["string", "null"]}
+    },
+    additionalProperties: false
+  };
+}
+
+function cellScanSchema() {
+  return {
+    type: "object",
+    properties: {
+      space: {enum: ["grid", "pack"], default: "grid"},
+      checks: {
+        type: "array",
+        minItems: 1,
+        uniqueItems: true,
+        items: {enum: ["terrain-consistency", "pack-mapping", "political-owner-range"]}
+      },
+      filter: {
+        type: "object",
+        properties: {
+          viewport: {type: "boolean", default: false},
+          bbox: {
+            type: "object",
+            required: ["minX", "minY", "maxX", "maxY"],
+            properties: {
+              minX: {type: "number"},
+              minY: {type: "number"},
+              maxX: {type: "number"},
+              maxY: {type: "number"}
+            },
+            additionalProperties: false
+          }
+        },
+        additionalProperties: false
+      },
+      fields: cellQuerySchema().properties.fields,
+      limit: {type: "integer", minimum: 1, maximum: 1000, default: 200},
+      cursor: {type: ["string", "null"]}
+    },
+    additionalProperties: false
+  };
+}
+
+function createAtCellMethodOverrides() {
+  const entries = {};
+  const codesByDomain = {
+    states: ["ok", "grid-cell-invalid", "grid-cell-water", "pack-cell-missing", "capital-province-protected"],
+    provinces: ["ok", "grid-cell-invalid", "grid-cell-water", "pack-cell-missing", "state-missing"],
+    cities: ["ok", "grid-cell-invalid", "grid-cell-water", "pack-cell-missing", "burg-cell-occupied"]
+  };
+  for (const domain of ["states", "provinces", "cities"]) {
+    const inspectionMethod = `edit.${domain}.inspectCreateAtCell`;
+    const createMethod = `edit.${domain}.createAtCell`;
+    entries[inspectionMethod] = {
+      arguments: [argument("request", cellCreateInspectionInputSchema())],
+      result: objectSchema(["allowed", "code", "summary", "reasons", "details", "cell", "predicted", "warnings", "inspectionToken", "expectedRevision", "inspectorSchemaVersion"]),
+      examples: [[{cell: {space: "grid", id: 0}}]],
+      referenceSpaces: ["gridCell"],
+      businessCodes: [...codesByDomain[domain], "cell-space-not-supported", "invalid_argument"]
+    };
+    entries[createMethod] = {
+      arguments: [argument("request", cellCreateExecutionInputSchema())],
+      result: objectSchema(["executed", "noop", "code", "inspection", "created", "affected", "history", "rollback", "mapRevisionBefore", "mapRevisionAfter"]),
+      examples: [[{
+        cell: {space: "grid", id: 0},
+        inspectionToken: "opaque",
+        expectedRevision: {mapIdentity: "opaque", mapRevision: 0}
+      }]],
+      referenceSpaces: ["gridCell"],
+      businessCodes: ["ok", "created", ...codesByDomain[domain], "inspection-required", "inspection-stale", "inspection-token-invalid", "inspection-token-mismatch", "create-failed"]
+    };
+  }
+  return entries;
+}
+
+function cellCreateInspectionInputSchema() {
+  return {
+    anyOf: [
+      {type: "integer", minimum: 0},
+      {
+        type: "object",
+        required: ["cell"],
+        properties: {cell: {...cellRefSchema(), properties: {...cellRefSchema().properties, space: {const: "grid"}}}},
+        additionalProperties: false
+      }
+    ]
+  };
+}
+
+function cellCreateExecutionInputSchema() {
+  return {
+    type: "object",
+    required: ["cell", "inspectionToken", "expectedRevision"],
+    properties: {
+      cell: {...cellRefSchema(), properties: {...cellRefSchema().properties, space: {const: "grid"}}},
+      inspectionToken: {type: "string", minLength: 1},
+      expectedRevision: {
+        type: "object",
+        required: ["mapIdentity", "mapRevision"],
+        properties: {
+          mapIdentity: {type: ["string", "null"]},
+          mapRevision: {type: "integer", minimum: 0}
+        },
+        additionalProperties: false
+      }
     },
     additionalProperties: false
   };

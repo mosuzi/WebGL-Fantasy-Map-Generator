@@ -116,6 +116,8 @@
     "regress:api": "node ./tools/webgl-generator-api-capabilities-regression.mjs",
     "regress:api-inventory": "node --no-warnings ./tools/webgl-generator-api-capability-inventory-regression.mjs",
     "regress:cells-read": "node --no-warnings ./tools/webgl-generator-cell-read-api-regression.mjs",
+    "regress:cells-diagnostics": "node --no-warnings ./tools/webgl-generator-cell-diagnostics-regression.mjs",
+    "regress:cells-actions": "node --no-warnings ./tools/webgl-generator-cell-action-registry-regression.mjs",
     "regress:api-ai-discovery": "node --no-warnings ./tools/webgl-generator-api-ai-discovery-regression.mjs",
     "audit:api-full-matrix": "node --no-warnings ./tools/webgl-generator-api-full-capability-matrix.mjs --check",
     "regress:api-full-matrix": "node --no-warnings ./tools/webgl-generator-api-full-capability-matrix-regression.mjs",

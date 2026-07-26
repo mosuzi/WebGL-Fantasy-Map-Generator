@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "scope": "权威任务第 204 项：全游戏复合语义接口、规则动作与玩法配方审计",
   "generatedAtPolicy": "报告不写入动态时间，sourceDigest 变化即要求重新生成",
-  "sourceDigest": "a34456dd10c32742f3c1dc0fa7235b184f984f70b58f8765ec7c1720f3f05019",
+  "sourceDigest": "0bd5ee2e90593712b528d749aeceb1f162c9ef0660fe0596a138fb9c8375a365",
   "definition": {
     "compoundSemanticAction": "一个玩家意图，但执行时需要跨对象/系统、条件分支、业务预检或原子回滚；应由单一规则事务表达。",
     "primitive": "只修改一个稳定字段或纯编辑器显示偏好，可保留为原子 API，不强行包装成复合动作。",
@@ -21,12 +21,12 @@
     "recipe-only": "战略/玩法流程，不应实现为一条超大写接口。"
   },
   "denominator": {
-    "fullCapabilityRows": 963,
+    "fullCapabilityRows": 987,
     "fullCapabilityUnknown": 0,
     "fullCapabilityUnclassified": 0,
     "fullCapabilityGaps": 0,
-    "publicApiMethods": 241,
-    "classifiedApiMethods": 241,
+    "publicApiMethods": 251,
+    "classifiedApiMethods": 251,
     "cellActionRows": 47,
     "classifiedCellActionRows": 47,
     "canvasModes": 28,
@@ -58,10 +58,10 @@
       "world": 6
     },
     "apiClassifications": {
-      "atomic-editor-primitive": 46,
-      "editor-runtime-service": 48,
+      "atomic-editor-primitive": 49,
+      "editor-runtime-service": 49,
       "read-export-service": 10,
-      "read-primitive": 20,
+      "read-primitive": 26,
       "semantic-action": 117
     },
     "interactionClassifications": {
@@ -2565,6 +2565,11 @@
   ],
   "apiCoverage": [
     {
+      "method": "cells.actions",
+      "classification": "read-primitive",
+      "actionIds": []
+    },
+    {
       "method": "cells.get",
       "classification": "semantic-action",
       "actionIds": [
@@ -2575,6 +2580,16 @@
     {
       "method": "cells.getAtPoint",
       "classification": "read-primitive",
+      "actionIds": []
+    },
+    {
+      "method": "cells.inspectAction",
+      "classification": "read-primitive",
+      "actionIds": []
+    },
+    {
+      "method": "cells.locate",
+      "classification": "editor-runtime-service",
       "actionIds": []
     },
     {
@@ -2591,6 +2606,11 @@
         "politics.transfer-province",
         "politics.transfer-territory"
       ]
+    },
+    {
+      "method": "cells.scan",
+      "classification": "read-primitive",
+      "actionIds": []
     },
     {
       "method": "climate.apply",
@@ -2832,12 +2852,22 @@
       ]
     },
     {
+      "method": "edit.cities.createAtCell",
+      "classification": "atomic-editor-primitive",
+      "actionIds": []
+    },
+    {
       "method": "edit.cities.delete",
       "classification": "semantic-action",
       "actionIds": [
         "editor.delete-with-impact",
         "settlement.delete-city"
       ]
+    },
+    {
+      "method": "edit.cities.inspectCreateAtCell",
+      "classification": "read-primitive",
+      "actionIds": []
     },
     {
       "method": "edit.cities.inspectMove",
@@ -3399,12 +3429,22 @@
       ]
     },
     {
+      "method": "edit.provinces.createAtCell",
+      "classification": "atomic-editor-primitive",
+      "actionIds": []
+    },
+    {
       "method": "edit.provinces.delete",
       "classification": "semantic-action",
       "actionIds": [
         "editor.delete-with-impact",
         "politics.delete-province"
       ]
+    },
+    {
+      "method": "edit.provinces.inspectCreateAtCell",
+      "classification": "read-primitive",
+      "actionIds": []
     },
     {
       "method": "edit.provinces.rename",
@@ -3549,6 +3589,11 @@
       ]
     },
     {
+      "method": "edit.states.createAtCell",
+      "classification": "atomic-editor-primitive",
+      "actionIds": []
+    },
+    {
       "method": "edit.states.delete",
       "classification": "semantic-action",
       "actionIds": [
@@ -3556,6 +3601,11 @@
         "politics.delete-state",
         "politics.transfer-territory"
       ]
+    },
+    {
+      "method": "edit.states.inspectCreateAtCell",
+      "classification": "read-primitive",
+      "actionIds": []
     },
     {
       "method": "edit.states.inspectMerge",

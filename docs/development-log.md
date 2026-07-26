@@ -28741,3 +28741,11 @@ full 矩阵结果：
 - 批量命令在 apply 前保存整图快照，任一子命令即使先部分写入再抛错也会原位恢复完整地图与原 `map.options` 引用，失败批次不进入历史。备注批删、战斗事件清空和全部标签样式重设按高影响补齐确认；marker、label、孤儿备注、measurement、zone 和用户视觉主题等低影响单对象删除继续免确认。
 - 高度用户模板和自定义单位各使用独立 LocalStorage 回收记录，确认删除后可跨刷新恢复上次删除，不写地图存档或 checksum；高度模板回收记录损坏时仍保留并加载有效用户模板。新增危险策略 Node 专项和真实 Chrome 脚本，浏览器脚本留到第 201～203 项统一验收。
 - `audit:interaction-danger-recovery`、`regress:interaction-danger-recovery`、`regress:danger-policy`、`regress:delete-impact`、`regress:height-template-programs`、API stability / convergence / edit coverage / data compatibility / suite contract、生产构建和 `git diff --check` 通过。
+## 2026-07-26：完成权威任务第 195 项阶段 B～D——Grid Cells 诊断、动作 Registry 与受控创建
+
+- 阶段 B 新增默认关闭的 `gridCells` 图层：Grid Voronoi 共享边去重后异步分片构建独立静态 `GL.LINES` buffer，普通地图编辑不重建，地图替换才失效；诊断高亮与普通 selection 使用独立动态 buffer，ID 按 10k / 50k / 100k 设置缩放阈值并限制视口最多 `240` 个。控制面板、图层偏好和 `layers.setVisible` 共路径，悬停在既有共享基础地理信息之外补充 Grid / Pack 映射摘要。
+- 新增 `cells.locate / scan`。定位支持 Grid / Pack 引用、适配相机、闪烁和强制目标 ID；扫描支持 bbox / 当前视口、检查白名单、字段投影、limit / 签名 cursor、异步分片和取消。旧图缺失 Grid → Pack 映射、height / feature 不一致和非法政治归属均返回稳定诊断 code。
+- 阶段 C 实现 `34 / 34` Cell action registry，并与重编排矩阵建立双向差集；每项声明输入空间、inspect / execute 目标、确认、撤销、回滚、revision 和旧入口，且统一标记为编辑原语、不声称覆盖第 204 项复合规则。空输入、非法 CellRef 和未知 actionId 均稳定拒绝。
+- 国家、省份、城市一次性补齐 `inspectCreateAtCell / createAtCell`。三族 inspector 首次调用不修改地图或挂缓存；token 绑定 map identity、revision、actionId、规范化输入和 inspector schema。合法创建恰好一条历史与 revision `+1`，旧 token 以 `inspection-stale` 拒绝；创建命令在注入异常后恢复政治、城镇、Grid / Pack 归属和派生状态，revision 与 undo 均不变。旧 `.add(gridCell)` 继续兼容。
+- 阶段 D 将第 200 项四类 `deferred-owned:195` 全部转为 `covered`。当前全量矩阵 `987` 行：`covered 916 / excluded 71 / deferred-owned 0 / gap 0 / unknown 0 / unclassified 0`；动作矩阵保持模式 `28 / 28`、直接操控 `19 / 19` 类与 `89 / 89` 宿主、planned / actual registry `34 / 34`、结构缺口 `0`。第 204 项仍为 `68` 个规则事务与 `10` 个配方，没有实现其 `5` 个碎片事务、`6` 个缺失规则或配方。
+- 三档固定图实际 Grid Cells 为 `9933 / 49824 / 99960`，共享边 `30004 / 149933 / 300533`，buffer `1,440,192 / 7,196,784 / 14,425,584 bytes`，构建 `33.8 / 489.7 / 1509.6ms`，最长切片 `2.7 / 6.3 / 9.9ms`。系统 Chrome 代表矩阵确认控制面板与 API 开关一致、关闭 `0` draw、开启 `1` draw、Grid / Pack 定位同一视觉 cell、强制 ID 可见、三族创建和撤销闭环；`251 / 251` API 三向一致，WebGL / application health / console / page error 均为 `0`。专项、旧数据兼容、矩阵陈旧门禁和生产构建通过；本批尚未暂存、提交或推送。

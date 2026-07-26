@@ -74,10 +74,11 @@ export function createApplyProvinceBrushCommand(changes, {label = "省份笔刷"
   };
 }
 
-export function createAddProvinceAtCellCommand(gridCell, {label = "新增省份"} = {}) {
+export function createAddProvinceAtCellCommand(gridCell, {label = "新增省份", faultInjector = null} = {}) {
   const targetGridCell = normalizeGridCell(gridCell);
   let snapshot = null;
   let result = null;
+  let inspection = null;
   return {
     label,
     domain: "province",
@@ -86,8 +87,16 @@ export function createAddProvinceAtCellCommand(gridCell, {label = "新增省份"
       affected: newObjectAffected("province")
     },
     apply(context) {
+      inspection = inspectProvinceCreation(context.map, targetGridCell);
+      if (!inspection.valid) throw new Error(inspection.summary);
       snapshot ??= captureProvinceCollectionSnapshot(context.map);
-      result = addProvinceAtGridCell(context.map, targetGridCell);
+      try {
+        result = addProvinceAtGridCell(context.map, targetGridCell);
+        faultInjector?.({stage: "after-create", result, map: context.map});
+      } catch (error) {
+        restoreProvinceCollectionSnapshot(context.map, snapshot);
+        throw error;
+      }
       this.effects.affected = objectAffected("province", result.provinceId);
     },
     revert(context) {
@@ -95,12 +104,35 @@ export function createAddProvinceAtCellCommand(gridCell, {label = "新增省份"
       restoreProvinceCollectionSnapshot(context.map, snapshot);
     },
     isNoop(context) {
-      return !isValidProvinceSeedCell(context.map, targetGridCell);
+      inspection = inspectProvinceCreation(context.map, targetGridCell);
+      return !inspection.valid;
+    },
+    getInspection() {
+      return inspection;
     },
     getResult() {
       return result;
     }
   };
+}
+
+export function inspectProvinceCreation(map, gridCell) {
+  const targetGridCell = normalizeGridCell(gridCell);
+  if (targetGridCell < 0 || targetGridCell >= (map?.grid?.cells?.i?.length || 0)) {
+    return creationInspection(false, "grid-cell-invalid", "目标 grid cell 无效。", {gridCell: targetGridCell});
+  }
+  if (!isGridLandCell(map, targetGridCell)) {
+    return creationInspection(false, "grid-cell-water", "目标 grid cell 不是陆地。", {gridCell: targetGridCell});
+  }
+  const stateId = normalizeStateId(map?.grid?.cells?.state?.[targetGridCell]);
+  if (stateId <= 0 || !map?.politics?.states?.[stateId] || map.politics.states[stateId].removed) {
+    return creationInspection(false, "state-missing", "目标 cell 不属于可用国家。", {gridCell: targetGridCell, stateId});
+  }
+  const packCell = choosePackCellForGridCell(map, targetGridCell, {readOnly: true});
+  if (!Number.isInteger(packCell)) {
+    return creationInspection(false, "pack-cell-missing", "目标 grid cell 没有可用的陆地 pack cell。", {gridCell: targetGridCell, stateId});
+  }
+  return creationInspection(true, "ok", "可以在目标 cell 创建省份。", {gridCell: targetGridCell, packCell, stateId});
 }
 
 export function createDeleteProvinceCommand(provinceId, {label = "删除省份"} = {}) {
@@ -525,8 +557,11 @@ function restoreProvinceCollectionSnapshot(map, snapshot) {
 }
 
 function isValidProvinceSeedCell(map, gridCell) {
-  if (!Number.isInteger(gridCell) || gridCell < 0 || !isGridLandCell(map, gridCell)) return false;
-  return normalizeStateId(map?.grid?.cells?.state?.[gridCell]) > 0;
+  return inspectProvinceCreation(map, gridCell).valid;
+}
+
+function creationInspection(valid, code, summary, details) {
+  return {valid, allowed: valid, code, summary, details};
 }
 
 function normalizeGridCell(value) {
@@ -534,14 +569,24 @@ function normalizeGridCell(value) {
   return Number.isInteger(numeric) ? numeric : -1;
 }
 
-function choosePackCellForGridCell(map, gridCell) {
-  const candidates = getPackCellsForGrid(map, gridCell).filter(cell => map?.pack?.cells?.h?.[cell] >= 20);
+function choosePackCellForGridCell(map, gridCell, {readOnly = false} = {}) {
+  const candidates = (readOnly ? findPackCellsForGrid(map, gridCell) : getPackCellsForGrid(map, gridCell))
+    .filter(cell => map?.pack?.cells?.h?.[cell] >= 20);
   if (candidates.length) return candidates.sort((a, b) => a - b)[0];
   const byGrid = map?.pack?.cells?.g || [];
   for (let cell = 0; cell < byGrid.length; cell += 1) {
     if (byGrid[cell] === gridCell && map?.pack?.cells?.h?.[cell] >= 20) return cell;
   }
   return null;
+}
+
+function findPackCellsForGrid(map, gridCell) {
+  const mappedGridCells = map?.pack?.cells?.g || [];
+  const result = [];
+  for (let packCell = 0; packCell < mappedGridCells.length; packCell++) {
+    if (mappedGridCells[packCell] === gridCell) result.push(packCell);
+  }
+  return result;
 }
 
 function initialProvinceCells(map, centerGridCell, stateId) {

@@ -3,20 +3,21 @@
 - 注册画布模式：28 / 28
 - 非注册直接操控：19 / 19
 - 非注册直接操控宿主实例：89 / 89
-- 第 200 项 deferred-owned:195：4 / 4
+- 第 195 项四类 Cell 能力：4 / 4
+- planned-registry / 实际 registry：34 / 34
 - 总行数：47
 - 排除直接操控：12
 - 双向差集、重复 actionId、空目标和空来源合计：0
 - 唯一 inspector 签名：`cells.inspectAction(actionId, input, options = {})`
 
-## 第 200 项上游归属
+## 第 200 项上游归属与第 195 项收口
 
 | capabilityId | 输入空间 | 第 195 项阶段 |
 |---|---|---|
-| `cell.action-inspection` | grid-cell-ref / pack-cell-ref / point / path / range | C |
-| `cell.controlled-write` | grid-cell-ref / inspection-token / expected-revision | C → D |
-| `cell.read` | grid-cell-ref / pack-cell-ref / world-point / client-point | A |
-| `cell.visual-diagnostics` | grid-cell-ref / viewport | B |
+| `cell.action-inspection` | grid-cell-ref / pack-cell-ref / point / path / range | C（covered） |
+| `cell.controlled-write` | grid-cell-ref / inspection-token / expected-revision | C → D（covered） |
+| `cell.read` | grid-cell-ref / pack-cell-ref / world-point / client-point | A（covered） |
+| `cell.visual-diagnostics` | grid-cell-ref / viewport | B（covered） |
 
 ## 动作映射
 

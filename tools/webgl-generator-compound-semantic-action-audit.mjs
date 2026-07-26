@@ -1031,6 +1031,12 @@ const RULE_ACTIONS = Object.freeze([
 ]);
 
 const EDITOR_SERVICE_PREFIXES = Object.freeze(["selection.", "layers.", "units.", "debug.", "history."]);
+const EDITOR_RUNTIME_METHODS = new Set(["cells.locate"]);
+const ATOMIC_EDITOR_METHODS = new Set([
+  "edit.cities.createAtCell",
+  "edit.provinces.createAtCell",
+  "edit.states.createAtCell"
+]);
 const READ_METHODS = new Set([
   "info.version",
   "info.capabilities",
@@ -1046,6 +1052,12 @@ const READ_METHODS = new Set([
   "cells.getAtPoint",
   "cells.neighbors",
   "cells.query",
+  "cells.scan",
+  "cells.actions",
+  "cells.inspectAction",
+  "edit.cities.inspectCreateAtCell",
+  "edit.provinces.inspectCreateAtCell",
+  "edit.states.inspectCreateAtCell",
   "climate.get",
   "climate.getOptions",
   "climate.getTemperature",
@@ -1279,14 +1291,15 @@ function classifyApiMethod(method, actionByApi) {
   if (actionIds.length) return {method, classification: "semantic-action", actionIds};
   if (READ_METHODS.has(method)) return {method, classification: "read-primitive", actionIds: []};
   if (EXPORT_METHODS.has(method)) return {method, classification: "read-export-service", actionIds: []};
-  if (EDITOR_SERVICE_PREFIXES.some(prefix => method.startsWith(prefix))) {
+  if (EDITOR_RUNTIME_METHODS.has(method) || EDITOR_SERVICE_PREFIXES.some(prefix => method.startsWith(prefix))) {
     return {method, classification: "editor-runtime-service", actionIds: []};
   }
   if (method === "generate.getOptions" || method === "generate.setOptions") {
     return {method, classification: "generation-configuration", actionIds: []};
   }
   if (
-    method.startsWith("edit.labels.")
+    ATOMIC_EDITOR_METHODS.has(method)
+    || method.startsWith("edit.labels.")
     || method.startsWith("edit.markers.")
     || method.startsWith("edit.measurements.")
     || method.startsWith("edit.notes.")

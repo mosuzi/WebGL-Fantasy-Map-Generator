@@ -142,7 +142,7 @@ async function inspectCapabilities(page, {cells, seed, template, expectedConfirm
     if (capabilities.contract?.stableCompatibility !== "same-major") failures.push("capabilities 缺少同主版本兼容策略");
     if (capabilities.contract?.deprecatedRemoval !== "next-major-only") failures.push("capabilities 缺少 deprecated 移除策略");
     if (Object.keys(capabilities.capabilityGroups || {}).length !== 16) failures.push("capabilities 能力组不是 16 个");
-    if (JSON.stringify(capabilities.stabilitySummary) !== JSON.stringify({stable: 233, experimental: 7, deprecated: 1})) failures.push("稳定等级统计不是 233 / 7 / 1");
+    if (JSON.stringify(capabilities.stabilitySummary) !== JSON.stringify({stable: 243, experimental: 7, deprecated: 1})) failures.push("稳定等级统计不是 243 / 7 / 1");
     if (!Object.prototype.hasOwnProperty.call(runtimeStats, "lastEditRefresh")) failures.push("runtimeStats 缺少 lastEditRefresh 字段");
     const coverage = capabilities.methodMetadataCoverage || {};
     if (coverage.complete !== true) failures.push("methodMetadataCoverage.complete 不是 true");
@@ -203,7 +203,7 @@ async function inspectCapabilities(page, {cells, seed, template, expectedConfirm
         failures.push(`${qualifiedName} mutates 变为 ${metadata.mutates}，期望 ${expectedMutates}`);
       }
     }
-    const cellRead = inspectCellReadApi();
+    const cellRead = await inspectCellReadApi();
     failures.push(...cellRead.failures);
     if (glError !== 0) failures.push(`WebGL error 非 0：${glError}`);
 
@@ -285,7 +285,7 @@ async function inspectCapabilities(page, {cells, seed, template, expectedConfirm
       if (extra.length) output.push(`${label} 多出：${extra.join(", ")}`);
     }
 
-    function inspectCellReadApi() {
+    async function inspectCellReadApi() {
       const cellFailures = [];
       const before = captureReadonlyState();
       const queryCall = api.cells.query({
@@ -393,6 +393,108 @@ async function inspectCapabilities(page, {cells, seed, template, expectedConfirm
       if (noopRename.executed !== false || afterNoopRevision.mapRevision !== beforeNoopRevision.mapRevision) cellFailures.push("no-op 错误改变了 revision");
       if (cursorAfterNoop.ok !== true) cellFailures.push("no-op 错误使 Cell cursor 失效");
 
+      const actionRegistry = unwrap(api.cells.actions(), "cells.actions");
+      const structuralInspection = unwrap(api.cells.inspectAction("markers.createAtCell", {
+        cell: packRef,
+        name: "浏览器验收标记"
+      }), "cells.inspectAction");
+      const geometryXs = grid.geometry.vertices.map(point => point.x);
+      const geometryYs = grid.geometry.vertices.map(point => point.y);
+      const diagnosticBbox = {
+        minX: Math.min(...geometryXs),
+        minY: Math.min(...geometryYs),
+        maxX: Math.max(...geometryXs),
+        maxY: Math.max(...geometryYs)
+      };
+      const scan = unwrap(await api.cells.scan({
+        space: "grid",
+        checks: ["terrain-consistency", "pack-mapping", "political-owner-range"],
+        filter: {bbox: diagnosticBbox},
+        fields: ["id", "height", "stateId", "consistency"],
+        limit: 20
+      }), "cells.scan");
+      if (actionRegistry.length !== 34 || new Set(actionRegistry.map(item => item.actionId)).size !== 34) {
+        cellFailures.push("cells.actions 没有返回 34 条唯一动作");
+      }
+      if (structuralInspection.allowed !== true || structuralInspection.inspectionLevel !== "spatial-input" || !structuralInspection.inspectionToken) {
+        cellFailures.push("cells.inspectAction 没有返回结构预检与 token");
+      }
+      if (scan.cancelled || scan.code !== "scan-complete" || scan.count > 20) {
+        cellFailures.push("cells.scan bbox / limit 结果异常");
+      }
+
+      unwrap(api.layers.setVisible("gridCells", false), "layers.setVisible.gridCells.off.initial");
+      await waitUntil(() => window.__webglGeneratorApp?.renderer?.getStats?.()?.draw?.gridCellsDrawCalls === 0);
+      const disabledStats = renderer?.getStats?.() || {};
+      const gridLocate = unwrap(api.cells.locate(gridRef, {fit: true, flash: true, openLayer: true}), "cells.locate.grid");
+      await waitUntil(() => window.__webglGeneratorApp?.renderer?.getStats?.()?.diagnostics?.gridCells?.ready === true);
+      const packLocate = unwrap(api.cells.locate(packRef, {fit: false, flash: true, openLayer: true}), "cells.locate.pack");
+      await waitUntil(() => window.__webglGeneratorApp?.renderer?.getStats?.()?.draw?.gridCellsDrawCalls === 1);
+      const enabledStats = renderer?.getStats?.() || {};
+      const forcedIdVisible = Boolean(document.querySelector(`.grid-cell-diagnostic-label[data-grid-cell-id="${gridRef.id}"]`));
+      if (disabledStats.draw?.gridCellsDrawCalls !== 0) cellFailures.push("Grid Cells 图层关闭时仍增加 draw call");
+      if (gridLocate.gridRef?.id !== gridRef.id || packLocate.gridRef?.id !== gridRef.id) cellFailures.push("Grid / Pack 定位没有落到同一视觉 cell");
+      if (JSON.stringify(gridLocate.camera?.before) === JSON.stringify(gridLocate.camera?.after)) cellFailures.push("cells.locate 没有调整相机");
+      if (!enabledStats.diagnostics?.gridCells?.ready || enabledStats.draw?.gridCellsDrawCalls !== 1) cellFailures.push("Grid Cells 图层没有完成构建与绘制");
+      if ((enabledStats.diagnostics?.gridCells?.edges || 0) <= 0 || (enabledStats.diagnostics?.gridCells?.bufferBytes || 0) <= 0) cellFailures.push("Grid Cells 诊断统计缺少共享边或 buffer 字节");
+      if (enabledStats.draw?.glError !== 0) cellFailures.push(`Grid Cells 开启后 WebGL error 非 0：${enabledStats.draw?.glError}`);
+      if (!forcedIdVisible) cellFailures.push("cells.locate 没有强制显示目标 Grid Cell ID");
+      renderer?.clearGridCellDiagnosticHighlight?.({draw: false});
+      unwrap(api.layers.setVisible("gridCells", false), "layers.setVisible.gridCells.off.final");
+      await waitUntil(() => window.__webglGeneratorApp?.renderer?.getStats?.()?.draw?.gridCellsDrawCalls === 0);
+
+      const createAtCell = [];
+      const createCandidates = unwrap(api.cells.query({
+        space: "grid",
+        filter: {land: true},
+        fields: ["id"],
+        limit: 1000
+      }), "cells.query.createCandidates").items;
+      for (const domain of ["states", "provinces", "cities"]) {
+        let inspection = null;
+        for (const candidate of createCandidates) {
+          const next = unwrap(api.edit[domain].inspectCreateAtCell({
+            cell: {space: "grid", id: candidate.id}
+          }), `edit.${domain}.inspectCreateAtCell`);
+          if (next.allowed) {
+            inspection = next;
+            break;
+          }
+        }
+        if (!inspection) {
+          cellFailures.push(`edit.${domain}.inspectCreateAtCell 固定图找不到合法 cell`);
+          continue;
+        }
+        const beforeCreate = unwrap(api.info.mapSummary(), `info.mapSummary.${domain}.beforeCreate`);
+        const created = unwrap(api.edit[domain].createAtCell({
+          cell: inspection.cell.ref,
+          inspectionToken: inspection.inspectionToken,
+          expectedRevision: inspection.expectedRevision
+        }), `edit.${domain}.createAtCell`);
+        const afterCreate = unwrap(api.info.mapSummary(), `info.mapSummary.${domain}.afterCreate`);
+        const stale = unwrap(api.edit[domain].createAtCell({
+          cell: inspection.cell.ref,
+          inspectionToken: inspection.inspectionToken,
+          expectedRevision: inspection.expectedRevision
+        }), `edit.${domain}.createAtCell.stale`);
+        const restored = unwrap(api.history.undo(), `history.undo.${domain}.createAtCell`);
+        if (!created.executed || created.code !== "created" || afterCreate.mapRevision !== beforeCreate.mapRevision + 1) {
+          cellFailures.push(`edit.${domain}.createAtCell 没有恰好写入一次`);
+        }
+        if (stale.executed !== false || stale.code !== "inspection-stale") {
+          cellFailures.push(`edit.${domain}.createAtCell 没有拒绝陈旧 token`);
+        }
+        if (!restored.executed) cellFailures.push(`edit.${domain}.createAtCell 无法撤销`);
+        createAtCell.push({
+          domain,
+          gridCell: inspection.cell.ref.id,
+          code: created.code,
+          staleCode: stale.code,
+          revisionBefore: beforeCreate.mapRevision,
+          revisionAfter: afterCreate.mapRevision
+        });
+      }
+
       return {
         gridRef,
         packRef,
@@ -409,6 +511,26 @@ async function inspectCapabilities(page, {cells, seed, template, expectedConfirm
         },
         readonlyStateStable: JSON.stringify(before) === JSON.stringify(after),
         descriptions: descriptions.length,
+        diagnostics: {
+          disabledDrawCalls: disabledStats.draw?.gridCellsDrawCalls ?? null,
+          enabledDrawCalls: enabledStats.draw?.gridCellsDrawCalls ?? null,
+          edges: enabledStats.diagnostics?.gridCells?.edges || 0,
+          bufferBytes: enabledStats.diagnostics?.gridCells?.bufferBytes || 0,
+          forcedIdVisible,
+          gridLocate: gridLocate.gridRef,
+          packLocate: packLocate.gridRef
+        },
+        scan: {
+          code: scan.code,
+          scanned: scan.scanned,
+          hits: scan.totalHits
+        },
+        actionRegistry: {
+          actions: actionRegistry.length,
+          structuralCode: structuralInspection.code,
+          semanticLayer: structuralInspection.action?.semanticLayer || null
+        },
+        createAtCell,
         failures: cellFailures,
         passed: cellFailures.length === 0
       };
@@ -427,6 +549,15 @@ async function inspectCapabilities(page, {cells, seed, template, expectedConfirm
           camera: stats.camera || null,
           pick: window.__webglGeneratorApp?.pick || null
         };
+      }
+
+      async function waitUntil(predicate, waitMs = 15000) {
+        const deadline = performance.now() + waitMs;
+        while (performance.now() < deadline) {
+          if (predicate()) return;
+          await new Promise(resolve => setTimeout(resolve, 16));
+        }
+        throw new Error("等待 Cell 浏览器状态超时");
       }
     }
   }, {cells, seed, template, expectedConfirmRequired});
@@ -448,6 +579,21 @@ async function inspectUiApiConvergence(page) {
   await page.locator("#open-generation-panel").click();
   await page.locator('.floating-panel[data-panel-id="generation-panel"]').waitFor({state: "visible"});
   await page.locator('[data-control-tab="layers"]').click();
+  const gridCellLayerControl = page.locator('[data-layer="gridCells"]');
+  await gridCellLayerControl.waitFor({state: "visible"});
+  await gridCellLayerControl.click();
+  await page.waitForFunction(() => window.webglGeneratorApi.layers.get().data.layers.gridCells === true);
+  const gridCellsEnabledByUi = await page.evaluate(() => ({
+    layerVisible: window.webglGeneratorApi.layers.get().data.layers.gridCells,
+    ariaPressed: document.querySelector('[data-layer="gridCells"]')?.getAttribute("aria-pressed")
+  }));
+  await gridCellLayerControl.click();
+  await page.waitForFunction(() => window.webglGeneratorApi.layers.get().data.layers.gridCells === false);
+  const gridCellsDisabledByUi = await page.evaluate(() => ({
+    layerVisible: window.webglGeneratorApi.layers.get().data.layers.gridCells,
+    ariaPressed: document.querySelector('[data-layer="gridCells"]')?.getAttribute("aria-pressed"),
+    drawCalls: window.__webglGeneratorApp?.renderer?.getStats?.()?.draw?.gridCellsDrawCalls
+  }));
   await page.locator("#show-hover-info").click();
   await page.waitForFunction(() => {
     const result = window.webglGeneratorApi.layers.get();
@@ -470,10 +616,22 @@ async function inspectUiApiConvergence(page) {
   return {
     action: "layers.setShowHoverInfo",
     initial,
+    gridCells: {
+      enabledByUi: gridCellsEnabledByUi,
+      disabledByUi: gridCellsDisabledByUi
+    },
     uiResult,
     apiResult,
     restored,
-    passed: uiResult === true && apiResult.snapshot === false && apiResult.ariaPressed === "false" && restored
+    passed: uiResult === true
+      && apiResult.snapshot === false
+      && apiResult.ariaPressed === "false"
+      && gridCellsEnabledByUi.layerVisible === true
+      && gridCellsEnabledByUi.ariaPressed === "true"
+      && gridCellsDisabledByUi.layerVisible === false
+      && gridCellsDisabledByUi.ariaPressed === "false"
+      && gridCellsDisabledByUi.drawCalls === 0
+      && restored
   };
 }
 

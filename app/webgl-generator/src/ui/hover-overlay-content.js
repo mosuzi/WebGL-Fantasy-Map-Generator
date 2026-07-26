@@ -90,6 +90,13 @@ export function buildHoverRowEntries(pick, unitPreferences = {}, options = {}) {
   const context = {pick, units: unitPreferences, map: options.map || null, viewOptions: options.viewOptions || {}};
   const viewRows = HOVER_VIEW_ROW_REGISTRY[colorMode]?.(context);
   const rows = viewRows ? mergeRowsByLabel(viewRows, basicGeographyRows(context)) : genericRows(context);
+  if (options.gridCellsVisible === true) {
+    rows.push(
+      {label: "Grid Cell", value: `#${pick.gridCell}`},
+      {label: "Pack Cell", value: pick.packCell === null || pick.packCell === undefined ? "无" : `#${pick.packCell}`},
+      {label: "Pack 映射", value: `${Number(pick.gridPackCellCount) || 0} 个`}
+    );
+  }
   if (colorMode !== "biomes") {
     const objectText = formatHoverObjectLine(pick, unitPreferences, debugEnabled);
     if (objectText && !duplicatesPrimaryObject(pick, colorMode)) rows.unshift({label: "对象", value: objectText});
