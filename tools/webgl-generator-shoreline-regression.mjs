@@ -550,12 +550,12 @@ function runPureRegression() {
   assert.equal(
     filteredClosedStroke.some(entry => entry.point[0] === 136 && entry.point[1] === 74),
     false,
-    "兰林湾闭环描边后处理必须检查并移除首尾接缝尖点"
+    "闭环描边后处理必须检查并移除首尾接缝尖点"
   );
   assert.deepEqual(
     filteredClosedStroke.at(-1).point,
     filteredClosedStroke[0].point,
-    "兰林湾闭环描边去针后必须重新闭合在新的首点"
+    "闭环描边去针后必须重新闭合在新的首点"
   );
 
   const displacedSource = [[0, 0], [4, 0.2], [8, -0.2], [12, 0]];

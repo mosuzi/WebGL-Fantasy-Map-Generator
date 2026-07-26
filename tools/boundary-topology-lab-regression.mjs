@@ -136,9 +136,9 @@ assert.equal(earcutStress.final.safeFallback, "hard-boundary-earcut", "平滑 Ea
 assert.equal(earcutStress.final.hardFallbackLeaks, 0, "安全硬边界三角不得越界");
 assert.equal(earcutStress.final.unfilledCells, 0, "Earcut 失败夹具不得留下缺面");
 const strokeClosureStress = analyzeStressComparison(FIXTURES.find(fixture => fixture.id === "single-cell-stroke-closure-spike"));
-assert.ok(strokeClosureStress.destructive.legacy.needleCount > 0, "兰林湾旧描边后处理必须稳定复现闭环首点细针");
-assert.equal(strokeClosureStress.final.needleCount, 0, "兰林湾最终描边后处理不得保留闭环首点细针");
-assert.equal(strokeClosureStress.final.closed, true, "兰林湾最终描边后处理必须保持闭环");
+assert.ok(strokeClosureStress.destructive.legacy.needleCount > 0, "旧描边后处理必须稳定复现闭环首点穿刺");
+assert.equal(strokeClosureStress.final.needleCount, 0, "最终描边后处理不得保留闭环首点穿刺");
+assert.equal(strokeClosureStress.final.closed, true, "最终描边后处理必须保持闭环");
 
 const protectedFixtureIds = ["single-island", "narrow-strait", "lake-sea-connection"];
 for (const fixtureId of protectedFixtureIds) {

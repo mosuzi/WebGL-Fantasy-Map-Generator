@@ -552,9 +552,9 @@ const cellEarcutSafeFailure = stressFixture(
 
 const singleCellStrokeClosureSpike = stressFixture(
   "single-cell-stroke-closure-spike",
-  "兰林湾单 cell 描边闭环针",
+  "岸线闭环首点漏检跨面描边针",
   "coast-stroke-closure",
-  "原样复刻兰林湾单 cell 岛：平滑填色保持完整，但水陆线后处理把闭环当开放折线，漏检首尾接缝尖点并画出跨岛细针；附近大陆、城镇与道路仅作同场景对照。",
+  "单 cell 岛的平滑填色保持完整，但水陆线后处理把闭环当开放折线，漏检首尾接缝尖点并画出跨岛细针；附近大陆、城镇与道路仅作同场景对照。",
   {
     kind: "closed-stroke-seam",
     renderRing: [
