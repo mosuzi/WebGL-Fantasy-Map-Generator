@@ -225,6 +225,11 @@ const detailRows = computed(() => selected.value ? [
   {label: "水位", value: formatNumber(selected.value.height)},
   {label: "补给", value: formatNumber(selected.value.flux)},
   {label: "蒸发", value: formatNumber(selected.value.evaporation)},
+  {label: "长期水量", value: formatNullableNumber(selected.value.netFlux)},
+  {label: "溢流判定", value: lakeOverflowStatusLabel(selected.value.overflowStatus)},
+  {label: "蓄水指数", value: formatNullableNumber(selected.value.storageCapacity)},
+  {label: "溢流高程", value: formatNullableNumber(selected.value.spillElevation)},
+  {label: "下切需求 / 预算", value: `${formatNullableNumber(selected.value.requiredIncision)} / ${formatNullableNumber(selected.value.incisionBudget)}`},
   {label: "岸线 cells", value: formatNumber(selected.value.shorelineCells)},
   {label: "最大补给", value: formatNumber(maxFlux.value)}
 ] : []);
@@ -273,6 +278,12 @@ function lakeRows(map) {
         height: Number(feature.height) || 0,
         flux: Number(feature.flux) || 0,
         evaporation: Number(feature.evaporation) || 0,
+        netFlux: finiteNumberOrNull(feature.overflow?.netFlux),
+        overflowStatus: feature.overflow?.status || "unknown",
+        storageCapacity: finiteNumberOrNull(feature.overflow?.storageCapacity),
+        spillElevation: finiteNumberOrNull(feature.overflow?.spillElevation),
+        requiredIncision: finiteNumberOrNull(feature.overflow?.requiredIncision),
+        incisionBudget: finiteNumberOrNull(feature.overflow?.incisionBudget),
         shorelineCells: Array.isArray(feature.shoreline) ? feature.shoreline.length : 0,
         firstCell: Number(feature.firstCell) || 0
       };
@@ -315,6 +326,19 @@ function lakeTypeLabel(type) {
   }[type] || type || "湖泊";
 }
 
+function lakeOverflowStatusLabel(status) {
+  return {
+    "natural-outlet": "自然外流",
+    "overflow-channel": "蓄满溢流并下切",
+    "balanced-terminal": "蒸发平衡，稳定闭流",
+    "incision-limited": "分水岭过高，暂不外流",
+    "no-escape": "没有可解析的出流路径",
+    "legacy-outlet": "旧图已有出口",
+    "unknown-legacy": "旧图待重新诊断",
+    unknown: "未知"
+  }[status] || status || "未知";
+}
+
 function handleLakeListAction(key) {
   if (key === "create") props.callbacks.onCreateMode?.(!props.state.createMode);
   if (key === "highlight-selected") props.callbacks.onHighlight?.(selectedLakeRows.value);
@@ -335,5 +359,15 @@ function formatAreaValue(value) {
 
 function formatNumber(value) {
   return formatDisplayNumber(value, unitPreferences.value);
+}
+
+function formatNullableNumber(value) {
+  return Number.isFinite(value) ? formatNumber(value) : "—";
+}
+
+function finiteNumberOrNull(value) {
+  if (value === null || value === undefined || value === "") return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
 }
 </script>

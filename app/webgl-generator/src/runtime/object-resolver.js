@@ -335,6 +335,15 @@ function resolveLake(map, object) {
     height: feature.height,
     flux: feature.flux,
     evaporation: feature.evaporation,
+    outlet: Number(feature.outlet) || 0,
+    overflowStatus: feature.overflow?.status || "unknown",
+    netFlux: Number.isFinite(Number(feature.overflow?.netFlux)) ? Number(feature.overflow.netFlux) : null,
+    storageCapacity: Number.isFinite(Number(feature.overflow?.storageCapacity)) ? Number(feature.overflow.storageCapacity) : null,
+    estimatedFillTime: Number.isFinite(Number(feature.overflow?.estimatedFillTime)) ? Number(feature.overflow.estimatedFillTime) : null,
+    spillElevation: Number.isFinite(Number(feature.overflow?.spillElevation)) ? Number(feature.overflow.spillElevation) : null,
+    requiredIncision: Number.isFinite(Number(feature.overflow?.requiredIncision)) ? Number(feature.overflow.requiredIncision) : null,
+    incisionBudget: Number.isFinite(Number(feature.overflow?.incisionBudget)) ? Number(feature.overflow.incisionBudget) : null,
+    overflow: feature.overflow || null,
     firstCell: feature.firstCell
   };
 }

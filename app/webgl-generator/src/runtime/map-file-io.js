@@ -10,6 +10,7 @@ import {normalizeDiplomacyMap} from "./diplomacy-map-compatibility.js";
 import {normalizeUnitPreferences} from "../ui/display-units.js";
 import {normalizeOceanCurrentModel, OCEAN_CURRENT_MODEL_VERSION} from "../generator/ocean-currents.js";
 import {normalizeRiverNetwork} from "../generator/river-network.js";
+import {normalizeLakeOverflowDiagnostics} from "../generator/lake-overflow.js";
 import {normalizeRegenerationLockStore, validateRegenerationLockStore} from "./regeneration-locks.js";
 import {
   NETWORK_GEOJSON_PROPERTY_SCHEMA_ID,
@@ -130,6 +131,7 @@ export function migrateMapDocument(document) {
   backfillProvinceNames(migrated.map);
   migrated.map = normalizeDiplomacyMap(migrated.map);
   migrated.map.oceanCurrents = normalizeOceanCurrentModel(migrated.map.oceanCurrents);
+  migrated.map = normalizeLakeOverflowMap(migrated.map);
   applyRegenerationLockCompatibility(migrated.map, versioned.map?.regenerationLocks);
   validateCurrentMapDocument(migrated);
   return migrated;
@@ -505,7 +507,7 @@ function normalizeMapSchemaV2(map, documentOptions = {}) {
     society: source.society ? {...source.society, cultures: societyCultures, religions: societyReligions, metadata: {...(source.society.metadata || {})}} : source.society,
     pack: normalizedCurrent.pack ? {...normalizedCurrent.pack, cultures: packCultures, religions: packReligions} : normalizedCurrent.pack
   };
-  const compatible = normalizeDiplomacyMap(normalizeEconomyDisplayMap(normalizeSocialExpansionMap(normalized)));
+  const compatible = normalizeLakeOverflowMap(normalizeDiplomacyMap(normalizeEconomyDisplayMap(normalizeSocialExpansionMap(normalized))));
   applyRegenerationLockCompatibility(compatible, source.regenerationLocks);
   return compatible;
 }
@@ -552,6 +554,18 @@ function normalizeRiverStore(store, pack) {
       networkDiagnostics: normalized.diagnostics
     }
   };
+}
+
+function normalizeLakeOverflowMap(map) {
+  if (!map?.pack?.features) return map;
+  const pack = {
+    ...map.pack,
+    features: map.pack.features.map(feature => feature && typeof feature === "object"
+      ? {...feature, ...(feature.overflow && typeof feature.overflow === "object" ? {overflow: {...feature.overflow}} : {})}
+      : feature)
+  };
+  normalizeLakeOverflowDiagnostics(pack);
+  return {...map, pack};
 }
 
 function applyRegenerationLockCompatibility(map, source) {
