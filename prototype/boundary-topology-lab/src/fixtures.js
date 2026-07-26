@@ -550,9 +550,49 @@ const cellEarcutSafeFailure = stressFixture(
   }
 );
 
+const singleCellStrokeClosureSpike = stressFixture(
+  "single-cell-stroke-closure-spike",
+  "兰林湾单 cell 描边闭环针",
+  "coast-stroke-closure",
+  "原样复刻兰林湾单 cell 岛：平滑填色保持完整，但水陆线后处理把闭环当开放折线，漏检首尾接缝尖点并画出跨岛细针；附近大陆、城镇与道路仅作同场景对照。",
+  {
+    kind: "closed-stroke-seam",
+    renderRing: [
+      point(136, 74),
+      point(154, 118),
+      point(242, 184),
+      point(170, 192),
+      point(108, 175),
+      point(82, 142),
+      point(92, 106),
+      point(151, 116),
+      point(136, 74)
+    ],
+    spikePoint: point(136, 74),
+    mainlandRing: [
+      point(24, 20),
+      point(296, 20),
+      point(296, 100),
+      point(248, 108),
+      point(202, 91),
+      point(160, 105),
+      point(112, 98),
+      point(66, 103),
+      point(24, 92),
+      point(24, 20)
+    ],
+    roads: [
+      [point(26, 91), point(118, 116), point(190, 118), point(276, 143)],
+      [point(104, 175), point(158, 151), point(242, 184)]
+    ],
+    town: point(146, 162)
+  }
+);
+
 export const FIXTURES = Object.freeze([
   singleIsland,
   singleCellSeamSpike,
+  singleCellStrokeClosureSpike,
   islandWithHole,
   narrowStrait,
   lakeSeaConnection,

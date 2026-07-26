@@ -9,6 +9,7 @@ import {
   buildStressPacketWithBoundaryCovers,
   mutateDrawPacket
 } from "./stress-analysis.js";
+import {filterShoreRenderSpikes} from "./shore-render-spike-filter.js";
 
 const EPSILON = 1e-6;
 const STRESS_ANALYSIS_CACHE = new WeakMap();
@@ -120,6 +121,30 @@ export function analyzeStressComparison(fixture) {
 }
 
 function computeStressComparison(model) {
+  if (model.kind === "closed-stroke-seam") {
+    const entries = model.renderRing.map(point => ({point: [...point], projected: [...point]}));
+    const legacyEntries = legacyOpenShoreSpikeFilter(entries);
+    const finalEntries = filterShoreRenderSpikes(entries);
+    const legacyNeedleCount = countPointOccurrences(legacyEntries, model.spikePoint);
+    const finalNeedleCount = countPointOccurrences(finalEntries, model.spikePoint);
+    const finalClosed = samePoint(finalEntries[0]?.point, finalEntries.at(-1)?.point);
+    return {
+      kind: model.kind,
+      final: {
+        points: finalEntries.map(entry => entry.point),
+        needleCount: finalNeedleCount,
+        closed: finalClosed
+      },
+      destructive: {
+        legacy: {
+          points: legacyEntries.map(entry => entry.point),
+          needleCount: legacyNeedleCount,
+          closed: samePoint(legacyEntries[0]?.point, legacyEntries.at(-1)?.point)
+        }
+      },
+      passed: legacyNeedleCount > 0 && finalNeedleCount === 0 && finalClosed
+    };
+  }
   if (model.kind === "phase-matrix" || model.kind === "multi-ring") {
     const correctionTriangles = buildExactSurfaceCorrectionTriangles(model.sourceRings, model.renderRings);
     const packet = buildStressPacketWithBoundaryCovers(
@@ -169,6 +194,40 @@ function computeStressComparison(model) {
     return {kind: model.kind, final, destructive: {legacyLeakCount: final.legacyLeakCount}, passed: final.passed};
   }
   return {kind: model.kind, passed: false, final: {}, destructive: {}};
+}
+
+function legacyOpenShoreSpikeFilter(entries) {
+  let currentEntries = entries;
+  for (let pass = 0; pass < 2; pass++) {
+    const result = [];
+    for (let index = 0; index < currentEntries.length; index++) {
+      const previous = currentEntries[index - 1];
+      const current = currentEntries[index];
+      const next = currentEntries[index + 1];
+      if (previous && next && legacyShoreRenderSpike(previous, current, next)) continue;
+      result.push(current);
+    }
+    if (result.length === currentEntries.length) return result;
+    currentEntries = result;
+  }
+  return currentEntries;
+}
+
+function legacyShoreRenderSpike(previous, current, next) {
+  const a = normalizedVector(previous.point, current.point);
+  const b = normalizedVector(next.point, current.point);
+  return a[0] * b[0] + a[1] * b[1] > 0.94;
+}
+
+function normalizedVector(point, origin) {
+  const dx = point[0] - origin[0];
+  const dy = point[1] - origin[1];
+  const length = Math.hypot(dx, dy) || 1;
+  return [dx / length, dy / length];
+}
+
+function countPointOccurrences(entries, point) {
+  return entries.filter(entry => samePoint(entry.point, point)).length;
 }
 
 function invalidDefinitionResult(fixture, algorithmId, issues) {

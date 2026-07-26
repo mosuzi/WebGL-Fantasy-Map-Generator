@@ -10,6 +10,7 @@ import {collectShapeDiagnostics, maximumDeviationZoomViewBox, mergeVisualDiagnos
 const expectedCases = new Map([
   ["single-island", "coast"],
   ["single-cell-seam-spike", "coast-seam"],
+  ["single-cell-stroke-closure-spike", "coast-stroke-closure"],
   ["island-with-hole", "ring"],
   ["narrow-strait", "clearance"],
   ["lake-sea-connection", "connectivity"],
@@ -39,7 +40,7 @@ const expectedAlgorithmPasses = new Map([
   ["recommended", 14]
 ]);
 
-assert.equal(FIXTURES.length, 18, "必须固定覆盖十八类拓扑夹具");
+assert.equal(FIXTURES.length, 19, "必须固定覆盖十九类拓扑夹具");
 assert.deepEqual(new Map(FIXTURES.map(fixture => [fixture.id, fixture.category])), expectedCases, "夹具 id 与案例分类必须保持稳定");
 assert.deepEqual(ALGORITHMS.map(algorithm => algorithm.id), ["raw", "douglas-peucker", "visvalingam", "chaikin", "catmull-rom", "b-spline", "recommended"], "算法矩阵不完整");
 
@@ -114,7 +115,8 @@ for (const fixtureId of [
   "coast-draw-packet-phase-matrix",
   "coast-multiring-xor-compound",
   "coast-fallback-splice-protected",
-  "cell-earcut-safe-failure"
+  "cell-earcut-safe-failure",
+  "single-cell-stroke-closure-spike"
 ]) {
   const stress = analyzeStressComparison(FIXTURES.find(fixture => fixture.id === fixtureId));
   assert.equal(stress.passed, true, `${fixtureId} 的真实计算或破坏反例门禁失败`);
@@ -133,6 +135,10 @@ const earcutStress = analyzeStressComparison(FIXTURES.find(fixture => fixture.id
 assert.equal(earcutStress.final.safeFallback, "hard-boundary-earcut", "平滑 Earcut 失败必须切换到安全硬边界");
 assert.equal(earcutStress.final.hardFallbackLeaks, 0, "安全硬边界三角不得越界");
 assert.equal(earcutStress.final.unfilledCells, 0, "Earcut 失败夹具不得留下缺面");
+const strokeClosureStress = analyzeStressComparison(FIXTURES.find(fixture => fixture.id === "single-cell-stroke-closure-spike"));
+assert.ok(strokeClosureStress.destructive.legacy.needleCount > 0, "兰林湾旧描边后处理必须稳定复现闭环首点细针");
+assert.equal(strokeClosureStress.final.needleCount, 0, "兰林湾最终描边后处理不得保留闭环首点细针");
+assert.equal(strokeClosureStress.final.closed, true, "兰林湾最终描边后处理必须保持闭环");
 
 const protectedFixtureIds = ["single-island", "narrow-strait", "lake-sea-connection"];
 for (const fixtureId of protectedFixtureIds) {

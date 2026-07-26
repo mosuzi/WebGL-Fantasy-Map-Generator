@@ -18,6 +18,7 @@ import polygonClipping from "polygon-clipping";
 import earcut from "earcut";
 import {resolvedGridVertexPoint} from "./grid-vertex-geometry.js";
 import {withSurfaceSideAlpha} from "./surface-side-depth.js";
+import {filterShoreRenderSpikes as filterLabShoreRenderSpikes} from "../../../../prototype/boundary-topology-lab/src/shore-render-spike-filter.js";
 
 const shoreSourceIndexCache = new WeakMap();
 const shoreRingIndexCache = new WeakMap();
@@ -1488,31 +1489,12 @@ function nearestPathCell(cells, sourceIndex, t) {
   return cells[Math.min(sourceIndex + 1, cells.length - 1)];
 }
 
-function filterShoreRenderSpikes(entries) {
-  if (entries.length < 3) return entries;
-  let currentEntries = entries;
-  for (let pass = 0; pass < 2; pass++) {
-    const result = [];
-    for (let index = 0; index < currentEntries.length; index++) {
-      const previous = currentEntries[index - 1];
-      const current = currentEntries[index];
-      const next = currentEntries[index + 1];
-      if (previous && next && isShoreRenderSpike(previous, current, next)) continue;
-      result.push(current);
-    }
-    if (result.length === currentEntries.length) return result;
-    currentEntries = result;
-  }
-  return currentEntries;
-}
-
-function isShoreRenderSpike(previous, current, next) {
-  const a = normalizeWorldVector(previous.point[0] - current.point[0], previous.point[1] - current.point[1]);
-  const b = normalizeWorldVector(next.point[0] - current.point[0], next.point[1] - current.point[1]);
-  const angleCos = a.x * b.x + a.y * b.y;
-  const displacement = current.projected ? worldDistance(current.point, current.projected) : 0;
-  return angleCos > SHORE_VISUAL_STYLE.hardSpikeAngleCos ||
-    (angleCos > SHORE_VISUAL_STYLE.spikeAngleCos && displacement > SHORE_VISUAL_STYLE.spikeDisplacementWorld);
+export function filterShoreRenderSpikes(entries) {
+  return filterLabShoreRenderSpikes(entries, {
+    spikeAngleCos: SHORE_VISUAL_STYLE.spikeAngleCos,
+    hardSpikeAngleCos: SHORE_VISUAL_STYLE.hardSpikeAngleCos,
+    spikeDisplacementWorld: SHORE_VISUAL_STYLE.spikeDisplacementWorld
+  });
 }
 
 export function buildShoreVisualPaths(map, algorithmOptions = {}) {

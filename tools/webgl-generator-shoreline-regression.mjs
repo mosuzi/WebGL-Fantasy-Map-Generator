@@ -29,6 +29,7 @@ import {
   buildShoreSurfaceDrawPacket,
   buildShoreSurfaceCorrectionTriangles,
   buildShoreVisualPaths,
+  filterShoreRenderSpikes,
   inspectShoreBandTriangleGeometry,
   SHORE_VISUAL_STYLE,
   shoreCorrectionTriangleAltitude,
@@ -541,6 +542,21 @@ function runPureRegression() {
   assert.deepEqual(combinedSingleCell.renderPoints, isolatedSingleCell.renderPoints, "附近大陆不得改变独立单 cell 海岸的平滑结果");
   assert.notDeepEqual(isolatedSingleCell.renderPoints[0], singleCellCoast.points[0], "单 cell 闭环不得残留原始首点毛刺");
   assert.deepEqual(isolatedSingleCell.renderPoints.at(-1), isolatedSingleCell.renderPoints[0], "单 cell 平滑结果必须闭合在处理后的首点");
+  const closedStrokeEntries = [
+    [136, 74], [154, 118], [242, 184], [170, 192],
+    [108, 175], [82, 142], [92, 106], [151, 116], [136, 74]
+  ].map(point => ({point, projected: point}));
+  const filteredClosedStroke = filterShoreRenderSpikes(closedStrokeEntries);
+  assert.equal(
+    filteredClosedStroke.some(entry => entry.point[0] === 136 && entry.point[1] === 74),
+    false,
+    "兰林湾闭环描边后处理必须检查并移除首尾接缝尖点"
+  );
+  assert.deepEqual(
+    filteredClosedStroke.at(-1).point,
+    filteredClosedStroke[0].point,
+    "兰林湾闭环描边去针后必须重新闭合在新的首点"
+  );
 
   const displacedSource = [[0, 0], [4, 0.2], [8, -0.2], [12, 0]];
   const displacedRender = transformRecommendedShoreArc(displacedSource, {threshold: 0, smoothness: 0.04, maxDisplacement: 0.5});
