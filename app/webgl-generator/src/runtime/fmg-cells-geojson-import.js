@@ -16,6 +16,7 @@ import {buildZones} from "../generator/zones.js";
 import {systemAffected} from "./edit-command-effects.js";
 import {EDIT_REFRESH_PRESETS} from "./edit-refresh-scheduler.js";
 import {ensureLabelStore} from "./label-edit-commands.js";
+import {createEmptyRegenerationLockStore} from "./regeneration-locks.js";
 
 const SPATIAL_BUCKETS = 64;
 
@@ -291,7 +292,7 @@ function refreshImportedTerrainDerivatives(map, source) {
       resourceMarkers: map.markers?.metadata?.resourceMarkers || 0,
       militaryRegiments: map.military?.metadata?.regiments || 0,
       zones: map.zones?.metadata?.zones || 0,
-      reset: ["pack", "rivers", "society", "settlements", "politics", "markers", "economy", "diplomacy", "military", "zones", "labels", "notes", "measurements"],
+      reset: ["pack", "rivers", "society", "settlements", "politics", "markers", "economy", "diplomacy", "military", "zones", "labels", "notes", "measurements", "regenerationLocks"],
       refreshedAt: new Date().toISOString()
     };
   }
@@ -304,6 +305,7 @@ function refreshImportedMapSummary(map) {
 }
 
 function resetMapUserObjectStores(map) {
+  map.regenerationLocks = createEmptyRegenerationLockStore();
   map.labels = {
     custom: [],
     hidden: {city: [], state: [], province: []}
@@ -328,7 +330,7 @@ function markImportedDerivedSystemsFresh(map) {
 }
 
 function captureGeoImportDerivedSnapshot(map) {
-  const keys = ["features", "pack", "climate", "mapCoordinates", "society", "politics", "settlements", "economy", "diplomacy", "military", "markers", "zones", "rivers", "labels", "notes", "measurements", "summary", "generationLog", "status"];
+  const keys = ["features", "pack", "climate", "mapCoordinates", "society", "politics", "settlements", "economy", "diplomacy", "military", "markers", "zones", "rivers", "labels", "notes", "measurements", "regenerationLocks", "summary", "generationLog", "status"];
   const snapshot = {metadata: cloneMapValue(map?.metadata)};
   for (const key of keys) snapshot[key] = cloneMapValue(map?.[key]);
   return snapshot;
@@ -336,7 +338,7 @@ function captureGeoImportDerivedSnapshot(map) {
 
 function restoreGeoImportDerivedSnapshot(map, snapshot) {
   if (!map || !snapshot) return;
-  const keys = ["features", "pack", "climate", "mapCoordinates", "society", "politics", "settlements", "economy", "diplomacy", "military", "markers", "zones", "rivers", "labels", "notes", "measurements", "summary", "generationLog", "status"];
+  const keys = ["features", "pack", "climate", "mapCoordinates", "society", "politics", "settlements", "economy", "diplomacy", "military", "markers", "zones", "rivers", "labels", "notes", "measurements", "regenerationLocks", "summary", "generationLog", "status"];
   map.metadata = cloneMapValue(snapshot.metadata);
   for (const key of keys) {
     if (snapshot[key] === undefined) delete map[key];

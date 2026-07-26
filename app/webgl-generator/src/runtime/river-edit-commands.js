@@ -3,6 +3,7 @@ import {namebaseRenameAffected, objectAffected} from "./edit-command-effects.js"
 import {cloneObjectNote, deleteObjectNote, objectNoteId, readObjectNote, restoreObjectNote} from "./object-notes.js";
 import {OBJECT_KIND} from "./object-kinds.js";
 import {createChineseNameGenerator} from "../generator/names.js";
+import {normalizeRiverNetwork} from "../generator/river-network.js";
 
 const RIVER_NOTE_EFFECTS = Object.freeze({
   render: "none",
@@ -79,6 +80,7 @@ export function createAddRiverCommand(options = {}) {
       readRivers(context.map).push(clonePlain(created));
       if (context.map.pack) context.map.pack.rivers = context.map.rivers.rivers;
       updateCreatedRiverFlux(context.map, created);
+      normalizeRiverNetwork(context.map.rivers.rivers, context.map.pack, {dropIncomplete: false});
       rebuildAllRiverCellState(context.map);
       attachCreatedRiverToLake(context.map, created);
       refreshRiverMetadata(context.map);

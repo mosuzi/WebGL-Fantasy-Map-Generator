@@ -4,7 +4,7 @@ import {createServer} from "node:http";
 import {createRequire} from "node:module";
 import {dirname, extname, join, normalize, resolve} from "node:path";
 import {fileURLToPath} from "node:url";
-import {waitForApiReady} from "./webgl-generator-api-browser-ready.mjs";
+import {partitionApiBrowserDiagnostics, waitForApiReady} from "./webgl-generator-api-browser-ready.mjs";
 
 const rootDir = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const sourceDir = join(rootDir, "source", "Fantasy-Map-Generator");
@@ -45,7 +45,9 @@ try {
   await page.goto(`${baseUrl}?healthClear=1`, {waitUntil: "domcontentloaded", timeout: timeoutMs});
   await waitForApiReady(page, timeoutMs);
   const result = await inspectNamebaseDocs(page, {cells, seed, template});
-  const healthErrors = await inspectHealthErrors(page);
+  const observedHealthErrors = await inspectHealthErrors(page);
+  const diagnostics = partitionApiBrowserDiagnostics(observedHealthErrors, consoleErrors);
+  const healthErrors = diagnostics.healthErrors;
 
   const report = {
     metadata: {
@@ -57,12 +59,13 @@ try {
       template,
       viewport,
       browserChannel,
-      consoleErrors,
+      consoleErrors: diagnostics.consoleErrors,
+      performanceConsoleErrors: diagnostics.performanceConsoleErrors,
       pageErrors
     },
     ...result,
     healthErrors,
-    passed: result.passed && healthErrors.total === 0 && consoleErrors.length === 0 && pageErrors.length === 0
+    passed: result.passed && healthErrors.total === 0 && diagnostics.consoleErrors.length === 0 && pageErrors.length === 0
   };
 
   writeFileSync(outPath, `${JSON.stringify(report, null, 2)}\n`, "utf8");
@@ -161,16 +164,16 @@ async function inspectNamebaseDocs(page, {cells, seed, template}) {
     const afterLegacyUndo = unwrap(api.namebases.list(), "namebases.list.afterLegacyUndo");
     assertUserCount(afterLegacyUndo, initialUserCount, "legacy 撤销后用户库数量", failures);
 
-    const clearDenied = api.namebases.clear();
-    const afterDeniedClear = unwrap(api.namebases.list(), "namebases.list.afterDeniedClear");
-    if (clearDenied?.ok !== false) failures.push("未确认 clear 应返回结构化失败");
-    if (!String(clearDenied?.error?.message || "").includes("confirm")) failures.push(`未确认 clear 错误信息异常：${clearDenied?.error?.message || ""}`);
-    assertUserCount(afterDeniedClear, initialUserCount, "未确认 clear 后用户库数量", failures);
     const clearCreateA = unwrap(api.namebases.create({name: "API 清空测试一", source: ["清河", "晴川"]}), "namebases.create.clearA");
     const clearCreateB = unwrap(api.namebases.create({name: "API 清空测试二", source: ["云港", "月浦"]}), "namebases.create.clearB");
     const afterClearCreates = unwrap(api.namebases.list(), "namebases.list.afterClearCreates");
     assertUserCount(afterClearCreates, initialUserCount + 2, "清空测试创建后用户库数量", failures);
     if (!clearCreateA.executed || !clearCreateB.executed) failures.push("清空测试名称库创建未执行");
+    const clearDenied = api.namebases.clear();
+    const afterDeniedClear = unwrap(api.namebases.list(), "namebases.list.afterDeniedClear");
+    if (clearDenied?.ok !== false) failures.push("存在用户名称库时，未确认 clear 应返回结构化失败");
+    if (!String(clearDenied?.error?.message || "").includes("确认")) failures.push(`未确认 clear 错误信息异常：${clearDenied?.error?.message || ""}`);
+    assertUserCount(afterDeniedClear, initialUserCount + 2, "未确认 clear 后用户库数量", failures);
     const clearConfirmed = unwrap(api.namebases.clear({confirm: true}), "namebases.clear.confirmed");
     const afterClear = unwrap(api.namebases.list(), "namebases.list.afterClear");
     assertUserCount(afterClear, 0, "确认 clear 后用户库数量", failures);
@@ -369,6 +372,7 @@ async function inspectHealthErrors(page) {
       total: result.data.total,
       counts: result.data.counts,
       events: result.data.events.map(event => ({
+        type: event.type || "",
         severity: event.severity || event.level || "",
         message: event.message || "",
         operation: event.operation || ""

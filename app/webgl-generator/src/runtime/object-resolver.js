@@ -1,6 +1,7 @@
 import {LABEL_TARGET_KIND, OBJECT_KIND} from "./object-kinds.js";
 import {resolveDiplomacyRelation} from "./diplomacy-relations.js";
 import {goodDisplayName} from "../generator/economy-display-properties.js";
+import {describeRiverRelation} from "../generator/river-network.js";
 
 const OBJECT_RESOLVERS = Object.freeze({
   [OBJECT_KIND.CITY]: resolveCity,
@@ -9,8 +10,11 @@ const OBJECT_RESOLVERS = Object.freeze({
   [OBJECT_KIND.NOTE]: resolveStandaloneNote,
   [OBJECT_KIND.ROUTE]: resolveRoute,
   [OBJECT_KIND.TRADE_FLOW]: resolveTradeFlow,
+  [OBJECT_KIND.ECONOMY_MARKET]: resolveEconomyMarket,
   [OBJECT_KIND.RIVER]: resolveRiver,
   [OBJECT_KIND.LAKE]: resolveLake,
+  [OBJECT_KIND.FEATURE]: resolveFeature,
+  [OBJECT_KIND.OCEAN_CURRENT]: resolveOceanCurrent,
   [OBJECT_KIND.MEASUREMENT]: resolveMeasurement,
   [OBJECT_KIND.MILITARY]: resolveMilitary,
   [OBJECT_KIND.DIPLOMACY_RELATION]: resolveDiplomacyRelation,
@@ -38,6 +42,7 @@ function resolveCity(map, object) {
     name: city.name,
     type: city.capital ? "capital" : city.provincial ? "provincial" : city.port ? "port" : "city",
     population: city.population,
+    emblem: emblemSummary(city.coa),
     stateId: city.state,
     state: map.politics.states[city.state]?.name || "none",
     provinceId: city.province,
@@ -209,6 +214,30 @@ function resolveTradeFlow(map, object) {
   };
 }
 
+function resolveEconomyMarket(map, object) {
+  const market = (map?.pack?.markets || map?.economy?.markets || []).find(item => Number(item?.i ?? item?.id) === Number(object.id));
+  if (!market || market.removed) return null;
+  const id = Number(market.i ?? market.id);
+  const center = map?.pack?.burgs?.[market.centerBurgId] || map?.settlements?.cities?.find(city => Number(city?.id) === Number(market.centerBurgId));
+  return {
+    ...object,
+    kind: OBJECT_KIND.ECONOMY_MARKET,
+    id,
+    name: market.display?.name || market.name || `市场 #${id}`,
+    stateId: Number(market.state || 0),
+    state: map?.politics?.states?.[market.state]?.fullName || map?.politics?.states?.[market.state]?.name || "无",
+    centerBurgId: Number(market.centerBurgId || 0),
+    centerBurg: center?.name || `城镇 #${market.centerBurgId || 0}`,
+    cell: market.cell ?? center?.cell ?? null,
+    color: market.display?.color || market.color || "",
+    goods: Object.keys(market.goods || {}).length,
+    demand: Number(market.demandSummary?.demand || 0),
+    supply: Number(market.demandSummary?.supply || 0),
+    shortage: Number(market.demandSummary?.shortage || 0),
+    surplus: Number(market.demandSummary?.surplus || 0)
+  };
+}
+
 function resolveZone(map, object) {
   const zone = (map?.zones?.zones || map?.pack?.zones || []).find(item => Number(item?.i ?? item?.id) === Number(object.id));
   if (!zone) return null;
@@ -224,6 +253,44 @@ function resolveZone(map, object) {
   };
 }
 
+function resolveFeature(map, object) {
+  const feature = (map?.pack?.features || []).find(item => Number(item?.i ?? item?.id) === Number(object.id));
+  if (!feature || feature.removed) return null;
+  const id = Number(feature.i ?? feature.id);
+  return {
+    ...object,
+    kind: OBJECT_KIND.FEATURE,
+    id,
+    name: feature.name || `${feature.type || "feature"} #${id}`,
+    type: feature.type || "unknown",
+    group: feature.group || "none",
+    land: Boolean(feature.land),
+    border: Boolean(feature.border),
+    cells: Number(feature.cells || 0),
+    area: Number(feature.area || 0),
+    height: Number(feature.height || 0),
+    firstCell: Number(feature.firstCell || 0)
+  };
+}
+
+function resolveOceanCurrent(map, object) {
+  const current = (map?.oceanCurrents?.currents || []).find(item => String(item?.id) === String(object.id));
+  if (!current) return null;
+  return {
+    ...object,
+    kind: OBJECT_KIND.OCEAN_CURRENT,
+    id: String(current.id),
+    name: current.name || `洋流 ${current.id}`,
+    temperature: current.temperature || "neutral",
+    hemisphere: current.hemisphere || "equatorial",
+    circulation: current.circulation || "clockwise",
+    strength: Number(current.strength || 0),
+    basinFeatureId: Number(current.basinFeatureId || 0),
+    westernBoundary: Boolean(current.westernBoundary),
+    points: current.points || current.path || []
+  };
+}
+
 function pointDistance(a, b) {
   if (!Array.isArray(a) || !Array.isArray(b)) return null;
   if (!Number.isFinite(a[0]) || !Number.isFinite(a[1]) || !Number.isFinite(b[0]) || !Number.isFinite(b[1])) return null;
@@ -233,13 +300,14 @@ function pointDistance(a, b) {
 function resolveRiver(map, object) {
   const river = map.rivers.rivers.find(item => item.id === object.id);
   if (!river) return null;
+  const relation = describeRiverRelation(river, map.rivers.rivers);
   return {
     ...object,
     kind: "river",
     id: river.id,
     name: river.name || `#${river.id}`,
     type: river.parent ? "支流" : "主河",
-    parentId: river.parent || 0,
+    ...relation,
     flux: river.flux || river.discharge || river.width || 0,
     discharge: river.discharge || river.flux || 0,
     length: river.length ?? river.cells?.length ?? Math.max(0, (river.points?.length || 0) - 1),
@@ -387,7 +455,8 @@ function resolveState(map, object) {
     culture: map.society.cultures[state.culture]?.name || "unknown",
     religionId: state.religion,
     religion: map.society.religions[state.religion]?.name || "unknown",
-    centerCell: state.center
+    centerCell: state.center,
+    emblem: emblemSummary(state.coa)
   };
 }
 
@@ -491,4 +560,21 @@ function routeLength(route) {
 
 function isPoint(point) {
   return Number.isFinite(point?.[0]) && Number.isFinite(point?.[1]);
+}
+
+function emblemSummary(coa) {
+  const charge = coa?.charges?.[0] || null;
+  return {
+    available: Boolean(coa?.shield && coa?.tinctures?.field && charge),
+    shield: coa?.shield || "none",
+    fieldColor: coa?.tinctures?.field || "none",
+    chargeColor: charge?.tincture || coa?.tinctures?.charge || "none",
+    charge: charge?.charge || "none",
+    chargeCount: coa?.charges?.length || 0,
+    size: Number(coa?.size || 0),
+    position: {
+      x: Number.isFinite(Number(coa?.x)) ? Number(coa.x) : null,
+      y: Number.isFinite(Number(coa?.y)) ? Number(coa.y) : null
+    }
+  };
 }

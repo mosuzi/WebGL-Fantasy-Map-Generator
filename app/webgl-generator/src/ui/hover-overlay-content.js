@@ -90,6 +90,13 @@ export function buildHoverRowEntries(pick, unitPreferences = {}, options = {}) {
   const context = {pick, units: unitPreferences, map: options.map || null, viewOptions: options.viewOptions || {}};
   const viewRows = HOVER_VIEW_ROW_REGISTRY[colorMode]?.(context);
   const rows = viewRows ? mergeRowsByLabel(viewRows, basicGeographyRows(context)) : genericRows(context);
+  if (options.gridCellsVisible === true) {
+    rows.push(
+      {label: "Grid Cell", value: `#${pick.gridCell}`},
+      {label: "Pack Cell", value: pick.packCell === null || pick.packCell === undefined ? "无" : `#${pick.packCell}`},
+      {label: "Pack 映射", value: `${Number(pick.gridPackCellCount) || 0} 个`}
+    );
+  }
   if (colorMode !== "biomes") {
     const objectText = formatHoverObjectLine(pick, unitPreferences, debugEnabled);
     if (objectText && !duplicatesPrimaryObject(pick, colorMode)) rows.unshift({label: "对象", value: objectText});
@@ -248,10 +255,26 @@ function formatHoverObjectLine(pick, unitPreferences, debugEnabled) {
   if (pick.marker) return formatHoverMarkerSummary(pick.marker, unitPreferences, debugEnabled);
   if (pick.tradeFlow) return `${pick.tradeFlow.goodName} / ${pick.tradeFlow.sellerName} -> ${pick.tradeFlow.buyerName} / ${pick.tradeFlow.priceSignalLabel || "平稳"} ${formatSignedDisplayNumber(pick.tradeFlow.priceDelta, unitPreferences)}`;
   if (isNamedHoverRoute(pick.route)) return `${pick.route.from} -> ${pick.route.to}`;
-  if (pick.river) return debugEnabled ? `河流 #${pick.river.id} / 流量 ${formatDisplayRiverFlow(pick.river.flux, unitPreferences)}` : "河流";
+  if (pick.river) return formatHoverRiverSummary(pick.river, unitPreferences, debugEnabled);
   if (pick.object && pick.object.kind !== OBJECT_KIND.ROUTE) return debugEnabled ? formatDebugHoverObjectTitle(pick.object) : formatHoverObjectTitle(pick.object);
   if (pick.politicalObject) return debugEnabled ? formatDebugHoverObjectTitle(pick.politicalObject) : formatHoverObjectTitle(pick.politicalObject);
   return "";
+}
+
+function formatHoverRiverSummary(river, unitPreferences, debugEnabled) {
+  const name = river.name || `河流 #${river.id}`;
+  const relation = river.networkStatus === "orphaned"
+    ? river.parentId
+      ? ` / 支流 → ${river.parentName || `#${river.parentId}`} / 无有效出口`
+      : " / 主河 / 无有效出口"
+    : river.parentId
+      ? ` / 支流 → ${river.parentName || `缺失干流 #${river.parentId}`}`
+      : river.outletKind === "lake"
+        ? " / 入湖河流"
+        : " / 主河";
+  return debugEnabled
+    ? `${name}${relation} / #${river.id} / 流量 ${formatDisplayRiverFlow(river.flux, unitPreferences)}`
+    : `${name}${relation}`;
 }
 
 function formatHoverMarkerSummary(marker, unitPreferences, debugEnabled) {

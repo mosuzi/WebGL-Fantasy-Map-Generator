@@ -1,0 +1,1299 @@
+{
+  "schemaVersion": 2,
+  "scope": "权威任务第 195 项 P0：Cell / Point / Path / Range 动作重编排矩阵",
+  "generatedFrom": [
+    "tools/webgl-generator-api-full-capability-matrix.mjs",
+    "tools/webgl-generator-interaction-direct-manipulation-audit.mjs",
+    "app/webgl-generator/src/runtime/cell-action-inspector-registry.js"
+  ],
+  "upstreamApiMatrixDigest": "1b4de393631822138706c1aa5eedb821d7a82c512a8ceb663cc7301c25756c13",
+  "upstreamTask195Capabilities": [
+    {
+      "capabilityId": "cell.action-inspection",
+      "title": "按 Cell / Point / Path / Range 动作 registry 与只读预检",
+      "inputSpace": "grid-cell-ref / pack-cell-ref / point / path / range",
+      "owner": "权威任务第 195 项",
+      "status": "covered",
+      "apiMethods": [
+        "cells.actions",
+        "cells.inspectAction",
+        "edit.cities.inspectCreateAtCell",
+        "edit.provinces.inspectCreateAtCell",
+        "edit.states.inspectCreateAtCell"
+      ],
+      "phases": [
+        "C"
+      ],
+      "evidence": [
+        "app/webgl-generator/src/runtime/cell-action-inspector-registry.js",
+        "app/webgl-generator/src/runtime/cell-inspection-token.js",
+        "docs/task-notes/cell-diagnostics-and-ai-api-design.md"
+      ]
+    },
+    {
+      "capabilityId": "cell.controlled-write",
+      "title": "国家、省份、城市等同族 createAtCell 与受控写入",
+      "inputSpace": "grid-cell-ref / inspection-token / expected-revision",
+      "owner": "权威任务第 195 项",
+      "status": "covered",
+      "apiMethods": [
+        "edit.cities.createAtCell",
+        "edit.provinces.createAtCell",
+        "edit.states.createAtCell"
+      ],
+      "phases": [
+        "C",
+        "D"
+      ],
+      "evidence": [
+        "app/webgl-generator/src/runtime/app.js",
+        "app/webgl-generator/src/runtime/city-edit-commands.js",
+        "app/webgl-generator/src/runtime/province-edit-commands.js",
+        "app/webgl-generator/src/runtime/state-edit-commands.js",
+        "docs/task-notes/cell-diagnostics-and-ai-api-design.md"
+      ]
+    },
+    {
+      "capabilityId": "cell.read",
+      "title": "Grid / Pack Cell 读取、映射、邻接与分页查询",
+      "inputSpace": "grid-cell-ref / pack-cell-ref / world-point / client-point",
+      "owner": "权威任务第 195 项",
+      "status": "covered",
+      "apiMethods": [
+        "cells.get",
+        "cells.getAtPoint",
+        "cells.neighbors",
+        "cells.query",
+        "cells.scan"
+      ],
+      "phases": [
+        "A"
+      ],
+      "evidence": [
+        "app/webgl-generator/src/runtime/cell-query-api.js",
+        "docs/task-notes/cell-diagnostics-and-ai-api-design.md"
+      ]
+    },
+    {
+      "capabilityId": "cell.visual-diagnostics",
+      "title": "Grid Cells 共享边诊断层、ID 与诊断高亮",
+      "inputSpace": "grid-cell-ref / viewport",
+      "owner": "权威任务第 195 项",
+      "status": "covered",
+      "apiMethods": [
+        "cells.locate",
+        "layers.get",
+        "layers.setVisible"
+      ],
+      "phases": [
+        "B"
+      ],
+      "evidence": [
+        "app/webgl-generator/src/renderer/grid-cell-diagnostics-layer.js",
+        "app/webgl-generator/src/renderer/placeholder-renderer.js",
+        "docs/task-notes/cell-diagnostics-and-ai-api-design.md"
+      ]
+    }
+  ],
+  "sourceDigest": "df9f69c94c49cd3123cbb22d7fb09ac769ff7ef749488de2433c1484543138f7",
+  "canonicalInspectorSignature": "cells.inspectAction(actionId, input, options = {})",
+  "actionIdConvention": "<domain>.<verb> 或 <domain>.<verb>AtCell；CANVAS_TOOL_MODE modeId 只作为映射元数据",
+  "revisionContract": {
+    "tokenBinding": [
+      "mapIdentity",
+      "mapRevision",
+      "actionId",
+      "normalizedInputFingerprint",
+      "inspectorSchemaVersion"
+    ],
+    "successfulMapMutation": "mapRevision 恰好递增 1，并使旧 token 失效",
+    "rejectedCancelledRolledBack": "mapRevision 不变",
+    "undoRedo": "每次成功撤销或重做均递增 1，并使旧 token 失效",
+    "mapReplacement": "创建新 mapIdentity；无论 revision 数值是否相同，旧 token 均失效",
+    "asyncCommit": "提交前复核 mapIdentity 与 mapRevision；陈旧任务不得写图"
+  },
+  "totals": {
+    "runtimeModes": 28,
+    "classifiedModes": 28,
+    "directFamilies": 19,
+    "classifiedDirectFamilies": 19,
+    "directInstances": 89,
+    "classifiedDirectInstances": 89,
+    "task195Capabilities": 4,
+    "classifiedTask195Capabilities": 4,
+    "rows": 47,
+    "excludedDirectFamilies": 12,
+    "plannedRegistryRows": 34,
+    "implementedRegistryRows": 34,
+    "existingApiRows": 1,
+    "gaps": 0
+  },
+  "coverage": {
+    "missingTask195Policies": [],
+    "extraTask195Policies": [],
+    "missingModePolicies": [],
+    "extraModePolicies": [],
+    "missingDirectPolicies": [],
+    "extraDirectPolicies": [],
+    "missingRegistryActions": [],
+    "extraRegistryActions": [],
+    "duplicateActionIds": [],
+    "unresolvedTargets": [],
+    "unresolvedSourceEntries": [],
+    "requiredFieldGaps": []
+  },
+  "rows": [
+    {
+      "rowId": "mode:height:brush",
+      "sourceKind": "canvas-mode",
+      "actionId": "height.applyCells",
+      "modeId": "height:brush",
+      "directId": "",
+      "title": "高度笔刷",
+      "inputSpace": "grid cell set + changes + range",
+      "sourceEntries": [
+        "panel:height-panel",
+        "canvas:map-canvas"
+      ],
+      "sourceRefs": [
+        "app/webgl-generator/src/runtime/app.js",
+        "app/webgl-generator/src/runtime/canvas-tool-mode-manager.js",
+        "app/webgl-generator/src/ui/brush-cursor-preview.js",
+        "app/webgl-generator/src/ui/panels/height-panel.js"
+      ],
+      "inspectTarget": "cells.inspectAction:height.applyCells",
+      "executeTarget": "edit.height.applyChanges",
+      "phase": "C",
+      "status": "planned-registry",
+      "historyAndRollback": "每次有效手势写一条历史；取消回滚当前手势；同入口关闭、切换模式或面板关闭调用统一 cancel；活动手势按各领域回滚；onCancel / onComplete 共用退出清理；onError 由管理器回退活动状态并执行清理",
+      "compatibility": "沿用旧高度笔刷、语义高度 API 与派生更新契约"
+    },
+    {
+      "rowId": "mode:state:brush",
+      "sourceKind": "canvas-mode",
+      "actionId": "states.assignCells",
+      "modeId": "state:brush",
+      "directId": "",
+      "title": "国家归属笔刷",
+      "inputSpace": "grid cell set + changes",
+      "sourceEntries": [
+        "panel:state-panel",
+        "canvas:map-canvas"
+      ],
+      "sourceRefs": [
+        "app/webgl-generator/src/runtime/app.js",
+        "app/webgl-generator/src/runtime/canvas-tool-mode-manager.js",
+        "app/webgl-generator/src/ui/brush-cursor-preview.js",
+        "app/webgl-generator/src/ui/panels/state-panel.js"
+      ],
+      "inspectTarget": "cells.inspectAction:states.assignCells",
+      "executeTarget": "edit.states.applyChanges",
+      "phase": "C",
+      "status": "planned-registry",
+      "historyAndRollback": "每次有效手势写一条历史；取消恢复原归属；同入口关闭、切换模式或面板关闭调用统一 cancel；活动手势按各领域回滚；onCancel / onComplete 共用退出清理；onError 由管理器回退活动状态并执行清理",
+      "compatibility": "旧国家归属笔刷与 applyChanges 保持可用"
+    },
+    {
+      "rowId": "mode:state:add",
+      "sourceKind": "canvas-mode",
+      "actionId": "states.createAtCell",
+      "modeId": "state:add",
+      "directId": "",
+      "title": "新增国家",
+      "inputSpace": "grid CellRef",
+      "sourceEntries": [
+        "panel:state-panel",
+        "canvas:map-canvas"
+      ],
+      "sourceRefs": [
+        "app/webgl-generator/src/runtime/app.js",
+        "app/webgl-generator/src/runtime/canvas-tool-mode-manager.js",
+        "app/webgl-generator/src/ui/brush-cursor-preview.js",
+        "app/webgl-generator/src/ui/panels/state-panel.js"
+      ],
+      "inspectTarget": "edit.states.inspectCreateAtCell",
+      "executeTarget": "edit.states.createAtCell",
+      "phase": "C",
+      "status": "planned-registry",
+      "historyAndRollback": "成功写一条新增国家历史；同入口关闭、切换模式或面板关闭调用统一 cancel；活动手势按各领域回滚；onCancel / onComplete 共用退出清理；onError 由管理器回退活动状态并执行清理",
+      "compatibility": "edit.states.add(gridCell) 保持等价兼容"
+    },
+    {
+      "rowId": "mode:state:delete",
+      "sourceKind": "canvas-mode",
+      "actionId": "states.delete",
+      "modeId": "state:delete",
+      "directId": "",
+      "title": "删除国家",
+      "inputSpace": "state ref or picked CellRef",
+      "sourceEntries": [
+        "panel:state-panel",
+        "canvas:map-canvas"
+      ],
+      "sourceRefs": [
+        "app/webgl-generator/src/runtime/app.js",
+        "app/webgl-generator/src/runtime/canvas-tool-mode-manager.js",
+        "app/webgl-generator/src/ui/brush-cursor-preview.js",
+        "app/webgl-generator/src/ui/panels/state-panel.js"
+      ],
+      "inspectTarget": "cells.inspectAction:states.delete",
+      "executeTarget": "edit.states.delete",
+      "phase": "C",
+      "status": "planned-registry",
+      "historyAndRollback": "成功写一条删除国家历史；同入口关闭、切换模式或面板关闭调用统一 cancel；活动手势按各领域回滚；onCancel / onComplete 共用退出清理；onError 由管理器回退活动状态并执行清理",
+      "compatibility": "复用第 203 项危险动作预检与旧删除入口"
+    },
+    {
+      "rowId": "mode:province:brush",
+      "sourceKind": "canvas-mode",
+      "actionId": "provinces.assignCells",
+      "modeId": "province:brush",
+      "directId": "",
+      "title": "省份归属笔刷",
+      "inputSpace": "grid cell set + changes",
+      "sourceEntries": [
+        "panel:province-panel",
+        "canvas:map-canvas"
+      ],
+      "sourceRefs": [
+        "app/webgl-generator/src/runtime/app.js",
+        "app/webgl-generator/src/runtime/canvas-tool-mode-manager.js",
+        "app/webgl-generator/src/ui/brush-cursor-preview.js",
+        "app/webgl-generator/src/ui/panels/province-panel.js"
+      ],
+      "inspectTarget": "cells.inspectAction:provinces.assignCells",
+      "executeTarget": "edit.provinces.applyChanges",
+      "phase": "C",
+      "status": "planned-registry",
+      "historyAndRollback": "每次有效手势写一条历史；取消恢复原归属；同入口关闭、切换模式或面板关闭调用统一 cancel；活动手势按各领域回滚；onCancel / onComplete 共用退出清理；onError 由管理器回退活动状态并执行清理",
+      "compatibility": "旧省份归属笔刷与 applyChanges 保持可用"
+    },
+    {
+      "rowId": "mode:province:add",
+      "sourceKind": "canvas-mode",
+      "actionId": "provinces.createAtCell",
+      "modeId": "province:add",
+      "directId": "",
+      "title": "新增省份",
+      "inputSpace": "grid CellRef",
+      "sourceEntries": [
+        "panel:province-panel",
+        "canvas:map-canvas"
+      ],
+      "sourceRefs": [
+        "app/webgl-generator/src/runtime/app.js",
+        "app/webgl-generator/src/runtime/canvas-tool-mode-manager.js",
+        "app/webgl-generator/src/ui/brush-cursor-preview.js",
+        "app/webgl-generator/src/ui/panels/province-panel.js"
+      ],
+      "inspectTarget": "edit.provinces.inspectCreateAtCell",
+      "executeTarget": "edit.provinces.createAtCell",
+      "phase": "C",
+      "status": "planned-registry",
+      "historyAndRollback": "成功写一条新增省份历史；同入口关闭、切换模式或面板关闭调用统一 cancel；活动手势按各领域回滚；onCancel / onComplete 共用退出清理；onError 由管理器回退活动状态并执行清理",
+      "compatibility": "edit.provinces.add(gridCell) 保持等价兼容"
+    },
+    {
+      "rowId": "mode:province:delete",
+      "sourceKind": "canvas-mode",
+      "actionId": "provinces.delete",
+      "modeId": "province:delete",
+      "directId": "",
+      "title": "删除省份",
+      "inputSpace": "province ref or picked CellRef",
+      "sourceEntries": [
+        "panel:province-panel",
+        "canvas:map-canvas"
+      ],
+      "sourceRefs": [
+        "app/webgl-generator/src/runtime/app.js",
+        "app/webgl-generator/src/runtime/canvas-tool-mode-manager.js",
+        "app/webgl-generator/src/ui/brush-cursor-preview.js",
+        "app/webgl-generator/src/ui/panels/province-panel.js"
+      ],
+      "inspectTarget": "cells.inspectAction:provinces.delete",
+      "executeTarget": "edit.provinces.delete",
+      "phase": "C",
+      "status": "planned-registry",
+      "historyAndRollback": "成功写一条删除省份历史；同入口关闭、切换模式或面板关闭调用统一 cancel；活动手势按各领域回滚；onCancel / onComplete 共用退出清理；onError 由管理器回退活动状态并执行清理",
+      "compatibility": "复用第 203 项危险动作预检与旧删除入口"
+    },
+    {
+      "rowId": "mode:city:add",
+      "sourceKind": "canvas-mode",
+      "actionId": "cities.createAtCell",
+      "modeId": "city:add",
+      "directId": "",
+      "title": "新增城镇",
+      "inputSpace": "grid CellRef",
+      "sourceEntries": [
+        "panel:city-panel",
+        "canvas:map-canvas"
+      ],
+      "sourceRefs": [
+        "app/webgl-generator/src/runtime/app.js",
+        "app/webgl-generator/src/runtime/canvas-tool-mode-manager.js",
+        "app/webgl-generator/src/ui/brush-cursor-preview.js",
+        "app/webgl-generator/src/ui/panels/city-panel.js"
+      ],
+      "inspectTarget": "edit.cities.inspectCreateAtCell",
+      "executeTarget": "edit.cities.createAtCell",
+      "phase": "C",
+      "status": "planned-registry",
+      "historyAndRollback": "成功写一条新增城镇历史；同入口关闭、切换模式或面板关闭调用统一 cancel；活动手势按各领域回滚；onCancel / onComplete 共用退出清理；onError 由管理器回退活动状态并执行清理",
+      "compatibility": "edit.cities.add(gridCell) 保持等价兼容"
+    },
+    {
+      "rowId": "mode:city:delete",
+      "sourceKind": "canvas-mode",
+      "actionId": "cities.delete",
+      "modeId": "city:delete",
+      "directId": "",
+      "title": "删除城镇",
+      "inputSpace": "city ref or picked CellRef",
+      "sourceEntries": [
+        "panel:city-panel",
+        "canvas:map-canvas"
+      ],
+      "sourceRefs": [
+        "app/webgl-generator/src/runtime/app.js",
+        "app/webgl-generator/src/runtime/canvas-tool-mode-manager.js",
+        "app/webgl-generator/src/ui/brush-cursor-preview.js",
+        "app/webgl-generator/src/ui/panels/city-panel.js"
+      ],
+      "inspectTarget": "cells.inspectAction:cities.delete",
+      "executeTarget": "edit.cities.delete",
+      "phase": "C",
+      "status": "planned-registry",
+      "historyAndRollback": "成功写一条删除城镇历史；同入口关闭、切换模式或面板关闭调用统一 cancel；活动手势按各领域回滚；onCancel / onComplete 共用退出清理；onError 由管理器回退活动状态并执行清理",
+      "compatibility": "复用第 203 项危险动作预检与旧删除入口"
+    },
+    {
+      "rowId": "mode:city:move",
+      "sourceKind": "canvas-mode",
+      "actionId": "cities.move",
+      "modeId": "city:move",
+      "directId": "",
+      "title": "移动城镇",
+      "inputSpace": "city ref + grid or pack CellRef",
+      "sourceEntries": [
+        "panel:city-panel",
+        "canvas:map-canvas"
+      ],
+      "sourceRefs": [
+        "app/webgl-generator/src/runtime/app.js",
+        "app/webgl-generator/src/runtime/canvas-tool-mode-manager.js",
+        "app/webgl-generator/src/runtime/city-relocation-drag.js",
+        "app/webgl-generator/src/ui/brush-cursor-preview.js",
+        "app/webgl-generator/src/ui/panels/city-panel.js"
+      ],
+      "inspectTarget": "edit.cities.inspectMove",
+      "executeTarget": "edit.cities.move",
+      "phase": "C",
+      "status": "planned-registry",
+      "historyAndRollback": "成功写一条移动历史；取消恢复原位置；同入口关闭、切换模式或面板关闭调用统一 cancel；活动手势按各领域回滚；onCancel / onComplete 共用退出清理；onError 由管理器回退活动状态并执行清理",
+      "compatibility": "直接登记既有 inspectMove / move"
+    },
+    {
+      "rowId": "mode:culture:assign",
+      "sourceKind": "canvas-mode",
+      "actionId": "cultures.assignCells",
+      "modeId": "culture:assign",
+      "directId": "",
+      "title": "文化归属笔刷",
+      "inputSpace": "culture ref + grid cell set",
+      "sourceEntries": [
+        "panel:culture-panel",
+        "canvas:map-canvas"
+      ],
+      "sourceRefs": [
+        "app/webgl-generator/src/runtime/app.js",
+        "app/webgl-generator/src/runtime/canvas-tool-mode-manager.js",
+        "app/webgl-generator/src/ui/brush-cursor-preview.js",
+        "app/webgl-generator/src/ui/panels/culture-panel.js"
+      ],
+      "inspectTarget": "cells.inspectAction:cultures.assignCells",
+      "executeTarget": "edit.cultures.assignCells",
+      "phase": "C",
+      "status": "planned-registry",
+      "historyAndRollback": "每次有效手势写一条历史；同入口关闭、切换模式或面板关闭调用统一 cancel；活动手势按各领域回滚；onCancel / onComplete 共用退出清理；onError 由管理器回退活动状态并执行清理",
+      "compatibility": "旧文化归属笔刷保持可用"
+    },
+    {
+      "rowId": "mode:religion:assign",
+      "sourceKind": "canvas-mode",
+      "actionId": "religions.assignCells",
+      "modeId": "religion:assign",
+      "directId": "",
+      "title": "宗教归属笔刷",
+      "inputSpace": "religion ref + grid cell set",
+      "sourceEntries": [
+        "panel:religion-panel",
+        "canvas:map-canvas"
+      ],
+      "sourceRefs": [
+        "app/webgl-generator/src/runtime/app.js",
+        "app/webgl-generator/src/runtime/canvas-tool-mode-manager.js",
+        "app/webgl-generator/src/ui/brush-cursor-preview.js",
+        "app/webgl-generator/src/ui/panels/religion-panel.js"
+      ],
+      "inspectTarget": "cells.inspectAction:religions.assignCells",
+      "executeTarget": "edit.religions.assignCells",
+      "phase": "C",
+      "status": "planned-registry",
+      "historyAndRollback": "每次有效手势写一条历史；同入口关闭、切换模式或面板关闭调用统一 cancel；活动手势按各领域回滚；onCancel / onComplete 共用退出清理；onError 由管理器回退活动状态并执行清理",
+      "compatibility": "旧宗教归属笔刷保持可用"
+    },
+    {
+      "rowId": "mode:culture:center",
+      "sourceKind": "canvas-mode",
+      "actionId": "cultures.setCenter",
+      "modeId": "culture:center",
+      "directId": "",
+      "title": "拾取文化中心草稿",
+      "inputSpace": "culture ref + pack CellRef",
+      "sourceEntries": [
+        "panel:culture-panel",
+        "canvas:map-canvas"
+      ],
+      "sourceRefs": [
+        "app/webgl-generator/src/runtime/app.js",
+        "app/webgl-generator/src/runtime/canvas-tool-mode-manager.js",
+        "app/webgl-generator/src/ui/brush-cursor-preview.js",
+        "app/webgl-generator/src/ui/panels/culture-panel.js"
+      ],
+      "inspectTarget": "edit.cultures.inspectExpansion",
+      "executeTarget": "edit.cultures.applyExpansion",
+      "phase": "C",
+      "status": "planned-registry",
+      "historyAndRollback": "拾取不写历史，保存中心变更写一条历史；同入口关闭、切换模式或面板关闭调用统一 cancel；活动手势按各领域回滚；onCancel / onComplete 共用退出清理；onError 由管理器回退活动状态并执行清理",
+      "compatibility": "中心输入并入既有扩张预检与提交"
+    },
+    {
+      "rowId": "mode:religion:center",
+      "sourceKind": "canvas-mode",
+      "actionId": "religions.setCenter",
+      "modeId": "religion:center",
+      "directId": "",
+      "title": "拾取宗教中心草稿",
+      "inputSpace": "religion ref + pack CellRef",
+      "sourceEntries": [
+        "panel:religion-panel",
+        "canvas:map-canvas"
+      ],
+      "sourceRefs": [
+        "app/webgl-generator/src/runtime/app.js",
+        "app/webgl-generator/src/runtime/canvas-tool-mode-manager.js",
+        "app/webgl-generator/src/ui/brush-cursor-preview.js",
+        "app/webgl-generator/src/ui/panels/religion-panel.js"
+      ],
+      "inspectTarget": "edit.religions.inspectExpansion",
+      "executeTarget": "edit.religions.applyExpansion",
+      "phase": "C",
+      "status": "planned-registry",
+      "historyAndRollback": "拾取不写历史，保存中心变更写一条历史；同入口关闭、切换模式或面板关闭调用统一 cancel；活动手势按各领域回滚；onCancel / onComplete 共用退出清理；onError 由管理器回退活动状态并执行清理",
+      "compatibility": "中心输入并入既有扩张预检与提交"
+    },
+    {
+      "rowId": "mode:biome:assign",
+      "sourceKind": "canvas-mode",
+      "actionId": "biomes.assignCells",
+      "modeId": "biome:assign",
+      "directId": "",
+      "title": "生物群系归属笔刷",
+      "inputSpace": "biome ref + grid cell set",
+      "sourceEntries": [
+        "panel:biome-panel",
+        "canvas:map-canvas"
+      ],
+      "sourceRefs": [
+        "app/webgl-generator/src/runtime/app.js",
+        "app/webgl-generator/src/runtime/canvas-tool-mode-manager.js",
+        "app/webgl-generator/src/ui/brush-cursor-preview.js",
+        "app/webgl-generator/src/ui/panels/biome-panel.js"
+      ],
+      "inspectTarget": "cells.inspectAction:biomes.assignCells",
+      "executeTarget": "edit.biomes.assignCells",
+      "phase": "C",
+      "status": "planned-registry",
+      "historyAndRollback": "每次有效手势写一条历史；同入口关闭、切换模式或面板关闭调用统一 cancel；活动手势按各领域回滚；onCancel / onComplete 共用退出清理；onError 由管理器回退活动状态并执行清理",
+      "compatibility": "旧生物群系归属笔刷保持可用"
+    },
+    {
+      "rowId": "mode:biome:suitability",
+      "sourceKind": "canvas-mode",
+      "actionId": "biomes.applySuitability",
+      "modeId": "biome:suitability",
+      "directId": "",
+      "title": "适居度笔刷",
+      "inputSpace": "grid cell set + changes",
+      "sourceEntries": [
+        "panel:biome-panel",
+        "canvas:map-canvas"
+      ],
+      "sourceRefs": [
+        "app/webgl-generator/src/runtime/app.js",
+        "app/webgl-generator/src/runtime/canvas-tool-mode-manager.js",
+        "app/webgl-generator/src/ui/brush-cursor-preview.js",
+        "app/webgl-generator/src/ui/panels/biome-panel.js"
+      ],
+      "inspectTarget": "edit.biomes.inspectSuitability",
+      "executeTarget": "edit.biomes.applySuitability",
+      "phase": "C",
+      "status": "planned-registry",
+      "historyAndRollback": "每次有效手势写一条历史；同入口关闭、切换模式或面板关闭调用统一 cancel；活动手势按各领域回滚；onCancel / onComplete 共用退出清理；onError 由管理器回退活动状态并执行清理",
+      "compatibility": "直接登记既有适居度 inspector"
+    },
+    {
+      "rowId": "mode:economy:market-assign",
+      "sourceKind": "canvas-mode",
+      "actionId": "economy.assignMarketCells",
+      "modeId": "economy:market-assign",
+      "directId": "",
+      "title": "市场归属笔刷",
+      "inputSpace": "market ref + pack cell set",
+      "sourceEntries": [
+        "panel:economy-panel",
+        "canvas:map-canvas"
+      ],
+      "sourceRefs": [
+        "app/webgl-generator/src/runtime/app.js",
+        "app/webgl-generator/src/runtime/canvas-tool-mode-manager.js",
+        "app/webgl-generator/src/ui/brush-cursor-preview.js",
+        "app/webgl-generator/src/ui/panels/economy-panel.js"
+      ],
+      "inspectTarget": "edit.economy.inspectAssignment",
+      "executeTarget": "edit.economy.assignCells",
+      "phase": "C",
+      "status": "planned-registry",
+      "historyAndRollback": "应用成功写一条历史；取消恢复预览；同入口关闭、切换模式或面板关闭调用统一 cancel；活动手势按各领域回滚；onCancel / onComplete 共用退出清理；onError 由管理器回退活动状态并执行清理",
+      "compatibility": "直接登记既有市场归属 inspector"
+    },
+    {
+      "rowId": "mode:measurement:draw",
+      "sourceKind": "canvas-mode",
+      "actionId": "measurements.savePath",
+      "modeId": "measurement:draw",
+      "directId": "",
+      "title": "测量绘制",
+      "inputSpace": "world point path",
+      "sourceEntries": [
+        "panel:measurement-panel",
+        "canvas:map-canvas"
+      ],
+      "sourceRefs": [
+        "app/webgl-generator/src/runtime/app.js",
+        "app/webgl-generator/src/runtime/canvas-tool-mode-manager.js",
+        "app/webgl-generator/src/styles.css",
+        "app/webgl-generator/src/ui/panels/measurement-panel.js"
+      ],
+      "inspectTarget": "cells.inspectAction:measurements.savePath",
+      "executeTarget": "edit.measurements.save",
+      "phase": "C",
+      "status": "planned-registry",
+      "historyAndRollback": "草稿不写历史，保存 / 修改 / 删除通过测量命令写历史；同入口 toggle-off 退出但保留草稿；切换、关面板、切图或进入失败时退出并清空草稿；onCancel / onComplete 共用退出清理；onError 由管理器回退活动状态并执行清理",
+      "compatibility": "既有测量草稿、保存和导入格式保持兼容"
+    },
+    {
+      "rowId": "mode:marker:add",
+      "sourceKind": "canvas-mode",
+      "actionId": "markers.createAtCell",
+      "modeId": "marker:add",
+      "directId": "",
+      "title": "新增标记",
+      "inputSpace": "pack CellRef + marker options",
+      "sourceEntries": [
+        "panel:marker-panel",
+        "canvas:map-canvas"
+      ],
+      "sourceRefs": [
+        "app/webgl-generator/src/runtime/app.js",
+        "app/webgl-generator/src/runtime/canvas-tool-mode-manager.js",
+        "app/webgl-generator/src/ui/brush-cursor-preview.js",
+        "app/webgl-generator/src/ui/panels/marker-panel.js"
+      ],
+      "inspectTarget": "cells.inspectAction:markers.createAtCell",
+      "executeTarget": "edit.markers.add",
+      "phase": "C",
+      "status": "planned-registry",
+      "historyAndRollback": "成功写一条新增标记历史；同入口关闭、切换模式或面板关闭调用统一 cancel；活动手势按各领域回滚；onCancel / onComplete 共用退出清理；onError 由管理器回退活动状态并执行清理",
+      "compatibility": "旧标记创建入口保持可用"
+    },
+    {
+      "rowId": "mode:marker:move",
+      "sourceKind": "canvas-mode",
+      "actionId": "markers.move",
+      "modeId": "marker:move",
+      "directId": "",
+      "title": "移动标记",
+      "inputSpace": "marker ref + pack CellRef",
+      "sourceEntries": [
+        "panel:marker-panel",
+        "canvas:map-canvas"
+      ],
+      "sourceRefs": [
+        "app/webgl-generator/src/runtime/app.js",
+        "app/webgl-generator/src/runtime/canvas-tool-mode-manager.js",
+        "app/webgl-generator/src/ui/brush-cursor-preview.js",
+        "app/webgl-generator/src/ui/panels/marker-panel.js"
+      ],
+      "inspectTarget": "cells.inspectAction:markers.move",
+      "executeTarget": "edit.markers.move",
+      "phase": "C",
+      "status": "planned-registry",
+      "historyAndRollback": "成功写一条移动标记历史；同入口关闭、切换模式或面板关闭调用统一 cancel；活动手势按各领域回滚；onCancel / onComplete 共用退出清理；onError 由管理器回退活动状态并执行清理",
+      "compatibility": "旧标记移动入口保持可用"
+    },
+    {
+      "rowId": "mode:route:draw",
+      "sourceKind": "canvas-mode",
+      "actionId": "routes.createPath",
+      "modeId": "route:draw",
+      "directId": "",
+      "title": "绘制路线",
+      "inputSpace": "pack-cell path or endpoint pair",
+      "sourceEntries": [
+        "panel:route-panel",
+        "canvas:map-canvas"
+      ],
+      "sourceRefs": [
+        "app/webgl-generator/src/runtime/app.js",
+        "app/webgl-generator/src/runtime/canvas-tool-mode-manager.js",
+        "app/webgl-generator/src/ui/brush-cursor-preview.js",
+        "app/webgl-generator/src/ui/panels/route-panel.js"
+      ],
+      "inspectTarget": "cells.inspectAction:routes.createPath",
+      "executeTarget": "edit.routes.create",
+      "phase": "C",
+      "status": "planned-registry",
+      "historyAndRollback": "成功写一条新增路线历史；同入口关闭、切换模式或面板关闭调用统一 cancel；活动手势按各领域回滚；onCancel / onComplete 共用退出清理；onError 由管理器回退活动状态并执行清理",
+      "compatibility": "旧路线创建入口保持可用"
+    },
+    {
+      "rowId": "mode:route:edit-waypoint",
+      "sourceKind": "canvas-mode",
+      "actionId": "routes.editWaypoint",
+      "modeId": "route:edit-waypoint",
+      "directId": "",
+      "title": "拾取路线途经点草稿",
+      "inputSpace": "route ref + pack CellRef",
+      "sourceEntries": [
+        "panel:route-panel",
+        "canvas:map-canvas"
+      ],
+      "sourceRefs": [
+        "app/webgl-generator/src/runtime/app.js",
+        "app/webgl-generator/src/runtime/canvas-tool-mode-manager.js",
+        "app/webgl-generator/src/ui/brush-cursor-preview.js",
+        "app/webgl-generator/src/ui/panels/route-panel.js"
+      ],
+      "inspectTarget": "edit.routes.inspectEdit",
+      "executeTarget": "edit.routes.update",
+      "phase": "C",
+      "status": "planned-registry",
+      "historyAndRollback": "拾取不写历史，实际应用写一条路线编辑历史；同入口关闭、切换模式或面板关闭调用统一 cancel；活动手势按各领域回滚；onCancel / onComplete 共用退出清理；onError 由管理器回退活动状态并执行清理",
+      "compatibility": "直接登记既有路线编辑 inspector"
+    },
+    {
+      "rowId": "mode:river:add",
+      "sourceKind": "canvas-mode",
+      "actionId": "rivers.createAtCell",
+      "modeId": "river:add",
+      "directId": "",
+      "title": "新增河流",
+      "inputSpace": "source pack CellRef",
+      "sourceEntries": [
+        "panel:river-panel",
+        "canvas:map-canvas"
+      ],
+      "sourceRefs": [
+        "app/webgl-generator/src/runtime/app.js",
+        "app/webgl-generator/src/runtime/canvas-tool-mode-manager.js",
+        "app/webgl-generator/src/ui/brush-cursor-preview.js",
+        "app/webgl-generator/src/ui/panels/river-panel.js"
+      ],
+      "inspectTarget": "cells.inspectAction:rivers.createAtCell",
+      "executeTarget": "edit.rivers.create",
+      "phase": "C",
+      "status": "planned-registry",
+      "historyAndRollback": "成功写一条新增河流历史；同入口关闭、切换模式或面板关闭调用统一 cancel；活动手势按各领域回滚；onCancel / onComplete 共用退出清理；onError 由管理器回退活动状态并执行清理",
+      "compatibility": "旧河流创建入口保持可用"
+    },
+    {
+      "rowId": "mode:lake:excavate",
+      "sourceKind": "canvas-mode",
+      "actionId": "lakes.excavateAtCell",
+      "modeId": "lake:excavate",
+      "directId": "",
+      "title": "开挖湖泊",
+      "inputSpace": "pack CellRef + radius",
+      "sourceEntries": [
+        "panel:lake-panel",
+        "canvas:map-canvas"
+      ],
+      "sourceRefs": [
+        "app/webgl-generator/src/runtime/app.js",
+        "app/webgl-generator/src/runtime/canvas-tool-mode-manager.js",
+        "app/webgl-generator/src/ui/brush-cursor-preview.js",
+        "app/webgl-generator/src/ui/panels/lake-panel.js"
+      ],
+      "inspectTarget": "cells.inspectAction:lakes.excavateAtCell",
+      "executeTarget": "edit.lakes.create",
+      "phase": "C",
+      "status": "planned-registry",
+      "historyAndRollback": "成功写一条湖泊开挖历史；同入口关闭、切换模式或面板关闭调用统一 cancel；活动手势按各领域回滚；onCancel / onComplete 共用退出清理；onError 由管理器回退活动状态并执行清理",
+      "compatibility": "旧湖泊开挖入口保持可用"
+    },
+    {
+      "rowId": "mode:feature:patch-select",
+      "sourceKind": "canvas-mode",
+      "actionId": "features.applyPatch",
+      "modeId": "feature:patch-select",
+      "directId": "",
+      "title": "拾取 feature 补丁草稿",
+      "inputSpace": "pack CellRef + radius + patch mode",
+      "sourceEntries": [
+        "panel:lake-panel",
+        "canvas:map-canvas"
+      ],
+      "sourceRefs": [
+        "app/webgl-generator/src/runtime/app.js",
+        "app/webgl-generator/src/runtime/canvas-tool-mode-manager.js",
+        "app/webgl-generator/src/ui/brush-cursor-preview.js",
+        "app/webgl-generator/src/ui/panels/lake-panel.js"
+      ],
+      "inspectTarget": "edit.features.inspectPatch",
+      "executeTarget": "edit.features.applyPatch",
+      "phase": "C",
+      "status": "planned-registry",
+      "historyAndRollback": "选择本身不写历史，应用补丁写一条历史；同入口关闭、切换模式或面板关闭调用统一 cancel；活动手势按各领域回滚；onCancel / onComplete 共用退出清理；onError 由管理器回退活动状态并执行清理",
+      "compatibility": "直接登记既有 Feature 补丁 inspector"
+    },
+    {
+      "rowId": "mode:feature:topology-select",
+      "sourceKind": "canvas-mode",
+      "actionId": "features.applyTopology",
+      "modeId": "feature:topology-select",
+      "directId": "",
+      "title": "选择 feature 拓扑 cell",
+      "inputSpace": "grid cell set + topology operation",
+      "sourceEntries": [
+        "panel:feature-panel",
+        "canvas:map-canvas"
+      ],
+      "sourceRefs": [
+        "app/webgl-generator/src/runtime/app.js",
+        "app/webgl-generator/src/runtime/canvas-tool-mode-manager.js",
+        "app/webgl-generator/src/ui/brush-cursor-preview.js",
+        "app/webgl-generator/src/ui/panels/feature-panel.js"
+      ],
+      "inspectTarget": "edit.features.inspectTopology",
+      "executeTarget": "edit.features.applyTopology",
+      "phase": "C",
+      "status": "planned-registry",
+      "historyAndRollback": "选择不写历史，应用拓扑写一条历史；同入口关闭、切换模式或面板关闭调用统一 cancel；活动手势按各领域回滚；onCancel / onComplete 共用退出清理；onError 由管理器回退活动状态并执行清理",
+      "compatibility": "直接登记既有 Feature 拓扑 inspector"
+    },
+    {
+      "rowId": "mode:zone:add",
+      "sourceKind": "canvas-mode",
+      "actionId": "zones.createAtCell",
+      "modeId": "zone:add",
+      "directId": "",
+      "title": "新增地区",
+      "inputSpace": "center pack CellRef + radius",
+      "sourceEntries": [
+        "panel:zone-panel",
+        "canvas:map-canvas"
+      ],
+      "sourceRefs": [
+        "app/webgl-generator/src/runtime/app.js",
+        "app/webgl-generator/src/runtime/canvas-tool-mode-manager.js",
+        "app/webgl-generator/src/ui/brush-cursor-preview.js",
+        "app/webgl-generator/src/ui/panels/zone-panel.js"
+      ],
+      "inspectTarget": "cells.inspectAction:zones.createAtCell",
+      "executeTarget": "edit.zones.create",
+      "phase": "C",
+      "status": "planned-registry",
+      "historyAndRollback": "成功写一条新增地区历史；同入口关闭、切换模式或面板关闭调用统一 cancel；活动手势按各领域回滚；onCancel / onComplete 共用退出清理；onError 由管理器回退活动状态并执行清理",
+      "compatibility": "旧地区创建入口保持可用"
+    },
+    {
+      "rowId": "mode:note:add",
+      "sourceKind": "canvas-mode",
+      "actionId": "notes.createAtCell",
+      "modeId": "note:add",
+      "directId": "",
+      "title": "新增备注",
+      "inputSpace": "pack CellRef or world point",
+      "sourceEntries": [
+        "panel:notes-panel",
+        "canvas:map-canvas"
+      ],
+      "sourceRefs": [
+        "app/webgl-generator/src/runtime/app.js",
+        "app/webgl-generator/src/runtime/canvas-tool-mode-manager.js",
+        "app/webgl-generator/src/ui/brush-cursor-preview.js",
+        "app/webgl-generator/src/ui/panels/notes-panel.js"
+      ],
+      "inspectTarget": "cells.inspectAction:notes.createAtCell",
+      "executeTarget": "edit.notes.createStandalone",
+      "phase": "C",
+      "status": "planned-registry",
+      "historyAndRollback": "成功写一条新增备注历史；同入口关闭、切换模式或面板关闭调用统一 cancel；活动手势按各领域回滚；onCancel / onComplete 共用退出清理；onError 由管理器回退活动状态并执行清理",
+      "compatibility": "旧独立备注创建入口与存档字段保持兼容"
+    },
+    {
+      "rowId": "direct:DM-01",
+      "sourceKind": "direct-manipulation",
+      "actionId": "selection.selectAtPoint",
+      "modeId": "",
+      "directId": "DM-01",
+      "title": "基础画布左键点击选择",
+      "inputSpace": "client or world point",
+      "sourceEntries": [
+        "canvas:map-canvas"
+      ],
+      "sourceRefs": [
+        "app/webgl-generator/src/renderer/placeholder-renderer.js"
+      ],
+      "inspectTarget": "selection.pick",
+      "executeTarget": "selection.select",
+      "phase": "P0",
+      "status": "existing-api",
+      "historyAndRollback": "选择不写地图历史；失败不改变选择；源码现状：选择不写地图历史；下一次 pointerdown 可重新开始",
+      "compatibility": "复用第 200 项 selection，不新增 Cell 写入口"
+    },
+    {
+      "rowId": "direct:DM-02",
+      "sourceKind": "direct-manipulation",
+      "actionId": "camera.panMiddlePointer",
+      "modeId": "",
+      "directId": "DM-02",
+      "title": "基础画布鼠标中键平移",
+      "inputSpace": "client pointer delta",
+      "sourceEntries": [
+        "canvas:map-canvas"
+      ],
+      "sourceRefs": [
+        "app/webgl-generator/src/renderer/placeholder-renderer.js",
+        "app/webgl-generator/src/runtime/app.js"
+      ],
+      "inspectTarget": "excluded:camera-control",
+      "executeTarget": "excluded:camera-control",
+      "phase": "excluded",
+      "status": "excluded",
+      "historyAndRollback": "不写地图历史；无地图事务；源码现状：相机变化不写地图历史；下一次从当前相机继续",
+      "compatibility": "相机平移不属于地图数据 API；沿用第 200 项排除理由"
+    },
+    {
+      "rowId": "direct:DM-03",
+      "sourceKind": "direct-manipulation",
+      "actionId": "camera.panRightPointer",
+      "modeId": "",
+      "directId": "DM-03",
+      "title": "基础画布鼠标右键平移",
+      "inputSpace": "client pointer delta",
+      "sourceEntries": [
+        "canvas:map-canvas"
+      ],
+      "sourceRefs": [
+        "app/webgl-generator/src/renderer/placeholder-renderer.js",
+        "app/webgl-generator/src/runtime/app.js"
+      ],
+      "inspectTarget": "excluded:camera-control",
+      "executeTarget": "excluded:camera-control",
+      "phase": "excluded",
+      "status": "excluded",
+      "historyAndRollback": "不写地图历史；无地图事务；源码现状：相机变化不写地图历史；下一次从当前相机继续",
+      "compatibility": "相机平移不属于地图数据 API；沿用第 200 项排除理由"
+    },
+    {
+      "rowId": "direct:DM-04",
+      "sourceKind": "direct-manipulation",
+      "actionId": "camera.panTouchPointer",
+      "modeId": "",
+      "directId": "DM-04",
+      "title": "基础画布非鼠标主指针平移",
+      "inputSpace": "client pointer delta",
+      "sourceEntries": [
+        "canvas:map-canvas"
+      ],
+      "sourceRefs": [
+        "app/webgl-generator/src/renderer/placeholder-renderer.js",
+        "app/webgl-generator/src/runtime/app.js"
+      ],
+      "inspectTarget": "excluded:camera-control",
+      "executeTarget": "excluded:camera-control",
+      "phase": "excluded",
+      "status": "excluded",
+      "historyAndRollback": "不写地图历史；无地图事务；源码现状：相机变化不写地图历史；下一次从当前相机继续",
+      "compatibility": "相机平移不属于地图数据 API；沿用第 200 项排除理由"
+    },
+    {
+      "rowId": "direct:DM-05",
+      "sourceKind": "direct-manipulation",
+      "actionId": "camera.zoomAtPoint",
+      "modeId": "",
+      "directId": "DM-05",
+      "title": "基础画布滚轮锚点缩放",
+      "inputSpace": "client point + wheel delta",
+      "sourceEntries": [
+        "canvas:map-canvas"
+      ],
+      "sourceRefs": [
+        "app/webgl-generator/src/renderer/placeholder-renderer.js",
+        "app/webgl-generator/src/runtime/app.js"
+      ],
+      "inspectTarget": "excluded:camera-control",
+      "executeTarget": "excluded:camera-control",
+      "phase": "excluded",
+      "status": "excluded",
+      "historyAndRollback": "不写地图历史；无地图事务；源码现状：相机变化不写地图历史；每次 wheel 独立从当前相机计算",
+      "compatibility": "相机缩放不属于地图数据 API；沿用第 200 项排除理由"
+    },
+    {
+      "rowId": "direct:DM-06",
+      "sourceKind": "direct-manipulation",
+      "actionId": "browser.suppressCanvasContextMenu",
+      "modeId": "",
+      "directId": "DM-06",
+      "title": "基础画布右键菜单抑制",
+      "inputSpace": "browser contextmenu event",
+      "sourceEntries": [
+        "canvas:map-canvas"
+      ],
+      "sourceRefs": [
+        "app/webgl-generator/src/renderer/placeholder-renderer.js"
+      ],
+      "inspectTarget": "excluded:browser-shell",
+      "executeTarget": "excluded:browser-shell",
+      "phase": "excluded",
+      "status": "excluded",
+      "historyAndRollback": "不写地图历史；无地图事务；源码现状：不写地图历史；每次事件独立",
+      "compatibility": "浏览器默认事件抑制不是地图能力；沿用第 200 项排除理由"
+    },
+    {
+      "rowId": "direct:DM-07",
+      "sourceKind": "direct-manipulation",
+      "actionId": "browser.suppressCanvasAuxClick",
+      "modeId": "",
+      "directId": "DM-07",
+      "title": "基础画布中 / 右键 auxclick 抑制",
+      "inputSpace": "browser auxclick event",
+      "sourceEntries": [
+        "canvas:map-canvas"
+      ],
+      "sourceRefs": [
+        "app/webgl-generator/src/renderer/placeholder-renderer.js"
+      ],
+      "inspectTarget": "excluded:browser-shell",
+      "executeTarget": "excluded:browser-shell",
+      "phase": "excluded",
+      "status": "excluded",
+      "historyAndRollback": "不写地图历史；无地图事务；源码现状：不写地图历史；每次事件独立",
+      "compatibility": "浏览器默认事件抑制不是地图能力；沿用第 200 项排除理由"
+    },
+    {
+      "rowId": "direct:DM-08",
+      "sourceKind": "direct-manipulation",
+      "actionId": "labels.placeCustom",
+      "modeId": "",
+      "directId": "DM-08",
+      "title": "手工标签首次放置并拖动",
+      "inputSpace": "world point + label options",
+      "sourceEntries": [
+        "canvas:map-overlay"
+      ],
+      "sourceRefs": [
+        "app/webgl-generator/src/runtime/app.js"
+      ],
+      "inspectTarget": "cells.inspectAction:labels.placeCustom",
+      "executeTarget": "edit.labels.addCustom + edit.labels.moveCustom",
+      "phase": "C",
+      "status": "planned-registry",
+      "historyAndRollback": "创建与落点合并为单历史；异常完整回滚；源码现状：沿用一条创建历史；命令失败刷新标签；缺失标签时清理拖态",
+      "compatibility": "旧手工标签创建与拖动交互保持可用"
+    },
+    {
+      "rowId": "direct:DM-09",
+      "sourceKind": "direct-manipulation",
+      "actionId": "labels.moveCustom",
+      "modeId": "",
+      "directId": "DM-09",
+      "title": "已有手工标签拖动",
+      "inputSpace": "label ref + world point",
+      "sourceEntries": [
+        "canvas:map-overlay"
+      ],
+      "sourceRefs": [
+        "app/webgl-generator/src/runtime/app.js"
+      ],
+      "inspectTarget": "cells.inspectAction:labels.moveCustom",
+      "executeTarget": "edit.labels.moveCustom",
+      "phase": "C",
+      "status": "planned-registry",
+      "historyAndRollback": "成功一条移动历史；取消不提交；源码现状：有效移动写一条历史；命令失败刷新标签；缺失标签时清理拖态",
+      "compatibility": "直接登记既有 moveCustom"
+    },
+    {
+      "rowId": "direct:DM-10",
+      "sourceKind": "direct-manipulation",
+      "actionId": "measurements.movePoint",
+      "modeId": "",
+      "directId": "DM-10",
+      "title": "测量控制点拖动",
+      "inputSpace": "measurement ref + point index + world point",
+      "sourceEntries": [
+        "canvas:measurement-overlay"
+      ],
+      "sourceRefs": [
+        "app/webgl-generator/src/runtime/app.js"
+      ],
+      "inspectTarget": "cells.inspectAction:measurements.movePoint",
+      "executeTarget": "edit.measurements.updatePoints",
+      "phase": "C",
+      "status": "planned-registry",
+      "historyAndRollback": "草稿不写历史，保存成功一条历史；失败保留原对象；源码现状：拖动不写历史，保存修改才写命令；切换模式、关闭面板、切图或进入失败时清理草稿；普通 toggle-off 后可继续",
+      "compatibility": "直接登记既有 updatePoints"
+    },
+    {
+      "rowId": "direct:DM-11",
+      "sourceKind": "direct-manipulation",
+      "actionId": "measurements.deletePointByPointer",
+      "modeId": "",
+      "directId": "DM-11",
+      "title": "测量控制点右键 / Alt / Shift 删除",
+      "inputSpace": "measurement ref + point index",
+      "sourceEntries": [
+        "canvas:measurement-overlay"
+      ],
+      "sourceRefs": [
+        "app/webgl-generator/src/runtime/app.js"
+      ],
+      "inspectTarget": "cells.inspectAction:measurements.deletePointByPointer",
+      "executeTarget": "edit.measurements.updatePoints",
+      "phase": "C",
+      "status": "planned-registry",
+      "historyAndRollback": "草稿不写历史，保存成功一条历史；失败保留原对象；源码现状：草稿删除不写历史，保存时才写命令；取消编辑可丢弃草稿；保存前原对象不变",
+      "compatibility": "指针删除仍委托 updatePoints"
+    },
+    {
+      "rowId": "direct:DM-12",
+      "sourceKind": "direct-manipulation",
+      "actionId": "measurements.deletePointByKeyboard",
+      "modeId": "",
+      "directId": "DM-12",
+      "title": "测量控制点 Delete / Backspace 删除",
+      "inputSpace": "measurement ref + point index",
+      "sourceEntries": [
+        "canvas:measurement-overlay"
+      ],
+      "sourceRefs": [
+        "app/webgl-generator/src/runtime/app.js"
+      ],
+      "inspectTarget": "cells.inspectAction:measurements.deletePointByKeyboard",
+      "executeTarget": "edit.measurements.updatePoints",
+      "phase": "C",
+      "status": "planned-registry",
+      "historyAndRollback": "草稿不写历史，保存成功一条历史；失败保留原对象；源码现状：草稿删除不写历史，保存时才写命令；取消编辑可丢弃草稿",
+      "compatibility": "键盘删除仍委托 updatePoints"
+    },
+    {
+      "rowId": "direct:DM-13",
+      "sourceKind": "direct-manipulation",
+      "actionId": "measurements.updatePath",
+      "modeId": "",
+      "directId": "DM-13",
+      "title": "载入已保存测量路径并编辑 / 保存",
+      "inputSpace": "measurement ref + world point path",
+      "sourceEntries": [
+        "canvas:measurement-overlay"
+      ],
+      "sourceRefs": [
+        "app/webgl-generator/src/runtime/app.js"
+      ],
+      "inspectTarget": "cells.inspectAction:measurements.updatePath",
+      "executeTarget": "edit.measurements.updatePoints",
+      "phase": "C",
+      "status": "planned-registry",
+      "historyAndRollback": "成功一条更新历史；失败保留原对象和可编辑草稿；源码现状：成功保存更新写一条测量命令；保存失败原对象保持，草稿仍可调整；toggle-off 后可再次进入继续",
+      "compatibility": "直接登记既有 updatePoints"
+    },
+    {
+      "rowId": "direct:DM-14",
+      "sourceKind": "direct-manipulation",
+      "actionId": "ui.dragPanel",
+      "modeId": "",
+      "directId": "DM-14",
+      "title": "主面板标题栏拖动",
+      "inputSpace": "client pointer delta",
+      "sourceEntries": [
+        "panel:biome-panel",
+        "panel:city-panel",
+        "panel:climate-panel",
+        "panel:culture-panel",
+        "panel:development-panel",
+        "panel:diplomacy-panel",
+        "panel:economy-panel",
+        "panel:emblem-panel",
+        "panel:feature-panel",
+        "panel:generation-panel",
+        "panel:government-panel",
+        "panel:height-panel",
+        "panel:label-naming-panel",
+        "panel:lake-panel",
+        "panel:marker-panel",
+        "panel:measurement-panel",
+        "panel:military-panel",
+        "panel:namebase-panel",
+        "panel:notes-panel",
+        "panel:object-details",
+        "panel:ocean-current-panel",
+        "panel:population-panel",
+        "panel:province-panel",
+        "panel:religion-panel",
+        "panel:river-panel",
+        "panel:route-panel",
+        "panel:state-panel",
+        "panel:zone-panel"
+      ],
+      "sourceRefs": [
+        "app/webgl-generator/src/ui/panel-manager.js"
+      ],
+      "inspectTarget": "excluded:ui-shell",
+      "executeTarget": "excluded:ui-shell",
+      "phase": "excluded",
+      "status": "excluded",
+      "historyAndRollback": "不写地图历史；无地图事务；源码现状：只持久化布局，不写地图历史；pointercancel 回原位，reflow 保证可达",
+      "compatibility": "面板位置不属于地图数据 API；沿用第 200 项排除理由"
+    },
+    {
+      "rowId": "direct:DM-15",
+      "sourceKind": "direct-manipulation",
+      "actionId": "ui.dragActionDock",
+      "modeId": "",
+      "directId": "DM-15",
+      "title": "动作坞二级面板拖动",
+      "inputSpace": "client pointer delta",
+      "sourceEntries": [
+        "fixed-overlay:action-dock:biome-panel",
+        "fixed-overlay:action-dock:city-panel",
+        "fixed-overlay:action-dock:control-panel",
+        "fixed-overlay:action-dock:culture-panel",
+        "fixed-overlay:action-dock:diplomacy-panel",
+        "fixed-overlay:action-dock:label-naming-panel",
+        "fixed-overlay:action-dock:lake-panel",
+        "fixed-overlay:action-dock:marker-panel",
+        "fixed-overlay:action-dock:measurement-panel",
+        "fixed-overlay:action-dock:military-panel",
+        "fixed-overlay:action-dock:notes-panel",
+        "fixed-overlay:action-dock:population-panel",
+        "fixed-overlay:action-dock:province-panel",
+        "fixed-overlay:action-dock:religion-panel",
+        "fixed-overlay:action-dock:river-panel",
+        "fixed-overlay:action-dock:route-panel",
+        "fixed-overlay:action-dock:state-panel",
+        "fixed-overlay:action-dock:zone-panel"
+      ],
+      "sourceRefs": [
+        "app/webgl-generator/src/ui/vue/components/base/UiActionDock.vue"
+      ],
+      "inspectTarget": "excluded:ui-shell",
+      "executeTarget": "excluded:ui-shell",
+      "phase": "excluded",
+      "status": "excluded",
+      "historyAndRollback": "不写地图历史；无地图事务；源码现状：不写地图历史；resize / scroll 重新约束",
+      "compatibility": "动作坞位置不属于地图数据 API；沿用第 200 项排除理由"
+    },
+    {
+      "rowId": "direct:DM-16",
+      "sourceKind": "direct-manipulation",
+      "actionId": "ui.dragExportOverlay",
+      "modeId": "",
+      "directId": "DM-16",
+      "title": "项目导出浮层拖动",
+      "inputSpace": "client pointer delta",
+      "sourceEntries": [
+        "fixed-overlay:project-export"
+      ],
+      "sourceRefs": [
+        "app/webgl-generator/src/ui/vue/components/ControlPanel.vue",
+        "app/webgl-generator/src/ui/vue/composables/use-draggable-floating-panel.js"
+      ],
+      "inspectTarget": "excluded:ui-shell",
+      "executeTarget": "excluded:ui-shell",
+      "phase": "excluded",
+      "status": "excluded",
+      "historyAndRollback": "不写地图历史；无地图事务；源码现状：只持久化 UI 位置；resize 约束；损坏存储回退默认",
+      "compatibility": "导出浮层位置不属于地图数据 API；沿用第 200 项排除理由"
+    },
+    {
+      "rowId": "direct:DM-17",
+      "sourceKind": "direct-manipulation",
+      "actionId": "ui.dragTreeOverlay",
+      "modeId": "",
+      "directId": "DM-17",
+      "title": "文化 / 宗教树状浮层拖动",
+      "inputSpace": "client pointer delta",
+      "sourceEntries": [
+        "fixed-overlay:tree:culture-panel",
+        "fixed-overlay:tree:religion-panel"
+      ],
+      "sourceRefs": [
+        "app/webgl-generator/src/ui/vue/components/base/UiTreeDisplayPanel.vue",
+        "app/webgl-generator/src/ui/vue/composables/use-draggable-floating-panel.js"
+      ],
+      "inspectTarget": "excluded:ui-shell",
+      "executeTarget": "excluded:ui-shell",
+      "phase": "excluded",
+      "status": "excluded",
+      "historyAndRollback": "不写地图历史；无地图事务；源码现状：未传 storageKey，不持久化且不写地图历史；卸载 stopDrag；重新创建组件回到调用方定位",
+      "compatibility": "树状浮层位置不属于地图数据 API；沿用第 200 项排除理由"
+    },
+    {
+      "rowId": "direct:DM-18",
+      "sourceKind": "direct-manipulation",
+      "actionId": "ui.dragHeightWorkbench",
+      "modeId": "",
+      "directId": "DM-18",
+      "title": "高度图工作台拖动",
+      "inputSpace": "client pointer delta",
+      "sourceEntries": [
+        "panel:height-panel"
+      ],
+      "sourceRefs": [
+        "app/webgl-generator/src/ui/vue/components/HeightPanel.vue"
+      ],
+      "inspectTarget": "excluded:ui-shell",
+      "executeTarget": "excluded:ui-shell",
+      "phase": "excluded",
+      "status": "excluded",
+      "historyAndRollback": "不写地图历史；无地图事务；源码现状：不写地图历史；停止时移除 window 监听",
+      "compatibility": "高度工作台位置不属于地图数据 API；沿用第 200 项排除理由"
+    },
+    {
+      "rowId": "direct:DM-19",
+      "sourceKind": "direct-manipulation",
+      "actionId": "ui.resizeObjectTableColumn",
+      "modeId": "",
+      "directId": "DM-19",
+      "title": "对象表格列宽拖动",
+      "inputSpace": "client pointer delta + column id",
+      "sourceEntries": [
+        "shared:object-table",
+        "shared:ui-object-table"
+      ],
+      "sourceRefs": [
+        "app/webgl-generator/src/ui/vue/components/base/UiObjectTable.vue"
+      ],
+      "inspectTarget": "excluded:ui-shell",
+      "executeTarget": "excluded:ui-shell",
+      "phase": "excluded",
+      "status": "excluded",
+      "historyAndRollback": "不写地图历史；无地图事务；源码现状：保存到面板列表偏好，不写地图历史；停止时移除 window 监听",
+      "compatibility": "表格列宽不属于地图数据 API；沿用第 200 项排除理由"
+    }
+  ]
+}

@@ -65,10 +65,11 @@ import {createEditRefreshScheduler} from "./edit-refresh-scheduler.js";
 import {BROWSER_MAP_STORAGE_KEY, decodeBrowserMapStoragePayload, encodeBrowserMapStoragePayload} from "./browser-map-storage.js";
 import {createImportFmgCellsHeightCommand} from "./fmg-cells-geojson-import.js";
 import {EditHistory} from "./edit-history.js";
+import {MapRevisionTracker} from "./map-revision.js";
 import {createGrayscaleHeightmapFromImage, createPaletteHeightmapFromImage, normalizeHeightmapImportPayload} from "./heightmap-import.js";
 import {createMapDocument, downloadText, mapFileBaseName, parseGeoJsonMeasurements, parseMapDocument, parseMapDocumentPayload, stringifyMapDocument} from "./map-file-io.js";
 import {attachImportDiagnostic, createHeightmapSourceSummary, createImportFailureDiagnostic, createImportSuccessDiagnostic, createMapImportDiagnostic, formatMapImportDiagnosticLines, inspectGeoImportSource, stringifyMapImportDiagnostic} from "./map-import-diagnostics.js";
-import {createAddCityAtCellCommand, createDeleteCityCommand, createRenameCitiesFromNamebaseCommand, createResetCityVisualCommand, createSetCityNoteCommand, createSetCityPopulationCommand, createSetCityVisualCommand, createSyncCityOwnerToCellCommand} from "./city-edit-commands.js";
+import {createAddCityAtCellCommand, createDeleteCityCommand, createRenameCitiesFromNamebaseCommand, createResetCityVisualCommand, createSetCityNoteCommand, createSetCityPopulationCommand, createSetCityVisualCommand, createSyncCityOwnerToCellCommand, inspectCityCreation} from "./city-edit-commands.js";
 import {createMoveCityCommand, inspectCityMove} from "./city-relocation.js";
 import {bindCityRelocationDrag} from "./city-relocation-drag.js";
 import {createAddCultureCommand, createApplyCultureAssignmentCommand, createDeleteCultureCommand, createSetCultureColorCommand, createSetCultureParentCommand} from "./culture-edit-commands.js";
@@ -129,7 +130,7 @@ import {applyMarketAssignmentPreview, buildMarketAssignmentChanges, createApplyM
 import {createRenameNamedObjectsFromNamebaseCommand, createRenameObjectCommand, createSetObjectNoteCommand, createSetProvinceColorCommand, createSetStateCapitalCommand} from "./object-edit-commands.js";
 import {createApplyFeaturePatchCommand, createDeleteLakeCommand, createExcavateLakeCommand, createRenameLakesFromNamebaseCommand, createSetLakeOutletCommand, inspectFeaturePatch, inspectLakeOutletChange} from "./lake-edit-commands.js";
 import {createApplyFeatureTopologyCommand, FEATURE_TOPOLOGY_MODE, inspectFeatureTopology, rebuildFeatureTopology} from "./feature-topology-edit-commands.js";
-import {applyProvinceBrushPreview, createAddProvinceAtCellCommand, createApplyProvinceBrushCommand, createDeleteProvinceCommand, PROVINCE_BRUSH_PREVIEW_EFFECTS} from "./province-edit-commands.js";
+import {applyProvinceBrushPreview, createAddProvinceAtCellCommand, createApplyProvinceBrushCommand, createDeleteProvinceCommand, inspectProvinceCreation, PROVINCE_BRUSH_PREVIEW_EFFECTS} from "./province-edit-commands.js";
 import {
   createAddReligionCommand,
   createApplyReligionAssignmentCommand,
@@ -148,9 +149,12 @@ import {captureMapMutationSnapshot, executeMapSnapshotTransaction, restoreMapMut
 import {SelectionStore} from "./selection-store.js";
 import {decideSelectionPanelRoute, SELECTION_PANEL_BINDINGS, SELECTION_PANEL_ROUTE} from "./selection-panel-policy.js";
 import {installKeyboardShortcuts} from "./keyboard-shortcuts.js";
-import {applyStateBrushPreview, createAddStateAtCellCommand, createApplyStateBrushCommand, createDeleteStateCommand, createRenameStatesFromNamebaseCommand, createSetStateColorCommand, createSetStateGovernmentCommand, createSetStatesGovernmentBatchCommand, STATE_BRUSH_PREVIEW_EFFECTS} from "./state-edit-commands.js";
+import {applyStateBrushPreview, createAddStateAtCellCommand, createApplyStateBrushCommand, createDeleteStateCommand, createRenameStatesFromNamebaseCommand, createSetStateColorCommand, createSetStateGovernmentCommand, createSetStatesGovernmentBatchCommand, inspectStateCreation, STATE_BRUSH_PREVIEW_EFFECTS} from "./state-edit-commands.js";
+import {issueCellInspectionToken, normalizeCellCreateInput, validateCellInspectionToken} from "./cell-inspection-token.js";
 import {createMergeStatesCommand, createSplitStateCommand, inspectStateMerge, inspectStateSplit, regenerateProvincesForStates} from "./state-topology-commands.js";
 import {createAddZoneCommand, createDeleteZoneCommand, createSetZoneStyleCommand} from "./zone-edit-commands.js";
+import {createClearRegenerationLocksCommand, createSetRegenerationLockCommand, createSetRegenerationLocksCommand} from "./regeneration-lock-commands.js";
+import {assertRegenerationLockInspection, createRegenerationLockInspection, getRegenerationLockStatus, listRegenerationLocks, lockError, normalizeRegenerationLockReference, normalizeRegenerationLockReferences, regenerationLockObjectExists} from "./regeneration-locks.js";
 import {captureVisualThemeState, createSetUserVisualThemesCommand} from "./visual-theme-edit-commands.js";
 import {mergePersistedUserVisualThemes, persistUserVisualThemes} from "./visual-theme-storage.js";
 import {collectionAffected, objectAffected, systemAffected} from "./edit-command-effects.js";
@@ -315,13 +319,20 @@ export const CANVAS_TOOL_MODE = Object.freeze({
 export function createGeneratorApp(documentRef, {healthMonitor = getWebglGeneratorHealthMonitor(documentRef)} = {}) {
   const canvas = documentRef.getElementById("map-canvas");
   const panelManager = new PanelManager(documentRef, documentRef.querySelector(".map-stage"));
+  const mapRevision = new MapRevisionTracker();
+  const editHistory = new EditHistory({
+    onMutation: () => mapRevision.advance(),
+    onSnapshot: () => mapRevision.createSnapshot(),
+    onRestore: snapshot => mapRevision.restoreSnapshot(snapshot)
+  });
   const state = {
     options: {...DEFAULT_OPTIONS},
     map: null,
     pick: null,
     selection: null,
     editingObject: null,
-    editHistory: new EditHistory(),
+    editHistory,
+    mapRevision,
     editRefreshScheduler: null,
     brushCursorPreview: null,
     heightEdit: {
@@ -593,12 +604,8 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       const scope = heightPanel.getBrush().scope;
       const seed = action === "disrupt" ? state.heightEdit.globalToolSeed + 1 : 0;
       const allowedCells = heightToolAllowedCells(state);
-      const preview = inspectGlobalHeightChanges(state.map, {action, scope, seed, allowedCells});
-      let rendererPreview = null;
-      if (preview.valid) {
-        const changes = getGlobalHeightChanges(state.map, {action, scope, seed, allowedCells});
-        rendererPreview = state.renderer?.setHeightTransformPreview?.(changes) || null;
-      }
+      const preview = runtimeActions.edit.height.inspectGlobalTransform({action, scope, seed, allowedCells, _includeAllChanges: true});
+      const rendererPreview = preview.valid ? state.renderer?.setHeightTransformPreview?.(preview.changes) || null : null;
       heightPanel.updateGlobalToolPreview({...preview, rendererPreview});
       updateEditingInteractionLock(state, documentRef);
       return preview;
@@ -615,28 +622,17 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
         return false;
       }
       const scope = heightPanel.getBrush().scope;
-      const options = {action: reserved.action, scope, seed: reserved.seed, allowedCells: heightToolAllowedCells(state)};
-      const preview = inspectGlobalHeightChanges(state.map, options);
-      if (!preview.valid) {
+      const options = {action: reserved.action, scope, seed: reserved.seed, allowedCells: heightToolAllowedCells(state), inspectionToken: reserved.inspectionToken};
+      const result = runtimeActions.edit.height.applyGlobalTransform(options);
+      if (!result.executed) {
         state.heightEdit.lastAffected = 0;
         state.heightEdit.lastHeight = "none";
         state.heightEdit.lastDelta = "none";
-        state.heightEdit.lastNotice = preview.notice;
+        state.heightEdit.lastNotice = result.notice;
         updateHeightPanel(state);
         return false;
       }
-      const changes = getGlobalHeightChanges(state.map, options);
-      const label = reserved.action === "smooth" ? "全局平滑" : "全局扰动";
-      state.heightEdit.lastAffected = changes.length;
-      state.heightEdit.lastHeight = summarizeChangedHeights(changes);
-      state.heightEdit.lastDelta = summarizeChangedHeightDelta(changes);
-      state.heightEdit.lastNotice = `已${label} ${changes.length} cells。`;
-      const result = executeEditCommand(state, documentRef, createApplyHeightBrushCommand(changes, {label}), {
-        context: {map: state.map},
-        refresh: refreshAfterEdit,
-        refreshPanels: false
-      });
-      if (result.executed && reserved.action === "disrupt") state.heightEdit.globalToolSeed = reserved.seed;
+      state.heightEdit.lastNotice = `已${reserved.action === "smooth" ? "全局平滑" : "全局扰动"} ${reserved.changeCount} cells。`;
       updateHeightPanel(state);
       updateEditingInteractionLock(state, documentRef);
       return result.executed;
@@ -655,12 +651,8 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
         seed: heightTerrainTemplateUsesSeed(template.templateId) ? state.heightEdit.terrainTemplateSeed + 1 : 0,
         allowedCells: heightTemplateAllowedCells(state)
       };
-      const preview = inspectHeightTerrainTemplate(state.map, options);
-      let rendererPreview = null;
-      if (preview.valid) {
-        const changes = getHeightTerrainTemplateChanges(state.map, options);
-        rendererPreview = state.renderer?.setHeightTransformPreview?.(changes) || null;
-      }
+      const preview = runtimeActions.edit.height.inspectTerrainTemplate({...options, _includeAllChanges: true});
+      const rendererPreview = preview.valid ? state.renderer?.setHeightTransformPreview?.(preview.changes) || null : null;
       heightPanel.updateTerrainTemplatePreview({...preview, rendererPreview});
       updateEditingInteractionLock(state, documentRef);
       return preview;
@@ -684,29 +676,20 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
         amplitude: reserved.amplitude,
         seed: reserved.seed,
         scope: reserved.scope,
-        allowedCells: heightTemplateAllowedCells(state)
+        allowedCells: heightTemplateAllowedCells(state),
+        inspectionToken: reserved.inspectionToken
       };
-      const preview = inspectHeightTerrainTemplate(state.map, options);
-      if (!preview.valid) {
+      const result = runtimeActions.edit.height.applyTerrainTemplate(options);
+      if (!result.executed) {
         state.heightEdit.lastAffected = 0;
         state.heightEdit.lastHeight = "none";
         state.heightEdit.lastDelta = "none";
-        state.heightEdit.lastNotice = preview.notice;
+        state.heightEdit.lastNotice = result.notice;
         updateHeightPanel(state);
         return false;
       }
-      const changes = getHeightTerrainTemplateChanges(state.map, options);
       const label = heightTerrainTemplateLabel(options.templateId);
-      state.heightEdit.lastAffected = changes.length;
-      state.heightEdit.lastHeight = summarizeChangedHeights(changes);
-      state.heightEdit.lastDelta = summarizeChangedHeightDelta(changes);
-      state.heightEdit.lastNotice = `已应用${label} ${changes.length} cells。`;
-      const result = executeEditCommand(state, documentRef, createApplyHeightBrushCommand(changes, {label}), {
-        context: {map: state.map},
-        refresh: refreshAfterEdit,
-        refreshPanels: false
-      });
-      if (result.executed && heightTerrainTemplateUsesSeed(options.templateId)) state.heightEdit.terrainTemplateSeed = options.seed;
+      state.heightEdit.lastNotice = `已应用${label} ${reserved.changeCount} cells。`;
       updateHeightPanel(state);
       updateEditingInteractionLock(state, documentRef);
       return result.executed;
@@ -723,12 +706,8 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
         seed: heightTerrainTemplateProgramUsesSeed(program) ? state.heightEdit.terrainTemplateSeed + 1 : 0,
         allowedCells: heightTemplateAllowedCells(state)
       };
-      const preview = inspectHeightTerrainTemplateProgram(state.map, program, options);
-      let rendererPreview = null;
-      if (preview.valid) {
-        const changes = getHeightTerrainTemplateProgramChanges(state.map, program, options);
-        rendererPreview = state.renderer?.setHeightTransformPreview?.(changes) || null;
-      }
+      const preview = runtimeActions.edit.height.inspectTerrainProgram(program, {...options, _includeAllChanges: true});
+      const rendererPreview = preview.valid ? state.renderer?.setHeightTransformPreview?.(preview.changes) || null : null;
       heightPanel.updateTerrainProgramPreview({...preview, program, rendererPreview});
       updateEditingInteractionLock(state, documentRef);
       return preview;
@@ -747,30 +726,21 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       const options = {
         scope: reserved.scope,
         seed: reserved.seed,
-        allowedCells: heightTemplateAllowedCells(state)
+        allowedCells: heightTemplateAllowedCells(state),
+        inspectionToken: reserved.inspectionToken
       };
-      const preview = inspectHeightTerrainTemplateProgram(state.map, reserved.program, options);
-      if (!preview.valid || preview.changeCount !== reserved.changeCount || preview.changeChecksum !== reserved.changeChecksum) {
+      const result = runtimeActions.edit.height.applyTerrainProgram(reserved.program, options);
+      if (!result.executed) {
         state.heightEdit.lastAffected = 0;
         state.heightEdit.lastHeight = "none";
         state.heightEdit.lastDelta = "none";
-        state.heightEdit.lastNotice = preview.valid ? "地图或选区已变化，请重新预览多步骤模板。" : preview.notice;
+        state.heightEdit.lastNotice = result.notice || "地图或选区已变化，请重新预览多步骤模板。";
         clearHeightTransformPreview(state);
-        heightPanel.updateTerrainProgramPreview(preview);
+        heightPanel.updateTerrainProgramPreview(result);
         updateHeightPanel(state);
         return false;
       }
-      const changes = getHeightTerrainTemplateProgramChanges(state.map, reserved.program, options);
-      state.heightEdit.lastAffected = changes.length;
-      state.heightEdit.lastHeight = summarizeChangedHeights(changes);
-      state.heightEdit.lastDelta = summarizeChangedHeightDelta(changes);
-      state.heightEdit.lastNotice = `已应用${reserved.program.name} ${changes.length} cells / ${reserved.program.steps.length} 步。`;
-      const result = executeEditCommand(state, documentRef, createApplyHeightBrushCommand(changes, {label: reserved.program.name}), {
-        context: {map: state.map},
-        refresh: refreshAfterEdit,
-        refreshPanels: false
-      });
-      if (result.executed && heightTerrainTemplateProgramUsesSeed(reserved.program)) state.heightEdit.terrainTemplateSeed = reserved.seed;
+      state.heightEdit.lastNotice = `已应用${reserved.program.name} ${reserved.changeCount} cells / ${reserved.program.steps.length} 步。`;
       if (result.executed) clearHeightTransformPreview(state);
       updateHeightPanel(state);
       updateEditingInteractionLock(state, documentRef);
@@ -779,12 +749,8 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     onConditionalTransformPreview: () => {
       const options = {...heightPanel.getConditionalTransform(), allowedCells: heightToolAllowedCells(state)};
       cancelHeightLine(state, documentRef);
-      const preview = inspectHeightRangeTransform(state.map, options);
-      let rendererPreview = null;
-      if (preview.valid) {
-        const changes = getHeightRangeTransformChanges(state.map, options);
-        rendererPreview = state.renderer?.setHeightTransformPreview?.(changes) || null;
-      }
+      const preview = runtimeActions.edit.height.inspectRangeTransform({...options, _includeAllChanges: true});
+      const rendererPreview = preview.valid ? state.renderer?.setHeightTransformPreview?.(preview.changes) || null : null;
       heightPanel.updateConditionalTransformPreview({...preview, rendererPreview});
       updateEditingInteractionLock(state, documentRef);
       return preview;
@@ -792,27 +758,19 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     onConditionalTransformApply: () => {
       const options = {...heightPanel.getConditionalTransform(), allowedCells: heightToolAllowedCells(state)};
       cancelHeightLine(state, documentRef);
-      const preview = inspectHeightRangeTransform(state.map, options);
-      heightPanel.updateConditionalTransformPreview(preview);
-      if (!preview.valid) {
+      const reserved = heightPanel.getConditionalTransformSnapshot?.().preview;
+      const result = runtimeActions.edit.height.applyRangeTransform({...options, inspectionToken: reserved?.inspectionToken});
+      heightPanel.updateConditionalTransformPreview(result);
+      if (!result.executed) {
         state.heightEdit.lastAffected = 0;
         state.heightEdit.lastHeight = "none";
         state.heightEdit.lastDelta = "none";
-        state.heightEdit.lastNotice = preview.notice;
+        state.heightEdit.lastNotice = result.notice;
         updateHeightPanel(state);
         return false;
       }
-      const changes = getHeightRangeTransformChanges(state.map, options);
       const label = conditionalHeightTransformLabel(options.operator);
-      state.heightEdit.lastAffected = changes.length;
-      state.heightEdit.lastHeight = summarizeChangedHeights(changes);
-      state.heightEdit.lastDelta = summarizeChangedHeightDelta(changes);
-      state.heightEdit.lastNotice = `已${label} ${changes.length} cells。`;
-      const result = executeEditCommand(state, documentRef, createApplyHeightBrushCommand(changes, {label}), {
-        context: {map: state.map},
-        refresh: refreshAfterEdit,
-        refreshPanels: false
-      });
+      state.heightEdit.lastNotice = `已${label} ${reserved?.changeCount || 0} cells。`;
       heightPanel.updateConditionalTransformPreview(null);
       updateHeightPanel(state);
       updateEditingInteractionLock(state, documentRef);
@@ -966,7 +924,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
         cellIds: state.heightEdit.terrainSelection?.cellIds,
         smoothness
       };
-      const {inspection, changes} = createHeightSelectionSmoothingPlan(state.map, options);
+      const inspection = runtimeActions.edit.height.inspectSelectionSmoothing(options);
       if (!inspection.valid) {
         state.heightEdit.lastAffected = 0;
         state.heightEdit.lastHeight = "none";
@@ -975,15 +933,8 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
         updateHeightPanel(state);
         return inspection;
       }
-      const result = executeEditCommand(state, documentRef, createApplyHeightBrushCommand(changes, {label: "平滑所选范围"}), {
-        context: {map: state.map},
-        refresh: refreshAfterEdit,
-        refreshPanels: false
-      });
-      state.heightEdit.lastAffected = changes.length;
-      state.heightEdit.lastHeight = summarizeChangedHeights(changes);
-      state.heightEdit.lastDelta = summarizeChangedHeightDelta(changes);
-      state.heightEdit.lastNotice = result.executed ? `已平滑所选范围，共调整 ${changes.length} 处陆地。` : "所选范围没有变化。";
+      const result = runtimeActions.edit.height.applySelectionSmoothing({...options, inspectionToken: inspection.inspectionToken});
+      state.heightEdit.lastNotice = result.executed ? `已平滑所选范围，共调整 ${inspection.changeCount} 处陆地。` : "所选范围没有变化。";
       updateHeightPanel(state);
       updateEditingInteractionLock(state, documentRef);
       return {...inspection, executed: result.executed};
@@ -993,10 +944,8 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       clearHeightTransformPreview(state);
       const seed = `${state.map?.metadata?.seed || state.map?.options?.seed || "map"}|seafloor|${state.heightEdit.seafloorResetSeed + 1}`;
       try {
-        const plan = buildSeafloorResetPlan(state.map, {seed});
-        const preview = plan.stats.changedCells
-          ? {...plan.stats, valid: true, seed: plan.seed, topologyChecksum: plan.topologyChecksum, resultChecksum: plan.resultChecksum, notice: `可重设 ${plan.stats.oceanCells} 处开放海洋，形成大陆架、陆坡、洋中脊与海沟。`}
-          : {...plan.stats, valid: false, seed: plan.seed, topologyChecksum: plan.topologyChecksum, resultChecksum: plan.resultChecksum, notice: plan.stats.oceanCells ? "当前海底无需调整。" : "当前地图没有可重设的开放海洋。"};
+        const preview = runtimeActions.edit.height.inspectSeafloorReset({seed});
+        const plan = preview.valid ? buildSeafloorResetPlan(state.map, {seed: preview.seed}) : null;
         const rendererPreview = preview.valid
           ? state.renderer?.setHeightTransformPreview?.(seafloorResetPreviewChanges(plan)) || null
           : null;
@@ -1018,18 +967,15 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
         return false;
       }
       try {
-        const plan = buildSeafloorResetPlan(state.map, {seed: reserved.seed});
-        if (plan.topologyChecksum !== reserved.topologyChecksum || plan.resultChecksum !== reserved.resultChecksum) {
-          clearHeightTransformPreview(state);
-          state.heightEdit.lastNotice = "地图已变化，请重新预览海底。";
-          updateHeightPanel(state);
-          return false;
-        }
         const confirmed = documentRef.defaultView?.confirm?.("重设海底将连同洋流、气候和全部世界派生一起重算，是否继续？") ?? false;
         if (!confirmed) return false;
-        const result = await runtimeActions.oceanCurrents.rebuildWorld({confirm: true, seafloorPlan: plan});
-        state.heightEdit.lastAffected = plan.stats.changedCells;
-        state.heightEdit.lastHeight = `${plan.stats.minHeight}..${plan.stats.maxHeight}`;
+        const result = await runtimeActions.edit.height.applySeafloorReset({
+          confirm: true,
+          seed: reserved.seed,
+          inspectionToken: reserved.inspectionToken
+        });
+        state.heightEdit.lastAffected = reserved.changedCells;
+        state.heightEdit.lastHeight = `${reserved.minHeight}..${reserved.maxHeight}`;
         state.heightEdit.lastDelta = "none";
         state.heightEdit.lastNotice = result.executed
           ? `已重设 ${plan.stats.oceanCells} 处开放海洋，并完成洋流、气候及世界派生重算。`
@@ -1958,9 +1904,13 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       executeEditCommand(state, documentRef, command, {context});
       updateEditingInteractionLock(state, documentRef);
     },
-    onPriorityChange: (object, priority) => applyLabelLayoutPatch(state, documentRef, object, {priority}),
-    onPriorityReset: object => applyLabelLayoutPatch(state, documentRef, object, {priority: null}),
-    onPositionToggle: object => toggleLabelPositionLock(state, documentRef, object),
+    onPriorityChange: (object, priority) => runtimeActions.edit.labels.setLayout(object, {priority}),
+    onPriorityReset: object => runtimeActions.edit.labels.setLayout(object, {priority: null}),
+    onPositionToggle: object => {
+      const targetId = Number(object?.targetId ?? object?.id);
+      const locked = Boolean(readLabelLayoutOverride(state.map, object?.targetKind, targetId).position);
+      return runtimeActions.edit.labels.setPositionLock(object, !locked);
+    },
     onAdd: () => {
       const point = getNewLabelPoint(state);
       const context = {map: state.map};
@@ -2206,26 +2156,14 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       oceanCurrentPanel.setSelectedId(current.id);
       refreshRuntimeAndPickPanels(documentRef, state);
     },
-    onRename: (currentId, name) => {
-      executeEditCommand(state, documentRef, createRenameOceanCurrentCommand(currentId, name), {
-        context: {map: state.map},
-        status: command => `已将洋流重命名为“${command.getResult?.().name || name}”。`,
-        noopStatus: "洋流名称没有变化。"
-      });
-    },
-    onRegenerate: () => {
-      executeEditCommand(state, documentRef, createRegenerateOceanCurrentsCommand(state.map), {
-        context: {map: state.map},
-        status: command => `已重新计算 ${command.getResult?.().currents || 0} 条洋流。`,
-        noopStatus: "当前洋流无需重新计算。"
-      });
-    },
+    onRename: (currentId, name) => runtimeActions.oceanCurrents.rename(currentId, name),
+    onRegenerate: () => runtimeActions.oceanCurrents.regenerate(),
     onWorldRebuild: async () => {
       const confirmed = documentRef.defaultView?.confirm?.("完整重算会更新气候、河流、人口、城镇、政区、外交和军事，并保留现有文化、国家、省份与宗教的名称和 ID。是否继续？") ?? false;
       if (!confirmed) return false;
       return runtimeActions.oceanCurrents.rebuildWorld({confirm: true});
     },
-    onCancelWorldRebuild: () => state.runtimeOperation?.cancelCurrent?.("用户取消洋流世界重算"),
+    onCancelWorldRebuild: () => runtimeActions.oceanCurrents.cancelWorldRebuild(),
     onHighlight: ids => state.renderer.setOceanCurrentHighlights(ids),
     onUndo: () => executeHistoryCommand(state, documentRef, "undo", {afterRefresh: () => updateOceanCurrentPanel(state)}),
     onRedo: () => executeHistoryCommand(state, documentRef, "redo", {afterRefresh: () => updateOceanCurrentPanel(state)})
@@ -2657,6 +2595,14 @@ function createRuntimeActions(state, documentRef, options = {}) {
       undo: () => executeHistoryCommand(state, documentRef, "undo"),
       redo: () => executeHistoryCommand(state, documentRef, "redo")
     },
+    regenerationLocks: {
+      list: (lockOptions = {}) => listRegenerationLocksViaApi(state, lockOptions),
+      status: reference => getRegenerationLockStatus(state.map, reference),
+      inspect: (references, locked) => inspectRegenerationLocksViaApi(state, references, locked),
+      set: (reference, locked, lockOptions = {}) => setRegenerationLockViaApi(state, documentRef, reference, locked, lockOptions),
+      setMany: (references, locked, lockOptions = {}) => setRegenerationLocksViaApi(state, documentRef, references, locked, lockOptions),
+      clearKind: (kind, lockOptions = {}) => clearRegenerationLocksViaApi(state, documentRef, kind, lockOptions)
+    },
     generate: {
       getOptions: () => getGenerationOptionsViaApi(state, documentRef),
       setOptions: (patch = {}) => setGenerationOptionsViaApi(state, documentRef, patch),
@@ -2718,6 +2664,8 @@ function createRuntimeActions(state, documentRef, options = {}) {
       )
     },
     oceanCurrents: {
+      rename: (currentId, name) => renameOceanCurrentViaApi(state, documentRef, currentId, name),
+      regenerate: (currentOptions = {}) => regenerateOceanCurrentsViaApi(state, documentRef, currentOptions),
       inspectWorldRebuild: (options = {}) => inspectOceanCurrentWorldRebuild(state.map, options),
       rebuildWorld: (options = {}) => operation.run("oceanCurrents.rebuildWorld", context => applyOceanCurrentWorldRebuildViaAction(state, documentRef, options, context), {
         message: "正在重算洋流与世界"
@@ -2790,6 +2738,8 @@ function createRuntimeActions(state, documentRef, options = {}) {
       },
       cities: {
         add: gridCell => addCityViaApi(state, documentRef, gridCell),
+        inspectCreateAtCell: input => inspectCreateAtCellViaApi(state, "cities", input),
+        createAtCell: input => createAtCellViaApi(state, documentRef, "cities", input),
         delete: (cityId, options = {}) => deleteCityViaApi(state, documentRef, cityId, options),
         inspectMove: (cityId, target) => inspectCityMoveViaApi(state, cityId, target),
         move: (cityId, target) => moveCityViaApi(state, documentRef, cityId, target),
@@ -2801,6 +2751,8 @@ function createRuntimeActions(state, documentRef, options = {}) {
       },
       provinces: {
         add: gridCell => addProvinceViaApi(state, documentRef, gridCell),
+        inspectCreateAtCell: input => inspectCreateAtCellViaApi(state, "provinces", input),
+        createAtCell: input => createAtCellViaApi(state, documentRef, "provinces", input),
         delete: (provinceId, options = {}) => deleteProvinceViaApi(state, documentRef, provinceId, options),
         rename: (provinceId, name) => renameProvinceViaApi(state, documentRef, provinceId, name),
         setColor: (provinceId, color) => setProvinceColorViaApi(state, documentRef, provinceId, color),
@@ -2808,6 +2760,8 @@ function createRuntimeActions(state, documentRef, options = {}) {
       },
       states: {
         add: gridCell => addStateViaApi(state, documentRef, gridCell),
+        inspectCreateAtCell: input => inspectCreateAtCellViaApi(state, "states", input),
+        createAtCell: input => createAtCellViaApi(state, documentRef, "states", input),
         delete: (stateId, options = {}) => deleteStateViaApi(state, documentRef, stateId, options),
         inspectMerge: options => inspectStateMergeViaApi(state, options),
         merge: options => mergeStatesViaApi(state, documentRef, options),
@@ -2822,6 +2776,22 @@ function createRuntimeActions(state, documentRef, options = {}) {
       },
       height: {
         applyChanges: (changes, editOptions = {}) => applyHeightChangesViaApi(state, documentRef, changes, editOptions),
+        inspectGlobalTransform: (editOptions = {}) => inspectHeightSemanticAction(state, "global-transform", editOptions),
+        applyGlobalTransform: (editOptions = {}) => applyHeightSemanticAction(state, documentRef, "global-transform", editOptions),
+        inspectTerrainTemplate: (editOptions = {}) => inspectHeightSemanticAction(state, "terrain-template", editOptions),
+        applyTerrainTemplate: (editOptions = {}) => applyHeightSemanticAction(state, documentRef, "terrain-template", editOptions),
+        inspectTerrainProgram: (program, editOptions = {}) => inspectHeightSemanticAction(state, "terrain-program", editOptions, program),
+        applyTerrainProgram: (program, editOptions = {}) => applyHeightSemanticAction(state, documentRef, "terrain-program", editOptions, program),
+        inspectRangeTransform: (editOptions = {}) => inspectHeightSemanticAction(state, "range-transform", editOptions),
+        applyRangeTransform: (editOptions = {}) => applyHeightSemanticAction(state, documentRef, "range-transform", editOptions),
+        inspectSelectionSmoothing: (editOptions = {}) => inspectHeightSemanticAction(state, "selection-smoothing", editOptions),
+        applySelectionSmoothing: (editOptions = {}) => applyHeightSemanticAction(state, documentRef, "selection-smoothing", editOptions),
+        inspectSeafloorReset: (editOptions = {}) => inspectSeafloorResetViaApi(state, editOptions),
+        applySeafloorReset: (editOptions = {}) => operation.run(
+          "edit.height.applySeafloorReset",
+          context => applySeafloorResetViaAction(state, documentRef, editOptions, context),
+          {message: "正在重设海底并重算世界", isNoop: result => !result?.executed}
+        ),
         rebuildBaseDerived: (editOptions = {}) => operation.runSync(
           "edit.height.rebuildBaseDerived",
           () => rebuildHeightDerivedViaAction(state, documentRef, "base", editOptions),
@@ -2927,6 +2897,8 @@ function createRuntimeActions(state, documentRef, options = {}) {
         setStyle: (styleType, patch) => setLabelStyleViaApi(state, documentRef, styleType, patch),
         resetStyle: styleType => resetLabelStyleViaApi(state, documentRef, styleType),
         resetStyles: () => resetAllLabelStylesViaApi(state, documentRef),
+        setLayout: (label, patch) => setLabelLayoutViaApi(state, documentRef, label, patch),
+        setPositionLock: (label, locked, editOptions = {}) => setLabelPositionLockViaApi(state, documentRef, label, locked, editOptions),
         addCustom: options => addCustomLabelViaApi(state, documentRef, options),
         delete: label => deleteLabelViaApi(state, documentRef, label),
         moveCustom: (labelId, point) => moveCustomLabelViaApi(state, documentRef, labelId, point),
@@ -3753,6 +3725,7 @@ async function loadMapIntoRuntime(state, documentRef, map, {loadingMessages = []
   state.selectionStore.clear();
   refreshRuntimeAfterMapLoad(state, documentRef, {restorePanels: true});
   syncLabelStylesUi(state, documentRef);
+  state.mapRevision.replaceMap();
   emitLoadTrace(documentRef, {phase: "end", id: "panel-refresh", message: loadingMessage("panel-refresh")});
   emitLoadTrace(documentRef, {phase: "end", id: "load-map", message: "接入地图运行时"});
   emitLoadTrace(documentRef, {phase: "complete", id: "complete", message: "地图进入可交互状态"});
@@ -5725,6 +5698,33 @@ async function executeClimateDownstreamSystem(state, documentRef, systemId, cont
   return regenerateMapAttribute(state, systemId, documentRef);
 }
 
+function renameOceanCurrentViaApi(state, documentRef, currentId, name) {
+  assertMapAvailable(state);
+  const result = executeEditCommand(state, documentRef, createRenameOceanCurrentCommand(currentId, name), {
+    context: {map: state.map},
+    status: command => `已将洋流重命名为“${command.getResult?.().name || name}”。`,
+    noopStatus: "洋流名称没有变化。",
+    throwOnError: false
+  });
+  updateOceanCurrentPanel(state);
+  updateEditingInteractionLock(state, documentRef);
+  return editApiResult(state, result);
+}
+
+function regenerateOceanCurrentsViaApi(state, documentRef, options = {}) {
+  assertMapAvailable(state);
+  if (!options || typeof options !== "object" || Array.isArray(options)) throw apiActionError("invalid_argument", "洋流重生成参数必须是对象");
+  const result = executeEditCommand(state, documentRef, createRegenerateOceanCurrentsCommand(state.map, {seed: options.seed}), {
+    context: {map: state.map},
+    status: command => `已重新计算 ${command.getResult?.().currents || 0} 条洋流。`,
+    noopStatus: "当前洋流无需重新计算。",
+    throwOnError: false
+  });
+  updateOceanCurrentPanel(state);
+  updateEditingInteractionLock(state, documentRef);
+  return editApiResult(state, result);
+}
+
 async function applyOceanCurrentWorldRebuildViaAction(state, documentRef, options = {}, operationContext) {
   assertMapAvailable(state);
   if (options.confirm !== true) throw new Error("完整洋流世界重算会改写全部派生数据，需要显式传入 {confirm: true}");
@@ -5988,6 +5988,7 @@ function applyClimateOptions(state, documentRef, options, changed = true) {
   updateStatePanel(state);
   updateGovernmentPanel(state);
   updateProvincePanel(state);
+  state.mapRevision?.advance();
   return climateApiUpdateResult(state, changed);
 }
 
@@ -6322,6 +6323,101 @@ function deleteApiResult(state, deletion) {
     deleteSummary: summary,
     inspectOnly: Boolean(deletion.inspectOnly),
     cancelled: Boolean(deletion.cancelled)
+  };
+}
+
+function listRegenerationLocksViaApi(state, options = {}) {
+  const entries = listRegenerationLocks(state.map, options);
+  return {
+    version: Number(state.map?.regenerationLocks?.version) || 1,
+    kind: options?.kind == null ? null : String(options.kind),
+    count: entries.length,
+    entries,
+    mapRevision: state.mapRevision.getSnapshot()
+  };
+}
+
+function inspectRegenerationLocksViaApi(state, references, locked) {
+  return createRegenerationLockInspection(
+    state.map,
+    state.mapRevision.getSnapshot().mapRevision,
+    references,
+    locked
+  );
+}
+
+function setRegenerationLockViaApi(state, documentRef, reference, locked, options = {}) {
+  const normalizedReference = normalizeRegenerationLockReference(reference);
+  if (!regenerationLockObjectExists(state.map, normalizedReference)) {
+    throw lockError("object_not_found", `找不到可锁定对象：${normalizedReference.kind} #${normalizedReference.id}`, {reference: normalizedReference});
+  }
+  return executeRegenerationLockCommand(
+    state,
+    documentRef,
+    [normalizedReference],
+    locked,
+    options,
+    normalized => createSetRegenerationLockCommand(normalized[0], locked)
+  );
+}
+
+function setRegenerationLocksViaApi(state, documentRef, references, locked, options = {}) {
+  return executeRegenerationLockCommand(
+    state,
+    documentRef,
+    references,
+    locked,
+    options,
+    normalized => createSetRegenerationLocksCommand(normalized, locked)
+  );
+}
+
+function clearRegenerationLocksViaApi(state, documentRef, kind, options = {}) {
+  const revisionBefore = state.mapRevision.getSnapshot();
+  const command = createClearRegenerationLocksCommand(kind);
+  const execution = executeEditCommand(state, documentRef, command, {
+    context: {map: state.map},
+    refresh: refreshAfterEdit,
+    throwOnError: true
+  });
+  const revisionAfter = state.mapRevision.getSnapshot();
+  return {
+    executed: execution.executed,
+    changed: execution.result?.changed || 0,
+    unchanged: 0,
+    kind: String(kind),
+    references: execution.result?.references || [],
+    mapRevisionBefore: revisionBefore,
+    mapRevisionAfter: revisionAfter,
+    history: state.editHistory.getStats(),
+    ...(options?.inspectionToken ? {inspectionToken: String(options.inspectionToken)} : {})
+  };
+}
+
+function executeRegenerationLockCommand(state, documentRef, references, locked, options, createCommand) {
+  const normalized = normalizeRegenerationLockReferences(references, state.map);
+  const revisionBefore = state.mapRevision.getSnapshot();
+  assertRegenerationLockInspection(options?.inspectionToken ? {
+    inspectionToken: options.inspectionToken,
+    revision: options.revision ?? revisionBefore.mapRevision
+  } : null, revisionBefore.mapRevision, normalized, locked);
+  const inspection = createRegenerationLockInspection(state.map, revisionBefore.mapRevision, normalized, locked);
+  const execution = executeEditCommand(state, documentRef, createCommand(normalized), {
+    context: {map: state.map},
+    refresh: refreshAfterEdit,
+    throwOnError: true
+  });
+  const revisionAfter = state.mapRevision.getSnapshot();
+  return {
+    executed: execution.executed,
+    changed: execution.result?.changed || 0,
+    unchanged: execution.executed ? 0 : normalized.length,
+    locked: Boolean(locked),
+    references: normalized,
+    inspectionToken: inspection.inspectionToken,
+    mapRevisionBefore: revisionBefore,
+    mapRevisionAfter: revisionAfter,
+    history: state.editHistory.getStats()
   };
 }
 
@@ -7126,6 +7222,137 @@ function deleteLakeViaApi(state, documentRef, lakeId, options = {}) {
   return deleteApiResult(state, deletion);
 }
 
+function inspectCreateAtCellViaApi(state, domain, input) {
+  const normalized = normalizeCellCreateInput(input);
+  const actionId = `${domain}.createAtCell`;
+  const inspection = createAtCellInspector(domain)(state.map, normalized.cell.id);
+  const token = issueCellInspectionToken(state.mapRevision, actionId, normalized);
+  return {
+    allowed: Boolean(inspection.valid),
+    code: inspection.code,
+    summary: inspection.summary,
+    reasons: inspection.valid ? [] : [{
+      code: inspection.code,
+      blocking: true,
+      details: {...(inspection.details || {})}
+    }],
+    details: {...(inspection.details || {})},
+    cell: {
+      ref: {...normalized.cell},
+      primaryPackCell: Number.isInteger(inspection.details?.packCell) ? inspection.details.packCell : null,
+      stateId: Number.isInteger(inspection.details?.stateId) ? inspection.details.stateId : null,
+      provinceId: Number.isInteger(inspection.details?.provinceId) ? inspection.details.provinceId : null
+    },
+    predicted: inspection.valid ? predictedCreateAtCell(state.map, domain, inspection.details) : null,
+    warnings: [],
+    ...token
+  };
+}
+
+function createAtCellViaApi(state, documentRef, domain, input) {
+  if (!input || typeof input !== "object" || Array.isArray(input)) {
+    const error = new Error("createAtCell 必须提供 cell、inspectionToken 与 expectedRevision");
+    error.code = "invalid_argument";
+    throw error;
+  }
+  const normalized = normalizeCellCreateInput(input);
+  const actionId = `${domain}.createAtCell`;
+  const token = validateCellInspectionToken(
+    state.mapRevision,
+    input.inspectionToken,
+    actionId,
+    normalized,
+    input.expectedRevision
+  );
+  if (!token.valid) return createAtCellRefusal(state, token.code, null, token.snapshot);
+  const inspection = inspectCreateAtCellViaApi(state, domain, normalized);
+  if (!inspection.allowed) return createAtCellRefusal(state, inspection.code, inspection, token.snapshot);
+
+  const revisionBefore = state.mapRevision.getSnapshot();
+  const result = createAtCellExecutor(domain)(state, documentRef, normalized.cell.id);
+  const revisionAfter = state.mapRevision.getSnapshot();
+  if (result.error) {
+    const error = new Error(result.error.message || `${actionId} 执行失败`);
+    error.code = "create-failed";
+    error.details = {
+      actionId,
+      rollback: {available: true, attempted: true, complete: true},
+      mapRevisionBefore: revisionBefore,
+      mapRevisionAfter: revisionAfter
+    };
+    throw error;
+  }
+  const code = result.executed ? "created" : inspection.code;
+  return {
+    ...result,
+    code,
+    inspection,
+    created: result.executed ? result.result : null,
+    rollback: {
+      available: true,
+      attempted: Boolean(result.error),
+      complete: Boolean(result.error) || !result.executed
+    },
+    mapRevisionBefore: revisionBefore,
+    mapRevisionAfter: revisionAfter
+  };
+}
+
+function createAtCellRefusal(state, code, inspection = null, snapshot = null) {
+  return {
+    executed: false,
+    noop: true,
+    code,
+    inspection,
+    result: null,
+    created: null,
+    affected: [],
+    effects: {render: "none", selection: "none", runtimeStats: false, pickPanel: false, derived: []},
+    error: null,
+    history: state.editHistory.getStats(),
+    rollback: {available: true, attempted: false, complete: true},
+    mapRevisionBefore: snapshot || state.mapRevision.getSnapshot(),
+    mapRevisionAfter: state.mapRevision.getSnapshot()
+  };
+}
+
+function createAtCellInspector(domain) {
+  if (domain === "states") return inspectStateCreation;
+  if (domain === "provinces") return inspectProvinceCreation;
+  if (domain === "cities") return inspectCityCreation;
+  throw new Error(`未知 createAtCell 领域：${domain}`);
+}
+
+function createAtCellExecutor(domain) {
+  if (domain === "states") return addStateViaApi;
+  if (domain === "provinces") return addProvinceViaApi;
+  if (domain === "cities") return addCityViaApi;
+  throw new Error(`未知 createAtCell 领域：${domain}`);
+}
+
+function predictedCreateAtCell(map, domain, details = {}) {
+  if (domain === "states") {
+    return {
+      tentativeStateId: map?.politics?.states?.length || 0,
+      tentativeProvinceId: map?.politics?.provinces?.length || 0,
+      capitalMode: "reuse-burg-or-create",
+      seedGridCells: [details.gridCell]
+    };
+  }
+  if (domain === "provinces") {
+    return {
+      tentativeProvinceId: map?.politics?.provinces?.length || 0,
+      stateId: details.stateId,
+      seedGridCells: [details.gridCell]
+    };
+  }
+  return {
+    tentativeCityId: map?.settlements?.cities?.length || 0,
+    tentativeBurgId: map?.pack?.burgs?.length || 0,
+    packCell: details.packCell
+  };
+}
+
 function addCityViaApi(state, documentRef, gridCell) {
   const targetGridCell = normalizeApiInteger(gridCell, "grid cell");
   const command = createAddCityAtCellCommand(targetGridCell);
@@ -7705,6 +7932,146 @@ function applyHeightChangesViaApi(state, documentRef, changes, options = {}) {
   updateRuntimePanel(documentRef, state);
   updateEditingInteractionLock(state, documentRef);
   return editApiResult(state, result);
+}
+
+function inspectHeightSemanticAction(state, kind, options = {}, program = null) {
+  assertMapAvailable(state);
+  if (!options || typeof options !== "object" || Array.isArray(options)) throw apiActionError("invalid_argument", "高度语义工具参数必须是对象");
+  const normalized = {...options};
+  delete normalized.inspectionToken;
+  delete normalized.includeChanges;
+  delete normalized.changeOffset;
+  delete normalized.changeLimit;
+  delete normalized._includeAllChanges;
+  let inspection;
+  let changes;
+  if (kind === "global-transform") {
+    inspection = inspectGlobalHeightChanges(state.map, normalized);
+    changes = inspection.valid ? getGlobalHeightChanges(state.map, normalized) : [];
+  } else if (kind === "terrain-template") {
+    inspection = inspectHeightTerrainTemplate(state.map, normalized);
+    changes = inspection.valid ? getHeightTerrainTemplateChanges(state.map, normalized) : [];
+  } else if (kind === "terrain-program") {
+    inspection = inspectHeightTerrainTemplateProgram(state.map, program, normalized);
+    changes = inspection.valid ? getHeightTerrainTemplateProgramChanges(state.map, program, normalized) : [];
+  } else if (kind === "range-transform") {
+    inspection = inspectHeightRangeTransform(state.map, normalized);
+    changes = inspection.valid ? getHeightRangeTransformChanges(state.map, normalized) : [];
+  } else if (kind === "selection-smoothing") {
+    const plan = createHeightSelectionSmoothingPlan(state.map, normalized);
+    inspection = plan.inspection;
+    changes = inspection.valid ? plan.changes : [];
+  } else {
+    throw apiActionError("invalid_argument", `未知高度语义工具：${kind}`);
+  }
+  const inspectionToken = heightSemanticInspectionToken(state.map, kind, changes, program);
+  const sample = changes.slice(0, 12).map(change => ({gridCell: change.gridCell, before: change.before, after: change.after}));
+  const includeAll = options._includeAllChanges === true;
+  const includeChanges = includeAll || options.includeChanges === true;
+  const offset = includeAll ? 0 : normalizeHeightChangePageInteger(options.changeOffset, 0, 0, changes.length);
+  const limit = includeAll ? changes.length : normalizeHeightChangePageInteger(options.changeLimit, 100, 1, 200);
+  const pageChanges = includeChanges
+    ? changes.slice(offset, offset + limit).map(change => ({gridCell: change.gridCell, before: change.before, after: change.after}))
+    : undefined;
+  return {
+    ...inspection,
+    inspectionToken,
+    changeSample: sample,
+    ...(includeChanges ? {
+      changes: pageChanges,
+      changePage: {
+        offset,
+        limit,
+        returned: pageChanges.length,
+        total: changes.length,
+        hasMore: offset + pageChanges.length < changes.length
+      }
+    } : {})
+  };
+}
+
+function applyHeightSemanticAction(state, documentRef, kind, options = {}, program = null) {
+  const inspection = inspectHeightSemanticAction(state, kind, options, program);
+  if (!inspection.valid) return {...inspection, executed: false, history: state.editHistory.getStats()};
+  if (!options.inspectionToken) throw apiActionError("inspection_required", "请先调用对应 inspect 方法并传入 inspectionToken");
+  if (String(options.inspectionToken) !== inspection.inspectionToken) throw apiActionError("operation_obsolete", "地图、选区或参数已变化，请重新预检高度工具");
+  const label = heightSemanticActionLabel(kind, options, program);
+  const planOptions = {...options, _includeAllChanges: true};
+  const plan = inspectHeightSemanticAction(state, kind, planOptions, program);
+  const result = applyHeightChangesViaApi(state, documentRef, plan.changes, {label});
+  if (result.executed && kind === "global-transform" && options.action === "disrupt") state.heightEdit.globalToolSeed = Number(options.seed) || 0;
+  if (result.executed && kind === "terrain-template" && heightTerrainTemplateUsesSeed(options.templateId)) state.heightEdit.terrainTemplateSeed = Number(options.seed) || 0;
+  if (result.executed && kind === "terrain-program" && heightTerrainTemplateProgramUsesSeed(program)) state.heightEdit.terrainTemplateSeed = Number(options.seed) || 0;
+  return {...result, inspection: {...inspection, changes: undefined}};
+}
+
+function normalizeHeightChangePageInteger(value, fallback, min, max) {
+  if (value === undefined || value === null || value === "") return fallback;
+  const number = Number(value);
+  if (!Number.isInteger(number) || number < min || number > max) throw apiActionError("invalid_argument", `高度变更分页值必须是 ${min}..${max} 的整数`);
+  return number;
+}
+
+function heightSemanticActionLabel(kind, options, program) {
+  if (kind === "global-transform") return options.action === "smooth" ? "全局平滑" : "全局扰动";
+  if (kind === "terrain-template") return heightTerrainTemplateLabel(options.templateId);
+  if (kind === "terrain-program") return String(program?.name || "多步骤地形模板");
+  if (kind === "range-transform") return conditionalHeightTransformLabel(options.operator);
+  return "平滑所选范围";
+}
+
+function heightSemanticInspectionToken(map, kind, changes, program) {
+  let hash = 2166136261;
+  for (const character of `${kind}|${map?.metadata?.seed || ""}|${map?.grid?.cells?.h?.length || 0}|${JSON.stringify(program || null)}`) {
+    hash ^= character.charCodeAt(0);
+    hash = Math.imul(hash, 16777619);
+  }
+  for (const change of changes) {
+    hash ^= Number(change.gridCell) || 0;
+    hash = Math.imul(hash, 16777619);
+    hash ^= (Number(change.before) || 0) << 8 | (Number(change.after) || 0);
+    hash = Math.imul(hash, 16777619);
+  }
+  return `height-v1-${(hash >>> 0).toString(16).padStart(8, "0")}`;
+}
+
+function inspectSeafloorResetViaApi(state, options = {}) {
+  assertMapAvailable(state);
+  const plan = buildSeafloorResetPlan(state.map, {seed: options.seed});
+  const inspection = {
+    valid: plan.stats.oceanCells > 0 && plan.stats.changedCells > 0,
+    seed: plan.seed,
+    topologyChecksum: plan.topologyChecksum,
+    resultChecksum: plan.resultChecksum,
+    ...plan.stats
+  };
+  return {
+    ...inspection,
+    inspectionToken: seafloorInspectionToken(inspection),
+    notice: inspection.valid
+      ? `可重设 ${inspection.oceanCells} 处开放海洋，形成大陆架、陆坡、洋中脊与海沟。`
+      : inspection.oceanCells ? "当前海底无需调整。" : "当前地图没有可重设的开放海洋。"
+  };
+}
+
+async function applySeafloorResetViaAction(state, documentRef, options = {}, operationContext) {
+  if (options.confirm !== true) throw apiActionError("confirmation_required", "重设海底会连同洋流、气候和全部世界派生重算，需要显式传入 {confirm: true}");
+  const inspection = inspectSeafloorResetViaApi(state, options);
+  if (!inspection.valid) return {...inspection, executed: false};
+  if (!options.inspectionToken) throw apiActionError("inspection_required", "请先调用 edit.height.inspectSeafloorReset 并传入 inspectionToken");
+  if (String(options.inspectionToken) !== inspection.inspectionToken) throw apiActionError("operation_obsolete", "地图或海陆拓扑已变化，请重新预检海底重设");
+  const seafloorPlan = buildSeafloorResetPlan(state.map, {seed: inspection.seed});
+  return applyOceanCurrentWorldRebuildViaAction(state, documentRef, {confirm: true, seed: options.worldSeed, seafloorPlan}, operationContext);
+}
+
+function seafloorInspectionToken(inspection) {
+  return `seafloor-v1-${inspection.seed}-${inspection.topologyChecksum}-${inspection.resultChecksum}`;
+}
+
+function apiActionError(code, message) {
+  const error = new Error(message);
+  error.code = code;
+  return error;
 }
 
 function assignBiomeCellsViaApi(state, documentRef, biomeId, gridCellIds, options = {}) {
@@ -8386,6 +8753,34 @@ function toggleLabelPositionLock(state, documentRef, object) {
   return result;
 }
 
+function setLabelLayoutViaApi(state, documentRef, label, patch) {
+  const target = normalizeApiLabelTarget(label);
+  if (!patch || typeof patch !== "object" || Array.isArray(patch)) throw apiActionError("invalid_argument", "标签布局修改必须是对象");
+  const result = applyLabelLayoutPatch(state, documentRef, target, patch);
+  return {
+    ...editApiResult(state, result),
+    layout: readLabelLayoutOverride(state.map, target.targetKind, target.targetId)
+  };
+}
+
+function setLabelPositionLockViaApi(state, documentRef, label, locked, options = {}) {
+  const target = normalizeApiLabelTarget(label);
+  const shouldLock = Boolean(locked);
+  let position = null;
+  if (shouldLock) {
+    const rendered = state.renderer?.getLabelLayoutSnapshot?.(target.targetKind, target.targetId);
+    const x = Number(options.position?.x ?? rendered?.x ?? label?.x);
+    const y = Number(options.position?.y ?? rendered?.y ?? label?.y);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) throw apiActionError("invalid_argument", `标签 ${target.targetKind} #${target.targetId} 当前没有可锁定的世界锚点`);
+    position = {x, y};
+  }
+  const result = setLabelLayoutViaApi(state, documentRef, target, {position});
+  if (result.executed && shouldLock && target.targetKind === LABEL_TARGET_KIND.CUSTOM && state.pendingCustomLabelPlacement?.labelId === target.targetId) {
+    state.pendingCustomLabelPlacement = null;
+  }
+  return {...result, locked: Boolean(result.layout?.position)};
+}
+
 function getRuntimeLabelStyles(state) {
   if (!state.map) return {version: 1, overrides: {}, styles: {}};
   const store = ensureLabelStore(state.map).styles;
@@ -8551,7 +8946,7 @@ function normalizeApiLabelTarget(label) {
   const id = Number(label?.targetId ?? label?.id);
   if (!Number.isFinite(id)) throw new Error("缺少标签 ID");
   const targetKind = label?.targetKind || LABEL_TARGET_KIND.CITY;
-  if (![LABEL_TARGET_KIND.CITY, LABEL_TARGET_KIND.STATE, LABEL_TARGET_KIND.CUSTOM].includes(targetKind)) {
+  if (![LABEL_TARGET_KIND.CITY, LABEL_TARGET_KIND.STATE, LABEL_TARGET_KIND.PROVINCE, LABEL_TARGET_KIND.CUSTOM].includes(targetKind)) {
     throw new Error(`未知标签类型：${targetKind}`);
   }
   return {id, targetId: id, targetKind};

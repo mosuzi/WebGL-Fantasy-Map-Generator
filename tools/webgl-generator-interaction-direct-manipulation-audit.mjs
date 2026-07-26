@@ -37,7 +37,7 @@ const MODE_DEFINITIONS = Object.freeze([
   oneShotMode("PROVINCE_DELETE", "province:delete", "province-panel", "删除省份", "单击目标省份", "点击前不改图", "成功删除后完成模式", "成功写一条删除省份历史"),
   oneShotMode("CITY_ADD", "city:add", "city-panel", "新增城镇", "在合法 grid cell 单击", "无跨手势草稿", "成功创建后完成模式", "成功写一条新增城镇历史"),
   oneShotMode("CITY_DELETE", "city:delete", "city-panel", "删除城镇", "单击目标城镇", "点击前不改图", "成功删除后完成模式", "成功写一条删除城镇历史"),
-  oneShotMode("CITY_MOVE", "city:move", "city-panel", "移动城镇", "在画布拖动所选城镇并于目标释放", "拖动期间显示落点预检", "合法释放提交并完成；非法释放保留或取消", "成功写一条移动历史；取消恢复原位置", {escape: "Escape 经 selection.cancel 特判取消此模式"}),
+  oneShotMode("CITY_MOVE", "city:move", "city-panel", "移动城镇", "在画布拖动所选城镇并于目标释放", "拖动期间显示落点预检", "合法释放提交并完成；非法释放保留或取消", "成功写一条移动历史；取消恢复原位置"),
   persistentMode("CULTURE_ASSIGN", "culture:assign", "culture-panel", "文化归属笔刷", "按住主键连续刷涂", "拖动时预览归属变化", "pointerup 提交一次手势并保留模式", "每次有效手势写一条历史"),
   persistentMode("RELIGION_ASSIGN", "religion:assign", "religion-panel", "宗教归属笔刷", "按住主键连续刷涂", "拖动时预览归属变化", "pointerup 提交一次手势并保留模式", "每次有效手势写一条历史"),
   oneShotMode("CULTURE_CENTER", "culture:center", "culture-panel", "拾取文化中心草稿", "单击合法中心 cell", "面板保存已拾取 cell，要求继续预检", "拾取后退出模式，显式保存才提交", "拾取不写历史，保存中心变更写一条历史"),
@@ -69,7 +69,7 @@ export function buildDirectManipulationAudit() {
   const directManipulations = expandedDirectDefinitions(inventory).map(item => verifyDirect(item, includedSurfaceIds));
   const expandedDirectRows = directManipulations.flatMap(expandDirectRows);
   const runtimeModeIds = runtimeModes.map(item => item.modeId);
-  const auditFindings = findings(runtimeModeIds, legacyModes);
+  const auditFindings = findings();
   const contractModeIds = modeContracts.map(item => item.modeId);
   const missingModeContracts = runtimeModeIds.filter(id => !contractModeIds.includes(id));
   const extraModeContracts = contractModeIds.filter(id => !runtimeModeIds.includes(id));
@@ -156,7 +156,7 @@ function modeDefinition(key, modeId, panel, target, gesture, preview, complete, 
     cursor: modeId === "measurement:draw" ? "css-crosshair" : modeId.includes("brush") || modeId.includes("assign") || modeId.includes("suitability") ? "brush-overlay" : "default",
     cancel: overrides.cancel || "同入口关闭、切换模式或面板关闭调用统一 cancel；活动手势按各领域回滚",
     switch: "CanvasToolModeManager 先以 reason=switch 取消旧模式，再进入新模式",
-    escape: overrides.escape || "全局 Escape 未把此模式纳入 selection.cancel 的活动条件",
+    escape: overrides.escape || "全局 Escape 优先取消当前任意活动画布模式",
     panelClose: "关闭拥有面板时经 wrapper 的模式回调或显式 onClose 取消；实际 reason 为 panel-toggle 或 panel-close",
     mapReplace: "地图替换调用 canvasToolModes.reset(\"map-replace\") 清理活动模式和预览",
     conflict: "locksInteraction 默认阻止基础左键选择；鼠标中 / 右键导航仍由编辑锁放行",
@@ -319,14 +319,14 @@ function panelCloseEvidence(item) {
 }
 
 function escapeEvidence(item) {
-  const source = readText(FILES.runtime);
-  const start = source.indexOf("function canExecuteKeyboardShortcut");
-  const end = source.indexOf("async function invokePublicApi", start);
-  const shortcutScope = source.slice(start, end > start ? end : source.length);
-  const directKeys = new Set([...shortcutScope.matchAll(/CANVAS_TOOL_MODE\.([A-Z0-9_]+)/g)].map(match => match[1]));
-  const direct = directKeys.has(item.key);
-  if (direct !== item.escape.includes("特判取消")) throw new Error(`${item.modeId} Escape 契约与快捷键源码不一致`);
-  return scopedRef(FILES.runtime, "function canExecuteKeyboardShortcut", "async function invokePublicApi", ["selection.cancel", "CANVAS_TOOL_MODE.CITY_MOVE"], ["escape"]);
+  if (!item.escape.includes("任意活动画布模式")) throw new Error(`${item.modeId} Escape 契约未声明通用活动模式取消`);
+  return scopedRef(
+    FILES.runtime,
+    "function canExecuteKeyboardShortcut",
+    "async function invokePublicApi",
+    ["state.canvasToolModes.getActive()", "item.id === \"selection.cancel\"", "cancelCanvasToolMode(state, documentRef, activeModeId, \"escape\")"],
+    ["escape"]
+  );
 }
 
 function expandedDirectDefinitions(inventory) {
@@ -450,29 +450,8 @@ function verifyDirect(item, includedSurfaceIds) {
   };
 }
 
-function findings(runtimeModeIds, legacyModes) {
-  const legacyMissing = runtimeModeIds.filter(id => !legacyModes.includes(id));
+function findings() {
   return [
-    {
-      findingId: "IA-103-001",
-      title: "既有画布模式回归分母落后于运行时",
-      behavior: `运行时有 ${runtimeModeIds.length} 个注册模式，既有回归仅冻结 ${legacyModes.length} 个，缺少 ${legacyMissing.join("、")}。`,
-      impact: "旧门禁通过不能证明新增模式已经进入统一模式生命周期回归。",
-      recommendation: "后续整改批次让既有回归从运行时真实清单派生或同步补齐；本批不修改旧门禁。",
-      severity: "P1", confidence: "代码确认", intB: false,
-      evidenceStatus: "E-C", browserEvidence: "not-required-test-contract",
-      sourceRefs: [sourceRef(FILES.runtime, ["export const CANVAS_TOOL_MODE"]), sourceRef(FILES.oldRegression, ["const expectedModes = ["])]
-    },
-    {
-      findingId: "IA-103-002",
-      title: "Escape 只显式退出城镇移动模式",
-      behavior: "selection.cancel 的可执行条件和 handler 只把 city:move 视为活动画布模式；其它活动模式不由该快捷键退出。",
-      impact: "用户可能预期 Escape 先退出当前工具，但多数模式仍保持 active，退出方式依赖原面板入口或关闭面板。",
-      recommendation: "第 107 项验证典型持续 / 一次性 / 草稿模式；若确认不合人类预期，另立 INT-B 任务设计统一优先级。",
-      severity: "P2", confidence: "待验证", intB: true,
-      evidenceStatus: "E-C", browserEvidence: "pending-Q107",
-      sourceRefs: [sourceRef(FILES.shortcuts, ["selection.cancel", "binding(\"Escape\")"]), sourceRef(FILES.runtime, ["selection-or-editing", "CANVAS_TOOL_MODE.CITY_MOVE", "\"escape\""])]
-    },
     {
       findingId: "IA-103-003",
       title: "手工标签 pointercancel 仍提交位置且切图未统一清理拖动",

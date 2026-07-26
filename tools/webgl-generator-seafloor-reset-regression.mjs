@@ -74,8 +74,8 @@ const bridgeSource = fs.readFileSync(new URL("../app/webgl-generator/src/ui/pane
 const appSource = fs.readFileSync(new URL("../app/webgl-generator/src/runtime/app.js", import.meta.url), "utf8");
 assert(panelSource.includes("重设海底") && panelSource.includes("预览新海底") && panelSource.includes("应用重设"), "玩家高度面板缺少重设海底入口");
 assert(bridgeSource.includes("onSeafloorResetPreview") && bridgeSource.includes("getSeafloorResetPreview"), "高度面板桥接缺少海底预览状态");
-assert(appSource.includes("plan.resultChecksum !== reserved.resultChecksum"), "应用前没有复核预览结果");
-assert(appSource.includes("seafloorPlan: plan") && appSource.includes("createResetSeafloorCommand(seafloorPlan)"), "海底方案没有并入洋流世界事务");
+assert(appSource.includes("String(options.inspectionToken) !== inspection.inspectionToken"), "应用前没有复核预览令牌");
+assert(appSource.includes("const seafloorPlan = buildSeafloorResetPlan") && appSource.includes("createResetSeafloorCommand(seafloorPlan)"), "海底方案没有并入洋流世界事务");
 assert(appSource.includes("runtimeActions.layers.setShowOceanHeight(true)"), "应用海底重设后没有显示正式海底深浅");
 
 console.log(JSON.stringify({

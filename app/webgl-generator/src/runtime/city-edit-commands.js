@@ -52,10 +52,11 @@ const CITY_COLLECTION_EFFECTS = Object.freeze({
   derived: Object.freeze(["settlement-states", "city-provinces", "city-population", "point-layers", "labels", "object-panels", "object-index", "state-statistics"])
 });
 
-export function createAddCityAtCellCommand(gridCell, {label = "新增城市"} = {}) {
+export function createAddCityAtCellCommand(gridCell, {label = "新增城市", faultInjector = null} = {}) {
   const targetGridCell = normalizeGridCell(gridCell);
   let snapshot = null;
   let result = null;
+  let inspection = null;
   return {
     label,
     domain: OBJECT_KIND.CITY,
@@ -64,8 +65,16 @@ export function createAddCityAtCellCommand(gridCell, {label = "新增城市"} = 
       affected: newObjectAffected(OBJECT_KIND.CITY)
     },
     apply(context) {
+      inspection = inspectCityCreation(context.map, targetGridCell);
+      if (!inspection.valid) throw new Error(inspection.summary);
       snapshot ??= captureCityCollectionSnapshot(context.map);
-      result = addCityAtGridCell(context.map, targetGridCell);
+      try {
+        result = addCityAtGridCell(context.map, targetGridCell);
+        faultInjector?.({stage: "after-create", result, map: context.map});
+      } catch (error) {
+        restoreCityCollectionSnapshot(context.map, snapshot);
+        throw error;
+      }
       this.effects.affected = objectAffected(OBJECT_KIND.CITY, result.cityId);
     },
     revert(context) {
@@ -73,12 +82,35 @@ export function createAddCityAtCellCommand(gridCell, {label = "新增城市"} = 
       restoreCityCollectionSnapshot(context.map, snapshot);
     },
     isNoop(context) {
-      return !isValidCitySeedCell(context.map, targetGridCell);
+      inspection = inspectCityCreation(context.map, targetGridCell);
+      return !inspection.valid;
+    },
+    getInspection() {
+      return inspection;
     },
     getResult() {
       return result;
     }
   };
+}
+
+export function inspectCityCreation(map, gridCell) {
+  const targetGridCell = normalizeGridCell(gridCell);
+  if (targetGridCell < 0 || targetGridCell >= (map?.grid?.cells?.i?.length || 0)) {
+    return creationInspection(false, "grid-cell-invalid", "目标 grid cell 无效。", {gridCell: targetGridCell});
+  }
+  if (!isGridLandCell(map, targetGridCell)) {
+    return creationInspection(false, "grid-cell-water", "目标 grid cell 不是陆地。", {gridCell: targetGridCell});
+  }
+  const packCell = choosePackCellForGridCell(map, targetGridCell);
+  if (!Number.isInteger(packCell)) {
+    return creationInspection(false, "pack-cell-missing", "目标 grid cell 没有可用的陆地 pack cell。", {gridCell: targetGridCell});
+  }
+  const burgId = normalizeOwnerId(map?.pack?.cells?.burg?.[packCell]);
+  if (burgId > 0) {
+    return creationInspection(false, "burg-cell-occupied", "目标 cell 已有城镇。", {gridCell: targetGridCell, packCell, burgId});
+  }
+  return creationInspection(true, "ok", "可以在目标 cell 创建城市。", {gridCell: targetGridCell, packCell});
 }
 
 export function createDeleteCityCommand(cityId, {label = "删除城市"} = {}) {
@@ -696,10 +728,11 @@ function findBurgForCity(map, city) {
 }
 
 function isValidCitySeedCell(map, gridCell) {
-  if (!Number.isInteger(gridCell) || gridCell < 0 || !isGridLandCell(map, gridCell)) return false;
-  const packCell = choosePackCellForGridCell(map, gridCell);
-  if (!Number.isInteger(packCell)) return false;
-  return !normalizeOwnerId(map?.pack?.cells?.burg?.[packCell]);
+  return inspectCityCreation(map, gridCell).valid;
+}
+
+function creationInspection(valid, code, summary, details) {
+  return {valid, allowed: valid, code, summary, details};
 }
 
 function choosePackCellForGridCell(map, gridCell) {

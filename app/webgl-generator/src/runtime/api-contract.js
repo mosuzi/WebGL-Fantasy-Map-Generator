@@ -4,8 +4,12 @@ export const API_CAPABILITY_SCHEMA_VERSION = "1.0.0";
 export const API_COMPATIBILITY_POLICY_VERSION = "1.0.0";
 
 export const API_METHODS = Object.freeze({
-  info: Object.freeze(["version", "capabilities", "mapSummary", "runtimeStats", "healthEvents"]),
+  info: Object.freeze(["version", "capabilities", "describe", "mapSummary", "runtimeStats", "healthEvents"]),
+  objects: Object.freeze(["types", "get", "list", "query"]),
+  cells: Object.freeze(["get", "getAtPoint", "neighbors", "query", "locate", "scan", "actions", "inspectAction"]),
+  regenerationLocks: Object.freeze(["list", "status", "inspect", "set", "setMany", "clearKind"]),
   generate: Object.freeze(["getOptions", "setOptions", "newMap", "rerollSeed", "regenerate"]),
+  oceanCurrents: Object.freeze(["rename", "regenerate", "inspectWorldRebuild", "rebuildWorld", "cancelWorldRebuild"]),
   selection: Object.freeze(["get", "resolve", "select", "clear", "locate", "pick", "flash", "highlight", "clearHighlights", "startEditing", "stopEditing", "toggleEditing"]),
   layers: Object.freeze(["get", "listThemes", "setViewMode", "setVisible", "setTheme", "exportTheme", "importTheme", "createTheme", "updateTheme", "deleteTheme", "fitView", "setShowOceanHeight", "setSmoothCellBorders", "setShowHoverInfo", "setMaxCityLabels"]),
   units: Object.freeze(["get", "apply", "setDistanceUnit", "setAreaUnit", "setNumberAbbreviation", "setMapScale", "setPopulationScale", "setMilitaryScale", "setPrecipitationScale"]),
@@ -14,17 +18,17 @@ export const API_METHODS = Object.freeze({
   edit: Object.freeze([
     "notes.createStandalone", "notes.set", "notes.delete", "notes.import", "notes.deleteBatch",
     "measurements.save", "measurements.rename", "measurements.updatePoints", "measurements.delete", "measurements.import",
-    "cities.add", "cities.delete", "cities.inspectMove", "cities.move", "cities.rename", "cities.setPopulation", "cities.syncOwner", "cities.setVisual", "cities.resetVisual",
-    "provinces.add", "provinces.delete", "provinces.rename", "provinces.setColor", "provinces.applyChanges",
-    "states.add", "states.delete", "states.inspectMerge", "states.merge", "states.inspectSplit", "states.split", "states.rename", "states.setColor", "states.setGovernment", "states.setCapital", "states.setGovernmentBatch", "states.applyChanges",
-    "height.applyChanges", "height.rebuildBaseDerived", "height.rebuildDownstreamDerived", "biomes.assignCells", "biomes.inspectSuitability", "biomes.applySuitability", "population.inspectAdjustment", "population.applyAdjustment", "population.inspectTransfer", "population.transfer", "diplomacy.setRelation",
+    "cities.add", "cities.inspectCreateAtCell", "cities.createAtCell", "cities.delete", "cities.inspectMove", "cities.move", "cities.rename", "cities.setPopulation", "cities.syncOwner", "cities.setVisual", "cities.resetVisual",
+    "provinces.add", "provinces.inspectCreateAtCell", "provinces.createAtCell", "provinces.delete", "provinces.rename", "provinces.setColor", "provinces.applyChanges",
+    "states.add", "states.inspectCreateAtCell", "states.createAtCell", "states.delete", "states.inspectMerge", "states.merge", "states.inspectSplit", "states.split", "states.rename", "states.setColor", "states.setGovernment", "states.setCapital", "states.setGovernmentBatch", "states.applyChanges",
+    "height.applyChanges", "height.inspectGlobalTransform", "height.applyGlobalTransform", "height.inspectTerrainTemplate", "height.applyTerrainTemplate", "height.inspectTerrainProgram", "height.applyTerrainProgram", "height.inspectRangeTransform", "height.applyRangeTransform", "height.inspectSelectionSmoothing", "height.applySelectionSmoothing", "height.inspectSeafloorReset", "height.applySeafloorReset", "height.rebuildBaseDerived", "height.rebuildDownstreamDerived", "height.rebuildAllDerived", "biomes.assignCells", "biomes.inspectSuitability", "biomes.applySuitability", "population.inspectAdjustment", "population.applyAdjustment", "population.inspectTransfer", "population.transfer", "diplomacy.setRelation",
     "economy.inspectAssignment", "economy.assignCells", "economy.rebuild", "economy.setGoodDisplay", "economy.setMarketDisplay",
     "military.setRatios", "military.setStatus", "military.setStatusBatch", "military.moveStation", "military.setBase", "military.recordBattleEvent", "military.importBattleEvents", "military.clearBattleEvents", "military.rename",
     "zones.create", "zones.delete", "zones.setStyle",
     "cultures.add", "cultures.assignCells", "cultures.inspectExpansion", "cultures.applyExpansion", "cultures.delete", "cultures.rename", "cultures.setColor", "cultures.setParent",
     "religions.add", "religions.assignCells", "religions.inspectExpansion", "religions.applyExpansion", "religions.delete", "religions.rename", "religions.setColor", "religions.setParent",
     "routes.create", "routes.inspectEdit", "routes.update", "routes.delete", "routes.setNote", "rivers.create", "rivers.delete", "rivers.rename", "rivers.setWidthFactor", "rivers.setNote", "lakes.create", "lakes.inspectOutlet", "lakes.setOutlet", "lakes.delete", "lakes.rename", "features.inspectPatch", "features.applyPatch", "features.inspectTopology", "features.applyTopology",
-    "labels.addCustom", "labels.delete", "labels.moveCustom", "labels.renameCustom", "labels.setNote", "labels.restore",
+    "labels.getStyles", "labels.setStyle", "labels.resetStyle", "labels.resetStyles", "labels.setLayout", "labels.setPositionLock", "labels.addCustom", "labels.delete", "labels.moveCustom", "labels.renameCustom", "labels.setNote", "labels.restore",
     "markers.add", "markers.delete", "markers.move", "markers.setNote", "markers.setVisual"
   ]),
   data: Object.freeze(["exportAll", "exportMap", "exportGEO", "exportFeatureGEO", "exportCompressedAll", "exportPNG", "exportNotes", "exportMeasurements", "exportImportDiagnostic", "saveBrowserMap", "restoreBrowserMap", "importMap", "importGEO", "importHeightmap"]),
@@ -36,6 +40,7 @@ export const CONFIRM_REQUIRED_METHODS = Object.freeze([
   "generate.regenerate",
   "generate.newMap",
   "generate.rerollSeed",
+  "oceanCurrents.rebuildWorld",
   "data.importMap",
   "data.importGEO",
   "data.importHeightmap",
@@ -46,6 +51,8 @@ export const CONFIRM_REQUIRED_METHODS = Object.freeze([
   "climate.applyDownstreamRebuild",
   "edit.height.rebuildBaseDerived",
   "edit.height.rebuildDownstreamDerived",
+  "edit.height.rebuildAllDerived",
+  "edit.height.applySeafloorReset",
   "edit.notes.deleteBatch",
   "edit.cities.delete",
   "edit.provinces.delete",
@@ -71,7 +78,11 @@ const STABILITY_LEVELS = Object.freeze({
 
 const CAPABILITY_GROUPS = Object.freeze({
   "runtime.read": {title: "运行时只读", access: "read"},
+  "objects.read": {title: "地图对象发现", access: "read"},
+  "cells.read": {title: "地图单元只读", access: "read"},
+  "regeneration-locks.control": {title: "重生成对象锁定", access: "write"},
   "map.generate": {title: "地图生成", access: "write"},
+  "ocean-currents.control": {title: "洋流", access: "write"},
   "selection.control": {title: "选择与定位", access: "control"},
   "display.control": {title: "显示与单位", access: "control"},
   "climate.control": {title: "气候", access: "write"},
@@ -203,7 +214,11 @@ function validateRawMetadata(methods, rawMetadata) {
 
 function resolveCapabilityGroup(namespace, method) {
   if (namespace === "info") return "runtime.read";
+  if (namespace === "objects") return "objects.read";
+  if (namespace === "cells") return "cells.read";
+  if (namespace === "regenerationLocks") return "regeneration-locks.control";
   if (namespace === "generate") return "map.generate";
+  if (namespace === "oceanCurrents") return "ocean-currents.control";
   if (namespace === "selection") return "selection.control";
   if (namespace === "layers" || namespace === "units") return "display.control";
   if (namespace === "climate") return "climate.control";

@@ -2,7 +2,7 @@
   <UiMetricGrid :metrics="summaryMetrics" class-name="river-panel-summary" />
 
   <div class="river-panel-controls">
-    <UiFilterInput :model-value="state.filter" placeholder="筛选名称 / id / 类型" @update:model-value="callbacks.onFilter" />
+    <UiFilterInput :model-value="state.filter" placeholder="筛选名称 / id / 类型 / 干流" @update:model-value="callbacks.onFilter" />
     <UiButton variant="danger" @click="callbacks.onRegenerate?.()">重新生成河流</UiButton>
   </div>
   <UiObjectTable
@@ -123,6 +123,7 @@ const columns = Object.freeze([
   {key: "id", label: "ID", align: "right"},
   {key: "name", label: "名称"},
   {key: "type", label: "类型"},
+  {key: "parentLabel", label: "干流"},
   {key: "length", label: "长度", align: "right", format: value => formatLength(value)},
   {key: "flux", label: "流量", align: "right", format: value => formatRiverFlow(value)}
 ]);
@@ -171,6 +172,10 @@ const summaryMetrics = computed(() => [
 
 const detailRows = computed(() => selected.value ? [
   {label: "选中", value: `#${selected.value.id} / ${selected.value.type}`},
+  {label: "汇入干流", value: selected.value.parentLabel},
+  {label: "流域主河", value: selected.value.basinLabel},
+  {label: "河网状态", value: selected.value.networkStatusLabel},
+  {label: "汇流 cell", value: selected.value.confluence >= 0 ? `#${selected.value.confluence}` : "—"},
   {label: "长度", value: formatLength(selected.value.length)},
   {label: "流量", value: formatRiverFlow(selected.value.flux)},
   {label: "汇水面积", value: formatHydrologyArea(selected.value.hydrology)},
@@ -199,14 +204,30 @@ watch(() => selected.value?.widthFactor, next => {
 });
 
 function riverRows(map) {
-  return (map?.rivers?.rivers || []).map(river => {
+  const rivers = map?.rivers?.rivers || [];
+  const byId = new Map(rivers.map(river => [Number(river.id ?? river.i), river]));
+  return rivers.map(river => {
     const length = riverLength(river);
     const flux = river.flux || river.discharge || river.width || 0;
     const note = readObjectNote(map, {kind: "river", id: river.id});
+    const parentId = Number(river.parent || 0);
+    const parent = byId.get(parentId);
+    const basinId = Number(river.basin || river.id);
+    const basin = byId.get(basinId);
+    const networkStatus = river.networkStatus || (parentId && !parent ? "orphaned" : "valid");
     return {
       id: river.id,
       name: river.name || `#${river.id}`,
-      type: river.parent ? "支流" : "主河",
+      type: networkStatus === "orphaned" ? (parentId ? "支流（无出口）" : "主河（无出口）") : parentId ? "支流" : river.outletKind === "lake" ? "入湖河流" : "主河",
+      parentId,
+      parentLabel: networkStatus === "orphaned"
+        ? parentId && parent ? `无有效出口（→ #${parentId} ${parent.name || ""}）` : "无有效出口"
+        : parentId ? `#${parentId} ${parent?.name || "未知干流"}` : "—",
+      basinLabel: `#${basinId} ${basin?.name || river.name || ""}`,
+      confluence: Number.isInteger(Number(river.confluence)) ? Number(river.confluence) : -1,
+      networkStatus,
+      networkIssue: river.networkIssue || "",
+      networkStatusLabel: formatNetworkStatus(networkStatus, river.networkIssue),
       length,
       flux,
       hydrology: normalizeHydrology(river.hydrology),
@@ -221,7 +242,27 @@ function riverRows(map) {
 function filterRows(sourceRows, filter) {
   const query = filter.trim().toLowerCase();
   if (!query) return sourceRows;
-  return sourceRows.filter(row => String(row.id).includes(query) || row.name.toLowerCase().includes(query) || row.type.toLowerCase().includes(query));
+  return sourceRows.filter(row => String(row.id).includes(query) || row.name.toLowerCase().includes(query) || row.type.toLowerCase().includes(query) || row.parentLabel.toLowerCase().includes(query));
+}
+
+function formatNetworkStatus(status, issue = "") {
+  if (status === "orphaned") {
+    return {
+      "disconnected-path": "河道 cell 不连续",
+      "invalid-water-outlet": "水体出口无效",
+      "invalid-border-outlet": "出界位置无效",
+      "invalid-downstream-basin": "下游根河无有效出口",
+      "parent-cycle": "父河链循环",
+      "missing-outlet": "根河无有效出口"
+    }[issue] || "无有效出口水系";
+  }
+  return {
+    valid: "河网正常",
+    "lake-inlet": "入湖",
+    "ocean-mouth": "入海",
+    "border-outlet": "出界",
+    orphaned: "无有效出口水系"
+  }[status] || status || "河网正常";
 }
 
 function sortRows(sourceRows, key, direction) {

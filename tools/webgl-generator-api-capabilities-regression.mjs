@@ -4,7 +4,8 @@ import {createServer} from "node:http";
 import {createRequire} from "node:module";
 import {dirname, extname, join, normalize, resolve} from "node:path";
 import {fileURLToPath} from "node:url";
-import {waitForApiReady} from "./webgl-generator-api-browser-ready.mjs";
+import {CONFIRM_REQUIRED_METHODS} from "../app/webgl-generator/src/runtime/api-contract.js";
+import {partitionApiBrowserDiagnostics, waitForApiReady} from "./webgl-generator-api-browser-ready.mjs";
 
 const rootDir = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const sourceDir = join(rootDir, "source", "Fantasy-Map-Generator");
@@ -45,9 +46,16 @@ try {
   const baseUrl = `http://${host}:${port}`;
   await page.goto(`${baseUrl}?healthClear=1`, {waitUntil: "domcontentloaded", timeout: timeoutMs});
   await waitForApiReady(page, timeoutMs);
-  const result = await inspectCapabilities(page, {cells, seed, template});
+  const result = await inspectCapabilities(page, {
+    cells,
+    seed,
+    template,
+    expectedConfirmRequired: [...CONFIRM_REQUIRED_METHODS]
+  });
   const uiApiConvergence = await inspectUiApiConvergence(page);
-  const healthErrors = await inspectHealthErrors(page);
+  const observedHealthErrors = await inspectHealthErrors(page);
+  const diagnostics = partitionApiBrowserDiagnostics(observedHealthErrors, consoleErrors);
+  const healthErrors = diagnostics.healthErrors;
 
   const report = {
     metadata: {
@@ -59,13 +67,14 @@ try {
       template,
       viewport,
       browserChannel,
-      consoleErrors,
+      consoleErrors: diagnostics.consoleErrors,
+      performanceConsoleErrors: diagnostics.performanceConsoleErrors,
       pageErrors
     },
     ...result,
     uiApiConvergence,
     healthErrors,
-    passed: result.passed && uiApiConvergence.passed && healthErrors.total === 0 && consoleErrors.length === 0 && pageErrors.length === 0
+    passed: result.passed && uiApiConvergence.passed && healthErrors.total === 0 && diagnostics.consoleErrors.length === 0 && pageErrors.length === 0
   };
 
   writeFileSync(outPath, `${JSON.stringify(report, null, 2)}\n`, "utf8");
@@ -80,36 +89,14 @@ try {
   await new Promise(resolveClose => server.close(resolveClose));
 }
 
-async function inspectCapabilities(page, {cells, seed, template}) {
-  return page.evaluate(async ({cells, seed, template}) => {
+async function inspectCapabilities(page, {cells, seed, template, expectedConfirmRequired}) {
+  return page.evaluate(async ({cells, seed, template, expectedConfirmRequired}) => {
     const failures = [];
-    const expectedConfirmRequired = [
-      "generate.regenerate",
-      "generate.newMap",
-      "generate.rerollSeed",
-      "data.importMap",
-      "data.importGEO",
-      "data.importHeightmap",
-      "data.restoreBrowserMap",
-      "namebases.clear",
-      "namebases.renameObjects",
-      "climate.applyDownstreamRebuild",
-      "edit.height.rebuildBaseDerived",
-      "edit.height.rebuildDownstreamDerived",
-      "edit.economy.assignCells",
-      "edit.economy.rebuild",
-      "edit.states.merge",
-      "edit.states.split",
-      "edit.features.applyTopology",
-      "edit.population.transfer"
-    ];
-    const expectedConfirmGroups = {
-      generate: ["regenerate", "newMap", "rerollSeed"],
-      data: ["importMap", "importGEO", "importHeightmap", "restoreBrowserMap"],
-      namebases: ["clear", "renameObjects"],
-      climate: ["applyDownstreamRebuild"],
-      edit: ["height.rebuildBaseDerived", "height.rebuildDownstreamDerived", "economy.assignCells", "economy.rebuild", "states.merge", "states.split", "features.applyTopology", "population.transfer"]
-    };
+    const expectedConfirmGroups = expectedConfirmRequired.reduce((groups, qualifiedName) => {
+      const [namespace, ...parts] = qualifiedName.split(".");
+      (groups[namespace] ||= []).push(parts.join("."));
+      return groups;
+    }, {});
     const expectedRepresentativeMutates = {
       "generate.setOptions": "generation-options",
       "edit.notes.set": "notes",
@@ -125,6 +112,7 @@ async function inspectCapabilities(page, {cells, seed, template}) {
 
     const api = window.webglGeneratorApi;
     const version = unwrap(api.info.version(), "info.version");
+    const initialSummary = unwrap(api.info.mapSummary(), "info.mapSummary.initial");
     const generation = unwrap(await api.generate.newMap({
       confirm: true,
       seed,
@@ -141,6 +129,9 @@ async function inspectCapabilities(page, {cells, seed, template}) {
     if (beforeSummary.checksum !== afterSummary.checksum) {
       failures.push(`读取 capabilities 前后 checksum 改变：${beforeSummary.checksum} -> ${afterSummary.checksum}`);
     }
+    if (!beforeSummary.mapIdentity || beforeSummary.mapIdentity === initialSummary.mapIdentity || beforeSummary.mapRevision !== 0) {
+      failures.push("成功换图没有生成新 identity 并从 revision 0 开始");
+    }
     if (!capabilities.methods) failures.push("capabilities 缺少 methods 字段");
     if (!capabilities.methodMetadata) failures.push("capabilities 缺少 methodMetadata 字段");
     if (!capabilities.methodMetadataCoverage) failures.push("capabilities 缺少 methodMetadataCoverage 字段");
@@ -150,8 +141,8 @@ async function inspectCapabilities(page, {cells, seed, template}) {
     if (version.capabilitySchemaVersion !== "1.0.0" || version.compatibilityPolicyVersion !== "1.0.0") failures.push("info.version 缺少能力或兼容策略版本");
     if (capabilities.contract?.stableCompatibility !== "same-major") failures.push("capabilities 缺少同主版本兼容策略");
     if (capabilities.contract?.deprecatedRemoval !== "next-major-only") failures.push("capabilities 缺少 deprecated 移除策略");
-    if (Object.keys(capabilities.capabilityGroups || {}).length !== 13) failures.push("capabilities 能力组不是 13 个");
-    if (JSON.stringify(capabilities.stabilitySummary) !== JSON.stringify({stable: 200, experimental: 7, deprecated: 1})) failures.push("稳定等级统计不是 200 / 7 / 1");
+    if (Object.keys(capabilities.capabilityGroups || {}).length !== 17) failures.push("capabilities 能力组不是 17 个");
+    if (JSON.stringify(capabilities.stabilitySummary) !== JSON.stringify({stable: 249, experimental: 7, deprecated: 1})) failures.push("稳定等级统计不是 249 / 7 / 1");
     if (!Object.prototype.hasOwnProperty.call(runtimeStats, "lastEditRefresh")) failures.push("runtimeStats 缺少 lastEditRefresh 字段");
     const coverage = capabilities.methodMetadataCoverage || {};
     if (coverage.complete !== true) failures.push("methodMetadataCoverage.complete 不是 true");
@@ -212,6 +203,8 @@ async function inspectCapabilities(page, {cells, seed, template}) {
         failures.push(`${qualifiedName} mutates 变为 ${metadata.mutates}，期望 ${expectedMutates}`);
       }
     }
+    const cellRead = await inspectCellReadApi();
+    failures.push(...cellRead.failures);
     if (glError !== 0) failures.push(`WebGL error 非 0：${glError}`);
 
     return {
@@ -225,6 +218,9 @@ async function inspectCapabilities(page, {cells, seed, template}) {
         aliases: (capabilities.compatibility?.aliases || []).map(({alias, target, status}) => ({alias, target, status}))
       },
       map: {
+        initialMapIdentity: initialSummary.mapIdentity,
+        mapIdentity: beforeSummary.mapIdentity,
+        mapRevision: beforeSummary.mapRevision,
         checksum: beforeSummary.checksum,
         gridCells: beforeSummary.gridCells,
         packCells: beforeSummary.packCells,
@@ -262,6 +258,7 @@ async function inspectCapabilities(page, {cells, seed, template}) {
         hasLastEditRefresh: Object.prototype.hasOwnProperty.call(runtimeStats, "lastEditRefresh"),
         lastEditRefresh: runtimeStats.lastEditRefresh
       },
+      cellRead,
       glError,
       failures,
       passed: failures.length === 0
@@ -287,7 +284,283 @@ async function inspectCapabilities(page, {cells, seed, template}) {
       if (missing.length) output.push(`${label} 缺少：${missing.join(", ")}`);
       if (extra.length) output.push(`${label} 多出：${extra.join(", ")}`);
     }
-  }, {cells, seed, template});
+
+    async function inspectCellReadApi() {
+      const cellFailures = [];
+      const before = captureReadonlyState();
+      const queryCall = api.cells.query({
+        space: "grid",
+        filter: {land: true},
+        fields: ["id", "height", "featureId", "stateId", "consistency"],
+        limit: 1
+      });
+      const query = unwrap(queryCall, "cells.query");
+      const gridRef = {space: "grid", id: query.items[0]?.id};
+      const grid = unwrap(api.cells.get(gridRef, {
+        includeGeometry: true,
+        includeNeighbors: true,
+        includeDiagnostics: true
+      }), "cells.get.grid");
+      const packRef = {space: "pack", id: grid.mapping.primaryPackCell};
+      const pack = unwrap(api.cells.get(packRef, {includeDiagnostics: true}), "cells.get.pack");
+      const neighbors = unwrap(api.cells.neighbors(gridRef, {depth: 2, limit: 64}), "cells.neighbors");
+      const world = unwrap(api.cells.getAtPoint({
+        coordinateSpace: "world",
+        x: grid.center.x,
+        y: grid.center.y
+      }), "cells.getAtPoint.world");
+      const renderer = window.__webglGeneratorApp?.renderer;
+      const canvas = document.getElementById("map-canvas");
+      const rect = canvas?.getBoundingClientRect();
+      const local = renderer?.worldToScreen?.(grid.center.x, grid.center.y, rect);
+      const client = unwrap(api.cells.getAtPoint({
+        coordinateSpace: "client",
+        x: Number(rect?.left || 0) + Number(local?.x || 0),
+        y: Number(rect?.top || 0) + Number(local?.y || 0)
+      }), "cells.getAtPoint.client");
+      const after = captureReadonlyState();
+      const tamperedCursor = query.nextCursor ? `${query.nextCursor.slice(0, -1)}x` : "";
+      const tampered = api.cells.query({
+        space: "grid",
+        filter: {land: true},
+        fields: ["id", "height", "featureId", "stateId", "consistency"],
+        limit: 1,
+        cursor: tamperedCursor
+      });
+      const crossFilter = api.cells.query({
+        space: "grid",
+        filter: {land: false},
+        fields: ["id", "height", "featureId", "stateId", "consistency"],
+        limit: 1,
+        cursor: query.nextCursor
+      });
+      const descriptions = ["cells.get", "cells.getAtPoint", "cells.neighbors", "cells.query"]
+        .map(method => unwrap(api.info.describe(method), `info.describe.${method}`));
+
+      if (!query.items.length || !query.nextCursor) cellFailures.push("cells.query 没有返回可分页陆地结果");
+      if (queryCall.metadata?.action !== "cells.query" || queryCall.metadata?.readonly !== true || !queryCall.metadata?.mapIdentity || queryCall.metadata?.mapRevision !== before.mapRevision) {
+        cellFailures.push("Cells 只读包络 metadata 缺少 action / readonly / identity / revision");
+      }
+      if (grid.ref?.space !== "grid" || grid.ref?.id !== gridRef.id) cellFailures.push("cells.get Grid 引用失真");
+      if (!Array.isArray(grid.geometry?.vertices) || grid.geometry.vertices.length < 3) cellFailures.push("cells.get 显式 geometry 缺失");
+      if (!Number.isInteger(packRef.id) || pack.mapping?.gridCell !== gridRef.id) cellFailures.push("Grid / Pack 映射没有往返");
+      if (world.found !== true || world.cell?.ref?.id !== gridRef.id) cellFailures.push("世界点没有命中同一 Grid cell");
+      if (client.found !== true || client.cell?.ref?.id !== gridRef.id) cellFailures.push("client 点没有命中同一 Grid cell");
+      if (!neighbors.returned || neighbors.returned > 64) cellFailures.push("邻接查询没有遵守非空与 limit");
+      if (JSON.stringify(before) !== JSON.stringify(after)) cellFailures.push("Cells 只读调用改变了 checksum、revision、历史、选择、相机或 pick");
+      if (tampered.ok !== false || tampered.error?.code !== "cursor-invalid") cellFailures.push("篡改 Cell cursor 没有稳定拒绝");
+      if (crossFilter.ok !== false || crossFilter.error?.code !== "cursor-stale") cellFailures.push("跨 filter Cell cursor 没有失效");
+      if (descriptions.some(description => description.metadata?.capabilityGroup !== "cells.read")) cellFailures.push("Cells 方法没有进入 cells.read 能力组");
+      if (descriptions.some(description => description.jsonSerializable !== true)) cellFailures.push("Cells 方法没有声明 JSON 可序列化");
+      if (descriptions.some(description => !description.resultSchema?.properties?.metadata?.required?.includes("mapRevision"))) {
+        cellFailures.push("Cells 自描述结果 schema 没有公开 revision metadata");
+      }
+
+      const statePage = unwrap(api.objects.list("state", {limit: 1, fields: ["id", "name"]}), "objects.list.state");
+      const state = statePage.items[0];
+      const beforeWriteRevision = unwrap(api.info.mapSummary(), "info.mapSummary.beforeWrite");
+      const rename = unwrap(api.edit.states.rename(state.id, `${state.name}·Cell验收`), "edit.states.rename.cellRevision");
+      const afterWriteRevision = unwrap(api.info.mapSummary(), "info.mapSummary.afterWrite");
+      const staleAfterWrite = api.cells.query({
+        space: "grid",
+        filter: {land: true},
+        fields: ["id", "height", "featureId", "stateId", "consistency"],
+        limit: 1,
+        cursor: query.nextCursor
+      });
+      const undo = unwrap(api.history.undo(), "history.undo.cellRevision");
+      const afterUndoRevision = unwrap(api.info.mapSummary(), "info.mapSummary.afterUndo");
+      const noopPage = unwrap(api.cells.query({
+        space: "grid",
+        filter: {land: true},
+        fields: ["id"],
+        limit: 1
+      }), "cells.query.noopCursor");
+      const beforeNoopRevision = unwrap(api.info.mapSummary(), "info.mapSummary.beforeNoop");
+      const noopRename = unwrap(api.edit.states.rename(state.id, state.name), "edit.states.rename.noop");
+      const afterNoopRevision = unwrap(api.info.mapSummary(), "info.mapSummary.afterNoop");
+      const cursorAfterNoop = api.cells.query({
+        space: "grid",
+        filter: {land: true},
+        fields: ["id"],
+        limit: 1,
+        cursor: noopPage.nextCursor
+      });
+
+      if (rename.executed !== true || afterWriteRevision.mapRevision !== beforeWriteRevision.mapRevision + 1) cellFailures.push("既有成功 map write 没有令 revision 恰好 +1");
+      if (staleAfterWrite.ok !== false || staleAfterWrite.error?.code !== "cursor-stale") cellFailures.push("既有 map write 后旧 Cell cursor 没有失效");
+      if (undo.executed !== true || afterUndoRevision.mapRevision !== afterWriteRevision.mapRevision + 1) cellFailures.push("undo 没有令 revision 恰好 +1");
+      if (noopRename.executed !== false || afterNoopRevision.mapRevision !== beforeNoopRevision.mapRevision) cellFailures.push("no-op 错误改变了 revision");
+      if (cursorAfterNoop.ok !== true) cellFailures.push("no-op 错误使 Cell cursor 失效");
+
+      const actionRegistry = unwrap(api.cells.actions(), "cells.actions");
+      const structuralInspection = unwrap(api.cells.inspectAction("markers.createAtCell", {
+        cell: packRef,
+        name: "浏览器验收标记"
+      }), "cells.inspectAction");
+      const geometryXs = grid.geometry.vertices.map(point => point.x);
+      const geometryYs = grid.geometry.vertices.map(point => point.y);
+      const diagnosticBbox = {
+        minX: Math.min(...geometryXs),
+        minY: Math.min(...geometryYs),
+        maxX: Math.max(...geometryXs),
+        maxY: Math.max(...geometryYs)
+      };
+      const scan = unwrap(await api.cells.scan({
+        space: "grid",
+        checks: ["terrain-consistency", "pack-mapping", "political-owner-range"],
+        filter: {bbox: diagnosticBbox},
+        fields: ["id", "height", "stateId", "consistency"],
+        limit: 20
+      }), "cells.scan");
+      if (actionRegistry.length !== 34 || new Set(actionRegistry.map(item => item.actionId)).size !== 34) {
+        cellFailures.push("cells.actions 没有返回 34 条唯一动作");
+      }
+      if (structuralInspection.allowed !== true || structuralInspection.inspectionLevel !== "spatial-input" || !structuralInspection.inspectionToken) {
+        cellFailures.push("cells.inspectAction 没有返回结构预检与 token");
+      }
+      if (scan.cancelled || scan.code !== "scan-complete" || scan.count > 20) {
+        cellFailures.push("cells.scan bbox / limit 结果异常");
+      }
+
+      unwrap(api.layers.setVisible("gridCells", false), "layers.setVisible.gridCells.off.initial");
+      await waitUntil(() => window.__webglGeneratorApp?.renderer?.getStats?.()?.draw?.gridCellsDrawCalls === 0);
+      const disabledStats = renderer?.getStats?.() || {};
+      const gridLocate = unwrap(api.cells.locate(gridRef, {fit: true, flash: true, openLayer: true}), "cells.locate.grid");
+      await waitUntil(() => window.__webglGeneratorApp?.renderer?.getStats?.()?.diagnostics?.gridCells?.ready === true);
+      const packLocate = unwrap(api.cells.locate(packRef, {fit: false, flash: true, openLayer: true}), "cells.locate.pack");
+      await waitUntil(() => window.__webglGeneratorApp?.renderer?.getStats?.()?.draw?.gridCellsDrawCalls === 1);
+      const enabledStats = renderer?.getStats?.() || {};
+      const forcedIdVisible = Boolean(document.querySelector(`.grid-cell-diagnostic-label[data-grid-cell-id="${gridRef.id}"]`));
+      if (disabledStats.draw?.gridCellsDrawCalls !== 0) cellFailures.push("Grid Cells 图层关闭时仍增加 draw call");
+      if (gridLocate.gridRef?.id !== gridRef.id || packLocate.gridRef?.id !== gridRef.id) cellFailures.push("Grid / Pack 定位没有落到同一视觉 cell");
+      if (JSON.stringify(gridLocate.camera?.before) === JSON.stringify(gridLocate.camera?.after)) cellFailures.push("cells.locate 没有调整相机");
+      if (!enabledStats.diagnostics?.gridCells?.ready || enabledStats.draw?.gridCellsDrawCalls !== 1) cellFailures.push("Grid Cells 图层没有完成构建与绘制");
+      if ((enabledStats.diagnostics?.gridCells?.edges || 0) <= 0 || (enabledStats.diagnostics?.gridCells?.bufferBytes || 0) <= 0) cellFailures.push("Grid Cells 诊断统计缺少共享边或 buffer 字节");
+      if (enabledStats.draw?.glError !== 0) cellFailures.push(`Grid Cells 开启后 WebGL error 非 0：${enabledStats.draw?.glError}`);
+      if (!forcedIdVisible) cellFailures.push("cells.locate 没有强制显示目标 Grid Cell ID");
+      renderer?.clearGridCellDiagnosticHighlight?.({draw: false});
+      unwrap(api.layers.setVisible("gridCells", false), "layers.setVisible.gridCells.off.final");
+      await waitUntil(() => window.__webglGeneratorApp?.renderer?.getStats?.()?.draw?.gridCellsDrawCalls === 0);
+
+      const createAtCell = [];
+      const createCandidates = unwrap(api.cells.query({
+        space: "grid",
+        filter: {land: true},
+        fields: ["id"],
+        limit: 1000
+      }), "cells.query.createCandidates").items;
+      for (const domain of ["states", "provinces", "cities"]) {
+        let inspection = null;
+        for (const candidate of createCandidates) {
+          const next = unwrap(api.edit[domain].inspectCreateAtCell({
+            cell: {space: "grid", id: candidate.id}
+          }), `edit.${domain}.inspectCreateAtCell`);
+          if (next.allowed) {
+            inspection = next;
+            break;
+          }
+        }
+        if (!inspection) {
+          cellFailures.push(`edit.${domain}.inspectCreateAtCell 固定图找不到合法 cell`);
+          continue;
+        }
+        const beforeCreate = unwrap(api.info.mapSummary(), `info.mapSummary.${domain}.beforeCreate`);
+        const created = unwrap(api.edit[domain].createAtCell({
+          cell: inspection.cell.ref,
+          inspectionToken: inspection.inspectionToken,
+          expectedRevision: inspection.expectedRevision
+        }), `edit.${domain}.createAtCell`);
+        const afterCreate = unwrap(api.info.mapSummary(), `info.mapSummary.${domain}.afterCreate`);
+        const stale = unwrap(api.edit[domain].createAtCell({
+          cell: inspection.cell.ref,
+          inspectionToken: inspection.inspectionToken,
+          expectedRevision: inspection.expectedRevision
+        }), `edit.${domain}.createAtCell.stale`);
+        const restored = unwrap(api.history.undo(), `history.undo.${domain}.createAtCell`);
+        if (!created.executed || created.code !== "created" || afterCreate.mapRevision !== beforeCreate.mapRevision + 1) {
+          cellFailures.push(`edit.${domain}.createAtCell 没有恰好写入一次`);
+        }
+        if (stale.executed !== false || stale.code !== "inspection-stale") {
+          cellFailures.push(`edit.${domain}.createAtCell 没有拒绝陈旧 token`);
+        }
+        if (!restored.executed) cellFailures.push(`edit.${domain}.createAtCell 无法撤销`);
+        createAtCell.push({
+          domain,
+          gridCell: inspection.cell.ref.id,
+          code: created.code,
+          staleCode: stale.code,
+          revisionBefore: beforeCreate.mapRevision,
+          revisionAfter: afterCreate.mapRevision
+        });
+      }
+
+      return {
+        gridRef,
+        packRef,
+        worldRef: world.cell?.ref || null,
+        clientRef: client.cell?.ref || null,
+        neighbors: neighbors.returned,
+        cursorTamperCode: tampered.error?.code || "",
+        cursorCrossFilterCode: crossFilter.error?.code || "",
+        revision: {
+          before: beforeWriteRevision.mapRevision,
+          afterWrite: afterWriteRevision.mapRevision,
+          afterUndo: afterUndoRevision.mapRevision,
+          afterNoop: afterNoopRevision.mapRevision
+        },
+        readonlyStateStable: JSON.stringify(before) === JSON.stringify(after),
+        descriptions: descriptions.length,
+        diagnostics: {
+          disabledDrawCalls: disabledStats.draw?.gridCellsDrawCalls ?? null,
+          enabledDrawCalls: enabledStats.draw?.gridCellsDrawCalls ?? null,
+          edges: enabledStats.diagnostics?.gridCells?.edges || 0,
+          bufferBytes: enabledStats.diagnostics?.gridCells?.bufferBytes || 0,
+          forcedIdVisible,
+          gridLocate: gridLocate.gridRef,
+          packLocate: packLocate.gridRef
+        },
+        scan: {
+          code: scan.code,
+          scanned: scan.scanned,
+          hits: scan.totalHits
+        },
+        actionRegistry: {
+          actions: actionRegistry.length,
+          structuralCode: structuralInspection.code,
+          semanticLayer: structuralInspection.action?.semanticLayer || null
+        },
+        createAtCell,
+        failures: cellFailures,
+        passed: cellFailures.length === 0
+      };
+
+      function captureReadonlyState() {
+        const summary = unwrap(api.info.mapSummary(), "info.mapSummary.cellsReadonly");
+        const history = unwrap(api.history.get(), "history.get.cellsReadonly");
+        const selection = unwrap(api.selection.get(), "selection.get.cellsReadonly");
+        const stats = window.__webglGeneratorApp?.renderer?.getStats?.() || {};
+        return {
+          checksum: summary.checksum,
+          mapIdentity: summary.mapIdentity,
+          mapRevision: summary.mapRevision,
+          history,
+          selection,
+          camera: stats.camera || null,
+          pick: window.__webglGeneratorApp?.pick || null
+        };
+      }
+
+      async function waitUntil(predicate, waitMs = 15000) {
+        const deadline = performance.now() + waitMs;
+        while (performance.now() < deadline) {
+          if (predicate()) return;
+          await new Promise(resolve => setTimeout(resolve, 16));
+        }
+        throw new Error("等待 Cell 浏览器状态超时");
+      }
+    }
+  }, {cells, seed, template, expectedConfirmRequired});
 }
 
 async function inspectUiApiConvergence(page) {
@@ -306,6 +579,21 @@ async function inspectUiApiConvergence(page) {
   await page.locator("#open-generation-panel").click();
   await page.locator('.floating-panel[data-panel-id="generation-panel"]').waitFor({state: "visible"});
   await page.locator('[data-control-tab="layers"]').click();
+  const gridCellLayerControl = page.locator('[data-layer="gridCells"]');
+  await gridCellLayerControl.waitFor({state: "visible"});
+  await gridCellLayerControl.click();
+  await page.waitForFunction(() => window.webglGeneratorApi.layers.get().data.layers.gridCells === true);
+  const gridCellsEnabledByUi = await page.evaluate(() => ({
+    layerVisible: window.webglGeneratorApi.layers.get().data.layers.gridCells,
+    ariaPressed: document.querySelector('[data-layer="gridCells"]')?.getAttribute("aria-pressed")
+  }));
+  await gridCellLayerControl.click();
+  await page.waitForFunction(() => window.webglGeneratorApi.layers.get().data.layers.gridCells === false);
+  const gridCellsDisabledByUi = await page.evaluate(() => ({
+    layerVisible: window.webglGeneratorApi.layers.get().data.layers.gridCells,
+    ariaPressed: document.querySelector('[data-layer="gridCells"]')?.getAttribute("aria-pressed"),
+    drawCalls: window.__webglGeneratorApp?.renderer?.getStats?.()?.draw?.gridCellsDrawCalls
+  }));
   await page.locator("#show-hover-info").click();
   await page.waitForFunction(() => {
     const result = window.webglGeneratorApi.layers.get();
@@ -328,10 +616,22 @@ async function inspectUiApiConvergence(page) {
   return {
     action: "layers.setShowHoverInfo",
     initial,
+    gridCells: {
+      enabledByUi: gridCellsEnabledByUi,
+      disabledByUi: gridCellsDisabledByUi
+    },
     uiResult,
     apiResult,
     restored,
-    passed: uiResult === true && apiResult.snapshot === false && apiResult.ariaPressed === "false" && restored
+    passed: uiResult === true
+      && apiResult.snapshot === false
+      && apiResult.ariaPressed === "false"
+      && gridCellsEnabledByUi.layerVisible === true
+      && gridCellsEnabledByUi.ariaPressed === "true"
+      && gridCellsDisabledByUi.layerVisible === false
+      && gridCellsDisabledByUi.ariaPressed === "false"
+      && gridCellsDisabledByUi.drawCalls === 0
+      && restored
   };
 }
 

@@ -1,5 +1,17 @@
 # 开发历史
 
+## 2026-07-26：合并 main 后统一复验海岸、河网与 Cells / API
+
+- 拉取并合并 `origin/main` 后，重新执行海岸专项全链。共享边界拓扑实验室 `20/20`、推荐算法 `14/14`；shoreline 完整 `--pure` 与独立 `--pure-formal` 均通过，正式 `10k / 50k` 重放的错侧像素、最长针、冲突覆盖、重复覆盖和 seam 全部为 `0`。正式 `10k` 继续识别 `1798` 条水陆直岸，cell visual 未填充数为 `0`。
+- main 新增河网固定种子、旧图迁移与往返回归通过；Cells 只读、诊断、动作登记、动作重规划、API AI 发现和全能力矩阵均通过。Cells 诊断覆盖 `10k / 50k / 100k`，能力矩阵保持 `1008` 行、`gap / unknown / unclassified = 0`。
+- 浏览器 API 能力回归首次复验发现脚本仍要求 `16` 个能力组，而运行时因 `cells.read` 与 `regeneration-locks.control` 已为 `17` 个；同步过期断言后复验通过，`257 / 257` 方法声明、文档、元数据与运行时完全覆盖，UI / API 收敛通过，`glError / healthErrors / consoleErrors / pageErrors` 全为 `0`。海岸静态门禁同样从旧 `if` 文本匹配更新为当前三元表达式的真实关闭条件，完整 `--pure` 随后通过。
+- 生产构建完成 `1269` modules，仅保留既有大 chunk 提示；本轮没有修改 `source/`，也没有把第 205 或第 212 项扩展为新的完成结论。
+
+## 2026-07-26：合并 main 并消解并行任务编号冲突
+
+- `codex-smooth-boundaries` 从共同基线独立使用了第 `204～209` 项记录海岸平滑专项；同期 main 又将第 `204～206` 项用于复合语义审计、重生成锁定和河网校验。本次合并以 main 编号为权威，把海岸专项在 `docs/current-plan.md` 顺延为第 `207～212` 项。
+- 为保持既有提交、截图、回归报告和历史讨论可追溯，以下合并前开发日志继续保留原分支编号；对应关系固定为海岸旧 `204 / 205 / 206 / 207 / 208 / 209` → 合并后 `207 / 208 / 209 / 210 / 211 / 212`。后续新增记录只使用合并后的编号。
+
 ## 2026-07-26：权威任务第 209 项补充——统一实际 cell 底面与 XOR 补面基线
 
 - 用户在 `http://127.0.0.1:5412/` 的同一 `stage-2-1 / 10k` 地图继续发现岸边白色长针和浅色分离带。保留页面并导出校验和 `35df777b` 的地图后，关闭平滑会让缺陷消失，关闭水陆线则不会，因此来源仍是平滑 surface，而不是描边。
@@ -138,7 +150,65 @@
 - 开发新增普通 Visvalingam、有限 Chaikin、开闭弧锚点锁定和双向最大位移约束组成的海岸快照；普通 Visvalingam 以最小堆和链式邻接实现性能优化，不改变实验室推荐语义。城镇、道路、河流和河口通过空间索引、包围盒预筛与精确线段检查保护，陆水侧、异常段、尖刺和交叉门禁失败时只回退当前弧线。平滑过渡面与描边统一消费 `snapshot.renderPoints` 和同一安全线段集合；关闭“平滑边界”仍完整回退共享 Voronoi 硬边。
 - 纯函数专项 `13` 项通过，包含输入不可变、开闭弧锁定、双向位移、被移除尖峰、退化回退、陆水侧、面线同源、硬边回退、对象保护和性能门禁；合成 `10k / 50k` 为 `234.6 / 1043.4ms`，正式 `shore-review / continents` 的 `10k / 50k` 构建为 `108.9 / 499.24ms`。共享边界拓扑实验室推荐方案保持 `8/8`，生产构建完成 `1251` modules，差异检查与独立代码审查通过。
 - 系统 Chrome 自动回归复用 `stage-2-1 / continents / 10000` 地图，覆盖高度、国家、省份三视图的平滑 / 硬边六种状态：全部加载层已隐藏、`glError = 0`、无 console / page error，最慢切换 `633.8ms`；平滑快照构建 `133ms`，`13` 条弧线中 `6` 条生效、`7` 条按陆水侧或城镇保护安全回退。三张平滑截图均无错色窄带、断口或政治面裂缝。额外可见 Chrome 复核确认高度与国家视图海岸连续，岛屿、半岛、水面及沿岸城镇、道路、河流关系正确；日志没有应用错误，仅出现 Chrome React DevTools 扩展来源的既有健康监测告警。第 204 项达到封闭范围最小验收，权威清单重新清空。
+## 2026-07-26：完成第 206 项河流干流关系与孤立支流门禁
 
+> 纠错：本节“完成”状态已撤回。用户随后指出玉溪本身也是内陆河，证明上一轮只把丹水接到一个存在的直接父河，却没有验证根干流最终出口。面板中的“入海”又只是根据单个 mouth cell 的低高度和 Feature 类型推断，不能替代河道 cell 连通、陆水邻接与外海连通验收。第 206 项已重新打开，完成口径提升为整条父链根出口合法。
+
+- 纠错实施补齐河道 cell 逐段邻接、出界边界 cell、入海 / 入湖末端陆水邻接、河线终点落在共享岸线、外海 Feature 边界连通和父链根出口六层门禁。根河无有效出口时，旧图把根河及全部上游统一标为无出口水系；新生成图把整棵水系从结果中拒绝，不再只删除根河后留下二次孤儿。
+- 河流管理对异常水系仍保留主河 / 支流身份：玉溪显示“主河（无出口）”，丹水显示“支流（无出口）”及“无有效出口（→ #48 玉溪）”；通用详情区分“水体出口无效”和“下游根河无有效出口”，悬停显示“丹水 / 支流 → 玉溪 / 无有效出口”。
+- 加强后的五个固定 10k 种子最终保留 `833` 条河流、`200` 条有效支流，共拒绝 `33` 条无有效出口河段；缺失父河、自指、父子不相交、循环、cell 跳跃、无合法根出口和残留孤立水系均为 `0`。合成旧图 `7 / 7` 条河道保留，并覆盖伪岸线终点及其上游传播。
+- 河流专项、河流删除、API 旧数据兼容、生产构建与差异检查通过。真实 Chrome 重新加载当前 `5410` 存档后仍保留 `258` 条旧河流，玉溪明确诊断为“水体出口无效”，丹水明确诊断为“下游根河无有效出口”；页面 application error 为 `0`，只有既有长任务性能 warn。当前存档未执行破坏性的河流重生成。
+
+- 用户在 `127.0.0.1:5410` 的真实存档中指出“丹水”被标为支流、流量 `15,338 m³/s`，但没有到海便截断；随后补充要求支流必须可见其干流，并从生成阶段避免同类孤立支流。
+- 现场确认河流管理与对象详情都只显示“支流”，没有直接干流名称或 ID。源码调查发现生成阶段先写 `riverParents`，之后 `defineRivers` 会过滤不足 3 个 cell 或河源位于水域的候选，却没有在过滤后校验父河；湖泊逻辑还会把全部入湖河流直接挂到湖泊出流。
+- 五个固定 10k 种子均可复现结构错误：父河缺失、自指或父子河段不在真实陆地汇流点相交；多个缺失父河实际是从水域 cell 起步、随后被过滤的湖泊出流。这证明问题来自河网数据关系，不只是线条渲染裁剪，单纯重新生成不能保证消失。
+- 新增第 206 项和专题文档，冻结 `parent` 只表示真实直接汇流、入湖河流不伪装成支流、新生成陆地孤立河段拒绝、旧图非破坏性标记，以及列表 / 详情 / 悬停 / API 统一展示干流的验收边界。
+- 新增共享河网归一化器：候选过滤后从真实陆地汇流点确定直接干流，清除缺失、自指、不相交和循环引用，解析根流域；入湖、入海和出界河流分别记录出口语义，新生成的陆地孤立河段从结果中剔除。手工新增河流也复用同一关系归一化。
+- 地图 schema v2 导入 / 导出链路会克隆并非破坏性归一化旧河流：可修复关系自动重接，入湖误挂解除，无法安全接续的旧陆地河段保留几何并标为 `orphaned`；`pack.rivers` 与主河流仓继续共用同一数组。
+- 河流管理新增“干流”列和干流筛选，详情、通用对象详情、地图悬停和对象查询补齐直接干流、根流域、汇流 cell、出口类型与河网状态。普通悬停不再只显示“河流”，会显示“河名 / 支流 → 干流名”等可读关系。
+- `regress:river-network` 的五个固定 10k 种子共覆盖 `857` 条河流与 `219` 条支流，最终缺失父河、自指、父子不相交、循环和孤立支流均为 `0`；生成门禁剔除 `9` 条无法接续的陆地河段。合成旧图 `5 / 5` 条几何保留，JSON 往返 `73 / 73` 条保留。既有河流删除、API 旧数据兼容、全部相关语法检查、`git diff --check` 与生产构建通过。
+- 真实 Chrome `5410` 存档无需重新生成：“丹水”现显示直接干流 `#48 玉溪`、流域主河 `#48 玉溪`、河网正常和汇流 cell `#3488`，地图悬停显示“丹水 / 支流 → 玉溪”；“西丹水”从错误支流改为“入湖河流”。浏览器未出现应用 error，只有既有 `main-thread-long-task` 性能 warn。
+
+## 2026-07-26：修正控制面板顶层 Tab 文字水平居中
+
+- 用户指出控制面板所有顶层 Tab 的文字没有在各自按钮中水平居中，其中首个“简介”明显靠左、末个“单位”明显靠右。
+- 真实浏览器计算样式确认 Element Plus 会对顶部 Tabs 的首项清除左内边距、末项清除右内边距；修正前两项文字中心分别相对按钮中心偏移 `-4px / +4px`，中间五项均为 `0px`。
+- 本轮只在 `.control-panel-tabs` 作用域内用足够明确的选择器恢复首尾项 `8px` 双侧内边距，不改变组件结构、Tab 顺序、伸展分配或点击行为。
+- 热更新后逐项复测“简介 / 生成 / 视图 / 样式 / 图层 / 管理 / 单位”：七项按钮宽度统一约 `74.74～74.75px`，文字中心偏移全部为 `0px`，左右计算内边距全部为 `8px`。
+
+## 2026-07-26：完成第 204 项全游戏复合语义接口与玩法规则审计
+
+- 用户指出“国家 A 占领 Cell B”只是一个样例，AI 友好 API 需要先从全部游戏规则反推复合语义动作；否则只能让 AI 拼接按钮级原语，既不能保证事务安全，也无法形成可信的完整玩法文档。
+- 本轮没有实现新的复合写接口。新增 `compound-semantic-action-audit`，直接消费第 200 项全量能力矩阵、当前 `API_METHODS` 和第 195 项 Cell 动作矩阵，把能力固定分为事实/原子原语、单事务规则动作和 AI 规划器配方三层。
+- 当前工作区审计分母为 full capability `963` 行、公开 API `241` 方法、Cell 动作 `47` 行、画布模式 `28` 个、直接操控 `19` 类 / `89` 个宿主。机器矩阵形成 `78` 个动作族：`68` 个规则事务和 `10` 个玩法配方；状态为已有完整事务 `33`、已有写命令但缺 inspector `24`、多 API 碎片 `5`、缺失游戏规则 `6`、配方 `10`。
+- 五个 P0 碎片族为领土转移/最后领土灭国、确保省份并分配 Cell、整省转移、名称库绑定并范围重命名、名称库替换或删除时迁移绑定。六个规则空白为省份合并/拆分、宣战/议和/宗藩变更和真实战斗结算。
+- “征服 Cell”收敛进通用 `politics.transfer-territory` 规则族，而不是继续增加互相重叠的 `conquer / cede / annex` 方法；规则分支负责自动/已有/确保省份，以及来源国最后领土时的完整墓碑和跨域引用清理。
+- 专题文档冻结玩法文档的十二章领域骨架。后续宣传与玩法说明按玩家目标、合法前置、规则分支、系统影响、失败/回滚和 AI 配方编写，不按控制面板逐项抄按钮；缺失规则未获自动实施授权。
+
+## 2026-07-25：第 195 项阶段 A 未提交实现尝试
+
+- 第 200 项与第 195 项重编排批次以提交 `73d252f` 推送到 `main` 后，按用户要求开始第 195 项实现尝试；本段之后的全部代码与文档只保留在工作区，没有暂存、提交或推送。
+- 新增 `cells.get / getAtPoint / neighbors / query`，公开 API 由 `13 / 237 / 129` 扩展为 `14` 个命名空间、`241` 个方法、`129` 个编辑方法，稳定等级为 `233 / 7 / 1`。四个方法使用显式 Grid / Pack CellRef、字段 / filter 白名单、默认 `100` / 最大 `1000` 分页、深复制结果与运行时 secret 签名 cursor；篡改、跨 filter、跨 revision 分别稳定拒绝。
+- Cell 快照区分高度水陆与 Feature 水陆，按需返回 polygon，提供 Grid / Pack 双向映射、所有同源 Pack cells、有限邻接、归属 / 气候 / 城镇摘要以及缺 polygon、缺映射、悬空政治对象和映射不一致诊断。`getAtPoint` 复用 renderer 的 client → world 投影与纯 `pickGridCell`，不触碰 `selection.pick`、pick 面板或选择状态。
+- 新增仅挂运行时 state 的地图 identity / revision tracker；地图替换生成新 identity 并从 `0` 开始，普通成功命令、undo / redo 各 `+1`，EditHistory 外部快照使同步 / 异步复合事务在内部多步后折叠为恰好 `+1`，完整回滚恢复原 revision，失败与 no-op 不递增。identity、revision 与 cursor secret 都没有写入 map、JSON、gzip 或浏览器缓存。
+- `regress:cells-read` 覆盖陆地、水域、边界、Grid / Pack 往返、geometry opt-in、三层邻接、字段投影、分页、确定性、JSON 副本、cursor 篡改 / 跨条件 / 跨 revision、非法引用、旧图缺映射 / polygon、普通命令、undo / redo、复合事务、失败回滚和换图身份；`regress:api-data-compatibility` 证明旧 v1、当前 v2、plain / gzip 浏览器信封无需新增必填字段。
+- 生产构建及 API discovery / stability / inventory / action convergence 门禁通过。真实 Chrome 固定图验证 Grid `#139` 与 Pack `#25` 往返，世界点与 client 点均命中 Grid `#139`，四个只读调用前后 checksum、revision、历史、选择、相机与 pick 不变；既有国家重命名令 revision `0 → 1`，撤销令 `1 → 2`，同名 no-op 保持 `2`，旧 cursor 正确失效，四方法均可由 `info.describe` 发现。最终 API 聚合门禁为 `12 / 12 passed`（代码 `6`、真实 Chrome `6`、失败 / 跳过 `0 / 0`），完整 JSON / gzip / base64 往返、失败恢复、GEO、导出、名称库及六条浏览器门的 WebGL / application health / console / page error 全部通过。
+- 既有 `regress:browser-storage-compatibility` 单独运行时只因把两条 `main-thread-long-task` 性能遥测仍计作 console error 而失败；同轮 `regress:api-data-compatibility` 的旧 JSON、gzip 与浏览器存储兼容断言全部通过。本项没有调整既有健康阈值或扩大范围。
+
+## 2026-07-25：完成第 200 项并依据真实矩阵重编排第 195 项
+
+- 第 200 项从当前 checkout 联合发现 `103` 个交互表面、`28` 个注册画布模式、`199` 个 runtime actions、`198` 个 API action bindings、`183` 个 command / inspector 导出和 `237` 个公开方法。机器矩阵共 `959` 行，结论为 `covered 884 / excluded 71 / deferred-owned:195 4 / gap 0 / unknown 0 / unclassified 0 / unownedParameterizableGap 0`。
+- 公开 API 由 `11 / 208 / 110` 扩展为 `13` 个命名空间、`237` 个方法、`129` 个编辑方法，稳定等级为 `229 / 7 / 1`。新增 `info.describe` 与逐方法真实参数 schema，`237 / 237` 方法均可发现；`objects` 支持 `17` 类对象、字段投影、稳定 cursor 和 JSON 副本。
+- 洋流重命名 / 重生成 / 世界重算、高度语义预检 / 应用 / 海底整链、标签样式 / 布局 / 位置锁定均与 UI 收口到同一 runtime action。公共世界重算拒绝内部 plan 参数，高度大范围预检默认只返回摘要与最多 `12` 个样本，显式详情也限制为 `200` 条，执行时在内部重算完整计划。
+- API 声明、真实 runtime、元数据、schema、业务 code、稳定性、确认策略和对象查询专项通过；生产构建、旧数据、事务、高度、海底、洋流、标签、机器矩阵与 `28` 模式门禁通过。`regress:api-suite` 最终为 `12 / 12 passed`（代码 `6`、真实 Chrome `6`、失败 / 跳过 `0 / 0`）；主 API 门为 `237 / 237`，UI / API 共路径成立，六条浏览器门的 WebGL / application health / console / page error 均为 `0`。
+- 六条 API 浏览器门把 `main-thread-long-task / render-frame-gap` 原样保留为性能遥测，并与应用 health / console 错误分列；没有调高阈值。名称库 clear 回归改为先创建真实用户库再验证未确认拒绝，避免把空集合 no-op 误判为危险写。
+- 发布前独立代码审查首轮发现 AI schema 的两个 P1：高度应用实际可能返回 `inspection_required / operation_invalid_input / operation_failed`，但方法描述未声明；地形程序示例缺必需 id，标签引用 schema 又与实际 `targetKind + targetId` 示例冲突。现已补齐稳定 business code，地形程序固定合法 id 示例，标签引用用 `id` 或 `targetKind + targetId` 二选一，并把这些契约写入 AI discovery 回归；同时删除未引用的空占位文件。针对性回归、生产构建与复审全部通过，发布审查最终为 `RELEASE`。
+- 第 195 项不再沿用旧 A～D：P0 以当前 `28 / 28` 画布模式及补充 point / path 入口冻结动作矩阵；新阶段依次为 A Cell 只读基础、B Grid Cells 诊断图层与定位扫描、C 全动作 inspector registry 与国家 / 省份 / 城市同族创建、D 只补机器差集证明缺失的受控写入口并统一验收。重编排复用第 200 项 `info.describe` / schema / objects，不建设远程 bridge，不开放通用任意写。
+- 首轮独立评审给出 `NOT RELEASE`，要求把 P0 从手写摘要提升为机器闭环，并补全 revision / token 和 inspector 签名。现已新增 `cell-action-replanning-matrix` 生成与回归：直接消费 `28` 个画布模式和 `19` 类非注册直接操控，共 `47` 行；模式 / 直接入口双向差集、重复 actionId、空目标、空源码引用均为 `0`。每行明确输入空间、源码入口、inspect / execute 目标、阶段、历史 / 回滚和旧兼容。
+- 唯一只读诊断签名冻结为 `cells.inspectAction(actionId, input, options = {})`，actionId 使用领域语义名，modeId 只作映射元数据；旧“三个创建动作首期 registry”文本已废止。revision 现覆盖所有既有成功地图写事务及 undo / redo，拒绝、取消、no-op 和完整回滚不递增；token 绑定 map identity、revision、actionId、规范化输入指纹和 inspector schema version，换图与异步陈旧提交边界均已写入最低验收。
+- 第二轮独立评审仍为 `NOT RELEASE`，指出权威清单残留“只设计不施工”旧口径，且 P0 没有把第 200 项矩阵作为真实上游。现已改为直接导入 `buildFullCapabilityMatrix()`：四类 `deferred-owned:195` 必须稳定归入 A、B、C、C+D，增加、删除或变更 owner 都会形成双向差集；source digest 同时绑定两份上游审计。矩阵还把 `89 / 89` 个直接操控宿主实例纳入摘要，并对 actionId、inputSpace、phase、status、history / rollback、compatibility 等全部必填字段建立统一缺口门禁。
+- 权威清单已把旧“只形成设计、不改代码”明确标为已完成的历史设计验收，另立当前 A～D 实施总验收；阶段 C 分母冻结为 `planned-registry 34 / 34`、`existing-api 1 / 1`、`excluded 12 / 12`，并明确用户本轮授权在评审 RELEASE、提交推送后尝试实施。
+- 第三轮独立评审结论为 `RELEASE`：确认第 200 项上游 deferred `4 / 4`、模式 `28 / 28`、直接操控 `19 / 19` 类与 `89 / 89` 宿主、`47` 行矩阵、阶段 C `34 / 34` 以及全部结构 gap `0`；第 195 项 A～D 编排正式成为唯一活动权威顺序。
 ## 2026-07-25：完成权威任务第 201～203 项统一验收
 
 - 统一验收首先修正复审发现的四个阻断：危险操作审计不再由策略清单反向枚举，而是递归扫描当前正式应用源码，独立发现面板 callback、确认函数与危险 API 名称，再与策略登记做双向差集；合成未知 `delete-fief / clear-archived-treaties` 会稳定进入缺口。专题索引同步明确 `Q-25～Q-27` 已转为第 201～203 项，只有 `Q-28～Q-33` 继续留在未批准候选池。
@@ -28839,3 +28909,29 @@ full 矩阵结果：
 - 批量命令在 apply 前保存整图快照，任一子命令即使先部分写入再抛错也会原位恢复完整地图与原 `map.options` 引用，失败批次不进入历史。备注批删、战斗事件清空和全部标签样式重设按高影响补齐确认；marker、label、孤儿备注、measurement、zone 和用户视觉主题等低影响单对象删除继续免确认。
 - 高度用户模板和自定义单位各使用独立 LocalStorage 回收记录，确认删除后可跨刷新恢复上次删除，不写地图存档或 checksum；高度模板回收记录损坏时仍保留并加载有效用户模板。新增危险策略 Node 专项和真实 Chrome 脚本，浏览器脚本留到第 201～203 项统一验收。
 - `audit:interaction-danger-recovery`、`regress:interaction-danger-recovery`、`regress:danger-policy`、`regress:delete-impact`、`regress:height-template-programs`、API stability / convergence / edit coverage / data compatibility / suite contract、生产构建和 `git diff --check` 通过。
+## 2026-07-26：完成权威任务第 195 项阶段 B～D——Grid Cells 诊断、动作 Registry 与受控创建
+
+- 阶段 B 新增默认关闭的 `gridCells` 图层：Grid Voronoi 共享边去重后异步分片构建独立静态 `GL.LINES` buffer，普通地图编辑不重建，地图替换才失效；诊断高亮与普通 selection 使用独立动态 buffer，ID 按 10k / 50k / 100k 设置缩放阈值并限制视口最多 `240` 个。控制面板、图层偏好和 `layers.setVisible` 共路径，悬停在既有共享基础地理信息之外补充 Grid / Pack 映射摘要。
+- 新增 `cells.locate / scan`。定位支持 Grid / Pack 引用、适配相机、闪烁和强制目标 ID；扫描支持 bbox / 当前视口、检查白名单、字段投影、limit / 签名 cursor、异步分片和取消。旧图缺失 Grid → Pack 映射、height / feature 不一致和非法政治归属均返回稳定诊断 code。
+- 阶段 C 实现 `34 / 34` Cell action registry，并与重编排矩阵建立双向差集；每项声明输入空间、inspect / execute 目标、确认、撤销、回滚、revision 和旧入口，且统一标记为编辑原语、不声称覆盖第 204 项复合规则。空输入、非法 CellRef 和未知 actionId 均稳定拒绝。
+- 国家、省份、城市一次性补齐 `inspectCreateAtCell / createAtCell`。三族 inspector 首次调用不修改地图或挂缓存；token 绑定 map identity、revision、actionId、规范化输入和 inspector schema。合法创建恰好一条历史与 revision `+1`，旧 token 以 `inspection-stale` 拒绝；创建命令在注入异常后恢复政治、城镇、Grid / Pack 归属和派生状态，revision 与 undo 均不变。旧 `.add(gridCell)` 继续兼容。
+- 阶段 D 将第 200 项四类 `deferred-owned:195` 全部转为 `covered`。当前全量矩阵 `987` 行：`covered 916 / excluded 71 / deferred-owned 0 / gap 0 / unknown 0 / unclassified 0`；动作矩阵保持模式 `28 / 28`、直接操控 `19 / 19` 类与 `89 / 89` 宿主、planned / actual registry `34 / 34`、结构缺口 `0`。第 204 项仍为 `68` 个规则事务与 `10` 个配方，没有实现其 `5` 个碎片事务、`6` 个缺失规则或配方。
+- 三档固定图实际 Grid Cells 为 `9933 / 49824 / 99960`，共享边 `30004 / 149933 / 300533`，buffer `1,440,192 / 7,196,784 / 14,425,584 bytes`，构建 `33.8 / 489.7 / 1509.6ms`，最长切片 `2.7 / 6.3 / 9.9ms`。系统 Chrome 代表矩阵确认控制面板与 API 开关一致、关闭 `0` draw、开启 `1` draw、Grid / Pack 定位同一视觉 cell、强制 ID 可见、三族创建和撤销闭环；`251 / 251` API 三向一致，WebGL / application health / console / page error 均为 `0`。专项、旧数据兼容、矩阵陈旧门禁和生产构建通过；本批尚未暂存、提交或推送。
+
+## 2026-07-26：启动权威任务第 205 项——重生成对象锁定体系
+
+- 用户直接批准新的“重生成锁定”专题：所有可被重新生成、重新扩张或重算改写的稳定列表行，都要提供逐行锁图标、列表批量锁定和地图多选批量锁定；锁定对象不得被对应重生成入口改写。
+- 从当前 checkout 重新盘点后，封闭分母不是控制面板可见的八类，而是 `14` 个列表页、`15` 类稳定行：国家、省份、城镇、道路、河流、资源点、外交关系、宗教、文化、军团、地区、Feature、洋流、经济市场和交易。受约束重生成 `11` 类、洋流 / 海底 / 气候 / 高度世界链、文化 / 宗教重新扩张和经济链重算均进入入口闭包。
+- 冻结独立 `regenerationLocks` v1 子仓，只保存规范化对象引用，不复用标签位置锁、marker pinned 或视觉 manual。锁定是“重生成保护”而不是通用只读权限；显式编辑继续允许，删除对象同步清理锁记录，完整换图由新地图自己的锁仓决定。
+- 冻结生成语义：锁定对象必须在生成前作为约束参与，完整对象、成员 cell、镜像与引用保持；不能以生成后覆盖旧对象的方式伪造保护。约束冲突时返回 `regeneration_lock_conflict` 并沿用第 202 项整图事务回滚，不静默解锁。
+- 列表和地图选择复用同一批量集合；共享 `UiObjectTable` 提供可选锁列，一个共享注册画布模式承载当前列表的地图多选。Feature、洋流和经济市场现有对象引用 / picking 缺口进入本项，不得以“不支持通用高亮”为理由排除。
+- 新增专题文档 `docs/task-notes/regeneration-object-lock-system.md`，并把第 205 项写入唯一权威任务清单与专题索引。实施按锁仓 API、共享 UI、独立对象生成器、政治社会拓扑、跨域复合链、统一验收六阶段推进；本轮只冻结范围和契约，尚未修改正式应用功能代码。
+
+## 2026-07-26：完成权威任务第 205 项阶段 A——版本化锁仓、命令、兼容与公开 API
+
+- 新增地图根级 `regenerationLocks v1`，固定支持国家、省份、城镇、道路、河流、资源点、外交关系、宗教、文化、军团、地区、Feature、洋流、经济市场和交易 15 类引用。锁仓只保存规范化身份，按 kind / id 稳定排序并去重；外交双向引用收敛为同一国家对，军团使用国家与军团复合 ID。
+- 新地图和 GEO 换图初始化空锁仓；完整 JSON、gzip 和浏览器存档继续共用地图规范化路径。旧图缺字段自动回填，损坏版本、非法类型和已删除对象引用不阻断加载，会被清理并记录到 `metadata.compatibility.regenerationLocks`。GEO 事务快照加入锁仓，失败恢复旧锁，成功换图不继承旧地图锁。
+- 新增单项、批量和按领域清空命令。批量先全量校验再写入，任一非法目标以 `lock_batch_invalid` 原子拒绝；单项保留 `unsupported_lock_kind / object_not_found`，预检令牌支持 `inspection_stale`。no-op 由运行时在进入历史前拦截，成功命令恰好推进一次 revision。编辑历史为显式删除命令附加孤儿清理生命周期，删除后移除无主锁，撤销同时恢复。
+- 公开 API 新增 `regenerationLocks.list / status / inspect / set / setMany / clearKind`；方法进入 `API_METHODS`、元数据、能力组、schema、`info.describe` 和稳定性契约。Feature、洋流和经济市场补进通用 `OBJECT_KIND`、resolver 与分页对象查询，15 类行均可投影 `regenerationLocked`，对象发现从 17 类扩为 20 类。
+- 当前公开工作区基线为 `15` 个命名空间、`257` 个方法、稳定等级 `249 / 7 / 1`。全量能力矩阵重新审计为 `1008` 行、`covered 937 / excluded 71 / gap 0 / unknown 0 / unclassified 0`；第 204 项复合语义矩阵同步归类 `257 / 257` 个 API，结构缺口仍为 `0`。新增锁定覆盖矩阵固定 `14` 个列表页、`15` 类行和 `22` 个直接 / 复合重生成入口，双向差集为 `0`。
+- `regress:regeneration-locks`、重生成锁定矩阵陈旧检查、API AI discovery / stability / action convergence / edit coverage / data compatibility / inventory、生产构建和 `git diff --check` 通过。完整 GEO 浏览器回归首次运行超过主线程 120 秒外部时限，未据此判定失败；锁仓专项、旧图和生产构建已独立通过。阶段 B 的共享锁列、批量集合与地图多选，以及阶段 C～E 的生成器保护尚未实施。

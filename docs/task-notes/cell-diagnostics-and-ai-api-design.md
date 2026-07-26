@@ -1,6 +1,6 @@
 # Cells 诊断图层与 AI 可判定 API 设计
 
-> 状态：权威任务第 195 项设计稿，2026-07-24 完成。本文只冻结产品语义、公共契约、分阶段施工边界和验收标准，不代表已批准或已完成代码实现。
+> 状态：权威任务第 195 项设计与实施权威编排；原设计于 2026-07-24 完成，2026-07-25 消费第 200 项真实能力矩阵后重写施工阶段，新智能体第三轮评审结论为 `RELEASE`；阶段 A 未提交实现尝试已通过专项与真实 Chrome 验收。
 
 ## 一、问题与目标
 
@@ -35,7 +35,7 @@
 ### 2.3 API 系统
 
 - 当前公共 API 根对象是 `window.webglGeneratorApi`，开发便利别名为 `window.api`。
-- 当前基线为 11 个命名空间、208 个方法，其中 110 个编辑方法；根版本为 `1.0.0 / stable`。
+- 当前未提交工作区基线为 `14` 个命名空间、`251` 个方法，其中 `135` 个编辑方法；根版本为 `1.0.0 / stable`。
 - API 使用统一外层结果：
 
 ```js
@@ -334,21 +334,15 @@ api.cells.locate({space: "grid", id: 3387}, {
 
 ```js
 api.cells.inspectAction(
-  {space: "grid", id: 3387},
   "states.createAtCell",
+  {cell: {space: "grid", id: 3387}},
   {}
 )
 ```
 
 它把 cell 查询与领域预检统一到一个 AI 易发现入口，内部委托给领域 inspector，不能复制另一套规则。
 
-首期动作 registry 只登记：
-
-```text
-states.createAtCell
-cities.createAtCell
-provinces.createAtCell
-```
+唯一规范签名冻结为 `cells.inspectAction(actionId, input, options = {})`。`actionId` 采用 `<domain>.<verb>` 或 `<domain>.<verb>AtCell`；`CANVAS_TOOL_MODE` 的 `modeId` 只作为 registry 映射元数据，不得直接充当公共 actionId。旧稿中只登记国家、省份、城市三类创建动作的范围已由本次 P0 重编排替代：registry 必须覆盖当前全部 `28` 个画布模式，以及机器矩阵纳入的标签、测量和基础选择入口。
 
 没有 inspector 的动作返回 `action-not-inspectable`，不能猜测。
 
@@ -721,73 +715,174 @@ ApiTransport 适配层
 
 ### 11.3 Revision
 
-建议引入单调 `mapRevision`：
+运行时建立不透明 `mapIdentity` 与单调 `mapRevision`，规则冻结如下：
 
-- 地图数据写入成功后递增。
-- 纯显示偏好、相机、临时高亮不递增。
-- 导入 / 新图替换重置地图 identity 并生成新 revision 作用域。
-- inspector 返回 revision。
-- 写 API 可选接受 `expectedRevision`；AI 写入默认应提供。
+- 每个新建或载入的地图生成新的 `mapIdentity`，其 revision 从 `0` 开始；换图后即使 revision 数值碰巧相同，旧 inspection token 也必须失效。
+- 每个成功提交的地图数据事务恰好令 revision `+1`。既有公开编辑、导入、重生成、世界重算、气候链和其它成功 map write 全部纳入，不允许只有第 195 项新增方法才递增。
+- 每次成功撤销或重做同样令 revision `+1`，因为当前地图状态已经改变；旧 token 随之失效。
+- 业务拒绝、用户取消、no-op、运行时失败且完整回滚都不递增。相机、选择、临时高亮、预览和纯显示偏好也不递增。
+- 异步或分片任务开始时捕获 identity + revision，提交前再次复核；任一不一致均返回陈旧 / 已作废结果，不得写入地图。
+- inspector 返回 revision 与不透明 `inspectionToken`。token 在运行时 registry 中绑定 `mapIdentity + mapRevision + actionId + 规范化输入指纹 + inspector schema version`；成功地图写入、undo / redo 和换图均使旧 token 失效。
+- 执行方法必须同时核对 token 与规范化后的真实输入，不能只比较 revision，也不能接受把同一 token 挪给另一 action 或另一 cell。
 
-revision 不是保存格式字段，可以只存在运行时；完整导出仍以地图 schema / checksum 为准。
+最小验收必须证明：任一既有成功 map write 会使旧 token 得到 `inspection-stale`；拒绝、取消和完整回滚不改变 revision；undo / redo 与地图替换一定使旧 token 失效；异步陈旧任务不会产生部分写入。
 
-## 十二、分阶段实施建议
+identity、revision 与 token 都不是保存格式字段，只存在运行时；旧 JSON、gzip、浏览器缓存和完整导出无需新增必填字段，持久完整性仍以地图 schema / checksum 为准。
 
-以下仅是未来施工建议，不因本文完成而自动转为权威实现任务。
+## 十二、待评审的权威实施编排
 
-### 前置小任务 P-API：控制台 API 全量复审与 AI 操作缺口补齐
+以下阶段已登记在 `docs/current-plan.md`，并已由用户要求的新智能体第三轮评审为 `RELEASE`，现为第 195 项唯一权威实施顺序；不能绕过本节另建候选顺序。
 
-本小任务已于 2026-07-25 转为权威任务第 200 项，当前可以执行，但不等于阶段 A～D 已获批准。它必须从当前 checkout 重生成地图能力分母，把交互表面、对象与统计面板、动作坞、画布模式、直接操控、runtime action、edit command 和现有公共 API 双向映射，补齐所有适合参数化但尚无 API 的地图能力，并建立面向 AI 的输入 / 结果、业务 code、预检、revision、确认、撤销 / 回滚和异步契约。
+### 前置 P-API：第 200 项已完成
 
-P-API 不把面板拖动、焦点、列宽或原生文件选择器等 UI shell 操作强行伪装成地图 API，也不开放裸内部状态写入或远程 bridge。完成标准与实际排除项以 `docs/current-plan.md` 第 200 项为准。
+第 200 项已经从当前 checkout 生成 `959` 行全量能力矩阵，关闭全部非 Cell 参数化缺口。当前公共 API 为 `13` 个命名空间、`237` 个方法、`129` 个编辑方法，`237 / 237` 方法已经接入统一 `info.describe` 与 schema registry，对象查询支持 `17` 类对象。
 
-### 前置小任务 P0：按 cell 动作矩阵审计与阶段重构
+第 195 项只消费第 200 项留下的四类 `deferred-owned`：
 
-本小任务尚未执行。任何阶段 A～D 的代码实现开始前，必须同时完成权威任务第 200 项 P-API 和本 P0；下列现有阶段划分在两项前置完成前只能作为初稿，不能直接用作施工清单。
+1. `cell.read`
+2. `cell.visual-diagnostics`
+3. `cell.action-inspection`
+4. `cell.controlled-write`
 
-P0 必须：
+因此不得在第 195 项重复实现 `info.describe`、`objects.*`、洋流、标签、高度语义 API 或新的能力描述系统，也不建设 MCP / HTTP / 远程写入 bridge。
 
-1. 盘点国家、省份、城市及其它所有通过 cell 选点、圈选或落笔触发的只读预检与写操作。
-2. 为每个动作记录现有 UI 入口、公开 API、内部命令 / inspector、输入空间、稳定业务 code、历史、回滚、旧图兼容和已有回归。
-3. 建立完整的 `inspect...AtCell / create...AtCell` 或等价动作矩阵，明确哪些动作应共享同一阶段，哪些因语义不同必须拆开。
-4. 重新评估 `states / provinces / cities` 的规范化写入顺序；不得只在阶段 B 实现 `api.edit.states.createAtCell`，却把 `api.edit.provinces.createAtCell`、`api.edit.cities.createAtCell` 等同类公共契约无依据地推迟到阶段 D。
-5. 基于矩阵重写阶段 A～D、依赖关系和验收分母，交由用户确认后再转入权威实施任务。
+### 前置 P0：按 Cell / Point / Path / Range 动作矩阵重编排
 
-P0 当前仍是第 195 项实施前置门禁：现在不调查、不实现 API、不修改正式应用代码，也不表示阶段 A～D 已获批准。P-API 与 P0 完成后，必须合并两份能力矩阵重写阶段 A～D，并再次交由用户确认。
+P0 已在本次重编排中完成。机器权威产物为 `docs/audits/cell-action-replanning-matrix.json`，人读摘要为同目录 Markdown；生成器直接消费第 200 项全量能力矩阵、当前 `CANVAS_TOOL_MODE`、非注册直接操控审计和实际 Cell action registry，并以 `audit:cell-action-replan` / `regress:cell-action-replan` 固定双向差集。第 200 项四类能力已逐条归入 A、B、C、C+D 并全部转为 `covered`；当前结果为第 195 项能力 `4 / 4`、注册模式 `28 / 28`、非注册直接操控 `19 / 19`、展开宿主实例 `89 / 89`、planned / actual registry `34 / 34`、总计 `47` 行、差集 / 重复 actionId / 任一必填字段 / 空目标 / 空来源 `0`。每行均记录 actionId、输入空间、源码入口与引用、inspect / execute 目标、实施阶段、历史 / 回滚和旧兼容。
 
-### 阶段 A：只读诊断闭环
+下表是机器产物的注册模式摘要；状态“已有写 API”只说明可参数化执行路径存在，不代表已具备统一只读 inspector、稳定业务 code 或 revision 防陈旧能力。
 
-1. 新增 `gridCells` 图层、控制面板开关和 `layers.setVisible` 支持。
-2. 新增 `api.cells.get / getAtPoint / neighbors / locate`。
-3. 新增 `api.edit.states.inspectCreateAtCell`。
-4. 让现有 `states.add` 的 noop 返回 inspection code。
-5. 新增 `api.info.describe(method)` 和对应最小 schema。
+| # | 模式 | 输入空间 | 现有公共 API | 重编排处理 |
+|---:|---|---|---|---|
+| 1 | `height:brush` | grid cells / changes / range | `edit.height.applyChanges` 与第 200 项高度语义 API | C 登记 inspector；不复制高度算法 |
+| 2 | `state:brush` | grid cells / changes | `edit.states.applyChanges` | C 登记 inspector |
+| 3 | `state:add` | grid cell | `edit.states.add` | C 同族新增 inspect / create |
+| 4 | `state:delete` | object / picked cell | `edit.states.delete` 与危险动作预检 | C 登记现有预检 |
+| 5 | `province:brush` | grid cells / changes | `edit.provinces.applyChanges` | C 登记 inspector |
+| 6 | `province:add` | grid cell | `edit.provinces.add` | C 同族新增 inspect / create |
+| 7 | `province:delete` | object / picked cell | `edit.provinces.delete` 与危险动作预检 | C 登记现有预检 |
+| 8 | `city:add` | grid cell | `edit.cities.add` | C 同族新增 inspect / create |
+| 9 | `city:delete` | object / picked cell | `edit.cities.delete` 与危险动作预检 | C 登记现有预检 |
+| 10 | `city:move` | city ref + grid / pack cell | `edit.cities.inspectMove / move` | C 复用现有 inspector |
+| 11 | `culture:assign` | grid cells | `edit.cultures.assignCells` | C 登记 inspector |
+| 12 | `religion:assign` | grid cells | `edit.religions.assignCells` | C 登记 inspector |
+| 13 | `culture:center` | culture ref + pack cell | `edit.cultures.inspectExpansion / applyExpansion` | C 把中心输入登记到扩张 inspector |
+| 14 | `religion:center` | religion ref + pack cell | `edit.religions.inspectExpansion / applyExpansion` | C 把中心输入登记到扩张 inspector |
+| 15 | `biome:assign` | grid cells | `edit.biomes.assignCells` | C 登记 inspector |
+| 16 | `biome:suitability` | grid cells / changes | `edit.biomes.inspectSuitability / applySuitability` | C 复用现有 inspector |
+| 17 | `economy:market-assign` | pack cells | `edit.economy.inspectAssignment / assignCells` | C 复用现有 inspector |
+| 18 | `measurement:draw` | world point list | `edit.measurements.save / updatePoints` | C 登记 path inspector |
+| 19 | `marker:add` | pack cell | `edit.markers.add` | C 登记 inspector |
+| 20 | `marker:move` | marker ref + pack cell | `edit.markers.move` | C 登记 inspector |
+| 21 | `route:draw` | pack-cell path / endpoints | `edit.routes.create` | C 登记 path inspector |
+| 22 | `route:edit-waypoint` | route ref + pack cell | `edit.routes.inspectEdit / update` | C 复用现有 inspector |
+| 23 | `river:add` | source pack cell | `edit.rivers.create` | C 登记 inspector |
+| 24 | `lake:excavate` | pack cell + radius | `edit.lakes.create` | C 登记 inspector |
+| 25 | `feature:patch-select` | pack cell + radius / mode | `edit.features.inspectPatch / applyPatch` | C 复用现有 inspector |
+| 26 | `feature:topology-select` | grid-cell set / operation | `edit.features.inspectTopology / applyTopology` | C 复用现有 inspector |
+| 27 | `zone:add` | center pack cell + radius | `edit.zones.create` | C 登记 inspector |
+| 28 | `note:add` | pack cell / world point | `edit.notes.createStandalone` | C 登记 inspector |
 
-阶段 A 不新增真实写入方法；既有 `states.add` 继续工作。
+非注册直接操控同时由机器矩阵逐行分类：
 
-### 阶段 B：规范化写入
+- 基础 pick / select / locate 已由第 200 项 `selection.*` 覆盖，只作为 Cell 空间映射输入，不重复建写 API。
+- 自定义标签拖动已由 `edit.labels.moveCustom` 覆盖；测量控制点拖动已由 `edit.measurements.updatePoints` 覆盖，二者进入 C 的关联动作 registry。
+- 画布平移 / 缩放属于相机控制，面板 / 浮层拖动、焦点、表格列宽和原生文件选择器属于 UI shell，继续按第 200 项理由排除。
 
-1. 新增 `api.edit.states.createAtCell`。
-2. `states.add` 委托新方法并保持兼容。
-3. 增加 `mapRevision / expectedRevision / inspectionToken`。
-4. 统一创建结果、rollback 证据和 typed error code。
+P0 完成标准冻结为：第 200 项 `deferred-owned:195` 必须全部消费并稳定归入 A～D；注册模式 `28 / 28`、非注册直接操控 `19 / 19` 及全部宿主实例、补充 point / path 入口全部有分类；未知、未分类、无归属、重复 actionId、任一必填字段、空 inspect / execute 目标和空源码引用均为 `0`。施工中若当前 checkout 新增 deferred、模式或入口，矩阵陈旧门禁必须先失败，再明确归入 A～D，不能静默忽略。
 
-### 阶段 C：批量诊断与 AI 传输
+### 新前置 P-SEM：第 204 项复合语义规则审计已完成
 
-1. 新增 `cells.query / inspectAction / scan`。
-2. 建立 action inspector registry。
-3. 评估本地只读 MCP / 调试桥。
-4. 建立调用日志、权限白名单和用户授权写入流程。
+阶段 A 完成后，用户明确指出“国家占领 Cell”只是一个样例，不能把 AI API 继续理解为按钮或画布动作的一一映射。第 204 项已从 `963` 行能力矩阵、`241` 个公开方法和 `47` 行 Cell 动作中冻结：
 
-### 阶段 D：扩展到其它编辑
+- 事实与原子原语；
+- `68` 个单事务规则动作；
+- `10` 个 AI 规划器玩法配方。
 
-按同一模式逐项覆盖：
+其中已有完整事务 `33`、已有写命令但缺 inspector `24`、多 API 碎片 `5`、缺失游戏规则 `6`。机器产物为 `docs/audits/compound-semantic-action-matrix.json / .md`。
 
-- `cities.inspectCreateAtCell / createAtCell`
-- `provinces.inspectCreateAtCell / createAtCell`
-- 高度填海、feature 改造、文化 / 宗教扩张等复杂动作
+第 195 项后续边界因此调整为：
 
-每个动作必须先有纯 inspector，不能只暴露写入口。
+- `cells.inspectAction` 只负责 Grid/Pack/point/path/range 等空间输入和画布原子动作预检；
+- 国家灭亡、领土转移、整省转移、战争结算等必须由领域 `inspect + execute` 规则事务承接；
+- 殖民、战争和行政改革等配方由 AI planner 逐步调用已授权规则事务，不能进入 `cells.execute(arbitraryPayload)`；
+- 第 204 项矩阵中的 `5` 个碎片事务、`6` 个缺失规则和 `10` 个配方没有随审计自动获得实现授权。
+
+### 阶段 A：Cell 只读基础
+
+当前实现状态：阶段 A～D 已全部落入未提交工作区。八个 `cells` 方法、运行时 identity / revision、schema、稳定 cursor、Grid Cells 图层、定位扫描、34 条动作 registry 与三族受控创建均通过专项、三档规模和真实 Chrome 代表矩阵；第 200 项四条 `deferred-owned:195` 已全部转为 `covered`。本批尚未暂存、提交或推送。
+
+1. 新增统一 `cells` 命名空间：`get / getAtPoint / neighbors / query`。
+2. Cell 引用必须显式区分 `{space: "grid", id}` 与 `{space: "pack", id}`；旧数字参数只在旧 `.add(gridCell)` 兼容路径解释为 Grid。
+3. 查询使用字段白名单、稳定 cursor、分页上限和 JSON 深复制；默认不返回 typed array、Map、内部对象或无限邻接。
+4. `getAtPoint` 支持世界点；client point 先经既有 `selection.pick` 转换，不重复实现相机投影。
+5. 建立运行时地图 identity / revision 读取基础。只读调用不得改 checksum、revision、EditHistory、选择或相机。
+6. 复用第 200 项 schema registry，把 CellRef、Point、Cursor 与结果 code 加入 `info.describe`，不建立第二套描述入口。
+
+阶段 A 最小验收：
+
+- Grid / Pack 双向映射、陆海 cell、边界 cell、无映射旧图和非法引用均有稳定结果。
+- `get / getAtPoint / neighbors / query` 重复调用确定、可序列化；分页 cursor 稳定且篡改会拒绝。
+- 旧 JSON、gzip、浏览器缓存无需新增必填字段。
+
+### 阶段 B：Grid Cells 诊断图层、定位与扫描
+
+1. 新增默认关闭的 `gridCells` 图层并接入 `layers.setVisible`；使用 Grid Voronoi 共享边去重，不混用 Pack cell。
+2. 边线使用静态 GPU buffer；普通高度 / 政治编辑不重建拓扑，地图替换才重建。
+3. Cell ID 只在缩放阈值与视口数量预算允许时显示，禁止 100k 全量 DOM 标签。
+4. 新增 `cells.locate / scan`：定位可以选择、闪烁并打开诊断摘要；扫描支持 bbox、字段投影、limit / cursor 和可取消分片。
+5. 图层关闭时不得增加 draw call；诊断高亮和普通 selection 分层，清理后不残留状态。
+
+阶段 B 最小验收：
+
+- 任一 A 阶段返回的 Grid / Pack 引用都可定位到同一视觉 cell。
+- 10k / 50k / 100k 固定图覆盖 buffer 构建、上传、draw、ID LOD、扫描分页、取消和地图替换。
+- 图层关闭零额外 draw；开启后 WebGL error、application console / page error 为 `0`。
+
+### 阶段 C：全动作 Inspector Registry 与创建同族
+
+1. 新增可枚举的只读 action registry 与唯一签名 `cells.inspectAction(actionId, input, options = {})`；至少覆盖机器矩阵的 `28` 个模式及标签 / 测量补充入口。
+2. 每个 actionId 必须链接第 204 项的规则动作或明确标记为原子编辑器原语；registry 不得声称自己覆盖国家灭亡、战争、整省转移等领域复合规则。
+3. registry 每项必须声明 input space、现有 inspect / execute API、业务 code、是否写地图、确认、撤销 / 回滚、异步、revision 要求和旧兼容入口。
+4. 同一阶段一次性新增：
+   - `edit.states.inspectCreateAtCell / createAtCell`
+   - `edit.provinces.inspectCreateAtCell / createAtCell`
+   - `edit.cities.inspectCreateAtCell / createAtCell`
+5. 三族共用 `expectedRevision / inspectionToken`、稳定 `allowed + code + details`、单条历史和故障快照回滚；不得再把省份或城市无依据地推迟到后续阶段。
+6. 旧 `states.add / provinces.add / cities.add` 路径继续可用，并委托规范入口或保持严格等价；既有调用的成功返回字段只增不删。
+7. 已有 inspector 的路线改线、Feature、适居度、市场、城市移动、文化 / 宗教扩张和危险删除只注册引用，不复制算法。
+
+阶段 C 最小验收：
+
+- action registry 覆盖机器矩阵全部 `planned-registry` 行，当前为 `34 / 34`，双向差集为 `0`；`existing-api 1 / 1`、`excluded 12 / 12` 也必须保持；合成未知模式、非注册入口或陈旧 API 引用会失败。
+- 所有 inspector 纯只读；业务拒绝使用 `ok: true / allowed: false / code`，运行时错误才使用失败包络。
+- 三类创建在合法、拒绝、revision 陈旧和注入异常下分别证明单历史、零历史或完整回滚。
+- 真实旧存档的普通对象缓存、稀疏高 ID、height / feature 不一致和 pack 映射缺失均有结构化结果。
+
+### 阶段 D：受控写缺口关闭与统一验收
+
+1. 依据阶段 C registry 重新生成“有 UI / inspector 但无规范写 API”的差集。
+2. 同时与第 204 项矩阵交叉检查：本阶段只关闭第 195 项已授权的 Cell / point / path / range 受控写缺口，不得顺带实现未获授权的领域复合事务或玩法配方。
+3. 只对白名单中的真实差集增加薄适配；已有 `edit.*` 方法直接登记为 execute target，不增加同义重复方法。
+4. 禁止通用 `cells.execute(action, arbitraryPayload)`、任意属性写、裸 command 执行器和远程写入入口。
+5. 每个新增适配必须先有纯 inspector，复用现有 command / transaction，并声明确认、撤销、失败回滚和旧图兼容。
+6. 更新第 200 项全量矩阵：四类 `deferred-owned: 195` 转为 covered；非 Cell 分母、排除理由和既有 `237` 条调用路径不得退化。
+
+阶段 D 最小验收：
+
+- action registry 中无 inspector 的业务拒绝、无 execute target 的参数化写入口、未知、未分类、无归属和真实 gap 均为 `0`。
+- API 声明、runtime、元数据、schema、业务 code、稳定性和确认策略双向一致。
+- API 聚合、旧数据、失败原子性、10k / 50k / 100k、生产构建和真实 Chrome 代表矩阵通过；性能遥测与应用错误继续分列。
+
+### 阶段 A～D 实施结果
+
+- API：`14` 个命名空间、`251` 个公开方法、`135` 个编辑方法，稳定等级 `243 / 7 / 1`，`251 / 251` 可描述且声明 / 元数据 / runtime 三向一致。
+- 图层：Grid Voronoi 共享边去重后写入独立 `GL.LINES` 静态 buffer；地图替换才失效，普通编辑复用；诊断高亮使用独立动态 buffer，ID 受缩放阈值与 `240` 个视口预算约束。
+- 三档规模：10k / 50k / 100k 的实际 Grid Cells 为 `9933 / 49824 / 99960`，边数 `30004 / 149933 / 300533`，buffer `1,440,192 / 7,196,784 / 14,425,584` bytes，构建 `33.8 / 489.7 / 1509.6ms`，最长切片 `2.7 / 6.3 / 9.9ms`。
+- Registry：planned / actual 均为 `34 / 34`；空输入、非法 CellRef、未知 actionId 均稳定拒绝，所有条目明确为 `editor-primitive / compoundRulesCovered=false`。第 204 项规则事务和 planner recipe 分层保持不变。
+- 创建：国家、省份、城市 inspector 首次调用不修改地图或挂载缓存；合法执行恰好一条历史和 revision `+1`，陈旧 token 拒绝，命令注入异常恢复完整集合快照且 revision / undo 均不变。
+- 矩阵：全量能力矩阵 `987` 行，`covered 916 / excluded 71 / deferred-owned 0 / gap 0 / unknown 0 / unclassified 0`；复合语义审计仍为 `68` 个规则事务、`10` 个玩法配方和结构缺口 `0`。
+- 浏览器：系统 Chrome 中 Grid / Pack 引用定位到同一视觉 cell；控制面板和 API 都可开关“网格单元”，关闭时额外 draw 为 `0`、开启为 `1`，强制目标 ID 可见；扫描、34 条登记、三族创建、陈旧 token 与撤销均通过，WebGL / application health / console / page error 为 `0`。
 
 ## 十三、验收标准
 
@@ -802,18 +897,20 @@ P0 当前仍是第 195 项实施前置门禁：现在不调查、不实现 API�
 
 ### 13.2 只读 API
 
-- `cells.get`、`getAtPoint`、`neighbors` 和 `inspectCreateAtCell` 不修改 checksum、mapRevision、EditHistory、选择或相机。
+- `cells.get`、`getAtPoint`、`neighbors`、`query`、`scan` 和全部 action inspector 不修改 checksum、mapRevision、EditHistory、选择或相机；`locate` 只改变选择 / 相机 / 诊断高亮。
 - 所有结果可 JSON 序列化。
 - 相同地图 revision 和输入返回相同 code 与关键 details。
 - 旧存档普通对象缓存、稀疏高 ID、height / feature 不一致和 pack 映射缺失都有结构化结果。
+- action registry 与当前 `28` 个画布模式及补充 point / path 入口双向差集为 `0`。
 
 ### 13.3 写入 API
 
-- `createAtCell` 成功时国家、省份、首都、grid / pack 归属和历史完整。
+- 国家、省份、城市三族 `createAtCell` 同阶段完成；成功时对象、必要锚点、grid / pack 归属和历史完整。
 - 业务拒绝返回 `ok: true / executed: false / code`，不写历史。
 - revision 不一致返回 `inspection-stale`，不写地图。
 - 任一阶段异常完整回滚，并返回 `rollback.complete: true`。
-- `states.add(gridCell)` 旧脚本继续可用。
+- `states.add / provinces.add / cities.add` 旧脚本继续可用。
+- 阶段 D 只补 registry 证明真实缺失的白名单写入口，不新增通用任意写执行器。
 
 ### 13.4 AI 可用性
 
@@ -822,11 +919,13 @@ P0 当前仍是第 195 项实施前置门禁：现在不调查、不实现 API�
 - 所有写方法的副作用、确认要求和撤销能力可由能力表发现。
 - 浏览器视觉与 API 指向同一 grid cell。
 
-## 十四、明确不在本设计阶段实施的内容
+## 十四、重编排明确不实施的内容
 
-- 不新增或修改正式应用代码。
 - 不建设远程 HTTP 服务。
+- 不建设本地 MCP / AI bridge 或远程写入授权流程。
 - 不自动删除旧图幽灵国家或孤儿对象。
 - 不把 pack cells 与 grid cells 混成一个图层。
 - 不开放内部 map 对象给 AI 直接写入。
-- 不批准阶段 A～D 自动进入施工；每一阶段仍需单独进入权威任务清单。
+- 不重复建设第 200 项已经完成的 `info.describe`、对象查询、洋流、标签或高度语义 API。
+- 不开放通用 `execute(action, arbitraryPayload)`、裸 command 执行器或任意属性写。
+- 不把 UI shell、面板拖动、焦点、表格列宽、原生文件选择器和纯视觉过渡伪装成地图 API。

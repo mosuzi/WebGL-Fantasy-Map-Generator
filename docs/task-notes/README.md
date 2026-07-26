@@ -22,6 +22,8 @@
 - 权威任务第 101～107 项来源登记于 `next-quasi-authoritative-interaction-audit-tasks-2026-07-19.md`：原 `Q-18～Q-24` 已获用户整体批准并按顺序转正，依次冻结交互分母与夹具、审计高频闭环、直接操控、复杂面板、危险恢复、键盘响应式，并在最后统一进行浏览器验证。
 - 第 101～107 项完成后形成的下一批交互整改来源登记于 `next-quasi-authoritative-interaction-remediation-tasks-2026-07-20.md`：其中 `Q-25～Q-27` 已获批准并转为权威任务第 201～203 项，当前状态与验收以权威任务清单为准；`Q-28～Q-33` 仍未获批准，不属于权威任务清单。
 - 权威任务第 128、159 项对应 `boundary-smoothing-topology-research.md`：比较边界简化 / spline / coverage 算法，冻结共享弧线数据结构、填充与描边同源不变量、缓存失效、编辑提交时序、许可边界和海岸线 → 国界 → 省界的分阶段建议，并链接已完成的独立拓扑实验室；不改正式 renderer。
+- 权威任务第 205 项对应 `regeneration-object-lock-system.md`：为 14 个可重生成对象列表、15 类稳定列表行建立逐行锁定、列表 / 地图批量选择、持久化锁仓和全重生成入口保护，并按锁仓 API、共享 UI、领域生成器与复合链分阶段实施。
+- 权威任务第 206 项对应 `river-network-parent-and-confluence-integrity.md`：把 `parent` 收敛为真实陆地汇流关系，补生成后河网门禁、旧图非破坏性归一化，以及列表、详情、悬停和对象查询中的直接干流信息。
 
 以上只是专题入口映射，范围、顺序和验收仍以权威任务清单为准。
 
@@ -41,7 +43,11 @@
 - `user-facing-shell-debug-export-and-naming-plan.md`：用户外壳、开发模式、导入导出和命名策略计划。
 - `initialization-loading-flow.md`：页面初始化与地图加载流程规约，记录阶段边界、预算和 Chrome 验证要求。
 - `render-health-monitoring.md`：渲染健康监测说明，记录本地卡顿日志、阈值、查询方式和限制。
-- `cell-diagnostics-and-ai-api-design.md`：权威任务第 195 项设计稿，统一规划 Grid Cells 诊断图层、cell 查询 / 定位 / 扫描 API、国家创建只读预检、稳定业务 code、revision 与未来 AI 受控传输；当前只完成设计，不代表实现阶段已获批准。
+- `cell-diagnostics-and-ai-api-design.md`：权威任务第 195 项经新智能体 `RELEASE` 的实施编排，消费第 200 项能力矩阵，按 Cell 只读、诊断图层、全动作 inspector 与同族创建、受控写缺口四阶段实施。
+- `console-api-full-audit-and-gap-closure-2026-07-25.md`：权威任务第 200 项执行说明与结果，记录全量能力分母、机器矩阵、AI 描述层、对象发现和非 Cell API 缺口关闭。
+- `compound-semantic-api-and-gameplay-rules.md`：权威任务第 204 项规则分层说明，区分事实/原子原语、单事务规则动作和 AI 规划器玩法配方，并为完整玩法文档冻结领域骨架。
+- `regeneration-object-lock-system.md`：权威任务第 205 项重生成对象锁定专题，冻结 14 个列表页 / 15 类行的覆盖分母、版本化锁仓、列表与地图批量选择、生成器约束、冲突回滚、API 和旧存档兼容。
+- `river-network-parent-and-confluence-integrity.md`：权威任务第 206 项河网完整性专题，冻结直接干流、汇流点、流域根、湖泊入流、孤立旧河段和可见诊断契约。
 - `object-table-column-width-audit-2026-07-24.md`：权威任务第 197 项对象列表默认列宽审计，以 24 个宿主 / 27 张表为分母，记录语义宽度分档、首都列收敛和一次性偏好迁移边界。
 - `object-notes-implementation-plan.md`：对象备注实现计划。
 - `measurement-rulers-plan.md`：测量对象与路线贴合计划。

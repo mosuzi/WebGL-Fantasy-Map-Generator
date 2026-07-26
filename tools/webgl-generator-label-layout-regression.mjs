@@ -98,8 +98,8 @@ assert.deepEqual(roundTrip.map.labels.layout, document.map.labels.layout, "完�
 const oldV2 = structuredClone(document);
 delete oldV2.map.labels.layout;
 const parsedOldV2 = parseMapDocument(stringifyMapDocument(oldV2));
-assert.equal(parsedOldV2.map.labels.layout, undefined, "旧 v2 缺字段应保持宽容读取");
-assert.deepEqual(createMapDocument(parsedOldV2.map, parsedOldV2.options).map.labels.layout, {version: 1, overrides: {}}, "旧 v2 再导出没有回填布局存储");
+assert.deepEqual(parsedOldV2.map.labels.layout, {version: 1, overrides: {}}, "旧 v2 缺字段没有在读取时回填布局存储");
+assert.deepEqual(createMapDocument(parsedOldV2.map, parsedOldV2.options).map.labels.layout, {version: 1, overrides: {}}, "旧 v2 再导出没有保留回填后的布局存储");
 const oldV1 = JSON.parse(await readFile(new URL("./fixtures/webgl-map-v1-minimal.json", import.meta.url), "utf8"));
 const migratedV1 = parseMapDocument(JSON.stringify(oldV1));
 assert.deepEqual(migratedV1.map.labels.layout, {version: 1, overrides: {}}, "v1 地图没有回填自动布局");

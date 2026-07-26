@@ -69,6 +69,12 @@ import {emptyOceanCurrentLayerStats, pushOceanCurrentLayer} from "./ocean-curren
 import {pushMilitaryFrontLayer} from "./military-front-layer.js";
 import {snapshotViewportCamera, viewportBufferTransform} from "./viewport-buffer-transform.js";
 import {
+  buildGridCellDiagnosticHighlight,
+  buildGridCellDiagnostics,
+  gridCellBounds,
+  gridCellCenter
+} from "./grid-cell-diagnostics-layer.js";
+import {
   ROUTE_SELECTION_HALO_CSS_PX,
   createLineWidthProjection,
   projectWorldLineWidth,
@@ -105,6 +111,7 @@ const MAP_EDGE_FADE_MIN_WORLD = 28;
 const MAP_EDGE_FADE_MAX_WORLD = 96;
 const MAP_EDGE_FADE_ALPHA = 0.9;
 const MAX_INCREMENTAL_SURFACE_GAP_FLOATS = 4096;
+const GRID_CELL_ID_LABEL_BUDGET = 240;
 
 const MARKER_ICON_PALETTES = Object.freeze({
   natural: {fill: "#7aa35f", stroke: "#203717", symbol: "#f6ffe8"},
@@ -179,6 +186,9 @@ export class PlaceholderMapRenderer {
     this.lineBuffer = this.gl.createBuffer();
     this.pointBuffer = this.gl.createBuffer();
     this.politicalMeshDebugBuffer = this.gl.createBuffer();
+    this.gridCellDiagnosticsBuffer = this.gl.createBuffer();
+    this.gridCellDiagnosticFillBuffer = this.gl.createBuffer();
+    this.gridCellDiagnosticLineBuffer = this.gl.createBuffer();
     this.vertexCount = 0;
     this.surfaceVertices = new Float32Array();
     this.landCorrectionVertices = new Float32Array();
@@ -206,6 +216,14 @@ export class PlaceholderMapRenderer {
     this.pointVertexCount = 0;
     this.politicalMeshDebugMode = "none";
     this.politicalMeshDebugVertexCount = 0;
+    this.gridCellDiagnosticsVertexCount = 0;
+    this.gridCellDiagnosticFillVertexCount = 0;
+    this.gridCellDiagnosticLineVertexCount = 0;
+    this.gridCellDiagnosticsGeneration = 0;
+    this.gridCellDiagnostics = emptyGridCellDiagnosticsStats();
+    this.gridCellDiagnosticHighlight = null;
+    this.gridCellDiagnosticFrame = 0;
+    this.gridCellIdLayer = null;
     this.labelCount = 0;
     this.visibleLabelCount = 0;
     this.cityLabelCount = 0;
@@ -276,7 +294,8 @@ export class PlaceholderMapRenderer {
       coastline: true,
       lakeShore: true,
       stateBorders: true,
-      provinceBorders: true
+      provinceBorders: true,
+      gridCells: false
     };
     this.camera = {scale: 1, offsetX: 0, offsetY: 0};
     this.routeBufferCamera = snapshotViewportCamera(this.camera);
@@ -337,6 +356,7 @@ export class PlaceholderMapRenderer {
   loadMap(map) {
     const profile = createRendererLoadProfile();
     this.map = map;
+    this.invalidateGridCellDiagnostics();
     this.objectHighlights = [];
     this.oceanCurrentHighlights = new Set();
     applyMapStageBackground(this.stage, map, this.visualTheme);
@@ -435,6 +455,7 @@ export class PlaceholderMapRenderer {
     };
 
     this.map = map;
+    this.invalidateGridCellDiagnostics();
     this.objectHighlights = [];
     this.oceanCurrentHighlights = new Set();
     applyMapStageBackground(this.stage, map, this.visualTheme);
@@ -829,10 +850,134 @@ export class PlaceholderMapRenderer {
       changed = true;
     }
     if (!changed) return;
+    if (layer === "gridCells" && nextVisible) void this.ensureGridCellDiagnosticsBuffer();
     if (layer === "tradeFlows") this.dynamicBuffersDirty.tradeFlows = true;
     if (layer === "cities" || layer === "population" || layer === "markers" || layer === "resources" || layer === "military") this.refreshPointLayers({draw: false});
     if (layers.some(item => item === "coastline" || item === "lakeShore" || item === "stateBorders" || item === "provinceBorders" || item === "warFronts" || item === "zones" || item === "oceanCurrents")) this.refreshLineLayers({draw: false});
     this.draw();
+  }
+
+  async ensureGridCellDiagnosticsBuffer(options = {}) {
+    if (!this.map || this.gridCellDiagnostics.ready) return this.gridCellDiagnostics.ready;
+    if (this.gridCellDiagnostics.building) return this.gridCellDiagnostics.buildPromise;
+    const map = this.map;
+    const generation = this.gridCellDiagnosticsGeneration;
+    const buildPromise = buildGridCellDiagnostics(map, {
+      yieldToBrowser: options.yieldToBrowser,
+      sliceMs: options.sliceMs,
+      shouldContinue: () => this.map === map && this.gridCellDiagnosticsGeneration === generation
+    }).then(result => {
+      if (result.aborted || this.map !== map || this.gridCellDiagnosticsGeneration !== generation) return false;
+      this.gridCellDiagnosticsVertexCount = result.vertices.length / 6;
+      this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.gridCellDiagnosticsBuffer);
+      const uploadStartedAt = performance.now();
+      this.gl.bufferData(this.gl.ARRAY_BUFFER, result.vertices, this.gl.STATIC_DRAW);
+      this.gridCellDiagnostics = {
+        ready: true,
+        building: false,
+        edges: result.edgeCount,
+        vertexCount: this.gridCellDiagnosticsVertexCount,
+        buildMs: result.buildMs,
+        uploadMs: roundMs(performance.now() - uploadStartedAt),
+        maxSliceMs: result.maxSliceMs,
+        bufferBytes: result.bufferBytes,
+        visibleIds: 0,
+        packCounts: result.packCounts,
+        buildPromise: null
+      };
+      this.draw({updateDynamicBuffers: false});
+      return true;
+    }).catch(error => {
+      if (this.gridCellDiagnosticsGeneration === generation) {
+        this.gridCellDiagnostics = {...emptyGridCellDiagnosticsStats(), error: String(error?.message || error)};
+      }
+      throw error;
+    });
+    this.gridCellDiagnostics = {...this.gridCellDiagnostics, building: true, buildPromise};
+    return buildPromise;
+  }
+
+  invalidateGridCellDiagnostics() {
+    this.gridCellDiagnosticsGeneration++;
+    this.gridCellDiagnosticsVertexCount = 0;
+    this.gridCellDiagnostics = emptyGridCellDiagnosticsStats();
+    this.clearGridCellDiagnosticHighlight({draw: false});
+    this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.gridCellDiagnosticsBuffer);
+    this.gl.bufferData(this.gl.ARRAY_BUFFER, new Float32Array(), this.gl.STATIC_DRAW);
+    if (this.gridCellIdLayer) this.gridCellIdLayer.replaceChildren();
+  }
+
+  locateCell(reference, options = {}) {
+    if (!this.map) return {found: false, code: "map-not-ready"};
+    const space = String(reference?.space || "");
+    const id = Number(reference?.id);
+    const gridCell = space === "pack" ? Number(this.map.pack?.cells?.g?.[id]) : id;
+    const bounds = Number.isInteger(gridCell) ? gridCellBounds(this.map, gridCell) : null;
+    if (!bounds) return {found: false, code: "cell-not-found", ref: {space, id}};
+    const before = {...this.camera};
+    if (options.openLayer !== false) {
+      this.layerVisibility.gridCells = true;
+      void this.ensureGridCellDiagnosticsBuffer();
+    }
+    if (options.fit !== false) this.locateBounds(bounds, {status: `grid cell #${gridCell}`, minScale: options.minScale ?? 6});
+    if (options.flash !== false) this.startGridCellDiagnosticHighlight(gridCell);
+    else this.draw();
+    return {
+      found: true,
+      code: "cell-located",
+      ref: {space, id},
+      gridRef: {space: "grid", id: gridCell},
+      camera: {before, after: {...this.camera}},
+      layerVisible: this.layerVisibility.gridCells,
+      highlighted: options.flash !== false
+    };
+  }
+
+  getViewportWorldBounds(marginPx = 0) {
+    return this.map ? viewportWorldBounds(this.map, this.camera, this.canvas, marginPx) : null;
+  }
+
+  startGridCellDiagnosticHighlight(gridCell) {
+    this.gridCellDiagnosticHighlight = {gridCell, until: performance.now() + 2600};
+    this.updateGridCellDiagnosticHighlightBuffer();
+    if (!this.gridCellDiagnosticFrame) this.animateGridCellDiagnosticHighlight();
+  }
+
+  clearGridCellDiagnosticHighlight({draw = true} = {}) {
+    const view = this.canvas.ownerDocument?.defaultView || globalThis;
+    if (this.gridCellDiagnosticFrame && typeof view.cancelAnimationFrame === "function") view.cancelAnimationFrame(this.gridCellDiagnosticFrame);
+    this.gridCellDiagnosticFrame = 0;
+    this.gridCellDiagnosticHighlight = null;
+    this.gridCellDiagnosticFillVertexCount = 0;
+    this.gridCellDiagnosticLineVertexCount = 0;
+    for (const buffer of [this.gridCellDiagnosticFillBuffer, this.gridCellDiagnosticLineBuffer]) {
+      this.gl.bindBuffer(this.gl.ARRAY_BUFFER, buffer);
+      this.gl.bufferData(this.gl.ARRAY_BUFFER, new Float32Array(), this.gl.DYNAMIC_DRAW);
+    }
+    if (draw && this.map) this.draw();
+  }
+
+  animateGridCellDiagnosticHighlight() {
+    if (!this.gridCellDiagnosticHighlight || performance.now() > this.gridCellDiagnosticHighlight.until) {
+      this.clearGridCellDiagnosticHighlight();
+      return;
+    }
+    this.updateGridCellDiagnosticHighlightBuffer();
+    this.draw({updateDynamicBuffers: false});
+    const view = this.canvas.ownerDocument?.defaultView || globalThis;
+    this.gridCellDiagnosticFrame = view.requestAnimationFrame(() => this.animateGridCellDiagnosticHighlight());
+  }
+
+  updateGridCellDiagnosticHighlightBuffer() {
+    if (!this.map || !this.gridCellDiagnosticHighlight) return;
+    const pulse = (Math.sin(performance.now() / 125) + 1) / 2;
+    const mesh = buildGridCellDiagnosticHighlight(this.map, this.gridCellDiagnosticHighlight.gridCell, pulse);
+    this.gridCellDiagnosticFillVertexCount = mesh.fill.length / 6;
+    this.gridCellDiagnosticLineVertexCount = mesh.line.length / 6;
+    this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.gridCellDiagnosticFillBuffer);
+    this.gl.bufferData(this.gl.ARRAY_BUFFER, mesh.fill, this.gl.DYNAMIC_DRAW);
+    this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.gridCellDiagnosticLineBuffer);
+    this.gl.bufferData(this.gl.ARRAY_BUFFER, mesh.line, this.gl.DYNAMIC_DRAW);
   }
 
   draw({updateDynamicBuffers = true, updateOverlay = true, drawDirtyDynamicBuffers = true} = {}) {
@@ -943,6 +1088,42 @@ export class PlaceholderMapRenderer {
       if (this.riverVertexCount > 0) layerOrder.push("rivers");
     }
     gl.disable(gl.BLEND);
+    let gridCellsDrawCalls = 0;
+    if (this.layerVisibility.gridCells && this.gridCellDiagnostics.ready && this.gridCellDiagnosticsVertexCount > 0) {
+      gl.bindBuffer(gl.ARRAY_BUFFER, this.gridCellDiagnosticsBuffer);
+      gl.uniform1f(this.locations.scale, this.camera.scale);
+      gl.uniform2f(this.locations.offset, this.camera.offsetX, this.camera.offsetY);
+      bindVertexBuffer(gl, this.locations);
+      gl.enable(gl.BLEND);
+      gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+      gl.lineWidth(1);
+      gl.drawArrays(gl.LINES, 0, this.gridCellDiagnosticsVertexCount);
+      gl.disable(gl.BLEND);
+      gridCellsDrawCalls = 1;
+      layerOrder.push("gridCells");
+    }
+    if (this.gridCellDiagnosticFillVertexCount > 0) {
+      gl.bindBuffer(gl.ARRAY_BUFFER, this.gridCellDiagnosticFillBuffer);
+      gl.uniform1f(this.locations.scale, this.camera.scale);
+      gl.uniform2f(this.locations.offset, this.camera.offsetX, this.camera.offsetY);
+      bindVertexBuffer(gl, this.locations);
+      gl.enable(gl.BLEND);
+      gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+      gl.drawArrays(gl.TRIANGLES, 0, this.gridCellDiagnosticFillVertexCount);
+      gl.disable(gl.BLEND);
+    }
+    if (this.gridCellDiagnosticLineVertexCount > 0) {
+      gl.bindBuffer(gl.ARRAY_BUFFER, this.gridCellDiagnosticLineBuffer);
+      gl.uniform1f(this.locations.scale, this.camera.scale);
+      gl.uniform2f(this.locations.offset, this.camera.offsetX, this.camera.offsetY);
+      bindVertexBuffer(gl, this.locations);
+      gl.enable(gl.BLEND);
+      gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+      gl.lineWidth(2);
+      gl.drawArrays(gl.LINES, 0, this.gridCellDiagnosticLineVertexCount);
+      gl.disable(gl.BLEND);
+      layerOrder.push("gridCellHighlight");
+    }
     gl.bindBuffer(gl.ARRAY_BUFFER, this.selectionBuffer);
     gl.uniform1f(this.locations.scale, 1);
     gl.uniform2f(this.locations.offset, 0, 0);
@@ -967,6 +1148,7 @@ export class PlaceholderMapRenderer {
       drawMs: roundMs(performance.now() - startedAt),
       glError: gl.getError(),
       layerOrder,
+      gridCellsDrawCalls,
       oceanCurrentScale: this.camera.scale,
       oceanCurrentScreenWidth: {
         min: projectWorldLineWidth(this.oceanCurrentLayerStats.minWidth, oceanCurrentProjection).backingWidth,
@@ -1048,6 +1230,9 @@ export class PlaceholderMapRenderer {
         vertexCount: this.politicalMeshDebugVertexCount,
         triangleCount: this.politicalMeshDebugVertexCount / 3
       },
+      diagnostics: {
+        gridCells: summarizeGridCellDiagnostics(this.gridCellDiagnostics)
+      },
       pointVertexCount: this.pointVertexCount,
       cityIconCount: this.cityIconCount,
       visibleCityIconCount: this.visibleCityIconCount,
@@ -1127,7 +1312,10 @@ export class PlaceholderMapRenderer {
     const politicalObject = pickPoliticalObject(this.map, result, this.colorMode);
     const object = militaryIcon || markerIcon || label || diplomacyRelation || tradeFlow || lake || cityObject || marker || military || river || route || politicalObject;
     this.lastObjectCandidateCount = (label ? 1 : 0) + (cityObject?.candidateCount || 0) + (marker?.candidateCount || 0) + (military?.candidateCount || 0) + (highlightedConnector?.candidateCount || tradeFlow?.candidateCount || 0) + (route?.candidateCount || 0) + (river?.candidateCount || 0) + (lake ? 1 : 0) + (politicalObject ? 1 : 0);
-    return result ? {...result, label, cityObject, marker, military, tradeFlow, diplomacyRelation, route, river, lake, politicalObject, object, objectCandidates: this.lastObjectCandidateCount, worldX: roundValue(result.worldX), worldY: roundValue(result.worldY)} : null;
+    const gridPackCellCount = Number.isInteger(result.gridCell)
+      ? Number(this.gridCellDiagnostics.packCounts?.[result.gridCell] || 0)
+      : 0;
+    return result ? {...result, gridPackCellCount, label, cityObject, marker, military, tradeFlow, diplomacyRelation, route, river, lake, politicalObject, object, objectCandidates: this.lastObjectCandidateCount, worldX: roundValue(result.worldX), worldY: roundValue(result.worldY)} : null;
   }
 
   screenToWorld(clientX, clientY) {
@@ -1565,6 +1753,7 @@ export class PlaceholderMapRenderer {
 
   buildLabels(map) {
     if (!this.overlay) {
+      this.gridCellIdLayer = null;
       this.labelItems = [];
       this.cityIconItems = [];
       this.cityIconItemsById = new Map();
@@ -1665,6 +1854,9 @@ export class PlaceholderMapRenderer {
     this.selectionMarker.className = "selection-marker";
     this.selectionMarker.style.display = "none";
     fragment.append(this.selectionMarker);
+    this.gridCellIdLayer = documentRef.createElement("div");
+    this.gridCellIdLayer.className = "grid-cell-diagnostic-label-layer";
+    fragment.append(this.gridCellIdLayer);
     this.overlay.append(fragment);
     this.labelCount = this.labelItems.length;
     this.cityLabelCount = this.labelItems.filter(item => item.targetKind === LABEL_TARGET_KIND.CITY).length;
@@ -1800,6 +1992,9 @@ export class PlaceholderMapRenderer {
     const selectionStartedAt = performance.now();
     this.updateSelectionMarker(rect);
     const selectionMs = roundMs(performance.now() - selectionStartedAt);
+    const gridCellIdsStartedAt = performance.now();
+    this.updateGridCellIdLabels(rect);
+    const gridCellIdsMs = roundMs(performance.now() - gridCellIdsStartedAt);
     this.lastOverlayUpdate = {
       totalMs: roundMs(performance.now() - startedAt),
       labelsMs,
@@ -1807,6 +2002,7 @@ export class PlaceholderMapRenderer {
       markerIconsMs,
       militaryIconsMs,
       selectionMs,
+      gridCellIdsMs,
       overlayChildren: this.overlay.childElementCount,
       labelItems: this.labelItems.length,
       visibleLabels: this.visibleLabelCount,
@@ -1821,6 +2017,44 @@ export class PlaceholderMapRenderer {
       militaryIconItems: this.militaryIconItems.length,
       visibleMilitaryIcons: this.visibleMilitaryIconCount
     };
+  }
+
+  updateGridCellIdLabels(rect) {
+    if (!this.gridCellIdLayer || !this.map || this.layerVisibility.gridCells !== true) {
+      if (this.gridCellIdLayer) this.gridCellIdLayer.replaceChildren();
+      this.gridCellDiagnostics.visibleIds = 0;
+      return;
+    }
+    const forcedCell = this.gridCellDiagnosticHighlight?.gridCell;
+    const minimumScale = gridCellIdMinimumScale(this.map);
+    if (this.camera.scale < minimumScale && !Number.isInteger(forcedCell)) {
+      this.gridCellIdLayer.replaceChildren();
+      this.gridCellDiagnostics.visibleIds = 0;
+      return;
+    }
+    const documentRef = this.gridCellIdLayer.ownerDocument;
+    const fragment = documentRef.createDocumentFragment();
+    const cells = this.map.grid?.cells?.i || [];
+    let visible = 0;
+    for (const value of cells) {
+      const gridCell = Number(value);
+      const forced = gridCell === forcedCell;
+      if (!forced && this.camera.scale < minimumScale) continue;
+      const center = gridCellCenter(this.map, gridCell);
+      if (!center) continue;
+      const screen = this.worldToScreen(center.x, center.y, rect);
+      if (!forced && (screen.x < 8 || screen.y < 8 || screen.x > rect.width - 8 || screen.y > rect.height - 8)) continue;
+      const node = documentRef.createElement("span");
+      node.className = `grid-cell-diagnostic-label${forced ? " forced" : ""}`;
+      node.dataset.gridCellId = String(gridCell);
+      node.textContent = `#${gridCell}`;
+      setOverlayNodePosition(node, screen.x, screen.y);
+      fragment.append(node);
+      visible++;
+      if (!forced && visible >= GRID_CELL_ID_LABEL_BUDGET) break;
+    }
+    this.gridCellIdLayer.replaceChildren(fragment);
+    this.gridCellDiagnostics.visibleIds = visible;
   }
 
   isLabelItemLayerVisible(item) {
@@ -4138,6 +4372,7 @@ function emptyOverlayUpdateStats() {
     markerIconsMs: 0,
     militaryIconsMs: 0,
     selectionMs: 0,
+    gridCellIdsMs: 0,
     overlayChildren: 0,
     labelItems: 0,
     visibleLabels: 0,
@@ -4152,6 +4387,44 @@ function emptyOverlayUpdateStats() {
     militaryIconItems: 0,
     visibleMilitaryIcons: 0
   };
+}
+
+function emptyGridCellDiagnosticsStats() {
+  return {
+    ready: false,
+    building: false,
+    edges: 0,
+    vertexCount: 0,
+    buildMs: 0,
+    uploadMs: 0,
+    maxSliceMs: 0,
+    bufferBytes: 0,
+    visibleIds: 0,
+    packCounts: new Uint32Array(),
+    buildPromise: null
+  };
+}
+
+function summarizeGridCellDiagnostics(stats = {}) {
+  return {
+    ready: Boolean(stats.ready),
+    building: Boolean(stats.building),
+    edges: Number(stats.edges) || 0,
+    vertexCount: Number(stats.vertexCount) || 0,
+    buildMs: Number(stats.buildMs) || 0,
+    uploadMs: Number(stats.uploadMs) || 0,
+    maxSliceMs: Number(stats.maxSliceMs) || 0,
+    bufferBytes: Number(stats.bufferBytes) || 0,
+    visibleIds: Number(stats.visibleIds) || 0,
+    ...(stats.error ? {error: String(stats.error)} : {})
+  };
+}
+
+function gridCellIdMinimumScale(map) {
+  const cells = Number(map?.grid?.cells?.i?.length || 0);
+  if (cells <= 12000) return 6;
+  if (cells <= 55000) return 10;
+  return 14;
 }
 
 function roundValue(value) {

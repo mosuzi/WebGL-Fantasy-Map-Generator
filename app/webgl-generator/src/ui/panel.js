@@ -983,7 +983,13 @@ function updateHoverOverlay(documentRef, pick, state) {
   rows.className = "hover-overlay-list";
   let entries = preferences.showHoverInfo === false
     ? []
-    : buildHoverRowEntries(pick, preferences.units, {debugEnabled, colorMode, map: state?.map, viewOptions: rendererStats.viewOptions});
+    : buildHoverRowEntries(pick, preferences.units, {
+      debugEnabled,
+      colorMode,
+      map: state?.map,
+      viewOptions: rendererStats.viewOptions,
+      gridCellsVisible: rendererStats.layerVisibility?.gridCells === true
+    });
   if (forcedHeightCell !== null) {
     const currentHeight = state?.map?.grid?.cells?.h?.[forcedHeightCell] ?? pick.packHeight ?? pick.height;
     entries = [{label: "画笔落点", value: formatDisplayHeight(currentHeight, preferences.units)}, ...entries.filter(entry => entry.label !== "高度")];
@@ -1125,6 +1131,7 @@ function formatLayerVisibility(visibility = {}) {
     stateLabels: "国家名",
     stateBorders: "国界",
     provinceBorders: "省界",
+    gridCells: "网格单元",
     coastline: "水陆线"
   };
   return Object.entries(labels)

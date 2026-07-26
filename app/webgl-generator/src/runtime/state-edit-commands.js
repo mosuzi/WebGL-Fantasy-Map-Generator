@@ -246,7 +246,7 @@ export function createRenameStatesFromNamebaseCommand(stateIds, {label = "按名
   };
 }
 
-export function createAddStateAtCellCommand(gridCell, {label = "新增国家"} = {}) {
+export function createAddStateAtCellCommand(gridCell, {label = "新增国家", faultInjector = null} = {}) {
   const targetGridCell = normalizeGridCell(gridCell);
   let snapshot = null;
   let result = null;
@@ -264,6 +264,7 @@ export function createAddStateAtCellCommand(gridCell, {label = "新增国家"} =
       snapshot ??= captureStateCollectionSnapshot(context.map);
       try {
         result = addStateAtGridCell(context.map, targetGridCell);
+        faultInjector?.({stage: "after-create", result, map: context.map});
       } catch (error) {
         restoreStateCollectionSnapshot(context.map, snapshot);
         throw error;
@@ -295,7 +296,7 @@ export function inspectStateCreation(map, gridCell) {
   if (!isGridLandCell(map, targetGridCell)) {
     return stateCreationInspection(false, "grid-cell-water", "目标 grid cell 不是陆地。", {gridCell: targetGridCell});
   }
-  const packCell = choosePackCellForGridCell(map, targetGridCell);
+  const packCell = choosePackCellForGridCell(map, targetGridCell, {readOnly: true});
   if (!Number.isInteger(packCell)) {
     return stateCreationInspection(false, "pack-cell-missing", "目标 grid cell 没有可用的陆地 pack cell。", {gridCell: targetGridCell});
   }
@@ -1369,7 +1370,7 @@ function restoreStateCollectionSnapshot(map, snapshot) {
 }
 
 function stateCreationInspection(valid, code, summary, details = {}) {
-  return {valid, code, summary, ...details};
+  return {valid, allowed: valid, code, summary, details: {...details}, ...details};
 }
 
 function findCapitalStateInProvince(map, provinceId) {
@@ -1390,16 +1391,25 @@ function normalizeGridCell(value) {
   return Number.isInteger(numeric) ? numeric : -1;
 }
 
-function choosePackCellForGridCell(map, gridCell) {
+function choosePackCellForGridCell(map, gridCell, {readOnly = false} = {}) {
   const directPackCell = map?.grid?.cells?.pack?.[gridCell];
   const candidates = [
     ...(Number.isInteger(directPackCell) ? [directPackCell] : []),
-    ...getPackCellsForGrid(map, gridCell)
+    ...(readOnly ? findPackCellsForGrid(map, gridCell) : getPackCellsForGrid(map, gridCell))
   ].filter((cell, index, list) => list.indexOf(cell) === index && isPackLandCell(map, cell));
   if (candidates.length) {
     return candidates.sort((a, b) => rankPackCellForStateSeed(map, gridCell, b) - rankPackCellForStateSeed(map, gridCell, a) || a - b)[0];
   }
   return findNearestPackLandCellForGridCell(map, gridCell);
+}
+
+function findPackCellsForGrid(map, gridCell) {
+  const mappedGridCells = map?.pack?.cells?.g || [];
+  const result = [];
+  for (let packCell = 0; packCell < mappedGridCells.length; packCell++) {
+    if (mappedGridCells[packCell] === gridCell) result.push(packCell);
+  }
+  return result;
 }
 
 function rankPackCellForStateSeed(map, gridCell, packCell) {

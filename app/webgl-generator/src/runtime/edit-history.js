@@ -1,8 +1,12 @@
 import {normalizeAffectedLimit, summarizeAffectedTargets} from "./edit-command-effects.js";
+import {attachRegenerationLockDeletionLifecycle} from "./regeneration-lock-commands.js";
 
 export class EditHistory {
-  constructor({limit = 100} = {}) {
+  constructor({limit = 100, onMutation = null, onSnapshot = null, onRestore = null} = {}) {
     this.limit = limit;
+    this.onMutation = typeof onMutation === "function" ? onMutation : null;
+    this.onSnapshot = typeof onSnapshot === "function" ? onSnapshot : null;
+    this.onRestore = typeof onRestore === "function" ? onRestore : null;
     this.undoStack = [];
     this.redoStack = [];
     this.commandAffected = new WeakMap();
@@ -13,6 +17,7 @@ export class EditHistory {
 
   execute(command, context) {
     validateEditCommandContract(command);
+    attachRegenerationLockDeletionLifecycle(command);
     command.apply(context);
     this.undoStack.push(command);
     if (this.undoStack.length > this.limit) this.undoStack.shift();
@@ -20,6 +25,7 @@ export class EditHistory {
     this.lastLabel = command.label;
     this.lastDomain = command.domain || "none";
     this.lastAffected = this.captureCommandAffected(command);
+    this.onMutation?.({action: "execute", command});
     return command;
   }
 
@@ -31,6 +37,7 @@ export class EditHistory {
     this.lastLabel = `撤销 ${command.label}`;
     this.lastDomain = command.domain || "none";
     this.lastAffected = this.captureCommandAffected(command);
+    this.onMutation?.({action: "undo", command});
     return command;
   }
 
@@ -42,6 +49,7 @@ export class EditHistory {
     this.lastLabel = `重做 ${command.label}`;
     this.lastDomain = command.domain || "none";
     this.lastAffected = this.captureCommandAffected(command);
+    this.onMutation?.({action: "redo", command});
     return command;
   }
 
@@ -61,7 +69,8 @@ export class EditHistory {
       commandAffected: this.commandAffected,
       lastLabel: this.lastLabel,
       lastDomain: this.lastDomain,
-      lastAffected: cloneAffectedTargets(this.lastAffected)
+      lastAffected: cloneAffectedTargets(this.lastAffected),
+      externalSnapshot: this.onSnapshot?.()
     };
   }
 
@@ -73,6 +82,7 @@ export class EditHistory {
     this.lastLabel = String(snapshot.lastLabel || "none");
     this.lastDomain = String(snapshot.lastDomain || "none");
     this.lastAffected = cloneAffectedTargets(snapshot.lastAffected);
+    this.onRestore?.(snapshot.externalSnapshot);
   }
 
   captureCommandAffected(command) {
