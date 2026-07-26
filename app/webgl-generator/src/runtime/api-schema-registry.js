@@ -10,7 +10,13 @@ const ERROR_CODES = Object.freeze([
   "operation_obsolete",
   "operation_invalid_input",
   "operation_failed",
-  "inspection_required"
+  "inspection_required",
+  "unsupported_lock_kind",
+  "object_not_found",
+  "lock_batch_empty",
+  "lock_batch_invalid",
+  "regeneration_lock_conflict",
+  "inspection_stale"
 ]);
 
 const REFERENCE_RULES = Object.freeze([
@@ -70,6 +76,47 @@ const METHOD_OVERRIDES = Object.freeze({
     ],
     result: pageSchema(),
     examples: [[{type: "city", text: "港"}, {limit: 20}]]
+  },
+  "regenerationLocks.list": {
+    arguments: [argument("options", {type: "object", properties: {kind: {type: "string"}}, additionalProperties: false}, false)],
+    result: objectSchema(["version", "count", "entries", "mapRevision"]),
+    examples: [[{kind: "river"}]]
+  },
+  "regenerationLocks.status": {
+    arguments: [argument("reference", objectSchema(["kind", "id"]))],
+    result: objectSchema(["reference", "locked"]),
+    examples: [[{kind: "river", id: 1}]]
+  },
+  "regenerationLocks.inspect": {
+    arguments: [argument("references", arraySchema(objectSchema(["kind", "id"]))), argument("locked", {type: "boolean"})],
+    result: objectSchema(["revision", "locked", "references", "changed", "unchanged", "inspectionToken"]),
+    examples: [[[{"kind": "river", "id": 1}], true]]
+  },
+  "regenerationLocks.set": {
+    arguments: [
+      argument("reference", objectSchema(["kind", "id"])),
+      argument("locked", {type: "boolean"}),
+      argument("options", {type: "object", properties: {inspectionToken: {type: "string"}, revision: {type: "integer"}}, additionalProperties: false}, false)
+    ],
+    result: objectSchema(["executed", "changed", "unchanged", "locked", "references", "mapRevisionBefore", "mapRevisionAfter", "history"]),
+    examples: [[{kind: "river", id: 1}, true, {}]]
+  },
+  "regenerationLocks.setMany": {
+    arguments: [
+      argument("references", arraySchema(objectSchema(["kind", "id"]))),
+      argument("locked", {type: "boolean"}),
+      argument("options", {type: "object", properties: {inspectionToken: {type: "string"}, revision: {type: "integer"}}, additionalProperties: false}, false)
+    ],
+    result: objectSchema(["executed", "changed", "unchanged", "locked", "references", "mapRevisionBefore", "mapRevisionAfter", "history"]),
+    examples: [[[{"kind": "river", "id": 1}, {"kind": "city", "id": 2}], true, {}]]
+  },
+  "regenerationLocks.clearKind": {
+    arguments: [
+      argument("kind", {type: "string"}),
+      argument("options", {type: "object", additionalProperties: false}, false)
+    ],
+    result: objectSchema(["executed", "changed", "kind", "references", "mapRevisionBefore", "mapRevisionAfter", "history"]),
+    examples: [["river", {}]]
   },
   "cells.get": {
     arguments: [

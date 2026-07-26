@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sourceDigest": "1b4de393631822138706c1aa5eedb821d7a82c512a8ceb663cc7301c25756c13",
+  "sourceDigest": "d07151d0c0df831240ac2566d1ba73736845fc032b3e688a7226d655761b714f",
   "sourceRoots": [
     "app/webgl-generator/index.html",
     "app/webgl-generator/src/**/*.{js,vue}",
@@ -11,10 +11,10 @@
     "includedInteractionSurfaces": 86,
     "excludedInteractionSurfaces": 17,
     "canvasModes": 28,
-    "runtimeActions": 205,
-    "apiActionBindings": 204,
-    "commandAndInspectorExports": 185,
-    "publicApiMethods": 251
+    "runtimeActions": 211,
+    "apiActionBindings": 210,
+    "commandAndInspectorExports": 188,
+    "publicApiMethods": 257
   },
   "statusPolicy": {
     "covered": "公共 API 已存在且与底层 action / command 或只读 helper 共路径",
@@ -23,8 +23,8 @@
     "gap": "适合参数化且没有公共 API，必须在第 200 项关闭"
   },
   "totals": {
-    "rows": 987,
-    "covered": 916,
+    "rows": 1008,
+    "covered": 937,
     "excluded": 71,
     "deferred-owned": 0,
     "gap": 0,
@@ -5644,6 +5644,180 @@
       "commandOrInspector": "",
       "apiMethods": [
         "oceanCurrents.rename"
+      ],
+      "inputSpace": "method-schema",
+      "mutates": "map-or-persistent-data",
+      "preflight": "按方法描述",
+      "businessCodes": [],
+      "confirm": "按 API 确认清单",
+      "undoOrRollback": "按方法元数据",
+      "async": false,
+      "compatibility": "UI 与 API 共用同一 runtime action",
+      "evidence": [
+        "app/webgl-generator/src/runtime/console-api.js"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "action:regenerationLocks.clearKind",
+      "capabilityId": "regenerationLocks.clearKind",
+      "title": "Runtime action regenerationLocks.clearKind",
+      "sourceKind": "runtime-action",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/app.js"
+      ],
+      "uiEntry": "",
+      "action": "regenerationLocks.clearKind",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "regenerationLocks.clearKind"
+      ],
+      "inputSpace": "method-schema",
+      "mutates": "map-or-persistent-data",
+      "preflight": "按方法描述",
+      "businessCodes": [],
+      "confirm": "按 API 确认清单",
+      "undoOrRollback": "按方法元数据",
+      "async": false,
+      "compatibility": "UI 与 API 共用同一 runtime action",
+      "evidence": [
+        "app/webgl-generator/src/runtime/console-api.js"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "action:regenerationLocks.inspect",
+      "capabilityId": "regenerationLocks.inspect",
+      "title": "Runtime action regenerationLocks.inspect",
+      "sourceKind": "runtime-action",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/app.js"
+      ],
+      "uiEntry": "",
+      "action": "regenerationLocks.inspect",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "regenerationLocks.inspect"
+      ],
+      "inputSpace": "method-schema",
+      "mutates": "none",
+      "preflight": "readonly",
+      "businessCodes": [],
+      "confirm": "按 API 确认清单",
+      "undoOrRollback": "not-applicable",
+      "async": false,
+      "compatibility": "UI 与 API 共用同一 runtime action",
+      "evidence": [
+        "app/webgl-generator/src/runtime/console-api.js"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "action:regenerationLocks.list",
+      "capabilityId": "regenerationLocks.list",
+      "title": "Runtime action regenerationLocks.list",
+      "sourceKind": "runtime-action",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/app.js"
+      ],
+      "uiEntry": "",
+      "action": "regenerationLocks.list",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "regenerationLocks.list"
+      ],
+      "inputSpace": "method-schema",
+      "mutates": "none",
+      "preflight": "readonly",
+      "businessCodes": [],
+      "confirm": "按 API 确认清单",
+      "undoOrRollback": "not-applicable",
+      "async": false,
+      "compatibility": "UI 与 API 共用同一 runtime action",
+      "evidence": [
+        "app/webgl-generator/src/runtime/console-api.js"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "action:regenerationLocks.set",
+      "capabilityId": "regenerationLocks.set",
+      "title": "Runtime action regenerationLocks.set",
+      "sourceKind": "runtime-action",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/app.js"
+      ],
+      "uiEntry": "",
+      "action": "regenerationLocks.set",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "regenerationLocks.set"
+      ],
+      "inputSpace": "method-schema",
+      "mutates": "map-or-persistent-data",
+      "preflight": "按方法描述",
+      "businessCodes": [],
+      "confirm": "按 API 确认清单",
+      "undoOrRollback": "按方法元数据",
+      "async": false,
+      "compatibility": "UI 与 API 共用同一 runtime action",
+      "evidence": [
+        "app/webgl-generator/src/runtime/console-api.js"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "action:regenerationLocks.setMany",
+      "capabilityId": "regenerationLocks.setMany",
+      "title": "Runtime action regenerationLocks.setMany",
+      "sourceKind": "runtime-action",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/app.js"
+      ],
+      "uiEntry": "",
+      "action": "regenerationLocks.setMany",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "regenerationLocks.setMany"
+      ],
+      "inputSpace": "method-schema",
+      "mutates": "map-or-persistent-data",
+      "preflight": "按方法描述",
+      "businessCodes": [],
+      "confirm": "按 API 确认清单",
+      "undoOrRollback": "按方法元数据",
+      "async": false,
+      "compatibility": "UI 与 API 共用同一 runtime action",
+      "evidence": [
+        "app/webgl-generator/src/runtime/console-api.js"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "action:regenerationLocks.status",
+      "capabilityId": "regenerationLocks.status",
+      "title": "Runtime action regenerationLocks.status",
+      "sourceKind": "runtime-action",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/app.js"
+      ],
+      "uiEntry": "",
+      "action": "regenerationLocks.status",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "regenerationLocks.status"
       ],
       "inputSpace": "method-schema",
       "mutates": "map-or-persistent-data",
@@ -11753,6 +11927,186 @@
       "commandOrInspector": "",
       "apiMethods": [
         "oceanCurrents.rename"
+      ],
+      "inputSpace": "method-schema",
+      "mutates": "map-or-persistent-data",
+      "preflight": "公共 API 绑定必须能解析到真实 runtime action",
+      "businessCodes": [],
+      "confirm": "按 API 确认清单",
+      "undoOrRollback": "按方法元数据",
+      "async": false,
+      "compatibility": "旧 API action 路径保持可调用",
+      "evidence": [
+        "tools/webgl-generator-api-action-convergence-regression.mjs"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "api-action-binding:regenerationLocks.clearKind",
+      "capabilityId": "regenerationLocks.clearKind",
+      "title": "API action 绑定 regenerationLocks.clearKind",
+      "sourceKind": "api-action-binding",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/console-api.js",
+        "app/webgl-generator/src/runtime/app.js"
+      ],
+      "uiEntry": "",
+      "action": "regenerationLocks.clearKind",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "regenerationLocks.clearKind"
+      ],
+      "inputSpace": "method-schema",
+      "mutates": "map-or-persistent-data",
+      "preflight": "公共 API 绑定必须能解析到真实 runtime action",
+      "businessCodes": [],
+      "confirm": "按 API 确认清单",
+      "undoOrRollback": "按方法元数据",
+      "async": false,
+      "compatibility": "旧 API action 路径保持可调用",
+      "evidence": [
+        "tools/webgl-generator-api-action-convergence-regression.mjs"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "api-action-binding:regenerationLocks.inspect",
+      "capabilityId": "regenerationLocks.inspect",
+      "title": "API action 绑定 regenerationLocks.inspect",
+      "sourceKind": "api-action-binding",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/console-api.js",
+        "app/webgl-generator/src/runtime/app.js"
+      ],
+      "uiEntry": "",
+      "action": "regenerationLocks.inspect",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "regenerationLocks.inspect"
+      ],
+      "inputSpace": "method-schema",
+      "mutates": "none",
+      "preflight": "公共 API 绑定必须能解析到真实 runtime action",
+      "businessCodes": [],
+      "confirm": "按 API 确认清单",
+      "undoOrRollback": "not-applicable",
+      "async": false,
+      "compatibility": "旧 API action 路径保持可调用",
+      "evidence": [
+        "tools/webgl-generator-api-action-convergence-regression.mjs"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "api-action-binding:regenerationLocks.list",
+      "capabilityId": "regenerationLocks.list",
+      "title": "API action 绑定 regenerationLocks.list",
+      "sourceKind": "api-action-binding",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/console-api.js",
+        "app/webgl-generator/src/runtime/app.js"
+      ],
+      "uiEntry": "",
+      "action": "regenerationLocks.list",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "regenerationLocks.list"
+      ],
+      "inputSpace": "method-schema",
+      "mutates": "none",
+      "preflight": "公共 API 绑定必须能解析到真实 runtime action",
+      "businessCodes": [],
+      "confirm": "按 API 确认清单",
+      "undoOrRollback": "not-applicable",
+      "async": false,
+      "compatibility": "旧 API action 路径保持可调用",
+      "evidence": [
+        "tools/webgl-generator-api-action-convergence-regression.mjs"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "api-action-binding:regenerationLocks.set",
+      "capabilityId": "regenerationLocks.set",
+      "title": "API action 绑定 regenerationLocks.set",
+      "sourceKind": "api-action-binding",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/console-api.js",
+        "app/webgl-generator/src/runtime/app.js"
+      ],
+      "uiEntry": "",
+      "action": "regenerationLocks.set",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "regenerationLocks.set"
+      ],
+      "inputSpace": "method-schema",
+      "mutates": "map-or-persistent-data",
+      "preflight": "公共 API 绑定必须能解析到真实 runtime action",
+      "businessCodes": [],
+      "confirm": "按 API 确认清单",
+      "undoOrRollback": "按方法元数据",
+      "async": false,
+      "compatibility": "旧 API action 路径保持可调用",
+      "evidence": [
+        "tools/webgl-generator-api-action-convergence-regression.mjs"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "api-action-binding:regenerationLocks.setMany",
+      "capabilityId": "regenerationLocks.setMany",
+      "title": "API action 绑定 regenerationLocks.setMany",
+      "sourceKind": "api-action-binding",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/console-api.js",
+        "app/webgl-generator/src/runtime/app.js"
+      ],
+      "uiEntry": "",
+      "action": "regenerationLocks.setMany",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "regenerationLocks.setMany"
+      ],
+      "inputSpace": "method-schema",
+      "mutates": "map-or-persistent-data",
+      "preflight": "公共 API 绑定必须能解析到真实 runtime action",
+      "businessCodes": [],
+      "confirm": "按 API 确认清单",
+      "undoOrRollback": "按方法元数据",
+      "async": false,
+      "compatibility": "旧 API action 路径保持可调用",
+      "evidence": [
+        "tools/webgl-generator-api-action-convergence-regression.mjs"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "api-action-binding:regenerationLocks.status",
+      "capabilityId": "regenerationLocks.status",
+      "title": "API action 绑定 regenerationLocks.status",
+      "sourceKind": "api-action-binding",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/console-api.js",
+        "app/webgl-generator/src/runtime/app.js"
+      ],
+      "uiEntry": "",
+      "action": "regenerationLocks.status",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "regenerationLocks.status"
       ],
       "inputSpace": "method-schema",
       "mutates": "map-or-persistent-data",
@@ -19230,6 +19584,192 @@
       "exclusionReason": ""
     },
     {
+      "matrixId": "api:regenerationLocks.clearKind",
+      "capabilityId": "regenerationLocks.clearKind",
+      "title": "公共 API regenerationLocks.clearKind",
+      "sourceKind": "public-api",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/api-contract.js",
+        "app/webgl-generator/src/runtime/console-api.js"
+      ],
+      "uiEntry": "",
+      "action": "regenerationLocks.clearKind",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "regenerationLocks.clearKind"
+      ],
+      "inputSpace": "info.describe(method)",
+      "mutates": "map-or-persistent-data",
+      "preflight": "由 info.describe(method) 与领域 inspector 发现",
+      "businessCodes": [],
+      "confirm": "由 methodMetadata.requiresConfirm 发现",
+      "undoOrRollback": "由 methodMetadata.undoable 与结果 metadata 发现",
+      "async": false,
+      "compatibility": "受 API 主版本和方法稳定性契约保护",
+      "evidence": [
+        "tools/webgl-generator-api-capabilities-regression.mjs",
+        "tools/webgl-generator-api-stability-contract-regression.mjs"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "api:regenerationLocks.inspect",
+      "capabilityId": "regenerationLocks.inspect",
+      "title": "公共 API regenerationLocks.inspect",
+      "sourceKind": "public-api",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/api-contract.js",
+        "app/webgl-generator/src/runtime/console-api.js"
+      ],
+      "uiEntry": "",
+      "action": "regenerationLocks.inspect",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "regenerationLocks.inspect"
+      ],
+      "inputSpace": "info.describe(method)",
+      "mutates": "none",
+      "preflight": "由 info.describe(method) 与领域 inspector 发现",
+      "businessCodes": [],
+      "confirm": "由 methodMetadata.requiresConfirm 发现",
+      "undoOrRollback": "由 methodMetadata.undoable 与结果 metadata 发现",
+      "async": false,
+      "compatibility": "受 API 主版本和方法稳定性契约保护",
+      "evidence": [
+        "tools/webgl-generator-api-capabilities-regression.mjs",
+        "tools/webgl-generator-api-stability-contract-regression.mjs"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "api:regenerationLocks.list",
+      "capabilityId": "regenerationLocks.list",
+      "title": "公共 API regenerationLocks.list",
+      "sourceKind": "public-api",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/api-contract.js",
+        "app/webgl-generator/src/runtime/console-api.js"
+      ],
+      "uiEntry": "",
+      "action": "regenerationLocks.list",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "regenerationLocks.list"
+      ],
+      "inputSpace": "info.describe(method)",
+      "mutates": "none",
+      "preflight": "由 info.describe(method) 与领域 inspector 发现",
+      "businessCodes": [],
+      "confirm": "由 methodMetadata.requiresConfirm 发现",
+      "undoOrRollback": "由 methodMetadata.undoable 与结果 metadata 发现",
+      "async": false,
+      "compatibility": "受 API 主版本和方法稳定性契约保护",
+      "evidence": [
+        "tools/webgl-generator-api-capabilities-regression.mjs",
+        "tools/webgl-generator-api-stability-contract-regression.mjs"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "api:regenerationLocks.set",
+      "capabilityId": "regenerationLocks.set",
+      "title": "公共 API regenerationLocks.set",
+      "sourceKind": "public-api",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/api-contract.js",
+        "app/webgl-generator/src/runtime/console-api.js"
+      ],
+      "uiEntry": "",
+      "action": "regenerationLocks.set",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "regenerationLocks.set"
+      ],
+      "inputSpace": "info.describe(method)",
+      "mutates": "map-or-persistent-data",
+      "preflight": "由 info.describe(method) 与领域 inspector 发现",
+      "businessCodes": [],
+      "confirm": "由 methodMetadata.requiresConfirm 发现",
+      "undoOrRollback": "由 methodMetadata.undoable 与结果 metadata 发现",
+      "async": false,
+      "compatibility": "受 API 主版本和方法稳定性契约保护",
+      "evidence": [
+        "tools/webgl-generator-api-capabilities-regression.mjs",
+        "tools/webgl-generator-api-stability-contract-regression.mjs"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "api:regenerationLocks.setMany",
+      "capabilityId": "regenerationLocks.setMany",
+      "title": "公共 API regenerationLocks.setMany",
+      "sourceKind": "public-api",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/api-contract.js",
+        "app/webgl-generator/src/runtime/console-api.js"
+      ],
+      "uiEntry": "",
+      "action": "regenerationLocks.setMany",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "regenerationLocks.setMany"
+      ],
+      "inputSpace": "info.describe(method)",
+      "mutates": "map-or-persistent-data",
+      "preflight": "由 info.describe(method) 与领域 inspector 发现",
+      "businessCodes": [],
+      "confirm": "由 methodMetadata.requiresConfirm 发现",
+      "undoOrRollback": "由 methodMetadata.undoable 与结果 metadata 发现",
+      "async": false,
+      "compatibility": "受 API 主版本和方法稳定性契约保护",
+      "evidence": [
+        "tools/webgl-generator-api-capabilities-regression.mjs",
+        "tools/webgl-generator-api-stability-contract-regression.mjs"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "api:regenerationLocks.status",
+      "capabilityId": "regenerationLocks.status",
+      "title": "公共 API regenerationLocks.status",
+      "sourceKind": "public-api",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/api-contract.js",
+        "app/webgl-generator/src/runtime/console-api.js"
+      ],
+      "uiEntry": "",
+      "action": "regenerationLocks.status",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "regenerationLocks.status"
+      ],
+      "inputSpace": "info.describe(method)",
+      "mutates": "map-or-persistent-data",
+      "preflight": "由 info.describe(method) 与领域 inspector 发现",
+      "businessCodes": [],
+      "confirm": "由 methodMetadata.requiresConfirm 发现",
+      "undoOrRollback": "由 methodMetadata.undoable 与结果 metadata 发现",
+      "async": false,
+      "compatibility": "受 API 主版本和方法稳定性契约保护",
+      "evidence": [
+        "tools/webgl-generator-api-capabilities-regression.mjs",
+        "tools/webgl-generator-api-stability-contract-regression.mjs"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
       "matrixId": "api:selection.clear",
       "capabilityId": "selection.clear",
       "title": "公共 API selection.clear",
@@ -25846,6 +26386,108 @@
       "compatibility": "领域 API 复用该 command / inspector 或同一纯 helper",
       "evidence": [
         "app/webgl-generator/src/runtime/province-edit-commands.js"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "command:regeneration-lock-commands.js:createClearRegenerationLocksCommand",
+      "capabilityId": "regenerationLocks.createClearRegenerationLocksCommand",
+      "title": "regeneration-lock-commands.js / createClearRegenerationLocksCommand",
+      "sourceKind": "command-or-inspector",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/regeneration-lock-commands.js"
+      ],
+      "uiEntry": "",
+      "action": "",
+      "commandOrInspector": "createClearRegenerationLocksCommand",
+      "apiMethods": [
+        "regenerationLocks.clearKind",
+        "regenerationLocks.inspect",
+        "regenerationLocks.list",
+        "regenerationLocks.set",
+        "regenerationLocks.setMany",
+        "regenerationLocks.status"
+      ],
+      "inputSpace": "domain-options / object-ref / cell-ids / changes",
+      "mutates": "domain-data-or-preview",
+      "preflight": "由领域 API 参数校验或 inspector 提供",
+      "businessCodes": [],
+      "confirm": "按领域 API 确认清单",
+      "undoOrRollback": "EditHistory / transaction",
+      "async": false,
+      "compatibility": "领域 API 复用该 command / inspector 或同一纯 helper",
+      "evidence": [
+        "app/webgl-generator/src/runtime/regeneration-lock-commands.js"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "command:regeneration-lock-commands.js:createSetRegenerationLockCommand",
+      "capabilityId": "regenerationLocks.createSetRegenerationLockCommand",
+      "title": "regeneration-lock-commands.js / createSetRegenerationLockCommand",
+      "sourceKind": "command-or-inspector",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/regeneration-lock-commands.js"
+      ],
+      "uiEntry": "",
+      "action": "",
+      "commandOrInspector": "createSetRegenerationLockCommand",
+      "apiMethods": [
+        "regenerationLocks.clearKind",
+        "regenerationLocks.inspect",
+        "regenerationLocks.list",
+        "regenerationLocks.set",
+        "regenerationLocks.setMany",
+        "regenerationLocks.status"
+      ],
+      "inputSpace": "domain-options / object-ref / cell-ids / changes",
+      "mutates": "domain-data-or-preview",
+      "preflight": "由领域 API 参数校验或 inspector 提供",
+      "businessCodes": [],
+      "confirm": "按领域 API 确认清单",
+      "undoOrRollback": "EditHistory / transaction",
+      "async": false,
+      "compatibility": "领域 API 复用该 command / inspector 或同一纯 helper",
+      "evidence": [
+        "app/webgl-generator/src/runtime/regeneration-lock-commands.js"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "command:regeneration-lock-commands.js:createSetRegenerationLocksCommand",
+      "capabilityId": "regenerationLocks.createSetRegenerationLocksCommand",
+      "title": "regeneration-lock-commands.js / createSetRegenerationLocksCommand",
+      "sourceKind": "command-or-inspector",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/regeneration-lock-commands.js"
+      ],
+      "uiEntry": "",
+      "action": "",
+      "commandOrInspector": "createSetRegenerationLocksCommand",
+      "apiMethods": [
+        "regenerationLocks.clearKind",
+        "regenerationLocks.inspect",
+        "regenerationLocks.list",
+        "regenerationLocks.set",
+        "regenerationLocks.setMany",
+        "regenerationLocks.status"
+      ],
+      "inputSpace": "domain-options / object-ref / cell-ids / changes",
+      "mutates": "domain-data-or-preview",
+      "preflight": "由领域 API 参数校验或 inspector 提供",
+      "businessCodes": [],
+      "confirm": "按领域 API 确认清单",
+      "undoOrRollback": "EditHistory / transaction",
+      "async": false,
+      "compatibility": "领域 API 复用该 command / inspector 或同一纯 helper",
+      "evidence": [
+        "app/webgl-generator/src/runtime/regeneration-lock-commands.js"
       ],
       "status": "covered",
       "owner": "",

@@ -142,7 +142,7 @@ async function inspectCapabilities(page, {cells, seed, template, expectedConfirm
     if (capabilities.contract?.stableCompatibility !== "same-major") failures.push("capabilities 缺少同主版本兼容策略");
     if (capabilities.contract?.deprecatedRemoval !== "next-major-only") failures.push("capabilities 缺少 deprecated 移除策略");
     if (Object.keys(capabilities.capabilityGroups || {}).length !== 16) failures.push("capabilities 能力组不是 16 个");
-    if (JSON.stringify(capabilities.stabilitySummary) !== JSON.stringify({stable: 243, experimental: 7, deprecated: 1})) failures.push("稳定等级统计不是 243 / 7 / 1");
+    if (JSON.stringify(capabilities.stabilitySummary) !== JSON.stringify({stable: 249, experimental: 7, deprecated: 1})) failures.push("稳定等级统计不是 249 / 7 / 1");
     if (!Object.prototype.hasOwnProperty.call(runtimeStats, "lastEditRefresh")) failures.push("runtimeStats 缺少 lastEditRefresh 字段");
     const coverage = capabilities.methodMetadataCoverage || {};
     if (coverage.complete !== true) failures.push("methodMetadataCoverage.complete 不是 true");

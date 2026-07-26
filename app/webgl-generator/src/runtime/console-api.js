@@ -79,6 +79,14 @@ export function createConsoleApi(documentRef, state, actions = {}) {
         cellReadonlyApiMetadata(state, "cells.inspectAction")
       )
     }),
+    regenerationLocks: Object.freeze({
+      list: (options = {}) => apiCall(() => requireApiAction(actions.regenerationLocks?.list, "regenerationLocks.list")(options)),
+      status: reference => apiCall(() => requireApiAction(actions.regenerationLocks?.status, "regenerationLocks.status")(reference)),
+      inspect: (references, locked) => apiCall(() => requireApiAction(actions.regenerationLocks?.inspect, "regenerationLocks.inspect")(references, locked)),
+      set: (reference, locked, options = {}) => apiCall(() => requireApiAction(actions.regenerationLocks?.set, "regenerationLocks.set")(reference, locked, options)),
+      setMany: (references, locked, options = {}) => apiCall(() => requireApiAction(actions.regenerationLocks?.setMany, "regenerationLocks.setMany")(references, locked, options)),
+      clearKind: (kind, options = {}) => apiCall(() => requireApiAction(actions.regenerationLocks?.clearKind, "regenerationLocks.clearKind")(kind, options))
+    }),
     generate: Object.freeze({
       getOptions: () => apiCall(() => requireApiAction(actions.generate?.getOptions, "generate.getOptions")()),
       setOptions: (patch = {}) => apiCall(() => requireApiAction(actions.generate?.setOptions, "generate.setOptions")(patch)),
@@ -406,6 +414,7 @@ function buildCapabilities(api) {
       info: "readonly",
       objects: "readonly-object-discovery",
       cells: "readonly-grid-and-pack-cell-discovery",
+      regenerationLocks: "persistent-regeneration-protection",
       generate: "map-regeneration",
       oceanCurrents: "ocean-current-edit-and-world-rebuild",
       selection: "selection-camera-highlights-and-editing-state",
@@ -447,6 +456,14 @@ export function buildMethodMetadata() {
       ,
       actions: {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
       inspectAction: {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false}
+    },
+    regenerationLocks: {
+      list: {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
+      status: {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
+      inspect: {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
+      set: {stable: "draft", mutates: "regeneration-locks", undoable: true, async: false, requiresConfirm: false},
+      setMany: {stable: "draft", mutates: "regeneration-locks", undoable: true, async: false, requiresConfirm: false},
+      clearKind: {stable: "draft", mutates: "regeneration-locks", undoable: true, async: false, requiresConfirm: false}
     },
     oceanCurrents: {
       rename: {stable: "draft", mutates: "ocean-currents", undoable: true, async: false, requiresConfirm: false},

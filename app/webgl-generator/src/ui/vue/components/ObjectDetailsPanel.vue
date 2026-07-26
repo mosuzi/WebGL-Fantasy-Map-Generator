@@ -139,6 +139,10 @@ const OBJECT_DETAIL_ROWS = Object.freeze({
   [OBJECT_KIND.RIVER]: object => [
     {label: "名称", value: object.name || `#${object.id}`},
     {label: "类型", value: object.type},
+    {label: "汇入干流", value: formatRiverParent(object)},
+    {label: "流域主河", value: object.basinName ? `#${object.basinId} ${object.basinName}` : `#${object.basinId || object.id} ${object.name || ""}`},
+    {label: "河网状态", value: formatRiverNetworkStatus(object)},
+    {label: "汇流 cell", value: object.confluence >= 0 ? object.confluence : "—", debug: true},
     {label: "流量", value: formatRiverFlowValue(object.flux)},
     {label: "长度", value: formatDistanceValue(object.length)},
     {label: "汇水面积", value: formatHydrologyArea(object.hydrology)},
@@ -249,6 +253,38 @@ function detailRows(object) {
 
 function canRenameObject(object) {
   return object?.kind === OBJECT_KIND.CITY || object?.kind === OBJECT_KIND.LAKE || (object?.kind === OBJECT_KIND.LABEL && (object.targetKind === LABEL_TARGET_KIND.CITY || object.targetKind === LABEL_TARGET_KIND.STATE));
+}
+
+function formatRiverParent(object) {
+  if (object.networkStatus === "orphaned") {
+    return object.parentId
+      ? `下游无有效出口（→ #${object.parentId} ${object.parentName || ""}）`
+      : "无有效出口";
+  }
+  if (!object.parentId) return "—";
+  return `#${object.parentId} ${object.parentName || "未知干流"}`;
+}
+
+function formatRiverNetworkStatus(object) {
+  if (object.networkStatus === "orphaned") return riverNetworkIssueLabel(object.networkIssue);
+  return {
+    valid: "河网正常",
+    "lake-inlet": "入湖",
+    "ocean-mouth": "入海",
+    "border-outlet": "出界",
+    orphaned: "无有效出口水系"
+  }[object.networkStatus] || object.networkStatus || "河网正常";
+}
+
+function riverNetworkIssueLabel(issue) {
+  return {
+    "disconnected-path": "河道 cell 不连续",
+    "invalid-water-outlet": "水体出口无效",
+    "invalid-border-outlet": "出界位置无效",
+    "invalid-downstream-basin": "下游根河无有效出口",
+    "parent-cycle": "父河链循环",
+    "missing-outlet": "根河无有效出口"
+  }[issue] || "无有效出口水系";
 }
 
 function canRenameObjectFromNamebase(object) {

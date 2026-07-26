@@ -1,4 +1,5 @@
 import {normalizeAffectedLimit, summarizeAffectedTargets} from "./edit-command-effects.js";
+import {attachRegenerationLockDeletionLifecycle} from "./regeneration-lock-commands.js";
 
 export class EditHistory {
   constructor({limit = 100, onMutation = null, onSnapshot = null, onRestore = null} = {}) {
@@ -16,6 +17,7 @@ export class EditHistory {
 
   execute(command, context) {
     validateEditCommandContract(command);
+    attachRegenerationLockDeletionLifecycle(command);
     command.apply(context);
     this.undoStack.push(command);
     if (this.undoStack.length > this.limit) this.undoStack.shift();

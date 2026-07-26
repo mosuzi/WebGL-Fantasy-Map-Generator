@@ -3,6 +3,7 @@ import {createChineseNameGenerator} from "./names.js";
 import {createStageProfile} from "./profile.js";
 import {MinPriorityQueue} from "./priority-queue.js";
 import {createRandom} from "./random.js";
+import {normalizeRiverNetwork} from "./river-network.js";
 
 const WATER_LEVEL = 20;
 const MIN_FLUX_TO_FORM_RIVER = 30;
@@ -73,12 +74,6 @@ export function buildRivers(grid, features, pack, options = {}) {
         flowDown(pack, riverPaths, riverParents, cell, cells.fl[lakeCell], lake.outlet, hydrology, lakeCell);
       }
 
-      const outlet = outletLakes[0]?.outlet;
-      for (const lake of outletLakes) {
-        if (!Array.isArray(lake.inlets)) continue;
-        for (const inlet of lake.inlets) riverParents.set(inlet, outlet);
-      }
-
       if (cells.b[cell] && cells.r[cell]) {
         addCellToRiver(riverPaths, cells.r[cell], -1);
         continue;
@@ -105,7 +100,9 @@ export function buildRivers(grid, features, pack, options = {}) {
     }
   });
 
-  const rivers = profile.stage("define-rivers", "构建河流对象", () => defineRivers({grid, pack, riverPaths, riverParents, options, nameGenerator, hydrology}));
+  const definedRivers = profile.stage("define-rivers", "构建河流对象", () => defineRivers({grid, pack, riverPaths, riverParents, options, nameGenerator, hydrology}));
+  const normalizedNetwork = profile.stage("normalize-river-network", "校验河流干流关系", () => normalizeRiverNetwork(definedRivers, pack, {dropIncomplete: true}));
+  const rivers = normalizedNetwork.rivers;
   profile.stage("mark-confluences", "标记河流 cell 与汇流", () => {
     cells.r = new Uint16Array(cells.i.length);
     cells.conf = new Uint16Array(cells.i.length);
@@ -132,6 +129,7 @@ export function buildRivers(grid, features, pack, options = {}) {
       flowModel: variation ? "source-pack-flux-regenerated-variation" : "source-pack-flux-first-pass",
       depressionMode,
       variationSalt: variation?.salt || null,
+      networkDiagnostics: normalizedNetwork.diagnostics,
       buildMs: timing.totalMs
     }
   };

@@ -100,6 +100,7 @@ export function generatePlaceholderMap(inputOptions = {}, overrides = {}) {
     pack,
     features,
     rivers,
+    regenerationLocks: {version: 1, entries: []},
     ...(namebases ? {namebases} : {}),
     summary,
     generationLog: [

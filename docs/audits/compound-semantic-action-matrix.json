@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "scope": "权威任务第 204 项：全游戏复合语义接口、规则动作与玩法配方审计",
   "generatedAtPolicy": "报告不写入动态时间，sourceDigest 变化即要求重新生成",
-  "sourceDigest": "0bd5ee2e90593712b528d749aeceb1f162c9ef0660fe0596a138fb9c8375a365",
+  "sourceDigest": "f119894abaf60ddeba573a67072dd58ec2c6a7a029cdf447e33c024578b96bde",
   "definition": {
     "compoundSemanticAction": "一个玩家意图，但执行时需要跨对象/系统、条件分支、业务预检或原子回滚；应由单一规则事务表达。",
     "primitive": "只修改一个稳定字段或纯编辑器显示偏好，可保留为原子 API，不强行包装成复合动作。",
@@ -21,12 +21,12 @@
     "recipe-only": "战略/玩法流程，不应实现为一条超大写接口。"
   },
   "denominator": {
-    "fullCapabilityRows": 987,
+    "fullCapabilityRows": 1008,
     "fullCapabilityUnknown": 0,
     "fullCapabilityUnclassified": 0,
     "fullCapabilityGaps": 0,
-    "publicApiMethods": 251,
-    "classifiedApiMethods": 251,
+    "publicApiMethods": 257,
+    "classifiedApiMethods": 257,
     "cellActionRows": 47,
     "classifiedCellActionRows": 47,
     "canvasModes": 28,
@@ -58,10 +58,10 @@
       "world": 6
     },
     "apiClassifications": {
-      "atomic-editor-primitive": 49,
+      "atomic-editor-primitive": 52,
       "editor-runtime-service": 49,
       "read-export-service": 10,
-      "read-primitive": 26,
+      "read-primitive": 29,
       "semantic-action": 117
     },
     "interactionClassifications": {
@@ -3982,6 +3982,36 @@
     {
       "method": "oceanCurrents.rename",
       "classification": "atomic-editor-primitive",
+      "actionIds": []
+    },
+    {
+      "method": "regenerationLocks.clearKind",
+      "classification": "atomic-editor-primitive",
+      "actionIds": []
+    },
+    {
+      "method": "regenerationLocks.inspect",
+      "classification": "read-primitive",
+      "actionIds": []
+    },
+    {
+      "method": "regenerationLocks.list",
+      "classification": "read-primitive",
+      "actionIds": []
+    },
+    {
+      "method": "regenerationLocks.set",
+      "classification": "atomic-editor-primitive",
+      "actionIds": []
+    },
+    {
+      "method": "regenerationLocks.setMany",
+      "classification": "atomic-editor-primitive",
+      "actionIds": []
+    },
+    {
+      "method": "regenerationLocks.status",
+      "classification": "read-primitive",
       "actionIds": []
     },
     {

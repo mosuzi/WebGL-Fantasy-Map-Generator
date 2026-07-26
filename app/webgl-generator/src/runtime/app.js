@@ -153,6 +153,8 @@ import {applyStateBrushPreview, createAddStateAtCellCommand, createApplyStateBru
 import {issueCellInspectionToken, normalizeCellCreateInput, validateCellInspectionToken} from "./cell-inspection-token.js";
 import {createMergeStatesCommand, createSplitStateCommand, inspectStateMerge, inspectStateSplit, regenerateProvincesForStates} from "./state-topology-commands.js";
 import {createAddZoneCommand, createDeleteZoneCommand, createSetZoneStyleCommand} from "./zone-edit-commands.js";
+import {createClearRegenerationLocksCommand, createSetRegenerationLockCommand, createSetRegenerationLocksCommand} from "./regeneration-lock-commands.js";
+import {assertRegenerationLockInspection, createRegenerationLockInspection, getRegenerationLockStatus, listRegenerationLocks, lockError, normalizeRegenerationLockReference, normalizeRegenerationLockReferences, regenerationLockObjectExists} from "./regeneration-locks.js";
 import {captureVisualThemeState, createSetUserVisualThemesCommand} from "./visual-theme-edit-commands.js";
 import {mergePersistedUserVisualThemes, persistUserVisualThemes} from "./visual-theme-storage.js";
 import {collectionAffected, objectAffected, systemAffected} from "./edit-command-effects.js";
@@ -2592,6 +2594,14 @@ function createRuntimeActions(state, documentRef, options = {}) {
       get: (options = {}) => state.editHistory.getStats(options),
       undo: () => executeHistoryCommand(state, documentRef, "undo"),
       redo: () => executeHistoryCommand(state, documentRef, "redo")
+    },
+    regenerationLocks: {
+      list: (lockOptions = {}) => listRegenerationLocksViaApi(state, lockOptions),
+      status: reference => getRegenerationLockStatus(state.map, reference),
+      inspect: (references, locked) => inspectRegenerationLocksViaApi(state, references, locked),
+      set: (reference, locked, lockOptions = {}) => setRegenerationLockViaApi(state, documentRef, reference, locked, lockOptions),
+      setMany: (references, locked, lockOptions = {}) => setRegenerationLocksViaApi(state, documentRef, references, locked, lockOptions),
+      clearKind: (kind, lockOptions = {}) => clearRegenerationLocksViaApi(state, documentRef, kind, lockOptions)
     },
     generate: {
       getOptions: () => getGenerationOptionsViaApi(state, documentRef),
@@ -6313,6 +6323,101 @@ function deleteApiResult(state, deletion) {
     deleteSummary: summary,
     inspectOnly: Boolean(deletion.inspectOnly),
     cancelled: Boolean(deletion.cancelled)
+  };
+}
+
+function listRegenerationLocksViaApi(state, options = {}) {
+  const entries = listRegenerationLocks(state.map, options);
+  return {
+    version: Number(state.map?.regenerationLocks?.version) || 1,
+    kind: options?.kind == null ? null : String(options.kind),
+    count: entries.length,
+    entries,
+    mapRevision: state.mapRevision.getSnapshot()
+  };
+}
+
+function inspectRegenerationLocksViaApi(state, references, locked) {
+  return createRegenerationLockInspection(
+    state.map,
+    state.mapRevision.getSnapshot().mapRevision,
+    references,
+    locked
+  );
+}
+
+function setRegenerationLockViaApi(state, documentRef, reference, locked, options = {}) {
+  const normalizedReference = normalizeRegenerationLockReference(reference);
+  if (!regenerationLockObjectExists(state.map, normalizedReference)) {
+    throw lockError("object_not_found", `找不到可锁定对象：${normalizedReference.kind} #${normalizedReference.id}`, {reference: normalizedReference});
+  }
+  return executeRegenerationLockCommand(
+    state,
+    documentRef,
+    [normalizedReference],
+    locked,
+    options,
+    normalized => createSetRegenerationLockCommand(normalized[0], locked)
+  );
+}
+
+function setRegenerationLocksViaApi(state, documentRef, references, locked, options = {}) {
+  return executeRegenerationLockCommand(
+    state,
+    documentRef,
+    references,
+    locked,
+    options,
+    normalized => createSetRegenerationLocksCommand(normalized, locked)
+  );
+}
+
+function clearRegenerationLocksViaApi(state, documentRef, kind, options = {}) {
+  const revisionBefore = state.mapRevision.getSnapshot();
+  const command = createClearRegenerationLocksCommand(kind);
+  const execution = executeEditCommand(state, documentRef, command, {
+    context: {map: state.map},
+    refresh: refreshAfterEdit,
+    throwOnError: true
+  });
+  const revisionAfter = state.mapRevision.getSnapshot();
+  return {
+    executed: execution.executed,
+    changed: execution.result?.changed || 0,
+    unchanged: 0,
+    kind: String(kind),
+    references: execution.result?.references || [],
+    mapRevisionBefore: revisionBefore,
+    mapRevisionAfter: revisionAfter,
+    history: state.editHistory.getStats(),
+    ...(options?.inspectionToken ? {inspectionToken: String(options.inspectionToken)} : {})
+  };
+}
+
+function executeRegenerationLockCommand(state, documentRef, references, locked, options, createCommand) {
+  const normalized = normalizeRegenerationLockReferences(references, state.map);
+  const revisionBefore = state.mapRevision.getSnapshot();
+  assertRegenerationLockInspection(options?.inspectionToken ? {
+    inspectionToken: options.inspectionToken,
+    revision: options.revision ?? revisionBefore.mapRevision
+  } : null, revisionBefore.mapRevision, normalized, locked);
+  const inspection = createRegenerationLockInspection(state.map, revisionBefore.mapRevision, normalized, locked);
+  const execution = executeEditCommand(state, documentRef, createCommand(normalized), {
+    context: {map: state.map},
+    refresh: refreshAfterEdit,
+    throwOnError: true
+  });
+  const revisionAfter = state.mapRevision.getSnapshot();
+  return {
+    executed: execution.executed,
+    changed: execution.result?.changed || 0,
+    unchanged: execution.executed ? 0 : normalized.length,
+    locked: Boolean(locked),
+    references: normalized,
+    inspectionToken: inspection.inspectionToken,
+    mapRevisionBefore: revisionBefore,
+    mapRevisionAfter: revisionAfter,
+    history: state.editHistory.getStats()
   };
 }
 

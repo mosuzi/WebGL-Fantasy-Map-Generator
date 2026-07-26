@@ -139,12 +139,19 @@ export function pickRiver(map, index, worldX, worldY, maxDistance) {
   for (const segment of riverSegments) {
     candidateCount++;
     const river = segment.river;
+    const parent = river.parent ? map.rivers.rivers.find(item => Number(item.id ?? item.i) === Number(river.parent)) : null;
     const distance = distanceToSegment(worldX, worldY, segment.a, segment.b);
     if (distance > maxDistance || (best && distance >= best.distance)) continue;
     best = {
       kind: "river",
       id: river.id,
+      name: river.name || `河流 #${river.id}`,
       type: river.parent ? "tributary" : "river",
+      parentId: river.parent || 0,
+      parentName: parent?.name || "",
+      networkStatus: river.networkStatus || (river.parent && !parent ? "orphaned" : "valid"),
+      networkIssue: river.networkIssue || "",
+      outletKind: river.outletKind || (river.parent ? "confluence" : "unknown"),
       flux: river.flux,
       length: river.cells.length,
       distance,

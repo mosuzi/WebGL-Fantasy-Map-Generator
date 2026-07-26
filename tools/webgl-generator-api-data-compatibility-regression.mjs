@@ -26,6 +26,7 @@ const oldExported = createMapDocument(oldImported.map, oldImported.options);
 const oldReimported = parseMapDocument(stringifyMapDocument(oldExported));
 assert.equal(oldImported.version, MAP_DOCUMENT_VERSION);
 assert.equal(oldImported.map.metadata.schemaVersion, MAP_SCHEMA_VERSION);
+assert.deepEqual(oldImported.map.regenerationLocks, {version: 1, entries: []});
 assert.deepEqual(compatibilitySummary(oldReimported), oldSummary);
 
 const currentRuntimeMap = {
@@ -41,9 +42,18 @@ const currentDocument = createMapDocument(currentRuntimeMap, currentRuntimeMap.o
 assert.equal(currentRuntimeMap.metadata.schemaVersion, undefined);
 assert.equal(currentRuntimeMap.notes.metadata, undefined);
 const currentImported = parseMapDocument(stringifyMapDocument(currentDocument));
+currentImported.map.pack = {...(currentImported.map.pack || {}), features: [null, {i: 1, id: 1, type: "island", land: true}]};
+currentImported.map.regenerationLocks = {version: 1, entries: [{kind: "feature", id: 1}]};
 const currentReexported = createMapDocument(currentImported.map, currentImported.options);
 const currentReimported = parseMapDocument(stringifyMapDocument(currentReexported));
 assert.deepEqual(compatibilitySummary(currentReimported), compatibilitySummary(currentImported));
+assert.deepEqual(currentReimported.map.regenerationLocks, {version: 1, entries: [{kind: "feature", id: 1}]});
+
+const damagedLockDocument = JSON.parse(stringifyMapDocument(currentDocument));
+damagedLockDocument.map.regenerationLocks = {version: 9, entries: [{kind: "feature", id: 999}, {kind: "unknown", id: 1}]};
+const repairedLocks = parseMapDocument(JSON.stringify(damagedLockDocument));
+assert.deepEqual(repairedLocks.map.regenerationLocks, {version: 1, entries: []});
+assert.equal(repairedLocks.map.metadata.compatibility?.regenerationLocks?.removed, 2);
 
 const fakeDocument = {defaultView: {}};
 const plainEnvelope = await encodeBrowserMapStoragePayload(fakeDocument, stringifyMapDocument(currentDocument), currentDocument.map);
@@ -134,5 +144,7 @@ function compatibilitySummary(document) {
       city: [...(map.labels?.hidden?.city || [])]
     },
     visualTheme: map.visualTheme?.preset || ""
+    ,
+    regenerationLocks: (map.regenerationLocks?.entries || []).map(entry => ({...entry}))
   };
 }

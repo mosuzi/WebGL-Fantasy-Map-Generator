@@ -1055,6 +1055,9 @@ const READ_METHODS = new Set([
   "cells.scan",
   "cells.actions",
   "cells.inspectAction",
+  "regenerationLocks.list",
+  "regenerationLocks.status",
+  "regenerationLocks.inspect",
   "edit.cities.inspectCreateAtCell",
   "edit.provinces.inspectCreateAtCell",
   "edit.states.inspectCreateAtCell",
@@ -1299,6 +1302,7 @@ function classifyApiMethod(method, actionByApi) {
   }
   if (
     ATOMIC_EDITOR_METHODS.has(method)
+    || method.startsWith("regenerationLocks.")
     || method.startsWith("edit.labels.")
     || method.startsWith("edit.markers.")
     || method.startsWith("edit.measurements.")

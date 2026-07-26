@@ -9,6 +9,8 @@ import {backfillProvinceNames} from "../generator/province-naming.js";
 import {normalizeDiplomacyMap} from "./diplomacy-map-compatibility.js";
 import {normalizeUnitPreferences} from "../ui/display-units.js";
 import {normalizeOceanCurrentModel, OCEAN_CURRENT_MODEL_VERSION} from "../generator/ocean-currents.js";
+import {normalizeRiverNetwork} from "../generator/river-network.js";
+import {normalizeRegenerationLockStore, validateRegenerationLockStore} from "./regeneration-locks.js";
 import {
   NETWORK_GEOJSON_PROPERTY_SCHEMA_ID,
   NETWORK_GEOJSON_PROPERTY_SCHEMA_VERSION,
@@ -128,6 +130,7 @@ export function migrateMapDocument(document) {
   backfillProvinceNames(migrated.map);
   migrated.map = normalizeDiplomacyMap(migrated.map);
   migrated.map.oceanCurrents = normalizeOceanCurrentModel(migrated.map.oceanCurrents);
+  applyRegenerationLockCompatibility(migrated.map, versioned.map?.regenerationLocks);
   validateCurrentMapDocument(migrated);
   return migrated;
 }
@@ -477,6 +480,7 @@ function validateCurrentMapDocument(document) {
   if (Number(document.map.oceanCurrents?.version) !== OCEAN_CURRENT_MODEL_VERSION || !Array.isArray(document.map.oceanCurrents?.currents)) {
     throw new Error("地图数据缺少 oceanCurrents 存储");
   }
+  validateRegenerationLockStore(document.map.regenerationLocks, document.map);
   for (const states of [document.map.politics?.states, document.map.pack?.states]) {
     for (const state of states || []) {
       if (!state || state.removed || Number(state.i ?? state.id) <= 0) continue;
@@ -490,8 +494,8 @@ function normalizeMapSchemaV2(map, documentOptions = {}) {
   const normalizedCurrent = normalizeCurrentMapSchemaV2(source, documentOptions);
   const societyCultures = cloneSocialStore(source.society?.cultures);
   const societyReligions = cloneSocialStore(source.society?.religions);
-  const packCultures = source.pack?.cultures === source.society?.cultures ? societyCultures : cloneSocialStore(source.pack?.cultures);
-  const packReligions = source.pack?.religions === source.society?.religions ? societyReligions : cloneSocialStore(source.pack?.religions);
+  const packCultures = normalizedCurrent.pack?.cultures === source.society?.cultures ? societyCultures : cloneSocialStore(normalizedCurrent.pack?.cultures);
+  const packReligions = normalizedCurrent.pack?.religions === source.society?.religions ? societyReligions : cloneSocialStore(normalizedCurrent.pack?.religions);
   const normalized = {
     ...normalizedCurrent,
     notes: normalizeNotesStoreV2(source.notes),
@@ -499,9 +503,11 @@ function normalizeMapSchemaV2(map, documentOptions = {}) {
     labels: normalizeLabelStoreV2(source.labels),
     visualTheme: normalizeVisualThemeStoreV2(source.visualTheme, normalizedCurrent.options.visualTheme),
     society: source.society ? {...source.society, cultures: societyCultures, religions: societyReligions, metadata: {...(source.society.metadata || {})}} : source.society,
-    pack: source.pack ? {...source.pack, cultures: packCultures, religions: packReligions} : source.pack
+    pack: normalizedCurrent.pack ? {...normalizedCurrent.pack, cultures: packCultures, religions: packReligions} : normalizedCurrent.pack
   };
-  return normalizeDiplomacyMap(normalizeEconomyDisplayMap(normalizeSocialExpansionMap(normalized)));
+  const compatible = normalizeDiplomacyMap(normalizeEconomyDisplayMap(normalizeSocialExpansionMap(normalized)));
+  applyRegenerationLockCompatibility(compatible, source.regenerationLocks);
+  return compatible;
 }
 
 function normalizeCurrentMapSchemaV2(map, documentOptions = {}) {
@@ -509,6 +515,7 @@ function normalizeCurrentMapSchemaV2(map, documentOptions = {}) {
   const options = {...(documentOptions || {}), ...(source.options || {})};
   delete options.display;
   const displaySource = documentOptions.display ?? source.display;
+  const normalizedRiverStore = normalizeRiverStore(source.rivers, source.pack);
   return {
     ...source,
     metadata: {...(source.metadata || {}), schemaVersion: MAP_SCHEMA_VERSION},
@@ -518,8 +525,47 @@ function normalizeCurrentMapSchemaV2(map, documentOptions = {}) {
     measurements: backfillMeasurementStoreV2(source.measurements),
     labels: backfillLabelStoreV2(source.labels),
     visualTheme: backfillVisualThemeStoreV2(source.visualTheme, options.visualTheme),
-    oceanCurrents: normalizeOceanCurrentModel(source.oceanCurrents)
+    regenerationLocks: normalizeRegenerationLockStore(source.regenerationLocks).store,
+    oceanCurrents: normalizeOceanCurrentModel(source.oceanCurrents),
+    ...(normalizedRiverStore ? {
+      rivers: normalizedRiverStore,
+      pack: source.pack ? {...source.pack, rivers: normalizedRiverStore.rivers} : source.pack
+    } : {})
   };
+}
+
+function normalizeRiverStore(store, pack) {
+  if (!store || typeof store !== "object" || !Array.isArray(store.rivers)) return store;
+  const rivers = store.rivers.map(river => river && typeof river === "object" ? {
+    ...river,
+    cells: Array.isArray(river.cells) ? [...river.cells] : river.cells,
+    gridCells: Array.isArray(river.gridCells) ? [...river.gridCells] : river.gridCells,
+    points: Array.isArray(river.points) ? river.points.map(point => Array.isArray(point) ? [...point] : point) : river.points,
+    hydrology: river.hydrology && typeof river.hydrology === "object" ? {...river.hydrology} : river.hydrology
+  } : river);
+  const normalized = normalizeRiverNetwork(rivers, pack, {dropIncomplete: false});
+  return {
+    ...store,
+    rivers: normalized.rivers,
+    metadata: {
+      ...(store.metadata || {}),
+      networkDiagnostics: normalized.diagnostics
+    }
+  };
+}
+
+function applyRegenerationLockCompatibility(map, source) {
+  const normalized = normalizeRegenerationLockStore(source, map);
+  map.regenerationLocks = normalized.store;
+  if (!normalized.diagnostics.removed) return normalized;
+  map.metadata = {
+    ...(map.metadata || {}),
+    compatibility: {
+      ...(map.metadata?.compatibility || {}),
+      regenerationLocks: normalized.diagnostics
+    }
+  };
+  return normalized;
 }
 
 function normalizeMapDocumentDisplay(document) {

@@ -1,0 +1,391 @@
+{
+  "schemaVersion": 1,
+  "denominator": {
+    "panels": 14,
+    "lockKinds": 15,
+    "regenerationEntries": 22
+  },
+  "panels": [
+    {
+      "id": "state",
+      "component": "StatePanel.vue",
+      "kinds": [
+        "state"
+      ]
+    },
+    {
+      "id": "province",
+      "component": "ProvincePanel.vue",
+      "kinds": [
+        "province"
+      ]
+    },
+    {
+      "id": "city",
+      "component": "CityPanel.vue",
+      "kinds": [
+        "city"
+      ]
+    },
+    {
+      "id": "route",
+      "component": "RoutePanel.vue",
+      "kinds": [
+        "route"
+      ]
+    },
+    {
+      "id": "river",
+      "component": "RiverPanel.vue",
+      "kinds": [
+        "river"
+      ]
+    },
+    {
+      "id": "marker",
+      "component": "MarkerPanel.vue",
+      "kinds": [
+        "marker"
+      ]
+    },
+    {
+      "id": "diplomacy",
+      "component": "DiplomacyPanel.vue",
+      "kinds": [
+        "diplomacy-relation"
+      ]
+    },
+    {
+      "id": "religion",
+      "component": "ReligionPanel.vue",
+      "kinds": [
+        "religion"
+      ]
+    },
+    {
+      "id": "culture",
+      "component": "CulturePanel.vue",
+      "kinds": [
+        "culture"
+      ]
+    },
+    {
+      "id": "military",
+      "component": "MilitaryPanel.vue",
+      "kinds": [
+        "military"
+      ]
+    },
+    {
+      "id": "zone",
+      "component": "ZonePanel.vue",
+      "kinds": [
+        "zone"
+      ]
+    },
+    {
+      "id": "feature",
+      "component": "FeaturePanel.vue",
+      "kinds": [
+        "feature"
+      ]
+    },
+    {
+      "id": "ocean-current",
+      "component": "OceanCurrentPanel.vue",
+      "kinds": [
+        "ocean-current"
+      ]
+    },
+    {
+      "id": "economy",
+      "component": "EconomyPanel.vue",
+      "kinds": [
+        "economy-market",
+        "trade-flow"
+      ]
+    }
+  ],
+  "lockKinds": [
+    "city",
+    "culture",
+    "diplomacy-relation",
+    "economy-market",
+    "feature",
+    "marker",
+    "military",
+    "ocean-current",
+    "province",
+    "religion",
+    "river",
+    "route",
+    "state",
+    "trade-flow",
+    "zone"
+  ],
+  "regenerationEntries": [
+    {
+      "id": "generate.regenerate:features",
+      "kinds": [
+        "feature"
+      ],
+      "implementationStage": "D",
+      "classified": true
+    },
+    {
+      "id": "generate.regenerate:routes",
+      "kinds": [
+        "route"
+      ],
+      "implementationStage": "C",
+      "classified": true
+    },
+    {
+      "id": "generate.regenerate:rivers",
+      "kinds": [
+        "river",
+        "route"
+      ],
+      "implementationStage": "C",
+      "classified": true
+    },
+    {
+      "id": "generate.regenerate:cities",
+      "kinds": [
+        "city",
+        "route"
+      ],
+      "implementationStage": "C",
+      "classified": true
+    },
+    {
+      "id": "generate.regenerate:states",
+      "kinds": [
+        "city",
+        "province",
+        "route",
+        "state"
+      ],
+      "implementationStage": "D",
+      "classified": true
+    },
+    {
+      "id": "generate.regenerate:provinces",
+      "kinds": [
+        "city",
+        "province",
+        "route"
+      ],
+      "implementationStage": "D",
+      "classified": true
+    },
+    {
+      "id": "generate.regenerate:markers",
+      "kinds": [
+        "marker"
+      ],
+      "implementationStage": "C",
+      "classified": true
+    },
+    {
+      "id": "generate.regenerate:diplomacy",
+      "kinds": [
+        "diplomacy-relation"
+      ],
+      "implementationStage": "E",
+      "classified": true
+    },
+    {
+      "id": "generate.regenerate:religions",
+      "kinds": [
+        "religion"
+      ],
+      "implementationStage": "D",
+      "classified": true
+    },
+    {
+      "id": "generate.regenerate:military",
+      "kinds": [
+        "military"
+      ],
+      "implementationStage": "E",
+      "classified": true
+    },
+    {
+      "id": "generate.regenerate:zones",
+      "kinds": [
+        "zone"
+      ],
+      "implementationStage": "C",
+      "classified": true
+    },
+    {
+      "id": "oceanCurrents.regenerate",
+      "kinds": [
+        "ocean-current"
+      ],
+      "implementationStage": "C",
+      "classified": true
+    },
+    {
+      "id": "oceanCurrents.rebuildWorld",
+      "kinds": [
+        "city",
+        "culture",
+        "diplomacy-relation",
+        "economy-market",
+        "feature",
+        "marker",
+        "military",
+        "ocean-current",
+        "province",
+        "religion",
+        "river",
+        "route",
+        "state",
+        "trade-flow",
+        "zone"
+      ],
+      "implementationStage": "E",
+      "classified": true
+    },
+    {
+      "id": "climate.applyDownstreamRebuild",
+      "kinds": [
+        "diplomacy-relation",
+        "economy-market",
+        "marker",
+        "military",
+        "religion",
+        "river",
+        "route",
+        "trade-flow",
+        "zone"
+      ],
+      "implementationStage": "E",
+      "classified": true
+    },
+    {
+      "id": "edit.height.applySeafloorReset",
+      "kinds": [
+        "city",
+        "culture",
+        "diplomacy-relation",
+        "economy-market",
+        "feature",
+        "marker",
+        "military",
+        "ocean-current",
+        "province",
+        "religion",
+        "river",
+        "route",
+        "state",
+        "trade-flow",
+        "zone"
+      ],
+      "implementationStage": "E",
+      "classified": true
+    },
+    {
+      "id": "edit.height.rebuildBaseDerived",
+      "kinds": [
+        "city",
+        "feature",
+        "ocean-current",
+        "province",
+        "river",
+        "route",
+        "state"
+      ],
+      "implementationStage": "E",
+      "classified": true
+    },
+    {
+      "id": "edit.height.rebuildDownstreamDerived",
+      "kinds": [
+        "diplomacy-relation",
+        "economy-market",
+        "marker",
+        "military",
+        "religion",
+        "trade-flow",
+        "zone"
+      ],
+      "implementationStage": "E",
+      "classified": true
+    },
+    {
+      "id": "edit.height.rebuildAllDerived",
+      "kinds": [
+        "city",
+        "culture",
+        "diplomacy-relation",
+        "economy-market",
+        "feature",
+        "marker",
+        "military",
+        "ocean-current",
+        "province",
+        "religion",
+        "river",
+        "route",
+        "state",
+        "trade-flow",
+        "zone"
+      ],
+      "implementationStage": "E",
+      "classified": true
+    },
+    {
+      "id": "edit.cultures.applyExpansion:reexpand",
+      "kinds": [
+        "culture"
+      ],
+      "implementationStage": "D",
+      "classified": true
+    },
+    {
+      "id": "edit.religions.applyExpansion:reexpand",
+      "kinds": [
+        "religion"
+      ],
+      "implementationStage": "D",
+      "classified": true
+    },
+    {
+      "id": "edit.economy.assignCells",
+      "kinds": [
+        "economy-market",
+        "trade-flow"
+      ],
+      "implementationStage": "E",
+      "classified": true
+    },
+    {
+      "id": "edit.economy.rebuild",
+      "kinds": [
+        "economy-market",
+        "trade-flow"
+      ],
+      "implementationStage": "E",
+      "classified": true
+    }
+  ],
+  "differences": {
+    "missingKinds": [],
+    "extraKinds": [],
+    "missingPanels": [],
+    "missingApiMethods": [],
+    "unknownEntryKinds": [],
+    "unclassifiedKinds": []
+  },
+  "totals": {
+    "differences": 0,
+    "implementationStages": {
+      "C": 6,
+      "D": 6,
+      "E": 10
+    }
+  }
+}

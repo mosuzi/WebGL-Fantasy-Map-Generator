@@ -1,6 +1,7 @@
 import {diplomacyRelationId} from "./diplomacy-relations.js";
 import {LABEL_TARGET_KIND, OBJECT_KIND, OBJECT_KIND_LABEL} from "./object-kinds.js";
 import {resolveObject} from "./object-resolver.js";
+import {REGENERATION_LOCK_KINDS, regenerationLockKey} from "./regeneration-locks.js";
 
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 200;
@@ -12,8 +13,11 @@ const FIELD_WHITELISTS = Object.freeze({
   [OBJECT_KIND.NOTE]: ["kind", "id", "noteId", "name", "body", "packCell", "x", "y", "standalone"],
   [OBJECT_KIND.ROUTE]: ["kind", "id", "type", "level", "fromId", "toId", "from", "to", "length", "points"],
   [OBJECT_KIND.TRADE_FLOW]: ["kind", "id", "goodId", "goodName", "sellerType", "sellerId", "sellerName", "buyerType", "buyerId", "buyerName", "units", "basePrice", "price", "value", "tradeDistance", "distanceCost", "distanceMultiplier", "tax", "source", "sourceLabel", "from", "to"],
-  [OBJECT_KIND.RIVER]: ["kind", "id", "name", "type", "parentId", "flux", "discharge", "length", "segments", "widthFactor", "hydrology", "source", "mouth", "points"],
+  [OBJECT_KIND.ECONOMY_MARKET]: ["kind", "id", "name", "stateId", "state", "centerBurgId", "centerBurg", "cell", "color", "goods", "demand", "supply", "shortage", "surplus"],
+  [OBJECT_KIND.RIVER]: ["kind", "id", "name", "type", "parentId", "parentName", "parentExists", "basinId", "basinName", "confluence", "outletKind", "outletFeatureId", "networkStatus", "networkIssue", "flux", "discharge", "length", "segments", "widthFactor", "hydrology", "source", "mouth", "points"],
   [OBJECT_KIND.LAKE]: ["kind", "id", "name", "type", "cells", "area", "height", "flux", "evaporation", "firstCell"],
+  [OBJECT_KIND.FEATURE]: ["kind", "id", "name", "type", "group", "land", "border", "cells", "area", "height", "firstCell"],
+  [OBJECT_KIND.OCEAN_CURRENT]: ["kind", "id", "name", "temperature", "hemisphere", "circulation", "strength", "basinFeatureId", "westernBoundary", "points"],
   [OBJECT_KIND.MEASUREMENT]: ["kind", "id", "name", "type", "pointCount", "displayPointCount", "distance", "area", "points", "summary"],
   [OBJECT_KIND.MILITARY]: ["kind", "id", "regimentId", "stateId", "name", "state", "type", "status", "statusLabel", "dominantUnit", "dominantUnitLabel", "troops", "units", "icon", "iconVariant", "iconLabel", "x", "y", "cell", "suitability", "movementSpeed"],
   [OBJECT_KIND.DIPLOMACY_RELATION]: ["kind", "id", "subjectId", "objectId", "subjectName", "objectName", "name", "relation", "relationLabel", "relationColor", "relationPolarity", "from", "to"],
@@ -24,6 +28,9 @@ const FIELD_WHITELISTS = Object.freeze({
   [OBJECT_KIND.REGION]: ["kind", "id", "name", "type"],
   [OBJECT_KIND.ZONE]: ["kind", "id", "name", "type", "pattern", "color", "cells"]
 });
+for (const kind of REGENERATION_LOCK_KINDS) {
+  if (FIELD_WHITELISTS[kind] && !FIELD_WHITELISTS[kind].includes("regenerationLocked")) FIELD_WHITELISTS[kind].push("regenerationLocked");
+}
 
 const OBJECT_TYPES = Object.freeze(Object.keys(FIELD_WHITELISTS));
 const HEAVY_FIELDS = new Set(["points", "hydrology", "summary", "units", "cells"]);
@@ -42,7 +49,7 @@ export function getObjectSnapshot(map, reference) {
   const normalized = normalizeReference(reference);
   const resolved = resolveObject(map, normalized);
   if (!resolved) throw apiError("not_found", `找不到对象 ${normalized.kind} #${normalized.id}`);
-  return projectObject(normalized.kind, resolved);
+  return projectObject(normalized.kind, resolved, FIELD_WHITELISTS[normalized.kind], map);
 }
 
 export function listObjectSnapshots(map, type, options = {}) {
@@ -70,14 +77,14 @@ export function queryObjectSnapshots(map, query = {}, options = {}) {
     lastKey = referenceKey(reference);
     const resolved = resolveObject(map, reference);
     if (!resolved) continue;
-    const full = projectObject(reference.kind, resolved);
+    const full = projectObject(reference.kind, resolved, FIELD_WHITELISTS[reference.kind], map);
     if (!matchesQuery(full, normalizedQuery)) continue;
-    items.push(projectObject(reference.kind, resolved, fields));
+    items.push(projectObject(reference.kind, resolved, fields, map));
   }
   let hasMore = false;
   for (let index = scanIndex; index < references.length; index++) {
     const resolved = resolveObject(map, references[index]);
-    if (resolved && matchesQuery(projectObject(references[index].kind, resolved), normalizedQuery)) {
+    if (resolved && matchesQuery(projectObject(references[index].kind, resolved, FIELD_WHITELISTS[references[index].kind], map), normalizedQuery)) {
       hasMore = true;
       break;
     }
@@ -116,8 +123,11 @@ function collectObjectReferences(map, type) {
   if (type === OBJECT_KIND.MARKER) return compactArray(map?.markers?.markers).map(item => reference(type, item.id ?? item.i));
   if (type === OBJECT_KIND.ROUTE) return compactArray(map?.settlements?.routes).map(item => reference(type, item.id ?? item.i));
   if (type === OBJECT_KIND.TRADE_FLOW) return compactArray(map?.pack?.deals).map(item => reference(type, item.i ?? item.id));
+  if (type === OBJECT_KIND.ECONOMY_MARKET) return compactArray(map?.pack?.markets || map?.economy?.markets).filter(item => !item.removed).map(item => reference(type, item.i ?? item.id));
   if (type === OBJECT_KIND.RIVER) return compactArray(map?.rivers?.rivers).map(item => reference(type, item.id ?? item.i));
   if (type === OBJECT_KIND.LAKE) return compactArray(map?.pack?.features).filter(item => item.type === "lake" && !item.removed).map(item => reference(type, item.i ?? item.id));
+  if (type === OBJECT_KIND.FEATURE) return compactArray(map?.pack?.features).filter(item => !item.removed).map(item => reference(type, item.i ?? item.id));
+  if (type === OBJECT_KIND.OCEAN_CURRENT) return compactArray(map?.oceanCurrents?.currents).map(item => reference(type, item.id));
   if (type === OBJECT_KIND.MEASUREMENT) return compactArray(map?.measurements?.items).map(item => reference(type, item.id));
   if (type === OBJECT_KIND.STATE) return indexedReferences(map?.politics?.states, type, item => !item.removed);
   if (type === OBJECT_KIND.PROVINCE) return indexedReferences(map?.politics?.provinces, type, item => !item.removed);
@@ -212,7 +222,7 @@ function matchesQuery(item, query) {
   return Object.entries(query.where).every(([field, value]) => item[field] === value);
 }
 
-function projectObject(kind, object, selectedFields = FIELD_WHITELISTS[kind]) {
+function projectObject(kind, object, selectedFields = FIELD_WHITELISTS[kind], map = null) {
   const fields = FIELD_WHITELISTS[kind].filter(field => selectedFields.includes(field));
   const result = {};
   for (const field of fields) {
@@ -221,6 +231,14 @@ function projectObject(kind, object, selectedFields = FIELD_WHITELISTS[kind]) {
   }
   result.kind = kind;
   if (result.id === undefined) result.id = toJsonValue(object.id);
+  if (selectedFields.includes("regenerationLocked") && REGENERATION_LOCK_KINDS.includes(kind)) {
+    try {
+      const keys = new Set((map?.regenerationLocks?.entries || []).map(regenerationLockKey));
+      result.regenerationLocked = keys.has(regenerationLockKey(object));
+    } catch {
+      result.regenerationLocked = false;
+    }
+  }
   assertJsonSafeObjectSnapshot(result);
   return result;
 }
