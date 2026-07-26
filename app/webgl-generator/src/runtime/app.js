@@ -65,6 +65,7 @@ import {createEditRefreshScheduler} from "./edit-refresh-scheduler.js";
 import {BROWSER_MAP_STORAGE_KEY, decodeBrowserMapStoragePayload, encodeBrowserMapStoragePayload} from "./browser-map-storage.js";
 import {createImportFmgCellsHeightCommand} from "./fmg-cells-geojson-import.js";
 import {EditHistory} from "./edit-history.js";
+import {MapRevisionTracker} from "./map-revision.js";
 import {createGrayscaleHeightmapFromImage, createPaletteHeightmapFromImage, normalizeHeightmapImportPayload} from "./heightmap-import.js";
 import {createMapDocument, downloadText, mapFileBaseName, parseGeoJsonMeasurements, parseMapDocument, parseMapDocumentPayload, stringifyMapDocument} from "./map-file-io.js";
 import {attachImportDiagnostic, createHeightmapSourceSummary, createImportFailureDiagnostic, createImportSuccessDiagnostic, createMapImportDiagnostic, formatMapImportDiagnosticLines, inspectGeoImportSource, stringifyMapImportDiagnostic} from "./map-import-diagnostics.js";
@@ -315,13 +316,20 @@ export const CANVAS_TOOL_MODE = Object.freeze({
 export function createGeneratorApp(documentRef, {healthMonitor = getWebglGeneratorHealthMonitor(documentRef)} = {}) {
   const canvas = documentRef.getElementById("map-canvas");
   const panelManager = new PanelManager(documentRef, documentRef.querySelector(".map-stage"));
+  const mapRevision = new MapRevisionTracker();
+  const editHistory = new EditHistory({
+    onMutation: () => mapRevision.advance(),
+    onSnapshot: () => mapRevision.createSnapshot(),
+    onRestore: snapshot => mapRevision.restoreSnapshot(snapshot)
+  });
   const state = {
     options: {...DEFAULT_OPTIONS},
     map: null,
     pick: null,
     selection: null,
     editingObject: null,
-    editHistory: new EditHistory(),
+    editHistory,
+    mapRevision,
     editRefreshScheduler: null,
     brushCursorPreview: null,
     heightEdit: {
@@ -3700,6 +3708,7 @@ async function loadMapIntoRuntime(state, documentRef, map, {loadingMessages = []
   state.selectionStore.clear();
   refreshRuntimeAfterMapLoad(state, documentRef, {restorePanels: true});
   syncLabelStylesUi(state, documentRef);
+  state.mapRevision.replaceMap();
   emitLoadTrace(documentRef, {phase: "end", id: "panel-refresh", message: loadingMessage("panel-refresh")});
   emitLoadTrace(documentRef, {phase: "end", id: "load-map", message: "接入地图运行时"});
   emitLoadTrace(documentRef, {phase: "complete", id: "complete", message: "地图进入可交互状态"});
@@ -5962,6 +5971,7 @@ function applyClimateOptions(state, documentRef, options, changed = true) {
   updateStatePanel(state);
   updateGovernmentPanel(state);
   updateProvincePanel(state);
+  state.mapRevision?.advance();
   return climateApiUpdateResult(state, changed);
 }
 

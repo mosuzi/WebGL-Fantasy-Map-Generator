@@ -20,6 +20,7 @@
 - `audits/`：审查、复盘和整改方案。
   - `audits/ui-function-and-information-architecture-audit.md`：现有功能入口、复杂度、分组、低优先级能力和浮层遮挡审计。
   - `audits/interaction-usability-audit-results.md`：权威任务第 101～107 项的交互总表、真实浏览器证据摘要、问题账本、跨系统原则和功能变更附录。
+  - `audits/compound-semantic-action-matrix.md`：权威任务第 204 项全游戏复合语义规则事务、AI 规划器配方和公开 API / Cell 动作覆盖矩阵。
 - `deployment/`：部署说明和线上环境约定。
 - `task-notes/`：可入库的专题计划、评估记录、执行细则和功能积压。新增专题前先读 `task-notes/README.md`，并同步更新该索引。
 

@@ -1,5 +1,31 @@
 # 开发历史
 
+## 2026-07-26：修正控制面板顶层 Tab 文字水平居中
+
+- 用户指出控制面板所有顶层 Tab 的文字没有在各自按钮中水平居中，其中首个“简介”明显靠左、末个“单位”明显靠右。
+- 真实浏览器计算样式确认 Element Plus 会对顶部 Tabs 的首项清除左内边距、末项清除右内边距；修正前两项文字中心分别相对按钮中心偏移 `-4px / +4px`，中间五项均为 `0px`。
+- 本轮只在 `.control-panel-tabs` 作用域内用足够明确的选择器恢复首尾项 `8px` 双侧内边距，不改变组件结构、Tab 顺序、伸展分配或点击行为。
+- 热更新后逐项复测“简介 / 生成 / 视图 / 样式 / 图层 / 管理 / 单位”：七项按钮宽度统一约 `74.74～74.75px`，文字中心偏移全部为 `0px`，左右计算内边距全部为 `8px`。
+
+## 2026-07-26：完成第 204 项全游戏复合语义接口与玩法规则审计
+
+- 用户指出“国家 A 占领 Cell B”只是一个样例，AI 友好 API 需要先从全部游戏规则反推复合语义动作；否则只能让 AI 拼接按钮级原语，既不能保证事务安全，也无法形成可信的完整玩法文档。
+- 本轮没有实现新的复合写接口。新增 `compound-semantic-action-audit`，直接消费第 200 项全量能力矩阵、当前 `API_METHODS` 和第 195 项 Cell 动作矩阵，把能力固定分为事实/原子原语、单事务规则动作和 AI 规划器配方三层。
+- 当前工作区审计分母为 full capability `963` 行、公开 API `241` 方法、Cell 动作 `47` 行、画布模式 `28` 个、直接操控 `19` 类 / `89` 个宿主。机器矩阵形成 `78` 个动作族：`68` 个规则事务和 `10` 个玩法配方；状态为已有完整事务 `33`、已有写命令但缺 inspector `24`、多 API 碎片 `5`、缺失游戏规则 `6`、配方 `10`。
+- 五个 P0 碎片族为领土转移/最后领土灭国、确保省份并分配 Cell、整省转移、名称库绑定并范围重命名、名称库替换或删除时迁移绑定。六个规则空白为省份合并/拆分、宣战/议和/宗藩变更和真实战斗结算。
+- “征服 Cell”收敛进通用 `politics.transfer-territory` 规则族，而不是继续增加互相重叠的 `conquer / cede / annex` 方法；规则分支负责自动/已有/确保省份，以及来源国最后领土时的完整墓碑和跨域引用清理。
+- 专题文档冻结玩法文档的十二章领域骨架。后续宣传与玩法说明按玩家目标、合法前置、规则分支、系统影响、失败/回滚和 AI 配方编写，不按控制面板逐项抄按钮；缺失规则未获自动实施授权。
+
+## 2026-07-25：第 195 项阶段 A 未提交实现尝试
+
+- 第 200 项与第 195 项重编排批次以提交 `73d252f` 推送到 `main` 后，按用户要求开始第 195 项实现尝试；本段之后的全部代码与文档只保留在工作区，没有暂存、提交或推送。
+- 新增 `cells.get / getAtPoint / neighbors / query`，公开 API 由 `13 / 237 / 129` 扩展为 `14` 个命名空间、`241` 个方法、`129` 个编辑方法，稳定等级为 `233 / 7 / 1`。四个方法使用显式 Grid / Pack CellRef、字段 / filter 白名单、默认 `100` / 最大 `1000` 分页、深复制结果与运行时 secret 签名 cursor；篡改、跨 filter、跨 revision 分别稳定拒绝。
+- Cell 快照区分高度水陆与 Feature 水陆，按需返回 polygon，提供 Grid / Pack 双向映射、所有同源 Pack cells、有限邻接、归属 / 气候 / 城镇摘要以及缺 polygon、缺映射、悬空政治对象和映射不一致诊断。`getAtPoint` 复用 renderer 的 client → world 投影与纯 `pickGridCell`，不触碰 `selection.pick`、pick 面板或选择状态。
+- 新增仅挂运行时 state 的地图 identity / revision tracker；地图替换生成新 identity 并从 `0` 开始，普通成功命令、undo / redo 各 `+1`，EditHistory 外部快照使同步 / 异步复合事务在内部多步后折叠为恰好 `+1`，完整回滚恢复原 revision，失败与 no-op 不递增。identity、revision 与 cursor secret 都没有写入 map、JSON、gzip 或浏览器缓存。
+- `regress:cells-read` 覆盖陆地、水域、边界、Grid / Pack 往返、geometry opt-in、三层邻接、字段投影、分页、确定性、JSON 副本、cursor 篡改 / 跨条件 / 跨 revision、非法引用、旧图缺映射 / polygon、普通命令、undo / redo、复合事务、失败回滚和换图身份；`regress:api-data-compatibility` 证明旧 v1、当前 v2、plain / gzip 浏览器信封无需新增必填字段。
+- 生产构建及 API discovery / stability / inventory / action convergence 门禁通过。真实 Chrome 固定图验证 Grid `#139` 与 Pack `#25` 往返，世界点与 client 点均命中 Grid `#139`，四个只读调用前后 checksum、revision、历史、选择、相机与 pick 不变；既有国家重命名令 revision `0 → 1`，撤销令 `1 → 2`，同名 no-op 保持 `2`，旧 cursor 正确失效，四方法均可由 `info.describe` 发现。最终 API 聚合门禁为 `12 / 12 passed`（代码 `6`、真实 Chrome `6`、失败 / 跳过 `0 / 0`），完整 JSON / gzip / base64 往返、失败恢复、GEO、导出、名称库及六条浏览器门的 WebGL / application health / console / page error 全部通过。
+- 既有 `regress:browser-storage-compatibility` 单独运行时只因把两条 `main-thread-long-task` 性能遥测仍计作 console error 而失败；同轮 `regress:api-data-compatibility` 的旧 JSON、gzip 与浏览器存储兼容断言全部通过。本项没有调整既有健康阈值或扩大范围。
+
 ## 2026-07-25：完成第 200 项并依据真实矩阵重编排第 195 项
 
 - 第 200 项从当前 checkout 联合发现 `103` 个交互表面、`28` 个注册画布模式、`199` 个 runtime actions、`198` 个 API action bindings、`183` 个 command / inspector 导出和 `237` 个公开方法。机器矩阵共 `959` 行，结论为 `covered 884 / excluded 71 / deferred-owned:195 4 / gap 0 / unknown 0 / unclassified 0 / unownedParameterizableGap 0`。

@@ -13,6 +13,7 @@ import {buildApiMethodCoverage} from "./api-capability-coverage.js";
 import {API_METHODS, API_STABILITY, API_VERSION, CONFIRM_REQUIRED_METHODS, buildApiContract, buildApiVersionContract, groupQualifiedMethodNames} from "./api-contract.js";
 import {buildApiDescriptionCoverage, buildApiMethodDescriptionRegistry, describeApiMethod} from "./api-schema-registry.js";
 import {getObjectSnapshot, listObjectSnapshots, listObjectTypes, queryObjectSnapshots} from "./object-query-api.js";
+import {getCellAtPoint, getCellNeighbors, getCellSnapshot, queryCells} from "./cell-query-api.js";
 
 export function installConsoleApi(documentRef, state, options = {}) {
   const view = documentRef.defaultView || window;
@@ -41,6 +42,23 @@ export function createConsoleApi(documentRef, state, actions = {}) {
       get: reference => apiCall(() => getObjectSnapshot(state.map, reference)),
       list: (type, options = {}) => apiCall(() => listObjectSnapshots(state.map, type, options)),
       query: (query = {}, options = {}) => apiCall(() => queryObjectSnapshots(state.map, query, options))
+    }),
+    cells: Object.freeze({
+      get: (reference, options = {}) => apiCall(
+        () => getCellSnapshot(state.map, reference, options),
+        cellReadonlyApiMetadata(state, "cells.get")
+      ),
+      getAtPoint: (point, options = {}) => apiCall(() => getCellAtPoint(state.map, point, options, {
+        screenToWorld: (x, y) => state.renderer?.screenToWorld?.(x, y)
+      }), cellReadonlyApiMetadata(state, "cells.getAtPoint")),
+      neighbors: (reference, options = {}) => apiCall(
+        () => getCellNeighbors(state.map, reference, options),
+        cellReadonlyApiMetadata(state, "cells.neighbors")
+      ),
+      query: (query = {}) => apiCall(
+        () => queryCells(state.map, query, state.mapRevision),
+        cellReadonlyApiMetadata(state, "cells.query")
+      )
     }),
     generate: Object.freeze({
       getOptions: () => apiCall(() => requireApiAction(actions.generate?.getOptions, "generate.getOptions")()),
@@ -362,6 +380,7 @@ function buildCapabilities(api) {
     sideEffects: {
       info: "readonly",
       objects: "readonly-object-discovery",
+      cells: "readonly-grid-and-pack-cell-discovery",
       generate: "map-regeneration",
       oceanCurrents: "ocean-current-edit-and-world-rebuild",
       selection: "selection-camera-highlights-and-editing-state",
@@ -391,6 +410,12 @@ export function buildMethodMetadata() {
       types: {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
       get: {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
       list: {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
+      query: {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false}
+    },
+    cells: {
+      get: {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
+      getAtPoint: {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
+      neighbors: {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
       query: {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false}
     },
     oceanCurrents: {
@@ -705,11 +730,20 @@ function buildApiVersion() {
   return buildApiVersionContract();
 }
 
+function cellReadonlyApiMetadata(state, action) {
+  return {
+    action,
+    readonly: true,
+    ...(state.mapRevision?.getSnapshot?.() || {mapIdentity: null, mapRevision: 0})
+  };
+}
+
 function buildMapSummary(state) {
   const map = state?.map;
   if (!map) return {ready: false};
   return {
     ready: true,
+    ...(state.mapRevision?.getSnapshot?.() || {}),
     seed: map.metadata?.seed || map.options?.seed || state.options?.seed || "",
     checksum: map.metadata?.checksum || map.summary?.checksum || "",
     generatedAt: map.metadata?.generatedAt || "",

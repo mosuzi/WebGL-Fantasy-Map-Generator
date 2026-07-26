@@ -1,6 +1,6 @@
 # Cells 诊断图层与 AI 可判定 API 设计
 
-> 状态：权威任务第 195 项设计与实施权威编排；原设计于 2026-07-24 完成，2026-07-25 消费第 200 项真实能力矩阵后重写施工阶段，新智能体第三轮评审结论为 `RELEASE`。
+> 状态：权威任务第 195 项设计与实施权威编排；原设计于 2026-07-24 完成，2026-07-25 消费第 200 项真实能力矩阵后重写施工阶段，新智能体第三轮评审结论为 `RELEASE`；阶段 A 未提交实现尝试已通过专项与真实 Chrome 验收。
 
 ## 一、问题与目标
 
@@ -35,7 +35,7 @@
 ### 2.3 API 系统
 
 - 当前公共 API 根对象是 `window.webglGeneratorApi`，开发便利别名为 `window.api`。
-- 当前基线为 `13` 个命名空间、`237` 个方法，其中 `129` 个编辑方法；根版本为 `1.0.0 / stable`。
+- 当前未提交工作区基线为 `14` 个命名空间、`241` 个方法，其中 `129` 个编辑方法；根版本为 `1.0.0 / stable`。
 - API 使用统一外层结果：
 
 ```js
@@ -791,7 +791,26 @@ P0 已在本次重编排中完成。机器权威产物为 `docs/audits/cell-acti
 
 P0 完成标准冻结为：第 200 项 `deferred-owned:195` 必须全部消费并稳定归入 A～D；注册模式 `28 / 28`、非注册直接操控 `19 / 19` 及全部宿主实例、补充 point / path 入口全部有分类；未知、未分类、无归属、重复 actionId、任一必填字段、空 inspect / execute 目标和空源码引用均为 `0`。施工中若当前 checkout 新增 deferred、模式或入口，矩阵陈旧门禁必须先失败，再明确归入 A～D，不能静默忽略。
 
+### 新前置 P-SEM：第 204 项复合语义规则审计已完成
+
+阶段 A 完成后，用户明确指出“国家占领 Cell”只是一个样例，不能把 AI API 继续理解为按钮或画布动作的一一映射。第 204 项已从 `963` 行能力矩阵、`241` 个公开方法和 `47` 行 Cell 动作中冻结：
+
+- 事实与原子原语；
+- `68` 个单事务规则动作；
+- `10` 个 AI 规划器玩法配方。
+
+其中已有完整事务 `33`、已有写命令但缺 inspector `24`、多 API 碎片 `5`、缺失游戏规则 `6`。机器产物为 `docs/audits/compound-semantic-action-matrix.json / .md`。
+
+第 195 项后续边界因此调整为：
+
+- `cells.inspectAction` 只负责 Grid/Pack/point/path/range 等空间输入和画布原子动作预检；
+- 国家灭亡、领土转移、整省转移、战争结算等必须由领域 `inspect + execute` 规则事务承接；
+- 殖民、战争和行政改革等配方由 AI planner 逐步调用已授权规则事务，不能进入 `cells.execute(arbitraryPayload)`；
+- 第 204 项矩阵中的 `5` 个碎片事务、`6` 个缺失规则和 `10` 个配方没有随审计自动获得实现授权。
+
 ### 阶段 A：Cell 只读基础
+
+当前实现状态：四个只读方法、运行时 identity / revision、schema、稳定 cursor、旧图诊断与专项 / Chrome 验收已经落入工作区；本批按用户要求不暂存、不提交、不推送。阶段 B～D 没有随本次尝试提前施工，第 200 项四条 `deferred-owned:195` 仍保留到阶段 D 统一转为 covered。
 
 1. 新增统一 `cells` 命名空间：`get / getAtPoint / neighbors / query`。
 2. Cell 引用必须显式区分 `{space: "grid", id}` 与 `{space: "pack", id}`；旧数字参数只在旧 `.add(gridCell)` 兼容路径解释为 Grid。
@@ -823,14 +842,15 @@ P0 完成标准冻结为：第 200 项 `deferred-owned:195` 必须全部消费�
 ### 阶段 C：全动作 Inspector Registry 与创建同族
 
 1. 新增可枚举的只读 action registry 与唯一签名 `cells.inspectAction(actionId, input, options = {})`；至少覆盖机器矩阵的 `28` 个模式及标签 / 测量补充入口。
-2. registry 每项必须声明 input space、现有 inspect / execute API、业务 code、是否写地图、确认、撤销 / 回滚、异步、revision 要求和旧兼容入口。
-3. 同一阶段一次性新增：
+2. 每个 actionId 必须链接第 204 项的规则动作或明确标记为原子编辑器原语；registry 不得声称自己覆盖国家灭亡、战争、整省转移等领域复合规则。
+3. registry 每项必须声明 input space、现有 inspect / execute API、业务 code、是否写地图、确认、撤销 / 回滚、异步、revision 要求和旧兼容入口。
+4. 同一阶段一次性新增：
    - `edit.states.inspectCreateAtCell / createAtCell`
    - `edit.provinces.inspectCreateAtCell / createAtCell`
    - `edit.cities.inspectCreateAtCell / createAtCell`
-4. 三族共用 `expectedRevision / inspectionToken`、稳定 `allowed + code + details`、单条历史和故障快照回滚；不得再把省份或城市无依据地推迟到后续阶段。
-5. 旧 `states.add / provinces.add / cities.add` 路径继续可用，并委托规范入口或保持严格等价；既有调用的成功返回字段只增不删。
-6. 已有 inspector 的路线改线、Feature、适居度、市场、城市移动、文化 / 宗教扩张和危险删除只注册引用，不复制算法。
+5. 三族共用 `expectedRevision / inspectionToken`、稳定 `allowed + code + details`、单条历史和故障快照回滚；不得再把省份或城市无依据地推迟到后续阶段。
+6. 旧 `states.add / provinces.add / cities.add` 路径继续可用，并委托规范入口或保持严格等价；既有调用的成功返回字段只增不删。
+7. 已有 inspector 的路线改线、Feature、适居度、市场、城市移动、文化 / 宗教扩张和危险删除只注册引用，不复制算法。
 
 阶段 C 最小验收：
 
@@ -842,10 +862,11 @@ P0 完成标准冻结为：第 200 项 `deferred-owned:195` 必须全部消费�
 ### 阶段 D：受控写缺口关闭与统一验收
 
 1. 依据阶段 C registry 重新生成“有 UI / inspector 但无规范写 API”的差集。
-2. 只对白名单中的真实差集增加薄适配；已有 `edit.*` 方法直接登记为 execute target，不增加同义重复方法。
-3. 禁止通用 `cells.execute(action, arbitraryPayload)`、任意属性写、裸 command 执行器和远程写入入口。
-4. 每个新增适配必须先有纯 inspector，复用现有 command / transaction，并声明确认、撤销、失败回滚和旧图兼容。
-5. 更新第 200 项全量矩阵：四类 `deferred-owned: 195` 转为 covered；非 Cell 分母、排除理由和既有 `237` 条调用路径不得退化。
+2. 同时与第 204 项矩阵交叉检查：本阶段只关闭第 195 项已授权的 Cell / point / path / range 受控写缺口，不得顺带实现未获授权的领域复合事务或玩法配方。
+3. 只对白名单中的真实差集增加薄适配；已有 `edit.*` 方法直接登记为 execute target，不增加同义重复方法。
+4. 禁止通用 `cells.execute(action, arbitraryPayload)`、任意属性写、裸 command 执行器和远程写入入口。
+5. 每个新增适配必须先有纯 inspector，复用现有 command / transaction，并声明确认、撤销、失败回滚和旧图兼容。
+6. 更新第 200 项全量矩阵：四类 `deferred-owned: 195` 转为 covered；非 Cell 分母、排除理由和既有 `237` 条调用路径不得退化。
 
 阶段 D 最小验收：
 

@@ -4114,6 +4114,11 @@ select:disabled {
   line-height: 28px;
 }
 
+.control-panel-tabs.el-tabs--top > .el-tabs__header .el-tabs__item:nth-child(2),
+.control-panel-tabs.el-tabs--top > .el-tabs__header .el-tabs__item:last-child {
+  padding-inline: 8px;
+}
+
 .control-panel-tabs .el-tabs__item span {
   display: block;
   width: 100%;

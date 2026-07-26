@@ -43,6 +43,7 @@
 - `render-health-monitoring.md`：渲染健康监测说明，记录本地卡顿日志、阈值、查询方式和限制。
 - `cell-diagnostics-and-ai-api-design.md`：权威任务第 195 项经新智能体 `RELEASE` 的实施编排，消费第 200 项能力矩阵，按 Cell 只读、诊断图层、全动作 inspector 与同族创建、受控写缺口四阶段实施。
 - `console-api-full-audit-and-gap-closure-2026-07-25.md`：权威任务第 200 项执行说明与结果，记录全量能力分母、机器矩阵、AI 描述层、对象发现和非 Cell API 缺口关闭。
+- `compound-semantic-api-and-gameplay-rules.md`：权威任务第 204 项规则分层说明，区分事实/原子原语、单事务规则动作和 AI 规划器玩法配方，并为完整玩法文档冻结领域骨架。
 - `object-table-column-width-audit-2026-07-24.md`：权威任务第 197 项对象列表默认列宽审计，以 24 个宿主 / 27 张表为分母，记录语义宽度分档、首都列收敛和一次性偏好迁移边界。
 - `object-notes-implementation-plan.md`：对象备注实现计划。
 - `measurement-rulers-plan.md`：测量对象与路线贴合计划。

@@ -112,6 +112,7 @@ async function inspectCapabilities(page, {cells, seed, template, expectedConfirm
 
     const api = window.webglGeneratorApi;
     const version = unwrap(api.info.version(), "info.version");
+    const initialSummary = unwrap(api.info.mapSummary(), "info.mapSummary.initial");
     const generation = unwrap(await api.generate.newMap({
       confirm: true,
       seed,
@@ -128,6 +129,9 @@ async function inspectCapabilities(page, {cells, seed, template, expectedConfirm
     if (beforeSummary.checksum !== afterSummary.checksum) {
       failures.push(`读取 capabilities 前后 checksum 改变：${beforeSummary.checksum} -> ${afterSummary.checksum}`);
     }
+    if (!beforeSummary.mapIdentity || beforeSummary.mapIdentity === initialSummary.mapIdentity || beforeSummary.mapRevision !== 0) {
+      failures.push("成功换图没有生成新 identity 并从 revision 0 开始");
+    }
     if (!capabilities.methods) failures.push("capabilities 缺少 methods 字段");
     if (!capabilities.methodMetadata) failures.push("capabilities 缺少 methodMetadata 字段");
     if (!capabilities.methodMetadataCoverage) failures.push("capabilities 缺少 methodMetadataCoverage 字段");
@@ -137,8 +141,8 @@ async function inspectCapabilities(page, {cells, seed, template, expectedConfirm
     if (version.capabilitySchemaVersion !== "1.0.0" || version.compatibilityPolicyVersion !== "1.0.0") failures.push("info.version 缺少能力或兼容策略版本");
     if (capabilities.contract?.stableCompatibility !== "same-major") failures.push("capabilities 缺少同主版本兼容策略");
     if (capabilities.contract?.deprecatedRemoval !== "next-major-only") failures.push("capabilities 缺少 deprecated 移除策略");
-    if (Object.keys(capabilities.capabilityGroups || {}).length !== 15) failures.push("capabilities 能力组不是 15 个");
-    if (JSON.stringify(capabilities.stabilitySummary) !== JSON.stringify({stable: 229, experimental: 7, deprecated: 1})) failures.push("稳定等级统计不是 229 / 7 / 1");
+    if (Object.keys(capabilities.capabilityGroups || {}).length !== 16) failures.push("capabilities 能力组不是 16 个");
+    if (JSON.stringify(capabilities.stabilitySummary) !== JSON.stringify({stable: 233, experimental: 7, deprecated: 1})) failures.push("稳定等级统计不是 233 / 7 / 1");
     if (!Object.prototype.hasOwnProperty.call(runtimeStats, "lastEditRefresh")) failures.push("runtimeStats 缺少 lastEditRefresh 字段");
     const coverage = capabilities.methodMetadataCoverage || {};
     if (coverage.complete !== true) failures.push("methodMetadataCoverage.complete 不是 true");
@@ -199,6 +203,8 @@ async function inspectCapabilities(page, {cells, seed, template, expectedConfirm
         failures.push(`${qualifiedName} mutates 变为 ${metadata.mutates}，期望 ${expectedMutates}`);
       }
     }
+    const cellRead = inspectCellReadApi();
+    failures.push(...cellRead.failures);
     if (glError !== 0) failures.push(`WebGL error 非 0：${glError}`);
 
     return {
@@ -212,6 +218,9 @@ async function inspectCapabilities(page, {cells, seed, template, expectedConfirm
         aliases: (capabilities.compatibility?.aliases || []).map(({alias, target, status}) => ({alias, target, status}))
       },
       map: {
+        initialMapIdentity: initialSummary.mapIdentity,
+        mapIdentity: beforeSummary.mapIdentity,
+        mapRevision: beforeSummary.mapRevision,
         checksum: beforeSummary.checksum,
         gridCells: beforeSummary.gridCells,
         packCells: beforeSummary.packCells,
@@ -249,6 +258,7 @@ async function inspectCapabilities(page, {cells, seed, template, expectedConfirm
         hasLastEditRefresh: Object.prototype.hasOwnProperty.call(runtimeStats, "lastEditRefresh"),
         lastEditRefresh: runtimeStats.lastEditRefresh
       },
+      cellRead,
       glError,
       failures,
       passed: failures.length === 0
@@ -273,6 +283,151 @@ async function inspectCapabilities(page, {cells, seed, template, expectedConfirm
       const extra = actual.filter(item => !expectedSet.has(item));
       if (missing.length) output.push(`${label} 缺少：${missing.join(", ")}`);
       if (extra.length) output.push(`${label} 多出：${extra.join(", ")}`);
+    }
+
+    function inspectCellReadApi() {
+      const cellFailures = [];
+      const before = captureReadonlyState();
+      const queryCall = api.cells.query({
+        space: "grid",
+        filter: {land: true},
+        fields: ["id", "height", "featureId", "stateId", "consistency"],
+        limit: 1
+      });
+      const query = unwrap(queryCall, "cells.query");
+      const gridRef = {space: "grid", id: query.items[0]?.id};
+      const grid = unwrap(api.cells.get(gridRef, {
+        includeGeometry: true,
+        includeNeighbors: true,
+        includeDiagnostics: true
+      }), "cells.get.grid");
+      const packRef = {space: "pack", id: grid.mapping.primaryPackCell};
+      const pack = unwrap(api.cells.get(packRef, {includeDiagnostics: true}), "cells.get.pack");
+      const neighbors = unwrap(api.cells.neighbors(gridRef, {depth: 2, limit: 64}), "cells.neighbors");
+      const world = unwrap(api.cells.getAtPoint({
+        coordinateSpace: "world",
+        x: grid.center.x,
+        y: grid.center.y
+      }), "cells.getAtPoint.world");
+      const renderer = window.__webglGeneratorApp?.renderer;
+      const canvas = document.getElementById("map-canvas");
+      const rect = canvas?.getBoundingClientRect();
+      const local = renderer?.worldToScreen?.(grid.center.x, grid.center.y, rect);
+      const client = unwrap(api.cells.getAtPoint({
+        coordinateSpace: "client",
+        x: Number(rect?.left || 0) + Number(local?.x || 0),
+        y: Number(rect?.top || 0) + Number(local?.y || 0)
+      }), "cells.getAtPoint.client");
+      const after = captureReadonlyState();
+      const tamperedCursor = query.nextCursor ? `${query.nextCursor.slice(0, -1)}x` : "";
+      const tampered = api.cells.query({
+        space: "grid",
+        filter: {land: true},
+        fields: ["id", "height", "featureId", "stateId", "consistency"],
+        limit: 1,
+        cursor: tamperedCursor
+      });
+      const crossFilter = api.cells.query({
+        space: "grid",
+        filter: {land: false},
+        fields: ["id", "height", "featureId", "stateId", "consistency"],
+        limit: 1,
+        cursor: query.nextCursor
+      });
+      const descriptions = ["cells.get", "cells.getAtPoint", "cells.neighbors", "cells.query"]
+        .map(method => unwrap(api.info.describe(method), `info.describe.${method}`));
+
+      if (!query.items.length || !query.nextCursor) cellFailures.push("cells.query 没有返回可分页陆地结果");
+      if (queryCall.metadata?.action !== "cells.query" || queryCall.metadata?.readonly !== true || !queryCall.metadata?.mapIdentity || queryCall.metadata?.mapRevision !== before.mapRevision) {
+        cellFailures.push("Cells 只读包络 metadata 缺少 action / readonly / identity / revision");
+      }
+      if (grid.ref?.space !== "grid" || grid.ref?.id !== gridRef.id) cellFailures.push("cells.get Grid 引用失真");
+      if (!Array.isArray(grid.geometry?.vertices) || grid.geometry.vertices.length < 3) cellFailures.push("cells.get 显式 geometry 缺失");
+      if (!Number.isInteger(packRef.id) || pack.mapping?.gridCell !== gridRef.id) cellFailures.push("Grid / Pack 映射没有往返");
+      if (world.found !== true || world.cell?.ref?.id !== gridRef.id) cellFailures.push("世界点没有命中同一 Grid cell");
+      if (client.found !== true || client.cell?.ref?.id !== gridRef.id) cellFailures.push("client 点没有命中同一 Grid cell");
+      if (!neighbors.returned || neighbors.returned > 64) cellFailures.push("邻接查询没有遵守非空与 limit");
+      if (JSON.stringify(before) !== JSON.stringify(after)) cellFailures.push("Cells 只读调用改变了 checksum、revision、历史、选择、相机或 pick");
+      if (tampered.ok !== false || tampered.error?.code !== "cursor-invalid") cellFailures.push("篡改 Cell cursor 没有稳定拒绝");
+      if (crossFilter.ok !== false || crossFilter.error?.code !== "cursor-stale") cellFailures.push("跨 filter Cell cursor 没有失效");
+      if (descriptions.some(description => description.metadata?.capabilityGroup !== "cells.read")) cellFailures.push("Cells 方法没有进入 cells.read 能力组");
+      if (descriptions.some(description => description.jsonSerializable !== true)) cellFailures.push("Cells 方法没有声明 JSON 可序列化");
+      if (descriptions.some(description => !description.resultSchema?.properties?.metadata?.required?.includes("mapRevision"))) {
+        cellFailures.push("Cells 自描述结果 schema 没有公开 revision metadata");
+      }
+
+      const statePage = unwrap(api.objects.list("state", {limit: 1, fields: ["id", "name"]}), "objects.list.state");
+      const state = statePage.items[0];
+      const beforeWriteRevision = unwrap(api.info.mapSummary(), "info.mapSummary.beforeWrite");
+      const rename = unwrap(api.edit.states.rename(state.id, `${state.name}·Cell验收`), "edit.states.rename.cellRevision");
+      const afterWriteRevision = unwrap(api.info.mapSummary(), "info.mapSummary.afterWrite");
+      const staleAfterWrite = api.cells.query({
+        space: "grid",
+        filter: {land: true},
+        fields: ["id", "height", "featureId", "stateId", "consistency"],
+        limit: 1,
+        cursor: query.nextCursor
+      });
+      const undo = unwrap(api.history.undo(), "history.undo.cellRevision");
+      const afterUndoRevision = unwrap(api.info.mapSummary(), "info.mapSummary.afterUndo");
+      const noopPage = unwrap(api.cells.query({
+        space: "grid",
+        filter: {land: true},
+        fields: ["id"],
+        limit: 1
+      }), "cells.query.noopCursor");
+      const beforeNoopRevision = unwrap(api.info.mapSummary(), "info.mapSummary.beforeNoop");
+      const noopRename = unwrap(api.edit.states.rename(state.id, state.name), "edit.states.rename.noop");
+      const afterNoopRevision = unwrap(api.info.mapSummary(), "info.mapSummary.afterNoop");
+      const cursorAfterNoop = api.cells.query({
+        space: "grid",
+        filter: {land: true},
+        fields: ["id"],
+        limit: 1,
+        cursor: noopPage.nextCursor
+      });
+
+      if (rename.executed !== true || afterWriteRevision.mapRevision !== beforeWriteRevision.mapRevision + 1) cellFailures.push("既有成功 map write 没有令 revision 恰好 +1");
+      if (staleAfterWrite.ok !== false || staleAfterWrite.error?.code !== "cursor-stale") cellFailures.push("既有 map write 后旧 Cell cursor 没有失效");
+      if (undo.executed !== true || afterUndoRevision.mapRevision !== afterWriteRevision.mapRevision + 1) cellFailures.push("undo 没有令 revision 恰好 +1");
+      if (noopRename.executed !== false || afterNoopRevision.mapRevision !== beforeNoopRevision.mapRevision) cellFailures.push("no-op 错误改变了 revision");
+      if (cursorAfterNoop.ok !== true) cellFailures.push("no-op 错误使 Cell cursor 失效");
+
+      return {
+        gridRef,
+        packRef,
+        worldRef: world.cell?.ref || null,
+        clientRef: client.cell?.ref || null,
+        neighbors: neighbors.returned,
+        cursorTamperCode: tampered.error?.code || "",
+        cursorCrossFilterCode: crossFilter.error?.code || "",
+        revision: {
+          before: beforeWriteRevision.mapRevision,
+          afterWrite: afterWriteRevision.mapRevision,
+          afterUndo: afterUndoRevision.mapRevision,
+          afterNoop: afterNoopRevision.mapRevision
+        },
+        readonlyStateStable: JSON.stringify(before) === JSON.stringify(after),
+        descriptions: descriptions.length,
+        failures: cellFailures,
+        passed: cellFailures.length === 0
+      };
+
+      function captureReadonlyState() {
+        const summary = unwrap(api.info.mapSummary(), "info.mapSummary.cellsReadonly");
+        const history = unwrap(api.history.get(), "history.get.cellsReadonly");
+        const selection = unwrap(api.selection.get(), "selection.get.cellsReadonly");
+        const stats = window.__webglGeneratorApp?.renderer?.getStats?.() || {};
+        return {
+          checksum: summary.checksum,
+          mapIdentity: summary.mapIdentity,
+          mapRevision: summary.mapRevision,
+          history,
+          selection,
+          camera: stats.camera || null,
+          pick: window.__webglGeneratorApp?.pick || null
+        };
+      }
     }
   }, {cells, seed, template, expectedConfirmRequired});
 }

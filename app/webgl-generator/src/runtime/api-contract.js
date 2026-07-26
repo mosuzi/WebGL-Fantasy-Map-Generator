@@ -6,6 +6,7 @@ export const API_COMPATIBILITY_POLICY_VERSION = "1.0.0";
 export const API_METHODS = Object.freeze({
   info: Object.freeze(["version", "capabilities", "describe", "mapSummary", "runtimeStats", "healthEvents"]),
   objects: Object.freeze(["types", "get", "list", "query"]),
+  cells: Object.freeze(["get", "getAtPoint", "neighbors", "query"]),
   generate: Object.freeze(["getOptions", "setOptions", "newMap", "rerollSeed", "regenerate"]),
   oceanCurrents: Object.freeze(["rename", "regenerate", "inspectWorldRebuild", "rebuildWorld", "cancelWorldRebuild"]),
   selection: Object.freeze(["get", "resolve", "select", "clear", "locate", "pick", "flash", "highlight", "clearHighlights", "startEditing", "stopEditing", "toggleEditing"]),
@@ -77,6 +78,7 @@ const STABILITY_LEVELS = Object.freeze({
 const CAPABILITY_GROUPS = Object.freeze({
   "runtime.read": {title: "运行时只读", access: "read"},
   "objects.read": {title: "地图对象发现", access: "read"},
+  "cells.read": {title: "地图单元只读", access: "read"},
   "map.generate": {title: "地图生成", access: "write"},
   "ocean-currents.control": {title: "洋流", access: "write"},
   "selection.control": {title: "选择与定位", access: "control"},
@@ -211,6 +213,7 @@ function validateRawMetadata(methods, rawMetadata) {
 function resolveCapabilityGroup(namespace, method) {
   if (namespace === "info") return "runtime.read";
   if (namespace === "objects") return "objects.read";
+  if (namespace === "cells") return "cells.read";
   if (namespace === "generate") return "map.generate";
   if (namespace === "oceanCurrents") return "ocean-currents.control";
   if (namespace === "selection") return "selection.control";

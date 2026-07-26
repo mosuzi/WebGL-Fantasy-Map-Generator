@@ -71,6 +71,85 @@ const METHOD_OVERRIDES = Object.freeze({
     result: pageSchema(),
     examples: [[{type: "city", text: "港"}, {limit: 20}]]
   },
+  "cells.get": {
+    arguments: [
+      argument("reference", cellRefSchema()),
+      argument("options", cellGetOptionsSchema(), false)
+    ],
+    result: cellSnapshotSchema(),
+    examples: [[{space: "grid", id: 0}, {includeNeighbors: true, includeDiagnostics: true}]],
+    referenceSpaces: ["gridCell", "packCell"],
+    businessCodes: ["ok", "invalid_argument", "not_found"],
+    responseMetadata: cellReadonlyMetadataSchema()
+  },
+  "cells.getAtPoint": {
+    arguments: [
+      argument("point", pointSchema()),
+      argument("options", {
+        ...cellGetOptionsSchema(),
+        properties: {
+          space: {enum: ["grid", "pack"], default: "grid"},
+          ...cellGetOptionsSchema().properties
+        }
+      }, false)
+    ],
+    result: {
+      type: "object",
+      required: ["found", "code", "point"],
+      properties: {
+        found: {type: "boolean"},
+        code: {enum: ["cell-found", "cell-not-found", "pack-cell-not-found"]},
+        point: objectSchema(["coordinateSpace", "x", "y", "worldX", "worldY"]),
+        cell: cellSnapshotSchema()
+      }
+    },
+    examples: [[{coordinateSpace: "world", x: 100, y: 100}, {space: "grid"}]],
+    referenceSpaces: ["clientPoint", "worldPoint", "gridCell", "packCell"],
+    businessCodes: ["ok", "cell-found", "cell-not-found", "pack-cell-not-found", "invalid_argument", "not_found"],
+    responseMetadata: cellReadonlyMetadataSchema()
+  },
+  "cells.neighbors": {
+    arguments: [
+      argument("reference", cellRefSchema()),
+      argument("options", {
+        type: "object",
+        properties: {
+          depth: {type: "integer", minimum: 1, maximum: 3, default: 1},
+          limit: {type: "integer", minimum: 1, maximum: 1000, default: 128}
+        },
+        additionalProperties: false
+      }, false)
+    ],
+    result: objectSchema(["ref", "requestedDepth", "returned", "truncated", "levels"]),
+    examples: [[{space: "grid", id: 0}, {depth: 2, limit: 128}]],
+    referenceSpaces: ["gridCell", "packCell"],
+    businessCodes: ["ok", "invalid_argument", "not_found"],
+    responseMetadata: cellReadonlyMetadataSchema()
+  },
+  "cells.query": {
+    arguments: [argument("query", cellQuerySchema(), false)],
+    result: {
+      type: "object",
+      required: ["items", "count", "total", "limit", "nextCursor"],
+      properties: {
+        items: arraySchema({type: "object"}),
+        count: {type: "integer"},
+        total: {type: "integer"},
+        limit: {type: "integer"},
+        nextCursor: {type: ["string", "null"]}
+      }
+    },
+    examples: [[{
+      space: "grid",
+      filter: {land: true},
+      fields: ["id", "height", "featureId", "stateId"],
+      limit: 100
+    }]],
+    pagination: {supported: true, cursor: "opaque-signed-cellq1", defaultLimit: 100, maxLimit: 1000},
+    referenceSpaces: ["gridCell", "packCell"],
+    businessCodes: ["ok", "invalid_argument", "cursor-invalid", "cursor-stale"],
+    responseMetadata: cellReadonlyMetadataSchema()
+  },
   "oceanCurrents.rename": {
     arguments: [argument("currentId", stringSchema("洋流 ID")), argument("name", stringSchema("新名称"))],
     result: objectSchema(["executed", "id", "name"]),
@@ -187,7 +266,7 @@ export function buildApiMethodDescriptionRegistry(methods, methodMetadata, runti
         method,
         schemaVersion: API_METHOD_SCHEMA_VERSION,
         inputSchema: inputSchema(argumentsList),
-        resultSchema: responseSchema(override.result || inferResultSchema(method)),
+        resultSchema: responseSchema(override.result || inferResultSchema(method), override.responseMetadata),
         enumValues: cloneJson(override.enumValues || inferEnumValues(method)),
         referenceSpaces: cloneJson(override.referenceSpaces || inferReferenceSpaces(method)),
         businessCodes: cloneJson(override.businessCodes || inferBusinessCodes(metadata)),
@@ -471,7 +550,17 @@ function inputSchema(argumentsList) {
   };
 }
 
-function responseSchema(dataSchema) {
+function responseSchema(dataSchema, metadataSchema = null) {
+  const metadata = metadataSchema
+    ? {
+        ...metadataSchema,
+        required: [...new Set([...(metadataSchema.required || []), "at"])],
+        properties: {
+          ...(metadataSchema.properties || {}),
+          at: {type: "string", format: "date-time"}
+        }
+      }
+    : {type: "object", properties: {at: {type: "string", format: "date-time"}}};
   return {
     type: "object",
     required: ["ok", "metadata"],
@@ -482,13 +571,126 @@ function responseSchema(dataSchema) {
         type: "object",
         properties: {code: {type: "string"}, name: {type: "string"}, message: {type: "string"}}
       },
-      metadata: {type: "object", properties: {at: {type: "string", format: "date-time"}}}
+      metadata
     }
   };
 }
 
 function objectSchema(required = []) {
   return {type: "object", required, additionalProperties: true};
+}
+
+function cellRefSchema() {
+  return {
+    type: "object",
+    required: ["space", "id"],
+    properties: {
+      space: {enum: ["grid", "pack"]},
+      id: {type: "integer", minimum: 0}
+    },
+    additionalProperties: false
+  };
+}
+
+function pointSchema() {
+  return {
+    type: "object",
+    required: ["coordinateSpace", "x", "y"],
+    properties: {
+      coordinateSpace: {enum: ["client", "world"]},
+      x: {type: "number"},
+      y: {type: "number"}
+    },
+    additionalProperties: false
+  };
+}
+
+function cellGetOptionsSchema() {
+  return {
+    type: "object",
+    properties: {
+      includeGeometry: {type: "boolean", default: false},
+      includeNeighbors: {type: "boolean", default: true},
+      includeDiagnostics: {type: "boolean", default: false}
+    },
+    additionalProperties: false
+  };
+}
+
+function cellSnapshotSchema() {
+  const required = ["ref", "center", "geometry", "terrain", "mapping", "ownership", "climate", "occupants", "neighbors", "diagnostics"];
+  return {
+    type: "object",
+    required,
+    properties: {
+      ref: cellRefSchema(),
+      center: objectSchema(["x", "y"]),
+      geometry: objectSchema(["vertexCount", "vertices"]),
+      terrain: objectSchema(["height", "heightLand", "featureId", "featureType", "featureLand", "consistency"]),
+      mapping: {type: "object"},
+      ownership: objectSchema(["stateId", "provinceId", "cultureId", "religionId"]),
+      climate: objectSchema(["biomeId", "temperature", "precipitation"]),
+      occupants: objectSchema(["burgIds", "cityIds", "capitalStateIds"]),
+      neighbors: {type: ["array", "null"]},
+      diagnostics: arraySchema(objectSchema(["code", "message"]))
+    }
+  };
+}
+
+function cellReadonlyMetadataSchema() {
+  return {
+    type: "object",
+    required: ["action", "readonly", "mapIdentity", "mapRevision"],
+    properties: {
+      action: {type: "string"},
+      readonly: {const: true},
+      mapIdentity: {type: ["string", "null"]},
+      mapRevision: {type: "integer", minimum: 0}
+    }
+  };
+}
+
+function cellQuerySchema() {
+  return {
+    type: "object",
+    properties: {
+      space: {enum: ["grid", "pack"], default: "grid"},
+      filter: {
+        type: "object",
+        properties: {
+          land: {type: "boolean"},
+          stateId: {type: "integer", minimum: 0},
+          provinceId: {type: "integer", minimum: 0},
+          cultureId: {type: "integer", minimum: 0},
+          religionId: {type: "integer", minimum: 0},
+          featureId: {type: "integer", minimum: 0},
+          biomeId: {type: "integer", minimum: 0},
+          consistency: {
+            anyOf: [
+              {type: "string"},
+              {type: "array", minItems: 1, uniqueItems: true, items: {type: "string"}}
+            ]
+          }
+        },
+        additionalProperties: false
+      },
+      fields: {
+        type: "array",
+        minItems: 1,
+        uniqueItems: true,
+        items: {
+          enum: [
+            "id", "space", "x", "y", "height", "land", "featureId", "featureType", "featureLand",
+            "stateId", "provinceId", "cultureId", "religionId", "biomeId", "temperature", "precipitation",
+            "population", "burgId", "gridCellId", "packCellId", "consistency"
+          ]
+        }
+      },
+      limit: {type: "integer", minimum: 1, maximum: 1000, default: 100},
+      cursor: {type: ["string", "null"]}
+    },
+    additionalProperties: false
+  };
 }
 
 function labelTargetSchema() {

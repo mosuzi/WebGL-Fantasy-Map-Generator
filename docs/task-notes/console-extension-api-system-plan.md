@@ -4,6 +4,8 @@
 
 > 设计扩展（2026-07-24）：Cells 诊断图层、`api.cells`、动作只读预检、稳定业务 code、revision 与未来 AI 受控传输方案见 `cell-diagnostics-and-ai-api-design.md`。该文档对应权威任务第 195 项且目前只完成设计，未授权实现。
 
+> 规则语义校准（2026-07-26）：权威任务第 204 项证明“方法可调用”仍不等于“AI 理解游戏规则”。后续 API 固定为事实/原子原语、单事务规则动作、AI 规划器配方三层；完整矩阵见 `../audits/compound-semantic-action-matrix.md`，规则说明见 `compound-semantic-api-and-gameplay-rules.md`。
+
 本文档记录“把不依赖 UI 的操作收束为统一 API 系统”的详细方案。目标是让运行时能力可以通过浏览器控制台、自动化脚本、未来 AI 助手或扩展插件稳定调用，而不是只能从 Vue 面板和 DOM 事件进入。
 
 ## 背景
@@ -40,6 +42,14 @@ API 目标：
 3. 为 AI / 插件预留一个可枚举、可校验、可测试的能力表。
 4. 通过 API 梳理副作用边界：哪些会写地图、哪些只读、哪些进入撤销栈、哪些触发派生重建、哪些只刷新渲染。
 5. 保持 UI 面板可继续使用，但逐步改为调用 API 或与 API 共用同一 command 层，避免重复业务逻辑。
+
+## AI 友好能力的三层边界
+
+- `info / objects / cells`、单字段编辑、图层与选择等属于事实或原子原语。
+- 一个玩家意图若需要跨对象、条件分支、业务拒绝或原子回滚，必须形成领域规则事务，并提供 `inspect + execute + stable code + revision/token`。
+- 殖民、战争、行政改革、人口迁徙等多事务目标属于 AI 规划器配方；每一步独立预检和授权，不实现为绕过规则的超级写接口。
+
+`cells.inspectAction` 只解释空间输入和画布原子动作，不负责国家灭亡、战争结算、整省转移等领域规则。领域规则应使用例如 `edit.states.inspectTerritoryTransfer / transferTerritory` 的规范入口，并复用 Cell 事实层作为输入。
 
 ## 非目标
 
