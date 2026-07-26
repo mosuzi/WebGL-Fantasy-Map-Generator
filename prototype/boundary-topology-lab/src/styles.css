@@ -158,6 +158,11 @@ h2 { font-size: 16px; }
 .pixel-parity-missing { fill: none; stroke: #e9f4f7; stroke-width: 1.1; filter: drop-shadow(0 0 2px rgba(255, 48, 43, .82)); }
 .pixel-parity-water-correction { fill: #5f91c2; stroke: #76e6a5; stroke-width: .8; }
 .pixel-parity-boundary-cover { fill: none; stroke: #5f91c2; stroke-width: 3.2; }
+.pixel-parity-correction-triangle { fill: rgba(255, 105, 99, .28); stroke: #ff6963; stroke-width: .7; }
+.pixel-parity-source-edge { fill: none; stroke: #d7a344; stroke-width: 1; stroke-dasharray: 3 2; }
+.pixel-parity-base-curve { fill: none; stroke-width: 1.4; vector-effect: non-scaling-stroke; }
+.pixel-parity-base-curve.fail { stroke: #e9f4f7; filter: drop-shadow(0 0 2px rgba(255, 48, 43, .82)); }
+.pixel-parity-base-curve.pass { stroke: #76e6a5; }
 .pixel-parity-coastline { fill: none; stroke: rgba(178, 194, 199, .58); stroke-linecap: round; vector-effect: non-scaling-stroke; }
 .pixel-parity-title, .pixel-parity-status { fill: #f5e8ba; stroke: #10243b; stroke-width: 2px; paint-order: stroke; font: 700 7px ui-monospace, monospace; }
 .pixel-parity-status.fail { fill: #ff6963; }

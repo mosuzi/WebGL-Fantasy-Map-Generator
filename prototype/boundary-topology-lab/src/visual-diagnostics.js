@@ -26,9 +26,9 @@ export function resolveComparisonPresentation(sharedArcCount, comparisonKind = f
       kind: "pixel-parity",
       firstMode: "legacy-pixel-seams",
       secondMode: "exact-pixel-parity",
-      firstTitle: "正式旧策略：长针 + 浅色带",
-      firstNote: "stage-2-1 / 10k 的 #6496/#6617 与 #6377/#6378",
-      secondTitle: "正式新策略：边缘覆盖 + 细描边"
+      firstTitle: "旧策略：弯曲底面 + 直岸补面",
+      firstNote: "两套基线叠加后，近共线补面被显成像素长针",
+      secondTitle: "最终策略：水陆边直岸同源"
     });
   }
   if (comparisonKind === "vertex-collapse") {
@@ -169,6 +169,11 @@ export function mergeVisualDiagnostics(result) {
   }
   const pixelParity = result.metrics.pixelParityGeometry;
   if (pixelParity) {
+    diagnostics.push({
+      id: "pixel-parity:base-xor-drift",
+      source: pixelParity.finalBaseDriftCases ? "acceptance" : "surface-pass",
+      message: `两组近共线补面在旧弯曲底面上最大漂移 ${pixelParity.maximumLegacyBaseDriftCss.toFixed(2)}px；水陆边改为直岸同源后残余基线漂移 ${pixelParity.finalBaseDriftCases} 组`
+    });
     diagnostics.push({
       id: "pixel-parity:lake-needle",
       source: "surface",

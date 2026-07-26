@@ -562,6 +562,43 @@ function runPureRegression() {
   const displacedRender = transformRecommendedShoreArc(displacedSource, {threshold: 0, smoothness: 0.04, maxDisplacement: 0.5});
   assert.ok(maxShoreDisplacement(displacedRender, displacedSource) <= 0.500001, "最大位移门禁失效");
 
+  const acuteTrianglePath = {
+    points: [[0, 0], [60, 75], [76, 0], [0, 0]],
+    sideVectors: Array.from({length: 4}, () => ({x: 0, y: 1})),
+    landCells: new Array(4).fill(1),
+    waterCells: new Array(4).fill(2)
+  };
+  const acuteTriangleSnapshot = buildShoreArcSnapshot(
+    acuteTrianglePath,
+    {towns: [[20, 24]], roads: [[[20, 24], [0, 18], [-12, 18]]], rivers: []},
+    {isSideSampleSafe: () => false}
+  );
+  assert.equal(acuteTriangleSnapshot.fallbackReason, null, "三顶点孤岛不得因固定平滑强度或旧水陆带预检整环回退");
+  assert.notDeepEqual(acuteTriangleSnapshot.path.renderPoints, acuteTrianglePath.points, "三顶点孤岛必须产生可见平滑结果");
+  assert.ok(acuteTriangleSnapshot.path.renderPoints.length > acuteTrianglePath.points.length, "三顶点孤岛必须增加圆角采样点");
+  assert.deepEqual(acuteTriangleSnapshot.path.renderPoints[0], acuteTriangleSnapshot.path.renderPoints.at(-1), "三顶点孤岛平滑后必须保持闭合");
+  assert.ok(
+    maxShoreDisplacement(acuteTriangleSnapshot.path.renderPoints, acuteTrianglePath.points) <= SHORE_TOPOLOGY_ALGORITHM.maxDisplacement + 0.000001,
+    "三顶点孤岛自适应平滑不得越过最大位移门禁"
+  );
+  const microEdgeTrianglePath = {
+    points: [[0, 0], [-1, 0], [2, 14], [11, 11], [12, 7], [0, 0]],
+    sideVectors: Array.from({length: 6}, () => ({x: 0, y: 1})),
+    landCells: new Array(6).fill(1),
+    waterCells: new Array(6).fill(2)
+  };
+  const microEdgeTriangleSnapshot = buildShoreArcSnapshot(
+    microEdgeTrianglePath,
+    {towns: [[0, 2]], roads: [[[-5, -2], [0, 2], [15, 2]]], rivers: []},
+    {isSideSampleSafe: () => false}
+  );
+  assert.equal(microEdgeTriangleSnapshot.fallbackReason, null, "夹有微短边的视觉三角岛不得被整环回退");
+  assert.ok(microEdgeTriangleSnapshot.path.renderPoints.length > microEdgeTrianglePath.points.length, "视觉三角岛必须先消除微短边再形成完整圆角");
+  assert.ok(
+    microEdgeTriangleSnapshot.path.renderPoints.every((point, index, points) => index === 0 || point[0] !== points[index - 1][0] || point[1] !== points[index - 1][1]),
+    "视觉三角岛平滑结果不得保留连续重复点"
+  );
+
   const removedPeakPath = {
     points: [[0, 0], [0.1, 24], [0.2, 0]],
     sideVectors: [{x: 0, y: 1}, {x: 0, y: 1}, {x: 0, y: 1}],
@@ -815,6 +852,9 @@ function runPureRegression() {
       "open-anchor-lock",
       "closed-anchor-lock",
       "bidirectional-max-displacement",
+      "closed-triangle-adaptive-smoothing",
+      "closed-triangle-retired-side-preflight",
+      "effective-triangle-micro-edge-simplification",
       "removed-peak-fallback",
       "invalid-fallback",
       "degenerate-fallback",
@@ -1055,6 +1095,36 @@ function runFormalMapRegression() {
         assert.ok(Math.abs(first - second) === 1 || Math.abs(first - second) === vertexIds.length - 1, `正式 cell #${cellId} 的固定坍缩顶点不再连续`);
       }
       const cellVisualMesh = buildCellVisualMesh(cellVisualMap);
+      const formalShoreEdgeKeys = new Set();
+      for (const cell of cellVisualMap.grid.cells.i) {
+        const land = Number(cellVisualMap.grid.cells.h[cell]) >= 20;
+        for (const neighbor of cellVisualMap.grid.cells.c[cell] || []) {
+          if (neighbor <= cell || land === (Number(cellVisualMap.grid.cells.h[neighbor]) >= 20)) continue;
+          const neighborVertices = new Set(cellVisualMap.grid.cells.v[neighbor] || []);
+          const shared = (cellVisualMap.grid.cells.v[cell] || []).filter(vertex => neighborVertices.has(vertex));
+          if (shared.length < 2) continue;
+          formalShoreEdgeKeys.add(`${Math.min(shared[0], shared[1])}:${Math.max(shared[0], shared[1])}`);
+        }
+      }
+      const resolvedFormalVertices = resolvedGridVertexPoints(cellVisualMap.grid);
+      for (const key of formalShoreEdgeKeys) {
+        const [first, second] = key.split(":").map(Number);
+        const firstPoint = resolvedFormalVertices[first];
+        const secondPoint = resolvedFormalVertices[second];
+        const expectedCurve = Math.hypot(secondPoint[0] - firstPoint[0], secondPoint[1] - firstPoint[1]) <= 0.001
+          ? [firstPoint]
+          : [firstPoint, secondPoint];
+        assert.deepEqual(
+          cellVisualMesh.edgeCurves.get(key),
+          expectedCurve,
+          `水陆边 ${key} 的实际 cell 底面必须保持 XOR 原始直岸`
+        );
+      }
+      assert.equal(cellVisualMesh.shoreEdgeCount, formalShoreEdgeKeys.size, "视觉 cell mesh 必须完整识别全部水陆边");
+      assert.ok(
+        [...cellVisualMesh.edgeCurves.entries()].some(([key, curve]) => !formalShoreEdgeKeys.has(key) && curve.length > 2),
+        "同侧 cell 共享边仍必须保留视觉曲线，不能把整张底面退回硬多边形"
+      );
       const legacyCellFanLeaks = cellVisualMesh.cells.reduce((sum, cell) => sum + countCellVisualFanLeaks(cell.center, cell.points), 0);
       const finalCellTriangulationLeaks = cellVisualMesh.cells.reduce((sum, cell) => sum + countCellVisualTriangulationLeaks(cell.points), 0);
       const pinnedLegacyLeaks = [1061, 8832].map(cellId => {
@@ -1067,12 +1137,13 @@ function runFormalMapRegression() {
           finalRasterLeakSamples: countCellVisualRasterLeakSamples(null, cell.points, triangulateCellVisualBoundary(cell.points))
         };
       });
-      assert.equal(legacyCellFanLeaks, 11, "stage-2-1 / 10k 正式视觉 cell 必须稳定复现 11 个旧中心扇形越界三角");
+      assert.equal(legacyCellFanLeaks, 8, "水陆边改为直岸同源后，stage-2-1 / 10k 旧中心扇形越界基线必须收敛到 8 个");
       assert.deepEqual(pinnedLegacyLeaks.map(({cell, leaks, height}) => ({cell, leaks, height})), [
         {cell: 1061, leaks: 2, height: 19},
-        {cell: 8832, leaks: 3, height: 20}
-      ], "实验室固定的两个正式海岸 cell 必须与生成器逐点同源");
-      assert.ok(pinnedLegacyLeaks.every(item => item.legacyRasterLeakSamples > 0), "两个正式反例都必须在像素采样中暴露异侧填色");
+        {cell: 8832, leaks: 0, height: 20}
+      ], "水陆边直岸基线必须保留 #1061 的旧扇形反例，并提前消除 #8832 的岸线基线漂移");
+      assert.ok(pinnedLegacyLeaks[0].legacyRasterLeakSamples > 0, "#1061 必须继续覆盖旧中心扇形的像素异侧反例");
+      assert.equal(pinnedLegacyLeaks[1].legacyRasterLeakSamples, 0, "#8832 必须由水陆边直岸同源提前消除旧像素异侧填色");
       assert.ok(pinnedLegacyLeaks.every(item => item.finalRasterLeakSamples === 0), "Earcut 后两个正式反例的像素级异侧填色必须归零");
       assert.equal(finalCellTriangulationLeaks, 0, "Earcut 视觉 cell 三角面重心不得落到自身边界外");
       assert.equal(cellVisualMesh.triangulationFallbackCells, 0, "正式 10k 视觉 cell 不得回退旧中心扇形");
@@ -1152,6 +1223,7 @@ function runFormalMapRegression() {
         surfaceNeedleCullTriangleCount,
         cellVisualTriangulation: {
           mode: cellVisualMesh.triangulationMode,
+          shoreEdgeCount: cellVisualMesh.shoreEdgeCount,
           legacyFanLeaks: legacyCellFanLeaks,
           finalLeaks: finalCellTriangulationLeaks,
           fallbackCells: cellVisualMesh.triangulationFallbackCells,

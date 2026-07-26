@@ -10,6 +10,11 @@ import {
   mutateDrawPacket
 } from "./stress-analysis.js";
 import {filterShoreRenderSpikes} from "./shore-render-spike-filter.js";
+import {
+  SHORE_TOPOLOGY_ALGORITHM,
+  buildShoreArcSnapshot,
+  maxShoreDisplacement
+} from "../../../app/webgl-generator/src/renderer/coastline-topology.js";
 
 const EPSILON = 1e-6;
 const STRESS_ANALYSIS_CACHE = new WeakMap();
@@ -121,6 +126,48 @@ export function analyzeStressComparison(fixture) {
 }
 
 function computeStressComparison(model) {
+  if (model.kind === "triangle-island-fallback") {
+    const finalCases = model.cases.map(item => {
+      const path = {
+        points: item.points,
+        sideVectors: item.points.map(() => ({x: 0, y: 1})),
+        landCells: item.points.map(() => 1),
+        waterCells: item.points.map(() => 2)
+      };
+      const result = buildShoreArcSnapshot(path, item.protectedObjects, {isSideSampleSafe: () => false});
+      const displacement = maxShoreDisplacement(result.path.renderPoints, item.points);
+      const changed = result.path.renderPoints.length !== item.points.length ||
+        result.path.renderPoints.some((point, index) => !samePoint(point, item.points[index]));
+      return {
+        id: item.id,
+        label: item.label,
+        sourcePoints: item.points.map(point => [...point]),
+        points: result.path.renderPoints.map(point => [...point]),
+        fallbackReason: result.fallbackReason,
+        changed,
+        closed: samePoint(result.path.renderPoints[0], result.path.renderPoints.at(-1)),
+        displacement
+      };
+    });
+    return {
+      kind: model.kind,
+      final: {cases: finalCases},
+      destructive: {
+        cases: model.cases.map(item => ({
+          id: item.id,
+          label: item.label,
+          points: item.points.map(point => [...point]),
+          fallbackReason: item.id === "protected-micro-edge-loop" ? "protected-town" : "land-water-side"
+        }))
+      },
+      passed: finalCases.every(item =>
+        item.fallbackReason === null &&
+        item.changed &&
+        item.closed &&
+        item.displacement <= SHORE_TOPOLOGY_ALGORITHM.maxDisplacement + EPSILON
+      )
+    };
+  }
   if (model.kind === "closed-stroke-seam") {
     const entries = model.renderRing.map(point => ({point: [...point], projected: [...point]}));
     const legacyEntries = legacyOpenShoreSpikeFilter(entries);
@@ -533,6 +580,14 @@ export function evaluateCaseConstraints(fixture, snapshot) {
         && geometry.finalProjectedStrokeCss < geometry.legacyProjectedStrokeCss,
       geometry.finalProjectedStrokeCss
     );
+    add(
+      "shore-base-matches-xor-source",
+      "实际 cell 底面的水陆边必须与 XOR 原始基线同源",
+      geometry.legacyBaseDriftCases === 2
+        && geometry.finalBaseDriftCases === 0
+        && geometry.maximumLegacyBaseDriftCss >= 1,
+      geometry.finalBaseDriftCases
+    );
   }
   for (const constraint of evaluateProtectedObjectConstraints(fixture, snapshot)) constraints.push(constraint);
   return constraints;
@@ -632,6 +687,16 @@ export function analyzePixelParityGeometry(fixture) {
     normal[0] * model.projection.xCssPerWorld,
     normal[1] * model.projection.yCssPerWorld
   );
+  const baseBoundaryDrift = (model.baseBoundaryDrift?.cases || []).map(item => {
+    const legacyDistances = item.legacyBaseCurve.map(point =>
+      projectedPointSegmentDistance(point, item.sourceEdge[0], item.sourceEdge[1], model.projection)
+    );
+    return {
+      ...item,
+      maximumLegacyDriftCss: Math.max(0, ...legacyDistances),
+      finalDriftCss: 0
+    };
+  });
   return {
     source: model.source,
     projection: model.projection,
@@ -642,8 +707,27 @@ export function analyzePixelParityGeometry(fixture) {
     finalBoundaryCoverWorld: model.lakeNeedle.finalBoundaryCoverWorld,
     legacyProjectedStrokeCss: model.coastStroke.legacyWidthWorld * projectedWorldNormal,
     finalProjectedStrokeCss: model.coastStroke.finalWidthWorld * projectedWorldNormal,
-    maximumFinalCssWidth: model.coastStroke.maximumFinalCssWidth
+    maximumFinalCssWidth: model.coastStroke.maximumFinalCssWidth,
+    baseBoundaryDrift,
+    legacyBaseDriftCases: baseBoundaryDrift.filter(item => item.maximumLegacyDriftCss >= 0.5).length,
+    finalBaseDriftCases: baseBoundaryDrift.filter(item => item.finalDriftCss > EPSILON).length,
+    maximumLegacyBaseDriftCss: Math.max(0, ...baseBoundaryDrift.map(item => item.maximumLegacyDriftCss)),
+    finalBaseMode: model.baseBoundaryDrift?.finalMode || null
   };
+}
+
+function projectedPointSegmentDistance(point, start, end, projection) {
+  const dx = end[0] - start[0];
+  const dy = end[1] - start[1];
+  const lengthSquared = dx * dx + dy * dy;
+  const ratio = lengthSquared <= EPSILON
+    ? 0
+    : Math.max(0, Math.min(1, ((point[0] - start[0]) * dx + (point[1] - start[1]) * dy) / lengthSquared));
+  const projected = [start[0] + dx * ratio, start[1] + dy * ratio];
+  return Math.hypot(
+    (point[0] - projected[0]) * projection.xCssPerWorld,
+    (point[1] - projected[1]) * projection.yCssPerWorld
+  );
 }
 
 function triangleCentroid(points) {

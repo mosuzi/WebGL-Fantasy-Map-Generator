@@ -16,6 +16,7 @@ export function buildCellVisualMesh(map) {
   const context = createRenderContext(map);
   const cells = [];
   const edgeCurves = new Map();
+  const shoreEdges = collectShoreCellVisualEdges(map);
   let boundaryPoints = 0;
   let skippedCells = 0;
   let triangleCount = 0;
@@ -28,7 +29,7 @@ export function buildCellVisualMesh(map) {
   const triangulationFailures = [];
 
   for (const cell of map?.grid?.cells?.i || []) {
-    const points = buildCellVisualBoundary(map, cell, edgeCurves);
+    const points = buildCellVisualBoundary(map, cell, edgeCurves, shoreEdges);
     if (points.length < 3) {
       skippedCells++;
       continue;
@@ -102,6 +103,7 @@ export function buildCellVisualMesh(map) {
     triangulationUnfilledCells,
     triangulationFailures,
     edgeCurveCount: edgeCurves.size,
+    shoreEdgeCount: shoreEdges.size,
     style: CELL_VISUAL_STYLE,
     buildMs: roundMs(performance.now() - startedAt)
   };
@@ -124,6 +126,7 @@ export function emptyCellVisualMesh() {
     triangulationUnfilledCells: 0,
     triangulationFailures: [],
     edgeCurveCount: 0,
+    shoreEdgeCount: 0,
     style: CELL_VISUAL_STYLE,
     buildMs: 0
   };
@@ -145,6 +148,7 @@ export function summarizeCellVisualMesh(mesh) {
     triangulationFailures: [...(mesh?.triangulationFailures || [])],
     averageBoundaryPoints: roundRatio(mesh?.boundaryPoints || 0, mesh?.cellCount || 0),
     edgeCurveCount: mesh?.edgeCurveCount || 0,
+    shoreEdgeCount: mesh?.shoreEdgeCount || 0,
     style: {...CELL_VISUAL_STYLE},
     buildMs: mesh?.buildMs || 0
   };
@@ -426,7 +430,7 @@ function pointSegmentDistance(point, a, b) {
   return worldDistance(point, [a[0] + dx * t, a[1] + dy * t]);
 }
 
-function buildCellVisualBoundary(map, cell, edgeCurves) {
+function buildCellVisualBoundary(map, cell, edgeCurves, shoreEdges) {
   const vertexIds = map?.grid?.cells?.v?.[cell] || [];
   if (vertexIds.length < 3) return [];
   const points = [];
@@ -434,7 +438,7 @@ function buildCellVisualBoundary(map, cell, edgeCurves) {
   for (let index = 0; index < vertexIds.length; index++) {
     const a = vertexIds[index];
     const b = vertexIds[(index + 1) % vertexIds.length];
-    const curve = cellVisualEdgeCurve(map, a, b, edgeCurves);
+    const curve = cellVisualEdgeCurve(map, a, b, edgeCurves, shoreEdges);
     const directed = a <= b ? curve : [...curve].reverse();
     for (let pointIndex = 0; pointIndex < directed.length; pointIndex++) {
       if (points.length && pointIndex === 0) continue;
@@ -446,7 +450,7 @@ function buildCellVisualBoundary(map, cell, edgeCurves) {
   return points;
 }
 
-function cellVisualEdgeCurve(map, a, b, edgeCurves) {
+function cellVisualEdgeCurve(map, a, b, edgeCurves, shoreEdges) {
   const first = Math.min(a, b);
   const second = Math.max(a, b);
   const key = `${first}:${second}`;
@@ -467,6 +471,11 @@ function cellVisualEdgeCurve(map, a, b, edgeCurves) {
     edgeCurves.set(key, point);
     return point;
   }
+  if (shoreEdges.has(key)) {
+    const edge = [start, end];
+    edgeCurves.set(key, edge);
+    return edge;
+  }
 
   const normal = normalizeWorldVector(-(end[1] - start[1]), end[0] - start[0]);
   const mid = midpoint(start, end);
@@ -480,6 +489,23 @@ function cellVisualEdgeCurve(map, a, b, edgeCurves) {
   const curve = sampleQuadraticWorldPath(start, control, end, CELL_VISUAL_STYLE.segmentsPerEdge);
   edgeCurves.set(key, curve);
   return curve;
+}
+
+function collectShoreCellVisualEdges(map) {
+  const cells = map?.grid?.cells;
+  const edges = new Set();
+  if (!cells?.i || !cells?.c || !cells?.v || !cells?.h) return edges;
+  for (const cell of cells.i) {
+    const land = Number(cells.h[cell]) >= 20;
+    for (const neighbor of cells.c[cell] || []) {
+      if (neighbor <= cell || land === (Number(cells.h[neighbor]) >= 20)) continue;
+      const neighborVertices = new Set(cells.v[neighbor] || []);
+      const shared = (cells.v[cell] || []).filter(vertex => neighborVertices.has(vertex));
+      if (shared.length < 2) continue;
+      edges.add(`${Math.min(shared[0], shared[1])}:${Math.max(shared[0], shared[1])}`);
+    }
+  }
+  return edges;
 }
 
 function cellVisualEdgeOffset(key, mid, length) {

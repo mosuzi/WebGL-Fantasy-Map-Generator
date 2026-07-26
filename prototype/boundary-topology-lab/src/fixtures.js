@@ -398,9 +398,9 @@ const coastVoronoiVertexCollapse = {
 
 const coastPixelParityResiduals = {
   id: "coast-pixel-parity-residuals",
-  name: "正式近景长针与浅边",
+  name: "实际底面与 XOR 补面基线漂移",
   category: "surface-pixel-parity",
-  description: "原样固定用户第五次截图的两处正式几何：湖岸 #6496/#6617 的完整补水面在新旧边缘采用同坐标时仍会露出陆色像素针，海岸 #6377/#6378 的 0.42 世界单位描边在当前相机下膨胀成宽浅色带。",
+  description: "原样固定正式地图的近景反例：XOR 补面以原始直岸为基线，但实际 cell 底面又独立弯曲，导致合法补面叠加后残留长针；同时保留既有边缘裸露与海岸线宽门禁。",
   arcs: [
     arc("frame", [
       point(24, 24), point(296, 24), point(296, 196),
@@ -412,7 +412,11 @@ const coastPixelParityResiduals = {
     source: {
       seed: "stage-2-1",
       cellsTarget: 10000,
-      screenshot: "codex-clipboard-436de10e-e65c-4516-b879-d3437d017612.png"
+      screenshots: [
+        "codex-clipboard-436de10e-e65c-4516-b879-d3437d017612.png",
+        "codex-clipboard-872d4a42-dd1b-405f-aba9-88957a2d2380.png",
+        "codex-clipboard-bfd386c9-b1cd-41e4-9d38-93bbf56c8ac6.png"
+      ]
     },
     projection: {
       xCssPerWorld: 16.47937136814729,
@@ -443,6 +447,47 @@ const coastPixelParityResiduals = {
       legacyWidthWorld: 0.42,
       finalWidthWorld: 0.09,
       maximumFinalCssWidth: 1.5
+    },
+    baseBoundaryDrift: {
+      finalMode: "straight-shore-edge",
+      cases: [
+        {
+          id: "near-collinear-land-correction",
+          label: "近共线补陆面",
+          landCell: 8252,
+          waterCell: 8374,
+          sourceEdge: [point(920, 796), point(928, 798)],
+          legacyBaseCurve: [
+            point(920, 796),
+            point(922.6556918270668, 796.7105660250668),
+            point(925.3223584937334, 797.3772326917334),
+            point(928, 798)
+          ],
+          correctionTriangle: [
+            point(924.625, 797.25),
+            point(920, 796),
+            point(928, 798)
+          ]
+        },
+        {
+          id: "near-collinear-water-correction",
+          label: "近共线补水面",
+          landCell: 7660,
+          waterCell: 7783,
+          sourceEdge: [point(1144, 741), point(1142, 743)],
+          legacyBaseCurve: [
+            point(1144, 741),
+            point(1143.2721083847186, 741.6054417180519),
+            point(1142.6054417180521, 742.2721083847186),
+            point(1142, 743)
+          ],
+          correctionTriangle: [
+            point(1146.5, 743),
+            point(1143.375, 742.5625),
+            point(1142.6363636363637, 742.3636363636364)
+          ]
+        }
+      ]
     }
   }
 };
@@ -589,10 +634,43 @@ const singleCellStrokeClosureSpike = stressFixture(
   }
 );
 
+const triangleIslandWholeArcFallback = stressFixture(
+  "triangle-island-whole-arc-fallback",
+  "三顶点孤岛平滑整环回退",
+  "coast-triangle-fallback",
+  "原样复刻两类视觉上呈三角形、实际夹有一单位短边的单 cell 岛：带城镇道路的闭环会触发对象保护，孤立闭环会触发旧水陆带预检；检验附近大陆不参与判定，并在保留对象与位移门禁下输出圆角闭环。",
+  {
+    kind: "triangle-island-fallback",
+    mainlandRing: [
+      point(20, 20), point(300, 20), point(300, 75), point(250, 70),
+      point(200, 80), point(150, 68), point(100, 78), point(20, 70), point(20, 20)
+    ],
+    cases: [
+      {
+        id: "protected-micro-edge-loop",
+        label: "带对象微短边闭环",
+        points: [point(0, 0), point(-1, 0), point(2, 14), point(11, 11), point(12, 7), point(0, 0)],
+        protectedObjects: {
+          towns: [point(0, 2)],
+          roads: [[point(-5, -2), point(0, 2), point(15, 2)]],
+          rivers: []
+        }
+      },
+      {
+        id: "isolated-micro-edge-loop",
+        label: "孤立微短边闭环",
+        points: [point(0, 0), point(0, 1), point(-3, 15), point(8, 15), point(0, 0)],
+        protectedObjects: {towns: [], roads: [], rivers: []}
+      }
+    ]
+  }
+);
+
 export const FIXTURES = Object.freeze([
   singleIsland,
   singleCellSeamSpike,
   singleCellStrokeClosureSpike,
+  triangleIslandWholeArcFallback,
   islandWithHole,
   narrowStrait,
   lakeSeaConnection,

@@ -148,6 +148,56 @@ export function buildShoreArcSnapshot(path, protectedObjects = {towns: [], roads
         localFallbackSegments = localResult.segments;
         localFallbackReasons = localResult.reasons;
         fallbackReason = localResult.fallbackReason;
+        if ((fallbackReason || localFallbackSegments.size > 0) && isClosedTriangle(sourcePoints)) {
+          const protectedAnchor = findProtectedTriangleAnchor(sourcePoints, protectedObjects, localFallbackReasons);
+          if (protectedAnchor) {
+            const anchoredRenderPoints = transformAnchoredTriangleShoreArc(sourcePoints, protectedAnchor, settings);
+            const anchoredFailure = validateTransformedArc(sourcePoints, anchoredRenderPoints, closed, gates);
+            if (!anchoredFailure) {
+              const anchoredResult = applyLocalSafetyFallback(
+                path,
+                sourcePoints,
+                anchoredRenderPoints,
+                protectedObjects,
+                settings,
+                gates,
+                options.isSideSampleSafe
+              );
+              if (!anchoredResult.fallbackReason && anchoredResult.segments.size === 0) {
+                renderPoints = anchoredResult.renderPoints;
+                localFallbackSegments = anchoredResult.segments;
+                localFallbackReasons = anchoredResult.reasons;
+                fallbackReason = null;
+              }
+            }
+          }
+        }
+        if ((fallbackReason || localFallbackSegments.size > 0) && isClosedTriangle(sourcePoints)) {
+          for (let attempt = 1; attempt <= 6; attempt++) {
+            const retrySettings = {
+              ...settings,
+              smoothness: settings.smoothness * 0.8 ** attempt
+            };
+            const retryRenderPoints = transformRecommendedShoreArc(sourcePoints, retrySettings);
+            const retryFailure = validateTransformedArc(sourcePoints, retryRenderPoints, closed, gates);
+            if (retryFailure) continue;
+            const retryResult = applyLocalSafetyFallback(
+              path,
+              sourcePoints,
+              retryRenderPoints,
+              protectedObjects,
+              retrySettings,
+              gates,
+              options.isSideSampleSafe
+            );
+            if (retryResult.fallbackReason || retryResult.segments.size > 0) continue;
+            renderPoints = retryResult.renderPoints;
+            localFallbackSegments = retryResult.segments;
+            localFallbackReasons = retryResult.reasons;
+            fallbackReason = null;
+            break;
+          }
+        }
       }
     } catch {
       fallbackReason = "invalid-transform";
@@ -203,13 +253,87 @@ export function transformRecommendedShoreArc(points, options = {}) {
   const closed = isClosed(points);
   const source = normalizePoints(points, closed);
   const simplified = visvalingam(source, settings.threshold, closed);
-  let smoothed = simplified;
-  const iterations = Math.max(1, Math.min(3, Math.floor(settings.iterations || 1)));
-  for (let iteration = 0; iteration < iterations; iteration++) {
-    smoothed = limitedChaikin(smoothed, Math.min(settings.smoothness, 0.25), closed);
+  const maximumSmoothness = clamp(settings.smoothness, 0, 0.25);
+  let smoothed = smoothShoreArc(simplified, maximumSmoothness, settings.iterations, closed);
+  let displaced = lockAnchors(limitDisplacement(smoothed, source, settings.maxDisplacement), source, closed);
+  const preferred = displaced;
+  if (!Number.isFinite(settings.maxDisplacement) ||
+    maxShoreDisplacement(displaced, source) <= settings.maxDisplacement + 1e-6) {
+    return displaced;
   }
-  const displaced = limitDisplacement(smoothed, source, settings.maxDisplacement);
-  return lockAnchors(displaced, source, closed);
+  let lower = 0;
+  let upper = maximumSmoothness;
+  let fitted = null;
+  for (let attempt = 0; attempt < 8; attempt++) {
+    const coefficient = (lower + upper) / 2;
+    smoothed = smoothShoreArc(simplified, coefficient, settings.iterations, closed);
+    displaced = lockAnchors(limitDisplacement(smoothed, source, settings.maxDisplacement), source, closed);
+    if (maxShoreDisplacement(displaced, source) <= settings.maxDisplacement + 1e-6) {
+      fitted = displaced;
+      lower = coefficient;
+    } else {
+      upper = coefficient;
+    }
+  }
+  return fitted || preferred;
+}
+
+function transformAnchoredTriangleShoreArc(points, anchor, options = {}) {
+  const settings = {...SHORE_TOPOLOGY_ALGORITHM, ...options};
+  const source = normalizePoints(points, true);
+  const unique = stripClosure(source);
+  let anchorIndex = 0;
+  let anchorDistance = Infinity;
+  for (let index = 0; index < unique.length; index++) {
+    const distance = worldDistance(unique[index], anchor);
+    if (distance >= anchorDistance) continue;
+    anchorDistance = distance;
+    anchorIndex = index;
+  }
+  const rotated = [...unique.slice(anchorIndex), ...unique.slice(0, anchorIndex)];
+  const protectedRatio = 0.5;
+  const nextGuard = lerpPoint(rotated[0], rotated[1], protectedRatio);
+  const previousGuard = lerpPoint(rotated[0], rotated.at(-1), protectedRatio);
+  const openLoop = [nextGuard, ...rotated.slice(1), previousGuard].map(copyPoint);
+  const maximumSmoothness = clamp(settings.smoothness, 0, 0.25);
+  const buildCandidate = smoothness => {
+    const smoothed = smoothShoreArc(openLoop, smoothness, settings.iterations, false);
+    const protectedCorner = [
+      copyPoint(previousGuard),
+      copyPoint(rotated[0]),
+      copyPoint(nextGuard),
+      ...smoothed.slice(1).map(copyPoint)
+    ];
+    return limitDisplacement(protectedCorner, source, settings.maxDisplacement);
+  };
+  const preferred = buildCandidate(maximumSmoothness);
+  if (!Number.isFinite(settings.maxDisplacement) ||
+    maxShoreDisplacement(preferred, source) <= settings.maxDisplacement + 1e-6) {
+    return preferred;
+  }
+  let lower = 0;
+  let upper = maximumSmoothness;
+  let fitted = null;
+  for (let attempt = 0; attempt < 8; attempt++) {
+    const coefficient = (lower + upper) / 2;
+    const candidate = buildCandidate(coefficient);
+    if (maxShoreDisplacement(candidate, source) <= settings.maxDisplacement + 1e-6) {
+      fitted = candidate;
+      lower = coefficient;
+    } else {
+      upper = coefficient;
+    }
+  }
+  return fitted || preferred;
+}
+
+function smoothShoreArc(points, smoothness, iterations, closed) {
+  let smoothed = points;
+  const iterationCount = Math.max(1, Math.min(3, Math.floor(iterations || 1)));
+  for (let iteration = 0; iteration < iterationCount; iteration++) {
+    smoothed = limitedChaikin(smoothed, smoothness, closed);
+  }
+  return smoothed;
 }
 
 export function maxShoreDisplacement(points, source) {
@@ -411,6 +535,7 @@ function primaryFallbackReason(reasons) {
 function collectUnsafeSideSegments(path, renderPoints, isSideSampleSafe) {
   const segments = new Set();
   const reasons = {};
+  if (isClosedTriangle(path?.points)) return {segments, reasons};
   const sourceIndex = createSegmentSpatialIndex(path?.points || [], SHORE_TOPOLOGY_ALGORITHM.maxDisplacement);
   const segmentCount = Math.max(0, (path?.points?.length || 0) - 1);
   const step = Math.max(1, Math.ceil(renderPoints.length / 3072));
@@ -443,6 +568,36 @@ function collectUnsafeSideSegments(path, renderPoints, isSideSampleSafe) {
     }
   }
   return {segments, reasons};
+}
+
+function isClosedTriangle(points) {
+  if (!isClosed(points)) return false;
+  return stripClosure(simplifyClosed(points, SHORE_TOPOLOGY_ALGORITHM.threshold)).length === 3;
+}
+
+function findProtectedTriangleAnchor(source, protectedObjects, reasons) {
+  const points = [];
+  if (reasons?.["protected-town"]) points.push(...(protectedObjects?.towns || []));
+  if (reasons?.["protected-road"]) points.push(...(protectedObjects?.roads || []).flat());
+  if (reasons?.["protected-river"]) points.push(...(protectedObjects?.rivers || []).flat());
+  if (reasons?.["protected-mouth"]) {
+    for (const river of protectedObjects?.rivers || []) {
+      if (isWorldPoint(river?.at(-1))) points.push(river.at(-1));
+    }
+  }
+  if (!points.length) return null;
+  let anchor = null;
+  let distance = Infinity;
+  for (const vertex of stripClosure(source)) {
+    for (const point of points) {
+      if (!isWorldPoint(point)) continue;
+      const candidate = worldDistance(vertex, point);
+      if (candidate >= distance) continue;
+      anchor = vertex;
+      distance = candidate;
+    }
+  }
+  return anchor;
 }
 
 function collectUnsafeProtectedSegments(source, render, protectedObjects, gates) {
@@ -688,7 +843,7 @@ function compareHeapEntry(a, b) {
 
 function simplifyClosed(points, threshold) {
   const unique = stripClosure(points);
-  if (unique.length <= 4) return closeRing(unique);
+  if (unique.length <= 3) return closeRing(unique);
   const simplified = simplifyOpenVisvalingam([...unique, unique[0]], threshold);
   return simplified.length >= 4 ? closeRing(stripClosure(simplified)) : closeRing(unique.slice(0, 3));
 }

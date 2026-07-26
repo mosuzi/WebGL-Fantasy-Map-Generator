@@ -11,6 +11,7 @@ const expectedCases = new Map([
   ["single-island", "coast"],
   ["single-cell-seam-spike", "coast-seam"],
   ["single-cell-stroke-closure-spike", "coast-stroke-closure"],
+  ["triangle-island-whole-arc-fallback", "coast-triangle-fallback"],
   ["island-with-hole", "ring"],
   ["narrow-strait", "clearance"],
   ["lake-sea-connection", "connectivity"],
@@ -40,7 +41,7 @@ const expectedAlgorithmPasses = new Map([
   ["recommended", 14]
 ]);
 
-assert.equal(FIXTURES.length, 19, "必须固定覆盖十九类拓扑夹具");
+assert.equal(FIXTURES.length, 20, "必须固定覆盖二十类拓扑夹具");
 assert.deepEqual(new Map(FIXTURES.map(fixture => [fixture.id, fixture.category])), expectedCases, "夹具 id 与案例分类必须保持稳定");
 assert.deepEqual(ALGORITHMS.map(algorithm => algorithm.id), ["raw", "douglas-peucker", "visvalingam", "chaikin", "catmull-rom", "b-spline", "recommended"], "算法矩阵不完整");
 
@@ -116,7 +117,8 @@ for (const fixtureId of [
   "coast-multiring-xor-compound",
   "coast-fallback-splice-protected",
   "cell-earcut-safe-failure",
-  "single-cell-stroke-closure-spike"
+  "single-cell-stroke-closure-spike",
+  "triangle-island-whole-arc-fallback"
 ]) {
   const stress = analyzeStressComparison(FIXTURES.find(fixture => fixture.id === fixtureId));
   assert.equal(stress.passed, true, `${fixtureId} 的真实计算或破坏反例门禁失败`);
@@ -139,6 +141,18 @@ const strokeClosureStress = analyzeStressComparison(FIXTURES.find(fixture => fix
 assert.ok(strokeClosureStress.destructive.legacy.needleCount > 0, "旧描边后处理必须稳定复现闭环首点穿刺");
 assert.equal(strokeClosureStress.final.needleCount, 0, "最终描边后处理不得保留闭环首点穿刺");
 assert.equal(strokeClosureStress.final.closed, true, "最终描边后处理必须保持闭环");
+const triangleFallbackStress = analyzeStressComparison(FIXTURES.find(fixture => fixture.id === "triangle-island-whole-arc-fallback"));
+assert.deepEqual(
+  triangleFallbackStress.destructive.cases.map(item => item.fallbackReason),
+  ["protected-town", "land-water-side"],
+  "三顶点孤岛破坏对照必须同时复现对象保护与旧水陆带预检回退"
+);
+assert.ok(triangleFallbackStress.final.cases.every(item => item.fallbackReason === null), "三顶点孤岛最终不得整环回退");
+assert.ok(triangleFallbackStress.final.cases.every(item => item.changed && item.closed), "三顶点孤岛最终必须形成闭合圆角");
+assert.ok(
+  triangleFallbackStress.final.cases.every(item => item.displacement <= 18.000001),
+  "三顶点孤岛最终不得越过 18 世界单位位移门禁"
+);
 
 const protectedFixtureIds = ["single-island", "narrow-strait", "lake-sea-connection"];
 for (const fixtureId of protectedFixtureIds) {
@@ -255,7 +269,17 @@ assert.equal(pixelParityGeometry.finalUncoveredBoundaryEdges, 0, "最终侧必�
 assert.equal(pixelParityGeometry.finalBoundaryCoverWorld, 0.18, "最终侧必须固定 0.18 世界单位的边缘覆盖");
 assert.ok(pixelParityGeometry.legacyProjectedStrokeCss > 4.5, "旧海岸线必须在截图投影下稳定复现宽浅色带");
 assert.ok(pixelParityGeometry.finalProjectedStrokeCss <= 1.5, "最终海岸线必须在截图投影下收敛到 1.5 CSS px 内");
-assert.ok(pixelParityResult.metrics.caseConstraints.every(item => item.pass), "正式像素残余夹具的两项硬门禁必须通过");
+assert.deepEqual(
+  pixelParityGeometry.baseBoundaryDrift.map(item => [item.landCell, item.waterCell]),
+  [[8252, 8374], [7660, 7783]],
+  "实验室必须固定本轮两组近共线补面与实际底面基线"
+);
+assert.equal(pixelParityGeometry.legacyBaseDriftCases, 2, "旧侧必须稳定复现两组实际底面 / XOR 基线漂移");
+assert.equal(pixelParityGeometry.finalBaseDriftCases, 0, "最终水陆边直岸同源后不得残留基线漂移");
+assert.ok(pixelParityGeometry.maximumLegacyBaseDriftCss >= 1, "旧弯曲底面必须在当前截图投影下形成可见偏移");
+assert.equal(pixelParityGeometry.finalBaseMode, "straight-shore-edge", "最终底面必须声明使用直岸水陆边");
+assert.ok(pixelParityResult.metrics.caseConstraints.every(item => item.pass), "正式像素残余夹具的三项硬门禁必须通过");
+assert.ok(mergeVisualDiagnostics(pixelParityResult).some(item => item.id === "pixel-parity:base-xor-drift"), "实验室必须提供实际底面 / XOR 基线漂移的可定位诊断");
 assert.ok(mergeVisualDiagnostics(pixelParityResult).some(item => item.message.includes("#6496/#6617")), "实验室必须提供正式湖岸单元的可定位诊断");
 assert.ok(mergeVisualDiagnostics(pixelParityResult).some(item => item.message.includes("#6377/#6378")), "实验室必须提供正式海岸单元的可定位诊断");
 

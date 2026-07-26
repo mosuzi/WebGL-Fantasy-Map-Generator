@@ -222,6 +222,46 @@ function renderSvg(model, fixture, mode, result) {
 
 function stressComparisonSvg(fixture, variant, stress) {
   const model = fixture.stressComparison;
+  if (model.kind === "triangle-island-fallback") {
+    const currentCases = variant === "destructive" ? stress.destructive.cases : stress.final.cases;
+    const projectors = new Map(model.cases.map((item, index) => {
+      const points = [
+        ...item.points,
+        ...item.protectedObjects.towns,
+        ...item.protectedObjects.roads.flat()
+      ];
+      const minX = Math.min(...points.map(point => point[0]));
+      const maxX = Math.max(...points.map(point => point[0]));
+      const minY = Math.min(...points.map(point => point[1]));
+      const maxY = Math.max(...points.map(point => point[1]));
+      const scale = Math.min(105 / Math.max(1, maxX - minX), 92 / Math.max(1, maxY - minY));
+      const originX = index ? 190 : 34;
+      const originY = 91;
+      return [item.id, point => [
+        originX + (point[0] - minX) * scale,
+        originY + (point[1] - minY) * scale
+      ]];
+    }));
+    const islands = currentCases.map(item =>
+      `<path d="${pathData(item.points.map(projectors.get(item.id)))}" fill="#355b49" stroke="#b8d0ce" stroke-width="1.4" stroke-linejoin="round"/>`
+    ).join("");
+    const raw = variant === "final"
+      ? model.cases.map(item => `<path d="${pathData(item.points.map(projectors.get(item.id)))}" fill="none" stroke="#d7a344" stroke-width="1" stroke-dasharray="4 3"/>`).join("")
+      : "";
+    const roads = model.cases.flatMap(item => (item.protectedObjects.roads || []).map(points => ({id: item.id, points})))
+      .map(item => `<path d="${pathData(item.points.map(projectors.get(item.id)))}" fill="none" stroke="#80755f" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>`)
+      .join("");
+    const towns = model.cases.flatMap(item => (item.protectedObjects.towns || []).map(point => ({id: item.id, point})))
+      .map(item => {
+        const point = projectors.get(item.id)(item.point);
+        return `<circle cx="${point[0]}" cy="${point[1]}" r="4" fill="#c29b58" stroke="#4b4437" stroke-width="1.5"/>`;
+      })
+      .join("");
+    const status = variant === "destructive"
+      ? `整环回退 · ${currentCases.map(item => item.fallbackReason).join(" / ")}`
+      : `自适应圆角 · 最大位移 ${Math.max(...currentCases.map(item => item.displacement)).toFixed(2)} / 18`;
+    return `<svg class="stress-comparison stress-triangle-fallback-${variant}" viewBox="0 0 320 220" role="img" aria-label="${variant === "destructive" ? "三顶点孤岛整环回退" : "三顶点孤岛自适应平滑"}"><path d="${pathData(model.mainlandRing)}" fill="#536f51"/>${islands}${raw}${roads}${towns}<text class="stress-status ${variant}" x="22" y="208">${status}</text></svg>`;
+  }
   if (model.kind === "closed-stroke-seam") {
     const current = variant === "destructive" ? stress.destructive.legacy : stress.final;
     const island = pathData(current.points);
@@ -406,33 +446,38 @@ function pixelParityMarkup(fixture, geometry, mode) {
   const legacy = mode === "legacy-pixel-seams";
   const lakeFrame = {x: 18, y: 30, width: 132, height: 154};
   const coastFrame = {x: 170, y: 30, width: 132, height: 154};
-  const lakePoints = [...model.lakeNeedle.oldBoundary, ...model.lakeNeedle.correctionTriangle, ...model.lakeNeedle.renderBoundaryEdge];
-  const lakeTransform = fitPointsToFrame(lakePoints, lakeFrame);
-  const oldBoundary = model.lakeNeedle.oldBoundary.map(lakeTransform);
-  const correctionTriangle = model.lakeNeedle.correctionTriangle.map(lakeTransform);
-  const renderBoundaryEdge = model.lakeNeedle.renderBoundaryEdge.map(lakeTransform);
   const coastTransform = fitPointsToFrame(model.coastStroke.segment, coastFrame);
   const coastSegment = model.coastStroke.segment.map(coastTransform);
   const strokeWidth = legacy
     ? Math.max(1, geometry.legacyProjectedStrokeCss)
     : Math.max(1, geometry.finalProjectedStrokeCss);
-  const lakeCorrection = `<path class="pixel-parity-water-correction" d="${pathData([...oldBoundary, oldBoundary[0]])}"/><path class="pixel-parity-water-correction" d="${pathData([...correctionTriangle, correctionTriangle[0]])}"/>`;
-  const lakeSeam = legacy
-    ? `<path class="pixel-parity-missing" d="${pathData(renderBoundaryEdge)}"/>`
-    : `<path class="pixel-parity-boundary-cover" d="${pathData(renderBoundaryEdge)}"/>`;
-  const lakeLabel = legacy
-    ? `边缘裸露 1 · 陆色像素针`
-    : `同色覆盖 0.18 · 连续水面`;
+  const driftMarkup = geometry.baseBoundaryDrift.map((item, index) => {
+    const frame = {x: lakeFrame.x, y: lakeFrame.y + index * 77, width: lakeFrame.width, height: 72};
+    const transform = fitPointsToFrame(
+      [...item.sourceEdge, ...item.legacyBaseCurve, ...item.correctionTriangle],
+      frame
+    );
+    const sourceEdge = item.sourceEdge.map(transform);
+    const baseEdge = (legacy ? item.legacyBaseCurve : item.sourceEdge).map(transform);
+    const correction = item.correctionTriangle.map(transform);
+    const status = legacy
+      ? `基线偏移 ${item.maximumLegacyDriftCss.toFixed(2)}px`
+      : "直岸同源 · 残针 0";
+    return `<g>
+      <rect class="pixel-parity-water" x="${frame.x}" y="${frame.y}" width="${frame.width}" height="${frame.height}" rx="3"/>
+      <path class="pixel-parity-correction-triangle" d="${pathData([...correction, correction[0]])}"/>
+      <path class="pixel-parity-source-edge" d="${pathData(sourceEdge)}"/>
+      <path class="pixel-parity-base-curve ${legacy ? "fail" : "pass"}" d="${pathData(baseEdge)}"/>
+      <rect class="pixel-parity-frame" x="${frame.x}" y="${frame.y}" width="${frame.width}" height="${frame.height}" rx="3"/>
+      <text class="pixel-parity-title" x="${frame.x + 5}" y="${frame.y + 12}">${item.label}</text>
+      <text class="pixel-parity-status ${legacy ? "fail" : "pass"}" x="${frame.x + 5}" y="${frame.y + frame.height - 6}">${status}</text>
+    </g>`;
+  }).join("");
   const coastLabel = legacy
     ? `海岸浅带 ${geometry.legacyProjectedStrokeCss.toFixed(2)}px`
     : `海岸细线 ${geometry.finalProjectedStrokeCss.toFixed(2)}px`;
   return `<g class="pixel-parity-comparison ${mode}">
-    <rect class="pixel-parity-water" x="${lakeFrame.x}" y="${lakeFrame.y}" width="${lakeFrame.width}" height="${lakeFrame.height}" rx="3"/>
-    ${lakeCorrection}
-    ${lakeSeam}
-    <rect class="pixel-parity-frame" x="${lakeFrame.x}" y="${lakeFrame.y}" width="${lakeFrame.width}" height="${lakeFrame.height}" rx="3"/>
-    <text class="pixel-parity-title" x="${lakeFrame.x + 5}" y="${lakeFrame.y + 13}">湖岸 #6496 / #6617</text>
-    <text class="pixel-parity-status ${legacy ? "fail" : "pass"}" x="${lakeFrame.x + 5}" y="${lakeFrame.y + lakeFrame.height - 8}">${lakeLabel}</text>
+    ${driftMarkup}
     <rect class="pixel-parity-land-bg" x="${coastFrame.x}" y="${coastFrame.y}" width="${coastFrame.width / 2}" height="${coastFrame.height}" rx="3"/>
     <rect class="pixel-parity-water" x="${coastFrame.x + coastFrame.width / 2}" y="${coastFrame.y}" width="${coastFrame.width / 2}" height="${coastFrame.height}" rx="3"/>
     <path class="pixel-parity-coastline" d="${pathData(coastSegment)}" style="stroke-width:${round(strokeWidth)}"/>
@@ -551,6 +596,8 @@ function metricsMarkup(metrics) {
   if (metrics.pixelParityGeometry) {
     values.push(
       ["正式来源", `${metrics.pixelParityGeometry.source.seed} / ${metrics.pixelParityGeometry.source.cellsTarget}`, "notice"],
+      ["底面 / XOR 基线漂移", `${metrics.pixelParityGeometry.legacyBaseDriftCases} → ${metrics.pixelParityGeometry.finalBaseDriftCases}`, metrics.pixelParityGeometry.finalBaseDriftCases ? "bad" : "good"],
+      ["旧底面最大偏移", `${metrics.pixelParityGeometry.maximumLegacyBaseDriftCss.toFixed(2)} CSS px`, metrics.pixelParityGeometry.maximumLegacyBaseDriftCss >= 1 ? "notice" : "good"],
       ["裸露边缘", `${metrics.pixelParityGeometry.legacyUncoveredBoundaryEdges} → ${metrics.pixelParityGeometry.finalUncoveredBoundaryEdges}`, metrics.pixelParityGeometry.finalUncoveredBoundaryEdges ? "bad" : "good"],
       ["海岸截图投影线宽", `${metrics.pixelParityGeometry.legacyProjectedStrokeCss.toFixed(2)} → ${metrics.pixelParityGeometry.finalProjectedStrokeCss.toFixed(2)} CSS px`, metrics.pixelParityGeometry.finalProjectedStrokeCss > metrics.pixelParityGeometry.maximumFinalCssWidth ? "bad" : "good"]
     );
