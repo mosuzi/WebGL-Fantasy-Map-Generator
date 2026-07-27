@@ -2,6 +2,17 @@ import {MinPriorityQueue} from "./priority-queue.js";
 import {createStageProfile} from "./profile.js";
 import {normalizeInheritanceMode, rebuildInheritanceTree, summarizeInheritanceTree} from "./inheritance.js";
 import {cultureNamingProfileForSet, normalizeCultureSetId} from "./culture-naming-styles.js";
+import {
+  applyFixedOwnership,
+  assertFixedOwnership,
+  clearExplicitOwnershipOutsideFixed,
+  combineLockedSocialOptions,
+  createRegenerationLockConflict,
+  nextAvailableSocialId,
+  prepareSocialRegenerationLocks,
+  restoreLockedSocialStructure,
+  seedLockedSocialStore
+} from "./social-regeneration-locks.js";
 
 const CULTURE_ROOTS = ["昭宁", "雁川", "栖梧", "青岚", "星渚", "南衡", "白麓", "清河", "苍原", "岚湾", "云麓", "河洛", "北辰", "东衡", "西陵", "海澜", "赤原", "沙洲", "霜庭", "松岳", "月湾", "石原", "晴川", "夜渡", "金台", "雨林", "岭南", "北海", "东渚", "朱明", "玄岭", "素川"];
 const RELIGION_ROOTS = ["天衡", "星渚", "青岚", "白麓", "南明", "清河", "玄曜", "苍极", "云章", "赤霄", "静澜", "昭灵"];
@@ -25,7 +36,7 @@ const CULTURE_TYPES = {
 export function buildSociety(grid, features, climate, rivers, random, pack, options = {}) {
   const startedAt = performance.now();
   const cultureResult = pack?.cells?.s ? buildPackCultures(grid, pack, random, options) : buildGridFallbackCultures(grid, features, rivers, random, options);
-  const religionResult = pack?.cells?.s ? initializePackReligions(grid, pack) : buildGridReligions(grid, features, rivers, random, options);
+  const religionResult = pack?.cells?.s ? initializePackReligions(grid, pack, options) : buildGridReligions(grid, features, rivers, random, options);
 
   return {
     cultures: cultureResult.cultures,
@@ -69,13 +80,15 @@ export function finalizeSocietyReligions(grid, society, pack, random, settlement
 function buildPackCultures(grid, pack, random, options) {
   const profile = createStageProfile();
   const {cells} = pack;
+  const lockContext = prepareCultureLocks(grid, pack, options);
   const populated = profile.stage("collect-populated", "收集文化候选地", () => cells.i.filter(cell => isPopulatedPackCell(cells, cell)));
   const defaultDefinitions = getDefaultCultureDefinitions(options);
   let count = Math.min(defaultDefinitions.length, Math.max(0, Math.floor(options.culturesNumber ?? 12)), Math.max(1, Math.floor(options.culturesSetMax ?? 32)));
   if (populated.length < count * 25) count = Math.floor(populated.length / 50);
   const cultureIds = new Uint16Array(cells.i.length);
+  applyFixedOwnership(cultureIds, lockContext.packOwners, lockContext.packFixed);
 
-  if (!count) {
+  if (!count && !lockContext.protectedIds.size) {
     cells.culture = cultureIds;
     grid.cells.culture = new Array(grid.points.length).fill(0);
     pack.cultures = [createWildlandsCulture()];
@@ -84,12 +97,14 @@ function buildPackCultures(grid, pack, random, options) {
   }
 
   const context = profile.stage("create-context", "准备文化选址上下文", () => createCultureContext(grid, pack, populated));
+  const generatedCount = Math.max(0, count - lockContext.protectedIds.size);
   const selected = profile.stage("select-definitions", "选择文化定义", () =>
-    options.culturesSet === "antique" ? defaultDefinitions.slice(0, count) : selectCultureDefinitions(defaultDefinitions, count, random)
+    options.culturesSet === "antique" ? defaultDefinitions.slice(0, generatedCount) : selectCultureDefinitions(defaultDefinitions, generatedCount, random)
   );
-  const cultures = [createWildlandsCulture()];
-  const centers = [];
-  let spacing = (grid.metadata.graphWidth + grid.metadata.graphHeight) / 2 / count;
+  const cultures = seedLockedSocialStore(createWildlandsCulture(), lockContext);
+  const centers = [...lockContext.snapshots.entries()].map(([cultureId, culture]) => ({cell: culture.center, cultureId, point: cells.p[culture.center]}));
+  const expansionCenters = [];
+  let spacing = (grid.metadata.graphWidth + grid.metadata.graphHeight) / 2 / Math.max(1, count);
   const rankScores = new Float64Array(cells.i.length);
 
   profile.stage("place-centers", "放置文化中心", () => {
@@ -100,7 +115,7 @@ function buildPackCultures(grid, pack, random, options) {
       const center = placeCultureCenter({cells, ranked, centers, spacing, random, cultureIds});
       if (center === -1) continue;
 
-      const cultureId = cultures.length;
+      const cultureId = nextAvailableSocialId(cultures, lockContext.protectedIds);
       const type = defineCultureType(pack, center, random);
       const culture = {
         id: cultureId,
@@ -119,21 +134,23 @@ function buildPackCultures(grid, pack, random, options) {
         origins: [0]
       };
 
-      cultures.push(culture);
+      cultures[cultureId] = culture;
       centers.push({cell: center, cultureId, point: cells.p[center]});
+      expansionCenters.push({cell: center, cultureId, point: cells.p[center]});
       cultureIds[center] = cultureId;
     }
   });
 
   const populatedMask = profile.stage("create-populated-mask", "建立人口 cell 掩码", () => createCellMask(cells.i.length, populated));
-  profile.stage("expand-cultures", "扩张文化", () => expandPackCultures(pack, cultures, centers, cultureIds, populatedMask));
+  profile.stage("expand-cultures", "扩张文化", () => expandPackCultures(pack, cultures, expansionCenters, cultureIds, populatedMask, lockContext));
   if (shouldFillUnassignedPopulatedCultures(options, pack)) {
-    profile.stage("fill-unassigned", "补齐未归属文化人口", () => fillUnassignedPopulatedCultures(pack, cultures, centers, cultureIds, populatedMask));
+    profile.stage("fill-unassigned", "补齐未归属文化人口", () => fillUnassignedPopulatedCultures(pack, cultures, expansionCenters, cultureIds, populatedMask, lockContext));
   }
+  assertFixedOwnership(cultureIds, lockContext.packOwners, lockContext.packFixed, "文化");
   cells.culture = cultureIds;
-  profile.stage("summarize", "汇总文化覆盖", () => summarizeCultureCoverage(pack, cultures));
-  profile.stage("inheritance", "构建文化继承树", () => applyCultureInheritance(cultures, pack, random, options));
-  const gridCells = profile.stage("mirror-grid", "同步文化到 grid", () => mirrorPackCultureToGrid(grid, pack));
+  profile.stage("summarize", "汇总文化覆盖", () => summarizeCultureCoverage(pack, cultures, lockContext));
+  profile.stage("inheritance", "构建文化继承树", () => applyCultureInheritance(cultures, pack, random, options, lockContext));
+  const gridCells = profile.stage("mirror-grid", "同步文化到 grid", () => mirrorPackCultureToGrid(grid, pack, lockContext));
   pack.cultures = cultures;
 
   return {
@@ -183,12 +200,24 @@ function buildGridFallbackCultures(grid, features, rivers, random, options) {
   };
 }
 
-function initializePackReligions(grid, pack) {
-  pack.cells.religion = new Uint16Array(pack.cells.i.length);
-  pack.religions = [createNoReligion()];
+function initializePackReligions(grid, pack, options = {}) {
+  const lockContext = prepareReligionLocks(grid, pack, options);
+  const religionIds = new Uint16Array(pack.cells.i.length);
+  applyFixedOwnership(religionIds, lockContext.packOwners, lockContext.packFixed);
+  pack.cells.religion = religionIds;
+  pack.religions = seedLockedSocialStore(createNoReligion(), lockContext);
   rebuildInheritanceTree(pack.religions);
-  grid.cells.religion = new Array(grid.points.length).fill(0);
-  return {religions: pack.religions, count: 0, centers: [], packCells: 0, gridCells: 0};
+  restoreLockedSocialStructure(pack.religions, lockContext);
+  const gridValues = new Array(grid.points.length).fill(0);
+  applyFixedOwnership(gridValues, lockContext.gridOwners, lockContext.gridFixed);
+  grid.cells.religion = gridValues;
+  return {
+    religions: pack.religions,
+    count: lockContext.protectedIds.size,
+    centers: [...lockContext.snapshots.values()].map(religion => religion.center),
+    packCells: countPositive(religionIds),
+    gridCells: countPositive(gridValues)
+  };
 }
 
 function buildGridReligions(grid, features, rivers, random, options) {
@@ -228,17 +257,23 @@ function buildGridReligions(grid, features, rivers, random, options) {
 
 function buildPackReligions(grid, pack, society, random, settlements, options) {
   const {cells} = pack;
-  const folkReligions = createFolkReligions(pack, society, random);
-  const organizedReligions = createOrganizedReligions(pack, society, random, Math.max(0, Math.floor(options.religionsNumber ?? 6)));
-  const religions = combinePackReligions([...folkReligions, ...organizedReligions]);
-  applyReligionInheritance(religions, society, pack, random, options);
-  const religionIds = expandPackReligions(pack, religions);
+  const lockContext = prepareReligionLocks(grid, pack, options);
+  const lockedFolkCultures = new Set([...lockContext.snapshots.values()].filter(religion => religion.type === "Folk").map(religion => Number(religion.culture) || 0));
+  const folkReligions = createFolkReligions(pack, society, random).filter(religion => !lockedFolkCultures.has(Number(religion.culture) || 0));
+  const lockedNonFolk = [...lockContext.snapshots.values()].filter(religion => religion.type !== "Folk").length;
+  const organizedTarget = Math.max(0, Math.floor(options.religionsNumber ?? 6) - lockedNonFolk);
+  const reservedCenters = new Set([...lockContext.snapshots.values()].map(religion => religion.center));
+  for (let cell = 0; cell < lockContext.packFixed.length; cell++) if (lockContext.packFixed[cell]) reservedCenters.add(cell);
+  const organizedReligions = createOrganizedReligions(pack, society, random, organizedTarget, reservedCenters);
+  const religions = combinePackReligions([...folkReligions, ...organizedReligions], lockContext);
+  applyReligionInheritance(religions, society, pack, random, options, lockContext);
+  const religionIds = expandPackReligions(pack, religions, lockContext);
 
   cells.religion = religionIds;
-  checkReligionCenters(pack, religions);
-  summarizeReligionCoverage(pack, religions);
-  const gridCells = mirrorPackReligionToGrid(grid, pack);
-  syncReligionsToSettlementsAndPolitics(pack, settlements);
+  checkReligionCenters(pack, religions, lockContext);
+  summarizeReligionCoverage(pack, religions, lockContext);
+  const gridCells = mirrorPackReligionToGrid(grid, pack, lockContext);
+  syncReligionsToSettlementsAndPolitics(pack, settlements, options);
   pack.religions = religions;
 
   return {
@@ -250,26 +285,28 @@ function buildPackReligions(grid, pack, society, random, settlements, options) {
   };
 }
 
-function applyCultureInheritance(cultures, pack, random, options = {}) {
+function applyCultureInheritance(cultures, pack, random, options = {}, lockContext = null) {
   const mode = normalizeInheritanceMode(options?.cultureInheritanceMode);
   for (const culture of cultures || []) {
     if (!culture) continue;
+    if (lockContext?.protectedIds.has(Number(culture.i ?? culture.id))) continue;
     culture.parent = Number.isInteger(culture.parent) ? culture.parent : 0;
   }
 
   if (mode !== "flat") {
     const rootsChance = mode === "regional" ? 0.52 : 0.28;
     const previous = [];
-    for (const culture of (cultures || []).filter(item => item?.i && !item.removed).sort((a, b) => a.i - b.i)) {
+    for (const culture of (cultures || []).filter(item => item?.i && !item.removed && !lockContext?.protectedIds.has(Number(item.i))).sort((a, b) => a.i - b.i)) {
       if (!previous.length || random.next() < rootsChance) culture.parent = 0;
       else culture.parent = pickCultureParent(culture, previous, pack, random, mode);
       previous.push(culture);
     }
   } else {
-    for (const culture of cultures || []) if (culture?.i) culture.parent = 0;
+    for (const culture of cultures || []) if (culture?.i && !lockContext?.protectedIds.has(Number(culture.i))) culture.parent = 0;
   }
 
   rebuildInheritanceTree(cultures);
+  if (lockContext) restoreLockedSocialStructure(cultures, lockContext);
 }
 
 function pickCultureParent(culture, previous, pack, random, mode) {
@@ -295,37 +332,49 @@ function cultureParentScore(culture, parent, pack) {
   return score;
 }
 
-function applyReligionInheritance(religions, society, pack, random, options = {}) {
+function applyReligionInheritance(religions, society, pack, random, options = {}, lockContext = null) {
   const mode = normalizeInheritanceMode(options?.religionInheritanceMode);
+  const explicitLockedIds = lockContext?.explicitIds || new Set();
   for (const religion of religions || []) {
     if (!religion) continue;
+    if (lockContext?.protectedIds.has(Number(religion.i ?? religion.id))) continue;
     religion.parent = Number.isInteger(religion.parent) ? religion.parent : 0;
   }
 
   if (mode === "flat") {
-    for (const religion of religions || []) if (religion?.i) religion.parent = 0;
+    for (const religion of religions || []) if (religion?.i && !lockContext?.protectedIds.has(Number(religion.i))) religion.parent = 0;
     rebuildInheritanceTree(religions);
+    if (lockContext) restoreLockedSocialStructure(religions, lockContext);
     return;
   }
 
   const folkByCulture = new Map(
     (religions || []).filter(religion => religion?.i && religion.type === "Folk" && !religion.removed).map(religion => [Number(religion.culture) || 0, religion.i])
   );
+  const assignableFolkByCulture = new Map(
+    [...folkByCulture].filter(([, religionId]) => !explicitLockedIds.has(Number(religionId)))
+  );
   const previous = [];
 
   for (const religion of (religions || []).filter(item => item?.i && !item.removed).sort((a, b) => a.i - b.i)) {
+    if (lockContext?.protectedIds.has(Number(religion.i))) {
+      previous.push(religion);
+      continue;
+    }
     const cultureId = Number(religion.culture) || 0;
     if (religion.type === "Folk") {
       const culture = society?.cultures?.[cultureId];
       const parentCultureId = Number(culture?.parent) || 0;
-      religion.parent = parentCultureId && folkByCulture.has(parentCultureId) ? folkByCulture.get(parentCultureId) : 0;
+      religion.parent = parentCultureId && assignableFolkByCulture.has(parentCultureId) ? assignableFolkByCulture.get(parentCultureId) : 0;
     } else {
-      religion.parent = pickReligionParent(religion, previous, folkByCulture, pack, random, mode);
+      const assignableParents = previous.filter(parent => !explicitLockedIds.has(Number(parent.i ?? parent.id)));
+      religion.parent = pickReligionParent(religion, assignableParents, assignableFolkByCulture, pack, random, mode);
     }
     previous.push(religion);
   }
 
   rebuildInheritanceTree(religions);
+  if (lockContext) restoreLockedSocialStructure(religions, lockContext);
 }
 
 function pickReligionParent(religion, previous, folkByCulture, pack, random, mode) {
@@ -379,8 +428,8 @@ function createFolkReligions(pack, society, random) {
     });
 }
 
-function createOrganizedReligions(pack, society, random, target) {
-  const candidateCells = getReligionCandidateCells(pack, target);
+function createOrganizedReligions(pack, society, random, target, excludedCenters = new Set()) {
+  const candidateCells = getReligionCandidateCells(pack, target).filter(cell => !excludedCenters.has(cell));
   const centers = placePackReligionCenters(pack, candidateCells, target);
   const cultsCount = Math.floor((random.integer(1, 4) / 10) * centers.length);
   const heresiesCount = Math.floor((random.integer(0, 3) / 10) * centers.length);
@@ -455,35 +504,39 @@ function getPackExtent(pack) {
   return [Math.max(1, maxX - minX), Math.max(1, maxY - minY)];
 }
 
-function combinePackReligions(rawReligions) {
-  const religions = [createNoReligion()];
-  const usedNames = new Set(["No religion"]);
+function combinePackReligions(rawReligions, lockContext = null) {
+  const religions = lockContext ? seedLockedSocialStore(createNoReligion(), lockContext) : [createNoReligion()];
+  const usedNames = new Set(religions.filter(Boolean).map(religion => religion.name).filter(Boolean));
 
   for (const religion of rawReligions) {
-    const i = religions.length;
+    const i = nextAvailableSocialId(religions, lockContext?.protectedIds);
     const name = uniqueName(religion.name, usedNames);
-    religions.push({
+    religions[i] = {
       ...religion,
       id: i,
       i,
       name,
       code: createReligionCode(name, i),
       origins: religion.type === "Folk" ? [0] : []
-    });
+    };
   }
 
   return religions;
 }
 
-function expandPackReligions(pack, religions) {
+function expandPackReligions(pack, religions, lockContext = null) {
   const {cells} = pack;
   const religionIds = spreadFolkReligions(pack, religions);
+  if (lockContext) applyExplicitLockedOwnershipBoundary(religionIds, lockContext);
   const costs = new Float64Array(cells.i.length).fill(Infinity);
   const queue = new MinPriorityQueue();
   const maxExpansionCost = cells.i.length / 20;
 
   for (const religion of religions) {
-    if (!religion?.i || religion.type === "Folk" || religion.removed) continue;
+    if (!religion?.i || religion.type === "Folk" || religion.removed || lockContext?.protectedIds.has(Number(religion.i))) continue;
+    if (lockContext?.packFixed[religion.center]) {
+      throw createRegenerationLockConflict(`宗教 #${religion.i} 的中心与锁定归属冲突`, {id: religion.i, center: religion.center});
+    }
     religionIds[religion.center] = religion.i;
     costs[religion.center] = 1;
     queue.push({cell: religion.center, religionId: religion.i, state: cells.state?.[religion.center] || 0, priority: 0}, 0);
@@ -496,6 +549,7 @@ function expandPackReligions(pack, religions) {
     if (!religion) continue;
 
     for (const next of cells.c[cell] || []) {
+      if (lockContext?.packFixed[next]) continue;
       if (religion.expansion === "culture" && religion.culture !== cells.culture?.[next]) continue;
       if (religion.expansion === "state" && state !== (cells.state?.[next] || 0)) continue;
 
@@ -511,19 +565,34 @@ function expandPackReligions(pack, religions) {
     }
   }
 
+  if (lockContext) assertFixedOwnership(religionIds, lockContext.packOwners, lockContext.packFixed, "宗教");
   return religionIds;
 }
 
-export function reexpandSocietyReligions(grid, pack, religions, settlements = null) {
+function applyExplicitLockedOwnershipBoundary(values, lockContext) {
+  for (let cell = 0; cell < values.length; cell++) {
+    if (lockContext.packFixed[cell]) {
+      values[cell] = lockContext.packOwners[cell];
+    } else if (lockContext.explicitIds.has(Number(values[cell]))) {
+      values[cell] = 0;
+    }
+  }
+  return values;
+}
+
+export function reexpandSocietyReligions(grid, pack, religions, settlements = null, options = {}) {
+  const lockContext = prepareReligionLocks(grid, pack, options);
   const before = Array.from(pack?.cells?.religion || []);
-  const religionIds = expandPackReligions(pack, religions);
+  const beforeGrid = Array.from(grid?.cells?.religion || []);
+  const religionIds = expandPackReligions(pack, religions, lockContext);
   pack.cells.religion = religionIds;
-  checkReligionCenters(pack, religions);
-  summarizeReligionCoverage(pack, religions);
-  const gridCells = mirrorPackReligionToGrid(grid, pack);
-  syncReligionsToSettlementsAndPolitics(pack, settlements);
+  checkReligionCenters(pack, religions, lockContext);
+  summarizeReligionCoverage(pack, religions, lockContext);
+  const gridCells = mirrorPackReligionToGrid(grid, pack, lockContext);
+  syncReligionsToSettlementsAndPolitics(pack, settlements, options);
   return {
     changedPackCells: countChanged(before, religionIds),
+    changedGridCells: countChanged(beforeGrid, grid.cells.religion),
     packCells: countPositive(religionIds),
     gridCells
   };
@@ -558,20 +627,23 @@ function getRouteBetween(pack, from, to) {
   return pack.routes?.[routeId] || null;
 }
 
-function checkReligionCenters(pack, religions) {
+function checkReligionCenters(pack, religions, lockContext = null) {
   for (const religion of religions) {
     if (!religion?.i || religion.removed) continue;
+    if (lockContext?.protectedIds.has(Number(religion.i))) continue;
     if (pack.cells.religion[religion.center] === religion.i) continue;
     const firstCell = pack.cells.i.find(cell => pack.cells.religion[cell] === religion.i);
     const cultureCenter = pack.cultures?.[religion.culture]?.center;
     if (Number.isInteger(firstCell)) religion.center = firstCell;
     else if (religion.type === "Folk" && Number.isInteger(cultureCenter)) religion.center = cultureCenter;
   }
+  if (lockContext) restoreLockedSocialStructure(religions, lockContext);
 }
 
-function summarizeReligionCoverage(pack, religions) {
+function summarizeReligionCoverage(pack, religions, lockContext = null) {
   for (const religion of religions) {
     if (!religion) continue;
+    if (lockContext?.protectedIds.has(Number(religion.i ?? religion.id))) continue;
     religion.cells = 0;
     religion.area = 0;
     religion.rural = 0;
@@ -580,7 +652,7 @@ function summarizeReligionCoverage(pack, religions) {
 
   for (const cell of pack.cells.i) {
     const religion = religions[pack.cells.religion[cell]];
-    if (!religion) continue;
+    if (!religion || lockContext?.protectedIds.has(Number(religion.i ?? religion.id))) continue;
     religion.cells++;
     religion.area = round((religion.area || 0) + (pack.cells.area?.[cell] || 0), 2);
     religion.rural = round((religion.rural || 0) + (pack.cells.pop?.[cell] || 0), 2);
@@ -589,11 +661,11 @@ function summarizeReligionCoverage(pack, religions) {
   for (const burg of pack.burgs || []) {
     if (!burg?.i || burg.removed) continue;
     const religion = religions[pack.cells.religion[burg.cell]];
-    if (religion) religion.urban = round((religion.urban || 0) + (burg.population || 0), 2);
+    if (religion && !lockContext?.protectedIds.has(Number(religion.i ?? religion.id))) religion.urban = round((religion.urban || 0) + (burg.population || 0), 2);
   }
 }
 
-function mirrorPackReligionToGrid(grid, pack) {
+function mirrorPackReligionToGrid(grid, pack, lockContext = null) {
   const values = new Array(grid.points.length).fill(0);
   const bestScore = new Float32Array(grid.points.length).fill(-1);
 
@@ -605,28 +677,57 @@ function mirrorPackReligionToGrid(grid, pack) {
     bestScore[gridCell] = score;
   }
 
+  if (lockContext) {
+    clearExplicitOwnershipOutsideFixed(values, lockContext.explicitIds, lockContext.gridFixed);
+    applyFixedOwnership(values, lockContext.gridOwners, lockContext.gridFixed);
+    assertFixedOwnership(pack.cells.religion, lockContext.packOwners, lockContext.packFixed, "宗教");
+    assertFixedOwnership(values, lockContext.gridOwners, lockContext.gridFixed, "宗教 grid");
+  }
   grid.cells.religion = values;
   return countPositive(values);
 }
 
-function syncReligionsToSettlementsAndPolitics(pack, settlements) {
+function syncReligionsToSettlementsAndPolitics(pack, settlements, options = {}) {
+  const protectedStateIds = protectedSocialSupportIds(options.lockedStates);
+  const protectedProvinceIds = protectedSocialSupportIds(options.lockedProvinces);
+  const protectedCityIds = new Set((options.lockedCities || []).map(city => String(city?.id ?? city?.i)));
+  const protectedBurgIds = new Set((options.lockedCities || [])
+    .map(city => Number(city?.burgId))
+    .filter(id => Number.isInteger(id) && id > 0));
   for (const burg of pack.burgs || []) {
     if (!burg?.i) continue;
+    if (protectedBurgIds.has(Number(burg.i))
+      || protectedStateIds.has(Number(burg.state))
+      || protectedProvinceIds.has(Number(burg.province))) continue;
     burg.religion = pack.cells.religion[burg.cell] || 0;
   }
   for (const city of settlements?.cities || []) {
-    if (!Number.isInteger(city.packCell)) continue;
+    if (!city || !Number.isInteger(city.packCell)) continue;
+    const stateId = Number(pack.cells.state?.[city.packCell] ?? city.state);
+    const provinceId = Number(pack.cells.province?.[city.packCell] ?? city.province);
+    if (protectedCityIds.has(String(city.id ?? city.i))
+      || protectedBurgIds.has(Number(city.burgId))
+      || protectedStateIds.has(stateId)
+      || protectedProvinceIds.has(provinceId)) continue;
     city.religion = pack.cells.religion[city.packCell] || 0;
   }
   for (const state of pack.states || []) {
-    if (!state?.i) continue;
+    if (!state?.i || protectedStateIds.has(Number(state.i))) continue;
     const capitalCell = pack.burgs?.[state.capital]?.cell ?? state.center;
     state.religion = pack.cells.religion[capitalCell] || 0;
   }
   for (const province of pack.provinces || []) {
-    if (!province?.i) continue;
+    if (!province?.i
+      || protectedProvinceIds.has(Number(province.i))
+      || protectedStateIds.has(Number(province.state))) continue;
     province.religion = pack.cells.religion[province.center] || 0;
   }
+}
+
+function protectedSocialSupportIds(snapshots = []) {
+  return new Set((snapshots || [])
+    .map(snapshot => Number(snapshot?.i ?? snapshot?.id))
+    .filter(Number.isInteger));
 }
 
 function defineReligionExpansion(pack, center, type, random) {
@@ -937,7 +1038,7 @@ function defineExpansionism(type, random, sizeVariety = 4) {
   return round(((random.next() * sizeVariety) / 2 + 1) * base, 1);
 }
 
-function expandPackCultures(pack, cultures, centers, cultureIds, populatedMask) {
+function expandPackCultures(pack, cultures, centers, cultureIds, populatedMask, lockContext = null) {
   const {cells} = pack;
   const costs = new Float64Array(cells.i.length).fill(Infinity);
   const queue = new MinPriorityQueue();
@@ -954,6 +1055,7 @@ function expandPackCultures(pack, cultures, centers, cultureIds, populatedMask) 
     if (priority !== costs[cell]) continue;
 
     for (const neighbor of cells.c[cell] || []) {
+      if (lockContext?.packFixed[neighbor]) continue;
       const step = packCultureStepCost(pack, cultures[cultureId], cell, neighbor);
       const total = priority + step;
       if (!Number.isFinite(total) || total > maxExpansionCost || total >= costs[neighbor]) continue;
@@ -965,23 +1067,28 @@ function expandPackCultures(pack, cultures, centers, cultureIds, populatedMask) 
   }
 }
 
-export function reexpandSocietyCultures(grid, pack, cultures) {
+export function reexpandSocietyCultures(grid, pack, cultures, options = {}) {
   const cells = pack.cells;
+  const lockContext = prepareCultureLocks(grid, pack, options);
   const before = Array.from(cells.culture || []);
+  const beforeGrid = Array.from(grid?.cells?.culture || []);
   const cultureIds = new Uint16Array(cells.i.length);
+  applyFixedOwnership(cultureIds, lockContext.packOwners, lockContext.packFixed);
   const centers = cultures
-    .filter(culture => culture?.i && !culture.removed && isValidCultureCenter(cells, culture.center))
+    .filter(culture => culture?.i && !culture.removed && !lockContext.protectedIds.has(Number(culture.i)) && isValidCultureCenter(cells, culture.center))
     .map(culture => ({cell: culture.center, cultureId: culture.i, point: cells.p?.[culture.center]}));
   const populated = cells.i.filter(cell => isPopulatedPackCell(cells, cell));
   const populatedMask = createCellMask(cells.i.length, populated);
-  resetCultureCoverage(cultures);
-  expandPackCultures(pack, cultures, centers, cultureIds, populatedMask);
-  fillUnassignedPopulatedCultures(pack, cultures, centers, cultureIds, populatedMask);
+  resetCultureCoverage(cultures, lockContext);
+  expandPackCultures(pack, cultures, centers, cultureIds, populatedMask, lockContext);
+  fillUnassignedPopulatedCultures(pack, cultures, centers, cultureIds, populatedMask, lockContext);
+  assertFixedOwnership(cultureIds, lockContext.packOwners, lockContext.packFixed, "文化");
   cells.culture = cultureIds;
-  summarizeCultureCoverage(pack, cultures);
-  const gridCells = mirrorPackCultureToGrid(grid, pack);
+  summarizeCultureCoverage(pack, cultures, lockContext);
+  const gridCells = mirrorPackCultureToGrid(grid, pack, lockContext);
   return {
     changedPackCells: countChanged(before, cultureIds),
+    changedGridCells: countChanged(beforeGrid, grid.cells.culture),
     packCells: countPositive(cultureIds),
     gridCells
   };
@@ -991,7 +1098,7 @@ function shouldFillUnassignedPopulatedCultures(options = {}, pack) {
   return !(options.heightmapTemplate === "archipelago" && options.cellsTarget <= 10000 && (pack?.cells?.i?.length || 0) < 3500);
 }
 
-function fillUnassignedPopulatedCultures(pack, cultures, centers, cultureIds, populatedMask) {
+function fillUnassignedPopulatedCultures(pack, cultures, centers, cultureIds, populatedMask, lockContext = null) {
   const {cells} = pack;
   if (!hasUnassignedPopulatedCulture(cultureIds, populatedMask)) return;
 
@@ -1008,9 +1115,10 @@ function fillUnassignedPopulatedCultures(pack, cultures, centers, cultureIds, po
     const {cell, cultureId, priority} = queue.pop();
     if (priority !== costs[cell]) continue;
 
-    if (!cultureIds[cell] && populatedMask[cell]) cultureIds[cell] = cultureId;
+    if (!lockContext?.packFixed[cell] && !cultureIds[cell] && populatedMask[cell]) cultureIds[cell] = cultureId;
 
     for (const neighbor of cells.c[cell] || []) {
+      if (lockContext?.packFixed[neighbor]) continue;
       const step = packCultureStepCost(pack, cultures[cultureId], cell, neighbor);
       const total = priority + step;
       if (!Number.isFinite(total) || total > maxCompletionCost || total >= costs[neighbor]) continue;
@@ -1079,11 +1187,11 @@ function getTypeCost(distanceFromCoast, type) {
   return 0;
 }
 
-function summarizeCultureCoverage(pack, cultures) {
+function summarizeCultureCoverage(pack, cultures, lockContext = null) {
   const {cells} = pack;
   for (const cell of cells.i) {
     const culture = cultures[cells.culture[cell]];
-    if (!culture) continue;
+    if (!culture || lockContext?.protectedIds.has(Number(culture.i ?? culture.id))) continue;
     culture.cells = (culture.cells || 0) + 1;
     culture.area = round((culture.area || 0) + (cells.area[cell] || 0), 2);
     culture.rural = round((culture.rural || 0) + (cells.pop[cell] || 0), 2);
@@ -1091,13 +1199,14 @@ function summarizeCultureCoverage(pack, cultures) {
   for (const burg of pack.burgs || []) {
     if (!burg?.i || burg.removed) continue;
     const culture = cultures[cells.culture[burg.cell]];
-    if (culture) culture.urban = round((culture.urban || 0) + (burg.population || 0), 2);
+    if (culture && !lockContext?.protectedIds.has(Number(culture.i ?? culture.id))) culture.urban = round((culture.urban || 0) + (burg.population || 0), 2);
   }
 }
 
-function resetCultureCoverage(cultures) {
+function resetCultureCoverage(cultures, lockContext = null) {
   for (const culture of cultures || []) {
     if (!culture) continue;
+    if (lockContext?.protectedIds.has(Number(culture.i ?? culture.id))) continue;
     culture.cells = 0;
     culture.area = 0;
     culture.rural = 0;
@@ -1105,7 +1214,7 @@ function resetCultureCoverage(cultures) {
   }
 }
 
-function mirrorPackCultureToGrid(grid, pack) {
+function mirrorPackCultureToGrid(grid, pack, lockContext = null) {
   const values = new Array(grid.points.length).fill(0);
   const bestScore = new Float32Array(grid.points.length).fill(-1);
 
@@ -1117,6 +1226,12 @@ function mirrorPackCultureToGrid(grid, pack) {
     bestScore[gridCell] = score;
   }
 
+  if (lockContext) {
+    clearExplicitOwnershipOutsideFixed(values, lockContext.explicitIds, lockContext.gridFixed);
+    applyFixedOwnership(values, lockContext.gridOwners, lockContext.gridFixed);
+    assertFixedOwnership(pack.cells.culture, lockContext.packOwners, lockContext.packFixed, "文化");
+    assertFixedOwnership(values, lockContext.gridOwners, lockContext.gridFixed, "文化 grid");
+  }
   grid.cells.culture = values;
   return countPositive(values);
 }
@@ -1255,6 +1370,28 @@ function countPositive(values = []) {
   let count = 0;
   for (const value of values) if (value > 0) count++;
   return count;
+}
+
+function prepareCultureLocks(grid, pack, options = {}) {
+  return prepareSocialRegenerationLocks({
+    grid,
+    pack,
+    objects: combineLockedSocialOptions(options, "lockedCultures", "preservedCultures"),
+    field: "culture",
+    plural: "cultures",
+    label: "文化"
+  });
+}
+
+function prepareReligionLocks(grid, pack, options = {}) {
+  return prepareSocialRegenerationLocks({
+    grid,
+    pack,
+    objects: combineLockedSocialOptions(options, "lockedReligions", "preservedReligions"),
+    field: "religion",
+    plural: "religions",
+    label: "宗教"
+  });
 }
 
 function round(value, digits = 0) {

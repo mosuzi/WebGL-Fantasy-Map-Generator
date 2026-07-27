@@ -56,7 +56,7 @@ export function finalizeSettlements(grid, features, politics, settlements, pack,
   mirrorCitiesToGrid(grid, settlements.cities);
   if (pack?.cells) {
     mirrorGridBurgsToPack(pack, settlements.cities);
-    syncPoliticalSettlementStats(pack, politics, settlements.cities);
+    syncPoliticalSettlementStats(pack, politics, settlements.cities, options);
   }
   const routes = buildRoutes(grid, features, politics, settlements.cities, pack, options);
   const populationPoints = buildPopulationPoints(grid, features, grid.cells.pop);
@@ -75,7 +75,7 @@ export function regenerateSettlementsWithinPolitics(grid, features, politics, se
     : rebuildPackSettlementsWithAnchors(grid, politics, pack, random, options, settlements);
   settlements.cities = result.cities;
   mirrorCitiesToGrid(grid, settlements.cities);
-  syncPoliticalSettlementStats(pack, politics, settlements.cities);
+  syncPoliticalSettlementStats(pack, politics, settlements.cities, options);
   return finalizeSettlements(grid, features, politics, settlements, pack, options);
 }
 
@@ -231,22 +231,34 @@ function rebuildPackSettlementsWithAnchors(grid, politics, pack, random, options
   const {cells} = pack;
   const nameGenerator = createChineseNameGenerator(options.seed, {namebases: options.namebases});
   const populated = cells.i.filter(cell => isPopulatedPackCell(cells, cell));
-  const cities = [];
-  const burgs = [null];
+  const previousBurgs = pack.burgs || [];
+  const previousCities = settlements?.cities || [];
+  const locked = prepareLockedCities(grid, pack, options, previousCities, previousBurgs);
+  const reservedBurgIds = new Set(locked.burgIds);
+  for (const state of politics?.states || []) {
+    if (state?.i && Number.isInteger(state.capital) && state.capital > 0) reservedBurgIds.add(Number(state.capital));
+  }
+  const allocateCityId = createReservedIdAllocator(locked.cityIds, 0);
+  const allocateBurgId = createReservedIdAllocator(reservedBurgIds, 1);
+  const cities = locked.cities;
+  const burgs = locked.burgs;
   const occupied = new Set();
   const occupiedGrid = new Set();
   const spacingIndex = new SpacingIndex(16);
-  const previousBurgs = pack.burgs || [];
-  const previousCitiesByBurg = new Map((settlements?.cities || []).map(city => [city.burgId, city]));
+  const previousCitiesByBurg = new Map(previousCities.filter(Boolean).map(city => [city.burgId, city]));
+  const protectedSettlementCells = collectProtectedSettlementCells(pack, options);
+  const protectedProvinceIds = snapshotIds(options.lockedProvinces);
 
   cells.burg = new Uint16Array(cells.i.length);
   if (!cells.i.length) {
     pack.burgs = burgs;
     return {cities};
   }
+  seedLockedCities(grid, cells, locked, occupied, occupiedGrid, spacingIndex);
 
   for (const state of politics?.states || []) {
     if (!state?.i || !Number.isInteger(state.capital)) continue;
+    if (locked.burgIds.has(Number(state.capital))) continue;
     const previousBurg = previousBurgs[state.capital];
     const previousCity = previousCitiesByBurg.get(state.capital);
     const packCell = anchorPackCell(pack, previousBurg?.cell ?? state.center, populated);
@@ -261,7 +273,7 @@ function rebuildPackSettlementsWithAnchors(grid, politics, pack, random, options
       packCell,
       random,
       nameGenerator,
-      flags: {capital: true, required: true, state: state.i, burgId: state.capital, name: previousCity?.name || previousBurg?.name}
+      flags: {capital: true, required: true, state: state.i, cityId: allocateCityId(), burgId: state.capital, name: previousCity?.name || previousBurg?.name}
     });
     if (city) {
       state.capital = city.burgId;
@@ -273,6 +285,8 @@ function rebuildPackSettlementsWithAnchors(grid, politics, pack, random, options
 
   for (const province of politics?.provinces || []) {
     if (!province?.i) continue;
+    if (protectedProvinceIds.has(Number(province.i ?? province.id))) continue;
+    if (locked.burgIds.has(Number(province.burg))) continue;
     const packCell = anchorPackCell(pack, province.center, populated);
     const previousBurg = previousBurgs[province.burg];
     const previousCity = previousCitiesByBurg.get(province.burg);
@@ -287,7 +301,7 @@ function rebuildPackSettlementsWithAnchors(grid, politics, pack, random, options
       packCell,
       random,
       nameGenerator,
-      flags: {provincial: true, required: true, state: province.state, name: previousCity?.name || previousBurg?.name}
+      flags: {provincial: true, required: true, state: province.state, cityId: allocateCityId(), burgId: allocateBurgId(), name: previousCity?.name || previousBurg?.name}
     });
     if (city) {
       province.burg = city.burgId;
@@ -298,11 +312,27 @@ function rebuildPackSettlementsWithAnchors(grid, politics, pack, random, options
     }
   }
 
-  addRegeneratedTowns({grid, pack, cities, burgs, occupied, occupiedGrid, spacingIndex, populated, random, nameGenerator});
+  addRegeneratedTowns({
+    grid,
+    pack,
+    cities,
+    burgs,
+    occupied,
+    occupiedGrid,
+    spacingIndex,
+    populated,
+    random,
+    nameGenerator,
+    reservedTowns: locked.cities.filter(city => city && !city.capital && !city.provincial).length,
+    allocateCityId,
+    allocateBurgId,
+    excludedPackCells: protectedSettlementCells
+  });
   pack.burgs = burgs;
-  shiftPortsAndRiverBurgs(grid, pack, cities, burgs, nameGenerator, options);
-  defineCityTypes(pack, cities, burgs);
-  specifyBurgs(pack, cities, burgs, nameGenerator);
+  const protectedOptions = {...options, preservedBurgIds: locked.burgIds};
+  shiftPortsAndRiverBurgs(grid, pack, cities, burgs, nameGenerator, protectedOptions);
+  defineCityTypes(pack, cities, burgs, protectedOptions);
+  specifyBurgs(pack, cities, burgs, nameGenerator, protectedOptions);
   return {cities};
 }
 
@@ -311,8 +341,9 @@ function rebuildPackSettlementsInScope(grid, politics, pack, random, options, se
   const {cells} = pack;
   const previousCities = settlements?.cities || [];
   const previousBurgs = pack.burgs || [];
-  const cities = previousCities.map(city => city ? {...city, visual: cloneVisual(city.visual)} : city);
-  const burgs = previousBurgs.map(burg => burg ? {...burg, visual: cloneVisual(burg.visual)} : burg);
+  const locked = prepareLockedCities(grid, pack, options, previousCities, previousBurgs);
+  const cities = structuredClone(previousCities);
+  const burgs = structuredClone(previousBurgs);
   const targetCell = cell => scope.kind === "state"
     ? Number(cells.state?.[cell]) === scope.id
     : Number(cells.province?.[cell]) === scope.id;
@@ -321,7 +352,7 @@ function rebuildPackSettlementsInScope(grid, politics, pack, random, options, se
     .map(province => Number(province.burg))
     .filter(Number.isInteger));
   const replaceable = previousCities.filter(city => city && !city.removed && targetCell(city.packCell)
-    && !city.capital && !provinceAnchors.has(Number(city.burgId)));
+    && !city.capital && !provinceAnchors.has(Number(city.burgId)) && !locked.cityIds.has(Number(city.id)));
   const replaceableIds = new Set(replaceable.map(city => Number(city.id)));
   const occupied = new Set();
   const occupiedGrid = new Set();
@@ -360,9 +391,80 @@ function rebuildPackSettlementsInScope(grid, politics, pack, random, options, se
   pack.burgs = burgs;
   const generatedBurgs = generated.map(city => burgs[city.burgId]).filter(Boolean);
   shiftPortsAndRiverBurgs(grid, pack, cities, generatedBurgs, nameGenerator, options);
-  defineCityTypes(pack, generated, burgs);
-  specifyBurgs(pack, generated, burgs, nameGenerator);
+  defineCityTypes(pack, generated, burgs, options);
+  specifyBurgs(pack, generated, burgs, nameGenerator, options);
   return {cities};
+}
+
+function prepareLockedCities(grid, pack, options, previousCities, previousBurgs) {
+  const provided = options.lockedCities ?? options.preservedCities ?? [];
+  if (!Array.isArray(provided)) throw settlementLockConflict("锁定城镇约束必须是数组", {reason: "invalid-constraint"});
+  const cities = [];
+  const burgs = [null];
+  const cityIds = new Set();
+  const burgIds = new Set();
+  const packCells = new Set();
+  const gridCells = new Set();
+
+  for (const source of provided) {
+    if (!source || typeof source !== "object") throw settlementLockConflict("锁定城镇约束包含空对象", {reason: "invalid-city"});
+    const city = structuredClone(source);
+    const id = Number(city.id ?? city.i);
+    const burgId = Number(city.burgId);
+    const packCell = Number(city.packCell);
+    const gridCell = Number(city.cell);
+    if (!Number.isInteger(id) || id < 0 || !Number.isInteger(burgId) || burgId <= 0) {
+      throw settlementLockConflict("锁定城镇缺少有效 ID 或 burgId", {reason: "invalid-id", id, burgId});
+    }
+    if (!Number.isInteger(packCell) || packCell < 0 || packCell >= pack.cells.i.length || !Number.isInteger(gridCell) || gridCell < 0 || gridCell >= grid.cells.h.length) {
+      throw settlementLockConflict(`锁定城镇 #${id} 引用了无效 cell`, {reason: "invalid-cell", id, packCell, gridCell});
+    }
+    const existing = previousCities.find(item => Number(item?.id ?? item?.i) === id);
+    const burg = previousBurgs[burgId];
+    if (!existing || !burg || burg.removed || Number(burg.cell) !== packCell) {
+      throw settlementLockConflict(`锁定城镇 #${id} 缺少一致的原对象或 burg 镜像`, {reason: "missing-mirror", id, burgId, packCell});
+    }
+    if (cityIds.has(id) || burgIds.has(burgId) || packCells.has(packCell) || gridCells.has(gridCell)) {
+      throw settlementLockConflict(`锁定城镇 #${id} 与其它锁城占用重复身份或 cell`, {reason: "reserved-space-conflict", id, burgId, packCell, gridCell});
+    }
+    city.id = id;
+    cities[id] = city;
+    burgs[burgId] = structuredClone(burg);
+    cityIds.add(id);
+    burgIds.add(burgId);
+    packCells.add(packCell);
+    gridCells.add(gridCell);
+  }
+
+  return {cities, burgs, cityIds, burgIds, packCells, gridCells};
+}
+
+function seedLockedCities(grid, cells, locked, occupied, occupiedGrid, spacingIndex) {
+  for (const city of locked.cities) {
+    if (!city) continue;
+    cells.burg[city.packCell] = city.burgId;
+    occupied.add(city.packCell);
+    occupiedGrid.add(city.cell);
+    spacingIndex.add(city.x, city.y, city.id);
+    if (grid.cells.burg) grid.cells.burg[city.cell] = city.id;
+  }
+}
+
+function settlementLockConflict(message, details) {
+  const error = new Error(message);
+  error.code = "regeneration_lock_conflict";
+  error.details = {domain: "cities", ...details};
+  return error;
+}
+
+function createReservedIdAllocator(reserved, start) {
+  let cursor = start;
+  return () => {
+    while (reserved.has(cursor)) cursor++;
+    const id = cursor++;
+    reserved.add(id);
+    return id;
+  };
 }
 
 function normalizeSettlementScope(scope, politics) {
@@ -416,12 +518,27 @@ function addScopedRegeneratedTowns({grid, pack, cities, burgs, occupied, occupie
   return generated;
 }
 
-function addRegeneratedTowns({grid, pack, cities, burgs, occupied, occupiedGrid, spacingIndex, populated, random, nameGenerator}) {
+function addRegeneratedTowns({
+  grid,
+  pack,
+  cities,
+  burgs,
+  occupied,
+  occupiedGrid,
+  spacingIndex,
+  populated,
+  random,
+  nameGenerator,
+  reservedTowns = 0,
+  allocateCityId = null,
+  allocateBurgId = null,
+  excludedPackCells = new Set()
+}) {
   const {cells} = pack;
-  const targetTowns = getTownsNumber(populated.length, grid.points.length);
+  const targetTowns = Math.max(0, getTownsNumber(populated.length, grid.points.length) - reservedTowns);
   const score = new Float32Array(cells.i.length);
   for (const cell of populated) score[cell] = citySiteScore(pack, cell) * gaussian(random, 1, 3, 0, 20, 3);
-  const sorted = [...populated].sort((a, b) => score[b] - score[a]);
+  const sorted = [...populated].filter(cell => !excludedPackCells.has(cell)).sort((a, b) => score[b] - score[a]);
   let spacing = ((grid.metadata.graphWidth + grid.metadata.graphHeight) / 150) / (targetTowns ** 0.7 / 66);
 
   for (let added = 0; added < targetTowns && spacing > 1; ) {
@@ -433,7 +550,22 @@ function addRegeneratedTowns({grid, pack, cities, burgs, occupied, occupiedGrid,
       const minSpacing = spacing * gaussian(random, 1, 0.3, 0.2, 2, 2);
       if (spacingIndex.find(x, y, minSpacing)) continue;
 
-      const city = addPackCity({grid, pack, cities, burgs, occupied, occupiedGrid, spacingIndex, packCell, random, nameGenerator});
+      const city = addPackCity({
+        grid,
+        pack,
+        cities,
+        burgs,
+        occupied,
+        occupiedGrid,
+        spacingIndex,
+        packCell,
+        random,
+        nameGenerator,
+        flags: {
+          ...(allocateCityId ? {cityId: allocateCityId()} : {}),
+          ...(allocateBurgId ? {burgId: allocateBurgId()} : {})
+        }
+      });
       if (city) added++;
     }
 
@@ -573,17 +705,23 @@ function anchorPackCell(pack, preferredCell, populated) {
 
 function shiftPortsAndRiverBurgs(grid, pack, cities, burgs, nameGenerator, options = {}) {
   const {cells} = pack;
+  const preservedBurgIds = new Set(options.preservedBurgIds || []);
+  const protectedFeatureIds = snapshotIds(options.lockedFeatures);
+  const previousFeatureDiagnostics = (pack.portDiagnostics?.features || [])
+    .filter(item => protectedFeatureIds.has(Number(item?.feature)))
+    .map(item => structuredClone(item));
   const featurePortCandidates = new Map();
   const selectedPortCandidates = [];
   const riversById = new Map((pack.rivers || []).map(river => [river.i, river]));
   const addCandidate = candidate => {
     if (!candidate.portFeatureId) return;
+    if (protectedFeatureIds.has(Number(candidate.portFeatureId))) return;
     if (!featurePortCandidates.has(candidate.portFeatureId)) featurePortCandidates.set(candidate.portFeatureId, []);
     featurePortCandidates.get(candidate.portFeatureId).push(candidate);
   };
 
   for (const burg of burgs) {
-    if (!burg?.i) continue;
+    if (!burg?.i || preservedBurgIds.has(Number(burg.i))) continue;
     burg.port = 0;
     const candidate = createSettlementPortCandidate(grid, pack, burg, riversById, options);
     if (candidate) addCandidate(candidate);
@@ -621,9 +759,15 @@ function shiftPortsAndRiverBurgs(grid, pack, cities, burgs, nameGenerator, optio
   }
 
   pack.portDiagnostics = describePortCandidateDiagnostics(pack, featurePortCandidates, selectedPortCandidates);
+  if (previousFeatureDiagnostics.length) {
+    pack.portDiagnostics.features = [
+      ...pack.portDiagnostics.features.filter(item => !protectedFeatureIds.has(Number(item?.feature))),
+      ...previousFeatureDiagnostics
+    ].sort((left, right) => Number(left?.feature) - Number(right?.feature));
+  }
 
   for (const burg of burgs) {
-    if (!burg?.i || burg.port || !cells.r?.[burg.cell]) continue;
+    if (!burg?.i || preservedBurgIds.has(Number(burg.i)) || burg.port || !cells.r?.[burg.cell]) continue;
     const city = cities[burg.cityId];
     const [x, y] = shiftTowardsRiverBank(pack, burg.cell, riversById);
     burg.x = x;
@@ -826,8 +970,10 @@ function getRiverTangent(pack, cell, riversById) {
   return tx || ty ? [tx, ty] : null;
 }
 
-function defineCityTypes(pack, cities, burgs) {
+function defineCityTypes(pack, cities, burgs, options = {}) {
+  const preservedBurgIds = new Set(options.preservedBurgIds || []);
   for (const city of cities) {
+    if (!city || preservedBurgIds.has(Number(city.burgId))) continue;
     const burg = burgs[city.burgId];
     const type = getBurgType(pack, city.packCell, city.port);
     burg.type = type;
@@ -838,9 +984,11 @@ function defineCityTypes(pack, cities, burgs) {
   }
 }
 
-function specifyBurgs(pack, cities, burgs, nameGenerator) {
+function specifyBurgs(pack, cities, burgs, nameGenerator, options = {}) {
+  const preservedBurgIds = new Set(options.preservedBurgIds || []);
   const populations = burgs.filter(burg => burg?.i && !burg.removed).map(burg => burg.population || 0).sort((a, b) => a - b);
   for (const city of cities) {
+    if (!city || preservedBurgIds.has(Number(city.burgId))) continue;
     const burg = burgs[city.burgId];
     if (!burg?.i || burg.removed) continue;
     defineBurgFeatures(pack, burg);
@@ -1109,11 +1257,14 @@ function buildRoutes(grid, features, politics, cities, pack, options = {}) {
 }
 
 function buildPackRoutes(grid, pack, cities, options = {}) {
-  const connections = new Set();
-  const routes = [];
+  const locked = prepareLockedRoutes(pack, options);
+  const protectedFeatureIds = snapshotIds(options.lockedFeatures);
+  const connections = locked.connections;
+  const routes = locked.routes;
+  const allocateRouteId = createRouteIdAllocator(locked.ids);
   const {burgs} = pack;
   const aliveBurgs = burgs.filter(burg => burg?.i && !burg.removed);
-  const cityByBurg = new Map(cities.map(city => [city.burgId, city]));
+  const cityByBurg = new Map(cities.filter(Boolean).map(city => [city.burgId, city]));
   const capitalBurgs = groupCapitalBurgs(aliveBurgs, grid);
   const burgsByProvince = groupBurgs(aliveBurgs, burg => burgProvinceKey(burg));
   const portsByFeature = groupBurgs(aliveBurgs.filter(burg => burg.port), burg => burg.port);
@@ -1123,37 +1274,108 @@ function buildPackRoutes(grid, pack, cities, options = {}) {
   const edgeKeyMultiplier = pack.cells.i.length + 1;
   const riverEdges = buildRiverEdges(pack);
 
-  for (const segment of mergeRouteSegments(generateRouteSegments({pack, connections, groups: capitalBurgs, water: false, variation, search, edgeKeyMultiplier, riverEdges, maxVisited: pack.cells.i.length}))) {
-    addPackRoute({routes, pack, segment, type: "road", pointsArray, cityByBurg});
+  for (const segment of mergeRouteSegments(generateRouteSegments({pack, connections, groups: capitalBurgs, water: false, variation, search, edgeKeyMultiplier, riverEdges, maxVisited: pack.cells.i.length, excludedGroupIds: protectedFeatureIds}))) {
+    addPackRoute({routes, pack, segment, type: "road", pointsArray, cityByBurg, allocateRouteId});
   }
 
-  for (const segment of mergeRouteSegments(generateRouteSegments({pack, connections, groups: burgsByProvince, water: false, variation, search, edgeKeyMultiplier, riverEdges}))) {
-    addPackRoute({routes, pack, segment, type: "trail", pointsArray, cityByBurg});
+  for (const segment of mergeRouteSegments(generateRouteSegments({pack, connections, groups: burgsByProvince, water: false, variation, search, edgeKeyMultiplier, riverEdges, excludedGroupIds: protectedFeatureIds}))) {
+    addPackRoute({routes, pack, segment, type: "trail", pointsArray, cityByBurg, allocateRouteId});
   }
 
-  for (const segment of mergeRouteSegments(generateRouteSegments({pack, connections, groups: portsByFeature, water: true, variation, search, edgeKeyMultiplier, riverEdges}))) {
-    addPackRoute({routes, pack, segment, type: "searoute", pointsArray, cityByBurg});
+  for (const segment of mergeRouteSegments(generateRouteSegments({pack, connections, groups: portsByFeature, water: true, variation, search, edgeKeyMultiplier, riverEdges, excludedGroupIds: protectedFeatureIds}))) {
+    addPackRoute({routes, pack, segment, type: "searoute", pointsArray, cityByBurg, allocateRouteId});
   }
 
-  pack.routes = routes.map(route => ({
-    i: route.id,
-    group: route.type === "road" ? "roads" : route.type === "trail" ? "trails" : "searoutes",
-    feature: route.feature,
-    state: route.state,
-    province: route.province,
-    resourceCells: route.resourceCells || 0,
-    markerResourceCells: route.markerResourceCells || 0,
-    points: route.points.map((point, index) => [point[0], point[1], route.packCells[index]])
-  }));
+  pack.routes = buildPackRouteMirror(routes);
   pack.cells.routes = buildPackRouteLinks(routes);
   return routes;
 }
 
-function generateRouteSegments({pack, connections, groups, water, variation = null, search, edgeKeyMultiplier, riverEdges = null, maxVisited = null}) {
+function prepareLockedRoutes(pack, options) {
+  const provided = options.lockedRoutes ?? options.preservedRoutes ?? [];
+  if (!Array.isArray(provided)) throw routeLockConflict("锁定道路约束必须是数组", {reason: "invalid-constraint"});
+
+  const routes = [];
+  const ids = new Set();
+  const connections = new Set();
+  const edgeKeyMultiplier = pack.cells.i.length + 1;
+
+  for (const source of provided) {
+    if (!source || typeof source !== "object") throw routeLockConflict("锁定道路约束包含空对象", {reason: "invalid-route"});
+    const route = structuredClone(source);
+    const id = Number(route.id ?? route.i);
+    if (!Number.isInteger(id) || id < 0) throw routeLockConflict("锁定道路缺少有效 ID", {reason: "invalid-id", id: route.id ?? route.i});
+    if (ids.has(id)) throw routeLockConflict(`锁定道路 ID #${id} 重复`, {reason: "duplicate-id", id});
+
+    const packCells = route.packCells;
+    if (!Array.isArray(packCells) || packCells.length < 2) {
+      throw routeLockConflict(`锁定道路 #${id} 缺少有效路径`, {reason: "invalid-path", id});
+    }
+    if (!Array.isArray(route.points) || route.points.length !== packCells.length || !Array.isArray(route.cells) || route.cells.length !== packCells.length) {
+      throw routeLockConflict(`锁定道路 #${id} 的路径镜像不完整`, {reason: "incomplete-path-mirror", id});
+    }
+
+    for (let index = 0; index < packCells.length; index++) {
+      const cell = Number(packCells[index]);
+      if (!Number.isInteger(cell) || cell < 0 || cell >= pack.cells.i.length) {
+        throw routeLockConflict(`锁定道路 #${id} 包含无效 cell`, {reason: "invalid-cell", id, cell: packCells[index]});
+      }
+      packCells[index] = cell;
+      if (index === 0) continue;
+      const previous = packCells[index - 1];
+      if (!(pack.cells.c?.[previous] || []).includes(cell)) {
+        throw routeLockConflict(`锁定道路 #${id} 的路径不连续`, {reason: "disconnected-path", id, from: previous, to: cell});
+      }
+      const edge = routeEdgeKey(previous, cell, edgeKeyMultiplier);
+      if (connections.has(edge)) {
+        throw routeLockConflict(`锁定道路 #${id} 与其它锁路占用同一边`, {reason: "duplicate-edge", id, from: previous, to: cell});
+      }
+      connections.add(edge);
+    }
+
+    route.id = id;
+    ids.add(id);
+    routes.push(route);
+  }
+
+  return {routes, ids, connections};
+}
+
+function createRouteIdAllocator(reservedIds) {
+  let candidate = 0;
+  return () => {
+    while (reservedIds.has(candidate)) candidate++;
+    const id = candidate;
+    reservedIds.add(id);
+    candidate++;
+    return id;
+  };
+}
+
+function routeLockConflict(message, details) {
+  const error = new Error(message);
+  error.code = "regeneration_lock_conflict";
+  error.details = {domain: "routes", ...details};
+  return error;
+}
+
+function generateRouteSegments({
+  pack,
+  connections,
+  groups,
+  water,
+  variation = null,
+  search,
+  edgeKeyMultiplier,
+  riverEdges = null,
+  maxVisited = null,
+  excludedGroupIds = new Set()
+}) {
   const routeSegments = [];
   const entries = [...groups.entries()].sort(([a], [b]) => Number(a) - Number(b));
 
   for (const [feature, burgs] of entries) {
+    if (excludedGroupIds.has(Number(feature))) continue;
     const points = burgs.map(burg => routeCandidatePoint(burg, variation, water));
     const edges = selectRouteEdges(calculateUrquhartEdges(points), points, water);
 
@@ -1453,11 +1675,11 @@ function mergeRouteSegments(segments) {
   return mergedCount > 1 ? mergeRouteSegments(segments) : segments;
 }
 
-function addPackRoute({routes, pack, segment, type, pointsArray, cityByBurg}) {
+function addPackRoute({routes, pack, segment, type, pointsArray, cityByBurg, allocateRouteId}) {
   if (segment.merged || segment.cells.length < 2) return;
   const parts = type === "searoute" ? splitSeaRouteCells(pack, segment.cells) : [segment.cells];
 
-  for (const cells of parts) addPackRoutePart({routes, pack, cells, type, feature: segment.feature, pointsArray, cityByBurg, fromBurgId: segment.fromBurg, toBurgId: segment.toBurg});
+  for (const cells of parts) addPackRoutePart({routes, pack, cells, type, feature: segment.feature, pointsArray, cityByBurg, fromBurgId: segment.fromBurg, toBurgId: segment.toBurg, allocateRouteId});
 }
 
 function splitSeaRouteCells(pack, cells) {
@@ -1478,8 +1700,8 @@ function splitSeaRouteCells(pack, cells) {
   return parts;
 }
 
-function addPackRoutePart({routes, pack, cells, type, feature, pointsArray, cityByBurg, fromBurgId = null, toBurgId = null}) {
-  const id = routes.length;
+function addPackRoutePart({routes, pack, cells, type, feature, pointsArray, cityByBurg, fromBurgId = null, toBurgId = null, allocateRouteId}) {
+  const id = allocateRouteId();
   const fromBurg = pack.burgs?.[pack.cells.burg?.[cells[0]]] || pack.burgs?.[fromBurgId];
   const toBurg = pack.burgs?.[pack.cells.burg?.[cells.at(-1)]] || pack.burgs?.[toBurgId];
   const fromCity = cityByBurg.get(fromBurg?.i);
@@ -1654,6 +1876,23 @@ function buildPackRouteLinks(routes) {
   return links;
 }
 
+function buildPackRouteMirror(routes) {
+  const mirror = [];
+  for (const route of routes) {
+    mirror[route.id] = {
+      i: route.id,
+      group: route.type === "road" ? "roads" : route.type === "trail" ? "trails" : "searoutes",
+      feature: route.feature,
+      state: route.state,
+      province: route.province,
+      resourceCells: route.resourceCells || 0,
+      markerResourceCells: route.markerResourceCells || 0,
+      points: route.points.map((point, index) => [point[0], point[1], route.packCells[index]])
+    };
+  }
+  return mirror;
+}
+
 function createRoute(grid, features, from, to, type, id) {
   const cells = traceLandPath(grid, features, from.cell, to.cell);
   return {
@@ -1766,9 +2005,11 @@ function mirrorGridBurgsToPack(pack, cities) {
   }
 }
 
-function syncPoliticalSettlementStats(pack, politics, cities) {
-  syncStateSettlementStats(pack, politics?.states || []);
-  syncProvinceSettlementStats(pack, politics?.provinces || []);
+function syncPoliticalSettlementStats(pack, politics, cities, options = {}) {
+  const protectedStateIds = snapshotIds(options.lockedStates);
+  const protectedProvinceIds = snapshotIds(options.lockedProvinces);
+  syncStateSettlementStats(pack, politics?.states || [], protectedStateIds);
+  syncProvinceSettlementStats(pack, politics?.provinces || [], protectedProvinceIds);
   for (const city of cities) {
     if (!city || city.removed) continue;
     const burg = pack.burgs?.[city.burgId];
@@ -1779,9 +2020,9 @@ function syncPoliticalSettlementStats(pack, politics, cities) {
   }
 }
 
-function syncStateSettlementStats(pack, states) {
+function syncStateSettlementStats(pack, states, protectedIds = new Set()) {
   for (const state of states) {
-    if (!state) continue;
+    if (!state || protectedIds.has(Number(state.i ?? state.id))) continue;
     state.burgs = 0;
     state.rural = 0;
     state.urban = 0;
@@ -1793,7 +2034,7 @@ function syncStateSettlementStats(pack, states) {
   for (const cell of pack.cells.i) {
     if (pack.cells.h[cell] < 20) continue;
     const state = states[pack.cells.state?.[cell]];
-    if (!state) continue;
+    if (!state || protectedIds.has(Number(state.i ?? state.id))) continue;
     state.rural += pack.cells.pop?.[cell] || 0;
     const burg = pack.burgs?.[pack.cells.burg?.[cell]];
     if (burg?.i && !burg.removed) {
@@ -1804,7 +2045,7 @@ function syncStateSettlementStats(pack, states) {
   }
 
   for (const state of states) {
-    if (!state) continue;
+    if (!state || protectedIds.has(Number(state.i ?? state.id))) continue;
     state.rural = round(state.rural || 0, 2);
     state.urban = round(state.urban || 0, 2);
     finalizeCivilizationProfile(state);
@@ -1842,9 +2083,9 @@ function finalizeCivilizationProfile(state) {
   state.civilizationLabel = CITY_CIVILIZATION_LABELS[dominant] || dominant;
 }
 
-function syncProvinceSettlementStats(pack, provinces) {
+function syncProvinceSettlementStats(pack, provinces, protectedIds = new Set()) {
   for (const province of provinces) {
-    if (!province) continue;
+    if (!province || protectedIds.has(Number(province.i ?? province.id))) continue;
     province.burgs = 0;
     province.rural = 0;
     province.urban = 0;
@@ -1853,7 +2094,7 @@ function syncProvinceSettlementStats(pack, provinces) {
   for (const cell of pack.cells.i) {
     if (pack.cells.h[cell] < 20) continue;
     const province = provinces[pack.cells.province?.[cell]];
-    if (!province) continue;
+    if (!province || protectedIds.has(Number(province.i ?? province.id))) continue;
     province.rural += pack.cells.pop?.[cell] || 0;
     const burg = pack.burgs?.[pack.cells.burg?.[cell]];
     if (burg?.i && !burg.removed) {
@@ -1863,10 +2104,26 @@ function syncProvinceSettlementStats(pack, provinces) {
   }
 
   for (const province of provinces) {
-    if (!province) continue;
+    if (!province || protectedIds.has(Number(province.i ?? province.id))) continue;
     province.rural = round(province.rural || 0, 2);
     province.urban = round(province.urban || 0, 2);
   }
+}
+
+function snapshotIds(snapshots = []) {
+  return new Set((snapshots || []).map(item => Number(item?.i ?? item?.id)).filter(Number.isInteger));
+}
+
+function collectProtectedSettlementCells(pack, options = {}) {
+  const protectedStates = snapshotIds(options.lockedStates);
+  const protectedProvinces = snapshotIds(options.lockedProvinces);
+  const cells = new Set();
+  for (const cell of pack?.cells?.i || []) {
+    if (protectedStates.has(Number(pack.cells.state?.[cell])) || protectedProvinces.has(Number(pack.cells.province?.[cell]))) {
+      cells.add(cell);
+    }
+  }
+  return cells;
 }
 
 function findPackCellForGrid(grid, pack, gridCell, populated) {

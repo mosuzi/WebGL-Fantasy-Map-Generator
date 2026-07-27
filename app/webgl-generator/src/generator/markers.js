@@ -186,12 +186,15 @@ function buildPackMarkers(grid, pack, politics, rivers, options) {
   const random = createRandom(`${options.seed}:markers`);
   const markers = [];
   const occupied = new Set();
+  const protectedFeatureIds = protectedObjectIds(options.lockedFeatures);
   const target = getTargetMarkerCount(pack, options);
   const totalWeight = MARKER_TYPES.reduce((sum, config) => sum + config.weight, 0);
   const context = {grid, pack, politics, rivers, options};
 
   for (const config of MARKER_TYPES) {
-    const candidates = uniqueCells(config.candidates(context)).filter(cell => isValidMarkerCell(pack, cell) && !occupied.has(cell));
+    const candidates = uniqueCells(config.candidates(context)).filter(cell =>
+      isAvailableMarkerCell(pack, cell, occupied, protectedFeatureIds)
+    );
     const quantity = Math.min(candidates.length, Math.max(0, Math.round((target * config.weight) / totalWeight)));
     addMarkersOfType(markers, occupied, pack, grid, random, config, candidates, quantity, {
       ordered: config.category === "resource",
@@ -200,11 +203,13 @@ function buildPackMarkers(grid, pack, politics, rivers, options) {
   }
 
   if (markers.length < target) {
-    const fallback = uniqueCells([...landCells({pack}), ...coastalWaterCells({pack}), ...deepWaterCells({pack})]).filter(cell => isValidMarkerCell(pack, cell) && !occupied.has(cell));
+    const fallback = uniqueCells([...landCells({pack}), ...coastalWaterCells({pack}), ...deepWaterCells({pack})]).filter(cell =>
+      isAvailableMarkerCell(pack, cell, occupied, protectedFeatureIds)
+    );
     addMarkersOfType(markers, occupied, pack, grid, random, MARKER_TYPES.at(-1), fallback, target - markers.length);
   }
 
-  applyMarkerResourceEconomy(pack, markers);
+  applyMarkerResourceEconomy(pack, markers, options);
   return createMarkerResult(markers);
 }
 
@@ -215,13 +220,20 @@ export function regenerateResourceMarkers(grid, pack, politics, rivers, options 
   const random = createRandom(`${options.seed}:resource-markers:${salt}`);
   const context = {grid, pack, politics, rivers, options};
   const occupied = new Set(existingMarkers.map(marker => marker?.packCell).filter(Number.isInteger));
+  const protectedFeatureIds = protectedObjectIds(options.lockedFeatures);
   const markers = [];
   const previousResourceCount = existingMarkers.filter(marker => marker?.category === "resource").length;
-  const target = Math.max(3, previousResourceCount || Math.round((getTargetMarkerCount(pack, options) * RESOURCE_MARKER_WEIGHT) / MARKER_TYPES.reduce((sum, config) => sum + config.weight, 0)));
+  const requestedTarget = Number(options.targetResourceCount);
+  const target = Number.isInteger(requestedTarget) && requestedTarget >= 0
+    ? requestedTarget
+    : Math.max(3, previousResourceCount || Math.round((getTargetMarkerCount(pack, options) * RESOURCE_MARKER_WEIGHT) / MARKER_TYPES.reduce((sum, config) => sum + config.weight, 0)));
+  if (!target) return [];
   const quotas = markerTypeQuotas(RESOURCE_MARKER_TYPES, target);
 
   for (const config of RESOURCE_MARKER_TYPES) {
-    const candidates = uniqueCells(config.candidates(context)).filter(cell => isValidMarkerCell(pack, cell) && !occupied.has(cell));
+    const candidates = uniqueCells(config.candidates(context)).filter(cell =>
+      isAvailableMarkerCell(pack, cell, occupied, protectedFeatureIds)
+    );
     const quantity = Math.min(candidates.length, quotas.get(config.type) || 0);
     addMarkersOfType(markers, occupied, pack, grid, random, config, candidates, quantity, {ordered: true, context, idOffset: existingMarkers.length});
   }
@@ -229,7 +241,9 @@ export function regenerateResourceMarkers(grid, pack, politics, rivers, options 
   if (markers.length < target) {
     for (const config of [...RESOURCE_MARKER_TYPES].sort((a, b) => b.weight - a.weight)) {
       if (markers.length >= target) break;
-      const candidates = uniqueCells(config.candidates(context)).filter(cell => isValidMarkerCell(pack, cell) && !occupied.has(cell));
+      const candidates = uniqueCells(config.candidates(context)).filter(cell =>
+        isAvailableMarkerCell(pack, cell, occupied, protectedFeatureIds)
+      );
       addMarkersOfType(markers, occupied, pack, grid, random, config, candidates, target - markers.length, {ordered: true, context, idOffset: existingMarkers.length});
     }
   }
@@ -252,8 +266,8 @@ export function createMarkerAtPackCell(markers, pack, grid, type, packCell, over
   return marker;
 }
 
-export function refreshMarkerResourceEconomy(pack, markers) {
-  applyMarkerResourceEconomy(pack, markers);
+export function refreshMarkerResourceEconomy(pack, markers, options = {}) {
+  applyMarkerResourceEconomy(pack, markers, options);
 }
 
 function addMarkersOfType(markers, occupied, pack, grid, random, config, candidates, quantity, options = {}) {
@@ -974,9 +988,16 @@ function normalizeMarkerVisual(config, categoryDetails) {
   };
 }
 
-function applyMarkerResourceEconomy(pack, markers) {
-  resetMarkerEconomy(pack.states || []);
-  resetMarkerEconomy(pack.provinces || []);
+function applyMarkerResourceEconomy(pack, markers, options = {}) {
+  const protectedStateIds = protectedObjectIds(options.lockedStates);
+  const protectedProvinceIds = protectedObjectIds(options.lockedProvinces);
+  for (const province of pack.provinces || []) {
+    if (province && protectedStateIds.has(Number(province.state))) {
+      protectedProvinceIds.add(Number(province.i ?? province.id));
+    }
+  }
+  resetMarkerEconomy(pack.states || [], protectedStateIds);
+  resetMarkerEconomy(pack.provinces || [], protectedProvinceIds);
 
   const metadata = {
     economicMarkers: 0,
@@ -1001,12 +1022,12 @@ function applyMarkerResourceEconomy(pack, markers) {
       metadata.resources[resourceKey] = (metadata.resources[resourceKey] || 0) + value;
     }
 
-    accumulateMarkerEconomy(pack.states?.[marker.data?.state], marker, value);
-    accumulateMarkerEconomy(pack.provinces?.[marker.data?.province], marker, value);
+    accumulateMarkerEconomy(pack.states?.[marker.data?.state], marker, value, protectedStateIds);
+    accumulateMarkerEconomy(pack.provinces?.[marker.data?.province], marker, value, protectedProvinceIds);
   }
 
-  const statesWithResources = finalizeMarkerEconomy(pack.states || []);
-  const provincesWithResources = finalizeMarkerEconomy(pack.provinces || []);
+  const statesWithResources = finalizeMarkerEconomy(pack.states || [], protectedStateIds);
+  const provincesWithResources = finalizeMarkerEconomy(pack.provinces || [], protectedProvinceIds);
   if (!pack.metadata) pack.metadata = {};
   pack.metadata.markerResourceEconomy = {
     ...metadata,
@@ -1019,9 +1040,9 @@ function applyMarkerResourceEconomy(pack, markers) {
   };
 }
 
-function resetMarkerEconomy(groups) {
+function resetMarkerEconomy(groups, protectedIds = new Set()) {
   for (const group of groups || []) {
-    if (!group) continue;
+    if (!group || protectedIds.has(Number(group.i ?? group.id))) continue;
     group.markerEconomicPotential = 0;
     group.markerEconomicMarkers = 0;
     group.resourcePotential = 0;
@@ -1031,8 +1052,8 @@ function resetMarkerEconomy(groups) {
   }
 }
 
-function accumulateMarkerEconomy(group, marker, value) {
-  if (!group || group.removed) return;
+function accumulateMarkerEconomy(group, marker, value, protectedIds = new Set()) {
+  if (!group || group.removed || protectedIds.has(Number(group.i ?? group.id))) return;
   group.markerEconomicPotential += value;
   group.markerEconomicMarkers++;
   group.markerCategories[marker.category] = (group.markerCategories[marker.category] || 0) + value;
@@ -1043,10 +1064,14 @@ function accumulateMarkerEconomy(group, marker, value) {
   group.resourceTypes[resourceKey] = (group.resourceTypes[resourceKey] || 0) + value;
 }
 
-function finalizeMarkerEconomy(groups) {
+function finalizeMarkerEconomy(groups, protectedIds = new Set()) {
   let withResources = 0;
   for (const group of groups || []) {
     if (!group || group.removed) continue;
+    if (protectedIds.has(Number(group.i ?? group.id))) {
+      if (Number(group.resourcePotential) > 0) withResources++;
+      continue;
+    }
     group.markerEconomicPotential = round(group.markerEconomicPotential || 0, 2);
     group.resourcePotential = round(group.resourcePotential || 0, 2);
     group.markerCategories = roundObject(group.markerCategories || {});
@@ -1054,6 +1079,18 @@ function finalizeMarkerEconomy(groups) {
     if (group.resourcePotential > 0) withResources++;
   }
   return withResources;
+}
+
+function protectedObjectIds(snapshots = []) {
+  return new Set((snapshots || [])
+    .map(snapshot => Number(snapshot?.i ?? snapshot?.id))
+    .filter(Number.isInteger));
+}
+
+function isAvailableMarkerCell(pack, cell, occupied, protectedFeatureIds) {
+  return isValidMarkerCell(pack, cell)
+    && !occupied.has(cell)
+    && !protectedFeatureIds.has(Number(pack.cells.f?.[cell]));
 }
 
 function uniqueCells(cells) {

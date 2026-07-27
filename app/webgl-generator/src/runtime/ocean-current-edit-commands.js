@@ -1,5 +1,11 @@
 import {buildOceanCurrents, normalizeOceanCurrentModel} from "../generator/ocean-currents.js";
 import {systemAffected} from "./edit-command-effects.js";
+import {OBJECT_KIND} from "./object-kinds.js";
+import {
+  allRegenerationObjectsLocked,
+  assertLockedRegenerationSnapshots,
+  captureLockedRegenerationObjects
+} from "./regeneration-lock-protection.js";
 
 export function createRenameOceanCurrentCommand(currentId, name) {
   const id = String(currentId || "");
@@ -28,8 +34,14 @@ export function createRenameOceanCurrentCommand(currentId, name) {
 
 export function createRegenerateOceanCurrentsCommand(map, {seed} = {}) {
   const before = normalizeOceanCurrentModel(map?.oceanCurrents);
+  const lockCapture = captureLockedRegenerationObjects(map, OBJECT_KIND.OCEAN_CURRENT);
   const resolvedSeed = String(seed || `${map?.metadata?.seed || map?.options?.seed || "map"}|ocean-currents|${before.seed || "initial"}`);
-  const after = buildOceanCurrents(map, {seed: resolvedSeed});
+  const allLocked = allRegenerationObjectsLocked(map, OBJECT_KIND.OCEAN_CURRENT, before.currents);
+  const after = allLocked ? before : buildOceanCurrents(map, {
+    seed: resolvedSeed,
+    preservedCurrents: lockCapture.snapshots
+  });
+  if (!allLocked) assertLockedRegenerationSnapshots({...map, oceanCurrents: after}, lockCapture);
   return {
     label: `重新计算洋流 ${after.currents.length} 条`,
     domain: "ocean-current",
@@ -41,7 +53,7 @@ export function createRegenerateOceanCurrentsCommand(map, {seed} = {}) {
       context.map.oceanCurrents = structuredClone(before);
     },
     isNoop() {
-      return JSON.stringify(before) === JSON.stringify(after);
+      return allLocked || JSON.stringify(before) === JSON.stringify(after);
     },
     getResult() {
       return {seed: after.seed, currents: after.currents.length, inputChecksum: after.metadata.inputChecksum};

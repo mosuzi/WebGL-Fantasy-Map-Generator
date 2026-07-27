@@ -105,7 +105,7 @@ async function testUiAndApiContract() {
   assert.match(controlSource, /@click="requestRegeneration"[\s\S]*webglGeneratorApi\?\.generate\?\.regenerate[\s\S]*confirm: true,[\s\S]*stateId:[\s\S]*provinceId:/, "控制面板没有通过公开 API 把局部范围传给运行时");
   assert.match(appSource, /normalizeRegenerationScope\(state\.map, targetKind, options\)/, "公开 API 没有校验局部重设范围");
   assert.match(appSource, /regenerateProvincesForStates\(map, \[scope\.id\]\)/, "省份重设没有走国家范围核心路径");
-  assert.match(appSource, /settlementScope\s*\n?\s*\}\);/, "城镇重设没有传递国家或省份范围");
+  assert.match(appSource, /settlementScope,[\s\S]{0,300}\}\);/, "城镇重设没有传递国家或省份范围");
 }
 
 function activeStates(map) {

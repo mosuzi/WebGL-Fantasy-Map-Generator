@@ -117,6 +117,7 @@ export function createEconomyPanel(documentRef, manager, callbacks = {}) {
     onSelectMarket: row => {
       panelState.selectedMarketId = normalizeId(row.id);
       if (!panelState.marketAssignmentActive) panelState.targetMarketId = normalizeId(row.id);
+      callbacks.onSelectMarket?.({kind: OBJECT_KIND.ECONOMY_MARKET, id: panelState.selectedMarketId});
     },
     onSelectDeal: row => {
       panelState.selectedDealId = normalizeId(row.id);
@@ -203,6 +204,23 @@ export function createEconomyPanel(documentRef, manager, callbacks = {}) {
       panelState.sortKey = "value";
       panelState.sortDir = "desc";
       panelState.selectedDealId = id;
+      panelState.version++;
+      updatePanelListPreferences(documentRef, ECONOMY_PANEL_ID, {
+        tab: panelState.tab,
+        sortKey: panelState.sortKey,
+        sortDir: panelState.sortDir
+      }, ECONOMY_LIST_DEFAULTS);
+      return true;
+    },
+    setSelectedMarketId(marketId) {
+      const id = normalizeId(marketId);
+      if (!marketExists(panelState.map, id)) return false;
+      panelState.tab = "markets";
+      panelState.filter = "";
+      panelState.sortKey = "tradeValue";
+      panelState.sortDir = "desc";
+      panelState.selectedMarketId = id;
+      panelState.targetMarketId = id;
       panelState.version++;
       updatePanelListPreferences(documentRef, ECONOMY_PANEL_ID, {
         tab: panelState.tab,

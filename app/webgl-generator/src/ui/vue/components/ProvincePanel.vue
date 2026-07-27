@@ -5,7 +5,10 @@
     <UiFilterInput :model-value="state.filter" placeholder="筛选名称 / id / 国家" @update:model-value="callbacks.onFilter" />
     <UiButton variant="danger" @click="callbacks.onRegenerate?.()">重新生成省份</UiButton>
   </div>
+  <UiRegenerationLockActions v-bind="regenerationLocks.actionProps" v-on="regenerationLocks.actionListeners" />
   <UiObjectTable
+    v-bind="regenerationLocks.tableProps"
+    v-on="regenerationLocks.tableListeners"
     :columns="columns"
     :column-widths="state.columnWidths"
     :rows="visibleRows"
@@ -102,6 +105,7 @@ import UiMetricGrid from "./base/UiMetricGrid.vue";
 import UiNoteField from "./base/UiNoteField.vue";
 import UiObjectTable from "./base/UiObjectTable.vue";
 import UiPanelIoActions from "./base/UiPanelIoActions.vue";
+import UiRegenerationLockActions from "./base/UiRegenerationLockActions.vue";
 import UiSelectField from "./base/UiSelectField.vue";
 import UiSliderField from "./base/UiSliderField.vue";
 import UiTextEditField from "./base/UiTextEditField.vue";
@@ -111,6 +115,7 @@ import {compareRowsByKey} from "../../sort-utils.js";
 import {readObjectNote} from "../../../runtime/object-notes.js";
 import {useUnitPreferences} from "../composables/use-unit-preferences.js";
 import {useVisibleRowSelection} from "../composables/use-visible-row-selection.js";
+import {useRegenerationLockSelection} from "../composables/use-regeneration-lock-selection.js";
 import {BRUSH_RADIUS_ID, readBrushRadiusContract} from "../../../runtime/brush-radius-contract.js";
 
 const brushRadius = readBrushRadiusContract(BRUSH_RADIUS_ID.PROVINCE);
@@ -167,7 +172,9 @@ const metrics = computed(() => {
 });
 const provinceOptions = computed(() => provinceRows(props.state.map));
 const visibleRows = computed(() => sortRows(filterRows(metrics.value.rows, props.state.filter), props.state.sortKey, props.state.sortDir));
-const {selectedRowIds: selectedProvinceIds, selectedRows: selectedProvinceRows} = useVisibleRowSelection(visibleRows);
+const regenerationLocks = useRegenerationLockSelection({panelId: "province-panel", kind: "province", rows: visibleRows});
+const {selectedRowIds: selectedProvinceIds} = useVisibleRowSelection(visibleRows);
+const selectedProvinceRows = regenerationLocks.selectedRows;
 const highlightableProvinceRows = computed(() => selectedProvinceRows.value.filter(row => !row.neutral && Number(row.id) > 0));
 const filterEmptyAction = computed(() => String(props.state.filter || "").trim()
   ? {key: "clear-filter", label: "清空筛选", icon: "⌫"}

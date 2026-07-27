@@ -1,4 +1,5 @@
 import {createRuntimeOperationError} from "./runtime-operation.js";
+import {captureRegenerationConstraintBundle} from "./regeneration-constraint-bundle.js";
 
 const SYSTEM_SPECS = Object.freeze([
   system("cities", "城市"),
@@ -82,13 +83,29 @@ export function executeClimateDownstreamRebuild({
   if (!preview.valid) return {executed: false, preview, steps: [], command: null};
 
   const before = cloneMap(map);
+  const constraintBundle = captureClimateConstraintBundle(map, preview);
   const historySnapshot = editHistory.createSnapshot();
   const stepResults = [];
+  if (climateStepsFullyLocked(constraintBundle, preview.steps)) {
+    return {executed: false, reason: "domain-fully-locked", preview, steps: [], command: null};
+  }
   try {
     for (const step of preview.steps) {
+      const domains = climateStepConstraintDomains(step.system);
+      if (domains.every(domain => constraintBundle.isDomainFullyLocked(domain))) {
+        stepResults.push({
+          system: step.system,
+          covers: [...step.covers],
+          regenerationSalt: null,
+          result: {executed: false, reason: "domain-fully-locked"}
+        });
+        continue;
+      }
+      assertClimateStepConstraints(constraintBundle, map, step.system, "before");
       const regenerationSalt = prepareRegenerationSalt(map, preview.seed, step.system);
-      const result = executeSystem(step.system, {step, preview, regenerationSalt});
+      const result = executeSystem(step.system, {step, preview, regenerationSalt, constraintBundle});
       if (!result || result.executed === false) throw new Error(`气候下游重算未完成：${step.system}`);
+      assertClimateStepConstraints(constraintBundle, map, step.system, "after");
       stepResults.push({system: step.system, covers: [...step.covers], regenerationSalt, result});
     }
     markSelectedFresh(map, preview.selectedSystems);
@@ -156,13 +173,40 @@ export async function executeClimateDownstreamRebuildAsync({
     onProgress?.({phase: "snapshot-before", message: "正在保存重算前状态"});
     before = await cloneMapInChunks(map, {id: "snapshot-before", chunks, now, yieldToMain});
     assertRequestCurrent(signal, assertCurrent);
+    const constraintBundle = captureClimateConstraintBundle(map, preview);
+    if (climateStepsFullyLocked(constraintBundle, preview.steps)) {
+      return {
+        executed: false,
+        reason: "domain-fully-locked",
+        preview,
+        steps: [],
+        command: null,
+        timings: summarizeTimings(chunks, now() - startedAt)
+      };
+    }
     for (const step of preview.steps) {
       assertRequestCurrent(signal, assertCurrent);
       onProgress?.({phase: "system", system: step.system, message: `正在重算${systemLabel(step.system)}`});
+      const domains = climateStepConstraintDomains(step.system);
+      if (domains.every(domain => constraintBundle.isDomainFullyLocked(domain))) {
+        stepResults.push({
+          system: step.system,
+          covers: [...step.covers],
+          regenerationSalt: null,
+          result: {executed: false, reason: "domain-fully-locked"}
+        });
+        continue;
+      }
+      assertClimateStepConstraints(constraintBundle, map, step.system, "before");
       const regenerationSalt = prepareRegenerationSalt(map, preview.seed, step.system);
-      const result = await runBlockingChunk(`system:${step.system}`, () => executeSystem(step.system, {step, preview, regenerationSalt}), {chunks, now, yieldToMain});
+      const result = await runBlockingChunk(
+        `system:${step.system}`,
+        () => executeSystem(step.system, {step, preview, regenerationSalt, constraintBundle}),
+        {chunks, now, yieldToMain}
+      );
       assertRequestCurrent(signal, assertCurrent);
       if (!result || result.executed === false) throw new Error(`气候下游重算未完成：${step.system}`);
+      assertClimateStepConstraints(constraintBundle, map, step.system, "after");
       for (const chunk of result.timings?.chunks || []) {
         chunks.push({id: `system:${step.system}:${chunk.id}`, blockingMs: roundTiming(chunk.blockingMs)});
       }
@@ -215,6 +259,35 @@ export function climateDownstreamRegenerationSalt(seed, systemId) {
     hash = Math.imul(hash, 16777619);
   }
   return 1 + ((hash >>> 0) % 2147483646);
+}
+
+function captureClimateConstraintBundle(map, preview) {
+  return captureRegenerationConstraintBundle(map, {closure: ["world"]});
+}
+
+function climateStepConstraintDomains(systemId) {
+  if (systemId === "states") return ["state", "province", "city", "route"];
+  if (systemId === "provinces") return ["province", "city", "route"];
+  if (systemId === "cities") return ["city", "route"];
+  if (systemId === "religions") return ["religion"];
+  if (systemId === "markers") return ["marker", "economy-market", "trade-flow"];
+  if (systemId === "economy") return ["economy-market", "trade-flow"];
+  if (systemId === "diplomacy") return ["diplomacy-relation"];
+  if (systemId === "military") return ["military"];
+  if (systemId === "zones") return ["zone"];
+  return [];
+}
+
+function assertClimateStepConstraints(constraintBundle, map, systemId, phase) {
+  for (const domain of climateStepConstraintDomains(systemId)) {
+    constraintBundle.assertDomain(map, domain, phase);
+  }
+}
+
+function climateStepsFullyLocked(constraintBundle, steps) {
+  return steps.length > 0 && steps.every(step =>
+    climateStepConstraintDomains(step.system).every(domain => constraintBundle.isDomainFullyLocked(domain))
+  );
 }
 
 function system(id, label, dependencies = []) {

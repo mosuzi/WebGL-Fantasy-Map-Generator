@@ -10,7 +10,10 @@
 
   <p v-if="worldRebuildBusy" class="ocean-current-world-status" role="status">{{ worldRebuildMessage }}</p>
 
+  <UiRegenerationLockActions v-bind="regenerationLocks.actionProps" v-on="regenerationLocks.actionListeners" />
   <UiObjectTable
+    v-bind="regenerationLocks.tableProps"
+    v-on="regenerationLocks.tableListeners"
     :columns="columns"
     :rows="visibleRows"
     :selected-id="state.selectedId"
@@ -45,7 +48,9 @@ import UiDetailGrid from "./base/UiDetailGrid.vue";
 import UiFilterInput from "./base/UiFilterInput.vue";
 import UiMetricGrid from "./base/UiMetricGrid.vue";
 import UiObjectTable from "./base/UiObjectTable.vue";
+import UiRegenerationLockActions from "./base/UiRegenerationLockActions.vue";
 import UiTextEditField from "./base/UiTextEditField.vue";
+import {useRegenerationLockSelection} from "../composables/use-regeneration-lock-selection.js";
 
 defineOptions({name: "OceanCurrentPanel"});
 
@@ -78,8 +83,9 @@ const visibleRows = computed(() => {
   if (!query) return rows.value;
   return rows.value.filter(row => `${row.name} ${row.temperatureLabel} ${row.hemisphereLabel}`.toLowerCase().includes(query));
 });
+const regenerationLocks = useRegenerationLockSelection({panelId: "ocean-current-panel", kind: "ocean-current", rows: visibleRows});
 const selected = computed(() => rows.value.find(row => String(row.id) === String(props.state.selectedId)) || null);
-const selectedRows = computed(() => rows.value.filter(row => selectedRowIds.value.map(String).includes(String(row.id))));
+const selectedRows = regenerationLocks.selectedRows;
 const warmCount = computed(() => rows.value.filter(row => row.temperature === "warm").length);
 const coldCount = computed(() => rows.value.filter(row => row.temperature === "cold").length);
 const algorithmLabel = computed(() => {

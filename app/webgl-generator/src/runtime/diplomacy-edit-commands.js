@@ -1,4 +1,12 @@
 import {buildDiplomacy, normalizeDiplomacyRelation, setDiplomacyRelation} from "../generator/diplomacy.js";
+import {
+  assertLockedDiplomacyRelations,
+  captureDiplomacyRelationSnapshot,
+  diplomacyLockConflict,
+  diplomacyPairKey,
+  parseDiplomacyPairIdentity,
+  prepareLockedDiplomacyRelations
+} from "../generator/diplomacy-regeneration-locks.js";
 import {reconcileWarDerivedData} from "../generator/war-consistency.js";
 import {objectAffected, systemAffected} from "./edit-command-effects.js";
 
@@ -61,8 +69,15 @@ function normalizeRelationReason(reason) {
   return text ? text.slice(0, 80) : "手动关系编辑";
 }
 
-export function createRegenerateDiplomacyCommand({salt = 0, label = "重生成外交"} = {}) {
+export function createRegenerateDiplomacyCommand({
+  salt = 0,
+  label = "重生成外交",
+  faultAt = "",
+  preservedRelations = [],
+  lockedDiplomacyRelations = []
+} = {}) {
   let snapshot = null;
+  let result = null;
   return {
     label,
     domain: "diplomacy",
@@ -71,12 +86,34 @@ export function createRegenerateDiplomacyCommand({salt = 0, label = "重生成�
       affected: systemAffected("diplomacy-regeneration", [{kind: "state", id: "all"}])
     },
     apply(context) {
+      const lockedSnapshots = collectLockedDiplomacyRelations(context.map, {preservedRelations, lockedDiplomacyRelations});
+      const locked = prepareLockedDiplomacyRelations(context.map.pack, {lockedDiplomacyRelations: lockedSnapshots});
+      assertLockedPoliticsMirrors(context.map, locked);
+      if (allDiplomacyPairsLocked(context.map, locked.ids)) {
+        result = {executed: false, reason: "all-pairs-locked"};
+        return;
+      }
       snapshot ??= snapshotDiplomacy(context.map);
-      context.map.options = {...context.map.options, diplomacyRegenerationSalt: salt};
-      context.map.diplomacy = buildDiplomacy(context.map.pack, context.map.society, context.map.options);
-      syncDiplomacy(context.map);
-      reconcileWarDerivedData(context.map);
-      this.effects.affected = diplomacyRegenerationAffected(context.map);
+      try {
+        context.map.options = {...context.map.options, diplomacyRegenerationSalt: salt};
+        context.map.diplomacy = buildDiplomacy(context.map.pack, context.map.society, {
+          ...context.map.options,
+          lockedDiplomacyRelations: lockedSnapshots
+        });
+        injectFault(faultAt, "after-build");
+        syncDiplomacy(context.map);
+        injectFault(faultAt, "after-sync");
+        reconcileWarDerivedData(context.map);
+        injectFault(faultAt, "after-war-derived");
+        const currentLocked = prepareLockedDiplomacyRelations(context.map.pack, {lockedDiplomacyRelations: lockedSnapshots});
+        assertLockedDiplomacyRelations(context.map.pack, currentLocked);
+        assertLockedPoliticsMirrors(context.map, currentLocked);
+        this.effects.affected = diplomacyRegenerationAffected(context.map);
+        result = {executed: true, lockedPairs: currentLocked.ids.size};
+      } catch (error) {
+        restoreDiplomacy(context.map, snapshot);
+        throw error;
+      }
     },
     revert(context) {
       if (!snapshot) throw new Error("缺少可撤销的外交快照");
@@ -84,7 +121,14 @@ export function createRegenerateDiplomacyCommand({salt = 0, label = "重生成�
     },
     isNoop(context) {
       const states = context.map?.pack?.states || context.map?.politics?.states || [];
-      return states.filter(state => state?.i && !state.removed).length < 2;
+      if (states.filter(state => state?.i && !state.removed).length < 2) return true;
+      const lockedSnapshots = collectLockedDiplomacyRelations(context.map, {preservedRelations, lockedDiplomacyRelations});
+      const locked = prepareLockedDiplomacyRelations(context.map.pack, {lockedDiplomacyRelations: lockedSnapshots});
+      assertLockedPoliticsMirrors(context.map, locked);
+      return allDiplomacyPairsLocked(context.map, locked.ids);
+    },
+    getResult() {
+      return result ? {...result} : null;
     }
   };
 }
@@ -147,6 +191,64 @@ function restoreWarDerivedData(map, snapshot) {
   const zones = map.zones?.zones || snapshot.packZones;
   if (map?.pack) map.pack.zones = zones ? clonePlain(zones) : [];
   if (map.zones) map.zones.zones = map.pack?.zones || map.zones.zones || [];
+}
+
+function collectLockedDiplomacyRelations(map, options = {}) {
+  const snapshots = [];
+  const seen = new Set();
+  const add = source => {
+    const identity = parseDiplomacyPairIdentity(source);
+    if (!identity || seen.has(identity.key)) return;
+    snapshots.push(source?.leftRelation || source?.rightRelation
+      ? clonePlain(source)
+      : captureDiplomacyRelationSnapshot(map.pack, identity.leftId, identity.rightId));
+    seen.add(identity.key);
+  };
+  for (const source of [...(options.preservedRelations || []), ...(options.lockedDiplomacyRelations || [])]) add(source);
+  for (const entry of map?.regenerationLocks?.entries || []) {
+    if (entry?.kind !== "diplomacy-relation") continue;
+    const identity = parseDiplomacyPairIdentity(entry);
+    if (!identity) throw diplomacyLockConflict("外交锁仓包含非法国家对", {reason: "invalid-pair", id: entry?.id});
+    add(captureDiplomacyRelationSnapshot(map.pack, identity.leftId, identity.rightId));
+  }
+  return snapshots;
+}
+
+function allDiplomacyPairsLocked(map, lockedIds) {
+  const states = (map?.pack?.states || map?.politics?.states || []).filter(state => state?.i && !state.removed);
+  const expected = new Set();
+  for (let left = 0; left < states.length; left++) {
+    for (let right = left + 1; right < states.length; right++) expected.add(diplomacyPairKey(states[left].i, states[right].i));
+  }
+  return expected.size > 0 && [...expected].every(key => lockedIds.has(key));
+}
+
+function assertLockedPoliticsMirrors(map, locked) {
+  const packStates = map?.pack?.states;
+  const politicsStates = map?.politics?.states;
+  if (!Array.isArray(packStates) || !Array.isArray(politicsStates) || packStates === politicsStates) return;
+  for (const snapshot of locked.pairs.values()) {
+    const packLeft = packStates[snapshot.leftId];
+    const packRight = packStates[snapshot.rightId];
+    const politicsLeft = politicsStates[snapshot.leftId];
+    const politicsRight = politicsStates[snapshot.rightId];
+    if (!politicsLeft || !politicsRight
+      || politicsLeft.diplomacy?.[snapshot.rightId] !== packLeft.diplomacy?.[snapshot.rightId]
+      || politicsRight.diplomacy?.[snapshot.leftId] !== packRight.diplomacy?.[snapshot.leftId]
+      || JSON.stringify(pairCampaigns(politicsLeft, snapshot.leftId, snapshot.rightId)) !== JSON.stringify(pairCampaigns(packLeft, snapshot.leftId, snapshot.rightId))
+      || JSON.stringify(pairCampaigns(politicsRight, snapshot.leftId, snapshot.rightId)) !== JSON.stringify(pairCampaigns(packRight, snapshot.leftId, snapshot.rightId))) {
+      throw diplomacyLockConflict(`外交锁 ${snapshot.id} 的 politics 镜像矛盾`, {reason: "politics-mirror-mismatch", pair: snapshot.id});
+    }
+  }
+}
+
+function pairCampaigns(state, leftId, rightId) {
+  const key = diplomacyPairKey(leftId, rightId);
+  return (state?.campaigns || []).filter(campaign => diplomacyPairKey(campaign?.attacker, campaign?.defender) === key);
+}
+
+function injectFault(actual, expected) {
+  if (actual === expected) throw new Error(`diplomacy regeneration fault: ${expected}`);
 }
 
 function syncDiplomacy(map) {

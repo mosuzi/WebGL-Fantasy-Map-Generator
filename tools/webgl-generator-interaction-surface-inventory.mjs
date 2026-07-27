@@ -262,6 +262,7 @@ function buildGlobalEventRows() {
     {path: "app/webgl-generator/src/ui/panel-manager.js", entry: "浮动面板全局 resize", result: "面板越界恢复与布局更新", included: true},
     {path: "app/webgl-generator/src/ui/panel.js", entry: "控制面板 document 自定义事件总线", result: "主题、标签样式、文件和高度图动作路由", included: true},
     {path: "app/webgl-generator/src/runtime/health-monitor.js", entry: "内部健康监测 document 事件", result: "诊断采样", included: false, reason: "健康监测只记录诊断，不是用户交互表面"},
+    {path: "app/webgl-generator/src/runtime/regeneration-lock-ui-session.js", entry: "重生成锁面板关闭清理事件", result: "取消地图多选并清理临时集合", included: false, reason: "用户入口已归入 14 个对象列表与共享画布模式，不重复计入全局分母"},
     {path: "app/webgl-generator/src/ui/brush-cursor-preview.js", entry: "画笔控件 document 委托监听", result: "画笔 cursor 刷新", included: false, reason: "局部委托行为已归入 canvas:map-canvas，不重复计入全局分母"},
     {path: "app/webgl-generator/src/ui/label-naming-panel-trigger.js", entry: "标签面板 document 委托监听", result: "标签面板打开", included: false, reason: "局部委托行为已归入对应面板，不重复计入全局分母"},
     {path: "app/webgl-generator/src/ui/vue/composables/use-debug-mode.js", entry: "内部 debug 状态同步", result: "Vue debug 状态", included: false, reason: "内部状态同步，不是直接用户交互表面"},

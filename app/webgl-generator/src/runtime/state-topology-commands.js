@@ -186,22 +186,40 @@ export function createSplitStateCommand(options = {}) {
   return createTopologyCommand("split", options);
 }
 
-export function regenerateProvincesForStates(map, stateIds) {
+const scopedProvinceRegenerationOptions = new WeakMap();
+
+export function withScopedProvinceRegenerationOptions(map, options, callback) {
+  scopedProvinceRegenerationOptions.set(map, options || {});
+  try {
+    return callback();
+  } finally {
+    scopedProvinceRegenerationOptions.delete(map);
+  }
+}
+
+export function regenerateProvincesForStates(map, stateIds, options = scopedProvinceRegenerationOptions.get(map) || {}) {
   const resultStateIds = uniquePositiveIntegers(stateIds).sort(ascending);
   if (!resultStateIds.length) throw new Error("按国家重设省份时必须指定至少一个有效国家");
   for (const stateIdValue of resultStateIds) {
     if (!isActiveState(readState(map, stateIdValue))) throw new Error(`国家 #${stateIdValue} 不存在或已移除`);
   }
 
+  const locked = prepareScopedLockedProvinces(map, resultStateIds, options);
+  for (const province of activeProvinces(map)) {
+    if (!resultStateIds.includes(numberId(province.state))) locked.allIds.add(provinceId(province));
+  }
   const affectedOldProvinceIds = activeProvinces(map)
     .filter(province => resultStateIds.includes(numberId(province.state)))
     .map(provinceId)
+    .filter(id => !locked.selectedIds.has(id))
     .sort(ascending);
   const provinceCounts = resultStateIds.map(stateIdValue => {
     const cities = activeCities(map).filter(city => numberId(city.state) === stateIdValue);
     const cells = landPackCells(map).filter(cell => numberId(map.pack.cells.state[cell]) === stateIdValue);
     if (!cities.length || !cells.length) throw new Error(`国家 #${stateIdValue} 缺少可重新分省的城镇或陆地`);
-    return targetProvinceCount(cities.length, map?.options?.provincesRatio);
+    const lockedCount = locked.byState.get(stateIdValue)?.length || 0;
+    const unlockedCells = cells.filter(cell => !locked.packOwners.has(cell));
+    return Math.max(unlockedCells.length ? 1 : 0, targetProvinceCount(cities.length, map?.options?.provincesRatio) - lockedCount);
   });
   const nextProvinceId = nextPoliticalId(map, "provinces");
   const totalProvinceCount = provinceCounts.reduce((sum, count) => sum + count, 0);
@@ -215,15 +233,68 @@ export function regenerateProvincesForStates(map, stateIds) {
     resultStateIds,
     affectedOldProvinceIds,
     newProvinceIds: sequence(nextProvinceId, totalProvinceCount),
+    newProvinceCounts: Object.fromEntries(resultStateIds.map((id, index) => [id, provinceCounts[index]])),
+    lockedProvinces: locked,
     boundaryStateIds: []
   };
   const provinceResult = rebuildAffectedProvinces(map, plan);
   refreshPoliticalTopology(map, plan);
   return {
     stateIds: [...resultStateIds],
-    provinceIds: [...provinceResult.newProvinceIds],
+    provinceIds: [...locked.selectedIds, ...provinceResult.newProvinceIds].sort(ascending),
     tombstonedProvinceIds: [...affectedOldProvinceIds]
   };
+}
+
+function prepareScopedLockedProvinces(map, selectedStateIds, options = {}) {
+  const provided = options.lockedProvinces ?? options.preservedProvinces ?? [];
+  if (!Array.isArray(provided)) throw scopedProvinceLockConflict("锁定省份约束必须是数组", {reason: "invalid-constraint"});
+  const allIds = new Set();
+  const selectedIds = new Set();
+  const byState = new Map();
+  const packOwners = new Map();
+  const gridOwners = new Map();
+  const selected = new Set(selectedStateIds);
+  for (const source of provided) {
+    const id = numberId(source?.id ?? source?.i);
+    const stateIdValue = numberId(source?.state);
+    if (!id || allIds.has(id)) throw scopedProvinceLockConflict("锁定省份缺少唯一 ID", {reason: "invalid-id", id});
+    allIds.add(id);
+    if (!selected.has(stateIdValue)) continue;
+    const current = readProvince(map, id);
+    const center = numberId(source.center);
+    const burgId = numberId(source.burg);
+    if (!current || current.removed || numberId(current.state) !== stateIdValue || !isActiveState(readState(map, stateIdValue))) {
+      throw scopedProvinceLockConflict(`锁定省份 #${id} 缺少一致对象或父国`, {reason: "invalid-parent-state", id, stateId: stateIdValue});
+    }
+    if (map.pack.cells.h?.[center] < 20 || numberId(map.pack.cells.state?.[center]) !== stateIdValue || numberId(map.pack.cells.province?.[center]) !== id) {
+      throw scopedProvinceLockConflict(`锁定省份 #${id} 缺少一致中心`, {reason: "invalid-center", id, center});
+    }
+    const burg = burgId ? map.pack.burgs?.[burgId] : null;
+    if (burgId && (!burg || burg.removed || numberId(burg.cell) !== center)) {
+      throw scopedProvinceLockConflict(`锁定省份 #${id} 缺少一致省会`, {reason: "invalid-burg", id, burgId, center});
+    }
+    const stateLocks = byState.get(stateIdValue) || [];
+    stateLocks.push(structuredClone(source));
+    byState.set(stateIdValue, stateLocks);
+    selectedIds.add(id);
+    for (const cell of landPackCells(map)) {
+      if (numberId(map.pack.cells.province?.[cell]) !== id) continue;
+      if (numberId(map.pack.cells.state?.[cell]) !== stateIdValue || packOwners.has(cell)) {
+        throw scopedProvinceLockConflict(`锁定省份 #${id} 领土重叠或跨国`, {reason: "overlapping-territory", id, cell});
+      }
+      packOwners.set(cell, id);
+    }
+    for (const cell of landGridCells(map)) if (numberId(map.grid.cells.province?.[cell]) === id) gridOwners.set(cell, id);
+  }
+  return {allIds, selectedIds, byState, packOwners, gridOwners};
+}
+
+function scopedProvinceLockConflict(message, details = {}) {
+  const error = new Error(message);
+  error.code = "regeneration_lock_conflict";
+  error.details = {kind: "province", ...details};
+  return error;
 }
 
 function createTopologyCommand(operation, options) {
@@ -423,21 +494,33 @@ function rebuildAffectedProvinces(map, plan) {
   }
 
   const plans = [];
-  let provinceCursor = plan.newProvinceIds[0];
+  let provinceCursor = 0;
   for (const stateId of plan.resultStateIds) {
     const cells = landPackCells(map).filter(cell => numberId(map.pack.cells.state[cell]) === stateId);
     const cities = activeCities(map).filter(city => numberId(city.state) === stateId && cells.includes(cityPackCell(city)));
     if (!cells.length || !cities.length) throw new Error(`国家 #${stateId} 缺少可重新分省的陆地或城市`);
-    const count = plan.operation === "merge"
+    const count = plan.operation === "regenerate" && plan.newProvinceCounts
+      ? numberId(plan.newProvinceCounts[stateId])
+      : plan.operation === "merge"
       ? plan.newProvinceIds.length
       : targetProvinceCount(cities.length, map?.options?.provincesRatio);
-    const provinceIds = sequence(provinceCursor, count);
+    const provinceIds = plan.newProvinceIds.slice(provinceCursor, provinceCursor + count);
     provinceCursor += count;
     const preservedProvinceNames = plan.operation === "merge" && stateId === plan.survivorStateId ? plan.preservedProvinceNames || [] : [];
+    const fixedAssignments = plan.lockedProvinces?.packOwners || new Map();
+    const availableCities = cities.filter(city => !fixedAssignments.has(cityPackCell(city)));
     const centers = preservedProvinceNames.length
       ? chooseMergeProvinceCenters(map, stateId, cells, cities, count, preservedProvinceNames)
-      : chooseProvinceCenters(map, stateId, cities, count);
-    const assignment = assignConnectedProvinces(map.pack.cells, cells, centers.map((city, index) => ({cell: cityPackCell(city), provinceId: provinceIds[index]})));
+      : chooseProvinceCenters(map, stateId, availableCities, count);
+    if (centers.length !== count) throw new Error(`国家 #${stateId} 缺少足够的未锁省会候选`);
+    const stateFixedAssignments = new Map([...fixedAssignments].filter(([cell]) => numberId(map.pack.cells.state?.[cell]) === stateId));
+    const assignment = assignConnectedProvinces(
+      map.pack.cells,
+      cells,
+      centers.map((city, index) => ({cell: cityPackCell(city), provinceId: provinceIds[index]})),
+      stateFixedAssignments,
+      plan.lockedProvinces?.selectedIds || new Set()
+    );
     plans.push({
       stateId,
       cells,
@@ -454,8 +537,8 @@ function rebuildAffectedProvinces(map, plan) {
   for (const item of plans) {
     for (const [cell, provinceId] of item.assignment) map.pack.cells.province[cell] = provinceId;
   }
-  synchronizeGridProvinces(map, new Set(plan.resultStateIds));
-  synchronizeCityProvinces(map, new Set(plan.resultStateIds));
+  synchronizeGridProvinces(map, new Set(plan.resultStateIds), plan.lockedProvinces?.gridOwners, plan.lockedProvinces?.selectedIds);
+  synchronizeCityProvinces(map, new Set(plan.resultStateIds), plan.lockedProvinces?.selectedIds);
 
   for (const item of plans) {
     for (let index = 0; index < item.provinceIds.length; index++) {
@@ -468,7 +551,7 @@ function rebuildAffectedProvinces(map, plan) {
       setCityProvincial(map, centerCity.id, true);
     }
   }
-  refreshProvinceNeighbors(map, expectedIds, plan.affectedOldProvinceIds);
+  refreshProvinceNeighbors(map, expectedIds, plan.affectedOldProvinceIds, plan.lockedProvinces?.allIds);
   return {plans, newProvinceIds: expectedIds};
 }
 
@@ -519,9 +602,9 @@ function chooseMergeProvinceCenters(map, stateId, stateCells, cities, count, pre
   return centers;
 }
 
-function assignConnectedProvinces(cells, ownedCells, seeds) {
+function assignConnectedProvinces(cells, ownedCells, seeds, fixedAssignments = new Map(), protectedIds = new Set()) {
   const allowed = new Set(ownedCells);
-  const assignment = new Map();
+  const assignment = new Map(fixedAssignments);
   let frontier = [];
   for (const seed of [...seeds].sort((a, b) => a.provinceId - b.provinceId)) {
     if (!allowed.has(seed.cell)) throw new Error("省会不在所属国家陆地内");
@@ -533,6 +616,7 @@ function assignConnectedProvinces(cells, ownedCells, seeds) {
   while (frontier.length) {
     const candidates = new Map();
     for (const item of frontier) {
+      if (protectedIds.has(item.provinceId)) continue;
       for (const neighbor of cells.c?.[item.cell] || []) {
         if (!allowed.has(neighbor) || assignment.has(neighbor)) continue;
         const previous = candidates.get(neighbor);
@@ -547,7 +631,7 @@ function assignConnectedProvinces(cells, ownedCells, seeds) {
   return assignment;
 }
 
-function synchronizeGridProvinces(map, stateIds) {
+function synchronizeGridProvinces(map, stateIds, fixedOwners = new Map(), protectedProvinceIds = new Set()) {
   const countsByGrid = new Map();
   for (const packCell of landPackCells(map)) {
     const stateId = numberId(map.pack.cells.state[packCell]);
@@ -563,16 +647,17 @@ function synchronizeGridProvinces(map, stateIds) {
     if (!stateIds.has(numberId(map.grid.cells.state[gridCell]))) continue;
     const counts = countsByGrid.get(gridCell);
     const provinceId = counts
-      ? [...counts].sort((a, b) => b[1] - a[1] || a[0] - b[0])[0]?.[0] || 0
+      ? [...counts].sort((a, b) => b[1] - a[1] || a[0] - b[0]).find(([id]) => !protectedProvinceIds.has(id))?.[0] || 0
       : 0;
-    map.grid.cells.province[gridCell] = provinceId;
+    map.grid.cells.province[gridCell] = fixedOwners?.has(gridCell) ? fixedOwners.get(gridCell) : provinceId;
   }
 }
 
-function synchronizeCityProvinces(map, stateIds) {
+function synchronizeCityProvinces(map, stateIds, protectedProvinceIds = new Set()) {
   for (const city of activeCities(map)) {
     if (!stateIds.has(numberId(city.state))) continue;
     const provinceId = numberId(map.pack.cells.province?.[cityPackCell(city)] ?? map.grid.cells.province?.[city.cell]);
+    if (protectedProvinceIds.has(numberId(city.province)) || protectedProvinceIds.has(provinceId)) continue;
     replaceCity(map, city, {...city, province: provinceId, provincial: false, group: city.capital ? "capital" : ordinaryCityGroup(city)});
     const burg = findBurgForCity(map, city);
     if (burg) replaceBurg(map, burg, {...burg, province: provinceId, group: city.capital ? "capital" : ordinaryCityGroup(city)});
@@ -621,7 +706,7 @@ function provinceNameSnapshot(province) {
   };
 }
 
-function refreshProvinceNeighbors(map, newProvinceIds, oldProvinceIds = []) {
+function refreshProvinceNeighbors(map, newProvinceIds, oldProvinceIds = [], protectedIds = new Set()) {
   const newSet = new Set(newProvinceIds);
   const oldSet = new Set(oldProvinceIds);
   const neighborSets = new Map(newProvinceIds.map(id => [id, new Set()]));
@@ -634,7 +719,7 @@ function refreshProvinceNeighbors(map, newProvinceIds, oldProvinceIds = []) {
       const otherId = numberId(map.pack.cells.province?.[neighbor]);
       if (!otherId || otherId === provinceId) continue;
       neighborSets.get(provinceId)?.add(otherId);
-      if (!newSet.has(otherId)) {
+      if (!newSet.has(otherId) && !protectedIds.has(otherId)) {
         const set = externalUpdates.get(otherId) || new Set((readProvince(map, otherId)?.neighbors || []).filter(id => !newSet.has(numberId(id)) && !oldSet.has(numberId(id))));
         set.add(provinceId);
         externalUpdates.set(otherId, set);
@@ -642,11 +727,13 @@ function refreshProvinceNeighbors(map, newProvinceIds, oldProvinceIds = []) {
     }
   }
   for (const id of newProvinceIds) {
+    if (protectedIds.has(id)) continue;
     const province = clonePlain(readProvince(map, id));
     province.neighbors = [...neighborSets.get(id)].sort(ascending);
     writeMirroredPoliticalItem(map, "provinces", id, province);
   }
   for (const [id, neighbors] of externalUpdates) {
+    if (protectedIds.has(id)) continue;
     const province = readProvince(map, id);
     if (!province || province.removed) continue;
     writeMirroredPoliticalItem(map, "provinces", id, {...clonePlain(province), neighbors: [...neighbors].sort(ascending)});

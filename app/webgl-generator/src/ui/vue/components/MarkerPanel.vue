@@ -14,7 +14,10 @@
   </div>
 
   <div v-if="editStatus" class="marker-edit-status">{{ editStatus }}</div>
+  <UiRegenerationLockActions v-bind="regenerationLocks.actionProps" v-on="regenerationLocks.actionListeners" />
   <UiObjectTable
+    v-bind="regenerationLocks.tableProps"
+    v-on="regenerationLocks.tableListeners"
     :columns="columns"
     :column-widths="state.columnWidths"
     :rows="visibleRows"
@@ -87,6 +90,7 @@ import UiMetricGrid from "./base/UiMetricGrid.vue";
 import UiNoteField from "./base/UiNoteField.vue";
 import UiObjectTable from "./base/UiObjectTable.vue";
 import UiPanelIoActions from "./base/UiPanelIoActions.vue";
+import UiRegenerationLockActions from "./base/UiRegenerationLockActions.vue";
 import UiSelectField from "./base/UiSelectField.vue";
 import UiSegmented from "./base/UiSegmented.vue";
 import UiTextEditField from "./base/UiTextEditField.vue";
@@ -96,6 +100,7 @@ import {compareRowsByKey} from "../../sort-utils.js";
 import {readObjectNote} from "../../../runtime/object-notes.js";
 import {useUnitPreferences} from "../composables/use-unit-preferences.js";
 import {useVisibleRowSelection} from "../composables/use-visible-row-selection.js";
+import {useRegenerationLockSelection} from "../composables/use-regeneration-lock-selection.js";
 
 defineOptions({
   name: "MarkerPanel"
@@ -185,7 +190,9 @@ const metrics = computed(() => {
 });
 const scopedRows = computed(() => applyScope(metrics.value.rows, props.state.scope));
 const visibleRows = computed(() => sortRows(filterRows(scopedRows.value, props.state.filter), props.state.sortKey, props.state.sortDir));
-const {selectedRowIds: selectedMarkerIds, selectedRows: selectedMarkerRows} = useVisibleRowSelection(visibleRows);
+const regenerationLocks = useRegenerationLockSelection({panelId: "marker-panel", kind: "marker", rows: visibleRows});
+const {selectedRowIds: selectedMarkerIds} = useVisibleRowSelection(visibleRows);
+const selectedMarkerRows = regenerationLocks.selectedRows;
 const filterEmptyAction = computed(() => String(props.state.filter || "").trim()
   ? {key: "clear-filter", label: "清空筛选", icon: "⌫"}
   : null);

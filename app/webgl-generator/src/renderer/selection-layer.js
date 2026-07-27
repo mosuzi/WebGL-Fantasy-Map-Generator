@@ -4,6 +4,7 @@ import {pushScreenPolyline, pushScreenTriangle} from "./mesh-writer.js";
 import {OBJECT_KIND, POLITICAL_OBJECT_FIELD, isPoliticalObjectKind} from "../runtime/object-kinds.js";
 import {parseDiplomacyRelationIdentity} from "../runtime/diplomacy-relations.js";
 import {compositeConnectorPoints, compositeConnectorSelectionColor} from "./composite-connectors.js";
+import {sampleOceanCurrent} from "../generator/ocean-currents.js";
 
 const SELECTION_HIGHLIGHT_COLORS = Object.freeze({
   [OBJECT_KIND.STATE]: [1, 0.86, 0.28, 0.3],
@@ -23,7 +24,10 @@ const SELECTION_HIGHLIGHT_MODES = Object.freeze({
   [OBJECT_KIND.REGION]: "region translucent cells",
   [OBJECT_KIND.ZONE]: "zone translucent cells",
   [OBJECT_KIND.DIPLOMACY_RELATION]: "diplomacy relation connector",
-  [OBJECT_KIND.TRADE_FLOW]: "trade flow connector"
+  [OBJECT_KIND.TRADE_FLOW]: "trade flow connector",
+  [OBJECT_KIND.FEATURE]: "feature translucent cells",
+  [OBJECT_KIND.OCEAN_CURRENT]: "ocean current screen-space mesh",
+  [OBJECT_KIND.ECONOMY_MARKET]: "economy market translucent cells"
 });
 
 const SELECTION_SMOOTHING = Object.freeze({
@@ -65,6 +69,18 @@ function pushSelectionTarget(vertices, context, selection, locateFlash, override
     pushTradeFlowSelection(vertices, context, selection, locateFlash, overrideColor);
     return;
   }
+  if (selection?.kind === OBJECT_KIND.FEATURE) {
+    pushCellFieldSelection(vertices, context, selection, "f", [0.32, 0.88, 1, 0.42], overrideColor);
+    return;
+  }
+  if (selection?.kind === OBJECT_KIND.ECONOMY_MARKET) {
+    pushCellFieldSelection(vertices, context, selection, "market", [0.94, 0.58, 0.2, 0.42], overrideColor);
+    return;
+  }
+  if (selection?.kind === OBJECT_KIND.OCEAN_CURRENT) {
+    pushOceanCurrentSelection(vertices, context, selection, locateFlash, overrideColor);
+    return;
+  }
   if (selection?.kind === OBJECT_KIND.NOTE) {
     pushStandaloneNoteSelection(vertices, context, selection, locateFlash, overrideColor);
     return;
@@ -79,6 +95,27 @@ function pushSelectionTarget(vertices, context, selection, locateFlash, override
   const widthPx = (4.2 + fluxFactor * 2.4) * pixelRatio;
   const color = overrideColor || locateFlashColor(selection, locateFlash) || [0.62, 0.88, 1, 1];
   pushScreenPolyline(vertices, context, smoothWorldPath(river.points, SELECTION_SMOOTHING.river), color, widthPx);
+}
+
+function pushCellFieldSelection(vertices, context, selection, field, fallbackColor, overrideColor) {
+  const values = context.map?.pack?.cells?.[field];
+  if (!values) return;
+  const color = overrideColor || fallbackColor;
+  for (const cell of context.map.pack.cells.i || []) {
+    if (String(values[cell]) !== String(selection.id)) continue;
+    pushPackCellSelectionMesh(vertices, context, cell, color);
+  }
+}
+
+function pushOceanCurrentSelection(vertices, context, selection, locateFlash, overrideColor) {
+  const current = (context.map?.oceanCurrents?.currents || []).find(item => String(item?.id) === String(selection.id));
+  const sampled = sampleOceanCurrent(current, 20);
+  const points = sampled.length
+    ? sampled
+    : Array.isArray(current?.points) ? current.points : Array.isArray(current?.path) ? current.path : [];
+  if (points.length < 2) return;
+  const color = overrideColor || locateFlashColor(selection, locateFlash) || [0.2, 0.84, 1, 0.96];
+  pushScreenPolyline(vertices, context, points, color, selectionLineWidth(context, overrideColor ? 5.2 : 6.2));
 }
 
 function pushStandaloneNoteSelection(vertices, context, selection, locateFlash, overrideColor = null) {

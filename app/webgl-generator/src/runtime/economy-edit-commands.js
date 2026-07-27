@@ -2,6 +2,13 @@ import {rebuildEconomyFromMarketAssignments} from "../generator/economy.js";
 import {normalizeGoodDisplayPatch, normalizeGoodDisplayProperties, normalizeMarketDisplayPatch, normalizeMarketDisplayProperties} from "../generator/economy-display-properties.js";
 import {BRUSH_RADIUS_ID, normalizeBrushRadius} from "./brush-radius-contract.js";
 import {systemAffected} from "./edit-command-effects.js";
+import {OBJECT_KIND} from "./object-kinds.js";
+import {listRegenerationLocks} from "./regeneration-locks.js";
+import {
+  allRegenerationObjectsLocked,
+  assertLockedRegenerationSnapshots,
+  captureLockedRegenerationObjects
+} from "./regeneration-lock-protection.js";
 
 const ECONOMY_REBUILD_EFFECTS = Object.freeze({
   render: "draw",
@@ -111,9 +118,16 @@ export function createApplyMarketAssignmentCommand(changes, {label = "应用市�
     apply(context) {
       if (!beforeSnapshot) {
         beforeSnapshot = captureEconomySnapshot(context.map);
-        applyMarketAssignmentChanges(context.map, normalized, "after");
-        result = rebuildMapEconomy(context.map);
-        afterSnapshot = captureEconomySnapshot(context.map);
+        try {
+          assertMarketAssignmentPreservesLocks(context.map, normalized);
+          applyMarketAssignmentChanges(context.map, normalized, "after");
+          result = rebuildMapEconomy(context.map);
+          afterSnapshot = captureEconomySnapshot(context.map);
+        } catch (error) {
+          restoreEconomySnapshot(context.map, beforeSnapshot);
+          beforeSnapshot = null;
+          throw error;
+        }
       } else {
         restoreEconomySnapshot(context.map, afterSnapshot);
       }
@@ -134,7 +148,7 @@ export function createApplyMarketAssignmentCommand(changes, {label = "应用市�
   };
 }
 
-export function createRebuildEconomyCommand({label = "重算经济链"} = {}) {
+export function createRebuildEconomyCommand({label = "重算经济链", constraintBundle = null} = {}) {
   let beforeSnapshot = null;
   let afterSnapshot = null;
   let result = null;
@@ -148,8 +162,14 @@ export function createRebuildEconomyCommand({label = "重算经济链"} = {}) {
     apply(context) {
       if (!beforeSnapshot) {
         beforeSnapshot = captureEconomySnapshot(context.map);
-        result = rebuildMapEconomy(context.map);
-        afterSnapshot = captureEconomySnapshot(context.map);
+        try {
+          result = rebuildMapEconomy(context.map, constraintBundle);
+          afterSnapshot = captureEconomySnapshot(context.map);
+        } catch (error) {
+          restoreEconomySnapshot(context.map, beforeSnapshot);
+          beforeSnapshot = null;
+          throw error;
+        }
       } else {
         restoreEconomySnapshot(context.map, afterSnapshot);
       }
@@ -159,7 +179,7 @@ export function createRebuildEconomyCommand({label = "重算经济链"} = {}) {
       restoreEconomySnapshot(context.map, beforeSnapshot);
     },
     isNoop(context) {
-      return !context.map?.pack?.markets?.some(Boolean);
+      return !context.map?.pack?.markets?.some(Boolean) || areBothEconomyDomainsFullyLocked(context.map);
     },
     getResult() {
       return result;
@@ -287,20 +307,68 @@ function applyMarketAssignmentChanges(map, changes, side) {
   for (const change of changes) values[change.packCell] = change[side];
 }
 
-function rebuildMapEconomy(map) {
+function rebuildMapEconomy(map, constraintBundle = null) {
+  const marketCapture = constraintBundle
+    ? {snapshots: constraintBundle.lockedMarkets}
+    : captureLockedRegenerationObjects(map, OBJECT_KIND.ECONOMY_MARKET);
+  const dealCapture = constraintBundle
+    ? {snapshots: constraintBundle.lockedDeals}
+    : captureLockedRegenerationObjects(map, OBJECT_KIND.TRADE_FLOW);
   const economy = rebuildEconomyFromMarketAssignments(map.pack, {
     ...(map.options || map.metadata || {}),
-    resourcePopulation: cloneValue(map.economy?.metadata?.resourcePopulation)
+    resourcePopulation: cloneValue(map.economy?.metadata?.resourcePopulation),
+    lockedMarkets: marketCapture.snapshots,
+    lockedDeals: dealCapture.snapshots,
+    lockedStates: constraintBundle?.lockedStates || [],
+    lockedProvinces: constraintBundle?.lockedProvinces || []
   });
   map.economy = economy;
   syncEconomyMirrors(map);
+  if (constraintBundle) constraintBundle.assertDomain(map, "economy", "economy-build");
+  else {
+    assertLockedRegenerationSnapshots(map, marketCapture);
+    assertLockedRegenerationSnapshots(map, dealCapture);
+  }
   return {
-    markets: Math.max(0, economy.markets.length - 1),
+    markets: economy.markets.filter(Boolean).length,
     deals: economy.deals.length,
     assignedMarketCells: economy.metadata.assignedMarketCells,
     burgsWithMarket: economy.metadata.burgsWithMarket,
     statesWithTaxes: economy.metadata.statesWithTaxes
   };
+}
+
+function assertMarketAssignmentPreservesLocks(map, changes) {
+  const lockedIds = new Set(listRegenerationLocks(map, {kind: OBJECT_KIND.ECONOMY_MARKET}).map(reference => Number(reference.id)));
+  if (!lockedIds.size) return;
+  for (const change of changes) {
+    const before = Number(map?.pack?.cells?.market?.[change.packCell] || 0);
+    if (!lockedIds.has(before) && !lockedIds.has(change.after)) continue;
+    if (before === change.after) continue;
+    throw economyRegenerationConflict(`市场归属修改会改变锁定市场 #${lockedIds.has(before) ? before : change.after} 的完整 cell 集合`, {
+      kind: OBJECT_KIND.ECONOMY_MARKET,
+      reason: "locked-market-cells-changed",
+      marketId: lockedIds.has(before) ? before : change.after,
+      packCell: change.packCell,
+      before,
+      after: change.after
+    });
+  }
+}
+
+function areBothEconomyDomainsFullyLocked(map) {
+  const markets = (map?.pack?.markets || []).filter(Boolean);
+  const deals = (map?.pack?.deals || []).filter(Boolean);
+  if (!markets.length || !deals.length) return false;
+  return allRegenerationObjectsLocked(map, OBJECT_KIND.ECONOMY_MARKET, markets)
+    && allRegenerationObjectsLocked(map, OBJECT_KIND.TRADE_FLOW, deals);
+}
+
+function economyRegenerationConflict(message, details = {}) {
+  const error = new Error(message);
+  error.code = "regeneration_lock_conflict";
+  error.details = {kind: "economy", ...details};
+  return error;
 }
 
 function syncEconomyMirrors(map) {

@@ -66,6 +66,7 @@ export function createFeaturePanel(documentRef, manager, callbacks = {}) {
     },
     onSelect: row => {
       panelState.selectedFeatureId = toIntegerId(row.id);
+      callbacks.onSelect?.(row);
     },
     onTopologyMode: mode => {
       panelState.topologyMode = String(mode || "carve-coast");

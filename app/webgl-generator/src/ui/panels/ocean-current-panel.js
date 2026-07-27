@@ -22,6 +22,7 @@ export function createOceanCurrentPanel(documentRef, manager, callbacks = {}) {
       panelState.selectedId = row?.id ?? null;
       panelState.highlightedIds = panelState.selectedId ? [String(panelState.selectedId)] : [];
       callbacks.onHighlight?.(panelState.highlightedIds);
+      callbacks.onSelect?.(row);
     },
     onLocate: row => {
       panelState.selectedId = row?.id ?? null;

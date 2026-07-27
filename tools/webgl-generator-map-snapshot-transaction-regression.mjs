@@ -234,7 +234,9 @@ async function verifyStaticWiring() {
     readFile(new URL("../app/webgl-generator/src/runtime/console-api.js", import.meta.url), "utf8")
   ]);
   assert.match(appSource, /generate\.regenerate[\s\S]*executeMapSnapshotTransaction\(\{/);
-  assert.match(appSource, /const regenerate = kind => regenerateMapAttributeCoreViaApi/);
+  assert.match(appSource, /const constraintBundle = captureRegenerationConstraintBundle\(state\.map, \{closure: \["world"\]\}\);/);
+  assert.match(appSource, /const regenerate = kind => \{[\s\S]*regenerateMapAttributeCoreViaApi[\s\S]*constraintBundle/);
+  assert.match(appSource, /constraintBundle\.assertDomain\(state\.map, "world", "after"\)/);
   assert.match(appSource, /rebuildAllDerived: \(editOptions = \{\}\) => operation\.runSync/);
   assert.match(appSource, /onRegenerateAll:[\s\S]*runtimeActions\.edit\.height\.rebuildAllDerived/);
   assert.match(appSource, /importGEO:[\s\S]*mapMutationConfig\("正在导入 GEO 数据"\)/);

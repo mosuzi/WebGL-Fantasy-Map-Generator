@@ -4,7 +4,10 @@
   <div class="feature-panel-controls">
     <UiFilterInput :model-value="state.filter" placeholder="筛选编号 / 类型 / 分组" @update:model-value="callbacks.onFilter" />
   </div>
+  <UiRegenerationLockActions v-bind="regenerationLocks.actionProps" v-on="regenerationLocks.actionListeners" />
   <UiObjectTable
+    v-bind="regenerationLocks.tableProps"
+    v-on="regenerationLocks.tableListeners"
     :columns="columns"
     :column-widths="state.columnWidths"
     :rows="visibleRows"
@@ -67,6 +70,7 @@ import UiDetailGrid from "./base/UiDetailGrid.vue";
 import UiFilterInput from "./base/UiFilterInput.vue";
 import UiMetricGrid from "./base/UiMetricGrid.vue";
 import UiObjectTable from "./base/UiObjectTable.vue";
+import UiRegenerationLockActions from "./base/UiRegenerationLockActions.vue";
 import UiSelectField from "./base/UiSelectField.vue";
 import UiStateBanner from "./base/UiStateBanner.vue";
 import {formatArea, formatDistance, formatNumber as formatDisplayNumber} from "../../display-units.js";
@@ -74,6 +78,7 @@ import {findByObjectId} from "../../object-id.js";
 import {compareRowsByKey} from "../../sort-utils.js";
 import {useDebugMode} from "../composables/use-debug-mode.js";
 import {useUnitPreferences} from "../composables/use-unit-preferences.js";
+import {useRegenerationLockSelection} from "../composables/use-regeneration-lock-selection.js";
 import {buildFeatureDetailRows} from "./feature-detail-layout.js";
 
 defineOptions({
@@ -125,6 +130,7 @@ const metrics = computed(() => {
   return buildFeatureMetrics(props.state.map);
 });
 const visibleRows = computed(() => sortRows(filterRows(metrics.value.rows, props.state.filter), props.state.sortKey, props.state.sortDir));
+const regenerationLocks = useRegenerationLockSelection({panelId: "feature-panel", kind: "feature", rows: visibleRows});
 const filterEmptyAction = computed(() => String(props.state.filter || "").trim()
   ? {key: "clear-filter", label: "清空筛选", icon: "⌫"}
   : null);

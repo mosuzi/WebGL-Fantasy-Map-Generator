@@ -1,5 +1,40 @@
 # 开发历史
 
+## 2026-07-28：完成权威任务第 205 项阶段 F 与整项验收
+
+- 完成阶段 F 统一静态门禁：重生成锁矩阵保持 `14` 个列表页、`15` 类行和 `22` 个入口，双向差集 `0`；公开 API 保持 `15` 个命名空间、`257` 个方法、`257 / 257` 描述、`20` 类对象与 `249 / 7 / 1` 稳定等级。旧 JSON / gzip / 浏览器缓存兼容、事务回滚、API 合同、生产构建和 `git diff --check` 全部通过。
+- 最终冻结构建上的系统 Chrome 用时 `177.3s`。14 个面板的逐行锁、列表批选与真实地图批选全部通过；15 类独立保护与解锁变化全部通过，`unlockGaps=[]`。10k / 50k / 100k 分别以 `904 / 987 / 1455` 行验证虚拟表格，真实 DOM 均为 `26` 行；列表批选 `92 / 75 / 125ms`，地图批选 `119 / 168 / 283ms`；15 类锁定下的 11 阶段世界链为 `2699.7 / 9845.8 / 21016.9ms`。三档 `constraintErrors=[]`，application console / page error 均为 `0`，仅有压力测试预期的主线程长任务健康信号。
+- 统一验收没有弱化硬快照。期间补齐锁国无省会省份、marker 经济与宗教支撑字段、Feature-marker 反向引用、合法共驻军团、最终河网与湖泊入流镜像、锁 Warzone 的外交 / 战役支撑、文化 / 宗教 pack→grid 多对一所有权，以及 `setMany` 混合批次计数；每项均有固定种子或结构化定向回归。
+- 独立调查、实现、复核与冻结构建验收均完成。阶段 A～F 和第 205 项整体标记为已完成；当前没有活动权威任务。本批仍未暂存、提交或推送。
+
+## 2026-07-28：完成第 205 项阶段 E 外交、军事、经济直接入口接线，待统一复核
+
+- 统一重生成保护层新增外交国家对、军团、经济市场和交易四类捕获、有效性检查与后验断言：外交固定双向关系及该国家对纪事 / 战役 / 前线 / 战区摘要，军团固定所属国家、驻地、位置与关联事件，市场固定完整对象、当前 owned cells 和中心 burg / city 身份镜像，交易固定完整对象、商品、双方端点、路径及政治 / 城镇身份镜像。市场当前 owned cells 允许为空，但中心 burg 与 cell 必须有效一致。
+- 外交和军事正式全量入口在 salt 前处理全锁 no-op，部分锁快照分别透传 `preservedRelations` / `preservedRegiments` 并在生成后复核；国家直重生成遇外交锁时写前返回 `regeneration_lock_conflict`。军事每次 retry 和兵种比例命令消费同一军团锁集合；显式 preserved 与锁仓捕获的同 ID 同快照会去重，同 ID 不同快照仍稳定冲突，战报归档不触碰锁定军团事件。
+- 经济正式重算、市场归属和资源 marker 经济链共同捕获市场 / 交易锁并透传 `lockedMarkets / lockedDeals`；双域全锁命令 no-op，市场归属在写入前拒绝改变锁市场 cell 集合，正式 API 让 `regeneration_lock_conflict` 传播到顶层并保持整图、历史与 revision 不变。
+- 新增并挂接外交、军事、经济三个 Node 专项和 `regress:regeneration-lock-direct-domains-browser`。三个专项通过；系统 Chrome 固定图通过锁对象不变、未锁对象变化、兵种比例、外交 / 军事单域全锁、经济双域全锁、salt / history / revision 与冲突回滚，样本分母为外交 `190` 对、军事 `89` 支、市场 `25` 个、交易 `12994` 笔，application console / page error / health error 均为 `0`。`build:app` 与差异检查通过。本轮不进入气候、世界、海底等复合链，不标记阶段 E 或第 205 项完成。
+
+## 2026-07-28：完成第 205 项阶段 D 社会与 Feature 正式接线，待统一复核
+
+- `generate.regenerate(features)` 现会在 salt 前识别全部有效 Feature 已锁且拓扑一致的 no-op；普通重建从锁仓捕获 Feature 快照并传入 `rebuildFeatureTopology`，完成后复核 pack / grid Feature、成员 cell、地形类型、haven / harbor、岸线和直接引用，异常恢复 Feature salt 并由整图事务回滚。
+- `generate.regenerate(religions)` 在 salt 前处理全锁宗教 no-op，同时捕获锁宗教和锁文化，向宗教 builder 透传两类快照并执行双域后验。新 organized 宗教的候选中心会排除锁宗教全部固定 pack cells，避免新对象中心侵入锁定 ownership；旧图或稀疏城市数组同步宗教引用时会跳过空 slot。
+- 文化 / 宗教重新扩张的预检、模拟与应用继续直接消费当前 `regenerationLocks`；正式命令补齐公共 capture / assert 后验，目标已锁时保持 no-op，文化联动宗教时同时保护两域。公共继承引用镜像只冻结引用 ID 与存在性，锁对象自身的 parent / origins 仍由完整快照保护，不再错误冻结未锁父对象的覆盖统计。
+- 新增系统 Chrome 社会 + Feature 固定图：覆盖锁文化目标 no-op、文化重扩并联动宗教、宗教重扩与全量、全锁宗教、锁湖 / 锁岛 Feature 重建、全锁 Feature、未锁 assignment 纠正及非法 Feature 地形冲突回滚。`regress:regeneration-lock-society`、`regress:regeneration-lock-feature`、生产构建和浏览器组合场景通过；浏览器 application console / page error 为 `0`，仅记录既有主线程长任务健康信号。本轮表示阶段 D 实现齐备、待统一复核，不标记第 205 项完成。
+
+## 2026-07-27：完成第 205 项阶段 D 政治正式接线，待统一复核
+
+- 国家和省份全量 / 局部正式重生成入口现会在推进扰动序号前识别目标全锁并 no-op；事务开始后统一捕获锁国、锁省、锁城和锁路。锁国的现有省份与城镇只作为本次生成的结构性支撑约束参与政治重算，不会写回锁仓。
+- 国家生成器保留锁国 / 锁省的稀疏 ID、完整对象、pack / grid ownership、首都、中心、省会和父子引用，并保护结构性支撑城镇的 burg 身份与首都状态；局部省份生成器会预种锁省、排除其 ID 与 pack / grid 领土扩张，同时保持范围外省份原样。生成后公共保护层复核政治对象、支撑省份、支撑城镇、burg、道路及相关镜像；冲突继续由第 202 项整图快照事务以 `regeneration_lock_conflict` 回滚。
+- 新增国家 / 省份生成器专项和系统 Chrome 政治固定图。Chrome 覆盖全锁国与全锁省 no-op、锁国 + 锁省 + 锁城 + 锁路、局部省份范围外保持、范围内未锁变化、政治统计与实际 burg / city 集合一致，以及非法锁省中心的稳定冲突与 salt / history / revision / 整图回滚；console 和 page error 均为 `0`。
+- 国家 / 省份生成器、局部重生成、城镇 / 道路、锁仓、整图事务和生产构建通过。本轮只记录阶段 D 政治子项完成，仍待文化、宗教、Feature 等阶段 D 领域汇合后的统一复核，不标记阶段 D 或第 205 项完成。
+
+## 2026-07-27：推进第 205 项阶段 C1 的三类生成约束
+
+- 新增公共重生成锁保护模块，统一按领域捕获锁对象、稳定冲突、快照校验和 ID 预留。
+- 资源点命令与分块重算现保留锁定 resource marker；地区 builder 预种锁定 zone 及 occupied cells；洋流 builder / 命令预种锁定 current，并避开其 ID 与路径空间。直接入口在全锁时不会推进扰动序号或历史，失败会恢复扰动序号。
+- 新增 `regress:regeneration-lock-protection-c1`，真实执行资源点、地区和洋流重生成，固定证明锁对象及 pack 镜像不变、未锁对照变化、全锁 no-op。既有锁仓、洋流、洋流世界链、战区一致性和生产构建通过。
+- 本轮未进入城镇、道路、河流或阶段 D～F；阶段 C 与第 205 项仍未完成。
+
 ## 2026-07-26：完成第 206 项河流干流关系与孤立支流门禁
 
 > 纠错：本节“完成”状态已撤回。用户随后指出玉溪本身也是内陆河，证明上一轮只把丹水接到一个存在的直接父河，却没有验证根干流最终出口。面板中的“入海”又只是根据单个 mouth cell 的低高度和 Feature 类型推断，不能替代河道 cell 连通、陆水邻接与外海连通验收。第 206 项已重新打开，完成口径提升为整条父链根出口合法。
@@ -28796,3 +28831,33 @@ full 矩阵结果：
 - 新图持久保存 `overflow v1` 的净补给、容量指数、蓄满时间、溢流高程、路径长度和下切需求 / 预算；旧 JSON、gzip 与浏览器缓存缺字段时只回填 `unknown-legacy / legacy-outlet`。湖泊对象查询和管理详情公开同一诊断，旧图不伪造水文结论。
 - 专项三个 10k 种子共诊断 `20` 个湖泊与 `137` 个有界逆向高程河段；既有五个 10k 河网种子最终保留 `847` 条河流 / `209` 条支流并拒绝 `24` 条坏候选，全部河网断言通过。50k 样本为 `23,725` 个 pack cells、`298` 条河流、`23` 个湖泊、`276` 个下切段、最终孤立河 `0`，本机约 `2.15s`。
 - `regress:lake-overflow`、`regress:river-network`、河流 / 湖泊删除、地图迁移、API 数据兼容、生产构建和 `git diff --check` 通过。隔离浏览器确认旧湖泊显示“旧图待重新诊断”；真实 Chrome `5410` 的 `258` 条河流、丹水 / 玉溪原状态和“丹水”筛选均保持，未自动重生成用户存档。
+## 2026-07-27：第 205 项阶段 B——共享锁列与列表 / 地图统一批量选择
+
+- 公共 `UiObjectTable` 新增可选重生成锁列、锁定 / 解锁图标、可访问名称、批量行点击和当前筛选排序结果内的 `Shift` 范围选择；锁模式会自行显示复选框，Feature 等原先没有批量复选的列表不再例外。
+- 新增文档级 `regeneration-lock-ui-session`、共享 Vue composable 和统一动作条。14 个目标列表页全部复用同一会话集合；旧列表高亮、导出和批量消费者改为读取同一选中行投影，经济商品定义继续按专题口径排除。
+- 新增唯一注册画布模式 `regeneration-lock:select`，地图点击按当前对象类型加入 / 移除集合；Feature、洋流和经济市场补入显式领域面板路由、列表选择接线、地图 picking 与持久高亮。外交模式携带当前主体，可从首次国家点击构造规范关系；洋流 picking 与 selection mesh 均受限采样正式 cubic path。临时高亮在 `Esc`、关面板、换图或换模式时恢复和清理。
+- 单行与批量锁定继续复用阶段 A 的 `regenerationLocks.set / setMany`，地图选择本身不写历史，显式批量应用只提交一条命令。模式审计收敛为 `29 / 29`，Cell / 直接操控矩阵为 `48` 行、gap `0`；API 全矩阵为 `1011` 行、`covered 938 / excluded 73 / gap 0`。
+- 新增 `regress:regeneration-lock-ui`，覆盖共享会话、单项 / 批量调用、200+ 行完整排序范围内的 `Shift` 选择、普通 select / dblclick / locate 事件保持、复合外交首次地图选择、正式 cubic 洋流首次地图选择、关面板清理、非法中立行排除和 Vue `v-bind` 实际响应对象；阶段 C～E 的生成器保护未进入本批。
+
+## 2026-07-27：第 205 项阶段 C 六类实现完成并通过独立复核
+
+- 新增公共重生成锁保护链，并接入资源点、地区、洋流、城镇、道路和河流。资源点、地区与洋流生成器在生成前预种锁快照并预留 ID、占用 cell 或采样路径；城镇生成器同步保护正式 city、pack burg、cell 位置与身份镜像，局部国家 / 省份范围只替换范围内未锁对象。
+- 道路生成器预种锁定道路并预留 ID 与边，锁快照覆盖正式 route、pack route、pack cell links 和备注；城镇、河流重生成的下游道路重建继续消费同一锁约束。断裂路径或重复边以 `regeneration_lock_conflict` 拒绝，失败由整图快照事务恢复地图、历史和扰动序号。
+- 河流生成器新增生成前约束层。锁定河流及父河 / 流域所需支撑闭包在水文缓冲清空后立即种入，冻结成员 cell 的 `r / fl / conf` 与相关湖泊河流边；写入、汇流、清理和 lake overflow 路径均跳过冻结目标，新候选若进入冻结 cell 会在对象定义前整条拒绝，不做生成后对象或 cell 覆盖。正式入口还捕获锁定道路，把 `lockedRivers` 传入河网、把 `lockedRoutes` 传入下游道路收尾，并在提交前校验显式锁定河流对象、pack 镜像、cell 水文、湖泊边、备注和道路镜像。
+- 新增 `regress:regeneration-lock-river-generator` 和系统 Chrome `regress:regeneration-lock-river-browser`。固定生成器夹具覆盖锁定根河、支流父河、流域支撑、冻结 cell、湖泊引用与稀疏 ID；浏览器固定图证明部分锁定时河流和下游道路快照不变、未锁河流变化且 salt / history 各推进一次，全部 `21` 条河流锁定时整图、salt、history 均不变，损坏冻结路径返回 `regeneration_lock_conflict` 且整笔事务回滚，无 application console / page error。
+- `regress:river-network`、`regress:lake-overflow`、`regress:route-edit`、`regress:map-snapshot-transaction`、`regress:regeneration-locks`、阶段 C1、道路生成器、城镇 / 道路 Node 与系统 Chrome、河流生成器与系统 Chrome、生产构建均通过。
+- 独立统一复核复跑关键 Node、真实系统 Chrome、锁仓矩阵、整图事务、生产构建和差异检查，结论为 `PASS`；六类正式入口均为生成前约束，锁对象与关键镜像保持、未锁对象可变化，全锁不推进 salt / history / revision，冲突稳定返回 `regeneration_lock_conflict` 并整图回滚。阶段 C 已验收；阶段 D～F 与第 205 项仍未完成，本批尚未暂存、提交或推送。
+
+## 2026-07-27：第 205 项阶段 D——政治、社会与 Feature 生成约束
+
+- 国家与省份全量 / 局部入口接入锁国家、锁省份、锁城镇和锁道路。锁定国家的现有省份与城镇作为本次结构支撑，builder 保留完整对象、pack / grid ownership、首都 / 省会 / 中心和父子引用；局部省份重生成不扩张锁省镜像，也不改写范围外省份。
+- 文化 / 宗教重新扩张的预检、模拟和应用共用同一约束，目标已锁时命令 no-op；宗教全量入口同时保护锁宗教与锁文化。Feature 拓扑重建把锁湖 / 锁岛作为生成约束，保留 pack / grid Feature、成员 cell、haven / harbor、岸线和直接引用。
+- Node 专项与两组系统 Chrome 固定图覆盖部分锁、全锁 no-op、局部范围、未锁变化、稀疏 ID、拓扑分裂 / 合并冲突和整图事务回滚，application console / page error 均为 `0`。
+- 独立统一复核发现社会重新扩张的模拟结果曾遗漏 `changedGridCells`，修正后模拟 / 应用均为 `3 / 3`，复核结论为 `PASS`。阶段 D 已验收；阶段 E～F 与第 205 项仍未完成，本批尚未暂存、提交或推送。
+
+## 2026-07-28：第 205 项阶段 E——外交、军事、经济与复合世界链
+
+- 外交、军事和经济直接入口统一保护规范国家对、军团、市场 owned cells、中心 burg / city、交易端点与路径；支持部分锁、单域 / 双域全锁 no-op、兵种比例、市场归属和资源 marker 经济联动。国家直接重生成遇锁外交时继续在首写前稳定拒绝。
+- 新增不可变重生成约束 bundle，一次捕获 15 类 world closure。world、climate、height、state 与 seafloor 在首写前捕获同一 bundle，各阶段在写 salt 前校验并透传实际生成器；锁国所属省份 / 城市 / 军团、锁市场与交易端点、宗教父子和 Feature 港口诊断作为本次结构支撑，不写入锁仓。
+- 修复真实 Chrome 暴露的跨域改写：聚落统计回写锁国、政治重扩只保身份、宗教 `children` 漂移、经济 / 外交 / 军事回写锁国、市场 / 交易端点城市漂移，以及 Feature 对道路数组位置和港口诊断的非业务引用。直接国家入口使用显式 `rejectLockedDiplomacy`，没有被复合入口豁免误伤。
+- 独立 Node 与系统 Chrome 最终 `PASS`：world `15` 类代表锁 / `11` 步、climate `7` 类 / `6` 步、seafloor `14` 类 / `12` 步、完整 closure `15577` 锁 no-op、`after:rivers` 故障完整回滚；states-only + market / deal 场景同样保持锁快照。应用错误与页面错误为 `0`，故障注入仅有恰好一条预期 `operation-failed`。阶段 E 已验收；阶段 F 与第 205 项仍未完成，本批尚未暂存、提交或推送。

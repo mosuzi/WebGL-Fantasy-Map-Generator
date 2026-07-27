@@ -19,7 +19,10 @@
     <UiSelectField label="新增地区类型" :model-value="zoneDraft.type" :options="ZONE_CREATION_TYPE_OPTIONS" @update:model-value="zoneDraft.type = $event" />
     <UiButton variant="secondary" :active="state.createMode" @click="toggleCreateMode">{{ state.createMode ? "取消放置" : "放置地区" }}</UiButton>
   </div>
+  <UiRegenerationLockActions v-bind="regenerationLocks.actionProps" v-on="regenerationLocks.actionListeners" />
   <UiObjectTable
+    v-bind="regenerationLocks.tableProps"
+    v-on="regenerationLocks.tableListeners"
     :columns="columns"
     :column-widths="state.columnWidths"
     :rows="visibleRows"
@@ -84,12 +87,14 @@ import UiFilterInput from "./base/UiFilterInput.vue";
 import UiMetricGrid from "./base/UiMetricGrid.vue";
 import UiObjectTable from "./base/UiObjectTable.vue";
 import UiPanelIoActions from "./base/UiPanelIoActions.vue";
+import UiRegenerationLockActions from "./base/UiRegenerationLockActions.vue";
 import UiSelectField from "./base/UiSelectField.vue";
 import {formatArea, formatNumber as formatDisplayNumber} from "../../display-units.js";
 import {findByObjectId} from "../../object-id.js";
 import {compareRowsByKey} from "../../sort-utils.js";
 import {useUnitPreferences} from "../composables/use-unit-preferences.js";
 import {useVisibleRowSelection} from "../composables/use-visible-row-selection.js";
+import {useRegenerationLockSelection} from "../composables/use-regeneration-lock-selection.js";
 
 defineOptions({
   name: "ZonePanel"
@@ -167,7 +172,9 @@ const rows = computed(() => {
 const selectedId = computed(() => props.state.selection?.object?.kind === "zone" ? props.state.selection.object.id : null);
 const selected = computed(() => findByObjectId(rows.value, selectedId.value));
 const visibleRows = computed(() => sortRows(filterRows(rows.value, props.state.filter), props.state.sortKey, props.state.sortDir));
-const {selectedRowIds: selectedZoneIds, selectedRows: selectedZoneRows} = useVisibleRowSelection(visibleRows);
+const regenerationLocks = useRegenerationLockSelection({panelId: "zone-panel", kind: "zone", rows: visibleRows});
+const {selectedRowIds: selectedZoneIds} = useVisibleRowSelection(visibleRows);
+const selectedZoneRows = regenerationLocks.selectedRows;
 const filterEmptyAction = computed(() => String(props.state.filter || "").trim()
   ? {key: "clear-filter", label: "清空筛选", icon: "⌫"}
   : null);

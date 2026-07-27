@@ -41,19 +41,27 @@ export function buildZones(pack, options = {}) {
   const random = createRandom(`${options.seed}:zones`);
   const target = getTargetZoneCount(pack);
   const types = getZoneTypePlan(target);
-  const occupied = new Set();
-  const zones = [];
+  const zones = (options.preservedZones || []).map(zone => structuredClone(zone));
+  const occupied = new Set(zones.flatMap(zone => zone?.cells || []).filter(Number.isInteger));
+  const reservedIds = new Set(zones.map(zone => Number(zone?.i ?? zone?.id)).filter(Number.isInteger));
 
   for (const type of types) {
-    const zone = createZone(type, pack, random, occupied, zones.length);
+    if (zones.length >= target) break;
+    const zone = createZone(type, pack, random, occupied, nextZoneId(reservedIds));
     if (!zone?.cells?.length) continue;
     for (const cell of zone.cells) occupied.add(cell);
     zones.push(zone);
-    if (zones.length >= target) break;
+    reservedIds.add(Number(zone.i));
   }
 
   pack.zones = zones;
   return createZonesResult(pack, zones, startedAt, target);
+}
+
+function nextZoneId(reservedIds) {
+  let id = 0;
+  while (reservedIds.has(id)) id += 1;
+  return id;
 }
 
 function createZone(type, pack, random, occupied, id) {

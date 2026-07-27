@@ -69,6 +69,25 @@ assert.equal(getRegenerationLockStatus(map, {kind: "city", id: 1}).locked, true)
 assert.equal(tracker.getSnapshot().mapRevision, 1);
 assert.equal(createSetRegenerationLockCommand({kind: "city", id: 1}, true).isNoop({map}), true);
 
+const mixedReferences = [{kind: "city", id: 1}, {kind: "state", id: 1}];
+const mixedInspection = createRegenerationLockInspection(map, tracker.getSnapshot().mapRevision, mixedReferences, true);
+assert.equal(mixedInspection.changed, 1);
+assert.equal(mixedInspection.unchanged, 1);
+const mixedBatch = createSetRegenerationLocksCommand(mixedReferences, true);
+const mixedHistoryBefore = history.getStats().undo;
+history.execute(mixedBatch, {map});
+assert.equal(mixedBatch.getResult().changed, mixedInspection.changed);
+assert.equal(mixedBatch.getResult().unchanged, mixedInspection.unchanged);
+assert.deepEqual(mixedBatch.effects.affected, [{kind: "state", id: 1}]);
+assert.equal(history.getStats().undo, mixedHistoryBefore + 1);
+const mixedNoop = createSetRegenerationLocksCommand(mixedReferences, true);
+assert.equal(mixedNoop.isNoop({map}), true);
+assert.equal(history.getStats().undo, mixedHistoryBefore + 1);
+history.undo({map});
+assert.equal(history.getStats().undo, mixedHistoryBefore);
+assert.equal(getRegenerationLockStatus(map, {kind: "city", id: 1}).locked, true);
+assert.equal(getRegenerationLockStatus(map, {kind: "state", id: 1}).locked, false);
+
 const batch = createSetRegenerationLocksCommand([{kind: "river", id: 1}, {kind: "route", id: 1}], true);
 history.execute(batch, {map});
 assert.equal(history.getStats().undo, 2);

@@ -43,7 +43,10 @@
       </tbody>
     </table>
   </div>
+  <UiRegenerationLockActions v-bind="regenerationLocks.actionProps" v-on="regenerationLocks.actionListeners" />
   <UiObjectTable
+    v-bind="regenerationLocks.tableProps"
+    v-on="regenerationLocks.tableListeners"
     :columns="columns"
     :column-widths="state.columnWidths"
     :rows="visibleRows"
@@ -157,12 +160,14 @@ import UiFilterInput from "./base/UiFilterInput.vue";
 import UiMetricGrid from "./base/UiMetricGrid.vue";
 import UiObjectTable from "./base/UiObjectTable.vue";
 import UiPanelIoActions from "./base/UiPanelIoActions.vue";
+import UiRegenerationLockActions from "./base/UiRegenerationLockActions.vue";
 import UiSelectField from "./base/UiSelectField.vue";
 import {formatArea, formatNumber as formatDisplayNumber, formatPopulation} from "../../display-units.js";
 import {findByObjectId, sameObjectId, toIntegerId} from "../../object-id.js";
 import {compareRowsByKey} from "../../sort-utils.js";
 import {useUnitPreferences} from "../composables/use-unit-preferences.js";
 import {useVisibleRowSelection} from "../composables/use-visible-row-selection.js";
+import {useRegenerationLockSelection} from "../composables/use-regeneration-lock-selection.js";
 import {
   createSelectionCenterController,
   selectionCenterAnchor,
@@ -221,7 +226,15 @@ const metrics = computed(() => {
 const stateOptions = computed(() => metrics.value.states.map(state => ({value: state.id, label: state.name})));
 const selectedSubjectId = computed(() => toIntegerId(props.state.selectedStateId) ?? stateOptions.value[0]?.value ?? null);
 const visibleRows = computed(() => sortRows(filterRows(metrics.value.rows, props.state.filter), props.state.sortKey, props.state.sortDir));
-const {selectedRowIds: selectedRelationIds, selectedRows: selectedRelationRows} = useVisibleRowSelection(visibleRows);
+const regenerationLocks = useRegenerationLockSelection({
+  panelId: "diplomacy-panel",
+  kind: "diplomacy-relation",
+  rows: visibleRows,
+  mapSelectionContext: computed(() => ({subjectId: selectedSubjectId.value})),
+  getReference: row => ({kind: "diplomacy-relation", subjectId: row.subjectId, objectId: row.id})
+});
+const {selectedRowIds: selectedRelationIds} = useVisibleRowSelection(visibleRows);
+const selectedRelationRows = regenerationLocks.selectedRows;
 const filterEmptyAction = computed(() => String(props.state.filter || "").trim()
   ? {key: "clear-filter", label: "清空筛选", icon: "⌫"}
   : null);

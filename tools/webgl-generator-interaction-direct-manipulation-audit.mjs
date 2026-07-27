@@ -17,6 +17,7 @@ const FILES = Object.freeze({
   styles: "app/webgl-generator/src/styles.css",
   cityDrag: "app/webgl-generator/src/runtime/city-relocation-drag.js",
   panelManager: "app/webgl-generator/src/ui/panel-manager.js",
+  lockSession: "app/webgl-generator/src/runtime/regeneration-lock-ui-session.js",
   actionDock: "app/webgl-generator/src/ui/vue/components/base/UiActionDock.vue",
   objectTable: "app/webgl-generator/src/ui/vue/components/base/UiObjectTable.vue",
   draggablePanel: "app/webgl-generator/src/ui/vue/composables/use-draggable-floating-panel.js",
@@ -55,7 +56,8 @@ const MODE_DEFINITIONS = Object.freeze([
   oneShotMode("FEATURE_PATCH_SELECT", "feature:patch-select", "lake-panel", "拾取 feature 补丁草稿", "单击目标 pack cell", "选中 cell 进入面板补丁预览", "拾取后退出模式；应用 / 取消由面板收口", "选择本身不写历史，应用补丁写一条历史"),
   persistentMode("FEATURE_TOPOLOGY_SELECT", "feature:topology-select", "feature-panel", "选择 feature 拓扑 cell", "逐次单击 grid cell 组成选区", "选区及拓扑草稿持续显示", "面板应用或取消时退出", "选择不写历史，应用拓扑写一条历史"),
   oneShotMode("ZONE_ADD", "zone:add", "zone-panel", "新增地区", "单击中心并按半径创建", "面板显示待创建类型", "成功创建后完成模式", "成功写一条新增地区历史"),
-  oneShotMode("NOTE_ADD", "note:add", "notes-panel", "新增备注", "单击合法 pack cell 创建独立备注", "面板显示待放置状态", "成功创建后完成模式", "成功写一条新增备注历史")
+  oneShotMode("NOTE_ADD", "note:add", "notes-panel", "新增备注", "单击合法 pack cell 创建独立备注", "面板显示待放置状态", "成功创建后完成模式", "成功写一条新增备注历史"),
+  persistentMode("REGENERATION_LOCK_SELECT", "regeneration-lock:select", "state-panel", "共享重生成锁地图多选", "逐次单击同类对象加入或移出面板会话集合", "共享高亮只显示当前临时集合", "锁定 / 解锁按钮经 setMany 一次提交", "地图点击不写历史，显式应用只写一条批量历史", {cancel: "Escape、切换模式、关面板或切图清理临时集合与高亮"})
 ]);
 
 export function buildDirectManipulationAudit() {
@@ -199,7 +201,7 @@ function verifyMode(item, includedSurfaceIds) {
 }
 
 function registrationEvidence(item) {
-  const directKeys = new Set(["HEIGHT_BRUSH", "STATE_BRUSH", "PROVINCE_BRUSH", "CITY_MOVE", "BIOME_ASSIGN", "SUITABILITY_PAINT", "MARKET_ASSIGN", "MEASUREMENT_DRAW", "MARKER_ADD", "MARKER_MOVE", "ROUTE_DRAW", "ROUTE_EDIT_WAYPOINT", "RIVER_ADD", "LAKE_EXCAVATE", "FEATURE_PATCH_SELECT", "FEATURE_TOPOLOGY_SELECT", "ZONE_ADD", "NOTE_ADD"]);
+  const directKeys = new Set(["HEIGHT_BRUSH", "STATE_BRUSH", "PROVINCE_BRUSH", "CITY_MOVE", "BIOME_ASSIGN", "SUITABILITY_PAINT", "MARKET_ASSIGN", "MEASUREMENT_DRAW", "MARKER_ADD", "MARKER_MOVE", "ROUTE_DRAW", "ROUTE_EDIT_WAYPOINT", "RIVER_ADD", "LAKE_EXCAVATE", "FEATURE_PATCH_SELECT", "FEATURE_TOPOLOGY_SELECT", "ZONE_ADD", "NOTE_ADD", "REGENERATION_LOCK_SELECT"]);
   if (directKeys.has(item.key)) {
     return [scopedRef(FILES.runtime, `register(CANVAS_TOOL_MODE.${item.key}`, "  register(", [`\"${item.panelId}\"`, "onExit"], ["target", "cancel", "recovery"])];
   }
@@ -263,7 +265,11 @@ function handlerEvidence(item) {
     FEATURE_PATCH_SELECT: objectToolEvidence(item.key, ["setPatchCell", "completeCanvasToolMode"], ["gesture", "preview", "complete", "history"]),
     FEATURE_TOPOLOGY_SELECT: [scopedRef(FILES.runtime, "function bindObjectCreationTools", "function bindCustomLabelDrag", ["CANVAS_TOOL_MODE.FEATURE_TOPOLOGY_SELECT", "setTopologyCell"], ["gesture", "preview"]), scopedRef(FILES.runtime, "export function applyFeatureTopologyViaApi", "export function inspectStateTopologyViaApi", ["executeEditCommand", "CANVAS_TOOL_MODE.FEATURE_TOPOLOGY_SELECT"], ["complete", "history"])],
     ZONE_ADD: objectToolEvidence(item.key, ["runtimeActions.edit.zones.create", "completeCanvasToolMode"], ["gesture", "preview", "complete", "history"]),
-    NOTE_ADD: objectToolEvidence(item.key, ["runtimeActions.edit.notes.create", "completeCanvasToolMode"], ["gesture", "preview", "complete", "history"])
+    NOTE_ADD: objectToolEvidence(item.key, ["runtimeActions.edit.notes.create", "completeCanvasToolMode"], ["gesture", "preview", "complete", "history"]),
+    REGENERATION_LOCK_SELECT: [
+      scopedRef(FILES.runtime, "function bindRegenerationLockMapSelection", "function regenerationLockReferenceAtPick", ["pointerdown", "mapPicked"], ["gesture", "preview", "cancel"]),
+      scopedRef(FILES.runtime, "state.regenerationLockUiSession = installRegenerationLockUiSession", "bindRegenerationLockMapSelection(canvas", ["setLocks", "setMany"], ["complete", "history"])
+    ]
   };
   const result = refs[item.key];
   if (!result) throw new Error(`缺少模式 handler 证据定义：${item.key}`);
@@ -296,6 +302,9 @@ function cursorEvidence(item) {
 }
 
 function panelCloseEvidence(item) {
+  if (item.key === "REGENERATION_LOCK_SELECT") {
+    return sourceRef(FILES.lockSession, ["fmg:panel-close", "closePanel"], {supports: ["panelClose"]});
+  }
   const file = `app/webgl-generator/src/ui/panels/${item.panelId}.js`;
   const callbackByKey = {
     HEIGHT_BRUSH: "callbacks.onActiveChange",

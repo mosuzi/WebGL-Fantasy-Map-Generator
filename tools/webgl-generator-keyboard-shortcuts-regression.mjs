@@ -180,7 +180,7 @@ const canvasModeBlock = appSource.slice(appSource.indexOf("export const CANVAS_T
 const canvasModeKeys = [...canvasModeBlock.matchAll(/^\s{2}([A-Z0-9_]+):\s*"[^"]+"/gm)].map(match => match[1]);
 const registrationScope = appSource.slice(appSource.indexOf("function registerCanvasToolModes"), appSource.indexOf("function enterCanvasToolMode"));
 const registeredCanvasModeKeys = [...registrationScope.matchAll(/CANVAS_TOOL_MODE\.([A-Z0-9_]+)/g)].map(match => match[1]);
-assert.equal(canvasModeKeys.length, 28, "当前运行时画布模式分母漂移时必须重新冻结 Escape 验收");
+assert.equal(canvasModeKeys.length, 29, "当前运行时画布模式分母漂移时必须重新冻结 Escape 验收");
 assert.deepEqual([...new Set(registeredCanvasModeKeys)].sort(), [...canvasModeKeys].sort(), "存在未接入通用注册器的画布模式");
 assert.match(appSource, /invokePublicApi\(documentRef/);
 assert.doesNotMatch(appSource.slice(appSource.indexOf("async function executeKeyboardShortcut"), appSource.indexOf("async function invokePublicApi")), /\.click\(/, "快捷键通过 DOM click 执行动作");

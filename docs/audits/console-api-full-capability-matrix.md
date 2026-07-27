@@ -4,18 +4,18 @@
 
 ## 当前分母
 
-- 交互表面：103（纳入 86，交互审计排除 17）
-- 画布模式：28
+- 交互表面：105（纳入 87，交互审计排除 18）
+- 画布模式：29
 - runtime actions：211
 - API action 绑定：210
 - command / inspector 导出：188
 - 公共 API 方法：257
-- 矩阵总行数：1008
+- 矩阵总行数：1011
 
 ## 分类结果
 
-- covered：937
-- excluded：71
+- covered：938
+- excluded：73
 - deferred-owned：0
 - gap：0
 - unknown：0
@@ -68,6 +68,7 @@
 - `surface:fixed-overlay:tree:religion-panel`：动作坞或树状浮层属于宿主面板的 UI 壳层；提交动作由对应领域 API 登记。
 - `surface:global:app-webgl-generator-src-runtime-health-monitor`：健康监测只记录诊断，不是用户交互表面
 - `surface:global:app-webgl-generator-src-runtime-keyboard-shortcuts`：全局事件负责快捷键、拖动、焦点或组件桥接，不形成独立地图参数能力。
+- `surface:global:app-webgl-generator-src-runtime-regeneration-lock-ui-session`：用户入口已归入 14 个对象列表与共享画布模式，不重复计入全局分母
 - `surface:global:app-webgl-generator-src-ui-brush-cursor-preview`：局部委托行为已归入 canvas:map-canvas，不重复计入全局分母
 - `surface:global:app-webgl-generator-src-ui-label-naming-panel-trigger`：局部委托行为已归入对应面板，不重复计入全局分母
 - `surface:global:app-webgl-generator-src-ui-overlay-registry`：全局事件负责快捷键、拖动、焦点或组件桥接，不形成独立地图参数能力。
@@ -101,6 +102,7 @@
 - `surface:shared:ui-number-field`：共享组件只承载输入、布局或面板生命周期；对应地图能力由宿主领域 API 登记。
 - `surface:shared:ui-object-table`：共享组件只承载输入、布局或面板生命周期；对应地图能力由宿主领域 API 登记。
 - `surface:shared:ui-panel-io-actions`：共享组件只承载输入、布局或面板生命周期；对应地图能力由宿主领域 API 登记。
+- `surface:shared:ui-regeneration-lock-actions`：共享组件只承载输入、布局或面板生命周期；对应地图能力由宿主领域 API 登记。
 - `surface:shared:ui-segmented`：共享组件只承载输入、布局或面板生命周期；对应地图能力由宿主领域 API 登记。
 - `surface:shared:ui-select-field`：共享组件只承载输入、布局或面板生命周期；对应地图能力由宿主领域 API 登记。
 - `surface:shared:ui-slider-field`：共享组件只承载输入、布局或面板生命周期；对应地图能力由宿主领域 API 登记。

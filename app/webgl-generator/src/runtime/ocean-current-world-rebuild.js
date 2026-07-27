@@ -1,5 +1,6 @@
 import {cloneMapSnapshotInChunks, restoreMapSnapshot} from "./climate-downstream-rebuild.js";
 import {systemAffected} from "./edit-command-effects.js";
+import {captureRegenerationConstraintBundle} from "./regeneration-constraint-bundle.js";
 
 export const OCEAN_CURRENT_WORLD_REBUILD_ORDER = Object.freeze([
   "ocean-currents",
@@ -66,6 +67,10 @@ export async function executeOceanCurrentWorldRebuild({
   if (typeof executeStage !== "function" || typeof executeCommand !== "function") throw new Error("洋流世界重算缺少阶段或命令执行器");
   const preview = inspectOceanCurrentWorldRebuild(map, {seed, includeSeafloor: Boolean(executePrepare)});
   if (!preview.valid) return {executed: false, preview, steps: [], command: null};
+  const constraintBundle = captureRegenerationConstraintBundle(map, {closure: ["world"]});
+  if (constraintBundle.isDomainFullyLocked("world")) {
+    return {executed: false, reason: "domain-fully-locked", preview, steps: [], command: null};
+  }
 
   const startedAt = now();
   const chunks = [];
@@ -80,8 +85,9 @@ export async function executeOceanCurrentWorldRebuild({
 
     if (executePrepare) {
       onProgress?.({phase: "prepare", message: "正在应用海底重设"});
-      const prepareResult = await executePrepare({preview, signal});
+      const prepareResult = await executePrepare({preview, signal, constraintBundle});
       if (prepareResult?.executed === false) throw new Error("海底重设准备阶段未完成");
+      constraintBundle.assertDomain(map, "world", "after-prepare");
       steps.push({system: "seafloor", result: prepareResult || {executed: true}});
       failAt(faultAt, "after:seafloor");
     }
@@ -90,10 +96,12 @@ export async function executeOceanCurrentWorldRebuild({
       ensureActive(signal, assertCurrent, system);
       onProgress?.({phase: "system", system, message: `正在重算${STAGE_LABELS[system]}`});
       const stageStartedAt = now();
-      const result = await executeStage(system, {preview, signal});
+      const result = await executeStage(system, {preview, signal, constraintBundle});
       const durationMs = roundTiming(now() - stageStartedAt);
       chunks.push({id: `world:${system}`, blockingMs: durationMs});
-      if (!result || result.executed === false) throw new Error(`洋流世界重算未完成：${STAGE_LABELS[system]}`);
+      if (!result || (result.executed === false && result.reason !== "domain-fully-locked")) {
+        throw new Error(`洋流世界重算未完成：${STAGE_LABELS[system]}`);
+      }
       steps.push({system, result, durationMs});
       failAt(faultAt, `after:${system}`);
       ensureActive(signal, assertCurrent, system);
@@ -101,6 +109,7 @@ export async function executeOceanCurrentWorldRebuild({
     }
 
     refreshSummary?.(map);
+    constraintBundle.assertDomain(map, "world", "after");
     ensureActive(signal, assertCurrent, "snapshot-after");
     onProgress?.({phase: "snapshot-after", message: "正在保存重算结果"});
     const after = await cloneMapSnapshotInChunks(map, {id: "world-snapshot-after", chunks, now, yieldToMain});

@@ -127,6 +127,10 @@ export function prepareInitialGoods(pack, options = {}) {
 }
 
 export function buildEconomy(pack, options = {}) {
+  const locks = prepareEconomyRegenerationLocks(pack, options);
+  const protectedStateIds = regenerationSnapshotIds(options.lockedStates);
+  const protectedProvinceIds = regenerationSnapshotIds(options.lockedProvinces);
+  const protectedBurgIds = collectProtectedEconomyBurgIds(pack, locks, options);
   const random = createRandom(`${options.seed}:economy`);
   const goods = ensurePackGoods(pack);
   const rawGoods = goods.filter(good => good?.distribution);
@@ -140,18 +144,25 @@ export function buildEconomy(pack, options = {}) {
   const resourcePopulation = applyResourcePopulationBonus(pack, {markerOnly: true});
   captureSuitabilityBase(pack);
   applySuitabilityOverrides(pack);
-  syncPoliticalPopulationStats(pack);
-  pack.markets = createMarkets(pack, aliveBurgs, goods, random, options);
-  pack.cells.market = assignMarketsToCells(pack, pack.markets);
-  const resourceTrade = applyResourceSupplyToMarkets(pack, pack.markets);
-  assignMarketsToBurgs(pack, aliveBurgs, pack.markets);
-  const demand = applyMarketDemandDiagnostics(pack, pack.markets, goods);
-  initializeTaxRates(states, random);
-  const deals = createProductionAndDeals(pack, aliveBurgs, goods, rawGoods, manufacturedGoods, states, random, options);
+  syncPoliticalPopulationStats(pack, {protectedStateIds, protectedProvinceIds});
+  pack.markets = createMarkets(pack, aliveBurgs, goods, random, {...options, economyLocks: locks});
+  pack.cells.market = assignMarketsToCells(pack, pack.markets, locks);
+  validateLockedMarketDependencies(pack, locks);
+  const resourceTrade = applyResourceSupplyToMarkets(pack, pack.markets, locks.marketIds);
+  assignMarketsToBurgs(pack, aliveBurgs, pack.markets, {lockedMarketIds: locks.marketIds, protectedBurgIds});
+  const demand = applyMarketDemandDiagnostics(pack, pack.markets, goods, locks.marketIds);
+  initializeTaxRates(states, random, protectedStateIds);
+  const deals = createProductionAndDeals(pack, aliveBurgs, goods, rawGoods, manufacturedGoods, states, random, {
+    ...options,
+    economyLocks: locks,
+    protectedStateIds,
+    protectedBurgIds
+  });
   pack.deals = deals;
-  const pricePropagation = applyPricePropagationDiagnostics(pack, pack.markets, deals, goods);
-  collectStateTreasuries(states, deals, pack.markets, pack);
-  const markerEconomy = refreshPoliticalEconomicPower(pack);
+  validateLockedDealDependencies(pack, locks);
+  const pricePropagation = applyPricePropagationDiagnostics(pack, pack.markets, deals, goods, locks.marketIds);
+  collectStateTreasuries(states, deals, pack.markets, pack, protectedStateIds);
+  const markerEconomy = refreshPoliticalEconomicPower(pack, {protectedStateIds, protectedProvinceIds});
 
   const metadata = createEconomyMetadata(pack, {
     goods,
@@ -169,6 +180,10 @@ export function buildEconomy(pack, options = {}) {
 }
 
 export function rebuildEconomyFromMarketAssignments(pack, options = {}) {
+  const locks = prepareEconomyRegenerationLocks(pack, options);
+  const protectedStateIds = regenerationSnapshotIds(options.lockedStates);
+  const protectedProvinceIds = regenerationSnapshotIds(options.lockedProvinces);
+  const protectedBurgIds = collectProtectedEconomyBurgIds(pack, locks, options);
   const random = createRandom(`${options.seed}:economy-market-rebuild`);
   const goods = ensurePackGoods(pack);
   const rawGoods = goods.filter(good => good?.distribution);
@@ -182,17 +197,28 @@ export function rebuildEconomyFromMarketAssignments(pack, options = {}) {
     if (marketId && !validMarketIds.has(marketId)) throw new Error(`pack cell #${cell} 指向不存在的市场 #${marketId}`);
   }
 
-  resetMarketsForEconomicRebuild(pack, goods, options);
+  resetMarketsForEconomicRebuild(pack, goods, options, locks.marketIds);
   const resourcePopulation = options.resourcePopulation || pack.metadata?.resourcePopulation || {boostedCells: 0, totalBonus: 0};
-  const resourceTrade = applyResourceSupplyToMarkets(pack, pack.markets);
-  assignMarketsToBurgs(pack, aliveBurgs, pack.markets, {preferCellAssignment: true});
-  const demand = applyMarketDemandDiagnostics(pack, pack.markets, goods);
-  preserveTaxRates(states, random);
-  const deals = createProductionAndDeals(pack, aliveBurgs, goods, rawGoods, manufacturedGoods, states, random, options);
+  validateLockedMarketDependencies(pack, locks);
+  const resourceTrade = applyResourceSupplyToMarkets(pack, pack.markets, locks.marketIds);
+  assignMarketsToBurgs(pack, aliveBurgs, pack.markets, {
+    preferCellAssignment: true,
+    lockedMarketIds: locks.marketIds,
+    protectedBurgIds
+  });
+  const demand = applyMarketDemandDiagnostics(pack, pack.markets, goods, locks.marketIds);
+  preserveTaxRates(states, random, protectedStateIds);
+  const deals = createProductionAndDeals(pack, aliveBurgs, goods, rawGoods, manufacturedGoods, states, random, {
+    ...options,
+    economyLocks: locks,
+    protectedStateIds,
+    protectedBurgIds
+  });
   pack.deals = deals;
-  const pricePropagation = applyPricePropagationDiagnostics(pack, pack.markets, deals, goods);
-  collectStateTreasuries(states, deals, pack.markets, pack);
-  const markerEconomy = refreshPoliticalEconomicPower(pack);
+  validateLockedDealDependencies(pack, locks);
+  const pricePropagation = applyPricePropagationDiagnostics(pack, pack.markets, deals, goods, locks.marketIds);
+  collectStateTreasuries(states, deals, pack.markets, pack, protectedStateIds);
+  const markerEconomy = refreshPoliticalEconomicPower(pack, {protectedStateIds, protectedProvinceIds});
   const metadata = createEconomyMetadata(pack, {
     goods,
     aliveBurgs,
@@ -224,7 +250,7 @@ function createEconomyMetadata(pack, {goods, aliveBurgs, states, resourcePopulat
     hybridGoods: goods.filter(good => good.distribution && good.recipes?.length).length,
     resourceCells: countPositive(pack.cells.good),
     resourcePopulation,
-    markets: Math.max(0, pack.markets.length - 1),
+    markets: pack.markets.filter(Boolean).length,
     assignedMarketCells: countPositive(pack.cells.market),
     burgsWithMarket: aliveBurgs.filter(burg => burg.market > 0).length,
     burgsWithProduction: aliveBurgs.filter(burg => burg.production?.length).length,
@@ -242,10 +268,271 @@ function createEconomyMetadata(pack, {goods, aliveBurgs, states, resourcePopulat
   };
 }
 
-function resetMarketsForEconomicRebuild(pack, goods, options) {
+function prepareEconomyRegenerationLocks(pack, options = {}) {
+  const marketSources = options.lockedMarkets ?? options.preservedMarkets ?? [];
+  const dealSources = options.lockedDeals ?? options.preservedDeals ?? [];
+  if (!Array.isArray(marketSources) || !Array.isArray(dealSources)) {
+    throw economyLockConflict("锁定市场与交易约束必须是数组", {reason: "invalid-constraint"});
+  }
+
+  const marketIds = new Set();
+  const dealIds = new Set();
+  const marketSnapshots = [];
+  const dealSnapshots = [];
+  const marketOwners = new Map();
+  const previousMarkets = (pack.markets || []).filter(Boolean);
+  const previousDeals = (pack.deals || []).filter(Boolean);
+
+  for (const source of marketSources) {
+    const snapshot = structuredClone(source);
+    const id = Number(snapshot?.i ?? snapshot?.id);
+    const current = findObjectByNumericId(previousMarkets, id);
+    if (!Number.isInteger(id) || id <= 0 || id > 65535 || marketIds.has(id)) {
+      throw economyLockConflict("锁定市场缺少唯一的正整数 ID", {kind: "economy-market", reason: "invalid-id", id});
+    }
+    if (!current) {
+      throw economyLockConflict(`锁定市场 #${id} 缺少原对象`, {kind: "economy-market", reason: "missing-market", id});
+    }
+    marketIds.add(id);
+    marketSnapshots.push(snapshot);
+  }
+
+  for (const cell of pack.cells?.i || []) {
+    const marketId = Number(pack.cells.market?.[cell] || 0);
+    if (!marketIds.has(marketId)) continue;
+    if (marketOwners.has(cell)) {
+      throw economyLockConflict(`锁定市场 #${marketId} 的固定 cell 与其它市场重叠`, {
+        kind: "economy-market",
+        reason: "overlapping-market-cell",
+        marketId,
+        cell
+      });
+    }
+    marketOwners.set(cell, marketId);
+  }
+
+  for (const source of dealSources) {
+    const snapshot = structuredClone(source);
+    const id = Number(snapshot?.i ?? snapshot?.id);
+    const current = findObjectByNumericId(previousDeals, id);
+    if (!Number.isInteger(id) || id < 0 || dealIds.has(id)) {
+      throw economyLockConflict("锁定交易缺少唯一的非负整数 ID", {kind: "trade-flow", reason: "invalid-id", id});
+    }
+    if (!current) {
+      throw economyLockConflict(`锁定交易 #${id} 缺少原对象`, {kind: "trade-flow", reason: "missing-deal", id});
+    }
+    dealIds.add(id);
+    dealSnapshots.push(snapshot);
+  }
+
+  return {
+    marketIds,
+    dealIds,
+    marketSnapshots,
+    dealSnapshots,
+    marketOwners,
+    allMarketsLocked: previousMarkets.length > 0 && previousMarkets.every(market => marketIds.has(Number(market.i ?? market.id))),
+    allDealsLocked: previousDeals.length > 0 && previousDeals.every(deal => dealIds.has(Number(deal.i ?? deal.id)))
+  };
+}
+
+function validateLockedMarketDependencies(pack, locks) {
+  const centers = new Map();
+  const centerCells = new Map();
+  for (const snapshot of locks.marketSnapshots) {
+    const id = Number(snapshot.i ?? snapshot.id);
+    const current = findObjectByNumericId((pack.markets || []).filter(Boolean), id);
+    const centerBurgId = Number(snapshot.centerBurgId);
+    const cell = Number(snapshot.cell);
+    const burg = pack.burgs?.[centerBurgId];
+    if (!current || stableEconomySnapshot(current) !== stableEconomySnapshot(snapshot)) {
+      throw economyLockConflict(`锁定市场 #${id} 的完整快照被改写`, {
+        kind: "economy-market",
+        reason: "market-snapshot-changed",
+        marketId: id
+      });
+    }
+    if (!Number.isInteger(centerBurgId) || centerBurgId <= 0 || !burg?.i || burg.removed || Number(burg.cell) !== cell) {
+      throw economyLockConflict(`锁定市场 #${id} 缺少一致的中心城市`, {
+        kind: "economy-market",
+        reason: "invalid-market-center",
+        marketId: id,
+        centerBurgId,
+        cell
+      });
+    }
+    const other = centers.get(centerBurgId);
+    if (other && other !== id) {
+      throw economyLockConflict(`锁定市场 #${id} 与市场 #${other} 复用中心城市`, {
+        kind: "economy-market",
+        reason: "duplicate-market-center",
+        marketId: id,
+        otherMarketId: other,
+        centerBurgId
+      });
+    }
+    centers.set(centerBurgId, id);
+    const otherAtCell = centerCells.get(cell);
+    if (otherAtCell && otherAtCell !== id) {
+      throw economyLockConflict(`锁定市场 #${id} 与市场 #${otherAtCell} 复用中心 cell`, {
+        kind: "economy-market",
+        reason: "duplicate-market-center-cell",
+        marketId: id,
+        otherMarketId: otherAtCell,
+        cell
+      });
+    }
+    centerCells.set(cell, id);
+  }
+
+  const actualOwners = new Map();
+  for (const cell of pack.cells?.i || []) {
+    const marketId = Number(pack.cells.market?.[cell] || 0);
+    if (locks.marketIds.has(marketId)) actualOwners.set(cell, marketId);
+  }
+  if (stableEconomySnapshot([...actualOwners]) !== stableEconomySnapshot([...locks.marketOwners])) {
+    throw economyLockConflict("锁定市场的完整 cell 集合被改写", {
+      kind: "economy-market",
+      reason: "market-cells-changed"
+    });
+  }
+}
+
+function validateLockedDealDependencies(pack, locks) {
+  const goods = new Set((pack.goods || []).filter(Boolean).map(good => Number(good.i ?? good.id)));
+  for (const snapshot of locks.dealSnapshots) {
+    const id = Number(snapshot.i ?? snapshot.id);
+    const current = findObjectByNumericId((pack.deals || []).filter(Boolean), id);
+    if (!current || stableEconomySnapshot(current) !== stableEconomySnapshot(snapshot)) {
+      throw economyLockConflict(`锁定交易 #${id} 的完整快照被改写`, {
+        kind: "trade-flow",
+        reason: "deal-snapshot-changed",
+        dealId: id
+      });
+    }
+    const goodId = Number(snapshot.good);
+    if (!goods.has(goodId)) {
+      throw economyLockConflict(`锁定交易 #${id} 引用了不存在的商品`, {
+        kind: "trade-flow",
+        reason: "missing-deal-good",
+        dealId: id,
+        goodId
+      });
+    }
+    const sellerMarketId = validateLockedDealParty(pack, snapshot.sellerType, snapshot.seller, id, "seller");
+    const buyerMarketId = validateLockedDealParty(pack, snapshot.buyerType, snapshot.buyer, id, "buyer");
+    for (const marketId of new Set([sellerMarketId, buyerMarketId].filter(Boolean))) {
+      if (!pack.markets?.[marketId]?.goods?.[goodId]) {
+        throw economyLockConflict(`锁定交易 #${id} 的市场 #${marketId} 缺少商品库存`, {
+          kind: "trade-flow",
+          reason: "missing-deal-inventory",
+          dealId: id,
+          marketId,
+          goodId
+        });
+      }
+    }
+    const stock = Number(pack.markets?.[sellerMarketId]?.goods?.[goodId]?.stock);
+    const units = Number(snapshot.units);
+    if (sellerMarketId && (!Number.isFinite(units) || units <= 0 || !Number.isFinite(stock) || stock < 0)) {
+      throw economyLockConflict(`锁定交易 #${id} 与卖方库存矛盾`, {
+        kind: "trade-flow",
+        reason: "deal-inventory-conflict",
+        dealId: id,
+        marketId: sellerMarketId,
+        goodId,
+        stock,
+        units
+      });
+    }
+    validateLockedDealPath(pack, snapshot, id);
+  }
+}
+
+function validateLockedDealParty(pack, type, value, dealId, side) {
+  const id = Number(value);
+  if (type === "market") {
+    if (!Number.isInteger(id) || id <= 0 || !pack.markets?.[id]) {
+      throw economyLockConflict(`锁定交易 #${dealId} 引用了不存在的市场端点`, {
+        kind: "trade-flow",
+        reason: "missing-deal-market",
+        dealId,
+        side,
+        marketId: id
+      });
+    }
+    return id;
+  }
+  if (type === "burg") {
+    const burg = pack.burgs?.[id];
+    if (!Number.isInteger(id) || id <= 0 || !burg?.i || burg.removed || !pack.markets?.[burg.market]) {
+      throw economyLockConflict(`锁定交易 #${dealId} 引用了无效城市端点`, {
+        kind: "trade-flow",
+        reason: "missing-deal-burg",
+        dealId,
+        side,
+        burgId: id
+      });
+    }
+    return Number(burg.market);
+  }
+  throw economyLockConflict(`锁定交易 #${dealId} 的端点类型无效`, {
+    kind: "trade-flow",
+    reason: "invalid-deal-party-type",
+    dealId,
+    side,
+    type
+  });
+}
+
+function validateLockedDealPath(pack, deal, dealId) {
+  if (deal.path === undefined || deal.path === null) return;
+  if (!Array.isArray(deal.path) || !deal.path.length) {
+    throw economyLockConflict(`锁定交易 #${dealId} 的路径无效`, {kind: "trade-flow", reason: "invalid-deal-path", dealId});
+  }
+  for (let index = 0; index < deal.path.length; index++) {
+    const cell = Number(deal.path[index]);
+    if (!Number.isInteger(cell) || cell < 0 || cell >= Number(pack.cells?.i?.length || 0)) {
+      throw economyLockConflict(`锁定交易 #${dealId} 的路径包含无效 cell`, {
+        kind: "trade-flow",
+        reason: "invalid-deal-path-cell",
+        dealId,
+        cell
+      });
+    }
+    if (index && !(pack.cells.c?.[deal.path[index - 1]] || []).includes(cell)) {
+      throw economyLockConflict(`锁定交易 #${dealId} 的路径不连续`, {
+        kind: "trade-flow",
+        reason: "disconnected-deal-path",
+        dealId,
+        from: deal.path[index - 1],
+        to: cell
+      });
+    }
+  }
+}
+
+function findObjectByNumericId(objects, id) {
+  if (!Number.isInteger(id)) return null;
+  return (objects || []).find(object => Number(object?.i ?? object?.id) === id) || null;
+}
+
+function stableEconomySnapshot(value) {
+  return JSON.stringify(value);
+}
+
+function economyLockConflict(message, details = {}) {
+  const error = new Error(message);
+  error.code = "regeneration_lock_conflict";
+  error.details = {kind: "economy", ...details};
+  return error;
+}
+
+function resetMarketsForEconomicRebuild(pack, goods, options, lockedMarketIds = new Set()) {
   const lowLandRatio = landRatio(pack) < 0.65;
   const stockScale = getMarketStockScale(pack, options);
   for (const market of (pack.markets || []).filter(Boolean)) {
+    if (lockedMarketIds.has(Number(market.i ?? market.id))) continue;
     const center = pack.burgs?.[market.centerBurgId];
     if (!center?.i || center.removed) throw new Error(`市场 #${market.i ?? market.id} 缺少有效中心城市`);
     const baseline = createMarket(Number(market.i ?? market.id), center, goods, {lowLandRatio, stockScale});
@@ -257,8 +544,9 @@ function resetMarketsForEconomicRebuild(pack, goods, options) {
   }
 }
 
-function preserveTaxRates(states, random) {
+function preserveTaxRates(states, random, protectedStateIds = new Set()) {
   for (const state of states) {
+    if (protectedStateIds.has(Number(state.i))) continue;
     const salesTax = Number(state.salesTax);
     const pollTax = Number(state.pollTax);
     initializeTaxRates([state], random);
@@ -354,14 +642,14 @@ function getResourceValue(pack, cell) {
   return good ? Number(pack.goods?.[good]?.value || 0) : 0;
 }
 
-function syncPoliticalPopulationStats(pack) {
-  syncGroupPopulationStats(pack, pack.states || [], "state");
-  syncGroupPopulationStats(pack, pack.provinces || [], "province");
+function syncPoliticalPopulationStats(pack, {protectedStateIds = new Set(), protectedProvinceIds = new Set()} = {}) {
+  syncGroupPopulationStats(pack, pack.states || [], "state", protectedStateIds);
+  syncGroupPopulationStats(pack, pack.provinces || [], "province", protectedProvinceIds);
 }
 
-function syncGroupPopulationStats(pack, groups, field) {
+function syncGroupPopulationStats(pack, groups, field, protectedIds = new Set()) {
   for (const group of groups || []) {
-    if (!group) continue;
+    if (!group || protectedIds.has(Number(group.i))) continue;
     group.rural = 0;
     group.urban = 0;
     group.burgs = 0;
@@ -370,7 +658,7 @@ function syncGroupPopulationStats(pack, groups, field) {
   for (const cell of pack.cells.i) {
     if ((pack.cells.h[cell] || 0) < 20) continue;
     const group = groups?.[pack.cells[field]?.[cell]];
-    if (!group) continue;
+    if (!group || protectedIds.has(Number(group.i))) continue;
     group.rural += pack.cells.pop?.[cell] || 0;
     const burg = pack.burgs?.[pack.cells.burg?.[cell]];
     if (burg?.i && !burg.removed) {
@@ -380,7 +668,7 @@ function syncGroupPopulationStats(pack, groups, field) {
   }
 
   for (const group of groups || []) {
-    if (!group) continue;
+    if (!group || protectedIds.has(Number(group.i))) continue;
     group.rural = round(group.rural || 0, 2);
     group.urban = round(group.urban || 0, 2);
   }
@@ -556,25 +844,35 @@ function markerSupplyScore(marker) {
 
 function createMarkets(pack, aliveBurgs, goods, random, options = {}) {
   const markets = [null];
+  const locks = options.economyLocks || prepareEconomyRegenerationLocks(pack, options);
+  for (const snapshot of locks.marketSnapshots) markets[Number(snapshot.i ?? snapshot.id)] = structuredClone(snapshot);
   if (!aliveBurgs.length) return markets;
 
   const target = getMarketTarget(pack, aliveBurgs.length, options);
   const lowLandRatio = landRatio(pack) < 0.65;
   const stockScale = getMarketStockScale(pack, options);
-  const selected = new Set();
+  const selected = new Set(locks.marketSnapshots.map(market => Number(market.centerBurgId)));
   const candidates = aliveBurgs
     .map(burg => ({burg, score: marketScore(pack, burg, random)}))
     .sort((a, b) => b.score - a.score || a.burg.i - b.burg.i)
     .map(item => item.burg);
 
   for (const burg of candidates) {
-    if (markets.length > target) break;
+    if (markets.filter(Boolean).length >= target) break;
     if (selected.has(burg.i)) continue;
     selected.add(burg.i);
-    markets.push(createMarket(markets.length, burg, goods, {lowLandRatio, stockScale}));
+    const id = nextAvailableMarketId(markets, locks.marketIds);
+    markets[id] = createMarket(id, burg, goods, {lowLandRatio, stockScale});
   }
 
   return markets;
+}
+
+function nextAvailableMarketId(markets, reservedIds) {
+  let id = 1;
+  while (markets[id] || reservedIds.has(id)) id++;
+  if (id > 65535) throw economyLockConflict("市场 ID 超出 Uint16 容量", {kind: "economy-market", reason: "market-id-overflow", id});
+  return id;
 }
 
 function getMarketTarget(pack, burgCount, options) {
@@ -622,14 +920,17 @@ function createMarket(id, burg, goods, {lowLandRatio = false, stockScale = 1} = 
   };
 }
 
-function assignMarketsToCells(pack, markets) {
+function assignMarketsToCells(pack, markets, locks = null) {
   const {cells} = pack;
   const marketCells = new Uint16Array(cells.i.length);
   const validMarkets = markets.filter(Boolean);
   if (!validMarkets.length) return marketCells;
+  const lockedMarketIds = locks?.marketIds || new Set();
+  const assignableMarkets = validMarkets.filter(market => !lockedMarketIds.has(Number(market.i ?? market.id)));
+  for (const [cell, marketId] of locks?.marketOwners || []) marketCells[cell] = marketId;
 
   const stateMarkets = new Map();
-  for (const market of validMarkets) if (market.state > 0 && !stateMarkets.has(market.state)) stateMarkets.set(market.state, market);
+  for (const market of assignableMarkets) if (market.state > 0 && !stateMarkets.has(market.state)) stateMarkets.set(market.state, market);
   const target = marketCoverageTarget(pack);
   const candidates = [];
 
@@ -641,25 +942,33 @@ function assignMarketsToCells(pack, markets) {
       (cells.s?.[cell] || 0) * 3 +
       (cells.pop?.[cell] || 0) * 0.25 +
       Math.max(0, cells.t?.[cell] || 0) * 20;
-    candidates.push({cell, score});
+    if (!locks?.marketOwners?.has(cell)) candidates.push({cell, score});
   }
 
   candidates.sort((a, b) => b.score - a.score || a.cell - b.cell);
-  for (let index = 0; index < target; index++) {
+  const remaining = Math.max(0, target - Number(locks?.marketOwners?.size || 0));
+  for (let index = 0; index < Math.min(remaining, candidates.length); index++) {
     const cell = candidates[index].cell;
+    if (!assignableMarkets.length) break;
     const stateMarket = stateMarkets.get(cells.state?.[cell]);
-    marketCells[cell] = stateMarket?.i || nearestMarketId(cells.p[cell], validMarkets);
+    marketCells[cell] = stateMarket?.i || nearestMarketId(cells.p[cell], assignableMarkets);
   }
   return marketCells;
 }
 
-function assignMarketsToBurgs(pack, aliveBurgs, markets, {preferCellAssignment = false} = {}) {
+function assignMarketsToBurgs(
+  pack,
+  aliveBurgs,
+  markets,
+  {preferCellAssignment = false, lockedMarketIds = new Set(), protectedBurgIds = new Set()} = {}
+) {
   const validMarkets = markets.filter(Boolean);
   if (!validMarkets.length) return;
   const stateMarkets = new Map();
   for (const market of validMarkets) if (market.state > 0 && !stateMarkets.has(market.state)) stateMarkets.set(market.state, market);
 
   for (const burg of aliveBurgs) {
+    if (protectedBurgIds.has(Number(burg.i))) continue;
     const cellMarket = markets[pack.cells.market?.[burg.cell]];
     const market = preferCellAssignment
       ? cellMarket || stateMarkets.get(burg.state) || validMarkets[0]
@@ -668,16 +977,17 @@ function assignMarketsToBurgs(pack, aliveBurgs, markets, {preferCellAssignment =
     burg.plaza = Number(market.centerBurgId === burg.i);
   }
 
-  if (preferCellAssignment) return;
   for (const market of validMarkets) {
+    if (preferCellAssignment && !lockedMarketIds.has(Number(market.i ?? market.id))) continue;
     const center = pack.burgs?.[market.centerBurgId];
     if (!center?.i || center.removed) continue;
+    if (protectedBurgIds.has(Number(center.i))) continue;
     center.market = market.i;
     center.plaza = 1;
   }
 }
 
-function applyResourceSupplyToMarkets(pack, markets) {
+function applyResourceSupplyToMarkets(pack, markets, lockedMarketIds = new Set()) {
   const validMarkets = markets.filter(Boolean);
   const metadata = {
     resourceCells: 0,
@@ -697,6 +1007,7 @@ function applyResourceSupplyToMarkets(pack, markets) {
     const market = markets[marketId];
     const record = market?.goods?.[goodId];
     if (!market || !record) continue;
+    if (lockedMarketIds.has(Number(market.i ?? market.id))) continue;
 
     const markerSource = (pack.cells.goodSource?.[cell] || 0) >= GOOD_SOURCE_MARKER;
     const supply = Number(pack.cells.goodSupply?.[cell] || 1);
@@ -726,7 +1037,7 @@ function applyResourceSupplyToMarkets(pack, markets) {
   return metadata;
 }
 
-function applyMarketDemandDiagnostics(pack, markets, goods) {
+function applyMarketDemandDiagnostics(pack, markets, goods, lockedMarketIds = new Set()) {
   const validMarkets = markets.filter(Boolean);
   const goodsList = goods.filter(Boolean);
   const marketDemandBase = new Map(validMarkets.map(market => [market.i, {rural: 0, urban: 0, burgs: 0}]));
@@ -764,6 +1075,7 @@ function applyMarketDemandDiagnostics(pack, markets, goods) {
   }
 
   for (const market of validMarkets) {
+    if (lockedMarketIds.has(Number(market.i ?? market.id))) continue;
     const base = marketDemandBase.get(market.i) || {rural: 0, urban: 0, burgs: 0};
     let marketDemand = 0;
     let marketSupply = 0;
@@ -833,7 +1145,7 @@ function marketGoodDemand(good, base) {
   return round(Math.max(0.05, consumerBase * (0.25 + urbanCoverage * 0.58 + ruralCoverage * 0.34) * typeFactor), 2);
 }
 
-function applyPricePropagationDiagnostics(pack, markets, deals, goods) {
+function applyPricePropagationDiagnostics(pack, markets, deals, goods, lockedMarketIds = new Set()) {
   const validMarkets = (markets || []).filter(Boolean);
   const goodsList = (goods || []).filter(Boolean);
   const flows = buildTradeFlowByMarketGood(pack, deals);
@@ -851,6 +1163,7 @@ function applyPricePropagationDiagnostics(pack, markets, deals, goods) {
   let totalDelta = 0;
 
   for (const market of validMarkets) {
+    if (lockedMarketIds.has(Number(market.i ?? market.id))) continue;
     let marketDelta = 0;
     let marketPressureGoods = 0;
     let marketTradeIn = 0;
@@ -991,8 +1304,9 @@ function nearestMarketId(point, markets) {
   return best.i;
 }
 
-function initializeTaxRates(states, random) {
+function initializeTaxRates(states, random, protectedStateIds = new Set()) {
   for (const state of states) {
+    if (protectedStateIds.has(Number(state.i))) continue;
     const governmentEffects = getGovernmentEffects(state);
     state.salesTax = round((0.12 + random.range(0, 0.06)) * governmentEffects.taxMultiplier, 3);
     state.pollTax = round((0.16 + random.range(0, 0.07)) * governmentEffects.taxMultiplier, 3);
@@ -1003,7 +1317,10 @@ function initializeTaxRates(states, random) {
 }
 
 function createProductionAndDeals(pack, aliveBurgs, goods, rawGoods, manufacturedGoods, states, random, options = {}) {
-  const deals = [];
+  const locks = options.economyLocks || prepareEconomyRegenerationLocks(pack, options);
+  const protectedStateIds = options.protectedStateIds || regenerationSnapshotIds(options.lockedStates);
+  const protectedBurgIds = options.protectedBurgIds || collectProtectedEconomyBurgIds(pack, locks, options);
+  const deals = locks.dealSnapshots.map(deal => structuredClone(deal));
   const stateDealTax = new Map();
   const statesById = new Map(states.map(state => [state.i, state]));
   const distanceContext = createTradeDistanceContext(pack, options);
@@ -1014,8 +1331,21 @@ function createProductionAndDeals(pack, aliveBurgs, goods, rawGoods, manufacture
   const dealGoodIds = new Set(dealGoods.map(good => good.i));
   const rawDealGoods = rawGoods.filter(good => dealGoodIds.has(good.i));
   const marketToBurgDeals = getMarketToBurgDealCount(pack, options);
+  const markets = (pack.markets || []).filter(Boolean);
+  const marketTradeLinks = getMarketTradeLinks(markets.length, options);
+  const expectedDeals = aliveBurgs.length * (marketToBurgDeals + 3) + markets.length * marketTradeLinks;
+  const dealAllocation = {
+    reservedIds: new Set(locks.dealIds),
+    remaining: locks.allDealsLocked ? 0 : Math.max(0, expectedDeals - locks.dealSnapshots.length),
+    cursor: 0
+  };
+  for (const deal of deals) {
+    const sellerState = partyState(pack, deal.sellerType, deal.seller);
+    if (sellerState > 0) stateDealTax.set(sellerState, round((stateDealTax.get(sellerState) || 0) + Number(deal.tax || 0)));
+  }
 
   for (const burg of aliveBurgs) {
+    if (protectedBurgIds.has(Number(burg.i))) continue;
     burg.production = [];
     const localMarket = pack.markets?.[burg.market];
     const localGood = selectMarketDealGood(localMarket, rawGoods, burg.i, 0, rawGoods[(burg.i * 7) % rawGoods.length]);
@@ -1049,9 +1379,10 @@ function createProductionAndDeals(pack, aliveBurgs, goods, rawGoods, manufacture
         price: marketPrice(localMarket, selectedGood.good.i),
         valueScale: dealValueScale,
         source: selectedGood.source,
-        distanceContext
+        distanceContext,
+        dealAllocation
       });
-      burg.production.push({dealId: deal.i});
+      if (deal) burg.production.push({dealId: deal.i});
     }
 
     for (let index = 0; index < 3; index++) {
@@ -1072,20 +1403,20 @@ function createProductionAndDeals(pack, aliveBurgs, goods, rawGoods, manufacture
         price: marketPrice(localMarket, goodId) * 0.75,
         valueScale: dealValueScale,
         source: selectedGood.source,
-        distanceContext
+        distanceContext,
+        dealAllocation
       });
-      burg.production.push({dealId: deal.i});
+      if (deal) burg.production.push({dealId: deal.i});
     }
 
     burg.product = calculateBurgProduct(burg, dealProductWeight);
     burg.treasury = round(burg.product * 0.35 + (burg.population || 0) * 0.5);
   }
 
-  const markets = (pack.markets || []).filter(Boolean);
-  const marketTradeLinks = getMarketTradeLinks(markets.length, options);
-  for (const market of markets) {
+  for (let marketIndex = 0; marketIndex < markets.length; marketIndex++) {
+    const market = markets[marketIndex];
     for (let index = 0; index < marketTradeLinks; index++) {
-      const buyer = markets[(market.i + index) % markets.length];
+      const buyer = markets[(marketIndex + index + 1) % markets.length];
       if (!buyer || buyer.i === market.i) continue;
       const selectedGood = selectMarketDealGood(market, dealGoods, market.i, index, dealGoods[(market.i * 17 + index * 9) % dealGoods.length]);
       addDeal({
@@ -1102,13 +1433,32 @@ function createProductionAndDeals(pack, aliveBurgs, goods, rawGoods, manufacture
         price: marketPrice(market, selectedGood.good.i),
         valueScale: dealValueScale,
         source: selectedGood.source,
-        distanceContext
+        distanceContext,
+        dealAllocation
       });
     }
   }
 
-  for (const state of states) state._economyDealTax = stateDealTax.get(state.i) || 0;
+  attachLockedDealsToBurgProduction(pack, locks.dealSnapshots);
+  deals.sort((left, right) => Number(left.i ?? left.id) - Number(right.i ?? right.id));
+  for (const state of states) {
+    if (protectedStateIds.has(Number(state.i))) continue;
+    state._economyDealTax = stateDealTax.get(state.i) || 0;
+  }
   return deals;
+}
+
+function attachLockedDealsToBurgProduction(pack, deals) {
+  for (const deal of deals) {
+    const id = Number(deal.i ?? deal.id);
+    for (const [type, party] of [[deal.sellerType, deal.seller], [deal.buyerType, deal.buyer]]) {
+      if (type !== "burg") continue;
+      const burg = pack.burgs?.[party];
+      if (!burg?.i || burg.removed) continue;
+      burg.production ??= [];
+      if (!burg.production.some(record => Number(record?.dealId) === id)) burg.production.push({dealId: id});
+    }
+  }
 }
 
 function getDealGoods(goods, options) {
@@ -1187,7 +1537,8 @@ function getDealValueScale(options) {
   return clamp((cellsTarget / 100000) ** 0.18, 0.66, 1);
 }
 
-function addDeal({pack, deals, statesById, stateDealTax, goodId, sellerType, seller, buyerType, buyer, units, price, valueScale = 1, source = "scheduled", distanceContext = null}) {
+function addDeal({pack, deals, statesById, stateDealTax, goodId, sellerType, seller, buyerType, buyer, units, price, valueScale = 1, source = "scheduled", distanceContext = null, dealAllocation = null}) {
+  if (dealAllocation && dealAllocation.remaining <= 0) return null;
   const sellerState = partyState(pack, sellerType, seller);
   const sellerStateItem = statesById.get(sellerState);
   const salesTax = sellerStateItem?.salesTax || 0.15;
@@ -1199,10 +1550,11 @@ function addDeal({pack, deals, statesById, stateDealTax, goodId, sellerType, sel
   const distanceMultiplier = round(1 + distanceRate, 3);
   const distanceCost = round(basePrice * distanceRate);
   const roundedPrice = round(basePrice + distanceCost);
-  const taxable = deals.length % 5 === 0;
+  const dealId = allocateDealId(dealAllocation, deals);
+  const taxable = dealId % 5 === 0;
   const tax = taxable ? round(roundedUnits * roundedPrice * salesTax * 3) : 0;
   const deal = {
-    i: deals.length,
+    i: dealId,
     good: goodId,
     sellerType,
     seller,
@@ -1218,8 +1570,22 @@ function addDeal({pack, deals, statesById, stateDealTax, goodId, sellerType, sel
     source
   };
   deals.push(deal);
+  if (dealAllocation) dealAllocation.remaining--;
   if (sellerState > 0) stateDealTax.set(sellerState, round((stateDealTax.get(sellerState) || 0) + tax));
   return deal;
+}
+
+function allocateDealId(allocation, deals) {
+  if (!allocation) {
+    const used = new Set(deals.map(deal => Number(deal?.i ?? deal?.id)).filter(Number.isInteger));
+    let id = 0;
+    while (used.has(id)) id++;
+    return id;
+  }
+  while (allocation.reservedIds.has(allocation.cursor)) allocation.cursor++;
+  const id = allocation.cursor++;
+  allocation.reservedIds.add(id);
+  return id;
 }
 
 function createTradeDistanceContext(pack, options = {}) {
@@ -1293,7 +1659,7 @@ function partyState(pack, type, id) {
   return 0;
 }
 
-function collectStateTreasuries(states, deals, markets, pack) {
+function collectStateTreasuries(states, deals, markets, pack, protectedStateIds = new Set()) {
   const dealTaxByState = new Map();
   const marketsById = new Map((markets || []).filter(Boolean).map(market => [market.i, market]));
   for (const deal of deals) {
@@ -1308,13 +1674,17 @@ function collectStateTreasuries(states, deals, markets, pack) {
   }
 
   for (const state of states) {
+    if (protectedStateIds.has(Number(state.i))) continue;
     const pollTax = round(Number(state.pollTax || 0) * (Number(state.rural || 0) + Number(state.urban || 0)));
     state.treasury = round((dealTaxByState.get(state.i) || 0) + pollTax);
     delete state._economyDealTax;
   }
 }
 
-export function refreshPoliticalEconomicPower(pack) {
+export function refreshPoliticalEconomicPower(
+  pack,
+  {protectedStateIds = new Set(), protectedProvinceIds = new Set()} = {}
+) {
   const markerEconomy = pack.metadata?.markerResourceEconomy || {};
   const states = (pack.states || []).filter(state => state?.i && !state.removed);
   const provinces = (pack.provinces || []).filter(province => province?.i && !province.removed);
@@ -1324,25 +1694,29 @@ export function refreshPoliticalEconomicPower(pack) {
   let provincesWithResources = 0;
 
   for (const state of states) {
-    applyPoliticalPowerFields(state, stateAverages, {
-      kind: "state",
-      treasury: Number(state.treasury || 0),
-      population: Number(state.rural || 0) + Number(state.urban || 0),
-      burgs: Number(state.burgs || 0),
-      area: Number(state.area || state.cells || 0)
-    });
+    if (!protectedStateIds.has(Number(state.i))) {
+      applyPoliticalPowerFields(state, stateAverages, {
+        kind: "state",
+        treasury: Number(state.treasury || 0),
+        population: Number(state.rural || 0) + Number(state.urban || 0),
+        burgs: Number(state.burgs || 0),
+        area: Number(state.area || state.cells || 0)
+      });
+    }
     if (Number(state.resourcePotential || 0) > 0) statesWithResources++;
   }
 
   for (const province of provinces) {
     const populationBase = Number(province.rural || 0) + Number(province.urban || 0);
-    applyPoliticalPowerFields(province, provinceAverages, {
-      kind: "province",
-      treasury: populationBase * 0.2,
-      population: populationBase,
-      burgs: Number(province.burgs || province.cityCount || 0),
-      area: Number(province.area || province.cells || 0)
-    });
+    if (!protectedProvinceIds.has(Number(province.i))) {
+      applyPoliticalPowerFields(province, provinceAverages, {
+        kind: "province",
+        treasury: populationBase * 0.2,
+        population: populationBase,
+        burgs: Number(province.burgs || province.cityCount || 0),
+        area: Number(province.area || province.cells || 0)
+      });
+    }
     if (Number(province.resourcePotential || 0) > 0) provincesWithResources++;
   }
 
@@ -1354,6 +1728,38 @@ export function refreshPoliticalEconomicPower(pack) {
     statesWithResources,
     provincesWithResources
   };
+}
+
+function regenerationSnapshotIds(snapshots) {
+  return new Set((snapshots || []).map(snapshot => Number(snapshot?.id ?? snapshot?.i)).filter(Number.isInteger));
+}
+
+function collectProtectedEconomyBurgIds(pack, locks, options = {}) {
+  const ids = new Set();
+  const protectedStateIds = regenerationSnapshotIds(options.lockedStates);
+  const protectedProvinceIds = regenerationSnapshotIds(options.lockedProvinces);
+  for (const city of options.lockedCities || []) {
+    const burgId = Number(city?.burgId);
+    if (Number.isInteger(burgId) && burgId > 0) ids.add(burgId);
+  }
+  for (const burg of pack?.burgs || []) {
+    if (!burg?.i || burg.removed) continue;
+    if (protectedStateIds.has(Number(burg.state)) || protectedProvinceIds.has(Number(burg.province))) {
+      ids.add(Number(burg.i));
+    }
+  }
+  const marketsById = new Map((pack?.markets || []).filter(Boolean).map(market => [Number(market.i ?? market.id), market]));
+  for (const market of locks.marketSnapshots || []) {
+    const burgId = Number(market?.centerBurgId);
+    if (Number.isInteger(burgId) && burgId > 0) ids.add(burgId);
+  }
+  for (const deal of locks.dealSnapshots || []) {
+    for (const [type, id] of [[deal?.sellerType, deal?.seller], [deal?.buyerType, deal?.buyer]]) {
+      const burgId = type === "burg" ? Number(id) : type === "market" ? Number(marketsById.get(Number(id))?.centerBurgId) : 0;
+      if (Number.isInteger(burgId) && burgId > 0) ids.add(burgId);
+    }
+  }
+  return ids;
 }
 
 function politicalAverages(groups) {

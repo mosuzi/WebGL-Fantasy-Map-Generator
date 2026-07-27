@@ -4019,6 +4019,7 @@ function buildPointVertices(map, visibility = {}) {
   }
   if (visibility.cities !== false) {
     for (const city of map.settlements.cities) {
+      if (!city) continue;
       const color = city.capital ? [0.98, 0.82, 0.32, 1] : city.port ? [0.35, 0.72, 0.95, 1] : [0.92, 0.72, 0.38, 1];
       pushWorldVertex(vertices, context, [city.x, city.y], color);
     }

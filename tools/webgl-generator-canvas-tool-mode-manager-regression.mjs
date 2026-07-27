@@ -46,7 +46,8 @@ const expectedModes = [
   "feature:patch-select",
   "feature:topology-select",
   "zone:add",
-  "note:add"
+  "note:add",
+  "regeneration-lock:select"
 ];
 
 testSingleActiveAndRepeatedEnter();

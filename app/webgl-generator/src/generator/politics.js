@@ -66,25 +66,28 @@ export function regeneratePackStatesAndProvinces(grid, society, options, pack, s
   const profile = createStageProfile();
   const random = profile.stage("random-states", "初始化国家重算随机源", () => createRandom(regenerationSeed(options, "regenerate-states", salt)));
   const nameGenerator = profile.stage("name-generator", "初始化政区命名器", () => createChineseNameGenerator(regenerationSeed(options, "regenerate-politics-names", salt), {namebases: options.namebases}));
+  const supportingProvinces = profile.stage("states-province-support", "收集锁国省份支撑快照", () => collectLockedStateProvinceSnapshots(pack, options));
+  const lockedProvinces = profile.stage("provinces-locks", "校验锁定省份", () => prepareLockedProvinces(grid, pack, options, supportingProvinces));
+  const lockedStates = profile.stage("states-locks", "校验锁定国家", () => prepareLockedStates(grid, pack, options, lockedProvinces));
 
-  const selectedCapitals = profile.stage("capitals-select", "重新选择国家首都", () => selectRegeneratedCapitalBurgs(pack, settlements, options, random));
+  const selectedCapitals = profile.stage("capitals-select", "重新选择国家首都", () => selectRegeneratedCapitalBurgs(pack, settlements, options, random, lockedStates));
   if (!selectedCapitals.length) return null;
 
-  const states = profile.stage("states-build", "生成国家对象", () => buildPackStates(pack, society, random, nameGenerator));
-  profile.stage("states-expand", "扩张 pack 国家", () => expandPackStates(pack, states, society));
-  profile.stage("states-normalize", "整理国家边界", () => normalizePackStates(pack, states));
-  profile.stage("states-claim-neutral", "吸收已定居中立 cell", () => claimInhabitedNeutralCells(pack, states));
-  profile.stage("states-smooth-spikes", "吸收国家边界毛刺", () => smoothPackStateBoundarySpikes(pack, states));
-  profile.stage("states-sync-burgs", "同步城市国家归属", () => syncBurgStates(pack));
-  profile.stage("states-statistics", "统计国家数据", () => collectStateStatistics(pack, states));
-  profile.stage("states-name-orientation", "校正国家方位名", () => orientPackStateDirectionalNames(pack, states));
-  profile.stage("states-neighbors", "计算国家相邻关系", () => findStateNeighbors(pack, states));
-  profile.stage("states-governments", "定义国家政体与国号", () => defineStateGovernments(states, options));
-  profile.stage("states-colors", "分配国家颜色", () => assignStateColors(states));
-  grid.cells.state = profile.stage("states-mirror-grid", "镜像国家到 grid", () => mirrorPackStateToGrid(grid, pack));
+  const states = profile.stage("states-build", "生成国家对象", () => buildPackStates(pack, society, random, nameGenerator, lockedStates));
+  profile.stage("states-expand", "扩张 pack 国家", () => expandPackStates(pack, states, society, null, lockedStates));
+  profile.stage("states-normalize", "整理国家边界", () => normalizePackStates(pack, states, lockedStates.packCells, lockedStates.ids));
+  profile.stage("states-claim-neutral", "吸收已定居中立 cell", () => claimInhabitedNeutralCells(pack, states, lockedStates.ids));
+  profile.stage("states-smooth-spikes", "吸收国家边界毛刺", () => smoothPackStateBoundarySpikes(pack, states, lockedStates.packCells, lockedStates.ids));
+  profile.stage("states-sync-burgs", "同步城市国家归属", () => syncBurgStates(pack, lockedStates.protectedBurgIds));
+  profile.stage("states-statistics", "统计国家数据", () => collectStateStatistics(pack, states, lockedStates.ids));
+  profile.stage("states-name-orientation", "校正国家方位名", () => orientPackStateDirectionalNames(pack, states, lockedStates.ids));
+  profile.stage("states-neighbors", "计算国家相邻关系", () => findStateNeighbors(pack, states, lockedStates.ids));
+  profile.stage("states-governments", "定义国家政体与国号", () => defineStateGovernments(states, options, lockedStates.ids));
+  profile.stage("states-colors", "分配国家颜色", () => assignStateColors(states, lockedStates.ids));
+  grid.cells.state = profile.stage("states-mirror-grid", "镜像国家到 grid", () => mirrorPackStateToGrid(grid, pack, lockedStates.gridOwners, lockedStates.ids));
 
-  const provinces = profile.stage("provinces-rebuild", "重建 pack 省份", () => buildPackProvinces(pack, society, createRandom(regenerationSeed(options, "regenerate-provinces", salt)), options, nameGenerator));
-  grid.cells.province = profile.stage("provinces-mirror-grid", "镜像省份到 grid", () => mirrorPackProvinceToGrid(grid, pack));
+  const provinces = profile.stage("provinces-rebuild", "重建 pack 省份", () => buildPackProvinces(pack, society, createRandom(regenerationSeed(options, "regenerate-provinces", salt)), options, nameGenerator, lockedProvinces, lockedStates.ids));
+  grid.cells.province = profile.stage("provinces-mirror-grid", "镜像省份到 grid", () => mirrorPackProvinceToGrid(grid, pack, lockedProvinces.gridOwners, lockedProvinces.ids));
 
   const timing = profile.finish();
   return {
@@ -101,8 +104,9 @@ export function regeneratePackProvincesWithinStates(grid, society, options, pack
   const profile = createStageProfile();
   const random = profile.stage("random-provinces", "初始化省份重算随机源", () => createRandom(regenerationSeed(options, "regenerate-provinces", salt)));
   const nameGenerator = profile.stage("name-generator", "初始化省份命名器", () => createChineseNameGenerator(regenerationSeed(options, "regenerate-province-names", salt), {namebases: options.namebases}));
-  const provinces = profile.stage("provinces-rebuild", "重建 pack 省份", () => buildPackProvinces(pack, society, random, options, nameGenerator));
-  grid.cells.province = profile.stage("provinces-mirror-grid", "镜像省份到 grid", () => mirrorPackProvinceToGrid(grid, pack));
+  const locked = profile.stage("provinces-locks", "校验锁定省份", () => prepareLockedProvinces(grid, pack, options));
+  const provinces = profile.stage("provinces-rebuild", "重建 pack 省份", () => buildPackProvinces(pack, society, random, options, nameGenerator, locked));
+  grid.cells.province = profile.stage("provinces-mirror-grid", "镜像省份到 grid", () => mirrorPackProvinceToGrid(grid, pack, locked.gridOwners, locked.ids));
   const timing = profile.finish();
   return {
     provinces,
@@ -115,37 +119,43 @@ export function regeneratePackProvincesWithinStates(grid, society, options, pack
   };
 }
 
-export function reexpandPackPoliticsPreservingIdentity(grid, society, pack, settlements) {
+export function reexpandPackPoliticsPreservingIdentity(grid, society, pack, settlements, options = {}) {
   const states = pack?.states;
   const provinces = pack?.provinces;
   if (!pack?.cells?.i?.length || !Array.isArray(states) || !Array.isArray(provinces)) return null;
+  const supportingProvinces = collectLockedStateProvinceSnapshots(pack, options);
+  const lockedProvinces = prepareLockedProvinces(grid, pack, options, supportingProvinces);
+  const lockedStates = prepareLockedStates(grid, pack, options, lockedProvinces);
   const stateIdentity = snapshotPoliticalIdentity(states);
   const provinceIdentity = snapshotPoliticalIdentity(provinces);
-  repairStateCapitalAnchors(pack, states);
+  repairStateCapitalAnchors(pack, states, lockedStates.ids);
   const stateAnchors = preservedProvinceStateAnchors(pack, provinces);
-  expandPackStates(pack, states, society, stateAnchors);
-  normalizePackStates(pack, states, stateAnchors.cells);
-  claimInhabitedNeutralCells(pack, states);
-  smoothPackStateBoundarySpikes(pack, states, stateAnchors.cells);
-  syncBurgStates(pack);
-  collectStateStatistics(pack, states);
-  findStateNeighbors(pack, states);
-  grid.cells.state = mirrorPackStateToGrid(grid, pack);
+  const protectedStateCells = new Set([...stateAnchors.cells, ...lockedStates.packCells]);
+  expandPackStates(pack, states, society, stateAnchors, lockedStates);
+  normalizePackStates(pack, states, protectedStateCells, lockedStates.ids);
+  claimInhabitedNeutralCells(pack, states, lockedStates.ids);
+  smoothPackStateBoundarySpikes(pack, states, protectedStateCells, lockedStates.ids);
+  syncBurgStates(pack, lockedStates.protectedBurgIds);
+  collectStateStatistics(pack, states, lockedStates.ids);
+  findStateNeighbors(pack, states, lockedStates.ids);
+  grid.cells.state = mirrorPackStateToGrid(grid, pack, lockedStates.gridOwners, lockedStates.ids);
 
-  const provinceIds = seedPreservedProvinceCenters(pack, states, provinces);
-  expandPackProvinces(pack, provinces, provinceIds, Infinity);
+  const provinceIds = seedPreservedProvinceCenters(pack, states, provinces, lockedProvinces, lockedStates);
+  expandPackProvinces(pack, provinces, provinceIds, Infinity, lockedProvinces.packOwners);
   fillPreservedProvinceGaps(pack, provinces, provinceIds);
-  justifyPackProvinces(pack, provinces, provinceIds);
-  smoothPackProvinceBoundarySpikes(pack, provinces, provinceIds);
-  collectProvinceStatistics(pack, provinces, provinceIds);
-  assignProvincePoles(pack, provinces, provinceIds);
-  findPackProvinceNeighbors(pack, provinces, provinceIds);
+  justifyPackProvinces(pack, provinces, provinceIds, lockedProvinces.packOwners);
+  smoothPackProvinceBoundarySpikes(pack, provinces, provinceIds, lockedProvinces.packOwners);
+  collectProvinceStatistics(pack, provinces, provinceIds, lockedProvinces.ids);
+  assignProvincePoles(pack, provinces, provinceIds, lockedProvinces.ids);
+  findPackProvinceNeighbors(pack, provinces, provinceIds, lockedProvinces.ids);
   pack.cells.province = provinceIds;
   pack.provinces = provinces;
-  grid.cells.province = mirrorPackProvinceToGrid(grid, pack);
+  grid.cells.province = mirrorPackProvinceToGrid(grid, pack, lockedProvinces.gridOwners, lockedProvinces.ids);
   syncBurgProvinces(pack);
   assertPoliticalIdentity(states, stateIdentity, "国家");
   assertPoliticalIdentity(provinces, provinceIdentity, "省份");
+  assertProtectedPoliticalSnapshots(states, options.lockedStates, "国家");
+  assertProtectedPoliticalSnapshots(provinces, options.lockedProvinces, "省份");
   return {
     states,
     provinces,
@@ -172,11 +182,15 @@ function preservedProvinceStateAnchors(pack, provinces) {
   return {anchors, cells};
 }
 
-function repairStateCapitalAnchors(pack, states) {
+function repairStateCapitalAnchors(pack, states, protectedIds = new Set()) {
   const oldStateByBurg = new Map((pack.burgs || []).filter(burg => burg?.i && !burg.removed).map(burg => [burg.i, Number(burg.state) || 0]));
   const used = new Set();
   for (const state of states) {
     if (!state?.i || state.removed) continue;
+    if (protectedIds.has(Number(state.i))) {
+      used.add(Number(state.center));
+      continue;
+    }
     let capital = pack.burgs?.[state.capital];
     if (!capital?.i || capital.removed || pack.cells.h[capital.cell] < 20 || used.has(capital.cell)) {
       capital = (pack.burgs || [])
@@ -192,9 +206,14 @@ function repairStateCapitalAnchors(pack, states) {
   }
 }
 
-function seedPreservedProvinceCenters(pack, states, provinces) {
+function seedPreservedProvinceCenters(pack, states, provinces, lockedProvinces = null, lockedStates = null) {
   const provinceIds = new Uint16Array(pack.cells.i.length);
   const used = new Set();
+  for (const [cell, provinceId] of lockedProvinces?.packOwners || []) provinceIds[cell] = provinceId;
+  for (const provinceId of lockedProvinces?.ids || []) {
+    const center = Number(provinces[provinceId]?.center);
+    if (Number.isInteger(center)) used.add(center);
+  }
   const landCellsByState = new Map();
   for (const cell of pack.cells.i) {
     const stateId = pack.cells.state[cell];
@@ -202,9 +221,12 @@ function seedPreservedProvinceCenters(pack, states, provinces) {
     if (!landCellsByState.has(stateId)) landCellsByState.set(stateId, []);
     landCellsByState.get(stateId).push(cell);
   }
-  for (const state of states) if (state?.i && !state.removed) state.provinces = [];
+  for (const state of states) {
+    if (state?.i && !state.removed && !lockedStates?.ids?.has(Number(state.i))) state.provinces = [];
+  }
   for (const province of provinces) {
     if (!province?.i || province.removed) continue;
+    if (lockedProvinces?.ids?.has(Number(province.i))) continue;
     const stateCells = (landCellsByState.get(province.state) || []).filter(cell => !used.has(cell));
     if (!stateCells.length) throw new Error(`省份 #${province.i} 的所属国家没有可用中心`);
     const originalPoint = pack.cells.p?.[province.center] || pack.cells.p?.[states[province.state]?.center] || [0, 0];
@@ -215,7 +237,7 @@ function seedPreservedProvinceCenters(pack, states, provinces) {
     province.gridCenter = pack.cells.g?.[center] ?? province.gridCenter;
     province.burg = pack.cells.burg?.[center] || 0;
     provinceIds[center] = province.i;
-    states[province.state]?.provinces?.push(province.i);
+    if (!lockedStates?.ids?.has(Number(province.state))) states[province.state]?.provinces?.push(province.i);
     used.add(center);
   }
   return provinceIds;
@@ -268,6 +290,19 @@ function assertPoliticalIdentity(items, snapshot, label) {
     const item = items[id];
     if (!item || item.removed) throw new Error(`${label} #${id} 的稳定身份在重算中丢失`);
     if (item.name !== identity.name || item.fullName !== identity.fullName || item.formName !== identity.formName) throw new Error(`${label} #${id} 的名称在重算中被改写`);
+  }
+}
+
+function assertProtectedPoliticalSnapshots(items, snapshots = [], label) {
+  for (const snapshot of snapshots || []) {
+    const id = Number(snapshot?.i ?? snapshot?.id);
+    if (JSON.stringify(items[id]) !== JSON.stringify(snapshot)) {
+      const conflict = label === "省份" ? provinceLockConflict : stateLockConflict;
+      throw conflict(`锁定${label} #${id} 的完整快照在重扩张中被改写`, {
+        reason: "locked-snapshot-changed",
+        id
+      });
+    }
   }
 }
 
@@ -344,11 +379,139 @@ function buildStates(grid, landCells, society, random) {
   });
 }
 
-function buildPackStates(pack, society, random, nameGenerator) {
-  const states = [{id: 0, i: 0, name: "中立", center: 0, culture: 0, type: "Neutral", expansionism: 0}];
+function prepareLockedStates(grid, pack, options = {}, lockedProvinces = null) {
+  const provided = options.lockedStates ?? options.preservedStates ?? [];
+  if (!Array.isArray(provided)) throw stateLockConflict("锁定国家约束必须是数组", {reason: "invalid-constraint"});
+
+  const neutral = {id: 0, i: 0, name: "中立", center: 0, culture: 0, type: "Neutral", expansionism: 0};
+  const states = [neutral];
+  const ids = new Set();
+  const requiredIds = new Set();
+  const centers = new Set();
+  const capitalBurgIds = new Set();
+  const lockedCapitalBurgIds = new Set();
+  const lockedCities = options.lockedCities ?? options.preservedCities ?? [];
+  if (!Array.isArray(lockedCities)) throw stateLockConflict("锁定城市约束必须是数组", {reason: "invalid-city-constraint"});
+  const protectedBurgIds = new Set(lockedCities.map(city => Number(city?.burgId)).filter(id => Number.isInteger(id) && id > 0));
+  const capitalToState = new Map();
+  const packOwners = new Map();
+  const gridOwners = new Map();
+  const previous = pack.states || [];
+
+  const addState = (source, {locked = false} = {}) => {
+    const state = structuredClone(source);
+    const id = Number(state.id ?? state.i);
+    const center = Number(state.center);
+    const capital = Number(state.capital);
+    if (!Number.isInteger(id) || id <= 0 || id > 65535 || requiredIds.has(id)) {
+      throw stateLockConflict("锁定国家缺少唯一的正整数 ID", {reason: "invalid-id", id});
+    }
+    const existing = previous[id];
+    if (!existing || existing.removed || Number(existing.id ?? existing.i) !== id) {
+      throw stateLockConflict(`锁定国家 #${id} 缺少原对象`, {reason: "missing-state", id});
+    }
+    const burg = pack.burgs?.[capital];
+    if (!Number.isInteger(capital) || capital <= 0 || !burg || burg.removed || !burg.capital) {
+      throw stateLockConflict(`锁定国家 #${id} 缺少有效首都`, {reason: "invalid-capital", id, capital});
+    }
+    if (!Number.isInteger(center) || center < 0 || center >= pack.cells.i.length || pack.cells.h?.[center] < 20) {
+      throw stateLockConflict(`锁定国家 #${id} 引用了无效或水域中心`, {reason: "invalid-center", id, center});
+    }
+    if (Number(burg.cell) !== center || Number(pack.cells.state?.[center]) !== id) {
+      throw stateLockConflict(`锁定国家 #${id} 的首都、中心或领土镜像不一致`, {reason: "capital-center-mismatch", id, capital, center});
+    }
+    if (centers.has(center) || capitalBurgIds.has(capital)) {
+      throw stateLockConflict(`锁定国家 #${id} 与其它约束复用首都或中心`, {reason: "duplicate-capital", id, capital, center});
+    }
+    states[id] = state;
+    requiredIds.add(id);
+    if (locked) ids.add(id);
+    centers.add(center);
+    capitalBurgIds.add(capital);
+    if (locked) lockedCapitalBurgIds.add(capital);
+    capitalToState.set(capital, id);
+  };
+
+  for (const source of provided) addState(source, {locked: true});
+
+  for (const provinceId of lockedProvinces?.ids || []) {
+    const province = lockedProvinces.provinces[provinceId];
+    const stateId = Number(province?.state);
+    if (!Number.isInteger(stateId) || stateId <= 0 || !previous[stateId] || previous[stateId].removed) {
+      throw stateLockConflict(`锁定省份 #${provinceId} 的父国不存在`, {reason: "locked-province-parent-missing", provinceId, stateId});
+    }
+    if (!requiredIds.has(stateId)) addState(previous[stateId]);
+  }
+
+  for (const cell of pack.cells.i) {
+    const stateId = Number(pack.cells.state?.[cell]) || 0;
+    if (!ids.has(stateId)) continue;
+    if (pack.cells.h?.[cell] < 20 || packOwners.has(cell)) {
+      throw stateLockConflict(`锁定国家 #${stateId} 包含水域或重叠领土`, {reason: "overlapping-territory", stateId, cell});
+    }
+    packOwners.set(cell, stateId);
+  }
+  for (const [cell, provinceId] of lockedProvinces?.packOwners || []) {
+    const stateId = Number(lockedProvinces.provinces[provinceId]?.state);
+    const current = packOwners.get(cell);
+    if (current && current !== stateId) {
+      throw stateLockConflict(`锁定省份 #${provinceId} 与锁国领土冲突`, {reason: "overlapping-territory", provinceId, stateId, cell});
+    }
+    packOwners.set(cell, stateId);
+  }
+
+  for (let gridCell = 0; gridCell < (grid.cells.state?.length || 0); gridCell++) {
+    const stateId = Number(grid.cells.state[gridCell]) || 0;
+    if (ids.has(stateId)) gridOwners.set(gridCell, stateId);
+  }
+  for (const [gridCell, provinceId] of lockedProvinces?.gridOwners || []) {
+    const stateId = Number(lockedProvinces.provinces[provinceId]?.state);
+    const current = gridOwners.get(gridCell);
+    if (ids.has(stateId) && current === undefined) continue;
+    if (current && current !== stateId) {
+      throw stateLockConflict(`锁定省份 #${provinceId} 与锁国 grid 领土冲突`, {reason: "overlapping-grid-territory", provinceId, stateId, gridCell});
+    }
+    gridOwners.set(gridCell, stateId);
+  }
+
+  return {
+    states,
+    ids,
+    requiredIds,
+    packOwners,
+    packCells: new Set(packOwners.keys()),
+    gridOwners,
+    capitalBurgIds,
+    lockedCapitalBurgIds,
+    protectedBurgIds: new Set([...protectedBurgIds, ...lockedCapitalBurgIds]),
+    capitalToState
+  };
+}
+
+function stateLockConflict(message, details = {}) {
+  const error = new Error(message);
+  error.code = "regeneration_lock_conflict";
+  error.details = {kind: "state", ...details};
+  return error;
+}
+
+function buildPackStates(pack, society, random, nameGenerator, locked = null) {
+  const constraints = locked || {
+    states: [{id: 0, i: 0, name: "中立", center: 0, culture: 0, type: "Neutral", expansionism: 0}],
+    requiredIds: new Set(),
+    capitalToState: new Map()
+  };
+  const states = constraints.states.slice();
   const capitals = pack.burgs.filter(burg => burg?.i && burg.capital && !burg.removed);
+  let nextStateId = 1;
+  const allocateStateId = preferred => {
+    if (Number.isInteger(preferred) && preferred > 0 && !states[preferred] && !constraints.requiredIds.has(preferred)) return preferred;
+    while (states[nextStateId] || constraints.requiredIds.has(nextStateId)) nextStateId++;
+    return nextStateId++;
+  };
 
   for (const burg of capitals) {
+    if (constraints.capitalToState.has(burg.i)) continue;
     const culture = society.cultures[burg.culture];
     const root = nameGenerator.makeStateRoot({
       id: burg.i,
@@ -360,7 +523,7 @@ function buildPackStates(pack, society, random, nameGenerator) {
       allowCapitalName: false,
       type: culture?.type || "Generic"
     }) || culture?.name?.replace("文化", "") || STATE_ROOTS[burg.i % STATE_ROOTS.length];
-    const id = burg.i;
+    const id = allocateStateId(burg.i);
     states[id] = {
       id,
       i: id,
@@ -395,21 +558,23 @@ function buildPackStates(pack, society, random, nameGenerator) {
   return states;
 }
 
-function selectRegeneratedCapitalBurgs(pack, settlements, options, random) {
+function selectRegeneratedCapitalBurgs(pack, settlements, options, random, locked = null) {
   const aliveBurgs = (pack.burgs || []).filter(burg => burg?.i && !burg.removed && pack.cells.h?.[burg.cell] >= 20);
   const currentCapitals = aliveBurgs.filter(burg => burg.capital);
-  const target = clamp(currentCapitals.length || Number(options.statesNumber) || 12, 1, Math.min(aliveBurgs.length, 40));
+  const requiredCapitals = aliveBurgs.filter(burg => locked?.capitalBurgIds?.has(burg.i));
+  const target = clamp(Math.max(currentCapitals.length || Number(options.statesNumber) || 12, requiredCapitals.length), 1, Math.min(aliveBurgs.length, 40));
   if (!target) return [];
 
   const candidates = aliveBurgs
+    .filter(burg => requiredCapitals.includes(burg) || !locked?.protectedBurgIds?.has(burg.i))
     .map(burg => ({
       burg,
       score: getCapitalCandidateScore(pack, burg, random)
     }))
     .sort((a, b) => b.score - a.score || a.burg.i - b.burg.i)
     .map(item => item.burg);
-  const selected = pickSpacedCapitalBurgs(pack, candidates, target);
-  applyCapitalSelection(pack, settlements, new Set(selected.map(burg => burg.i)));
+  const selected = pickSpacedCapitalBurgs(pack, candidates, target, requiredCapitals);
+  applyCapitalSelection(pack, settlements, new Set(selected.map(burg => burg.i)), locked?.protectedBurgIds);
   return selected;
 }
 
@@ -422,8 +587,8 @@ function getCapitalCandidateScore(pack, burg, random) {
   return population * random.range(70, 130) + suitability * random.range(2, 5) + portBonus + cultureSpread + random.range(0, 30);
 }
 
-function pickSpacedCapitalBurgs(pack, candidates, target) {
-  const selected = [];
+function pickSpacedCapitalBurgs(pack, candidates, target, initial = []) {
+  const selected = initial.slice();
   let spacing = estimateCapitalSpacing(pack, target);
 
   while (selected.length < target && spacing > 1) {
@@ -469,11 +634,12 @@ function estimateCapitalSpacing(pack, target) {
   return Math.max(1, (width + height) / 2 / Math.max(1, target));
 }
 
-function applyCapitalSelection(pack, settlements, selectedBurgIds) {
-  const citiesByBurg = new Map((settlements?.cities || []).map(city => [city.burgId, city]));
+function applyCapitalSelection(pack, settlements, selectedBurgIds, protectedBurgIds = new Set()) {
+  const citiesByBurg = new Map((settlements?.cities || []).filter(Boolean).map(city => [city.burgId, city]));
   for (const burg of pack.burgs || []) {
     if (!burg?.i || burg.removed) continue;
     const selected = selectedBurgIds.has(burg.i);
+    if (protectedBurgIds.has(burg.i)) continue;
     burg.capital = selected ? 1 : 0;
     burg.group = selected ? "capital" : burg.port ? "city" : burg.population >= 5 ? "city" : burg.population <= 0.1 ? "hamlet" : "town";
     const city = citiesByBurg.get(burg.i);
@@ -497,9 +663,9 @@ function createPackPoliticsMetadata(states, provinces, regions = []) {
   };
 }
 
-function orientPackStateDirectionalNames(pack, states) {
+function orientPackStateDirectionalNames(pack, states, protectedIds = new Set()) {
   const groups = new Map();
-  const validStates = states.filter(state => state?.i && !state.removed);
+  const validStates = states.filter(state => state?.i && !state.removed && !protectedIds.has(state.i));
   for (const state of validStates) {
     const parsed = parseDirectionalStateName(state.name);
     if (!parsed?.directional) continue;
@@ -609,8 +775,8 @@ function applyStateRootName(state, nextName, reason) {
   state.nameOrientation = {from: previousName, to: nextName, reason};
 }
 
-function defineStateGovernments(states, options = {}) {
-  const validStates = states.filter(state => state && !state.removed && (state.i > 0 || (state.i === undefined && Number.isInteger(state.id))));
+function defineStateGovernments(states, options = {}, protectedIds = new Set()) {
+  const validStates = states.filter(state => state && !state.removed && !protectedIds.has(stateColorId(state)) && (state.i > 0 || (state.i === undefined && Number.isInteger(state.id))));
   if (!validStates.length) return;
   const areas = validStates.map(state => state.area || 0).sort((a, b) => a - b);
   const medianArea = areas[Math.floor(areas.length / 2)] || 1;
@@ -632,7 +798,7 @@ function defineStateGovernments(states, options = {}) {
   }
 }
 
-function expandPackStates(pack, states, society, preservedAnchors = null) {
+function expandPackStates(pack, states, society, preservedAnchors = null, locked = null) {
   const {cells, burgs} = pack;
   cells.state = new Uint16Array(cells.i.length);
   const costs = new Float64Array(cells.i.length).fill(Infinity);
@@ -658,6 +824,13 @@ function expandPackStates(pack, states, society, preservedAnchors = null) {
     costs[anchor.cell] = 1;
     queue.push({cell: anchor.cell, stateId: state.i, nativeBiome: nativeBiomes.get(state.i) ?? cells.biome[anchor.cell], cost: 0}, 0);
   }
+  for (const [cell, stateId] of locked?.packOwners || []) {
+    const state = states[stateId];
+    if (!state?.i || state.removed || cells.h[cell] < 20) continue;
+    cells.state[cell] = stateId;
+    costs[cell] = 1;
+    queue.push({cell, stateId, nativeBiome: nativeBiomes.get(stateId) ?? cells.biome[cell], cost: 0}, 0);
+  }
 
   while (queue.length) {
     const {cell, stateId, nativeBiome, cost} = queue.pop();
@@ -666,6 +839,9 @@ function expandPackStates(pack, states, society, preservedAnchors = null) {
     if (!state) continue;
 
     for (const neighbor of cells.c[cell] || []) {
+      const fixedOwner = locked?.packOwners?.get(neighbor);
+      if (locked?.ids?.has(stateId) && fixedOwner !== stateId) continue;
+      if (fixedOwner && fixedOwner !== stateId) continue;
       const occupiedState = states[cells.state[neighbor]];
       if (cells.state[neighbor] && neighbor === occupiedState?.center) continue;
 
@@ -687,11 +863,12 @@ function expandPackStates(pack, states, society, preservedAnchors = null) {
 
   for (const burg of burgs) {
     if (!burg?.i || burg.removed) continue;
+    if (locked?.lockedCapitalBurgIds?.has(burg.i)) continue;
     burg.state = cells.state[burg.cell];
   }
 }
 
-function normalizePackStates(pack, states, protectedCells = new Set()) {
+function normalizePackStates(pack, states, protectedCells = new Set(), protectedIds = new Set()) {
   const {cells, burgs} = pack;
 
   for (const cell of cells.i) {
@@ -703,15 +880,16 @@ function normalizePackStates(pack, states, protectedCells = new Set()) {
     if (adversaries.length < 2) continue;
     const buddies = landNeighbors.filter(neighbor => cells.state[neighbor] === cells.state[cell]);
     if (buddies.length > 2 || adversaries.length <= buddies.length) continue;
-    cells.state[cell] = cells.state[adversaries[0]];
+    const nextState = cells.state[adversaries[0]];
+    if (!protectedIds.has(nextState)) cells.state[cell] = nextState;
   }
 
   for (const state of states) {
-    if (state?.i) state.center = pack.burgs[state.capital].cell;
+    if (state?.i && !protectedIds.has(state.i)) state.center = pack.burgs[state.capital].cell;
   }
 }
 
-function smoothPackStateBoundarySpikes(pack, states, additionalProtectedCells = new Set()) {
+function smoothPackStateBoundarySpikes(pack, states, additionalProtectedCells = new Set(), protectedIds = new Set()) {
   const {cells, burgs} = pack;
   const protectedCells = new Set(
     burgs
@@ -725,11 +903,11 @@ function smoothPackStateBoundarySpikes(pack, states, additionalProtectedCells = 
     protectedCells,
     canInspect: cell => cells.h[cell] >= 20 && Boolean(states[cells.state[cell]]),
     canUseNeighbor: neighbor => cells.h[neighbor] >= 20,
-    canAbsorbTo: value => value > 0 && Boolean(states[value])
+    canAbsorbTo: value => value > 0 && Boolean(states[value]) && !protectedIds.has(value)
   });
 }
 
-function claimInhabitedNeutralCells(pack, states) {
+function claimInhabitedNeutralCells(pack, states, protectedIds = new Set()) {
   const {cells} = pack;
   if (!cells?.state) return;
   const costs = new Float64Array(cells.i.length).fill(Infinity);
@@ -745,6 +923,7 @@ function claimInhabitedNeutralCells(pack, states) {
   while (queue.length) {
     const {cell, stateId, cost} = queue.pop();
     if (cost > costs[cell]) continue;
+    if (protectedIds.has(stateId)) continue;
 
     for (const neighbor of cells.c[cell] || []) {
       if (cells.state[neighbor]) continue;
@@ -758,7 +937,7 @@ function claimInhabitedNeutralCells(pack, states) {
     }
   }
 
-  claimIsolatedInhabitedNeutralCells(pack, states);
+  claimIsolatedInhabitedNeutralCells(pack, states, protectedIds);
 }
 
 function isInhabitedNeutralCell(cells, cell) {
@@ -767,10 +946,10 @@ function isInhabitedNeutralCell(cells, cell) {
   return (cells.s?.[cell] || 0) > 0 && (cells.culture?.[cell] || 0) > 0;
 }
 
-function claimIsolatedInhabitedNeutralCells(pack, states) {
+function claimIsolatedInhabitedNeutralCells(pack, states, protectedIds = new Set()) {
   const {cells} = pack;
   const centers = states
-    .filter(state => state?.i && cells.p?.[state.center])
+    .filter(state => state?.i && !protectedIds.has(state.i) && cells.p?.[state.center])
     .map(state => ({stateId: state.i, point: cells.p[state.center]}));
   if (!centers.length) return;
 
@@ -788,17 +967,18 @@ function claimIsolatedInhabitedNeutralCells(pack, states) {
   }
 }
 
-function syncBurgStates(pack) {
+function syncBurgStates(pack, protectedBurgIds = new Set()) {
   for (const burg of pack.burgs) {
     if (!burg?.i || burg.removed) continue;
+    if (protectedBurgIds.has(burg.i)) continue;
     burg.state = pack.cells.state[burg.cell];
   }
 }
 
-function collectStateStatistics(pack, states) {
+function collectStateStatistics(pack, states, protectedIds = new Set()) {
   const {cells, burgs} = pack;
   for (const state of states) {
-    if (!state) continue;
+    if (!state || protectedIds.has(stateColorId(state))) continue;
     state.cells = 0;
     state.area = 0;
     state.burgs = 0;
@@ -809,7 +989,7 @@ function collectStateStatistics(pack, states) {
   for (const cell of cells.i) {
     if (cells.h[cell] < 20) continue;
     const state = states[cells.state[cell]];
-    if (!state) continue;
+    if (!state || protectedIds.has(stateColorId(state))) continue;
     state.cells++;
     state.area += cells.area[cell] || 0;
     state.rural += cells.pop?.[cell] || 0;
@@ -821,14 +1001,14 @@ function collectStateStatistics(pack, states) {
   }
 
   for (const state of states) {
-    if (!state) continue;
+    if (!state || protectedIds.has(stateColorId(state))) continue;
     state.area = round(state.area || 0, 2);
     state.rural = round(state.rural || 0, 2);
     state.urban = round(state.urban || 0, 2);
   }
 }
 
-function findStateNeighbors(pack, states) {
+function findStateNeighbors(pack, states, protectedIds = new Set()) {
   const {cells} = pack;
   const neighbors = states.map(() => new Set());
 
@@ -843,13 +1023,13 @@ function findStateNeighbors(pack, states) {
   }
 
   for (const state of states) {
-    if (!state) continue;
+    if (!state || protectedIds.has(stateColorId(state))) continue;
     state.neighbors = Array.from(neighbors[state.i] || []).filter(id => id !== undefined);
   }
 }
 
-function assignStateColors(states) {
-  const validStates = states.filter(isStateColorTarget);
+function assignStateColors(states, protectedIds = new Set()) {
+  const validStates = states.filter(state => isStateColorTarget(state) && !protectedIds.has(stateColorId(state)));
   const coloredStates = [];
   const usedColors = new Set();
   const ordered = [...validStates].sort((a, b) => {
@@ -932,30 +1112,42 @@ function stateColorId(state) {
   return state.i ?? state.id;
 }
 
-function mirrorPackStateToGrid(grid, pack) {
+function mirrorPackStateToGrid(grid, pack, fixedOwners = new Map(), immutableIds = new Set()) {
   const values = new Array(grid.points.length).fill(0);
   const bestScore = new Float32Array(grid.points.length).fill(-1);
+  const fallbackValues = new Array(grid.points.length).fill(0);
+  const fallbackScore = new Float32Array(grid.points.length).fill(-1);
 
   for (const packCell of pack.cells.i) {
     const gridCell = pack.cells.g[packCell];
     const score = pack.cells.pop?.[packCell] || pack.cells.s?.[packCell] || 0;
+    const stateId = pack.cells.state[packCell] || 0;
+    if (!immutableIds.has(stateId) && score >= fallbackScore[gridCell]) {
+      fallbackValues[gridCell] = stateId;
+      fallbackScore[gridCell] = score;
+    }
     if (score < bestScore[gridCell]) continue;
-    values[gridCell] = pack.cells.state[packCell] || 0;
+    values[gridCell] = stateId;
     bestScore[gridCell] = score;
   }
 
-  smoothMirroredGridStates(grid, pack, values);
+  for (let gridCell = 0; gridCell < values.length; gridCell++) {
+    if (!fixedOwners.has(gridCell) && immutableIds.has(values[gridCell])) values[gridCell] = fallbackValues[gridCell];
+  }
+  for (const [gridCell, stateId] of fixedOwners) values[gridCell] = stateId;
+  smoothMirroredGridStates(grid, pack, values, fixedOwners, immutableIds);
   return values;
 }
 
-function smoothMirroredGridStates(grid, pack, values) {
+function smoothMirroredGridStates(grid, pack, values, fixedOwners = new Map(), immutableIds = new Set()) {
   const protectedCells = protectedGridCellsForPackBurgs(pack, {capitalsOnly: true});
+  for (const gridCell of fixedOwners.keys()) protectedCells.add(gridCell);
   absorbBoundarySpikes(grid.cells, values, {
     passes: 3,
     protectedCells,
     canInspect: cell => grid.cells.h[cell] >= 20 && values[cell] > 0,
     canUseNeighbor: neighbor => grid.cells.h[neighbor] >= 20,
-    canAbsorbTo: value => value > 0
+    canAbsorbTo: value => value > 0 && !immutableIds.has(value)
   });
 }
 
@@ -1025,29 +1217,161 @@ function buildProvinces(grid, landCells, states, society, random) {
   return provinces;
 }
 
-function buildPackProvinces(pack, society, random, options, nameGenerator) {
+function collectLockedStateProvinceSnapshots(pack, options = {}) {
+  const provided = options.lockedStates ?? options.preservedStates ?? [];
+  if (!Array.isArray(provided)) return [];
+  const snapshots = [];
+  const seen = new Set();
+  for (const source of provided) {
+    const stateId = Number(source?.id ?? source?.i);
+    const state = pack.states?.[stateId];
+    if (!state || state.removed) continue;
+    for (const provinceId of source.provinces || state.provinces || []) {
+      const id = Number(provinceId);
+      if (!Number.isInteger(id) || id <= 0 || seen.has(id)) continue;
+      const province = pack.provinces?.[id];
+      if (!province || province.removed || Number(province.state) !== stateId) {
+        throw stateLockConflict(`锁定国家 #${stateId} 引用了缺失或父国不一致的省份 #${id}`, {
+          reason: "locked-state-province-missing",
+          stateId,
+          provinceId: id
+        });
+      }
+      snapshots.push(structuredClone(province));
+      seen.add(id);
+    }
+  }
+  return snapshots;
+}
+
+function prepareLockedProvinces(grid, pack, options = {}, supporting = []) {
+  const requested = options.lockedProvinces ?? options.preservedProvinces ?? [];
+  if (!Array.isArray(requested)) throw provinceLockConflict("锁定省份约束必须是数组", {reason: "invalid-constraint"});
+  const provided = requested.slice();
+  const requestedIds = new Set(requested.map(province => Number(province?.id ?? province?.i)).filter(Number.isInteger));
+  for (const province of supporting) {
+    const id = Number(province?.id ?? province?.i);
+    if (!requestedIds.has(id)) provided.push(province);
+  }
+
+  const provinces = [null];
+  const ids = new Set();
+  const centers = new Set();
+  const burgIds = new Set();
+  const packOwners = new Map();
+  const gridOwners = new Map();
+  const previous = pack.provinces || [];
+
+  for (const source of provided) {
+    if (!source || typeof source !== "object") throw provinceLockConflict("锁定省份约束包含空对象", {reason: "invalid-province"});
+    const province = structuredClone(source);
+    const id = Number(province.id ?? province.i);
+    const stateId = Number(province.state);
+    const center = Number(province.center);
+    const burgId = Number(province.burg || 0);
+    if (!Number.isInteger(id) || id <= 0 || id > 65535 || ids.has(id)) {
+      throw provinceLockConflict("锁定省份缺少唯一的正整数 ID", {reason: "invalid-id", id});
+    }
+    const existing = previous[id];
+    if (!existing || existing.removed || Number(existing.id ?? existing.i) !== id) {
+      throw provinceLockConflict(`锁定省份 #${id} 缺少原对象`, {reason: "missing-province", id});
+    }
+    if (!Number.isInteger(stateId) || stateId <= 0 || !pack.states?.[stateId] || pack.states[stateId].removed) {
+      throw provinceLockConflict(`锁定省份 #${id} 引用了无效父国`, {reason: "invalid-parent-state", id, stateId});
+    }
+    if (!Number.isInteger(center) || center < 0 || center >= pack.cells.i.length || pack.cells.h?.[center] < 20) {
+      throw provinceLockConflict(`锁定省份 #${id} 引用了无效或水域中心`, {reason: "invalid-center", id, center});
+    }
+    if (Number(pack.cells.state?.[center]) !== stateId) {
+      throw provinceLockConflict(`锁定省份 #${id} 的中心不属于父国`, {reason: "center-parent-mismatch", id, stateId, center});
+    }
+    if (centers.has(center)) {
+      throw provinceLockConflict(`锁定省份 #${id} 与其它锁省中心重叠`, {reason: "overlapping-center", id, center});
+    }
+    if (burgId) {
+      const burg = pack.burgs?.[burgId];
+      if (!Number.isInteger(burgId) || burgId <= 0 || !burg || burg.removed || Number(burg.cell) !== center) {
+        throw provinceLockConflict(`锁定省份 #${id} 缺少一致的省会 burg`, {reason: "invalid-burg", id, burgId, center});
+      }
+      if (burgIds.has(burgId)) {
+        throw provinceLockConflict(`锁定省份 #${id} 与其它锁省复用省会 burg`, {reason: "overlapping-burg", id, burgId});
+      }
+      burgIds.add(burgId);
+    }
+
+    let cellCount = 0;
+    for (const cell of pack.cells.i) {
+      if (Number(pack.cells.province?.[cell]) !== id) continue;
+      if (pack.cells.h?.[cell] < 20 || Number(pack.cells.state?.[cell]) !== stateId) {
+        throw provinceLockConflict(`锁定省份 #${id} 包含水域或跨国 cell`, {reason: "invalid-territory", id, cell, stateId});
+      }
+      if (packOwners.has(cell)) {
+        throw provinceLockConflict(`锁定省份 #${id} 与其它锁省领土重叠`, {reason: "overlapping-territory", id, cell});
+      }
+      packOwners.set(cell, id);
+      cellCount++;
+    }
+    if (!cellCount || Number(pack.cells.province?.[center]) !== id) {
+      throw provinceLockConflict(`锁定省份 #${id} 缺少包含中心的领土镜像`, {reason: "missing-territory", id, center});
+    }
+
+    provinces[id] = province;
+    ids.add(id);
+    centers.add(center);
+  }
+
+  for (let gridCell = 0; gridCell < (grid.cells.province?.length || 0); gridCell++) {
+    const id = Number(grid.cells.province[gridCell]);
+    if (!ids.has(id)) continue;
+    if (grid.cells.h?.[gridCell] < 20) {
+      throw provinceLockConflict(`锁定省份 #${id} 的 grid 镜像落在水域`, {reason: "invalid-grid-territory", id, gridCell});
+    }
+    gridOwners.set(gridCell, id);
+  }
+
+  return {provinces, ids, centers, burgIds, packOwners, gridOwners};
+}
+
+function provinceLockConflict(message, details = {}) {
+  const error = new Error(message);
+  error.code = "regeneration_lock_conflict";
+  error.details = {kind: "province", ...details};
+  return error;
+}
+
+function buildPackProvinces(pack, society, random, options, nameGenerator, locked = null, protectedStateIds = new Set()) {
   const profile = createStageProfile();
   const {cells, states, burgs} = pack;
-  const provinces = [null];
+  const constraints = locked || {provinces: [null], ids: new Set(), centers: new Set(), burgIds: new Set(), packOwners: new Map(), gridOwners: new Map()};
+  const provinces = constraints.provinces.slice();
   const provinceIds = new Uint16Array(cells.i.length);
+  for (const [cell, provinceId] of constraints.packOwners) provinceIds[cell] = provinceId;
   const provincesRatio = Math.max(0, Math.min(100, Number(options.provincesRatio ?? 20)));
   const maxGrowth = provincesRatio === 100 ? 1000 : gauss(random, 20, 5, 5, 100) * Math.sqrt(provincesRatio);
+  let nextProvinceId = 1;
+  const allocateProvinceId = () => {
+    while (provinces[nextProvinceId] || constraints.ids.has(nextProvinceId)) nextProvinceId++;
+    return nextProvinceId++;
+  };
 
   profile.stage("seed-provinces", "选择省份中心", () => {
     for (const state of states) {
       if (!state?.i) continue;
-      state.provinces = [];
+      const lockedStateProvinces = Array.from(constraints.ids).filter(id => Number(provinces[id]?.state) === state.i);
+      if (!protectedStateIds.has(state.i)) state.provinces = lockedStateProvinces.slice();
       const stateBurgs = burgs
-        .filter(burg => burg?.i && !burg.removed && burg.state === state.i)
+        .filter(burg => burg?.i && !burg.removed && burg.state === state.i && !constraints.burgIds.has(burg.i) && !constraints.packOwners.has(burg.cell))
         .sort((a, b) => b.population * gauss(random, 1, 0.2, 0.5, 1.5, 3) - a.population)
         .sort((a, b) => Number(b.capital) - Number(a.capital));
-      if (stateBurgs.length < 2) continue;
+      if (stateBurgs.length + lockedStateProvinces.length < 2) continue;
       const provinceForm = provinceFormForState(state, society.cultures || pack.cultures);
 
-      const provincesNumber = Math.max(Math.ceil((stateBurgs.length * provincesRatio) / 100), 2);
-      for (let index = 0; index < provincesNumber; index++) {
+      const totalBurgs = stateBurgs.length + lockedStateProvinces.length;
+      const provincesNumber = Math.max(Math.ceil((totalBurgs * provincesRatio) / 100), 2);
+      const generatedNumber = Math.max(0, Math.min(stateBurgs.length, provincesNumber - lockedStateProvinces.length));
+      for (let index = 0; index < generatedNumber; index++) {
         const burg = stateBurgs[index];
-        const provinceId = provinces.length;
+        const provinceId = allocateProvinceId();
         const culture = society.cultures[burg.culture];
         const sourceRoot = (index % 2 === 0 || culture?.nameStyle ? burg.name : culture?.name?.replace("文化", "")) || STATE_ROOTS[provinceId % STATE_ROOTS.length];
         const provinceName = nameGenerator.makeProvinceName({
@@ -1073,28 +1397,28 @@ function buildPackProvinces(pack, society, random, options, nameGenerator) {
           cells: 0,
           area: 0
         };
-        provinces.push(province);
-        state.provinces.push(provinceId);
+        provinces[provinceId] = province;
+        if (!protectedStateIds.has(state.i)) state.provinces.push(provinceId);
         provinceIds[burg.cell] = provinceId;
       }
     }
   });
 
-  profile.stage("expand-provinces", "扩张省份", () => expandPackProvinces(pack, provinces, provinceIds, maxGrowth));
-  profile.stage("justify-provinces", "整理省份边界", () => justifyPackProvinces(pack, provinces, provinceIds));
-  profile.stage("fill-unassigned", "填充未归属省份 cell", () => fillUnassignedProvinceCells(pack, provinces, provinceIds, random, maxGrowth, nameGenerator));
-  profile.stage("smooth-spikes", "吸收省份边界毛刺", () => smoothPackProvinceBoundarySpikes(pack, provinces, provinceIds));
-  profile.stage("statistics", "统计省份数据", () => collectProvinceStatistics(pack, provinces, provinceIds));
-  profile.stage("assign-poles", "计算省份 pole", () => assignProvincePoles(pack, provinces, provinceIds));
-  profile.stage("neighbors", "计算省份相邻关系", () => findPackProvinceNeighbors(pack, provinces, provinceIds));
-  profile.stage("colors", "分配省份颜色", () => assignProvinceColors(provinces));
+  profile.stage("expand-provinces", "扩张省份", () => expandPackProvinces(pack, provinces, provinceIds, maxGrowth, constraints.packOwners));
+  profile.stage("justify-provinces", "整理省份边界", () => justifyPackProvinces(pack, provinces, provinceIds, constraints.packOwners));
+  profile.stage("fill-unassigned", "填充未归属省份 cell", () => fillUnassignedProvinceCells(pack, provinces, provinceIds, random, maxGrowth, nameGenerator, allocateProvinceId, protectedStateIds));
+  profile.stage("smooth-spikes", "吸收省份边界毛刺", () => smoothPackProvinceBoundarySpikes(pack, provinces, provinceIds, constraints.packOwners));
+  profile.stage("statistics", "统计省份数据", () => collectProvinceStatistics(pack, provinces, provinceIds, constraints.ids));
+  profile.stage("assign-poles", "计算省份 pole", () => assignProvincePoles(pack, provinces, provinceIds, constraints.ids));
+  profile.stage("neighbors", "计算省份相邻关系", () => findPackProvinceNeighbors(pack, provinces, provinceIds, constraints.ids));
+  profile.stage("colors", "分配省份颜色", () => assignProvinceColors(provinces, constraints.ids));
   cells.province = provinceIds;
   pack.provinces = provinces;
   provinces.timing = profile.finish();
   return provinces;
 }
 
-function findPackProvinceNeighbors(pack, provinces, provinceIds) {
+function findPackProvinceNeighbors(pack, provinces, provinceIds, protectedIds = new Set()) {
   const neighbors = provinces.map(() => new Set());
   const {cells} = pack;
 
@@ -1110,7 +1434,7 @@ function findPackProvinceNeighbors(pack, provinces, provinceIds) {
   }
 
   for (const province of provinces) {
-    if (!province) continue;
+    if (!province || protectedIds.has(provinceColorId(province))) continue;
     const id = provinceColorId(province);
     province.neighbors = Array.from(neighbors[id] || []);
   }
@@ -1138,8 +1462,8 @@ function findGridProvinceNeighbors(grid, provinces) {
   }
 }
 
-function assignProvinceColors(provinces) {
-  const validProvinces = provinces.filter(isProvinceColorTarget);
+function assignProvinceColors(provinces, protectedIds = new Set()) {
+  const validProvinces = provinces.filter(province => isProvinceColorTarget(province) && !protectedIds.has(provinceColorId(province)));
   const coloredProvinces = [];
   const usedColors = new Set();
   const ordered = [...validProvinces].sort((a, b) => {
@@ -1184,15 +1508,22 @@ function provinceColorId(province) {
   return province.i ?? province.id;
 }
 
-function expandPackProvinces(pack, provinces, provinceIds, maxGrowth) {
+function expandPackProvinces(pack, provinces, provinceIds, maxGrowth, fixedOwners = new Map()) {
   const {cells} = pack;
   const costs = new Float64Array(cells.i.length).fill(Infinity);
   const queue = new MinPriorityQueue();
+  const fixedProvinceIds = new Set(fixedOwners.values());
 
   for (const province of provinces) {
     if (!province?.i) continue;
-    costs[province.center] = 1;
-    queue.push({cell: province.center, province: province.i, state: province.state, cost: 0}, 0);
+    const fixedCells = [];
+    for (const [cell, owner] of fixedOwners) {
+      if (owner === province.i) fixedCells.push(cell);
+    }
+    for (const cell of fixedCells.length ? fixedCells : [province.center]) {
+      costs[cell] = 1;
+      queue.push({cell, province: province.i, state: province.state, cost: 0}, 0);
+    }
   }
 
   while (queue.length) {
@@ -1200,6 +1531,9 @@ function expandPackProvinces(pack, provinces, provinceIds, maxGrowth) {
     if (cost > costs[cell] && costs[cell] !== 1) continue;
 
     for (const neighbor of cells.c[cell] || []) {
+      const fixedOwner = fixedOwners.get(neighbor);
+      if (fixedProvinceIds.has(province) && fixedOwner !== province) continue;
+      if (fixedOwner && fixedOwner !== province) continue;
       const land = cells.h[neighbor] >= 20;
       if (!land && !cells.t[neighbor]) continue;
       if (land && cells.state[neighbor] !== state) continue;
@@ -1213,9 +1547,11 @@ function expandPackProvinces(pack, provinces, provinceIds, maxGrowth) {
   }
 }
 
-function justifyPackProvinces(pack, provinces, provinceIds) {
+function justifyPackProvinces(pack, provinces, provinceIds, fixedOwners = new Map()) {
   const {cells} = pack;
+  const fixedProvinceIds = new Set(fixedOwners.values());
   for (const cell of cells.i) {
+    if (fixedOwners.has(cell)) continue;
     if (cells.burg[cell]) continue;
     const sameStateNeighbors = (cells.c[cell] || []).filter(neighbor => cells.state[neighbor] === cells.state[cell]);
     const neighborProvinces = sameStateNeighbors.map(neighbor => provinceIds[neighbor]);
@@ -1232,26 +1568,28 @@ function justifyPackProvinces(pack, provinces, provinceIds) {
       bestProvince = province;
       bestCount = count;
     }
-    if (bestProvince) provinceIds[cell] = bestProvince;
+    if (bestProvince && !fixedProvinceIds.has(bestProvince)) provinceIds[cell] = bestProvince;
   }
 }
 
-function smoothPackProvinceBoundarySpikes(pack, provinces, provinceIds) {
+function smoothPackProvinceBoundarySpikes(pack, provinces, provinceIds, fixedOwners = new Map()) {
   const {cells} = pack;
   const protectedCells = new Set();
+  const fixedProvinceIds = new Set(fixedOwners.values());
   for (const province of provinces) {
     if (province?.i && cells.h[province.center] >= 20) protectedCells.add(province.center);
   }
   for (const cell of cells.i) {
     if (cells.burg[cell] && cells.h[cell] >= 20) protectedCells.add(cell);
   }
+  for (const cell of fixedOwners.keys()) protectedCells.add(cell);
 
   absorbBoundarySpikes(cells, provinceIds, {
     passes: 3,
     protectedCells,
     canInspect: cell => cells.h[cell] >= 20 && Boolean(provinces[provinceIds[cell]]),
     canUseNeighbor: (neighbor, cell) => cells.h[neighbor] >= 20 && cells.state[neighbor] === cells.state[cell],
-    canAbsorbTo: value => value > 0 && Boolean(provinces[value])
+    canAbsorbTo: value => value > 0 && Boolean(provinces[value]) && !fixedProvinceIds.has(value)
   });
 }
 
@@ -1311,7 +1649,7 @@ function boundarySpikeAbsorptionValue(cells, values, cell, canUseNeighbor, canAb
   return null;
 }
 
-function fillUnassignedProvinceCells(pack, provinces, provinceIds, random, maxGrowth, nameGenerator) {
+function fillUnassignedProvinceCells(pack, provinces, provinceIds, random, maxGrowth, nameGenerator, allocateProvinceId = () => provinces.length, protectedStateIds = new Set()) {
   const {cells, states, burgs} = pack;
   const unassignedByState = collectUnassignedProvinceCellsByState(cells, states, provinceIds);
   const remaining = new Uint8Array(cells.i.length);
@@ -1332,7 +1670,7 @@ function fillUnassignedProvinceCells(pack, provinces, provinceIds, random, maxGr
     while (remainingCount) {
       const center = pickUnassignedProvinceCenter(stateUnassigned, remaining, cells.burg);
       if (center === -1) break;
-      const provinceId = provinces.length;
+      const provinceId = allocateProvinceId();
       const burgId = cells.burg[center] || 0;
       const burg = burgs[burgId];
       const provinceName = nameGenerator.makeProvinceName({
@@ -1360,8 +1698,8 @@ function fillUnassignedProvinceCells(pack, provinces, provinceIds, random, maxGr
         cells: 0,
         area: 0
       };
-      provinces.push(province);
-      state.provinces.push(provinceId);
+      provinces[provinceId] = province;
+      if (!protectedStateIds.has(state.i)) state.provinces.push(provinceId);
 
       runId++;
       costs[center] = 0;
@@ -1418,27 +1756,27 @@ function pickUnassignedProvinceCenter(stateUnassigned, remaining, burgsByCell) {
   return -1;
 }
 
-function collectProvinceStatistics(pack, provinces, provinceIds) {
+function collectProvinceStatistics(pack, provinces, provinceIds, protectedIds = new Set()) {
   for (const province of provinces) {
-    if (!province) continue;
+    if (!province || protectedIds.has(provinceColorId(province))) continue;
     province.cells = 0;
     province.area = 0;
   }
 
   for (const cell of pack.cells.i) {
     const province = provinces[provinceIds[cell]];
-    if (!province || pack.cells.h[cell] < 20) continue;
+    if (!province || protectedIds.has(provinceColorId(province)) || pack.cells.h[cell] < 20) continue;
     province.cells++;
     province.area += pack.cells.area[cell] || 0;
   }
 
   for (const province of provinces) {
-    if (!province) continue;
+    if (!province || protectedIds.has(provinceColorId(province))) continue;
     province.area = round(province.area || 0, 2);
   }
 }
 
-function assignProvincePoles(pack, provinces, provinceIds) {
+function assignProvincePoles(pack, provinces, provinceIds, protectedIds = new Set()) {
   const provinceCells = new Map();
   const provinceBoundaryCells = new Map();
   const {cells} = pack;
@@ -1457,7 +1795,7 @@ function assignProvincePoles(pack, provinces, provinceIds) {
   }
 
   for (const province of provinces) {
-    if (!province?.i || province.removed) continue;
+    if (!province?.i || province.removed || protectedIds.has(province.i)) continue;
     const ownCells = provinceCells.get(province.i) || [];
     if (!ownCells.length) {
       province.pole = cells.p[province.center] ? cells.p[province.center].map(value => round(value, 2)) : [0, 0];
@@ -1496,35 +1834,49 @@ function getMinDistanceSquared(point, boundaryCells, cells) {
   return Number.isFinite(min) ? min : 0;
 }
 
-function mirrorPackProvinceToGrid(grid, pack) {
+function mirrorPackProvinceToGrid(grid, pack, fixedOwners = new Map(), protectedIds = new Set(fixedOwners.values())) {
   const values = new Array(grid.points.length).fill(0);
   const bestScore = new Float32Array(grid.points.length).fill(-1);
+  const fallbackValues = new Array(grid.points.length).fill(0);
+  const fallbackScore = new Float32Array(grid.points.length).fill(-1);
+  const fixedProvinceIds = protectedIds;
 
   for (const packCell of pack.cells.i) {
     const gridCell = pack.cells.g[packCell];
     const score = pack.cells.pop?.[packCell] || pack.cells.s?.[packCell] || 0;
+    const provinceId = pack.cells.province?.[packCell] || 0;
+    if (!fixedProvinceIds.has(provinceId) && score >= fallbackScore[gridCell]) {
+      fallbackValues[gridCell] = provinceId;
+      fallbackScore[gridCell] = score;
+    }
     if (score < bestScore[gridCell]) continue;
-    values[gridCell] = pack.cells.province?.[packCell] || 0;
+    values[gridCell] = provinceId;
     bestScore[gridCell] = score;
   }
 
-  smoothMirroredGridProvinces(grid, pack, values);
+  for (let gridCell = 0; gridCell < values.length; gridCell++) {
+    if (!fixedOwners.has(gridCell) && fixedProvinceIds.has(values[gridCell])) values[gridCell] = fallbackValues[gridCell];
+  }
+  for (const [gridCell, provinceId] of fixedOwners) values[gridCell] = provinceId;
+  smoothMirroredGridProvinces(grid, pack, values, fixedOwners, protectedIds);
   return values;
 }
 
-function smoothMirroredGridProvinces(grid, pack, values) {
+function smoothMirroredGridProvinces(grid, pack, values, fixedOwners = new Map(), protectedIds = new Set(fixedOwners.values())) {
   const protectedCells = protectedGridCellsForPackBurgs(pack, {capitalsOnly: true});
+  const fixedProvinceIds = protectedIds;
   for (const province of pack.provinces || []) {
     const gridCenter = Number.isInteger(province?.gridCenter) ? province.gridCenter : Number.isInteger(province?.center) ? pack.cells.g?.[province.center] : null;
     if (Number.isInteger(gridCenter) && grid.cells.h[gridCenter] >= 20) protectedCells.add(gridCenter);
   }
+  for (const gridCell of fixedOwners.keys()) protectedCells.add(gridCell);
 
   absorbBoundarySpikes(grid.cells, values, {
     passes: 3,
     protectedCells,
     canInspect: cell => grid.cells.h[cell] >= 20 && values[cell] > 0,
     canUseNeighbor: (neighbor, cell) => grid.cells.h[neighbor] >= 20 && grid.cells.state?.[neighbor] === grid.cells.state?.[cell],
-    canAbsorbTo: value => value > 0
+    canAbsorbTo: value => value > 0 && !fixedProvinceIds.has(value)
   });
 }
 

@@ -1,6 +1,7 @@
 import {defineBiomesAndPopulation} from "./biomes.js";
 import {applyOceanCurrentClimateInfluence, buildClimate} from "./climate.js";
 import {buildDiplomacy} from "./diplomacy.js";
+import {captureDiplomacyRelationSnapshot} from "./diplomacy-regeneration-locks.js";
 import {buildEconomy} from "./economy.js";
 import {buildMarkers, createMarkerResult} from "./markers.js";
 import {buildMilitary} from "./military.js";
@@ -10,16 +11,55 @@ import {createRandom} from "./random.js";
 import {buildRivers, renameHydronymsByCulture} from "./rivers.js";
 import {finalizeSettlements, regenerateSettlementsWithinPolitics} from "./settlements.js";
 import {reexpandSocietyCultures, reexpandSocietyReligions} from "./society.js";
+import {resolveWarzoneStatePair} from "./war-consistency.js";
 import {buildZones} from "./zones.js";
 
-export async function rebuildOceanCurrentWorldStage(map, system, {seed, signal} = {}) {
+const WORLD_STAGE_CONSTRAINT_KEYS = Object.freeze({
+  "ocean-currents": Object.freeze(["lockedOceanCurrents"]),
+  climate: Object.freeze([]),
+  rivers: Object.freeze(["lockedRivers"]),
+  "biomes-population": Object.freeze([]),
+  cultures: Object.freeze(["lockedCultures"]),
+  "cities-routes": Object.freeze(["lockedCities", "lockedRoutes"]),
+  "states-provinces": Object.freeze(["lockedStates", "lockedProvinces", "lockedCities", "lockedRoutes"]),
+  religions: Object.freeze(["lockedReligions"]),
+  "markers-economy": Object.freeze(["lockedFeatures", "lockedMarkers", "lockedMarkets", "lockedDeals"]),
+  diplomacy: Object.freeze(["lockedDiplomacyRelations"]),
+  "military-zones": Object.freeze(["lockedMilitaryRegiments", "lockedZones"])
+});
+
+const WORLD_STAGE_DOMAINS = Object.freeze({
+  "ocean-currents": Object.freeze(["ocean-current"]),
+  climate: Object.freeze([]),
+  rivers: Object.freeze(["river"]),
+  "biomes-population": Object.freeze([]),
+  cultures: Object.freeze(["culture"]),
+  "cities-routes": Object.freeze(["city", "route"]),
+  "states-provinces": Object.freeze(["state", "province", "city", "route"]),
+  religions: Object.freeze(["religion"]),
+  "markers-economy": Object.freeze(["feature", "marker", "economy-market", "trade-flow"]),
+  diplomacy: Object.freeze(["diplomacy-relation"]),
+  "military-zones": Object.freeze(["military", "zone"])
+});
+
+export async function rebuildOceanCurrentWorldStage(map, system, {seed, signal, constraintBundle = null} = {}) {
   throwIfCancelled(signal);
   const options = {...map.options, seed: String(seed || map.options?.seed || map.metadata?.seed || "map"), namebases: map.namebases};
+  const stageConstraints = oceanCurrentWorldStageConstraints(system, constraintBundle);
+  const stageContext = {map, system, constraints: stageConstraints, constraintBundle};
+  await assertWorldStageDomains(constraintBundle, "before", stageContext);
+  if (await isWorldStageFullyLocked(constraintBundle, stageContext)) {
+    await assertWorldStageDomains(constraintBundle, "after", stageContext);
+    return {executed: false, reason: "domain-fully-locked", system};
+  }
   let result;
 
   switch (system) {
     case "ocean-currents":
-      map.oceanCurrents = buildOceanCurrents(map, {seed: `${options.seed}:currents`});
+      map.oceanCurrents = buildOceanCurrents(map, {
+        seed: `${options.seed}:currents`,
+        preservedCurrents: stageConstraints.lockedOceanCurrents
+      });
       result = {currents: map.oceanCurrents.currents.length};
       break;
     case "climate":
@@ -29,7 +69,12 @@ export async function rebuildOceanCurrentWorldStage(map, system, {seed, signal} 
       result = {...map.climate.metadata.oceanCurrentInfluence};
       break;
     case "rivers": {
-      const riverOptions = {...options, riverRegenerationSalt: `${options.seed}:world-rivers`};
+      const riverOptions = {
+        ...options,
+        ...stageConstraints,
+        frozenRiverIds: stageConstraints.lockedRivers.map(river => Number(river?.i ?? river?.id)).filter(Number.isFinite),
+        riverRegenerationSalt: `${options.seed}:world-rivers`
+      };
       map.rivers = buildRivers(map.grid, map.features, map.pack, riverOptions);
       renameHydronymsByCulture(map.rivers, map.pack, riverOptions);
       result = {rivers: map.rivers.metadata.rivers};
@@ -44,54 +89,224 @@ export async function rebuildOceanCurrentWorldStage(map, system, {seed, signal} 
     }
     case "cultures":
       repairSocietyCenters(map.pack, map.society.cultures, "culture");
-      result = reexpandSocietyCultures(map.grid, map.pack, map.society.cultures);
+      result = reexpandSocietyCultures(map.grid, map.pack, map.society.cultures, stageConstraints);
       syncSocietyCollections(map);
       break;
-    case "cities-routes":
+    case "cities-routes": {
+      const lockedProvinces = collectPoliticalSupportProvinces(
+        map,
+        constraintBundle?.lockedStates,
+        constraintBundle?.lockedProvinces
+      );
+      const lockedCities = collectPoliticalSupportCities(
+        map,
+        constraintBundle?.lockedStates,
+        lockedProvinces,
+        [
+          ...stageConstraints.lockedCities,
+          ...collectFeatureSupportObjects(map, constraintBundle?.lockedFeatures, "cities"),
+          ...collectEconomicSupportCities(map, constraintBundle?.lockedMarkets, constraintBundle?.lockedDeals)
+        ]
+      );
+      const lockedRoutes = mergeSupportSnapshots([
+        ...stageConstraints.lockedRoutes,
+        ...collectFeatureSupportObjects(map, constraintBundle?.lockedFeatures, "routes")
+      ]);
       regenerateSettlementsWithinPolitics(map.grid, map.features, map.politics, map.settlements, map.pack, {
         ...options,
+        ...stageConstraints,
+        lockedStates: constraintBundle?.lockedStates || [],
+        lockedProvinces,
+        lockedCities,
+        lockedRoutes,
+        lockedFeatures: constraintBundle?.lockedFeatures || [],
         settlementRegenerationSalt: `${options.seed}:world-cities`,
         routeRegenerationSalt: `${options.seed}:world-routes`
       });
       result = {cities: map.settlements.metadata.cities, routes: map.settlements.metadata.routes};
       break;
+    }
     case "states-provinces": {
+      const lockedProvinces = collectPoliticalSupportProvinces(
+        map,
+        stageConstraints.lockedStates,
+        stageConstraints.lockedProvinces
+      );
+      const lockedCities = collectPoliticalSupportCities(
+        map,
+        stageConstraints.lockedStates,
+        lockedProvinces,
+        [
+          ...stageConstraints.lockedCities,
+          ...collectFeatureSupportObjects(map, constraintBundle?.lockedFeatures, "cities"),
+          ...collectEconomicSupportCities(map, constraintBundle?.lockedMarkets, constraintBundle?.lockedDeals)
+        ]
+      );
+      const lockedRoutes = mergeSupportSnapshots([
+        ...stageConstraints.lockedRoutes,
+        ...collectFeatureSupportObjects(map, constraintBundle?.lockedFeatures, "routes")
+      ]);
       synchronizePoliticalMirrorsForRebuild(map);
-      const politics = reexpandPackPoliticsPreservingIdentity(map.grid, map.society, map.pack, map.settlements);
+      const politics = reexpandPackPoliticsPreservingIdentity(map.grid, map.society, map.pack, map.settlements, {
+        ...stageConstraints,
+        lockedProvinces,
+        lockedCities,
+        lockedRoutes
+      });
       if (!politics) throw new Error("当前地图缺少可保留身份的国家与省份数据");
       map.politics.states = map.pack.states = politics.states;
       map.politics.provinces = map.pack.provinces = politics.provinces;
       map.politics.metadata = {...map.politics.metadata, ...politics.metadata};
-      finalizeSettlements(map.grid, map.features, map.politics, map.settlements, map.pack, {...options, routeRegenerationSalt: `${options.seed}:world-routes-final`});
+      finalizeSettlements(map.grid, map.features, map.politics, map.settlements, map.pack, {
+        ...options,
+        ...stageConstraints,
+        lockedProvinces,
+        lockedCities,
+        lockedRoutes,
+        lockedFeatures: constraintBundle?.lockedFeatures || [],
+        routeRegenerationSalt: `${options.seed}:world-routes-final`
+      });
       result = politics.metadata;
       break;
     }
-    case "religions":
+    case "religions": {
+      const lockedProvinces = collectPoliticalSupportProvinces(
+        map,
+        constraintBundle?.lockedStates,
+        constraintBundle?.lockedProvinces
+      );
+      const lockedCities = collectPoliticalSupportCities(
+        map,
+        constraintBundle?.lockedStates,
+        lockedProvinces,
+        constraintBundle?.lockedCities
+      );
       repairSocietyCenters(map.pack, map.society.religions, "religion");
-      result = reexpandSocietyReligions(map.grid, map.pack, map.society.religions, map.settlements);
+      result = reexpandSocietyReligions(map.grid, map.pack, map.society.religions, map.settlements, {
+        ...stageConstraints,
+        lockedStates: constraintBundle?.lockedStates || [],
+        lockedProvinces,
+        lockedCities
+      });
       syncSocietyCollections(map);
+      restoreLockedPoliticalReligionFields(
+        map,
+        constraintBundle?.lockedStates,
+        lockedProvinces,
+        lockedCities
+      );
       break;
-    case "markers-economy":
-      map.markers = rebuildMarkersPreservingManual(map, options);
+    }
+    case "markers-economy": {
+      const lockedProvinces = collectPoliticalSupportProvinces(
+        map,
+        constraintBundle?.lockedStates,
+        constraintBundle?.lockedProvinces
+      );
+      const lockedCities = collectPoliticalSupportCities(
+        map,
+        constraintBundle?.lockedStates,
+        lockedProvinces,
+        constraintBundle?.lockedCities
+      );
+      map.markers = rebuildMarkersPreservingManual(map, {
+        ...options,
+        lockedStates: constraintBundle?.lockedStates || [],
+        lockedProvinces,
+        lockedFeatures: stageConstraints.lockedFeatures
+      }, mergeSupportSnapshots([
+        ...stageConstraints.lockedMarkers,
+        ...collectFeatureSupportObjects(map, constraintBundle?.lockedFeatures, "markers")
+      ]));
       map.pack.markers = map.markers.markers;
-      map.economy = buildEconomy(map.pack, options);
+      restoreLockedPoliticalMarkerEconomyFields(map, constraintBundle?.lockedStates, lockedProvinces);
+      map.economy = buildEconomy(map.pack, {
+        ...options,
+        ...stageConstraints,
+        lockedMarkets: collectEconomicSupportMarkets(map, stageConstraints.lockedMarkets, stageConstraints.lockedDeals),
+        lockedStates: constraintBundle?.lockedStates || [],
+        lockedProvinces,
+        lockedCities
+      });
+      restoreLockedPoliticalMarkerEconomyFields(map, constraintBundle?.lockedStates, lockedProvinces);
       result = {markers: map.markers.metadata.markers, deals: map.economy.metadata.deals};
       break;
-    case "diplomacy":
-      map.diplomacy = buildDiplomacy(map.pack, map.society, {...options, diplomacyRegenerationSalt: `${options.seed}:world-diplomacy`});
+    }
+    case "diplomacy": {
+      const lockedDiplomacyRelations = mergeSupportSnapshots([
+        ...stageConstraints.lockedDiplomacyRelations,
+        ...collectLockedWarzoneDiplomacySupport(map.pack, constraintBundle?.lockedZones)
+      ]);
+      map.diplomacy = buildDiplomacy(map.pack, map.society, {
+        ...options,
+        ...stageConstraints,
+        lockedDiplomacyRelations,
+        lockedStates: constraintBundle?.lockedStates || [],
+        diplomacyRegenerationSalt: `${options.seed}:world-diplomacy`
+      });
       result = {...map.diplomacy.metadata};
       break;
-    case "military-zones":
-      map.military = buildMilitary(map.pack, {...options, seed: `${options.seed}:world-military`});
-      map.zones = buildZones(map.pack, {...options, seed: `${options.seed}:world-zones`});
+    }
+    case "military-zones": {
+      map.military = buildMilitary(map.pack, {
+        ...options,
+        ...stageConstraints,
+        lockedStates: constraintBundle?.lockedStates || [],
+        seed: `${options.seed}:world-military`
+      });
+      const lockedZones = mergeSupportSnapshots([
+        ...stageConstraints.lockedZones,
+        ...(constraintBundle?.lockedZones || [])
+      ]);
+      map.zones = buildZones(map.pack, {
+        ...options,
+        seed: `${options.seed}:world-zones`,
+        preservedZones: lockedZones
+      });
       result = {regiments: map.military.metadata.regiments, zones: map.zones.metadata.zones};
       break;
+    }
     default:
       throw new Error(`未知的洋流世界重算阶段：${system}`);
   }
 
   throwIfCancelled(signal);
+  await assertWorldStageDomains(constraintBundle, "after", stageContext);
   return {executed: true, ...result};
+}
+
+export function oceanCurrentWorldStageConstraints(system, constraintBundle = null) {
+  const keys = WORLD_STAGE_CONSTRAINT_KEYS[system];
+  if (!keys) throw new Error(`未知的洋流世界重算阶段：${system}`);
+  return Object.freeze(Object.fromEntries(keys.map(key => {
+    const value = constraintBundle?.[key];
+    return [key, Array.isArray(value) ? value : Object.freeze([])];
+  })));
+}
+
+async function isWorldStageFullyLocked(constraintBundle, context) {
+  if (typeof constraintBundle?.isDomainFullyLocked !== "function") return false;
+  const domains = WORLD_STAGE_DOMAINS[context.system] || [];
+  if (!domains.length) return false;
+  for (const domain of domains) {
+    if (!await constraintBundle.isDomainFullyLocked(domain, {...context, domain, phase: "skip"})) return false;
+  }
+  return true;
+}
+
+async function assertWorldStageDomains(constraintBundle, phase, context) {
+  if (typeof constraintBundle?.assertDomain !== "function") return;
+  const domains = Array.isArray(constraintBundle.selectedDomains) && constraintBundle.selectedDomains.length
+    ? constraintBundle.selectedDomains
+    : WORLD_STAGE_DOMAINS[context.system] || [];
+  for (const domain of domains) {
+    try {
+      await constraintBundle.assertDomain(domain, {...context, domain, phase});
+    } catch (error) {
+      if (error instanceof Error) error.message = `[${context.system}:${phase}:${domain}] ${error.message}`;
+      throw error;
+    }
+  }
 }
 
 export function snapshotOceanCurrentWorldIdentity(map) {
@@ -114,8 +329,25 @@ export function assertOceanCurrentWorldIdentity(map, before) {
   }
 }
 
-function rebuildMarkersPreservingManual(map, options) {
-  const preserved = (map.markers?.markers || map.pack?.markers || []).filter(isManualMarker).map(marker => structuredClone(marker));
+function rebuildMarkersPreservingManual(map, options, lockedMarkers = []) {
+  const current = map.markers?.markers || map.pack?.markers || [];
+  const lockedById = new Map((lockedMarkers || []).map(marker => [String(marker?.id ?? marker?.i), marker]));
+  const protectedFeatureIds = new Set((options.lockedFeatures || [])
+    .map(feature => Number(feature?.i ?? feature?.id))
+    .filter(Number.isInteger));
+  const preserved = current
+    .filter(marker => {
+      const id = String(marker?.id ?? marker?.i);
+      return lockedById.has(id) || isManualMarker(marker) || markerTouchesFeature(marker, protectedFeatureIds);
+    })
+    .map(marker => structuredClone(lockedById.get(String(marker?.id ?? marker?.i)) || marker));
+  const preservedKeys = new Set(preserved.map(marker => String(marker?.id ?? marker?.i)));
+  for (const marker of lockedMarkers || []) {
+    const id = String(marker?.id ?? marker?.i);
+    if (preservedKeys.has(id)) continue;
+    preserved.push(structuredClone(marker));
+    preservedKeys.add(id);
+  }
   const occupiedCells = new Set(preserved.map(marker => marker.packCell).filter(Number.isInteger));
   const generated = buildMarkers(map.grid, map.features, map.politics, map.rivers, map.pack, options).markers
     .filter(marker => !isManualMarker(marker) && !occupiedCells.has(marker.packCell));
@@ -133,6 +365,198 @@ function rebuildMarkersPreservingManual(map, options) {
 
 function isManualMarker(marker) {
   return Boolean(marker?.pinned || marker?.lock || marker?.visual?.manual || marker?.data?.visual?.manual);
+}
+
+function markerTouchesFeature(marker, featureIds) {
+  return featureIds.has(Number(marker?.feature))
+    || featureIds.has(Number(marker?.data?.feature));
+}
+
+function restoreLockedPoliticalMarkerEconomyFields(map, lockedStates = [], lockedProvinces = []) {
+  const fields = [
+    "markerEconomicPotential",
+    "markerEconomicMarkers",
+    "resourcePotential",
+    "resourceMarkers",
+    "markerCategories",
+    "resourceTypes"
+  ];
+  restoreFields([map?.politics?.states, map?.pack?.states], lockedStates);
+  restoreFields([map?.politics?.provinces, map?.pack?.provinces], lockedProvinces);
+
+  function restoreFields(collections, snapshots) {
+    for (const snapshot of snapshots || []) {
+    const id = Number(snapshot?.i ?? snapshot?.id);
+    if (!Number.isInteger(id) || id <= 0) continue;
+      for (const collection of collections) {
+        const object = (collection || []).find(item => Number(item?.i ?? item?.id) === id);
+        if (!object) continue;
+      for (const field of fields) {
+          if (Object.prototype.hasOwnProperty.call(snapshot, field)) object[field] = structuredClone(snapshot[field]);
+          else delete object[field];
+        }
+      }
+    }
+  }
+}
+
+function restoreLockedPoliticalReligionFields(map, lockedStates = [], lockedProvinces = [], lockedCities = []) {
+  for (const snapshot of lockedStates || []) restoreReligionField(
+    [map?.politics?.states, map?.pack?.states],
+    snapshot,
+    snapshot?.i ?? snapshot?.id
+  );
+  for (const snapshot of lockedProvinces || []) restoreReligionField(
+    [map?.politics?.provinces, map?.pack?.provinces],
+    snapshot,
+    snapshot?.i ?? snapshot?.id
+  );
+  for (const snapshot of lockedCities || []) {
+    const id = String(snapshot?.id ?? snapshot?.i);
+    const city = (map?.settlements?.cities || []).find(item => String(item?.id ?? item?.i) === id);
+    copyReligionField(city, snapshot);
+    const burgId = Number(snapshot?.burgId);
+    if (Number.isInteger(burgId) && burgId > 0) copyReligionField(map?.pack?.burgs?.[burgId], snapshot);
+  }
+}
+
+function restoreReligionField(collections, snapshot, id) {
+  for (const collection of collections) {
+    const target = (collection || []).find(item => String(item?.i ?? item?.id) === String(id));
+    copyReligionField(target, snapshot);
+  }
+}
+
+function copyReligionField(target, snapshot) {
+  if (!target) return;
+  if (Object.prototype.hasOwnProperty.call(snapshot || {}, "religion")) target.religion = snapshot.religion;
+  else delete target.religion;
+}
+
+function collectPoliticalSupportCities(map, lockedStates = [], lockedProvinces = [], lockedCities = []) {
+  const byId = new Map();
+  const add = city => {
+    const id = city?.id ?? city?.i;
+    if (id !== undefined && id !== null && !byId.has(String(id))) byId.set(String(id), structuredClone(city));
+  };
+  for (const city of lockedCities || []) add(city);
+  const protectedStateIds = new Set((lockedStates || []).map(state => Number(state?.i ?? state?.id)).filter(Number.isInteger));
+  const protectedProvinceIds = new Set((lockedProvinces || []).map(province => Number(province?.i ?? province?.id)).filter(Number.isInteger));
+  const protectedBurgIds = new Set([
+    ...(lockedStates || []).map(state => Number(state?.capital)),
+    ...(lockedProvinces || []).map(province => Number(province?.burg))
+  ].filter(id => Number.isInteger(id) && id > 0));
+  for (const city of map?.settlements?.cities || []) {
+    if (!city || city.removed) continue;
+    const packCell = Number(city.packCell);
+    const stateId = Number.isInteger(packCell) ? Number(map?.pack?.cells?.state?.[packCell]) : Number(city.state);
+    const provinceId = Number.isInteger(packCell) ? Number(map?.pack?.cells?.province?.[packCell]) : Number(city.province);
+    if (protectedBurgIds.has(Number(city.burgId)) || protectedStateIds.has(stateId) || protectedProvinceIds.has(provinceId)) add(city);
+  }
+  return [...byId.values()];
+}
+
+function collectPoliticalSupportProvinces(map, lockedStates = [], lockedProvinces = []) {
+  const byId = new Map();
+  const add = province => {
+    const id = Number(province?.i ?? province?.id);
+    if (Number.isInteger(id) && id > 0 && !byId.has(id)) byId.set(id, structuredClone(province));
+  };
+  for (const province of lockedProvinces || []) add(province);
+  const protectedStateIds = new Set((lockedStates || []).map(state => Number(state?.i ?? state?.id)).filter(Number.isInteger));
+  for (const province of map?.politics?.provinces || map?.pack?.provinces || []) {
+    if (province && !province.removed && protectedStateIds.has(Number(province.state))) add(province);
+  }
+  return [...byId.values()];
+}
+
+function collectEconomicSupportCities(map, lockedMarkets = [], lockedDeals = []) {
+  const burgIds = new Set();
+  const marketById = new Map((map?.pack?.markets || map?.economy?.markets || [])
+    .filter(Boolean)
+    .map(market => [Number(market.i ?? market.id), market]));
+  for (const market of lockedMarkets || []) {
+    const burgId = Number(market?.centerBurgId);
+    if (Number.isInteger(burgId) && burgId > 0) burgIds.add(burgId);
+  }
+  for (const deal of lockedDeals || []) {
+    for (const [type, id] of [[deal?.sellerType, deal?.seller], [deal?.buyerType, deal?.buyer]]) {
+      if (type === "burg") burgIds.add(Number(id));
+      if (type === "market") {
+        const burgId = Number(marketById.get(Number(id))?.centerBurgId);
+        if (Number.isInteger(burgId) && burgId > 0) burgIds.add(burgId);
+      }
+    }
+  }
+  return (map?.settlements?.cities || [])
+    .filter(city => city && !city.removed && burgIds.has(Number(city.burgId)))
+    .map(city => structuredClone(city));
+}
+
+function collectEconomicSupportMarkets(map, lockedMarkets = [], lockedDeals = []) {
+  const byId = new Map();
+  const add = market => {
+    const id = Number(market?.i ?? market?.id);
+    if (Number.isInteger(id) && id > 0 && !byId.has(id)) byId.set(id, structuredClone(market));
+  };
+  for (const market of lockedMarkets || []) add(market);
+  const currentById = new Map((map?.pack?.markets || map?.economy?.markets || [])
+    .filter(Boolean)
+    .map(market => [Number(market.i ?? market.id), market]));
+  for (const deal of lockedDeals || []) {
+    for (const [type, id] of [[deal?.sellerType, deal?.seller], [deal?.buyerType, deal?.buyer]]) {
+      if (type === "market") add(currentById.get(Number(id)));
+    }
+  }
+  return [...byId.values()];
+}
+
+function collectFeatureSupportObjects(map, lockedFeatures = [], kind) {
+  const featureIds = new Set((lockedFeatures || [])
+    .map(feature => Number(feature?.i ?? feature?.id))
+    .filter(Number.isInteger));
+  if (!featureIds.size) return [];
+  const matches = object => featureIds.has(Number(object?.feature))
+    || featureIds.has(Number(object?.port))
+    || featureIds.has(Number(object?.data?.feature));
+  if (kind === "cities") {
+    return (map?.settlements?.cities || [])
+      .filter(city => {
+        const burg = map?.pack?.burgs?.[Number(city?.burgId)];
+        return city && !city.removed && (matches(city) || matches(burg));
+      })
+      .map(city => structuredClone(city));
+  }
+  const objects = kind === "routes"
+    ? map?.settlements?.routes || map?.pack?.routes || []
+    : kind === "markers"
+      ? map?.markers?.markers || map?.pack?.markers || []
+      : [];
+  return objects.filter(object => object && !object.removed && matches(object)).map(object => structuredClone(object));
+}
+
+function mergeSupportSnapshots(snapshots) {
+  const byId = new Map();
+  for (const snapshot of snapshots || []) {
+    const id = snapshot?.id ?? snapshot?.i;
+    if (id !== undefined && id !== null && !byId.has(String(id))) byId.set(String(id), snapshot);
+  }
+  return [...byId.values()];
+}
+
+export function collectLockedWarzoneDiplomacySupport(pack, lockedZones = []) {
+  const supporting = [];
+  const capturedPairs = new Set();
+  for (const zone of lockedZones || []) {
+    if (zone?.type !== "Warzone") continue;
+    const pair = resolveWarzoneStatePair(pack, zone);
+    if (!pair) continue;
+    const key = `${Math.min(pair.attacker, pair.defender)}:${Math.max(pair.attacker, pair.defender)}`;
+    if (capturedPairs.has(key)) continue;
+    supporting.push(captureDiplomacyRelationSnapshot(pack, pair.attacker, pair.defender));
+    capturedPairs.add(key);
+  }
+  return supporting;
 }
 
 function nextUnusedId(used, start) {
