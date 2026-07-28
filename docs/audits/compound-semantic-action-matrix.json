@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "scope": "权威任务第 204 项：全游戏复合语义接口、规则动作与玩法配方审计",
   "generatedAtPolicy": "报告不写入动态时间，sourceDigest 变化即要求重新生成",
-  "sourceDigest": "6f0697aa5fdf09fc94e6cb70d27f661a40753e29ac7ea845d2af4ae015e5bf88",
+  "sourceDigest": "f7b53ab0497fc2aa6d7eef02840bde84f1cdcbc1471f533ac29247c2a0f7fd1a",
   "definition": {
     "compoundSemanticAction": "一个玩家意图，但执行时需要跨对象/系统、条件分支、业务预检或原子回滚；应由单一规则事务表达。",
     "primitive": "只修改一个稳定字段或纯编辑器显示偏好，可保留为原子 API，不强行包装成复合动作。",
@@ -18,15 +18,16 @@
     "existing-needs-inspector": "已有写命令，但缺少 AI 可调用的只读业务预检或稳定分支结果。",
     "fragmented-needs-transaction": "当前只能串联多个 API，不能保证单历史、并发安全和失败原子性。",
     "missing-game-rule": "当前只有数据原语或记录能力，尚无完整游戏规则。",
-    "recipe-only": "战略/玩法流程，不应实现为一条超大写接口。"
+    "recipe-only": "战略/玩法流程尚未发布为可枚举的执行配方。",
+    "executable-recipe": "已进入公开 planner registry；规划器逐步调用精确事实、预检和执行方法。"
   },
   "denominator": {
-    "fullCapabilityRows": 1165,
+    "fullCapabilityRows": 1167,
     "fullCapabilityUnknown": 0,
     "fullCapabilityUnclassified": 0,
     "fullCapabilityGaps": 0,
-    "publicApiMethods": 301,
-    "classifiedApiMethods": 301,
+    "publicApiMethods": 303,
+    "classifiedApiMethods": 303,
     "cellActionRows": 48,
     "classifiedCellActionRows": 48,
     "canvasModes": 29,
@@ -38,8 +39,8 @@
     "ruleTransactions": 68,
     "plannerRecipes": 10,
     "statuses": {
-      "existing-transaction": 68,
-      "recipe-only": 10
+      "executable-recipe": 10,
+      "existing-transaction": 68
     },
     "domains": {
       "diplomacy": 5,
@@ -58,7 +59,7 @@
       "atomic-editor-primitive": 54,
       "editor-runtime-service": 49,
       "read-export-service": 10,
-      "read-primitive": 28,
+      "read-primitive": 30,
       "semantic-action": 160
     },
     "interactionClassifications": {
@@ -112,6 +113,45 @@
       "chapter": "编辑器事务、批量操作与发布",
       "invariant": "编辑器服务不得伪装成游戏规则；危险操作要有预检，批量操作要有单事务回滚。"
     }
+  },
+  "recipeDocSync": {
+    "complete": true,
+    "canonicalDigest": "3d156e35c9d98f61989500e1544702ce9248add5dc04cd037478c344f623b45b",
+    "documentDigest": "27b7cf8023e8c19e215cb92b31636c710269dc7c962ced7f0b0093b84f20dfd7",
+    "recipeCount": 10,
+    "stepCount": 43,
+    "issueCount": 0,
+    "machineOnly": [],
+    "docsOnly": [],
+    "fieldMismatch": [],
+    "methodMismatch": []
+  },
+  "recipeRegistryCoverage": {
+    "complete": true,
+    "registryRecipes": 10,
+    "registrySteps": 43,
+    "spatialActionsReferenced": 3,
+    "executableRecipes": 10,
+    "issueCount": 0,
+    "missingAuditRecipes": [],
+    "staleAuditRecipes": [],
+    "missingRuleActions": [],
+    "duplicateRecipeIds": [],
+    "duplicateStepIds": [],
+    "invalidFields": [],
+    "unknownMethods": [],
+    "unauthorizedMethods": [],
+    "placeholderRefs": [],
+    "unknownSpatialActionIds": [],
+    "spatialRegistryOnly": [],
+    "spatialMatrixOnly": [],
+    "staleSpatialActionIds": [],
+    "docMachineOnly": [],
+    "docOnly": [],
+    "docFieldMismatch": [],
+    "docMethodMismatch": [],
+    "docDigestMismatch": [],
+    "docMarkerMissing": []
   },
   "actions": [
     {
@@ -2285,12 +2325,13 @@
       "tier": "planner-recipe",
       "variants": [],
       "api": [],
-      "inspect": "逐步骤 inspector",
-      "execute": "AI planner orchestration",
+      "inspect": "planner.getRecipe + step.inspection.methods",
+      "execute": "按 step.executeMethods 逐步调用公开 API",
       "branches": [
-        "每一步单独预检",
-        "需要写入授权时暂停",
-        "失败后按玩法策略重规划，不把已提交步骤伪装成整体回滚"
+        "逐步骤读取事实与 revision",
+        "每一步单独预检并按方法策略等待授权",
+        "拒绝或陈旧时停止并重规划",
+        "已提交步骤不伪装成跨步骤原子回滚"
       ],
       "steps": [
         "politics.transfer-territory",
@@ -2300,13 +2341,277 @@
         "economy.assign-market-region"
       ],
       "sourceRefs": [
-        "docs/task-notes/compound-semantic-api-and-gameplay-rules.md"
+        "app/webgl-generator/src/runtime/planner-recipe-registry.js",
+        "docs/task-notes/compound-semantic-api-and-gameplay-rules.md",
+        "docs/task-notes/gameplay-rules-and-ai-planner-recipes.md"
       ],
-      "status": "recipe-only",
+      "status": "executable-recipe",
       "id": "scenario.colonize-region",
       "title": "殖民或开拓区域",
       "domain": "politics",
       "intent": "取得领土、建立城镇、划分省份、连接路线并接入市场。",
+      "stepContracts": [
+        {
+          "stepId": "transfer-territory",
+          "kind": "rule",
+          "actionId": "politics.transfer-territory",
+          "spatialActionId": null,
+          "facts": [
+            "objects.get",
+            "cells.get"
+          ],
+          "inspection": {
+            "methods": [
+              "edit.states.inspectTerritoryTransfer"
+            ],
+            "policy": "使用当前事实输入调用精确公开方法；若只有 info.describe，则按公开方法契约完成结构预检。"
+          },
+          "executeMethods": [
+            "edit.states.transferTerritory"
+          ],
+          "inputTemplate": {
+            "fromStateId": "$sourceStateId",
+            "toStateId": "$targetStateId",
+            "cells": "$packCellRefs"
+          },
+          "preconditions": [
+            "读取当前事实并确认目标仍存在。",
+            "使用当前 map revision 生成步骤输入。"
+          ],
+          "authorization": {
+            "mode": "per-method-policy",
+            "policy": "逐个读取 info.describe；requiresConfirm 为 true 时必须在该步骤暂停并取得显式授权。"
+          },
+          "successCriteria": [
+            "目标 Cell 的国家与省份归属一致，相关城市和政治引用没有悬空。",
+            "通过 objects.get 重读并验证上述领域结果。"
+          ],
+          "failurePolicy": {
+            "rejected": "停止并按稳定 business code 重规划。",
+            "stale": "丢弃旧输入，刷新事实后重新预检。",
+            "partial": "不把已提交步骤伪装成整体回滚。"
+          },
+          "compensation": {
+            "mode": "history-undo",
+            "method": "history.undo",
+            "guard": "仅当执行 ledger 的 stepId 精确等于 transfer-territory、当前 revision 精确等于 ledger.afterRevision、该步骤仍是最新一条历史、地图 identity 未变化且用户明确授权撤销时调用。"
+          },
+          "revisionCheckpoints": [
+            "before-facts",
+            "after-inspection",
+            "before-execution",
+            "after-each-commit"
+          ]
+        },
+        {
+          "stepId": "ensure-province-assignment",
+          "kind": "rule",
+          "actionId": "politics.ensure-province-assignment",
+          "spatialActionId": null,
+          "facts": [
+            "objects.get",
+            "cells.get"
+          ],
+          "inspection": {
+            "methods": [
+              "edit.provinces.inspectEnsureAssignment"
+            ],
+            "policy": "使用当前事实输入调用精确公开方法；若只有 info.describe，则按公开方法契约完成结构预检。"
+          },
+          "executeMethods": [
+            "edit.provinces.ensureAssignment"
+          ],
+          "inputTemplate": {
+            "stateId": "$targetStateId",
+            "cells": "$packCellRefs",
+            "provinceId": "$optionalProvinceId"
+          },
+          "preconditions": [
+            "读取当前事实并确认目标仍存在。",
+            "使用当前 map revision 生成步骤输入。"
+          ],
+          "authorization": {
+            "mode": "per-method-policy",
+            "policy": "逐个读取 info.describe；requiresConfirm 为 true 时必须在该步骤暂停并取得显式授权。"
+          },
+          "successCriteria": [
+            "目标陆地 Cell 均属于有效省份，省份国家归属与 Cell 国家归属一致。",
+            "通过 objects.get 重读并验证上述领域结果。"
+          ],
+          "failurePolicy": {
+            "rejected": "停止并按稳定 business code 重规划。",
+            "stale": "丢弃旧输入，刷新事实后重新预检。",
+            "partial": "不把已提交步骤伪装成整体回滚。"
+          },
+          "compensation": {
+            "mode": "history-undo",
+            "method": "history.undo",
+            "guard": "仅当执行 ledger 的 stepId 精确等于 ensure-province-assignment、当前 revision 精确等于 ledger.afterRevision、该步骤仍是最新一条历史、地图 identity 未变化且用户明确授权撤销时调用。"
+          },
+          "revisionCheckpoints": [
+            "before-facts",
+            "after-inspection",
+            "before-execution",
+            "after-each-commit"
+          ]
+        },
+        {
+          "stepId": "found-city",
+          "kind": "rule",
+          "actionId": "settlement.found-city",
+          "spatialActionId": null,
+          "facts": [
+            "cells.get",
+            "objects.list"
+          ],
+          "inspection": {
+            "methods": [
+              "edit.cities.inspectCreateAtCell"
+            ],
+            "policy": "使用当前事实输入调用精确公开方法；若只有 info.describe，则按公开方法契约完成结构预检。"
+          },
+          "executeMethods": [
+            "edit.cities.createAtCell"
+          ],
+          "inputTemplate": {
+            "cell": "$gridCellRef",
+            "stateId": "$targetStateId",
+            "provinceId": "$optionalProvinceId"
+          },
+          "preconditions": [
+            "读取当前事实并确认目标仍存在。",
+            "使用当前 map revision 生成步骤输入。"
+          ],
+          "authorization": {
+            "mode": "per-method-policy",
+            "policy": "逐个读取 info.describe；requiresConfirm 为 true 时必须在该步骤暂停并取得显式授权。"
+          },
+          "successCriteria": [
+            "新城市可按稳定引用读取，所属国家、省份和 Cell 与请求一致。",
+            "通过 cells.get 重读并验证上述领域结果。"
+          ],
+          "failurePolicy": {
+            "rejected": "停止并按稳定 business code 重规划。",
+            "stale": "丢弃旧输入，刷新事实后重新预检。",
+            "partial": "不把已提交步骤伪装成整体回滚。"
+          },
+          "compensation": {
+            "mode": "history-undo",
+            "method": "history.undo",
+            "guard": "仅当执行 ledger 的 stepId 精确等于 found-city、当前 revision 精确等于 ledger.afterRevision、该步骤仍是最新一条历史、地图 identity 未变化且用户明确授权撤销时调用。"
+          },
+          "revisionCheckpoints": [
+            "before-facts",
+            "after-inspection",
+            "before-execution",
+            "after-each-commit"
+          ]
+        },
+        {
+          "stepId": "create-route",
+          "kind": "rule",
+          "actionId": "infrastructure.create-route",
+          "spatialActionId": "routes.createPath",
+          "facts": [
+            "cells.get",
+            "cells.neighbors"
+          ],
+          "inspection": {
+            "methods": [
+              "cells.inspectAction"
+            ],
+            "policy": "使用当前事实输入调用精确公开方法；若只有 info.describe，则按公开方法契约完成结构预检。"
+          },
+          "executeMethods": [
+            "edit.routes.create"
+          ],
+          "inputTemplate": {
+            "actionId": "routes.createPath",
+            "actionInput": {
+              "path": "$packCellPath"
+            }
+          },
+          "preconditions": [
+            "读取当前事实并确认目标仍存在。",
+            "使用当前 map revision 生成步骤输入。"
+          ],
+          "authorization": {
+            "mode": "per-method-policy",
+            "policy": "逐个读取 info.describe；requiresConfirm 为 true 时必须在该步骤暂停并取得显式授权。"
+          },
+          "successCriteria": [
+            "新路线存在并连接预期端点，路径 Cell 连续且没有悬空引用。",
+            "通过 cells.get 重读并验证上述领域结果。"
+          ],
+          "failurePolicy": {
+            "rejected": "停止并按稳定 business code 重规划。",
+            "stale": "丢弃旧输入，刷新事实后重新预检。",
+            "partial": "不把已提交步骤伪装成整体回滚。"
+          },
+          "compensation": {
+            "mode": "history-undo",
+            "method": "history.undo",
+            "guard": "仅当执行 ledger 的 stepId 精确等于 create-route、当前 revision 精确等于 ledger.afterRevision、该步骤仍是最新一条历史、地图 identity 未变化且用户明确授权撤销时调用。"
+          },
+          "revisionCheckpoints": [
+            "before-facts",
+            "after-inspection",
+            "before-execution",
+            "after-each-commit"
+          ]
+        },
+        {
+          "stepId": "assign-market-region",
+          "kind": "rule",
+          "actionId": "economy.assign-market-region",
+          "spatialActionId": null,
+          "facts": [
+            "objects.get",
+            "cells.query"
+          ],
+          "inspection": {
+            "methods": [
+              "edit.economy.inspectAssignment"
+            ],
+            "policy": "使用当前事实输入调用精确公开方法；若只有 info.describe，则按公开方法契约完成结构预检。"
+          },
+          "executeMethods": [
+            "edit.economy.assignCells"
+          ],
+          "inputTemplate": {
+            "marketId": "$marketId",
+            "cells": "$packCellRefs"
+          },
+          "preconditions": [
+            "读取当前事实并确认目标仍存在。",
+            "使用当前 map revision 生成步骤输入。"
+          ],
+          "authorization": {
+            "mode": "per-method-policy",
+            "policy": "逐个读取 info.describe；requiresConfirm 为 true 时必须在该步骤暂停并取得显式授权。"
+          },
+          "successCriteria": [
+            "目标 Cell 全部归入指定市场，市场覆盖与经济摘要一致。",
+            "通过 objects.get 重读并验证上述领域结果。"
+          ],
+          "failurePolicy": {
+            "rejected": "停止并按稳定 business code 重规划。",
+            "stale": "丢弃旧输入，刷新事实后重新预检。",
+            "partial": "不把已提交步骤伪装成整体回滚。"
+          },
+          "compensation": {
+            "mode": "history-undo",
+            "method": "history.undo",
+            "guard": "仅当执行 ledger 的 stepId 精确等于 assign-market-region、当前 revision 精确等于 ledger.afterRevision、该步骤仍是最新一条历史、地图 identity 未变化且用户明确授权撤销时调用。"
+          },
+          "revisionCheckpoints": [
+            "before-facts",
+            "after-inspection",
+            "before-execution",
+            "after-each-commit"
+          ]
+        }
+      ],
       "gameplayChapter": "国家、省份与政治拓扑",
       "invariant": "国家、省份、Grid/Pack 归属、首都、省会、外交、军事、市场和路线引用不得悬空。",
       "historyPolicy": "每个规则动作独立进入历史；配方本身不伪造跨步骤原子性。",
@@ -2316,12 +2621,13 @@
       "tier": "planner-recipe",
       "variants": [],
       "api": [],
-      "inspect": "逐步骤 inspector",
-      "execute": "AI planner orchestration",
+      "inspect": "planner.getRecipe + step.inspection.methods",
+      "execute": "按 step.executeMethods 逐步调用公开 API",
       "branches": [
-        "每一步单独预检",
-        "需要写入授权时暂停",
-        "失败后按玩法策略重规划，不把已提交步骤伪装成整体回滚"
+        "逐步骤读取事实与 revision",
+        "每一步单独预检并按方法策略等待授权",
+        "拒绝或陈旧时停止并重规划",
+        "已提交步骤不伪装成跨步骤原子回滚"
       ],
       "steps": [
         "diplomacy.declare-war",
@@ -2331,13 +2637,275 @@
         "diplomacy.make-peace"
       ],
       "sourceRefs": [
-        "docs/task-notes/compound-semantic-api-and-gameplay-rules.md"
+        "app/webgl-generator/src/runtime/planner-recipe-registry.js",
+        "docs/task-notes/compound-semantic-api-and-gameplay-rules.md",
+        "docs/task-notes/gameplay-rules-and-ai-planner-recipes.md"
       ],
-      "status": "recipe-only",
+      "status": "executable-recipe",
       "id": "scenario.invasion-and-annexation",
       "title": "入侵、占领与吞并国家",
       "domain": "military",
       "intent": "宣战、调动军队、结算战斗、逐步占领领土并议和或吞并。",
+      "stepContracts": [
+        {
+          "stepId": "declare-war",
+          "kind": "rule",
+          "actionId": "diplomacy.declare-war",
+          "spatialActionId": null,
+          "facts": [
+            "objects.get"
+          ],
+          "inspection": {
+            "methods": [
+              "edit.diplomacy.inspectDeclareWar"
+            ],
+            "policy": "使用当前事实输入调用精确公开方法；若只有 info.describe，则按公开方法契约完成结构预检。"
+          },
+          "executeMethods": [
+            "edit.diplomacy.declareWar"
+          ],
+          "inputTemplate": {
+            "attackerStateId": "$attackerStateId",
+            "defenderStateId": "$defenderStateId",
+            "reason": "$reason"
+          },
+          "preconditions": [
+            "读取当前事实并确认目标仍存在。",
+            "使用当前 map revision 生成步骤输入。"
+          ],
+          "authorization": {
+            "mode": "per-method-policy",
+            "policy": "逐个读取 info.describe；requiresConfirm 为 true 时必须在该步骤暂停并取得显式授权。"
+          },
+          "successCriteria": [
+            "双方关系均为 Enemy，战争纪事、战区和军事上下文可解析。",
+            "通过 objects.get 重读并验证上述领域结果。"
+          ],
+          "failurePolicy": {
+            "rejected": "停止并按稳定 business code 重规划。",
+            "stale": "丢弃旧输入，刷新事实后重新预检。",
+            "partial": "不把已提交步骤伪装成整体回滚。"
+          },
+          "compensation": {
+            "mode": "history-undo",
+            "method": "history.undo",
+            "guard": "仅当执行 ledger 的 stepId 精确等于 declare-war、当前 revision 精确等于 ledger.afterRevision、该步骤仍是最新一条历史、地图 identity 未变化且用户明确授权撤销时调用。"
+          },
+          "revisionCheckpoints": [
+            "before-facts",
+            "after-inspection",
+            "before-execution",
+            "after-each-commit"
+          ]
+        },
+        {
+          "stepId": "move-station",
+          "kind": "rule",
+          "actionId": "military.move-station",
+          "spatialActionId": null,
+          "facts": [
+            "objects.get",
+            "cells.get"
+          ],
+          "inspection": {
+            "methods": [
+              "edit.military.inspectMoveStation"
+            ],
+            "policy": "使用当前事实输入调用精确公开方法；若只有 info.describe，则按公开方法契约完成结构预检。"
+          },
+          "executeMethods": [
+            "edit.military.moveStation"
+          ],
+          "inputTemplate": {
+            "target": "$regimentRef",
+            "station": "$packCellRef"
+          },
+          "preconditions": [
+            "读取当前事实并确认目标仍存在。",
+            "使用当前 map revision 生成步骤输入。"
+          ],
+          "authorization": {
+            "mode": "per-method-policy",
+            "policy": "逐个读取 info.describe；requiresConfirm 为 true 时必须在该步骤暂停并取得显式授权。"
+          },
+          "successCriteria": [
+            "目标军团驻地 Cell 与移动命令一致，兵力和身份未被意外改写。",
+            "通过 objects.get 重读并验证上述领域结果。"
+          ],
+          "failurePolicy": {
+            "rejected": "停止并按稳定 business code 重规划。",
+            "stale": "丢弃旧输入，刷新事实后重新预检。",
+            "partial": "不把已提交步骤伪装成整体回滚。"
+          },
+          "compensation": {
+            "mode": "history-undo",
+            "method": "history.undo",
+            "guard": "仅当执行 ledger 的 stepId 精确等于 move-station、当前 revision 精确等于 ledger.afterRevision、该步骤仍是最新一条历史、地图 identity 未变化且用户明确授权撤销时调用。"
+          },
+          "revisionCheckpoints": [
+            "before-facts",
+            "after-inspection",
+            "before-execution",
+            "after-each-commit"
+          ]
+        },
+        {
+          "stepId": "resolve-battle",
+          "kind": "rule",
+          "actionId": "military.resolve-battle",
+          "spatialActionId": null,
+          "facts": [
+            "objects.get",
+            "cells.neighbors"
+          ],
+          "inspection": {
+            "methods": [
+              "edit.military.inspectBattle"
+            ],
+            "policy": "使用当前事实输入调用精确公开方法；若只有 info.describe，则按公开方法契约完成结构预检。"
+          },
+          "executeMethods": [
+            "edit.military.resolveBattle"
+          ],
+          "inputTemplate": {
+            "attacker": "$attackerRegimentRef",
+            "defender": "$defenderRegimentRef",
+            "seed": "$battleSeed"
+          },
+          "preconditions": [
+            "读取当前事实并确认目标仍存在。",
+            "使用当前 map revision 生成步骤输入。"
+          ],
+          "authorization": {
+            "mode": "per-method-policy",
+            "policy": "逐个读取 info.describe；requiresConfirm 为 true 时必须在该步骤暂停并取得显式授权。"
+          },
+          "successCriteria": [
+            "双方兵力非负、伤亡与态势符合结果，并在全局及双方军团中记录同一战报。",
+            "通过 objects.get 重读并验证上述领域结果。"
+          ],
+          "failurePolicy": {
+            "rejected": "停止并按稳定 business code 重规划。",
+            "stale": "丢弃旧输入，刷新事实后重新预检。",
+            "partial": "不把已提交步骤伪装成整体回滚。"
+          },
+          "compensation": {
+            "mode": "history-undo",
+            "method": "history.undo",
+            "guard": "仅当执行 ledger 的 stepId 精确等于 resolve-battle、当前 revision 精确等于 ledger.afterRevision、该步骤仍是最新一条历史、地图 identity 未变化且用户明确授权撤销时调用。"
+          },
+          "revisionCheckpoints": [
+            "before-facts",
+            "after-inspection",
+            "before-execution",
+            "after-each-commit"
+          ]
+        },
+        {
+          "stepId": "transfer-territory",
+          "kind": "rule",
+          "actionId": "politics.transfer-territory",
+          "spatialActionId": null,
+          "facts": [
+            "objects.get",
+            "cells.get"
+          ],
+          "inspection": {
+            "methods": [
+              "edit.states.inspectTerritoryTransfer"
+            ],
+            "policy": "使用当前事实输入调用精确公开方法；若只有 info.describe，则按公开方法契约完成结构预检。"
+          },
+          "executeMethods": [
+            "edit.states.transferTerritory"
+          ],
+          "inputTemplate": {
+            "fromStateId": "$defenderStateId",
+            "toStateId": "$attackerStateId",
+            "cells": "$occupiedPackCellRefs"
+          },
+          "preconditions": [
+            "读取当前事实并确认目标仍存在。",
+            "使用当前 map revision 生成步骤输入。"
+          ],
+          "authorization": {
+            "mode": "per-method-policy",
+            "policy": "逐个读取 info.describe；requiresConfirm 为 true 时必须在该步骤暂停并取得显式授权。"
+          },
+          "successCriteria": [
+            "目标 Cell 的国家与省份归属一致，相关城市和政治引用没有悬空。",
+            "通过 objects.get 重读并验证上述领域结果。"
+          ],
+          "failurePolicy": {
+            "rejected": "停止并按稳定 business code 重规划。",
+            "stale": "丢弃旧输入，刷新事实后重新预检。",
+            "partial": "不把已提交步骤伪装成整体回滚。"
+          },
+          "compensation": {
+            "mode": "history-undo",
+            "method": "history.undo",
+            "guard": "仅当执行 ledger 的 stepId 精确等于 transfer-territory、当前 revision 精确等于 ledger.afterRevision、该步骤仍是最新一条历史、地图 identity 未变化且用户明确授权撤销时调用。"
+          },
+          "revisionCheckpoints": [
+            "before-facts",
+            "after-inspection",
+            "before-execution",
+            "after-each-commit"
+          ]
+        },
+        {
+          "stepId": "make-peace",
+          "kind": "rule",
+          "actionId": "diplomacy.make-peace",
+          "spatialActionId": null,
+          "facts": [
+            "objects.get"
+          ],
+          "inspection": {
+            "methods": [
+              "edit.diplomacy.inspectPeace"
+            ],
+            "policy": "使用当前事实输入调用精确公开方法；若只有 info.describe，则按公开方法契约完成结构预检。"
+          },
+          "executeMethods": [
+            "edit.diplomacy.makePeace"
+          ],
+          "inputTemplate": {
+            "leftStateId": "$attackerStateId",
+            "rightStateId": "$defenderStateId",
+            "relation": "$postWarRelation",
+            "terms": "$peaceTerms"
+          },
+          "preconditions": [
+            "读取当前事实并确认目标仍存在。",
+            "使用当前 map revision 生成步骤输入。"
+          ],
+          "authorization": {
+            "mode": "per-method-policy",
+            "policy": "逐个读取 info.describe；requiresConfirm 为 true 时必须在该步骤暂停并取得显式授权。"
+          },
+          "successCriteria": [
+            "双方关系符合和平条款，战争活动、战区与战线按规则清理。",
+            "通过 objects.get 重读并验证上述领域结果。"
+          ],
+          "failurePolicy": {
+            "rejected": "停止并按稳定 business code 重规划。",
+            "stale": "丢弃旧输入，刷新事实后重新预检。",
+            "partial": "不把已提交步骤伪装成整体回滚。"
+          },
+          "compensation": {
+            "mode": "history-undo",
+            "method": "history.undo",
+            "guard": "仅当执行 ledger 的 stepId 精确等于 make-peace、当前 revision 精确等于 ledger.afterRevision、该步骤仍是最新一条历史、地图 identity 未变化且用户明确授权撤销时调用。"
+          },
+          "revisionCheckpoints": [
+            "before-facts",
+            "after-inspection",
+            "before-execution",
+            "after-each-commit"
+          ]
+        }
+      ],
       "gameplayChapter": "军队、调动与战斗",
       "invariant": "军团身份、所属国家、驻地、基地、命令、事件链和国家存亡必须保持引用完整。",
       "historyPolicy": "每个规则动作独立进入历史；配方本身不伪造跨步骤原子性。",
@@ -2347,12 +2915,13 @@
       "tier": "planner-recipe",
       "variants": [],
       "api": [],
-      "inspect": "逐步骤 inspector",
-      "execute": "AI planner orchestration",
+      "inspect": "planner.getRecipe + step.inspection.methods",
+      "execute": "按 step.executeMethods 逐步调用公开 API",
       "branches": [
-        "每一步单独预检",
-        "需要写入授权时暂停",
-        "失败后按玩法策略重规划，不把已提交步骤伪装成整体回滚"
+        "逐步骤读取事实与 revision",
+        "每一步单独预检并按方法策略等待授权",
+        "拒绝或陈旧时停止并重规划",
+        "已提交步骤不伪装成跨步骤原子回滚"
       ],
       "steps": [
         "politics.transfer-province",
@@ -2362,13 +2931,275 @@
         "society.bind-namebase-and-rename"
       ],
       "sourceRefs": [
-        "docs/task-notes/compound-semantic-api-and-gameplay-rules.md"
+        "app/webgl-generator/src/runtime/planner-recipe-registry.js",
+        "docs/task-notes/compound-semantic-api-and-gameplay-rules.md",
+        "docs/task-notes/gameplay-rules-and-ai-planner-recipes.md"
       ],
-      "status": "recipe-only",
+      "status": "executable-recipe",
       "id": "scenario.administrative-reform",
       "title": "行政区划改革",
       "domain": "politics",
       "intent": "合并、拆分或转移省份，重新选择省会并按范围重命名。",
+      "stepContracts": [
+        {
+          "stepId": "transfer-province",
+          "kind": "rule",
+          "actionId": "politics.transfer-province",
+          "spatialActionId": null,
+          "facts": [
+            "objects.get"
+          ],
+          "inspection": {
+            "methods": [
+              "edit.provinces.inspectTransfer"
+            ],
+            "policy": "使用当前事实输入调用精确公开方法；若只有 info.describe，则按公开方法契约完成结构预检。"
+          },
+          "executeMethods": [
+            "edit.provinces.transfer"
+          ],
+          "inputTemplate": {
+            "provinceId": "$provinceId",
+            "targetStateId": "$targetStateId"
+          },
+          "preconditions": [
+            "读取当前事实并确认目标仍存在。",
+            "使用当前 map revision 生成步骤输入。"
+          ],
+          "authorization": {
+            "mode": "per-method-policy",
+            "policy": "逐个读取 info.describe；requiresConfirm 为 true 时必须在该步骤暂停并取得显式授权。"
+          },
+          "successCriteria": [
+            "整省、内部 Cell、城市和省会均归入目标国家且引用一致。",
+            "通过 objects.get 重读并验证上述领域结果。"
+          ],
+          "failurePolicy": {
+            "rejected": "停止并按稳定 business code 重规划。",
+            "stale": "丢弃旧输入，刷新事实后重新预检。",
+            "partial": "不把已提交步骤伪装成整体回滚。"
+          },
+          "compensation": {
+            "mode": "history-undo",
+            "method": "history.undo",
+            "guard": "仅当执行 ledger 的 stepId 精确等于 transfer-province、当前 revision 精确等于 ledger.afterRevision、该步骤仍是最新一条历史、地图 identity 未变化且用户明确授权撤销时调用。"
+          },
+          "revisionCheckpoints": [
+            "before-facts",
+            "after-inspection",
+            "before-execution",
+            "after-each-commit"
+          ]
+        },
+        {
+          "stepId": "merge-provinces",
+          "kind": "rule",
+          "actionId": "politics.merge-provinces",
+          "spatialActionId": null,
+          "facts": [
+            "objects.get",
+            "cells.neighbors"
+          ],
+          "inspection": {
+            "methods": [
+              "edit.provinces.inspectMerge"
+            ],
+            "policy": "使用当前事实输入调用精确公开方法；若只有 info.describe，则按公开方法契约完成结构预检。"
+          },
+          "executeMethods": [
+            "edit.provinces.merge"
+          ],
+          "inputTemplate": {
+            "provinceIds": "$provinceIds",
+            "targetProvinceId": "$targetProvinceId"
+          },
+          "preconditions": [
+            "读取当前事实并确认目标仍存在。",
+            "使用当前 map revision 生成步骤输入。"
+          ],
+          "authorization": {
+            "mode": "per-method-policy",
+            "policy": "逐个读取 info.describe；requiresConfirm 为 true 时必须在该步骤暂停并取得显式授权。"
+          },
+          "successCriteria": [
+            "来源省份退出活动集合，保留省份非空连通且省会与城市引用有效。",
+            "通过 objects.get 重读并验证上述领域结果。"
+          ],
+          "failurePolicy": {
+            "rejected": "停止并按稳定 business code 重规划。",
+            "stale": "丢弃旧输入，刷新事实后重新预检。",
+            "partial": "不把已提交步骤伪装成整体回滚。"
+          },
+          "compensation": {
+            "mode": "history-undo",
+            "method": "history.undo",
+            "guard": "仅当执行 ledger 的 stepId 精确等于 merge-provinces、当前 revision 精确等于 ledger.afterRevision、该步骤仍是最新一条历史、地图 identity 未变化且用户明确授权撤销时调用。"
+          },
+          "revisionCheckpoints": [
+            "before-facts",
+            "after-inspection",
+            "before-execution",
+            "after-each-commit"
+          ]
+        },
+        {
+          "stepId": "split-province",
+          "kind": "rule",
+          "actionId": "politics.split-province",
+          "spatialActionId": null,
+          "facts": [
+            "objects.get",
+            "cells.query"
+          ],
+          "inspection": {
+            "methods": [
+              "edit.provinces.inspectSplit"
+            ],
+            "policy": "使用当前事实输入调用精确公开方法；若只有 info.describe，则按公开方法契约完成结构预检。"
+          },
+          "executeMethods": [
+            "edit.provinces.split"
+          ],
+          "inputTemplate": {
+            "provinceId": "$provinceId",
+            "cells": "$newProvincePackCellRefs"
+          },
+          "preconditions": [
+            "读取当前事实并确认目标仍存在。",
+            "使用当前 map revision 生成步骤输入。"
+          ],
+          "authorization": {
+            "mode": "per-method-policy",
+            "policy": "逐个读取 info.describe；requiresConfirm 为 true 时必须在该步骤暂停并取得显式授权。"
+          },
+          "successCriteria": [
+            "新旧省份均非空连通，各自省会、城市和 Cell 归属有效。",
+            "通过 objects.get 重读并验证上述领域结果。"
+          ],
+          "failurePolicy": {
+            "rejected": "停止并按稳定 business code 重规划。",
+            "stale": "丢弃旧输入，刷新事实后重新预检。",
+            "partial": "不把已提交步骤伪装成整体回滚。"
+          },
+          "compensation": {
+            "mode": "history-undo",
+            "method": "history.undo",
+            "guard": "仅当执行 ledger 的 stepId 精确等于 split-province、当前 revision 精确等于 ledger.afterRevision、该步骤仍是最新一条历史、地图 identity 未变化且用户明确授权撤销时调用。"
+          },
+          "revisionCheckpoints": [
+            "before-facts",
+            "after-inspection",
+            "before-execution",
+            "after-each-commit"
+          ]
+        },
+        {
+          "stepId": "reorganize-provinces",
+          "kind": "rule",
+          "actionId": "politics.reorganize-provinces",
+          "spatialActionId": null,
+          "facts": [
+            "info.mapSummary",
+            "objects.list"
+          ],
+          "inspection": {
+            "methods": [
+              "info.describe"
+            ],
+            "policy": "使用当前事实输入调用精确公开方法；若只有 info.describe，则按公开方法契约完成结构预检。"
+          },
+          "executeMethods": [
+            "generate.regenerate"
+          ],
+          "inputTemplate": {
+            "method": "generate.regenerate",
+            "kind": "provinces",
+            "options": {
+              "confirm": true
+            }
+          },
+          "preconditions": [
+            "读取当前事实并确认目标仍存在。",
+            "使用当前 map revision 生成步骤输入。"
+          ],
+          "authorization": {
+            "mode": "per-method-policy",
+            "policy": "逐个读取 info.describe；requiresConfirm 为 true 时必须在该步骤暂停并取得显式授权。"
+          },
+          "successCriteria": [
+            "省份重生成完成，锁定对象未被覆盖，国家、省份与城市引用一致。",
+            "通过 info.mapSummary 重读并验证上述领域结果。"
+          ],
+          "failurePolicy": {
+            "rejected": "停止并按稳定 business code 重规划。",
+            "stale": "丢弃旧输入，刷新事实后重新预检。",
+            "partial": "不把已提交步骤伪装成整体回滚。"
+          },
+          "compensation": {
+            "mode": "history-undo",
+            "method": "history.undo",
+            "guard": "仅当执行 ledger 的 stepId 精确等于 reorganize-provinces、当前 revision 精确等于 ledger.afterRevision、该步骤仍是最新一条历史、地图 identity 未变化且用户明确授权撤销时调用。"
+          },
+          "revisionCheckpoints": [
+            "before-facts",
+            "after-inspection",
+            "before-execution",
+            "after-each-commit"
+          ]
+        },
+        {
+          "stepId": "bind-namebase-and-rename",
+          "kind": "rule",
+          "actionId": "society.bind-namebase-and-rename",
+          "spatialActionId": null,
+          "facts": [
+            "namebases.list",
+            "objects.list"
+          ],
+          "inspection": {
+            "methods": [
+              "namebases.inspectBindAndRename"
+            ],
+            "policy": "使用当前事实输入调用精确公开方法；若只有 info.describe，则按公开方法契约完成结构预检。"
+          },
+          "executeMethods": [
+            "namebases.bindAndRename"
+          ],
+          "inputTemplate": {
+            "binding": "$binding",
+            "namebaseId": "$namebaseId",
+            "rename": "$renameOptions"
+          },
+          "preconditions": [
+            "读取当前事实并确认目标仍存在。",
+            "使用当前 map revision 生成步骤输入。"
+          ],
+          "authorization": {
+            "mode": "per-method-policy",
+            "policy": "逐个读取 info.describe；requiresConfirm 为 true 时必须在该步骤暂停并取得显式授权。"
+          },
+          "successCriteria": [
+            "名称库绑定与目标范围名称同时更新，不存在已删除或旧名称库残留引用。",
+            "通过 namebases.list 重读并验证上述领域结果。"
+          ],
+          "failurePolicy": {
+            "rejected": "停止并按稳定 business code 重规划。",
+            "stale": "丢弃旧输入，刷新事实后重新预检。",
+            "partial": "不把已提交步骤伪装成整体回滚。"
+          },
+          "compensation": {
+            "mode": "history-undo",
+            "method": "history.undo",
+            "guard": "仅当执行 ledger 的 stepId 精确等于 bind-namebase-and-rename、当前 revision 精确等于 ledger.afterRevision、该步骤仍是最新一条历史、地图 identity 未变化且用户明确授权撤销时调用。"
+          },
+          "revisionCheckpoints": [
+            "before-facts",
+            "after-inspection",
+            "before-execution",
+            "after-each-commit"
+          ]
+        }
+      ],
       "gameplayChapter": "国家、省份与政治拓扑",
       "invariant": "国家、省份、Grid/Pack 归属、首都、省会、外交、军事、市场和路线引用不得悬空。",
       "historyPolicy": "每个规则动作独立进入历史；配方本身不伪造跨步骤原子性。",
@@ -2378,12 +3209,13 @@
       "tier": "planner-recipe",
       "variants": [],
       "api": [],
-      "inspect": "逐步骤 inspector",
-      "execute": "AI planner orchestration",
+      "inspect": "planner.getRecipe + step.inspection.methods",
+      "execute": "按 step.executeMethods 逐步调用公开 API",
       "branches": [
-        "每一步单独预检",
-        "需要写入授权时暂停",
-        "失败后按玩法策略重规划，不把已提交步骤伪装成整体回滚"
+        "逐步骤读取事实与 revision",
+        "每一步单独预检并按方法策略等待授权",
+        "拒绝或陈旧时停止并重规划",
+        "已提交步骤不伪装成跨步骤原子回滚"
       ],
       "steps": [
         "society.transfer-population",
@@ -2393,13 +3225,275 @@
         "infrastructure.create-route"
       ],
       "sourceRefs": [
-        "docs/task-notes/compound-semantic-api-and-gameplay-rules.md"
+        "app/webgl-generator/src/runtime/planner-recipe-registry.js",
+        "docs/task-notes/compound-semantic-api-and-gameplay-rules.md",
+        "docs/task-notes/gameplay-rules-and-ai-planner-recipes.md"
       ],
-      "status": "recipe-only",
+      "status": "executable-recipe",
       "id": "scenario.population-resettlement",
       "title": "人口迁徙与新城建设",
       "domain": "settlement",
       "intent": "迁移人口、建立或移动城镇、调整市场与路线。",
+      "stepContracts": [
+        {
+          "stepId": "transfer-population",
+          "kind": "rule",
+          "actionId": "society.transfer-population",
+          "spatialActionId": null,
+          "facts": [
+            "objects.get"
+          ],
+          "inspection": {
+            "methods": [
+              "edit.population.inspectTransfer"
+            ],
+            "policy": "使用当前事实输入调用精确公开方法；若只有 info.describe，则按公开方法契约完成结构预检。"
+          },
+          "executeMethods": [
+            "edit.population.transfer"
+          ],
+          "inputTemplate": {
+            "from": "$sourceRef",
+            "to": "$targetRef",
+            "amount": "$populationAmount"
+          },
+          "preconditions": [
+            "读取当前事实并确认目标仍存在。",
+            "使用当前 map revision 生成步骤输入。"
+          ],
+          "authorization": {
+            "mode": "per-method-policy",
+            "policy": "逐个读取 info.describe；requiresConfirm 为 true 时必须在该步骤暂停并取得显式授权。"
+          },
+          "successCriteria": [
+            "迁出与迁入人口均非负，城乡分量与总人口守恒。",
+            "通过 objects.get 重读并验证上述领域结果。"
+          ],
+          "failurePolicy": {
+            "rejected": "停止并按稳定 business code 重规划。",
+            "stale": "丢弃旧输入，刷新事实后重新预检。",
+            "partial": "不把已提交步骤伪装成整体回滚。"
+          },
+          "compensation": {
+            "mode": "history-undo",
+            "method": "history.undo",
+            "guard": "仅当执行 ledger 的 stepId 精确等于 transfer-population、当前 revision 精确等于 ledger.afterRevision、该步骤仍是最新一条历史、地图 identity 未变化且用户明确授权撤销时调用。"
+          },
+          "revisionCheckpoints": [
+            "before-facts",
+            "after-inspection",
+            "before-execution",
+            "after-each-commit"
+          ]
+        },
+        {
+          "stepId": "found-city",
+          "kind": "rule",
+          "actionId": "settlement.found-city",
+          "spatialActionId": null,
+          "facts": [
+            "cells.get",
+            "objects.list"
+          ],
+          "inspection": {
+            "methods": [
+              "edit.cities.inspectCreateAtCell"
+            ],
+            "policy": "使用当前事实输入调用精确公开方法；若只有 info.describe，则按公开方法契约完成结构预检。"
+          },
+          "executeMethods": [
+            "edit.cities.createAtCell"
+          ],
+          "inputTemplate": {
+            "cell": "$gridCellRef",
+            "stateId": "$stateId",
+            "provinceId": "$provinceId"
+          },
+          "preconditions": [
+            "读取当前事实并确认目标仍存在。",
+            "使用当前 map revision 生成步骤输入。"
+          ],
+          "authorization": {
+            "mode": "per-method-policy",
+            "policy": "逐个读取 info.describe；requiresConfirm 为 true 时必须在该步骤暂停并取得显式授权。"
+          },
+          "successCriteria": [
+            "新城市可按稳定引用读取，所属国家、省份和 Cell 与请求一致。",
+            "通过 cells.get 重读并验证上述领域结果。"
+          ],
+          "failurePolicy": {
+            "rejected": "停止并按稳定 business code 重规划。",
+            "stale": "丢弃旧输入，刷新事实后重新预检。",
+            "partial": "不把已提交步骤伪装成整体回滚。"
+          },
+          "compensation": {
+            "mode": "history-undo",
+            "method": "history.undo",
+            "guard": "仅当执行 ledger 的 stepId 精确等于 found-city、当前 revision 精确等于 ledger.afterRevision、该步骤仍是最新一条历史、地图 identity 未变化且用户明确授权撤销时调用。"
+          },
+          "revisionCheckpoints": [
+            "before-facts",
+            "after-inspection",
+            "before-execution",
+            "after-each-commit"
+          ]
+        },
+        {
+          "stepId": "move-city",
+          "kind": "rule",
+          "actionId": "settlement.move-city",
+          "spatialActionId": null,
+          "facts": [
+            "objects.get",
+            "cells.get"
+          ],
+          "inspection": {
+            "methods": [
+              "edit.cities.inspectMove"
+            ],
+            "policy": "使用当前事实输入调用精确公开方法；若只有 info.describe，则按公开方法契约完成结构预检。"
+          },
+          "executeMethods": [
+            "edit.cities.move"
+          ],
+          "inputTemplate": {
+            "cityId": "$cityId",
+            "cell": "$targetCellRef"
+          },
+          "preconditions": [
+            "读取当前事实并确认目标仍存在。",
+            "使用当前 map revision 生成步骤输入。"
+          ],
+          "authorization": {
+            "mode": "per-method-policy",
+            "policy": "逐个读取 info.describe；requiresConfirm 为 true 时必须在该步骤暂停并取得显式授权。"
+          },
+          "successCriteria": [
+            "城市目标 Cell、坐标、国家、省份、港口与路线引用保持一致。",
+            "通过 objects.get 重读并验证上述领域结果。"
+          ],
+          "failurePolicy": {
+            "rejected": "停止并按稳定 business code 重规划。",
+            "stale": "丢弃旧输入，刷新事实后重新预检。",
+            "partial": "不把已提交步骤伪装成整体回滚。"
+          },
+          "compensation": {
+            "mode": "history-undo",
+            "method": "history.undo",
+            "guard": "仅当执行 ledger 的 stepId 精确等于 move-city、当前 revision 精确等于 ledger.afterRevision、该步骤仍是最新一条历史、地图 identity 未变化且用户明确授权撤销时调用。"
+          },
+          "revisionCheckpoints": [
+            "before-facts",
+            "after-inspection",
+            "before-execution",
+            "after-each-commit"
+          ]
+        },
+        {
+          "stepId": "assign-market-region",
+          "kind": "rule",
+          "actionId": "economy.assign-market-region",
+          "spatialActionId": null,
+          "facts": [
+            "objects.get",
+            "cells.query"
+          ],
+          "inspection": {
+            "methods": [
+              "edit.economy.inspectAssignment"
+            ],
+            "policy": "使用当前事实输入调用精确公开方法；若只有 info.describe，则按公开方法契约完成结构预检。"
+          },
+          "executeMethods": [
+            "edit.economy.assignCells"
+          ],
+          "inputTemplate": {
+            "marketId": "$marketId",
+            "cells": "$packCellRefs"
+          },
+          "preconditions": [
+            "读取当前事实并确认目标仍存在。",
+            "使用当前 map revision 生成步骤输入。"
+          ],
+          "authorization": {
+            "mode": "per-method-policy",
+            "policy": "逐个读取 info.describe；requiresConfirm 为 true 时必须在该步骤暂停并取得显式授权。"
+          },
+          "successCriteria": [
+            "目标 Cell 全部归入指定市场，市场覆盖与经济摘要一致。",
+            "通过 objects.get 重读并验证上述领域结果。"
+          ],
+          "failurePolicy": {
+            "rejected": "停止并按稳定 business code 重规划。",
+            "stale": "丢弃旧输入，刷新事实后重新预检。",
+            "partial": "不把已提交步骤伪装成整体回滚。"
+          },
+          "compensation": {
+            "mode": "history-undo",
+            "method": "history.undo",
+            "guard": "仅当执行 ledger 的 stepId 精确等于 assign-market-region、当前 revision 精确等于 ledger.afterRevision、该步骤仍是最新一条历史、地图 identity 未变化且用户明确授权撤销时调用。"
+          },
+          "revisionCheckpoints": [
+            "before-facts",
+            "after-inspection",
+            "before-execution",
+            "after-each-commit"
+          ]
+        },
+        {
+          "stepId": "create-route",
+          "kind": "rule",
+          "actionId": "infrastructure.create-route",
+          "spatialActionId": "routes.createPath",
+          "facts": [
+            "cells.get",
+            "cells.neighbors"
+          ],
+          "inspection": {
+            "methods": [
+              "cells.inspectAction"
+            ],
+            "policy": "使用当前事实输入调用精确公开方法；若只有 info.describe，则按公开方法契约完成结构预检。"
+          },
+          "executeMethods": [
+            "edit.routes.create"
+          ],
+          "inputTemplate": {
+            "actionId": "routes.createPath",
+            "actionInput": {
+              "path": "$packCellPath"
+            }
+          },
+          "preconditions": [
+            "读取当前事实并确认目标仍存在。",
+            "使用当前 map revision 生成步骤输入。"
+          ],
+          "authorization": {
+            "mode": "per-method-policy",
+            "policy": "逐个读取 info.describe；requiresConfirm 为 true 时必须在该步骤暂停并取得显式授权。"
+          },
+          "successCriteria": [
+            "新路线存在并连接预期端点，路径 Cell 连续且没有悬空引用。",
+            "通过 cells.get 重读并验证上述领域结果。"
+          ],
+          "failurePolicy": {
+            "rejected": "停止并按稳定 business code 重规划。",
+            "stale": "丢弃旧输入，刷新事实后重新预检。",
+            "partial": "不把已提交步骤伪装成整体回滚。"
+          },
+          "compensation": {
+            "mode": "history-undo",
+            "method": "history.undo",
+            "guard": "仅当执行 ledger 的 stepId 精确等于 create-route、当前 revision 精确等于 ledger.afterRevision、该步骤仍是最新一条历史、地图 identity 未变化且用户明确授权撤销时调用。"
+          },
+          "revisionCheckpoints": [
+            "before-facts",
+            "after-inspection",
+            "before-execution",
+            "after-each-commit"
+          ]
+        }
+      ],
       "gameplayChapter": "城镇、人口与定居点",
       "invariant": "城镇位置、国家/省份归属、首都/省会、港口、路线和人口统计必须同步。",
       "historyPolicy": "每个规则动作独立进入历史；配方本身不伪造跨步骤原子性。",
@@ -2409,12 +3503,13 @@
       "tier": "planner-recipe",
       "variants": [],
       "api": [],
-      "inspect": "逐步骤 inspector",
-      "execute": "AI planner orchestration",
+      "inspect": "planner.getRecipe + step.inspection.methods",
+      "execute": "按 step.executeMethods 逐步调用公开 API",
       "branches": [
-        "每一步单独预检",
-        "需要写入授权时暂停",
-        "失败后按玩法策略重规划，不把已提交步骤伪装成整体回滚"
+        "逐步骤读取事实与 revision",
+        "每一步单独预检并按方法策略等待授权",
+        "拒绝或陈旧时停止并重规划",
+        "已提交步骤不伪装成跨步骤原子回滚"
       ],
       "steps": [
         "society.culture.lifecycle",
@@ -2422,13 +3517,183 @@
         "society.bind-namebase-and-rename"
       ],
       "sourceRefs": [
-        "docs/task-notes/compound-semantic-api-and-gameplay-rules.md"
+        "app/webgl-generator/src/runtime/planner-recipe-registry.js",
+        "docs/task-notes/compound-semantic-api-and-gameplay-rules.md",
+        "docs/task-notes/gameplay-rules-and-ai-planner-recipes.md"
       ],
-      "status": "recipe-only",
+      "status": "executable-recipe",
       "id": "scenario.cultural-assimilation",
       "title": "文化或宗教传播与同化",
       "domain": "society",
       "intent": "调整中心和继承关系，扩张归属并按新名称体系重命名对象。",
+      "stepContracts": [
+        {
+          "stepId": "culture-lifecycle",
+          "kind": "rule",
+          "actionId": "society.culture.lifecycle",
+          "spatialActionId": null,
+          "facts": [
+            "objects.get",
+            "cells.query"
+          ],
+          "inspection": {
+            "methods": [
+              "edit.cultures.inspectLifecycle",
+              "edit.cultures.inspectExpansion"
+            ],
+            "policy": "使用当前事实输入调用精确公开方法；若只有 info.describe，则按公开方法契约完成结构预检。"
+          },
+          "executeMethods": [
+            "edit.cultures.add",
+            "edit.cultures.assignCells",
+            "edit.cultures.applyExpansion",
+            "edit.cultures.setParent",
+            "edit.cultures.delete"
+          ],
+          "inputTemplate": {
+            "operation": "$cultureOperation",
+            "culture": "$cultureRef",
+            "options": "$operationOptions"
+          },
+          "preconditions": [
+            "读取当前事实并确认目标仍存在。",
+            "使用当前 map revision 生成步骤输入。"
+          ],
+          "authorization": {
+            "mode": "per-method-policy",
+            "policy": "逐个读取 info.describe；requiresConfirm 为 true 时必须在该步骤暂停并取得显式授权。"
+          },
+          "successCriteria": [
+            "文化中心、父级和 Cell 归属有效，不形成父级循环或无主引用。",
+            "通过 objects.get 重读并验证上述领域结果。"
+          ],
+          "failurePolicy": {
+            "rejected": "停止并按稳定 business code 重规划。",
+            "stale": "丢弃旧输入，刷新事实后重新预检。",
+            "partial": "不把已提交步骤伪装成整体回滚。"
+          },
+          "compensation": {
+            "mode": "history-undo",
+            "method": "history.undo",
+            "guard": "仅当执行 ledger 的 stepId 精确等于 culture-lifecycle、当前 revision 精确等于 ledger.afterRevision、该步骤仍是最新一条历史、地图 identity 未变化且用户明确授权撤销时调用。"
+          },
+          "revisionCheckpoints": [
+            "before-facts",
+            "after-inspection",
+            "before-execution",
+            "after-each-commit"
+          ]
+        },
+        {
+          "stepId": "religion-lifecycle",
+          "kind": "rule",
+          "actionId": "society.religion.lifecycle",
+          "spatialActionId": null,
+          "facts": [
+            "objects.get",
+            "cells.query"
+          ],
+          "inspection": {
+            "methods": [
+              "edit.religions.inspectLifecycle",
+              "edit.religions.inspectExpansion"
+            ],
+            "policy": "使用当前事实输入调用精确公开方法；若只有 info.describe，则按公开方法契约完成结构预检。"
+          },
+          "executeMethods": [
+            "edit.religions.add",
+            "edit.religions.assignCells",
+            "edit.religions.applyExpansion",
+            "edit.religions.setParent",
+            "edit.religions.delete"
+          ],
+          "inputTemplate": {
+            "operation": "$religionOperation",
+            "religion": "$religionRef",
+            "options": "$operationOptions"
+          },
+          "preconditions": [
+            "读取当前事实并确认目标仍存在。",
+            "使用当前 map revision 生成步骤输入。"
+          ],
+          "authorization": {
+            "mode": "per-method-policy",
+            "policy": "逐个读取 info.describe；requiresConfirm 为 true 时必须在该步骤暂停并取得显式授权。"
+          },
+          "successCriteria": [
+            "宗教中心、父级和 Cell 归属有效，不形成父级循环或无主引用。",
+            "通过 objects.get 重读并验证上述领域结果。"
+          ],
+          "failurePolicy": {
+            "rejected": "停止并按稳定 business code 重规划。",
+            "stale": "丢弃旧输入，刷新事实后重新预检。",
+            "partial": "不把已提交步骤伪装成整体回滚。"
+          },
+          "compensation": {
+            "mode": "history-undo",
+            "method": "history.undo",
+            "guard": "仅当执行 ledger 的 stepId 精确等于 religion-lifecycle、当前 revision 精确等于 ledger.afterRevision、该步骤仍是最新一条历史、地图 identity 未变化且用户明确授权撤销时调用。"
+          },
+          "revisionCheckpoints": [
+            "before-facts",
+            "after-inspection",
+            "before-execution",
+            "after-each-commit"
+          ]
+        },
+        {
+          "stepId": "bind-namebase-and-rename",
+          "kind": "rule",
+          "actionId": "society.bind-namebase-and-rename",
+          "spatialActionId": null,
+          "facts": [
+            "namebases.list",
+            "objects.list"
+          ],
+          "inspection": {
+            "methods": [
+              "namebases.inspectBindAndRename"
+            ],
+            "policy": "使用当前事实输入调用精确公开方法；若只有 info.describe，则按公开方法契约完成结构预检。"
+          },
+          "executeMethods": [
+            "namebases.bindAndRename"
+          ],
+          "inputTemplate": {
+            "binding": "$binding",
+            "namebaseId": "$namebaseId",
+            "rename": "$renameOptions"
+          },
+          "preconditions": [
+            "读取当前事实并确认目标仍存在。",
+            "使用当前 map revision 生成步骤输入。"
+          ],
+          "authorization": {
+            "mode": "per-method-policy",
+            "policy": "逐个读取 info.describe；requiresConfirm 为 true 时必须在该步骤暂停并取得显式授权。"
+          },
+          "successCriteria": [
+            "名称库绑定与目标范围名称同时更新，不存在已删除或旧名称库残留引用。",
+            "通过 namebases.list 重读并验证上述领域结果。"
+          ],
+          "failurePolicy": {
+            "rejected": "停止并按稳定 business code 重规划。",
+            "stale": "丢弃旧输入，刷新事实后重新预检。",
+            "partial": "不把已提交步骤伪装成整体回滚。"
+          },
+          "compensation": {
+            "mode": "history-undo",
+            "method": "history.undo",
+            "guard": "仅当执行 ledger 的 stepId 精确等于 bind-namebase-and-rename、当前 revision 精确等于 ledger.afterRevision、该步骤仍是最新一条历史、地图 identity 未变化且用户明确授权撤销时调用。"
+          },
+          "revisionCheckpoints": [
+            "before-facts",
+            "after-inspection",
+            "before-execution",
+            "after-each-commit"
+          ]
+        }
+      ],
       "gameplayChapter": "文化、宗教、命名与社会归属",
       "invariant": "文化/宗教中心、继承关系、Cell 归属、对象引用和名称库绑定不得形成无主或循环数据。",
       "historyPolicy": "每个规则动作独立进入历史；配方本身不伪造跨步骤原子性。",
@@ -2438,12 +3703,13 @@
       "tier": "planner-recipe",
       "variants": [],
       "api": [],
-      "inspect": "逐步骤 inspector",
-      "execute": "AI planner orchestration",
+      "inspect": "planner.getRecipe + step.inspection.methods",
+      "execute": "按 step.executeMethods 逐步调用公开 API",
       "branches": [
-        "每一步单独预检",
-        "需要写入授权时暂停",
-        "失败后按玩法策略重规划，不把已提交步骤伪装成整体回滚"
+        "逐步骤读取事实与 revision",
+        "每一步单独预检并按方法策略等待授权",
+        "拒绝或陈旧时停止并重规划",
+        "已提交步骤不伪装成跨步骤原子回滚"
       ],
       "steps": [
         "infrastructure.create-route",
@@ -2452,13 +3718,228 @@
         "economy.rebuild"
       ],
       "sourceRefs": [
-        "docs/task-notes/compound-semantic-api-and-gameplay-rules.md"
+        "app/webgl-generator/src/runtime/planner-recipe-registry.js",
+        "docs/task-notes/compound-semantic-api-and-gameplay-rules.md",
+        "docs/task-notes/gameplay-rules-and-ai-planner-recipes.md"
       ],
-      "status": "recipe-only",
+      "status": "executable-recipe",
       "id": "scenario.infrastructure-development",
       "title": "区域基础设施与经济开发",
       "domain": "economy",
       "intent": "规划路线、调整市场覆盖、生成资源并重建经济。",
+      "stepContracts": [
+        {
+          "stepId": "create-route",
+          "kind": "rule",
+          "actionId": "infrastructure.create-route",
+          "spatialActionId": "routes.createPath",
+          "facts": [
+            "cells.get",
+            "cells.neighbors"
+          ],
+          "inspection": {
+            "methods": [
+              "cells.inspectAction"
+            ],
+            "policy": "使用当前事实输入调用精确公开方法；若只有 info.describe，则按公开方法契约完成结构预检。"
+          },
+          "executeMethods": [
+            "edit.routes.create"
+          ],
+          "inputTemplate": {
+            "actionId": "routes.createPath",
+            "actionInput": {
+              "path": "$packCellPath"
+            }
+          },
+          "preconditions": [
+            "读取当前事实并确认目标仍存在。",
+            "使用当前 map revision 生成步骤输入。"
+          ],
+          "authorization": {
+            "mode": "per-method-policy",
+            "policy": "逐个读取 info.describe；requiresConfirm 为 true 时必须在该步骤暂停并取得显式授权。"
+          },
+          "successCriteria": [
+            "新路线存在并连接预期端点，路径 Cell 连续且没有悬空引用。",
+            "通过 cells.get 重读并验证上述领域结果。"
+          ],
+          "failurePolicy": {
+            "rejected": "停止并按稳定 business code 重规划。",
+            "stale": "丢弃旧输入，刷新事实后重新预检。",
+            "partial": "不把已提交步骤伪装成整体回滚。"
+          },
+          "compensation": {
+            "mode": "history-undo",
+            "method": "history.undo",
+            "guard": "仅当执行 ledger 的 stepId 精确等于 create-route、当前 revision 精确等于 ledger.afterRevision、该步骤仍是最新一条历史、地图 identity 未变化且用户明确授权撤销时调用。"
+          },
+          "revisionCheckpoints": [
+            "before-facts",
+            "after-inspection",
+            "before-execution",
+            "after-each-commit"
+          ]
+        },
+        {
+          "stepId": "assign-market-region",
+          "kind": "rule",
+          "actionId": "economy.assign-market-region",
+          "spatialActionId": null,
+          "facts": [
+            "objects.get",
+            "cells.query"
+          ],
+          "inspection": {
+            "methods": [
+              "edit.economy.inspectAssignment"
+            ],
+            "policy": "使用当前事实输入调用精确公开方法；若只有 info.describe，则按公开方法契约完成结构预检。"
+          },
+          "executeMethods": [
+            "edit.economy.assignCells"
+          ],
+          "inputTemplate": {
+            "marketId": "$marketId",
+            "cells": "$packCellRefs"
+          },
+          "preconditions": [
+            "读取当前事实并确认目标仍存在。",
+            "使用当前 map revision 生成步骤输入。"
+          ],
+          "authorization": {
+            "mode": "per-method-policy",
+            "policy": "逐个读取 info.describe；requiresConfirm 为 true 时必须在该步骤暂停并取得显式授权。"
+          },
+          "successCriteria": [
+            "目标 Cell 全部归入指定市场，市场覆盖与经济摘要一致。",
+            "通过 objects.get 重读并验证上述领域结果。"
+          ],
+          "failurePolicy": {
+            "rejected": "停止并按稳定 business code 重规划。",
+            "stale": "丢弃旧输入，刷新事实后重新预检。",
+            "partial": "不把已提交步骤伪装成整体回滚。"
+          },
+          "compensation": {
+            "mode": "history-undo",
+            "method": "history.undo",
+            "guard": "仅当执行 ledger 的 stepId 精确等于 assign-market-region、当前 revision 精确等于 ledger.afterRevision、该步骤仍是最新一条历史、地图 identity 未变化且用户明确授权撤销时调用。"
+          },
+          "revisionCheckpoints": [
+            "before-facts",
+            "after-inspection",
+            "before-execution",
+            "after-each-commit"
+          ]
+        },
+        {
+          "stepId": "regenerate-resources",
+          "kind": "rule",
+          "actionId": "infrastructure.regenerate-resources",
+          "spatialActionId": null,
+          "facts": [
+            "info.mapSummary",
+            "objects.list"
+          ],
+          "inspection": {
+            "methods": [
+              "info.describe"
+            ],
+            "policy": "使用当前事实输入调用精确公开方法；若只有 info.describe，则按公开方法契约完成结构预检。"
+          },
+          "executeMethods": [
+            "generate.regenerate"
+          ],
+          "inputTemplate": {
+            "method": "generate.regenerate",
+            "kind": "markers",
+            "options": {
+              "confirm": true
+            }
+          },
+          "preconditions": [
+            "读取当前事实并确认目标仍存在。",
+            "使用当前 map revision 生成步骤输入。"
+          ],
+          "authorization": {
+            "mode": "per-method-policy",
+            "policy": "逐个读取 info.describe；requiresConfirm 为 true 时必须在该步骤暂停并取得显式授权。"
+          },
+          "successCriteria": [
+            "资源标记完成重生成，锁定资源保持不变且所有对象引用有效。",
+            "通过 info.mapSummary 重读并验证上述领域结果。"
+          ],
+          "failurePolicy": {
+            "rejected": "停止并按稳定 business code 重规划。",
+            "stale": "丢弃旧输入，刷新事实后重新预检。",
+            "partial": "不把已提交步骤伪装成整体回滚。"
+          },
+          "compensation": {
+            "mode": "history-undo",
+            "method": "history.undo",
+            "guard": "仅当执行 ledger 的 stepId 精确等于 regenerate-resources、当前 revision 精确等于 ledger.afterRevision、该步骤仍是最新一条历史、地图 identity 未变化且用户明确授权撤销时调用。"
+          },
+          "revisionCheckpoints": [
+            "before-facts",
+            "after-inspection",
+            "before-execution",
+            "after-each-commit"
+          ]
+        },
+        {
+          "stepId": "rebuild-economy",
+          "kind": "rule",
+          "actionId": "economy.rebuild",
+          "spatialActionId": null,
+          "facts": [
+            "info.mapSummary",
+            "objects.list"
+          ],
+          "inspection": {
+            "methods": [
+              "info.describe"
+            ],
+            "policy": "使用当前事实输入调用精确公开方法；若只有 info.describe，则按公开方法契约完成结构预检。"
+          },
+          "executeMethods": [
+            "edit.economy.rebuild"
+          ],
+          "inputTemplate": {
+            "method": "edit.economy.rebuild",
+            "options": {
+              "confirm": true
+            }
+          },
+          "preconditions": [
+            "读取当前事实并确认目标仍存在。",
+            "使用当前 map revision 生成步骤输入。"
+          ],
+          "authorization": {
+            "mode": "per-method-policy",
+            "policy": "逐个读取 info.describe；requiresConfirm 为 true 时必须在该步骤暂停并取得显式授权。"
+          },
+          "successCriteria": [
+            "市场、资源、路线和城市对应的经济摘要来自同一最新地图状态。",
+            "通过 info.mapSummary 重读并验证上述领域结果。"
+          ],
+          "failurePolicy": {
+            "rejected": "停止并按稳定 business code 重规划。",
+            "stale": "丢弃旧输入，刷新事实后重新预检。",
+            "partial": "不把已提交步骤伪装成整体回滚。"
+          },
+          "compensation": {
+            "mode": "history-undo",
+            "method": "history.undo",
+            "guard": "仅当执行 ledger 的 stepId 精确等于 rebuild-economy、当前 revision 精确等于 ledger.afterRevision、该步骤仍是最新一条历史、地图 identity 未变化且用户明确授权撤销时调用。"
+          },
+          "revisionCheckpoints": [
+            "before-facts",
+            "after-inspection",
+            "before-execution",
+            "after-each-commit"
+          ]
+        }
+      ],
       "gameplayChapter": "市场、资源与经济链",
       "invariant": "市场归属、资源供给、贸易关系和统计摘要必须基于同一批已提交地图状态。",
       "historyPolicy": "每个规则动作独立进入历史；配方本身不伪造跨步骤原子性。",
@@ -2468,12 +3949,13 @@
       "tier": "planner-recipe",
       "variants": [],
       "api": [],
-      "inspect": "逐步骤 inspector",
-      "execute": "AI planner orchestration",
+      "inspect": "planner.getRecipe + step.inspection.methods",
+      "execute": "按 step.executeMethods 逐步调用公开 API",
       "branches": [
-        "每一步单独预检",
-        "需要写入授权时暂停",
-        "失败后按玩法策略重规划，不把已提交步骤伪装成整体回滚"
+        "逐步骤读取事实与 revision",
+        "每一步单独预检并按方法策略等待授权",
+        "拒绝或陈旧时停止并重规划",
+        "已提交步骤不伪装成跨步骤原子回滚"
       ],
       "steps": [
         "terrain.patch-feature",
@@ -2482,13 +3964,223 @@
         "world.regenerate-system"
       ],
       "sourceRefs": [
-        "docs/task-notes/compound-semantic-api-and-gameplay-rules.md"
+        "app/webgl-generator/src/runtime/planner-recipe-registry.js",
+        "docs/task-notes/compound-semantic-api-and-gameplay-rules.md",
+        "docs/task-notes/gameplay-rules-and-ai-planner-recipes.md"
       ],
-      "status": "recipe-only",
+      "status": "executable-recipe",
       "id": "scenario.coastline-engineering",
       "title": "海岸、海峡与湖海工程",
       "domain": "terrain",
       "intent": "改变局部水陆和连通性，保护沿岸对象并重建水文与路线。",
+      "stepContracts": [
+        {
+          "stepId": "patch-feature",
+          "kind": "rule",
+          "actionId": "terrain.patch-feature",
+          "spatialActionId": null,
+          "facts": [
+            "objects.get",
+            "cells.get"
+          ],
+          "inspection": {
+            "methods": [
+              "edit.features.inspectPatch"
+            ],
+            "policy": "使用当前事实输入调用精确公开方法；若只有 info.describe，则按公开方法契约完成结构预检。"
+          },
+          "executeMethods": [
+            "edit.features.applyPatch"
+          ],
+          "inputTemplate": {
+            "featureId": "$featureId",
+            "patch": "$featurePatch"
+          },
+          "preconditions": [
+            "读取当前事实并确认目标仍存在。",
+            "使用当前 map revision 生成步骤输入。"
+          ],
+          "authorization": {
+            "mode": "per-method-policy",
+            "policy": "逐个读取 info.describe；requiresConfirm 为 true 时必须在该步骤暂停并取得显式授权。"
+          },
+          "successCriteria": [
+            "Feature 补丁生效且受保护的城镇、路线、河口与水陆引用仍可解析。",
+            "通过 objects.get 重读并验证上述领域结果。"
+          ],
+          "failurePolicy": {
+            "rejected": "停止并按稳定 business code 重规划。",
+            "stale": "丢弃旧输入，刷新事实后重新预检。",
+            "partial": "不把已提交步骤伪装成整体回滚。"
+          },
+          "compensation": {
+            "mode": "history-undo",
+            "method": "history.undo",
+            "guard": "仅当执行 ledger 的 stepId 精确等于 patch-feature、当前 revision 精确等于 ledger.afterRevision、该步骤仍是最新一条历史、地图 identity 未变化且用户明确授权撤销时调用。"
+          },
+          "revisionCheckpoints": [
+            "before-facts",
+            "after-inspection",
+            "before-execution",
+            "after-each-commit"
+          ]
+        },
+        {
+          "stepId": "change-feature-topology",
+          "kind": "rule",
+          "actionId": "terrain.change-feature-topology",
+          "spatialActionId": null,
+          "facts": [
+            "objects.get",
+            "cells.query"
+          ],
+          "inspection": {
+            "methods": [
+              "edit.features.inspectTopology"
+            ],
+            "policy": "使用当前事实输入调用精确公开方法；若只有 info.describe，则按公开方法契约完成结构预检。"
+          },
+          "executeMethods": [
+            "edit.features.applyTopology"
+          ],
+          "inputTemplate": {
+            "operation": "$topologyOperation",
+            "cells": "$gridCellRefs"
+          },
+          "preconditions": [
+            "读取当前事实并确认目标仍存在。",
+            "使用当前 map revision 生成步骤输入。"
+          ],
+          "authorization": {
+            "mode": "per-method-policy",
+            "policy": "逐个读取 info.describe；requiresConfirm 为 true 时必须在该步骤暂停并取得显式授权。"
+          },
+          "successCriteria": [
+            "水陆连通性、Feature 身份及相关城镇、路线和河口引用保持一致。",
+            "通过 objects.get 重读并验证上述领域结果。"
+          ],
+          "failurePolicy": {
+            "rejected": "停止并按稳定 business code 重规划。",
+            "stale": "丢弃旧输入，刷新事实后重新预检。",
+            "partial": "不把已提交步骤伪装成整体回滚。"
+          },
+          "compensation": {
+            "mode": "history-undo",
+            "method": "history.undo",
+            "guard": "仅当执行 ledger 的 stepId 精确等于 change-feature-topology、当前 revision 精确等于 ledger.afterRevision、该步骤仍是最新一条历史、地图 identity 未变化且用户明确授权撤销时调用。"
+          },
+          "revisionCheckpoints": [
+            "before-facts",
+            "after-inspection",
+            "before-execution",
+            "after-each-commit"
+          ]
+        },
+        {
+          "stepId": "change-lake-outlet",
+          "kind": "rule",
+          "actionId": "hydrology.change-lake-outlet",
+          "spatialActionId": null,
+          "facts": [
+            "objects.get",
+            "cells.get"
+          ],
+          "inspection": {
+            "methods": [
+              "edit.lakes.inspectOutlet"
+            ],
+            "policy": "使用当前事实输入调用精确公开方法；若只有 info.describe，则按公开方法契约完成结构预检。"
+          },
+          "executeMethods": [
+            "edit.lakes.setOutlet"
+          ],
+          "inputTemplate": {
+            "lakeId": "$lakeId",
+            "outlet": "$outletCellRef"
+          },
+          "preconditions": [
+            "读取当前事实并确认目标仍存在。",
+            "使用当前 map revision 生成步骤输入。"
+          ],
+          "authorization": {
+            "mode": "per-method-policy",
+            "policy": "逐个读取 info.describe；requiresConfirm 为 true 时必须在该步骤暂停并取得显式授权。"
+          },
+          "successCriteria": [
+            "湖泊出口、下游河流与相关水文引用一致且没有无效 Cell。",
+            "通过 objects.get 重读并验证上述领域结果。"
+          ],
+          "failurePolicy": {
+            "rejected": "停止并按稳定 business code 重规划。",
+            "stale": "丢弃旧输入，刷新事实后重新预检。",
+            "partial": "不把已提交步骤伪装成整体回滚。"
+          },
+          "compensation": {
+            "mode": "history-undo",
+            "method": "history.undo",
+            "guard": "仅当执行 ledger 的 stepId 精确等于 change-lake-outlet、当前 revision 精确等于 ledger.afterRevision、该步骤仍是最新一条历史、地图 identity 未变化且用户明确授权撤销时调用。"
+          },
+          "revisionCheckpoints": [
+            "before-facts",
+            "after-inspection",
+            "before-execution",
+            "after-each-commit"
+          ]
+        },
+        {
+          "stepId": "regenerate-system",
+          "kind": "rule",
+          "actionId": "world.regenerate-system",
+          "spatialActionId": null,
+          "facts": [
+            "info.mapSummary"
+          ],
+          "inspection": {
+            "methods": [
+              "info.describe"
+            ],
+            "policy": "使用当前事实输入调用精确公开方法；若只有 info.describe，则按公开方法契约完成结构预检。"
+          },
+          "executeMethods": [
+            "generate.regenerate"
+          ],
+          "inputTemplate": {
+            "method": "generate.regenerate",
+            "kind": "$derivedSystem",
+            "options": {
+              "confirm": true
+            }
+          },
+          "preconditions": [
+            "读取当前事实并确认目标仍存在。",
+            "使用当前 map revision 生成步骤输入。"
+          ],
+          "authorization": {
+            "mode": "per-method-policy",
+            "policy": "逐个读取 info.describe；requiresConfirm 为 true 时必须在该步骤暂停并取得显式授权。"
+          },
+          "successCriteria": [
+            "指定派生系统基于当前 revision 完成重建，范围外与锁定对象保持不变。",
+            "通过 info.mapSummary 重读并验证上述领域结果。"
+          ],
+          "failurePolicy": {
+            "rejected": "停止并按稳定 business code 重规划。",
+            "stale": "丢弃旧输入，刷新事实后重新预检。",
+            "partial": "不把已提交步骤伪装成整体回滚。"
+          },
+          "compensation": {
+            "mode": "history-undo",
+            "method": "history.undo",
+            "guard": "仅当执行 ledger 的 stepId 精确等于 regenerate-system、当前 revision 精确等于 ledger.afterRevision、该步骤仍是最新一条历史、地图 identity 未变化且用户明确授权撤销时调用。"
+          },
+          "revisionCheckpoints": [
+            "before-facts",
+            "after-inspection",
+            "before-execution",
+            "after-each-commit"
+          ]
+        }
+      ],
       "gameplayChapter": "地形、水文与 Feature",
       "invariant": "Grid/Pack、高度、水陆 Feature、河湖、海岸和下游派生必须在事务结束时一致。",
       "historyPolicy": "每个规则动作独立进入历史；配方本身不伪造跨步骤原子性。",
@@ -2498,12 +4190,13 @@
       "tier": "planner-recipe",
       "variants": [],
       "api": [],
-      "inspect": "逐步骤 inspector",
-      "execute": "AI planner orchestration",
+      "inspect": "planner.getRecipe + step.inspection.methods",
+      "execute": "按 step.executeMethods 逐步调用公开 API",
       "branches": [
-        "每一步单独预检",
-        "需要写入授权时暂停",
-        "失败后按玩法策略重规划，不把已提交步骤伪装成整体回滚"
+        "逐步骤读取事实与 revision",
+        "每一步单独预检并按方法策略等待授权",
+        "拒绝或陈旧时停止并重规划",
+        "已提交步骤不伪装成跨步骤原子回滚"
       ],
       "steps": [
         "world.apply-climate-and-rebuild",
@@ -2512,13 +4205,230 @@
         "world.regenerate-system"
       ],
       "sourceRefs": [
-        "docs/task-notes/compound-semantic-api-and-gameplay-rules.md"
+        "app/webgl-generator/src/runtime/planner-recipe-registry.js",
+        "docs/task-notes/compound-semantic-api-and-gameplay-rules.md",
+        "docs/task-notes/gameplay-rules-and-ai-planner-recipes.md"
       ],
-      "status": "recipe-only",
+      "status": "executable-recipe",
       "id": "scenario.climate-disaster",
       "title": "气候灾变及世界响应",
       "domain": "ecology",
       "intent": "改变气候或洋流，重建生态、人口和社会系统并记录前后结果。",
+      "stepContracts": [
+        {
+          "stepId": "apply-climate-and-rebuild",
+          "kind": "rule",
+          "actionId": "world.apply-climate-and-rebuild",
+          "spatialActionId": null,
+          "facts": [
+            "climate.get",
+            "info.mapSummary"
+          ],
+          "inspection": {
+            "methods": [
+              "info.describe",
+              "climate.inspectDownstreamRebuild"
+            ],
+            "policy": "使用当前事实输入调用精确公开方法；若只有 info.describe，则按公开方法契约完成结构预检。"
+          },
+          "executeMethods": [
+            "climate.apply",
+            "climate.applyDownstreamRebuild"
+          ],
+          "inputTemplate": {
+            "method": "climate.apply",
+            "patch": "$climatePatch",
+            "rebuild": {
+              "systems": "$systems",
+              "seed": "$seed",
+              "confirm": true
+            }
+          },
+          "preconditions": [
+            "读取当前事实并确认目标仍存在。",
+            "使用当前 map revision 生成步骤输入。"
+          ],
+          "authorization": {
+            "mode": "per-method-policy",
+            "policy": "逐个读取 info.describe；requiresConfirm 为 true 时必须在该步骤暂停并取得显式授权。"
+          },
+          "successCriteria": [
+            "气候直接值与选定下游系统一致，生态与人口派生均来自灾变后的事实。",
+            "通过 climate.get 重读并验证上述领域结果。"
+          ],
+          "failurePolicy": {
+            "rejected": "停止并按稳定 business code 重规划。",
+            "stale": "丢弃旧输入，刷新事实后重新预检。",
+            "partial": "不把已提交步骤伪装成整体回滚。"
+          },
+          "compensation": {
+            "mode": "none",
+            "method": null,
+            "guard": "气候参数写入不进入地图历史；若下游重算失败，保留已提交气候并要求显式重规划。"
+          },
+          "revisionCheckpoints": [
+            "before-facts",
+            "after-inspection",
+            "before-execution",
+            "after-each-commit"
+          ]
+        },
+        {
+          "stepId": "rebuild-from-ocean-currents",
+          "kind": "rule",
+          "actionId": "world.rebuild-from-ocean-currents",
+          "spatialActionId": null,
+          "facts": [
+            "oceanCurrents.inspectWorldRebuild",
+            "info.mapSummary"
+          ],
+          "inspection": {
+            "methods": [
+              "oceanCurrents.inspectWorldRebuild"
+            ],
+            "policy": "使用当前事实输入调用精确公开方法；若只有 info.describe，则按公开方法契约完成结构预检。"
+          },
+          "executeMethods": [
+            "oceanCurrents.regenerate",
+            "oceanCurrents.rebuildWorld"
+          ],
+          "inputTemplate": {
+            "seed": "$seed",
+            "confirm": true
+          },
+          "preconditions": [
+            "读取当前事实并确认目标仍存在。",
+            "使用当前 map revision 生成步骤输入。"
+          ],
+          "authorization": {
+            "mode": "per-method-policy",
+            "policy": "逐个读取 info.describe；requiresConfirm 为 true 时必须在该步骤暂停并取得显式授权。"
+          },
+          "successCriteria": [
+            "洋流与选定世界派生完成一致重建，地图 identity 保持不变。",
+            "通过 oceanCurrents.inspectWorldRebuild 重读并验证上述领域结果。"
+          ],
+          "failurePolicy": {
+            "rejected": "停止并按稳定 business code 重规划。",
+            "stale": "丢弃旧输入，刷新事实后重新预检。",
+            "partial": "不把已提交步骤伪装成整体回滚。"
+          },
+          "compensation": {
+            "mode": "history-undo",
+            "method": "history.undo",
+            "guard": "仅当执行 ledger 的 stepId 精确等于 rebuild-from-ocean-currents、当前 revision 精确等于 ledger.afterRevision、该步骤仍是最新一条历史、地图 identity 未变化且用户明确授权撤销时调用。"
+          },
+          "revisionCheckpoints": [
+            "before-facts",
+            "after-inspection",
+            "before-execution",
+            "after-each-commit"
+          ]
+        },
+        {
+          "stepId": "adjust-population",
+          "kind": "rule",
+          "actionId": "society.adjust-population",
+          "spatialActionId": null,
+          "facts": [
+            "objects.get"
+          ],
+          "inspection": {
+            "methods": [
+              "edit.population.inspectAdjustment"
+            ],
+            "policy": "使用当前事实输入调用精确公开方法；若只有 info.describe，则按公开方法契约完成结构预检。"
+          },
+          "executeMethods": [
+            "edit.population.applyAdjustment"
+          ],
+          "inputTemplate": {
+            "target": "$populationTarget",
+            "adjustment": "$adjustment"
+          },
+          "preconditions": [
+            "读取当前事实并确认目标仍存在。",
+            "使用当前 map revision 生成步骤输入。"
+          ],
+          "authorization": {
+            "mode": "per-method-policy",
+            "policy": "逐个读取 info.describe；requiresConfirm 为 true 时必须在该步骤暂停并取得显式授权。"
+          },
+          "successCriteria": [
+            "目标人口调整符合请求，城乡分量与总量均保持非负。",
+            "通过 objects.get 重读并验证上述领域结果。"
+          ],
+          "failurePolicy": {
+            "rejected": "停止并按稳定 business code 重规划。",
+            "stale": "丢弃旧输入，刷新事实后重新预检。",
+            "partial": "不把已提交步骤伪装成整体回滚。"
+          },
+          "compensation": {
+            "mode": "history-undo",
+            "method": "history.undo",
+            "guard": "仅当执行 ledger 的 stepId 精确等于 adjust-population、当前 revision 精确等于 ledger.afterRevision、该步骤仍是最新一条历史、地图 identity 未变化且用户明确授权撤销时调用。"
+          },
+          "revisionCheckpoints": [
+            "before-facts",
+            "after-inspection",
+            "before-execution",
+            "after-each-commit"
+          ]
+        },
+        {
+          "stepId": "regenerate-system",
+          "kind": "rule",
+          "actionId": "world.regenerate-system",
+          "spatialActionId": null,
+          "facts": [
+            "info.mapSummary"
+          ],
+          "inspection": {
+            "methods": [
+              "info.describe"
+            ],
+            "policy": "使用当前事实输入调用精确公开方法；若只有 info.describe，则按公开方法契约完成结构预检。"
+          },
+          "executeMethods": [
+            "generate.regenerate"
+          ],
+          "inputTemplate": {
+            "method": "generate.regenerate",
+            "kind": "$derivedSystem",
+            "options": {
+              "confirm": true
+            }
+          },
+          "preconditions": [
+            "读取当前事实并确认目标仍存在。",
+            "使用当前 map revision 生成步骤输入。"
+          ],
+          "authorization": {
+            "mode": "per-method-policy",
+            "policy": "逐个读取 info.describe；requiresConfirm 为 true 时必须在该步骤暂停并取得显式授权。"
+          },
+          "successCriteria": [
+            "指定派生系统基于当前 revision 完成重建，范围外与锁定对象保持不变。",
+            "通过 info.mapSummary 重读并验证上述领域结果。"
+          ],
+          "failurePolicy": {
+            "rejected": "停止并按稳定 business code 重规划。",
+            "stale": "丢弃旧输入，刷新事实后重新预检。",
+            "partial": "不把已提交步骤伪装成整体回滚。"
+          },
+          "compensation": {
+            "mode": "history-undo",
+            "method": "history.undo",
+            "guard": "仅当执行 ledger 的 stepId 精确等于 regenerate-system、当前 revision 精确等于 ledger.afterRevision、该步骤仍是最新一条历史、地图 identity 未变化且用户明确授权撤销时调用。"
+          },
+          "revisionCheckpoints": [
+            "before-facts",
+            "after-inspection",
+            "before-execution",
+            "after-each-commit"
+          ]
+        }
+      ],
       "gameplayChapter": "气候、生态与人口承载",
       "invariant": "气候、生物群系、适居度和人口承载的直接值与派生值必须有明确的重算边界。",
       "historyPolicy": "每个规则动作独立进入历史；配方本身不伪造跨步骤原子性。",
@@ -2528,12 +4438,13 @@
       "tier": "planner-recipe",
       "variants": [],
       "api": [],
-      "inspect": "逐步骤 inspector",
-      "execute": "AI planner orchestration",
+      "inspect": "planner.getRecipe + step.inspection.methods",
+      "execute": "按 step.executeMethods 逐步调用公开 API",
       "branches": [
-        "每一步单独预检",
-        "需要写入授权时暂停",
-        "失败后按玩法策略重规划，不把已提交步骤伪装成整体回滚"
+        "逐步骤读取事实与 revision",
+        "每一步单独预检并按方法策略等待授权",
+        "拒绝或陈旧时停止并重规划",
+        "已提交步骤不伪装成跨步骤原子回滚"
       ],
       "steps": [
         "politics.change-government",
@@ -2542,13 +4453,225 @@
         "society.bind-namebase-and-rename"
       ],
       "sourceRefs": [
-        "docs/task-notes/compound-semantic-api-and-gameplay-rules.md"
+        "app/webgl-generator/src/runtime/planner-recipe-registry.js",
+        "docs/task-notes/compound-semantic-api-and-gameplay-rules.md",
+        "docs/task-notes/gameplay-rules-and-ai-planner-recipes.md"
       ],
-      "status": "recipe-only",
+      "status": "executable-recipe",
       "id": "scenario.state-reformation",
       "title": "国家改制与迁都",
       "domain": "politics",
       "intent": "调整政体国号、迁都、重设省份并更新命名。",
+      "stepContracts": [
+        {
+          "stepId": "change-government",
+          "kind": "rule",
+          "actionId": "politics.change-government",
+          "spatialActionId": null,
+          "facts": [
+            "objects.get"
+          ],
+          "inspection": {
+            "methods": [
+              "info.describe"
+            ],
+            "policy": "使用当前事实输入调用精确公开方法；若只有 info.describe，则按公开方法契约完成结构预检。"
+          },
+          "executeMethods": [
+            "edit.states.setGovernment",
+            "edit.states.setGovernmentBatch"
+          ],
+          "inputTemplate": {
+            "method": "edit.states.setGovernment",
+            "state": "$stateRef",
+            "government": "$government"
+          },
+          "preconditions": [
+            "读取当前事实并确认目标仍存在。",
+            "使用当前 map revision 生成步骤输入。"
+          ],
+          "authorization": {
+            "mode": "per-method-policy",
+            "policy": "逐个读取 info.describe；requiresConfirm 为 true 时必须在该步骤暂停并取得显式授权。"
+          },
+          "successCriteria": [
+            "政体、完整国号和相关显示事实与目标国家集合一致。",
+            "通过 objects.get 重读并验证上述领域结果。"
+          ],
+          "failurePolicy": {
+            "rejected": "停止并按稳定 business code 重规划。",
+            "stale": "丢弃旧输入，刷新事实后重新预检。",
+            "partial": "不把已提交步骤伪装成整体回滚。"
+          },
+          "compensation": {
+            "mode": "history-undo",
+            "method": "history.undo",
+            "guard": "仅当执行 ledger 的 stepId 精确等于 change-government、当前 revision 精确等于 ledger.afterRevision、该步骤仍是最新一条历史、地图 identity 未变化且用户明确授权撤销时调用。"
+          },
+          "revisionCheckpoints": [
+            "before-facts",
+            "after-inspection",
+            "before-execution",
+            "after-each-commit"
+          ]
+        },
+        {
+          "stepId": "relocate-capital",
+          "kind": "rule",
+          "actionId": "politics.relocate-capital",
+          "spatialActionId": null,
+          "facts": [
+            "objects.get"
+          ],
+          "inspection": {
+            "methods": [
+              "edit.states.inspectCapitalChange"
+            ],
+            "policy": "使用当前事实输入调用精确公开方法；若只有 info.describe，则按公开方法契约完成结构预检。"
+          },
+          "executeMethods": [
+            "edit.states.setCapital"
+          ],
+          "inputTemplate": {
+            "stateId": "$stateId",
+            "cityId": "$capitalCityId"
+          },
+          "preconditions": [
+            "读取当前事实并确认目标仍存在。",
+            "使用当前 map revision 生成步骤输入。"
+          ],
+          "authorization": {
+            "mode": "per-method-policy",
+            "policy": "逐个读取 info.describe；requiresConfirm 为 true 时必须在该步骤暂停并取得显式授权。"
+          },
+          "successCriteria": [
+            "首都指向本国有效城市，国家中心及旧新首都引用同步更新。",
+            "通过 objects.get 重读并验证上述领域结果。"
+          ],
+          "failurePolicy": {
+            "rejected": "停止并按稳定 business code 重规划。",
+            "stale": "丢弃旧输入，刷新事实后重新预检。",
+            "partial": "不把已提交步骤伪装成整体回滚。"
+          },
+          "compensation": {
+            "mode": "history-undo",
+            "method": "history.undo",
+            "guard": "仅当执行 ledger 的 stepId 精确等于 relocate-capital、当前 revision 精确等于 ledger.afterRevision、该步骤仍是最新一条历史、地图 identity 未变化且用户明确授权撤销时调用。"
+          },
+          "revisionCheckpoints": [
+            "before-facts",
+            "after-inspection",
+            "before-execution",
+            "after-each-commit"
+          ]
+        },
+        {
+          "stepId": "reorganize-provinces",
+          "kind": "rule",
+          "actionId": "politics.reorganize-provinces",
+          "spatialActionId": null,
+          "facts": [
+            "info.mapSummary",
+            "objects.list"
+          ],
+          "inspection": {
+            "methods": [
+              "info.describe"
+            ],
+            "policy": "使用当前事实输入调用精确公开方法；若只有 info.describe，则按公开方法契约完成结构预检。"
+          },
+          "executeMethods": [
+            "generate.regenerate"
+          ],
+          "inputTemplate": {
+            "method": "generate.regenerate",
+            "kind": "provinces",
+            "options": {
+              "confirm": true
+            }
+          },
+          "preconditions": [
+            "读取当前事实并确认目标仍存在。",
+            "使用当前 map revision 生成步骤输入。"
+          ],
+          "authorization": {
+            "mode": "per-method-policy",
+            "policy": "逐个读取 info.describe；requiresConfirm 为 true 时必须在该步骤暂停并取得显式授权。"
+          },
+          "successCriteria": [
+            "省份重生成完成，锁定对象未被覆盖，国家、省份与城市引用一致。",
+            "通过 info.mapSummary 重读并验证上述领域结果。"
+          ],
+          "failurePolicy": {
+            "rejected": "停止并按稳定 business code 重规划。",
+            "stale": "丢弃旧输入，刷新事实后重新预检。",
+            "partial": "不把已提交步骤伪装成整体回滚。"
+          },
+          "compensation": {
+            "mode": "history-undo",
+            "method": "history.undo",
+            "guard": "仅当执行 ledger 的 stepId 精确等于 reorganize-provinces、当前 revision 精确等于 ledger.afterRevision、该步骤仍是最新一条历史、地图 identity 未变化且用户明确授权撤销时调用。"
+          },
+          "revisionCheckpoints": [
+            "before-facts",
+            "after-inspection",
+            "before-execution",
+            "after-each-commit"
+          ]
+        },
+        {
+          "stepId": "bind-namebase-and-rename",
+          "kind": "rule",
+          "actionId": "society.bind-namebase-and-rename",
+          "spatialActionId": null,
+          "facts": [
+            "namebases.list",
+            "objects.list"
+          ],
+          "inspection": {
+            "methods": [
+              "namebases.inspectBindAndRename"
+            ],
+            "policy": "使用当前事实输入调用精确公开方法；若只有 info.describe，则按公开方法契约完成结构预检。"
+          },
+          "executeMethods": [
+            "namebases.bindAndRename"
+          ],
+          "inputTemplate": {
+            "binding": "$binding",
+            "namebaseId": "$namebaseId",
+            "rename": "$renameOptions"
+          },
+          "preconditions": [
+            "读取当前事实并确认目标仍存在。",
+            "使用当前 map revision 生成步骤输入。"
+          ],
+          "authorization": {
+            "mode": "per-method-policy",
+            "policy": "逐个读取 info.describe；requiresConfirm 为 true 时必须在该步骤暂停并取得显式授权。"
+          },
+          "successCriteria": [
+            "名称库绑定与目标范围名称同时更新，不存在已删除或旧名称库残留引用。",
+            "通过 namebases.list 重读并验证上述领域结果。"
+          ],
+          "failurePolicy": {
+            "rejected": "停止并按稳定 business code 重规划。",
+            "stale": "丢弃旧输入，刷新事实后重新预检。",
+            "partial": "不把已提交步骤伪装成整体回滚。"
+          },
+          "compensation": {
+            "mode": "history-undo",
+            "method": "history.undo",
+            "guard": "仅当执行 ledger 的 stepId 精确等于 bind-namebase-and-rename、当前 revision 精确等于 ledger.afterRevision、该步骤仍是最新一条历史、地图 identity 未变化且用户明确授权撤销时调用。"
+          },
+          "revisionCheckpoints": [
+            "before-facts",
+            "after-inspection",
+            "before-execution",
+            "after-each-commit"
+          ]
+        }
+      ],
       "gameplayChapter": "国家、省份与政治拓扑",
       "invariant": "国家、省份、Grid/Pack 归属、首都、省会、外交、军事、市场和路线引用不得悬空。",
       "historyPolicy": "每个规则动作独立进入历史；配方本身不伪造跨步骤原子性。",
@@ -2558,27 +4681,253 @@
       "tier": "planner-recipe",
       "variants": [],
       "api": [],
-      "inspect": "逐步骤 inspector",
-      "execute": "AI planner orchestration",
+      "inspect": "planner.getRecipe + step.inspection.methods",
+      "execute": "按 step.executeMethods 逐步调用公开 API",
       "branches": [
-        "每一步单独预检",
-        "需要写入授权时暂停",
-        "失败后按玩法策略重规划，不把已提交步骤伪装成整体回滚"
+        "逐步骤读取事实与 revision",
+        "每一步单独预检并按方法策略等待授权",
+        "拒绝或陈旧时停止并重规划",
+        "已提交步骤不伪装成跨步骤原子回滚"
       ],
       "steps": [
-        "service:health-check",
-        "service:layers-and-themes",
-        "service:data-export",
-        "service:gameplay-documentation"
+        "health-check",
+        "layers-and-themes",
+        "data-export",
+        "gameplay-documentation"
       ],
       "sourceRefs": [
-        "docs/task-notes/compound-semantic-api-and-gameplay-rules.md"
+        "app/webgl-generator/src/runtime/planner-recipe-registry.js",
+        "docs/task-notes/compound-semantic-api-and-gameplay-rules.md",
+        "docs/task-notes/gameplay-rules-and-ai-planner-recipes.md"
       ],
-      "status": "recipe-only",
+      "status": "executable-recipe",
       "id": "scenario.publish-map",
       "title": "检查、整理并发布地图",
       "domain": "editor",
       "intent": "检查健康与对象一致性，整理图层和主题，再导出数据、图片和说明。",
+      "stepContracts": [
+        {
+          "stepId": "health-check",
+          "kind": "fact",
+          "actionId": null,
+          "spatialActionId": null,
+          "facts": [
+            "info.mapSummary",
+            "info.runtimeStats",
+            "info.healthEvents"
+          ],
+          "inspection": {
+            "methods": [
+              "info.describe"
+            ],
+            "policy": "使用当前事实输入调用精确公开方法；若只有 info.describe，则按公开方法契约完成结构预检。"
+          },
+          "executeMethods": [
+            "info.mapSummary",
+            "info.runtimeStats",
+            "info.healthEvents"
+          ],
+          "inputTemplate": {
+            "method": "info.healthEvents",
+            "options": {
+              "severity": "error"
+            }
+          },
+          "preconditions": [
+            "读取当前事实并确认目标仍存在。",
+            "使用当前 map revision 生成步骤输入。"
+          ],
+          "authorization": {
+            "mode": "per-method-policy",
+            "policy": "逐个读取 info.describe；requiresConfirm 为 true 时必须在该步骤暂停并取得显式授权。"
+          },
+          "successCriteria": [
+            "应用 health、WebGL、console error 与 page error 均为零，地图摘要可读取。",
+            "通过 info.mapSummary 重读并验证上述领域结果。"
+          ],
+          "failurePolicy": {
+            "rejected": "停止并按稳定 business code 重规划。",
+            "stale": "丢弃旧输入，刷新事实后重新预检。",
+            "partial": "不把已提交步骤伪装成整体回滚。"
+          },
+          "compensation": {
+            "mode": "none",
+            "method": null,
+            "guard": "只读或导出步骤没有地图写入，不调用补偿方法。"
+          },
+          "revisionCheckpoints": [
+            "before-facts",
+            "after-inspection",
+            "before-execution",
+            "after-each-commit"
+          ]
+        },
+        {
+          "stepId": "layers-and-themes",
+          "kind": "service",
+          "actionId": null,
+          "spatialActionId": null,
+          "facts": [
+            "layers.get",
+            "layers.listThemes"
+          ],
+          "inspection": {
+            "methods": [
+              "info.describe"
+            ],
+            "policy": "使用当前事实输入调用精确公开方法；若只有 info.describe，则按公开方法契约完成结构预检。"
+          },
+          "executeMethods": [
+            "layers.setViewMode",
+            "layers.setVisible",
+            "layers.setTheme"
+          ],
+          "inputTemplate": {
+            "previousDisplayPreferences": "$layers.get",
+            "viewMode": "$selectedViewMode",
+            "visibilityChanges": "$layerVisibilityChanges",
+            "themeId": "$selectedThemeId"
+          },
+          "preconditions": [
+            "读取当前事实并确认目标仍存在。",
+            "使用当前 map revision 生成步骤输入。"
+          ],
+          "authorization": {
+            "mode": "per-method-policy",
+            "policy": "逐个读取 info.describe；requiresConfirm 为 true 时必须在该步骤暂停并取得显式授权。"
+          },
+          "successCriteria": [
+            "视图模式、图层可见性和主题与发布目标一致。",
+            "这些调用只修改显示偏好，不增加 map revision 或地图编辑历史。",
+            "通过 layers.get 重读并验证上述领域结果。"
+          ],
+          "failurePolicy": {
+            "rejected": "停止并按稳定 business code 重规划。",
+            "stale": "丢弃旧输入，刷新事实后重新预检。",
+            "partial": "不把已提交步骤伪装成整体回滚。"
+          },
+          "compensation": {
+            "mode": "restore-display-preferences",
+            "method": null,
+            "methods": [
+              "layers.setViewMode",
+              "layers.setVisible",
+              "layers.setTheme"
+            ],
+            "guard": "仅当执行 ledger 的 stepId 精确等于 layers-and-themes、当前 revision 精确等于 ledger.afterRevision，并且本步骤 facts 已保存原显示值时恢复；地图 identity 变化或缺少原值时禁止自动恢复。"
+          },
+          "revisionCheckpoints": [
+            "before-facts",
+            "after-inspection",
+            "before-execution",
+            "after-each-commit"
+          ]
+        },
+        {
+          "stepId": "data-export",
+          "kind": "service",
+          "actionId": null,
+          "spatialActionId": null,
+          "facts": [
+            "info.mapSummary"
+          ],
+          "inspection": {
+            "methods": [
+              "info.describe"
+            ],
+            "policy": "使用当前事实输入调用精确公开方法；若只有 info.describe，则按公开方法契约完成结构预检。"
+          },
+          "executeMethods": [
+            "data.exportMap",
+            "data.exportPNG"
+          ],
+          "inputTemplate": {
+            "method": "$selectedExportMethod",
+            "options": "$exportOptions"
+          },
+          "preconditions": [
+            "读取当前事实并确认目标仍存在。",
+            "使用当前 map revision 生成步骤输入。"
+          ],
+          "authorization": {
+            "mode": "per-method-policy",
+            "policy": "逐个读取 info.describe；requiresConfirm 为 true 时必须在该步骤暂停并取得显式授权。"
+          },
+          "successCriteria": [
+            "地图数据与 PNG 导出结果均非空，导出前后地图摘要和 revision 不变。",
+            "通过 info.mapSummary 重读并验证上述领域结果。"
+          ],
+          "failurePolicy": {
+            "rejected": "停止并按稳定 business code 重规划。",
+            "stale": "丢弃旧输入，刷新事实后重新预检。",
+            "partial": "不把已提交步骤伪装成整体回滚。"
+          },
+          "compensation": {
+            "mode": "none",
+            "method": null,
+            "guard": "只读或导出步骤没有地图写入，不调用补偿方法。"
+          },
+          "revisionCheckpoints": [
+            "before-facts",
+            "after-inspection",
+            "before-execution",
+            "after-each-commit"
+          ]
+        },
+        {
+          "stepId": "gameplay-documentation",
+          "kind": "fact",
+          "actionId": null,
+          "spatialActionId": null,
+          "facts": [
+            "info.capabilities",
+            "planner.listRecipes",
+            "planner.getRecipe"
+          ],
+          "inspection": {
+            "methods": [
+              "info.describe"
+            ],
+            "policy": "使用当前事实输入调用精确公开方法；若只有 info.describe，则按公开方法契约完成结构预检。"
+          },
+          "executeMethods": [
+            "info.capabilities",
+            "planner.listRecipes",
+            "planner.getRecipe"
+          ],
+          "inputTemplate": {
+            "recipeId": "$optionalRecipeId"
+          },
+          "preconditions": [
+            "读取当前事实并确认目标仍存在。",
+            "使用当前 map revision 生成步骤输入。"
+          ],
+          "authorization": {
+            "mode": "per-method-policy",
+            "policy": "逐个读取 info.describe；requiresConfirm 为 true 时必须在该步骤暂停并取得显式授权。"
+          },
+          "successCriteria": [
+            "能力、方法描述、十个配方和四十三个步骤均可读取并与当前 API 版本一致。",
+            "通过 info.capabilities 重读并验证上述领域结果。"
+          ],
+          "failurePolicy": {
+            "rejected": "停止并按稳定 business code 重规划。",
+            "stale": "丢弃旧输入，刷新事实后重新预检。",
+            "partial": "不把已提交步骤伪装成整体回滚。"
+          },
+          "compensation": {
+            "mode": "none",
+            "method": null,
+            "guard": "只读或导出步骤没有地图写入，不调用补偿方法。"
+          },
+          "revisionCheckpoints": [
+            "before-facts",
+            "after-inspection",
+            "before-execution",
+            "after-each-commit"
+          ]
+        }
+      ],
       "gameplayChapter": "编辑器事务、批量操作与发布",
       "invariant": "编辑器服务不得伪装成游戏规则；危险操作要有预检，批量操作要有单事务回滚。",
       "historyPolicy": "每个规则动作独立进入历史；配方本身不伪造跨步骤原子性。",
@@ -4291,6 +6640,16 @@
     {
       "method": "oceanCurrents.rename",
       "classification": "atomic-editor-primitive",
+      "actionIds": []
+    },
+    {
+      "method": "planner.getRecipe",
+      "classification": "read-primitive",
+      "actionIds": []
+    },
+    {
+      "method": "planner.listRecipes",
+      "classification": "read-primitive",
       "actionIds": []
     },
     {

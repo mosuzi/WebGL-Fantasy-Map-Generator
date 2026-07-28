@@ -47,6 +47,7 @@
 - `console-api-full-audit-and-gap-closure-2026-07-25.md`：权威任务第 200 项执行说明与结果，记录全量能力分母、机器矩阵、AI 描述层、对象发现和非 Cell API 缺口关闭。
 - `compound-semantic-api-and-gameplay-rules.md`：权威任务第 204 项规则分层说明，区分事实/原子原语、单事务规则动作和 AI 规划器玩法配方，并为完整玩法文档冻结领域骨架。
 - `compound-semantic-gap-implementation-plan.md`：权威任务第 207～210 项施工图，冻结 24 个 inspector、5 个碎片事务、6 个游戏规则与 10 个 AI 配方的实施顺序、默认规则和人类审阅格式。
+- `gameplay-rules-and-ai-planner-recipes.md`：权威任务第 210 项已发布的完整中文玩法说明，覆盖十二个领域章节、十个机器配方和四十三个顶层步骤，并带 canonical registry SHA-256 与自动同步附录。
 - `regeneration-object-lock-system.md`：权威任务第 205 项重生成对象锁定专题，冻结 14 个列表页 / 15 类行的覆盖分母、版本化锁仓、列表与地图批量选择、生成器约束、冲突回滚、API 和旧存档兼容。
 - `river-network-parent-and-confluence-integrity.md`：权威任务第 206 项河网完整性专题，冻结直接干流、汇流点、流域根、湖泊入流、孤立旧河段和可见诊断契约。
 - `object-table-column-width-audit-2026-07-24.md`：权威任务第 197 项对象列表默认列宽审计，以 24 个宿主 / 27 张表为分母，记录语义宽度分档、首都列收敛和一次性偏好迁移边界。

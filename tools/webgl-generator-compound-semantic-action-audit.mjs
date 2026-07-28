@@ -5,6 +5,9 @@ import {dirname, join, resolve} from "node:path";
 import {fileURLToPath, pathToFileURL} from "node:url";
 
 import {API_METHODS} from "../app/webgl-generator/src/runtime/api-contract.js";
+import {listCellActions} from "../app/webgl-generator/src/runtime/cell-action-inspector-registry.js";
+import {listPlannerRecipes, getPlannerRecipe, validatePlannerRecipeRegistry} from "../app/webgl-generator/src/runtime/planner-recipe-registry.js";
+import {buildPlannerRecipeDocSyncReport} from "./webgl-generator-planner-recipe-doc-sync.mjs";
 import {buildFullCapabilityMatrix} from "./webgl-generator-api-full-capability-matrix.mjs";
 import {buildCellActionReplanningMatrix} from "./webgl-generator-cell-action-replanning-matrix.mjs";
 
@@ -18,7 +21,8 @@ const STATUS = new Set([
   "existing-needs-inspector",
   "fragmented-needs-transaction",
   "missing-game-rule",
-  "recipe-only"
+  "recipe-only",
+  "executable-recipe"
 ]);
 
 const TIER = new Set(["rule-transaction", "planner-recipe"]);
@@ -958,76 +962,7 @@ const RULE_ACTIONS = Object.freeze([
     branches: ["格式拒绝", "ID 冲突", "append/replace", "单事务导入"],
     sourceRefs: ["app/webgl-generator/src/runtime/note-import.js", "app/webgl-generator/src/runtime/measurement-edit-commands.js", "app/webgl-generator/src/runtime/namebase-edit-commands.js"]
   }),
-  recipe({
-    id: "scenario.colonize-region",
-    title: "殖民或开拓区域",
-    domain: "politics",
-    intent: "取得领土、建立城镇、划分省份、连接路线并接入市场。",
-    steps: ["politics.transfer-territory", "politics.ensure-province-assignment", "settlement.found-city", "infrastructure.create-route", "economy.assign-market-region"]
-  }),
-  recipe({
-    id: "scenario.invasion-and-annexation",
-    title: "入侵、占领与吞并国家",
-    domain: "military",
-    intent: "宣战、调动军队、结算战斗、逐步占领领土并议和或吞并。",
-    steps: ["diplomacy.declare-war", "military.move-station", "military.resolve-battle", "politics.transfer-territory", "diplomacy.make-peace"]
-  }),
-  recipe({
-    id: "scenario.administrative-reform",
-    title: "行政区划改革",
-    domain: "politics",
-    intent: "合并、拆分或转移省份，重新选择省会并按范围重命名。",
-    steps: ["politics.transfer-province", "politics.merge-provinces", "politics.split-province", "politics.reorganize-provinces", "society.bind-namebase-and-rename"]
-  }),
-  recipe({
-    id: "scenario.population-resettlement",
-    title: "人口迁徙与新城建设",
-    domain: "settlement",
-    intent: "迁移人口、建立或移动城镇、调整市场与路线。",
-    steps: ["society.transfer-population", "settlement.found-city", "settlement.move-city", "economy.assign-market-region", "infrastructure.create-route"]
-  }),
-  recipe({
-    id: "scenario.cultural-assimilation",
-    title: "文化或宗教传播与同化",
-    domain: "society",
-    intent: "调整中心和继承关系，扩张归属并按新名称体系重命名对象。",
-    steps: ["society.culture.lifecycle", "society.religion.lifecycle", "society.bind-namebase-and-rename"]
-  }),
-  recipe({
-    id: "scenario.infrastructure-development",
-    title: "区域基础设施与经济开发",
-    domain: "economy",
-    intent: "规划路线、调整市场覆盖、生成资源并重建经济。",
-    steps: ["infrastructure.create-route", "economy.assign-market-region", "infrastructure.regenerate-resources", "economy.rebuild"]
-  }),
-  recipe({
-    id: "scenario.coastline-engineering",
-    title: "海岸、海峡与湖海工程",
-    domain: "terrain",
-    intent: "改变局部水陆和连通性，保护沿岸对象并重建水文与路线。",
-    steps: ["terrain.patch-feature", "terrain.change-feature-topology", "hydrology.change-lake-outlet", "world.regenerate-system"]
-  }),
-  recipe({
-    id: "scenario.climate-disaster",
-    title: "气候灾变及世界响应",
-    domain: "ecology",
-    intent: "改变气候或洋流，重建生态、人口和社会系统并记录前后结果。",
-    steps: ["world.apply-climate-and-rebuild", "world.rebuild-from-ocean-currents", "society.adjust-population", "world.regenerate-system"]
-  }),
-  recipe({
-    id: "scenario.state-reformation",
-    title: "国家改制与迁都",
-    domain: "politics",
-    intent: "调整政体国号、迁都、重设省份并更新命名。",
-    steps: ["politics.change-government", "politics.relocate-capital", "politics.reorganize-provinces", "society.bind-namebase-and-rename"]
-  }),
-  recipe({
-    id: "scenario.publish-map",
-    title: "检查、整理并发布地图",
-    domain: "editor",
-    intent: "检查健康与对象一致性，整理图层和主题，再导出数据、图片和说明。",
-    steps: ["service:health-check", "service:layers-and-themes", "service:data-export", "service:gameplay-documentation"]
-  })
+  ...plannerRecipeAuditRows()
 ]);
 
 const EDITOR_SERVICE_PREFIXES = Object.freeze(["selection.", "layers.", "units.", "debug.", "history."]);
@@ -1046,6 +981,8 @@ const READ_METHODS = new Set([
   "info.mapSummary",
   "info.runtimeStats",
   "info.healthEvents",
+  "planner.listRecipes",
+  "planner.getRecipe",
   "objects.types",
   "objects.get",
   "objects.list",
@@ -1094,23 +1031,19 @@ export function buildCompoundSemanticActionAudit() {
   const cellMatrix = buildCellActionReplanningMatrix();
   const actions = RULE_ACTIONS.map(action => normalizeAction(action, apiSet));
   validateActions(actions);
+  const recipeDocSync = buildPlannerRecipeDocSyncReport();
+  const recipeRegistryCoverage = buildRecipeRegistryCoverage(actions, apiMethods, cellMatrix, recipeDocSync);
 
   const actionByApi = indexActionsByApi(actions);
   const apiCoverage = apiMethods.map(method => classifyApiMethod(method, actionByApi));
   const unclassifiedApi = apiCoverage.filter(item => item.classification === "unclassified");
   const interactionCoverage = cellMatrix.rows.map(row => classifyInteractionRow(row, actions));
   const unclassifiedInteractions = interactionCoverage.filter(item => item.classification === "unclassified");
-  const missingRecipeSteps = actions
-    .filter(action => action.tier === "planner-recipe")
-    .flatMap(action => action.steps
-      .filter(step => !step.startsWith("service:") && !step.includes(" ") && !actions.some(candidate => candidate.id === step))
-      .map(step => `${action.id}:${step}`));
-
-  if (unclassifiedApi.length || unclassifiedInteractions.length || missingRecipeSteps.length) {
+  if (unclassifiedApi.length || unclassifiedInteractions.length || !recipeRegistryCoverage.complete) {
     throw new Error(`复合语义审计仍有未分类项：${JSON.stringify({
       api: unclassifiedApi.map(item => item.method),
       interactions: unclassifiedInteractions.map(item => item.rowId),
-      recipeSteps: missingRecipeSteps
+      recipeRegistry: recipeRegistryCoverage
     })}`);
   }
 
@@ -1118,6 +1051,8 @@ export function buildCompoundSemanticActionAudit() {
     .update(fullMatrix.sourceDigest)
     .update(cellMatrix.sourceDigest)
     .update(JSON.stringify(actions))
+    .update(recipeDocSync.canonicalDigest)
+    .update(recipeDocSync.documentDigest)
     .digest("hex");
   const actionStatuses = countBy(actions, "status");
   const actionDomains = countBy(actions, "domain");
@@ -1144,7 +1079,8 @@ export function buildCompoundSemanticActionAudit() {
       "existing-needs-inspector": "已有写命令，但缺少 AI 可调用的只读业务预检或稳定分支结果。",
       "fragmented-needs-transaction": "当前只能串联多个 API，不能保证单历史、并发安全和失败原子性。",
       "missing-game-rule": "当前只有数据原语或记录能力，尚无完整游戏规则。",
-      "recipe-only": "战略/玩法流程，不应实现为一条超大写接口。"
+      "recipe-only": "战略/玩法流程尚未发布为可枚举的执行配方。",
+      "executable-recipe": "已进入公开 planner registry；规划器逐步调用精确事实、预检和执行方法。"
     },
     denominator: {
       fullCapabilityRows: fullMatrix.rows.length,
@@ -1167,9 +1103,22 @@ export function buildCompoundSemanticActionAudit() {
       domains: actionDomains,
       apiClassifications,
       interactionClassifications,
-      structuralGaps: unclassifiedApi.length + unclassifiedInteractions.length + missingRecipeSteps.length
+      structuralGaps: unclassifiedApi.length + unclassifiedInteractions.length + recipeRegistryCoverage.issueCount
     },
     domainRules: DOMAIN_RULES,
+    recipeDocSync: {
+      complete: recipeDocSync.complete,
+      canonicalDigest: recipeDocSync.canonicalDigest,
+      documentDigest: recipeDocSync.documentDigest,
+      recipeCount: recipeDocSync.recipeCount,
+      stepCount: recipeDocSync.stepCount,
+      issueCount: recipeDocSync.issueCount,
+      machineOnly: recipeDocSync.machineOnly,
+      docsOnly: recipeDocSync.docsOnly,
+      fieldMismatch: recipeDocSync.fieldMismatch,
+      methodMismatch: recipeDocSync.methodMismatch
+    },
+    recipeRegistryCoverage,
     actions,
     apiCoverage,
     interactionCoverage
@@ -1226,16 +1175,147 @@ function rule(options) {
   };
 }
 
+function plannerRecipeAuditRows() {
+  return listPlannerRecipes().map(summary => {
+    const registryRecipe = getPlannerRecipe(summary.recipeId);
+    return recipe({
+      id: registryRecipe.recipeId,
+      title: registryRecipe.title,
+      domain: registryRecipe.domain,
+      intent: registryRecipe.intent,
+      api: [],
+      steps: registryRecipe.steps.map(step => step.actionId || step.stepId),
+      stepContracts: registryRecipe.steps,
+      inspect: "planner.getRecipe + step.inspection.methods",
+      execute: "按 step.executeMethods 逐步调用公开 API",
+      branches: [
+        "逐步骤读取事实与 revision",
+        "每一步单独预检并按方法策略等待授权",
+        "拒绝或陈旧时停止并重规划",
+        "已提交步骤不伪装成跨步骤原子回滚"
+      ],
+      sourceRefs: [
+        "app/webgl-generator/src/runtime/planner-recipe-registry.js",
+        "docs/task-notes/compound-semantic-api-and-gameplay-rules.md",
+        "docs/task-notes/gameplay-rules-and-ai-planner-recipes.md"
+      ]
+    });
+  });
+}
+
 function recipe(options) {
   return rule({
     tier: "planner-recipe",
-    status: "recipe-only",
-    inspect: "逐步骤 inspector",
-    execute: "AI planner orchestration",
-    branches: ["每一步单独预检", "需要写入授权时暂停", "失败后按玩法策略重规划，不把已提交步骤伪装成整体回滚"],
-    sourceRefs: ["docs/task-notes/compound-semantic-api-and-gameplay-rules.md"],
+    status: "executable-recipe",
     ...options
   });
+}
+
+function buildRecipeRegistryCoverage(actions, apiMethods, cellMatrix, recipeDocSync) {
+  const apiSet = new Set(apiMethods);
+  const validation = validatePlannerRecipeRegistry(apiMethods);
+  const ruleById = new Map(actions
+    .filter(action => action.tier === "rule-transaction")
+    .map(action => [action.id, action]));
+  const plannerById = new Map(actions
+    .filter(action => action.tier === "planner-recipe")
+    .map(action => [action.id, action]));
+  const registryRecipes = listPlannerRecipes().map(summary => getPlannerRecipe(summary.recipeId));
+  const cellActions = new Map(listCellActions().map(action => [action.actionId, action]));
+  const matrixCellActions = new Map((cellMatrix?.rows || [])
+    .filter(row => row.actionId)
+    .map(row => [row.actionId, row]));
+  const registryIds = registryRecipes.map(recipe => recipe.recipeId);
+  const auditIds = [...plannerById.keys()];
+  const missingAuditRecipes = registryIds.filter(id => !plannerById.has(id));
+  const staleAuditRecipes = auditIds.filter(id => !registryIds.includes(id));
+  const missingRuleActions = [];
+  const unauthorizedMethods = [];
+  const placeholderRefs = [...validation.placeholderMethods];
+  const unknownSpatialActionIds = [];
+  const spatialRegistryOnly = [];
+  const spatialMatrixOnly = [];
+  const staleSpatialActionIds = [];
+
+  for (const recipe of registryRecipes) {
+    for (const step of recipe.steps) {
+      const methodRefs = [
+        ...step.facts,
+        ...step.inspection.methods,
+        ...step.executeMethods,
+        ...(step.compensation.method ? [step.compensation.method] : []),
+        ...(step.compensation.methods || [])
+      ];
+      for (const method of methodRefs) {
+        if (!apiSet.has(method)) unauthorizedMethods.push(`${recipe.recipeId}:${step.stepId}:${method}`);
+        if (/^(planned:|service:)|[*() /]/u.test(method)) placeholderRefs.push(`${recipe.recipeId}:${step.stepId}:${method}`);
+      }
+      if (step.kind !== "rule") continue;
+      const action = ruleById.get(step.actionId);
+      if (!action) {
+        missingRuleActions.push(`${recipe.recipeId}:${step.stepId}:${step.actionId}`);
+        continue;
+      }
+      const actionApi = new Set(action.api);
+      for (const method of step.executeMethods) {
+        if (!actionApi.has(method)) unauthorizedMethods.push(`${recipe.recipeId}:${step.stepId}:${method}:execute-not-in-action`);
+      }
+      for (const method of step.inspection.methods) {
+        if (!actionApi.has(method) && method !== "info.describe" && method !== "cells.inspectAction") {
+          unauthorizedMethods.push(`${recipe.recipeId}:${step.stepId}:${method}:inspect-not-in-action`);
+        }
+      }
+      if (step.spatialActionId) {
+        const cellAction = cellActions.get(step.spatialActionId);
+        const matrixRow = matrixCellActions.get(step.spatialActionId);
+        if (!cellAction && !matrixRow) unknownSpatialActionIds.push(`${recipe.recipeId}:${step.stepId}:${step.spatialActionId}`);
+        else if (cellAction && !matrixRow) spatialRegistryOnly.push(`${recipe.recipeId}:${step.stepId}:${step.spatialActionId}`);
+        else if (!cellAction && matrixRow) spatialMatrixOnly.push(`${recipe.recipeId}:${step.stepId}:${step.spatialActionId}`);
+        if (cellAction && (
+          cellAction.inspectTarget !== `cells.inspectAction:${step.spatialActionId}`
+          || !step.executeMethods.includes(cellAction.executeTarget)
+          || step.inputTemplate?.actionId !== step.spatialActionId
+        )) staleSpatialActionIds.push(`${recipe.recipeId}:${step.stepId}:${step.spatialActionId}`);
+        if (matrixRow && (
+          matrixRow.inspectTarget !== `cells.inspectAction:${step.spatialActionId}`
+          || !step.executeMethods.includes(matrixRow.executeTarget)
+        )) staleSpatialActionIds.push(`${recipe.recipeId}:${step.stepId}:${step.spatialActionId}:matrix`);
+      }
+    }
+  }
+
+  const issueGroups = {
+    missingAuditRecipes,
+    staleAuditRecipes,
+    missingRuleActions,
+    duplicateRecipeIds: validation.rawDuplicateRecipeIds,
+    duplicateStepIds: validation.rawDuplicateStepIds,
+    invalidFields: validation.invalidFields,
+    unknownMethods: validation.unknownMethods,
+    unauthorizedMethods: [...new Set(unauthorizedMethods)].sort(),
+    placeholderRefs: [...new Set(placeholderRefs)].sort(),
+    unknownSpatialActionIds: [...new Set(unknownSpatialActionIds)].sort(),
+    spatialRegistryOnly: [...new Set(spatialRegistryOnly)].sort(),
+    spatialMatrixOnly: [...new Set(spatialMatrixOnly)].sort(),
+    staleSpatialActionIds: [...new Set(staleSpatialActionIds)].sort(),
+    docMachineOnly: recipeDocSync.machineOnly,
+    docOnly: recipeDocSync.docsOnly,
+    docFieldMismatch: recipeDocSync.fieldMismatch,
+    docMethodMismatch: recipeDocSync.methodMismatch,
+    docDigestMismatch: recipeDocSync.digestMismatch ? ["canonical-digest"] : [],
+    docMarkerMissing: recipeDocSync.markerFound ? [] : ["machine-sync-marker"]
+  };
+  const issueCount = Object.values(issueGroups).reduce((sum, items) => sum + items.length, 0);
+  return {
+    complete: validation.valid && issueCount === 0,
+    registryRecipes: validation.recipeCount,
+    registrySteps: validation.stepCount,
+    spatialActionsReferenced: registryRecipes.flatMap(recipe => recipe.steps)
+      .filter(step => step.spatialActionId).length,
+    executableRecipes: plannerById.size,
+    issueCount,
+    ...issueGroups
+  };
 }
 
 function normalizeAction(action, apiSet) {
@@ -1275,8 +1355,12 @@ function validateActions(actions) {
     const missingSourceRefs = action.sourceRefs.filter(path => !existsSync(join(REPO_ROOT, path)));
     if (missingSourceRefs.length) throw new Error(`${action.id} 引用了不存在的证据：${missingSourceRefs.join("、")}`);
     if (action.tier === "planner-recipe" && !action.steps.length) throw new Error(`${action.id} 配方缺少步骤`);
-    if (action.tier === "rule-transaction" && action.status === "recipe-only") throw new Error(`${action.id} 事务动作不能标记为 recipe-only`);
-    if (action.tier === "planner-recipe" && action.status !== "recipe-only") throw new Error(`${action.id} 配方状态必须为 recipe-only`);
+    if (action.tier === "rule-transaction" && ["recipe-only", "executable-recipe"].includes(action.status)) {
+      throw new Error(`${action.id} 事务动作不能标记为配方状态`);
+    }
+    if (action.tier === "planner-recipe" && action.status !== "executable-recipe") {
+      throw new Error(`${action.id} 配方状态必须为 executable-recipe`);
+    }
   }
 }
 
@@ -1409,7 +1493,7 @@ function renderMarkdown(report) {
   return [
     "# 全游戏复合语义接口、规则动作与玩法配方审计",
     "",
-    "> 本报告对应权威任务第 204 项，只梳理规则与接口边界，不表示已实现缺失动作。当前 API 数量包含第 195 项阶段 A 的未提交工作区。",
+    "> 本报告对应权威任务第 204 项及第 207～210 项闭环结果，持续校验规则事务、AI 规划器配方与公开 API 的当前实现状态。",
     "",
     "## 审计结论",
     "",
@@ -1417,7 +1501,7 @@ function renderMarkdown(report) {
     `- 公开 API：${report.denominator.classifiedApiMethods} / ${report.denominator.publicApiMethods} 已归类。`,
     `- Cell / 画布动作：${report.denominator.classifiedCellActionRows} / ${report.denominator.cellActionRows} 已归类；画布模式 ${report.denominator.canvasModes}，直接操控 ${report.denominator.directManipulationFamilies} 类 / ${report.denominator.directManipulationInstances} 个宿主。`,
     `- 规则事务与玩法配方：${report.totals.ruleTransactions} + ${report.totals.plannerRecipes} = ${report.totals.actions}。`,
-    `- 已有完整事务 ${statuses["existing-transaction"] || 0}，已有写命令但缺 AI inspector ${statuses["existing-needs-inspector"] || 0}，多 API 碎片待收敛 ${statuses["fragmented-needs-transaction"] || 0}，缺失游戏规则 ${statuses["missing-game-rule"] || 0}，规划器配方 ${statuses["recipe-only"] || 0}。`,
+    `- 已有完整事务 ${statuses["existing-transaction"] || 0}，已有写命令但缺 AI inspector ${statuses["existing-needs-inspector"] || 0}，多 API 碎片待收敛 ${statuses["fragmented-needs-transaction"] || 0}，缺失游戏规则 ${statuses["missing-game-rule"] || 0}，待发布配方 ${statuses["recipe-only"] || 0}，可执行配方 ${statuses["executable-recipe"] || 0}。`,
     `- 结构缺口：${report.totals.structuralGaps}。`,
     "",
     "## 边界定义",
@@ -1461,7 +1545,7 @@ function renderMarkdown(report) {
       .filter(action => action.tier === "planner-recipe")
       .map(action => `| \`${action.id}\` ${action.title} | ${action.intent} | ${action.steps.map(step => `\`${step}\``).join(" → ")} |`),
     "",
-    "配方不承诺跨步骤原子性。AI 每一步都必须读取当前 revision、调用 inspector、等待必要授权、执行一条规则事务，再根据新状态继续规划。",
+    "配方已由公开 planner registry 发布，但不承诺跨步骤原子性。AI 每一步都必须读取当前 revision、调用登记的精确 inspector、等待必要授权、执行公开规则事务，再根据新状态继续规划。",
     "",
     "## 玩法文档生成骨架",
     "",

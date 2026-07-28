@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sourceDigest": "cf2eb8104a3abf381ce995b0079d1dd372ea4329810ddc848700a0a874343432",
+  "sourceDigest": "377b2a9db26f4855cb73516a3bacc5c557fb5a2565bd5d3b0dd64efc849e725e",
   "sourceRoots": [
     "app/webgl-generator/index.html",
     "app/webgl-generator/src/**/*.{js,vue}",
@@ -14,7 +14,7 @@
     "runtimeActions": 255,
     "apiActionBindings": 254,
     "commandAndInspectorExports": 210,
-    "publicApiMethods": 301
+    "publicApiMethods": 303
   },
   "statusPolicy": {
     "covered": "公共 API 已存在且与底层 action / command 或只读 helper 共路径",
@@ -23,8 +23,8 @@
     "gap": "适合参数化且没有公共 API，必须在第 200 项关闭"
   },
   "totals": {
-    "rows": 1165,
-    "covered": 1092,
+    "rows": 1167,
+    "covered": 1094,
     "excluded": 73,
     "deferred-owned": 0,
     "gap": 0,
@@ -23529,6 +23529,68 @@
       ],
       "inputSpace": "info.describe(method)",
       "mutates": "map-or-persistent-data",
+      "preflight": "由 info.describe(method) 与领域 inspector 发现",
+      "businessCodes": [],
+      "confirm": "由 methodMetadata.requiresConfirm 发现",
+      "undoOrRollback": "由 methodMetadata.undoable 与结果 metadata 发现",
+      "async": false,
+      "compatibility": "受 API 主版本和方法稳定性契约保护",
+      "evidence": [
+        "tools/webgl-generator-api-capabilities-regression.mjs",
+        "tools/webgl-generator-api-stability-contract-regression.mjs"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "api:planner.getRecipe",
+      "capabilityId": "planner.getRecipe",
+      "title": "公共 API planner.getRecipe",
+      "sourceKind": "public-api",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/api-contract.js",
+        "app/webgl-generator/src/runtime/console-api.js"
+      ],
+      "uiEntry": "",
+      "action": "planner.getRecipe",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "planner.getRecipe"
+      ],
+      "inputSpace": "info.describe(method)",
+      "mutates": "none",
+      "preflight": "由 info.describe(method) 与领域 inspector 发现",
+      "businessCodes": [],
+      "confirm": "由 methodMetadata.requiresConfirm 发现",
+      "undoOrRollback": "由 methodMetadata.undoable 与结果 metadata 发现",
+      "async": false,
+      "compatibility": "受 API 主版本和方法稳定性契约保护",
+      "evidence": [
+        "tools/webgl-generator-api-capabilities-regression.mjs",
+        "tools/webgl-generator-api-stability-contract-regression.mjs"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "api:planner.listRecipes",
+      "capabilityId": "planner.listRecipes",
+      "title": "公共 API planner.listRecipes",
+      "sourceKind": "public-api",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/api-contract.js",
+        "app/webgl-generator/src/runtime/console-api.js"
+      ],
+      "uiEntry": "",
+      "action": "planner.listRecipes",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "planner.listRecipes"
+      ],
+      "inputSpace": "info.describe(method)",
+      "mutates": "none",
       "preflight": "由 info.describe(method) 与领域 inspector 发现",
       "businessCodes": [],
       "confirm": "由 methodMetadata.requiresConfirm 发现",

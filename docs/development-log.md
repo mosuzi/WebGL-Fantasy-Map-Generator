@@ -28940,3 +28940,14 @@ full 矩阵结果：
 - 专项覆盖五种显式结果、seed 决定性、同格 / 相邻 / 战区三条接触路径、20 个领域拒绝 code、确认与 token、双方伤亡和三事件落点、无越权副作用、五故障点、validation failure、undo / redo 和旧图。核心预审与公开 API/schema/矩阵完整终审均为 `PASS`。
 - 公开 API 更新为 `301 / 174`，稳定等级 `293 / 7 / 1`，描述覆盖 `301 / 301`。复合语义矩阵的 `68` 个规则事务全部为完整事务，缺规则 `0`，另有配方 `10`；完整能力矩阵为 `1165` 行、`covered 1092 / excluded 73 / gap 0`。API、危险策略、复合与完整矩阵、生产构建和差异检查通过。
 - 系统 Chrome 真实图先通过公开 `declareWar` 建立战争，再用双方 `moveStation` 将军团 `12:0 / 8:0` 合法移动至相邻陆地 cell `175 / 230`。结算后兵力 `5010 → 4810 / 5505 → 4514`、态势 `resting / routed`、三份事件各一；人口、领土、外交和时间不变，summary 更新，undo / redo / undo 完整。health、application console、page 与 WebGL error 均为 `0`。没有新增待人类审阅问题；第 209 项完成，下一步只进入第 210 项步骤 10。
+
+## 2026-07-29：完成第 210 项步骤 10——AI 玩法配方目录与统一验收
+
+- 新增只读 `planner.listRecipes / getRecipe` 与唯一运行时配方 registry，冻结 `10` 个配方、`43` 个顶层步骤和 `86` 个精确公开方法引用。每一步登记事实读取、领域或空间预检、执行入口、输入模板、本步授权、领域成功事实、失败重规划、补偿 guard 和 revision 检查点；没有新增配方级执行、任意脚本、超级写接口、总历史或跨步骤自动回滚。
+- 三条路线步骤把 `routes.createPath` 提升为显式 `spatialActionId`，与真实 Cell action registry 和重编排矩阵双向校验。全部步骤的成功条件都可从登记 facts 重读，不再以“API 返回成功”代替玩法结果；补偿必须匹配 ledger 的 `stepId / afterRevision`，使用 `history.undo` 时还要求栈顶、地图 identity 未变和用户明确授权。
+- 新增十二章完整中文玩法说明及自动生成的机器同步附录。`tools/webgl-generator-planner-recipe-doc-sync.mjs` 用 canonical registry SHA-256 和 `43` 行逐步字段守门，`machineOnly / docsOnly / fieldMismatch / methodMismatch` 均为 `0`；玩法说明已进入复合语义审计 source digest，手工漂移会使 `--check` 失败。
+- 公开 API 更新为 `16` 个命名空间、`303` 个方法和 `174` 个编辑方法，稳定等级 `295 / 7 / 1`，描述覆盖 `303 / 303`，确认方法保持 `40`。复合语义矩阵为 `68` 个完整事务和 `10` 个可执行配方，待补 inspector、碎片、缺规则、待发布配方和结构缺口均为 `0`；完整能力矩阵为 `1167` 行、`covered 1094 / excluded 73 / gap 0`。
+- Node 专项对十条配方逐一执行成功、拒绝、陈旧与补偿的确定性模拟；文档同步、API 发现 / 稳定性 / 编辑覆盖 / 动作收敛 / 危险策略、复合语义和完整矩阵门禁、生产构建与差异检查全部通过。独立核心复审曾阻断文档未守门、成功条件占位和空间 action 盲区，三项修复后重新通过。
+- 系统 Chrome 真实走通四条代表链：殖民连续完成割让、确保省份、建城、建路和市场归属，revision `0 → 5`；战争完成宣战、双方调动、战斗、征服和议和，revision `0 → 6`，战斗不改领土而领土事务单独改变归属；行政改革完成整省转移，旧 merge token 稳定返回 `inspection-stale` 且前序提交保留，重新预检后合并，revision `0 → 2`；发布完成 health、显示整理与精确恢复、地图和 `1280×820` PNG 导出、能力及配方说明发现，历史和 revision 均不增加。最终 health、WebGL、application console 和 page error 均为 `0`，仅记录三条既有主线程长任务性能信号。
+- `pnpm run regress:planner-recipes-browser` 因 Corepack 访问 `registry.npmjs.org/@pnpm%2Fexe` 被当前网络环境阻断，未进入脚本；等价的直接 `node --no-warnings tools/webgl-generator-planner-recipes-browser-regression.mjs` 在 `19.3s` 内完整通过。第 207～210 项封闭批次全部完成，没有新增待人类审阅问题，下一动作只剩统一提交与推送。
+- 最终统一复审补测发现 `api-capabilities` 仍把新增 planner 后的能力组数量写死为 `17`，已校正为真实契约的 `18` 并重跑通过；终轮独立复审结论为 `RELEASE`，确认四个既有阻断均有机器守门，`source/` 无改动，Q-28～Q-33 未纳入本批。

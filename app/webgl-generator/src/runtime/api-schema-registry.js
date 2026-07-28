@@ -83,6 +83,18 @@ const METHOD_OVERRIDES = Object.freeze({
     result: pageSchema(),
     examples: [[{type: "city", text: "港"}, {limit: 20}]]
   },
+  "planner.listRecipes": {
+    arguments: [],
+    result: arraySchema(plannerRecipeSummarySchema()),
+    examples: [[]],
+    businessCodes: ["ok"]
+  },
+  "planner.getRecipe": {
+    arguments: [argument("recipeId", stringSchema("稳定配方 ID，例如 scenario.invasion-and-annexation"))],
+    result: plannerRecipeSchema(),
+    examples: [["scenario.invasion-and-annexation"]],
+    businessCodes: ["ok", "invalid_argument", "recipe-not-found"]
+  },
   "regenerationLocks.list": {
     arguments: [argument("options", {type: "object", properties: {kind: {type: "string"}}, additionalProperties: false}, false)],
     result: objectSchema(["version", "count", "entries", "mapRevision"]),
@@ -692,6 +704,104 @@ function responseSchema(dataSchema, metadataSchema = null) {
 
 function objectSchema(required = []) {
   return {type: "object", required, additionalProperties: true};
+}
+
+function plannerRecipeSummarySchema() {
+  return {
+    type: "object",
+    required: ["schemaVersion", "recipeId", "title", "domain", "intent", "stepIds", "stepCount", "historyPolicy"],
+    properties: {
+      schemaVersion: {type: "string"},
+      recipeId: {type: "string"},
+      title: {type: "string"},
+      domain: {type: "string"},
+      intent: {type: "string"},
+      stepIds: arraySchema({type: "string"}),
+      stepCount: {type: "integer", minimum: 1},
+      historyPolicy: {type: "string"}
+    },
+    additionalProperties: false
+  };
+}
+
+function plannerRecipeSchema() {
+  return {
+    type: "object",
+    required: [
+      "schemaVersion",
+      "recipeId",
+      "title",
+      "domain",
+      "intent",
+      "preconditions",
+      "successCriteria",
+      "historyPolicy",
+      "compatibilityPolicy",
+      "failurePolicy",
+      "steps"
+    ],
+    properties: {
+      schemaVersion: {type: "string"},
+      recipeId: {type: "string"},
+      title: {type: "string"},
+      domain: {type: "string"},
+      intent: {type: "string"},
+      preconditions: arraySchema({type: "string"}),
+      successCriteria: arraySchema({type: "string"}),
+      historyPolicy: {type: "string"},
+      compatibilityPolicy: {type: "string"},
+      failurePolicy: {type: "object", additionalProperties: {type: "string"}},
+      steps: arraySchema(plannerRecipeStepSchema())
+    },
+    additionalProperties: false
+  };
+}
+
+function plannerRecipeStepSchema() {
+  return {
+    type: "object",
+    required: [
+      "stepId",
+      "kind",
+      "actionId",
+      "spatialActionId",
+      "facts",
+      "inspection",
+      "executeMethods",
+      "inputTemplate",
+      "preconditions",
+      "authorization",
+      "successCriteria",
+      "failurePolicy",
+      "compensation",
+      "revisionCheckpoints"
+    ],
+    properties: {
+      stepId: {type: "string"},
+      kind: {enum: ["rule", "service", "fact"]},
+      actionId: {type: ["string", "null"]},
+      spatialActionId: {type: ["string", "null"]},
+      facts: arraySchema({type: "string"}),
+      inspection: {
+        type: "object",
+        required: ["methods", "policy"],
+        properties: {
+          methods: arraySchema({type: "string"}),
+          policy: {type: "string"}
+        },
+        additionalProperties: false
+      },
+      executeMethods: arraySchema({type: "string"}),
+      inputTemplate: {type: "object", additionalProperties: true},
+      preconditions: arraySchema({type: "string"}),
+      authorization: {type: "object", required: ["mode", "policy"], additionalProperties: true},
+      successCriteria: arraySchema({type: "string"}),
+      failurePolicy: {type: "object", required: ["rejected", "stale", "partial"], additionalProperties: true},
+      compensation: {type: "object", required: ["mode", "method", "guard"], additionalProperties: true},
+      revisionCheckpoints: arraySchema({type: "string"})
+    },
+    additionalProperties: false
+  };
 }
 
 function cellRefSchema() {

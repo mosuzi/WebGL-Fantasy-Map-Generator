@@ -16,6 +16,27 @@ assert.equal(report.totals.statuses["existing-transaction"], 68);
 assert.equal(report.totals.statuses["existing-needs-inspector"] || 0, 0);
 assert.equal(report.totals.statuses["fragmented-needs-transaction"] || 0, 0);
 assert.equal(report.totals.statuses["missing-game-rule"] || 0, 0);
+assert.equal(report.totals.statuses["recipe-only"] || 0, 0);
+assert.equal(report.totals.statuses["executable-recipe"], 10);
+assert.equal(report.recipeRegistryCoverage.complete, true);
+assert.equal(report.recipeRegistryCoverage.registryRecipes, 10);
+assert.equal(report.recipeRegistryCoverage.registrySteps, 43);
+assert.equal(report.recipeRegistryCoverage.spatialActionsReferenced, 3);
+assert.equal(report.recipeRegistryCoverage.issueCount, 0);
+assert.equal(report.recipeDocSync.complete, true);
+assert.equal(report.recipeDocSync.recipeCount, 10);
+assert.equal(report.recipeDocSync.stepCount, 43);
+for (const field of ["machineOnly", "docsOnly", "fieldMismatch", "methodMismatch"]) {
+  assert.deepEqual(report.recipeDocSync[field], []);
+}
+for (const field of [
+  "unknownSpatialActionIds",
+  "spatialRegistryOnly",
+  "spatialMatrixOnly",
+  "staleSpatialActionIds"
+]) {
+  assert.deepEqual(report.recipeRegistryCoverage[field], []);
+}
 
 for (const [id, inspect, execute] of [
   ["politics.create-state", "edit.states.inspectCreateAtCell", "edit.states.createAtCell"],
@@ -105,8 +126,10 @@ assert.equal(battle?.execute, "edit.military.resolveBattle");
 assert.ok(battle?.api.includes("edit.military.recordBattleEvent"), "旧战报原语未保留为兼容支持入口");
 
 for (const action of report.actions.filter(item => item.tier === "planner-recipe")) {
-  assert.equal(action.status, "recipe-only");
+  assert.equal(action.status, "executable-recipe");
   assert.ok(action.steps.length >= 3);
+  assert.equal(action.stepContracts.length, action.steps.length);
+  assert.ok(action.stepContracts.every(step => step.inspection.methods.length && step.executeMethods.length));
 }
 
 console.log(JSON.stringify({

@@ -70,6 +70,20 @@ try {
   assert.equal(labelLayoutDescription.examples[0].arguments[0].targetKind, "state", "标签示例没有使用运行时支持的 targetKind");
   assert.equal(labelLayoutDescription.examples[0].arguments[0].targetId, 1, "标签示例没有使用运行时支持的 targetId");
 
+  const plannerRecipes = unwrap(api.planner.listRecipes());
+  assert.equal(plannerRecipes.length, 10, "公开 planner registry 配方数错误");
+  assert.equal(plannerRecipes.reduce((sum, recipe) => sum + recipe.stepCount, 0), 43, "公开 planner registry 顶层步骤数错误");
+  const plannerRecipe = unwrap(api.planner.getRecipe("scenario.invasion-and-annexation"));
+  plannerRecipe.steps[0].facts.push("foreign.method");
+  assert.equal(
+    unwrap(api.planner.getRecipe("scenario.invasion-and-annexation")).steps[0].facts.includes("foreign.method"),
+    false,
+    "公开 planner.getRecipe 没有返回深拷贝"
+  );
+  const unknownRecipe = api.planner.getRecipe("scenario.unknown");
+  assert.equal(unknownRecipe.ok, false, "未知 planner recipe 没有拒绝");
+  assert.equal(unknownRecipe.error.code, "recipe-not-found", "未知 planner recipe code 不稳定");
+
   const types = unwrap(api.objects.types());
   assert(types.some(item => item.type === "state" && item.fields.includes("emblem")), "国家对象类型缺少纹章摘要");
   assert(types.some(item => item.type === "city" && item.fields.includes("emblem")), "城市对象类型缺少纹章摘要");

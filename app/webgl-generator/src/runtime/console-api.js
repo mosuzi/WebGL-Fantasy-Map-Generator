@@ -15,6 +15,7 @@ import {buildApiDescriptionCoverage, buildApiMethodDescriptionRegistry, describe
 import {getObjectSnapshot, listObjectSnapshots, listObjectTypes, queryObjectSnapshots} from "./object-query-api.js";
 import {getCellAtPoint, getCellNeighbors, getCellSnapshot, queryCells, scanCells} from "./cell-query-api.js";
 import {inspectCellAction, listCellActions} from "./cell-action-inspector-registry.js";
+import {getPlannerRecipe, listPlannerRecipes} from "./planner-recipe-registry.js";
 
 export function installConsoleApi(documentRef, state, options = {}) {
   const view = documentRef.defaultView || window;
@@ -78,6 +79,10 @@ export function createConsoleApi(documentRef, state, actions = {}) {
         }),
         cellReadonlyApiMetadata(state, "cells.inspectAction")
       )
+    }),
+    planner: Object.freeze({
+      listRecipes: () => apiCall(() => listPlannerRecipes()),
+      getRecipe: recipeId => apiCall(() => getPlannerRecipe(recipeId))
     }),
     regenerationLocks: Object.freeze({
       list: (options = {}) => apiCall(() => requireApiAction(actions.regenerationLocks?.list, "regenerationLocks.list")(options)),
@@ -458,6 +463,7 @@ function buildCapabilities(api) {
       info: "readonly",
       objects: "readonly-object-discovery",
       cells: "readonly-grid-and-pack-cell-discovery",
+      planner: "readonly-planner-recipes",
       regenerationLocks: "persistent-regeneration-protection",
       generate: "map-regeneration",
       oceanCurrents: "ocean-current-edit-and-world-rebuild",
@@ -500,6 +506,10 @@ export function buildMethodMetadata() {
       ,
       actions: {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
       inspectAction: {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false}
+    },
+    planner: {
+      listRecipes: {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
+      getRecipe: {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false}
     },
     regenerationLocks: {
       list: {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},

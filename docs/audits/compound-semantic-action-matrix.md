@@ -1,14 +1,14 @@
 # 全游戏复合语义接口、规则动作与玩法配方审计
 
-> 本报告对应权威任务第 204 项，只梳理规则与接口边界，不表示已实现缺失动作。当前 API 数量包含第 195 项阶段 A 的未提交工作区。
+> 本报告对应权威任务第 204 项及第 207～210 项闭环结果，持续校验规则事务、AI 规划器配方与公开 API 的当前实现状态。
 
 ## 审计结论
 
-- 上游能力矩阵：1165 行，unknown / unclassified / gap = 0 / 0 / 0。
-- 公开 API：301 / 301 已归类。
+- 上游能力矩阵：1167 行，unknown / unclassified / gap = 0 / 0 / 0。
+- 公开 API：303 / 303 已归类。
 - Cell / 画布动作：48 / 48 已归类；画布模式 29，直接操控 19 类 / 89 个宿主。
 - 规则事务与玩法配方：68 + 10 = 78。
-- 已有完整事务 68，已有写命令但缺 AI inspector 0，多 API 碎片待收敛 0，缺失游戏规则 0，规划器配方 10。
+- 已有完整事务 68，已有写命令但缺 AI inspector 0，多 API 碎片待收敛 0，缺失游戏规则 0，待发布配方 0，可执行配方 10。
 - 结构缺口：0。
 
 ## 边界定义
@@ -108,9 +108,9 @@
 | `scenario.coastline-engineering` 海岸、海峡与湖海工程 | 改变局部水陆和连通性，保护沿岸对象并重建水文与路线。 | `terrain.patch-feature` → `terrain.change-feature-topology` → `hydrology.change-lake-outlet` → `world.regenerate-system` |
 | `scenario.climate-disaster` 气候灾变及世界响应 | 改变气候或洋流，重建生态、人口和社会系统并记录前后结果。 | `world.apply-climate-and-rebuild` → `world.rebuild-from-ocean-currents` → `society.adjust-population` → `world.regenerate-system` |
 | `scenario.state-reformation` 国家改制与迁都 | 调整政体国号、迁都、重设省份并更新命名。 | `politics.change-government` → `politics.relocate-capital` → `politics.reorganize-provinces` → `society.bind-namebase-and-rename` |
-| `scenario.publish-map` 检查、整理并发布地图 | 检查健康与对象一致性，整理图层和主题，再导出数据、图片和说明。 | `service:health-check` → `service:layers-and-themes` → `service:data-export` → `service:gameplay-documentation` |
+| `scenario.publish-map` 检查、整理并发布地图 | 检查健康与对象一致性，整理图层和主题，再导出数据、图片和说明。 | `health-check` → `layers-and-themes` → `data-export` → `gameplay-documentation` |
 
-配方不承诺跨步骤原子性。AI 每一步都必须读取当前 revision、调用 inspector、等待必要授权、执行一条规则事务，再根据新状态继续规划。
+配方已由公开 planner registry 发布，但不承诺跨步骤原子性。AI 每一步都必须读取当前 revision、调用登记的精确 inspector、等待必要授权、执行公开规则事务，再根据新状态继续规划。
 
 ## 玩法文档生成骨架
 
@@ -130,6 +130,6 @@
 
 ## 机器覆盖
 
-- API 分类：`atomic-editor-primitive=54`，`editor-runtime-service=49`，`read-export-service=10`，`read-primitive=28`，`semantic-action=160`。
+- API 分类：`atomic-editor-primitive=54`，`editor-runtime-service=49`，`read-export-service=10`，`read-primitive=30`，`semantic-action=160`。
 - 交互分类：`semantic-input-or-primitive=36`，`ui-boundary=12`。
-- Source digest：`6f0697aa5fdf09fc94e6cb70d27f661a40753e29ac7ea845d2af4ae015e5bf88`。
+- Source digest：`f7b53ab0497fc2aa6d7eef02840bde84f1cdcbc1471f533ac29247c2a0f7fd1a`。
