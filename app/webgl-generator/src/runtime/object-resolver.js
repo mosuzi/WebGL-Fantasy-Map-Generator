@@ -34,7 +34,7 @@ export function resolveObject(map, object) {
 
 function resolveCity(map, object) {
   const city = map.settlements.cities[object.id];
-  if (!city) return null;
+  if (!city || city.removed) return null;
   return {
     ...object,
     kind: "city",
@@ -97,7 +97,7 @@ function resolveLabel(map, object) {
   }
   if (object.targetKind === LABEL_TARGET_KIND.CITY || object.id !== undefined) {
     const city = map.settlements.cities[object.id];
-    if (!city) return null;
+    if (!city || city.removed) return null;
     return {
       ...object,
       kind: OBJECT_KIND.LABEL,

@@ -141,8 +141,8 @@ async function inspectCapabilities(page, {cells, seed, template, expectedConfirm
     if (version.capabilitySchemaVersion !== "1.0.0" || version.compatibilityPolicyVersion !== "1.0.0") failures.push("info.version 缺少能力或兼容策略版本");
     if (capabilities.contract?.stableCompatibility !== "same-major") failures.push("capabilities 缺少同主版本兼容策略");
     if (capabilities.contract?.deprecatedRemoval !== "next-major-only") failures.push("capabilities 缺少 deprecated 移除策略");
-    if (Object.keys(capabilities.capabilityGroups || {}).length !== 16) failures.push("capabilities 能力组不是 16 个");
-    if (JSON.stringify(capabilities.stabilitySummary) !== JSON.stringify({stable: 249, experimental: 7, deprecated: 1})) failures.push("稳定等级统计不是 249 / 7 / 1");
+    if (Object.keys(capabilities.capabilityGroups || {}).length !== 17) failures.push("capabilities 能力组不是 17 个");
+    if (JSON.stringify(capabilities.stabilitySummary) !== JSON.stringify({stable: 261, experimental: 7, deprecated: 1})) failures.push("稳定等级统计不是 261 / 7 / 1");
     if (!Object.prototype.hasOwnProperty.call(runtimeStats, "lastEditRefresh")) failures.push("runtimeStats 缺少 lastEditRefresh 字段");
     const coverage = capabilities.methodMetadataCoverage || {};
     if (coverage.complete !== true) failures.push("methodMetadataCoverage.complete 不是 true");
@@ -205,6 +205,8 @@ async function inspectCapabilities(page, {cells, seed, template, expectedConfirm
     }
     const cellRead = await inspectCellReadApi();
     failures.push(...cellRead.failures);
+    const existingRuleTransactions = await inspectExistingRuleTransactionApi();
+    failures.push(...existingRuleTransactions.failures);
     if (glError !== 0) failures.push(`WebGL error 非 0：${glError}`);
 
     return {
@@ -259,6 +261,7 @@ async function inspectCapabilities(page, {cells, seed, template, expectedConfirm
         lastEditRefresh: runtimeStats.lastEditRefresh
       },
       cellRead,
+      existingRuleTransactions,
       glError,
       failures,
       passed: failures.length === 0
@@ -560,6 +563,159 @@ async function inspectCapabilities(page, {cells, seed, template, expectedConfirm
         throw new Error("等待 Cell 浏览器状态超时");
       }
     }
+
+    async function inspectExistingRuleTransactionApi() {
+      const ruleFailures = [];
+      const evidence = {};
+      const inspectionFields = [
+        "allowed", "code", "summary", "normalizedInput", "affected", "requiresConfirm",
+        "expectedRevision", "inspectionToken", "inspectorSchemaVersion"
+      ];
+      for (const [method, actionCode] of [
+        ["edit.height.inspectChanges", "height-changes-empty"],
+        ["edit.biomes.inspectAssignment", "invalid-biome"],
+        ["edit.rivers.inspectCreate", "invalid-source"],
+        ["edit.cities.inspectDelete", "delete-not-found"],
+        ["edit.zones.inspectCreate", "occupied-cell"]
+      ]) {
+        const description = unwrap(api.info.describe(method), `info.describe.${method}`);
+        const required = description.resultSchema?.properties?.data?.required || [];
+        if (inspectionFields.some(field => !required.includes(field))) ruleFailures.push(`${method} 缺少统一预检结果字段`);
+        if (!description.businessCodes?.includes(actionCode)) ruleFailures.push(`${method} 缺少 ${actionCode}`);
+      }
+
+      const initialCell = unwrap(api.cells.get({space: "grid", id: 0}), "rules.height.initial");
+      const initialHeight = Number(initialCell.terrain.height);
+      const nextHeight = initialHeight === 100 ? 99 : initialHeight + 1;
+      const changes = [{gridCell: 0, after: nextHeight}];
+      const heightInspection = unwrap(api.edit.height.inspectChanges(changes), "rules.height.inspect");
+      const revisionBefore = unwrap(api.info.mapSummary(), "rules.height.revision.before").mapRevision;
+      const mismatch = api.edit.height.applyChanges(
+        [{gridCell: 0, after: nextHeight === 100 ? 99 : nextHeight + 1}],
+        inspectionOptions(heightInspection)
+      );
+      if (mismatch?.ok !== false || mismatch.error?.code !== "inspection-input-mismatch") ruleFailures.push("高度公开执行没有拒绝输入错配 token");
+      const heightApplied = unwrap(api.edit.height.applyChanges(changes, inspectionOptions(heightInspection)), "rules.height.apply");
+      const revisionAfter = unwrap(api.info.mapSummary(), "rules.height.revision.after").mapRevision;
+      if (!heightApplied.executed || revisionAfter !== revisionBefore + 1) ruleFailures.push("高度公开执行没有恰好推进一次 revision");
+      if (Number(unwrap(api.cells.get({space: "grid", id: 0}), "rules.height.changed").terrain.height) !== nextHeight) ruleFailures.push("高度公开执行没有落图");
+      unwrap(api.history.undo(), "rules.height.undo");
+      if (Number(unwrap(api.cells.get({space: "grid", id: 0}), "rules.height.restored").terrain.height) !== initialHeight) ruleFailures.push("高度公开执行撤销没有恢复");
+      const legacyHeight = initialHeight === 0 ? 1 : initialHeight - 1;
+      const legacy = unwrap(api.edit.height.applyChanges([{gridCell: 0, after: legacyHeight}]), "rules.height.legacy");
+      if (!legacy.executed) ruleFailures.push("高度旧公开调用不再执行");
+      unwrap(api.history.undo(), "rules.height.legacy.undo");
+      evidence.height = {mismatchCode: mismatch?.error?.code || "", tokenExecuted: heightApplied.executed, legacyExecuted: legacy.executed};
+
+      const packCells = unwrap(api.cells.query({
+        space: "pack",
+        filter: {land: true},
+        fields: ["id", "height"],
+        limit: 1000
+      }), "rules.packCells").items.sort((left, right) => Number(right.height) - Number(left.height));
+      let riverSample = null;
+      for (const cell of packCells) {
+        const input = {sourcePackCell: Number(cell.id)};
+        const inspection = unwrap(api.edit.rivers.inspectCreate(input), "rules.river.inspect");
+        if (inspection.allowed) {
+          riverSample = {input, inspection};
+          break;
+        }
+      }
+      if (!riverSample) {
+        ruleFailures.push("生产图找不到合法河流创建样本");
+      } else {
+        const created = unwrap(api.edit.rivers.create({...riverSample.input, ...inspectionOptions(riverSample.inspection)}), "rules.river.create");
+        const riverId = Number(created.result?.riverId);
+        if (!created.executed || !Number.isInteger(riverId) || !objectExists({kind: "river", id: riverId})) ruleFailures.push("河流公开创建没有落图");
+        unwrap(api.history.undo(), "rules.river.undo");
+        if (objectExists({kind: "river", id: riverId})) ruleFailures.push("河流公开创建撤销没有恢复");
+        evidence.creation = {kind: "river", id: riverId, executed: created.executed};
+      }
+
+      const landCells = unwrap(api.cells.query({
+        space: "grid",
+        filter: {land: true},
+        fields: ["id", "biomeId"],
+        limit: 100
+      }), "rules.landCells").items;
+      const biomeCell = landCells[0];
+      const targetBiome = unwrap(api.climate.getBiomes(), "rules.biomes.catalog").entries
+        .find(item => Number(item.id) > 0 && Number(item.id) !== Number(biomeCell?.biomeId));
+      if (!biomeCell || !targetBiome) {
+        ruleFailures.push("生产图找不到生物群系样本");
+      } else {
+        const biomeOptions = {scope: "land"};
+        const inspection = unwrap(api.edit.biomes.inspectAssignment(Number(targetBiome.id), [Number(biomeCell.id)], biomeOptions), "rules.biomes.inspect");
+        const assigned = unwrap(api.edit.biomes.assignCells(
+          Number(targetBiome.id),
+          [Number(biomeCell.id)],
+          {...biomeOptions, ...inspectionOptions(inspection)}
+        ), "rules.biomes.assign");
+        if (!assigned.executed) ruleFailures.push("生物群系公开执行没有落图");
+        unwrap(api.history.undo(), "rules.biomes.undo");
+        const restored = unwrap(api.cells.get({space: "grid", id: Number(biomeCell.id)}), "rules.biomes.restored");
+        if (Number(restored.climate.biomeId) !== Number(biomeCell.biomeId)) ruleFailures.push("生物群系撤销没有恢复");
+        evidence.biome = {gridCell: Number(biomeCell.id), target: Number(targetBiome.id), executed: assigned.executed};
+      }
+
+      const city = unwrap(api.objects.list("city", {limit: 100}), "rules.cities.list").items[0];
+      if (!city) {
+        ruleFailures.push("生产图找不到城市删除样本");
+      } else {
+        const inspection = unwrap(api.edit.cities.inspectDelete(Number(city.id)), "rules.cities.inspectDelete");
+        const deleted = unwrap(api.edit.cities.delete(Number(city.id), {
+          confirm: true,
+          ...inspectionOptions(inspection)
+        }), "rules.cities.delete");
+        const afterDeleteInspection = unwrap(api.edit.cities.inspectDelete(Number(city.id)), "rules.cities.inspectDelete.after");
+        if (!deleted.executed || afterDeleteInspection.allowed || afterDeleteInspection.code !== "delete-not-found") ruleFailures.push("城市危险删除没有落图");
+        unwrap(api.history.undo(), "rules.cities.undo");
+        const afterUndoInspection = unwrap(api.edit.cities.inspectDelete(Number(city.id)), "rules.cities.inspectDelete.undo");
+        if (!afterUndoInspection.allowed) ruleFailures.push("城市危险删除撤销没有恢复");
+        evidence.deletion = {kind: "city", id: Number(city.id), confirmPreserved: deleted.executed};
+      }
+
+      let zoneSample = null;
+      for (const cell of packCells) {
+        const input = {packCells: [Number(cell.id)], name: "规则事务验收地区"};
+        const inspection = unwrap(api.edit.zones.inspectCreate(input), "rules.zones.inspectCreate");
+        if (inspection.allowed) {
+          zoneSample = {input, inspection};
+          break;
+        }
+      }
+      if (!zoneSample) {
+        ruleFailures.push("生产图找不到地区创建样本");
+      } else {
+        const created = unwrap(api.edit.zones.create({...zoneSample.input, ...inspectionOptions(zoneSample.inspection)}), "rules.zones.create");
+        const zoneId = Number(created.result?.zoneId);
+        if (!created.executed || !objectExists({kind: "zone", id: zoneId})) ruleFailures.push("地区公开创建没有落图");
+        const deleteInspection = unwrap(api.edit.zones.inspectDelete(zoneId), "rules.zones.inspectDelete");
+        const deleted = unwrap(api.edit.zones.delete(zoneId, inspectionOptions(deleteInspection)), "rules.zones.delete");
+        if (!deleted.executed || objectExists({kind: "zone", id: zoneId})) ruleFailures.push("地区公开删除没有落图");
+        unwrap(api.history.undo(), "rules.zones.delete.undo");
+        if (!objectExists({kind: "zone", id: zoneId})) ruleFailures.push("地区删除撤销没有恢复");
+        unwrap(api.history.undo(), "rules.zones.create.undo");
+        if (objectExists({kind: "zone", id: zoneId})) ruleFailures.push("地区创建撤销没有恢复");
+        evidence.zone = {id: zoneId, create: created.executed, delete: deleted.executed};
+      }
+
+      return {passed: ruleFailures.length === 0, evidence, failures: ruleFailures};
+
+      function inspectionOptions(inspection) {
+        return {
+          inspectionToken: inspection.inspectionToken,
+          expectedRevision: inspection.expectedRevision,
+          inspectorSchemaVersion: inspection.inspectorSchemaVersion
+        };
+      }
+
+      function objectExists(reference) {
+        const result = api.objects.get(reference);
+        return result?.ok === true && result.data != null;
+      }
+    }
   }, {cells, seed, template, expectedConfirmRequired});
 }
 
@@ -670,6 +826,7 @@ function buildConsoleSummary(report) {
     confirmRequired: report.safety.confirmRequiredMethods,
     representativeMutates: report.representativeMutates,
     contract: report.contract,
+    existingRuleTransactions: report.existingRuleTransactions,
     uiApiConvergence: report.uiApiConvergence,
     glError: report.glError,
     healthErrors: report.healthErrors.total,
@@ -700,6 +857,8 @@ function renderMarkdown(report) {
   lines.push(`- API 版本 / 稳定等级：${report.contract.rootVersion} / ${report.contract.rootStability}`);
   lines.push(`- stable / experimental / deprecated：${report.contract.stabilitySummary.stable} / ${report.contract.stabilitySummary.experimental} / ${report.contract.stabilitySummary.deprecated}`);
   lines.push(`- 能力组：${report.contract.capabilityGroups}`);
+  lines.push(`- 既有规则事务公开链：${report.existingRuleTransactions.passed ? "通过" : "失败"}`);
+  lines.push(`- 规则事务证据：\`${JSON.stringify(report.existingRuleTransactions.evidence)}\``);
   lines.push("");
   lines.push("## 命名空间", "");
   lines.push("| 命名空间 | methods | documented | metadata | runtime | 完整 |");

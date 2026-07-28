@@ -4,11 +4,11 @@
 
 ## 审计结论
 
-- 上游能力矩阵：1012 行，unknown / unclassified / gap = 0 / 0 / 0。
-- 公开 API：257 / 257 已归类。
+- 上游能力矩阵：1048 行，unknown / unclassified / gap = 0 / 0 / 0。
+- 公开 API：269 / 269 已归类。
 - Cell / 画布动作：48 / 48 已归类；画布模式 29，直接操控 19 类 / 89 个宿主。
 - 规则事务与玩法配方：68 + 10 = 78。
-- 已有完整事务 36，已有写命令但缺 AI inspector 21，多 API 碎片待收敛 5，缺失游戏规则 6，规划器配方 10。
+- 已有完整事务 47，已有写命令但缺 AI inspector 10，多 API 碎片待收敛 5，缺失游戏规则 6，规划器配方 10。
 - 结构缺口：0。
 
 ## 边界定义
@@ -34,20 +34,20 @@
 | `world.rebuild-from-ocean-currents` | 气候、生态与人口承载 | 重生成洋流，选择仅更新洋流或继续重算气候、河流、生态与社会。 | `existing-transaction` | `oceanCurrents.cancelWorldRebuild`<br>`oceanCurrents.inspectWorldRebuild`<br>`oceanCurrents.rebuildWorld`<br>`oceanCurrents.regenerate` | `oceanCurrents.inspectWorldRebuild`<br>`oceanCurrents.regenerate / oceanCurrents.rebuildWorld` |
 | `terrain.reset-seafloor` | 地形、水文与 Feature | 重新生成海底高度，同时保护陆地、湖泊和已冻结的水陆拓扑。 | `existing-transaction` | `edit.height.applySeafloorReset`<br>`edit.height.inspectSeafloorReset` | `edit.height.inspectSeafloorReset`<br>`edit.height.applySeafloorReset` |
 | `terrain.rebuild-height-derived` | 地形、水文与 Feature | 在高度编辑后重建基础、下游或全部派生系统。 | `existing-transaction` | `edit.height.rebuildAllDerived`<br>`edit.height.rebuildBaseDerived`<br>`edit.height.rebuildDownstreamDerived` | `planned:edit.height.inspectDerivedRebuild`<br>`edit.height.rebuildBaseDerived / rebuildDownstreamDerived / rebuildAllDerived` |
-| `terrain.edit-height-region` | 地形、水文与 Feature | 按 Cell 集、范围或画笔修改高度，并明确是否影响海底及哪些派生系统待更新。 | `existing-needs-inspector` | `edit.height.applyChanges`<br>`edit.height.applyRangeTransform`<br>`edit.height.inspectRangeTransform` | `edit.height.inspectRangeTransform / planned:cells.inspectAction(height.edit)`<br>`edit.height.applyChanges / edit.height.applyRangeTransform` |
+| `terrain.edit-height-region` | 地形、水文与 Feature | 按 Cell 集、范围或画笔修改高度，并明确是否影响海底及哪些派生系统待更新。 | `existing-transaction` | `edit.height.applyChanges`<br>`edit.height.applyRangeTransform`<br>`edit.height.inspectChanges`<br>`edit.height.inspectRangeTransform` | `edit.height.inspectChanges / edit.height.inspectRangeTransform`<br>`edit.height.applyChanges / edit.height.applyRangeTransform` |
 | `terrain.apply-height-program` | 地形、水文与 Feature | 把模板或多步骤程序应用到全图或选区，并保持步骤整体原子。 | `existing-transaction` | `edit.height.applyGlobalTransform`<br>`edit.height.applyTerrainProgram`<br>`edit.height.applyTerrainTemplate`<br>`edit.height.inspectGlobalTransform`<br>`edit.height.inspectTerrainProgram`<br>`edit.height.inspectTerrainTemplate` | `对应 inspect 方法`<br>`对应 apply 方法` |
 | `terrain.smooth-selection` | 地形、水文与 Feature | 对选中 Cell 做受控平滑，维护羽化、海陆保护和单事务。 | `existing-transaction` | `edit.height.applySelectionSmoothing`<br>`edit.height.inspectSelectionSmoothing` | `edit.height.inspectSelectionSmoothing`<br>`edit.height.applySelectionSmoothing` |
 | `terrain.patch-feature` | 地形、水文与 Feature | 在局部 Cell 集修正水陆状态，并同步高度、Feature、对象保护和派生链。 | `existing-transaction` | `edit.features.applyPatch`<br>`edit.features.inspectPatch` | `edit.features.inspectPatch`<br>`edit.features.applyPatch` |
 | `terrain.change-feature-topology` | 地形、水文与 Feature | 改变水陆连通关系，同时保护沿岸对象、河口、道路和 Feature 身份。 | `existing-transaction` | `edit.features.applyTopology`<br>`edit.features.inspectTopology` | `edit.features.inspectTopology`<br>`edit.features.applyTopology` |
-| `hydrology.create-river` | 地形、水文与 Feature | 选择合法源点创建河流，解析下游路径、河口和统计。 | `existing-needs-inspector` | `edit.rivers.create` | `planned:cells.inspectAction(river.add)`<br>`edit.rivers.create` |
-| `hydrology.delete-river` | 地形、水文与 Feature | 删除河流，检查湖泊出口、路线/备注和其它依赖。 | `existing-needs-inspector` | `edit.rivers.delete` | `planned:edit.rivers.inspectDelete`<br>`edit.rivers.delete` |
-| `hydrology.excavate-lake` | 地形、水文与 Feature | 以 Cell 和半径开挖湖泊，处理高度、Feature、对象保护和出口。 | `existing-needs-inspector` | `edit.lakes.create` | `planned:cells.inspectAction(lake.excavate)`<br>`edit.lakes.create` |
+| `hydrology.create-river` | 地形、水文与 Feature | 选择合法源点创建河流，解析下游路径、河口和统计。 | `existing-transaction` | `edit.rivers.create`<br>`edit.rivers.inspectCreate` | `edit.rivers.inspectCreate`<br>`edit.rivers.create` |
+| `hydrology.delete-river` | 地形、水文与 Feature | 删除河流，检查湖泊出口、路线/备注和其它依赖。 | `existing-transaction` | `edit.rivers.delete`<br>`edit.rivers.inspectDelete` | `edit.rivers.inspectDelete`<br>`edit.rivers.delete` |
+| `hydrology.excavate-lake` | 地形、水文与 Feature | 以 Cell 和半径开挖湖泊，处理高度、Feature、对象保护和出口。 | `existing-transaction` | `edit.lakes.create`<br>`edit.lakes.inspectCreate` | `edit.lakes.inspectCreate`<br>`edit.lakes.create` |
 | `hydrology.change-lake-outlet` | 地形、水文与 Feature | 验证湖泊与河流关系后设置出口，并修复水文引用。 | `existing-transaction` | `edit.lakes.inspectOutlet`<br>`edit.lakes.setOutlet` | `edit.lakes.inspectOutlet`<br>`edit.lakes.setOutlet` |
-| `hydrology.delete-lake` | 地形、水文与 Feature | 删除湖泊对象，明确是仅删对象还是填平水体，并清理依赖。 | `existing-needs-inspector` | `edit.lakes.delete` | `planned:edit.lakes.inspectDelete`<br>`edit.lakes.delete` |
-| `ecology.assign-biome` | 气候、生态与人口承载 | 按 Grid Cell 集分配生物群系，并报告气候或水陆不适配。 | `existing-needs-inspector` | `edit.biomes.assignCells` | `planned:cells.inspectAction(biome.assign)`<br>`edit.biomes.assignCells` |
+| `hydrology.delete-lake` | 地形、水文与 Feature | 删除湖泊对象，明确是仅删对象还是填平水体，并清理依赖。 | `existing-transaction` | `edit.lakes.delete`<br>`edit.lakes.inspectDelete` | `edit.lakes.inspectDelete`<br>`edit.lakes.delete` |
+| `ecology.assign-biome` | 气候、生态与人口承载 | 按 Grid Cell 集分配生物群系，并报告气候或水陆不适配。 | `existing-transaction` | `edit.biomes.assignCells`<br>`edit.biomes.inspectAssignment` | `edit.biomes.inspectAssignment`<br>`edit.biomes.assignCells` |
 | `ecology.adjust-suitability` | 气候、生态与人口承载 | 调整基础适居度或覆盖值，维护人口承载和旧图兼容。 | `existing-transaction` | `edit.biomes.applySuitability`<br>`edit.biomes.inspectSuitability` | `edit.biomes.inspectSuitability`<br>`edit.biomes.applySuitability` |
 | `politics.create-state` | 国家、省份与政治拓扑 | 在合法陆地创建国家，同时创建首省、复用或创建首都并同步政治镜像。 | `existing-transaction` | `edit.states.add`<br>`edit.states.createAtCell`<br>`edit.states.inspectCreateAtCell` | `edit.states.inspectCreateAtCell`<br>`edit.states.createAtCell` |
-| `politics.delete-state` | 国家、省份与政治拓扑 | 删除国家，明确处理领土、省份、城镇、外交、军事、市场和历史引用。 | `existing-needs-inspector` | `edit.states.delete` | `planned:edit.states.inspectDelete`<br>`edit.states.delete` |
+| `politics.delete-state` | 国家、省份与政治拓扑 | 删除国家，明确处理领土、省份、城镇、外交、军事、市场和历史引用。 | `existing-transaction` | `edit.states.delete`<br>`edit.states.inspectDelete` | `edit.states.inspectDelete`<br>`edit.states.delete` |
 | `politics.merge-states` | 国家、省份与政治拓扑 | 把被合并国完整并入保留国，重建省份并同步外交、军事、市场和路线。 | `existing-transaction` | `edit.states.inspectMerge`<br>`edit.states.merge` | `edit.states.inspectMerge`<br>`edit.states.merge` |
 | `politics.split-state` | 国家、省份与政治拓扑 | 选择完整旧省份和新首都拆出国家，修复原国家首都及全部跨域引用。 | `existing-transaction` | `edit.states.inspectSplit`<br>`edit.states.split` | `edit.states.inspectSplit`<br>`edit.states.split` |
 | `politics.transfer-territory` | 国家、省份与政治拓扑 | 把一个或多个 Cell 从原国家转给目标国家，并按省份策略处理；若原国家失去最后领土则触发完整灭国。 | `fragmented-needs-transaction` | `cells.get`<br>`cells.query`<br>`edit.provinces.applyChanges`<br>`edit.states.applyChanges`<br>`edit.states.delete`<br>`edit.states.merge` | `planned:edit.states.inspectTerritoryTransfer`<br>`planned:edit.states.transferTerritory` |
@@ -55,14 +55,14 @@
 | `politics.transfer-province` | 国家、省份与政治拓扑 | 把完整省份及其 Cell、城镇和省会转给目标国家，并修复双方统计、首都和引用。 | `fragmented-needs-transaction` | `cells.query`<br>`edit.provinces.applyChanges`<br>`edit.states.applyChanges`<br>`objects.get` | `planned:edit.provinces.inspectTransfer`<br>`planned:edit.provinces.transfer` |
 | `politics.reorganize-provinces` | 国家、省份与政治拓扑 | 保留国家与范围外对象，墓碑化目标旧省并生成新的连通省份。 | `existing-transaction` | `generate.regenerate` | `planned:edit.provinces.inspectRegeneration`<br>`generate.regenerate(provinces)` |
 | `politics.create-province` | 国家、省份与政治拓扑 | 在已有国家的合法 Cell 创建省份，确定省会并同步国家省份列表。 | `existing-transaction` | `edit.provinces.add`<br>`edit.provinces.createAtCell`<br>`edit.provinces.inspectCreateAtCell` | `edit.provinces.inspectCreateAtCell`<br>`edit.provinces.createAtCell` |
-| `politics.delete-province` | 国家、省份与政治拓扑 | 删除省份，清除或重新分配领土与城镇，维护国家省份列表。 | `existing-needs-inspector` | `edit.provinces.delete` | `planned:edit.provinces.inspectDelete`<br>`edit.provinces.delete` |
+| `politics.delete-province` | 国家、省份与政治拓扑 | 删除省份，清除或重新分配领土与城镇，维护国家省份列表。 | `existing-transaction` | `edit.provinces.delete`<br>`edit.provinces.inspectDelete` | `edit.provinces.inspectDelete`<br>`edit.provinces.delete` |
 | `politics.merge-provinces` | 国家、省份与政治拓扑 | 把多个同国相邻省份合并，保留一个身份或创建新身份，并确定省会。 | `missing-game-rule` | `cells.query`<br>`objects.get` | `planned:edit.provinces.inspectMerge`<br>`planned:edit.provinces.merge` |
 | `politics.split-province` | 国家、省份与政治拓扑 | 按连通 Cell 集或城镇锚点拆分省份，并为两侧确定省会。 | `missing-game-rule` | `cells.query`<br>`objects.get` | `planned:edit.provinces.inspectSplit`<br>`planned:edit.provinces.split` |
 | `politics.change-government` | 国家、省份与政治拓扑 | 调整国家政体和允许的国号后缀，并同步完整国名和政治镜像。 | `existing-transaction` | `edit.states.setGovernment`<br>`edit.states.setGovernmentBatch` | `info.describe(edit.states.setGovernment)`<br>`edit.states.setGovernment / setGovernmentBatch` |
 | `politics.relocate-capital` | 国家、省份与政治拓扑 | 把本国城市设为首都，取消旧首都并同步国家中心、标签和城镇层级。 | `existing-needs-inspector` | `edit.states.setCapital` | `planned:edit.states.inspectCapitalChange`<br>`edit.states.setCapital` |
 | `settlement.found-city` | 城镇、人口与定居点 | 在合法 Cell 建立城镇，继承国家、省份、文化、宗教和港口条件。 | `existing-transaction` | `edit.cities.add`<br>`edit.cities.createAtCell`<br>`edit.cities.inspectCreateAtCell` | `edit.cities.inspectCreateAtCell`<br>`edit.cities.createAtCell` |
 | `settlement.move-city` | 城镇、人口与定居点 | 移动城镇到目标点，处理国家/省份归属、首都省会限制、港口和相连路线。 | `existing-transaction` | `edit.cities.inspectMove`<br>`edit.cities.move` | `edit.cities.inspectMove`<br>`edit.cities.move` |
-| `settlement.delete-city` | 城镇、人口与定居点 | 删除城镇前评估首都、省会、路线、市场和备注依赖，确认后单事务清理。 | `existing-needs-inspector` | `edit.cities.delete` | `planned:edit.cities.inspectDelete`<br>`edit.cities.delete` |
+| `settlement.delete-city` | 城镇、人口与定居点 | 删除城镇前评估首都、省会、路线、市场和备注依赖，确认后单事务清理。 | `existing-transaction` | `edit.cities.delete`<br>`edit.cities.inspectDelete` | `edit.cities.inspectDelete`<br>`edit.cities.delete` |
 | `settlement.sync-city-owner` | 城镇、人口与定居点 | 让城镇国家与省份归属跟随所在 Cell，并处理首都、省会和跨国约束。 | `existing-needs-inspector` | `edit.cities.syncOwner` | `planned:edit.cities.inspectOwnerSync`<br>`edit.cities.syncOwner` |
 | `settlement.regenerate-scope` | 城镇、人口与定居点 | 在全图、国家或省份范围重设普通城镇，保留首都、省会和范围外对象身份。 | `existing-transaction` | `generate.regenerate` | `planned:edit.cities.inspectRegeneration`<br>`generate.regenerate(cities)` |
 | `society.adjust-population` | 城镇、人口与定居点 | 给国家、省份、城市或 Cell 区域增减人口，并按规则分摊城乡。 | `existing-transaction` | `edit.population.applyAdjustment`<br>`edit.population.inspectAdjustment` | `edit.population.inspectAdjustment`<br>`edit.population.applyAdjustment` |
@@ -73,12 +73,12 @@
 | `society.replace-or-remove-namebase` | 文化、宗教、命名与社会归属 | 删除、清空或替换用户名称库时，先处理所有文化和对象绑定，避免悬空。 | `fragmented-needs-transaction` | `namebases.bind`<br>`namebases.clear`<br>`namebases.delete`<br>`namebases.import`<br>`namebases.update` | `planned:namebases.inspectReplacement`<br>`planned:namebases.replace` |
 | `infrastructure.create-route` | 路线、区域与资源设施 | 根据端点或 Pack Cell 路径创建道路、步道或海路，验证通行和归属。 | `existing-transaction` | `edit.routes.create` | `planned:cells.inspectAction(route.draw)`<br>`edit.routes.create` |
 | `infrastructure.edit-route` | 路线、区域与资源设施 | 移动、插入或删除路线节点，并重建路径、长度、归属和渲染数据。 | `existing-transaction` | `edit.routes.inspectEdit`<br>`edit.routes.update` | `edit.routes.inspectEdit`<br>`edit.routes.update` |
-| `infrastructure.delete-route` | 路线、区域与资源设施 | 删除路线，评估备注、城镇和资源引用并保持普通单路线低影响兼容。 | `existing-needs-inspector` | `edit.routes.delete` | `planned:edit.routes.inspectDelete`<br>`edit.routes.delete` |
+| `infrastructure.delete-route` | 路线、区域与资源设施 | 删除路线，评估备注、城镇和资源引用并保持普通单路线低影响兼容。 | `existing-transaction` | `edit.routes.delete`<br>`edit.routes.inspectDelete` | `edit.routes.inspectDelete`<br>`edit.routes.delete` |
 | `infrastructure.rebuild-route-network` | 路线、区域与资源设施 | 基于当前城镇、地形和政治归属重新生成路线网络。 | `existing-transaction` | `generate.regenerate` | `planned:edit.routes.inspectRegeneration`<br>`generate.regenerate(routes)` |
 | `economy.assign-market-region` | 市场、资源与经济链 | 把 Pack Cell 区域分配给市场，校验跨国、水域和无效市场后重算经济链。 | `existing-transaction` | `edit.economy.assignCells`<br>`edit.economy.inspectAssignment` | `edit.economy.inspectAssignment`<br>`edit.economy.assignCells` |
 | `economy.rebuild` | 市场、资源与经济链 | 基于当前政治、城镇和资源状态重算市场与交易。 | `existing-transaction` | `edit.economy.rebuild` | `planned:edit.economy.inspectRebuild`<br>`edit.economy.rebuild` |
 | `infrastructure.regenerate-resources` | 市场、资源与经济链 | 重生成资源标记、资源潜力和相关贸易。 | `existing-transaction` | `generate.regenerate` | `planned:edit.markers.inspectResourceRegeneration`<br>`generate.regenerate(markers)` |
-| `infrastructure.manage-zone` | 路线、区域与资源设施 | 按中心 Cell 和半径创建区域，或在依赖预检后删除区域。 | `existing-needs-inspector` | `edit.zones.create`<br>`edit.zones.delete` | `planned:cells.inspectAction(zone.add) / planned:edit.zones.inspectDelete`<br>`edit.zones.create / edit.zones.delete` |
+| `infrastructure.manage-zone` | 路线、区域与资源设施 | 按中心 Cell 和半径创建区域，或在依赖预检后删除区域。 | `existing-transaction` | `edit.zones.create`<br>`edit.zones.delete`<br>`edit.zones.inspectCreate`<br>`edit.zones.inspectDelete` | `edit.zones.inspectCreate / edit.zones.inspectDelete`<br>`edit.zones.create / edit.zones.delete` |
 | `diplomacy.set-bilateral-relation` | 外交、战争与国家关系 | 设置两国关系并同步反向关系、摘要、纪事和战争相关约束。 | `existing-needs-inspector` | `edit.diplomacy.setRelation` | `planned:edit.diplomacy.inspectRelation`<br>`edit.diplomacy.setRelation` |
 | `diplomacy.regenerate` | 外交、战争与国家关系 | 基于当前国家、邻接和随机种子重建外交关系与摘要。 | `existing-transaction` | `generate.regenerate` | `planned:edit.diplomacy.inspectRegeneration`<br>`generate.regenerate(diplomacy)` |
 | `diplomacy.declare-war` | 外交、战争与国家关系 | 两国从和平关系进入战争，建立战争目标、参战方、纪事和军事活动上下文。 | `missing-game-rule` | `objects.get` | `planned:edit.diplomacy.inspectDeclareWar`<br>`planned:edit.diplomacy.declareWar` |
@@ -240,6 +240,6 @@
 
 ## 机器覆盖
 
-- API 分类：`atomic-editor-primitive=49`，`editor-runtime-service=49`，`read-export-service=10`，`read-primitive=26`，`semantic-action=123`。
+- API 分类：`atomic-editor-primitive=49`，`editor-runtime-service=49`，`read-export-service=10`，`read-primitive=26`，`semantic-action=135`。
 - 交互分类：`semantic-input-or-primitive=36`，`ui-boundary=12`。
-- Source digest：`654a652a3a8931a2598a16d947bfcf8a25e7022123d6b4fc4f433d349e335242`。
+- Source digest：`980d843eae32bf43971c764c7e3c3d75b729ccc7015ee113fa03556d9e89983b`。

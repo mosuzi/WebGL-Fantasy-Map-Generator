@@ -144,6 +144,12 @@ import {MAX_PERSISTENT_OBJECT_HIGHLIGHTS, isPersistentHighlightObjectKind, norma
 import {createAddRiverCommand, createDeleteRiverCommand, createRenameRiversFromNamebaseCommand, createSetRiverNoteCommand, createSetRiverWidthFactorCommand} from "./river-edit-commands.js";
 import {createAddRouteCommand, createDeleteRouteCommand, createEditRouteCommand, createSetRouteNoteCommand, inspectRouteEdit} from "./route-edit-commands.js";
 import {createDeleteBatchCommand, createDeleteConfirmationRequiredError, inspectDeleteImpact, requestDeleteConfirmation} from "./delete-impact.js";
+import {
+  assertExistingRuleInspection,
+  EXISTING_RULE_ACTION,
+  inspectExistingRuleAction,
+  stripRuleInspectionMetadata
+} from "./existing-rule-inspectors.js";
 import {executeClimateDownstreamRebuildAsync, inspectClimateDownstreamRebuild} from "./climate-downstream-rebuild.js";
 import {captureMapMutationSnapshot, executeMapSnapshotTransaction, restoreMapMutationSnapshot} from "./map-snapshot-transaction.js";
 import {SelectionStore} from "./selection-store.js";
@@ -2774,6 +2780,7 @@ function createRuntimeActions(state, documentRef, options = {}) {
         add: gridCell => addCityViaApi(state, documentRef, gridCell),
         inspectCreateAtCell: input => inspectCreateAtCellViaApi(state, "cities", input),
         createAtCell: input => createAtCellViaApi(state, documentRef, "cities", input),
+        inspectDelete: cityId => inspectExistingRuleViaApi(state, EXISTING_RULE_ACTION.CITY_DELETE, {id: normalizeApiInteger(cityId, "城市 ID")}),
         delete: (cityId, options = {}) => deleteCityViaApi(state, documentRef, cityId, options),
         inspectMove: (cityId, target) => inspectCityMoveViaApi(state, cityId, target),
         move: (cityId, target) => moveCityViaApi(state, documentRef, cityId, target),
@@ -2787,6 +2794,7 @@ function createRuntimeActions(state, documentRef, options = {}) {
         add: gridCell => addProvinceViaApi(state, documentRef, gridCell),
         inspectCreateAtCell: input => inspectCreateAtCellViaApi(state, "provinces", input),
         createAtCell: input => createAtCellViaApi(state, documentRef, "provinces", input),
+        inspectDelete: provinceId => inspectExistingRuleViaApi(state, EXISTING_RULE_ACTION.PROVINCE_DELETE, {id: normalizeApiInteger(provinceId, "省份 ID")}),
         delete: (provinceId, options = {}) => deleteProvinceViaApi(state, documentRef, provinceId, options),
         rename: (provinceId, name) => renameProvinceViaApi(state, documentRef, provinceId, name),
         setColor: (provinceId, color) => setProvinceColorViaApi(state, documentRef, provinceId, color),
@@ -2796,6 +2804,7 @@ function createRuntimeActions(state, documentRef, options = {}) {
         add: gridCell => addStateViaApi(state, documentRef, gridCell),
         inspectCreateAtCell: input => inspectCreateAtCellViaApi(state, "states", input),
         createAtCell: input => createAtCellViaApi(state, documentRef, "states", input),
+        inspectDelete: stateId => inspectExistingRuleViaApi(state, EXISTING_RULE_ACTION.STATE_DELETE, {id: normalizeApiInteger(stateId, "国家 ID")}),
         delete: (stateId, options = {}) => deleteStateViaApi(state, documentRef, stateId, options),
         inspectMerge: options => inspectStateMergeViaApi(state, options),
         merge: options => mergeStatesViaApi(state, documentRef, options),
@@ -2809,6 +2818,7 @@ function createRuntimeActions(state, documentRef, options = {}) {
         applyChanges: changes => applyStateChangesViaApi(state, documentRef, changes)
       },
       height: {
+        inspectChanges: changes => inspectHeightChangesViaApi(state, changes),
         applyChanges: (changes, editOptions = {}) => applyHeightChangesViaApi(state, documentRef, changes, editOptions),
         inspectGlobalTransform: (editOptions = {}) => inspectHeightSemanticAction(state, "global-transform", editOptions),
         applyGlobalTransform: (editOptions = {}) => applyHeightSemanticAction(state, documentRef, "global-transform", editOptions),
@@ -2843,6 +2853,7 @@ function createRuntimeActions(state, documentRef, options = {}) {
         )
       },
       biomes: {
+        inspectAssignment: (biomeId, gridCellIds, editOptions = {}) => inspectBiomeAssignmentViaApi(state, biomeId, gridCellIds, editOptions),
         assignCells: (biomeId, gridCellIds, editOptions = {}) => assignBiomeCellsViaApi(state, documentRef, biomeId, gridCellIds, editOptions),
         inspectSuitability: (gridCellIds, editOptions = {}) => inspectSuitabilityViaApi(state, gridCellIds, editOptions),
         applySuitability: (gridCellIds, editOptions = {}) => applySuitabilityViaApi(state, documentRef, gridCellIds, editOptions)
@@ -2875,8 +2886,10 @@ function createRuntimeActions(state, documentRef, options = {}) {
         rename: (target, name) => renameMilitaryRegimentViaApi(state, documentRef, target, name)
       },
       zones: {
-        create: options => createZoneViaApi(state, documentRef, options),
-        delete: zoneId => deleteZoneViaApi(state, documentRef, zoneId),
+        inspectCreate: (options = {}) => inspectZoneCreationViaApi(state, options),
+        create: (options = {}) => createZoneViaApi(state, documentRef, options),
+        inspectDelete: zoneId => inspectExistingRuleViaApi(state, EXISTING_RULE_ACTION.ZONE_MANAGE, {operation: "delete", id: normalizeApiInteger(zoneId, "地区 ID")}),
+        delete: (zoneId, options = {}) => deleteZoneViaApi(state, documentRef, zoneId, options),
         setStyle: (zoneId, patch) => setZoneStyleViaApi(state, documentRef, zoneId, patch)
       },
       cultures: {
@@ -2903,20 +2916,25 @@ function createRuntimeActions(state, documentRef, options = {}) {
         create: options => createRouteViaApi(state, documentRef, options),
         inspectEdit: (routeId, patch = {}) => inspectRouteEditViaApi(state, routeId, patch),
         update: (routeId, patch = {}) => updateRouteViaApi(state, documentRef, routeId, patch),
+        inspectDelete: routeId => inspectExistingRuleViaApi(state, EXISTING_RULE_ACTION.ROUTE_DELETE, {id: normalizeApiInteger(routeId, "路线 ID")}),
         delete: (routeId, options = {}) => deleteRouteViaApi(state, documentRef, routeId, options),
         setNote: (routeId, body, options = {}) => setRouteNoteViaApi(state, documentRef, routeId, body, options)
       },
       rivers: {
-        create: options => createRiverViaApi(state, documentRef, options),
+        inspectCreate: (options = {}) => inspectRiverCreationViaApi(state, options),
+        create: (options = {}) => createRiverViaApi(state, documentRef, options),
+        inspectDelete: riverId => inspectExistingRuleViaApi(state, EXISTING_RULE_ACTION.RIVER_DELETE, {id: normalizeApiInteger(riverId, "河流 ID")}),
         delete: (riverId, options = {}) => deleteRiverViaApi(state, documentRef, riverId, options),
         rename: (riverId, name) => renameRiverViaApi(state, documentRef, riverId, name),
         setWidthFactor: (riverId, widthFactor) => setRiverWidthFactorViaApi(state, documentRef, riverId, widthFactor),
         setNote: (riverId, body, options = {}) => setRiverNoteViaApi(state, documentRef, riverId, body, options)
       },
       lakes: {
-        create: options => createLakeViaApi(state, documentRef, options),
+        inspectCreate: (options = {}) => inspectLakeCreationViaApi(state, options),
+        create: (options = {}) => createLakeViaApi(state, documentRef, options),
         inspectOutlet: (lakeId, outletRiverId) => inspectLakeOutletViaApi(state, lakeId, outletRiverId),
         setOutlet: (lakeId, outletRiverId) => setLakeOutletViaApi(state, documentRef, lakeId, outletRiverId),
+        inspectDelete: lakeId => inspectExistingRuleViaApi(state, EXISTING_RULE_ACTION.LAKE_DELETE, {id: normalizeApiInteger(lakeId, "湖泊 ID")}),
         delete: (lakeId, options = {}) => deleteLakeViaApi(state, documentRef, lakeId, options),
         rename: (lakeId, name) => renameLakeViaApi(state, documentRef, lakeId, name)
       },
@@ -7048,6 +7066,49 @@ function inspectRouteEditViaApi(state, routeId, patch = {}) {
   return inspectRouteEdit(state.map, normalizeApiInteger(routeId, "路线 ID"), patch);
 }
 
+function inspectExistingRuleViaApi(state, actionId, input) {
+  assertMapAvailable(state);
+  return inspectExistingRuleAction(state.map, state.mapRevision, actionId, input);
+}
+
+function inspectHeightChangesViaApi(state, changes) {
+  if (!Array.isArray(changes)) throw new Error("高度变更必须是数组");
+  return inspectExistingRuleViaApi(state, EXISTING_RULE_ACTION.HEIGHT_EDIT_REGION, {changes});
+}
+
+function inspectRiverCreationViaApi(state, options = {}) {
+  if (!options || typeof options !== "object" || Array.isArray(options)) throw new Error("河流创建参数必须是对象");
+  const semanticOptions = stripRuleInspectionMetadata(options);
+  return inspectExistingRuleViaApi(state, EXISTING_RULE_ACTION.RIVER_CREATE, {options: semanticOptions});
+}
+
+function inspectLakeCreationViaApi(state, options = {}) {
+  if (!options || typeof options !== "object" || Array.isArray(options)) throw new Error("湖泊创建参数必须是对象");
+  const semanticOptions = stripRuleInspectionMetadata(options);
+  return inspectExistingRuleViaApi(state, EXISTING_RULE_ACTION.LAKE_EXCAVATE, {options: semanticOptions});
+}
+
+function inspectBiomeAssignmentViaApi(state, biomeId, gridCellIds, options = {}) {
+  if (!Array.isArray(gridCellIds)) throw new Error("生物群系 grid cells 必须是数组");
+  if (!options || typeof options !== "object" || Array.isArray(options)) throw new Error("生物群系分配参数必须是对象");
+  const target = normalizeApiInteger(biomeId, "生物群系 ID");
+  const semanticOptions = stripRuleInspectionMetadata(options);
+  return inspectExistingRuleViaApi(state, EXISTING_RULE_ACTION.BIOME_ASSIGN, {
+    biomeId: target,
+    gridCellIds,
+    options: semanticOptions
+  });
+}
+
+function inspectZoneCreationViaApi(state, options = {}) {
+  if (!options || typeof options !== "object" || Array.isArray(options)) throw new Error("地区创建参数必须是对象");
+  const semanticOptions = stripRuleInspectionMetadata(options);
+  return inspectExistingRuleViaApi(state, EXISTING_RULE_ACTION.ZONE_MANAGE, {
+    operation: "create",
+    options: semanticOptions
+  });
+}
+
 function updateRouteViaApi(state, documentRef, routeId, patch = {}) {
   assertMapAvailable(state);
   if (!patch || typeof patch !== "object" || Array.isArray(patch)) throw new Error("路线编辑参数必须是对象");
@@ -7066,12 +7127,13 @@ function updateRouteViaApi(state, documentRef, routeId, patch = {}) {
 
 function deleteRouteViaApi(state, documentRef, routeId, options = {}) {
   const id = normalizeApiInteger(routeId, "路线 ID");
+  assertExistingRuleInspection(state.mapRevision, EXISTING_RULE_ACTION.ROUTE_DELETE, {id}, options);
   const deletion = executeDeleteWithPreflight(state, documentRef, {
     kind: OBJECT_KIND.ROUTE,
     ids: [id],
     createCommand: targetId => createDeleteRouteCommand(targetId, {label: `删除路线 #${targetId}`}),
     label: "API 删除路线",
-    options,
+    options: stripRuleInspectionMetadata(options),
     confirmation: "explicit",
     executeOptions: {noopStatus: "路线不存在或已被删除。"}
   });
@@ -7080,8 +7142,10 @@ function deleteRouteViaApi(state, documentRef, routeId, options = {}) {
 }
 
 function createRiverViaApi(state, documentRef, options = {}) {
-  if (!options || typeof options !== "object") throw new Error("河流创建参数必须是对象");
-  const command = createAddRiverCommand(options);
+  if (!options || typeof options !== "object" || Array.isArray(options)) throw new Error("河流创建参数必须是对象");
+  const semanticOptions = stripRuleInspectionMetadata(options);
+  assertExistingRuleInspection(state.mapRevision, EXISTING_RULE_ACTION.RIVER_CREATE, {options: semanticOptions}, options);
+  const command = createAddRiverCommand(semanticOptions);
   const result = executeEditCommand(state, documentRef, command, {
     context: {map: state.map},
     status: executed => `已新增河流 #${executed.getResult?.().riverId ?? ""}。`,
@@ -7122,8 +7186,10 @@ function renameRiverViaApi(state, documentRef, riverId, name) {
 }
 
 function createLakeViaApi(state, documentRef, options = {}) {
-  if (!options || typeof options !== "object") throw new Error("湖泊创建参数必须是对象");
-  const command = createExcavateLakeCommand(options);
+  if (!options || typeof options !== "object" || Array.isArray(options)) throw new Error("湖泊创建参数必须是对象");
+  const semanticOptions = stripRuleInspectionMetadata(options);
+  assertExistingRuleInspection(state.mapRevision, EXISTING_RULE_ACTION.LAKE_EXCAVATE, {options: semanticOptions}, options);
+  const command = createExcavateLakeCommand(semanticOptions);
   const result = executeEditCommand(state, documentRef, command, {
     context: {map: state.map},
     status: executed => `已开挖湖泊 #${executed.getResult?.().lakeId ?? ""}。`,
@@ -7226,12 +7292,13 @@ export function applyFeatureTopologyViaApi(state, documentRef, options = {}, run
 
 function deleteRiverViaApi(state, documentRef, riverId, options = {}) {
   const id = normalizeApiInteger(riverId, "河流 ID");
+  assertExistingRuleInspection(state.mapRevision, EXISTING_RULE_ACTION.RIVER_DELETE, {id}, options);
   const deletion = executeDeleteWithPreflight(state, documentRef, {
     kind: OBJECT_KIND.RIVER,
     ids: [id],
     createCommand: targetId => createDeleteRiverCommand(targetId),
     label: "API 删除河流",
-    options,
+    options: stripRuleInspectionMetadata(options),
     confirmation: "explicit",
     executeOptions: {noopStatus: "河流不存在，未执行删除。"}
   });
@@ -7281,12 +7348,13 @@ function renameLakeViaApi(state, documentRef, lakeId, name) {
 
 function deleteLakeViaApi(state, documentRef, lakeId, options = {}) {
   const id = normalizeApiInteger(lakeId, "湖泊 ID");
+  assertExistingRuleInspection(state.mapRevision, EXISTING_RULE_ACTION.LAKE_DELETE, {id}, options);
   const deletion = executeDeleteWithPreflight(state, documentRef, {
     kind: OBJECT_KIND.LAKE,
     ids: [id],
     createCommand: targetId => createDeleteLakeCommand(targetId),
     label: "API 填平并删除湖泊",
-    options,
+    options: stripRuleInspectionMetadata(options),
     confirmation: "explicit",
     executeOptions: {noopStatus: "湖泊不存在，未执行删除。"}
   });
@@ -7452,12 +7520,13 @@ function addCityViaApi(state, documentRef, gridCell) {
 
 function deleteCityViaApi(state, documentRef, cityId, options = {}) {
   const id = normalizeApiInteger(cityId, "城市 ID");
+  assertExistingRuleInspection(state.mapRevision, EXISTING_RULE_ACTION.CITY_DELETE, {id}, options);
   const deletion = executeDeleteWithPreflight(state, documentRef, {
     kind: OBJECT_KIND.CITY,
     ids: [id],
     createCommand: targetId => createDeleteCityCommand(targetId),
     label: "API 删除城市",
-    options,
+    options: stripRuleInspectionMetadata(options),
     confirmation: "explicit",
     executeOptions: {
       noopStatus: "城市不存在或已被删除。",
@@ -7525,12 +7594,13 @@ function addProvinceViaApi(state, documentRef, gridCell) {
 
 function deleteProvinceViaApi(state, documentRef, provinceId, options = {}) {
   const id = normalizeApiInteger(provinceId, "省份 ID");
+  assertExistingRuleInspection(state.mapRevision, EXISTING_RULE_ACTION.PROVINCE_DELETE, {id}, options);
   const deletion = executeDeleteWithPreflight(state, documentRef, {
     kind: OBJECT_KIND.PROVINCE,
     ids: [id],
     createCommand: targetId => createDeleteProvinceCommand(targetId),
     label: "API 删除省份",
-    options,
+    options: stripRuleInspectionMetadata(options),
     confirmation: "explicit",
     executeOptions: {
       noopStatus: "省份不存在、为中立省份或已被删除。",
@@ -7580,12 +7650,13 @@ function addStateViaApi(state, documentRef, gridCell) {
 
 function deleteStateViaApi(state, documentRef, stateId, options = {}) {
   const id = normalizeApiInteger(stateId, "国家 ID");
+  assertExistingRuleInspection(state.mapRevision, EXISTING_RULE_ACTION.STATE_DELETE, {id}, options);
   const deletion = executeDeleteWithPreflight(state, documentRef, {
     kind: OBJECT_KIND.STATE,
     ids: [id],
     createCommand: targetId => createDeleteStateCommand(targetId),
     label: "API 删除国家",
-    options,
+    options: stripRuleInspectionMetadata(options),
     confirmation: "explicit",
     executeOptions: {
       noopStatus: "国家不存在、为中立国家或已被删除。",
@@ -7987,8 +8058,11 @@ function applyStateChangesViaApi(state, documentRef, changes) {
 }
 
 function applyHeightChangesViaApi(state, documentRef, changes, options = {}) {
+  if (!Array.isArray(changes)) throw new Error("高度变更必须是数组");
+  assertExistingRuleInspection(state.mapRevision, EXISTING_RULE_ACTION.HEIGHT_EDIT_REGION, {changes}, options);
   const normalized = normalizeApiGridChanges(state.map, changes, {field: "h", valueKeys: ["after", "height"], label: "高度", clamp: [0, 100]});
-  const label = String(options.label || "API 高度编辑").trim() || "API 高度编辑";
+  const semanticOptions = stripRuleInspectionMetadata(options);
+  const label = String(semanticOptions.label || "API 高度编辑").trim() || "API 高度编辑";
   const command = createApplyHeightBrushCommand(normalized, {label});
   const result = executeEditCommand(state, documentRef, command, {
     context: {map: state.map},
@@ -8151,7 +8225,14 @@ function assignBiomeCellsViaApi(state, documentRef, biomeId, gridCellIds, option
   assertMapAvailable(state);
   if (!Array.isArray(gridCellIds)) throw new Error("生物群系 grid cells 必须是数组");
   const target = normalizeApiInteger(biomeId, "生物群系 ID");
-  const changes = buildBiomeAssignmentChanges(state.map, target, gridCellIds, options);
+  if (!options || typeof options !== "object" || Array.isArray(options)) throw new Error("生物群系分配参数必须是对象");
+  const semanticOptions = stripRuleInspectionMetadata(options);
+  assertExistingRuleInspection(state.mapRevision, EXISTING_RULE_ACTION.BIOME_ASSIGN, {
+    biomeId: target,
+    gridCellIds,
+    options: semanticOptions
+  }, options);
+  const changes = buildBiomeAssignmentChanges(state.map, target, gridCellIds, semanticOptions);
   const command = createApplyBiomeAssignmentCommand(changes, {label: "API 生物群系归属"});
   const result = executeEditCommand(state, documentRef, command, {
     context: {map: state.map},
@@ -8532,8 +8613,13 @@ function setZoneStyleViaApi(state, documentRef, zoneId, patch) {
 }
 
 function createZoneViaApi(state, documentRef, options = {}) {
-  if (!options || typeof options !== "object") throw new Error("地区创建参数必须是对象");
-  const command = createAddZoneCommand(options);
+  if (!options || typeof options !== "object" || Array.isArray(options)) throw new Error("地区创建参数必须是对象");
+  const semanticOptions = stripRuleInspectionMetadata(options);
+  assertExistingRuleInspection(state.mapRevision, EXISTING_RULE_ACTION.ZONE_MANAGE, {
+    operation: "create",
+    options: semanticOptions
+  }, options);
+  const command = createAddZoneCommand(semanticOptions);
   const result = executeEditCommand(state, documentRef, command, {
     context: {map: state.map},
     status: executed => `已新增地区 #${executed.getResult?.().zoneId ?? ""}。`,
@@ -8550,8 +8636,9 @@ function createZoneViaApi(state, documentRef, options = {}) {
   return editApiResult(state, result);
 }
 
-function deleteZoneViaApi(state, documentRef, zoneId) {
+function deleteZoneViaApi(state, documentRef, zoneId, options = {}) {
   const id = normalizeApiInteger(zoneId, "地区 ID");
+  assertExistingRuleInspection(state.mapRevision, EXISTING_RULE_ACTION.ZONE_MANAGE, {operation: "delete", id}, options);
   const result = executeEditCommand(state, documentRef, createDeleteZoneCommand(id), {
     context: {map: state.map},
     noopStatus: "地区不存在或已被删除。",

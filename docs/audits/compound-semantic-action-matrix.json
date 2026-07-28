@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "scope": "权威任务第 204 项：全游戏复合语义接口、规则动作与玩法配方审计",
   "generatedAtPolicy": "报告不写入动态时间，sourceDigest 变化即要求重新生成",
-  "sourceDigest": "654a652a3a8931a2598a16d947bfcf8a25e7022123d6b4fc4f433d349e335242",
+  "sourceDigest": "980d843eae32bf43971c764c7e3c3d75b729ccc7015ee113fa03556d9e89983b",
   "definition": {
     "compoundSemanticAction": "一个玩家意图，但执行时需要跨对象/系统、条件分支、业务预检或原子回滚；应由单一规则事务表达。",
     "primitive": "只修改一个稳定字段或纯编辑器显示偏好，可保留为原子 API，不强行包装成复合动作。",
@@ -21,12 +21,12 @@
     "recipe-only": "战略/玩法流程，不应实现为一条超大写接口。"
   },
   "denominator": {
-    "fullCapabilityRows": 1012,
+    "fullCapabilityRows": 1048,
     "fullCapabilityUnknown": 0,
     "fullCapabilityUnclassified": 0,
     "fullCapabilityGaps": 0,
-    "publicApiMethods": 257,
-    "classifiedApiMethods": 257,
+    "publicApiMethods": 269,
+    "classifiedApiMethods": 269,
     "cellActionRows": 48,
     "classifiedCellActionRows": 48,
     "canvasModes": 29,
@@ -38,8 +38,8 @@
     "ruleTransactions": 68,
     "plannerRecipes": 10,
     "statuses": {
-      "existing-needs-inspector": 21,
-      "existing-transaction": 36,
+      "existing-needs-inspector": 10,
+      "existing-transaction": 47,
       "fragmented-needs-transaction": 5,
       "missing-game-rule": 6,
       "recipe-only": 10
@@ -62,7 +62,7 @@
       "editor-runtime-service": 49,
       "read-export-service": 10,
       "read-primitive": 26,
-      "semantic-action": 123
+      "semantic-action": 135
     },
     "interactionClassifications": {
       "semantic-input-or-primitive": 36,
@@ -468,9 +468,10 @@
       "api": [
         "edit.height.applyChanges",
         "edit.height.applyRangeTransform",
+        "edit.height.inspectChanges",
         "edit.height.inspectRangeTransform"
       ],
-      "inspect": "edit.height.inspectRangeTransform / planned:cells.inspectAction(height.edit)",
+      "inspect": "edit.height.inspectChanges / edit.height.inspectRangeTransform",
       "execute": "edit.height.applyChanges / edit.height.applyRangeTransform",
       "branches": [
         "水陆跨阈值",
@@ -486,7 +487,7 @@
       "id": "terrain.edit-height-region",
       "title": "编辑区域高度并维护海陆边界",
       "domain": "terrain",
-      "status": "existing-needs-inspector",
+      "status": "existing-transaction",
       "intent": "按 Cell 集、范围或画笔修改高度，并明确是否影响海底及哪些派生系统待更新。",
       "gameplayChapter": "地形、水文与 Feature",
       "invariant": "Grid/Pack、高度、水陆 Feature、河湖、海岸和下游派生必须在事务结束时一致。",
@@ -631,9 +632,10 @@
       "tier": "rule-transaction",
       "variants": [],
       "api": [
-        "edit.rivers.create"
+        "edit.rivers.create",
+        "edit.rivers.inspectCreate"
       ],
-      "inspect": "planned:cells.inspectAction(river.add)",
+      "inspect": "edit.rivers.inspectCreate",
       "execute": "edit.rivers.create",
       "branches": [
         "源点非法",
@@ -648,7 +650,7 @@
       "id": "hydrology.create-river",
       "title": "从源 Cell 创建河流并接入水文",
       "domain": "terrain",
-      "status": "existing-needs-inspector",
+      "status": "existing-transaction",
       "intent": "选择合法源点创建河流，解析下游路径、河口和统计。",
       "gameplayChapter": "地形、水文与 Feature",
       "invariant": "Grid/Pack、高度、水陆 Feature、河湖、海岸和下游派生必须在事务结束时一致。",
@@ -659,9 +661,10 @@
       "tier": "rule-transaction",
       "variants": [],
       "api": [
-        "edit.rivers.delete"
+        "edit.rivers.delete",
+        "edit.rivers.inspectDelete"
       ],
-      "inspect": "planned:edit.rivers.inspectDelete",
+      "inspect": "edit.rivers.inspectDelete",
       "execute": "edit.rivers.delete",
       "branches": [
         "依赖预检",
@@ -677,7 +680,7 @@
       "id": "hydrology.delete-river",
       "title": "删除河流并修复湖泊出口和引用",
       "domain": "terrain",
-      "status": "existing-needs-inspector",
+      "status": "existing-transaction",
       "intent": "删除河流，检查湖泊出口、路线/备注和其它依赖。",
       "gameplayChapter": "地形、水文与 Feature",
       "invariant": "Grid/Pack、高度、水陆 Feature、河湖、海岸和下游派生必须在事务结束时一致。",
@@ -688,9 +691,10 @@
       "tier": "rule-transaction",
       "variants": [],
       "api": [
-        "edit.lakes.create"
+        "edit.lakes.create",
+        "edit.lakes.inspectCreate"
       ],
-      "inspect": "planned:cells.inspectAction(lake.excavate)",
+      "inspect": "edit.lakes.inspectCreate",
       "execute": "edit.lakes.create",
       "branches": [
         "半径/落点非法",
@@ -705,7 +709,7 @@
       "id": "hydrology.excavate-lake",
       "title": "开挖湖泊并重建局部水陆",
       "domain": "terrain",
-      "status": "existing-needs-inspector",
+      "status": "existing-transaction",
       "intent": "以 Cell 和半径开挖湖泊，处理高度、Feature、对象保护和出口。",
       "gameplayChapter": "地形、水文与 Feature",
       "invariant": "Grid/Pack、高度、水陆 Feature、河湖、海岸和下游派生必须在事务结束时一致。",
@@ -745,9 +749,10 @@
       "tier": "rule-transaction",
       "variants": [],
       "api": [
-        "edit.lakes.delete"
+        "edit.lakes.delete",
+        "edit.lakes.inspectDelete"
       ],
-      "inspect": "planned:edit.lakes.inspectDelete",
+      "inspect": "edit.lakes.inspectDelete",
       "execute": "edit.lakes.delete",
       "branches": [
         "依赖预检",
@@ -763,7 +768,7 @@
       "id": "hydrology.delete-lake",
       "title": "删除湖泊并处理水陆及出口依赖",
       "domain": "terrain",
-      "status": "existing-needs-inspector",
+      "status": "existing-transaction",
       "intent": "删除湖泊对象，明确是仅删对象还是填平水体，并清理依赖。",
       "gameplayChapter": "地形、水文与 Feature",
       "invariant": "Grid/Pack、高度、水陆 Feature、河湖、海岸和下游派生必须在事务结束时一致。",
@@ -774,9 +779,10 @@
       "tier": "rule-transaction",
       "variants": [],
       "api": [
-        "edit.biomes.assignCells"
+        "edit.biomes.assignCells",
+        "edit.biomes.inspectAssignment"
       ],
-      "inspect": "planned:cells.inspectAction(biome.assign)",
+      "inspect": "edit.biomes.inspectAssignment",
       "execute": "edit.biomes.assignCells",
       "branches": [
         "目标群系非法",
@@ -791,7 +797,7 @@
       "id": "ecology.assign-biome",
       "title": "给区域分配生物群系",
       "domain": "ecology",
-      "status": "existing-needs-inspector",
+      "status": "existing-transaction",
       "intent": "按 Grid Cell 集分配生物群系，并报告气候或水陆不适配。",
       "gameplayChapter": "气候、生态与人口承载",
       "invariant": "气候、生物群系、适居度和人口承载的直接值与派生值必须有明确的重算边界。",
@@ -863,9 +869,10 @@
       "tier": "rule-transaction",
       "variants": [],
       "api": [
-        "edit.states.delete"
+        "edit.states.delete",
+        "edit.states.inspectDelete"
       ],
-      "inspect": "planned:edit.states.inspectDelete",
+      "inspect": "edit.states.inspectDelete",
       "execute": "edit.states.delete",
       "branches": [
         "中立/不存在拒绝",
@@ -881,7 +888,7 @@
       "id": "politics.delete-state",
       "title": "删除国家并处理全部依赖",
       "domain": "politics",
-      "status": "existing-needs-inspector",
+      "status": "existing-transaction",
       "intent": "删除国家，明确处理领土、省份、城镇、外交、军事、市场和历史引用。",
       "gameplayChapter": "国家、省份与政治拓扑",
       "invariant": "国家、省份、Grid/Pack 归属、首都、省会、外交、军事、市场和路线引用不得悬空。",
@@ -1122,9 +1129,10 @@
       "tier": "rule-transaction",
       "variants": [],
       "api": [
-        "edit.provinces.delete"
+        "edit.provinces.delete",
+        "edit.provinces.inspectDelete"
       ],
-      "inspect": "planned:edit.provinces.inspectDelete",
+      "inspect": "edit.provinces.inspectDelete",
       "execute": "edit.provinces.delete",
       "branches": [
         "中立/不存在",
@@ -1140,7 +1148,7 @@
       "id": "politics.delete-province",
       "title": "删除省份并处理城镇与国家列表",
       "domain": "politics",
-      "status": "existing-needs-inspector",
+      "status": "existing-transaction",
       "intent": "删除省份，清除或重新分配领土与城镇，维护国家省份列表。",
       "gameplayChapter": "国家、省份与政治拓扑",
       "invariant": "国家、省份、Grid/Pack 归属、首都、省会、外交、军事、市场和路线引用不得悬空。",
@@ -1332,9 +1340,10 @@
       "tier": "rule-transaction",
       "variants": [],
       "api": [
-        "edit.cities.delete"
+        "edit.cities.delete",
+        "edit.cities.inspectDelete"
       ],
-      "inspect": "planned:edit.cities.inspectDelete",
+      "inspect": "edit.cities.inspectDelete",
       "execute": "edit.cities.delete",
       "branches": [
         "依赖影响",
@@ -1350,7 +1359,7 @@
       "id": "settlement.delete-city",
       "title": "删除城镇并修复首都、省会、路线和市场",
       "domain": "settlement",
-      "status": "existing-needs-inspector",
+      "status": "existing-transaction",
       "intent": "删除城镇前评估首都、省会、路线、市场和备注依赖，确认后单事务清理。",
       "gameplayChapter": "城镇、人口与定居点",
       "invariant": "城镇位置、国家/省份归属、首都/省会、港口、路线和人口统计必须同步。",
@@ -1686,9 +1695,10 @@
       "tier": "rule-transaction",
       "variants": [],
       "api": [
-        "edit.routes.delete"
+        "edit.routes.delete",
+        "edit.routes.inspectDelete"
       ],
-      "inspect": "planned:edit.routes.inspectDelete",
+      "inspect": "edit.routes.inspectDelete",
       "execute": "edit.routes.delete",
       "branches": [
         "普通单路线低影响",
@@ -1704,7 +1714,7 @@
       "id": "infrastructure.delete-route",
       "title": "删除路线并清理引用",
       "domain": "infrastructure",
-      "status": "existing-needs-inspector",
+      "status": "existing-transaction",
       "intent": "删除路线，评估备注、城镇和资源引用并保持普通单路线低影响兼容。",
       "gameplayChapter": "路线、区域与资源设施",
       "invariant": "路径、端点、Cell 链、对象归属和资源引用必须保持可定位、可撤销且无悬空目标。",
@@ -1834,9 +1844,11 @@
       ],
       "api": [
         "edit.zones.create",
-        "edit.zones.delete"
+        "edit.zones.delete",
+        "edit.zones.inspectCreate",
+        "edit.zones.inspectDelete"
       ],
-      "inspect": "planned:cells.inspectAction(zone.add) / planned:edit.zones.inspectDelete",
+      "inspect": "edit.zones.inspectCreate / edit.zones.inspectDelete",
       "execute": "edit.zones.create / edit.zones.delete",
       "branches": [
         "中心/半径非法",
@@ -1851,7 +1863,7 @@
       "id": "infrastructure.manage-zone",
       "title": "创建或删除业务区域",
       "domain": "infrastructure",
-      "status": "existing-needs-inspector",
+      "status": "existing-transaction",
       "intent": "按中心 Cell 和半径创建区域，或在依赖预检后删除区域。",
       "gameplayChapter": "路线、区域与资源设施",
       "invariant": "路径、端点、Cell 链、对象归属和资源引用必须保持可定位、可撤销且无悬空目标。",
@@ -2844,6 +2856,13 @@
       ]
     },
     {
+      "method": "edit.biomes.inspectAssignment",
+      "classification": "semantic-action",
+      "actionIds": [
+        "ecology.assign-biome"
+      ]
+    },
+    {
       "method": "edit.biomes.inspectSuitability",
       "classification": "semantic-action",
       "actionIds": [
@@ -2877,6 +2896,13 @@
       "classification": "semantic-action",
       "actionIds": [
         "settlement.found-city"
+      ]
+    },
+    {
+      "method": "edit.cities.inspectDelete",
+      "classification": "semantic-action",
+      "actionIds": [
+        "settlement.delete-city"
       ]
     },
     {
@@ -3091,6 +3117,13 @@
       ]
     },
     {
+      "method": "edit.height.inspectChanges",
+      "classification": "semantic-action",
+      "actionIds": [
+        "terrain.edit-height-region"
+      ]
+    },
+    {
       "method": "edit.height.inspectGlobalTransform",
       "classification": "semantic-action",
       "actionIds": [
@@ -3227,6 +3260,20 @@
       "classification": "semantic-action",
       "actionIds": [
         "editor.delete-with-impact",
+        "hydrology.delete-lake"
+      ]
+    },
+    {
+      "method": "edit.lakes.inspectCreate",
+      "classification": "semantic-action",
+      "actionIds": [
+        "hydrology.excavate-lake"
+      ]
+    },
+    {
+      "method": "edit.lakes.inspectDelete",
+      "classification": "semantic-action",
+      "actionIds": [
         "hydrology.delete-lake"
       ]
     },
@@ -3461,6 +3508,13 @@
       ]
     },
     {
+      "method": "edit.provinces.inspectDelete",
+      "classification": "semantic-action",
+      "actionIds": [
+        "politics.delete-province"
+      ]
+    },
+    {
       "method": "edit.provinces.rename",
       "classification": "atomic-editor-primitive",
       "actionIds": []
@@ -3539,6 +3593,20 @@
       ]
     },
     {
+      "method": "edit.rivers.inspectCreate",
+      "classification": "semantic-action",
+      "actionIds": [
+        "hydrology.create-river"
+      ]
+    },
+    {
+      "method": "edit.rivers.inspectDelete",
+      "classification": "semantic-action",
+      "actionIds": [
+        "hydrology.delete-river"
+      ]
+    },
+    {
       "method": "edit.rivers.rename",
       "classification": "atomic-editor-primitive",
       "actionIds": []
@@ -3565,6 +3633,13 @@
       "classification": "semantic-action",
       "actionIds": [
         "editor.delete-with-impact",
+        "infrastructure.delete-route"
+      ]
+    },
+    {
+      "method": "edit.routes.inspectDelete",
+      "classification": "semantic-action",
+      "actionIds": [
         "infrastructure.delete-route"
       ]
     },
@@ -3623,6 +3698,13 @@
       "classification": "semantic-action",
       "actionIds": [
         "politics.create-state"
+      ]
+    },
+    {
+      "method": "edit.states.inspectDelete",
+      "classification": "semantic-action",
+      "actionIds": [
+        "politics.delete-state"
       ]
     },
     {
@@ -3697,6 +3779,20 @@
       "classification": "semantic-action",
       "actionIds": [
         "editor.delete-with-impact",
+        "infrastructure.manage-zone"
+      ]
+    },
+    {
+      "method": "edit.zones.inspectCreate",
+      "classification": "semantic-action",
+      "actionIds": [
+        "infrastructure.manage-zone"
+      ]
+    },
+    {
+      "method": "edit.zones.inspectDelete",
+      "classification": "semantic-action",
+      "actionIds": [
         "infrastructure.manage-zone"
       ]
     },

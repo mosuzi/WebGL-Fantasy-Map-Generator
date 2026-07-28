@@ -133,6 +133,7 @@
     "regress:cells-diagnostics": "node --no-warnings ./tools/webgl-generator-cell-diagnostics-regression.mjs",
     "regress:cells-actions": "node --no-warnings ./tools/webgl-generator-cell-action-registry-regression.mjs",
     "regress:rule-inspection-contract": "node --no-warnings ./tools/webgl-generator-rule-inspection-contract-regression.mjs",
+    "regress:existing-rule-inspectors": "node --no-warnings ./tools/webgl-generator-existing-rule-inspectors-regression.mjs",
     "regress:api-ai-discovery": "node --no-warnings ./tools/webgl-generator-api-ai-discovery-regression.mjs",
     "audit:api-full-matrix": "node --no-warnings ./tools/webgl-generator-api-full-capability-matrix.mjs --check",
     "regress:api-full-matrix": "node --no-warnings ./tools/webgl-generator-api-full-capability-matrix-regression.mjs",

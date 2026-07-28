@@ -28876,3 +28876,12 @@ full 矩阵结果：
 - 规范输入只接受纯 JSON：稳定排序并深复制，拒绝非有限数字、循环、稀疏数组、额外数组字段、非枚举字段和访问器；对象与数组均先读取属性描述符，不触发调用方 getter。
 - token 使用 `MapRevisionTracker.signCursor` 的运行时 secret，对完整 actionId、完整规范输入、map identity、revision 和 schema version 签名；短 FNV 只作 token 索引。新增已知输入碰撞与动作碰撞夹具，证明同一短指纹仍不能跨输入或跨动作复用；缺 signer 不再降级为可公开计算的签名。
 - 专项、`cells-actions`、三族 object creation、语法和差异检查通过，既有 `celli1` 文件与调用路径未修改。独立复审第一轮指出短 hash 签名、getter 和无密钥 fallback 三类阻断；修正并补回归后第二轮结论为 `PASS`。
+
+## 2026-07-28：完成第 207 项步骤 3——地形水文与危险删除预检
+
+- 新增 `existing-rule-inspectors.js`，把区域高度、河流创建 / 删除、湖泊开挖 / 删除、生物群系分配、国家 / 省份 / 城市 / 路线删除和地区创建 / 删除统一映射为 `11` 个稳定领域动作；全部预检只读复用既有领域 inspector 或 `inspectDeleteImpact`，不复制写命令规则。
+- 公开 API 新增 `12` 个 inspector：`height.inspectChanges`、`biomes.inspectAssignment`、`rivers / lakes / zones.inspectCreate`，以及国家、省份、城市、路线、河流、湖泊、地区的 `inspectDelete`。对应执行入口保持旧调用兼容；调用方若携带 `inspectionToken / expectedRevision`，执行前必须通过统一动作、输入、schema、地图 identity 与 revision 复核。
+- 公开工作区基线更新为 `15` 个命名空间、`269` 个方法、`147` 个编辑方法和 `261 / 7 / 1` 稳定等级，`info.describe` 覆盖 `269 / 269`。复合语义矩阵更新为 `47` 个完整事务、`10` 个待补 inspector、`5` 个碎片事务、`6` 个缺失规则和 `10` 个配方；全量能力矩阵 `1048` 行，`covered 975 / excluded 73 / gap 0`。
+- 新增 `regress:existing-rule-inspectors`，固定图上的 `12` 个合法样本覆盖 `11` 个动作族，确认预检前后整图摘要不变，并覆盖跨动作令牌、输入变化、陈旧 revision 和旧调用兼容；同时验证 `info.describe` 的统一结果字段、执行令牌参数和真实领域 code，避免实现与机器说明漂移。规则令牌、API 发现 / 覆盖 / 收敛 / 稳定性、能力清单、全量矩阵与复合语义专项通过。
+- `pnpm run build:app` 完成 `1277` modules；生产构建系统 Chrome 的 API 能力专项确认声明、文档、元数据和 runtime 均为 `269 / 269`，稳定等级 `261 / 7 / 1`。真实公开链通过高度输入错配拒绝、令牌执行、撤销与旧调用兼容，河流创建、群系分配、城市 `confirm + token` 删除、地区创建 / 删除及各自撤销；验收时修复通用对象解析器未排除 `removed` 城市、导致删除状态误判的旧问题。application health、console、page 和 WebGL error 均为 `0`。
+- 独立复审首轮阻断 `info.describe` 未明确统一结果 / token options 和专项只覆盖帮助层；补齐真实公开链后，第二轮发现河流 `path-limit` 与规范化 `invalid-argument` 漏记，补 schema 和防漂移断言后最终结论为 `PASS`。

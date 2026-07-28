@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sourceDigest": "35761224559ac483c86e61756c801f59793503611abacfcf9d67c98b91bc6626",
+  "sourceDigest": "abcc8df78fccec8ad557aa19c8d3db495a585a5e6c6479b36fe063156e5c08fe",
   "sourceRoots": [
     "app/webgl-generator/index.html",
     "app/webgl-generator/src/**/*.{js,vue}",
@@ -11,10 +11,10 @@
     "includedInteractionSurfaces": 87,
     "excludedInteractionSurfaces": 18,
     "canvasModes": 29,
-    "runtimeActions": 211,
-    "apiActionBindings": 210,
-    "commandAndInspectorExports": 188,
-    "publicApiMethods": 257
+    "runtimeActions": 223,
+    "apiActionBindings": 222,
+    "commandAndInspectorExports": 189,
+    "publicApiMethods": 269
   },
   "statusPolicy": {
     "covered": "公共 API 已存在且与底层 action / command 或只读 helper 共路径",
@@ -23,8 +23,8 @@
     "gap": "适合参数化且没有公共 API，必须在第 200 项关闭"
   },
   "totals": {
-    "rows": 1011,
-    "covered": 938,
+    "rows": 1048,
+    "covered": 975,
     "excluded": 73,
     "deferred-owned": 0,
     "gap": 0,
@@ -760,6 +760,35 @@
       "exclusionReason": ""
     },
     {
+      "matrixId": "action:edit.biomes.inspectAssignment",
+      "capabilityId": "edit.biomes.inspectAssignment",
+      "title": "Runtime action edit.biomes.inspectAssignment",
+      "sourceKind": "runtime-action",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/app.js"
+      ],
+      "uiEntry": "",
+      "action": "edit.biomes.inspectAssignment",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "edit.biomes.inspectAssignment"
+      ],
+      "inputSpace": "method-schema",
+      "mutates": "none",
+      "preflight": "readonly",
+      "businessCodes": [],
+      "confirm": "按 API 确认清单",
+      "undoOrRollback": "not-applicable",
+      "async": false,
+      "compatibility": "UI 与 API 共用同一 runtime action",
+      "evidence": [
+        "app/webgl-generator/src/runtime/console-api.js"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
       "matrixId": "action:edit.biomes.inspectSuitability",
       "capabilityId": "edit.biomes.inspectSuitability",
       "title": "Runtime action edit.biomes.inspectSuitability",
@@ -888,6 +917,35 @@
       "commandOrInspector": "",
       "apiMethods": [
         "edit.cities.inspectCreateAtCell"
+      ],
+      "inputSpace": "method-schema",
+      "mutates": "none",
+      "preflight": "readonly",
+      "businessCodes": [],
+      "confirm": "按 API 确认清单",
+      "undoOrRollback": "not-applicable",
+      "async": false,
+      "compatibility": "UI 与 API 共用同一 runtime action",
+      "evidence": [
+        "app/webgl-generator/src/runtime/console-api.js"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "action:edit.cities.inspectDelete",
+      "capabilityId": "edit.cities.inspectDelete",
+      "title": "Runtime action edit.cities.inspectDelete",
+      "sourceKind": "runtime-action",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/app.js"
+      ],
+      "uiEntry": "",
+      "action": "edit.cities.inspectDelete",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "edit.cities.inspectDelete"
       ],
       "inputSpace": "method-schema",
       "mutates": "none",
@@ -1833,6 +1891,35 @@
       "exclusionReason": ""
     },
     {
+      "matrixId": "action:edit.height.inspectChanges",
+      "capabilityId": "edit.height.inspectChanges",
+      "title": "Runtime action edit.height.inspectChanges",
+      "sourceKind": "runtime-action",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/app.js"
+      ],
+      "uiEntry": "",
+      "action": "edit.height.inspectChanges",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "edit.height.inspectChanges"
+      ],
+      "inputSpace": "method-schema",
+      "mutates": "none",
+      "preflight": "readonly",
+      "businessCodes": [],
+      "confirm": "按 API 确认清单",
+      "undoOrRollback": "not-applicable",
+      "async": false,
+      "compatibility": "UI 与 API 共用同一 runtime action",
+      "evidence": [
+        "app/webgl-generator/src/runtime/console-api.js"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
       "matrixId": "action:edit.height.inspectGlobalTransform",
       "capabilityId": "edit.height.inspectGlobalTransform",
       "title": "Runtime action edit.height.inspectGlobalTransform",
@@ -2490,6 +2577,64 @@
       "businessCodes": [],
       "confirm": "按 API 确认清单",
       "undoOrRollback": "按方法元数据",
+      "async": false,
+      "compatibility": "UI 与 API 共用同一 runtime action",
+      "evidence": [
+        "app/webgl-generator/src/runtime/console-api.js"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "action:edit.lakes.inspectCreate",
+      "capabilityId": "edit.lakes.inspectCreate",
+      "title": "Runtime action edit.lakes.inspectCreate",
+      "sourceKind": "runtime-action",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/app.js"
+      ],
+      "uiEntry": "",
+      "action": "edit.lakes.inspectCreate",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "edit.lakes.inspectCreate"
+      ],
+      "inputSpace": "method-schema",
+      "mutates": "none",
+      "preflight": "readonly",
+      "businessCodes": [],
+      "confirm": "按 API 确认清单",
+      "undoOrRollback": "not-applicable",
+      "async": false,
+      "compatibility": "UI 与 API 共用同一 runtime action",
+      "evidence": [
+        "app/webgl-generator/src/runtime/console-api.js"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "action:edit.lakes.inspectDelete",
+      "capabilityId": "edit.lakes.inspectDelete",
+      "title": "Runtime action edit.lakes.inspectDelete",
+      "sourceKind": "runtime-action",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/app.js"
+      ],
+      "uiEntry": "",
+      "action": "edit.lakes.inspectDelete",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "edit.lakes.inspectDelete"
+      ],
+      "inputSpace": "method-schema",
+      "mutates": "none",
+      "preflight": "readonly",
+      "businessCodes": [],
+      "confirm": "按 API 确认清单",
+      "undoOrRollback": "not-applicable",
       "async": false,
       "compatibility": "UI 与 API 共用同一 runtime action",
       "evidence": [
@@ -3544,6 +3689,35 @@
       "exclusionReason": ""
     },
     {
+      "matrixId": "action:edit.provinces.inspectDelete",
+      "capabilityId": "edit.provinces.inspectDelete",
+      "title": "Runtime action edit.provinces.inspectDelete",
+      "sourceKind": "runtime-action",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/app.js"
+      ],
+      "uiEntry": "",
+      "action": "edit.provinces.inspectDelete",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "edit.provinces.inspectDelete"
+      ],
+      "inputSpace": "method-schema",
+      "mutates": "none",
+      "preflight": "readonly",
+      "businessCodes": [],
+      "confirm": "按 API 确认清单",
+      "undoOrRollback": "not-applicable",
+      "async": false,
+      "compatibility": "UI 与 API 共用同一 runtime action",
+      "evidence": [
+        "app/webgl-generator/src/runtime/console-api.js"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
       "matrixId": "action:edit.provinces.rename",
       "capabilityId": "edit.provinces.rename",
       "title": "Runtime action edit.provinces.rename",
@@ -3892,6 +4066,64 @@
       "exclusionReason": ""
     },
     {
+      "matrixId": "action:edit.rivers.inspectCreate",
+      "capabilityId": "edit.rivers.inspectCreate",
+      "title": "Runtime action edit.rivers.inspectCreate",
+      "sourceKind": "runtime-action",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/app.js"
+      ],
+      "uiEntry": "",
+      "action": "edit.rivers.inspectCreate",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "edit.rivers.inspectCreate"
+      ],
+      "inputSpace": "method-schema",
+      "mutates": "none",
+      "preflight": "readonly",
+      "businessCodes": [],
+      "confirm": "按 API 确认清单",
+      "undoOrRollback": "not-applicable",
+      "async": false,
+      "compatibility": "UI 与 API 共用同一 runtime action",
+      "evidence": [
+        "app/webgl-generator/src/runtime/console-api.js"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "action:edit.rivers.inspectDelete",
+      "capabilityId": "edit.rivers.inspectDelete",
+      "title": "Runtime action edit.rivers.inspectDelete",
+      "sourceKind": "runtime-action",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/app.js"
+      ],
+      "uiEntry": "",
+      "action": "edit.rivers.inspectDelete",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "edit.rivers.inspectDelete"
+      ],
+      "inputSpace": "method-schema",
+      "mutates": "none",
+      "preflight": "readonly",
+      "businessCodes": [],
+      "confirm": "按 API 确认清单",
+      "undoOrRollback": "not-applicable",
+      "async": false,
+      "compatibility": "UI 与 API 共用同一 runtime action",
+      "evidence": [
+        "app/webgl-generator/src/runtime/console-api.js"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
       "matrixId": "action:edit.rivers.rename",
       "capabilityId": "edit.rivers.rename",
       "title": "Runtime action edit.rivers.rename",
@@ -4027,6 +4259,35 @@
       "businessCodes": [],
       "confirm": "按 API 确认清单",
       "undoOrRollback": "按方法元数据",
+      "async": false,
+      "compatibility": "UI 与 API 共用同一 runtime action",
+      "evidence": [
+        "app/webgl-generator/src/runtime/console-api.js"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "action:edit.routes.inspectDelete",
+      "capabilityId": "edit.routes.inspectDelete",
+      "title": "Runtime action edit.routes.inspectDelete",
+      "sourceKind": "runtime-action",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/app.js"
+      ],
+      "uiEntry": "",
+      "action": "edit.routes.inspectDelete",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "edit.routes.inspectDelete"
+      ],
+      "inputSpace": "method-schema",
+      "mutates": "none",
+      "preflight": "readonly",
+      "businessCodes": [],
+      "confirm": "按 API 确认清单",
+      "undoOrRollback": "not-applicable",
       "async": false,
       "compatibility": "UI 与 API 共用同一 runtime action",
       "evidence": [
@@ -4252,6 +4513,35 @@
       "commandOrInspector": "",
       "apiMethods": [
         "edit.states.inspectCreateAtCell"
+      ],
+      "inputSpace": "method-schema",
+      "mutates": "none",
+      "preflight": "readonly",
+      "businessCodes": [],
+      "confirm": "按 API 确认清单",
+      "undoOrRollback": "not-applicable",
+      "async": false,
+      "compatibility": "UI 与 API 共用同一 runtime action",
+      "evidence": [
+        "app/webgl-generator/src/runtime/console-api.js"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "action:edit.states.inspectDelete",
+      "capabilityId": "edit.states.inspectDelete",
+      "title": "Runtime action edit.states.inspectDelete",
+      "sourceKind": "runtime-action",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/app.js"
+      ],
+      "uiEntry": "",
+      "action": "edit.states.inspectDelete",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "edit.states.inspectDelete"
       ],
       "inputSpace": "method-schema",
       "mutates": "none",
@@ -4578,6 +4868,64 @@
       "businessCodes": [],
       "confirm": "按 API 确认清单",
       "undoOrRollback": "按方法元数据",
+      "async": false,
+      "compatibility": "UI 与 API 共用同一 runtime action",
+      "evidence": [
+        "app/webgl-generator/src/runtime/console-api.js"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "action:edit.zones.inspectCreate",
+      "capabilityId": "edit.zones.inspectCreate",
+      "title": "Runtime action edit.zones.inspectCreate",
+      "sourceKind": "runtime-action",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/app.js"
+      ],
+      "uiEntry": "",
+      "action": "edit.zones.inspectCreate",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "edit.zones.inspectCreate"
+      ],
+      "inputSpace": "method-schema",
+      "mutates": "none",
+      "preflight": "readonly",
+      "businessCodes": [],
+      "confirm": "按 API 确认清单",
+      "undoOrRollback": "not-applicable",
+      "async": false,
+      "compatibility": "UI 与 API 共用同一 runtime action",
+      "evidence": [
+        "app/webgl-generator/src/runtime/console-api.js"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "action:edit.zones.inspectDelete",
+      "capabilityId": "edit.zones.inspectDelete",
+      "title": "Runtime action edit.zones.inspectDelete",
+      "sourceKind": "runtime-action",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/app.js"
+      ],
+      "uiEntry": "",
+      "action": "edit.zones.inspectDelete",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "edit.zones.inspectDelete"
+      ],
+      "inputSpace": "method-schema",
+      "mutates": "none",
+      "preflight": "readonly",
+      "businessCodes": [],
+      "confirm": "按 API 确认清单",
+      "undoOrRollback": "not-applicable",
       "async": false,
       "compatibility": "UI 与 API 共用同一 runtime action",
       "evidence": [
@@ -6904,6 +7252,36 @@
       "exclusionReason": ""
     },
     {
+      "matrixId": "api-action-binding:edit.biomes.inspectAssignment",
+      "capabilityId": "edit.biomes.inspectAssignment",
+      "title": "API action 绑定 edit.biomes.inspectAssignment",
+      "sourceKind": "api-action-binding",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/console-api.js",
+        "app/webgl-generator/src/runtime/app.js"
+      ],
+      "uiEntry": "",
+      "action": "edit.biomes.inspectAssignment",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "edit.biomes.inspectAssignment"
+      ],
+      "inputSpace": "method-schema",
+      "mutates": "none",
+      "preflight": "公共 API 绑定必须能解析到真实 runtime action",
+      "businessCodes": [],
+      "confirm": "按 API 确认清单",
+      "undoOrRollback": "not-applicable",
+      "async": false,
+      "compatibility": "旧 API action 路径保持可调用",
+      "evidence": [
+        "tools/webgl-generator-api-action-convergence-regression.mjs"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
       "matrixId": "api-action-binding:edit.biomes.inspectSuitability",
       "capabilityId": "edit.biomes.inspectSuitability",
       "title": "API action 绑定 edit.biomes.inspectSuitability",
@@ -7037,6 +7415,36 @@
       "commandOrInspector": "",
       "apiMethods": [
         "edit.cities.inspectCreateAtCell"
+      ],
+      "inputSpace": "method-schema",
+      "mutates": "none",
+      "preflight": "公共 API 绑定必须能解析到真实 runtime action",
+      "businessCodes": [],
+      "confirm": "按 API 确认清单",
+      "undoOrRollback": "not-applicable",
+      "async": false,
+      "compatibility": "旧 API action 路径保持可调用",
+      "evidence": [
+        "tools/webgl-generator-api-action-convergence-regression.mjs"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "api-action-binding:edit.cities.inspectDelete",
+      "capabilityId": "edit.cities.inspectDelete",
+      "title": "API action 绑定 edit.cities.inspectDelete",
+      "sourceKind": "api-action-binding",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/console-api.js",
+        "app/webgl-generator/src/runtime/app.js"
+      ],
+      "uiEntry": "",
+      "action": "edit.cities.inspectDelete",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "edit.cities.inspectDelete"
       ],
       "inputSpace": "method-schema",
       "mutates": "none",
@@ -8014,6 +8422,36 @@
       "exclusionReason": ""
     },
     {
+      "matrixId": "api-action-binding:edit.height.inspectChanges",
+      "capabilityId": "edit.height.inspectChanges",
+      "title": "API action 绑定 edit.height.inspectChanges",
+      "sourceKind": "api-action-binding",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/console-api.js",
+        "app/webgl-generator/src/runtime/app.js"
+      ],
+      "uiEntry": "",
+      "action": "edit.height.inspectChanges",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "edit.height.inspectChanges"
+      ],
+      "inputSpace": "method-schema",
+      "mutates": "none",
+      "preflight": "公共 API 绑定必须能解析到真实 runtime action",
+      "businessCodes": [],
+      "confirm": "按 API 确认清单",
+      "undoOrRollback": "not-applicable",
+      "async": false,
+      "compatibility": "旧 API action 路径保持可调用",
+      "evidence": [
+        "tools/webgl-generator-api-action-convergence-regression.mjs"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
       "matrixId": "api-action-binding:edit.height.inspectGlobalTransform",
       "capabilityId": "edit.height.inspectGlobalTransform",
       "title": "API action 绑定 edit.height.inspectGlobalTransform",
@@ -8694,6 +9132,66 @@
       "businessCodes": [],
       "confirm": "按 API 确认清单",
       "undoOrRollback": "按方法元数据",
+      "async": false,
+      "compatibility": "旧 API action 路径保持可调用",
+      "evidence": [
+        "tools/webgl-generator-api-action-convergence-regression.mjs"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "api-action-binding:edit.lakes.inspectCreate",
+      "capabilityId": "edit.lakes.inspectCreate",
+      "title": "API action 绑定 edit.lakes.inspectCreate",
+      "sourceKind": "api-action-binding",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/console-api.js",
+        "app/webgl-generator/src/runtime/app.js"
+      ],
+      "uiEntry": "",
+      "action": "edit.lakes.inspectCreate",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "edit.lakes.inspectCreate"
+      ],
+      "inputSpace": "method-schema",
+      "mutates": "none",
+      "preflight": "公共 API 绑定必须能解析到真实 runtime action",
+      "businessCodes": [],
+      "confirm": "按 API 确认清单",
+      "undoOrRollback": "not-applicable",
+      "async": false,
+      "compatibility": "旧 API action 路径保持可调用",
+      "evidence": [
+        "tools/webgl-generator-api-action-convergence-regression.mjs"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "api-action-binding:edit.lakes.inspectDelete",
+      "capabilityId": "edit.lakes.inspectDelete",
+      "title": "API action 绑定 edit.lakes.inspectDelete",
+      "sourceKind": "api-action-binding",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/console-api.js",
+        "app/webgl-generator/src/runtime/app.js"
+      ],
+      "uiEntry": "",
+      "action": "edit.lakes.inspectDelete",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "edit.lakes.inspectDelete"
+      ],
+      "inputSpace": "method-schema",
+      "mutates": "none",
+      "preflight": "公共 API 绑定必须能解析到真实 runtime action",
+      "businessCodes": [],
+      "confirm": "按 API 确认清单",
+      "undoOrRollback": "not-applicable",
       "async": false,
       "compatibility": "旧 API action 路径保持可调用",
       "evidence": [
@@ -9784,6 +10282,36 @@
       "exclusionReason": ""
     },
     {
+      "matrixId": "api-action-binding:edit.provinces.inspectDelete",
+      "capabilityId": "edit.provinces.inspectDelete",
+      "title": "API action 绑定 edit.provinces.inspectDelete",
+      "sourceKind": "api-action-binding",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/console-api.js",
+        "app/webgl-generator/src/runtime/app.js"
+      ],
+      "uiEntry": "",
+      "action": "edit.provinces.inspectDelete",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "edit.provinces.inspectDelete"
+      ],
+      "inputSpace": "method-schema",
+      "mutates": "none",
+      "preflight": "公共 API 绑定必须能解析到真实 runtime action",
+      "businessCodes": [],
+      "confirm": "按 API 确认清单",
+      "undoOrRollback": "not-applicable",
+      "async": false,
+      "compatibility": "旧 API action 路径保持可调用",
+      "evidence": [
+        "tools/webgl-generator-api-action-convergence-regression.mjs"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
       "matrixId": "api-action-binding:edit.provinces.rename",
       "capabilityId": "edit.provinces.rename",
       "title": "API action 绑定 edit.provinces.rename",
@@ -10144,6 +10672,66 @@
       "exclusionReason": ""
     },
     {
+      "matrixId": "api-action-binding:edit.rivers.inspectCreate",
+      "capabilityId": "edit.rivers.inspectCreate",
+      "title": "API action 绑定 edit.rivers.inspectCreate",
+      "sourceKind": "api-action-binding",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/console-api.js",
+        "app/webgl-generator/src/runtime/app.js"
+      ],
+      "uiEntry": "",
+      "action": "edit.rivers.inspectCreate",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "edit.rivers.inspectCreate"
+      ],
+      "inputSpace": "method-schema",
+      "mutates": "none",
+      "preflight": "公共 API 绑定必须能解析到真实 runtime action",
+      "businessCodes": [],
+      "confirm": "按 API 确认清单",
+      "undoOrRollback": "not-applicable",
+      "async": false,
+      "compatibility": "旧 API action 路径保持可调用",
+      "evidence": [
+        "tools/webgl-generator-api-action-convergence-regression.mjs"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "api-action-binding:edit.rivers.inspectDelete",
+      "capabilityId": "edit.rivers.inspectDelete",
+      "title": "API action 绑定 edit.rivers.inspectDelete",
+      "sourceKind": "api-action-binding",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/console-api.js",
+        "app/webgl-generator/src/runtime/app.js"
+      ],
+      "uiEntry": "",
+      "action": "edit.rivers.inspectDelete",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "edit.rivers.inspectDelete"
+      ],
+      "inputSpace": "method-schema",
+      "mutates": "none",
+      "preflight": "公共 API 绑定必须能解析到真实 runtime action",
+      "businessCodes": [],
+      "confirm": "按 API 确认清单",
+      "undoOrRollback": "not-applicable",
+      "async": false,
+      "compatibility": "旧 API action 路径保持可调用",
+      "evidence": [
+        "tools/webgl-generator-api-action-convergence-regression.mjs"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
       "matrixId": "api-action-binding:edit.rivers.rename",
       "capabilityId": "edit.rivers.rename",
       "title": "API action 绑定 edit.rivers.rename",
@@ -10284,6 +10872,36 @@
       "businessCodes": [],
       "confirm": "按 API 确认清单",
       "undoOrRollback": "按方法元数据",
+      "async": false,
+      "compatibility": "旧 API action 路径保持可调用",
+      "evidence": [
+        "tools/webgl-generator-api-action-convergence-regression.mjs"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "api-action-binding:edit.routes.inspectDelete",
+      "capabilityId": "edit.routes.inspectDelete",
+      "title": "API action 绑定 edit.routes.inspectDelete",
+      "sourceKind": "api-action-binding",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/console-api.js",
+        "app/webgl-generator/src/runtime/app.js"
+      ],
+      "uiEntry": "",
+      "action": "edit.routes.inspectDelete",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "edit.routes.inspectDelete"
+      ],
+      "inputSpace": "method-schema",
+      "mutates": "none",
+      "preflight": "公共 API 绑定必须能解析到真实 runtime action",
+      "businessCodes": [],
+      "confirm": "按 API 确认清单",
+      "undoOrRollback": "not-applicable",
       "async": false,
       "compatibility": "旧 API action 路径保持可调用",
       "evidence": [
@@ -10517,6 +11135,36 @@
       "commandOrInspector": "",
       "apiMethods": [
         "edit.states.inspectCreateAtCell"
+      ],
+      "inputSpace": "method-schema",
+      "mutates": "none",
+      "preflight": "公共 API 绑定必须能解析到真实 runtime action",
+      "businessCodes": [],
+      "confirm": "按 API 确认清单",
+      "undoOrRollback": "not-applicable",
+      "async": false,
+      "compatibility": "旧 API action 路径保持可调用",
+      "evidence": [
+        "tools/webgl-generator-api-action-convergence-regression.mjs"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "api-action-binding:edit.states.inspectDelete",
+      "capabilityId": "edit.states.inspectDelete",
+      "title": "API action 绑定 edit.states.inspectDelete",
+      "sourceKind": "api-action-binding",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/console-api.js",
+        "app/webgl-generator/src/runtime/app.js"
+      ],
+      "uiEntry": "",
+      "action": "edit.states.inspectDelete",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "edit.states.inspectDelete"
       ],
       "inputSpace": "method-schema",
       "mutates": "none",
@@ -10854,6 +11502,66 @@
       "businessCodes": [],
       "confirm": "按 API 确认清单",
       "undoOrRollback": "按方法元数据",
+      "async": false,
+      "compatibility": "旧 API action 路径保持可调用",
+      "evidence": [
+        "tools/webgl-generator-api-action-convergence-regression.mjs"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "api-action-binding:edit.zones.inspectCreate",
+      "capabilityId": "edit.zones.inspectCreate",
+      "title": "API action 绑定 edit.zones.inspectCreate",
+      "sourceKind": "api-action-binding",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/console-api.js",
+        "app/webgl-generator/src/runtime/app.js"
+      ],
+      "uiEntry": "",
+      "action": "edit.zones.inspectCreate",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "edit.zones.inspectCreate"
+      ],
+      "inputSpace": "method-schema",
+      "mutates": "none",
+      "preflight": "公共 API 绑定必须能解析到真实 runtime action",
+      "businessCodes": [],
+      "confirm": "按 API 确认清单",
+      "undoOrRollback": "not-applicable",
+      "async": false,
+      "compatibility": "旧 API action 路径保持可调用",
+      "evidence": [
+        "tools/webgl-generator-api-action-convergence-regression.mjs"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "api-action-binding:edit.zones.inspectDelete",
+      "capabilityId": "edit.zones.inspectDelete",
+      "title": "API action 绑定 edit.zones.inspectDelete",
+      "sourceKind": "api-action-binding",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/console-api.js",
+        "app/webgl-generator/src/runtime/app.js"
+      ],
+      "uiEntry": "",
+      "action": "edit.zones.inspectDelete",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "edit.zones.inspectDelete"
+      ],
+      "inputSpace": "method-schema",
+      "mutates": "none",
+      "preflight": "公共 API 绑定必须能解析到真实 runtime action",
+      "businessCodes": [],
+      "confirm": "按 API 确认清单",
+      "undoOrRollback": "not-applicable",
       "async": false,
       "compatibility": "旧 API action 路径保持可调用",
       "evidence": [
@@ -13911,6 +14619,37 @@
       "exclusionReason": ""
     },
     {
+      "matrixId": "api:edit.biomes.inspectAssignment",
+      "capabilityId": "edit.biomes.inspectAssignment",
+      "title": "公共 API edit.biomes.inspectAssignment",
+      "sourceKind": "public-api",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/api-contract.js",
+        "app/webgl-generator/src/runtime/console-api.js"
+      ],
+      "uiEntry": "",
+      "action": "edit.biomes.inspectAssignment",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "edit.biomes.inspectAssignment"
+      ],
+      "inputSpace": "info.describe(method)",
+      "mutates": "none",
+      "preflight": "由 info.describe(method) 与领域 inspector 发现",
+      "businessCodes": [],
+      "confirm": "由 methodMetadata.requiresConfirm 发现",
+      "undoOrRollback": "由 methodMetadata.undoable 与结果 metadata 发现",
+      "async": false,
+      "compatibility": "受 API 主版本和方法稳定性契约保护",
+      "evidence": [
+        "tools/webgl-generator-api-capabilities-regression.mjs",
+        "tools/webgl-generator-api-stability-contract-regression.mjs"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
       "matrixId": "api:edit.biomes.inspectSuitability",
       "capabilityId": "edit.biomes.inspectSuitability",
       "title": "公共 API edit.biomes.inspectSuitability",
@@ -14048,6 +14787,37 @@
       "commandOrInspector": "",
       "apiMethods": [
         "edit.cities.inspectCreateAtCell"
+      ],
+      "inputSpace": "info.describe(method)",
+      "mutates": "none",
+      "preflight": "由 info.describe(method) 与领域 inspector 发现",
+      "businessCodes": [],
+      "confirm": "由 methodMetadata.requiresConfirm 发现",
+      "undoOrRollback": "由 methodMetadata.undoable 与结果 metadata 发现",
+      "async": false,
+      "compatibility": "受 API 主版本和方法稳定性契约保护",
+      "evidence": [
+        "tools/webgl-generator-api-capabilities-regression.mjs",
+        "tools/webgl-generator-api-stability-contract-regression.mjs"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "api:edit.cities.inspectDelete",
+      "capabilityId": "edit.cities.inspectDelete",
+      "title": "公共 API edit.cities.inspectDelete",
+      "sourceKind": "public-api",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/api-contract.js",
+        "app/webgl-generator/src/runtime/console-api.js"
+      ],
+      "uiEntry": "",
+      "action": "edit.cities.inspectDelete",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "edit.cities.inspectDelete"
       ],
       "inputSpace": "info.describe(method)",
       "mutates": "none",
@@ -15058,6 +15828,37 @@
       "exclusionReason": ""
     },
     {
+      "matrixId": "api:edit.height.inspectChanges",
+      "capabilityId": "edit.height.inspectChanges",
+      "title": "公共 API edit.height.inspectChanges",
+      "sourceKind": "public-api",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/api-contract.js",
+        "app/webgl-generator/src/runtime/console-api.js"
+      ],
+      "uiEntry": "",
+      "action": "edit.height.inspectChanges",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "edit.height.inspectChanges"
+      ],
+      "inputSpace": "info.describe(method)",
+      "mutates": "none",
+      "preflight": "由 info.describe(method) 与领域 inspector 发现",
+      "businessCodes": [],
+      "confirm": "由 methodMetadata.requiresConfirm 发现",
+      "undoOrRollback": "由 methodMetadata.undoable 与结果 metadata 发现",
+      "async": false,
+      "compatibility": "受 API 主版本和方法稳定性契约保护",
+      "evidence": [
+        "tools/webgl-generator-api-capabilities-regression.mjs",
+        "tools/webgl-generator-api-stability-contract-regression.mjs"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
       "matrixId": "api:edit.height.inspectGlobalTransform",
       "capabilityId": "edit.height.inspectGlobalTransform",
       "title": "公共 API edit.height.inspectGlobalTransform",
@@ -15756,6 +16557,68 @@
       ],
       "inputSpace": "info.describe(method)",
       "mutates": "map-or-persistent-data",
+      "preflight": "由 info.describe(method) 与领域 inspector 发现",
+      "businessCodes": [],
+      "confirm": "由 methodMetadata.requiresConfirm 发现",
+      "undoOrRollback": "由 methodMetadata.undoable 与结果 metadata 发现",
+      "async": false,
+      "compatibility": "受 API 主版本和方法稳定性契约保护",
+      "evidence": [
+        "tools/webgl-generator-api-capabilities-regression.mjs",
+        "tools/webgl-generator-api-stability-contract-regression.mjs"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "api:edit.lakes.inspectCreate",
+      "capabilityId": "edit.lakes.inspectCreate",
+      "title": "公共 API edit.lakes.inspectCreate",
+      "sourceKind": "public-api",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/api-contract.js",
+        "app/webgl-generator/src/runtime/console-api.js"
+      ],
+      "uiEntry": "",
+      "action": "edit.lakes.inspectCreate",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "edit.lakes.inspectCreate"
+      ],
+      "inputSpace": "info.describe(method)",
+      "mutates": "none",
+      "preflight": "由 info.describe(method) 与领域 inspector 发现",
+      "businessCodes": [],
+      "confirm": "由 methodMetadata.requiresConfirm 发现",
+      "undoOrRollback": "由 methodMetadata.undoable 与结果 metadata 发现",
+      "async": false,
+      "compatibility": "受 API 主版本和方法稳定性契约保护",
+      "evidence": [
+        "tools/webgl-generator-api-capabilities-regression.mjs",
+        "tools/webgl-generator-api-stability-contract-regression.mjs"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "api:edit.lakes.inspectDelete",
+      "capabilityId": "edit.lakes.inspectDelete",
+      "title": "公共 API edit.lakes.inspectDelete",
+      "sourceKind": "public-api",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/api-contract.js",
+        "app/webgl-generator/src/runtime/console-api.js"
+      ],
+      "uiEntry": "",
+      "action": "edit.lakes.inspectDelete",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "edit.lakes.inspectDelete"
+      ],
+      "inputSpace": "info.describe(method)",
+      "mutates": "none",
       "preflight": "由 info.describe(method) 与领域 inspector 发现",
       "businessCodes": [],
       "confirm": "由 methodMetadata.requiresConfirm 发现",
@@ -16887,6 +17750,37 @@
       "exclusionReason": ""
     },
     {
+      "matrixId": "api:edit.provinces.inspectDelete",
+      "capabilityId": "edit.provinces.inspectDelete",
+      "title": "公共 API edit.provinces.inspectDelete",
+      "sourceKind": "public-api",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/api-contract.js",
+        "app/webgl-generator/src/runtime/console-api.js"
+      ],
+      "uiEntry": "",
+      "action": "edit.provinces.inspectDelete",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "edit.provinces.inspectDelete"
+      ],
+      "inputSpace": "info.describe(method)",
+      "mutates": "none",
+      "preflight": "由 info.describe(method) 与领域 inspector 发现",
+      "businessCodes": [],
+      "confirm": "由 methodMetadata.requiresConfirm 发现",
+      "undoOrRollback": "由 methodMetadata.undoable 与结果 metadata 发现",
+      "async": false,
+      "compatibility": "受 API 主版本和方法稳定性契约保护",
+      "evidence": [
+        "tools/webgl-generator-api-capabilities-regression.mjs",
+        "tools/webgl-generator-api-stability-contract-regression.mjs"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
       "matrixId": "api:edit.provinces.rename",
       "capabilityId": "edit.provinces.rename",
       "title": "公共 API edit.provinces.rename",
@@ -17259,6 +18153,68 @@
       "exclusionReason": ""
     },
     {
+      "matrixId": "api:edit.rivers.inspectCreate",
+      "capabilityId": "edit.rivers.inspectCreate",
+      "title": "公共 API edit.rivers.inspectCreate",
+      "sourceKind": "public-api",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/api-contract.js",
+        "app/webgl-generator/src/runtime/console-api.js"
+      ],
+      "uiEntry": "",
+      "action": "edit.rivers.inspectCreate",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "edit.rivers.inspectCreate"
+      ],
+      "inputSpace": "info.describe(method)",
+      "mutates": "none",
+      "preflight": "由 info.describe(method) 与领域 inspector 发现",
+      "businessCodes": [],
+      "confirm": "由 methodMetadata.requiresConfirm 发现",
+      "undoOrRollback": "由 methodMetadata.undoable 与结果 metadata 发现",
+      "async": false,
+      "compatibility": "受 API 主版本和方法稳定性契约保护",
+      "evidence": [
+        "tools/webgl-generator-api-capabilities-regression.mjs",
+        "tools/webgl-generator-api-stability-contract-regression.mjs"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "api:edit.rivers.inspectDelete",
+      "capabilityId": "edit.rivers.inspectDelete",
+      "title": "公共 API edit.rivers.inspectDelete",
+      "sourceKind": "public-api",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/api-contract.js",
+        "app/webgl-generator/src/runtime/console-api.js"
+      ],
+      "uiEntry": "",
+      "action": "edit.rivers.inspectDelete",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "edit.rivers.inspectDelete"
+      ],
+      "inputSpace": "info.describe(method)",
+      "mutates": "none",
+      "preflight": "由 info.describe(method) 与领域 inspector 发现",
+      "businessCodes": [],
+      "confirm": "由 methodMetadata.requiresConfirm 发现",
+      "undoOrRollback": "由 methodMetadata.undoable 与结果 metadata 发现",
+      "async": false,
+      "compatibility": "受 API 主版本和方法稳定性契约保护",
+      "evidence": [
+        "tools/webgl-generator-api-capabilities-regression.mjs",
+        "tools/webgl-generator-api-stability-contract-regression.mjs"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
       "matrixId": "api:edit.rivers.rename",
       "capabilityId": "edit.rivers.rename",
       "title": "公共 API edit.rivers.rename",
@@ -17399,6 +18355,37 @@
       ],
       "inputSpace": "info.describe(method)",
       "mutates": "map-or-persistent-data",
+      "preflight": "由 info.describe(method) 与领域 inspector 发现",
+      "businessCodes": [],
+      "confirm": "由 methodMetadata.requiresConfirm 发现",
+      "undoOrRollback": "由 methodMetadata.undoable 与结果 metadata 发现",
+      "async": false,
+      "compatibility": "受 API 主版本和方法稳定性契约保护",
+      "evidence": [
+        "tools/webgl-generator-api-capabilities-regression.mjs",
+        "tools/webgl-generator-api-stability-contract-regression.mjs"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "api:edit.routes.inspectDelete",
+      "capabilityId": "edit.routes.inspectDelete",
+      "title": "公共 API edit.routes.inspectDelete",
+      "sourceKind": "public-api",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/api-contract.js",
+        "app/webgl-generator/src/runtime/console-api.js"
+      ],
+      "uiEntry": "",
+      "action": "edit.routes.inspectDelete",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "edit.routes.inspectDelete"
+      ],
+      "inputSpace": "info.describe(method)",
+      "mutates": "none",
       "preflight": "由 info.describe(method) 与领域 inspector 发现",
       "businessCodes": [],
       "confirm": "由 methodMetadata.requiresConfirm 发现",
@@ -17644,6 +18631,37 @@
       "commandOrInspector": "",
       "apiMethods": [
         "edit.states.inspectCreateAtCell"
+      ],
+      "inputSpace": "info.describe(method)",
+      "mutates": "none",
+      "preflight": "由 info.describe(method) 与领域 inspector 发现",
+      "businessCodes": [],
+      "confirm": "由 methodMetadata.requiresConfirm 发现",
+      "undoOrRollback": "由 methodMetadata.undoable 与结果 metadata 发现",
+      "async": false,
+      "compatibility": "受 API 主版本和方法稳定性契约保护",
+      "evidence": [
+        "tools/webgl-generator-api-capabilities-regression.mjs",
+        "tools/webgl-generator-api-stability-contract-regression.mjs"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "api:edit.states.inspectDelete",
+      "capabilityId": "edit.states.inspectDelete",
+      "title": "公共 API edit.states.inspectDelete",
+      "sourceKind": "public-api",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/api-contract.js",
+        "app/webgl-generator/src/runtime/console-api.js"
+      ],
+      "uiEntry": "",
+      "action": "edit.states.inspectDelete",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "edit.states.inspectDelete"
       ],
       "inputSpace": "info.describe(method)",
       "mutates": "none",
@@ -17988,6 +19006,68 @@
       ],
       "inputSpace": "info.describe(method)",
       "mutates": "map-or-persistent-data",
+      "preflight": "由 info.describe(method) 与领域 inspector 发现",
+      "businessCodes": [],
+      "confirm": "由 methodMetadata.requiresConfirm 发现",
+      "undoOrRollback": "由 methodMetadata.undoable 与结果 metadata 发现",
+      "async": false,
+      "compatibility": "受 API 主版本和方法稳定性契约保护",
+      "evidence": [
+        "tools/webgl-generator-api-capabilities-regression.mjs",
+        "tools/webgl-generator-api-stability-contract-regression.mjs"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "api:edit.zones.inspectCreate",
+      "capabilityId": "edit.zones.inspectCreate",
+      "title": "公共 API edit.zones.inspectCreate",
+      "sourceKind": "public-api",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/api-contract.js",
+        "app/webgl-generator/src/runtime/console-api.js"
+      ],
+      "uiEntry": "",
+      "action": "edit.zones.inspectCreate",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "edit.zones.inspectCreate"
+      ],
+      "inputSpace": "info.describe(method)",
+      "mutates": "none",
+      "preflight": "由 info.describe(method) 与领域 inspector 发现",
+      "businessCodes": [],
+      "confirm": "由 methodMetadata.requiresConfirm 发现",
+      "undoOrRollback": "由 methodMetadata.undoable 与结果 metadata 发现",
+      "async": false,
+      "compatibility": "受 API 主版本和方法稳定性契约保护",
+      "evidence": [
+        "tools/webgl-generator-api-capabilities-regression.mjs",
+        "tools/webgl-generator-api-stability-contract-regression.mjs"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "api:edit.zones.inspectDelete",
+      "capabilityId": "edit.zones.inspectDelete",
+      "title": "公共 API edit.zones.inspectDelete",
+      "sourceKind": "public-api",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/api-contract.js",
+        "app/webgl-generator/src/runtime/console-api.js"
+      ],
+      "uiEntry": "",
+      "action": "edit.zones.inspectDelete",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "edit.zones.inspectDelete"
+      ],
+      "inputSpace": "info.describe(method)",
+      "mutates": "none",
       "preflight": "由 info.describe(method) 与领域 inspector 发现",
       "businessCodes": [],
       "confirm": "由 methodMetadata.requiresConfirm 发现",
@@ -20434,6 +21514,7 @@
       "apiMethods": [
         "edit.biomes.applySuitability",
         "edit.biomes.assignCells",
+        "edit.biomes.inspectAssignment",
         "edit.biomes.inspectSuitability"
       ],
       "inputSpace": "domain-options / object-ref / cell-ids / changes",
@@ -20465,6 +21546,7 @@
       "apiMethods": [
         "edit.biomes.applySuitability",
         "edit.biomes.assignCells",
+        "edit.biomes.inspectAssignment",
         "edit.biomes.inspectSuitability"
       ],
       "inputSpace": "domain-options / object-ref / cell-ids / changes",
@@ -20496,6 +21578,7 @@
       "apiMethods": [
         "edit.biomes.applySuitability",
         "edit.biomes.assignCells",
+        "edit.biomes.inspectAssignment",
         "edit.biomes.inspectSuitability"
       ],
       "inputSpace": "domain-options / object-ref / cell-ids / changes",
@@ -20527,6 +21610,7 @@
       "apiMethods": [
         "edit.biomes.applySuitability",
         "edit.biomes.assignCells",
+        "edit.biomes.inspectAssignment",
         "edit.biomes.inspectSuitability"
       ],
       "inputSpace": "domain-options / object-ref / cell-ids / changes",
@@ -20558,6 +21642,7 @@
       "apiMethods": [
         "edit.biomes.applySuitability",
         "edit.biomes.assignCells",
+        "edit.biomes.inspectAssignment",
         "edit.biomes.inspectSuitability"
       ],
       "inputSpace": "domain-options / object-ref / cell-ids / changes",
@@ -20591,6 +21676,7 @@
         "edit.cities.createAtCell",
         "edit.cities.delete",
         "edit.cities.inspectCreateAtCell",
+        "edit.cities.inspectDelete",
         "edit.cities.inspectMove",
         "edit.cities.move",
         "edit.cities.rename",
@@ -20642,6 +21728,7 @@
         "edit.cities.createAtCell",
         "edit.cities.delete",
         "edit.cities.inspectCreateAtCell",
+        "edit.cities.inspectDelete",
         "edit.cities.inspectMove",
         "edit.cities.move",
         "edit.cities.rename",
@@ -20693,6 +21780,7 @@
         "edit.cities.createAtCell",
         "edit.cities.delete",
         "edit.cities.inspectCreateAtCell",
+        "edit.cities.inspectDelete",
         "edit.cities.inspectMove",
         "edit.cities.move",
         "edit.cities.rename",
@@ -20744,6 +21832,7 @@
         "edit.cities.createAtCell",
         "edit.cities.delete",
         "edit.cities.inspectCreateAtCell",
+        "edit.cities.inspectDelete",
         "edit.cities.inspectMove",
         "edit.cities.move",
         "edit.cities.rename",
@@ -20795,6 +21884,7 @@
         "edit.cities.createAtCell",
         "edit.cities.delete",
         "edit.cities.inspectCreateAtCell",
+        "edit.cities.inspectDelete",
         "edit.cities.inspectMove",
         "edit.cities.move",
         "edit.cities.rename",
@@ -20846,6 +21936,7 @@
         "edit.cities.createAtCell",
         "edit.cities.delete",
         "edit.cities.inspectCreateAtCell",
+        "edit.cities.inspectDelete",
         "edit.cities.inspectMove",
         "edit.cities.move",
         "edit.cities.rename",
@@ -20897,6 +21988,7 @@
         "edit.cities.createAtCell",
         "edit.cities.delete",
         "edit.cities.inspectCreateAtCell",
+        "edit.cities.inspectDelete",
         "edit.cities.inspectMove",
         "edit.cities.move",
         "edit.cities.rename",
@@ -20948,6 +22040,7 @@
         "edit.cities.createAtCell",
         "edit.cities.delete",
         "edit.cities.inspectCreateAtCell",
+        "edit.cities.inspectDelete",
         "edit.cities.inspectMove",
         "edit.cities.move",
         "edit.cities.rename",
@@ -20999,6 +22092,7 @@
         "edit.cities.createAtCell",
         "edit.cities.delete",
         "edit.cities.inspectCreateAtCell",
+        "edit.cities.inspectDelete",
         "edit.cities.inspectMove",
         "edit.cities.move",
         "edit.cities.rename",
@@ -21920,6 +23014,7 @@
         "edit.height.applySelectionSmoothing",
         "edit.height.applyTerrainProgram",
         "edit.height.applyTerrainTemplate",
+        "edit.height.inspectChanges",
         "edit.height.inspectGlobalTransform",
         "edit.height.inspectRangeTransform",
         "edit.height.inspectSeafloorReset",
@@ -21965,6 +23060,7 @@
         "edit.height.applySelectionSmoothing",
         "edit.height.applyTerrainProgram",
         "edit.height.applyTerrainTemplate",
+        "edit.height.inspectChanges",
         "edit.height.inspectGlobalTransform",
         "edit.height.inspectRangeTransform",
         "edit.height.inspectSeafloorReset",
@@ -22010,6 +23106,7 @@
         "edit.height.applySelectionSmoothing",
         "edit.height.applyTerrainProgram",
         "edit.height.applyTerrainTemplate",
+        "edit.height.inspectChanges",
         "edit.height.inspectGlobalTransform",
         "edit.height.inspectRangeTransform",
         "edit.height.inspectSeafloorReset",
@@ -22055,6 +23152,7 @@
         "edit.height.applySelectionSmoothing",
         "edit.height.applyTerrainProgram",
         "edit.height.applyTerrainTemplate",
+        "edit.height.inspectChanges",
         "edit.height.inspectGlobalTransform",
         "edit.height.inspectRangeTransform",
         "edit.height.inspectSeafloorReset",
@@ -22100,6 +23198,7 @@
         "edit.height.applySelectionSmoothing",
         "edit.height.applyTerrainProgram",
         "edit.height.applyTerrainTemplate",
+        "edit.height.inspectChanges",
         "edit.height.inspectGlobalTransform",
         "edit.height.inspectRangeTransform",
         "edit.height.inspectSeafloorReset",
@@ -22145,6 +23244,7 @@
         "edit.height.applySelectionSmoothing",
         "edit.height.applyTerrainProgram",
         "edit.height.applyTerrainTemplate",
+        "edit.height.inspectChanges",
         "edit.height.inspectGlobalTransform",
         "edit.height.inspectRangeTransform",
         "edit.height.inspectSeafloorReset",
@@ -22190,6 +23290,7 @@
         "edit.height.applySelectionSmoothing",
         "edit.height.applyTerrainProgram",
         "edit.height.applyTerrainTemplate",
+        "edit.height.inspectChanges",
         "edit.height.inspectGlobalTransform",
         "edit.height.inspectRangeTransform",
         "edit.height.inspectSeafloorReset",
@@ -22235,6 +23336,7 @@
         "edit.height.applySelectionSmoothing",
         "edit.height.applyTerrainProgram",
         "edit.height.applyTerrainTemplate",
+        "edit.height.inspectChanges",
         "edit.height.inspectGlobalTransform",
         "edit.height.inspectRangeTransform",
         "edit.height.inspectSeafloorReset",
@@ -22280,6 +23382,7 @@
         "edit.height.applySelectionSmoothing",
         "edit.height.applyTerrainProgram",
         "edit.height.applyTerrainTemplate",
+        "edit.height.inspectChanges",
         "edit.height.inspectGlobalTransform",
         "edit.height.inspectRangeTransform",
         "edit.height.inspectSeafloorReset",
@@ -22325,6 +23428,7 @@
         "edit.height.applySelectionSmoothing",
         "edit.height.applyTerrainProgram",
         "edit.height.applyTerrainTemplate",
+        "edit.height.inspectChanges",
         "edit.height.inspectGlobalTransform",
         "edit.height.inspectRangeTransform",
         "edit.height.inspectSeafloorReset",
@@ -22370,6 +23474,7 @@
         "edit.height.applySelectionSmoothing",
         "edit.height.applyTerrainProgram",
         "edit.height.applyTerrainTemplate",
+        "edit.height.inspectChanges",
         "edit.height.inspectGlobalTransform",
         "edit.height.inspectRangeTransform",
         "edit.height.inspectSeafloorReset",
@@ -22415,6 +23520,7 @@
         "edit.height.applySelectionSmoothing",
         "edit.height.applyTerrainProgram",
         "edit.height.applyTerrainTemplate",
+        "edit.height.inspectChanges",
         "edit.height.inspectGlobalTransform",
         "edit.height.inspectRangeTransform",
         "edit.height.inspectSeafloorReset",
@@ -22460,6 +23566,7 @@
         "edit.height.applySelectionSmoothing",
         "edit.height.applyTerrainProgram",
         "edit.height.applyTerrainTemplate",
+        "edit.height.inspectChanges",
         "edit.height.inspectGlobalTransform",
         "edit.height.inspectRangeTransform",
         "edit.height.inspectSeafloorReset",
@@ -22505,6 +23612,7 @@
         "edit.height.applySelectionSmoothing",
         "edit.height.applyTerrainProgram",
         "edit.height.applyTerrainTemplate",
+        "edit.height.inspectChanges",
         "edit.height.inspectGlobalTransform",
         "edit.height.inspectRangeTransform",
         "edit.height.inspectSeafloorReset",
@@ -22550,6 +23658,7 @@
         "edit.height.applySelectionSmoothing",
         "edit.height.applyTerrainProgram",
         "edit.height.applyTerrainTemplate",
+        "edit.height.inspectChanges",
         "edit.height.inspectGlobalTransform",
         "edit.height.inspectRangeTransform",
         "edit.height.inspectSeafloorReset",
@@ -22595,6 +23704,7 @@
         "edit.height.applySelectionSmoothing",
         "edit.height.applyTerrainProgram",
         "edit.height.applyTerrainTemplate",
+        "edit.height.inspectChanges",
         "edit.height.inspectGlobalTransform",
         "edit.height.inspectRangeTransform",
         "edit.height.inspectSeafloorReset",
@@ -22640,6 +23750,7 @@
         "edit.height.applySelectionSmoothing",
         "edit.height.applyTerrainProgram",
         "edit.height.applyTerrainTemplate",
+        "edit.height.inspectChanges",
         "edit.height.inspectGlobalTransform",
         "edit.height.inspectRangeTransform",
         "edit.height.inspectSeafloorReset",
@@ -22685,6 +23796,7 @@
         "edit.height.applySelectionSmoothing",
         "edit.height.applyTerrainProgram",
         "edit.height.applyTerrainTemplate",
+        "edit.height.inspectChanges",
         "edit.height.inspectGlobalTransform",
         "edit.height.inspectRangeTransform",
         "edit.height.inspectSeafloorReset",
@@ -22730,6 +23842,7 @@
         "edit.height.applySelectionSmoothing",
         "edit.height.applyTerrainProgram",
         "edit.height.applyTerrainTemplate",
+        "edit.height.inspectChanges",
         "edit.height.inspectGlobalTransform",
         "edit.height.inspectRangeTransform",
         "edit.height.inspectSeafloorReset",
@@ -22775,6 +23888,7 @@
         "edit.height.applySelectionSmoothing",
         "edit.height.applyTerrainProgram",
         "edit.height.applyTerrainTemplate",
+        "edit.height.inspectChanges",
         "edit.height.inspectGlobalTransform",
         "edit.height.inspectRangeTransform",
         "edit.height.inspectSeafloorReset",
@@ -22820,6 +23934,7 @@
         "edit.height.applySelectionSmoothing",
         "edit.height.applyTerrainProgram",
         "edit.height.applyTerrainTemplate",
+        "edit.height.inspectChanges",
         "edit.height.inspectGlobalTransform",
         "edit.height.inspectRangeTransform",
         "edit.height.inspectSeafloorReset",
@@ -22865,6 +23980,7 @@
         "edit.height.applySelectionSmoothing",
         "edit.height.applyTerrainProgram",
         "edit.height.applyTerrainTemplate",
+        "edit.height.inspectChanges",
         "edit.height.inspectGlobalTransform",
         "edit.height.inspectRangeTransform",
         "edit.height.inspectSeafloorReset",
@@ -22910,6 +24026,7 @@
         "edit.height.applySelectionSmoothing",
         "edit.height.applyTerrainProgram",
         "edit.height.applyTerrainTemplate",
+        "edit.height.inspectChanges",
         "edit.height.inspectGlobalTransform",
         "edit.height.inspectRangeTransform",
         "edit.height.inspectSeafloorReset",
@@ -22955,6 +24072,7 @@
         "edit.height.applySelectionSmoothing",
         "edit.height.applyTerrainProgram",
         "edit.height.applyTerrainTemplate",
+        "edit.height.inspectChanges",
         "edit.height.inspectGlobalTransform",
         "edit.height.inspectRangeTransform",
         "edit.height.inspectSeafloorReset",
@@ -23000,6 +24118,7 @@
         "edit.height.applySelectionSmoothing",
         "edit.height.applyTerrainProgram",
         "edit.height.applyTerrainTemplate",
+        "edit.height.inspectChanges",
         "edit.height.inspectGlobalTransform",
         "edit.height.inspectRangeTransform",
         "edit.height.inspectSeafloorReset",
@@ -23045,6 +24164,7 @@
         "edit.height.applySelectionSmoothing",
         "edit.height.applyTerrainProgram",
         "edit.height.applyTerrainTemplate",
+        "edit.height.inspectChanges",
         "edit.height.inspectGlobalTransform",
         "edit.height.inspectRangeTransform",
         "edit.height.inspectSeafloorReset",
@@ -23609,6 +24729,8 @@
         "edit.features.inspectTopology",
         "edit.lakes.create",
         "edit.lakes.delete",
+        "edit.lakes.inspectCreate",
+        "edit.lakes.inspectDelete",
         "edit.lakes.inspectOutlet",
         "edit.lakes.rename",
         "edit.lakes.setOutlet",
@@ -23658,6 +24780,8 @@
         "edit.features.inspectTopology",
         "edit.lakes.create",
         "edit.lakes.delete",
+        "edit.lakes.inspectCreate",
+        "edit.lakes.inspectDelete",
         "edit.lakes.inspectOutlet",
         "edit.lakes.rename",
         "edit.lakes.setOutlet",
@@ -23707,6 +24831,8 @@
         "edit.features.inspectTopology",
         "edit.lakes.create",
         "edit.lakes.delete",
+        "edit.lakes.inspectCreate",
+        "edit.lakes.inspectDelete",
         "edit.lakes.inspectOutlet",
         "edit.lakes.rename",
         "edit.lakes.setOutlet",
@@ -23756,6 +24882,8 @@
         "edit.features.inspectTopology",
         "edit.lakes.create",
         "edit.lakes.delete",
+        "edit.lakes.inspectCreate",
+        "edit.lakes.inspectDelete",
         "edit.lakes.inspectOutlet",
         "edit.lakes.rename",
         "edit.lakes.setOutlet",
@@ -23805,6 +24933,8 @@
         "edit.features.inspectTopology",
         "edit.lakes.create",
         "edit.lakes.delete",
+        "edit.lakes.inspectCreate",
+        "edit.lakes.inspectDelete",
         "edit.lakes.inspectOutlet",
         "edit.lakes.rename",
         "edit.lakes.setOutlet",
@@ -23854,6 +24984,8 @@
         "edit.features.inspectTopology",
         "edit.lakes.create",
         "edit.lakes.delete",
+        "edit.lakes.inspectCreate",
+        "edit.lakes.inspectDelete",
         "edit.lakes.inspectOutlet",
         "edit.lakes.rename",
         "edit.lakes.setOutlet",
@@ -23903,6 +25035,8 @@
         "edit.features.inspectTopology",
         "edit.lakes.create",
         "edit.lakes.delete",
+        "edit.lakes.inspectCreate",
+        "edit.lakes.inspectDelete",
         "edit.lakes.inspectOutlet",
         "edit.lakes.rename",
         "edit.lakes.setOutlet",
@@ -23952,6 +25086,8 @@
         "edit.features.inspectTopology",
         "edit.lakes.create",
         "edit.lakes.delete",
+        "edit.lakes.inspectCreate",
+        "edit.lakes.inspectDelete",
         "edit.lakes.inspectOutlet",
         "edit.lakes.rename",
         "edit.lakes.setOutlet",
@@ -24729,6 +25865,56 @@
       "uiEntry": "",
       "action": "",
       "commandOrInspector": "createRecordMilitaryBattleEventCommand",
+      "apiMethods": [
+        "edit.military.clearBattleEvents",
+        "edit.military.importBattleEvents",
+        "edit.military.moveStation",
+        "edit.military.recordBattleEvent",
+        "edit.military.rename",
+        "edit.military.setBase",
+        "edit.military.setRatios",
+        "edit.military.setStatus",
+        "edit.military.setStatusBatch",
+        "generate.regenerate",
+        "selection.clear",
+        "selection.clearHighlights",
+        "selection.flash",
+        "selection.get",
+        "selection.highlight",
+        "selection.locate",
+        "selection.pick",
+        "selection.resolve",
+        "selection.select",
+        "selection.startEditing",
+        "selection.stopEditing",
+        "selection.toggleEditing"
+      ],
+      "inputSpace": "domain-options / object-ref / cell-ids / changes",
+      "mutates": "domain-data-or-preview",
+      "preflight": "由领域 API 参数校验或 inspector 提供",
+      "businessCodes": [],
+      "confirm": "按领域 API 确认清单",
+      "undoOrRollback": "EditHistory / transaction",
+      "async": false,
+      "compatibility": "领域 API 复用该 command / inspector 或同一纯 helper",
+      "evidence": [
+        "app/webgl-generator/src/runtime/military-edit-commands.js"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "command:military-edit-commands.js:createRegenerateMilitaryCommand",
+      "capabilityId": "military.createRegenerateMilitaryCommand",
+      "title": "military-edit-commands.js / createRegenerateMilitaryCommand",
+      "sourceKind": "command-or-inspector",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/military-edit-commands.js"
+      ],
+      "uiEntry": "",
+      "action": "",
+      "commandOrInspector": "createRegenerateMilitaryCommand",
       "apiMethods": [
         "edit.military.clearBattleEvents",
         "edit.military.importBattleEvents",
@@ -26168,6 +27354,7 @@
         "edit.provinces.createAtCell",
         "edit.provinces.delete",
         "edit.provinces.inspectCreateAtCell",
+        "edit.provinces.inspectDelete",
         "edit.provinces.rename",
         "edit.provinces.setColor",
         "generate.regenerate",
@@ -26216,6 +27403,7 @@
         "edit.provinces.createAtCell",
         "edit.provinces.delete",
         "edit.provinces.inspectCreateAtCell",
+        "edit.provinces.inspectDelete",
         "edit.provinces.rename",
         "edit.provinces.setColor",
         "generate.regenerate",
@@ -26264,6 +27452,7 @@
         "edit.provinces.createAtCell",
         "edit.provinces.delete",
         "edit.provinces.inspectCreateAtCell",
+        "edit.provinces.inspectDelete",
         "edit.provinces.rename",
         "edit.provinces.setColor",
         "generate.regenerate",
@@ -26312,6 +27501,7 @@
         "edit.provinces.createAtCell",
         "edit.provinces.delete",
         "edit.provinces.inspectCreateAtCell",
+        "edit.provinces.inspectDelete",
         "edit.provinces.rename",
         "edit.provinces.setColor",
         "generate.regenerate",
@@ -26360,6 +27550,7 @@
         "edit.provinces.createAtCell",
         "edit.provinces.delete",
         "edit.provinces.inspectCreateAtCell",
+        "edit.provinces.inspectDelete",
         "edit.provinces.rename",
         "edit.provinces.setColor",
         "generate.regenerate",
@@ -26797,6 +27988,8 @@
       "apiMethods": [
         "edit.rivers.create",
         "edit.rivers.delete",
+        "edit.rivers.inspectCreate",
+        "edit.rivers.inspectDelete",
         "edit.rivers.rename",
         "edit.rivers.setNote",
         "edit.rivers.setWidthFactor",
@@ -26843,6 +28036,8 @@
       "apiMethods": [
         "edit.rivers.create",
         "edit.rivers.delete",
+        "edit.rivers.inspectCreate",
+        "edit.rivers.inspectDelete",
         "edit.rivers.rename",
         "edit.rivers.setNote",
         "edit.rivers.setWidthFactor",
@@ -26889,6 +28084,8 @@
       "apiMethods": [
         "edit.rivers.create",
         "edit.rivers.delete",
+        "edit.rivers.inspectCreate",
+        "edit.rivers.inspectDelete",
         "edit.rivers.rename",
         "edit.rivers.setNote",
         "edit.rivers.setWidthFactor",
@@ -26935,6 +28132,8 @@
       "apiMethods": [
         "edit.rivers.create",
         "edit.rivers.delete",
+        "edit.rivers.inspectCreate",
+        "edit.rivers.inspectDelete",
         "edit.rivers.rename",
         "edit.rivers.setNote",
         "edit.rivers.setWidthFactor",
@@ -26981,6 +28180,8 @@
       "apiMethods": [
         "edit.rivers.create",
         "edit.rivers.delete",
+        "edit.rivers.inspectCreate",
+        "edit.rivers.inspectDelete",
         "edit.rivers.rename",
         "edit.rivers.setNote",
         "edit.rivers.setWidthFactor",
@@ -27027,6 +28228,8 @@
       "apiMethods": [
         "edit.rivers.create",
         "edit.rivers.delete",
+        "edit.rivers.inspectCreate",
+        "edit.rivers.inspectDelete",
         "edit.rivers.rename",
         "edit.rivers.setNote",
         "edit.rivers.setWidthFactor",
@@ -27073,6 +28276,7 @@
       "apiMethods": [
         "edit.routes.create",
         "edit.routes.delete",
+        "edit.routes.inspectDelete",
         "edit.routes.inspectEdit",
         "edit.routes.setNote",
         "edit.routes.update",
@@ -27119,6 +28323,7 @@
       "apiMethods": [
         "edit.routes.create",
         "edit.routes.delete",
+        "edit.routes.inspectDelete",
         "edit.routes.inspectEdit",
         "edit.routes.setNote",
         "edit.routes.update",
@@ -27165,6 +28370,7 @@
       "apiMethods": [
         "edit.routes.create",
         "edit.routes.delete",
+        "edit.routes.inspectDelete",
         "edit.routes.inspectEdit",
         "edit.routes.setNote",
         "edit.routes.update",
@@ -27211,6 +28417,7 @@
       "apiMethods": [
         "edit.routes.create",
         "edit.routes.delete",
+        "edit.routes.inspectDelete",
         "edit.routes.inspectEdit",
         "edit.routes.setNote",
         "edit.routes.update",
@@ -27257,6 +28464,7 @@
       "apiMethods": [
         "edit.routes.create",
         "edit.routes.delete",
+        "edit.routes.inspectDelete",
         "edit.routes.inspectEdit",
         "edit.routes.setNote",
         "edit.routes.update",
@@ -27303,6 +28511,7 @@
       "apiMethods": [
         "edit.routes.create",
         "edit.routes.delete",
+        "edit.routes.inspectDelete",
         "edit.routes.inspectEdit",
         "edit.routes.setNote",
         "edit.routes.update",
@@ -27354,6 +28563,7 @@
         "edit.height.applySelectionSmoothing",
         "edit.height.applyTerrainProgram",
         "edit.height.applyTerrainTemplate",
+        "edit.height.inspectChanges",
         "edit.height.inspectGlobalTransform",
         "edit.height.inspectRangeTransform",
         "edit.height.inspectSeafloorReset",
@@ -27399,6 +28609,7 @@
         "edit.height.applySelectionSmoothing",
         "edit.height.applyTerrainProgram",
         "edit.height.applyTerrainTemplate",
+        "edit.height.inspectChanges",
         "edit.height.inspectGlobalTransform",
         "edit.height.inspectRangeTransform",
         "edit.height.inspectSeafloorReset",
@@ -27444,6 +28655,7 @@
         "edit.height.applySelectionSmoothing",
         "edit.height.applyTerrainProgram",
         "edit.height.applyTerrainTemplate",
+        "edit.height.inspectChanges",
         "edit.height.inspectGlobalTransform",
         "edit.height.inspectRangeTransform",
         "edit.height.inspectSeafloorReset",
@@ -28067,6 +29279,7 @@
         "edit.states.createAtCell",
         "edit.states.delete",
         "edit.states.inspectCreateAtCell",
+        "edit.states.inspectDelete",
         "edit.states.inspectMerge",
         "edit.states.inspectSplit",
         "edit.states.merge",
@@ -28122,6 +29335,7 @@
         "edit.states.createAtCell",
         "edit.states.delete",
         "edit.states.inspectCreateAtCell",
+        "edit.states.inspectDelete",
         "edit.states.inspectMerge",
         "edit.states.inspectSplit",
         "edit.states.merge",
@@ -28177,6 +29391,7 @@
         "edit.states.createAtCell",
         "edit.states.delete",
         "edit.states.inspectCreateAtCell",
+        "edit.states.inspectDelete",
         "edit.states.inspectMerge",
         "edit.states.inspectSplit",
         "edit.states.merge",
@@ -28232,6 +29447,7 @@
         "edit.states.createAtCell",
         "edit.states.delete",
         "edit.states.inspectCreateAtCell",
+        "edit.states.inspectDelete",
         "edit.states.inspectMerge",
         "edit.states.inspectSplit",
         "edit.states.merge",
@@ -28287,6 +29503,7 @@
         "edit.states.createAtCell",
         "edit.states.delete",
         "edit.states.inspectCreateAtCell",
+        "edit.states.inspectDelete",
         "edit.states.inspectMerge",
         "edit.states.inspectSplit",
         "edit.states.merge",
@@ -28342,6 +29559,7 @@
         "edit.states.createAtCell",
         "edit.states.delete",
         "edit.states.inspectCreateAtCell",
+        "edit.states.inspectDelete",
         "edit.states.inspectMerge",
         "edit.states.inspectSplit",
         "edit.states.merge",
@@ -28397,6 +29615,7 @@
         "edit.states.createAtCell",
         "edit.states.delete",
         "edit.states.inspectCreateAtCell",
+        "edit.states.inspectDelete",
         "edit.states.inspectMerge",
         "edit.states.inspectSplit",
         "edit.states.merge",
@@ -28452,6 +29671,7 @@
         "edit.states.createAtCell",
         "edit.states.delete",
         "edit.states.inspectCreateAtCell",
+        "edit.states.inspectDelete",
         "edit.states.inspectMerge",
         "edit.states.inspectSplit",
         "edit.states.merge",
@@ -28507,6 +29727,7 @@
         "edit.states.createAtCell",
         "edit.states.delete",
         "edit.states.inspectCreateAtCell",
+        "edit.states.inspectDelete",
         "edit.states.inspectMerge",
         "edit.states.inspectSplit",
         "edit.states.merge",
@@ -28562,6 +29783,7 @@
         "edit.states.createAtCell",
         "edit.states.delete",
         "edit.states.inspectCreateAtCell",
+        "edit.states.inspectDelete",
         "edit.states.inspectMerge",
         "edit.states.inspectSplit",
         "edit.states.merge",
@@ -28617,6 +29839,7 @@
         "edit.states.createAtCell",
         "edit.states.delete",
         "edit.states.inspectCreateAtCell",
+        "edit.states.inspectDelete",
         "edit.states.inspectMerge",
         "edit.states.inspectSplit",
         "edit.states.merge",
@@ -28672,6 +29895,7 @@
         "edit.states.createAtCell",
         "edit.states.delete",
         "edit.states.inspectCreateAtCell",
+        "edit.states.inspectDelete",
         "edit.states.inspectMerge",
         "edit.states.inspectSplit",
         "edit.states.merge",
@@ -28727,6 +29951,7 @@
         "edit.states.createAtCell",
         "edit.states.delete",
         "edit.states.inspectCreateAtCell",
+        "edit.states.inspectDelete",
         "edit.states.inspectMerge",
         "edit.states.inspectSplit",
         "edit.states.merge",
@@ -28779,6 +30004,7 @@
       "apiMethods": [
         "edit.biomes.applySuitability",
         "edit.biomes.assignCells",
+        "edit.biomes.inspectAssignment",
         "edit.biomes.inspectSuitability"
       ],
       "inputSpace": "domain-options / object-ref / cell-ids / changes",
@@ -28810,6 +30036,7 @@
       "apiMethods": [
         "edit.biomes.applySuitability",
         "edit.biomes.assignCells",
+        "edit.biomes.inspectAssignment",
         "edit.biomes.inspectSuitability"
       ],
       "inputSpace": "domain-options / object-ref / cell-ids / changes",
@@ -28841,6 +30068,7 @@
       "apiMethods": [
         "edit.biomes.applySuitability",
         "edit.biomes.assignCells",
+        "edit.biomes.inspectAssignment",
         "edit.biomes.inspectSuitability"
       ],
       "inputSpace": "domain-options / object-ref / cell-ids / changes",
@@ -28872,6 +30100,7 @@
       "apiMethods": [
         "edit.biomes.applySuitability",
         "edit.biomes.assignCells",
+        "edit.biomes.inspectAssignment",
         "edit.biomes.inspectSuitability"
       ],
       "inputSpace": "domain-options / object-ref / cell-ids / changes",
@@ -28903,6 +30132,7 @@
       "apiMethods": [
         "edit.biomes.applySuitability",
         "edit.biomes.assignCells",
+        "edit.biomes.inspectAssignment",
         "edit.biomes.inspectSuitability"
       ],
       "inputSpace": "domain-options / object-ref / cell-ids / changes",
@@ -28934,6 +30164,7 @@
       "apiMethods": [
         "edit.biomes.applySuitability",
         "edit.biomes.assignCells",
+        "edit.biomes.inspectAssignment",
         "edit.biomes.inspectSuitability"
       ],
       "inputSpace": "domain-options / object-ref / cell-ids / changes",
@@ -28965,6 +30196,7 @@
       "apiMethods": [
         "edit.biomes.applySuitability",
         "edit.biomes.assignCells",
+        "edit.biomes.inspectAssignment",
         "edit.biomes.inspectSuitability"
       ],
       "inputSpace": "domain-options / object-ref / cell-ids / changes",
@@ -28996,6 +30228,7 @@
       "apiMethods": [
         "edit.biomes.applySuitability",
         "edit.biomes.assignCells",
+        "edit.biomes.inspectAssignment",
         "edit.biomes.inspectSuitability"
       ],
       "inputSpace": "domain-options / object-ref / cell-ids / changes",
@@ -29070,6 +30303,8 @@
       "apiMethods": [
         "edit.zones.create",
         "edit.zones.delete",
+        "edit.zones.inspectCreate",
+        "edit.zones.inspectDelete",
         "edit.zones.setStyle",
         "selection.clear",
         "selection.clearHighlights",
@@ -29113,6 +30348,8 @@
       "apiMethods": [
         "edit.zones.create",
         "edit.zones.delete",
+        "edit.zones.inspectCreate",
+        "edit.zones.inspectDelete",
         "edit.zones.setStyle",
         "selection.clear",
         "selection.clearHighlights",
@@ -29156,6 +30393,8 @@
       "apiMethods": [
         "edit.zones.create",
         "edit.zones.delete",
+        "edit.zones.inspectCreate",
+        "edit.zones.inspectDelete",
         "edit.zones.setStyle",
         "selection.clear",
         "selection.clearHighlights",
@@ -29199,6 +30438,8 @@
       "apiMethods": [
         "edit.zones.create",
         "edit.zones.delete",
+        "edit.zones.inspectCreate",
+        "edit.zones.inspectDelete",
         "edit.zones.setStyle",
         "selection.clear",
         "selection.clearHighlights",
@@ -29431,6 +30672,7 @@
       "apiMethods": [
         "edit.biomes.applySuitability",
         "edit.biomes.assignCells",
+        "edit.biomes.inspectAssignment",
         "edit.biomes.inspectSuitability"
       ],
       "inputSpace": "object-ref / grid-cell-id / pack-cell-id / world-point / point-list / changes",
@@ -29462,6 +30704,7 @@
       "apiMethods": [
         "edit.biomes.applySuitability",
         "edit.biomes.assignCells",
+        "edit.biomes.inspectAssignment",
         "edit.biomes.inspectSuitability"
       ],
       "inputSpace": "object-ref / grid-cell-id / pack-cell-id / world-point / point-list / changes",
@@ -29495,6 +30738,7 @@
         "edit.cities.createAtCell",
         "edit.cities.delete",
         "edit.cities.inspectCreateAtCell",
+        "edit.cities.inspectDelete",
         "edit.cities.inspectMove",
         "edit.cities.move",
         "edit.cities.rename",
@@ -29546,6 +30790,7 @@
         "edit.cities.createAtCell",
         "edit.cities.delete",
         "edit.cities.inspectCreateAtCell",
+        "edit.cities.inspectDelete",
         "edit.cities.inspectMove",
         "edit.cities.move",
         "edit.cities.rename",
@@ -29597,6 +30842,7 @@
         "edit.cities.createAtCell",
         "edit.cities.delete",
         "edit.cities.inspectCreateAtCell",
+        "edit.cities.inspectDelete",
         "edit.cities.inspectMove",
         "edit.cities.move",
         "edit.cities.rename",
@@ -29900,6 +31146,7 @@
         "edit.height.applySelectionSmoothing",
         "edit.height.applyTerrainProgram",
         "edit.height.applyTerrainTemplate",
+        "edit.height.inspectChanges",
         "edit.height.inspectGlobalTransform",
         "edit.height.inspectRangeTransform",
         "edit.height.inspectSeafloorReset",
@@ -29944,6 +31191,8 @@
         "edit.features.inspectTopology",
         "edit.lakes.create",
         "edit.lakes.delete",
+        "edit.lakes.inspectCreate",
+        "edit.lakes.inspectDelete",
         "edit.lakes.inspectOutlet",
         "edit.lakes.rename",
         "edit.lakes.setOutlet",
@@ -30181,6 +31430,7 @@
         "edit.provinces.createAtCell",
         "edit.provinces.delete",
         "edit.provinces.inspectCreateAtCell",
+        "edit.provinces.inspectDelete",
         "edit.provinces.rename",
         "edit.provinces.setColor",
         "generate.regenerate",
@@ -30229,6 +31479,7 @@
         "edit.provinces.createAtCell",
         "edit.provinces.delete",
         "edit.provinces.inspectCreateAtCell",
+        "edit.provinces.inspectDelete",
         "edit.provinces.rename",
         "edit.provinces.setColor",
         "generate.regenerate",
@@ -30277,6 +31528,7 @@
         "edit.provinces.createAtCell",
         "edit.provinces.delete",
         "edit.provinces.inspectCreateAtCell",
+        "edit.provinces.inspectDelete",
         "edit.provinces.rename",
         "edit.provinces.setColor",
         "generate.regenerate",
@@ -30472,6 +31724,8 @@
       "apiMethods": [
         "edit.rivers.create",
         "edit.rivers.delete",
+        "edit.rivers.inspectCreate",
+        "edit.rivers.inspectDelete",
         "edit.rivers.rename",
         "edit.rivers.setNote",
         "edit.rivers.setWidthFactor",
@@ -30518,6 +31772,7 @@
       "apiMethods": [
         "edit.routes.create",
         "edit.routes.delete",
+        "edit.routes.inspectDelete",
         "edit.routes.inspectEdit",
         "edit.routes.setNote",
         "edit.routes.update",
@@ -30564,6 +31819,7 @@
       "apiMethods": [
         "edit.routes.create",
         "edit.routes.delete",
+        "edit.routes.inspectDelete",
         "edit.routes.inspectEdit",
         "edit.routes.setNote",
         "edit.routes.update",
@@ -30613,6 +31869,7 @@
         "edit.states.createAtCell",
         "edit.states.delete",
         "edit.states.inspectCreateAtCell",
+        "edit.states.inspectDelete",
         "edit.states.inspectMerge",
         "edit.states.inspectSplit",
         "edit.states.merge",
@@ -30668,6 +31925,7 @@
         "edit.states.createAtCell",
         "edit.states.delete",
         "edit.states.inspectCreateAtCell",
+        "edit.states.inspectDelete",
         "edit.states.inspectMerge",
         "edit.states.inspectSplit",
         "edit.states.merge",
@@ -30723,6 +31981,7 @@
         "edit.states.createAtCell",
         "edit.states.delete",
         "edit.states.inspectCreateAtCell",
+        "edit.states.inspectDelete",
         "edit.states.inspectMerge",
         "edit.states.inspectSplit",
         "edit.states.merge",
@@ -30775,6 +32034,8 @@
       "apiMethods": [
         "edit.zones.create",
         "edit.zones.delete",
+        "edit.zones.inspectCreate",
+        "edit.zones.inspectDelete",
         "edit.zones.setStyle",
         "selection.clear",
         "selection.clearHighlights",
@@ -32175,6 +33436,7 @@
       "apiMethods": [
         "edit.biomes.applySuitability",
         "edit.biomes.assignCells",
+        "edit.biomes.inspectAssignment",
         "edit.biomes.inspectSuitability"
       ],
       "inputSpace": "object-ref / options",
@@ -32209,6 +33471,7 @@
         "edit.cities.createAtCell",
         "edit.cities.delete",
         "edit.cities.inspectCreateAtCell",
+        "edit.cities.inspectDelete",
         "edit.cities.inspectMove",
         "edit.cities.move",
         "edit.cities.rename",
@@ -32605,6 +33868,7 @@
         "edit.states.createAtCell",
         "edit.states.delete",
         "edit.states.inspectCreateAtCell",
+        "edit.states.inspectDelete",
         "edit.states.inspectMerge",
         "edit.states.inspectSplit",
         "edit.states.merge",
@@ -32666,6 +33930,7 @@
         "edit.height.applySelectionSmoothing",
         "edit.height.applyTerrainProgram",
         "edit.height.applyTerrainTemplate",
+        "edit.height.inspectChanges",
         "edit.height.inspectGlobalTransform",
         "edit.height.inspectRangeTransform",
         "edit.height.inspectSeafloorReset",
@@ -32764,6 +34029,8 @@
         "edit.features.inspectTopology",
         "edit.lakes.create",
         "edit.lakes.delete",
+        "edit.lakes.inspectCreate",
+        "edit.lakes.inspectDelete",
         "edit.lakes.inspectOutlet",
         "edit.lakes.rename",
         "edit.lakes.setOutlet",
@@ -33186,6 +34453,7 @@
         "edit.provinces.createAtCell",
         "edit.provinces.delete",
         "edit.provinces.inspectCreateAtCell",
+        "edit.provinces.inspectDelete",
         "edit.provinces.rename",
         "edit.provinces.setColor",
         "generate.regenerate",
@@ -33291,6 +34559,8 @@
       "apiMethods": [
         "edit.rivers.create",
         "edit.rivers.delete",
+        "edit.rivers.inspectCreate",
+        "edit.rivers.inspectDelete",
         "edit.rivers.rename",
         "edit.rivers.setNote",
         "edit.rivers.setWidthFactor",
@@ -33338,6 +34608,7 @@
       "apiMethods": [
         "edit.routes.create",
         "edit.routes.delete",
+        "edit.routes.inspectDelete",
         "edit.routes.inspectEdit",
         "edit.routes.setNote",
         "edit.routes.update",
@@ -33388,6 +34659,7 @@
         "edit.states.createAtCell",
         "edit.states.delete",
         "edit.states.inspectCreateAtCell",
+        "edit.states.inspectDelete",
         "edit.states.inspectMerge",
         "edit.states.inspectSplit",
         "edit.states.merge",
@@ -33441,6 +34713,8 @@
       "apiMethods": [
         "edit.zones.create",
         "edit.zones.delete",
+        "edit.zones.inspectCreate",
+        "edit.zones.inspectDelete",
         "edit.zones.setStyle",
         "selection.clear",
         "selection.clearHighlights",

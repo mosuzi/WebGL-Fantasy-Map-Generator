@@ -85,8 +85,8 @@ assert.match(heightComponentSource, /恢复上次删除/, "高度面板缺少恢
 assert.match(controlPanelSource, /CUSTOM_UNIT_RECYCLE_STORAGE_KEY[\s\S]*?window\.confirm[\s\S]*?restoreLastDeletedCustomUnit/, "自定义单位缺少确认与跨刷新回收恢复");
 
 const publicMethods = Object.values(API_METHODS).reduce((sum, methods) => sum + methods.length, 0);
-assert.equal(publicMethods, 208, "公开 API 分母漂移");
-assert(!API_METHODS.edit.includes("labels.resetStyles"), "未公开的 labels.resetStyles 不得虚增到公开 API");
+assert.equal(publicMethods, 269, "公开 API 分母漂移");
+assert(API_METHODS.edit.includes("labels.resetStyles"), "公开 labels.resetStyles 没有进入危险动作清单");
 const publicDangerMethods = Object.entries(API_METHODS).flatMap(([namespace, methods]) => methods
   .map(method => `${namespace}.${method}`)
   .filter(name => name !== "selection.clear" && (name === "layers.deleteTheme" || /(^|\.)(delete|deleteBatch|clear|clearBattleEvents|resetStyles)$/.test(name)))
@@ -95,6 +95,7 @@ assert.deepEqual(publicDangerMethods, [
   "edit.cities.delete",
   "edit.cultures.delete",
   "edit.labels.delete",
+  "edit.labels.resetStyles",
   "edit.lakes.delete",
   "edit.markers.delete",
   "edit.measurements.delete",

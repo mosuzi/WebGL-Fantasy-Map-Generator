@@ -11,12 +11,18 @@ const ERROR_CODES = Object.freeze([
   "operation_invalid_input",
   "operation_failed",
   "inspection_required",
+  "inspection-required",
   "unsupported_lock_kind",
   "object_not_found",
   "lock_batch_empty",
   "lock_batch_invalid",
   "regeneration_lock_conflict",
-  "inspection_stale"
+  "inspection_stale",
+  "inspection-stale",
+  "inspection-token-invalid",
+  "inspection-action-mismatch",
+  "inspection-input-mismatch",
+  "inspection-schema-mismatch"
 ]);
 
 const REFERENCE_RULES = Object.freeze([
@@ -251,6 +257,7 @@ const METHOD_OVERRIDES = Object.freeze({
     responseMetadata: cellReadonlyMetadataSchema()
   },
   ...createAtCellMethodOverrides(),
+  ...existingRuleMethodOverrides(),
   "oceanCurrents.rename": {
     arguments: [argument("currentId", stringSchema("洋流 ID")), argument("name", stringSchema("新名称"))],
     result: objectSchema(["executed", "id", "name"]),
@@ -861,6 +868,233 @@ function createAtCellMethodOverrides() {
     };
   }
   return entries;
+}
+
+function existingRuleMethodOverrides() {
+  const entries = {};
+  const tokenCodes = [
+    "inspection-required",
+    "inspection-stale",
+    "inspection-token-invalid",
+    "inspection-action-mismatch",
+    "inspection-input-mismatch",
+    "inspection-schema-mismatch"
+  ];
+  const deleteCodes = ["delete-invalid-id", "delete-duplicate-id", "delete-protected-neutral", "delete-not-found", "delete-not-allowed"];
+  const deleteDomains = [
+    ["states", "stateId", "国家 ID", true],
+    ["provinces", "provinceId", "省份 ID", true],
+    ["cities", "cityId", "城市 ID", true],
+    ["routes", "routeId", "路线 ID", false],
+    ["rivers", "riverId", "河流 ID", true],
+    ["lakes", "lakeId", "湖泊 ID", true]
+  ];
+  for (const [domain, idName, description, confirm] of deleteDomains) {
+    entries[`edit.${domain}.inspectDelete`] = ruleInspectorOverride(
+      [argument(idName, {type: "integer", minimum: 0, description})],
+      deleteCodes,
+      [[1]]
+    );
+    entries[`edit.${domain}.delete`] = ruleExecutorOverride(
+      [
+        argument(idName, {type: "integer", minimum: 0, description}),
+        argument("options", ruleExecutionOptionsSchema({confirm}), false)
+      ],
+      [...deleteCodes, ...tokenCodes, ...(confirm ? ["confirmation_required"] : [])],
+      [[1, confirm ? {confirm: true} : {}]]
+    );
+  }
+
+  const changesArgument = argument("changes", arraySchema({
+    type: "object",
+    required: ["gridCell", "after"],
+    properties: {
+      gridCell: {type: "integer", minimum: 0},
+      after: {type: "number", minimum: 0, maximum: 100}
+    },
+    additionalProperties: true
+  }));
+  const heightCodes = ["height-changes-empty", "height-cell-invalid", "height-value-invalid", "height-cell-duplicate", "height-no-change"];
+  entries["edit.height.inspectChanges"] = ruleInspectorOverride(
+    [changesArgument],
+    heightCodes,
+    [[[{"gridCell": 0, "after": 30}]]]
+  );
+  entries["edit.height.applyChanges"] = ruleExecutorOverride(
+    [changesArgument, argument("options", ruleExecutionOptionsSchema(), false)],
+    [...heightCodes, ...tokenCodes],
+    [[[{"gridCell": 0, "after": 30}], {}]]
+  );
+
+  const biomeOptions = ruleExecutionOptionsSchema({
+    properties: {scope: {enum: ["land", "water"]}}
+  });
+  const biomeCodes = [
+    "invalid-biome", "invalid-scope", "target-scope-mismatch", "empty-cells", "region-size",
+    "invalid-cell", "land-water-mismatch", "missing-pack-cells"
+  ];
+  entries["edit.biomes.inspectAssignment"] = ruleInspectorOverride(
+    [
+      argument("biomeId", {type: "integer", minimum: 0}),
+      argument("gridCellIds", arraySchema({type: "integer", minimum: 0})),
+      argument("options", biomeOptions, false)
+    ],
+    biomeCodes,
+    [[1, [0], {scope: "land"}]]
+  );
+  entries["edit.biomes.assignCells"] = ruleExecutorOverride(
+    [
+      argument("biomeId", {type: "integer", minimum: 0}),
+      argument("gridCellIds", arraySchema({type: "integer", minimum: 0})),
+      argument("options", biomeOptions, false)
+    ],
+    [...biomeCodes, ...tokenCodes],
+    [[1, [0], {scope: "land"}]]
+  );
+
+  const riverOptions = ruleExecutionOptionsSchema({
+    properties: {sourcePackCell: {type: "integer", minimum: 0}, label: {type: "string"}}
+  });
+  const riverCodes = ["invalid-source", "source-water", "source-occupied", "downhill-blocked", "path-too-short", "path-limit"];
+  entries["edit.rivers.inspectCreate"] = ruleInspectorOverride(
+    [argument("options", riverOptions, false)],
+    riverCodes,
+    [[{sourcePackCell: 0}]]
+  );
+  entries["edit.rivers.create"] = ruleExecutorOverride(
+    [argument("options", riverOptions, false)],
+    [...riverCodes, ...tokenCodes],
+    [[{sourcePackCell: 0}]]
+  );
+
+  const lakeOptions = ruleExecutionOptionsSchema({
+    properties: {
+      packCell: {type: "integer", minimum: 0},
+      radius: {type: "integer", minimum: 0, maximum: 4},
+      waterHeight: {type: "number", minimum: 0, maximum: 19},
+      label: {type: "string"}
+    }
+  });
+  const lakeCodes = [
+    "invalid-cell", "center-water", "region-size", "region-water", "border-region", "open-basin",
+    "pack-region-water", "occupied-burg", "occupied-river", "occupied-route", "occupied-marker", "invalid-shoreline"
+  ];
+  entries["edit.lakes.inspectCreate"] = ruleInspectorOverride(
+    [argument("options", lakeOptions, false)],
+    lakeCodes,
+    [[{packCell: 0, radius: 0, waterHeight: 19}]]
+  );
+  entries["edit.lakes.create"] = ruleExecutorOverride(
+    [argument("options", lakeOptions, false)],
+    [...lakeCodes, ...tokenCodes],
+    [[{packCell: 0, radius: 0, waterHeight: 19}]]
+  );
+
+  const zoneOptions = ruleExecutionOptionsSchema({
+    properties: {
+      id: {type: "integer", minimum: 0},
+      type: {type: "string"},
+      name: {type: "string"},
+      centerPackCell: {type: "integer", minimum: 0},
+      radius: {type: "integer", minimum: 0},
+      packCells: arraySchema({type: "integer", minimum: 0}),
+      pattern: {type: "string"},
+      color: {type: "string"},
+      hexColor: {type: "string"}
+    }
+  });
+  const zoneCreateCodes = ["missing-map", "invalid-id", "duplicate-id", "empty-cells", "duplicate-cell", "too-many-cells", "invalid-cell", "disconnected-cells", "occupied-cell"];
+  entries["edit.zones.inspectCreate"] = ruleInspectorOverride(
+    [argument("options", zoneOptions, false)],
+    zoneCreateCodes,
+    [[{packCells: [0]}]]
+  );
+  entries["edit.zones.create"] = ruleExecutorOverride(
+    [argument("options", zoneOptions, false)],
+    [...zoneCreateCodes, ...tokenCodes],
+    [[{packCells: [0]}]]
+  );
+  entries["edit.zones.inspectDelete"] = ruleInspectorOverride(
+    [argument("zoneId", {type: "integer", minimum: 0})],
+    deleteCodes,
+    [[1]]
+  );
+  entries["edit.zones.delete"] = ruleExecutorOverride(
+    [
+      argument("zoneId", {type: "integer", minimum: 0}),
+      argument("options", ruleExecutionOptionsSchema(), false)
+    ],
+    [...deleteCodes, ...tokenCodes],
+    [[1, {}]]
+  );
+  return entries;
+}
+
+function ruleInspectorOverride(argumentsList, actionCodes, examples) {
+  return {
+    arguments: argumentsList,
+    result: ruleInspectionResultSchema(),
+    examples,
+    businessCodes: ["ok", ...actionCodes, "invalid-argument", "invalid_argument"]
+  };
+}
+
+function ruleExecutorOverride(argumentsList, actionCodes, examples) {
+  return {
+    arguments: argumentsList,
+    result: objectSchema(["executed", "history"]),
+    examples,
+    businessCodes: ["ok", ...actionCodes, "invalid-argument", "invalid_argument"]
+  };
+}
+
+function ruleInspectionResultSchema() {
+  return {
+    type: "object",
+    required: [
+      "allowed", "code", "summary", "normalizedInput", "affected", "requiresConfirm",
+      "expectedRevision", "inspectionToken", "inspectorSchemaVersion"
+    ],
+    properties: {
+      allowed: {type: "boolean"},
+      code: {type: "string"},
+      summary: {type: "string"},
+      normalizedInput: {type: ["object", "array"]},
+      affected: arraySchema(objectSchema(["kind", "id"])),
+      requiresConfirm: {type: "boolean"},
+      expectedRevision: ruleExpectedRevisionSchema(),
+      inspectionToken: {type: ["string", "null"]},
+      inspectorSchemaVersion: {type: "integer", minimum: 1}
+    },
+    additionalProperties: false
+  };
+}
+
+function ruleExecutionOptionsSchema({confirm = false, properties = {}} = {}) {
+  return {
+    type: "object",
+    ...(confirm ? {required: ["confirm"]} : {}),
+    properties: {
+      ...properties,
+      inspectionToken: {type: "string", minLength: 1},
+      expectedRevision: ruleExpectedRevisionSchema(),
+      inspectorSchemaVersion: {type: "integer", minimum: 1},
+      ...(confirm ? {confirm: {const: true}} : {confirm: {type: "boolean"}})
+    },
+    additionalProperties: true
+  };
+}
+
+function ruleExpectedRevisionSchema() {
+  return {
+    type: "object",
+    required: ["mapIdentity", "mapRevision"],
+    properties: {
+      mapIdentity: {type: ["string", "null"]},
+      mapRevision: {type: "integer", minimum: 0}
+    },
+    additionalProperties: false
+  };
 }
 
 function cellCreateInspectionInputSchema() {

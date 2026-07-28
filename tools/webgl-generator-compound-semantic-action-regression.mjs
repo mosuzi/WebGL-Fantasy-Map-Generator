@@ -12,8 +12,8 @@ assert.equal(report.denominator.classifiedCellActionRows, report.denominator.cel
 assert.equal(report.denominator.fullCapabilityGaps, 0);
 assert.ok(report.totals.ruleTransactions >= 50);
 assert.ok(report.totals.plannerRecipes >= 10);
-assert.equal(report.totals.statuses["existing-transaction"], 36);
-assert.equal(report.totals.statuses["existing-needs-inspector"], 21);
+assert.equal(report.totals.statuses["existing-transaction"], 47);
+assert.equal(report.totals.statuses["existing-needs-inspector"], 10);
 
 for (const [id, inspect, execute] of [
   ["politics.create-state", "edit.states.inspectCreateAtCell", "edit.states.createAtCell"],
@@ -27,6 +27,33 @@ for (const [id, inspect, execute] of [
   assert.ok(action?.api.includes(inspect));
   assert.ok(action?.api.includes(execute));
 }
+
+for (const [id, inspect, execute] of [
+  ["terrain.edit-height-region", "edit.height.inspectChanges", "edit.height.applyChanges"],
+  ["hydrology.create-river", "edit.rivers.inspectCreate", "edit.rivers.create"],
+  ["hydrology.delete-river", "edit.rivers.inspectDelete", "edit.rivers.delete"],
+  ["hydrology.excavate-lake", "edit.lakes.inspectCreate", "edit.lakes.create"],
+  ["hydrology.delete-lake", "edit.lakes.inspectDelete", "edit.lakes.delete"],
+  ["ecology.assign-biome", "edit.biomes.inspectAssignment", "edit.biomes.assignCells"],
+  ["politics.delete-state", "edit.states.inspectDelete", "edit.states.delete"],
+  ["politics.delete-province", "edit.provinces.inspectDelete", "edit.provinces.delete"],
+  ["settlement.delete-city", "edit.cities.inspectDelete", "edit.cities.delete"],
+  ["infrastructure.delete-route", "edit.routes.inspectDelete", "edit.routes.delete"]
+]) {
+  const action = byId.get(id);
+  assert.equal(action?.status, "existing-transaction", `${id} 尚未闭合为完整规则事务`);
+  if (id === "terrain.edit-height-region") assert.match(action?.inspect || "", /edit\.height\.inspectChanges/u);
+  else assert.equal(action?.inspect, inspect);
+  if (id === "terrain.edit-height-region") assert.match(action?.execute || "", /edit\.height\.applyChanges/u);
+  else assert.equal(action?.execute, execute);
+  assert.ok(action?.api.includes(inspect));
+  assert.ok(action?.api.includes(execute));
+}
+
+const zoneManagement = byId.get("infrastructure.manage-zone");
+assert.equal(zoneManagement?.status, "existing-transaction");
+assert.match(zoneManagement?.inspect || "", /edit\.zones\.inspectCreate/u);
+assert.match(zoneManagement?.inspect || "", /edit\.zones\.inspectDelete/u);
 
 const territory = byId.get("politics.transfer-territory");
 assert.equal(territory.status, "fragmented-needs-transaction");
