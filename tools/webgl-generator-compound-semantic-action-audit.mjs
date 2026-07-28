@@ -894,15 +894,15 @@ const RULE_ACTIONS = Object.freeze([
   }),
   rule({
     id: "military.resolve-battle",
-    title: "结算战斗并联动军队、人口与政治结果",
+    title: "结算明确双方军团的单次战斗",
     domain: "military",
-    status: "missing-game-rule",
-    intent: "根据参战军团、地形和规则结算伤亡、撤退、占领与纪事，而不只是记录文本事件。",
-    api: ["edit.military.recordBattleEvent"],
-    inspect: "planned:edit.military.inspectBattle",
-    execute: "planned:edit.military.resolveBattle",
-    branches: ["参战方/地点非法", "战斗结算", "伤亡与撤退", "占领/战争纪事"],
-    sourceRefs: ["app/webgl-generator/src/runtime/military-edit-commands.js", "app/webgl-generator/src/runtime/state-topology-commands.js"]
+    status: "existing-transaction",
+    intent: "在双向战争、海陆一致且同 cell、相邻 cell 或同一匹配战区时，确定性结算双方伤亡、态势、败退命令与战报。",
+    api: ["edit.military.inspectBattle", "edit.military.resolveBattle", "edit.military.recordBattleEvent"],
+    inspect: "edit.military.inspectBattle",
+    execute: "edit.military.resolveBattle",
+    branches: ["参战军团非法", "非战争或海陆冲突", "不在接触范围", "显式结果或种子结算", "双方伤亡与撤退", "故障回滚与撤销"],
+    sourceRefs: ["app/webgl-generator/src/runtime/military-edit-commands.js"]
   }),
   rule({
     id: "military.regenerate",

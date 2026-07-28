@@ -23,7 +23,7 @@ export const API_METHODS = Object.freeze({
     "states.add", "states.inspectCreateAtCell", "states.createAtCell", "states.inspectDelete", "states.delete", "states.inspectMerge", "states.merge", "states.inspectSplit", "states.split", "states.inspectTerritoryTransfer", "states.transferTerritory", "states.rename", "states.setColor", "states.setGovernment", "states.inspectCapitalChange", "states.setCapital", "states.setGovernmentBatch", "states.applyChanges",
     "height.inspectChanges", "height.applyChanges", "height.inspectGlobalTransform", "height.applyGlobalTransform", "height.inspectTerrainTemplate", "height.applyTerrainTemplate", "height.inspectTerrainProgram", "height.applyTerrainProgram", "height.inspectRangeTransform", "height.applyRangeTransform", "height.inspectSelectionSmoothing", "height.applySelectionSmoothing", "height.inspectSeafloorReset", "height.applySeafloorReset", "height.rebuildBaseDerived", "height.rebuildDownstreamDerived", "height.rebuildAllDerived", "biomes.inspectAssignment", "biomes.assignCells", "biomes.inspectSuitability", "biomes.applySuitability", "population.inspectAdjustment", "population.applyAdjustment", "population.inspectTransfer", "population.transfer", "diplomacy.inspectRelation", "diplomacy.setRelation", "diplomacy.inspectDeclareWar", "diplomacy.declareWar", "diplomacy.inspectPeace", "diplomacy.makePeace", "diplomacy.inspectOverlordChange", "diplomacy.changeOverlord",
     "economy.inspectAssignment", "economy.assignCells", "economy.rebuild", "economy.setGoodDisplay", "economy.setMarketDisplay",
-    "military.inspectRatios", "military.setRatios", "military.inspectStatus", "military.setStatus", "military.setStatusBatch", "military.inspectMoveStation", "military.moveStation", "military.inspectBase", "military.setBase", "military.recordBattleEvent", "military.importBattleEvents", "military.clearBattleEvents", "military.rename",
+    "military.inspectRatios", "military.setRatios", "military.inspectStatus", "military.setStatus", "military.setStatusBatch", "military.inspectMoveStation", "military.moveStation", "military.inspectBase", "military.setBase", "military.inspectBattle", "military.resolveBattle", "military.recordBattleEvent", "military.importBattleEvents", "military.clearBattleEvents", "military.rename",
     "zones.inspectCreate", "zones.create", "zones.inspectDelete", "zones.delete", "zones.setStyle",
     "cultures.inspectLifecycle", "cultures.add", "cultures.assignCells", "cultures.inspectExpansion", "cultures.applyExpansion", "cultures.delete", "cultures.rename", "cultures.setColor", "cultures.setParent",
     "religions.inspectLifecycle", "religions.add", "religions.assignCells", "religions.inspectExpansion", "religions.applyExpansion", "religions.delete", "religions.rename", "religions.setColor", "religions.setParent",
@@ -77,6 +77,7 @@ export const CONFIRM_REQUIRED_METHODS = Object.freeze([
   "edit.diplomacy.declareWar",
   "edit.diplomacy.makePeace",
   "edit.diplomacy.changeOverlord",
+  "edit.military.resolveBattle",
   "edit.features.applyTopology",
   "edit.population.transfer"
 ]);

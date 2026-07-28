@@ -28931,3 +28931,12 @@ full 矩阵结果：
 - 独立审查先后阻断并推动修复三项 P1：外交根与纪事别名恢复、军事 / 地区独立根恢复，以及 API 历史外刷新摘要。系统 Chrome 随后暴露正式生成图多宗主脏数据，修复生成与兼容规范化后，最终三条公开链全部通过。
 - 公开 API 更新为 `299 / 172`，稳定等级 `291 / 7 / 1`，描述覆盖 `299 / 299`。复合语义矩阵为完整事务 `67`、缺游戏规则 `1`、配方 `10`；完整能力矩阵为 `1157` 行、`covered 1084 / excluded 73 / gap 0`。外交 / 战区 / 旧图 / 锁仓、API、矩阵、生产构建和差异检查通过。
 - 系统 Chrome 生产 URL `http://127.0.0.1:5552?healthClear=1` 上，宣战验证双向 Enemy、2 条国家 campaign 与 1 条军事 campaign；议和验证 Neutral、record-only 纪事及战争上下文全清；宗藩验证正向 Vassal、逆向 Suzerain。每条 inspector 均只读，缺确认稳定返回 `confirmation_required`，执行 history / revision 各 `+1`，撤销完整恢复；事务期 health、application console、page 与 WebGL error 均为 `0`。夹具生成的一条 long-task 作为 setup performance signal 单独记录，不计入事务期健康基线。没有新增待人类审阅问题；下一步只进入第 209 项步骤 9 的显式战斗结算。
+
+## 2026-07-29：完成第 209 项步骤 9——显式战斗结算规则事务
+
+- 新增 `edit.military.inspectBattle / resolveBattle`。输入精确指定进攻与防守军团，显式 outcome 与非空 seed 二选一；双方必须属于不同且双向 Enemy 的国家、兵力为正、海陆类型一致，并处于同一 / 相邻 pack cell 或匹配国家对且覆盖双方驻地的 Warzone。seed 由地图 seed、用户 seed、排序军团身份、当前兵力与 cell 稳定散列，只得到胜、负或平。
+- 结算复用既有 `BATTLE_RESULT_RULES`、对手规则、兵种缩放和态势刷新；双方伤亡保持非负，败退只设置 `routed` 与返回本国中心的 order，不瞬移。全局和双方军团各保存一条同 ID、深等值事件，包含结果、双方伤亡、seed、resolutionSeed 和 warzone；不修改人口、领土、外交或世界时间。
+- 新执行器强制 `rulei1` inspection token、expected revision 与 `confirm:true`，成功只写一条历史。专用快照精确保留 `map / pack` military 根、`pack / politics` 军事字段、zones、summary 的存在性、独立值和共享引用；五个故障点、最终一致性失败、撤销 / 重做与旧图缺字段均完整恢复。
+- 专项覆盖五种显式结果、seed 决定性、同格 / 相邻 / 战区三条接触路径、20 个领域拒绝 code、确认与 token、双方伤亡和三事件落点、无越权副作用、五故障点、validation failure、undo / redo 和旧图。核心预审与公开 API/schema/矩阵完整终审均为 `PASS`。
+- 公开 API 更新为 `301 / 174`，稳定等级 `293 / 7 / 1`，描述覆盖 `301 / 301`。复合语义矩阵的 `68` 个规则事务全部为完整事务，缺规则 `0`，另有配方 `10`；完整能力矩阵为 `1165` 行、`covered 1092 / excluded 73 / gap 0`。API、危险策略、复合与完整矩阵、生产构建和差异检查通过。
+- 系统 Chrome 真实图先通过公开 `declareWar` 建立战争，再用双方 `moveStation` 将军团 `12:0 / 8:0` 合法移动至相邻陆地 cell `175 / 230`。结算后兵力 `5010 → 4810 / 5505 → 4514`、态势 `resting / routed`、三份事件各一；人口、领土、外交和时间不变，summary 更新，undo / redo / undo 完整。health、application console、page 与 WebGL error 均为 `0`。没有新增待人类审阅问题；第 209 项完成，下一步只进入第 210 项步骤 10。

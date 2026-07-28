@@ -262,6 +262,7 @@ const METHOD_OVERRIDES = Object.freeze({
   ...politicalTransferRuleMethodOverrides(),
   ...provinceTopologyRuleMethodOverrides(),
   ...diplomacyRuleMethodOverrides(),
+  ...militaryBattleRuleMethodOverrides(),
   ...namebaseRuleMethodOverrides(),
   "oceanCurrents.rename": {
     arguments: [argument("currentId", stringSchema("洋流 ID")), argument("name", stringSchema("新名称"))],
@@ -1489,6 +1490,77 @@ function diplomacyRuleMethodOverrides() {
       {vassalStateId: 2, overlordStateId: 1, releaseRelation: "Neutral"},
       exampleOptions
     ]])
+  };
+}
+
+function militaryBattleRuleMethodOverrides() {
+  const tokenCodes = [
+    "inspection-required", "inspection-stale", "inspection-token-invalid",
+    "inspection-action-mismatch", "inspection-input-mismatch", "inspection-schema-mismatch"
+  ];
+  const battleCodes = [
+    "invalid-battle-request", "invalid-attacker", "invalid-defender", "same-regiment",
+    "attacker-regiment-not-found", "defender-regiment-not-found", "same-state",
+    "states-not-at-war", "attacker-empty", "defender-empty", "battle-result-required",
+    "battle-result-ambiguous", "invalid-outcome", "invalid-seed", "invalid-battle-type",
+    "battle-terrain-mismatch", "battle-cell-missing", "warzone-not-found",
+    "warzone-pair-mismatch", "battle-out-of-contact", "battle-validation-failed"
+  ];
+  const regimentTarget = {
+    type: "object",
+    properties: {
+      id: {type: "string", pattern: "^[1-9][0-9]*:[0-9]+$"},
+      stateId: {type: "integer", minimum: 1},
+      regimentId: {type: "integer", minimum: 0}
+    },
+    anyOf: [
+      {required: ["id"]},
+      {required: ["stateId", "regimentId"]}
+    ],
+    additionalProperties: false
+  };
+  const request = {
+    type: "object",
+    required: ["attacker", "defender"],
+    properties: {
+      attacker: regimentTarget,
+      defender: regimentTarget,
+      outcome: {enum: ["victory", "defeat", "draw", "loss", "regroup"]},
+      seed: {type: "string", minLength: 1},
+      type: {enum: ["skirmish", "siege", "raid", "naval", "retreat", "report"]},
+      warzoneId: {type: ["integer", "string"]},
+      description: {type: "string", maxLength: 500}
+    },
+    oneOf: [
+      {required: ["outcome"], not: {required: ["seed"]}},
+      {required: ["seed"], not: {required: ["outcome"]}}
+    ],
+    additionalProperties: false
+  };
+  const options = ruleExecutionOptionsSchema({
+    confirm: true,
+    properties: {label: {type: "string"}},
+    required: ["inspectionToken", "expectedRevision"]
+  });
+  const exampleRequest = {
+    attacker: {stateId: 1, regimentId: 0},
+    defender: {stateId: 2, regimentId: 0},
+    seed: "front-a-turn-1",
+    type: "skirmish"
+  };
+  const exampleOptions = {
+    inspectionToken: "rulei1.example",
+    expectedRevision: {mapIdentity: "example-map", mapRevision: 1},
+    confirm: true
+  };
+  return {
+    "edit.military.inspectBattle": ruleInspectorOverride([
+      argument("request", request)
+    ], battleCodes, [[exampleRequest]]),
+    "edit.military.resolveBattle": ruleExecutorOverride([
+      argument("request", request),
+      argument("options", options)
+    ], [...battleCodes, ...tokenCodes, "confirmation_required"], [[exampleRequest, exampleOptions]])
   };
 }
 

@@ -129,7 +129,21 @@ import {
 } from "./measurement-objects.js";
 import {simplifyMeasurementPoints} from "./measurement-geometry.js";
 import {findNearestRouteMeasurementPoint, MEASUREMENT_ROUTE_FIT_NONE, MEASUREMENT_ROUTE_FIT_ROADS, normalizeMeasurementRouteFit} from "./measurement-route-fit.js";
-import {createClearMilitaryBattleEventsCommand, createImportMilitaryBattleEventsCommand, createMoveMilitaryStationCommand, createRecordMilitaryBattleEventCommand, createRegenerateMilitaryCommand, createRenameMilitaryRegimentCommand, createSetMilitaryBaseCommand, createSetMilitaryRatiosCommand, createSetMilitaryStatusBatchCommand, createSetMilitaryStatusCommand} from "./military-edit-commands.js";
+import {
+  createClearMilitaryBattleEventsCommand,
+  createImportMilitaryBattleEventsCommand,
+  createMoveMilitaryStationCommand,
+  createRecordMilitaryBattleEventCommand,
+  createRegenerateMilitaryCommand,
+  createRenameMilitaryRegimentCommand,
+  createResolveBattleCommand,
+  createSetMilitaryBaseCommand,
+  createSetMilitaryRatiosCommand,
+  createSetMilitaryStatusBatchCommand,
+  createSetMilitaryStatusCommand,
+  inspectBattle,
+  MILITARY_RULE_ACTION
+} from "./military-edit-commands.js";
 import {compareMilitaryVariation, snapshotMilitaryVariation, syncMilitaryStateMirrors} from "./military-regeneration-variation.js";
 import {createClearUserNamebasesCommand, createCopyBuiltinNamebaseCommand, createCreateUserNamebaseCommand, createDeleteUserNamebaseCommand, createImportNamebasesCommand, createRenameUserNamebaseCommand, createSetNamebaseBindingCommand, createUpdateUserNamebaseCommand, createUpdateUserNamebaseOptionsCommand, createUpdateUserNamebaseSourceCommand} from "./namebase-edit-commands.js";
 import {createDeleteNoteCommand, createStandaloneNoteCommand} from "./note-edit-commands.js";
@@ -2946,6 +2960,8 @@ function createRuntimeActions(state, documentRef, options = {}) {
         moveStation: (target, destination, options = {}) => moveMilitaryStationViaApi(state, documentRef, target, destination, options),
         inspectBase: target => inspectMilitaryBaseViaApi(state, target),
         setBase: (target, options = {}) => setMilitaryBaseViaApi(state, documentRef, target, options),
+        inspectBattle: request => inspectBattleViaApi(state, request),
+        resolveBattle: (request, options = {}) => resolveBattleViaApi(state, documentRef, request, options),
         recordBattleEvent: (target, event = {}) => recordMilitaryBattleEventViaApi(state, documentRef, target, event),
         importBattleEvents: (document, options = {}) => importMilitaryBattleEventsViaApi(state, documentRef, document, options),
         clearBattleEvents: (target, editOptions = {}) => clearMilitaryBattleEventsViaApi(state, documentRef, target, editOptions),
@@ -5019,6 +5035,66 @@ function executeDiplomacyRuleViaApi(state, documentRef, actionId, request, optio
     noopStatus: "外交关系没有变化。",
     status: executed => executed.getResult?.()?.summary || `${label}完成。`,
     errorStatus: `${label}失败，外交与战争上下文已恢复执行前状态。`,
+    throwOnError: true
+  });
+  updateRuntimePanel(documentRef, state);
+  updateEditingInteractionLock(state, documentRef);
+  return editApiResult(state, result);
+}
+
+function inspectBattleViaApi(state, request) {
+  assertMapAvailable(state);
+  const normalizedInput = normalizeRuleInspectionInput(request);
+  const evaluation = inspectBattle(state.map, normalizedInput);
+  return createRuleInspectionResult(
+    state.mapRevision,
+    MILITARY_RULE_ACTION.RESOLVE_BATTLE,
+    evaluation.normalizedInput ?? normalizedInput,
+    evaluation
+  );
+}
+
+function assertBattleRuleExecution(state, request, options = {}) {
+  const normalizedInput = normalizeRuleInspectionInput(request);
+  const evaluation = inspectBattle(state.map, normalizedInput);
+  const tokenInput = evaluation.normalizedInput ?? normalizedInput;
+  const validation = assertExistingRuleInspection(
+    state.mapRevision,
+    MILITARY_RULE_ACTION.RESOLVE_BATTLE,
+    tokenInput,
+    options
+  );
+  if (validation.legacy) {
+    const error = new Error("战斗规则事务必须先调用 inspectBattle 并提交 inspectionToken");
+    error.code = "inspection-required";
+    throw error;
+  }
+  if (!evaluation.allowed) {
+    const error = new Error(evaluation.summary || "战斗规则事务不允许执行");
+    error.code = evaluation.code || "rule-rejected";
+    throw error;
+  }
+  if (options?.confirm !== true) {
+    const error = new Error(`${evaluation.summary || "该战斗规则事务"}需要显式传入 {confirm: true}`);
+    error.code = "confirmation_required";
+    throw error;
+  }
+  return {evaluation, normalizedInput: tokenInput};
+}
+
+function resolveBattleViaApi(state, documentRef, request, options = {}) {
+  assertMapAvailable(state);
+  const {normalizedInput} = assertBattleRuleExecution(state, request, options);
+  const label = options.label || "API 结算单次战斗";
+  const command = createResolveBattleCommand(normalizedInput, {
+    label,
+    refreshSummary: refreshGenerationSummary
+  });
+  const result = executeEditCommand(state, documentRef, command, {
+    context: {map: state.map},
+    noopStatus: "战斗没有产生变化。",
+    status: executed => executed.getResult?.()?.summary || `${label}完成。`,
+    errorStatus: `${label}失败，军事与战报上下文已恢复执行前状态。`,
     throwOnError: true
   });
   updateRuntimePanel(documentRef, state);

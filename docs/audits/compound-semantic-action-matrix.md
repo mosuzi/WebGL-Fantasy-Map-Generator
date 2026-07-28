@@ -4,11 +4,11 @@
 
 ## 审计结论
 
-- 上游能力矩阵：1157 行，unknown / unclassified / gap = 0 / 0 / 0。
-- 公开 API：299 / 299 已归类。
+- 上游能力矩阵：1165 行，unknown / unclassified / gap = 0 / 0 / 0。
+- 公开 API：301 / 301 已归类。
 - Cell / 画布动作：48 / 48 已归类；画布模式 29，直接操控 19 类 / 89 个宿主。
 - 规则事务与玩法配方：68 + 10 = 78。
-- 已有完整事务 67，已有写命令但缺 AI inspector 0，多 API 碎片待收敛 0，缺失游戏规则 1，规划器配方 10。
+- 已有完整事务 68，已有写命令但缺 AI inspector 0，多 API 碎片待收敛 0，缺失游戏规则 0，规划器配方 10。
 - 结构缺口：0。
 
 ## 边界定义
@@ -88,22 +88,12 @@
 | `military.move-station` | 军队、调动与战斗 | 移动军团到合法 Cell，校验国家、地形、基地和命令目标。 | `existing-transaction` | `edit.military.inspectMoveStation`<br>`edit.military.moveStation` | `edit.military.inspectMoveStation`<br>`edit.military.moveStation` |
 | `military.set-base` | 军队、调动与战斗 | 把当前位置或指定位置设为基地，验证归属和可达性。 | `existing-transaction` | `edit.military.inspectBase`<br>`edit.military.setBase` | `edit.military.inspectBase`<br>`edit.military.setBase` |
 | `military.issue-status` | 军队、调动与战斗 | 调整军团驻防、机动、交战等态势并检查目标和批量原子性。 | `existing-transaction` | `edit.military.inspectStatus`<br>`edit.military.setStatus`<br>`edit.military.setStatusBatch` | `edit.military.inspectStatus`<br>`edit.military.setStatus / setStatusBatch` |
-| `military.resolve-battle` | 军队、调动与战斗 | 根据参战军团、地形和规则结算伤亡、撤退、占领与纪事，而不只是记录文本事件。 | `missing-game-rule` | `edit.military.recordBattleEvent` | `planned:edit.military.inspectBattle`<br>`planned:edit.military.resolveBattle` |
+| `military.resolve-battle` | 军队、调动与战斗 | 在双向战争、海陆一致且同 cell、相邻 cell 或同一匹配战区时，确定性结算双方伤亡、态势、败退命令与战报。 | `existing-transaction` | `edit.military.inspectBattle`<br>`edit.military.recordBattleEvent`<br>`edit.military.resolveBattle` | `edit.military.inspectBattle`<br>`edit.military.resolveBattle` |
 | `military.regenerate` | 军队、调动与战斗 | 基于当前国家、人口与政策重生成军团并维护引用。 | `existing-transaction` | `generate.regenerate` | `planned:edit.military.inspectRegeneration`<br>`generate.regenerate(military)` |
 | `editor.delete-with-impact` | 编辑器事务、批量操作与发布 | 对对象删除、批量删除和清空先评估依赖与风险，再确认并原子执行。 | `existing-transaction` | `edit.cities.delete`<br>`edit.cultures.delete`<br>`edit.labels.delete`<br>`edit.lakes.delete`<br>`edit.markers.delete`<br>`edit.notes.delete`<br>`edit.notes.deleteBatch`<br>`edit.provinces.delete`<br>`edit.religions.delete`<br>`edit.rivers.delete`<br>`edit.routes.delete`<br>`edit.states.delete`<br>`edit.zones.delete`<br>`namebases.clear`<br>`namebases.delete` | `统一 delete impact inspector`<br>`各领域 delete/clear` |
 | `editor.import-collection` | 编辑器事务、批量操作与发布 | 校验外部集合、处理 ID 冲突与覆盖策略，并作为单条历史导入。 | `existing-transaction` | `data.inspectCollectionImport`<br>`edit.measurements.import`<br>`edit.military.importBattleEvents`<br>`edit.notes.import`<br>`namebases.import` | `data.inspectCollectionImport`<br>`现有 import 方法` |
 
 ## 需要优先补齐的复合事务
-
-### 结算战斗并联动军队、人口与政治结果（`military.resolve-battle`）
-
-根据参战军团、地形和规则结算伤亡、撤退、占领与纪事，而不只是记录文本事件。
-
-- 当前状态：`missing-game-rule`。
-- 关键分支：参战方/地点非法；战斗结算；伤亡与撤退；占领/战争纪事。
-- 规范入口：`planned:edit.military.inspectBattle` → `planned:edit.military.resolveBattle`。
-- 共同不变量：军团身份、所属国家、驻地、基地、命令、事件链和国家存亡必须保持引用完整。
-- 证据：`app/webgl-generator/src/runtime/military-edit-commands.js`、`app/webgl-generator/src/runtime/state-topology-commands.js`。
 
 ## AI 规划器玩法配方
 
@@ -140,6 +130,6 @@
 
 ## 机器覆盖
 
-- API 分类：`atomic-editor-primitive=54`，`editor-runtime-service=49`，`read-export-service=10`，`read-primitive=28`，`semantic-action=158`。
+- API 分类：`atomic-editor-primitive=54`，`editor-runtime-service=49`，`read-export-service=10`，`read-primitive=28`，`semantic-action=160`。
 - 交互分类：`semantic-input-or-primitive=36`，`ui-boundary=12`。
-- Source digest：`3e03dc07aa4a129b8184049109c8705695f25b4e0501ee12a0d479eab480fb0f`。
+- Source digest：`6f0697aa5fdf09fc94e6cb70d27f661a40753e29ac7ea845d2af4ae015e5bf88`。

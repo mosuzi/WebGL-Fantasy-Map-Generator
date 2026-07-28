@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "scope": "权威任务第 204 项：全游戏复合语义接口、规则动作与玩法配方审计",
   "generatedAtPolicy": "报告不写入动态时间，sourceDigest 变化即要求重新生成",
-  "sourceDigest": "3e03dc07aa4a129b8184049109c8705695f25b4e0501ee12a0d479eab480fb0f",
+  "sourceDigest": "6f0697aa5fdf09fc94e6cb70d27f661a40753e29ac7ea845d2af4ae015e5bf88",
   "definition": {
     "compoundSemanticAction": "一个玩家意图，但执行时需要跨对象/系统、条件分支、业务预检或原子回滚；应由单一规则事务表达。",
     "primitive": "只修改一个稳定字段或纯编辑器显示偏好，可保留为原子 API，不强行包装成复合动作。",
@@ -21,12 +21,12 @@
     "recipe-only": "战略/玩法流程，不应实现为一条超大写接口。"
   },
   "denominator": {
-    "fullCapabilityRows": 1157,
+    "fullCapabilityRows": 1165,
     "fullCapabilityUnknown": 0,
     "fullCapabilityUnclassified": 0,
     "fullCapabilityGaps": 0,
-    "publicApiMethods": 299,
-    "classifiedApiMethods": 299,
+    "publicApiMethods": 301,
+    "classifiedApiMethods": 301,
     "cellActionRows": 48,
     "classifiedCellActionRows": 48,
     "canvasModes": 29,
@@ -38,8 +38,7 @@
     "ruleTransactions": 68,
     "plannerRecipes": 10,
     "statuses": {
-      "existing-transaction": 67,
-      "missing-game-rule": 1,
+      "existing-transaction": 68,
       "recipe-only": 10
     },
     "domains": {
@@ -60,7 +59,7 @@
       "editor-runtime-service": 49,
       "read-export-service": 10,
       "read-primitive": 28,
-      "semantic-action": 158
+      "semantic-action": 160
     },
     "interactionClassifications": {
       "semantic-input-or-primitive": 36,
@@ -2139,26 +2138,29 @@
       "tier": "rule-transaction",
       "variants": [],
       "api": [
-        "edit.military.recordBattleEvent"
+        "edit.military.inspectBattle",
+        "edit.military.recordBattleEvent",
+        "edit.military.resolveBattle"
       ],
-      "inspect": "planned:edit.military.inspectBattle",
-      "execute": "planned:edit.military.resolveBattle",
+      "inspect": "edit.military.inspectBattle",
+      "execute": "edit.military.resolveBattle",
       "branches": [
-        "参战方/地点非法",
-        "战斗结算",
-        "伤亡与撤退",
-        "占领/战争纪事"
+        "参战军团非法",
+        "非战争或海陆冲突",
+        "不在接触范围",
+        "显式结果或种子结算",
+        "双方伤亡与撤退",
+        "故障回滚与撤销"
       ],
       "steps": [],
       "sourceRefs": [
-        "app/webgl-generator/src/runtime/military-edit-commands.js",
-        "app/webgl-generator/src/runtime/state-topology-commands.js"
+        "app/webgl-generator/src/runtime/military-edit-commands.js"
       ],
       "id": "military.resolve-battle",
-      "title": "结算战斗并联动军队、人口与政治结果",
+      "title": "结算明确双方军团的单次战斗",
       "domain": "military",
-      "status": "missing-game-rule",
-      "intent": "根据参战军团、地形和规则结算伤亡、撤退、占领与纪事，而不只是记录文本事件。",
+      "status": "existing-transaction",
+      "intent": "在双向战争、海陆一致且同 cell、相邻 cell 或同一匹配战区时，确定性结算双方伤亡、态势、败退命令与战报。",
       "gameplayChapter": "军队、调动与战斗",
       "invariant": "军团身份、所属国家、驻地、基地、命令、事件链和国家存亡必须保持引用完整。",
       "historyPolicy": "成功恰好一条历史且 mapRevision +1；拒绝、no-op、取消和完整回滚不增加历史或 revision。",
@@ -3432,6 +3434,13 @@
       ]
     },
     {
+      "method": "edit.military.inspectBattle",
+      "classification": "semantic-action",
+      "actionIds": [
+        "military.resolve-battle"
+      ]
+    },
+    {
       "method": "edit.military.inspectMoveStation",
       "classification": "semantic-action",
       "actionIds": [
@@ -3470,6 +3479,13 @@
       "method": "edit.military.rename",
       "classification": "atomic-editor-primitive",
       "actionIds": []
+    },
+    {
+      "method": "edit.military.resolveBattle",
+      "classification": "semantic-action",
+      "actionIds": [
+        "military.resolve-battle"
+      ]
     },
     {
       "method": "edit.military.setBase",

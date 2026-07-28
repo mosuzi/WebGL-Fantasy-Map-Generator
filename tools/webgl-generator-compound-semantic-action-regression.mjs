@@ -12,10 +12,10 @@ assert.equal(report.denominator.classifiedCellActionRows, report.denominator.cel
 assert.equal(report.denominator.fullCapabilityGaps, 0);
 assert.ok(report.totals.ruleTransactions >= 50);
 assert.ok(report.totals.plannerRecipes >= 10);
-assert.equal(report.totals.statuses["existing-transaction"], 67);
+assert.equal(report.totals.statuses["existing-transaction"], 68);
 assert.equal(report.totals.statuses["existing-needs-inspector"] || 0, 0);
 assert.equal(report.totals.statuses["fragmented-needs-transaction"] || 0, 0);
-assert.equal(report.totals.statuses["missing-game-rule"], 1);
+assert.equal(report.totals.statuses["missing-game-rule"] || 0, 0);
 
 for (const [id, inspect, execute] of [
   ["politics.create-state", "edit.states.inspectCreateAtCell", "edit.states.createAtCell"],
@@ -98,7 +98,11 @@ for (const [id, inspect, execute] of [
   assert.equal(byId.get(id)?.execute, execute);
 }
 
-assert.equal(byId.get("military.resolve-battle")?.status, "missing-game-rule", "military.resolve-battle 没有登记为缺失游戏规则");
+const battle = byId.get("military.resolve-battle");
+assert.equal(battle?.status, "existing-transaction", "military.resolve-battle 尚未闭合为完整规则事务");
+assert.equal(battle?.inspect, "edit.military.inspectBattle");
+assert.equal(battle?.execute, "edit.military.resolveBattle");
+assert.ok(battle?.api.includes("edit.military.recordBattleEvent"), "旧战报原语未保留为兼容支持入口");
 
 for (const action of report.actions.filter(item => item.tier === "planner-recipe")) {
   assert.equal(action.status, "recipe-only");

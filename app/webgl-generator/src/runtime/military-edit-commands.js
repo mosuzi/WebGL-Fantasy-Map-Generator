@@ -1,4 +1,6 @@
 import {applyRegimentIconProfile, buildMilitary, MILITARY_STATUSES, MILITARY_UNITS, normalizeUnitRatios} from "../generator/military.js";
+import {stableHash} from "../generator/random.js";
+import {resolveWarzoneStatePair} from "../generator/war-consistency.js";
 import {
   assertLockedMilitaryRegiments,
   captureMilitaryRegimentSnapshot,
@@ -76,6 +78,203 @@ const BATTLE_OPPONENT_RESULT_RULES = Object.freeze({
   loss: Object.freeze({lossRate: 0.03, status: "resting", label: "对手追击"}),
   regroup: Object.freeze({lossRate: 0, status: null, label: "对手未变"})
 });
+
+export const MILITARY_RULE_ACTION = Object.freeze({
+  RESOLVE_BATTLE: "military.resolve-battle"
+});
+
+export function inspectBattle(map, input = {}) {
+  if (!input || typeof input !== "object" || Array.isArray(input)) {
+    return rejectedBattle("invalid-battle-request", "战斗请求必须是结构化对象");
+  }
+  const attackerTarget = normalizeBattleRuleTarget(input.attacker);
+  if (!attackerTarget) return rejectedBattle("invalid-attacker", "进攻方必须是有效军团目标");
+  const defenderTarget = normalizeBattleRuleTarget(input.defender);
+  if (!defenderTarget) return rejectedBattle("invalid-defender", "防守方必须是有效军团目标");
+  if (attackerTarget.id === defenderTarget.id) return rejectedBattle("same-regiment", "同一军团不能与自己交战");
+
+  const {state: attackerState, regiment: attackerRegiment} = findRegiment(map, attackerTarget);
+  if (!attackerState?.i || !attackerRegiment) return rejectedBattle("attacker-regiment-not-found", "找不到进攻方军团");
+  const {state: defenderState, regiment: defenderRegiment} = findRegiment(map, defenderTarget);
+  if (!defenderState?.i || !defenderRegiment) return rejectedBattle("defender-regiment-not-found", "找不到防守方军团");
+  if (Number(attackerState.i) === Number(defenderState.i)) return rejectedBattle("same-state", "同一国家的军团不能进行敌对结算");
+  if (!statesAtWar(attackerState, defenderState)) return rejectedBattle("states-not-at-war", "双方国家没有处于双向战争关系");
+
+  const attackerTroops = regimentTroops(attackerRegiment);
+  const defenderTroops = regimentTroops(defenderRegiment);
+  if (attackerTroops <= 0) return rejectedBattle("attacker-empty", "进攻方军团没有可参战兵力");
+  if (defenderTroops <= 0) return rejectedBattle("defender-empty", "防守方军团没有可参战兵力");
+
+  const outcomeProvided = hasOwn(input, "outcome");
+  const seedProvided = hasOwn(input, "seed");
+  if (!outcomeProvided && !seedProvided) return rejectedBattle("battle-result-required", "必须提供 outcome 或 seed");
+  if (outcomeProvided && seedProvided) return rejectedBattle("battle-result-ambiguous", "outcome 与 seed 只能提供一个");
+  const explicitOutcome = outcomeProvided ? String(input.outcome || "").trim() : "";
+  if (outcomeProvided && !hasOwn(BATTLE_RESULT_RULES, explicitOutcome)) {
+    return rejectedBattle("invalid-outcome", "战斗结果不在支持范围内");
+  }
+  const userSeed = seedProvided && typeof input.seed === "string" ? input.seed.trim() : "";
+  if (seedProvided && !userSeed) return rejectedBattle("invalid-seed", "seed 必须是非空字符串");
+
+  const attackerNaval = isNavalRegiment(attackerRegiment);
+  const defenderNaval = isNavalRegiment(defenderRegiment);
+  const defaultType = attackerNaval ? "naval" : "skirmish";
+  const type = hasOwn(input, "type") ? String(input.type || "").trim() : defaultType;
+  if (!hasOwn(BATTLE_EVENT_TYPES, type)) return rejectedBattle("invalid-battle-type", "战斗类型不在支持范围内");
+  if (attackerNaval !== defenderNaval || (type === "naval") !== attackerNaval) {
+    return rejectedBattle("battle-terrain-mismatch", "双方军团海陆属性或战斗类型不匹配");
+  }
+
+  const attackerCell = Number(attackerRegiment.cell);
+  const defenderCell = Number(defenderRegiment.cell);
+  if (!validBattleCell(map, attackerCell) || !validBattleCell(map, defenderCell)) {
+    return rejectedBattle("battle-cell-missing", "双方军团必须有有效 pack cell 驻地");
+  }
+
+  const requestedWarzoneId = hasOwn(input, "warzoneId") ? input.warzoneId : null;
+  const requestedWarzone = requestedWarzoneId === null || requestedWarzoneId === undefined || requestedWarzoneId === ""
+    ? null
+    : findBattleWarzone(map, requestedWarzoneId);
+  if (requestedWarzoneId !== null && requestedWarzoneId !== undefined && requestedWarzoneId !== "" && !requestedWarzone) {
+    return rejectedBattle("warzone-not-found", "找不到指定战区");
+  }
+  if (requestedWarzone && !warzoneMatchesStatePair(map, requestedWarzone, attackerState.i, defenderState.i)) {
+    return rejectedBattle("warzone-pair-mismatch", "指定战区与参战国家对不匹配");
+  }
+
+  const adjacent = battleCellsTouch(map, attackerCell, defenderCell);
+  const matchedWarzone = requestedWarzone || findMatchingBattleWarzone(map, attackerState.i, defenderState.i, attackerCell, defenderCell);
+  const warzoneContact = Boolean(matchedWarzone && warzoneContainsCells(matchedWarzone, attackerCell, defenderCell));
+  if (!adjacent && !warzoneContact) return rejectedBattle("battle-out-of-contact", "双方军团不在同一、相邻 cell 或同一匹配战区");
+
+  const seedResolution = seedProvided
+    ? resolveSeededBattleOutcome(map, userSeed, attackerTarget, attackerRegiment, defenderTarget, defenderRegiment)
+    : {outcome: explicitOutcome, resolutionSeed: ""};
+  const normalizedInput = {
+    attacker: attackerTarget,
+    defender: defenderTarget,
+    ...(outcomeProvided ? {outcome: explicitOutcome} : {seed: userSeed}),
+    type,
+    ...(matchedWarzone ? {warzoneId: battleWarzoneId(matchedWarzone)} : {}),
+    ...(String(input.description || "").trim() ? {description: String(input.description).trim().slice(0, 500)} : {})
+  };
+  return {
+    valid: true,
+    allowed: true,
+    code: "ok",
+    summary: `可结算 ${attackerRegiment.name || attackerTarget.id} 对 ${defenderRegiment.name || defenderTarget.id} 的单次战斗`,
+    normalizedInput,
+    requiresConfirm: true,
+    affected: [
+      {kind: "military", id: attackerTarget.id},
+      {kind: "military", id: defenderTarget.id}
+    ],
+    resolvedOutcome: seedResolution.outcome,
+    resolutionSeed: seedResolution.resolutionSeed,
+    attackerStateId: Number(attackerState.i),
+    defenderStateId: Number(defenderState.i),
+    attackerCell,
+    defenderCell,
+    attackerTroops,
+    defenderTroops
+  };
+}
+
+export function createResolveBattleCommand(input = {}, options = {}) {
+  let frozenPlan = null;
+  let snapshot = null;
+  let event = null;
+  let result = null;
+  return {
+    label: options.label || "结算单次战斗",
+    domain: "military-rule",
+    effects: {
+      ...MILITARY_BATTLE_RESULT_EFFECTS,
+      affected: militarySystemAffected("military-battle")
+    },
+    apply(context) {
+      const map = context?.map;
+      const inspection = frozenPlan || inspectBattle(map, input);
+      if (!inspection.allowed) throw battleRuleError(inspection);
+      frozenPlan ??= clonePlain(inspection);
+      snapshot ??= snapshotBattleRule(map);
+      try {
+        const attacker = findRegiment(map, frozenPlan.normalizedInput.attacker);
+        const defender = findRegiment(map, frozenPlan.normalizedInput.defender);
+        if (!attacker.regiment || !defender.regiment) throw battleValidationError("参战军团在执行前消失");
+        const eventInput = normalizeBattleEventInput({
+          type: frozenPlan.normalizedInput.type,
+          outcome: frozenPlan.resolvedOutcome,
+          description: frozenPlan.normalizedInput.description,
+          applyResult: true,
+          chainKey: `battle:${frozenPlan.normalizedInput.attacker.id}:${frozenPlan.normalizedInput.defender.id}`,
+          chainLabel: "单次战斗结算",
+          chainSide: "attacker",
+          opponentStateId: defender.state.i,
+          opponentStateName: stateName(defender.state),
+          attackerStateId: attacker.state.i,
+          attackerStateName: stateName(attacker.state),
+          defenderStateId: defender.state.i,
+          defenderStateName: stateName(defender.state)
+        });
+        event ??= createBattleEvent(map, attacker.state, attacker.regiment, eventInput);
+        applyBattleResult(map, attacker.state, attacker.regiment, event, eventInput, defender);
+        event.seed = frozenPlan.normalizedInput.seed || null;
+        event.resolutionSeed = frozenPlan.resolutionSeed || null;
+        event.warzoneId = frozenPlan.normalizedInput.warzoneId ?? null;
+        event.result = {
+          ...event.result,
+          outcome: frozenPlan.resolvedOutcome,
+          seed: event.seed,
+          resolutionSeed: event.resolutionSeed,
+          warzoneId: event.warzoneId
+        };
+        injectBattleRuleFault(options.faultAt, "after-result");
+        appendBattleEvent(map, attacker.regiment, event);
+        appendBattleEvent(map, defender.regiment, event);
+        injectBattleRuleFault(options.faultAt, "after-events");
+        syncMilitary(map);
+        refreshMilitaryTroopMetadata(map);
+        refreshMilitaryStatusMetadata(map);
+        refreshMilitaryEventMetadata(map);
+        injectBattleRuleFault(options.faultAt, "after-sync");
+        options.refreshSummary?.(map);
+        injectBattleRuleFault(options.faultAt, "after-summary");
+        validateBattleResult(map, frozenPlan, event);
+        injectBattleRuleFault(options.faultAt, "after-validation");
+        this.effects.affected = militarySystemAffected("military-battle", frozenPlan.affected);
+        result = {
+          executed: true,
+          summary: event.result.summary,
+          outcome: frozenPlan.resolvedOutcome,
+          seed: event.seed,
+          resolutionSeed: event.resolutionSeed,
+          warzoneId: event.warzoneId,
+          eventId: event.id,
+          attacker: clonePlain(event.result),
+          defender: clonePlain(event.result.opponent)
+        };
+      } catch (error) {
+        restoreBattleRule(map, snapshot);
+        result = null;
+        throw error;
+      }
+    },
+    revert(context) {
+      if (!snapshot) throw new Error("缺少可撤销的战斗规则快照");
+      restoreBattleRule(context?.map, snapshot);
+    },
+    isNoop() {
+      return false;
+    },
+    getInspection() {
+      return frozenPlan ? clonePlain(frozenPlan) : null;
+    },
+    getResult() {
+      return result ? clonePlain(result) : null;
+    }
+  };
+}
 
 export function createRegenerateMilitaryCommand({
   seed = "",
@@ -706,6 +905,125 @@ function restoreMilitary(map, snapshot) {
   syncMilitaryStateMirrors(map);
 }
 
+function snapshotBattleRule(map) {
+  const pack = map?.pack;
+  const packStates = pack?.states;
+  const politicsStates = map?.politics?.states;
+  const mapMilitaryPresent = hasOwn(map, "military");
+  const packMilitaryPresent = hasOwn(pack, "military");
+  const mapMilitary = mapMilitaryPresent ? map.military : undefined;
+  const packMilitary = packMilitaryPresent ? pack.military : undefined;
+  const mapZonesPresent = hasOwn(map, "zones");
+  const packZonesPresent = hasOwn(pack, "zones");
+  const mapZones = mapZonesPresent ? map.zones : undefined;
+  const packZones = packZonesPresent ? pack.zones : undefined;
+  const mapZoneListPresent = hasOwn(mapZones, "zones");
+  const mapZoneList = mapZoneListPresent ? mapZones.zones : undefined;
+  const summaryPresent = hasOwn(map, "summary");
+  return {
+    mapMilitaryPresent,
+    packMilitaryPresent,
+    mapMilitary: cloneOptional(mapMilitary),
+    packMilitary: cloneOptional(packMilitary),
+    militaryRootsShared: mapMilitaryPresent && packMilitaryPresent && mapMilitary === packMilitary,
+    packStateFields: snapshotBattleStateStore(packStates),
+    politicsStateFields: snapshotBattleStateStore(politicsStates),
+    stateStoresShared: Array.isArray(packStates) && packStates === politicsStates,
+    stateFieldAliases: snapshotBattleStateAliases(packStates, politicsStates),
+    mapZonesPresent,
+    packZonesPresent,
+    mapZones: cloneOptional(mapZones),
+    packZones: cloneOptional(packZones),
+    mapZoneListPresent,
+    mapZoneList: cloneOptional(mapZoneList),
+    zoneListsShared: mapZoneListPresent && packZonesPresent && mapZoneList === packZones,
+    summaryPresent,
+    summary: summaryPresent ? cloneOptional(map.summary) : undefined
+  };
+}
+
+function restoreBattleRule(map, snapshot) {
+  const pack = map?.pack;
+  if (snapshot.militaryRootsShared && snapshot.mapMilitaryPresent && snapshot.packMilitaryPresent) {
+    const military = cloneOptional(snapshot.mapMilitary);
+    map.military = military;
+    if (pack) pack.military = military;
+  } else {
+    restoreOwnValue(map, "military", snapshot.mapMilitaryPresent, snapshot.mapMilitary);
+    if (pack) restoreOwnValue(pack, "military", snapshot.packMilitaryPresent, snapshot.packMilitary);
+  }
+
+  restoreBattleStateStore(pack?.states, snapshot.packStateFields);
+  if (!snapshot.stateStoresShared) restoreBattleStateStore(map?.politics?.states, snapshot.politicsStateFields);
+  restoreBattleStateAliases(pack?.states, map?.politics?.states, snapshot.stateFieldAliases);
+
+  restoreOwnValue(map, "zones", snapshot.mapZonesPresent, snapshot.mapZones);
+  if (pack) restoreOwnValue(pack, "zones", snapshot.packZonesPresent, snapshot.packZones);
+  if (snapshot.mapZoneListPresent && map?.zones) map.zones.zones = cloneOptional(snapshot.mapZoneList);
+  else if (map?.zones) delete map.zones.zones;
+  if (snapshot.zoneListsShared && map?.zones && pack) pack.zones = map.zones.zones;
+
+  restoreOwnValue(map, "summary", snapshot.summaryPresent, snapshot.summary);
+}
+
+function snapshotBattleStateStore(states) {
+  if (!Array.isArray(states)) return null;
+  return states.map(state => state ? {
+    military: snapshotOwnValue(state, "military"),
+    militaryPolicy: snapshotOwnValue(state, "militaryPolicy"),
+    militaryDiagnostics: snapshotOwnValue(state, "militaryDiagnostics"),
+    alert: snapshotOwnValue(state, "alert")
+  } : null);
+}
+
+function restoreBattleStateStore(states, snapshots) {
+  if (!Array.isArray(states) || !Array.isArray(snapshots)) return;
+  for (let id = 0; id < snapshots.length; id++) {
+    const state = states[id];
+    const snapshot = snapshots[id];
+    if (!state || !snapshot) continue;
+    for (const key of ["military", "militaryPolicy", "militaryDiagnostics", "alert"]) {
+      restoreOwnValue(state, key, snapshot[key].present, snapshot[key].value);
+    }
+  }
+}
+
+function snapshotBattleStateAliases(packStates, politicsStates) {
+  if (!Array.isArray(packStates) || !Array.isArray(politicsStates) || packStates === politicsStates) return [];
+  return packStates.map((state, id) => {
+    const mirror = politicsStates[id];
+    if (!state || !mirror) return null;
+    return {
+      military: hasOwn(state, "military") && hasOwn(mirror, "military") && state.military === mirror.military,
+      militaryPolicy: hasOwn(state, "militaryPolicy") && hasOwn(mirror, "militaryPolicy") && state.militaryPolicy === mirror.militaryPolicy,
+      militaryDiagnostics: hasOwn(state, "militaryDiagnostics") && hasOwn(mirror, "militaryDiagnostics") && state.militaryDiagnostics === mirror.militaryDiagnostics
+    };
+  });
+}
+
+function restoreBattleStateAliases(packStates, politicsStates, aliases) {
+  if (!Array.isArray(packStates) || !Array.isArray(politicsStates) || packStates === politicsStates) return;
+  for (let id = 0; id < aliases.length; id++) {
+    const alias = aliases[id];
+    const source = packStates[id];
+    const target = politicsStates[id];
+    if (!alias || !source || !target) continue;
+    for (const key of ["military", "militaryPolicy", "militaryDiagnostics"]) {
+      if (alias[key]) target[key] = source[key];
+    }
+  }
+}
+
+function snapshotOwnValue(target, key) {
+  const present = hasOwn(target, key);
+  return {present, value: present ? cloneOptional(target[key]) : undefined};
+}
+
+function restoreOwnValue(target, key, present, value) {
+  if (present) target[key] = cloneOptional(value);
+  else delete target[key];
+}
+
 function syncMilitary(map) {
   if (!map?.pack?.military) return;
   map.military = map.pack.military;
@@ -866,6 +1184,134 @@ function findRegiment(map, target) {
   const state = map?.pack?.states?.[target.stateId] || map?.politics?.states?.[target.stateId];
   const regiment = (state?.military || []).find(item => item.i === target.regimentId || item.id === target.id) || null;
   return {state, regiment};
+}
+
+function normalizeBattleRuleTarget(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const target = normalizeRegimentTarget(value);
+  if (!Number.isInteger(target.stateId) || target.stateId <= 0
+    || !Number.isInteger(target.regimentId) || target.regimentId < 0) return null;
+  return {...target, id: `${target.stateId}:${target.regimentId}`};
+}
+
+function statesAtWar(left, right) {
+  return left?.diplomacy?.[right?.i] === "Enemy" && right?.diplomacy?.[left?.i] === "Enemy";
+}
+
+function regimentTroops(regiment) {
+  const value = Number(regiment?.a ?? sumUnitTroops(regiment?.u || {}));
+  return Number.isFinite(value) ? Math.max(0, Math.round(value)) : 0;
+}
+
+function isNavalRegiment(regiment) {
+  return Boolean(regiment?.n || regiment?.type === "fleet");
+}
+
+function validBattleCell(map, cell) {
+  if (!Number.isInteger(cell) || cell < 0) return false;
+  const cells = map?.pack?.cells;
+  const length = Math.max(cells?.i?.length || 0, cells?.c?.length || 0, cells?.p?.length || 0);
+  return cell < length;
+}
+
+function battleCellsTouch(map, leftCell, rightCell) {
+  if (leftCell === rightCell) return true;
+  return (map?.pack?.cells?.c?.[leftCell] || []).includes(rightCell)
+    || (map?.pack?.cells?.c?.[rightCell] || []).includes(leftCell);
+}
+
+function battleWarzones(map) {
+  const zones = map?.zones?.zones;
+  return Array.isArray(zones) ? zones : Array.isArray(map?.pack?.zones) ? map.pack.zones : [];
+}
+
+function battleWarzoneId(zone) {
+  return zone?.i ?? zone?.id ?? null;
+}
+
+function findBattleWarzone(map, id) {
+  return battleWarzones(map).find(zone => String(battleWarzoneId(zone)) === String(id)) || null;
+}
+
+function warzoneMatchesStatePair(map, zone, leftStateId, rightStateId) {
+  if (zone?.type !== "Warzone") return false;
+  const pair = resolveWarzoneStatePair(map?.pack, zone);
+  if (!pair) return false;
+  return (Number(pair.attacker) === Number(leftStateId) && Number(pair.defender) === Number(rightStateId))
+    || (Number(pair.attacker) === Number(rightStateId) && Number(pair.defender) === Number(leftStateId));
+}
+
+function warzoneContainsCells(zone, leftCell, rightCell) {
+  const cells = new Set((zone?.cells || []).map(Number));
+  return cells.has(leftCell) && cells.has(rightCell);
+}
+
+function findMatchingBattleWarzone(map, leftStateId, rightStateId, leftCell, rightCell) {
+  return battleWarzones(map).find(zone =>
+    warzoneMatchesStatePair(map, zone, leftStateId, rightStateId)
+    && warzoneContainsCells(zone, leftCell, rightCell)
+  ) || null;
+}
+
+function resolveSeededBattleOutcome(map, userSeed, attackerTarget, attacker, defenderTarget, defender) {
+  const regiments = [
+    {id: attackerTarget.id, troops: regimentTroops(attacker), cell: Number(attacker.cell)},
+    {id: defenderTarget.id, troops: regimentTroops(defender), cell: Number(defender.cell)}
+  ].sort((left, right) => left.id.localeCompare(right.id, "en", {numeric: true}));
+  const resolutionSeed = stableHash(JSON.stringify({
+    mapSeed: String(map?.options?.seed || map?.metadata?.seed || ""),
+    userSeed,
+    regiments
+  }));
+  const outcomes = ["victory", "defeat", "draw"];
+  return {outcome: outcomes[Number.parseInt(resolutionSeed, 16) % outcomes.length], resolutionSeed};
+}
+
+function rejectedBattle(code, summary) {
+  return {valid: false, allowed: false, code, summary, normalizedInput: null, affected: [], requiresConfirm: false};
+}
+
+function battleRuleError(inspection) {
+  const error = new Error(inspection.summary || "战斗规则事务不允许执行");
+  error.code = inspection.code || "battle-rule-rejected";
+  error.details = clonePlain(inspection);
+  return error;
+}
+
+function battleValidationError(message) {
+  const error = new Error(`battle-validation-failed: ${message}`);
+  error.code = "battle-validation-failed";
+  return error;
+}
+
+function injectBattleRuleFault(actual, expected) {
+  if (actual === expected) throw new Error(`battle rule fault: ${expected}`);
+}
+
+function validateBattleResult(map, plan, event) {
+  const attacker = findRegiment(map, plan.normalizedInput.attacker);
+  const defender = findRegiment(map, plan.normalizedInput.defender);
+  const errors = [];
+  if (!attacker.regiment || !defender.regiment) errors.push("参战军团缺失");
+  if ([attacker.regiment, defender.regiment].some(regiment => !Number.isFinite(Number(regiment?.a)) || Number(regiment.a) < 0)) {
+    errors.push("军团兵力非法");
+  }
+  if (!statesAtWar(attacker.state, defender.state)) errors.push("国家战争关系被改写");
+  if (Number(attacker.regiment?.cell) !== plan.attackerCell || Number(defender.regiment?.cell) !== plan.defenderCell) errors.push("军团被隐式移动");
+  const military = map?.pack?.military || map?.military;
+  if (!(military?.events || []).some(item => item?.id === event.id)) errors.push("全局战报缺失");
+  if (!(attacker.regiment?.events || []).some(item => item?.id === event.id)) errors.push("进攻方战报缺失");
+  if (!(defender.regiment?.events || []).some(item => item?.id === event.id)) errors.push("防守方战报缺失");
+  if (Number(event?.result?.opponent?.stateId) !== Number(defender.state?.i)
+    || Number(event?.result?.opponent?.regimentId) !== Number(defender.regiment?.i)) errors.push("战报对手不精确");
+  for (const regiment of [attacker.regiment, defender.regiment]) {
+    if (Object.values(regiment?.u || {}).some(value => Number(value) < 0)) errors.push("兵种兵力为负");
+    if (regiment?.status === "routed"
+      && (regiment.order?.kind !== "retreat" || Number(regiment.order?.targetCell) !== Number((regiment === attacker.regiment ? attacker.state : defender.state)?.center))) {
+      errors.push("败退命令未指向本国中心");
+    }
+  }
+  if (errors.length) throw battleValidationError(errors.join("；"));
 }
 
 function snapshotRegimentStatus(regiment) {
@@ -1632,4 +2078,12 @@ function roundValue(value, digits = 2) {
 
 function clonePlain(value) {
   return JSON.parse(JSON.stringify(value));
+}
+
+function cloneOptional(value) {
+  return value === undefined ? undefined : clonePlain(value);
+}
+
+function hasOwn(value, key) {
+  return Boolean(value && Object.prototype.hasOwnProperty.call(value, key));
 }
