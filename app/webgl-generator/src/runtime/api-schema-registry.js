@@ -260,6 +260,7 @@ const METHOD_OVERRIDES = Object.freeze({
   ...existingRuleMethodOverrides(),
   ...remainingRuleMethodOverrides(),
   ...politicalTransferRuleMethodOverrides(),
+  ...provinceTopologyRuleMethodOverrides(),
   ...namebaseRuleMethodOverrides(),
   "oceanCurrents.rename": {
     arguments: [argument("currentId", stringSchema("洋流 ID")), argument("name", stringSchema("新名称"))],
@@ -1300,6 +1301,79 @@ function politicalTransferRuleMethodOverrides() {
     ], [...transferCodes, ...tokenCodes, "confirmation_required"], [[
       {provinceId: 3, targetStateId: 2},
       {...executionExample, confirm: true}
+    ]])
+  };
+}
+
+function provinceTopologyRuleMethodOverrides() {
+  const tokenCodes = [
+    "inspection-required", "inspection-stale", "inspection-token-invalid",
+    "inspection-action-mismatch", "inspection-input-mismatch", "inspection-schema-mismatch"
+  ];
+  const mergeCodes = [
+    "province-selection-too-small", "target-province-not-selected", "province-not-found",
+    "province-state-mismatch", "province-territory-empty", "province-owner-mismatch",
+    "merge-region-disconnected", "merge-region-without-city", "capital-city-not-found",
+    "capital-outside-merge", "capital-candidate-missing"
+  ];
+  const splitCodes = [
+    "source-province-not-found", "source-province-territory-empty", "split-selection-empty",
+    "pack-cell-invalid", "pack-cell-water", "pack-cell-outside-source", "split-covers-all",
+    "split-side-disconnected", "split-side-without-city", "new-capital-not-found",
+    "new-capital-outside-selection", "source-capital-candidate-missing",
+    "pack-grid-mapping-missing", "province-id-overflow"
+  ];
+  const positiveIds = {type: "array", minItems: 2, uniqueItems: true, items: {type: "integer", minimum: 1}};
+  const mergeRequest = {
+    type: "object",
+    required: ["provinceIds", "targetProvinceId"],
+    properties: {
+      provinceIds: positiveIds,
+      targetProvinceId: {type: "integer", minimum: 1},
+      capitalCityId: {type: "integer", minimum: 1}
+    },
+    additionalProperties: false
+  };
+  const splitRequest = {
+    type: "object",
+    required: ["sourceProvinceId", "packCellIds"],
+    properties: {
+      sourceProvinceId: {type: "integer", minimum: 1},
+      packCellIds: {type: "array", minItems: 1, uniqueItems: true, items: {type: "integer", minimum: 0}},
+      newCapitalCityId: {type: "integer", minimum: 1}
+    },
+    additionalProperties: false
+  };
+  const options = ruleExecutionOptionsSchema({
+    confirm: true,
+    properties: {label: {type: "string"}},
+    required: ["inspectionToken", "expectedRevision"]
+  });
+  const exampleOptions = {
+    inspectionToken: "rulei1.example",
+    expectedRevision: {mapIdentity: "example-map", mapRevision: 1},
+    confirm: true
+  };
+  return {
+    "edit.provinces.inspectMerge": ruleInspectorOverride([
+      argument("request", mergeRequest)
+    ], mergeCodes, [[{provinceIds: [1, 2], targetProvinceId: 1}]]),
+    "edit.provinces.merge": ruleExecutorOverride([
+      argument("request", mergeRequest),
+      argument("options", options)
+    ], [...mergeCodes, ...tokenCodes, "province-topology-validation-failed", "confirmation_required"], [[
+      {provinceIds: [1, 2], targetProvinceId: 1},
+      exampleOptions
+    ]]),
+    "edit.provinces.inspectSplit": ruleInspectorOverride([
+      argument("request", splitRequest)
+    ], splitCodes, [[{sourceProvinceId: 1, packCellIds: [10, 11]}]]),
+    "edit.provinces.split": ruleExecutorOverride([
+      argument("request", splitRequest),
+      argument("options", options)
+    ], [...splitCodes, ...tokenCodes, "province-topology-validation-failed", "confirmation_required"], [[
+      {sourceProvinceId: 1, packCellIds: [10, 11]},
+      exampleOptions
     ]])
   };
 }

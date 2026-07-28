@@ -170,14 +170,18 @@ import {applyStateBrushPreview, createAddStateAtCellCommand, createApplyStateBru
 import {issueCellInspectionToken, normalizeCellCreateInput, validateCellInspectionToken} from "./cell-inspection-token.js";
 import {
   createEnsureProvinceAssignmentCommand,
+  createMergeProvincesCommand,
   createMergeStatesCommand,
   createProvinceTransferCommand,
+  createSplitProvinceCommand,
   createSplitStateCommand,
   createTerritoryTransferCommand,
   inspectPoliticalTransferTransaction,
+  inspectProvinceTopologyTransaction,
   inspectStateMerge,
   inspectStateSplit,
   POLITICAL_TRANSFER_ACTION,
+  PROVINCE_TOPOLOGY_ACTION,
   regenerateProvincesForStates,
   withScopedProvinceRegenerationOptions
 } from "./state-topology-commands.js";
@@ -2829,6 +2833,10 @@ function createRuntimeActions(state, documentRef, options = {}) {
         ensureAssignment: (request, options = {}) => executePoliticalTransferViaApi(state, documentRef, POLITICAL_TRANSFER_ACTION.ENSURE_PROVINCE_ASSIGNMENT, request, options),
         inspectTransfer: request => inspectPoliticalTransferViaApi(state, POLITICAL_TRANSFER_ACTION.PROVINCE_TRANSFER, request),
         transfer: (request, options = {}) => executePoliticalTransferViaApi(state, documentRef, POLITICAL_TRANSFER_ACTION.PROVINCE_TRANSFER, request, options),
+        inspectMerge: request => inspectProvinceTopologyViaApi(state, PROVINCE_TOPOLOGY_ACTION.MERGE, request),
+        merge: (request, options = {}) => executeProvinceTopologyViaApi(state, documentRef, PROVINCE_TOPOLOGY_ACTION.MERGE, request, options),
+        inspectSplit: request => inspectProvinceTopologyViaApi(state, PROVINCE_TOPOLOGY_ACTION.SPLIT, request),
+        split: (request, options = {}) => executeProvinceTopologyViaApi(state, documentRef, PROVINCE_TOPOLOGY_ACTION.SPLIT, request, options),
         rename: (provinceId, name) => renameProvinceViaApi(state, documentRef, provinceId, name),
         setColor: (provinceId, color) => setProvinceColorViaApi(state, documentRef, provinceId, color),
         applyChanges: changes => applyProvinceChangesViaApi(state, documentRef, changes)
@@ -4885,6 +4893,56 @@ function executePoliticalTransferViaApi(state, documentRef, actionId, request, o
     refresh: refreshAfterStateEdit,
     noopStatus: "政治归属没有变化。",
     status: executed => executed.getResult?.()?.summary || `${label}完成。`,
+    errorStatus: `${label}失败，地图已恢复执行前状态。`,
+    throwOnError: true
+  });
+  updateRuntimePanel(documentRef, state);
+  updateEditingInteractionLock(state, documentRef);
+  return editApiResult(state, result);
+}
+
+function inspectProvinceTopologyViaApi(state, actionId, request) {
+  assertMapAvailable(state);
+  const normalizedInput = normalizeRuleInspectionInput(request);
+  const evaluation = inspectProvinceTopologyTransaction(state.map, actionId, normalizedInput);
+  return createRuleInspectionResult(
+    state.mapRevision,
+    actionId,
+    evaluation.normalizedInput ?? normalizedInput,
+    {...evaluation, allowed: evaluation.allowed ?? evaluation.valid === true}
+  );
+}
+
+function executeProvinceTopologyViaApi(state, documentRef, actionId, request, options = {}) {
+  assertMapAvailable(state);
+  const normalizedInput = normalizeRuleInspectionInput(request);
+  const evaluation = inspectProvinceTopologyTransaction(state.map, actionId, normalizedInput);
+  const tokenInput = evaluation.normalizedInput ?? normalizedInput;
+  const validation = assertExistingRuleInspection(state.mapRevision, actionId, tokenInput, options);
+  if (validation.legacy) {
+    const error = new Error("省份拓扑规则事务必须先调用对应 inspector 并提交 inspectionToken");
+    error.code = "inspection-required";
+    throw error;
+  }
+  if (!(evaluation.allowed ?? evaluation.valid === true)) {
+    const error = new Error(evaluation.summary || "省份拓扑规则事务不允许执行");
+    error.code = evaluation.code || "rule-rejected";
+    throw error;
+  }
+  if (options.confirm !== true) {
+    const error = new Error(`${evaluation.summary || "该省份拓扑规则事务"}需要显式传入 {confirm: true}`);
+    error.code = "confirmation_required";
+    throw error;
+  }
+  const commandFactory = actionId === PROVINCE_TOPOLOGY_ACTION.MERGE
+    ? createMergeProvincesCommand
+    : createSplitProvinceCommand;
+  const label = options.label || (actionId === PROVINCE_TOPOLOGY_ACTION.MERGE ? "API 合并省份" : "API 拆分省份");
+  const result = executeEditCommand(state, documentRef, commandFactory(tokenInput, {label}), {
+    context: {map: state.map},
+    refresh: refreshAfterStateEdit,
+    noopStatus: "省份拓扑没有变化。",
+    status: `${label}完成。`,
     errorStatus: `${label}失败，地图已恢复执行前状态。`,
     throwOnError: true
   });

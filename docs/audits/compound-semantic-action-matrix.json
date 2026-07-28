@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "scope": "权威任务第 204 项：全游戏复合语义接口、规则动作与玩法配方审计",
   "generatedAtPolicy": "报告不写入动态时间，sourceDigest 变化即要求重新生成",
-  "sourceDigest": "1f47828b9e49ebcb1991db42c7e88033383d58163aee3661f8a9516f3ac7ec5c",
+  "sourceDigest": "94e1d22aa9f9a73e3485b2d7ad6e655149dd1f16942975e7df1d854f51f7325b",
   "definition": {
     "compoundSemanticAction": "一个玩家意图，但执行时需要跨对象/系统、条件分支、业务预检或原子回滚；应由单一规则事务表达。",
     "primitive": "只修改一个稳定字段或纯编辑器显示偏好，可保留为原子 API，不强行包装成复合动作。",
@@ -21,12 +21,12 @@
     "recipe-only": "战略/玩法流程，不应实现为一条超大写接口。"
   },
   "denominator": {
-    "fullCapabilityRows": 1115,
+    "fullCapabilityRows": 1132,
     "fullCapabilityUnknown": 0,
     "fullCapabilityUnclassified": 0,
     "fullCapabilityGaps": 0,
-    "publicApiMethods": 289,
-    "classifiedApiMethods": 289,
+    "publicApiMethods": 293,
+    "classifiedApiMethods": 293,
     "cellActionRows": 48,
     "classifiedCellActionRows": 48,
     "canvasModes": 29,
@@ -38,8 +38,8 @@
     "ruleTransactions": 68,
     "plannerRecipes": 10,
     "statuses": {
-      "existing-transaction": 62,
-      "missing-game-rule": 6,
+      "existing-transaction": 64,
+      "missing-game-rule": 4,
       "recipe-only": 10
     },
     "domains": {
@@ -59,8 +59,8 @@
       "atomic-editor-primitive": 54,
       "editor-runtime-service": 49,
       "read-export-service": 10,
-      "read-primitive": 27,
-      "semantic-action": 149
+      "read-primitive": 28,
+      "semantic-action": 152
     },
     "interactionClassifications": {
       "semantic-input-or-primitive": 36,
@@ -1150,11 +1150,11 @@
       "tier": "rule-transaction",
       "variants": [],
       "api": [
-        "cells.query",
-        "objects.get"
+        "edit.provinces.inspectMerge",
+        "edit.provinces.merge"
       ],
-      "inspect": "planned:edit.provinces.inspectMerge",
-      "execute": "planned:edit.provinces.merge",
+      "inspect": "edit.provinces.inspectMerge",
+      "execute": "edit.provinces.merge",
       "branches": [
         "必须同国相邻",
         "省会选择",
@@ -1169,7 +1169,7 @@
       "id": "politics.merge-provinces",
       "title": "合并同一国家内的省份",
       "domain": "politics",
-      "status": "missing-game-rule",
+      "status": "existing-transaction",
       "intent": "把多个同国相邻省份合并，保留一个身份或创建新身份，并确定省会。",
       "gameplayChapter": "国家、省份与政治拓扑",
       "invariant": "国家、省份、Grid/Pack 归属、首都、省会、外交、军事、市场和路线引用不得悬空。",
@@ -1180,11 +1180,11 @@
       "tier": "rule-transaction",
       "variants": [],
       "api": [
-        "cells.query",
-        "objects.get"
+        "edit.provinces.inspectSplit",
+        "edit.provinces.split"
       ],
-      "inspect": "planned:edit.provinces.inspectSplit",
-      "execute": "planned:edit.provinces.split",
+      "inspect": "edit.provinces.inspectSplit",
+      "execute": "edit.provinces.split",
       "branches": [
         "两侧必须连通",
         "两侧需要合法中心",
@@ -1198,7 +1198,7 @@
       "id": "politics.split-province",
       "title": "拆分省份",
       "domain": "politics",
-      "status": "missing-game-rule",
+      "status": "existing-transaction",
       "intent": "按连通 Cell 集或城镇锚点拆分省份，并为两侧确定省会。",
       "gameplayChapter": "国家、省份与政治拓扑",
       "invariant": "国家、省份、Grid/Pack 归属、首都、省会、外交、军事、市场和路线引用不得悬空。",
@@ -2612,11 +2612,8 @@
     },
     {
       "method": "cells.query",
-      "classification": "semantic-action",
-      "actionIds": [
-        "politics.merge-provinces",
-        "politics.split-province"
-      ]
+      "classification": "read-primitive",
+      "actionIds": []
     },
     {
       "method": "cells.scan",
@@ -3573,10 +3570,31 @@
       ]
     },
     {
+      "method": "edit.provinces.inspectMerge",
+      "classification": "semantic-action",
+      "actionIds": [
+        "politics.merge-provinces"
+      ]
+    },
+    {
+      "method": "edit.provinces.inspectSplit",
+      "classification": "semantic-action",
+      "actionIds": [
+        "politics.split-province"
+      ]
+    },
+    {
       "method": "edit.provinces.inspectTransfer",
       "classification": "semantic-action",
       "actionIds": [
         "politics.transfer-province"
+      ]
+    },
+    {
+      "method": "edit.provinces.merge",
+      "classification": "semantic-action",
+      "actionIds": [
+        "politics.merge-provinces"
       ]
     },
     {
@@ -3588,6 +3606,13 @@
       "method": "edit.provinces.setColor",
       "classification": "atomic-editor-primitive",
       "actionIds": []
+    },
+    {
+      "method": "edit.provinces.split",
+      "classification": "semantic-action",
+      "actionIds": [
+        "politics.split-province"
+      ]
     },
     {
       "method": "edit.provinces.transfer",
@@ -4157,9 +4182,7 @@
       "actionIds": [
         "diplomacy.change-overlord",
         "diplomacy.declare-war",
-        "diplomacy.make-peace",
-        "politics.merge-provinces",
-        "politics.split-province"
+        "diplomacy.make-peace"
       ]
     },
     {

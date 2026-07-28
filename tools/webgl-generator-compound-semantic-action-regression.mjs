@@ -12,7 +12,7 @@ assert.equal(report.denominator.classifiedCellActionRows, report.denominator.cel
 assert.equal(report.denominator.fullCapabilityGaps, 0);
 assert.ok(report.totals.ruleTransactions >= 50);
 assert.ok(report.totals.plannerRecipes >= 10);
-assert.equal(report.totals.statuses["existing-transaction"], 62);
+assert.equal(report.totals.statuses["existing-transaction"], 64);
 assert.equal(report.totals.statuses["existing-needs-inspector"] || 0, 0);
 assert.equal(report.totals.statuses["fragmented-needs-transaction"] || 0, 0);
 
@@ -85,14 +85,20 @@ const provinceTransfer = byId.get("politics.transfer-province");
 assert.equal(provinceTransfer.status, "existing-transaction");
 assert.equal(provinceTransfer.inspect, "edit.provinces.inspectTransfer");
 assert.equal(provinceTransfer.execute, "edit.provinces.transfer");
+for (const [id, inspect, execute] of [
+  ["politics.merge-provinces", "edit.provinces.inspectMerge", "edit.provinces.merge"],
+  ["politics.split-province", "edit.provinces.inspectSplit", "edit.provinces.split"]
+]) {
+  assert.equal(byId.get(id)?.status, "existing-transaction");
+  assert.equal(byId.get(id)?.inspect, inspect);
+  assert.equal(byId.get(id)?.execute, execute);
+}
 
 for (const id of [
   "diplomacy.declare-war",
   "diplomacy.make-peace",
   "diplomacy.change-overlord",
-  "military.resolve-battle",
-  "politics.merge-provinces",
-  "politics.split-province"
+  "military.resolve-battle"
 ]) {
   assert.equal(byId.get(id)?.status, "missing-game-rule", `${id} 没有登记为缺失游戏规则`);
 }

@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sourceDigest": "15291498165150ad9454b760a8d9d4f40208169d44e0611b876624a8f648062d",
+  "sourceDigest": "3d04e4f3783e40f85a0f21579ac700a99d92d6235c5fe6fc739513cab541551b",
   "sourceRoots": [
     "app/webgl-generator/index.html",
     "app/webgl-generator/src/**/*.{js,vue}",
@@ -11,10 +11,10 @@
     "includedInteractionSurfaces": 87,
     "excludedInteractionSurfaces": 18,
     "canvasModes": 29,
-    "runtimeActions": 243,
-    "apiActionBindings": 242,
-    "commandAndInspectorExports": 196,
-    "publicApiMethods": 289
+    "runtimeActions": 247,
+    "apiActionBindings": 246,
+    "commandAndInspectorExports": 201,
+    "publicApiMethods": 293
   },
   "statusPolicy": {
     "covered": "公共 API 已存在且与底层 action / command 或只读 helper 共路径",
@@ -23,8 +23,8 @@
     "gap": "适合参数化且没有公共 API，必须在第 200 项关闭"
   },
   "totals": {
-    "rows": 1115,
-    "covered": 1042,
+    "rows": 1132,
+    "covered": 1059,
     "excluded": 73,
     "deferred-owned": 0,
     "gap": 0,
@@ -4008,6 +4008,64 @@
       "exclusionReason": ""
     },
     {
+      "matrixId": "action:edit.provinces.inspectMerge",
+      "capabilityId": "edit.provinces.inspectMerge",
+      "title": "Runtime action edit.provinces.inspectMerge",
+      "sourceKind": "runtime-action",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/app.js"
+      ],
+      "uiEntry": "",
+      "action": "edit.provinces.inspectMerge",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "edit.provinces.inspectMerge"
+      ],
+      "inputSpace": "method-schema",
+      "mutates": "none",
+      "preflight": "readonly",
+      "businessCodes": [],
+      "confirm": "按 API 确认清单",
+      "undoOrRollback": "not-applicable",
+      "async": false,
+      "compatibility": "UI 与 API 共用同一 runtime action",
+      "evidence": [
+        "app/webgl-generator/src/runtime/console-api.js"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "action:edit.provinces.inspectSplit",
+      "capabilityId": "edit.provinces.inspectSplit",
+      "title": "Runtime action edit.provinces.inspectSplit",
+      "sourceKind": "runtime-action",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/app.js"
+      ],
+      "uiEntry": "",
+      "action": "edit.provinces.inspectSplit",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "edit.provinces.inspectSplit"
+      ],
+      "inputSpace": "method-schema",
+      "mutates": "none",
+      "preflight": "readonly",
+      "businessCodes": [],
+      "confirm": "按 API 确认清单",
+      "undoOrRollback": "not-applicable",
+      "async": false,
+      "compatibility": "UI 与 API 共用同一 runtime action",
+      "evidence": [
+        "app/webgl-generator/src/runtime/console-api.js"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
       "matrixId": "action:edit.provinces.inspectTransfer",
       "capabilityId": "edit.provinces.inspectTransfer",
       "title": "Runtime action edit.provinces.inspectTransfer",
@@ -4027,6 +4085,35 @@
       "businessCodes": [],
       "confirm": "按 API 确认清单",
       "undoOrRollback": "not-applicable",
+      "async": false,
+      "compatibility": "UI 与 API 共用同一 runtime action",
+      "evidence": [
+        "app/webgl-generator/src/runtime/console-api.js"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "action:edit.provinces.merge",
+      "capabilityId": "edit.provinces.merge",
+      "title": "Runtime action edit.provinces.merge",
+      "sourceKind": "runtime-action",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/app.js"
+      ],
+      "uiEntry": "",
+      "action": "edit.provinces.merge",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "edit.provinces.merge"
+      ],
+      "inputSpace": "method-schema",
+      "mutates": "map-or-persistent-data",
+      "preflight": "按方法描述",
+      "businessCodes": [],
+      "confirm": "按 API 确认清单",
+      "undoOrRollback": "按方法元数据",
       "async": false,
       "compatibility": "UI 与 API 共用同一 runtime action",
       "evidence": [
@@ -4078,6 +4165,35 @@
       "commandOrInspector": "",
       "apiMethods": [
         "edit.provinces.setColor"
+      ],
+      "inputSpace": "method-schema",
+      "mutates": "map-or-persistent-data",
+      "preflight": "按方法描述",
+      "businessCodes": [],
+      "confirm": "按 API 确认清单",
+      "undoOrRollback": "按方法元数据",
+      "async": false,
+      "compatibility": "UI 与 API 共用同一 runtime action",
+      "evidence": [
+        "app/webgl-generator/src/runtime/console-api.js"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "action:edit.provinces.split",
+      "capabilityId": "edit.provinces.split",
+      "title": "Runtime action edit.provinces.split",
+      "sourceKind": "runtime-action",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/app.js"
+      ],
+      "uiEntry": "",
+      "action": "edit.provinces.split",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "edit.provinces.split"
       ],
       "inputSpace": "method-schema",
       "mutates": "map-or-persistent-data",
@@ -11192,6 +11308,66 @@
       "exclusionReason": ""
     },
     {
+      "matrixId": "api-action-binding:edit.provinces.inspectMerge",
+      "capabilityId": "edit.provinces.inspectMerge",
+      "title": "API action 绑定 edit.provinces.inspectMerge",
+      "sourceKind": "api-action-binding",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/console-api.js",
+        "app/webgl-generator/src/runtime/app.js"
+      ],
+      "uiEntry": "",
+      "action": "edit.provinces.inspectMerge",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "edit.provinces.inspectMerge"
+      ],
+      "inputSpace": "method-schema",
+      "mutates": "none",
+      "preflight": "公共 API 绑定必须能解析到真实 runtime action",
+      "businessCodes": [],
+      "confirm": "按 API 确认清单",
+      "undoOrRollback": "not-applicable",
+      "async": false,
+      "compatibility": "旧 API action 路径保持可调用",
+      "evidence": [
+        "tools/webgl-generator-api-action-convergence-regression.mjs"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "api-action-binding:edit.provinces.inspectSplit",
+      "capabilityId": "edit.provinces.inspectSplit",
+      "title": "API action 绑定 edit.provinces.inspectSplit",
+      "sourceKind": "api-action-binding",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/console-api.js",
+        "app/webgl-generator/src/runtime/app.js"
+      ],
+      "uiEntry": "",
+      "action": "edit.provinces.inspectSplit",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "edit.provinces.inspectSplit"
+      ],
+      "inputSpace": "method-schema",
+      "mutates": "none",
+      "preflight": "公共 API 绑定必须能解析到真实 runtime action",
+      "businessCodes": [],
+      "confirm": "按 API 确认清单",
+      "undoOrRollback": "not-applicable",
+      "async": false,
+      "compatibility": "旧 API action 路径保持可调用",
+      "evidence": [
+        "tools/webgl-generator-api-action-convergence-regression.mjs"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
       "matrixId": "api-action-binding:edit.provinces.inspectTransfer",
       "capabilityId": "edit.provinces.inspectTransfer",
       "title": "API action 绑定 edit.provinces.inspectTransfer",
@@ -11212,6 +11388,36 @@
       "businessCodes": [],
       "confirm": "按 API 确认清单",
       "undoOrRollback": "not-applicable",
+      "async": false,
+      "compatibility": "旧 API action 路径保持可调用",
+      "evidence": [
+        "tools/webgl-generator-api-action-convergence-regression.mjs"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "api-action-binding:edit.provinces.merge",
+      "capabilityId": "edit.provinces.merge",
+      "title": "API action 绑定 edit.provinces.merge",
+      "sourceKind": "api-action-binding",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/console-api.js",
+        "app/webgl-generator/src/runtime/app.js"
+      ],
+      "uiEntry": "",
+      "action": "edit.provinces.merge",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "edit.provinces.merge"
+      ],
+      "inputSpace": "method-schema",
+      "mutates": "map-or-persistent-data",
+      "preflight": "公共 API 绑定必须能解析到真实 runtime action",
+      "businessCodes": [],
+      "confirm": "按 API 确认清单",
+      "undoOrRollback": "按方法元数据",
       "async": false,
       "compatibility": "旧 API action 路径保持可调用",
       "evidence": [
@@ -11265,6 +11471,36 @@
       "commandOrInspector": "",
       "apiMethods": [
         "edit.provinces.setColor"
+      ],
+      "inputSpace": "method-schema",
+      "mutates": "map-or-persistent-data",
+      "preflight": "公共 API 绑定必须能解析到真实 runtime action",
+      "businessCodes": [],
+      "confirm": "按 API 确认清单",
+      "undoOrRollback": "按方法元数据",
+      "async": false,
+      "compatibility": "旧 API action 路径保持可调用",
+      "evidence": [
+        "tools/webgl-generator-api-action-convergence-regression.mjs"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "api-action-binding:edit.provinces.split",
+      "capabilityId": "edit.provinces.split",
+      "title": "API action 绑定 edit.provinces.split",
+      "sourceKind": "api-action-binding",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/console-api.js",
+        "app/webgl-generator/src/runtime/app.js"
+      ],
+      "uiEntry": "",
+      "action": "edit.provinces.split",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "edit.provinces.split"
       ],
       "inputSpace": "method-schema",
       "mutates": "map-or-persistent-data",
@@ -19271,6 +19507,68 @@
       "exclusionReason": ""
     },
     {
+      "matrixId": "api:edit.provinces.inspectMerge",
+      "capabilityId": "edit.provinces.inspectMerge",
+      "title": "公共 API edit.provinces.inspectMerge",
+      "sourceKind": "public-api",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/api-contract.js",
+        "app/webgl-generator/src/runtime/console-api.js"
+      ],
+      "uiEntry": "",
+      "action": "edit.provinces.inspectMerge",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "edit.provinces.inspectMerge"
+      ],
+      "inputSpace": "info.describe(method)",
+      "mutates": "none",
+      "preflight": "由 info.describe(method) 与领域 inspector 发现",
+      "businessCodes": [],
+      "confirm": "由 methodMetadata.requiresConfirm 发现",
+      "undoOrRollback": "由 methodMetadata.undoable 与结果 metadata 发现",
+      "async": false,
+      "compatibility": "受 API 主版本和方法稳定性契约保护",
+      "evidence": [
+        "tools/webgl-generator-api-capabilities-regression.mjs",
+        "tools/webgl-generator-api-stability-contract-regression.mjs"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "api:edit.provinces.inspectSplit",
+      "capabilityId": "edit.provinces.inspectSplit",
+      "title": "公共 API edit.provinces.inspectSplit",
+      "sourceKind": "public-api",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/api-contract.js",
+        "app/webgl-generator/src/runtime/console-api.js"
+      ],
+      "uiEntry": "",
+      "action": "edit.provinces.inspectSplit",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "edit.provinces.inspectSplit"
+      ],
+      "inputSpace": "info.describe(method)",
+      "mutates": "none",
+      "preflight": "由 info.describe(method) 与领域 inspector 发现",
+      "businessCodes": [],
+      "confirm": "由 methodMetadata.requiresConfirm 发现",
+      "undoOrRollback": "由 methodMetadata.undoable 与结果 metadata 发现",
+      "async": false,
+      "compatibility": "受 API 主版本和方法稳定性契约保护",
+      "evidence": [
+        "tools/webgl-generator-api-capabilities-regression.mjs",
+        "tools/webgl-generator-api-stability-contract-regression.mjs"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
       "matrixId": "api:edit.provinces.inspectTransfer",
       "capabilityId": "edit.provinces.inspectTransfer",
       "title": "公共 API edit.provinces.inspectTransfer",
@@ -19287,6 +19585,37 @@
       ],
       "inputSpace": "info.describe(method)",
       "mutates": "none",
+      "preflight": "由 info.describe(method) 与领域 inspector 发现",
+      "businessCodes": [],
+      "confirm": "由 methodMetadata.requiresConfirm 发现",
+      "undoOrRollback": "由 methodMetadata.undoable 与结果 metadata 发现",
+      "async": false,
+      "compatibility": "受 API 主版本和方法稳定性契约保护",
+      "evidence": [
+        "tools/webgl-generator-api-capabilities-regression.mjs",
+        "tools/webgl-generator-api-stability-contract-regression.mjs"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "api:edit.provinces.merge",
+      "capabilityId": "edit.provinces.merge",
+      "title": "公共 API edit.provinces.merge",
+      "sourceKind": "public-api",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/api-contract.js",
+        "app/webgl-generator/src/runtime/console-api.js"
+      ],
+      "uiEntry": "",
+      "action": "edit.provinces.merge",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "edit.provinces.merge"
+      ],
+      "inputSpace": "info.describe(method)",
+      "mutates": "map-or-persistent-data",
       "preflight": "由 info.describe(method) 与领域 inspector 发现",
       "businessCodes": [],
       "confirm": "由 methodMetadata.requiresConfirm 发现",
@@ -19346,6 +19675,37 @@
       "commandOrInspector": "",
       "apiMethods": [
         "edit.provinces.setColor"
+      ],
+      "inputSpace": "info.describe(method)",
+      "mutates": "map-or-persistent-data",
+      "preflight": "由 info.describe(method) 与领域 inspector 发现",
+      "businessCodes": [],
+      "confirm": "由 methodMetadata.requiresConfirm 发现",
+      "undoOrRollback": "由 methodMetadata.undoable 与结果 metadata 发现",
+      "async": false,
+      "compatibility": "受 API 主版本和方法稳定性契约保护",
+      "evidence": [
+        "tools/webgl-generator-api-capabilities-regression.mjs",
+        "tools/webgl-generator-api-stability-contract-regression.mjs"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "api:edit.provinces.split",
+      "capabilityId": "edit.provinces.split",
+      "title": "公共 API edit.provinces.split",
+      "sourceKind": "public-api",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/api-contract.js",
+        "app/webgl-generator/src/runtime/console-api.js"
+      ],
+      "uiEntry": "",
+      "action": "edit.provinces.split",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "edit.provinces.split"
       ],
       "inputSpace": "info.describe(method)",
       "mutates": "map-or-persistent-data",
@@ -29273,9 +29633,13 @@
         "edit.provinces.inspectCreateAtCell",
         "edit.provinces.inspectDelete",
         "edit.provinces.inspectEnsureAssignment",
+        "edit.provinces.inspectMerge",
+        "edit.provinces.inspectSplit",
         "edit.provinces.inspectTransfer",
+        "edit.provinces.merge",
         "edit.provinces.rename",
         "edit.provinces.setColor",
+        "edit.provinces.split",
         "edit.provinces.transfer",
         "generate.regenerate",
         "selection.clear",
@@ -29326,9 +29690,13 @@
         "edit.provinces.inspectCreateAtCell",
         "edit.provinces.inspectDelete",
         "edit.provinces.inspectEnsureAssignment",
+        "edit.provinces.inspectMerge",
+        "edit.provinces.inspectSplit",
         "edit.provinces.inspectTransfer",
+        "edit.provinces.merge",
         "edit.provinces.rename",
         "edit.provinces.setColor",
+        "edit.provinces.split",
         "edit.provinces.transfer",
         "generate.regenerate",
         "selection.clear",
@@ -29379,9 +29747,13 @@
         "edit.provinces.inspectCreateAtCell",
         "edit.provinces.inspectDelete",
         "edit.provinces.inspectEnsureAssignment",
+        "edit.provinces.inspectMerge",
+        "edit.provinces.inspectSplit",
         "edit.provinces.inspectTransfer",
+        "edit.provinces.merge",
         "edit.provinces.rename",
         "edit.provinces.setColor",
+        "edit.provinces.split",
         "edit.provinces.transfer",
         "generate.regenerate",
         "selection.clear",
@@ -29432,9 +29804,13 @@
         "edit.provinces.inspectCreateAtCell",
         "edit.provinces.inspectDelete",
         "edit.provinces.inspectEnsureAssignment",
+        "edit.provinces.inspectMerge",
+        "edit.provinces.inspectSplit",
         "edit.provinces.inspectTransfer",
+        "edit.provinces.merge",
         "edit.provinces.rename",
         "edit.provinces.setColor",
+        "edit.provinces.split",
         "edit.provinces.transfer",
         "generate.regenerate",
         "selection.clear",
@@ -29485,9 +29861,13 @@
         "edit.provinces.inspectCreateAtCell",
         "edit.provinces.inspectDelete",
         "edit.provinces.inspectEnsureAssignment",
+        "edit.provinces.inspectMerge",
+        "edit.provinces.inspectSplit",
         "edit.provinces.inspectTransfer",
+        "edit.provinces.merge",
         "edit.provinces.rename",
         "edit.provinces.setColor",
+        "edit.provinces.split",
         "edit.provinces.transfer",
         "generate.regenerate",
         "selection.clear",
@@ -31864,6 +32244,65 @@
       "exclusionReason": ""
     },
     {
+      "matrixId": "command:state-topology-commands.js:createMergeProvincesCommand",
+      "capabilityId": "state.createMergeProvincesCommand",
+      "title": "state-topology-commands.js / createMergeProvincesCommand",
+      "sourceKind": "command-or-inspector",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/state-topology-commands.js"
+      ],
+      "uiEntry": "",
+      "action": "",
+      "commandOrInspector": "createMergeProvincesCommand",
+      "apiMethods": [
+        "edit.states.add",
+        "edit.states.applyChanges",
+        "edit.states.createAtCell",
+        "edit.states.delete",
+        "edit.states.inspectCapitalChange",
+        "edit.states.inspectCreateAtCell",
+        "edit.states.inspectDelete",
+        "edit.states.inspectMerge",
+        "edit.states.inspectSplit",
+        "edit.states.inspectTerritoryTransfer",
+        "edit.states.merge",
+        "edit.states.rename",
+        "edit.states.setCapital",
+        "edit.states.setColor",
+        "edit.states.setGovernment",
+        "edit.states.setGovernmentBatch",
+        "edit.states.split",
+        "edit.states.transferTerritory",
+        "generate.regenerate",
+        "selection.clear",
+        "selection.clearHighlights",
+        "selection.flash",
+        "selection.get",
+        "selection.highlight",
+        "selection.locate",
+        "selection.pick",
+        "selection.resolve",
+        "selection.select",
+        "selection.startEditing",
+        "selection.stopEditing",
+        "selection.toggleEditing"
+      ],
+      "inputSpace": "domain-options / object-ref / cell-ids / changes",
+      "mutates": "domain-data-or-preview",
+      "preflight": "由领域 API 参数校验或 inspector 提供",
+      "businessCodes": [],
+      "confirm": "按领域 API 确认清单",
+      "undoOrRollback": "EditHistory / transaction",
+      "async": false,
+      "compatibility": "领域 API 复用该 command / inspector 或同一纯 helper",
+      "evidence": [
+        "app/webgl-generator/src/runtime/state-topology-commands.js"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
       "matrixId": "command:state-topology-commands.js:createMergeStatesCommand",
       "capabilityId": "state.createMergeStatesCommand",
       "title": "state-topology-commands.js / createMergeStatesCommand",
@@ -31933,6 +32372,65 @@
       "uiEntry": "",
       "action": "",
       "commandOrInspector": "createProvinceTransferCommand",
+      "apiMethods": [
+        "edit.states.add",
+        "edit.states.applyChanges",
+        "edit.states.createAtCell",
+        "edit.states.delete",
+        "edit.states.inspectCapitalChange",
+        "edit.states.inspectCreateAtCell",
+        "edit.states.inspectDelete",
+        "edit.states.inspectMerge",
+        "edit.states.inspectSplit",
+        "edit.states.inspectTerritoryTransfer",
+        "edit.states.merge",
+        "edit.states.rename",
+        "edit.states.setCapital",
+        "edit.states.setColor",
+        "edit.states.setGovernment",
+        "edit.states.setGovernmentBatch",
+        "edit.states.split",
+        "edit.states.transferTerritory",
+        "generate.regenerate",
+        "selection.clear",
+        "selection.clearHighlights",
+        "selection.flash",
+        "selection.get",
+        "selection.highlight",
+        "selection.locate",
+        "selection.pick",
+        "selection.resolve",
+        "selection.select",
+        "selection.startEditing",
+        "selection.stopEditing",
+        "selection.toggleEditing"
+      ],
+      "inputSpace": "domain-options / object-ref / cell-ids / changes",
+      "mutates": "domain-data-or-preview",
+      "preflight": "由领域 API 参数校验或 inspector 提供",
+      "businessCodes": [],
+      "confirm": "按领域 API 确认清单",
+      "undoOrRollback": "EditHistory / transaction",
+      "async": false,
+      "compatibility": "领域 API 复用该 command / inspector 或同一纯 helper",
+      "evidence": [
+        "app/webgl-generator/src/runtime/state-topology-commands.js"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "command:state-topology-commands.js:createSplitProvinceCommand",
+      "capabilityId": "state.createSplitProvinceCommand",
+      "title": "state-topology-commands.js / createSplitProvinceCommand",
+      "sourceKind": "command-or-inspector",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/state-topology-commands.js"
+      ],
+      "uiEntry": "",
+      "action": "",
+      "commandOrInspector": "createSplitProvinceCommand",
       "apiMethods": [
         "edit.states.add",
         "edit.states.applyChanges",
@@ -32205,6 +32703,183 @@
       "inputSpace": "domain-options / object-ref / cell-ids / changes",
       "mutates": "none",
       "preflight": "inspectPoliticalTransferTransaction",
+      "businessCodes": [],
+      "confirm": "按领域 API 确认清单",
+      "undoOrRollback": "not-applicable-or-domain-contract",
+      "async": false,
+      "compatibility": "领域 API 复用该 command / inspector 或同一纯 helper",
+      "evidence": [
+        "app/webgl-generator/src/runtime/state-topology-commands.js"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "command:state-topology-commands.js:inspectProvinceMerge",
+      "capabilityId": "state.inspectProvinceMerge",
+      "title": "state-topology-commands.js / inspectProvinceMerge",
+      "sourceKind": "command-or-inspector",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/state-topology-commands.js"
+      ],
+      "uiEntry": "",
+      "action": "",
+      "commandOrInspector": "inspectProvinceMerge",
+      "apiMethods": [
+        "edit.states.add",
+        "edit.states.applyChanges",
+        "edit.states.createAtCell",
+        "edit.states.delete",
+        "edit.states.inspectCapitalChange",
+        "edit.states.inspectCreateAtCell",
+        "edit.states.inspectDelete",
+        "edit.states.inspectMerge",
+        "edit.states.inspectSplit",
+        "edit.states.inspectTerritoryTransfer",
+        "edit.states.merge",
+        "edit.states.rename",
+        "edit.states.setCapital",
+        "edit.states.setColor",
+        "edit.states.setGovernment",
+        "edit.states.setGovernmentBatch",
+        "edit.states.split",
+        "edit.states.transferTerritory",
+        "generate.regenerate",
+        "selection.clear",
+        "selection.clearHighlights",
+        "selection.flash",
+        "selection.get",
+        "selection.highlight",
+        "selection.locate",
+        "selection.pick",
+        "selection.resolve",
+        "selection.select",
+        "selection.startEditing",
+        "selection.stopEditing",
+        "selection.toggleEditing"
+      ],
+      "inputSpace": "domain-options / object-ref / cell-ids / changes",
+      "mutates": "none",
+      "preflight": "inspectProvinceMerge",
+      "businessCodes": [],
+      "confirm": "按领域 API 确认清单",
+      "undoOrRollback": "not-applicable-or-domain-contract",
+      "async": false,
+      "compatibility": "领域 API 复用该 command / inspector 或同一纯 helper",
+      "evidence": [
+        "app/webgl-generator/src/runtime/state-topology-commands.js"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "command:state-topology-commands.js:inspectProvinceSplit",
+      "capabilityId": "state.inspectProvinceSplit",
+      "title": "state-topology-commands.js / inspectProvinceSplit",
+      "sourceKind": "command-or-inspector",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/state-topology-commands.js"
+      ],
+      "uiEntry": "",
+      "action": "",
+      "commandOrInspector": "inspectProvinceSplit",
+      "apiMethods": [
+        "edit.states.add",
+        "edit.states.applyChanges",
+        "edit.states.createAtCell",
+        "edit.states.delete",
+        "edit.states.inspectCapitalChange",
+        "edit.states.inspectCreateAtCell",
+        "edit.states.inspectDelete",
+        "edit.states.inspectMerge",
+        "edit.states.inspectSplit",
+        "edit.states.inspectTerritoryTransfer",
+        "edit.states.merge",
+        "edit.states.rename",
+        "edit.states.setCapital",
+        "edit.states.setColor",
+        "edit.states.setGovernment",
+        "edit.states.setGovernmentBatch",
+        "edit.states.split",
+        "edit.states.transferTerritory",
+        "generate.regenerate",
+        "selection.clear",
+        "selection.clearHighlights",
+        "selection.flash",
+        "selection.get",
+        "selection.highlight",
+        "selection.locate",
+        "selection.pick",
+        "selection.resolve",
+        "selection.select",
+        "selection.startEditing",
+        "selection.stopEditing",
+        "selection.toggleEditing"
+      ],
+      "inputSpace": "domain-options / object-ref / cell-ids / changes",
+      "mutates": "none",
+      "preflight": "inspectProvinceSplit",
+      "businessCodes": [],
+      "confirm": "按领域 API 确认清单",
+      "undoOrRollback": "not-applicable-or-domain-contract",
+      "async": false,
+      "compatibility": "领域 API 复用该 command / inspector 或同一纯 helper",
+      "evidence": [
+        "app/webgl-generator/src/runtime/state-topology-commands.js"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "command:state-topology-commands.js:inspectProvinceTopologyTransaction",
+      "capabilityId": "state.inspectProvinceTopologyTransaction",
+      "title": "state-topology-commands.js / inspectProvinceTopologyTransaction",
+      "sourceKind": "command-or-inspector",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/state-topology-commands.js"
+      ],
+      "uiEntry": "",
+      "action": "",
+      "commandOrInspector": "inspectProvinceTopologyTransaction",
+      "apiMethods": [
+        "edit.states.add",
+        "edit.states.applyChanges",
+        "edit.states.createAtCell",
+        "edit.states.delete",
+        "edit.states.inspectCapitalChange",
+        "edit.states.inspectCreateAtCell",
+        "edit.states.inspectDelete",
+        "edit.states.inspectMerge",
+        "edit.states.inspectSplit",
+        "edit.states.inspectTerritoryTransfer",
+        "edit.states.merge",
+        "edit.states.rename",
+        "edit.states.setCapital",
+        "edit.states.setColor",
+        "edit.states.setGovernment",
+        "edit.states.setGovernmentBatch",
+        "edit.states.split",
+        "edit.states.transferTerritory",
+        "generate.regenerate",
+        "selection.clear",
+        "selection.clearHighlights",
+        "selection.flash",
+        "selection.get",
+        "selection.highlight",
+        "selection.locate",
+        "selection.pick",
+        "selection.resolve",
+        "selection.select",
+        "selection.startEditing",
+        "selection.stopEditing",
+        "selection.toggleEditing"
+      ],
+      "inputSpace": "domain-options / object-ref / cell-ids / changes",
+      "mutates": "none",
+      "preflight": "inspectProvinceTopologyTransaction",
       "businessCodes": [],
       "confirm": "按领域 API 确认清单",
       "undoOrRollback": "not-applicable-or-domain-contract",
@@ -33909,9 +34584,13 @@
         "edit.provinces.inspectCreateAtCell",
         "edit.provinces.inspectDelete",
         "edit.provinces.inspectEnsureAssignment",
+        "edit.provinces.inspectMerge",
+        "edit.provinces.inspectSplit",
         "edit.provinces.inspectTransfer",
+        "edit.provinces.merge",
         "edit.provinces.rename",
         "edit.provinces.setColor",
+        "edit.provinces.split",
         "edit.provinces.transfer",
         "generate.regenerate",
         "selection.clear",
@@ -33962,9 +34641,13 @@
         "edit.provinces.inspectCreateAtCell",
         "edit.provinces.inspectDelete",
         "edit.provinces.inspectEnsureAssignment",
+        "edit.provinces.inspectMerge",
+        "edit.provinces.inspectSplit",
         "edit.provinces.inspectTransfer",
+        "edit.provinces.merge",
         "edit.provinces.rename",
         "edit.provinces.setColor",
+        "edit.provinces.split",
         "edit.provinces.transfer",
         "generate.regenerate",
         "selection.clear",
@@ -34015,9 +34698,13 @@
         "edit.provinces.inspectCreateAtCell",
         "edit.provinces.inspectDelete",
         "edit.provinces.inspectEnsureAssignment",
+        "edit.provinces.inspectMerge",
+        "edit.provinces.inspectSplit",
         "edit.provinces.inspectTransfer",
+        "edit.provinces.merge",
         "edit.provinces.rename",
         "edit.provinces.setColor",
+        "edit.provinces.split",
         "edit.provinces.transfer",
         "generate.regenerate",
         "selection.clear",
@@ -36983,9 +37670,13 @@
         "edit.provinces.inspectCreateAtCell",
         "edit.provinces.inspectDelete",
         "edit.provinces.inspectEnsureAssignment",
+        "edit.provinces.inspectMerge",
+        "edit.provinces.inspectSplit",
         "edit.provinces.inspectTransfer",
+        "edit.provinces.merge",
         "edit.provinces.rename",
         "edit.provinces.setColor",
+        "edit.provinces.split",
         "edit.provinces.transfer",
         "generate.regenerate",
         "selection.clear",

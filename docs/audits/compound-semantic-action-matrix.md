@@ -4,11 +4,11 @@
 
 ## 审计结论
 
-- 上游能力矩阵：1115 行，unknown / unclassified / gap = 0 / 0 / 0。
-- 公开 API：289 / 289 已归类。
+- 上游能力矩阵：1132 行，unknown / unclassified / gap = 0 / 0 / 0。
+- 公开 API：293 / 293 已归类。
 - Cell / 画布动作：48 / 48 已归类；画布模式 29，直接操控 19 类 / 89 个宿主。
 - 规则事务与玩法配方：68 + 10 = 78。
-- 已有完整事务 62，已有写命令但缺 AI inspector 0，多 API 碎片待收敛 0，缺失游戏规则 6，规划器配方 10。
+- 已有完整事务 64，已有写命令但缺 AI inspector 0，多 API 碎片待收敛 0，缺失游戏规则 4，规划器配方 10。
 - 结构缺口：0。
 
 ## 边界定义
@@ -56,8 +56,8 @@
 | `politics.reorganize-provinces` | 国家、省份与政治拓扑 | 保留国家与范围外对象，墓碑化目标旧省并生成新的连通省份。 | `existing-transaction` | `generate.regenerate` | `planned:edit.provinces.inspectRegeneration`<br>`generate.regenerate(provinces)` |
 | `politics.create-province` | 国家、省份与政治拓扑 | 在已有国家的合法 Cell 创建省份，确定省会并同步国家省份列表。 | `existing-transaction` | `edit.provinces.add`<br>`edit.provinces.createAtCell`<br>`edit.provinces.inspectCreateAtCell` | `edit.provinces.inspectCreateAtCell`<br>`edit.provinces.createAtCell` |
 | `politics.delete-province` | 国家、省份与政治拓扑 | 删除省份，清除或重新分配领土与城镇，维护国家省份列表。 | `existing-transaction` | `edit.provinces.delete`<br>`edit.provinces.inspectDelete` | `edit.provinces.inspectDelete`<br>`edit.provinces.delete` |
-| `politics.merge-provinces` | 国家、省份与政治拓扑 | 把多个同国相邻省份合并，保留一个身份或创建新身份，并确定省会。 | `missing-game-rule` | `cells.query`<br>`objects.get` | `planned:edit.provinces.inspectMerge`<br>`planned:edit.provinces.merge` |
-| `politics.split-province` | 国家、省份与政治拓扑 | 按连通 Cell 集或城镇锚点拆分省份，并为两侧确定省会。 | `missing-game-rule` | `cells.query`<br>`objects.get` | `planned:edit.provinces.inspectSplit`<br>`planned:edit.provinces.split` |
+| `politics.merge-provinces` | 国家、省份与政治拓扑 | 把多个同国相邻省份合并，保留一个身份或创建新身份，并确定省会。 | `existing-transaction` | `edit.provinces.inspectMerge`<br>`edit.provinces.merge` | `edit.provinces.inspectMerge`<br>`edit.provinces.merge` |
+| `politics.split-province` | 国家、省份与政治拓扑 | 按连通 Cell 集或城镇锚点拆分省份，并为两侧确定省会。 | `existing-transaction` | `edit.provinces.inspectSplit`<br>`edit.provinces.split` | `edit.provinces.inspectSplit`<br>`edit.provinces.split` |
 | `politics.change-government` | 国家、省份与政治拓扑 | 调整国家政体和允许的国号后缀，并同步完整国名和政治镜像。 | `existing-transaction` | `edit.states.setGovernment`<br>`edit.states.setGovernmentBatch` | `info.describe(edit.states.setGovernment)`<br>`edit.states.setGovernment / setGovernmentBatch` |
 | `politics.relocate-capital` | 国家、省份与政治拓扑 | 把本国城市设为首都，取消旧首都并同步国家中心、标签和城镇层级。 | `existing-transaction` | `edit.states.inspectCapitalChange`<br>`edit.states.setCapital` | `edit.states.inspectCapitalChange`<br>`edit.states.setCapital` |
 | `settlement.found-city` | 城镇、人口与定居点 | 在合法 Cell 建立城镇，继承国家、省份、文化、宗教和港口条件。 | `existing-transaction` | `edit.cities.add`<br>`edit.cities.createAtCell`<br>`edit.cities.inspectCreateAtCell` | `edit.cities.inspectCreateAtCell`<br>`edit.cities.createAtCell` |
@@ -94,26 +94,6 @@
 | `editor.import-collection` | 编辑器事务、批量操作与发布 | 校验外部集合、处理 ID 冲突与覆盖策略，并作为单条历史导入。 | `existing-transaction` | `data.inspectCollectionImport`<br>`edit.measurements.import`<br>`edit.military.importBattleEvents`<br>`edit.notes.import`<br>`namebases.import` | `data.inspectCollectionImport`<br>`现有 import 方法` |
 
 ## 需要优先补齐的复合事务
-
-### 合并同一国家内的省份（`politics.merge-provinces`）
-
-把多个同国相邻省份合并，保留一个身份或创建新身份，并确定省会。
-
-- 当前状态：`missing-game-rule`。
-- 关键分支：必须同国相邻；省会选择；旧省墓碑化；城镇归属同步。
-- 规范入口：`planned:edit.provinces.inspectMerge` → `planned:edit.provinces.merge`。
-- 共同不变量：国家、省份、Grid/Pack 归属、首都、省会、外交、军事、市场和路线引用不得悬空。
-- 证据：`app/webgl-generator/src/runtime/province-edit-commands.js`、`app/webgl-generator/src/runtime/state-topology-commands.js`。
-
-### 拆分省份（`politics.split-province`）
-
-按连通 Cell 集或城镇锚点拆分省份，并为两侧确定省会。
-
-- 当前状态：`missing-game-rule`。
-- 关键分支：两侧必须连通；两侧需要合法中心；新 ID 分配；城镇同步。
-- 规范入口：`planned:edit.provinces.inspectSplit` → `planned:edit.provinces.split`。
-- 共同不变量：国家、省份、Grid/Pack 归属、首都、省会、外交、军事、市场和路线引用不得悬空。
-- 证据：`app/webgl-generator/src/runtime/province-edit-commands.js`。
 
 ### 宣战并建立战争与军事上下文（`diplomacy.declare-war`）
 
@@ -190,6 +170,6 @@
 
 ## 机器覆盖
 
-- API 分类：`atomic-editor-primitive=54`，`editor-runtime-service=49`，`read-export-service=10`，`read-primitive=27`，`semantic-action=149`。
+- API 分类：`atomic-editor-primitive=54`，`editor-runtime-service=49`，`read-export-service=10`，`read-primitive=28`，`semantic-action=152`。
 - 交互分类：`semantic-input-or-primitive=36`，`ui-boundary=12`。
-- Source digest：`1f47828b9e49ebcb1991db42c7e88033383d58163aee3661f8a9516f3ac7ec5c`。
+- Source digest：`94e1d22aa9f9a73e3485b2d7ad6e655149dd1f16942975e7df1d854f51f7325b`。
