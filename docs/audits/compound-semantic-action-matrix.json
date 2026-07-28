@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "scope": "权威任务第 204 项：全游戏复合语义接口、规则动作与玩法配方审计",
   "generatedAtPolicy": "报告不写入动态时间，sourceDigest 变化即要求重新生成",
-  "sourceDigest": "74bc0b1ab0a60cac37e260f634dbca878ecee7e1401b88d70fb9e33e23511436",
+  "sourceDigest": "1f47828b9e49ebcb1991db42c7e88033383d58163aee3661f8a9516f3ac7ec5c",
   "definition": {
     "compoundSemanticAction": "一个玩家意图，但执行时需要跨对象/系统、条件分支、业务预检或原子回滚；应由单一规则事务表达。",
     "primitive": "只修改一个稳定字段或纯编辑器显示偏好，可保留为原子 API，不强行包装成复合动作。",
@@ -21,12 +21,12 @@
     "recipe-only": "战略/玩法流程，不应实现为一条超大写接口。"
   },
   "denominator": {
-    "fullCapabilityRows": 1090,
+    "fullCapabilityRows": 1115,
     "fullCapabilityUnknown": 0,
     "fullCapabilityUnclassified": 0,
     "fullCapabilityGaps": 0,
-    "publicApiMethods": 283,
-    "classifiedApiMethods": 283,
+    "publicApiMethods": 289,
+    "classifiedApiMethods": 289,
     "cellActionRows": 48,
     "classifiedCellActionRows": 48,
     "canvasModes": 29,
@@ -38,8 +38,7 @@
     "ruleTransactions": 68,
     "plannerRecipes": 10,
     "statuses": {
-      "existing-transaction": 59,
-      "fragmented-needs-transaction": 3,
+      "existing-transaction": 62,
       "missing-game-rule": 6,
       "recipe-only": 10
     },
@@ -57,11 +56,11 @@
       "world": 6
     },
     "apiClassifications": {
-      "atomic-editor-primitive": 52,
+      "atomic-editor-primitive": 54,
       "editor-runtime-service": 49,
       "read-export-service": 10,
-      "read-primitive": 26,
-      "semantic-action": 146
+      "read-primitive": 27,
+      "semantic-action": 149
     },
     "interactionClassifications": {
       "semantic-input-or-primitive": 36,
@@ -963,15 +962,11 @@
         "annex-last-cell"
       ],
       "api": [
-        "cells.get",
-        "cells.query",
-        "edit.provinces.applyChanges",
-        "edit.states.applyChanges",
-        "edit.states.delete",
-        "edit.states.merge"
+        "edit.states.inspectTerritoryTransfer",
+        "edit.states.transferTerritory"
       ],
-      "inspect": "planned:edit.states.inspectTerritoryTransfer",
-      "execute": "planned:edit.states.transferTerritory",
+      "inspect": "edit.states.inspectTerritoryTransfer",
+      "execute": "edit.states.transferTerritory",
       "branches": [
         "攻击国/来源国/Cell 非法",
         "指定省份存在且属于目标国",
@@ -987,7 +982,7 @@
       "id": "politics.transfer-territory",
       "title": "征服、割让或中立化 Cell/区域",
       "domain": "politics",
-      "status": "fragmented-needs-transaction",
+      "status": "existing-transaction",
       "intent": "把一个或多个 Cell 从原国家转给目标国家，并按省份策略处理；若原国家失去最后领土则触发完整灭国。",
       "gameplayChapter": "国家、省份与政治拓扑",
       "invariant": "国家、省份、Grid/Pack 归属、首都、省会、外交、军事、市场和路线引用不得悬空。",
@@ -1002,12 +997,11 @@
         "ensure"
       ],
       "api": [
-        "cells.get",
-        "edit.provinces.add",
-        "edit.provinces.applyChanges"
+        "edit.provinces.ensureAssignment",
+        "edit.provinces.inspectEnsureAssignment"
       ],
-      "inspect": "planned:edit.provinces.inspectEnsureAssignment",
-      "execute": "planned:edit.provinces.ensureAssignment",
+      "inspect": "edit.provinces.inspectEnsureAssignment",
+      "execute": "edit.provinces.ensureAssignment",
       "branches": [
         "自动选择相邻/最大省份",
         "已有省份归属校验",
@@ -1022,7 +1016,7 @@
       "id": "politics.ensure-province-assignment",
       "title": "确保省份存在并分配 Cell",
       "domain": "politics",
-      "status": "fragmented-needs-transaction",
+      "status": "existing-transaction",
       "intent": "把 Cell 分给已有省份；若明确要求的省份不存在，则在合法 ID/命名策略下创建后分配。",
       "gameplayChapter": "国家、省份与政治拓扑",
       "invariant": "国家、省份、Grid/Pack 归属、首都、省会、外交、军事、市场和路线引用不得悬空。",
@@ -1033,13 +1027,11 @@
       "tier": "rule-transaction",
       "variants": [],
       "api": [
-        "cells.query",
-        "edit.provinces.applyChanges",
-        "edit.states.applyChanges",
-        "objects.get"
+        "edit.provinces.inspectTransfer",
+        "edit.provinces.transfer"
       ],
-      "inspect": "planned:edit.provinces.inspectTransfer",
-      "execute": "planned:edit.provinces.transfer",
+      "inspect": "edit.provinces.inspectTransfer",
+      "execute": "edit.provinces.transfer",
       "branches": [
         "省份/国家非法",
         "首都省保护",
@@ -1054,7 +1046,7 @@
       "id": "politics.transfer-province",
       "title": "整省转移给另一国家",
       "domain": "politics",
-      "status": "fragmented-needs-transaction",
+      "status": "existing-transaction",
       "intent": "把完整省份及其 Cell、城镇和省会转给目标国家，并修复双方统计、首都和引用。",
       "gameplayChapter": "国家、省份与政治拓扑",
       "invariant": "国家、省份、Grid/Pack 归属、首都、省会、外交、军事、市场和路线引用不得悬空。",
@@ -2595,11 +2587,8 @@
     },
     {
       "method": "cells.get",
-      "classification": "semantic-action",
-      "actionIds": [
-        "politics.ensure-province-assignment",
-        "politics.transfer-territory"
-      ]
+      "classification": "read-primitive",
+      "actionIds": []
     },
     {
       "method": "cells.getAtPoint",
@@ -2626,9 +2615,7 @@
       "classification": "semantic-action",
       "actionIds": [
         "politics.merge-provinces",
-        "politics.split-province",
-        "politics.transfer-province",
-        "politics.transfer-territory"
+        "politics.split-province"
       ]
     },
     {
@@ -3534,18 +3521,13 @@
       "method": "edit.provinces.add",
       "classification": "semantic-action",
       "actionIds": [
-        "politics.create-province",
-        "politics.ensure-province-assignment"
+        "politics.create-province"
       ]
     },
     {
       "method": "edit.provinces.applyChanges",
-      "classification": "semantic-action",
-      "actionIds": [
-        "politics.ensure-province-assignment",
-        "politics.transfer-province",
-        "politics.transfer-territory"
-      ]
+      "classification": "atomic-editor-primitive",
+      "actionIds": []
     },
     {
       "method": "edit.provinces.createAtCell",
@@ -3563,6 +3545,13 @@
       ]
     },
     {
+      "method": "edit.provinces.ensureAssignment",
+      "classification": "semantic-action",
+      "actionIds": [
+        "politics.ensure-province-assignment"
+      ]
+    },
+    {
       "method": "edit.provinces.inspectCreateAtCell",
       "classification": "semantic-action",
       "actionIds": [
@@ -3577,6 +3566,20 @@
       ]
     },
     {
+      "method": "edit.provinces.inspectEnsureAssignment",
+      "classification": "semantic-action",
+      "actionIds": [
+        "politics.ensure-province-assignment"
+      ]
+    },
+    {
+      "method": "edit.provinces.inspectTransfer",
+      "classification": "semantic-action",
+      "actionIds": [
+        "politics.transfer-province"
+      ]
+    },
+    {
       "method": "edit.provinces.rename",
       "classification": "atomic-editor-primitive",
       "actionIds": []
@@ -3585,6 +3588,13 @@
       "method": "edit.provinces.setColor",
       "classification": "atomic-editor-primitive",
       "actionIds": []
+    },
+    {
+      "method": "edit.provinces.transfer",
+      "classification": "semantic-action",
+      "actionIds": [
+        "politics.transfer-province"
+      ]
     },
     {
       "method": "edit.religions.add",
@@ -3740,11 +3750,8 @@
     },
     {
       "method": "edit.states.applyChanges",
-      "classification": "semantic-action",
-      "actionIds": [
-        "politics.transfer-province",
-        "politics.transfer-territory"
-      ]
+      "classification": "atomic-editor-primitive",
+      "actionIds": []
     },
     {
       "method": "edit.states.createAtCell",
@@ -3758,8 +3765,7 @@
       "classification": "semantic-action",
       "actionIds": [
         "editor.delete-with-impact",
-        "politics.delete-state",
-        "politics.transfer-territory"
+        "politics.delete-state"
       ]
     },
     {
@@ -3798,11 +3804,17 @@
       ]
     },
     {
+      "method": "edit.states.inspectTerritoryTransfer",
+      "classification": "semantic-action",
+      "actionIds": [
+        "politics.transfer-territory"
+      ]
+    },
+    {
       "method": "edit.states.merge",
       "classification": "semantic-action",
       "actionIds": [
-        "politics.merge-states",
-        "politics.transfer-territory"
+        "politics.merge-states"
       ]
     },
     {
@@ -3841,6 +3853,13 @@
       "classification": "semantic-action",
       "actionIds": [
         "politics.split-state"
+      ]
+    },
+    {
+      "method": "edit.states.transferTerritory",
+      "classification": "semantic-action",
+      "actionIds": [
+        "politics.transfer-territory"
       ]
     },
     {
@@ -4140,8 +4159,7 @@
         "diplomacy.declare-war",
         "diplomacy.make-peace",
         "politics.merge-provinces",
-        "politics.split-province",
-        "politics.transfer-province"
+        "politics.split-province"
       ]
     },
     {

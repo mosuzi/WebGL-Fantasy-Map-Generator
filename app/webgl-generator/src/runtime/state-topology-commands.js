@@ -186,6 +186,768 @@ export function createSplitStateCommand(options = {}) {
   return createTopologyCommand("split", options);
 }
 
+export const POLITICAL_TRANSFER_ACTION = Object.freeze({
+  TERRITORY_TRANSFER: "politics.transfer-territory",
+  ENSURE_PROVINCE_ASSIGNMENT: "politics.ensure-province-assignment",
+  PROVINCE_TRANSFER: "politics.transfer-province"
+});
+
+export function inspectPoliticalTransferTransaction(map, actionId, input = {}) {
+  if (actionId === POLITICAL_TRANSFER_ACTION.TERRITORY_TRANSFER) return inspectTerritoryTransfer(map, input);
+  if (actionId === POLITICAL_TRANSFER_ACTION.ENSURE_PROVINCE_ASSIGNMENT) return inspectEnsureProvinceAssignment(map, input);
+  if (actionId === POLITICAL_TRANSFER_ACTION.PROVINCE_TRANSFER) return inspectProvinceTransfer(map, input);
+  return normalizePoliticalInspection(invalidInspection("unknown-action", "未知的政治领土事务"));
+}
+
+export function inspectTerritoryTransfer(map, input = {}) {
+  return normalizePoliticalInspection(inspectTerritoryTransferPlan(map, input));
+}
+
+function inspectTerritoryTransferPlan(map, input = {}) {
+  const mode = String(input.mode || "").trim().toLowerCase();
+  if (!["conquer", "cede", "neutralize"].includes(mode)) {
+    return invalidInspection("invalid-transfer-mode", "领土转移 mode 必须是 conquer、cede 或 neutralize");
+  }
+  const sourceStateId = positiveInteger(input.sourceStateId);
+  const source = readState(map, sourceStateId);
+  if (!sourceStateId || !isActiveState(source)) return invalidInspection("source-state-not-found", "来源国家必须是未移除的有效国家");
+  const targetStateId = mode === "neutralize" ? 0 : positiveInteger(input.targetStateId);
+  if (mode !== "neutralize" && targetStateId === sourceStateId) {
+    return invalidInspection("same-state", "来源国家与目标国家不能相同");
+  }
+  if (mode !== "neutralize" && (!targetStateId || !isActiveState(readState(map, targetStateId)))) {
+    return invalidInspection("target-state-not-found", "目标国家必须是有效国家");
+  }
+  if (mode === "neutralize" && positiveInteger(input.targetStateId)) {
+    return invalidInspection("invalid-transfer-mode", "中立化领土不能指定目标国家");
+  }
+
+  const selection = inspectExactTerritorySelection(map, sourceStateId, input.gridCellIds, {
+    emptyCode: "territory-empty",
+    mismatchCode: "cell-owner-mismatch"
+  });
+  if (!selection.valid) return selection;
+  if (targetStateId && !selectionTouchesState(map, selection.packCells, targetStateId)) {
+    return invalidInspection("target-not-adjacent", "冻结选区必须与目标国家共享至少一条陆地边");
+  }
+  if (mode === "conquer" && !statesAreMutualEnemies(map, sourceStateId, targetStateId)) {
+    return invalidInspection("war-required", "征服要求来源与目标双边关系均为 Enemy");
+  }
+
+  const sourcePackCells = landPackCells(map).filter(cell => numberId(map.pack.cells.state[cell]) === sourceStateId);
+  const selectedSet = new Set(selection.packCells);
+  const remainderPackCells = sourcePackCells.filter(cell => !selectedSet.has(cell));
+  const sourceExtinguished = remainderPackCells.length === 0;
+  const sourceCapitalCityId = validStateCapitalCityId(map, sourceStateId);
+  const transferredCityIds = activeCities(map).filter(city => selectedSet.has(cityPackCell(city))).map(city => numberId(city.id));
+  const sourceCapitalTransferred = transferredCityIds.includes(sourceCapitalCityId);
+  const sourceCapitalPlan = sourceExtinguished
+    ? null
+    : sourceCapitalTransferred || sourceCapitalCityId === null
+      ? rankCapitalCandidates(map, activeCities(map).filter(city => numberId(city.state) === sourceStateId && !selectedSet.has(cityPackCell(city))))[0] || null
+      : {cityId: sourceCapitalCityId, reason: "retained"};
+  if (!sourceExtinguished && !sourceCapitalPlan) {
+    return invalidInspection("source-capital-candidate-missing", "部分划走后来源国家没有可用首都");
+  }
+
+  const retreat = inspectTransferMilitaryRetreat(map, sourceStateId, selectedSet, remainderPackCells, sourceCapitalPlan?.cityId);
+  if (!sourceExtinguished && !retreat.valid) {
+    return invalidInspection("military-relocation-unresolved", `军团 ${retreat.unresolved.join("、")} 无法撤离冻结选区`, {unresolvedMilitary: retreat.unresolved});
+  }
+
+  let provincePlan = null;
+  if (mode !== "neutralize") {
+    provincePlan = inspectProvinceAssignmentStrategy(map, {
+      stateId: targetStateId,
+      packCells: selection.packCells,
+      gridCells: selection.gridCells,
+      province: input.province || {},
+      forceEnsure: false
+    });
+    if (!provincePlan.valid) return provincePlan;
+  }
+  const normalizedInput = {
+    mode,
+    sourceStateId,
+    ...(targetStateId ? {targetStateId} : {}),
+    gridCellIds: [...selection.gridCells],
+    ...(provincePlan ? {province: normalizeProvinceInput(input.province, provincePlan)} : {})
+  };
+  return politicalValidInspection({
+    operation: "territory-transfer",
+    mode,
+    sourceStateId,
+    targetStateId,
+    gridCells: selection.gridCells,
+    packCells: selection.packCells,
+    sourceExtinguished,
+    sourceCapitalCityId,
+    sourceCapitalCityIdAfter: sourceCapitalPlan?.cityId ?? null,
+    transferredCityIds,
+    militaryRetreats: retreat.assignments,
+    provincePlan,
+    affectedStateIds: targetStateId ? [sourceStateId, targetStateId] : [sourceStateId],
+    summary: `${mode === "conquer" ? "征服" : mode === "cede" ? "割让" : "中立化"}国家 #${sourceStateId} 的 ${selection.gridCells.length} 个 grid cells`
+  }, normalizedInput, [
+    {kind: "state", id: sourceStateId},
+    ...(targetStateId ? [{kind: "state", id: targetStateId}] : []),
+    ...selection.gridCells.map(id => ({kind: "grid-cell", id}))
+  ], true);
+}
+
+export function inspectEnsureProvinceAssignment(map, input = {}) {
+  return normalizePoliticalInspection(inspectEnsureProvinceAssignmentPlan(map, input));
+}
+
+function inspectEnsureProvinceAssignmentPlan(map, input = {}) {
+  const stateIdValue = positiveInteger(input.stateId);
+  if (!stateIdValue || !isActiveState(readState(map, stateIdValue))) {
+    return invalidInspection("state-not-found", "分省目标必须是未移除的有效国家");
+  }
+  const selection = inspectExactTerritorySelection(map, stateIdValue, input.gridCellIds, {
+    emptyCode: "assignment-empty",
+    mismatchCode: "cell-state-mismatch"
+  });
+  if (!selection.valid) return selection;
+  const province = {
+    mode: input.mode,
+    provinceId: input.provinceId,
+    anchorGridCell: input.anchorGridCell
+  };
+  const provincePlan = inspectProvinceAssignmentStrategy(map, {
+    stateId: stateIdValue,
+    packCells: selection.packCells,
+    gridCells: selection.gridCells,
+    province,
+    forceEnsure: String(input.mode || "").trim().toLowerCase() === "ensure"
+  });
+  if (!provincePlan.valid) return provincePlan;
+  const unchanged = selection.packCells.every(cell => numberId(map.pack.cells.province?.[cell]) === provincePlan.provinceId)
+    && selection.gridCells.every(cell => numberId(map.grid.cells.province?.[cell]) === provincePlan.provinceId);
+  if (unchanged) return invalidInspection("province-assignment-unchanged", "冻结选区已经属于目标省份");
+  const oldProvinceIds = [...new Set(selection.packCells.map(cell => numberId(map.pack.cells.province?.[cell])).filter(Boolean))];
+  const willTombstoneProvince = oldProvinceIds.some(id => landPackCells(map)
+    .filter(cell => numberId(map.pack.cells.province?.[cell]) === id)
+    .every(cell => selection.packCells.includes(cell)));
+  const normalizedInput = {
+    stateId: stateIdValue,
+    gridCellIds: [...selection.gridCells],
+    ...normalizeEnsureProvinceInput(input, provincePlan)
+  };
+  return politicalValidInspection({
+    operation: "ensure-province-assignment",
+    stateId: stateIdValue,
+    gridCells: selection.gridCells,
+    packCells: selection.packCells,
+    provincePlan,
+    affectedStateIds: [stateIdValue],
+    summary: `将国家 #${stateIdValue} 的 ${selection.gridCells.length} 个 grid cells 精确分配到省份 #${provincePlan.provinceId}`
+  }, normalizedInput, [
+    {kind: "state", id: stateIdValue},
+    {kind: "province", id: provincePlan.provinceId},
+    ...selection.gridCells.map(id => ({kind: "grid-cell", id}))
+  ], provincePlan.created || willTombstoneProvince);
+}
+
+export function inspectProvinceTransfer(map, input = {}) {
+  return normalizePoliticalInspection(inspectProvinceTransferPlan(map, input));
+}
+
+function inspectProvinceTransferPlan(map, input = {}) {
+  const provinceIdValue = positiveInteger(input.provinceId);
+  const province = readProvince(map, provinceIdValue);
+  if (!provinceIdValue || !province || province.removed) return invalidInspection("province-not-found", "待转移省份必须是未移除的有效省份");
+  const sourceStateId = positiveInteger(province.state);
+  const targetStateId = positiveInteger(input.targetStateId);
+  if (!sourceStateId || !isActiveState(readState(map, sourceStateId))) return invalidInspection("source-state-not-found", "省份来源国家无效");
+  if (!targetStateId || targetStateId === sourceStateId || !isActiveState(readState(map, targetStateId))) {
+    return invalidInspection(targetStateId === sourceStateId ? "same-state" : "target-state-not-found", targetStateId === sourceStateId ? "省份已经属于目标国家" : "省份目标国家无效");
+  }
+  const packCells = landPackCells(map).filter(cell => numberId(map.pack.cells.province?.[cell]) === provinceIdValue && numberId(map.pack.cells.state?.[cell]) === sourceStateId);
+  const allProvinceCells = landPackCells(map).filter(cell => numberId(map.pack.cells.province?.[cell]) === provinceIdValue);
+  if (!allProvinceCells.length) return invalidInspection("province-territory-empty", "待转移省份没有有效领土");
+  if (packCells.length !== allProvinceCells.length) return invalidInspection("province-owner-mismatch", "省份领土与省档案的来源国家不一致");
+  if (!selectionTouchesState(map, packCells, targetStateId)) return invalidInspection("target-not-adjacent", "待转移省份必须与目标国家共享陆地边");
+  const gridCells = landGridCells(map).filter(cell => numberId(map.grid.cells.province?.[cell]) === provinceIdValue && numberId(map.grid.cells.state?.[cell]) === sourceStateId);
+  const selectedSet = new Set(packCells);
+  const remainderPackCells = landPackCells(map).filter(cell => numberId(map.pack.cells.state?.[cell]) === sourceStateId && !selectedSet.has(cell));
+  const sourceExtinguished = remainderPackCells.length === 0;
+  const sourceCapitalCityId = validStateCapitalCityId(map, sourceStateId);
+  const sourceCapitalTransferred = activeCities(map).some(city => numberId(city.id) === sourceCapitalCityId && selectedSet.has(cityPackCell(city)));
+  const sourceCapitalPlan = sourceExtinguished
+    ? null
+    : sourceCapitalTransferred || sourceCapitalCityId === null
+      ? rankCapitalCandidates(map, activeCities(map).filter(city => numberId(city.state) === sourceStateId && !selectedSet.has(cityPackCell(city))))[0] || null
+      : {cityId: sourceCapitalCityId, reason: "retained"};
+  if (!sourceExtinguished && !sourceCapitalPlan) return invalidInspection("source-capital-candidate-missing", "整省转移后来源国家没有可用首都");
+  const retreat = inspectTransferMilitaryRetreat(map, sourceStateId, selectedSet, remainderPackCells, sourceCapitalPlan?.cityId);
+  if (!sourceExtinguished && !retreat.valid) {
+    return invalidInspection("military-relocation-unresolved", `军团 ${retreat.unresolved.join("、")} 无法撤离待转移省份`, {unresolvedMilitary: retreat.unresolved});
+  }
+  const normalizedInput = {provinceId: provinceIdValue, targetStateId};
+  return politicalValidInspection({
+    operation: "province-transfer",
+    provinceId: provinceIdValue,
+    sourceStateId,
+    targetStateId,
+    gridCells,
+    packCells,
+    sourceExtinguished,
+    sourceCapitalCityId,
+    sourceCapitalCityIdAfter: sourceCapitalPlan?.cityId ?? null,
+    militaryRetreats: retreat.assignments,
+    affectedStateIds: [sourceStateId, targetStateId],
+    summary: `将省份 #${provinceIdValue} 从国家 #${sourceStateId} 转移到国家 #${targetStateId}`
+  }, normalizedInput, [
+    {kind: "province", id: provinceIdValue},
+    {kind: "state", id: sourceStateId},
+    {kind: "state", id: targetStateId}
+  ], true);
+}
+
+export function createTerritoryTransferCommand(input = {}, options = {}) {
+  return createPoliticalTransferCommand(POLITICAL_TRANSFER_ACTION.TERRITORY_TRANSFER, input, options);
+}
+
+export function createEnsureProvinceAssignmentCommand(input = {}, options = {}) {
+  return createPoliticalTransferCommand(POLITICAL_TRANSFER_ACTION.ENSURE_PROVINCE_ASSIGNMENT, input, options);
+}
+
+export function createProvinceTransferCommand(input = {}, options = {}) {
+  return createPoliticalTransferCommand(POLITICAL_TRANSFER_ACTION.PROVINCE_TRANSFER, input, options);
+}
+
+function createPoliticalTransferCommand(actionId, input, options) {
+  let frozenPlan = null;
+  let beforeSnapshot = null;
+  let result = null;
+  const actionOptions = {...input, ...options};
+  return {
+    label: options.label || politicalTransferLabel(actionId),
+    domain: "political-transfer",
+    effects: {
+      ...STATE_TOPOLOGY_EFFECTS,
+      affected: systemAffected("political-transfer")
+    },
+    apply(context) {
+      const map = context?.map;
+      const inspection = frozenPlan || inspectPoliticalTransferTransaction(map, actionId, input);
+      if (!inspection.valid) throw politicalTransferError(inspection);
+      frozenPlan ??= {...clonePlain(inspection), transactionTimestamp: options.timestamp || new Date().toISOString()};
+      beforeSnapshot ??= captureTopologySnapshot(map);
+      try {
+        result = applyPoliticalTransferPlan(map, frozenPlan, actionOptions);
+        this.effects.affected = systemAffected("political-transfer", [
+          ...(result.stateIds || []).map(id => ({kind: "state", id})),
+          ...(result.provinceIds || []).map(id => ({kind: "province", id})),
+          ...(result.gridCells || []).map(id => ({kind: "grid-cell", id}))
+        ]);
+      } catch (error) {
+        restoreTopologySnapshot(map, beforeSnapshot);
+        throw error;
+      }
+    },
+    revert(context) {
+      if (!beforeSnapshot) throw new Error("缺少可撤销的政治领土事务快照");
+      restoreTopologySnapshot(context?.map, beforeSnapshot);
+    },
+    isNoop(context) {
+      const inspection = frozenPlan || inspectPoliticalTransferTransaction(context?.map, actionId, input);
+      return !inspection.valid && ["province-assignment-unchanged", "province-transfer-unchanged"].includes(inspection.code);
+    },
+    getInspection() {
+      return frozenPlan ? clonePlain(frozenPlan) : null;
+    },
+    getResult() {
+      return result ? clonePlain(result) : null;
+    }
+  };
+}
+
+function applyPoliticalTransferPlan(map, plan, options) {
+  if (!map?.grid?.cells?.state || !map?.pack?.cells?.state || !map?.grid?.cells?.province || !map?.pack?.cells?.province) {
+    throw new Error("当前地图缺少政治领土事务所需的 state/province cells");
+  }
+  if (plan.operation === "ensure-province-assignment") {
+    const changedProvinceIds = applyExactProvinceAssignment(map, plan.stateId, plan.gridCells, plan.packCells, plan.provincePlan);
+    injectFault(options, "after-province");
+    synchronizeSelectedCities(map, new Set(plan.packCells), plan.stateId, plan.provincePlan.provinceId, {preserveCapital: true});
+    refreshTransferredProvinceRecords(map, changedProvinceIds);
+    refreshPoliticalTopology(map, {
+      resultStateIds: [plan.stateId],
+      boundaryStateIds: [],
+      selectedStateIds: [plan.stateId]
+    });
+    synchronizeMarkets(map);
+    synchronizeRoutes(map);
+    synchronizeTopologyMetadata(map, plan);
+    injectFault(options, "after-domains");
+    validatePoliticalTransferResult(map, plan, changedProvinceIds);
+    return politicalTransferResult(plan, [...changedProvinceIds]);
+  }
+
+  const selectedPack = new Set(plan.packCells);
+  const oldProvinceIds = new Set(plan.packCells.map(cell => numberId(map.pack.cells.province?.[cell])).filter(Boolean));
+  const nextStateId = plan.operation === "province-transfer" ? plan.targetStateId : plan.targetStateId;
+  for (const cell of plan.gridCells) map.grid.cells.state[cell] = nextStateId;
+  for (const cell of plan.packCells) map.pack.cells.state[cell] = nextStateId;
+  injectFault(options, "after-territory");
+
+  let destinationProvinceId = 0;
+  const changedProvinceIds = new Set(oldProvinceIds);
+  if (plan.operation === "province-transfer") {
+    destinationProvinceId = plan.provinceId;
+    replaceMirroredPoliticalFields(map, "provinces", plan.provinceId, {state: plan.targetStateId});
+    changedProvinceIds.add(plan.provinceId);
+  } else if (plan.mode !== "neutralize") {
+    destinationProvinceId = plan.provincePlan.provinceId;
+    for (const cell of plan.gridCells) map.grid.cells.province[cell] = destinationProvinceId;
+    for (const cell of plan.packCells) map.pack.cells.province[cell] = destinationProvinceId;
+    if (plan.provincePlan.created) createEnsuredProvinceRecord(map, plan.targetStateId, plan.provincePlan);
+    changedProvinceIds.add(destinationProvinceId);
+  } else {
+    for (const cell of plan.gridCells) map.grid.cells.province[cell] = 0;
+    for (const cell of plan.packCells) map.pack.cells.province[cell] = 0;
+  }
+  injectFault(options, "after-province");
+
+  synchronizeSelectedCities(map, selectedPack, nextStateId, destinationProvinceId);
+  if (plan.sourceExtinguished) tombstoneTransferredState(map, plan.sourceStateId);
+  else if (plan.sourceCapitalCityIdAfter !== plan.sourceCapitalCityId) setStateCapital(map, plan.sourceStateId, plan.sourceCapitalCityIdAfter);
+  injectFault(options, "capital", {map, plan});
+
+  refreshTransferredProvinceRecords(map, changedProvinceIds);
+  refreshProvinceNeighbors(map, [...changedProvinceIds].filter(id => readProvince(map, id) && !readProvince(map, id).removed));
+  const boundaryStateIds = collectBoundaryStateIds(map, plan.packCells, new Set(plan.affectedStateIds || []));
+  const resultStateIds = (plan.affectedStateIds || []).filter(id => isActiveState(readState(map, id)));
+  refreshPoliticalTopology(map, {
+    resultStateIds,
+    boundaryStateIds,
+    selectedStateIds: plan.affectedStateIds || []
+  });
+
+  if (plan.sourceExtinguished && plan.targetStateId) {
+    synchronizeDiplomacy(map, {
+      operation: "merge",
+      survivorStateId: plan.targetStateId,
+      victimStateId: plan.sourceStateId,
+      resultStateIds: [plan.targetStateId]
+    });
+    synchronizeMilitary(map, {
+      operation: "merge",
+      survivorStateId: plan.targetStateId,
+      victimStateId: plan.sourceStateId,
+      resultStateIds: [plan.targetStateId]
+    });
+  } else if (plan.sourceExtinguished) {
+    neutralizeExtinguishedStateDomains(map, plan.sourceStateId);
+  } else {
+    applyMilitaryRetreats(map, plan.sourceStateId, plan.militaryRetreats || []);
+  }
+  injectFault(options, "military", {map, plan});
+  synchronizeMarkets(map);
+  injectFault(options, "market", {map, plan});
+  synchronizeRoutes(map);
+  injectFault(options, "route", {map, plan});
+  synchronizeTopologyMetadata(map, plan);
+  injectFault(options, "after-domains");
+  validatePoliticalTransferResult(map, plan, changedProvinceIds);
+  return politicalTransferResult(plan, [...changedProvinceIds]);
+}
+
+function inspectExactTerritorySelection(map, stateIdValue, values, {emptyCode = "territory-empty", mismatchCode = "cell-owner-mismatch"} = {}) {
+  if (!Array.isArray(values) || !values.length) return invalidInspection(emptyCode, "必须冻结至少一个 grid cell");
+  const gridCells = [...new Set(values.map(optionalInteger).filter(value => value !== null))].sort(ascending);
+  if (gridCells.length !== values.length) return invalidInspection("grid-cell-invalid", "gridCellIds 必须是互不重复的整数");
+  const validGrid = new Set(landGridCells(map));
+  for (const cell of gridCells) {
+    if (!Array.from(map?.grid?.cells?.i || []).includes(cell)) return invalidInspection("grid-cell-invalid", `grid cell #${cell} 无效`);
+    if (!validGrid.has(cell)) return invalidInspection("grid-cell-water", `grid cell #${cell} 不是陆地`);
+    if (numberId(map.grid.cells.state?.[cell]) !== stateIdValue) {
+      return invalidInspection(mismatchCode, `grid cell #${cell} 不是指定国家陆地`);
+    }
+  }
+  const gridSet = new Set(gridCells);
+  const packCells = landPackCells(map)
+    .filter(cell => gridSet.has(packGridCell(map, cell)) && numberId(map.pack.cells.state?.[cell]) === stateIdValue)
+    .sort(ascending);
+  if (!packCells.length) return invalidInspection("grid-cell-invalid", "冻结 grid 选区没有对应来源国家 pack cells");
+  for (const gridCell of gridCells) {
+    if (!packCells.some(cell => packGridCell(map, cell) === gridCell)) {
+      return invalidInspection("grid-cell-invalid", `grid cell #${gridCell} 没有对应来源国家 pack cell`);
+    }
+  }
+  return validInspection({gridCells, packCells});
+}
+
+function inspectProvinceAssignmentStrategy(map, {stateId: stateIdValue, packCells, gridCells, province, forceEnsure}) {
+  let mode = String(province?.mode || "auto").trim().toLowerCase();
+  if (!["auto", "existing", "ensure"].includes(mode)) {
+    return invalidInspection("invalid-province-mode", "省策略 mode 必须是 auto、existing 或 ensure");
+  }
+  if (forceEnsure) mode = "ensure";
+  if (mode === "existing") {
+    const provinceIdValue = positiveInteger(province?.provinceId);
+    const target = readProvince(map, provinceIdValue);
+    if (!provinceIdValue || !target || target.removed) return invalidInspection("province-not-found", "existing 省份必须有效");
+    if (numberId(target.state) !== stateIdValue) return invalidInspection("province-state-mismatch", "existing 省份必须属于目标国家");
+    return validInspection({mode, provinceId: provinceIdValue, created: false, anchorGridCell: null});
+  }
+  if (mode === "auto") {
+    const candidates = rankAdjacentProvinceCandidates(map, stateIdValue, packCells);
+    if (candidates.length) {
+      return validInspection({mode, provinceId: candidates[0].provinceId, created: false, anchorGridCell: null, candidates});
+    }
+    mode = "ensure";
+  }
+  const anchorGridCell = province?.anchorGridCell === undefined || province?.anchorGridCell === null
+    ? gridCells[0]
+    : optionalInteger(province.anchorGridCell);
+  if (anchorGridCell === null || !gridCells.includes(anchorGridCell)) {
+    return invalidInspection("province-anchor-invalid", "新省 anchorGridCell 必须位于冻结选区");
+  }
+  const provinceIdValue = nextPoliticalId(map, "provinces");
+  if (provinceIdValue > MAX_PROVINCE_ID) return invalidInspection("province-id-overflow", `新省份编号不能超过 ${MAX_PROVINCE_ID}`);
+  const anchorPackCell = packCells.find(cell => packGridCell(map, cell) === anchorGridCell) ?? packCells[0];
+  return validInspection({mode: "ensure", provinceId: provinceIdValue, created: true, anchorGridCell, anchorPackCell});
+}
+
+function rankAdjacentProvinceCandidates(map, stateIdValue, packCells) {
+  const selected = new Set(packCells);
+  const edgeCounts = new Map();
+  for (const cell of selected) {
+    for (const neighbor of map?.pack?.cells?.c?.[cell] || []) {
+      if (selected.has(neighbor) || map.pack.cells.h?.[neighbor] < 20 || numberId(map.pack.cells.state?.[neighbor]) !== stateIdValue) continue;
+      const provinceIdValue = numberId(map.pack.cells.province?.[neighbor]);
+      const province = readProvince(map, provinceIdValue);
+      if (!provinceIdValue || !province || province.removed || numberId(province.state) !== stateIdValue) continue;
+      edgeCounts.set(provinceIdValue, (edgeCounts.get(provinceIdValue) || 0) + 1);
+    }
+  }
+  return [...edgeCounts].map(([provinceIdValue, edges]) => ({
+    provinceId: provinceIdValue,
+    edges,
+    area: Number(readProvince(map, provinceIdValue)?.area || 0)
+  })).sort((a, b) => b.edges - a.edges || b.area - a.area || a.provinceId - b.provinceId);
+}
+
+function inspectTransferMilitaryRetreat(map, sourceStateId, selectedCells, remainderCells, capitalCityId) {
+  const affected = [];
+  for (const regiment of readState(map, sourceStateId)?.military || []) {
+    const station = optionalInteger(regiment.cell);
+    const base = optionalInteger(regiment.baseCell ?? regiment.bcell);
+    if (selectedCells.has(station) || selectedCells.has(base)) affected.push(regiment);
+  }
+  if (!affected.length) return {valid: true, assignments: [], unresolved: []};
+  const remainder = new Set(remainderCells);
+  const capitalCell = cityPackCell(findCity(map, capitalCityId));
+  const stateCenter = optionalInteger(readState(map, sourceStateId)?.center);
+  const retreatCell = remainder.has(capitalCell) ? capitalCell : remainder.has(stateCenter) ? stateCenter : null;
+  if (retreatCell === null) {
+    return {
+      valid: false,
+      assignments: [],
+      unresolved: affected.map(regiment => regiment.id || `${sourceStateId}:${numberId(regiment.i)}`)
+    };
+  }
+  return {
+    valid: true,
+    assignments: affected.map(regiment => ({
+      id: regiment.id || `${sourceStateId}:${numberId(regiment.i)}`,
+      regimentId: numberId(regiment.i),
+      retreatCell
+    })),
+    unresolved: []
+  };
+}
+
+function selectionTouchesState(map, packCells, targetStateId) {
+  const selected = new Set(packCells);
+  return packCells.some(cell => (map?.pack?.cells?.c?.[cell] || []).some(neighbor => (
+    !selected.has(neighbor)
+    && map.pack.cells.h?.[neighbor] >= 20
+    && numberId(map.pack.cells.state?.[neighbor]) === targetStateId
+  )));
+}
+
+function statesAreMutualEnemies(map, left, right) {
+  return readState(map, left)?.diplomacy?.[right] === "Enemy" && readState(map, right)?.diplomacy?.[left] === "Enemy";
+}
+
+function applyExactProvinceAssignment(map, stateIdValue, gridCells, packCells, provincePlan) {
+  const changed = new Set(packCells.map(cell => numberId(map.pack.cells.province?.[cell])).filter(Boolean));
+  for (const cell of gridCells) map.grid.cells.province[cell] = provincePlan.provinceId;
+  for (const cell of packCells) map.pack.cells.province[cell] = provincePlan.provinceId;
+  if (provincePlan.created) createEnsuredProvinceRecord(map, stateIdValue, provincePlan);
+  changed.add(provincePlan.provinceId);
+  return changed;
+}
+
+function createEnsuredProvinceRecord(map, stateIdValue, provincePlan) {
+  const centerCell = provincePlan.anchorPackCell;
+  const centerCity = activeCities(map).find(city => cityPackCell(city) === centerCell);
+  const state = readState(map, stateIdValue);
+  const name = centerCity?.name || `新省${provincePlan.provinceId}`;
+  const formName = provinceFormForState(state, map?.society?.cultures || map?.pack?.cultures) || "州";
+  writeMirroredPoliticalItem(map, "provinces", provincePlan.provinceId, {
+    id: provincePlan.provinceId,
+    i: provincePlan.provinceId,
+    state: stateIdValue,
+    center: centerCell,
+    gridCenter: provincePlan.anchorGridCell,
+    burg: numberId(centerCity?.burgId),
+    name,
+    formName,
+    fullName: `${name}${formName}`,
+    color: deterministicColor(`${map?.options?.seed}:province:${provincePlan.provinceId}:${stateIdValue}`),
+    cells: 0,
+    area: 0,
+    pole: clonePoint(map.pack.cells.p?.[centerCell]),
+    neighbors: [],
+    burgs: 0,
+    rural: 0,
+    urban: 0,
+    religion: numberId(map.pack.cells.religion?.[centerCell] ?? state?.religion),
+    removed: false
+  });
+}
+
+function synchronizeSelectedCities(map, selectedPackCells, stateIdValue, provinceIdValue, {preserveCapital = false} = {}) {
+  for (const city of activeCities(map)) {
+    if (!selectedPackCells.has(cityPackCell(city))) continue;
+    const next = {
+      ...city,
+      state: stateIdValue,
+      province: provinceIdValue,
+      capital: preserveCapital ? Boolean(city.capital) : false,
+      provincial: false,
+      group: preserveCapital && city.capital ? "capital" : ordinaryCityGroup(city)
+    };
+    replaceCity(map, city, next);
+    const burg = findBurgForCity(map, city);
+    if (burg) replaceBurg(map, burg, {
+      ...burg,
+      state: stateIdValue,
+      province: provinceIdValue,
+      capital: preserveCapital ? Number(Boolean(burg.capital)) : 0,
+      group: preserveCapital && burg.capital ? "capital" : ordinaryCityGroup(city)
+    });
+  }
+}
+
+function refreshTransferredProvinceRecords(map, provinceIds) {
+  for (const id of provinceIds) {
+    const province = readProvince(map, id);
+    if (!province) continue;
+    const cells = landPackCells(map).filter(cell => numberId(map.pack.cells.province?.[cell]) === id);
+    if (!cells.length) {
+      for (const city of activeCities(map).filter(item => numberId(item.province) === id && item.provincial)) {
+        setCityProvincial(map, city.id, false);
+      }
+      replaceMirroredPoliticalFields(map, "provinces", id, {
+        removed: true,
+        cells: 0,
+        area: 0,
+        burgs: 0,
+        rural: 0,
+        urban: 0,
+        neighbors: []
+      });
+      continue;
+    }
+    const stateIdValue = numberId(map.pack.cells.state?.[cells[0]]);
+    const cities = activeCities(map).filter(city => cells.includes(cityPackCell(city)));
+    let center = cells.includes(numberId(province.center)) ? numberId(province.center) : cityPackCell(cities[0]) ?? cells[0];
+    if (!cells.includes(center)) center = cells[0];
+    const centerCity = cities.find(city => cityPackCell(city) === center) || cities[0];
+    replaceMirroredPoliticalFields(map, "provinces", id, {
+      state: stateIdValue,
+      center,
+      gridCenter: packGridCell(map, center),
+      burg: numberId(centerCity?.burgId),
+      cells: cells.length,
+      area: roundValue(cells.reduce((sum, cell) => sum + Number(map.pack.cells.area?.[cell] || 0), 0), 2),
+      pole: clonePoint(map.pack.cells.p?.[center]),
+      burgs: cities.length,
+      rural: roundValue(cells.reduce((sum, cell) => sum + Number(map.pack.cells.pop?.[cell] || 0), 0), 2),
+      urban: roundValue(cities.reduce((sum, city) => sum + Number(city.population || 0), 0), 2),
+      removed: false
+    });
+    for (const city of cities) setCityProvincial(map, city.id, numberId(city.id) === numberId(centerCity?.id));
+  }
+}
+
+function tombstoneTransferredState(map, sourceStateId) {
+  assignMirroredPoliticalFields(map, "states", sourceStateId, {
+    removed: true,
+    capital: 0,
+    capitalName: "",
+    cells: 0,
+    area: 0,
+    burgs: 0,
+    rural: 0,
+    urban: 0,
+    provinces: [],
+    neighbors: []
+  });
+}
+
+function replaceMirroredPoliticalFields(map, key, id, fields) {
+  const current = key === "provinces" ? readProvince(map, id) : readState(map, id);
+  if (!current) throw new Error(`地图缺少 ${key} #${id}`);
+  writeMirroredPoliticalItem(map, key, id, {...clonePlain(current), ...clonePlain(fields)});
+}
+
+function applyMilitaryRetreats(map, sourceStateId, assignments) {
+  if (!assignments.length) return;
+  const byId = new Map(assignments.map(item => [item.id, item]));
+  const state = readState(map, sourceStateId);
+  const military = (state?.military || []).map(regiment => {
+    const id = regiment.id || `${sourceStateId}:${numberId(regiment.i)}`;
+    const assignment = byId.get(id);
+    if (!assignment) return clonePlain(regiment);
+    const next = {...clonePlain(regiment), cell: assignment.retreatCell, baseCell: assignment.retreatCell};
+    if (Object.hasOwn(regiment, "bcell")) next.bcell = assignment.retreatCell;
+    return next;
+  });
+  assignMirroredPoliticalFields(map, "states", sourceStateId, {military});
+}
+
+function neutralizeExtinguishedStateDomains(map, sourceStateId) {
+  assignMirroredPoliticalFields(map, "states", sourceStateId, {military: [], campaigns: []});
+  for (const state of activeStates(map)) {
+    const diplomacy = clonePlain(state.diplomacy || []);
+    diplomacy[sourceStateId] = "x";
+    assignMirroredPoliticalFields(map, "states", stateId(state), {
+      diplomacy,
+      campaigns: closeCampaignsForState(state.campaigns, sourceStateId),
+      diplomacySummary: summarizeStateDiplomacy({i: stateId(state), diplomacy}, new Set(activeStates(map).map(stateId)))
+    });
+  }
+  const diplomacy = clonePlain(map?.diplomacy || map?.pack?.diplomacy || {relations: {}, chronicle: [], metadata: {}});
+  diplomacy.chronicle = [...(diplomacy.chronicle || []), ["国家解散", `国家 #${sourceStateId} 的最后领土被中立化，军团与活动关系已清理。`]];
+  diplomacy.metadata = summarizeDiplomacyMetadata(map, diplomacy);
+  writeMirroredRoot(map, "diplomacy", diplomacy);
+  const military = clonePlain(map?.military || map?.pack?.military || {campaigns: [], fronts: [], events: [], metadata: {}});
+  military.campaigns = closeMilitaryCampaigns(military.campaigns, sourceStateId);
+  military.fronts = closeMilitaryCampaigns(military.fronts, sourceStateId);
+  military.events = (military.events || []).filter(event => !campaignInvolvesState(event, sourceStateId));
+  military.metadata = refreshMilitaryMetadata(map, military);
+  writeMirroredRoot(map, "military", military);
+}
+
+function validatePoliticalTransferResult(map, plan, changedProvinceIds) {
+  const errors = [];
+  for (const cell of plan.gridCells) {
+    const expectedState = plan.operation === "ensure-province-assignment" ? plan.stateId : plan.targetStateId;
+    if (numberId(map.grid.cells.state?.[cell]) !== expectedState) errors.push(`grid cell #${cell} 国家未同步`);
+  }
+  for (const cell of plan.packCells) {
+    const expectedState = plan.operation === "ensure-province-assignment" ? plan.stateId : plan.targetStateId;
+    if (numberId(map.pack.cells.state?.[cell]) !== expectedState) errors.push(`pack cell #${cell} 国家未同步`);
+  }
+  const expectedProvince = plan.operation === "province-transfer"
+    ? plan.provinceId
+    : plan.operation === "ensure-province-assignment"
+      ? plan.provincePlan.provinceId
+      : plan.mode === "neutralize" ? 0 : plan.provincePlan.provinceId;
+  for (const cell of plan.packCells) {
+    if (numberId(map.pack.cells.province?.[cell]) !== expectedProvince) errors.push(`pack cell #${cell} 省份未同步`);
+  }
+  for (const city of activeCities(map)) {
+    const cell = cityPackCell(city);
+    if (!plan.packCells.includes(cell)) continue;
+    const expectedState = plan.operation === "ensure-province-assignment" ? plan.stateId : plan.targetStateId;
+    if (numberId(city.state) !== expectedState || numberId(city.province) !== expectedProvince) errors.push(`城市 #${city.id} 归属未同步`);
+  }
+  const changedProvinceSet = new Set([...changedProvinceIds].map(numberId).filter(Boolean));
+  for (const province of activeProvinces(map).filter(item => changedProvinceSet.has(provinceId(item)))) {
+    const id = provinceId(province);
+    const cities = activeCities(map).filter(city => numberId(city.province) === id);
+    const centerCity = numberId(province.burg) ? findCityByBurgId(map, province.burg) : null;
+    if (numberId(province.burg) && (!centerCity || numberId(centerCity.province) !== id || !centerCity.provincial)) {
+      errors.push(`省份 #${id} 的省会城市标记未同步`);
+    }
+    if (cities.some(city => city.provincial && numberId(city.burgId) !== numberId(province.burg))) {
+      errors.push(`省份 #${id} 存在非省会城市的省会标记`);
+    }
+  }
+  validateMirrorItems(map, "states", plan.affectedStateIds || [plan.stateId], errors);
+  const provinceIds = [expectedProvince, ...(plan.packCells || []).map(cell => numberId(map.pack.cells.province?.[cell]))].filter(Boolean);
+  validateMirrorItems(map, "provinces", [...new Set(provinceIds)], errors);
+  if (plan.sourceExtinguished && !readState(map, plan.sourceStateId)?.removed) errors.push("来源国家最后领土转移后未墓碑化");
+  if (errors.length) {
+    const error = new Error(`政治领土事务校验失败：${errors.join("；")}`);
+    error.code = "source-province-repair-failed";
+    throw error;
+  }
+}
+
+function politicalTransferResult(plan, provinceIds) {
+  return {
+    operation: plan.operation,
+    mode: plan.mode || null,
+    stateIds: [...(plan.affectedStateIds || [plan.stateId])],
+    provinceIds: [...new Set(provinceIds.filter(Boolean))].sort(ascending),
+    gridCells: [...plan.gridCells],
+    packCells: [...plan.packCells],
+    sourceExtinguished: Boolean(plan.sourceExtinguished),
+    selectionTarget: plan.targetStateId ? {kind: "state", id: plan.targetStateId} : null
+  };
+}
+
+function politicalTransferLabel(actionId) {
+  if (actionId === POLITICAL_TRANSFER_ACTION.TERRITORY_TRANSFER) return "转移国家领土";
+  if (actionId === POLITICAL_TRANSFER_ACTION.ENSURE_PROVINCE_ASSIGNMENT) return "确保选区省份归属";
+  return "转移完整省份";
+}
+
+function politicalTransferError(inspection) {
+  const error = new Error(inspection.summary);
+  error.code = inspection.code;
+  error.inspection = clonePlain(inspection);
+  return error;
+}
+
+function politicalValidInspection(plan, normalizedInput, affected, requiresConfirm) {
+  return {
+    ...validInspection(plan),
+    allowed: true,
+    normalizedInput: clonePlain(normalizedInput),
+    affected: affected.map(item => ({...item})),
+    requiresConfirm: Boolean(requiresConfirm)
+  };
+}
+
+function normalizePoliticalInspection(inspection) {
+  return {
+    ...inspection,
+    allowed: inspection?.valid === true,
+    normalizedInput: inspection?.normalizedInput ? clonePlain(inspection.normalizedInput) : null,
+    affected: Array.isArray(inspection?.affected) ? inspection.affected.map(item => ({...item})) : [],
+    requiresConfirm: inspection?.requiresConfirm === true
+  };
+}
+
+function normalizeProvinceInput(input, plan) {
+  const requestedMode = String(input?.mode || "auto").trim().toLowerCase();
+  if (requestedMode === "existing") return {mode: "existing", provinceId: plan.provinceId};
+  if (plan.created) return {mode: "ensure", anchorGridCell: plan.anchorGridCell};
+  return {mode: "auto"};
+}
+
+function normalizeEnsureProvinceInput(input, plan) {
+  const requestedMode = String(input?.mode || "auto").trim().toLowerCase();
+  if (requestedMode === "existing") return {mode: "existing", provinceId: plan.provinceId};
+  if (plan.created) return {mode: "ensure", anchorGridCell: plan.anchorGridCell};
+  return {mode: "auto"};
+}
+
+function packGridCell(map, packCell) {
+  const mapped = optionalInteger(map?.pack?.cells?.g?.[packCell]);
+  return mapped === null ? packCell : mapped;
+}
+
 const scopedProvinceRegenerationOptions = new WeakMap();
 
 export function withScopedProvinceRegenerationOptions(map, options, callback) {
@@ -1494,6 +2256,18 @@ function stateCapitalCityId(map, stateIdValue) {
   const state = readState(map, stateIdValue);
   const city = findCityByBurgId(map, state?.capital);
   return city ? numberId(city.id) : null;
+}
+
+function validStateCapitalCityId(map, stateIdValue) {
+  const cityId = stateCapitalCityId(map, stateIdValue);
+  const city = findCity(map, cityId);
+  const packCell = cityPackCell(city);
+  return city
+    && numberId(city.state) === stateIdValue
+    && Number.isInteger(packCell)
+    && numberId(map?.pack?.cells?.state?.[packCell]) === stateIdValue
+    ? cityId
+    : null;
 }
 
 function cityPackCell(city) {

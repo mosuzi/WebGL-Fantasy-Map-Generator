@@ -259,6 +259,7 @@ const METHOD_OVERRIDES = Object.freeze({
   ...createAtCellMethodOverrides(),
   ...existingRuleMethodOverrides(),
   ...remainingRuleMethodOverrides(),
+  ...politicalTransferRuleMethodOverrides(),
   ...namebaseRuleMethodOverrides(),
   "oceanCurrents.rename": {
     arguments: [argument("currentId", stringSchema("洋流 ID")), argument("name", stringSchema("新名称"))],
@@ -1181,6 +1182,126 @@ function remainingRuleMethodOverrides() {
     ], [...collectionCodes, ...tokenCodes, "confirmation_required"], [[kind === "measurements" ? [] : {}, {}]]);
   }
   return entries;
+}
+
+function politicalTransferRuleMethodOverrides() {
+  const tokenCodes = [
+    "inspection-required", "inspection-stale", "inspection-token-invalid",
+    "inspection-action-mismatch", "inspection-input-mismatch", "inspection-schema-mismatch"
+  ];
+  const territoryCodes = [
+    "invalid-transfer-mode", "source-state-not-found", "target-state-not-found", "same-state",
+    "territory-empty", "grid-cell-invalid", "grid-cell-water", "cell-owner-mismatch",
+    "target-not-adjacent", "war-required", "invalid-province-mode", "province-not-found",
+    "province-state-mismatch", "province-anchor-invalid", "province-id-overflow",
+    "source-capital-candidate-missing", "source-province-repair-failed",
+    "military-relocation-unresolved"
+  ];
+  const ensureCodes = [
+    "state-not-found", "assignment-empty", "grid-cell-invalid", "grid-cell-water",
+    "cell-state-mismatch", "invalid-province-mode", "province-not-found",
+    "province-state-mismatch", "province-anchor-invalid", "province-id-overflow",
+    "province-assignment-unchanged"
+  ];
+  const transferCodes = [
+    "province-not-found", "source-state-not-found", "target-state-not-found", "same-state",
+    "province-territory-empty", "province-owner-mismatch", "target-not-adjacent",
+    "source-capital-candidate-missing", "military-relocation-unresolved"
+  ];
+  const gridCellIds = {
+    type: "array",
+    minItems: 1,
+    uniqueItems: true,
+    items: {type: "integer", minimum: 0}
+  };
+  const provinceStrategy = {
+    type: "object",
+    required: ["mode"],
+    properties: {
+      mode: {type: "string", enum: ["auto", "existing", "ensure"]},
+      provinceId: {type: "integer", minimum: 1},
+      anchorGridCell: {type: "integer", minimum: 0}
+    },
+    additionalProperties: false
+  };
+  const territoryRequest = {
+    type: "object",
+    required: ["mode", "sourceStateId", "gridCellIds"],
+    properties: {
+      mode: {type: "string", enum: ["conquer", "cede", "neutralize"]},
+      sourceStateId: {type: "integer", minimum: 1},
+      targetStateId: {type: "integer", minimum: 0},
+      gridCellIds,
+      province: provinceStrategy
+    },
+    additionalProperties: false
+  };
+  const ensureRequest = {
+    type: "object",
+    required: ["stateId", "gridCellIds", "mode"],
+    properties: {
+      stateId: {type: "integer", minimum: 1},
+      gridCellIds,
+      mode: {type: "string", enum: ["auto", "existing", "ensure"]},
+      provinceId: {type: "integer", minimum: 1},
+      anchorGridCell: {type: "integer", minimum: 0}
+    },
+    additionalProperties: false
+  };
+  const provinceTransferRequest = {
+    type: "object",
+    required: ["provinceId", "targetStateId"],
+    properties: {
+      provinceId: {type: "integer", minimum: 1},
+      targetStateId: {type: "integer", minimum: 1}
+    },
+    additionalProperties: false
+  };
+  const executionOptions = ruleExecutionOptionsSchema({
+    properties: {label: {type: "string"}},
+    required: ["inspectionToken", "expectedRevision"]
+  });
+  const confirmedExecutionOptions = ruleExecutionOptionsSchema({
+    confirm: true,
+    properties: {label: {type: "string"}},
+    required: ["inspectionToken", "expectedRevision"]
+  });
+  const executionExample = {
+    inspectionToken: "rulei1.example",
+    expectedRevision: {mapIdentity: "example-map", mapRevision: 1}
+  };
+  return {
+    "edit.states.inspectTerritoryTransfer": ruleInspectorOverride([
+      argument("request", territoryRequest)
+    ], territoryCodes, [[{mode: "cede", sourceStateId: 1, targetStateId: 2, gridCellIds: [10, 11], province: {mode: "auto"}}]]),
+    "edit.states.transferTerritory": ruleExecutorOverride([
+      argument("request", territoryRequest),
+      argument("options", confirmedExecutionOptions)
+    ], [...territoryCodes, ...tokenCodes, "confirmation_required"], [[
+      {mode: "cede", sourceStateId: 1, targetStateId: 2, gridCellIds: [10, 11], province: {mode: "auto"}},
+      {...executionExample, confirm: true}
+    ]]),
+    "edit.provinces.inspectEnsureAssignment": ruleInspectorOverride([
+      argument("request", ensureRequest)
+    ], ensureCodes, [[{stateId: 2, gridCellIds: [10, 11], mode: "auto"}]]),
+    "edit.provinces.ensureAssignment": ruleExecutorOverride([
+      argument("request", ensureRequest),
+      argument("options", executionOptions)
+    ], [...ensureCodes, ...tokenCodes, "confirmation_required"], [[
+      {stateId: 2, gridCellIds: [10, 11], mode: "auto"},
+      executionExample
+    ]]),
+    "edit.provinces.inspectTransfer": ruleInspectorOverride([
+      argument("request", provinceTransferRequest)
+    ], transferCodes, [[{provinceId: 3, targetStateId: 2}]]),
+    "edit.provinces.transfer": ruleExecutorOverride([
+      argument("request", provinceTransferRequest),
+      argument("options", confirmedExecutionOptions)
+    ], [...transferCodes, ...tokenCodes, "confirmation_required"], [[
+      {provinceId: 3, targetStateId: 2},
+      {...executionExample, confirm: true}
+    ]])
+  };
 }
 
 function namebaseRuleMethodOverrides() {

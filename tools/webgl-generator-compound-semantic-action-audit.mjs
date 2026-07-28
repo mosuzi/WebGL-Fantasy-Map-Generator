@@ -448,12 +448,12 @@ const RULE_ACTIONS = Object.freeze([
     id: "politics.transfer-territory",
     title: "征服、割让或中立化 Cell/区域",
     domain: "politics",
-    status: "fragmented-needs-transaction",
+    status: "existing-transaction",
     intent: "把一个或多个 Cell 从原国家转给目标国家，并按省份策略处理；若原国家失去最后领土则触发完整灭国。",
     variants: ["conquer", "cede", "neutralize", "annex-last-cell"],
-    api: ["cells.get", "cells.query", "edit.states.applyChanges", "edit.provinces.applyChanges", "edit.states.merge", "edit.states.delete"],
-    inspect: "planned:edit.states.inspectTerritoryTransfer",
-    execute: "planned:edit.states.transferTerritory",
+    api: ["edit.states.inspectTerritoryTransfer", "edit.states.transferTerritory"],
+    inspect: "edit.states.inspectTerritoryTransfer",
+    execute: "edit.states.transferTerritory",
     branches: [
       "攻击国/来源国/Cell 非法",
       "指定省份存在且属于目标国",
@@ -467,12 +467,12 @@ const RULE_ACTIONS = Object.freeze([
     id: "politics.ensure-province-assignment",
     title: "确保省份存在并分配 Cell",
     domain: "politics",
-    status: "fragmented-needs-transaction",
+    status: "existing-transaction",
     intent: "把 Cell 分给已有省份；若明确要求的省份不存在，则在合法 ID/命名策略下创建后分配。",
     variants: ["auto", "existing", "ensure"],
-    api: ["cells.get", "edit.provinces.add", "edit.provinces.applyChanges"],
-    inspect: "planned:edit.provinces.inspectEnsureAssignment",
-    execute: "planned:edit.provinces.ensureAssignment",
+    api: ["edit.provinces.inspectEnsureAssignment", "edit.provinces.ensureAssignment"],
+    inspect: "edit.provinces.inspectEnsureAssignment",
+    execute: "edit.provinces.ensureAssignment",
     branches: ["自动选择相邻/最大省份", "已有省份归属校验", "缺失省份创建", "稀疏 ID/Uint16 容量"],
     sourceRefs: ["app/webgl-generator/src/runtime/province-edit-commands.js", "app/webgl-generator/src/runtime/state-edit-commands.js"]
   }),
@@ -480,11 +480,11 @@ const RULE_ACTIONS = Object.freeze([
     id: "politics.transfer-province",
     title: "整省转移给另一国家",
     domain: "politics",
-    status: "fragmented-needs-transaction",
+    status: "existing-transaction",
     intent: "把完整省份及其 Cell、城镇和省会转给目标国家，并修复双方统计、首都和引用。",
-    api: ["objects.get", "cells.query", "edit.states.applyChanges", "edit.provinces.applyChanges"],
-    inspect: "planned:edit.provinces.inspectTransfer",
-    execute: "planned:edit.provinces.transfer",
+    api: ["edit.provinces.inspectTransfer", "edit.provinces.transfer"],
+    inspect: "edit.provinces.inspectTransfer",
+    execute: "edit.provinces.transfer",
     branches: ["省份/国家非法", "首都省保护", "来源国失去最后领土", "目标国接收"],
     sourceRefs: ["app/webgl-generator/src/runtime/state-edit-commands.js", "app/webgl-generator/src/runtime/province-edit-commands.js"]
   }),
@@ -1034,7 +1034,9 @@ const EDITOR_SERVICE_PREFIXES = Object.freeze(["selection.", "layers.", "units."
 const EDITOR_RUNTIME_METHODS = new Set(["cells.locate"]);
 const ATOMIC_EDITOR_METHODS = new Set([
   "edit.cities.createAtCell",
+  "edit.provinces.applyChanges",
   "edit.provinces.createAtCell",
+  "edit.states.applyChanges",
   "edit.states.createAtCell"
 ]);
 const READ_METHODS = new Set([

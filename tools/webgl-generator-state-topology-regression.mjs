@@ -312,8 +312,19 @@ function testCapitalRankingTiebreaks() {
   for (const criterion of cases) {
     const map = generatePlaceholderMap(baseOptions);
     const input = findSplitInspection(map, {preferCapitalProvince: true});
+    const selectedCapital = findCity(map, input.newCapitalCityId);
+    const sourceState = map.politics.states[input.sourceStateId];
+    for (const city of map.settlements.cities || []) {
+      if (!city || Number(city.state) !== input.sourceStateId) continue;
+      city.capital = city.id === selectedCapital.id;
+      const burg = map.pack.burgs?.[city.burgId];
+      if (burg) burg.capital = Number(city.capital);
+    }
+    sourceState.capital = selectedCapital.burgId;
+    if (map.pack.states !== map.politics.states) map.pack.states[input.sourceStateId].capital = selectedCapital.burgId;
     const baseline = inspectStateSplit(map, input);
     assert.equal(baseline.valid, true);
+    assert.ok(baseline.selectedCityIds.includes(baseline.oldSourceCapitalCityId), `补都 ${criterion} 样本必须把旧首都拆入选区`);
     assert.ok(baseline.remainderCityIds.length >= 2, `补都 ${criterion} 样本至少需要两个候选`);
     if (!map.pack.cells.s) map.pack.cells.s = new Float64Array(map.pack.cells.i.length);
     const candidates = baseline.remainderCityIds.map(id => findCity(map, id));
@@ -615,7 +626,7 @@ function testLegacyTombstones() {
   assert.deepEqual(provinceTombstone, provinceValue);
   assert.deepEqual(map.notes.notes.find(note => note.id === noteValue.id), noteValue);
   const roundtrip = parseMapDocument(stringifyMapDocument(createMapDocument(map, map.options)));
-  assert.deepEqual(roundtrip.map.politics.states[stateTombstoneId], stateValue, "完整地图往返必须保留旧国家 tombstone");
+  assert.deepEqual(roundtrip.map.politics.states[stateTombstoneId], {...stateValue, campaigns: []}, "完整地图版本化往返必须保留旧国家 tombstone 并补齐 campaigns");
   assert.deepEqual(roundtrip.map.politics.provinces[provinceTombstoneId], provinceValue, "完整地图往返必须保留旧省份 tombstone");
   report.compatibility.legacyTombstones = {stateTombstoneId, provinceTombstoneId};
 }

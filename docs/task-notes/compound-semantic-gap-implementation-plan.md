@@ -30,7 +30,7 @@
 
 每个步骤只提交本步骤已经达到最小验收的文件；不按文件保存动作或临时修正制造无意义提交。全部本地提交完成后统一推送。
 
-当前进度：步骤 1～5 已完成并分别提交，下一执行项为步骤 6。第 207 项实际待补的 `21` 个动作族已经全部接入领域 inspector；第 208 项两个名称库碎片已收敛为四个公开 `inspect + execute` 入口。矩阵现为 `existing-transaction 59 / fragmented-needs-transaction 3 / missing-game-rule 6 / recipe-only 10`，公开 API 为 `283 / 156`；`info.describe`、故障回滚、旧图、零号城市和系统 Chrome 公开执行链均已验收，没有新增待人类审阅问题。
+当前进度：步骤 1～6 已完成并分别提交，下一执行项为步骤 7。第 207 项实际待补的 `21` 个动作族已经全部接入领域 inspector；第 208 项五个碎片已收敛为名称库绑定迁移、领土转移、确保省份和整省转移的原子事务。矩阵现为 `existing-transaction 62 / fragmented-needs-transaction 0 / missing-game-rule 6 / recipe-only 10`，公开 API 为 `289 / 162`，完整能力矩阵为 `1115` 行、`covered 1042 / excluded 73 / gap 0`；`info.describe`、故障回滚、旧图、省会 / 首都 / 军团不变量和系统 Chrome 公开执行链均已验收，没有新增待人类审阅问题。
 
 第 204 项矩阵状态是审计时的冻结值，不完全等于当前代码真相。第 195 项已经完成国家、省份和城市的 `inspectCreateAtCell / createAtCell`、令牌、revision、单历史与故障回滚；真实战斗结果也已经由军团战斗事件的 `applyResult` 分支提供确定性扣兵、态势更新和撤销。步骤 1 必须先把这些现状重新归类，后续只补缺失的语义层，不重复实现。
 

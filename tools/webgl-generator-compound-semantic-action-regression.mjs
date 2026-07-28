@@ -12,9 +12,9 @@ assert.equal(report.denominator.classifiedCellActionRows, report.denominator.cel
 assert.equal(report.denominator.fullCapabilityGaps, 0);
 assert.ok(report.totals.ruleTransactions >= 50);
 assert.ok(report.totals.plannerRecipes >= 10);
-assert.equal(report.totals.statuses["existing-transaction"], 59);
+assert.equal(report.totals.statuses["existing-transaction"], 62);
 assert.equal(report.totals.statuses["existing-needs-inspector"] || 0, 0);
-assert.equal(report.totals.statuses["fragmented-needs-transaction"], 3);
+assert.equal(report.totals.statuses["fragmented-needs-transaction"] || 0, 0);
 
 for (const [id, inspect, execute] of [
   ["politics.create-state", "edit.states.inspectCreateAtCell", "edit.states.createAtCell"],
@@ -57,7 +57,7 @@ assert.match(zoneManagement?.inspect || "", /edit\.zones\.inspectCreate/u);
 assert.match(zoneManagement?.inspect || "", /edit\.zones\.inspectDelete/u);
 
 const territory = byId.get("politics.transfer-territory");
-assert.equal(territory.status, "fragmented-needs-transaction");
+assert.equal(territory.status, "existing-transaction");
 assert.match(territory.inspect, /inspectTerritoryTransfer/u);
 
 for (const [id, inspect, execute] of [
@@ -73,12 +73,18 @@ for (const [id, inspect, execute] of [
 }
 assert.match(territory.execute, /transferTerritory/u);
 assert.ok(territory.branches.some(item => item.includes("最后领土")));
-assert.ok(territory.api.includes("edit.states.applyChanges"));
-assert.ok(territory.api.includes("edit.states.merge"));
+assert.ok(territory.api.includes("edit.states.inspectTerritoryTransfer"));
+assert.ok(territory.api.includes("edit.states.transferTerritory"));
 
 const province = byId.get("politics.ensure-province-assignment");
-assert.equal(province.status, "fragmented-needs-transaction");
+assert.equal(province.status, "existing-transaction");
 assert.ok(province.variants.includes("ensure"));
+assert.equal(province.inspect, "edit.provinces.inspectEnsureAssignment");
+assert.equal(province.execute, "edit.provinces.ensureAssignment");
+const provinceTransfer = byId.get("politics.transfer-province");
+assert.equal(provinceTransfer.status, "existing-transaction");
+assert.equal(provinceTransfer.inspect, "edit.provinces.inspectTransfer");
+assert.equal(provinceTransfer.execute, "edit.provinces.transfer");
 
 for (const id of [
   "diplomacy.declare-war",

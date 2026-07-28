@@ -4,11 +4,11 @@
 
 ## 审计结论
 
-- 上游能力矩阵：1090 行，unknown / unclassified / gap = 0 / 0 / 0。
-- 公开 API：283 / 283 已归类。
+- 上游能力矩阵：1115 行，unknown / unclassified / gap = 0 / 0 / 0。
+- 公开 API：289 / 289 已归类。
 - Cell / 画布动作：48 / 48 已归类；画布模式 29，直接操控 19 类 / 89 个宿主。
 - 规则事务与玩法配方：68 + 10 = 78。
-- 已有完整事务 59，已有写命令但缺 AI inspector 0，多 API 碎片待收敛 3，缺失游戏规则 6，规划器配方 10。
+- 已有完整事务 62，已有写命令但缺 AI inspector 0，多 API 碎片待收敛 0，缺失游戏规则 6，规划器配方 10。
 - 结构缺口：0。
 
 ## 边界定义
@@ -50,9 +50,9 @@
 | `politics.delete-state` | 国家、省份与政治拓扑 | 删除国家，明确处理领土、省份、城镇、外交、军事、市场和历史引用。 | `existing-transaction` | `edit.states.delete`<br>`edit.states.inspectDelete` | `edit.states.inspectDelete`<br>`edit.states.delete` |
 | `politics.merge-states` | 国家、省份与政治拓扑 | 把被合并国完整并入保留国，重建省份并同步外交、军事、市场和路线。 | `existing-transaction` | `edit.states.inspectMerge`<br>`edit.states.merge` | `edit.states.inspectMerge`<br>`edit.states.merge` |
 | `politics.split-state` | 国家、省份与政治拓扑 | 选择完整旧省份和新首都拆出国家，修复原国家首都及全部跨域引用。 | `existing-transaction` | `edit.states.inspectSplit`<br>`edit.states.split` | `edit.states.inspectSplit`<br>`edit.states.split` |
-| `politics.transfer-territory` | 国家、省份与政治拓扑 | 把一个或多个 Cell 从原国家转给目标国家，并按省份策略处理；若原国家失去最后领土则触发完整灭国。 | `fragmented-needs-transaction` | `cells.get`<br>`cells.query`<br>`edit.provinces.applyChanges`<br>`edit.states.applyChanges`<br>`edit.states.delete`<br>`edit.states.merge` | `planned:edit.states.inspectTerritoryTransfer`<br>`planned:edit.states.transferTerritory` |
-| `politics.ensure-province-assignment` | 国家、省份与政治拓扑 | 把 Cell 分给已有省份；若明确要求的省份不存在，则在合法 ID/命名策略下创建后分配。 | `fragmented-needs-transaction` | `cells.get`<br>`edit.provinces.add`<br>`edit.provinces.applyChanges` | `planned:edit.provinces.inspectEnsureAssignment`<br>`planned:edit.provinces.ensureAssignment` |
-| `politics.transfer-province` | 国家、省份与政治拓扑 | 把完整省份及其 Cell、城镇和省会转给目标国家，并修复双方统计、首都和引用。 | `fragmented-needs-transaction` | `cells.query`<br>`edit.provinces.applyChanges`<br>`edit.states.applyChanges`<br>`objects.get` | `planned:edit.provinces.inspectTransfer`<br>`planned:edit.provinces.transfer` |
+| `politics.transfer-territory` | 国家、省份与政治拓扑 | 把一个或多个 Cell 从原国家转给目标国家，并按省份策略处理；若原国家失去最后领土则触发完整灭国。 | `existing-transaction` | `edit.states.inspectTerritoryTransfer`<br>`edit.states.transferTerritory` | `edit.states.inspectTerritoryTransfer`<br>`edit.states.transferTerritory` |
+| `politics.ensure-province-assignment` | 国家、省份与政治拓扑 | 把 Cell 分给已有省份；若明确要求的省份不存在，则在合法 ID/命名策略下创建后分配。 | `existing-transaction` | `edit.provinces.ensureAssignment`<br>`edit.provinces.inspectEnsureAssignment` | `edit.provinces.inspectEnsureAssignment`<br>`edit.provinces.ensureAssignment` |
+| `politics.transfer-province` | 国家、省份与政治拓扑 | 把完整省份及其 Cell、城镇和省会转给目标国家，并修复双方统计、首都和引用。 | `existing-transaction` | `edit.provinces.inspectTransfer`<br>`edit.provinces.transfer` | `edit.provinces.inspectTransfer`<br>`edit.provinces.transfer` |
 | `politics.reorganize-provinces` | 国家、省份与政治拓扑 | 保留国家与范围外对象，墓碑化目标旧省并生成新的连通省份。 | `existing-transaction` | `generate.regenerate` | `planned:edit.provinces.inspectRegeneration`<br>`generate.regenerate(provinces)` |
 | `politics.create-province` | 国家、省份与政治拓扑 | 在已有国家的合法 Cell 创建省份，确定省会并同步国家省份列表。 | `existing-transaction` | `edit.provinces.add`<br>`edit.provinces.createAtCell`<br>`edit.provinces.inspectCreateAtCell` | `edit.provinces.inspectCreateAtCell`<br>`edit.provinces.createAtCell` |
 | `politics.delete-province` | 国家、省份与政治拓扑 | 删除省份，清除或重新分配领土与城镇，维护国家省份列表。 | `existing-transaction` | `edit.provinces.delete`<br>`edit.provinces.inspectDelete` | `edit.provinces.inspectDelete`<br>`edit.provinces.delete` |
@@ -94,36 +94,6 @@
 | `editor.import-collection` | 编辑器事务、批量操作与发布 | 校验外部集合、处理 ID 冲突与覆盖策略，并作为单条历史导入。 | `existing-transaction` | `data.inspectCollectionImport`<br>`edit.measurements.import`<br>`edit.military.importBattleEvents`<br>`edit.notes.import`<br>`namebases.import` | `data.inspectCollectionImport`<br>`现有 import 方法` |
 
 ## 需要优先补齐的复合事务
-
-### 征服、割让或中立化 Cell/区域（`politics.transfer-territory`）
-
-把一个或多个 Cell 从原国家转给目标国家，并按省份策略处理；若原国家失去最后领土则触发完整灭国。
-
-- 当前状态：`fragmented-needs-transaction`。
-- 关键分支：攻击国/来源国/Cell 非法；指定省份存在且属于目标国；指定省份不存在时确保创建；原国家仍有领土时修复首都/省会；原国家最后领土时完整墓碑化并清理引用。
-- 规范入口：`planned:edit.states.inspectTerritoryTransfer` → `planned:edit.states.transferTerritory`。
-- 共同不变量：国家、省份、Grid/Pack 归属、首都、省会、外交、军事、市场和路线引用不得悬空。
-- 证据：`app/webgl-generator/src/runtime/state-edit-commands.js`、`app/webgl-generator/src/runtime/state-topology-commands.js`。
-
-### 确保省份存在并分配 Cell（`politics.ensure-province-assignment`）
-
-把 Cell 分给已有省份；若明确要求的省份不存在，则在合法 ID/命名策略下创建后分配。
-
-- 当前状态：`fragmented-needs-transaction`。
-- 关键分支：自动选择相邻/最大省份；已有省份归属校验；缺失省份创建；稀疏 ID/Uint16 容量。
-- 规范入口：`planned:edit.provinces.inspectEnsureAssignment` → `planned:edit.provinces.ensureAssignment`。
-- 共同不变量：国家、省份、Grid/Pack 归属、首都、省会、外交、军事、市场和路线引用不得悬空。
-- 证据：`app/webgl-generator/src/runtime/province-edit-commands.js`、`app/webgl-generator/src/runtime/state-edit-commands.js`。
-
-### 整省转移给另一国家（`politics.transfer-province`）
-
-把完整省份及其 Cell、城镇和省会转给目标国家，并修复双方统计、首都和引用。
-
-- 当前状态：`fragmented-needs-transaction`。
-- 关键分支：省份/国家非法；首都省保护；来源国失去最后领土；目标国接收。
-- 规范入口：`planned:edit.provinces.inspectTransfer` → `planned:edit.provinces.transfer`。
-- 共同不变量：国家、省份、Grid/Pack 归属、首都、省会、外交、军事、市场和路线引用不得悬空。
-- 证据：`app/webgl-generator/src/runtime/province-edit-commands.js`、`app/webgl-generator/src/runtime/state-edit-commands.js`。
 
 ### 合并同一国家内的省份（`politics.merge-provinces`）
 
@@ -220,6 +190,6 @@
 
 ## 机器覆盖
 
-- API 分类：`atomic-editor-primitive=52`，`editor-runtime-service=49`，`read-export-service=10`，`read-primitive=26`，`semantic-action=146`。
+- API 分类：`atomic-editor-primitive=54`，`editor-runtime-service=49`，`read-export-service=10`，`read-primitive=27`，`semantic-action=149`。
 - 交互分类：`semantic-input-or-primitive=36`，`ui-boundary=12`。
-- Source digest：`74bc0b1ab0a60cac37e260f634dbca878ecee7e1401b88d70fb9e33e23511436`。
+- Source digest：`1f47828b9e49ebcb1991db42c7e88033383d58163aee3661f8a9516f3ac7ec5c`。

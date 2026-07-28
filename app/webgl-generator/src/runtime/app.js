@@ -168,7 +168,19 @@ import {decideSelectionPanelRoute, SELECTION_PANEL_BINDINGS, SELECTION_PANEL_ROU
 import {installKeyboardShortcuts} from "./keyboard-shortcuts.js";
 import {applyStateBrushPreview, createAddStateAtCellCommand, createApplyStateBrushCommand, createDeleteStateCommand, createRenameStatesFromNamebaseCommand, createSetStateColorCommand, createSetStateGovernmentCommand, createSetStatesGovernmentBatchCommand, inspectStateCreation, STATE_BRUSH_PREVIEW_EFFECTS} from "./state-edit-commands.js";
 import {issueCellInspectionToken, normalizeCellCreateInput, validateCellInspectionToken} from "./cell-inspection-token.js";
-import {createMergeStatesCommand, createSplitStateCommand, inspectStateMerge, inspectStateSplit, regenerateProvincesForStates, withScopedProvinceRegenerationOptions} from "./state-topology-commands.js";
+import {
+  createEnsureProvinceAssignmentCommand,
+  createMergeStatesCommand,
+  createProvinceTransferCommand,
+  createSplitStateCommand,
+  createTerritoryTransferCommand,
+  inspectPoliticalTransferTransaction,
+  inspectStateMerge,
+  inspectStateSplit,
+  POLITICAL_TRANSFER_ACTION,
+  regenerateProvincesForStates,
+  withScopedProvinceRegenerationOptions
+} from "./state-topology-commands.js";
 import {createAddZoneCommand, createDeleteZoneCommand, createSetZoneStyleCommand} from "./zone-edit-commands.js";
 import {createClearRegenerationLocksCommand, createSetRegenerationLockCommand, createSetRegenerationLocksCommand} from "./regeneration-lock-commands.js";
 import {assertRegenerationLockInspection, createRegenerationLockInspection, getRegenerationLockStatus, listRegenerationLocks, lockError, normalizeRegenerationLockReference, normalizeRegenerationLockReferences, regenerationLockObjectExists} from "./regeneration-locks.js";
@@ -2813,6 +2825,10 @@ function createRuntimeActions(state, documentRef, options = {}) {
         createAtCell: input => createAtCellViaApi(state, documentRef, "provinces", input),
         inspectDelete: provinceId => inspectExistingRuleViaApi(state, EXISTING_RULE_ACTION.PROVINCE_DELETE, {id: normalizeApiInteger(provinceId, "省份 ID")}),
         delete: (provinceId, options = {}) => deleteProvinceViaApi(state, documentRef, provinceId, options),
+        inspectEnsureAssignment: request => inspectPoliticalTransferViaApi(state, POLITICAL_TRANSFER_ACTION.ENSURE_PROVINCE_ASSIGNMENT, request),
+        ensureAssignment: (request, options = {}) => executePoliticalTransferViaApi(state, documentRef, POLITICAL_TRANSFER_ACTION.ENSURE_PROVINCE_ASSIGNMENT, request, options),
+        inspectTransfer: request => inspectPoliticalTransferViaApi(state, POLITICAL_TRANSFER_ACTION.PROVINCE_TRANSFER, request),
+        transfer: (request, options = {}) => executePoliticalTransferViaApi(state, documentRef, POLITICAL_TRANSFER_ACTION.PROVINCE_TRANSFER, request, options),
         rename: (provinceId, name) => renameProvinceViaApi(state, documentRef, provinceId, name),
         setColor: (provinceId, color) => setProvinceColorViaApi(state, documentRef, provinceId, color),
         applyChanges: changes => applyProvinceChangesViaApi(state, documentRef, changes)
@@ -2827,6 +2843,8 @@ function createRuntimeActions(state, documentRef, options = {}) {
         merge: options => mergeStatesViaApi(state, documentRef, options),
         inspectSplit: options => inspectStateSplitViaApi(state, options),
         split: options => splitStateViaApi(state, documentRef, options),
+        inspectTerritoryTransfer: request => inspectPoliticalTransferViaApi(state, POLITICAL_TRANSFER_ACTION.TERRITORY_TRANSFER, request),
+        transferTerritory: (request, options = {}) => executePoliticalTransferViaApi(state, documentRef, POLITICAL_TRANSFER_ACTION.TERRITORY_TRANSFER, request, options),
         rename: (stateId, name) => renameStateViaApi(state, documentRef, stateId, name),
         setColor: (stateId, color) => setStateColorViaApi(state, documentRef, stateId, color),
         setGovernment: (stateId, governmentKey, options = {}) => setStateGovernmentViaApi(state, documentRef, stateId, governmentKey, options),
@@ -4811,6 +4829,68 @@ function executeNamebaseReplacementViaApi(state, documentRef, request, options =
       return `已完成名称库${payload.operation || "迁移"}事务，迁移 ${payload.migrated || 0} 个绑定。`;
     }
   });
+}
+
+function inspectPoliticalTransferViaApi(state, actionId, request) {
+  assertMapAvailable(state);
+  const normalizedInput = normalizeRuleInspectionInput(request);
+  const evaluation = inspectPoliticalTransferTransaction(state.map, actionId, normalizedInput);
+  return createRuleInspectionResult(
+    state.mapRevision,
+    actionId,
+    evaluation.normalizedInput ?? normalizedInput,
+    {...evaluation, allowed: evaluation.allowed ?? evaluation.valid === true}
+  );
+}
+
+function assertPoliticalTransferExecution(state, actionId, request, options = {}) {
+  const normalizedInput = normalizeRuleInspectionInput(request);
+  const evaluation = inspectPoliticalTransferTransaction(state.map, actionId, normalizedInput);
+  const tokenInput = evaluation.normalizedInput ?? normalizedInput;
+  const validation = assertExistingRuleInspection(state.mapRevision, actionId, tokenInput, options);
+  if (validation.legacy) {
+    const error = new Error("政治转移规则事务必须先调用对应 inspector 并提交 inspectionToken");
+    error.code = "inspection-required";
+    throw error;
+  }
+  if (!(evaluation.allowed ?? evaluation.valid === true)) {
+    const error = new Error(evaluation.summary || "政治转移规则事务不允许执行");
+    error.code = evaluation.code || "rule-rejected";
+    throw error;
+  }
+  if (evaluation.requiresConfirm && options?.confirm !== true) {
+    const error = new Error(`${evaluation.summary || "该政治转移规则事务"}需要显式传入 {confirm: true}`);
+    error.code = "confirmation_required";
+    throw error;
+  }
+  return {evaluation, normalizedInput: tokenInput};
+}
+
+function executePoliticalTransferViaApi(state, documentRef, actionId, request, options = {}) {
+  assertMapAvailable(state);
+  const {normalizedInput} = assertPoliticalTransferExecution(state, actionId, request, options);
+  const commandFactory = actionId === POLITICAL_TRANSFER_ACTION.TERRITORY_TRANSFER
+    ? createTerritoryTransferCommand
+    : actionId === POLITICAL_TRANSFER_ACTION.ENSURE_PROVINCE_ASSIGNMENT
+      ? createEnsureProvinceAssignmentCommand
+      : createProvinceTransferCommand;
+  const label = options.label || (actionId === POLITICAL_TRANSFER_ACTION.TERRITORY_TRANSFER
+    ? "API 转移领土"
+    : actionId === POLITICAL_TRANSFER_ACTION.ENSURE_PROVINCE_ASSIGNMENT
+      ? "API 确保省份归属"
+      : "API 转移整省");
+  const command = commandFactory(normalizedInput, {label});
+  const result = executeEditCommand(state, documentRef, command, {
+    context: {map: state.map},
+    refresh: refreshAfterStateEdit,
+    noopStatus: "政治归属没有变化。",
+    status: executed => executed.getResult?.()?.summary || `${label}完成。`,
+    errorStatus: `${label}失败，地图已恢复执行前状态。`,
+    throwOnError: true
+  });
+  updateRuntimePanel(documentRef, state);
+  updateEditingInteractionLock(state, documentRef);
+  return editApiResult(state, result);
 }
 
 function executeNamedObjectNamebaseRename(state, documentRef, kind, ids, {refresh} = {}) {
