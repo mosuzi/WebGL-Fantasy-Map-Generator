@@ -154,6 +154,12 @@ import {
   REMAINING_RULE_ACTION,
   inspectRemainingRuleAction
 } from "./remaining-rule-inspectors.js";
+import {
+  NAMEBASE_RULE_ACTION,
+  createBindNamebaseAndRenameCommand,
+  createReplaceOrRemoveNamebaseCommand,
+  inspectNamebaseRuleTransaction
+} from "./namebase-rule-transactions.js";
 import {createRuleInspectionResult, normalizeRuleInspectionInput} from "./rule-inspection-token.js";
 import {executeClimateDownstreamRebuildAsync, inspectClimateDownstreamRebuild} from "./climate-downstream-rebuild.js";
 import {captureMapMutationSnapshot, executeMapSnapshotTransaction, restoreMapMutationSnapshot} from "./map-snapshot-transaction.js";
@@ -2726,7 +2732,11 @@ function createRuntimeActions(state, documentRef, options = {}) {
       delete: (baseId, options = {}) => deleteNamebaseViaAction(state, documentRef, baseId, options),
       clear: (options = {}) => clearNamebasesViaApi(state, documentRef, options),
       bind: (scope, target, baseId, options = {}) => bindNamebaseViaApi(state, documentRef, scope, target, baseId, options),
-      renameObjects: (kind, ids, options = {}) => renameObjectsFromNamebaseViaApi(state, documentRef, kind, ids, options)
+      renameObjects: (kind, ids, options = {}) => renameObjectsFromNamebaseViaApi(state, documentRef, kind, ids, options),
+      inspectBindAndRename: request => inspectNamebaseRuleViaApi(state, NAMEBASE_RULE_ACTION.BIND_AND_RENAME, request),
+      bindAndRename: (request, options = {}) => executeBindAndRenameViaApi(state, documentRef, request, options),
+      inspectReplacement: request => inspectNamebaseRuleViaApi(state, NAMEBASE_RULE_ACTION.REPLACE_OR_REMOVE, request),
+      replace: (request, options = {}) => executeNamebaseReplacementViaApi(state, documentRef, request, options)
     },
     data: {
       exportAll: (options = {}) => exportAllMapData(state, documentRef, options),
@@ -4731,6 +4741,78 @@ function renameObjectsFromNamebaseViaApi(state, documentRef, kind, ids, options 
   return editApiResult(state, result);
 }
 
+function inspectNamebaseRuleViaApi(state, actionId, request) {
+  assertMapAvailable(state);
+  const normalizedInput = normalizeRuleInspectionInput(request);
+  const evaluation = inspectNamebaseRuleTransaction(state.map, actionId, normalizedInput);
+  return createRuleInspectionResult(state.mapRevision, actionId, evaluation.normalizedInput ?? normalizedInput, evaluation);
+}
+
+function assertNamebaseRuleExecution(state, actionId, request, options = {}) {
+  const normalizedInput = normalizeRuleInspectionInput(request);
+  const evaluation = inspectNamebaseRuleTransaction(state.map, actionId, normalizedInput);
+  const tokenInput = evaluation.normalizedInput ?? normalizedInput;
+  const validation = assertExistingRuleInspection(state.mapRevision, actionId, tokenInput, options);
+  if (validation.legacy) {
+    const error = new Error("名称库规则事务必须先调用对应 inspector 并提交 inspectionToken");
+    error.code = "inspection-required";
+    throw error;
+  }
+  if (!evaluation.allowed) {
+    const error = new Error(evaluation.summary || "名称库规则事务不允许执行");
+    error.code = evaluation.code || "rule-rejected";
+    throw error;
+  }
+  if (evaluation.requiresConfirm && options?.confirm !== true) {
+    const error = new Error(`${evaluation.summary || "该名称库规则事务"}需要显式传入 {confirm: true}`);
+    error.code = "confirmation_required";
+    throw error;
+  }
+  return {evaluation, normalizedInput: tokenInput};
+}
+
+function executeBindAndRenameViaApi(state, documentRef, request, options = {}) {
+  assertMapAvailable(state);
+  const {normalizedInput} = assertNamebaseRuleExecution(
+    state,
+    NAMEBASE_RULE_ACTION.BIND_AND_RENAME,
+    request,
+    options
+  );
+  const command = createBindNamebaseAndRenameCommand(normalizedInput, {
+    label: options.label || "API 绑定名称库并重命名"
+  });
+  return executeNamebaseCommandViaApi(state, documentRef, command, {
+    noopStatus: "名称库绑定和对象名称均未变化。",
+    throwOnError: true,
+    status: executed => {
+      const payload = executed.getResult?.() || {};
+      return `已原子设置名称库绑定${payload.rename?.renamed ? `并重命名 ${payload.rename.renamed} 个对象` : ""}。`;
+    }
+  });
+}
+
+function executeNamebaseReplacementViaApi(state, documentRef, request, options = {}) {
+  assertMapAvailable(state);
+  const {normalizedInput} = assertNamebaseRuleExecution(
+    state,
+    NAMEBASE_RULE_ACTION.REPLACE_OR_REMOVE,
+    request,
+    options
+  );
+  const command = createReplaceOrRemoveNamebaseCommand(normalizedInput, {
+    label: options.label || "API 替换或移除名称库"
+  });
+  return executeNamebaseCommandViaApi(state, documentRef, command, {
+    noopStatus: "名称库及其绑定没有变化。",
+    throwOnError: true,
+    status: executed => {
+      const payload = executed.getResult?.() || {};
+      return `已完成名称库${payload.operation || "迁移"}事务，迁移 ${payload.migrated || 0} 个绑定。`;
+    }
+  });
+}
+
 function executeNamedObjectNamebaseRename(state, documentRef, kind, ids, {refresh} = {}) {
   const command = createRenameNamedObjectsFromNamebaseCommand(kind, ids);
   executeEditCommand(state, documentRef, command, {
@@ -4814,7 +4896,7 @@ function executeNamebaseCommandViaApi(state, documentRef, command, options = {})
     },
     noopStatus: options.noopStatus,
     status: options.status,
-    throwOnError: false
+    throwOnError: options.throwOnError === true
   });
   return editApiResult(state, result);
 }

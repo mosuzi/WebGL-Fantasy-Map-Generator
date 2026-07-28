@@ -32,7 +32,10 @@ export const API_METHODS = Object.freeze({
     "markers.add", "markers.delete", "markers.move", "markers.setNote", "markers.setVisual"
   ]),
   data: Object.freeze(["exportAll", "exportMap", "exportGEO", "exportFeatureGEO", "exportCompressedAll", "exportPNG", "exportNotes", "exportMeasurements", "exportImportDiagnostic", "saveBrowserMap", "restoreBrowserMap", "inspectCollectionImport", "importMap", "importGEO", "importHeightmap"]),
-  namebases: Object.freeze(["list", "export", "import", "create", "copyBuiltin", "update", "delete", "clear", "bind", "renameObjects"]),
+  namebases: Object.freeze([
+    "list", "export", "import", "create", "copyBuiltin", "update", "delete", "clear", "bind", "renameObjects",
+    "inspectBindAndRename", "bindAndRename", "inspectReplacement", "replace"
+  ]),
   debug: Object.freeze(["enable", "disable", "snapshot", "dumpState", "renderer", "health", "profileNextRender"])
 });
 
@@ -47,6 +50,7 @@ export const CONFIRM_REQUIRED_METHODS = Object.freeze([
   "data.restoreBrowserMap",
   "namebases.delete",
   "namebases.clear",
+  "namebases.replace",
   "namebases.renameObjects",
   "climate.applyDownstreamRebuild",
   "edit.height.rebuildBaseDerived",

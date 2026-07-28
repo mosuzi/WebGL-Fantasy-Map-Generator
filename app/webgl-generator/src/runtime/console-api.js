@@ -393,7 +393,11 @@ export function createConsoleApi(documentRef, state, actions = {}) {
       delete: (baseId, options = {}) => apiCall(() => requireApiAction(actions.namebases?.delete, "namebases.delete")(baseId, options)),
       clear: (options = {}) => apiCall(() => requireApiAction(actions.namebases?.clear, "namebases.clear")(options)),
       bind: (scope, target, baseId, options = {}) => apiCall(() => requireApiAction(actions.namebases?.bind, "namebases.bind")(scope, target, baseId, options)),
-      renameObjects: (kind, ids, options = {}) => apiCall(() => requireApiAction(actions.namebases?.renameObjects, "namebases.renameObjects")(kind, ids, options))
+      renameObjects: (kind, ids, options = {}) => apiCall(() => requireApiAction(actions.namebases?.renameObjects, "namebases.renameObjects")(kind, ids, options)),
+      inspectBindAndRename: request => apiCall(() => requireApiAction(actions.namebases?.inspectBindAndRename, "namebases.inspectBindAndRename")(request)),
+      bindAndRename: (request, options = {}) => apiCall(() => requireApiAction(actions.namebases?.bindAndRename, "namebases.bindAndRename")(request, options)),
+      inspectReplacement: request => apiCall(() => requireApiAction(actions.namebases?.inspectReplacement, "namebases.inspectReplacement")(request)),
+      replace: (request, options = {}) => apiCall(() => requireApiAction(actions.namebases?.replace, "namebases.replace")(request, options))
     }),
     debug: Object.freeze({
       enable: () => apiCall(() => setDebugMode(state, true)),
@@ -753,7 +757,11 @@ export function buildMethodMetadata() {
       delete: {stable: "draft", mutates: "namebases", undoable: true, async: false, requiresConfirm: true},
       clear: {stable: "draft", mutates: "namebases", undoable: true, async: false, requiresConfirm: true},
       bind: {stable: "draft", mutates: "namebases", undoable: true, async: false, requiresConfirm: false},
-      renameObjects: {stable: "draft", mutates: "object-names", undoable: true, async: false, requiresConfirm: true}
+      renameObjects: {stable: "draft", mutates: "object-names", undoable: true, async: false, requiresConfirm: true},
+      inspectBindAndRename: {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
+      bindAndRename: {stable: "draft", mutates: "namebases-and-object-names", undoable: true, async: false, requiresConfirm: false},
+      inspectReplacement: {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
+      replace: {stable: "draft", mutates: "namebases-and-bindings", undoable: true, async: false, requiresConfirm: true}
     },
     debug: {
       enable: {stable: "draft", mutates: "debug-ui-state", undoable: false, async: false, requiresConfirm: false},

@@ -4,11 +4,11 @@
 
 ## 审计结论
 
-- 上游能力矩阵：1078 行，unknown / unclassified / gap = 0 / 0 / 0。
-- 公开 API：279 / 279 已归类。
+- 上游能力矩阵：1090 行，unknown / unclassified / gap = 0 / 0 / 0。
+- 公开 API：283 / 283 已归类。
 - Cell / 画布动作：48 / 48 已归类；画布模式 29，直接操控 19 类 / 89 个宿主。
 - 规则事务与玩法配方：68 + 10 = 78。
-- 已有完整事务 57，已有写命令但缺 AI inspector 0，多 API 碎片待收敛 5，缺失游戏规则 6，规划器配方 10。
+- 已有完整事务 59，已有写命令但缺 AI inspector 0，多 API 碎片待收敛 3，缺失游戏规则 6，规划器配方 10。
 - 结构缺口：0。
 
 ## 边界定义
@@ -69,8 +69,8 @@
 | `society.transfer-population` | 城镇、人口与定居点 | 从来源区域向目标区域迁移人口，保持总量并更新城乡和统计。 | `existing-transaction` | `edit.population.inspectTransfer`<br>`edit.population.transfer` | `edit.population.inspectTransfer`<br>`edit.population.transfer` |
 | `society.culture.lifecycle` | 文化、宗教、命名与社会归属 | 管理文化对象及其 Cell 归属、中心、父级和删除后的回退。 | `existing-transaction` | `edit.cultures.add`<br>`edit.cultures.applyExpansion`<br>`edit.cultures.assignCells`<br>`edit.cultures.delete`<br>`edit.cultures.inspectExpansion`<br>`edit.cultures.inspectLifecycle`<br>`edit.cultures.setParent` | `edit.cultures.inspectLifecycle / edit.cultures.inspectExpansion`<br>`edit.cultures.*` |
 | `society.religion.lifecycle` | 文化、宗教、命名与社会归属 | 管理宗教对象及其 Cell 归属、中心、父级和删除后的回退。 | `existing-transaction` | `edit.religions.add`<br>`edit.religions.applyExpansion`<br>`edit.religions.assignCells`<br>`edit.religions.delete`<br>`edit.religions.inspectExpansion`<br>`edit.religions.inspectLifecycle`<br>`edit.religions.setParent` | `edit.religions.inspectLifecycle / edit.religions.inspectExpansion`<br>`edit.religions.*` |
-| `society.bind-namebase-and-rename` | 文化、宗教、命名与社会归属 | 调整名称库绑定并按国家、省份或对象类型批量重命名，确保唯一性和旧名策略。 | `fragmented-needs-transaction` | `namebases.bind`<br>`namebases.renameObjects` | `planned:namebases.inspectBindAndRename`<br>`planned:namebases.bindAndRename` |
-| `society.replace-or-remove-namebase` | 文化、宗教、命名与社会归属 | 删除、清空或替换用户名称库时，先处理所有文化和对象绑定，避免悬空。 | `fragmented-needs-transaction` | `namebases.bind`<br>`namebases.clear`<br>`namebases.delete`<br>`namebases.import`<br>`namebases.update` | `planned:namebases.inspectReplacement`<br>`planned:namebases.replace` |
+| `society.bind-namebase-and-rename` | 文化、宗教、命名与社会归属 | 调整名称库绑定并按国家、省份或对象类型批量重命名，确保唯一性和旧名策略。 | `existing-transaction` | `namebases.bindAndRename`<br>`namebases.inspectBindAndRename` | `namebases.inspectBindAndRename`<br>`namebases.bindAndRename` |
+| `society.replace-or-remove-namebase` | 文化、宗教、命名与社会归属 | 删除、清空或替换用户名称库时，先处理所有文化和对象绑定，避免悬空。 | `existing-transaction` | `namebases.inspectReplacement`<br>`namebases.replace` | `namebases.inspectReplacement`<br>`namebases.replace` |
 | `infrastructure.create-route` | 路线、区域与资源设施 | 根据端点或 Pack Cell 路径创建道路、步道或海路，验证通行和归属。 | `existing-transaction` | `edit.routes.create` | `planned:cells.inspectAction(route.draw)`<br>`edit.routes.create` |
 | `infrastructure.edit-route` | 路线、区域与资源设施 | 移动、插入或删除路线节点，并重建路径、长度、归属和渲染数据。 | `existing-transaction` | `edit.routes.inspectEdit`<br>`edit.routes.update` | `edit.routes.inspectEdit`<br>`edit.routes.update` |
 | `infrastructure.delete-route` | 路线、区域与资源设施 | 删除路线，评估备注、城镇和资源引用并保持普通单路线低影响兼容。 | `existing-transaction` | `edit.routes.delete`<br>`edit.routes.inspectDelete` | `edit.routes.inspectDelete`<br>`edit.routes.delete` |
@@ -144,26 +144,6 @@
 - 规范入口：`planned:edit.provinces.inspectSplit` → `planned:edit.provinces.split`。
 - 共同不变量：国家、省份、Grid/Pack 归属、首都、省会、外交、军事、市场和路线引用不得悬空。
 - 证据：`app/webgl-generator/src/runtime/province-edit-commands.js`。
-
-### 绑定名称库并按范围重命名对象（`society.bind-namebase-and-rename`）
-
-调整名称库绑定并按国家、省份或对象类型批量重命名，确保唯一性和旧名策略。
-
-- 当前状态：`fragmented-needs-transaction`。
-- 关键分支：只绑定；绑定并重命名；范围过滤；名称冲突回退。
-- 规范入口：`planned:namebases.inspectBindAndRename` → `planned:namebases.bindAndRename`。
-- 共同不变量：文化/宗教中心、继承关系、Cell 归属、对象引用和名称库绑定不得形成无主或循环数据。
-- 证据：`app/webgl-generator/src/runtime/namebase-edit-commands.js`、`app/webgl-generator/src/runtime/object-edit-commands.js`。
-
-### 替换或删除名称库并迁移绑定（`society.replace-or-remove-namebase`）
-
-删除、清空或替换用户名称库时，先处理所有文化和对象绑定，避免悬空。
-
-- 当前状态：`fragmented-needs-transaction`。
-- 关键分支：仍被绑定时拒绝/迁移；导入替换；删除单库；清空用户库。
-- 规范入口：`planned:namebases.inspectReplacement` → `planned:namebases.replace`。
-- 共同不变量：文化/宗教中心、继承关系、Cell 归属、对象引用和名称库绑定不得形成无主或循环数据。
-- 证据：`app/webgl-generator/src/runtime/namebase-edit-commands.js`、`docs/task-notes/delete-impact-and-batch.md`。
 
 ### 宣战并建立战争与军事上下文（`diplomacy.declare-war`）
 
@@ -240,6 +220,6 @@
 
 ## 机器覆盖
 
-- API 分类：`atomic-editor-primitive=49`，`editor-runtime-service=49`，`read-export-service=10`，`read-primitive=26`，`semantic-action=145`。
+- API 分类：`atomic-editor-primitive=52`，`editor-runtime-service=49`，`read-export-service=10`，`read-primitive=26`，`semantic-action=146`。
 - 交互分类：`semantic-input-or-primitive=36`，`ui-boundary=12`。
-- Source digest：`60a4f620ed905e442a3a252c0eba7d7a695540272b48c79c2799ccca689ba1b4`。
+- Source digest：`74bc0b1ab0a60cac37e260f634dbca878ecee7e1401b88d70fb9e33e23511436`。

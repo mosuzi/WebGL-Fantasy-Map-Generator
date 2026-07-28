@@ -6,15 +6,15 @@
 
 - 交互表面：105（纳入 87，交互审计排除 18）
 - 画布模式：29
-- runtime actions：233
-- API action 绑定：232
+- runtime actions：237
+- API action 绑定：236
 - command / inspector 导出：189
-- 公共 API 方法：279
-- 矩阵总行数：1078
+- 公共 API 方法：283
+- 矩阵总行数：1090
 
 ## 分类结果
 
-- covered：1005
+- covered：1017
 - excluded：73
 - deferred-owned：0
 - gap：0

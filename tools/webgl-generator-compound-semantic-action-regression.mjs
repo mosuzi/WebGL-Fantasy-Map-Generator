@@ -12,8 +12,9 @@ assert.equal(report.denominator.classifiedCellActionRows, report.denominator.cel
 assert.equal(report.denominator.fullCapabilityGaps, 0);
 assert.ok(report.totals.ruleTransactions >= 50);
 assert.ok(report.totals.plannerRecipes >= 10);
-assert.equal(report.totals.statuses["existing-transaction"], 57);
+assert.equal(report.totals.statuses["existing-transaction"], 59);
 assert.equal(report.totals.statuses["existing-needs-inspector"] || 0, 0);
+assert.equal(report.totals.statuses["fragmented-needs-transaction"], 3);
 
 for (const [id, inspect, execute] of [
   ["politics.create-state", "edit.states.inspectCreateAtCell", "edit.states.createAtCell"],
@@ -58,6 +59,18 @@ assert.match(zoneManagement?.inspect || "", /edit\.zones\.inspectDelete/u);
 const territory = byId.get("politics.transfer-territory");
 assert.equal(territory.status, "fragmented-needs-transaction");
 assert.match(territory.inspect, /inspectTerritoryTransfer/u);
+
+for (const [id, inspect, execute] of [
+  ["society.bind-namebase-and-rename", "namebases.inspectBindAndRename", "namebases.bindAndRename"],
+  ["society.replace-or-remove-namebase", "namebases.inspectReplacement", "namebases.replace"]
+]) {
+  const action = byId.get(id);
+  assert.equal(action?.status, "existing-transaction", `${id} 尚未闭合为原子规则事务`);
+  assert.equal(action?.inspect, inspect);
+  assert.equal(action?.execute, execute);
+  assert.ok(action?.api.includes(inspect));
+  assert.ok(action?.api.includes(execute));
+}
 assert.match(territory.execute, /transferTerritory/u);
 assert.ok(territory.branches.some(item => item.includes("最后领土")));
 assert.ok(territory.api.includes("edit.states.applyChanges"));

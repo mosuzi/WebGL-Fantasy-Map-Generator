@@ -259,6 +259,7 @@ const METHOD_OVERRIDES = Object.freeze({
   ...createAtCellMethodOverrides(),
   ...existingRuleMethodOverrides(),
   ...remainingRuleMethodOverrides(),
+  ...namebaseRuleMethodOverrides(),
   "oceanCurrents.rename": {
     arguments: [argument("currentId", stringSchema("洋流 ID")), argument("name", stringSchema("新名称"))],
     result: objectSchema(["executed", "id", "name"]),
@@ -1182,6 +1183,91 @@ function remainingRuleMethodOverrides() {
   return entries;
 }
 
+function namebaseRuleMethodOverrides() {
+  const tokenCodes = [
+    "inspection-required", "inspection-stale", "inspection-token-invalid",
+    "inspection-action-mismatch", "inspection-input-mismatch", "inspection-schema-mismatch"
+  ];
+  const bindCodes = [
+    "missing-map", "invalid-input", "invalid-scope", "invalid-target",
+    "invalid-culture", "culture-not-found", "namebase-not-found", "invalid-rename",
+    "target-kind-mismatch", "invalid-rename-ids", "rename-object-not-found", "rename-culture-mismatch",
+    "binding-unchanged", "rename-unchanged", "name-conflict"
+  ];
+  const replacementCodes = [
+    "missing-map", "invalid-input", "invalid-operation", "invalid-base", "user-namebase-not-found",
+    "no-user-namebases", "invalid-document", "empty-document", "replacement-not-found",
+    "replacement-will-be-removed"
+  ];
+  const bindRequest = {
+    type: "object",
+    required: ["scope", "target", "baseId"],
+    properties: {
+      scope: {type: "string", enum: ["global", "culture"]},
+      cultureId: {type: "integer", minimum: 1},
+      target: {type: "string", enum: ["stateRoot", "place", "hydro", "culture", "religion"]},
+      baseId: {type: "string"},
+      rename: {
+        type: "object",
+        required: ["kind", "ids"],
+        properties: {
+          kind: {type: "string", enum: ["state", "province", "city", "river", "lake", "culture", "religion"]},
+          ids: arraySchema({type: "integer", minimum: 0})
+        },
+        additionalProperties: false
+      }
+    },
+    additionalProperties: false
+  };
+  const replacementRequest = {
+    type: "object",
+    required: ["operation"],
+    properties: {
+      operation: {type: "string", enum: ["delete", "clear", "replace"]},
+      baseId: {type: "string"},
+      replacementBaseId: {type: "string"},
+      document: {type: "object"},
+      filename: {type: "string"}
+    },
+    additionalProperties: false
+  };
+  const executionOptions = ruleExecutionOptionsSchema({
+    properties: {label: {type: "string"}},
+    required: ["inspectionToken", "expectedRevision"]
+  });
+  const destructiveExecutionOptions = ruleExecutionOptionsSchema({
+    confirm: true,
+    properties: {label: {type: "string"}},
+    required: ["inspectionToken", "expectedRevision"]
+  });
+  const executionExample = {
+    inspectionToken: "rulei1.example",
+    expectedRevision: {mapIdentity: "example-map", mapRevision: 1}
+  };
+  return {
+    "namebases.inspectBindAndRename": ruleInspectorOverride([
+      argument("request", bindRequest)
+    ], bindCodes, [[{scope: "global", target: "place", baseId: "", rename: {kind: "city", ids: [1]}}]]),
+    "namebases.bindAndRename": ruleExecutorOverride([
+      argument("request", bindRequest),
+      argument("options", executionOptions)
+    ], [...bindCodes, ...tokenCodes, "confirmation_required"], [[
+      {scope: "global", target: "place", baseId: "", rename: {kind: "city", ids: [1]}},
+      {...executionExample, confirm: true}
+    ]]),
+    "namebases.inspectReplacement": ruleInspectorOverride([
+      argument("request", replacementRequest)
+    ], replacementCodes, [[{operation: "delete", baseId: "user-1", replacementBaseId: ""}]]),
+    "namebases.replace": ruleExecutorOverride([
+      argument("request", replacementRequest),
+      argument("options", destructiveExecutionOptions)
+    ], [...replacementCodes, ...tokenCodes, "confirmation_required"], [[
+      {operation: "delete", baseId: "user-1", replacementBaseId: ""},
+      {...executionExample, confirm: true}
+    ]])
+  };
+}
+
 function ruleInspectorOverride(argumentsList, actionCodes, examples) {
   return {
     arguments: argumentsList,
@@ -1222,10 +1308,11 @@ function ruleInspectionResultSchema() {
   };
 }
 
-function ruleExecutionOptionsSchema({confirm = false, properties = {}} = {}) {
+function ruleExecutionOptionsSchema({confirm = false, properties = {}, required = []} = {}) {
+  const requiredProperties = [...new Set([...required, ...(confirm ? ["confirm"] : [])])];
   return {
     type: "object",
-    ...(confirm ? {required: ["confirm"]} : {}),
+    ...(requiredProperties.length ? {required: requiredProperties} : {}),
     properties: {
       ...properties,
       inspectionToken: {type: "string", minLength: 1},

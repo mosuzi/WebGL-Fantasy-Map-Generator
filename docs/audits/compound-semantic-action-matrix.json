@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "scope": "权威任务第 204 项：全游戏复合语义接口、规则动作与玩法配方审计",
   "generatedAtPolicy": "报告不写入动态时间，sourceDigest 变化即要求重新生成",
-  "sourceDigest": "60a4f620ed905e442a3a252c0eba7d7a695540272b48c79c2799ccca689ba1b4",
+  "sourceDigest": "74bc0b1ab0a60cac37e260f634dbca878ecee7e1401b88d70fb9e33e23511436",
   "definition": {
     "compoundSemanticAction": "一个玩家意图，但执行时需要跨对象/系统、条件分支、业务预检或原子回滚；应由单一规则事务表达。",
     "primitive": "只修改一个稳定字段或纯编辑器显示偏好，可保留为原子 API，不强行包装成复合动作。",
@@ -21,12 +21,12 @@
     "recipe-only": "战略/玩法流程，不应实现为一条超大写接口。"
   },
   "denominator": {
-    "fullCapabilityRows": 1078,
+    "fullCapabilityRows": 1090,
     "fullCapabilityUnknown": 0,
     "fullCapabilityUnclassified": 0,
     "fullCapabilityGaps": 0,
-    "publicApiMethods": 279,
-    "classifiedApiMethods": 279,
+    "publicApiMethods": 283,
+    "classifiedApiMethods": 283,
     "cellActionRows": 48,
     "classifiedCellActionRows": 48,
     "canvasModes": 29,
@@ -38,8 +38,8 @@
     "ruleTransactions": 68,
     "plannerRecipes": 10,
     "statuses": {
-      "existing-transaction": 57,
-      "fragmented-needs-transaction": 5,
+      "existing-transaction": 59,
+      "fragmented-needs-transaction": 3,
       "missing-game-rule": 6,
       "recipe-only": 10
     },
@@ -57,11 +57,11 @@
       "world": 6
     },
     "apiClassifications": {
-      "atomic-editor-primitive": 49,
+      "atomic-editor-primitive": 52,
       "editor-runtime-service": 49,
       "read-export-service": 10,
       "read-primitive": 26,
-      "semantic-action": 145
+      "semantic-action": 146
     },
     "interactionClassifications": {
       "semantic-input-or-primitive": 36,
@@ -1578,11 +1578,11 @@
       "tier": "rule-transaction",
       "variants": [],
       "api": [
-        "namebases.bind",
-        "namebases.renameObjects"
+        "namebases.bindAndRename",
+        "namebases.inspectBindAndRename"
       ],
-      "inspect": "planned:namebases.inspectBindAndRename",
-      "execute": "planned:namebases.bindAndRename",
+      "inspect": "namebases.inspectBindAndRename",
+      "execute": "namebases.bindAndRename",
       "branches": [
         "只绑定",
         "绑定并重命名",
@@ -1597,7 +1597,7 @@
       "id": "society.bind-namebase-and-rename",
       "title": "绑定名称库并按范围重命名对象",
       "domain": "society",
-      "status": "fragmented-needs-transaction",
+      "status": "existing-transaction",
       "intent": "调整名称库绑定并按国家、省份或对象类型批量重命名，确保唯一性和旧名策略。",
       "gameplayChapter": "文化、宗教、命名与社会归属",
       "invariant": "文化/宗教中心、继承关系、Cell 归属、对象引用和名称库绑定不得形成无主或循环数据。",
@@ -1608,14 +1608,11 @@
       "tier": "rule-transaction",
       "variants": [],
       "api": [
-        "namebases.bind",
-        "namebases.clear",
-        "namebases.delete",
-        "namebases.import",
-        "namebases.update"
+        "namebases.inspectReplacement",
+        "namebases.replace"
       ],
-      "inspect": "planned:namebases.inspectReplacement",
-      "execute": "planned:namebases.replace",
+      "inspect": "namebases.inspectReplacement",
+      "execute": "namebases.replace",
       "branches": [
         "仍被绑定时拒绝/迁移",
         "导入替换",
@@ -1630,7 +1627,7 @@
       "id": "society.replace-or-remove-namebase",
       "title": "替换或删除名称库并迁移绑定",
       "domain": "society",
-      "status": "fragmented-needs-transaction",
+      "status": "existing-transaction",
       "intent": "删除、清空或替换用户名称库时，先处理所有文化和对象绑定，避免悬空。",
       "gameplayChapter": "文化、宗教、命名与社会归属",
       "invariant": "文化/宗教中心、继承关系、Cell 归属、对象引用和名称库绑定不得形成无主或循环数据。",
@@ -4053,18 +4050,21 @@
     },
     {
       "method": "namebases.bind",
+      "classification": "atomic-editor-primitive",
+      "actionIds": []
+    },
+    {
+      "method": "namebases.bindAndRename",
       "classification": "semantic-action",
       "actionIds": [
-        "society.bind-namebase-and-rename",
-        "society.replace-or-remove-namebase"
+        "society.bind-namebase-and-rename"
       ]
     },
     {
       "method": "namebases.clear",
       "classification": "semantic-action",
       "actionIds": [
-        "editor.delete-with-impact",
-        "society.replace-or-remove-namebase"
+        "editor.delete-with-impact"
       ]
     },
     {
@@ -4081,8 +4081,7 @@
       "method": "namebases.delete",
       "classification": "semantic-action",
       "actionIds": [
-        "editor.delete-with-impact",
-        "society.replace-or-remove-namebase"
+        "editor.delete-with-impact"
       ]
     },
     {
@@ -4094,7 +4093,20 @@
       "method": "namebases.import",
       "classification": "semantic-action",
       "actionIds": [
-        "editor.import-collection",
+        "editor.import-collection"
+      ]
+    },
+    {
+      "method": "namebases.inspectBindAndRename",
+      "classification": "semantic-action",
+      "actionIds": [
+        "society.bind-namebase-and-rename"
+      ]
+    },
+    {
+      "method": "namebases.inspectReplacement",
+      "classification": "semantic-action",
+      "actionIds": [
         "society.replace-or-remove-namebase"
       ]
     },
@@ -4105,17 +4117,20 @@
     },
     {
       "method": "namebases.renameObjects",
-      "classification": "semantic-action",
-      "actionIds": [
-        "society.bind-namebase-and-rename"
-      ]
+      "classification": "atomic-editor-primitive",
+      "actionIds": []
     },
     {
-      "method": "namebases.update",
+      "method": "namebases.replace",
       "classification": "semantic-action",
       "actionIds": [
         "society.replace-or-remove-namebase"
       ]
+    },
+    {
+      "method": "namebases.update",
+      "classification": "atomic-editor-primitive",
+      "actionIds": []
     },
     {
       "method": "objects.get",

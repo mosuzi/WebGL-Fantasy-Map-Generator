@@ -101,6 +101,7 @@ async function inspectNamebaseRenames(page, {cells, seed, template}) {
       failures.push(`空 ids 未结构化失败：${JSON.stringify(emptyIds)}`);
     }
 
+    const ruleTransactions = inspectRuleTransactions();
     const results = [];
     for (const kind of ["state", "city", "river", "lake", "province", "culture", "religion"]) {
       const plan = targets[kind];
@@ -162,6 +163,7 @@ async function inspectNamebaseRenames(page, {cells, seed, template}) {
         emptyIdsRejected: emptyIds?.ok === false,
         emptyIdsMessage: emptyIds?.error?.message || ""
       },
+      ruleTransactions,
       targets,
       renames: results,
       history: {undo: history.undo, redo: history.redo, lastAffected: history.lastAffected || []},
@@ -169,6 +171,89 @@ async function inspectNamebaseRenames(page, {cells, seed, template}) {
       failures,
       passed: failures.length === 0
     };
+
+    function inspectRuleTransactions() {
+      const cityId = targets.city.ids[0];
+      if (!Number.isInteger(cityId)) {
+        failures.push("当前地图没有可用于名称库原子事务的城市");
+        return {skipped: true};
+      }
+      const beforeCity = readNameSnapshots(map, "city", [cityId])[0];
+      const beforeBinding = String(map?.namebases?.bindings?.global?.place || "");
+      const created = unwrap(api.namebases.create({
+        name: "规则事务浏览器名称库",
+        source: ["验收孤城", "霜桥古渡", "云岫新港", "星野长川"]
+      }), "namebases.create.rule");
+      const baseId = created.result?.id;
+      if (!baseId) throw new Error("namebases.create.rule 未返回用户库 ID");
+
+      const bindRequest = {
+        scope: "global",
+        target: "place",
+        baseId,
+        rename: {kind: "city", ids: [cityId]}
+      };
+      const bindInspection = unwrap(api.namebases.inspectBindAndRename(bindRequest), "namebases.inspectBindAndRename");
+      if (!bindInspection.allowed) throw new Error(`绑定重命名预检被拒绝：${bindInspection.code} ${bindInspection.summary}`);
+      const bindWithoutToken = api.namebases.bindAndRename(bindRequest, {confirm: true});
+      if (bindWithoutToken?.ok !== false || bindWithoutToken.error?.code !== "inspection-required") {
+        failures.push(`绑定重命名未强制 inspectionToken：${JSON.stringify(bindWithoutToken)}`);
+      }
+      const bindWithoutConfirm = api.namebases.bindAndRename(bindInspection.normalizedInput, {
+        inspectionToken: bindInspection.inspectionToken,
+        expectedRevision: bindInspection.expectedRevision
+      });
+      if (bindWithoutConfirm?.ok !== false || bindWithoutConfirm.error?.code !== "confirmation_required") {
+        failures.push(`绑定重命名未执行条件确认：${JSON.stringify(bindWithoutConfirm)}`);
+      }
+      const bindResult = unwrap(api.namebases.bindAndRename(bindInspection.normalizedInput, {
+        inspectionToken: bindInspection.inspectionToken,
+        expectedRevision: bindInspection.expectedRevision,
+        confirm: true
+      }), "namebases.bindAndRename");
+      const renamedCity = readNameSnapshots(map, "city", [cityId])[0];
+      if (!bindResult.executed || sameSnapshot(renamedCity, beforeCity)) failures.push("绑定重命名事务没有同时改名");
+      if (String(map?.namebases?.bindings?.global?.place || "") !== baseId) failures.push("绑定重命名事务没有写入新绑定");
+
+      const replacementRequest = {operation: "delete", baseId, replacementBaseId: ""};
+      const replacementInspection = unwrap(api.namebases.inspectReplacement(replacementRequest), "namebases.inspectReplacement");
+      const replacementWithoutConfirm = api.namebases.replace(replacementInspection.normalizedInput, {
+        inspectionToken: replacementInspection.inspectionToken,
+        expectedRevision: replacementInspection.expectedRevision
+      });
+      if (replacementWithoutConfirm?.ok !== false || replacementWithoutConfirm.error?.code !== "confirmation_required") {
+        failures.push(`名称库替换事务未强制确认：${JSON.stringify(replacementWithoutConfirm)}`);
+      }
+      const replacementResult = unwrap(api.namebases.replace(replacementInspection.normalizedInput, {
+        inspectionToken: replacementInspection.inspectionToken,
+        expectedRevision: replacementInspection.expectedRevision,
+        confirm: true
+      }), "namebases.replace");
+      if (!replacementResult.executed) failures.push("名称库删除迁移事务未执行");
+      if ((map?.namebases?.bases || []).some(base => base?.id === baseId)) failures.push("名称库删除迁移事务没有删除目标库");
+      if (String(map?.namebases?.bindings?.global?.place || "") !== "") failures.push("名称库删除迁移事务留下旧绑定");
+
+      const undoReplacement = unwrap(api.history.undo(), "history.undo.namebaseReplacement");
+      const undoBinding = unwrap(api.history.undo(), "history.undo.bindAndRename");
+      const undoCreate = unwrap(api.history.undo(), "history.undo.namebaseCreate");
+      const restoredCity = readNameSnapshots(map, "city", [cityId])[0];
+      if (!undoReplacement.executed || !undoBinding.executed || !undoCreate.executed) failures.push("名称库规则事务撤销链未完整执行");
+      if (!sameSnapshot(restoredCity, beforeCity)) failures.push("名称库规则事务撤销后城市名称未恢复");
+      if (String(map?.namebases?.bindings?.global?.place || "") !== beforeBinding) failures.push("名称库规则事务撤销后绑定未恢复");
+      if ((map?.namebases?.bases || []).some(base => base?.id === baseId)) failures.push("名称库规则事务撤销后临时用户库未清理");
+      return {
+        skipped: false,
+        cityId,
+        baseId,
+        bindRequiresConfirm: bindInspection.requiresConfirm === true,
+        bindExecuted: bindResult.executed === true,
+        replacementRequiresConfirm: replacementInspection.requiresConfirm === true,
+        replacementExecuted: replacementResult.executed === true,
+        migrated: replacementResult.result?.migrated || 0,
+        restored: sameSnapshot(restoredCity, beforeCity)
+          && String(map?.namebases?.bindings?.global?.place || "") === beforeBinding
+      };
+    }
 
     function collectTargets(map) {
       return {
@@ -328,6 +413,7 @@ function buildConsoleSummary(report) {
       ids: item.ids
     }])),
     safety: report.safety,
+    ruleTransactions: report.ruleTransactions,
     renames: Object.fromEntries(report.renames.map(item => [item.kind, {
       skipped: item.skipped,
       ids: item.ids,
@@ -364,6 +450,9 @@ function renderMarkdown(report) {
   lines.push(`- 未确认调用结构化失败：${report.safety.noConfirmRejected ? "是" : "否"}`);
   lines.push(`- 不支持类型结构化失败：${report.safety.unsupportedRejected ? "是" : "否"}`);
   lines.push(`- 空 ids 结构化失败：${report.safety.emptyIdsRejected ? "是" : "否"}`);
+  lines.push(`- 绑定重命名原子事务：${report.ruleTransactions.bindExecuted ? "通过" : "失败"}`);
+  lines.push(`- 删除迁移原子事务：${report.ruleTransactions.replacementExecuted ? "通过" : "失败"}`);
+  lines.push(`- 原子事务撤销恢复：${report.ruleTransactions.restored ? "是" : "否"}`);
   lines.push("");
   lines.push("## 改名与撤销", "");
   for (const item of report.renames) {
