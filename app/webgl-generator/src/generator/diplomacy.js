@@ -83,6 +83,7 @@ export function buildDiplomacy(pack, society, options = {}) {
   if (validStates.length >= 2) {
     const context = createDiplomacyContext(pack, society, validStates);
     assignPairRelations({pack, society, states, validStates, random, context, locked});
+    normalizeDiplomacyHierarchy(states);
     declareRivalWars({states, validStates, random, context, chronicle, options, locked});
   }
 
@@ -125,6 +126,38 @@ export function setDiplomacyRelation(pack, subjectId, objectId, relation, {recor
 
 export function normalizeDiplomacyRelation(relation) {
   return DIPLOMACY_RELATIONS[relation] ? relation : null;
+}
+
+export function normalizeDiplomacyHierarchy(states = []) {
+  const activeStates = states
+    .filter(state => state?.i && !state.removed)
+    .sort((left, right) => Number(left.i) - Number(right.i));
+  const candidates = [];
+  for (let leftIndex = 0; leftIndex < activeStates.length; leftIndex++) {
+    for (let rightIndex = leftIndex + 1; rightIndex < activeStates.length; rightIndex++) {
+      const edge = hierarchyEdge(activeStates[leftIndex], activeStates[rightIndex]);
+      if (edge) candidates.push(edge);
+    }
+  }
+
+  // 低 vassalId 优先，同一附庸再保留低 overlordId；按此顺序只接纳无环边。
+  candidates.sort((left, right) => left.vassalId - right.vassalId || left.overlordId - right.overlordId);
+  const overlordByVassal = new Map();
+  const retained = [];
+  const removed = [];
+  for (const edge of candidates) {
+    const reason = overlordByVassal.has(edge.vassalId)
+      ? "multiple-overlords"
+      : createsHierarchyCycle(overlordByVassal, edge.vassalId, edge.overlordId) ? "cycle" : "";
+    if (reason) {
+      setPairRelation(edge.vassal, edge.overlord, "Neutral");
+      removed.push({vassalId: edge.vassalId, overlordId: edge.overlordId, reason});
+      continue;
+    }
+    overlordByVassal.set(edge.vassalId, edge.overlordId);
+    retained.push({vassalId: edge.vassalId, overlordId: edge.overlordId});
+  }
+  return {retained, removed};
 }
 
 export function diplomacyRelationLabel(relation) {
@@ -343,6 +376,30 @@ function setPairRelation(subject, object, relation) {
   object.diplomacy[subject.i] = inverseRelation(normalized);
 }
 
+function hierarchyEdge(left, right) {
+  const leftRelation = left.diplomacy?.[right.i];
+  const rightRelation = right.diplomacy?.[left.i];
+  if (leftRelation === "Suzerain" && rightRelation === "Vassal") {
+    return {vassal: left, overlord: right, vassalId: Number(left.i), overlordId: Number(right.i)};
+  }
+  if (leftRelation === "Vassal" && rightRelation === "Suzerain") {
+    return {vassal: right, overlord: left, vassalId: Number(right.i), overlordId: Number(left.i)};
+  }
+  return null;
+}
+
+function createsHierarchyCycle(overlordByVassal, vassalId, overlordId) {
+  const visited = new Set();
+  let current = overlordId;
+  while (current) {
+    if (current === vassalId) return true;
+    if (visited.has(current)) return true;
+    visited.add(current);
+    current = overlordByVassal.get(current) || 0;
+  }
+  return false;
+}
+
 function inverseRelation(relation) {
   return INVERSE_RELATION[relation] || relation;
 }
@@ -422,8 +479,8 @@ function createRelationHistoryEntry(subject, object, oldRelation, relation, reas
   if (oldRelation === "Enemy") return ["停战", `${subjectName}与${objectName}结束战争，关系改为${diplomacyRelationLabel(relation)}${suffix}`];
   if (relation === "Enemy") return ["战争爆发", `${subjectName}向${objectName}宣战${suffix}`];
   if (relation === "Ally") return ["防御盟约", `${subjectName}与${objectName}缔结同盟${suffix}`];
-  if (relation === "Vassal") return ["附庸关系", `${subjectName}成为${objectName}的附庸${suffix}`];
-  if (relation === "Suzerain") return ["附庸关系", `${subjectName}使${objectName}成为附庸${suffix}`];
+  if (relation === "Vassal") return ["附庸关系", `${subjectName}使${objectName}成为附庸${suffix}`];
+  if (relation === "Suzerain") return ["附庸关系", `${subjectName}成为${objectName}的附庸${suffix}`];
   if (relation === "Rival") return ["宿敌关系", `${subjectName}与${objectName}成为宿敌${suffix}`];
   if (relation === "Unknown") return ["断绝往来", `${subjectName}与${objectName}断绝正式往来${suffix}`];
   return ["外交变化", `${subjectName}与${objectName}的关系改为${diplomacyRelationLabel(relation)}${suffix}`];

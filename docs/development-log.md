@@ -28922,3 +28922,12 @@ full 矩阵结果：
 - 新增 Node 专项和生产 Chrome 回归。专项覆盖合并 / 拆分各八个故障阶段、历史 ID `300` 后创建 `301`、原 typed-array 引用恢复、第三省共享 grid、业务 code、schema、撤销 / 重做和旧图镜像；既有国家拓扑回归继续通过。系统 Chrome 在真实生成图上走通 merge / split 的预检、令牌、revision、确认拒绝、执行、单历史与撤销，application health、console、page 和 WebGL error 均为 `0`。
 - 公开 API 更新为 `293 / 166`，稳定等级 `285 / 7 / 1`，描述覆盖 `293 / 293`。复合语义矩阵为完整事务 `64`、缺游戏规则 `4`、配方 `10`；完整能力矩阵为 `1132` 行、`covered 1059 / excluded 73 / gap 0`。API 发现 / 稳定性 / 编辑覆盖 / 动作收敛 / 危险策略、复合语义与完整能力矩阵均通过。
 - 独立复审最终结论为 `PASS`；仅记录低风险的后续覆盖增强空间：尚未把 Uint8 扩容后的 redo 与 Uint8 老图乘以全部故障阶段逐项组合测试，现有回归已分别覆盖 Uint8 成功执行 / undo 与普通数组全部 16 个故障阶段，不影响本步验收。没有新增待人类审阅问题；下一步只进入第 209 项步骤 8 的宣战、议和与宗藩变更。
+
+## 2026-07-29：完成第 209 项步骤 8——宣战、议和与宗藩规则事务
+
+- 新增 `edit.diplomacy.inspectDeclareWar / declareWar / inspectPeace / makePeace / inspectOverlordChange / changeOverlord` 六个公开入口。宣战把两个活动且非直接宗藩的国家设为双向 `Enemy`，建立纪事、国家 campaign 与军事 campaign；不自动移动军团、转移领土、扣减兵力或人口。议和仅接受当前双向战争，恢复受支持的普通关系并清理国家 / 军事 campaign、front 与 Warzone；赔款和说明首版明确以 `record-only` 条款写入纪事，不伪装成经济结算。
+- 宗藩事务使用现有 `Vassal / Suzerain` 逆关系处理建立、转移与解除，保证一个国家最多一个直接宗主、禁止自指、环和直接战争宗藩。同步修正旧纪事中 Vassal / Suzerain 主客体方向。生成器与旧图兼容层复用确定性宗藩规范化：候选按 `vassalId / overlordId` 排序，保留首个可加入的无环边，其它冲突边双向降为 `Neutral`；锁关系冲突仍由既有锁断言显式拒绝。
+- 三项执行器强制 `rulei1` token、expected revision 与 `confirm:true`，成功只写一条历史。外交规则快照精确保留 `map / pack` 外交、军事、地区、纪事和生成摘要的属性存在性、独立值与共享引用；摘要刷新进入命令内部，执行、撤销、重做和故障回滚保持完整。专项覆盖全部稳定 code、结构化条款、宗藩转移 / 解除、全故障、旧图双缺 / 单根 / 分离根 / 共享根、摘要 checksum 和镜像。
+- 独立审查先后阻断并推动修复三项 P1：外交根与纪事别名恢复、军事 / 地区独立根恢复，以及 API 历史外刷新摘要。系统 Chrome 随后暴露正式生成图多宗主脏数据，修复生成与兼容规范化后，最终三条公开链全部通过。
+- 公开 API 更新为 `299 / 172`，稳定等级 `291 / 7 / 1`，描述覆盖 `299 / 299`。复合语义矩阵为完整事务 `67`、缺游戏规则 `1`、配方 `10`；完整能力矩阵为 `1157` 行、`covered 1084 / excluded 73 / gap 0`。外交 / 战区 / 旧图 / 锁仓、API、矩阵、生产构建和差异检查通过。
+- 系统 Chrome 生产 URL `http://127.0.0.1:5552?healthClear=1` 上，宣战验证双向 Enemy、2 条国家 campaign 与 1 条军事 campaign；议和验证 Neutral、record-only 纪事及战争上下文全清；宗藩验证正向 Vassal、逆向 Suzerain。每条 inspector 均只读，缺确认稳定返回 `confirmation_required`，执行 history / revision 各 `+1`，撤销完整恢复；事务期 health、application console、page 与 WebGL error 均为 `0`。夹具生成的一条 long-task 作为 setup performance signal 单独记录，不计入事务期健康基线。没有新增待人类审阅问题；下一步只进入第 209 项步骤 9 的显式战斗结算。

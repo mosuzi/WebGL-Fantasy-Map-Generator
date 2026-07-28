@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sourceDigest": "3d04e4f3783e40f85a0f21579ac700a99d92d6235c5fe6fc739513cab541551b",
+  "sourceDigest": "daa4a43082caa20168f2fe0e90b4036424c33e806ca8f03d2bde3dfc14004141",
   "sourceRoots": [
     "app/webgl-generator/index.html",
     "app/webgl-generator/src/**/*.{js,vue}",
@@ -11,10 +11,10 @@
     "includedInteractionSurfaces": 87,
     "excludedInteractionSurfaces": 18,
     "canvasModes": 29,
-    "runtimeActions": 247,
-    "apiActionBindings": 246,
-    "commandAndInspectorExports": 201,
-    "publicApiMethods": 293
+    "runtimeActions": 253,
+    "apiActionBindings": 252,
+    "commandAndInspectorExports": 208,
+    "publicApiMethods": 299
   },
   "statusPolicy": {
     "covered": "公共 API 已存在且与底层 action / command 或只读 helper 共路径",
@@ -23,8 +23,8 @@
     "gap": "适合参数化且没有公共 API，必须在第 200 项关闭"
   },
   "totals": {
-    "rows": 1132,
-    "covered": 1059,
+    "rows": 1157,
+    "covered": 1084,
     "excluded": 73,
     "deferred-owned": 0,
     "gap": 0,
@@ -1485,6 +1485,151 @@
       "exclusionReason": ""
     },
     {
+      "matrixId": "action:edit.diplomacy.changeOverlord",
+      "capabilityId": "edit.diplomacy.changeOverlord",
+      "title": "Runtime action edit.diplomacy.changeOverlord",
+      "sourceKind": "runtime-action",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/app.js"
+      ],
+      "uiEntry": "",
+      "action": "edit.diplomacy.changeOverlord",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "edit.diplomacy.changeOverlord"
+      ],
+      "inputSpace": "method-schema",
+      "mutates": "map-or-persistent-data",
+      "preflight": "按方法描述",
+      "businessCodes": [],
+      "confirm": "按 API 确认清单",
+      "undoOrRollback": "按方法元数据",
+      "async": false,
+      "compatibility": "UI 与 API 共用同一 runtime action",
+      "evidence": [
+        "app/webgl-generator/src/runtime/console-api.js"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "action:edit.diplomacy.declareWar",
+      "capabilityId": "edit.diplomacy.declareWar",
+      "title": "Runtime action edit.diplomacy.declareWar",
+      "sourceKind": "runtime-action",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/app.js"
+      ],
+      "uiEntry": "",
+      "action": "edit.diplomacy.declareWar",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "edit.diplomacy.declareWar"
+      ],
+      "inputSpace": "method-schema",
+      "mutates": "map-or-persistent-data",
+      "preflight": "按方法描述",
+      "businessCodes": [],
+      "confirm": "按 API 确认清单",
+      "undoOrRollback": "按方法元数据",
+      "async": false,
+      "compatibility": "UI 与 API 共用同一 runtime action",
+      "evidence": [
+        "app/webgl-generator/src/runtime/console-api.js"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "action:edit.diplomacy.inspectDeclareWar",
+      "capabilityId": "edit.diplomacy.inspectDeclareWar",
+      "title": "Runtime action edit.diplomacy.inspectDeclareWar",
+      "sourceKind": "runtime-action",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/app.js"
+      ],
+      "uiEntry": "",
+      "action": "edit.diplomacy.inspectDeclareWar",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "edit.diplomacy.inspectDeclareWar"
+      ],
+      "inputSpace": "method-schema",
+      "mutates": "none",
+      "preflight": "readonly",
+      "businessCodes": [],
+      "confirm": "按 API 确认清单",
+      "undoOrRollback": "not-applicable",
+      "async": false,
+      "compatibility": "UI 与 API 共用同一 runtime action",
+      "evidence": [
+        "app/webgl-generator/src/runtime/console-api.js"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "action:edit.diplomacy.inspectOverlordChange",
+      "capabilityId": "edit.diplomacy.inspectOverlordChange",
+      "title": "Runtime action edit.diplomacy.inspectOverlordChange",
+      "sourceKind": "runtime-action",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/app.js"
+      ],
+      "uiEntry": "",
+      "action": "edit.diplomacy.inspectOverlordChange",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "edit.diplomacy.inspectOverlordChange"
+      ],
+      "inputSpace": "method-schema",
+      "mutates": "none",
+      "preflight": "readonly",
+      "businessCodes": [],
+      "confirm": "按 API 确认清单",
+      "undoOrRollback": "not-applicable",
+      "async": false,
+      "compatibility": "UI 与 API 共用同一 runtime action",
+      "evidence": [
+        "app/webgl-generator/src/runtime/console-api.js"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "action:edit.diplomacy.inspectPeace",
+      "capabilityId": "edit.diplomacy.inspectPeace",
+      "title": "Runtime action edit.diplomacy.inspectPeace",
+      "sourceKind": "runtime-action",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/app.js"
+      ],
+      "uiEntry": "",
+      "action": "edit.diplomacy.inspectPeace",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "edit.diplomacy.inspectPeace"
+      ],
+      "inputSpace": "method-schema",
+      "mutates": "none",
+      "preflight": "readonly",
+      "businessCodes": [],
+      "confirm": "按 API 确认清单",
+      "undoOrRollback": "not-applicable",
+      "async": false,
+      "compatibility": "UI 与 API 共用同一 runtime action",
+      "evidence": [
+        "app/webgl-generator/src/runtime/console-api.js"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
       "matrixId": "action:edit.diplomacy.inspectRelation",
       "capabilityId": "edit.diplomacy.inspectRelation",
       "title": "Runtime action edit.diplomacy.inspectRelation",
@@ -1504,6 +1649,35 @@
       "businessCodes": [],
       "confirm": "按 API 确认清单",
       "undoOrRollback": "not-applicable",
+      "async": false,
+      "compatibility": "UI 与 API 共用同一 runtime action",
+      "evidence": [
+        "app/webgl-generator/src/runtime/console-api.js"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "action:edit.diplomacy.makePeace",
+      "capabilityId": "edit.diplomacy.makePeace",
+      "title": "Runtime action edit.diplomacy.makePeace",
+      "sourceKind": "runtime-action",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/app.js"
+      ],
+      "uiEntry": "",
+      "action": "edit.diplomacy.makePeace",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "edit.diplomacy.makePeace"
+      ],
+      "inputSpace": "method-schema",
+      "mutates": "map-or-persistent-data",
+      "preflight": "按方法描述",
+      "businessCodes": [],
+      "confirm": "按 API 确认清单",
+      "undoOrRollback": "按方法元数据",
       "async": false,
       "compatibility": "UI 与 API 共用同一 runtime action",
       "evidence": [
@@ -8698,6 +8872,156 @@
       "exclusionReason": ""
     },
     {
+      "matrixId": "api-action-binding:edit.diplomacy.changeOverlord",
+      "capabilityId": "edit.diplomacy.changeOverlord",
+      "title": "API action 绑定 edit.diplomacy.changeOverlord",
+      "sourceKind": "api-action-binding",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/console-api.js",
+        "app/webgl-generator/src/runtime/app.js"
+      ],
+      "uiEntry": "",
+      "action": "edit.diplomacy.changeOverlord",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "edit.diplomacy.changeOverlord"
+      ],
+      "inputSpace": "method-schema",
+      "mutates": "map-or-persistent-data",
+      "preflight": "公共 API 绑定必须能解析到真实 runtime action",
+      "businessCodes": [],
+      "confirm": "按 API 确认清单",
+      "undoOrRollback": "按方法元数据",
+      "async": false,
+      "compatibility": "旧 API action 路径保持可调用",
+      "evidence": [
+        "tools/webgl-generator-api-action-convergence-regression.mjs"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "api-action-binding:edit.diplomacy.declareWar",
+      "capabilityId": "edit.diplomacy.declareWar",
+      "title": "API action 绑定 edit.diplomacy.declareWar",
+      "sourceKind": "api-action-binding",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/console-api.js",
+        "app/webgl-generator/src/runtime/app.js"
+      ],
+      "uiEntry": "",
+      "action": "edit.diplomacy.declareWar",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "edit.diplomacy.declareWar"
+      ],
+      "inputSpace": "method-schema",
+      "mutates": "map-or-persistent-data",
+      "preflight": "公共 API 绑定必须能解析到真实 runtime action",
+      "businessCodes": [],
+      "confirm": "按 API 确认清单",
+      "undoOrRollback": "按方法元数据",
+      "async": false,
+      "compatibility": "旧 API action 路径保持可调用",
+      "evidence": [
+        "tools/webgl-generator-api-action-convergence-regression.mjs"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "api-action-binding:edit.diplomacy.inspectDeclareWar",
+      "capabilityId": "edit.diplomacy.inspectDeclareWar",
+      "title": "API action 绑定 edit.diplomacy.inspectDeclareWar",
+      "sourceKind": "api-action-binding",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/console-api.js",
+        "app/webgl-generator/src/runtime/app.js"
+      ],
+      "uiEntry": "",
+      "action": "edit.diplomacy.inspectDeclareWar",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "edit.diplomacy.inspectDeclareWar"
+      ],
+      "inputSpace": "method-schema",
+      "mutates": "none",
+      "preflight": "公共 API 绑定必须能解析到真实 runtime action",
+      "businessCodes": [],
+      "confirm": "按 API 确认清单",
+      "undoOrRollback": "not-applicable",
+      "async": false,
+      "compatibility": "旧 API action 路径保持可调用",
+      "evidence": [
+        "tools/webgl-generator-api-action-convergence-regression.mjs"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "api-action-binding:edit.diplomacy.inspectOverlordChange",
+      "capabilityId": "edit.diplomacy.inspectOverlordChange",
+      "title": "API action 绑定 edit.diplomacy.inspectOverlordChange",
+      "sourceKind": "api-action-binding",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/console-api.js",
+        "app/webgl-generator/src/runtime/app.js"
+      ],
+      "uiEntry": "",
+      "action": "edit.diplomacy.inspectOverlordChange",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "edit.diplomacy.inspectOverlordChange"
+      ],
+      "inputSpace": "method-schema",
+      "mutates": "none",
+      "preflight": "公共 API 绑定必须能解析到真实 runtime action",
+      "businessCodes": [],
+      "confirm": "按 API 确认清单",
+      "undoOrRollback": "not-applicable",
+      "async": false,
+      "compatibility": "旧 API action 路径保持可调用",
+      "evidence": [
+        "tools/webgl-generator-api-action-convergence-regression.mjs"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "api-action-binding:edit.diplomacy.inspectPeace",
+      "capabilityId": "edit.diplomacy.inspectPeace",
+      "title": "API action 绑定 edit.diplomacy.inspectPeace",
+      "sourceKind": "api-action-binding",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/console-api.js",
+        "app/webgl-generator/src/runtime/app.js"
+      ],
+      "uiEntry": "",
+      "action": "edit.diplomacy.inspectPeace",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "edit.diplomacy.inspectPeace"
+      ],
+      "inputSpace": "method-schema",
+      "mutates": "none",
+      "preflight": "公共 API 绑定必须能解析到真实 runtime action",
+      "businessCodes": [],
+      "confirm": "按 API 确认清单",
+      "undoOrRollback": "not-applicable",
+      "async": false,
+      "compatibility": "旧 API action 路径保持可调用",
+      "evidence": [
+        "tools/webgl-generator-api-action-convergence-regression.mjs"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
       "matrixId": "api-action-binding:edit.diplomacy.inspectRelation",
       "capabilityId": "edit.diplomacy.inspectRelation",
       "title": "API action 绑定 edit.diplomacy.inspectRelation",
@@ -8718,6 +9042,36 @@
       "businessCodes": [],
       "confirm": "按 API 确认清单",
       "undoOrRollback": "not-applicable",
+      "async": false,
+      "compatibility": "旧 API action 路径保持可调用",
+      "evidence": [
+        "tools/webgl-generator-api-action-convergence-regression.mjs"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "api-action-binding:edit.diplomacy.makePeace",
+      "capabilityId": "edit.diplomacy.makePeace",
+      "title": "API action 绑定 edit.diplomacy.makePeace",
+      "sourceKind": "api-action-binding",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/console-api.js",
+        "app/webgl-generator/src/runtime/app.js"
+      ],
+      "uiEntry": "",
+      "action": "edit.diplomacy.makePeace",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "edit.diplomacy.makePeace"
+      ],
+      "inputSpace": "method-schema",
+      "mutates": "map-or-persistent-data",
+      "preflight": "公共 API 绑定必须能解析到真实 runtime action",
+      "businessCodes": [],
+      "confirm": "按 API 确认清单",
+      "undoOrRollback": "按方法元数据",
       "async": false,
       "compatibility": "旧 API action 路径保持可调用",
       "evidence": [
@@ -16810,6 +17164,161 @@
       "exclusionReason": ""
     },
     {
+      "matrixId": "api:edit.diplomacy.changeOverlord",
+      "capabilityId": "edit.diplomacy.changeOverlord",
+      "title": "公共 API edit.diplomacy.changeOverlord",
+      "sourceKind": "public-api",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/api-contract.js",
+        "app/webgl-generator/src/runtime/console-api.js"
+      ],
+      "uiEntry": "",
+      "action": "edit.diplomacy.changeOverlord",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "edit.diplomacy.changeOverlord"
+      ],
+      "inputSpace": "info.describe(method)",
+      "mutates": "map-or-persistent-data",
+      "preflight": "由 info.describe(method) 与领域 inspector 发现",
+      "businessCodes": [],
+      "confirm": "由 methodMetadata.requiresConfirm 发现",
+      "undoOrRollback": "由 methodMetadata.undoable 与结果 metadata 发现",
+      "async": false,
+      "compatibility": "受 API 主版本和方法稳定性契约保护",
+      "evidence": [
+        "tools/webgl-generator-api-capabilities-regression.mjs",
+        "tools/webgl-generator-api-stability-contract-regression.mjs"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "api:edit.diplomacy.declareWar",
+      "capabilityId": "edit.diplomacy.declareWar",
+      "title": "公共 API edit.diplomacy.declareWar",
+      "sourceKind": "public-api",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/api-contract.js",
+        "app/webgl-generator/src/runtime/console-api.js"
+      ],
+      "uiEntry": "",
+      "action": "edit.diplomacy.declareWar",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "edit.diplomacy.declareWar"
+      ],
+      "inputSpace": "info.describe(method)",
+      "mutates": "map-or-persistent-data",
+      "preflight": "由 info.describe(method) 与领域 inspector 发现",
+      "businessCodes": [],
+      "confirm": "由 methodMetadata.requiresConfirm 发现",
+      "undoOrRollback": "由 methodMetadata.undoable 与结果 metadata 发现",
+      "async": false,
+      "compatibility": "受 API 主版本和方法稳定性契约保护",
+      "evidence": [
+        "tools/webgl-generator-api-capabilities-regression.mjs",
+        "tools/webgl-generator-api-stability-contract-regression.mjs"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "api:edit.diplomacy.inspectDeclareWar",
+      "capabilityId": "edit.diplomacy.inspectDeclareWar",
+      "title": "公共 API edit.diplomacy.inspectDeclareWar",
+      "sourceKind": "public-api",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/api-contract.js",
+        "app/webgl-generator/src/runtime/console-api.js"
+      ],
+      "uiEntry": "",
+      "action": "edit.diplomacy.inspectDeclareWar",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "edit.diplomacy.inspectDeclareWar"
+      ],
+      "inputSpace": "info.describe(method)",
+      "mutates": "none",
+      "preflight": "由 info.describe(method) 与领域 inspector 发现",
+      "businessCodes": [],
+      "confirm": "由 methodMetadata.requiresConfirm 发现",
+      "undoOrRollback": "由 methodMetadata.undoable 与结果 metadata 发现",
+      "async": false,
+      "compatibility": "受 API 主版本和方法稳定性契约保护",
+      "evidence": [
+        "tools/webgl-generator-api-capabilities-regression.mjs",
+        "tools/webgl-generator-api-stability-contract-regression.mjs"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "api:edit.diplomacy.inspectOverlordChange",
+      "capabilityId": "edit.diplomacy.inspectOverlordChange",
+      "title": "公共 API edit.diplomacy.inspectOverlordChange",
+      "sourceKind": "public-api",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/api-contract.js",
+        "app/webgl-generator/src/runtime/console-api.js"
+      ],
+      "uiEntry": "",
+      "action": "edit.diplomacy.inspectOverlordChange",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "edit.diplomacy.inspectOverlordChange"
+      ],
+      "inputSpace": "info.describe(method)",
+      "mutates": "none",
+      "preflight": "由 info.describe(method) 与领域 inspector 发现",
+      "businessCodes": [],
+      "confirm": "由 methodMetadata.requiresConfirm 发现",
+      "undoOrRollback": "由 methodMetadata.undoable 与结果 metadata 发现",
+      "async": false,
+      "compatibility": "受 API 主版本和方法稳定性契约保护",
+      "evidence": [
+        "tools/webgl-generator-api-capabilities-regression.mjs",
+        "tools/webgl-generator-api-stability-contract-regression.mjs"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "api:edit.diplomacy.inspectPeace",
+      "capabilityId": "edit.diplomacy.inspectPeace",
+      "title": "公共 API edit.diplomacy.inspectPeace",
+      "sourceKind": "public-api",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/api-contract.js",
+        "app/webgl-generator/src/runtime/console-api.js"
+      ],
+      "uiEntry": "",
+      "action": "edit.diplomacy.inspectPeace",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "edit.diplomacy.inspectPeace"
+      ],
+      "inputSpace": "info.describe(method)",
+      "mutates": "none",
+      "preflight": "由 info.describe(method) 与领域 inspector 发现",
+      "businessCodes": [],
+      "confirm": "由 methodMetadata.requiresConfirm 发现",
+      "undoOrRollback": "由 methodMetadata.undoable 与结果 metadata 发现",
+      "async": false,
+      "compatibility": "受 API 主版本和方法稳定性契约保护",
+      "evidence": [
+        "tools/webgl-generator-api-capabilities-regression.mjs",
+        "tools/webgl-generator-api-stability-contract-regression.mjs"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
       "matrixId": "api:edit.diplomacy.inspectRelation",
       "capabilityId": "edit.diplomacy.inspectRelation",
       "title": "公共 API edit.diplomacy.inspectRelation",
@@ -16826,6 +17335,37 @@
       ],
       "inputSpace": "info.describe(method)",
       "mutates": "none",
+      "preflight": "由 info.describe(method) 与领域 inspector 发现",
+      "businessCodes": [],
+      "confirm": "由 methodMetadata.requiresConfirm 发现",
+      "undoOrRollback": "由 methodMetadata.undoable 与结果 metadata 发现",
+      "async": false,
+      "compatibility": "受 API 主版本和方法稳定性契约保护",
+      "evidence": [
+        "tools/webgl-generator-api-capabilities-regression.mjs",
+        "tools/webgl-generator-api-stability-contract-regression.mjs"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "api:edit.diplomacy.makePeace",
+      "capabilityId": "edit.diplomacy.makePeace",
+      "title": "公共 API edit.diplomacy.makePeace",
+      "sourceKind": "public-api",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/api-contract.js",
+        "app/webgl-generator/src/runtime/console-api.js"
+      ],
+      "uiEntry": "",
+      "action": "edit.diplomacy.makePeace",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "edit.diplomacy.makePeace"
+      ],
+      "inputSpace": "info.describe(method)",
+      "mutates": "map-or-persistent-data",
       "preflight": "由 info.describe(method) 与领域 inspector 发现",
       "businessCodes": [],
       "confirm": "由 methodMetadata.requiresConfirm 发现",
@@ -24613,6 +25153,153 @@
       "exclusionReason": ""
     },
     {
+      "matrixId": "command:diplomacy-edit-commands.js:createChangeOverlordCommand",
+      "capabilityId": "diplomacy.createChangeOverlordCommand",
+      "title": "diplomacy-edit-commands.js / createChangeOverlordCommand",
+      "sourceKind": "command-or-inspector",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/diplomacy-edit-commands.js"
+      ],
+      "uiEntry": "",
+      "action": "",
+      "commandOrInspector": "createChangeOverlordCommand",
+      "apiMethods": [
+        "edit.diplomacy.changeOverlord",
+        "edit.diplomacy.declareWar",
+        "edit.diplomacy.inspectDeclareWar",
+        "edit.diplomacy.inspectOverlordChange",
+        "edit.diplomacy.inspectPeace",
+        "edit.diplomacy.inspectRelation",
+        "edit.diplomacy.makePeace",
+        "edit.diplomacy.setRelation",
+        "generate.regenerate",
+        "selection.clear",
+        "selection.clearHighlights",
+        "selection.flash",
+        "selection.get",
+        "selection.highlight",
+        "selection.locate",
+        "selection.pick",
+        "selection.resolve",
+        "selection.select",
+        "selection.startEditing",
+        "selection.stopEditing",
+        "selection.toggleEditing"
+      ],
+      "inputSpace": "domain-options / object-ref / cell-ids / changes",
+      "mutates": "domain-data-or-preview",
+      "preflight": "由领域 API 参数校验或 inspector 提供",
+      "businessCodes": [],
+      "confirm": "按领域 API 确认清单",
+      "undoOrRollback": "EditHistory / transaction",
+      "async": false,
+      "compatibility": "领域 API 复用该 command / inspector 或同一纯 helper",
+      "evidence": [
+        "app/webgl-generator/src/runtime/diplomacy-edit-commands.js"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "command:diplomacy-edit-commands.js:createDeclareWarCommand",
+      "capabilityId": "diplomacy.createDeclareWarCommand",
+      "title": "diplomacy-edit-commands.js / createDeclareWarCommand",
+      "sourceKind": "command-or-inspector",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/diplomacy-edit-commands.js"
+      ],
+      "uiEntry": "",
+      "action": "",
+      "commandOrInspector": "createDeclareWarCommand",
+      "apiMethods": [
+        "edit.diplomacy.changeOverlord",
+        "edit.diplomacy.declareWar",
+        "edit.diplomacy.inspectDeclareWar",
+        "edit.diplomacy.inspectOverlordChange",
+        "edit.diplomacy.inspectPeace",
+        "edit.diplomacy.inspectRelation",
+        "edit.diplomacy.makePeace",
+        "edit.diplomacy.setRelation",
+        "generate.regenerate",
+        "selection.clear",
+        "selection.clearHighlights",
+        "selection.flash",
+        "selection.get",
+        "selection.highlight",
+        "selection.locate",
+        "selection.pick",
+        "selection.resolve",
+        "selection.select",
+        "selection.startEditing",
+        "selection.stopEditing",
+        "selection.toggleEditing"
+      ],
+      "inputSpace": "domain-options / object-ref / cell-ids / changes",
+      "mutates": "domain-data-or-preview",
+      "preflight": "由领域 API 参数校验或 inspector 提供",
+      "businessCodes": [],
+      "confirm": "按领域 API 确认清单",
+      "undoOrRollback": "EditHistory / transaction",
+      "async": false,
+      "compatibility": "领域 API 复用该 command / inspector 或同一纯 helper",
+      "evidence": [
+        "app/webgl-generator/src/runtime/diplomacy-edit-commands.js"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "command:diplomacy-edit-commands.js:createMakePeaceCommand",
+      "capabilityId": "diplomacy.createMakePeaceCommand",
+      "title": "diplomacy-edit-commands.js / createMakePeaceCommand",
+      "sourceKind": "command-or-inspector",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/diplomacy-edit-commands.js"
+      ],
+      "uiEntry": "",
+      "action": "",
+      "commandOrInspector": "createMakePeaceCommand",
+      "apiMethods": [
+        "edit.diplomacy.changeOverlord",
+        "edit.diplomacy.declareWar",
+        "edit.diplomacy.inspectDeclareWar",
+        "edit.diplomacy.inspectOverlordChange",
+        "edit.diplomacy.inspectPeace",
+        "edit.diplomacy.inspectRelation",
+        "edit.diplomacy.makePeace",
+        "edit.diplomacy.setRelation",
+        "generate.regenerate",
+        "selection.clear",
+        "selection.clearHighlights",
+        "selection.flash",
+        "selection.get",
+        "selection.highlight",
+        "selection.locate",
+        "selection.pick",
+        "selection.resolve",
+        "selection.select",
+        "selection.startEditing",
+        "selection.stopEditing",
+        "selection.toggleEditing"
+      ],
+      "inputSpace": "domain-options / object-ref / cell-ids / changes",
+      "mutates": "domain-data-or-preview",
+      "preflight": "由领域 API 参数校验或 inspector 提供",
+      "businessCodes": [],
+      "confirm": "按领域 API 确认清单",
+      "undoOrRollback": "EditHistory / transaction",
+      "async": false,
+      "compatibility": "领域 API 复用该 command / inspector 或同一纯 helper",
+      "evidence": [
+        "app/webgl-generator/src/runtime/diplomacy-edit-commands.js"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
       "matrixId": "command:diplomacy-edit-commands.js:createRegenerateDiplomacyCommand",
       "capabilityId": "diplomacy.createRegenerateDiplomacyCommand",
       "title": "diplomacy-edit-commands.js / createRegenerateDiplomacyCommand",
@@ -24624,7 +25311,13 @@
       "action": "",
       "commandOrInspector": "createRegenerateDiplomacyCommand",
       "apiMethods": [
+        "edit.diplomacy.changeOverlord",
+        "edit.diplomacy.declareWar",
+        "edit.diplomacy.inspectDeclareWar",
+        "edit.diplomacy.inspectOverlordChange",
+        "edit.diplomacy.inspectPeace",
         "edit.diplomacy.inspectRelation",
+        "edit.diplomacy.makePeace",
         "edit.diplomacy.setRelation",
         "generate.regenerate",
         "selection.clear",
@@ -24667,7 +25360,13 @@
       "action": "",
       "commandOrInspector": "createSetDiplomacyRelationCommand",
       "apiMethods": [
+        "edit.diplomacy.changeOverlord",
+        "edit.diplomacy.declareWar",
+        "edit.diplomacy.inspectDeclareWar",
+        "edit.diplomacy.inspectOverlordChange",
+        "edit.diplomacy.inspectPeace",
         "edit.diplomacy.inspectRelation",
+        "edit.diplomacy.makePeace",
         "edit.diplomacy.setRelation",
         "generate.regenerate",
         "selection.clear",
@@ -24689,6 +25388,202 @@
       "businessCodes": [],
       "confirm": "按领域 API 确认清单",
       "undoOrRollback": "EditHistory / transaction",
+      "async": false,
+      "compatibility": "领域 API 复用该 command / inspector 或同一纯 helper",
+      "evidence": [
+        "app/webgl-generator/src/runtime/diplomacy-edit-commands.js"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "command:diplomacy-edit-commands.js:inspectDeclareWar",
+      "capabilityId": "diplomacy.inspectDeclareWar",
+      "title": "diplomacy-edit-commands.js / inspectDeclareWar",
+      "sourceKind": "command-or-inspector",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/diplomacy-edit-commands.js"
+      ],
+      "uiEntry": "",
+      "action": "",
+      "commandOrInspector": "inspectDeclareWar",
+      "apiMethods": [
+        "edit.diplomacy.changeOverlord",
+        "edit.diplomacy.declareWar",
+        "edit.diplomacy.inspectDeclareWar",
+        "edit.diplomacy.inspectOverlordChange",
+        "edit.diplomacy.inspectPeace",
+        "edit.diplomacy.inspectRelation",
+        "edit.diplomacy.makePeace",
+        "edit.diplomacy.setRelation",
+        "generate.regenerate",
+        "selection.clear",
+        "selection.clearHighlights",
+        "selection.flash",
+        "selection.get",
+        "selection.highlight",
+        "selection.locate",
+        "selection.pick",
+        "selection.resolve",
+        "selection.select",
+        "selection.startEditing",
+        "selection.stopEditing",
+        "selection.toggleEditing"
+      ],
+      "inputSpace": "domain-options / object-ref / cell-ids / changes",
+      "mutates": "none",
+      "preflight": "inspectDeclareWar",
+      "businessCodes": [],
+      "confirm": "按领域 API 确认清单",
+      "undoOrRollback": "not-applicable-or-domain-contract",
+      "async": false,
+      "compatibility": "领域 API 复用该 command / inspector 或同一纯 helper",
+      "evidence": [
+        "app/webgl-generator/src/runtime/diplomacy-edit-commands.js"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "command:diplomacy-edit-commands.js:inspectDiplomacyRuleTransaction",
+      "capabilityId": "diplomacy.inspectDiplomacyRuleTransaction",
+      "title": "diplomacy-edit-commands.js / inspectDiplomacyRuleTransaction",
+      "sourceKind": "command-or-inspector",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/diplomacy-edit-commands.js"
+      ],
+      "uiEntry": "",
+      "action": "",
+      "commandOrInspector": "inspectDiplomacyRuleTransaction",
+      "apiMethods": [
+        "edit.diplomacy.changeOverlord",
+        "edit.diplomacy.declareWar",
+        "edit.diplomacy.inspectDeclareWar",
+        "edit.diplomacy.inspectOverlordChange",
+        "edit.diplomacy.inspectPeace",
+        "edit.diplomacy.inspectRelation",
+        "edit.diplomacy.makePeace",
+        "edit.diplomacy.setRelation",
+        "generate.regenerate",
+        "selection.clear",
+        "selection.clearHighlights",
+        "selection.flash",
+        "selection.get",
+        "selection.highlight",
+        "selection.locate",
+        "selection.pick",
+        "selection.resolve",
+        "selection.select",
+        "selection.startEditing",
+        "selection.stopEditing",
+        "selection.toggleEditing"
+      ],
+      "inputSpace": "domain-options / object-ref / cell-ids / changes",
+      "mutates": "none",
+      "preflight": "inspectDiplomacyRuleTransaction",
+      "businessCodes": [],
+      "confirm": "按领域 API 确认清单",
+      "undoOrRollback": "not-applicable-or-domain-contract",
+      "async": false,
+      "compatibility": "领域 API 复用该 command / inspector 或同一纯 helper",
+      "evidence": [
+        "app/webgl-generator/src/runtime/diplomacy-edit-commands.js"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "command:diplomacy-edit-commands.js:inspectMakePeace",
+      "capabilityId": "diplomacy.inspectMakePeace",
+      "title": "diplomacy-edit-commands.js / inspectMakePeace",
+      "sourceKind": "command-or-inspector",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/diplomacy-edit-commands.js"
+      ],
+      "uiEntry": "",
+      "action": "",
+      "commandOrInspector": "inspectMakePeace",
+      "apiMethods": [
+        "edit.diplomacy.changeOverlord",
+        "edit.diplomacy.declareWar",
+        "edit.diplomacy.inspectDeclareWar",
+        "edit.diplomacy.inspectOverlordChange",
+        "edit.diplomacy.inspectPeace",
+        "edit.diplomacy.inspectRelation",
+        "edit.diplomacy.makePeace",
+        "edit.diplomacy.setRelation",
+        "generate.regenerate",
+        "selection.clear",
+        "selection.clearHighlights",
+        "selection.flash",
+        "selection.get",
+        "selection.highlight",
+        "selection.locate",
+        "selection.pick",
+        "selection.resolve",
+        "selection.select",
+        "selection.startEditing",
+        "selection.stopEditing",
+        "selection.toggleEditing"
+      ],
+      "inputSpace": "domain-options / object-ref / cell-ids / changes",
+      "mutates": "none",
+      "preflight": "inspectMakePeace",
+      "businessCodes": [],
+      "confirm": "按领域 API 确认清单",
+      "undoOrRollback": "not-applicable-or-domain-contract",
+      "async": false,
+      "compatibility": "领域 API 复用该 command / inspector 或同一纯 helper",
+      "evidence": [
+        "app/webgl-generator/src/runtime/diplomacy-edit-commands.js"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "command:diplomacy-edit-commands.js:inspectOverlordChange",
+      "capabilityId": "diplomacy.inspectOverlordChange",
+      "title": "diplomacy-edit-commands.js / inspectOverlordChange",
+      "sourceKind": "command-or-inspector",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/diplomacy-edit-commands.js"
+      ],
+      "uiEntry": "",
+      "action": "",
+      "commandOrInspector": "inspectOverlordChange",
+      "apiMethods": [
+        "edit.diplomacy.changeOverlord",
+        "edit.diplomacy.declareWar",
+        "edit.diplomacy.inspectDeclareWar",
+        "edit.diplomacy.inspectOverlordChange",
+        "edit.diplomacy.inspectPeace",
+        "edit.diplomacy.inspectRelation",
+        "edit.diplomacy.makePeace",
+        "edit.diplomacy.setRelation",
+        "generate.regenerate",
+        "selection.clear",
+        "selection.clearHighlights",
+        "selection.flash",
+        "selection.get",
+        "selection.highlight",
+        "selection.locate",
+        "selection.pick",
+        "selection.resolve",
+        "selection.select",
+        "selection.startEditing",
+        "selection.stopEditing",
+        "selection.toggleEditing"
+      ],
+      "inputSpace": "domain-options / object-ref / cell-ids / changes",
+      "mutates": "none",
+      "preflight": "inspectOverlordChange",
+      "businessCodes": [],
+      "confirm": "按领域 API 确认清单",
+      "undoOrRollback": "not-applicable-or-domain-contract",
       "async": false,
       "compatibility": "领域 API 复用该 command / inspector 或同一纯 helper",
       "evidence": [
@@ -36863,7 +37758,13 @@
       "action": "",
       "commandOrInspector": "",
       "apiMethods": [
+        "edit.diplomacy.changeOverlord",
+        "edit.diplomacy.declareWar",
+        "edit.diplomacy.inspectDeclareWar",
+        "edit.diplomacy.inspectOverlordChange",
+        "edit.diplomacy.inspectPeace",
         "edit.diplomacy.inspectRelation",
+        "edit.diplomacy.makePeace",
         "edit.diplomacy.setRelation",
         "generate.regenerate",
         "selection.clear",

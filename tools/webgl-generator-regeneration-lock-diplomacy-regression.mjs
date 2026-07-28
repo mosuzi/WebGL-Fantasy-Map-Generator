@@ -1,11 +1,44 @@
 #!/usr/bin/env node
 import {generatePlaceholderMap} from "../app/webgl-generator/src/generator/index.js";
+import {normalizeDiplomacyHierarchy} from "../app/webgl-generator/src/generator/diplomacy.js";
 import {captureDiplomacyRelationSnapshot, diplomacyPairKey} from "../app/webgl-generator/src/generator/diplomacy-regeneration-locks.js";
 import {createRegenerateDiplomacyCommand, createSetDiplomacyRelationCommand} from "../app/webgl-generator/src/runtime/diplomacy-edit-commands.js";
+
+const doubleOverlordA = hierarchyFixture();
+setHierarchyPair(doubleOverlordA, 1, 3);
+setHierarchyPair(doubleOverlordA, 1, 2);
+const doubleResult = normalizeDiplomacyHierarchy(doubleOverlordA);
+assertHierarchyPair(doubleOverlordA, 1, 2, true);
+assertHierarchyPair(doubleOverlordA, 1, 3, false);
+assertDeepEqual(doubleResult.removed, [{vassalId: 1, overlordId: 3, reason: "multiple-overlords"}], "双宗主未按稳定 ID 顺序裁剪");
+
+const doubleOverlordB = hierarchyFixture();
+setHierarchyPair(doubleOverlordB, 1, 2);
+setHierarchyPair(doubleOverlordB, 1, 3);
+normalizeDiplomacyHierarchy(doubleOverlordB);
+assertDeepEqual(hierarchyMatrix(doubleOverlordB), hierarchyMatrix(doubleOverlordA), "宗藩规范化结果受写入顺序影响");
+
+const cycleStates = hierarchyFixture();
+setHierarchyPair(cycleStates, 3, 1);
+setHierarchyPair(cycleStates, 2, 3);
+setHierarchyPair(cycleStates, 1, 2);
+const cycleResult = normalizeDiplomacyHierarchy(cycleStates);
+assertHierarchyPair(cycleStates, 1, 2, true);
+assertHierarchyPair(cycleStates, 2, 3, true);
+assertHierarchyPair(cycleStates, 3, 1, false);
+assertDeepEqual(cycleResult.removed, [{vassalId: 3, overlordId: 1, reason: "cycle"}], "三节点环未按稳定顺序断开末边");
+
+const normalHierarchy = hierarchyFixture();
+setHierarchyPair(normalHierarchy, 2, 1);
+const normalBefore = hierarchyMatrix(normalHierarchy);
+const normalResult = normalizeDiplomacyHierarchy(normalHierarchy);
+assertDeepEqual(hierarchyMatrix(normalHierarchy), normalBefore, "合法宗藩图被意外改写");
+assert(normalResult.removed.length === 0, "合法宗藩图报告了错误裁剪");
 
 const base = generatePlaceholderMap({seed: "regeneration-lock-diplomacy", cellsTarget: 5000, heightmapTemplate: "continents"});
 const states = activeStates(base);
 assert(states.length >= 3, "固定图不足三个有效国家");
+assertValidHierarchy(base.pack.states);
 const left = states[0];
 const right = states.at(-1);
 const third = states.find(state => state.i !== left.i && state.i !== right.i);
@@ -59,6 +92,20 @@ mirrorPair(derivedMap, left.i, third.i);
 derivedMap.regenerationLocks.entries = [{kind: "diplomacy-relation", id: derivedPair}];
 assertConflict(() => createRegenerateDiplomacyCommand({salt: 3}).apply({map: derivedMap}), "war-derived-conflict");
 
+const hierarchyLockMap = generatePlaceholderMap({seed: "regeneration-lock-diplomacy-hierarchy", cellsTarget: 3000, heightmapTemplate: "continents"});
+const hierarchyLockStates = activeStates(hierarchyLockMap).slice(0, 3);
+assert(hierarchyLockStates.length === 3, "宗藩锁冲突夹具不足三个国家");
+const [lockedVassal, firstOverlord, secondOverlord] = hierarchyLockStates;
+createSetDiplomacyRelationCommand(firstOverlord.i, lockedVassal.i, "Vassal", {reason: "首个锁定宗主"}).apply({map: hierarchyLockMap});
+createSetDiplomacyRelationCommand(secondOverlord.i, lockedVassal.i, "Vassal", {reason: "第二个锁定宗主"}).apply({map: hierarchyLockMap});
+for (const overlord of [firstOverlord, secondOverlord]) {
+  hierarchyLockMap.regenerationLocks.entries.push({
+    kind: "diplomacy-relation",
+    id: diplomacyPairKey(lockedVassal.i, overlord.i)
+  });
+}
+assertConflict(() => createRegenerateDiplomacyCommand({salt: 4}).apply({map: hierarchyLockMap}), "locked-derived-changed");
+
 const faultMap = structuredClone(base);
 const faultBefore = fullSnapshot(faultMap);
 assertThrows(
@@ -78,9 +125,63 @@ console.log(JSON.stringify({
   campaigns: lockedBefore.campaigns.length,
   otherPairsChanged: true,
   allPairsNoop: allStates.length * (allStates.length - 1) / 2,
-  conflicts: ["missing-state", "non-reciprocal", "war-derived-conflict"],
+  hierarchyNormalization: {
+    doubleOverlordKept: [1, 2],
+    cycleRemoved: [3, 1],
+    deterministic: true,
+    validGeneration: true
+  },
+  conflicts: ["missing-state", "non-reciprocal", "war-derived-conflict", "locked-derived-changed"],
   rollback: "after-war-derived"
 }, null, 2));
+
+function hierarchyFixture() {
+  return Array.from({length: 5}, (_, id) => ({
+    id,
+    i: id,
+    name: id ? `国家 ${id}` : "中立",
+    removed: false,
+    diplomacy: id ? Array.from({length: 5}, (_, targetId) => targetId === id ? "x" : "Neutral") : []
+  }));
+}
+
+function setHierarchyPair(states, vassalId, overlordId) {
+  states[vassalId].diplomacy[overlordId] = "Suzerain";
+  states[overlordId].diplomacy[vassalId] = "Vassal";
+}
+
+function assertHierarchyPair(states, vassalId, overlordId, retained) {
+  const expectedVassal = retained ? "Suzerain" : "Neutral";
+  const expectedOverlord = retained ? "Vassal" : "Neutral";
+  assert(states[vassalId].diplomacy[overlordId] === expectedVassal, `国家 #${vassalId} 对 #${overlordId} 的宗藩方向错误`);
+  assert(states[overlordId].diplomacy[vassalId] === expectedOverlord, `国家 #${overlordId} 对 #${vassalId} 的宗藩逆向错误`);
+}
+
+function hierarchyMatrix(states) {
+  return states.map(state => state ? [...state.diplomacy] : null);
+}
+
+function assertValidHierarchy(states) {
+  const active = states.filter(state => state?.i && !state.removed);
+  const overlordByVassal = new Map();
+  for (const vassal of active) {
+    const overlords = active.filter(overlord =>
+      vassal.diplomacy?.[overlord.i] === "Suzerain"
+      && overlord.diplomacy?.[vassal.i] === "Vassal"
+    );
+    assert(overlords.length <= 1, `国家 #${vassal.i} 仍有多个直接宗主`);
+    if (overlords[0]) overlordByVassal.set(vassal.i, overlords[0].i);
+  }
+  for (const vassal of active) {
+    const visited = new Set([vassal.i]);
+    let current = overlordByVassal.get(vassal.i);
+    while (current) {
+      assert(!visited.has(current), `国家 #${vassal.i} 的宗藩链仍有环`);
+      visited.add(current);
+      current = overlordByVassal.get(current);
+    }
+  }
+}
 
 function activeStates(map) {
   return (map.pack.states || []).filter(state => state?.i && !state.removed);

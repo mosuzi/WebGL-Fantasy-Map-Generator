@@ -4,11 +4,11 @@
 
 ## 审计结论
 
-- 上游能力矩阵：1132 行，unknown / unclassified / gap = 0 / 0 / 0。
-- 公开 API：293 / 293 已归类。
+- 上游能力矩阵：1157 行，unknown / unclassified / gap = 0 / 0 / 0。
+- 公开 API：299 / 299 已归类。
 - Cell / 画布动作：48 / 48 已归类；画布模式 29，直接操控 19 类 / 89 个宿主。
 - 规则事务与玩法配方：68 + 10 = 78。
-- 已有完整事务 64，已有写命令但缺 AI inspector 0，多 API 碎片待收敛 0，缺失游戏规则 4，规划器配方 10。
+- 已有完整事务 67，已有写命令但缺 AI inspector 0，多 API 碎片待收敛 0，缺失游戏规则 1，规划器配方 10。
 - 结构缺口：0。
 
 ## 边界定义
@@ -81,9 +81,9 @@
 | `infrastructure.manage-zone` | 路线、区域与资源设施 | 按中心 Cell 和半径创建区域，或在依赖预检后删除区域。 | `existing-transaction` | `edit.zones.create`<br>`edit.zones.delete`<br>`edit.zones.inspectCreate`<br>`edit.zones.inspectDelete` | `edit.zones.inspectCreate / edit.zones.inspectDelete`<br>`edit.zones.create / edit.zones.delete` |
 | `diplomacy.set-bilateral-relation` | 外交、战争与国家关系 | 设置两国关系并同步反向关系、摘要、纪事和战争相关约束。 | `existing-transaction` | `edit.diplomacy.inspectRelation`<br>`edit.diplomacy.setRelation` | `edit.diplomacy.inspectRelation`<br>`edit.diplomacy.setRelation` |
 | `diplomacy.regenerate` | 外交、战争与国家关系 | 基于当前国家、邻接和随机种子重建外交关系与摘要。 | `existing-transaction` | `generate.regenerate` | `planned:edit.diplomacy.inspectRegeneration`<br>`generate.regenerate(diplomacy)` |
-| `diplomacy.declare-war` | 外交、战争与国家关系 | 两国从和平关系进入战争，建立战争目标、参战方、纪事和军事活动上下文。 | `missing-game-rule` | `objects.get` | `planned:edit.diplomacy.inspectDeclareWar`<br>`planned:edit.diplomacy.declareWar` |
-| `diplomacy.make-peace` | 外交、战争与国家关系 | 结束战争，处理领土、赔款、附庸、军队状态和纪事。 | `missing-game-rule` | `edit.diplomacy.setRelation`<br>`objects.get` | `planned:edit.diplomacy.inspectPeace`<br>`planned:edit.diplomacy.makePeace` |
-| `diplomacy.change-overlord` | 外交、战争与国家关系 | 建立或解除附庸关系，维护关系矩阵、外交摘要、战争资格和纪事。 | `missing-game-rule` | `edit.diplomacy.setRelation`<br>`objects.get` | `planned:edit.diplomacy.inspectOverlordChange`<br>`planned:edit.diplomacy.changeOverlord` |
+| `diplomacy.declare-war` | 外交、战争与国家关系 | 两国从和平关系进入战争，建立战争目标、参战方、纪事和军事活动上下文。 | `existing-transaction` | `edit.diplomacy.declareWar`<br>`edit.diplomacy.inspectDeclareWar`<br>`objects.get` | `edit.diplomacy.inspectDeclareWar`<br>`edit.diplomacy.declareWar` |
+| `diplomacy.make-peace` | 外交、战争与国家关系 | 结束战争，处理领土、赔款、附庸、军队状态和纪事。 | `existing-transaction` | `edit.diplomacy.inspectPeace`<br>`edit.diplomacy.makePeace`<br>`objects.get` | `edit.diplomacy.inspectPeace`<br>`edit.diplomacy.makePeace` |
+| `diplomacy.change-overlord` | 外交、战争与国家关系 | 建立或解除附庸关系，维护关系矩阵、外交摘要、战争资格和纪事。 | `existing-transaction` | `edit.diplomacy.changeOverlord`<br>`edit.diplomacy.inspectOverlordChange`<br>`objects.get` | `edit.diplomacy.inspectOverlordChange`<br>`edit.diplomacy.changeOverlord` |
 | `military.reconfigure-force` | 军队、调动与战斗 | 调整国家兵种比例，验证总和并同步军团构成与统计。 | `existing-transaction` | `edit.military.inspectRatios`<br>`edit.military.setRatios` | `edit.military.inspectRatios`<br>`edit.military.setRatios` |
 | `military.move-station` | 军队、调动与战斗 | 移动军团到合法 Cell，校验国家、地形、基地和命令目标。 | `existing-transaction` | `edit.military.inspectMoveStation`<br>`edit.military.moveStation` | `edit.military.inspectMoveStation`<br>`edit.military.moveStation` |
 | `military.set-base` | 军队、调动与战斗 | 把当前位置或指定位置设为基地，验证归属和可达性。 | `existing-transaction` | `edit.military.inspectBase`<br>`edit.military.setBase` | `edit.military.inspectBase`<br>`edit.military.setBase` |
@@ -94,36 +94,6 @@
 | `editor.import-collection` | 编辑器事务、批量操作与发布 | 校验外部集合、处理 ID 冲突与覆盖策略，并作为单条历史导入。 | `existing-transaction` | `data.inspectCollectionImport`<br>`edit.measurements.import`<br>`edit.military.importBattleEvents`<br>`edit.notes.import`<br>`namebases.import` | `data.inspectCollectionImport`<br>`现有 import 方法` |
 
 ## 需要优先补齐的复合事务
-
-### 宣战并建立战争与军事上下文（`diplomacy.declare-war`）
-
-两国从和平关系进入战争，建立战争目标、参战方、纪事和军事活动上下文。
-
-- 当前状态：`missing-game-rule`。
-- 关键分支：双方合法；现有关系/宗藩限制；共同战争合并；战争创建。
-- 规范入口：`planned:edit.diplomacy.inspectDeclareWar` → `planned:edit.diplomacy.declareWar`。
-- 共同不变量：双边关系、宗藩、战争、纪事和被移除国家引用必须成对同步并保持对称规则。
-- 证据：`app/webgl-generator/src/runtime/diplomacy-edit-commands.js`、`app/webgl-generator/src/runtime/military-edit-commands.js`。
-
-### 议和并结算战争结果（`diplomacy.make-peace`）
-
-结束战争，处理领土、赔款、附庸、军队状态和纪事。
-
-- 当前状态：`missing-game-rule`。
-- 关键分支：战争不存在；无条件和平；领土割让；附庸/赔款与战后状态。
-- 规范入口：`planned:edit.diplomacy.inspectPeace` → `planned:edit.diplomacy.makePeace`。
-- 共同不变量：双边关系、宗藩、战争、纪事和被移除国家引用必须成对同步并保持对称规则。
-- 证据：`app/webgl-generator/src/runtime/diplomacy-edit-commands.js`、`app/webgl-generator/src/runtime/state-topology-commands.js`。
-
-### 建立、转移或解除宗藩关系（`diplomacy.change-overlord`）
-
-建立或解除附庸关系，维护关系矩阵、外交摘要、战争资格和纪事。
-
-- 当前状态：`missing-game-rule`。
-- 关键分支：循环宗藩阻断；战争状态；旧宗主解除；新关系建立。
-- 规范入口：`planned:edit.diplomacy.inspectOverlordChange` → `planned:edit.diplomacy.changeOverlord`。
-- 共同不变量：双边关系、宗藩、战争、纪事和被移除国家引用必须成对同步并保持对称规则。
-- 证据：`app/webgl-generator/src/runtime/diplomacy-edit-commands.js`。
 
 ### 结算战斗并联动军队、人口与政治结果（`military.resolve-battle`）
 
@@ -170,6 +140,6 @@
 
 ## 机器覆盖
 
-- API 分类：`atomic-editor-primitive=54`，`editor-runtime-service=49`，`read-export-service=10`，`read-primitive=28`，`semantic-action=152`。
+- API 分类：`atomic-editor-primitive=54`，`editor-runtime-service=49`，`read-export-service=10`，`read-primitive=28`，`semantic-action=158`。
 - 交互分类：`semantic-input-or-primitive=36`，`ui-boundary=12`。
-- Source digest：`94e1d22aa9f9a73e3485b2d7ad6e655149dd1f16942975e7df1d854f51f7325b`。
+- Source digest：`3e03dc07aa4a129b8184049109c8705695f25b4e0501ee12a0d479eab480fb0f`。

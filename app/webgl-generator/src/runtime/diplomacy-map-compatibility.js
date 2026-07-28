@@ -1,12 +1,19 @@
-import {DIPLOMACY_RELATIONS, normalizeDiplomacyRelation} from "../generator/diplomacy.js";
+import {
+  DIPLOMACY_RELATIONS,
+  normalizeDiplomacyHierarchy,
+  normalizeDiplomacyRelation
+} from "../generator/diplomacy.js";
 
 export function normalizeDiplomacyMap(map) {
   if (!map || typeof map !== "object") return map;
   const chronicle = diplomacyChronicle(map);
-  const politicsStates = normalizeStateStore(map.politics?.states, map.pack?.states, chronicle);
-  const packStates = normalizeStateStore(map.pack?.states, politicsStates, chronicle);
-  const states = packStates.length ? packStates : politicsStates;
+  const normalizedPoliticsStates = normalizeStateStore(map.politics?.states, map.pack?.states, chronicle);
+  const packStates = normalizeStateStore(map.pack?.states, normalizedPoliticsStates, chronicle);
+  const states = packStates.length ? packStates : normalizedPoliticsStates;
+  normalizeDiplomacyHierarchy(states);
+  refreshDiplomacyStateSummaries(states);
   const normalizedChronicle = diplomacyChronicle(map, states);
+  const politicsStates = mirrorDiplomacyStateStore(normalizedPoliticsStates, states, normalizedChronicle);
   const diplomacy = normalizeDiplomacyStore(map.diplomacy || map.pack?.diplomacy, states, normalizedChronicle);
   return {
     ...map,
@@ -79,8 +86,34 @@ function normalizeDiplomacyStore(source, states, chronicle) {
     ...(source && typeof source === "object" ? source : {}),
     relations: source?.relations && typeof source.relations === "object" ? source.relations : DIPLOMACY_RELATIONS,
     chronicle: cloneChronicle(chronicle),
-    metadata: {...metadata, ...(source?.metadata || {})}
+    metadata: {
+      ...(source?.metadata || {}),
+      ...metadata,
+      buildMs: Number(source?.metadata?.buildMs) || metadata.buildMs
+    }
   };
+}
+
+function mirrorDiplomacyStateStore(targetStates, sourceStates, chronicle) {
+  const size = Math.max(targetStates.length, sourceStates.length);
+  return Array.from({length: size}, (_, id) => {
+    const source = sourceStates[id];
+    const target = targetStates[id];
+    if (!source && !target) return source ?? target ?? null;
+    const state = {...(target || source)};
+    if (id === 0) return {...state, diplomacy: cloneChronicle(chronicle)};
+    return {
+      ...state,
+      diplomacy: Array.isArray(source?.diplomacy) ? [...source.diplomacy] : null,
+      diplomacySummary: source?.diplomacySummary ? {...source.diplomacySummary} : {},
+      campaigns: cloneCampaigns(source?.campaigns)
+    };
+  });
+}
+
+function refreshDiplomacyStateSummaries(states) {
+  const activeIds = states.map((state, id) => state && !state.removed && politicalId(state) > 0 ? id : 0).filter(Boolean);
+  for (const id of activeIds) states[id].diplomacySummary = diplomacySummary(states[id], activeIds);
 }
 
 function diplomacyChronicle(map, states = null) {

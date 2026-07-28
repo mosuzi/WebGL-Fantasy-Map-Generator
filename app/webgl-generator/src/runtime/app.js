@@ -84,7 +84,15 @@ import {
   inspectPopulationAdjustment,
   inspectPopulationTransfer
 } from "./population-adjustment-commands.js";
-import {createRegenerateDiplomacyCommand, createSetDiplomacyRelationCommand} from "./diplomacy-edit-commands.js";
+import {
+  createChangeOverlordCommand,
+  createDeclareWarCommand,
+  createMakePeaceCommand,
+  createRegenerateDiplomacyCommand,
+  createSetDiplomacyRelationCommand,
+  DIPLOMACY_RULE_ACTION,
+  inspectDiplomacyRuleTransaction
+} from "./diplomacy-edit-commands.js";
 import {applyHeightBrushPreview, createApplyHeightBrushCommand} from "./height-edit-commands.js";
 import {getGlobalHeightChanges, getHeightBrushChanges, getHeightLineChanges, getHeightRangeTransformChanges, inspectGlobalHeightChanges, inspectHeightFillTarget, inspectHeightRangeTransform} from "./height-brush.js";
 import {acceptHeightBrushSample} from "./height-brush-cadence.js";
@@ -2920,7 +2928,13 @@ function createRuntimeActions(state, documentRef, options = {}) {
       },
       diplomacy: {
         inspectRelation: (subjectId, objectId, relation, editOptions = {}) => inspectDiplomacyRelationViaApi(state, subjectId, objectId, relation, editOptions),
-        setRelation: (subjectId, objectId, relation, editOptions = {}) => setDiplomacyRelationViaApi(state, documentRef, subjectId, objectId, relation, editOptions)
+        setRelation: (subjectId, objectId, relation, editOptions = {}) => setDiplomacyRelationViaApi(state, documentRef, subjectId, objectId, relation, editOptions),
+        inspectDeclareWar: request => inspectDiplomacyRuleViaApi(state, DIPLOMACY_RULE_ACTION.DECLARE_WAR, request),
+        declareWar: (request, options = {}) => executeDiplomacyRuleViaApi(state, documentRef, DIPLOMACY_RULE_ACTION.DECLARE_WAR, request, options),
+        inspectPeace: request => inspectDiplomacyRuleViaApi(state, DIPLOMACY_RULE_ACTION.MAKE_PEACE, request),
+        makePeace: (request, options = {}) => executeDiplomacyRuleViaApi(state, documentRef, DIPLOMACY_RULE_ACTION.MAKE_PEACE, request, options),
+        inspectOverlordChange: request => inspectDiplomacyRuleViaApi(state, DIPLOMACY_RULE_ACTION.CHANGE_OVERLORD, request),
+        changeOverlord: (request, options = {}) => executeDiplomacyRuleViaApi(state, documentRef, DIPLOMACY_RULE_ACTION.CHANGE_OVERLORD, request, options)
       },
       military: {
         inspectRatios: (stateId, ratios) => inspectMilitaryRatiosViaApi(state, stateId, ratios),
@@ -4944,6 +4958,67 @@ function executeProvinceTopologyViaApi(state, documentRef, actionId, request, op
     noopStatus: "省份拓扑没有变化。",
     status: `${label}完成。`,
     errorStatus: `${label}失败，地图已恢复执行前状态。`,
+    throwOnError: true
+  });
+  updateRuntimePanel(documentRef, state);
+  updateEditingInteractionLock(state, documentRef);
+  return editApiResult(state, result);
+}
+
+function inspectDiplomacyRuleViaApi(state, actionId, request) {
+  assertMapAvailable(state);
+  const normalizedInput = normalizeRuleInspectionInput(request);
+  const evaluation = inspectDiplomacyRuleTransaction(state.map, actionId, normalizedInput);
+  return createRuleInspectionResult(
+    state.mapRevision,
+    actionId,
+    evaluation.normalizedInput ?? normalizedInput,
+    evaluation
+  );
+}
+
+function assertDiplomacyRuleExecution(state, actionId, request, options = {}) {
+  const normalizedInput = normalizeRuleInspectionInput(request);
+  const evaluation = inspectDiplomacyRuleTransaction(state.map, actionId, normalizedInput);
+  const tokenInput = evaluation.normalizedInput ?? normalizedInput;
+  const validation = assertExistingRuleInspection(state.mapRevision, actionId, tokenInput, options);
+  if (validation.legacy) {
+    const error = new Error("外交规则事务必须先调用对应 inspector 并提交 inspectionToken");
+    error.code = "inspection-required";
+    throw error;
+  }
+  if (!evaluation.allowed) {
+    const error = new Error(evaluation.summary || "外交规则事务不允许执行");
+    error.code = evaluation.code || "rule-rejected";
+    throw error;
+  }
+  if (options?.confirm !== true) {
+    const error = new Error(`${evaluation.summary || "该外交规则事务"}需要显式传入 {confirm: true}`);
+    error.code = "confirmation_required";
+    throw error;
+  }
+  return {evaluation, normalizedInput: tokenInput};
+}
+
+function executeDiplomacyRuleViaApi(state, documentRef, actionId, request, options = {}) {
+  assertMapAvailable(state);
+  const {normalizedInput} = assertDiplomacyRuleExecution(state, actionId, request, options);
+  const commandFactory = actionId === DIPLOMACY_RULE_ACTION.DECLARE_WAR
+    ? createDeclareWarCommand
+    : actionId === DIPLOMACY_RULE_ACTION.MAKE_PEACE
+      ? createMakePeaceCommand
+      : createChangeOverlordCommand;
+  const label = options.label || (actionId === DIPLOMACY_RULE_ACTION.DECLARE_WAR
+    ? "API 宣战"
+    : actionId === DIPLOMACY_RULE_ACTION.MAKE_PEACE
+      ? "API 议和"
+      : "API 变更宗藩");
+  const command = commandFactory(normalizedInput, {label, refreshSummary: refreshGenerationSummary});
+  const result = executeEditCommand(state, documentRef, command, {
+    context: {map: state.map},
+    noopStatus: "外交关系没有变化。",
+    status: executed => executed.getResult?.()?.summary || `${label}完成。`,
+    errorStatus: `${label}失败，外交与战争上下文已恢复执行前状态。`,
     throwOnError: true
   });
   updateRuntimePanel(documentRef, state);

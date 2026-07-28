@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "scope": "权威任务第 204 项：全游戏复合语义接口、规则动作与玩法配方审计",
   "generatedAtPolicy": "报告不写入动态时间，sourceDigest 变化即要求重新生成",
-  "sourceDigest": "94e1d22aa9f9a73e3485b2d7ad6e655149dd1f16942975e7df1d854f51f7325b",
+  "sourceDigest": "3e03dc07aa4a129b8184049109c8705695f25b4e0501ee12a0d479eab480fb0f",
   "definition": {
     "compoundSemanticAction": "一个玩家意图，但执行时需要跨对象/系统、条件分支、业务预检或原子回滚；应由单一规则事务表达。",
     "primitive": "只修改一个稳定字段或纯编辑器显示偏好，可保留为原子 API，不强行包装成复合动作。",
@@ -21,12 +21,12 @@
     "recipe-only": "战略/玩法流程，不应实现为一条超大写接口。"
   },
   "denominator": {
-    "fullCapabilityRows": 1132,
+    "fullCapabilityRows": 1157,
     "fullCapabilityUnknown": 0,
     "fullCapabilityUnclassified": 0,
     "fullCapabilityGaps": 0,
-    "publicApiMethods": 293,
-    "classifiedApiMethods": 293,
+    "publicApiMethods": 299,
+    "classifiedApiMethods": 299,
     "cellActionRows": 48,
     "classifiedCellActionRows": 48,
     "canvasModes": 29,
@@ -38,8 +38,8 @@
     "ruleTransactions": 68,
     "plannerRecipes": 10,
     "statuses": {
-      "existing-transaction": 64,
-      "missing-game-rule": 4,
+      "existing-transaction": 67,
+      "missing-game-rule": 1,
       "recipe-only": 10
     },
     "domains": {
@@ -60,7 +60,7 @@
       "editor-runtime-service": 49,
       "read-export-service": 10,
       "read-primitive": 28,
-      "semantic-action": 152
+      "semantic-action": 158
     },
     "interactionClassifications": {
       "semantic-input-or-primitive": 36,
@@ -1923,10 +1923,12 @@
       "tier": "rule-transaction",
       "variants": [],
       "api": [
+        "edit.diplomacy.declareWar",
+        "edit.diplomacy.inspectDeclareWar",
         "objects.get"
       ],
-      "inspect": "planned:edit.diplomacy.inspectDeclareWar",
-      "execute": "planned:edit.diplomacy.declareWar",
+      "inspect": "edit.diplomacy.inspectDeclareWar",
+      "execute": "edit.diplomacy.declareWar",
       "branches": [
         "双方合法",
         "现有关系/宗藩限制",
@@ -1941,7 +1943,7 @@
       "id": "diplomacy.declare-war",
       "title": "宣战并建立战争与军事上下文",
       "domain": "diplomacy",
-      "status": "missing-game-rule",
+      "status": "existing-transaction",
       "intent": "两国从和平关系进入战争，建立战争目标、参战方、纪事和军事活动上下文。",
       "gameplayChapter": "外交、战争与国家关系",
       "invariant": "双边关系、宗藩、战争、纪事和被移除国家引用必须成对同步并保持对称规则。",
@@ -1952,11 +1954,12 @@
       "tier": "rule-transaction",
       "variants": [],
       "api": [
-        "edit.diplomacy.setRelation",
+        "edit.diplomacy.inspectPeace",
+        "edit.diplomacy.makePeace",
         "objects.get"
       ],
-      "inspect": "planned:edit.diplomacy.inspectPeace",
-      "execute": "planned:edit.diplomacy.makePeace",
+      "inspect": "edit.diplomacy.inspectPeace",
+      "execute": "edit.diplomacy.makePeace",
       "branches": [
         "战争不存在",
         "无条件和平",
@@ -1971,7 +1974,7 @@
       "id": "diplomacy.make-peace",
       "title": "议和并结算战争结果",
       "domain": "diplomacy",
-      "status": "missing-game-rule",
+      "status": "existing-transaction",
       "intent": "结束战争，处理领土、赔款、附庸、军队状态和纪事。",
       "gameplayChapter": "外交、战争与国家关系",
       "invariant": "双边关系、宗藩、战争、纪事和被移除国家引用必须成对同步并保持对称规则。",
@@ -1986,11 +1989,12 @@
         "release"
       ],
       "api": [
-        "edit.diplomacy.setRelation",
+        "edit.diplomacy.changeOverlord",
+        "edit.diplomacy.inspectOverlordChange",
         "objects.get"
       ],
-      "inspect": "planned:edit.diplomacy.inspectOverlordChange",
-      "execute": "planned:edit.diplomacy.changeOverlord",
+      "inspect": "edit.diplomacy.inspectOverlordChange",
+      "execute": "edit.diplomacy.changeOverlord",
       "branches": [
         "循环宗藩阻断",
         "战争状态",
@@ -2004,7 +2008,7 @@
       "id": "diplomacy.change-overlord",
       "title": "建立、转移或解除宗藩关系",
       "domain": "diplomacy",
-      "status": "missing-game-rule",
+      "status": "existing-transaction",
       "intent": "建立或解除附庸关系，维护关系矩阵、外交摘要、战争资格和纪事。",
       "gameplayChapter": "外交、战争与国家关系",
       "invariant": "双边关系、宗藩、战争、纪事和被移除国家引用必须成对同步并保持对称规则。",
@@ -3011,6 +3015,41 @@
       ]
     },
     {
+      "method": "edit.diplomacy.changeOverlord",
+      "classification": "semantic-action",
+      "actionIds": [
+        "diplomacy.change-overlord"
+      ]
+    },
+    {
+      "method": "edit.diplomacy.declareWar",
+      "classification": "semantic-action",
+      "actionIds": [
+        "diplomacy.declare-war"
+      ]
+    },
+    {
+      "method": "edit.diplomacy.inspectDeclareWar",
+      "classification": "semantic-action",
+      "actionIds": [
+        "diplomacy.declare-war"
+      ]
+    },
+    {
+      "method": "edit.diplomacy.inspectOverlordChange",
+      "classification": "semantic-action",
+      "actionIds": [
+        "diplomacy.change-overlord"
+      ]
+    },
+    {
+      "method": "edit.diplomacy.inspectPeace",
+      "classification": "semantic-action",
+      "actionIds": [
+        "diplomacy.make-peace"
+      ]
+    },
+    {
       "method": "edit.diplomacy.inspectRelation",
       "classification": "semantic-action",
       "actionIds": [
@@ -3018,11 +3057,16 @@
       ]
     },
     {
+      "method": "edit.diplomacy.makePeace",
+      "classification": "semantic-action",
+      "actionIds": [
+        "diplomacy.make-peace"
+      ]
+    },
+    {
       "method": "edit.diplomacy.setRelation",
       "classification": "semantic-action",
       "actionIds": [
-        "diplomacy.change-overlord",
-        "diplomacy.make-peace",
         "diplomacy.set-bilateral-relation"
       ]
     },

@@ -276,7 +276,13 @@ export function createConsoleApi(documentRef, state, actions = {}) {
       }),
       diplomacy: Object.freeze({
         inspectRelation: (subjectId, objectId, relation, options = {}) => apiCall(() => requireApiAction(actions.edit?.diplomacy?.inspectRelation, "edit.diplomacy.inspectRelation")(subjectId, objectId, relation, options)),
-        setRelation: (subjectId, objectId, relation, options = {}) => apiCall(() => requireApiAction(actions.edit?.diplomacy?.setRelation, "edit.diplomacy.setRelation")(subjectId, objectId, relation, options))
+        setRelation: (subjectId, objectId, relation, options = {}) => apiCall(() => requireApiAction(actions.edit?.diplomacy?.setRelation, "edit.diplomacy.setRelation")(subjectId, objectId, relation, options)),
+        inspectDeclareWar: request => apiCall(() => requireApiAction(actions.edit?.diplomacy?.inspectDeclareWar, "edit.diplomacy.inspectDeclareWar")(request)),
+        declareWar: (request, options = {}) => apiCall(() => requireApiAction(actions.edit?.diplomacy?.declareWar, "edit.diplomacy.declareWar")(request, options)),
+        inspectPeace: request => apiCall(() => requireApiAction(actions.edit?.diplomacy?.inspectPeace, "edit.diplomacy.inspectPeace")(request)),
+        makePeace: (request, options = {}) => apiCall(() => requireApiAction(actions.edit?.diplomacy?.makePeace, "edit.diplomacy.makePeace")(request, options)),
+        inspectOverlordChange: request => apiCall(() => requireApiAction(actions.edit?.diplomacy?.inspectOverlordChange, "edit.diplomacy.inspectOverlordChange")(request)),
+        changeOverlord: (request, options = {}) => apiCall(() => requireApiAction(actions.edit?.diplomacy?.changeOverlord, "edit.diplomacy.changeOverlord")(request, options))
       }),
       military: Object.freeze({
         inspectRatios: (stateId, ratios) => apiCall(() => requireApiAction(actions.edit?.military?.inspectRatios, "edit.military.inspectRatios")(stateId, ratios)),
@@ -672,6 +678,12 @@ export function buildMethodMetadata() {
       "economy.setMarketDisplay": {stable: "draft", mutates: "economy-display", undoable: true, async: false, requiresConfirm: false},
       "diplomacy.inspectRelation": {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
       "diplomacy.setRelation": {stable: "draft", mutates: "diplomacy", undoable: true, async: false, requiresConfirm: false, conditionalConfirm: "inspector.requiresConfirm"},
+      "diplomacy.inspectDeclareWar": {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
+      "diplomacy.declareWar": {stable: "draft", mutates: "diplomacy-and-war-context", undoable: true, async: false, requiresConfirm: true},
+      "diplomacy.inspectPeace": {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
+      "diplomacy.makePeace": {stable: "draft", mutates: "diplomacy-and-war-context", undoable: true, async: false, requiresConfirm: true},
+      "diplomacy.inspectOverlordChange": {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
+      "diplomacy.changeOverlord": {stable: "draft", mutates: "diplomacy-and-war-context", undoable: true, async: false, requiresConfirm: true},
       "military.inspectRatios": {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
       "military.setRatios": {stable: "draft", mutates: "military", undoable: true, async: false, requiresConfirm: false},
       "military.inspectStatus": {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},

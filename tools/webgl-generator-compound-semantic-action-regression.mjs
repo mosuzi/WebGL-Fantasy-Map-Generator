@@ -12,14 +12,18 @@ assert.equal(report.denominator.classifiedCellActionRows, report.denominator.cel
 assert.equal(report.denominator.fullCapabilityGaps, 0);
 assert.ok(report.totals.ruleTransactions >= 50);
 assert.ok(report.totals.plannerRecipes >= 10);
-assert.equal(report.totals.statuses["existing-transaction"], 64);
+assert.equal(report.totals.statuses["existing-transaction"], 67);
 assert.equal(report.totals.statuses["existing-needs-inspector"] || 0, 0);
 assert.equal(report.totals.statuses["fragmented-needs-transaction"] || 0, 0);
+assert.equal(report.totals.statuses["missing-game-rule"], 1);
 
 for (const [id, inspect, execute] of [
   ["politics.create-state", "edit.states.inspectCreateAtCell", "edit.states.createAtCell"],
   ["politics.create-province", "edit.provinces.inspectCreateAtCell", "edit.provinces.createAtCell"],
-  ["settlement.found-city", "edit.cities.inspectCreateAtCell", "edit.cities.createAtCell"]
+  ["settlement.found-city", "edit.cities.inspectCreateAtCell", "edit.cities.createAtCell"],
+  ["diplomacy.declare-war", "edit.diplomacy.inspectDeclareWar", "edit.diplomacy.declareWar"],
+  ["diplomacy.make-peace", "edit.diplomacy.inspectPeace", "edit.diplomacy.makePeace"],
+  ["diplomacy.change-overlord", "edit.diplomacy.inspectOverlordChange", "edit.diplomacy.changeOverlord"]
 ]) {
   const action = byId.get(id);
   assert.equal(action?.status, "existing-transaction", `${id} 没有按第 195 项真实实现重新归类`);
@@ -94,14 +98,7 @@ for (const [id, inspect, execute] of [
   assert.equal(byId.get(id)?.execute, execute);
 }
 
-for (const id of [
-  "diplomacy.declare-war",
-  "diplomacy.make-peace",
-  "diplomacy.change-overlord",
-  "military.resolve-battle"
-]) {
-  assert.equal(byId.get(id)?.status, "missing-game-rule", `${id} 没有登记为缺失游戏规则`);
-}
+assert.equal(byId.get("military.resolve-battle")?.status, "missing-game-rule", "military.resolve-battle 没有登记为缺失游戏规则");
 
 for (const action of report.actions.filter(item => item.tier === "planner-recipe")) {
   assert.equal(action.status, "recipe-only");

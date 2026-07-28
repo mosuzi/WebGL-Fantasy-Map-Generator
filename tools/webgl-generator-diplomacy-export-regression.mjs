@@ -4,6 +4,7 @@ import {readFile} from "node:fs/promises";
 
 import {setDiplomacyRelation} from "../app/webgl-generator/src/generator/diplomacy.js";
 import {generatePlaceholderMap} from "../app/webgl-generator/src/generator/index.js";
+import {normalizeDiplomacyMap} from "../app/webgl-generator/src/runtime/diplomacy-map-compatibility.js";
 import {
   createCompressedMapDocumentBlob,
   createMapDocument,
@@ -60,6 +61,15 @@ assert.equal(backfilled.politics.states[enemyId].diplomacy[subjectId], "Unknown"
 assert.deepEqual(backfilled.pack.states[subjectId].campaigns, []);
 assert.equal(backfilled.diplomacy.metadata.states, activeStateCount);
 
+const legacyHierarchy = normalizeDiplomacyMap(createLegacyHierarchyMap());
+assert.deepEqual(legacyHierarchy.pack.states[1].diplomacy, legacyHierarchy.politics.states[1].diplomacy, "旧图 pack/politics 宗藩矩阵未统一");
+assert.equal(legacyHierarchy.pack.states[1].diplomacy[2], "Suzerain", "旧图双宗主未保留低 overlordId");
+assert.equal(legacyHierarchy.pack.states[2].diplomacy[1], "Vassal");
+assert.equal(legacyHierarchy.pack.states[1].diplomacy[3], "Neutral", "旧图多余宗主未降为 Neutral");
+assert.equal(legacyHierarchy.pack.states[3].diplomacy[1], "Neutral");
+assert.deepEqual(legacyHierarchy.pack.states[1].diplomacySummary, {Suzerain: 1, Neutral: 1}, "旧图外交摘要未重算");
+assert.equal(legacyHierarchy.diplomacy.metadata.vassals, 1, "旧图外交 metadata 未按规范化结果重算");
+
 const oldV1 = JSON.parse(await readFile(new URL("./fixtures/webgl-map-v1-minimal.json", import.meta.url), "utf8"));
 const migratedV1 = parseMapDocument(JSON.stringify(oldV1)).map;
 assert.ok(migratedV1.diplomacy && Array.isArray(migratedV1.diplomacy.chronicle), "旧 v1 没有安全回填外交存储");
@@ -96,8 +106,36 @@ console.log(JSON.stringify({
   jsonBytes: jsonText.length,
   gzipBytes: compressed.compressedBytes,
   oldV1Backfilled: Boolean(migratedV1.diplomacy),
+  legacyHierarchyNormalized: true,
   geoJsonDiplomacyFields: 0
 }, null, 2));
+
+function createLegacyHierarchyMap() {
+  const states = Array.from({length: 4}, (_, id) => ({
+    id,
+    i: id,
+    name: id ? `国家 ${id}` : "中立",
+    removed: false,
+    diplomacy: id ? Array.from({length: 4}, (_, targetId) => targetId === id ? "x" : "Neutral") : [],
+    diplomacySummary: {stale: 99},
+    campaigns: []
+  }));
+  states[1].diplomacy[2] = "Suzerain";
+  states[2].diplomacy[1] = "Vassal";
+  states[1].diplomacy[3] = "Suzerain";
+  states[3].diplomacy[1] = "Vassal";
+  const politicsStates = structuredClone(states);
+  for (let id = 1; id < politicsStates.length; id++) {
+    politicsStates[id].diplomacy = politicsStates[id].diplomacy.map((relation, targetId) =>
+      targetId === id ? "x" : targetId ? "Friendly" : relation
+    );
+  }
+  return {
+    pack: {states, diplomacy: {chronicle: [], metadata: {vassals: 99}}},
+    politics: {states: politicsStates},
+    diplomacy: {chronicle: [], metadata: {vassals: 99}}
+  };
+}
 
 function diplomacyDigest(sourceMap, ids) {
   const [subject, enemy, vassal] = ids;

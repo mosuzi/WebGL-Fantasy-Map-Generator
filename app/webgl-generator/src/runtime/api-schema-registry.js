@@ -261,6 +261,7 @@ const METHOD_OVERRIDES = Object.freeze({
   ...remainingRuleMethodOverrides(),
   ...politicalTransferRuleMethodOverrides(),
   ...provinceTopologyRuleMethodOverrides(),
+  ...diplomacyRuleMethodOverrides(),
   ...namebaseRuleMethodOverrides(),
   "oceanCurrents.rename": {
     arguments: [argument("currentId", stringSchema("洋流 ID")), argument("name", stringSchema("新名称"))],
@@ -1373,6 +1374,119 @@ function provinceTopologyRuleMethodOverrides() {
       argument("options", options)
     ], [...splitCodes, ...tokenCodes, "province-topology-validation-failed", "confirmation_required"], [[
       {sourceProvinceId: 1, packCellIds: [10, 11]},
+      exampleOptions
+    ]])
+  };
+}
+
+function diplomacyRuleMethodOverrides() {
+  const tokenCodes = [
+    "inspection-required", "inspection-stale", "inspection-token-invalid",
+    "inspection-action-mismatch", "inspection-input-mismatch", "inspection-schema-mismatch"
+  ];
+  const declareCodes = [
+    "invalid-state-pair", "same-state", "attacker-not-found", "defender-not-found",
+    "war-already-active", "direct-vassal-war-forbidden", "diplomacy-validation-failed"
+  ];
+  const peaceCodes = [
+    "invalid-state-pair", "same-state", "left-not-found", "right-not-found",
+    "war-not-active", "invalid-peace-relation", "invalid-peace-terms",
+    "peace-term-rejected", "diplomacy-validation-failed"
+  ];
+  const overlordCodes = [
+    "vassal-not-found", "overlord-not-found", "same-state", "overlord-unchanged",
+    "overlord-missing", "overlord-cycle", "overlord-war-conflict",
+    "invalid-release-relation", "diplomacy-validation-failed"
+  ];
+  const declareRequest = {
+    type: "object",
+    required: ["attackerStateId", "defenderStateId"],
+    properties: {
+      attackerStateId: {type: "integer", minimum: 1},
+      defenderStateId: {type: "integer", minimum: 1},
+      reason: {type: "string", maxLength: 160}
+    },
+    additionalProperties: false
+  };
+  const reparations = {
+    type: "object",
+    required: ["fromStateId", "toStateId", "amount"],
+    properties: {
+      fromStateId: {type: "integer", minimum: 1},
+      toStateId: {type: "integer", minimum: 1},
+      amount: {type: "number", exclusiveMinimum: 0},
+      unit: {type: "string", maxLength: 40},
+      note: {type: "string", maxLength: 160}
+    },
+    additionalProperties: false
+  };
+  const peaceRequest = {
+    type: "object",
+    required: ["leftStateId", "rightStateId"],
+    properties: {
+      leftStateId: {type: "integer", minimum: 1},
+      rightStateId: {type: "integer", minimum: 1},
+      relation: {enum: ["Ally", "Friendly", "Neutral", "Suspicion", "Rival", "Unknown"]},
+      terms: {
+        type: "object",
+        properties: {
+          reparations,
+          note: {type: "string", maxLength: 240}
+        },
+        additionalProperties: false
+      }
+    },
+    additionalProperties: false
+  };
+  const overlordRequest = {
+    type: "object",
+    required: ["vassalStateId", "overlordStateId"],
+    properties: {
+      vassalStateId: {type: "integer", minimum: 1},
+      overlordStateId: {type: ["integer", "null"], minimum: 1},
+      releaseRelation: {enum: ["Ally", "Friendly", "Neutral", "Suspicion", "Rival", "Unknown"]}
+    },
+    additionalProperties: false
+  };
+  const options = ruleExecutionOptionsSchema({
+    confirm: true,
+    properties: {label: {type: "string"}},
+    required: ["inspectionToken", "expectedRevision"]
+  });
+  const exampleOptions = {
+    inspectionToken: "rulei1.example",
+    expectedRevision: {mapIdentity: "example-map", mapRevision: 1},
+    confirm: true
+  };
+  return {
+    "edit.diplomacy.inspectDeclareWar": ruleInspectorOverride([
+      argument("request", declareRequest)
+    ], declareCodes, [[{attackerStateId: 1, defenderStateId: 2, reason: "边境争端"}]]),
+    "edit.diplomacy.declareWar": ruleExecutorOverride([
+      argument("request", declareRequest),
+      argument("options", options)
+    ], [...declareCodes, ...tokenCodes, "confirmation_required"], [[
+      {attackerStateId: 1, defenderStateId: 2, reason: "边境争端"},
+      exampleOptions
+    ]]),
+    "edit.diplomacy.inspectPeace": ruleInspectorOverride([
+      argument("request", peaceRequest)
+    ], peaceCodes, [[{leftStateId: 1, rightStateId: 2, relation: "Neutral"}]]),
+    "edit.diplomacy.makePeace": ruleExecutorOverride([
+      argument("request", peaceRequest),
+      argument("options", options)
+    ], [...peaceCodes, ...tokenCodes, "confirmation_required"], [[
+      {leftStateId: 1, rightStateId: 2, relation: "Neutral"},
+      exampleOptions
+    ]]),
+    "edit.diplomacy.inspectOverlordChange": ruleInspectorOverride([
+      argument("request", overlordRequest)
+    ], overlordCodes, [[{vassalStateId: 2, overlordStateId: 1, releaseRelation: "Neutral"}]]),
+    "edit.diplomacy.changeOverlord": ruleExecutorOverride([
+      argument("request", overlordRequest),
+      argument("options", options)
+    ], [...overlordCodes, ...tokenCodes, "confirmation_required"], [[
+      {vassalStateId: 2, overlordStateId: 1, releaseRelation: "Neutral"},
       exampleOptions
     ]])
   };
