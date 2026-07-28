@@ -832,6 +832,7 @@
 - **权威任务第 207 项：补齐已有规则写命令的领域 inspector。** `执行中；来源：用户整体批准第 204 项缺口`
   - 封闭分母：第 204 项原矩阵中 `existing-needs-inspector` 的 `24` 个动作族；重新审计确认国家、省份、城市三族 `createAtCell` 已由第 195 项完整实现，现升级为 `existing-transaction`，实际待补 inspector 为 `21` 个。不新增动作族，不重复包装已有完整事务。
   - 契约：每个动作使用领域专用 `inspect<Action>`，返回 `allowed / code / summary / normalizedInput / affected / requiresConfirm / expectedRevision / inspectionToken`；执行入口保持兼容，并接受可选 `expectedRevision / inspectionToken`。业务拒绝不写地图、历史、selection、相机或运行时缓存；成功仍复用既有命令且只形成一条历史与一次 revision 递增。
+  - 步骤 2 完成记录：新增独立 `rulei1` / inspector schema v1，只负责领域规则事务令牌与结果包络，不修改既有 `celli1`。纯 JSON 输入按稳定键序深复制并拒绝 getter、setter、非枚举字段、数组额外字段、稀疏槽、循环和非有限值；token 使用运行时 secret 对完整 actionId、完整规范输入、map identity、revision 与 schema 签名，短指纹碰撞不能复用，缺少 signer 时拒绝签发。专项覆盖对象 / 数组访问器零触发、两组已知 FNV 碰撞、跨动作 / 输入 / 地图 / schema、陈旧 revision、签名篡改和禁止 arbitrary execute；独立复审结论为 `PASS`。
   - 最小验收：原 `24 / 24` 动作族均可由 `info.describe` 和复合语义矩阵发现，其中三族创建继续使用已验收契约、其余 `21 / 21` 补齐领域 inspector；空输入、非法引用、陈旧 revision、跨动作 token 和 no-op 有稳定结果；旧调用路径继续可用；专项、API 契约、旧数据、生产构建和差异检查通过。
 
 - **权威任务第 208 项：把五个多 API 碎片收敛为原子规则事务。** `待执行；来源：用户整体批准第 204 项缺口`

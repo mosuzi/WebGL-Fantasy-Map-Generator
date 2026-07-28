@@ -28869,3 +28869,10 @@ full 矩阵结果：
 - 新增 `docs/task-notes/compound-semantic-gap-implementation-plan.md`，冻结统一事务契约、省份合并 / 拆分、宣战 / 议和、宗藩变更和真实战斗结算的默认规则，以及需要人类审阅时必须使用的玩家视角表格。当前没有阻断施工的未决项。
 - 独立调查校准出两个审计滞后点：第 195 项已经完整实现国家、省份、城市三族 `createAtCell` inspector / execute，现有军团战斗事件 `applyResult` 也已有确定性双方损耗、态势、纪事和撤销。施工图因此拆为 `10` 个提交步骤，先重新归类真实基线，再只补缺失语义，避免重复实现。
 - 复合语义生成器已按当前 checkout 重跑：三族创建由 `existing-needs-inspector` 升级为 `existing-transaction`，真实状态从 `33 / 24 / 5 / 6 / 10` 校准为 `36 / 21 / 5 / 6 / 10`；第 205 项新增画布锁选择也补入交互归类。当前能力矩阵 `1012` 行、公开 API `257 / 257`、Cell / 画布动作 `48 / 48`，结构缺口继续为 `0`。
+
+## 2026-07-28：完成第 207 项步骤 2——统一规则事务预检与提交契约
+
+- 新增独立 `rule-inspection-token.js`，冻结 `rulei1` 与 inspector schema v1。统一结果包含 `allowed / code / summary / normalizedInput / affected / requiresConfirm / expectedRevision / inspectionToken / inspectorSchemaVersion`，不提供通用 executor，也明确拒绝 `execute / run / dispatch / invoke` 等无领域动作标识。
+- 规范输入只接受纯 JSON：稳定排序并深复制，拒绝非有限数字、循环、稀疏数组、额外数组字段、非枚举字段和访问器；对象与数组均先读取属性描述符，不触发调用方 getter。
+- token 使用 `MapRevisionTracker.signCursor` 的运行时 secret，对完整 actionId、完整规范输入、map identity、revision 和 schema version 签名；短 FNV 只作 token 索引。新增已知输入碰撞与动作碰撞夹具，证明同一短指纹仍不能跨输入或跨动作复用；缺 signer 不再降级为可公开计算的签名。
+- 专项、`cells-actions`、三族 object creation、语法和差异检查通过，既有 `celli1` 文件与调用路径未修改。独立复审第一轮指出短 hash 签名、getter 和无密钥 fallback 三类阻断；修正并补回归后第二轮结论为 `PASS`。
