@@ -176,6 +176,11 @@ export class PanelManager {
     this.stopHeaderRefresh(record);
     this.savePanelState(id);
     if (wasOpen) record.onClose();
+    if (wasOpen) {
+      this.documentRef.dispatchEvent(new CustomEvent("fmg:panel-close", {
+        detail: {panelId: id}
+      }));
+    }
     if (returnParentId) this.restoreReturnParent(returnParentId, {focus: !fromRegistry});
     if (!fromRegistry) this.overlayRegistry?.hide(record.overlayId, {restoreFocus});
     this.reflowPanels();

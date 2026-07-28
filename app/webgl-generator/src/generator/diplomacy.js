@@ -1,6 +1,13 @@
 import {createRandom} from "./random.js";
 import {getGovernmentEffects} from "./governments.js";
 import {reconcileWarDerivedData} from "./war-consistency.js";
+import {
+  assertLockedDiplomacyRelations,
+  captureDiplomacyRelationSnapshot,
+  diplomacyPairKey,
+  prepareLockedDiplomacyRelations,
+  seedLockedDiplomacyRelations
+} from "./diplomacy-regeneration-locks.js";
 
 export const DIPLOMACY_RELATIONS = Object.freeze({
   Ally: Object.freeze({value: "Ally", label: "盟友", color: "#2fa85a", polarity: 3}),
@@ -42,26 +49,48 @@ export function buildDiplomacy(pack, society, options = {}) {
   const startedAt = performance.now();
   const states = pack?.states || [];
   const validStates = states.filter(state => state?.i && !state.removed);
+  const protectedStateIds = new Set((options.lockedStates || [])
+    .map(state => Number(state?.i ?? state?.id))
+    .filter(Number.isInteger));
+  const supportingRelations = [];
+  for (const state of validStates) {
+    if (!protectedStateIds.has(Number(state.i))) continue;
+    for (const other of validStates) {
+      if (other.i <= state.i) continue;
+      supportingRelations.push(captureDiplomacyRelationSnapshot(pack, state.i, other.i));
+    }
+    for (const other of validStates) {
+      if (other.i >= state.i || protectedStateIds.has(Number(other.i))) continue;
+      supportingRelations.push(captureDiplomacyRelationSnapshot(pack, other.i, state.i));
+    }
+  }
+  const locked = prepareLockedDiplomacyRelations(pack, {
+    ...options,
+    lockedDiplomacyRelations: mergeDiplomacySnapshots(options.lockedDiplomacyRelations, supportingRelations)
+  });
   const random = createRandom(`${options.seed}:diplomacy:${options.diplomacyRegenerationSalt ?? 0}`);
   const chronicle = [];
 
   if (states[0]) states[0].diplomacy = chronicle;
   for (const state of validStates) {
+    if (protectedStateIds.has(Number(state.i))) continue;
     state.diplomacy = new Array(states.length).fill("x");
     state.diplomacy[state.i] = "x";
     state.campaigns = [];
   }
+  seedLockedDiplomacyRelations(states, chronicle, locked);
 
   if (validStates.length >= 2) {
     const context = createDiplomacyContext(pack, society, validStates);
-    assignPairRelations({pack, society, states, validStates, random, context});
-    declareRivalWars({states, validStates, random, context, chronicle, options});
+    assignPairRelations({pack, society, states, validStates, random, context, locked});
+    declareRivalWars({states, validStates, random, context, chronicle, options, locked});
   }
 
-  refreshDiplomacySummaries(states);
+  refreshDiplomacySummaries(states, protectedStateIds);
   const metadata = summarizeDiplomacy(states, roundMs(performance.now() - startedAt));
   const diplomacy = {relations: DIPLOMACY_RELATIONS, chronicle, metadata};
   if (pack) pack.diplomacy = diplomacy;
+  assertLockedDiplomacyRelations(pack, locked);
   return diplomacy;
 }
 
@@ -106,11 +135,12 @@ export function diplomacyRelationColor(relation) {
   return DIPLOMACY_RELATIONS[relation]?.color || "#9ca3a8";
 }
 
-function assignPairRelations({pack, society, states, validStates, random, context}) {
+function assignPairRelations({pack, society, states, validStates, random, context, locked}) {
   for (let fIndex = 0; fIndex < validStates.length; fIndex++) {
     const from = validStates[fIndex];
     for (let tIndex = fIndex + 1; tIndex < validStates.length; tIndex++) {
       const to = validStates[tIndex];
+      if (locked.ids.has(diplomacyPairKey(from.i, to.i))) continue;
       const relation = choosePairRelation({pack, society, states, from, to, random, context});
       setPairRelation(from, to, relation);
     }
@@ -154,7 +184,7 @@ function choosePairRelation({pack, society, states, from, to, random, context}) 
   return relation;
 }
 
-function declareRivalWars({states, validStates, random, context, chronicle, options}) {
+function declareRivalWars({states, validStates, random, context, chronicle, options, locked}) {
   const maxWars = Math.max(1, Math.floor(validStates.length / 8));
   let wars = 0;
   const year = Number(options.year) || 1000;
@@ -163,7 +193,7 @@ function declareRivalWars({states, validStates, random, context, chronicle, opti
     if (wars >= maxWars) break;
     if ((attacker.diplomacy || []).includes("Vassal") || (attacker.diplomacy || []).includes("Enemy")) continue;
     const rivalIds = (attacker.diplomacy || [])
-      .map((relation, id) => (relation === "Rival" && !states[id]?.diplomacy?.includes("Vassal") ? id : 0))
+      .map((relation, id) => (relation === "Rival" && !locked.ids.has(diplomacyPairKey(attacker.i, id)) && !states[id]?.diplomacy?.includes("Vassal") ? id : 0))
       .filter(Boolean);
     if (!rivalIds.length || random.next() > 0.34) continue;
 
@@ -329,10 +359,10 @@ function ensureDiplomacyArrays(states) {
   }
 }
 
-function refreshDiplomacySummaries(states) {
+function refreshDiplomacySummaries(states, protectedStateIds = new Set()) {
   const validIds = new Set((states || []).filter(state => state?.i && !state.removed).map(state => state.i));
   for (const state of states || []) {
-    if (!state?.i || state.removed) continue;
+    if (!state?.i || state.removed || protectedStateIds.has(Number(state.i))) continue;
     const counts = {};
     for (let id = 1; id < (states || []).length; id++) {
       if (id === state.i || !validIds.has(id)) continue;
@@ -341,6 +371,14 @@ function refreshDiplomacySummaries(states) {
     }
     state.diplomacySummary = counts;
   }
+}
+
+function mergeDiplomacySnapshots(primary = [], supporting = []) {
+  const byId = new Map();
+  for (const snapshot of [...(primary || []), ...(supporting || [])]) {
+    if (snapshot?.id && !byId.has(String(snapshot.id))) byId.set(String(snapshot.id), snapshot);
+  }
+  return [...byId.values()];
 }
 
 function summarizeDiplomacy(states, buildMs = 0) {

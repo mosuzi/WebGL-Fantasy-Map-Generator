@@ -1,7 +1,8 @@
 const WATER_LEVEL = 20;
 
-export function normalizeRiverNetwork(rivers, pack, {dropIncomplete = false} = {}) {
+export function normalizeRiverNetwork(rivers, pack, {dropIncomplete = false, frozenIds = new Set()} = {}) {
   const source = Array.isArray(rivers) ? rivers.filter(Boolean) : [];
+  const frozen = new Set([...frozenIds].map(Number));
   const cells = pack?.cells || {};
   const byId = new Map(source.map(river => [riverIdOf(river), river]));
   const diagnostics = {
@@ -28,6 +29,11 @@ export function normalizeRiverNetwork(rivers, pack, {dropIncomplete = false} = {
     const receiver = outlet.kind === "inland"
       ? findDirectReceiver(river, source, cells, declaredParent)
       : null;
+
+    if (frozen.has(id)) {
+      assertFrozenRiverRelation(river, outlet, receiver);
+      continue;
+    }
 
     if (declaredParent === id) diagnostics.selfParents++;
     else if (declaredParent && !byId.has(declaredParent)) diagnostics.missingParents++;
@@ -76,13 +82,15 @@ export function normalizeRiverNetwork(rivers, pack, {dropIncomplete = false} = {
     }
   }
 
-  breakParentCycles(source, diagnostics);
-  markInvalidBasins(source, diagnostics);
+  breakParentCycles(source, diagnostics, frozen);
+  markInvalidBasins(source, diagnostics, frozen);
 
   let normalized = source;
   if (dropIncomplete) {
     const droppedIds = collectIncompleteRiverIds(source);
     if (droppedIds.size) {
+      const frozenDrop = [...droppedIds].find(id => frozen.has(id));
+      if (frozenDrop) throw frozenConflict(frozenDrop, "frozen_river_incomplete", `冻结河流 #${frozenDrop} 无法通过河网完整性门禁`);
       normalized = source.filter(river => !droppedIds.has(riverIdOf(river)));
       diagnostics.dropped = droppedIds.size;
       for (const river of normalized) {
@@ -98,14 +106,28 @@ export function normalizeRiverNetwork(rivers, pack, {dropIncomplete = false} = {
       }
       const cascading = collectIncompleteRiverIds(normalized);
       if (cascading.size) {
+        const frozenCascade = [...cascading].find(id => frozen.has(id));
+        if (frozenCascade) throw frozenConflict(frozenCascade, "frozen_basin_incomplete", `冻结河流 #${frozenCascade} 的下游流域无效`);
         normalized = normalized.filter(river => !cascading.has(riverIdOf(river)));
         diagnostics.dropped += cascading.size;
       }
     }
   }
 
-  resolveRiverBasins(normalized);
+  resolveRiverBasins(normalized, frozen);
   return {rivers: normalized, diagnostics};
+}
+
+function assertFrozenRiverRelation(river, outlet, receiver) {
+  const id = riverIdOf(river);
+  const parent = Number(river.parent || 0);
+  if (parent && riverIdOf(receiver) !== parent) {
+    throw frozenConflict(id, "frozen_parent_changed", `冻结支流 #${id} 无法继续接入父河 #${parent}`);
+  }
+  if (!parent && outlet.issue) throw frozenConflict(id, outlet.issue, `冻结河流 #${id} 的出口或路径无效`);
+  if (!parent && outlet.kind === "inland") {
+    throw frozenConflict(id, "frozen_outlet_missing", `冻结干流 #${id} 缺少合法出口`);
+  }
 }
 
 export function describeRiverRelation(river, rivers) {
@@ -231,7 +253,7 @@ function writeRiverRelation(river, relation) {
   river.type = relation.parent ? "Branch" : "River";
 }
 
-function breakParentCycles(rivers, diagnostics) {
+function breakParentCycles(rivers, diagnostics, frozenIds = new Set()) {
   const byId = new Map(rivers.map(river => [riverIdOf(river), river]));
   for (const river of rivers) {
     const seen = new Set();
@@ -239,6 +261,7 @@ function breakParentCycles(rivers, diagnostics) {
     while (Number(current?.parent || 0)) {
       const id = riverIdOf(current);
       if (seen.has(id)) {
+        if (frozenIds.has(id)) throw frozenConflict(id, "parent_cycle", `冻结河流 #${id} 的父链存在循环`);
         writeRiverRelation(current, {
           parent: 0,
           confluence: -1,
@@ -258,7 +281,7 @@ function breakParentCycles(rivers, diagnostics) {
   }
 }
 
-function markInvalidBasins(rivers, diagnostics) {
+function markInvalidBasins(rivers, diagnostics, frozenIds = new Set()) {
   const byId = new Map(rivers.map(river => [riverIdOf(river), river]));
   for (const river of rivers) {
     const chain = [];
@@ -275,6 +298,9 @@ function markInvalidBasins(rivers, diagnostics) {
     if (root?.networkStatus !== "orphaned") continue;
     for (const member of chain) {
       if (member.networkStatus === "orphaned") continue;
+      if (frozenIds.has(riverIdOf(member))) {
+        throw frozenConflict(riverIdOf(member), "invalid_downstream_basin", `冻结河流 #${riverIdOf(member)} 的下游流域无效`);
+      }
       member.networkStatus = "orphaned";
       member.networkIssue = "invalid-downstream-basin";
       diagnostics.invalidBasins++;
@@ -317,7 +343,7 @@ function collectIncompleteRiverIds(rivers) {
   return dropped;
 }
 
-function resolveRiverBasins(rivers) {
+function resolveRiverBasins(rivers, frozenIds = new Set()) {
   const byId = new Map(rivers.map(river => [riverIdOf(river), river]));
   for (const river of rivers) {
     let root = river;
@@ -329,8 +355,22 @@ function resolveRiverBasins(rivers) {
       seen.add(id);
       root = next;
     }
-    river.basin = riverIdOf(root);
+    const resolved = riverIdOf(root);
+    if (frozenIds.has(riverIdOf(river))) {
+      if (Number(river.basin || riverIdOf(river)) !== resolved) {
+        throw frozenConflict(riverIdOf(river), "frozen_basin_changed", `冻结河流 #${riverIdOf(river)} 的流域根河不一致`);
+      }
+      continue;
+    }
+    river.basin = resolved;
   }
+}
+
+function frozenConflict(id, reason, message) {
+  const error = new Error(message);
+  error.code = "regeneration_lock_conflict";
+  error.details = {kind: "river", id, reason};
+  return error;
 }
 
 function riverIdOf(river) {

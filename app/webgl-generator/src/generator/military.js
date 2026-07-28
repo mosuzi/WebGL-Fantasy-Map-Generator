@@ -1,6 +1,14 @@
 import {createRandom} from "./random.js";
 import {isActiveEnemyPair} from "./war-consistency.js";
 import {getGovernmentEffects} from "./governments.js";
+import {
+  assertLockedMilitaryRegiments,
+  captureMilitaryRegimentSnapshot,
+  lockedRegimentOccupancy,
+  mergeLockedMilitaryEvents,
+  prepareLockedMilitaryRegiments,
+  seedLockedStateRegiments
+} from "./military-regeneration-locks.js";
 
 export const MILITARY_UNITS = Object.freeze([
   {name: "infantry", label: "步兵", icon: "infantry", rural: 0.25, urban: 0.2, baseRatio: 0.46, type: "melee", separate: 0, speed: 0.78},
@@ -83,6 +91,16 @@ export function buildMilitary(pack, options = {}) {
   const states = pack?.states || [];
   const cells = pack?.cells;
   if (!cells?.i || !states.length) return emptyMilitaryResult(startedAt);
+  const protectedStateIds = new Set((options.lockedStates || [])
+    .map(state => Number(state?.i ?? state?.id))
+    .filter(Number.isInteger));
+  const supportingRegiments = states.flatMap(state => protectedStateIds.has(Number(state?.i))
+    ? (state.military || []).map(regiment => captureMilitaryRegimentSnapshot(pack, regiment))
+    : []);
+  const locked = prepareLockedMilitaryRegiments(pack, {
+    ...options,
+    lockedMilitaryRegiments: mergeMilitarySnapshots(options.lockedMilitaryRegiments, supportingRegiments)
+  });
 
   const random = createRandom(`${options.seed}:military`);
   const validStates = states.filter(state => state?.i && !state.removed);
@@ -95,10 +113,12 @@ export function buildMilitary(pack, options = {}) {
 
   for (const state of states) {
     if (!state) continue;
-    state.military = [];
+    if (protectedStateIds.has(Number(state.i))) continue;
+    state.military = seedLockedStateRegiments(state, locked);
   }
 
   for (const state of validStates) {
+    if (protectedStateIds.has(Number(state.i))) continue;
     const diplomacyPressure = getStateDiplomacyPressure(state, states);
     const resourcePressure = getStateResourcePressure(state, states);
     const alert = getStateAlert(state, averageArea, averageExpansion, diplomacyPressure);
@@ -110,7 +130,17 @@ export function buildMilitary(pack, options = {}) {
     const targetDetails = getStateRegimentTargetDetails(state, cellsForState, burgsForState, alert, densityFactor, options, policy);
     const target = targetDetails.finalTarget;
     const nodes = createMilitaryNodes({pack, state, cellsForState, burgsForState, target, alert, policy, random});
-    state.military = createRegiments({pack, state, nodes, target, spatialMerge, policy, random});
+    state.military = createRegiments({
+      pack,
+      state,
+      nodes,
+      target,
+      spatialMerge,
+      policy,
+      random,
+      preserved: state.military,
+      occupancy: lockedRegimentOccupancy(locked, state.i)
+    });
     state.militaryPolicy.generatedTroops = round(sumRegimentTroops(state.military));
     state.militaryDiagnostics = describeStateMilitaryFunnel({
       pack,
@@ -141,8 +171,20 @@ export function buildMilitary(pack, options = {}) {
       buildMs: roundMs(performance.now() - startedAt)
     }
   };
-  if (pack) pack.military = result;
+  mergeLockedMilitaryEvents(result, locked);
+  if (pack) {
+    pack.military = result;
+    assertLockedMilitaryRegiments(pack, locked);
+  }
   return result;
+}
+
+function mergeMilitarySnapshots(primary = [], supporting = []) {
+  const byId = new Map();
+  for (const snapshot of [...(primary || []), ...(supporting || [])]) {
+    if (snapshot?.id && !byId.has(String(snapshot.id))) byId.set(String(snapshot.id), snapshot);
+  }
+  return [...byId.values()];
 }
 
 function createMilitaryNodes({pack, state, cellsForState, burgsForState, target, alert, policy, random}) {
@@ -200,12 +242,22 @@ function createNode(pack, cell, x, y, unit, total, naval) {
   };
 }
 
-function createRegiments({pack, state, nodes, target, spatialMerge, policy, random}) {
-  if (!nodes.length || target <= 0) return [];
-  const regiments = [];
-  const landNodes = nodes.filter(node => !node.n);
-  const navalNodes = nodes.filter(node => node.n);
-  const {landTarget, navalTarget} = getRegimentSplitTargets(nodes, target);
+function createRegiments({pack, state, nodes, target, spatialMerge, policy, random, preserved = [], occupancy}) {
+  const regiments = preserved.map(clonePlain);
+  const supplementTarget = Math.max(0, target - regiments.length);
+  if (!nodes.length || supplementTarget <= 0) return regiments;
+  const reservedIds = occupancy?.ids || new Set(regiments.map(regiment => Number(regiment.i)));
+  const reservedCells = occupancy?.cells || new Set(regiments.map(regiment => Number(regiment.cell)));
+  const reservedPositions = occupancy?.positions || new Set(regiments.map(regiment => regimentPositionKey(regiment.x, regiment.y)));
+  const availableNodes = nodes.filter(node =>
+    !reservedCells.has(Number(node.cell))
+    && !reservedPositions.has(regimentPositionKey(node.x, node.y))
+  );
+  if (!availableNodes.length) return regiments;
+  const generated = [];
+  const landNodes = availableNodes.filter(node => !node.n);
+  const navalNodes = availableNodes.filter(node => node.n);
+  const {landTarget, navalTarget} = getRegimentSplitTargets(availableNodes, supplementTarget);
   const expectedSize = getExpectedRegimentSize();
   const grouped = [
     ...groupNodes(landNodes, landTarget, expectedSize, spatialMerge),
@@ -221,7 +273,8 @@ function createRegiments({pack, state, nodes, target, spatialMerge, policy, rand
       units[node.u] = (units[node.u] || 0) + node.a;
       total += node.a;
     }
-    const id = regiments.length;
+    const id = nextRegimentId(reservedIds);
+    reservedIds.add(id);
     const unitMap = roundUnitMap(units);
     const dominantUnit = dominantUnitName(unitMap);
     const status = getRegimentStatus(pack, state, lead, dominantUnit, policy, random);
@@ -253,13 +306,29 @@ function createRegiments({pack, state, nodes, target, spatialMerge, policy, rand
         front: round(policy.diplomacyPressure || 1, 2),
         supply: round(getStateSupplyModifier(state, unitDefinition.type), 2)
       },
-      name: getRegimentName(pack, state, lead, id, regiments),
+      name: getRegimentName(pack, state, lead, id, [...regiments, ...generated]),
       state: state.i
     };
-    regiments.push(applyRegimentIconProfile(regiment));
+    generated.push(applyRegimentIconProfile(regiment));
   }
 
-  return scaleRegimentsToPolicy(regiments, policy);
+  const preservedTroops = sumRegimentTroops(regiments);
+  const generatedPolicy = {...policy, finalTroops: Math.max(0, Number(policy?.finalTroops || 0) - preservedTroops)};
+  return [...regiments, ...scaleRegimentsToPolicy(generated, generatedPolicy)];
+}
+
+function nextRegimentId(reservedIds) {
+  let id = 0;
+  while (reservedIds.has(id)) id += 1;
+  return id;
+}
+
+function regimentPositionKey(x, y) {
+  return `${Number(x).toFixed(4)}:${Number(y).toFixed(4)}`;
+}
+
+function clonePlain(value) {
+  return value === undefined ? undefined : JSON.parse(JSON.stringify(value));
 }
 
 function getRegimentSplitTargets(nodes, target) {

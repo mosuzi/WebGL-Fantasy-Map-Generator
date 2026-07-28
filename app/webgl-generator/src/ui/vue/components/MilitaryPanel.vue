@@ -73,7 +73,10 @@
   </section>
 
   <UiDetailGrid class-name="military-panel-details" empty-text="未选中军团" :rows="detailRows" />
+  <UiRegenerationLockActions v-bind="regenerationLocks.actionProps" v-on="regenerationLocks.actionListeners" />
   <UiObjectTable
+    v-bind="regenerationLocks.tableProps"
+    v-on="regenerationLocks.tableListeners"
     :columns="columns"
     :column-widths="state.columnWidths"
     :rows="visibleRows"
@@ -451,6 +454,7 @@ import UiMetricGrid from "./base/UiMetricGrid.vue";
 import UiNoteField from "./base/UiNoteField.vue";
 import UiObjectTable from "./base/UiObjectTable.vue";
 import UiPanelIoActions from "./base/UiPanelIoActions.vue";
+import UiRegenerationLockActions from "./base/UiRegenerationLockActions.vue";
 import UiSelectField from "./base/UiSelectField.vue";
 import UiSliderField from "./base/UiSliderField.vue";
 import UiSwitchField from "./base/UiSwitchField.vue";
@@ -460,6 +464,7 @@ import {findByObjectId, sameObjectId} from "../../object-id.js";
 import {compareRowsByKey} from "../../sort-utils.js";
 import {useUnitPreferences} from "../composables/use-unit-preferences.js";
 import {useVisibleRowSelection} from "../composables/use-visible-row-selection.js";
+import {useRegenerationLockSelection} from "../composables/use-regeneration-lock-selection.js";
 
 defineOptions({
   name: "MilitaryPanel"
@@ -595,7 +600,9 @@ const eventOutcomeFilter = computed(() => props.state.eventOutcomeFilter || "all
 const eventApplyFilter = computed(() => props.state.eventApplyFilter || "all");
 const filteredRows = computed(() => filterRows(metrics.value.rows, props.state.filter, props.state.selectedStateId, props.state.selectedStatus));
 const visibleRows = computed(() => sortRows(filteredRows.value, props.state.sortKey, props.state.sortDir));
-const {selectedRowIds: selectedRegimentIds, selectedRows: selectedRegimentRows} = useVisibleRowSelection(visibleRows);
+const regenerationLocks = useRegenerationLockSelection({panelId: "military-panel", kind: "military", rows: visibleRows});
+const {selectedRowIds: selectedRegimentIds} = useVisibleRowSelection(visibleRows);
+const selectedRegimentRows = regenerationLocks.selectedRows;
 const filterEmptyAction = computed(() => String(props.state.filter || "").trim()
   ? {key: "clear-filter", label: "清空筛选", icon: "⌫"}
   : null);

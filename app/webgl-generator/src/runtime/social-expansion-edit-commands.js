@@ -1,6 +1,9 @@
 import {rebuildInheritanceTree, summarizeInheritanceTree} from "../generator/inheritance.js";
 import {reexpandSocietyCultures, reexpandSocietyReligions} from "../generator/society.js";
+import {prepareSocialRegenerationLocks} from "../generator/social-regeneration-locks.js";
 import {objectAffected, systemAffected} from "./edit-command-effects.js";
+import {OBJECT_KIND} from "./object-kinds.js";
+import {assertLockedRegenerationSnapshots, captureLockedRegenerationObjects} from "./regeneration-lock-protection.js";
 
 export const CULTURE_EXPANSION_TYPES = Object.freeze(["Generic", "Hunting", "Highland", "River", "Lake", "Naval", "Nomadic"]);
 export const RELIGION_EXPANSION_SCOPES = Object.freeze(["culture", "state", "global"]);
@@ -21,6 +24,10 @@ export function inspectSocialExpansion(map, request = {}) {
   const store = getPrimaryStore(map, config);
   const item = store?.[normalized.id];
   if (!item || item.removed || normalized.id <= 0) return invalidInspection(normalized, `${config.label}不存在或已删除`, "missing-object");
+  if (normalized.mode === SOCIAL_EXPANSION_MODE.REEXPAND && isSocialObjectLocked(map, normalized.kind, normalized.id)) {
+    validateLockedSocialDomain(map, normalized.kind);
+    return lockedNoopInspection(normalized, item, config);
+  }
 
   const patchResult = normalizePatch(item, normalized, config, {strict: true});
   if (!patchResult.valid) return invalidInspection(normalized, patchResult.reason, patchResult.code);
@@ -91,17 +98,35 @@ export function createApplySocialExpansionCommand(request, {label = null} = {}) 
     apply(context) {
       const inspection = inspectSocialExpansion(context.map, initialRequest);
       if (!inspection.valid) throw new Error(inspection.reason);
+      if (inspection.code === "regeneration_locked_noop") {
+        result = {
+          kind: inspection.kind,
+          id: inspection.id,
+          mode: inspection.mode,
+          includeReligions: inspection.includeReligions,
+          parameterChanges: [],
+          centerChanged: false,
+          changedPackCells: 0,
+          changedGridCells: 0,
+          linkedReligionPackCells: 0,
+          executed: false
+        };
+        return;
+      }
       if (inspection.requiresConfirm && initialRequest.confirm !== true) throw new Error(`${config.label}重新扩张需要 confirm: true`);
       snapshot ??= captureSnapshot(context.map);
       try {
+        const locked = captureSocialRegenerationState(context.map);
         applyPatchToStores(context.map, config, inspection.id, inspection.next);
         failAt(initialRequest, "after-parameters");
         const expansion = inspection.mode === SOCIAL_EXPANSION_MODE.REEXPAND
-          ? applyReexpansion(context.map, inspection)
+          ? applyReexpansion(context.map, inspection, locked)
           : {changedPackCells: 0, changedGridCells: 0, linkedReligionPackCells: 0};
         failAt(initialRequest, "after-ownership");
         appliedAt ??= new Date().toISOString();
         repairSocialState(context.map, config.kind, inspection.mode, inspection.includeReligions, appliedAt);
+        assertLockedRegenerationSnapshots(context.map, locked.cultures);
+        assertLockedRegenerationSnapshots(context.map, locked.religions);
         failAt(initialRequest, "after-references");
         result = {
           kind: inspection.kind,
@@ -266,18 +291,20 @@ function simulateReexpansion(map, request, patch) {
   const beforePack = Array.from(map.pack.cells[config.field] || []);
   const beforeGrid = Array.from(map.grid.cells[config.field] || []);
   let linkedReligionPackCells = 0;
+  const cultureLocks = getLockedSocialObjects(map, "culture");
+  const religionLocks = getLockedSocialObjects(map, "religion");
   if (request.kind === "culture") {
-    reexpandSocietyCultures(shadow.grid, shadow.pack, shadow.society.cultures);
-    repairCenters(shadow, config);
+    reexpandSocietyCultures(shadow.grid, shadow.pack, shadow.society.cultures, {lockedCultures: cultureLocks});
+    repairCenters(shadow, config, new Set(cultureLocks.map(item => Number(item.i ?? item.id))));
     if (request.includeReligions) {
       const beforeReligion = Array.from(map.pack.cells.religion || []);
-      reexpandSocietyReligions(shadow.grid, shadow.pack, shadow.society.religions, shadow.settlements);
-      repairCenters(shadow, socialConfig("religion"));
+      reexpandSocietyReligions(shadow.grid, shadow.pack, shadow.society.religions, shadow.settlements, {lockedReligions: religionLocks});
+      repairCenters(shadow, socialConfig("religion"), new Set(religionLocks.map(item => Number(item.i ?? item.id))));
       linkedReligionPackCells = countChanged(beforeReligion, shadow.pack.cells.religion);
     }
   } else {
-    reexpandSocietyReligions(shadow.grid, shadow.pack, shadow.society.religions, shadow.settlements);
-    repairCenters(shadow, config);
+    reexpandSocietyReligions(shadow.grid, shadow.pack, shadow.society.religions, shadow.settlements, {lockedReligions: religionLocks});
+    repairCenters(shadow, config, new Set(religionLocks.map(item => Number(item.i ?? item.id))));
   }
   return {
     changedPackCells: countChanged(beforePack, shadow.pack.cells[config.field]),
@@ -322,17 +349,26 @@ function applyPatchToStores(map, config, id, patch) {
   }
 }
 
-function applyReexpansion(map, inspection) {
+function applyReexpansion(map, inspection, locked = captureSocialRegenerationState(map)) {
+  const cultureLocks = locked.cultures.snapshots;
+  const religionLocks = locked.religions.snapshots;
   if (inspection.kind === "culture") {
-    const cultureResult = reexpandSocietyCultures(map.grid, map.pack, getPrimaryStore(map, socialConfig("culture")));
+    const cultureResult = reexpandSocietyCultures(map.grid, map.pack, getPrimaryStore(map, socialConfig("culture")), {lockedCultures: cultureLocks});
     let linkedReligionPackCells = 0;
     if (inspection.includeReligions) {
-      const religionResult = reexpandSocietyReligions(map.grid, map.pack, getPrimaryStore(map, socialConfig("religion")), map.settlements);
+      const religionResult = reexpandSocietyReligions(map.grid, map.pack, getPrimaryStore(map, socialConfig("religion")), map.settlements, {lockedReligions: religionLocks});
       linkedReligionPackCells = religionResult.changedPackCells;
     }
     return {...cultureResult, linkedReligionPackCells};
   }
-  return {...reexpandSocietyReligions(map.grid, map.pack, getPrimaryStore(map, socialConfig("religion")), map.settlements), linkedReligionPackCells: 0};
+  return {...reexpandSocietyReligions(map.grid, map.pack, getPrimaryStore(map, socialConfig("religion")), map.settlements, {lockedReligions: religionLocks}), linkedReligionPackCells: 0};
+}
+
+function captureSocialRegenerationState(map) {
+  return {
+    cultures: captureLockedRegenerationObjects(map, OBJECT_KIND.CULTURE),
+    religions: captureLockedRegenerationObjects(map, OBJECT_KIND.RELIGION)
+  };
 }
 
 function repairSocialState(map, kind, mode, includeReligions, updatedAt) {
@@ -340,8 +376,10 @@ function repairSocialState(map, kind, mode, includeReligions, updatedAt) {
   const kinds = kind === "culture" && includeReligions ? ["culture", "religion"] : [kind];
   for (const currentKind of kinds) {
     const config = socialConfig(currentKind);
-    repairCenters(map, config);
-    repairTreePreservingOrigins(getPrimaryStore(map, config));
+    const lockedObjects = getLockedSocialObjects(map, currentKind);
+    const lockedIds = new Set(lockedObjects.map(item => Number(item.i ?? item.id)));
+    repairCenters(map, config, lockedIds);
+    repairTreePreservingOrigins(getPrimaryStore(map, config), lockedObjects);
     syncStoreMirrors(map, config);
     syncReferences(map, config);
     refreshMetadata(map, config);
@@ -355,7 +393,7 @@ function repairSocialState(map, kind, mode, includeReligions, updatedAt) {
   }
 }
 
-function repairCenters(map, config) {
+function repairCenters(map, config, fixedIds = new Set()) {
   const store = getPrimaryStore(map, config);
   const cells = map.pack?.cells;
   if (!Array.isArray(store) || !cells) return;
@@ -363,6 +401,10 @@ function repairCenters(map, config) {
   const items = store.filter(item => item && !item.removed && Number(item.i ?? item.id) > 0).sort((a, b) => Number(a.i ?? a.id) - Number(b.i ?? b.id));
   for (const item of items) {
     const id = Number(item.i ?? item.id);
+    if (fixedIds.has(id)) {
+      used.add(Number(item.center));
+      continue;
+    }
     let center = Number(item.center);
     if (!isOwnedLandCenter(cells, config.field, id, center) || used.has(center)) center = selectDeterministicOwnedCenter(cells, config.field, id, used);
     item.center = center;
@@ -381,7 +423,8 @@ function isOwnedLandCenter(cells, field, id, center) {
 
 export function selectDeterministicOwnedCenter(cells, field, id, used = new Set()) {
   let best = -1;
-  for (const cell of cells.i || []) {
+  const count = cells.i?.length || cells[field]?.length || cells.h?.length || 0;
+  for (let cell = 0; cell < count; cell++) {
     if (used.has(cell) || Number(cells.h?.[cell]) < 20 || Number(cells[field]?.[cell]) !== id) continue;
     if (best < 0 || compareCenterCandidates(cells, cell, best) < 0) best = cell;
   }
@@ -394,13 +437,22 @@ function compareCenterCandidates(cells, left, right) {
     || left - right;
 }
 
-function repairTreePreservingOrigins(store) {
+function repairTreePreservingOrigins(store, fixedObjects = []) {
   const origins = new Map((store || []).filter(Boolean).map(item => [Number(item.i ?? item.id), clonePlain(item.origins)]));
   rebuildInheritanceTree(store || []);
   for (const item of store || []) {
     if (!item) continue;
     const saved = origins.get(Number(item.i ?? item.id));
     if (saved !== undefined) item.origins = saved;
+  }
+  for (const snapshot of fixedObjects) {
+    const id = Number(snapshot?.i ?? snapshot?.id);
+    const item = store?.[id];
+    if (!item) continue;
+    for (const key of ["center", "gridCenter", "parent", "origins", "culture"]) {
+      if (Object.prototype.hasOwnProperty.call(snapshot, key)) item[key] = clonePlain(snapshot[key]);
+      else delete item[key];
+    }
   }
 }
 
@@ -550,6 +602,61 @@ function invalidInspection(request, reason, code) {
   return {valid: false, code, reason, kind: request.kind, id: request.id, mode: request.mode, includeReligions: request.includeReligions, requiresConfirm: request.mode === SOCIAL_EXPANSION_MODE.REEXPAND, changed: false, request: {...request}};
 }
 
+function lockedNoopInspection(request, item, config) {
+  const current = currentEditableValues(item, config);
+  return {
+    valid: true,
+    code: "regeneration_locked_noop",
+    reason: `${config.label} #${request.id} 已锁定，重新扩张未执行`,
+    kind: request.kind,
+    id: request.id,
+    mode: request.mode,
+    includeReligions: request.includeReligions,
+    requiresConfirm: false,
+    current,
+    next: {...current},
+    parameterChanges: [],
+    centerChanged: false,
+    changedPackCells: 0,
+    changedGridCells: 0,
+    linkedReligionPackCells: 0,
+    changed: false,
+    request: {...request}
+  };
+}
+
+function isSocialObjectLocked(map, kind, id) {
+  return (map?.regenerationLocks?.entries || []).some(entry => entry?.kind === kind && Number(entry.id) === Number(id));
+}
+
+function getLockedSocialObjects(map, kind) {
+  const config = socialConfig(kind);
+  const store = getPrimaryStore(map, config);
+  const objects = [];
+  const seen = new Set();
+  for (const entry of map?.regenerationLocks?.entries || []) {
+    if (entry?.kind !== kind) continue;
+    const id = Number(entry.id);
+    if (seen.has(id)) continue;
+    const item = store?.[id];
+    if (item && !item.removed) objects.push(clonePlain(item));
+    seen.add(id);
+  }
+  return objects;
+}
+
+function validateLockedSocialDomain(map, kind) {
+  const config = socialConfig(kind);
+  prepareSocialRegenerationLocks({
+    grid: map.grid,
+    pack: map.pack,
+    objects: getLockedSocialObjects(map, kind),
+    field: config.field,
+    plural: config.plural,
+    label: config.label
+  });
+}
+
 function failAt(request, stage) {
   if (request.faultAt === stage) throw new Error(`social-expansion fault: ${stage}`);
 }
@@ -575,7 +682,8 @@ function countChanged(before, after) {
 
 function countPositive(values) {
   let count = 0;
-  for (const value of values || []) if (Number(value) > 0) count++;
+  const length = Number(values?.length) || 0;
+  for (let index = 0; index < length; index++) if (Number(values[index]) > 0) count++;
   return count;
 }
 

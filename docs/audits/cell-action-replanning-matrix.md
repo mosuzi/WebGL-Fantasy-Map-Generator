@@ -1,11 +1,11 @@
 # 第 195 项 Cell 动作重编排矩阵
 
-- 注册画布模式：28 / 28
+- 注册画布模式：29 / 29
 - 非注册直接操控：19 / 19
 - 非注册直接操控宿主实例：89 / 89
 - 第 195 项四类 Cell 能力：4 / 4
 - planned-registry / 实际 registry：34 / 34
-- 总行数：47
+- 总行数：48
 - 排除直接操控：12
 - 双向差集、重复 actionId、空目标和空来源合计：0
 - 唯一 inspector 签名：`cells.inspectAction(actionId, input, options = {})`
@@ -51,6 +51,7 @@
 | `feature:topology-select` | `features.applyTopology` | grid cell set + topology operation | `edit.features.inspectTopology` | `edit.features.applyTopology` | C / planned-registry | 直接登记既有 Feature 拓扑 inspector |
 | `zone:add` | `zones.createAtCell` | center pack CellRef + radius | `cells.inspectAction:zones.createAtCell` | `edit.zones.create` | C / planned-registry | 旧地区创建入口保持可用 |
 | `note:add` | `notes.createAtCell` | pack CellRef or world point | `cells.inspectAction:notes.createAtCell` | `edit.notes.createStandalone` | C / planned-registry | 旧独立备注创建入口与存档字段保持兼容 |
+| `regeneration-lock:select` | `regenerationLocks.setMany` | 同类 object ref 集合 | `regenerationLocks.inspect` | `regenerationLocks.setMany` | B / existing-api | 列表与地图共用同一临时集合，应用时只形成一条历史 |
 | `DM-01` | `selection.selectAtPoint` | client or world point | `selection.pick` | `selection.select` | P0 / existing-api | 复用第 200 项 selection，不新增 Cell 写入口 |
 | `DM-02` | `camera.panMiddlePointer` | client pointer delta | `excluded:camera-control` | `excluded:camera-control` | excluded / excluded | 相机平移不属于地图数据 API；沿用第 200 项排除理由 |
 | `DM-03` | `camera.panRightPointer` | client pointer delta | `excluded:camera-control` | `excluded:camera-control` | excluded / excluded | 相机平移不属于地图数据 API；沿用第 200 项排除理由 |

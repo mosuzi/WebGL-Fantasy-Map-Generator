@@ -161,7 +161,8 @@ assert.match(appSource, /applyDownstreamRebuild: \(options = \{\}\) => operation
 assert.match(appSource, /context => applyClimateDownstreamRebuildViaApi\(state, documentRef, options, context\)/);
 assert.match(appSource, /await executeClimateDownstreamRebuildAsync\(\{/);
 assert.match(appSource, /yieldToMain: \(\) => yieldToBrowser\(documentRef\)/);
-assert.match(appSource, /regenerateMarkerResourcesForClimate\(state, documentRef, context\.regenerationSalt\)/);
+assert.match(appSource, /regenerateMarkerResourcesForClimate\(state, documentRef, context\.regenerationSalt, constraintBundle\)/);
+assert.match(appSource, /regenerateMapAttribute\(state, systemId, documentRef, \{constraintBundle\}\)/);
 assert.match(appSource, /regenerateResourceMarkersInChunks\(map, \{/);
 assert.match(panelModelSource, /downstreamSystems: \[\]/, "气候面板不应默认全选");
 assert.match(panelModelSource, /confirm: true/);

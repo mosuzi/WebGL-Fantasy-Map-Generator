@@ -32,6 +32,7 @@ export function buildObjectPickingIndex(map) {
   let riverSegmentCount = 0;
 
   for (const city of map.settlements.cities) {
+    if (!city) continue;
     addToBucket(buckets, columns, rows, bucketSize, city.x, city.y, "cities", city);
   }
 
@@ -74,7 +75,7 @@ export function buildObjectPickingIndex(map) {
     rows,
     buckets,
     bucketCount: buckets.size,
-    cityCount: map.settlements.cities.length,
+    cityCount: map.settlements.cities.filter(Boolean).length,
     markerCount: map.markers.markers.length,
     militaryCount: militaryRegiments(map).length,
     routeSegmentCount,
@@ -170,6 +171,7 @@ export function pickCity(map, index, worldX, worldY, maxDistance) {
   const cities = index ? queryIndexedItems(index, worldX, worldY, maxDistance, "cities", city => city.id) : map.settlements.cities;
 
   for (const city of cities) {
+    if (!city) continue;
     candidateCount++;
     const distance = Math.hypot(worldX - city.x, worldY - city.y);
     if (distance > maxDistance || (best && distance >= best.distance)) continue;

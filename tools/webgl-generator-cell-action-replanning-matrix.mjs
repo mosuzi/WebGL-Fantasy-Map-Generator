@@ -58,7 +58,8 @@ const MODE_POLICIES = Object.freeze([
   mode("feature:patch-select", "features.applyPatch", "pack CellRef + radius + patch mode", "edit.features.inspectPatch", "edit.features.applyPatch", "直接登记既有 Feature 补丁 inspector"),
   mode("feature:topology-select", "features.applyTopology", "grid cell set + topology operation", "edit.features.inspectTopology", "edit.features.applyTopology", "直接登记既有 Feature 拓扑 inspector"),
   mode("zone:add", "zones.createAtCell", "center pack CellRef + radius", "cells.inspectAction:zones.createAtCell", "edit.zones.create", "旧地区创建入口保持可用"),
-  mode("note:add", "notes.createAtCell", "pack CellRef or world point", "cells.inspectAction:notes.createAtCell", "edit.notes.createStandalone", "旧独立备注创建入口与存档字段保持兼容")
+  mode("note:add", "notes.createAtCell", "pack CellRef or world point", "cells.inspectAction:notes.createAtCell", "edit.notes.createStandalone", "旧独立备注创建入口与存档字段保持兼容"),
+  mode("regeneration-lock:select", "regenerationLocks.setMany", "同类 object ref 集合", "regenerationLocks.inspect", "regenerationLocks.setMany", "列表与地图共用同一临时集合，应用时只形成一条历史", "existing-api", "B")
 ]);
 
 const DIRECT_POLICIES = Object.freeze([
@@ -201,8 +202,8 @@ export function writeCellActionReplanningMatrix() {
   return report;
 }
 
-function mode(modeId, actionId, inputSpace, inspectTarget, executeTarget, compatibility) {
-  return {modeId, actionId, inputSpace, inspectTarget, executeTarget, phase: "C", status: "planned-registry", compatibility};
+function mode(modeId, actionId, inputSpace, inspectTarget, executeTarget, compatibility, status = "planned-registry", phase = "C") {
+  return {modeId, actionId, inputSpace, inspectTarget, executeTarget, phase, status, compatibility};
 }
 
 function direct(directId, actionId, inputSpace, inspectTarget, executeTarget, phase, status, historyAndRollback, compatibility) {

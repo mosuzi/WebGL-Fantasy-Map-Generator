@@ -6,7 +6,7 @@
     "tools/webgl-generator-interaction-direct-manipulation-audit.mjs",
     "app/webgl-generator/src/runtime/cell-action-inspector-registry.js"
   ],
-  "upstreamApiMatrixDigest": "1b4de393631822138706c1aa5eedb821d7a82c512a8ceb663cc7301c25756c13",
+  "upstreamApiMatrixDigest": "35761224559ac483c86e61756c801f59793503611abacfcf9d67c98b91bc6626",
   "upstreamTask195Capabilities": [
     {
       "capabilityId": "cell.action-inspection",
@@ -95,7 +95,7 @@
       ]
     }
   ],
-  "sourceDigest": "df9f69c94c49cd3123cbb22d7fb09ac769ff7ef749488de2433c1484543138f7",
+  "sourceDigest": "4799809ee15efdac36e728256de2cf4465718548e112bec5d4b6f72c37e1bcb5",
   "canonicalInspectorSignature": "cells.inspectAction(actionId, input, options = {})",
   "actionIdConvention": "<domain>.<verb> 或 <domain>.<verb>AtCell；CANVAS_TOOL_MODE modeId 只作为映射元数据",
   "revisionContract": {
@@ -113,19 +113,19 @@
     "asyncCommit": "提交前复核 mapIdentity 与 mapRevision；陈旧任务不得写图"
   },
   "totals": {
-    "runtimeModes": 28,
-    "classifiedModes": 28,
+    "runtimeModes": 29,
+    "classifiedModes": 29,
     "directFamilies": 19,
     "classifiedDirectFamilies": 19,
     "directInstances": 89,
     "classifiedDirectInstances": 89,
     "task195Capabilities": 4,
     "classifiedTask195Capabilities": 4,
-    "rows": 47,
+    "rows": 48,
     "excludedDirectFamilies": 12,
     "plannedRegistryRows": 34,
     "implementedRegistryRows": 34,
-    "existingApiRows": 1,
+    "existingApiRows": 2,
     "gaps": 0
   },
   "coverage": {
@@ -843,6 +843,31 @@
       "status": "planned-registry",
       "historyAndRollback": "成功写一条新增备注历史；同入口关闭、切换模式或面板关闭调用统一 cancel；活动手势按各领域回滚；onCancel / onComplete 共用退出清理；onError 由管理器回退活动状态并执行清理",
       "compatibility": "旧独立备注创建入口与存档字段保持兼容"
+    },
+    {
+      "rowId": "mode:regeneration-lock:select",
+      "sourceKind": "canvas-mode",
+      "actionId": "regenerationLocks.setMany",
+      "modeId": "regeneration-lock:select",
+      "directId": "",
+      "title": "共享重生成锁地图多选",
+      "inputSpace": "同类 object ref 集合",
+      "sourceEntries": [
+        "panel:state-panel",
+        "canvas:map-canvas"
+      ],
+      "sourceRefs": [
+        "app/webgl-generator/src/runtime/app.js",
+        "app/webgl-generator/src/runtime/canvas-tool-mode-manager.js",
+        "app/webgl-generator/src/runtime/regeneration-lock-ui-session.js",
+        "app/webgl-generator/src/ui/brush-cursor-preview.js"
+      ],
+      "inspectTarget": "regenerationLocks.inspect",
+      "executeTarget": "regenerationLocks.setMany",
+      "phase": "B",
+      "status": "existing-api",
+      "historyAndRollback": "地图点击不写历史，显式应用只写一条批量历史；Escape、切换模式、关面板或切图清理临时集合与高亮；onCancel / onComplete 共用退出清理；onError 由管理器回退活动状态并执行清理",
+      "compatibility": "列表与地图共用同一临时集合，应用时只形成一条历史"
     },
     {
       "rowId": "direct:DM-01",

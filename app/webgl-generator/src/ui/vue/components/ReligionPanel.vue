@@ -25,7 +25,10 @@
   <div class="religion-panel-controls">
     <UiFilterInput :model-value="state.filter" placeholder="筛选名称 / id / 类型 / 文化 / 国家" @update:model-value="callbacks.onFilter" />
   </div>
+  <UiRegenerationLockActions v-bind="regenerationLocks.actionProps" v-on="regenerationLocks.actionListeners" />
   <UiObjectTable
+    v-bind="regenerationLocks.tableProps"
+    v-on="regenerationLocks.tableListeners"
     :columns="columns"
     :column-widths="state.columnWidths"
     :rows="visibleRows"
@@ -159,6 +162,7 @@ import UiMetricGrid from "./base/UiMetricGrid.vue";
 import UiNoteField from "./base/UiNoteField.vue";
 import UiObjectTable from "./base/UiObjectTable.vue";
 import UiPanelIoActions from "./base/UiPanelIoActions.vue";
+import UiRegenerationLockActions from "./base/UiRegenerationLockActions.vue";
 import UiSelectField from "./base/UiSelectField.vue";
 import UiSliderField from "./base/UiSliderField.vue";
 import UiTextEditField from "./base/UiTextEditField.vue";
@@ -169,6 +173,7 @@ import {compareRowsByKey} from "../../sort-utils.js";
 import {readObjectNote} from "../../../runtime/object-notes.js";
 import {useUnitPreferences} from "../composables/use-unit-preferences.js";
 import {useVisibleRowSelection} from "../composables/use-visible-row-selection.js";
+import {useRegenerationLockSelection} from "../composables/use-regeneration-lock-selection.js";
 import {BRUSH_RADIUS_ID, readBrushRadiusContract} from "../../../runtime/brush-radius-contract.js";
 
 const brushRadius = readBrushRadiusContract(BRUSH_RADIUS_ID.RELIGION);
@@ -222,7 +227,9 @@ const metrics = computed(() => {
 });
 const treeOverview = computed(() => buildTreeOverview(metrics.value.rows, "根宗教"));
 const visibleRows = computed(() => sortRows(filterRows(metrics.value.rows, props.state.filter), props.state.sortKey, props.state.sortDir));
-const {selectedRowIds: selectedReligionIds, selectedRows: selectedReligionRows} = useVisibleRowSelection(visibleRows);
+const regenerationLocks = useRegenerationLockSelection({panelId: "religion-panel", kind: "religion", rows: visibleRows});
+const {selectedRowIds: selectedReligionIds} = useVisibleRowSelection(visibleRows);
+const selectedReligionRows = regenerationLocks.selectedRows;
 const highlightableReligionRows = computed(() => selectedReligionRows.value.filter(row => Number(row.id) > 0));
 const selected = computed(() => findByObjectId(metrics.value.rows, props.state.selectedReligionId));
 const parentOptions = computed(() => buildParentOptions(metrics.value.rows, selected.value, "根宗教"));

@@ -61,6 +61,11 @@
       @secondary-action="callbacks.onCancelMarketAssignment"
     />
   </section>
+  <UiRegenerationLockActions
+    v-if="state.tab !== 'goods'"
+    v-bind="regenerationLocks.actionProps"
+    v-on="regenerationLocks.actionListeners"
+  />
   <UiObjectTable
     v-if="state.tab === 'goods'"
     :columns="goodColumns"
@@ -85,6 +90,8 @@
   />
   <UiObjectTable
     v-else-if="state.tab === 'markets'"
+    v-bind="regenerationLocks.tableProps"
+    v-on="regenerationLocks.tableListeners"
     :columns="marketColumns"
     :column-widths="marketColumnWidths"
     :rows="visibleMarketRows"
@@ -107,6 +114,8 @@
   />
   <UiObjectTable
     v-else
+    v-bind="regenerationLocks.tableProps"
+    v-on="regenerationLocks.tableListeners"
     :columns="dealColumns"
     :column-widths="dealColumnWidths"
     :rows="visibleDealRows"
@@ -236,6 +245,7 @@ import UiKeyValueGrid from "./base/UiKeyValueGrid.vue";
 import UiMetricGrid from "./base/UiMetricGrid.vue";
 import UiObjectTable from "./base/UiObjectTable.vue";
 import UiPanelIoActions from "./base/UiPanelIoActions.vue";
+import UiRegenerationLockActions from "./base/UiRegenerationLockActions.vue";
 import UiSegmented from "./base/UiSegmented.vue";
 import UiSelectField from "./base/UiSelectField.vue";
 import UiSliderField from "./base/UiSliderField.vue";
@@ -247,6 +257,7 @@ import {compareRowsByKey} from "../../sort-utils.js";
 import {useDebugMode} from "../composables/use-debug-mode.js";
 import {useUnitPreferences} from "../composables/use-unit-preferences.js";
 import {useVisibleRowSelection} from "../composables/use-visible-row-selection.js";
+import {useRegenerationLockSelection} from "../composables/use-regeneration-lock-selection.js";
 import {BRUSH_RADIUS_ID, readBrushRadiusContract} from "../../../runtime/brush-radius-contract.js";
 import {goodDisplayName, normalizeGoodDisplayProperties, normalizeMarketDisplayProperties} from "../../../generator/economy-display-properties.js";
 import {buildTradeQueryOptions, EMPTY_TRADE_QUERY, queryTradeDeals} from "../../economy-trade-query.js";
@@ -393,7 +404,19 @@ const activeVisibleRowObjects = computed(() => {
   if (props.state.tab === "deals") return visibleDealRows.value;
   return visibleGoodRows.value;
 });
-const {selectedRowIds: selectedEconomyRowIds, selectedRows: selectedEconomyRows} = useVisibleRowSelection(activeVisibleRowObjects);
+const {
+  selectedRowIds: selectedEconomyRowIds,
+  selectedRows: selectedVisibleEconomyRows
+} = useVisibleRowSelection(activeVisibleRowObjects);
+const regenerationLockKind = computed(() => props.state.tab === "markets" ? "economy-market" : props.state.tab === "deals" ? "trade-flow" : "");
+const regenerationLocks = useRegenerationLockSelection({
+  panelId: "economy-panel",
+  kind: regenerationLockKind,
+  rows: activeVisibleRowObjects
+});
+const selectedEconomyRows = computed(() => props.state.tab === "goods"
+  ? selectedVisibleEconomyRows.value
+  : regenerationLocks.selectedRows.value);
 const highlightableTradeFlowRows = computed(() => props.state.tab === "deals"
   ? selectedEconomyRows.value.filter(row => row.sellerValid && row.buyerValid)
   : []);

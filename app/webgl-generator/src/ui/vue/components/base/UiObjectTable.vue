@@ -3,7 +3,7 @@
     <table v-if="rows.length" class="object-table object-table-native">
       <thead>
         <tr>
-          <th v-if="selectableRows" class="object-table-selection-column">
+          <th v-if="selectionColumnVisible" class="object-table-selection-column">
             <input
               class="object-table-selection-checkbox object-table-select-all-checkbox"
               type="checkbox"
@@ -45,6 +45,7 @@
               @pointerdown.stop.prevent="startColumnResize($event, column)"
             ></button>
           </th>
+          <th v-if="showRegenerationLock" class="object-table-lock-column">重生成锁</th>
           <th v-if="showLocateAction" class="object-table-action-column">定位</th>
         </tr>
       </thead>
@@ -55,23 +56,37 @@
         <tr
           v-for="row in visibleRows"
           :key="rowKey(row)"
-          v-memo="[rowKey(row), row, isSelected(row), rowSelectionChecked(row), columnLayoutSignature]"
+          v-memo="[rowKey(row), row, isSelected(row), rowSelectionChecked(row), rowLocked(row), rowLockable(row), columnLayoutSignature]"
           class="object-table-row"
           :class="{'selected-row': isSelected(row), 'is-selected': isSelected(row)}"
           :aria-selected="isSelected(row) ? 'true' : 'false'"
           :data-ui-state="isSelected(row) ? 'selected' : undefined"
-          @click="handleRowClick(row)"
+          @click="event => handleRowClick(row, event)"
           @dblclick="handleRowDoubleClick(row)"
         >
-          <td v-if="selectableRows" class="object-table-selection-cell">
+          <td v-if="selectionColumnVisible" class="object-table-selection-cell">
             <input
               class="object-table-selection-checkbox object-table-row-selection-checkbox"
               type="checkbox"
               :checked="rowSelectionChecked(row)"
               :aria-label="`选择 ${rowKey(row)}`"
-              @click.stop
+              @click.stop="event => rememberSelectionModifiers(row, event)"
               @change="event => handleRowSelectionChange(row, event.target.checked)"
             />
+          </td>
+          <td v-if="showRegenerationLock" class="object-table-lock-cell">
+            <button
+              v-if="rowLockable(row)"
+              class="table-icon-action object-table-lock-action"
+              type="button"
+              :title="rowLocked(row) ? '解除重生成锁定' : '锁定以防重新生成'"
+              :aria-label="rowLocked(row) ? '解除重生成锁定' : '锁定以防重新生成'"
+              :aria-pressed="rowLocked(row) ? 'true' : 'false'"
+              @click.stop="emit('lock-toggle', {row, locked: !rowLocked(row)})"
+            >
+              <ElIcon aria-hidden="true"><Lock v-if="rowLocked(row)" /><Unlock v-else /></ElIcon>
+            </button>
+            <span v-else aria-label="不可锁定">—</span>
           </td>
           <td
             v-for="column in columns"
@@ -115,7 +130,7 @@
 
 <script setup>
 import {computed, nextTick, onBeforeUnmount, onMounted, ref, watch} from "vue";
-import {Location} from "@element-plus/icons-vue";
+import {Location, Lock, Unlock} from "@element-plus/icons-vue";
 import {objectIdKey, sameObjectId} from "../../../object-id.js";
 import {
   centerVirtualRowVertically,
@@ -124,6 +139,7 @@ import {
   selectionOrderSignature,
   stickyTableViewportInsets
 } from "../../../components/selection-scroll.js";
+import {objectTableSelectionRange} from "./object-table-selection.js";
 
 defineOptions({
   name: "UiObjectTable"
@@ -195,6 +211,26 @@ const props = defineProps({
   selectedRowIds: {
     type: Array,
     default: () => []
+  },
+  showRegenerationLock: {
+    type: Boolean,
+    default: false
+  },
+  lockedRowIds: {
+    type: Array,
+    default: () => []
+  },
+  lockableRowIds: {
+    type: Array,
+    default: () => []
+  },
+  lockSelectionIds: {
+    type: Array,
+    default: () => []
+  },
+  batchLockSelectionMode: {
+    type: Boolean,
+    default: false
   }
 });
 
@@ -204,15 +240,18 @@ const VIRTUAL_OVERSCAN_ROWS = 8;
 const MIN_RESIZE_COLUMN_WIDTH = 32;
 const MAX_RESIZE_COLUMN_WIDTH = 640;
 
-const emit = defineEmits(["select", "locate", "edit", "empty-action", "sort", "column-resize", "selection-change"]);
+const emit = defineEmits(["select", "locate", "edit", "empty-action", "sort", "column-resize", "selection-change", "lock-toggle", "lock-selection-change", "lock-range-selection", "batch-row-toggle"]);
 
 const tableWrap = ref(null);
 const scrollTop = ref(0);
 const viewportHeight = ref(300);
 let scrollMetricsFrame = 0;
 let resizeState = null;
+let selectionModifiers = null;
+let lockSelectionAnchor = null;
 
-const columnSpan = computed(() => props.columns.length + (props.showLocateAction ? 1 : 0) + (props.selectableRows ? 1 : 0));
+const selectionColumnVisible = computed(() => props.selectableRows || props.showRegenerationLock);
+const columnSpan = computed(() => props.columns.length + (props.showLocateAction ? 1 : 0) + (selectionColumnVisible.value ? 1 : 0) + (props.showRegenerationLock ? 1 : 0));
 const virtualEnabled = computed(() => props.rows.length > VIRTUAL_THRESHOLD);
 const virtualWindow = computed(() => {
   if (!virtualEnabled.value) return {start: 0, end: props.rows.length};
@@ -226,7 +265,10 @@ const virtualTopPadding = computed(() => virtualEnabled.value ? virtualWindow.va
 const virtualBottomPadding = computed(() => virtualEnabled.value ? Math.max(0, props.rows.length - virtualWindow.value.end) * VIRTUAL_ROW_HEIGHT : 0);
 const sortableKeys = computed(() => new Set((props.sortOptions || []).map(option => option?.key).filter(Boolean)));
 const sortIndicator = computed(() => props.sortDirection === "asc" ? "↑" : "↓");
-const selectedRowKeySet = computed(() => new Set(props.selectedRowIds.map(id => stringRowId(id))));
+const effectiveSelectionIds = computed(() => props.showRegenerationLock ? props.lockSelectionIds : props.selectedRowIds);
+const selectedRowKeySet = computed(() => new Set(effectiveSelectionIds.value.map(id => stringRowId(id))));
+const lockedRowKeySet = computed(() => new Set(props.lockedRowIds.map(id => stringRowId(id))));
+const lockableRowKeySet = computed(() => new Set(props.lockableRowIds.map(id => stringRowId(id))));
 const allRowsSelected = computed(() => Boolean(props.rows.length) && props.rows.every(row => rowSelectionChecked(row)));
 const someRowsSelected = computed(() => props.rows.some(row => rowSelectionChecked(row)));
 const partialRowsSelected = computed(() => someRowsSelected.value && !allRowsSelected.value);
@@ -295,7 +337,13 @@ function rowKey(row) {
   return stringRowId(getRowId(row));
 }
 
-function handleRowClick(row) {
+function handleRowClick(row, event) {
+  if (props.showRegenerationLock && props.batchLockSelectionMode) {
+    if (event.shiftKey) emitRangeSelection(row, !rowSelectionChecked(row));
+    else emit("batch-row-toggle", row);
+    lockSelectionAnchor = rowKey(row);
+    return;
+  }
   emit("select", row);
 }
 
@@ -314,21 +362,55 @@ function handleSelectAllChange(event) {
   const checked = Boolean(event.target.checked);
   const currentRows = props.rows || [];
   const currentKeys = new Set(currentRows.map(row => rowKey(row)));
-  const selected = new Map(props.selectedRowIds.map(id => [stringRowId(id), id]));
+  const selected = new Map(effectiveSelectionIds.value.map(id => [stringRowId(id), id]));
   if (checked) {
     for (const row of currentRows) selected.set(rowKey(row), getRowId(row));
   } else {
     for (const key of currentKeys) selected.delete(key);
   }
-  emit("selection-change", Array.from(selected.values()));
+  emitSelectionChange(Array.from(selected.values()));
 }
 
 function handleRowSelectionChange(row, checked) {
+  if (props.showRegenerationLock && selectionModifiers?.shiftKey) {
+    emitRangeSelection(row, checked);
+    selectionModifiers = null;
+    return;
+  }
   const key = rowKey(row);
-  const selected = new Map(props.selectedRowIds.map(id => [stringRowId(id), id]));
+  const selected = new Map(effectiveSelectionIds.value.map(id => [stringRowId(id), id]));
   if (checked) selected.set(key, getRowId(row));
   else selected.delete(key);
-  emit("selection-change", Array.from(selected.values()));
+  lockSelectionAnchor = key;
+  emitSelectionChange(Array.from(selected.values()));
+  selectionModifiers = null;
+}
+
+function rememberSelectionModifiers(row, event) {
+  selectionModifiers = {shiftKey: event.shiftKey};
+  if (!event.shiftKey) lockSelectionAnchor = rowKey(row);
+}
+
+function emitRangeSelection(row, selected) {
+  const rangeRows = objectTableSelectionRange(props.rows, lockSelectionAnchor, rowKey(row), rowKey);
+  if (!rangeRows) {
+    emitSelectionChange([getRowId(row)]);
+    return;
+  }
+  emit("lock-range-selection", {rows: rangeRows, selected});
+}
+
+function emitSelectionChange(ids) {
+  if (props.showRegenerationLock) emit("lock-selection-change", ids);
+  emit("selection-change", ids);
+}
+
+function rowLocked(row) {
+  return lockedRowKeySet.value.has(rowKey(row));
+}
+
+function rowLockable(row) {
+  return lockableRowKeySet.value.has(rowKey(row));
 }
 
 function startColumnResize(event, column) {

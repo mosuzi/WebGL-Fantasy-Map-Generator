@@ -4,7 +4,10 @@
   <div class="route-panel-controls">
     <UiFilterInput :model-value="state.filter" placeholder="筛选类型 / id / 起点 / 终点" @update:model-value="callbacks.onFilter" />
   </div>
+  <UiRegenerationLockActions v-bind="regenerationLocks.actionProps" v-on="regenerationLocks.actionListeners" />
   <UiObjectTable
+    v-bind="regenerationLocks.tableProps"
+    v-on="regenerationLocks.tableListeners"
     :columns="columns"
     :column-widths="state.columnWidths"
     :rows="visibleRows"
@@ -106,6 +109,7 @@ import UiMetricGrid from "./base/UiMetricGrid.vue";
 import UiNoteField from "./base/UiNoteField.vue";
 import UiObjectTable from "./base/UiObjectTable.vue";
 import UiPanelIoActions from "./base/UiPanelIoActions.vue";
+import UiRegenerationLockActions from "./base/UiRegenerationLockActions.vue";
 import UiSelectField from "./base/UiSelectField.vue";
 import UiStateBanner from "./base/UiStateBanner.vue";
 import {formatDistance, formatNumber} from "../../display-units.js";
@@ -114,6 +118,7 @@ import {compareRowsByKey} from "../../sort-utils.js";
 import {readObjectNote} from "../../../runtime/object-notes.js";
 import {useUnitPreferences} from "../composables/use-unit-preferences.js";
 import {useVisibleRowSelection} from "../composables/use-visible-row-selection.js";
+import {useRegenerationLockSelection} from "../composables/use-regeneration-lock-selection.js";
 
 defineOptions({
   name: "RoutePanel"
@@ -158,7 +163,9 @@ const rows = computed(() => {
   return routeRows(props.state.map);
 });
 const visibleRows = computed(() => sortRows(filterRows(rows.value, props.state.filter), props.state.sortKey, props.state.sortDir));
-const {selectedRowIds: selectedRouteIds, selectedRows: selectedRouteRows} = useVisibleRowSelection(visibleRows);
+const regenerationLocks = useRegenerationLockSelection({panelId: "route-panel", kind: "route", rows: visibleRows});
+const {selectedRowIds: selectedRouteIds} = useVisibleRowSelection(visibleRows);
+const selectedRouteRows = regenerationLocks.selectedRows;
 const selected = computed(() => findByObjectId(rows.value, props.state.selectedRouteId));
 const routeTypeOptions = Object.freeze([
   {value: "road", label: "道路"},

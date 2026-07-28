@@ -14,18 +14,21 @@ const highlights = [
 const single = buildSelectionMeshVertices(map, camera, canvas, state, null, []);
 const combined = buildSelectionMeshVertices(map, camera, canvas, null, null, highlights);
 const deduplicated = buildSelectionMeshVertices(map, camera, canvas, state, null, highlights);
+const cubicOceanCurrent = buildSelectionMeshVertices(map, camera, canvas, {kind: "ocean-current", id: "current-cubic"}, null, []);
 
 assert(single.length / 6 === 12, `单国家顶点数异常：${single.length / 6}`);
 assert(combined.length / 6 === 30, `三对象顶点数异常：${combined.length / 6}`);
 assert(deduplicated.length / 6 === combined.length / 6, "当前 selection 与持久高亮重复绘制");
 assert(selectionHighlightMode(null, null, highlights) === "multi-object highlight (3)", "多对象高亮模式摘要异常");
 assert(selectionHighlightMode(state, null, []) === "state translucent cells", "单对象 selection 模式发生回归");
+assert(cubicOceanCurrent.length > 0, "正式 cubic 洋流必须生成非空 selection mesh");
 
 console.log(JSON.stringify({
   ok: true,
   singleVertices: single.length / 6,
   combinedVertices: combined.length / 6,
   duplicateSafeVertices: deduplicated.length / 6,
+  cubicOceanCurrentVertices: cubicOceanCurrent.length / 6,
   mode: selectionHighlightMode(null, null, highlights)
 }, null, 2));
 
@@ -58,6 +61,20 @@ function createSyntheticMap() {
     rivers: {
       metadata: {maxFlux: 10},
       rivers: [{id: 3, flux: 10, points: [[0, 100], [100, 0]]}]
+    },
+    oceanCurrents: {
+      currents: [{
+        id: "current-cubic",
+        path: {
+          kind: "cubic",
+          segments: [{
+            start: [10, 65],
+            control1: [30, 55],
+            control2: [60, 75],
+            end: [90, 60]
+          }]
+        }
+      }]
     },
     zones: {zones: []}
   };

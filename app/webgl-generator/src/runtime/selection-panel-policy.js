@@ -22,7 +22,10 @@ export const SELECTION_PANEL_BINDINGS = Object.freeze({
   [OBJECT_KIND.LABEL]: binding("label-naming-panel"),
   [OBJECT_KIND.NOTE]: binding("notes-panel"),
   [OBJECT_KIND.MEASUREMENT]: binding("measurement-panel"),
-  [OBJECT_KIND.MILITARY]: binding("military-panel")
+  [OBJECT_KIND.MILITARY]: binding("military-panel"),
+  [OBJECT_KIND.FEATURE]: binding("feature-panel"),
+  [OBJECT_KIND.OCEAN_CURRENT]: binding("ocean-current-panel"),
+  [OBJECT_KIND.ECONOMY_MARKET]: binding("economy-panel")
 });
 
 export function decideSelectionPanelRoute({binding: panelBinding, sourcePanelId = null, panelOpen = false} = {}) {

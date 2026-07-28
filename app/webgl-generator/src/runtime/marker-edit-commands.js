@@ -3,6 +3,12 @@ import {buildEconomy, refreshPoliticalEconomicPower} from "../generator/economy.
 import {cloneObjectNote, deleteObjectNote, objectNoteId, readObjectNote, restoreObjectNote} from "./object-notes.js";
 import {OBJECT_KIND} from "./object-kinds.js";
 import {newObjectAffected, objectAffected, systemAffected} from "./edit-command-effects.js";
+import {
+  allRegenerationObjectsLocked,
+  assignReservedNumericIds,
+  assertLockedRegenerationSnapshots,
+  captureLockedRegenerationObjects
+} from "./regeneration-lock-protection.js";
 
 const MARKER_VISUAL_EFFECTS = Object.freeze({
   render: "draw",
@@ -228,8 +234,10 @@ export function createDeleteMarkerCommand(markerId) {
   };
 }
 
-export function createRegenerateResourceMarkersCommand({salt = 0} = {}) {
+export function createRegenerateResourceMarkersCommand({salt = 0, constraintBundle = null} = {}) {
   let previous = null;
+  let lockCapture = null;
+  let featureCapture = null;
 
   return {
     label: `重生成资源点 #${salt}`,
@@ -240,48 +248,141 @@ export function createRegenerateResourceMarkersCommand({salt = 0} = {}) {
     },
     apply(context) {
       previous ??= captureMarkerSnapshot(context.map);
-      const preserved = markerRows(context.map).filter(marker => marker.category !== "resource");
-      const resources = regenerateResourceMarkers(context.map.grid, context.map.pack, context.map.politics, context.map.rivers, {
-        ...context.map.options,
-        resourceRegenerationSalt: salt
-      }, preserved);
-      const nextId = preserved.reduce((max, marker) => Math.max(max, marker.id), -1) + 1;
-      const identifiedResources = resources.map((marker, index) => ({...marker, id: nextId + index, i: nextId + index}));
-      writeMarkerCollection(context.map, [...preserved, ...identifiedResources]);
+      try {
+        lockCapture ??= constraintBundle
+          ? {snapshots: constraintBundle.lockedMarkers, ids: new Set(constraintBundle.ids(OBJECT_KIND.MARKER))}
+          : captureLockedRegenerationObjects(context.map, OBJECT_KIND.MARKER);
+        featureCapture ??= captureFeatureLocks(context.map, constraintBundle);
+        const lockedIds = lockCapture.ids;
+        const resourceCount = markerRows(context.map).filter(marker => marker.category === "resource").length;
+        const preserved = markerRows(context.map).filter(marker =>
+          marker.category !== "resource"
+          || lockedIds.has(String(marker.id))
+          || markerTouchesLockedFeature(context.map, marker, featureCapture.ids)
+        );
+        const lockedResourceCount = preserved.filter(marker => marker.category === "resource").length;
+        const resources = regenerateResourceMarkers(context.map.grid, context.map.pack, context.map.politics, context.map.rivers, {
+          ...context.map.options,
+          lockedFeatures: featureCapture.snapshots,
+          resourceRegenerationSalt: salt,
+          ...(resourceCount > 0 ? {targetResourceCount: Math.max(0, resourceCount - lockedResourceCount)} : {})
+        }, preserved);
+        const identifiedResources = assignReservedNumericIds(resources.map(cloneMarker), new Set(preserved.map(marker => marker.id)));
+        writeMarkerCollection(context.map, [...preserved, ...identifiedResources], constraintBundle, featureCapture);
+        if (constraintBundle) constraintBundle.assertDomain(context.map, "markers-economy", "marker-command");
+        else assertLockedRegenerationSnapshots(context.map, lockCapture);
+      } catch (error) {
+        restoreMarkerSnapshot(context.map, previous, constraintBundle, featureCapture);
+        throw error;
+      }
     },
     revert(context) {
-      restoreMarkerSnapshot(context.map, previous);
+      restoreMarkerSnapshot(context.map, previous, constraintBundle, featureCapture);
     },
     isNoop(context) {
-      return !context.map?.pack?.cells?.i?.length || !context.map?.markers?.markers?.length;
+      const resources = markerRows(context.map).filter(marker => marker.category === "resource");
+      return !context.map?.pack?.cells?.i?.length
+        || !Array.isArray(context.map?.markers?.markers)
+        || resources.length > 0 && allRegenerationObjectsLocked(context.map, OBJECT_KIND.MARKER, resources);
     }
   };
 }
 
-export async function regenerateResourceMarkersInChunks(map, {salt = 0, yieldToMain = async () => {}, now = currentTime} = {}) {
-  if (!map?.pack?.cells?.i?.length || !map?.markers?.markers?.length) return {executed: false, timings: {chunks: []}};
-  const chunks = [];
-  const preserved = markerRows(map).filter(marker => marker.category !== "resource");
-  const resources = await markerRegenerationChunk("generate-resources", () => regenerateResourceMarkers(map.grid, map.pack, map.politics, map.rivers, {
-    ...map.options,
-    resourceRegenerationSalt: salt
-  }, preserved), {chunks, now, yieldToMain});
-  const normalized = await markerRegenerationChunk("write-markers", () => {
-    const nextId = preserved.reduce((max, marker) => Math.max(max, marker.id), -1) + 1;
-    const identifiedResources = resources.map((marker, index) => ({...marker, id: nextId + index, i: nextId + index}));
-    const collection = normalizeMarkerIds([...preserved, ...identifiedResources]);
-    const previousMetadata = map.markers?.metadata || {};
-    map.markers = createMarkerResult(collection);
-    map.markers.metadata = {...previousMetadata, ...map.markers.metadata, stale: false};
-    map.pack.markers = collection;
-    return collection;
-  }, {chunks, now, yieldToMain});
-  await markerRegenerationChunk("resource-economy", () => refreshMarkerResourceEconomy(map.pack, normalized), {chunks, now, yieldToMain});
-  await markerRegenerationChunk("build-economy", () => {
-    if (map.options) map.economy = buildEconomy(map.pack, map.options);
-    else refreshPoliticalEconomicPower(map.pack);
-  }, {chunks, now, yieldToMain});
-  return {executed: true, timings: {chunks}};
+export async function regenerateResourceMarkersInChunks(
+  map,
+  {salt = 0, yieldToMain = async () => {}, now = currentTime, constraintBundle = null} = {}
+) {
+  const currentResources = markerRows(map).filter(marker => marker.category === "resource");
+  if (!map?.pack?.cells?.i?.length
+    || !Array.isArray(map?.markers?.markers)
+    || currentResources.length > 0 && allRegenerationObjectsLocked(map, OBJECT_KIND.MARKER, currentResources)) {
+    return {executed: false, timings: {chunks: []}};
+  }
+  const snapshot = structuredClone({
+    markers: map.markers,
+    pack: map.pack,
+    politics: map.politics,
+    economy: map.economy
+  });
+  try {
+    const chunks = [];
+    const marketCapture = constraintBundle
+      ? {snapshots: mergeLockedDealMarkets(map, constraintBundle.lockedMarkets, constraintBundle.lockedDeals)}
+      : captureLockedRegenerationObjects(map, OBJECT_KIND.ECONOMY_MARKET);
+    const dealCapture = constraintBundle
+      ? {snapshots: constraintBundle.lockedDeals}
+      : captureLockedRegenerationObjects(map, OBJECT_KIND.TRADE_FLOW);
+    const lockCapture = constraintBundle
+      ? {snapshots: constraintBundle.lockedMarkers, ids: new Set(constraintBundle.ids(OBJECT_KIND.MARKER))}
+      : captureLockedRegenerationObjects(map, OBJECT_KIND.MARKER);
+    const featureCapture = captureFeatureLocks(map, constraintBundle);
+    const preserved = markerRows(map).filter(marker =>
+      marker.category !== "resource"
+      || lockCapture.ids.has(String(marker.id))
+      || markerTouchesLockedFeature(map, marker, featureCapture.ids)
+    );
+    const lockedResourceCount = preserved.filter(marker => marker.category === "resource").length;
+    const resources = await markerRegenerationChunk("generate-resources", () => regenerateResourceMarkers(map.grid, map.pack, map.politics, map.rivers, {
+      ...map.options,
+      lockedFeatures: featureCapture.snapshots,
+      resourceRegenerationSalt: salt,
+      ...(currentResources.length > 0 ? {targetResourceCount: Math.max(0, currentResources.length - lockedResourceCount)} : {})
+    }, preserved), {chunks, now, yieldToMain});
+    const normalized = await markerRegenerationChunk("write-markers", () => {
+      const identifiedResources = assignReservedNumericIds(resources.map(cloneMarker), new Set(preserved.map(marker => marker.id)));
+      const collection = normalizeMarkerIds([...preserved, ...identifiedResources]);
+      const previousMetadata = map.markers?.metadata || {};
+      map.markers = createMarkerResult(collection);
+      map.markers.metadata = {...previousMetadata, ...map.markers.metadata, stale: false};
+      map.pack.markers = collection;
+      assertFeatureLocks(map, constraintBundle, featureCapture, "marker-write");
+      if (constraintBundle) constraintBundle.assertDomain(map, "marker", "marker-write");
+      else assertLockedRegenerationSnapshots(map, lockCapture);
+      return collection;
+    }, {chunks, now, yieldToMain});
+    await markerRegenerationChunk("resource-economy", () => refreshMarkerResourceEconomy(map.pack, normalized, {
+      lockedStates: constraintBundle?.lockedStates || [],
+      lockedProvinces: constraintBundle?.lockedProvinces || []
+    }), {chunks, now, yieldToMain});
+    await markerRegenerationChunk("build-economy", () => {
+      if (map.options) {
+        map.economy = buildEconomy(map.pack, {
+          ...map.options,
+          lockedMarkets: marketCapture.snapshots,
+          lockedDeals: dealCapture.snapshots,
+          lockedStates: constraintBundle?.lockedStates || [],
+          lockedProvinces: constraintBundle?.lockedProvinces || []
+        });
+        if (constraintBundle) constraintBundle.assertDomain(map, "markers-economy", "economy-build");
+        else {
+          assertLockedRegenerationSnapshots(map, marketCapture);
+          assertLockedRegenerationSnapshots(map, dealCapture);
+        }
+      }
+      else refreshPoliticalEconomicPower(map.pack);
+    }, {chunks, now, yieldToMain});
+    return {executed: true, timings: {chunks}};
+  } catch (error) {
+    map.markers = snapshot.markers;
+    map.pack = snapshot.pack;
+    map.politics = snapshot.politics;
+    map.economy = snapshot.economy;
+    throw error;
+  }
+}
+
+function mergeLockedDealMarkets(map, lockedMarkets = [], lockedDeals = []) {
+  const byId = new Map((lockedMarkets || []).map(market => [Number(market?.i ?? market?.id), market]));
+  const current = new Map((map?.pack?.markets || []).filter(Boolean).map(market => [Number(market.i ?? market.id), market]));
+  for (const deal of lockedDeals || []) {
+    for (const [type, value] of [[deal?.sellerType, deal?.seller], [deal?.buyerType, deal?.buyer]]) {
+      if (type !== "market") continue;
+      const id = Number(value);
+      const market = current.get(id);
+      if (market && !byId.has(id)) byId.set(id, structuredClone(market));
+    }
+  }
+  return [...byId.values()];
 }
 
 function readMarker(map, markerId) {
@@ -346,14 +447,20 @@ function captureMarkerSnapshot(map) {
   };
 }
 
-function restoreMarkerSnapshot(map, snapshot) {
-  writeMarkerCollection(map, (snapshot?.markers || []).map(cloneMarker));
+function restoreMarkerSnapshot(map, snapshot, constraintBundle = null, featureCapture = null) {
+  writeMarkerCollection(map, (snapshot?.markers || []).map(cloneMarker), constraintBundle, featureCapture);
   map.markers.metadata = cloneMarker(snapshot?.metadata || map.markers.metadata);
   for (const note of [...(map?.notes?.notes || [])]) if (note?.kind === OBJECT_KIND.MARKER) deleteObjectNote(map, note.id);
   for (const note of snapshot?.notes || []) restoreObjectNote(map, note);
 }
 
-function writeMarkerCollection(map, markers) {
+function writeMarkerCollection(map, markers, constraintBundle = null, featureCapture = null) {
+  const marketCapture = constraintBundle
+    ? {snapshots: mergeLockedDealMarkets(map, constraintBundle.lockedMarkets, constraintBundle.lockedDeals)}
+    : captureLockedRegenerationObjects(map, OBJECT_KIND.ECONOMY_MARKET);
+  const dealCapture = constraintBundle
+    ? {snapshots: constraintBundle.lockedDeals}
+    : captureLockedRegenerationObjects(map, OBJECT_KIND.TRADE_FLOW);
   const previousMetadata = map.markers?.metadata || {};
   const normalized = normalizeMarkerIds(markers.map(cloneMarker));
   map.markers = createMarkerResult(normalized);
@@ -364,10 +471,50 @@ function writeMarkerCollection(map, markers) {
   };
   if (map.pack) {
     map.pack.markers = normalized;
-    refreshMarkerResourceEconomy(map.pack, normalized);
-    if (map.options) map.economy = buildEconomy(map.pack, map.options);
+    if (featureCapture || constraintBundle) assertFeatureLocks(map, constraintBundle, featureCapture, "marker-write");
+    refreshMarkerResourceEconomy(map.pack, normalized, {
+      lockedStates: constraintBundle?.lockedStates || [],
+      lockedProvinces: constraintBundle?.lockedProvinces || []
+    });
+    if (map.options) {
+      map.economy = buildEconomy(map.pack, {
+        ...map.options,
+        lockedMarkets: marketCapture.snapshots,
+        lockedDeals: dealCapture.snapshots,
+        lockedStates: constraintBundle?.lockedStates || [],
+        lockedProvinces: constraintBundle?.lockedProvinces || []
+      });
+      if (constraintBundle) constraintBundle.assertDomain(map, "markers-economy", "marker-write");
+      else {
+        assertLockedRegenerationSnapshots(map, marketCapture);
+        assertLockedRegenerationSnapshots(map, dealCapture);
+      }
+    }
     else refreshPoliticalEconomicPower(map.pack);
   }
+}
+
+function captureFeatureLocks(map, constraintBundle = null) {
+  if (!constraintBundle) return captureLockedRegenerationObjects(map, OBJECT_KIND.FEATURE);
+  const snapshots = constraintBundle.lockedFeatures || [];
+  return {
+    snapshots,
+    ids: new Set(snapshots.map(feature => String(feature?.i ?? feature?.id)))
+  };
+}
+
+function markerTouchesLockedFeature(map, marker, lockedFeatureIds) {
+  const packCell = Number(marker?.packCell ?? marker?.data?.packCell);
+  return [
+    marker?.feature,
+    marker?.data?.feature,
+    Number.isInteger(packCell) ? map?.pack?.cells?.f?.[packCell] : null
+  ].some(value => lockedFeatureIds.has(String(value)));
+}
+
+function assertFeatureLocks(map, constraintBundle, featureCapture, phase) {
+  if (constraintBundle) constraintBundle.assertDomain(map, "feature", phase);
+  else if (featureCapture) assertLockedRegenerationSnapshots(map, featureCapture);
 }
 
 async function markerRegenerationChunk(id, task, {chunks, now, yieldToMain}) {

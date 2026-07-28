@@ -37,14 +37,16 @@ export function createSetRegenerationLocksCommand(references, locked, {label = l
     apply({map}) {
       const normalized = normalizeRegenerationLockReferences(references, map);
       before = cloneStore(ensureRegenerationLockStore(map));
+      const currentKeys = new Set(before.entries.map(regenerationLockKey));
+      const changedReferences = normalized.filter(reference => currentKeys.has(regenerationLockKey(reference)) !== Boolean(locked));
       const keys = new Set(normalized.map(regenerationLockKey));
       const retained = before.entries.filter(entry => !keys.has(regenerationLockKey(entry)));
       const entries = locked ? [...retained, ...normalized] : retained;
       map.regenerationLocks = normalizeRegenerationLockStore({version: REGENERATION_LOCK_VERSION, entries}, map, {strict: true}).store;
-      this.effects.affected = normalized.map(entry => ({...entry}));
+      this.effects.affected = changedReferences.map(entry => ({...entry}));
       result = {
-        changed: normalized.length,
-        unchanged: 0,
+        changed: changedReferences.length,
+        unchanged: normalized.length - changedReferences.length,
         locked: Boolean(locked),
         references: normalized.map(entry => ({...entry}))
       };

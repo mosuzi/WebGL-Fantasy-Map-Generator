@@ -165,8 +165,19 @@ export function createApplyFeatureTopologyCommand(options = {}, {label = "编辑
   };
 }
 
-export function rebuildFeatureTopology(map) {
+export function rebuildFeatureTopology(map, options = {}) {
   ensureFeatureTopologyContainers(map);
+  const locked = prepareLockedFeatureConstraints(map, options);
+  const rollback = locked.ids.size ? captureFeatureTopologySnapshot(map) : null;
+  try {
+    return rebuildFeatureTopologyInternal(map, locked);
+  } catch (error) {
+    if (rollback) restoreFeatureTopologySnapshot(map, rollback);
+    throw error;
+  }
+}
+
+function rebuildFeatureTopologyInternal(map, locked) {
   const beforeGrid = captureFeatureIdentity(map?.features?.features, map?.grid?.cells?.f, map?.grid?.cells);
   const beforePack = captureFeatureIdentity(map?.pack?.features, map?.pack?.cells?.f, map?.pack?.cells);
   const spatialReferencesBefore = captureSpatialFeatureState(map);
@@ -174,7 +185,7 @@ export function rebuildFeatureTopology(map) {
   const gridTopology = buildComponents(map.grid.cells, null);
   const rawGridFeatures = createGridFeatures(gridTopology, map.grid);
   const rawGridCellFeatures = gridTopology.cellComponent.map(id => id + 1);
-  const stableGrid = stabilizeFeatureIds(rawGridFeatures, rawGridCellFeatures, beforeGrid, {grid: true});
+  const stableGrid = stabilizeFeatureIds(rawGridFeatures, rawGridCellFeatures, beforeGrid, {grid: true, locked: locked.grid});
   map.grid.cells.f = stableGrid.cellFeatures;
   map.grid.cells.t = buildDistanceField(map.grid.cells);
   map.features.features = stableGrid.features;
@@ -183,7 +194,7 @@ export function rebuildFeatureTopology(map) {
   refreshGridFeatureMetadata(map);
 
   refreshPackFeatures(map.pack, map.grid);
-  const stablePack = stabilizeFeatureIds(map.pack.features, map.pack.cells.f, beforePack, {grid: false});
+  const stablePack = stabilizeFeatureIds(map.pack.features, map.pack.cells.f, beforePack, {grid: false, locked: locked.pack});
   map.pack.features = stablePack.features;
   map.pack.cells.f = stablePack.cellFeatures;
   for (let cell = 0; cell < map.pack.cells.f.length; cell++) {
@@ -192,6 +203,7 @@ export function rebuildFeatureTopology(map) {
   refreshPackFeatureMetadata(map);
   remapFeatureReferences(map, stablePack.redirects);
   syncSpatialFeatureReferences(map, spatialReferencesBefore);
+  assertLockedFeatureConstraints(map, locked);
   return {
     activeFeatureIds: activeFeatures(map.pack.features).map(featureId),
     removedFeatureIds: stablePack.removedIds,
@@ -403,7 +415,114 @@ function createGridFeatures(topology) {
   })];
 }
 
-function stabilizeFeatureIds(rawFeatures, rawCellFeatures, before, {grid}) {
+function prepareLockedFeatureConstraints(map, options = {}) {
+  const provided = options.lockedFeatures ?? options.preservedFeatures ?? [];
+  if (!Array.isArray(provided)) throw featureLockConflict("锁定 Feature 约束必须是数组", {reason: "invalid-constraint"});
+  const ids = new Set();
+  const gridEntries = new Map();
+  const packEntries = new Map();
+
+  for (const source of provided) {
+    if (!source || typeof source !== "object") throw featureLockConflict("锁定 Feature 约束包含空对象", {reason: "invalid-feature"});
+    const id = featureId(source);
+    if (!Number.isInteger(id) || id <= 0 || ids.has(id)) {
+      throw featureLockConflict("锁定 Feature 缺少唯一的正整数 ID", {reason: "invalid-id", id});
+    }
+    const packFeature = map.pack?.features?.[id];
+    if (!packFeature || packFeature.removed) {
+      throw featureLockConflict(`锁定 Feature #${id} 缺少 pack 对象`, {reason: "missing-feature", id});
+    }
+    const packCells = memberCells(map.pack.cells.f, id);
+    const projectedGridCells = uniqueIntegers(packCells.map(cell => map.pack.cells.g?.[cell]));
+    const gridIds = uniquePositiveIntegers(projectedGridCells.map(cell => map.grid.cells.f?.[cell]));
+    if (!packCells.length || gridIds.length !== 1) {
+      throw featureLockConflict(`锁定 Feature #${id} 缺少唯一的 grid 空间镜像`, {reason: "missing-members", id, gridIds});
+    }
+    const gridId = gridIds[0];
+    const gridFeature = map.features?.features?.[gridId];
+    const gridCells = memberCells(map.grid.cells.f, gridId);
+    if (!gridFeature || gridFeature.removed || !gridCells.length) {
+      throw featureLockConflict(`锁定 Feature #${id} 缺少 grid 对象或成员 cell`, {reason: "missing-feature", id, gridId});
+    }
+    if (Boolean(gridFeature.land) !== Boolean(packFeature.land) || String(gridFeature.type) !== String(packFeature.type)) {
+      throw featureLockConflict(`锁定 Feature #${id} 的 grid / pack 类型不一致`, {reason: "type-mismatch", id, gridId});
+    }
+    const sourceLand = Boolean(source.land);
+    const sourceType = String(source.type || "");
+    if (sourceLand !== Boolean(packFeature.land) || sourceType && sourceType !== String(packFeature.type)) {
+      throw featureLockConflict(`锁定 Feature #${id} 的对象类型与当前拓扑不一致`, {reason: "type-mismatch", id});
+    }
+
+    if (gridEntries.has(gridId)) {
+      throw featureLockConflict(`锁定 Feature #${id} 与另一锁对象复用 grid Feature #${gridId}`, {reason: "overlapping-grid-feature", id, gridId});
+    }
+    gridEntries.set(gridId, {
+      id: gridId,
+      sourceId: id,
+      feature: clonePlain(gridFeature),
+      cells: gridCells,
+      land: Boolean(gridFeature.land),
+      type: String(gridFeature.type),
+      fields: captureLockedCellAssignments(map.grid.cells, gridCells, ["f"])
+    });
+    packEntries.set(id, {
+      id,
+      feature: clonePlain(packFeature),
+      cells: packCells,
+      land: Boolean(packFeature.land),
+      type: String(packFeature.type),
+      fields: captureLockedCellAssignments(map.pack.cells, packCells, ["f", "haven", "harbor", "type"])
+    });
+    ids.add(id);
+  }
+
+  return {
+    ids,
+    grid: {entries: gridEntries, ids: new Set(gridEntries.keys())},
+    pack: {entries: packEntries, ids: new Set(packEntries.keys())}
+  };
+}
+
+function captureLockedCellAssignments(cells, memberCells, fields) {
+  return Object.fromEntries(fields.map(field => [field, memberCells.map(cell => clonePlain(cells?.[field]?.[cell]))]));
+}
+
+function assertLockedFeatureConstraints(map, locked) {
+  assertLockedFeatureSide(map.features?.features, map.grid?.cells, locked.grid, "grid");
+  assertLockedFeatureSide(map.pack?.features, map.pack?.cells, locked.pack, "pack");
+}
+
+function assertLockedFeatureSide(features, cells, locked, side) {
+  for (const [id, entry] of locked.entries) {
+    if (stableValue(features?.[id]) !== stableValue(entry.feature)) {
+      throw featureLockConflict(`锁定 Feature #${id} 的 ${side} 对象被改写`, {reason: "locked-object-changed", id, side});
+    }
+    const currentCells = memberCells(cells?.f, id);
+    if (!sameIntegerCells(currentCells, entry.cells)) {
+      throw featureLockConflict(`锁定 Feature #${id} 的 ${side} 成员 cell 被改写`, {reason: "locked-members-changed", id, side});
+    }
+    for (const [field, values] of Object.entries(entry.fields)) {
+      const current = entry.cells.map(cell => cells?.[field]?.[cell]);
+      if (stableValue(current) !== stableValue(values)) {
+        throw featureLockConflict(`锁定 Feature #${id} 的 ${side}.${field} assignment 被改写`, {
+          reason: "locked-assignment-changed",
+          id,
+          side,
+          field
+        });
+      }
+    }
+  }
+}
+
+function featureLockConflict(message, details = {}) {
+  const error = new Error(message);
+  error.code = "regeneration_lock_conflict";
+  error.details = {kind: "feature", ...details};
+  return error;
+}
+
+function stabilizeFeatureIds(rawFeatures, rawCellFeatures, before, {grid, locked = {entries: new Map(), ids: new Set()}}) {
   const rawIds = activeFeatures(rawFeatures).map(featureId);
   const rawCellsById = cellsByFeature(rawCellFeatures);
   const oldCellsById = cellsByFeature(before.cellFeatures);
@@ -411,6 +530,26 @@ function stabilizeFeatureIds(rawFeatures, rawCellFeatures, before, {grid}) {
   const oldIds = new Set(oldActive.map(featureId));
   const assignments = new Map();
   const claimed = new Set();
+  for (const [lockedId, entry] of locked.entries) {
+    const rawIdsForMembers = new Set(entry.cells.map(cell => Number(rawCellFeatures?.[cell])).filter(id => id > 0));
+    if (rawIdsForMembers.size !== 1) {
+      throw featureLockConflict(`锁定 Feature #${lockedId} 被拆分`, {reason: "locked-feature-split", id: lockedId, grid});
+    }
+    const rawId = [...rawIdsForMembers][0];
+    const rawFeature = rawFeatures?.[rawId];
+    if (!rawFeature || Boolean(rawFeature.land) !== entry.land || String(rawFeature.type) !== entry.type) {
+      throw featureLockConflict(`锁定 Feature #${lockedId} 的陆水或类型发生变化`, {reason: "locked-feature-type-changed", id: lockedId, grid});
+    }
+    const rawCells = rawCellsById.get(rawId) || [];
+    if (!sameIntegerCells(rawCells, entry.cells)) {
+      throw featureLockConflict(`锁定 Feature #${lockedId} 与其它分量合并`, {reason: "locked-feature-merged", id: lockedId, grid});
+    }
+    if (assignments.has(rawId) || claimed.has(lockedId)) {
+      throw featureLockConflict(`锁定 Feature #${lockedId} assignment 冲突`, {reason: "locked-assignment-conflict", id: lockedId, grid});
+    }
+    assignments.set(rawId, lockedId);
+    claimed.add(lockedId);
+  }
   const rawContainingCenters = new Map();
   for (const old of oldActive) {
     const oldId = featureId(old);
@@ -419,6 +558,7 @@ function stabilizeFeatureIds(rawFeatures, rawCellFeatures, before, {grid}) {
     if (rawId > 0 && Boolean(rawFeatures[rawId]?.land) === Boolean(old.land)) rawContainingCenters.set(oldId, rawId);
   }
   for (const rawId of rawIds) {
+    if (assignments.has(rawId)) continue;
     const candidates = [...oldIds].filter(oldId => rawContainingCenters.get(oldId) === rawId);
     const winner = chooseSurvivor(rawFeatures[rawId], candidates, before.features, oldCellsById, before.openFeatureIds, before.featureAreas);
     if (winner && !claimed.has(winner)) {
@@ -449,7 +589,8 @@ function stabilizeFeatureIds(rawFeatures, rawCellFeatures, before, {grid}) {
   for (const rawId of rawIds) {
     const stableId = assignments.get(rawId);
     const old = before.features[stableId];
-    features[stableId] = mergeFeatureIdentity(old, rawFeatures[rawId], stableId, grid);
+    const lockedEntry = locked.entries.get(stableId);
+    features[stableId] = lockedEntry ? clonePlain(lockedEntry.feature) : mergeFeatureIdentity(old, rawFeatures[rawId], stableId, grid);
   }
 
   const redirects = new Map();
@@ -927,6 +1068,26 @@ function cellsByFeature(cellFeatures) {
     byId.get(id).push(cell);
   }
   return byId;
+}
+
+function memberCells(cellFeatures, id) {
+  const result = [];
+  for (let cell = 0; cell < (cellFeatures?.length || 0); cell++) {
+    if (Number(cellFeatures[cell]) === id) result.push(cell);
+  }
+  return result;
+}
+
+function sameIntegerCells(first, second) {
+  if (first.length !== second.length) return false;
+  for (let index = 0; index < first.length; index++) {
+    if (Number(first[index]) !== Number(second[index])) return false;
+  }
+  return true;
+}
+
+function stableValue(value) {
+  return JSON.stringify(value);
 }
 
 function overlapCandidates(cells, cellFeatures) {

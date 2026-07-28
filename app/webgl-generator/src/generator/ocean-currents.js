@@ -54,7 +54,7 @@ export function normalizeOceanCurrentModel(source) {
   };
 }
 
-export function buildOceanCurrents(map, {seed} = {}) {
+export function buildOceanCurrents(map, {seed, preservedCurrents = []} = {}) {
   assertInputs(map);
   const resolvedSeed = String(seed ?? `${map.metadata?.seed || map.options?.seed || "map"}|ocean-currents`);
   const random = createRandom(resolvedSeed);
@@ -63,9 +63,15 @@ export function buildOceanCurrents(map, {seed} = {}) {
   const coastDistance = buildCoastDistance(map.grid.cells.c, oceanMask);
   const spatialIndex = createGridSpatialIndex(map.grid);
   const currents = [];
+  const preserved = (preservedCurrents || []).map(current => structuredClone(current));
 
   for (const basin of oceanBasins) {
-    currents.push(...buildBasinCurrents(map, basin, coastDistance, spatialIndex, random, resolvedSeed));
+    const basinCells = new Set(basin.cells);
+    const basinPreserved = preserved.filter(current =>
+      Number(current?.basinFeatureId) === Number(basin.featureId)
+      && basinCells.has(nearestGridCell(spatialIndex, current?.path?.segments?.[0]?.start || [NaN, NaN]))
+    );
+    currents.push(...buildBasinCurrents(map, basin, coastDistance, spatialIndex, random, resolvedSeed, basinPreserved));
   }
 
   return {
@@ -113,19 +119,28 @@ export function sampleOceanCurrent(current, samplesPerSegment = 24) {
   return points;
 }
 
-function buildBasinCurrents(map, basin, coastDistance, spatialIndex, random, seed) {
-  if (basin.cells.length < 24) return [];
-  const deepCells = basin.cells.filter(cell => coastDistance[cell] >= 3 && map.grid.cells.h[cell] <= 16);
+function buildBasinCurrents(map, basin, coastDistance, spatialIndex, random, seed, preserved = []) {
+  if (basin.cells.length < 24) return preserved.map(current => structuredClone(current));
+  const reservedPoints = preserved.flatMap(current => sampleOceanCurrent(current, 16));
+  const pathClearance = averageCellSpacing(map) * 2;
+  const deepCells = basin.cells.filter(cell =>
+    coastDistance[cell] >= 3
+    && map.grid.cells.h[cell] <= 16
+    && !pointNearReservedPath(pointForCell(map.grid, cell), reservedPoints, pathClearance)
+  );
   const candidates = deepCells.length >= 8 ? deepCells : basin.cells;
   const bounds = cellBounds(map.grid, basin.cells);
   const center = basinCentroid(map.grid, basin.cells);
   const basinSet = new Set(basin.cells);
   const baseCount = basin.cells.length >= LARGE_BASIN_CELL_THRESHOLD ? 3 : 2;
   const targetCount = clamp(Math.round(Math.sqrt(basin.cells.length) / CURRENT_DENSITY_DIVISOR) + baseCount, 2, MAX_CURRENTS_PER_BASIN);
-  const starts = chooseSeparatedStarts(map.grid, candidates, center, bounds, targetCount, random, seed, basin.featureId);
-  const currents = [];
+  const generatedTarget = Math.max(0, targetCount - preserved.length);
+  const starts = chooseSeparatedStarts(map.grid, candidates, center, bounds, Math.max(generatedTarget, targetCount), random, seed, basin.featureId);
+  const currents = preserved.map(current => structuredClone(current));
+  const usedIds = new Set(currents.map(current => String(current.id)));
 
   for (let index = 0; index < starts.length; index++) {
+    if (currents.length >= targetCount) break;
     const start = starts[index];
     const latitude = latitudeAtPoint(map, pointForCell(map.grid, start));
     const hemisphere = hemisphereForLatitude(latitude);
@@ -133,13 +148,18 @@ function buildBasinCurrents(map, basin, coastDistance, spatialIndex, random, see
     const pathCells = traceCurrentCells(map, basinSet, start, center, coastDistance, circulation, seed, index);
     const segment = fitSafeCubic(map, basin.featureId, pathCells, spatialIndex);
     if (!segment) continue;
+    const candidatePath = {path: {segments: [segment]}};
+    if (pathsOverlap(candidatePath, reservedPoints, pathClearance)) continue;
     const startPoint = segment.start;
     const endPoint = segment.end;
     const endLatitude = latitudeAtPoint(map, endPoint);
     const temperature = currentTemperature(latitude, endLatitude);
     const westernBoundary = startPoint[0] <= bounds.minX + bounds.width * 0.32 && coastDistance[start] <= 9;
     const strength = round(clamp((westernBoundary ? 0.72 : 0.34) + random.next() * (westernBoundary ? 0.25 : 0.34), 0.2, 1), 3);
-    const id = `current-${basin.featureId}-${basin.componentIndex}-${index + 1}`;
+    let suffix = index + 1;
+    let id = `current-${basin.featureId}-${basin.componentIndex}-${suffix}`;
+    while (usedIds.has(id)) id = `current-${basin.featureId}-${basin.componentIndex}-${++suffix}`;
+    usedIds.add(id);
     currents.push({
       id,
       name: currentName({hemisphere, temperature, westernBoundary, index}),
@@ -159,6 +179,16 @@ function buildBasinCurrents(map, basin, coastDistance, spatialIndex, random, see
     });
   }
   return currents;
+}
+
+function pathsOverlap(current, reservedPoints, clearance) {
+  return sampleOceanCurrent(current, 16).some(point => pointNearReservedPath(point, reservedPoints, clearance));
+}
+
+function pointNearReservedPath(point, reservedPoints, clearance) {
+  if (!reservedPoints.length) return false;
+  const threshold = clearance * clearance;
+  return reservedPoints.some(reserved => squaredDistance(point, reserved) < threshold);
 }
 
 function collectOceanBasins(map) {

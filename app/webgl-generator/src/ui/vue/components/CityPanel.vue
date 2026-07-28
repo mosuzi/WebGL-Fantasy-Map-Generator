@@ -6,7 +6,10 @@
     <UiButton variant="secondary" :disabled="!visibleRows.length" @click="callbacks.onRenameVisibleFromNamebase?.(visibleRows.map(row => row.id))">按名称库重命名筛选</UiButton>
     <UiButton variant="danger" @click="callbacks.onRegenerate?.()">重新生成城镇</UiButton>
   </div>
+  <UiRegenerationLockActions v-bind="regenerationLocks.actionProps" v-on="regenerationLocks.actionListeners" />
   <UiObjectTable
+    v-bind="regenerationLocks.tableProps"
+    v-on="regenerationLocks.tableListeners"
     :columns="columns"
     :column-widths="state.columnWidths"
     :rows="visibleRows"
@@ -108,6 +111,7 @@ import UiNoteField from "./base/UiNoteField.vue";
 import UiNumberField from "./base/UiNumberField.vue";
 import UiObjectTable from "./base/UiObjectTable.vue";
 import UiPanelIoActions from "./base/UiPanelIoActions.vue";
+import UiRegenerationLockActions from "./base/UiRegenerationLockActions.vue";
 import UiSelectField from "./base/UiSelectField.vue";
 import UiTextEditField from "./base/UiTextEditField.vue";
 import {
@@ -124,6 +128,7 @@ import {compareRowsByKey} from "../../sort-utils.js";
 import {readObjectNote} from "../../../runtime/object-notes.js";
 import {useUnitPreferences} from "../composables/use-unit-preferences.js";
 import {useVisibleRowSelection} from "../composables/use-visible-row-selection.js";
+import {useRegenerationLockSelection} from "../composables/use-regeneration-lock-selection.js";
 
 defineOptions({
   name: "CityPanel"
@@ -174,7 +179,9 @@ const metrics = computed(() => {
   return buildCityMetrics(props.state.map);
 });
 const visibleRows = computed(() => sortRows(filterRows(metrics.value.rows, props.state.filter), props.state.sortKey, props.state.sortDir));
-const {selectedRowIds: selectedCityIds, selectedRows: selectedCityRows} = useVisibleRowSelection(visibleRows);
+const regenerationLocks = useRegenerationLockSelection({panelId: "city-panel", kind: "city", rows: visibleRows});
+const {selectedRowIds: selectedCityIds} = useVisibleRowSelection(visibleRows);
+const selectedCityRows = regenerationLocks.selectedRows;
 const filterEmptyAction = computed(() => String(props.state.filter || "").trim()
   ? {key: "clear-filter", label: "清空筛选", icon: "⌫"}
   : null);

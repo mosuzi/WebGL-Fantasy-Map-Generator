@@ -5,6 +5,16 @@ import {MinPriorityQueue} from "./priority-queue.js";
 import {createRandom} from "./random.js";
 import {normalizeRiverNetwork} from "./river-network.js";
 import {
+  assertFrozenRiverState,
+  frozenLakeGuard,
+  initializeGuardedLakeReferences,
+  isFrozenRiverCell,
+  nextAvailableRiverId,
+  prepareRiverRegenerationLocks,
+  seedFrozenRiverCells,
+  seedFrozenRiverState
+} from "./river-regeneration-locks.js";
+import {
   activateOverflowRoute,
   applyLakeOverflowDiagnostics,
   applyOverflowRouteOrdering,
@@ -27,6 +37,7 @@ export function buildRivers(grid, features, pack, options = {}) {
   const profile = createStageProfile();
   const nameGenerator = profile.stage("name-generator", "初始化河流命名器", () => createChineseNameGenerator(getHydronymSeed(options), {namebases: options.namebases}));
   const cells = pack.cells;
+  const lockContext = prepareRiverRegenerationLocks(pack, options.lockedRivers);
   const riverPaths = new Map();
   const riverParents = new Map();
   let incisedTransitions = 0;
@@ -40,9 +51,11 @@ export function buildRivers(grid, features, pack, options = {}) {
     cells.fl = new Uint16Array(cells.i.length);
     cells.r = new Uint16Array(cells.i.length);
     cells.conf = new Uint8Array(cells.i.length);
+    seedFrozenRiverState(lockContext, cells, riverPaths, riverParents);
   });
   const hydrology = profile.stage("init-hydrology", "初始化河流水文诊断", () => createHydrologyBuffers(cells));
   const lakeDrainage = profile.stage("lake-climate", "计算湖泊水文与溢流路径", () => defineLakeClimateData(grid, pack, effectiveHeights, options, variation));
+  initializeGuardedLakeReferences(pack, lockContext);
 
   const cellsNumberModifier = Math.max(1, (Number(options.cellsTarget || grid.metadata.cellsDesired || grid.points.length) / 10000) ** 0.25);
   const land = profile.stage("sort-land", "按高度排序陆地 cell", () => Array.from(cells.i)
@@ -50,8 +63,11 @@ export function buildRivers(grid, features, pack, options = {}) {
     .sort((a, b) => lakeDrainage.processingHeights[b] - lakeDrainage.processingHeights[a]));
 
   profile.stage("flow-accumulation", "累计降水并追踪河道", () => {
+    const reservedRiverIds = new Set(lockContext.frozenIds);
+    const blockedRiverIds = new Set();
     let nextRiverId = 1;
     for (const cell of land) {
+      if (isFrozenRiverCell(lockContext, cell)) continue;
       const precipitation = getCellPrecipitation(grid, cells, cell, variation);
       addCellHydrology(hydrology, cells, cell, precipitation);
       addFlux(cells.fl, cell, precipitation / cellsNumberModifier);
@@ -63,6 +79,10 @@ export function buildRivers(grid, features, pack, options = {}) {
         const lakeCell = (cells.c[cell] || []).find(neighbor => effectiveHeights[neighbor] < WATER_LEVEL && cells.f[neighbor] === lake.i);
         if (lakeCell === undefined) continue;
         activateOverflowRoute(lakeDrainage.activeDownstream, plan);
+        if (isFrozenRiverCell(lockContext, lakeCell)) {
+          flowDown(pack, riverPaths, riverParents, cell, cells.fl[lakeCell], cells.r[lakeCell], hydrology, lakeCell, lockContext, blockedRiverIds);
+          continue;
+        }
 
         addFlux(cells.fl, lakeCell, Math.max(lake.flux - lake.evaporation, 0));
         addLakeHydrology(hydrology, grid, cells, lakeCell, lake, variation);
@@ -74,13 +94,15 @@ export function buildRivers(grid, features, pack, options = {}) {
             cells.r[lakeCell] = lake.river;
             addCellToRiver(riverPaths, lake.river, lakeCell);
           } else {
-            cells.r[lakeCell] = nextRiverId;
-            nextRiverId++;
+            const allocatedId = nextAvailableRiverId(reservedRiverIds, nextRiverId);
+            cells.r[lakeCell] = allocatedId;
+            nextRiverId = allocatedId + 1;
           }
         }
 
-        lake.outlet = cells.r[lakeCell];
-        flowDown(pack, riverPaths, riverParents, cell, cells.fl[lakeCell], lake.outlet, hydrology, lakeCell);
+        const lakeGuard = frozenLakeGuard(lockContext, lake);
+        if (!lakeGuard?.outlet) lake.outlet = cells.r[lakeCell];
+        flowDown(pack, riverPaths, riverParents, cell, cells.fl[lakeCell], lake.outlet, hydrology, lakeCell, lockContext, blockedRiverIds);
       }
 
       if (cells.b[cell] && cells.r[cell]) {
@@ -104,29 +126,35 @@ export function buildRivers(grid, features, pack, options = {}) {
       if (rawRise > 0) incisedTransitions++;
 
       if (!cells.r[cell]) {
-        cells.r[cell] = nextRiverId;
-        addCellToRiver(riverPaths, nextRiverId, cell);
-        nextRiverId++;
+        const allocatedId = nextAvailableRiverId(reservedRiverIds, nextRiverId);
+        cells.r[cell] = allocatedId;
+        addCellToRiver(riverPaths, allocatedId, cell);
+        nextRiverId = allocatedId + 1;
       }
 
-      flowDown(pack, riverPaths, riverParents, downhill, cells.fl[cell], cells.r[cell], hydrology, cell);
+      flowDown(pack, riverPaths, riverParents, downhill, cells.fl[cell], cells.r[cell], hydrology, cell, lockContext, blockedRiverIds);
     }
+    discardBlockedRiverCandidates(cells, riverPaths, riverParents, blockedRiverIds);
   });
 
-  const definedRivers = profile.stage("define-rivers", "构建河流对象", () => defineRivers({grid, pack, riverPaths, riverParents, options, nameGenerator, hydrology}));
-  const normalizedNetwork = profile.stage("normalize-river-network", "校验河流干流关系", () => normalizeRiverNetwork(definedRivers, pack, {dropIncomplete: true}));
+  const definedRivers = profile.stage("define-rivers", "构建河流对象", () =>
+    defineRivers({grid, pack, riverPaths, riverParents, options, nameGenerator, hydrology, lockContext}));
+  const normalizedNetwork = profile.stage("normalize-river-network", "校验河流干流关系", () =>
+    normalizeRiverNetwork(definedRivers, pack, {dropIncomplete: true, frozenIds: lockContext.frozenIds}));
   const rivers = normalizedNetwork.rivers;
   profile.stage("mark-confluences", "标记河流 cell 与汇流", () => {
     cells.r = new Uint16Array(cells.i.length);
     cells.conf = new Uint16Array(cells.i.length);
-    markRiverCells(cells, rivers);
-    calculateConfluenceFlux(cells, effectiveHeights);
+    seedFrozenRiverCells(lockContext, cells);
+    markRiverCells(cells, rivers, lockContext);
+    calculateConfluenceFlux(cells, effectiveHeights, lockContext);
   });
   pack.rivers = rivers;
-  profile.stage("cleanup-lakes", "清理湖泊水文状态", () => cleanupLakeData(pack));
+  profile.stage("cleanup-lakes", "清理湖泊水文状态", () => cleanupLakeData(pack, lockContext));
   profile.stage("lake-names", "命名湖泊", () => defineLakeNames(pack, nameGenerator));
   profile.stage("feature-groups", "更新 feature 分组", () => defineFeatureGroups(pack, grid));
   const timing = profile.finish();
+  assertFrozenRiverState(pack, rivers, lockContext);
 
   return {
     rivers,
@@ -173,8 +201,10 @@ function summarizeLakeOverflow(features) {
 
 export function renameHydronymsByCulture(rivers, pack, options = {}) {
   const nameGenerator = createChineseNameGenerator(getHydronymSeed(options), {namebases: options.namebases});
+  const frozenIds = new Set(options.frozenRiverIds || options.lockedRiverIds || []);
   for (const river of rivers.rivers || []) {
     if (!river?.i) continue;
+    if (frozenIds.has(Number(river.i))) continue;
     const cultureId = pack.cells.culture?.[river.source] || 0;
     const culture = pack.cultures?.[cultureId];
     river.name = nameGenerator.makeRiverName({
@@ -711,11 +741,16 @@ function effectiveHeightForCell(pack, heights, cell) {
   return feature?.height || heights[cell];
 }
 
-function flowDown(pack, riverPaths, riverParents, toCell, fromFlux, riverId, hydrology = null, fromCell = null) {
+function flowDown(pack, riverPaths, riverParents, toCell, fromFlux, riverId, hydrology = null, fromCell = null, lockContext = null, blockedRiverIds = null) {
   const {cells, features} = pack;
   const toFlux = cells.fl[toCell] - cells.conf[toCell];
   const toRiver = cells.r[toCell];
   const toLand = cells.h[toCell] >= WATER_LEVEL;
+
+  if (isFrozenRiverCell(lockContext, toCell)) {
+    if (!lockContext.frozenIds.has(Number(riverId))) blockedRiverIds?.add(Number(riverId));
+    return;
+  }
 
   if (toLand) transferHydrology(hydrology, fromCell, toCell);
 
@@ -735,7 +770,8 @@ function flowDown(pack, riverPaths, riverParents, toCell, fromFlux, riverId, hyd
   if (!toLand) {
     const waterBody = features[cells.f[toCell]];
     if (waterBody?.type === "lake") {
-      if (!waterBody.river || fromFlux > (waterBody.enteringFlux || 0)) {
+      const lakeGuard = frozenLakeGuard(lockContext, waterBody);
+      if (!lakeGuard?.river && (!waterBody.river || fromFlux > (waterBody.enteringFlux || 0))) {
         waterBody.river = riverId;
         waterBody.enteringFlux = fromFlux;
       }
@@ -750,13 +786,14 @@ function flowDown(pack, riverPaths, riverParents, toCell, fromFlux, riverId, hyd
   addCellToRiver(riverPaths, riverId, toCell);
 }
 
-function defineRivers({grid, pack, riverPaths, riverParents, options, nameGenerator, hydrology}) {
-  const rivers = [];
+function defineRivers({grid, pack, riverPaths, riverParents, options, nameGenerator, hydrology, lockContext}) {
+  const rivers = (lockContext?.frozenRivers || []).map(river => structuredClone(river));
   const cells = pack.cells;
   const defaultWidthFactor = round(1 / Math.max(1, (Number(options.cellsTarget || grid.metadata.cellsDesired || grid.points.length) / 10000) ** 0.25), 2);
   const mainStemWidthFactor = defaultWidthFactor * 1.2;
 
   for (const [riverId, rawCells] of riverPaths) {
+    if (lockContext?.frozenIds?.has(Number(riverId))) continue;
     const riverCells = dedupeConsecutive(rawCells);
     if (riverCells.length < MIN_RIVER_CELLS && !(riverCells.length >= 2 && isLakeOutletRiver(pack, riverId))) continue;
     const source = riverCells[0];
@@ -804,7 +841,7 @@ function defineRivers({grid, pack, riverPaths, riverParents, options, nameGenera
     });
   }
 
-  return rivers;
+  return rivers.sort((a, b) => Number(a.i ?? a.id) - Number(b.i ?? b.id));
 }
 
 function isLakeOutletRiver(pack, riverId) {
@@ -828,18 +865,20 @@ function defineLakeNames(pack, nameGenerator) {
   }
 }
 
-function markRiverCells(cells, rivers) {
+function markRiverCells(cells, rivers, lockContext = null) {
   for (const river of rivers) {
     for (const cell of river.cells) {
       if (cell < 0 || cells.h[cell] < WATER_LEVEL) continue;
+      if (isFrozenRiverCell(lockContext, cell)) continue;
       if (cells.r[cell]) cells.conf[cell] = Math.max(cells.conf[cell], 1);
       else cells.r[cell] = river.i;
     }
   }
 }
 
-function calculateConfluenceFlux(cells, heights) {
+function calculateConfluenceFlux(cells, heights, lockContext = null) {
   for (const cell of cells.i) {
+    if (isFrozenRiverCell(lockContext, cell)) continue;
     if (!cells.conf[cell]) continue;
     const sortedInflux = (cells.c[cell] || [])
       .filter(neighbor => cells.r[neighbor] && heights[neighbor] > heights[cell])
@@ -849,17 +888,48 @@ function calculateConfluenceFlux(cells, heights) {
   }
 }
 
-function cleanupLakeData(pack) {
+function cleanupLakeData(pack, lockContext = null) {
+  const lakesById = new Map((pack.features || [])
+    .filter(feature => feature?.type === "lake")
+    .map(feature => [Number(feature.i ?? feature.id), feature]));
+  const validInletsByLake = new Map();
+  for (const river of pack.rivers || []) {
+    if (river?.outletKind !== "lake") continue;
+    const lakeId = Number(river.outletFeatureId);
+    if (!lakesById.has(lakeId)) continue;
+    if (!validInletsByLake.has(lakeId)) validInletsByLake.set(lakeId, []);
+    validInletsByLake.get(lakeId).push(Number(river.i ?? river.id));
+  }
   for (const feature of pack.features || []) {
     if (!feature || feature.type !== "lake") continue;
-    delete feature.river;
+    const guard = frozenLakeGuard(lockContext, feature);
+    if (!guard?.river) delete feature.river;
     delete feature.enteringFlux;
     delete feature.outCell;
     delete feature.closed;
     feature.height = round(feature.height, 3);
-    if (feature.inlets) feature.inlets = [...new Set(feature.inlets.filter(id => pack.rivers?.some(river => river.i === id)))];
+    const lakeId = Number(feature.i ?? feature.id);
+    const validInlets = validInletsByLake.get(lakeId) || [];
+    const validIds = new Set(validInlets);
+    feature.inlets = [...new Set([
+      ...(feature.inlets || []).map(Number).filter(id => validIds.has(id)),
+      ...validInlets
+    ])];
     if (!feature.inlets?.length) delete feature.inlets;
-    if (feature.outlet && !pack.rivers?.some(river => river.i === feature.outlet)) delete feature.outlet;
+    if (!guard?.outlet && feature.outlet && !pack.rivers?.some(river => river.i === feature.outlet)) delete feature.outlet;
+  }
+}
+
+function discardBlockedRiverCandidates(cells, riverPaths, riverParents, blockedRiverIds) {
+  if (!blockedRiverIds?.size) return;
+  for (const id of blockedRiverIds) {
+    riverPaths.delete(id);
+    riverParents.delete(id);
+  }
+  for (const cell of cells.i) {
+    if (!blockedRiverIds.has(Number(cells.r[cell]))) continue;
+    cells.r[cell] = 0;
+    cells.conf[cell] = 0;
   }
 }
 

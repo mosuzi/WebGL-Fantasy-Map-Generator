@@ -5,7 +5,10 @@
     <UiFilterInput :model-value="state.filter" placeholder="筛选名称 / id / 类型 / 干流" @update:model-value="callbacks.onFilter" />
     <UiButton variant="danger" @click="callbacks.onRegenerate?.()">重新生成河流</UiButton>
   </div>
+  <UiRegenerationLockActions v-bind="regenerationLocks.actionProps" v-on="regenerationLocks.actionListeners" />
   <UiObjectTable
+    v-bind="regenerationLocks.tableProps"
+    v-on="regenerationLocks.tableListeners"
     :columns="columns"
     :column-widths="state.columnWidths"
     :rows="visibleRows"
@@ -89,6 +92,7 @@ import UiMetricGrid from "./base/UiMetricGrid.vue";
 import UiNoteField from "./base/UiNoteField.vue";
 import UiObjectTable from "./base/UiObjectTable.vue";
 import UiPanelIoActions from "./base/UiPanelIoActions.vue";
+import UiRegenerationLockActions from "./base/UiRegenerationLockActions.vue";
 import UiSliderField from "./base/UiSliderField.vue";
 import UiTextEditField from "./base/UiTextEditField.vue";
 import {estimateRiverRunoffFlowRange, formatArea, formatDistance, formatNumber as formatDisplayNumber, formatPrecipitation, formatRiverFlow as formatDisplayRiverFlow, formatRiverRunoffFlowRange, riverFluxToCubicMetersPerSecond} from "../../display-units.js";
@@ -97,6 +101,7 @@ import {compareRowsByKey} from "../../sort-utils.js";
 import {readObjectNote} from "../../../runtime/object-notes.js";
 import {useUnitPreferences} from "../composables/use-unit-preferences.js";
 import {useVisibleRowSelection} from "../composables/use-visible-row-selection.js";
+import {useRegenerationLockSelection} from "../composables/use-regeneration-lock-selection.js";
 
 defineOptions({
   name: "RiverPanel"
@@ -140,7 +145,9 @@ const selectedId = computed(() => props.state.selection?.object?.kind === "river
 const selected = computed(() => findByObjectId(rows.value, selectedId.value));
 const editing = computed(() => props.state.editingObject?.kind === "river" && sameObjectId(props.state.editingObject.id, selectedId.value));
 const visibleRows = computed(() => sortRows(filterRows(rows.value, props.state.filter), props.state.sortKey, props.state.sortDir));
-const {selectedRowIds: selectedRiverIds, selectedRows: selectedRiverRows} = useVisibleRowSelection(visibleRows);
+const regenerationLocks = useRegenerationLockSelection({panelId: "river-panel", kind: "river", rows: visibleRows});
+const {selectedRowIds: selectedRiverIds} = useVisibleRowSelection(visibleRows);
+const selectedRiverRows = regenerationLocks.selectedRows;
 const filterEmptyAction = computed(() => String(props.state.filter || "").trim()
   ? {key: "clear-filter", label: "清空筛选", icon: "⌫"}
   : null);

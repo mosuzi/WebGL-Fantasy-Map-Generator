@@ -1,16 +1,16 @@
 {
   "schemaVersion": 1,
-  "sourceDigest": "d07151d0c0df831240ac2566d1ba73736845fc032b3e688a7226d655761b714f",
+  "sourceDigest": "35761224559ac483c86e61756c801f59793503611abacfcf9d67c98b91bc6626",
   "sourceRoots": [
     "app/webgl-generator/index.html",
     "app/webgl-generator/src/**/*.{js,vue}",
     "app/webgl-generator/src/runtime/**/*-commands.js"
   ],
   "denominator": {
-    "interactionSurfaces": 103,
-    "includedInteractionSurfaces": 86,
-    "excludedInteractionSurfaces": 17,
-    "canvasModes": 28,
+    "interactionSurfaces": 105,
+    "includedInteractionSurfaces": 87,
+    "excludedInteractionSurfaces": 18,
+    "canvasModes": 29,
     "runtimeActions": 211,
     "apiActionBindings": 210,
     "commandAndInspectorExports": 188,
@@ -23,9 +23,9 @@
     "gap": "适合参数化且没有公共 API，必须在第 200 项关闭"
   },
   "totals": {
-    "rows": 1008,
-    "covered": 937,
-    "excluded": 71,
+    "rows": 1011,
+    "covered": 938,
+    "excluded": 73,
     "deferred-owned": 0,
     "gap": 0,
     "unknown": 0,
@@ -30309,6 +30309,40 @@
       "exclusionReason": ""
     },
     {
+      "matrixId": "mode:regeneration-lock:select",
+      "capabilityId": "canvas-mode.regeneration-lock:select",
+      "title": "画布模式 regeneration-lock:select",
+      "sourceKind": "canvas-mode",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/app.js"
+      ],
+      "uiEntry": "canvas:map-canvas",
+      "action": "",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "regenerationLocks.clearKind",
+        "regenerationLocks.inspect",
+        "regenerationLocks.list",
+        "regenerationLocks.set",
+        "regenerationLocks.setMany",
+        "regenerationLocks.status"
+      ],
+      "inputSpace": "object-ref / grid-cell-id / pack-cell-id / world-point / point-list / changes",
+      "mutates": "map-or-runtime-state",
+      "preflight": "领域 inspector 或参数校验",
+      "businessCodes": [],
+      "confirm": "按领域方法元数据",
+      "undoOrRollback": "EditHistory 或运行时状态取消",
+      "async": false,
+      "compatibility": "画布手势继续可用，API 不模拟指针轨迹",
+      "evidence": [
+        "app/webgl-generator/src/runtime/canvas-tool-mode-manager.js"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
       "matrixId": "mode:religion:assign",
       "capabilityId": "canvas-mode.religion:assign",
       "title": "画布模式 religion:assign",
@@ -31801,6 +31835,33 @@
       "status": "excluded",
       "owner": "",
       "exclusionReason": "全局事件负责快捷键、拖动、焦点或组件桥接，不形成独立地图参数能力。"
+    },
+    {
+      "matrixId": "surface:global:app-webgl-generator-src-runtime-regeneration-lock-ui-session",
+      "capabilityId": "ui-shell",
+      "title": "重生成锁面板关闭清理事件",
+      "sourceKind": "interaction-surface",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/regeneration-lock-ui-session.js"
+      ],
+      "uiEntry": "global:app-webgl-generator-src-runtime-regeneration-lock-ui-session",
+      "action": "",
+      "commandOrInspector": "",
+      "apiMethods": [],
+      "inputSpace": "not-applicable",
+      "mutates": "ui-shell",
+      "preflight": "not-applicable",
+      "businessCodes": [],
+      "confirm": "not-applicable",
+      "undoOrRollback": "not-applicable",
+      "async": false,
+      "compatibility": "不改变地图 schema",
+      "evidence": [
+        "tools/webgl-generator-interaction-surface-inventory.mjs"
+      ],
+      "status": "excluded",
+      "owner": "",
+      "exclusionReason": "用户入口已归入 14 个对象列表与共享画布模式，不重复计入全局分母"
     },
     {
       "matrixId": "surface:global:app-webgl-generator-src-ui-brush-cursor-preview",
@@ -34094,6 +34155,33 @@
         "app/webgl-generator/src/ui/vue/components/base/UiPanelIoActions.vue"
       ],
       "uiEntry": "shared:ui-panel-io-actions",
+      "action": "",
+      "commandOrInspector": "",
+      "apiMethods": [],
+      "inputSpace": "not-applicable",
+      "mutates": "ui-shell",
+      "preflight": "not-applicable",
+      "businessCodes": [],
+      "confirm": "not-applicable",
+      "undoOrRollback": "not-applicable",
+      "async": false,
+      "compatibility": "不改变地图 schema",
+      "evidence": [
+        "tools/webgl-generator-interaction-surface-inventory.mjs"
+      ],
+      "status": "excluded",
+      "owner": "",
+      "exclusionReason": "共享组件只承载输入、布局或面板生命周期；对应地图能力由宿主领域 API 登记。"
+    },
+    {
+      "matrixId": "surface:shared:ui-regeneration-lock-actions",
+      "capabilityId": "ui-shell",
+      "title": "由领域面板或固定浮层复用",
+      "sourceKind": "interaction-surface",
+      "sourceFiles": [
+        "app/webgl-generator/src/ui/vue/components/base/UiRegenerationLockActions.vue"
+      ],
+      "uiEntry": "shared:ui-regeneration-lock-actions",
       "action": "",
       "commandOrInspector": "",
       "apiMethods": [],

@@ -1,5 +1,16 @@
 import {applyRegimentIconProfile, buildMilitary, MILITARY_STATUSES, MILITARY_UNITS, normalizeUnitRatios} from "../generator/military.js";
+import {
+  assertLockedMilitaryRegiments,
+  captureMilitaryRegimentSnapshot,
+  militaryLockConflict,
+  prepareLockedMilitaryRegiments
+} from "../generator/military-regeneration-locks.js";
 import {objectAffected, systemAffected} from "./edit-command-effects.js";
+import {
+  compareMilitaryVariation,
+  snapshotMilitaryVariation,
+  syncMilitaryStateMirrors
+} from "./military-regeneration-variation.js";
 
 const MILITARY_EFFECTS = Object.freeze({
   render: "draw",
@@ -66,6 +77,92 @@ const BATTLE_OPPONENT_RESULT_RULES = Object.freeze({
   regroup: Object.freeze({lossRate: 0, status: null, label: "对手未变"})
 });
 
+export function createRegenerateMilitaryCommand({
+  seed = "",
+  maxAttempts = 6,
+  label = "重生成军事",
+  faultAt = "",
+  preservedRegiments = [],
+  lockedMilitaryRegiments = []
+} = {}) {
+  let snapshot = null;
+  let result = null;
+  return {
+    label,
+    domain: "military",
+    effects: {
+      ...MILITARY_EFFECTS,
+      affected: systemAffected("military-regeneration", [{kind: "military", id: "all"}])
+    },
+    apply(context) {
+      const lockedSnapshots = collectLockedMilitaryRegiments(context.map, {preservedRegiments, lockedMilitaryRegiments});
+      const lockedIds = new Set(lockedSnapshots.map(snapshot => snapshot.id));
+      if (allMilitaryRegimentsLocked(context.map, lockedIds)) {
+        result = {executed: false, reason: "all-regiments-locked", attempts: 0, lockedRegiments: lockedIds.size};
+        return;
+      }
+      const locked = prepareLockedMilitaryRegiments(context.map.pack, {lockedMilitaryRegiments: lockedSnapshots});
+      assertLockedMilitaryPoliticsMirrors(context.map, locked);
+      snapshot ??= snapshotMilitary(context.map);
+      const before = unlockedMilitaryVariationSnapshot(context.map, locked.ids);
+      const previousEvents = clonePlain(context.map?.military?.events || []);
+      const eventSequence = Number(context.map?.military?.metadata?.eventSequence) || 0;
+      const attemptLimit = Math.max(1, Math.min(20, Number(maxAttempts) || 6));
+      const baseSeed = String(seed || `${context.map?.options?.seed || "map"}:regenerate-military`);
+      let attempts = 0;
+      let variation = compareMilitaryVariation(before, before);
+      try {
+        do {
+          attempts += 1;
+          const attemptSeed = attempts === 1 ? baseSeed : `${baseSeed}:retry:${attempts}`;
+          context.map.military = buildMilitary(context.map.pack, {
+            ...context.map.options,
+            seed: attemptSeed,
+            lockedMilitaryRegiments: lockedSnapshots
+          });
+          injectMilitaryRegenerationFault(faultAt, "after-build");
+          syncMilitary(context.map);
+          injectMilitaryRegenerationFault(faultAt, "after-sync");
+          variation = compareMilitaryVariation(before, unlockedMilitaryVariationSnapshot(context.map, locked.ids));
+        } while (!variation.changed && attempts < attemptLimit);
+
+        restoreMilitaryRegenerationEvents(context.map, previousEvents, eventSequence, locked.ids);
+        injectMilitaryRegenerationFault(faultAt, "after-events");
+        const currentLocked = prepareLockedMilitaryRegiments(context.map.pack, {lockedMilitaryRegiments: lockedSnapshots});
+        assertLockedMilitaryRegiments(context.map.pack, currentLocked);
+        assertLockedMilitaryPoliticsMirrors(context.map, currentLocked);
+        this.effects.affected = militaryRegenerationAffected(context.map);
+        result = {
+          executed: true,
+          attempts,
+          lockedRegiments: currentLocked.ids.size,
+          variation
+        };
+      } catch (error) {
+        restoreMilitary(context.map, snapshot);
+        throw error;
+      }
+    },
+    revert(context) {
+      if (!snapshot) throw new Error("缺少可撤销的军事快照");
+      restoreMilitary(context.map, snapshot);
+    },
+    isNoop(context) {
+      const validStates = (context.map?.pack?.states || []).filter(state => state?.i && !state.removed);
+      if (!context.map?.pack?.cells?.i?.length || !validStates.length) return true;
+      const lockedSnapshots = collectLockedMilitaryRegiments(context.map, {preservedRegiments, lockedMilitaryRegiments});
+      const lockedIds = new Set(lockedSnapshots.map(snapshot => snapshot.id));
+      if (allMilitaryRegimentsLocked(context.map, lockedIds)) return true;
+      const locked = prepareLockedMilitaryRegiments(context.map.pack, {lockedMilitaryRegiments: lockedSnapshots});
+      assertLockedMilitaryPoliticsMirrors(context.map, locked);
+      return false;
+    },
+    getResult() {
+      return result ? clonePlain(result) : null;
+    }
+  };
+}
+
 export function createSetMilitaryRatiosCommand(stateId, ratios, {label = "调整兵种比例"} = {}) {
   const normalizedStateId = Number(stateId);
   const normalizedRatios = normalizeUnitRatios(ratios);
@@ -84,10 +181,24 @@ export function createSetMilitaryRatiosCommand(stateId, ratios, {label = "调整
     apply(context) {
       const state = context.map?.pack?.states?.[normalizedStateId] || context.map?.politics?.states?.[normalizedStateId];
       if (!state?.i) throw new Error("找不到国家");
+      const lockedSnapshots = collectLockedMilitaryRegiments(context.map);
+      const locked = prepareLockedMilitaryRegiments(context.map.pack, {lockedMilitaryRegiments: lockedSnapshots});
+      assertLockedMilitaryPoliticsMirrors(context.map, locked);
       snapshot ??= snapshotMilitary(context.map);
-      state.militaryPolicy = {...(state.militaryPolicy || {}), unitRatios: normalizedRatios};
-      context.map.military = buildMilitary(context.map.pack, context.map.options);
-      syncMilitary(context.map);
+      try {
+        state.militaryPolicy = {...(state.militaryPolicy || {}), unitRatios: normalizedRatios};
+        context.map.military = buildMilitary(context.map.pack, {
+          ...context.map.options,
+          lockedMilitaryRegiments: lockedSnapshots
+        });
+        syncMilitary(context.map);
+        const currentLocked = prepareLockedMilitaryRegiments(context.map.pack, {lockedMilitaryRegiments: lockedSnapshots});
+        assertLockedMilitaryRegiments(context.map.pack, currentLocked);
+        assertLockedMilitaryPoliticsMirrors(context.map, currentLocked);
+      } catch (error) {
+        restoreMilitary(context.map, snapshot);
+        throw error;
+      }
     },
     revert(context) {
       if (!snapshot) throw new Error("缺少可撤销的军事快照");
@@ -466,6 +577,100 @@ function militaryTargetId(target) {
   return target.id || `${target.stateId}:${target.regimentId}`;
 }
 
+function collectLockedMilitaryRegiments(map, options = {}) {
+  const snapshots = [];
+  const byId = new Map();
+  const add = source => {
+    const identity = militaryLockIdentity(source);
+    if (!identity) throw militaryLockConflict("军事锁仓包含非法军团复合 ID", {reason: "invalid-id", id: source?.id});
+    const snapshot = source?.regiment ? clonePlain(source) : captureMilitaryRegimentSnapshot(map.pack, identity);
+    const existing = byId.get(identity.id);
+    if (existing) {
+      if (JSON.stringify(existing) === JSON.stringify(snapshot)) return;
+      throw militaryLockConflict(`锁定军团 ${identity.id} 重复且快照矛盾`, {reason: "duplicate-id", id: identity.id});
+    }
+    snapshots.push(snapshot);
+    byId.set(identity.id, snapshot);
+  };
+  for (const source of [...(options.preservedRegiments || []), ...(options.lockedMilitaryRegiments || [])]) add(source);
+  for (const entry of map?.regenerationLocks?.entries || []) {
+    if (entry?.kind !== "military") continue;
+    add(entry);
+  }
+  return snapshots;
+}
+
+function militaryLockIdentity(source = {}) {
+  const regiment = source?.regiment || source;
+  const [idState, idRegiment] = String(source?.id ?? regiment?.id ?? "").split(":");
+  const stateId = Number(source?.stateId ?? regiment?.state ?? idState);
+  const regimentId = Number(source?.regimentId ?? regiment?.i ?? idRegiment);
+  if (!Number.isInteger(stateId) || stateId <= 0 || !Number.isInteger(regimentId) || regimentId < 0) return null;
+  return {id: `${stateId}:${regimentId}`, stateId, regimentId};
+}
+
+function allMilitaryRegimentsLocked(map, lockedIds) {
+  const ids = (map?.pack?.states || [])
+    .filter(state => state?.i && !state.removed)
+    .flatMap(state => (state.military || []).map(regiment => `${state.i}:${regiment.i}`));
+  return ids.length > 0 && ids.every(id => lockedIds.has(id));
+}
+
+function unlockedMilitaryVariationSnapshot(map, lockedIds) {
+  return snapshotMilitaryVariation(map).filter(item => !lockedIds.has(item.id));
+}
+
+function restoreMilitaryRegenerationEvents(map, previousEvents, eventSequence, lockedIds) {
+  const generatedLockedEvents = (map?.military?.events || []).filter(event => lockedIds.has(militaryEventRegimentId(event)));
+  const archivedEvents = previousEvents
+    .filter(event => !lockedIds.has(militaryEventRegimentId(event)))
+    .map(event => ({
+      ...event,
+      archived: true,
+      archiveReason: "military-regeneration"
+    }));
+  map.military.events = [...generatedLockedEvents, ...archivedEvents];
+  map.military.metadata = {
+    ...(map.military.metadata || {}),
+    events: map.military.events.length,
+    eventSequence
+  };
+  if (map?.pack) map.pack.military = map.military;
+}
+
+function militaryEventRegimentId(event = {}) {
+  if (event.regimentObjectId) return String(event.regimentObjectId);
+  const stateId = Number(event.stateId);
+  const regimentId = Number(event.regimentId);
+  return Number.isInteger(stateId) && Number.isInteger(regimentId) ? `${stateId}:${regimentId}` : "";
+}
+
+function assertLockedMilitaryPoliticsMirrors(map, locked) {
+  const packStates = map?.pack?.states;
+  const politicsStates = map?.politics?.states;
+  if (!Array.isArray(packStates) || !Array.isArray(politicsStates) || packStates === politicsStates) return;
+  for (const snapshot of locked.regiments.values()) {
+    const mirror = politicsStates[snapshot.stateId];
+    const regiment = (mirror?.military || []).find(item =>
+      Number(item?.i) === snapshot.regimentId || String(item?.id) === snapshot.id
+    );
+    if (!regiment || JSON.stringify(regiment) !== JSON.stringify(snapshot.regiment)) {
+      throw militaryLockConflict(`军事锁 ${snapshot.id} 的 politics 镜像矛盾`, {reason: "politics-mirror-mismatch", id: snapshot.id});
+    }
+  }
+}
+
+function militaryRegenerationAffected(map) {
+  const targets = (map?.pack?.states || [])
+    .filter(state => state?.i && !state.removed)
+    .flatMap(state => (state.military || []).flatMap(regiment => objectAffected("military", `${state.i}:${regiment.i}`)));
+  return systemAffected("military-regeneration", targets);
+}
+
+function injectMilitaryRegenerationFault(actual, expected) {
+  if (actual === expected) throw new Error(`military regeneration fault: ${expected}`);
+}
+
 function snapshotMilitary(map) {
   const states = map?.pack?.states || map?.politics?.states || [];
   return {
@@ -498,11 +703,13 @@ function restoreMilitary(map, snapshot) {
   }
   map.military = snapshot.military ? clonePlain(snapshot.military) : null;
   if (map?.pack) map.pack.military = snapshot.packMilitary ? clonePlain(snapshot.packMilitary) : map.military;
+  syncMilitaryStateMirrors(map);
 }
 
 function syncMilitary(map) {
   if (!map?.pack?.military) return;
   map.military = map.pack.military;
+  syncMilitaryStateMirrors(map);
 }
 
 function normalizeRegimentTarget(target = {}) {

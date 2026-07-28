@@ -392,6 +392,7 @@ function domainForMode(mode) {
     note: "note",
     province: "province",
     religion: "religion",
+    "regeneration-lock": "regenerationLocks",
     river: "river",
     route: "route",
     state: "state",
