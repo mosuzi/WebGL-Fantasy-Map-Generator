@@ -12,6 +12,21 @@ assert.equal(report.denominator.classifiedCellActionRows, report.denominator.cel
 assert.equal(report.denominator.fullCapabilityGaps, 0);
 assert.ok(report.totals.ruleTransactions >= 50);
 assert.ok(report.totals.plannerRecipes >= 10);
+assert.equal(report.totals.statuses["existing-transaction"], 36);
+assert.equal(report.totals.statuses["existing-needs-inspector"], 21);
+
+for (const [id, inspect, execute] of [
+  ["politics.create-state", "edit.states.inspectCreateAtCell", "edit.states.createAtCell"],
+  ["politics.create-province", "edit.provinces.inspectCreateAtCell", "edit.provinces.createAtCell"],
+  ["settlement.found-city", "edit.cities.inspectCreateAtCell", "edit.cities.createAtCell"]
+]) {
+  const action = byId.get(id);
+  assert.equal(action?.status, "existing-transaction", `${id} 没有按第 195 项真实实现重新归类`);
+  assert.equal(action?.inspect, inspect);
+  assert.equal(action?.execute, execute);
+  assert.ok(action?.api.includes(inspect));
+  assert.ok(action?.api.includes(execute));
+}
 
 const territory = byId.get("politics.transfer-territory");
 assert.equal(territory.status, "fragmented-needs-transaction");

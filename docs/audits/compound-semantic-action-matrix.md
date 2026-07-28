@@ -4,11 +4,11 @@
 
 ## 审计结论
 
-- 上游能力矩阵：1008 行，unknown / unclassified / gap = 0 / 0 / 0。
+- 上游能力矩阵：1012 行，unknown / unclassified / gap = 0 / 0 / 0。
 - 公开 API：257 / 257 已归类。
-- Cell / 画布动作：47 / 47 已归类；画布模式 28，直接操控 19 类 / 89 个宿主。
+- Cell / 画布动作：48 / 48 已归类；画布模式 29，直接操控 19 类 / 89 个宿主。
 - 规则事务与玩法配方：68 + 10 = 78。
-- 已有完整事务 33，已有写命令但缺 AI inspector 24，多 API 碎片待收敛 5，缺失游戏规则 6，规划器配方 10。
+- 已有完整事务 36，已有写命令但缺 AI inspector 21，多 API 碎片待收敛 5，缺失游戏规则 6，规划器配方 10。
 - 结构缺口：0。
 
 ## 边界定义
@@ -46,7 +46,7 @@
 | `hydrology.delete-lake` | 地形、水文与 Feature | 删除湖泊对象，明确是仅删对象还是填平水体，并清理依赖。 | `existing-needs-inspector` | `edit.lakes.delete` | `planned:edit.lakes.inspectDelete`<br>`edit.lakes.delete` |
 | `ecology.assign-biome` | 气候、生态与人口承载 | 按 Grid Cell 集分配生物群系，并报告气候或水陆不适配。 | `existing-needs-inspector` | `edit.biomes.assignCells` | `planned:cells.inspectAction(biome.assign)`<br>`edit.biomes.assignCells` |
 | `ecology.adjust-suitability` | 气候、生态与人口承载 | 调整基础适居度或覆盖值，维护人口承载和旧图兼容。 | `existing-transaction` | `edit.biomes.applySuitability`<br>`edit.biomes.inspectSuitability` | `edit.biomes.inspectSuitability`<br>`edit.biomes.applySuitability` |
-| `politics.create-state` | 国家、省份与政治拓扑 | 在合法陆地创建国家，同时创建首省、复用或创建首都并同步政治镜像。 | `existing-needs-inspector` | `edit.states.add` | `planned:edit.states.inspectCreateAtCell`<br>`planned:edit.states.createAtCell` |
+| `politics.create-state` | 国家、省份与政治拓扑 | 在合法陆地创建国家，同时创建首省、复用或创建首都并同步政治镜像。 | `existing-transaction` | `edit.states.add`<br>`edit.states.createAtCell`<br>`edit.states.inspectCreateAtCell` | `edit.states.inspectCreateAtCell`<br>`edit.states.createAtCell` |
 | `politics.delete-state` | 国家、省份与政治拓扑 | 删除国家，明确处理领土、省份、城镇、外交、军事、市场和历史引用。 | `existing-needs-inspector` | `edit.states.delete` | `planned:edit.states.inspectDelete`<br>`edit.states.delete` |
 | `politics.merge-states` | 国家、省份与政治拓扑 | 把被合并国完整并入保留国，重建省份并同步外交、军事、市场和路线。 | `existing-transaction` | `edit.states.inspectMerge`<br>`edit.states.merge` | `edit.states.inspectMerge`<br>`edit.states.merge` |
 | `politics.split-state` | 国家、省份与政治拓扑 | 选择完整旧省份和新首都拆出国家，修复原国家首都及全部跨域引用。 | `existing-transaction` | `edit.states.inspectSplit`<br>`edit.states.split` | `edit.states.inspectSplit`<br>`edit.states.split` |
@@ -54,13 +54,13 @@
 | `politics.ensure-province-assignment` | 国家、省份与政治拓扑 | 把 Cell 分给已有省份；若明确要求的省份不存在，则在合法 ID/命名策略下创建后分配。 | `fragmented-needs-transaction` | `cells.get`<br>`edit.provinces.add`<br>`edit.provinces.applyChanges` | `planned:edit.provinces.inspectEnsureAssignment`<br>`planned:edit.provinces.ensureAssignment` |
 | `politics.transfer-province` | 国家、省份与政治拓扑 | 把完整省份及其 Cell、城镇和省会转给目标国家，并修复双方统计、首都和引用。 | `fragmented-needs-transaction` | `cells.query`<br>`edit.provinces.applyChanges`<br>`edit.states.applyChanges`<br>`objects.get` | `planned:edit.provinces.inspectTransfer`<br>`planned:edit.provinces.transfer` |
 | `politics.reorganize-provinces` | 国家、省份与政治拓扑 | 保留国家与范围外对象，墓碑化目标旧省并生成新的连通省份。 | `existing-transaction` | `generate.regenerate` | `planned:edit.provinces.inspectRegeneration`<br>`generate.regenerate(provinces)` |
-| `politics.create-province` | 国家、省份与政治拓扑 | 在已有国家的合法 Cell 创建省份，确定省会并同步国家省份列表。 | `existing-needs-inspector` | `edit.provinces.add` | `planned:edit.provinces.inspectCreateAtCell`<br>`planned:edit.provinces.createAtCell` |
+| `politics.create-province` | 国家、省份与政治拓扑 | 在已有国家的合法 Cell 创建省份，确定省会并同步国家省份列表。 | `existing-transaction` | `edit.provinces.add`<br>`edit.provinces.createAtCell`<br>`edit.provinces.inspectCreateAtCell` | `edit.provinces.inspectCreateAtCell`<br>`edit.provinces.createAtCell` |
 | `politics.delete-province` | 国家、省份与政治拓扑 | 删除省份，清除或重新分配领土与城镇，维护国家省份列表。 | `existing-needs-inspector` | `edit.provinces.delete` | `planned:edit.provinces.inspectDelete`<br>`edit.provinces.delete` |
 | `politics.merge-provinces` | 国家、省份与政治拓扑 | 把多个同国相邻省份合并，保留一个身份或创建新身份，并确定省会。 | `missing-game-rule` | `cells.query`<br>`objects.get` | `planned:edit.provinces.inspectMerge`<br>`planned:edit.provinces.merge` |
 | `politics.split-province` | 国家、省份与政治拓扑 | 按连通 Cell 集或城镇锚点拆分省份，并为两侧确定省会。 | `missing-game-rule` | `cells.query`<br>`objects.get` | `planned:edit.provinces.inspectSplit`<br>`planned:edit.provinces.split` |
 | `politics.change-government` | 国家、省份与政治拓扑 | 调整国家政体和允许的国号后缀，并同步完整国名和政治镜像。 | `existing-transaction` | `edit.states.setGovernment`<br>`edit.states.setGovernmentBatch` | `info.describe(edit.states.setGovernment)`<br>`edit.states.setGovernment / setGovernmentBatch` |
 | `politics.relocate-capital` | 国家、省份与政治拓扑 | 把本国城市设为首都，取消旧首都并同步国家中心、标签和城镇层级。 | `existing-needs-inspector` | `edit.states.setCapital` | `planned:edit.states.inspectCapitalChange`<br>`edit.states.setCapital` |
-| `settlement.found-city` | 城镇、人口与定居点 | 在合法 Cell 建立城镇，继承国家、省份、文化、宗教和港口条件。 | `existing-needs-inspector` | `edit.cities.add` | `planned:edit.cities.inspectCreateAtCell`<br>`planned:edit.cities.createAtCell` |
+| `settlement.found-city` | 城镇、人口与定居点 | 在合法 Cell 建立城镇，继承国家、省份、文化、宗教和港口条件。 | `existing-transaction` | `edit.cities.add`<br>`edit.cities.createAtCell`<br>`edit.cities.inspectCreateAtCell` | `edit.cities.inspectCreateAtCell`<br>`edit.cities.createAtCell` |
 | `settlement.move-city` | 城镇、人口与定居点 | 移动城镇到目标点，处理国家/省份归属、首都省会限制、港口和相连路线。 | `existing-transaction` | `edit.cities.inspectMove`<br>`edit.cities.move` | `edit.cities.inspectMove`<br>`edit.cities.move` |
 | `settlement.delete-city` | 城镇、人口与定居点 | 删除城镇前评估首都、省会、路线、市场和备注依赖，确认后单事务清理。 | `existing-needs-inspector` | `edit.cities.delete` | `planned:edit.cities.inspectDelete`<br>`edit.cities.delete` |
 | `settlement.sync-city-owner` | 城镇、人口与定居点 | 让城镇国家与省份归属跟随所在 Cell，并处理首都、省会和跨国约束。 | `existing-needs-inspector` | `edit.cities.syncOwner` | `planned:edit.cities.inspectOwnerSync`<br>`edit.cities.syncOwner` |
@@ -240,6 +240,6 @@
 
 ## 机器覆盖
 
-- API 分类：`atomic-editor-primitive=52`，`editor-runtime-service=49`，`read-export-service=10`，`read-primitive=29`，`semantic-action=117`。
-- 交互分类：`semantic-input-or-primitive=35`，`ui-boundary=12`。
-- Source digest：`f119894abaf60ddeba573a67072dd58ec2c6a7a029cdf447e33c024578b96bde`。
+- API 分类：`atomic-editor-primitive=49`，`editor-runtime-service=49`，`read-export-service=10`，`read-primitive=26`，`semantic-action=123`。
+- 交互分类：`semantic-input-or-primitive=36`，`ui-boundary=12`。
+- Source digest：`654a652a3a8931a2598a16d947bfcf8a25e7022123d6b4fc4f433d349e335242`。

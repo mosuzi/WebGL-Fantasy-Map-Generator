@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "scope": "权威任务第 204 项：全游戏复合语义接口、规则动作与玩法配方审计",
   "generatedAtPolicy": "报告不写入动态时间，sourceDigest 变化即要求重新生成",
-  "sourceDigest": "f119894abaf60ddeba573a67072dd58ec2c6a7a029cdf447e33c024578b96bde",
+  "sourceDigest": "654a652a3a8931a2598a16d947bfcf8a25e7022123d6b4fc4f433d349e335242",
   "definition": {
     "compoundSemanticAction": "一个玩家意图，但执行时需要跨对象/系统、条件分支、业务预检或原子回滚；应由单一规则事务表达。",
     "primitive": "只修改一个稳定字段或纯编辑器显示偏好，可保留为原子 API，不强行包装成复合动作。",
@@ -21,15 +21,15 @@
     "recipe-only": "战略/玩法流程，不应实现为一条超大写接口。"
   },
   "denominator": {
-    "fullCapabilityRows": 1008,
+    "fullCapabilityRows": 1012,
     "fullCapabilityUnknown": 0,
     "fullCapabilityUnclassified": 0,
     "fullCapabilityGaps": 0,
     "publicApiMethods": 257,
     "classifiedApiMethods": 257,
-    "cellActionRows": 47,
-    "classifiedCellActionRows": 47,
-    "canvasModes": 28,
+    "cellActionRows": 48,
+    "classifiedCellActionRows": 48,
+    "canvasModes": 29,
     "directManipulationFamilies": 19,
     "directManipulationInstances": 89
   },
@@ -38,8 +38,8 @@
     "ruleTransactions": 68,
     "plannerRecipes": 10,
     "statuses": {
-      "existing-needs-inspector": 24,
-      "existing-transaction": 33,
+      "existing-needs-inspector": 21,
+      "existing-transaction": 36,
       "fragmented-needs-transaction": 5,
       "missing-game-rule": 6,
       "recipe-only": 10
@@ -58,14 +58,14 @@
       "world": 6
     },
     "apiClassifications": {
-      "atomic-editor-primitive": 52,
+      "atomic-editor-primitive": 49,
       "editor-runtime-service": 49,
       "read-export-service": 10,
-      "read-primitive": 29,
-      "semantic-action": 117
+      "read-primitive": 26,
+      "semantic-action": 123
     },
     "interactionClassifications": {
-      "semantic-input-or-primitive": 35,
+      "semantic-input-or-primitive": 36,
       "ui-boundary": 12
     },
     "structuralGaps": 0
@@ -832,10 +832,12 @@
       "tier": "rule-transaction",
       "variants": [],
       "api": [
-        "edit.states.add"
+        "edit.states.add",
+        "edit.states.createAtCell",
+        "edit.states.inspectCreateAtCell"
       ],
-      "inspect": "planned:edit.states.inspectCreateAtCell",
-      "execute": "planned:edit.states.createAtCell",
+      "inspect": "edit.states.inspectCreateAtCell",
+      "execute": "edit.states.createAtCell",
       "branches": [
         "Cell 非法/水域",
         "首都省保护",
@@ -850,7 +852,7 @@
       "id": "politics.create-state",
       "title": "在 Cell 创建国家、省份和首都链",
       "domain": "politics",
-      "status": "existing-needs-inspector",
+      "status": "existing-transaction",
       "intent": "在合法陆地创建国家，同时创建首省、复用或创建首都并同步政治镜像。",
       "gameplayChapter": "国家、省份与政治拓扑",
       "invariant": "国家、省份、Grid/Pack 归属、首都、省会、外交、军事、市场和路线引用不得悬空。",
@@ -1089,10 +1091,12 @@
       "tier": "rule-transaction",
       "variants": [],
       "api": [
-        "edit.provinces.add"
+        "edit.provinces.add",
+        "edit.provinces.createAtCell",
+        "edit.provinces.inspectCreateAtCell"
       ],
-      "inspect": "planned:edit.provinces.inspectCreateAtCell",
-      "execute": "planned:edit.provinces.createAtCell",
+      "inspect": "edit.provinces.inspectCreateAtCell",
+      "execute": "edit.provinces.createAtCell",
       "branches": [
         "Cell/国家非法",
         "生成名称",
@@ -1107,7 +1111,7 @@
       "id": "politics.create-province",
       "title": "在国家内创建省份",
       "domain": "politics",
-      "status": "existing-needs-inspector",
+      "status": "existing-transaction",
       "intent": "在已有国家的合法 Cell 创建省份，确定省会并同步国家省份列表。",
       "gameplayChapter": "国家、省份与政治拓扑",
       "invariant": "国家、省份、Grid/Pack 归属、首都、省会、外交、军事、市场和路线引用不得悬空。",
@@ -1267,10 +1271,12 @@
       "tier": "rule-transaction",
       "variants": [],
       "api": [
-        "edit.cities.add"
+        "edit.cities.add",
+        "edit.cities.createAtCell",
+        "edit.cities.inspectCreateAtCell"
       ],
-      "inspect": "planned:edit.cities.inspectCreateAtCell",
-      "execute": "planned:edit.cities.createAtCell",
+      "inspect": "edit.cities.inspectCreateAtCell",
+      "execute": "edit.cities.createAtCell",
       "branches": [
         "Cell 非法/水域",
         "已有城镇冲突",
@@ -1285,7 +1291,7 @@
       "id": "settlement.found-city",
       "title": "建立城镇并同步政治与路线数据",
       "domain": "settlement",
-      "status": "existing-needs-inspector",
+      "status": "existing-transaction",
       "intent": "在合法 Cell 建立城镇，继承国家、省份、文化、宗教和港口条件。",
       "gameplayChapter": "城镇、人口与定居点",
       "invariant": "城镇位置、国家/省份归属、首都/省会、港口、路线和人口统计必须同步。",
@@ -2853,8 +2859,10 @@
     },
     {
       "method": "edit.cities.createAtCell",
-      "classification": "atomic-editor-primitive",
-      "actionIds": []
+      "classification": "semantic-action",
+      "actionIds": [
+        "settlement.found-city"
+      ]
     },
     {
       "method": "edit.cities.delete",
@@ -2866,8 +2874,10 @@
     },
     {
       "method": "edit.cities.inspectCreateAtCell",
-      "classification": "read-primitive",
-      "actionIds": []
+      "classification": "semantic-action",
+      "actionIds": [
+        "settlement.found-city"
+      ]
     },
     {
       "method": "edit.cities.inspectMove",
@@ -3430,8 +3440,10 @@
     },
     {
       "method": "edit.provinces.createAtCell",
-      "classification": "atomic-editor-primitive",
-      "actionIds": []
+      "classification": "semantic-action",
+      "actionIds": [
+        "politics.create-province"
+      ]
     },
     {
       "method": "edit.provinces.delete",
@@ -3443,8 +3455,10 @@
     },
     {
       "method": "edit.provinces.inspectCreateAtCell",
-      "classification": "read-primitive",
-      "actionIds": []
+      "classification": "semantic-action",
+      "actionIds": [
+        "politics.create-province"
+      ]
     },
     {
       "method": "edit.provinces.rename",
@@ -3590,8 +3604,10 @@
     },
     {
       "method": "edit.states.createAtCell",
-      "classification": "atomic-editor-primitive",
-      "actionIds": []
+      "classification": "semantic-action",
+      "actionIds": [
+        "politics.create-state"
+      ]
     },
     {
       "method": "edit.states.delete",
@@ -3604,8 +3620,10 @@
     },
     {
       "method": "edit.states.inspectCreateAtCell",
-      "classification": "read-primitive",
-      "actionIds": []
+      "classification": "semantic-action",
+      "actionIds": [
+        "politics.create-state"
+      ]
     },
     {
       "method": "edit.states.inspectMerge",
@@ -4536,6 +4554,15 @@
     {
       "rowId": "mode:note:add",
       "actionId": "notes.createAtCell",
+      "classification": "semantic-input-or-primitive",
+      "semanticActionIds": [
+        "editor.delete-with-impact",
+        "editor.import-collection"
+      ]
+    },
+    {
+      "rowId": "mode:regeneration-lock:select",
+      "actionId": "regenerationLocks.setMany",
       "classification": "semantic-input-or-primitive",
       "semanticActionIds": [
         "editor.delete-with-impact",
