@@ -142,8 +142,8 @@ for (const method of expectedMethods) {
   assert(consoleApiSource.includes(`"${method}": {stable: "draft"`), `元数据缺少 ${method}`);
 }
 const actionSignatures = {
-  "measurements.import": "import: measurements => importMeasurementsViaApi",
-  "cities.syncOwner": "syncOwner: cityId => syncCityOwnerViaApi",
+  "measurements.import": "import: (measurements, options = {}) => importMeasurementsViaApi",
+  "cities.syncOwner": "syncOwner: (cityId, options = {}) => syncCityOwnerViaApi",
   "cities.setVisual": "setVisual: (cityId, patch) => setCityVisualViaApi",
   "cities.resetVisual": "resetVisual: cityId => resetCityVisualViaApi",
   "provinces.applyChanges": "applyChanges: changes => applyProvinceChangesViaApi",
@@ -152,17 +152,17 @@ const actionSignatures = {
   "states.merge": "merge: options => mergeStatesViaApi",
   "states.inspectSplit": "inspectSplit: options => inspectStateSplitViaApi",
   "states.split": "split: options => splitStateViaApi",
-  "states.setCapital": "setCapital: (stateId, cityId) => setStateCapitalViaApi",
+  "states.setCapital": "setCapital: (stateId, cityId, options = {}) => setStateCapitalViaApi",
   "states.setGovernmentBatch": "setGovernmentBatch: (stateIds, governmentKey) => setStatesGovernmentBatchViaApi",
   "height.applyChanges": "applyChanges: (changes, editOptions = {}) => applyHeightChangesViaApi",
   "diplomacy.setRelation": "setRelation: (subjectId, objectId, relation, editOptions = {}) => setDiplomacyRelationViaApi",
-  "military.setRatios": "setRatios: (stateId, ratios) => setMilitaryRatiosViaApi",
-  "military.setStatus": "setStatus: (target, status) => setMilitaryStatusViaApi",
-  "military.setStatusBatch": "setStatusBatch: (targets, status) => setMilitaryStatusBatchViaApi",
-  "military.moveStation": "moveStation: (target, destination) => moveMilitaryStationViaApi",
-  "military.setBase": "setBase: target => setMilitaryBaseViaApi",
+  "military.setRatios": "setRatios: (stateId, ratios, options = {}) => setMilitaryRatiosViaApi",
+  "military.setStatus": "setStatus: (target, status, options = {}) => setMilitaryStatusViaApi",
+  "military.setStatusBatch": "setStatusBatch: (targets, status, options = {}) => setMilitaryStatusBatchViaApi",
+  "military.moveStation": "moveStation: (target, destination, options = {}) => moveMilitaryStationViaApi",
+  "military.setBase": "setBase: (target, options = {}) => setMilitaryBaseViaApi",
   "military.recordBattleEvent": "recordBattleEvent: (target, event = {}) => recordMilitaryBattleEventViaApi",
-  "military.importBattleEvents": "importBattleEvents: document => importMilitaryBattleEventsViaApi",
+  "military.importBattleEvents": "importBattleEvents: (document, options = {}) => importMilitaryBattleEventsViaApi",
   "military.clearBattleEvents": "clearBattleEvents: (target, editOptions = {}) => clearMilitaryBattleEventsViaApi",
   "military.rename": "rename: (target, name) => renameMilitaryRegimentViaApi",
   "zones.setStyle": "setStyle: (zoneId, patch) => setZoneStyleViaApi"
@@ -173,8 +173,8 @@ for (const field of ["affected:", "stale:", "noop:"]) assert(editResultSource.in
 assert(consoleApiSource.includes("buildDebugStateDump(state, documentRef, options, api)"), "debug.dumpState 没有复用真实 API 覆盖对象");
 assert.equal(expectedMethods.length, 20, "第 29 项冻结方法数量漂移");
 const declaredCounts = countDeclaredMethods(API_METHODS);
-assert.equal(declaredCounts.edit, 147, "edit capabilities 方法数不是 147");
-assert.equal(declaredCounts.total, 269, "公开 capabilities 方法总数不是 269");
+assert.equal(declaredCounts.edit, 156, "edit capabilities 方法数不是 156");
+assert.equal(declaredCounts.total, 279, "公开 capabilities 方法总数不是 279");
 
 console.log(JSON.stringify({
   ok: true,

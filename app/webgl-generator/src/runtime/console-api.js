@@ -181,7 +181,7 @@ export function createConsoleApi(documentRef, state, actions = {}) {
         rename: (measurementId, name) => apiCall(() => requireApiAction(actions.edit?.measurements?.rename, "edit.measurements.rename")(measurementId, name)),
         updatePoints: (measurementId, points, options = {}) => apiCall(() => requireApiAction(actions.edit?.measurements?.updatePoints, "edit.measurements.updatePoints")(measurementId, points, options)),
         delete: measurementId => apiCall(() => requireApiAction(actions.edit?.measurements?.delete, "edit.measurements.delete")(measurementId)),
-        import: measurements => apiCall(() => requireApiAction(actions.edit?.measurements?.import, "edit.measurements.import")(measurements))
+        import: (measurements, options = {}) => apiCall(() => requireApiAction(actions.edit?.measurements?.import, "edit.measurements.import")(measurements, options))
       }),
       cities: Object.freeze({
         add: gridCell => apiCall(() => requireApiAction(actions.edit?.cities?.add, "edit.cities.add")(gridCell)),
@@ -193,7 +193,8 @@ export function createConsoleApi(documentRef, state, actions = {}) {
         move: (cityId, target) => apiCall(() => requireApiAction(actions.edit?.cities?.move, "edit.cities.move")(cityId, target)),
         rename: (cityId, name) => apiCall(() => requireApiAction(actions.edit?.cities?.rename, "edit.cities.rename")(cityId, name)),
         setPopulation: (cityId, population) => apiCall(() => requireApiAction(actions.edit?.cities?.setPopulation, "edit.cities.setPopulation")(cityId, population)),
-        syncOwner: cityId => apiCall(() => requireApiAction(actions.edit?.cities?.syncOwner, "edit.cities.syncOwner")(cityId)),
+        inspectOwnerSync: cityId => apiCall(() => requireApiAction(actions.edit?.cities?.inspectOwnerSync, "edit.cities.inspectOwnerSync")(cityId)),
+        syncOwner: (cityId, options = {}) => apiCall(() => requireApiAction(actions.edit?.cities?.syncOwner, "edit.cities.syncOwner")(cityId, options)),
         setVisual: (cityId, patch) => apiCall(() => requireApiAction(actions.edit?.cities?.setVisual, "edit.cities.setVisual")(cityId, patch)),
         resetVisual: cityId => apiCall(() => requireApiAction(actions.edit?.cities?.resetVisual, "edit.cities.resetVisual")(cityId))
       }),
@@ -220,7 +221,8 @@ export function createConsoleApi(documentRef, state, actions = {}) {
         rename: (stateId, name) => apiCall(() => requireApiAction(actions.edit?.states?.rename, "edit.states.rename")(stateId, name)),
         setColor: (stateId, color) => apiCall(() => requireApiAction(actions.edit?.states?.setColor, "edit.states.setColor")(stateId, color)),
         setGovernment: (stateId, governmentKey, options = {}) => apiCall(() => requireApiAction(actions.edit?.states?.setGovernment, "edit.states.setGovernment")(stateId, governmentKey, options)),
-        setCapital: (stateId, cityId) => apiCall(() => requireApiAction(actions.edit?.states?.setCapital, "edit.states.setCapital")(stateId, cityId)),
+        inspectCapitalChange: (stateId, cityId) => apiCall(() => requireApiAction(actions.edit?.states?.inspectCapitalChange, "edit.states.inspectCapitalChange")(stateId, cityId)),
+        setCapital: (stateId, cityId, options = {}) => apiCall(() => requireApiAction(actions.edit?.states?.setCapital, "edit.states.setCapital")(stateId, cityId, options)),
         setGovernmentBatch: (stateIds, governmentKey) => apiCall(() => requireApiAction(actions.edit?.states?.setGovernmentBatch, "edit.states.setGovernmentBatch")(stateIds, governmentKey)),
         applyChanges: changes => apiCall(() => requireApiAction(actions.edit?.states?.applyChanges, "edit.states.applyChanges")(changes))
       }),
@@ -263,16 +265,21 @@ export function createConsoleApi(documentRef, state, actions = {}) {
         setMarketDisplay: (marketId, patch = {}) => apiCall(() => requireApiAction(actions.edit?.economy?.setMarketDisplay, "edit.economy.setMarketDisplay")(marketId, patch))
       }),
       diplomacy: Object.freeze({
+        inspectRelation: (subjectId, objectId, relation, options = {}) => apiCall(() => requireApiAction(actions.edit?.diplomacy?.inspectRelation, "edit.diplomacy.inspectRelation")(subjectId, objectId, relation, options)),
         setRelation: (subjectId, objectId, relation, options = {}) => apiCall(() => requireApiAction(actions.edit?.diplomacy?.setRelation, "edit.diplomacy.setRelation")(subjectId, objectId, relation, options))
       }),
       military: Object.freeze({
-        setRatios: (stateId, ratios) => apiCall(() => requireApiAction(actions.edit?.military?.setRatios, "edit.military.setRatios")(stateId, ratios)),
-        setStatus: (target, status) => apiCall(() => requireApiAction(actions.edit?.military?.setStatus, "edit.military.setStatus")(target, status)),
-        setStatusBatch: (targets, status) => apiCall(() => requireApiAction(actions.edit?.military?.setStatusBatch, "edit.military.setStatusBatch")(targets, status)),
-        moveStation: (target, destination) => apiCall(() => requireApiAction(actions.edit?.military?.moveStation, "edit.military.moveStation")(target, destination)),
-        setBase: target => apiCall(() => requireApiAction(actions.edit?.military?.setBase, "edit.military.setBase")(target)),
+        inspectRatios: (stateId, ratios) => apiCall(() => requireApiAction(actions.edit?.military?.inspectRatios, "edit.military.inspectRatios")(stateId, ratios)),
+        setRatios: (stateId, ratios, options = {}) => apiCall(() => requireApiAction(actions.edit?.military?.setRatios, "edit.military.setRatios")(stateId, ratios, options)),
+        inspectStatus: (targets, status) => apiCall(() => requireApiAction(actions.edit?.military?.inspectStatus, "edit.military.inspectStatus")(targets, status)),
+        setStatus: (target, status, options = {}) => apiCall(() => requireApiAction(actions.edit?.military?.setStatus, "edit.military.setStatus")(target, status, options)),
+        setStatusBatch: (targets, status, options = {}) => apiCall(() => requireApiAction(actions.edit?.military?.setStatusBatch, "edit.military.setStatusBatch")(targets, status, options)),
+        inspectMoveStation: (target, destination) => apiCall(() => requireApiAction(actions.edit?.military?.inspectMoveStation, "edit.military.inspectMoveStation")(target, destination)),
+        moveStation: (target, destination, options = {}) => apiCall(() => requireApiAction(actions.edit?.military?.moveStation, "edit.military.moveStation")(target, destination, options)),
+        inspectBase: target => apiCall(() => requireApiAction(actions.edit?.military?.inspectBase, "edit.military.inspectBase")(target)),
+        setBase: (target, options = {}) => apiCall(() => requireApiAction(actions.edit?.military?.setBase, "edit.military.setBase")(target, options)),
         recordBattleEvent: (target, event = {}) => apiCall(() => requireApiAction(actions.edit?.military?.recordBattleEvent, "edit.military.recordBattleEvent")(target, event)),
-        importBattleEvents: document => apiCall(() => requireApiAction(actions.edit?.military?.importBattleEvents, "edit.military.importBattleEvents")(document)),
+        importBattleEvents: (document, options = {}) => apiCall(() => requireApiAction(actions.edit?.military?.importBattleEvents, "edit.military.importBattleEvents")(document, options)),
         clearBattleEvents: (target, options = {}) => apiCall(() => requireApiAction(actions.edit?.military?.clearBattleEvents, "edit.military.clearBattleEvents")(target, options)),
         rename: (target, name) => apiCall(() => requireApiAction(actions.edit?.military?.rename, "edit.military.rename")(target, name))
       }),
@@ -284,24 +291,26 @@ export function createConsoleApi(documentRef, state, actions = {}) {
         setStyle: (zoneId, patch) => apiCall(() => requireApiAction(actions.edit?.zones?.setStyle, "edit.zones.setStyle")(zoneId, patch))
       }),
       cultures: Object.freeze({
+        inspectLifecycle: (operation, request = {}) => apiCall(() => requireApiAction(actions.edit?.cultures?.inspectLifecycle, "edit.cultures.inspectLifecycle")(operation, request)),
         add: (options = {}) => apiCall(() => requireApiAction(actions.edit?.cultures?.add, "edit.cultures.add")(options)),
-        assignCells: (cultureId, gridCellIds) => apiCall(() => requireApiAction(actions.edit?.cultures?.assignCells, "edit.cultures.assignCells")(cultureId, gridCellIds)),
+        assignCells: (cultureId, gridCellIds, options = {}) => apiCall(() => requireApiAction(actions.edit?.cultures?.assignCells, "edit.cultures.assignCells")(cultureId, gridCellIds, options)),
         inspectExpansion: (cultureId, options = {}) => apiCall(() => requireApiAction(actions.edit?.cultures?.inspectExpansion, "edit.cultures.inspectExpansion")(cultureId, options)),
         applyExpansion: (cultureId, options = {}) => apiCall(() => requireApiAction(actions.edit?.cultures?.applyExpansion, "edit.cultures.applyExpansion")(cultureId, options)),
         delete: (cultureId, options = {}) => apiCall(() => requireApiAction(actions.edit?.cultures?.delete, "edit.cultures.delete")(cultureId, options)),
         rename: (cultureId, name) => apiCall(() => requireApiAction(actions.edit?.cultures?.rename, "edit.cultures.rename")(cultureId, name)),
         setColor: (cultureId, color) => apiCall(() => requireApiAction(actions.edit?.cultures?.setColor, "edit.cultures.setColor")(cultureId, color)),
-        setParent: (cultureId, parentId) => apiCall(() => requireApiAction(actions.edit?.cultures?.setParent, "edit.cultures.setParent")(cultureId, parentId))
+        setParent: (cultureId, parentId, options = {}) => apiCall(() => requireApiAction(actions.edit?.cultures?.setParent, "edit.cultures.setParent")(cultureId, parentId, options))
       }),
       religions: Object.freeze({
+        inspectLifecycle: (operation, request = {}) => apiCall(() => requireApiAction(actions.edit?.religions?.inspectLifecycle, "edit.religions.inspectLifecycle")(operation, request)),
         add: (options = {}) => apiCall(() => requireApiAction(actions.edit?.religions?.add, "edit.religions.add")(options)),
-        assignCells: (religionId, gridCellIds) => apiCall(() => requireApiAction(actions.edit?.religions?.assignCells, "edit.religions.assignCells")(religionId, gridCellIds)),
+        assignCells: (religionId, gridCellIds, options = {}) => apiCall(() => requireApiAction(actions.edit?.religions?.assignCells, "edit.religions.assignCells")(religionId, gridCellIds, options)),
         inspectExpansion: (religionId, options = {}) => apiCall(() => requireApiAction(actions.edit?.religions?.inspectExpansion, "edit.religions.inspectExpansion")(religionId, options)),
         applyExpansion: (religionId, options = {}) => apiCall(() => requireApiAction(actions.edit?.religions?.applyExpansion, "edit.religions.applyExpansion")(religionId, options)),
         delete: (religionId, options = {}) => apiCall(() => requireApiAction(actions.edit?.religions?.delete, "edit.religions.delete")(religionId, options)),
         rename: (religionId, name) => apiCall(() => requireApiAction(actions.edit?.religions?.rename, "edit.religions.rename")(religionId, name)),
         setColor: (religionId, color) => apiCall(() => requireApiAction(actions.edit?.religions?.setColor, "edit.religions.setColor")(religionId, color)),
-        setParent: (religionId, parentId) => apiCall(() => requireApiAction(actions.edit?.religions?.setParent, "edit.religions.setParent")(religionId, parentId))
+        setParent: (religionId, parentId, options = {}) => apiCall(() => requireApiAction(actions.edit?.religions?.setParent, "edit.religions.setParent")(religionId, parentId, options))
       }),
       routes: Object.freeze({
         create: (options = {}) => apiCall(() => requireApiAction(actions.edit?.routes?.create, "edit.routes.create")(options)),
@@ -369,6 +378,7 @@ export function createConsoleApi(documentRef, state, actions = {}) {
       exportImportDiagnostic: (options = {}) => apiCall(() => requireApiAction(actions.data?.exportImportDiagnostic, "data.exportImportDiagnostic")(options)),
       saveBrowserMap: (options = {}) => apiCall(() => requireApiAction(actions.data?.saveBrowserMap, "data.saveBrowserMap")(options)),
       restoreBrowserMap: (options = {}) => apiCall(() => requireApiAction(actions.data?.restoreBrowserMap, "data.restoreBrowserMap")(options)),
+      inspectCollectionImport: (kind, document, options = {}) => apiCall(() => requireApiAction(actions.data?.inspectCollectionImport, "data.inspectCollectionImport")(kind, document, options)),
       importMap: (document, options = {}) => apiCall(() => requireApiAction(actions.data?.importMap, "data.importMap")(document, options)),
       importGEO: (document, options = {}) => apiCall(() => requireApiAction(actions.data?.importGEO, "data.importGEO")(document, options)),
       importHeightmap: (payload, options = {}) => apiCall(() => requireApiAction(actions.data?.importHeightmap, "data.importHeightmap")(payload, options))
@@ -578,6 +588,7 @@ export function buildMethodMetadata() {
       "cities.move": {stable: "draft", mutates: "settlements-routes", undoable: true, async: false, requiresConfirm: false},
       "cities.rename": {stable: "draft", mutates: "settlements", undoable: true, async: false, requiresConfirm: false},
       "cities.setPopulation": {stable: "draft", mutates: "settlements", undoable: true, async: false, requiresConfirm: false},
+      "cities.inspectOwnerSync": {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
       "cities.syncOwner": {stable: "draft", mutates: "settlements", undoable: true, async: false, requiresConfirm: false},
       "cities.setVisual": {stable: "draft", mutates: "settlements", undoable: true, async: false, requiresConfirm: false},
       "cities.resetVisual": {stable: "draft", mutates: "settlements", undoable: true, async: false, requiresConfirm: false},
@@ -601,6 +612,7 @@ export function buildMethodMetadata() {
       "states.rename": {stable: "draft", mutates: "political-entities", undoable: true, async: false, requiresConfirm: false},
       "states.setColor": {stable: "draft", mutates: "political-entities", undoable: true, async: false, requiresConfirm: false},
       "states.setGovernment": {stable: "draft", mutates: "political-entities", undoable: true, async: false, requiresConfirm: false},
+      "states.inspectCapitalChange": {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
       "states.setCapital": {stable: "draft", mutates: "political-entities", undoable: true, async: false, requiresConfirm: false},
       "states.setGovernmentBatch": {stable: "draft", mutates: "political-entities", undoable: true, async: false, requiresConfirm: false},
       "states.applyChanges": {stable: "draft", mutates: "political-entities", undoable: true, async: false, requiresConfirm: false},
@@ -634,11 +646,16 @@ export function buildMethodMetadata() {
       "economy.rebuild": {stable: "draft", mutates: "economy", undoable: true, async: false, requiresConfirm: true},
       "economy.setGoodDisplay": {stable: "draft", mutates: "economy-display", undoable: true, async: false, requiresConfirm: false},
       "economy.setMarketDisplay": {stable: "draft", mutates: "economy-display", undoable: true, async: false, requiresConfirm: false},
-      "diplomacy.setRelation": {stable: "draft", mutates: "diplomacy", undoable: true, async: false, requiresConfirm: false},
+      "diplomacy.inspectRelation": {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
+      "diplomacy.setRelation": {stable: "draft", mutates: "diplomacy", undoable: true, async: false, requiresConfirm: false, conditionalConfirm: "inspector.requiresConfirm"},
+      "military.inspectRatios": {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
       "military.setRatios": {stable: "draft", mutates: "military", undoable: true, async: false, requiresConfirm: false},
+      "military.inspectStatus": {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
       "military.setStatus": {stable: "draft", mutates: "military", undoable: true, async: false, requiresConfirm: false},
       "military.setStatusBatch": {stable: "draft", mutates: "military", undoable: true, async: false, requiresConfirm: false},
+      "military.inspectMoveStation": {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
       "military.moveStation": {stable: "draft", mutates: "military", undoable: true, async: false, requiresConfirm: false},
+      "military.inspectBase": {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
       "military.setBase": {stable: "draft", mutates: "military", undoable: true, async: false, requiresConfirm: false},
       "military.recordBattleEvent": {stable: "draft", mutates: "military", undoable: true, async: false, requiresConfirm: false},
       "military.importBattleEvents": {stable: "draft", mutates: "military", undoable: true, async: false, requiresConfirm: false},
@@ -649,6 +666,7 @@ export function buildMethodMetadata() {
       "zones.inspectDelete": {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
       "zones.delete": {stable: "draft", mutates: "zones", undoable: true, async: false, requiresConfirm: false},
       "zones.setStyle": {stable: "draft", mutates: "zones", undoable: true, async: false, requiresConfirm: false},
+      "cultures.inspectLifecycle": {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
       "cultures.add": {stable: "draft", mutates: "cultures", undoable: true, async: false, requiresConfirm: false},
       "cultures.assignCells": {stable: "draft", mutates: "cultures", undoable: true, async: false, requiresConfirm: false},
       "cultures.inspectExpansion": {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
@@ -657,6 +675,7 @@ export function buildMethodMetadata() {
       "cultures.rename": {stable: "draft", mutates: "cultures", undoable: true, async: false, requiresConfirm: false},
       "cultures.setColor": {stable: "draft", mutates: "cultures", undoable: true, async: false, requiresConfirm: false},
       "cultures.setParent": {stable: "draft", mutates: "cultures", undoable: true, async: false, requiresConfirm: false},
+      "religions.inspectLifecycle": {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
       "religions.add": {stable: "draft", mutates: "religions", undoable: true, async: false, requiresConfirm: false},
       "religions.assignCells": {stable: "draft", mutates: "religions", undoable: true, async: false, requiresConfirm: false},
       "religions.inspectExpansion": {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
@@ -719,6 +738,7 @@ export function buildMethodMetadata() {
       exportImportDiagnostic: {stable: "draft", mutates: "download-or-export-result", undoable: false, async: false, requiresConfirm: false},
       saveBrowserMap: {stable: "draft", mutates: "browser-storage", undoable: false, async: true, requiresConfirm: false},
       restoreBrowserMap: {stable: "draft", mutates: "replace-map", undoable: false, async: true, requiresConfirm: true},
+      inspectCollectionImport: {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
       importMap: {stable: "draft", mutates: "replace-map", undoable: false, async: true, requiresConfirm: true},
       importGEO: {stable: "draft", mutates: "map-or-measurements", undoable: true, async: true, requiresConfirm: true},
       importHeightmap: {stable: "draft", mutates: "replace-map", undoable: false, async: true, requiresConfirm: true}

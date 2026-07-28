@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sourceDigest": "abcc8df78fccec8ad557aa19c8d3db495a585a5e6c6479b36fe063156e5c08fe",
+  "sourceDigest": "1047caeb4ad0d4ab6968de8ce369135e71f8a4e1e36053b96c03a60a7f70f659",
   "sourceRoots": [
     "app/webgl-generator/index.html",
     "app/webgl-generator/src/**/*.{js,vue}",
@@ -11,10 +11,10 @@
     "includedInteractionSurfaces": 87,
     "excludedInteractionSurfaces": 18,
     "canvasModes": 29,
-    "runtimeActions": 223,
-    "apiActionBindings": 222,
+    "runtimeActions": 233,
+    "apiActionBindings": 232,
     "commandAndInspectorExports": 189,
-    "publicApiMethods": 269
+    "publicApiMethods": 279
   },
   "statusPolicy": {
     "covered": "公共 API 已存在且与底层 action / command 或只读 helper 共路径",
@@ -23,8 +23,8 @@
     "gap": "适合参数化且没有公共 API，必须在第 200 项关闭"
   },
   "totals": {
-    "rows": 1048,
-    "covered": 975,
+    "rows": 1078,
+    "covered": 1005,
     "excluded": 73,
     "deferred-owned": 0,
     "gap": 0,
@@ -644,6 +644,35 @@
       "exclusionReason": ""
     },
     {
+      "matrixId": "action:data.inspectCollectionImport",
+      "capabilityId": "data.inspectCollectionImport",
+      "title": "Runtime action data.inspectCollectionImport",
+      "sourceKind": "runtime-action",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/app.js"
+      ],
+      "uiEntry": "",
+      "action": "data.inspectCollectionImport",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "data.inspectCollectionImport"
+      ],
+      "inputSpace": "method-schema",
+      "mutates": "none",
+      "preflight": "readonly",
+      "businessCodes": [],
+      "confirm": "按 API 确认清单",
+      "undoOrRollback": "not-applicable",
+      "async": false,
+      "compatibility": "UI 与 API 共用同一 runtime action",
+      "evidence": [
+        "app/webgl-generator/src/runtime/console-api.js"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
       "matrixId": "action:data.restoreBrowserMap",
       "capabilityId": "data.restoreBrowserMap",
       "title": "Runtime action data.restoreBrowserMap",
@@ -992,6 +1021,35 @@
       "exclusionReason": ""
     },
     {
+      "matrixId": "action:edit.cities.inspectOwnerSync",
+      "capabilityId": "edit.cities.inspectOwnerSync",
+      "title": "Runtime action edit.cities.inspectOwnerSync",
+      "sourceKind": "runtime-action",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/app.js"
+      ],
+      "uiEntry": "",
+      "action": "edit.cities.inspectOwnerSync",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "edit.cities.inspectOwnerSync"
+      ],
+      "inputSpace": "method-schema",
+      "mutates": "none",
+      "preflight": "readonly",
+      "businessCodes": [],
+      "confirm": "按 API 确认清单",
+      "undoOrRollback": "not-applicable",
+      "async": false,
+      "compatibility": "UI 与 API 共用同一 runtime action",
+      "evidence": [
+        "app/webgl-generator/src/runtime/console-api.js"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
       "matrixId": "action:edit.cities.move",
       "capabilityId": "edit.cities.move",
       "title": "Runtime action edit.cities.move",
@@ -1311,6 +1369,35 @@
       "exclusionReason": ""
     },
     {
+      "matrixId": "action:edit.cultures.inspectLifecycle",
+      "capabilityId": "edit.cultures.inspectLifecycle",
+      "title": "Runtime action edit.cultures.inspectLifecycle",
+      "sourceKind": "runtime-action",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/app.js"
+      ],
+      "uiEntry": "",
+      "action": "edit.cultures.inspectLifecycle",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "edit.cultures.inspectLifecycle"
+      ],
+      "inputSpace": "method-schema",
+      "mutates": "none",
+      "preflight": "readonly",
+      "businessCodes": [],
+      "confirm": "按 API 确认清单",
+      "undoOrRollback": "not-applicable",
+      "async": false,
+      "compatibility": "UI 与 API 共用同一 runtime action",
+      "evidence": [
+        "app/webgl-generator/src/runtime/console-api.js"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
       "matrixId": "action:edit.cultures.rename",
       "capabilityId": "edit.cultures.rename",
       "title": "Runtime action edit.cultures.rename",
@@ -1388,6 +1475,35 @@
       "businessCodes": [],
       "confirm": "按 API 确认清单",
       "undoOrRollback": "按方法元数据",
+      "async": false,
+      "compatibility": "UI 与 API 共用同一 runtime action",
+      "evidence": [
+        "app/webgl-generator/src/runtime/console-api.js"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "action:edit.diplomacy.inspectRelation",
+      "capabilityId": "edit.diplomacy.inspectRelation",
+      "title": "Runtime action edit.diplomacy.inspectRelation",
+      "sourceKind": "runtime-action",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/app.js"
+      ],
+      "uiEntry": "",
+      "action": "edit.diplomacy.inspectRelation",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "edit.diplomacy.inspectRelation"
+      ],
+      "inputSpace": "method-schema",
+      "mutates": "none",
+      "preflight": "readonly",
+      "businessCodes": [],
+      "confirm": "按 API 确认清单",
+      "undoOrRollback": "not-applicable",
       "async": false,
       "compatibility": "UI 与 API 共用同一 runtime action",
       "evidence": [
@@ -3080,6 +3196,122 @@
       "exclusionReason": ""
     },
     {
+      "matrixId": "action:edit.military.inspectBase",
+      "capabilityId": "edit.military.inspectBase",
+      "title": "Runtime action edit.military.inspectBase",
+      "sourceKind": "runtime-action",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/app.js"
+      ],
+      "uiEntry": "",
+      "action": "edit.military.inspectBase",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "edit.military.inspectBase"
+      ],
+      "inputSpace": "method-schema",
+      "mutates": "none",
+      "preflight": "readonly",
+      "businessCodes": [],
+      "confirm": "按 API 确认清单",
+      "undoOrRollback": "not-applicable",
+      "async": false,
+      "compatibility": "UI 与 API 共用同一 runtime action",
+      "evidence": [
+        "app/webgl-generator/src/runtime/console-api.js"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "action:edit.military.inspectMoveStation",
+      "capabilityId": "edit.military.inspectMoveStation",
+      "title": "Runtime action edit.military.inspectMoveStation",
+      "sourceKind": "runtime-action",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/app.js"
+      ],
+      "uiEntry": "",
+      "action": "edit.military.inspectMoveStation",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "edit.military.inspectMoveStation"
+      ],
+      "inputSpace": "method-schema",
+      "mutates": "none",
+      "preflight": "readonly",
+      "businessCodes": [],
+      "confirm": "按 API 确认清单",
+      "undoOrRollback": "not-applicable",
+      "async": false,
+      "compatibility": "UI 与 API 共用同一 runtime action",
+      "evidence": [
+        "app/webgl-generator/src/runtime/console-api.js"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "action:edit.military.inspectRatios",
+      "capabilityId": "edit.military.inspectRatios",
+      "title": "Runtime action edit.military.inspectRatios",
+      "sourceKind": "runtime-action",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/app.js"
+      ],
+      "uiEntry": "",
+      "action": "edit.military.inspectRatios",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "edit.military.inspectRatios"
+      ],
+      "inputSpace": "method-schema",
+      "mutates": "none",
+      "preflight": "readonly",
+      "businessCodes": [],
+      "confirm": "按 API 确认清单",
+      "undoOrRollback": "not-applicable",
+      "async": false,
+      "compatibility": "UI 与 API 共用同一 runtime action",
+      "evidence": [
+        "app/webgl-generator/src/runtime/console-api.js"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "action:edit.military.inspectStatus",
+      "capabilityId": "edit.military.inspectStatus",
+      "title": "Runtime action edit.military.inspectStatus",
+      "sourceKind": "runtime-action",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/app.js"
+      ],
+      "uiEntry": "",
+      "action": "edit.military.inspectStatus",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "edit.military.inspectStatus"
+      ],
+      "inputSpace": "method-schema",
+      "mutates": "none",
+      "preflight": "readonly",
+      "businessCodes": [],
+      "confirm": "按 API 确认清单",
+      "undoOrRollback": "not-applicable",
+      "async": false,
+      "compatibility": "UI 与 API 共用同一 runtime action",
+      "evidence": [
+        "app/webgl-generator/src/runtime/console-api.js"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
       "matrixId": "action:edit.military.moveStation",
       "capabilityId": "edit.military.moveStation",
       "title": "Runtime action edit.military.moveStation",
@@ -3921,6 +4153,35 @@
       "exclusionReason": ""
     },
     {
+      "matrixId": "action:edit.religions.inspectLifecycle",
+      "capabilityId": "edit.religions.inspectLifecycle",
+      "title": "Runtime action edit.religions.inspectLifecycle",
+      "sourceKind": "runtime-action",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/app.js"
+      ],
+      "uiEntry": "",
+      "action": "edit.religions.inspectLifecycle",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "edit.religions.inspectLifecycle"
+      ],
+      "inputSpace": "method-schema",
+      "mutates": "none",
+      "preflight": "readonly",
+      "businessCodes": [],
+      "confirm": "按 API 确认清单",
+      "undoOrRollback": "not-applicable",
+      "async": false,
+      "compatibility": "UI 与 API 共用同一 runtime action",
+      "evidence": [
+        "app/webgl-generator/src/runtime/console-api.js"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
       "matrixId": "action:edit.religions.rename",
       "capabilityId": "edit.religions.rename",
       "title": "Runtime action edit.religions.rename",
@@ -4491,6 +4752,35 @@
       "businessCodes": [],
       "confirm": "按 API 确认清单",
       "undoOrRollback": "按方法元数据",
+      "async": false,
+      "compatibility": "UI 与 API 共用同一 runtime action",
+      "evidence": [
+        "app/webgl-generator/src/runtime/console-api.js"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "action:edit.states.inspectCapitalChange",
+      "capabilityId": "edit.states.inspectCapitalChange",
+      "title": "Runtime action edit.states.inspectCapitalChange",
+      "sourceKind": "runtime-action",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/app.js"
+      ],
+      "uiEntry": "",
+      "action": "edit.states.inspectCapitalChange",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "edit.states.inspectCapitalChange"
+      ],
+      "inputSpace": "method-schema",
+      "mutates": "none",
+      "preflight": "readonly",
+      "businessCodes": [],
+      "confirm": "按 API 确认清单",
+      "undoOrRollback": "not-applicable",
       "async": false,
       "compatibility": "UI 与 API 共用同一 runtime action",
       "evidence": [
@@ -7132,6 +7422,36 @@
       "exclusionReason": ""
     },
     {
+      "matrixId": "api-action-binding:data.inspectCollectionImport",
+      "capabilityId": "data.inspectCollectionImport",
+      "title": "API action 绑定 data.inspectCollectionImport",
+      "sourceKind": "api-action-binding",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/console-api.js",
+        "app/webgl-generator/src/runtime/app.js"
+      ],
+      "uiEntry": "",
+      "action": "data.inspectCollectionImport",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "data.inspectCollectionImport"
+      ],
+      "inputSpace": "method-schema",
+      "mutates": "none",
+      "preflight": "公共 API 绑定必须能解析到真实 runtime action",
+      "businessCodes": [],
+      "confirm": "按 API 确认清单",
+      "undoOrRollback": "not-applicable",
+      "async": false,
+      "compatibility": "旧 API action 路径保持可调用",
+      "evidence": [
+        "tools/webgl-generator-api-action-convergence-regression.mjs"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
       "matrixId": "api-action-binding:data.restoreBrowserMap",
       "capabilityId": "data.restoreBrowserMap",
       "title": "API action 绑定 data.restoreBrowserMap",
@@ -7492,6 +7812,36 @@
       "exclusionReason": ""
     },
     {
+      "matrixId": "api-action-binding:edit.cities.inspectOwnerSync",
+      "capabilityId": "edit.cities.inspectOwnerSync",
+      "title": "API action 绑定 edit.cities.inspectOwnerSync",
+      "sourceKind": "api-action-binding",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/console-api.js",
+        "app/webgl-generator/src/runtime/app.js"
+      ],
+      "uiEntry": "",
+      "action": "edit.cities.inspectOwnerSync",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "edit.cities.inspectOwnerSync"
+      ],
+      "inputSpace": "method-schema",
+      "mutates": "none",
+      "preflight": "公共 API 绑定必须能解析到真实 runtime action",
+      "businessCodes": [],
+      "confirm": "按 API 确认清单",
+      "undoOrRollback": "not-applicable",
+      "async": false,
+      "compatibility": "旧 API action 路径保持可调用",
+      "evidence": [
+        "tools/webgl-generator-api-action-convergence-regression.mjs"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
       "matrixId": "api-action-binding:edit.cities.move",
       "capabilityId": "edit.cities.move",
       "title": "API action 绑定 edit.cities.move",
@@ -7822,6 +8172,36 @@
       "exclusionReason": ""
     },
     {
+      "matrixId": "api-action-binding:edit.cultures.inspectLifecycle",
+      "capabilityId": "edit.cultures.inspectLifecycle",
+      "title": "API action 绑定 edit.cultures.inspectLifecycle",
+      "sourceKind": "api-action-binding",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/console-api.js",
+        "app/webgl-generator/src/runtime/app.js"
+      ],
+      "uiEntry": "",
+      "action": "edit.cultures.inspectLifecycle",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "edit.cultures.inspectLifecycle"
+      ],
+      "inputSpace": "method-schema",
+      "mutates": "none",
+      "preflight": "公共 API 绑定必须能解析到真实 runtime action",
+      "businessCodes": [],
+      "confirm": "按 API 确认清单",
+      "undoOrRollback": "not-applicable",
+      "async": false,
+      "compatibility": "旧 API action 路径保持可调用",
+      "evidence": [
+        "tools/webgl-generator-api-action-convergence-regression.mjs"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
       "matrixId": "api-action-binding:edit.cultures.rename",
       "capabilityId": "edit.cultures.rename",
       "title": "API action 绑定 edit.cultures.rename",
@@ -7902,6 +8282,36 @@
       "businessCodes": [],
       "confirm": "按 API 确认清单",
       "undoOrRollback": "按方法元数据",
+      "async": false,
+      "compatibility": "旧 API action 路径保持可调用",
+      "evidence": [
+        "tools/webgl-generator-api-action-convergence-regression.mjs"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "api-action-binding:edit.diplomacy.inspectRelation",
+      "capabilityId": "edit.diplomacy.inspectRelation",
+      "title": "API action 绑定 edit.diplomacy.inspectRelation",
+      "sourceKind": "api-action-binding",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/console-api.js",
+        "app/webgl-generator/src/runtime/app.js"
+      ],
+      "uiEntry": "",
+      "action": "edit.diplomacy.inspectRelation",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "edit.diplomacy.inspectRelation"
+      ],
+      "inputSpace": "method-schema",
+      "mutates": "none",
+      "preflight": "公共 API 绑定必须能解析到真实 runtime action",
+      "businessCodes": [],
+      "confirm": "按 API 确认清单",
+      "undoOrRollback": "not-applicable",
       "async": false,
       "compatibility": "旧 API action 路径保持可调用",
       "evidence": [
@@ -9652,6 +10062,126 @@
       "exclusionReason": ""
     },
     {
+      "matrixId": "api-action-binding:edit.military.inspectBase",
+      "capabilityId": "edit.military.inspectBase",
+      "title": "API action 绑定 edit.military.inspectBase",
+      "sourceKind": "api-action-binding",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/console-api.js",
+        "app/webgl-generator/src/runtime/app.js"
+      ],
+      "uiEntry": "",
+      "action": "edit.military.inspectBase",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "edit.military.inspectBase"
+      ],
+      "inputSpace": "method-schema",
+      "mutates": "none",
+      "preflight": "公共 API 绑定必须能解析到真实 runtime action",
+      "businessCodes": [],
+      "confirm": "按 API 确认清单",
+      "undoOrRollback": "not-applicable",
+      "async": false,
+      "compatibility": "旧 API action 路径保持可调用",
+      "evidence": [
+        "tools/webgl-generator-api-action-convergence-regression.mjs"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "api-action-binding:edit.military.inspectMoveStation",
+      "capabilityId": "edit.military.inspectMoveStation",
+      "title": "API action 绑定 edit.military.inspectMoveStation",
+      "sourceKind": "api-action-binding",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/console-api.js",
+        "app/webgl-generator/src/runtime/app.js"
+      ],
+      "uiEntry": "",
+      "action": "edit.military.inspectMoveStation",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "edit.military.inspectMoveStation"
+      ],
+      "inputSpace": "method-schema",
+      "mutates": "none",
+      "preflight": "公共 API 绑定必须能解析到真实 runtime action",
+      "businessCodes": [],
+      "confirm": "按 API 确认清单",
+      "undoOrRollback": "not-applicable",
+      "async": false,
+      "compatibility": "旧 API action 路径保持可调用",
+      "evidence": [
+        "tools/webgl-generator-api-action-convergence-regression.mjs"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "api-action-binding:edit.military.inspectRatios",
+      "capabilityId": "edit.military.inspectRatios",
+      "title": "API action 绑定 edit.military.inspectRatios",
+      "sourceKind": "api-action-binding",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/console-api.js",
+        "app/webgl-generator/src/runtime/app.js"
+      ],
+      "uiEntry": "",
+      "action": "edit.military.inspectRatios",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "edit.military.inspectRatios"
+      ],
+      "inputSpace": "method-schema",
+      "mutates": "none",
+      "preflight": "公共 API 绑定必须能解析到真实 runtime action",
+      "businessCodes": [],
+      "confirm": "按 API 确认清单",
+      "undoOrRollback": "not-applicable",
+      "async": false,
+      "compatibility": "旧 API action 路径保持可调用",
+      "evidence": [
+        "tools/webgl-generator-api-action-convergence-regression.mjs"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "api-action-binding:edit.military.inspectStatus",
+      "capabilityId": "edit.military.inspectStatus",
+      "title": "API action 绑定 edit.military.inspectStatus",
+      "sourceKind": "api-action-binding",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/console-api.js",
+        "app/webgl-generator/src/runtime/app.js"
+      ],
+      "uiEntry": "",
+      "action": "edit.military.inspectStatus",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "edit.military.inspectStatus"
+      ],
+      "inputSpace": "method-schema",
+      "mutates": "none",
+      "preflight": "公共 API 绑定必须能解析到真实 runtime action",
+      "businessCodes": [],
+      "confirm": "按 API 确认清单",
+      "undoOrRollback": "not-applicable",
+      "async": false,
+      "compatibility": "旧 API action 路径保持可调用",
+      "evidence": [
+        "tools/webgl-generator-api-action-convergence-regression.mjs"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
       "matrixId": "api-action-binding:edit.military.moveStation",
       "capabilityId": "edit.military.moveStation",
       "title": "API action 绑定 edit.military.moveStation",
@@ -10522,6 +11052,36 @@
       "exclusionReason": ""
     },
     {
+      "matrixId": "api-action-binding:edit.religions.inspectLifecycle",
+      "capabilityId": "edit.religions.inspectLifecycle",
+      "title": "API action 绑定 edit.religions.inspectLifecycle",
+      "sourceKind": "api-action-binding",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/console-api.js",
+        "app/webgl-generator/src/runtime/app.js"
+      ],
+      "uiEntry": "",
+      "action": "edit.religions.inspectLifecycle",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "edit.religions.inspectLifecycle"
+      ],
+      "inputSpace": "method-schema",
+      "mutates": "none",
+      "preflight": "公共 API 绑定必须能解析到真实 runtime action",
+      "businessCodes": [],
+      "confirm": "按 API 确认清单",
+      "undoOrRollback": "not-applicable",
+      "async": false,
+      "compatibility": "旧 API action 路径保持可调用",
+      "evidence": [
+        "tools/webgl-generator-api-action-convergence-regression.mjs"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
       "matrixId": "api-action-binding:edit.religions.rename",
       "capabilityId": "edit.religions.rename",
       "title": "API action 绑定 edit.religions.rename",
@@ -11112,6 +11672,36 @@
       "businessCodes": [],
       "confirm": "按 API 确认清单",
       "undoOrRollback": "按方法元数据",
+      "async": false,
+      "compatibility": "旧 API action 路径保持可调用",
+      "evidence": [
+        "tools/webgl-generator-api-action-convergence-regression.mjs"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "api-action-binding:edit.states.inspectCapitalChange",
+      "capabilityId": "edit.states.inspectCapitalChange",
+      "title": "API action 绑定 edit.states.inspectCapitalChange",
+      "sourceKind": "api-action-binding",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/console-api.js",
+        "app/webgl-generator/src/runtime/app.js"
+      ],
+      "uiEntry": "",
+      "action": "edit.states.inspectCapitalChange",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "edit.states.inspectCapitalChange"
+      ],
+      "inputSpace": "method-schema",
+      "mutates": "none",
+      "preflight": "公共 API 绑定必须能解析到真实 runtime action",
+      "businessCodes": [],
+      "confirm": "按 API 确认清单",
+      "undoOrRollback": "not-applicable",
       "async": false,
       "compatibility": "旧 API action 路径保持可调用",
       "evidence": [
@@ -14278,6 +14868,37 @@
       "exclusionReason": ""
     },
     {
+      "matrixId": "api:data.inspectCollectionImport",
+      "capabilityId": "data.inspectCollectionImport",
+      "title": "公共 API data.inspectCollectionImport",
+      "sourceKind": "public-api",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/api-contract.js",
+        "app/webgl-generator/src/runtime/console-api.js"
+      ],
+      "uiEntry": "",
+      "action": "data.inspectCollectionImport",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "data.inspectCollectionImport"
+      ],
+      "inputSpace": "info.describe(method)",
+      "mutates": "none",
+      "preflight": "由 info.describe(method) 与领域 inspector 发现",
+      "businessCodes": [],
+      "confirm": "由 methodMetadata.requiresConfirm 发现",
+      "undoOrRollback": "由 methodMetadata.undoable 与结果 metadata 发现",
+      "async": false,
+      "compatibility": "受 API 主版本和方法稳定性契约保护",
+      "evidence": [
+        "tools/webgl-generator-api-capabilities-regression.mjs",
+        "tools/webgl-generator-api-stability-contract-regression.mjs"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
       "matrixId": "api:data.restoreBrowserMap",
       "capabilityId": "data.restoreBrowserMap",
       "title": "公共 API data.restoreBrowserMap",
@@ -14867,6 +15488,37 @@
       "exclusionReason": ""
     },
     {
+      "matrixId": "api:edit.cities.inspectOwnerSync",
+      "capabilityId": "edit.cities.inspectOwnerSync",
+      "title": "公共 API edit.cities.inspectOwnerSync",
+      "sourceKind": "public-api",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/api-contract.js",
+        "app/webgl-generator/src/runtime/console-api.js"
+      ],
+      "uiEntry": "",
+      "action": "edit.cities.inspectOwnerSync",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "edit.cities.inspectOwnerSync"
+      ],
+      "inputSpace": "info.describe(method)",
+      "mutates": "none",
+      "preflight": "由 info.describe(method) 与领域 inspector 发现",
+      "businessCodes": [],
+      "confirm": "由 methodMetadata.requiresConfirm 发现",
+      "undoOrRollback": "由 methodMetadata.undoable 与结果 metadata 发现",
+      "async": false,
+      "compatibility": "受 API 主版本和方法稳定性契约保护",
+      "evidence": [
+        "tools/webgl-generator-api-capabilities-regression.mjs",
+        "tools/webgl-generator-api-stability-contract-regression.mjs"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
       "matrixId": "api:edit.cities.move",
       "capabilityId": "edit.cities.move",
       "title": "公共 API edit.cities.move",
@@ -15208,6 +15860,37 @@
       "exclusionReason": ""
     },
     {
+      "matrixId": "api:edit.cultures.inspectLifecycle",
+      "capabilityId": "edit.cultures.inspectLifecycle",
+      "title": "公共 API edit.cultures.inspectLifecycle",
+      "sourceKind": "public-api",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/api-contract.js",
+        "app/webgl-generator/src/runtime/console-api.js"
+      ],
+      "uiEntry": "",
+      "action": "edit.cultures.inspectLifecycle",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "edit.cultures.inspectLifecycle"
+      ],
+      "inputSpace": "info.describe(method)",
+      "mutates": "none",
+      "preflight": "由 info.describe(method) 与领域 inspector 发现",
+      "businessCodes": [],
+      "confirm": "由 methodMetadata.requiresConfirm 发现",
+      "undoOrRollback": "由 methodMetadata.undoable 与结果 metadata 发现",
+      "async": false,
+      "compatibility": "受 API 主版本和方法稳定性契约保护",
+      "evidence": [
+        "tools/webgl-generator-api-capabilities-regression.mjs",
+        "tools/webgl-generator-api-stability-contract-regression.mjs"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
       "matrixId": "api:edit.cultures.rename",
       "capabilityId": "edit.cultures.rename",
       "title": "公共 API edit.cultures.rename",
@@ -15286,6 +15969,37 @@
       ],
       "inputSpace": "info.describe(method)",
       "mutates": "map-or-persistent-data",
+      "preflight": "由 info.describe(method) 与领域 inspector 发现",
+      "businessCodes": [],
+      "confirm": "由 methodMetadata.requiresConfirm 发现",
+      "undoOrRollback": "由 methodMetadata.undoable 与结果 metadata 发现",
+      "async": false,
+      "compatibility": "受 API 主版本和方法稳定性契约保护",
+      "evidence": [
+        "tools/webgl-generator-api-capabilities-regression.mjs",
+        "tools/webgl-generator-api-stability-contract-regression.mjs"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "api:edit.diplomacy.inspectRelation",
+      "capabilityId": "edit.diplomacy.inspectRelation",
+      "title": "公共 API edit.diplomacy.inspectRelation",
+      "sourceKind": "public-api",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/api-contract.js",
+        "app/webgl-generator/src/runtime/console-api.js"
+      ],
+      "uiEntry": "",
+      "action": "edit.diplomacy.inspectRelation",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "edit.diplomacy.inspectRelation"
+      ],
+      "inputSpace": "info.describe(method)",
+      "mutates": "none",
       "preflight": "由 info.describe(method) 与领域 inspector 发现",
       "businessCodes": [],
       "confirm": "由 methodMetadata.requiresConfirm 发现",
@@ -17099,6 +17813,130 @@
       "exclusionReason": ""
     },
     {
+      "matrixId": "api:edit.military.inspectBase",
+      "capabilityId": "edit.military.inspectBase",
+      "title": "公共 API edit.military.inspectBase",
+      "sourceKind": "public-api",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/api-contract.js",
+        "app/webgl-generator/src/runtime/console-api.js"
+      ],
+      "uiEntry": "",
+      "action": "edit.military.inspectBase",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "edit.military.inspectBase"
+      ],
+      "inputSpace": "info.describe(method)",
+      "mutates": "none",
+      "preflight": "由 info.describe(method) 与领域 inspector 发现",
+      "businessCodes": [],
+      "confirm": "由 methodMetadata.requiresConfirm 发现",
+      "undoOrRollback": "由 methodMetadata.undoable 与结果 metadata 发现",
+      "async": false,
+      "compatibility": "受 API 主版本和方法稳定性契约保护",
+      "evidence": [
+        "tools/webgl-generator-api-capabilities-regression.mjs",
+        "tools/webgl-generator-api-stability-contract-regression.mjs"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "api:edit.military.inspectMoveStation",
+      "capabilityId": "edit.military.inspectMoveStation",
+      "title": "公共 API edit.military.inspectMoveStation",
+      "sourceKind": "public-api",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/api-contract.js",
+        "app/webgl-generator/src/runtime/console-api.js"
+      ],
+      "uiEntry": "",
+      "action": "edit.military.inspectMoveStation",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "edit.military.inspectMoveStation"
+      ],
+      "inputSpace": "info.describe(method)",
+      "mutates": "none",
+      "preflight": "由 info.describe(method) 与领域 inspector 发现",
+      "businessCodes": [],
+      "confirm": "由 methodMetadata.requiresConfirm 发现",
+      "undoOrRollback": "由 methodMetadata.undoable 与结果 metadata 发现",
+      "async": false,
+      "compatibility": "受 API 主版本和方法稳定性契约保护",
+      "evidence": [
+        "tools/webgl-generator-api-capabilities-regression.mjs",
+        "tools/webgl-generator-api-stability-contract-regression.mjs"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "api:edit.military.inspectRatios",
+      "capabilityId": "edit.military.inspectRatios",
+      "title": "公共 API edit.military.inspectRatios",
+      "sourceKind": "public-api",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/api-contract.js",
+        "app/webgl-generator/src/runtime/console-api.js"
+      ],
+      "uiEntry": "",
+      "action": "edit.military.inspectRatios",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "edit.military.inspectRatios"
+      ],
+      "inputSpace": "info.describe(method)",
+      "mutates": "none",
+      "preflight": "由 info.describe(method) 与领域 inspector 发现",
+      "businessCodes": [],
+      "confirm": "由 methodMetadata.requiresConfirm 发现",
+      "undoOrRollback": "由 methodMetadata.undoable 与结果 metadata 发现",
+      "async": false,
+      "compatibility": "受 API 主版本和方法稳定性契约保护",
+      "evidence": [
+        "tools/webgl-generator-api-capabilities-regression.mjs",
+        "tools/webgl-generator-api-stability-contract-regression.mjs"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "api:edit.military.inspectStatus",
+      "capabilityId": "edit.military.inspectStatus",
+      "title": "公共 API edit.military.inspectStatus",
+      "sourceKind": "public-api",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/api-contract.js",
+        "app/webgl-generator/src/runtime/console-api.js"
+      ],
+      "uiEntry": "",
+      "action": "edit.military.inspectStatus",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "edit.military.inspectStatus"
+      ],
+      "inputSpace": "info.describe(method)",
+      "mutates": "none",
+      "preflight": "由 info.describe(method) 与领域 inspector 发现",
+      "businessCodes": [],
+      "confirm": "由 methodMetadata.requiresConfirm 发现",
+      "undoOrRollback": "由 methodMetadata.undoable 与结果 metadata 发现",
+      "async": false,
+      "compatibility": "受 API 主版本和方法稳定性契约保护",
+      "evidence": [
+        "tools/webgl-generator-api-capabilities-regression.mjs",
+        "tools/webgl-generator-api-stability-contract-regression.mjs"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
       "matrixId": "api:edit.military.moveStation",
       "capabilityId": "edit.military.moveStation",
       "title": "公共 API edit.military.moveStation",
@@ -17998,6 +18836,37 @@
       "exclusionReason": ""
     },
     {
+      "matrixId": "api:edit.religions.inspectLifecycle",
+      "capabilityId": "edit.religions.inspectLifecycle",
+      "title": "公共 API edit.religions.inspectLifecycle",
+      "sourceKind": "public-api",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/api-contract.js",
+        "app/webgl-generator/src/runtime/console-api.js"
+      ],
+      "uiEntry": "",
+      "action": "edit.religions.inspectLifecycle",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "edit.religions.inspectLifecycle"
+      ],
+      "inputSpace": "info.describe(method)",
+      "mutates": "none",
+      "preflight": "由 info.describe(method) 与领域 inspector 发现",
+      "businessCodes": [],
+      "confirm": "由 methodMetadata.requiresConfirm 发现",
+      "undoOrRollback": "由 methodMetadata.undoable 与结果 metadata 发现",
+      "async": false,
+      "compatibility": "受 API 主版本和方法稳定性契约保护",
+      "evidence": [
+        "tools/webgl-generator-api-capabilities-regression.mjs",
+        "tools/webgl-generator-api-stability-contract-regression.mjs"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
       "matrixId": "api:edit.religions.rename",
       "capabilityId": "edit.religions.rename",
       "title": "公共 API edit.religions.rename",
@@ -18603,6 +19472,37 @@
       ],
       "inputSpace": "info.describe(method)",
       "mutates": "map-or-persistent-data",
+      "preflight": "由 info.describe(method) 与领域 inspector 发现",
+      "businessCodes": [],
+      "confirm": "由 methodMetadata.requiresConfirm 发现",
+      "undoOrRollback": "由 methodMetadata.undoable 与结果 metadata 发现",
+      "async": false,
+      "compatibility": "受 API 主版本和方法稳定性契约保护",
+      "evidence": [
+        "tools/webgl-generator-api-capabilities-regression.mjs",
+        "tools/webgl-generator-api-stability-contract-regression.mjs"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "api:edit.states.inspectCapitalChange",
+      "capabilityId": "edit.states.inspectCapitalChange",
+      "title": "公共 API edit.states.inspectCapitalChange",
+      "sourceKind": "public-api",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/api-contract.js",
+        "app/webgl-generator/src/runtime/console-api.js"
+      ],
+      "uiEntry": "",
+      "action": "edit.states.inspectCapitalChange",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "edit.states.inspectCapitalChange"
+      ],
+      "inputSpace": "info.describe(method)",
+      "mutates": "none",
       "preflight": "由 info.describe(method) 与领域 inspector 发现",
       "businessCodes": [],
       "confirm": "由 methodMetadata.requiresConfirm 发现",
@@ -21678,6 +22578,7 @@
         "edit.cities.inspectCreateAtCell",
         "edit.cities.inspectDelete",
         "edit.cities.inspectMove",
+        "edit.cities.inspectOwnerSync",
         "edit.cities.move",
         "edit.cities.rename",
         "edit.cities.resetVisual",
@@ -21730,6 +22631,7 @@
         "edit.cities.inspectCreateAtCell",
         "edit.cities.inspectDelete",
         "edit.cities.inspectMove",
+        "edit.cities.inspectOwnerSync",
         "edit.cities.move",
         "edit.cities.rename",
         "edit.cities.resetVisual",
@@ -21782,6 +22684,7 @@
         "edit.cities.inspectCreateAtCell",
         "edit.cities.inspectDelete",
         "edit.cities.inspectMove",
+        "edit.cities.inspectOwnerSync",
         "edit.cities.move",
         "edit.cities.rename",
         "edit.cities.resetVisual",
@@ -21834,6 +22737,7 @@
         "edit.cities.inspectCreateAtCell",
         "edit.cities.inspectDelete",
         "edit.cities.inspectMove",
+        "edit.cities.inspectOwnerSync",
         "edit.cities.move",
         "edit.cities.rename",
         "edit.cities.resetVisual",
@@ -21886,6 +22790,7 @@
         "edit.cities.inspectCreateAtCell",
         "edit.cities.inspectDelete",
         "edit.cities.inspectMove",
+        "edit.cities.inspectOwnerSync",
         "edit.cities.move",
         "edit.cities.rename",
         "edit.cities.resetVisual",
@@ -21938,6 +22843,7 @@
         "edit.cities.inspectCreateAtCell",
         "edit.cities.inspectDelete",
         "edit.cities.inspectMove",
+        "edit.cities.inspectOwnerSync",
         "edit.cities.move",
         "edit.cities.rename",
         "edit.cities.resetVisual",
@@ -21990,6 +22896,7 @@
         "edit.cities.inspectCreateAtCell",
         "edit.cities.inspectDelete",
         "edit.cities.inspectMove",
+        "edit.cities.inspectOwnerSync",
         "edit.cities.move",
         "edit.cities.rename",
         "edit.cities.resetVisual",
@@ -22042,6 +22949,7 @@
         "edit.cities.inspectCreateAtCell",
         "edit.cities.inspectDelete",
         "edit.cities.inspectMove",
+        "edit.cities.inspectOwnerSync",
         "edit.cities.move",
         "edit.cities.rename",
         "edit.cities.resetVisual",
@@ -22094,6 +23002,7 @@
         "edit.cities.inspectCreateAtCell",
         "edit.cities.inspectDelete",
         "edit.cities.inspectMove",
+        "edit.cities.inspectOwnerSync",
         "edit.cities.move",
         "edit.cities.rename",
         "edit.cities.resetVisual",
@@ -22145,6 +23054,7 @@
         "edit.cultures.assignCells",
         "edit.cultures.delete",
         "edit.cultures.inspectExpansion",
+        "edit.cultures.inspectLifecycle",
         "edit.cultures.rename",
         "edit.cultures.setColor",
         "edit.cultures.setParent",
@@ -22203,6 +23113,7 @@
         "edit.cultures.assignCells",
         "edit.cultures.delete",
         "edit.cultures.inspectExpansion",
+        "edit.cultures.inspectLifecycle",
         "edit.cultures.rename",
         "edit.cultures.setColor",
         "edit.cultures.setParent",
@@ -22261,6 +23172,7 @@
         "edit.cultures.assignCells",
         "edit.cultures.delete",
         "edit.cultures.inspectExpansion",
+        "edit.cultures.inspectLifecycle",
         "edit.cultures.rename",
         "edit.cultures.setColor",
         "edit.cultures.setParent",
@@ -22319,6 +23231,7 @@
         "edit.cultures.assignCells",
         "edit.cultures.delete",
         "edit.cultures.inspectExpansion",
+        "edit.cultures.inspectLifecycle",
         "edit.cultures.rename",
         "edit.cultures.setColor",
         "edit.cultures.setParent",
@@ -22377,6 +23290,7 @@
         "edit.cultures.assignCells",
         "edit.cultures.delete",
         "edit.cultures.inspectExpansion",
+        "edit.cultures.inspectLifecycle",
         "edit.cultures.rename",
         "edit.cultures.setColor",
         "edit.cultures.setParent",
@@ -22430,6 +23344,7 @@
       "action": "",
       "commandOrInspector": "createRegenerateDiplomacyCommand",
       "apiMethods": [
+        "edit.diplomacy.inspectRelation",
         "edit.diplomacy.setRelation",
         "generate.regenerate",
         "selection.clear",
@@ -22472,6 +23387,7 @@
       "action": "",
       "commandOrInspector": "createSetDiplomacyRelationCommand",
       "apiMethods": [
+        "edit.diplomacy.inspectRelation",
         "edit.diplomacy.setRelation",
         "generate.regenerate",
         "selection.clear",
@@ -25718,6 +26634,10 @@
       "apiMethods": [
         "edit.military.clearBattleEvents",
         "edit.military.importBattleEvents",
+        "edit.military.inspectBase",
+        "edit.military.inspectMoveStation",
+        "edit.military.inspectRatios",
+        "edit.military.inspectStatus",
         "edit.military.moveStation",
         "edit.military.recordBattleEvent",
         "edit.military.rename",
@@ -25768,6 +26688,10 @@
       "apiMethods": [
         "edit.military.clearBattleEvents",
         "edit.military.importBattleEvents",
+        "edit.military.inspectBase",
+        "edit.military.inspectMoveStation",
+        "edit.military.inspectRatios",
+        "edit.military.inspectStatus",
         "edit.military.moveStation",
         "edit.military.recordBattleEvent",
         "edit.military.rename",
@@ -25818,6 +26742,10 @@
       "apiMethods": [
         "edit.military.clearBattleEvents",
         "edit.military.importBattleEvents",
+        "edit.military.inspectBase",
+        "edit.military.inspectMoveStation",
+        "edit.military.inspectRatios",
+        "edit.military.inspectStatus",
         "edit.military.moveStation",
         "edit.military.recordBattleEvent",
         "edit.military.rename",
@@ -25868,6 +26796,10 @@
       "apiMethods": [
         "edit.military.clearBattleEvents",
         "edit.military.importBattleEvents",
+        "edit.military.inspectBase",
+        "edit.military.inspectMoveStation",
+        "edit.military.inspectRatios",
+        "edit.military.inspectStatus",
         "edit.military.moveStation",
         "edit.military.recordBattleEvent",
         "edit.military.rename",
@@ -25918,6 +26850,10 @@
       "apiMethods": [
         "edit.military.clearBattleEvents",
         "edit.military.importBattleEvents",
+        "edit.military.inspectBase",
+        "edit.military.inspectMoveStation",
+        "edit.military.inspectRatios",
+        "edit.military.inspectStatus",
         "edit.military.moveStation",
         "edit.military.recordBattleEvent",
         "edit.military.rename",
@@ -25968,6 +26904,10 @@
       "apiMethods": [
         "edit.military.clearBattleEvents",
         "edit.military.importBattleEvents",
+        "edit.military.inspectBase",
+        "edit.military.inspectMoveStation",
+        "edit.military.inspectRatios",
+        "edit.military.inspectStatus",
         "edit.military.moveStation",
         "edit.military.recordBattleEvent",
         "edit.military.rename",
@@ -26018,6 +26958,10 @@
       "apiMethods": [
         "edit.military.clearBattleEvents",
         "edit.military.importBattleEvents",
+        "edit.military.inspectBase",
+        "edit.military.inspectMoveStation",
+        "edit.military.inspectRatios",
+        "edit.military.inspectStatus",
         "edit.military.moveStation",
         "edit.military.recordBattleEvent",
         "edit.military.rename",
@@ -26068,6 +27012,10 @@
       "apiMethods": [
         "edit.military.clearBattleEvents",
         "edit.military.importBattleEvents",
+        "edit.military.inspectBase",
+        "edit.military.inspectMoveStation",
+        "edit.military.inspectRatios",
+        "edit.military.inspectStatus",
         "edit.military.moveStation",
         "edit.military.recordBattleEvent",
         "edit.military.rename",
@@ -26118,6 +27066,10 @@
       "apiMethods": [
         "edit.military.clearBattleEvents",
         "edit.military.importBattleEvents",
+        "edit.military.inspectBase",
+        "edit.military.inspectMoveStation",
+        "edit.military.inspectRatios",
+        "edit.military.inspectStatus",
         "edit.military.moveStation",
         "edit.military.recordBattleEvent",
         "edit.military.rename",
@@ -26168,6 +27120,10 @@
       "apiMethods": [
         "edit.military.clearBattleEvents",
         "edit.military.importBattleEvents",
+        "edit.military.inspectBase",
+        "edit.military.inspectMoveStation",
+        "edit.military.inspectRatios",
+        "edit.military.inspectStatus",
         "edit.military.moveStation",
         "edit.military.recordBattleEvent",
         "edit.military.rename",
@@ -27701,6 +28657,7 @@
         "edit.religions.assignCells",
         "edit.religions.delete",
         "edit.religions.inspectExpansion",
+        "edit.religions.inspectLifecycle",
         "edit.religions.rename",
         "edit.religions.setColor",
         "edit.religions.setParent",
@@ -27759,6 +28716,7 @@
         "edit.religions.assignCells",
         "edit.religions.delete",
         "edit.religions.inspectExpansion",
+        "edit.religions.inspectLifecycle",
         "edit.religions.rename",
         "edit.religions.setColor",
         "edit.religions.setParent",
@@ -27817,6 +28775,7 @@
         "edit.religions.assignCells",
         "edit.religions.delete",
         "edit.religions.inspectExpansion",
+        "edit.religions.inspectLifecycle",
         "edit.religions.rename",
         "edit.religions.setColor",
         "edit.religions.setParent",
@@ -27875,6 +28834,7 @@
         "edit.religions.assignCells",
         "edit.religions.delete",
         "edit.religions.inspectExpansion",
+        "edit.religions.inspectLifecycle",
         "edit.religions.rename",
         "edit.religions.setColor",
         "edit.religions.setParent",
@@ -27933,6 +28893,7 @@
         "edit.religions.assignCells",
         "edit.religions.delete",
         "edit.religions.inspectExpansion",
+        "edit.religions.inspectLifecycle",
         "edit.religions.rename",
         "edit.religions.setColor",
         "edit.religions.setParent",
@@ -28699,6 +29660,7 @@
         "edit.cultures.assignCells",
         "edit.cultures.delete",
         "edit.cultures.inspectExpansion",
+        "edit.cultures.inspectLifecycle",
         "edit.cultures.rename",
         "edit.cultures.setColor",
         "edit.cultures.setParent",
@@ -28757,6 +29719,7 @@
         "edit.cultures.assignCells",
         "edit.cultures.delete",
         "edit.cultures.inspectExpansion",
+        "edit.cultures.inspectLifecycle",
         "edit.cultures.rename",
         "edit.cultures.setColor",
         "edit.cultures.setParent",
@@ -28815,6 +29778,7 @@
         "edit.cultures.assignCells",
         "edit.cultures.delete",
         "edit.cultures.inspectExpansion",
+        "edit.cultures.inspectLifecycle",
         "edit.cultures.rename",
         "edit.cultures.setColor",
         "edit.cultures.setParent",
@@ -28873,6 +29837,7 @@
         "edit.cultures.assignCells",
         "edit.cultures.delete",
         "edit.cultures.inspectExpansion",
+        "edit.cultures.inspectLifecycle",
         "edit.cultures.rename",
         "edit.cultures.setColor",
         "edit.cultures.setParent",
@@ -28931,6 +29896,7 @@
         "edit.cultures.assignCells",
         "edit.cultures.delete",
         "edit.cultures.inspectExpansion",
+        "edit.cultures.inspectLifecycle",
         "edit.cultures.rename",
         "edit.cultures.setColor",
         "edit.cultures.setParent",
@@ -28989,6 +29955,7 @@
         "edit.cultures.assignCells",
         "edit.cultures.delete",
         "edit.cultures.inspectExpansion",
+        "edit.cultures.inspectLifecycle",
         "edit.cultures.rename",
         "edit.cultures.setColor",
         "edit.cultures.setParent",
@@ -29047,6 +30014,7 @@
         "edit.cultures.assignCells",
         "edit.cultures.delete",
         "edit.cultures.inspectExpansion",
+        "edit.cultures.inspectLifecycle",
         "edit.cultures.rename",
         "edit.cultures.setColor",
         "edit.cultures.setParent",
@@ -29105,6 +30073,7 @@
         "edit.cultures.assignCells",
         "edit.cultures.delete",
         "edit.cultures.inspectExpansion",
+        "edit.cultures.inspectLifecycle",
         "edit.cultures.rename",
         "edit.cultures.setColor",
         "edit.cultures.setParent",
@@ -29163,6 +30132,7 @@
         "edit.cultures.assignCells",
         "edit.cultures.delete",
         "edit.cultures.inspectExpansion",
+        "edit.cultures.inspectLifecycle",
         "edit.cultures.rename",
         "edit.cultures.setColor",
         "edit.cultures.setParent",
@@ -29221,6 +30191,7 @@
         "edit.cultures.assignCells",
         "edit.cultures.delete",
         "edit.cultures.inspectExpansion",
+        "edit.cultures.inspectLifecycle",
         "edit.cultures.rename",
         "edit.cultures.setColor",
         "edit.cultures.setParent",
@@ -29278,6 +30249,7 @@
         "edit.states.applyChanges",
         "edit.states.createAtCell",
         "edit.states.delete",
+        "edit.states.inspectCapitalChange",
         "edit.states.inspectCreateAtCell",
         "edit.states.inspectDelete",
         "edit.states.inspectMerge",
@@ -29334,6 +30306,7 @@
         "edit.states.applyChanges",
         "edit.states.createAtCell",
         "edit.states.delete",
+        "edit.states.inspectCapitalChange",
         "edit.states.inspectCreateAtCell",
         "edit.states.inspectDelete",
         "edit.states.inspectMerge",
@@ -29390,6 +30363,7 @@
         "edit.states.applyChanges",
         "edit.states.createAtCell",
         "edit.states.delete",
+        "edit.states.inspectCapitalChange",
         "edit.states.inspectCreateAtCell",
         "edit.states.inspectDelete",
         "edit.states.inspectMerge",
@@ -29446,6 +30420,7 @@
         "edit.states.applyChanges",
         "edit.states.createAtCell",
         "edit.states.delete",
+        "edit.states.inspectCapitalChange",
         "edit.states.inspectCreateAtCell",
         "edit.states.inspectDelete",
         "edit.states.inspectMerge",
@@ -29502,6 +30477,7 @@
         "edit.states.applyChanges",
         "edit.states.createAtCell",
         "edit.states.delete",
+        "edit.states.inspectCapitalChange",
         "edit.states.inspectCreateAtCell",
         "edit.states.inspectDelete",
         "edit.states.inspectMerge",
@@ -29558,6 +30534,7 @@
         "edit.states.applyChanges",
         "edit.states.createAtCell",
         "edit.states.delete",
+        "edit.states.inspectCapitalChange",
         "edit.states.inspectCreateAtCell",
         "edit.states.inspectDelete",
         "edit.states.inspectMerge",
@@ -29614,6 +30591,7 @@
         "edit.states.applyChanges",
         "edit.states.createAtCell",
         "edit.states.delete",
+        "edit.states.inspectCapitalChange",
         "edit.states.inspectCreateAtCell",
         "edit.states.inspectDelete",
         "edit.states.inspectMerge",
@@ -29670,6 +30648,7 @@
         "edit.states.applyChanges",
         "edit.states.createAtCell",
         "edit.states.delete",
+        "edit.states.inspectCapitalChange",
         "edit.states.inspectCreateAtCell",
         "edit.states.inspectDelete",
         "edit.states.inspectMerge",
@@ -29726,6 +30705,7 @@
         "edit.states.applyChanges",
         "edit.states.createAtCell",
         "edit.states.delete",
+        "edit.states.inspectCapitalChange",
         "edit.states.inspectCreateAtCell",
         "edit.states.inspectDelete",
         "edit.states.inspectMerge",
@@ -29782,6 +30762,7 @@
         "edit.states.applyChanges",
         "edit.states.createAtCell",
         "edit.states.delete",
+        "edit.states.inspectCapitalChange",
         "edit.states.inspectCreateAtCell",
         "edit.states.inspectDelete",
         "edit.states.inspectMerge",
@@ -29838,6 +30819,7 @@
         "edit.states.applyChanges",
         "edit.states.createAtCell",
         "edit.states.delete",
+        "edit.states.inspectCapitalChange",
         "edit.states.inspectCreateAtCell",
         "edit.states.inspectDelete",
         "edit.states.inspectMerge",
@@ -29894,6 +30876,7 @@
         "edit.states.applyChanges",
         "edit.states.createAtCell",
         "edit.states.delete",
+        "edit.states.inspectCapitalChange",
         "edit.states.inspectCreateAtCell",
         "edit.states.inspectDelete",
         "edit.states.inspectMerge",
@@ -29950,6 +30933,7 @@
         "edit.states.applyChanges",
         "edit.states.createAtCell",
         "edit.states.delete",
+        "edit.states.inspectCapitalChange",
         "edit.states.inspectCreateAtCell",
         "edit.states.inspectDelete",
         "edit.states.inspectMerge",
@@ -30740,6 +31724,7 @@
         "edit.cities.inspectCreateAtCell",
         "edit.cities.inspectDelete",
         "edit.cities.inspectMove",
+        "edit.cities.inspectOwnerSync",
         "edit.cities.move",
         "edit.cities.rename",
         "edit.cities.resetVisual",
@@ -30792,6 +31777,7 @@
         "edit.cities.inspectCreateAtCell",
         "edit.cities.inspectDelete",
         "edit.cities.inspectMove",
+        "edit.cities.inspectOwnerSync",
         "edit.cities.move",
         "edit.cities.rename",
         "edit.cities.resetVisual",
@@ -30844,6 +31830,7 @@
         "edit.cities.inspectCreateAtCell",
         "edit.cities.inspectDelete",
         "edit.cities.inspectMove",
+        "edit.cities.inspectOwnerSync",
         "edit.cities.move",
         "edit.cities.rename",
         "edit.cities.resetVisual",
@@ -30895,6 +31882,7 @@
         "edit.cultures.assignCells",
         "edit.cultures.delete",
         "edit.cultures.inspectExpansion",
+        "edit.cultures.inspectLifecycle",
         "edit.cultures.rename",
         "edit.cultures.setColor",
         "edit.cultures.setParent",
@@ -30953,6 +31941,7 @@
         "edit.cultures.assignCells",
         "edit.cultures.delete",
         "edit.cultures.inspectExpansion",
+        "edit.cultures.inspectLifecycle",
         "edit.cultures.rename",
         "edit.cultures.setColor",
         "edit.cultures.setParent",
@@ -31611,6 +32600,7 @@
         "edit.religions.assignCells",
         "edit.religions.delete",
         "edit.religions.inspectExpansion",
+        "edit.religions.inspectLifecycle",
         "edit.religions.rename",
         "edit.religions.setColor",
         "edit.religions.setParent",
@@ -31669,6 +32659,7 @@
         "edit.religions.assignCells",
         "edit.religions.delete",
         "edit.religions.inspectExpansion",
+        "edit.religions.inspectLifecycle",
         "edit.religions.rename",
         "edit.religions.setColor",
         "edit.religions.setParent",
@@ -31868,6 +32859,7 @@
         "edit.states.applyChanges",
         "edit.states.createAtCell",
         "edit.states.delete",
+        "edit.states.inspectCapitalChange",
         "edit.states.inspectCreateAtCell",
         "edit.states.inspectDelete",
         "edit.states.inspectMerge",
@@ -31924,6 +32916,7 @@
         "edit.states.applyChanges",
         "edit.states.createAtCell",
         "edit.states.delete",
+        "edit.states.inspectCapitalChange",
         "edit.states.inspectCreateAtCell",
         "edit.states.inspectDelete",
         "edit.states.inspectMerge",
@@ -31980,6 +32973,7 @@
         "edit.states.applyChanges",
         "edit.states.createAtCell",
         "edit.states.delete",
+        "edit.states.inspectCapitalChange",
         "edit.states.inspectCreateAtCell",
         "edit.states.inspectDelete",
         "edit.states.inspectMerge",
@@ -32927,6 +33921,7 @@
         "data.importGEO",
         "data.importHeightmap",
         "data.importMap",
+        "data.inspectCollectionImport",
         "data.restoreBrowserMap",
         "data.saveBrowserMap"
       ],
@@ -32969,6 +33964,7 @@
         "data.importGEO",
         "data.importHeightmap",
         "data.importMap",
+        "data.inspectCollectionImport",
         "data.restoreBrowserMap",
         "data.saveBrowserMap"
       ],
@@ -33473,6 +34469,7 @@
         "edit.cities.inspectCreateAtCell",
         "edit.cities.inspectDelete",
         "edit.cities.inspectMove",
+        "edit.cities.inspectOwnerSync",
         "edit.cities.move",
         "edit.cities.rename",
         "edit.cities.resetVisual",
@@ -33570,6 +34567,7 @@
         "edit.cultures.assignCells",
         "edit.cultures.delete",
         "edit.cultures.inspectExpansion",
+        "edit.cultures.inspectLifecycle",
         "edit.cultures.rename",
         "edit.cultures.setColor",
         "edit.cultures.setParent",
@@ -33661,6 +34659,7 @@
       "action": "",
       "commandOrInspector": "",
       "apiMethods": [
+        "edit.diplomacy.inspectRelation",
         "edit.diplomacy.setRelation",
         "generate.regenerate",
         "selection.clear",
@@ -33867,6 +34866,7 @@
         "edit.states.applyChanges",
         "edit.states.createAtCell",
         "edit.states.delete",
+        "edit.states.inspectCapitalChange",
         "edit.states.inspectCreateAtCell",
         "edit.states.inspectDelete",
         "edit.states.inspectMerge",
@@ -34178,6 +35178,10 @@
       "apiMethods": [
         "edit.military.clearBattleEvents",
         "edit.military.importBattleEvents",
+        "edit.military.inspectBase",
+        "edit.military.inspectMoveStation",
+        "edit.military.inspectRatios",
+        "edit.military.inspectStatus",
         "edit.military.moveStation",
         "edit.military.recordBattleEvent",
         "edit.military.rename",
@@ -34503,6 +35507,7 @@
         "edit.religions.assignCells",
         "edit.religions.delete",
         "edit.religions.inspectExpansion",
+        "edit.religions.inspectLifecycle",
         "edit.religions.rename",
         "edit.religions.setColor",
         "edit.religions.setParent",
@@ -34658,6 +35663,7 @@
         "edit.states.applyChanges",
         "edit.states.createAtCell",
         "edit.states.delete",
+        "edit.states.inspectCapitalChange",
         "edit.states.inspectCreateAtCell",
         "edit.states.inspectDelete",
         "edit.states.inspectMerge",

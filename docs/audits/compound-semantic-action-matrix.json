@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "scope": "权威任务第 204 项：全游戏复合语义接口、规则动作与玩法配方审计",
   "generatedAtPolicy": "报告不写入动态时间，sourceDigest 变化即要求重新生成",
-  "sourceDigest": "980d843eae32bf43971c764c7e3c3d75b729ccc7015ee113fa03556d9e89983b",
+  "sourceDigest": "60a4f620ed905e442a3a252c0eba7d7a695540272b48c79c2799ccca689ba1b4",
   "definition": {
     "compoundSemanticAction": "一个玩家意图，但执行时需要跨对象/系统、条件分支、业务预检或原子回滚；应由单一规则事务表达。",
     "primitive": "只修改一个稳定字段或纯编辑器显示偏好，可保留为原子 API，不强行包装成复合动作。",
@@ -21,12 +21,12 @@
     "recipe-only": "战略/玩法流程，不应实现为一条超大写接口。"
   },
   "denominator": {
-    "fullCapabilityRows": 1048,
+    "fullCapabilityRows": 1078,
     "fullCapabilityUnknown": 0,
     "fullCapabilityUnclassified": 0,
     "fullCapabilityGaps": 0,
-    "publicApiMethods": 269,
-    "classifiedApiMethods": 269,
+    "publicApiMethods": 279,
+    "classifiedApiMethods": 279,
     "cellActionRows": 48,
     "classifiedCellActionRows": 48,
     "canvasModes": 29,
@@ -38,8 +38,7 @@
     "ruleTransactions": 68,
     "plannerRecipes": 10,
     "statuses": {
-      "existing-needs-inspector": 10,
-      "existing-transaction": 47,
+      "existing-transaction": 57,
       "fragmented-needs-transaction": 5,
       "missing-game-rule": 6,
       "recipe-only": 10
@@ -62,7 +61,7 @@
       "editor-runtime-service": 49,
       "read-export-service": 10,
       "read-primitive": 26,
-      "semantic-action": 135
+      "semantic-action": 145
     },
     "interactionClassifications": {
       "semantic-input-or-primitive": 36,
@@ -1251,9 +1250,10 @@
       "tier": "rule-transaction",
       "variants": [],
       "api": [
+        "edit.states.inspectCapitalChange",
         "edit.states.setCapital"
       ],
-      "inspect": "planned:edit.states.inspectCapitalChange",
+      "inspect": "edit.states.inspectCapitalChange",
       "execute": "edit.states.setCapital",
       "branches": [
         "城市不存在",
@@ -1268,7 +1268,7 @@
       "id": "politics.relocate-capital",
       "title": "迁都并更新国家中心",
       "domain": "politics",
-      "status": "existing-needs-inspector",
+      "status": "existing-transaction",
       "intent": "把本国城市设为首都，取消旧首都并同步国家中心、标签和城镇层级。",
       "gameplayChapter": "国家、省份与政治拓扑",
       "invariant": "国家、省份、Grid/Pack 归属、首都、省会、外交、军事、市场和路线引用不得悬空。",
@@ -1370,9 +1370,10 @@
       "tier": "rule-transaction",
       "variants": [],
       "api": [
+        "edit.cities.inspectOwnerSync",
         "edit.cities.syncOwner"
       ],
-      "inspect": "planned:edit.cities.inspectOwnerSync",
+      "inspect": "edit.cities.inspectOwnerSync",
       "execute": "edit.cities.syncOwner",
       "branches": [
         "无需变化",
@@ -1387,7 +1388,7 @@
       "id": "settlement.sync-city-owner",
       "title": "按落点同步城镇政治归属",
       "domain": "settlement",
-      "status": "existing-needs-inspector",
+      "status": "existing-transaction",
       "intent": "让城镇国家与省份归属跟随所在 Cell，并处理首都、省会和跨国约束。",
       "gameplayChapter": "城镇、人口与定居点",
       "invariant": "城镇位置、国家/省份归属、首都/省会、港口、路线和人口统计必须同步。",
@@ -1502,9 +1503,10 @@
         "edit.cultures.assignCells",
         "edit.cultures.delete",
         "edit.cultures.inspectExpansion",
+        "edit.cultures.inspectLifecycle",
         "edit.cultures.setParent"
       ],
-      "inspect": "edit.cultures.inspectExpansion / planned:edit.cultures.inspectLifecycle",
+      "inspect": "edit.cultures.inspectLifecycle / edit.cultures.inspectExpansion",
       "execute": "edit.cultures.*",
       "branches": [
         "创建名称和中心",
@@ -1522,7 +1524,7 @@
       "id": "society.culture.lifecycle",
       "title": "文化创建、归属、扩张、继承与删除",
       "domain": "society",
-      "status": "existing-needs-inspector",
+      "status": "existing-transaction",
       "intent": "管理文化对象及其 Cell 归属、中心、父级和删除后的回退。",
       "gameplayChapter": "文化、宗教、命名与社会归属",
       "invariant": "文化/宗教中心、继承关系、Cell 归属、对象引用和名称库绑定不得形成无主或循环数据。",
@@ -1544,9 +1546,10 @@
         "edit.religions.assignCells",
         "edit.religions.delete",
         "edit.religions.inspectExpansion",
+        "edit.religions.inspectLifecycle",
         "edit.religions.setParent"
       ],
-      "inspect": "edit.religions.inspectExpansion / planned:edit.religions.inspectLifecycle",
+      "inspect": "edit.religions.inspectLifecycle / edit.religions.inspectExpansion",
       "execute": "edit.religions.*",
       "branches": [
         "创建名称和中心",
@@ -1564,7 +1567,7 @@
       "id": "society.religion.lifecycle",
       "title": "宗教创建、归属、扩张、继承与删除",
       "domain": "society",
-      "status": "existing-needs-inspector",
+      "status": "existing-transaction",
       "intent": "管理宗教对象及其 Cell 归属、中心、父级和删除后的回退。",
       "gameplayChapter": "文化、宗教、命名与社会归属",
       "invariant": "文化/宗教中心、继承关系、Cell 归属、对象引用和名称库绑定不得形成无主或循环数据。",
@@ -1874,9 +1877,10 @@
       "tier": "rule-transaction",
       "variants": [],
       "api": [
+        "edit.diplomacy.inspectRelation",
         "edit.diplomacy.setRelation"
       ],
-      "inspect": "planned:edit.diplomacy.inspectRelation",
+      "inspect": "edit.diplomacy.inspectRelation",
       "execute": "edit.diplomacy.setRelation",
       "branches": [
         "国家无效/同国",
@@ -1891,7 +1895,7 @@
       "id": "diplomacy.set-bilateral-relation",
       "title": "设置双边外交关系并写入纪事",
       "domain": "diplomacy",
-      "status": "existing-needs-inspector",
+      "status": "existing-transaction",
       "intent": "设置两国关系并同步反向关系、摘要、纪事和战争相关约束。",
       "gameplayChapter": "外交、战争与国家关系",
       "invariant": "双边关系、宗藩、战争、纪事和被移除国家引用必须成对同步并保持对称规则。",
@@ -2022,9 +2026,10 @@
       "tier": "rule-transaction",
       "variants": [],
       "api": [
+        "edit.military.inspectRatios",
         "edit.military.setRatios"
       ],
-      "inspect": "planned:edit.military.inspectRatios",
+      "inspect": "edit.military.inspectRatios",
       "execute": "edit.military.setRatios",
       "branches": [
         "比例非法",
@@ -2039,7 +2044,7 @@
       "id": "military.reconfigure-force",
       "title": "调整国家兵种比例并重配军队",
       "domain": "military",
-      "status": "existing-needs-inspector",
+      "status": "existing-transaction",
       "intent": "调整国家兵种比例，验证总和并同步军团构成与统计。",
       "gameplayChapter": "军队、调动与战斗",
       "invariant": "军团身份、所属国家、驻地、基地、命令、事件链和国家存亡必须保持引用完整。",
@@ -2050,9 +2055,10 @@
       "tier": "rule-transaction",
       "variants": [],
       "api": [
+        "edit.military.inspectMoveStation",
         "edit.military.moveStation"
       ],
-      "inspect": "planned:cells.inspectAction(military.move)",
+      "inspect": "edit.military.inspectMoveStation",
       "execute": "edit.military.moveStation",
       "branches": [
         "军团/Cell 非法",
@@ -2067,7 +2073,7 @@
       "id": "military.move-station",
       "title": "移动军团驻地",
       "domain": "military",
-      "status": "existing-needs-inspector",
+      "status": "existing-transaction",
       "intent": "移动军团到合法 Cell，校验国家、地形、基地和命令目标。",
       "gameplayChapter": "军队、调动与战斗",
       "invariant": "军团身份、所属国家、驻地、基地、命令、事件链和国家存亡必须保持引用完整。",
@@ -2078,9 +2084,10 @@
       "tier": "rule-transaction",
       "variants": [],
       "api": [
+        "edit.military.inspectBase",
         "edit.military.setBase"
       ],
-      "inspect": "planned:edit.military.inspectBase",
+      "inspect": "edit.military.inspectBase",
       "execute": "edit.military.setBase",
       "branches": [
         "目标非法",
@@ -2095,7 +2102,7 @@
       "id": "military.set-base",
       "title": "设置军团基地并维护驻地关系",
       "domain": "military",
-      "status": "existing-needs-inspector",
+      "status": "existing-transaction",
       "intent": "把当前位置或指定位置设为基地，验证归属和可达性。",
       "gameplayChapter": "军队、调动与战斗",
       "invariant": "军团身份、所属国家、驻地、基地、命令、事件链和国家存亡必须保持引用完整。",
@@ -2109,10 +2116,11 @@
         "batch"
       ],
       "api": [
+        "edit.military.inspectStatus",
         "edit.military.setStatus",
         "edit.military.setStatusBatch"
       ],
-      "inspect": "planned:edit.military.inspectStatus",
+      "inspect": "edit.military.inspectStatus",
       "execute": "edit.military.setStatus / setStatusBatch",
       "branches": [
         "态势非法",
@@ -2127,7 +2135,7 @@
       "id": "military.issue-status",
       "title": "单个或批量调整军团态势",
       "domain": "military",
-      "status": "existing-needs-inspector",
+      "status": "existing-transaction",
       "intent": "调整军团驻防、机动、交战等态势并检查目标和批量原子性。",
       "gameplayChapter": "军队、调动与战斗",
       "invariant": "军团身份、所属国家、驻地、基地、命令、事件链和国家存亡必须保持引用完整。",
@@ -2248,12 +2256,13 @@
         "military-events"
       ],
       "api": [
+        "data.inspectCollectionImport",
         "edit.measurements.import",
         "edit.military.importBattleEvents",
         "edit.notes.import",
         "namebases.import"
       ],
-      "inspect": "planned:data.inspectCollectionImport",
+      "inspect": "data.inspectCollectionImport",
       "execute": "现有 import 方法",
       "branches": [
         "格式拒绝",
@@ -2270,7 +2279,7 @@
       "id": "editor.import-collection",
       "title": "导入备注、测量、名称库或战斗事件集合",
       "domain": "editor",
-      "status": "existing-needs-inspector",
+      "status": "existing-transaction",
       "intent": "校验外部集合、处理 ID 冲突与覆盖策略，并作为单条历史导入。",
       "gameplayChapter": "编辑器事务、批量操作与发布",
       "invariant": "编辑器服务不得伪装成游戏规则；危险操作要有预检，批量操作要有单事务回滚。",
@@ -2795,6 +2804,13 @@
       ]
     },
     {
+      "method": "data.inspectCollectionImport",
+      "classification": "semantic-action",
+      "actionIds": [
+        "editor.import-collection"
+      ]
+    },
+    {
       "method": "data.restoreBrowserMap",
       "classification": "semantic-action",
       "actionIds": [
@@ -2913,6 +2929,13 @@
       ]
     },
     {
+      "method": "edit.cities.inspectOwnerSync",
+      "classification": "semantic-action",
+      "actionIds": [
+        "settlement.sync-city-owner"
+      ]
+    },
+    {
       "method": "edit.cities.move",
       "classification": "semantic-action",
       "actionIds": [
@@ -2983,6 +3006,13 @@
       ]
     },
     {
+      "method": "edit.cultures.inspectLifecycle",
+      "classification": "semantic-action",
+      "actionIds": [
+        "society.culture.lifecycle"
+      ]
+    },
+    {
       "method": "edit.cultures.rename",
       "classification": "atomic-editor-primitive",
       "actionIds": []
@@ -2997,6 +3027,13 @@
       "classification": "semantic-action",
       "actionIds": [
         "society.culture.lifecycle"
+      ]
+    },
+    {
+      "method": "edit.diplomacy.inspectRelation",
+      "classification": "semantic-action",
+      "actionIds": [
+        "diplomacy.set-bilateral-relation"
       ]
     },
     {
@@ -3363,6 +3400,34 @@
       ]
     },
     {
+      "method": "edit.military.inspectBase",
+      "classification": "semantic-action",
+      "actionIds": [
+        "military.set-base"
+      ]
+    },
+    {
+      "method": "edit.military.inspectMoveStation",
+      "classification": "semantic-action",
+      "actionIds": [
+        "military.move-station"
+      ]
+    },
+    {
+      "method": "edit.military.inspectRatios",
+      "classification": "semantic-action",
+      "actionIds": [
+        "military.reconfigure-force"
+      ]
+    },
+    {
+      "method": "edit.military.inspectStatus",
+      "classification": "semantic-action",
+      "actionIds": [
+        "military.issue-status"
+      ]
+    },
+    {
       "method": "edit.military.moveStation",
       "classification": "semantic-action",
       "actionIds": [
@@ -3561,6 +3626,13 @@
       ]
     },
     {
+      "method": "edit.religions.inspectLifecycle",
+      "classification": "semantic-action",
+      "actionIds": [
+        "society.religion.lifecycle"
+      ]
+    },
+    {
       "method": "edit.religions.rename",
       "classification": "atomic-editor-primitive",
       "actionIds": []
@@ -3691,6 +3763,13 @@
         "editor.delete-with-impact",
         "politics.delete-state",
         "politics.transfer-territory"
+      ]
+    },
+    {
+      "method": "edit.states.inspectCapitalChange",
+      "classification": "semantic-action",
+      "actionIds": [
+        "politics.relocate-capital"
       ]
     },
     {

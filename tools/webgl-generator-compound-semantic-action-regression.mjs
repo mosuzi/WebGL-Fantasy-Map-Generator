@@ -12,8 +12,8 @@ assert.equal(report.denominator.classifiedCellActionRows, report.denominator.cel
 assert.equal(report.denominator.fullCapabilityGaps, 0);
 assert.ok(report.totals.ruleTransactions >= 50);
 assert.ok(report.totals.plannerRecipes >= 10);
-assert.equal(report.totals.statuses["existing-transaction"], 47);
-assert.equal(report.totals.statuses["existing-needs-inspector"], 10);
+assert.equal(report.totals.statuses["existing-transaction"], 57);
+assert.equal(report.totals.statuses["existing-needs-inspector"] || 0, 0);
 
 for (const [id, inspect, execute] of [
   ["politics.create-state", "edit.states.inspectCreateAtCell", "edit.states.createAtCell"],

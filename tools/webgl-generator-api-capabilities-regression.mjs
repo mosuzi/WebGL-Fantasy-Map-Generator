@@ -142,7 +142,7 @@ async function inspectCapabilities(page, {cells, seed, template, expectedConfirm
     if (capabilities.contract?.stableCompatibility !== "same-major") failures.push("capabilities 缺少同主版本兼容策略");
     if (capabilities.contract?.deprecatedRemoval !== "next-major-only") failures.push("capabilities 缺少 deprecated 移除策略");
     if (Object.keys(capabilities.capabilityGroups || {}).length !== 17) failures.push("capabilities 能力组不是 17 个");
-    if (JSON.stringify(capabilities.stabilitySummary) !== JSON.stringify({stable: 261, experimental: 7, deprecated: 1})) failures.push("稳定等级统计不是 261 / 7 / 1");
+    if (JSON.stringify(capabilities.stabilitySummary) !== JSON.stringify({stable: 271, experimental: 7, deprecated: 1})) failures.push("稳定等级统计不是 271 / 7 / 1");
     if (!Object.prototype.hasOwnProperty.call(runtimeStats, "lastEditRefresh")) failures.push("runtimeStats 缺少 lastEditRefresh 字段");
     const coverage = capabilities.methodMetadataCoverage || {};
     if (coverage.complete !== true) failures.push("methodMetadataCoverage.complete 不是 true");
@@ -207,6 +207,8 @@ async function inspectCapabilities(page, {cells, seed, template, expectedConfirm
     failures.push(...cellRead.failures);
     const existingRuleTransactions = await inspectExistingRuleTransactionApi();
     failures.push(...existingRuleTransactions.failures);
+    const remainingRuleTransactions = await inspectRemainingRuleTransactionApi();
+    failures.push(...remainingRuleTransactions.failures);
     if (glError !== 0) failures.push(`WebGL error 非 0：${glError}`);
 
     return {
@@ -262,6 +264,7 @@ async function inspectCapabilities(page, {cells, seed, template, expectedConfirm
       },
       cellRead,
       existingRuleTransactions,
+      remainingRuleTransactions,
       glError,
       failures,
       passed: failures.length === 0
@@ -716,6 +719,146 @@ async function inspectCapabilities(page, {cells, seed, template, expectedConfirm
         return result?.ok === true && result.data != null;
       }
     }
+
+    async function inspectRemainingRuleTransactionApi() {
+      const ruleFailures = [];
+      const evidence = {};
+      const states = unwrap(api.objects.list("state", {limit: 200}), "remaining.states").items
+        .filter(item => Number(item.id) > 0);
+      const cities = unwrap(api.objects.list("city", {limit: 200}), "remaining.cities").items
+        .filter(item => Number(item.id) > 0);
+
+      const capitalSample = states
+        .map(state => ({
+          state,
+          city: cities.find(city => Number(city.stateId) === Number(state.id) && Number(city.id) !== Number(state.capitalId))
+        }))
+        .find(sample => sample.city);
+      if (!capitalSample) {
+        ruleFailures.push("生产图找不到迁都样本");
+      } else {
+        const inspection = unwrap(
+          api.edit.states.inspectCapitalChange(Number(capitalSample.state.id), Number(capitalSample.city.id)),
+          "remaining.capital.inspect"
+        );
+        const executed = unwrap(api.edit.states.setCapital(
+          Number(capitalSample.state.id),
+          Number(capitalSample.city.id),
+          inspectionOptions(inspection)
+        ), "remaining.capital.execute");
+        if (!executed.executed) ruleFailures.push("迁都公开令牌执行没有落图");
+        unwrap(api.history.undo(), "remaining.capital.undo");
+        evidence.capital = {stateId: Number(capitalSample.state.id), cityId: Number(capitalSample.city.id), executed: executed.executed};
+      }
+
+      if (states.length < 2) {
+        ruleFailures.push("生产图找不到双边外交样本");
+      } else {
+        let diplomacySample = null;
+        for (const relation of ["Enemy", "Friendly", "Neutral"]) {
+          const inspectionResult = unwrap(
+            api.edit.diplomacy.inspectRelation(Number(states[0].id), Number(states[1].id), relation),
+            `remaining.diplomacy.inspect.${relation}`
+          );
+          if (inspectionResult.allowed) {
+            diplomacySample = {relation, inspection: inspectionResult};
+            break;
+          }
+        }
+        if (!diplomacySample) {
+          ruleFailures.push("生产图找不到可变更外交关系");
+        } else {
+          const withoutConfirm = api.edit.diplomacy.setRelation(
+            Number(states[0].id),
+            Number(states[1].id),
+            diplomacySample.relation,
+            inspectionOptions(diplomacySample.inspection)
+          );
+          if (diplomacySample.inspection.requiresConfirm && (withoutConfirm?.ok !== false || withoutConfirm.error?.code !== "confirmation_required")) {
+            ruleFailures.push("外交高影响变更没有保留确认门禁");
+          }
+          const executed = unwrap(api.edit.diplomacy.setRelation(
+            Number(states[0].id),
+            Number(states[1].id),
+            diplomacySample.relation,
+            {
+              ...inspectionOptions(diplomacySample.inspection),
+              ...(diplomacySample.inspection.requiresConfirm ? {confirm: true} : {})
+            }
+          ), "remaining.diplomacy.execute");
+          if (!executed.executed) ruleFailures.push("外交公开令牌执行没有落图");
+          unwrap(api.history.undo(), "remaining.diplomacy.undo");
+          evidence.diplomacy = {
+            pair: [Number(states[0].id), Number(states[1].id)],
+            relation: diplomacySample.relation,
+            requiresConfirm: diplomacySample.inspection.requiresConfirm,
+            executed: executed.executed
+          };
+        }
+      }
+
+      const regiment = unwrap(api.objects.list("military", {limit: 200}), "remaining.military").items[0];
+      if (!regiment) {
+        ruleFailures.push("生产图找不到军团态势样本");
+      } else {
+        const status = ["marching", "resting", "garrisoned"].find(value => value !== regiment.status) || "marching";
+        const target = {
+          id: regiment.id,
+          stateId: Number(regiment.stateId),
+          regimentId: Number(regiment.regimentId)
+        };
+        const inspection = unwrap(api.edit.military.inspectStatus(target, status), "remaining.military.inspect");
+        const executed = unwrap(api.edit.military.setStatus(target, status, inspectionOptions(inspection)), "remaining.military.execute");
+        if (!executed.executed) ruleFailures.push("军团态势公开令牌执行没有落图");
+        unwrap(api.history.undo(), "remaining.military.undo");
+        evidence.military = {id: regiment.id, status, executed: executed.executed};
+      }
+
+      if (!states.length) {
+        ruleFailures.push("生产图找不到集合导入备注目标");
+      } else {
+        const stateId = Number(states[0].id);
+        const noteDocument = {
+          type: "webgl-generator-notes-summary",
+          version: 1,
+          notes: [{
+            id: `state:${stateId}`,
+            kind: "state",
+            objectId: stateId,
+            name: states[0].name || `国家 #${stateId}`,
+            body: "规则事务浏览器验收",
+            format: "plain"
+          }]
+        };
+        const importOptions = {mode: "replace"};
+        const inspection = unwrap(api.data.inspectCollectionImport("notes", noteDocument, importOptions), "remaining.collection.inspect");
+        const withoutConfirm = api.edit.notes.import(noteDocument, {
+          ...importOptions,
+          ...inspectionOptions(inspection)
+        });
+        if (withoutConfirm?.ok !== false || withoutConfirm.error?.code !== "confirmation_required") {
+          ruleFailures.push("集合替换导入没有保留确认门禁");
+        }
+        const executed = unwrap(api.edit.notes.import(noteDocument, {
+          ...importOptions,
+          confirm: true,
+          ...inspectionOptions(inspection)
+        }), "remaining.collection.execute");
+        if (!executed.executed) ruleFailures.push("集合导入公开令牌执行没有落图");
+        unwrap(api.history.undo(), "remaining.collection.undo");
+        evidence.collection = {kind: "notes", mode: "replace", requiresConfirm: inspection.requiresConfirm, executed: executed.executed};
+      }
+
+      return {passed: ruleFailures.length === 0, evidence, failures: ruleFailures};
+
+      function inspectionOptions(inspection) {
+        return {
+          inspectionToken: inspection.inspectionToken,
+          expectedRevision: inspection.expectedRevision,
+          inspectorSchemaVersion: inspection.inspectorSchemaVersion
+        };
+      }
+    }
   }, {cells, seed, template, expectedConfirmRequired});
 }
 
@@ -827,6 +970,7 @@ function buildConsoleSummary(report) {
     representativeMutates: report.representativeMutates,
     contract: report.contract,
     existingRuleTransactions: report.existingRuleTransactions,
+    remainingRuleTransactions: report.remainingRuleTransactions,
     uiApiConvergence: report.uiApiConvergence,
     glError: report.glError,
     healthErrors: report.healthErrors.total,
@@ -859,6 +1003,8 @@ function renderMarkdown(report) {
   lines.push(`- 能力组：${report.contract.capabilityGroups}`);
   lines.push(`- 既有规则事务公开链：${report.existingRuleTransactions.passed ? "通过" : "失败"}`);
   lines.push(`- 规则事务证据：\`${JSON.stringify(report.existingRuleTransactions.evidence)}\``);
+  lines.push(`- 第 207 项剩余规则事务公开链：${report.remainingRuleTransactions.passed ? "通过" : "失败"}`);
+  lines.push(`- 剩余规则事务证据：\`${JSON.stringify(report.remainingRuleTransactions.evidence)}\``);
   lines.push("");
   lines.push("## 命名空间", "");
   lines.push("| 命名空间 | methods | documented | metadata | runtime | 完整 |");

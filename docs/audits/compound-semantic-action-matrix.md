@@ -4,11 +4,11 @@
 
 ## 审计结论
 
-- 上游能力矩阵：1048 行，unknown / unclassified / gap = 0 / 0 / 0。
-- 公开 API：269 / 269 已归类。
+- 上游能力矩阵：1078 行，unknown / unclassified / gap = 0 / 0 / 0。
+- 公开 API：279 / 279 已归类。
 - Cell / 画布动作：48 / 48 已归类；画布模式 29，直接操控 19 类 / 89 个宿主。
 - 规则事务与玩法配方：68 + 10 = 78。
-- 已有完整事务 47，已有写命令但缺 AI inspector 10，多 API 碎片待收敛 5，缺失游戏规则 6，规划器配方 10。
+- 已有完整事务 57，已有写命令但缺 AI inspector 0，多 API 碎片待收敛 5，缺失游戏规则 6，规划器配方 10。
 - 结构缺口：0。
 
 ## 边界定义
@@ -59,16 +59,16 @@
 | `politics.merge-provinces` | 国家、省份与政治拓扑 | 把多个同国相邻省份合并，保留一个身份或创建新身份，并确定省会。 | `missing-game-rule` | `cells.query`<br>`objects.get` | `planned:edit.provinces.inspectMerge`<br>`planned:edit.provinces.merge` |
 | `politics.split-province` | 国家、省份与政治拓扑 | 按连通 Cell 集或城镇锚点拆分省份，并为两侧确定省会。 | `missing-game-rule` | `cells.query`<br>`objects.get` | `planned:edit.provinces.inspectSplit`<br>`planned:edit.provinces.split` |
 | `politics.change-government` | 国家、省份与政治拓扑 | 调整国家政体和允许的国号后缀，并同步完整国名和政治镜像。 | `existing-transaction` | `edit.states.setGovernment`<br>`edit.states.setGovernmentBatch` | `info.describe(edit.states.setGovernment)`<br>`edit.states.setGovernment / setGovernmentBatch` |
-| `politics.relocate-capital` | 国家、省份与政治拓扑 | 把本国城市设为首都，取消旧首都并同步国家中心、标签和城镇层级。 | `existing-needs-inspector` | `edit.states.setCapital` | `planned:edit.states.inspectCapitalChange`<br>`edit.states.setCapital` |
+| `politics.relocate-capital` | 国家、省份与政治拓扑 | 把本国城市设为首都，取消旧首都并同步国家中心、标签和城镇层级。 | `existing-transaction` | `edit.states.inspectCapitalChange`<br>`edit.states.setCapital` | `edit.states.inspectCapitalChange`<br>`edit.states.setCapital` |
 | `settlement.found-city` | 城镇、人口与定居点 | 在合法 Cell 建立城镇，继承国家、省份、文化、宗教和港口条件。 | `existing-transaction` | `edit.cities.add`<br>`edit.cities.createAtCell`<br>`edit.cities.inspectCreateAtCell` | `edit.cities.inspectCreateAtCell`<br>`edit.cities.createAtCell` |
 | `settlement.move-city` | 城镇、人口与定居点 | 移动城镇到目标点，处理国家/省份归属、首都省会限制、港口和相连路线。 | `existing-transaction` | `edit.cities.inspectMove`<br>`edit.cities.move` | `edit.cities.inspectMove`<br>`edit.cities.move` |
 | `settlement.delete-city` | 城镇、人口与定居点 | 删除城镇前评估首都、省会、路线、市场和备注依赖，确认后单事务清理。 | `existing-transaction` | `edit.cities.delete`<br>`edit.cities.inspectDelete` | `edit.cities.inspectDelete`<br>`edit.cities.delete` |
-| `settlement.sync-city-owner` | 城镇、人口与定居点 | 让城镇国家与省份归属跟随所在 Cell，并处理首都、省会和跨国约束。 | `existing-needs-inspector` | `edit.cities.syncOwner` | `planned:edit.cities.inspectOwnerSync`<br>`edit.cities.syncOwner` |
+| `settlement.sync-city-owner` | 城镇、人口与定居点 | 让城镇国家与省份归属跟随所在 Cell，并处理首都、省会和跨国约束。 | `existing-transaction` | `edit.cities.inspectOwnerSync`<br>`edit.cities.syncOwner` | `edit.cities.inspectOwnerSync`<br>`edit.cities.syncOwner` |
 | `settlement.regenerate-scope` | 城镇、人口与定居点 | 在全图、国家或省份范围重设普通城镇，保留首都、省会和范围外对象身份。 | `existing-transaction` | `generate.regenerate` | `planned:edit.cities.inspectRegeneration`<br>`generate.regenerate(cities)` |
 | `society.adjust-population` | 城镇、人口与定居点 | 给国家、省份、城市或 Cell 区域增减人口，并按规则分摊城乡。 | `existing-transaction` | `edit.population.applyAdjustment`<br>`edit.population.inspectAdjustment` | `edit.population.inspectAdjustment`<br>`edit.population.applyAdjustment` |
 | `society.transfer-population` | 城镇、人口与定居点 | 从来源区域向目标区域迁移人口，保持总量并更新城乡和统计。 | `existing-transaction` | `edit.population.inspectTransfer`<br>`edit.population.transfer` | `edit.population.inspectTransfer`<br>`edit.population.transfer` |
-| `society.culture.lifecycle` | 文化、宗教、命名与社会归属 | 管理文化对象及其 Cell 归属、中心、父级和删除后的回退。 | `existing-needs-inspector` | `edit.cultures.add`<br>`edit.cultures.applyExpansion`<br>`edit.cultures.assignCells`<br>`edit.cultures.delete`<br>`edit.cultures.inspectExpansion`<br>`edit.cultures.setParent` | `edit.cultures.inspectExpansion / planned:edit.cultures.inspectLifecycle`<br>`edit.cultures.*` |
-| `society.religion.lifecycle` | 文化、宗教、命名与社会归属 | 管理宗教对象及其 Cell 归属、中心、父级和删除后的回退。 | `existing-needs-inspector` | `edit.religions.add`<br>`edit.religions.applyExpansion`<br>`edit.religions.assignCells`<br>`edit.religions.delete`<br>`edit.religions.inspectExpansion`<br>`edit.religions.setParent` | `edit.religions.inspectExpansion / planned:edit.religions.inspectLifecycle`<br>`edit.religions.*` |
+| `society.culture.lifecycle` | 文化、宗教、命名与社会归属 | 管理文化对象及其 Cell 归属、中心、父级和删除后的回退。 | `existing-transaction` | `edit.cultures.add`<br>`edit.cultures.applyExpansion`<br>`edit.cultures.assignCells`<br>`edit.cultures.delete`<br>`edit.cultures.inspectExpansion`<br>`edit.cultures.inspectLifecycle`<br>`edit.cultures.setParent` | `edit.cultures.inspectLifecycle / edit.cultures.inspectExpansion`<br>`edit.cultures.*` |
+| `society.religion.lifecycle` | 文化、宗教、命名与社会归属 | 管理宗教对象及其 Cell 归属、中心、父级和删除后的回退。 | `existing-transaction` | `edit.religions.add`<br>`edit.religions.applyExpansion`<br>`edit.religions.assignCells`<br>`edit.religions.delete`<br>`edit.religions.inspectExpansion`<br>`edit.religions.inspectLifecycle`<br>`edit.religions.setParent` | `edit.religions.inspectLifecycle / edit.religions.inspectExpansion`<br>`edit.religions.*` |
 | `society.bind-namebase-and-rename` | 文化、宗教、命名与社会归属 | 调整名称库绑定并按国家、省份或对象类型批量重命名，确保唯一性和旧名策略。 | `fragmented-needs-transaction` | `namebases.bind`<br>`namebases.renameObjects` | `planned:namebases.inspectBindAndRename`<br>`planned:namebases.bindAndRename` |
 | `society.replace-or-remove-namebase` | 文化、宗教、命名与社会归属 | 删除、清空或替换用户名称库时，先处理所有文化和对象绑定，避免悬空。 | `fragmented-needs-transaction` | `namebases.bind`<br>`namebases.clear`<br>`namebases.delete`<br>`namebases.import`<br>`namebases.update` | `planned:namebases.inspectReplacement`<br>`planned:namebases.replace` |
 | `infrastructure.create-route` | 路线、区域与资源设施 | 根据端点或 Pack Cell 路径创建道路、步道或海路，验证通行和归属。 | `existing-transaction` | `edit.routes.create` | `planned:cells.inspectAction(route.draw)`<br>`edit.routes.create` |
@@ -79,19 +79,19 @@
 | `economy.rebuild` | 市场、资源与经济链 | 基于当前政治、城镇和资源状态重算市场与交易。 | `existing-transaction` | `edit.economy.rebuild` | `planned:edit.economy.inspectRebuild`<br>`edit.economy.rebuild` |
 | `infrastructure.regenerate-resources` | 市场、资源与经济链 | 重生成资源标记、资源潜力和相关贸易。 | `existing-transaction` | `generate.regenerate` | `planned:edit.markers.inspectResourceRegeneration`<br>`generate.regenerate(markers)` |
 | `infrastructure.manage-zone` | 路线、区域与资源设施 | 按中心 Cell 和半径创建区域，或在依赖预检后删除区域。 | `existing-transaction` | `edit.zones.create`<br>`edit.zones.delete`<br>`edit.zones.inspectCreate`<br>`edit.zones.inspectDelete` | `edit.zones.inspectCreate / edit.zones.inspectDelete`<br>`edit.zones.create / edit.zones.delete` |
-| `diplomacy.set-bilateral-relation` | 外交、战争与国家关系 | 设置两国关系并同步反向关系、摘要、纪事和战争相关约束。 | `existing-needs-inspector` | `edit.diplomacy.setRelation` | `planned:edit.diplomacy.inspectRelation`<br>`edit.diplomacy.setRelation` |
+| `diplomacy.set-bilateral-relation` | 外交、战争与国家关系 | 设置两国关系并同步反向关系、摘要、纪事和战争相关约束。 | `existing-transaction` | `edit.diplomacy.inspectRelation`<br>`edit.diplomacy.setRelation` | `edit.diplomacy.inspectRelation`<br>`edit.diplomacy.setRelation` |
 | `diplomacy.regenerate` | 外交、战争与国家关系 | 基于当前国家、邻接和随机种子重建外交关系与摘要。 | `existing-transaction` | `generate.regenerate` | `planned:edit.diplomacy.inspectRegeneration`<br>`generate.regenerate(diplomacy)` |
 | `diplomacy.declare-war` | 外交、战争与国家关系 | 两国从和平关系进入战争，建立战争目标、参战方、纪事和军事活动上下文。 | `missing-game-rule` | `objects.get` | `planned:edit.diplomacy.inspectDeclareWar`<br>`planned:edit.diplomacy.declareWar` |
 | `diplomacy.make-peace` | 外交、战争与国家关系 | 结束战争，处理领土、赔款、附庸、军队状态和纪事。 | `missing-game-rule` | `edit.diplomacy.setRelation`<br>`objects.get` | `planned:edit.diplomacy.inspectPeace`<br>`planned:edit.diplomacy.makePeace` |
 | `diplomacy.change-overlord` | 外交、战争与国家关系 | 建立或解除附庸关系，维护关系矩阵、外交摘要、战争资格和纪事。 | `missing-game-rule` | `edit.diplomacy.setRelation`<br>`objects.get` | `planned:edit.diplomacy.inspectOverlordChange`<br>`planned:edit.diplomacy.changeOverlord` |
-| `military.reconfigure-force` | 军队、调动与战斗 | 调整国家兵种比例，验证总和并同步军团构成与统计。 | `existing-needs-inspector` | `edit.military.setRatios` | `planned:edit.military.inspectRatios`<br>`edit.military.setRatios` |
-| `military.move-station` | 军队、调动与战斗 | 移动军团到合法 Cell，校验国家、地形、基地和命令目标。 | `existing-needs-inspector` | `edit.military.moveStation` | `planned:cells.inspectAction(military.move)`<br>`edit.military.moveStation` |
-| `military.set-base` | 军队、调动与战斗 | 把当前位置或指定位置设为基地，验证归属和可达性。 | `existing-needs-inspector` | `edit.military.setBase` | `planned:edit.military.inspectBase`<br>`edit.military.setBase` |
-| `military.issue-status` | 军队、调动与战斗 | 调整军团驻防、机动、交战等态势并检查目标和批量原子性。 | `existing-needs-inspector` | `edit.military.setStatus`<br>`edit.military.setStatusBatch` | `planned:edit.military.inspectStatus`<br>`edit.military.setStatus / setStatusBatch` |
+| `military.reconfigure-force` | 军队、调动与战斗 | 调整国家兵种比例，验证总和并同步军团构成与统计。 | `existing-transaction` | `edit.military.inspectRatios`<br>`edit.military.setRatios` | `edit.military.inspectRatios`<br>`edit.military.setRatios` |
+| `military.move-station` | 军队、调动与战斗 | 移动军团到合法 Cell，校验国家、地形、基地和命令目标。 | `existing-transaction` | `edit.military.inspectMoveStation`<br>`edit.military.moveStation` | `edit.military.inspectMoveStation`<br>`edit.military.moveStation` |
+| `military.set-base` | 军队、调动与战斗 | 把当前位置或指定位置设为基地，验证归属和可达性。 | `existing-transaction` | `edit.military.inspectBase`<br>`edit.military.setBase` | `edit.military.inspectBase`<br>`edit.military.setBase` |
+| `military.issue-status` | 军队、调动与战斗 | 调整军团驻防、机动、交战等态势并检查目标和批量原子性。 | `existing-transaction` | `edit.military.inspectStatus`<br>`edit.military.setStatus`<br>`edit.military.setStatusBatch` | `edit.military.inspectStatus`<br>`edit.military.setStatus / setStatusBatch` |
 | `military.resolve-battle` | 军队、调动与战斗 | 根据参战军团、地形和规则结算伤亡、撤退、占领与纪事，而不只是记录文本事件。 | `missing-game-rule` | `edit.military.recordBattleEvent` | `planned:edit.military.inspectBattle`<br>`planned:edit.military.resolveBattle` |
 | `military.regenerate` | 军队、调动与战斗 | 基于当前国家、人口与政策重生成军团并维护引用。 | `existing-transaction` | `generate.regenerate` | `planned:edit.military.inspectRegeneration`<br>`generate.regenerate(military)` |
 | `editor.delete-with-impact` | 编辑器事务、批量操作与发布 | 对对象删除、批量删除和清空先评估依赖与风险，再确认并原子执行。 | `existing-transaction` | `edit.cities.delete`<br>`edit.cultures.delete`<br>`edit.labels.delete`<br>`edit.lakes.delete`<br>`edit.markers.delete`<br>`edit.notes.delete`<br>`edit.notes.deleteBatch`<br>`edit.provinces.delete`<br>`edit.religions.delete`<br>`edit.rivers.delete`<br>`edit.routes.delete`<br>`edit.states.delete`<br>`edit.zones.delete`<br>`namebases.clear`<br>`namebases.delete` | `统一 delete impact inspector`<br>`各领域 delete/clear` |
-| `editor.import-collection` | 编辑器事务、批量操作与发布 | 校验外部集合、处理 ID 冲突与覆盖策略，并作为单条历史导入。 | `existing-needs-inspector` | `edit.measurements.import`<br>`edit.military.importBattleEvents`<br>`edit.notes.import`<br>`namebases.import` | `planned:data.inspectCollectionImport`<br>`现有 import 方法` |
+| `editor.import-collection` | 编辑器事务、批量操作与发布 | 校验外部集合、处理 ID 冲突与覆盖策略，并作为单条历史导入。 | `existing-transaction` | `data.inspectCollectionImport`<br>`edit.measurements.import`<br>`edit.military.importBattleEvents`<br>`edit.notes.import`<br>`namebases.import` | `data.inspectCollectionImport`<br>`现有 import 方法` |
 
 ## 需要优先补齐的复合事务
 
@@ -240,6 +240,6 @@
 
 ## 机器覆盖
 
-- API 分类：`atomic-editor-primitive=49`，`editor-runtime-service=49`，`read-export-service=10`，`read-primitive=26`，`semantic-action=135`。
+- API 分类：`atomic-editor-primitive=49`，`editor-runtime-service=49`，`read-export-service=10`，`read-primitive=26`，`semantic-action=145`。
 - 交互分类：`semantic-input-or-primitive=36`，`ui-boundary=12`。
-- Source digest：`980d843eae32bf43971c764c7e3c3d75b729ccc7015ee113fa03556d9e89983b`。
+- Source digest：`60a4f620ed905e442a3a252c0eba7d7a695540272b48c79c2799ccca689ba1b4`。

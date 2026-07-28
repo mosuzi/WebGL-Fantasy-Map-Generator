@@ -258,6 +258,7 @@ const METHOD_OVERRIDES = Object.freeze({
   },
   ...createAtCellMethodOverrides(),
   ...existingRuleMethodOverrides(),
+  ...remainingRuleMethodOverrides(),
   "oceanCurrents.rename": {
     arguments: [argument("currentId", stringSchema("洋流 ID")), argument("name", stringSchema("新名称"))],
     result: objectSchema(["executed", "id", "name"]),
@@ -1027,6 +1028,157 @@ function existingRuleMethodOverrides() {
     [...deleteCodes, ...tokenCodes],
     [[1, {}]]
   );
+  return entries;
+}
+
+function remainingRuleMethodOverrides() {
+  const entries = {};
+  const object = {type: "object", additionalProperties: true};
+  const tokenCodes = [
+    "inspection-required", "inspection-stale", "inspection-token-invalid",
+    "inspection-action-mismatch", "inspection-input-mismatch", "inspection-schema-mismatch"
+  ];
+  const executionOptions = ruleExecutionOptionsSchema();
+  const lifecycleCodes = [
+    "culture-store-missing", "religion-store-missing", "invalid-culture", "invalid-religion",
+    "culture-not-found", "religion-not-found",
+    "invalid-operation", "empty-assignment", "invalid-assignment", "invalid-grid-cell", "water-grid-cell",
+    "assignment-unchanged", "expansion-invalid", "expansion-unchanged", "invalid-parent",
+    "parent-unchanged", "parent-cycle-or-missing", "delete-not-found",
+    "invalid-mode", "missing-object", "invalid-center", "invalid-type", "invalid-expansion", "invalid-expansionism",
+    "center-out-of-range", "center-water", "center-not-owned", "center-collision",
+    "regeneration_locked_noop"
+  ];
+  const capitalCodes = [
+    "invalid-state", "invalid-city", "state-not-found", "city-not-found", "city-state-mismatch",
+    "burg-not-found", "capital-unchanged"
+  ];
+  const ownerCodes = [
+    "invalid-city", "city-not-found", "city-cell-missing", "capital-owner-conflict",
+    "provincial-owner-conflict", "owner-unchanged"
+  ];
+  const diplomacyCodes = [
+    "invalid-state-pair", "same-state", "subject-not-found", "object-not-found",
+    "invalid-relation", "relation-unchanged"
+  ];
+  const ratioCodes = ["invalid-state", "state-not-found", "invalid-ratios", "empty-ratios", "zero-ratios", "ratios-unchanged"];
+  const moveCodes = ["regiment-not-found", "destination-not-found", "foreign-territory", "terrain-mismatch", "station-unchanged"];
+  const baseCodes = ["regiment-not-found", "station-coordinates-missing", "base-unchanged"];
+  const statusCodes = ["invalid-status", "invalid-target", "empty-targets", "regiment-not-found", "status-unchanged"];
+  const collectionCodes = [
+    "invalid-collection-kind", "notes-not-importable", "import-unchanged", "invalid-measurements",
+    "empty-measurements", "invalid-namebase-document", "empty-namebases", "invalid-military-events",
+    "empty-military-events"
+  ];
+
+  entries["edit.states.inspectCapitalChange"] = ruleInspectorOverride([
+    argument("stateId", {type: "integer", minimum: 1}),
+    argument("cityId", {type: "integer", minimum: 1})
+  ], capitalCodes, [[1, 1]]);
+  entries["edit.states.setCapital"] = ruleExecutorOverride([
+    argument("stateId", {type: "integer", minimum: 1}),
+    argument("cityId", {type: "integer", minimum: 1}),
+    argument("options", executionOptions, false)
+  ], [...capitalCodes, ...tokenCodes], [[1, 1, {}]]);
+
+  entries["edit.cities.inspectOwnerSync"] = ruleInspectorOverride([
+    argument("cityId", {type: "integer", minimum: 0})
+  ], ownerCodes, [[1]]);
+  entries["edit.cities.syncOwner"] = ruleExecutorOverride([
+    argument("cityId", {type: "integer", minimum: 0}),
+    argument("options", executionOptions, false)
+  ], [...ownerCodes, ...tokenCodes, "confirmation_required"], [[1, {}]]);
+
+  entries["edit.cultures.inspectLifecycle"] = ruleInspectorOverride([
+    argument("operation", {type: "string", enum: ["create", "assign", "expand", "reparent", "delete"]}),
+    argument("request", object, false)
+  ], lifecycleCodes, [["assign", {id: 1, gridCellIds: [0]}]]);
+  entries["edit.religions.inspectLifecycle"] = ruleInspectorOverride([
+    argument("operation", {type: "string", enum: ["create", "assign", "expand", "reparent", "delete"]}),
+    argument("request", object, false)
+  ], lifecycleCodes, [["assign", {id: 1, gridCellIds: [0]}]]);
+  for (const kind of ["cultures", "religions"]) {
+    for (const method of ["add", "assignCells", "applyExpansion", "delete", "setParent"]) {
+      const qualified = `edit.${kind}.${method}`;
+      const argumentsList = method === "add"
+        ? [argument("options", executionOptions, false)]
+        : method === "assignCells"
+          ? [argument(`${kind.slice(0, -1)}Id`, {type: "integer", minimum: 1}), argument("gridCellIds", arraySchema({type: "integer", minimum: 0})), argument("options", executionOptions, false)]
+          : method === "applyExpansion"
+            ? [argument(`${kind.slice(0, -1)}Id`, {type: "integer", minimum: 1}), argument("options", executionOptions, false)]
+            : method === "delete"
+              ? [argument(`${kind.slice(0, -1)}Id`, {type: "integer", minimum: 1}), argument("options", executionOptions, false)]
+              : [argument(`${kind.slice(0, -1)}Id`, {type: "integer", minimum: 1}), argument("parentId", {type: "integer", minimum: 0}), argument("options", executionOptions, false)];
+      entries[qualified] = ruleExecutorOverride(argumentsList, [...lifecycleCodes, ...tokenCodes, "confirmation_required"], [[]]);
+    }
+  }
+
+  entries["edit.diplomacy.inspectRelation"] = ruleInspectorOverride([
+    argument("subjectId", {type: "integer", minimum: 1}),
+    argument("objectId", {type: "integer", minimum: 1}),
+    argument("relation", {type: "string"}),
+    argument("options", object, false)
+  ], diplomacyCodes, [[1, 2, "Friendly", {}]]);
+  entries["edit.diplomacy.setRelation"] = ruleExecutorOverride([
+    argument("subjectId", {type: "integer", minimum: 1}),
+    argument("objectId", {type: "integer", minimum: 1}),
+    argument("relation", {type: "string"}),
+    argument("options", ruleExecutionOptionsSchema({properties: {reason: {type: "string"}}}), false)
+  ], [...diplomacyCodes, ...tokenCodes, "confirmation_required"], [[1, 2, "Friendly", {}]]);
+
+  entries["edit.military.inspectRatios"] = ruleInspectorOverride([
+    argument("stateId", {type: "integer", minimum: 1}),
+    argument("ratios", object)
+  ], ratioCodes, [[1, {infantry: 0.5, archers: 0.5}]]);
+  entries["edit.military.setRatios"] = ruleExecutorOverride([
+    argument("stateId", {type: "integer", minimum: 1}),
+    argument("ratios", object),
+    argument("options", executionOptions, false)
+  ], [...ratioCodes, ...tokenCodes, "confirmation_required"], [[1, {infantry: 0.5, archers: 0.5}, {}]]);
+  entries["edit.military.inspectMoveStation"] = ruleInspectorOverride([
+    argument("target", object),
+    argument("destination", object)
+  ], moveCodes, [[{stateId: 1, regimentId: 0}, {packCell: 0}]]);
+  entries["edit.military.moveStation"] = ruleExecutorOverride([
+    argument("target", object),
+    argument("destination", object),
+    argument("options", executionOptions, false)
+  ], [...moveCodes, ...tokenCodes], [[{stateId: 1, regimentId: 0}, {packCell: 0}, {}]]);
+  entries["edit.military.inspectBase"] = ruleInspectorOverride([
+    argument("target", object)
+  ], baseCodes, [[{stateId: 1, regimentId: 0}]]);
+  entries["edit.military.setBase"] = ruleExecutorOverride([
+    argument("target", object),
+    argument("options", executionOptions, false)
+  ], [...baseCodes, ...tokenCodes], [[{stateId: 1, regimentId: 0}, {}]]);
+  entries["edit.military.inspectStatus"] = ruleInspectorOverride([
+    argument("targets", {anyOf: [object, arraySchema(object)]}),
+    argument("status", {type: "string"})
+  ], statusCodes, [[[{stateId: 1, regimentId: 0}], "resting"]]);
+  for (const method of ["setStatus", "setStatusBatch"]) {
+    entries[`edit.military.${method}`] = ruleExecutorOverride([
+      argument(method === "setStatus" ? "target" : "targets", method === "setStatus" ? object : arraySchema(object)),
+      argument("status", {type: "string"}),
+      argument("options", executionOptions, false)
+    ], [...statusCodes, ...tokenCodes], [[]]);
+  }
+
+  entries["data.inspectCollectionImport"] = ruleInspectorOverride([
+    argument("kind", {type: "string", enum: ["notes", "measurements", "namebases", "military-events"]}),
+    argument("document", {type: ["object", "array", "string"]}),
+    argument("options", object, false)
+  ], collectionCodes, [["measurements", [], {}]]);
+  for (const [method, kind] of [
+    ["edit.notes.import", "notes"],
+    ["edit.measurements.import", "measurements"],
+    ["namebases.import", "namebases"],
+    ["edit.military.importBattleEvents", "military-events"]
+  ]) {
+    entries[method] = ruleExecutorOverride([
+      argument(method === "edit.measurements.import" ? "measurements" : "document", {type: ["object", "array", "string"]}),
+      argument("options", executionOptions, false)
+    ], [...collectionCodes, ...tokenCodes, "confirmation_required"], [[kind === "measurements" ? [] : {}, {}]]);
+  }
   return entries;
 }
 

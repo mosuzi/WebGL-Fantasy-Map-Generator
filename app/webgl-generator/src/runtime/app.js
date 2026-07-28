@@ -150,6 +150,11 @@ import {
   inspectExistingRuleAction,
   stripRuleInspectionMetadata
 } from "./existing-rule-inspectors.js";
+import {
+  REMAINING_RULE_ACTION,
+  inspectRemainingRuleAction
+} from "./remaining-rule-inspectors.js";
+import {createRuleInspectionResult, normalizeRuleInspectionInput} from "./rule-inspection-token.js";
 import {executeClimateDownstreamRebuildAsync, inspectClimateDownstreamRebuild} from "./climate-downstream-rebuild.js";
 import {captureMapMutationSnapshot, executeMapSnapshotTransaction, restoreMapMutationSnapshot} from "./map-snapshot-transaction.js";
 import {SelectionStore} from "./selection-store.js";
@@ -2747,6 +2752,7 @@ function createRuntimeActions(state, documentRef, options = {}) {
         ...mapReplaceConfig(loadingMessage("map-import-read")),
         isNoop: result => result?.restored === false
       }),
+      inspectCollectionImport: (kind, document, options = {}) => inspectCollectionImportViaApi(state, kind, document, options),
       importMap: (document, options = {}) => operation.run("data.importMap", context => importMapDocumentViaApi(state, documentRef, document, options, context), mapReplaceConfig(loadingMessage("map-import-read"))),
       importGEO: (document, options = {}) => operation.runSync("data.importGEO", context => {
         context.report("import", {message: "正在导入 GEO 数据"});
@@ -2774,7 +2780,7 @@ function createRuntimeActions(state, documentRef, options = {}) {
         rename: (measurementId, name) => renameMeasurementViaApi(state, documentRef, measurementId, name),
         updatePoints: (measurementId, points, options = {}) => updateMeasurementPointsViaApi(state, documentRef, measurementId, points, options),
         delete: measurementId => deleteMeasurementViaApi(state, documentRef, measurementId),
-        import: measurements => importMeasurementsViaApi(state, documentRef, measurements)
+        import: (measurements, options = {}) => importMeasurementsViaApi(state, documentRef, measurements, options)
       },
       cities: {
         add: gridCell => addCityViaApi(state, documentRef, gridCell),
@@ -2786,7 +2792,8 @@ function createRuntimeActions(state, documentRef, options = {}) {
         move: (cityId, target) => moveCityViaApi(state, documentRef, cityId, target),
         rename: (cityId, name) => renameCityViaApi(state, documentRef, cityId, name),
         setPopulation: (cityId, population) => setCityPopulationViaApi(state, documentRef, cityId, population),
-        syncOwner: cityId => syncCityOwnerViaApi(state, documentRef, cityId),
+        inspectOwnerSync: cityId => inspectRemainingRuleViaApi(state, REMAINING_RULE_ACTION.CITY_OWNER_SYNC, {cityId: normalizeApiInteger(cityId, "城市 ID")}),
+        syncOwner: (cityId, options = {}) => syncCityOwnerViaApi(state, documentRef, cityId, options),
         setVisual: (cityId, patch) => setCityVisualViaApi(state, documentRef, cityId, patch),
         resetVisual: cityId => resetCityVisualViaApi(state, documentRef, cityId)
       },
@@ -2813,7 +2820,11 @@ function createRuntimeActions(state, documentRef, options = {}) {
         rename: (stateId, name) => renameStateViaApi(state, documentRef, stateId, name),
         setColor: (stateId, color) => setStateColorViaApi(state, documentRef, stateId, color),
         setGovernment: (stateId, governmentKey, options = {}) => setStateGovernmentViaApi(state, documentRef, stateId, governmentKey, options),
-        setCapital: (stateId, cityId) => setStateCapitalViaApi(state, documentRef, stateId, cityId),
+        inspectCapitalChange: (stateId, cityId) => inspectRemainingRuleViaApi(state, REMAINING_RULE_ACTION.CAPITAL_CHANGE, {
+          stateId: normalizeApiInteger(stateId, "国家 ID"),
+          cityId: normalizeApiInteger(cityId, "城市 ID")
+        }),
+        setCapital: (stateId, cityId, options = {}) => setStateCapitalViaApi(state, documentRef, stateId, cityId, options),
         setGovernmentBatch: (stateIds, governmentKey) => setStatesGovernmentBatchViaApi(state, documentRef, stateIds, governmentKey),
         applyChanges: changes => applyStateChangesViaApi(state, documentRef, changes)
       },
@@ -2872,16 +2883,21 @@ function createRuntimeActions(state, documentRef, options = {}) {
         setMarketDisplay: (marketId, patch) => setMarketDisplayViaApi(state, documentRef, marketId, patch)
       },
       diplomacy: {
+        inspectRelation: (subjectId, objectId, relation, editOptions = {}) => inspectDiplomacyRelationViaApi(state, subjectId, objectId, relation, editOptions),
         setRelation: (subjectId, objectId, relation, editOptions = {}) => setDiplomacyRelationViaApi(state, documentRef, subjectId, objectId, relation, editOptions)
       },
       military: {
-        setRatios: (stateId, ratios) => setMilitaryRatiosViaApi(state, documentRef, stateId, ratios),
-        setStatus: (target, status) => setMilitaryStatusViaApi(state, documentRef, target, status),
-        setStatusBatch: (targets, status) => setMilitaryStatusBatchViaApi(state, documentRef, targets, status),
-        moveStation: (target, destination) => moveMilitaryStationViaApi(state, documentRef, target, destination),
-        setBase: target => setMilitaryBaseViaApi(state, documentRef, target),
+        inspectRatios: (stateId, ratios) => inspectMilitaryRatiosViaApi(state, stateId, ratios),
+        setRatios: (stateId, ratios, options = {}) => setMilitaryRatiosViaApi(state, documentRef, stateId, ratios, options),
+        inspectStatus: (targets, status) => inspectMilitaryStatusViaApi(state, targets, status),
+        setStatus: (target, status, options = {}) => setMilitaryStatusViaApi(state, documentRef, target, status, options),
+        setStatusBatch: (targets, status, options = {}) => setMilitaryStatusBatchViaApi(state, documentRef, targets, status, options),
+        inspectMoveStation: (target, destination) => inspectMilitaryMoveViaApi(state, target, destination),
+        moveStation: (target, destination, options = {}) => moveMilitaryStationViaApi(state, documentRef, target, destination, options),
+        inspectBase: target => inspectMilitaryBaseViaApi(state, target),
+        setBase: (target, options = {}) => setMilitaryBaseViaApi(state, documentRef, target, options),
         recordBattleEvent: (target, event = {}) => recordMilitaryBattleEventViaApi(state, documentRef, target, event),
-        importBattleEvents: document => importMilitaryBattleEventsViaApi(state, documentRef, document),
+        importBattleEvents: (document, options = {}) => importMilitaryBattleEventsViaApi(state, documentRef, document, options),
         clearBattleEvents: (target, editOptions = {}) => clearMilitaryBattleEventsViaApi(state, documentRef, target, editOptions),
         rename: (target, name) => renameMilitaryRegimentViaApi(state, documentRef, target, name)
       },
@@ -2893,24 +2909,26 @@ function createRuntimeActions(state, documentRef, options = {}) {
         setStyle: (zoneId, patch) => setZoneStyleViaApi(state, documentRef, zoneId, patch)
       },
       cultures: {
+        inspectLifecycle: (operation, input = {}) => inspectSocialLifecycleViaApi(state, "culture", operation, input),
         add: options => addCultureViaApi(state, documentRef, options),
-        assignCells: (cultureId, gridCellIds) => assignSocialCellsViaApi(state, documentRef, "culture", cultureId, gridCellIds),
+        assignCells: (cultureId, gridCellIds, options = {}) => assignSocialCellsViaApi(state, documentRef, "culture", cultureId, gridCellIds, options),
         inspectExpansion: (cultureId, options = {}) => inspectSocialExpansionViaApi(state, "culture", cultureId, options),
         applyExpansion: (cultureId, options = {}) => applySocialExpansionViaApi(state, documentRef, "culture", cultureId, options),
         delete: (cultureId, options = {}) => deleteCultureViaApi(state, documentRef, cultureId, options),
         rename: (cultureId, name) => renameCultureViaApi(state, documentRef, cultureId, name),
         setColor: (cultureId, color) => setCultureColorViaApi(state, documentRef, cultureId, color),
-        setParent: (cultureId, parentId) => setCultureParentViaApi(state, documentRef, cultureId, parentId)
+        setParent: (cultureId, parentId, options = {}) => setCultureParentViaApi(state, documentRef, cultureId, parentId, options)
       },
       religions: {
+        inspectLifecycle: (operation, input = {}) => inspectSocialLifecycleViaApi(state, "religion", operation, input),
         add: options => addReligionViaApi(state, documentRef, options),
-        assignCells: (religionId, gridCellIds) => assignSocialCellsViaApi(state, documentRef, "religion", religionId, gridCellIds),
+        assignCells: (religionId, gridCellIds, options = {}) => assignSocialCellsViaApi(state, documentRef, "religion", religionId, gridCellIds, options),
         inspectExpansion: (religionId, options = {}) => inspectSocialExpansionViaApi(state, "religion", religionId, options),
         applyExpansion: (religionId, options = {}) => applySocialExpansionViaApi(state, documentRef, "religion", religionId, options),
         delete: (religionId, options = {}) => deleteReligionViaApi(state, documentRef, religionId, options),
         rename: (religionId, name) => renameReligionViaApi(state, documentRef, religionId, name),
         setColor: (religionId, color) => setReligionColorViaApi(state, documentRef, religionId, color),
-        setParent: (religionId, parentId) => setReligionParentViaApi(state, documentRef, religionId, parentId)
+        setParent: (religionId, parentId, options = {}) => setReligionParentViaApi(state, documentRef, religionId, parentId, options)
       },
       routes: {
         create: options => createRouteViaApi(state, documentRef, options),
@@ -4503,6 +4521,11 @@ function setCultureNamebaseBinding(state, documentRef, cultureId, target, value)
 
 function importNamebaseDocumentViaApi(state, documentRef, document, options = {}) {
   assertMapAvailable(state);
+  assertRemainingRuleExecution(state, REMAINING_RULE_ACTION.COLLECTION_IMPORT, {
+    kind: "namebases",
+    document: normalizeRuleInspectionInput(document),
+    options: normalizeRuleInspectionInput(stripRuleControlMetadata(options))
+  }, options);
   const parsedDocument = normalizeApiNamebaseImportDocument(document);
   const mode = normalizeApiNamebaseImportMode(options.mode);
   const filename = String(options.filename || "api-namebases.json").trim();
@@ -6834,6 +6857,11 @@ function deleteNoteViaApi(state, documentRef, noteId, options = {}) {
 }
 
 function importNotesViaApi(state, documentRef, document, options = {}) {
+  assertRemainingRuleExecution(state, REMAINING_RULE_ACTION.COLLECTION_IMPORT, {
+    kind: "notes",
+    document: normalizeRuleInspectionInput(document),
+    options: normalizeRuleInspectionInput(stripRuleControlMetadata(options))
+  }, options);
   const command = createImportNotesCommand(document, {
     mode: options.mode,
     label: options.label || "导入备注摘要"
@@ -6959,7 +6987,12 @@ function deleteMeasurementViaApi(state, documentRef, measurementId) {
   return editApiResult(state, result);
 }
 
-function importMeasurementsViaApi(state, documentRef, input) {
+function importMeasurementsViaApi(state, documentRef, input, options = {}) {
+  assertRemainingRuleExecution(state, REMAINING_RULE_ACTION.COLLECTION_IMPORT, {
+    kind: "measurements",
+    document: normalizeRuleInspectionInput(input),
+    options: normalizeRuleInspectionInput(stripRuleControlMetadata(options))
+  }, options);
   const measurements = Array.isArray(input) ? input : input?.measurements;
   if (!Array.isArray(measurements)) throw new Error("测量导入内容必须是数组或包含 measurements 数组的对象");
   const command = createImportMeasurementsCommand(measurements, {label: "API 导入测量对象"});
@@ -7069,6 +7102,101 @@ function inspectRouteEditViaApi(state, routeId, patch = {}) {
 function inspectExistingRuleViaApi(state, actionId, input) {
   assertMapAvailable(state);
   return inspectExistingRuleAction(state.map, state.mapRevision, actionId, input);
+}
+
+function inspectRemainingRuleViaApi(state, actionId, input) {
+  assertMapAvailable(state);
+  const normalizedInput = normalizeRuleInspectionInput(input);
+  const evaluation = inspectRemainingRuleAction(state.map, actionId, normalizedInput);
+  return createRuleInspectionResult(state.mapRevision, actionId, normalizedInput, evaluation);
+}
+
+function assertRemainingRuleExecution(state, actionId, input, options = {}) {
+  const validation = assertExistingRuleInspection(state.mapRevision, actionId, input, options);
+  if (validation.legacy) return validation;
+  const evaluation = inspectRemainingRuleAction(state.map, actionId, normalizeRuleInspectionInput(input));
+  if (!evaluation.allowed) {
+    const error = new Error(evaluation.summary || "规则事务不允许执行");
+    error.code = evaluation.code || "rule-rejected";
+    throw error;
+  }
+  if (evaluation.requiresConfirm && options?.confirm !== true) {
+    const error = new Error(`${evaluation.summary || "该规则事务"}需要显式传入 {confirm: true}`);
+    error.code = "confirmation_required";
+    throw error;
+  }
+  return validation;
+}
+
+function stripRuleControlMetadata(options = {}) {
+  const normalized = stripRuleInspectionMetadata(options);
+  if (!normalized || typeof normalized !== "object" || Array.isArray(normalized)) return normalized;
+  const semantic = {...normalized};
+  delete semantic.confirm;
+  return semantic;
+}
+
+function inspectDiplomacyRelationViaApi(state, subjectId, objectId, relation, options = {}) {
+  const input = diplomacyRelationRuleInput(subjectId, objectId, relation, options);
+  return inspectRemainingRuleViaApi(state, REMAINING_RULE_ACTION.DIPLOMACY_RELATION, input);
+}
+
+function diplomacyRelationRuleInput(subjectId, objectId, relation, options = {}) {
+  return {
+    subjectId: normalizeApiInteger(subjectId, "外交主体国家 ID"),
+    objectId: normalizeApiInteger(objectId, "外交对象国家 ID"),
+    relation: String(relation || "").trim(),
+    options: normalizeRuleInspectionInput(stripRuleControlMetadata(options))
+  };
+}
+
+function inspectMilitaryRatiosViaApi(state, stateId, ratios) {
+  const input = {
+    stateId: normalizeApiInteger(stateId, "国家 ID"),
+    ratios: normalizeRuleInspectionInput(ratios)
+  };
+  return inspectRemainingRuleViaApi(state, REMAINING_RULE_ACTION.MILITARY_RATIOS, input);
+}
+
+function inspectMilitaryStatusViaApi(state, targets, status) {
+  const input = {
+    targets: normalizeRuleInspectionInput(Array.isArray(targets) ? targets : [targets]),
+    status: normalizeApiMilitaryStatus(status)
+  };
+  return inspectRemainingRuleViaApi(state, REMAINING_RULE_ACTION.MILITARY_STATUS, input);
+}
+
+function inspectMilitaryMoveViaApi(state, target, destination) {
+  return inspectRemainingRuleViaApi(state, REMAINING_RULE_ACTION.MILITARY_MOVE, {
+    target: normalizeRuleInspectionInput(target),
+    destination: normalizeRuleInspectionInput(destination)
+  });
+}
+
+function inspectMilitaryBaseViaApi(state, target) {
+  return inspectRemainingRuleViaApi(state, REMAINING_RULE_ACTION.MILITARY_BASE, {
+    target: normalizeRuleInspectionInput(target)
+  });
+}
+
+function inspectSocialLifecycleViaApi(state, kind, operation, input = {}) {
+  if (!input || typeof input !== "object" || Array.isArray(input)) throw new Error("社会生命周期预检 input 必须是对象");
+  const actionId = kind === "culture"
+    ? REMAINING_RULE_ACTION.CULTURE_LIFECYCLE
+    : REMAINING_RULE_ACTION.RELIGION_LIFECYCLE;
+  return inspectRemainingRuleViaApi(state, actionId, {
+    operation: String(operation || "").trim(),
+    ...stripRuleControlMetadata(input)
+  });
+}
+
+function inspectCollectionImportViaApi(state, kind, document, options = {}) {
+  if (!options || typeof options !== "object" || Array.isArray(options)) throw new Error("集合导入预检参数必须是对象");
+  return inspectRemainingRuleViaApi(state, REMAINING_RULE_ACTION.COLLECTION_IMPORT, {
+    kind: String(kind || "").trim(),
+    document: normalizeRuleInspectionInput(document),
+    options: normalizeRuleInspectionInput(stripRuleControlMetadata(options))
+  });
 }
 
 function inspectHeightChangesViaApi(state, changes) {
@@ -7877,8 +8005,9 @@ function setCityPopulationViaApi(state, documentRef, cityId, population) {
   return editApiResult(state, result);
 }
 
-function syncCityOwnerViaApi(state, documentRef, cityId) {
+function syncCityOwnerViaApi(state, documentRef, cityId, options = {}) {
   const id = normalizeApiInteger(cityId, "城市 ID");
+  assertRemainingRuleExecution(state, REMAINING_RULE_ACTION.CITY_OWNER_SYNC, {cityId: id}, options);
   const command = createSyncCityOwnerToCellCommand(id);
   const result = executeEditCommand(state, documentRef, command, {
     context: {map: state.map},
@@ -8005,9 +8134,10 @@ function setStateGovernmentViaApi(state, documentRef, stateId, governmentKey, op
   return editApiResult(state, result);
 }
 
-function setStateCapitalViaApi(state, documentRef, stateId, cityId) {
+function setStateCapitalViaApi(state, documentRef, stateId, cityId, options = {}) {
   const id = normalizeApiInteger(stateId, "国家 ID");
   const capitalId = normalizeApiInteger(cityId, "城市 ID");
+  assertRemainingRuleExecution(state, REMAINING_RULE_ACTION.CAPITAL_CHANGE, {stateId: id, cityId: capitalId}, options);
   const city = state.map?.settlements?.cities?.[capitalId];
   const burgId = Number(city?.burgId ?? city?.burg ?? capitalId);
   const command = createSetStateCapitalCommand(id, burgId);
@@ -8491,6 +8621,12 @@ function setMarketDisplayViaApi(state, documentRef, marketId, patch = {}) {
 function setDiplomacyRelationViaApi(state, documentRef, subjectId, objectId, relation, options = {}) {
   const subject = normalizeApiInteger(subjectId, "外交主体国家 ID");
   const object = normalizeApiInteger(objectId, "外交对象国家 ID");
+  assertRemainingRuleExecution(
+    state,
+    REMAINING_RULE_ACTION.DIPLOMACY_RELATION,
+    diplomacyRelationRuleInput(subject, object, relation, options),
+    options
+  );
   const command = createSetDiplomacyRelationCommand(subject, object, relation, {reason: options.reason});
   const result = executeEditCommand(state, documentRef, command, {
     context: {map: state.map},
@@ -8504,29 +8640,44 @@ function setDiplomacyRelationViaApi(state, documentRef, subjectId, objectId, rel
   return editApiResult(state, result);
 }
 
-function setMilitaryRatiosViaApi(state, documentRef, stateId, ratios) {
+function setMilitaryRatiosViaApi(state, documentRef, stateId, ratios, options = {}) {
   const id = normalizeApiInteger(stateId, "国家 ID");
   if (!ratios || typeof ratios !== "object" || Array.isArray(ratios)) throw new Error("兵种比例必须是对象");
+  assertRemainingRuleExecution(state, REMAINING_RULE_ACTION.MILITARY_RATIOS, {
+    stateId: id,
+    ratios: normalizeRuleInspectionInput(ratios)
+  }, options);
   return executeMilitaryCommandViaApi(state, documentRef, createSetMilitaryRatiosCommand(id, ratios), `update military ratios: state=${id}`);
 }
 
-function setMilitaryStatusViaApi(state, documentRef, target, status) {
+function setMilitaryStatusViaApi(state, documentRef, target, status, options = {}) {
   const nextStatus = normalizeApiMilitaryStatus(status);
+  const targets = normalizeRuleInspectionInput([target]);
+  assertRemainingRuleExecution(state, REMAINING_RULE_ACTION.MILITARY_STATUS, {targets, status: nextStatus}, options);
   return executeMilitaryCommandViaApi(state, documentRef, createSetMilitaryStatusCommand(target, nextStatus), `update military status: regiment=${target?.id || ""}, status=${nextStatus}`);
 }
 
-function setMilitaryStatusBatchViaApi(state, documentRef, targets, status) {
+function setMilitaryStatusBatchViaApi(state, documentRef, targets, status, options = {}) {
   if (!Array.isArray(targets)) throw new Error("军团目标必须是数组");
   const nextStatus = normalizeApiMilitaryStatus(status);
+  const normalizedTargets = normalizeRuleInspectionInput(targets);
+  assertRemainingRuleExecution(state, REMAINING_RULE_ACTION.MILITARY_STATUS, {targets: normalizedTargets, status: nextStatus}, options);
   return executeMilitaryCommandViaApi(state, documentRef, createSetMilitaryStatusBatchCommand(targets, nextStatus), `batch update military status: count=${targets.length}, status=${nextStatus}`);
 }
 
-function moveMilitaryStationViaApi(state, documentRef, target, destination) {
+function moveMilitaryStationViaApi(state, documentRef, target, destination, options = {}) {
   if (!destination || typeof destination !== "object" || Array.isArray(destination)) throw new Error("军团驻地目标必须是对象");
+  const input = {
+    target: normalizeRuleInspectionInput(target),
+    destination: normalizeRuleInspectionInput(destination)
+  };
+  assertRemainingRuleExecution(state, REMAINING_RULE_ACTION.MILITARY_MOVE, input, options);
   return executeMilitaryCommandViaApi(state, documentRef, createMoveMilitaryStationCommand(target, destination), `move military station: regiment=${target?.id || ""}, cell=${destination.cell ?? destination.packCell ?? ""}`);
 }
 
-function setMilitaryBaseViaApi(state, documentRef, target) {
+function setMilitaryBaseViaApi(state, documentRef, target, options = {}) {
+  const input = {target: normalizeRuleInspectionInput(target)};
+  assertRemainingRuleExecution(state, REMAINING_RULE_ACTION.MILITARY_BASE, input, options);
   return executeMilitaryCommandViaApi(state, documentRef, createSetMilitaryBaseCommand(target), `set military base: regiment=${target?.id || ""}`);
 }
 
@@ -8535,8 +8686,13 @@ function recordMilitaryBattleEventViaApi(state, documentRef, target, event) {
   return executeMilitaryCommandViaApi(state, documentRef, createRecordMilitaryBattleEventCommand(target, event), `record military battle event: regiment=${target?.id || ""}, type=${event.type || ""}, outcome=${event.outcome || ""}`);
 }
 
-function importMilitaryBattleEventsViaApi(state, documentRef, document) {
+function importMilitaryBattleEventsViaApi(state, documentRef, document, options = {}) {
   if (!document || typeof document !== "object") throw new Error("战斗事件导入文档必须是对象或数组");
+  assertRemainingRuleExecution(state, REMAINING_RULE_ACTION.COLLECTION_IMPORT, {
+    kind: "military-events",
+    document: normalizeRuleInspectionInput(document),
+    options: normalizeRuleInspectionInput(stripRuleControlMetadata(options))
+  }, options);
   return executeMilitaryCommandViaApi(state, documentRef, createImportMilitaryBattleEventsCommand(document), "import military battle events");
 }
 
@@ -8672,7 +8828,12 @@ function renameObjectViaApi(state, documentRef, kind, objectId, name, options = 
 }
 
 function addCultureViaApi(state, documentRef, options = {}) {
-  const payload = normalizeApiObjectOptions(options);
+  const semanticOptions = stripRuleInspectionMetadata(options);
+  const payload = normalizeApiObjectOptions(semanticOptions);
+  assertRemainingRuleExecution(state, REMAINING_RULE_ACTION.CULTURE_LIFECYCLE, {
+    operation: "create",
+    name: payload.name
+  }, options);
   const command = createAddCultureCommand({name: payload.name});
   const result = executeEditCommand(state, documentRef, command, {
     context: {map: state.map},
@@ -8698,12 +8859,16 @@ function addCultureViaApi(state, documentRef, options = {}) {
 
 function deleteCultureViaApi(state, documentRef, cultureId, options = {}) {
   const id = normalizeApiInteger(cultureId, "文化 ID");
+  assertRemainingRuleExecution(state, REMAINING_RULE_ACTION.CULTURE_LIFECYCLE, {
+    operation: "delete",
+    id
+  }, options);
   const deletion = executeDeleteWithPreflight(state, documentRef, {
     kind: OBJECT_KIND.CULTURE,
     ids: [id],
     createCommand: targetId => createDeleteCultureCommand(targetId),
     label: "API 删除文化",
-    options,
+    options: stripRuleInspectionMetadata(options),
     confirmation: "explicit",
     executeOptions: {
       noopStatus: "文化不存在或已删除。",
@@ -8720,9 +8885,17 @@ function deleteCultureViaApi(state, documentRef, cultureId, options = {}) {
   return deleteApiResult(state, deletion);
 }
 
-function assignSocialCellsViaApi(state, documentRef, kind, targetId, gridCellIds) {
+function assignSocialCellsViaApi(state, documentRef, kind, targetId, gridCellIds, options = {}) {
   const label = kind === "culture" ? "文化" : "宗教";
   const id = normalizeApiInteger(targetId, `${label} ID`);
+  const actionId = kind === "culture"
+    ? REMAINING_RULE_ACTION.CULTURE_LIFECYCLE
+    : REMAINING_RULE_ACTION.RELIGION_LIFECYCLE;
+  assertRemainingRuleExecution(state, actionId, {
+    operation: "assign",
+    id,
+    gridCellIds: normalizeRuleInspectionInput(gridCellIds)
+  }, options);
   const store = kind === "culture"
     ? state.map?.society?.cultures || state.map?.pack?.cultures
     : state.map?.society?.religions || state.map?.pack?.religions;
@@ -8769,10 +8942,19 @@ export function applySocialExpansionViaApi(state, documentRef, kind, objectId, o
   const label = kind === "culture" ? "文化" : "宗教";
   const id = normalizeApiInteger(objectId, `${label} ID`);
   if (!options || typeof options !== "object" || Array.isArray(options)) throw new Error(`${label}扩张编辑参数必须是对象`);
-  if (options.mode === "reexpand" && options.confirm !== true) throw new Error(`${label}重新扩张需要显式传入 {confirm: true}`);
-  const inspection = inspectSocialExpansion(state.map, {...options, kind, id});
+  const semanticOptions = stripRuleInspectionMetadata(options);
+  const actionId = kind === "culture"
+    ? REMAINING_RULE_ACTION.CULTURE_LIFECYCLE
+    : REMAINING_RULE_ACTION.RELIGION_LIFECYCLE;
+  assertRemainingRuleExecution(state, actionId, {
+    operation: "expand",
+    id,
+    options: stripRuleControlMetadata(options)
+  }, options);
+  if (semanticOptions.mode === "reexpand" && options.confirm !== true) throw new Error(`${label}重新扩张需要显式传入 {confirm: true}`);
+  const inspection = inspectSocialExpansion(state.map, {...semanticOptions, kind, id});
   if (!inspection.valid) throw new Error(inspection.reason);
-  const command = createApplySocialExpansionCommand({...options, kind, id}, {label: `${label}${options.mode === "reexpand" ? "重新扩张" : "中心与参数"}`});
+  const command = createApplySocialExpansionCommand({...semanticOptions, kind, id}, {label: `${label}${semanticOptions.mode === "reexpand" ? "重新扩张" : "中心与参数"}`});
   const result = executeEditCommand(state, documentRef, command, {
     context: {map: state.map},
     ...(runtimeUi.refresh ? {refresh: runtimeUi.refresh} : {}),
@@ -8815,9 +8997,14 @@ function setCultureColorViaApi(state, documentRef, cultureId, color) {
   return editApiResult(state, result);
 }
 
-function setCultureParentViaApi(state, documentRef, cultureId, parentId) {
+function setCultureParentViaApi(state, documentRef, cultureId, parentId, options = {}) {
   const id = normalizeApiInteger(cultureId, "文化 ID");
   const parent = normalizeApiInteger(parentId, "文化父级 ID");
+  assertRemainingRuleExecution(state, REMAINING_RULE_ACTION.CULTURE_LIFECYCLE, {
+    operation: "reparent",
+    id,
+    parentId: parent
+  }, options);
   const culture = state.map?.society?.cultures?.[id] || state.map?.pack?.cultures?.[id];
   const command = createSetCultureParentCommand(id, parent, {beforeParent: culture?.parent ?? 0});
   const result = executeEditCommand(state, documentRef, command, {
@@ -8832,7 +9019,12 @@ function setCultureParentViaApi(state, documentRef, cultureId, parentId) {
 }
 
 function addReligionViaApi(state, documentRef, options = {}) {
-  const payload = normalizeApiObjectOptions(options);
+  const semanticOptions = stripRuleInspectionMetadata(options);
+  const payload = normalizeApiObjectOptions(semanticOptions);
+  assertRemainingRuleExecution(state, REMAINING_RULE_ACTION.RELIGION_LIFECYCLE, {
+    operation: "create",
+    name: payload.name
+  }, options);
   const command = createAddReligionCommand({name: payload.name});
   const result = executeEditCommand(state, documentRef, command, {
     context: {map: state.map},
@@ -8858,12 +9050,16 @@ function addReligionViaApi(state, documentRef, options = {}) {
 
 function deleteReligionViaApi(state, documentRef, religionId, options = {}) {
   const id = normalizeApiInteger(religionId, "宗教 ID");
+  assertRemainingRuleExecution(state, REMAINING_RULE_ACTION.RELIGION_LIFECYCLE, {
+    operation: "delete",
+    id
+  }, options);
   const deletion = executeDeleteWithPreflight(state, documentRef, {
     kind: OBJECT_KIND.RELIGION,
     ids: [id],
     createCommand: targetId => createDeleteReligionCommand(targetId),
     label: "API 删除宗教",
-    options,
+    options: stripRuleInspectionMetadata(options),
     confirmation: "explicit",
     executeOptions: {
       noopStatus: "宗教不存在或已删除。",
@@ -8904,9 +9100,14 @@ function setReligionColorViaApi(state, documentRef, religionId, color) {
   return editApiResult(state, result);
 }
 
-function setReligionParentViaApi(state, documentRef, religionId, parentId) {
+function setReligionParentViaApi(state, documentRef, religionId, parentId, options = {}) {
   const id = normalizeApiInteger(religionId, "宗教 ID");
   const parent = normalizeApiInteger(parentId, "宗教父级 ID");
+  assertRemainingRuleExecution(state, REMAINING_RULE_ACTION.RELIGION_LIFECYCLE, {
+    operation: "reparent",
+    id,
+    parentId: parent
+  }, options);
   const religion = state.map?.society?.religions?.[id] || state.map?.pack?.religions?.[id];
   const command = createSetReligionParentCommand(id, parent, {beforeParent: religion?.parent ?? 0});
   const result = executeEditCommand(state, documentRef, command, {
