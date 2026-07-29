@@ -1,4 +1,6 @@
-export function createCanvasToolModeManager() {
+export function createCanvasToolModeManager({declaredModeIds = []} = {}) {
+  const declarations = normalizeModeIds(declaredModeIds);
+  const declared = new Set(declarations);
   const registrations = new Map();
   let active = null;
   let transition = null;
@@ -8,6 +10,7 @@ export function createCanvasToolModeManager() {
 
   function register(id, hooks = {}) {
     const modeId = normalizeModeId(id);
+    if (declared.size && !declared.has(modeId)) throw new Error(`画布工具模式未声明：${modeId}`);
     if (registrations.has(modeId)) throw new Error(`画布工具模式已注册：${modeId}`);
     const registration = {
       id: modeId,
@@ -183,13 +186,27 @@ export function createCanvasToolModeManager() {
   }
 
   function getSnapshot() {
+    const coverage = compareCanvasToolModeSets({
+      declaredModeIds: declarations,
+      registeredModeIds: registrations.keys()
+    });
     return {
       active: activeSnapshot(active),
+      declaredModeIds: [...declarations],
       registeredModeIds: [...registrations.keys()],
+      registrationCoverage: coverage,
       sequence,
       lastTransition: lastTransition ? {...lastTransition} : null,
       transitioning: Boolean(transition)
     };
+  }
+
+  function assertRegistrationComplete() {
+    const snapshot = getSnapshot();
+    if (!snapshot.registrationCoverage.complete) {
+      throw new Error(formatCoverageError("画布工具模式注册不完整", snapshot.registrationCoverage));
+    }
+    return snapshot;
   }
 
   return {
@@ -200,8 +217,31 @@ export function createCanvasToolModeManager() {
     reset,
     isActive: id => active?.id === id,
     getActive,
-    getSnapshot
+    getSnapshot,
+    assertRegistrationComplete
   };
+}
+
+export function compareCanvasToolModeSets({declaredModeIds = [], registeredModeIds = [], coveredModeIds = null} = {}) {
+  const declared = normalizeModeIds(declaredModeIds);
+  const registered = normalizeModeIds(registeredModeIds);
+  const covered = coveredModeIds === null ? null : normalizeModeIds(coveredModeIds);
+  const result = {
+    missingRegistrations: difference(declared, registered),
+    undeclaredRegistrations: difference(registered, declared),
+    missingCoverage: covered ? difference(declared, covered) : [],
+    undeclaredCoverage: covered ? difference(covered, declared) : []
+  };
+  return {
+    ...result,
+    complete: Object.values(result).every(items => items.length === 0)
+  };
+}
+
+export function assertCanvasToolModeSets(sets) {
+  const coverage = compareCanvasToolModeSets(sets);
+  if (!coverage.complete) throw new Error(formatCoverageError("画布工具模式集合不一致", coverage));
+  return coverage;
 }
 
 function transitionPayload(entry, extra = {}) {
@@ -230,6 +270,24 @@ function normalizeModeId(id) {
   const normalized = String(id || "").trim();
   if (!normalized) throw new Error("画布工具模式 ID 不能为空");
   return normalized;
+}
+
+function normalizeModeIds(ids) {
+  const normalized = [...ids].map(normalizeModeId);
+  if (new Set(normalized).size !== normalized.length) throw new Error("画布工具模式集合包含重复 ID");
+  return normalized;
+}
+
+function difference(left, right) {
+  const rightSet = new Set(right);
+  return left.filter(id => !rightSet.has(id));
+}
+
+function formatCoverageError(label, coverage) {
+  const details = Object.entries(coverage)
+    .filter(([key, value]) => key !== "complete" && value.length)
+    .map(([key, value]) => `${key}=[${value.join(", ")}]`);
+  return `${label}：${details.join("；")}`;
 }
 
 function normalizePanelIds(panelIds) {

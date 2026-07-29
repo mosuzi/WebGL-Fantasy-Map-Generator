@@ -4,7 +4,10 @@ import {fileURLToPath} from "node:url";
 import path from "node:path";
 import {generatePlaceholderMap} from "../app/webgl-generator/src/generator/index.js";
 import {colorForProvince} from "../app/webgl-generator/src/renderer/color-modes.js";
-import {createCanvasToolModeManager} from "../app/webgl-generator/src/runtime/canvas-tool-mode-manager.js";
+import {
+  assertCanvasToolModeSets,
+  createCanvasToolModeManager
+} from "../app/webgl-generator/src/runtime/canvas-tool-mode-manager.js";
 import {restoreCanvasToolStrokePreview} from "../app/webgl-generator/src/runtime/canvas-tool-preview-rollback.js";
 import {EditHistory} from "../app/webgl-generator/src/runtime/edit-history.js";
 import {applyHeightBrushPreview, createApplyHeightBrushCommand} from "../app/webgl-generator/src/runtime/height-edit-commands.js";
@@ -18,37 +21,8 @@ const brushCursorSource = await readFile(path.join(root, "app/webgl-generator/sr
 assert.match(brushCursorSource, /HEIGHT_BRUSH_ACTIONS = new Set\(\["raise", "lower", "smooth", "flatten", "level", "disrupt"\]\)/, "共享光标缺少高度动作白名单");
 assert.ok(appSource.indexOf("state.brushCursorPreview = createBrushCursorPreview") < appSource.indexOf("bindHeightEditing(canvas, state, documentRef)"), "共享光标监听注册晚于编辑监听");
 
-const expectedModes = [
-  "height:brush",
-  "state:brush",
-  "state:add",
-  "state:delete",
-  "province:brush",
-  "province:add",
-  "province:delete",
-  "city:add",
-  "city:delete",
-  "city:move",
-  "culture:assign",
-  "religion:assign",
-  "culture:center",
-  "religion:center",
-  "biome:assign",
-  "biome:suitability",
-  "economy:market-assign",
-  "measurement:draw",
-  "marker:add",
-  "marker:move",
-  "route:draw",
-  "route:edit-waypoint",
-  "river:add",
-  "lake:excavate",
-  "feature:patch-select",
-  "feature:topology-select",
-  "zone:add",
-  "note:add",
-  "regeneration-lock:select"
-];
+const declaredModes = parseDeclaredCanvasToolModes(appSource);
+const coveredModes = new Set();
 
 testSingleActiveAndRepeatedEnter();
 testCancelCompleteAndMetadata();
@@ -59,35 +33,39 @@ testPreviewRollback();
 testHeightBrushCommitAndCancel();
 testProvinceBrushCommitAndCancel();
 testRuntimeIntegrationContract();
+testModeSetDriftGuards();
 
-console.log(`画布工具模式管理器回归通过：${expectedModes.length} 个模式，互斥 / 重入 / 取消 / 完成 / 异常 / 面板关闭 / 地图替换及高度 / 省份笔刷提交 / 取消契约完整。`);
+console.log(`画布工具模式管理器回归通过：${declaredModes.length} 个运行时声明模式，声明 / 注册 / 覆盖三向一致，互斥 / 重入 / 取消 / 完成 / 异常 / 面板关闭 / 地图替换及高度 / 省份笔刷提交 / 取消契约完整。`);
 
 function testSingleActiveAndRepeatedEnter() {
-  const manager = createCanvasToolModeManager();
+  const manager = createCanvasToolModeManager({declaredModeIds: declaredModes});
   const events = [];
-  for (const id of expectedModes) {
+  for (const id of declaredModes) {
     manager.register(id, {
       allowedPanelIds: [`${id.split(":")[0]}-panel`],
       onEnter: () => events.push(`enter:${id}`),
       onRepeat: ({context}) => events.push(`repeat:${id}:${context.variant || "same"}`),
       onCancel: ({reason}) => events.push(`cancel:${id}:${reason}`)
     });
+    coveredModes.add(id);
   }
-  const first = manager.enter(expectedModes[0]);
+  const first = manager.enter(declaredModes[0]);
   assert.equal(first.changed, true);
-  assert.equal(manager.getActive().id, expectedModes[0]);
-  const repeated = manager.enter(expectedModes[0], {variant: "updated"});
+  assert.equal(manager.getActive().id, declaredModes[0]);
+  const repeated = manager.enter(declaredModes[0], {variant: "updated"});
   assert.equal(repeated.changed, false);
-  assert.equal(events.filter(event => event === `enter:${expectedModes[0]}`).length, 1);
+  assert.equal(events.filter(event => event === `enter:${declaredModes[0]}`).length, 1);
   assert.equal(manager.getActive().context.variant, "updated");
-  assert.equal(events.includes(`repeat:${expectedModes[0]}:updated`), true);
+  assert.equal(events.includes(`repeat:${declaredModes[0]}:updated`), true);
 
-  for (const id of expectedModes.slice(1)) {
+  for (const id of declaredModes.slice(1)) {
     manager.enter(id);
     assert.equal(manager.getActive().id, id);
   }
-  assert.equal(events.filter(event => event.startsWith("cancel:")).length, expectedModes.length - 1);
-  assert.equal(manager.getSnapshot().registeredModeIds.length, expectedModes.length);
+  assert.equal(events.filter(event => event.startsWith("cancel:")).length, declaredModes.length - 1);
+  const snapshot = manager.assertRegistrationComplete();
+  assert.deepEqual(snapshot.declaredModeIds, declaredModes);
+  assert.deepEqual(snapshot.registeredModeIds, declaredModes);
 }
 
 function testCancelCompleteAndMetadata() {
@@ -171,8 +149,8 @@ function testEnterErrorCleanup() {
 
 function testLifecycleCleanup() {
   const manager = createCanvasToolModeManager();
-  const states = Object.fromEntries(expectedModes.map(id => [id, {active: false, preview: false, lock: false, exitReason: null}]));
-  for (const id of expectedModes) {
+  const states = Object.fromEntries(declaredModes.map(id => [id, {active: false, preview: false, lock: false, exitReason: null}]));
+  for (const id of declaredModes) {
     manager.register(id, {
       onEnter: () => Object.assign(states[id], {active: true, preview: true, lock: id !== "measurement:draw"}),
       onCancel: ({reason}) => Object.assign(states[id], {active: false, preview: false, lock: false, exitReason: reason}),
@@ -393,8 +371,10 @@ function assertProvinceSummaryMatchesPack(map, provinceId) {
 }
 
 function testRuntimeIntegrationContract() {
-  for (const id of expectedModes) assert.match(appSource, new RegExp(escapeRegex(`"${id}"`)), `缺少模式常量：${id}`);
+  assert.match(appSource, /export const CANVAS_TOOL_MODE_IDS = Object\.freeze\(Object\.values\(CANVAS_TOOL_MODE\)\)/);
+  assert.match(appSource, /createCanvasToolModeManager\(\{declaredModeIds: CANVAS_TOOL_MODE_IDS\}\)/);
   assert.match(appSource, /registerCanvasToolModes\(state, documentRef, \{stopObjectEditing\}\)/);
+  assert.match(appSource, /state\.canvasToolModes\.assertRegistrationComplete\(\)/);
   assert.match(appSource, /state\.canvasToolModes\.reset\("map-replace"\)/);
   assert.match(appSource, /function rollbackCanvasToolStroke\(state, kind\)/);
   assert.match(appSource, /restoreCanvasToolStrokePreview\(state\.map, kind, stroke\)/);
@@ -429,6 +409,45 @@ function testRuntimeIntegrationContract() {
   const markerStop = sourceBetween(appSource, "function stopMarkerEditMode", "function clearMarkerEditMode");
   assert.doesNotMatch(measurementStop, /setFileOperationStatus/, "退出测量不得写入错误的完成提示");
   assert.doesNotMatch(markerStop, /setFileOperationStatus/, "退出标记不得写入错误的完成提示");
+}
+
+function testModeSetDriftGuards() {
+  const registeredModes = [...declaredModes];
+  assert.deepEqual(
+    assertCanvasToolModeSets({declaredModeIds: declaredModes, registeredModeIds: registeredModes, coveredModeIds: coveredModes}),
+    {missingRegistrations: [], undeclaredRegistrations: [], missingCoverage: [], undeclaredCoverage: [], complete: true}
+  );
+  assert.throws(
+    () => assertCanvasToolModeSets({
+      declaredModeIds: declaredModes,
+      registeredModeIds: registeredModes.slice(1),
+      coveredModeIds: coveredModes
+    }),
+    /missingRegistrations=.*height:brush/,
+    "合成漏注册必须稳定失败"
+  );
+  assert.throws(
+    () => assertCanvasToolModeSets({
+      declaredModeIds: declaredModes,
+      registeredModeIds: registeredModes,
+      coveredModeIds: registeredModes.slice(0, -1)
+    }),
+    /missingCoverage=.*regeneration-lock:select/,
+    "合成漏覆盖必须稳定失败"
+  );
+  const manager = createCanvasToolModeManager({declaredModeIds: declaredModes});
+  assert.throws(() => manager.register("synthetic:undeclared"), /未声明/, "注册无声明模式必须稳定失败");
+  manager.register(declaredModes[0]);
+  assert.throws(() => manager.assertRegistrationComplete(), /注册不完整/, "真实注册快照缺少声明模式时必须失败");
+}
+
+function parseDeclaredCanvasToolModes(source) {
+  const block = source.match(/export const CANVAS_TOOL_MODE = Object\.freeze\(\{([\s\S]*?)\n\}\);/)?.[1];
+  assert.ok(block, "无法读取运行时 CANVAS_TOOL_MODE 声明");
+  const declarations = [...block.matchAll(/^\s*[A-Z0-9_]+:\s*"([^"]+)",?\s*$/gm)].map(match => match[1]);
+  assert.ok(declarations.length, "运行时 CANVAS_TOOL_MODE 声明不能为空");
+  assert.equal(new Set(declarations).size, declarations.length, "运行时 CANVAS_TOOL_MODE 声明不能重复");
+  return declarations;
 }
 
 function countMatches(value, pattern) {

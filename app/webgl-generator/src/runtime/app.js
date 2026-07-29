@@ -384,6 +384,7 @@ export const CANVAS_TOOL_MODE = Object.freeze({
   NOTE_ADD: "note:add",
   REGENERATION_LOCK_SELECT: "regeneration-lock:select"
 });
+export const CANVAS_TOOL_MODE_IDS = Object.freeze(Object.values(CANVAS_TOOL_MODE));
 export function createGeneratorApp(documentRef, {healthMonitor = getWebglGeneratorHealthMonitor(documentRef)} = {}) {
   const canvas = documentRef.getElementById("map-canvas");
   const panelManager = new PanelManager(documentRef, documentRef.querySelector(".map-stage"));
@@ -499,7 +500,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     healthMonitor,
     runtimeOperation: null,
     runtimeOperationSnapshot: null,
-    canvasToolModes: createCanvasToolModeManager(),
+    canvasToolModes: createCanvasToolModeManager({declaredModeIds: CANVAS_TOOL_MODE_IDS}),
     lazyPanelPreloadScheduled: false,
     panels: {}
   };
@@ -11464,6 +11465,7 @@ function registerCanvasToolModes(state, documentRef, {stopObjectEditing} = {}) {
       state.regenerationLockUiSession?.finishMapSelection(reason, {clearSelection: true});
     }
   });
+  state.canvasToolModes.assertRegistrationComplete();
 }
 
 function registerPoliticalOneShotMode(state, documentRef, register, {modeId, kind, flag, panelId, colorMode, objectKind, stopObjectEditing}) {

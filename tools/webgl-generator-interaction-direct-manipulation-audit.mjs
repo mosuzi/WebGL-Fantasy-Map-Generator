@@ -66,7 +66,7 @@ export function buildDirectManipulationAudit() {
   const runtimeModes = parseRuntimeModes();
   const registeredModes = parseRegisteredModes(runtimeModes);
   const entryModes = parseEntryModes(runtimeModes);
-  const legacyModes = parseLegacyRegressionModes();
+  const legacyModes = parseRegressionCoveredModes(runtimeModes);
   const modeContracts = MODE_DEFINITIONS.map(item => verifyMode(item, includedSurfaceIds));
   const directManipulations = expandedDirectDefinitions(inventory).map(item => verifyDirect(item, includedSurfaceIds));
   const expandedDirectRows = directManipulations.flatMap(expandDirectRows);
@@ -551,11 +551,18 @@ function modeIdsForKeys(runtimeModes, keys) {
   }).sort();
 }
 
-function parseLegacyRegressionModes() {
+function parseRegressionCoveredModes(runtimeModes) {
   const source = readText(FILES.oldRegression);
-  const block = source.match(/const expectedModes = \[([\s\S]*?)\n\];/)?.[1];
-  if (!block) throw new Error("无法读取既有画布模式回归分母");
-  return [...block.matchAll(/"([^"]+)"/g)].map(match => match[1]);
+  const requiredDerivedCoverage = [
+    "const declaredModes = parseDeclaredCanvasToolModes(appSource)",
+    "const coveredModes = new Set()",
+    "for (const id of declaredModes)",
+    "coveredModes.add(id)",
+    "assertCanvasToolModeSets({declaredModeIds: declaredModes, registeredModeIds: registeredModes, coveredModeIds: coveredModes})"
+  ];
+  const missingTokens = requiredDerivedCoverage.filter(token => !source.includes(token));
+  if (missingTokens.length) throw new Error(`画布模式回归未从运行时声明派生：${missingTokens.join("；")}`);
+  return runtimeModes.map(item => item.modeId).sort();
 }
 
 function componentHosts(token) {
