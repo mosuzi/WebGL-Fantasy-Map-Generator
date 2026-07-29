@@ -8,6 +8,7 @@ const PANEL_INITIAL_PLACEMENT_LEFT = "left";
 const PANEL_MARGIN = 8;
 const PANEL_PAIR_GAP = 24;
 const PANEL_HEADER_HEIGHT = 44;
+const PANEL_MIN_BODY_HEIGHT = 96;
 const PANEL_MIN_VISIBLE_HEADER_WIDTH = 64;
 const PANEL_FIRST_OPEN_TOP = 64;
 
@@ -18,6 +19,7 @@ export class PanelManager {
     this.panels = new Map();
     this.openSequence = 0;
     this.returnParentContext = null;
+    this.launchGeometryContext = null;
     this.storagePrefix = "webgl-generator-panel:";
     this.lastMainStorageKey = `${this.storagePrefix}last-main`;
     this.overlayRegistry = getOverlayRegistry(documentRef);
@@ -160,7 +162,28 @@ export class PanelManager {
     if (record.role === "main") this.closeOtherMainPanels(id);
     record.openSequence = ++this.openSequence;
     record.panel.classList.remove("hidden");
-    this.applyPreferredPosition(record);
+    const launchSafeTop = finiteCoordinate(this.launchGeometryContext?.safeTop, PANEL_MARGIN);
+    if (record.panel.dataset) {
+      if (this.launchGeometryContext) {
+        record.panel.dataset.launchSafeTop = String(launchSafeTop);
+        record.panel.dataset.launchSafeTopPending = "true";
+      } else {
+        delete record.panel.dataset.launchSafeTop;
+        delete record.panel.dataset.launchSafeTopPending;
+      }
+    }
+    this.applyPreferredPosition(record, {safeTop: launchSafeTop});
+    if (this.launchGeometryContext && record.panel.dataset) {
+      const launchOpenSequence = record.openSequence;
+      const releaseLaunchSafeTop = () => {
+        if (record.openSequence !== launchOpenSequence) return;
+        delete record.panel.dataset.launchSafeTopPending;
+        if (!record.panel.classList.contains("hidden")) this.reflowPanels();
+      };
+      const view = this.documentRef?.defaultView;
+      if (typeof view?.requestAnimationFrame === "function") view.requestAnimationFrame(releaseLaunchSafeTop);
+      else queueMicrotask(releaseLaunchSafeTop);
+    }
     this.resolvePanelCoexistence(id);
     this.overlayRegistry?.show(record.overlayId, {returnFocus, focus});
     restoreManagedPanelViewportOrigin(this.documentRef?.defaultView);
@@ -193,13 +216,16 @@ export class PanelManager {
     this.reflowPanels();
   }
 
-  withReturnParent(parentId, callback) {
+  withReturnParent(parentId, callback, {launchGeometry = null} = {}) {
     const previous = this.returnParentContext;
+    const previousLaunchGeometry = this.launchGeometryContext;
     this.returnParentContext = parentId || null;
+    this.launchGeometryContext = launchGeometry;
     try {
       return callback?.();
     } finally {
       this.returnParentContext = previous;
+      this.launchGeometryContext = previousLaunchGeometry;
     }
   }
 
@@ -250,7 +276,8 @@ export class PanelManager {
   constrain(panel, {
     left = Number.parseFloat(panel.style.left),
     top = Number.parseFloat(panel.style.top),
-    reachableOnly = false
+    reachableOnly = false,
+    safeTop = null
   } = {}) {
     const hostRect = this.host.getBoundingClientRect();
     const header = panel.querySelector?.(".floating-panel-header");
@@ -258,6 +285,15 @@ export class PanelManager {
     const hostHeight = this.host.clientHeight || hostRect.height;
     const width = panelWidth(panel);
     const height = panel.offsetHeight || 180;
+    const headerHeight = header?.offsetHeight || PANEL_HEADER_HEIGHT;
+    const maxSafeTop = Math.max(PANEL_MARGIN, hostHeight - headerHeight - PANEL_MIN_BODY_HEIGHT - PANEL_MARGIN);
+    const inheritedSafeTop = Number(panel.dataset?.launchSafeTop);
+    const launchSafeTopPending = panel.dataset?.launchSafeTopPending === "true";
+    const fallbackSafeTop = launchSafeTopPending ? finiteCoordinate(inheritedSafeTop, PANEL_MARGIN) : PANEL_MARGIN;
+    const effectiveSafeTop = clamp(finiteCoordinate(safeTop, fallbackSafeTop), PANEL_MARGIN, maxSafeTop);
+    if (panel.dataset && Object.hasOwn(panel.dataset, "launchSafeTop")) {
+      panel.dataset.launchSafeTop = String(effectiveSafeTop);
+    }
     const position = reachableOnly
       ? constrainPanelRuntimePosition({
         left,
@@ -265,22 +301,24 @@ export class PanelManager {
         hostWidth,
         hostHeight,
         panelWidth: width,
-        headerHeight: header?.offsetHeight || PANEL_HEADER_HEIGHT
+        headerHeight,
+        minTop: effectiveSafeTop
       })
       : {
         left: clamp(finiteCoordinate(left, 0), PANEL_MARGIN, Math.max(PANEL_MARGIN, hostWidth - width - PANEL_MARGIN)),
-        top: clamp(finiteCoordinate(top, 0), PANEL_MARGIN, Math.max(PANEL_MARGIN, hostHeight - height - PANEL_MARGIN))
+        top: clamp(finiteCoordinate(top, 0), effectiveSafeTop, Math.max(effectiveSafeTop, hostHeight - height - PANEL_MARGIN))
     };
     writePanelRuntimePosition(panel, position);
     writePanelAvailableHeight(panel, panelAvailableHeight(hostHeight, position.top));
     return position;
   }
 
-  applyPreferredPosition(record) {
+  applyPreferredPosition(record, {safeTop = null} = {}) {
     return this.constrain(record.panel, {
       left: record.preferredLeft,
       top: record.preferredTop,
-      reachableOnly: record.positionMode === PANEL_POSITION_MANUAL
+      reachableOnly: record.positionMode === PANEL_POSITION_MANUAL,
+      safeTop
     });
   }
 
@@ -548,7 +586,8 @@ export function constrainPanelRuntimePosition({
   panelWidth: width,
   headerHeight = PANEL_HEADER_HEIGHT,
   margin = PANEL_MARGIN,
-  minVisibleHeaderWidth = PANEL_MIN_VISIBLE_HEADER_WIDTH
+  minVisibleHeaderWidth = PANEL_MIN_VISIBLE_HEADER_WIDTH,
+  minTop = margin
 }) {
   const safeWidth = Math.max(1, finiteCoordinate(width, 320));
   const safeHeaderHeight = Math.max(1, finiteCoordinate(headerHeight, PANEL_HEADER_HEIGHT));
@@ -557,9 +596,10 @@ export function constrainPanelRuntimePosition({
   const minLeft = Math.min(margin, minVisibleHeaderWidth - safeWidth);
   const maxLeft = Math.max(minLeft, safeHostWidth - safeWidth - margin);
   const maxTop = Math.max(margin, safeHostHeight - safeHeaderHeight - margin);
+  const safeMinTop = clamp(finiteCoordinate(minTop, margin), margin, maxTop);
   return {
     left: clamp(finiteCoordinate(left, margin), minLeft, maxLeft),
-    top: clamp(finiteCoordinate(top, margin), margin, maxTop)
+    top: clamp(finiteCoordinate(top, margin), safeMinTop, maxTop)
   };
 }
 

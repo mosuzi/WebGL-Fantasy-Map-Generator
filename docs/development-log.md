@@ -28997,6 +28997,22 @@ full 矩阵结果：
 - 新增源码派生几何专项；复杂工作区与键盘视觉审计分别移除 `IA-104-003 / IA-106-004`。首轮独立复核发现面板可用高度只约束 content-box、固定 `38px` header 会在字体放大时裁切、checkbox 扩大命中缺事件级语义证明，以及提前删除 `IA-107-001` 会让最终历史审计与产物不一致；限修后面板 outer box 直接受安全高度约束，header 改为内容自适应，label 空白 / 键盘 checkbox 和列宽提交 / 取消均由合成事件与真实直接操控会话守门。`IA-107-001` 继续作为历史浏览器 finding 保留，待第 216 项后的统一 Chrome 真实矩形验收再闭环。
 - 二次复核又发现 pointerdown 无 change 会残留修饰键；最终改为只在真实 label click 捕获，合成 input 冒泡只停止传播，微任务兜底清理未消费状态，直接鼠标与键盘 input click 各自捕获修饰键。强化几何专项、两份现行审计生成 / 陈旧检查 / 回归、直接操控、面板位置、overlay policy、列宽、选择居中、重生成锁和本地 Vite 构建通过；`pnpm` 包装器因 Corepack 访问 registry 失败未进入测试，已用等价本地入口完成。最终历史审计生成器与报告均未改动，已批准候选池未被覆写；终轮独立复核结论为 `RELEASE`。真实 Chrome 与历史 `IA-107-001` 闭环留到第 216 项完成后统一执行；下一项只进入第 216 项。
 
+## 2026-07-29：第 216 项代码阶段完成——焦点、长文本与编辑弹框高度
+
+- 新增共享 focus-visible token，9 个焦点 selector 家族不再清除 outline；MapToolbar 保持 6 个稳定 id 和 5 个用户入口，文字按钮以 `min-width: 0`、可换行与有界 flex 处理长中文，收起 / 展开、顺序、点击与 ARIA 语义不变。
+- 管理 Tab 的 6 组 25 个入口与 25 个运行时 child handler 由专项双向比对。点击同步捕获 `open-generation-panel` 所在工具行、七 Tab header 与同 y 管理按钮行的真实矩形，将三行实际高度、明确间距与 margin 形成的一次性占用预算传入 `PanelManager`；不把低位入口前空白或原绝对 y 区域当成永久 `minTop`，也不写位置持久化。
+- 18 个 `UiActionDock` 宿主、68 个动作和 55 个二级弹框统一使用真实 active anchor 与 `scrollHeight`：下方容纳则下置，否则上方容纳则上置，否则选择较大侧；`max-height` 等于所选侧真实空间，不再设置 `180px` 下限，上置也不再错误使用下方空间。用户拖动后只按有效安全区 clamp，不自动换侧；动作身份、结果、ARIA、outside / Escape、会话与历史语义不变。
+- 现行主面板互斥会在子面板打开时隐藏控制面板，本项按兼容解释保留此导航：三行在点击时必须真实可见并取证，首帧只消费实际占用高度，不承诺保留原绝对 y 区域；关闭子面板仍返回控制面板。若要求父子同时常驻，应另行产品决策。
+- 新增 responsive / focus / overlay 源码派生专项，冻结管理 `6 / 25 / 25`、动作坞 `18 / 68 / 55`、焦点 `9`、工具栏 `6 / 5` 及上下选侧 / 150% 行 union 纯函数。键盘视觉审计移除 `IA-106-003`；历史 `IA-107-002` 继续保留到统一 Chrome 真正证明 document 横向溢出为 0。
+
+### 第 216 项首轮复核阻断与限修
+
+- 首轮复核指出两类 P1：其一，raw `safeTop` 被作为整个打开生命周期的永久 `minTop`，极窄屏可只剩标题栏且用户无法上拖；其二，直接使用三行 `union.bottom` 会把低位管理入口前的滚动空白误算为占用高度。现仍保留三行真实 rect 作为点击取证，但启动预算改为“工具栏行顶部 + 三行实际高度 + 两段明确 `8px` 间距 + `8px` margin”；低位样本的 union bottom 为 `552`，实际占用预算为 `152`，首帧 `safeTop = 160`。
+- `PanelManager` 首帧按真实 header 与最小 `96px` 正文预算钳制并回写 launch safeTop；动画帧后解除 pending，并主动进入统一 `reflowPanels()`，后续 reflow / 用户拖动可恢复常规安全区，同时把新值继续写给子 ActionDock。专项在 `576px` 宿主、`38px` header 下实测首帧可用高度 `408px`、正文预算 `370px`，随后 reflow 回写 `8`；主面板与详情共存时继续左右 dock，不由单面板 preferred position 破坏布局，普通面板不产生 launch 字段。
+- 动作坞补入 panel / body `ResizeObserver`，active 切换后按动画帧重新绑定并以 `max(panel.scrollHeight, header.offsetHeight + body.scrollHeight)` 取得自然高度。异步内容增高会重新选择可容纳侧或较大侧；用户定位只做 clamp，关闭、失活和卸载均断开观察，避免残留监听与重排循环。
+- 强化专项真实调用 `captureControlPanelLaunchGeometry` 和 `withReturnParent / open / constrain` mock，不再只检查源码字符串；同时冻结低位入口正文可用、首帧后安全带释放、子弹框正可用高度、异步增高换侧和用户位置不跳侧。
+- 后续复核又发现 rAF 释放曾绕过主 / 详情共存出口、多个 active 动作可能取错第一个锚点、离屏锚点可能返回负 `top` 或超出 viewport bottom。最终分别改为 rAF 主动进入统一 `reflowPanels()`、按稳定 `data-action-id` 精确定位当前二级动作、在计算上下空间前钳制锚点边界；专项覆盖左右 dock、双 active 与上下离屏反例。最新 responsive、ActionDock、键盘视觉生成 / 陈旧检查 / 回归、直接操控生成 / 陈旧检查 / 回归、面板位置 / overlay policy、生产构建与差异检查均通过；独立复核结论为 `RELEASE`，只待统一 Chrome，不提交、不推送。
+
 ## 2026-07-30：登记权威任务第 217～218 项——城市规模与省会选择一致性
 
 - 用户在 `127.0.0.1:5410/?debug=1` 的真实地图中指出：`#150` 上虞人口 `1,179` 却因省会 / 高地身份显示为复杂寨堡，邻近且同属上虞省的 `#284` 澜晖人口 `3,997` 却显示为村落；随后进一步确认省会选择本身也应纳入优化，并要求把方案转为权威任务。

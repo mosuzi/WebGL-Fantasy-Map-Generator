@@ -97,6 +97,7 @@
     "regress:panel-manual-position": "node --no-warnings ./tools/webgl-generator-panel-manual-position-regression.mjs",
     "regress:panel-overlay-policy": "node --no-warnings ./tools/webgl-generator-panel-overlay-policy-regression.mjs",
     "regress:panel-overlay-browser": "node --no-warnings ./tools/webgl-generator-panel-overlay-browser-regression.mjs",
+    "regress:responsive-focus-overlay": "node --no-warnings ./tools/webgl-generator-responsive-focus-overlay-regression.mjs",
     "regress:ui-system-audit-contract": "node --no-warnings ./tools/webgl-generator-ui-system-audit-contract.mjs",
     "regress:action-ia": "node --no-warnings ./tools/webgl-generator-action-information-architecture-regression.mjs",
     "regress:action-ia-browser": "node --no-warnings ./tools/webgl-generator-action-information-architecture-browser-regression.mjs",

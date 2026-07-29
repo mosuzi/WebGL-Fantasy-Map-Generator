@@ -27,6 +27,7 @@ import {
   visualThemeOptions
 } from "../renderer/themes.js";
 import {PanelManager} from "../ui/panel-manager.js";
+import {captureControlPanelLaunchGeometry} from "../ui/control-panel-launch-geometry.js";
 import {createBrushCursorPreview} from "../ui/brush-cursor-preview.js";
 import {bindRuntimePanel, readControlPreferences, readOptionsFromPanel, setActiveModeButton, setEditingInteractionLock, setGenerationLoading, setSeedInput, updateControlPreferences, updateLayerPreference, updatePickPanel, updateRegenerationSection, updateRuntimePanel} from "../ui/panel.js";
 import {formatArea as formatDisplayArea, formatDistance as formatDisplayDistance, normalizeUnitPreferences} from "../ui/display-units.js";
@@ -6793,7 +6794,8 @@ function wrapControlPanelChildOpeners(handlers, panelManager) {
     handlers[name] = event => {
       const sourcePanelId = event?.currentTarget?.closest?.(".floating-panel")?.dataset?.panelId || null;
       const returnParentId = sourcePanelId === "generation-panel" ? sourcePanelId : null;
-      return panelManager.withReturnParent(returnParentId, () => open(event));
+      const launchGeometry = returnParentId ? captureControlPanelLaunchGeometry(event.currentTarget.ownerDocument, event.currentTarget) : null;
+      return panelManager.withReturnParent(returnParentId, () => open(event), {launchGeometry});
     };
   }
 }

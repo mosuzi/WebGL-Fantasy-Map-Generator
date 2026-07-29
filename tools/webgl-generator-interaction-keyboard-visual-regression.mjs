@@ -29,8 +29,8 @@ assert.deepEqual(report.totals, {
   layerContracts: 8,
   targetSizeContracts: 8,
   stateBannerKinds: 7,
-  findings: 4,
-  pureUiFindings: 1,
+  findings: 3,
+  pureUiFindings: 0,
   behaviorFindings: 3,
   browserCases: 12,
   unresolved: 1
@@ -48,7 +48,7 @@ assert.deepEqual(report.escapeContracts.filter(item => item.included).map(item =
 assert.ok(report.escapeContracts.filter(item => !item.included).every(item => item.exclusionReason), "排除的 Escape 字面量必须有理由");
 assert.deepEqual(report.responsive.mediaBreakpoints.map(item => item.maxWidthPx), [620, 520, 720]);
 assert.deepEqual(report.responsive.containerQueries.map(item => item.maxWidthPx), [520, 320]);
-assert.deepEqual(report.responsive.cssInventory, {zIndexDeclarations: 36, baseOverflowDeclarations: 64, axisOverflowDeclarations: 2, nowrapDeclarations: 45, ellipsisDeclarations: 25, wrapDeclarations: 55});
+assert.deepEqual(report.responsive.cssInventory, {zIndexDeclarations: 36, baseOverflowDeclarations: 64, axisOverflowDeclarations: 2, nowrapDeclarations: 45, ellipsisDeclarations: 25, wrapDeclarations: 56});
 assert.deepEqual(report.responsive.viewports.map(item => item.id), ["desktop", "narrow", "css-stress"]);
 assert.deepEqual([...new Set(report.browserMatrix.map(item => item.variantId))], ["baseline", "long-zh", "expanded-options", "font-and-states"]);
 assert.ok(report.browserMatrix.every(item => item.checklistIds.length >= 6 && item.evidenceStatus === "E-C" && item.browserEvidence === "pending-Q107"));
@@ -63,9 +63,9 @@ assert.ok(report.visualContracts.targetSizes.some(item => item.declaredSize === 
 assert.ok(report.visualContracts.targetSizes.some(item => item.declaredSize === "透明命中 16×表头高度；视觉线 2px"));
 assert.deepEqual(report.visualContracts.stateBanners.map(item => item.kind), ["selected", "editing", "preview", "stale", "empty", "error", "orphan"]);
 assert.deepEqual(report.visualContracts.stateBanners.filter(item => item.role === "alert").map(item => item.kind), ["error", "orphan"]);
-assert.deepEqual(report.findings.map(item => item.id), ["IA-106-001", "IA-106-002", "IA-106-003", "IA-106-005"]);
+assert.deepEqual(report.findings.map(item => item.id), ["IA-106-001", "IA-106-002", "IA-106-005"]);
 assert.equal(report.findings.filter(item => item.changeClass === "INT-B").length, 3);
-assert.equal(report.findings.filter(item => item.changeClass === "UI-only").length, 1);
+assert.equal(report.findings.filter(item => item.changeClass === "UI-only").length, 0);
 assert.ok(report.findings.every(item => ["high", "medium"].includes(item.confidence) && item.evidence && item.recommendation && item.sourceRefs.length && item.evidenceStatus === "E-C"));
 assert.deepEqual(report.coverage.unknownFocusCandidates, []);
 assert.deepEqual(report.coverage.missingFocusEntries, []);
