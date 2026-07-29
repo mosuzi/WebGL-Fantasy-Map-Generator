@@ -31,7 +31,7 @@ assert.ok(report.modeContracts.every(item => {
 assert.ok(report.modeContracts.every(item => item.sourceRefs.some(ref => ref.pattern?.includes(`CANVAS_TOOL_MODE\\.${item.key}`) || ref.scope?.anchor === "function startMarkerEditMode" && ref.tokens.includes(`CANVAS_TOOL_MODE.${item.key}`)) && item.sourceRefs.filter(ref => ref.scope).length >= 3), "每个模式必须有自己的入口模式和至少三段限域生命周期证据");
 assert.equal(report.modeContracts.filter(item => item.cursor === "brush-overlay").length, 8, "八个连续 / 分阶段笔刷必须声明共享半径光标");
 assert.equal(report.modeContracts.filter(item => item.cursor === "css-crosshair").length, 1, "测量模式是唯一 crosshair 模式");
-assert.equal(report.modeContracts.filter(item => item.cursor === "default").length, runtimeIds.length - 9, "其余模式必须明确记录 default，而不是 unknown");
+assert.equal(report.modeContracts.filter(item => item.cursor === "mode-cursor").length, runtimeIds.length - 9, "其余模式必须由统一提示契约提供非默认光标");
 assert.deepEqual(report.modeContracts.filter(item => item.locksInteraction === false).map(item => item.modeId), ["measurement:draw"], "测量必须是唯一不锁基础交互的注册模式");
 
 assert.equal(report.totals.directFamilies, 19, "直接操控应为 13 条原生路径加 6 类展开宿主");
@@ -56,8 +56,7 @@ assert.equal(new Set(directById.get("DM-19").hostLabels.map(item => item.split("
 assert.match(directById.get("DM-13").complete, /createUpdateMeasurementPointsCommand/, "测量 UI 编辑保存不得误写为公开 API 路径");
 assert.match(directById.get("DM-17").history, /未传 storageKey，不持久化/, "树状浮层没有 storageKey，只能记录会话内位置");
 
-assert.equal(report.findings.length, 1);
-assert.deepEqual(report.findings.map(item => item.findingId), ["IA-103-007"]);
+assert.equal(report.findings.length, 0);
 assert.ok(report.findings.every(item => ["P0", "P1", "P2", "P3"].includes(item.severity) && ["代码确认", "浏览器复现", "用户反馈", "待验证"].includes(item.confidence) && typeof item.intB === "boolean"), "问题候选必须使用专题规定的严重度、信心与 INT-B 字段");
 assert.ok(report.findings.filter(item => item.intB).every(item => item.browserEvidence === "pending-Q107"), "行为变化候选必须保留给第 107 项验证");
 

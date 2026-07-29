@@ -302,12 +302,13 @@ function definitions() {
         visibleAction("details-locate", "对象详情：定位", [
           sourceRef(FILES.objectDetailsVue, ["@click=\"callbacks.onLocate\""]),
           sourceRef(FILES.objectDetailsWrapper, ["onLocate: () => callbacks.onLocate"]),
-          sourceRef(FILES.runtime, ["onLocate:", "locateAndSelectObject(null"], {anchor: "createObjectDetailsPanel(documentRef", end: "next-panel-factory"})
+          sourceRef(FILES.runtime, ["onLocate:", "locateAndSelectObject(null"], {anchor: "createObjectDetailsPanel(documentRef", end: "next-panel-factory"}),
+          sourceRef(FILES.runtime, ["const locateAndSelectObject", "无法定位${kindLabel}", "return located"])
         ], {
           result: "相机定位当前对象并保持统一 selection",
           historyEffect: "不写历史",
-          feedback: "相机移动与地图高亮",
-          recovery: "定位失败返回 false；用户可见反馈待第 107 项验证"
+          feedback: "相机移动与地图高亮；失败时显示领域可读状态",
+          recovery: "定位失败返回 false，地图与 selection 不变，并显示稳定可见反馈"
         }),
         visibleAction("details-edit", "对象详情：进入编辑", [
           sourceRef(FILES.objectDetailsVue, ["callbacks.onEdit?.()"]),
@@ -552,9 +553,12 @@ function domainPanelActions() {
   return matches.map(([, id, name, label]) => {
     const handler = `onOpen${pascalCase(name)}Panel`;
     const panelKey = lowerFirst(pascalCase(name));
+    const bindingTokens = ["height", "state"].includes(name)
+      ? [`bindDelegatedButton(documentRef, "${id}"`, handler]
+      : [name === "label-naming" ? "bindLabelNamingPanelTrigger" : `getElementById("${id}")`];
     return visibleAction(`open-${name}`, label, [
       sourceRef(FILES.control, [`["${id}", "${label}"]`]),
-      sourceRef(FILES.panelBindings, [name === "label-naming" ? "bindLabelNamingPanelTrigger" : `getElementById("${id}")`]),
+      sourceRef(FILES.panelBindings, bindingTokens),
       sourceRef(FILES.runtime, [`${handler}:`, `state.panels.${panelKey}.open`], {anchor: `${handler}:`, end: "next-open-handler"})
     ], {
       result: `打开${label}主面板，并按该面板既有 open 契约初始化内容`,
@@ -580,6 +584,8 @@ function locateHostActions() {
           sourceRef(FILES.runtime, [`${callback}:`, "locateMeasurement(state"], {anchor, end: "next-panel-factory"}),
           sourceRef(FILES.runtime, ["state.locateAndSelectObject(\"measurement-panel\""])
         ]
+      : name === "OceanCurrentPanel"
+        ? [sourceRef(FILES.runtime, [`${callback}: current`, "oceanCurrentBounds", "locateBounds", "无法定位洋流"], {anchor, end: "next-panel-factory"})]
       : [sourceRef(FILES.runtime, [`${callback}:`, `locateAndSelectObject(\"${panelSlug}-panel\"`], {anchor, end: "next-panel-factory"})];
     return visibleAction(`locate-${panelSlug}`, `${base} 列表定位`, [
       sourceRef(file, ["@locate", `callbacks.${callback}`]),
@@ -604,7 +610,8 @@ function renameHostActions() {
     Province: "createRenameObjectCommand",
     Religion: "createRenameObjectCommand",
     River: "createRenameObjectCommand",
-    State: "createRenameObjectCommand"
+    State: "createRenameObjectCommand",
+    OceanCurrent: "createRenameOceanCurrentCommand"
   };
   return discoverVueHosts("UiTextEditField", {excludeBase: true}).map(({file, name}) => {
     const base = name.replace(/Panel$/, "");
@@ -628,6 +635,15 @@ function renameHostActions() {
     const anchor = `create${base}Panel(documentRef`;
     const commandToken = commandByBase[base];
     if (!commandToken) throw new Error(`缺少 ${base} 重命名命令映射`);
+    if (base === "OceanCurrent") {
+      return visibleAction("rename-ocean-current", "OceanCurrent 重命名", [
+        sourceRef(file, ["UiTextEditField", "@apply"]),
+        sourceRef(FILES.textEdit, ["submit.prevent", "$emit('apply'"]),
+        sourceRef(wrapper, [`${callback}:`, `callbacks.${callback}`]),
+        sourceRef(FILES.runtime, [`${callback}:`, "runtimeActions.oceanCurrents.rename"], {anchor, end: "next-panel-factory"}),
+        sourceRef(FILES.runtime, ["function renameOceanCurrentViaApi", commandToken, "executeEditCommand"])
+      ]);
+    }
     return visibleAction(`rename-${panelSlug}`, `${base} 重命名`, [
       sourceRef(file, ["UiTextEditField", "@apply"]),
       sourceRef(FILES.textEdit, ["submit.prevent", "$emit('apply'"]),
@@ -702,32 +718,7 @@ function step(layer, file, tokens) {
 }
 
 function buildStaticFindings() {
-  return [
-    {
-      findingId: "IA-102-001",
-      title: "列表定位失败可能缺少用户可见反馈",
-      severity: "P2",
-      confidence: "待验证",
-      intB: true,
-      evidenceStatus: "E-C",
-      browserEvidence: "pending-Q107",
-      observed: "统一定位 helper 在 locateObject 返回 false 时只刷新面板并返回 false，当前静态链未发现通用 toast 或状态文案。",
-      recommendation: "第 107 项验证无效 / 孤儿对象路径；若确认为静默失败，后续候选需增加反馈，属于行为变化。",
-      sourceRefs: [sourceRef(FILES.runtime, ["const located = object ?", "refreshRuntimeAndPickPanels", "return located"])]
-    },
-    {
-      findingId: "IA-102-002",
-      title: "部分重命名 no-op 可能静默返回",
-      severity: "P3",
-      confidence: "待验证",
-      intB: true,
-      evidenceStatus: "E-C",
-      browserEvidence: "pending-Q107",
-      observed: "executeEditCommand 仅在调用方传入 noopStatus 时显示状态，部分领域重命名没有统一传入该字段。",
-      recommendation: "第 107 项验证空名和未变化名称；若缺少反馈，后续候选需统一 no-op 反馈，属于行为变化。",
-      sourceRefs: [sourceRef(FILES.runtime, ["if (command.isNoop?.(context))", "if (options.noopStatus)", "return {executed: false"])]
-    }
-  ];
+  return [];
 }
 
 function verifyFlow(item, includedSurfaceIds) {

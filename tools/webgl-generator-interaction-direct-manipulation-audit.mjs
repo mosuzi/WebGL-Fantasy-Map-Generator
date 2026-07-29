@@ -53,7 +53,7 @@ const MODE_DEFINITIONS = Object.freeze([
   oneShotMode("ROUTE_DRAW", "route:draw", "route-panel", "绘制路线", "第一次点击起点，第二次点击终点", "起点在两次点击间保留", "第二次合法点击提交并完成模式", "成功写一条新增路线历史", {continuation: "两阶段一次性模式；第一次点击保留起点，成功创建后退出"}),
   oneShotMode("ROUTE_EDIT_WAYPOINT", "route:edit-waypoint", "route-panel", "拾取路线途经点草稿", "单击新的途经 cell", "面板保存途经点草稿", "拾取后退出模式，应用 / 取消由面板收口", "拾取不写历史，实际应用写一条路线编辑历史"),
   oneShotMode("RIVER_ADD", "river:add", "river-panel", "新增河流", "单击合法河源 cell", "无跨手势草稿", "成功创建后完成模式", "成功写一条新增河流历史"),
-  oneShotMode("LAKE_EXCAVATE", "lake:excavate", "lake-panel", "开挖湖泊", "单击中心并按面板半径作用", "面板保存半径参数；画布使用默认光标，没有专属半径预览", "成功开挖后完成模式", "成功写一条湖泊开挖历史"),
+  oneShotMode("LAKE_EXCAVATE", "lake:excavate", "lake-panel", "开挖湖泊", "单击中心并按面板半径作用", "面板保存半径参数；画布持续显示模式名、下一步和 crosshair 光标", "成功开挖后完成模式", "成功写一条湖泊开挖历史"),
   oneShotMode("FEATURE_PATCH_SELECT", "feature:patch-select", "lake-panel", "拾取 feature 补丁草稿", "单击目标 pack cell", "选中 cell 进入面板补丁预览", "拾取后退出模式；应用 / 取消由面板收口", "选择本身不写历史，应用补丁写一条历史"),
   persistentMode("FEATURE_TOPOLOGY_SELECT", "feature:topology-select", "feature-panel", "选择 feature 拓扑 cell", "逐次单击 grid cell 组成选区", "选区及拓扑草稿持续显示", "面板应用或取消时退出", "选择不写历史，应用拓扑写一条历史"),
   oneShotMode("ZONE_ADD", "zone:add", "zone-panel", "新增地区", "单击中心并按半径创建", "面板显示待创建类型", "成功创建后完成模式", "成功写一条新增地区历史"),
@@ -156,7 +156,7 @@ function modeDefinition(key, modeId, panel, target, gesture, preview, complete, 
   return {
     key, modeId, panelId: panel, target, gesture, preview, complete, history,
     entry: `${panel} 中对应工具入口`,
-    cursor: modeId === "measurement:draw" ? "css-crosshair" : modeId.includes("brush") || modeId.includes("assign") || modeId.includes("suitability") ? "brush-overlay" : "default",
+    cursor: modeId === "measurement:draw" ? "css-crosshair" : modeId.includes("brush") || modeId.includes("assign") || modeId.includes("suitability") ? "brush-overlay" : "mode-cursor",
     cancel: overrides.cancel || "同入口关闭、切换模式或面板关闭调用统一 cancel；活动手势按各领域回滚",
     switch: "CanvasToolModeManager 先以 reason=switch 取消旧模式，再进入新模式",
     escape: overrides.escape || "全局 Escape 优先取消当前任意活动画布模式",
@@ -295,11 +295,11 @@ function objectToolEvidence(key, tokens, supports) {
 
 function cursorEvidence(item) {
   const brushModes = new Set([...readText(FILES.brushCursor).matchAll(/modeId === "([^"]+)"/g)].map(match => match[1]));
-  const expected = brushModes.has(item.modeId) ? "brush-overlay" : item.modeId === "measurement:draw" ? "css-crosshair" : "default";
+  const expected = brushModes.has(item.modeId) ? "brush-overlay" : item.modeId === "measurement:draw" ? "css-crosshair" : "mode-cursor";
   if (item.cursor !== expected) throw new Error(`${item.modeId} 光标契约与源码不一致：${item.cursor} != ${expected}`);
   if (item.cursor === "brush-overlay") return sourceRef(FILES.brushCursor, [`modeId === \"${item.modeId}\"`], {supports: ["cursor"]});
   if (item.cursor === "css-crosshair") return sourceRef(FILES.styles, [".measurement-active #map-canvas", "cursor: crosshair"], {supports: ["cursor"]});
-  return sourceRef(FILES.brushCursor, ["return null"], {supports: ["cursor"]});
+  return sourceRef(FILES.runtime, [`[CANVAS_TOOL_MODE.${item.key}]`, "canvasToolModeFeedback", "style.setProperty(\"cursor\", contract.cursor)"], {supports: ["cursor"]});
 }
 
 function panelCloseEvidence(item) {
@@ -461,18 +461,7 @@ function verifyDirect(item, includedSurfaceIds) {
 }
 
 function findings() {
-  return [
-    {
-      findingId: "IA-103-007",
-      title: "十九个拾取 / 创建 / 移动模式使用默认画布光标",
-      behavior: "只有八个连续笔刷使用 brush overlay，measurement 使用 crosshair；其余十九个模式没有模式专属光标。",
-      impact: "首次用户主要依赖面板按钮和状态文案理解下一步需要在画布操作。",
-      recommendation: "第 107 项观察典型模式的可发现性；如不足，后续纯 UI 候选可增加 cursor / overlay 提示。",
-      severity: "P2", confidence: "待验证", intB: false,
-      evidenceStatus: "E-C", browserEvidence: "pending-Q107",
-      sourceRefs: [sourceRef(FILES.runtime, ["function getActiveEditorKind", "CANVAS_TOOL_MODE.MEASUREMENT_DRAW"])]
-    }
-  ].map(item => ({...item, sourceRefs: item.sourceRefs.map(ref => (verifySourceRef(ref), ref))}));
+  return [];
 }
 
 function parseRuntimeModes() {

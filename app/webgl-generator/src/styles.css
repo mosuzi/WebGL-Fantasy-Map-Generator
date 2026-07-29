@@ -830,6 +830,7 @@ select:disabled {
 .map-overlay,
 .map-badge,
 .generation-loading-bubble,
+.canvas-tool-mode-feedback,
 .map-toast,
 .shortcut-toast,
 .hover-overlay,
@@ -1057,6 +1058,34 @@ select:disabled {
 }
 
 .map-toast[hidden] {
+  display: none;
+}
+
+.canvas-tool-mode-feedback {
+  position: absolute;
+  left: 18px;
+  bottom: 22px;
+  display: grid;
+  max-width: min(420px, calc(100% - 36px));
+  gap: 2px;
+  border: 1px solid rgba(170, 207, 222, 0.32);
+  border-radius: 10px;
+  padding: 8px 12px;
+  background: rgba(21, 37, 48, 0.86);
+  box-shadow: 0 12px 30px rgba(2, 6, 23, 0.28);
+  color: #e9f2f5;
+  font-size: 12px;
+  line-height: 1.35;
+  pointer-events: none;
+  z-index: 4;
+}
+
+.canvas-tool-mode-feedback strong {
+  color: #ffffff;
+  font-size: 12px;
+}
+
+.canvas-tool-mode-feedback[hidden] {
   display: none;
 }
 

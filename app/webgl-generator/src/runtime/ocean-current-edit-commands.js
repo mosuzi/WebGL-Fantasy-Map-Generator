@@ -24,7 +24,7 @@ export function createRenameOceanCurrentCommand(currentId, name) {
       findCurrent(context.map, id).name = before;
     },
     isNoop(context) {
-      return findCurrent(context.map, id).name === after;
+      return !after || findCurrent(context.map, id).name === after;
     },
     getResult() {
       return {id, name: after};
@@ -80,7 +80,6 @@ function findCurrent(map, id) {
 
 function normalizeName(value) {
   const name = String(value || "").trim();
-  if (!name) throw new Error("洋流名称不能为空");
   if (name.length > 80) throw new Error("洋流名称不能超过 80 个字符");
   return name;
 }

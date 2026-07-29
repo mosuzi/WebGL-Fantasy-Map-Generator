@@ -227,7 +227,7 @@ import {mergePersistedUserVisualThemes, persistUserVisualThemes} from "./visual-
 import {collectionAffected, objectAffected, systemAffected} from "./edit-command-effects.js";
 import {syncEditorStateSnapshot} from "../ui/vue/state-bridge.js";
 import {completeStartupLoading, failStartupLoading} from "../ui/startup-loading.js";
-import {LABEL_TARGET_KIND, OBJECT_KIND} from "./object-kinds.js";
+import {LABEL_TARGET_KIND, OBJECT_KIND, OBJECT_KIND_LABEL} from "./object-kinds.js";
 import GenerationWorker from "./generation-worker.js?worker";
 import {getWebglGeneratorHealthMonitor} from "./health-monitor.js";
 import {createRuntimeOperationError, createRuntimeOperationManager} from "./runtime-operation.js";
@@ -386,6 +386,48 @@ export const CANVAS_TOOL_MODE = Object.freeze({
   REGENERATION_LOCK_SELECT: "regeneration-lock:select"
 });
 export const CANVAS_TOOL_MODE_IDS = Object.freeze(Object.values(CANVAS_TOOL_MODE));
+function canvasToolModeFeedback(name, nextAction, category, cursor) {
+  return Object.freeze({name, nextAction, category, cursor});
+}
+
+export const CANVAS_TOOL_MODE_FEEDBACK = Object.freeze({
+  [CANVAS_TOOL_MODE.HEIGHT_BRUSH]: canvasToolModeFeedback("高度笔刷", "在地图上拖动以调整高度。", "brush", "none"),
+  [CANVAS_TOOL_MODE.STATE_BRUSH]: canvasToolModeFeedback("国家归属笔刷", "在地图上拖动以调整国家归属。", "brush", "none"),
+  [CANVAS_TOOL_MODE.STATE_ADD]: canvasToolModeFeedback("新增国家", "单击一块合法陆地以创建国家。", "one-shot", "crosshair"),
+  [CANVAS_TOOL_MODE.STATE_DELETE]: canvasToolModeFeedback("删除国家", "单击要删除的国家。", "one-shot", "crosshair"),
+  [CANVAS_TOOL_MODE.PROVINCE_BRUSH]: canvasToolModeFeedback("省份归属笔刷", "在地图上拖动以调整省份归属。", "brush", "none"),
+  [CANVAS_TOOL_MODE.PROVINCE_ADD]: canvasToolModeFeedback("新增省份", "单击合法目标以创建省份。", "one-shot", "crosshair"),
+  [CANVAS_TOOL_MODE.PROVINCE_DELETE]: canvasToolModeFeedback("删除省份", "单击要删除的省份。", "one-shot", "crosshair"),
+  [CANVAS_TOOL_MODE.CITY_ADD]: canvasToolModeFeedback("新增城镇", "单击合法陆地以创建城镇。", "one-shot", "crosshair"),
+  [CANVAS_TOOL_MODE.CITY_DELETE]: canvasToolModeFeedback("删除城镇", "单击要删除的城镇。", "one-shot", "crosshair"),
+  [CANVAS_TOOL_MODE.CITY_MOVE]: canvasToolModeFeedback("移动城镇", "拖动所选城镇并在目标处释放。", "move", "grab"),
+  [CANVAS_TOOL_MODE.CULTURE_ASSIGN]: canvasToolModeFeedback("文化归属笔刷", "在地图上拖动以调整文化归属。", "brush", "none"),
+  [CANVAS_TOOL_MODE.RELIGION_ASSIGN]: canvasToolModeFeedback("宗教归属笔刷", "在地图上拖动以调整宗教归属。", "brush", "none"),
+  [CANVAS_TOOL_MODE.CULTURE_CENTER]: canvasToolModeFeedback("拾取文化中心", "单击要设为文化中心的位置。", "pick", "cell"),
+  [CANVAS_TOOL_MODE.RELIGION_CENTER]: canvasToolModeFeedback("拾取宗教中心", "单击要设为宗教中心的位置。", "pick", "cell"),
+  [CANVAS_TOOL_MODE.BIOME_ASSIGN]: canvasToolModeFeedback("生物群系归属笔刷", "在地图上拖动以调整生物群系。", "brush", "none"),
+  [CANVAS_TOOL_MODE.SUITABILITY_PAINT]: canvasToolModeFeedback("适居度笔刷", "在地图上拖动以调整适居度。", "brush", "none"),
+  [CANVAS_TOOL_MODE.MARKET_ASSIGN]: canvasToolModeFeedback("市场归属笔刷", "在地图上拖动选择归属，随后在面板应用。", "brush", "none"),
+  [CANVAS_TOOL_MODE.MEASUREMENT_DRAW]: canvasToolModeFeedback("测量绘制", "在地图上点击或拖动以采集测量点。", "persistent", "crosshair"),
+  [CANVAS_TOOL_MODE.MARKER_ADD]: canvasToolModeFeedback("新增标记", "单击合法位置以放置标记。", "one-shot", "crosshair"),
+  [CANVAS_TOOL_MODE.MARKER_MOVE]: canvasToolModeFeedback("移动标记", "单击新的合法位置以移动标记。", "move", "grab"),
+  [CANVAS_TOOL_MODE.ROUTE_DRAW]: canvasToolModeFeedback("绘制路线", "依次单击路线起点和终点，成功创建后退出。", "one-shot", "crosshair"),
+  [CANVAS_TOOL_MODE.ROUTE_EDIT_WAYPOINT]: canvasToolModeFeedback("拾取路线途经点", "单击新的途经位置。", "pick", "cell"),
+  [CANVAS_TOOL_MODE.RIVER_ADD]: canvasToolModeFeedback("新增河流", "单击合法河源位置。", "one-shot", "crosshair"),
+  [CANVAS_TOOL_MODE.LAKE_EXCAVATE]: canvasToolModeFeedback("开挖湖泊", "单击开挖中心位置。", "one-shot", "crosshair"),
+  [CANVAS_TOOL_MODE.FEATURE_PATCH_SELECT]: canvasToolModeFeedback("拾取水陆修正区域", "单击局部水陆修正的中心。", "pick", "cell"),
+  [CANVAS_TOOL_MODE.FEATURE_TOPOLOGY_SELECT]: canvasToolModeFeedback("选择海岸编辑区域", "逐次单击地图区域以组成持续选区。", "persistent", "cell"),
+  [CANVAS_TOOL_MODE.ZONE_ADD]: canvasToolModeFeedback("新增地区", "单击地区中心位置。", "one-shot", "crosshair"),
+  [CANVAS_TOOL_MODE.NOTE_ADD]: canvasToolModeFeedback("新增备注", "单击合法位置以放置独立备注。", "one-shot", "crosshair"),
+  [CANVAS_TOOL_MODE.REGENERATION_LOCK_SELECT]: canvasToolModeFeedback("选择重生成锁对象", "逐次单击同类对象以加入或移出选区。", "persistent", "cell")
+});
+
+const canvasToolFeedbackIds = Object.keys(CANVAS_TOOL_MODE_FEEDBACK);
+const missingCanvasToolFeedbackIds = CANVAS_TOOL_MODE_IDS.filter(modeId => !canvasToolFeedbackIds.includes(modeId));
+const extraCanvasToolFeedbackIds = canvasToolFeedbackIds.filter(modeId => !CANVAS_TOOL_MODE_IDS.includes(modeId));
+if (missingCanvasToolFeedbackIds.length || extraCanvasToolFeedbackIds.length) {
+  throw new Error(`画布模式提示契约与模式分母不一致：missing=${missingCanvasToolFeedbackIds.join(",")} extra=${extraCanvasToolFeedbackIds.join(",")}`);
+}
 export function createGeneratorApp(documentRef, {healthMonitor = getWebglGeneratorHealthMonitor(documentRef)} = {}) {
   const canvas = documentRef.getElementById("map-canvas");
   const panelManager = new PanelManager(documentRef, documentRef.querySelector(".map-stage"));
@@ -585,6 +627,10 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       if (sourcePanelId) selectFromPanel(sourcePanelId, object);
       else selectionStore.setSelection({object});
       afterSelect?.(object);
+    } else {
+      const kindLabel = OBJECT_KIND_LABEL[object?.kind] || "对象";
+      const objectLabel = object?.name || object?.fullName || object?.id;
+      setFileOperationStatus(documentRef, `无法定位${kindLabel}${objectLabel === undefined ? "" : `“${objectLabel}”`}：对象不存在、已删除或已成为孤儿。`);
     }
     refreshRuntimeAndPickPanels(documentRef, state);
     return located;
@@ -2059,7 +2105,10 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       notesPanel.setSelectedNoteId(row.id);
     },
     onLocate: row => {
-      if (!row?.object || row.orphan) return;
+      if (!row?.object || row.orphan) {
+        setFileOperationStatus(documentRef, `无法定位备注“${row?.name || row?.id || "未知"}”：关联对象不存在、已删除或已成为孤儿。`);
+        return;
+      }
       locateAndSelectObject("notes-panel", row.object, {
         afterSelect: () => notesPanel.setSelectedNoteId(row.id)
       });
@@ -2077,7 +2126,10 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       updateEditingInteractionLock(state, documentRef);
     },
     onRename: (row, name) => {
-      if (!row?.object || row.orphan) return;
+      if (!row?.object || row.orphan) {
+        setFileOperationStatus(documentRef, `重命名备注关联对象失败：对象不存在、已删除或已成为孤儿。`);
+        return;
+      }
       executeEditCommand(state, documentRef, createRenameObjectCommand(row.object, name), {context: {map: state.map}});
       updateEditingInteractionLock(state, documentRef);
     },
@@ -2236,9 +2288,15 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     },
     onLocate: current => {
       const bounds = oceanCurrentBounds(current);
-      if (!bounds) return;
+      if (!bounds) {
+        setFileOperationStatus(documentRef, `无法定位洋流“${current?.name || current?.id || "未知"}”：洋流不存在、已删除或缺少有效路径。`);
+        return;
+      }
       const located = state.renderer.locateBounds(bounds, {status: `洋流 ${current.name || current.id}`});
-      if (!located) return;
+      if (!located) {
+        setFileOperationStatus(documentRef, `无法定位洋流“${current?.name || current?.id || "未知"}”：洋流不存在、已删除或缺少有效路径。`);
+        return;
+      }
       oceanCurrentPanel.setSelectedId(current.id);
       refreshRuntimeAndPickPanels(documentRef, state);
     },
@@ -3769,6 +3827,7 @@ async function loadMapIntoRuntime(state, documentRef, map, {loadingMessages = []
   state.pendingCustomLabelPlacement = null;
   state.customLabelDrag = null;
   state.canvasToolModes.reset("map-replace");
+  clearCanvasToolModeFeedback(state, documentRef);
   state.brushCursorPreview?.reset();
   state.map = map;
   state.regenerationLockUiSession?.clear({keepContext: false});
@@ -6170,7 +6229,7 @@ function renameOceanCurrentViaApi(state, documentRef, currentId, name) {
   const result = executeEditCommand(state, documentRef, createRenameOceanCurrentCommand(currentId, name), {
     context: {map: state.map},
     status: command => `已将洋流重命名为“${command.getResult?.().name || name}”。`,
-    noopStatus: "洋流名称没有变化。",
+    noopStatus: "洋流名称没有变化：名称不能为空，或新名称与当前名称相同。",
     throwOnError: false
   });
   updateOceanCurrentPanel(state);
@@ -6920,7 +6979,8 @@ function executeEditCommand(state, documentRef, command, options = {}) {
   if (!command) return {executed: false, command: null, result: null, error: null};
   try {
     if (command.isNoop?.(context)) {
-      if (options.noopStatus) setFileOperationStatus(documentRef, messageFromOption(options.noopStatus, command));
+      const noopStatus = options.noopStatus || renameCommandNoopStatus(command);
+      if (noopStatus) setFileOperationStatus(documentRef, messageFromOption(noopStatus, command));
       return {executed: false, command, result: null, error: null};
     }
     const executedCommand = state.editHistory.execute(command, context);
@@ -6938,10 +6998,23 @@ function executeEditCommand(state, documentRef, command, options = {}) {
     if (options.status) setFileOperationStatus(documentRef, messageFromOption(options.status, executedCommand));
     return {executed: true, command: executedCommand, result, error: null};
   } catch (error) {
-    if (options.errorStatus) setFileOperationStatus(documentRef, messageFromOption(options.errorStatus, command));
+    const errorStatus = options.errorStatus || renameCommandErrorStatus(command, error);
+    if (errorStatus) setFileOperationStatus(documentRef, messageFromOption(errorStatus, command));
     if (options.throwOnError === false) return {executed: false, command, result: null, error};
     throw error;
   }
+}
+
+function renameCommandNoopStatus(command) {
+  const label = String(command?.label || "").trim();
+  if (!label.startsWith("重命名")) return "";
+  return `${label}没有变化：名称不能为空、对象不存在，或新名称与当前名称相同。`;
+}
+
+function renameCommandErrorStatus(command, error) {
+  const label = String(command?.label || "").trim();
+  if (!label.startsWith("重命名")) return "";
+  return `${label}失败：${error?.message || "对象不存在或名称无效"}。`;
 }
 
 export function executeHistoryCommand(state, documentRef, action, options = {}) {
@@ -11149,16 +11222,26 @@ function registerCanvasToolModes(state, documentRef, {stopObjectEditing} = {}) {
   const register = (modeId, panelId, hooks = {}) => {
     const exit = payload => {
       state.brushCursorPreview?.clear();
+      clearCanvasToolModeFeedback(state, documentRef);
       hooks.onExit?.(payload);
     };
     state.canvasToolModes.register(modeId, {
       locksInteraction: hooks.locksInteraction,
       allowedPanelIds: Array.isArray(panelId) ? panelId : panelId ? [panelId] : [],
-      onEnter: hooks.onEnter,
-      onRepeat: hooks.onRepeat,
+      onEnter: payload => {
+        hooks.onEnter?.(payload);
+        showCanvasToolModeFeedback(state, documentRef, modeId);
+      },
+      onRepeat: payload => {
+        hooks.onRepeat?.(payload);
+        showCanvasToolModeFeedback(state, documentRef, modeId);
+      },
       onCancel: exit,
       onComplete: exit,
-      onError: hooks.onError
+      onError: payload => {
+        clearCanvasToolModeFeedback(state, documentRef);
+        hooks.onError?.(payload);
+      }
     });
   };
 
@@ -11546,6 +11629,29 @@ function registerSocialCenterMode(state, documentRef, register, kind) {
 function activateCanvasToolTheme(state, documentRef, colorMode) {
   state.renderer?.setColorMode(colorMode);
   setActiveModeButton(documentRef, colorMode);
+}
+
+function showCanvasToolModeFeedback(state, documentRef, modeId) {
+  const contract = CANVAS_TOOL_MODE_FEEDBACK[modeId];
+  const feedback = documentRef.getElementById("canvas-tool-mode-feedback");
+  if (!contract || !feedback) return false;
+  feedback.querySelector("[data-canvas-tool-name]")?.replaceChildren(contract.name);
+  feedback.querySelector("[data-canvas-tool-next-action]")?.replaceChildren(contract.nextAction);
+  feedback.dataset.modeId = modeId;
+  feedback.dataset.category = contract.category;
+  feedback.hidden = false;
+  state.renderer?.canvas?.style.setProperty("cursor", contract.cursor);
+  return true;
+}
+
+function clearCanvasToolModeFeedback(state, documentRef) {
+  const feedback = documentRef.getElementById("canvas-tool-mode-feedback");
+  if (feedback) {
+    feedback.hidden = true;
+    delete feedback.dataset.modeId;
+    delete feedback.dataset.category;
+  }
+  state.renderer?.canvas?.style.removeProperty("cursor");
 }
 
 function syncPoliticalModePanel(state, kind) {
