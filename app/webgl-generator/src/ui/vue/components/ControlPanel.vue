@@ -338,7 +338,7 @@
           </label>
         </div>
         <div v-if="activeUserThemeDocument" class="visual-theme-edit-actions">
-          <UiActionDock v-model:active="activeThemeAction" :actions="visualThemeActions">
+          <UiActionDock host-id="ControlPanel" v-model:active="activeThemeAction" :actions="visualThemeActions">
             <template #color>
               <UiSelectField
                 label="颜色 token"
@@ -790,7 +790,7 @@ const visualThemeColorFields = Object.freeze([
   {value: "scaleBarForeground", label: "比例尺前景"},
   {value: "scaleBarBackground", label: "比例尺背景"}
 ]);
-const visualThemeActions = Object.freeze([{key: "color", label: "编辑主题颜色", icon: "◐", panelWidth: 360, panelHeight: 420}]);
+const visualThemeActions = Object.freeze([{key: "color", resultClass: "open-secondary", label: "编辑主题颜色", icon: "◐", panelWidth: 360, panelHeight: 420}]);
 
 const labelStyleTypeOptions = Object.freeze([
   {value: "state", label: "国家名称"},

@@ -72,7 +72,7 @@
     @input="callbacks.onAssignmentRadius"
   />
 
-  <UiActionDock v-if="selected" v-model:active="activeAction" :actions="religionActions" @select="handleActionSelect">
+  <UiActionDock v-if="selected" host-id="ReligionPanel" v-model:active="activeAction" :actions="religionActions" @select="handleActionSelect">
     <template #rename>
       <UiTextEditField
         class-name="religion-name-editor"
@@ -251,12 +251,12 @@ const religionListActions = computed(() => [
   }
 ]);
 const religionActions = computed(() => [
-  {key: "assign", label: props.state.assignmentActive ? "退出宗教归属笔刷" : "编辑宗教归属", icon: "◎", panel: false, active: props.state.assignmentActive},
-  {key: "rename", label: "重命名", icon: "✎"},
-  {key: "color", label: "调整颜色", icon: "◐"},
-  {key: "parent", label: "调整继承", icon: "↳"},
-  {key: "expansion", label: "中心与扩张", icon: "⊕"},
-  {key: "note", label: "编辑备注", icon: "☰"}
+  {key: "assign", resultClass: "toggle-canvas-mode", label: props.state.assignmentActive ? "退出宗教归属笔刷" : "编辑宗教归属", icon: "◎", panel: false, active: props.state.assignmentActive},
+  {key: "rename", resultClass: "open-secondary", label: "重命名", icon: "✎"},
+  {key: "color", resultClass: "open-secondary", label: "调整颜色", icon: "◐"},
+  {key: "parent", resultClass: "open-secondary", label: "调整继承", icon: "↳"},
+  {key: "expansion", resultClass: "open-secondary", label: "中心与扩张", icon: "⊕"},
+  {key: "note", resultClass: "open-secondary", label: "编辑备注", icon: "☰"}
 ]);
 const assignmentOptions = computed(() => [
   {value: 0, label: "无宗教"},
@@ -354,7 +354,7 @@ function selectTreeNode(node) {
 
 function openRenameEditor(row) {
   renameRequestId.value = row?.id ?? null;
-  props.callbacks.onSelect?.(row);
+  if (!sameObjectId(selected.value?.id, row?.id)) props.callbacks.onSelect?.(row);
   nextTick(() => {
     if (!sameObjectId(selected.value?.id, row?.id)) return;
     renameRequestId.value = null;

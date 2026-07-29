@@ -304,7 +304,7 @@
     </div>
   </details>
 
-  <UiActionDock v-if="selectedState" v-model:active="activeAction" :actions="militaryActions">
+  <UiActionDock v-if="selectedState" host-id="MilitaryPanel" v-model:active="activeAction" :actions="militaryActions">
     <template #rename>
       <UiTextEditField
         class-name="military-name-editor"
@@ -678,11 +678,11 @@ const statusEditOptions = computed(() => {
   return options;
 });
 const militaryActions = computed(() => [
-  {key: "rename", label: "重命名", icon: "✎", disabled: !selected.value},
-  {key: "status", label: "调整态势", icon: "⇄", disabled: !selected.value},
-  {key: "batchStatus", label: "批量态势", icon: "☷", disabled: !visibleRows.value.length},
-  {key: "station", label: "驻地基地", icon: "⌖", disabled: !selected.value},
-  {key: "ratios", label: "兵种比例", icon: "⚖", panelWidth: 620, panelHeight: 620}
+  {key: "rename", resultClass: "open-secondary", label: "重命名", icon: "✎", disabled: !selected.value},
+  {key: "status", resultClass: "open-secondary", label: "调整态势", icon: "⇄", disabled: !selected.value},
+  {key: "batchStatus", resultClass: "open-secondary", label: "批量态势", icon: "☷", disabled: !visibleRows.value.length},
+  {key: "station", resultClass: "open-secondary", label: "驻地基地", icon: "⌖", disabled: !selected.value},
+  {key: "ratios", resultClass: "open-secondary", label: "兵种比例", icon: "⚖", panelWidth: 620, panelHeight: 620}
 ]);
 
 const summaryMetrics = computed(() => [
@@ -1075,7 +1075,7 @@ function applyRename(name) {
 
 function openRenameEditor(row) {
   renameRequestId.value = row?.id ?? null;
-  props.callbacks.onSelect?.(row);
+  if (!sameObjectId(selected.value?.id, row?.id)) props.callbacks.onSelect?.(row);
   nextTick(() => {
     if (!sameObjectId(selected.value?.id, row?.id)) return;
     renameRequestId.value = null;

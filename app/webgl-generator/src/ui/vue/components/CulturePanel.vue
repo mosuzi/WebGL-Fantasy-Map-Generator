@@ -78,7 +78,7 @@
     @input="callbacks.onAssignmentRadius"
   />
 
-  <UiActionDock v-if="selected" v-model:active="activeAction" :actions="cultureActions" @select="handleActionSelect">
+  <UiActionDock v-if="selected" host-id="CulturePanel" v-model:active="activeAction" :actions="cultureActions" @select="handleActionSelect">
     <template #rename>
       <UiTextEditField
         class-name="culture-name-editor"
@@ -242,13 +242,13 @@ const filterEmptyAction = computed(() => String(props.state.filter || "").trim()
   ? {key: "clear-filter", label: "清空筛选", icon: "⌫"}
   : null);
 const cultureActions = computed(() => [
-  {key: "assign", label: props.state.assignmentActive ? "退出文化归属笔刷" : "编辑文化归属", icon: "◎", panel: false, active: props.state.assignmentActive},
-  {key: "rename", label: "重命名", icon: "✎"},
-  {key: "color", label: "调整颜色", icon: "◐"},
-  {key: "parent", label: "调整继承", icon: "↳"},
-  {key: "expansion", label: "中心与扩张", icon: "⊕"},
-  {key: "namebase", label: "名称库绑定", icon: "名"},
-  {key: "note", label: "编辑备注", icon: "☰"}
+  {key: "assign", resultClass: "toggle-canvas-mode", label: props.state.assignmentActive ? "退出文化归属笔刷" : "编辑文化归属", icon: "◎", panel: false, active: props.state.assignmentActive},
+  {key: "rename", resultClass: "open-secondary", label: "重命名", icon: "✎"},
+  {key: "color", resultClass: "open-secondary", label: "调整颜色", icon: "◐"},
+  {key: "parent", resultClass: "open-secondary", label: "调整继承", icon: "↳"},
+  {key: "expansion", resultClass: "open-secondary", label: "中心与扩张", icon: "⊕"},
+  {key: "namebase", resultClass: "open-other-panel", label: "名称库绑定", icon: "名"},
+  {key: "note", resultClass: "open-secondary", label: "编辑备注", icon: "☰"}
 ]);
 const assignmentOptions = computed(() => [
   {value: 0, label: "无文化"},
@@ -367,7 +367,7 @@ function handleActionSelect(actionKey) {
 
 function openRenameEditor(row) {
   renameRequestId.value = row?.id ?? null;
-  props.callbacks.onSelect?.(row);
+  if (!sameObjectId(selected.value?.id, row?.id)) props.callbacks.onSelect?.(row);
   nextTick(() => {
     if (!sameObjectId(selected.value?.id, row?.id)) return;
     renameRequestId.value = null;

@@ -79,7 +79,7 @@
     {{ selected.body || "空备注" }}
   </div>
 
-  <UiActionDock v-if="selected && !selected.orphan" v-model:active="activeAction" :actions="noteActions">
+  <UiActionDock v-if="selected && !selected.orphan" host-id="NotesPanel" v-model:active="activeAction" :actions="noteActions">
     <template #rename>
       <UiTextEditField :model-value="selected.name" :max-length="64" @apply="name => callbacks.onRename?.(selected, name)" />
     </template>
@@ -128,8 +128,8 @@ const props = defineProps({
 const unitPreferences = useUnitPreferences();
 const activeAction = ref(null);
 const noteActions = Object.freeze([
-  {key: "rename", label: "重命名", icon: "✎"},
-  {key: "edit", label: "编辑正文", icon: "☰"}
+  {key: "rename", resultClass: "open-secondary", label: "重命名", icon: "✎"},
+  {key: "edit", resultClass: "open-secondary", label: "编辑正文", icon: "☰"}
 ]);
 const sortOptions = Object.freeze([
   {key: "updatedAt", label: "更新时间"},

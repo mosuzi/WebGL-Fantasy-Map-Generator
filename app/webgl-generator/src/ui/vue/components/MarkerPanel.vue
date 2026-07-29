@@ -50,7 +50,7 @@
 
   <UiDetailGrid class-name="marker-panel-details" empty-text="未选中资源点或通用标记" :rows="detailRows" />
 
-  <UiActionDock v-if="selected" v-model:active="activeAction" :actions="markerActions">
+  <UiActionDock v-if="selected" host-id="MarkerPanel" v-model:active="activeAction" :actions="markerActions">
     <template #rename>
       <UiTextEditField
         class-name="marker-name-editor"
@@ -204,9 +204,9 @@ const activeSelectedMarkerId = computed(() => {
 });
 const selected = computed(() => findByObjectId(metrics.value.rows, activeSelectedMarkerId.value));
 const markerActions = Object.freeze([
-  {key: "rename", label: "重命名", icon: "✎"},
-  {key: "visual", label: "调整图标", icon: "▣"},
-  {key: "note", label: "编辑备注", icon: "☰"}
+  {key: "rename", resultClass: "open-secondary", label: "重命名", icon: "✎"},
+  {key: "visual", resultClass: "open-secondary", label: "调整图标", icon: "▣"},
+  {key: "note", resultClass: "open-secondary", label: "编辑备注", icon: "☰"}
 ]);
 const markerListActions = computed(() => [
   {...defaultMarkerEmptyAction, active: props.state.editMode === "add", disabled: props.state.editMode === "move"},
@@ -334,7 +334,7 @@ function applyVisual() {
 
 function openRenameEditor(row) {
   renameRequestId.value = row?.id ?? null;
-  props.callbacks.onSelect?.(row);
+  if (!sameObjectId(selected.value?.id, row?.id)) props.callbacks.onSelect?.(row);
   nextTick(() => {
     if (!sameObjectId(selected.value?.id, row?.id)) return;
     renameRequestId.value = null;

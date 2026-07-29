@@ -53,7 +53,7 @@
 
   <UiDetailGrid class-name="zone-panel-details" empty-text="未选中地区" :rows="detailRows" />
 
-  <UiActionDock v-if="selected" v-model:active="activeAction" :actions="zoneActions">
+  <UiActionDock v-if="selected" host-id="ZonePanel" v-model:active="activeAction" :actions="zoneActions">
     <template #style>
       <div class="zone-style-editor">
         <UiColorActionPanel
@@ -139,7 +139,7 @@ const patternOptions = Object.freeze([
 ]);
 
 const zoneActions = Object.freeze([
-  {key: "style", label: "调整样式", icon: "▧", panelWidth: 360, panelHeight: 420}
+  {key: "style", resultClass: "open-secondary", label: "调整样式", icon: "▧", panelWidth: 360, panelHeight: 420}
 ]);
 
 const sortOptions = Object.freeze([

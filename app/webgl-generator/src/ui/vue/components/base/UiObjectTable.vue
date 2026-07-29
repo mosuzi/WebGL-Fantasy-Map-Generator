@@ -351,7 +351,6 @@ function handleRowClick(row, event) {
 
 function handleRowDoubleClick(row) {
   if (props.doubleClickAction !== "edit") return;
-  emit("select", row);
   emit("edit", row);
 }
 

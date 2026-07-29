@@ -37,7 +37,10 @@ assert.match(tableSource, /@click="event => handleRowClick\(row, event\)"/, "普
 assert.match(tableSource, /@dblclick="handleRowDoubleClick\(row\)"/, "普通行双击入口必须保留");
 assert.match(tableSource, /@click\.stop="emit\('locate', row\)"/, "定位事件入口必须保留");
 assert.match(tableSource, /function handleRowClick\(row, event\)[\s\S]*?emit\("select", row\);/, "非批量模式必须继续发出 select");
-assert.match(tableSource, /function handleRowDoubleClick\(row\)[\s\S]*?emit\("select", row\);\s+emit\("edit", row\);/, "双击编辑必须继续发出 select 与 edit");
+assert.match(tableSource, /function handleRowClick\(row, event\)[\s\S]*?emit\("select", row\);/, "普通 click 必须继续发出 select");
+const doubleClickHandler = tableSource.slice(tableSource.indexOf("function handleRowDoubleClick"), tableSource.indexOf("function handleHeaderSort"));
+assert.match(doubleClickHandler, /emit\("edit", row\)/, "双击编辑必须发出一次 edit");
+assert.doesNotMatch(doubleClickHandler, /emit\("select", row\)/, "dblclick 不得重复发出 select");
 
 const completeRows = Array.from({length: 240}, (_, index) => ({id: index + 1}));
 const completeRange = objectTableSelectionRange(completeRows, "15", "220", row => String(row.id));

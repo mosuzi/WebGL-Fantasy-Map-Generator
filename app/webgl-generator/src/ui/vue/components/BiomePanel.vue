@@ -25,7 +25,7 @@
 
   <UiDetailGrid class-name="biome-panel-details" empty-text="未选中生物群系" :rows="detailRows" />
 
-  <UiActionDock v-if="selected" v-model:active="activeAction" :actions="biomeActions">
+  <UiActionDock v-if="selected" host-id="BiomePanel" v-model:active="activeAction" :actions="biomeActions">
     <template #assign>
       <div class="biome-assignment-editor">
         <UiSelectField
@@ -170,8 +170,8 @@ const filterEmptyAction = computed(() => String(props.state.filter || "").trim()
   : null);
 const selected = computed(() => findByObjectId(metrics.value.rows, props.state.selectedBiomeId));
 const biomeActions = Object.freeze([
-  {key: "assign", label: "归属笔刷", icon: "◉"},
-  {key: "suitability", label: "数值适居度", icon: "∿"}
+  {key: "assign", resultClass: "open-secondary", label: "归属笔刷", icon: "◉"},
+  {key: "suitability", resultClass: "open-secondary", label: "数值适居度", icon: "∿"}
 ]);
 const biomeOptions = computed(() => metrics.value.rows.map(row => ({value: row.id, label: `${row.name}（#${row.id}）`})));
 const scopeOptions = Object.freeze([

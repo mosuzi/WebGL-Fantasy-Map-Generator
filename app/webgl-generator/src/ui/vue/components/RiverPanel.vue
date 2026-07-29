@@ -42,7 +42,7 @@
   <UiDetailGrid class-name="river-panel-details" empty-text="未选中河流" :rows="detailRows" />
 
   <template v-if="selected">
-    <UiActionDock v-model:active="activeAction" :actions="riverActions" @select="handleRiverActionSelect">
+    <UiActionDock host-id="RiverPanel" v-model:active="activeAction" :actions="riverActions" @select="handleRiverActionSelect">
       <template #rename>
         <UiTextEditField
           class-name="river-name-editor"
@@ -154,10 +154,10 @@ const filterEmptyAction = computed(() => String(props.state.filter || "").trim()
 const totalLength = computed(() => rows.value.reduce((sum, row) => sum + row.length, 0));
 const maxFlux = computed(() => rows.value.reduce((max, row) => Math.max(max, row.flux), 0));
 const riverActions = computed(() => [
-  {key: "edit", label: editing.value ? "退出河流编辑" : "进入河流编辑", icon: "◎", panel: false, active: editing.value},
-  {key: "rename", label: "重命名", icon: "✎"},
-  {key: "width", label: "调整宽度", icon: "↔"},
-  {key: "note", label: "编辑备注", icon: "☰"}
+  {key: "edit", resultClass: "toggle-canvas-mode", label: editing.value ? "退出河流编辑" : "进入河流编辑", icon: "◎", panel: false, active: editing.value},
+  {key: "rename", resultClass: "open-secondary", label: "重命名", icon: "✎"},
+  {key: "width", resultClass: "open-secondary", label: "调整宽度", icon: "↔"},
+  {key: "note", resultClass: "open-secondary", label: "编辑备注", icon: "☰"}
 ]);
 const riverListActions = computed(() => [
   {key: "create", label: props.state.createMode ? "取消新增河流" : "新增河流", icon: "+", active: props.state.createMode},
@@ -282,7 +282,7 @@ function handleRiverActionSelect(key) {
 
 function openRenameEditor(row) {
   renameRequestId.value = row?.id ?? null;
-  props.callbacks.onSelect?.(row);
+  if (!sameObjectId(selected.value?.id, row?.id)) props.callbacks.onSelect?.(row);
   nextTick(() => {
     if (!sameObjectId(selected.value?.id, row?.id)) return;
     renameRequestId.value = null;

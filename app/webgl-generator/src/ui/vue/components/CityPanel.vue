@@ -51,7 +51,7 @@
     <span v-if="state.movePreview?.warnings?.length" class="city-move-preview-warning">提示：{{ state.movePreview.warnings.join("；") }}</span>
   </section>
 
-  <UiActionDock v-model:active="activeAction" :actions="cityActions" @select="handleActionSelect">
+  <UiActionDock host-id="CityPanel" v-model:active="activeAction" :actions="cityActions" @select="handleActionSelect">
     <template #rename>
       <UiTextEditField
         class-name="city-name-editor"
@@ -192,14 +192,14 @@ const visualDraft = reactive({
   palette: "town"
 });
 const cityActions = computed(() => [
-  {key: "add", label: props.state.addMode ? "取消新增城市" : "新增城市：下一次点击地图 cell", icon: "+", panel: false, active: props.state.addMode, disabled: props.state.deleteMode || props.state.moveMode},
-  {key: "delete", label: props.state.deleteMode ? "取消删除城市" : "删除城市：下一次点击地图城市", icon: "×", panel: false, active: props.state.deleteMode, disabled: props.state.addMode || props.state.moveMode},
-  {key: "move", label: props.state.moveMode ? "取消移动城市" : "移动城市：在地图上拖动所选城市", icon: "↗", panel: false, active: props.state.moveMode, disabled: props.state.addMode || props.state.deleteMode || !selected.value},
-  {key: "rename", label: "重命名", icon: "✎", disabled: modalActionActive.value || !selected.value},
-  {key: "population", label: "调整人口", icon: "#", disabled: modalActionActive.value || !selected.value},
-  {key: "owner", label: "同步归属", icon: "⇄", disabled: modalActionActive.value || !selected.value?.canSyncOwner},
-  {key: "visual", label: "调整剪影", icon: "▣", disabled: modalActionActive.value || !selected.value},
-  {key: "note", label: "编辑备注", icon: "☰", disabled: modalActionActive.value || !selected.value}
+  {key: "add", resultClass: "toggle-canvas-mode", label: props.state.addMode ? "取消新增城市" : "新增城市：下一次点击地图 cell", icon: "+", panel: false, active: props.state.addMode, disabled: props.state.deleteMode || props.state.moveMode},
+  {key: "delete", resultClass: "toggle-canvas-mode", label: props.state.deleteMode ? "取消删除城市" : "删除城市：下一次点击地图城市", icon: "×", panel: false, active: props.state.deleteMode, disabled: props.state.addMode || props.state.moveMode},
+  {key: "move", resultClass: "toggle-canvas-mode", label: props.state.moveMode ? "取消移动城市" : "移动城市：在地图上拖动所选城市", icon: "↗", panel: false, active: props.state.moveMode, disabled: props.state.addMode || props.state.deleteMode || !selected.value},
+  {key: "rename", resultClass: "open-secondary", label: "重命名", icon: "✎", disabled: modalActionActive.value || !selected.value},
+  {key: "population", resultClass: "open-secondary", label: "调整人口", icon: "#", disabled: modalActionActive.value || !selected.value},
+  {key: "owner", resultClass: "open-secondary", label: "同步归属", icon: "⇄", disabled: modalActionActive.value || !selected.value?.canSyncOwner},
+  {key: "visual", resultClass: "open-secondary", label: "调整剪影", icon: "▣", disabled: modalActionActive.value || !selected.value},
+  {key: "note", resultClass: "open-secondary", label: "编辑备注", icon: "☰", disabled: modalActionActive.value || !selected.value}
 ]);
 const cityHighlightActions = computed(() => [
   {key: "highlight-selected", label: `高亮选中 ${formatNumberValue(selectedCityRows.value.length)}`, icon: "◉", disabled: !selectedCityRows.value.length},
@@ -405,7 +405,7 @@ function handleCitySelect(row) {
 
 function openRenameEditor(row) {
   renameRequestId.value = row?.id ?? null;
-  props.callbacks.onSelect?.(row);
+  if (!sameObjectId(selected.value?.id, row?.id)) props.callbacks.onSelect?.(row);
   nextTick(() => {
     if (!sameObjectId(selected.value?.id, row?.id)) return;
     renameRequestId.value = null;

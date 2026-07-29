@@ -38,7 +38,7 @@
   <UiDetailGrid class-name="lake-panel-details" empty-text="未选中湖泊" :rows="detailRows" />
 
   <template v-if="selected">
-    <UiActionDock v-model:active="activeAction" :actions="lakeActions">
+    <UiActionDock host-id="LakePanel" v-model:active="activeAction" :actions="lakeActions">
       <template #outlet>
         <div v-if="state.outletDraft" class="lake-outlet-editor">
           <UiSelectField
@@ -169,9 +169,9 @@ const totalArea = computed(() => rows.value.reduce((sum, row) => sum + row.area,
 const totalCells = computed(() => rows.value.reduce((sum, row) => sum + row.cells, 0));
 const maxFlux = computed(() => rows.value.reduce((max, row) => Math.max(max, row.flux), 0));
 const lakeActions = Object.freeze([
-  {key: "outlet", label: "编辑湖泊出口", icon: "⇢"},
-  {key: "shore", label: "局部水陆修正", icon: "◒"},
-  {key: "rename", label: "重命名", icon: "✎"}
+  {key: "outlet", resultClass: "open-secondary", label: "编辑湖泊出口", icon: "⇢"},
+  {key: "shore", resultClass: "open-secondary", label: "局部水陆修正", icon: "◒"},
+  {key: "rename", resultClass: "open-secondary", label: "重命名", icon: "✎"}
 ]);
 const patchTargetOptions = Object.freeze([
   {value: "water", label: "扩展为湖泊水域"},
@@ -307,7 +307,7 @@ function sortRows(sourceRows, key, direction) {
 
 function openRenameEditor(row) {
   renameRequestId.value = row?.id ?? null;
-  props.callbacks.onSelect?.(row);
+  if (!sameObjectId(selected.value?.id, row?.id)) props.callbacks.onSelect?.(row);
   nextTick(() => {
     if (!sameObjectId(selected.value?.id, row?.id)) return;
     renameRequestId.value = null;

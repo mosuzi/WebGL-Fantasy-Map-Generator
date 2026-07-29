@@ -42,7 +42,7 @@
 
   <UiDetailGrid class-name="state-panel-details" empty-text="未选中国家" :rows="detailRows" />
 
-  <UiActionDock v-model:active="activeAction" :actions="stateActions" @select="handleActionSelect">
+  <UiActionDock host-id="StatePanel" v-model:active="activeAction" :actions="stateActions" @select="handleActionSelect">
     <template #rename>
       <UiTextEditField
         class-name="state-name-editor"
@@ -318,16 +318,16 @@ const canInspectSplit = computed(() => splitProvinceIds.value.length > 0 && Numb
 const canSubmitTopology = computed(() => Boolean(topologyInspection.value?.valid));
 const topologyPreviewRows = computed(() => topologyInspection.value?.preview?.rows || []);
 const stateActions = computed(() => [
-  {key: "add", label: props.state.addMode ? "取消新增国家" : "新增国家：下一次点击地图 cell 作为首都", icon: "+", panel: false, active: props.state.addMode, disabled: props.state.deleteMode || editActive.value},
-  {key: "delete", label: props.state.deleteMode ? "取消删除国家" : "删除国家：下一次点击地图国家", icon: "×", panel: false, active: props.state.deleteMode, disabled: props.state.addMode || editActive.value},
-  {key: "edit", label: editActive.value ? "退出国家编辑" : "进入国家编辑", icon: "◎", panel: false, disabled: modalActionActive.value || !canDeleteSelected.value, active: editActive.value},
-  {key: "rename", label: "重命名", icon: "✎", disabled: modalActionActive.value || !canDeleteSelected.value},
-  {key: "color", label: "调整颜色", icon: "◐", disabled: modalActionActive.value || !canDeleteSelected.value},
-  {key: "government", label: "调整政体", icon: "⚖", panelWidth: 620, disabled: modalActionActive.value || !canDeleteSelected.value},
-  {key: "capital", label: "设置首都", icon: "♛", disabled: modalActionActive.value || !canDeleteSelected.value || !capitalOptions.value.length},
-  {key: "note", label: "编辑备注", icon: "☰", disabled: modalActionActive.value || !canDeleteSelected.value},
-  {key: "merge", label: "合并相邻国家", icon: "⇄", panelWidth: 380, panelHeight: 390, disabled: modalActionActive.value || !canDeleteSelected.value || !activeStateNeighbors(props.state.map, selected.value?.id).length},
-  {key: "split", label: "按完整省份拆分国家", icon: "⑂", panelWidth: 420, panelHeight: 560, disabled: modalActionActive.value || !canDeleteSelected.value || stateProvinces(props.state.map, selected.value?.id).length < 2}
+  {key: "add", resultClass: "toggle-canvas-mode", label: props.state.addMode ? "取消新增国家" : "新增国家：下一次点击地图 cell 作为首都", icon: "+", panel: false, active: props.state.addMode, disabled: props.state.deleteMode || editActive.value},
+  {key: "delete", resultClass: "toggle-canvas-mode", label: props.state.deleteMode ? "取消删除国家" : "删除国家：下一次点击地图国家", icon: "×", panel: false, active: props.state.deleteMode, disabled: props.state.addMode || editActive.value},
+  {key: "edit", resultClass: "toggle-canvas-mode", label: editActive.value ? "退出国家编辑" : "进入国家编辑", icon: "◎", panel: false, disabled: modalActionActive.value || !canDeleteSelected.value, active: editActive.value},
+  {key: "rename", resultClass: "open-secondary", label: "重命名", icon: "✎", disabled: modalActionActive.value || !canDeleteSelected.value},
+  {key: "color", resultClass: "open-secondary", label: "调整颜色", icon: "◐", disabled: modalActionActive.value || !canDeleteSelected.value},
+  {key: "government", resultClass: "open-secondary", label: "调整政体", icon: "⚖", panelWidth: 620, disabled: modalActionActive.value || !canDeleteSelected.value},
+  {key: "capital", resultClass: "open-secondary", label: "设置首都", icon: "♛", disabled: modalActionActive.value || !canDeleteSelected.value || !capitalOptions.value.length},
+  {key: "note", resultClass: "open-secondary", label: "编辑备注", icon: "☰", disabled: modalActionActive.value || !canDeleteSelected.value},
+  {key: "merge", resultClass: "open-secondary", label: "合并相邻国家", icon: "⇄", panelWidth: 380, panelHeight: 390, disabled: modalActionActive.value || !canDeleteSelected.value || !activeStateNeighbors(props.state.map, selected.value?.id).length},
+  {key: "split", resultClass: "open-secondary", label: "按完整省份拆分国家", icon: "⑂", panelWidth: 420, panelHeight: 560, disabled: modalActionActive.value || !canDeleteSelected.value || stateProvinces(props.state.map, selected.value?.id).length < 2}
 ]);
 const stateHighlightActions = computed(() => [
   {key: "highlight-selected", label: `高亮选中 ${formatNumber(highlightableStateRows.value.length)}`, icon: "◉", disabled: !highlightableStateRows.value.length},
@@ -606,7 +606,7 @@ function resetTopologyDraft() {
 function openRenameEditor(row) {
   if (!row || row.neutral) return;
   renameRequestId.value = row.id ?? null;
-  props.callbacks.onSelect?.(row);
+  if (!sameObjectId(selected.value?.id, row.id)) props.callbacks.onSelect?.(row);
   nextTick(() => {
     if (!sameObjectId(selected.value?.id, row.id) || selected.value?.neutral) return;
     renameRequestId.value = null;

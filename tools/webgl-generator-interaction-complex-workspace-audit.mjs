@@ -29,8 +29,8 @@ const SHARED_FIELDS = Object.freeze([
 ]);
 
 const COMPLEX_WORKSPACES = Object.freeze([
-  workspace("HeightPanel.vue", 31, 2, "高度编辑与高度图导入工作台"),
-  workspace("StatePanel.vue", 9, 2, "国家管理、合并与拆分"),
+  workspace("HeightPanel.vue", 33, 2, "高度编辑与高度图导入工作台"),
+  workspace("StatePanel.vue", 10, 2, "国家管理、合并与拆分"),
   workspace("ProvincePanel.vue", 4, 0, "省份管理与批量操作"),
   workspace("CulturePanel.vue", 5, 5, "文化属性、中心与扩张"),
   workspace("ReligionPanel.vue", 5, 4, "宗教属性、中心与扩张"),
@@ -41,30 +41,9 @@ const COMPLEX_WORKSPACES = Object.freeze([
   {workspaceId: "project-export", file: "ControlPanel.vue", label: "项目导出浮层", expectedSharedFields: 17, expectedExceptionFields: 11, exportWorkspace: true}
 ]);
 
-const ACTION_DOCKS = Object.freeze([
-  dock("BiomePanel.vue", ["assign", "suitability"]),
-  dock("CityPanel.vue", ["add", "delete", "move", "rename", "population", "owner", "visual", "note"], ["add", "delete", "move"]),
-  dock("ControlPanel.vue", ["color"]),
-  dock("CulturePanel.vue", ["assign", "rename", "color", "parent", "expansion", "namebase", "note"], ["assign"], "namebase"),
-  dock("DiplomacyPanel.vue", ["openState", "relation"]),
-  dock("LabelNamingPanel.vue", ["rename", "note", "display"]),
-  dock("LakePanel.vue", ["outlet", "shore", "rename"]),
-  dock("MarkerPanel.vue", ["rename", "visual", "note"]),
-  dock("MeasurementPanel.vue", ["rename"]),
-  dock("MilitaryPanel.vue", ["rename", "status", "batchStatus", "station", "ratios"]),
-  dock("NotesPanel.vue", ["rename", "edit"]),
-  dock("PopulationPanel.vue", ["adjustment", "transfer"]),
-  dock("ProvincePanel.vue", ["add", "delete", "edit", "rename", "color", "note"], ["add", "delete", "edit"]),
-  dock("ReligionPanel.vue", ["assign", "rename", "color", "parent", "expansion", "note"], ["assign"]),
-  dock("RiverPanel.vue", ["edit", "rename", "width", "note"], ["edit"]),
-  dock("RoutePanel.vue", ["edit", "note"]),
-  dock("StatePanel.vue", ["add", "delete", "edit", "rename", "color", "government", "capital", "note", "merge", "split"], ["add", "delete", "edit"]),
-  dock("ZonePanel.vue", ["style"])
-]);
-
 const EXPECTED_GLOBAL_SELECTION_TABLES = new Set([
-  "CityPanel.vue#1", "CulturePanel.vue#1", "DiplomacyPanel.vue#1", "GovernmentPanel.vue#2",
-  "LabelNamingPanel.vue#1", "LakePanel.vue#1", "MarkerPanel.vue#1", "MeasurementPanel.vue#1",
+  "CityPanel.vue#1", "CulturePanel.vue#1", "DiplomacyPanel.vue#1", "EconomyPanel.vue#2", "FeaturePanel.vue#1", "GovernmentPanel.vue#2",
+  "LabelNamingPanel.vue#1", "LakePanel.vue#1", "MarkerPanel.vue#1", "MeasurementPanel.vue#1", "OceanCurrentPanel.vue#1",
   "MilitaryPanel.vue#1", "NotesPanel.vue#1", "ProvincePanel.vue#1", "ReligionPanel.vue#1",
   "RiverPanel.vue#1", "RoutePanel.vue#1", "StatePanel.vue#1", "ZonePanel.vue#1"
 ]);
@@ -83,13 +62,12 @@ const EXPECTED_SELECTED_EXPORT_TABLES = new Set([
 
 export function buildComplexWorkspaceAudit() {
   const panelFiles = panelComponentFiles();
-  verifyActionDockDenominator(panelFiles);
   const panelProfiles = panelFiles.map(buildPanelProfile);
   const tableInstances = panelFiles.flatMap(buildTableInstances);
   verifyTableSemanticDenominators(tableInstances);
   const complexWorkspaces = COMPLEX_WORKSPACES.map(buildWorkspaceProfile);
   const fieldInstances = complexWorkspaces.flatMap(item => item.fields);
-  const actionDockHosts = ACTION_DOCKS.map(buildActionDockHost);
+  const actionDockHosts = buildActionDockHosts(panelFiles);
   const actionDockActions = actionDockHosts.flatMap(item => item.actions);
   const findings = buildFindings();
   const sourceFiles = [...new Set([
@@ -100,7 +78,7 @@ export function buildComplexWorkspaceAudit() {
     ...tableInstances.map(item => item.file)
   ])].sort();
   const unknownFields = fieldInstances.filter(item => !item.commitClass || !item.commitTiming || !item.effectClass || !item.historyBoundary || !item.historyEffect);
-  const unresolvedTables = tableInstances.filter(item => !item.selectedId || !item.rows || !item.columnWidths || !item.emptyState || !item.selectionContract);
+  const unresolvedTables = tableInstances.filter(item => !item.selectedId || !item.rows || item.resizable && !item.columnWidths || !item.emptyState || !item.selectionContract);
   const unresolvedActions = actionDockActions.filter(item => !item.resultClass || !item.historyBoundary || !item.sourceRef);
 
   return {
@@ -138,6 +116,7 @@ export function buildComplexWorkspaceAudit() {
       toggleModeActions: actionDockActions.filter(item => item.resultClass === "toggle-canvas-mode").length,
       directActions: actionDockActions.filter(item => item.resultClass === "direct").length,
       secondaryPanelActions: actionDockActions.filter(item => item.resultClass === "open-secondary").length,
+      otherPanelActions: actionDockActions.filter(item => item.resultClass === "open-other-panel").length,
       crossResultActionKeys: crossResultActionKeys(actionDockActions).length,
       findings: findings.length,
       unknownFields: unknownFields.length,
@@ -172,10 +151,6 @@ export function writeComplexWorkspaceAudit(outputRoot = OUTPUT_ROOT) {
 
 function workspace(file, expectedSharedFields, expectedExceptionFields, label) {
   return {workspaceId: basename(file, ".vue").replace(/Panel$/, "").toLowerCase(), file, label, expectedSharedFields, expectedExceptionFields, exportWorkspace: false};
-}
-
-function dock(file, actions, toggleActions = [], directAction = null) {
-  return {file, actions, toggleActions: new Set(toggleActions), directAction};
 }
 
 function panelComponentFiles() {
@@ -314,8 +289,10 @@ function buildTableInstances(file) {
     const selectionContract = discoverSelectionContract(file, source, normalized);
     const persistentHighlight = discoverPersistentHighlight(file, source, rows, batchSelection);
     const selectedExport = batchSelection && /key:\s*"selected-(?:csv|json|legacy|measurements|notes)"/.test(source);
+    const doubleClickEdit = /doubleClickAction|double-click-action/.test(normalized);
     if (batchSelection) verifyBatchSelectionSource(file, source);
     if (persistentHighlight) verifyHighlightSource(file, source);
+    if (doubleClickEdit) verifyDoubleClickEditSource(file, source);
     const expectedGlobal = EXPECTED_GLOBAL_SELECTION_TABLES.has(tableId) ? "global-selection" : "panel-local";
     if (selectionContract !== expectedGlobal) throw new Error(`${tableId} 主选中路由漂移：${selectionContract}/${expectedGlobal}`);
     return {
@@ -329,24 +306,25 @@ function buildTableInstances(file) {
       selectionContract,
       selectionNote: tableId === "NotesPanel.vue#1" ? "非 orphan 行才进入全局 Selection" : selectionContract === "global-selection" ? "行 click 经 Vue handler 与 wrapper callback 同步全局 Selection" : "行 click 只更新面板局部 selectedId",
       locate: !/:show-locate-action="false"/.test(normalized),
-      doubleClickEdit: /doubleClickAction|double-click-action/.test(normalized),
+      doubleClickEdit,
       resizable: hasBooleanProp(normalized, "resizable-columns"),
       virtualCapable: true,
       emptyState: /empty-text=|:empty-text=/.test(normalized),
       actionableEmptyState: /:empty-action=/.test(normalized),
       batchSelection,
-      batchContract: batchSelection ? "checkbox 只更新可见行批量集合；不触发主选中，筛选或排序后裁去不可见 id，不持久化" : "无 checkbox 批量集合",
+      batchContract: batchSelection ? batchSelectionContract(file) : "无 checkbox 批量集合",
       persistentHighlight,
       highlightContract: persistentHighlight ? "仅显式动作写入 persistent highlight；过滤无效对象并截到 100；不写 EditHistory 或地图 checksum" : "无显式地图高亮动作",
       selectedExport,
       locateHistory: "定位只移动视口 / selection，不写 EditHistory",
-      editHistory: /doubleClickAction|double-click-action/.test(normalized) ? "双击只打开编辑入口；实际提交由二级表单 callback/command 划定历史" : "无双击编辑提交",
+      editHistory: doubleClickEdit ? "双击只打开编辑入口；实际提交由二级表单 callback/command 划定历史" : "无双击编辑提交",
       evidenceStatus: "E-C",
       browserEvidence: "pending-Q107",
       sourceRefs: [
         {file, token: normalized.slice(0, 360)},
         {file: FILES.objectTable, tokens: ["handleRowClick", "handleRowDoubleClick", "handleSelectAllChange", "VIRTUAL_ROW_HEIGHT = 32"]},
-        ...(batchSelection ? [{file: FILES.visibleSelection, tokens: ["watch(visibleRows", "selectedRowIds.value = selectedRowIds.value.filter"]}] : []),
+        ...(doubleClickEdit ? [{file, pattern: "function openRenameEditor\\(row\\)[\\s\\S]*?if \\([^\\n]+\\) props\\.callbacks\\.onSelect\\?\\.\\(row\\)"}] : []),
+        ...(batchSelection ? batchSelectionSourceRefs(file) : []),
         ...(persistentHighlight ? [{file, tokens: ['key: "highlight-selected"', "onHighlight"]}, {file: FILES.persistentHighlights, tokens: ["MAX_PERSISTENT_OBJECT_HIGHLIGHTS = 100", "normalizePersistentHighlights"]}, {file: FILES.runtime, tokens: ["requested.slice(0, MAX_PERSISTENT_OBJECT_HIGHLIGHTS)", "strictLimit === true"]}, {file: FILES.panelHighlightActions, tokens: ["callbacks.onHighlight"]}] : []),
         ...(selectedExport ? [{file, pattern: 'key:\\s*"selected-(?:csv|json|legacy|measurements|notes)"'}] : [])
       ]
@@ -391,11 +369,42 @@ function verifyBatchSelectionSource(file, source) {
     requireTokens(file, source, ["selectedNamebaseIds = ref([])", "selectedNamebaseIds.value = selectedNamebaseIds.value.filter"]);
     return;
   }
+  if (basename(file) === "OceanCurrentPanel.vue") {
+    requireTokens(file, source, ["selectedRowIds = ref([])", "@selection-change=\"selectedRowIds = $event\""]);
+    return;
+  }
   requireTokens(file, source, ["useVisibleRowSelection"]);
+}
+
+function batchSelectionContract(file) {
+  if (basename(file) === "OceanCurrentPanel.vue") {
+    return "checkbox 只更新面板本地 selectedRowIds；不触发主选中；当前筛选变化不主动裁去不可见 id，不持久化";
+  }
+  if (basename(file) === "NamebasePanel.vue") {
+    return "checkbox 只更新名称库本地批量集合；不触发主选中；可见行变化时裁去不可见 id，不持久化";
+  }
+  return "checkbox 只更新可见行批量集合；不触发主选中，筛选或排序后裁去不可见 id，不持久化";
+}
+
+function batchSelectionSourceRefs(file) {
+  if (basename(file) === "OceanCurrentPanel.vue") {
+    return [{file, tokens: ["selectedRowIds = ref([])", "@selection-change=\"selectedRowIds = $event\""]}];
+  }
+  if (basename(file) === "NamebasePanel.vue") {
+    return [{file, tokens: ["selectedNamebaseIds = ref([])", "selectedNamebaseIds.value = selectedNamebaseIds.value.filter"]}];
+  }
+  return [{file: FILES.visibleSelection, tokens: ["watch(visibleRows", "selectedRowIds.value = selectedRowIds.value.filter"]}];
 }
 
 function verifyHighlightSource(file, source) {
   requireTokens(file, source, ["highlight-selected", "onHighlight"]);
+}
+
+function verifyDoubleClickEditSource(file, source) {
+  const editor = source.match(/function openRenameEditor\(row\) \{[\s\S]*?\n\}/)?.[0] || "";
+  if (!/if \([^\n]+\) props\.callbacks\.onSelect\?\.\(row\);/.test(editor)) {
+    throw new Error(`${file} 双击编辑入口必须只在目标尚未选中时补选`);
+  }
 }
 
 function verifyTableSemanticDenominators(tables) {
@@ -409,58 +418,50 @@ function compareIdSets(label, discovered, expectedSet) {
   if (JSON.stringify(actual) !== JSON.stringify(expected)) throw new Error(`${label}源码推导与契约不一致：${JSON.stringify({actual, expected})}`);
 }
 
-function buildActionDockHost(definition) {
-  const file = `${COMPONENT_ROOT}/${definition.file}`;
+function buildActionDockHosts(panelFiles) {
+  return panelFiles.filter(file => readText(file).includes("<UiActionDock")).map(file => {
+    const source = readText(file);
+    const dockTags = extractTags(templateSource(source), ["UiActionDock"]);
+    if (dockTags.length !== 1) throw new Error(`${file} 当前必须恰好包含一个 UiActionDock，实际 ${dockTags.length}`);
+    const dockTag = normalizeTag(dockTags[0]);
+    const hostId = attributeValue(dockTag, "host-id");
+    const actionVariable = attributeValue(dockTag, "actions");
+    if (!hostId || !actionVariable) throw new Error(`${file} 的 UiActionDock 缺少稳定 host-id 或 actions 绑定`);
+    const arraySource = actionArraySource(file, source, actionVariable);
+    const keys = [...arraySource.matchAll(/\bkey:\s*"([^"]+)"/g)].map(match => match[1]);
+    const actions = keys.map(key => buildActionDockAction({file, arraySource, hostId, key}));
+    return {hostId, file, actionCount: actions.length, actions};
+  }).sort((left, right) => left.hostId.localeCompare(right.hostId));
+}
+
+function buildActionDockAction({file, arraySource, hostId, key}) {
   const source = readText(file);
-  requireTokens(file, source, ["<UiActionDock"]);
-  const actions = definition.actions.map(key => {
-    requireTokens(file, source, [`key: "${key}"`]);
-    const objectSource = actionObjectSource(file, source, key);
-    const hasSlot = source.includes(`<template #${key}>`);
-    const resultClass = objectSource.includes("panel: false") ? objectSource.includes("active:") ? "toggle-canvas-mode" : "direct" : hasSlot ? "open-secondary" : "direct";
-    if (resultClass === "open-secondary") requireTokens(file, source, [`<template #${key}>`]);
-    if (resultClass === "direct") requireTokens(file, source, ["activeAction.value = null"]);
-    return {
-      actionId: `dock:${basename(file, ".vue")}:${key}`,
-      hostId: basename(file, ".vue"),
-      file,
-      key,
-      resultClass,
-      result: resultClass === "toggle-canvas-mode" ? "直接切换画布模式，不打开二级面板" : resultClass === "direct" ? "立即执行或打开其它管理面板，并同步清除 dock active" : "切换同名二级编辑面板",
-      historyBoundary: resultClass === "open-secondary" ? "打开 / 关闭面板不写历史；面板内显式提交才进入 callback/command" : resultClass === "toggle-canvas-mode" ? "切换模式不写历史；合法画布提交由模式命令写历史" : "入口本身不写地图历史",
-      evidenceStatus: "E-C",
-      browserEvidence: "pending-Q107",
-      sourceRef: {file, tokens: [`key: "${key}"`, resultClass === "open-secondary" ? `<template #${key}>` : resultClass === "toggle-canvas-mode" ? "panel: false" : "activeAction.value = null"]}
-    };
-  });
-  return {hostId: basename(file, ".vue"), file, actionCount: actions.length, actions};
-}
-
-function verifyActionPanelFalse(file, source, key) {
-  const objectSource = actionObjectSource(file, source, key);
-  if (!objectSource.includes("panel: false")) throw new Error(`${file} 的动作 ${key} 未在自己的元数据中声明 panel:false`);
-}
-
-function verifyActionDockDenominator(panelFiles) {
-  const discovered = panelFiles
-    .filter(file => readText(file).includes("<UiActionDock"))
-    .map(file => {
-      const source = readText(file);
-      const dockTags = extractTags(templateSource(source), ["UiActionDock"]);
-      if (dockTags.length !== 1) throw new Error(`${file} 当前必须恰好包含一个 UiActionDock，实际 ${dockTags.length}；新增第二宿主时需扩展稳定身份`);
-      const dockTag = dockTags[0];
-      const actionVariable = attributeValue(normalizeTag(dockTag), "actions");
-      if (!actionVariable) throw new Error(`${file} 的 UiActionDock 缺少 actions 绑定`);
-      const arraySource = actionArraySource(file, source, actionVariable);
-      return {file: basename(file), actions: [...arraySource.matchAll(/\bkey:\s*"([^"]+)"/g)].map(match => match[1])};
-    })
-    .sort((left, right) => left.file.localeCompare(right.file));
-  const expected = ACTION_DOCKS
-    .map(item => ({file: item.file, actions: [...item.actions]}))
-    .sort((left, right) => left.file.localeCompare(right.file));
-  if (JSON.stringify(discovered) !== JSON.stringify(expected)) {
-    throw new Error(`动作坞源码分母与契约不一致：${JSON.stringify({discovered, expected})}`);
+  const objectSource = actionObjectSource(file, arraySource, key);
+  const resultClass = objectSource.match(/\bresultClass:\s*"([^"]+)"/)?.[1];
+  if (!["toggle-canvas-mode", "open-secondary", "direct", "open-other-panel"].includes(resultClass)) {
+    throw new Error(`${file} 的动作 ${key} 缺少合法 resultClass`);
   }
+  const hasSlot = source.includes(`<template #${key}>`);
+  if (resultClass === "open-secondary" && !hasSlot) throw new Error(`${file} 的二级动作 ${key} 缺少同名 slot`);
+  if (resultClass !== "open-secondary" && hasSlot) throw new Error(`${file} 的非二级动作 ${key} 不得持有同名 slot`);
+  if (resultClass === "toggle-canvas-mode" && !objectSource.includes("panel: false")) throw new Error(`${file} 的模式动作 ${key} 缺少 panel:false`);
+  return {
+    actionId: `${hostId}:${key}`,
+    hostId,
+    file,
+    key,
+    resultClass,
+    result: resultClass === "toggle-canvas-mode" ? "直接切换画布模式，不打开二级面板"
+      : resultClass === "open-secondary" ? "切换同名二级编辑面板"
+      : resultClass === "open-other-panel" ? "直接打开其它管理面板，不打开本宿主二级面板"
+      : "立即执行，不打开二级面板",
+    historyBoundary: resultClass === "open-secondary" ? "打开 / 关闭面板不写历史；面板内显式提交才进入 callback/command"
+      : resultClass === "toggle-canvas-mode" ? "切换模式不写历史；合法画布提交由模式命令写历史"
+      : "入口本身不写地图历史",
+    evidenceStatus: "E-C",
+    browserEvidence: "pending-Q107",
+    sourceRef: {file, tokens: [`host-id="${hostId}"`, `key: "${key}"`, `resultClass: "${resultClass}"`]}
+  };
 }
 
 function actionArraySource(file, source, variable) {
@@ -471,17 +472,10 @@ function actionArraySource(file, source, variable) {
   return balancedSlice(source, start, "[", "]");
 }
 
-function actionObjectSource(file, source, key) {
-  for (const definition of ACTION_DOCKS.filter(item => `${COMPONENT_ROOT}/${item.file}` === file)) {
-    const dockTag = extractTags(templateSource(source), ["UiActionDock"])[0];
-    const variable = attributeValue(normalizeTag(dockTag), "actions");
-    const arraySource = actionArraySource(file, source, variable);
-    const keyIndex = arraySource.indexOf(`key: "${key}"`);
-    if (keyIndex < 0) continue;
-    const objectStart = arraySource.lastIndexOf("{", keyIndex);
-    if (objectStart < 0) break;
-    return balancedSlice(arraySource, objectStart, "{", "}");
-  }
+function actionObjectSource(file, arraySource, key) {
+  const keyIndex = arraySource.indexOf(`key: "${key}"`);
+  const objectStart = arraySource.lastIndexOf("{", keyIndex);
+  if (keyIndex >= 0 && objectStart >= 0) return balancedSlice(arraySource, objectStart, "{", "}");
   throw new Error(`${file} 缺少动作对象：${key}`);
 }
 
@@ -523,18 +517,19 @@ function buildDictionaries() {
     },
     tableActions: {
       primary: "行 click 只改变单一 selectedId；是否同步全局 Selection 由宿主决定",
-      batch: "checkbox 只改变批量集合，不触发行 select；集合随当前可见行裁剪且不持久化",
+      batch: "checkbox 只改变批量集合，不触发行 select；是否随可见行裁剪由各宿主真实契约记录，均不持久化",
       highlight: "显式动作才写持久高亮，最多 100 个；不写 EditHistory 或 checksum",
       locate: "只定位视口 / 对象，不写 EditHistory",
-      doubleClick: "浏览器 click 序列后由 dblclick 再 emit select + edit；编辑提交仍在二级表单",
+      doubleClick: "浏览器 click 序列负责主选中，dblclick 只 emit edit；宿主仅在 selection 尚未同步时条件补选，编辑提交仍在二级表单",
       sortAndFilter: "只改变列表投影与偏好，不改地图业务数据",
       resize: "只持久化列宽偏好，不写地图历史",
       export: "读取当前可见或批量行生成文件，不写地图历史"
     },
     actionResults: {
       "toggle-canvas-mode": "直接进入 / 退出画布模式",
-      direct: "直接执行动作或打开其它工作区",
-      "open-secondary": "打开动作坞二级编辑面板"
+      direct: "直接执行动作",
+      "open-secondary": "打开动作坞二级编辑面板",
+      "open-other-panel": "打开其它管理工作区，不打开本宿主二级面板"
     }
   };
 }
@@ -564,11 +559,7 @@ function buildVisualEvidence() {
 
 function buildFindings() {
   return [
-    finding("IA-104-001", "动作坞模式激活视觉与 aria-pressed 不一致", "12 个 panel:false 模式动作通过 action.active 呈现视觉 active，但 aria-pressed 只比较 action.key === active；直接模式动作不会把 dock active 设置为动作 key。", "键盘与辅助技术用户可能收到未按下状态，而视觉用户看到已激活。", "后续纯 UI 任务把 aria-pressed 与视觉 active 使用同一判定。", "P1", "代码确认", false, [FILES.actionDock]),
-    finding("IA-104-002", "文化名称库动作的元数据与最终结果不一致", "Culture namebase 动作未声明 panel:false；UiActionDock 会先尝试打开同名二级面板，宿主 handler 再清 active 并打开名称库绑定。", "同一动作存在瞬时无内容面板语义，且动作词典不能只依赖 metadata。", "后续把 direct/open-other-panel 结果写入统一动作元数据。", "P2", "代码确认", true, [`${COMPONENT_ROOT}/CulturePanel.vue`, FILES.actionDock]),
-    finding("IA-104-003", "表格虚拟行高与 CSS 几何模型不一致", "UiObjectTable 固定按 32px 计算 spacer 和居中；19 个带定位列的表格行至少包含 28px 高按钮、上下各 6px 的 td padding 和 1px border，最小行高约 41px，其余 7 个表格也没有固定 32px CSS。", "长表超过 120 行启用虚拟化后，窗口起点、spacer 和选中居中会产生累计偏差。", "第 107 项用长列表与字体放大实测；后续将虚拟行高和 CSS 行高收敛到同一 token 或实测。", "P1", "代码确认", false, [FILES.objectTable, FILES.styles]),
-    finding("IA-104-004", "双击编辑重复触发主选中", "11 个 edit 表格先收到浏览器 click 序列，每次 click emit select；dblclick handler 又 emit select + edit。", "可能造成重复 selection 同步、列表刷新或不必要的渲染。", "第 107 项核对用户可见影响；如有代价，后续去除 dblclick 内重复 select 或抑制双击 click 副作用。", "P2", "待验证", true, [FILES.objectTable]),
-    finding("IA-104-005", "动作 key 不能作为全局结果语义", "68 个动作只有 32 个 unique key；assign 同时表示二级面板和画布模式，edit 同时表示画布模式和二级面板。", "若后续审计、遥测或快捷键只按 key 聚合，会把不同结果错误合并。", "继续以 host + key 作为动作身份，并在后续统一元数据时显式声明 resultClass。", "P2", "代码确认", true, ACTION_DOCKS.map(item => `${COMPONENT_ROOT}/${item.file}`))
+    finding("IA-104-003", "表格虚拟行高与 CSS 几何模型不一致", "UiObjectTable 固定按 32px 计算 spacer 和居中；19 个带定位列的表格行至少包含 28px 高按钮、上下各 6px 的 td padding 和 1px border，最小行高约 41px，其余 7 个表格也没有固定 32px CSS。", "长表超过 120 行启用虚拟化后，窗口起点、spacer 和选中居中会产生累计偏差。", "第 215 项用统一行高 token 与真实浏览器测量收口。", "P1", "代码确认", false, [FILES.objectTable, FILES.styles])
   ];
 }
 
@@ -691,7 +682,7 @@ function renderMarkdown(report) {
     `- 对象表格：${t.tableHosts} 个宿主 / ${t.tableInstances} 个实例；独立筛选 ${t.independentlyFilterable}；排序 ${t.sortable}`,
     `- 主选中：${t.primarySelection}（全局 ${t.globalSelection} / 面板局部 ${t.localSelection}）；批量集合 ${t.batchSelection}；持久高亮 ${t.persistentHighlight}`,
     `- 定位 ${t.locate}；双击编辑 ${t.doubleClickEdit}；列宽 ${t.resizable}；虚拟列表 ${t.virtualCapable}；可恢复空态 ${t.actionableEmptyState}`,
-    `- 动作坞：${t.actionDockHosts} 个宿主 / ${t.actionDockActions} 个动作（${t.uniqueActionKeys} 个 unique key）= 模式 ${t.toggleModeActions} + 直接 ${t.directActions} + 二级面板 ${t.secondaryPanelActions}`,
+    `- 动作坞：${t.actionDockHosts} 个宿主 / ${t.actionDockActions} 个动作（${t.uniqueActionKeys} 个 unique key）= 模式 ${t.toggleModeActions} + 直接 ${t.directActions} + 二级面板 ${t.secondaryPanelActions} + 其它面板 ${t.otherPanelActions}`,
     `- 未分类字段 / 未解析表格 / 未解析动作：${t.unknownFields} / ${t.unresolvedTables} / ${t.unresolvedActions}`,
     "",
     "## 静态发现",

@@ -41,7 +41,7 @@
   <UiDetailGrid class-name="measurement-panel-details" empty-text="未选中测量对象" :rows="detailRows" />
 
   <template v-if="selected">
-    <UiActionDock v-model:active="activeAction" :actions="measurementActions">
+    <UiActionDock host-id="MeasurementPanel" v-model:active="activeAction" :actions="measurementActions">
       <template #rename>
         <UiTextEditField
           class-name="measurement-name-editor"
@@ -116,7 +116,7 @@ const columns = Object.freeze([
 ]);
 
 const measurementActions = Object.freeze([
-  {key: "rename", label: "重命名", icon: "✎"}
+  {key: "rename", resultClass: "open-secondary", label: "重命名", icon: "✎"}
 ]);
 const startMeasurementAction = Object.freeze({key: "start", label: "开始测量", icon: "+"});
 
@@ -277,7 +277,7 @@ function handleMeasurementExport(key) {
 
 function openRenameEditor(row) {
   renameRequestId.value = row?.id ?? null;
-  props.callbacks.onSelect?.(row);
+  if (selected.value?.id !== row?.id) props.callbacks.onSelect?.(row);
   nextTick(() => {
     if (selected.value?.id !== row?.id) return;
     renameRequestId.value = null;

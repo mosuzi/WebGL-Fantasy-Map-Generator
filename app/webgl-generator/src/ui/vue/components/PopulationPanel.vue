@@ -26,7 +26,7 @@
 
   <UiDetailGrid class-name="population-panel-details" empty-text="未选中人口统计" :rows="detailRows" />
 
-  <UiActionDock v-if="selected" v-model:active="activeAction" :actions="populationActions">
+  <UiActionDock v-if="selected" host-id="PopulationPanel" v-model:active="activeAction" :actions="populationActions">
     <template #adjustment>
       <div class="population-adjustment-editor" aria-label="区域人口增减">
         <ElForm label-position="top" size="small">
@@ -142,8 +142,8 @@ const columns = Object.freeze([
 const unitPreferences = useUnitPreferences();
 const activeAction = ref(null);
 const populationActions = Object.freeze([
-  {key: "adjustment", label: "区域人口增减", icon: "±", panelWidth: 360, panelHeight: 310},
-  {key: "transfer", label: "区域人口转移", icon: "⇄", panelWidth: 380, panelHeight: 390}
+  {key: "adjustment", resultClass: "open-secondary", label: "区域人口增减", icon: "±", panelWidth: 360, panelHeight: 310},
+  {key: "transfer", resultClass: "open-secondary", label: "区域人口转移", icon: "⇄", panelWidth: 380, panelHeight: 390}
 ]);
 const metrics = computed(() => {
   props.state.version;

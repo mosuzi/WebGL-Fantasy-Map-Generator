@@ -38,7 +38,7 @@
 
   <UiDetailGrid class-name="route-panel-details" empty-text="未选中路线" :rows="detailRows" />
 
-  <UiActionDock v-if="selected" v-model:active="activeAction" :actions="routeActions">
+  <UiActionDock v-if="selected" host-id="RoutePanel" v-model:active="activeAction" :actions="routeActions">
     <template #edit>
       <div v-if="state.editDraft" class="route-edit-form">
         <UiSelectField
@@ -155,8 +155,8 @@ const columns = Object.freeze([
 const unitPreferences = useUnitPreferences();
 const activeAction = ref(null);
 const routeActions = Object.freeze([
-  {key: "edit", label: "编辑路线", icon: "✎"},
-  {key: "note", label: "编辑备注", icon: "☰"}
+  {key: "edit", resultClass: "open-secondary", label: "编辑路线", icon: "✎"},
+  {key: "note", resultClass: "open-secondary", label: "编辑备注", icon: "☰"}
 ]);
 const rows = computed(() => {
   props.state.version;

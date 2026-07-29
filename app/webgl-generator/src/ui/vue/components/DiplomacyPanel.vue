@@ -102,7 +102,7 @@
     <p v-else class="diplomacy-history-empty">当前范围暂无外交历史。</p>
   </section>
 
-  <UiActionDock v-if="selected" v-model:active="activeAction" :actions="diplomacyActions">
+  <UiActionDock v-if="selected" host-id="DiplomacyPanel" v-model:active="activeAction" :actions="diplomacyActions">
     <template #openState>
       <div class="diplomacy-open-state-panel">
         <p>{{ selected.name }}</p>
@@ -266,8 +266,8 @@ const matrixCenterController = createSelectionCenterController({
   getViewportInsets: scroller => stickyTableViewportInsets(scroller, scroller?.querySelector?.("thead"))
 });
 const diplomacyActions = Object.freeze([
-  {key: "openState", label: "打开国家", icon: "◎"},
-  {key: "relation", label: "调整关系", icon: "⇄"}
+  {key: "openState", resultClass: "open-secondary", label: "打开国家", icon: "◎"},
+  {key: "relation", resultClass: "open-secondary", label: "调整关系", icon: "⇄"}
 ]);
 
 watch(matrixSelectionAnchor, () => {

@@ -38,7 +38,7 @@
     @action="handleLabelManagementAction"
   />
 
-  <UiActionDock v-if="selected" v-model:active="activeAction" :actions="labelActions">
+  <UiActionDock v-if="selected" host-id="LabelNamingPanel" v-model:active="activeAction" :actions="labelActions">
     <template #rename>
       <UiTextEditField
         class-name="label-name-editor"
@@ -137,9 +137,9 @@ const unitPreferences = useUnitPreferences();
 const activeAction = ref(null);
 const renameRequestKey = ref(null);
 const labelActions = Object.freeze([
-  {key: "rename", label: "重命名", icon: "✎"},
-  {key: "note", label: "编辑备注", icon: "☰"},
-  {key: "display", label: "显示布局", icon: "⌖"}
+  {key: "rename", resultClass: "open-secondary", label: "重命名", icon: "✎"},
+  {key: "note", resultClass: "open-secondary", label: "编辑备注", icon: "☰"},
+  {key: "display", resultClass: "open-secondary", label: "显示布局", icon: "⌖"}
 ]);
 const visibleRows = computed(() => sortRows(filterRows(rows.value, props.state.filter), props.state.sortKey, props.state.sortDir));
 const {selectedRowIds: selectedLabelKeys, selectedRows: selectedLabelRows} = useVisibleRowSelection(visibleRows, {idKey: "key"});
@@ -213,7 +213,7 @@ function handleLabelManagementAction(key) {
 
 function openRenameEditor(row) {
   renameRequestKey.value = row?.key ?? null;
-  props.callbacks.onSelect?.(row);
+  if (selected.value?.key !== row?.key) props.callbacks.onSelect?.(row);
   nextTick(() => {
     if (selected.value?.key !== row?.key) return;
     renameRequestKey.value = null;

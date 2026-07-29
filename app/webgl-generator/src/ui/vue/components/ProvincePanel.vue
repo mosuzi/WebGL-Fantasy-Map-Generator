@@ -41,7 +41,7 @@
 
   <UiDetailGrid class-name="province-panel-details" empty-text="未选中省份" :rows="detailRows" />
 
-  <UiActionDock v-model:active="activeAction" :actions="provinceActions" @select="handleActionSelect">
+  <UiActionDock host-id="ProvincePanel" v-model:active="activeAction" :actions="provinceActions" @select="handleActionSelect">
     <template #rename>
       <UiTextEditField
         class-name="province-name-editor"
@@ -184,12 +184,12 @@ const canDeleteSelected = computed(() => Boolean(selected.value && !selected.val
 const editActive = computed(() => Boolean(selected.value && props.state.active && selected.value.id === props.state.selectedProvinceId));
 const modalActionActive = computed(() => Boolean(props.state.addMode || props.state.deleteMode));
 const provinceActions = computed(() => [
-  {key: "add", label: props.state.addMode ? "取消新增省份" : "新增省份：下一次点击地图 cell 作为中心", icon: "+", panel: false, active: props.state.addMode, disabled: props.state.deleteMode || editActive.value},
-  {key: "delete", label: props.state.deleteMode ? "取消删除省份" : "删除省份：下一次点击地图省份", icon: "×", panel: false, active: props.state.deleteMode, disabled: props.state.addMode || editActive.value},
-  {key: "edit", label: editActive.value ? "退出省份编辑" : "进入省份编辑", icon: "◎", panel: false, disabled: modalActionActive.value || !canDeleteSelected.value, active: editActive.value},
-  {key: "rename", label: "重命名", icon: "✎", disabled: modalActionActive.value || !canDeleteSelected.value},
-  {key: "color", label: "调整颜色", icon: "◐", disabled: modalActionActive.value || !canDeleteSelected.value},
-  {key: "note", label: "编辑备注", icon: "☰", disabled: modalActionActive.value || !canDeleteSelected.value}
+  {key: "add", resultClass: "toggle-canvas-mode", label: props.state.addMode ? "取消新增省份" : "新增省份：下一次点击地图 cell 作为中心", icon: "+", panel: false, active: props.state.addMode, disabled: props.state.deleteMode || editActive.value},
+  {key: "delete", resultClass: "toggle-canvas-mode", label: props.state.deleteMode ? "取消删除省份" : "删除省份：下一次点击地图省份", icon: "×", panel: false, active: props.state.deleteMode, disabled: props.state.addMode || editActive.value},
+  {key: "edit", resultClass: "toggle-canvas-mode", label: editActive.value ? "退出省份编辑" : "进入省份编辑", icon: "◎", panel: false, disabled: modalActionActive.value || !canDeleteSelected.value, active: editActive.value},
+  {key: "rename", resultClass: "open-secondary", label: "重命名", icon: "✎", disabled: modalActionActive.value || !canDeleteSelected.value},
+  {key: "color", resultClass: "open-secondary", label: "调整颜色", icon: "◐", disabled: modalActionActive.value || !canDeleteSelected.value},
+  {key: "note", resultClass: "open-secondary", label: "编辑备注", icon: "☰", disabled: modalActionActive.value || !canDeleteSelected.value}
 ]);
 const provinceHighlightActions = computed(() => [
   {key: "rename-visible", label: `按名称库重命名筛选结果 ${formatNumber(visibleRows.value.filter(row => !row.neutral).length)}`, icon: "名", disabled: !visibleRows.value.some(row => !row.neutral)},
@@ -326,7 +326,7 @@ function handleActionSelect(key) {
 function openRenameEditor(row) {
   if (!row || row.neutral) return;
   renameRequestId.value = row.id ?? null;
-  props.callbacks.onSelect?.(row);
+  if (!sameObjectId(selected.value?.id, row.id)) props.callbacks.onSelect?.(row);
   nextTick(() => {
     if (!sameObjectId(selected.value?.id, row.id) || selected.value?.neutral) return;
     renameRequestId.value = null;

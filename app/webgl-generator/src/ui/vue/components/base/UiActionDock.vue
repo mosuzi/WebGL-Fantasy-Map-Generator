@@ -3,13 +3,14 @@
     <div class="ui-action-icon-row" role="toolbar" aria-label="对象操作">
       <ElButton
         v-for="action in actions"
-        :key="action.key"
+        :key="actionIdentity(action)"
+        :data-action-id="actionIdentity(action)"
         class="ui-icon-action"
-        :class="{active: action.key === active || action.active, 'is-editing': action.key === active}"
+        :class="{active: isActionActive(action), 'is-editing': isActionActive(action)}"
         :disabled="action.disabled"
         :title="action.label"
         :aria-label="action.label"
-        :aria-pressed="action.key === active ? 'true' : 'false'"
+        :aria-pressed="isActionActive(action) ? 'true' : 'false'"
         circle
         @click="toggleAction(action)"
       >
@@ -40,7 +41,7 @@
 </template>
 
 <script setup>
-import {computed, nextTick, onBeforeUnmount, onMounted, ref, useId, watch} from "vue";
+import {computed, nextTick, onBeforeUnmount, onMounted, ref, watch} from "vue";
 import {useManagedOverlay} from "../../composables/use-managed-overlay.js";
 import {beginDirectManipulationSession} from "../../../../runtime/direct-manipulation-session.js";
 
@@ -49,6 +50,10 @@ defineOptions({
 });
 
 const props = defineProps({
+  hostId: {
+    type: String,
+    required: true
+  },
   actions: {
     type: Array,
     required: true
@@ -65,13 +70,13 @@ const panel = ref(null);
 const panelStyle = ref({});
 const dragState = ref(null);
 const userPositioned = ref(false);
-const activeAction = computed(() => props.actions.find(action => action.key === props.active));
+const activeAction = computed(() => props.actions.find(action => action.resultClass === "open-secondary" && action.key === props.active));
 const activeActionLabel = computed(() => activeAction.value?.label || "对象操作");
-const overlayId = `ui-action-dock:${useId()}`;
+const overlayId = computed(() => `ui-action-dock:${props.hostId}`);
 let panelDragSession = null;
 
 useManagedOverlay(panel, () => Boolean(props.active), {
-  id: overlayId,
+  id: overlayId.value,
   onClose: () => closePanel()
 });
 
@@ -101,13 +106,21 @@ onBeforeUnmount(() => {
 
 function toggleAction(action) {
   if (action.disabled) return;
-  if (action.panel === false) {
+  if (action.resultClass !== "open-secondary") {
     emit("select", action.key);
     return;
   }
   const next = action.key === props.active ? null : action.key;
   emit("update:active", next);
   emit("select", next);
+}
+
+function actionIdentity(action) {
+  return `${props.hostId}:${action.key}`;
+}
+
+function isActionActive(action) {
+  return Boolean(action.active || action.resultClass === "open-secondary" && action.key === props.active);
 }
 
 function closePanel() {
