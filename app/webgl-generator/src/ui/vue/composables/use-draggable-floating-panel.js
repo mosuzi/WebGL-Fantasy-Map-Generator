@@ -53,7 +53,7 @@ export function useDraggableFloatingPanel(panelRef, options = {}) {
     event.preventDefault();
     event.stopPropagation();
     dragSession?.cancel("restart");
-    const positionBefore = position.value ? {...position.value} : null;
+    const positionBefore = {x: rect.left, y: rect.top};
     const widthBefore = panelWidth.value;
     const captureTarget = event.currentTarget;
     panelWidth.value = Math.round(rect.width || panelWidth.value || options.defaultWidth || 320);

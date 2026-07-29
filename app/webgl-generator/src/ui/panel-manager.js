@@ -419,6 +419,11 @@ export class PanelManager {
     restoreManagedPanelViewportOrigin(this.documentRef?.defaultView);
     const main = this.visiblePanelByRole("main");
     const detail = this.visiblePanelByRole("detail");
+    const activeDrag = [main, detail].find(record => record?.panel?.dataset?.directManipulationActive === "true");
+    if (activeDrag) {
+      this.constrain(activeDrag.panel, {reachableOnly: true});
+      return;
+    }
     if (main && detail) {
       if (panelsCanCoexist(this.host.clientWidth || this.host.getBoundingClientRect().width, panelWidth(main.panel), panelWidth(detail.panel))) {
         this.dockPanelPair(main, detail);
@@ -706,22 +711,29 @@ function installDrag(manager, panel, handle) {
       startLeft: Number.parseFloat(panel.style.left) || 0,
       startTop: Number.parseFloat(panel.style.top) || 0
     };
+    panel.dataset.directManipulationActive = "true";
     manager.activate(panel.dataset.panelId);
     handle.setPointerCapture(event.pointerId);
+    const clearDirectManipulationMarker = () => {
+      delete panel.dataset.directManipulationActive;
+    };
     drag.session = beginDirectManipulationSession({
       kind: "panel-manager",
       pointerId: event.pointerId,
       captureTarget: handle,
       onCommit: () => {
+        clearDirectManipulationMarker();
         const endLeft = Number.parseFloat(panel.style.left) || 0;
         const endTop = Number.parseFloat(panel.style.top) || 0;
         if (panelDragHasMoved(drag.startLeft, drag.startTop, endLeft, endTop)) manager.commitManualPosition(panel.dataset.panelId);
       },
       onRollback: () => {
+        clearDirectManipulationMarker();
         manager.constrain(panel, {left: drag.startLeft, top: drag.startTop, reachableOnly: true});
         manager.reflowPanels();
       },
       onCleanup: () => {
+        clearDirectManipulationMarker();
         if (drag?.pointerId === event.pointerId) drag = null;
       }
     });

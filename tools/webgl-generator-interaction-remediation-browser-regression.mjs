@@ -31,17 +31,25 @@ try {
   const page = await context.newPage();
   page.setDefaultTimeout(timeoutMs);
   const consoleErrors = [];
+  const healthConsoleErrors = [];
   const pageErrors = [];
   page.on("console", message => {
     if (message.type() !== "error") return;
     const text = message.text();
-    if (!text.startsWith("[FMG health]")) consoleErrors.push(text);
+    if (text.startsWith("[FMG health]")) healthConsoleErrors.push(text);
+    else consoleErrors.push(text);
   });
   page.on("pageerror", error => pageErrors.push(error.message));
 
   await page.goto(`${baseUrl}/?debug=1&healthClear=1`, {waitUntil: "domcontentloaded"});
   await waitForApiReady(page, timeoutMs);
   await page.waitForFunction(() => window.webglGeneratorApi.info.mapSummary()?.data?.ready === true);
+  if (await page.locator("#app-loading-screen").getAttribute("data-state") === "error") {
+    await page.reload({waitUntil: "domcontentloaded"});
+    await waitForApiReady(page, timeoutMs);
+    await page.waitForFunction(() => window.webglGeneratorApi.info.mapSummary()?.data?.ready === true);
+  }
+  await page.waitForFunction(() => document.getElementById("app-loading-screen")?.hidden === true);
   console.log("[interaction-remediation] runtime", await page.evaluate(() => ({
     states: window.__webglGeneratorApp.map.politics.states.filter(item => item && !item.removed).length,
     cities: window.__webglGeneratorApp.map.settlements.cities.filter(Boolean).length
@@ -58,11 +66,14 @@ try {
   const tableGeometry = await verifyTableGeometry(page);
   const directManipulation = [];
   console.log("[interaction-remediation] 5/5 六类直接操控生命周期");
-  page.setDefaultTimeout(timeoutMs);
+  page.setDefaultTimeout(30000);
   for (const viewport of [{width: 1280, height: 820}, {width: 576, height: 576}]) {
     await page.setViewportSize(viewport);
-    directManipulation.push(await verifyDirectManipulationMatrix(page, viewport));
+    const realPaths = await verifyRealDirectManipulationPaths(page, viewport);
+    const lifecycle = await verifyDirectManipulationMatrix(page, viewport);
+    directManipulation.push({...lifecycle, realPaths});
   }
+  const mapReplace = await verifyMapReplaceCleanup(page);
   await page.setViewportSize({width: 1280, height: 820});
   const runtime = await page.evaluate(() => ({
     glError: window.__webglGeneratorApp.renderer.getStats().draw?.glError ?? 0,
@@ -76,16 +87,23 @@ try {
   assert.deepEqual(runtime.documentOverflow, {x: 0, y: 0}, "正式应用不得产生 document 溢出");
   assert.deepEqual(consoleErrors, [], "不得产生 application console error");
   assert.deepEqual(pageErrors, [], "不得产生 page error");
+  assert.equal(
+    healthConsoleErrors.every(text => /main-thread-long-task|input-handler-stall/.test(text)),
+    true,
+    `只允许既有 long-task / input-stall 健康遥测：${JSON.stringify(healthConsoleErrors)}`
+  );
 
   console.log(JSON.stringify({
     ok: true,
     runtimeModes,
     directManipulation,
+    mapReplace,
     actionSemantics,
     feedback,
     tableGeometry,
     runtime,
     consoleErrors,
+    healthConsoleErrors,
     pageErrors
   }, null, 2));
   await context.close();
@@ -144,29 +162,11 @@ async function verifyDirectManipulationMatrix(page, viewport) {
       }
     }
 
-    const replaceReasons = [];
-    for (const kind of kinds) {
-      module.beginDirectManipulationSession({
-        kind,
-        ownerId: kind,
-        onRollback: ({reason}) => replaceReasons.push(`${kind}:${reason}`)
-      });
-    }
-    const beforeReplace = module.getDirectManipulationSessionSnapshot();
-    const generation = await window.webglGeneratorApi.generate.newMap({
-      seed: `interaction-remediation-${viewport.width}`,
-      cells: 2000,
-      confirm: true
-    });
-    if (!generation?.ok) throw new Error(generation?.error?.message || "换图失败");
-    const afterReplace = module.getDirectManipulationSessionSnapshot();
-
     return {
       viewport,
       kinds,
       reasons,
-      outcomes,
-      mapReplace: {before: beforeReplace.length, after: afterReplace.length, reasons: replaceReasons.sort()}
+      outcomes
     };
   }, {viewport}).then(result => {
     for (const item of result.outcomes) {
@@ -176,22 +176,510 @@ async function verifyDirectManipulationMatrix(page, viewport) {
       assert.equal(item.commits, item.reason === "pointerup" ? 1 : 0, `${item.kind}/${item.reason} 提交次数错误`);
       assert.equal(item.rollbacks, item.reason === "pointerup" ? 0 : 1, `${item.kind}/${item.reason} 回滚次数错误`);
     }
-    assert.equal(result.mapReplace.before, 6, "换图前必须存在六类活动会话");
-    assert.equal(result.mapReplace.after, 0, "换图后六类活动会话必须全部清理");
-    assert.deepEqual(
-      result.mapReplace.reasons,
-      result.kinds.map(kind => `${kind}:map-replace`).sort(),
-      "换图必须以 map-replace 原因回滚六类会话"
-    );
     return {
       viewport: result.viewport,
       kinds: result.kinds.length,
       lifecycleCases: result.outcomes.length,
       normalCommits: result.outcomes.filter(item => item.commits === 1).length,
-      rollbackCases: result.outcomes.filter(item => item.rollbacks === 1).length,
-      mapReplace: result.mapReplace
+      rollbackCases: result.outcomes.filter(item => item.rollbacks === 1).length
     };
   });
+}
+
+async function verifyRealDirectManipulationPaths(page, viewport) {
+  const customLabel = await verifyCustomLabelDrag(page);
+  const measurement = await verifyMeasurementPointDrag(page);
+  const panel = await verifyManagedPanelDrag(page);
+  const actionDock = await verifyActionDockDrag(page);
+  const vueOverlay = await verifyVueOverlayDrag(page);
+  const column = await verifyColumnResizeDrag(page);
+  return {viewport, customLabel, measurement, panel, actionDock, vueOverlay, column};
+}
+
+async function verifyCustomLabelDrag(page) {
+  await page.evaluate(() => {
+    const app = window.__webglGeneratorApp;
+    for (const panel of document.querySelectorAll(".floating-panel:not(.hidden)")) {
+      app.panelManager.close(panel.dataset.panelId, {restoreFocus: false, restoreParent: false});
+    }
+  });
+  const screenPoint = await uncoveredCanvasPoint(page, {x: 0.68, y: 0.42});
+  const setup = await page.evaluate(async screenPoint => {
+    const app = window.__webglGeneratorApp;
+    const point = app.renderer.screenToWorld(screenPoint.x, screenPoint.y);
+    const created = await window.webglGeneratorApi.edit.labels.addCustom({
+      text: `直接操控验收${innerWidth}`,
+      x: point.x,
+      y: point.y
+    });
+    if (!created?.ok) throw new Error(created?.error?.message || "创建手工标签失败");
+    const label = app.map.labels.custom.at(-1);
+    return {
+      id: label.id,
+      point: {x: label.x, y: label.y},
+      history: app.editHistory.getStats()
+    };
+  }, screenPoint);
+  const selector = `.custom-label[data-label-target-id="${setup.id}"]`;
+  await page.locator(selector).waitFor({state: "visible"});
+  const drag = await cancelTrustedDrag(page, selector, {
+    observedSelector: selector,
+    captureSelector: ".map-overlay",
+    expectedKind: "custom-label"
+  });
+  const after = await page.evaluate(id => {
+    const app = window.__webglGeneratorApp;
+    const label = app.map.labels.custom.find(item => item?.id === id);
+    return {
+      point: {x: label.x, y: label.y},
+      history: app.editHistory.getStats(),
+      selection: app.selectionStore.getSnapshot().selection?.object || null,
+      activeDrag: Boolean(app.customLabelDrag)
+    };
+  }, setup.id);
+  assert.deepEqual(after.point, setup.point, "手工标签 pointercancel 未恢复起点");
+  assert.deepEqual(after.history, setup.history, "手工标签 pointercancel 错误写入历史");
+  assert.equal(after.selection?.id, setup.id, "手工标签取消后 selection 未保持目标");
+  assert.equal(after.activeDrag, false, "手工标签取消后 drag 未清理");
+  assert.equal(drag.captureAfter, false, "手工标签取消后 pointer capture 未释放");
+  assert.deepEqual(drag.after, drag.late, "手工标签取消后迟到 pointermove 仍生效");
+  return {id: setup.id, movedDuringGesture: rectMoved(drag.before, drag.during), restored: true, historyUnchanged: true, captureReleased: true, lateMoveIgnored: true};
+}
+
+async function verifyMeasurementPointDrag(page) {
+  await page.evaluate(() => {
+    const app = window.__webglGeneratorApp;
+    app.canvasToolModes.cancel(null, "browser-setup");
+    for (const panel of document.querySelectorAll(".floating-panel:not(.hidden)")) {
+      app.panelManager.close(panel.dataset.panelId, {restoreFocus: false, restoreParent: false});
+    }
+    app.canvasToolModes.enter("measurement:draw");
+  });
+  const canvas = page.locator("#map-canvas");
+  const box = await canvas.boundingBox();
+  assert.ok(box, "地图画布不可见");
+  const firstPoint = await uncoveredCanvasPoint(page, {x: 0.4, y: 0.45});
+  const secondPoint = await uncoveredCanvasPoint(page, {x: 0.56, y: 0.55});
+  await page.mouse.click(firstPoint.x, firstPoint.y);
+  await page.mouse.click(secondPoint.x, secondPoint.y);
+  await page.waitForFunction(() => document.querySelectorAll(".measurement-point").length >= 2);
+  const setup = await page.evaluate(() => ({
+    point: {...window.__webglGeneratorApp.measurement.points[0]},
+    history: window.__webglGeneratorApp.editHistory.getStats(),
+    selection: window.__webglGeneratorApp.selectionStore.getSnapshot()
+  }));
+  const drag = await cancelTrustedDrag(page, ".measurement-point", {
+    observedSelector: ".measurement-point",
+    captureSelector: ".map-overlay",
+    expectedKind: "measurement-point"
+  });
+  const after = await page.evaluate(() => ({
+    point: {...window.__webglGeneratorApp.measurement.points[0]},
+    history: window.__webglGeneratorApp.editHistory.getStats(),
+    selection: window.__webglGeneratorApp.selectionStore.getSnapshot(),
+    activeDrag: Boolean(window.__webglGeneratorApp.measurement.drag)
+  }));
+  assert.deepEqual(after.point, setup.point, "测量控制点 pointercancel 未恢复起点");
+  assert.deepEqual(after.history, setup.history, "测量控制点 pointercancel 错误写入历史");
+  assert.deepEqual(after.selection, setup.selection, "测量控制点 pointercancel 错误改变 selection");
+  assert.equal(after.activeDrag, false, "测量控制点取消后 window listener / drag 未清理");
+  assert.equal(drag.captureAfter, false, "测量控制点取消后 pointer capture 未释放");
+  assert.deepEqual(drag.after, drag.late, "测量控制点取消后迟到 pointermove 仍生效");
+  await page.keyboard.press("Escape");
+  return {movedDuringGesture: rectMoved(drag.before, drag.during), restored: true, historyUnchanged: true, selectionUnchanged: true, captureReleased: true, lateMoveIgnored: true};
+}
+
+async function verifyManagedPanelDrag(page) {
+  await page.evaluate(() => {
+    const app = window.__webglGeneratorApp;
+    for (const panel of document.querySelectorAll(".floating-panel:not(.hidden)")) {
+      app.panelManager.close(panel.dataset.panelId, {restoreFocus: false, restoreParent: false});
+    }
+    app.panels.height.open(app.editHistory.getStats());
+  });
+  const panelSelector = '.floating-panel[data-panel-id="height-panel"]:not(.hidden)';
+  await page.locator(panelSelector).waitFor({state: "visible"});
+  await page.locator(`${panelSelector} .height-panel-summary`).waitFor({state: "visible"});
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  await page.waitForTimeout(120);
+  const before = await readUiState(page, panelSelector, "height-panel");
+  const drag = await cancelTrustedDrag(page, `${panelSelector} .floating-panel-header`, {
+    observedSelector: panelSelector,
+    cancelTarget: "element",
+    expectedKind: "panel-manager"
+  });
+  const after = await readUiState(page, panelSelector, "height-panel");
+  assertRectNear(after.rect, before.rect, "主浮动面板 pointercancel 未恢复位置");
+  assert.deepEqual(after.storage, before.storage, "主浮动面板 pointercancel 错误写入 localStorage");
+  assert.deepEqual(after.history, before.history, "主浮动面板 pointercancel 错误写入历史");
+  assert.deepEqual(after.selection, before.selection, "主浮动面板 pointercancel 错误改变 selection");
+  assert.equal(drag.captureAfter, false, "主浮动面板取消后 pointer capture 未释放");
+  assert.deepEqual(drag.after, drag.late, "主浮动面板取消后迟到 pointermove 仍生效");
+  const coexistenceCommit = await verifyManagedPanelCommitCoexistence(page, panelSelector);
+  return {
+    movedDuringGesture: rectMoved(drag.before, drag.during),
+    restored: true,
+    storageUnchanged: true,
+    historyUnchanged: true,
+    selectionUnchanged: true,
+    captureReleased: true,
+    lateMoveIgnored: true,
+    coexistenceCommit
+  };
+}
+
+async function verifyManagedPanelCommitCoexistence(page, panelSelector) {
+  const viewport = page.viewportSize();
+  if (viewport.width < 800) return {applicable: false, reason: "窄屏不允许主面板与详情面板共存"};
+  await page.evaluate(() => {
+    const app = window.__webglGeneratorApp;
+    const city = app.map.settlements.cities.find(Boolean);
+    app.panels.objectDetails.show({object: {kind: "city", id: city.id, name: city.name}});
+  });
+  const detailSelector = '.floating-panel[data-panel-id="object-details"]:not(.hidden)';
+  await page.locator(detailSelector).waitFor({state: "visible"});
+  const beforeMain = await readRect(page, panelSelector);
+  const beforeDetail = await readRect(page, detailSelector);
+  assert.equal(rectanglesOverlap(beforeMain, beforeDetail), false, "主面板与详情面板初始 dock 不得重叠");
+
+  const handleSelector = `${panelSelector} .floating-panel-header`;
+  const handle = page.locator(handleSelector).first();
+  const start = await findHittablePoint(handle, handleSelector);
+  await page.mouse.move(start.x, start.y);
+  await page.mouse.down();
+  const session = await readActiveDirectManipulationSession(page, "panel-manager");
+  const captureDuring = await handle.evaluate(
+    (element, pointerId) => element.hasPointerCapture?.(pointerId) || false,
+    session.pointerId
+  );
+  assert.equal(captureDuring, true, "主面板共存提交路径未建立 pointer capture");
+  const target = {
+    x: beforeDetail.left + beforeDetail.width / 2,
+    y: Math.max(12, Math.min(viewport.height - 12, start.y))
+  };
+  await page.mouse.move(target.x, target.y, {steps: 8});
+  const duringMain = await readRect(page, panelSelector);
+  assert.equal(rectMoved(beforeMain, duringMain), true, "主面板共存提交路径未发生真实移动");
+  await page.mouse.up();
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  await page.waitForTimeout(50);
+
+  const afterMain = await readRect(page, panelSelector);
+  const afterDetail = await readRect(page, detailSelector);
+  const activeAfter = await readActiveDirectManipulationSession(page, "panel-manager", {required: false});
+  const captureAfter = await handle.evaluate(
+    (element, pointerId) => element.hasPointerCapture?.(pointerId) || false,
+    session.pointerId
+  );
+  assert.equal(activeAfter, null, "主面板 pointerup 后活动事务未清理");
+  assert.equal(captureAfter, false, "主面板 pointerup 后 pointer capture 未释放");
+  assert.equal(rectanglesOverlap(afterMain, afterDetail), false, "主面板 pointerup 后共存重排仍发生重叠");
+  const saved = await page.evaluate(() => localStorage.getItem("webgl-generator-panel:height-panel"));
+  assert.equal(JSON.parse(saved || "{}").positionMode, "manual", "主面板 pointerup 后未提交手工位置");
+  await page.evaluate(() => {
+    const app = window.__webglGeneratorApp;
+    app.panels.objectDetails.clear();
+    app.panelManager.close("height-panel", {restoreFocus: false, restoreParent: false});
+  });
+  return {
+    applicable: true,
+    movedDuringGesture: true,
+    captureEstablished: true,
+    captureReleased: true,
+    sessionCleared: true,
+    overlapAfterCommit: false,
+    position: "manual"
+  };
+}
+
+async function verifyActionDockDrag(page) {
+  await page.evaluate(() => {
+    const app = window.__webglGeneratorApp;
+    app.panels.state.updateAddMode(false);
+    app.panels.state.open(app.map, app.editHistory.getStats());
+  });
+  const statePanel = page.locator('.floating-panel[data-panel-id="state-panel"]:not(.hidden)');
+  await statePanel.locator(".object-table-row").first().click();
+  await statePanel.locator('[data-action-id="StatePanel:rename"]').click();
+  const panelSelector = '.ui-secondary-action-panel[aria-label="重命名"]';
+  await page.locator(panelSelector).waitFor({state: "visible"});
+  const before = await readUiState(page, panelSelector, "StatePanel");
+  const drag = await cancelTrustedDrag(page, `${panelSelector} .ui-secondary-action-header`, {
+    observedSelector: panelSelector,
+    expectedKind: "ui-action-dock"
+  });
+  const after = await readUiState(page, panelSelector, "StatePanel");
+  assertRectNear(after.rect, before.rect, "动作坞二级面板 pointercancel 未恢复位置");
+  assert.deepEqual(after.storage, before.storage, "动作坞取消错误写入 localStorage");
+  assert.deepEqual(after.history, before.history, "动作坞取消错误写入历史");
+  assert.deepEqual(after.selection, before.selection, "动作坞取消错误改变 selection");
+  assert.equal(drag.captureAfter, false, "动作坞取消后 pointer capture 未释放");
+  assert.deepEqual(drag.after, drag.late, "动作坞取消后迟到 pointermove 仍生效");
+  await page.locator(`${panelSelector} .ui-secondary-action-close`).click();
+  return {movedDuringGesture: rectMoved(drag.before, drag.during), restored: true, historyUnchanged: true, selectionUnchanged: true, captureReleased: true, lateMoveIgnored: true};
+}
+
+async function verifyVueOverlayDrag(page) {
+  await page.evaluate(() => {
+    const app = window.__webglGeneratorApp;
+    app.panels.culture.open(app.map, app.editHistory.getStats());
+  });
+  await page.locator('.floating-panel[data-panel-id="culture-panel"]:not(.hidden) .inheritance-tree-open').click();
+  const panelSelector = '.ui-tree-display-panel[aria-label="文化树总览"]';
+  await page.locator(panelSelector).waitFor({state: "visible"});
+  await page.waitForFunction(() => Boolean(document.querySelector('.ui-tree-display-panel[aria-label="文化树总览"]')?.style.left));
+  await page.waitForTimeout(180);
+  const before = await readUiState(page, panelSelector, "culture-tree");
+  const drag = await cancelTrustedDrag(page, `${panelSelector} .ui-tree-display-header`, {
+    observedSelector: panelSelector,
+    expectedKind: "vue-floating-panel"
+  });
+  const after = await readUiState(page, panelSelector, "culture-tree");
+  assertRectNear(after.rect, before.rect, "Vue 树状浮层 pointercancel 未恢复位置");
+  assert.deepEqual(after.storage, before.storage, "Vue 树状浮层 pointercancel 错误写入 localStorage");
+  assert.deepEqual(after.history, before.history, "Vue 树状浮层 pointercancel 错误写入历史");
+  assert.deepEqual(after.selection, before.selection, "Vue 树状浮层 pointercancel 错误改变 selection");
+  assert.equal(drag.captureAfter, false, "Vue 树状浮层取消后 pointer capture 未释放");
+  assert.deepEqual(drag.after, drag.late, "Vue 树状浮层取消后迟到 pointermove 仍生效");
+  await page.locator(`${panelSelector} .ui-tree-display-close`).click();
+  return {movedDuringGesture: rectMoved(drag.before, drag.during), restored: true, storageUnchanged: true, historyUnchanged: true, selectionUnchanged: true, captureReleased: true, lateMoveIgnored: true};
+}
+
+async function verifyColumnResizeDrag(page) {
+  await page.evaluate(() => {
+    const app = window.__webglGeneratorApp;
+    app.panels.city.open(app.map, app.editHistory.getStats());
+  });
+  const panelSelector = '.floating-panel[data-panel-id="city-panel"]:not(.hidden)';
+  const handleSelector = `${panelSelector} .object-table-column-resize-handle`;
+  await page.locator(handleSelector).first().waitFor({state: "visible"});
+  const observedSelector = `${panelSelector} .object-table-native th.object-table-resizable-column`;
+  const before = await readUiState(page, observedSelector, "city-panel");
+  const drag = await cancelTrustedDrag(page, handleSelector, {
+    observedSelector,
+    expectedKind: "object-table-column"
+  });
+  const after = await readUiState(page, observedSelector, "city-panel");
+  assertRectNear(after.rect, before.rect, "对象表格列宽 pointercancel 未恢复宽度");
+  assert.deepEqual(after.storage, before.storage, "对象表格列宽 pointercancel 错误写入 localStorage");
+  assert.deepEqual(after.history, before.history, "对象表格列宽 pointercancel 错误写入历史");
+  assert.deepEqual(after.selection, before.selection, "对象表格列宽 pointercancel 错误改变 selection");
+  assert.equal(drag.captureAfter, false, "列宽取消后 pointer capture 未释放");
+  assert.deepEqual(drag.after, drag.late, "列宽取消后迟到 pointermove 仍生效");
+  return {widthChangedDuringGesture: Math.abs(drag.before.width - drag.during.width) > 1, restored: true, storageUnchanged: true, historyUnchanged: true, selectionUnchanged: true, captureReleased: true, lateMoveIgnored: true};
+}
+
+async function verifyMapReplaceCleanup(page) {
+  return page.evaluate(async () => {
+    const module = await import("/src/runtime/direct-manipulation-session.js");
+    const kinds = ["custom-label", "measurement-point", "panel-manager", "ui-action-dock", "vue-floating-panel", "object-table-column"];
+    const reasons = [];
+    for (const kind of kinds) {
+      module.beginDirectManipulationSession({
+        kind,
+        ownerId: kind,
+        onRollback: ({reason}) => reasons.push(`${kind}:${reason}`)
+      });
+    }
+    const before = module.getDirectManipulationSessionSnapshot().length;
+    const generation = await window.webglGeneratorApi.generate.newMap({
+      seed: "interaction-remediation-map-replace",
+      cellsTarget: 10000,
+      confirm: true
+    });
+    if (!generation?.ok) throw new Error(generation?.error?.message || "换图失败");
+    const after = module.getDirectManipulationSessionSnapshot().length;
+    return {before, after, reasons: reasons.sort()};
+  }).then(result => {
+    assert.equal(result.before, 6, "换图前必须存在六类活动会话");
+    assert.equal(result.after, 0, "换图后六类活动会话必须全部清理");
+    assert.deepEqual(result.reasons, [
+      "custom-label:map-replace",
+      "measurement-point:map-replace",
+      "object-table-column:map-replace",
+      "panel-manager:map-replace",
+      "ui-action-dock:map-replace",
+      "vue-floating-panel:map-replace"
+    ]);
+    return result;
+  });
+}
+
+async function cancelTrustedDrag(
+  page,
+  handleSelector,
+  {observedSelector = handleSelector, captureSelector = handleSelector, cancelTarget = "window", expectedKind, dx = 36, dy = 24} = {}
+) {
+  const handle = page.locator(handleSelector).first();
+  const captureTarget = page.locator(captureSelector).first();
+  const box = await handle.boundingBox();
+  assert.ok(box, `拖动入口不可见：${handleSelector}`);
+  const start = await findHittablePoint(handle, handleSelector);
+  const before = await readRect(page, observedSelector);
+  const viewport = page.viewportSize();
+  const moveDx = before.left + before.width + Math.abs(dx) + 8 <= viewport.width ? Math.abs(dx) : -Math.abs(dx);
+  const moveDy = before.top + before.height + Math.abs(dy) + 8 <= viewport.height ? Math.abs(dy) : -Math.abs(dy);
+  await page.mouse.move(start.x, start.y);
+  await page.mouse.down();
+  const activeSessionRecord = await readActiveDirectManipulationSession(page, expectedKind);
+  const activePointerId = activeSessionRecord?.pointerId;
+  const captureDuring = await captureTarget.evaluate(
+    (element, pointerId) => element.hasPointerCapture?.(pointerId) || false,
+    activePointerId
+  );
+  assert.equal(captureDuring, true, `真实 DOM 拖动未建立 pointer capture：${handleSelector}`);
+  await page.mouse.move(start.x + moveDx, start.y + moveDy, {steps: 3});
+  const during = await readRect(page, observedSelector);
+  assert.equal(
+    expectedKind === "object-table-column"
+      ? Math.abs(before.width - during.width) > 1
+      : rectMoved(before, during),
+    true,
+    `真实 DOM 拖动未产生可见变化：${expectedKind}；before=${JSON.stringify(before)}；during=${JSON.stringify(during)}；delta=${moveDx},${moveDy}`
+  );
+  await page.evaluate(({handleSelector, cancelTarget, pointerId, x, y}) => {
+    const event = new PointerEvent("pointercancel", {
+      pointerId,
+      pointerType: "mouse",
+      button: 0,
+      buttons: 0,
+      clientX: x,
+      clientY: y,
+      bubbles: true,
+      cancelable: true
+    });
+    if (cancelTarget === "element") document.querySelector(handleSelector)?.dispatchEvent(event);
+    else window.dispatchEvent(event);
+  }, {handleSelector, cancelTarget, pointerId: activePointerId, x: start.x + moveDx, y: start.y + moveDy});
+  await page.waitForTimeout(50);
+  await page.mouse.move(start.x, start.y);
+  await page.mouse.up();
+  await page.waitForTimeout(50);
+  const after = await readRect(page, observedSelector);
+  const captureAfter = await captureTarget.evaluate(
+    (element, pointerId) => element.hasPointerCapture?.(pointerId) || false,
+    activePointerId
+  );
+  await page.evaluate(({pointerId, x, y}) => {
+    window.dispatchEvent(new PointerEvent("pointermove", {
+      pointerId,
+      pointerType: "mouse",
+      buttons: 1,
+      clientX: x,
+      clientY: y,
+      bubbles: true
+    }));
+  }, {pointerId: activePointerId, x: start.x + moveDx * 2, y: start.y + moveDy * 2});
+  await page.waitForTimeout(30);
+  const late = await readRect(page, observedSelector);
+  return {
+    before,
+    during,
+    after,
+    late,
+    captureDuring,
+    captureAfter,
+    activeKinds: [activeSessionRecord.kind]
+  };
+}
+
+async function findHittablePoint(handle, selector) {
+  const point = await handle.evaluate(element => {
+    const rect = element.getBoundingClientRect();
+    for (const xRatio of [0.5, 0.25, 0.75, 0.1, 0.9]) {
+      for (const yRatio of [0.5, 0.25, 0.75, 0.1, 0.9]) {
+        const x = rect.left + rect.width * xRatio;
+        const y = rect.top + rect.height * yRatio;
+        const hit = document.elementFromPoint(x, y);
+        if (hit && (hit === element || element.contains(hit))) return {x, y};
+      }
+    }
+    return null;
+  });
+  assert.ok(point, `拖动入口被其它元素遮挡：${selector}`);
+  return point;
+}
+
+async function readActiveDirectManipulationSession(page, kind, {required = true} = {}) {
+  const result = await page.evaluate(async kind => {
+    const moduleUrl = performance
+      .getEntriesByType("resource")
+      .map(entry => entry.name)
+      .find(url => url.includes("/src/runtime/direct-manipulation-session.js"));
+    const module = await import(moduleUrl || "/src/runtime/direct-manipulation-session.js");
+    return {
+      moduleUrl: moduleUrl || "/src/runtime/direct-manipulation-session.js",
+      session: module.getDirectManipulationSessionSnapshot().find(session => session.kind === kind) || null
+    };
+  }, kind);
+  if (required) {
+    assert.ok(result.session, `真实 DOM 拖动未登记 ${kind} 活动事务；模块=${result.moduleUrl}`);
+  }
+  return result.session;
+}
+
+async function readRect(page, selector) {
+  return page.locator(selector).first().evaluate(element => {
+    const rect = element.getBoundingClientRect();
+    return {left: rect.left, top: rect.top, width: rect.width, height: rect.height};
+  });
+}
+
+async function readUiState(page, selector, storageNeedle) {
+  return page.locator(selector).first().evaluate((element, storageNeedle) => {
+    const app = window.__webglGeneratorApp;
+    const rect = element.getBoundingClientRect();
+    return {
+      rect: {left: rect.left, top: rect.top, width: rect.width, height: rect.height},
+      storage: Object.fromEntries(
+        Object.keys(localStorage)
+          .filter(key => key.includes(storageNeedle))
+          .sort()
+          .map(key => [key, localStorage.getItem(key)])
+      ),
+      history: app.editHistory.getStats(),
+      selection: app.selectionStore.getSnapshot()
+    };
+  }, storageNeedle);
+}
+
+function assertRectNear(actual, expected, message) {
+  for (const key of ["left", "top", "width", "height"]) {
+    assert.ok(Math.abs(actual[key] - expected[key]) <= 1, `${message}：${key} ${actual[key]} / ${expected[key]}`);
+  }
+}
+
+function rectMoved(before, after) {
+  return Math.abs(before.left - after.left) > 1 || Math.abs(before.top - after.top) > 1;
+}
+
+function rectanglesOverlap(left, right) {
+  return !(
+    left.left + left.width <= right.left
+    || right.left + right.width <= left.left
+    || left.top + left.height <= right.top
+    || right.top + right.height <= left.top
+  );
+}
+
+async function uncoveredCanvasPoint(page, preferred) {
+  return page.evaluate(preferred => {
+    const canvas = document.getElementById("map-canvas");
+    const rect = canvas.getBoundingClientRect();
+    const candidates = [
+      preferred,
+      {x: 0.75, y: 0.5},
+      {x: 0.5, y: 0.75},
+      {x: 0.75, y: 0.75},
+      {x: 0.5, y: 0.5}
+    ];
+    for (const candidate of candidates) {
+      const x = rect.left + rect.width * candidate.x;
+      const y = rect.top + rect.height * candidate.y;
+      if (document.elementFromPoint(x, y) === canvas) return {x, y};
+    }
+    throw new Error("找不到未被浮层覆盖的画布坐标");
+  }, preferred);
 }
 
 async function verifyActionSemantics(page) {

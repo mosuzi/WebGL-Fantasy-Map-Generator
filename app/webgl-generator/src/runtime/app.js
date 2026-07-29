@@ -12413,7 +12413,7 @@ function startMeasurementPointDrag(event, state, documentRef, index) {
   event.stopPropagation();
   const view = documentRef.defaultView || window;
   const pointBefore = {...state.measurement.points[index]};
-  const captureTarget = event.currentTarget;
+  const captureTarget = state.renderer.overlay || event.currentTarget;
   const drag = {
     pointerId: event.pointerId,
     index,
@@ -13627,7 +13627,7 @@ function bindCustomLabelDrag(state, documentRef) {
     startCustomLabelDrag(state, documentRef, event, label, {
       node,
       placementCommand: placement?.command || null,
-      captureTarget: node
+      captureTarget: overlay
     });
   }, true);
 }
