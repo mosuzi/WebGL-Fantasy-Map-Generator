@@ -51,10 +51,10 @@ assert.deepEqual(crossResultKeys(report.actionDockActions), ["assign", "edit"], 
 assert.ok(report.actionDockActions.every(item => item.sourceRef.tokens.includes(`host-id="${item.hostId}"`) && item.sourceRef.tokens.includes(`resultClass: "${item.resultClass}"`)), "每个动作必须由源码显式声明 host + key 身份和结果类型");
 assert.deepEqual(report.actionDockActions.filter(item => item.resultClass === "open-other-panel").map(item => item.actionId), ["CulturePanel:namebase"]);
 
-assert.equal(report.visualEvidence.geometryBasis.virtualRowHeight, 32);
-assert.equal(report.visualEvidence.geometryBasis.locateRowMinimumHeight, 41);
-assert.equal(report.visualEvidence.geometryBasis.fixedCssRowHeight, false);
-assert.deepEqual(report.findings.map(item => item.findingId), ["IA-104-003"]);
+assert.equal(report.visualEvidence.geometryBasis.virtualRowHeight, 42);
+assert.equal(report.visualEvidence.geometryBasis.locateRowMinimumHeight, 42);
+assert.equal(report.visualEvidence.geometryBasis.fixedCssRowHeight, true);
+assert.deepEqual(report.findings.map(item => item.findingId), []);
 assert.ok(report.findings.every(item => ["P0", "P1", "P2", "P3"].includes(item.severity) && typeof item.intB === "boolean" && item.evidenceStatus === "E-C" && item.browserEvidence === "pending-Q107"));
 assert.equal(report.totals.unknownFields, 0);
 assert.equal(report.totals.unresolvedTables, 0);

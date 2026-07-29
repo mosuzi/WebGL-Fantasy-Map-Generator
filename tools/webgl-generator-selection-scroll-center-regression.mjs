@@ -158,7 +158,7 @@ const diplomacySource = await readFile(new URL("../app/webgl-generator/src/ui/vu
 assert.match(objectTableSource, /watch\(\s*selectedScrollAnchor,/);
 assert.match(objectTableSource, /prepareTarget: scroller =>/);
 assert.match(objectTableSource, /getViewportInsets: scroller => tableViewportInsets\(scroller\)/);
-assert.match(objectTableSource, /centerVirtualRowVertically\(scroller, selectedRowPosition\.value, VIRTUAL_ROW_HEIGHT, tableViewportInsets\(scroller\)\)/);
+assert.match(objectTableSource, /centerVirtualRowVertically\(scroller, selectedRowPosition\.value, OBJECT_TABLE_ROW_HEIGHT, tableViewportInsets\(scroller\)\)/);
 assert.match(objectTableSource, /function tableViewportInsets\(scroller\)/);
 assert.match(objectTableSource, /stickyTableViewportInsets\(scroller, scroller\?\.querySelector\?\.\("thead"\)\)/);
 assert.doesNotMatch(objectTableSource, /\[props\.selectedId, props\.rows/);

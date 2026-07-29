@@ -92,12 +92,12 @@ const LAYER_CONTRACTS = Object.freeze([
 const TARGET_SIZE_CONTRACTS = Object.freeze([
   targetSize("panel-header-actions", ".floating-panel-history-button", "28×28；与 .floating-panel-close 共用规则", "shared-panel-header", ["width: 28px", "height: 28px"]),
   targetSize("icon-action", ".ui-icon-action.el-button", "32×32", "shared-action", ["width: 32px", "height: 32px"]),
-  targetSize("secondary-close", ".ui-secondary-action-close", "26×26", "compact-close", ["width: 26px", "height: 26px"]),
+  targetSize("secondary-close", ".ui-secondary-action-close", "视觉 26×26；透明命中 28×28", "compact-close", ["width: 26px", "height: 26px"], [cssRef(".ui-secondary-action-close::before", ["inset: -1px"])]),
   targetSize("table-row-action", ".table-icon-action", "28×28", "table-row", ["width: 28px", "height: 28px"]),
-  targetSize("table-sort", ".object-table-sort-button", "min-height 18；宽度随表头", "table-header", ["min-height: 18px", "width: 100%"]),
-  targetSize("table-resize", ".object-table-column-resize-handle", "8×表头高度", "precision-drag", ["width: 8px", "height: 100%"]),
-  targetSize("table-checkbox", ".object-table-selection-checkbox", "14×14", "checkbox", ["width: 14px", "height: 14px"]),
-  targetSize("empty-action", ".object-table-empty-action", "min-height 26", "empty-state", ["min-height: 26px"])
+  targetSize("table-sort", ".object-table-sort-button", "min-height 28；宽度随表头", "table-header", ["min-height: 28px", "width: 100%"]),
+  targetSize("table-resize", ".object-table-column-resize-handle", "透明命中 16×表头高度；视觉线 2px", "precision-drag", ["width: 16px", "height: 100%"], [cssRef(".object-table-column-resize-handle::after", ["width: 2px"])]),
+  targetSize("table-checkbox", ".object-table-selection-hit", "视觉 14×14；透明命中 28×28", "checkbox", ["width: 28px", "height: 28px"], [cssRef(".object-table-selection-checkbox", ["width: 14px", "height: 14px"])]),
+  targetSize("empty-action", ".object-table-empty-action", "视觉 min-height 26；透明命中 min-height 28", "empty-state", ["min-height: 26px"], [cssRef(".object-table-empty-action::before", ["inset: -1px 0"])])
 ]);
 
 const FOCUS_STYLE_CONTRACTS = Object.freeze([
@@ -319,7 +319,7 @@ function buildManagedOverlayInstances(interactionInventory, complexWorkspaceAudi
     source: "interaction-inventory+semantic-diff"
   }));
   const instances = [...panelInstances, ...fixedInstances];
-  if (panelInstances.length !== 27 || fixedInstances.length !== 22 || new Set(instances.map(item => item.instanceId)).size !== 49) {
+  if (panelInstances.length !== 28 || fixedInstances.length !== 22 || new Set(instances.map(item => item.instanceId)).size !== 50) {
     throw new Error(`managed overlay 分母漂移：panel=${panelInstances.length}, fixed=${fixedInstances.length}`);
   }
   return {instances, fixedOverlayInventory, fixedOverlaySemanticIds, fixedOverlayDiff};
@@ -330,7 +330,6 @@ function buildFindings() {
     finding("IA-106-001", "P1", "同一次 Escape 可能同时关闭 managed overlay 并清除 selection / editing", "INT-B", "OverlayRegistry 先注册 document capture 并执行 preventDefault + stopPropagation；这不会阻止同一 document 节点上后注册的快捷键 listener。快捷键 listener 又不检查 defaultPrevented，所以非 editable target 下同一事件仍可继续执行 selection.cancel。", "建立单一 Escape 仲裁器或让后续消费者尊重 defaultPrevented，并冻结 popup、二级浮层、主面板、画布编辑的逐级优先级。", [ref(FILES.overlay, ["documentRef.addEventListener(\"keydown\"", "event.preventDefault()", "event.stopPropagation()"]), ref(FILES.shortcuts, ["documentRef.addEventListener(\"keydown\"", "if (event.repeat", "resolveShortcut"]), ref(FILES.runtime, ["new PanelManager", "installKeyboardShortcuts"])]),
     finding("IA-106-002", "P1", "Escape 结果随焦点是否位于可编辑控件而改变，内部 popup 还缺应用侧可证明优先级", "INT-B", "editable target 会让全局快捷键提前返回，但先注册的 overlay capture 仍会运行；Element Plus select / dropdown 的 Escape 位于依赖侧并晚于 document capture，静态源码不能证明一次按键只关闭候选。", "把 Escape 从普通快捷键守卫中单列，第107项分别记录 panel container、输入框和展开 popup 的单次实际消费者。", [ref(FILES.shortcuts, ["isEditableShortcutTarget(event.target)", "selection.cancel"]), ref(FILES.overlay, ["event.key !== \"Escape\"", "event.stopPropagation()"])]),
     finding("IA-106-003", "P2", "键盘焦点视觉表达在共享控件间不一致", "UI-only", "图标动作和 checkbox 有独立 outline；二级关闭、表格 sort / resize / empty 等把 focus 与 hover 合并并清除 outline，只依赖颜色或背景变化。", "统一 focus-visible token，并在第107项用逐控件像素差确认替代焦点样式是否足够。", [cssRef(".ui-icon-action.el-button:focus-visible", ["outline: 2px solid"]), cssRef(".object-table-sort-button:hover,\n.object-table-sort-button:focus-visible", ["outline: none"]), cssRef(".object-table-empty-action:hover,\n.object-table-empty-action:focus-visible", ["outline: none"])]),
-    finding("IA-106-004", "P2", "共享点击目标尺寸从 8px 到 32px，紧凑控件缺少统一命中区口径", "UI-only", "二级关闭 26px、表格空态动作 26px、checkbox 14px、列宽拖柄 8px；同一系统的图标动作是 32px、表格行动作与面板头按钮是 28px。", "保留视觉尺寸时扩大透明命中区；精密拖柄、checkbox 与行级代理在浏览器报告中单列。", [cssRef(".ui-secondary-action-close", ["width: 26px"]), cssRef(".object-table-column-resize-handle", ["width: 8px"]), cssRef(".object-table-selection-checkbox", ["width: 14px"])]),
     finding("IA-106-005", "P2", "22 个 role=dialog 的 managed fixed overlay 都不会暂停全局快捷键", "INT-B", "18 个动作坞、项目导出、高度图工作台和 2 个树状展示均声明 role=dialog，但没有 aria-modal=true 或 data-keyboard-exclusive=true；全局快捷键只把后两种属性视为独占。", "逐类决定 dialog 是否非模态；若需独占，补明确属性并验证打开期间保存、视图和面板快捷键不误触。", [ref(FILES.shortcuts, ["hasExclusiveKeyboardModal", "[aria-modal=\"true\"]", "[data-keyboard-exclusive=\"true\"]"]), ref(FILES.actionDock, ["role=\"dialog\"", "useManagedOverlay"]), ref(FILES.control, ["class=\"project-export-panel\"", "role=\"dialog\""]), ref(FILES.height, ["class=\"heightmap-import-workbench\"", "role=\"dialog\""]), ref(FILES.tree, ["role=\"dialog\"", "useManagedOverlay"])])
   ];
 }
@@ -515,7 +514,7 @@ function visualContract(id, label, value, file, tokens) {
   return {id, label, value, evidenceStatus: "E-C", browserEvidence: "pending-Q107", sourceRefs};
 }
 
-function targetSize(id, selector, declaredSize, context, tokens) {
+function targetSize(id, selector, declaredSize, context, tokens, extraSourceRefs = []) {
   const ruleSelector = ({
     "panel-header-actions": ".floating-panel-history-button,\n.floating-panel-close",
     "icon-action": ".ui-icon-action.el-button",
@@ -523,11 +522,11 @@ function targetSize(id, selector, declaredSize, context, tokens) {
     "table-row-action": ".table-icon-action",
     "table-sort": ".object-table-sort-button",
     "table-resize": ".object-table-column-resize-handle",
-    "table-checkbox": ".object-table-selection-checkbox",
+    "table-checkbox": ".object-table-selection-hit",
     "empty-action": ".object-table-empty-action"
   })[id];
   if (!ruleSelector) throw new Error(`未知目标尺寸契约：${id}`);
-  return {id, selector, declaredSize, context, evidenceStatus: "E-C", browserEvidence: "pending-Q107", sourceRefs: [cssRef(ruleSelector, tokens)]};
+  return {id, selector, declaredSize, context, evidenceStatus: "E-C", browserEvidence: "pending-Q107", sourceRefs: [cssRef(ruleSelector, tokens), ...extraSourceRefs]};
 }
 
 function finding(id, severity, title, changeClass, evidence, recommendation, sourceRefs) {

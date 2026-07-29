@@ -10,6 +10,7 @@ const OUTPUT_ROOT = join(REPO_ROOT, "docs", "generated", "interaction-audit");
 
 const FILES = Object.freeze({
   objectTable: `${COMPONENT_ROOT}/base/UiObjectTable.vue`,
+  objectTableGeometry: `${COMPONENT_ROOT}/base/object-table-geometry.js`,
   actionDock: `${COMPONENT_ROOT}/base/UiActionDock.vue`,
   visibleSelection: "app/webgl-generator/src/ui/vue/composables/use-visible-row-selection.js",
   persistentHighlights: "app/webgl-generator/src/runtime/persistent-highlights.js",
@@ -536,21 +537,23 @@ function buildDictionaries() {
 
 function buildVisualEvidence() {
   const tableSource = readText(FILES.objectTable);
+  const geometrySource = readText(FILES.objectTableGeometry);
   const styles = readText(FILES.styles);
-  requireTokens(FILES.objectTable, tableSource, ["const VIRTUAL_ROW_HEIGHT = 32", "const VIRTUAL_THRESHOLD = 120", "const VIRTUAL_OVERSCAN_ROWS = 8"]);
-  requireTokens(FILES.styles, styles, [".object-table-native th,", "padding: 6px 8px;", "line-height: 1.35;", "--el-font-size-small: 12px;", ".table-icon-action", "height: 28px;"]);
+  requireTokens(FILES.objectTableGeometry, geometrySource, ["export const OBJECT_TABLE_ROW_HEIGHT = 42"]);
+  requireTokens(FILES.objectTable, tableSource, ["OBJECT_TABLE_ROW_HEIGHT", "--object-table-row-height", "const VIRTUAL_THRESHOLD = 120", "const VIRTUAL_OVERSCAN_ROWS = 8"]);
+  requireTokens(FILES.styles, styles, [".object-table-native tbody .object-table-row", "height: var(--object-table-row-height);", "padding-top: 0;", "padding-bottom: 0;", "--el-font-size-small: 12px;", ".table-icon-action", "height: 28px;"]);
   return {
     tokenBasis: ["--el-font-size-small: 12px", "--ui-segmented-height: 28px", "--ui-segmented-font-size: 12px"],
     sharedComponentBasis: [FILES.objectTable, FILES.actionDock],
     geometryBasis: {
-      virtualRowHeight: 32,
+      virtualRowHeight: 42,
       virtualThreshold: 120,
       virtualOverscanRows: 8,
-      tableCellPadding: "6px 8px",
+      tableCellPadding: "0 8px",
       tableLineHeight: 1.35,
       locateButtonHeight: 28,
-      locateRowMinimumHeight: 41,
-      fixedCssRowHeight: false
+      locateRowMinimumHeight: 42,
+      fixedCssRowHeight: true
     },
     evidenceStatus: "E-C",
     browserEvidence: "pending-Q107"
@@ -558,9 +561,7 @@ function buildVisualEvidence() {
 }
 
 function buildFindings() {
-  return [
-    finding("IA-104-003", "表格虚拟行高与 CSS 几何模型不一致", "UiObjectTable 固定按 32px 计算 spacer 和居中；19 个带定位列的表格行至少包含 28px 高按钮、上下各 6px 的 td padding 和 1px border，最小行高约 41px，其余 7 个表格也没有固定 32px CSS。", "长表超过 120 行启用虚拟化后，窗口起点、spacer 和选中居中会产生累计偏差。", "第 215 项用统一行高 token 与真实浏览器测量收口。", "P1", "代码确认", false, [FILES.objectTable, FILES.styles])
-  ];
+  return [];
 }
 
 function crossResultActionKeys(actions) {

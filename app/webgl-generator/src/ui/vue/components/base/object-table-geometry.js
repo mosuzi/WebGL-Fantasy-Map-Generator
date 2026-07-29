@@ -1,0 +1,1 @@
+export const OBJECT_TABLE_ROW_HEIGHT = 42;

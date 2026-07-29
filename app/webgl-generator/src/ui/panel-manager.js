@@ -270,8 +270,9 @@ export class PanelManager {
       : {
         left: clamp(finiteCoordinate(left, 0), PANEL_MARGIN, Math.max(PANEL_MARGIN, hostWidth - width - PANEL_MARGIN)),
         top: clamp(finiteCoordinate(top, 0), PANEL_MARGIN, Math.max(PANEL_MARGIN, hostHeight - height - PANEL_MARGIN))
-      };
+    };
     writePanelRuntimePosition(panel, position);
+    writePanelAvailableHeight(panel, panelAvailableHeight(hostHeight, position.top));
     return position;
   }
 
@@ -587,6 +588,10 @@ export function panelDragHasMoved(startLeft, startTop, endLeft, endTop, threshol
   return Math.hypot(endLeft - startLeft, endTop - startTop) > threshold;
 }
 
+export function panelAvailableHeight(hostHeight, finalTop, margin = PANEL_MARGIN) {
+  return Math.max(0, finiteCoordinate(hostHeight, 0) - finiteCoordinate(finalTop, 0) - margin);
+}
+
 export function chooseLastOpenMainPanel(candidates, preferredId = null) {
   if (!Array.isArray(candidates) || !candidates.length) return null;
   if (preferredId && candidates.some(candidate => candidate.id === preferredId)) return preferredId;
@@ -711,6 +716,14 @@ function writePanelRuntimePosition(panel, position) {
   const top = `${position.top}px`;
   if (panel.style.left !== left) panel.style.left = left;
   if (panel.style.top !== top) panel.style.top = top;
+}
+
+function writePanelAvailableHeight(panel, availableHeight) {
+  const value = `${availableHeight}px`;
+  const current = panel.style.getPropertyValue?.("--floating-panel-available-height") || panel.style["--floating-panel-available-height"];
+  if (current === value) return;
+  if (typeof panel.style.setProperty === "function") panel.style.setProperty("--floating-panel-available-height", value);
+  else panel.style["--floating-panel-available-height"] = value;
 }
 
 function finiteCoordinate(value, fallback) {

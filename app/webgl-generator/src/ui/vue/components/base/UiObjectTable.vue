@@ -1,19 +1,20 @@
 <template>
-  <div ref="tableWrap" class="object-table-wrap" @scroll.passive="handleScroll">
+  <div ref="tableWrap" class="object-table-wrap" :style="objectTableGeometryStyle" @scroll.passive="handleScroll">
     <table v-if="rows.length" class="object-table object-table-native">
       <thead>
         <tr>
           <th v-if="selectionColumnVisible" class="object-table-selection-column">
-            <input
-              class="object-table-selection-checkbox object-table-select-all-checkbox"
-              type="checkbox"
-              :checked="allRowsSelected"
-              :indeterminate="partialRowsSelected"
-              :aria-checked="selectionHeaderState"
-              aria-label="选择当前列表"
-              @click.stop
-              @change="handleSelectAllChange"
-            />
+            <label class="object-table-selection-hit" @click="stopSelectionEvent">
+              <input
+                class="object-table-selection-checkbox object-table-select-all-checkbox"
+                type="checkbox"
+                :checked="allRowsSelected"
+                :indeterminate="partialRowsSelected"
+                :aria-checked="selectionHeaderState"
+                aria-label="选择当前列表"
+                @change="handleSelectAllChange"
+              />
+            </label>
           </th>
           <th
             v-for="column in columns"
@@ -65,14 +66,19 @@
           @dblclick="handleRowDoubleClick(row)"
         >
           <td v-if="selectionColumnVisible" class="object-table-selection-cell">
-            <input
-              class="object-table-selection-checkbox object-table-row-selection-checkbox"
-              type="checkbox"
-              :checked="rowSelectionChecked(row)"
-              :aria-label="`选择 ${rowKey(row)}`"
-              @click.stop="event => rememberSelectionModifiers(row, event)"
-              @change="event => handleRowSelectionChange(row, event.target.checked)"
-            />
+            <label
+              class="object-table-selection-hit"
+              @click="event => handleSelectionHitClick(row, event)"
+            >
+              <input
+                class="object-table-selection-checkbox object-table-row-selection-checkbox"
+                type="checkbox"
+                :checked="rowSelectionChecked(row)"
+                :aria-label="`选择 ${rowKey(row)}`"
+                @click="event => rememberSelectionModifiers(row, event, false, true)"
+                @change="event => handleRowSelectionChange(row, event.target.checked)"
+              />
+            </label>
           </td>
           <td v-if="showRegenerationLock" class="object-table-lock-cell">
             <button
@@ -140,6 +146,14 @@ import {
   stickyTableViewportInsets
 } from "../../../components/selection-scroll.js";
 import {objectTableSelectionRange} from "./object-table-selection.js";
+import {OBJECT_TABLE_ROW_HEIGHT} from "./object-table-geometry.js";
+import {
+  captureObjectTableSelectionEvent,
+  captureObjectTableSelectionHitClick,
+  consumeObjectTableSelectionModifiers,
+  createObjectTableSelectionEventState,
+  stopObjectTableSelectionEvent
+} from "./object-table-selection-events.js";
 import {beginDirectManipulationSession} from "../../../../runtime/direct-manipulation-session.js";
 
 defineOptions({
@@ -235,7 +249,6 @@ const props = defineProps({
   }
 });
 
-const VIRTUAL_ROW_HEIGHT = 32;
 const VIRTUAL_THRESHOLD = 120;
 const VIRTUAL_OVERSCAN_ROWS = 8;
 const MIN_RESIZE_COLUMN_WIDTH = 32;
@@ -244,12 +257,13 @@ const MAX_RESIZE_COLUMN_WIDTH = 640;
 const emit = defineEmits(["select", "locate", "edit", "empty-action", "sort", "column-resize", "selection-change", "lock-toggle", "lock-selection-change", "lock-range-selection", "batch-row-toggle"]);
 
 const tableWrap = ref(null);
+const objectTableGeometryStyle = Object.freeze({"--object-table-row-height": `${OBJECT_TABLE_ROW_HEIGHT}px`});
 const scrollTop = ref(0);
 const viewportHeight = ref(300);
 let scrollMetricsFrame = 0;
 let resizeState = null;
 const previewColumnWidths = ref({});
-let selectionModifiers = null;
+const selectionEventState = createObjectTableSelectionEventState();
 let lockSelectionAnchor = null;
 
 const selectionColumnVisible = computed(() => props.selectableRows || props.showRegenerationLock);
@@ -257,14 +271,14 @@ const columnSpan = computed(() => props.columns.length + (props.showLocateAction
 const virtualEnabled = computed(() => props.rows.length > VIRTUAL_THRESHOLD);
 const virtualWindow = computed(() => {
   if (!virtualEnabled.value) return {start: 0, end: props.rows.length};
-  const visibleCount = Math.max(1, Math.ceil(viewportHeight.value / VIRTUAL_ROW_HEIGHT));
-  const start = Math.max(0, Math.floor(scrollTop.value / VIRTUAL_ROW_HEIGHT) - VIRTUAL_OVERSCAN_ROWS);
+  const visibleCount = Math.max(1, Math.ceil(viewportHeight.value / OBJECT_TABLE_ROW_HEIGHT));
+  const start = Math.max(0, Math.floor(scrollTop.value / OBJECT_TABLE_ROW_HEIGHT) - VIRTUAL_OVERSCAN_ROWS);
   const end = Math.min(props.rows.length, start + visibleCount + VIRTUAL_OVERSCAN_ROWS * 2);
   return {start, end};
 });
 const visibleRows = computed(() => props.rows.slice(virtualWindow.value.start, virtualWindow.value.end));
-const virtualTopPadding = computed(() => virtualEnabled.value ? virtualWindow.value.start * VIRTUAL_ROW_HEIGHT : 0);
-const virtualBottomPadding = computed(() => virtualEnabled.value ? Math.max(0, props.rows.length - virtualWindow.value.end) * VIRTUAL_ROW_HEIGHT : 0);
+const virtualTopPadding = computed(() => virtualEnabled.value ? virtualWindow.value.start * OBJECT_TABLE_ROW_HEIGHT : 0);
+const virtualBottomPadding = computed(() => virtualEnabled.value ? Math.max(0, props.rows.length - virtualWindow.value.end) * OBJECT_TABLE_ROW_HEIGHT : 0);
 const sortableKeys = computed(() => new Set((props.sortOptions || []).map(option => option?.key).filter(Boolean)));
 const sortIndicator = computed(() => props.sortDirection === "asc" ? "↑" : "↓");
 const effectiveSelectionIds = computed(() => props.showRegenerationLock ? props.lockSelectionIds : props.selectedRowIds);
@@ -300,7 +314,7 @@ const selectedCenterController = createSelectionCenterController({
   getViewportInsets: scroller => tableViewportInsets(scroller),
   prepareTarget: scroller => {
     if (!virtualEnabled.value || selectedRowPosition.value < 0) return;
-    centerVirtualRowVertically(scroller, selectedRowPosition.value, VIRTUAL_ROW_HEIGHT, tableViewportInsets(scroller));
+    centerVirtualRowVertically(scroller, selectedRowPosition.value, OBJECT_TABLE_ROW_HEIGHT, tableViewportInsets(scroller));
     refreshScrollMetrics();
   },
   onSettled: refreshScrollMetrics
@@ -373,9 +387,9 @@ function handleSelectAllChange(event) {
 }
 
 function handleRowSelectionChange(row, checked) {
+  const selectionModifiers = consumeObjectTableSelectionModifiers(selectionEventState);
   if (props.showRegenerationLock && selectionModifiers?.shiftKey) {
     emitRangeSelection(row, checked);
-    selectionModifiers = null;
     return;
   }
   const key = rowKey(row);
@@ -384,12 +398,19 @@ function handleRowSelectionChange(row, checked) {
   else selected.delete(key);
   lockSelectionAnchor = key;
   emitSelectionChange(Array.from(selected.values()));
-  selectionModifiers = null;
 }
 
-function rememberSelectionModifiers(row, event) {
-  selectionModifiers = {shiftKey: event.shiftKey};
+function rememberSelectionModifiers(row, event, stopPropagation = false, preserveExisting = false) {
+  captureObjectTableSelectionEvent(selectionEventState, event, {stopPropagation, preserveExisting});
   if (!event.shiftKey) lockSelectionAnchor = rowKey(row);
+}
+
+function handleSelectionHitClick(row, event) {
+  if (captureObjectTableSelectionHitClick(selectionEventState, event) && !event.shiftKey) lockSelectionAnchor = rowKey(row);
+}
+
+function stopSelectionEvent(event) {
+  stopObjectTableSelectionEvent(event);
 }
 
 function emitRangeSelection(row, selected) {

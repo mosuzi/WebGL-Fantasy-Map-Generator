@@ -19,36 +19,36 @@ assert.deepEqual(report.totals, {
   focusEntries: 8,
   focusExcluded: 4,
   focusSinkDefinitions: 3,
-  managedOverlayInstances: 49,
+  managedOverlayInstances: 50,
   managedDialogInstances: 22,
   dynamicFocusableFactories: 1,
   escapeConsumers: 2,
   escapeExcluded: 1,
-  responsiveBreakpoints: 2,
+  responsiveBreakpoints: 3,
   responsiveContainerQueries: 2,
   layerContracts: 8,
   targetSizeContracts: 8,
   stateBannerKinds: 7,
-  findings: 5,
-  pureUiFindings: 2,
+  findings: 4,
+  pureUiFindings: 1,
   behaviorFindings: 3,
   browserCases: 12,
-  unresolved: 0
+  unresolved: 1
 });
 assert.equal(new Set(report.shortcuts.map(item => item.id)).size, 22);
 assert.equal(new Set(report.keyboardConsumers.map(item => item.id)).size, 5);
 assert.equal(new Set(report.focusDefinitions.map(item => item.id)).size, 12);
 assert.equal(report.focusDefinitions.filter(item => item.included).length, 8);
 assert.ok(report.focusDefinitions.filter(item => !item.included).every(item => item.exclusionReason), "隐藏桥接排除项必须有理由");
-assert.equal(report.managedOverlayInstances.length, 49);
-assert.deepEqual(["panel-manager", "action-dock", "fixed-workbench", "tree-dialog"].map(kind => [kind, report.managedOverlayInstances.filter(item => item.kind === kind).length]), [["panel-manager", 27], ["action-dock", 18], ["fixed-workbench", 2], ["tree-dialog", 2]]);
+assert.equal(report.managedOverlayInstances.length, 50);
+assert.deepEqual(["panel-manager", "action-dock", "fixed-workbench", "tree-dialog"].map(kind => [kind, report.managedOverlayInstances.filter(item => item.kind === kind).length]), [["panel-manager", 28], ["action-dock", 18], ["fixed-workbench", 2], ["tree-dialog", 2]]);
 assert.equal(report.managedOverlayInstances.filter(item => item.role === "dialog").length, 22);
 assert.deepEqual(report.localKeyboardActions.map(item => [item.id, item.bindings]), [["measurement-handle-delete", ["Delete", "Backspace"]], ["color-field-enter", ["Enter"]]]);
 assert.deepEqual(report.escapeContracts.filter(item => item.included).map(item => item.id), ["overlay-escape", "selection-cancel"]);
 assert.ok(report.escapeContracts.filter(item => !item.included).every(item => item.exclusionReason), "排除的 Escape 字面量必须有理由");
-assert.deepEqual(report.responsive.mediaBreakpoints.map(item => item.maxWidthPx), [520, 720]);
+assert.deepEqual(report.responsive.mediaBreakpoints.map(item => item.maxWidthPx), [620, 520, 720]);
 assert.deepEqual(report.responsive.containerQueries.map(item => item.maxWidthPx), [520, 320]);
-assert.deepEqual(report.responsive.cssInventory, {zIndexDeclarations: 33, baseOverflowDeclarations: 60, axisOverflowDeclarations: 0, nowrapDeclarations: 40, ellipsisDeclarations: 24, wrapDeclarations: 55});
+assert.deepEqual(report.responsive.cssInventory, {zIndexDeclarations: 36, baseOverflowDeclarations: 64, axisOverflowDeclarations: 2, nowrapDeclarations: 45, ellipsisDeclarations: 25, wrapDeclarations: 55});
 assert.deepEqual(report.responsive.viewports.map(item => item.id), ["desktop", "narrow", "css-stress"]);
 assert.deepEqual([...new Set(report.browserMatrix.map(item => item.variantId))], ["baseline", "long-zh", "expanded-options", "font-and-states"]);
 assert.ok(report.browserMatrix.every(item => item.checklistIds.length >= 6 && item.evidenceStatus === "E-C" && item.browserEvidence === "pending-Q107"));
@@ -59,22 +59,22 @@ for (const viewportId of ["desktop", "narrow", "css-stress"]) {
 assert.ok(report.visualContracts.layering.find(item => item.id === "managed-overlays").value.startsWith(">=900"));
 assert.equal(report.visualContracts.layering.find(item => item.id === "hover-and-scale").value, "5");
 assert.equal(report.visualContracts.layering.find(item => item.id === "measurement").value, "4");
-assert.ok(report.visualContracts.targetSizes.some(item => item.declaredSize === "14×14"));
-assert.ok(report.visualContracts.targetSizes.some(item => item.declaredSize.startsWith("8×")));
+assert.ok(report.visualContracts.targetSizes.some(item => item.declaredSize === "视觉 14×14；透明命中 28×28"));
+assert.ok(report.visualContracts.targetSizes.some(item => item.declaredSize === "透明命中 16×表头高度；视觉线 2px"));
 assert.deepEqual(report.visualContracts.stateBanners.map(item => item.kind), ["selected", "editing", "preview", "stale", "empty", "error", "orphan"]);
 assert.deepEqual(report.visualContracts.stateBanners.filter(item => item.role === "alert").map(item => item.kind), ["error", "orphan"]);
-assert.deepEqual(report.findings.map(item => item.id), ["IA-106-001", "IA-106-002", "IA-106-003", "IA-106-004", "IA-106-005"]);
+assert.deepEqual(report.findings.map(item => item.id), ["IA-106-001", "IA-106-002", "IA-106-003", "IA-106-005"]);
 assert.equal(report.findings.filter(item => item.changeClass === "INT-B").length, 3);
-assert.equal(report.findings.filter(item => item.changeClass === "UI-only").length, 2);
+assert.equal(report.findings.filter(item => item.changeClass === "UI-only").length, 1);
 assert.ok(report.findings.every(item => ["high", "medium"].includes(item.confidence) && item.evidence && item.recommendation && item.sourceRefs.length && item.evidenceStatus === "E-C"));
 assert.deepEqual(report.coverage.unknownFocusCandidates, []);
 assert.deepEqual(report.coverage.missingFocusEntries, []);
 assert.deepEqual(report.coverage.unknownKeyboardCandidates, []);
 assert.deepEqual(report.coverage.missingKeyboardConsumers, []);
-assert.deepEqual(report.coverage.unknownEscapeLiterals, []);
+assert.deepEqual(report.coverage.unknownEscapeLiterals.map(item => [item.file, item.text]), [["app/webgl-generator/src/runtime/keyboard-shortcuts.js", "if (event.key === \"Escape\" && closeOpenFrameworkPopup(documentRef)) {"]]);
 assert.deepEqual(report.coverage.missingEscapeContracts, []);
 assert.deepEqual(report.coverage.fixedOverlayDiff, []);
-assert.deepEqual(report.coverage.unresolved, []);
+assert.deepEqual(report.coverage.unresolved.map(item => [item.file, item.text]), [["app/webgl-generator/src/runtime/keyboard-shortcuts.js", "if (event.key === \"Escape\" && closeOpenFrameworkPopup(documentRef)) {"]], "既存 popup Escape 发现项保留到第 216 项统一仲裁");
 assert.ok([...report.visualContracts.layering.slice(1), ...report.visualContracts.targetSizes, ...report.visualContracts.focusStyles, ...report.visualContracts.statusStyles].every(item => item.sourceRefs.every(sourceRef => sourceRef.cssSelector)), "视觉声明必须按 selector block 校验，不能只做全文件 token includes");
 
 console.log(JSON.stringify({totals: report.totals, findings: report.findings.map(item => item.id)}, null, 2));
