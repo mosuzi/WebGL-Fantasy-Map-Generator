@@ -21,6 +21,7 @@
 - 权威任务第 88～93 项来源登记于 `next-quasi-authoritative-tasks-2026-07-18.md`：原 `Q-12～Q-17` 已获用户整体批准并按顺序转正；当前状态与验收以权威任务清单为准。
 - 权威任务第 101～107 项来源登记于 `next-quasi-authoritative-interaction-audit-tasks-2026-07-19.md`：原 `Q-18～Q-24` 已获用户整体批准并按顺序转正，依次冻结交互分母与夹具、审计高频闭环、直接操控、复杂面板、危险恢复、键盘响应式，并在最后统一进行浏览器验证。
 - 第 101～107 项完成后形成的下一批交互整改来源登记于 `next-quasi-authoritative-interaction-remediation-tasks-2026-07-20.md`：`Q-25～Q-27` 已转为权威任务第 201～203 项并完成；`Q-28～Q-33` 于 2026-07-29 获批，按依赖转为权威任务第 211～216 项，其中第 216 项增加管理 Tab 编辑弹框高度预算验收。
+- 权威任务第 217～218 项对应 `city-scale-and-provincial-capital-consistency.md`：先统一人口规模、图标、提示、手工视觉与行政角色语义，再在最终城市人口形成后确定性重评省会；旧地图加载不静默改视觉或迁都，现有地图只通过显式预览 / 确认事务重评。
 - 权威任务第 128、159 项对应 `boundary-smoothing-topology-research.md`：比较边界简化 / spline / coverage 算法，冻结共享弧线数据结构、填充与描边同源不变量、缓存失效、编辑提交时序、许可边界和海岸线 → 国界 → 省界的分阶段建议，并链接已完成的独立拓扑实验室；不改正式 renderer。
 - 权威任务第 205 项对应 `regeneration-object-lock-system.md`：为 14 个可重生成对象列表、15 类稳定列表行建立逐行锁定、列表 / 地图批量选择、持久化锁仓和全重生成入口保护，并按锁仓 API、共享 UI、领域生成器与复合链分阶段实施。
 - 权威任务第 206 项对应 `river-network-parent-and-confluence-integrity.md`：把 `parent` 收敛为真实陆地汇流关系，补生成后河网门禁、旧图非破坏性归一化，以及列表、详情、悬停和对象查询中的直接干流信息。
@@ -38,7 +39,8 @@
 ## 编辑器与用户外壳
 
 - `interaction-usability-audit-plan.md`：全功能交互与可用性专项审计方案；以真实用户任务链排查冗余、无效、流程、状态、样式、恢复、键盘和响应式问题，纯交互建议与需要功能变更的提案分开，未获批准前不形成权威任务。
-- `next-quasi-authoritative-interaction-remediation-tasks-2026-07-20.md`：统一交互审计形成的 `Q-25～Q-33` 来源问题、功能变化边界和最小验收；`Q-25～Q-27` 已转为权威任务第 201～203 项，`Q-28～Q-33` 仍只作候选池，不自动入队。
+- `next-quasi-authoritative-interaction-remediation-tasks-2026-07-20.md`：统一交互审计形成的 `Q-25～Q-33` 来源问题、功能变化边界和最小验收；`Q-25～Q-27` 已转为权威任务第 201～203 项并完成，`Q-28～Q-33` 已于 2026-07-29 按依赖转为权威任务第 211～216 项。
+- `city-scale-and-provincial-capital-consistency.md`：权威任务第 217～218 项的真实浏览器反例、单一城市规模契约、行政角色附加表达、最终省会重评、锁定保护、旧图兼容和统一验收矩阵。
 - `editor-and-stat-panel-inventory.md`：正式版编辑器与统计面板清单。
 - `user-facing-shell-debug-export-and-naming-plan.md`：用户外壳、开发模式、导入导出和命名策略计划。
 - `initialization-loading-flow.md`：页面初始化与地图加载流程规约，记录阶段边界、预算和 Chrome 验证要求。
