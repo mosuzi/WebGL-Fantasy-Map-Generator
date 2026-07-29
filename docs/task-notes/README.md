@@ -20,7 +20,7 @@
 - 权威任务第 87 项登记于 `authoritative-task-87.md`：只修正悬停菜单被国家、省份名称标签遮挡的堆叠层级，不扩展为全局浮层重构。
 - 权威任务第 88～93 项来源登记于 `next-quasi-authoritative-tasks-2026-07-18.md`：原 `Q-12～Q-17` 已获用户整体批准并按顺序转正；当前状态与验收以权威任务清单为准。
 - 权威任务第 101～107 项来源登记于 `next-quasi-authoritative-interaction-audit-tasks-2026-07-19.md`：原 `Q-18～Q-24` 已获用户整体批准并按顺序转正，依次冻结交互分母与夹具、审计高频闭环、直接操控、复杂面板、危险恢复、键盘响应式，并在最后统一进行浏览器验证。
-- 第 101～107 项完成后形成的下一批交互整改来源登记于 `next-quasi-authoritative-interaction-remediation-tasks-2026-07-20.md`：其中 `Q-25～Q-27` 已获批准并转为权威任务第 201～203 项，当前状态与验收以权威任务清单为准；`Q-28～Q-33` 仍未获批准，不属于权威任务清单。
+- 第 101～107 项完成后形成的下一批交互整改来源登记于 `next-quasi-authoritative-interaction-remediation-tasks-2026-07-20.md`：`Q-25～Q-27` 已转为权威任务第 201～203 项并完成；`Q-28～Q-33` 于 2026-07-29 获批，按依赖转为权威任务第 211～216 项，其中第 216 项增加管理 Tab 编辑弹框高度预算验收。
 - 权威任务第 128、159 项对应 `boundary-smoothing-topology-research.md`：比较边界简化 / spline / coverage 算法，冻结共享弧线数据结构、填充与描边同源不变量、缓存失效、编辑提交时序、许可边界和海岸线 → 国界 → 省界的分阶段建议，并链接已完成的独立拓扑实验室；不改正式 renderer。
 - 权威任务第 205 项对应 `regeneration-object-lock-system.md`：为 14 个可重生成对象列表、15 类稳定列表行建立逐行锁定、列表 / 地图批量选择、持久化锁仓和全重生成入口保护，并按锁仓 API、共享 UI、领域生成器与复合链分阶段实施。
 - 权威任务第 206 项对应 `river-network-parent-and-confluence-integrity.md`：把 `parent` 收敛为真实陆地汇流关系，补生成后河网门禁、旧图非破坏性归一化，以及列表、详情、悬停和对象查询中的直接干流信息。
