@@ -1,5 +1,6 @@
 import {formatHistoryCommand} from "./history-format.js";
 import {getOverlayRegistry} from "./overlay-registry.js";
+import {beginDirectManipulationSession, cancelAllDirectManipulationSessions} from "../runtime/direct-manipulation-session.js";
 
 const PANEL_POSITION_AUTO = "auto";
 const PANEL_POSITION_MANUAL = "manual";
@@ -132,7 +133,7 @@ export class PanelManager {
       refreshHeaderActions(record);
     });
     refreshHeaderActions(record);
-    installDrag(this, panel, header);
+    record.cancelDrag = installDrag(this, panel, header);
     panel.addEventListener("pointerdown", event => {
       event.stopPropagation();
       restoreManagedPanelViewportOrigin(this.documentRef?.defaultView);
@@ -154,6 +155,7 @@ export class PanelManager {
     const record = this.panels.get(id);
     if (!record) return;
     const wasOpen = !record.panel.classList.contains("hidden");
+    if (wasOpen) record.cancelDrag?.("panel-reopen");
     if (!wasOpen) record.returnParentId = this.resolveReturnParentId(id, record);
     if (record.role === "main") this.closeOtherMainPanels(id);
     record.openSequence = ++this.openSequence;
@@ -172,14 +174,19 @@ export class PanelManager {
     const wasOpen = !record.panel.classList.contains("hidden");
     const returnParentId = wasOpen && restoreParent ? record.returnParentId : null;
     record.returnParentId = null;
+    if (wasOpen) {
+      cancelAllDirectManipulationSessions("panel-close", {scopeElement: record.panel});
+      record.cancelDrag?.("panel-close");
+    }
     record.panel.classList.add("hidden");
     this.stopHeaderRefresh(record);
     this.savePanelState(id);
     if (wasOpen) record.onClose();
-    if (wasOpen) {
-      this.documentRef.dispatchEvent(new CustomEvent("fmg:panel-close", {
-        detail: {panelId: id}
-      }));
+    if (wasOpen && typeof this.documentRef.dispatchEvent === "function") {
+      const CustomEventCtor = this.documentRef.defaultView?.CustomEvent || globalThis.CustomEvent;
+      if (typeof CustomEventCtor === "function") {
+        this.documentRef.dispatchEvent(new CustomEventCtor("fmg:panel-close", {detail: {panelId: id}}));
+      }
     }
     if (returnParentId) this.restoreReturnParent(returnParentId, {focus: !fromRegistry});
     if (!fromRegistry) this.overlayRegistry?.hide(record.overlayId, {restoreFocus});
@@ -640,48 +647,63 @@ function refreshHeaderActions(record) {
 }
 
 function installDrag(manager, panel, handle) {
-  let dragging = false;
-  let startX = 0;
-  let startY = 0;
-  let startLeft = 0;
-  let startTop = 0;
+  let drag = null;
 
   handle.addEventListener("pointerdown", event => {
     if (event.target.closest("button")) return;
     event.preventDefault();
     event.stopPropagation();
-    dragging = true;
-    startX = event.clientX;
-    startY = event.clientY;
-    startLeft = Number.parseFloat(panel.style.left) || 0;
-    startTop = Number.parseFloat(panel.style.top) || 0;
+    drag?.session.cancel("restart");
+    drag = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      startLeft: Number.parseFloat(panel.style.left) || 0,
+      startTop: Number.parseFloat(panel.style.top) || 0
+    };
     manager.activate(panel.dataset.panelId);
     handle.setPointerCapture(event.pointerId);
+    drag.session = beginDirectManipulationSession({
+      kind: "panel-manager",
+      pointerId: event.pointerId,
+      captureTarget: handle,
+      onCommit: () => {
+        const endLeft = Number.parseFloat(panel.style.left) || 0;
+        const endTop = Number.parseFloat(panel.style.top) || 0;
+        if (panelDragHasMoved(drag.startLeft, drag.startTop, endLeft, endTop)) manager.commitManualPosition(panel.dataset.panelId);
+      },
+      onRollback: () => {
+        manager.constrain(panel, {left: drag.startLeft, top: drag.startTop, reachableOnly: true});
+        manager.reflowPanels();
+      },
+      onCleanup: () => {
+        if (drag?.pointerId === event.pointerId) drag = null;
+      }
+    });
   });
 
   handle.addEventListener("pointermove", event => {
-    if (!dragging) return;
+    if (!drag || event.pointerId !== drag.pointerId) return;
     event.preventDefault();
-    panel.style.left = `${startLeft + event.clientX - startX}px`;
-    panel.style.top = `${startTop + event.clientY - startY}px`;
+    panel.style.left = `${drag.startLeft + event.clientX - drag.startX}px`;
+    panel.style.top = `${drag.startTop + event.clientY - drag.startY}px`;
     manager.constrain(panel, {reachableOnly: true});
   });
 
   handle.addEventListener("pointerup", event => {
-    if (!dragging) return;
-    dragging = false;
-    const endLeft = Number.parseFloat(panel.style.left) || 0;
-    const endTop = Number.parseFloat(panel.style.top) || 0;
-    if (panelDragHasMoved(startLeft, startTop, endLeft, endTop)) manager.commitManualPosition(panel.dataset.panelId);
-    if (handle.hasPointerCapture(event.pointerId)) handle.releasePointerCapture(event.pointerId);
+    if (!drag || event.pointerId !== drag.pointerId) return;
+    drag.session.commit(event);
   });
 
   handle.addEventListener("pointercancel", event => {
-    if (dragging) manager.constrain(panel, {left: startLeft, top: startTop, reachableOnly: true});
-    dragging = false;
-    if (handle.hasPointerCapture(event.pointerId)) handle.releasePointerCapture(event.pointerId);
-    manager.reflowPanels();
+    if (!drag || event.pointerId !== drag.pointerId) return;
+    drag.session.cancel("pointercancel", event);
   });
+  handle.addEventListener("lostpointercapture", event => {
+    if (!drag || event.pointerId !== drag.pointerId) return;
+    drag.session.cancel("lostpointercapture", event);
+  });
+  return reason => drag?.session.cancel(reason);
 }
 
 function writePanelRuntimePosition(panel, position) {

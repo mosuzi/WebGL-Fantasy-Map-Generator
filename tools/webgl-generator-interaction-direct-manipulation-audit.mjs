@@ -17,6 +17,7 @@ const FILES = Object.freeze({
   styles: "app/webgl-generator/src/styles.css",
   cityDrag: "app/webgl-generator/src/runtime/city-relocation-drag.js",
   panelManager: "app/webgl-generator/src/ui/panel-manager.js",
+  directManipulationSession: "app/webgl-generator/src/runtime/direct-manipulation-session.js",
   lockSession: "app/webgl-generator/src/runtime/regeneration-lock-ui-session.js",
   actionDock: "app/webgl-generator/src/ui/vue/components/base/UiActionDock.vue",
   objectTable: "app/webgl-generator/src/ui/vue/components/base/UiObjectTable.vue",
@@ -362,7 +363,7 @@ function expandedDirectDefinitions(inventory) {
     labelDrag("DM-08", "手工标签首次放置并拖动", true),
     labelDrag("DM-09", "已有手工标签拖动", false),
     direct("DM-10", "测量控制点拖动", "measurement-edit", ["canvas:measurement-overlay"], 1, {
-      start: "控制点主键 pointerdown 建立 drag", move: "自由模式按世界坐标移动，贴路模式吸附路线", complete: "pointerup 结束拖动并保留草稿点", clickNoMove: "草稿坐标保持", cancel: "清空按钮删除草稿；同入口 toggle-off 只退出模式并保留草稿", pointerCancel: "与 pointerup 共用 drag.end，不恢复拖动前坐标", captureLost: "window capture-phase 监听但无 lostpointercapture", conflicts: "overlay 控制点阻止画布选择；测量模式 locksInteraction=false", history: "拖动不写历史，保存修改才写命令", recovery: "切换模式、关闭面板、切图或进入失败时清理草稿；普通 toggle-off 后可继续", refs: [[FILES.runtime, ["startMeasurementPointDrag", "moveMeasurementPoint", "cancelMeasurementDrag"]]]
+      start: "控制点主键 pointerdown 保存完整起点并建立统一操控会话", move: "自由模式按世界坐标移动，贴路模式吸附路线", complete: "仅 pointerup 提交当前草稿点", clickNoMove: "草稿坐标保持", cancel: "清空、关面板、换图和主动取消结束会话并恢复拖动前坐标", pointerCancel: "回滚到拖动前的完整控制点", captureLost: "lostpointercapture 回滚并清理监听", conflicts: "overlay 控制点阻止画布选择；测量模式 locksInteraction=false", history: "拖动不写历史，保存修改才写命令", recovery: "取消或异常终止恢复起点；重新进入后可继续编辑草稿", refs: [[FILES.runtime, ["startMeasurementPointDrag", "kind: \"measurement-point\"", "onRollback", "lostpointercapture"]], [FILES.directManipulationSession, ["reason === \"pointerup\"", "onRollback"]]]
     }),
     direct("DM-11", "测量控制点右键 / Alt / Shift 删除", "measurement-edit", ["canvas:measurement-overlay"], 1, {
       start: "控制点 pointerdown 检查右键、Alt 或 Shift", move: "不适用", complete: "立即从草稿 points 删除并刷新 overlay", clickNoMove: "一次修饰点击删除一个点", cancel: "删除后只能退出整个草稿或重新载入保存对象", pointerCancel: "删除发生在 pointerdown，后续 pointercancel 不回滚", captureLost: "不使用指针捕获", conflicts: "优先于主键拖动", history: "草稿删除不写历史，保存时才写命令", recovery: "取消编辑可丢弃草稿；保存前原对象不变", refs: [[FILES.runtime, ["shouldDeleteMeasurementPoint", "deleteMeasurementPoint"]]]
@@ -374,23 +375,23 @@ function expandedDirectDefinitions(inventory) {
       start: "编辑动作复制保存对象 points 并设置 editingMeasurementId", move: "通过控制点拖动、插点或删点修改草稿", complete: "UI 保存修改创建 createUpdateMeasurementPointsCommand 并交给 executeEditCommand", clickNoMove: "无变化保存由命令结果判定", cancel: "清空按钮、模式切换、关面板或切图清理；同入口 toggle-off 保留编辑草稿", pointerCancel: "按具体点拖动语义处理，不自动保存", captureLost: "按具体点拖动语义处理", conflicts: "同一时刻只维护一个 measurement 草稿", history: "成功保存更新写一条测量命令", recovery: "保存失败原对象保持，草稿仍可调整；toggle-off 后可再次进入继续", refs: [scopedRef(FILES.runtime, "function saveCurrentMeasurement", "function undoMeasurementPoint", ["createUpdateMeasurementPointsCommand", "executeEditCommand"], [])]
     }),
     hostDrag("DM-14", "主面板标题栏拖动", "panel-drag", panelHosts, {
-      start: "非按钮标题 pointerdown 记录起点并捕获", move: "更新 left / top 并保持可达", complete: "实际移动后提交手工位置并释放捕获", clickNoMove: "不持久化新位置", cancel: "无键盘取消", pointerCancel: "恢复起点并重新排版", captureLost: "未监听 lostpointercapture", conflicts: "标题按钮不启动拖动；拖动激活面板", history: "只持久化布局，不写地图历史", recovery: "pointercancel 回原位，reflow 保证可达", refs: [[FILES.panelManager, ["function installDrag", "commitManualPosition", "pointercancel"]]]
+      start: "非按钮标题 pointerdown 记录起点、捕获并建立统一操控会话", move: "更新 left / top 并保持可达", complete: "仅 pointerup 在实际移动后提交手工位置", clickNoMove: "不持久化新位置", cancel: "关面板或换图按范围取消并恢复起点", pointerCancel: "恢复起点并重新排版", captureLost: "lostpointercapture 恢复起点并清理监听", conflicts: "标题按钮不启动拖动；拖动激活面板", history: "只持久化布局，不写地图历史", recovery: "所有非 pointerup 终止均回原位，reflow 保证可达", refs: [[FILES.panelManager, ["function installDrag", "kind: \"panel-manager\"", "onCommit", "onRollback", "lostpointercapture"]], [FILES.directManipulationSession, ["cancelAllDirectManipulationSessions", "scopeElement"]]]
     }),
     hostDrag("DM-15", "动作坞二级面板拖动", "panel-drag", actionDockHosts, {
-      start: "二级标题 pointerdown 记录矩形", move: "window pointermove 约束在视口内", complete: "pointerup 保留会话位置", clickNoMove: "标记用户定位但位置不变", cancel: "关闭动作坞结束；无回滚键", pointerCancel: "与 pointerup 相同，保留末位置", captureLost: "不使用捕获，依赖 window 监听", conflicts: "点击外部关闭；Element Plus popper 例外", history: "不写地图历史", recovery: "resize / scroll 重新约束", refs: [[FILES.actionDock, ["startPanelDrag", "onPanelDragMove", "stopPanelDrag"]]]
+      start: "二级标题 pointerdown 记录矩形、捕获并建立统一操控会话", move: "window pointermove 约束在视口内", complete: "仅 pointerup 保留会话位置", clickNoMove: "位置不变", cancel: "关闭动作坞、关宿主面板或卸载时恢复起点", pointerCancel: "恢复拖动前位置", captureLost: "lostpointercapture 恢复起点并清理监听", conflicts: "点击外部关闭；Element Plus popper 例外", history: "不写地图历史", recovery: "取消后恢复起点；resize / scroll 重新约束", refs: [[FILES.actionDock, ["startPanelDrag", "kind: \"ui-action-dock\"", "scopeElement", "onRollback", "lostpointercapture"]]]
     }),
     hostDrag("DM-16", "项目导出浮层拖动", "floating-overlay-drag", ["fixed-overlay:project-export"], {
-      start: "标题调用共享 startDrag 并捕获", move: "window pointermove 更新视口内位置", complete: "pointerup 约束并写 localStorage", clickNoMove: "仍保存当前位置和宽度", cancel: "无独立回滚键", pointerCancel: "与 pointerup 相同并持久化末位置", captureLost: "未监听 lostpointercapture", conflicts: "按钮、链接和表单控件不启动", history: "只持久化 UI 位置", recovery: "resize 约束；损坏存储回退默认", refs: [[FILES.controlPanel, ["startExportPanelDrag", "useDraggableFloatingPanel"]], [FILES.draggablePanel, ["startDrag", "saveStoredPosition"]]]
+      start: "标题调用共享 startDrag，保存起点并捕获", move: "window pointermove 更新视口内位置", complete: "仅 pointerup 约束并写 localStorage", clickNoMove: "仍保存当前位置和宽度", cancel: "关闭导出浮层或卸载时恢复起点", pointerCancel: "恢复起点且不持久化末位置", captureLost: "lostpointercapture 恢复起点并清理监听", conflicts: "按钮、链接和表单控件不启动", history: "仅成功完成时持久化 UI 位置", recovery: "取消回到起点；resize 约束；损坏存储回退默认", refs: [[FILES.controlPanel, ["startExportPanelDrag", "watch(exportPanelOpen", "stopExportPanelDrag"]], [FILES.draggablePanel, ["kind: \"vue-floating-panel\"", "onCommit", "onRollback", "lostpointercapture"]]]
     }),
     hostDrag("DM-17", "文化 / 宗教树状浮层拖动", "floating-overlay-drag", treeHosts, {
-      start: "标题调用共享 startDrag 并捕获", move: "window pointermove 更新视口内位置", complete: "pointerup 约束并在当前会话保留末位置", clickNoMove: "会话位置不变", cancel: "无独立回滚键", pointerCancel: "与 pointerup 相同，仅在会话内保留末位置", captureLost: "未监听 lostpointercapture", conflicts: "内部控件不启动拖动", history: "未传 storageKey，不持久化且不写地图历史", recovery: "卸载 stopDrag；重新创建组件回到调用方定位", refs: [[FILES.treePanel, ["useDraggableFloatingPanel(panel", "startDrag"]], [FILES.draggablePanel, ["if (!storageKey", "onBeforeUnmount"]]]
+      start: "标题调用共享 startDrag，保存起点并捕获", move: "window pointermove 更新视口内位置", complete: "仅 pointerup 在当前会话保留末位置", clickNoMove: "会话位置不变", cancel: "浮层关闭或卸载时恢复起点", pointerCancel: "恢复拖动前位置", captureLost: "lostpointercapture 恢复起点并清理监听", conflicts: "内部控件不启动拖动", history: "未传 storageKey，不持久化且不写地图历史", recovery: "取消回到起点；重新创建组件回到调用方定位", refs: [[FILES.treePanel, ["useDraggableFloatingPanel(panel", "stopDrag"]], [FILES.draggablePanel, ["kind: \"vue-floating-panel\"", "onRollback", "lostpointercapture", "onBeforeUnmount"]]]
     }),
     hostDrag("DM-18", "高度图工作台拖动", "floating-overlay-drag", ["panel:height-panel"], {
-      start: "标题主键 pointerdown 记录起点，按钮除外", move: "window pointermove 并约束视口", complete: "pointerup 保留会话位置", clickNoMove: "位置不变", cancel: "无独立回滚键", pointerCancel: "与 pointerup 相同，保留末位置", captureLost: "不使用捕获，依赖 window 监听", conflicts: "标题按钮不启动拖动", history: "不写地图历史", recovery: "停止时移除 window 监听", refs: [[FILES.heightPanel, ["startWorkbenchDrag", "onWorkbenchDrag", "stopWorkbenchDrag"]]]
+      start: "标题主键 pointerdown 保存起点、捕获并建立统一操控会话，按钮除外", move: "window pointermove 并约束视口", complete: "仅 pointerup 保留会话位置", clickNoMove: "位置不变", cancel: "关闭工作台或卸载时恢复起点", pointerCancel: "恢复拖动前位置", captureLost: "lostpointercapture 恢复起点并清理监听", conflicts: "标题按钮不启动拖动", history: "不写地图历史", recovery: "所有非 pointerup 终止均回起点并移除监听", refs: [[FILES.heightPanel, ["startWorkbenchDrag", "kind: \"height-workbench\"", "onRollback", "lostpointercapture"]]]
     }),
     hostDrag("DM-19", "对象表格列宽拖动", "table-resize", ["shared:object-table", "shared:ui-object-table"], {
       hostLabels: tableHosts, hostCount: tableHosts.length,
-      start: "列手柄 pointerdown 记录起点和宽度", move: "window pointermove clamp 后发出 column-resize", complete: "pointerup 保留最后一次宿主宽度", clickNoMove: "可保持相同宽度", cancel: "无键盘取消或起点回滚", pointerCancel: "与 pointerup 相同，保留最后宽度", captureLost: "不使用捕获，依赖 window 监听", conflicts: "手柄阻止默认与传播，避免表头排序", history: "保存到面板列表偏好，不写地图历史", recovery: "停止时移除 window 监听", refs: [[FILES.objectTable, ["startColumnResize", "handleColumnResizeMove", "stopColumnResize"]]]
+      start: "列手柄 pointerdown 记录起点和宽度，建立统一操控会话", move: "window pointermove 只更新本地预览宽度", complete: "仅 pointerup 最多发出一次 column-resize 并持久化", clickNoMove: "相同宽度不产生额外持久化", cancel: "关宿主、卸载或主动取消清除预览", pointerCancel: "清除预览且不发出 column-resize", captureLost: "lostpointercapture 清除预览并清理监听", conflicts: "手柄阻止默认与传播，避免表头排序", history: "仅成功完成时保存到面板列表偏好，不写地图历史", recovery: "取消后由宿主持久值恢复显示", refs: [[FILES.objectTable, ["kind: \"object-table-column\"", "handleColumnResizeMove", "onCommit", "lostpointercapture"]]]
     })
   ];
 }
@@ -403,11 +404,11 @@ function canvasPan(id, label, evidenceToken) {
 
 function labelDrag(id, label, initialPlacement) {
   return direct(id, label, "map-overlay-drag", ["canvas:map-overlay"], 1, {
-    start: initialPlacement ? "创建命令后在画布落点并立即建立 drag" : "已有 custom-label pointerdown 建立 drag 并捕获",
+    start: initialPlacement ? "创建命令后在画布落点并立即建立统一操控会话" : "已有 custom-label pointerdown 保存起点、捕获并建立统一操控会话",
     move: "screenToWorld 后实时更新标签坐标和面板",
-    complete: initialPlacement ? "pointerup 更新原创建命令的落点" : "pointerup 执行移动标签命令",
+    complete: initialPlacement ? "仅 pointerup 更新原创建命令的落点" : "仅 pointerup 执行移动标签命令",
     clickNoMove: initialPlacement ? "保留首次落点" : "同点移动由命令 no-op 处理",
-    cancel: "没有独立回滚入口", pointerCancel: "与 pointerup 共用 finishCustomLabelDrag，仍提交当前坐标", captureLost: "未监听 lostpointercapture", conflicts: "overlay 阻止事件传播；锁定标签只反馈不拖动", history: initialPlacement ? "沿用一条创建历史" : "有效移动写一条历史", recovery: "命令失败刷新标签；缺失标签时清理拖态", refs: [[FILES.runtime, ["startCustomLabelDrag", "finishCustomLabelDrag", initialPlacement ? "pendingCustomLabelPlacement" : "createMoveCustomLabelCommand"]]]
+    cancel: "标签管理关闭会按 owner 定向取消；换图或主动取消也恢复拖动前坐标", pointerCancel: "恢复拖动前坐标且不提交移动", captureLost: "lostpointercapture 回滚并清理监听", conflicts: "overlay 阻止事件传播；锁定标签只反馈不拖动", history: initialPlacement ? "成功完成时沿用一条创建历史，取消不新增历史" : "仅有效完成写一条移动历史", recovery: "关面板与换图都会清理拖态和待放置状态；命令失败刷新标签", refs: [[FILES.runtime, ["startCustomLabelDrag", "kind: \"custom-label\"", "ownerId: \"label-naming-panel\"", "cancelAllDirectManipulationSessions(\"panel-close\", {ownerId: \"label-naming-panel\"})", "onCommit", "onRollback", "lostpointercapture", "map-replace", initialPlacement ? "pendingCustomLabelPlacement" : "createMoveCustomLabelCommand"]], [FILES.directManipulationSession, ["cancelAllDirectManipulationSessions", "ownerId"]]]
   });
 }
 
@@ -461,46 +462,6 @@ function verifyDirect(item, includedSurfaceIds) {
 
 function findings() {
   return [
-    {
-      findingId: "IA-103-003",
-      title: "手工标签 pointercancel 仍提交位置且切图未统一清理拖动",
-      behavior: "pointerup 与 pointercancel 共用 finishCustomLabelDrag；loadMapIntoRuntime 的切图清理未显式终止 customLabelDrag / pendingCustomLabelPlacement 及其 window 监听。",
-      impact: "系统级取消仍可能形成移动历史；若拖动跨越地图替换，旧监听可能继续作用到新 runtime 状态。",
-      recommendation: "后续 INT-B 任务区分提交与取消，并在地图替换前统一终止标签拖动。",
-      severity: "P1", confidence: "代码确认", intB: true,
-      evidenceStatus: "E-C", browserEvidence: "pending-Q107",
-      sourceRefs: [sourceRef(FILES.runtime, ["view.addEventListener(\"pointercancel\", end, true)", "finishCustomLabelDrag", "async function loadMapIntoRuntime"])]
-    },
-    {
-      findingId: "IA-103-004",
-      title: "测量控制点 pointercancel 不恢复拖动前坐标",
-      behavior: "测量控制点的 pointerup 与 pointercancel 共用 drag.end；该函数只清理监听，不保存起点或回滚草稿坐标。",
-      impact: "虽然未保存草稿尚未写历史，但取消手势与完成手势在可见结果上没有区别。",
-      recommendation: "第 107 项验证用户可见取消结果；若需回滚，另立 INT-B 任务保存起点并区分结束原因。",
-      severity: "P2", confidence: "待验证", intB: true,
-      evidenceStatus: "E-C", browserEvidence: "pending-Q107",
-      sourceRefs: [sourceRef(FILES.runtime, ["startMeasurementPointDrag", "view.addEventListener(\"pointercancel\", drag.end, true)", "cancelMeasurementDrag"])]
-    },
-    {
-      findingId: "IA-103-005",
-      title: "指针捕获路径没有 lostpointercapture 恢复消费者",
-      behavior: "当前应用源码使用 setPointerCapture / releasePointerCapture，但没有注册 lostpointercapture。",
-      impact: "浏览器或系统意外丢失捕获时，部分拖动态只能依赖 pointercancel，存在残留状态风险。",
-      recommendation: "第 107 项覆盖可构造路径；后续统一拖动基础设施时补 lostpointercapture 收口。",
-      severity: "P2", confidence: "代码确认", intB: true,
-      evidenceStatus: "E-C", browserEvidence: "pending-Q107",
-      sourceRefs: [sourceRef(FILES.panelManager, ["setPointerCapture", "releasePointerCapture"]), sourceRef(FILES.draggablePanel, ["setPointerCapture", "releasePointerCapture"])]
-    },
-    {
-      findingId: "IA-103-006",
-      title: "共享拖动的 pointercancel 结果不一致",
-      behavior: "主面板回到起点；动作坞、高度工作台和未传 storageKey 的树状浮层仅在会话内保留末位置；项目导出浮层会持久化末位置；表格列宽保留最后一次 emit。",
-      impact: "相同的系统取消手势在不同表面表现为回滚、保留或持久化，用户难以形成一致预期。",
-      recommendation: "第 107 项记录实际可见差异；后续按交互类型决定统一语义，不在审计批次修改。",
-      severity: "P3", confidence: "代码确认", intB: true,
-      evidenceStatus: "E-C", browserEvidence: "pending-Q107",
-      sourceRefs: [sourceRef(FILES.panelManager, ["pointercancel", "startLeft", "startTop"]), sourceRef(FILES.actionDock, ["pointercancel", "stopPanelDrag"]), sourceRef(FILES.draggablePanel, ["pointercancel", "constrainPanel({save: true})"]), sourceRef(FILES.objectTable, ["pointercancel", "stopColumnResize"])]
-    },
     {
       findingId: "IA-103-007",
       title: "十九个拾取 / 创建 / 移动模式使用默认画布光标",

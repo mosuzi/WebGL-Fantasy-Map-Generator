@@ -140,6 +140,7 @@ import {
   stickyTableViewportInsets
 } from "../../../components/selection-scroll.js";
 import {objectTableSelectionRange} from "./object-table-selection.js";
+import {beginDirectManipulationSession} from "../../../../runtime/direct-manipulation-session.js";
 
 defineOptions({
   name: "UiObjectTable"
@@ -247,6 +248,7 @@ const scrollTop = ref(0);
 const viewportHeight = ref(300);
 let scrollMetricsFrame = 0;
 let resizeState = null;
+const previewColumnWidths = ref({});
 let selectionModifiers = null;
 let lockSelectionAnchor = null;
 
@@ -417,33 +419,57 @@ function startColumnResize(event, column) {
   if (!columnResizable(column)) return;
   const view = tableWrap.value?.ownerDocument?.defaultView;
   if (!view) return;
+  resizeState?.session.cancel("restart");
+  const captureTarget = event.currentTarget;
+  const startWidth = currentHeaderWidth(captureTarget, column);
   resizeState = {
     view,
     column,
+    pointerId: event.pointerId,
+    captureTarget,
     startX: event.clientX,
-    startWidth: currentHeaderWidth(event.currentTarget, column)
+    startWidth,
+    width: startWidth
   };
+  const state = resizeState;
+  captureTarget?.setPointerCapture?.(event.pointerId);
+  state.session = beginDirectManipulationSession({
+    kind: "object-table-column",
+    pointerId: event.pointerId,
+    captureTarget,
+    onCommit: () => {
+      if (state.width === state.startWidth) return;
+      emit("column-resize", {key: state.column.key, width: state.width});
+    },
+    onCleanup: () => {
+      const nextPreview = {...previewColumnWidths.value};
+      delete nextPreview[state.column.key];
+      previewColumnWidths.value = nextPreview;
+      state.view?.removeEventListener?.("pointermove", handleColumnResizeMove);
+      state.view?.removeEventListener?.("pointerup", stopColumnResize);
+      state.view?.removeEventListener?.("pointercancel", stopColumnResize);
+      state.captureTarget?.removeEventListener?.("lostpointercapture", stopColumnResize);
+      if (resizeState === state) resizeState = null;
+    }
+  });
   view.addEventListener("pointermove", handleColumnResizeMove);
-  view.addEventListener("pointerup", stopColumnResize, {once: true});
-  view.addEventListener("pointercancel", stopColumnResize, {once: true});
+  view.addEventListener("pointerup", stopColumnResize);
+  view.addEventListener("pointercancel", stopColumnResize);
+  captureTarget?.addEventListener?.("lostpointercapture", stopColumnResize);
 }
 
 function handleColumnResizeMove(event) {
   if (!resizeState) return;
   const delta = event.clientX - resizeState.startX;
   const width = clampColumnWidth(resizeState.startWidth + delta);
-  emit("column-resize", {
-    key: resizeState.column.key,
-    width
-  });
+  resizeState.width = width;
+  previewColumnWidths.value = {...previewColumnWidths.value, [resizeState.column.key]: width};
 }
 
-function stopColumnResize() {
+function stopColumnResize(event) {
   if (!resizeState) return;
-  resizeState.view?.removeEventListener?.("pointermove", handleColumnResizeMove);
-  resizeState.view?.removeEventListener?.("pointerup", stopColumnResize);
-  resizeState.view?.removeEventListener?.("pointercancel", stopColumnResize);
-  resizeState = null;
+  if (event?.pointerId !== undefined && event.pointerId !== resizeState.pointerId) return;
+  resizeState.session.finish(event?.type === "pointerup" ? "pointerup" : event?.type || "unmount", event);
 }
 
 function handleEmptyAction() {
@@ -551,7 +577,7 @@ function defaultColumnWidth(column) {
 }
 
 function columnWidthOverride(column) {
-  return props.columnWidths?.[column.key];
+  return previewColumnWidths.value[column.key] ?? props.columnWidths?.[column.key];
 }
 
 function columnSize(value) {

@@ -174,13 +174,13 @@ assertReturnParentLifecycle();
 
 const managerSource = await readFile(new URL("../app/webgl-generator/src/ui/panel-manager.js", import.meta.url), "utf8");
 const appSource = await readFile(new URL("../app/webgl-generator/src/runtime/app.js", import.meta.url), "utf8");
-const pointerUpSource = sourceBetween(managerSource, 'handle.addEventListener("pointerup"', 'handle.addEventListener("pointercancel"');
-const pointerCancelSource = sourceBetween(managerSource, 'handle.addEventListener("pointercancel"', "function writePanelRuntimePosition");
+const dragSource = sourceBetween(managerSource, "function installDrag", "function writePanelRuntimePosition");
 const saveSource = sourceBetween(managerSource, "  savePanelState(id) {", "  readPanelState(id");
 const toolbarSource = sourceBetween(managerSource, "keepPanelClearOfToolbar(record)", "visiblePanelByRole(role)");
-assert.match(pointerUpSource, /panelDragHasMoved[\s\S]*commitManualPosition/, "pointerup 必须只在实际位移后提交手动偏好");
-assert.doesNotMatch(pointerCancelSource, /savePanelState|commitManualPosition/, "pointercancel 不得提交新手动偏好");
-assert.match(pointerCancelSource, /startLeft[\s\S]*startTop[\s\S]*reflowPanels/, "pointercancel 必须恢复拖动开始位置并重排");
+assert.match(dragSource, /onCommit:[\s\S]*panelDragHasMoved[\s\S]*commitManualPosition/, "pointerup 必须只在实际位移后提交手动偏好");
+assert.match(dragSource, /onRollback:[\s\S]*startLeft[\s\S]*startTop[\s\S]*reflowPanels/, "取消必须恢复拖动开始位置并重排");
+assert.match(dragSource, /pointercancel[\s\S]*session\.cancel\("pointercancel"/, "pointercancel 必须走统一回滚");
+assert.match(dragSource, /lostpointercapture[\s\S]*session\.cancel\("lostpointercapture"/, "捕获丢失必须走统一回滚");
 assert.match(saveSource, /preferredLeft[\s\S]*preferredTop/, "持久化必须读取偏好坐标");
 assert.doesNotMatch(saveSource, /parseFloat\(record\.panel\.style\.(left|top)\)/, "持久化不得从运行时 DOM 反推偏好");
 assert.match(toolbarSource, /PANEL_POSITION_MANUAL[\s\S]*applyPreferredPosition[\s\S]*return/, "手动面板必须跳过工具栏强制避让");

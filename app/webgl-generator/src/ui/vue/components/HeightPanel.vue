@@ -803,6 +803,7 @@ import {useDebugMode} from "../composables/use-debug-mode.js";
 import {useUnitPreferences} from "../composables/use-unit-preferences.js";
 import {useManagedOverlay} from "../composables/use-managed-overlay.js";
 import {BRUSH_RADIUS_ID, normalizeBrushRadius, readBrushRadiusContract} from "../../../runtime/brush-radius-contract.js";
+import {beginDirectManipulationSession} from "../../../runtime/direct-manipulation-session.js";
 
 const heightRadius = readBrushRadiusContract(BRUSH_RADIUS_ID.HEIGHT);
 const heightSelectionRadius = readBrushRadiusContract(BRUSH_RADIUS_ID.HEIGHT_SELECTION);
@@ -995,6 +996,7 @@ const profileMatchStats = ref(null);
 const previewStatus = ref("尚未选择图片");
 const workbenchPosition = ref({left: 760, top: 110});
 let dragState = null;
+let workbenchDragSession = null;
 let latestHeightBandSamples = null;
 
 useManagedOverlay(workbenchRef, workbenchOpen, {
@@ -1207,7 +1209,7 @@ watch(debugEnabled, enabled => {
 });
 
 onBeforeUnmount(() => {
-  removeDragListeners();
+  workbenchDragSession?.cancel("unmount");
 });
 
 function setActive(active) {
@@ -1508,8 +1510,8 @@ function openImportWorkbench() {
 }
 
 function closeImportWorkbench() {
+  workbenchDragSession?.cancel("panel-close");
   workbenchOpen.value = false;
-  removeDragListeners();
 }
 
 function handleHeightmapWorkbenchExport(key) {
@@ -2478,15 +2480,36 @@ function startWorkbenchDrag(event) {
   if (event.button !== 0 || event.target.closest("button")) return;
   event.preventDefault();
   const view = document.defaultView || window;
+  workbenchDragSession?.cancel("restart");
+  const captureTarget = event.currentTarget;
+  const positionBefore = {...workbenchPosition.value};
   dragState = {
+    pointerId: event.pointerId,
     startX: event.clientX,
     startY: event.clientY,
     startLeft: workbenchPosition.value.left,
     startTop: workbenchPosition.value.top
   };
+  captureTarget?.setPointerCapture?.(event.pointerId);
+  workbenchDragSession = beginDirectManipulationSession({
+    kind: "height-workbench",
+    pointerId: event.pointerId,
+    captureTarget,
+    scopeElement: captureTarget?.closest?.(".floating-panel") || null,
+    onRollback: () => {
+      workbenchPosition.value = positionBefore;
+    },
+    onCleanup: () => {
+      dragState = null;
+      removeDragListeners();
+      captureTarget?.removeEventListener?.("lostpointercapture", stopWorkbenchDrag);
+      workbenchDragSession = null;
+    }
+  });
   view.addEventListener("pointermove", onWorkbenchDrag);
   view.addEventListener("pointerup", stopWorkbenchDrag);
   view.addEventListener("pointercancel", stopWorkbenchDrag);
+  captureTarget?.addEventListener?.("lostpointercapture", stopWorkbenchDrag);
 }
 
 function onWorkbenchDrag(event) {
@@ -2500,9 +2523,10 @@ function onWorkbenchDrag(event) {
   };
 }
 
-function stopWorkbenchDrag() {
-  dragState = null;
-  removeDragListeners();
+function stopWorkbenchDrag(event) {
+  if (!dragState || !workbenchDragSession) return;
+  if (event?.pointerId !== undefined && event.pointerId !== dragState.pointerId) return;
+  workbenchDragSession.finish(event?.type === "pointerup" ? "pointerup" : event?.type || "cancel", event);
 }
 
 function removeDragListeners() {

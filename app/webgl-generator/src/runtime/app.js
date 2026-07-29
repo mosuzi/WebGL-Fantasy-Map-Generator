@@ -232,6 +232,7 @@ import GenerationWorker from "./generation-worker.js?worker";
 import {getWebglGeneratorHealthMonitor} from "./health-monitor.js";
 import {createRuntimeOperationError, createRuntimeOperationManager} from "./runtime-operation.js";
 import {createCanvasToolModeManager} from "./canvas-tool-mode-manager.js";
+import {beginDirectManipulationSession, cancelAllDirectManipulationSessions} from "./direct-manipulation-session.js";
 import {BRUSH_RADIUS_ID, normalizeBrushRadius} from "./brush-radius-contract.js";
 import {restoreCanvasToolStrokePreview} from "./canvas-tool-preview-rollback.js";
 import {
@@ -2016,6 +2017,10 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       if (result.executed) updateRuntimePanel(documentRef, state);
       updateEditingInteractionLock(state, documentRef);
     },
+    onClose: () => {
+      cancelAllDirectManipulationSessions("panel-close", {ownerId: "label-naming-panel"});
+      state.pendingCustomLabelPlacement = null;
+    },
     onUndo: () => {
       return executeHistoryCommand(state, documentRef, "undo");
     },
@@ -3760,6 +3765,9 @@ function generationApiMapSummary(map) {
 async function loadMapIntoRuntime(state, documentRef, map, {loadingMessages = [], completionToast = "", operation = null} = {}) {
   emitLoadTrace(documentRef, {phase: "start", id: "load-map", message: "接入地图运行时", delayMs: readDebugLoadDelayMs(documentRef)});
   operation?.report("prepare-map", {message: "正在接入地图运行时"});
+  cancelAllDirectManipulationSessions("map-replace");
+  state.pendingCustomLabelPlacement = null;
+  state.customLabelDrag = null;
   state.canvasToolModes.reset("map-replace");
   state.brushCursorPreview?.reset();
   state.map = map;
@@ -12296,6 +12304,8 @@ function startMeasurementPointDrag(event, state, documentRef, index) {
   event.preventDefault();
   event.stopPropagation();
   const view = documentRef.defaultView || window;
+  const pointBefore = {...state.measurement.points[index]};
+  const captureTarget = event.currentTarget;
   const drag = {
     pointerId: event.pointerId,
     index,
@@ -12310,15 +12320,37 @@ function startMeasurementPointDrag(event, state, documentRef, index) {
       if (endEvent.pointerId !== drag.pointerId) return;
       endEvent.preventDefault();
       endEvent.stopPropagation();
-      cancelMeasurementDrag(state, documentRef);
-      updateMeasurementOverlay(state, documentRef);
+      drag.session.finish(endEvent.type, endEvent);
     }
   };
   state.measurement.drag = drag;
+  capturePointer(captureTarget, event.pointerId);
+  drag.session = beginDirectManipulationSession({
+    kind: "measurement-point",
+    pointerId: event.pointerId,
+    captureTarget,
+    onRollback: () => {
+      const point = state.measurement.points?.[index];
+      if (!point) return;
+      point.x = pointBefore.x;
+      point.y = pointBefore.y;
+      if ("cellStop" in pointBefore) point.cellStop = pointBefore.cellStop;
+      else delete point.cellStop;
+    },
+    onCleanup: () => {
+      view.removeEventListener("pointermove", drag.move, true);
+      view.removeEventListener("pointerup", drag.end, true);
+      view.removeEventListener("pointercancel", drag.end, true);
+      captureTarget?.removeEventListener?.("lostpointercapture", drag.end, true);
+      if (state.measurement.drag === drag) state.measurement.drag = null;
+      updateMeasurementOverlay(state, documentRef);
+    }
+  });
   moveMeasurementPoint(state, event);
   view.addEventListener("pointermove", drag.move, true);
   view.addEventListener("pointerup", drag.end, true);
   view.addEventListener("pointercancel", drag.end, true);
+  captureTarget?.addEventListener?.("lostpointercapture", drag.end, true);
   updateMeasurementOverlay(state, documentRef);
 }
 
@@ -12340,14 +12372,10 @@ function moveMeasurementPoint(state, event) {
   delete point.cellStop;
 }
 
-function cancelMeasurementDrag(state, documentRef) {
+function cancelMeasurementDrag(state, documentRef, reason = "cancel") {
   const drag = state.measurement.drag;
   if (!drag) return;
-  const view = documentRef.defaultView || window;
-  view.removeEventListener("pointermove", drag.move, true);
-  view.removeEventListener("pointerup", drag.end, true);
-  view.removeEventListener("pointercancel", drag.end, true);
-  state.measurement.drag = null;
+  drag.session?.cancel(reason);
 }
 
 function measurementPointClass(state, index) {
@@ -13460,12 +13488,14 @@ function bindCustomLabelDrag(state, documentRef) {
     }
     event.preventDefault();
     event.stopImmediatePropagation();
+    const startedAt = {x: label.x, y: label.y};
     const point = state.renderer.screenToWorld(event.clientX, event.clientY);
     setCustomLabelLivePosition(state, label, point);
     placement.command?.setCreatedPoint?.(point);
     startCustomLabelDrag(state, documentRef, event, label, {
       placementCommand: placement.command,
-      captureTarget: canvas
+      captureTarget: canvas,
+      startedAt
     });
   }, true);
 
@@ -13494,7 +13524,7 @@ function bindCustomLabelDrag(state, documentRef) {
   }, true);
 }
 
-function startCustomLabelDrag(state, documentRef, event, label, {node = null, placementCommand = null, captureTarget = null} = {}) {
+function startCustomLabelDrag(state, documentRef, event, label, {node = null, placementCommand = null, captureTarget = null, startedAt = null} = {}) {
   const object = labelObjectFromCustomLabel(label);
   state.selectionStore.setSelection({object});
   state.panels.labelNaming?.setSelectedLabelKey?.(labelKeyForObject(object));
@@ -13504,7 +13534,7 @@ function startCustomLabelDrag(state, documentRef, event, label, {node = null, pl
     labelId: label.id,
     node: labelNode,
     captureTarget: captureTarget || labelNode,
-    startedAt: {x: label.x, y: label.y},
+    startedAt: startedAt || {x: label.x, y: label.y},
     placementCommand,
     moved: false
   };
@@ -13516,9 +13546,27 @@ function startCustomLabelDrag(state, documentRef, event, label, {node = null, pl
   const end = endEvent => finishCustomLabelDrag(state, documentRef, endEvent);
   state.customLabelDrag.move = move;
   state.customLabelDrag.end = end;
+  const drag = state.customLabelDrag;
+  drag.session = beginDirectManipulationSession({
+    kind: "custom-label",
+    pointerId: event.pointerId,
+    captureTarget: drag.captureTarget,
+    ownerId: "label-naming-panel",
+    onCommit: () => commitCustomLabelDrag(state, documentRef, drag),
+    onRollback: () => rollbackCustomLabelDrag(state, documentRef, drag),
+    onCleanup: () => {
+      view.removeEventListener("pointermove", move, true);
+      view.removeEventListener("pointerup", end, true);
+      view.removeEventListener("pointercancel", end, true);
+      drag.captureTarget?.removeEventListener?.("lostpointercapture", end, true);
+      drag.node?.classList.remove("dragging");
+      if (state.customLabelDrag === drag) state.customLabelDrag = null;
+    }
+  });
   view.addEventListener("pointermove", move, true);
   view.addEventListener("pointerup", end, true);
   view.addEventListener("pointercancel", end, true);
+  drag.captureTarget?.addEventListener?.("lostpointercapture", end, true);
 }
 
 function updateCustomLabelDrag(state, documentRef, event) {
@@ -13541,14 +13589,10 @@ function finishCustomLabelDrag(state, documentRef, event) {
   if (!drag || drag.pointerId !== event.pointerId) return;
   event.preventDefault();
   event.stopPropagation();
-  const view = documentRef.defaultView || window;
-  view.removeEventListener("pointermove", drag.move, true);
-  view.removeEventListener("pointerup", drag.end, true);
-  view.removeEventListener("pointercancel", drag.end, true);
-  drag.node?.classList.remove("dragging");
-  releasePointer(drag.captureTarget, event.pointerId);
-  state.customLabelDrag = null;
+  drag.session.finish(event.type, event);
+}
 
+function commitCustomLabelDrag(state, documentRef, drag) {
   const label = findCustomLabel(state.map, drag.labelId);
   if (!label) {
     updateLabelNamingPanel(state);
@@ -13573,6 +13617,15 @@ function finishCustomLabelDrag(state, documentRef, event) {
     state.renderer.refreshLabels?.();
     updateLabelNamingPanel(state);
   }
+  updateRuntimePanel(documentRef, state);
+}
+
+function rollbackCustomLabelDrag(state, documentRef, drag) {
+  const label = findCustomLabel(state.map, drag.labelId);
+  if (label) setCustomLabelLivePosition(state, label, drag.startedAt);
+  drag.placementCommand?.setCreatedPoint?.(drag.startedAt);
+  state.renderer.refreshLabels?.();
+  updateLabelNamingPanel(state);
   updateRuntimePanel(documentRef, state);
 }
 

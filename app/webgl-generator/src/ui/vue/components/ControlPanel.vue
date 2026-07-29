@@ -679,7 +679,8 @@ const {
   position: exportPanelPosition,
   positionNear: positionExportPanelNear,
   constrainPanel: constrainExportPanel,
-  startDrag: startExportPanelDrag
+  startDrag: startExportPanelDrag,
+  stopDrag: stopExportPanelDrag
 } = useDraggableFloatingPanel(exportPanelRef, {
   defaultWidth: 320,
   defaultHeight: 300,
@@ -691,6 +692,9 @@ useManagedOverlay(exportPanelRef, exportPanelOpen, {
   onClose: () => {
     exportPanelOpen.value = false;
   }
+});
+watch(exportPanelOpen, open => {
+  if (!open) stopExportPanelDrag();
 });
 const climateLatitudeMode = ref("auto");
 const climateLatitudeCenter = ref(0);

@@ -1,4 +1,5 @@
 import {computed, onBeforeUnmount, ref} from "vue";
+import {beginDirectManipulationSession} from "../../../runtime/direct-manipulation-session.js";
 
 export function useDraggableFloatingPanel(panelRef, options = {}) {
   const margin = Number(options.margin ?? 8);
@@ -6,6 +7,7 @@ export function useDraggableFloatingPanel(panelRef, options = {}) {
   const panelWidth = ref(position.value?.width || null);
   const dragging = ref(false);
   let dragState = null;
+  let dragSession = null;
 
   const panelStyle = computed(() => {
     const style = {};
@@ -50,6 +52,10 @@ export function useDraggableFloatingPanel(panelRef, options = {}) {
     if (!rect) return;
     event.preventDefault();
     event.stopPropagation();
+    dragSession?.cancel("restart");
+    const positionBefore = position.value ? {...position.value} : null;
+    const widthBefore = panelWidth.value;
+    const captureTarget = event.currentTarget;
     panelWidth.value = Math.round(rect.width || panelWidth.value || options.defaultWidth || 320);
     position.value = {x: rect.left, y: rect.top};
     dragState = {
@@ -58,10 +64,30 @@ export function useDraggableFloatingPanel(panelRef, options = {}) {
       offsetY: event.clientY - rect.top
     };
     dragging.value = true;
-    event.currentTarget?.setPointerCapture?.(event.pointerId);
+    captureTarget?.setPointerCapture?.(event.pointerId);
+    dragSession = beginDirectManipulationSession({
+      kind: "vue-floating-panel",
+      pointerId: event.pointerId,
+      captureTarget,
+      onCommit: () => constrainPanel({save: true}),
+      onRollback: () => {
+        position.value = positionBefore;
+        panelWidth.value = widthBefore;
+      },
+      onCleanup: () => {
+        dragState = null;
+        dragging.value = false;
+        window.removeEventListener("pointermove", dragPanel);
+        window.removeEventListener("pointerup", stopDrag);
+        window.removeEventListener("pointercancel", stopDrag);
+        captureTarget?.removeEventListener?.("lostpointercapture", stopDrag);
+        dragSession = null;
+      }
+    });
     window.addEventListener("pointermove", dragPanel);
     window.addEventListener("pointerup", stopDrag);
     window.addEventListener("pointercancel", stopDrag);
+    captureTarget?.addEventListener?.("lostpointercapture", stopDrag);
   }
 
   function dragPanel(event) {
@@ -73,16 +99,9 @@ export function useDraggableFloatingPanel(panelRef, options = {}) {
   }
 
   function stopDrag(event) {
-    if (!dragState) return;
+    if (!dragState || !dragSession) return;
     if (event?.pointerId !== undefined && event.pointerId !== dragState.pointerId) return;
-    const pointerId = dragState.pointerId;
-    dragState = null;
-    dragging.value = false;
-    event?.currentTarget?.releasePointerCapture?.(pointerId);
-    window.removeEventListener("pointermove", dragPanel);
-    window.removeEventListener("pointerup", stopDrag);
-    window.removeEventListener("pointercancel", stopDrag);
-    constrainPanel({save: true});
+    dragSession.finish(event?.type === "pointerup" ? "pointerup" : event?.type || "cancel", event);
   }
 
   function panelBounds() {
@@ -94,7 +113,7 @@ export function useDraggableFloatingPanel(panelRef, options = {}) {
   }
 
   onBeforeUnmount(() => {
-    stopDrag();
+    dragSession?.cancel("unmount");
   });
 
   return {

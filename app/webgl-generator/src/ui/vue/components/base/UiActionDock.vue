@@ -42,6 +42,7 @@
 <script setup>
 import {computed, nextTick, onBeforeUnmount, onMounted, ref, useId, watch} from "vue";
 import {useManagedOverlay} from "../../composables/use-managed-overlay.js";
+import {beginDirectManipulationSession} from "../../../../runtime/direct-manipulation-session.js";
 
 defineOptions({
   name: "UiActionDock"
@@ -67,6 +68,7 @@ const userPositioned = ref(false);
 const activeAction = computed(() => props.actions.find(action => action.key === props.active));
 const activeActionLabel = computed(() => activeAction.value?.label || "对象操作");
 const overlayId = `ui-action-dock:${useId()}`;
+let panelDragSession = null;
 
 useManagedOverlay(panel, () => Boolean(props.active), {
   id: overlayId,
@@ -83,6 +85,7 @@ watch(() => props.active, active => {
     });
     return;
   }
+  panelDragSession?.cancel("panel-close");
   removePositionListeners();
 });
 
@@ -92,8 +95,8 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   document.removeEventListener("pointerdown", onDocumentPointerDown);
+  panelDragSession?.cancel("unmount");
   removePositionListeners();
-  removeDragListeners();
 });
 
 function toggleAction(action) {
@@ -108,9 +111,8 @@ function toggleAction(action) {
 }
 
 function closePanel() {
-  dragState.value = null;
+  panelDragSession?.cancel("panel-close");
   userPositioned.value = false;
-  removeDragListeners();
   emit("update:active", null);
   emit("select", null);
 }
@@ -143,6 +145,10 @@ function startPanelDrag(event) {
   if (event.button !== 0 || !panel.value) return;
   event.preventDefault();
   const rect = panel.value.getBoundingClientRect();
+  panelDragSession?.cancel("restart");
+  const captureTarget = event.currentTarget;
+  const positionBefore = {...panelStyle.value};
+  const userPositionedBefore = userPositioned.value;
   dragState.value = {
     pointerId: event.pointerId,
     startX: event.clientX,
@@ -152,7 +158,25 @@ function startPanelDrag(event) {
     width: rect.width
   };
   userPositioned.value = true;
+  captureTarget?.setPointerCapture?.(event.pointerId);
+  panelDragSession = beginDirectManipulationSession({
+    kind: "ui-action-dock",
+    pointerId: event.pointerId,
+    captureTarget,
+    scopeElement: root.value?.closest(".floating-panel") || null,
+    onRollback: () => {
+      panelStyle.value = positionBefore;
+      userPositioned.value = userPositionedBefore;
+    },
+    onCleanup: () => {
+      dragState.value = null;
+      removeDragListeners();
+      captureTarget?.removeEventListener?.("lostpointercapture", stopPanelDrag);
+      panelDragSession = null;
+    }
+  });
   addDragListeners();
+  captureTarget?.addEventListener?.("lostpointercapture", stopPanelDrag);
 }
 
 function addDragListeners() {
@@ -183,9 +207,10 @@ function onPanelDragMove(event) {
   applyPanelPosition({left, top, width});
 }
 
-function stopPanelDrag() {
-  dragState.value = null;
-  removeDragListeners();
+function stopPanelDrag(event) {
+  if (!panelDragSession) return;
+  if (event?.pointerId !== undefined && event.pointerId !== panelDragSession.pointerId) return;
+  panelDragSession.finish(event?.type === "pointerup" ? "pointerup" : event?.type || "cancel", event);
 }
 
 function updatePanelPosition() {

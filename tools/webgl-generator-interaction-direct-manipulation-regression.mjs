@@ -56,8 +56,8 @@ assert.equal(new Set(directById.get("DM-19").hostLabels.map(item => item.split("
 assert.match(directById.get("DM-13").complete, /createUpdateMeasurementPointsCommand/, "测量 UI 编辑保存不得误写为公开 API 路径");
 assert.match(directById.get("DM-17").history, /未传 storageKey，不持久化/, "树状浮层没有 storageKey，只能记录会话内位置");
 
-assert.equal(report.findings.length, 5);
-assert.deepEqual(report.findings.map(item => item.findingId), ["IA-103-003", "IA-103-004", "IA-103-005", "IA-103-006", "IA-103-007"]);
+assert.equal(report.findings.length, 1);
+assert.deepEqual(report.findings.map(item => item.findingId), ["IA-103-007"]);
 assert.ok(report.findings.every(item => ["P0", "P1", "P2", "P3"].includes(item.severity) && ["代码确认", "浏览器复现", "用户反馈", "待验证"].includes(item.confidence) && typeof item.intB === "boolean"), "问题候选必须使用专题规定的严重度、信心与 INT-B 字段");
 assert.ok(report.findings.filter(item => item.intB).every(item => item.browserEvidence === "pending-Q107"), "行为变化候选必须保留给第 107 项验证");
 
