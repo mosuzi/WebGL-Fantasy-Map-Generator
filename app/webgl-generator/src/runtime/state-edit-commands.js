@@ -2,7 +2,7 @@ import {GOVERNMENT_BY_KEY, applyStateGovernment, governmentAllowsSuffix, setStat
 import {createChineseNameGenerator, getStateFullName} from "../generator/names.js";
 import {provinceFormForState} from "../generator/province-naming.js";
 import {createRandom} from "../generator/random.js";
-import {createCityScaleContext, defaultCityVisual, deriveCityScale} from "./city-visuals.js";
+import {createCityScaleContext, defaultCityVisual, deriveCityScale, refreshCityScaleVisuals} from "./city-visuals.js";
 import {namebaseRenameAffected, newObjectAffected, objectAffected, systemAffected} from "./edit-command-effects.js";
 
 const STATE_CELL_SURFACE_EFFECTS = Object.freeze({
@@ -531,6 +531,7 @@ function addStateAtGridCell(map, gridCell) {
     }
   }
   writeCityOwnerForNewState(map, capital.cityId, stateId, provinceId);
+  refreshCityScaleVisuals(map);
   refreshProvinceSummaries(map);
   refreshProvincePoles(map, new Set([provinceId]));
   refreshStateSummaries(map);

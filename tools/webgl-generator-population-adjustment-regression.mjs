@@ -2,6 +2,7 @@
 import assert from "node:assert/strict";
 
 import {generatePlaceholderMap} from "../app/webgl-generator/src/generator/index.js";
+import {createCityScaleContext, deriveCityScale} from "../app/webgl-generator/src/runtime/city-visuals.js";
 import {EditHistory} from "../app/webgl-generator/src/runtime/edit-history.js";
 import {createMapDocument, parseMapDocument, stringifyMapDocument} from "../app/webgl-generator/src/runtime/map-file-io.js";
 import {
@@ -31,6 +32,7 @@ const targetBefore = inspectPopulationAdjustment(base, target, {delta: 250});
 assert.equal(inspectPopulationAdjustment(base, target, {delta: -targetBefore.totalBefore - 1}).code, targetBefore.totalBefore + 1 > Math.abs(POPULATION_ADJUSTMENT_LIMITS.deltaMin) ? "delta-range" : "negative-population");
 
 const map = structuredClone(base);
+const manualVisualSample = installManualVisualSample(map);
 const immutableBefore = immutableSnapshot(map);
 const inspectBefore = transactionSnapshot(map);
 const inspection = inspectPopulationAdjustment(map, target, {delta: 250});
@@ -49,6 +51,8 @@ assertClose(applied.urbanBefore / applied.totalBefore, inspection.urbanBefore / 
 assertZeroCarriersStayedZero(map, plan);
 assertUnrelatedGridPopulationUnchanged(map, plan, gridPopulationBefore);
 assertCityBurgMirrors(map);
+assertCityScaleContract(map);
+assert.deepEqual(readCityVisual(map, manualVisualSample.cityId), manualVisualSample.visual, "人口调整覆盖了手工城市视觉");
 assertPopulationStats(map);
 assert(map.metadata.derivedStale.systems.every(Boolean), "人口调整没有写入下游 stale");
 for (const system of ["economy", "military", "diplomacy", "zones"]) assert(map.metadata.derivedStale.systems.includes(system), `缺少 ${system} stale`);
@@ -104,6 +108,7 @@ assert.equal(Object.prototype.hasOwnProperty.call(legacy, "economy"), false, "�
 const roundtrip = parseMapDocument(stringifyMapDocument(createMapDocument(map, map.options))).map;
 assert.deepEqual([...roundtrip.pack.cells.pop], [...map.pack.cells.pop], "完整地图往返丢失 pack 人口");
 assert.deepEqual(cityPopulationSnapshot(roundtrip), cityPopulationSnapshot(map), "完整地图往返丢失城市人口");
+assertCityScaleContract(roundtrip);
 assertPopulationStats(roundtrip);
 
 assertRangeLimits(base, target);
@@ -114,7 +119,7 @@ console.log(JSON.stringify({
   target,
   adjustment: {delta: 250, before: inspection.totalBefore, after: applied.totalBefore, rural: applied.ruralBefore, urban: applied.urbanBefore},
   limits: POPULATION_ADJUSTMENT_LIMITS,
-  compatibility: {undoRedo: true, fullMapRoundtrip: true, sparseOldMap: true, faultStages: 2, heightAndSuitabilityUnaffected: true},
+  compatibility: {undoRedo: true, fullMapRoundtrip: true, sparseOldMap: true, faultStages: 2, heightAndSuitabilityUnaffected: true, cityScaleContract: true},
   history: history.getStats()
 }, null, 2));
 
@@ -176,6 +181,35 @@ function assertCityBurgMirrors(map) {
     const burg = map.pack.burgs?.[city.burgId] || map.pack.burgs?.find(item => item?.cityId === city.id);
     if (burg && !burg.removed) assertClose(Number(city.population) || 0, Number(burg.population) || 0, 1e-6, `城市 #${city.id} 与 burg 人口不一致`);
   }
+}
+
+function assertCityScaleContract(map) {
+  const context = createCityScaleContext(map.settlements?.cities, map.pack?.burgs);
+  for (const city of map.settlements?.cities || []) {
+    if (!city || city.removed) continue;
+    const burg = map.pack?.burgs?.[city.burgId] || map.pack?.burgs?.find(item => Number(item?.cityId) === Number(city.id));
+    const expected = deriveCityScale(city, context, burg);
+    assert.equal(city.group, expected, `城市 #${city.id} 规模分组未随人口更新`);
+    if (!city.visual?.manual) assert.equal(city.visual?.silhouette, expected, `城市 #${city.id} 自动剪影未随人口更新`);
+    if (!burg || burg.removed) continue;
+    assert.equal(burg.group, expected, `burg #${city.burgId} 规模分组未随人口更新`);
+    if (!burg.visual?.manual) assert.equal(burg.visual?.silhouette, expected, `burg #${city.burgId} 自动剪影未随人口更新`);
+    assert.deepEqual(burg.visual, city.visual, `城市 #${city.id} 与 burg 视觉镜像不一致`);
+  }
+}
+
+function installManualVisualSample(map) {
+  const city = (map.settlements?.cities || []).find(item => item && !item.removed);
+  assert(city, "缺少手工视觉保留样本");
+  const burg = map.pack?.burgs?.[city.burgId] || map.pack?.burgs?.find(item => Number(item?.cityId) === Number(city.id));
+  const visual = {silhouette: "fort", palette: "highland", cultureStyle: "highland", manual: true};
+  city.visual = {...visual};
+  if (burg) burg.visual = {...visual};
+  return {cityId: city.id, visual};
+}
+
+function readCityVisual(map, cityId) {
+  return map.settlements?.cities?.find(city => Number(city?.id) === Number(cityId))?.visual;
 }
 
 function assertUnrelatedGridPopulationUnchanged(map, plan, before) {
@@ -246,7 +280,7 @@ function transactionSnapshot(map) {
     packPopulation: [...map.pack.cells.pop],
     gridPopulation: [...map.grid.cells.pop],
     cities: cityPopulationSnapshot(map),
-    burgs: (map.pack.burgs || []).map(item => item && ({i: item.i, population: item.population})),
+    burgs: (map.pack.burgs || []).map(item => item && ({i: item.i, population: item.population, group: item.group, visual: item.visual})),
     states: groupSnapshot(map.politics?.states),
     packStates: groupSnapshot(map.pack?.states),
     provinces: groupSnapshot(map.politics?.provinces),
@@ -269,7 +303,7 @@ function groupSnapshot(items) {
 }
 
 function cityPopulationSnapshot(map) {
-  return (map.settlements?.cities || []).map(item => item && ({id: item.id, population: item.population}));
+  return (map.settlements?.cities || []).map(item => item && ({id: item.id, population: item.population, group: item.group, visual: item.visual}));
 }
 
 function assertClose(actual, expected, tolerance, message) {

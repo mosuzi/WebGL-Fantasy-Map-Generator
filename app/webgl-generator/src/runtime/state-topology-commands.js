@@ -1,6 +1,7 @@
 import {systemAffected} from "./edit-command-effects.js";
 import {createChineseNameGenerator} from "../generator/names.js";
 import {provinceFormForState} from "../generator/province-naming.js";
+import {refreshCityScaleVisuals} from "./city-visuals.js";
 
 const STATE_TOPOLOGY_EFFECTS = Object.freeze({
   render: "draw",
@@ -559,9 +560,9 @@ function isValidProvinceCapitalCity(map, city) {
 function synchronizeProvinceCities(map, cells, provinceIdValue) {
   for (const city of activeCities(map)) {
     if (!cells.has(cityPackCell(city))) continue;
-    replaceCity(map, city, {...city, province: provinceIdValue, provincial: false, group: city.capital ? "capital" : ordinaryCityGroup(city)});
+    replaceCity(map, city, {...city, province: provinceIdValue, provincial: false});
     const burg = findBurgForCity(map, city);
-    if (burg) replaceBurg(map, burg, {...burg, province: provinceIdValue, group: city.capital ? "capital" : ordinaryCityGroup(city)});
+    if (burg) replaceBurg(map, burg, {...burg, province: provinceIdValue});
   }
 }
 
@@ -1225,8 +1226,7 @@ function synchronizeSelectedCities(map, selectedPackCells, stateIdValue, provinc
       state: stateIdValue,
       province: provinceIdValue,
       capital: preserveCapital ? Boolean(city.capital) : false,
-      provincial: false,
-      group: preserveCapital && city.capital ? "capital" : ordinaryCityGroup(city)
+      provincial: false
     };
     replaceCity(map, city, next);
     const burg = findBurgForCity(map, city);
@@ -1234,8 +1234,7 @@ function synchronizeSelectedCities(map, selectedPackCells, stateIdValue, provinc
       ...burg,
       state: stateIdValue,
       province: provinceIdValue,
-      capital: preserveCapital ? Number(Boolean(burg.capital)) : 0,
-      group: preserveCapital && burg.capital ? "capital" : ordinaryCityGroup(city)
+      capital: preserveCapital ? Number(Boolean(burg.capital)) : 0
     });
   }
 }
@@ -1729,9 +1728,9 @@ function synchronizeCityOwnershipAndCapitals(map, plan) {
     const packCell = cityPackCell(city);
     const nextState = Number.isInteger(packCell) ? numberId(map.pack.cells.state?.[packCell]) : numberId(map.grid.cells.state?.[city.cell]);
     if (!resultStates.has(nextState)) continue;
-    replaceCity(map, city, {...city, state: nextState, capital: false, provincial: false, group: ordinaryCityGroup(city)});
+    replaceCity(map, city, {...city, state: nextState, capital: false, provincial: false});
     const burg = findBurgForCity(map, city);
-    if (burg) replaceBurg(map, burg, {...burg, state: nextState, capital: 0, group: ordinaryCityGroup(city)});
+    if (burg) replaceBurg(map, burg, {...burg, state: nextState, capital: 0});
   }
 
   if (plan.operation === "merge") {
@@ -1925,9 +1924,9 @@ function synchronizeCityProvinces(map, stateIds, protectedProvinceIds = new Set(
     if (!stateIds.has(numberId(city.state))) continue;
     const provinceId = numberId(map.pack.cells.province?.[cityPackCell(city)] ?? map.grid.cells.province?.[city.cell]);
     if (protectedProvinceIds.has(numberId(city.province)) || protectedProvinceIds.has(provinceId)) continue;
-    replaceCity(map, city, {...city, province: provinceId, provincial: false, group: city.capital ? "capital" : ordinaryCityGroup(city)});
+    replaceCity(map, city, {...city, province: provinceId, provincial: false});
     const burg = findBurgForCity(map, city);
-    if (burg) replaceBurg(map, burg, {...burg, province: provinceId, group: city.capital ? "capital" : ordinaryCityGroup(city)});
+    if (burg) replaceBurg(map, burg, {...burg, province: provinceId});
   }
 }
 
@@ -2043,6 +2042,7 @@ function refreshPoliticalTopology(map, plan) {
     });
   }
   refreshPoliticsMetadata(map);
+  refreshCityScaleVisuals(map);
   refreshSettlementMetadata(map);
 }
 
@@ -2470,12 +2470,12 @@ function setStateCapital(map, stateIdValue, cityId) {
   if (!burg) throw new Error(`首都城市 #${cityId} 缺少 burg 镜像`);
   for (const other of activeCities(map)) {
     if (numberId(other.state) !== stateIdValue || numberId(other.id) === numberId(city.id) || !other.capital) continue;
-    replaceCity(map, other, {...other, capital: false, group: ordinaryCityGroup(other)});
+    replaceCity(map, other, {...other, capital: false});
     const otherBurg = findBurgForCity(map, other);
-    if (otherBurg) replaceBurg(map, otherBurg, {...otherBurg, capital: 0, group: ordinaryCityGroup(other)});
+    if (otherBurg) replaceBurg(map, otherBurg, {...otherBurg, capital: 0});
   }
-  replaceCity(map, city, {...city, capital: true, group: "capital"});
-  replaceBurg(map, burg, {...burg, capital: 1, group: "capital"});
+  replaceCity(map, city, {...city, capital: true});
+  replaceBurg(map, burg, {...burg, capital: 1});
   const state = readState(map, stateIdValue);
   assignMirroredPoliticalFields(map, "states", stateIdValue, {
     capital: numberId(city.burgId),
@@ -2489,9 +2489,7 @@ function setStateCapital(map, stateIdValue, cityId) {
 function setCityProvincial(map, cityId, value) {
   const city = findCity(map, cityId);
   if (!city) return;
-  replaceCity(map, city, {...city, provincial: Boolean(value), group: city.capital ? "capital" : value ? "town" : ordinaryCityGroup(city)});
-  const burg = findBurgForCity(map, city);
-  if (burg) replaceBurg(map, burg, {...burg, group: city.capital ? "capital" : value ? "town" : ordinaryCityGroup(city)});
+  replaceCity(map, city, {...city, provincial: Boolean(value)});
 }
 
 function rankCapitalCandidates(map, cities) {
@@ -2785,10 +2783,6 @@ function cityPackCell(city) {
 
 function cityInPackCells(city, cells) {
   return new Set(cells).has(cityPackCell(city));
-}
-
-function ordinaryCityGroup(city) {
-  return city?.port ? "city" : "town";
 }
 
 function landPackCells(map) {

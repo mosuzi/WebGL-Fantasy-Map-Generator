@@ -133,4 +133,4 @@
 
 - API 分类：`atomic-editor-primitive=54`，`editor-runtime-service=49`，`read-export-service=10`，`read-primitive=30`，`semantic-action=162`。
 - 交互分类：`semantic-input-or-primitive=36`，`ui-boundary=12`。
-- Source digest：`f0b4f51af63a17d1e20d0257e8232ad1185338e06d1787400e92a49130dd8fa4`。
+- Source digest：`cbd2fecc914da784d7cc569a06fa2a93c4ed3b2e81a3a48c3c55fda51d8b6dfa`。

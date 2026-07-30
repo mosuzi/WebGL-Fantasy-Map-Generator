@@ -136,6 +136,49 @@ export function resolveCityVisual(city = {}, culture = null, fallbackVisual = nu
   };
 }
 
+export function refreshCityScaleVisuals(map) {
+  const cities = map?.settlements?.cities || [];
+  const burgs = map?.pack?.burgs || [];
+  const context = createCityScaleContext(cities, burgs);
+  for (const city of cities) {
+    if (!city || city.removed) continue;
+    const burg = findCityBurg(map, city);
+    const scale = deriveCityScale(city, context, burg);
+    city.group = scale;
+    if (burg) burg.group = scale;
+    const cultureId = city.culture ?? burg?.culture ?? 0;
+    const culture = map?.society?.cultures?.[cultureId] || map?.pack?.cultures?.[cultureId] || null;
+    const visual = resolveCityVisual(city, culture, burg?.visual, context, burg);
+    city.visual = cloneCityVisual(visual);
+    if (burg) burg.visual = cloneCityVisual(visual);
+  }
+  return context;
+}
+
+export function captureCityScaleVisualSnapshot(map) {
+  return (map?.settlements?.cities || []).filter(Boolean).map(city => {
+    const burg = findCityBurg(map, city);
+    return {
+      cityId: city.id,
+      burgId: city.burgId,
+      city: snapshotCityScaleVisual(city),
+      burg: burg ? snapshotCityScaleVisual(burg) : null
+    };
+  });
+}
+
+export function restoreCityScaleVisualSnapshot(map, snapshot) {
+  const cityById = new Map((map?.settlements?.cities || [])
+    .filter(Boolean)
+    .map(city => [Number(city.id), city]));
+  for (const item of snapshot || []) {
+    const city = cityById.get(Number(item.cityId));
+    if (city) restoreCityScaleVisual(city, item.city);
+    const burg = map?.pack?.burgs?.[item.burgId] || findCityBurg(map, city);
+    if (burg && item.burg) restoreCityScaleVisual(burg, item.burg);
+  }
+}
+
 export function normalizeCityVisualPatch(patch = {}) {
   const next = {};
   if (validSilhouette(patch.silhouette)) next.silhouette = patch.silhouette;
@@ -173,6 +216,33 @@ function cityCultureStyle(culture) {
   if (type === "Highland") return "highland";
   if (type === "Hunting") return "woodland";
   return "default";
+}
+
+function findCityBurg(map, city) {
+  const burgId = Number(city?.burgId);
+  return map?.pack?.burgs?.[burgId]
+    || (map?.pack?.burgs || []).find(burg => Number(burg?.cityId) === Number(city?.id))
+    || null;
+}
+
+function snapshotCityScaleVisual(object) {
+  return {
+    hasGroup: Object.prototype.hasOwnProperty.call(object, "group"),
+    group: object.group,
+    hasVisual: Object.prototype.hasOwnProperty.call(object, "visual"),
+    visual: cloneCityVisual(object.visual)
+  };
+}
+
+function restoreCityScaleVisual(object, snapshot) {
+  if (snapshot.hasGroup) object.group = snapshot.group;
+  else delete object.group;
+  if (snapshot.hasVisual) object.visual = cloneCityVisual(snapshot.visual);
+  else delete object.visual;
+}
+
+function cloneCityVisual(visual) {
+  return visual === null || visual === undefined ? visual : {...visual};
 }
 
 function validSilhouette(value) {

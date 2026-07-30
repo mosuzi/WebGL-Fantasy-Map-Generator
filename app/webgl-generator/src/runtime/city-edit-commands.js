@@ -1,8 +1,11 @@
 import {
+  captureCityScaleVisualSnapshot,
   createCityScaleContext,
   defaultCityVisual,
   deriveCityScale,
   normalizeCityVisualPatch,
+  refreshCityScaleVisuals,
+  restoreCityScaleVisualSnapshot,
   resolveCityVisual
 } from "./city-visuals.js";
 import {namebaseRenameAffected, newObjectAffected, objectAffected} from "./edit-command-effects.js";
@@ -598,58 +601,6 @@ function restoreCityPopulation(map, snapshot) {
   if (city) city.population = snapshot.city.population;
   const burg = map?.pack?.burgs?.[snapshot.burgId] || findBurgForCity(map, city);
   if (burg && snapshot.burg) burg.population = snapshot.burg.population;
-}
-
-function refreshCityScaleVisuals(map) {
-  const cities = map?.settlements?.cities || [];
-  const burgs = map?.pack?.burgs || [];
-  const scaleContext = createCityScaleContext(cities, burgs);
-  for (const city of cities) {
-    if (!city || city.removed) continue;
-    const burg = findBurgForCity(map, city);
-    const scale = deriveCityScale(city, scaleContext, burg);
-    city.group = scale;
-    if (burg) burg.group = scale;
-    const culture = readCityCulture(map, city, burg);
-    writeCityVisual(city, burg, resolveCityVisual(city, culture, burg?.visual, scaleContext, burg));
-  }
-}
-
-function captureCityScaleVisualSnapshot(map) {
-  return (map?.settlements?.cities || []).filter(Boolean).map(city => {
-    const burg = findBurgForCity(map, city);
-    return {
-      cityId: city.id,
-      burgId: city.burgId,
-      city: snapshotGroupVisual(city),
-      burg: burg ? snapshotGroupVisual(burg) : null
-    };
-  });
-}
-
-function restoreCityScaleVisualSnapshot(map, snapshot) {
-  for (const item of snapshot || []) {
-    const city = map?.settlements?.cities?.[item.cityId];
-    if (city) restoreGroupVisual(city, item.city);
-    const burg = map?.pack?.burgs?.[item.burgId] || findBurgForCity(map, city);
-    if (burg && item.burg) restoreGroupVisual(burg, item.burg);
-  }
-}
-
-function snapshotGroupVisual(object) {
-  return {
-    hasGroup: hasOwn(object, "group"),
-    group: object.group,
-    hasVisual: hasOwn(object, "visual"),
-    visual: cloneVisual(object.visual)
-  };
-}
-
-function restoreGroupVisual(object, snapshot) {
-  if (snapshot.hasGroup) object.group = snapshot.group;
-  else delete object.group;
-  if (snapshot.hasVisual) object.visual = cloneVisual(snapshot.visual);
-  else delete object.visual;
 }
 
 function readCellOwner(map, cityId) {

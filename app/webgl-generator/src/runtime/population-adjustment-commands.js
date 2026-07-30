@@ -1,5 +1,10 @@
 import {refreshPopulationDemandDiagnostics} from "../generator/economy.js";
 import {refreshRelocatedSettlementDerived} from "../generator/settlements.js";
+import {
+  captureCityScaleVisualSnapshot,
+  refreshCityScaleVisuals,
+  restoreCityScaleVisualSnapshot
+} from "./city-visuals.js";
 import {systemAffected} from "./edit-command-effects.js";
 
 export const POPULATION_ADJUSTMENT_SCOPE = Object.freeze({
@@ -352,6 +357,7 @@ function applyPopulationPlan(map, plan) {
 
 function refreshPopulationDerived(map, plan) {
   mirrorPackPopulationToGrid(map, plan.packChanges.map(change => change.packCell));
+  refreshCityScaleVisuals(map);
   if (map.settlements && map.pack) {
     refreshRelocatedSettlementDerived(map.grid, map.features, map.politics, map.settlements, map.pack);
   }
@@ -427,6 +433,7 @@ function captureSnapshot(map) {
     gridPopulation: cloneArray(map.grid.cells.pop),
     cityPopulation: (map.settlements?.cities || []).map(city => city ? {id: city.id, population: city.population} : null),
     burgPopulation: (map.pack?.burgs || []).map(burg => burg ? {i: burg.i, population: burg.population} : null),
+    cityScaleVisuals: captureCityScaleVisualSnapshot(map),
     groupStats: captureGroupStats(map),
     settlementPopulationPoints: clone(map.settlements?.populationPoints),
     settlementMetadata: captureSectionMetadata(map, "settlements"),
@@ -445,6 +452,7 @@ function restoreSnapshot(map, snapshot) {
   restoreField(map.grid.cells, "pop", snapshot.gridPopulation);
   restorePopulationValues(map.settlements?.cities, snapshot.cityPopulation, "id");
   restorePopulationValues(map.pack?.burgs, snapshot.burgPopulation, "i");
+  restoreCityScaleVisualSnapshot(map, snapshot.cityScaleVisuals);
   restoreGroupStats(snapshot.groupStats);
   if (snapshot.settlementPopulationPoints === undefined) {
     if (map.settlements) delete map.settlements.populationPoints;

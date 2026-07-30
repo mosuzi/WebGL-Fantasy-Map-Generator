@@ -2,6 +2,7 @@
 import assert from "node:assert/strict";
 
 import {generatePlaceholderMap} from "../app/webgl-generator/src/generator/index.js";
+import {createCityScaleContext, deriveCityScale} from "../app/webgl-generator/src/runtime/city-visuals.js";
 import {EditHistory} from "../app/webgl-generator/src/runtime/edit-history.js";
 import {createMapDocument, parseMapDocument, stringifyMapDocument} from "../app/webgl-generator/src/runtime/map-file-io.js";
 import {
@@ -56,6 +57,7 @@ assertClose(targetAfter.totalBefore, inspection.targetAfter, 0.03, "目标人口
 assertRatioPreserved(inspection.sourceRuralBefore, inspection.sourceUrbanBefore, sourceAfter.ruralBefore, sourceAfter.urbanBefore, "来源");
 assertRatioPreserved(inspection.targetRuralBefore, inspection.targetUrbanBefore, targetAfter.ruralBefore, targetAfter.urbanBefore, "目标");
 assertCityBurgMirrors(map);
+assertCityScaleContract(map);
 assert(map.metadata?.derivedStale?.systems?.includes("economy"), "人口转移没有标记经济 stale");
 const after = digest(map);
 history.undo({map});
@@ -91,6 +93,7 @@ assert.equal(Object.prototype.hasOwnProperty.call(legacy, "economy"), false, "�
 const roundtrip = parseMapDocument(stringifyMapDocument(createMapDocument(map, map.options))).map;
 assert.deepEqual([...roundtrip.pack.cells.pop], [...map.pack.cells.pop], "完整地图往返丢失 pack 人口");
 assert.deepEqual(cityPopulations(roundtrip), cityPopulations(map), "完整地图往返丢失城市人口");
+assertCityScaleContract(roundtrip);
 
 console.log(JSON.stringify({
   ok: true,
@@ -104,7 +107,7 @@ console.log(JSON.stringify({
     targetCapacity: inspection.targetCapacity,
     actualAmount: inspection.actualAmount
   },
-  compatibility: {undoRedo: true, fullMapRoundtrip: true, sparseOldMap: true, faultStages: 2},
+  compatibility: {undoRedo: true, fullMapRoundtrip: true, sparseOldMap: true, faultStages: 2, cityScaleContract: true},
   history: history.getStats()
 }, null, 2));
 
@@ -167,6 +170,21 @@ function assertCityBurgMirrors(map) {
   }
 }
 
+function assertCityScaleContract(map) {
+  const context = createCityScaleContext(map.settlements?.cities, map.pack?.burgs);
+  for (const city of map.settlements?.cities || []) {
+    if (!city || city.removed) continue;
+    const burg = map.pack?.burgs?.[city.burgId] || map.pack?.burgs?.find(item => Number(item?.cityId) === Number(city.id));
+    const expected = deriveCityScale(city, context, burg);
+    assert.equal(city.group, expected, `城市 #${city.id} 规模分组未随人口转移更新`);
+    if (!city.visual?.manual) assert.equal(city.visual?.silhouette, expected, `城市 #${city.id} 自动剪影未随人口转移更新`);
+    if (!burg || burg.removed) continue;
+    assert.equal(burg.group, expected, `burg #${city.burgId} 规模分组未随人口转移更新`);
+    if (!burg.visual?.manual) assert.equal(burg.visual?.silhouette, expected, `burg #${city.burgId} 自动剪影未随人口转移更新`);
+    assert.deepEqual(burg.visual, city.visual, `城市 #${city.id} 与 burg 视觉镜像不一致`);
+  }
+}
+
 function digest(map) {
   const stale = structuredClone(map.metadata?.derivedStale || null);
   if (stale) delete stale.updatedAt;
@@ -174,7 +192,7 @@ function digest(map) {
     gridPopulation: [...map.grid.cells.pop],
     packPopulation: [...map.pack.cells.pop],
     cities: cityPopulations(map),
-    burgs: (map.pack?.burgs || []).map(burg => burg && ({i: burg.i, population: burg.population})),
+    burgs: (map.pack?.burgs || []).map(burg => burg && ({i: burg.i, population: burg.population, group: burg.group, visual: burg.visual})),
     states: stats(map.politics?.states),
     provinces: stats(map.politics?.provinces),
     cultures: stats(map.society?.cultures),
@@ -188,7 +206,7 @@ function digest(map) {
 }
 
 function cityPopulations(map) {
-  return (map.settlements?.cities || []).map(city => city && ({id: city.id, population: city.population}));
+  return (map.settlements?.cities || []).map(city => city && ({id: city.id, population: city.population, group: city.group, visual: city.visual}));
 }
 
 function stats(items) {

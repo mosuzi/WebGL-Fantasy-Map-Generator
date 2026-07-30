@@ -4,6 +4,8 @@ import {readFile} from "node:fs/promises";
 
 import {generatePlaceholderMap} from "../app/webgl-generator/src/generator/index.js";
 import {createSetCityPopulationCommand, createSetCityVisualCommand} from "../app/webgl-generator/src/runtime/city-edit-commands.js";
+import {createAddStateAtCellCommand, inspectStateCreation} from "../app/webgl-generator/src/runtime/state-edit-commands.js";
+import {createMergeStatesCommand, inspectStateMerge} from "../app/webgl-generator/src/runtime/state-topology-commands.js";
 import {
   cityRoleKeys,
   cityRoleScaleLabel,
@@ -79,6 +81,25 @@ for (const city of generated.settlements.cities.filter(Boolean)) {
   if (!city.visual?.manual) assert.equal(city.visual?.silhouette, expected, `生成城市 #${city.id} 自动剪影未使用统一规模`);
 }
 
+const topologyMap = generatePlaceholderMap({seed: "state-topology-regression", cellsTarget: 3000, heightmapTemplate: "continents"});
+const topologyBefore = groupVisualFingerprint(topologyMap);
+const mergeCommand = createMergeStatesCommand(findMergeInput(topologyMap));
+mergeCommand.apply({map: topologyMap});
+assertCityBurgScaleParity(topologyMap);
+mergeCommand.revert({map: topologyMap});
+assert.equal(groupVisualFingerprint(topologyMap), topologyBefore, "国家合并撤销必须恢复完整规模与视觉指纹");
+
+const stateCreationMap = generatePlaceholderMap({seed: "state-lifecycle-regression", cellsTarget: 3000, heightmapTemplate: "continents"});
+const stateCreationBefore = groupVisualFingerprint(stateCreationMap);
+const cityCountBefore = activeCityCount(stateCreationMap);
+const stateCreationCell = findStateCreationCellWithoutCity(stateCreationMap);
+const stateCreationCommand = createAddStateAtCellCommand(stateCreationCell);
+stateCreationCommand.apply({map: stateCreationMap});
+assert.equal(activeCityCount(stateCreationMap), cityCountBefore + 1, "无城市落点新建国家必须新增首都城市");
+assertCityBurgScaleParity(stateCreationMap);
+stateCreationCommand.revert({map: stateCreationMap});
+assert.equal(groupVisualFingerprint(stateCreationMap), stateCreationBefore, "新建国家撤销必须恢复完整规模与视觉指纹");
+
 const rendererSource = await readFile(new URL("../app/webgl-generator/src/renderer/placeholder-renderer.js", import.meta.url), "utf8");
 const settlementSource = await readFile(new URL("../app/webgl-generator/src/generator/settlements.js", import.meta.url), "utf8");
 const panelSource = await readFile(new URL("../app/webgl-generator/src/ui/vue/components/CityPanel.vue", import.meta.url), "utf8");
@@ -107,6 +128,7 @@ console.log(JSON.stringify({
   generatedCities: generated.settlements.cities.filter(Boolean).length,
   cityBurgDiff: 0,
   manualPreserved: true,
+  writeSurfaces: {cityPopulation: true, stateTopology: true, stateCreation: true},
   domPngShared: true
 }, null, 2));
 
@@ -153,9 +175,35 @@ function assertCityBurgScaleParity(map) {
   for (const city of map.settlements.cities.filter(Boolean)) {
     const burg = map.pack.burgs[city.burgId];
     const expected = deriveCityScale(city, context, burg);
-    assert.equal(city.group, expected);
-    assert.equal(burg.group, expected);
+    assert.equal(city.group, expected, `城市 #${city.id} 规模分组不一致`);
+    if (!city.visual?.manual) assert.equal(city.visual?.silhouette, expected, `城市 #${city.id} 自动剪影不一致`);
+    assert.equal(burg.group, expected, `burg #${city.burgId} 规模分组不一致`);
+    if (!burg.visual?.manual) assert.equal(burg.visual?.silhouette, expected, `burg #${city.burgId} 自动剪影不一致`);
+    assert.deepEqual(burg.visual, city.visual, `城市 #${city.id} 与 burg 视觉镜像不一致`);
   }
+}
+
+function findMergeInput(map) {
+  for (const state of map.politics?.states || []) {
+    if (!state?.i || state.removed) continue;
+    for (const neighbor of state.neighbors || []) {
+      const input = {survivorStateId: state.i, victimStateId: Number(neighbor)};
+      if (inspectStateMerge(map, input).valid) return input;
+    }
+  }
+  throw new Error("固定生成图找不到可合并的相邻国家");
+}
+
+function findStateCreationCellWithoutCity(map) {
+  for (const gridCell of map.grid?.cells?.i || []) {
+    const inspection = inspectStateCreation(map, gridCell);
+    if (inspection.valid && !Number(map.pack?.cells?.burg?.[inspection.packCell] || 0)) return gridCell;
+  }
+  throw new Error("固定生成图找不到无城市且允许新建国家的陆地 cell");
+}
+
+function activeCityCount(map) {
+  return (map.settlements?.cities || []).filter(city => city && !city.removed).length;
 }
 
 function groupVisualFingerprint(map) {
