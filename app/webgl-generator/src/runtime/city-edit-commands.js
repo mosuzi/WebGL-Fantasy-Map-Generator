@@ -1,4 +1,10 @@
-import {defaultCityVisual, normalizeCityVisualPatch, resolveCityVisual} from "./city-visuals.js";
+import {
+  createCityScaleContext,
+  defaultCityVisual,
+  deriveCityScale,
+  normalizeCityVisualPatch,
+  resolveCityVisual
+} from "./city-visuals.js";
 import {namebaseRenameAffected, newObjectAffected, objectAffected} from "./edit-command-effects.js";
 import {cloneObjectNote, deleteObjectNote, objectNoteId, readObjectNote, restoreObjectNote} from "./object-notes.js";
 import {OBJECT_KIND} from "./object-kinds.js";
@@ -146,6 +152,7 @@ export function createSetCityPopulationCommand(cityId, nextPopulation, {label = 
   const normalizedCityId = normalizeCityId(cityId);
   const after = normalizePopulation(nextPopulation);
   let snapshot = null;
+  let scaleVisualSnapshot = null;
 
   return {
     label: `${label} #${normalizedCityId}`,
@@ -158,12 +165,15 @@ export function createSetCityPopulationCommand(cityId, nextPopulation, {label = 
       if (after === null) throw new Error("城市人口必须是非负有限数");
       snapshot ??= captureCitySnapshot(context.map, normalizedCityId);
       if (!snapshot) throw new Error(`找不到城市 #${normalizedCityId}`);
+      scaleVisualSnapshot ??= captureCityScaleVisualSnapshot(context.map);
       writeCityPopulation(context.map, normalizedCityId, after);
+      refreshCityScaleVisuals(context.map);
       refreshSettlementDerivedStats(context.map);
     },
     revert(context) {
       if (!snapshot) throw new Error("缺少可撤销的城市人口快照");
       restoreCityPopulation(context.map, snapshot);
+      restoreCityScaleVisualSnapshot(context.map, scaleVisualSnapshot);
       refreshSettlementDerivedStats(context.map);
     },
     isNoop(context) {
@@ -230,7 +240,8 @@ export function createSetCityVisualCommand(cityId, patch = {}, {label = "调整�
       snapshot ??= captureCityVisualSnapshot(context.map, normalizedCityId);
       if (!snapshot) throw new Error(`找不到城市 #${normalizedCityId}`);
       const {city, burg, culture} = readCityVisualTarget(context.map, normalizedCityId);
-      const current = resolveCityVisual(city, culture, burg?.visual);
+      const scaleContext = createCityScaleContext(context.map?.settlements?.cities, context.map?.pack?.burgs);
+      const current = resolveCityVisual(city, culture, burg?.visual, scaleContext, burg);
       writeCityVisual(city, burg, {...current, ...nextPatch, manual: true});
     },
     revert(context) {
@@ -242,7 +253,8 @@ export function createSetCityVisualCommand(cityId, patch = {}, {label = "调整�
       if (!city || !Object.keys(nextPatch).length) return true;
       const burg = findBurgForCity(context.map, city);
       const culture = readCityCulture(context.map, city, burg);
-      const current = resolveCityVisual(city, culture, burg?.visual);
+      const scaleContext = createCityScaleContext(context.map?.settlements?.cities, context.map?.pack?.burgs);
+      const current = resolveCityVisual(city, culture, burg?.visual, scaleContext, burg);
       return current.manual && Object.entries(nextPatch).every(([key, value]) => current[key] === value);
     }
   };
@@ -263,7 +275,8 @@ export function createResetCityVisualCommand(cityId, {label = "恢复城市自�
       snapshot ??= captureCityVisualSnapshot(context.map, normalizedCityId);
       if (!snapshot) throw new Error(`找不到城市 #${normalizedCityId}`);
       const {city, burg, culture} = readCityVisualTarget(context.map, normalizedCityId);
-      writeCityVisual(city, burg, defaultCityVisual(city, culture));
+      const scaleContext = createCityScaleContext(context.map?.settlements?.cities, context.map?.pack?.burgs);
+      writeCityVisual(city, burg, defaultCityVisual(city, culture, scaleContext, burg));
     },
     revert(context) {
       if (!snapshot) throw new Error("缺少可撤销的城市剪影快照");
@@ -274,8 +287,9 @@ export function createResetCityVisualCommand(cityId, {label = "恢复城市自�
       if (!city) return true;
       const burg = findBurgForCity(context.map, city);
       const culture = readCityCulture(context.map, city, burg);
-      const current = resolveCityVisual(city, culture, burg?.visual);
-      const automatic = defaultCityVisual(city, culture);
+      const scaleContext = createCityScaleContext(context.map?.settlements?.cities, context.map?.pack?.burgs);
+      const current = resolveCityVisual(city, culture, burg?.visual, scaleContext, burg);
+      const automatic = defaultCityVisual(city, culture, scaleContext, burg);
       return !current.manual
         && current.silhouette === automatic.silhouette
         && current.palette === automatic.palette
@@ -421,6 +435,7 @@ function addCityAtGridCell(map, gridCell) {
   map.settlements.cities[cityId] = city;
   map.pack.burgs[burgId] = burg;
   if (map.pack.cells.burg) map.pack.cells.burg[packCell] = burgId;
+  refreshCityScaleVisuals(map);
   refreshSettlementDerivedStats(map);
   return {cityId, burgId, packCell, gridCell};
 }
@@ -437,6 +452,7 @@ function deleteCity(map, cityId) {
     map.pack.cells.burg[packCell] = 0;
   }
   repairDeletedCityRoles(map, city, burg);
+  refreshCityScaleVisuals(map);
   refreshSettlementDerivedStats(map);
   return {cityId, burgId, packCell};
 }
@@ -582,6 +598,58 @@ function restoreCityPopulation(map, snapshot) {
   if (city) city.population = snapshot.city.population;
   const burg = map?.pack?.burgs?.[snapshot.burgId] || findBurgForCity(map, city);
   if (burg && snapshot.burg) burg.population = snapshot.burg.population;
+}
+
+function refreshCityScaleVisuals(map) {
+  const cities = map?.settlements?.cities || [];
+  const burgs = map?.pack?.burgs || [];
+  const scaleContext = createCityScaleContext(cities, burgs);
+  for (const city of cities) {
+    if (!city || city.removed) continue;
+    const burg = findBurgForCity(map, city);
+    const scale = deriveCityScale(city, scaleContext, burg);
+    city.group = scale;
+    if (burg) burg.group = scale;
+    const culture = readCityCulture(map, city, burg);
+    writeCityVisual(city, burg, resolveCityVisual(city, culture, burg?.visual, scaleContext, burg));
+  }
+}
+
+function captureCityScaleVisualSnapshot(map) {
+  return (map?.settlements?.cities || []).filter(Boolean).map(city => {
+    const burg = findBurgForCity(map, city);
+    return {
+      cityId: city.id,
+      burgId: city.burgId,
+      city: snapshotGroupVisual(city),
+      burg: burg ? snapshotGroupVisual(burg) : null
+    };
+  });
+}
+
+function restoreCityScaleVisualSnapshot(map, snapshot) {
+  for (const item of snapshot || []) {
+    const city = map?.settlements?.cities?.[item.cityId];
+    if (city) restoreGroupVisual(city, item.city);
+    const burg = map?.pack?.burgs?.[item.burgId] || findBurgForCity(map, city);
+    if (burg && item.burg) restoreGroupVisual(burg, item.burg);
+  }
+}
+
+function snapshotGroupVisual(object) {
+  return {
+    hasGroup: hasOwn(object, "group"),
+    group: object.group,
+    hasVisual: hasOwn(object, "visual"),
+    visual: cloneVisual(object.visual)
+  };
+}
+
+function restoreGroupVisual(object, snapshot) {
+  if (snapshot.hasGroup) object.group = snapshot.group;
+  else delete object.group;
+  if (snapshot.hasVisual) object.visual = cloneVisual(snapshot.visual);
+  else delete object.visual;
 }
 
 function readCellOwner(map, cityId) {

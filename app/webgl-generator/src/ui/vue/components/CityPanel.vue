@@ -119,7 +119,11 @@ import {
   CITY_SILHOUETTE_OPTIONS,
   cityCultureStyleLabel,
   cityPaletteLabel,
+  cityRoleScaleLabel,
+  cityScaleLabel,
   citySilhouetteLabel,
+  createCityScaleContext,
+  deriveCityScale,
   resolveCityVisual
 } from "../../../runtime/city-visuals.js";
 import {formatHeight, formatNumber, formatPopulation} from "../../display-units.js";
@@ -255,6 +259,7 @@ watch(() => selected.value?.silhouette, syncVisualDraft);
 watch(() => selected.value?.palette, syncVisualDraft);
 
 function buildCityMetrics(map) {
+  const scaleContext = createCityScaleContext(map?.settlements?.cities, map?.pack?.burgs);
   const rows = cityRows(map).map(city => {
     const burg = findBurgForCity(map, city);
     const stateId = numberOrFallback(city.state, burg?.state, 0);
@@ -267,7 +272,8 @@ function buildCityMetrics(map) {
     const flags = cityFlags(city, burg);
     const owner = cityOwnerInfo(map, city, burg, {stateId, provinceId, packCell, gridCell});
     const culture = map?.society?.cultures?.[cultureId] || map?.pack?.cultures?.[cultureId] || null;
-    const visual = resolveCityVisual(city, culture, burg?.visual);
+    const scale = deriveCityScale(city, scaleContext, burg);
+    const visual = resolveCityVisual(city, culture, burg?.visual, scaleContext, burg);
     const note = readObjectNote(map, {kind: "city", id: city.id});
 
     return {
@@ -275,7 +281,9 @@ function buildCityMetrics(map) {
       burgId: city.burgId ?? burg?.i ?? "none",
       name: city.name || burg?.name || `城市 #${city.id}`,
       rawName: city.name || burg?.name || `城市 #${city.id}`,
-      type: formatCityType(city, burg, population),
+      type: cityRoleScaleLabel(city, scaleContext, burg),
+      scale,
+      scaleLabel: cityScaleLabel(scale),
       flags: flags.join(" / ") || "普通",
       population,
       resourceCells: numberOrFallback(city.resourceCells, burg?.resourceCells, 0),
@@ -372,15 +380,6 @@ function handleActionSelect(key) {
     return;
   }
   if (!key) activeAction.value = null;
-}
-
-function formatCityType(city, burg, population) {
-  if (city.capital || burg?.capital) return "首都";
-  if (city.provincial) return "省会";
-  if (city.port || burg?.port) return "港口";
-  if (city.group === "hamlet" || burg?.group === "hamlet") return "村镇";
-  if (population >= 5 || city.group === "city" || burg?.group === "city") return "城市";
-  return "城镇";
 }
 
 function applyVisual() {

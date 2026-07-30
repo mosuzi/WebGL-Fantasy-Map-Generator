@@ -2,7 +2,7 @@ import {GOVERNMENT_BY_KEY, applyStateGovernment, governmentAllowsSuffix, setStat
 import {createChineseNameGenerator, getStateFullName} from "../generator/names.js";
 import {provinceFormForState} from "../generator/province-naming.js";
 import {createRandom} from "../generator/random.js";
-import {defaultCityVisual} from "./city-visuals.js";
+import {createCityScaleContext, defaultCityVisual, deriveCityScale} from "./city-visuals.js";
 import {namebaseRenameAffected, newObjectAffected, objectAffected, systemAffected} from "./edit-command-effects.js";
 
 const STATE_CELL_SURFACE_EFFECTS = Object.freeze({
@@ -568,12 +568,13 @@ function deleteState(map, stateId) {
     city.province = 0;
     city.capital = false;
     city.provincial = false;
-    city.group = city.port ? "city" : "town";
+    const scale = cityScaleForMap(map, city, burg);
+    city.group = scale;
     if (burg) {
       burg.state = 0;
       burg.province = 0;
       burg.capital = 0;
-      burg.group = burg.port ? "city" : "town";
+      burg.group = scale;
     }
   }
   removePoliticalItem(map, "states", stateId);
@@ -745,7 +746,7 @@ function applySettlementTransfers(map, snapshot) {
     city.state = item.nextState;
     if (wasCapital) {
       city.capital = false;
-      city.group = city.port ? "city" : city.provincial ? "town" : "town";
+      city.group = cityScaleForMap(map, city, burg);
       statesNeedingCapital.add(item.previousState);
     }
 
@@ -753,7 +754,7 @@ function applySettlementTransfers(map, snapshot) {
       burg.state = item.nextState;
       if (wasCapital) {
         burg.capital = 0;
-        burg.group = burg.port ? "city" : "town";
+        burg.group = city.group;
       }
     }
   }
@@ -857,10 +858,11 @@ function chooseReplacementCapital(map, stateId) {
 
   const burg = findBurgForCity(map, candidate);
   if (!burg) return;
+  const scale = cityScaleForMap(map, candidate, burg);
   candidate.capital = true;
-  candidate.group = "capital";
+  candidate.group = scale;
   burg.capital = 1;
-  burg.group = "capital";
+  burg.group = scale;
   state.capital = burg.i ?? candidate.burgId;
   state.center = burg.cell ?? candidate.packCell;
   state.gridCenter = map?.pack?.cells?.g?.[burg.cell] ?? candidate.cell;
@@ -1490,13 +1492,13 @@ function ensureCapitalCityForNewState(map, context) {
       burg.state = context.stateId;
       burg.province = context.provinceId;
       burg.capital = 1;
-      burg.group = "capital";
+      burg.group = cityScaleForMap(map, city || burg, burg);
     }
     if (city) {
       city.state = context.stateId;
       city.province = context.provinceId;
       city.capital = true;
-      city.group = "capital";
+      city.group = burg?.group || cityScaleForMap(map, city, burg);
       return {cityId: city.id, burgId: existingBurgId, name: city.name || burg?.name || `都城 #${existingBurgId}`};
     }
   }
@@ -1513,6 +1515,9 @@ function createCapitalCity(map, {stateId, provinceId, packCell, gridCell, cultur
   const [x, y] = map.pack.cells.p[packCell];
   const culture = map?.society?.cultures?.[cultureId] || map?.pack?.cultures?.[cultureId] || null;
   const population = Math.max(8, roundValue((map.pack.cells.pop?.[packCell] || map.grid?.cells?.pop?.[gridCell] || 8) + 18, 2));
+  const provisionalCity = {population};
+  const scaleContext = createCityScaleContext([...(map?.settlements?.cities || []), provisionalCity], map?.pack?.burgs);
+  const scale = deriveCityScale(provisionalCity, scaleContext);
   const name = nameGenerator.makePlaceName({
     id: cityId,
     cell: packCell,
@@ -1523,7 +1528,7 @@ function createCapitalCity(map, {stateId, provinceId, packCell, gridCell, cultur
     group: "capital",
     population
   }) || `新都${burgId}`;
-  const visual = defaultCityVisual({capital: true, provincial: false, port: 0, population, type: "Generic", group: "capital"}, culture);
+  const visual = defaultCityVisual({capital: true, provincial: false, port: 0, population, type: "Generic", group: scale}, culture, scaleContext);
   const burg = {
     i: burgId,
     id: burgId,
@@ -1540,7 +1545,7 @@ function createCapitalCity(map, {stateId, provinceId, packCell, gridCell, cultur
     capital: 1,
     port: 0,
     population,
-    group: "capital",
+    group: scale,
     type: "Generic",
     civilizationType: "agrarian",
     civilizationLabel: "农耕",
@@ -1565,13 +1570,18 @@ function createCapitalCity(map, {stateId, provinceId, packCell, gridCell, cultur
     type: "Generic",
     civilizationType: "agrarian",
     civilizationLabel: "农耕",
-    group: "capital",
+    group: scale,
     visual: clonePlain(visual)
   };
   map.pack.burgs[burgId] = burg;
   map.settlements.cities.push(city);
   if (map.pack.cells.burg) map.pack.cells.burg[packCell] = burgId;
   return {cityId, burgId, name};
+}
+
+function cityScaleForMap(map, city, burg = null) {
+  const context = createCityScaleContext(map?.settlements?.cities, map?.pack?.burgs);
+  return deriveCityScale(city, context, burg);
 }
 
 function writeCityOwnerForNewState(map, cityId, stateId, provinceId) {

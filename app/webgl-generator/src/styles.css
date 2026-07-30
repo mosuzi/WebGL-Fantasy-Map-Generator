@@ -1702,6 +1702,28 @@ select:disabled {
   opacity: 0.68;
 }
 
+.city-icon-role-badge-bg {
+  fill: rgba(31, 25, 18, 0.88);
+  stroke: var(--city-accent, #efd69a);
+  stroke-width: 0.8;
+}
+
+.city-icon-role-badge-mark {
+  fill: var(--city-accent, #efd69a);
+  stroke: var(--city-accent, #efd69a);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 0.7;
+}
+
+.city-icon-role-badge--port .city-icon-role-badge-bg {
+  fill: rgba(28, 55, 67, 0.9);
+}
+
+.city-icon-role-badge--provincial .city-icon-role-badge-bg {
+  fill: rgba(93, 50, 34, 0.9);
+}
+
 .city-map-icon.selected {
   filter: drop-shadow(0 0 4px rgba(255, 226, 130, 0.95));
 }

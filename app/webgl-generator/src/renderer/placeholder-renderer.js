@@ -46,7 +46,14 @@ import {
 } from "./political-layer.js";
 import {LABEL_TARGET_KIND, OBJECT_KIND, POLITICAL_OBJECT_FIELD, isPointObjectKind, isPoliticalObjectKind} from "../runtime/object-kinds.js";
 import {compositeConnectorPoints, pickCompositeConnector} from "./composite-connectors.js";
-import {CITY_ICON_PALETTES, resolveCityVisual} from "../runtime/city-visuals.js";
+import {
+  CITY_ICON_PALETTES,
+  cityRoleKeys,
+  cityRoleScaleLabel,
+  createCityScaleContext,
+  deriveCityScale,
+  resolveCityVisual
+} from "../runtime/city-visuals.js";
 import {isGeneratedLabelHidden} from "../runtime/label-edit-commands.js";
 import {estimateLabelTextBox, hasVisibleLabelShadow, labelStyleTypeForTarget, resolveLabelStyle} from "../runtime/label-style-registry.js";
 import {hasManualLabelPriorities, resolveLabelLayout, sortLabelItemsByPriority} from "../runtime/label-layout-registry.js";
@@ -1735,6 +1742,8 @@ export class PlaceholderMapRenderer {
       node.setAttribute("aria-label", item.tooltip);
       node.dataset.cityId = String(item.id);
       node.dataset.cityKind = item.kind;
+      node.dataset.cityScale = item.scale;
+      node.dataset.cityRoles = item.roles.join(",");
       applyCityIconPalette(node, item);
       node.innerHTML = cityIconSvg(item);
       fragment.append(node);
@@ -2665,22 +2674,27 @@ function getCustomLabels(map) {
 }
 
 function getCityIconItems(map) {
-  return [...(map?.settlements?.cities || [])]
+  const cities = [...(map?.settlements?.cities || [])];
+  const scaleContext = createCityScaleContext(cities, map?.pack?.burgs);
+  return cities
     .filter(city => city && Number.isInteger(city.id) && Number.isFinite(city.x) && Number.isFinite(city.y))
     .map(city => ({city, priority: scoreCityIcon(city)}))
     .sort((a, b) => b.priority - a.priority)
     .map(({city, priority}, rank) => {
-      const kind = cityIconKind(city);
       const culture = map?.society?.cultures?.[city.culture] || map?.pack?.cultures?.[city.culture] || null;
       const burg = map?.pack?.burgs?.[city.burgId] || null;
-      const visual = resolveCityVisual(city, culture, burg?.visual);
+      const scale = deriveCityScale(city, scaleContext, burg);
+      const roles = cityRoleKeys(city, burg);
+      const visual = resolveCityVisual(city, culture, burg?.visual, scaleContext, burg);
       return {
         id: city.id,
         city,
         name: city.name || `城镇 #${city.id + 1}`,
-        kind,
+        kind: scale,
+        scale,
+        roles,
         silhouette: visual.silhouette,
-        tooltip: cityIconTooltip(city, kind),
+        tooltip: cityIconTooltip(city, cityRoleScaleLabel(city, scaleContext, burg)),
         priority,
         rank,
         population: Number(city.population || 0),
@@ -2688,7 +2702,7 @@ function getCityIconItems(map) {
         visual,
         x: city.x,
         y: city.y,
-        minScale: cityIconMinScale(city, kind, rank)
+        minScale: cityIconMinScale(city, scale, rank)
       };
     });
 }
@@ -2697,36 +2711,16 @@ function scoreCityIcon(city) {
   return (city.capital ? 800 : 0) + (city.provincial ? 320 : 0) + (city.port ? 120 : 0) + Number(city.population || 0) * 2;
 }
 
-function cityIconKind(city) {
-  const population = Number(city.population || 0);
-  if (city.capital) return "capital";
-  if (city.provincial) return "provincial";
-  if (city.port) return "port";
-  if (population >= 64) return "city";
-  if (population < 8) return "hamlet";
-  return "town";
+function cityIconMinScale(city, scale, _rank) {
+  const scaleThreshold = scale === "city" ? 1.45 : scale === "town" ? 1.9 : scale === "village" ? 2.15 : 2.35;
+  const roleThreshold = city.capital ? 0.95 : city.provincial ? 1.2 : city.port ? 1.45 : scaleThreshold;
+  return Math.min(scaleThreshold, roleThreshold);
 }
 
-function cityIconMinScale(city, kind, rank) {
-  if (kind === "capital") return 0.95;
-  if (kind === "provincial") return 1.2;
-  if (kind === "city" || kind === "port") return rank < 18 ? 1.45 : 1.65;
-  if (kind === "town") return rank < 36 ? 1.9 : 2.25;
-  return rank < 72 ? 2.35 : 2.85;
-}
-
-function cityIconTooltip(city, kind) {
-  const kindLabel = {
-    capital: "都城",
-    provincial: "省会",
-    port: "港镇",
-    city: "城市",
-    town: "城镇",
-    hamlet: "村落"
-  }[kind] || "城镇";
+function cityIconTooltip(city, roleScaleLabel) {
   const population = Number(city.population || 0);
   const populationText = population > 0 ? `，人口 ${formatPopulationPeople(population)}` : "";
-  return `${city.name || "城镇"} / ${kindLabel}${populationText}`;
+  return `${city.name || "城镇"} / ${roleScaleLabel}${populationText}`;
 }
 
 function cityIconClassName(item) {
@@ -2748,6 +2742,12 @@ function cityIconPalette(item) {
 }
 
 function cityIconSvg(item) {
+  const base = cityBaseIconSvg(item);
+  const badges = cityRoleBadgeSvg(item.roles);
+  return badges ? base.replace("</svg>", `${badges}</svg>`) : base;
+}
+
+function cityBaseIconSvg(item) {
   if (item.silhouette === "capital") return `<svg viewBox="0 0 34 26" aria-hidden="true" focusable="false">
     <ellipse class="city-icon-shadow" cx="17" cy="22.2" rx="13.6" ry="2.3"/>
     <ellipse class="city-icon-ground" cx="17" cy="21.1" rx="13.1" ry="2.1"/>
@@ -2801,6 +2801,14 @@ function cityIconSvg(item) {
     <path class="city-icon-window" d="M15.3 16.1h3.4v4.2h-3.4z"/>
     <path class="city-icon-stroke" d="M9.2 20.3h15.6"/>
   </svg>`;
+  if (item.silhouette === "village") return `<svg viewBox="0 0 34 26" aria-hidden="true" focusable="false">
+    <ellipse class="city-icon-shadow" cx="17" cy="22.2" rx="10.5" ry="1.9"/>
+    <ellipse class="city-icon-ground" cx="17" cy="21.1" rx="10" ry="1.7"/>
+    <path class="city-icon-fill" d="M7.8 20.2v-6.6h8.3v6.6zm10 0v-7.4h8.1v7.4z"/>
+    <path class="city-icon-roof" d="m6.5 14 5.5-4.1 5.5 4.1zm9.8-.7 5.5-4.3 5.5 4.3z"/>
+    <path class="city-icon-window" d="M11 16.2h2.1v4h-2.1zm9.7-.3H23v4.3h-2.3z"/>
+    <path class="city-icon-stroke" d="M7.2 20.2h19.6"/>
+  </svg>`;
   if (item.silhouette === "city") return `<svg viewBox="0 0 34 26" aria-hidden="true" focusable="false">
     <ellipse class="city-icon-shadow" cx="17" cy="22.2" rx="12.9" ry="2.2"/>
     <ellipse class="city-icon-ground" cx="17" cy="21.1" rx="12.2" ry="1.9"/>
@@ -2818,6 +2826,30 @@ function cityIconSvg(item) {
   </svg>`;
 }
 
+function cityRoleBadgeSvg(roles = []) {
+  const parts = [];
+  if (roles.includes("capital")) {
+    parts.push(`<g class="city-icon-role-badge city-icon-role-badge--capital">
+      <circle class="city-icon-role-badge-bg" cx="28.2" cy="5.2" r="4"/>
+      <path class="city-icon-role-badge-mark" d="m25.8 5.8.7-3 1.7 1.6 1.7-1.6.7 3z"/>
+    </g>`);
+  }
+  if (roles.includes("provincial")) {
+    const x = roles.includes("capital") ? 20.5 : 28.2;
+    parts.push(`<g class="city-icon-role-badge city-icon-role-badge--provincial">
+      <circle class="city-icon-role-badge-bg" cx="${x}" cy="5.2" r="4"/>
+      <path class="city-icon-role-badge-mark" d="M${x - 1.4} 7.5V2.7m.2.3h3l-1 1.2 1 1.2h-3"/>
+    </g>`);
+  }
+  if (roles.includes("port")) {
+    parts.push(`<g class="city-icon-role-badge city-icon-role-badge--port">
+      <circle class="city-icon-role-badge-bg" cx="5.8" cy="5.2" r="3.7"/>
+      <path class="city-icon-role-badge-mark" d="M5.8 2.8v4.8m-1.7-1.4c.4 1.1 1 1.6 1.7 1.6s1.3-.5 1.7-1.6M4.7 4h2.2"/>
+    </g>`);
+  }
+  return parts.join("");
+}
+
 function cityIconBoxForItem(item, screen, sizeScale) {
   const width = CITY_ICON_BASE_WIDTH * sizeScale;
   const height = CITY_ICON_BASE_HEIGHT * sizeScale;
@@ -2831,8 +2863,8 @@ function cityIconBoxForItem(item, screen, sizeScale) {
 }
 
 function cityIconScale(scale, item) {
-  const kindBonus = item.kind === "capital" ? 0.16 : item.kind === "provincial" ? 0.1 : item.kind === "city" || item.kind === "port" ? 0.06 : 0;
-  return clamp(0.72 + kindBonus + (scale - item.minScale) * 0.055, 0.72, 1.18);
+  const scaleBonus = item.scale === "city" ? 0.16 : item.scale === "town" ? 0.1 : item.scale === "village" ? 0.05 : 0;
+  return clamp(0.72 + scaleBonus + Math.max(0, scale - 1) * 0.055, 0.72, 1.18);
 }
 
 function overlayLabelAnchor(renderer, item, screen, scale) {

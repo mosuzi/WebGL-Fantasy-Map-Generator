@@ -4,6 +4,7 @@ import {createChineseNameGenerator, getStateFullName, isAncientStateNameRoot} fr
 import {legacyProvinceForm, provinceFormForState} from "./province-naming.js";
 import {createStageProfile} from "./profile.js";
 import {createRandom} from "./random.js";
+import {createCityScaleContext, deriveCityScale} from "../runtime/city-visuals.js";
 
 const STATE_ROOTS = ["昭宁", "雁川", "青岚", "星渚", "南衡", "白麓", "清河", "苍原", "岚湾", "云麓", "河洛", "云渡", "栖梧", "北辰", "东衡", "西麓", "南浦", "霜川", "泽阳", "柏原", "海津", "长岚", "玄丘", "玉津"];
 const REGION_NAMES = ["北境", "南陆", "西岭", "东湾", "中原", "湖泽"];
@@ -636,16 +637,18 @@ function estimateCapitalSpacing(pack, target) {
 
 function applyCapitalSelection(pack, settlements, selectedBurgIds, protectedBurgIds = new Set()) {
   const citiesByBurg = new Map((settlements?.cities || []).filter(Boolean).map(city => [city.burgId, city]));
+  const scaleContext = createCityScaleContext(settlements?.cities, pack?.burgs);
   for (const burg of pack.burgs || []) {
     if (!burg?.i || burg.removed) continue;
     const selected = selectedBurgIds.has(burg.i);
     if (protectedBurgIds.has(burg.i)) continue;
     burg.capital = selected ? 1 : 0;
-    burg.group = selected ? "capital" : burg.port ? "city" : burg.population >= 5 ? "city" : burg.population <= 0.1 ? "hamlet" : "town";
     const city = citiesByBurg.get(burg.i);
+    const scale = deriveCityScale(city || burg, scaleContext, burg);
+    burg.group = scale;
     if (!city) continue;
     city.capital = selected;
-    city.group = selected ? "capital" : city.port ? "city" : city.population >= 5 ? "city" : city.population <= 0.1 ? "hamlet" : "town";
+    city.group = scale;
   }
 }
 

@@ -3,7 +3,7 @@ import Delaunator from "../vendor/delaunator.js";
 import {BIOMES} from "./biomes.js";
 import {createChineseNameGenerator} from "./names.js";
 import {createRandom} from "./random.js";
-import {defaultCityVisual} from "../runtime/city-visuals.js";
+import {createCityScaleContext, defaultCityVisual, deriveCityScale, resolveCityVisual} from "../runtime/city-visuals.js";
 
 const MIN_PASSABLE_SEA_TEMP = -4;
 const MIN_NAVIGABLE_FLUX = 100;
@@ -118,15 +118,15 @@ export function deriveRelocatedSettlement(pack, city, burg) {
   burg.type = getBurgType(pack, burg.cell, burg.port);
   city.type = burg.type;
   defineBurgFeatures(pack, burg);
-  const populations = (pack?.burgs || []).filter(item => item?.i && !item.removed).map(item => Number(item.population) || 0).sort((a, b) => a - b);
-  burg.group = defineBurgGroup(pack, burg, populations);
+  const scaleContext = createCityScaleContext([], pack?.burgs || []);
+  burg.group = defineBurgGroup(burg, scaleContext);
   city.group = burg.group;
   city.citadel = burg.citadel;
   city.plaza = burg.plaza;
   city.walls = burg.walls;
   city.temple = burg.temple;
   assignCityCivilization(pack, city, burg);
-  syncCityVisual(pack, city, burg);
+  syncCityVisual(pack, city, burg, scaleContext);
   return {type: city.type, group: city.group, resources};
 }
 
@@ -622,7 +622,7 @@ function addPackCity({grid, pack, cities, burgs, occupied, occupiedGrid, spacing
   const culture = pack.cultures?.[cultureId];
   const population = defineBurgPopulation(pack, packCell, Boolean(flags.capital), random);
   const resourceContext = collectCityResourceContext(pack, packCell);
-  const groupHint = flags.capital ? "capital" : flags.provincial || population >= 5 ? "city" : population <= 0.1 ? "hamlet" : population <= 1 ? "village" : "town";
+  const groupHint = deriveCityScale({population});
   const name = flags.name || nameGenerator.makePlaceName({
     id: cityId,
     cell: packCell,
@@ -972,13 +972,14 @@ function getRiverTangent(pack, cell, riversById) {
 
 function defineCityTypes(pack, cities, burgs, options = {}) {
   const preservedBurgIds = new Set(options.preservedBurgIds || []);
+  const scaleContext = createCityScaleContext(cities, burgs);
   for (const city of cities) {
     if (!city || preservedBurgIds.has(Number(city.burgId))) continue;
     const burg = burgs[city.burgId];
     const type = getBurgType(pack, city.packCell, city.port);
     burg.type = type;
     city.type = type;
-    city.group = city.capital ? "capital" : city.port ? "city" : city.population >= 5 ? "city" : city.population <= 0.1 ? "hamlet" : "town";
+    city.group = deriveCityScale(city, scaleContext, burg);
     burg.group = city.group;
     assignCityCivilization(pack, city, burg);
   }
@@ -986,13 +987,13 @@ function defineCityTypes(pack, cities, burgs, options = {}) {
 
 function specifyBurgs(pack, cities, burgs, nameGenerator, options = {}) {
   const preservedBurgIds = new Set(options.preservedBurgIds || []);
-  const populations = burgs.filter(burg => burg?.i && !burg.removed).map(burg => burg.population || 0).sort((a, b) => a - b);
+  const scaleContext = createCityScaleContext(cities, burgs);
   for (const city of cities) {
     if (!city || preservedBurgIds.has(Number(city.burgId))) continue;
     const burg = burgs[city.burgId];
     if (!burg?.i || burg.removed) continue;
     defineBurgFeatures(pack, burg);
-    burg.group = defineBurgGroup(pack, burg, populations);
+    burg.group = defineBurgGroup(burg, scaleContext);
     burg.coa = nameGenerator.makeEmblem({
       id: burg.i,
       kind: "burg",
@@ -1016,7 +1017,7 @@ function specifyBurgs(pack, cities, burgs, nameGenerator, options = {}) {
     city.resourceGoodIds = burg.resourceGoodIds || city.resourceGoodIds || [];
     city.resourceScore = burg.resourceScore || city.resourceScore || 0;
     assignCityCivilization(pack, city, burg);
-    syncCityVisual(pack, city, burg);
+    syncCityVisual(pack, city, burg, scaleContext);
   }
 }
 
@@ -1051,18 +1052,10 @@ function resolveCityCivilization(pack, city, burg) {
   return "agrarian";
 }
 
-function syncCityVisual(pack, city, burg) {
+function syncCityVisual(pack, city, burg, scaleContext) {
   const cultureId = city.culture ?? burg?.culture ?? 0;
   const culture = pack?.cultures?.[cultureId] || null;
-  const current = city.visual || burg?.visual || {};
-  if (current.manual) {
-    const manual = cloneVisual(current);
-    city.visual = manual;
-    if (burg) burg.visual = cloneVisual(manual);
-    return;
-  }
-
-  const visual = defaultCityVisual(city, culture);
+  const visual = resolveCityVisual(city, culture, burg?.visual, scaleContext, burg);
   city.visual = visual;
   if (burg) burg.visual = cloneVisual(visual);
 }
@@ -1078,19 +1071,8 @@ function defineBurgFeatures(pack, burg) {
   burg.temple = Number((religion && state?.form === "Theocracy") || pop > 50 || (pop > 35 && ((burg.i + burg.cell) % 4 !== 0)) || (pop > 20 && ((burg.i + burg.cell) % 2 === 0)));
 }
 
-function defineBurgGroup(pack, burg, populations) {
-  const pop = burg.population || 0;
-  const percentile90 = populations[Math.floor(populations.length * 0.9)] || 0;
-  const biome = pack.cells.biome?.[burg.cell];
-  if (burg.capital) return "capital";
-  if (pop >= Math.max(5, percentile90)) return "city";
-  if (burg.citadel && !burg.walls && !burg.plaza && !burg.port && pop <= 1) return "fort";
-  if (burg.temple && !burg.walls && !burg.plaza && !burg.port && pop <= 0.8) return "monastery";
-  if (!burg.port && burg.plaza && pop <= 0.8 && [1, 2, 3].includes(biome)) return "caravanserai";
-  if (!burg.port && burg.plaza && pop <= 0.8 && biome >= 5 && biome <= 12) return "trading_post";
-  if (pop >= 0.1 && pop <= 2) return "village";
-  if (pop <= 0.1 && !burg.plaza) return "hamlet";
-  return "town";
+function defineBurgGroup(burg, scaleContext) {
+  return deriveCityScale(burg, scaleContext);
 }
 
 function getBurgType(pack, cell, port) {
@@ -1179,12 +1161,12 @@ function buildGridCities(grid, features, politics, riverCells, landCells, popula
     picked.push({cell: candidate.cell});
   }
 
-  return picked.map((item, id) => {
+  const cities = picked.map((item, id) => {
     const state = grid.cells.state[item.cell];
     const province = grid.cells.province[item.cell];
     const port = isCoastalCell(grid, features, item.cell) ? 1 : 0;
     const populationValue = population[item.cell] + (item.capital ? 90 : item.provincial ? 45 : 20);
-    const group = item.capital ? "capital" : port || populationValue >= 5 ? "city" : populationValue <= 0.1 ? "hamlet" : populationValue <= 1 ? "village" : "town";
+    const group = deriveCityScale({population: populationValue});
     const city = {
       id,
       burgId: id + 1,
@@ -1218,6 +1200,12 @@ function buildGridCities(grid, features, politics, riverCells, landCells, popula
     city.visual = defaultCityVisual(city, null);
     return city;
   });
+  const scaleContext = createCityScaleContext(cities);
+  for (const city of cities) {
+    city.group = deriveCityScale(city, scaleContext);
+    city.visual = defaultCityVisual(city, null, scaleContext);
+  }
+  return cities;
 }
 
 function buildRoutes(grid, features, politics, cities, pack, options = {}) {

@@ -2,6 +2,7 @@ import {LABEL_TARGET_KIND, OBJECT_KIND, OBJECT_KIND_LABEL} from "./object-kinds.
 import {cloneObjectNote, deleteObjectNote, objectNoteId, readObjectNote, restoreObjectNote} from "./object-notes.js";
 import {createChineseNameGenerator, getStateFullName} from "../generator/names.js";
 import {namebaseRenameAffected, objectAffected} from "./edit-command-effects.js";
+import {createCityScaleContext, deriveCityScale} from "./city-visuals.js";
 
 const OBJECT_NAME_EFFECTS = Object.freeze({
   render: "draw",
@@ -489,20 +490,21 @@ function writeStateCapital(map, stateId, nextBurgId) {
   const previousCity = findCityByBurg(map, state.capital);
   const nextBurg = findBurgForCity(map, nextCity);
   if (!nextBurg) throw new Error(`找不到城市对应 burg #${nextBurgId}`);
+  const scaleContext = createCityScaleContext(map?.settlements?.cities, map?.pack?.burgs);
 
   if (previousBurg) {
     previousBurg.capital = 0;
-    previousBurg.group = previousBurg.port ? "city" : "town";
+    previousBurg.group = deriveCityScale(previousCity || previousBurg, scaleContext, previousBurg);
   }
   if (previousCity) {
     previousCity.capital = false;
-    previousCity.group = previousCity.port ? "city" : previousCity.provincial ? "town" : "town";
+    previousCity.group = deriveCityScale(previousCity, scaleContext, previousBurg);
   }
 
   nextBurg.capital = 1;
-  nextBurg.group = "capital";
+  nextBurg.group = deriveCityScale(nextCity, scaleContext, nextBurg);
   nextCity.capital = true;
-  nextCity.group = "capital";
+  nextCity.group = nextBurg.group;
   state.capital = nextBurg.i;
   state.center = nextBurg.cell;
   state.gridCenter = map.pack?.cells?.g?.[nextBurg.cell] ?? nextCity.cell;
