@@ -154,6 +154,8 @@ import {createRenameNamedObjectsFromNamebaseCommand, createRenameObjectCommand, 
 import {createApplyFeaturePatchCommand, createDeleteLakeCommand, createExcavateLakeCommand, createRenameLakesFromNamebaseCommand, createSetLakeOutletCommand, inspectFeaturePatch, inspectLakeOutletChange} from "./lake-edit-commands.js";
 import {createApplyFeatureTopologyCommand, FEATURE_TOPOLOGY_MODE, inspectFeatureTopology, rebuildFeatureTopology} from "./feature-topology-edit-commands.js";
 import {applyProvinceBrushPreview, createAddProvinceAtCellCommand, createApplyProvinceBrushCommand, createDeleteProvinceCommand, inspectProvinceCreation, PROVINCE_BRUSH_PREVIEW_EFFECTS} from "./province-edit-commands.js";
+import {inspectProvincialCapitalReassessment} from "../generator/provincial-capitals.js";
+import {createReassessProvincialCapitalsCommand} from "./provincial-capital-edit-commands.js";
 import {
   createAddReligionCommand,
   createApplyReligionAssignmentCommand,
@@ -1332,6 +1334,11 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       updateEditingInteractionLock(state, documentRef);
     },
     onRegenerate: () => runtimeActions.generate.regenerate("provinces", {confirm: true}),
+    onPreviewCapitalReassessment: request => inspectProvincialCapitalsViaApi(state, request),
+    onConfirmCapitalReassessment: (request, preview) => executeProvincialCapitalsViaApi(state, documentRef, request, {
+      confirm: true,
+      expectedFingerprint: preview?.fingerprint
+    }),
     onSampleSelection: () => {
       setProvincePanelTarget(state, getProvinceIdFromSelection(state));
     },
@@ -2924,6 +2931,8 @@ function createRuntimeActions(state, documentRef, options = {}) {
         merge: (request, options = {}) => executeProvinceTopologyViaApi(state, documentRef, PROVINCE_TOPOLOGY_ACTION.MERGE, request, options),
         inspectSplit: request => inspectProvinceTopologyViaApi(state, PROVINCE_TOPOLOGY_ACTION.SPLIT, request),
         split: (request, options = {}) => executeProvinceTopologyViaApi(state, documentRef, PROVINCE_TOPOLOGY_ACTION.SPLIT, request, options),
+        inspectCapitalReassessment: request => inspectProvincialCapitalsViaApi(state, request),
+        reassessCapitals: (request, options = {}) => executeProvincialCapitalsViaApi(state, documentRef, request, options),
         rename: (provinceId, name) => renameProvinceViaApi(state, documentRef, provinceId, name),
         setColor: (provinceId, color) => setProvinceColorViaApi(state, documentRef, provinceId, color),
         applyChanges: changes => applyProvinceChangesViaApi(state, documentRef, changes)
@@ -5048,6 +5057,47 @@ function executeProvinceTopologyViaApi(state, documentRef, actionId, request, op
   updateRuntimePanel(documentRef, state);
   updateEditingInteractionLock(state, documentRef);
   return editApiResult(state, result);
+}
+
+function inspectProvincialCapitalsViaApi(state, request = {}) {
+  assertMapAvailable(state);
+  const preview = inspectProvincialCapitalReassessment(state.map, request);
+  return {
+    ...preview,
+    expectedFingerprint: preview.fingerprint,
+    history: state.editHistory.getStats()
+  };
+}
+
+function executeProvincialCapitalsViaApi(state, documentRef, request = {}, options = {}) {
+  assertMapAvailable(state);
+  if (!options || typeof options !== "object" || Array.isArray(options)) {
+    throw new Error("省会重评执行参数必须是对象");
+  }
+  if (options.confirm !== true) {
+    const error = new Error("省会重评需要显式传入 {confirm: true, expectedFingerprint}");
+    error.code = "confirmation_required";
+    throw error;
+  }
+  const command = createReassessProvincialCapitalsCommand(request, {
+    expectedFingerprint: options.expectedFingerprint,
+    label: options.label || "API 重评省会",
+    faultInjector: options.faultInjector
+  });
+  const result = executeEditCommand(state, documentRef, command, {
+    context: {map: state.map},
+    refresh: refreshAfterProvinceEdit,
+    noopStatus: "当前省会已经符合确定性选择结果。",
+    status: executed => `已重评 ${executed.getResult?.()?.changed || 0} 个省份的省会。`,
+    errorStatus: "省会重评失败，地图已恢复执行前状态。",
+    throwOnError: true
+  });
+  updateRuntimePanel(documentRef, state);
+  updateEditingInteractionLock(state, documentRef);
+  return {
+    ...editApiResult(state, result),
+    preview: command.getPreview?.() || null
+  };
 }
 
 function inspectDiplomacyRuleViaApi(state, actionId, request) {
@@ -10454,7 +10504,8 @@ function regenerateStates(state, documentRef, options = {}) {
       lockedStates: stateLocks.snapshots,
       lockedProvinces: lockedPoliticalProvinces,
       lockedCities: lockedPoliticalCities,
-      lockedRoutes: routeLocks.snapshots
+      lockedRoutes: routeLocks.snapshots,
+      reassessProvincialCapitals: true
     }, map.pack, map.settlements, {salt: stateSalt});
     if (!result) {
       restoreRegenerationSalt(map, previousSalt);
@@ -10469,7 +10520,8 @@ function regenerateStates(state, documentRef, options = {}) {
       lockedStates: stateLocks.snapshots,
       lockedProvinces: lockedPoliticalProvinces,
       lockedCities: lockedPoliticalCities,
-      lockedRoutes: routeLocks.snapshots
+      lockedRoutes: routeLocks.snapshots,
+      reassessProvincialCapitals: true
     });
     if (constraintBundle) constraintBundle.assertDomain(map, "states-provinces", "politics-settlements");
     else {
@@ -10597,7 +10649,9 @@ function regenerateProvinces(state, documentRef, scope = {kind: "all"}) {
       routeRegenerationSalt: provinceSalt,
       lockedProvinces: provinceLocks.snapshots,
       lockedCities: lockedPoliticalCities,
-      lockedRoutes: routeLocks.snapshots
+      lockedRoutes: routeLocks.snapshots,
+      settlementScope: scope.kind === "state" ? {kind: "state", id: scope.id} : null,
+      reassessProvincialCapitals: true
     });
     if (constraintBundle) constraintBundle.assertDomain(map, "states-provinces", "province-settlements");
     else {
@@ -10770,8 +10824,9 @@ function regenerateCities(state, documentRef, scope = {kind: "all"}) {
       settlementRegenerationSalt: citySalt,
       routeRegenerationSalt: citySalt,
       settlementScope,
-      lockedCities: scopedLockedCities,
-      lockedRoutes: routeLocks.snapshots
+      lockedCities: cityLocks.snapshots,
+      lockedRoutes: routeLocks.snapshots,
+      reassessProvincialCapitals: true
     });
     if (constraintBundle) constraintBundle.assertDomain(map, "cities-routes", "settlement-routes");
     else {

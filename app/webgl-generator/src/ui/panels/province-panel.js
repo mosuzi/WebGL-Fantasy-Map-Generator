@@ -41,6 +41,9 @@ export function createProvincePanel(documentRef, manager, callbacks = {}) {
     deleteMode: false,
     lastAffected: 0,
     sourceProvinceId: null,
+    capitalPreview: null,
+    capitalPreviewScope: null,
+    capitalPreviewError: "",
     version: 0
   });
   const panelCallbacks = {
@@ -71,6 +74,7 @@ export function createProvincePanel(documentRef, manager, callbacks = {}) {
       panelState.columnWidths = next.columnWidths;
     },
     onSelect: row => {
+      if (panelState.selectedProvinceId !== row.id) clearCapitalPreviewState(panelState);
       panelState.selectedProvinceId = row.id;
       callbacks.onSelect?.(provinceObject(row));
     },
@@ -80,6 +84,7 @@ export function createProvincePanel(documentRef, manager, callbacks = {}) {
     onClearHighlights: () => clearPanelHighlights(panelState, callbacks),
     onEdit: row => {
       const nextActive = !(panelState.active && panelState.selectedProvinceId === row.id);
+      if (panelState.selectedProvinceId !== row.id) clearCapitalPreviewState(panelState);
       panelState.selectedProvinceId = row.id;
       panelState.active = nextActive;
       panelState.addMode = false;
@@ -113,7 +118,9 @@ export function createProvincePanel(documentRef, manager, callbacks = {}) {
     },
     onDeleteProvince: provinceId => callbacks.onDeleteProvince?.(provinceId),
     onTargetProvinceId: provinceId => {
-      panelState.selectedProvinceId = normalizeProvinceId(provinceId);
+      const nextId = normalizeProvinceId(provinceId);
+      if (panelState.selectedProvinceId !== nextId) clearCapitalPreviewState(panelState);
+      panelState.selectedProvinceId = nextId;
     },
     onRadius: radius => {
       panelState.radius = normalizeBrushRadius(BRUSH_RADIUS_ID.PROVINCE, radius);
@@ -124,6 +131,39 @@ export function createProvincePanel(documentRef, manager, callbacks = {}) {
     onRename: (provinceId, name) => callbacks.onRename?.(provinceId, name),
     onColorChange: (provinceId, color) => callbacks.onColorChange?.(provinceId, color),
     onNoteChange: (provinceId, body) => callbacks.onNoteChange?.(provinceId, body),
+    onPreviewCapitalReassessment: scope => {
+      clearCapitalPreviewState(panelState);
+      const request = scope === "all" ? {all: true} : {provinceIds: [normalizeProvinceId(panelState.selectedProvinceId)]};
+      try {
+        panelState.capitalPreview = callbacks.onPreviewCapitalReassessment?.(request) || null;
+        panelState.capitalPreviewScope = scope;
+        panelState.capitalPreviewError = "";
+      } catch (error) {
+        panelState.capitalPreview = null;
+        panelState.capitalPreviewScope = scope;
+        panelState.capitalPreviewError = error?.message || "省会重评预览失败";
+      }
+      panelState.version++;
+    },
+    onConfirmCapitalReassessment: () => {
+      if (!panelState.capitalPreview) return;
+      const request = panelState.capitalPreviewScope === "all"
+        ? {all: true}
+        : {provinceIds: [normalizeProvinceId(panelState.selectedProvinceId)]};
+      try {
+        callbacks.onConfirmCapitalReassessment?.(request, panelState.capitalPreview);
+        panelState.capitalPreview = null;
+        panelState.capitalPreviewScope = null;
+        panelState.capitalPreviewError = "";
+      } catch (error) {
+        panelState.capitalPreviewError = error?.message || "省会重评执行失败";
+      }
+      panelState.version++;
+    },
+    onClearCapitalPreview: () => {
+      clearCapitalPreviewState(panelState);
+      panelState.version++;
+    },
     onUndo: () => callbacks.onUndo?.(),
     onRedo: () => callbacks.onRedo?.()
   };
@@ -169,6 +209,7 @@ export function createProvincePanel(documentRef, manager, callbacks = {}) {
       panelState.map = map ? markRaw(map) : null;
       panelState.selection = selection;
       panelState.history = history;
+      clearCapitalPreviewState(panelState);
       syncPanelHighlightCount(panelState, callbacks);
       if (!panelState.active && selection?.object?.kind === "province") panelState.selectedProvinceId = normalizeProvinceId(selection.object.id);
       if (!provinceExists(map, panelState.selectedProvinceId)) panelState.selectedProvinceId = firstProvinceId(map);
@@ -181,6 +222,7 @@ export function createProvincePanel(documentRef, manager, callbacks = {}) {
       panelState.map = map ? markRaw(map) : null;
       panelState.selection = selection;
       panelState.history = history;
+      clearCapitalPreviewState(panelState);
       syncPanelHighlightCount(panelState, callbacks);
       panelState.lastAffected = editState.lastAffected ?? panelState.lastAffected;
       panelState.sourceProvinceId = editState.sourceProvinceId ?? panelState.sourceProvinceId;
@@ -190,7 +232,10 @@ export function createProvincePanel(documentRef, manager, callbacks = {}) {
     },
     setSelectedProvinceId(provinceId) {
       const normalized = normalizeProvinceId(provinceId);
-      if (provinceExists(panelState.map, normalized)) panelState.selectedProvinceId = normalized;
+      if (provinceExists(panelState.map, normalized)) {
+        if (panelState.selectedProvinceId !== normalized) clearCapitalPreviewState(panelState);
+        panelState.selectedProvinceId = normalized;
+      }
     },
     updateAddMode(active) {
       panelState.addMode = Boolean(active);
@@ -263,4 +308,10 @@ function firstProvinceId(map) {
 
 function roundNumber(value) {
   return Math.round((Number(value) || 0) * 10) / 10;
+}
+
+function clearCapitalPreviewState(panelState) {
+  panelState.capitalPreview = null;
+  panelState.capitalPreviewScope = null;
+  panelState.capitalPreviewError = "";
 }

@@ -217,6 +217,8 @@ export function createConsoleApi(documentRef, state, actions = {}) {
         merge: (request, options = {}) => apiCall(() => requireApiAction(actions.edit?.provinces?.merge, "edit.provinces.merge")(request, options)),
         inspectSplit: request => apiCall(() => requireApiAction(actions.edit?.provinces?.inspectSplit, "edit.provinces.inspectSplit")(request)),
         split: (request, options = {}) => apiCall(() => requireApiAction(actions.edit?.provinces?.split, "edit.provinces.split")(request, options)),
+        inspectCapitalReassessment: (request = {}) => apiCall(() => requireApiAction(actions.edit?.provinces?.inspectCapitalReassessment, "edit.provinces.inspectCapitalReassessment")(request)),
+        reassessCapitals: (request = {}, options = {}) => apiCall(() => requireApiAction(actions.edit?.provinces?.reassessCapitals, "edit.provinces.reassessCapitals")(request, options)),
         rename: (provinceId, name) => apiCall(() => requireApiAction(actions.edit?.provinces?.rename, "edit.provinces.rename")(provinceId, name)),
         setColor: (provinceId, color) => apiCall(() => requireApiAction(actions.edit?.provinces?.setColor, "edit.provinces.setColor")(provinceId, color)),
         applyChanges: changes => apiCall(() => requireApiAction(actions.edit?.provinces?.applyChanges, "edit.provinces.applyChanges")(changes))
@@ -637,6 +639,8 @@ export function buildMethodMetadata() {
       "provinces.merge": {stable: "draft", mutates: "political-topology", undoable: true, async: false, requiresConfirm: true},
       "provinces.inspectSplit": {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
       "provinces.split": {stable: "draft", mutates: "political-topology", undoable: true, async: false, requiresConfirm: true},
+      "provinces.inspectCapitalReassessment": {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
+      "provinces.reassessCapitals": {stable: "draft", mutates: "provincial-capitals-and-route-priority", undoable: true, async: false, requiresConfirm: true},
       "provinces.rename": {stable: "draft", mutates: "political-entities", undoable: true, async: false, requiresConfirm: false},
       "provinces.setColor": {stable: "draft", mutates: "political-entities", undoable: true, async: false, requiresConfirm: false},
       "provinces.applyChanges": {stable: "draft", mutates: "political-entities", undoable: true, async: false, requiresConfirm: false},

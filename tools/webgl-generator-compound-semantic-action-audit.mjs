@@ -579,6 +579,22 @@ const RULE_ACTIONS = Object.freeze([
     sourceRefs: ["app/webgl-generator/src/runtime/object-edit-commands.js"]
   }),
   rule({
+    id: "politics.reassess-provincial-capitals",
+    title: "按最终人口确定性重评省会",
+    domain: "politics",
+    status: "existing-transaction",
+    intent: "先只读预览单省或全部未锁省份，再以预览指纹确认并原子同步唯一省会、政治双镜像与道路优先级。",
+    variants: ["single-province", "all-unlocked-provinces"],
+    api: ["edit.provinces.inspectCapitalReassessment", "edit.provinces.reassessCapitals"],
+    inspect: "edit.provinces.inspectCapitalReassessment",
+    execute: "edit.provinces.reassessCapitals",
+    branches: ["省份或镜像无效", "锁定保护或冲突", "预览过期", "no-op", "确认执行与完整回滚"],
+    sourceRefs: [
+      "app/webgl-generator/src/generator/provincial-capitals.js",
+      "app/webgl-generator/src/runtime/provincial-capital-edit-commands.js"
+    ]
+  }),
+  rule({
     id: "settlement.found-city",
     title: "建立城镇并同步政治与路线数据",
     domain: "settlement",

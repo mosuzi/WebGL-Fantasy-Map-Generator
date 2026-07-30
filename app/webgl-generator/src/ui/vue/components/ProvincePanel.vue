@@ -67,6 +67,37 @@
         @clear="callbacks.onNoteChange(selected.id, '')"
       />
     </template>
+
+    <template #capital>
+      <div class="province-capital-reassessment">
+        <p class="province-capital-reassessment__intro">先生成只读预览；确认时会校验预览指纹，并以一条历史原子更新省会。</p>
+        <div class="province-capital-reassessment__actions">
+          <UiButton variant="secondary" @click="callbacks.onPreviewCapitalReassessment('selected')">预览当前省份</UiButton>
+          <UiButton variant="secondary" @click="callbacks.onPreviewCapitalReassessment('all')">预览全部未锁省份</UiButton>
+        </div>
+        <div v-if="state.capitalPreview" class="province-capital-reassessment__preview" role="status">
+          <strong>{{ state.capitalPreview.summary }}</strong>
+          <span>变更 {{ formatNumber(state.capitalPreview.changes?.length || 0) }}</span>
+          <span>不变 {{ formatNumber(state.capitalPreview.unchanged?.length || 0) }}</span>
+          <span>保护 {{ formatNumber(state.capitalPreview.protected?.length || 0) }}</span>
+          <span>拒绝 {{ formatNumber(state.capitalPreview.rejected?.length || 0) }}</span>
+          <ul v-if="state.capitalPreview.changes?.length">
+            <li v-for="change in state.capitalPreview.changes.slice(0, 8)" :key="change.provinceId">
+              {{ change.provinceName }}：城市 #{{ change.currentCityId ?? "无" }} → #{{ change.nextCityId }}
+            </li>
+          </ul>
+          <div class="province-capital-reassessment__actions">
+            <UiButton
+              variant="danger"
+              :disabled="!state.capitalPreview.allowed"
+              @click="callbacks.onConfirmCapitalReassessment"
+            >确认执行</UiButton>
+            <UiButton variant="secondary" @click="callbacks.onClearCapitalPreview">取消预览</UiButton>
+          </div>
+        </div>
+        <p v-if="state.capitalPreviewError" class="province-capital-reassessment__error" role="alert">{{ state.capitalPreviewError }}</p>
+      </div>
+    </template>
   </UiActionDock>
 
   <UiSelectField
@@ -189,7 +220,8 @@ const provinceActions = computed(() => [
   {key: "edit", resultClass: "toggle-canvas-mode", label: editActive.value ? "退出省份编辑" : "进入省份编辑", icon: "◎", panel: false, disabled: modalActionActive.value || !canDeleteSelected.value, active: editActive.value},
   {key: "rename", resultClass: "open-secondary", label: "重命名", icon: "✎", disabled: modalActionActive.value || !canDeleteSelected.value},
   {key: "color", resultClass: "open-secondary", label: "调整颜色", icon: "◐", disabled: modalActionActive.value || !canDeleteSelected.value},
-  {key: "note", resultClass: "open-secondary", label: "编辑备注", icon: "☰", disabled: modalActionActive.value || !canDeleteSelected.value}
+  {key: "note", resultClass: "open-secondary", label: "编辑备注", icon: "☰", disabled: modalActionActive.value || !canDeleteSelected.value},
+  {key: "capital", resultClass: "open-secondary", label: "重评省会", icon: "省", disabled: modalActionActive.value || !canDeleteSelected.value}
 ]);
 const provinceHighlightActions = computed(() => [
   {key: "rename-visible", label: `按名称库重命名筛选结果 ${formatNumber(visibleRows.value.filter(row => !row.neutral).length)}`, icon: "名", disabled: !visibleRows.value.some(row => !row.neutral)},

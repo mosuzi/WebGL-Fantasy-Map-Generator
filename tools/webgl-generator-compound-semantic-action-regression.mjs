@@ -12,7 +12,7 @@ assert.equal(report.denominator.classifiedCellActionRows, report.denominator.cel
 assert.equal(report.denominator.fullCapabilityGaps, 0);
 assert.ok(report.totals.ruleTransactions >= 50);
 assert.ok(report.totals.plannerRecipes >= 10);
-assert.equal(report.totals.statuses["existing-transaction"], 68);
+assert.equal(report.totals.statuses["existing-transaction"], 69);
 assert.equal(report.totals.statuses["existing-needs-inspector"] || 0, 0);
 assert.equal(report.totals.statuses["fragmented-needs-transaction"] || 0, 0);
 assert.equal(report.totals.statuses["missing-game-rule"] || 0, 0);
@@ -87,7 +87,8 @@ assert.match(territory.inspect, /inspectTerritoryTransfer/u);
 
 for (const [id, inspect, execute] of [
   ["society.bind-namebase-and-rename", "namebases.inspectBindAndRename", "namebases.bindAndRename"],
-  ["society.replace-or-remove-namebase", "namebases.inspectReplacement", "namebases.replace"]
+  ["society.replace-or-remove-namebase", "namebases.inspectReplacement", "namebases.replace"],
+  ["politics.reassess-provincial-capitals", "edit.provinces.inspectCapitalReassessment", "edit.provinces.reassessCapitals"]
 ]) {
   const action = byId.get(id);
   assert.equal(action?.status, "existing-transaction", `${id} 尚未闭合为原子规则事务`);

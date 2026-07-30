@@ -121,7 +121,8 @@ export async function rebuildOceanCurrentWorldStage(map, system, {seed, signal, 
         lockedRoutes,
         lockedFeatures: constraintBundle?.lockedFeatures || [],
         settlementRegenerationSalt: `${options.seed}:world-cities`,
-        routeRegenerationSalt: `${options.seed}:world-routes`
+        routeRegenerationSalt: `${options.seed}:world-routes`,
+        reassessProvincialCapitals: true
       });
       result = {cities: map.settlements.metadata.cities, routes: map.settlements.metadata.routes};
       break;
@@ -164,7 +165,8 @@ export async function rebuildOceanCurrentWorldStage(map, system, {seed, signal, 
         lockedCities,
         lockedRoutes,
         lockedFeatures: constraintBundle?.lockedFeatures || [],
-        routeRegenerationSalt: `${options.seed}:world-routes-final`
+        routeRegenerationSalt: `${options.seed}:world-routes-final`,
+        reassessProvincialCapitals: true
       });
       result = politics.metadata;
       break;

@@ -74,8 +74,8 @@ for (const kind of ["cities", "provinces", "states", "cultures", "religions", "r
 assert.match(appSource, /function deleteApiResult[\s\S]*?summary\.subresults\[0\]\.result[\s\S]*?deleteSummary/, "单对象删除没有保留旧 result 并追加 deleteSummary");
 
 for (const mode of ["STATE_DELETE", "PROVINCE_DELETE", "CITY_DELETE"]) {
-  const block = sourceAround(appSource, `CANVAS_TOOL_MODE.${mode}`, 2400);
-  assert.match(block, /executeDeleteWithPreflight/, `${mode} 画布删除没有接入统一预检执行器`);
+  const blocks = sourceWindows(appSource, `CANVAS_TOOL_MODE.${mode}`, 5200);
+  assert(blocks.some(block => /executeDeleteWithPreflight/.test(block)), `${mode} 画布删除没有接入统一预检执行器`);
 }
 
 assert.match(appSource, /deleteNamebaseViaAction[\s\S]*?confirmation === "explicit"[\s\S]*?createDeleteConfirmationRequiredError/, "名称库 UI/API 没有共用确认 action");
@@ -85,7 +85,7 @@ assert.match(heightComponentSource, /恢复上次删除/, "高度面板缺少恢
 assert.match(controlPanelSource, /CUSTOM_UNIT_RECYCLE_STORAGE_KEY[\s\S]*?window\.confirm[\s\S]*?restoreLastDeletedCustomUnit/, "自定义单位缺少确认与跨刷新回收恢复");
 
 const publicMethods = Object.values(API_METHODS).reduce((sum, methods) => sum + methods.length, 0);
-assert.equal(publicMethods, 303, "公开 API 分母漂移");
+assert.equal(publicMethods, 305, "公开 API 分母漂移");
 assert(API_METHODS.edit.includes("labels.resetStyles"), "公开 labels.resetStyles 没有进入危险动作清单");
 const publicDangerMethods = Object.entries(API_METHODS).flatMap(([namespace, methods]) => methods
   .map(method => `${namespace}.${method}`)
@@ -123,8 +123,13 @@ console.log(JSON.stringify({
   localRecovery: ["height-template", "custom-unit"]
 }, null, 2));
 
-function sourceAround(source, token, length) {
-  const index = source.indexOf(token);
-  assert(index >= 0, `源码缺少 ${token}`);
-  return source.slice(index, index + length);
+function sourceWindows(source, token, length) {
+  const windows = [];
+  let index = source.indexOf(token);
+  while (index >= 0) {
+    windows.push(source.slice(index, index + length));
+    index = source.indexOf(token, index + token.length);
+  }
+  assert(windows.length, `源码缺少 ${token}`);
+  return windows;
 }

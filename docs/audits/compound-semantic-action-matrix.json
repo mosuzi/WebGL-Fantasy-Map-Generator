@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "scope": "权威任务第 204 项：全游戏复合语义接口、规则动作与玩法配方审计",
   "generatedAtPolicy": "报告不写入动态时间，sourceDigest 变化即要求重新生成",
-  "sourceDigest": "f7b53ab0497fc2aa6d7eef02840bde84f1cdcbc1471f533ac29247c2a0f7fd1a",
+  "sourceDigest": "f0b4f51af63a17d1e20d0257e8232ad1185338e06d1787400e92a49130dd8fa4",
   "definition": {
     "compoundSemanticAction": "一个玩家意图，但执行时需要跨对象/系统、条件分支、业务预检或原子回滚；应由单一规则事务表达。",
     "primitive": "只修改一个稳定字段或纯编辑器显示偏好，可保留为原子 API，不强行包装成复合动作。",
@@ -22,12 +22,12 @@
     "executable-recipe": "已进入公开 planner registry；规划器逐步调用精确事实、预检和执行方法。"
   },
   "denominator": {
-    "fullCapabilityRows": 1167,
+    "fullCapabilityRows": 1173,
     "fullCapabilityUnknown": 0,
     "fullCapabilityUnclassified": 0,
     "fullCapabilityGaps": 0,
-    "publicApiMethods": 303,
-    "classifiedApiMethods": 303,
+    "publicApiMethods": 305,
+    "classifiedApiMethods": 305,
     "cellActionRows": 48,
     "classifiedCellActionRows": 48,
     "canvasModes": 29,
@@ -35,12 +35,12 @@
     "directManipulationInstances": 89
   },
   "totals": {
-    "actions": 78,
-    "ruleTransactions": 68,
+    "actions": 79,
+    "ruleTransactions": 69,
     "plannerRecipes": 10,
     "statuses": {
       "executable-recipe": 10,
-      "existing-transaction": 68
+      "existing-transaction": 69
     },
     "domains": {
       "diplomacy": 5,
@@ -49,7 +49,7 @@
       "editor": 3,
       "infrastructure": 5,
       "military": 7,
-      "politics": 17,
+      "politics": 18,
       "settlement": 8,
       "society": 5,
       "terrain": 13,
@@ -60,7 +60,7 @@
       "editor-runtime-service": 49,
       "read-export-service": 10,
       "read-primitive": 30,
-      "semantic-action": 160
+      "semantic-action": 162
     },
     "interactionClassifications": {
       "semantic-input-or-primitive": 36,
@@ -1301,6 +1301,40 @@
       "domain": "politics",
       "status": "existing-transaction",
       "intent": "把本国城市设为首都，取消旧首都并同步国家中心、标签和城镇层级。",
+      "gameplayChapter": "国家、省份与政治拓扑",
+      "invariant": "国家、省份、Grid/Pack 归属、首都、省会、外交、军事、市场和路线引用不得悬空。",
+      "historyPolicy": "成功恰好一条历史且 mapRevision +1；拒绝、no-op、取消和完整回滚不增加历史或 revision。",
+      "compatibilityPolicy": "旧公开方法保留并委托规范规则入口或保持严格等价；旧存档走迁移/回填。"
+    },
+    {
+      "tier": "rule-transaction",
+      "variants": [
+        "single-province",
+        "all-unlocked-provinces"
+      ],
+      "api": [
+        "edit.provinces.inspectCapitalReassessment",
+        "edit.provinces.reassessCapitals"
+      ],
+      "inspect": "edit.provinces.inspectCapitalReassessment",
+      "execute": "edit.provinces.reassessCapitals",
+      "branches": [
+        "省份或镜像无效",
+        "锁定保护或冲突",
+        "预览过期",
+        "no-op",
+        "确认执行与完整回滚"
+      ],
+      "steps": [],
+      "sourceRefs": [
+        "app/webgl-generator/src/generator/provincial-capitals.js",
+        "app/webgl-generator/src/runtime/provincial-capital-edit-commands.js"
+      ],
+      "id": "politics.reassess-provincial-capitals",
+      "title": "按最终人口确定性重评省会",
+      "domain": "politics",
+      "status": "existing-transaction",
+      "intent": "先只读预览单省或全部未锁省份，再以预览指纹确认并原子同步唯一省会、政治双镜像与道路优先级。",
       "gameplayChapter": "国家、省份与政治拓扑",
       "invariant": "国家、省份、Grid/Pack 归属、首都、省会、外交、军事、市场和路线引用不得悬空。",
       "historyPolicy": "成功恰好一条历史且 mapRevision +1；拒绝、no-op、取消和完整回滚不增加历史或 revision。",
@@ -5958,6 +5992,13 @@
       ]
     },
     {
+      "method": "edit.provinces.inspectCapitalReassessment",
+      "classification": "semantic-action",
+      "actionIds": [
+        "politics.reassess-provincial-capitals"
+      ]
+    },
+    {
       "method": "edit.provinces.inspectCreateAtCell",
       "classification": "semantic-action",
       "actionIds": [
@@ -6004,6 +6045,13 @@
       "classification": "semantic-action",
       "actionIds": [
         "politics.merge-provinces"
+      ]
+    },
+    {
+      "method": "edit.provinces.reassessCapitals",
+      "classification": "semantic-action",
+      "actionIds": [
+        "politics.reassess-provincial-capitals"
       ]
     },
     {
@@ -6821,6 +6869,7 @@
         "politics.ensure-province-assignment",
         "politics.merge-provinces",
         "politics.merge-states",
+        "politics.reassess-provincial-capitals",
         "politics.relocate-capital",
         "politics.reorganize-provinces",
         "politics.split-province",
@@ -6842,6 +6891,7 @@
         "politics.ensure-province-assignment",
         "politics.merge-provinces",
         "politics.merge-states",
+        "politics.reassess-provincial-capitals",
         "politics.relocate-capital",
         "politics.reorganize-provinces",
         "politics.split-province",
@@ -6863,6 +6913,7 @@
         "politics.ensure-province-assignment",
         "politics.merge-provinces",
         "politics.merge-states",
+        "politics.reassess-provincial-capitals",
         "politics.relocate-capital",
         "politics.reorganize-provinces",
         "politics.split-province",
@@ -6884,6 +6935,7 @@
         "politics.ensure-province-assignment",
         "politics.merge-provinces",
         "politics.merge-states",
+        "politics.reassess-provincial-capitals",
         "politics.relocate-capital",
         "politics.reorganize-provinces",
         "politics.split-province",
@@ -6905,6 +6957,7 @@
         "politics.ensure-province-assignment",
         "politics.merge-provinces",
         "politics.merge-states",
+        "politics.reassess-provincial-capitals",
         "politics.relocate-capital",
         "politics.reorganize-provinces",
         "politics.split-province",
@@ -6926,6 +6979,7 @@
         "politics.ensure-province-assignment",
         "politics.merge-provinces",
         "politics.merge-states",
+        "politics.reassess-provincial-capitals",
         "politics.relocate-capital",
         "politics.reorganize-provinces",
         "politics.split-province",

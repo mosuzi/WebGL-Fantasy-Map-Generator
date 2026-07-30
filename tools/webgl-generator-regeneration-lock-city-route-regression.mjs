@@ -122,7 +122,7 @@ async function testFormalEntryContract() {
     readFile(new URL("../package.json", import.meta.url), "utf8")
   ]);
   assert.match(appSource, /function regenerateRoutes[\s\S]*allRegenerationObjectsLocked\(map, OBJECT_KIND\.ROUTE[\s\S]*captureLockedRegenerationObjects\(map, OBJECT_KIND\.ROUTE\)[\s\S]*lockedRoutes: routeLocks\.snapshots[\s\S]*assertLockedRegenerationSnapshots\(map, routeLocks\)/);
-  assert.match(appSource, /function regenerateCities[\s\S]*allRegenerationObjectsLocked\(map, OBJECT_KIND\.CITY[\s\S]*captureLockedRegenerationObjects\(map, OBJECT_KIND\.CITY\)[\s\S]*lockedCities: scopedLockedCities,[\s\S]*lockedRoutes: routeLocks\.snapshots[\s\S]*assertLockedRegenerationSnapshots\(map, cityLocks\)/);
+  assert.match(appSource, /function regenerateCities[\s\S]*allRegenerationObjectsLocked\(map, OBJECT_KIND\.CITY[\s\S]*captureLockedRegenerationObjects\(map, OBJECT_KIND\.CITY\)[\s\S]*lockedCities: cityLocks\.snapshots,[\s\S]*lockedRoutes: routeLocks\.snapshots[\s\S]*assertLockedRegenerationSnapshots\(map, cityLocks\)/);
   assert.match(appSource, /function regenerateMapAttributeViaApi[\s\S]*executeMapSnapshotTransaction/);
   assert.match(packageSource, /regress:regeneration-lock-route-generator/);
   report.contract = {formalEntry: "generate.regenerate", transaction: "executeMapSnapshotTransaction", routeGeneratorGate: true};

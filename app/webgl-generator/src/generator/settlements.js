@@ -3,6 +3,7 @@ import Delaunator from "../vendor/delaunator.js";
 import {BIOMES} from "./biomes.js";
 import {createChineseNameGenerator} from "./names.js";
 import {createRandom} from "./random.js";
+import {reassessGeneratedProvincialCapitals} from "./provincial-capitals.js";
 import {createCityScaleContext, defaultCityVisual, deriveCityScale, resolveCityVisual} from "../runtime/city-visuals.js";
 
 const MIN_PASSABLE_SEA_TEMP = -4;
@@ -52,18 +53,320 @@ export function finalizeSettlements(grid, features, politics, settlements, pack,
     }
   }
 
+  if (pack?.cells && options.reassessProvincialCapitals === true) {
+    synchronizeSettlementPoliticalOwnership(pack, settlements.cities, options);
+    ensureProvinceCityCandidates(grid, pack, politics, settlements, options);
+  }
   if (options.pruneNeutralSettlements) pruneNeutralSettlements(grid, settlements, pack);
   mirrorCitiesToGrid(grid, settlements.cities);
   if (pack?.cells) {
     mirrorGridBurgsToPack(pack, settlements.cities);
     syncPoliticalSettlementStats(pack, politics, settlements.cities, options);
+    if (options.reassessProvincialCapitals === true) {
+      reassessGeneratedProvincialCapitals(grid, pack, settlements, politics, options);
+    }
   }
   const routes = buildRoutes(grid, features, politics, settlements.cities, pack, options);
+  refreshProvincialCapitalRoutePriorities(settlements.cities, routes, pack, {
+    lockedRoutes: options.lockedRoutes
+  });
   const populationPoints = buildPopulationPoints(grid, features, grid.cells.pop);
   settlements.routes = routes;
   settlements.populationPoints = populationPoints;
   settlements.metadata = createSettlementMetadata({grid, features, population: grid.cells.pop, cities: settlements.cities, routes, pack, populationPoints});
   return settlements;
+}
+
+function ensureProvinceCityCandidates(grid, pack, politics, settlements, options) {
+  const protectedProvinceIds = snapshotIds(options.lockedProvinces);
+  const scopedProvinceIds = provinceIdsForSettlementScope(options.settlementScope, politics);
+  const activeCities = (settlements.cities || []).filter(city => city && !city.removed);
+  const provincesWithCities = new Set(activeCities.map(city => Number(city.province)).filter(id => id > 0));
+  const occupied = new Set(activeCities.map(city => Number(city.packCell)).filter(Number.isInteger));
+  const occupiedGrid = new Set(activeCities.map(city => Number(city.cell)).filter(Number.isInteger));
+  const spacingIndex = new SpacingIndex(16);
+  for (const city of activeCities) spacingIndex.add(city.x, city.y, city.id);
+  const random = createRandom(`${options.seed || "map"}|province-city-candidates`);
+  const nameGenerator = createChineseNameGenerator(options.seed, {namebases: options.namebases});
+  const added = [];
+  const relocated = [];
+  const lockedCityIds = snapshotIds(options.lockedCities || options.preservedCities);
+  const cityByGrid = new Map(activeCities.map(city => [Number(city.cell), city]));
+
+  for (const province of politics?.provinces || []) {
+    if (!province?.i || province.removed || provincesWithCities.has(Number(province.i))) continue;
+    if (scopedProvinceIds && !scopedProvinceIds.has(Number(province.i))) continue;
+    if (protectedProvinceIds.has(Number(province.i))) continue;
+    const candidates = (pack.cells.i || [])
+      .filter(cell => pack.cells.h?.[cell] >= 20
+        && Number(pack.cells.province?.[cell]) === Number(province.i)
+        && Number(pack.cells.state?.[cell]) === Number(province.state)
+        && !pack.cells.burg?.[cell]
+        && !occupied.has(cell))
+      .sort((left, right) => provinceCandidateScore(pack, right, province) - provinceCandidateScore(pack, left, province) || left - right);
+    let packCell = candidates.find(cell => !occupiedGrid.has(Number(pack.cells.g?.[cell])));
+    if (!Number.isInteger(packCell)) {
+      for (const candidate of candidates) {
+        const blockingCity = cityByGrid.get(Number(pack.cells.g?.[candidate]));
+        const relocationPlan = findCityRelocationPlan({
+          pack,
+          city: blockingCity,
+          cityByGrid,
+          lockedCityIds,
+          protectedProvinceIds,
+          scopedProvinceIds,
+          reservedPackCells: new Set([candidate])
+        });
+        if (!relocationPlan) continue;
+        if (!validateCityRelocationPlan(pack, relocationPlan, cityByGrid)) continue;
+        for (const step of relocationPlan) {
+          relocateCityToPackCell(pack, step.city, step.packCell, {
+            occupied,
+            occupiedGrid,
+            cityByGrid,
+            spacingIndex
+          });
+          relocated.push(step.city);
+        }
+        packCell = candidate;
+        break;
+      }
+    }
+    if (!Number.isInteger(packCell)) continue;
+    const city = addPackCity({
+      grid,
+      pack,
+      cities: settlements.cities,
+      burgs: pack.burgs,
+      occupied,
+      occupiedGrid,
+      spacingIndex,
+      packCell,
+      random,
+      nameGenerator,
+      flags: {provincial: true, required: true, state: Number(province.state), province: Number(province.i)}
+    });
+    if (!city) continue;
+    for (const collection of [...new Set([politics?.provinces, pack?.provinces].filter(Array.isArray))]) {
+      const target = collection[Number(province.i)];
+      if (!target) continue;
+      target.burg = city.burgId;
+      target.center = city.packCell;
+      target.gridCenter = city.cell;
+    }
+    provincesWithCities.add(Number(province.i));
+    added.push(city);
+  }
+
+  if (!added.length) return;
+  const adjustedCities = [...new Map([...relocated, ...added].map(city => [Number(city.id), city])).values()];
+  shiftPortsAndRiverBurgs(
+    grid,
+    pack,
+    settlements.cities,
+    adjustedCities.map(city => pack.burgs[city.burgId]).filter(Boolean),
+    nameGenerator,
+    options
+  );
+  defineCityTypes(pack, adjustedCities, pack.burgs, options);
+  specifyBurgs(pack, added, pack.burgs, nameGenerator, options);
+  synchronizeCityScaleGroups(pack, settlements.cities, pack.burgs, options);
+}
+
+function findCityRelocationPlan({
+  pack,
+  city,
+  cityByGrid,
+  lockedCityIds,
+  protectedProvinceIds,
+  scopedProvinceIds,
+  reservedPackCells,
+  visiting = new Set()
+}) {
+  if (!city || visiting.has(Number(city.id))) return null;
+  const burg = pack.burgs?.[city.burgId];
+  if (!burg
+    || Number(burg.cell) !== Number(city.packCell)
+    || Number(pack.cells.g?.[city.packCell]) !== Number(city.cell)
+    || Number(pack.cells.burg?.[city.packCell]) !== Number(city.burgId)) {
+    return null;
+  }
+  const provinceId = Number(city.province);
+  if (lockedCityIds.has(Number(city.id))
+    || protectedProvinceIds.has(provinceId)
+    || scopedProvinceIds && !scopedProvinceIds.has(provinceId)
+    || city.capital
+    || burg.capital
+    || city.provincial
+    || burg.provincial
+    || city.visual?.manual
+    || burg.visual?.manual) {
+    return null;
+  }
+
+  const nextVisiting = new Set(visiting).add(Number(city.id));
+  const currentPoint = pack.cells.p?.[city.packCell] || [Number(city.x) || 0, Number(city.y) || 0];
+  const destinations = (pack.cells.i || [])
+    .filter(cell => pack.cells.h?.[cell] >= 20
+      && Number(pack.cells.province?.[cell]) === provinceId
+      && Number(pack.cells.state?.[cell]) === Number(city.state)
+      && !pack.cells.burg?.[cell]
+      && !reservedPackCells.has(cell)
+      && Number(pack.cells.g?.[cell]) !== Number(city.cell))
+    .sort((left, right) => {
+      const leftOccupied = cityByGrid.has(Number(pack.cells.g?.[left])) ? 1 : 0;
+      const rightOccupied = cityByGrid.has(Number(pack.cells.g?.[right])) ? 1 : 0;
+      if (leftOccupied !== rightOccupied) return leftOccupied - rightOccupied;
+      const leftPoint = pack.cells.p?.[left] || currentPoint;
+      const rightPoint = pack.cells.p?.[right] || currentPoint;
+      const leftDistance = Math.hypot(Number(leftPoint[0]) - Number(currentPoint[0]), Number(leftPoint[1]) - Number(currentPoint[1]));
+      const rightDistance = Math.hypot(Number(rightPoint[0]) - Number(currentPoint[0]), Number(rightPoint[1]) - Number(currentPoint[1]));
+      return leftDistance - rightDistance || left - right;
+    });
+
+  for (const packCell of destinations) {
+    const nextReserved = new Set(reservedPackCells).add(packCell);
+    const blocker = cityByGrid.get(Number(pack.cells.g?.[packCell]));
+    if (!blocker) return [{city, packCell}];
+    const prefix = findCityRelocationPlan({
+      pack,
+      city: blocker,
+      cityByGrid,
+      lockedCityIds,
+      protectedProvinceIds,
+      scopedProvinceIds,
+      reservedPackCells: nextReserved,
+      visiting: nextVisiting
+    });
+    if (prefix) return [...prefix, {city, packCell}];
+  }
+  return null;
+}
+
+function validateCityRelocationPlan(pack, plan, cityByGrid) {
+  const simulatedGrid = new Map([...cityByGrid].map(([gridCell, city]) => [Number(gridCell), Number(city?.id)]));
+  const simulatedPackBurgs = new Map();
+  const readPackBurg = packCell => simulatedPackBurgs.has(packCell)
+    ? simulatedPackBurgs.get(packCell)
+    : Number(pack.cells.burg?.[packCell] || 0);
+
+  for (const step of plan || []) {
+    const city = step?.city;
+    const burg = pack.burgs?.[city?.burgId];
+    const oldPackCell = Number(city?.packCell);
+    const oldGridCell = Number(city?.cell);
+    const nextPackCell = Number(step?.packCell);
+    const nextGridCell = Number(pack.cells.g?.[nextPackCell]);
+    if (!city
+      || !burg
+      || !Number.isInteger(oldPackCell)
+      || !Number.isInteger(oldGridCell)
+      || !Number.isInteger(nextPackCell)
+      || !Number.isInteger(nextGridCell)
+      || Number(burg.cell) !== oldPackCell
+      || Number(pack.cells.g?.[oldPackCell]) !== oldGridCell
+      || readPackBurg(oldPackCell) !== Number(city.burgId)
+      || readPackBurg(nextPackCell) !== 0
+      || simulatedGrid.get(oldGridCell) !== Number(city.id)) {
+      return false;
+    }
+    simulatedGrid.delete(oldGridCell);
+    if (simulatedGrid.has(nextGridCell)) return false;
+    simulatedPackBurgs.set(oldPackCell, 0);
+    simulatedPackBurgs.set(nextPackCell, Number(city.burgId));
+    simulatedGrid.set(nextGridCell, Number(city.id));
+  }
+  return true;
+}
+
+function relocateCityToPackCell(pack, city, packCell, {occupied, occupiedGrid, cityByGrid, spacingIndex}) {
+  const burg = pack.burgs?.[city.burgId];
+  const oldPackCell = Number(city.packCell);
+  const oldGridCell = Number(city.cell);
+  const gridCell = Number(pack.cells.g?.[packCell]);
+  if (!burg || !Number.isInteger(gridCell) || cityByGrid.has(gridCell)) {
+    throw new Error(`无法为省份补城腾挪城市 #${city.id} 的落点`);
+  }
+
+  if (Number(pack.cells.burg?.[oldPackCell]) === Number(city.burgId)) pack.cells.burg[oldPackCell] = 0;
+  const [x, y] = pack.cells.p?.[packCell] || [Number(city.x) || 0, Number(city.y) || 0];
+  const resources = collectCityResourceContext(pack, packCell);
+  const culture = Number(pack.cells.culture?.[packCell] ?? city.culture ?? 0);
+  const religion = Number(pack.cells.religion?.[packCell] ?? city.religion ?? 0);
+  const type = getBurgType(pack, packCell, 0);
+  Object.assign(city, {
+    cell: gridCell,
+    packCell,
+    x,
+    y,
+    culture,
+    religion,
+    type,
+    resourceCells: resources.resourceCells,
+    markerResourceCells: resources.markerResourceCells,
+    resourceGoodIds: resources.goodIds,
+    resourceScore: resources.score
+  });
+  Object.assign(burg, {
+    cell: packCell,
+    x,
+    y,
+    culture,
+    religion,
+    type,
+    feature: pack.cells.f?.[packCell],
+    resourceCells: resources.resourceCells,
+    markerResourceCells: resources.markerResourceCells,
+    resourceGoodIds: resources.goodIds,
+    resourceScore: resources.score
+  });
+  for (const emblem of [city.coa, burg.coa]) {
+    if (!emblem || typeof emblem !== "object") continue;
+    emblem.x = x;
+    emblem.y = y;
+  }
+  assignCityCivilization(pack, city, burg);
+  pack.cells.burg[packCell] = city.burgId;
+  occupied.delete(oldPackCell);
+  occupied.add(packCell);
+  occupiedGrid.delete(oldGridCell);
+  occupiedGrid.add(gridCell);
+  cityByGrid.delete(oldGridCell);
+  cityByGrid.set(gridCell, city);
+  spacingIndex.add(x, y, city.id);
+}
+
+function provinceCandidateScore(pack, cell, province) {
+  const point = pack.cells.p?.[cell] || [0, 0];
+  const pole = Array.isArray(province?.pole) ? province.pole : pack.cells.p?.[province?.center] || point;
+  const distancePenalty = Math.hypot(Number(point[0]) - Number(pole[0]), Number(point[1]) - Number(pole[1])) * 0.01;
+  return Number(pack.cells.s?.[cell] || 0) + Number(pack.cells.pop?.[cell] || 0) * 0.2 - distancePenalty;
+}
+
+function provinceIdsForSettlementScope(scope, politics) {
+  if (!scope || typeof scope !== "object") return null;
+  const kind = String(scope.kind || scope.type || "");
+  const id = Number(scope.id);
+  if (kind === "province" && Number.isInteger(id) && id > 0) return new Set([id]);
+  if (kind === "state" && Number.isInteger(id) && id > 0) {
+    return new Set((politics?.provinces || [])
+      .filter(province => province && !province.removed && Number(province.state) === id)
+      .map(province => Number(province.i ?? province.id)));
+  }
+  return null;
+}
+
+function synchronizeCityScaleGroups(pack, cities, burgs, options = {}) {
+  const preservedBurgIds = new Set(options.preservedBurgIds || options.lockedCities?.map(city => Number(city?.burgId)) || []);
+  const scaleContext = createCityScaleContext(cities, burgs);
+  for (const city of cities || []) {
+    if (!city || city.removed || preservedBurgIds.has(Number(city.burgId))) continue;
+    const burg = burgs?.[city.burgId];
+    if (!burg || burg.removed) continue;
+    city.group = deriveCityScale(city, scaleContext, burg);
+    burg.group = city.group;
+    syncCityVisual(pack, city, burg, scaleContext);
+  }
 }
 
 export function regenerateSettlementsWithinPolitics(grid, features, politics, settlements, pack, options = {}) {
@@ -128,6 +431,37 @@ export function deriveRelocatedSettlement(pack, city, burg) {
   assignCityCivilization(pack, city, burg);
   syncCityVisual(pack, city, burg, scaleContext);
   return {type: city.type, group: city.group, resources};
+}
+
+export function refreshProvincialCapitalRoutePriorities(cities, routes, pack = null, options = {}) {
+  const byId = new Map((cities || []).filter(Boolean).map(city => [Number(city.id), city]));
+  const lockedRouteIds = snapshotIds(options.lockedRoutes);
+  const apply = route => {
+    if (!route || lockedRouteIds.has(Number(route.id ?? route.i))) return;
+    const from = byId.get(Number(route.from));
+    const to = byId.get(Number(route.to));
+    route.fromProvincial = Boolean(from?.provincial);
+    route.toProvincial = Boolean(to?.provincial);
+    route.administrativePriority = from?.capital || to?.capital
+      ? "national"
+      : from?.provincial || to?.provincial
+        ? "provincial"
+        : "ordinary";
+  };
+  for (const route of routes || []) apply(route);
+  if (pack?.routes !== routes) {
+    const primaryById = new Map((routes || []).filter(Boolean).map(route => [Number(route.id), route]));
+    for (const route of pack?.routes || []) {
+      if (!route) continue;
+      const routeId = Number(route.i ?? route.id);
+      if (lockedRouteIds.has(routeId)) continue;
+      const primary = primaryById.get(routeId);
+      if (!primary) continue;
+      route.fromProvincial = primary.fromProvincial;
+      route.toProvincial = primary.toProvincial;
+      route.administrativePriority = primary.administrativePriority;
+    }
+  }
 }
 
 function createSettlementResult({grid, features, population, cities, routes, pack}) {
@@ -616,7 +950,9 @@ function addPackCity({grid, pack, cities, burgs, occupied, occupiedGrid, spacing
   const burgId = Number.isInteger(flags.burgId) && flags.burgId > 0 ? flags.burgId : burgs.length;
   const cityId = Number.isInteger(flags.cityId) && flags.cityId >= 0 ? flags.cityId : cities.length;
   const state = Number.isInteger(flags.state) ? flags.state : flags.capital ? burgId : grid.cells.state?.[gridCell] ?? 0;
-  const province = grid.cells.province?.[gridCell] ?? -1;
+  const province = Number.isInteger(flags.province)
+    ? flags.province
+    : cells.province?.[packCell] ?? grid.cells.province?.[gridCell] ?? -1;
   const type = getBurgType(pack, packCell, 0);
   const cultureId = cells.culture[packCell] || 0;
   const culture = pack.cultures?.[cultureId];
@@ -1705,6 +2041,13 @@ function addPackRoutePart({routes, pack, cells, type, feature, pointsArray, city
     province: type === "searoute" ? 0 : routeMajorityCellValue(pack, cells, "province"),
     from: fromCity?.id ?? -1,
     to: toCity?.id ?? -1,
+    fromProvincial: Boolean(fromCity?.provincial),
+    toProvincial: Boolean(toCity?.provincial),
+    administrativePriority: fromCity?.capital || toCity?.capital
+      ? "national"
+      : fromCity?.provincial || toCity?.provincial
+        ? "provincial"
+        : "ordinary",
     cells: cells.map(cell => pack.cells.g[cell]),
     packCells: cells,
     resourceCells: resources.resourceCells,
@@ -1873,6 +2216,11 @@ function buildPackRouteMirror(routes) {
       feature: route.feature,
       state: route.state,
       province: route.province,
+      from: route.from,
+      to: route.to,
+      fromProvincial: route.fromProvincial,
+      toProvincial: route.toProvincial,
+      administrativePriority: route.administrativePriority,
       resourceCells: route.resourceCells || 0,
       markerResourceCells: route.markerResourceCells || 0,
       points: route.points.map((point, index) => [point[0], point[1], route.packCells[index]])
@@ -1889,6 +2237,13 @@ function createRoute(grid, features, from, to, type, id) {
     level: routeLevel(type, from, to),
     from: from.id,
     to: to.id,
+    fromProvincial: Boolean(from.provincial),
+    toProvincial: Boolean(to.provincial),
+    administrativePriority: from.capital || to.capital
+      ? "national"
+      : from.provincial || to.provincial
+        ? "provincial"
+        : "ordinary",
     cells,
     points: cells.map(cell => grid.points[cell])
   };
@@ -1998,12 +2353,21 @@ function syncPoliticalSettlementStats(pack, politics, cities, options = {}) {
   const protectedProvinceIds = snapshotIds(options.lockedProvinces);
   syncStateSettlementStats(pack, politics?.states || [], protectedStateIds);
   syncProvinceSettlementStats(pack, politics?.provinces || [], protectedProvinceIds);
+  synchronizeSettlementPoliticalOwnership(pack, cities, options);
+}
+
+function synchronizeSettlementPoliticalOwnership(pack, cities, options = {}) {
+  const protectedCityIds = snapshotIds(options.lockedCities || options.preservedCities);
+  const protectedProvinceIds = snapshotIds(options.lockedProvinces);
   for (const city of cities) {
     if (!city || city.removed) continue;
+    if (protectedCityIds.has(Number(city.id))) continue;
     const burg = pack.burgs?.[city.burgId];
     if (!burg) continue;
+    const nextProvince = pack.cells.province?.[city.packCell] ?? city.province;
+    if (protectedProvinceIds.has(Number(city.province)) || protectedProvinceIds.has(Number(nextProvince))) continue;
     city.state = burg.state;
-    city.province = pack.cells.province?.[city.packCell] ?? city.province;
+    city.province = nextProvince;
     burg.province = city.province;
   }
 }

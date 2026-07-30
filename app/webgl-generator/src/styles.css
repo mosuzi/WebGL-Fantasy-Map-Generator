@@ -4099,6 +4099,44 @@ select:disabled {
   margin: 8px 0;
 }
 
+.province-capital-reassessment {
+  display: grid;
+  gap: 10px;
+}
+
+.province-capital-reassessment__intro,
+.province-capital-reassessment__error {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.province-capital-reassessment__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.province-capital-reassessment__preview {
+  display: grid;
+  gap: 6px;
+  padding: 9px;
+  border: 1px solid #4a5962;
+  border-radius: 6px;
+  background: rgba(79, 112, 125, 0.12);
+}
+
+.province-capital-reassessment__preview ul {
+  max-height: 126px;
+  margin: 0;
+  padding-left: 20px;
+  overflow: auto;
+}
+
+.province-capital-reassessment__error {
+  color: #f1a6a6;
+}
+
 .province-range-field strong {
   color: #edf4f6;
   text-align: right;

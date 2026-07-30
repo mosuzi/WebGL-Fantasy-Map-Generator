@@ -52,7 +52,11 @@ export function generatePlaceholderMap(inputOptions = {}, overrides = {}) {
   profile.stage("river-names", "按文化命名河流", () => renameHydronymsByCulture(rivers, pack, stageOptions));
   const settlements = profile.stage("settlements-initial", "生成初始城镇", () => buildSettlements(grid, features, null, rivers, random, pack, stageOptions));
   const politics = profile.stage("politics", "生成国家 / 省份 / 区域", () => buildPolitics(grid, features, society, rivers, random, stageOptions, pack));
-  profile.stage("settlements-finalize", "按政区整理城镇和路线", () => finalizeSettlements(grid, features, politics, settlements, pack, {...stageOptions, pruneNeutralSettlements: true}));
+  profile.stage("settlements-finalize", "按政区整理城镇和路线", () => finalizeSettlements(grid, features, politics, settlements, pack, {
+    ...stageOptions,
+    pruneNeutralSettlements: true,
+    reassessProvincialCapitals: true
+  }));
   const markers = profile.stage("markers", "生成标记 / 资源点", () => buildMarkers(grid, features, politics, rivers, pack, generationOptions));
   pack.markers = markers.markers;
   const economy = profile.stage("economy", "生成商品 / 市场 / 交易 / 税收", () => buildEconomy(pack, generationOptions));

@@ -45,6 +45,7 @@
     "regress:interaction-final": "node --no-warnings ./tools/webgl-generator-interaction-final-regression.mjs",
     "profile:generation": "node ./tools/webgl-generator-generation-profile.mjs",
     "regress:city-scale": "node --no-warnings ./tools/webgl-generator-city-scale-regression.mjs",
+    "regress:provincial-capitals": "node --no-warnings ./tools/webgl-generator-provincial-capital-regression.mjs",
     "regress:geo": "node ./tools/webgl-generator-geo-import-regression.mjs",
     "regress:measurement": "node ./tools/webgl-generator-measurement-import-regression.mjs",
     "regress:measurement-curve": "node --no-warnings ./tools/webgl-generator-measurement-curve-regression.mjs",

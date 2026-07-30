@@ -268,6 +268,32 @@ const METHOD_OVERRIDES = Object.freeze({
     businessCodes: ["ok", "action-not-inspectable", "invalid-input", "cell-not-found", "point-invalid", "business-rule-rejected"],
     responseMetadata: cellReadonlyMetadataSchema()
   },
+  "edit.provinces.inspectCapitalReassessment": {
+    arguments: [argument("request", provincialCapitalRequestSchema(), false)],
+    result: objectSchema(["allowed", "code", "summary", "fingerprint", "expectedFingerprint", "changes", "unchanged", "protected", "rejected", "history"]),
+    examples: [[{provinceIds: [1]}], [{all: true}]],
+    referenceSpaces: ["object:province", "object:city"],
+    businessCodes: ["ok", "no-op", "protected", "rejected", "province-not-found", "invalid-request", "invalid-province-id"]
+  },
+  "edit.provinces.reassessCapitals": {
+    arguments: [
+      argument("request", provincialCapitalRequestSchema(), false),
+      argument("options", {
+        type: "object",
+        required: ["confirm", "expectedFingerprint"],
+        properties: {
+          confirm: {const: true},
+          expectedFingerprint: {type: "string", minLength: 1},
+          label: {type: "string"}
+        },
+        additionalProperties: false
+      })
+    ],
+    result: objectSchema(["executed", "noop", "result", "affected", "history", "preview"]),
+    examples: [[{provinceIds: [1]}, {confirm: true, expectedFingerprint: "pcap-v1-00000000"}]],
+    referenceSpaces: ["object:province", "object:city"],
+    businessCodes: ["ok", "no-op", "confirmation_required", "preview-required", "preview-stale", "protected", "rejected", "province-not-found", "invalid-request", "invalid-province-id"]
+  },
   ...createAtCellMethodOverrides(),
   ...existingRuleMethodOverrides(),
   ...remainingRuleMethodOverrides(),
@@ -1876,6 +1902,18 @@ function labelTargetSchema() {
       {required: ["targetKind", "targetId"]}
     ],
     additionalProperties: true
+  };
+}
+
+function provincialCapitalRequestSchema() {
+  return {
+    type: "object",
+    properties: {
+      provinceId: {type: "integer", minimum: 1},
+      provinceIds: {type: "array", minItems: 1, uniqueItems: true, items: {type: "integer", minimum: 1}},
+      all: {type: "boolean"}
+    },
+    additionalProperties: false
   };
 }
 

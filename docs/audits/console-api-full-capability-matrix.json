@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sourceDigest": "377b2a9db26f4855cb73516a3bacc5c557fb5a2565bd5d3b0dd64efc849e725e",
+  "sourceDigest": "49095d72b10bef6f92048194ef818b811c7f2c58facfdec31c68fd3b621d5fda",
   "sourceRoots": [
     "app/webgl-generator/index.html",
     "app/webgl-generator/src/**/*.{js,vue}",
@@ -11,10 +11,10 @@
     "includedInteractionSurfaces": 87,
     "excludedInteractionSurfaces": 18,
     "canvasModes": 29,
-    "runtimeActions": 255,
-    "apiActionBindings": 254,
+    "runtimeActions": 257,
+    "apiActionBindings": 256,
     "commandAndInspectorExports": 210,
-    "publicApiMethods": 303
+    "publicApiMethods": 305
   },
   "statusPolicy": {
     "covered": "公共 API 已存在且与底层 action / command 或只读 helper 共路径",
@@ -23,8 +23,8 @@
     "gap": "适合参数化且没有公共 API，必须在第 200 项关闭"
   },
   "totals": {
-    "rows": 1167,
-    "covered": 1094,
+    "rows": 1173,
+    "covered": 1100,
     "excluded": 73,
     "deferred-owned": 0,
     "gap": 0,
@@ -4153,6 +4153,35 @@
       "exclusionReason": ""
     },
     {
+      "matrixId": "action:edit.provinces.inspectCapitalReassessment",
+      "capabilityId": "edit.provinces.inspectCapitalReassessment",
+      "title": "Runtime action edit.provinces.inspectCapitalReassessment",
+      "sourceKind": "runtime-action",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/app.js"
+      ],
+      "uiEntry": "",
+      "action": "edit.provinces.inspectCapitalReassessment",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "edit.provinces.inspectCapitalReassessment"
+      ],
+      "inputSpace": "method-schema",
+      "mutates": "none",
+      "preflight": "readonly",
+      "businessCodes": [],
+      "confirm": "按 API 确认清单",
+      "undoOrRollback": "not-applicable",
+      "async": false,
+      "compatibility": "UI 与 API 共用同一 runtime action",
+      "evidence": [
+        "app/webgl-generator/src/runtime/console-api.js"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
       "matrixId": "action:edit.provinces.inspectCreateAtCell",
       "capabilityId": "edit.provinces.inspectCreateAtCell",
       "title": "Runtime action edit.provinces.inspectCreateAtCell",
@@ -4339,6 +4368,35 @@
       "commandOrInspector": "",
       "apiMethods": [
         "edit.provinces.merge"
+      ],
+      "inputSpace": "method-schema",
+      "mutates": "map-or-persistent-data",
+      "preflight": "按方法描述",
+      "businessCodes": [],
+      "confirm": "按 API 确认清单",
+      "undoOrRollback": "按方法元数据",
+      "async": false,
+      "compatibility": "UI 与 API 共用同一 runtime action",
+      "evidence": [
+        "app/webgl-generator/src/runtime/console-api.js"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "action:edit.provinces.reassessCapitals",
+      "capabilityId": "edit.provinces.reassessCapitals",
+      "title": "Runtime action edit.provinces.reassessCapitals",
+      "sourceKind": "runtime-action",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/app.js"
+      ],
+      "uiEntry": "",
+      "action": "edit.provinces.reassessCapitals",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "edit.provinces.reassessCapitals"
       ],
       "inputSpace": "method-schema",
       "mutates": "map-or-persistent-data",
@@ -11690,6 +11748,36 @@
       "exclusionReason": ""
     },
     {
+      "matrixId": "api-action-binding:edit.provinces.inspectCapitalReassessment",
+      "capabilityId": "edit.provinces.inspectCapitalReassessment",
+      "title": "API action 绑定 edit.provinces.inspectCapitalReassessment",
+      "sourceKind": "api-action-binding",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/console-api.js",
+        "app/webgl-generator/src/runtime/app.js"
+      ],
+      "uiEntry": "",
+      "action": "edit.provinces.inspectCapitalReassessment",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "edit.provinces.inspectCapitalReassessment"
+      ],
+      "inputSpace": "method-schema",
+      "mutates": "none",
+      "preflight": "公共 API 绑定必须能解析到真实 runtime action",
+      "businessCodes": [],
+      "confirm": "按 API 确认清单",
+      "undoOrRollback": "not-applicable",
+      "async": false,
+      "compatibility": "旧 API action 路径保持可调用",
+      "evidence": [
+        "tools/webgl-generator-api-action-convergence-regression.mjs"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
       "matrixId": "api-action-binding:edit.provinces.inspectCreateAtCell",
       "capabilityId": "edit.provinces.inspectCreateAtCell",
       "title": "API action 绑定 edit.provinces.inspectCreateAtCell",
@@ -11883,6 +11971,36 @@
       "commandOrInspector": "",
       "apiMethods": [
         "edit.provinces.merge"
+      ],
+      "inputSpace": "method-schema",
+      "mutates": "map-or-persistent-data",
+      "preflight": "公共 API 绑定必须能解析到真实 runtime action",
+      "businessCodes": [],
+      "confirm": "按 API 确认清单",
+      "undoOrRollback": "按方法元数据",
+      "async": false,
+      "compatibility": "旧 API action 路径保持可调用",
+      "evidence": [
+        "tools/webgl-generator-api-action-convergence-regression.mjs"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "api-action-binding:edit.provinces.reassessCapitals",
+      "capabilityId": "edit.provinces.reassessCapitals",
+      "title": "API action 绑定 edit.provinces.reassessCapitals",
+      "sourceKind": "api-action-binding",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/console-api.js",
+        "app/webgl-generator/src/runtime/app.js"
+      ],
+      "uiEntry": "",
+      "action": "edit.provinces.reassessCapitals",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "edit.provinces.reassessCapitals"
       ],
       "inputSpace": "method-schema",
       "mutates": "map-or-persistent-data",
@@ -20134,6 +20252,37 @@
       "exclusionReason": ""
     },
     {
+      "matrixId": "api:edit.provinces.inspectCapitalReassessment",
+      "capabilityId": "edit.provinces.inspectCapitalReassessment",
+      "title": "公共 API edit.provinces.inspectCapitalReassessment",
+      "sourceKind": "public-api",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/api-contract.js",
+        "app/webgl-generator/src/runtime/console-api.js"
+      ],
+      "uiEntry": "",
+      "action": "edit.provinces.inspectCapitalReassessment",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "edit.provinces.inspectCapitalReassessment"
+      ],
+      "inputSpace": "info.describe(method)",
+      "mutates": "none",
+      "preflight": "由 info.describe(method) 与领域 inspector 发现",
+      "businessCodes": [],
+      "confirm": "由 methodMetadata.requiresConfirm 发现",
+      "undoOrRollback": "由 methodMetadata.undoable 与结果 metadata 发现",
+      "async": false,
+      "compatibility": "受 API 主版本和方法稳定性契约保护",
+      "evidence": [
+        "tools/webgl-generator-api-capabilities-regression.mjs",
+        "tools/webgl-generator-api-stability-contract-regression.mjs"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
       "matrixId": "api:edit.provinces.inspectCreateAtCell",
       "capabilityId": "edit.provinces.inspectCreateAtCell",
       "title": "公共 API edit.provinces.inspectCreateAtCell",
@@ -20333,6 +20482,37 @@
       "commandOrInspector": "",
       "apiMethods": [
         "edit.provinces.merge"
+      ],
+      "inputSpace": "info.describe(method)",
+      "mutates": "map-or-persistent-data",
+      "preflight": "由 info.describe(method) 与领域 inspector 发现",
+      "businessCodes": [],
+      "confirm": "由 methodMetadata.requiresConfirm 发现",
+      "undoOrRollback": "由 methodMetadata.undoable 与结果 metadata 发现",
+      "async": false,
+      "compatibility": "受 API 主版本和方法稳定性契约保护",
+      "evidence": [
+        "tools/webgl-generator-api-capabilities-regression.mjs",
+        "tools/webgl-generator-api-stability-contract-regression.mjs"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "api:edit.provinces.reassessCapitals",
+      "capabilityId": "edit.provinces.reassessCapitals",
+      "title": "公共 API edit.provinces.reassessCapitals",
+      "sourceKind": "public-api",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/api-contract.js",
+        "app/webgl-generator/src/runtime/console-api.js"
+      ],
+      "uiEntry": "",
+      "action": "edit.provinces.reassessCapitals",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "edit.provinces.reassessCapitals"
       ],
       "inputSpace": "info.describe(method)",
       "mutates": "map-or-persistent-data",
@@ -30899,6 +31079,7 @@
         "edit.provinces.createAtCell",
         "edit.provinces.delete",
         "edit.provinces.ensureAssignment",
+        "edit.provinces.inspectCapitalReassessment",
         "edit.provinces.inspectCreateAtCell",
         "edit.provinces.inspectDelete",
         "edit.provinces.inspectEnsureAssignment",
@@ -30906,6 +31087,7 @@
         "edit.provinces.inspectSplit",
         "edit.provinces.inspectTransfer",
         "edit.provinces.merge",
+        "edit.provinces.reassessCapitals",
         "edit.provinces.rename",
         "edit.provinces.setColor",
         "edit.provinces.split",
@@ -30956,6 +31138,7 @@
         "edit.provinces.createAtCell",
         "edit.provinces.delete",
         "edit.provinces.ensureAssignment",
+        "edit.provinces.inspectCapitalReassessment",
         "edit.provinces.inspectCreateAtCell",
         "edit.provinces.inspectDelete",
         "edit.provinces.inspectEnsureAssignment",
@@ -30963,6 +31146,7 @@
         "edit.provinces.inspectSplit",
         "edit.provinces.inspectTransfer",
         "edit.provinces.merge",
+        "edit.provinces.reassessCapitals",
         "edit.provinces.rename",
         "edit.provinces.setColor",
         "edit.provinces.split",
@@ -31013,6 +31197,7 @@
         "edit.provinces.createAtCell",
         "edit.provinces.delete",
         "edit.provinces.ensureAssignment",
+        "edit.provinces.inspectCapitalReassessment",
         "edit.provinces.inspectCreateAtCell",
         "edit.provinces.inspectDelete",
         "edit.provinces.inspectEnsureAssignment",
@@ -31020,6 +31205,7 @@
         "edit.provinces.inspectSplit",
         "edit.provinces.inspectTransfer",
         "edit.provinces.merge",
+        "edit.provinces.reassessCapitals",
         "edit.provinces.rename",
         "edit.provinces.setColor",
         "edit.provinces.split",
@@ -31070,6 +31256,7 @@
         "edit.provinces.createAtCell",
         "edit.provinces.delete",
         "edit.provinces.ensureAssignment",
+        "edit.provinces.inspectCapitalReassessment",
         "edit.provinces.inspectCreateAtCell",
         "edit.provinces.inspectDelete",
         "edit.provinces.inspectEnsureAssignment",
@@ -31077,6 +31264,7 @@
         "edit.provinces.inspectSplit",
         "edit.provinces.inspectTransfer",
         "edit.provinces.merge",
+        "edit.provinces.reassessCapitals",
         "edit.provinces.rename",
         "edit.provinces.setColor",
         "edit.provinces.split",
@@ -31127,6 +31315,7 @@
         "edit.provinces.createAtCell",
         "edit.provinces.delete",
         "edit.provinces.ensureAssignment",
+        "edit.provinces.inspectCapitalReassessment",
         "edit.provinces.inspectCreateAtCell",
         "edit.provinces.inspectDelete",
         "edit.provinces.inspectEnsureAssignment",
@@ -31134,6 +31323,7 @@
         "edit.provinces.inspectSplit",
         "edit.provinces.inspectTransfer",
         "edit.provinces.merge",
+        "edit.provinces.reassessCapitals",
         "edit.provinces.rename",
         "edit.provinces.setColor",
         "edit.provinces.split",
@@ -35850,6 +36040,7 @@
         "edit.provinces.createAtCell",
         "edit.provinces.delete",
         "edit.provinces.ensureAssignment",
+        "edit.provinces.inspectCapitalReassessment",
         "edit.provinces.inspectCreateAtCell",
         "edit.provinces.inspectDelete",
         "edit.provinces.inspectEnsureAssignment",
@@ -35857,6 +36048,7 @@
         "edit.provinces.inspectSplit",
         "edit.provinces.inspectTransfer",
         "edit.provinces.merge",
+        "edit.provinces.reassessCapitals",
         "edit.provinces.rename",
         "edit.provinces.setColor",
         "edit.provinces.split",
@@ -35907,6 +36099,7 @@
         "edit.provinces.createAtCell",
         "edit.provinces.delete",
         "edit.provinces.ensureAssignment",
+        "edit.provinces.inspectCapitalReassessment",
         "edit.provinces.inspectCreateAtCell",
         "edit.provinces.inspectDelete",
         "edit.provinces.inspectEnsureAssignment",
@@ -35914,6 +36107,7 @@
         "edit.provinces.inspectSplit",
         "edit.provinces.inspectTransfer",
         "edit.provinces.merge",
+        "edit.provinces.reassessCapitals",
         "edit.provinces.rename",
         "edit.provinces.setColor",
         "edit.provinces.split",
@@ -35964,6 +36158,7 @@
         "edit.provinces.createAtCell",
         "edit.provinces.delete",
         "edit.provinces.ensureAssignment",
+        "edit.provinces.inspectCapitalReassessment",
         "edit.provinces.inspectCreateAtCell",
         "edit.provinces.inspectDelete",
         "edit.provinces.inspectEnsureAssignment",
@@ -35971,6 +36166,7 @@
         "edit.provinces.inspectSplit",
         "edit.provinces.inspectTransfer",
         "edit.provinces.merge",
+        "edit.provinces.reassessCapitals",
         "edit.provinces.rename",
         "edit.provinces.setColor",
         "edit.provinces.split",
@@ -38944,6 +39140,7 @@
         "edit.provinces.createAtCell",
         "edit.provinces.delete",
         "edit.provinces.ensureAssignment",
+        "edit.provinces.inspectCapitalReassessment",
         "edit.provinces.inspectCreateAtCell",
         "edit.provinces.inspectDelete",
         "edit.provinces.inspectEnsureAssignment",
@@ -38951,6 +39148,7 @@
         "edit.provinces.inspectSplit",
         "edit.provinces.inspectTransfer",
         "edit.provinces.merge",
+        "edit.provinces.reassessCapitals",
         "edit.provinces.rename",
         "edit.provinces.setColor",
         "edit.provinces.split",

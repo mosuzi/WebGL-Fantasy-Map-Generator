@@ -4,11 +4,11 @@
 
 ## 审计结论
 
-- 上游能力矩阵：1167 行，unknown / unclassified / gap = 0 / 0 / 0。
-- 公开 API：303 / 303 已归类。
+- 上游能力矩阵：1173 行，unknown / unclassified / gap = 0 / 0 / 0。
+- 公开 API：305 / 305 已归类。
 - Cell / 画布动作：48 / 48 已归类；画布模式 29，直接操控 19 类 / 89 个宿主。
-- 规则事务与玩法配方：68 + 10 = 78。
-- 已有完整事务 68，已有写命令但缺 AI inspector 0，多 API 碎片待收敛 0，缺失游戏规则 0，待发布配方 0，可执行配方 10。
+- 规则事务与玩法配方：69 + 10 = 79。
+- 已有完整事务 69，已有写命令但缺 AI inspector 0，多 API 碎片待收敛 0，缺失游戏规则 0，待发布配方 0，可执行配方 10。
 - 结构缺口：0。
 
 ## 边界定义
@@ -60,6 +60,7 @@
 | `politics.split-province` | 国家、省份与政治拓扑 | 按连通 Cell 集或城镇锚点拆分省份，并为两侧确定省会。 | `existing-transaction` | `edit.provinces.inspectSplit`<br>`edit.provinces.split` | `edit.provinces.inspectSplit`<br>`edit.provinces.split` |
 | `politics.change-government` | 国家、省份与政治拓扑 | 调整国家政体和允许的国号后缀，并同步完整国名和政治镜像。 | `existing-transaction` | `edit.states.setGovernment`<br>`edit.states.setGovernmentBatch` | `info.describe(edit.states.setGovernment)`<br>`edit.states.setGovernment / setGovernmentBatch` |
 | `politics.relocate-capital` | 国家、省份与政治拓扑 | 把本国城市设为首都，取消旧首都并同步国家中心、标签和城镇层级。 | `existing-transaction` | `edit.states.inspectCapitalChange`<br>`edit.states.setCapital` | `edit.states.inspectCapitalChange`<br>`edit.states.setCapital` |
+| `politics.reassess-provincial-capitals` | 国家、省份与政治拓扑 | 先只读预览单省或全部未锁省份，再以预览指纹确认并原子同步唯一省会、政治双镜像与道路优先级。 | `existing-transaction` | `edit.provinces.inspectCapitalReassessment`<br>`edit.provinces.reassessCapitals` | `edit.provinces.inspectCapitalReassessment`<br>`edit.provinces.reassessCapitals` |
 | `settlement.found-city` | 城镇、人口与定居点 | 在合法 Cell 建立城镇，继承国家、省份、文化、宗教和港口条件。 | `existing-transaction` | `edit.cities.add`<br>`edit.cities.createAtCell`<br>`edit.cities.inspectCreateAtCell` | `edit.cities.inspectCreateAtCell`<br>`edit.cities.createAtCell` |
 | `settlement.move-city` | 城镇、人口与定居点 | 移动城镇到目标点，处理国家/省份归属、首都省会限制、港口和相连路线。 | `existing-transaction` | `edit.cities.inspectMove`<br>`edit.cities.move` | `edit.cities.inspectMove`<br>`edit.cities.move` |
 | `settlement.delete-city` | 城镇、人口与定居点 | 删除城镇前评估首都、省会、路线、市场和备注依赖，确认后单事务清理。 | `existing-transaction` | `edit.cities.delete`<br>`edit.cities.inspectDelete` | `edit.cities.inspectDelete`<br>`edit.cities.delete` |
@@ -130,6 +131,6 @@
 
 ## 机器覆盖
 
-- API 分类：`atomic-editor-primitive=54`，`editor-runtime-service=49`，`read-export-service=10`，`read-primitive=30`，`semantic-action=160`。
+- API 分类：`atomic-editor-primitive=54`，`editor-runtime-service=49`，`read-export-service=10`，`read-primitive=30`，`semantic-action=162`。
 - 交互分类：`semantic-input-or-primitive=36`，`ui-boundary=12`。
-- Source digest：`f7b53ab0497fc2aa6d7eef02840bde84f1cdcbc1471f533ac29247c2a0f7fd1a`。
+- Source digest：`f0b4f51af63a17d1e20d0257e8232ad1185338e06d1787400e92a49130dd8fa4`。
