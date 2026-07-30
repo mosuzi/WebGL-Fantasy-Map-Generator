@@ -910,6 +910,12 @@ select:disabled {
   white-space: normal;
 }
 
+.map-toolbar .debug-action {
+  min-width: max-content;
+  overflow-wrap: normal;
+  white-space: nowrap;
+}
+
 .map-toolbar .debug-action[hidden] {
   display: none;
 }
@@ -2049,6 +2055,20 @@ select:disabled {
   min-height: 0;
   overflow: auto;
   padding: 12px;
+}
+
+.floating-panel[data-panel-id="generation-panel"] > .floating-panel-body {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.floating-panel[data-panel-id="generation-panel"] .vue-control-panel-root {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
 }
 
 .development-panel-content {
@@ -4235,6 +4255,16 @@ select:disabled {
   --el-color-primary: #d7a84f;
   --el-text-color-primary: #cbd7dc;
   --el-text-color-secondary: #9fb0ba;
+}
+
+.vue-control-panel-root > .control-panel-tabs {
+  flex: 0 0 auto;
+}
+
+.vue-control-panel-root > .control-panel-tab-panels {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
 }
 
 .control-panel-tabs .el-tabs__header {

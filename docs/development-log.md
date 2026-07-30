@@ -1,5 +1,13 @@
 # 开发历史
 
+## 2026-07-30：固定控制面板 Tab 并约束开发模式按钮单行
+
+- 根因是控制面板的 `UiTabs` 与正文虽然已经是同级节点，但共同挂在共享 `overflow: auto` 的 `.floating-panel-body` 中；管理 Tab 的长内容因此带着顶部 Tab 一起滚动。修正只覆盖 `generation-panel`：外层 body 改为不滚动的纵向 flex，`.vue-control-panel-root` 补齐 `flex / min-height: 0`，真正的 `overflow: auto` 下沉到 `.control-panel-tab-panels`，没有改变其它浮动面板或共享 `PanelManager`。
+- 工具栏原本为所有长文本按钮设置 `min-width: 0 / overflow-wrap: anywhere / white-space: normal`，debug 模式的“开发模式”因此会在按钮内部折行。局部 `.debug-action` 现在使用 `min-width: max-content / overflow-wrap: normal / white-space: nowrap`；父 `.map-toolbar-actions` 仍保留 `flex-wrap`，窄屏时整个按钮可以换行。
+- 响应式专项新增控制面板滚动所有权和 debug 按钮单行契约。运行时审计同时发现第 218 项新增“重评省会”二级动作后，旧断言仍冻结 `18 / 68 / 55`；依据 `ProvincePanel` 的 `capital` slot 与 `open-secondary` 分类校准为 `18 / 69 / 56`，未改应用语义。
+- 生产构建、`regress:responsive-focus-overlay`、`regress:control-ia`、`regress:ui-system-audit-contract` 与 `git diff --check` 通过。系统 Chrome 在 `1280×720 / 720×720 / 576×576` 三档实测父区 `scrollHeight = clientHeight`、`scrollTop = 0`，Tab 滚动前后位移均为 `0px`，正文可滚到底且 document 横纵溢出为 `0`；七个 Tab 点击、方向键切换和开发入口全部正常。576px 字体压力下按钮整体进入下一行、文字 Range 仍只有一行，application console、page 与 WebGL error 均为 `0`，给事中与观察使均给出 `ACCEPT`。
+- 额外尝试的全量 `audit:ui-system` 已完成低频面板矩阵，但在其既有桌面高度面板等待点超时：非 debug 页面仍等待 debug 专属“高级地形程序与条件变换”文本。该超时没有命中本次控制面板或工具栏断言，未冒充通过；本次以三档专项 Chrome 矩阵、UI system 静态契约和生产构建作为验收依据。
+
 ## 2026-07-30：完成权威任务第 211～216 项统一系统 Chrome 验收
 
 - 新增可重复统一门禁 `regress:interaction-remediation-browser`。正式运行时声明、注册与回归覆盖均为 `29` 个画布模式，三组集合的六向差集全部为 `0`；第 211 项不再依赖手写固定分母。

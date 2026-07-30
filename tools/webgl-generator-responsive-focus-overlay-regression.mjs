@@ -24,6 +24,16 @@ const toolbarIds = [...source.toolbar.matchAll(/\bid="([^"]+)"/g)].map(match => 
 assert.deepEqual(toolbarIds, ["open-generation-panel", "fit-view", "toggle-measurement", "open-development-panel", "collapse-global-tools", "expand-global-tools"]);
 assert.equal(toolbarIds.filter(id => id !== "open-development-panel").length, 5, "MapToolbar 用户入口必须保持 5 个");
 for (const token of ["flex-wrap: wrap", "min-width: 0", "overflow-wrap: anywhere", "white-space: normal"]) assert.ok(cssRule(source.styles, ".map-toolbar").includes(token) || source.styles.includes(token), `工具栏长文本契约缺少 ${token}`);
+const debugActionRule = cssRule(source.styles, ".map-toolbar .debug-action");
+for (const token of ["min-width: max-content", "overflow-wrap: normal", "white-space: nowrap"]) assert.ok(debugActionRule.includes(token), `开发模式按钮单行契约缺少 ${token}`);
+const generationBodyRule = cssRule(source.styles, '.floating-panel[data-panel-id="generation-panel"] > .floating-panel-body');
+for (const token of ["display: flex", "flex-direction: column", "overflow: hidden"]) assert.ok(generationBodyRule.includes(token), `控制面板外层固定契约缺少 ${token}`);
+const generationRootRule = cssRule(source.styles, '.floating-panel[data-panel-id="generation-panel"] .vue-control-panel-root');
+for (const token of ["display: flex", "flex: 1 1 auto", "flex-direction: column", "min-height: 0"]) assert.ok(generationRootRule.includes(token), `控制面板根容器布局契约缺少 ${token}`);
+const controlTabsRule = cssRule(source.styles, ".vue-control-panel-root > .control-panel-tabs");
+assert.ok(controlTabsRule.includes("flex: 0 0 auto"), "控制面板顶部 Tab 必须固定在滚动区外");
+const controlPanelsRule = cssRule(source.styles, ".vue-control-panel-root > .control-panel-tab-panels");
+for (const token of ["flex: 1 1 auto", "min-height: 0", "overflow: auto"]) assert.ok(controlPanelsRule.includes(token), `控制面板正文独立滚动契约缺少 ${token}`);
 
 const managementBlock = sourceBlock(source.control, "const managementGroups = Object.freeze([", "\n]);");
 const managementIds = [...managementBlock.matchAll(/\["(open-[^"]+-panel)",/g)].map(match => match[1]);
@@ -49,7 +59,7 @@ assert.deepEqual({
   hosts: complex.actionDockHosts.length,
   actions: complex.actionDockActions.length,
   secondary: complex.totals.secondaryPanelActions
-}, {hosts: 18, actions: 68, secondary: 55});
+}, {hosts: 18, actions: 69, secondary: 56}, "第 218 项省会重评二级动作必须纳入复杂工作区分母");
 for (const token of ["ResizeObserver", "requestAnimationFrame", "positionObserver.observe(panel.value)", "positionObserver.observe(panelBody.value)", "naturalPanelHeight", "panel.value?.scrollHeight", "panelBody.value?.scrollHeight", "chooseSecondaryPanelPlacement", "findSecondaryActionAnchor", "constrainUserSecondaryPanelPosition", 'side: "user"', ":data-placement-side", ":data-available-height"]) assert.ok(source.actionDock.includes(token), `UiActionDock 缺少 ${token}`);
 assert.doesNotMatch(source.actionDock, /minHeight\s*=\s*180|Math\.max\(minHeight/, "二级面板不得保留 180px 高度 floor");
 
@@ -142,9 +152,10 @@ for (const selector of focusSelectors) assert.doesNotMatch(cssRulesContaining(so
 
 console.log(JSON.stringify({
   management: {groups: 6, entries: 25, handlers: 25},
-  actionDock: {hosts: 18, actions: 68, secondary: 55},
+  actionDock: {hosts: 18, actions: 69, secondary: 56},
   focusFamilies: 9,
-  toolbar: {ids: 6, userEntries: 5}
+  toolbar: {ids: 6, userEntries: 5, debugActionSingleLine: true},
+  controlPanel: {fixedTabs: true, independentContentScroll: true}
 }, null, 2));
 
 function readRect(rect) {
