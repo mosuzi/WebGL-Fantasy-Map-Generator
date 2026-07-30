@@ -23,9 +23,14 @@ const source = Object.fromEntries(Object.entries(FILES).map(([key, file]) => [ke
 const toolbarIds = [...source.toolbar.matchAll(/\bid="([^"]+)"/g)].map(match => match[1]).filter(id => id !== "map-global-tool-actions");
 assert.deepEqual(toolbarIds, ["open-generation-panel", "fit-view", "toggle-measurement", "open-development-panel", "collapse-global-tools", "expand-global-tools"]);
 assert.equal(toolbarIds.filter(id => id !== "open-development-panel").length, 5, "MapToolbar 用户入口必须保持 5 个");
-for (const token of ["flex-wrap: wrap", "min-width: 0", "overflow-wrap: anywhere", "white-space: normal"]) assert.ok(cssRule(source.styles, ".map-toolbar").includes(token) || source.styles.includes(token), `工具栏长文本契约缺少 ${token}`);
+const toolbarActionsRule = cssRulesContaining(source.styles, ".map-toolbar-actions");
+for (const token of ["align-items: flex-start", "flex-wrap: nowrap"]) assert.ok(toolbarActionsRule.includes(token), `工具栏单排契约缺少 ${token}`);
+const toolbarButtonRules = cssRulesContaining(source.styles, ".map-toolbar .primary-action");
+for (const token of ["flex: 1 1 max-content", "min-width: max-content", "overflow-wrap: normal", "white-space: nowrap"]) assert.ok(toolbarButtonRules.includes(token), `工具栏按钮单行契约缺少 ${token}`);
 const debugActionRule = cssRule(source.styles, ".map-toolbar .debug-action");
-for (const token of ["min-width: max-content", "overflow-wrap: normal", "white-space: nowrap"]) assert.ok(debugActionRule.includes(token), `开发模式按钮单行契约缺少 ${token}`);
+assert.ok(debugActionRule.includes("flex-grow: 0"), "开发模式按钮不得挤占普通入口宽度");
+assert.match(source.styles, /@media \(max-width: 400px\)[\s\S]*?\.map-toolbar-actions\s*\{[\s\S]*?gap:\s*4px[\s\S]*?\.map-toolbar :is\(\.primary-action, \.secondary-action\):not\(\.map-toolbar-collapse\)\s*\{[\s\S]*?padding-inline:\s*4px/, "400px 以下必须收紧工具栏间距与非收起按钮内边距");
+assert.match(source.styles, /@media \(max-width: 294px\)[\s\S]*?\.map-toolbar-actions\s*\{[\s\S]*?max-width:\s*calc\(100vw - 8px\)[\s\S]*?margin-left:\s*4px[\s\S]*?gap:\s*2px[\s\S]*?\.map-toolbar :is\(\.primary-action, \.secondary-action\):not\(\.map-toolbar-collapse\)\s*\{[\s\S]*?padding-inline:\s*1px[\s\S]*?font-size:\s*clamp\(9px, 4\.4vw, 13px\)[\s\S]*?\.map-toolbar :is\(\.primary-action, \.secondary-action\):focus-visible\s*\{[\s\S]*?position:\s*relative[\s\S]*?z-index:\s*1/, "150% 页面缩放的紧凑 CSS 视口必须保留完整单行按钮与可见焦点环");
 const generationBodyRule = cssRule(source.styles, '.floating-panel[data-panel-id="generation-panel"] > .floating-panel-body');
 for (const token of ["display: flex", "flex-direction: column", "overflow: hidden"]) assert.ok(generationBodyRule.includes(token), `控制面板外层固定契约缺少 ${token}`);
 const generationRootRule = cssRule(source.styles, '.floating-panel[data-panel-id="generation-panel"] .vue-control-panel-root');
@@ -154,7 +159,7 @@ console.log(JSON.stringify({
   management: {groups: 6, entries: 25, handlers: 25},
   actionDock: {hosts: 18, actions: 69, secondary: 56},
   focusFamilies: 9,
-  toolbar: {ids: 6, userEntries: 5, debugActionSingleLine: true},
+  toolbar: {ids: 6, userEntries: 5, singleRow: true, textActionsSingleLine: 4},
   controlPanel: {fixedTabs: true, independentContentScroll: true}
 }, null, 2));
 

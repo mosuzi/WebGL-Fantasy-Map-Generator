@@ -1,5 +1,13 @@
 # 开发历史
 
+## 2026-07-30：纠正 debug 工具栏整组换排
+
+- 用户截图证明上一轮验收口径错误：虽然“开发模式”文字自身没有断行，但整个按钮仍掉到第二排。真实 Chrome 返工前在 `480 / 390 / 320px` 三档均得到两排，首排与次排 top 分别约为 `12 / 54px`，工具栏高约 `76px`；上一轮关于该按钮的完成结论撤回，控制面板固定 Tab 的结果不受影响。
+- 根因是父 `.map-toolbar-actions` 仍声明 `flex-wrap: wrap`，而四个文字按钮同时使用有界 flex；只给 `.debug-action` 设置 `max-content / nowrap` 无法约束整组排列。第一轮把整组改为单排后，用户进一步明确“控制面板 / 适配视图 / 测量 / 开发模式”四项都不得内部折行，因此 MapToolbar 的四个固定短标签统一改用内容宽度、`min-width: max-content / white-space: nowrap`；MapToolbar 之外的 Q-32 长文本安全换行不变。
+- `400px` 以下先收紧常规间距与内边距，`294px` 以下再用 `clamp(9px, 4.4vw, 13px)`、`2px` gap 和 `1px` 内边距按视口比例紧凑布局，并让焦点项升层，避免窄间距下焦点环被相邻按钮覆盖。执行中曾出现用负字距硬挤的候选；只读审查测得汉字约有 32% 字宽重叠且视口仍有大量空白，已阻断并删除。最终没有负字距、隐藏、裁剪、横向滚动或 DOM 改造。
+- 响应式专项改为冻结父工具栏单排、四文字入口单行和两档紧凑规则。系统 Chrome 在 `480 / 390 / 320px` 普通与 150% 页面缩放六档中，五个控件 top 差均为 `0px`、高度均为 `34px`，四项 `clientWidth = scrollWidth`，文字 Range 均位于各自按钮内且互不重叠，工具栏与 document 横向溢出均为 `0`。普通 `320px` 末项右边界约 `281.29px`；最窄等效 `213px` 档仍保留完整中文、收起按钮与可见焦点环。
+- 工具栏收起 / 展开与开发面板入口实测正常。上一轮控制面板滚动修正也再次验收：父 `.floating-panel-body` 不滚动，管理正文可以到达底部，Tab top 位移为 `0px`。application console、page 与 WebGL error 均为 `0`；响应式专项、控制信息架构、UI system 契约、生产构建与 `git diff --check` 通过。两名独立智能体分别采集六档几何、收展 / 开发入口和固定 Tab / 错误面证据，互补汇总后的终验结论为 `RELEASE ACCEPT`。
+
 ## 2026-07-30：固定控制面板 Tab 并约束开发模式按钮单行
 
 - 根因是控制面板的 `UiTabs` 与正文虽然已经是同级节点，但共同挂在共享 `overflow: auto` 的 `.floating-panel-body` 中；管理 Tab 的长内容因此带着顶部 Tab 一起滚动。修正只覆盖 `generation-panel`：外层 body 改为不滚动的纵向 flex，`.vue-control-panel-root` 补齐 `flex / min-height: 0`，真正的 `overflow: auto` 下沉到 `.control-panel-tab-panels`，没有改变其它浮动面板或共享 `PanelManager`。
