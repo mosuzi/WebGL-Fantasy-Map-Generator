@@ -2110,6 +2110,54 @@ select:disabled {
   font-size: 12px;
 }
 
+.ai-bridge-controls {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid rgba(189, 206, 213, 0.16);
+  border-radius: 6px;
+  background: rgba(16, 25, 30, 0.48);
+}
+
+.ai-bridge-controls > input[type="password"] {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  height: 30px;
+  padding: 0 9px;
+  border: 1px solid rgba(189, 206, 213, 0.24);
+  border-radius: 4px;
+  background: rgba(4, 10, 13, 0.62);
+  color: #f2f6f8;
+}
+
+.ai-bridge-controls > label {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  color: #c5d3d9;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.ai-bridge-controls .development-panel-toolbar {
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  padding-bottom: 8px;
+}
+
+#ai-bridge-status[data-state="success"] {
+  color: #8fe0b5;
+}
+
+#ai-bridge-status[data-state="warning"] {
+  color: #ffd27a;
+}
+
+#ai-bridge-status[data-state="error"] {
+  color: #ff9b92;
+}
+
 .development-panel-section {
   display: grid;
   gap: 8px;

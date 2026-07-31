@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "scope": "权威任务第 204 项：全游戏复合语义接口、规则动作与玩法配方审计",
   "generatedAtPolicy": "报告不写入动态时间，sourceDigest 变化即要求重新生成",
-  "sourceDigest": "80196983d985851e3c8ffadab5d992696398fae94b4aa31abc96f279af5beeb2",
+  "sourceDigest": "ff2662f63130a4acd1a68250cee65631b505077275b48bdb93d3672719fb0ade",
   "definition": {
     "compoundSemanticAction": "一个玩家意图，但执行时需要跨对象/系统、条件分支、业务预检或原子回滚；应由单一规则事务表达。",
     "primitive": "只修改一个稳定字段或纯编辑器显示偏好，可保留为原子 API，不强行包装成复合动作。",
@@ -22,12 +22,12 @@
     "executable-recipe": "已进入公开 planner registry；规划器逐步调用精确事实、预检和执行方法。"
   },
   "denominator": {
-    "fullCapabilityRows": 1187,
+    "fullCapabilityRows": 1195,
     "fullCapabilityUnknown": 0,
     "fullCapabilityUnclassified": 0,
     "fullCapabilityGaps": 0,
-    "publicApiMethods": 309,
-    "classifiedApiMethods": 309,
+    "publicApiMethods": 316,
+    "classifiedApiMethods": 316,
     "cellActionRows": 48,
     "classifiedCellActionRows": 48,
     "canvasModes": 29,
@@ -59,7 +59,7 @@
       "atomic-editor-primitive": 54,
       "editor-runtime-service": 49,
       "read-export-service": 11,
-      "read-primitive": 31,
+      "read-primitive": 38,
       "semantic-action": 164
     },
     "interactionClassifications": {
@@ -4971,6 +4971,41 @@
     }
   ],
   "apiCoverage": [
+    {
+      "method": "analysis.comparePower",
+      "classification": "read-primitive",
+      "actionIds": []
+    },
+    {
+      "method": "analysis.compareRegions",
+      "classification": "read-primitive",
+      "actionIds": []
+    },
+    {
+      "method": "analysis.defineRegion",
+      "classification": "read-primitive",
+      "actionIds": []
+    },
+    {
+      "method": "analysis.describeRegion",
+      "classification": "read-primitive",
+      "actionIds": []
+    },
+    {
+      "method": "analysis.diagnosePopulation",
+      "classification": "read-primitive",
+      "actionIds": []
+    },
+    {
+      "method": "analysis.diagnoseTerrain",
+      "classification": "read-primitive",
+      "actionIds": []
+    },
+    {
+      "method": "analysis.explainPrecipitation",
+      "classification": "read-primitive",
+      "actionIds": []
+    },
     {
       "method": "cells.actions",
       "classification": "read-primitive",

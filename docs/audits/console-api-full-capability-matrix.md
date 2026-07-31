@@ -4,18 +4,18 @@
 
 ## 当前分母
 
-- 交互表面：105（纳入 87，交互审计排除 18）
+- 交互表面：106（纳入 87，交互审计排除 19）
 - 画布模式：29
 - runtime actions：261
 - API action 绑定：260
 - command / inspector 导出：212
-- 公共 API 方法：309
-- 矩阵总行数：1187
+- 公共 API 方法：316
+- 矩阵总行数：1195
 
 ## 分类结果
 
-- covered：1114
-- excluded：73
+- covered：1121
+- excluded：74
 - deferred-owned：0
 - gap：0
 - unknown：0
@@ -74,6 +74,7 @@
 - `surface:global:app-webgl-generator-src-ui-overlay-registry`：全局事件负责快捷键、拖动、焦点或组件桥接，不形成独立地图参数能力。
 - `surface:global:app-webgl-generator-src-ui-panel`：全局事件负责快捷键、拖动、焦点或组件桥接，不形成独立地图参数能力。
 - `surface:global:app-webgl-generator-src-ui-panel-manager`：全局事件负责快捷键、拖动、焦点或组件桥接，不形成独立地图参数能力。
+- `surface:global:app-webgl-generator-src-ui-panels-development-panel`：局部按钮行为已归入开发面板，不重复计入全局分母
 - `surface:global:app-webgl-generator-src-ui-vue-components-base-ui-action-dock`：局部行为已按 18 个 fixed-overlay 宿主展开，不重复计入全局分母
 - `surface:global:app-webgl-generator-src-ui-vue-components-control-panel`：局部行为已归入 fixed-overlay:project-export，不重复计入全局分母
 - `surface:global:app-webgl-generator-src-ui-vue-composables-use-debug-mode`：内部状态同步，不是直接用户交互表面

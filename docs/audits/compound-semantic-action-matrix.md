@@ -4,8 +4,8 @@
 
 ## 审计结论
 
-- 上游能力矩阵：1187 行，unknown / unclassified / gap = 0 / 0 / 0。
-- 公开 API：309 / 309 已归类。
+- 上游能力矩阵：1195 行，unknown / unclassified / gap = 0 / 0 / 0。
+- 公开 API：316 / 316 已归类。
 - Cell / 画布动作：48 / 48 已归类；画布模式 29，直接操控 19 类 / 89 个宿主。
 - 规则事务与玩法配方：69 + 10 = 79。
 - 已有完整事务 69，已有写命令但缺 AI inspector 0，多 API 碎片待收敛 0，缺失游戏规则 0，待发布配方 0，可执行配方 10。
@@ -131,6 +131,6 @@
 
 ## 机器覆盖
 
-- API 分类：`atomic-editor-primitive=54`，`editor-runtime-service=49`，`read-export-service=11`，`read-primitive=31`，`semantic-action=164`。
+- API 分类：`atomic-editor-primitive=54`，`editor-runtime-service=49`，`read-export-service=11`，`read-primitive=38`，`semantic-action=164`。
 - 交互分类：`semantic-input-or-primitive=36`，`ui-boundary=12`。
-- Source digest：`80196983d985851e3c8ffadab5d992696398fae94b4aa31abc96f279af5beeb2`。
+- Source digest：`ff2662f63130a4acd1a68250cee65631b505077275b48bdb93d3672719fb0ade`。

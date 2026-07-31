@@ -2,7 +2,7 @@
 
 > 由 `pnpm run sync:ai-docs` 生成，请勿手工修改。
 
-## 浏览器 API（309）
+## 浏览器 API（316）
 
 | 方法 | 稳定性 | 副作用 | 确认 | AI 手册 |
 |---|---|---|---|---|
@@ -26,6 +26,13 @@
 | `cells.inspectAction` | stable | none-or-export-result | 否 | `docs/ai/map-data-model.md` |
 | `planner.listRecipes` | stable | none-or-export-result | 否 | `docs/ai/runtime-and-loading.md` |
 | `planner.getRecipe` | stable | none-or-export-result | 否 | `docs/ai/runtime-and-loading.md` |
+| `analysis.defineRegion` | stable | map-or-persistent-state | 否 | `docs/ai/regional-analysis.md` |
+| `analysis.describeRegion` | stable | none-or-export-result | 否 | `docs/ai/regional-analysis.md` |
+| `analysis.compareRegions` | stable | map-or-persistent-state | 否 | `docs/ai/regional-analysis.md` |
+| `analysis.explainPrecipitation` | stable | map-or-persistent-state | 否 | `docs/ai/regional-analysis.md` |
+| `analysis.diagnosePopulation` | stable | map-or-persistent-state | 否 | `docs/ai/regional-analysis.md` |
+| `analysis.comparePower` | stable | map-or-persistent-state | 否 | `docs/ai/regional-analysis.md` |
+| `analysis.diagnoseTerrain` | stable | map-or-persistent-state | 否 | `docs/ai/regional-analysis.md` |
 | `regenerationLocks.list` | stable | none-or-export-result | 否 | `docs/ai/safe-change-boundaries.md` |
 | `regenerationLocks.status` | stable | map-or-persistent-state | 否 | `docs/ai/safe-change-boundaries.md` |
 | `regenerationLocks.inspect` | stable | none-or-export-result | 否 | `docs/ai/safe-change-boundaries.md` |

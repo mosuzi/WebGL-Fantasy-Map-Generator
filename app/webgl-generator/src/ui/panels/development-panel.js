@@ -23,8 +23,13 @@ export function createDevelopmentPanel(documentRef, manager) {
 
   let enabled = false;
   let collapsed = false;
+  let aiBridgeFactory = null;
+  let aiBridgeController = null;
+  let pendingBridgeRequest = null;
   const loadTrace = [];
   const healthEvents = [];
+
+  bindAiBridgeControls();
 
   control?.addEventListener("click", () => {
     if (!enabled) setEnabled(true, {open: true});
@@ -82,6 +87,18 @@ export function createDevelopmentPanel(documentRef, manager) {
     get healthEvents() {
       return healthEvents.map(item => ({...item, detail: {...item.detail}}));
     },
+    configureAiBridge: factory => {
+      aiBridgeFactory = factory;
+      restoreAiBridgeSession();
+    },
+    get aiBridge() {
+      return {
+        loaded: Boolean(aiBridgeController),
+        connected: Boolean(aiBridgeController),
+        writeEnabled: Boolean(aiBridgeController?.writeEnabled),
+        pending: pendingBridgeRequest ? {method: pendingBridgeRequest.command?.method, requestId: pendingBridgeRequest.command?.requestId || null} : null
+      };
+    },
     panel: record.panel
   };
 
@@ -135,6 +152,114 @@ export function createDevelopmentPanel(documentRef, manager) {
       detail: {enabled, collapsed}
     }));
   }
+
+  function bindAiBridgeControls() {
+    documentRef.getElementById("ai-bridge-connect")?.addEventListener("click", () => void connectAiBridge());
+    documentRef.getElementById("ai-bridge-write")?.addEventListener("click", () => {
+      if (!aiBridgeController) return updateAiBridgeStatus("请先连接本地 AI 桥", "error");
+      const enabled = aiBridgeController.setWriteEnabled(!aiBridgeController.writeEnabled);
+      updateAiBridgeWriteButton(enabled);
+      updateAiBridgeStatus(enabled ? "已连接·允许本次地图写入" : "已连接·只读", enabled ? "warning" : "success");
+    });
+    documentRef.getElementById("ai-bridge-disconnect")?.addEventListener("click", () => void disconnectAiBridge(true));
+    documentRef.getElementById("ai-bridge-approve")?.addEventListener("click", () => void aiBridgeController?.approvePending());
+    documentRef.getElementById("ai-bridge-reject")?.addEventListener("click", () => void aiBridgeController?.rejectPending());
+  }
+
+  async function connectAiBridge(options = {}) {
+    if (aiBridgeController) return aiBridgeController;
+    if (typeof aiBridgeFactory !== "function") return updateAiBridgeStatus("AI 桥启动器尚未就绪", "error");
+    const tokenInput = documentRef.getElementById("ai-bridge-token");
+    const autoInput = documentRef.getElementById("ai-bridge-auto-reconnect");
+    const pairingToken = String(options.pairingToken || tokenInput?.value || "").trim();
+    if (!pairingToken) return updateAiBridgeStatus("请输入本地桥显示的配对令牌", "error");
+    if (tokenInput) tokenInput.value = pairingToken;
+    updateAiBridgeStatus("正在懒加载 AI 桥…", "loading");
+    try {
+      aiBridgeController = await aiBridgeFactory({
+        pairingToken,
+        endpoint: "http://127.0.0.1:5412",
+        onStatus: detail => handleAiBridgeStatus(detail),
+        onPendingConfirmation: detail => handlePendingBridgeRequest(detail)
+      });
+      const autoReconnect = options.autoReconnect ?? Boolean(autoInput?.checked);
+      if (autoReconnect) {
+        documentRef.defaultView.sessionStorage.setItem("webgl-generator-ai-bridge", JSON.stringify({pairingToken, endpoint: "http://127.0.0.1:5412", autoReconnect: true}));
+      } else {
+        documentRef.defaultView.sessionStorage.removeItem("webgl-generator-ai-bridge");
+      }
+      updateAiBridgeWriteButton(false);
+      return aiBridgeController;
+    } catch (error) {
+      aiBridgeController = null;
+      updateAiBridgeStatus(`连接失败：${error?.message || error}`, "error");
+      return null;
+    }
+  }
+
+  async function disconnectAiBridge(forget = false) {
+    const controller = aiBridgeController;
+    aiBridgeController = null;
+    pendingBridgeRequest = null;
+    renderPendingBridgeRequest();
+    if (controller) await controller.disconnect({forget});
+    if (forget) documentRef.defaultView.sessionStorage.removeItem("webgl-generator-ai-bridge");
+    const session = documentRef.getElementById("ai-bridge-session");
+    if (session) session.textContent = "尚无页面会话";
+    updateAiBridgeWriteButton(false);
+    updateAiBridgeStatus("未连接；主桥接代码不会运行", "idle");
+  }
+
+  function restoreAiBridgeSession() {
+    let saved = null;
+    try {
+      saved = JSON.parse(documentRef.defaultView.sessionStorage.getItem("webgl-generator-ai-bridge") || "null");
+    } catch {}
+    if (!saved?.autoReconnect || !saved.pairingToken) return;
+    const tokenInput = documentRef.getElementById("ai-bridge-token");
+    const autoInput = documentRef.getElementById("ai-bridge-auto-reconnect");
+    if (tokenInput) tokenInput.value = saved.pairingToken;
+    if (autoInput) autoInput.checked = true;
+    void connectAiBridge({pairingToken: saved.pairingToken, autoReconnect: true});
+  }
+
+  function handleAiBridgeStatus(detail = {}) {
+    if (detail.state === "connected") updateAiBridgeStatus(detail.writeEnabled ? "已连接·可写" : "已连接·只读", detail.writeEnabled ? "warning" : "success");
+    else if (detail.state === "awaiting-confirmation") updateAiBridgeStatus(`等待确认：${detail.command?.method || "高风险操作"}`, "warning");
+    else if (detail.state === "reconnecting") updateAiBridgeStatus("连接中断，正在重连…", "loading");
+    else if (detail.state === "disconnected") updateAiBridgeStatus("已断开", "idle");
+    const session = documentRef.getElementById("ai-bridge-session");
+    if (session && detail.pageSessionId) session.textContent = `页面会话 ${detail.pageSessionId.slice(0, 8)}；刷新后写权限自动降级`;
+  }
+
+  function handlePendingBridgeRequest(detail) {
+    pendingBridgeRequest = detail;
+    renderPendingBridgeRequest();
+  }
+
+  function renderPendingBridgeRequest() {
+    const box = documentRef.getElementById("ai-bridge-pending");
+    const approve = documentRef.getElementById("ai-bridge-approve");
+    const reject = documentRef.getElementById("ai-bridge-reject");
+    const pending = Boolean(pendingBridgeRequest);
+    if (box) box.textContent = pending ? `待批准：${pendingBridgeRequest.command?.method}（${pendingBridgeRequest.command?.requestId || "无 requestId"}）` : "暂无待批准操作";
+    if (approve) approve.hidden = !pending;
+    if (reject) reject.hidden = !pending;
+  }
+
+  function updateAiBridgeStatus(text, state) {
+    const status = documentRef.getElementById("ai-bridge-status");
+    if (!status) return;
+    status.textContent = text;
+    status.dataset.state = state;
+  }
+
+  function updateAiBridgeWriteButton(value) {
+    const button = documentRef.getElementById("ai-bridge-write");
+    if (!button) return;
+    button.textContent = value ? "恢复只读" : "允许本次地图写入";
+    button.setAttribute("aria-pressed", value ? "true" : "false");
+  }
 }
 
 function createDevelopmentPanelBody(documentRef, callbacks) {
@@ -146,10 +271,58 @@ function createDevelopmentPanelBody(documentRef, callbacks) {
     developmentSection(documentRef, "健康监测", [healthEventList(documentRef)]),
     developmentSection(documentRef, "加载追踪", [loadTraceList(documentRef)]),
     developmentSection(documentRef, "运行时", [definitionList(documentRef, "runtime-stats")]),
+    aiBridgeSection(documentRef),
     developmentSection(documentRef, "选择", [definitionList(documentRef, "pick-stats")]),
     developmentSection(documentRef, "边界", [boundaryList(documentRef)])
   );
   return root;
+}
+
+function aiBridgeSection(documentRef) {
+  const wrapper = documentRef.createElement("div");
+  wrapper.className = "ai-bridge-controls";
+  const description = paragraph(documentRef, "ai-bridge-description", "默认不加载主桥；视觉开启后只连接本机 127.0.0.1:5412。连接默认只读。");
+  const token = documentRef.createElement("input");
+  token.id = "ai-bridge-token";
+  token.type = "password";
+  token.autocomplete = "off";
+  token.placeholder = "本地桥配对令牌";
+  token.setAttribute("aria-label", "AI 桥配对令牌");
+  const autoLabel = documentRef.createElement("label");
+  const auto = documentRef.createElement("input");
+  auto.id = "ai-bridge-auto-reconnect";
+  auto.type = "checkbox";
+  auto.checked = true;
+  autoLabel.append(auto, " 本次浏览器会话刷新后自动恢复只读连接");
+  const actions = documentRef.createElement("div");
+  actions.className = "development-panel-toolbar";
+  actions.append(
+    actionButton(documentRef, "ai-bridge-connect", "开启 AI 调试"),
+    actionButton(documentRef, "ai-bridge-write", "允许本次地图写入"),
+    actionButton(documentRef, "ai-bridge-disconnect", "断开并忘记")
+  );
+  const status = paragraph(documentRef, "ai-bridge-status", "未连接；主桥接代码不会运行");
+  status.dataset.state = "idle";
+  const session = paragraph(documentRef, "ai-bridge-session", "尚无页面会话");
+  const pending = paragraph(documentRef, "ai-bridge-pending", "暂无待批准操作");
+  const confirmation = documentRef.createElement("div");
+  confirmation.className = "development-panel-toolbar";
+  const approve = actionButton(documentRef, "ai-bridge-approve", "批准本次操作");
+  const reject = actionButton(documentRef, "ai-bridge-reject", "拒绝");
+  approve.hidden = true;
+  reject.hidden = true;
+  confirmation.append(approve, reject);
+  wrapper.append(description, token, autoLabel, actions, status, session, pending, confirmation);
+  return developmentSection(documentRef, "AI 调试", [wrapper]);
+}
+
+function actionButton(documentRef, id, text) {
+  const button = documentRef.createElement("button");
+  button.id = id;
+  button.type = "button";
+  button.className = "secondary-action";
+  button.textContent = text;
+  return button;
 }
 
 function developmentToolbar(documentRef, callbacks) {

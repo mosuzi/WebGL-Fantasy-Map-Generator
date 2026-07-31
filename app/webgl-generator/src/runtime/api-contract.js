@@ -8,6 +8,7 @@ export const API_METHODS = Object.freeze({
   objects: Object.freeze(["types", "get", "list", "query"]),
   cells: Object.freeze(["get", "getAtPoint", "neighbors", "query", "locate", "scan", "actions", "inspectAction"]),
   planner: Object.freeze(["listRecipes", "getRecipe"]),
+  analysis: Object.freeze(["defineRegion", "describeRegion", "compareRegions", "explainPrecipitation", "diagnosePopulation", "comparePower", "diagnoseTerrain"]),
   regenerationLocks: Object.freeze(["list", "status", "inspect", "set", "setMany", "clearKind"]),
   generate: Object.freeze(["getOptions", "setOptions", "newMap", "rerollSeed", "regenerate"]),
   oceanCurrents: Object.freeze(["rename", "regenerate", "inspectWorldRebuild", "rebuildWorld", "cancelWorldRebuild"]),
@@ -95,6 +96,7 @@ const CAPABILITY_GROUPS = Object.freeze({
   "objects.read": {title: "地图对象发现", access: "read"},
   "cells.read": {title: "地图单元只读", access: "read"},
   "planner.read": {title: "AI 规划器配方", access: "read"},
+  "analysis.read": {title: "区域分析", access: "read"},
   "regeneration-locks.control": {title: "重生成对象锁定", access: "write"},
   "map.generate": {title: "地图生成", access: "write"},
   "ocean-currents.control": {title: "洋流", access: "write"},
@@ -232,6 +234,7 @@ function resolveCapabilityGroup(namespace, method) {
   if (namespace === "objects") return "objects.read";
   if (namespace === "cells") return "cells.read";
   if (namespace === "planner") return "planner.read";
+  if (namespace === "analysis") return "analysis.read";
   if (namespace === "regenerationLocks") return "regeneration-locks.control";
   if (namespace === "generate") return "map.generate";
   if (namespace === "oceanCurrents") return "ocean-currents.control";

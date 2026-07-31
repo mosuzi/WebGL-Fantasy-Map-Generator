@@ -28,6 +28,24 @@ node --no-warnings .\tools\webgl-generator-headless-api.mjs .\map.webgl-map.json
 
 CLI 的第三个参数始终是“参数数组”的 JSON。输出永远是一行 JSON；成功为 `{ok:true,data,metadata}`，失败为 `{ok:false,error,metadata}`。metadata 包含 `runtime=headless`、method、sourceChecksum 和 `mutates=none`。
 
+## 连接当前标签页
+
+启动只监听本机回环的桥服务：
+
+```powershell
+pnpm run start:ai-bridge
+```
+
+终端会输出配对令牌。打开地图的开发模式，在“AI 调试”区输入令牌并视觉点击“开启 AI 调试”；主桥此时才懒加载，连接默认只读。外部调用：
+
+```powershell
+node --no-warnings .\tools\webgl-generator-ai-bridge-cli.mjs status --token <令牌>
+node --no-warnings .\tools\webgl-generator-ai-bridge-cli.mjs call info.mapSummary '[]' --token <令牌>
+node --no-warnings .\tools\webgl-generator-ai-bridge-cli.mjs call analysis.describeRegion '[{\"kind\":\"state\",\"id\":3}]' --token <令牌>
+```
+
+写请求还必须在页面开启本次地图写权限，并提供唯一 `--request-id` 和预检时得到的 `--expected-revision`；metadata 标记 `requiresConfirm` 的方法会停在页面等待逐次批准。刷新会生成新 pageSession 并自动恢复只读连接，旧写权限和待确认请求不继承；断开并忘记会清除本次浏览器会话的恢复信息。
+
 ## 格式、迁移与不变性
 
 - 支持完整地图 JSON、`.json.gz` 和模块入口的 `gzip-base64` payload。
@@ -38,5 +56,4 @@ CLI 的第三个参数始终是“参数数组”的 JSON。输出永远是一�
 
 ## 选择建议
 
-仅分析存档时优先无头；需要观察画面或实际编辑时用浏览器；需要把外部 AI 连接到当前标签页时报告“受控桥尚未实现”，不要退化为远程调试浏览器。
-
+仅分析存档时优先无头；需要观察画面或实际编辑时用浏览器；外部 AI 连接当前标签页时使用受控桥，不开放远程调试端口，也不执行任意 JavaScript。

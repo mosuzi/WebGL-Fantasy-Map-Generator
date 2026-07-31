@@ -265,6 +265,7 @@ function buildGlobalEventRows() {
     {path: "app/webgl-generator/src/runtime/regeneration-lock-ui-session.js", entry: "重生成锁面板关闭清理事件", result: "取消地图多选并清理临时集合", included: false, reason: "用户入口已归入 14 个对象列表与共享画布模式，不重复计入全局分母"},
     {path: "app/webgl-generator/src/ui/brush-cursor-preview.js", entry: "画笔控件 document 委托监听", result: "画笔 cursor 刷新", included: false, reason: "局部委托行为已归入 canvas:map-canvas，不重复计入全局分母"},
     {path: "app/webgl-generator/src/ui/label-naming-panel-trigger.js", entry: "标签面板 document 委托监听", result: "标签面板打开", included: false, reason: "局部委托行为已归入对应面板，不重复计入全局分母"},
+    {path: "app/webgl-generator/src/ui/panels/development-panel.js", entry: "开发面板 AI 桥按钮监听", result: "连接、授权、确认或断开本地桥", included: false, reason: "局部按钮行为已归入开发面板，不重复计入全局分母"},
     {path: "app/webgl-generator/src/ui/vue/composables/use-debug-mode.js", entry: "内部 debug 状态同步", result: "Vue debug 状态", included: false, reason: "内部状态同步，不是直接用户交互表面"},
     {path: "app/webgl-generator/src/ui/vue/composables/use-draggable-floating-panel.js", entry: "局部浮层拖动 window 捕获", result: "浮层拖动", included: false, reason: "拖动生命周期已归入 shared / fixed-overlay，不重复计入全局分母"},
     {path: "app/webgl-generator/src/ui/vue/components/base/UiActionDock.vue", entry: "动作坞 document 外部点击", result: "二级面板关闭", included: false, reason: "局部行为已按 18 个 fixed-overlay 宿主展开，不重复计入全局分母"},

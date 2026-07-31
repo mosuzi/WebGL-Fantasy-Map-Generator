@@ -3,7 +3,7 @@
     "generatedAt": "由 sync 脚本生成；时间不参与一致性比较",
     "apiVersion": "1.0.0",
     "plannerRecipeSchemaVersion": "1.0.0",
-    "browserMethods": 309,
+    "browserMethods": 316,
     "headlessMethods": 23,
     "recipes": 10,
     "runtimeProfiles": [
@@ -232,6 +232,83 @@
       "capabilityGroup": "planner",
       "schemaDiscovery": "window.webglGeneratorApi.info.describe(\"planner.getRecipe\")",
       "handbook": "docs/ai/runtime-and-loading.md"
+    },
+    {
+      "method": "analysis.defineRegion",
+      "stability": "stable",
+      "mutates": "map-or-persistent-state",
+      "undoable": false,
+      "async": false,
+      "requiresConfirm": false,
+      "capabilityGroup": "analysis",
+      "schemaDiscovery": "window.webglGeneratorApi.info.describe(\"analysis.defineRegion\")",
+      "handbook": "docs/ai/regional-analysis.md"
+    },
+    {
+      "method": "analysis.describeRegion",
+      "stability": "stable",
+      "mutates": "none-or-export-result",
+      "undoable": false,
+      "async": false,
+      "requiresConfirm": false,
+      "capabilityGroup": "analysis",
+      "schemaDiscovery": "window.webglGeneratorApi.info.describe(\"analysis.describeRegion\")",
+      "handbook": "docs/ai/regional-analysis.md"
+    },
+    {
+      "method": "analysis.compareRegions",
+      "stability": "stable",
+      "mutates": "map-or-persistent-state",
+      "undoable": false,
+      "async": false,
+      "requiresConfirm": false,
+      "capabilityGroup": "analysis",
+      "schemaDiscovery": "window.webglGeneratorApi.info.describe(\"analysis.compareRegions\")",
+      "handbook": "docs/ai/regional-analysis.md"
+    },
+    {
+      "method": "analysis.explainPrecipitation",
+      "stability": "stable",
+      "mutates": "map-or-persistent-state",
+      "undoable": false,
+      "async": false,
+      "requiresConfirm": false,
+      "capabilityGroup": "analysis",
+      "schemaDiscovery": "window.webglGeneratorApi.info.describe(\"analysis.explainPrecipitation\")",
+      "handbook": "docs/ai/regional-analysis.md"
+    },
+    {
+      "method": "analysis.diagnosePopulation",
+      "stability": "stable",
+      "mutates": "map-or-persistent-state",
+      "undoable": false,
+      "async": false,
+      "requiresConfirm": false,
+      "capabilityGroup": "analysis",
+      "schemaDiscovery": "window.webglGeneratorApi.info.describe(\"analysis.diagnosePopulation\")",
+      "handbook": "docs/ai/regional-analysis.md"
+    },
+    {
+      "method": "analysis.comparePower",
+      "stability": "stable",
+      "mutates": "map-or-persistent-state",
+      "undoable": false,
+      "async": false,
+      "requiresConfirm": false,
+      "capabilityGroup": "analysis",
+      "schemaDiscovery": "window.webglGeneratorApi.info.describe(\"analysis.comparePower\")",
+      "handbook": "docs/ai/regional-analysis.md"
+    },
+    {
+      "method": "analysis.diagnoseTerrain",
+      "stability": "stable",
+      "mutates": "map-or-persistent-state",
+      "undoable": false,
+      "async": false,
+      "requiresConfirm": false,
+      "capabilityGroup": "analysis",
+      "schemaDiscovery": "window.webglGeneratorApi.info.describe(\"analysis.diagnoseTerrain\")",
+      "handbook": "docs/ai/regional-analysis.md"
     },
     {
       "method": "regenerationLocks.list",

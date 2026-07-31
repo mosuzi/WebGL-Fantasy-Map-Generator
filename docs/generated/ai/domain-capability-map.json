@@ -25,6 +25,12 @@
       "wikiPage": "docs/wiki/功能与领域总览.md"
     },
     {
+      "namespace": "analysis",
+      "methodCount": 7,
+      "aiHandbook": "docs/ai/README.md",
+      "wikiPage": "docs/wiki/功能与领域总览.md"
+    },
+    {
       "namespace": "regenerationLocks",
       "methodCount": 6,
       "aiHandbook": "docs/ai/safe-change-boundaries.md",

@@ -139,6 +139,8 @@
     "regress:exports": "node --no-warnings ./tools/webgl-generator-export-regression-suite.mjs",
     "regress:api": "node ./tools/webgl-generator-api-capabilities-regression.mjs",
     "regress:headless-api": "node --no-warnings ./tools/webgl-generator-headless-api-regression.mjs",
+    "start:ai-bridge": "node --no-warnings ./tools/webgl-generator-ai-bridge-server.mjs",
+    "regress:ai-browser-bridge": "node --no-warnings ./tools/webgl-generator-ai-browser-bridge-regression.mjs",
     "regress:map-analysis": "node --no-warnings ./tools/webgl-generator-map-analysis-regression.mjs",
     "regress:api-inventory": "node --no-warnings ./tools/webgl-generator-api-capability-inventory-regression.mjs",
     "regress:cells-read": "node --no-warnings ./tools/webgl-generator-cell-read-api-regression.mjs",

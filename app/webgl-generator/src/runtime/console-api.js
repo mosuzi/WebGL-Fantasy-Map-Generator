@@ -17,6 +17,7 @@ import {getCellAtPoint, getCellNeighbors, getCellSnapshot, queryCells, scanCells
 import {inspectCellAction, listCellActions} from "./cell-action-inspector-registry.js";
 import {getPlannerRecipe, listPlannerRecipes} from "./planner-recipe-registry.js";
 import {buildMapSummary as buildSharedMapSummary} from "./read-only-map-core.js";
+import {compareAnalysisRegions, compareRegionPower, defineAnalysisRegion, describeAnalysisRegion, diagnoseRegionPopulation, diagnoseRegionTerrain, explainRegionPrecipitation} from "./map-analysis-api.js";
 
 export function installConsoleApi(documentRef, state, options = {}) {
   const view = documentRef.defaultView || window;
@@ -84,6 +85,15 @@ export function createConsoleApi(documentRef, state, actions = {}) {
     planner: Object.freeze({
       listRecipes: () => apiCall(() => listPlannerRecipes()),
       getRecipe: recipeId => apiCall(() => getPlannerRecipe(recipeId))
+    }),
+    analysis: Object.freeze({
+      defineRegion: specification => apiCall(() => defineAnalysisRegion(state.map, specification)),
+      describeRegion: (specification, options = {}) => apiCall(() => describeAnalysisRegion(state.map, specification, options)),
+      compareRegions: (left, right, options = {}) => apiCall(() => compareAnalysisRegions(state.map, left, right, options)),
+      explainPrecipitation: (specification, options = {}) => apiCall(() => explainRegionPrecipitation(state.map, specification, options)),
+      diagnosePopulation: (specification, options = {}) => apiCall(() => diagnoseRegionPopulation(state.map, specification, options)),
+      comparePower: (left, right, options = {}) => apiCall(() => compareRegionPower(state.map, left, right, options)),
+      diagnoseTerrain: (specification, options = {}) => apiCall(() => diagnoseRegionTerrain(state.map, specification, options))
     }),
     regenerationLocks: Object.freeze({
       list: (options = {}) => apiCall(() => requireApiAction(actions.regenerationLocks?.list, "regenerationLocks.list")(options)),
@@ -471,6 +481,7 @@ function buildCapabilities(api) {
       objects: "readonly-object-discovery",
       cells: "readonly-grid-and-pack-cell-discovery",
       planner: "readonly-planner-recipes",
+      analysis: "readonly-regional-analysis",
       regenerationLocks: "persistent-regeneration-protection",
       generate: "map-regeneration",
       oceanCurrents: "ocean-current-edit-and-world-rebuild",
@@ -517,6 +528,15 @@ export function buildMethodMetadata() {
     planner: {
       listRecipes: {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
       getRecipe: {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false}
+    },
+    analysis: {
+      defineRegion: {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
+      describeRegion: {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
+      compareRegions: {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
+      explainPrecipitation: {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
+      diagnosePopulation: {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
+      comparePower: {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
+      diagnoseTerrain: {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false}
     },
     regenerationLocks: {
       list: {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},

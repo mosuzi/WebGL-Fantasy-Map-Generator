@@ -1,20 +1,20 @@
 {
   "schemaVersion": 1,
-  "sourceDigest": "410f474585e6c412f5980154e966d0a15855bac1e417401c6c41517f61c43fe9",
+  "sourceDigest": "1cc6de55118c2d47d74ddd58ec35d7aa2509796364a10d3ae7e3a07e00ce2bc5",
   "sourceRoots": [
     "app/webgl-generator/index.html",
     "app/webgl-generator/src/**/*.{js,vue}",
     "app/webgl-generator/src/runtime/**/*-commands.js"
   ],
   "denominator": {
-    "interactionSurfaces": 105,
+    "interactionSurfaces": 106,
     "includedInteractionSurfaces": 87,
-    "excludedInteractionSurfaces": 18,
+    "excludedInteractionSurfaces": 19,
     "canvasModes": 29,
     "runtimeActions": 261,
     "apiActionBindings": 260,
     "commandAndInspectorExports": 212,
-    "publicApiMethods": 309
+    "publicApiMethods": 316
   },
   "statusPolicy": {
     "covered": "公共 API 已存在且与底层 action / command 或只读 helper 共路径",
@@ -23,9 +23,9 @@
     "gap": "适合参数化且没有公共 API，必须在第 200 项关闭"
   },
   "totals": {
-    "rows": 1187,
-    "covered": 1114,
-    "excluded": 73,
+    "rows": 1195,
+    "covered": 1121,
+    "excluded": 74,
     "deferred-owned": 0,
     "gap": 0,
     "unknown": 0,
@@ -15398,6 +15398,223 @@
       "compatibility": "旧 API action 路径保持可调用",
       "evidence": [
         "tools/webgl-generator-api-action-convergence-regression.mjs"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "api:analysis.comparePower",
+      "capabilityId": "analysis.comparePower",
+      "title": "公共 API analysis.comparePower",
+      "sourceKind": "public-api",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/api-contract.js",
+        "app/webgl-generator/src/runtime/console-api.js"
+      ],
+      "uiEntry": "",
+      "action": "analysis.comparePower",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "analysis.comparePower"
+      ],
+      "inputSpace": "info.describe(method)",
+      "mutates": "map-or-persistent-data",
+      "preflight": "由 info.describe(method) 与领域 inspector 发现",
+      "businessCodes": [],
+      "confirm": "由 methodMetadata.requiresConfirm 发现",
+      "undoOrRollback": "由 methodMetadata.undoable 与结果 metadata 发现",
+      "async": false,
+      "compatibility": "受 API 主版本和方法稳定性契约保护",
+      "evidence": [
+        "tools/webgl-generator-api-capabilities-regression.mjs",
+        "tools/webgl-generator-api-stability-contract-regression.mjs"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "api:analysis.compareRegions",
+      "capabilityId": "analysis.compareRegions",
+      "title": "公共 API analysis.compareRegions",
+      "sourceKind": "public-api",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/api-contract.js",
+        "app/webgl-generator/src/runtime/console-api.js"
+      ],
+      "uiEntry": "",
+      "action": "analysis.compareRegions",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "analysis.compareRegions"
+      ],
+      "inputSpace": "info.describe(method)",
+      "mutates": "map-or-persistent-data",
+      "preflight": "由 info.describe(method) 与领域 inspector 发现",
+      "businessCodes": [],
+      "confirm": "由 methodMetadata.requiresConfirm 发现",
+      "undoOrRollback": "由 methodMetadata.undoable 与结果 metadata 发现",
+      "async": false,
+      "compatibility": "受 API 主版本和方法稳定性契约保护",
+      "evidence": [
+        "tools/webgl-generator-api-capabilities-regression.mjs",
+        "tools/webgl-generator-api-stability-contract-regression.mjs"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "api:analysis.defineRegion",
+      "capabilityId": "analysis.defineRegion",
+      "title": "公共 API analysis.defineRegion",
+      "sourceKind": "public-api",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/api-contract.js",
+        "app/webgl-generator/src/runtime/console-api.js"
+      ],
+      "uiEntry": "",
+      "action": "analysis.defineRegion",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "analysis.defineRegion"
+      ],
+      "inputSpace": "info.describe(method)",
+      "mutates": "map-or-persistent-data",
+      "preflight": "由 info.describe(method) 与领域 inspector 发现",
+      "businessCodes": [],
+      "confirm": "由 methodMetadata.requiresConfirm 发现",
+      "undoOrRollback": "由 methodMetadata.undoable 与结果 metadata 发现",
+      "async": false,
+      "compatibility": "受 API 主版本和方法稳定性契约保护",
+      "evidence": [
+        "tools/webgl-generator-api-capabilities-regression.mjs",
+        "tools/webgl-generator-api-stability-contract-regression.mjs"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "api:analysis.describeRegion",
+      "capabilityId": "analysis.describeRegion",
+      "title": "公共 API analysis.describeRegion",
+      "sourceKind": "public-api",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/api-contract.js",
+        "app/webgl-generator/src/runtime/console-api.js"
+      ],
+      "uiEntry": "",
+      "action": "analysis.describeRegion",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "analysis.describeRegion"
+      ],
+      "inputSpace": "info.describe(method)",
+      "mutates": "none",
+      "preflight": "由 info.describe(method) 与领域 inspector 发现",
+      "businessCodes": [],
+      "confirm": "由 methodMetadata.requiresConfirm 发现",
+      "undoOrRollback": "由 methodMetadata.undoable 与结果 metadata 发现",
+      "async": false,
+      "compatibility": "受 API 主版本和方法稳定性契约保护",
+      "evidence": [
+        "tools/webgl-generator-api-capabilities-regression.mjs",
+        "tools/webgl-generator-api-stability-contract-regression.mjs"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "api:analysis.diagnosePopulation",
+      "capabilityId": "analysis.diagnosePopulation",
+      "title": "公共 API analysis.diagnosePopulation",
+      "sourceKind": "public-api",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/api-contract.js",
+        "app/webgl-generator/src/runtime/console-api.js"
+      ],
+      "uiEntry": "",
+      "action": "analysis.diagnosePopulation",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "analysis.diagnosePopulation"
+      ],
+      "inputSpace": "info.describe(method)",
+      "mutates": "map-or-persistent-data",
+      "preflight": "由 info.describe(method) 与领域 inspector 发现",
+      "businessCodes": [],
+      "confirm": "由 methodMetadata.requiresConfirm 发现",
+      "undoOrRollback": "由 methodMetadata.undoable 与结果 metadata 发现",
+      "async": false,
+      "compatibility": "受 API 主版本和方法稳定性契约保护",
+      "evidence": [
+        "tools/webgl-generator-api-capabilities-regression.mjs",
+        "tools/webgl-generator-api-stability-contract-regression.mjs"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "api:analysis.diagnoseTerrain",
+      "capabilityId": "analysis.diagnoseTerrain",
+      "title": "公共 API analysis.diagnoseTerrain",
+      "sourceKind": "public-api",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/api-contract.js",
+        "app/webgl-generator/src/runtime/console-api.js"
+      ],
+      "uiEntry": "",
+      "action": "analysis.diagnoseTerrain",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "analysis.diagnoseTerrain"
+      ],
+      "inputSpace": "info.describe(method)",
+      "mutates": "map-or-persistent-data",
+      "preflight": "由 info.describe(method) 与领域 inspector 发现",
+      "businessCodes": [],
+      "confirm": "由 methodMetadata.requiresConfirm 发现",
+      "undoOrRollback": "由 methodMetadata.undoable 与结果 metadata 发现",
+      "async": false,
+      "compatibility": "受 API 主版本和方法稳定性契约保护",
+      "evidence": [
+        "tools/webgl-generator-api-capabilities-regression.mjs",
+        "tools/webgl-generator-api-stability-contract-regression.mjs"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "api:analysis.explainPrecipitation",
+      "capabilityId": "analysis.explainPrecipitation",
+      "title": "公共 API analysis.explainPrecipitation",
+      "sourceKind": "public-api",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/api-contract.js",
+        "app/webgl-generator/src/runtime/console-api.js"
+      ],
+      "uiEntry": "",
+      "action": "analysis.explainPrecipitation",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "analysis.explainPrecipitation"
+      ],
+      "inputSpace": "info.describe(method)",
+      "mutates": "map-or-persistent-data",
+      "preflight": "由 info.describe(method) 与领域 inspector 发现",
+      "businessCodes": [],
+      "confirm": "由 methodMetadata.requiresConfirm 发现",
+      "undoOrRollback": "由 methodMetadata.undoable 与结果 metadata 发现",
+      "async": false,
+      "compatibility": "受 API 主版本和方法稳定性契约保护",
+      "evidence": [
+        "tools/webgl-generator-api-capabilities-regression.mjs",
+        "tools/webgl-generator-api-stability-contract-regression.mjs"
       ],
       "status": "covered",
       "owner": "",
@@ -38392,6 +38609,33 @@
       "status": "excluded",
       "owner": "",
       "exclusionReason": "全局事件负责快捷键、拖动、焦点或组件桥接，不形成独立地图参数能力。"
+    },
+    {
+      "matrixId": "surface:global:app-webgl-generator-src-ui-panels-development-panel",
+      "capabilityId": "ui-shell",
+      "title": "开发面板 AI 桥按钮监听",
+      "sourceKind": "interaction-surface",
+      "sourceFiles": [
+        "app/webgl-generator/src/ui/panels/development-panel.js"
+      ],
+      "uiEntry": "global:app-webgl-generator-src-ui-panels-development-panel",
+      "action": "",
+      "commandOrInspector": "",
+      "apiMethods": [],
+      "inputSpace": "not-applicable",
+      "mutates": "ui-shell",
+      "preflight": "not-applicable",
+      "businessCodes": [],
+      "confirm": "not-applicable",
+      "undoOrRollback": "not-applicable",
+      "async": false,
+      "compatibility": "不改变地图 schema",
+      "evidence": [
+        "tools/webgl-generator-interaction-surface-inventory.mjs"
+      ],
+      "status": "excluded",
+      "owner": "",
+      "exclusionReason": "局部按钮行为已归入开发面板，不重复计入全局分母"
     },
     {
       "matrixId": "surface:global:app-webgl-generator-src-ui-vue-components-base-ui-action-dock",

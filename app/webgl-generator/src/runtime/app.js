@@ -2730,7 +2730,9 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
 
   const view = documentRef.defaultView || window;
   view.__webglGeneratorApp = state;
-  installConsoleApi(documentRef, state, {actions: runtimeActions});
+  const consoleApi = installConsoleApi(documentRef, state, {actions: runtimeActions});
+  state.panels.development?.configureAiBridge?.(bridgeOptions => import("./ai-browser-bridge.js")
+    .then(module => module.startAiBrowserBridge({api: consoleApi, documentRef, ...bridgeOptions})));
   state.keyboardShortcuts = installKeyboardShortcuts(documentRef, {
     canExecute: item => canExecuteKeyboardShortcut(state, item),
     execute: item => executeKeyboardShortcut(state, documentRef, item, runtimePanelHandlers),

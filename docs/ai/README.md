@@ -14,7 +14,7 @@
 
 | 目标 | 入口 | 能力边界 |
 |---|---|---|
-| 当前已打开地图、UI、下载、相机或编辑事务 | `window.webglGeneratorApi` | 309 个公开方法；包含只读、UI 状态和写事务 |
+| 当前已打开地图、UI、下载、相机或编辑事务 | `window.webglGeneratorApi` | 316 个公开方法；包含只读、UI 状态和写事务 |
 | 本地存档的批量 / 自动只读分析 | `createHeadlessMapApi` 或 `tools/webgl-generator-headless-api.mjs` | 无浏览器；文件、对象、Cell、气候、地形、人口、planner、区域分析；严格不写 |
 | 当前标签页但调用者不在页面上下文 | 尚未实现 | 不得用调试端口、Cookie 或 localStorage 绕过；受控桥需另行批准 |
 
@@ -36,4 +36,3 @@
 - 晴布赫斯降水 / 人口：[`playbooks/kingdom-rainfall-population.md`](./playbooks/kingdom-rainfall-population.md)
 - 高山无人区南北平原：[`playbooks/wilderness-population-power.md`](./playbooks/wilderness-population-power.md)
 - 山地高度自然化：[`playbooks/mountain-gradient-naturalization.md`](./playbooks/mountain-gradient-naturalization.md)
-
