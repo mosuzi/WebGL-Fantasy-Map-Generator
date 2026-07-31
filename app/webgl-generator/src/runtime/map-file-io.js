@@ -868,14 +868,14 @@ function isCompressedMapDocumentFile(file) {
 }
 
 function textByteLength(documentRef, text) {
-  const view = documentRef.defaultView || window;
+  const view = documentRef?.defaultView || globalThis;
   if (typeof view.Blob === "function") return new view.Blob([text], {type: "application/json;charset=utf-8"}).size;
   if (typeof TextEncoder === "function") return new TextEncoder().encode(text).byteLength;
   return text.length;
 }
 
 async function decompressMapDocumentFile(documentRef, file) {
-  const view = documentRef.defaultView || window;
+  const view = documentRef?.defaultView || globalThis;
   if (typeof view.DecompressionStream !== "function" || typeof view.Response !== "function" || typeof view.Blob !== "function") {
     throw new Error("当前浏览器不支持读取压缩地图文件");
   }
@@ -884,7 +884,7 @@ async function decompressMapDocumentFile(documentRef, file) {
 }
 
 export async function decompressGzipBase64Text(documentRef, data) {
-  const view = documentRef.defaultView || window;
+  const view = documentRef?.defaultView || globalThis;
   if (typeof view.DecompressionStream !== "function" || typeof view.Response !== "function" || typeof view.Blob !== "function") {
     throw new Error("当前浏览器不支持读取压缩地图文件");
   }
@@ -894,7 +894,7 @@ export async function decompressGzipBase64Text(documentRef, data) {
 }
 
 async function createGzipTextBlob(documentRef, text) {
-  const view = documentRef.defaultView || window;
+  const view = documentRef?.defaultView || globalThis;
   if (typeof view.CompressionStream !== "function" || typeof view.Response !== "function" || typeof view.Blob !== "function") {
     throw new Error("当前浏览器不支持导出压缩地图文件");
   }

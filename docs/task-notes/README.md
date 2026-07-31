@@ -6,6 +6,7 @@
 
 ## 当前活动专题映射
 
+- 权威任务第 223～226 项对应 `headless-api-ai-docs-wiki.md`：依次建立共享 API 核心与无浏览器只读运行时、区域聚合与三个标准问题基线、AI 友好文档和机器目录、GitHub Wiki 人类文档与可复现发布流程；当前标签页受控桥和无头写入不在本批。
 - 权威任务第 220～222 项对应 `zone-semantics-natural-regions-and-wilderness.md`：依次补齐事件地区参与方与详情、自然 / 自定义地区及中性基础影响、自动无人区连通分块与独立名称标签；旧图只做非破坏性归一化，不把 biome 或中立国家语义混入地区。
 - 权威任务第 64 项对应 `canvas-tool-mode-manager.md`：修正省份笔刷抬手提交与取消回滚，并把画布模式回归清单从 19 个同步到运行时真实 23 个，不扩展其它省份能力。
 - 权威任务第 65 项对应 `selection-panel-policy.md`：按既有方案 B 补独立备注的 `notes-panel` 绑定，不改变其它对象路由。
@@ -43,6 +44,7 @@
 - `next-quasi-authoritative-interaction-remediation-tasks-2026-07-20.md`：统一交互审计形成的 `Q-25～Q-33` 来源问题、功能变化边界和最小验收；`Q-25～Q-27` 已转为权威任务第 201～203 项并完成，`Q-28～Q-33` 已于 2026-07-29 按依赖转为权威任务第 211～216 项。
 - `city-scale-and-provincial-capital-consistency.md`：权威任务第 217～218 项的真实浏览器反例、单一城市规模契约、行政角色附加表达、最终省会重评、锁定保护、旧图兼容和统一验收矩阵。
 - `zone-semantics-natural-regions-and-wilderness.md`：权威任务第 220～222 项施工图，冻结事件参与方、自然 / 自定义地区、中性基础影响、自动无人区连通分块、名称继承、标签与旧图兼容边界。
+- `headless-api-ai-docs-wiki.md`：权威任务第 223～226 项施工图，冻结共享核心、无头只读边界、区域聚合、三个标准问题、AI 文档机器目录、Wiki 源稿和发布门禁。
 - `editor-and-stat-panel-inventory.md`：正式版编辑器与统计面板清单。
 - `user-facing-shell-debug-export-and-naming-plan.md`：用户外壳、开发模式、导入导出和命名策略计划。
 - `initialization-loading-flow.md`：页面初始化与地图加载流程规约，记录阶段边界、预算和 Chrome 验证要求。

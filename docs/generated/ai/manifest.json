@@ -1,0 +1,13 @@
+{
+  "generatedAt": "由 sync 脚本生成；时间不参与一致性比较",
+  "apiVersion": "1.0.0",
+  "plannerRecipeSchemaVersion": "1.0.0",
+  "browserMethods": 309,
+  "headlessMethods": 23,
+  "recipes": 10,
+  "runtimeProfiles": [
+    "browser",
+    "headless-readonly"
+  ],
+  "entry": "docs/ai/README.md"
+}

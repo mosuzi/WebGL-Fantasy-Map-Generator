@@ -1,0 +1,100 @@
+{
+  "domains": [
+    {
+      "namespace": "info",
+      "methodCount": 6,
+      "aiHandbook": "docs/ai/README.md",
+      "wikiPage": "docs/wiki/功能与领域总览.md"
+    },
+    {
+      "namespace": "objects",
+      "methodCount": 4,
+      "aiHandbook": "docs/ai/regional-analysis.md",
+      "wikiPage": "docs/wiki/地图数据与区域分析.md"
+    },
+    {
+      "namespace": "cells",
+      "methodCount": 8,
+      "aiHandbook": "docs/ai/regional-analysis.md",
+      "wikiPage": "docs/wiki/地图数据与区域分析.md"
+    },
+    {
+      "namespace": "planner",
+      "methodCount": 2,
+      "aiHandbook": "docs/ai/README.md",
+      "wikiPage": "docs/wiki/功能与领域总览.md"
+    },
+    {
+      "namespace": "regenerationLocks",
+      "methodCount": 6,
+      "aiHandbook": "docs/ai/safe-change-boundaries.md",
+      "wikiPage": "docs/wiki/编辑器与安全修改.md"
+    },
+    {
+      "namespace": "generate",
+      "methodCount": 5,
+      "aiHandbook": "docs/ai/README.md",
+      "wikiPage": "docs/wiki/功能与领域总览.md"
+    },
+    {
+      "namespace": "oceanCurrents",
+      "methodCount": 5,
+      "aiHandbook": "docs/ai/README.md",
+      "wikiPage": "docs/wiki/功能与领域总览.md"
+    },
+    {
+      "namespace": "selection",
+      "methodCount": 12,
+      "aiHandbook": "docs/ai/README.md",
+      "wikiPage": "docs/wiki/功能与领域总览.md"
+    },
+    {
+      "namespace": "layers",
+      "methodCount": 15,
+      "aiHandbook": "docs/ai/README.md",
+      "wikiPage": "docs/wiki/功能与领域总览.md"
+    },
+    {
+      "namespace": "units",
+      "methodCount": 9,
+      "aiHandbook": "docs/ai/README.md",
+      "wikiPage": "docs/wiki/功能与领域总览.md"
+    },
+    {
+      "namespace": "climate",
+      "methodCount": 16,
+      "aiHandbook": "docs/ai/playbooks/kingdom-rainfall-population.md",
+      "wikiPage": "docs/wiki/气候与降水.md"
+    },
+    {
+      "namespace": "history",
+      "methodCount": 5,
+      "aiHandbook": "docs/ai/safe-change-boundaries.md",
+      "wikiPage": "docs/wiki/编辑器与安全修改.md"
+    },
+    {
+      "namespace": "edit",
+      "methodCount": 179,
+      "aiHandbook": "docs/ai/safe-change-boundaries.md",
+      "wikiPage": "docs/wiki/编辑器与安全修改.md"
+    },
+    {
+      "namespace": "data",
+      "methodCount": 16,
+      "aiHandbook": "docs/ai/README.md",
+      "wikiPage": "docs/wiki/存档与导入导出.md"
+    },
+    {
+      "namespace": "namebases",
+      "methodCount": 14,
+      "aiHandbook": "docs/ai/README.md",
+      "wikiPage": "docs/wiki/功能与领域总览.md"
+    },
+    {
+      "namespace": "debug",
+      "methodCount": 7,
+      "aiHandbook": "docs/ai/README.md",
+      "wikiPage": "docs/wiki/API与自动化.md"
+    }
+  ]
+}

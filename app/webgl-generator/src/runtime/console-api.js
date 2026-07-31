@@ -16,6 +16,7 @@ import {getObjectSnapshot, listObjectSnapshots, listObjectTypes, queryObjectSnap
 import {getCellAtPoint, getCellNeighbors, getCellSnapshot, queryCells, scanCells} from "./cell-query-api.js";
 import {inspectCellAction, listCellActions} from "./cell-action-inspector-registry.js";
 import {getPlannerRecipe, listPlannerRecipes} from "./planner-recipe-registry.js";
+import {buildMapSummary as buildSharedMapSummary} from "./read-only-map-core.js";
 
 export function installConsoleApi(documentRef, state, options = {}) {
   const view = documentRef.defaultView || window;
@@ -998,36 +999,11 @@ function normalizeCellLocateOptions(options) {
 }
 
 function buildMapSummary(state) {
-  const map = state?.map;
-  if (!map) return {ready: false};
-  return {
-    ready: true,
-    ...(state.mapRevision?.getSnapshot?.() || {}),
-    seed: map.metadata?.seed || map.options?.seed || state.options?.seed || "",
-    checksum: map.metadata?.checksum || map.summary?.checksum || "",
-    generatedAt: map.metadata?.generatedAt || "",
-    generatorStage: map.metadata?.generatorStage || "",
-    graphWidth: numberOrZero(map.metadata?.graphWidth ?? map.options?.graphWidth),
-    graphHeight: numberOrZero(map.metadata?.graphHeight ?? map.options?.graphHeight),
-    gridCells: numberOrZero(map.metadata?.gridCells ?? map.grid?.metadata?.actualCells ?? map.grid?.cells?.i?.length),
-    packCells: numberOrZero(map.metadata?.packCells ?? map.pack?.metadata?.cells ?? map.pack?.cells?.i?.length),
-    features: numberOrZero(map.features?.metadata?.features ?? countArrayItems(map.features?.features)),
-    states: countPoliticalItems(map.politics?.states),
-    provinces: countPoliticalItems(map.politics?.provinces),
-    cities: numberOrZero(map.settlements?.metadata?.cities ?? countArrayItems(map.settlements?.burgs)),
-    routes: numberOrZero(map.settlements?.metadata?.routes ?? countArrayItems(map.settlements?.routes)),
-    rivers: numberOrZero(map.rivers?.metadata?.rivers ?? countArrayItems(map.rivers?.rivers)),
-    lakes: numberOrZero(map.features?.metadata?.lakes),
-    cultures: countArrayItems(map.society?.cultures),
-    religions: countArrayItems(map.society?.religions),
-    markers: numberOrZero(map.markers?.metadata?.markers ?? countArrayItems(map.markers?.markers)),
-    zones: numberOrZero(map.zones?.metadata?.zones ?? countArrayItems(map.zones?.zones)),
-    regiments: numberOrZero(map.military?.metadata?.regiments ?? countArrayItems(map.military?.regiments)),
-    measurements: numberOrZero(map.measurements?.metadata?.measurements ?? countArrayItems(map.measurements?.items)),
-    notes: numberOrZero(map.notes?.metadata?.notes ?? countArrayItems(map.notes?.notes)),
-    visualTheme: map.visualTheme?.preset || map.options?.visualTheme || state.options?.visualTheme || "default",
-    staleSystems: [...(map.metadata?.derivedStale?.systems || [])]
-  };
+  return buildSharedMapSummary(state?.map, {
+    revision: state?.mapRevision?.getSnapshot?.() || {},
+    seed: state?.options?.seed,
+    visualTheme: state?.options?.visualTheme
+  });
 }
 
 function buildRuntimeStats(state, documentRef) {

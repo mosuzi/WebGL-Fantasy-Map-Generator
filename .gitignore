@@ -26,6 +26,10 @@ pnpm-debug.log*
 # Local visual previews, generated reports, and server logs.
 docs/local-preview-images/
 docs/generated/
+!docs/generated/
+docs/generated/*
+!docs/generated/ai/
+!docs/generated/ai/**
 docs/local-logs/
 
 # Local scratch workspace unrelated to project sources.
