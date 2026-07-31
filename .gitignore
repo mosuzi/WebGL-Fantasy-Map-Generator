@@ -35,6 +35,9 @@ docs/local-logs/
 # Local scratch workspace unrelated to project sources.
 /work/
 
+# 本地私有 AI 修复案例，可包含完整用户存档与阶段快照。
+/private-cases/
+
 # Guard rails for misplaced generated reports in docs root.
 docs/source-baselines/
 docs/webgl-generator-snapshot-*/

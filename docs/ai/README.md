@@ -8,7 +8,7 @@
 2. 读取 [`map-data-model.md`](./map-data-model.md)，确认 Grid / Pack、单位、派生关系与旧图迁移。
 3. 只读分析先用 [`regional-analysis.md`](./regional-analysis.md)；写入前必须再读 [`safe-change-boundaries.md`](./safe-change-boundaries.md)。
 4. 查方法时优先读取生成目录 `docs/generated/ai/manifest.json`、`api-catalog.json` 和 `domain-capability-map.json`，不要靠记忆拼方法名。
-5. 处理典型问题时进入 `playbooks/`，输出事实、口径、证据 cell、约束、建议目标和仍需预检的写动作。
+5. 处理复杂区域问题时按 `regional-analysis.md` 的通用闭环输出事实、口径、证据 cell、保持约束、目标区间和仍需预检的写动作；不要假设仓库外私人存档中的名称、位置或对象 id。
 
 ## 运行时选择
 
@@ -34,6 +34,3 @@
 - 存档与运行环境：[`runtime-and-loading.md`](./runtime-and-loading.md)
 - 数据解释与聚合：[`map-data-model.md`](./map-data-model.md)、[`regional-analysis.md`](./regional-analysis.md)
 - 写入安全：[`safe-change-boundaries.md`](./safe-change-boundaries.md)
-- 晴布赫斯降水 / 人口：[`playbooks/kingdom-rainfall-population.md`](./playbooks/kingdom-rainfall-population.md)
-- 高山无人区南北平原：[`playbooks/wilderness-population-power.md`](./playbooks/wilderness-population-power.md)
-- 山地高度自然化：[`playbooks/mountain-gradient-naturalization.md`](./playbooks/mountain-gradient-naturalization.md)

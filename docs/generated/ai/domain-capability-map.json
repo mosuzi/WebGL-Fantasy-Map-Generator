@@ -69,7 +69,7 @@
     {
       "namespace": "climate",
       "methodCount": 16,
-      "aiHandbook": "docs/ai/playbooks/kingdom-rainfall-population.md",
+      "aiHandbook": "docs/ai/regional-analysis.md",
       "wikiPage": "docs/wiki/气候与降水.md"
     },
     {

@@ -69,7 +69,7 @@ function buildDomainRoutes() {
   return Object.keys(API_METHODS).map(namespace => ({
     namespace,
     methodCount: API_METHODS[namespace].length,
-    aiHandbook: namespace === "climate" ? "docs/ai/playbooks/kingdom-rainfall-population.md" : namespace === "cells" || namespace === "objects" ? "docs/ai/regional-analysis.md" : namespace === "edit" || namespace === "history" || namespace === "regenerationLocks" ? "docs/ai/safe-change-boundaries.md" : "docs/ai/README.md",
+    aiHandbook: namespace === "climate" || namespace === "cells" || namespace === "objects" ? "docs/ai/regional-analysis.md" : namespace === "edit" || namespace === "history" || namespace === "regenerationLocks" ? "docs/ai/safe-change-boundaries.md" : "docs/ai/README.md",
     wikiPage: wikiPage(namespace)
   }));
 }

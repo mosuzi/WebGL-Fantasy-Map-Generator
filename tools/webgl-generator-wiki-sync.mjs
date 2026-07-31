@@ -8,7 +8,7 @@ const source = resolve("docs/wiki");
 const publish = process.argv.includes("--publish");
 const files = readdirSync(source).filter(name => name.endsWith(".md")).sort();
 const stems = new Set(files.map(name => basename(name, ".md")));
-const required = ["Home", "_Sidebar", "能力覆盖矩阵", "教程-改善王国降水与人口", "教程-无人区两侧人口与国力", "教程-山地高度自然化"];
+const required = ["Home", "_Sidebar", "能力覆盖矩阵", "地图数据与区域分析", "编辑器与安全修改", "存档与导入导出"];
 const failures = [];
 
 for (const page of required) if (!stems.has(page)) failures.push(`缺少页面 ${page}`);
