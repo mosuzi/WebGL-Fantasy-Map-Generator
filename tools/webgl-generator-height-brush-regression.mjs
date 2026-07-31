@@ -108,8 +108,8 @@ assert(/:disabled="!state\.derivedStaleSystems\?\.length"[\s\S]+完成编辑并�
 assert(/class="height-player-rebuild-action"/.test(heightPanelSource) && /\.height-player-rebuild-action\.el-button\s*\{[^}]*margin-bottom:\s*10px;/.test(stylesSource), "普通地图更新按钮与高度编辑启停按钮之间仍缺少 10px 留白");
 assert(/selectionSmoothness: 0/.test(heightPanelModelSource), "范围平滑度默认值不是 0");
 assert(/onTerrainSelectionSmooth/.test(heightPanelModelSource), "高度面板 wrapper 缺少范围平滑入口");
-assert(/createHeightSelectionSmoothingPlan\(state\.map, options\)/.test(appSource), "范围平滑没有复用单次分析计划");
-assert(/createApplyHeightBrushCommand\(changes, \{label: "平滑所选范围"\}\)/.test(appSource), "范围平滑没有复用单条高度历史命令");
+assert(/createHeightSelectionSmoothingPlan\(state\.map, (?:options|normalized)\)/.test(appSource), "范围平滑没有复用单次分析计划");
+assert(/applyHeightChangesViaApi\(state, documentRef, plan\.changes, \{label\}\)/.test(appSource) && /createApplyHeightBrushCommand\(normalized, \{label\}\)/.test(appSource), "范围平滑没有复用单条高度历史命令");
 assert(/terrainSelectionPaintState/.test(heightPanelSource) && /:class="\{active: !isPlayerSmoothingSelection && state\.action === action\.value\}"/.test(heightPanelSource), "普通升降与范围涂选没有互斥高亮");
 assert(/props\.callbacks\.onTerrainSelectionCancel\?\.\(\);[\s\S]+setAction/.test(heightPanelSource), "切回普通升降没有取消范围涂选");
 assert(!/function selectHeightAction\([\s\S]+?props\.state\.falloff = true;[\s\S]+?function setAction/.test(heightPanelSource), "切换抬升或降低仍会偷偷重置画笔强度模式");

@@ -1,6 +1,6 @@
 # 安全修改边界
 
-无头 API 第一阶段严格只读。它可以给出分析、候选 cell 和建议目标，但不能执行、模拟成功或覆盖输入文件。
+无头读取 API 严格只读。独立无头写会话只开放六个方法，覆盖人口调整、高度选区平滑和对象重命名的 inspect/apply 配对；其它浏览器写方法返回 `headless_method_unsupported`，不得退化为裸字段赋值。
 
 浏览器运行时修改时遵守：
 
@@ -13,5 +13,16 @@
 
 三个标准问题当前只完成分析能力，没有新增局部降水覆写、人口自动追平或高度自然化写事务。可复用的现有写能力包括人口调整 / 转移、高度选区平滑 / 变换、气候全局设置及派生重建，但是否适合具体地图必须经过 inspector，不能把分析建议直接翻译为裸字段赋值。
 
-锁定系统保护重生成对象，不等于保护任意 cell 数值。修改前同时检查 regeneration lock、目标 cells、政治归属、路线与城市约束。旧图只在显式操作时改变地图事实，加载迁移不得静默改人口、地形或疆域。
+## 无头写入流程
 
+每次 apply 必须同时匹配 `documentId`、`expectedRevision`、`inspectionToken` 和唯一 `requestId`。成功后 revision 单调递增，HeadlessHistory 记录事务摘要，人口命令刷新正式派生数据，高度命令同步 Grid / Pack 高度并标记下游 stale；任何异常恢复整个地图文档快照。
+
+```powershell
+$inspection = node --no-warnings .\tools\webgl-generator-headless-write.mjs inspect .\input.webgl-map.json edit.objects.inspectRename '[{\"kind\":\"city\",\"id\":12},\"新城名\"]' | ConvertFrom-Json
+node --no-warnings .\tools\webgl-generator-headless-write.mjs apply .\input.webgl-map.json .\output.webgl-map.json edit.objects.applyRename '[{\"kind\":\"city\",\"id\":12},\"新城名\"]' --document-id $inspection.data.documentId --expected-revision $inspection.data.revision --inspection-token $inspection.data.inspectionToken --request-id rename-city-12-v1
+node --no-warnings .\tools\webgl-generator-headless-write.mjs verify .\output.webgl-map.json
+```
+
+默认输出路径必须不同于输入，且已有输出文件也不会静默覆盖。只有同时提供 `--overwrite --confirm-overwrite OVERWRITE` 才允许覆盖输入；这不是推荐工作流。JSON、gzip 和迁移后的 v1 输入均走相同事务路径，输出重新读取成功后才能报告修改完成。
+
+锁定系统保护重生成对象，不等于保护任意 cell 数值。修改前同时检查 regeneration lock、目标 cells、政治归属、路线与城市约束。旧图只在显式操作时改变地图事实，加载迁移不得静默改人口、地形或疆域。

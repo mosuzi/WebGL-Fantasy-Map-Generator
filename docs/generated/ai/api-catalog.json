@@ -5,10 +5,13 @@
     "plannerRecipeSchemaVersion": "1.0.0",
     "browserMethods": 316,
     "headlessMethods": 23,
+    "headlessWriteVersion": "1.0.0",
+    "headlessWriteMethods": 6,
     "recipes": 10,
     "runtimeProfiles": [
       "browser",
-      "headless-readonly"
+      "headless-readonly",
+      "headless-write"
     ],
     "entry": "docs/ai/README.md"
   },
@@ -3628,6 +3631,65 @@
       "runtime": "headless",
       "mutates": "none",
       "handbook": "docs/ai/regional-analysis.md"
+    }
+  ],
+  "headlessWrite": [
+    {
+      "method": "edit.population.inspectAdjustment",
+      "runtime": "headless-write",
+      "mutates": "none",
+      "requires": [],
+      "handbook": "docs/ai/safe-change-boundaries.md"
+    },
+    {
+      "method": "edit.population.applyAdjustment",
+      "runtime": "headless-write",
+      "mutates": "map-document-copy",
+      "requires": [
+        "documentId",
+        "expectedRevision",
+        "inspectionToken",
+        "requestId"
+      ],
+      "handbook": "docs/ai/safe-change-boundaries.md"
+    },
+    {
+      "method": "edit.height.inspectSelectionSmoothing",
+      "runtime": "headless-write",
+      "mutates": "none",
+      "requires": [],
+      "handbook": "docs/ai/safe-change-boundaries.md"
+    },
+    {
+      "method": "edit.height.applySelectionSmoothing",
+      "runtime": "headless-write",
+      "mutates": "map-document-copy",
+      "requires": [
+        "documentId",
+        "expectedRevision",
+        "inspectionToken",
+        "requestId"
+      ],
+      "handbook": "docs/ai/safe-change-boundaries.md"
+    },
+    {
+      "method": "edit.objects.inspectRename",
+      "runtime": "headless-write",
+      "mutates": "none",
+      "requires": [],
+      "handbook": "docs/ai/safe-change-boundaries.md"
+    },
+    {
+      "method": "edit.objects.applyRename",
+      "runtime": "headless-write",
+      "mutates": "map-document-copy",
+      "requires": [
+        "documentId",
+        "expectedRevision",
+        "inspectionToken",
+        "requestId"
+      ],
+      "handbook": "docs/ai/safe-change-boundaries.md"
     }
   ]
 }

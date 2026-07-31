@@ -351,6 +351,17 @@
 | `analysis.comparePower` | `docs/ai/regional-analysis.md` |
 | `analysis.diagnoseTerrain` | `docs/ai/regional-analysis.md` |
 
+## 无头写入 API（6）
+
+| 方法 | 副作用 | 必需授权字段 | AI 手册 |
+|---|---|---|---|
+| `edit.population.inspectAdjustment` | none | 无 | `docs/ai/safe-change-boundaries.md` |
+| `edit.population.applyAdjustment` | map-document-copy | documentId / expectedRevision / inspectionToken / requestId | `docs/ai/safe-change-boundaries.md` |
+| `edit.height.inspectSelectionSmoothing` | none | 无 | `docs/ai/safe-change-boundaries.md` |
+| `edit.height.applySelectionSmoothing` | map-document-copy | documentId / expectedRevision / inspectionToken / requestId | `docs/ai/safe-change-boundaries.md` |
+| `edit.objects.inspectRename` | none | 无 | `docs/ai/safe-change-boundaries.md` |
+| `edit.objects.applyRename` | map-document-copy | documentId / expectedRevision / inspectionToken / requestId | `docs/ai/safe-change-boundaries.md` |
+
 ## Planner 配方（10）
 
 - `scenario.colonize-region`：殖民或开拓区域（5 步）

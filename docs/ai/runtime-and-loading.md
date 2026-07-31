@@ -54,6 +54,8 @@ node --no-warnings .\tools\webgl-generator-ai-bridge-cli.mjs call analysis.descr
 - 读取前后应比较输入文件哈希或地图 checksum；分析不能改变原文件。
 - 旧图归一化是内存读取兼容，不等于已经覆盖旧文件。
 
+需要修改离线文件时使用独立 `createHeadlessWriteSession` 或 `tools/webgl-generator-headless-write.mjs`，不要向只读 API 注入写能力。写会话的完整 inspect/apply、revision、幂等、回滚和安全输出约束见 [`safe-change-boundaries.md`](./safe-change-boundaries.md)。
+
 ## 选择建议
 
 仅分析存档时优先无头；需要观察画面或实际编辑时用浏览器；外部 AI 连接当前标签页时使用受控桥，不开放远程调试端口，也不执行任意 JavaScript。

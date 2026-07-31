@@ -26,6 +26,6 @@ node --no-warnings .\tools\webgl-generator-headless-api.mjs map.json analysis.co
 
 运行 `pnpm run start:ai-bridge` 后，把终端显示的配对令牌输入开发面板“AI 调试”区并点击开启。主桥只在此时懒加载，只连接 `127.0.0.1:5412`，默认只读；外部使用 `tools/webgl-generator-ai-bridge-cli.mjs` 调用公开 API。写权限必须在页面可见开启，写请求必须携带 requestId 与 expectedRevision，高风险方法还需页面逐次批准。刷新可自动恢复连接，但必定降回只读并更换 pageSession；不会开放 Cookie、任意脚本、内部 map 或远程监听。
 
-无头写入仍由第 228 项单独实现，不能以当前标签页桥冒充离线文件写入。
+离线文件修改使用独立的 `tools/webgl-generator-headless-write.mjs`，当前只开放人口调整、高度选区平滑和对象重命名三组 inspect/apply。它拥有独立 revision、HeadlessHistory、requestId 幂等和完整文档回滚，默认输出新文件；不能以当前标签页桥冒充离线文件写入，也不能调用尚未迁入无头宿主的浏览器写方法。
 
 机器目录位于主仓库 `docs/generated/ai/`，由 `pnpm run sync:ai-docs` 生成，`pnpm run audit:ai-docs` 检查陈旧内容。

@@ -16,7 +16,8 @@
 |---|---|---|
 | 当前已打开地图、UI、下载、相机或编辑事务 | `window.webglGeneratorApi` | 316 个公开方法；包含只读、UI 状态和写事务 |
 | 本地存档的批量 / 自动只读分析 | `createHeadlessMapApi` 或 `tools/webgl-generator-headless-api.mjs` | 无浏览器；文件、对象、Cell、气候、地形、人口、planner、区域分析；严格不写 |
-| 当前标签页但调用者不在页面上下文 | 尚未实现 | 不得用调试端口、Cookie 或 localStorage 绕过；受控桥需另行批准 |
+| 本地存档的受控写入 | `createHeadlessWriteSession` 或 `tools/webgl-generator-headless-write.mjs` | 无浏览器；首批只支持人口调整、高度选区平滑和对象重命名；默认输出新文件 |
+| 当前标签页但调用者不在页面上下文 | `tools/webgl-generator-ai-bridge-server.mjs` + 页面 AI 调试区 | 回环连接、默认只读；写权限与高风险确认都在页面可见控制 |
 
 浏览器 API 在开发模式关闭时仍存在，方法本身也不会因开发模式改变返回信息。开发模式只改变 UI 是否显示入口和调试面板。`debug.*` 是独立实验命名空间，不是普通 API 的“详细模式”。
 
@@ -25,7 +26,7 @@
 - 分清事实、推断、建议和未验证假设。
 - 所有区域统计写明空间（当前统一为 Pack cells）、样本数、单位 / 原始尺度、均值与分位数。
 - 引用具体对象和证据 cell；修改建议必须列出“必须保持”的疆域、地形、锁定对象和派生系统。
-- 无头第一阶段只读；即使分析结果给出目标，也不能声称已经修改地图。
+- 无头只读分析不能声称修改地图；需要写入时必须显式切换到无头写会话、完成 inspect/apply 并重读输出文件。
 - 浏览器写入只调用公开 inspector / execute 配对，遵守确认、revision、history、回滚和 regeneration lock。
 
 ## 领域路由

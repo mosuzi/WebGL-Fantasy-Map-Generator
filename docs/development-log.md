@@ -13,6 +13,13 @@
 - 专项覆盖错误令牌 / Origin、只读、写权限、revision、幂等冲突、拒绝与批准、地图替换、刷新降权和懒加载。真实浏览器通过 `analysis.describeRegion` 读取当前地图，城市 `#0` 从“晴渚”改名后由 `history.undo` 恢复；`edit.states.delete` 停在页面并被拒绝，刷新后 pageSession 从 `097e1fd9…` 变为 `f0bf6fd7…` 且写请求返回 `bridge_write_not_authorized`，断开后服务活动会话为 `0`，console error 为 `0`。
 - 浏览器 API 补入已存在于无头运行时的七个 `analysis` 只读方法；统一基线为 `17` 个命名空间、`316` 个方法、`179` 个编辑方法、稳定等级 `308 / 7 / 1`。完整能力矩阵为 `1195` 行、`covered 1121 / excluded 74 / gap 0`，复合语义矩阵 `316 / 316` 已分类且结构缺口为 `0`；API、AI 目录、Wiki、专项、生产构建与差异检查均通过。
 
+### 第 228 项完成：无头写入事务 API
+
+- 新增 Node 专用 `headless-write` 会话、`HeadlessHistory` 和 `inspect / apply / verify` CLI，不依赖 document、renderer、selection、camera 或浏览器存储。首批只开放人口调整、高度选区平滑与安全对象重命名共 `6` 个方法，其它方法稳定返回 `headless_method_unsupported`；对象重命名限于国家、省份、文化、宗教、河流、湖泊、城市、标记和备注。
+- 写请求必须绑定 documentId、expectedRevision、inspectionToken 和 requestId。相同 requestId 同参重放不推进 revision、异参拒绝；成功写入 revision 单调递增并把有界幂等结果与事务摘要写入存档 metadata。命令或注入故障会恢复完整文档、revision、请求结果与历史，再生成锁保持原样。
+- CLI 默认以 `wx` 写新文件并重新读取验证，JSON、gzip 和 v1 旧图迁移均通过；输入 SHA-256 保持不变。原地覆盖只在同时提供 `--overwrite --confirm-overwrite OVERWRITE` 时允许。AI 目录同步为浏览器 `316`、无头只读 `23`、无头写入 `6`；完整能力矩阵保持 `1195 / covered 1121 / excluded 74 / gap 0`，专项、无头只读、人口、高度画笔、AI 文档、Wiki、API 发现、矩阵和生产构建均通过。
+- 真实 gzip 存档 `stage-2-1` 在无头 CLI 中把城市 `#0` 从“鹿明”改为“鹿明·无头终验”，revision `0 → 1`，输入哈希不变；真实浏览器随后通过界面导入新文件，显示正确 seed 和新城市名。第 227～228 项均已独立提交并完成统一复核，当前没有新的活动权威任务。
+
 ## 2026-07-31：登记无头 API、分析能力、AI 文档与 GitHub Wiki 权威任务
 
 - 用户批准此前临时草案转正并立即执行。按依赖登记第 223～226 项：先建立共享 API 核心和无浏览器只读运行时，再补区域定义、聚合分析和三个真实问题基线，随后建立 AI 友好文档与机器能力目录，最后形成 GitHub Wiki 人类文档和可复现发布流程。

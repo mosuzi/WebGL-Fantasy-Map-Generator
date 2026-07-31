@@ -183,7 +183,7 @@
 
 本节是唯一权威任务清单。README、专题文档和历史日志中的“缺口”“下一步”只提供来源与设计背景，不能覆盖这里的编号、顺序和最小验收。已验收能力不得重新计为待办。
 
-> **执行门禁（2026-07-31）**：第 45～52、54～225、227 项已完成，第 53 项已移除；第 226 项本地完成、远端 Wiki 发布受 GitHub 私有仓库套餐阻塞。当前只执行第 228 项；第 227 项已独立验收并提交，第 228 项完成后统一推送，不得从历史记录或新发现扩展范围。
+> **执行门禁（2026-07-31）**：第 45～52、54～225、227～228 项已完成，第 53 项已移除；第 226 项本地完成、远端 Wiki 发布受 GitHub 私有仓库套餐阻塞。当前没有活动权威任务；第 227～228 项已分别验收并提交，统一复核后一次推送，不得从历史记录或新发现扩展范围。
 
 当前 API 基线为：`window.webglGeneratorApi` 覆盖 `17` 个命名空间、`316` 个公开方法和 `179` 个编辑方法，稳定等级为 `308 / 7 / 1`；`316 / 316` 方法可通过 `info.describe` 发现，`planner.listRecipes / getRecipe` 只读公开 `10` 个配方和 `43` 个顶层步骤，`objects` 覆盖 `20` 类对象，`cells` 已提供八个读取、定位、扫描与动作预检方法。完整能力矩阵为 `1195` 行、`covered 1121 / excluded 74 / deferred 0 / gap 0`；复合语义矩阵为 `79` 个动作、`69` 个完整规则事务与 `10` 个玩法配方，`316` 个公开方法全部完成事务分类，结构缺口为 `0`。
 
@@ -994,10 +994,11 @@
   - 排除：不开放任意 JavaScript、Cookie、其它标签页、任意 localStorage、远程监听、CDP、浏览器调试端口或直接内部 map 写入；主桥不得进入普通首屏静态依赖。
   - 完成记录：开发面板新增可见 AI 调试区，主桥通过动态 `import()` 独立为约 `4.98 kB / gzip 2.36 kB` chunk；本地服务固定监听 `127.0.0.1:5412`，使用 bearer 配对令牌、来源限制、pageSession、documentId、revision、requestId 幂等与方法描述白名单。页面默认只读，低风险写入需可见开启，高风险方法逐次停在页面批准；刷新等待地图 ready 后生成新 pageSession 并只读重连。专项覆盖鉴权、未知 / 冲突请求、地图替换、revision、幂等、确认、刷新和懒加载；真实浏览器完成只读区域分析、城市改名与撤销、拒绝删国、刷新降权和断开，console error 为 `0`。浏览器 API 同步公开 `analysis` 命名空间，当前为 `17` 个命名空间、`316` 个方法、稳定等级 `308 / 7 / 1`；完整矩阵 `1195 / covered 1121 / excluded 74 / gap 0`，`316 / 316` 方法完成复合语义分类。
 
-- **权威任务第 228 项：建立无头写入 API、事务回滚与安全输出。** `未开始；依赖第 227 项；来源：用户直接要求`
+- **权威任务第 228 项：建立无头写入 API、事务回滚与安全输出。** `已完成；来源：用户直接要求`
   - 范围：在第 223 项无头只读运行时上增加独立 HeadlessRuntimeHost、HeadlessHistory 和写会话；复用公开 API 的领域 inspector / execute 语义、schema、业务 code、对象锁与派生重建，不通过浏览器或 DOM。默认读取输入后修改内存副本并输出新文件，CLI 提供 inspect / apply / verify，不覆盖输入文件。
   - 最小验收：固定 JSON / gzip / 旧图样本可完成至少人口调整、高度选区平滑和安全对象编辑；每次写入校验 documentId、expectedRevision、inspectionToken 与 requestId，成功递增 revision 并记录事务摘要，失败完整回滚；重复 requestId 幂等。输出 JSON / gzip 可被浏览器与无头重新读取，输入哈希不变；显式 `--overwrite` 仍需二次确认参数且不作为默认路径。专项、兼容矩阵、生产构建和真实 Chrome 导入新文件通过。
   - 排除：不建立远程 HTTP 服务，不模拟 renderer / selection / camera，不支持未迁入无头领域宿主的写方法，不把裸字段赋值包装成正式 API。
+  - 完成记录：新增独立 `headless-write` 会话、`HeadlessHistory` 与 `inspect / apply / verify` CLI，首批公开人口增减、高度选区平滑和九类安全对象重命名共 `6` 个方法。每笔执行校验 documentId、expectedRevision、inspectionToken 与 requestId，成功单调递增 revision 并持久化有界幂等结果和事务摘要；命令或故障注入失败会恢复完整文档、revision、历史与请求表。默认以 `wx` 写新 JSON / gzip 文件，输入覆盖必须同时提供 `--overwrite --confirm-overwrite OVERWRITE`；v1 输入迁移后输出 v2。专项通过三类写入、再生成锁原样保留、幂等冲突、过期 token、整图回滚、JSON / gzip / v1 和输入哈希不变；AI 文档目录为浏览器 `316`、无头只读 `23`、无头写入 `6`，完整能力矩阵 `1195 / covered 1121 / excluded 74 / gap 0`，生产构建通过。真实浏览器通过界面导入无头写出的 gzip，显示 `seed stage-2-1` 并读取城市 `#0` 新名称“鹿明·无头终验”。
 
 - **第 227～228 项统一执行约束。**
   - 专题施工图：`docs/task-notes/controlled-browser-bridge-and-headless-write.md`。

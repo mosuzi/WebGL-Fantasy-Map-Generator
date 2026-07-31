@@ -4,10 +4,13 @@
   "plannerRecipeSchemaVersion": "1.0.0",
   "browserMethods": 316,
   "headlessMethods": 23,
+  "headlessWriteVersion": "1.0.0",
+  "headlessWriteMethods": 6,
   "recipes": 10,
   "runtimeProfiles": [
     "browser",
-    "headless-readonly"
+    "headless-readonly",
+    "headless-write"
   ],
   "entry": "docs/ai/README.md"
 }
