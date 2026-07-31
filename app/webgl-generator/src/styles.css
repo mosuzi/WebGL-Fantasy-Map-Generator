@@ -1494,7 +1494,8 @@ select:disabled {
 .city-label,
 .custom-label,
 .state-label,
-.province-label {
+.province-label,
+.zone-label {
   position: absolute;
   left: 0;
   top: 0;
@@ -1513,7 +1514,8 @@ select:disabled {
 }
 
 .city-label,
-.custom-label {
+.custom-label,
+.zone-label {
   transform: translate(var(--overlay-x, 0px), var(--overlay-y, 0px)) translate(-50%, -100%);
   max-width: 120px;
   line-height: 1.25;
@@ -1528,7 +1530,8 @@ select:disabled {
 
 .city-label.visible,
 .custom-label.visible,
-.province-label.visible {
+.province-label.visible,
+.zone-label.visible {
   opacity: var(--label-opacity, 1);
   transition-delay: 0s;
   visibility: visible;
@@ -1540,9 +1543,19 @@ select:disabled {
 }
 
 .city-label.selected,
-.custom-label.selected {
+.custom-label.selected,
+.zone-label.selected {
   background: rgba(29, 43, 54, 0.92);
   color: #f8fafb;
+}
+
+.zone-label {
+  max-width: 150px;
+  color: var(--theme-custom-label, rgba(48, 55, 48, 0.9));
+  font-size: calc(var(--label-font-size) * 0.86);
+  cursor: pointer;
+  pointer-events: auto;
+  z-index: 2;
 }
 
 .custom-label {

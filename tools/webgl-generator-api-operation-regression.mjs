@@ -140,6 +140,7 @@ for (const operationName of [
   "data.importGEO",
   "data.importHeightmap",
   "data.exportPNG",
+  "data.exportHeightmapPNG",
   "data.exportCompressedAll",
   "data.saveBrowserMap",
   "data.restoreBrowserMap",

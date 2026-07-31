@@ -1,6 +1,6 @@
 import {readControlPreferences, updateControlPreferences} from "../ui/panel.js";
 import {areaUnitForDistanceUnit, formatArea as formatDisplayArea, formatDistance as formatDisplayDistance, normalizeUnitPreferences, precipitationUnitsToMillimeters} from "../ui/display-units.js";
-import {createCanvasPngBlob, createCompressedMapDocumentBlob, createMapDocument, createMapFeatureGeoJson, createMapGeoJson, downloadCanvasPng, downloadCompressedMapDocument, downloadText, mapFileBaseName, stringifyMapDocument} from "./map-file-io.js";
+import {createCanvasPngBlob, createCompressedMapDocumentBlob, createHeightmapPngBlob, createMapDocument, createMapFeatureGeoJson, createMapGeoJson, downloadCanvasPng, downloadCompressedMapDocument, downloadHeightmapPng, downloadText, mapFileBaseName, stringifyMapDocument} from "./map-file-io.js";
 import {apiCall} from "./api-result.js";
 import {NAMEBASE_BINDING_TARGETS, createLegacyNamebaseText, createNamebaseDocument, getNamebaseBindingStatus, getNamebaseSummariesForMap} from "../generator/namebase-store.js";
 import {listBiomeDescriptors} from "../generator/biome-registry.js";
@@ -313,7 +313,10 @@ export function createConsoleApi(documentRef, state, actions = {}) {
         create: (options = {}) => apiCall(() => requireApiAction(actions.edit?.zones?.create, "edit.zones.create")(options)),
         inspectDelete: zoneId => apiCall(() => requireApiAction(actions.edit?.zones?.inspectDelete, "edit.zones.inspectDelete")(zoneId)),
         delete: (zoneId, options = {}) => apiCall(() => requireApiAction(actions.edit?.zones?.delete, "edit.zones.delete")(zoneId, options)),
-        setStyle: (zoneId, patch) => apiCall(() => requireApiAction(actions.edit?.zones?.setStyle, "edit.zones.setStyle")(zoneId, patch))
+        setStyle: (zoneId, patch) => apiCall(() => requireApiAction(actions.edit?.zones?.setStyle, "edit.zones.setStyle")(zoneId, patch)),
+        setContext: (zoneId, context) => apiCall(() => requireApiAction(actions.edit?.zones?.setContext, "edit.zones.setContext")(zoneId, context)),
+        setProperties: (zoneId, patch) => apiCall(() => requireApiAction(actions.edit?.zones?.setProperties, "edit.zones.setProperties")(zoneId, patch)),
+        getEffectsAtCell: packCell => apiCall(() => requireApiAction(actions.edit?.zones?.getEffectsAtCell, "edit.zones.getEffectsAtCell")(packCell))
       }),
       cultures: Object.freeze({
         inspectLifecycle: (operation, request = {}) => apiCall(() => requireApiAction(actions.edit?.cultures?.inspectLifecycle, "edit.cultures.inspectLifecycle")(operation, request)),
@@ -398,6 +401,7 @@ export function createConsoleApi(documentRef, state, actions = {}) {
       exportFeatureGEO: (options = {}) => apiCall(() => requireApiAction(actions.data?.exportFeatureGEO, "data.exportFeatureGEO")(options)),
       exportCompressedAll: (options = {}) => apiCall(() => requireApiAction(actions.data?.exportCompressedAll, "data.exportCompressedAll")(options)),
       exportPNG: (options = {}) => apiCall(() => requireApiAction(actions.data?.exportPNG, "data.exportPNG")(options)),
+      exportHeightmapPNG: (options = {}) => apiCall(() => requireApiAction(actions.data?.exportHeightmapPNG, "data.exportHeightmapPNG")(options)),
       exportNotes: (options = {}) => apiCall(() => requireApiAction(actions.data?.exportNotes, "data.exportNotes")(options)),
       exportMeasurements: (options = {}) => apiCall(() => requireApiAction(actions.data?.exportMeasurements, "data.exportMeasurements")(options)),
       exportImportDiagnostic: (options = {}) => apiCall(() => requireApiAction(actions.data?.exportImportDiagnostic, "data.exportImportDiagnostic")(options)),
@@ -720,6 +724,9 @@ export function buildMethodMetadata() {
       "zones.inspectDelete": {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
       "zones.delete": {stable: "draft", mutates: "zones", undoable: true, async: false, requiresConfirm: false},
       "zones.setStyle": {stable: "draft", mutates: "zones", undoable: true, async: false, requiresConfirm: false},
+      "zones.setContext": {stable: "draft", mutates: "zones", undoable: true, async: false, requiresConfirm: false},
+      "zones.setProperties": {stable: "draft", mutates: "zones", undoable: true, async: false, requiresConfirm: false},
+      "zones.getEffectsAtCell": {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
       "cultures.inspectLifecycle": {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
       "cultures.add": {stable: "draft", mutates: "cultures", undoable: true, async: false, requiresConfirm: false},
       "cultures.assignCells": {stable: "draft", mutates: "cultures", undoable: true, async: false, requiresConfirm: false},
@@ -787,6 +794,7 @@ export function buildMethodMetadata() {
       exportFeatureGEO: {stable: "draft", mutates: "download-or-export-result", undoable: false, async: false, requiresConfirm: false},
       exportCompressedAll: {stable: "draft", mutates: "download-or-export-result", undoable: false, async: true, requiresConfirm: false},
       exportPNG: {stable: "draft", mutates: "download-or-export-result", undoable: false, async: true, requiresConfirm: false},
+      exportHeightmapPNG: {stable: "draft", mutates: "download-or-export-result", undoable: false, async: true, requiresConfirm: false},
       exportNotes: {stable: "draft", mutates: "download-or-export-result", undoable: false, async: false, requiresConfirm: false},
       exportMeasurements: {stable: "draft", mutates: "download-or-export-result", undoable: false, async: false, requiresConfirm: false},
       exportImportDiagnostic: {stable: "draft", mutates: "download-or-export-result", undoable: false, async: false, requiresConfirm: false},
@@ -1835,6 +1843,37 @@ export async function exportPngData(state, documentRef, options = {}) {
     transparentBackground: result.transparentBackground,
     crop: result.crop,
     overlays: result.overlays
+  };
+  if (options.includeDataUrl !== false) data.dataUrl = await blobToDataUrl(documentRef, result.blob);
+  return data;
+}
+
+export async function exportHeightmapPngData(state, documentRef, options = {}) {
+  const map = assertApiMap(state);
+  const filename = `${mapFileBaseName(map)}.heightmap.png`;
+  const pixelScale = normalizePngApiScale(options.pixelScale ?? options.scale ?? readPngExportScale(documentRef));
+  const pngOptions = {pixelScale};
+  if (options.download === true) {
+    const result = await downloadHeightmapPng(documentRef, map, filename, pngOptions);
+    return {
+      filename,
+      mimeType: "image/png",
+      ...result
+    };
+  }
+
+  const result = await createHeightmapPngBlob(documentRef, map, pngOptions);
+  const data = {
+    filename,
+    mimeType: "image/png",
+    bytes: result.blob.size,
+    width: result.width,
+    height: result.height,
+    pixelScale: result.pixelScale,
+    cellCount: result.cellCount,
+    minHeight: result.minHeight,
+    maxHeight: result.maxHeight,
+    encoding: result.encoding
   };
   if (options.includeDataUrl !== false) data.dataUrl = await blobToDataUrl(documentRef, result.blob);
   return data;

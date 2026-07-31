@@ -230,6 +230,13 @@ const OBJECT_DETAIL_ROWS = Object.freeze({
   ],
   [OBJECT_KIND.ZONE]: object => [
     {label: "类型", value: object.type},
+    {label: "类别", value: object.category},
+    {label: "覆盖层", value: object.coverage},
+    {label: "说明", value: object.description || "无"},
+    {label: "基础影响", value: formatZoneEffects(object.effects)},
+    {label: "事件摘要", value: object.summary},
+    {label: "事件状态", value: object.statusLabel},
+    ...(object.participants || []).map(participant => ({label: participantRoleLabel(participant.role), value: participant.name})),
     {label: "纹理", value: object.pattern},
     {label: "颜色", value: object.color},
     {label: "区域数", value: formatNumberValue(object.cells)},
@@ -249,6 +256,14 @@ function formatObjectTitle(object) {
 function detailRows(object) {
   if (!object) return [];
   return OBJECT_DETAIL_ROWS[object.kind]?.(object) || [{label: "类型", value: object.kind || "unknown"}];
+}
+
+function participantRoleLabel(role) {
+  return ({attacker: "进攻方", defender: "防守方", invader: "入侵方", rebel: "叛乱方", ruler: "统治方", "source-religion": "传播宗教", "target-religion": "目标宗教", "initiator-religion": "发起宗教", origin: "来源", affected: "受影响对象"})[role] || role;
+}
+
+function formatZoneEffects(effects = {}) {
+  return `宜居 ${effects.habitability ?? 0} / 通行 ×${effects.movementCost ?? 1} / 经济 ×${effects.economy ?? 1} / 防守 ${effects.defense ?? 0}`;
 }
 
 function canRenameObject(object) {

@@ -2,6 +2,8 @@ import {LABEL_TARGET_KIND, OBJECT_KIND} from "./object-kinds.js";
 import {resolveDiplomacyRelation} from "./diplomacy-relations.js";
 import {goodDisplayName} from "../generator/economy-display-properties.js";
 import {describeRiverRelation} from "../generator/river-network.js";
+import {resolveZoneContext} from "./zone-context.js";
+import {normalizeZoneTypeRecord} from "./zone-types.js";
 
 const OBJECT_RESOLVERS = Object.freeze({
   [OBJECT_KIND.CITY]: resolveCity,
@@ -51,6 +53,11 @@ function resolveCity(map, object) {
 }
 
 function resolveLabel(map, object) {
+  if (object.targetKind === LABEL_TARGET_KIND.ZONE) {
+    const zone = resolveZone(map, {kind: OBJECT_KIND.ZONE, id: object.targetId ?? object.id});
+    if (!zone) return null;
+    return {...object, kind: OBJECT_KIND.LABEL, id: zone.id, text: zone.name, targetKind: LABEL_TARGET_KIND.ZONE, targetId: zone.id, targetName: zone.name, zone};
+  }
   if (object.targetKind === LABEL_TARGET_KIND.CUSTOM) {
     const label = (map.labels?.custom || []).find(item => item.id === (object.targetId ?? object.id));
     if (!label) return null;
@@ -241,15 +248,29 @@ function resolveEconomyMarket(map, object) {
 function resolveZone(map, object) {
   const zone = (map?.zones?.zones || map?.pack?.zones || []).find(item => Number(item?.i ?? item?.id) === Number(object.id));
   if (!zone) return null;
+  const model = normalizeZoneTypeRecord(zone);
+  const context = resolveZoneContext(map, zone);
   return {
     ...object,
     kind: OBJECT_KIND.ZONE,
     id: Number(zone.i ?? zone.id),
     name: zone.name || object.name || `地区 #${object.id}`,
     type: zone.type || object.type || "zone",
+    category: model.category,
+    source: model.source,
+    customTypeName: model.customTypeName,
+    description: model.description,
+    coverage: model.coverage,
+    effects: model.effects,
     pattern: zone.pattern || object.pattern || "",
     color: zone.hexColor || zone.fill || zone.color || object.color || "",
-    cells: zone.cells?.length || object.cells || 0
+    cells: zone.cells?.length || object.cells || 0,
+    status: context.status,
+    statusLabel: context.statusLabel,
+    summary: context.summary,
+    participants: context.participants,
+    missingRoles: context.missingRoles,
+    context: {status: context.status, participants: context.participants.map(({role, ref}) => ({role, ref}))}
   };
 }
 

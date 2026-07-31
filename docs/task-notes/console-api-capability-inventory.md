@@ -10,9 +10,9 @@
 
 ## 当前公开 API 基线
 
-当前公开基线：16 个命名空间、305 个方法，其中 176 个为编辑方法。
+当前公开基线：16 个命名空间、309 个方法，其中 179 个为编辑方法。
 
-根 API 仍为 `1.0.0 / stable`。方法级稳定性统计为 297 个 `stable`、7 个 `experimental` 调试方法和 1 个 `deprecated` 兼容方法；能力表同时公开 18 个能力组、41 个显式确认方法以及 `window.api / data.exportAll` 两个兼容别名。下表“第 33 项稳定化”字样是第 28 项冻结时的归属记录，当前均已完成，不再表示待办。
+根 API 仍为 `1.0.0 / stable`。方法级稳定性统计为 301 个 `stable`、7 个 `experimental` 调试方法和 1 个 `deprecated` 兼容方法；能力表同时公开 18 个能力组、41 个显式确认方法以及 `window.api / data.exportAll` 两个兼容别名。下表“第 33 项稳定化”字样是第 28 项冻结时的归属记录，当前均已完成，不再表示待办。
 
 | 命名空间 | 方法数 | 当前结论 |
 |---|---:|---|
@@ -28,8 +28,8 @@
 | `units` | 9 | 已覆盖当前全部显示单位偏好 |
 | `climate` | 16 | 已覆盖气候读取、当前写入入口和受约束下游重算预检 / 应用 |
 | `history` | 5 | 已覆盖历史读取、peek、撤销和重做 |
-| `edit` | 176 | 已覆盖现行对象、规则事务与省会重评的 inspect / execute，共用单历史和回滚边界 |
-| `data` | 15 | 已覆盖地图 / GEO / 高度图 / 浏览器存档 / PNG / 记录、集合预检与诊断导入导出 |
+| `edit` | 179 | 已覆盖现行对象、规则事务、省会重评与地区语义 / 影响编辑及查询，共用单历史和回滚边界 |
+| `data` | 16 | 已覆盖地图 / GEO / 高度图 / 浏览器存档 / 普通 PNG / 高度灰度 PNG / 记录、集合预检与诊断导入导出 |
 | `namebases` | 14 | 已覆盖名称库读取、交换、编辑、绑定、替换、删除与批量改名 |
 | `debug` | 7 | 已覆盖只读诊断、debug UI 和单帧 profile |
 
@@ -70,7 +70,7 @@
 | 24 | 路线 / 河流 / 湖泊 / feature | 创建、删除、改线、端点重连、样式、备注、重命名、河宽、湖泊出口和局部水陆修正 | 已暴露且共路径 | `api.edit.routes / rivers / lakes / features`；路线改线、湖泊出口和局部水陆修正均与 UI 共用预检、runtime action 和 edit command | 第 40、49、50 项已完成 |
 | 25 | 标签 / marker | 当前新增、删除、移动、视觉、备注和恢复 | 已暴露且共路径 | `api.edit.labels / markers`；marker id 作为稳定对象身份，不再依赖数组下标 | 第 33、41 项已完成 |
 | 26 | 名称库 | list、export/import、CRUD、绑定、批量对象改名 | 已暴露且共路径 | UI 文件适配与 `api.namebases.*` 共用 `runtimeActions.namebases`；既有名称库文档往返门禁继续有效 | 第 30、32 项已完成；第 33 项稳定化 |
-| 27 | 数据导出 | 完整 JSON / gzip、GEO、要素 GEO、PNG、备注、测量 | 已暴露且共路径 | UI 下载提示与 `api.data.export*` 共用 `runtimeActions.data` 及同一序列化结果；PNG / gzip 已接统一 operation | 第 30、31 项已完成；第 33 项稳定化 |
+| 27 | 数据导出 | 完整 JSON / gzip、GEO、要素 GEO、普通 PNG、高度灰度 PNG、备注、测量 | 已暴露且共路径 | UI 下载提示与 `api.data.export*` 共用 `runtimeActions.data` 及同一序列化结果；普通 PNG / 高度灰度 PNG / gzip 已接统一 operation | 第 30、31、219 项已完成；第 33 项稳定化 |
 | 28 | 数据导入 | 完整地图、普通 GEO、Cells GEO | 已暴露且共路径 | UI 与 API 共用 action；固定 v1 / v2 地图往返、失败回滚、GEO 命令路径均有代码门禁 | 第 30～32 项已完成；第 33 项稳定化 |
 | 29 | 数据导入 | 高度图图片、导入诊断包导出、浏览器存档保存 / 恢复 | 已暴露且共路径 | `data.importHeightmap / exportImportDiagnostic / saveBrowserMap / restoreBrowserMap`；控制面板共用 `runtimeActions.data` | 第 32 项已完成；第 33 项稳定化 |
 | 30 | 诊断 | debug 开关、snapshot、dump、renderer、health、profile | 已暴露且共路径 | `api.debug.*` | 第 33 项稳定化 |

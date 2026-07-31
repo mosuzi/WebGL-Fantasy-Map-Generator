@@ -417,7 +417,7 @@ function buildRuntimeActionRows(runtimeActions, apiMethods) {
       businessCodes: [],
       confirm: "按 API 确认清单",
       undoOrRollback: actionMutation(action) === "none" ? "not-applicable" : "按方法元数据",
-      async: /rebuildWorld|applyDownstreamRebuild|importMap|importHeightmap|exportPNG|exportCompressedAll|saveBrowserMap|restoreBrowserMap|newMap|rerollSeed/.test(action),
+      async: /rebuildWorld|applyDownstreamRebuild|importMap|importHeightmap|exportPNG|exportHeightmapPNG|exportCompressedAll|saveBrowserMap|restoreBrowserMap|newMap|rerollSeed/.test(action),
       compatibility: "UI 与 API 共用同一 runtime action",
       evidence: ["app/webgl-generator/src/runtime/console-api.js"],
       status: publicMethods.length ? "covered" : "gap",

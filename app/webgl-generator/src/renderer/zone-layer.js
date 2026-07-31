@@ -15,7 +15,16 @@ const ZONE_STYLE_BY_TYPE = Object.freeze({
   Avalanche: Object.freeze({pattern: "diagonal", color: "#c4ced2", alpha: 0.54}),
   Fault: Object.freeze({pattern: "diagonal", color: "#8d7d70", alpha: 0.54}),
   Flood: Object.freeze({pattern: "dots", color: "#4e9ac9", alpha: 0.5}),
-  Tsunami: Object.freeze({pattern: "cross", color: "#4a9dbe", alpha: 0.52})
+  Tsunami: Object.freeze({pattern: "cross", color: "#4a9dbe", alpha: 0.52}),
+  Wilderness: Object.freeze({pattern: "diagonal", color: "#777064", alpha: 0.18}),
+  Desert: Object.freeze({pattern: "dots", color: "#d3ae63", alpha: 0.18}),
+  Swamp: Object.freeze({pattern: "dots", color: "#647c59", alpha: 0.18}),
+  DeepForest: Object.freeze({pattern: "cross", color: "#426b45", alpha: 0.18}),
+  Grassland: Object.freeze({pattern: "diagonal", color: "#91a85d", alpha: 0.16}),
+  Tundra: Object.freeze({pattern: "dots", color: "#aab9b5", alpha: 0.18}),
+  Highland: Object.freeze({pattern: "cross", color: "#847866", alpha: 0.18}),
+  Badlands: Object.freeze({pattern: "diagonal", color: "#a47755", alpha: 0.18}),
+  VolcanicLand: Object.freeze({pattern: "cross", color: "#8f4a3d", alpha: 0.2})
 });
 
 const HATCH_PATTERN_BY_ID = Object.freeze({
@@ -41,8 +50,33 @@ export function pushZoneTextureLayer(vertices, context, map, visibility = {}) {
   if (!zones.length) return;
 
   for (const zone of zones) {
-    if (!zone || zone.hidden) continue;
-    pushZoneTexture(vertices, context, map, zone);
+    if (!zone || zone.hidden || !isZoneLayerVisible(zone, visibility)) continue;
+    if ((zone.category || "event") === "event") pushZoneTexture(vertices, context, map, zone);
+    else pushNaturalZone(vertices, context, map, zone);
+  }
+}
+
+export function isZoneLayerVisible(zone, visibility) {
+  const category = zone.category || "event";
+  if (zone.source === "auto-wilderness") return visibility.zoneWilderness !== false;
+  if (category === "event") return visibility.zoneEvents !== false;
+  return visibility.zoneNatural !== false;
+}
+
+function pushNaturalZone(vertices, context, map, zone) {
+  const style = resolveZoneStyle(zone);
+  const fill = [...style.color.slice(0, 3), Math.min(style.color[3], 0.22)];
+  const stroke = [...style.color.slice(0, 3), 0.46];
+  for (const cell of zonePatternCells(zone.cells || [])) {
+    const polygon = packCellPolygon(map, cell);
+    if (polygon.length < 3) continue;
+    const center = polygonCentroid(polygon);
+    for (let index = 0; index < polygon.length; index++) {
+      pushWorldVertex(vertices, context, center, fill);
+      pushWorldVertex(vertices, context, polygon[index], fill);
+      pushWorldVertex(vertices, context, polygon[(index + 1) % polygon.length], fill);
+    }
+    pushWorldPolylineMesh(vertices, context, [...polygon, polygon[0]], stroke, 0.38, {joinMode: "caps", joinSegments: 4});
   }
 }
 

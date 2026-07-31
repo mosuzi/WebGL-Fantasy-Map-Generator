@@ -142,7 +142,7 @@ function normalizeLabelLayoutOverride(source, {strict = false} = {}) {
 }
 
 function parseLabelTargetKey(value, {strict = false} = {}) {
-  const match = String(value || "").match(/^(state|province|city|custom):(\d+)$/);
+  const match = String(value || "").match(/^(state|province|city|zone|custom):(\d+)$/);
   if (!match) {
     if (strict) throw new Error(`标签布局目标键无效：${value}`);
     return null;

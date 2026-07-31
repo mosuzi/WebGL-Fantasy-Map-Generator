@@ -11,6 +11,7 @@ const gates = [
   ["diplomacy-export", "外交关系完整地图往返", "webgl-generator-diplomacy-export-regression.mjs"],
   ["map-import-diagnostics", "完整地图导入诊断", "webgl-generator-map-import-diagnostics-regression.mjs"],
   ["png-options", "PNG 显式选项", "webgl-generator-png-options-regression.mjs"],
+  ["heightmap-png", "高度灰度 PNG", "webgl-generator-heightmap-export-regression.mjs"],
   ["geojson-range", "GeoJSON 范围导出与坐标参考", "webgl-generator-geojson-range-regression.mjs"],
   ["network-geojson", "路线与河流 GeoJSON 稳定属性", "webgl-generator-network-geojson-properties-regression.mjs"],
   ["dissolve-compatibility", "政治面 dissolve 外部兼容性", "webgl-generator-dissolve-compatibility-regression.mjs"],

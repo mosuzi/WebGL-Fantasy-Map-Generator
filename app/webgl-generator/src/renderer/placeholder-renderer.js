@@ -74,6 +74,7 @@ import {DEFAULT_VISUAL_THEME_ID, resolveVisualTheme} from "./themes.js";
 import {emptyOceanCurrentLayerStats, pushOceanCurrentLayer} from "./ocean-current-layer.js";
 import {pushMilitaryFrontLayer} from "./military-front-layer.js";
 import {snapshotViewportCamera, viewportBufferTransform} from "./viewport-buffer-transform.js";
+import {wildernessLabelAnchor} from "../runtime/zone-wilderness.js";
 import {
   buildGridCellDiagnosticHighlight,
   buildGridCellDiagnostics,
@@ -281,6 +282,10 @@ export class PlaceholderMapRenderer {
       military: true,
       warFronts: true,
       zones: true,
+      zoneEvents: true,
+      zoneNatural: true,
+      zoneWilderness: true,
+      zoneLabels: true,
       measurements: true,
       scaleBar: true,
       mapBadge: true,
@@ -804,7 +809,8 @@ export class PlaceholderMapRenderer {
     if (layer === "gridCells" && nextVisible) void this.ensureGridCellDiagnosticsBuffer();
     if (layer === "tradeFlows") this.dynamicBuffersDirty.tradeFlows = true;
     if (layer === "cities" || layer === "population" || layer === "markers" || layer === "resources" || layer === "military") this.refreshPointLayers({draw: false});
-    if (layers.some(item => item === "coastline" || item === "lakeShore" || item === "stateBorders" || item === "provinceBorders" || item === "warFronts" || item === "zones" || item === "oceanCurrents")) this.refreshLineLayers({draw: false});
+    if (layers.some(item => item === "coastline" || item === "lakeShore" || item === "stateBorders" || item === "provinceBorders" || item === "warFronts" || item === "zones" || item === "zoneEvents" || item === "zoneNatural" || item === "zoneWilderness" || item === "oceanCurrents")) this.refreshLineLayers({draw: false});
+    if (layer === "zoneLabels") this.updateLabels();
     this.draw();
   }
 
@@ -1612,8 +1618,9 @@ export class PlaceholderMapRenderer {
     const ndcHeight = (boundsHeight / this.map.metadata.graphHeight) * 2;
     const available = 2 * (1 - padding);
     const nextScale = clamp(Math.min(available / ndcWidth, available / ndcHeight), minScale, maxScale);
-    const centerX = (bounds.minX + bounds.maxX) / 2;
-    const centerY = (bounds.minY + bounds.maxY) / 2;
+    const focus = object.kind === OBJECT_KIND.ZONE ? selectionPoint(this.map, object) : null;
+    const centerX = focus?.x ?? (bounds.minX + bounds.maxX) / 2;
+    const centerY = focus?.y ?? (bounds.minY + bounds.maxY) / 2;
     const [ndcX, ndcY] = worldToNdcPoint(createRenderContext(this.map), [centerX, centerY]);
 
     this.camera.scale = nextScale;
@@ -1711,12 +1718,17 @@ export class PlaceholderMapRenderer {
     this.overlay.replaceChildren();
     const documentRef = this.overlay.ownerDocument || document;
     const fragment = documentRef.createDocumentFragment();
-    const labels = [...getLabelStates(map), ...getLabelProvinces(map), ...getLabelCities(map, this.labelOptions), ...getCustomLabels(map)].map(item => {
+    const labels = [...getLabelStates(map), ...getLabelProvinces(map), ...getLabelCities(map, this.labelOptions), ...getLabelZones(map), ...getCustomLabels(map)].map(item => {
       const node = documentRef.createElement("span");
       node.className = labelClassName(item);
       const glyphNodes = appendLabelNodeText(node, item, documentRef);
       node.dataset.labelTargetKind = item.targetKind;
       node.dataset.labelTargetId = String(item.targetId);
+      if (item.targetKind === LABEL_TARGET_KIND.ZONE) node.addEventListener("click", event => {
+        event.preventDefault();
+        event.stopPropagation();
+        this.onSelect({object: {kind: OBJECT_KIND.ZONE, id: item.targetId}});
+      });
       const styleType = labelStyleTypeForTarget(item.targetKind, item.city);
       const resolvedStyle = resolveLabelStyle(map, styleType, this.visualTheme);
       const layout = resolveLabelLayout(map, item.targetKind, item.targetId, item.city, {
@@ -1837,14 +1849,15 @@ export class PlaceholderMapRenderer {
     const labelStartedAt = performance.now();
     for (const item of labelItems) {
       const selected = isSelectionForLabelItem(this.selection, item) || this.objectHighlights.some(highlight => isSelectionForLabelItem(highlight, item));
-      const forceVisible = selected && item.targetKind === LABEL_TARGET_KIND.CUSTOM;
+      const zoneLabel = item.targetKind === LABEL_TARGET_KIND.ZONE;
+      const forceVisible = selected && (item.targetKind === LABEL_TARGET_KIND.CUSTOM || zoneLabel);
       item.node.classList.toggle("selected", selected);
       const stateLabel = item.targetKind === LABEL_TARGET_KIND.STATE;
       const provinceLabel = item.targetKind === LABEL_TARGET_KIND.PROVINCE;
       const politicalLabel = stateLabel || provinceLabel;
       const layerVisible = this.isLabelItemLayerVisible(item);
       const withinLimit = item.targetKind === LABEL_TARGET_KIND.CITY ? visibleCities < maxVisible : true;
-      if (!forceVisible && (!layerVisible || !withinLimit || scale < item.minScale || (stateLabel && !stateLabelScale.visible))) {
+      if (!layerVisible || (!forceVisible && (!withinLimit || scale < item.minScale || (stateLabel && !stateLabelScale.visible)))) {
         item.node.classList.toggle("visible", false);
         item.visible = false;
         item.box = null;
@@ -1995,6 +2008,7 @@ export class PlaceholderMapRenderer {
   isLabelItemLayerVisible(item) {
     if (item.targetKind === LABEL_TARGET_KIND.STATE) return this.layerVisibility.stateLabels !== false;
     if (item.targetKind === LABEL_TARGET_KIND.PROVINCE) return this.layerVisibility.provinceLabels !== false;
+    if (item.targetKind === LABEL_TARGET_KIND.ZONE) return this.layerVisibility.zones !== false && this.layerVisibility.zoneLabels !== false && zoneLabelLayerVisible(item.zone, this.layerVisibility);
     if (item.targetKind === LABEL_TARGET_KIND.CUSTOM) return this.layerVisibility.labels !== false;
     return this.layerVisibility.labels !== false;
   }
@@ -2306,6 +2320,10 @@ function defaultLocateMinScale(object) {
 }
 
 function selectionPoint(map, selection) {
+  if (selection?.kind === OBJECT_KIND.ZONE || selection?.kind === OBJECT_KIND.LABEL && selection.targetKind === LABEL_TARGET_KIND.ZONE) {
+    const zone = (map?.zones?.zones || map?.pack?.zones || []).find(item => Number(item?.i ?? item?.id) === Number(selection.targetId ?? selection.id));
+    return wildernessLabelAnchor(map.pack, zone);
+  }
   if (selection?.kind === OBJECT_KIND.LABEL && selection.targetKind === LABEL_TARGET_KIND.STATE) {
     const state = map.politics.states[selection.targetId ?? selection.id];
     const placement = stateLabelPlacement(map, state, state?.fullName || state?.name || "");
@@ -2349,6 +2367,9 @@ function getObjectBounds(map, object) {
   }
   if (object.kind === OBJECT_KIND.LABEL && object.targetKind === LABEL_TARGET_KIND.PROVINCE) {
     return politicalBounds(map, {kind: OBJECT_KIND.PROVINCE, id: object.targetId ?? object.id}, 42);
+  }
+  if (object.kind === OBJECT_KIND.LABEL && object.targetKind === LABEL_TARGET_KIND.ZONE) {
+    return zoneBounds(map, object.targetId ?? object.id, 42);
   }
   if (object.kind === OBJECT_KIND.LABEL && object.targetKind === LABEL_TARGET_KIND.CUSTOM) {
     const label = (map.labels?.custom || []).find(item => item.id === (object.targetId ?? object.id));
@@ -2655,6 +2676,33 @@ function getLabelProvinces(map) {
     })
     .filter(Boolean)
     .sort((a, b) => b.priority - a.priority);
+}
+
+function getLabelZones(map) {
+  return (map?.zones?.zones || map?.pack?.zones || [])
+    .filter(zone => zone && !zone.hidden && zone.name)
+    .map((zone, rank) => {
+      const anchor = wildernessLabelAnchor(map.pack, zone);
+      return anchor ? {
+        targetKind: LABEL_TARGET_KIND.ZONE,
+        targetId: Number(zone.i ?? zone.id),
+        text: zone.name,
+        x: anchor.x,
+        y: anchor.y,
+        anchorCell: anchor.cell,
+        priority: 80 + Math.min(120, zone.cells?.length || 0),
+        zone,
+        rank,
+        minScale: 0.65
+      } : null;
+    })
+    .filter(Boolean);
+}
+
+function zoneLabelLayerVisible(zone, visibility) {
+  if (zone?.source === "auto-wilderness") return visibility.zoneWilderness !== false;
+  if ((zone?.category || "event") === "event") return visibility.zoneEvents !== false;
+  return visibility.zoneNatural !== false;
 }
 
 function getCustomLabels(map) {
@@ -3147,6 +3195,7 @@ function stateLabelAnchorAllowed(renderer, item, anchor, rect) {
 function labelClassName(item) {
   if (item.targetKind === LABEL_TARGET_KIND.STATE) return "state-label";
   if (item.targetKind === LABEL_TARGET_KIND.PROVINCE) return "province-label";
+  if (item.targetKind === LABEL_TARGET_KIND.ZONE) return "zone-label";
   if (item.targetKind === LABEL_TARGET_KIND.CUSTOM) return "custom-label";
   const city = item.city || {};
   return `city-label${city.capital ? " capital" : ""}`;

@@ -4,8 +4,8 @@
 
 ## 审计结论
 
-- 上游能力矩阵：1173 行，unknown / unclassified / gap = 0 / 0 / 0。
-- 公开 API：305 / 305 已归类。
+- 上游能力矩阵：1187 行，unknown / unclassified / gap = 0 / 0 / 0。
+- 公开 API：309 / 309 已归类。
 - Cell / 画布动作：48 / 48 已归类；画布模式 29，直接操控 19 类 / 89 个宿主。
 - 规则事务与玩法配方：69 + 10 = 79。
 - 已有完整事务 69，已有写命令但缺 AI inspector 0，多 API 碎片待收敛 0，缺失游戏规则 0，待发布配方 0，可执行配方 10。
@@ -79,7 +79,7 @@
 | `economy.assign-market-region` | 市场、资源与经济链 | 把 Pack Cell 区域分配给市场，校验跨国、水域和无效市场后重算经济链。 | `existing-transaction` | `edit.economy.assignCells`<br>`edit.economy.inspectAssignment` | `edit.economy.inspectAssignment`<br>`edit.economy.assignCells` |
 | `economy.rebuild` | 市场、资源与经济链 | 基于当前政治、城镇和资源状态重算市场与交易。 | `existing-transaction` | `edit.economy.rebuild` | `planned:edit.economy.inspectRebuild`<br>`edit.economy.rebuild` |
 | `infrastructure.regenerate-resources` | 市场、资源与经济链 | 重生成资源标记、资源潜力和相关贸易。 | `existing-transaction` | `generate.regenerate` | `planned:edit.markers.inspectResourceRegeneration`<br>`generate.regenerate(markers)` |
-| `infrastructure.manage-zone` | 路线、区域与资源设施 | 按中心 Cell 和半径创建区域，或在依赖预检后删除区域。 | `existing-transaction` | `edit.zones.create`<br>`edit.zones.delete`<br>`edit.zones.inspectCreate`<br>`edit.zones.inspectDelete` | `edit.zones.inspectCreate / edit.zones.inspectDelete`<br>`edit.zones.create / edit.zones.delete` |
+| `infrastructure.manage-zone` | 路线、区域与资源设施 | 按中心 Cell 和半径创建区域，或在依赖预检后删除区域。 | `existing-transaction` | `edit.zones.create`<br>`edit.zones.delete`<br>`edit.zones.inspectCreate`<br>`edit.zones.inspectDelete`<br>`edit.zones.setContext`<br>`edit.zones.setProperties` | `edit.zones.inspectCreate / edit.zones.inspectDelete`<br>`edit.zones.create / edit.zones.delete` |
 | `diplomacy.set-bilateral-relation` | 外交、战争与国家关系 | 设置两国关系并同步反向关系、摘要、纪事和战争相关约束。 | `existing-transaction` | `edit.diplomacy.inspectRelation`<br>`edit.diplomacy.setRelation` | `edit.diplomacy.inspectRelation`<br>`edit.diplomacy.setRelation` |
 | `diplomacy.regenerate` | 外交、战争与国家关系 | 基于当前国家、邻接和随机种子重建外交关系与摘要。 | `existing-transaction` | `generate.regenerate` | `planned:edit.diplomacy.inspectRegeneration`<br>`generate.regenerate(diplomacy)` |
 | `diplomacy.declare-war` | 外交、战争与国家关系 | 两国从和平关系进入战争，建立战争目标、参战方、纪事和军事活动上下文。 | `existing-transaction` | `edit.diplomacy.declareWar`<br>`edit.diplomacy.inspectDeclareWar`<br>`objects.get` | `edit.diplomacy.inspectDeclareWar`<br>`edit.diplomacy.declareWar` |
@@ -131,6 +131,6 @@
 
 ## 机器覆盖
 
-- API 分类：`atomic-editor-primitive=54`，`editor-runtime-service=49`，`read-export-service=10`，`read-primitive=30`，`semantic-action=162`。
+- API 分类：`atomic-editor-primitive=54`，`editor-runtime-service=49`，`read-export-service=11`，`read-primitive=31`，`semantic-action=164`。
 - 交互分类：`semantic-input-or-primitive=36`，`ui-boundary=12`。
-- Source digest：`cbd2fecc914da784d7cc569a06fa2a93c4ed3b2e81a3a48c3c55fda51d8b6dfa`。
+- Source digest：`80196983d985851e3c8ffadab5d992696398fae94b4aa31abc96f279af5beeb2`。

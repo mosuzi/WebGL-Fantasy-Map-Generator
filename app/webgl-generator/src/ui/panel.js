@@ -149,6 +149,7 @@ export function bindRuntimePanel(documentRef, handlers) {
     if (event.detail?.target === "browser-storage") handlers.onSaveBrowserStorage?.();
   });
   documentRef.getElementById("export-map-image")?.addEventListener("click", () => handlers.onExportImage?.());
+  documentRef.getElementById("export-heightmap-image")?.addEventListener("click", () => handlers.onExportHeightmapImage?.());
   documentRef.getElementById("export-map-data")?.addEventListener("click", () => handlers.onExportMapData?.());
   documentRef.getElementById("export-map-data-compressed")?.addEventListener("click", () => handlers.onExportCompressedMapData?.());
   documentRef.getElementById("export-map-geojson")?.addEventListener("click", () => handlers.onExportGeoJson?.());
@@ -270,6 +271,7 @@ function editLockControls(documentRef) {
     "#open-namebase-panel",
     "#open-export-panel",
     "#export-map-image",
+    "#export-heightmap-image",
     "#export-png-scale",
     "#export-png-crop-mode",
     "#export-png-crop-x",

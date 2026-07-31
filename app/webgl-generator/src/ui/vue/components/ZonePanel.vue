@@ -73,18 +73,34 @@
         </div>
       </div>
     </template>
+    <template #properties>
+      <div class="zone-style-editor">
+        <label>名称<input v-model="propertyDraft.name" maxlength="64" @input="propertyDraftDirty = true" /></label>
+        <label v-if="selected.category === 'custom'">自定义类型<input v-model="propertyDraft.customTypeName" maxlength="48" @input="propertyDraftDirty = true" /></label>
+        <label>说明<input v-model="propertyDraft.description" maxlength="240" @input="propertyDraftDirty = true" /></label>
+        <UiSelectField label="覆盖方式" :model-value="propertyDraft.coverage" :options="coverageOptions" :disabled="selected.category !== 'custom'" @update:model-value="value => updatePropertyDraft('coverage', value)" />
+        <UiNumberField label="宜居度修正" :model-value="propertyDraft.habitability" :min="-100" :max="100" @update:model-value="value => updatePropertyDraft('habitability', value)" @apply="value => updatePropertyDraft('habitability', value)" />
+        <UiNumberField label="通行成本倍率" :model-value="propertyDraft.movementCost" :min="0" :max="10" :step="0.1" @update:model-value="value => updatePropertyDraft('movementCost', value)" @apply="value => updatePropertyDraft('movementCost', value)" />
+        <UiNumberField label="经济产出倍率" :model-value="propertyDraft.economy" :min="0" :max="10" :step="0.1" @update:model-value="value => updatePropertyDraft('economy', value)" @apply="value => updatePropertyDraft('economy', value)" />
+        <UiNumberField label="防守修正" :model-value="propertyDraft.defense" :min="-100" :max="100" @update:model-value="value => updatePropertyDraft('defense', value)" @apply="value => updatePropertyDraft('defense', value)" />
+        <UiButton variant="primary" @click="applyProperties">应用地区属性</UiButton>
+      </div>
+    </template>
   </UiActionDock>
 </template>
 
 <script setup>
 import {computed, reactive, ref, watch} from "vue";
 import {ZONE_CREATION_TYPE_OPTIONS} from "../../../runtime/zone-edit-commands.js";
+import {resolveZoneContext, zoneRoleLabel} from "../../../runtime/zone-context.js";
+import {normalizeZoneTypeRecord, zoneCategoryLabel} from "../../../runtime/zone-types.js";
 import UiActionDock from "./base/UiActionDock.vue";
 import UiButton from "./base/UiButton.vue";
 import UiColorActionPanel from "./base/UiColorActionPanel.vue";
 import UiDetailGrid from "./base/UiDetailGrid.vue";
 import UiFilterInput from "./base/UiFilterInput.vue";
 import UiMetricGrid from "./base/UiMetricGrid.vue";
+import UiNumberField from "./base/UiNumberField.vue";
 import UiObjectTable from "./base/UiObjectTable.vue";
 import UiPanelIoActions from "./base/UiPanelIoActions.vue";
 import UiRegenerationLockActions from "./base/UiRegenerationLockActions.vue";
@@ -123,7 +139,17 @@ const TYPE_META = Object.freeze({
   Avalanche: Object.freeze({label: "雪崩区", pattern: "diagonal", color: "#c4ced2", note: "高山雪崩风险地区"}),
   Fault: Object.freeze({label: "断层区", pattern: "diagonal", color: "#8d7d70", note: "地质断层或地震风险区"}),
   Flood: Object.freeze({label: "洪水区", pattern: "dots", color: "#4e9ac9", note: "沿河洪水影响地区"}),
-  Tsunami: Object.freeze({label: "海啸区", pattern: "cross", color: "#4a9dbe", note: "海岸海啸影响地区"})
+  Tsunami: Object.freeze({label: "海啸区", pattern: "cross", color: "#4a9dbe", note: "海岸海啸影响地区"}),
+  Wilderness: Object.freeze({label: "无人区", pattern: "diagonal", color: "#8a806f", note: "人烟稀少的自然地区"}),
+  Desert: Object.freeze({label: "沙漠", pattern: "dots", color: "#d3ae63", note: "干旱沙漠地区"}),
+  Swamp: Object.freeze({label: "沼泽", pattern: "dots", color: "#647c59", note: "湿地沼泽地区"}),
+  DeepForest: Object.freeze({label: "密林", pattern: "cross", color: "#426b45", note: "茂密森林地区"}),
+  Grassland: Object.freeze({label: "草原", pattern: "diagonal", color: "#91a85d", note: "开阔草原地区"}),
+  Tundra: Object.freeze({label: "苔原 / 冰原", pattern: "dots", color: "#aab9b5", note: "寒冷苔原或冰原"}),
+  Highland: Object.freeze({label: "高地 / 山地", pattern: "cross", color: "#847866", note: "高地与山地"}),
+  Badlands: Object.freeze({label: "荒地", pattern: "diagonal", color: "#a47755", note: "贫瘠荒地"}),
+  VolcanicLand: Object.freeze({label: "火山地带", pattern: "cross", color: "#8f4a3d", note: "火山地貌地区"}),
+  Custom: Object.freeze({label: "自定义地区", pattern: "diagonal", color: "#777777", note: "完全自定义地区"})
 });
 
 const PATTERN_LABELS = Object.freeze({
@@ -139,7 +165,8 @@ const patternOptions = Object.freeze([
 ]);
 
 const zoneActions = Object.freeze([
-  {key: "style", resultClass: "open-secondary", label: "调整样式", icon: "▧", panelWidth: 360, panelHeight: 420}
+  {key: "style", resultClass: "open-secondary", label: "调整样式", icon: "▧", panelWidth: 360, panelHeight: 420},
+  {key: "properties", resultClass: "open-secondary", label: "地区属性", icon: "◇", panelWidth: 380, panelHeight: 620}
 ]);
 
 const sortOptions = Object.freeze([
@@ -164,6 +191,9 @@ const activeAction = ref(null);
 const styleDraft = reactive({
   pattern: "diagonal"
 });
+const propertyDraft = reactive({name: "", customTypeName: "", description: "", coverage: "base", habitability: 0, movementCost: 1, economy: 1, defense: 0});
+const propertyDraftDirty = ref(false);
+const coverageOptions = Object.freeze([{value: "base", label: "底区"}, {value: "overlay", label: "覆盖区"}]);
 const zoneDraft = reactive({type: props.state.createType || "Disaster"});
 const rows = computed(() => {
   props.state.version;
@@ -210,6 +240,12 @@ const summaryMetrics = computed(() => [
 const detailRows = computed(() => selected.value ? [
   {label: "选中", value: `#${selected.value.id} / ${selected.value.type}`},
   {label: "含义", value: selected.value.note},
+  {label: "类别", value: zoneCategoryLabel(selected.value.category)},
+  {label: "覆盖方式", value: selected.value.coverage === "base" ? "底区" : "覆盖区"},
+  {label: "基础影响", value: formatEffects(selected.value.effects)},
+  {label: "事件摘要", value: selected.value.summary},
+  {label: "事件状态", value: selected.value.statusLabel},
+  ...selected.value.participants.map(participant => ({label: zoneRoleLabel(participant.role), value: participant.name})),
   {label: "纹理", value: `${selected.value.patternLabel} / ${selected.value.color}`},
   {label: "涉及国家", value: selected.value.statesLabel},
   {label: "规模", value: `${formatNumber(selected.value.cells)} cells`},
@@ -220,12 +256,50 @@ const detailRows = computed(() => selected.value ? [
 watch(() => selected.value?.id, () => {
   activeAction.value = null;
   syncStyleDraft();
+  syncPropertyDraft();
 }, {immediate: true});
 
 watch(() => selected.value?.pattern, syncStyleDraft);
+watch(() => JSON.stringify({
+  version: props.state.version,
+  id: selected.value?.id,
+  name: selected.value?.name,
+  customTypeName: selected.value?.customTypeName,
+  description: selected.value?.description,
+  coverage: selected.value?.coverage,
+  effects: selected.value?.effects,
+  status: selected.value?.status,
+  summary: selected.value?.summary
+}), () => {
+  if (!propertyDraftDirty.value) syncPropertyDraft();
+});
 
 function syncStyleDraft() {
   styleDraft.pattern = selected.value?.pattern || "diagonal";
+}
+
+function syncPropertyDraft() {
+  const zone = selected.value;
+  if (!zone) return;
+  Object.assign(propertyDraft, {name: zone.name, customTypeName: zone.customTypeName, description: zone.description, coverage: zone.coverage, ...zone.effects});
+  propertyDraftDirty.value = false;
+}
+
+function updatePropertyDraft(key, value) {
+  propertyDraft[key] = value;
+  propertyDraftDirty.value = true;
+}
+
+function applyProperties() {
+  if (!selected.value) return;
+  props.callbacks.onPropertiesChange?.(selected.value.id, {
+    name: propertyDraft.name,
+    customTypeName: propertyDraft.customTypeName,
+    description: propertyDraft.description,
+    coverage: propertyDraft.coverage,
+    effects: {habitability: propertyDraft.habitability, movementCost: propertyDraft.movementCost, economy: propertyDraft.economy, defense: propertyDraft.defense}
+  });
+  propertyDraftDirty.value = false;
 }
 
 function applyPattern() {
@@ -259,6 +333,8 @@ function zoneRows(map) {
       const pattern = normalizePattern(zone.pattern || meta.pattern);
       const cells = (zone.cells || []).filter(Number.isInteger);
       const stateNames = zoneStateNames(map, cells);
+      const context = resolveZoneContext(map, zone);
+      const model = normalizeZoneTypeRecord(zone);
       const area = cells.reduce((sum, cell) => sum + Number(map?.pack?.cells?.area?.[cell] || 0), 0);
       return {
         id,
@@ -266,6 +342,16 @@ function zoneRows(map) {
         rawType,
         type: meta.label || rawType,
         note: meta.note || "自定义地区",
+        summary: context.summary,
+        status: context.status,
+        statusLabel: context.statusLabel,
+        participants: context.participants,
+        category: model.category,
+        source: model.source,
+        customTypeName: model.customTypeName,
+        description: model.description,
+        coverage: model.coverage,
+        effects: model.effects,
         pattern,
         patternLabel: PATTERN_LABELS[pattern] || pattern,
         color: normalizeHexColor(zone.hexColor || zone.fill || zone.color) || meta.color,
@@ -300,6 +386,7 @@ function filterRows(sourceRows, filter) {
     row.patternLabel,
     row.color,
     row.statesLabel,
+    row.summary,
     row.note
   ].some(value => String(value || "").toLowerCase().includes(query)));
 }
@@ -319,6 +406,10 @@ function normalizeHexColor(color) {
 
 function formatAreaValue(value) {
   return formatArea(value, unitPreferences.value);
+}
+
+function formatEffects(effects = {}) {
+  return `宜居 ${effects.habitability ?? 0} / 通行 ×${effects.movementCost ?? 1} / 经济 ×${effects.economy ?? 1} / 防守 ${effects.defense ?? 0}`;
 }
 
 function formatNumber(value) {

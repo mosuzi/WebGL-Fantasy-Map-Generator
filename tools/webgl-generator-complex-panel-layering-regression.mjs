@@ -32,7 +32,7 @@ assert(!/key: "battle"/.test(militarySource), "军事首层动作栏仍保留战
 
 const controlTemplate = templateOf(controlSource);
 const exportAdvanced = detailsBlock(controlTemplate, "project-export-advanced-section");
-for (const id of ["export-map-data-compressed", "export-map-geojson", "export-map-features-geojson", "export-png-scale", "feature-export-layer-state"]) {
+for (const id of ["export-heightmap-image", "export-map-data-compressed", "export-map-geojson", "export-map-features-geojson", "export-png-scale", "feature-export-layer-state"]) {
   assert(exportAdvanced.includes(id), `导出高级区缺少 ${id}`);
 }
 const exportBeforeAdvanced = controlTemplate.slice(0, controlTemplate.indexOf(exportAdvanced));
@@ -48,7 +48,7 @@ console.log(JSON.stringify({
   ok: true,
   height: {primary: ["brush", "scope", "global-tools", "import"], advanced: ["terrain-template", "program", "conditional-transform", "gpu-stats"]},
   military: {primary: ["regiments", "locate", "status", "ratios", "regenerate"], advanced: ["battle-archive", "chain-filters", "light-resolution"]},
-  export: {quick: ["png", "map-json"], advanced: ["compressed-json", "geojson", "png-options", "feature-layers"]},
+  export: {quick: ["png", "map-json"], advanced: ["heightmap-png", "compressed-json", "geojson", "png-options", "feature-layers"]},
   defaultCollapsed: true
 }, null, 2));
 

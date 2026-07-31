@@ -83,6 +83,56 @@ const METHOD_OVERRIDES = Object.freeze({
     result: pageSchema(),
     examples: [[{type: "city", text: "港"}, {limit: 20}]]
   },
+  "edit.zones.setContext": {
+    arguments: [
+      argument("zoneId", {type: "integer", minimum: 0}),
+      argument("context", {
+        type: "object",
+        properties: {
+          status: {type: "string", enum: ["active", "planned", "resolved", "incomplete"]},
+          participants: arraySchema({
+            type: "object",
+            required: ["role", "ref"],
+            properties: {
+              role: {type: "string"},
+              ref: {type: "object", required: ["kind", "id"], properties: {kind: {type: "string"}, id: {type: ["integer", "string"]}, nameSnapshot: {type: "string"}}, additionalProperties: false}
+            },
+            additionalProperties: false
+          })
+        },
+        additionalProperties: false
+      })
+    ],
+    result: objectSchema(["executed", "revision", "result"]),
+    examples: [[1, {status: "active", participants: [{role: "invader", ref: {kind: "state", id: 1}}, {role: "defender", ref: {kind: "state", id: 2}}]}]],
+    businessCodes: ["ok", "api_error", "invalid_argument", "not_found"]
+  },
+  "edit.zones.setProperties": {
+    arguments: [argument("zoneId", {type: "integer", minimum: 0}), argument("patch", {type: "object", additionalProperties: true})],
+    result: objectSchema(["executed", "revision", "result"]),
+    examples: [[1, {name: "黑沼", description: "终年积水", coverage: "base", effects: {movementCost: 1.5}}]],
+    businessCodes: ["ok", "api_error", "invalid_argument", "not_found"]
+  },
+  "edit.zones.getEffectsAtCell": {
+    arguments: [argument("packCell", {type: "integer", minimum: 0})],
+    result: objectSchema(["packCell", "effects", "zones"]),
+    examples: [[0]],
+    businessCodes: ["ok", "api_error", "invalid_argument"]
+  },
+  "data.exportHeightmapPNG": {
+    arguments: [argument("options", {
+      type: "object",
+      properties: {
+        download: {type: "boolean", default: false},
+        pixelScale: {type: "integer", minimum: 1, maximum: 4, default: 1},
+        includeDataUrl: {type: "boolean", default: true}
+      },
+      additionalProperties: false
+    }, false)],
+    result: objectSchema(["filename", "mimeType", "bytes", "width", "height", "pixelScale", "cellCount", "minHeight", "maxHeight", "encoding"]),
+    examples: [[{download: false, pixelScale: 2}]],
+    businessCodes: ["ok", "api_error"]
+  },
   "planner.listRecipes": {
     arguments: [],
     result: arraySchema(plannerRecipeSummarySchema()),
@@ -1894,7 +1944,7 @@ function labelTargetSchema() {
     properties: {
       kind: {const: "label"},
       id: {type: "integer"},
-      targetKind: {enum: ["city", "state", "province", "custom"]},
+      targetKind: {enum: ["city", "state", "province", "zone", "custom"]},
       targetId: {type: "integer"}
     },
     anyOf: [

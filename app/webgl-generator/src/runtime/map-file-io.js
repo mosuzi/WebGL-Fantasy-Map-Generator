@@ -12,6 +12,8 @@ import {normalizeOceanCurrentModel, OCEAN_CURRENT_MODEL_VERSION} from "../genera
 import {normalizeRiverNetwork} from "../generator/river-network.js";
 import {normalizeLakeOverflowDiagnostics} from "../generator/lake-overflow.js";
 import {normalizeRegenerationLockStore, validateRegenerationLockStore} from "./regeneration-locks.js";
+import {normalizeZoneMap, resolveZoneContext} from "./zone-context.js";
+import {normalizeZoneTypeRecord} from "./zone-types.js";
 import {
   NETWORK_GEOJSON_PROPERTY_SCHEMA_ID,
   NETWORK_GEOJSON_PROPERTY_SCHEMA_VERSION,
@@ -132,6 +134,7 @@ export function migrateMapDocument(document) {
   migrated.map = normalizeDiplomacyMap(migrated.map);
   migrated.map.oceanCurrents = normalizeOceanCurrentModel(migrated.map.oceanCurrents);
   migrated.map = normalizeLakeOverflowMap(migrated.map);
+  migrated.map = normalizeZoneMap(migrated.map);
   applyRegenerationLockCompatibility(migrated.map, versioned.map?.regenerationLocks);
   validateCurrentMapDocument(migrated);
   return migrated;
@@ -356,6 +359,99 @@ export async function downloadCanvasPng(documentRef, canvas, filename, options =
   };
 }
 
+export async function downloadHeightmapPng(documentRef, map, filename, options = {}) {
+  const result = await createHeightmapPngBlob(documentRef, map, options);
+  downloadBlob(documentRef, result.blob, filename);
+  return {
+    bytes: result.blob.size,
+    width: result.width,
+    height: result.height,
+    pixelScale: result.pixelScale,
+    cellCount: result.cellCount,
+    minHeight: result.minHeight,
+    maxHeight: result.maxHeight,
+    encoding: result.encoding
+  };
+}
+
+export async function createHeightmapPngBlob(documentRef, map, options = {}) {
+  const result = createHeightmapCanvas(documentRef, map, options);
+  return {
+    ...result,
+    blob: await canvasToBlob(result.canvas)
+  };
+}
+
+export function createHeightmapCanvas(documentRef, map, options = {}) {
+  if (!map) throw new Error("当前没有可导出的地图");
+  const graphWidth = Number(map.metadata?.graphWidth ?? map.options?.graphWidth);
+  const graphHeight = Number(map.metadata?.graphHeight ?? map.options?.graphHeight);
+  if (!(graphWidth > 0) || !(graphHeight > 0)) throw new Error("当前地图缺少有效世界尺寸");
+
+  const grid = map.grid;
+  const cellVertices = grid?.cells?.v;
+  const heights = grid?.cells?.h;
+  const vertices = grid?.vertices?.p;
+  if (!Array.isArray(cellVertices) || !heights || !Array.isArray(vertices) || cellVertices.length !== heights.length) {
+    throw new Error("当前地图缺少完整的 Grid 高度或 Voronoi 几何");
+  }
+
+  const pixelScale = normalizePngPixelScale(options.pixelScale);
+  const width = Math.max(1, Math.round(graphWidth * pixelScale));
+  const height = Math.max(1, Math.round(graphHeight * pixelScale));
+  const canvas = documentRef.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext("2d");
+  if (!context) throw new Error("当前浏览器不支持高度灰度图导出");
+
+  context.imageSmoothingEnabled = false;
+  context.fillStyle = "#000000";
+  context.fillRect(0, 0, width, height);
+  context.save();
+  context.scale(pixelScale, pixelScale);
+  context.lineJoin = "round";
+  context.lineWidth = 1 / pixelScale;
+
+  const shadeBuckets = Array.from({length: 256}, () => []);
+  let minHeight = 100;
+  let maxHeight = 0;
+  for (let cell = 0; cell < cellVertices.length; cell++) {
+    const heightValue = clampHeightmapHeight(heights[cell]);
+    minHeight = Math.min(minHeight, heightValue);
+    maxHeight = Math.max(maxHeight, heightValue);
+    shadeBuckets[heightToGrayscaleByte(heightValue)].push(cell);
+  }
+
+  for (let shade = 0; shade < shadeBuckets.length; shade++) {
+    const cells = shadeBuckets[shade];
+    if (!cells.length) continue;
+    context.beginPath();
+    for (const cell of cells) appendHeightmapCellPath(context, cellVertices[cell], vertices, cell);
+    const color = `rgb(${shade}, ${shade}, ${shade})`;
+    context.fillStyle = color;
+    context.strokeStyle = color;
+    context.fill();
+    context.stroke();
+  }
+  context.restore();
+
+  return {
+    canvas,
+    width,
+    height,
+    pixelScale,
+    cellCount: cellVertices.length,
+    minHeight,
+    maxHeight,
+    encoding: "linear-height-0-100-to-gray-0-255"
+  };
+}
+
+export function heightToGrayscaleByte(height) {
+  return Math.round(clampHeightmapHeight(height) * 255 / 100);
+}
+
 export async function createCanvasPngBlob(documentRef, canvas, options = {}) {
   if (!canvas?.toBlob) throw new Error("当前浏览器不支持 canvas 图片导出");
   const normalizedOptions = normalizePngExportOptions(options);
@@ -371,6 +467,25 @@ export async function createCanvasPngBlob(documentRef, canvas, options = {}) {
     ...normalizedOptions,
     crop: composed.crop
   };
+}
+
+function appendHeightmapCellPath(context, vertexIds, vertices, cell) {
+  if (!Array.isArray(vertexIds) || vertexIds.length < 3) throw new Error(`Grid cell #${cell} 缺少有效 Voronoi 多边形`);
+  for (let index = 0; index < vertexIds.length; index++) {
+    const point = vertices[vertexIds[index]];
+    if (!Array.isArray(point) || !Number.isFinite(Number(point[0])) || !Number.isFinite(Number(point[1]))) {
+      throw new Error(`Grid cell #${cell} 含无效 Voronoi 顶点`);
+    }
+    if (index === 0) context.moveTo(Number(point[0]), Number(point[1]));
+    else context.lineTo(Number(point[0]), Number(point[1]));
+  }
+  context.closePath();
+}
+
+function clampHeightmapHeight(value) {
+  const height = Number(value);
+  if (!Number.isFinite(height)) throw new Error("Grid 高度必须是有限数");
+  return Math.max(0, Math.min(100, height));
 }
 
 export function normalizePngExportOptions(options = {}) {
@@ -507,7 +622,7 @@ function normalizeMapSchemaV2(map, documentOptions = {}) {
     society: source.society ? {...source.society, cultures: societyCultures, religions: societyReligions, metadata: {...(source.society.metadata || {})}} : source.society,
     pack: normalizedCurrent.pack ? {...normalizedCurrent.pack, cultures: packCultures, religions: packReligions} : normalizedCurrent.pack
   };
-  const compatible = normalizeLakeOverflowMap(normalizeDiplomacyMap(normalizeEconomyDisplayMap(normalizeSocialExpansionMap(normalized))));
+  const compatible = normalizeZoneMap(normalizeLakeOverflowMap(normalizeDiplomacyMap(normalizeEconomyDisplayMap(normalizeSocialExpansionMap(normalized)))));
   applyRegenerationLockCompatibility(compatible, source.regenerationLocks);
   return compatible;
 }
@@ -1467,6 +1582,8 @@ function markerFeatures(map) {
 function zoneFeatures(map, options = {}) {
   return (map.zones?.zones || []).map(zone => {
     const id = zone.i ?? zone.id;
+    const context = resolveZoneContext(map, zone);
+    const model = normalizeZoneTypeRecord(zone);
     const polygons = options.dissolve === true
       ? dissolvePackCellPolygons(map, zone.cells || [])
       : (zone.cells || []).map(cell => packCellPolygon(map, cell)).filter(Boolean);
@@ -1480,6 +1597,12 @@ function zoneFeatures(map, options = {}) {
         numericId: id,
         name: zone.name || "",
         type: zone.type || "",
+        category: model.category,
+        source: model.source,
+        customTypeName: model.customTypeName,
+        description: model.description,
+        coverage: model.coverage,
+        effects: model.effects,
         attacker: Number(zone.attacker) || 0,
         defender: Number(zone.defender) || 0,
         hidden: Boolean(zone.hidden),
@@ -1487,6 +1610,13 @@ function zoneFeatures(map, options = {}) {
         color: zone.color || "",
         pattern: zone.pattern || "",
         hexColor: zone.hexColor || "",
+        status: context.status,
+        statusLabel: context.statusLabel,
+        summary: context.summary,
+        context: {
+          status: context.status,
+          participants: context.participants.map(({role, ref}) => ({role, ref}))
+        },
         dissolved: options.dissolve === true
       },
       geometry: {
@@ -1959,7 +2089,7 @@ async function drawMapOverlayElements(documentRef, context, canvasRect, scale, o
   if (options.overlays?.cityIcons !== false) selectors.push(".city-map-icon.visible");
   if (options.overlays?.markers !== false) selectors.push(".marker-map-icon.visible");
   if (options.overlays?.military !== false) selectors.push(".military-map-icon.visible");
-  if (options.overlays?.labels !== false) selectors.push(".state-label.visible", ".province-label.visible", ".city-label.visible", ".custom-label.visible");
+  if (options.overlays?.labels !== false) selectors.push(".state-label.visible", ".province-label.visible", ".city-label.visible", ".zone-label.visible", ".custom-label.visible");
   const elements = selectors.length ? Array.from(overlay.querySelectorAll(selectors.join(", "))).filter(isVisibleElement) : [];
   elements.sort((a, b) => overlayZIndex(a) - overlayZIndex(b));
 

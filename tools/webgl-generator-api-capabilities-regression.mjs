@@ -102,6 +102,7 @@ async function inspectCapabilities(page, {cells, seed, template, expectedConfirm
       "edit.notes.set": "notes",
       "edit.states.setGovernment": "political-entities",
       "data.exportPNG": "download-or-export-result",
+      "data.exportHeightmapPNG": "download-or-export-result",
       "debug.profileNextRender": "renderer-diagnostics",
       "selection.locate": "camera-and-selection-state",
       "selection.highlight": "persistent-highlight-state",
@@ -142,7 +143,7 @@ async function inspectCapabilities(page, {cells, seed, template, expectedConfirm
     if (capabilities.contract?.stableCompatibility !== "same-major") failures.push("capabilities 缺少同主版本兼容策略");
     if (capabilities.contract?.deprecatedRemoval !== "next-major-only") failures.push("capabilities 缺少 deprecated 移除策略");
     if (Object.keys(capabilities.capabilityGroups || {}).length !== 18) failures.push("capabilities 能力组不是 18 个");
-    if (JSON.stringify(capabilities.stabilitySummary) !== JSON.stringify({stable: 297, experimental: 7, deprecated: 1})) failures.push("稳定等级统计不是 297 / 7 / 1");
+    if (JSON.stringify(capabilities.stabilitySummary) !== JSON.stringify({stable: 301, experimental: 7, deprecated: 1})) failures.push("稳定等级统计不是 301 / 7 / 1");
     if (!Object.prototype.hasOwnProperty.call(runtimeStats, "lastEditRefresh")) failures.push("runtimeStats 缺少 lastEditRefresh 字段");
     const coverage = capabilities.methodMetadataCoverage || {};
     if (coverage.complete !== true) failures.push("methodMetadataCoverage.complete 不是 true");

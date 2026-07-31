@@ -210,7 +210,8 @@ import {
   regenerateProvincesForStates,
   withScopedProvinceRegenerationOptions
 } from "./state-topology-commands.js";
-import {createAddZoneCommand, createDeleteZoneCommand, createSetZoneStyleCommand} from "./zone-edit-commands.js";
+import {createAddZoneCommand, createDeleteZoneCommand, createSetZoneContextCommand, createSetZonePropertiesCommand, createSetZoneStyleCommand} from "./zone-edit-commands.js";
+import {resolveZoneEffectsAtCell} from "./zone-types.js";
 import {createClearRegenerationLocksCommand, createSetRegenerationLockCommand, createSetRegenerationLocksCommand} from "./regeneration-lock-commands.js";
 import {assertRegenerationLockInspection, createRegenerationLockInspection, getRegenerationLockStatus, listRegenerationLocks, lockError, normalizeRegenerationLockReference, normalizeRegenerationLockReferences, regenerationLockObjectExists} from "./regeneration-locks.js";
 import {
@@ -242,6 +243,7 @@ import {
   exportAllMapData,
   exportCompressedAllMapData,
   exportFeatureGeoJsonData,
+  exportHeightmapPngData,
   exportMeasurementsData,
   exportNamebasesData,
   exportNotesData,
@@ -2441,6 +2443,10 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       executeEditCommand(state, documentRef, command, {context});
       updateEditingInteractionLock(state, documentRef);
     },
+    onPropertiesChange: (zoneId, patch) => {
+      executeEditCommand(state, documentRef, createSetZonePropertiesCommand(zoneId, patch), {context: {map: state.map}});
+      updateEditingInteractionLock(state, documentRef);
+    },
     onDelete: zoneId => {
       const result = executeEditCommand(state, documentRef, createDeleteZoneCommand(zoneId), {
         context: {map: state.map},
@@ -2704,6 +2710,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       void saveMapToBrowserStorage(state, documentRef, runtimeActions.data.saveBrowserMap);
     },
     onExportImage: () => exportMapImage(state, documentRef, runtimeActions.data.exportPNG),
+    onExportHeightmapImage: () => exportHeightmapImage(state, documentRef, runtimeActions.data.exportHeightmapPNG),
     onExportMapData: () => exportMapData(state, documentRef, runtimeActions.data.exportMap),
     onExportCompressedMapData: () => {
       void exportCompressedMapData(state, documentRef, runtimeActions.data.exportCompressedAll);
@@ -2861,6 +2868,10 @@ function createRuntimeActions(state, documentRef, options = {}) {
         context.report("render-export", {message: "正在导出 PNG"});
         return exportPngData(state, documentRef, options);
       }, {message: "正在导出 PNG"}),
+      exportHeightmapPNG: (options = {}) => operation.run("data.exportHeightmapPNG", context => {
+        context.report("render-export", {message: "正在导出高度灰度图"});
+        return exportHeightmapPngData(state, documentRef, options);
+      }, {message: "正在导出高度灰度图"}),
       exportNotes: (options = {}) => exportNotesData(state, documentRef, options),
       exportMeasurements: (options = {}) => exportMeasurementsData(state, documentRef, options),
       exportImportDiagnostic: (options = {}) => exportMapImportDiagnosticViaApi(state, documentRef, options),
@@ -3046,7 +3057,10 @@ function createRuntimeActions(state, documentRef, options = {}) {
         create: (options = {}) => createZoneViaApi(state, documentRef, options),
         inspectDelete: zoneId => inspectExistingRuleViaApi(state, EXISTING_RULE_ACTION.ZONE_MANAGE, {operation: "delete", id: normalizeApiInteger(zoneId, "地区 ID")}),
         delete: (zoneId, options = {}) => deleteZoneViaApi(state, documentRef, zoneId, options),
-        setStyle: (zoneId, patch) => setZoneStyleViaApi(state, documentRef, zoneId, patch)
+        setStyle: (zoneId, patch) => setZoneStyleViaApi(state, documentRef, zoneId, patch),
+        setContext: (zoneId, context) => setZoneContextViaApi(state, documentRef, zoneId, context),
+        setProperties: (zoneId, patch) => setZonePropertiesViaApi(state, documentRef, zoneId, patch),
+        getEffectsAtCell: packCell => resolveZoneEffectsAtCell(state.map, packCell)
       },
       cultures: {
         inspectLifecycle: (operation, input = {}) => inspectSocialLifecycleViaApi(state, "culture", operation, input),
@@ -4345,6 +4359,19 @@ async function exportMapImage(state, documentRef, exportAction = state.runtimeAc
     return result;
   } catch (error) {
     reportFileOperationError(documentRef, "图片导出失败", error);
+    return null;
+  }
+}
+
+async function exportHeightmapImage(state, documentRef, exportAction = state.runtimeActions?.data?.exportHeightmapPNG) {
+  try {
+    const pixelScale = readPngExportScale(documentRef);
+    setFileOperationStatus(documentRef, "正在导出高度灰度图...");
+    const result = await exportAction({download: true, pixelScale});
+    setFileOperationStatus(documentRef, `高度灰度图已导出：${result.width} x ${result.height}px，倍率 ${result.pixelScale}x，${result.cellCount} 个 Grid Cells，${formatStorageBytes(result.bytes)}。`);
+    return result;
+  } catch (error) {
+    reportFileOperationError(documentRef, "高度灰度图导出失败", error);
     return null;
   }
 }
@@ -9266,6 +9293,33 @@ function setZoneStyleViaApi(state, documentRef, zoneId, patch) {
     context: {map: state.map},
     noopStatus: "地区不存在、样式无效或未变化。",
     status: `已更新地区 #${id} 样式。`,
+    throwOnError: false
+  });
+  updateRuntimePanel(documentRef, state);
+  updateEditingInteractionLock(state, documentRef);
+  return editApiResult(state, result);
+}
+
+function setZoneContextViaApi(state, documentRef, zoneId, context) {
+  const id = normalizeApiInteger(zoneId, "地区 ID");
+  const command = createSetZoneContextCommand(id, context);
+  const result = executeEditCommand(state, documentRef, command, {
+    context: {map: state.map},
+    noopStatus: "地区不存在、语义无效或未变化。",
+    status: `已更新地区 #${id} 事件语义。`,
+    throwOnError: false
+  });
+  updateRuntimePanel(documentRef, state);
+  updateEditingInteractionLock(state, documentRef);
+  return editApiResult(state, result);
+}
+
+function setZonePropertiesViaApi(state, documentRef, zoneId, patch) {
+  const id = normalizeApiInteger(zoneId, "地区 ID");
+  const result = executeEditCommand(state, documentRef, createSetZonePropertiesCommand(id, patch), {
+    context: {map: state.map},
+    noopStatus: "地区不存在、属性无效或未变化。",
+    status: `已更新地区 #${id} 属性。`,
     throwOnError: false
   });
   updateRuntimePanel(documentRef, state);

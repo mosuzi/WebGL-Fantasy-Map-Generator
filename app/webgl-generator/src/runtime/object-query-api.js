@@ -26,7 +26,7 @@ const FIELD_WHITELISTS = Object.freeze({
   [OBJECT_KIND.CULTURE]: ["kind", "id", "name", "type", "nameStyle", "centerCell", "gridCenterCell", "cells", "population"],
   [OBJECT_KIND.RELIGION]: ["kind", "id", "name", "type", "form", "cultureId", "culture", "centerCell", "gridCenterCell", "cells", "population"],
   [OBJECT_KIND.REGION]: ["kind", "id", "name", "type"],
-  [OBJECT_KIND.ZONE]: ["kind", "id", "name", "type", "pattern", "color", "cells"]
+  [OBJECT_KIND.ZONE]: ["kind", "id", "name", "type", "category", "source", "customTypeName", "description", "coverage", "effects", "pattern", "color", "cells", "status", "statusLabel", "summary", "participants", "missingRoles", "context"]
 });
 for (const kind of REGENERATION_LOCK_KINDS) {
   if (FIELD_WHITELISTS[kind] && !FIELD_WHITELISTS[kind].includes("regenerationLocked")) FIELD_WHITELISTS[kind].push("regenerationLocked");
@@ -169,6 +169,7 @@ function collectLabelReferences(map) {
       .map(item => ({...item, targetKind: LABEL_TARGET_KIND.STATE, targetId: item.id})),
     ...indexedReferences(map?.politics?.provinces, OBJECT_KIND.LABEL, item => Number(item.id ?? item.i) > 0 && !item.removed)
       .map(item => ({...item, targetKind: LABEL_TARGET_KIND.PROVINCE, targetId: item.id})),
+    ...compactArray(map?.zones?.zones || map?.pack?.zones).map(item => ({kind: OBJECT_KIND.LABEL, id: item.i ?? item.id, targetKind: LABEL_TARGET_KIND.ZONE, targetId: item.i ?? item.id})),
     ...compactArray(map?.settlements?.cities).map(item => ({kind: OBJECT_KIND.LABEL, id: item.id, targetKind: LABEL_TARGET_KIND.CITY, targetId: item.id}))
   ];
 }

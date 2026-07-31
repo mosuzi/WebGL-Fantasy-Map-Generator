@@ -33,6 +33,7 @@ const uiActionSignatures = {
   geoImport: "onImportGeoData: file => importGeoData(state, documentRef, file, runtimeActions.data.importGEO)",
   heightmapImport: "onImportHeightmapImage: payload => importHeightmapImage(state, documentRef, payload, runtimeActions.data.importHeightmap)",
   mapExport: "onExportMapData: () => exportMapData(state, documentRef, runtimeActions.data.exportMap)",
+  heightmapExport: "onExportHeightmapImage: () => exportHeightmapImage(state, documentRef, runtimeActions.data.exportHeightmapPNG)",
   browserSave: "saveMapToBrowserStorage(state, documentRef, runtimeActions.data.saveBrowserMap)",
   importDiagnostic: "exportMapImportDiagnostic(state, documentRef, runtimeActions.data.exportImportDiagnostic)",
   namebaseImport: "onImport: (file, mode) => importNamebases(state, documentRef, file, mode, runtimeActions.namebases.import)",
@@ -60,6 +61,7 @@ const apiActionSignatures = [
   "actions.data?.exportGEO",
   "actions.data?.exportFeatureGEO",
   "actions.data?.exportPNG",
+  "actions.data?.exportHeightmapPNG",
   "actions.data?.importMap",
   "actions.data?.importGEO",
   "actions.data?.importHeightmap",
@@ -122,8 +124,8 @@ assert.equal(failure.error.code, "api_error", "公共 action 参数错误 code �
 assert.match(failure.error.message, /当前没有可导出的地图/, "公共 action 错误消息漂移");
 
 const declaredCounts = countDeclaredMethods(API_METHODS);
-assert.equal(declaredCounts.total, 305, "公共 API 方法总数漂移");
-assert.equal(declaredCounts.edit, 176, "edit 方法数漂移");
+assert.equal(declaredCounts.total, 309, "公共 API 方法总数漂移");
+assert.equal(declaredCounts.edit, 179, "edit 方法数漂移");
 
 console.log(JSON.stringify({
   ok: true,

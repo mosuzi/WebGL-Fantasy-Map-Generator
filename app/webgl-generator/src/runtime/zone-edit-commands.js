@@ -1,6 +1,8 @@
 import {OBJECT_KIND} from "./object-kinds.js";
 import {objectAffected} from "./edit-command-effects.js";
 import {cloneObjectNote, deleteObjectNote, readObjectNote, restoreObjectNote} from "./object-notes.js";
+import {normalizeZoneContextPatch} from "./zone-context.js";
+import {EVENT_ZONE_TYPES, NATURAL_ZONE_TYPES, normalizeZonePropertiesPatch, normalizeZoneTypeRecord, zoneCoverageConflicts, zoneTypeModel} from "./zone-types.js";
 
 const ZONE_STYLE_EFFECTS = Object.freeze({
   render: "draw",
@@ -11,14 +13,14 @@ const ZONE_STYLE_EFFECTS = Object.freeze({
 });
 
 const ZONE_PATTERNS = new Set(["diagonal", "cross", "dots"]);
-const ZONE_TYPES = new Set(["Warzone", "Invasion", "Rebels", "Proselytism", "Crusade", "Disease", "Disaster", "Eruption", "Avalanche", "Fault", "Flood", "Tsunami"]);
+const ZONE_TYPES = new Set([...EVENT_ZONE_TYPES, ...NATURAL_ZONE_TYPES, "Custom"]);
 
 const ZONE_COLLECTION_EFFECTS = Object.freeze({
   render: "draw",
   selection: "refresh",
   runtimeStats: true,
   pickPanel: true,
-  derived: Object.freeze(["line-layers", "object-panels", "object-index"])
+  derived: Object.freeze(["line-layers", "labels", "object-panels", "object-index"])
 });
 
 export const ZONE_CREATION_TYPE_OPTIONS = Object.freeze([...ZONE_TYPES].map(value => Object.freeze({value, label: zoneTypeLabel(value)})));
@@ -28,6 +30,7 @@ export function inspectZoneCreation(map, options = {}) {
   const count = cells?.i?.length || cells?.h?.length || 0;
   if (!count) return invalidZoneCreation("missing-map", "当前地图没有可用 pack cells");
   const type = ZONE_TYPES.has(options.type) ? options.type : "Disaster";
+  const model = zoneTypeModel(type, {source: "manual", ...options});
   const id = options.id === undefined ? nextZoneId(map) : Number(options.id);
   if (!Number.isInteger(id) || id < 0) return invalidZoneCreation("invalid-id", "地区 id 必须是非负整数");
   if (findZone(map, id)) return invalidZoneCreation("duplicate-id", `地区 #${id} 已存在`);
@@ -39,12 +42,14 @@ export function inspectZoneCreation(map, options = {}) {
   if (rawCells.length > 256) return invalidZoneCreation("too-many-cells", "地区最多包含 256 个 pack cells");
   if (rawCells.some(cell => !Number.isInteger(cell) || cell < 0 || cell >= count)) return invalidZoneCreation("invalid-cell", "地区包含超出范围的 pack cell");
   if (!connectedZoneCells(cells, rawCells)) return invalidZoneCreation("disconnected-cells", "地区 cells 必须在 pack 邻接图上连通");
-  const occupied = new Set((map?.zones?.zones || map?.pack?.zones || []).flatMap(zone => zone?.cells || []).map(Number));
+  const occupied = new Set((map?.zones?.zones || map?.pack?.zones || [])
+    .filter(zone => zoneCoverageConflicts(model, zone))
+    .flatMap(zone => zone?.cells || []).map(Number));
   if (rawCells.some(cell => occupied.has(cell))) return invalidZoneCreation("occupied-cell", "地区 cells 与既有地区重叠");
   const name = normalizeZoneName(options.name) || `${zoneTypeLabel(type)} #${id}`;
   const pattern = normalizeZonePattern(options.pattern) || defaultZonePattern(type);
   const hexColor = normalizeHexColor(options.hexColor || options.color) || defaultZoneColor(type);
-  return {valid: true, code: "ok", reason: "", id, type, name, pattern, hexColor, packCells: rawCells};
+  return {valid: true, code: "ok", reason: "", id, type, name, pattern, hexColor, packCells: rawCells, ...model};
 }
 
 export function createAddZoneCommand(options = {}) {
@@ -67,7 +72,13 @@ export function createAddZoneCommand(options = {}) {
         color: `url(#${patternHatch(preview.pattern)})`,
         pattern: preview.pattern,
         hexColor: preview.hexColor,
-        hidden: false
+        hidden: false,
+        category: preview.category,
+        source: preview.source,
+        customTypeName: preview.customTypeName,
+        description: preview.description,
+        coverage: preview.coverage,
+        effects: clone(preview.effects)
       };
       writeZoneCollection(context.map, [...readZones(context.map), clone(created)]);
       command.effects.affected = objectAffected(OBJECT_KIND.ZONE, created.id);
@@ -137,6 +148,75 @@ export function createSetZoneStyleCommand(zoneId, patch = {}) {
       const zone = findZone(context.map, normalizedZoneId);
       if (!zone || !Object.keys(normalizedPatch).length) return true;
       return Object.entries(normalizedPatch).every(([key, value]) => normalizeComparableStyleValue(key, zone[key]) === value);
+    }
+  };
+}
+
+export function createSetZoneContextCommand(zoneId, contextValue) {
+  const normalizedZoneId = Number(zoneId);
+  const nextContext = normalizeZoneContextPatch(contextValue);
+  let previous = null;
+  let hadPrevious = false;
+  let captured = false;
+  return {
+    label: `调整地区语义 #${normalizedZoneId}`,
+    domain: OBJECT_KIND.ZONE,
+    effects: {...ZONE_COLLECTION_EFFECTS, affected: objectAffected(OBJECT_KIND.ZONE, normalizedZoneId)},
+    apply(context) {
+      const zone = readZone(context.map, normalizedZoneId);
+      if (!captured) {
+        hadPrevious = Object.prototype.hasOwnProperty.call(zone, "context");
+        previous = hadPrevious ? clone(zone.context) : undefined;
+        captured = true;
+      }
+      zone.context = clone(nextContext);
+    },
+    revert(context) {
+      const zone = readZone(context.map, normalizedZoneId);
+      if (hadPrevious) zone.context = clone(previous);
+      else delete zone.context;
+    },
+    isNoop(context) {
+      const zone = findZone(context.map, normalizedZoneId);
+      return !zone || JSON.stringify(normalizeZoneContextPatch(zone.context || {})) === JSON.stringify(nextContext);
+    },
+    getResult() {
+      return {zoneId: normalizedZoneId, context: clone(nextContext)};
+    }
+  };
+}
+
+export function createSetZonePropertiesCommand(zoneId, patch = {}) {
+  const id = Number(zoneId);
+  let previous = null;
+  let next = null;
+  return {
+    label: `调整地区属性 #${id}`,
+    domain: OBJECT_KIND.ZONE,
+    effects: {...ZONE_COLLECTION_EFFECTS, affected: objectAffected(OBJECT_KIND.ZONE, id)},
+    apply(context) {
+      const zone = readZone(context.map, id);
+      previous ??= clone(zone);
+      next ??= normalizeZonePropertiesPatch(zone, patch);
+      const conflicts = readZones(context.map).some(other => Number(other?.i ?? other?.id) !== id
+        && zoneCoverageConflicts(next, other)
+        && (zone.cells || []).some(cell => other?.cells?.includes(cell)));
+      if (conflicts) throw new Error("地区覆盖类型调整后会与既有同层地区重叠");
+      Object.assign(zone, clone(next));
+    },
+    revert(context) {
+      const zone = readZone(context.map, id);
+      for (const key of Object.keys(zone)) delete zone[key];
+      Object.assign(zone, clone(previous));
+    },
+    isNoop(context) {
+      const zone = findZone(context.map, id);
+      if (!zone) return true;
+      next ??= normalizeZonePropertiesPatch(zone, patch);
+      return Object.entries(next).every(([key, value]) => JSON.stringify(zone[key]) === JSON.stringify(value));
+    },
+    getResult() {
+      return next ? {zoneId: id, properties: clone(next)} : null;
     }
   };
 }
@@ -279,7 +359,7 @@ function normalizeZoneName(value) {
 }
 
 function zoneTypeLabel(type) {
-  return ({Warzone: "战区", Invasion: "入侵区", Rebels: "叛乱区", Proselytism: "传教区", Crusade: "圣战区", Disease: "疫病区", Disaster: "灾害区", Eruption: "喷发区", Avalanche: "雪崩区", Fault: "断层区", Flood: "洪水区", Tsunami: "海啸区"})[type] || type;
+  return ({Warzone: "战区", Invasion: "入侵区", Rebels: "叛乱区", Proselytism: "传教区", Crusade: "圣战区", Disease: "疫病区", Disaster: "灾害区", Eruption: "喷发区", Avalanche: "雪崩区", Fault: "断层区", Flood: "洪水区", Tsunami: "海啸区", Wilderness: "无人区", Desert: "沙漠", Swamp: "沼泽", DeepForest: "密林", Grassland: "草原", Tundra: "苔原 / 冰原", Highland: "高地 / 山地", Badlands: "荒地", VolcanicLand: "火山地带", Custom: "自定义地区"})[type] || type;
 }
 
 function defaultZonePattern(type) {

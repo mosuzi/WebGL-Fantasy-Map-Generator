@@ -129,6 +129,7 @@ export function hoverViewTitle(colorMode) {
 export function formatHoverObjectTitle(object) {
   const name = object?.name || object?.text || object?.goodName || object?.relationLabel || "";
   const label = HOVER_OBJECT_LABELS[object?.kind] || "对象";
+  if (object?.kind === OBJECT_KIND.ZONE && object.summary) return `${label} ${name} / ${object.summary}`;
   return name ? `${label} ${name}` : label;
 }
 

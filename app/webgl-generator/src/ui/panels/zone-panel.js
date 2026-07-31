@@ -68,6 +68,7 @@ export function createZonePanel(documentRef, manager, callbacks = {}) {
     onHighlight: rows => highlightPanelRows(panelState, callbacks, rows, zoneObject),
     onClearHighlights: () => clearPanelHighlights(panelState, callbacks),
     onStyleChange: (zoneId, patch) => callbacks.onStyleChange?.(zoneId, patch),
+    onPropertiesChange: (zoneId, patch) => callbacks.onPropertiesChange?.(zoneId, patch),
     onCreateMode: type => callbacks.onCreateMode?.(type),
     onDelete: zoneId => callbacks.onDelete?.(zoneId),
     onUndo: () => callbacks.onUndo?.(),

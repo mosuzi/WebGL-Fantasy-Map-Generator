@@ -81,6 +81,7 @@
             <summary>高级导出选项</summary>
             <div class="panel-advanced-section-body">
               <div class="project-export-action-grid project-export-advanced-actions">
+                <UiButton id="export-heightmap-image" variant="secondary" @click="closeExportPanel">高度灰度图</UiButton>
                 <UiButton id="export-map-data-compressed" variant="secondary" @click="closeExportPanel">压缩完整地图数据</UiButton>
                 <UiButton id="export-map-geojson" variant="secondary" @click="closeExportPanel">GeoJSON</UiButton>
                 <UiButton id="export-map-features-geojson" variant="secondary" @click="closeExportPanel">要素 GeoJSON</UiButton>
@@ -880,6 +881,10 @@ const layers = Object.freeze([
   {id: "military", label: "军事"},
   {id: "warFronts", label: "战线"},
   {id: "zones", label: "地区"},
+  {id: "zoneEvents", label: "事件地区"},
+  {id: "zoneNatural", label: "自然地区"},
+  {id: "zoneWilderness", label: "自动无人区"},
+  {id: "zoneLabels", label: "地区名称"},
   {id: "measurements", label: "测量对象"},
   {id: "scaleBar", label: "比例尺"},
   {id: "mapBadge", label: "地图总尺寸"},

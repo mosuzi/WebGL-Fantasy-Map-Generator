@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sourceDigest": "899aab875efafb76a3ffaa3678a7d3fff456123e6c42946cbefc853095b2fba7",
+  "sourceDigest": "410f474585e6c412f5980154e966d0a15855bac1e417401c6c41517f61c43fe9",
   "sourceRoots": [
     "app/webgl-generator/index.html",
     "app/webgl-generator/src/**/*.{js,vue}",
@@ -11,10 +11,10 @@
     "includedInteractionSurfaces": 87,
     "excludedInteractionSurfaces": 18,
     "canvasModes": 29,
-    "runtimeActions": 257,
-    "apiActionBindings": 256,
-    "commandAndInspectorExports": 210,
-    "publicApiMethods": 305
+    "runtimeActions": 261,
+    "apiActionBindings": 260,
+    "commandAndInspectorExports": 212,
+    "publicApiMethods": 309
   },
   "statusPolicy": {
     "covered": "公共 API 已存在且与底层 action / command 或只读 helper 共路径",
@@ -23,8 +23,8 @@
     "gap": "适合参数化且没有公共 API，必须在第 200 项关闭"
   },
   "totals": {
-    "rows": 1173,
-    "covered": 1100,
+    "rows": 1187,
+    "covered": 1114,
     "excluded": 73,
     "deferred-owned": 0,
     "gap": 0,
@@ -403,6 +403,35 @@
       "confirm": "按 API 确认清单",
       "undoOrRollback": "not-applicable",
       "async": false,
+      "compatibility": "UI 与 API 共用同一 runtime action",
+      "evidence": [
+        "app/webgl-generator/src/runtime/console-api.js"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "action:data.exportHeightmapPNG",
+      "capabilityId": "data.exportHeightmapPNG",
+      "title": "Runtime action data.exportHeightmapPNG",
+      "sourceKind": "runtime-action",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/app.js"
+      ],
+      "uiEntry": "",
+      "action": "data.exportHeightmapPNG",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "data.exportHeightmapPNG"
+      ],
+      "inputSpace": "method-schema",
+      "mutates": "none",
+      "preflight": "readonly",
+      "businessCodes": [],
+      "confirm": "按 API 确认清单",
+      "undoOrRollback": "not-applicable",
+      "async": true,
       "compatibility": "UI 与 API 共用同一 runtime action",
       "evidence": [
         "app/webgl-generator/src/runtime/console-api.js"
@@ -5748,6 +5777,35 @@
       "exclusionReason": ""
     },
     {
+      "matrixId": "action:edit.zones.getEffectsAtCell",
+      "capabilityId": "edit.zones.getEffectsAtCell",
+      "title": "Runtime action edit.zones.getEffectsAtCell",
+      "sourceKind": "runtime-action",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/app.js"
+      ],
+      "uiEntry": "",
+      "action": "edit.zones.getEffectsAtCell",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "edit.zones.getEffectsAtCell"
+      ],
+      "inputSpace": "method-schema",
+      "mutates": "none",
+      "preflight": "readonly",
+      "businessCodes": [],
+      "confirm": "按 API 确认清单",
+      "undoOrRollback": "not-applicable",
+      "async": false,
+      "compatibility": "UI 与 API 共用同一 runtime action",
+      "evidence": [
+        "app/webgl-generator/src/runtime/console-api.js"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
       "matrixId": "action:edit.zones.inspectCreate",
       "capabilityId": "edit.zones.inspectCreate",
       "title": "Runtime action edit.zones.inspectCreate",
@@ -5796,6 +5854,64 @@
       "businessCodes": [],
       "confirm": "按 API 确认清单",
       "undoOrRollback": "not-applicable",
+      "async": false,
+      "compatibility": "UI 与 API 共用同一 runtime action",
+      "evidence": [
+        "app/webgl-generator/src/runtime/console-api.js"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "action:edit.zones.setContext",
+      "capabilityId": "edit.zones.setContext",
+      "title": "Runtime action edit.zones.setContext",
+      "sourceKind": "runtime-action",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/app.js"
+      ],
+      "uiEntry": "",
+      "action": "edit.zones.setContext",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "edit.zones.setContext"
+      ],
+      "inputSpace": "method-schema",
+      "mutates": "map-or-persistent-data",
+      "preflight": "按方法描述",
+      "businessCodes": [],
+      "confirm": "按 API 确认清单",
+      "undoOrRollback": "按方法元数据",
+      "async": false,
+      "compatibility": "UI 与 API 共用同一 runtime action",
+      "evidence": [
+        "app/webgl-generator/src/runtime/console-api.js"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "action:edit.zones.setProperties",
+      "capabilityId": "edit.zones.setProperties",
+      "title": "Runtime action edit.zones.setProperties",
+      "sourceKind": "runtime-action",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/app.js"
+      ],
+      "uiEntry": "",
+      "action": "edit.zones.setProperties",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "edit.zones.setProperties"
+      ],
+      "inputSpace": "method-schema",
+      "mutates": "map-or-persistent-data",
+      "preflight": "按方法描述",
+      "businessCodes": [],
+      "confirm": "按 API 确认清单",
+      "undoOrRollback": "按方法元数据",
       "async": false,
       "compatibility": "UI 与 API 共用同一 runtime action",
       "evidence": [
@@ -7861,6 +7977,36 @@
       "commandOrInspector": "",
       "apiMethods": [
         "data.exportGEO"
+      ],
+      "inputSpace": "method-schema",
+      "mutates": "none",
+      "preflight": "公共 API 绑定必须能解析到真实 runtime action",
+      "businessCodes": [],
+      "confirm": "按 API 确认清单",
+      "undoOrRollback": "not-applicable",
+      "async": false,
+      "compatibility": "旧 API action 路径保持可调用",
+      "evidence": [
+        "tools/webgl-generator-api-action-convergence-regression.mjs"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "api-action-binding:data.exportHeightmapPNG",
+      "capabilityId": "data.exportHeightmapPNG",
+      "title": "API action 绑定 data.exportHeightmapPNG",
+      "sourceKind": "api-action-binding",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/console-api.js",
+        "app/webgl-generator/src/runtime/app.js"
+      ],
+      "uiEntry": "",
+      "action": "data.exportHeightmapPNG",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "data.exportHeightmapPNG"
       ],
       "inputSpace": "method-schema",
       "mutates": "none",
@@ -13398,6 +13544,36 @@
       "exclusionReason": ""
     },
     {
+      "matrixId": "api-action-binding:edit.zones.getEffectsAtCell",
+      "capabilityId": "edit.zones.getEffectsAtCell",
+      "title": "API action 绑定 edit.zones.getEffectsAtCell",
+      "sourceKind": "api-action-binding",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/console-api.js",
+        "app/webgl-generator/src/runtime/app.js"
+      ],
+      "uiEntry": "",
+      "action": "edit.zones.getEffectsAtCell",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "edit.zones.getEffectsAtCell"
+      ],
+      "inputSpace": "method-schema",
+      "mutates": "none",
+      "preflight": "公共 API 绑定必须能解析到真实 runtime action",
+      "businessCodes": [],
+      "confirm": "按 API 确认清单",
+      "undoOrRollback": "not-applicable",
+      "async": false,
+      "compatibility": "旧 API action 路径保持可调用",
+      "evidence": [
+        "tools/webgl-generator-api-action-convergence-regression.mjs"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
       "matrixId": "api-action-binding:edit.zones.inspectCreate",
       "capabilityId": "edit.zones.inspectCreate",
       "title": "API action 绑定 edit.zones.inspectCreate",
@@ -13448,6 +13624,66 @@
       "businessCodes": [],
       "confirm": "按 API 确认清单",
       "undoOrRollback": "not-applicable",
+      "async": false,
+      "compatibility": "旧 API action 路径保持可调用",
+      "evidence": [
+        "tools/webgl-generator-api-action-convergence-regression.mjs"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "api-action-binding:edit.zones.setContext",
+      "capabilityId": "edit.zones.setContext",
+      "title": "API action 绑定 edit.zones.setContext",
+      "sourceKind": "api-action-binding",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/console-api.js",
+        "app/webgl-generator/src/runtime/app.js"
+      ],
+      "uiEntry": "",
+      "action": "edit.zones.setContext",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "edit.zones.setContext"
+      ],
+      "inputSpace": "method-schema",
+      "mutates": "map-or-persistent-data",
+      "preflight": "公共 API 绑定必须能解析到真实 runtime action",
+      "businessCodes": [],
+      "confirm": "按 API 确认清单",
+      "undoOrRollback": "按方法元数据",
+      "async": false,
+      "compatibility": "旧 API action 路径保持可调用",
+      "evidence": [
+        "tools/webgl-generator-api-action-convergence-regression.mjs"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "api-action-binding:edit.zones.setProperties",
+      "capabilityId": "edit.zones.setProperties",
+      "title": "API action 绑定 edit.zones.setProperties",
+      "sourceKind": "api-action-binding",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/console-api.js",
+        "app/webgl-generator/src/runtime/app.js"
+      ],
+      "uiEntry": "",
+      "action": "edit.zones.setProperties",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "edit.zones.setProperties"
+      ],
+      "inputSpace": "method-schema",
+      "mutates": "map-or-persistent-data",
+      "preflight": "公共 API 绑定必须能解析到真实 runtime action",
+      "businessCodes": [],
+      "confirm": "按 API 确认清单",
+      "undoOrRollback": "按方法元数据",
       "async": false,
       "compatibility": "旧 API action 路径保持可调用",
       "evidence": [
@@ -16018,6 +16254,37 @@
       "commandOrInspector": "",
       "apiMethods": [
         "data.exportGEO"
+      ],
+      "inputSpace": "info.describe(method)",
+      "mutates": "none",
+      "preflight": "由 info.describe(method) 与领域 inspector 发现",
+      "businessCodes": [],
+      "confirm": "由 methodMetadata.requiresConfirm 发现",
+      "undoOrRollback": "由 methodMetadata.undoable 与结果 metadata 发现",
+      "async": false,
+      "compatibility": "受 API 主版本和方法稳定性契约保护",
+      "evidence": [
+        "tools/webgl-generator-api-capabilities-regression.mjs",
+        "tools/webgl-generator-api-stability-contract-regression.mjs"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "api:data.exportHeightmapPNG",
+      "capabilityId": "data.exportHeightmapPNG",
+      "title": "公共 API data.exportHeightmapPNG",
+      "sourceKind": "public-api",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/api-contract.js",
+        "app/webgl-generator/src/runtime/console-api.js"
+      ],
+      "uiEntry": "",
+      "action": "data.exportHeightmapPNG",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "data.exportHeightmapPNG"
       ],
       "inputSpace": "info.describe(method)",
       "mutates": "none",
@@ -21957,6 +22224,37 @@
       "exclusionReason": ""
     },
     {
+      "matrixId": "api:edit.zones.getEffectsAtCell",
+      "capabilityId": "edit.zones.getEffectsAtCell",
+      "title": "公共 API edit.zones.getEffectsAtCell",
+      "sourceKind": "public-api",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/api-contract.js",
+        "app/webgl-generator/src/runtime/console-api.js"
+      ],
+      "uiEntry": "",
+      "action": "edit.zones.getEffectsAtCell",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "edit.zones.getEffectsAtCell"
+      ],
+      "inputSpace": "info.describe(method)",
+      "mutates": "none",
+      "preflight": "由 info.describe(method) 与领域 inspector 发现",
+      "businessCodes": [],
+      "confirm": "由 methodMetadata.requiresConfirm 发现",
+      "undoOrRollback": "由 methodMetadata.undoable 与结果 metadata 发现",
+      "async": false,
+      "compatibility": "受 API 主版本和方法稳定性契约保护",
+      "evidence": [
+        "tools/webgl-generator-api-capabilities-regression.mjs",
+        "tools/webgl-generator-api-stability-contract-regression.mjs"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
       "matrixId": "api:edit.zones.inspectCreate",
       "capabilityId": "edit.zones.inspectCreate",
       "title": "公共 API edit.zones.inspectCreate",
@@ -22004,6 +22302,68 @@
       ],
       "inputSpace": "info.describe(method)",
       "mutates": "none",
+      "preflight": "由 info.describe(method) 与领域 inspector 发现",
+      "businessCodes": [],
+      "confirm": "由 methodMetadata.requiresConfirm 发现",
+      "undoOrRollback": "由 methodMetadata.undoable 与结果 metadata 发现",
+      "async": false,
+      "compatibility": "受 API 主版本和方法稳定性契约保护",
+      "evidence": [
+        "tools/webgl-generator-api-capabilities-regression.mjs",
+        "tools/webgl-generator-api-stability-contract-regression.mjs"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "api:edit.zones.setContext",
+      "capabilityId": "edit.zones.setContext",
+      "title": "公共 API edit.zones.setContext",
+      "sourceKind": "public-api",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/api-contract.js",
+        "app/webgl-generator/src/runtime/console-api.js"
+      ],
+      "uiEntry": "",
+      "action": "edit.zones.setContext",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "edit.zones.setContext"
+      ],
+      "inputSpace": "info.describe(method)",
+      "mutates": "map-or-persistent-data",
+      "preflight": "由 info.describe(method) 与领域 inspector 发现",
+      "businessCodes": [],
+      "confirm": "由 methodMetadata.requiresConfirm 发现",
+      "undoOrRollback": "由 methodMetadata.undoable 与结果 metadata 发现",
+      "async": false,
+      "compatibility": "受 API 主版本和方法稳定性契约保护",
+      "evidence": [
+        "tools/webgl-generator-api-capabilities-regression.mjs",
+        "tools/webgl-generator-api-stability-contract-regression.mjs"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "api:edit.zones.setProperties",
+      "capabilityId": "edit.zones.setProperties",
+      "title": "公共 API edit.zones.setProperties",
+      "sourceKind": "public-api",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/api-contract.js",
+        "app/webgl-generator/src/runtime/console-api.js"
+      ],
+      "uiEntry": "",
+      "action": "edit.zones.setProperties",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "edit.zones.setProperties"
+      ],
+      "inputSpace": "info.describe(method)",
+      "mutates": "map-or-persistent-data",
       "preflight": "由 info.describe(method) 与领域 inspector 发现",
       "businessCodes": [],
       "confirm": "由 methodMetadata.requiresConfirm 发现",
@@ -34900,8 +35260,11 @@
       "apiMethods": [
         "edit.zones.create",
         "edit.zones.delete",
+        "edit.zones.getEffectsAtCell",
         "edit.zones.inspectCreate",
         "edit.zones.inspectDelete",
+        "edit.zones.setContext",
+        "edit.zones.setProperties",
         "edit.zones.setStyle",
         "selection.clear",
         "selection.clearHighlights",
@@ -34945,8 +35308,107 @@
       "apiMethods": [
         "edit.zones.create",
         "edit.zones.delete",
+        "edit.zones.getEffectsAtCell",
         "edit.zones.inspectCreate",
         "edit.zones.inspectDelete",
+        "edit.zones.setContext",
+        "edit.zones.setProperties",
+        "edit.zones.setStyle",
+        "selection.clear",
+        "selection.clearHighlights",
+        "selection.flash",
+        "selection.get",
+        "selection.highlight",
+        "selection.locate",
+        "selection.pick",
+        "selection.resolve",
+        "selection.select",
+        "selection.startEditing",
+        "selection.stopEditing",
+        "selection.toggleEditing"
+      ],
+      "inputSpace": "domain-options / object-ref / cell-ids / changes",
+      "mutates": "domain-data-or-preview",
+      "preflight": "由领域 API 参数校验或 inspector 提供",
+      "businessCodes": [],
+      "confirm": "按领域 API 确认清单",
+      "undoOrRollback": "EditHistory / transaction",
+      "async": false,
+      "compatibility": "领域 API 复用该 command / inspector 或同一纯 helper",
+      "evidence": [
+        "app/webgl-generator/src/runtime/zone-edit-commands.js"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "command:zone-edit-commands.js:createSetZoneContextCommand",
+      "capabilityId": "zone.createSetZoneContextCommand",
+      "title": "zone-edit-commands.js / createSetZoneContextCommand",
+      "sourceKind": "command-or-inspector",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/zone-edit-commands.js"
+      ],
+      "uiEntry": "",
+      "action": "",
+      "commandOrInspector": "createSetZoneContextCommand",
+      "apiMethods": [
+        "edit.zones.create",
+        "edit.zones.delete",
+        "edit.zones.getEffectsAtCell",
+        "edit.zones.inspectCreate",
+        "edit.zones.inspectDelete",
+        "edit.zones.setContext",
+        "edit.zones.setProperties",
+        "edit.zones.setStyle",
+        "selection.clear",
+        "selection.clearHighlights",
+        "selection.flash",
+        "selection.get",
+        "selection.highlight",
+        "selection.locate",
+        "selection.pick",
+        "selection.resolve",
+        "selection.select",
+        "selection.startEditing",
+        "selection.stopEditing",
+        "selection.toggleEditing"
+      ],
+      "inputSpace": "domain-options / object-ref / cell-ids / changes",
+      "mutates": "domain-data-or-preview",
+      "preflight": "由领域 API 参数校验或 inspector 提供",
+      "businessCodes": [],
+      "confirm": "按领域 API 确认清单",
+      "undoOrRollback": "EditHistory / transaction",
+      "async": false,
+      "compatibility": "领域 API 复用该 command / inspector 或同一纯 helper",
+      "evidence": [
+        "app/webgl-generator/src/runtime/zone-edit-commands.js"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "command:zone-edit-commands.js:createSetZonePropertiesCommand",
+      "capabilityId": "zone.createSetZonePropertiesCommand",
+      "title": "zone-edit-commands.js / createSetZonePropertiesCommand",
+      "sourceKind": "command-or-inspector",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/zone-edit-commands.js"
+      ],
+      "uiEntry": "",
+      "action": "",
+      "commandOrInspector": "createSetZonePropertiesCommand",
+      "apiMethods": [
+        "edit.zones.create",
+        "edit.zones.delete",
+        "edit.zones.getEffectsAtCell",
+        "edit.zones.inspectCreate",
+        "edit.zones.inspectDelete",
+        "edit.zones.setContext",
+        "edit.zones.setProperties",
         "edit.zones.setStyle",
         "selection.clear",
         "selection.clearHighlights",
@@ -34990,8 +35452,11 @@
       "apiMethods": [
         "edit.zones.create",
         "edit.zones.delete",
+        "edit.zones.getEffectsAtCell",
         "edit.zones.inspectCreate",
         "edit.zones.inspectDelete",
+        "edit.zones.setContext",
+        "edit.zones.setProperties",
         "edit.zones.setStyle",
         "selection.clear",
         "selection.clearHighlights",
@@ -35035,8 +35500,11 @@
       "apiMethods": [
         "edit.zones.create",
         "edit.zones.delete",
+        "edit.zones.getEffectsAtCell",
         "edit.zones.inspectCreate",
         "edit.zones.inspectDelete",
+        "edit.zones.setContext",
+        "edit.zones.setProperties",
         "edit.zones.setStyle",
         "selection.clear",
         "selection.clearHighlights",
@@ -36693,8 +37161,11 @@
       "apiMethods": [
         "edit.zones.create",
         "edit.zones.delete",
+        "edit.zones.getEffectsAtCell",
         "edit.zones.inspectCreate",
         "edit.zones.inspectDelete",
+        "edit.zones.setContext",
+        "edit.zones.setProperties",
         "edit.zones.setStyle",
         "selection.clear",
         "selection.clearHighlights",
@@ -37578,6 +38049,7 @@
         "data.exportCompressedAll",
         "data.exportFeatureGEO",
         "data.exportGEO",
+        "data.exportHeightmapPNG",
         "data.exportImportDiagnostic",
         "data.exportMap",
         "data.exportMeasurements",
@@ -37621,6 +38093,7 @@
         "data.exportCompressedAll",
         "data.exportFeatureGEO",
         "data.exportGEO",
+        "data.exportHeightmapPNG",
         "data.exportImportDiagnostic",
         "data.exportMap",
         "data.exportMeasurements",
@@ -39418,8 +39891,11 @@
       "apiMethods": [
         "edit.zones.create",
         "edit.zones.delete",
+        "edit.zones.getEffectsAtCell",
         "edit.zones.inspectCreate",
         "edit.zones.inspectDelete",
+        "edit.zones.setContext",
+        "edit.zones.setProperties",
         "edit.zones.setStyle",
         "selection.clear",
         "selection.clearHighlights",
