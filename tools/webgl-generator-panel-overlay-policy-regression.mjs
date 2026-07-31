@@ -187,8 +187,12 @@ assert.doesNotMatch(browserRegressionSource, /locator\(`#\$\{triggerId\}`\)\.cli
 assert.match(browserRegressionSource, /keyboard\.press\("Shift\+H"\)[\s\S]*重设海底[\s\S]*windowScroll/, "浏览器回归必须真实展开高度面板详情并检查 document viewport");
 assert.match(managerSource, /panel\.addEventListener\("pointerdown"[\s\S]{0,180}?restoreManagedPanelViewportOrigin/, "受管面板交互必须恢复 document viewport 原点");
 assert.match(managerSource, /reflowPanels\(\) \{[\s\S]{0,100}?restoreManagedPanelViewportOrigin/, "reflow 必须兜底恢复 document viewport 原点");
+assert.match(managerSource, /options\.minWidth[\s\S]{0,120}?style\.minWidth = `min\(\$\{options\.minWidth\}px, calc\(100% - 16px\)\)`/, "面板管理器必须支持响应式宽度下限");
 assert(detailsSource.includes('role: "detail"'), "对象详情没有登记为可选详情面板");
 assert(developmentSource.includes("persistOpen: false"), "开发面板不应覆盖用户最后打开的主面板记录");
+for (const token of ["width: 760", "minWidth: 680", "maxWidth: 1100"]) assert(developmentSource.includes(token), `开发面板宽屏契约缺少 ${token}`);
+assert.match(styleSource, /\.development-load-trace li,[\s\S]{0,180}?white-space:\s*nowrap/, "开发追踪列表必须局部单行滚动");
+assert.match(styleSource, /#runtime-stats \.development-generation-log dd[\s\S]{0,500}?overflow:\s*auto[\s\S]{0,300}?white-space:\s*pre/, "生成日志必须按条保留单行并局部滚动");
 for (const [source, id] of [[controlSource, "project-export"], [heightSource, "heightmap-import-workbench"], [treeSource, "tree-display"]]) {
   assert(source.includes("useManagedOverlay"), `${id} 没有接入统一浮层注册表`);
   assert(source.includes(`id: "${id}"`), `${id} 缺少稳定浮层 id`);

@@ -1987,6 +1987,10 @@ select:disabled {
   max-height: min(76%, calc(100% - 96px), var(--floating-panel-available-height, calc(100% - 96px)));
 }
 
+.floating-panel[data-panel-id="development-panel"] .stats-list div {
+  grid-template-columns: 140px minmax(0, 1fr);
+}
+
 .floating-panel-header {
   display: flex;
   flex: 0 0 auto;
@@ -2188,6 +2192,39 @@ select:disabled {
   color: #dce7ec;
   font-size: 11px;
   line-height: 1.4;
+}
+
+.development-load-trace li,
+.development-health-events li {
+  width: max-content;
+  min-width: 100%;
+  white-space: nowrap;
+}
+
+#runtime-stats .development-generation-log {
+  grid-template-columns: 1fr;
+  align-items: start;
+}
+
+#runtime-stats .development-generation-log dd {
+  box-sizing: border-box;
+  max-height: 260px;
+  overflow: auto;
+  padding: 8px 10px;
+  border: 1px solid rgba(189, 206, 213, 0.14);
+  border-radius: 5px;
+  background: rgba(4, 10, 13, 0.5);
+  font-family: ui-monospace, "Cascadia Mono", "SFMono-Regular", Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.55;
+  overflow-wrap: normal;
+  white-space: pre;
+}
+
+@media (max-width: 600px) {
+  .floating-panel[data-panel-id="development-panel"] .stats-list div {
+    grid-template-columns: 100px minmax(0, 1fr);
+  }
 }
 
 .development-load-trace li::marker,

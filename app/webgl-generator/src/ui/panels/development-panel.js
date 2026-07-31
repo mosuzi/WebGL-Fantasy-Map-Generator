@@ -7,8 +7,9 @@ export function createDevelopmentPanel(documentRef, manager) {
     persistOpen: false,
     left: 24,
     top: 72,
-    width: 420,
-    maxWidth: 560,
+    width: 760,
+    minWidth: 680,
+    maxWidth: 1100,
     onClose: () => {
       if (!enabled) return;
       collapsed = true;

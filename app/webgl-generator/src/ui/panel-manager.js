@@ -46,6 +46,7 @@ export class PanelManager {
     panel.style.left = `${positionState.left}px`;
     panel.style.top = `${positionState.top}px`;
     panel.style.width = `${savedState?.width ?? options.width ?? 320}px`;
+    if (options.minWidth) panel.style.minWidth = `min(${options.minWidth}px, calc(100% - 16px))`;
     if (options.maxWidth) panel.style.maxWidth = `min(${options.maxWidth}px, calc(100% - 16px))`;
     panel.dataset.panelId = id;
     panel.dataset.panelRole = role;

@@ -703,7 +703,7 @@ export function updateRuntimePanel(documentRef, state) {
     statRow(documentRef, "WebGL error", stats.draw.glError),
     statRow(documentRef, "source 依赖", map.status.sourceDependency ? "是" : "否"),
     statRow(documentRef, "快照依赖", map.status.snapshotDependency ? "是" : "否"),
-    statRow(documentRef, "生成日志", map.generationLog.join(" / "))
+    statRow(documentRef, "生成日志", map.generationLog.join("\n"), {className: "development-generation-log"})
   );
 }
 
@@ -1150,8 +1150,9 @@ function formatBoundaryLineMode(mode) {
   return mode || "未知";
 }
 
-function statRow(documentRef, label, value) {
+function statRow(documentRef, label, value, options = {}) {
   const row = documentRef.createElement("div");
+  if (options.className) row.className = options.className;
   const term = documentRef.createElement("dt");
   const desc = documentRef.createElement("dd");
   term.textContent = label;
