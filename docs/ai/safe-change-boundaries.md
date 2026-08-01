@@ -26,3 +26,11 @@ node --no-warnings .\tools\webgl-generator-headless-write.mjs verify .\output.we
 默认输出路径必须不同于输入，且已有输出文件也不会静默覆盖。只有同时提供 `--overwrite --confirm-overwrite OVERWRITE` 才允许覆盖输入；这不是推荐工作流。JSON、gzip 和迁移后的 v1 输入均走相同事务路径，输出重新读取成功后才能报告修改完成。
 
 锁定系统保护重生成对象，不等于保护任意 cell 数值。修改前同时检查 regeneration lock、目标 cells、政治归属、路线与城市约束。旧图只在显式操作时改变地图事实，加载迁移不得静默改人口、地形或疆域。
+
+## 跨领域写入顺序
+
+复杂地图修复不得把多个领域写动作随意排列。通用顺序是：先完成有限地形写入，再重建受影响的地理派生；地理关系稳定后调整气候；最后才执行人口、经济或政治事务。每一层完成后都先冻结新基线，后续层只相对该基线验收。
+
+气候或 `features / routes / rivers` 重算需要保留当前人口时，显式传入 `preservePopulation:true`。它不适用于国家、省份、城市等人口业务重算，也不会自动证明行政聚合、承载或其它 stale 系统正确。最终必须导出新存档、重新加载并复算人口数组、Grid 镜像和对象聚合。
+
+路线等重生成对象应在重建前通过 `regenerationLocks` 冻结。旧图可能在加载时补齐非必需镜像字段；锁验证关注正式对象、稳定几何与 cell 引用，不能因兼容回填误判语义变化，也不能因此放松路径和归属保护。详见 [`regional-intervention-playbook.md`](./regional-intervention-playbook.md)。

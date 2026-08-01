@@ -53,6 +53,7 @@ node --no-warnings .\tools\webgl-generator-ai-bridge-cli.mjs call analysis.descr
 - 无头运行时不访问 DOM、renderer、相机、浏览器存储或网络，不创建历史，也没有任何写方法。
 - 读取前后应比较输入文件哈希或地图 checksum；分析不能改变原文件。
 - 旧图归一化是内存读取兼容，不等于已经覆盖旧文件。
+- 完整压缩存档经受控桥传输时仍有明确有界上限；大结果走已鉴权页面回传，不能通过放开无限请求体解决。导入会替换 documentId 并把 revision 归零，调用方必须重新读取地图身份。
 
 需要修改离线文件时使用独立 `createHeadlessWriteSession` 或 `tools/webgl-generator-headless-write.mjs`，不要向只读 API 注入写能力。写会话的完整 inspect/apply、revision、幂等、回滚和安全输出约束见 [`safe-change-boundaries.md`](./safe-change-boundaries.md)。
 

@@ -8,6 +8,7 @@
     "headlessWriteVersion": "1.0.0",
     "headlessWriteMethods": 6,
     "recipes": 10,
+    "problemPatterns": 3,
     "runtimeProfiles": [
       "browser",
       "headless-readonly",

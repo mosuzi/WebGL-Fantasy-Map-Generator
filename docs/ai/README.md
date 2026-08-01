@@ -9,6 +9,7 @@
 3. 只读分析先用 [`regional-analysis.md`](./regional-analysis.md)；写入前必须再读 [`safe-change-boundaries.md`](./safe-change-boundaries.md)。
 4. 查方法时优先读取生成目录 `docs/generated/ai/manifest.json`、`api-catalog.json` 和 `domain-capability-map.json`，不要靠记忆拼方法名。
 5. 处理复杂区域问题时按 `regional-analysis.md` 的通用闭环输出事实、口径、证据 cell、保持约束、目标区间和仍需预检的写动作；不要假设仓库外私人存档中的名称、位置或对象 id。
+6. 需要实际改善地图时读取 [`regional-intervention-playbook.md`](./regional-intervention-playbook.md)，按匿名模式选择“地形梯度自然化 / 雨影下承载改善 / 跨障碍发展差距”，不要把任何私人案例当固定配方。
 
 ## 运行时选择
 
@@ -33,4 +34,5 @@
 
 - 存档与运行环境：[`runtime-and-loading.md`](./runtime-and-loading.md)
 - 数据解释与聚合：[`map-data-model.md`](./map-data-model.md)、[`regional-analysis.md`](./regional-analysis.md)
+- 复杂区域干预：[`regional-intervention-playbook.md`](./regional-intervention-playbook.md)
 - 写入安全：[`safe-change-boundaries.md`](./safe-change-boundaries.md)

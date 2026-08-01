@@ -8,7 +8,15 @@ const check = process.argv.includes("--check");
 const outputDirectory = resolve("docs/generated/ai");
 const recipes = listPlannerRecipes().map(item => getPlannerRecipe(item.recipeId));
 const domainRoutes = buildDomainRoutes();
+const problemPatterns = buildProblemPatterns();
 const catalog = Object.entries(API_METHODS).flatMap(([namespace, methods]) => methods.map(name => buildBrowserCatalogRow(namespace, name)));
+const browserMethodNames = new Set(catalog.map(item => item.method));
+const invalidPatternMethods = problemPatterns.flatMap(pattern =>
+  [...pattern.readMethods, ...pattern.inspectMethods, ...pattern.executeMethods]
+    .filter(method => !browserMethodNames.has(method))
+    .map(method => `${pattern.patternId}:${method}`)
+);
+if (invalidPatternMethods.length) throw new Error(`问题模式引用不存在的浏览器方法：${invalidPatternMethods.join("、")}`);
 const headlessCatalog = [
   "info.mapSummary", "info.document", "objects.types", "objects.get", "objects.list", "objects.query",
   "cells.get", "cells.getAtPoint", "cells.neighbors", "cells.query", "cells.scan", "climate.get", "terrain.get", "population.get",
@@ -31,6 +39,7 @@ const manifest = {
   headlessWriteVersion: HEADLESS_WRITE_VERSION,
   headlessWriteMethods: headlessWriteCatalog.length,
   recipes: recipes.length,
+  problemPatterns: problemPatterns.length,
   runtimeProfiles: ["browser", "headless-readonly", "headless-write"],
   entry: "docs/ai/README.md"
 };
@@ -38,7 +47,7 @@ const files = {
   "manifest.json": manifest,
   "api-catalog.json": {manifest, browser: catalog, headless: headlessCatalog, headlessWrite: headlessWriteCatalog},
   "recipe-catalog.json": {schemaVersion: PLANNER_RECIPE_SCHEMA_VERSION, recipes},
-  "domain-capability-map.json": {domains: domainRoutes},
+  "domain-capability-map.json": {domains: domainRoutes, problemPatterns},
   "api-catalog.md": renderMarkdown(catalog, headlessCatalog, headlessWriteCatalog, recipes)
 };
 
@@ -46,7 +55,8 @@ const referencedDocuments = new Set([
   ...catalog.map(item => item.handbook),
   ...headlessCatalog.map(item => item.handbook),
   ...headlessWriteCatalog.map(item => item.handbook),
-  ...domainRoutes.flatMap(item => [item.aiHandbook, item.wikiPage])
+  ...domainRoutes.flatMap(item => [item.aiHandbook, item.wikiPage]),
+  ...problemPatterns.map(item => item.handbook)
 ]);
 const missingDocuments = [...referencedDocuments].filter(path => !existsSync(resolve(path)));
 if (missingDocuments.length) throw new Error(`AI / Wiki 路由指向不存在文档：${missingDocuments.join("、")}`);
@@ -72,6 +82,42 @@ function buildDomainRoutes() {
     aiHandbook: namespace === "climate" || namespace === "cells" || namespace === "objects" ? "docs/ai/regional-analysis.md" : namespace === "edit" || namespace === "history" || namespace === "regenerationLocks" ? "docs/ai/safe-change-boundaries.md" : "docs/ai/README.md",
     wikiPage: wikiPage(namespace)
   }));
+}
+
+function buildProblemPatterns() {
+  const handbook = "docs/ai/regional-intervention-playbook.md";
+  return [
+    {
+      patternId: "terrain-gradient-naturalization",
+      title: "保持大地形关系的梯度自然化",
+      handbook,
+      anchor: "模式一保持大地形关系的梯度自然化",
+      readMethods: ["analysis.defineRegion", "analysis.describeRegion", "analysis.diagnoseTerrain", "cells.neighbors"],
+      inspectMethods: ["edit.height.inspectSelectionSmoothing", "regenerationLocks.inspect"],
+      executeMethods: ["edit.height.applySelectionSmoothing", "edit.height.rebuildAllDerived", "regenerationLocks.setMany"],
+      invariants: ["sea-level-classification", "ridge-and-peak", "passes", "river-outlets", "outside-selection-ring"]
+    },
+    {
+      patternId: "rain-shadow-carrying-improvement",
+      title: "地形雨影下的区域承载改善",
+      handbook,
+      anchor: "模式二地形雨影下的区域承载改善",
+      readMethods: ["analysis.describeRegion", "analysis.explainPrecipitation", "analysis.diagnosePopulation", "climate.getAtmosphere"],
+      inspectMethods: ["climate.inspectDownstreamRebuild", "edit.population.inspectAdjustment"],
+      executeMethods: ["climate.apply", "generate.regenerate", "edit.population.applyAdjustment"],
+      invariants: ["unaffected-climate-control", "terrain-barrier", "political-boundary", "population-carriers", "save-roundtrip"]
+    },
+    {
+      patternId: "cross-barrier-development-balancing",
+      title: "跨障碍的同政权发展差距",
+      handbook,
+      anchor: "模式三跨障碍的同政权发展差距",
+      readMethods: ["analysis.compareRegions", "analysis.diagnosePopulation", "analysis.comparePower", "regenerationLocks.list"],
+      inspectMethods: ["edit.population.inspectAdjustment", "regenerationLocks.inspect"],
+      executeMethods: ["edit.population.applyAdjustment", "regenerationLocks.setMany"],
+      invariants: ["control-side-drift", "barrier-wilderness", "cities-and-routes", "transparent-power-proxy", "save-roundtrip"]
+    }
+  ];
 }
 
 function buildBrowserCatalogRow(namespace, name) {

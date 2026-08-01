@@ -102,5 +102,90 @@
       "aiHandbook": "docs/ai/README.md",
       "wikiPage": "docs/wiki/API与自动化.md"
     }
+  ],
+  "problemPatterns": [
+    {
+      "patternId": "terrain-gradient-naturalization",
+      "title": "保持大地形关系的梯度自然化",
+      "handbook": "docs/ai/regional-intervention-playbook.md",
+      "anchor": "模式一保持大地形关系的梯度自然化",
+      "readMethods": [
+        "analysis.defineRegion",
+        "analysis.describeRegion",
+        "analysis.diagnoseTerrain",
+        "cells.neighbors"
+      ],
+      "inspectMethods": [
+        "edit.height.inspectSelectionSmoothing",
+        "regenerationLocks.inspect"
+      ],
+      "executeMethods": [
+        "edit.height.applySelectionSmoothing",
+        "edit.height.rebuildAllDerived",
+        "regenerationLocks.setMany"
+      ],
+      "invariants": [
+        "sea-level-classification",
+        "ridge-and-peak",
+        "passes",
+        "river-outlets",
+        "outside-selection-ring"
+      ]
+    },
+    {
+      "patternId": "rain-shadow-carrying-improvement",
+      "title": "地形雨影下的区域承载改善",
+      "handbook": "docs/ai/regional-intervention-playbook.md",
+      "anchor": "模式二地形雨影下的区域承载改善",
+      "readMethods": [
+        "analysis.describeRegion",
+        "analysis.explainPrecipitation",
+        "analysis.diagnosePopulation",
+        "climate.getAtmosphere"
+      ],
+      "inspectMethods": [
+        "climate.inspectDownstreamRebuild",
+        "edit.population.inspectAdjustment"
+      ],
+      "executeMethods": [
+        "climate.apply",
+        "generate.regenerate",
+        "edit.population.applyAdjustment"
+      ],
+      "invariants": [
+        "unaffected-climate-control",
+        "terrain-barrier",
+        "political-boundary",
+        "population-carriers",
+        "save-roundtrip"
+      ]
+    },
+    {
+      "patternId": "cross-barrier-development-balancing",
+      "title": "跨障碍的同政权发展差距",
+      "handbook": "docs/ai/regional-intervention-playbook.md",
+      "anchor": "模式三跨障碍的同政权发展差距",
+      "readMethods": [
+        "analysis.compareRegions",
+        "analysis.diagnosePopulation",
+        "analysis.comparePower",
+        "regenerationLocks.list"
+      ],
+      "inspectMethods": [
+        "edit.population.inspectAdjustment",
+        "regenerationLocks.inspect"
+      ],
+      "executeMethods": [
+        "edit.population.applyAdjustment",
+        "regenerationLocks.setMany"
+      ],
+      "invariants": [
+        "control-side-drift",
+        "barrier-wilderness",
+        "cities-and-routes",
+        "transparent-power-proxy",
+        "save-roundtrip"
+      ]
+    }
   ]
 }

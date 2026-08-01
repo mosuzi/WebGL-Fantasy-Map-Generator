@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sourceDigest": "f706ab64f93d3bd6d1b224bf82daae4aba48bd6f8e6107227c17ae01fcf304a9",
+  "sourceDigest": "3331bd36951a3bbac65df538b90c8a086439ea7e7ba4040bd98cf0bb235e7bfe",
   "sourceRoots": [
     "app/webgl-generator/index.html",
     "app/webgl-generator/src/**/*.{js,vue}",
