@@ -19,6 +19,7 @@ const options = {
 const report = {ok: true, full: {}, scoped: {}, conflict: {}, contract: {}};
 
 testFullRegeneration();
+testLegacyRouteMirrorBackfill();
 testScopedRegeneration();
 testConflict();
 await testFormalEntryContract();
@@ -63,6 +64,34 @@ function testFullRegeneration() {
     cities: activeCities(map).length,
     routes: activeRoutes(map).length
   };
+}
+
+function testLegacyRouteMirrorBackfill() {
+  const map = generatePlaceholderMap({...options, seed: `${options.seed}:legacy-route-mirror`});
+  const route = activeRoutes(map).find(item => item.packCells?.length >= 3);
+  assert(route, "旧图镜像用例缺少道路");
+  const mirror = map.pack.routes[route.id];
+  delete mirror.from;
+  delete mirror.to;
+  delete mirror.fromProvincial;
+  delete mirror.toProvincial;
+  delete mirror.administrativePriority;
+  mirror.feature = Number(route.feature || 0) + 100;
+  map.regenerationLocks = {version: 1, entries: [{kind: "route", id: route.id}]};
+  const capture = captureLockedRegenerationObjects(map, "route");
+  const routeBefore = clone(route);
+
+  regenerateSettlementsWithinPolitics(map.grid, map.features, map.politics, map.settlements, map.pack, {
+    ...map.options,
+    namebases: map.namebases,
+    settlementRegenerationSalt: 19,
+    routeRegenerationSalt: 19,
+    lockedRoutes: capture.snapshots
+  });
+
+  assertLockedRegenerationSnapshots(map, capture);
+  assert.deepEqual(activeRoutes(map).find(item => item.id === route.id), routeBefore, "旧图锁路对象不得因镜像字段补齐而改变");
+  report.legacyMirror = {lockedRoute: route.id, backfilled: true};
 }
 
 function testScopedRegeneration() {

@@ -99,6 +99,7 @@ import {getGlobalHeightChanges, getHeightBrushChanges, getHeightLineChanges, get
 import {acceptHeightBrushSample} from "./height-brush-cadence.js";
 import {composeHeightCellSelection, createHeightCellSelectionFeather, createHeightCellSelectionSet, createHeightCellSelectionSnapshot, createHeightCursorRadiusSelection, restoreHeightCellSelectionSnapshot, transformHeightCellSelection} from "./height-cell-selection.js";
 import {createHeightSelectionSmoothingPlan} from "./height-selection-smoothing.js";
+import {captureClimatePopulation, restoreClimatePopulation} from "./climate-population-preservation.js";
 import {getHeightTerrainTemplateChanges, heightTerrainTemplateLabel, heightTerrainTemplateUsesSeed, inspectHeightTerrainTemplate} from "./height-terrain-templates.js";
 import {getHeightTerrainTemplateProgramChanges, heightTerrainTemplateProgramUsesSeed, inspectHeightTerrainTemplateProgram} from "./height-terrain-template-programs.js";
 import {createRegenerationResult, HEIGHT_BASE_REBUILD_STEPS, HEIGHT_DOWNSTREAM_REBUILD_STEPS, rebuildHeightAllDerived, rebuildHeightBaseDerived, rebuildHeightDownstreamDerived} from "./height-derived-rebuild.js";
@@ -6172,7 +6173,7 @@ function applyClimatePatchViaApi(state, documentRef, patch = {}, options = {}) {
   const changed = !sameClimateOptions(currentClimate, nextClimate);
   syncClimateInputs(documentRef, nextOptions);
   if (!changed && options.force !== true) return climateApiUpdateResult(state, false);
-  return measureHealthOperation(state, "apply-climate", {keys: Object.keys(normalizedPatch)}, () => applyClimateOptions(state, documentRef, nextOptions, changed));
+  return measureHealthOperation(state, "apply-climate", {keys: Object.keys(normalizedPatch)}, () => applyClimateOptions(state, documentRef, nextOptions, changed, options));
 }
 
 function setClimateLatitudeViaApi(state, documentRef, value, options = {}) {
@@ -6573,11 +6574,14 @@ function applyClimateControls(state, documentRef, applyAction = state.runtimeAct
   return applyAction(climateOptionSnapshot(options), {force: true});
 }
 
-function applyClimateOptions(state, documentRef, options, changed = true) {
+function applyClimateOptions(state, documentRef, options, changed = true, applyOptions = {}) {
   state.options = options;
   state.map.options = options;
+  const preservedPopulation = applyOptions.preservePopulation === true ? captureClimatePopulation(state.map) : null;
   const climate = buildClimate(state.map.grid, state.map.features, options, createRandom(options.seed));
   const biomes = defineBiomesAndPopulation(state.map.grid, state.map.pack, state.map.options);
+  if (preservedPopulation) restoreClimatePopulation(state.map, preservedPopulation);
+  markDerivedFresh(state.map, ["biomes"]);
   climate.biomes = biomes.biomes;
   climate.metadata.biomeCounts = biomes.metadata.biomeCounts;
   state.map.climate = climate;
@@ -6601,7 +6605,7 @@ function applyClimateOptions(state, documentRef, options, changed = true) {
   updateGovernmentPanel(state);
   updateProvincePanel(state);
   state.mapRevision?.advance();
-  return climateApiUpdateResult(state, changed);
+  return {...climateApiUpdateResult(state, changed), populationPreserved: Boolean(preservedPopulation)};
 }
 
 function climateApiUpdateResult(state, changed) {
@@ -10319,6 +10323,9 @@ function regenerateMapAttributeViaApi(state, documentRef, kind, options = {}) {
   assertMapAvailable(state);
   if (options?.confirm !== true) throw new Error("受约束重算会改写当前地图派生数据，需要显式传入 {confirm: true}");
   const targetKind = normalizeApiRegenerationKind(kind);
+  if (options?.preservePopulation === true && !["features", "routes", "rivers"].includes(targetKind)) {
+    throw new Error("preservePopulation 仅支持 features、routes 和 rivers 地理派生重算");
+  }
   const transaction = executeMapSnapshotTransaction({
     map: state.map,
     editHistory: state.editHistory,
@@ -10329,6 +10336,9 @@ function regenerateMapAttributeViaApi(state, documentRef, kind, options = {}) {
       affected: [{kind: "system", id: targetKind}]
     },
     execute: () => {
+      const populationSnapshot = options?.preservePopulation === true
+        ? captureClimatePopulation(state.map)
+        : null;
       const constraintBundle = targetKind === "states"
         ? captureRegenerationConstraintBundle(state.map, {closure: ["world"]})
         : options.constraintBundle || null;
@@ -10337,8 +10347,9 @@ function regenerateMapAttributeViaApi(state, documentRef, kind, options = {}) {
         constraintBundle,
         rejectLockedDiplomacy: targetKind === "states" && !options.constraintBundle
       });
+      if (populationSnapshot) restoreClimatePopulation(state.map, populationSnapshot);
       if (constraintBundle) constraintBundle.assertDomain(state.map, "world", "after");
-      return result;
+      return populationSnapshot ? {...result, populationPreserved: true} : result;
     },
     executeCommand: command => executeEditCommand(state, documentRef, command, {
       context: {map: state.map},

@@ -30,6 +30,30 @@ try {
   assert.equal(readonly.result.ok, true);
   assert.deepEqual(readonly.result.data, [{id: 1, name: "测试城"}]);
 
+  const climateReadonly = await bridgeRequest("POST", "/v1/request", token, {method: "climate.get", arguments: []});
+  assert.equal(climateReadonly.result.ok, true);
+  assert.deepEqual(climateReadonly.result.data, {temperature: "stable"});
+
+  const exportReadonly = await bridgeRequest("POST", "/v1/request", token, {method: "data.exportCompressedAll", arguments: [{includeBase64: false}]});
+  assert.equal(exportReadonly.result.ok, true);
+  assert.deepEqual(exportReadonly.result.data, {filename: "test.webgl-map.json.gz"});
+
+  const largeExportReadonly = await bridgeRequest("POST", "/v1/request", token, {method: "data.exportCompressedAll", arguments: [{includeBase64: true}]});
+  assert.equal(largeExportReadonly.result.ok, true);
+  assert.equal(largeExportReadonly.result.data.base64.length, 1_100_000);
+
+  const largeCommandReadonly = await bridgeRequest("POST", "/v1/request", token, {method: "objects.list", arguments: ["A".repeat(1_100_000)]});
+  assert.equal(largeCommandReadonly.result.ok, true);
+  assert.deepEqual(largeCommandReadonly.result.data, [{id: 1, name: "测试城"}]);
+
+  const importUnauthorized = await bridgeRequest("POST", "/v1/request", token, {
+    method: "data.importMap",
+    arguments: [{type: "webgl-generator-map"}],
+    requestId: "import-before-enable",
+    expectedRevision: 4
+  });
+  assert.equal(importUnauthorized.result.error.code, "bridge_write_not_authorized");
+
   const unauthorized = await bridgeRequest("POST", "/v1/request", token, {
     method: "edit.notes.set",
     arguments: [1, {name: "未授权"}],
@@ -119,7 +143,7 @@ try {
   const builtIndex = await readFile("./dist/webgl-generator/index.html", "utf8");
   assert.doesNotMatch(builtIndex, /ai-browser-bridge/);
 
-  process.stdout.write("浏览器 AI 受控桥回归通过：回环鉴权、只读、显式写授权、revision、幂等、页面确认、刷新降权、地图替换与懒加载均符合预期。\n");
+  process.stdout.write("浏览器 AI 受控桥回归通过：回环鉴权、方法级只读与导出、有界大命令、导入阻断、显式写授权、revision、幂等、页面确认、刷新降权、地图替换与懒加载均符合预期。\n");
 } finally {
   server.kill();
 }
@@ -127,16 +151,28 @@ try {
 function createFakeApi(state) {
   const descriptions = {
     "objects.list": {mutates: "none", requiresConfirm: false},
+    "climate.get": {mutates: "none", requiresConfirm: false},
+    "data.exportCompressedAll": {mutates: "download-or-export-result", requiresConfirm: false},
+    "data.importMap": {mutates: "map", requiresConfirm: true},
     "edit.notes.set": {mutates: "notes", requiresConfirm: false},
     "edit.states.delete": {mutates: "political-entities", requiresConfirm: true}
   };
   return {
     info: {
-      mapSummary: async () => state.readyChecks++ === 0 ? success({ready: false}) : success({ready: true, mapIdentity: state.documentId, mapRevision: state.revision, checksum: `checksum-${state.revision}`}),
+      mapSummary: async () => state.readyChecks++ === 0
+        ? success({ready: true, seed: "temporary", generatedAt: "legacy", mapIdentity: null, mapRevision: 0, checksum: "temporary-checksum"})
+        : success({ready: true, mapIdentity: state.documentId, mapRevision: state.revision, checksum: `checksum-${state.revision}`}),
       describe: method => descriptions[method] ? success({qualifiedName: method, metadata: descriptions[method]}) : failure("api_method_not_found", "未知方法")
     },
     objects: {
       list: () => success([{id: 1, name: "测试城"}])
+    },
+    climate: {
+      get: () => success({temperature: "stable"})
+    },
+    data: {
+      exportCompressedAll: options => success({filename: "test.webgl-map.json.gz", ...(options?.includeBase64 ? {base64: "A".repeat(1_100_000)} : {})}),
+      importMap: () => success({imported: true})
     },
     edit: {
       notes: {

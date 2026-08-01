@@ -13,6 +13,22 @@
 - 新增 `regress:development-panel-browser`：系统 Chrome 构建产物覆盖 `1440 / 480 / 390 / 320px`，四档均以历史 `360px` 宽度启动；实际面板宽度分别为 `680 / 464 / 374 / 304px`，document 横向溢出均为 `0`，正文均可内部滚动，AI 调试入口可达，application console、page、活动 application health 与 WebGL error 均为 `0`。
 - `regress:panel-overlay-policy`、三个目标 JS 文件与新回归 `node --check`、`pnpm run build:app`、`git diff --check` 均通过。`regress:responsive-focus-overlay` 仍被本批未触碰的既有复杂动作分母漂移阻断：实际 `18 hosts / 70 actions / 57 secondary`，脚本冻结值仍为 `18 / 69 / 56`；该失败不影响本项专项，按封闭范围只记录、不修改。
 
+### 第 231 项完成：当前标签页 AI 桥与三个私有地图案例
+
+- 真实 Chrome 中，同一地图的备用标签页在令牌填写前可稳定接管；填写 `password` 输入后，密码管理 / 扩展提示层会在“开启 AI 调试”点击前抢占页面，桥服务器保持零会话，证明没有误连或误写。
+- 在既有视觉开启边界内，把令牌输入收敛为 `text` 元素配合 `-webkit-text-security: disc` 掩码，并增加 1Password、Bitwarden、LastPass 忽略标记；配对令牌仍不明文显示，懒加载、回环地址、只读默认、刷新降权和写授权均不改变。
+- 开发面板浏览器专项新增四档断言，要求输入类型、掩码样式、自动大写 / 拼写检查和三个扩展忽略标记稳定；专项与真实 Chrome 配对通过前不进入私有存档读取。
+- 真实配对通过后，首批只读基线调用确认 `info / objects` 正常，但桥接原固定命名空间白名单会把 `climate.get / history.get` 等 `mutates:none` 读取误判为写操作，压缩存档导出也无法在只读状态完成。桥接现直接信任已全量审计的方法级副作用元数据：所有 `mutates:none` 和 `data.*` 的 `download-or-export-result` 只读放行，地图导入及真实写方法仍完整阻断；专项加入气候读取、压缩导出和导入未授权三条反例。
+- 页面刷新后自动恢复曾在浏览器存档接入完成前注册：此时 `mapSummary.ready=true`，但 `MapRevisionTracker` 尚未生成 mapIdentity，旧桥会用 seed / generatedAt fallback 注册临时 documentId；正式加载完成后身份切换，首批基线请求全部被 `bridge_document_mismatch` 安全拒绝。桥接注册现要求非空公开 mapIdentity，不再接受临时 fallback；专项加入“临时 ready 但无身份 → 正式身份”序列，刷新仍自动恢复只读且不会继承写权限。
+- 完整 gzip 基线导出随后被原 `/v1/result` 共用的 `1 MiB` JSON 上限拒绝；普通气候、大气、历史和运行时读取均已成功，地图 checksum / revision 未变。桥服务器现保持注册、轮询和控制请求 `1 MiB` 上限，把 AI 命令入口 `/v1/request` 设为 `8 MiB`、已鉴权页面结果回传 `/v1/result` 设为 `128 MiB`；两侧仍受原鉴权、页面写授权、revision 与 requestId 保护，回归分别以大命令和大结果冻结边界。
+- 气候调参会重新运行生物群系与人口派生，当前 API 增加显式 `preservePopulation`，使调整风带、温度或降水时可保持既有 `pack / grid` 人口；通用 `generate.regenerate` 只允许 `features / routes / rivers` 三类地理派生重算使用该选项，国家、城市、省份等人口业务重算会明确拒绝，避免聚合字段失配。
+- 完整 gzip 回读暴露 `normalizeSuitabilityMap` 会从适居度重新生成 `pack.cells.pop`，从而擦除合法的存档人口调整。加载归一化现先保存人口、应用适居度覆盖，再恢复人口并刷新 grid 镜像与行政农村人口存储；新增加载专项，真实 gzip 导入后立即导出的指标与最终阶段一致。
+- 首轮独立复验把派生重建顺序、未受影响控制区、关键路线保护和无遮挡局部截图识别为阻断。最终执行顺序固定为“有限地形修改 → 地理派生重建 → 气候调整 → 目标人口事务 → 对照人口事务”，在地理重建前锁定必须保持的路线，全部地理 / 气候变化完成后才冻结人口对照基线；开发面板关闭后重拍同相机全图和两处山地、目标区、保护区局部证据。
+- 旧存档的 pack 路线镜像可能在加载时补齐 `from / to / feature` 等可选字段。路线锁兼容比较只冻结稳定的 `i / points` 镜像，正式路线对象、cell 链路和备注仍逐项保护；新增旧镜像回填专项，既允许非语义补齐又能继续阻断路径或链路变化。
+- 完整 gzip 回读还暴露零号未归属国家 / 省份 / 文化 / 宗教人口桶没有先清零，会在重复加载时累加。农村人口聚合现覆盖包括索引 `0` 的全部有效桶，并由加载专项冻结“保存人口不变、Grid 镜像一致、全部聚合一致、二次加载不累加”。
+- 第二轮独立智能体从原始存档、最终存档和严格人口对照基线重新计算，量化指标、控制区、南部对照、保护荒野、关键路线、最终解锁、存档回读和无遮挡视觉证据全部通过，最终结论为 `ACCEPT`；首轮 `BLOCK` 全文保留在 gitignore 排除的私有报告中。公开文档不记录真实名称、对象编号、坐标、数值或截图。
+- `regress:ai-browser-bridge`、`regress:climate-population-preservation`、`regress:map-load-population-preservation`、两项路线锁专项、`regress:api`、`regress:api-inventory`、`regress:development-panel-browser`、`regress:panel-overlay-policy`、生产构建和 `git diff --check` 全部通过；浏览器最终 checksum 与验收存档一致，application / page 功能错误和 WebGL error 为 `0`，长任务性能遥测单列。
+
 ## 2026-08-01：登记 AI 文档去存档上下文化
 
 - 用户指出三个私人地图问题被误写成开源 AI 手册固定 playbook；没有对应存档时，外部 AI 无法复现这些名称和空间上下文，案例也不应成为能力路由入口。

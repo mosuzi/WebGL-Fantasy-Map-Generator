@@ -2123,7 +2123,7 @@ select:disabled {
   background: rgba(16, 25, 30, 0.48);
 }
 
-.ai-bridge-controls > input[type="password"] {
+.ai-bridge-controls > .ai-bridge-token {
   box-sizing: border-box;
   width: 100%;
   min-width: 0;
@@ -2133,6 +2133,7 @@ select:disabled {
   border-radius: 4px;
   background: rgba(4, 10, 13, 0.62);
   color: #f2f6f8;
+  -webkit-text-security: disc;
 }
 
 .ai-bridge-controls > label {

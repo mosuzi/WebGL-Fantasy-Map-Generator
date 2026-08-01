@@ -7,6 +7,7 @@ import {
   SUITABILITY_VALUE_RANGE
 } from "../generator/suitability.js";
 import {BRUSH_RADIUS_ID, normalizeBrushRadius} from "./brush-radius-contract.js";
+import {captureClimatePopulation, restoreClimatePopulation} from "./climate-population-preservation.js";
 import {systemAffected} from "./edit-command-effects.js";
 
 export const SUITABILITY_EDIT_MODE = Object.freeze({SET: "set", RESET: "reset"});
@@ -25,8 +26,7 @@ const STALE_SECTIONS = Object.freeze(["settlements", "markers", "zones", "milita
 export function normalizeSuitabilityMap(map) {
   if (!map?.pack?.cells || !map?.grid?.cells) return map;
   ensureSuitabilityStores(map.pack);
-  applySuitabilityOverrides(map.pack);
-  refreshSuitabilityDerived(map, {markStale: false});
+  refreshSuitabilityDerived(map, {markStale: false, preservePopulation: true});
   return map;
 }
 
@@ -172,8 +172,10 @@ export function createApplySuitabilityCommand(changes, {label = "数值适居度
   };
 }
 
-export function refreshSuitabilityDerived(map, {markStale = true} = {}) {
+export function refreshSuitabilityDerived(map, {markStale = true, preservePopulation = false} = {}) {
+  const populationSnapshot = preservePopulation ? captureClimatePopulation(map) : null;
   const suitability = applySuitabilityOverrides(map.pack);
+  if (populationSnapshot) restoreClimatePopulation(map, populationSnapshot);
   mirrorSuitabilityPopulationToGrid(map.grid, map.pack);
   const packSuitability = map.pack.cells.s || [];
   const packPopulation = map.pack.cells.pop || [];
@@ -317,13 +319,13 @@ function refreshRuralPopulationStores(map) {
   ];
   for (const config of configs) {
     for (const store of uniqueArrays(config.stores)) {
-      for (const item of store) if (item && !item.removed && Number(item.i ?? item.id) > 0) item.rural = 0;
+      for (const item of store) if (item && !item.removed && Number(item.i ?? item.id) >= 0) item.rural = 0;
       for (const cell of map.pack.cells.i || []) {
         const id = Number(map.pack.cells[config.field]?.[cell]) || 0;
         const item = store[id];
         if (item && !item.removed) item.rural = (Number(item.rural) || 0) + (Number(map.pack.cells.pop?.[cell]) || 0);
       }
-      for (const item of store) if (item && !item.removed && Number(item.i ?? item.id) > 0) item.rural = round(Number(item.rural) || 0, 2);
+      for (const item of store) if (item && !item.removed && Number(item.i ?? item.id) >= 0) item.rural = round(Number(item.rural) || 0, 2);
     }
   }
 }

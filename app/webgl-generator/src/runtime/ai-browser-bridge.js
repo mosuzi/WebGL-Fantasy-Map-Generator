@@ -1,5 +1,4 @@
 const DEFAULT_ENDPOINT = "http://127.0.0.1:5412";
-const READ_NAMESPACES = new Set(["info", "objects", "cells", "planner", "analysis"]);
 
 export async function startAiBrowserBridge(options = {}) {
   const api = options.api;
@@ -91,7 +90,7 @@ export async function startAiBrowserBridge(options = {}) {
     const description = api.info.describe(command.method);
     if (!description?.ok) return postResult(command, description);
     const metadata = description.data?.metadata || {};
-    const readonly = metadata.mutates === "none" && READ_NAMESPACES.has(String(command.method).split(".")[0]);
+    const readonly = isReadonlyMethod(command.method, metadata);
     if (!readonly && !writeEnabled) return postResult(command, failure("bridge_write_not_authorized", "当前 AI 桥仅有只读权限"));
     const identity = await readMapIdentity(api);
     if (command.documentId && command.documentId !== identity.documentId) return postResult(command, failure("bridge_document_mismatch", "请求绑定的地图与当前地图不同", {identity}));
@@ -133,14 +132,20 @@ export async function startAiBrowserBridge(options = {}) {
   }
 }
 
+function isReadonlyMethod(method, metadata) {
+  if (metadata?.mutates === "none") return true;
+  return String(method).startsWith("data.") && metadata?.mutates === "download-or-export-result";
+}
+
 async function readMapIdentity(api, {waitForReadyMs = 0} = {}) {
   const deadline = Date.now() + waitForReadyMs;
   do {
     const summary = await api.info.mapSummary();
-    if (summary?.ok && summary.data?.ready) {
+    const documentId = String(summary?.data?.documentId || summary?.data?.mapIdentity || "").trim();
+    if (summary?.ok && summary.data?.ready && documentId) {
       const data = summary.data;
       return {
-        documentId: String(data.documentId || data.mapIdentity || `${data.seed || "map"}:${data.generatedAt || data.generatorStage || "legacy"}`),
+        documentId,
         revision: Number(data.revision ?? data.mapRevision ?? data.currentRevision ?? 0),
         checksum: String(data.checksum || "")
       };
@@ -148,7 +153,7 @@ async function readMapIdentity(api, {waitForReadyMs = 0} = {}) {
     if (Date.now() >= deadline) break;
     await new Promise(resolve => setTimeout(resolve, 120));
   } while (true);
-  throw bridgeError("map_not_ready", "当前地图尚未就绪");
+  throw bridgeError("map_not_ready", "当前地图尚未就绪或地图身份仍在切换");
 }
 
 function resolveMethod(api, qualifiedName) {

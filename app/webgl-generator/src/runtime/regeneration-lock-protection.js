@@ -763,10 +763,15 @@ function captureRouteMirrors(map, route) {
   }
   const notes = (map?.notes?.notes || []).filter(note => note?.kind === OBJECT_KIND.ROUTE && String(note.objectId) === String(id));
   return {
-    packRoute: clone(map?.pack?.routes?.[id] || null),
+    packRoute: captureRoutePackMirror(map?.pack?.routes?.[id]),
     links,
     notes: clone(notes)
   };
+}
+
+function captureRoutePackMirror(route) {
+  if (!route) return null;
+  return pickFields(route, ["i", "points"]);
 }
 
 function pickFields(source, fields) {

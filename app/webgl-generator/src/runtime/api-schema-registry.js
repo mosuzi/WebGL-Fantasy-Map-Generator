@@ -83,6 +83,31 @@ const METHOD_OVERRIDES = Object.freeze({
     result: pageSchema(),
     examples: [[{type: "city", text: "港"}, {limit: 20}]]
   },
+  "generate.regenerate": {
+    arguments: [
+      argument("kind", {type: "string", enum: ["features", "routes", "rivers", "cities", "states", "provinces", "markers", "diplomacy", "religions", "military", "zones"]}),
+      argument("options", {
+        type: "object",
+        required: ["confirm"],
+        properties: {
+          confirm: {const: true},
+          preservePopulation: {
+            type: "boolean",
+            default: false,
+            description: "仅适用于 features、routes、rivers；保留当前 pack/grid 人口，避免地理派生重算附带覆盖已调整人口"
+          },
+          scope: {type: ["string", "object"]},
+          regenerationScope: {type: "string"},
+          stateId: {type: "integer", minimum: 1},
+          provinceId: {type: "integer", minimum: 1},
+          id: {type: "integer", minimum: 1}
+        },
+        additionalProperties: false
+      })
+    ],
+    result: objectSchema(["kind", "executed", "status", "staleSystems", "history"]),
+    examples: [["rivers", {confirm: true, preservePopulation: true}]]
+  },
   "edit.zones.setContext": {
     arguments: [
       argument("zoneId", {type: "integer", minimum: 0}),

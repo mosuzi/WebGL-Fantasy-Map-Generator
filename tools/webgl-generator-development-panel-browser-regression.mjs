@@ -67,6 +67,7 @@ async function runViewportCase(browserInstance, viewport) {
       const body = panel.querySelector(".floating-panel-body");
       const log = panel.querySelector(".development-generation-log dd");
       const traceItem = panel.querySelector("#development-load-trace li");
+      const token = panel.querySelector("#ai-bridge-token");
       const rect = panel.getBoundingClientRect();
       const rendererStats = window.__webglGeneratorApp?.renderer?.getStats?.();
       return {
@@ -82,6 +83,16 @@ async function runViewportCase(browserInstance, viewport) {
           whiteSpace: getComputedStyle(log).whiteSpace
         },
         traceWhiteSpace: getComputedStyle(traceItem).whiteSpace,
+        token: {
+          type: token.type,
+          autocomplete: token.autocomplete,
+          autocapitalize: token.autocapitalize,
+          spellcheck: token.spellcheck,
+          textSecurity: getComputedStyle(token).webkitTextSecurity,
+          onePasswordIgnore: token.getAttribute("data-1p-ignore"),
+          bitwardenIgnore: token.getAttribute("data-bwignore"),
+          lastPassIgnore: token.getAttribute("data-lpignore")
+        },
         document: {clientWidth: document.documentElement.clientWidth, scrollWidth: document.documentElement.scrollWidth},
         webglError: rendererStats?.draw?.glError ?? null
       };
@@ -96,6 +107,16 @@ async function runViewportCase(browserInstance, viewport) {
     assert.equal(metrics.log.overflowX, "auto", `${viewport.label} 生成日志没有局部滚动`);
     assert.equal(metrics.log.whiteSpace, "pre", `${viewport.label} 生成日志没有保持逐条单行`);
     assert.equal(metrics.traceWhiteSpace, "nowrap", `${viewport.label} 加载追踪仍在任意换行`);
+    assert.deepEqual(metrics.token, {
+      type: "text",
+      autocomplete: "off",
+      autocapitalize: "none",
+      spellcheck: false,
+      textSecurity: "disc",
+      onePasswordIgnore: "true",
+      bitwardenIgnore: "true",
+      lastPassIgnore: "true"
+    }, `${viewport.label} AI 桥令牌输入没有保持掩码或密码管理器隔离`);
     assert.equal(metrics.webglError, 0, `${viewport.label} WebGL error 非 0`);
 
     await page.getByRole("button", {name: "收起", exact: true}).click();

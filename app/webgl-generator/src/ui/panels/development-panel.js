@@ -285,8 +285,14 @@ function aiBridgeSection(documentRef) {
   const description = paragraph(documentRef, "ai-bridge-description", "默认不加载主桥；视觉开启后只连接本机 127.0.0.1:5412。连接默认只读。");
   const token = documentRef.createElement("input");
   token.id = "ai-bridge-token";
-  token.type = "password";
+  token.className = "ai-bridge-token";
+  token.type = "text";
   token.autocomplete = "off";
+  token.autocapitalize = "none";
+  token.spellcheck = false;
+  token.setAttribute("data-1p-ignore", "true");
+  token.setAttribute("data-bwignore", "true");
+  token.setAttribute("data-lpignore", "true");
   token.placeholder = "本地桥配对令牌";
   token.setAttribute("aria-label", "AI 桥配对令牌");
   const autoLabel = documentRef.createElement("label");

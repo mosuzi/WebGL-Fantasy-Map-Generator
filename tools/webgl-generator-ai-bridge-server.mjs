@@ -7,6 +7,9 @@ const sessions = new Map();
 const commands = new Map();
 const requestResults = new Map();
 const allowedOrigins = new Set(["http://127.0.0.1:5410", "http://localhost:5410", "http://127.0.0.1:5411", "http://localhost:5411"]);
+const CONTROL_BODY_MAX_BYTES = 1024 * 1024;
+const COMMAND_REQUEST_BODY_MAX_BYTES = 8 * 1024 * 1024;
+const RESULT_BODY_MAX_BYTES = 128 * 1024 * 1024;
 
 const server = createServer(async (request, response) => {
   try {
@@ -33,7 +36,7 @@ const server = createServer(async (request, response) => {
       return json(response, 200, publicCommand(command));
     }
     if (request.method === "POST" && url.pathname === "/v1/result") {
-      const body = await readJson(request);
+      const body = await readJson(request, RESULT_BODY_MAX_BYTES);
       const session = requireSession(body.sessionId, body.pageSessionId);
       const command = commands.get(String(body.commandId || ""));
       if (!command || command.sessionId !== session.sessionId) throw httpError(404, "bridge_command_not_found", "找不到待完成命令");
@@ -51,7 +54,7 @@ const server = createServer(async (request, response) => {
       return json(response, 200, {ok: true});
     }
     if (request.method === "POST" && url.pathname === "/v1/request") {
-      const body = await readJson(request);
+      const body = await readJson(request, COMMAND_REQUEST_BODY_MAX_BYTES);
       const session = selectSession(body.sessionId);
       const requestId = String(body.requestId || "").trim();
       const requestKey = requestId ? `${body.documentId || session.documentId}:${requestId}` : null;
@@ -173,12 +176,12 @@ function applyCors(request, response) {
   response.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
 }
 
-async function readJson(request) {
+async function readJson(request, maxBytes = CONTROL_BODY_MAX_BYTES) {
   const chunks = [];
   let size = 0;
   for await (const chunk of request) {
     size += chunk.length;
-    if (size > 1024 * 1024) throw httpError(413, "bridge_payload_too_large", "请求体超过 1 MiB");
+    if (size > maxBytes) throw httpError(413, "bridge_payload_too_large", `请求体超过 ${Math.round(maxBytes / 1024 / 1024)} MiB`);
     chunks.push(chunk);
   }
   if (!chunks.length) return {};
