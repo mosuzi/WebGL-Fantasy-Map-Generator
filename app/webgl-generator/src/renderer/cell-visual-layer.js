@@ -1,6 +1,8 @@
 import {colorForCell} from "./color-modes.js";
 import {createRenderContext, worldToNdcPoint} from "./render-context.js";
 import {isWorldPoint, midpoint, normalizeWorldVector, pointsNear, worldDistance} from "./geometry.js";
+import earcut from "earcut";
+import {resolvedGridVertexPoint} from "./grid-vertex-geometry.js";
 
 const CELL_VISUAL_STYLE = Object.freeze({
   segmentsPerEdge: 3,
@@ -14,21 +16,75 @@ export function buildCellVisualMesh(map) {
   const context = createRenderContext(map);
   const cells = [];
   const edgeCurves = new Map();
+  const shoreEdges = collectShoreCellVisualEdges(map);
   let boundaryPoints = 0;
   let skippedCells = 0;
   let triangleCount = 0;
+  let triangulationFallbackCells = 0;
+  let triangulationRetriedCells = 0;
+  let triangulationSkippedCells = 0;
+  let triangulationHardFallbackCells = 0;
+  let triangulationHardFanFallbackCells = 0;
+  let triangulationUnfilledCells = 0;
+  const triangulationFailures = [];
 
   for (const cell of map?.grid?.cells?.i || []) {
-    const points = buildCellVisualBoundary(map, cell, edgeCurves);
+    const points = buildCellVisualBoundary(map, cell, edgeCurves, shoreEdges);
     if (points.length < 3) {
       skippedCells++;
       continue;
     }
     const center = cellCenterPoint(map.grid, cell);
-    const ndcTriangles = buildCellVisualNdcTriangles(context, center, points);
-    cells.push({cell, center, points, ndcTriangles, triangleCount: points.length});
-    boundaryPoints += points.length;
-    triangleCount += points.length;
+    const smoothTriangulation = buildCellVisualNdcTriangles(context, points);
+    let triangulation = smoothTriangulation;
+    let fallbackMode = null;
+    if (smoothTriangulation.retried) triangulationRetriedCells++;
+    if (smoothTriangulation.skipped) {
+      triangulationSkippedCells++;
+      let hardPoints = buildHardCellVisualBoundary(map, cell, true);
+      triangulation = buildCellVisualNdcTriangles(context, hardPoints, center);
+      let hardBoundarySource = "resolved";
+      if (triangulation.skipped) {
+        hardPoints = buildHardCellVisualBoundary(map, cell, false);
+        triangulation = buildCellVisualNdcTriangles(context, hardPoints, center);
+        hardBoundarySource = "stored";
+      }
+      if (!triangulation.skipped) {
+        triangulationHardFallbackCells++;
+        if (triangulation.safeHardFan) triangulationHardFanFallbackCells++;
+        fallbackMode = triangulation.safeHardFan
+          ? `validated-${hardBoundarySource}-hard-fan`
+          : `${hardBoundarySource}-hard-boundary-earcut`;
+      }
+      if (triangulationFailures.length < 32) {
+        triangulationFailures.push({
+          cell,
+          reason: smoothTriangulation.reason,
+          sourcePointCount: points.length,
+          cleanedPointCount: smoothTriangulation.points.length,
+          fallback: triangulation.skipped ? "unfilled" : fallbackMode,
+          fallbackReason: triangulation.reason,
+          hardPointCount: hardPoints.length
+        });
+      }
+    }
+    if (triangulation.fallback) triangulationFallbackCells++;
+    if (triangulation.skipped) {
+      triangulationUnfilledCells++;
+      skippedCells++;
+      continue;
+    }
+    const ndcTriangles = triangulation.ndcTriangles;
+    cells.push({
+      cell,
+      center,
+      points: triangulation.points,
+      ndcTriangles,
+      triangleCount: ndcTriangles.length / 6,
+      triangulationFallback: smoothTriangulation.skipped ? fallbackMode : null
+    });
+    boundaryPoints += triangulation.points.length;
+    triangleCount += ndcTriangles.length / 6;
   }
 
   return {
@@ -38,7 +94,16 @@ export function buildCellVisualMesh(map) {
     skippedCells,
     boundaryPoints,
     triangleCount,
+    triangulationMode: "earcut-boundary",
+    triangulationFallbackCells,
+    triangulationRetriedCells,
+    triangulationSkippedCells,
+    triangulationHardFallbackCells,
+    triangulationHardFanFallbackCells,
+    triangulationUnfilledCells,
+    triangulationFailures,
     edgeCurveCount: edgeCurves.size,
+    shoreEdgeCount: shoreEdges.size,
     style: CELL_VISUAL_STYLE,
     buildMs: roundMs(performance.now() - startedAt)
   };
@@ -52,7 +117,16 @@ export function emptyCellVisualMesh() {
     skippedCells: 0,
     boundaryPoints: 0,
     triangleCount: 0,
+    triangulationMode: "earcut-boundary",
+    triangulationFallbackCells: 0,
+    triangulationRetriedCells: 0,
+    triangulationSkippedCells: 0,
+    triangulationHardFallbackCells: 0,
+    triangulationHardFanFallbackCells: 0,
+    triangulationUnfilledCells: 0,
+    triangulationFailures: [],
     edgeCurveCount: 0,
+    shoreEdgeCount: 0,
     style: CELL_VISUAL_STYLE,
     buildMs: 0
   };
@@ -64,8 +138,17 @@ export function summarizeCellVisualMesh(mesh) {
     skippedCells: mesh?.skippedCells || 0,
     boundaryPoints: mesh?.boundaryPoints || 0,
     triangleCount: mesh?.triangleCount || 0,
+    triangulationMode: mesh?.triangulationMode || "earcut-boundary",
+    triangulationFallbackCells: mesh?.triangulationFallbackCells || 0,
+    triangulationRetriedCells: mesh?.triangulationRetriedCells || 0,
+    triangulationSkippedCells: mesh?.triangulationSkippedCells || 0,
+    triangulationHardFallbackCells: mesh?.triangulationHardFallbackCells || 0,
+    triangulationHardFanFallbackCells: mesh?.triangulationHardFanFallbackCells || 0,
+    triangulationUnfilledCells: mesh?.triangulationUnfilledCells || 0,
+    triangulationFailures: [...(mesh?.triangulationFailures || [])],
     averageBoundaryPoints: roundRatio(mesh?.boundaryPoints || 0, mesh?.cellCount || 0),
     edgeCurveCount: mesh?.edgeCurveCount || 0,
+    shoreEdgeCount: mesh?.shoreEdgeCount || 0,
     style: {...CELL_VISUAL_STYLE},
     buildMs: mesh?.buildMs || 0
   };
@@ -96,25 +179,258 @@ export function buildCellVisualGridVertices(context, colorMode, viewOptions, cel
   return offset === vertices.length ? vertices : vertices.slice(0, offset);
 }
 
-function buildCellVisualNdcTriangles(context, center, points) {
-  const ndc = new Float32Array(points.length * 3 * 2);
-  const centerNdc = worldToNdcPoint(context, center);
-  let offset = 0;
-  for (let index = 0; index < points.length; index++) {
-    const nextIndex = (index + 1) % points.length;
-    const current = worldToNdcPoint(context, points[index]);
-    const next = worldToNdcPoint(context, points[nextIndex]);
-    ndc[offset++] = centerNdc[0];
-    ndc[offset++] = centerNdc[1];
-    ndc[offset++] = current[0];
-    ndc[offset++] = current[1];
-    ndc[offset++] = next[0];
-    ndc[offset++] = next[1];
+function buildCellVisualNdcTriangles(context, points, safeFanCenter = null) {
+  const triangulation = triangulateCellVisualBoundarySafely(points);
+  let indices = triangulation.indices;
+  let safeHardFan = false;
+  if (triangulation.status === "skipped" && isWorldPoint(safeFanCenter)) {
+    indices = buildValidatedHardBoundaryFanIndices(triangulation.points, safeFanCenter);
+    safeHardFan = indices.length > 0;
   }
-  return ndc;
+  if (triangulation.status === "skipped" && !safeHardFan) return {
+      ndcTriangles: new Float32Array(),
+      fallback: false,
+      skipped: true,
+      retried: triangulation.retried,
+      reason: triangulation.reason,
+      points: triangulation.points,
+      safeHardFan: false
+    };
+  const ndc = new Float32Array(indices.length * 2);
+  let offset = 0;
+  const fanPoints = safeHardFan ? [safeFanCenter, ...triangulation.points] : triangulation.points;
+  for (const pointIndex of indices) {
+    const point = worldToNdcPoint(context, fanPoints[pointIndex]);
+    ndc[offset++] = point[0];
+    ndc[offset++] = point[1];
+  }
+  return {
+    ndcTriangles: ndc,
+    fallback: false,
+    skipped: false,
+    retried: triangulation.retried,
+    reason: null,
+    points: triangulation.points,
+    safeHardFan
+  };
 }
 
-function buildCellVisualBoundary(map, cell, edgeCurves) {
+export function triangulateCellVisualBoundary(points) {
+  if (!Array.isArray(points) || points.length < 3 || points.some(point => !isWorldPoint(point))) return [];
+  return earcut(points.flat(), null, 2);
+}
+
+export function triangulateCellVisualBoundarySafely(points) {
+  if (!Array.isArray(points) || points.length < 3 || points.some(point => !isWorldPoint(point))) {
+    return {status: "skipped", reason: "invalid-boundary", retried: false, removedPointCount: 0, points: [], indices: []};
+  }
+  const source = points.map(point => [point[0], point[1]]);
+  const cleaned = cleanCellVisualBoundary(source);
+  const retried = cleaned.length !== source.length || cleaned.some((point, index) => !pointsNear(point, source[index], 0.000000001));
+  const candidate = retried ? cleaned : source;
+  if (candidate.length < 3) {
+    return {
+      status: "skipped",
+      reason: "boundary-collapsed-after-cleanup",
+      retried,
+      removedPointCount: source.length - candidate.length,
+      points: candidate,
+      indices: []
+    };
+  }
+  if (cellVisualBoundarySelfIntersects(candidate)) {
+    return {
+      status: "skipped",
+      reason: "self-intersecting-boundary",
+      retried,
+      removedPointCount: source.length - candidate.length,
+      points: candidate,
+      indices: []
+    };
+  }
+  const indices = triangulateCellVisualBoundary(candidate);
+  if (!validateCellVisualTriangulation(candidate, indices)) {
+    return {
+      status: "skipped",
+      reason: indices.length ? "unsafe-earcut-result" : "earcut-empty",
+      retried: true,
+      removedPointCount: source.length - candidate.length,
+      points: candidate,
+      indices: []
+    };
+  }
+  return {
+    status: "ok",
+    reason: null,
+    retried,
+    removedPointCount: source.length - candidate.length,
+    points: candidate,
+    indices
+  };
+}
+
+export function countCellVisualFanLeaks(center, points) {
+  if (!isWorldPoint(center) || !Array.isArray(points) || points.length < 3) return 0;
+  let leaks = 0;
+  for (let index = 0; index < points.length; index++) {
+    const next = points[(index + 1) % points.length];
+    const centroid = [
+      (center[0] + points[index][0] + next[0]) / 3,
+      (center[1] + points[index][1] + next[1]) / 3
+    ];
+    if (!pointInCellVisualBoundary(centroid, points)) leaks++;
+  }
+  return leaks;
+}
+
+export function countCellVisualTriangulationLeaks(points, indices = triangulateCellVisualBoundary(points)) {
+  let leaks = 0;
+  for (let index = 0; index < indices.length; index += 3) {
+    const triangle = [points[indices[index]], points[indices[index + 1]], points[indices[index + 2]]];
+    const centroid = [
+      (triangle[0][0] + triangle[1][0] + triangle[2][0]) / 3,
+      (triangle[0][1] + triangle[1][1] + triangle[2][1]) / 3
+    ];
+    if (!pointInCellVisualBoundary(centroid, points)) leaks++;
+  }
+  return leaks;
+}
+
+function pointInCellVisualBoundary(point, points) {
+  let inside = false;
+  for (let index = 0, previous = points.length - 1; index < points.length; previous = index++) {
+    const a = points[index];
+    const b = points[previous];
+    const crosses = (a[1] > point[1]) !== (b[1] > point[1])
+      && point[0] < (b[0] - a[0]) * (point[1] - a[1]) / (b[1] - a[1]) + a[0];
+    if (crosses) inside = !inside;
+  }
+  return inside;
+}
+
+function buildHardCellVisualBoundary(map, cell, resolved) {
+  const vertexIds = map?.grid?.cells?.v?.[cell] || [];
+  const points = vertexIds
+    .map(vertex => resolved ? resolvedGridVertexPoint(map.grid, vertex) : map?.grid?.vertices?.p?.[vertex])
+    .filter(isWorldPoint);
+  return cleanCellVisualBoundary(points);
+}
+
+function buildValidatedHardBoundaryFanIndices(points, center) {
+  if (points.length < 3 || cellVisualBoundarySelfIntersects(points) || !pointInCellVisualBoundary(center, points)) return [];
+  const fanPoints = [center, ...points];
+  const indices = [];
+  for (let index = 0; index < points.length; index++) {
+    indices.push(0, index + 1, (index + 1) % points.length + 1);
+  }
+  if (!validateCellVisualTriangulation(fanPoints, indices, points)) return [];
+  return indices;
+}
+
+function cleanCellVisualBoundary(points) {
+  if (!points.length) return [];
+  const span = Math.max(
+    Math.max(...points.map(point => point[0])) - Math.min(...points.map(point => point[0])),
+    Math.max(...points.map(point => point[1])) - Math.min(...points.map(point => point[1])),
+    1
+  );
+  const epsilon = Math.max(0.0000001, span * 0.00000001);
+  let cleaned = [];
+  for (const point of points) {
+    if (!cleaned.length || worldDistance(cleaned.at(-1), point) > epsilon) cleaned.push([...point]);
+  }
+  if (cleaned.length > 1 && worldDistance(cleaned[0], cleaned.at(-1)) <= epsilon) cleaned.pop();
+  let changed = true;
+  while (changed && cleaned.length >= 3) {
+    changed = false;
+    const next = [];
+    for (let index = 0; index < cleaned.length; index++) {
+      const previous = cleaned[(index + cleaned.length - 1) % cleaned.length];
+      const point = cleaned[index];
+      const following = cleaned[(index + 1) % cleaned.length];
+      if (pointSegmentDistance(point, previous, following) <= epsilon
+        && worldDistance(previous, following) + epsilon >= worldDistance(previous, point) + worldDistance(point, following)) {
+        changed = true;
+        continue;
+      }
+      next.push(point);
+    }
+    cleaned = next;
+  }
+  return cleaned;
+}
+
+function validateCellVisualTriangulation(points, indices, coverageBoundary = points) {
+  if (!indices.length || indices.length % 3) return false;
+  const polygonArea = Math.abs(cellVisualBoundaryArea(coverageBoundary));
+  if (polygonArea <= 0.000000001) return false;
+  let triangleArea = 0;
+  for (let index = 0; index < indices.length; index += 3) {
+    const triangle = [points[indices[index]], points[indices[index + 1]], points[indices[index + 2]]];
+    if (triangle.some(point => !point)) return false;
+    const area = Math.abs(cellVisualTriangleArea(triangle));
+    if (area <= 0.000000001) return false;
+    triangleArea += area;
+    const centroid = [
+      (triangle[0][0] + triangle[1][0] + triangle[2][0]) / 3,
+      (triangle[0][1] + triangle[1][1] + triangle[2][1]) / 3
+    ];
+    if (!pointInCellVisualBoundary(centroid, coverageBoundary)) return false;
+  }
+  return Math.abs(triangleArea - polygonArea) <= Math.max(0.000001, polygonArea * 0.000001);
+}
+
+function cellVisualBoundaryArea(points) {
+  let area = 0;
+  for (let index = 0; index < points.length; index++) {
+    const next = points[(index + 1) % points.length];
+    area += points[index][0] * next[1] - next[0] * points[index][1];
+  }
+  return area / 2;
+}
+
+function cellVisualTriangleArea(points) {
+  return (
+    points[0][0] * (points[1][1] - points[2][1])
+    + points[1][0] * (points[2][1] - points[0][1])
+    + points[2][0] * (points[0][1] - points[1][1])
+  ) / 2;
+}
+
+function cellVisualBoundarySelfIntersects(points) {
+  for (let first = 0; first < points.length; first++) {
+    const firstNext = (first + 1) % points.length;
+    for (let second = first + 1; second < points.length; second++) {
+      const secondNext = (second + 1) % points.length;
+      if (first === second || firstNext === second || secondNext === first) continue;
+      if (segmentsProperlyIntersect(points[first], points[firstNext], points[second], points[secondNext])) return true;
+    }
+  }
+  return false;
+}
+
+function segmentsProperlyIntersect(a, b, c, d) {
+  const abC = cross2d(a, b, c);
+  const abD = cross2d(a, b, d);
+  const cdA = cross2d(c, d, a);
+  const cdB = cross2d(c, d, b);
+  return abC * abD < -0.000000000001 && cdA * cdB < -0.000000000001;
+}
+
+function cross2d(a, b, c) {
+  return (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
+}
+
+function pointSegmentDistance(point, a, b) {
+  const dx = b[0] - a[0];
+  const dy = b[1] - a[1];
+  const lengthSquared = dx * dx + dy * dy;
+  if (lengthSquared <= 0.000000000001) return worldDistance(point, a);
+  const t = Math.max(0, Math.min(1, ((point[0] - a[0]) * dx + (point[1] - a[1]) * dy) / lengthSquared));
+  return worldDistance(point, [a[0] + dx * t, a[1] + dy * t]);
+}
+
+function buildCellVisualBoundary(map, cell, edgeCurves, shoreEdges) {
   const vertexIds = map?.grid?.cells?.v?.[cell] || [];
   if (vertexIds.length < 3) return [];
   const points = [];
@@ -122,7 +438,7 @@ function buildCellVisualBoundary(map, cell, edgeCurves) {
   for (let index = 0; index < vertexIds.length; index++) {
     const a = vertexIds[index];
     const b = vertexIds[(index + 1) % vertexIds.length];
-    const curve = cellVisualEdgeCurve(map, a, b, edgeCurves);
+    const curve = cellVisualEdgeCurve(map, a, b, edgeCurves, shoreEdges);
     const directed = a <= b ? curve : [...curve].reverse();
     for (let pointIndex = 0; pointIndex < directed.length; pointIndex++) {
       if (points.length && pointIndex === 0) continue;
@@ -134,15 +450,15 @@ function buildCellVisualBoundary(map, cell, edgeCurves) {
   return points;
 }
 
-function cellVisualEdgeCurve(map, a, b, edgeCurves) {
+function cellVisualEdgeCurve(map, a, b, edgeCurves, shoreEdges) {
   const first = Math.min(a, b);
   const second = Math.max(a, b);
   const key = `${first}:${second}`;
   const cached = edgeCurves.get(key);
   if (cached) return cached;
 
-  const start = map?.grid?.vertices?.p?.[first];
-  const end = map?.grid?.vertices?.p?.[second];
+  const start = resolvedGridVertexPoint(map?.grid, first);
+  const end = resolvedGridVertexPoint(map?.grid, second);
   if (!isWorldPoint(start) || !isWorldPoint(end)) {
     const fallback = [];
     edgeCurves.set(key, fallback);
@@ -154,6 +470,11 @@ function cellVisualEdgeCurve(map, a, b, edgeCurves) {
     const point = [[start[0], start[1]]];
     edgeCurves.set(key, point);
     return point;
+  }
+  if (shoreEdges.has(key)) {
+    const edge = [start, end];
+    edgeCurves.set(key, edge);
+    return edge;
   }
 
   const normal = normalizeWorldVector(-(end[1] - start[1]), end[0] - start[0]);
@@ -168,6 +489,23 @@ function cellVisualEdgeCurve(map, a, b, edgeCurves) {
   const curve = sampleQuadraticWorldPath(start, control, end, CELL_VISUAL_STYLE.segmentsPerEdge);
   edgeCurves.set(key, curve);
   return curve;
+}
+
+function collectShoreCellVisualEdges(map) {
+  const cells = map?.grid?.cells;
+  const edges = new Set();
+  if (!cells?.i || !cells?.c || !cells?.v || !cells?.h) return edges;
+  for (const cell of cells.i) {
+    const land = Number(cells.h[cell]) >= 20;
+    for (const neighbor of cells.c[cell] || []) {
+      if (neighbor <= cell || land === (Number(cells.h[neighbor]) >= 20)) continue;
+      const neighborVertices = new Set(cells.v[neighbor] || []);
+      const shared = (cells.v[cell] || []).filter(vertex => neighborVertices.has(vertex));
+      if (shared.length < 2) continue;
+      edges.add(`${Math.min(shared[0], shared[1])}:${Math.max(shared[0], shared[1])}`);
+    }
+  }
+  return edges;
 }
 
 function cellVisualEdgeOffset(key, mid, length) {

@@ -23,12 +23,13 @@ import {
 } from "./geometry.js";
 import {
   boundaryLineModeForOptions,
+  buildShoreSurfaceVertexLayers,
   buildShoreVisualPaths,
   emptyShoreVisualPaths,
   pushShoreLineLayers,
-  pushShoreVisualBands,
   summarizeShoreVisualPaths
 } from "./shore-layer.js";
+import {withSurfaceSideAlpha} from "./surface-side-depth.js";
 import {
   PROVINCE_VISUAL_STYLE,
   STATE_VISUAL_STYLE,
@@ -163,7 +164,7 @@ export class PlaceholderMapRenderer {
     this.gl = canvas.getContext("webgl2", {
       alpha: false,
       antialias: false,
-      depth: false,
+      depth: true,
       powerPreference: "high-performance",
       stencil: false
     });
@@ -175,9 +176,14 @@ export class PlaceholderMapRenderer {
       color: this.gl.getAttribLocation(this.program, "a_color"),
       scale: this.gl.getUniformLocation(this.program, "u_scale"),
       offset: this.gl.getUniformLocation(this.program, "u_offset"),
-      pointMode: this.gl.getUniformLocation(this.program, "u_pointMode")
+      pointMode: this.gl.getUniformLocation(this.program, "u_pointMode"),
+      surfaceSideMode: this.gl.getUniformLocation(this.program, "u_surfaceSideMode")
     };
     this.vertexBuffer = this.gl.createBuffer();
+    this.landCorrectionBuffer = this.gl.createBuffer();
+    this.waterCorrectionBuffer = this.gl.createBuffer();
+    this.landCoverBuffer = this.gl.createBuffer();
+    this.waterCoverBuffer = this.gl.createBuffer();
     this.routeBuffer = this.gl.createBuffer();
     this.tradeFlowBuffer = this.gl.createBuffer();
     this.riverBuffer = this.gl.createBuffer();
@@ -193,6 +199,14 @@ export class PlaceholderMapRenderer {
     this.gridCellDiagnosticLineBuffer = this.gl.createBuffer();
     this.vertexCount = 0;
     this.surfaceVertices = new Float32Array();
+    this.landCorrectionVertices = new Float32Array();
+    this.waterCorrectionVertices = new Float32Array();
+    this.landCoverVertices = new Float32Array();
+    this.waterCoverVertices = new Float32Array();
+    this.landCorrectionVertexCount = 0;
+    this.waterCorrectionVertexCount = 0;
+    this.landCoverVertexCount = 0;
+    this.waterCoverVertexCount = 0;
     this.surfaceCellRanges = new Map();
     this.routeVertexCount = 0;
     this.tradeFlowVertexCount = 0;
@@ -364,15 +378,24 @@ export class PlaceholderMapRenderer {
     profile.stage("state-boundaries", "构建国家边界缓存", () => this.rebuildStateVisualCache());
     profile.stage("province-boundaries", "构建省份边界缓存", () => this.rebuildProvinceVisualCache());
     profile.stage("political-meshes", "构建政治视觉 mesh", () => this.rebuildPoliticalVisualMeshesIfNeeded());
-    const vertices = profile.stage("surface-vertices", "构建 surface 顶点", () => buildPlaceholderVertices(map, this.colorMode, this.viewOptions, this.shoreVisualPaths, this.stateVisualPaths, this.provinceVisualPaths, this.politicalVisualMeshes, this.cellVisualMesh));
+    const surfaceBundle = profile.stage("surface-vertices", "构建 surface 顶点", () => buildPlaceholderSurfaceBundle(map, this.colorMode, this.viewOptions, this.shoreVisualPaths, this.stateVisualPaths, this.provinceVisualPaths, this.politicalVisualMeshes, this.cellVisualMesh));
+    const vertices = surfaceBundle.base;
     const lineLayer = profile.stage("line-vertices", "构建线层顶点", () => buildLineVertices(map, this.layerVisibility, this.colorMode, this.shoreVisualPaths, this.stateVisualPaths, this.provinceVisualPaths, this.cellVisualMesh, this.viewOptions));
     const lineVertices = lineLayer.vertices;
     const oceanCurrentVertices = lineLayer.oceanCurrentVertices;
     this.oceanCurrentLayerStats = lineLayer.oceanCurrents;
     const pointVertices = profile.stage("point-vertices", "构建点图层顶点", () => buildPointVertices(map, this.layerVisibility));
     this.surfaceVertices = vertices;
+    this.landCorrectionVertices = surfaceBundle.landCorrections;
+    this.waterCorrectionVertices = surfaceBundle.waterCorrections;
+    this.landCoverVertices = surfaceBundle.landCovers;
+    this.waterCoverVertices = surfaceBundle.waterCovers;
     this.surfaceCellRanges = buildSurfaceCellRanges(this.colorMode, this.viewOptions, this.cellVisualMesh, vertices.length);
     this.vertexCount = vertices.length / 6;
+    this.landCorrectionVertexCount = surfaceBundle.landCorrections.length / 6;
+    this.waterCorrectionVertexCount = surfaceBundle.waterCorrections.length / 6;
+    this.landCoverVertexCount = surfaceBundle.landCovers.length / 6;
+    this.waterCoverVertexCount = surfaceBundle.waterCovers.length / 6;
     this.routeVertexCount = 0;
     this.riverVertexCount = 0;
     this.tradeFlowVertexCount = 0;
@@ -391,6 +414,7 @@ export class PlaceholderMapRenderer {
     profile.stage("gpu-upload", "上传静态 GPU buffer", () => {
       this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.vertexBuffer);
       this.gl.bufferData(this.gl.ARRAY_BUFFER, vertices, this.gl.STATIC_DRAW);
+      uploadShoreSurfaceBuffers(this.gl, this, surfaceBundle);
       this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.routeBuffer);
       this.gl.bufferData(this.gl.ARRAY_BUFFER, new Float32Array(), this.gl.DYNAMIC_DRAW);
       this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.tradeFlowBuffer);
@@ -453,15 +477,24 @@ export class PlaceholderMapRenderer {
     await stage("state-boundaries", "构建国家边界缓存", () => this.rebuildStateVisualCache());
     await stage("province-boundaries", "构建省份边界缓存", () => this.rebuildProvinceVisualCache());
     await stage("political-meshes", "构建政治视觉 mesh", () => this.rebuildPoliticalVisualMeshesIfNeeded());
-    const vertices = await stage("surface-vertices", "构建 surface 顶点", () => buildPlaceholderVertices(map, this.colorMode, this.viewOptions, this.shoreVisualPaths, this.stateVisualPaths, this.provinceVisualPaths, this.politicalVisualMeshes, this.cellVisualMesh));
+    const surfaceBundle = await stage("surface-vertices", "构建 surface 顶点", () => buildPlaceholderSurfaceBundle(map, this.colorMode, this.viewOptions, this.shoreVisualPaths, this.stateVisualPaths, this.provinceVisualPaths, this.politicalVisualMeshes, this.cellVisualMesh));
+    const vertices = surfaceBundle.base;
     const lineLayer = await stage("line-vertices", "构建线层顶点", () => buildLineVertices(map, this.layerVisibility, this.colorMode, this.shoreVisualPaths, this.stateVisualPaths, this.provinceVisualPaths, this.cellVisualMesh, this.viewOptions));
     const lineVertices = lineLayer.vertices;
     const oceanCurrentVertices = lineLayer.oceanCurrentVertices;
     this.oceanCurrentLayerStats = lineLayer.oceanCurrents;
     const pointVertices = await stage("point-vertices", "构建点图层顶点", () => buildPointVertices(map, this.layerVisibility));
     this.surfaceVertices = vertices;
+    this.landCorrectionVertices = surfaceBundle.landCorrections;
+    this.waterCorrectionVertices = surfaceBundle.waterCorrections;
+    this.landCoverVertices = surfaceBundle.landCovers;
+    this.waterCoverVertices = surfaceBundle.waterCovers;
     this.surfaceCellRanges = buildSurfaceCellRanges(this.colorMode, this.viewOptions, this.cellVisualMesh, vertices.length);
     this.vertexCount = vertices.length / 6;
+    this.landCorrectionVertexCount = surfaceBundle.landCorrections.length / 6;
+    this.waterCorrectionVertexCount = surfaceBundle.waterCorrections.length / 6;
+    this.landCoverVertexCount = surfaceBundle.landCovers.length / 6;
+    this.waterCoverVertexCount = surfaceBundle.waterCovers.length / 6;
     this.routeVertexCount = 0;
     this.riverVertexCount = 0;
     this.tradeFlowVertexCount = 0;
@@ -480,6 +513,7 @@ export class PlaceholderMapRenderer {
     await stage("gpu-upload", "上传静态 GPU buffer", () => {
       this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.vertexBuffer);
       this.gl.bufferData(this.gl.ARRAY_BUFFER, vertices, this.gl.STATIC_DRAW);
+      uploadShoreSurfaceBuffers(this.gl, this, surfaceBundle);
       this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.routeBuffer);
       this.gl.bufferData(this.gl.ARRAY_BUFFER, new Float32Array(), this.gl.DYNAMIC_DRAW);
       this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.tradeFlowBuffer);
@@ -578,12 +612,22 @@ export class PlaceholderMapRenderer {
 
   refreshCellSurface({draw = true} = {}) {
     if (!this.map) return;
-    const vertices = buildPlaceholderVertices(this.map, this.colorMode, this.viewOptions, this.shoreVisualPaths, this.stateVisualPaths, this.provinceVisualPaths, this.politicalVisualMeshes, this.cellVisualMesh);
+    const surfaceBundle = buildPlaceholderSurfaceBundle(this.map, this.colorMode, this.viewOptions, this.shoreVisualPaths, this.stateVisualPaths, this.provinceVisualPaths, this.politicalVisualMeshes, this.cellVisualMesh);
+    const vertices = surfaceBundle.base;
     this.surfaceVertices = vertices;
+    this.landCorrectionVertices = surfaceBundle.landCorrections;
+    this.waterCorrectionVertices = surfaceBundle.waterCorrections;
+    this.landCoverVertices = surfaceBundle.landCovers;
+    this.waterCoverVertices = surfaceBundle.waterCovers;
     this.surfaceCellRanges = buildSurfaceCellRanges(this.colorMode, this.viewOptions, this.cellVisualMesh, vertices.length);
     this.vertexCount = vertices.length / 6;
+    this.landCorrectionVertexCount = surfaceBundle.landCorrections.length / 6;
+    this.waterCorrectionVertexCount = surfaceBundle.waterCorrections.length / 6;
+    this.landCoverVertexCount = surfaceBundle.landCovers.length / 6;
+    this.waterCoverVertexCount = surfaceBundle.waterCovers.length / 6;
     this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.vertexBuffer);
     this.gl.bufferData(this.gl.ARRAY_BUFFER, vertices, this.gl.STATIC_DRAW);
+    uploadShoreSurfaceBuffers(this.gl, this, surfaceBundle);
     if (draw) this.draw();
   }
 
@@ -593,6 +637,19 @@ export class PlaceholderMapRenderer {
     if (this.colorMode !== "height" || !(this.surfaceVertices instanceof Float32Array) || !this.surfaceCellRanges.size) {
       this.refreshCellSurface({draw});
       return {incremental: false, cells: normalizedCells.length, spans: 1};
+    }
+    const shoreCells = collectShoreVisualCells(this.shoreVisualPaths);
+    const requiresShoreRebuild = normalizedCells.some(gridCell => {
+      const range = this.surfaceCellRanges.get(gridCell);
+      const storedSide = range ? this.surfaceVertices[range.start + 5] : null;
+      const currentSide = Number(this.map.grid.cells.h[gridCell]) >= 20 ? 0.25 : 0.75;
+      return shoreCells.has(gridCell) || storedSide !== currentSide;
+    });
+    if (requiresShoreRebuild) {
+      this.rebuildCellVisualMesh();
+      this.rebuildShoreVisualCache();
+      this.refreshCellSurface({draw});
+      return {incremental: false, cells: normalizedCells.length, spans: 1, reason: "shore-or-land-water-change"};
     }
 
     const spans = [];
@@ -605,7 +662,6 @@ export class PlaceholderMapRenderer {
         this.surfaceVertices[offset + 2] = color[0];
         this.surfaceVertices[offset + 3] = color[1];
         this.surfaceVertices[offset + 4] = color[2];
-        this.surfaceVertices[offset + 5] = color[3];
       }
       spans.push(range);
       changedCells++;
@@ -948,14 +1004,23 @@ export class PlaceholderMapRenderer {
     const gl = this.gl;
     gl.viewport(0, 0, this.canvas.width, this.canvas.height);
     gl.clearColor(...(this.visualTheme?.canvas?.background || this.map.layers.background));
-    gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.depthMask(true);
+    gl.clearDepth(0.5);
+    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
     gl.useProgram(this.program);
     gl.uniform1i(this.locations.pointMode, 0);
-    gl.bindBuffer(gl.ARRAY_BUFFER, this.vertexBuffer);
+    gl.uniform1i(this.locations.surfaceSideMode, 1);
     gl.uniform1f(this.locations.scale, this.camera.scale);
     gl.uniform2f(this.locations.offset, this.camera.offsetX, this.camera.offsetY);
-    bindVertexBuffer(gl, this.locations);
-    gl.drawArrays(gl.TRIANGLES, 0, this.vertexCount);
+    gl.enable(gl.DEPTH_TEST);
+    drawSurfaceDepthBatch(gl, this, this.vertexBuffer, this.vertexCount, gl.ALWAYS);
+    drawSurfaceDepthBatch(gl, this, this.landCorrectionBuffer, this.landCorrectionVertexCount, gl.LESS);
+    drawSurfaceDepthBatch(gl, this, this.waterCorrectionBuffer, this.waterCorrectionVertexCount, gl.GREATER);
+    drawSurfaceDepthBatch(gl, this, this.landCoverBuffer, this.landCoverVertexCount, gl.LESS);
+    drawSurfaceDepthBatch(gl, this, this.waterCoverBuffer, this.waterCoverVertexCount, gl.GREATER);
+    gl.disable(gl.DEPTH_TEST);
+    gl.depthMask(false);
+    gl.uniform1i(this.locations.surfaceSideMode, 0);
     const layerOrder = ["surface"];
     if (this.oceanCurrentVertexCount > 0) {
       gl.bindBuffer(gl.ARRAY_BUFFER, this.oceanCurrentBuffer);
@@ -1113,6 +1178,15 @@ export class PlaceholderMapRenderer {
       pack: this.map?.pack?.metadata,
       features: this.map?.features?.metadata,
       vertexCount: this.vertexCount,
+      shoreSurfaceDepth: {
+        baseVertexCount: this.vertexCount,
+        landCorrectionVertexCount: this.landCorrectionVertexCount,
+        waterCorrectionVertexCount: this.waterCorrectionVertexCount,
+        landCoverVertexCount: this.landCoverVertexCount,
+        waterCoverVertexCount: this.waterCoverVertexCount,
+        drawCount: 5,
+        clearDepth: 0.5
+      },
       routeVertexCount: this.routeVertexCount,
       routeTriangleCount: this.routeVertexCount / 3,
       routeBuildMs: this.routeBuildMs,
@@ -1159,7 +1233,7 @@ export class PlaceholderMapRenderer {
       oceanCurrentVertexCount: this.oceanCurrentVertexCount,
       cellVisualMesh: summarizeCellVisualMesh(this.cellVisualMesh),
       cellSurfaceMode: this.viewOptions.smoothCellBorders !== false ? "visual-cells" : "hard-cells",
-      boundaryLineMode: boundaryLineModeForOptions(this.viewOptions, this.cellVisualMesh),
+      boundaryLineMode: boundaryLineModeForOptions(this.viewOptions, this.cellVisualMesh, this.shoreVisualPaths),
       shoreVisual: summarizeShoreVisualPaths(this.shoreVisualPaths),
       stateVisual: summarizePoliticalVisualPaths(this.stateVisualPaths, STATE_VISUAL_STYLE),
       provinceVisual: summarizePoliticalVisualPaths(this.provinceVisualPaths, PROVINCE_VISUAL_STYLE),
@@ -2244,6 +2318,16 @@ export class PlaceholderMapRenderer {
       y: ((1 - ndcY) / 2) * rect.height
     };
   }
+}
+
+function collectShoreVisualCells(paths) {
+  const cells = new Set();
+  for (const path of [...(paths?.coastline || []), ...(paths?.lakeShore || [])]) {
+    for (const cell of [...(path.landCells || []), ...(path.waterCells || [])]) {
+      if (Number.isInteger(cell)) cells.add(cell);
+    }
+  }
+  return cells;
 }
 
 function isUndevelopedWorldPoint(map, world) {
@@ -3331,7 +3415,7 @@ function pointerInteractionMode(event) {
   return event.button === 0 ? "pan" : null;
 }
 
-function buildPlaceholderVertices(map, colorMode, viewOptions, shoreVisualPaths = null, stateVisualPaths = null, provinceVisualPaths = null, politicalVisualMeshes = null, cellVisualMesh = null) {
+function buildPlaceholderSurfaceBundle(map, colorMode, viewOptions, shoreVisualPaths = null, stateVisualPaths = null, provinceVisualPaths = null, politicalVisualMeshes = null, cellVisualMesh = null) {
   const context = createRenderContext(map);
   const statePaths = stateVisualPaths || buildStateVisualPaths(map);
   const provincePaths = provinceVisualPaths || buildProvinceVisualPaths(map);
@@ -3340,21 +3424,61 @@ function buildPlaceholderVertices(map, colorMode, viewOptions, shoreVisualPaths 
   const useCellVisualMesh = smoothCellBorders && cellVisualMesh?.cells?.length;
   const usePoliticalSurface = smoothCellBorders && politicalSurface;
   const vertices = useCellVisualMesh ? buildCellVisualGridVertices(context, colorMode, viewOptions, cellVisualMesh) : [];
+  if (useCellVisualMesh) encodeCellVisualSurfaceSides(vertices, cellVisualMesh, map);
 
   if (!useCellVisualMesh && usePoliticalSurface) {
-    pushGridCells(vertices, context, colorMode, viewOptions, cellIndex => shouldDrawGridCellUnderPoliticalMesh(map, colorMode, cellIndex));
-    pushMeshSurfaceVertices(vertices, politicalSurface);
+    pushGridCells(
+      vertices,
+      context,
+      colorMode,
+      viewOptions,
+      cellIndex => shouldDrawGridCellUnderPoliticalMesh(map, colorMode, cellIndex),
+      (color, cellIndex) => withSurfaceSideAlpha(color, Number(map.grid.cells.h[cellIndex]) >= 20 ? "land" : "water")
+    );
+    pushMeshSurfaceVertices(vertices, politicalSurface, color => withSurfaceSideAlpha(color, "land"));
   } else if (!useCellVisualMesh) {
-    pushGridCells(vertices, context, colorMode, viewOptions);
+    pushGridCells(
+      vertices,
+      context,
+      colorMode,
+      viewOptions,
+      () => true,
+      (color, cellIndex) => withSurfaceSideAlpha(color, Number(map.grid.cells.h[cellIndex]) >= 20 ? "land" : "water")
+    );
   }
-  const shoreVertices = [];
-  if (shouldDrawShoreVisualBands(colorMode) && shoreVisualPaths) pushShoreVisualBands(shoreVertices, context, colorMode, viewOptions, shoreVisualPaths);
+  const shoreLayers = smoothCellBorders && shouldDrawShoreVisualBands(colorMode) && shoreVisualPaths
+    ? buildShoreSurfaceVertexLayers(context, colorMode, viewOptions, shoreVisualPaths)
+    : emptyShoreSurfaceVertexLayers();
   if (smoothCellBorders && !useCellVisualMesh) {
+    const politicalBandStart = vertices.length;
     if (colorMode === "states") pushPoliticalVisualBands(vertices, context, statePaths, STATE_VISUAL_STYLE);
     if (colorMode === "provinces") pushPoliticalVisualBands(vertices, context, provincePaths, PROVINCE_VISUAL_STYLE);
+    for (let offset = politicalBandStart; offset < vertices.length; offset += 6) vertices[offset + 5] = 0.25;
   }
 
-  return combineVertexBuffers(vertices, shoreVertices);
+  return {
+    base: vertices instanceof Float32Array ? vertices : new Float32Array(vertices),
+    ...shoreLayers
+  };
+}
+
+function encodeCellVisualSurfaceSides(vertices, cellVisualMesh, map) {
+  let offset = 0;
+  for (const cellMesh of cellVisualMesh?.cells || []) {
+    const alpha = Number(map.grid.cells.h[cellMesh.cell]) >= 20 ? 0.25 : 0.75;
+    const vertexCount = (cellMesh?.ndcTriangles?.length || 0) / 2;
+    for (let vertex = 0; vertex < vertexCount; vertex++) vertices[offset + vertex * 6 + 5] = alpha;
+    offset += vertexCount * 6;
+  }
+}
+
+function emptyShoreSurfaceVertexLayers() {
+  return {
+    landCorrections: new Float32Array(),
+    waterCorrections: new Float32Array(),
+    landCovers: new Float32Array(),
+    waterCovers: new Float32Array()
+  };
 }
 
 function buildSurfaceCellRanges(colorMode, viewOptions, cellVisualMesh, surfaceFloatLength) {
@@ -3385,8 +3509,8 @@ function mergeSurfaceRanges(ranges) {
   return merged;
 }
 
-function shouldDrawShoreVisualBands(colorMode) {
-  return false;
+export function shouldDrawShoreVisualBands(colorMode) {
+  return colorMode === "height" || colorMode === "states" || colorMode === "provinces";
 }
 
 function combineVertexBuffers(primary, extra) {
@@ -3398,6 +3522,26 @@ function combineVertexBuffers(primary, extra) {
   return result;
 }
 
+function uploadShoreSurfaceBuffers(gl, renderer, bundle) {
+  for (const [buffer, vertices] of [
+    [renderer.landCorrectionBuffer, bundle.landCorrections],
+    [renderer.waterCorrectionBuffer, bundle.waterCorrections],
+    [renderer.landCoverBuffer, bundle.landCovers],
+    [renderer.waterCoverBuffer, bundle.waterCovers]
+  ]) {
+    gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+    gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.STATIC_DRAW);
+  }
+}
+
+function drawSurfaceDepthBatch(gl, renderer, buffer, vertexCount, depthFunction) {
+  if (!vertexCount) return;
+  gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+  bindVertexBuffer(gl, renderer.locations);
+  gl.depthFunc(depthFunction);
+  gl.drawArrays(gl.TRIANGLES, 0, vertexCount);
+}
+
 function buildLineVertices(map, visibility = {}, colorMode = "height", shoreVisualPaths = null, stateVisualPaths = null, provinceVisualPaths = null, cellVisualMesh = null, viewOptions = {}, oceanCurrentHighlights = new Set()) {
   const context = createRenderContext(map);
   const vertices = [];
@@ -3406,7 +3550,7 @@ function buildLineVertices(map, visibility = {}, colorMode = "height", shoreVisu
   const provincePaths = provinceVisualPaths || buildProvinceVisualPaths(map);
   const themeLines = viewOptions.visualTheme?.lines || {};
   pushMapEdgeFade(vertices, context, map, viewOptions.visualTheme);
-  pushShoreLineLayers(vertices, context, visibility, cellVisualMesh, viewOptions);
+  pushShoreLineLayers(vertices, context, visibility, cellVisualMesh, viewOptions, shoreVisualPaths);
   pushZoneTextureLayer(vertices, context, map, visibility);
   const oceanCurrents = pushOceanCurrentLayer(oceanCurrentVertices, context, map, visibility, oceanCurrentHighlights);
   if (visibility.provinceBorders !== false) pushPoliticalBoundaryStrokes(vertices, provincePaths, context, themeLines.provinceBorder || PROVINCE_VISUAL_STYLE.borderStroke, PROVINCE_VISUAL_STYLE.borderWidthWorld, PROVINCE_VISUAL_STYLE.borderDashWorld);
@@ -4379,12 +4523,14 @@ in vec4 a_color;
 uniform float u_scale;
 uniform vec2 u_offset;
 uniform bool u_pointMode;
+uniform bool u_surfaceSideMode;
 out vec4 v_color;
 
 void main() {
   v_color = a_color;
   gl_PointSize = 4.0;
-  gl_Position = vec4(a_position * u_scale + u_offset, 0.0, 1.0);
+  float z = u_surfaceSideMode ? (a_color.a < 0.5 ? -0.5 : 0.5) : 0.0;
+  gl_Position = vec4(a_position * u_scale + u_offset, z, 1.0);
 }`;
 
 const fragmentShaderSource = `#version 300 es
@@ -4392,6 +4538,7 @@ precision highp float;
 
 in vec4 v_color;
 uniform bool u_pointMode;
+uniform bool u_surfaceSideMode;
 out vec4 outColor;
 
 void main() {
@@ -4404,5 +4551,5 @@ void main() {
     return;
   }
 
-  outColor = v_color;
+  outColor = u_surfaceSideMode ? vec4(v_color.rgb, 1.0) : v_color;
 }`;

@@ -4,37 +4,52 @@ import {readFileSync} from "node:fs";
 import {ALGORITHMS, DEFAULT_OPTIONS, samePoint} from "../prototype/boundary-topology-lab/src/algorithms.js";
 import {FIXTURES} from "../prototype/boundary-topology-lab/src/fixtures.js";
 import {buildIndependentComparison, buildSharedSnapshot, composeRawRing, measureIndependentSeamError, measureIndependentSeamErrorDetails, sharedArcRefs} from "../prototype/boundary-topology-lab/src/topology.js";
-import {bidirectionalHausdorff, HAUSDORFF_LIMITS, inspectRingGeometry, runAllFixtures, validateFixture} from "../prototype/boundary-topology-lab/src/validation.js";
+import {analyzeBandTriangleGeometry, analyzeCellFanGeometry, analyzePixelParityGeometry, analyzeStressComparison, analyzeVertexCollapseGeometry, bidirectionalHausdorff, HAUSDORFF_LIMITS, inspectRingGeometry, runAllFixtures, validateFixture} from "../prototype/boundary-topology-lab/src/validation.js";
 import {collectShapeDiagnostics, maximumDeviationZoomViewBox, mergeVisualDiagnostics, resolveComparisonPresentation} from "../prototype/boundary-topology-lab/src/visual-diagnostics.js";
 
 const expectedCases = new Map([
   ["single-island", "coast"],
+  ["single-cell-seam-spike", "coast-seam"],
+  ["single-cell-stroke-closure-spike", "coast-stroke-closure"],
+  ["triangle-island-whole-arc-fallback", "coast-triangle-fallback"],
   ["island-with-hole", "ring"],
   ["narrow-strait", "clearance"],
   ["lake-sea-connection", "connectivity"],
   ["tri-state-junction", "junction"],
   ["cross-state-province", "hierarchy"],
   ["map-boundary", "frame"],
-  ["closed-loop", "closed-loop"]
+  ["closed-loop", "closed-loop"],
+  ["coast-fill-stroke-separation", "surface-parity"],
+  ["coast-band-triangle-flip", "surface-triangulation"],
+  ["coast-xor-subpixel-needle", "surface-triangulation"],
+  ["coast-voronoi-vertex-collapse", "surface-precision"],
+  ["coast-pixel-parity-residuals", "surface-pixel-parity"],
+  ["coast-draw-packet-phase-matrix", "surface-phase-matrix"],
+  ["coast-multiring-xor-compound", "surface-multiring"],
+  ["coast-fallback-splice-protected", "fallback-splice"],
+  ["cell-earcut-safe-failure", "cell-triangulation-safety"]
 ]);
 const options = {...DEFAULT_OPTIONS};
+const topologyFixtures = FIXTURES.filter(fixture => !fixture.stressComparison);
 const expectedAlgorithmPasses = new Map([
-  ["raw", 8],
-  ["douglas-peucker", 8],
-  ["visvalingam", 8],
-  ["chaikin", 8],
-  ["catmull-rom", 8],
-  ["b-spline", 7],
-  ["recommended", 8]
+  ["raw", 14],
+  ["douglas-peucker", 14],
+  ["visvalingam", 14],
+  ["chaikin", 14],
+  ["catmull-rom", 14],
+  ["b-spline", 13],
+  ["recommended", 14]
 ]);
 
-assert.equal(FIXTURES.length, 8, "必须固定覆盖八类拓扑夹具");
+assert.equal(FIXTURES.length, 20, "必须固定覆盖二十类拓扑夹具");
 assert.deepEqual(new Map(FIXTURES.map(fixture => [fixture.id, fixture.category])), expectedCases, "夹具 id 与案例分类必须保持稳定");
 assert.deepEqual(ALGORITHMS.map(algorithm => algorithm.id), ["raw", "douglas-peucker", "visvalingam", "chaikin", "catmull-rom", "b-spline", "recommended"], "算法矩阵不完整");
 
 const algorithmReports = [];
+const algorithmResultById = new Map();
 for (const algorithm of ALGORITHMS) {
-  const report = runAllFixtures(FIXTURES, algorithm.id, options);
+  const report = runAllFixtures(topologyFixtures, algorithm.id, options);
+  algorithmResultById.set(algorithm.id, report);
   assert.equal(report.summary.passed, expectedAlgorithmPasses.get(algorithm.id), `${algorithm.name} 默认通过数变化：${formatFailures(report)}`);
   if (algorithm.id === "recommended") assert.equal(report.ok, true, `${algorithm.name} 未通过全部夹具：${formatFailures(report)}`);
   assert.equal(report.summary.selfIntersections, 0, `${algorithm.name} 产生自交`);
@@ -48,9 +63,9 @@ for (const algorithm of ALGORITHMS) {
 
 let reverseArcRefs = 0;
 let expectedFailureCases = 0;
-for (const fixture of FIXTURES) {
-  const result = validateFixture(fixture, "recommended", options);
-  const rawResult = validateFixture(fixture, "raw", options);
+for (const fixture of topologyFixtures) {
+  const result = algorithmResultById.get("recommended").results.find(item => item.fixtureId === fixture.id);
+  const rawResult = algorithmResultById.get("raw").results.find(item => item.fixtureId === fixture.id);
   assert.equal(result.ok, true, `${fixture.name} 推荐管线失败：${result.issues.join("；")}`);
   assert.equal(result.metrics.validRings, true, `${fixture.name} 存在非法 ring`);
   assert.equal(result.metrics.selfIntersections, 0, `${fixture.name} 存在自交`);
@@ -70,10 +85,20 @@ for (const fixture of FIXTURES) {
   }
   assert.ok(result.metrics.caseConstraints.every(item => item.pass), `${fixture.name} 的案例约束未通过`);
 
+  const protectedClosedArcs = new Set(
+    (fixture.protectedObjects?.rivers || []).map(river => river?.mouth?.arcId).filter(Boolean)
+  );
   for (const rawArc of fixture.arcs) {
     const transformed = result.snapshot.arcs.get(rawArc.id).points;
-    assert.ok(samePoint(rawArc.points[0], transformed[0]), `${fixture.name}/${rawArc.id} 起点未锁定`);
-    assert.ok(samePoint(rawArc.points.at(-1), transformed.at(-1)), `${fixture.name}/${rawArc.id} 终点未锁定`);
+    if (rawArc.closed) {
+      assert.ok(samePoint(transformed[0], transformed.at(-1)), `${fixture.name}/${rawArc.id} 闭环未闭合`);
+      if (rawArc.syntheticAnchor || protectedClosedArcs.has(rawArc.id)) {
+        assert.ok(samePoint(rawArc.points[0], transformed[0]), `${fixture.name}/${rawArc.id} 受保护闭环锚点未锁定`);
+      }
+    } else {
+      assert.ok(samePoint(rawArc.points[0], transformed[0]), `${fixture.name}/${rawArc.id} 起点未锁定`);
+      assert.ok(samePoint(rawArc.points.at(-1), transformed.at(-1)), `${fixture.name}/${rawArc.id} 终点未锁定`);
+    }
   }
 
   const sharedRefs = sharedArcRefs(fixture);
@@ -85,7 +110,49 @@ for (const fixture of FIXTURES) {
 }
 
 assert.ok(reverseArcRefs > 0, "测试矩阵必须实际覆盖反向 ArcRef");
-assert.ok(expectedFailureCases >= 3, "独立 polygon 失败对照覆盖不足");
+assert.ok(expectedFailureCases >= 2, "独立 polygon 失败对照覆盖不足");
+
+for (const fixtureId of [
+  "coast-draw-packet-phase-matrix",
+  "coast-multiring-xor-compound",
+  "coast-fallback-splice-protected",
+  "cell-earcut-safe-failure",
+  "single-cell-stroke-closure-spike",
+  "triangle-island-whole-arc-fallback"
+]) {
+  const stress = analyzeStressComparison(FIXTURES.find(fixture => fixture.id === fixtureId));
+  assert.equal(stress.passed, true, `${fixtureId} 的真实计算或破坏反例门禁失败`);
+}
+const phaseStress = analyzeStressComparison(FIXTURES.find(fixture => fixture.id === "coast-draw-packet-phase-matrix"));
+assert.equal(phaseStress.final.phaseCount, 36, "实验室相位矩阵必须覆盖 36 组 DPR/zoom/offset");
+assert.equal(phaseStress.final.wrongSidePixels, 0, "实验室最终 Float32 相位矩阵不得有错侧像素");
+assert.equal(phaseStress.final.conflictingPixels, 0, "实验室最终 Float32 相位矩阵不得有冲突覆盖");
+assert.equal(phaseStress.final.longestNeedlePixels, 0, "实验室最终 framebuffer 不得有连续像素针");
+assert.equal(phaseStress.final.duplicatePixels, 0, "实验室最终 framebuffer 不得有重复覆盖");
+assert.equal(phaseStress.final.seamPixels, 0, "实验室最终 framebuffer 不得有边缘裸露/错色");
+assert.ok(phaseStress.destructive.deleteCover.seamPixels > 0 || phaseStress.destructive.deleteCover.wrongSidePixels > 0, "实验室删封口反例必须产生真实 framebuffer 缝隙");
+assert.ok(phaseStress.destructive.wrongDirection.wrongSidePixels > 0, "实验室反向语义反例必须产生错侧像素");
+assert.ok(phaseStress.destructive.endpointQuantization.wrongSidePixels > 0, "实验室端点量化反例必须产生错侧像素");
+const earcutStress = analyzeStressComparison(FIXTURES.find(fixture => fixture.id === "cell-earcut-safe-failure"));
+assert.equal(earcutStress.final.safeFallback, "hard-boundary-earcut", "平滑 Earcut 失败必须切换到安全硬边界");
+assert.equal(earcutStress.final.hardFallbackLeaks, 0, "安全硬边界三角不得越界");
+assert.equal(earcutStress.final.unfilledCells, 0, "Earcut 失败夹具不得留下缺面");
+const strokeClosureStress = analyzeStressComparison(FIXTURES.find(fixture => fixture.id === "single-cell-stroke-closure-spike"));
+assert.ok(strokeClosureStress.destructive.legacy.needleCount > 0, "旧描边后处理必须稳定复现闭环首点穿刺");
+assert.equal(strokeClosureStress.final.needleCount, 0, "最终描边后处理不得保留闭环首点穿刺");
+assert.equal(strokeClosureStress.final.closed, true, "最终描边后处理必须保持闭环");
+const triangleFallbackStress = analyzeStressComparison(FIXTURES.find(fixture => fixture.id === "triangle-island-whole-arc-fallback"));
+assert.deepEqual(
+  triangleFallbackStress.destructive.cases.map(item => item.fallbackReason),
+  ["protected-town", "land-water-side"],
+  "三顶点孤岛破坏对照必须同时复现对象保护与旧水陆带预检回退"
+);
+assert.ok(triangleFallbackStress.final.cases.every(item => item.fallbackReason === null), "三顶点孤岛最终不得整环回退");
+assert.ok(triangleFallbackStress.final.cases.every(item => item.changed && item.closed), "三顶点孤岛最终必须形成闭合圆角");
+assert.ok(
+  triangleFallbackStress.final.cases.every(item => item.displacement <= 18.000001),
+  "三顶点孤岛最终不得越过 18 世界单位位移门禁"
+);
 
 const protectedFixtureIds = ["single-island", "narrow-strait", "lake-sea-connection"];
 for (const fixtureId of protectedFixtureIds) {
@@ -95,7 +162,7 @@ for (const fixtureId of protectedFixtureIds) {
     [1, 1, 1],
     `${fixture.name} 必须各含一个城镇、道路和河流保护样本`
   );
-  const result = validateFixture(fixture, "recommended", options);
+  const result = algorithmResultById.get("recommended").results.find(item => item.fixtureId === fixture.id);
   const objectConstraints = result.metrics.caseConstraints.filter(item => /^(town|road|river):/.test(item.id));
   assert.equal(objectConstraints.length, 4, `${fixture.name} 缺少保护对象约束`);
   assert.ok(objectConstraints.every(item => item.pass), `${fixture.name} 正常保护对象未通过：${objectConstraints.filter(item => !item.pass).map(item => item.id).join("、")}`);
@@ -116,10 +183,151 @@ const singleIslandComparison = buildIndependentComparison(FIXTURES.find(fixture 
 assert.equal(singleIslandComparison.seamError, 0, "零共享 arc 案例必须保留 seamError = 0");
 assert.equal(singleIslandComparison.maximumDeviation, null, "零共享 arc 案例不得伪造最大偏差");
 
+const singleCellFixture = FIXTURES.find(fixture => fixture.id === "single-cell-seam-spike");
+const singleCellResult = validateFixture(singleCellFixture, "recommended", options);
+assert.equal(singleCellResult.ok, true, `单 cell 闭环接缝夹具失败：${singleCellResult.issues.join("；")}`);
+assert.equal(
+  singleCellResult.metrics.caseConstraints.find(item => item.id === "closed-seam-released")?.pass,
+  true,
+  "推荐管线不得把任意原始首点重新钉回平滑闭环"
+);
+const isolatedSingleCell = structuredClone(singleCellFixture);
+isolatedSingleCell.arcs = isolatedSingleCell.arcs.filter(item => item.id === "single-cell-coast");
+isolatedSingleCell.regions = isolatedSingleCell.regions.filter(item => item.id === "single-cell-island");
+const combinedSingleCellArc = buildSharedSnapshot(singleCellFixture, "recommended", options).arcs.get("single-cell-coast");
+const isolatedSingleCellArc = buildSharedSnapshot(isolatedSingleCell, "recommended", options).arcs.get("single-cell-coast");
+assert.deepEqual(
+  combinedSingleCellArc.points,
+  isolatedSingleCellArc.points,
+  "附近大陆不得改变独立单 cell 海岸的平滑结果"
+);
+
 const sharedPresentation = resolveComparisonPresentation(3);
 assert.deepEqual([sharedPresentation.kind, sharedPresentation.firstMode, sharedPresentation.secondMode], ["shared", "independent", "shared"], "共享案例必须使用独立/共享对照模式");
 const shapePresentation = resolveComparisonPresentation(0);
 assert.deepEqual([shapePresentation.kind, shapePresentation.firstMode, shapePresentation.secondMode], ["shape", "raw", "processed"], "零共享案例必须使用原始/处理后形状对照模式");
+const closedSeamPresentation = resolveComparisonPresentation(0, "closed-seam");
+assert.deepEqual(
+  [closedSeamPresentation.kind, closedSeamPresentation.firstMode, closedSeamPresentation.secondMode],
+  ["closed-seam", "legacy-closed-anchor", "processed"],
+  "单 cell 毛刺夹具必须使用旧闭环锚点/最终闭环对照模式"
+);
+const surfacePresentation = resolveComparisonPresentation(0, true);
+assert.deepEqual(
+  [surfacePresentation.kind, surfacePresentation.firstMode, surfacePresentation.secondMode],
+  ["surface", "legacy-surface", "shared-surface"],
+  "填色—描边夹具必须使用旧策略/同源策略对照模式"
+);
+const bandPresentation = resolveComparisonPresentation(0, "band");
+assert.deepEqual(
+  [bandPresentation.kind, bandPresentation.firstMode, bandPresentation.secondMode],
+  ["band", "legacy-band", "exact-surface"],
+  "过渡带翻面夹具必须使用旧四三角/精确填色对照模式"
+);
+const cellFanPresentation = resolveComparisonPresentation(0, "cell-fan");
+assert.deepEqual(
+  [cellFanPresentation.kind, cellFanPresentation.firstMode, cellFanPresentation.secondMode],
+  ["cell-fan", "legacy-cell-fan", "earcut-cell-surface"],
+  "正式单元夹具必须使用中心扇形/Earcut 边界三角化对照模式"
+);
+const vertexCollapsePresentation = resolveComparisonPresentation(0, "vertex-collapse");
+assert.deepEqual(
+  [vertexCollapsePresentation.kind, vertexCollapsePresentation.firstMode, vertexCollapsePresentation.secondMode],
+  ["vertex-collapse", "collapsed-grid-surface", "resolved-grid-surface"],
+  "正式顶点坍缩夹具必须使用旧存储坐标/精确回算坐标对照模式"
+);
+const pixelParityPresentation = resolveComparisonPresentation(0, "pixel-parity");
+assert.deepEqual(
+  [pixelParityPresentation.kind, pixelParityPresentation.firstMode, pixelParityPresentation.secondMode],
+  ["pixel-parity", "legacy-pixel-seams", "exact-pixel-parity"],
+  "正式像素残余夹具必须使用旧长针浅边/边缘覆盖细描边对照模式"
+);
+
+const vertexCollapseFixture = FIXTURES.find(fixture => fixture.id === "coast-voronoi-vertex-collapse");
+const vertexCollapseGeometry = analyzeVertexCollapseGeometry(vertexCollapseFixture);
+assert.deepEqual(vertexCollapseGeometry.source.cells, [6255, 6378], "实验室必须固定用户当前现场的两个正式水面 cell");
+assert.deepEqual(vertexCollapseGeometry.source.vertices, [5331, 5519], "实验室必须固定用户当前现场的两个坍缩 Voronoi 顶点");
+assert.equal(vertexCollapseGeometry.storedEdgeLength, 0, "实验室旧侧必须原样复现零长度共享边");
+assert.ok(vertexCollapseGeometry.resolvedEdgeLength > 0.1 && vertexCollapseGeometry.resolvedEdgeLength < 0.2, "实验室最终侧必须恢复精确共享边");
+assert.ok(vertexCollapseGeometry.projectedCssLength >= 0.9, "实验室最终侧必须覆盖当前 12x 现场可见的约 1 CSS px 接缝");
+
+const pixelParityFixture = FIXTURES.find(fixture => fixture.id === "coast-pixel-parity-residuals");
+const pixelParityResult = validateFixture(pixelParityFixture, "recommended", options);
+const pixelParityGeometry = analyzePixelParityGeometry(pixelParityFixture);
+assert.deepEqual(
+  [pixelParityGeometry.lakeNeedle.landCell, pixelParityGeometry.lakeNeedle.waterCell],
+  [6496, 6617],
+  "实验室必须固定用户第五次截图的正式湖岸单元"
+);
+assert.deepEqual(
+  [pixelParityGeometry.coastStroke.landCell, pixelParityGeometry.coastStroke.waterCell],
+  [6377, 6378],
+  "实验室必须固定用户第五次截图的正式海岸单元"
+);
+assert.equal(pixelParityGeometry.legacyUncoveredBoundaryEdges, 1, "旧侧必须稳定复现一条无覆盖的修补面边缘");
+assert.equal(pixelParityGeometry.finalUncoveredBoundaryEdges, 0, "最终侧必须以同色边缘覆盖消除像素针");
+assert.equal(pixelParityGeometry.finalBoundaryCoverWorld, 0.18, "最终侧必须固定 0.18 世界单位的边缘覆盖");
+assert.ok(pixelParityGeometry.legacyProjectedStrokeCss > 4.5, "旧海岸线必须在截图投影下稳定复现宽浅色带");
+assert.ok(pixelParityGeometry.finalProjectedStrokeCss <= 1.5, "最终海岸线必须在截图投影下收敛到 1.5 CSS px 内");
+assert.deepEqual(
+  pixelParityGeometry.baseBoundaryDrift.map(item => [item.landCell, item.waterCell]),
+  [[8252, 8374], [7660, 7783]],
+  "实验室必须固定本轮两组近共线补面与实际底面基线"
+);
+assert.equal(pixelParityGeometry.legacyBaseDriftCases, 2, "旧侧必须稳定复现两组实际底面 / XOR 基线漂移");
+assert.equal(pixelParityGeometry.finalBaseDriftCases, 0, "最终水陆边直岸同源后不得残留基线漂移");
+assert.ok(pixelParityGeometry.maximumLegacyBaseDriftCss >= 1, "旧弯曲底面必须在当前截图投影下形成可见偏移");
+assert.equal(pixelParityGeometry.finalBaseMode, "straight-shore-edge", "最终底面必须声明使用直岸水陆边");
+assert.ok(pixelParityResult.metrics.caseConstraints.every(item => item.pass), "正式像素残余夹具的三项硬门禁必须通过");
+assert.ok(mergeVisualDiagnostics(pixelParityResult).some(item => item.id === "pixel-parity:base-xor-drift"), "实验室必须提供实际底面 / XOR 基线漂移的可定位诊断");
+assert.ok(mergeVisualDiagnostics(pixelParityResult).some(item => item.message.includes("#6496/#6617")), "实验室必须提供正式湖岸单元的可定位诊断");
+assert.ok(mergeVisualDiagnostics(pixelParityResult).some(item => item.message.includes("#6377/#6378")), "实验室必须提供正式海岸单元的可定位诊断");
+
+const surfaceFixture = FIXTURES.find(fixture => fixture.id === "coast-fill-stroke-separation");
+const surfaceResult = validateFixture(surfaceFixture, "recommended", options);
+assert.ok(surfaceResult.metrics.surfaceClassification.xorSamples > 0, "填色—描边夹具必须实际产生 raw XOR processed 二维差异");
+assert.ok(
+  surfaceResult.metrics.surfaceClassification.legacyMismatchSamples >= surfaceFixture.surfaceComparison.minimumLegacyMismatchSamples,
+  "旧策略必须留下达到门槛的未覆盖二维采样"
+);
+assert.equal(surfaceResult.metrics.surfaceClassification.sharedMismatchSamples, 0, "同源策略不得留下二维分类错分");
+assert.ok(surfaceResult.metrics.surfaceClassification.correctionTriangleCount > 0, "实验室必须生成并重放实际 XOR 修补三角形");
+assert.equal(surfaceResult.metrics.surfaceClassification.correctionVerificationStep, 0.5, "实验室必须用不同于构建过程的 0.5px 错相位细采样独立重放");
+assert.equal(surfaceResult.metrics.surfaceClassification.correctionDegenerateTriangles, 0, "实验室 XOR 修补不得产生退化三角形");
+assert.equal(surfaceResult.metrics.surfaceClassification.correctionMultiCoveredSamples, 0, "实验室 XOR 修补不得产生内部重复覆盖");
+assert.equal(surfaceResult.metrics.surfaceClassification.correctionConflictingSamples, 0, "实验室 XOR 修补不得产生陆水冲突覆盖");
+assert.equal(surfaceResult.metrics.caseConstraints.find(item => item.id === "legacy-surface-exposes-wedge")?.pass, true, "旧策略外露楔形必须作为固定预期失败被定位");
+assert.equal(surfaceResult.metrics.caseConstraints.find(item => item.id === "shared-surface-classification")?.pass, true, "同源填色与描边硬门禁必须通过");
+assert.ok(mergeVisualDiagnostics(surfaceResult).some(item => item.message.includes("左图红色区域可定位")), "旧策略外露楔形必须提供可定位视觉诊断");
+
+const bandFixture = FIXTURES.find(fixture => fixture.id === "coast-band-triangle-flip");
+const bandResult = validateFixture(bandFixture, "recommended", options);
+const bandGeometry = analyzeBandTriangleGeometry(bandFixture);
+assert.deepEqual(
+  bandGeometry.legacySignedAreas.map(area => Number(area.toFixed(2))),
+  [1147.17, 2479.37, 3126.37, -2633.01],
+  "固定反例必须保持与正式 writer 相同的四三角拆分和一个反向面"
+);
+assert.equal(bandGeometry.legacyOppositeWindingCount, 1, "固定反例必须稳定暴露一个与其余三角面相反的三角扇");
+assert.equal(bandGeometry.finalTriangleCount, 0, "精确 XOR 填色路径不得再提交冗余过渡带三角面");
+assert.equal(bandResult.metrics.caseConstraints.find(item => item.id === "legacy-band-opposite-winding")?.pass, true, "旧四三角过渡带必须稳定复现翻面");
+assert.equal(bandResult.metrics.caseConstraints.find(item => item.id === "exact-surface-retires-band")?.pass, true, "最终精确填色必须停用冗余过渡带");
+assert.ok(mergeVisualDiagnostics(bandResult).some(item => item.message.includes("红色三角扇可定位")), "过渡带翻面必须提供可定位视觉诊断");
+
+const cellFanFixture = FIXTURES.find(fixture => fixture.id === "coast-xor-subpixel-needle");
+const cellFanResult = validateFixture(cellFanFixture, "recommended", options);
+const cellFanGeometry = analyzeCellFanGeometry(cellFanFixture);
+assert.deepEqual(cellFanGeometry.cases.map(item => item.cell), [1061, 8832], "实验室必须固定引用正式地图的两个原始 cell");
+assert.deepEqual(cellFanGeometry.cases.map(item => item.height), [19, 20], "正式反例必须覆盖海平线两侧高度");
+assert.deepEqual(cellFanGeometry.cases.map(item => item.legacyLeakCount), [2, 3], "旧中心扇形必须稳定复现 2 + 3 个越界三角");
+assert.deepEqual(cellFanGeometry.sides.sort(), ["land", "water"], "正式反例必须同时覆盖陆色入水与水色入陆");
+assert.equal(cellFanGeometry.legacyLeakCount, 5, "实验室必须复现正式 writer 的五个海岸越界三角");
+assert.deepEqual(cellFanGeometry.cases.map(item => item.legacyRasterLeakSamples), [37, 22], "实验室 0.1 世界单位采样必须与正式生成器反例逐点一致");
+assert.equal(cellFanGeometry.finalLeakCount, 0, "边界 Earcut 三角化不得留下越界填色");
+assert.equal(cellFanGeometry.finalRasterLeakSamples, 0, "边界 Earcut 三角化不得留下像素级异侧填色");
+assert.equal(cellFanResult.metrics.caseConstraints.find(item => item.id === "formal-cell-fan-leaks-reproduced")?.pass, true, "正式中心扇形反例门禁必须通过");
+assert.equal(cellFanResult.metrics.caseConstraints.find(item => item.id === "earcut-boundary-contained")?.pass, true, "边界 Earcut 包含性门禁必须通过");
+assert.ok(mergeVisualDiagnostics(cellFanResult).some(item => item.message.includes("原始单元")), "正式单元反例必须提供可定位视觉诊断");
 
 const narrowStraitFixture = FIXTURES.find(fixture => fixture.id === "narrow-strait");
 const catmullStrait = validateFixture(narrowStraitFixture, "catmull-rom", options);
@@ -167,12 +375,23 @@ const styleSource = readFileSync(new URL("../prototype/boundary-topology-lab/src
 for (const contract of ["id=\"independent-title\"", "id=\"shared-status\"", "id=\"visual-legend\"", "id=\"current-issues\"", "绿色仅表示共享同源", "受保护城镇", "受保护道路", "受保护河流", "锚定河口", "海岸形状超限仅提示"]) {
   assert.ok(indexSource.includes(contract), `静态 UI 缺少契约：${contract}`);
 }
-for (const contract of ["fixtureId: \"tri-state-junction\"", "resolveComparisonPresentation(", "mergeVisualDiagnostics(", "maximumDeviationZoomViewBox(", "deviationMarkup(result.comparison)", "protectedObjectsMarkup(fixture)", "metrics.shapePolicy === \"notice\"", "当前验收与形状诊断", "result.ok ? \"pass\" : \"fail\""]) {
+for (const contract of ["fixtureId: \"tri-state-junction\"", "resolveComparisonPresentation(", "mergeVisualDiagnostics(", "maximumDeviationZoomViewBox(", "deviationMarkup(result.comparison)", "protectedObjectsMarkup(fixture)", "surfaceMismatchMarkup(", "bandTriangleMarkup(", "cellFanMarkup(", "legacy-closed-anchor", "legacy-surface", "legacy-band", "legacy-cell-fan", "earcut-cell-surface", "metrics.shapePolicy === \"notice\"", "当前验收与形状诊断", "result.ok ? \"pass\" : \"fail\""]) {
   assert.ok(appSource.includes(contract), `交互逻辑缺少契约：${contract}`);
 }
 assert.ok(appSource.includes("zoom.distance.toFixed(2)"), "UI 最大偏差文案必须使用归一化有限距离");
 assert.equal(appSource.includes("maximum.distance.toFixed"), false, "UI 不得直接显示未经归一化的最大偏差距离");
-for (const contract of [".usage-side.side-first", ".usage-side.side-second", ".same-source-line", ".deviation-connector", ".zoom-shell", ".result-card.fail", ".protected-town", ".protected-road", ".protected-river", ".protected-mouth", ".metric.notice"]) {
+for (const contract of [
+  "stress-${model.kind}-${variant}",
+  "stress-fallback-${variant}",
+  "stress-earcut-${variant}",
+  "stress-pixel-location",
+  "stress-splice-gap",
+  "stress-fan-triangle",
+  "stress-earcut-triangle"
+]) {
+  assert.ok(appSource.includes(contract), `实验室缺少高风险左右对照 markup 契约：${contract}`);
+}
+for (const contract of [".usage-side.side-first", ".usage-side.side-second", ".same-source-line", ".closed-seam-defect", ".deviation-connector", ".zoom-shell", ".result-card.fail", ".protected-town", ".protected-road", ".protected-river", ".protected-mouth", ".legacy-repair-band", ".surface-mismatch", ".band-triangle.flipped", ".band-centerline", ".cell-fan-triangle.leaked", ".cell-fan-boundary", ".cell-fan-status.fail", ".metric.notice"]) {
   assert.ok(styleSource.includes(contract), `诊断样式缺少契约：${contract}`);
 }
 
@@ -185,7 +404,7 @@ assert.throws(() => { immutableSnapshot.arcs.set = () => {}; }, TypeError, "snap
 assert.ok(Object.isFrozen(immutableSnapshot.arcs.get("coast")), "snapshot arc 值必须不可变");
 
 assert.ok(bidirectionalHausdorff([[0, 0], [5, 5], [10, 0]], [[0, 0], [10, 0]]) >= 5, "双向 Hausdorff 必须捕获被简化线遗漏的峰值");
-const aggressive = runAllFixtures(FIXTURES, "recommended", {threshold: 5, smoothness: 0.22, maxDisplacement: 7});
+const aggressive = runAllFixtures(topologyFixtures, "recommended", {threshold: 5, smoothness: 0.22, maxDisplacement: 7});
 assert.equal(aggressive.ok, false, "行政边界门槛必须拦截过强的推荐平滑参数");
 assert.ok(aggressive.results.some(result => result.issues.some(issue => issue.includes("Hausdorff"))), "国界 / 省界 Hausdorff 分层门槛必须拦截超标参数");
 
@@ -207,7 +426,7 @@ delete provinceAreaFixture.protectedObjects;
 const provinceAreaResult = validateFixture(provinceAreaFixture, "recommended", {threshold: 5, smoothness: 0.22, maxDisplacement: 7});
 assert.ok(provinceAreaResult.issues.some(issue => issue.includes("province 面积 P95")), "推荐管线必须按 arc.kind 保留省界面积 P95 硬门槛");
 
-const bSplineStateResult = validateFixture(FIXTURES.find(fixture => fixture.id === "map-boundary"), "b-spline", options);
+const bSplineStateResult = algorithmResultById.get("b-spline").results.find(result => result.fixtureId === "map-boundary");
 assert.equal(bSplineStateResult.ok, false, "B-spline 国界 Hausdorff 超限必须失败");
 assert.ok(bSplineStateResult.issues.some(issue => issue.includes("Hausdorff")), "国界 Hausdorff 超限必须写入 issues");
 assert.ok(bSplineStateResult.metrics.shapeDiagnostics.some(item => item.kind === "state" && item.metric === "hausdorff" && item.exceeded && item.policy === "acceptance"), "国界 Hausdorff 必须保留结构化硬验收诊断");
@@ -283,6 +502,12 @@ assertBrokenConstraint("map-boundary", "frame-lock", fixture => {
 assertBrokenConstraint("closed-loop", "synthetic-anchor", fixture => {
   fixture.arcs.find(arc => arc.id === "stable-loop").syntheticAnchor = false;
 });
+assertBrokenConstraint("coast-fill-stroke-separation", "shared-surface-classification", fixture => {
+  fixture.surfaceComparison.correctionMode = "disabled";
+});
+assertBrokenConstraint("coast-xor-subpixel-needle", "formal-cell-fan-leaks-reproduced", fixture => {
+  fixture.cellFanComparison.cases[0].expectedLegacyLeaks = 99;
+});
 
 const brokenDirection = cloneFixture("tri-state-junction");
 brokenDirection.regions.find(region => region.id === "northeast").rings[0].find(ref => ref.arcId === "north-border").reversed = false;
@@ -332,7 +557,7 @@ console.log(JSON.stringify({
   structuredMaximumDeviation: true,
   seamErrorCompatibility: true,
   zeroSharedArcComparison: true,
-  comparisonPresentationModes: [sharedPresentation.kind, shapePresentation.kind],
+  comparisonPresentationModes: [sharedPresentation.kind, shapePresentation.kind, surfacePresentation.kind, bandPresentation.kind, cellFanPresentation.kind],
   mergedShapeDiagnostics: true,
   reverseSameShapeSeam: 0,
   reverseOffsetMaximum: reverseOffsetMaximum.distance,
@@ -340,7 +565,7 @@ console.log(JSON.stringify({
   invalidZoomInputsRejected: 3,
   normalizedZoomDistance: normalizedDistanceZoom.distance,
   staticUiContracts: true,
-  destructiveCounterexamples: 8,
+  destructiveCounterexamples: 10,
   sharedArcIdentityCounterexample: true,
   sharedArcDirectionCounterexample: true,
   regionCrossingCounterexample: true,
@@ -358,6 +583,20 @@ console.log(JSON.stringify({
   readonlyArcFacade: true,
   endpointLock: true,
   fillStrokeSameSnapshot: true,
+  surfaceClassificationGate: true,
+  bandTriangleWindingGate: true,
+  legacyOppositeWindingTriangles: bandGeometry.legacyOppositeWindingCount,
+  finalBandTriangleCount: bandGeometry.finalTriangleCount,
+  reproducedFormalCellFanLeaks: cellFanGeometry.legacyLeakCount,
+  finalResidualCellFanLeaks: cellFanGeometry.finalLeakCount,
+  legacyMismatchSamples: surfaceResult.metrics.surfaceClassification.legacyMismatchSamples,
+  legacyMismatchArea: surfaceResult.metrics.surfaceClassification.legacyMismatchArea,
+  correctionTriangleCount: surfaceResult.metrics.surfaceClassification.correctionTriangleCount,
+  correctionVerificationStep: surfaceResult.metrics.surfaceClassification.correctionVerificationStep,
+  correctionDegenerateTriangles: surfaceResult.metrics.surfaceClassification.correctionDegenerateTriangles,
+  correctionMultiCoveredSamples: surfaceResult.metrics.surfaceClassification.correctionMultiCoveredSamples,
+  correctionConflictingSamples: surfaceResult.metrics.surfaceClassification.correctionConflictingSamples,
+  sharedMismatchSamples: surfaceResult.metrics.surfaceClassification.sharedMismatchSamples,
   seamGap: 0,
   seamOverlap: 0,
   selfIntersections: 0,

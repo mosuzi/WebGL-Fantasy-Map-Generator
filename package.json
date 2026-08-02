@@ -270,8 +270,10 @@
   "dependencies": {
     "@element-plus/icons-vue": "^2.3.2",
     "@vueuse/core": "^14.3.0",
+    "earcut": "^3.2.3",
     "element-plus": "^2.14.2",
     "pinia": "^3.0.4",
+    "polygon-clipping": "^0.15.7",
     "vue": "^3.5.39"
   },
   "devDependencies": {

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import {createReadStream, existsSync, statSync} from "node:fs";
 import {createServer} from "node:http";
-import {extname, join, normalize, resolve} from "node:path";
+import {extname, isAbsolute, join, normalize, relative, resolve} from "node:path";
 import {fileURLToPath} from "node:url";
 import {dirname} from "node:path";
 
@@ -10,6 +10,7 @@ const args = parseArgs(process.argv.slice(2));
 const host = args.host || "127.0.0.1";
 const port = Number(args.port || 5400);
 const publicDir = resolve(args.dir || join(rootDir, "prototype", "webgl-cells"));
+const appDir = join(rootDir, "app");
 
 if (!existsSync(publicDir)) {
   console.error(`Static directory does not exist: ${publicDir}`);
@@ -19,9 +20,13 @@ if (!existsSync(publicDir)) {
 const server = createServer((request, response) => {
   const url = new URL(request.url || "/", `http://${host}:${port}`);
   const pathname = decodeURIComponent(url.pathname === "/" ? "/index.html" : url.pathname);
-  const target = resolve(publicDir, `.${normalize(pathname)}`);
+  const isAppModule = pathname.startsWith("/app/");
+  const requestRoot = isAppModule ? appDir : publicDir;
+  const requestPath = isAppModule ? pathname.slice("/app".length) : pathname;
+  const target = resolve(requestRoot, `.${normalize(requestPath)}`);
+  const targetRelative = relative(requestRoot, target);
 
-  if (!target.startsWith(publicDir)) {
+  if (targetRelative.startsWith("..") || isAbsolute(targetRelative)) {
     response.writeHead(403);
     response.end("Forbidden");
     return;
@@ -60,6 +65,7 @@ function getContentType(file) {
   const types = {
     ".html": "text/html; charset=utf-8",
     ".js": "text/javascript; charset=utf-8",
+    ".mjs": "text/javascript; charset=utf-8",
     ".css": "text/css; charset=utf-8",
     ".json": "application/json; charset=utf-8",
     ".svg": "image/svg+xml"

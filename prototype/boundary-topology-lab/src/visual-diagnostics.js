@@ -1,6 +1,76 @@
 const AREA_KIND_LABELS = Object.freeze({coast: "海岸", state: "国界", province: "省界"});
 
-export function resolveComparisonPresentation(sharedArcCount) {
+export function resolveComparisonPresentation(sharedArcCount, comparisonKind = false) {
+  if (comparisonKind === "closed-seam") {
+    return Object.freeze({
+      kind: "closed-seam",
+      firstMode: "legacy-closed-anchor",
+      secondMode: "processed",
+      firstTitle: "旧策略：闭环首点硬锁",
+      firstNote: "左侧直接重放平滑后把 source[0] 钉回首尾形成的单点毛刺",
+      secondTitle: "最终策略：闭环接缝均匀平滑"
+    });
+  }
+  if (comparisonKind === "stress") {
+    return Object.freeze({
+      kind: "stress",
+      firstMode: "raw",
+      secondMode: "processed",
+      firstTitle: "破坏反例",
+      firstNote: "左侧保留同一固定输入；具体失败相位与坐标见下方定位指标",
+      secondTitle: "最终生产同源计算"
+    });
+  }
+  if (comparisonKind === "pixel-parity") {
+    return Object.freeze({
+      kind: "pixel-parity",
+      firstMode: "legacy-pixel-seams",
+      secondMode: "exact-pixel-parity",
+      firstTitle: "旧策略：弯曲底面 + 直岸补面",
+      firstNote: "两套基线叠加后，近共线补面被显成像素长针",
+      secondTitle: "最终策略：水陆边直岸同源"
+    });
+  }
+  if (comparisonKind === "vertex-collapse") {
+    return Object.freeze({
+      kind: "vertex-collapse",
+      firstMode: "collapsed-grid-surface",
+      secondMode: "resolved-grid-surface",
+      firstTitle: "正式旧数据：共享边坍缩",
+      firstNote: "cell #6255 / #6378 的 v5331、v5519 同为 [397,608]",
+      secondTitle: "正式新 writer：精确端点回算"
+    });
+  }
+  if (comparisonKind === "cell-fan") {
+    return Object.freeze({
+      kind: "cell-fan",
+      firstMode: "legacy-cell-fan",
+      secondMode: "earcut-cell-surface",
+      firstTitle: "正式旧 writer：中心扇形",
+      firstNote: "stage-2-1 / 10k 的 cell #1061 与 #8832；红边三角跨出自身边界",
+      secondTitle: "正式新 writer：边界 Earcut"
+    });
+  }
+  if (comparisonKind === "band") {
+    return Object.freeze({
+      kind: "band",
+      firstMode: "legacy-band",
+      secondMode: "exact-surface",
+      firstTitle: "旧策略：四三角过渡带",
+      firstNote: "红色三角面与其余三角面的绕向相反",
+      secondTitle: "最终策略：XOR 填色 + 共享描边"
+    });
+  }
+  if (comparisonKind) {
+    return Object.freeze({
+      kind: "surface",
+      firstMode: "legacy-surface",
+      secondMode: "shared-surface",
+      firstTitle: "旧策略：原始填色 + 局部修补",
+      firstNote: "红色区域为未覆盖 raw XOR processed",
+      secondTitle: "XOR 策略：差区三角面 + 描边"
+    });
+  }
   if (sharedArcCount > 0) {
     return Object.freeze({
       kind: "shared",
@@ -44,6 +114,76 @@ export function mergeVisualDiagnostics(result) {
     if (ids.has(observation.id)) continue;
     diagnostics.push(observation);
     ids.add(observation.id);
+  }
+  const surface = result.metrics.surfaceClassification;
+  if (surface) {
+    diagnostics.push({
+      id: "surface:legacy-mismatch",
+      source: "surface",
+      message: `旧策略留下 ${surface.legacyMismatchSamples} 个错分采样点（${surface.legacyMismatchArea.toFixed(0)} px²），左图红色区域可定位`
+    });
+    diagnostics.push({
+      id: "surface:shared-mismatch",
+      source: surface.sharedMismatchSamples ? "acceptance" : "surface-pass",
+      message: `XOR 修补后二维分类错分 ${surface.sharedMismatchSamples} 点`
+    });
+  }
+  const band = result.metrics.bandTriangleGeometry;
+  if (band) {
+    diagnostics.push({
+      id: "band:legacy-opposite-winding",
+      source: "surface",
+      message: `旧 writer 的四个三角面中有 ${band.legacyOppositeWindingCount} 个反向面，左图红色三角扇可定位`
+    });
+    diagnostics.push({
+      id: "band:final-triangles",
+      source: band.finalTriangleCount ? "acceptance" : "surface-pass",
+      message: `最终精确填色路径提交的冗余过渡带三角面：${band.finalTriangleCount} 个`
+    });
+  }
+  const cellFan = result.metrics.cellFanGeometry;
+  if (cellFan) {
+    diagnostics.push({
+      id: "cell-fan:formal-reproduction",
+      source: "surface",
+      message: `正式 ${cellFan.source.seed} / ${cellFan.source.cellsTarget} 地图的 ${cellFan.cases.length} 个原始单元在左图复现 ${cellFan.legacyLeakCount} 个越界三角、${cellFan.legacyRasterLeakSamples} 个 0.1 世界单位异侧采样`
+    });
+    diagnostics.push({
+      id: "cell-fan:earcut-contained",
+      source: cellFan.finalLeakCount ? "acceptance" : "surface-pass",
+      message: `使用真实边界 Earcut 后，越界三角 ${cellFan.finalLeakCount} 个、异侧采样 ${cellFan.finalRasterLeakSamples} 个`
+    });
+  }
+  const vertexCollapse = result.metrics.vertexCollapseGeometry;
+  if (vertexCollapse) {
+    diagnostics.push({
+      id: "vertex-collapse:formal-reproduction",
+      source: "surface",
+      message: `正式 ${vertexCollapse.source.seed} / ${vertexCollapse.source.cellsTarget} 的旧共享边长度 ${vertexCollapse.storedEdgeLength.toFixed(3)}，左图原样复现单点断面`
+    });
+    diagnostics.push({
+      id: "vertex-collapse:resolved",
+      source: vertexCollapse.projectedCssLength >= 0.9 ? "surface-pass" : "acceptance",
+      message: `精确端点回算后共享边 ${vertexCollapse.resolvedEdgeLength.toFixed(3)} 世界单位；当前 12x 现场投影 ${vertexCollapse.projectedCssLength.toFixed(2)} CSS px`
+    });
+  }
+  const pixelParity = result.metrics.pixelParityGeometry;
+  if (pixelParity) {
+    diagnostics.push({
+      id: "pixel-parity:base-xor-drift",
+      source: pixelParity.finalBaseDriftCases ? "acceptance" : "surface-pass",
+      message: `两组近共线补面在旧弯曲底面上最大漂移 ${pixelParity.maximumLegacyBaseDriftCss.toFixed(2)}px；水陆边改为直岸同源后残余基线漂移 ${pixelParity.finalBaseDriftCases} 组`
+    });
+    diagnostics.push({
+      id: "pixel-parity:lake-needle",
+      source: "surface",
+      message: `正式湖岸 #${pixelParity.lakeNeedle.landCell}/#${pixelParity.lakeNeedle.waterCell} 的修补面边缘旧侧裸露 ${pixelParity.legacyUncoveredBoundaryEdges} 条，最终以 ${pixelParity.finalBoundaryCoverWorld.toFixed(2)} 世界单位同色覆盖收敛到 ${pixelParity.finalUncoveredBoundaryEdges} 条`
+    });
+    diagnostics.push({
+      id: "pixel-parity:coast-stroke",
+      source: pixelParity.finalProjectedStrokeCss <= pixelParity.maximumFinalCssWidth ? "surface-pass" : "acceptance",
+      message: `正式海岸 #${pixelParity.coastStroke.landCell}/#${pixelParity.coastStroke.waterCell} 在截图投影下由 ${pixelParity.legacyProjectedStrokeCss.toFixed(2)}px 收敛到 ${pixelParity.finalProjectedStrokeCss.toFixed(2)}px`
+    });
   }
   return diagnostics;
 }
