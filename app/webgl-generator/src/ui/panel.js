@@ -21,6 +21,7 @@ import {
 import {formatHistoryStats} from "./history-format.js";
 import {buildHoverRowEntries, formatHoverObjectTitle, hoverViewTitle, isNamedHoverRoute} from "./hover-overlay-content.js";
 import {updateStartupLoadingStatus} from "./startup-loading.js";
+import {buildShortcutDisplayModel} from "../runtime/keyboard-shortcuts.js";
 
 export const CONTROL_PREFERENCES_KEY = "webgl-generator-control-preferences";
 const CRITICAL_CONTROL_CHANGE_DEBOUNCE_MS = 180;
@@ -1001,22 +1002,18 @@ export function updatePickPanel(documentRef, state) {
 function updateHoverOverlay(documentRef, pick, state) {
   const overlay = documentRef.getElementById("hover-overlay");
   if (!overlay) return;
+  const structure = ensureHoverOverlayStructure(documentRef, overlay);
   const preferences = readControlPreferences(documentRef);
   const heightBrush = state?.panels?.height?.getBrush?.();
   const forcedHeightCell = heightBrush?.active && Number.isInteger(pick?.gridCell) && pick.gridCell >= 0 ? pick.gridCell : null;
   const visible = pick && (pick.invalidMapArea || pick.gridCell !== null) && (preferences.showHoverInfo !== false || forcedHeightCell !== null);
   overlay.hidden = !visible;
-  overlay.replaceChildren();
   if (!visible) return;
 
   const debugEnabled = Boolean(documentRef.defaultView?.__webglGeneratorDebug?.enabled);
   const rendererStats = state?.renderer?.getStats?.() || {};
   const colorMode = rendererStats.colorMode || preferences.colorMode || "height";
-  const title = documentRef.createElement("div");
-  title.className = "hover-overlay-title";
-  title.textContent = preferences.showHoverInfo === false && forcedHeightCell !== null ? `高度画笔 · ${heightBrush.action === "lower" ? "降低" : "抬升"}` : formatHoverTitle(pick, preferences.units, debugEnabled, colorMode);
-  const rows = documentRef.createElement("dl");
-  rows.className = "hover-overlay-list";
+  structure.title.textContent = preferences.showHoverInfo === false && forcedHeightCell !== null ? `高度画笔 · ${heightBrush.action === "lower" ? "降低" : "抬升"}` : formatHoverTitle(pick, preferences.units, debugEnabled, colorMode);
   let entries = preferences.showHoverInfo === false
     ? []
     : buildHoverRowEntries(pick, preferences.units, {
@@ -1030,8 +1027,66 @@ function updateHoverOverlay(documentRef, pick, state) {
     const currentHeight = state?.map?.grid?.cells?.h?.[forcedHeightCell] ?? pick.packHeight ?? pick.height;
     entries = [{label: "画笔落点", value: formatDisplayHeight(currentHeight, preferences.units)}, ...entries.filter(entry => entry.label !== "高度")];
   }
-  rows.replaceChildren(...entries.map(entry => hoverRow(documentRef, entry.label, entry.value)));
-  overlay.replaceChildren(title, rows);
+  structure.rows.replaceChildren(...entries.map(entry => hoverRow(documentRef, entry.label, entry.value)));
+}
+
+function ensureHoverOverlayStructure(documentRef, overlay) {
+  const existingTitle = overlay.querySelector?.(".hover-overlay-title");
+  const existingRows = overlay.querySelector?.(".hover-overlay-list");
+  const existingHelp = overlay.querySelector?.(".hover-shortcut-help");
+  if (existingTitle && existingRows && existingHelp) return {title: existingTitle, rows: existingRows};
+
+  overlay.dataset.canvasTextId = "hover-details";
+  const title = documentRef.createElement("div");
+  title.className = "hover-overlay-title";
+  const rows = documentRef.createElement("dl");
+  rows.className = "hover-overlay-list";
+
+  const help = documentRef.createElement("div");
+  help.className = "hover-shortcut-help";
+  const trigger = documentRef.createElement("button");
+  trigger.type = "button";
+  trigger.className = "hover-shortcut-trigger";
+  trigger.textContent = "i";
+  trigger.setAttribute("aria-label", "查看全部快捷键");
+  const popover = documentRef.createElement("div");
+  const popoverId = "hover-shortcut-popover";
+  popover.id = popoverId;
+  popover.className = "hover-shortcut-popover";
+  popover.setAttribute("role", "tooltip");
+  trigger.setAttribute("aria-describedby", popoverId);
+
+  const model = buildShortcutDisplayModel({navigatorRef: documentRef.defaultView?.navigator});
+  const heading = documentRef.createElement("strong");
+  heading.className = "hover-shortcut-heading";
+  heading.textContent = "快捷键";
+  popover.append(heading);
+  for (const group of model.groups) {
+    const section = documentRef.createElement("section");
+    section.className = "hover-shortcut-group";
+    const groupTitle = documentRef.createElement("h3");
+    groupTitle.textContent = group.label;
+    const list = documentRef.createElement("dl");
+    for (const item of group.items) {
+      const row = documentRef.createElement("div");
+      row.className = "hover-shortcut-item";
+      const term = documentRef.createElement("dt");
+      term.textContent = item.context ? `${item.context} · ${item.label}` : item.label;
+      const description = documentRef.createElement("dd");
+      for (const bindingLabel of item.bindingLabels) {
+        const key = documentRef.createElement("kbd");
+        key.textContent = bindingLabel;
+        description.append(key);
+      }
+      row.append(term, description);
+      list.append(row);
+    }
+    section.append(groupTitle, list);
+    popover.append(section);
+  }
+  help.append(trigger, popover);
+  overlay.append(title, rows, help);
+  return {title, rows};
 }
 
 function formatHoverTitle(pick, unitPreferences = {}, debugEnabled = false, colorMode = "") {

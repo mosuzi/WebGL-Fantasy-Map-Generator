@@ -29,6 +29,19 @@ export const KEYBOARD_SHORTCUTS = Object.freeze([
   shortcut({id: "panel.measurements", group: "panels", label: "打开测量对象", scope: "global", when: "map-idle", selector: "#open-measurement-panel", bindings: [binding("KeyQ", {shift: true})], action: {type: "panel", handler: "onOpenMeasurementPanel"}})
 ]);
 
+export const SCENARIO_SHORTCUTS = Object.freeze([
+  shortcut({id: "scenario.measurement.delete-point", group: "scenario", label: "删除当前测量点", scope: "measurement", context: "测量编辑", bindings: [binding("Delete"), binding("Backspace")], action: {type: "documented-existing"}}),
+  shortcut({id: "scenario.color.confirm-hex", group: "scenario", label: "确认 HEX 颜色输入", scope: "hex-color", context: "HEX 颜色输入", bindings: [binding("Enter")], action: {type: "documented-existing"}})
+]);
+
+export const SHORTCUT_DISPLAY_GROUPS = Object.freeze([
+  Object.freeze({id: "file", label: "文件", sourceGroups: Object.freeze(["file"])}),
+  Object.freeze({id: "editing", label: "编辑与历史", sourceGroups: Object.freeze(["history", "editing", "selection"])}),
+  Object.freeze({id: "view", label: "视图与图层", sourceGroups: Object.freeze(["view", "layers"])}),
+  Object.freeze({id: "panels", label: "打开面板", sourceGroups: Object.freeze(["generation", "panels"])}),
+  Object.freeze({id: "scenario", label: "场景操作", sourceGroups: Object.freeze(["scenario"]), scenario: true})
+]);
+
 export function shortcutPlatform(navigatorRef = globalThis.navigator) {
   const platform = String(navigatorRef?.userAgentData?.platform || navigatorRef?.platform || "");
   return /mac|iphone|ipad|ipod/i.test(platform) ? "mac" : "default";
@@ -49,6 +62,27 @@ export function shortcutBindingLabel(item, platform = "default") {
 export function shortcutAriaLabel(item, platform = "default") {
   const modifiers = resolvedModifiers(item, platform);
   return [modifiers.ctrl ? "Control" : "", modifiers.alt ? "Alt" : "", modifiers.shift ? "Shift" : "", modifiers.meta ? "Meta" : "", keyLabel(item.code)].filter(Boolean).join("+");
+}
+
+export function buildShortcutDisplayModel(options = {}) {
+  const platform = options.platform || shortcutPlatform(options.navigatorRef);
+  const registry = options.registry || KEYBOARD_SHORTCUTS;
+  const scenarios = options.scenarios || SCENARIO_SHORTCUTS;
+  const globalItems = registry.map(item => shortcutDisplayItem(item, platform, "global"));
+  const scenarioItems = scenarios.map(item => shortcutDisplayItem(item, platform, "scenario"));
+  const groups = SHORTCUT_DISPLAY_GROUPS.map(group => {
+    const source = group.scenario ? scenarioItems : globalItems;
+    const items = source.filter(item => group.sourceGroups.includes(item.sourceGroup));
+    return Object.freeze({id: group.id, label: group.label, items: Object.freeze(items)});
+  }).filter(group => group.items.length);
+  return Object.freeze({
+    platform,
+    globalShortcutCount: registry.length,
+    globalBindingCount: registry.reduce((total, item) => total + item.bindings.length, 0),
+    scenarioShortcutCount: scenarios.length,
+    totalDescriptionCount: globalItems.length + scenarioItems.length,
+    groups: Object.freeze(groups)
+  });
 }
 
 export function validateShortcutRegistry(registry = KEYBOARD_SHORTCUTS, platforms = ["default", "mac"]) {
@@ -289,6 +323,19 @@ function keyLabel(code) {
   if (code === "Escape") return "Esc";
   if (code === "Home") return "Home";
   return code;
+}
+
+function shortcutDisplayItem(item, platform, kind) {
+  const bindingLabels = item.bindings.map(itemBinding => shortcutBindingLabel(itemBinding, platform));
+  return Object.freeze({
+    id: item.id,
+    label: item.label,
+    context: item.context || "",
+    kind,
+    sourceGroup: item.group,
+    bindingLabels: Object.freeze(bindingLabels),
+    bindingLabel: bindingLabels.join(" / ")
+  });
 }
 
 function shortcutForElement(target, registry) {

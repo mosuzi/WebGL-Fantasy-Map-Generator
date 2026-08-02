@@ -27,7 +27,7 @@ let browser = null;
 
 try {
   browser = await launchBrowser(playwright, {headless: !args.headful, browserChannel});
-  const context = await browser.newContext({viewport: {width: 1280, height: 820}, deviceScaleFactor: 1});
+  const context = await browser.newContext({viewport: {width: 1440, height: 900}, deviceScaleFactor: 1});
   const page = await context.newPage();
   page.setDefaultTimeout(timeoutMs);
   const consoleErrors = [];
@@ -58,6 +58,12 @@ try {
     groups: report.registry.groups,
     sampledGroups: report.sampledGroups,
     hint: report.hint,
+    hoverShortcutHelp: {
+      focusVisible: report.hoverShortcutHelp.focusVisible,
+      stableAfterNormalPick: report.hoverShortcutHelp.stableAfterNormalPick,
+      stableAfterHeightPick: report.hoverShortcutHelp.stableAfterHeightPick,
+      viewportWidths: report.hoverShortcutHelp.viewports.map(item => item.viewport.width)
+    },
     glError: report.glError,
     healthErrors: report.healthErrors.total,
     consoleErrors: consoleErrors.length,
@@ -113,6 +119,7 @@ async function inspectShortcuts(page) {
   if (!hint.background.includes("245, 247, 250")) failures.push(`快捷键提示不是中性半透明背景：${hint.background}`);
   await page.mouse.move(10, 10);
   await page.waitForFunction(() => document.getElementById("shortcut-toast")?.hidden === true);
+  const hoverShortcutHelp = await inspectHoverShortcutHelp(page, failures);
 
   await pressCode(page, "KeyG", {shiftKey: true});
   await page.locator('.floating-panel[data-panel-id="generation-panel"]:not(.hidden)').waitFor({state: "visible"});
@@ -147,7 +154,8 @@ async function inspectShortcuts(page) {
     mode: window.__webglGeneratorApp.canvasToolModes.getSnapshot(),
     history: window.webglGeneratorApi.history.get().data
   }));
-  if (canvasModeBefore.mode.registeredModeIds.length !== 28 || !canvasModeBefore.entered?.changed || canvasModeBefore.mode.active?.id !== "height:brush" || canvasModeAfter.mode.active) failures.push("Escape 没有覆盖当前全部注册模式或未通过通用入口取消活动画布模式");
+  const canvasModeCoverage = canvasModeBefore.mode.registrationCoverage;
+  if (canvasModeBefore.mode.declaredModeIds.length !== 29 || canvasModeBefore.mode.registeredModeIds.length !== 29 || canvasModeCoverage?.complete !== true || !canvasModeBefore.entered?.changed || canvasModeBefore.mode.active?.id !== "height:brush" || canvasModeAfter.mode.active) failures.push("Escape 没有覆盖当前 29 个已声明且完整注册的画布模式，或未通过通用入口取消活动模式");
   if (canvasModeAfter.history.undo !== canvasModeBefore.history.undo || canvasModeAfter.history.redo !== canvasModeBefore.history.redo) failures.push("取消画布模式错误写入历史");
   await pressCode(page, "KeyG", {shiftKey: true});
   await page.locator('.floating-panel[data-panel-id="generation-panel"]:not(.hidden)').waitFor({state: "visible"});
@@ -230,6 +238,7 @@ async function inspectShortcuts(page) {
     registry,
     sampledGroups: ["file", "generation", "history", "editing", "selection", "view", "layers", "panels"],
     hint: {...hint, beforeThresholdHidden: beforeThreshold, mapToastPriority: toastPriority},
+    hoverShortcutHelp,
     history: {afterEdit: history.afterEdit, afterUndo, afterRedo},
     editing: {before: cancelBefore, afterEditing: cancelAfterEditing, afterSelection: cancelAfterSelection, canvasModeBefore, canvasModeAfter},
     view: {mode: viewMode, zoomBeforeFit, zoomAfterFit},
@@ -237,6 +246,180 @@ async function inspectShortcuts(page) {
     glError: runtime.glError,
     failures
   };
+}
+
+async function inspectHoverShortcutHelp(page, failures) {
+  await page.setViewportSize({width: 1440, height: 900});
+  const initial = await exposeHoverCard(page, 0);
+  const display = await page.evaluate(() => {
+    const scenarioGroup = [...document.querySelectorAll(".hover-shortcut-group")]
+      .find(group => group.querySelector("h3")?.textContent === "场景操作");
+    return {
+      descriptions: document.querySelectorAll(".hover-shortcut-item").length,
+      groups: document.querySelectorAll(".hover-shortcut-group").length,
+      scenarioRows: scenarioGroup ? [...scenarioGroup.querySelectorAll(".hover-shortcut-item")].map(row => ({
+        label: row.querySelector("dt")?.textContent || "",
+        keys: [...row.querySelectorAll("kbd")].map(key => key.textContent || "")
+      })) : []
+    };
+  });
+  if (display.descriptions !== 24 || display.groups !== 5) failures.push(`快捷键弹层展示分母错误：${display.descriptions} 条 / ${display.groups} 组`);
+  const measurementScenario = display.scenarioRows.find(row => row.label.includes("测量编辑") && row.label.includes("删除当前测量点"));
+  const hexScenario = display.scenarioRows.find(row => row.label.includes("HEX 颜色输入") && row.label.includes("确认 HEX 颜色输入"));
+  if (JSON.stringify(measurementScenario?.keys) !== JSON.stringify(["Delete", "Backspace"]) || JSON.stringify(hexScenario?.keys) !== JSON.stringify(["Enter"])) failures.push("快捷键弹层缺少两个场景条目或其分片按键文案错误");
+  await page.evaluate(() => {
+    window.__shortcutHelpIdentity = {
+      trigger: document.querySelector(".hover-shortcut-trigger"),
+      popover: document.querySelector(".hover-shortcut-popover")
+    };
+  });
+
+  const normal = await exerciseHoverShortcutPath(page, {label: "普通悬停", expectedPick: initial.pickKey});
+  if (!normal.triggerVisible || !normal.popoverVisible || !normal.visibleAfterScroll || !normal.scrolled) failures.push("普通悬停无法稳定从 i 按钮进入并滚动快捷键弹层");
+
+  const updated = await exposeHoverCard(page, 1, initial.pickKey);
+  const stableAfterNormalPick = await shortcutHelpIdentityStable(page);
+  if (!updated.pickChanged) failures.push("普通悬停没有产生第二个真实 pick，无法冻结节点更新契约");
+  if (!stableAfterNormalPick) failures.push("普通 pick 更新重建了快捷键按钮或弹层节点");
+
+  const heightMode = await page.evaluate(() => {
+    const app = window.__webglGeneratorApp;
+    const entered = app.canvasToolModes.enter("height:brush");
+    return {entered, active: app.canvasToolModes.getActive()?.id || null, brushActive: app.panels.height?.getBrush?.().active === true};
+  });
+  if (heightMode.active !== "height:brush" || !heightMode.brushActive) failures.push("高度画笔场景未真实激活");
+  const heightPick = await exposeHoverCard(page, 2);
+  const height = await exerciseHoverShortcutPath(page, {label: "高度画笔", expectedPick: heightPick.pickKey, requirePickRetention: true});
+  if (!height.triggerVisible || !height.popoverVisible || !height.visibleAfterScroll || !height.scrolled) failures.push("高度画笔下无法稳定从 i 按钮进入并滚动快捷键弹层");
+  if (!height.pickRetained) failures.push("高度画笔移入快捷键帮助时清空了当前 pick");
+  const heightUpdated = await exposeHoverCard(page, 3, heightPick.pickKey);
+  const stableAfterHeightPick = await shortcutHelpIdentityStable(page);
+  if (!heightUpdated.pickChanged) failures.push("高度画笔没有产生第二个真实 pick，无法冻结节点更新契约");
+  if (!stableAfterHeightPick) failures.push("高度画笔 pick 更新重建了快捷键按钮或弹层节点");
+  await page.evaluate(() => window.__webglGeneratorApp.canvasToolModes.cancel("height:brush", "browser-regression"));
+
+  await page.mouse.move(12, 12);
+  await page.locator(".hover-shortcut-trigger").focus();
+  const focusVisible = await isShortcutPopoverVisible(page);
+  if (!focusVisible) failures.push("键盘 focus 没有显示快捷键弹层");
+  await page.evaluate(() => document.activeElement?.blur());
+
+  const viewports = [];
+  for (const viewport of [{width: 1440, height: 900}, {width: 390, height: 780}, {width: 320, height: 720}]) {
+    await page.setViewportSize(viewport);
+    await exposeHoverCard(page, viewport.width);
+    await page.locator(".hover-shortcut-trigger").focus();
+    await page.waitForTimeout(180);
+    const geometry = await page.evaluate(() => {
+      const overlay = document.getElementById("hover-overlay");
+      const trigger = overlay.querySelector(".hover-shortcut-trigger");
+      const popover = overlay.querySelector(".hover-shortcut-popover");
+      const overlayRect = overlay.getBoundingClientRect();
+      const triggerRect = trigger.getBoundingClientRect();
+      const popoverRect = popover.getBoundingClientRect();
+      const probeX = Math.min(overlayRect.right - 4, overlayRect.left + 8);
+      const probeY = overlayRect.bottom - 8;
+      const hit = document.elementFromPoint(probeX, probeY);
+      return {
+        viewport: {width: innerWidth, height: innerHeight},
+        overlay: rectSnapshot(overlayRect),
+        trigger: rectSnapshot(triggerRect),
+        popover: rectSnapshot(popoverRect),
+        visible: getComputedStyle(popover).visibility === "visible",
+        seam: triggerRect.top - popoverRect.bottom,
+        nonIconHit: hit?.id || hit?.className || hit?.tagName || ""
+      };
+
+      function rectSnapshot(rect) {
+        return {left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom, width: rect.width, height: rect.height};
+      }
+    });
+    const {popover, viewport: actualViewport} = geometry;
+    geometry.inBounds = popover.left >= -0.5 && popover.top >= -0.5 && popover.right <= actualViewport.width + 0.5 && popover.bottom <= actualViewport.height + 0.5;
+    geometry.seamConnected = geometry.seam <= 0.5;
+    geometry.canvasPassThrough = geometry.nonIconHit === "map-canvas";
+    if (!geometry.visible) failures.push(`${viewport.width}px 键盘 focus 后快捷键弹层仍不可见`);
+    else if (!geometry.inBounds) failures.push(`${viewport.width}px 快捷键弹层越出视口：left=${popover.left}, top=${popover.top}, right=${popover.right}, bottom=${popover.bottom}`);
+    if (!geometry.seamConnected) failures.push(`${viewport.width}px 信息按钮与弹层之间存在 ${geometry.seam}px 间隙`);
+    if (!geometry.canvasPassThrough) failures.push(`${viewport.width}px hover 主区域截获了画布命中：${geometry.nonIconHit}`);
+    viewports.push(geometry);
+    await page.evaluate(() => document.activeElement?.blur());
+  }
+  await page.setViewportSize({width: 1440, height: 900});
+  await page.evaluate(() => {
+    delete window.__shortcutHelpIdentity;
+  });
+
+  return {
+    display: {descriptions: display.descriptions, groups: display.groups},
+    normal,
+    height: {...height, mode: heightMode},
+    focusVisible,
+    stableAfterNormalPick,
+    stableAfterHeightPick,
+    viewports
+  };
+}
+
+async function exerciseHoverShortcutPath(page, {label, expectedPick, requirePickRetention = false}) {
+  const trigger = page.locator(".hover-shortcut-trigger");
+  const popover = page.locator(".hover-shortcut-popover");
+  await trigger.hover();
+  const triggerVisible = await isShortcutPopoverVisible(page);
+  const popoverBox = await popover.boundingBox();
+  if (!popoverBox) throw new Error(`${label}快捷键弹层没有可命中的真实边界`);
+  await page.mouse.move(popoverBox.x + popoverBox.width - 12, popoverBox.y + popoverBox.height - 10, {steps: 12});
+  const popoverVisible = await isShortcutPopoverVisible(page);
+  const pickRetained = !requirePickRetention || await page.evaluate(expected => {
+    const pick = window.__webglGeneratorApp.pick;
+    return pick && `${pick.gridCell ?? ""}:${pick.packCell ?? ""}` === expected;
+  }, expectedPick);
+  await popover.evaluate(element => {
+    element.scrollTop = 0;
+  });
+  const beforeScroll = await popover.evaluate(element => ({top: element.scrollTop, height: element.clientHeight, scrollHeight: element.scrollHeight}));
+  await page.mouse.wheel(0, 620);
+  await page.waitForTimeout(80);
+  const afterScroll = await popover.evaluate(element => ({top: element.scrollTop, visible: getComputedStyle(element).visibility === "visible", overlayVisible: !element.closest("#hover-overlay").hidden}));
+  return {
+    triggerVisible,
+    popoverVisible,
+    visibleAfterScroll: afterScroll.visible && afterScroll.overlayVisible,
+    scrolled: beforeScroll.scrollHeight > beforeScroll.height && afterScroll.top > beforeScroll.top,
+    pickRetained
+  };
+}
+
+async function exposeHoverCard(page, variant = 0, previousPick = null) {
+  const canvas = page.locator("#map-canvas");
+  const box = await canvas.boundingBox();
+  if (!box) throw new Error("地图 canvas 没有可用边界");
+  const ratios = [[0.5, 0.5], [0.32, 0.42], [0.68, 0.58], [0.24, 0.7], [0.76, 0.3]];
+  for (let offset = 0; offset < ratios.length; offset += 1) {
+    const [xRatio, yRatio] = ratios[(variant + offset) % ratios.length];
+    await page.mouse.move(box.x + box.width * xRatio, box.y + box.height * yRatio);
+    await page.waitForTimeout(80);
+    const snapshot = await page.evaluate(previous => {
+      const overlay = document.getElementById("hover-overlay");
+      const pick = window.__webglGeneratorApp.pick;
+      const pickKey = pick ? `${pick.gridCell ?? ""}:${pick.packCell ?? ""}` : null;
+      return {visible: Boolean(overlay && !overlay.hidden && pick), pickKey, pickChanged: previous === null || pickKey !== previous};
+    }, previousPick);
+    if (snapshot.visible && (previousPick === null || snapshot.pickChanged)) return snapshot;
+  }
+  throw new Error(previousPick === null ? "无法通过真实 canvas pointermove 显示悬停卡" : "无法通过真实 canvas pointermove 更新 pick");
+}
+
+async function isShortcutPopoverVisible(page) {
+  return page.locator(".hover-shortcut-popover").evaluate(element => {
+    const style = getComputedStyle(element);
+    return style.visibility === "visible" && Number(style.opacity) > 0 && !element.closest("#hover-overlay").hidden;
+  });
+}
+
+async function shortcutHelpIdentityStable(page) {
+  return page.evaluate(() => window.__shortcutHelpIdentity?.trigger === document.querySelector(".hover-shortcut-trigger")
+    && window.__shortcutHelpIdentity?.popover === document.querySelector(".hover-shortcut-popover"));
 }
 
 async function pressCode(page, code, modifiers = {}) {
@@ -264,6 +447,9 @@ function renderMarkdown(report) {
     `- registry：${report.registry.shortcuts} 项 / ${report.registry.bindings} 组按键`,
     `- 抽查分组：${report.sampledGroups.join(" / ")}`,
     `- 提示文案：${report.hint.text}`,
+    `- 悬停帮助：${report.hoverShortcutHelp.display.descriptions} 条 / ${report.hoverShortcutHelp.display.groups} 组`,
+    `- 节点稳定：普通 ${report.hoverShortcutHelp.stableAfterNormalPick ? "是" : "否"} / 高度画笔 ${report.hoverShortcutHelp.stableAfterHeightPick ? "是" : "否"}`,
+    `- 响应式视口：${report.hoverShortcutHelp.viewports.map(item => item.viewport.width).join(" / ")}`,
     `- 居中偏差：${report.hint.centerDelta}px`,
     `- 背景：${report.hint.background}`,
     `- WebGL error：${report.glError}`,

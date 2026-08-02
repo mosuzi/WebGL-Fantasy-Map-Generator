@@ -3,10 +3,12 @@ import assert from "node:assert/strict";
 import {readFile} from "node:fs/promises";
 
 import {
+  buildShortcutDisplayModel,
   hasOpenFrameworkPopup,
   installKeyboardShortcuts,
   isEditableShortcutTarget,
   KEYBOARD_SHORTCUTS,
+  SCENARIO_SHORTCUTS,
   resolveShortcut,
   shortcutAriaLabel,
   shortcutBindingLabel,
@@ -19,6 +21,30 @@ assert.equal(summary.bindings, 23);
 assert.deepEqual(summary.conflicts, []);
 assert.deepEqual(new Set(KEYBOARD_SHORTCUTS.map(item => item.group)), new Set(["file", "history", "editing", "selection", "view", "layers", "generation", "panels"]));
 assert(!KEYBOARD_SHORTCUTS.some(item => item.action?.path === "generate.newMap" || item.action?.path === "generate.rerollSeed"), "破坏性生成动作不应默认绑定快捷键");
+
+const defaultDisplay = buildShortcutDisplayModel({platform: "default"});
+const macDisplay = buildShortcutDisplayModel({platform: "mac"});
+assert.equal(defaultDisplay.globalShortcutCount, 22, "展示模型改变了全局快捷键分母");
+assert.equal(defaultDisplay.globalBindingCount, 23, "展示模型改变了全局按键组分母");
+assert.equal(defaultDisplay.scenarioShortcutCount, 2, "展示模型缺少场景快捷键");
+assert.equal(defaultDisplay.totalDescriptionCount, 24, "展示模型说明项总数不是 24");
+assert.deepEqual(defaultDisplay.groups.map(group => group.id), ["file", "editing", "view", "panels", "scenario"], "展示模型没有按用途稳定分组");
+const defaultDisplayItems = defaultDisplay.groups.flatMap(group => group.items);
+const defaultGlobalItems = defaultDisplayItems.filter(item => item.kind === "global");
+const defaultScenarioItems = defaultDisplayItems.filter(item => item.kind === "scenario");
+assert.deepEqual(defaultGlobalItems.map(item => item.id), KEYBOARD_SHORTCUTS.map(item => item.id), "展示模型没有完整派生 KEYBOARD_SHORTCUTS");
+assert.deepEqual(defaultScenarioItems.map(item => item.id), SCENARIO_SHORTCUTS.map(item => item.id), "展示模型没有完整派生场景快捷键");
+for (const item of KEYBOARD_SHORTCUTS) {
+  const display = defaultGlobalItems.find(candidate => candidate.id === item.id);
+  assert.equal(display.label, item.label, `${item.id} 展示文案没有复用 registry`);
+  assert.deepEqual(display.bindingLabels, item.bindings.map(itemBinding => shortcutBindingLabel(itemBinding, "default")), `${item.id} 展示按键没有复用 shortcutBindingLabel`);
+}
+assert.deepEqual(defaultScenarioItems.map(item => [item.id, item.bindingLabel]), [
+  ["scenario.measurement.delete-point", "Delete / Backspace"],
+  ["scenario.color.confirm-hex", "Enter"]
+]);
+assert.equal(macDisplay.groups.flatMap(group => group.items).find(item => item.id === "file.save-browser").bindingLabel, "⌘S", "Mac 展示模型没有复用 platform 标签");
+assert(Object.isFrozen(defaultDisplay) && Object.isFrozen(defaultDisplay.groups) && defaultDisplay.groups.every(group => Object.isFrozen(group.items)), "展示模型没有保持只读");
 
 const save = KEYBOARD_SHORTCUTS.find(item => item.id === "file.save-browser");
 assert.equal(shortcutBindingLabel(save.bindings[0], "default"), "Ctrl+S");
@@ -163,9 +189,10 @@ assert.equal(editableEscape.defaultPrevented, true, "输入控件内 Escape 没�
 assert.equal(cancelExecutions, 1, "输入控件内 Escape 未执行唯一退出动作");
 cancelController.destroy();
 
-const [appSource, controlPanelSource, indexSource, stylesSource] = await Promise.all([
+const [appSource, controlPanelSource, colorFieldSource, indexSource, stylesSource] = await Promise.all([
   readFile(new URL("../app/webgl-generator/src/runtime/app.js", import.meta.url), "utf8"),
   readFile(new URL("../app/webgl-generator/src/ui/vue/components/ControlPanel.vue", import.meta.url), "utf8"),
+  readFile(new URL("../app/webgl-generator/src/ui/vue/components/base/UiColorField.vue", import.meta.url), "utf8"),
   readFile(new URL("../app/webgl-generator/index.html", import.meta.url), "utf8"),
   readFile(new URL("../app/webgl-generator/src/styles.css", import.meta.url), "utf8")
 ]);
@@ -192,15 +219,20 @@ assert.match(indexSource, /id="shortcut-toast"/);
 assert.match(stylesSource, /\.shortcut-toast\s*\{/);
 assert.match(stylesSource, /background:\s*rgba\(245, 247, 250, 0\.82\)/);
 assert.match(appSource, /webgl-generator-map-toast-change/);
+assert.match(appSource, /if \(event\.key !== "Delete" && event\.key !== "Backspace"\) return;[\s\S]*deleteMeasurementPoint\(state, documentRef, index\);/, "测量点场景文案没有 Delete / Backspace 的真实行为证据");
+assert.match(colorFieldSource, /@keydown\.enter\.prevent="commitHexDraft"/, "HEX 颜色场景文案没有 Enter 提交的真实行为证据");
 
 console.log(JSON.stringify({
   ok: true,
   shortcuts: summary.shortcuts,
   bindings: summary.bindings,
+  displayDescriptions: defaultDisplay.totalDescriptionCount,
+  scenarioShortcuts: defaultDisplay.scenarioShortcutCount,
   groups: [...new Set(KEYBOARD_SHORTCUTS.map(item => item.group))],
   platformLabels: {default: "Ctrl+S", mac: "⌘S"},
   hintDelayCovered: true,
   mapToastPriorityCovered: true,
+  scenarioBehaviorEvidence: true,
   destructiveGenerationBound: false
 }, null, 2));
 

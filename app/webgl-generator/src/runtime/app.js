@@ -12762,9 +12762,10 @@ function bindHeightEditing(canvas, state, documentRef) {
     updateHeightPanel(state);
   }, true);
 
-  canvas.addEventListener("pointerleave", () => {
+  canvas.addEventListener("pointerleave", event => {
     const brush = state.panels.height?.getBrush();
-    if (!state.heightEdit.activeStroke && brush?.active) {
+    const enteringShortcutHelp = event.relatedTarget?.closest?.(".hover-shortcut-help");
+    if (!state.heightEdit.activeStroke && brush?.active && !enteringShortcutHelp) {
       state.pick = null;
       updatePickPanel(documentRef, state);
     }

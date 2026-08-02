@@ -2,11 +2,12 @@
 import assert from "node:assert/strict";
 import {readFile} from "node:fs/promises";
 
-const [stylesSource, indexSource, panelSource, overlayRegistrySource] = await Promise.all([
+const [stylesSource, indexSource, panelSource, overlayRegistrySource, appSource] = await Promise.all([
   readFile(new URL("../app/webgl-generator/src/styles.css", import.meta.url), "utf8"),
   readFile(new URL("../app/webgl-generator/index.html", import.meta.url), "utf8"),
   readFile(new URL("../app/webgl-generator/src/ui/panel.js", import.meta.url), "utf8"),
-  readFile(new URL("../app/webgl-generator/src/ui/overlay-registry.js", import.meta.url), "utf8")
+  readFile(new URL("../app/webgl-generator/src/ui/overlay-registry.js", import.meta.url), "utf8"),
+  readFile(new URL("../app/webgl-generator/src/runtime/app.js", import.meta.url), "utf8")
 ]);
 
 const layers = {
@@ -38,7 +39,32 @@ assert(mapOverlayIndex >= 0 && hoverOverlayIndex > mapOverlayIndex, "悬停信�
 const hoverRule = ruleBody(stylesSource, ".hover-overlay");
 assert.match(hoverRule, /pointer-events:\s*none;/, "只读悬停信息层不应截获地图操作");
 assert.match(panelSource, /function updateHoverOverlay\(documentRef, pick, state\)/, "悬停信息更新入口缺失");
-assert.match(panelSource, /overlay\.hidden = !visible;[\s\S]*overlay\.replaceChildren\(title, rows\);/, "悬停信息显示与内容更新契约异常");
+const updateBlock = panelSource.slice(panelSource.indexOf("function updateHoverOverlay"), panelSource.indexOf("function formatHoverTitle"));
+assert.match(updateBlock, /const structure = ensureHoverOverlayStructure\(documentRef, overlay\)/, "悬停信息没有复用稳定 DOM 结构");
+assert.match(updateBlock, /overlay\.hidden = !visible;[\s\S]*structure\.title\.textContent[\s\S]*structure\.rows\.replaceChildren/, "悬停标题和详情没有保持局部更新");
+assert.doesNotMatch(updateBlock, /overlay\.replaceChildren/, "悬停更新仍会销毁快捷键按钮或弹层");
+assert.match(panelSource, /overlay\.dataset\.canvasTextId = "hover-details"/, "悬停稳定结构没有保持画布文字契约");
+assert.match(panelSource, /trigger\.type = "button"[\s\S]*trigger\.className = "hover-shortcut-trigger"[\s\S]*trigger\.textContent = "i"/, "右上角信息按钮结构缺失");
+assert.match(panelSource, /trigger\.setAttribute\("aria-label", "查看全部快捷键"\)/, "快捷键信息按钮缺少无障碍名称");
+assert.match(panelSource, /popover\.setAttribute\("role", "tooltip"\)[\s\S]*trigger\.setAttribute\("aria-describedby", popoverId\)/, "快捷键信息按钮与弹层的无障碍关系缺失");
+assert.match(panelSource, /buildShortcutDisplayModel\([\s\S]*for \(const group of model\.groups\)[\s\S]*for \(const item of group\.items\)[\s\S]*for \(const bindingLabel of item\.bindingLabels\)/, "快捷键弹层没有从完整展示模型派生");
+assert.match(panelSource, /row\.className = "hover-shortcut-item"/, "快捷键条目缺少稳定的浏览器验收选择器");
+assert.doesNotMatch(panelSource, /Ctrl\+S|⌘S|Delete \/ Backspace/, "悬停面板硬编码了快捷键列表");
+
+const helpRule = ruleBody(stylesSource, ".hover-shortcut-help");
+const triggerRule = ruleBody(stylesSource, ".hover-shortcut-trigger");
+const popoverRule = ruleBody(stylesSource, ".hover-shortcut-popover");
+assert.match(helpRule, /top:\s*7px;[\s\S]*right:\s*7px;[\s\S]*pointer-events:\s*auto;/, "信息按钮没有固定在悬停卡片右上角或恢复交互");
+assert.match(triggerRule, /width:\s*22px;[\s\S]*height:\s*22px;[\s\S]*border-radius:\s*50%;/, "信息按钮不是圆形");
+assert.equal(declarationValue(popoverRule, "right"), "0", "快捷键弹层没有向左展开");
+assert.equal(declarationValue(popoverRule, "bottom"), "calc(100% - 1px)", "快捷键弹层与信息按钮之间仍有不可命中的间隙");
+assert.match(popoverRule, /width:\s*min\(360px, calc\(100vw - 36px\)\);[\s\S]*max-height:\s*min\(62vh, 460px\);[\s\S]*overflow:\s*auto;/, "快捷键长列表没有视口宽度与滚动约束");
+assert.match(stylesSource, /\.hover-shortcut-help:hover \.hover-shortcut-popover,\s*\.hover-shortcut-help:focus-within \.hover-shortcut-popover/, "鼠标 hover 与键盘 focus 没有共用显示契约");
+assert.match(stylesSource, /@media \(max-width: 390px\)[\s\S]*\.hover-shortcut-popover\s*\{[\s\S]*width:\s*calc\(100vw - 24px\)/, "390px 弹层没有防越界约束");
+assert.match(stylesSource, /@media \(max-width: 320px\)[\s\S]*\.hover-shortcut-popover\s*\{[\s\S]*width:\s*calc\(100vw - 16px\)/, "320px 弹层没有防越界约束");
+const heightPointerLeaveBlock = appSource.slice(appSource.indexOf('canvas.addEventListener("pointerleave", event => {'), appSource.indexOf("function updateHeightFillPreviewAtEvent"));
+assert.match(heightPointerLeaveBlock, /event\.relatedTarget\?\.closest\?\.\("\.hover-shortcut-help"\)/, "高度画笔离开画布时没有识别快捷键帮助目标");
+assert.match(heightPointerLeaveBlock, /brush\?\.active && !enteringShortcutHelp[\s\S]*state\.pick = null;[\s\S]*updatePickPanel/, "高度画笔没有仅在正常离开画布时清理 pick");
 
 console.log(JSON.stringify({
   ok: true,
@@ -46,7 +72,10 @@ console.log(JSON.stringify({
   highestMapTextLabel,
   panelBaseZIndex,
   pointerEvents: "none",
-  mapInteractionPreserved: true
+  mapInteractionPreserved: true,
+  stableShortcutHelp: true,
+  pointerLeaveGuarded: true,
+  responsiveWidths: [390, 320]
 }, null, 2));
 
 function overlayPanelBaseZIndex(source) {
@@ -76,6 +105,12 @@ function ruleBody(source, selector) {
   const match = source.match(new RegExp(`(?:^|\\n)${escapeRegExp(selector)}\\s*\\{([\\s\\S]*?)\\}`));
   assert(match, `缺少样式规则：${selector}`);
   return match[1];
+}
+
+function declarationValue(body, property) {
+  const match = body.match(new RegExp(`(?:^|\\n)\\s*${escapeRegExp(property)}:\\s*([^;]+);`));
+  assert(match, `缺少样式声明：${property}`);
+  return match[1].trim();
 }
 
 function escapeRegExp(value) {
