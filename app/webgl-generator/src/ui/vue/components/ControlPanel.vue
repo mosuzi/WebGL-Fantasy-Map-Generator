@@ -506,24 +506,35 @@
     </div>
 
     <div class="control-panel-section" data-control-panel="layers" :hidden="activeTab !== 'layers'">
-      <div class="layer-toggle-grid">
-        <UiLayerToggleButton
-          v-for="layer in layers"
-          :key="layer.id"
-          :layer="layer.id"
-          :label="layer.label"
-          :pressed="isLayerVisible(layer.id)"
-        />
-        <ElButton
-          id="show-hover-info"
-          class="layer-toggle-button"
-          :class="{active: preferences.showHoverInfo !== false}"
-          :aria-pressed="preferences.showHoverInfo !== false ? 'true' : 'false'"
-        >
-          <span class="layer-toggle-indicator"></span>
-          <span>悬停信息</span>
-        </ElButton>
-      </div>
+      <section
+        v-for="group in layerGroups"
+        :key="group.id"
+        class="layer-control-group"
+        :data-layer-control-group="group.id"
+        :aria-labelledby="`layer-control-group-${group.id}`"
+      >
+        <h2 :id="`layer-control-group-${group.id}`">{{ group.label }}</h2>
+        <div class="layer-toggle-grid">
+          <UiLayerToggleButton
+            v-for="layer in group.layers"
+            :key="layer.id"
+            :layer="layer.id"
+            :layers="layer.layers || []"
+            :label="layer.label"
+            :pressed="layerToggleState(layer)"
+          />
+          <ElButton
+            v-if="group.id === 'annotation'"
+            id="show-hover-info"
+            class="layer-toggle-button"
+            :class="{active: preferences.showHoverInfo !== false}"
+            :aria-pressed="preferences.showHoverInfo !== false ? 'true' : 'false'"
+          >
+            <span class="layer-toggle-indicator"></span>
+            <span>悬停信息</span>
+          </ElButton>
+        </div>
+      </section>
 
       <UiSliderField
         label="城市标签上限"
@@ -871,31 +882,46 @@ const themes = Object.freeze([
   {value: "population", label: "人口"}
 ]);
 
-const layers = Object.freeze([
-  {id: "routes", label: "道路"},
-  {id: "rivers", label: "河流"},
-  {id: "oceanCurrents", label: "洋流"},
-  {id: "cities", label: "城市"},
-  {id: "resources", label: "资源点"},
-  {id: "markers", label: "通用标记"},
-  {id: "military", label: "军事"},
-  {id: "warFronts", label: "战线"},
-  {id: "zones", label: "地区"},
-  {id: "zoneEvents", label: "事件地区"},
-  {id: "zoneNatural", label: "自然地区"},
-  {id: "zoneWilderness", label: "自动无人区"},
-  {id: "zoneLabels", label: "地区名称"},
-  {id: "measurements", label: "测量对象"},
-  {id: "scaleBar", label: "比例尺"},
-  {id: "mapBadge", label: "地图总尺寸"},
-  {id: "labels", label: "城市标签"},
-  {id: "stateLabels", label: "国家名称"},
-  {id: "provinceLabels", label: "省份名称"},
-  {id: "stateBorders", label: "国界"},
-  {id: "provinceBorders", label: "省界"},
-  {id: "coastline", label: "水陆线"},
-  {id: "gridCells", label: "网格单元"}
+const layerGroups = Object.freeze([
+  layerGroup("terrain", "地形水文", [
+    {id: "coastline", label: "水陆线"},
+    {id: "rivers", label: "河流"},
+    {id: "oceanCurrents", label: "洋流"}
+  ]),
+  layerGroup("politics", "政治边界", [
+    {id: "stateBorders", label: "国界"},
+    {id: "provinceBorders", label: "省界"}
+  ]),
+  layerGroup("objects", "地图对象", [
+    {id: "routes", label: "道路"},
+    {id: "cities", label: "城市"},
+    {id: "mapMarkers", label: "资源与标记", layers: ["resources", "markers"]},
+    {id: "military", label: "军事"},
+    {id: "warFronts", label: "战线"}
+  ]),
+  layerGroup("zones", "地区", [
+    {id: "zoneComposite", label: "全部地区", layers: ["zones", "zoneEvents", "zoneNatural", "zoneWilderness", "zoneLabels"]},
+    {id: "zoneEvents", label: "事件地区"},
+    {id: "zoneNatural", label: "自然地区"},
+    {id: "zoneWilderness", label: "自动无人区"},
+    {id: "zoneLabels", label: "地区名称"}
+  ]),
+  layerGroup("annotation", "标注辅助", [
+    {id: "labels", label: "城市标签"},
+    {id: "stateLabels", label: "国家名称"},
+    {id: "provinceLabels", label: "省份名称"},
+    {id: "measurements", label: "测量对象"},
+    {id: "scaleBar", label: "比例尺"},
+    {id: "mapBadge", label: "地图总尺寸"},
+    {id: "gridCells", label: "网格单元", defaultVisible: false}
+  ])
 ]);
+
+const layers = Object.freeze(layerGroups.flatMap(group => group.layers.flatMap(layer => layer.layers?.map(id => ({id})) || [layer])));
+
+function layerGroup(id, label, groupLayers) {
+  return Object.freeze({id, label, layers: Object.freeze(groupLayers.map(layer => Object.freeze(layer)))});
+}
 
 const managementGroups = Object.freeze([
   managementGroup("terrain", "地形环境", [
@@ -929,8 +955,7 @@ const managementGroups = Object.freeze([
     ["open-notes-panel", "备注总览"],
     ["open-measurement-panel", "测量对象"]
   ]),
-  managementGroup("system", "系统工具", [["open-namebase-panel", "名称库"]]),
-  managementGroup("experimental", "实验功能", [["open-emblem-panel", "纹章统计"]])
+  managementGroup("system", "系统工具", [["open-namebase-panel", "名称库"]])
 ]);
 
 function managementGroup(id, label, actions) {
@@ -949,7 +974,8 @@ const regenerationActions = Object.freeze([
   {value: "rivers", kind: "rivers", label: "河流", impact: "会替换河流与水文引用，并标记相关下游系统待重算。"},
   {value: "markers", kind: "markers", label: "资源点", impact: "会替换资源类标记，并刷新资源贸易摘要。"},
   {value: "diplomacy", kind: "diplomacy", label: "外交", impact: "会替换国家关系、战争与贸易关系摘要。"},
-  {value: "military", kind: "military", label: "军事", impact: "会替换全部军团、兵力、舰队、战线和战役摘要。"}
+  {value: "military", kind: "military", label: "军事", impact: "会替换全部军团、兵力、舰队、战线和战役摘要。"},
+  {value: "zones", kind: "zones", label: "地区", impact: "会按当前战争、宗教、军事与地形上下文重新生成未锁定地区，并保留锁定地区。"}
 ]);
 const selectedRegenerationKind = ref(regenerationActions[0].kind);
 const selectedRegenerationAction = computed(() => regenerationActions.find(action => action.kind === selectedRegenerationKind.value) || regenerationActions[0]);
@@ -972,9 +998,18 @@ const regenerationTargetMissing = computed(() => (selectedRegenerationScope.valu
 const regenerationFeedback = ref("");
 
 function isLayerVisible(layer) {
+  const preferred = preferences.value.layers?.[layer];
+  if (typeof preferred === "boolean") return preferred;
   const config = layers.find(item => item.id === layer);
-  if (config?.defaultVisible === false && preferences.value.layers?.[layer] !== true) return false;
-  return preferences.value.layers?.[layer] !== false;
+  return config?.defaultVisible !== false;
+}
+
+function layerToggleState(layer) {
+  const members = layer.layers || [layer.id];
+  const visible = members.filter(isLayerVisible).length;
+  if (visible === 0) return false;
+  if (visible === members.length) return true;
+  return "mixed";
 }
 
 function patchUnitPreference(patch) {

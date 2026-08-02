@@ -17,6 +17,7 @@ const root = resolve(import.meta.dirname, "..");
 const tableSource = read("app/webgl-generator/src/ui/vue/components/base/UiObjectTable.vue");
 const composableSource = read("app/webgl-generator/src/ui/vue/composables/use-regeneration-lock-selection.js");
 const actionsSource = read("app/webgl-generator/src/ui/vue/components/base/UiRegenerationLockActions.vue");
+const stylesSource = read("app/webgl-generator/src/styles.css");
 const targetPanels = [
   "State", "Province", "City", "Route", "River", "Marker", "Diplomacy", "Religion",
   "Culture", "Military", "Zone", "Feature", "OceanCurrent", "Economy"
@@ -61,6 +62,7 @@ assert.match(composableSource, /getRegenerationLockUiSession/);
 assert.match(composableSource, /get selectedCount\(\)/, "地图选中不可见行时动作条仍须使用完整会话计数");
 assert.match(actionsSource, /已选 \{\{ selectedCount \}\} 项/);
 assert.match(actionsSource, /在地图多选/);
+assert.match(stylesSource, /\.regeneration-lock-actions\s*\{[\s\S]*?display:\s*grid;[\s\S]*?gap:\s*8px;/, "共享批量操作没有稳定按钮间距");
 
 const previousWarn = console.warn;
 console.warn = () => {};

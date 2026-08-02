@@ -19,6 +19,10 @@
     <UiSelectField label="新增地区类型" :model-value="zoneDraft.type" :options="ZONE_CREATION_TYPE_OPTIONS" @update:model-value="zoneDraft.type = $event" />
     <UiButton variant="secondary" :active="state.createMode" @click="toggleCreateMode">{{ state.createMode ? "取消放置" : "放置地区" }}</UiButton>
   </div>
+  <div class="zone-panel-regeneration">
+    <UiButton variant="danger" :disabled="state.regenerating" @click="callbacks.onRegenerate">重新生成地区</UiButton>
+    <span aria-live="polite">{{ state.regenerationStatus }}</span>
+  </div>
   <UiRegenerationLockActions v-bind="regenerationLocks.actionProps" v-on="regenerationLocks.actionListeners" />
   <UiObjectTable
     v-bind="regenerationLocks.tableProps"
@@ -178,8 +182,8 @@ const sortOptions = Object.freeze([
 ]);
 
 const columns = Object.freeze([
-  {key: "id", label: "ID", width: 54, align: "right"},
   {key: "name", label: "名称", width: 150},
+  {key: "id", label: "编号", width: 54, align: "right"},
   {key: "type", label: "类型", width: 80},
   {key: "patternLabel", label: "纹理", width: 82},
   {key: "cells", label: "规模", width: 64, align: "right", format: value => formatNumber(value)},

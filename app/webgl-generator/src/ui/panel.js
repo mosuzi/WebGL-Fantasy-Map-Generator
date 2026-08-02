@@ -184,6 +184,17 @@ export function bindRuntimePanel(documentRef, handlers) {
       });
     }
   }
+  for (const control of documentRef.querySelectorAll("[data-layer-group]")) {
+    control.addEventListener("click", () => {
+      const visible = control.getAttribute("aria-pressed") !== "true";
+      const members = layerGroupMembers(control);
+      for (const layer of members) {
+        updateLayerPreference(documentRef, layer, visible);
+        handlers.onLayerVisible?.(layer, visible);
+      }
+      setLayerGroupControlState(control, members.map(() => visible));
+    });
+  }
   for (const button of documentRef.querySelectorAll("[data-mode]")) {
     button.addEventListener("click", () => {
       setActiveModeButton(documentRef, button.dataset.mode);
@@ -389,6 +400,9 @@ function applyControlPreferences(documentRef) {
     if (control.tagName === "BUTTON") setLayerControlState(control, visible);
     else control.checked = Boolean(visible);
   }
+  const visibility = {...preferences.layers};
+  if (!Object.prototype.hasOwnProperty.call(visibility, "gridCells")) visibility.gridCells = false;
+  syncLayerGroupControls(documentRef, visibility);
 }
 
 function setLabelLimitControlValue(documentRef, value) {
@@ -463,6 +477,25 @@ function normalizeMaxCityLabels(value) {
 
 function setLayerControlState(control, visible) {
   setBooleanControlState(control, visible);
+}
+
+export function syncLayerGroupControls(documentRef, visibility = {}) {
+  for (const control of documentRef.querySelectorAll("[data-layer-group]")) {
+    const members = layerGroupMembers(control);
+    setLayerGroupControlState(control, members.map(layer => visibility[layer] !== false));
+  }
+}
+
+function layerGroupMembers(control) {
+  return String(control?.dataset?.layerGroup || "").split(",").map(value => value.trim()).filter(Boolean);
+}
+
+function setLayerGroupControlState(control, states) {
+  const enabled = states.filter(Boolean).length;
+  const state = enabled === 0 ? "false" : enabled === states.length ? "true" : "mixed";
+  control.classList.toggle("active", state === "true");
+  control.classList.toggle("mixed", state === "mixed");
+  control.setAttribute("aria-pressed", state);
 }
 
 function setBooleanControlState(control, visible) {

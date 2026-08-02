@@ -3,13 +3,14 @@ import assert from "node:assert/strict";
 import {readFile} from "node:fs/promises";
 import {bindLabelNamingPanelTrigger} from "../app/webgl-generator/src/ui/label-naming-panel-trigger.js";
 
-const [controlPanelSource, toolbarSource, shortcutSource, runtimePanelSource, runtimeAppSource, labelPanelSource] = await Promise.all([
+const [controlPanelSource, toolbarSource, shortcutSource, runtimePanelSource, runtimeAppSource, labelPanelSource, stylesSource] = await Promise.all([
   readFile(new URL("../app/webgl-generator/src/ui/vue/components/ControlPanel.vue", import.meta.url), "utf8"),
   readFile(new URL("../app/webgl-generator/src/ui/vue/components/MapToolbar.vue", import.meta.url), "utf8"),
   readFile(new URL("../app/webgl-generator/src/runtime/keyboard-shortcuts.js", import.meta.url), "utf8"),
   readFile(new URL("../app/webgl-generator/src/ui/panel.js", import.meta.url), "utf8"),
   readFile(new URL("../app/webgl-generator/src/runtime/app.js", import.meta.url), "utf8"),
-  readFile(new URL("../app/webgl-generator/src/ui/panels/label-naming-panel.js", import.meta.url), "utf8")
+  readFile(new URL("../app/webgl-generator/src/ui/panels/label-naming-panel.js", import.meta.url), "utf8"),
+  readFile(new URL("../app/webgl-generator/src/styles.css", import.meta.url), "utf8")
 ]);
 
 const expectedGroups = Object.freeze({
@@ -17,8 +18,7 @@ const expectedGroups = Object.freeze({
   politics: {label: "政治社会", actions: ["open-state-panel", "open-government-panel", "open-province-panel", "open-city-panel", "open-population-panel", "open-culture-panel", "open-religion-panel", "open-diplomacy-panel"]},
   network: {label: "网络经济", actions: ["open-economy-panel", "open-military-panel", "open-route-panel"]},
   annotation: {label: "标注对象", actions: ["open-zone-panel", "open-marker-panel", "open-label-naming-panel", "open-notes-panel", "open-measurement-panel"]},
-  system: {label: "系统工具", actions: ["open-namebase-panel"]},
-  experimental: {label: "实验功能", actions: ["open-emblem-panel"]}
+  system: {label: "系统工具", actions: ["open-namebase-panel"]}
 });
 
 const groupSource = sliceBetween(controlPanelSource, "const managementGroups", "const regenerationActions");
@@ -34,11 +34,29 @@ for (const [groupId, group] of Object.entries(expectedGroups)) {
     actionIds.push(actionId);
   }
 }
-assert.equal(actionIds.length, 25, "管理首层入口数量漂移");
+assert.equal(actionIds.length, 24, "管理首层入口数量漂移");
 assert.equal(new Set(actionIds).size, actionIds.length, "管理入口被重复分组");
 assert.equal(countMatches(groupSource, /\["open-[^"]+"/g), actionIds.length, "存在未登记或重复的管理入口");
 assert(!groupSource.includes("fit-view"), "适配视图仍在管理入口中");
-assert(groupSource.indexOf("open-emblem-panel") > groupSource.indexOf('managementGroup("experimental"'), "纹章没有降到实验功能组");
+assert(!groupSource.includes("open-emblem-panel") && !groupSource.includes('managementGroup("experimental"'), "纹章实验入口仍然可见");
+assert(runtimeAppSource.includes('"emblem-panel": () => state.panels.emblem?.open(map, history)'), "隐藏入口时不得移除纹章内部面板注册");
+
+const layerSource = sliceBetween(controlPanelSource, "const layerGroups", "const managementGroups");
+for (const [id, label] of [["terrain", "地形水文"], ["politics", "政治边界"], ["objects", "地图对象"], ["zones", "地区"], ["annotation", "标注辅助"]]) {
+  assert(layerSource.includes(`layerGroup("${id}", "${label}"`), `图层页缺少语义组：${label}`);
+}
+assert.equal(countMatches(layerSource, /layerGroup\("/g), 5, "图层页语义组数量漂移");
+assert(layerSource.includes('layers: ["resources", "markers"]'), "资源点与通用标记没有合并为首层入口");
+assert(layerSource.includes('{id: "zoneComposite", label: "全部地区", layers: ["zones", "zoneEvents", "zoneNatural", "zoneWilderness", "zoneLabels"]}'), "全部地区没有覆盖五个既有地区状态键");
+for (const [id, label] of [["zoneEvents", "事件地区"], ["zoneNatural", "自然地区"], ["zoneWilderness", "自动无人区"], ["zoneLabels", "地区名称"]]) {
+  assert(layerSource.includes(`{id: "${id}", label: "${label}"}`), `地区图层缺少独立入口：${label}`);
+}
+assert.match(layerSource, /id: "gridCells", label: "网格单元", defaultVisible: false/, "网格单元无偏好默认值没有关闭");
+assert.match(controlPanelSource, /function isLayerVisible\(layer\)\s*\{[\s\S]*?typeof preferred === "boolean"[\s\S]*?return config\?\.defaultVisible !== false;/, "Vue 图层状态没有按显式偏好优先、配置默认值兜底");
+assert.match(controlPanelSource, /function layerToggleState\(layer\)\s*\{[\s\S]*?members\.filter\(isLayerVisible\)[\s\S]*?return "mixed";/, "复合图层的 Vue 计算路径没有复用独立底层状态");
+assert.match(runtimePanelSource, /querySelectorAll\("\[data-layer-group\]"\)[\s\S]*?aria-pressed[\s\S]*?"mixed"/, "复合图层入口缺少三态同步");
+assert.match(stylesSource, /\.ui-select-el \.el-select__wrapper\s*\{[\s\S]*?padding:\s*0 8px 0 10px/, "共享下拉箭头没有靠近右边框");
+assert.match(stylesSource, /@media \(max-width: 430px\)\s*\{[\s\S]*?:is\(\.floating-panel, \.vue-control-panel-root\) \.ui-select-field\s*\{[\s\S]*?grid-template-columns:\s*minmax\(0, 1fr\)[\s\S]*?gap:\s*5px/, "窄视口下共享下拉框没有切换为上下布局");
 
 assert.equal(countMatches(toolbarSource, /id="fit-view"/g), 1, "地图工具栏中的适配视图入口数量不为 1");
 assert.match(shortcutSource, /id: "selection\.fit-view"[\s\S]*?selector: "#fit-view"[\s\S]*?path: "layers\.fitView"/, "适配视图快捷键没有继续调用既有 action");

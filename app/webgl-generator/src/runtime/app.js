@@ -61,6 +61,7 @@ import {createRoutePanel} from "../ui/panels/route-panel.js";
 import {createStatePanel} from "../ui/panels/state-panel.js";
 import {createZonePanel} from "../ui/panels/zone-panel.js";
 import {scheduleLazyVuePanelPreload} from "../ui/panels/lazy-vue-panel.js";
+import ZonePanelComponent from "../ui/vue/components/ZonePanel.vue";
 import {EDIT_REFRESH_PRESETS} from "./edit-refresh-scheduler.js";
 import {createEditRefreshScheduler} from "./edit-refresh-scheduler.js";
 import {BROWSER_MAP_STORAGE_KEY, decodeBrowserMapStoragePayload, encodeBrowserMapStoragePayload} from "./browser-map-storage.js";
@@ -2420,7 +2421,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     }
   });
   state.panels.lake = lakePanel;
-  zonePanel = createZonePanel(documentRef, panelManager, {
+  zonePanel = createZonePanel(documentRef, panelManager, ZonePanelComponent, {
     onCreateMode: type => {
       if (type) enterCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.ZONE_ADD, {type, radius: 1});
       else cancelCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.ZONE_ADD, "panel-toggle");
@@ -2457,6 +2458,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       updateEditingInteractionLock(state, documentRef);
       return result;
     },
+    onRegenerate: () => runtimeActions.generate.regenerate("zones", {confirm: true}),
     onUndo: () => {
       return executeHistoryCommand(state, documentRef, "undo");
     },
@@ -11068,7 +11070,7 @@ function regenerateZones(state, documentRef, options = {}) {
   const constraintBundle = options.constraintBundle;
   if (!map?.pack?.cells?.i?.length) return regenerationResult("zones", "未执行", "当前地图缺少 pack cells，无法重建地区。");
   const currentZones = map.zones?.zones || map.pack?.zones || [];
-  if (!currentZones.length || allRegenerationObjectsLocked(map, OBJECT_KIND.ZONE, currentZones)) {
+  if (currentZones.length > 0 && allRegenerationObjectsLocked(map, OBJECT_KIND.ZONE, currentZones)) {
     return regenerationResult("zones", "未执行", "当前地区已全部锁定，未推进扰动序号。");
   }
   const lockCapture = constraintBundle
@@ -11095,10 +11097,10 @@ function regenerateZones(state, documentRef, options = {}) {
   refreshGenerationSummary(map);
   appendGenerationLog(map, `regenerate zones: salt=${salt}, zones=${map.zones.metadata.zones}, cells=${map.zones.metadata.cells}`);
   refreshRegeneratedLayers(state, documentRef, {
-    derived: ["cell-colors", "object-panels", "object-index"],
+    derived: ["cell-colors", "line-layers", "labels", "object-panels", "object-index"],
     affected: systemAffected("zones", collectionAffected(OBJECT_KIND.ZONE, map.zones?.zones))
   });
-  return regenerationResult("zones", `地区已按当前战争、宗教、军事与地形上下文重算（扰动 #${salt}）：${before} -> ${map.zones.metadata.zones}`, "已刷新地区覆盖、统计和对象索引。");
+  return regenerationResult("zones", `地区已按当前战争、宗教、军事与地形上下文重算（扰动 #${salt}）：${before} -> ${map.zones.metadata.zones}`, "已刷新地区覆盖、名称、统计和对象索引。");
 }
 
 function regenerateMarkerResources(state, documentRef, {deferRefresh = false, constraintBundle = null} = {}) {

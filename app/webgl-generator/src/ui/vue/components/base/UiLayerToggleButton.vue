@@ -1,9 +1,10 @@
 <template>
   <ElButton
     class="layer-toggle-button"
-    :class="{active: pressed}"
-    :data-layer="layer"
-    :aria-pressed="pressed ? 'true' : 'false'"
+    :class="{active: state === 'true', mixed: state === 'mixed'}"
+    :data-layer="layers.length ? null : layer"
+    :data-layer-group="layers.length ? layers.join(',') : null"
+    :aria-pressed="state"
   >
     <span class="layer-toggle-indicator"></span>
     <span>{{ label }}</span>
@@ -11,11 +12,13 @@
 </template>
 
 <script setup>
+import {computed} from "vue";
+
 defineOptions({
   name: "UiLayerToggleButton"
 });
 
-defineProps({
+const props = defineProps({
   layer: {
     type: String,
     required: true
@@ -25,8 +28,14 @@ defineProps({
     required: true
   },
   pressed: {
-    type: Boolean,
+    type: [Boolean, String],
     default: true
+  },
+  layers: {
+    type: Array,
+    default: () => []
   }
 });
+
+const state = computed(() => props.pressed === "mixed" ? "mixed" : props.pressed ? "true" : "false");
 </script>

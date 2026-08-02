@@ -6015,6 +6015,20 @@ select:disabled {
   gap: 10px;
 }
 
+.layer-control-group {
+  display: grid;
+  gap: 7px;
+  margin-bottom: 12px;
+}
+
+.layer-control-group h2 {
+  margin: 0;
+  color: #9fb0ba;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
 .layer-toggle-grid .el-button {
   width: 100%;
   min-width: 0;
@@ -6239,6 +6253,16 @@ select:disabled {
   border-color: #f0c56e;
   background: #d7a84f;
   box-shadow: 0 0 0 3px rgb(215 168 79 / 14%);
+}
+
+.layer-toggle-button.el-button.mixed {
+  border-color: #8b7548;
+  color: #e0c98f;
+}
+
+.layer-toggle-button.el-button.mixed .layer-toggle-indicator {
+  border-color: #d7a84f;
+  background: linear-gradient(90deg, #d7a84f 50%, #1b252b 50%);
 }
 
 .toggle-button-switch {
@@ -9424,7 +9448,7 @@ input.ui-switch-native {
   min-height: 32px;
   border: 1px solid #33444f;
   border-radius: 6px;
-  padding: 0 30px 0 10px;
+  padding: 0 8px 0 10px;
   background: linear-gradient(180deg, #162129 0%, #10171b 100%);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
   color: #edf4f6;
@@ -9450,6 +9474,10 @@ input.ui-switch-native {
 
 .ui-select-el .el-select__placeholder.is-transparent {
   color: #9fb0ba;
+}
+
+.ui-select-el .el-select__suffix {
+  margin-inline-start: 4px;
 }
 
 .ui-select-el .el-select__caret {
@@ -9715,6 +9743,29 @@ input.ui-switch-native {
 .population-panel-controls,
 .zone-panel-controls {
   margin: 10px 0 8px;
+}
+
+.zone-panel-regeneration {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 8px 0;
+}
+
+.zone-panel-regeneration span {
+  color: #9fb0b9;
+  font-size: 12px;
+}
+
+.regeneration-lock-actions {
+  display: grid;
+  gap: 8px;
+  margin: 8px 0;
+}
+
+.regeneration-lock-selection-count {
+  color: #9fb0b9;
+  font-size: 12px;
 }
 
 .state-panel-controls .ui-filter-input,
@@ -10149,6 +10200,13 @@ input.ui-switch-native {
   .map-toolbar :is(.primary-action, .secondary-action):focus-visible {
     position: relative;
     z-index: 1;
+  }
+}
+
+@media (max-width: 430px) {
+  :is(.floating-panel, .vue-control-panel-root) .ui-select-field {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 5px;
   }
 }
 

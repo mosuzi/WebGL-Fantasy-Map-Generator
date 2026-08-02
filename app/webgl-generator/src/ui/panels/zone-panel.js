@@ -20,7 +20,7 @@ const ZONE_LIST_DEFAULTS = Object.freeze({
   sortDir: "asc"
 });
 
-export function createZonePanel(documentRef, manager, callbacks = {}) {
+export function createZonePanel(documentRef, manager, component, callbacks = {}) {
   const listPreferences = readPanelListPreferences(documentRef, ZONE_PANEL_ID, ZONE_LIST_DEFAULTS);
   const panelState = shallowReactive({
     open: false,
@@ -34,6 +34,8 @@ export function createZonePanel(documentRef, manager, callbacks = {}) {
     highlightCount: readPanelHighlightCount(callbacks),
     createMode: false,
     createType: "Disaster",
+    regenerating: false,
+    regenerationStatus: "",
     version: 0
   });
   const panelCallbacks = {
@@ -71,6 +73,21 @@ export function createZonePanel(documentRef, manager, callbacks = {}) {
     onPropertiesChange: (zoneId, patch) => callbacks.onPropertiesChange?.(zoneId, patch),
     onCreateMode: type => callbacks.onCreateMode?.(type),
     onDelete: zoneId => callbacks.onDelete?.(zoneId),
+    onRegenerate: async () => {
+      if (panelState.regenerating) return null;
+      panelState.regenerating = true;
+      panelState.regenerationStatus = "正在重新生成地区…";
+      try {
+        const result = await callbacks.onRegenerate?.();
+        panelState.regenerationStatus = result?.status || (result?.executed === false ? "地区没有变化。" : "地区重新生成完成。");
+        return result;
+      } catch (error) {
+        panelState.regenerationStatus = `重新生成失败：${error?.message || error || "未知错误"}`;
+        return null;
+      } finally {
+        panelState.regenerating = false;
+      }
+    },
     onUndo: () => callbacks.onUndo?.(),
     onRedo: () => callbacks.onRedo?.()
   };
@@ -97,7 +114,7 @@ export function createZonePanel(documentRef, manager, callbacks = {}) {
   const lazyPanel = createLazyVuePanel(
     documentRef,
     root,
-    () => import("../vue/components/ZonePanel.vue"),
+    () => component,
     {state: panelState, callbacks: panelCallbacks},
     {
       initial: "地区管理将在首次打开时加载。",
