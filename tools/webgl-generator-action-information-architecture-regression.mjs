@@ -41,7 +41,8 @@ const regenerationPanels = new Map([
   ["rivers", "RiverPanel.vue"],
   ["markers", "MarkerPanel.vue"],
   ["diplomacy", "DiplomacyPanel.vue"],
-  ["military", "MilitaryPanel.vue"]
+  ["military", "MilitaryPanel.vue"],
+  ["zones", "ZonePanel.vue"]
 ]);
 for (const [kind, name] of regenerationPanels) {
   const source = components.get(name) || "";

@@ -97,7 +97,7 @@ const [controlSource, pickingSource, panelSource, appSource] = await Promise.all
 const controlModes = [...controlSource.matchAll(/\{value: "([^"]+)", label: "(?:高度|温度|降水|生物群系|文化|宗教|外交|政体|国家|省份|区域|人口)"\}/g)].map(match => match[1]);
 assert.deepEqual(controlModes, HOVER_VIEW_MODES, "控制面板视图与悬停 registry 漂移");
 for (const id of ["cultureId", "religionId", "stateId", "provinceId", "regionId", "packBiomeDescription"]) assert.match(pickingSource, new RegExp(`\\b${id}\\b`), `pick 结果缺少 ${id}`);
-assert.match(panelSource, /buildHoverRowEntries\(pick, preferences\.units, \{debugEnabled, colorMode, map: state\?\.map, viewOptions: rendererStats\.viewOptions\}\)/);
+assert.match(panelSource, /buildHoverRowEntries\(pick, preferences\.units, \{[\s\S]*debugEnabled,[\s\S]*colorMode,[\s\S]*map: state\?\.map,[\s\S]*viewOptions: rendererStats\.viewOptions,[\s\S]*gridCellsVisible: rendererStats\.layerVisibility\?\.gridCells === true[\s\S]*\}\)/);
 assert.match(appSource, /state\.renderer\?\.setColorMode\?\.\(nextMode\);[\s\S]{0,160}updatePickPanel\(documentRef, state\);/, "切换视图后没有即时刷新现有悬停内容");
 
 console.log(JSON.stringify({ok: true, modes: HOVER_VIEW_MODES, biomeRows, fallbackRows: fallback.length, diagnostics: debug.slice(-3).map(row => row.label)}, null, 2));

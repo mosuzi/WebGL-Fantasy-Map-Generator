@@ -322,6 +322,7 @@ function domainForPanel(panelId) {
     "biome-panel": "biome",
     "city-panel": "city",
     "climate-panel": "climate",
+    "cloud-storage-panel": "data",
     "culture-panel": "culture",
     "diplomacy-panel": "diplomacy",
     "economy-panel": "economy",

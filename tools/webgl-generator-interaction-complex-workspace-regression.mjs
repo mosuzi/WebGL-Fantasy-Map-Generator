@@ -8,7 +8,7 @@ assert.deepEqual(generated, report, "生成的复杂工作区审计报告不得�
 
 assert.deepEqual(
   pick(report.totals, ["panelProfiles", "complexWorkspaces", "complexWorkspaceFields", "sharedFields", "exceptionFields", "exportParameterFields"]),
-  {panelProfiles: 27, complexWorkspaces: 10, complexWorkspaceFields: 134, sharedFields: 86, exceptionFields: 20, exportParameterFields: 28},
+  {panelProfiles: 28, complexWorkspaces: 10, complexWorkspaceFields: 134, sharedFields: 86, exceptionFields: 20, exportParameterFields: 28},
   "复杂面板和字段模板分母漂移时必须重新审计"
 );
 assert.ok(report.complexWorkspaces.every(item => item.fieldTemplates === item.sharedFields + item.exceptionFields), "每个复杂工作区的字段分母必须闭合");
@@ -41,12 +41,12 @@ assert.ok(report.tableInstances.every(item => item.locateHistory.includes("不�
 
 assert.deepEqual(
   pick(report.totals, ["actionDockHosts", "actionDockActions", "uniqueActionKeys", "toggleModeActions", "directActions", "secondaryPanelActions", "otherPanelActions", "crossResultActionKeys"]),
-  {actionDockHosts: 18, actionDockActions: 68, uniqueActionKeys: 32, toggleModeActions: 12, directActions: 0, secondaryPanelActions: 55, otherPanelActions: 1, crossResultActionKeys: 2},
+  {actionDockHosts: 18, actionDockActions: 70, uniqueActionKeys: 33, toggleModeActions: 12, directActions: 0, secondaryPanelActions: 57, otherPanelActions: 1, crossResultActionKeys: 2},
   "动作坞结果分母漂移时必须重新审计"
 );
 assert.equal(report.panelProfiles.reduce((sum, panel) => sum + panel.actionDocks, 0), report.totals.actionDockHosts, "每个源码 Dock 都必须进入宿主分母，不能只读取每个文件的第一个实例");
 assert.ok(report.panelProfiles.filter(panel => panel.actionDocks).every(panel => panel.actionDocks === 1), "当前每个动作坞宿主恰好一个；新增第二实例时必须扩展稳定身份");
-assert.equal(new Set(report.actionDockActions.map(item => item.actionId)).size, 68, "动作身份必须使用 host + key，不能只用全局 key");
+assert.equal(new Set(report.actionDockActions.map(item => item.actionId)).size, 70, "动作身份必须使用 host + key，不能只用全局 key");
 assert.deepEqual(crossResultKeys(report.actionDockActions), ["assign", "edit"], "跨结果类别 key 漂移时必须重新审计动作词典");
 assert.ok(report.actionDockActions.every(item => item.sourceRef.tokens.includes(`host-id="${item.hostId}"`) && item.sourceRef.tokens.includes(`resultClass: "${item.resultClass}"`)), "每个动作必须由源码显式声明 host + key 身份和结果类型");
 assert.deepEqual(report.actionDockActions.filter(item => item.resultClass === "open-other-panel").map(item => item.actionId), ["CulturePanel:namebase"]);

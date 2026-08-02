@@ -42,8 +42,8 @@ for (const token of ["flex: 1 1 auto", "min-height: 0", "overflow: auto"]) asser
 
 const managementBlock = sourceBlock(source.control, "const managementGroups = Object.freeze([", "\n]);");
 const managementIds = [...managementBlock.matchAll(/\["(open-[^"]+-panel)",/g)].map(match => match[1]);
-assert.equal(new Set(managementIds).size, 25, "管理 Tab 必须保持 6 组 25 个唯一入口");
-assert.equal((managementBlock.match(/managementGroup\(/g) || []).length, 6);
+assert.equal(new Set(managementIds).size, 24, "管理 Tab 必须保持 5 组 24 个唯一可见入口");
+assert.equal((managementBlock.match(/managementGroup\(/g) || []).length, 5);
 const handlerBlock = sourceBlock(source.app, "const CONTROL_PANEL_CHILD_OPEN_HANDLERS = Object.freeze([", "\n]);");
 const handlers = [...handlerBlock.matchAll(/"(onOpen[^"]+Panel)"/g)].map(match => match[1]);
 assert.equal(new Set(handlers).size, 25, "child opener handler 必须保持 25 个");
@@ -64,7 +64,7 @@ assert.deepEqual({
   hosts: complex.actionDockHosts.length,
   actions: complex.actionDockActions.length,
   secondary: complex.totals.secondaryPanelActions
-}, {hosts: 18, actions: 69, secondary: 56}, "第 218 项省会重评二级动作必须纳入复杂工作区分母");
+}, {hosts: 18, actions: 70, secondary: 57}, "复杂工作区动作必须纳入固定分母");
 for (const token of ["ResizeObserver", "requestAnimationFrame", "positionObserver.observe(panel.value)", "positionObserver.observe(panelBody.value)", "naturalPanelHeight", "panel.value?.scrollHeight", "panelBody.value?.scrollHeight", "chooseSecondaryPanelPlacement", "findSecondaryActionAnchor", "constrainUserSecondaryPanelPosition", 'side: "user"', ":data-placement-side", ":data-available-height"]) assert.ok(source.actionDock.includes(token), `UiActionDock 缺少 ${token}`);
 assert.doesNotMatch(source.actionDock, /minHeight\s*=\s*180|Math\.max\(minHeight/, "二级面板不得保留 180px 高度 floor");
 
@@ -156,8 +156,8 @@ assert.ok(source.styles.includes(focusBlock), "9 个 focus selector 家族必须
 for (const selector of focusSelectors) assert.doesNotMatch(cssRulesContaining(source.styles, selector), /outline:\s*none/, `${selector} 不得清除焦点环`);
 
 console.log(JSON.stringify({
-  management: {groups: 6, entries: 25, handlers: 25},
-  actionDock: {hosts: 18, actions: 69, secondary: 56},
+  management: {groups: 5, entries: 24, handlers: 25},
+  actionDock: {hosts: 18, actions: 70, secondary: 57},
   focusFamilies: 9,
   toolbar: {ids: 6, userEntries: 5, singleRow: true, textActionsSingleLine: 4},
   controlPanel: {fixedTabs: true, independentContentScroll: true}

@@ -4,17 +4,17 @@
 
 ## 当前分母
 
-- 交互表面：106（纳入 87，交互审计排除 19）
+- 交互表面：107（纳入 88，交互审计排除 19）
 - 画布模式：29
 - runtime actions：261
 - API action 绑定：260
 - command / inspector 导出：212
 - 公共 API 方法：316
-- 矩阵总行数：1195
+- 矩阵总行数：1196
 
 ## 分类结果
 
-- covered：1121
+- covered：1122
 - excluded：74
 - deferred-owned：0
 - gap：0

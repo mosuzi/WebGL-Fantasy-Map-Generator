@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "scope": "权威任务第 204 项：全游戏复合语义接口、规则动作与玩法配方审计",
   "generatedAtPolicy": "报告不写入动态时间，sourceDigest 变化即要求重新生成",
-  "sourceDigest": "f0ccbe50c4cb034a988c3302c4021c73fa2590cda273baa93bb92d1d155bc51f",
+  "sourceDigest": "b9ee37c44699866533430fde1739f290e6f9084100946495cd4cc73e5a058a36",
   "definition": {
     "compoundSemanticAction": "一个玩家意图，但执行时需要跨对象/系统、条件分支、业务预检或原子回滚；应由单一规则事务表达。",
     "primitive": "只修改一个稳定字段或纯编辑器显示偏好，可保留为原子 API，不强行包装成复合动作。",
@@ -22,7 +22,7 @@
     "executable-recipe": "已进入公开 planner registry；规划器逐步调用精确事实、预检和执行方法。"
   },
   "denominator": {
-    "fullCapabilityRows": 1195,
+    "fullCapabilityRows": 1196,
     "fullCapabilityUnknown": 0,
     "fullCapabilityUnclassified": 0,
     "fullCapabilityGaps": 0,
@@ -32,7 +32,7 @@
     "classifiedCellActionRows": 48,
     "canvasModes": 29,
     "directManipulationFamilies": 19,
-    "directManipulationInstances": 89
+    "directManipulationInstances": 90
   },
   "totals": {
     "actions": 79,

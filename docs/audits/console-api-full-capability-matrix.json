@@ -1,14 +1,14 @@
 {
   "schemaVersion": 1,
-  "sourceDigest": "3331bd36951a3bbac65df538b90c8a086439ea7e7ba4040bd98cf0bb235e7bfe",
+  "sourceDigest": "691c822da72c0ac3acd35bcfa8b39890ea6bf5028316e77b159f953907603fd9",
   "sourceRoots": [
     "app/webgl-generator/index.html",
     "app/webgl-generator/src/**/*.{js,vue}",
     "app/webgl-generator/src/runtime/**/*-commands.js"
   ],
   "denominator": {
-    "interactionSurfaces": 106,
-    "includedInteractionSurfaces": 87,
+    "interactionSurfaces": 107,
+    "includedInteractionSurfaces": 88,
     "excludedInteractionSurfaces": 19,
     "canvasModes": 29,
     "runtimeActions": 261,
@@ -23,8 +23,8 @@
     "gap": "适合参数化且没有公共 API，必须在第 200 项关闭"
   },
   "totals": {
-    "rows": 1195,
-    "covered": 1121,
+    "rows": 1196,
+    "covered": 1122,
     "excluded": 74,
     "deferred-owned": 0,
     "gap": 0,
@@ -38932,6 +38932,50 @@
       "exclusionReason": ""
     },
     {
+      "matrixId": "surface:panel:cloud-storage-panel",
+      "capabilityId": "surface-domain.data",
+      "title": "运行时面板入口",
+      "sourceKind": "interaction-surface",
+      "sourceFiles": [
+        "app/webgl-generator/src/ui/panels/cloud-storage-panel.js"
+      ],
+      "uiEntry": "panel:cloud-storage-panel",
+      "action": "",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "data.exportAll",
+        "data.exportCompressedAll",
+        "data.exportFeatureGEO",
+        "data.exportGEO",
+        "data.exportHeightmapPNG",
+        "data.exportImportDiagnostic",
+        "data.exportMap",
+        "data.exportMeasurements",
+        "data.exportNotes",
+        "data.exportPNG",
+        "data.importGEO",
+        "data.importHeightmap",
+        "data.importMap",
+        "data.inspectCollectionImport",
+        "data.restoreBrowserMap",
+        "data.saveBrowserMap"
+      ],
+      "inputSpace": "object-ref / options",
+      "mutates": "按方法元数据",
+      "preflight": "按领域 inspector / method schema",
+      "businessCodes": [],
+      "confirm": "按方法元数据",
+      "undoOrRollback": "按方法元数据",
+      "async": false,
+      "compatibility": "UI 与 API 使用同一领域入口",
+      "evidence": [
+        "tools/webgl-generator-interaction-surface-inventory.mjs"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
       "matrixId": "surface:panel:culture-panel",
       "capabilityId": "surface-domain.culture",
       "title": "控制面板、快捷键或对象上下文入口",
@@ -40123,11 +40167,10 @@
     {
       "matrixId": "surface:panel:zone-panel",
       "capabilityId": "surface-domain.zone",
-      "title": "控制面板、快捷键或对象上下文入口",
+      "title": "运行时面板入口",
       "sourceKind": "interaction-surface",
       "sourceFiles": [
-        "app/webgl-generator/src/ui/panels/zone-panel.js",
-        "app/webgl-generator/src/ui/vue/components/ZonePanel.vue"
+        "app/webgl-generator/src/ui/panels/zone-panel.js"
       ],
       "uiEntry": "panel:zone-panel",
       "action": "",
