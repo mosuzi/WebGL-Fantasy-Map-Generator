@@ -69,7 +69,7 @@ pnpm run build
 
 ## 致谢与许可证
 
-项目作者为 mosuzi。当前应用的代码 100% 由 Codex + GPT-5.5～5.6 实现，文档也由 Codex + GPT 编写。
+项目作者为 mosuzi。当前应用的代码 100% 由 Codex + GPT 实现，文档也由 Codex + GPT 编写。
 
 感谢 Max Haniyeu（Azgaar）和参与维护 [Fantasy Map Generator](https://github.com/Azgaar/Fantasy-Map-Generator) 的社区。本项目的许多生成思路和视觉参考来自他们的工作。原项目的版权与许可证以其仓库声明为准。
 

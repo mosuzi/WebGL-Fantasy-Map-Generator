@@ -69,7 +69,7 @@ The main application is past its early placeholder prototype, but it remains und
 
 ## Credits and license
 
-The project is authored by mosuzi. All application code was produced with Codex and GPT-5.5–5.6, and the documentation was written with Codex and GPT as well.
+The project is authored by mosuzi. All application code was produced with Codex and GPT, and the documentation was written with Codex and GPT as well.
 
 Thanks to Max Haniyeu (Azgaar) and the community behind [Fantasy Map Generator](https://github.com/Azgaar/Fantasy-Map-Generator). Much of this project's thinking about generation and visual presentation builds on their work. Copyright and licensing for the original project remain as stated in its repository.
 
