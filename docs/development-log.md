@@ -1,5 +1,10 @@
 # 开发历史
 
+## 2026-08-02：完成权威任务第 256 项
+
+- 用户指出“FMG WebGL 地图生成器”同时使用 FMG 和“地图生成器”，中文已经重复，英文“FMG WebGL Map Generator”更加明显；项目名称应改为“WebGL 架空地图生成器”，英文自然写作“WebGL Fantasy Map Generator”。
+- 中英文 README 的标题和开篇自称已同步修正，不再以 `FMG WebGL` 作为项目名；对原 Fantasy Map Generator 的参考和致谢保持不变。本项只改 README 品牌文案与权威记录，不改应用标题、包名、域名、代码命名空间或运行行为。
+
 ## 2026-08-02：完成权威任务第 255 项
 
 - `origin/codex-smooth-boundaries` 已通过双父 merge 提交 `a5832dc` 合入当前 `main`，父提交为 `e393599 / a536d51`。相对第一父只包含共享拓扑海岸 / 湖岸平滑、正式 renderer 接线、拓扑实验室、shoreline 回归和依赖，共 `25` 个有效文件；旧第 212 项状态与过期 API 分母没有回灌。

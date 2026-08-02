@@ -1,8 +1,8 @@
 [简体中文](./README.md) | [English](./README.en.md)
 
-# FMG WebGL Map Generator
+# WebGL Fantasy Map Generator
 
-FMG WebGL is a fantasy map generator for worldbuilding, tabletop RPGs, alternate-history writing, and anyone who simply enjoys maps. It takes inspiration from how [Fantasy Map Generator](https://github.com/Azgaar/Fantasy-Map-Generator) generates and presents a world, as well as its visual style. The application itself was built from scratch, independently of the original project. You can generate a complete map in a few steps, then inspect, revise, and keep developing the world it describes.
+WebGL Fantasy Map Generator is made for worldbuilding, tabletop RPGs, alternate-history writing, and anyone who simply enjoys maps. It takes inspiration from how [Fantasy Map Generator](https://github.com/Azgaar/Fantasy-Map-Generator) generates and presents a world, as well as its visual style. The application itself was built from scratch, independently of the original project. You can generate a complete map in a few steps, then inspect, revise, and keep developing the world it describes.
 
 [Try it online](https://fmg.mosuzi.top/) · [Quick start](#quick-start) · [Documentation](#documentation-guide)
 

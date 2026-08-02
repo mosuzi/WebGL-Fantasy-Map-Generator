@@ -1206,6 +1206,12 @@
   - 完成记录：创建双父 merge 提交 `a5832dcb90134a5308a355119cfb9c6561b864b2`，父提交严格为原主线 `e393599` 与目标 `a536d51`；相对第一父只合入目标专项的 `25` 个有效文件，旧活动任务和旧 API 分母未回灌。路径限定 stash `471b616f` 已成功 apply 且继续保留为恢复点，第 236～254 项其它未提交工作未进入合并提交。
   - 验收记录：拓扑实验室 `20` 个夹具、推荐算法 `14 / 14`，10k / 50k pure / formal 回放的错侧像素、最长针、冲突覆盖、重复覆盖和 seam 均为 `0`；API `316 / 316`、Cells、生产构建与差异检查通过。冻结构建和 `5411` 当前源码均完成高度 / 国家 / 省份 × 平滑 / 硬边六态，平滑模式为 `shore-topology-snapshot + butt-join-political`，硬边为 `hard-cell-shore + butt-join-political`；六态 checksum、历史、选择与 picking 不变，WebGL、health、application console 和 page error 均为 `0`。六张截图中孤岛、狭水道、湖洞无错侧色带、长针或断口，国家 / 省份边界保持硬边。首次 `5411` 因旧 Vite 进程未重扫新增依赖而 `BLOCK`，重启为 PID `33912` 并完成依赖优化后二次验收 `ACCEPT`；本项未推送。
 
+- **权威任务第 256 项：修正中英文 README 的项目名称。** `已完成；来源：用户直接纠正`
+  - 范围：中文版项目名统一为“WebGL 架空地图生成器”，英文版使用自然对应的“WebGL Fantasy Map Generator”，删除“FMG WebGL 地图生成器 / FMG WebGL Map Generator”中由 FMG 与“地图生成器 / Map Generator”造成的语义重复。
+  - 最小验收：两版标题和开篇自称一致、自然，不再把 `FMG` 当作项目名称前缀；对原 Fantasy Map Generator 的参考与致谢保持准确，语言切换、在线入口和文档链接不变。
+  - 排除：不修改应用页面标题、包名、域名、代码命名空间、许可证或原项目名称，不借更名扩写其它 README 内容。
+  - 完成记录：中文标题改为“WebGL 架空地图生成器”，英文标题改为“WebGL Fantasy Map Generator”，两版开篇同步去除 `FMG WebGL` 自称；全文仅在指向原作及致谢时保留 Fantasy Map Generator 名称。
+
 - **第 211～216 项统一执行约束。**
   - 专题来源与施工图：`docs/task-notes/next-quasi-authoritative-interaction-remediation-tasks-2026-07-20.md`。
   - 封闭顺序为 `Q-33 → Q-28 → Q-30 → Q-31 → Q-29 → Q-32`。每项达到最小验收后立即独立中文提交，中途不推送；第 216 项完成后由独立复审检查六项差异、专项和兼容边界，再用系统 Chrome 统一跑响应式与交互矩阵，通过后同步完成状态并一次推送。
