@@ -43,11 +43,14 @@ const cityAuto = resolveLabelLayout(map, LABEL_TARGET_KIND.CITY, 1, map.settleme
 const stateAuto = resolveLabelLayout(map, LABEL_TARGET_KIND.STATE, 1, null, {x: 22, y: 32, priority: 500, minScale: 0.5});
 const provinceAuto = resolveLabelLayout(map, LABEL_TARGET_KIND.PROVINCE, 1, null, {x: 24, y: 36, priority: 140, minScale: 0.8});
 const customAuto = resolveLabelLayout(map, LABEL_TARGET_KIND.CUSTOM, 1, null, {x: 40, y: 50, priority: 90000, minScale: 0.25});
+const zoneAuto = resolveLabelLayout(map, LABEL_TARGET_KIND.ZONE, 1, null, {x: 36, y: 44, priority: 600, minScale: 0.7});
 assert.equal(capitalAuto.priority, LABEL_LAYOUT_DEFAULT_PRIORITY.capital);
 assert.equal(cityAuto.priority, LABEL_LAYOUT_DEFAULT_PRIORITY.city);
 assert.equal(stateAuto.priority, LABEL_LAYOUT_DEFAULT_PRIORITY.state);
 assert.equal(provinceAuto.priority, LABEL_LAYOUT_DEFAULT_PRIORITY.province);
 assert.equal(customAuto.priority, LABEL_LAYOUT_DEFAULT_PRIORITY.custom);
+assert.equal(zoneAuto.priority, LABEL_LAYOUT_DEFAULT_PRIORITY.zone);
+assert.equal(zoneAuto.priority, cityAuto.priority, "地区默认优先级没有保持此前城市 fallback 行为");
 assert.equal(cityAuto.minScale, 1.2, "自动优先级不得改变旧 LOD");
 
 assert.throws(() => patchLabelLayout(map, "city", 1, {priority: 101}), /0 到 100/);
@@ -81,6 +84,16 @@ const sortedInput = [
 const firstSort = sortLabelItemsByPriority(sortedInput).map(item => item.layout.key);
 assert.deepEqual(firstSort, ["city:1", "custom:1", "state:1"], "优先级、自动分值和稳定键排序错误");
 assert.deepEqual(sortLabelItemsByPriority(sortedInput).map(item => item.layout.key), firstSort, "重复布局排序发生抖动");
+
+patchLabelLayout(map, "custom", 1, {priority: 40});
+const customManual = resolveLabelLayout(map, LABEL_TARGET_KIND.CUSTOM, 1, null, {x: 40, y: 50, priority: 90000, minScale: 0.25});
+const mixedOrder = sortLabelItemsByPriority([
+  {layout: stateAuto},
+  {layout: zoneAuto},
+  {layout: customManual},
+  {layout: cityManual}
+]).map(item => item.layout.key);
+assert.deepEqual(mixedOrder, ["city:1", "state:1", "zone:1", "custom:1"], "地区加入后默认与手工优先级混排退化");
 
 patchLabelLayout(map, "custom", 1, {position: {x: 40, y: 50}});
 const lockedMove = createMoveCustomLabelCommand(1, {x: 60, y: 70});
@@ -121,7 +134,7 @@ assert.match(rendererSource, /priorityLayout[\s\S]*boxesOverlapAny\(occupiedByPr
 assert.match(rendererSource, /x: layout\.position\.x, y: layout\.position\.y/, "锁定世界锚点没有进入实时标签模型");
 assert.match(panelSource, /显示优先级[\s\S]*恢复自动优先级[\s\S]*锁定当前位置/, "标签面板缺少优先级或位置锁定入口");
 assert.match(appSource, /labelPositionLocked === "true"[\s\S]*请先在标签管理中解锁/, "锁定手工标签仍可能进入拖动流程");
-assert.match(mapIoSource, /\.state-label\.visible[\s\S]*\.province-label\.visible[\s\S]*\.city-label\.visible[\s\S]*\.custom-label\.visible/, "PNG 没有复用实时可见标签集合");
+assert.match(mapIoSource, /selectors\.push\(\.\.\.PNG_SEMANTIC_LABEL_SELECTORS\)/, "PNG 没有复用实时可见标签生产契约");
 
 console.log(JSON.stringify({
   ok: true,
@@ -130,11 +143,13 @@ console.log(JSON.stringify({
     province: provinceAuto.priority,
     capital: capitalAuto.priority,
     city: cityAuto.priority,
-    custom: customAuto.priority
+    custom: customAuto.priority,
+    zone: zoneAuto.priority
   },
   manualPriority: cityManual.priority,
   lockedPosition: cityManual.position,
   stableOrder: firstSort,
+  mixedOrder,
   roundTripOverrides: Object.keys(roundTrip.map.labels.layout.overrides).length,
   oldV1LayoutVersion: migratedV1.map.labels.layout.version,
   history: history.getStats()

@@ -1,3 +1,5 @@
+import {LABEL_STYLE_TYPES} from "./label-style-registry.js";
+
 export const API_METHOD_SCHEMA_VERSION = "1.0.0";
 
 const ERROR_CODES = Object.freeze([
@@ -464,12 +466,12 @@ const METHOD_OVERRIDES = Object.freeze({
     examples: [[]]
   },
   "edit.labels.setStyle": {
-    arguments: [argument("styleType", stringSchema("标签样式类型")), argument("patch", {type: "object", additionalProperties: {type: ["string", "number", "boolean", "null"]}})],
+    arguments: [argument("styleType", {type: "string", enum: [...LABEL_STYLE_TYPES], description: "标签样式类型"}), argument("patch", {type: "object", additionalProperties: {type: ["string", "number", "boolean", "null"]}})],
     result: objectSchema(["executed", "history"]),
-    examples: [["state", {fontSize: 24}]]
+    examples: [["state", {fontSize: 24}], ["zone", {fontSize: 18, color: "#334455"}]]
   },
   "edit.labels.resetStyle": {
-    arguments: [argument("styleType", stringSchema("标签样式类型"))],
+    arguments: [argument("styleType", {type: "string", enum: [...LABEL_STYLE_TYPES], description: "标签样式类型"})],
     result: objectSchema(["executed", "history"]),
     examples: [["state"]]
   },

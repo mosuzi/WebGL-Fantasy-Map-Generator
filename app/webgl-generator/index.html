@@ -500,27 +500,27 @@
         <canvas id="map-canvas"></canvas>
         <div class="map-overlay" id="map-overlay"></div>
         <div id="vue-state-root"></div>
-        <div id="map-toolbar" class="map-toolbar" aria-label="地图工具"></div>
-        <div class="map-badge" id="map-badge" aria-live="polite"></div>
-        <div class="generation-loading-bubble" id="generation-loading" role="status" aria-live="polite" hidden>
+        <div id="map-toolbar" class="map-toolbar" aria-label="地图工具" data-canvas-text-id="toolbar"></div>
+        <div class="map-badge" id="map-badge" aria-live="polite" data-canvas-text-id="map-badge"></div>
+        <div class="generation-loading-bubble" id="generation-loading" role="status" aria-live="polite" data-canvas-text-id="generation-status" hidden>
           <span class="generation-loading-dot"></span>
-          <span id="generation-loading-text">山海初开</span>
+          <span id="generation-loading-text" data-canvas-text-id="generation-status">山海初开</span>
         </div>
-        <div class="canvas-tool-mode-feedback" id="canvas-tool-mode-feedback" role="status" aria-live="polite" hidden>
+        <div class="canvas-tool-mode-feedback" id="canvas-tool-mode-feedback" role="status" aria-live="polite" data-canvas-text-id="tool-mode" hidden>
           <strong data-canvas-tool-name></strong>
           <span data-canvas-tool-next-action></span>
         </div>
-        <div class="map-toast" id="map-toast" role="status" aria-live="polite" hidden></div>
-        <div class="shortcut-toast" id="shortcut-toast" role="status" aria-live="polite" hidden></div>
-        <div class="hover-overlay" id="hover-overlay" hidden></div>
-        <div class="map-legend" id="map-legend" hidden></div>
-        <div class="map-scale-bar" id="map-scale-bar" aria-label="地图比例尺" hidden>
+        <div class="map-toast" id="map-toast" role="status" aria-live="polite" data-canvas-text-id="toast" hidden></div>
+        <div class="shortcut-toast" id="shortcut-toast" role="status" aria-live="polite" data-canvas-text-id="shortcut-hint" hidden></div>
+        <div class="hover-overlay" id="hover-overlay" data-canvas-text-id="hover-details" hidden></div>
+        <div class="map-legend" id="map-legend" data-canvas-text-id="legend" hidden></div>
+        <div class="map-scale-bar" id="map-scale-bar" aria-label="地图比例尺" data-canvas-text-id="scale-bar" hidden>
           <div class="map-scale-line"></div>
-          <div class="map-scale-label">比例尺</div>
+          <div class="map-scale-label" data-canvas-text-id="scale-bar">比例尺</div>
         </div>
         <div class="measurement-overlay" id="measurement-overlay" hidden>
           <svg id="measurement-svg" class="measurement-svg" aria-hidden="true"></svg>
-          <div id="measurement-readout" class="measurement-readout" hidden></div>
+          <div id="measurement-readout" class="measurement-readout" data-canvas-text-id="measurement-readout" hidden></div>
         </div>
       </section>
     </main>

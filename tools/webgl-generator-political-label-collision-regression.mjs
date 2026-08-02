@@ -8,6 +8,7 @@ import {
   createPoliticalLabelGlyphLayout,
   resolvePoliticalLabelPlacement
 } from "../app/webgl-generator/src/renderer/political-label-layout.js";
+import {estimateLabelTextBox, resolveLabelStyle} from "../app/webgl-generator/src/runtime/label-style-registry.js";
 
 const stateStyle = {fontSize: 30, letterSpacing: 2, strokeWidth: 0, shadowOffsetX: 0, shadowOffsetY: 0, shadowBlur: 0};
 const provinceStyle = {fontSize: 18, letterSpacing: 1.2, strokeWidth: 0, shadowOffsetX: 0, shadowOffsetY: 0, shadowBlur: 0};
@@ -47,6 +48,9 @@ const impossibleObstacle = {left: -1000, right: 1000, top: -1000, bottom: 1000};
 const fallback = resolvePoliticalLabelPlacement({item: provinceItem, screen, obstacles: [impossibleObstacle], viewport, padding: 6});
 assert.equal(fallback.collides, true, "无解样本必须返回最佳碰撞候选供省份降级显示");
 assert.equal(PROVINCE_COLLISION_OPACITY, 0.76, "省份碰撞透明度必须保持清晰且仍低于正常标签");
+const compactZoneBox = estimateLabelTextBox("北境荒原", resolveLabelStyle({version: 1, overrides: {zone: {fontSize: 10, letterSpacing: 0}}}, "zone"));
+const expandedZoneBox = estimateLabelTextBox("北境荒原", resolveLabelStyle({version: 1, overrides: {zone: {fontSize: 36, letterSpacing: 5}}}, "zone"));
+assert.ok(expandedZoneBox.width > compactZoneBox.width && expandedZoneBox.height > compactZoneBox.height, "地区样式字号与字距没有进入共享碰撞盒");
 
 const orderedKinds = automaticPoliticalLabelOrder([
   {targetKind: "province", targetId: 1, priority: 90},
@@ -74,6 +78,7 @@ console.log(JSON.stringify({
   curves: {upwardMiddleY: upward.glyphs[middle].y, downwardMiddleY: downward.glyphs[middle].y},
   avoidedCandidate: {index: avoided.candidateIndex, bend: avoided.bend, anchor: avoided.anchor},
   fallback: {candidate: fallback.candidateIndex, opacity: PROVINCE_COLLISION_OPACITY},
+  zoneBox: {compact: compactZoneBox, expanded: expandedZoneBox},
   order: orderedKinds
 }, null, 2));
 

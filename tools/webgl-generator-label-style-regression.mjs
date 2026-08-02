@@ -14,12 +14,14 @@ import {
   estimateLabelTextBox,
   hasVisibleLabelShadow,
   labelStyleTypeForTarget,
+  normalizeLabelStyleStore,
   normalizeLocalFontFamilyName,
   patchLabelStyle,
   resolveLabelFontFamily,
   resolveLabelStyle
 } from "../app/webgl-generator/src/runtime/label-style-registry.js";
 import {createCompressedMapDocumentBlob, createMapDocument, parseMapDocument, parseMapDocumentPayload, stringifyMapDocument} from "../app/webgl-generator/src/runtime/map-file-io.js";
+import {PNG_SEMANTIC_LABEL_SELECTORS} from "../app/webgl-generator/src/runtime/canvas-text-contract.js";
 import {createLocalFontFamilyOptions} from "../app/webgl-generator/src/runtime/local-font-catalog.js";
 import {LABEL_TARGET_KIND} from "../app/webgl-generator/src/runtime/object-kinds.js";
 import {resolveVisualTheme} from "../app/webgl-generator/src/renderer/themes.js";
@@ -38,7 +40,8 @@ const store = ensureLabelStore(map);
 assert.equal(store.styles.version, 1);
 assert.deepEqual(Object.keys(store.styles.overrides), []);
 assert.deepEqual(map.labels.hidden.province, []);
-assert.equal(LABEL_STYLE_TYPES.length, 5);
+assert.equal(LABEL_STYLE_TYPES.length, 6);
+assert.deepEqual(LABEL_STYLE_TYPES, ["state", "province", "capital", "city", "custom", "zone"]);
 const cartographicFont = LABEL_FONT_FAMILIES.cartographic;
 assert.match(cartographicFont, /KaiTi[\s\S]*Noto Serif CJK SC[\s\S]*SimSun/, "舆图楷体没有提供跨平台中文楷宋回退");
 const historicalFont = LABEL_FONT_FAMILIES.historical;
@@ -59,11 +62,12 @@ for (const styleType of LABEL_STYLE_TYPES) {
     [0, 0, 0],
     `${styleType} 默认阴影参数没有归零`
   );
-  const expectedFont = ["state", "capital", "custom"].includes(styleType) ? "historicalDisplay" : "historical";
+  const expectedFont = ["state", "capital", "custom", "zone"].includes(styleType) ? "historicalDisplay" : "historical";
   assert.equal(style.fontFamilyId, expectedFont, `${styleType} 默认字体没有使用现代历史图册分级字体`);
   if (["province", "capital", "city"].includes(styleType)) assert.equal(style.strokeWidth, 0, `${styleType} 默认标签仍有描边`);
   else assert.ok(style.strokeWidth > 0 && style.strokeWidth <= 0.8, `${styleType} 默认净空边超出现代历史图册范围`);
 }
+assert.deepEqual(LABEL_STYLE_DEFAULTS.zone, LABEL_STYLE_DEFAULTS.custom, "地区默认样式没有显式继承手工标签默认值");
 assert.ok(LABEL_STYLE_DEFAULTS.state.fontSize > LABEL_STYLE_DEFAULTS.province.fontSize, "国家和省份字号层级不清");
 assert.ok(LABEL_STYLE_DEFAULTS.province.fontSize > LABEL_STYLE_DEFAULTS.city.fontSize, "省份和城市字号层级不清");
 assert.ok(LABEL_STYLE_DEFAULTS.state.letterSpacing > LABEL_STYLE_DEFAULTS.province.letterSpacing, "区域标签没有形成大而疏排的层级");
@@ -76,6 +80,8 @@ const defaultTheme = resolveVisualTheme("default");
 const defaultStateStyle = resolveLabelStyle(map, "state", defaultTheme);
 const defaultProvinceStyle = resolveLabelStyle(map, "province", defaultTheme);
 const defaultCityStyle = resolveLabelStyle(map, "city", defaultTheme);
+const defaultCustomStyle = resolveLabelStyle(map, "custom", defaultTheme);
+const defaultZoneStyle = resolveLabelStyle(map, "zone", defaultTheme);
 assert.equal(defaultStateStyle.color, "#293038", "默认国家标签没有使用炭黑墨色");
 assert.equal(defaultProvinceStyle.color, "#8a2434", "默认省份标签没有使用醒目深酒红色");
 assert.equal(defaultProvinceStyle.opacity, 0.94, "默认省份标签仍然过浅");
@@ -84,6 +90,8 @@ assert.equal(LABEL_STYLE_DEFAULTS.city.fontWeight, 700, "默认普通城市名�
 assert.equal(LABEL_STYLE_DEFAULTS.capital.strokeWidth, 0, "默认首都名仍有描边");
 assert.equal(LABEL_STYLE_DEFAULTS.city.strokeWidth, 0, "默认普通城市名仍有描边");
 assert.equal(defaultCityStyle.color, "#20252a", "默认城市标签没有使用深色中性墨色");
+assert.equal(defaultZoneStyle.color, defaultCustomStyle.color, "默认地区标签没有继承手工标签主题颜色");
+assert.equal(defaultZoneStyle.strokeColor, defaultCustomStyle.strokeColor, "默认地区标签没有继承手工标签主题衬边");
 assert.equal(hasVisibleLabelShadow(defaultStateStyle), false, "默认主题重新引入了国家标签阴影");
 assert.ok(defaultTheme.labels.customBackground[3] >= 0.8, "手工标签没有使用稳定中性浅底");
 assert.ok(Math.abs(defaultTheme.labels.customBorder[0] - defaultTheme.labels.customBorder[1]) < 0.05, "手工标签边框仍带明显仿旧褐色");
@@ -91,6 +99,8 @@ assert.ok(Math.abs(defaultTheme.labels.customBorder[0] - defaultTheme.labels.cus
 const theme = {labels: {state: [0.2, 0.4, 0.6, 0.7], stateShadow: [0.05, 0.1, 0.15, 1], city: [0.7, 0.8, 0.9, 0.85], cityHalo: [0.1, 0.1, 0.1, 1], custom: [0.9, 0.7, 0.5, 0.9], customBorder: [0.2, 0.1, 0.05, 1]}};
 assert.equal(resolveLabelStyle(map, "province", theme).color, resolveLabelStyle(map, "state", theme).color, "省份没有继承国家主题层");
 assert.equal(resolveLabelStyle(map, "capital", theme).color, resolveLabelStyle(map, "city", theme).color, "首都没有继承城市主题层");
+assert.equal(resolveLabelStyle(map, "zone", theme).color, resolveLabelStyle(map, "custom", theme).color, "地区没有显式继承手工标签主题层");
+assert.equal(resolveLabelStyle(map, "zone", theme).strokeColor, resolveLabelStyle(map, "custom", theme).strokeColor, "地区没有继承手工标签主题衬边");
 patchLabelStyle(map, "province", {fontSize: 999, opacity: -2, letterSpacing: 4, color: "#123456"});
 assert.equal(resolveLabelStyle(map, "province", theme).fontSize, 72, "字号没有 clamp");
 assert.equal(resolveLabelStyle(map, "province", theme).opacity, 0, "不透明度没有 clamp");
@@ -107,6 +117,11 @@ assert.equal(normalizeLocalFontFamilyName("bad\u0000font"), "", "控制字符字
 patchLabelStyle(map, "city", {fontFamilyId: "sans", fontFamilyName: null});
 assert.equal(resolveLabelStyle(map, "city").fontFamilyId, "sans");
 assert.equal(resolveLabelStyle(map, "city").fontFamilyName, null, "切回内置字体仍残留本机字体名");
+const customColorBeforeZoneOverride = resolveLabelStyle(map, "custom", theme).color;
+patchLabelStyle(map, "zone", {fontSize: 27, color: "#654321", opacity: 0.55, strokeColor: "#abcdef", strokeWidth: 0.45});
+assert.equal(resolveLabelStyle(map, "zone", theme).color, "#654321", "地区覆盖没有高于主题继承层");
+assert.equal(resolveLabelStyle(map, "zone", theme).fontSize, 27);
+assert.equal(resolveLabelStyle(map, "custom", theme).color, customColorBeforeZoneOverride, "地区覆盖污染了手工标签样式");
 
 const localFontOptions = createLocalFontFamilyOptions([
   {family: "KaiTi", fullName: "楷体", postscriptName: "KaiTi", style: "Regular"},
@@ -151,8 +166,16 @@ assert.equal(resolveLabelStyle(map, "custom").strokeWidth, LABEL_STYLE_DEFAULTS.
 history.redo(context);
 assert.equal(resolveLabelStyle(map, "custom").strokeWidth, 0.01, "细效果重做没有恢复描边");
 assert.equal(resolveLabelStyle(map, "custom").shadowOffsetY, -0.1, "细效果重做没有恢复阴影");
+history.execute(createPatchLabelStyleCommand("zone", {fontSize: 31, color: "#102030"}), context);
+assert.equal(resolveLabelStyle(map, "zone").fontSize, 31);
+assert.equal(resolveLabelStyle(map, "custom").fontSize, LABEL_STYLE_DEFAULTS.custom.fontSize, "地区命令污染了手工标签默认字号");
+history.undo(context);
+assert.equal(resolveLabelStyle(map, "zone").fontSize, LABEL_STYLE_DEFAULTS.zone.fontSize, "地区样式撤销没有恢复原覆盖");
+history.redo(context);
+assert.equal(resolveLabelStyle(map, "zone").fontSize, 31, "地区样式重做没有恢复新覆盖");
 
 assert.equal(labelStyleTypeForTarget(LABEL_TARGET_KIND.CITY, map.settlements.cities[0]), "capital", "首都样式拆分改变了 city target identity");
+assert.equal(labelStyleTypeForTarget(LABEL_TARGET_KIND.ZONE), "zone", "地区 target 没有映射到独立样式类型");
 assert.equal(LABEL_TARGET_KIND.CITY, "city");
 map.labels.hidden.province.push(1);
 assert.equal(isGeneratedLabelHidden(map, LABEL_TARGET_KIND.PROVINCE, 1), true);
@@ -163,6 +186,9 @@ const largeStyle = resolveLabelStyle({version: 1, overrides: {city: {fontSize: 3
 const smallBox = estimateLabelTextBox("北境城", smallStyle);
 const largeBox = estimateLabelTextBox("北境城", largeStyle);
 assert.ok(largeBox.width > smallBox.width && largeBox.height > smallBox.height, "字号/字距没有改变碰撞盒");
+const zoneSmallBox = estimateLabelTextBox("北境荒原", resolveLabelStyle({version: 1, overrides: {zone: {fontSize: 10}}}, "zone"));
+const zoneLargeBox = estimateLabelTextBox("北境荒原", resolveLabelStyle({version: 1, overrides: {zone: {fontSize: 38, letterSpacing: 5}}}, "zone"));
+assert.ok(zoneLargeBox.width > zoneSmallBox.width && zoneLargeBox.height > zoneSmallBox.height, "地区字号没有进入共享碰撞盒");
 
 const document = createMapDocument(map, map.options);
 const roundTrip = parseMapDocument(stringifyMapDocument(document));
@@ -172,6 +198,11 @@ assert.equal(roundTrip.map.labels.styles.overrides.custom.strokeWidth, 0.01, "�
 assert.equal(roundTrip.map.labels.styles.overrides.custom.shadowOffsetX, 0.1, "完整地图没有保留细阴影横移");
 assert.equal(roundTrip.map.labels.styles.overrides.custom.shadowOffsetY, -0.1, "完整地图没有保留细阴影纵移");
 assert.equal(roundTrip.map.labels.styles.overrides.custom.shadowBlur, 0.1, "完整地图没有保留细阴影模糊");
+assert.equal(roundTrip.map.labels.styles.overrides.zone.fontSize, 31, "完整地图没有保存地区样式覆盖");
+assert.equal(roundTrip.map.labels.styles.overrides.zone.color, "#102030", "完整地图没有保存地区文字颜色");
+const legacyFiveTypeStore = normalizeLabelStyleStore({version: 1, overrides: {state: {fontSize: 25}, province: {fontSize: 15}, capital: {fontSize: 14}, city: {fontSize: 12}, custom: {fontSize: 16}}}, {strict: true});
+assert.equal(legacyFiveTypeStore.version, 1, "五类型旧样式存储不应升级版本");
+assert.equal(Object.hasOwn(legacyFiveTypeStore.overrides, "zone"), false, "五类型旧样式存储被伪造地区覆盖");
 const oldV2 = structuredClone(document);
 delete oldV2.map.labels.styles;
 delete oldV2.map.labels.hidden.province;
@@ -193,18 +224,22 @@ const gzipBase64 = Buffer.from(await compressed.blob.arrayBuffer()).toString("ba
 const parsedGzip = await parseMapDocumentPayload(documentRef, {encoding: "gzip-base64", data: gzipBase64});
 assert.equal(parsedGzip.map.labels.styles.version, 1, "gzip 全图链没有保留标签样式");
 assert.equal(parsedGzip.map.labels.styles.overrides.custom.fontFamilyName, "Archive Only Font", "gzip 没有保存本机字体族名称");
+assert.equal(parsedGzip.map.labels.styles.overrides.zone.fontSize, 31, "gzip 没有保存地区样式覆盖");
 
-const [rendererSource, controlPanelSource, mapIoSource, stylesSource, switchFieldSource] = await Promise.all([
+const [rendererSource, controlPanelSource, mapIoSource, stylesSource, switchFieldSource, appSource, consoleApiSource] = await Promise.all([
   readFile(new URL("../app/webgl-generator/src/renderer/placeholder-renderer.js", import.meta.url), "utf8"),
   readFile(new URL("../app/webgl-generator/src/ui/vue/components/ControlPanel.vue", import.meta.url), "utf8"),
   readFile(new URL("../app/webgl-generator/src/runtime/map-file-io.js", import.meta.url), "utf8"),
   readFile(new URL("../app/webgl-generator/src/styles.css", import.meta.url), "utf8"),
-  readFile(new URL("../app/webgl-generator/src/ui/vue/components/base/UiSwitchField.vue", import.meta.url), "utf8")
+  readFile(new URL("../app/webgl-generator/src/ui/vue/components/base/UiSwitchField.vue", import.meta.url), "utf8"),
+  readFile(new URL("../app/webgl-generator/src/runtime/app.js", import.meta.url), "utf8"),
+  readFile(new URL("../app/webgl-generator/src/runtime/console-api.js", import.meta.url), "utf8")
 ]);
 assert.match(rendererSource, /getLabelStates\(map\), \.\.\.getLabelProvinces\(map\), \.\.\.getLabelCities/, "标签固定层序不是国家→省份→城市");
 assert.match(rendererSource, /isWorldPoint\(province\.pole\)[\s\S]*province\.center/, "省份标签没有 pole→center 回退");
 assert.match(rendererSource, /provinceLabel[\s\S]*boxesOverlapAny\(occupiedStates/, "省份标签没有避让国家名称");
 assert.match(controlPanelSource, /data-control-panel="styles"[\s\S]*reset-all-label-styles/, "样式页或全部重置入口缺失");
+assert.match(controlPanelSource, /\{value: "zone", label: "地区名称"\}/, "样式页没有地区名称类型");
 assert.match(controlPanelSource, /load-local-label-fonts[\s\S]*queryLocalFonts/, "样式页没有用户触发的本机字体读取入口");
 assert.match(controlPanelSource, /本机未检测到[\s\S]*系统字体/, "样式页没有缺失字体 fallback 状态");
 assert.match(controlPanelSource, /input-id="label-style-stroke-width"[^>]*:step="0\.01"/, "描边步长不是 0.01");
@@ -225,12 +260,18 @@ assert.match(stylesSource, /\.label-style-panel \.ui-slider-field\s*\{[^}]*grid-
 assert.match(stylesSource, /\.label-style-panel \.ui-slider-field-has-unit\s*\{[^}]*grid-template-columns:\s*72px minmax\(0, 1fr\) 84px max-content;/, "样式页带单位滑动条没有保持数值与单位独立列");
 assert.match(stylesSource, /\.label-style-panel \.ui-slider-field > span:first-child\s*\{[^}]*white-space:\s*nowrap;/, "样式页滑动条标签仍可能折行");
 assert.match(stylesSource, /\.custom-label\s*\{[^}]*padding:\s*2px 5px;[^}]*border-radius:\s*2px;/, "手工标签没有使用现代图册窄注记底板");
-assert.match(mapIoSource, /\.province-label\.visible/, "PNG overlay 没有纳入省份名称");
+assert.ok(PNG_SEMANTIC_LABEL_SELECTORS.includes(".province-label.visible"), "PNG overlay 没有纳入省份名称");
+assert.ok(PNG_SEMANTIC_LABEL_SELECTORS.includes(".zone-label.visible"), "PNG overlay 没有纳入地区名称");
+assert.match(mapIoSource, /selectors\.push\(\.\.\.PNG_SEMANTIC_LABEL_SELECTORS\)/, "PNG overlay 没有消费语义标签生产契约");
+assert.doesNotMatch(stylesSource, /\.zone-label\s*\{[^}]*color:\s*var\(--theme-custom-label/, "地区标签仍用固定主题颜色覆盖 resolved style");
+assert.doesNotMatch(stylesSource, /\.zone-label\s*\{[^}]*font-size:\s*calc\(var\(--label-font-size\)\s*\*\s*0\.86\)/, "地区标签仍把 resolved 字号缩小为 0.86 倍");
 assert.match(rendererSource, /--label-stroke-width[\s\S]*--label-shadow-offset-x[\s\S]*--label-shadow-blur/, "实时标签没有把细效果值写入共享 CSS 变量");
 assert.match(rendererSource, /hasVisibleLabelShadow\(style\) \? style\.shadowColor : "transparent"/, "实时标签没有显式关闭零效果阴影");
 assert.match(controlPanelSource, /textShadow:\s*hasVisibleLabelShadow\(activeLabelStyle\.value\)[\s\S]*:\s*"none"/, "样式预览没有显式关闭零效果阴影");
 assert.match(mapIoSource, /--label-stroke-width[\s\S]*--label-shadow-blur[\s\S]*--label-shadow-offset-x[\s\S]*--label-shadow-offset-y/, "PNG 没有读取实时标签的共享效果值");
 assert.match(mapIoSource, /context\.strokeText\([\s\S]*context\.fillText\(/, "PNG 文字没有按描边→填充绘制");
+assert.match(appSource, /getStyles:\s*\(\) => getRuntimeLabelStyles\(state\)[\s\S]*setStyle:\s*\(styleType, patch\) => setLabelStyleViaApi/, "既有标签样式 action 没有直接消费六类型 registry");
+assert.match(consoleApiSource, /labels:\s*Object\.freeze\(\{[\s\S]*getStyles[\s\S]*setStyle[\s\S]*resetStyle[\s\S]*resetStyles/, "既有标签样式公开 API 接线缺失");
 
 console.log(JSON.stringify({
   ok: true,

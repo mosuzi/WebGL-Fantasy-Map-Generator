@@ -1491,6 +1491,7 @@ select:disabled {
   visibility: hidden;
 }
 
+/* canvas-text-contract: semantic-label-base */
 .city-label,
 .custom-label,
 .state-label,
@@ -1551,8 +1552,6 @@ select:disabled {
 
 .zone-label {
   max-width: 150px;
-  color: var(--theme-custom-label, rgba(48, 55, 48, 0.9));
-  font-size: calc(var(--label-font-size) * 0.86);
   cursor: pointer;
   pointer-events: auto;
   z-index: 2;

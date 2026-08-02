@@ -78,3 +78,44 @@
 第 138 项曾把“参考古代地图”理解为直接参考 1602 年《坤舆万国全图》，从而把五类默认标签统一成楷体、深褐墨色和仿旧纸签。用户已澄清目标应是现代出版社制作的古代历史地图风格。
 
 第 154 项以现代出版《中国历史地图集》《简明中国历史地图集》和 DK `Map by Map` 系列的共同排印原则校正默认值：国家、首都和手工标签使用现代黑体建立显示层级，省份与普通城市使用现代宋体承载密集地名；文字以炭黑和中性灰为主，区域名只保留有限字距，浅色净空边压到接近印刷套白的细度。旧 `cartographic` / “舆图楷体”ID 不改义，新默认使用独立内置字体 ID，避免已有显式选择被静默改写。
+
+## 第 245～247 项：地区名称与画布文字分层整理
+
+### 真实分母
+
+- 地图语义标签共六类：国家、省份、首都、城市、手工标签、地区名称。六类均进入实时画布和 PNG，均应由地图标签样式控制。
+- 地图成品注记共三类：军事兵力数字、图例文字、比例尺文字。它们进入实时画布和 PNG，但继续使用独立 annotation / theme 样式来源，本批不写入 `labels.styles`。
+- HUD / 诊断文字包括地图尺寸、悬停详情、测量读数、工具模式、生成状态、toast、快捷提示、工具栏和 grid cell id；它们属于应用交互或诊断，不进入地图标签样式。
+- 河流名存在于数据、hover 和河流面板，但没有画布文字节点；路线可选 `route.name` 只作为数据字段，并由 GeoJSON 序列化链生成 `displayName`，当前路线面板与 hover 使用端点信息，不得宣称正在显示 `route.name`；marker 与城市图标是 SVG，marker 名称只存在于 title / aria / hover。本批登记为 `not-rendered`，不虚构文字控件。
+
+### 第 245 项：地区名称样式
+
+- `LABEL_STYLE_TYPE` 新增 `zone`，样式页新增“地区名称”。默认和主题继承显式使用 `zone -> custom`，用户覆盖独立于城市与手工标签。
+- `.zone-label` 不再用固定 custom 主题色和 `0.86` 倍字号覆盖 resolved style；其交互、层级、最大宽度、显隐、定位和碰撞保持。
+- `labels.styles.version` 继续为 `1`；新增可选 override key 不提升地图 schema。旧 JSON、gzip、浏览器缓存缺少 `zone` 时得到空覆盖，五个旧类型不迁移、不改值。
+- 现有 `labels.getStyles / setStyle / resetStyle / resetStyles` 直接接受 `zone`，不新增公开方法。
+
+### 第 246 项：分层 registry 与机器门禁
+
+- 建立机器可读画布文字目录，逐项声明 `layer / rendered / styleSource / stylePersistence / editability / exported`。`stylePersistence` 只允许 `direct-map / visual-theme / runtime-palette / none`，`editability` 只允许 `direct / indirect / none`；不再用 `persisted / userEditable` 二值掩盖间接来源。
+- 六类语义标签固定为 `direct-map / direct / exported`；军事兵力数字由国家颜色生成 runtime palette，属于 `runtime-palette / indirect / exported`；图例和比例尺经视觉主题间接编辑并随地图保存，属于 `visual-theme / indirect / exported`。HUD / 诊断为 `none / none / not exported`，not-rendered 同样不得冒充地图标签覆盖。
+- renderer、CSS 和 PNG 使用或公开可枚举生产契约。固定 `map-stage` 文字的最近承载节点必须声明 `data-canvas-text-id`；renderer 动态文字只能通过统一 helper 写入并登记。源码审计必须能在内存中识别未标记固定文字、绕过 helper 的动态 `textContent` 和对应的未登记 CSS，不得把纯 SVG 图标、title / aria 或面板 UI 误报为画布文字。
+- 本批不为军事、图例、比例尺另造持久化 schema；如未来要求逐项可编辑，另立权威任务。
+
+### 第 247 项：统一验收
+
+- 地区字体、字号、颜色、描边和透明度只改变地区名称；字号变化进入碰撞盒。主题继承、单类 / 全部重置、撤销 / 重做和五个旧类型隔离保持。
+- 旧地图、普通 JSON、gzip、浏览器恢复和 checksum / 地理零变化通过；公开 API 保持 `316 / 316`，现有 setStyle 可发现并接受 `zone`。
+- 实时画布与 PNG 中地区样式一致；军事、图例和比例尺仍进入 PNG，HUD、诊断和 not-rendered 不误入。
+- Chrome 覆盖地区样式、主题、重置、刷新、PNG、显隐、定位、改名以及 `390 / 320px`；不得出现新增 console、page 或 WebGL error。
+
+### 明确排除
+
+- 不修改 `source/`，不新增河流 / 道路沿线文字，不把 marker 文字化，不开放 HUD 字体设置，不新增 PNG overlay 类型，不重写标签布局算法。
+
+### 完成记录
+
+- 地区名称现为第六类独立语义标签样式，默认与主题显式继承手工标签语义，但地图级覆盖、重置和历史记录均与城市、手工标签隔离；旧 `labels.styles.version = 1` 和旧图缺省行为保持。
+- 机器目录共 `21` 项：语义标签 `6`、成品注记 `3`、HUD `8`、诊断 `1`、未渲染名称 `3`。生产源码审计违规为 `0`；三类故障注入分别检出未标记固定文字、绕过 helper 的动态文字和对应未登记 CSS，防止目录只会核对已有标记。
+- 独立复核先后两次 `BLOCK` 并推动补齐地区布局优先级、双向生产契约、三级持久化 / 编辑语义、真实源码故障注入和道路名称证据；第三轮结论为 `ACCEPT`。
+- 系统 Chrome 确认地区字号、文字色、描边色、描边宽度和透明度实时生效，城市 / 首都样式不变；撤销、重做、当前类型重置及浏览器保存后刷新恢复通过。`390 / 320px` 下控制面板与正文横向溢出均为 `0`，测试结束后已恢复并重新保存原始地区样式。

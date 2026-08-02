@@ -5,7 +5,8 @@ export const LABEL_STYLE_TYPE = Object.freeze({
   PROVINCE: "province",
   CAPITAL: "capital",
   CITY: "city",
-  CUSTOM: "custom"
+  CUSTOM: "custom",
+  ZONE: "zone"
 });
 
 export const LABEL_STYLE_TYPES = Object.freeze(Object.values(LABEL_STYLE_TYPE));
@@ -24,12 +25,15 @@ export const LABEL_FONT_FAMILIES = Object.freeze({
 export const LOCAL_LABEL_FONT_ID = "local";
 export const LABEL_FONT_FALLBACK = LABEL_FONT_FAMILIES.system;
 
+const CUSTOM_LABEL_STYLE_DEFAULT = freezeStyle({fontFamilyId: "historicalDisplay", fontFamilyName: null, fontSize: 13, fontWeight: 600, italic: false, letterSpacing: 0.15, color: "#2c3339", opacity: 0.96, strokeColor: "#f5f3eb", strokeWidth: 0.03, shadowColor: "#2c3339", shadowOffsetX: 0, shadowOffsetY: 0, shadowBlur: 0});
+
 export const LABEL_STYLE_DEFAULTS = Object.freeze({
   [LABEL_STYLE_TYPE.STATE]: freezeStyle({fontFamilyId: "historicalDisplay", fontFamilyName: null, fontSize: 24, fontWeight: 700, italic: false, letterSpacing: 3.2, color: "#293038", opacity: 0.94, strokeColor: "#f5f2e8", strokeWidth: 0.03, shadowColor: "#293038", shadowOffsetX: 0, shadowOffsetY: 0, shadowBlur: 0}),
   [LABEL_STYLE_TYPE.PROVINCE]: freezeStyle({fontFamilyId: "historical", fontFamilyName: null, fontSize: 14, fontWeight: 600, italic: false, letterSpacing: 1, color: "#8a2434", opacity: 0.94, strokeColor: "#f5f2e8", strokeWidth: 0, shadowColor: "#8a2434", shadowOffsetX: 0, shadowOffsetY: 0, shadowBlur: 0}),
   [LABEL_STYLE_TYPE.CAPITAL]: freezeStyle({fontFamilyId: "historicalDisplay", fontFamilyName: null, fontSize: 13, fontWeight: 700, italic: false, letterSpacing: 0.15, color: "#20262c", opacity: 0.98, strokeColor: "#f5f3eb", strokeWidth: 0, shadowColor: "#20262c", shadowOffsetX: 0, shadowOffsetY: 0, shadowBlur: 0}),
   [LABEL_STYLE_TYPE.CITY]: freezeStyle({fontFamilyId: "historical", fontFamilyName: null, fontSize: 11, fontWeight: 700, italic: false, letterSpacing: 0, color: "#343a40", opacity: 0.94, strokeColor: "#f5f3eb", strokeWidth: 0, shadowColor: "#343a40", shadowOffsetX: 0, shadowOffsetY: 0, shadowBlur: 0}),
-  [LABEL_STYLE_TYPE.CUSTOM]: freezeStyle({fontFamilyId: "historicalDisplay", fontFamilyName: null, fontSize: 13, fontWeight: 600, italic: false, letterSpacing: 0.15, color: "#2c3339", opacity: 0.96, strokeColor: "#f5f3eb", strokeWidth: 0.03, shadowColor: "#2c3339", shadowOffsetX: 0, shadowOffsetY: 0, shadowBlur: 0})
+  [LABEL_STYLE_TYPE.CUSTOM]: CUSTOM_LABEL_STYLE_DEFAULT,
+  [LABEL_STYLE_TYPE.ZONE]: freezeStyle({...CUSTOM_LABEL_STYLE_DEFAULT})
 });
 
 const STYLE_FIELDS = Object.freeze(Object.keys(LABEL_STYLE_DEFAULTS[LABEL_STYLE_TYPE.CITY]));
@@ -126,6 +130,7 @@ export function resetAllLabelStyles(map) {
 export function labelStyleTypeForTarget(targetKind, item = null) {
   if (targetKind === LABEL_STYLE_TYPE.STATE) return LABEL_STYLE_TYPE.STATE;
   if (targetKind === LABEL_STYLE_TYPE.PROVINCE) return LABEL_STYLE_TYPE.PROVINCE;
+  if (targetKind === LABEL_STYLE_TYPE.ZONE) return LABEL_STYLE_TYPE.ZONE;
   if (targetKind === LABEL_STYLE_TYPE.CUSTOM) return LABEL_STYLE_TYPE.CUSTOM;
   return item?.capital ? LABEL_STYLE_TYPE.CAPITAL : LABEL_STYLE_TYPE.CITY;
 }
@@ -255,9 +260,11 @@ function themeStyleForType(theme, styleType) {
   } else if (styleType === LABEL_STYLE_TYPE.CAPITAL) {
     color = labels.capital || labels.city;
     halo = labels.capitalHalo || labels.cityHalo;
-  } else if (styleType === LABEL_STYLE_TYPE.CUSTOM) {
-    color = labels.custom;
-    halo = labels.customHalo || labels.customBorder;
+  } else if (styleType === LABEL_STYLE_TYPE.CUSTOM || styleType === LABEL_STYLE_TYPE.ZONE) {
+    color = styleType === LABEL_STYLE_TYPE.ZONE ? labels.zone || labels.custom : labels.custom;
+    const styleHalo = styleType === LABEL_STYLE_TYPE.ZONE ? labels.zoneHalo : labels.customHalo;
+    const styleBorder = styleType === LABEL_STYLE_TYPE.ZONE ? labels.zoneBorder : labels.customBorder;
+    halo = styleHalo || styleBorder || labels.customHalo || labels.customBorder;
   }
   const result = {};
   if (Array.isArray(color)) {

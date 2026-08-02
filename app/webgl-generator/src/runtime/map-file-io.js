@@ -2,6 +2,7 @@ import {readObjectNote} from "./object-notes.js";
 import {normalizeVisualThemeDocument} from "../renderer/themes.js";
 import {normalizeLabelStyleStore, validateLabelStyleStore} from "./label-style-registry.js";
 import {normalizeLabelLayoutStore, validateLabelLayoutStore} from "./label-layout-registry.js";
+import {PNG_FIXED_TEXT_ELEMENT_IDS, PNG_MILITARY_TEXT_SELECTOR, PNG_SEMANTIC_LABEL_SELECTORS} from "./canvas-text-contract.js";
 import {normalizeSocialExpansionMap} from "./social-expansion-edit-commands.js";
 import {backfillEconomyDisplayProperties, normalizeEconomyDisplayMap} from "../generator/economy-display-properties.js";
 import {resolveBiomeDescriptor} from "../generator/biome-registry.js";
@@ -2088,8 +2089,8 @@ async function drawMapOverlayElements(documentRef, context, canvasRect, scale, o
   const selectors = [];
   if (options.overlays?.cityIcons !== false) selectors.push(".city-map-icon.visible");
   if (options.overlays?.markers !== false) selectors.push(".marker-map-icon.visible");
-  if (options.overlays?.military !== false) selectors.push(".military-map-icon.visible");
-  if (options.overlays?.labels !== false) selectors.push(".state-label.visible", ".province-label.visible", ".city-label.visible", ".zone-label.visible", ".custom-label.visible");
+  if (options.overlays?.military !== false) selectors.push(PNG_MILITARY_TEXT_SELECTOR);
+  if (options.overlays?.labels !== false) selectors.push(...PNG_SEMANTIC_LABEL_SELECTORS);
   const elements = selectors.length ? Array.from(overlay.querySelectorAll(selectors.join(", "))).filter(isVisibleElement) : [];
   elements.sort((a, b) => overlayZIndex(a) - overlayZIndex(b));
 
@@ -2163,8 +2164,8 @@ function drawFixedMapUiElements(documentRef, context, canvasRect, scale, options
 
 function fixedMapUiElements(documentRef, overlays = PNG_OVERLAY_DEFAULTS) {
   const ids = [];
-  if (overlays.legend !== false) ids.push("map-legend");
-  if (overlays.scaleBar !== false) ids.push("map-scale-bar");
+  if (overlays.legend !== false) ids.push(PNG_FIXED_TEXT_ELEMENT_IDS.legend);
+  if (overlays.scaleBar !== false) ids.push(PNG_FIXED_TEXT_ELEMENT_IDS.scaleBar);
   return ids
     .map(id => documentRef.getElementById(id))
     .filter(isVisibleElement);

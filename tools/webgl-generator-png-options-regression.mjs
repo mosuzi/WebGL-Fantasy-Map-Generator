@@ -10,6 +10,7 @@ import {
   pngCameraForWorldRect,
   resolvePngCropRect
 } from "../app/webgl-generator/src/runtime/map-file-io.js";
+import {PNG_FIXED_TEXT_ELEMENT_IDS, PNG_MILITARY_TEXT_SELECTOR, PNG_SEMANTIC_LABEL_SELECTORS} from "../app/webgl-generator/src/runtime/canvas-text-contract.js";
 
 const defaultOverlays = {labels: true, cityIcons: true, markers: true, military: true, measurements: false, legend: true, scaleBar: true};
 assert.deepEqual(normalizePngExportOptions({}), {
@@ -110,6 +111,13 @@ const [fileIoSource, appSource, apiSource, controlSource] = await Promise.all([
   readFile(new URL("../app/webgl-generator/src/ui/vue/components/ControlPanel.vue", import.meta.url), "utf8")
 ]);
 assert.match(fileIoSource, /if \(options\.includeMapOverlays\) \{[\s\S]*?drawMapOverlayElements[\s\S]*?drawFixedMapUiElements/);
+assert.deepEqual(PNG_SEMANTIC_LABEL_SELECTORS, [".state-label.visible", ".province-label.visible", ".city-label.visible", ".custom-label.visible", ".zone-label.visible"], "PNG 标签生产契约没有完整覆盖六类语义标签");
+assert.match(fileIoSource, /overlays\?\.labels[\s\S]*selectors\.push\(\.\.\.PNG_SEMANTIC_LABEL_SELECTORS\)/, "PNG 标签通道没有消费生产契约");
+assert.equal(PNG_MILITARY_TEXT_SELECTOR, ".military-map-icon.visible", "军事兵力注记生产契约错误");
+assert.match(fileIoSource, /overlays\?\.military[\s\S]*selectors\.push\(PNG_MILITARY_TEXT_SELECTOR\)/, "军事兵力注记没有保留独立 PNG 通道");
+assert.deepEqual(PNG_FIXED_TEXT_ELEMENT_IDS, {legend: "map-legend", scaleBar: "map-scale-bar"}, "图例或比例尺生产契约错误");
+assert.match(fileIoSource, /ids\.push\(PNG_FIXED_TEXT_ELEMENT_IDS\.legend\)[\s\S]*ids\.push\(PNG_FIXED_TEXT_ELEMENT_IDS\.scaleBar\)/, "图例或比例尺没有保留独立 PNG 通道");
+assert.doesNotMatch(fileIoSource, /selectors\.push\([^\n]*(?:map-badge|hover-overlay|grid-cell-diagnostic-label|measurement-readout)/, "HUD 或诊断文字误入 PNG overlay selector");
 assert.ok(fileIoSource.indexOf("drawFixedMapUiElements(documentRef, context, canvasRect, scale, options)") < fileIoSource.indexOf("if (options.transparentBackground) clearOutsideMapBounds"), "透明清除必须在 overlay 合成后执行");
 assert.match(appSource, /export-png-overlays/);
 assert.match(appSource, /export-png-transparent/);

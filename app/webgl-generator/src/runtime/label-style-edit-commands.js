@@ -83,7 +83,7 @@ function cloneStyleStore(store) {
 }
 
 function labelStyleTypeName(styleType) {
-  const labels = {state: "国家名称", province: "省份名称", capital: "首都名称", city: "城市名称", custom: "手工标签"};
+  const labels = {state: "国家名称", province: "省份名称", capital: "首都名称", city: "城市名称", custom: "手工标签", zone: "地区名称"};
   if (!LABEL_STYLE_TYPES.includes(styleType)) throw new Error(`未知标签样式类型：${styleType}`);
   return labels[styleType];
 }

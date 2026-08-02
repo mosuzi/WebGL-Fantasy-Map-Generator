@@ -16,6 +16,7 @@ import {
   upsertUserVisualTheme
 } from "../app/webgl-generator/src/renderer/themes.js";
 import {EditHistory} from "../app/webgl-generator/src/runtime/edit-history.js";
+import {resolveLabelStyle} from "../app/webgl-generator/src/runtime/label-style-registry.js";
 import {createMapDocument, parseMapDocument, stringifyMapDocument} from "../app/webgl-generator/src/runtime/map-file-io.js";
 import {captureVisualThemeState, createSetUserVisualThemesCommand} from "../app/webgl-generator/src/runtime/visual-theme-edit-commands.js";
 import {loadUserVisualThemes, persistUserVisualThemes} from "../app/webgl-generator/src/runtime/visual-theme-storage.js";
@@ -48,6 +49,8 @@ assert.deepEqual(colorForHeight(40, {ocean: [0, 0, 0, 1]}, {visualTheme: created
 assert.deepEqual(createdTheme.water.fill.slice(0, 3), createdTheme.canvas.background.slice(0, 3), "水域与画布海洋背景没有共用颜色");
 assert.deepEqual(createdTheme.lines.routePrimary.slice(0, 3), createdTheme.lines.routeSecondary.slice(0, 3), "道路颜色没有覆盖全部路线等级");
 assert.deepEqual(createdTheme.labels.city.slice(0, 3), createdTheme.legend.text.slice(0, 3), "主要标签与图例没有共用颜色 token");
+assert.equal(resolveLabelStyle({}, "zone", createdTheme).color, resolveLabelStyle({}, "custom", createdTheme).color, "地区标签没有继承用户主题的手工标签颜色");
+assert.equal(resolveLabelStyle({}, "zone", createdTheme).strokeColor, resolveLabelStyle({}, "custom", createdTheme).strokeColor, "地区标签没有继承用户主题的手工标签衬边");
 assert.deepEqual(createdTheme.scaleBar.foreground.slice(0, 3), createdTheme.scaleBar.text.slice(0, 3), "比例尺前景与文字没有共用颜色 token");
 
 const map = generatePlaceholderMap({seed: "visual-theme-regression", cellsTarget: 3000, heightmapTemplate: "continents"});
@@ -74,6 +77,7 @@ const beforeUpdate = captureVisualThemeState(map, seedDocument.id);
 const afterUpdate = {preset: seedDocument.id, userThemes: [updatedDocument]};
 history.execute(createSetUserVisualThemesCommand(beforeUpdate, afterUpdate, {label: "编辑回归主题"}), {map});
 assert.equal(resolveVisualTheme(seedDocument.id).land.fill[0], 0x12 / 255);
+assert.equal(resolveLabelStyle({}, "zone", resolveVisualTheme(seedDocument.id)).color, "#6789ab", "地区标签没有跟随用户主题主要标签颜色");
 history.undo({map});
 assert.equal(exportVisualThemeDocument(seedDocument.id).colors.land, seedDocument.colors.land, "撤销没有恢复用户主题颜色");
 history.redo({map});

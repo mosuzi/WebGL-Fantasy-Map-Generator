@@ -810,7 +810,8 @@ const labelStyleTypeOptions = Object.freeze([
   {value: "province", label: "省份名称"},
   {value: "capital", label: "首都名称"},
   {value: "city", label: "城市名称"},
-  {value: "custom", label: "手工标签"}
+  {value: "custom", label: "手工标签"},
+  {value: "zone", label: "地区名称"}
 ]);
 const localFontCatalog = ref([]);
 const localFontsLoaded = ref(false);

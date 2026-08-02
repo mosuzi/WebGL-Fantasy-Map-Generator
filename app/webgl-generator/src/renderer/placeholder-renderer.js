@@ -46,6 +46,7 @@ import {
   summarizePoliticalVisualPaths
 } from "./political-layer.js";
 import {LABEL_TARGET_KIND, OBJECT_KIND, POLITICAL_OBJECT_FIELD, isPointObjectKind, isPoliticalObjectKind} from "../runtime/object-kinds.js";
+import {markDynamicCanvasTextNode, semanticLabelClassName, setDynamicCanvasTextContent} from "../runtime/canvas-text-contract.js";
 import {compositeConnectorPoints, pickCompositeConnector} from "./composite-connectors.js";
 import {
   CITY_ICON_PALETTES,
@@ -724,7 +725,7 @@ export class PlaceholderMapRenderer {
       const tooltip = militaryIconTooltip(item.regiment || item, this.map, this.unitPreferences);
       item.rendererUnitPreferences = this.unitPreferences;
       const count = item.node?.querySelector?.(".military-map-icon-count");
-      if (count) count.textContent = troopLabel;
+      if (count) setDynamicCanvasTextContent(count, "military-count", troopLabel);
       if (item.node) {
         item.node.title = tooltip;
         item.node.setAttribute("aria-label", tooltip);
@@ -1794,8 +1795,10 @@ export class PlaceholderMapRenderer {
     const fragment = documentRef.createDocumentFragment();
     const labels = [...getLabelStates(map), ...getLabelProvinces(map), ...getLabelCities(map, this.labelOptions), ...getLabelZones(map), ...getCustomLabels(map)].map(item => {
       const node = documentRef.createElement("span");
-      node.className = labelClassName(item);
-      const glyphNodes = appendLabelNodeText(node, item, documentRef);
+      const styleType = labelStyleTypeForTarget(item.targetKind, item.city);
+      node.className = semanticLabelClassName(item.targetKind, item.city);
+      markDynamicCanvasTextNode(node, styleType);
+      const glyphNodes = appendLabelNodeText(node, item, documentRef, styleType);
       node.dataset.labelTargetKind = item.targetKind;
       node.dataset.labelTargetId = String(item.targetId);
       if (item.targetKind === LABEL_TARGET_KIND.ZONE) node.addEventListener("click", event => {
@@ -1803,7 +1806,6 @@ export class PlaceholderMapRenderer {
         event.stopPropagation();
         this.onSelect({object: {kind: OBJECT_KIND.ZONE, id: item.targetId}});
       });
-      const styleType = labelStyleTypeForTarget(item.targetKind, item.city);
       const resolvedStyle = resolveLabelStyle(map, styleType, this.visualTheme);
       const layout = resolveLabelLayout(map, item.targetKind, item.targetId, item.city, {
         x: item.x,
@@ -1866,7 +1868,7 @@ export class PlaceholderMapRenderer {
       symbol.append(icon);
       const count = documentRef.createElement("span");
       count.className = "military-map-icon-count";
-      count.textContent = formatMilitaryTroops(item.troops, this.unitPreferences);
+      setDynamicCanvasTextContent(count, "military-count", formatMilitaryTroops(item.troops, this.unitPreferences));
       node.append(symbol, count);
       fragment.append(node);
       return {...item, node, box: null, visible: false};
@@ -1877,6 +1879,7 @@ export class PlaceholderMapRenderer {
     fragment.append(this.selectionMarker);
     this.gridCellIdLayer = documentRef.createElement("div");
     this.gridCellIdLayer.className = "grid-cell-diagnostic-label-layer";
+    markDynamicCanvasTextNode(this.gridCellIdLayer, "grid-cell-id");
     fragment.append(this.gridCellIdLayer);
     this.overlay.append(fragment);
     this.labelCount = this.labelItems.length;
@@ -2069,7 +2072,7 @@ export class PlaceholderMapRenderer {
       const node = documentRef.createElement("span");
       node.className = `grid-cell-diagnostic-label${forced ? " forced" : ""}`;
       node.dataset.gridCellId = String(gridCell);
-      node.textContent = `#${gridCell}`;
+      setDynamicCanvasTextContent(node, "grid-cell-id", `#${gridCell}`);
       setOverlayNodePosition(node, screen.x, screen.y);
       fragment.append(node);
       visible++;
@@ -2607,10 +2610,10 @@ function setOverlayNodePosition(node, x, y) {
   setStylePropertyIfChanged(node, "--overlay-y", overlayCoordinateValue(y));
 }
 
-function appendLabelNodeText(node, item, documentRef) {
+function appendLabelNodeText(node, item, documentRef, styleType) {
   const political = item.targetKind === LABEL_TARGET_KIND.STATE || item.targetKind === LABEL_TARGET_KIND.PROVINCE;
   if (!political) {
-    node.textContent = item.text;
+    setDynamicCanvasTextContent(node, styleType, item.text);
     return [];
   }
   node.setAttribute("aria-label", item.text);
@@ -2618,7 +2621,7 @@ function appendLabelNodeText(node, item, documentRef) {
     const glyph = documentRef.createElement("span");
     glyph.className = "political-label-glyph";
     glyph.setAttribute("aria-hidden", "true");
-    glyph.textContent = character;
+    setDynamicCanvasTextContent(glyph, styleType, character);
     node.append(glyph);
     return glyph;
   });
@@ -3274,15 +3277,6 @@ function stateLabelAnchorAllowed(renderer, item, anchor, rect) {
   const world = renderer.screenToWorld(rect.left + anchor.x, rect.top + anchor.y);
   const picked = pickGridCell(renderer.map, world.x, world.y);
   return Number.isInteger(picked?.packCell) && item.componentCellSet.has(picked.packCell);
-}
-
-function labelClassName(item) {
-  if (item.targetKind === LABEL_TARGET_KIND.STATE) return "state-label";
-  if (item.targetKind === LABEL_TARGET_KIND.PROVINCE) return "province-label";
-  if (item.targetKind === LABEL_TARGET_KIND.ZONE) return "zone-label";
-  if (item.targetKind === LABEL_TARGET_KIND.CUSTOM) return "custom-label";
-  const city = item.city || {};
-  return `city-label${city.capital ? " capital" : ""}`;
 }
 
 function isSelectedOrHighlighted(selection, highlights, kind, id) {
