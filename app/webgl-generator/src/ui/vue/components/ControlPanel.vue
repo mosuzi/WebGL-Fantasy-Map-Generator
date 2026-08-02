@@ -26,6 +26,7 @@
               <ElDropdownMenu>
                 <ElDropdownItem command="local-file">保存到本地</ElDropdownItem>
                 <ElDropdownItem id="save-browser-storage" command="browser-storage">保存到浏览器</ElDropdownItem>
+                <ElDropdownItem id="open-cloud-storage" command="cloud-storage">云端存储…</ElDropdownItem>
               </ElDropdownMenu>
             </template>
           </ElDropdown>

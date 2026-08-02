@@ -29,12 +29,13 @@ import {
 import {PanelManager} from "../ui/panel-manager.js";
 import {captureControlPanelLaunchGeometry} from "../ui/control-panel-launch-geometry.js";
 import {createBrushCursorPreview} from "../ui/brush-cursor-preview.js";
-import {bindRuntimePanel, readControlPreferences, readOptionsFromPanel, setActiveModeButton, setEditingInteractionLock, setGenerationLoading, setSeedInput, updateControlPreferences, updateLayerPreference, updatePickPanel, updateRegenerationSection, updateRuntimePanel} from "../ui/panel.js";
+import {bindRuntimePanel, readControlPreferences, readOptionsFromPanel, setActiveModeButton, setEditingInteractionLock, setGenerationLoading, setSeedInput, syncLayerGroupControls, updateControlPreferences, updateLayerPreference, updatePickPanel, updateRegenerationSection, updateRuntimePanel} from "../ui/panel.js";
 import {formatArea as formatDisplayArea, formatDistance as formatDisplayDistance, normalizeUnitPreferences} from "../ui/display-units.js";
 import {sameObjectId} from "../ui/object-id.js";
 import {createBiomePanel} from "../ui/panels/biome-panel.js";
 import {createCityPanel} from "../ui/panels/city-panel.js";
 import {createClimatePanel} from "../ui/panels/climate-panel.js";
+import {createCloudStoragePanel} from "../ui/panels/cloud-storage-panel.js";
 import {createCulturePanel} from "../ui/panels/culture-panel.js";
 import {createDevelopmentPanel} from "../ui/panels/development-panel.js";
 import {createDiplomacyPanel} from "../ui/panels/diplomacy-panel.js";
@@ -61,10 +62,12 @@ import {createRoutePanel} from "../ui/panels/route-panel.js";
 import {createStatePanel} from "../ui/panels/state-panel.js";
 import {createZonePanel} from "../ui/panels/zone-panel.js";
 import {scheduleLazyVuePanelPreload} from "../ui/panels/lazy-vue-panel.js";
+import CloudStoragePanelComponent from "../ui/vue/components/CloudStoragePanel.vue";
 import ZonePanelComponent from "../ui/vue/components/ZonePanel.vue";
 import {EDIT_REFRESH_PRESETS} from "./edit-refresh-scheduler.js";
 import {createEditRefreshScheduler} from "./edit-refresh-scheduler.js";
 import {BROWSER_MAP_STORAGE_KEY, decodeBrowserMapStoragePayload, encodeBrowserMapStoragePayload} from "./browser-map-storage.js";
+import {createCloudStorageRegistry} from "./cloud-storage.js";
 import {createImportFmgCellsHeightCommand} from "./fmg-cells-geojson-import.js";
 import {EditHistory} from "./edit-history.js";
 import {MapRevisionTracker} from "./map-revision.js";
@@ -2526,6 +2529,14 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     })
   });
   state.runtimeActions = runtimeActions;
+  const cloudStorageRegistry = createCloudStorageRegistry({view: documentRef.defaultView || window});
+  state.panels.cloudStorage = createCloudStoragePanel(documentRef, panelManager, cloudStorageRegistry, CloudStoragePanelComponent, {
+    onCreatePayload: async () => {
+      const exported = await runtimeActions.data.exportCompressedAll({download: false, includeBase64: false, includeBlob: true});
+      return {filename: exported.filename, blob: exported.blob, metadata: exported.metadata};
+    },
+    onLoadPayload: (blob, file) => runtimeActions.data.importMap(blob, {confirm: true, source: "ui", sourceFile: file, toast: true})
+  });
   state.regenerationLockUiSession = installRegenerationLockUiSession(documentRef, {
     getMap: () => state.map,
     setLock: (reference, locked) => runtimeActions.regenerationLocks.set(reference, locked),
@@ -2711,6 +2722,9 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     onSaveLocalFile: () => saveMapToLocalFile(state, documentRef, runtimeActions.data.exportMap),
     onSaveBrowserStorage: () => {
       void saveMapToBrowserStorage(state, documentRef, runtimeActions.data.saveBrowserMap);
+    },
+    onOpenCloudStorage: () => {
+      state.panels.cloudStorage.open();
     },
     onExportImage: () => exportMapImage(state, documentRef, runtimeActions.data.exportPNG),
     onExportHeightmapImage: () => exportHeightmapImage(state, documentRef, runtimeActions.data.exportHeightmapPNG),
@@ -3184,6 +3198,7 @@ function setRuntimeLayerVisible(state, documentRef, layer, visible) {
     const layerControls = [...documentRef.querySelectorAll("[data-layer]")];
     for (const item of controls) syncRuntimeBooleanControl(layerControls.find(control => control.dataset.layer === item), nextVisible);
     state.renderer?.setLayerVisible?.(nextLayer, nextVisible);
+    syncLayerGroupControls(documentRef, state.renderer?.getStats?.()?.layerVisibility || state.renderer?.layerVisibility || {});
     updateRuntimePanel(documentRef, state);
     if (nextLayer === "measurements") updateMeasurementOverlay(state, documentRef);
     return runtimeDisplayActionResult(state, documentRef, ["display-preference", "renderer", "runtime-panel", ...(nextLayer === "measurements" ? ["measurement-overlay"] : [])]);

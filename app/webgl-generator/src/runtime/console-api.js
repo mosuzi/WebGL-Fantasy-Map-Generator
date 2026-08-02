@@ -1674,6 +1674,7 @@ export async function exportCompressedAllMapData(state, documentRef, options = {
     compressedBytes: result.compressedBytes,
     metadata
   };
+  if (options.includeBlob === true) data.blob = result.blob;
   if (options.includeBase64 !== false) data.base64 = await blobToBase64(documentRef, result.blob);
   return data;
 }

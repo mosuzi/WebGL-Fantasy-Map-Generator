@@ -48,7 +48,7 @@ Vercel 会把不带尾斜杠的 `/prototype/<目录名>` 临时重定向到带�
 1. 选择当前仓库。
 2. Root Directory 保持仓库根目录。
 3. 保留 `vercel.json` 中的构建设置；控制台里不需要手动改 Root Directory。
-4. 当前应用不需要环境变量。
+4. 本地 / 浏览器存储不需要环境变量。若要启用云端存储，按[云存储自部署配置](./cloud-storage.md)设置 `VITE_FMG_DROPBOX_APP_KEY`、`VITE_FMG_DROPBOX_REDIRECT_URI` 与 `VITE_FMG_GOOGLE_CLIENT_ID`；未配置的服务会在界面中明确保持禁用。
 5. 首次部署后访问 Vercel 给出的 Preview URL，确认根路径显示从中央向两侧展开的中国古代画卷加载页，卷面包含“莫苏子”“架空地图生成器”和当前版本号，并能完成初始生成。
 6. 分别打开 `/prototype/webgl-cells/`、`/prototype/boundary-topology-lab/` 与 `/prototype/loading-scroll-showcase/`，确认原型页面和关键数据 / 模块能直接加载。
 

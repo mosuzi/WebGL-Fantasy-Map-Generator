@@ -2,9 +2,16 @@ import {createApp} from "vue";
 import {pinia} from "../vue/pinia.js";
 
 const lazyVuePanelEntries = new Set();
+const LAZY_PANEL_ERROR_MESSAGE_LIMIT = 240;
 
-export function createLazyVuePanel(documentRef, root, loadComponent, props, messages = {}) {
+export const LAZY_PANEL_ERROR_KIND = Object.freeze({
+  MODULE_FETCH: "module-fetch",
+  COMPONENT: "component"
+});
+
+export function createLazyVuePanel(documentRef, root, loadComponent, props, messages = {}, runtime = {}) {
   root.textContent = messages.initial || "";
+  const createVueApp = runtime.createApp || createApp;
   let app = null;
   let appPromise = null;
   let componentModule = null;
@@ -25,16 +32,16 @@ export function createLazyVuePanel(documentRef, root, loadComponent, props, mess
 
   return {
     load() {
-      ensureApp().catch(error => {
-        root.textContent = messages.failure || "面板加载失败，请检查开发模式日志。";
+      return ensureApp().catch(error => {
+        renderLoadFailure(error);
         documentRef.defaultView?.console.error?.(error);
+        return null;
       });
     },
     unmount() {
       disposed = true;
       lazyVuePanelEntries.delete(entry);
-      app?.unmount();
-      app = null;
+      safelyUnmountApp();
     },
     preload() {
       return preload();
@@ -65,6 +72,51 @@ export function createLazyVuePanel(documentRef, root, loadComponent, props, mess
     return componentPromise;
   }
 
+  function retry() {
+    if (disposed) return;
+    safelyUnmountApp();
+    lastError = null;
+    componentModule = null;
+    componentPromise = null;
+    appPromise = null;
+    void ensureApp().catch(error => {
+      renderLoadFailure(error);
+      documentRef.defaultView?.console.error?.(error);
+    });
+  }
+
+  function renderLoadFailure(error) {
+    const failure = classifyLazyVuePanelError(error);
+    root.replaceChildren?.();
+    const container = documentRef.createElement("div");
+    container.className = "lazy-panel-recovery";
+    container.dataset.errorKind = failure.kind;
+
+    const title = documentRef.createElement("strong");
+    title.textContent = messages.failure || "面板加载失败，请检查开发模式日志。";
+    container.append(title);
+
+    if (failure.kind === LAZY_PANEL_ERROR_KIND.MODULE_FETCH) {
+      const explanation = documentRef.createElement("p");
+      explanation.textContent = "页面版本可能已经更新，当前页面无法取得原版本的面板资源。请先保存尚未保存的地图，再重试或刷新页面。";
+      container.append(explanation);
+    }
+
+    const detail = documentRef.createElement("p");
+    detail.className = "lazy-panel-recovery-detail";
+    detail.textContent = failure.message;
+    container.append(detail);
+
+    const actions = documentRef.createElement("div");
+    actions.className = "lazy-panel-recovery-actions";
+    actions.append(createRecoveryButton(documentRef, "重试加载", retry));
+    if (failure.kind === LAZY_PANEL_ERROR_KIND.MODULE_FETCH) {
+      actions.append(createRecoveryButton(documentRef, "刷新页面", () => documentRef.defaultView?.location?.reload?.()));
+    }
+    container.append(actions);
+    root.append(container);
+  }
+
   function ensureApp() {
     if (app) return Promise.resolve(app);
     if (appPromise) return appPromise;
@@ -73,16 +125,42 @@ export function createLazyVuePanel(documentRef, root, loadComponent, props, mess
       if (disposed) return null;
       if (app) return app;
       root.textContent = "";
-      app = createApp(module.default || module, props);
+      app = createVueApp(module.default || module, props);
       app.use(pinia);
       app.mount(root);
       return app;
     }).catch(error => {
       appPromise = null;
+      lastError = error;
+      safelyUnmountApp();
       throw error;
     });
     return appPromise;
   }
+
+  function safelyUnmountApp() {
+    const mountedApp = app;
+    app = null;
+    if (!mountedApp) return;
+    try {
+      mountedApp.unmount();
+    } catch {
+      // 半初始化组件的清理失败不能阻断错误恢复或再次挂载。
+    }
+  }
+}
+
+export function classifyLazyVuePanelError(error) {
+  const name = String(error?.name || "");
+  const code = String(error?.code || "");
+  const message = boundedLazyPanelErrorMessage(error);
+  const moduleFetch = name === "ChunkLoadError"
+    || code === "ERR_MODULE_NOT_FOUND"
+    || /failed to fetch dynamically imported module|error loading dynamically imported module|importing a module script failed|loading chunk [^ ]+ failed|chunkloaderror/i.test(`${name} ${code} ${message}`);
+  return Object.freeze({
+    kind: moduleFetch ? LAZY_PANEL_ERROR_KIND.MODULE_FETCH : LAZY_PANEL_ERROR_KIND.COMPONENT,
+    message
+  });
 }
 
 export function scheduleLazyVuePanelPreload(documentRef, options = {}) {
@@ -184,8 +262,23 @@ export function getLazyVuePanelPreloadStats() {
     resolved: entry.isResolved(),
     pending: entry.isPending(),
     disposed: entry.isDisposed(),
-    error: entry.lastError()?.message || ""
+    errorKind: entry.lastError() ? classifyLazyVuePanelError(entry.lastError()).kind : "",
+    error: entry.lastError() ? classifyLazyVuePanelError(entry.lastError()).message : ""
   }));
+}
+
+function boundedLazyPanelErrorMessage(error) {
+  const value = String(error?.message || error || "未知加载错误").replace(/\s+/g, " ").trim() || "未知加载错误";
+  return value.slice(0, LAZY_PANEL_ERROR_MESSAGE_LIMIT);
+}
+
+function createRecoveryButton(documentRef, label, onClick) {
+  const button = documentRef.createElement("button");
+  button.type = "button";
+  button.className = "el-button el-button--small";
+  button.textContent = label;
+  button.addEventListener("click", onClick);
+  return button;
 }
 
 function resolveLazyPanelId(root, messages) {
