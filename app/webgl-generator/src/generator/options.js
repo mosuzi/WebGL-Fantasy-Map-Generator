@@ -8,8 +8,10 @@ import {
   normalizeWindProfile
 } from "./climate-options.js";
 import {DEFAULT_INHERITANCE_MODE, normalizeInheritanceMode} from "./inheritance.js";
+import {DEFAULT_MAP_NAME, normalizeMapName} from "../runtime/map-filename.js";
 
 export const DEFAULT_OPTIONS = {
+  mapName: DEFAULT_MAP_NAME,
   seed: "stage-2-1",
   randomSeed: false,
   heightmapTemplate: "continents",
@@ -49,6 +51,7 @@ export function normalizeOptions(input = {}) {
   const randomized = createRandomizedDefaults(seed);
 
   return {
+    mapName: normalizeMapName(input.mapName),
     seed,
     randomSeed: Boolean(input.randomSeed),
     heightmapTemplate: HEIGHTMAP_TEMPLATES.has(input.heightmapTemplate) ? input.heightmapTemplate : DEFAULT_OPTIONS.heightmapTemplate,

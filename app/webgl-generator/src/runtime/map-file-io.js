@@ -21,6 +21,7 @@ import {
   serializeRiverGeoJsonProperties,
   serializeRouteGeoJsonProperties
 } from "./network-geojson-properties.js";
+import {isCompressedMapDocumentFilename, mapBaseFilename, synchronizeMapName} from "./map-filename.js";
 
 export const MAP_DOCUMENT_TYPE = "webgl-generator-map";
 export const MAP_DOCUMENT_VERSION = 2;
@@ -58,6 +59,7 @@ export function createMapDocument(map, options = {}) {
     exportedAt: new Date().toISOString(),
     app: "fmg-webgl-reimplementation",
     metadata: {
+      name: normalizedMap.metadata?.name || normalizedMap.options?.mapName,
       seed: normalizedMap.metadata?.seed || documentOptions.seed,
       checksum: normalizedMap.metadata?.checksum || null,
       generatorStage: normalizedMap.metadata?.generatorStage || null,
@@ -523,9 +525,7 @@ export function normalizePngOverlayOptions(overlays = {}, includeMapOverlays = t
 }
 
 export function mapFileBaseName(map) {
-  const seed = sanitizeFilename(map?.metadata?.seed || "map");
-  const checksum = sanitizeFilename(map?.metadata?.checksum || "");
-  return checksum ? `fmg-${seed}-${checksum}` : `fmg-${seed}`;
+  return mapBaseFilename(map);
 }
 
 function typedArrayReplacer(_key, value) {
@@ -634,7 +634,7 @@ function normalizeCurrentMapSchemaV2(map, documentOptions = {}) {
   delete options.display;
   const displaySource = documentOptions.display ?? source.display;
   const normalizedRiverStore = normalizeRiverStore(source.rivers, source.pack);
-  return {
+  return synchronizeMapName({
     ...source,
     metadata: {...(source.metadata || {}), schemaVersion: MAP_SCHEMA_VERSION},
     options,
@@ -649,7 +649,7 @@ function normalizeCurrentMapSchemaV2(map, documentOptions = {}) {
       rivers: normalizedRiverStore,
       pack: source.pack ? {...source.pack, rivers: normalizedRiverStore.rivers} : source.pack
     } : {})
-  };
+  }, documentOptions, {legacyFallback: source.metadata?.name == null && source.options?.mapName == null && documentOptions?.mapName == null});
 }
 
 function normalizeRiverStore(store, pack) {
@@ -865,7 +865,7 @@ function measurementNumericId(id) {
 function isCompressedMapDocumentFile(file) {
   const name = String(file?.name || "").toLowerCase();
   const type = String(file?.type || "").toLowerCase();
-  return name.endsWith(".gz") || type.includes("gzip") || type === "application/x-gzip";
+  return isCompressedMapDocumentFilename(name) || type.includes("gzip") || type === "application/x-gzip";
 }
 
 function textByteLength(documentRef, text) {
@@ -914,7 +914,7 @@ function isGzipBase64MapPayload(value) {
   if (typeof value.base64 !== "string") return false;
   const filename = String(value.filename || value.name || "").toLowerCase();
   const type = String(value.mimeType || value.type || "").toLowerCase();
-  return filename.endsWith(".gz") || type.includes("gzip") || type === "application/x-gzip";
+  return isCompressedMapDocumentFilename(filename) || type.includes("gzip") || type === "application/x-gzip";
 }
 
 function base64ToUint8Array(view, base64) {

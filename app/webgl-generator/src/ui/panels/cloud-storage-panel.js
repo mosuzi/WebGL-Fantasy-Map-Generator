@@ -1,7 +1,9 @@
 import {shallowReactive} from "vue";
 import {createLazyVuePanel} from "./lazy-vue-panel.js";
+import {DEFAULT_MAP_FILENAME_TEMPLATE} from "../../runtime/map-filename.js";
 
 const CLOUD_STORAGE_PANEL_ID = "cloud-storage-panel";
+export const CLOUD_FILENAME_TEMPLATE_STORAGE_KEY = "webgl-generator-cloud-filename-template";
 
 export function canSelectCloudStorageProvider(state) {
   return state?.busy !== true;
@@ -26,6 +28,9 @@ export function createCloudStoragePanel(documentRef, manager, registry, componen
     busy: false,
     status: "",
     error: "",
+    filenameTemplate: readCloudFilenameTemplate(documentRef.defaultView?.localStorage),
+    filenamePreview: "",
+    filenameTemplateError: "",
     liveVerified: false,
     version: 0
   });
@@ -60,8 +65,11 @@ export function createCloudStoragePanel(documentRef, manager, registry, componen
       panelState.status = "已断开连接，访问令牌已从内存清除。";
     }),
     onRefresh: () => refreshFiles(),
+    onFilenameTemplateInput: (value, commit = false) => updateFilenameTemplate(value, {commit}),
     onCreate: () => run("正在创建云端地图…", async (provider, operation) => {
-      const payload = await callbacks.onCreatePayload?.();
+      updateFilenamePreview();
+      if (panelState.filenameTemplateError) throw new Error(panelState.filenameTemplateError);
+      const payload = await callbacks.onCreatePayload?.({filenameTemplate: effectiveFilenameTemplate(panelState.filenameTemplate)});
       if (!payload?.blob) throw new Error("未能生成完整地图存档");
       const created = await provider.createFile(payload);
       if (!operation.isCurrent()) return;
@@ -146,13 +154,17 @@ export function createCloudStoragePanel(documentRef, manager, registry, componen
       panelState.version++;
       manager.open(CLOUD_STORAGE_PANEL_ID);
       lazyPanel.load();
+      updateFilenamePreview();
       if (currentProvider()?.getState().connected) void refreshFiles({quiet: true});
     },
     unmount() {
       unsubscribe();
       lazyPanel.unmount();
       registry.dispose();
-    }
+    },
+    updateFilenamePreview,
+    updateFilenameTemplate,
+    getFilenameTemplateState: () => filenameTemplateState()
   };
 
   async function refreshFiles(options = {}) {
@@ -210,4 +222,53 @@ export function createCloudStoragePanel(documentRef, manager, registry, componen
     panelState.status = "";
     panelState.error = "";
   }
+
+  function updateFilenameTemplate(value, {commit = false} = {}) {
+    const raw = String(value ?? "");
+    panelState.filenameTemplate = commit && !raw.trim() ? DEFAULT_MAP_FILENAME_TEMPLATE : raw;
+    updateFilenamePreview();
+    if (!panelState.filenameTemplateError) persistCloudFilenameTemplate(documentRef.defaultView?.localStorage, panelState.filenameTemplate);
+    return filenameTemplateState();
+  }
+
+  function updateFilenamePreview() {
+    try {
+      panelState.filenamePreview = callbacks.onPreviewFilename?.(effectiveFilenameTemplate(panelState.filenameTemplate)) || "";
+      panelState.filenameTemplateError = "";
+    } catch (error) {
+      panelState.filenamePreview = "";
+      panelState.filenameTemplateError = String(error?.message || error || "文件名模板无效");
+    }
+    return filenameTemplateState();
+  }
+
+  function filenameTemplateState() {
+    return {
+      filenameTemplate: panelState.filenameTemplate,
+      filenamePreview: panelState.filenamePreview,
+      filenameTemplateError: panelState.filenameTemplateError
+    };
+  }
+}
+
+export function readCloudFilenameTemplate(storage) {
+  try {
+    return String(storage?.getItem?.(CLOUD_FILENAME_TEMPLATE_STORAGE_KEY) || "").trim() || DEFAULT_MAP_FILENAME_TEMPLATE;
+  } catch {
+    return DEFAULT_MAP_FILENAME_TEMPLATE;
+  }
+}
+
+export function persistCloudFilenameTemplate(storage, value) {
+  const template = effectiveFilenameTemplate(value);
+  try {
+    storage?.setItem?.(CLOUD_FILENAME_TEMPLATE_STORAGE_KEY, template);
+  } catch {
+    return false;
+  }
+  return true;
+}
+
+function effectiveFilenameTemplate(value) {
+  return String(value ?? "").trim() || DEFAULT_MAP_FILENAME_TEMPLATE;
 }

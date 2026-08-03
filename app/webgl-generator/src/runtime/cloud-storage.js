@@ -1,4 +1,6 @@
-export const CLOUD_MAP_EXTENSION = ".webgl-map.json.gz";
+import {ensureMapArchiveExtension, isMapDocumentFilename, MAP_ARCHIVE_EXTENSION} from "./map-filename.js";
+
+export const CLOUD_MAP_EXTENSION = MAP_ARCHIVE_EXTENSION;
 export const DROPBOX_SCOPES = Object.freeze(["files.metadata.read", "files.content.read", "files.content.write"]);
 export const GOOGLE_DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.file";
 
@@ -600,8 +602,7 @@ export function createGoogleDriveProvider({view = globalThis, fetchImpl = view.f
 }
 
 export function normalizeCloudFilename(filename) {
-  const base = String(filename || "map").trim().replace(/[\\/:*?"<>|\u0000-\u001f]+/g, "-").replace(/\s+/g, " ").slice(0, 180) || "map";
-  return base.endsWith(CLOUD_MAP_EXTENSION) ? base : `${base.replace(/(?:\.json(?:\.gz)?|\.gz)$/i, "")}${CLOUD_MAP_EXTENSION}`;
+  return ensureMapArchiveExtension(filename);
 }
 
 export function normalizeGoogleDriveFolderPath(value = "/webFMG") {
@@ -642,7 +643,7 @@ function sortRemoteFiles(a, b) {
 }
 
 function isCloudMapFilename(name) {
-  return String(name || "").toLowerCase().endsWith(CLOUD_MAP_EXTENSION);
+  return isMapDocumentFilename(name);
 }
 
 function dropboxJsonRequest(token, body) {

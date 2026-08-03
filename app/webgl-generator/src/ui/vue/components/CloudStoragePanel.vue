@@ -37,8 +37,14 @@
         </div>
 
         <template v-if="selectedProvider.connected">
+          <div class="cloud-storage-filename-template">
+            <span>新建存档文件名</span>
+            <small>文件名模板在控制面板的“生成”页统一设置</small>
+            <code id="cloud-storage-filename-preview">{{ state.filenamePreview || state.filenameTemplateError }}</code>
+          </div>
+
           <div class="cloud-storage-actions">
-            <UiButton :disabled="state.busy" @click="callbacks.onCreate">新建云端存档</UiButton>
+            <UiButton :disabled="state.busy || !!state.filenameTemplateError" @click="callbacks.onCreate">新建云端存档</UiButton>
             <UiButton variant="secondary" :disabled="state.busy" @click="callbacks.onRefresh">刷新列表</UiButton>
           </div>
 

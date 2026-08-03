@@ -29518,3 +29518,11 @@ full 矩阵结果：
 - 首轮动态验证在 relief 等待阶段超时：隐藏道路后 renderer 合理保留 `routesDirty`，旧脚本仍无条件等待其清零。限修后稳定门禁只等待当前场景实际可见的动态图层，仍强制等待可见河流和 selection；没有改 renderer 或放宽正式 PNG 完成条件。工具同时增加服务、浏览器、API、地图、场景和兼容验证的阶段日志，便于后续定位。
 - 最新连续两次 clean run 逐字节一致：relief 为 `1440×960 / 246090 bytes / 7b96922b8fc7a2dc0d2cf7e8cf75719dd5efe9cc76a70aeb7c634becd0405257`，viewMode `height`，国家 / 省份 / 城市标签 `0 / 0 / 0`；atlas 为 `1440×960 / 285591 bytes / b19943c52fa5df608ddcea8df936d70e4f04b177c50f4c59ecf8614af4468967`，viewMode `states`，标签 `12 / 0 / 10`。人工查看确认第一张突出纯地形和河网，第二张国家着色、国界、国名和城镇层级清楚。
 - 生产构建、工具 / 回归语法、README 静态门禁、正式 PNG、旧偏好兼容、故障注入和清理通过；成功与注入失败后的 profile 均为 `0`，checksum / revision 不变，console、page、health 与 WebGL error 为 `0`。`git diff --check` 通过，`source/` 零改动；产品 fresh 默认、标签 registry、主题色、算法、schema 与用户偏好未改。本项未暂存、提交或推送，当前没有活动权威任务。
+
+# 2026-08-03：完成第 268 项——地图名称与共享存档命名
+
+- 生成 Tab 新增地图名称，写入 `options.mapName` 与 `map.metadata.name`；旧图缺字段时按 seed 确定性回填，名称不进入 checksum。地图替换和导入会同步输入与文件名预览。
+- 原生压缩存档扩展名改为 `.webfmg`，内容仍为 gzip JSON。旧 `.webgl-map.json.gz / .json.gz / .gz / .json` 在导入、云端列表、gzip-base64 与两套无头 CLI 中保持兼容；云端覆盖继续使用远端 id / path、revision 和原文件名。
+- 共享模板支持 `{name}`、`{date}`、`{time}`、`{seed}`、`{checksum}`、`{ext}`，默认 `{name}-{date}-{time}.{ext}`。本地保存、高级压缩导出和云端新建读取同一持久化偏好；公共 API 未显式传模板时继续保持 `{name}.{ext}`，不隐式读取 LocalStorage。
+- 模板编辑不依赖云盘：地图名称输入右侧提供无边框设置图标，默认收起，点击后才显示格式、token 帮助和实时预览；图标垂直居中并保留键盘焦点轮廓，云端面板只展示当前新建文件名和入口提示。
+- 首轮独立复核为 `BLOCK`：云端面板保持打开时换图，预览未同步。统一地图加载链补刷新后复验为 `ACCEPT`。命名、云端、迁移、无头读写、API 往返、生产构建与差异检查通过；系统 Chrome 实际捕获本地保存和高级压缩导出的同名 `.webfmg`，gunzip 后三个名称字段一致，刷新持久化和 `1440 / 390 / 320px` 布局通过，console、page、health 与 WebGL error 为 `0`。未访问真实云盘，`source/` 零改动。

@@ -36,7 +36,7 @@ import {sameObjectId} from "../ui/object-id.js";
 import {createBiomePanel} from "../ui/panels/biome-panel.js";
 import {createCityPanel} from "../ui/panels/city-panel.js";
 import {createClimatePanel} from "../ui/panels/climate-panel.js";
-import {createCloudStoragePanel} from "../ui/panels/cloud-storage-panel.js";
+import {createCloudStoragePanel, readCloudFilenameTemplate} from "../ui/panels/cloud-storage-panel.js";
 import {createCulturePanel} from "../ui/panels/culture-panel.js";
 import {createDevelopmentPanel} from "../ui/panels/development-panel.js";
 import {createDiplomacyPanel} from "../ui/panels/diplomacy-panel.js";
@@ -74,6 +74,7 @@ import {EditHistory} from "./edit-history.js";
 import {MapRevisionTracker} from "./map-revision.js";
 import {createGrayscaleHeightmapFromImage, createPaletteHeightmapFromImage, normalizeHeightmapImportPayload} from "./heightmap-import.js";
 import {createMapDocument, downloadText, mapFileBaseName, parseGeoJsonMeasurements, parseMapDocument, parseMapDocumentPayload, stringifyMapDocument} from "./map-file-io.js";
+import {createMapArchiveFilename, normalizeMapName} from "./map-filename.js";
 import {attachImportDiagnostic, createHeightmapSourceSummary, createImportFailureDiagnostic, createImportSuccessDiagnostic, createMapImportDiagnostic, formatMapImportDiagnosticLines, inspectGeoImportSource, stringifyMapImportDiagnostic} from "./map-import-diagnostics.js";
 import {createAddCityAtCellCommand, createDeleteCityCommand, createRenameCitiesFromNamebaseCommand, createResetCityVisualCommand, createSetCityNoteCommand, createSetCityPopulationCommand, createSetCityVisualCommand, createSyncCityOwnerToCellCommand, inspectCityCreation} from "./city-edit-commands.js";
 import {createMoveCityCommand, inspectCityMove} from "./city-relocation.js";
@@ -2532,12 +2533,15 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
   state.runtimeActions = runtimeActions;
   const cloudStorageRegistry = createCloudStorageRegistry({view: documentRef.defaultView || window});
   state.panels.cloudStorage = createCloudStoragePanel(documentRef, panelManager, cloudStorageRegistry, CloudStoragePanelComponent, {
-    onCreatePayload: async () => {
-      const exported = await runtimeActions.data.exportCompressedAll({download: false, includeBase64: false, includeBlob: true});
+    onCreatePayload: async ({filenameTemplate} = {}) => {
+      const exported = await runtimeActions.data.exportCompressedAll({download: false, includeBase64: false, includeBlob: true, filenameTemplate});
       return {filename: exported.filename, blob: exported.blob, metadata: exported.metadata};
     },
+    onPreviewFilename: filenameTemplate => createMapArchiveFilename(state.map, {template: filenameTemplate}),
     onLoadPayload: (blob, file) => runtimeActions.data.importMap(blob, {confirm: true, source: "ui", sourceFile: file, toast: true})
   });
+  state.panels.cloudStorage.updateFilenamePreview();
+  syncSaveFilenameTemplateUi(documentRef, state);
   state.regenerationLockUiSession = installRegenerationLockUiSession(documentRef, {
     getMap: () => state.map,
     setLock: (reference, locked) => runtimeActions.regenerationLocks.set(reference, locked),
@@ -2563,6 +2567,20 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
   bindEditingInteractionLock(canvas, state);
 
   const runtimePanelHandlers = {
+    onMapName: value => {
+      const mapName = normalizeMapName(value);
+      state.options = {...(state.options || {}), mapName};
+      if (state.map) {
+        state.map.options = {...(state.map.options || {}), mapName};
+        state.map.metadata = {...(state.map.metadata || {}), name: mapName};
+      }
+      state.panels.cloudStorage?.updateFilenamePreview?.();
+      syncSaveFilenameTemplateUi(documentRef, state);
+    },
+    onMapFilenameTemplate: (value, commit = false) => {
+      state.panels.cloudStorage?.updateFilenameTemplate?.(value, {commit});
+      syncSaveFilenameTemplateUi(documentRef, state);
+    },
     onGenerate: () => requestGenerate(state, documentRef, runtimeActions),
     onRandomSeed: () => {
       setSeedInput(documentRef, createRandomSeed());
@@ -2720,7 +2738,9 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     onOpenNamebasePanel: () => {
       state.panels.namebase.open(state.map, {history: state.editHistory.getStats()});
     },
-    onSaveLocalFile: () => saveMapToLocalFile(state, documentRef, runtimeActions.data.exportMap),
+    onSaveLocalFile: () => {
+      void saveMapToLocalFile(state, documentRef, runtimeActions.data.exportCompressedAll);
+    },
     onSaveBrowserStorage: () => {
       void saveMapToBrowserStorage(state, documentRef, runtimeActions.data.saveBrowserMap);
     },
@@ -3974,6 +3994,8 @@ async function loadMapIntoRuntime(state, documentRef, map, {loadingMessages = []
   }
   state.selectionStore.clear();
   refreshRuntimeAfterMapLoad(state, documentRef, {restorePanels: true});
+  state.panels.cloudStorage?.updateFilenamePreview?.();
+  syncSaveFilenameTemplateUi(documentRef, state);
   syncLabelStylesUi(state, documentRef);
   state.mapRevision.replaceMap();
   emitLoadTrace(documentRef, {phase: "end", id: "panel-refresh", message: loadingMessage("panel-refresh")});
@@ -4404,10 +4426,14 @@ function readPngExportScale(documentRef) {
   return Math.max(1, Math.min(4, Math.round(value)));
 }
 
-function saveMapToLocalFile(state, documentRef, exportAction = state.runtimeActions?.data?.exportMap) {
+async function saveMapToLocalFile(state, documentRef, exportAction = state.runtimeActions?.data?.exportCompressedAll) {
   try {
     setFileOperationStatus(documentRef, "正在保存地图到本地...");
-    const result = exportAction({download: true, includeText: false});
+    const result = await exportAction({
+      download: true,
+      includeBase64: false,
+      filenameTemplate: readCloudFilenameTemplate(documentRef.defaultView?.localStorage)
+    });
     setFileOperationStatus(documentRef, "地图已保存到本地文件。");
     showMapToast(documentRef, "保存成功");
     return result;
@@ -4466,7 +4492,11 @@ function exportMapData(state, documentRef, exportAction = state.runtimeActions?.
 async function exportCompressedMapData(state, documentRef, exportAction = state.runtimeActions?.data?.exportCompressedAll) {
   try {
     setFileOperationStatus(documentRef, "正在导出压缩地图数据...");
-    const result = await exportAction({download: true, includeBase64: false});
+    const result = await exportAction({
+      download: true,
+      includeBase64: false,
+      filenameTemplate: readCloudFilenameTemplate(documentRef.defaultView?.localStorage)
+    });
     setFileOperationStatus(documentRef, `压缩地图数据已导出：原始 ${formatStorageBytes(result.originalBytes)}，压缩后 ${formatStorageBytes(result.compressedBytes)}。`);
     return result;
   } catch (error) {
@@ -6109,12 +6139,24 @@ function clearFileOperationDetails(documentRef, targetId = "file-operation-error
 }
 
 function syncGenerationInputs(documentRef, options) {
+  setInputValue(documentRef, "map-name-input", options.mapName, {emitChange: false});
   setInputValue(documentRef, "seed-input", options.seed, {emitChange: false});
   setInputValue(documentRef, "cells-input", options.cellsTarget ?? options.cells, {emitChange: false});
   setInputValue(documentRef, "width-input", options.graphWidth, {emitChange: false});
   setInputValue(documentRef, "height-input", options.graphHeight, {emitChange: false});
   setInputValue(documentRef, "heightmap-template", options.heightmapTemplate, {emitChange: false});
   syncClimateInputs(documentRef, options);
+}
+
+function syncSaveFilenameTemplateUi(documentRef, state) {
+  const templateState = state.panels.cloudStorage?.getFilenameTemplateState?.();
+  if (!templateState) return;
+  setInputValue(documentRef, "map-filename-template-input", templateState.filenameTemplate, {emitChange: false});
+  const preview = documentRef.getElementById("map-filename-template-preview");
+  if (!preview) return;
+  const error = templateState.filenameTemplateError;
+  preview.textContent = error || templateState.filenamePreview;
+  preview.dataset.state = error ? "error" : "ready";
 }
 
 function syncClimateInputs(documentRef, options) {

@@ -36,7 +36,7 @@ try {
 
   const exportReadonly = await bridgeRequest("POST", "/v1/request", token, {method: "data.exportCompressedAll", arguments: [{includeBase64: false}]});
   assert.equal(exportReadonly.result.ok, true);
-  assert.deepEqual(exportReadonly.result.data, {filename: "test.webgl-map.json.gz"});
+  assert.deepEqual(exportReadonly.result.data, {filename: "test.webfmg"});
 
   const largeExportReadonly = await bridgeRequest("POST", "/v1/request", token, {method: "data.exportCompressedAll", arguments: [{includeBase64: true}]});
   assert.equal(largeExportReadonly.result.ok, true);
@@ -171,7 +171,7 @@ function createFakeApi(state) {
       get: () => success({temperature: "stable"})
     },
     data: {
-      exportCompressedAll: options => success({filename: "test.webgl-map.json.gz", ...(options?.includeBase64 ? {base64: "A".repeat(1_100_000)} : {})}),
+      exportCompressedAll: options => success({filename: "test.webfmg", ...(options?.includeBase64 ? {base64: "A".repeat(1_100_000)} : {})}),
       importMap: () => success({imported: true})
     },
     edit: {

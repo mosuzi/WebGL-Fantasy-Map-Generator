@@ -72,6 +72,7 @@ export function generatePlaceholderMap(inputOptions = {}, overrides = {}) {
   return {
     metadata: {
       app: "webgl-generator",
+      name: generationOptions.mapName,
       generatorStage: "source-stage-20-diplomacy-first-pass",
       seed: generationOptions.seed,
       heightmapTemplate: heightmap.template,

@@ -4501,6 +4501,78 @@ select:disabled {
   gap: 10px;
 }
 
+.generation-save-template-meta {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  margin: -4px 0 2px;
+}
+
+.generation-map-name-control {
+  position: relative;
+  min-width: 0;
+}
+
+.generation-map-name-control .generation-field-row input {
+  padding-right: 38px;
+}
+
+.generation-save-template-toggle.ui-icon-action.el-button {
+  position: absolute;
+  top: 50%;
+  right: 3px;
+  width: 26px;
+  height: 26px;
+  min-width: 26px;
+  transform: translateY(-50%);
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  color: #9fb0ba;
+}
+
+.generation-save-template-toggle.ui-icon-action.el-button:hover:not(.is-disabled),
+.generation-save-template-toggle.ui-icon-action.el-button.active {
+  border-color: transparent;
+  background: transparent;
+  color: #ffe0a1;
+}
+
+.generation-save-template-settings {
+  display: grid;
+  gap: 9px;
+  padding: 9px;
+  border: 1px solid rgba(99, 126, 140, 0.4);
+  border-radius: 7px;
+  background: rgba(12, 18, 22, 0.72);
+}
+
+.generation-save-template-settings .generation-save-template-meta {
+  margin-left: 98px;
+}
+
+.generation-save-template-meta small {
+  color: #9fb0ba;
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+
+.generation-save-template-meta code {
+  min-width: 0;
+  padding: 6px 8px;
+  border: 1px solid #273640;
+  border-radius: 6px;
+  background: #10171b;
+  color: #dce7ec;
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+
+.generation-save-template-meta code[data-state="error"] {
+  border-color: #a95757;
+  color: #ffc1c1;
+}
+
 .control-panel-tabs {
   margin-bottom: 12px;
   --el-color-primary: #d7a84f;
@@ -9704,6 +9776,37 @@ input.ui-switch-native {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+.cloud-storage-filename-template {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  color: var(--el-text-color-regular, #d8e4e8);
+}
+
+.cloud-storage-filename-template input,
+.cloud-storage-filename-template code {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  border: 1px solid var(--el-border-color-light, #273640);
+  border-radius: 6px;
+  background: var(--el-bg-color-overlay, #0f1519);
+  color: var(--el-text-color-primary, #edf4f6);
+}
+
+.cloud-storage-filename-template input {
+  padding: 8px 10px;
+}
+
+.cloud-storage-filename-template small {
+  color: var(--el-text-color-secondary, #9fb0ba);
+}
+
+.cloud-storage-filename-template code {
+  padding: 7px 9px;
 }
 
 .cloud-storage-configuration code {

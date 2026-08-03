@@ -183,7 +183,7 @@
 
 本节是唯一权威任务清单。README、专题文档和历史日志中的“缺口”“下一步”只提供来源与设计背景，不能覆盖这里的编号、顺序和最小验收。已验收能力不得重新计为待办。
 
-> **执行门禁（2026-08-03）**：第 45～52、54～225、227～267 项已完成，第 53 项已移除；第 226 项本地完成、远端 Wiki 发布仍受 GitHub 私有仓库套餐阻塞。当前没有活动权威任务；不从 README、历史日志或专题文档扩展其它任务。
+> **执行门禁（2026-08-03）**：第 45～52、54～225、227～268 项已完成，第 53 项已移除；第 226 项本地完成、远端 Wiki 发布仍受 GitHub 私有仓库套餐阻塞。当前没有活动权威任务；不从 README、历史日志或专题文档扩展其它任务。
 
 当前 API 基线为：`window.webglGeneratorApi` 覆盖 `17` 个命名空间、`316` 个公开方法和 `179` 个编辑方法，稳定等级为 `308 / 7 / 1`；`316 / 316` 方法可通过 `info.describe` 发现，`planner.listRecipes / getRecipe` 只读公开 `10` 个配方和 `43` 个顶层步骤，`objects` 覆盖 `20` 类对象，`cells` 已提供八个读取、定位、扫描与动作预检方法。完整能力矩阵为 `1196` 行、`covered 1122 / excluded 74 / deferred 0 / gap 0`；复合语义矩阵为 `79` 个动作、`69` 个完整规则事务与 `10` 个玩法配方，`316` 个公开方法全部完成事务分类，结构缺口为 `0`。
 
@@ -1305,6 +1305,12 @@
   - 排除：不修改产品 fresh 默认、标签 registry、主题配色、地图生成算法、schema、用户偏好、输出尺寸 / 种子或其它 README 结构；本项不提交或推送。
   - 实现记录：截图工具新增 `relief / states` 两个完整场景契约，每个场景独立声明 theme、viewMode、完整图层矩阵和 PNG overlay；导出前依次调用正式 `layers.setTheme / setViewMode / setVisible / fitView`。旧共享 profile 被移除，动态图层稳定门禁只等待当前场景实际可见的路线 / 贸易流 / 河流，避免隐藏道路后 `routesDirty` 合理保留却导致无效超时。中英文 README 表头与 alt 已改为“自然地貌 / 国家视角”。
   - 验收记录：生产构建与隔离系统 Chrome 通过；relief 为 `height / 246090 bytes / 7b96922b8fc7a2dc0d2cf7e8cf75719dd5efe9cc76a70aeb7c634becd0405257`，可见国家 / 省份 / 城市标签 `0 / 0 / 0`；atlas 为 `states / 285591 bytes / b19943c52fa5df608ddcea8df936d70e4f04b177c50f4c59ecf8614af4468967`，可见标签 `12 / 0 / 10`。连续两次 clean run 摘要一致，人工视觉确认自然地貌无政治噪声、国家图政治着色与国界清楚；故障注入按预期失败且 profile 为 `0`，console、page、health 与 WebGL error 为 `0`。README 静态门禁、语法、`git diff --check` 与 `source/` 零改动通过；未提交或推送，当前没有活动权威任务。
+
+- **权威任务第 268 项：地图名称、共享存档模板与 `.webfmg` 扩展名。** `已完成；来源：用户直接要求`
+  - 范围：生成 Tab 新增地图名称；名称输入右侧的无边框设置图标按需展开共享存档格式、token 帮助和实时预览。模板支持 `{name}`、`{date}`、`{time}`、`{seed}`、`{checksum}`、`{ext}`，默认 `{name}-{date}-{time}.{ext}`，本地保存、高级压缩导出和云端新建共用同一持久化偏好；云端覆盖仍按原 id / path / revision 和原名执行。
+  - 格式与兼容：新建原生存档采用 `.webfmg`，内部继续为 `application/gzip` 的 gzip JSON，不升级 schema；旧 `.webgl-map.json.gz / .json.gz / .gz / .json` 在导入、云端列表、gzip-base64 与两套无头 CLI 中继续兼容。旧图缺少名称时按 seed 回填，名称不进入 checksum，浏览器固定单槽存档 key 不变。
+  - 验收记录：首轮独立复核阻断的换图后云端预览陈旧问题已在统一加载链修复并复验 `ACCEPT`。命名、云端、迁移、无头读写、API 往返和生产构建通过；系统 Chrome 实际捕获本地保存与高级压缩导出的同名 `.webfmg` 并 gunzip 核对，刷新持久化、默认收起、图标展开、无边框垂直居中及 `1440 / 390 / 320px` 无溢出通过，console、page、health 与 WebGL error 为 `0`。`source/` 零改动，未访问真实云盘。
+  - 专题施工图：`docs/task-notes/map-save-naming-and-extension.md`。
 
 - **第 263～264 项统一执行约束。**
   - 专题施工图：`docs/task-notes/app-and-canvas-icon-system.md`。

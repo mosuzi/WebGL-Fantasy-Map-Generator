@@ -2,6 +2,7 @@ import {readControlPreferences, updateControlPreferences} from "../ui/panel.js";
 import {DEFAULT_MAX_CITY_LABELS} from "./display-defaults.js";
 import {areaUnitForDistanceUnit, formatArea as formatDisplayArea, formatDistance as formatDisplayDistance, normalizeUnitPreferences, precipitationUnitsToMillimeters} from "../ui/display-units.js";
 import {createCanvasPngBlob, createCompressedMapDocumentBlob, createHeightmapPngBlob, createMapDocument, createMapFeatureGeoJson, createMapGeoJson, downloadCanvasPng, downloadCompressedMapDocument, downloadHeightmapPng, downloadText, mapFileBaseName, stringifyMapDocument} from "./map-file-io.js";
+import {createMapArchiveFilename} from "./map-filename.js";
 import {apiCall} from "./api-result.js";
 import {NAMEBASE_BINDING_TARGETS, createLegacyNamebaseText, createNamebaseDocument, getNamebaseBindingStatus, getNamebaseSummariesForMap} from "../generator/namebase-store.js";
 import {listBiomeDescriptors} from "../generator/biome-registry.js";
@@ -1649,10 +1650,13 @@ export async function exportCompressedAllMapData(state, documentRef, options = {
     visualTheme: currentVisualThemeId(state, documentRef),
     display: {units}
   });
-  const filename = `${mapFileBaseName(map)}.webgl-map.json.gz`;
+  const filename = createMapArchiveFilename(map, {
+    template: options.filenameTemplate === undefined ? "{name}.{ext}" : options.filenameTemplate
+  });
   const metadata = {
     type: document.type,
     version: document.version,
+    name: document.metadata.name || "",
     seed: document.metadata.seed || "",
     checksum: document.metadata.checksum || ""
   };

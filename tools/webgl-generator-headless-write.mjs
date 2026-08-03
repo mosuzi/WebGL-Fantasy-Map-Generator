@@ -5,6 +5,7 @@ import {resolve} from "node:path";
 import {gunzipSync, gzipSync} from "node:zlib";
 import {createHeadlessWriteSession, loadHeadlessWriteDocument} from "../app/webgl-generator/src/runtime/headless-write-api.js";
 import {stringifyMapDocument} from "../app/webgl-generator/src/runtime/map-file-io.js";
+import {isCompressedMapDocumentFilename} from "../app/webgl-generator/src/runtime/map-filename.js";
 
 const options = parseArguments(process.argv.slice(2));
 
@@ -52,7 +53,7 @@ async function apply() {
     return;
   }
   const text = stringifyMapDocument(session.getDocument());
-  const outputBytes = outputPath.toLowerCase().endsWith(".gz") ? gzipSync(text) : Buffer.from(text);
+  const outputBytes = isCompressedMapDocumentFilename(outputPath) ? gzipSync(text) : Buffer.from(text);
   await writeFile(outputPath, outputBytes, {flag: overwriteInput ? "w" : "wx"});
   const inputAfterHash = hash(await readFile(inputPath));
   if (!overwriteInput && inputAfterHash !== inputHash) throw cliError("headless_input_changed", "写出期间输入文件发生变化");
@@ -81,7 +82,7 @@ async function verify() {
 
 async function loadSession(file, bytes = null) {
   const source = bytes || await readFile(file);
-  const text = String(file).toLowerCase().endsWith(".gz") ? gunzipSync(source).toString("utf8") : source.toString("utf8");
+  const text = isCompressedMapDocumentFilename(file) ? gunzipSync(source).toString("utf8") : source.toString("utf8");
   return createHeadlessWriteSession(loadHeadlessWriteDocument(text));
 }
 

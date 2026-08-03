@@ -76,6 +76,9 @@ const DERIVED_STALE_LABELS = Object.freeze({
 
 export function bindRuntimePanel(documentRef, handlers) {
   applyControlPreferences(documentRef);
+  documentRef.getElementById("map-name-input")?.addEventListener("input", event => handlers.onMapName?.(event.target.value));
+  documentRef.getElementById("map-filename-template-input")?.addEventListener("input", event => handlers.onMapFilenameTemplate?.(event.target.value, false));
+  documentRef.getElementById("map-filename-template-input")?.addEventListener("change", event => handlers.onMapFilenameTemplate?.(event.target.value, true));
   documentRef.defaultView?.addEventListener("webgl-generator-debug-change", () => handlers.onDebugModeChange?.());
   documentRef.getElementById("generate-map").addEventListener("click", handlers.onGenerate);
   documentRef.getElementById("random-seed").addEventListener("click", handlers.onRandomSeed);
@@ -621,6 +624,7 @@ export function setGenerationLoading(documentRef, visible, message = "山海初�
 export function readOptionsFromPanel(documentRef, previousOptions) {
   return {
     ...previousOptions,
+    mapName: documentRef.getElementById("map-name-input")?.value || previousOptions?.mapName,
     seed: documentRef.getElementById("seed-input").value,
     randomSeed: documentRef.getElementById("auto-random-seed").checked,
     heightmapTemplate: documentRef.getElementById("heightmap-template").value,

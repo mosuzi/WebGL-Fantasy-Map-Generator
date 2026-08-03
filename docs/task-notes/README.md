@@ -115,6 +115,7 @@
 ## 导入导出与 GIS
 
 - `export-capability-matrix.md`：导出能力矩阵。
+- `map-save-naming-and-extension.md`：权威任务第 268 项的地图名称、共享文件名模板、`.webfmg` 原生存档外壳与旧格式兼容边界。
 - `political-geojson-dissolve-plan.md`：政治面 GeoJSON 与 dissolve 计划。
 
 ## 名称库

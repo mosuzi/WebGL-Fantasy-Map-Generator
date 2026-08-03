@@ -44,7 +44,7 @@
           </div>
           <label class="file-import-action secondary-action">
             <span>导入</span>
-            <input id="import-map-file" type="file" accept=".json,.gz,.webgl-map.json,.webgl-map.json.gz,application/json,application/gzip,application/x-gzip" />
+            <input id="import-map-file" type="file" accept=".webfmg,.json,.gz,.webgl-map.json,.webgl-map.json.gz,application/json,application/gzip,application/x-gzip" />
           </label>
           <label class="file-import-action secondary-action">
             <span>导入 GEO 数据</span>
@@ -162,6 +162,32 @@
     </div>
 
     <div class="generation-panel-form" data-control-panel="generation" :hidden="activeTab !== 'generation'">
+      <div class="generation-map-name-control">
+        <UiField label="地图名称" input-id="map-name-input" model-value="未命名地图" :input-attrs="{autocomplete: 'off', maxlength: 120}" />
+        <ElButton
+          id="toggle-map-filename-template"
+          class="ui-icon-action generation-save-template-toggle"
+          :class="{active: saveFilenameSettingsOpen}"
+          circle
+          title="设置存档名称格式"
+          aria-label="设置存档名称格式"
+          :aria-expanded="saveFilenameSettingsOpen ? 'true' : 'false'"
+          aria-controls="map-filename-template-settings"
+          @click="saveFilenameSettingsOpen = !saveFilenameSettingsOpen"
+        ><ElIcon><Setting /></ElIcon></ElButton>
+      </div>
+      <div v-show="saveFilenameSettingsOpen" id="map-filename-template-settings" class="generation-save-template-settings">
+        <UiField
+          label="存档名称格式"
+          input-id="map-filename-template-input"
+          model-value="{name}-{date}-{time}.{ext}"
+          :input-attrs="{autocomplete: 'off', spellcheck: false, maxlength: 180, 'aria-describedby': 'map-filename-template-help map-filename-template-preview'}"
+        />
+        <div class="generation-save-template-meta">
+          <small id="map-filename-template-help">支持 {name}、{date}、{time}、{seed}、{checksum}、{ext}</small>
+          <code id="map-filename-template-preview"></code>
+        </div>
+      </div>
       <UiField label="地图种子" input-id="seed-input" model-value="stage-2-1" :input-attrs="{autocomplete: 'off'}" />
       <UiField label="地图规模" input-id="cells-input" type="number" :model-value="10000" :input-attrs="{min: 1000, max: 100000, step: 1000}" />
       <UiField label="宽度" input-id="width-input" type="number" :model-value="1440" :input-attrs="{min: 640, max: 4096, step: 80}" />
@@ -643,7 +669,7 @@ import UiSelectField from "./base/UiSelectField.vue";
 import UiSliderField from "./base/UiSliderField.vue";
 import UiSwitchField from "./base/UiSwitchField.vue";
 import UiTabs from "./base/UiTabs.vue";
-import {Lock, Unlock} from "@element-plus/icons-vue";
+import {Lock, Setting, Unlock} from "@element-plus/icons-vue";
 import {useDraggableFloatingPanel} from "../composables/use-draggable-floating-panel.js";
 import {useManagedOverlay} from "../composables/use-managed-overlay.js";
 import {visualThemeOptions} from "../../../renderer/themes.js";
@@ -685,6 +711,7 @@ const customUnitCanRestore = ref(Boolean(readCustomUnitRecycleRecord()));
 const CONTROL_PANEL_TAB_IDS = Object.freeze(["about", "generation", "themes", "styles", "layers", "management", "units"]);
 const activeTab = ref(normalizeControlPanelTab(preferences.value.controlPanelTab));
 const exportPanelOpen = ref(false);
+const saveFilenameSettingsOpen = ref(false);
 const exportAnchorRef = ref(null);
 const exportPanelRef = ref(null);
 const {
