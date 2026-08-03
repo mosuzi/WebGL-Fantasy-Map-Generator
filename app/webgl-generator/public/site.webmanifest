@@ -1,6 +1,6 @@
 {
-  "name": "WebGL 架空地图生成器",
-  "short_name": "架空地图",
+  "name": "WebGL 幻想地图生成器",
+  "short_name": "幻想地图",
   "description": "用于世界构建、TRPG 与架空历史创作的 WebGL 地图生成器。",
   "lang": "zh-CN",
   "start_url": "./",

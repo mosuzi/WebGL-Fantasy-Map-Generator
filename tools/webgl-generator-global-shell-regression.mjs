@@ -28,12 +28,12 @@ const packageJson = JSON.parse(packageSource);
 assert.match(packageJson.version, /^\d+\.\d+\.\d+$/, "根 package.json 缺少可展示的语义版本号");
 const loadingStyle = indexSource.slice(indexSource.indexOf("<style>"), indexSource.indexOf("</style>"));
 const loadingMarkup = indexSource.slice(indexSource.indexOf('<div class="app-loading-screen"'), indexSource.indexOf('<main class="app-shell"'));
-for (const token of ["app-loading-screen", "app-loading-scroll", "app-loading-paper-window", "app-loading-paper", "app-loading-landscape-far", "app-loading-landscape-mid", "app-loading-landscape-near", "app-loading-roller-left", "app-loading-roller-right", "舆图演算", "架空地图生成器", "铺陈山河", "山川", "郡国", "城邑", "风物", "app-loading-seal", "app-loading-version", "卷次", "__FMG_APP_VERSION__"]) {
+for (const token of ["app-loading-screen", "app-loading-scroll", "app-loading-paper-window", "app-loading-paper", "app-loading-landscape-far", "app-loading-landscape-mid", "app-loading-landscape-near", "app-loading-roller-left", "app-loading-roller-right", "舆图演算", "幻想地图生成器", "铺陈山河", "山川", "郡国", "城邑", "风物", "app-loading-seal", "app-loading-version", "卷次", "__FMG_APP_VERSION__"]) {
   assert(indexSource.includes(token), `全局加载页缺少 ${token}`);
 }
 assert.equal(createHash("sha256").update(sealSource).digest("hex"), "367ad061211ee469f9fccb57e438edfc52221acdb8c501b5843bf14a3c9de725", "正式印章资源不是已确认的莫苏子印3版本");
 assert.match(loadingMarkup, /id="app-loading-screen" role="status" aria-live="polite" aria-labelledby="app-loading-title" aria-describedby="app-loading-status"/, "画卷加载页没有保留 role / aria 状态契约");
-assert.match(loadingMarkup, /class="app-loading-title" id="app-loading-title" data-title="架空地图生成器">架空地图生成器<\/strong>/, "画卷中央主标题或标题 ID 漂移");
+assert.match(loadingMarkup, /class="app-loading-title" id="app-loading-title" data-title="幻想地图生成器">幻想地图生成器<\/strong>/, "画卷中央主标题或标题 ID 漂移");
 assert.match(loadingMarkup, /class="app-loading-status" id="app-loading-status">正在加载地图资源<\/p>/, "画卷下方动态状态或状态 ID 漂移");
 assert.match(loadingMarkup, /<script>\s*window\.__webglGeneratorStartupLoadingStartedAt = performance\.now\(\);\s*<\/script>\s*$/, "加载屏幕 DOM 完成后、主应用 DOM 之前没有记录单调可见起点");
 assert.match(loadingMarkup, /<image href="\/assets\/mosuzi-seal\.png"[\s\S]*?filter="url\(#app-loading-seal-cutout\)"/, "正式加载页没有使用同源阴刻印章资源");

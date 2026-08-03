@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title description">
-  <title id="title">WebGL 架空地图生成器</title>
+  <title id="title">WebGL 幻想地图生成器</title>
   <desc id="description">墨绿色方形中的米色地图圆盘，右下角带朱红印记</desc>
   <defs>
     <clipPath id="world-disc">

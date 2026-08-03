@@ -34,6 +34,7 @@ try {
     const manifest = await (await fetch(manifestLink.href, {cache: "reload"})).json();
     return {
       title: document.title,
+      loadingTitle: document.getElementById("app-loading-title")?.textContent?.trim() || "",
       themeColor: document.querySelector('meta[name="theme-color"]')?.content,
       resources,
       manifest
@@ -41,12 +42,14 @@ try {
   });
 
   assert.equal(metadata.themeColor, "#18231f");
+  assert.equal(metadata.title, "莫苏子的幻想地图生成器");
+  assert.equal(metadata.loadingTitle, "幻想地图生成器");
   assert.equal(metadata.resources.length, 5, "图标与 manifest 入口数量错误");
   assert(metadata.resources.every(resource => resource.status === 200), "存在无法加载的图标资源");
   assert(metadata.resources.find(resource => resource.href.endsWith("app-icon.svg"))?.contentType.includes("image/svg+xml"), "SVG favicon 内容类型错误");
   assert(metadata.resources.find(resource => resource.href.endsWith("app-icon-64.png"))?.contentType.includes("image/png"), "64px favicon 内容类型错误");
   assert(metadata.resources.find(resource => resource.href.endsWith("site.webmanifest"))?.contentType.includes("manifest+json"), "manifest 内容类型错误");
-  assert.equal(metadata.manifest.name, "WebGL 架空地图生成器");
+  assert.equal(metadata.manifest.name, "WebGL 幻想地图生成器");
   assert(metadata.manifest.icons.some(icon => icon.src.endsWith("app-icon-256.png") && icon.sizes === "256x256"), "manifest 缺少 256px 图标");
 
   const viewports = [];

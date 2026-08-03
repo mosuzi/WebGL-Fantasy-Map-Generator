@@ -17,13 +17,13 @@ const [indexSource, styleSource, appSource, readmeSource, packageSource, sealSou
 ]);
 const packageJson = JSON.parse(packageSource);
 
-for (const text of ["舆图演算", "架空地图生成器", "铺陈山河", "推演万邦", "山川", "郡国", "城邑", "风物", "卷次", "v0.1.0"]) {
+for (const text of ["舆图演算", "幻想地图生成器", "铺陈山河", "推演万邦", "山川", "郡国", "城邑", "风物", "卷次", "v0.1.0"]) {
   assert(indexSource.includes(text), `概念稿缺少文字层级：${text}`);
 }
 
 assert.doesNotMatch(indexSource, /<main\b[^>]*\brole="status"/, "概念页主容器不应把评审控制纳入状态直播区域");
 assert.match(indexSource, /class="loading-copy" role="status" aria-live="polite" aria-atomic="true" aria-labelledby="showcase-title" aria-describedby="showcase-status"/, "加载文案缺少独立状态直播与可访问关联");
-assert.match(indexSource, /class="main-title" id="showcase-title" data-title="架空地图生成器">架空地图生成器<\/h1>/, "主标题真实文本或墨晕复制层契约漂移");
+assert.match(indexSource, /class="main-title" id="showcase-title" data-title="幻想地图生成器">幻想地图生成器<\/h1>/, "主标题真实文本或墨晕复制层契约漂移");
 assert.match(indexSource, /id="replay-button">重新展开<\/button>[\s\S]*?id="next-copy-button">下一文案<\/button>[\s\S]*?id="error-button" aria-pressed="false">错误态<\/button>[\s\S]*?id="static-button" aria-pressed="false">静态终态<\/button>/, "四个概念评审控制不完整");
 assert.doesNotMatch(indexSource, /https?:\/\/|(?:src|href|xlink:href)="(?!\.\/|data:)/i, "概念稿依赖外部图片、脚本或样式");
 assert.doesNotMatch(styleSource, /@import\b|url\s*\(/i, "概念稿 CSS 依赖外部字体或图片");

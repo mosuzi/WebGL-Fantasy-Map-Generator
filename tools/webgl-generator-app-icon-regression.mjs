@@ -15,7 +15,7 @@ for (const color of ["#18231f", "#d2c49d", "#4e7168", "#96382d"]) assert(svg.inc
 assert.match(svg, /<circle cx="250" cy="238" r="158"/, "地图圆盘主体缺失");
 assert.match(svg, /translate\(350 348\)/, "右下朱印识别块缺失");
 
-assert.equal(manifest.name, "WebGL 架空地图生成器");
+assert.equal(manifest.name, "WebGL 幻想地图生成器");
 assert.equal(manifest.theme_color, "#18231f");
 assert.deepEqual(manifest.icons.map(icon => [icon.src, icon.sizes, icon.type]), [
   ["./app-icon.svg", "any", "image/svg+xml"],

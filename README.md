@@ -1,8 +1,8 @@
 [简体中文](./README.md) | [English](./README.en.md)
 
-# WebGL 架空地图生成器
+# WebGL 幻想地图生成器
 
-WebGL 架空地图生成器适合世界构建、TRPG 主持、架空历史创作，也适合单纯喜欢地图的人。项目借鉴 [Fantasy Map Generator](https://github.com/Azgaar/Fantasy-Map-Generator) 生成和呈现世界的思路与视觉风格，应用本身从头独立开发。打开页面即可生成一幅完整地图，之后还可以继续查看、推演和修改其中的世界。
+WebGL 幻想地图生成器适合世界构建、TRPG 主持、架空历史创作，也适合单纯喜欢地图的人。项目借鉴 [Fantasy Map Generator](https://github.com/Azgaar/Fantasy-Map-Generator) 生成和呈现世界的思路与视觉风格，应用本身从头独立开发。打开页面即可生成一幅完整地图，之后还可以继续查看、推演和修改其中的世界。
 
 [在线体验](https://fmg.mosuzi.top/) · [快速开始](#快速开始) · [文档导览](#文档导览)
 
