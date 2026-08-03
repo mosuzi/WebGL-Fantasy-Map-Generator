@@ -1,27 +1,42 @@
 import assert from "node:assert/strict";
+import {createHash} from "node:crypto";
 import {readFile} from "node:fs/promises";
 
 const publicRoot = new URL("../app/webgl-generator/public/", import.meta.url);
-const [svg, manifestSource, index] = await Promise.all([
+const [master, svg, manifestSource, index, generator] = await Promise.all([
+  readFile(new URL("app-icon-master.jpg", publicRoot)),
   readFile(new URL("app-icon.svg", publicRoot), "utf8"),
   readFile(new URL("site.webmanifest", publicRoot), "utf8"),
-  readFile(new URL("../app/webgl-generator/index.html", import.meta.url), "utf8")
+  readFile(new URL("../app/webgl-generator/index.html", import.meta.url), "utf8"),
+  readFile(new URL("./generate-webgl-generator-app-icons.mjs", import.meta.url), "utf8")
 ]);
 const manifest = JSON.parse(manifestSource);
+const masterHash = createHash("sha256").update(master).digest("hex");
 
-assert.match(svg, /viewBox="0 0 512 512"/, "SVG 主稿画布必须固定为 512 方形");
+assert.equal(masterHash, "50c20b1e8d908b0a45e91988e5421a0792d9f4570db7a504de91205851ab771d", "应用图标原图已被改动");
+assert.equal(master.length, 103496, "应用图标原图字节长度异常");
+assert.equal(master.subarray(0, 3).toString("hex"), "ffd8ff", "应用图标原图不是 JPEG");
+
+assert.match(svg, /viewBox="0 0 1280 1280"/, "SVG 封装必须保持原图画布比例");
 assert(!/<text\b/i.test(svg), "应用图标不得依赖可见文字或字体");
-for (const color of ["#18231f", "#d2c49d", "#4e7168", "#96382d"]) assert(svg.includes(color), `SVG 缺少冻结品牌色 ${color}`);
-assert.match(svg, /<circle cx="250" cy="238" r="158"/, "地图圆盘主体缺失");
-assert.match(svg, /translate\(350 348\)/, "右下朱印识别块缺失");
+assert.equal((svg.match(/<image\b/g) || []).length, 1, "SVG 必须只封装一份原图");
+assert.match(svg, /id="app-icon-master-image"/, "SVG 缺少原图语义节点");
+assert.match(svg, /preserveAspectRatio="xMidYMid meet"/, "SVG 必须等比显示原图");
+const embedded = svg.match(/href="data:image\/jpeg;base64,([^"]+)"/);
+assert(embedded, "SVG 未自包含 JPEG 原图");
+assert(Buffer.from(embedded[1], "base64").equals(master), "SVG 内嵌图像与原图不一致");
+
+assert.match(generator, /readFile\(join\(publicDir, "app-icon-master\.jpg"\)\)/, "生成器未读取唯一原图");
+assert.match(generator, /page\.setContent\(imageDocument\(masterDataUrl\)\)/, "PNG 未直接从原图缩放生成");
+assert.match(generator, /writeFile\(join\(publicDir, "app-icon\.svg"\), svg/, "SVG 未由原图确定性生成");
 
 assert.equal(manifest.name, "WebGL 幻想地图生成器");
 assert.equal(manifest.theme_color, "#18231f");
-assert.deepEqual(manifest.icons.map(icon => [icon.src, icon.sizes, icon.type]), [
-  ["./app-icon.svg", "any", "image/svg+xml"],
-  ["./app-icon-192.png", "192x192", "image/png"],
-  ["./app-icon-256.png", "256x256", "image/png"],
-  ["./app-icon-512.png", "512x512", "image/png"]
+assert.deepEqual(manifest.icons.map(icon => [icon.src, icon.sizes, icon.type, icon.purpose]), [
+  ["./app-icon.svg", "any", "image/svg+xml", "any"],
+  ["./app-icon-192.png", "192x192", "image/png", "any"],
+  ["./app-icon-256.png", "256x256", "image/png", "any"],
+  ["./app-icon-512.png", "512x512", "image/png", "any"]
 ]);
 
 for (const [filename, size] of [["app-icon-32.png", 32], ["app-icon-64.png", 64], ["apple-touch-icon.png", 180], ["app-icon-192.png", 192], ["app-icon-256.png", 256], ["app-icon-512.png", 512]]) {
@@ -43,7 +58,8 @@ assert(!index.includes('href="data:,"'), "正式入口仍在使用空 favicon");
 
 console.log(JSON.stringify({
   ok: true,
-  identity: "map-disc-and-vermilion-seal",
+  identity: "selected-a-master-image",
+  master: {sha256: masterHash, bytes: master.length, size: [1280, 1280]},
   formats: {svg: "any", png: [32, 64, 180, 192, 256, 512]},
   manifest: manifest.icons.length,
   textElements: 0

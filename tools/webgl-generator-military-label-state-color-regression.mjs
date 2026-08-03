@@ -35,7 +35,7 @@ assert.match(rendererSource, /dataset\.stateColor = palette\.stateColor/, "军�
 assert.match(stylesSource, /background:\s*var\(--military-label-bg,\s*rgba\(12, 18, 19, 0\.42\)\)/, "军事标签 CSS 没有使用透明深色底板");
 assert.match(stylesSource, /border:\s*2px solid var\(--military-label-border,\s*#6f7773\)/, "军事标签没有使用醒目的国家色边框");
 assert.doesNotMatch(stylesSource, /\.military-map-icon--fleet\s*\{[^}]*border-color/s, "舰队样式仍覆盖国家色边框");
-assert.match(exportSource, /\.military-map-icon\.visible/, "PNG 导出没有包含军事标签");
+assert.match(exportSource, /selectors\.push\(PNG_MILITARY_TEXT_SELECTOR\)/, "PNG 导出没有消费军事标签生产契约");
 assert.match(exportSource, /drawMilitaryOverlayElement[\s\S]*style\.backgroundColor/, "PNG 军事标签没有读取实时计算背景色");
 
 console.log(JSON.stringify({

@@ -66,7 +66,14 @@ import {
 } from "./political-label-layout.js";
 import {resolveStateLabelPlacement} from "./state-label-territory.js";
 import {formatMilitary, normalizeUnitPreferences} from "../ui/display-units.js";
-import {militaryIconLabelForVariant, militaryIconUrlForVariant, normalizeMilitaryIconVariant} from "./military-icon-assets.js";
+import {militaryIconLabelForVariant, normalizeMilitaryIconVariant} from "./military-icon-assets.js";
+import {
+  cityBaseIconSvg as renderCityBaseIconSvg,
+  cityRoleBadgeSvg as renderCityRoleBadgeSvg,
+  markerIconSvg as renderMarkerIconSvg,
+  militaryIconDataUrl,
+  resolveMarkerIconVisual
+} from "./canvas-icon-registry.js";
 import {resizeCanvasToDisplaySize} from "./canvas-display-size.js";
 import {resolveMilitaryLabelPalette} from "./military-label-palette.js";
 import {MILITARY_CITY_LABEL_AVOID_SCALE, militaryLabelBox, resolveMilitaryLabelPlacement} from "./military-label-layout.js";
@@ -132,25 +139,6 @@ const MARKER_ICON_PALETTES = Object.freeze({
   culture: {fill: "#8264c5", stroke: "#2d204d", symbol: "#fbf2ff"},
   settlement: {fill: "#cf6f4b", stroke: "#4b271b", symbol: "#fff1e8"},
   mystery: {fill: "#715cc7", stroke: "#271f51", symbol: "#f7f1ff"}
-});
-
-const MARKER_ICON_SYMBOLS = Object.freeze({
-  mine: '<path d="M9.2 17.7 18 8.9"/><path d="M16.2 7.8c1.6.1 2.7.5 3.6 1.4-.8.2-1.6.6-2.5 1.4"/><path d="m9 9 10 9"/>',
-  salt: '<path class="fill" d="M11 10.1h2.7v2.7H11zM15.1 12.4h2.3v2.3h-2.3zM10.2 15.1h2.2v2.2h-2.2z"/><path d="M9.2 18.4h9.6"/>',
-  life: '<path d="M10.1 17.8c5.7-.6 8.1-4.4 8.5-8.2-4.5.1-8.2 2.2-8.6 7.6"/><path d="M10.3 17.6c1.4-2.3 3.2-4.1 5.5-5.4"/><path d="M8.7 10.4l.9 1.4 1.5.6-1.5.6-.9 1.4-.7-1.4-1.5-.6 1.5-.6z"/>',
-  gem: '<path class="fill" d="m14 7.4 6.5 4.7-2.7 7.5h-7.6l-2.7-7.5z"/><path d="M7.7 12.1h12.6M11.2 8.3l2.8 11.3 2.8-11.3"/>',
-  spring: '<path d="M9.1 11.2c1.7-1.4 3.4-1.4 5 0 1.6 1.3 3.2 1.3 4.8 0"/><path d="M9.1 14.6c1.7-1.4 3.4-1.4 5 0 1.6 1.3 3.2 1.3 4.8 0"/><path d="M11.1 18.1h5.8"/>',
-  drop: '<path class="fill" d="M14 7.7c3.2 3.8 4.8 6.4 4.8 8.1a4.8 4.8 0 0 1-9.6 0c0-1.7 1.6-4.3 4.8-8.1z"/>',
-  volcano: '<path class="fill" d="M7.8 19.2 12.4 8.6h3.2l4.6 10.6z"/><path d="m12 10.4 2 2.2 2-2.2M10.2 19.2h7.6"/>',
-  bridge: '<path d="M7.7 18.7h12.6M9 18.6c.7-4.2 2.3-6.3 5-6.3s4.3 2.1 5 6.3M10.2 14.2h7.6"/>',
-  inn: '<path class="fill" d="M9.4 10.4h9.2v8H9.4z"/><path d="M8.2 11.1 14 7.5l5.8 3.6M12 18.3v-4h4v4"/>',
-  tower: '<path class="fill" d="M10.4 9.2h7.2v10h-7.2z"/><path d="M10 9.1V7.7h1.8v1.4h4.4V7.7H18v1.4M12.4 19.1v-4h3.2v4"/>',
-  ruin: '<path d="M8.7 18.8h10.6M10 10.1h8M11.1 10.2v8.2M14 10.2v8.2M16.9 10.2v8.2"/><path class="fill" d="m9.5 8.1 4.5-1.5 4.5 1.5z"/>',
-  book: '<path d="M8.5 9.1h4.7c.7 0 1.1.4 1.1 1.1v8.1c0-.7-.5-1.1-1.2-1.1H8.5z"/><path d="M19.5 9.1h-4.7c-.7 0-1.1.4-1.1 1.1v8.1c0-.7.5-1.1 1.2-1.1h4.6z"/>',
-  market: '<path d="M8.5 11.2h11M9.6 11.4l1-3h6.8l1 3"/><path class="fill" d="M10 13.2h8v5.7h-8z"/><path d="M12.8 18.8v-3.1h2.4v3.1"/>',
-  danger: '<path class="fill" d="m14 7.6 6 11H8z"/><path d="M14 11.3v3.6M14 17.4h.1"/>',
-  star: '<path class="fill" d="m14 7.6 1.7 4 4.2.4-3.2 2.8.9 4.2-3.6-2.2-3.6 2.2.9-4.2L8.1 12l4.2-.4z"/>',
-  marker: '<circle class="fill" cx="14" cy="13.8" r="4.5"/><path d="M14 9.3v9"/>'
 });
 
 export class PlaceholderMapRenderer {
@@ -1861,7 +1849,7 @@ export class PlaceholderMapRenderer {
       symbol.className = "military-map-icon-symbol";
       const icon = documentRef.createElement("img");
       icon.className = "military-map-icon-image";
-      icon.src = item.iconUrl;
+      icon.src = militaryIconDataUrl(item.iconVariant);
       icon.alt = item.iconLabel || item.dominantUnitLabel || "军种";
       icon.decoding = "async";
       icon.draggable = false;
@@ -2877,112 +2865,9 @@ function cityIconPalette(item) {
 }
 
 function cityIconSvg(item) {
-  const base = cityBaseIconSvg(item);
-  const badges = cityRoleBadgeSvg(item.roles);
+  const base = renderCityBaseIconSvg(item.silhouette);
+  const badges = renderCityRoleBadgeSvg(item.roles);
   return badges ? base.replace("</svg>", `${badges}</svg>`) : base;
-}
-
-function cityBaseIconSvg(item) {
-  if (item.silhouette === "capital") return `<svg viewBox="0 0 34 26" aria-hidden="true" focusable="false">
-    <ellipse class="city-icon-shadow" cx="17" cy="22.2" rx="13.6" ry="2.3"/>
-    <ellipse class="city-icon-ground" cx="17" cy="21.1" rx="13.1" ry="2.1"/>
-    <path class="city-icon-fill" d="M5 20.1v-7.8l2.4-1.3 2.4 1.3 2.4-1.3 2.4 1.3 2.4-1.3 2.4 1.3 2.4-1.3 2.4 1.3 2.4-1.3 2.4 1.3v7.8z"/>
-    <path class="city-icon-roof" d="m9.2 11.8 4.2-4 4.2 4zm8.8.1 4.2-4.9 4.2 4.9z"/>
-    <path class="city-icon-accent" d="M6.9 20.1v-8.8h3.7v8.8zm16.5 0v-8.8h3.7v8.8z"/>
-    <path class="city-icon-window" d="M12.3 15.2h2.2v4.9h-2.2zm7.3-.1h2.2v5h-2.2z"/>
-    <path class="city-icon-stroke" d="M4.2 20.1h25.6"/>
-  </svg>`;
-  if (item.silhouette === "provincial") return `<svg viewBox="0 0 34 26" aria-hidden="true" focusable="false">
-    <ellipse class="city-icon-shadow" cx="17" cy="22.3" rx="12.4" ry="2.1"/>
-    <ellipse class="city-icon-ground" cx="17" cy="21.1" rx="12" ry="1.9"/>
-    <path class="city-icon-fill" d="M9.2 20.2v-8.8l1.8-.9 1.8.9 1.8-.9 1.8.9 1.8-.9 1.8.9 1.8-.9 1.8.9v8.8z"/>
-    <path class="city-icon-roof" d="m7.4 14.1 5.3-4.5 5.3 4.5zm10.2-.4 4.4-3.7 4.4 3.7z"/>
-    <path class="city-icon-accent" d="M14 20.2v-11h6v11z"/>
-    <path class="city-icon-window" d="M16 12.2h2v2.2h-2zm.1 4.1h1.8v3.9h-1.8z"/>
-    <path class="city-icon-stroke" d="M6.7 20.2h20.6"/>
-  </svg>`;
-  if (item.silhouette === "port") return `<svg viewBox="0 0 34 26" aria-hidden="true" focusable="false">
-    <ellipse class="city-icon-shadow" cx="16.5" cy="22.1" rx="12.5" ry="2.1"/>
-    <path class="city-icon-water" d="M4.8 21.1c2.5-1.1 4.9-1.1 7.4 0s4.9 1.1 7.4 0 5-1.1 7.5 0"/>
-    <path class="city-icon-fill" d="M7.6 20v-6h8.6v6z"/>
-    <path class="city-icon-roof" d="m6.3 14.2 5.6-4 5.6 4z"/>
-    <path class="city-icon-accent" d="M21.5 7.3v12.8"/>
-    <path class="city-icon-sail" d="M22.3 8.2c3 2 4.6 4.7 4.9 8.1h-4.9z"/>
-    <path class="city-icon-window" d="M10.7 16h2.4v4h-2.4z"/>
-  </svg>`;
-  if (item.silhouette === "fort") return `<svg viewBox="0 0 34 26" aria-hidden="true" focusable="false">
-    <ellipse class="city-icon-shadow" cx="17" cy="22.2" rx="12.6" ry="2.1"/>
-    <ellipse class="city-icon-ground" cx="17" cy="21" rx="12" ry="1.8"/>
-    <path class="city-icon-fill" d="M6.4 20.2v-7.5l1.6-.8 1.6.8 1.6-.8 1.6.8 1.6-.8 1.6.8 1.6-.8 1.6.8 1.6-.8 1.6.8 1.6-.8 1.6.8v7.5z"/>
-    <path class="city-icon-accent" d="M12.1 20.2v-10h4.2v10zm5.7 0v-11.8h4.6v11.8z"/>
-    <path class="city-icon-roof" d="m11.1 10.4 3.1-3.2 3.1 3.2zm5.7-1.9 3.3-3.5 3.3 3.5z"/>
-    <path class="city-icon-window" d="M13.5 14.2H15v6h-1.5zm5.8-2h1.6v2.1h-1.6zm.1 4.1h1.4v3.9h-1.4z"/>
-    <path class="city-icon-stroke" d="M5.6 20.2h22.8"/>
-  </svg>`;
-  if (item.silhouette === "camp") return `<svg viewBox="0 0 34 26" aria-hidden="true" focusable="false">
-    <ellipse class="city-icon-shadow" cx="17" cy="22.2" rx="11.8" ry="2"/>
-    <ellipse class="city-icon-ground" cx="17" cy="21.1" rx="11.2" ry="1.7"/>
-    <path class="city-icon-tent" d="M7.8 20.2 13 9.2l5.2 11z"/>
-    <path class="city-icon-tent city-icon-tent--main" d="M13.2 20.2 20 7.3l6.8 12.9z"/>
-    <path class="city-icon-roof" d="M20 7.3v12.9"/>
-    <path class="city-icon-window" d="M18.3 16.4 20 13.2l1.7 3.2v3.8h-3.4z"/>
-    <path class="city-icon-stroke" d="M6.9 20.2h21.2"/>
-  </svg>`;
-  if (item.silhouette === "hamlet") return `<svg viewBox="0 0 34 26" aria-hidden="true" focusable="false">
-    <ellipse class="city-icon-shadow" cx="17" cy="22.2" rx="9.4" ry="1.8"/>
-    <ellipse class="city-icon-ground" cx="17" cy="21.1" rx="9" ry="1.6"/>
-    <path class="city-icon-fill" d="M10.4 20.3v-7.2h13.2v7.2z"/>
-    <path class="city-icon-roof" d="M8.7 13.6 17 7.7l8.3 5.9z"/>
-    <path class="city-icon-window" d="M15.3 16.1h3.4v4.2h-3.4z"/>
-    <path class="city-icon-stroke" d="M9.2 20.3h15.6"/>
-  </svg>`;
-  if (item.silhouette === "village") return `<svg viewBox="0 0 34 26" aria-hidden="true" focusable="false">
-    <ellipse class="city-icon-shadow" cx="17" cy="22.2" rx="10.5" ry="1.9"/>
-    <ellipse class="city-icon-ground" cx="17" cy="21.1" rx="10" ry="1.7"/>
-    <path class="city-icon-fill" d="M7.8 20.2v-6.6h8.3v6.6zm10 0v-7.4h8.1v7.4z"/>
-    <path class="city-icon-roof" d="m6.5 14 5.5-4.1 5.5 4.1zm9.8-.7 5.5-4.3 5.5 4.3z"/>
-    <path class="city-icon-window" d="M11 16.2h2.1v4h-2.1zm9.7-.3H23v4.3h-2.3z"/>
-    <path class="city-icon-stroke" d="M7.2 20.2h19.6"/>
-  </svg>`;
-  if (item.silhouette === "city") return `<svg viewBox="0 0 34 26" aria-hidden="true" focusable="false">
-    <ellipse class="city-icon-shadow" cx="17" cy="22.2" rx="12.9" ry="2.2"/>
-    <ellipse class="city-icon-ground" cx="17" cy="21.1" rx="12.2" ry="1.9"/>
-    <path class="city-icon-fill" d="M5.8 20.2v-6.9h8.2v6.9zm9.2 0v-8.2h8.4v8.2zm9.2 0v-6.1h4.2v6.1z"/>
-    <path class="city-icon-roof" d="m4.7 13.5 5.2-4.1 5.2 4.1zm8.7-1.1 5.8-4.6 5.8 4.6zm9.4 1.9 3.5-2.8 3.5 2.8z"/>
-    <path class="city-icon-window" d="M8.7 16h2.1v4.2H8.7zm18 1h1.2v3.2h-1.2zm-9.4-1.6h3v4.8h-3z"/>
-  </svg>`;
-  return `<svg viewBox="0 0 34 26" aria-hidden="true" focusable="false">
-    <ellipse class="city-icon-shadow" cx="17" cy="22.2" rx="11.4" ry="2"/>
-    <ellipse class="city-icon-ground" cx="17" cy="21.1" rx="10.8" ry="1.7"/>
-    <path class="city-icon-fill" d="M7.9 20.2v-6.8h8.7v6.8zm9.8 0v-7.6h8.4v7.6z"/>
-    <path class="city-icon-roof" d="m6.7 13.8 5.5-4.2 5.5 4.2zm9.6-.8 5.5-4.3 5.5 4.3z"/>
-    <path class="city-icon-window" d="M11.1 16.2h2.2v4h-2.2zm9.7-.3h2.3v4.3h-2.3z"/>
-    <path class="city-icon-stroke" d="M7.1 20.2h20"/>
-  </svg>`;
-}
-
-function cityRoleBadgeSvg(roles = []) {
-  const parts = [];
-  if (roles.includes("capital")) {
-    parts.push(`<g class="city-icon-role-badge city-icon-role-badge--capital">
-      <circle class="city-icon-role-badge-bg" cx="28.2" cy="5.2" r="4"/>
-      <path class="city-icon-role-badge-mark" d="m25.8 5.8.7-3 1.7 1.6 1.7-1.6.7 3z"/>
-    </g>`);
-  }
-  if (roles.includes("provincial")) {
-    const x = roles.includes("capital") ? 20.5 : 28.2;
-    parts.push(`<g class="city-icon-role-badge city-icon-role-badge--provincial">
-      <circle class="city-icon-role-badge-bg" cx="${x}" cy="5.2" r="4"/>
-      <path class="city-icon-role-badge-mark" d="M${x - 1.4} 7.5V2.7m.2.3h3l-1 1.2 1 1.2h-3"/>
-    </g>`);
-  }
-  if (roles.includes("port")) {
-    parts.push(`<g class="city-icon-role-badge city-icon-role-badge--port">
-      <circle class="city-icon-role-badge-bg" cx="5.8" cy="5.2" r="3.7"/>
-      <path class="city-icon-role-badge-mark" d="M5.8 2.8v4.8m-1.7-1.4c.4 1.1 1 1.6 1.7 1.6s1.3-.5 1.7-1.6M4.7 4h2.2"/>
-    </g>`);
-  }
-  return parts.join("");
 }
 
 function cityIconBoxForItem(item, screen, sizeScale) {
@@ -3020,20 +2905,23 @@ function getMarkerIconItems(map) {
   return [...(map?.markers?.markers || [])]
     .filter(marker => marker && Number.isFinite(marker.x) && Number.isFinite(marker.y))
     .sort((a, b) => markerIconPriority(b) - markerIconPriority(a))
-    .map(marker => ({
-      id: marker.id,
-      marker,
-      type: marker.type,
-      label: marker.label,
-      name: marker.name || marker.label || `标记 #${marker.id + 1}`,
-      tooltip: markerIconTooltip(marker),
-      category: marker.category || "marker",
-      resourceKey: marker.resourceKey || null,
-      economicValue: Number(marker.economicValue || 0),
-      visual: marker.visual || marker.data?.visual || {},
-      x: marker.x,
-      y: marker.y
-    }));
+    .map(marker => {
+      const visual = resolveMarkerIconVisual(marker.type, marker.visual || marker.data?.visual || {});
+      return {
+        id: marker.id,
+        marker,
+        type: marker.type,
+        label: marker.label,
+        name: marker.name || marker.label || `标记 #${marker.id + 1}`,
+        tooltip: markerIconTooltip(marker),
+        category: marker.category || visual.category,
+        resourceKey: marker.resourceKey || null,
+        economicValue: Number(marker.economicValue || 0),
+        visual,
+        x: marker.x,
+        y: marker.y
+      };
+    });
 }
 
 function markerIconPriority(marker) {
@@ -3093,7 +2981,6 @@ function getMilitaryIconItems(map, unitPreferences = {}) {
         stateName: regiment.stateName || map?.politics?.states?.[regiment.state]?.name || "none",
         icon: iconVariant,
         iconVariant,
-        iconUrl: militaryIconUrlForVariant(iconVariant),
         iconLabel: regiment.iconLabel || militaryIconLabelForVariant(iconVariant),
         troops,
         boxBaseWidth: MILITARY_ICON_BASE_WIDTH + troopTextWidth,
@@ -3234,14 +3121,7 @@ function normalizedCssColor(color) {
 }
 
 function markerIconSvg(item) {
-  const visual = item.visual || {};
-  const symbol = MARKER_ICON_SYMBOLS[visual.symbol] || MARKER_ICON_SYMBOLS.marker;
-  return `<svg viewBox="0 0 28 32" aria-hidden="true" focusable="false">
-    <path class="marker-icon-shadow" d="M14 30.8c2.3-1.9 11.6-10.3 11.6-18.1C25.6 6 20.8 1.7 14 1.7S2.4 6 2.4 12.7c0 7.8 9.3 16.2 11.6 18.1z"/>
-    <path class="marker-icon-body" d="M14 30.8c2.3-1.9 11.6-10.3 11.6-18.1C25.6 6 20.8 1.7 14 1.7S2.4 6 2.4 12.7c0 7.8 9.3 16.2 11.6 18.1z"/>
-    <circle class="marker-icon-plate" cx="14" cy="13.6" r="8.7"/>
-    <g class="marker-icon-symbol" transform="translate(0 .2)">${symbol}</g>
-  </svg>`;
+  return renderMarkerIconSvg(item);
 }
 
 function markerIconBoxForItem(item, screen, scale) {

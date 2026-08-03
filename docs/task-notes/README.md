@@ -7,6 +7,7 @@
 ## 当前活动专题映射
 
 - 权威任务第 257～258 项对应 `project-app-icon.md`：设计原创无文字应用图标，生成浏览器与安装入口所需尺寸，并补齐 64 / 256px、favicon、manifest、Apple Touch Icon 和真实浏览器验收；第 258 项的 Cloud Provider Config 见 `docs/deployment/cloud-storage.md`。
+- 权威任务第 263～264 项对应 `app-and-canvas-icon-system.md`：把用户选定的微缩山河城池 A 方案接入应用图标，并以 `9 + 3 + 58 + 10 = 80` 个稳定键统一城镇、Marker / 资源点与军事图标，冻结旧数据、DOM / PNG 和系统 Chrome 验收边界。
 - 权威任务第 259 项对应 `docs/deployment/cloud-storage.md`：把 Dropbox 回调统一为独立轻量页，由原窗口校验 popup、同源、state 与握手期限并换取令牌；Google Drive 不在本项修改范围。
 
 - 权威任务第 227～228 项对应 `controlled-browser-bridge-and-headless-write.md`：先建立视觉开启、懒加载、默认只读并可刷新重连的当前标签页受控桥，再建立复用领域事务、失败回滚且默认输出新文件的无头写入运行时。

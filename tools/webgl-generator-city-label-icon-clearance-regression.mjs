@@ -35,9 +35,10 @@ assert.match(rendererSource, /cityIconItemsById = new Map/, "渲染器没有建�
 assert.match(rendererSource, /renderer\.layerVisibility\.cities !== false && scale >= cityIcon\.minScale/, "城镇标签净空没有遵守图标图层和缩放显隐");
 assert.match(rendererSource, /setOverlayNodePosition\(item\.node, labelAnchor\.x, labelAnchor\.y\)/, "城镇标签没有应用净空后的锚点");
 assert.match(rendererSource, /item\.targetKind === LABEL_TARGET_KIND\.CITY[\s\S]*top: anchorY - estimatedHeight,[\s\S]*bottom: anchorY/, "城镇标签碰撞盒没有同步到新锚点");
-assert.match(stylesSource, /\.city-label,\s*\.custom-label\s*\{[\s\S]*translate\(-50%, -100%\)/, "城镇标签不再以上边文字盒锚定");
+assert.match(stylesSource, /\.city-label,\s*\.custom-label,\s*\.zone-label\s*\{[\s\S]*translate\(-50%, -100%\)/, "城镇标签不再以上边文字盒锚定");
 assert.match(stylesSource, /\.city-map-icon\s*\{[\s\S]*translate\(-50%, -80%\)/, "城镇图标顶部锚点与净空模型不一致");
-assert.match(mapIoSource, /\.city-map-icon\.visible[\s\S]*\.city-label\.visible/, "PNG 没有同时复用城镇图标与标签可见集合");
+assert.match(mapIoSource, /overlays\?\.cityIcons[\s\S]*selectors\.push\("\.city-map-icon\.visible"\)/, "PNG 没有复用城镇图标可见集合");
+assert.match(mapIoSource, /overlays\?\.labels[\s\S]*selectors\.push\(\.\.\.PNG_SEMANTIC_LABEL_SELECTORS\)/, "PNG 没有复用语义标签生产契约");
 
 console.log(JSON.stringify({
   ok: true,

@@ -62,9 +62,9 @@
 
     <template #visual>
       <div class="marker-visual-editor">
-        <UiSelectField class-name="marker-visual-select" label="图形" :model-value="visualDraft.symbol" :options="symbolOptions" @update:model-value="visualDraft.symbol = $event" />
+        <UiSelectField class-name="marker-visual-select" label="图形" :model-value="visualDraft.symbol" :options="visualSymbolOptions" @update:model-value="visualDraft.symbol = $event" />
         <UiSelectField class-name="marker-visual-select" label="配色" :model-value="visualDraft.palette" :options="paletteOptions" @update:model-value="visualDraft.palette = $event" />
-        <UiButton variant="secondary" @click="applyVisual">应用图标</UiButton>
+        <UiButton variant="secondary" :disabled="isAutomaticVisualDraft" @click="applyVisual">应用图标</UiButton>
       </div>
     </template>
 
@@ -82,6 +82,7 @@
 <script setup>
 import {computed, nextTick, reactive, ref, watch} from "vue";
 import {MARKER_TYPE_OPTIONS} from "../../../generator/markers.js";
+import {MARKER_SYMBOL_OPTIONS, resolveMarkerIconVisual} from "../../../renderer/canvas-icon-registry.js";
 import UiActionDock from "./base/UiActionDock.vue";
 import UiButton from "./base/UiButton.vue";
 import UiDetailGrid from "./base/UiDetailGrid.vue";
@@ -139,24 +140,7 @@ const columns = Object.freeze([
   {key: "economicValue", label: "潜力", align: "right", format: value => formatNumber(value)}
 ]);
 
-const symbolOptions = Object.freeze([
-  {value: "marker", label: "通用"},
-  {value: "mine", label: "矿山"},
-  {value: "salt", label: "盐晶"},
-  {value: "life", label: "生物"},
-  {value: "gem", label: "宝石"},
-  {value: "spring", label: "温泉"},
-  {value: "drop", label: "水源"},
-  {value: "volcano", label: "火山"},
-  {value: "bridge", label: "桥梁"},
-  {value: "inn", label: "驿馆"},
-  {value: "tower", label: "塔楼"},
-  {value: "ruin", label: "遗迹"},
-  {value: "book", label: "书卷"},
-  {value: "market", label: "商贸"},
-  {value: "danger", label: "危险"},
-  {value: "star", label: "奇观"}
-]);
+const symbolOptions = MARKER_SYMBOL_OPTIONS;
 
 const paletteOptions = Object.freeze([
   {value: "natural", label: "自然"},
@@ -203,6 +187,11 @@ const activeSelectedMarkerId = computed(() => {
   return selectionId !== null && selectionId !== undefined ? selectionId : props.state.selectedMarkerId;
 });
 const selected = computed(() => findByObjectId(metrics.value.rows, activeSelectedMarkerId.value));
+const isAutomaticVisualDraft = computed(() => visualDraft.symbol.startsWith("type:"));
+const visualSymbolOptions = computed(() => {
+  if (!isAutomaticVisualDraft.value) return symbolOptions;
+  return [{value: visualDraft.symbol, label: symbolLabel(visualDraft.symbol)}, ...symbolOptions];
+});
 const markerActions = Object.freeze([
   {key: "rename", resultClass: "open-secondary", label: "重命名", icon: "✎"},
   {key: "visual", resultClass: "open-secondary", label: "调整图标", icon: "▣"},
@@ -260,7 +249,8 @@ function buildMarkerMetrics(map) {
   const rows = markerRows(map).map(marker => {
     const stateId = marker.data?.state ?? 0;
     const provinceId = marker.data?.province ?? 0;
-    const visual = marker.visual || marker.data?.visual || {};
+    const storedVisual = marker.visual || marker.data?.visual || {};
+    const visual = resolveMarkerIconVisual(marker.type, storedVisual);
     const note = readObjectNote(map, {kind: "marker", id: marker.id});
     return {
       id: marker.id,
@@ -325,7 +315,7 @@ function sortRows(rows, key, direction) {
 }
 
 function applyVisual() {
-  if (!selected.value) return;
+  if (!selected.value || isAutomaticVisualDraft.value) return;
   props.callbacks.onVisualChange?.(selected.value.id, {
     symbol: visualDraft.symbol,
     palette: visualDraft.palette
@@ -387,6 +377,7 @@ function indexedName(items, id) {
 }
 
 function symbolLabel(value) {
+  if (String(value || "").startsWith("type:")) return `自动：${markerTypeLabel(String(value).slice(5))}`;
   return symbolOptions.find(option => option.value === value)?.label || value || "通用";
 }
 
