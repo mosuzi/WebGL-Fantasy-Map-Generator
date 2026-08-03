@@ -30,6 +30,7 @@ import {PanelManager} from "../ui/panel-manager.js";
 import {captureControlPanelLaunchGeometry} from "../ui/control-panel-launch-geometry.js";
 import {createBrushCursorPreview} from "../ui/brush-cursor-preview.js";
 import {bindRuntimePanel, readControlPreferences, readOptionsFromPanel, setActiveModeButton, setEditingInteractionLock, setGenerationLoading, setSeedInput, syncLayerGroupControls, updateControlPreferences, updateLayerPreference, updatePickPanel, updateRegenerationSection, updateRuntimePanel} from "../ui/panel.js";
+import {DEFAULT_MAX_CITY_LABELS} from "./display-defaults.js";
 import {formatArea as formatDisplayArea, formatDistance as formatDisplayDistance, normalizeUnitPreferences} from "../ui/display-units.js";
 import {sameObjectId} from "../ui/object-id.js";
 import {createBiomePanel} from "../ui/panels/biome-panel.js";
@@ -3410,7 +3411,7 @@ function runtimeDisplayActionResult(state, documentRef, effects) {
       showOceanHeight: Boolean(preferences.showOceanHeight),
       smoothCellBorders: Boolean(preferences.smoothCellBorders),
       showHoverInfo: Boolean(preferences.showHoverInfo),
-      maxCityLabels: Number(preferences.maxCityLabels) || 5000
+      maxCityLabels: Number(preferences.maxCityLabels) || DEFAULT_MAX_CITY_LABELS
     },
     camera: {...(stats.camera || {})},
     effects: [...effects]

@@ -13,9 +13,9 @@ export const LABEL_STYLE_TYPES = Object.freeze(Object.values(LABEL_STYLE_TYPE));
 
 export const LABEL_FONT_FAMILIES = Object.freeze({
   system: "system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif",
-  historical: "\"Source Han Serif SC\", \"Noto Serif CJK SC\", \"Songti SC\", STSong, SimSun, Georgia, \"Times New Roman\", serif",
-  historicalDisplay: "\"Source Han Sans SC\", \"Noto Sans CJK SC\", \"Microsoft YaHei\", \"PingFang SC\", \"Heiti SC\", Arial, sans-serif",
-  cartographic: "\"STKaiti\", \"KaiTi\", \"Kaiti SC\", \"Noto Serif CJK SC\", \"Source Han Serif SC\", \"Songti SC\", SimSun, Georgia, serif",
+  historical: "\"Source Han Serif SC\", \"Noto Serif SC\", \"Noto Serif CJK SC\", \"Songti SC\", STSong, SimSun, Georgia, \"Times New Roman\", serif",
+  historicalDisplay: "\"Source Han Sans SC\", \"Noto Sans SC\", \"Noto Sans CJK SC\", \"Microsoft YaHei\", \"PingFang SC\", \"Heiti SC\", Arial, sans-serif",
+  cartographic: "\"STKaiti\", \"KaiTi\", \"Kaiti SC\", \"Noto Serif SC\", \"Noto Serif CJK SC\", \"Source Han Serif SC\", \"Songti SC\", SimSun, Georgia, serif",
   serif: "Georgia, \"Times New Roman\", serif",
   sans: "\"Segoe UI\", Arial, sans-serif",
   condensed: "\"Arial Narrow\", \"Segoe UI\", sans-serif",
@@ -28,10 +28,10 @@ export const LABEL_FONT_FALLBACK = LABEL_FONT_FAMILIES.system;
 const CUSTOM_LABEL_STYLE_DEFAULT = freezeStyle({fontFamilyId: "historicalDisplay", fontFamilyName: null, fontSize: 13, fontWeight: 600, italic: false, letterSpacing: 0.15, color: "#2c3339", opacity: 0.96, strokeColor: "#f5f3eb", strokeWidth: 0.03, shadowColor: "#2c3339", shadowOffsetX: 0, shadowOffsetY: 0, shadowBlur: 0});
 
 export const LABEL_STYLE_DEFAULTS = Object.freeze({
-  [LABEL_STYLE_TYPE.STATE]: freezeStyle({fontFamilyId: "historicalDisplay", fontFamilyName: null, fontSize: 24, fontWeight: 700, italic: false, letterSpacing: 3.2, color: "#293038", opacity: 0.94, strokeColor: "#f5f2e8", strokeWidth: 0.03, shadowColor: "#293038", shadowOffsetX: 0, shadowOffsetY: 0, shadowBlur: 0}),
-  [LABEL_STYLE_TYPE.PROVINCE]: freezeStyle({fontFamilyId: "historical", fontFamilyName: null, fontSize: 14, fontWeight: 600, italic: false, letterSpacing: 1, color: "#8a2434", opacity: 0.94, strokeColor: "#f5f2e8", strokeWidth: 0, shadowColor: "#8a2434", shadowOffsetX: 0, shadowOffsetY: 0, shadowBlur: 0}),
-  [LABEL_STYLE_TYPE.CAPITAL]: freezeStyle({fontFamilyId: "historicalDisplay", fontFamilyName: null, fontSize: 13, fontWeight: 700, italic: false, letterSpacing: 0.15, color: "#20262c", opacity: 0.98, strokeColor: "#f5f3eb", strokeWidth: 0, shadowColor: "#20262c", shadowOffsetX: 0, shadowOffsetY: 0, shadowBlur: 0}),
-  [LABEL_STYLE_TYPE.CITY]: freezeStyle({fontFamilyId: "historical", fontFamilyName: null, fontSize: 11, fontWeight: 700, italic: false, letterSpacing: 0, color: "#343a40", opacity: 0.94, strokeColor: "#f5f3eb", strokeWidth: 0, shadowColor: "#343a40", shadowOffsetX: 0, shadowOffsetY: 0, shadowBlur: 0}),
+  [LABEL_STYLE_TYPE.STATE]: freezeStyle({fontFamilyId: "historicalDisplay", fontFamilyName: null, fontSize: 22, fontWeight: 650, italic: false, letterSpacing: 2.4, color: "#293038", opacity: 0.9, strokeColor: "#f5f2e8", strokeWidth: 0.03, shadowColor: "#293038", shadowOffsetX: 0, shadowOffsetY: 0, shadowBlur: 0}),
+  [LABEL_STYLE_TYPE.PROVINCE]: freezeStyle({fontFamilyId: "historical", fontFamilyName: null, fontSize: 12, fontWeight: 500, italic: false, letterSpacing: 0.7, color: "#734750", opacity: 0.82, strokeColor: "#f5f2e8", strokeWidth: 0, shadowColor: "#734750", shadowOffsetX: 0, shadowOffsetY: 0, shadowBlur: 0}),
+  [LABEL_STYLE_TYPE.CAPITAL]: freezeStyle({fontFamilyId: "historicalDisplay", fontFamilyName: null, fontSize: 13, fontWeight: 650, italic: false, letterSpacing: 0.1, color: "#20262c", opacity: 0.96, strokeColor: "#f5f3eb", strokeWidth: 0, shadowColor: "#20262c", shadowOffsetX: 0, shadowOffsetY: 0, shadowBlur: 0}),
+  [LABEL_STYLE_TYPE.CITY]: freezeStyle({fontFamilyId: "historical", fontFamilyName: null, fontSize: 11, fontWeight: 600, italic: false, letterSpacing: 0.05, color: "#343a40", opacity: 0.9, strokeColor: "#f5f3eb", strokeWidth: 0, shadowColor: "#343a40", shadowOffsetX: 0, shadowOffsetY: 0, shadowBlur: 0}),
   [LABEL_STYLE_TYPE.CUSTOM]: CUSTOM_LABEL_STYLE_DEFAULT,
   [LABEL_STYLE_TYPE.ZONE]: freezeStyle({...CUSTOM_LABEL_STYLE_DEFAULT})
 });

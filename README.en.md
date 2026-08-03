@@ -6,6 +6,10 @@ WebGL Fantasy Map Generator is made for worldbuilding, tabletop RPGs, alternate-
 
 [Try it online](https://fmg.mosuzi.top/) · [Quick start](#quick-start) · [Documentation](#documentation-guide)
 
+| Natural relief | State view |
+|---|---|
+| ![Natural terrain without political labels](./docs/assets/readme/showcase-relief-overview.png) | ![State view with borders, names, and settlements](./docs/assets/readme/showcase-atlas-overview.png) |
+
 ## From landscape to society
 
 Each map starts with its natural setting. Land and sea establish the outline; climate, water, and terrain shape one another; rivers cross uplands and plains; and biomes follow temperature and rainfall. There is no need to specify every detail in advance. Once the map is generated, thematic views show how these elements combine to shape it.

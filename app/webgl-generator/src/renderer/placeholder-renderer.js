@@ -58,6 +58,7 @@ import {
 } from "../runtime/city-visuals.js";
 import {isGeneratedLabelHidden} from "../runtime/label-edit-commands.js";
 import {estimateLabelTextBox, hasVisibleLabelShadow, labelStyleTypeForTarget, resolveLabelStyle} from "../runtime/label-style-registry.js";
+import {createDefaultLayerVisibility, DEFAULT_MAX_CITY_LABELS} from "../runtime/display-defaults.js";
 import {hasManualLabelPriorities, resolveLabelLayout, sortLabelItemsByPriority} from "../runtime/label-layout-registry.js";
 import {
   PROVINCE_COLLISION_OPACITY,
@@ -268,36 +269,9 @@ export class PlaceholderMapRenderer {
     this.colorMode = "height";
     this.visualTheme = resolveVisualTheme(DEFAULT_VISUAL_THEME_ID);
     this.viewOptions = {showOceanHeight: false, smoothCellBorders: true, diplomacySubjectId: null, visualTheme: this.visualTheme};
-    this.labelOptions = {maxCityLabels: 5000};
+    this.labelOptions = {maxCityLabels: DEFAULT_MAX_CITY_LABELS};
     this.unitPreferences = normalizeUnitPreferences();
-    this.layerVisibility = {
-      routes: true,
-      tradeFlows: false,
-      rivers: true,
-      oceanCurrents: true,
-      cities: true,
-      labels: true,
-      stateLabels: true,
-      provinceLabels: true,
-      population: true,
-      markers: true,
-      resources: true,
-      military: true,
-      warFronts: true,
-      zones: true,
-      zoneEvents: true,
-      zoneNatural: true,
-      zoneWilderness: true,
-      zoneLabels: true,
-      measurements: true,
-      scaleBar: true,
-      mapBadge: true,
-      coastline: true,
-      lakeShore: true,
-      stateBorders: true,
-      provinceBorders: true,
-      gridCells: false
-    };
+    this.layerVisibility = createDefaultLayerVisibility();
     this.camera = {scale: 1, offsetX: 0, offsetY: 0};
     this.routeBufferCamera = snapshotViewportCamera(this.camera);
     this.riverBufferCamera = snapshotViewportCamera(this.camera);
@@ -2671,7 +2645,7 @@ function expandBounds(bounds, padding) {
 }
 
 function getLabelCities(map, labelOptions = {}) {
-  const maxCityLabels = normalizeMaxCityLabels(labelOptions.maxCityLabels, 5000);
+  const maxCityLabels = normalizeMaxCityLabels(labelOptions.maxCityLabels, DEFAULT_MAX_CITY_LABELS);
   const candidates = [...map.settlements.cities]
     .filter(city => city && Number.isInteger(city.id))
     .filter(city => !isGeneratedLabelHidden(map, LABEL_TARGET_KIND.CITY, city.id))
@@ -4170,8 +4144,8 @@ function minLabelScale(city, rank, totalLabels = 48) {
   return 0.9 + rankRatio ** 0.72 * 5.2;
 }
 
-function labelLimitForScale(scale, maxCityLabels = 5000) {
-  const limit = normalizeMaxCityLabels(maxCityLabels, 5000);
+function labelLimitForScale(scale, maxCityLabels = DEFAULT_MAX_CITY_LABELS) {
+  const limit = normalizeMaxCityLabels(maxCityLabels, DEFAULT_MAX_CITY_LABELS);
   const t = smoothStep(0.55, 6.2, scale);
   return Math.min(limit, Math.max(8, Math.round(8 + (limit - 8) * t)));
 }

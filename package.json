@@ -20,6 +20,8 @@
     "start:app": "vite --config vite.config.mjs",
     "build": "pnpm run build:app",
     "build:app": "vite build --config vite.config.mjs",
+    "capture:readme-showcase": "vite build --config vite.config.mjs && node --no-warnings ./tools/webgl-generator-readme-showcase.mjs",
+    "regress:readme-showcase": "node --no-warnings ./tools/webgl-generator-readme-showcase-regression.mjs",
     "preview": "pnpm run preview:app",
     "preview:app": "vite preview --config vite.config.mjs",
     "profile:e2e": "node ./tools/webgl-generator-e2e-profile.mjs",

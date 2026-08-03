@@ -33,6 +33,8 @@ try {
   await page.evaluate(async () => {
     const result = await window.webglGeneratorApi.generate.newMap({confirm: true, seed: "stage-2-1", cellsTarget: 10000});
     if (!result?.ok) throw new Error(result?.error?.message || "默认地图生成失败");
+    const visible = window.webglGeneratorApi.layers.setVisible("oceanCurrents", true);
+    if (!visible?.ok) throw new Error(visible?.error?.message || "洋流图层开启失败");
   });
   await page.waitForFunction(() => window.__webglGeneratorApp?.map?.oceanCurrents?.currents?.length >= 5);
   await page.evaluate(() => document.getElementById("open-ocean-current-panel")?.click());

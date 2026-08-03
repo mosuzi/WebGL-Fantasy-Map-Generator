@@ -2,6 +2,7 @@
 import assert from "node:assert/strict";
 import {readFile} from "node:fs/promises";
 import {bindLabelNamingPanelTrigger} from "../app/webgl-generator/src/ui/label-naming-panel-trigger.js";
+import {DEFAULT_LAYER_VISIBILITY} from "../app/webgl-generator/src/runtime/display-defaults.js";
 
 const [controlPanelSource, toolbarSource, shortcutSource, runtimePanelSource, runtimeAppSource, labelPanelSource, stylesSource] = await Promise.all([
   readFile(new URL("../app/webgl-generator/src/ui/vue/components/ControlPanel.vue", import.meta.url), "utf8"),
@@ -51,8 +52,8 @@ assert(layerSource.includes('{id: "zoneComposite", label: "全部地区", layers
 for (const [id, label] of [["zoneEvents", "事件地区"], ["zoneNatural", "自然地区"], ["zoneWilderness", "自动无人区"], ["zoneLabels", "地区名称"]]) {
   assert(layerSource.includes(`{id: "${id}", label: "${label}"}`), `地区图层缺少独立入口：${label}`);
 }
-assert.match(layerSource, /id: "gridCells", label: "网格单元", defaultVisible: false/, "网格单元无偏好默认值没有关闭");
-assert.match(controlPanelSource, /function isLayerVisible\(layer\)\s*\{[\s\S]*?typeof preferred === "boolean"[\s\S]*?return config\?\.defaultVisible !== false;/, "Vue 图层状态没有按显式偏好优先、配置默认值兜底");
+assert.equal(DEFAULT_LAYER_VISIBILITY.gridCells, false, "网格单元无偏好默认值没有关闭");
+assert.match(controlPanelSource, /function isLayerVisible\(layer\)\s*\{[\s\S]*?typeof preferred === "boolean"[\s\S]*?return DEFAULT_LAYER_VISIBILITY\[layer\] !== false;/, "Vue 图层状态没有按显式偏好优先、集中默认值兜底");
 assert.match(controlPanelSource, /function layerToggleState\(layer\)\s*\{[\s\S]*?members\.filter\(isLayerVisible\)[\s\S]*?return "mixed";/, "复合图层的 Vue 计算路径没有复用独立底层状态");
 assert.match(runtimePanelSource, /querySelectorAll\("\[data-layer-group\]"\)[\s\S]*?aria-pressed[\s\S]*?"mixed"/, "复合图层入口缺少三态同步");
 assert.match(stylesSource, /\.ui-select-el \.el-select__wrapper\s*\{[\s\S]*?padding:\s*0 8px 0 10px/, "共享下拉箭头没有靠近右边框");

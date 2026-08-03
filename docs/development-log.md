@@ -29489,3 +29489,32 @@ full 矩阵结果：
 - 首轮独立审查为 `BLOCK`：圆盘右下有明显接缝，favicon 专项以 reload 绕过缓存且未检查实际 SVG / 32 / 64 资源，城镇唯一性指纹可被 `data-*` 元数据伪造。限修后采用完整无缝圆盘；浏览器先以 `force-cache` 预热，再重新导航并核对实际链接摘要与像素；几何指纹剥离全部元数据，城市城墙、门、塔和屋舍另以实际 path 约束。原审查者复验和独立观察使终验均为 `ACCEPT`。
 - 应用图标、画布注册表、城市规模、标签净空、Marker 面板、选择标记、PNG 选项、地图迁移、生产 PNG crop、生产构建和差异检查通过；本机 `pnpm` 启动器因受限网络尝试访问 registry 失败，随后直接调用仓库已安装的同一 Vite 入口完成最新构建，共转换 `1295` 个模块。生产预览五个实际入口均为 `200` 且响应摘要匹配磁盘；SVG / 32px / 64px 四角透明、中心不透明、朱印红色像素为 `0`，圆环连续性最大相邻色差为 `49.74`。
 - 系统 Chrome 图鉴在 `1440 / 390 / 320px` 均为稳定卡 `80`、附加卡 `7`、裁切与横向溢出 `0`。真实 `10004 / 5968` grid / pack 地图模型与 DOM 均为城镇 `839`、Marker `44`、军事 `114`，picking 命中；`1440×900` PNG 与 DOM 同源，checksum / revision 不变。生产 PNG crop 的六态输出、相机恢复与越界拒绝通过，console、page、health 与 WebGL error 为 `0`。`source/` 零改动，本项未暂存、提交或推送，当前没有活动权威任务。
+
+# 2026-08-03：登记第 266 项——默认地图可读性与 README 展示截图
+
+- 用户希望 README 直接展示项目画布，但当前 fresh session 几乎打开全部图层，默认文字样式和全图信息密度不适合项目截图；用户明确允许示例地图使用非默认种子，并希望无需手工操作即可产出成图。
+- 隔离 CDP 调查在固定 `1440×960 / 10k / continents / 12 states / provincesRatio 30 / mountains-and-seas` 场景测得，现状国家 / 省份 / 城市标签约为 `12 / 256 / 98`；关闭省份、洋流、资源、军事、地区等专题图层并限制城市标签后约为 `12 / 0 / 20`。本机安装的是 `NotoSansSC-VF.ttf / NotoSerifSC-VF.ttf`，而现有 registry 只声明 `Noto Sans CJK SC / Noto Serif CJK SC`，会回退到其它字体。
+- 第 266 项冻结为三部分：集中 fresh session 默认图层并保留既有用户偏好；调整默认标签参数并把全局城市标签预算收敛到 `128`，不覆盖旧图显式样式；新增自行管理临时服务、隔离 Chrome / profile 和 CDP 的单命令，走正式 PNG 合成链生成 relief 与 atlas 两张 `1440×960` README 图片。产品默认继续开启没有首层恢复入口的 `population`，展示预设关闭它并显式保持 `128` 个城市标签上限。
+- 地图算法、schema、存档迁移、标签编辑 API、既有用户偏好、其它 README 结构、`source/` 和用户现有 Chrome / CDP 会话全部排除。本项按“实现、独立审查、隔离 CDP 终验”推进，登记时工作树除本项外只有既有未跟踪远程附件与临时目录；不提交或推送。
+- 截图工具最终采用仓库浏览器回归共用的 Playwright 系统 Chrome 持久上下文，并在隔离 profile 内建立专属 CDP session；不扫描或附着用户调试端口。直接管理 Chrome 150 远程调试端口的试验会触发其 Windows GPU persistent cache 锁竞态，已撤回；故障注入现可在应用就绪后按预期失败，并把隔离浏览器、静态服务和 profile 全部清至 `0`。
+
+# 2026-08-03：完成第 266 项——默认地图可读性与 README 展示截图
+
+- fresh session 图层默认值已集中到 `display-defaults.js`：保留地貌、河流、道路、城镇、常规 / 国家标签、人口、比例尺、海岸 / 湖岸与国界；默认关闭贸易流、洋流、省份、Marker / 资源、军事 / 战线、地区、测量、地图徽记和网格。城市标签上限统一为 `128`，已有用户逐项偏好和显式上限继续优先，岸线联动与 `tradeFlows` 不持久化语义不变。
+- 默认标签层级已收敛：国家 / 省份 / 首都 / 城市的字号、字重、字距、颜色和透明度同步到 registry 与 relief / atlas 主题；字体栈补入 Windows 实际安装的 `Noto Sans SC / Noto Serif SC`。旧图和地图级显式样式覆盖没有被回写或重置。
+- 新增 `capture:readme-showcase / regress:readme-showcase`。生成工具自行构建应用、启动动态端口本地服务、创建 workspace 内唯一隔离 Chrome profile，并在 Playwright 系统 Chrome 持久上下文中建立 CDP session 固定 `1440×960 / DPR 1`。固定 `mountains-and-seas / 10k / continents / 12 states / 30% provinces` 场景只生成一次 canonical 地图，随后经正式 `data.exportPNG` 分别导出 relief 与 atlas；中英文 README 引用同一组正式资产。
+- 两次 clean run 产物逐字节一致：relief 为 `394702 bytes / 72b860d37150b55dcea059c5f7c2002c8defcc9a680d2e8428e6544fcd503dd0`，atlas 为 `389947 bytes / 7c7998983fad64533e4f6229575ef9581e70db4a3b3068156a44d9935497d42c`。两张均为 `1440×960`，可见国家 / 省份 / 城市为 `12 / 0 / 10`，人工视觉检查确认同一世界构图一致、无管理叠层或边缘裁字。
+- fresh 默认、旧偏好覆盖与刷新持久化、空地图级标签覆盖、主题切换和 PNG 导出前后 checksum / revision 不变均在系统 Chrome 通过；console、page、health 与 WebGL error 为 `0`。正常和故障注入路径的 `fmg-readme-showcase-*` profile 均为 `0 → 0`；提权只读核对确认正式工具没有存活进程或监听残留，也没有触碰 Parent `31208` 的 ChatGPT Remote Chrome 树。早期已撤回的直接 CDP 试验曾遗留独立 PID `28948 / 9333 / readme-cdp-profile`，本轮按完整命令行精确确认后仅终止该任务自有 PID；最终任务 profile 参数进程和 `9333` 监听均为 `0`。
+- 标签样式、视觉主题、标签布局、政治碰撞、城市净空、地图迁移、API 数据兼容、控制信息架构、PNG 选项、默认标签浏览器、PNG crop 浏览器、README 展示静态门禁、生产构建和 `git diff --check` 通过，`source/` 零改动。独立代码复核与最终观察使均为 `ACCEPT`。本机全局 pnpm 11 尝试按 `packageManager` 切换到项目固定 pnpm 10 时受限于网络，最终直接运行 package script 中完全相同的本地 Vite 构建与 Node 出图本体完成验收；未暂存、提交或推送，当前没有活动权威任务。
+
+# 2026-08-03：登记第 267 项——README 自然地貌与国家视角分工
+
+- 用户指出当前两张图仍缺少明确的国家视角，并要求高度图隐藏国家名等标签、浅色图改为国家视角。现状工具在生成后只应用一套共享图层配置，再分别切换 relief / atlas 主题，因此两张图实际只是同一高度视图的主题换肤。
+- 第 267 项只调整 README 截图场景：relief 使用无标签、无城市 / 道路 / 政治边界的 `height` 自然地貌；atlas 使用带国家着色、国界、国家名、首都 / 城市及必要河流道路的 `states` 国家视图。固定种子、地图、尺寸、文件名、正式 PNG 导出、隔离 Chrome / CDP 和清理边界全部复用第 266 项；产品默认、标签样式、主题、算法、schema、偏好、`source/`、提交和推送均不在范围内。
+
+# 2026-08-03：完成第 267 项——README 自然地貌与国家视角分工
+
+- 截图工具不再用一套共享图层只换主题；`relief` 场景显式使用 `default + height`，只开河流、比例尺、海岸和湖岸，PNG overlay 同时关闭标签与城市图标；`states` 场景显式使用 `atlas + states`，开启道路、河流、城市、常规 / 国家标签、比例尺、岸线和国界，继续关闭省份及其它专题层。两者均在导出前逐键应用完整矩阵。
+- 首轮动态验证在 relief 等待阶段超时：隐藏道路后 renderer 合理保留 `routesDirty`，旧脚本仍无条件等待其清零。限修后稳定门禁只等待当前场景实际可见的动态图层，仍强制等待可见河流和 selection；没有改 renderer 或放宽正式 PNG 完成条件。工具同时增加服务、浏览器、API、地图、场景和兼容验证的阶段日志，便于后续定位。
+- 最新连续两次 clean run 逐字节一致：relief 为 `1440×960 / 246090 bytes / 7b96922b8fc7a2dc0d2cf7e8cf75719dd5efe9cc76a70aeb7c634becd0405257`，viewMode `height`，国家 / 省份 / 城市标签 `0 / 0 / 0`；atlas 为 `1440×960 / 285591 bytes / b19943c52fa5df608ddcea8df936d70e4f04b177c50f4c59ecf8614af4468967`，viewMode `states`，标签 `12 / 0 / 10`。人工查看确认第一张突出纯地形和河网，第二张国家着色、国界、国名和城镇层级清楚。
+- 生产构建、工具 / 回归语法、README 静态门禁、正式 PNG、旧偏好兼容、故障注入和清理通过；成功与注入失败后的 profile 均为 `0`，checksum / revision 不变，console、page、health 与 WebGL error 为 `0`。`git diff --check` 通过，`source/` 零改动；产品 fresh 默认、标签 registry、主题色、算法、schema 与用户偏好未改。本项未暂存、提交或推送，当前没有活动权威任务。

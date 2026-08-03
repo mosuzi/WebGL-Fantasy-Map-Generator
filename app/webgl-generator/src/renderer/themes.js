@@ -36,13 +36,13 @@ export const VISUAL_THEME_PRESETS = Object.freeze([
       routeMinor: [0.43, 0.38, 0.31, 0.64]
     },
     labels: {
-      city: [0.125, 0.145, 0.165, 0.97],
+      city: [0.125, 0.145, 0.165, 0.9],
       cityHalo: [0.96, 0.96, 0.93, 0.8],
-      capital: [0.125, 0.145, 0.165, 0.98],
+      capital: [0.125, 0.145, 0.165, 0.96],
       capitalHalo: [0.96, 0.96, 0.93, 0.82],
-      state: [0.16, 0.19, 0.22, 0.94],
+      state: [0.16, 0.19, 0.22, 0.9],
       stateShadow: [0.96, 0.95, 0.91, 0.8],
-      province: [0.541, 0.141, 0.204, 0.94],
+      province: [0.451, 0.278, 0.314, 0.82],
       provinceShadow: [0.96, 0.95, 0.91, 0.74],
       custom: [0.15, 0.18, 0.2, 0.96],
       customHalo: [0.96, 0.96, 0.93, 0.84],
@@ -129,9 +129,9 @@ export const VISUAL_THEME_PRESETS = Object.freeze([
       routeMinor: [0.45, 0.38, 0.3, 0.56]
     },
     labels: {
-      city: [0.08, 0.13, 0.15, 1],
+      city: [0.08, 0.13, 0.15, 0.9],
       cityHalo: [0.96, 0.98, 0.92, 0.72],
-      state: [0.2, 0.28, 0.34, 0.92],
+      state: [0.2, 0.28, 0.34, 0.9],
       stateShadow: [0.94, 0.97, 0.9, 0.56],
       custom: [0.08, 0.13, 0.15, 1],
       customBackground: [0.92, 0.96, 0.9, 0.72],

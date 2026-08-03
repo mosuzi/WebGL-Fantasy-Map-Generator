@@ -1,4 +1,5 @@
 import {readControlPreferences, updateControlPreferences} from "../ui/panel.js";
+import {DEFAULT_MAX_CITY_LABELS} from "./display-defaults.js";
 import {areaUnitForDistanceUnit, formatArea as formatDisplayArea, formatDistance as formatDisplayDistance, normalizeUnitPreferences, precipitationUnitsToMillimeters} from "../ui/display-units.js";
 import {createCanvasPngBlob, createCompressedMapDocumentBlob, createHeightmapPngBlob, createMapDocument, createMapFeatureGeoJson, createMapGeoJson, downloadCanvasPng, downloadCompressedMapDocument, downloadHeightmapPng, downloadText, mapFileBaseName, stringifyMapDocument} from "./map-file-io.js";
 import {apiCall} from "./api-result.js";
@@ -1263,7 +1264,7 @@ function buildLayerSnapshot(state, documentRef) {
       showOceanHeight: Boolean(preferences.showOceanHeight),
       smoothCellBorders: Boolean(preferences.smoothCellBorders),
       showHoverInfo: Boolean(preferences.showHoverInfo),
-      maxCityLabels: Number(preferences.maxCityLabels) || 5000
+      maxCityLabels: Number(preferences.maxCityLabels) || DEFAULT_MAX_CITY_LABELS
     },
     units: {...(preferences.units || {})}
   };

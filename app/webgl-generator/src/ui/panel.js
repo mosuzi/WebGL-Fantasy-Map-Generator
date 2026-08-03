@@ -22,6 +22,7 @@ import {formatHistoryStats} from "./history-format.js";
 import {buildHoverRowEntries, formatHoverObjectTitle, hoverViewTitle, isNamedHoverRoute} from "./hover-overlay-content.js";
 import {updateStartupLoadingStatus} from "./startup-loading.js";
 import {buildShortcutDisplayModel} from "../runtime/keyboard-shortcuts.js";
+import {DEFAULT_MAX_CITY_LABELS} from "../runtime/display-defaults.js";
 
 export const CONTROL_PREFERENCES_KEY = "webgl-generator-control-preferences";
 const CRITICAL_CONTROL_CHANGE_DEBOUNCE_MS = 180;
@@ -473,7 +474,7 @@ function setOutputText(documentRef, id, value) {
 
 function normalizeMaxCityLabels(value) {
   const number = Number(value);
-  if (!Number.isFinite(number)) return 5000;
+  if (!Number.isFinite(number)) return DEFAULT_MAX_CITY_LABELS;
   return Math.max(8, Math.min(5000, Math.round(number)));
 }
 
@@ -778,7 +779,7 @@ function syncLabelLimitControlBounds(documentRef, map, stats) {
 
 function formatCityLabelLimit(map, stats) {
   const cityTotal = map.settlements?.cities?.length || map.settlements?.metadata?.cities || 0;
-  const configured = normalizeMaxCityLabels(stats.labelOptions?.maxCityLabels ?? 5000);
+  const configured = normalizeMaxCityLabels(stats.labelOptions?.maxCityLabels ?? DEFAULT_MAX_CITY_LABELS);
   return String(cityTotal ? Math.min(configured, cityTotal) : configured);
 }
 

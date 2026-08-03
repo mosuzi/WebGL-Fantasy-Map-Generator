@@ -648,6 +648,7 @@ import {useDraggableFloatingPanel} from "../composables/use-draggable-floating-p
 import {useManagedOverlay} from "../composables/use-managed-overlay.js";
 import {visualThemeOptions} from "../../../renderer/themes.js";
 import {LABEL_FONT_FAMILIES, LABEL_STYLE_TYPES, LOCAL_LABEL_FONT_ID, hasVisibleLabelShadow, normalizeLocalFontFamilyName, resolveLabelStyle} from "../../../runtime/label-style-registry.js";
+import {DEFAULT_LAYER_VISIBILITY} from "../../../runtime/display-defaults.js";
 import {createLocalFontFamilyOptions} from "../../../runtime/local-font-catalog.js";
 import {
   NUMBER_ABBREVIATION_OPTIONS,
@@ -1002,8 +1003,7 @@ const regenerationFeedback = ref("");
 function isLayerVisible(layer) {
   const preferred = preferences.value.layers?.[layer];
   if (typeof preferred === "boolean") return preferred;
-  const config = layers.find(item => item.id === layer);
-  return config?.defaultVisible !== false;
+  return DEFAULT_LAYER_VISIBILITY[layer] !== false;
 }
 
 function layerToggleState(layer) {

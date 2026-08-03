@@ -11,13 +11,13 @@ import {
 import {estimateLabelTextBox, resolveLabelStyle} from "../app/webgl-generator/src/runtime/label-style-registry.js";
 
 const stateStyle = {fontSize: 30, letterSpacing: 2, strokeWidth: 0, shadowOffsetX: 0, shadowOffsetY: 0, shadowBlur: 0};
-const provinceStyle = {fontSize: 18, letterSpacing: 1.2, strokeWidth: 0, shadowOffsetX: 0, shadowOffsetY: 0, shadowBlur: 0};
+const provinceStyle = {fontSize: 18, letterSpacing: 0.2, strokeWidth: 0, shadowOffsetX: 0, shadowOffsetY: 0, shadowBlur: 0};
 const stateItem = {targetKind: "state", targetId: 1, text: "北境共和国", rotation: 0, resolvedStyle: stateStyle};
 const screen = {x: 320, y: 180};
 const viewport = {width: 640, height: 360};
 
 const straight = createPoliticalLabelGlyphLayout(stateItem.text, stateStyle, {targetKind: "state", rotation: 0, bend: 0});
-assert.equal(straight.spacing, 4, "国家名称必须保留不少于 4px 的稳定字距");
+assert.equal(straight.spacing, 2.4, "国家名称必须保留不少于 2.4px 的稳定字距");
 assert(straight.glyphs.every(glyph => glyph.y === 0 && glyph.angle === 0), "直线候选不应产生弯曲偏移");
 for (let index = 1; index < straight.glyphs.length; index++) {
   assert(straight.glyphs[index].x > straight.glyphs[index - 1].x, "政治标签字形必须按稳定顺序分布");
@@ -44,6 +44,8 @@ assert.deepEqual(
 );
 
 const provinceItem = {targetKind: "province", targetId: 2, text: "霜原行省", rotation: 0, resolvedStyle: provinceStyle};
+const provinceStraight = createPoliticalLabelGlyphLayout(provinceItem.text, provinceStyle, {targetKind: "province", rotation: 0, bend: 0});
+assert.equal(provinceStraight.spacing, 0.7, "省份名称必须保留不少于 0.7px 的稳定字距");
 const impossibleObstacle = {left: -1000, right: 1000, top: -1000, bottom: 1000};
 const fallback = resolvePoliticalLabelPlacement({item: provinceItem, screen, obstacles: [impossibleObstacle], viewport, padding: 6});
 assert.equal(fallback.collides, true, "无解样本必须返回最佳碰撞候选供省份降级显示");
@@ -74,7 +76,7 @@ assert.match(mapIoSource, /querySelectorAll\("\.political-label-glyph"\)[\s\S]*c
 
 console.log(JSON.stringify({
   ok: true,
-  spacing: {state: straight.spacing, provinceMinimum: 2.5},
+  spacing: {state: straight.spacing, province: provinceStraight.spacing},
   curves: {upwardMiddleY: upward.glyphs[middle].y, downwardMiddleY: downward.glyphs[middle].y},
   avoidedCandidate: {index: avoided.candidateIndex, bend: avoided.bend, anchor: avoided.anchor},
   fallback: {candidate: fallback.candidateIndex, opacity: PROVINCE_COLLISION_OPACITY},

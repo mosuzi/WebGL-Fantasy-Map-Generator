@@ -24,6 +24,7 @@
   - `audits/compound-semantic-action-matrix.md`：权威任务第 204 项全游戏复合语义规则事务、AI 规划器配方和公开 API / Cell 动作覆盖矩阵。
 - `deployment/`：部署说明和线上环境约定。
 - `task-notes/`：可入库的专题计划、评估记录、执行细则和功能积压。新增专题前先读 `task-notes/README.md`，并同步更新该索引。
+- `assets/readme/`：由仓库内确定性工具生成、需要随中英文 README 长期入库的展示图片；本地调查截图仍放在 `generated/`。
 
 ## 本地或生成内容
 

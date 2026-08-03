@@ -2,6 +2,7 @@ import {useLocalStorage} from "@vueuse/core";
 import {defineStore} from "pinia";
 import {normalizeVisualThemeId} from "../../../renderer/themes.js";
 import {DEFAULT_UNIT_PREFERENCES, normalizeUnitPreferences} from "../../display-units.js";
+import {DEFAULT_MAX_CITY_LABELS} from "../../../runtime/display-defaults.js";
 
 export const CONTROL_PREFERENCES_KEY = "webgl-generator-control-preferences";
 
@@ -14,7 +15,7 @@ const DEFAULT_CONTROL_PREFERENCES = Object.freeze({
   showHoverInfo: true,
   toolbarCollapsed: false,
   climateRangeRatioLocked: true,
-  maxCityLabels: 5000,
+  maxCityLabels: DEFAULT_MAX_CITY_LABELS,
   units: Object.freeze({...DEFAULT_UNIT_PREFERENCES}),
   layers: Object.freeze({})
 });

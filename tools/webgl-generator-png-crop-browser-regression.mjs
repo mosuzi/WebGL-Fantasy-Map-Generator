@@ -29,9 +29,13 @@ try {
   const page = await context.newPage();
   page.setDefaultTimeout(timeoutMs);
   const consoleErrors = [];
+  const performanceConsoleErrors = [];
   const pageErrors = [];
   page.on("console", message => {
-    if (message.type() === "error") consoleErrors.push(message.text());
+    if (message.type() !== "error") return;
+    const text = message.text();
+    if (/\[FMG health\] (?:main-thread-long-task|render-frame-gap)/.test(text)) performanceConsoleErrors.push(text);
+    else consoleErrors.push(text);
   });
   page.on("pageerror", error => pageErrors.push(error.message));
   await page.goto(`http://${host}:${port}?healthClear=1`, {waitUntil: "domcontentloaded", timeout: timeoutMs});
@@ -41,6 +45,8 @@ try {
     if (!generated?.ok) throw new Error(generated?.error?.message || "地图生成失败");
     const measurement = window.webglGeneratorApi.edit.measurements.save([{x: 360, y: 240}, {x: 720, y: 480}, {x: 960, y: 280}], {name: "PNG 测量叠层"});
     if (!measurement?.ok) throw new Error(measurement?.error?.message || "测量对象创建失败");
+    const visible = window.webglGeneratorApi.layers.setVisible("measurements", true);
+    if (!visible?.ok) throw new Error(visible?.error?.message || "测量图层开启失败");
     return window.webglGeneratorApi.info.mapSummary().data;
   });
 
@@ -86,7 +92,7 @@ try {
   }
   const report = {
     generatedAt: new Date().toISOString(),
-    browser: {channel: browserChannel, headless: !args.headful, consoleErrors, pageErrors},
+    browser: {channel: browserChannel, headless: !args.headful, consoleErrors, performanceConsoleErrors, pageErrors},
     generation,
     exports,
     rejection,

@@ -183,7 +183,7 @@
 
 本节是唯一权威任务清单。README、专题文档和历史日志中的“缺口”“下一步”只提供来源与设计背景，不能覆盖这里的编号、顺序和最小验收。已验收能力不得重新计为待办。
 
-> **执行门禁（2026-08-03）**：第 45～52、54～225、227～265 项已完成，第 53 项已移除；第 226 项本地完成、远端 Wiki 发布仍受 GitHub 私有仓库套餐阻塞。当前没有活动权威任务，不从 README、历史日志或专题文档扩展其它任务。
+> **执行门禁（2026-08-03）**：第 45～52、54～225、227～267 项已完成，第 53 项已移除；第 226 项本地完成、远端 Wiki 发布仍受 GitHub 私有仓库套餐阻塞。当前没有活动权威任务；不从 README、历史日志或专题文档扩展其它任务。
 
 当前 API 基线为：`window.webglGeneratorApi` 覆盖 `17` 个命名空间、`316` 个公开方法和 `179` 个编辑方法，稳定等级为 `308 / 7 / 1`；`316 / 316` 方法可通过 `info.describe` 发现，`planner.listRecipes / getRecipe` 只读公开 `10` 个配方和 `43` 个顶层步骤，`objects` 覆盖 `20` 类对象，`cells` 已提供八个读取、定位、扫描与动作预检方法。完整能力矩阵为 `1196` 行、`covered 1122 / excluded 74 / deferred 0 / gap 0`；复合语义矩阵为 `79` 个动作、`69` 个完整规则事务与 `10` 个玩法配方，`316` 个公开方法全部完成事务分类，结构缺口为 `0`。
 
@@ -1287,6 +1287,24 @@
   - 复核记录：首轮独立审查以 `BLOCK` 指出右下补绘接缝、favicon 回归绕过缓存、城镇唯一性可被元数据伪造。限修后弃用拼接稿、改为完整无缝圆盘；浏览器先预热实际链接缓存再重新导航，并逐项核对 SVG、32px、64px、Apple Touch Icon 与 manifest 的响应摘要；城镇指纹和城市结构改为直接几何断言。原审查者复验与独立观察使终验均为 `ACCEPT`。
   - 验收记录：应用图标静态专项、注册表、城市规模、标签净空、Marker 面板、选择标记、PNG 选项、旧图迁移、生产 PNG crop、生产构建与 `git diff --check` 通过；生产构建转换 `1295` 个模块。生产预览的五个实际图标入口均为 `200` 且命中当前磁盘摘要，SVG / 32px / 64px 四角透明、中心不透明、朱印红色像素为 `0`，圆环连续性最大相邻色差为 `49.74`。系统 Chrome 图鉴在 `1440 / 390 / 320px` 均为稳定卡 `80`、附加卡 `7`、裁切与横向溢出 `0`；真实 `10004 / 5968` grid / pack 地图中模型与 DOM 均为城镇 `839`、Marker `44`、军事 `114`，picking 命中，`1440×900` PNG 与 DOM 同源，checksum / revision 不变。console、page、health 与 WebGL error 为 `0`；`source/` 零改动，未提交或推送，当前没有活动权威任务。
   - 专题施工图：`docs/task-notes/app-and-canvas-icon-system.md`。
+
+- **权威任务第 266 项：优化默认地图展示，并提供零操作 README 截图生成链。** `已完成；来源：用户直接要求`
+  - 范围：集中 fresh session 的默认图层可见性，保留地貌、河流、道路、城市、国家名称、人口、比例尺、海岸 / 湖岸与国界等核心信息，把洋流、省份边界 / 名称、Marker / 资源点、军事 / 战线、地区、测量、地图徽记和网格等专题或截图噪声默认关闭；既有本地用户偏好继续覆盖默认值。收敛默认城市标签上限并改善国家、省份、首都和城市的默认字号、字重、间距、颜色与透明度，同时补齐本机实际可用的 Noto 简体中文字体名；旧图及用户显式样式不被重写。
+  - README 展示：新增一条无需人工操作的确定性生成命令，自行启动临时静态服务和隔离的系统 Chrome，通过 CDP 驱动固定 `1440×960`、`10k`、`continents`、`12` 国、`30%` 省份、种子 `mountains-and-seas` 的地图；显式应用不含人口、资源和管理叠层的展示预设，分别从正式 PNG 合成链输出 relief 与 atlas 两张长期入库图片，并在中英文 README 接入。
+  - 最小验收：fresh session 的默认图层、字体栈、默认标签参数和城市标签上限有静态 / 浏览器门禁；单命令能在没有既有浏览器会话、用户输入或网络依赖的情况下确定性重建两张 `1440×960` PNG，输出前后 checksum / revision 不变，工具可自动清理服务、Chrome 与临时 profile；README 引用存在；生产构建、标签专项、PNG 专项、系统 Chrome 视觉检查和 `git diff --check` 通过。
+  - 排除：不修改地图生成算法、数据 schema、存档迁移、人口语义、标签编辑 API、用户已有图层 / 标签偏好、其它 README 文案结构或 `source/`；截图工具不得连接、刷新或关闭用户现有 Chrome / CDP 会话，不引入在线字体或其它网络依赖。
+  - 执行边界：全局默认仍保留没有首层恢复开关的 `population`，全局与 README 展示的城市标签上限均固定为 `128`；README 展示预设另行关闭人口、资源等附加信息。实施期间只允许施工、专项回归与隔离 CDP 调试，独立审查和观察使终验完成后才标记完成。
+  - 实现记录：新增单一 `display-defaults.js` 作为 renderer、runtime、Vue 面板与回归的 fresh 默认来源；显式旧 `localStorage` 偏好继续优先，岸线联动与 `tradeFlows` 不持久化语义保持。标签 registry 与 relief / atlas 主题同步收敛国家、省份、首都和城市层级，字体栈补入 `Noto Sans SC / Noto Serif SC`，地图级显式覆盖仍按原优先级生效。截图工具自行启动动态端口静态服务、Playwright 系统 Chrome 隔离 profile 与专属 CDP session，调用正式 `data.exportPNG` 输出 `showcase-relief-overview.png / showcase-atlas-overview.png`，不使用页面截图。
+  - 复核记录：首轮独立代码复核和最终观察使均为 `ACCEPT`。系统 Chrome 验证 fresh 默认、`128` 上限、旧偏好覆盖与刷新持久化、空地图级标签覆盖、导出前后 checksum / revision 不变；正常和故障注入路径 profile 均为 `0 → 0`，存活 Chrome 中任务 profile 参数与旧 `9333` 监听均为 `0`，没有终止用户 Chrome 会话。
+  - 验收记录：两张成品均为 `1440×960`，连续 clean run 摘要稳定；relief SHA-256 为 `72b860d37150b55dcea059c5f7c2002c8defcc9a680d2e8428e6544fcd503dd0`，atlas 为 `7c7998983fad64533e4f6229575ef9581e70db4a3b3068156a44d9935497d42c`。标签样式、主题、布局、政治碰撞、城市净空、地图迁移、API 兼容、控制信息架构、PNG 选项、默认标签与 PNG crop 浏览器专项、生产构建、README 静态门禁和 `git diff --check` 通过；console、page、health 与 WebGL error 为 `0`，`source/` 零改动。本机全局 pnpm 11 离线切换项目固定 pnpm 10 时受限，最终以 package script 完全相同的本地 Vite + Node 本体完成构建和出图验收；本项未提交或推送，当前没有活动权威任务。
+
+- **权威任务第 267 项：区分 README 自然地貌与国家政治视角。** `已完成；来源：用户直接要求`
+  - 范围：沿用第 266 项同一固定地图与两张 `1440×960` 文件；relief 场景固定 `height` 视图，关闭国家 / 城市等全部标签、城市图标、道路和政治边界，只保留地貌、岸线、河流与比例尺；atlas 场景固定 `states` 视图，保留国家着色、国界、国家名称、首都 / 城市、河流、道路、岸线与比例尺，继续关闭省份、人口、Marker / 资源、军事、地区和测量。
+  - README：中英文表头、alt 和说明分别改为“自然地貌 / 国家视角”，不再把 relief 描述成国家与城市概览，也不再把浅色图仅描述为同一世界的主题换肤。
+  - 最小验收：截图工具逐场景应用独立 `viewMode + layers`，relief 的国家 / 省份 / 城市可见标签均为 `0` 且政治边界关闭；atlas 为 `states` 视图，国家标签与城市标签均大于 `0`、省份标签为 `0`、国界开启。两张图继续走正式 PNG 导出，尺寸、checksum / revision 不变、连续运行确定性、错误面和清理门禁不退化；系统 Chrome 与人工视觉检查确认两张图职责清楚，`source/` 零改动。
+  - 排除：不修改产品 fresh 默认、标签 registry、主题配色、地图生成算法、schema、用户偏好、输出尺寸 / 种子或其它 README 结构；本项不提交或推送。
+  - 实现记录：截图工具新增 `relief / states` 两个完整场景契约，每个场景独立声明 theme、viewMode、完整图层矩阵和 PNG overlay；导出前依次调用正式 `layers.setTheme / setViewMode / setVisible / fitView`。旧共享 profile 被移除，动态图层稳定门禁只等待当前场景实际可见的路线 / 贸易流 / 河流，避免隐藏道路后 `routesDirty` 合理保留却导致无效超时。中英文 README 表头与 alt 已改为“自然地貌 / 国家视角”。
+  - 验收记录：生产构建与隔离系统 Chrome 通过；relief 为 `height / 246090 bytes / 7b96922b8fc7a2dc0d2cf7e8cf75719dd5efe9cc76a70aeb7c634becd0405257`，可见国家 / 省份 / 城市标签 `0 / 0 / 0`；atlas 为 `states / 285591 bytes / b19943c52fa5df608ddcea8df936d70e4f04b177c50f4c59ecf8614af4468967`，可见标签 `12 / 0 / 10`。连续两次 clean run 摘要一致，人工视觉确认自然地貌无政治噪声、国家图政治着色与国界清楚；故障注入按预期失败且 profile 为 `0`，console、page、health 与 WebGL error 为 `0`。README 静态门禁、语法、`git diff --check` 与 `source/` 零改动通过；未提交或推送，当前没有活动权威任务。
 
 - **第 263～264 项统一执行约束。**
   - 专题施工图：`docs/task-notes/app-and-canvas-icon-system.md`。

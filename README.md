@@ -6,6 +6,10 @@ WebGL 幻想地图生成器适合世界构建、TRPG 主持、架空历史创作
 
 [在线体验](https://fmg.mosuzi.top/) · [快速开始](#快速开始) · [文档导览](#文档导览)
 
+| 自然地貌 | 国家视角 |
+|---|---|
+| ![无政治标签的山海自然地貌](./docs/assets/readme/showcase-relief-overview.png) | ![浅色国家视角下的国界、国名与城镇](./docs/assets/readme/showcase-atlas-overview.png) |
+
 ## 从地貌到人文
 
 新地图先确定自然环境。陆地与海洋构成轮廓，气候、水文和地貌再影响河流与生物群系的分布。生成时不必预先规定每个细节。完成后，专题视图可以帮助了解这些要素之间的关系。
