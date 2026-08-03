@@ -7,8 +7,8 @@ const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const sourceDir = join(repoRoot, "source", "Fantasy-Map-Generator");
 const playwright = createRequire(join(sourceDir, "package.json"))("playwright");
 const publicDir = join(repoRoot, "app", "webgl-generator", "public");
-const master = await readFile(join(publicDir, "app-icon-master.jpg"));
-const masterDataUrl = `data:image/jpeg;base64,${master.toString("base64")}`;
+const master = await readFile(join(publicDir, "app-icon-circle-master.png"));
+const masterDataUrl = `data:image/png;base64,${master.toString("base64")}`;
 const svg = iconSvg(masterDataUrl);
 await writeFile(join(publicDir, "app-icon.svg"), svg, "utf8");
 const outputs = new Map([
@@ -41,16 +41,16 @@ try {
 console.log(JSON.stringify({ok: true, outputs: [...outputs.values()]}, null, 2));
 
 function iconSvg(dataUrl) {
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 1280" role="img" aria-labelledby="title description">
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-labelledby="title description">
   <title id="title">WebGL 幻想地图生成器</title>
-  <desc id="description">海岸、山脉、河流、路线、城池与朱红方印组成的微缩地图</desc>
-  <image id="app-icon-master-image" width="1280" height="1280" preserveAspectRatio="xMidYMid meet" href="${dataUrl}" />
+  <desc id="description">海岸、山脉、河流、路线与环城城池组成的圆形旧纸地图</desc>
+  <image id="app-icon-circle-master-image" width="1024" height="1024" preserveAspectRatio="xMidYMid meet" href="${dataUrl}" />
 </svg>
 `;
 }
 
 function imageDocument(dataUrl) {
-  return `<!doctype html><style>html,body,img{width:100%;height:100%;margin:0}img{display:block;object-fit:contain}</style><img src="${dataUrl}" alt="">`;
+  return `<!doctype html><style>html,body,img{width:100%;height:100%;margin:0;background:transparent}img{display:block;object-fit:contain}</style><img src="${dataUrl}" alt="">`;
 }
 
 function previewDocument(dataUrl) {
