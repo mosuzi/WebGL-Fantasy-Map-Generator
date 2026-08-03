@@ -19,6 +19,11 @@ let browser;
 try {
   browser = await playwright.chromium.launch({headless: true, channel: "chrome"});
   const context = await browser.newContext({viewport: viewports[0], deviceScaleFactor: 1});
+  await context.route("**/cloud-provider-config.js", route => route.fulfill({
+    status: 200,
+    contentType: "application/javascript; charset=utf-8",
+    body: 'globalThis.__FMG_CLOUD_PROVIDER_CONFIG__={version:1,providers:{dropbox:{appKey:"",redirectUri:""},googleDrive:{clientId:""}}};'
+  }));
   const page = await context.newPage();
   page.setDefaultTimeout(60000);
   const consoleErrors = [];

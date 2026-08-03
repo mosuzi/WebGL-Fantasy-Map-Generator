@@ -10,15 +10,19 @@ const GOOGLE_DRIVE_API_URL = "https://www.googleapis.com/drive/v3";
 const GOOGLE_DRIVE_UPLOAD_URL = "https://www.googleapis.com/upload/drive/v3";
 const GOOGLE_TOKEN_SCRIPT = "https://accounts.google.com/gsi/client";
 const GOOGLE_APP_PROPERTY = Object.freeze({key: "fmgWebglMap", value: "true"});
+const DROPBOX_HANDSHAKE_MAX_AGE = 10 * 60 * 1000;
 
-export function readCloudStorageConfig(env = import.meta.env || {}) {
+export function readCloudStorageConfig(env = import.meta.env || {}, runtimeConfig = globalThis.__FMG_CLOUD_PROVIDER_CONFIG__) {
+  const providers = runtimeConfig?.providers && typeof runtimeConfig.providers === "object" ? runtimeConfig.providers : runtimeConfig || {};
+  const dropbox = providers?.dropbox || {};
+  const googleDrive = providers?.googleDrive || {};
   return Object.freeze({
     dropbox: Object.freeze({
-      appKey: String(env.VITE_FMG_DROPBOX_APP_KEY || "").trim(),
-      redirectUri: String(env.VITE_FMG_DROPBOX_REDIRECT_URI || "").trim()
+      appKey: firstConfiguredValue(dropbox.appKey, env.VITE_FMG_DROPBOX_APP_KEY),
+      redirectUri: firstConfiguredValue(dropbox.redirectUri, env.VITE_FMG_DROPBOX_REDIRECT_URI)
     }),
     googleDrive: Object.freeze({
-      clientId: String(env.VITE_FMG_GOOGLE_CLIENT_ID || "").trim()
+      clientId: firstConfiguredValue(googleDrive.clientId, env.VITE_FMG_GOOGLE_CLIENT_ID)
     })
   });
 }
@@ -26,7 +30,8 @@ export function readCloudStorageConfig(env = import.meta.env || {}) {
 export function createCloudStorageRegistry(options = {}) {
   const view = options.view || globalThis;
   const fetchImpl = options.fetchImpl || view.fetch?.bind(view);
-  const config = options.config || readCloudStorageConfig(options.env);
+  const runtimeConfig = options.runtimeConfig === undefined ? view.__FMG_CLOUD_PROVIDER_CONFIG__ : options.runtimeConfig;
+  const config = options.config || readCloudStorageConfig(options.env, runtimeConfig);
   const providers = new Map();
   const listeners = new Set();
   const notify = () => listeners.forEach(listener => listener(listProviderStates()));
@@ -37,8 +42,11 @@ export function createCloudStorageRegistry(options = {}) {
   const messageHandler = event => {
     if (event.origin !== safeOrigin(view)) return;
     const payload = event.data;
-    if (payload?.type !== "fmg-cloud-oauth-result" || payload.provider !== "dropbox") return;
-    providers.get("dropbox")?.acceptOAuthResult(payload);
+    if (payload?.provider !== "dropbox") return;
+    const provider = providers.get("dropbox");
+    if (payload.type === "fmg-cloud-oauth-callback") {
+      void provider?.handleOAuthCallbackMessage(payload, event.source);
+    }
   };
   view.addEventListener?.("message", messageHandler);
 
@@ -70,10 +78,17 @@ export function createCloudStorageRegistry(options = {}) {
   }
 }
 
+function firstConfiguredValue(...values) {
+  return values.map(value => String(value || "").trim()).find(Boolean) || "";
+}
+
 export function createDropboxProvider({view = globalThis, fetchImpl = view.fetch?.bind(view), config = {}, notify = () => {}, oauth = {}} = {}) {
   let accessToken = "";
   let expiresAt = 0;
   let pendingState = "";
+  let pendingPopup = null;
+  let callbackInFlight = false;
+  let authorizationError = "";
   const configurationError = validateDropboxConfiguration(config, view);
   const configured = !configurationError;
   const sessionKey = "fmg-cloud-oauth:dropbox";
@@ -89,17 +104,21 @@ export function createDropboxProvider({view = globalThis, fetchImpl = view.fetch
     overwriteFile,
     downloadFile,
     handleOAuthCallback,
+    handleOAuthCallbackMessage,
     acceptOAuthResult
   };
 
   function getState() {
-    return publicProviderState("dropbox", "Dropbox", configured, tokenValid(), configFields(config, ["appKey", "redirectUri"]), configurationError);
+    return publicProviderState("dropbox", "Dropbox", configured, tokenValid(), configFields(config, ["appKey", "redirectUri"]), configurationError, authorizationError);
   }
 
   async function connect() {
     assertConfigured(configured, "Dropbox");
+    if (callbackInFlight) throw new Error("正在完成 Dropbox 授权，请稍候。");
     const verifier = oauth.createVerifier?.() || createRandomUrlToken(view, 64);
     const state = oauth.createState?.() || createRandomUrlToken(view, 32);
+    authorizationError = "";
+    callbackInFlight = false;
     pendingState = state;
     const handshake = JSON.stringify({verifier, state, createdAt: Date.now()});
     sessionStorageRef(view)?.setItem(sessionKey, handshake);
@@ -111,6 +130,7 @@ export function createDropboxProvider({view = globalThis, fetchImpl = view.fetch
       popup?.close?.();
       clearPendingHandshake();
       pendingState = "";
+      pendingPopup = null;
       throw error;
     }
     const params = new URLSearchParams({
@@ -125,35 +145,80 @@ export function createDropboxProvider({view = globalThis, fetchImpl = view.fetch
     });
     const url = `${DROPBOX_AUTH_URL}?${params}`;
     const oauthPopup = oauth.open ? oauth.open(url, {handshake, sessionKey}) : popup;
+    pendingPopup = oauthPopup || null;
     if (oauthPopup && !oauth.open) {
       try {
         oauthPopup.sessionStorage?.setItem?.(sessionKey, handshake);
         oauthPopup.location?.replace?.(url);
       } catch {
         oauthPopup.close?.();
-        view.location?.assign?.(url);
-        return {started: true, popup: false, authorizationUrl: url};
+        clearPendingHandshake();
+        pendingState = "";
+        pendingPopup = null;
+        throw new Error("Dropbox 授权窗口无法打开，请允许此站点弹出窗口后重试。");
       }
     }
-    if (!oauthPopup && oauth.navigate !== false) view.location?.assign?.(url);
+    if (!oauthPopup && oauth.navigate !== false) {
+      clearPendingHandshake();
+      pendingState = "";
+      throw new Error("Dropbox 授权窗口被浏览器拦截，请允许此站点弹出窗口后重试。");
+    }
     return {started: true, popup: Boolean(oauthPopup), authorizationUrl: url};
   }
 
   async function handleOAuthCallback() {
-    if (!configured) return {handled: false};
     const url = new URL(String(view.location?.href || config.redirectUri));
     const code = url.searchParams.get("code");
     const returnedState = url.searchParams.get("state");
     const error = url.searchParams.get("error_description") || url.searchParams.get("error");
     if (!code && !error) return {handled: false};
+    cleanOAuthQuery(view, url);
+    if (view.opener && view.opener !== view) {
+      view.opener.postMessage?.({type: "fmg-cloud-oauth-callback", provider: "dropbox", code: String(code || ""), state: String(returnedState || ""), error: safeRemoteMessage(error)}, safeOrigin(view));
+      view.close?.();
+      return {handled: true, relayed: true, ok: !error};
+    }
+    if (!configured || callbackInFlight) return {handled: false};
+    callbackInFlight = true;
+    try {
+      const payload = await exchangeAuthorizationCode({code, state: returnedState, error});
+      const ok = acceptOAuthResult({provider: "dropbox", ...payload});
+      return {handled: true, relayed: false, ok};
+    } finally {
+      callbackInFlight = false;
+    }
+  }
+
+  async function handleOAuthCallbackMessage(payload, source) {
+    if (!configured) return {handled: false};
+    if (!pendingPopup || source !== pendingPopup) return {handled: false, ok: false};
+    if (callbackInFlight) return {handled: false, ok: false, reason: "in-flight"};
+    callbackInFlight = true;
+    try {
+      const result = await exchangeAuthorizationCode({
+        code: payload?.code,
+        state: payload?.state,
+        error: payload?.error
+      });
+      const ok = acceptOAuthResult({provider: "dropbox", ...result});
+      return {handled: true, relayed: false, ok};
+    } finally {
+      callbackInFlight = false;
+    }
+  }
+
+  async function exchangeAuthorizationCode({code, state, error}) {
+    const returnedState = String(state || "");
     const pending = readPendingHandshake();
     if (pending?.state) pendingState = String(pending.state);
     clearPendingHandshake();
-    cleanOAuthQuery(view, url);
-    if (error) return finishCallback({ok: false, state: returnedState, error: safeRemoteMessage(error)});
-    if (!pending?.verifier || !pending?.state || pending.state !== returnedState) {
-      return finishCallback({ok: false, state: returnedState, error: "Dropbox 授权状态校验失败，请重新连接。"});
+    const createdAt = Number(pending?.createdAt);
+    const expired = !Number.isFinite(createdAt) || createdAt > Date.now() + 60_000 || Date.now() - createdAt > DROPBOX_HANDSHAKE_MAX_AGE;
+    if (!pending?.verifier || !pending?.state || pending.state !== returnedState || expired) {
+      return {ok: false, state: returnedState, error: "Dropbox 授权状态校验失败，请重新连接。"};
     }
+    if (error) return {ok: false, state: returnedState, error: safeRemoteMessage(error)};
+    if (!code) return {ok: false, state: returnedState, error: "Dropbox 未返回授权码，请重新连接。"};
     try {
       const response = await requireFetch(fetchImpl)(DROPBOX_TOKEN_URL, {
         method: "POST",
@@ -167,29 +232,23 @@ export function createDropboxProvider({view = globalThis, fetchImpl = view.fetch
         })
       });
       const payload = await readJsonResponse(response, "Dropbox 授权");
-      return finishCallback({ok: true, state: returnedState, accessToken: payload.access_token, expiresIn: payload.expires_in});
+      return {ok: true, state: returnedState, accessToken: payload.access_token, expiresIn: payload.expires_in};
     } catch (callbackError) {
-      return finishCallback({ok: false, state: returnedState, error: safeRemoteMessage(callbackError?.message)});
+      return {ok: false, state: returnedState, error: safeRemoteMessage(callbackError?.message)};
     }
-  }
-
-  function finishCallback(payload) {
-    if (view.opener && view.opener !== view) {
-      view.opener.postMessage?.({type: "fmg-cloud-oauth-result", provider: "dropbox", ...payload}, safeOrigin(view));
-      view.close?.();
-      return {handled: true, relayed: true, ok: payload.ok};
-    }
-    acceptOAuthResult({provider: "dropbox", ...payload});
-    return {handled: true, relayed: false, ok: payload.ok};
   }
 
   function acceptOAuthResult(payload) {
-    if (!payload.state || !pendingState || payload.state !== pendingState) return false;
+    const stateMatches = Boolean(payload.state && pendingState && payload.state === pendingState);
     pendingState = "";
-    if (!payload.ok || !payload.accessToken) {
+    pendingPopup = null;
+    callbackInFlight = false;
+    if (!stateMatches || !payload.ok || !payload.accessToken) {
+      authorizationError = stateMatches ? safeRemoteMessage(payload.error || "Dropbox 授权未完成，请重新连接。") : "Dropbox 授权状态校验失败，请重新连接。";
       notify();
       return false;
     }
+    authorizationError = "";
     accessToken = String(payload.accessToken);
     expiresAt = Date.now() + Math.max(60, Number(payload.expiresIn) || 14_400) * 1000;
     notify();
@@ -201,6 +260,9 @@ export function createDropboxProvider({view = globalThis, fetchImpl = view.fetch
     accessToken = "";
     expiresAt = 0;
     pendingState = "";
+    pendingPopup = null;
+    callbackInFlight = false;
+    authorizationError = "";
     clearPendingHandshake();
     notify();
     if (remote && token) {
@@ -290,12 +352,18 @@ export function createDropboxProvider({view = globalThis, fetchImpl = view.fetch
 export function createGoogleDriveProvider({view = globalThis, fetchImpl = view.fetch?.bind(view), config = {}, notify = () => {}, oauth = null} = {}) {
   let accessToken = "";
   let expiresAt = 0;
-  const configured = Boolean(config.clientId);
+  const clientId = String(config.clientId || "").trim();
+  const configurationError = !clientId
+    ? "缺少 Google OAuth client ID"
+    : /^GOCSPX-/i.test(clientId)
+      ? "检测到 Google client secret；请改用 OAuth Client ID"
+      : "";
+  const configured = !configurationError;
 
   return {
     id: "google-drive",
     label: "Google Drive",
-    getState: () => publicProviderState("google-drive", "Google Drive", configured, tokenValid(), configFields(config, ["clientId"]), configured ? "" : "缺少 Google OAuth client ID"),
+    getState: () => publicProviderState("google-drive", "Google Drive", configured, tokenValid(), configFields(config, ["clientId"]), configurationError),
     connect,
     disconnect,
     listFiles,
@@ -404,8 +472,8 @@ export function normalizeCloudFilename(filename) {
   return base.endsWith(CLOUD_MAP_EXTENSION) ? base : `${base.replace(/(?:\.json(?:\.gz)?|\.gz)$/i, "")}${CLOUD_MAP_EXTENSION}`;
 }
 
-function publicProviderState(id, label, configured, connected, fields, configurationError = "") {
-  return Object.freeze({id, label, configured, connected, configuration: fields, configurationError});
+function publicProviderState(id, label, configured, connected, fields, configurationError = "", authorizationError = "") {
+  return Object.freeze({id, label, configured, connected, configuration: fields, configurationError, authorizationError});
 }
 
 function configFields(config, fields) {

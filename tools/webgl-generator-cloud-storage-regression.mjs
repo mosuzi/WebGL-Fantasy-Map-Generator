@@ -9,6 +9,7 @@ import {
   createCloudStorageRegistry,
   createDropboxProvider,
   createGoogleDriveProvider,
+  readCloudStorageConfig,
   normalizeCloudFilename
 } from "../app/webgl-generator/src/runtime/cloud-storage.js";
 import {canSelectCloudStorageProvider, reconcileCloudStorageFileList} from "../app/webgl-generator/src/ui/panels/cloud-storage-panel.js";
@@ -22,6 +23,7 @@ assert.equal(normalizeCloudFilename("bad:/name.json.gz"), `bad-name${CLOUD_MAP_E
 await verifyDropbox();
 await verifyGoogleDrive();
 verifyRegistryAndUiContract();
+verifyConfigurationPriority();
 verifyPanelRefreshAndBusyGuard();
 
 console.log(JSON.stringify({
@@ -35,6 +37,7 @@ async function verifyDropbox() {
   const session = createMemoryStorage();
   const calls = [];
   let authorizationUrl = "";
+  const oauthPopup = {};
   const view = createView({session, href: "https://maps.test/app"});
   view.open = url => {
     authorizationUrl = url;
@@ -66,7 +69,7 @@ async function verifyDropbox() {
     config: {appKey: "dropbox-app-key", redirectUri: "https://maps.test/callback"},
     oauth: {open: url => {
       authorizationUrl = url;
-      return {};
+      return oauthPopup;
     }}
   });
 
@@ -80,12 +83,24 @@ async function verifyDropbox() {
   const state = auth.searchParams.get("state");
   assert.ok(state && auth.searchParams.get("code_challenge"));
   assert.ok(session.getItem("fmg-cloud-oauth:dropbox")?.includes(state));
+  const handshake = JSON.parse(session.getItem("fmg-cloud-oauth:dropbox"));
 
-  view.location.href = `https://maps.test/callback?code=fixture-code&state=${encodeURIComponent(state)}`;
-  const callback = await provider.handleOAuthCallback();
+  const wrongSource = await provider.handleOAuthCallbackMessage({code: "fixture-code", state}, {});
+  assert.equal(wrongSource.handled, false);
+  assert.equal(calls.some(call => call.url.endsWith("/oauth2/token")), false);
+  assert.ok(session.getItem("fmg-cloud-oauth:dropbox"), "错误窗口不得消耗授权握手");
+
+  const callback = await provider.handleOAuthCallbackMessage({code: "fixture-code", state}, oauthPopup);
   assert.equal(callback.ok, true);
   assert.equal(provider.getState().connected, true);
   assert.equal(session.getItem("fmg-cloud-oauth:dropbox"), null);
+  const tokenCall = calls.find(call => call.url.endsWith("/oauth2/token"));
+  assert.equal(tokenCall.options.body.get("code_verifier"), handshake.verifier);
+  assert.equal(tokenCall.options.body.get("redirect_uri"), "https://maps.test/callback");
+  assert.equal(JSON.stringify(callback).includes("dropbox-secret-token"), false, "回调处理结果不得暴露 access token");
+  const tokenCallCount = calls.filter(call => call.url.endsWith("/oauth2/token")).length;
+  assert.equal((await provider.handleOAuthCallbackMessage({code: "replay", state}, oauthPopup)).handled, false);
+  assert.equal(calls.filter(call => call.url.endsWith("/oauth2/token")).length, tokenCallCount, "重复回调不得再次换令牌");
 
   const listed = await provider.listFiles();
   assert.equal(listed.length, 1);
@@ -114,6 +129,114 @@ async function verifyDropbox() {
   const strictState = createDropboxProvider({view: strictStateView, fetchImpl, config: {appKey: "x", redirectUri: "https://maps.test/callback"}});
   assert.equal(strictState.acceptOAuthResult({ok: true, accessToken: "must-not-pass", expiresIn: 100}), false);
   assert.equal(strictState.getState().connected, false);
+
+  await verifyRejectedDropboxCallback(fetchImpl);
+  await verifyLegacyDropboxCallback(fetchImpl);
+  await verifyConcurrentDropboxCallback();
+}
+
+async function verifyRejectedDropboxCallback(fetchImpl) {
+  for (const mode of ["state", "expired", "expired-error"]) {
+    const session = createMemoryStorage();
+    const view = createView({session, href: "https://maps.test/app"});
+    const popup = {};
+    let tokenRequests = 0;
+    const provider = createDropboxProvider({
+      view,
+      fetchImpl: async (...args) => {
+        tokenRequests++;
+        return fetchImpl(...args);
+      },
+      config: {appKey: "dropbox-app-key", redirectUri: "https://maps.test/callback"},
+      oauth: {createState: () => "expected-state", createVerifier: () => "fixture-verifier", createChallenge: async () => "fixture-challenge", open: () => popup}
+    });
+    await provider.connect();
+    if (mode.startsWith("expired")) {
+      const handshake = JSON.parse(session.getItem("fmg-cloud-oauth:dropbox"));
+      session.setItem("fmg-cloud-oauth:dropbox", JSON.stringify({...handshake, createdAt: Date.now() - 11 * 60 * 1000}));
+    }
+    const result = await provider.handleOAuthCallbackMessage({
+      code: mode === "expired-error" ? "" : "fixture-code",
+      state: mode === "state" ? "wrong-state" : "expected-state",
+      error: mode === "expired-error" ? "access_denied" : ""
+    }, popup);
+    assert.equal(result.ok, false);
+    assert.equal(provider.getState().connected, false);
+    assert.match(provider.getState().authorizationError, /状态校验失败/);
+    assert.equal(tokenRequests, 0, `${mode} 拒绝不得请求 token endpoint`);
+    assert.equal(session.getItem("fmg-cloud-oauth:dropbox"), null);
+  }
+}
+
+async function verifyLegacyDropboxCallback(fetchImpl) {
+  const openerSession = createMemoryStorage();
+  const openerView = createView({session: openerSession, href: "https://maps.test/app"});
+  const popupView = createView({session: createMemoryStorage(), href: "https://maps.test/legacy-callback?code=legacy-code&state=legacy-state"});
+  let relayed = null;
+  let popupTokenRequests = 0;
+  popupView.opener = {
+    postMessage(payload, origin) {
+      relayed = {payload, origin};
+    }
+  };
+  popupView.close = () => {
+    popupView.closed = true;
+  };
+  const openerProvider = createDropboxProvider({
+    view: openerView,
+    fetchImpl,
+    config: {appKey: "dropbox-app-key", redirectUri: "https://maps.test/legacy-callback"},
+    oauth: {createState: () => "legacy-state", createVerifier: () => "legacy-verifier", createChallenge: async () => "legacy-challenge", open: () => popupView}
+  });
+  await openerProvider.connect();
+  const popupProvider = createDropboxProvider({
+    view: popupView,
+    fetchImpl: async () => {
+      popupTokenRequests++;
+      throw new Error("旧回调弹窗不得请求 token endpoint");
+    },
+    config: {appKey: "", redirectUri: ""}
+  });
+  const relayedResult = await popupProvider.handleOAuthCallback();
+  assert.deepEqual(relayedResult, {handled: true, relayed: true, ok: true});
+  assert.equal(popupTokenRequests, 0);
+  assert.equal(popupView.closed, true);
+  assert.equal(relayed.origin, "https://maps.test");
+  assert.deepEqual(Object.keys(relayed.payload).sort(), ["code", "error", "provider", "state", "type"]);
+  assert.equal(JSON.stringify(relayed.payload).includes("accessToken"), false);
+  const openerResult = await openerProvider.handleOAuthCallbackMessage(relayed.payload, popupView);
+  assert.equal(openerResult.ok, true, "旧整页回调必须由 opener 完成令牌交换");
+  assert.equal(openerProvider.getState().connected, true);
+}
+
+async function verifyConcurrentDropboxCallback() {
+  const session = createMemoryStorage();
+  const view = createView({session, href: "https://maps.test/app"});
+  const popup = {};
+  let releaseTokenRequest;
+  let tokenRequests = 0;
+  const provider = createDropboxProvider({
+    view,
+    fetchImpl: async url => {
+      assert.match(String(url), /oauth2\/token$/);
+      tokenRequests++;
+      await new Promise(resolve => {
+        releaseTokenRequest = resolve;
+      });
+      return jsonResponse({access_token: "concurrent-secret-token", expires_in: 7200});
+    },
+    config: {appKey: "dropbox-app-key", redirectUri: "https://maps.test/callback"},
+    oauth: {createState: () => "concurrent-state", createVerifier: () => "concurrent-verifier", createChallenge: async () => "concurrent-challenge", open: () => popup}
+  });
+  await provider.connect();
+  const first = provider.handleOAuthCallbackMessage({code: "first-code", state: "concurrent-state"}, popup);
+  while (!releaseTokenRequest) await new Promise(resolve => setTimeout(resolve, 0));
+  const duplicate = await provider.handleOAuthCallbackMessage({code: "duplicate-code", state: "concurrent-state"}, popup);
+  assert.deepEqual(duplicate, {handled: false, ok: false, reason: "in-flight"});
+  assert.equal(tokenRequests, 1);
+  releaseTokenRequest();
+  assert.equal((await first).ok, true);
+  assert.equal(provider.getState().connected, true, "重复消息不得破坏首个合法回调");
 }
 
 async function verifyGoogleDrive() {
@@ -177,6 +300,10 @@ async function verifyGoogleDrive() {
     oauth: {requestToken: async () => ({access_token: "x", expires_in: 3600, scope: "openid"})}
   });
   await assert.rejects(() => badScope.connect(), /drive.file/);
+
+  const clientSecret = createGoogleDriveProvider({view, fetchImpl, config: {clientId: "GOCSPX-fixture-not-a-client-id"}, oauth});
+  assert.equal(clientSecret.getState().configured, false);
+  assert.match(clientSecret.getState().configurationError, /client secret/);
 }
 
 function verifyRegistryAndUiContract() {
@@ -222,6 +349,41 @@ function verifyRegistryAndUiContract() {
   assert.match(app, /includeBase64: false, includeBlob: true/);
   assert.match(app, /importMap\(blob, \{confirm: true, source: "ui"/);
   assert.doesNotMatch(apiContract, /cloud|dropbox|google/i, "云存储不应增加公开 API 方法或分母");
+}
+
+function verifyConfigurationPriority() {
+  const config = readCloudStorageConfig(
+    {
+      VITE_FMG_DROPBOX_APP_KEY: "fixture-legacy-dropbox",
+      VITE_FMG_DROPBOX_REDIRECT_URI: "https://fixture.test/legacy-callback",
+      VITE_FMG_GOOGLE_CLIENT_ID: "fixture-legacy-google.apps.googleusercontent.com"
+    },
+    {
+      version: 1,
+      providers: {
+        dropbox: {appKey: "fixture-runtime-dropbox", redirectUri: ""},
+        googleDrive: {clientId: "fixture-runtime-google.apps.googleusercontent.com"}
+      }
+    }
+  );
+  assert.deepEqual(config, {
+    dropbox: {appKey: "fixture-runtime-dropbox", redirectUri: "https://fixture.test/legacy-callback"},
+    googleDrive: {clientId: "fixture-runtime-google.apps.googleusercontent.com"}
+  });
+
+  const view = createView({session: createMemoryStorage(), href: "https://fixture.test/app"});
+  view.__FMG_CLOUD_PROVIDER_CONFIG__ = {
+    version: 1,
+    providers: {
+      dropbox: {appKey: "fixture-runtime-dropbox", redirectUri: "https://fixture.test/callback"},
+      googleDrive: {clientId: "fixture-runtime-google.apps.googleusercontent.com"}
+    }
+  };
+  const registry = createCloudStorageRegistry({view, fetchImpl: async () => new Response(null, {status: 500})});
+  const states = registry.listProviderStates();
+  assert.deepEqual(states.map(state => [state.id, state.configured]), [["dropbox", true], ["google-drive", true]]);
+  assert.equal(JSON.stringify(states).includes("fixture-runtime"), false, "provider state 不得回显 client identifier");
+  registry.dispose();
 }
 
 function verifyPanelRefreshAndBusyGuard() {

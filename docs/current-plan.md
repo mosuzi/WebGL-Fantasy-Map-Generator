@@ -183,7 +183,7 @@
 
 本节是唯一权威任务清单。README、专题文档和历史日志中的“缺口”“下一步”只提供来源与设计背景，不能覆盖这里的编号、顺序和最小验收。已验收能力不得重新计为待办。
 
-> **执行门禁（2026-08-02）**：第 45～52、54～225、227～255 项已完成，第 53 项已移除；第 226 项本地完成、远端 Wiki 发布仍受 GitHub 私有仓库套餐阻塞。当前没有活动权威任务，不从 README、历史日志或专题文档扩展其它任务。
+> **执行门禁（2026-08-03）**：第 45～52、54～225、227～259 项已完成，第 53 项已移除；第 226 项本地完成、远端 Wiki 发布仍受 GitHub 私有仓库套餐阻塞。当前没有活动权威任务，不从 README、历史日志或专题文档扩展其它任务。
 
 当前 API 基线为：`window.webglGeneratorApi` 覆盖 `17` 个命名空间、`316` 个公开方法和 `179` 个编辑方法，稳定等级为 `308 / 7 / 1`；`316 / 316` 方法可通过 `info.describe` 发现，`planner.listRecipes / getRecipe` 只读公开 `10` 个配方和 `43` 个顶层步骤，`objects` 覆盖 `20` 类对象，`cells` 已提供八个读取、定位、扫描与动作预检方法。完整能力矩阵为 `1196` 行、`covered 1122 / excluded 74 / deferred 0 / gap 0`；复合语义矩阵为 `79` 个动作、`69` 个完整规则事务与 `10` 个玩法配方，`316` 个公开方法全部完成事务分类，结构缺口为 `0`。
 
@@ -1211,6 +1211,30 @@
   - 最小验收：两版标题和开篇自称一致、自然，不再把 `FMG` 当作项目名称前缀；对原 Fantasy Map Generator 的参考与致谢保持准确，语言切换、在线入口和文档链接不变。
   - 排除：不修改应用页面标题、包名、域名、代码命名空间、许可证或原项目名称，不借更名扩写其它 README 内容。
   - 完成记录：中文标题改为“WebGL 架空地图生成器”，英文标题改为“WebGL Fantasy Map Generator”，两版开篇同步去除 `FMG WebGL` 自称；全文仅在指向原作及致谢时保留 Fantasy Map Generator 名称。
+
+- **权威任务第 257 项：设计并接入项目应用图标。** `已完成；来源：用户直接要求`
+  - 范围：为“WebGL 架空地图生成器”设计原创、无文字、适合小尺寸识别的应用图标；视觉语言与现有墨绿色界面、旧纸画卷和朱印保持协调。提交 SVG 主稿及浏览器 / 安装入口需要的派生资源，接入 favicon、manifest、Apple Touch Icon 和主题色。
+  - 最小验收：标签页不再使用空 `data:,` 图标；SVG 在 `16 / 32 / 64px` 下主体轮廓清楚，常用位图尺寸与 manifest 声明一致；正式构建包含全部资源，直接访问无 404；桌面和窄视口不因元数据接入产生布局、console、page 或 WebGL 错误。
+  - 排除：不复制或改绘原 Fantasy Map Generator 图标，不加入依赖字体或可读文字，不借本项重做加载页、应用标题、README 排版、主题系统或其它品牌资产。
+  - 完成记录：原创图标以墨绿色圆角底框承载米色地图圆盘、墨绿色地貌与浅青水系，并以右下朱红方印形成小尺寸第二识别点；SVG 不含可见文字、字体、渐变或原作资产。提交 `app-icon.svg` 主稿和 `32 / 180 / 192 / 512px` PNG，正式入口已接入双 favicon、Apple Touch Icon、Web App Manifest 和 `#18231f` 主题色。
+  - 验收记录：静态专项核对 SVG 结构、四份 PNG 尺寸、manifest 三项声明和入口元数据；生产构建通过且全部资源进入 `dist`。系统 Chrome 分别访问 `5411` 当前源码与 `5412` 生产构建，四个入口资源均返回 `200` 与正确内容类型，`1440 / 390 / 320px` 横向溢出为 `0`，canvas 正常、错误界面隐藏，console / page error 为 `0`。`16 / 32 / 64 / 128px` 预览经人工检查仍能辨认浅色地图圆盘与朱红角标；当前没有活动权威任务。
+
+- **权威任务第 258 项：补齐应用图标尺寸并建立 Cloud Provider Config。** `已完成；来源：用户直接要求`
+  - 范围：从第 257 项既有 SVG 主稿补齐 `64 / 256px` PNG，并同步 favicon、manifest、生成脚本与专项回归；新增独立 Cloud Provider Config，供正式应用在启动前读取 Dropbox App key、Dropbox Redirect URI 与 Google Drive Client ID。官方部署无覆盖变量时自动使用用户明确提供的公开配置，私有部署可通过同一组构建环境变量或直接替换构建产物中的配置文件启用自己的云存储，无需修改应用源码。
+  - 配置契约：统一 JSON 环境变量 `FMG_CLOUD_PROVIDER_CONFIG` 优先，也接受 `FMG_DROPBOX_APP_KEY / FMG_DROPBOX_REDIRECT_URI / FMG_GOOGLE_CLIENT_ID`；现有 `VITE_FMG_*` 仅作兼容回退。运行时配置优先于旧构建变量，配置只允许公开 OAuth client identifier，不得包含 client secret、refresh token 或用户 access token。
+  - 最小验收：六份 PNG 与声明尺寸一致，正式入口和 manifest 包含新增尺寸且构建产物直接访问无 404；空配置仍明确禁用 provider，运行时文件、统一 JSON、逐项部署变量和旧 `VITE_FMG_*` 的优先级有自动化覆盖；生产构建会生成规范配置文件，系统 Chrome 验证空配置与注入配置两态，云存储面板不泄露真实值，console、page 与 WebGL error 为 `0`。
+  - 排除：除用户明确要求写入的三个浏览器公开 identifier 外，不提交 OAuth secret、refresh token 或用户 access token；不修改 Dropbox / Google Drive 的授权范围、上传下载、令牌持久化或 provider 业务语义，不借本项接入其它云服务、部署平台或重做图标视觉。
+  - 实现记录：从既有 SVG 主稿生成 `64 / 256px` PNG，入口新增 64px favicon，manifest 新增 256px 安装图标。应用启动前同步装载可独立替换的 `cloud-provider-config.js`；Vite 从仓库根环境读取统一 JSON、新逐项变量及旧 `VITE_FMG_*`，构建后只输出三个允许字段。Vercel 对配置文件使用 `no-store`，私有部署可设置环境变量或直接替换构建产物配置文件，不需修改源码或重新打包应用。
+  - 安全记录：provider state 继续只暴露字段 presence；构建规范化与运行时均拒绝把 `GOCSPX-` Google client secret 当作 Client ID，敏感字段名及值不会进入公开产物或错误输出。`.env.example` 继续保持空模板，正式配置只包含浏览器本就可见的三项公开 identifier。
+  - 验收记录：六份 PNG、manifest 四项声明、配置四级来源、fixture / mock 云协议、生产构建与差异检查通过。无环境覆盖时最终产物与官方配置一致；统一 JSON 与逐项变量可以覆盖，显式统一空配置可以禁用 provider。系统 Chrome 在 `5411 / 5412` 验证官方配置已加载且正式回调受同源保护，空配置为 `providers-disabled`，私人 fixture 覆盖后两 provider 可连接；`http://localhost:5410` 使用本地回调后两 provider 均进入可连接状态。配置值不在面板回显，console、page、health 与 WebGL error 为 `0`。独立审查先后阻断构建层 secret 前缀漏检和本地分流负例缺口，修复后复审为 `ACCEPT`。
+  - 部署边界：代码与构建产物已具备官方配置，但本项未推送或触发线上部署，也未启动真实 OAuth 或访问用户云盘；线上账号联调必须在发布后另行验收，不能由本地 fixture 结果替代。
+
+- **权威任务第 259 项：修正 Dropbox 独立 OAuth 回调与授权窗口收口。** `已完成；来源：用户真实联调反馈`
+  - 范围：把官方与 `localhost:5410` 的 Dropbox Redirect URI 统一改为 `/oauth/dropbox/callback`；新增不启动地图应用的同源轻量回调页，只把授权码、state 或错误送回发起授权的原窗口并自动关闭；由原窗口完成 PKCE state 校验、授权码换令牌和连接状态更新。保留既有整页回调处理作为旧配置兼容路径。
+  - 最小验收：开发服务、生产构建与 Vercel 精确回调路径均直接返回轻量页面；授权小窗口不会挂载地图 canvas 或把 token / verifier 写入 URL、DOM、日志与跨窗口消息；同源、provider 与 state 校验失败时拒绝连接，正确回调后由原窗口完成 token 交换并关闭小窗口；既有 Dropbox fixture、云存储回归、生产构建及真实系统 Chrome 回调专项通过。
+  - 排除：Google Drive 已由用户确认恢复正常，本项不改 Google Client ID、授权范围、GIS 流程或 Drive 文件行为；不访问真实 Dropbox 用户文件、不改 App Console 配置、不持久化 access token，不提交或推送。
+  - 实现记录：官方与 `localhost:5410` 配置分别使用 `https://fmg.mosuzi.top/oauth/dropbox/callback` 和 `http://localhost:5410/oauth/dropbox/callback`。新增无外部资源的独立回调页，开发 / preview 中间件与 Vercel 精确 rewrite 均先于 SPA fallback；新旧 popup 回调只向 opener 发送 `type / provider / code / state / error`，令牌交换统一回到 opener。握手增加同源、popup source、state、十分钟期限和 in-flight 一次性门禁，弹窗被拦截时保留地图页并给出明确错误。
+  - 验收记录：语法检查、云存储与 Cloud Provider Config 专项、生产构建和差异检查通过。`localhost:5410` 开发服务与 `127.0.0.1:5414` 生产预览的 Chrome 专项均确认回调页不挂载 canvas、不加载主应用资源、消息字段受限且 popup 自动关闭；旧 popup token 请求为 `0`，过期 / 过期错误 token 请求为 `0`，并发重复只产生 `1` 次交换且首条成功。首轮安全复核对旧 token 消息、期限绕过和并发竞争给出 `BLOCK`，限修后二次复核与独立终验均为 `ACCEPT`；`source/` 零改动，未启动真实 OAuth、访问云盘、提交或推送。
 
 - **第 211～216 项统一执行约束。**
   - 专题来源与施工图：`docs/task-notes/next-quasi-authoritative-interaction-remediation-tasks-2026-07-20.md`。

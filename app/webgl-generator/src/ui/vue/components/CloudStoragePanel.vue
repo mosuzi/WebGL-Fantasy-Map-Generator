@@ -23,7 +23,7 @@
     <template v-if="selectedProvider">
       <div v-if="!selectedProvider.configured" class="cloud-storage-configuration" data-cloud-state="unconfigured">
         <strong>{{ selectedProvider.label }} 尚未配置</strong>
-        <p>部署者需要先设置以下公开的 OAuth client identifier。本仓库不会提供项目方账号，也不会回退到原作的硬编码配置。</p>
+        <p>部署者需要先在 Cloud Provider Config 中设置以下公开的 OAuth client identifier。本仓库不会提供项目方账号，也不会回退到原作的硬编码配置。</p>
         <p v-if="selectedProvider.configurationError">{{ selectedProvider.configurationError }}</p>
         <code v-for="field in missingConfiguration" :key="field">{{ field }}</code>
         <a href="https://github.com/mosuzi/fmg-gl/blob/main/docs/deployment/cloud-storage.md" target="_blank" rel="noreferrer">查看自部署配置说明</a>
@@ -84,11 +84,11 @@ const selectedProvider = computed(() => props.state.providers.find(provider => p
 const missingConfiguration = computed(() => {
   if (selectedProvider.value?.id === "dropbox") {
     return [
-      !selectedProvider.value.configuration.appKey && "VITE_FMG_DROPBOX_APP_KEY",
-      !selectedProvider.value.configuration.redirectUri && "VITE_FMG_DROPBOX_REDIRECT_URI"
+      !selectedProvider.value.configuration.appKey && "providers.dropbox.appKey",
+      !selectedProvider.value.configuration.redirectUri && "providers.dropbox.redirectUri"
     ].filter(Boolean);
   }
-  return [!selectedProvider.value?.configuration.clientId && "VITE_FMG_GOOGLE_CLIENT_ID"].filter(Boolean);
+  return [!selectedProvider.value?.configuration.clientId && "providers.googleDrive.clientId"].filter(Boolean);
 });
 
 function formatFileMeta(file) {

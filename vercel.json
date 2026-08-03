@@ -13,6 +13,10 @@
   ],
   "rewrites": [
     {
+      "source": "/oauth/dropbox/callback",
+      "destination": "/oauth/dropbox/callback/index.html"
+    },
+    {
       "source": "/prototype/:prototype/",
       "destination": "/prototype/:prototype/index.html"
     },
@@ -22,6 +26,15 @@
     }
   ],
   "headers": [
+    {
+      "source": "/cloud-provider-config.js",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-store, max-age=0"
+        }
+      ]
+    },
     {
       "source": "/assets/(.*)",
       "headers": [

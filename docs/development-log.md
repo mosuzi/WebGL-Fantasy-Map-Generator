@@ -1,5 +1,48 @@
 # 开发历史
 
+## 2026-08-03：完成权威任务第 259 项的 Dropbox 独立回调
+
+- 官方与 `localhost:5410` 的 Dropbox Redirect URI 已从误用的 Google 路径统一改为 `/oauth/dropbox/callback`。新增不加载地图应用的同源轻量回调页，Vite 开发 / preview 与 Vercel 均在 SPA fallback 前精确处理该路径；无 opener 时只显示固定说明，有 opener 时只传回 `code / state / error` 后自动关闭。
+- PKCE verifier 只保留在 opener 的 `sessionStorage`，token exchange 也统一由 opener 执行。回调同时校验 origin、发起授权的 popup、state 和十分钟期限；握手一次性消费，网络请求进行中的重复消息直接忽略。浏览器拦截弹窗时不再导航离开主地图页。
+- 首轮独立安全审查发现旧整页 popup 仍跨窗口传 token、过期错误可绕过期限以及并发消息可破坏首个回调，三项均已限修并补反例。语法、云存储 / 配置专项、生产构建、`5410 / 5414` Chrome 回调与既有云面板回归全部通过，二次安全复核和独立终验均为 `ACCEPT`；Google Drive 语义未改，`source/` 零改动。本项未启动真实 OAuth、访问云盘、提交或推送。
+
+## 2026-08-03：登记权威任务第 259 项
+
+- 用户真实联调发现 Dropbox 授权小窗口回到完整应用页面，且现有 Dropbox Redirect URI 误沿用了 `/oauth/google/callback`。本地代码应与用户同步修正的 Dropbox App Console 配置配合，统一使用 `/oauth/dropbox/callback`。
+- 本项限定为 Dropbox 独立轻量回调页、原窗口 PKCE 校验与换令牌、开发 / 生产 / Vercel 路由、旧回调兼容及专项验收。Google Drive 已由用户确认正常，明确不在本项修改范围内。
+
+## 2026-08-03：完成权威任务第 258 项的官方配置与本地回调分流
+
+- 用户明确提供 Dropbox App key、Dropbox Redirect URI 与 Google OAuth Client ID 后，三项浏览器公开 identifier 已写入 `public/cloud-provider-config.js`；`.env.example` 恢复并保持空模板。Google 值通过 Client ID 形态门禁，`GOCSPX-` Client secret 仍会在构建和运行时被拒绝。
+- 构建规则改为：没有任何 Cloud Provider Config 环境输入时保留仓库官方配置；统一 JSON、新逐项变量和旧 `VITE_FMG_*` 仍可覆盖。显式传入统一空 JSON 可以禁用 provider，因此私人部署者可使用自己的配置或构建后直接替换文件，无需修改源码。
+- 官方配置按访问位置选择 Dropbox 回调：仅 `hostname=localhost && port=5410` 使用本地回调，其他主机和端口保持正式回调。自动化固定 `localhost:5410` 正例、`localhost:5411` 与 `127.0.0.1:5410` 两个负例，不放宽既有同源校验。
+- 无覆盖构建保留官方配置，私人 fixture 构建成功覆盖，最终产物已恢复官方配置。旧 5410 Vite 进程曾因两套 Vue 依赖哈希导致启动失败，原端口重启后系统 Chrome 通过：官方本地配置两 provider ready、显式空配置 disabled、私人覆盖 ready，未启动真实 OAuth。第 258 项代码与本地验收完成；本项未推送、未触发线上部署，真实账号联调仍需发布后验收。
+
+## 2026-08-02：权威任务第 258 项实现与本地验收完成，等待官方部署配置
+
+- 从第 257 项 SVG 主稿补齐 `64 / 256px` PNG；正式入口新增 64px favicon，Web App Manifest 新增 256px 安装图标。生成脚本、静态门禁和 Chrome 专项同步覆盖 `32 / 64 / 180 / 192 / 256 / 512px` 六份 PNG。
+- 新增同步加载、可在构建后独立替换的 `cloud-provider-config.js`。构建优先读取 `FMG_CLOUD_PROVIDER_CONFIG`，其次逐字段读取 `FMG_*` 并回退旧 `VITE_FMG_*`；Vite 明确从仓库根读取环境配置，只把 Dropbox App key、Dropbox Redirect URI 和 Google Client ID 三个公开字段写入产物。Vercel 对该文件设置 `no-store`，私有部署者无需修改源码。
+- 云存储面板改为显示 Cloud Provider Config 字段路径，provider state 仍只返回 presence 布尔值。构建与运行时两层都会拒绝把 `GOCSPX-` Client secret 当作 Google Client ID；首轮独立审查据此阻断构建层漏检，修复并补值形态回归后复审 `ACCEPT`。
+- 图标、配置来源、fixture / mock 云协议、构建期 fixture 生成、最终空配置构建和差异检查通过。观察使在 `5411 / 5412` 确认配置脚本均为 JavaScript，空 / fixture 注入两态正确，图标 MIME 与 `1440 / 390 / 320px` 健康状态正常，console、page、health 与 WebGL error 为 `0`；未启动真实 OAuth，`5411` 验收后继续监听。
+- 仓库和默认配置未保存任何真实 identifier 或 secret。由于当前环境没有可确认的官方 Dropbox Redirect URI，也未连接 Vercel 项目，官方 `FMG_CLOUD_PROVIDER_CONFIG` 尚未实际写入部署环境；本项保留为等待外部配置，不能声称真实账号联调完成。
+
+## 2026-08-02：登记权威任务第 258 项
+
+- 用户要求从既有应用图标主稿补齐 `64 / 256px` 位图，并把云存储公开 client identifier 收敛为 Cloud Provider Config：官方部署从部署环境自动生成，私有部署者只需设置配置或替换构建产物中的配置文件，不必修改源码。
+- 当前正式应用只有 `32 / 180 / 192 / 512px` PNG；云存储运行时只读取 `VITE_FMG_*` 构建变量，缺少可独立部署、运行时加载和统一 JSON 表达的配置层。本项登记为第 258 项，范围只覆盖图标派生资源、配置装载 / 构建接线、界面说明、部署文档和对应验收，不改变 OAuth 与文件操作语义。
+
+## 2026-08-02：完成权威任务第 257 项
+
+- 新增原创无文字应用图标：墨绿色圆角底框内为米色地图圆盘、地貌与水系，右下朱红方印呼应加载页印章。SVG 主稿不依赖字体、渐变或原作资产，在 `16 / 32 / 64 / 128px` 预览中保留“地图圆盘 + 朱红角标”的两级轮廓。
+- `public/` 新增 SVG、`32 / 180 / 192 / 512px` PNG 和 Web App Manifest；正式入口用 SVG 与 32px PNG 替换空 favicon，补 Apple Touch Icon、manifest 与 `#18231f` 主题色。生成脚本可从 SVG 重建全部位图，静态门禁冻结品牌色、主体结构、PNG 尺寸与入口声明。
+- 生产构建通过，资源完整进入 `dist`。系统 Chrome 在 `5411` 当前源码和 `5412` 生产构建均确认 favicon、Apple Touch Icon、manifest 返回 `200` 与正确内容类型；`1440 / 390 / 320px` 无横向溢出、错误界面、console 或 page error。第 257 项完成，当前没有活动权威任务。
+
+## 2026-08-02：登记权威任务第 257 项
+
+- 当前正式入口仍使用空的 `<link rel="icon" href="data:," />`，仓库没有 favicon、manifest 或应用级图标资源。用户要求设计并实现项目图标，本项据此登记为第 257 项。
+- 设计冻结为无文字的“墨绿色底、米色地图圆盘、朱红印记”，优先保证 `16px` 标签页尺寸的轮廓和色块识别，再提供 SVG 主稿与浏览器 / 安装入口所需派生尺寸；不得复制原 Fantasy Map Generator 图标。
+- 本项只接入图标资源和页面元数据，不修改应用名称、加载页构图、主题、地图生成与交互行为；完成前须通过资源尺寸、manifest、生产构建和真实浏览器验收。
+
 ## 2026-08-02：完成权威任务第 256 项
 
 - 用户指出“FMG WebGL 地图生成器”同时使用 FMG 和“地图生成器”，中文已经重复，英文“FMG WebGL Map Generator”更加明显；项目名称应改为“WebGL 架空地图生成器”，英文自然写作“WebGL Fantasy Map Generator”。

@@ -124,10 +124,19 @@ export function createCloudStoragePanel(documentRef, manager, registry, componen
     }
   );
   const unsubscribe = registry.subscribe(states => {
+    const previous = panelState.providers.find(provider => provider.id === panelState.selectedProviderId);
     panelState.providers = states;
     panelState.version++;
     const provider = currentProvider();
-    if (!panelState.busy && panelState.open && provider?.getState().connected) void refreshFiles({quiet: true});
+    const providerState = provider?.getState();
+    if (providerState?.authorizationError) {
+      panelState.error = providerState.authorizationError;
+      panelState.status = "";
+    } else if (!previous?.connected && providerState?.connected) {
+      panelState.error = "";
+      panelState.status = `已连接 ${providerState.label}。`;
+    }
+    if (!panelState.busy && panelState.open && providerState?.connected) void refreshFiles({quiet: true});
   });
 
   return {
