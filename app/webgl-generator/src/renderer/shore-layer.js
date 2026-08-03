@@ -1499,6 +1499,7 @@ export function filterShoreRenderSpikes(entries) {
 
 export function buildShoreVisualPaths(map, algorithmOptions = {}) {
   const edges = collectShoreVisualEdges(map);
+  const sideSafetyCache = new Map();
   const options = {
     ...algorithmOptions,
     gates: {
@@ -1506,7 +1507,13 @@ export function buildShoreVisualPaths(map, algorithmOptions = {}) {
       maxSegmentWorld: SHORE_VISUAL_STYLE.maxRenderSegmentWorld,
       spikeAngleCos: SHORE_VISUAL_STYLE.hardSpikeAngleCos
     },
-    isSideSampleSafe: (point, side) => fitShoreHalfWidth(map, point, side, SHORE_VISUAL_STYLE.sidePreflightHalfWidthWorld) > 0
+    isSideSampleSafe: (point, side) => {
+      const key = `${point[0]}:${point[1]}:${side.x}:${side.y}`;
+      if (sideSafetyCache.has(key)) return sideSafetyCache.get(key);
+      const safe = fitShoreHalfWidth(map, point, side, SHORE_VISUAL_STYLE.sidePreflightHalfWidthWorld) > 0;
+      sideSafetyCache.set(key, safe);
+      return safe;
+    }
   };
   const coastline = buildShoreTopologySnapshot(buildShorePathsFromEdges(edges.coastline), map, options);
   const lakeShore = buildShoreTopologySnapshot(buildShorePathsFromEdges(edges.lakeShore), map, options);

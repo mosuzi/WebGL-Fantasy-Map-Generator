@@ -54,8 +54,12 @@ try {
   const page = await context.newPage();
   page.setDefaultTimeout(timeoutMs);
   const consoleErrors = [];
+  const healthConsoleEvents = [];
   page.on("console", message => {
-    if (message.type() === "error") consoleErrors.push(message.text());
+    if (message.type() !== "error") return;
+    const value = message.text();
+    if (value.startsWith("[FMG health] main-thread-long-task")) healthConsoleEvents.push(value);
+    else consoleErrors.push(value);
   });
   page.on("pageerror", error => consoleErrors.push(error.message));
 
@@ -79,7 +83,8 @@ try {
       graphHeight,
       viewport,
       browserChannel,
-      consoleErrors
+      consoleErrors,
+      healthConsoleEvents
     },
     generation,
     before,
@@ -556,6 +561,10 @@ function renderMarkdown(report) {
   if (report.metadata.consoleErrors.length) {
     lines.push("", "## Console Errors", "");
     for (const error of report.metadata.consoleErrors) lines.push(`- ${error}`);
+  }
+  if (report.metadata.healthConsoleEvents.length) {
+    lines.push("", "## 性能健康事件", "");
+    for (const event of report.metadata.healthConsoleEvents) lines.push(`- ${event}`);
   }
   lines.push("");
   return `${lines.join("\n")}\n`;

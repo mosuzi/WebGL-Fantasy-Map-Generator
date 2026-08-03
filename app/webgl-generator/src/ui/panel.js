@@ -196,8 +196,9 @@ export function bindRuntimePanel(documentRef, handlers) {
       const members = layerGroupMembers(control);
       for (const layer of members) {
         updateLayerPreference(documentRef, layer, visible);
-        handlers.onLayerVisible?.(layer, visible);
       }
+      if (handlers.onLayerGroupVisible) handlers.onLayerGroupVisible(members, visible);
+      else for (const layer of members) handlers.onLayerVisible?.(layer, visible);
       setLayerGroupControlState(control, members.map(() => visible));
     });
   }

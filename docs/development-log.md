@@ -29526,3 +29526,39 @@ full 矩阵结果：
 - 共享模板支持 `{name}`、`{date}`、`{time}`、`{seed}`、`{checksum}`、`{ext}`，默认 `{name}-{date}-{time}.{ext}`。本地保存、高级压缩导出和云端新建读取同一持久化偏好；公共 API 未显式传模板时继续保持 `{name}.{ext}`，不隐式读取 LocalStorage。
 - 模板编辑不依赖云盘：地图名称输入右侧提供无边框设置图标，默认收起，点击后才显示格式、token 帮助和实时预览；图标垂直居中并保留键盘焦点轮廓，云端面板只展示当前新建文件名和入口提示。
 - 首轮独立复核为 `BLOCK`：云端面板保持打开时换图，预览未同步。统一地图加载链补刷新后复验为 `ACCEPT`。命名、云端、迁移、无头读写、API 往返、生产构建与差异检查通过；系统 Chrome 实际捕获本地保存和高级压缩导出的同名 `.webfmg`，gunzip 后三个名称字段一致，刷新持久化和 `1440 / 390 / 320px` 布局通过，console、page、health 与 WebGL error 为 `0`。未访问真实云盘，`source/` 零改动。
+# 2026-08-03：登记第 269 项——画布性能调查与优化建议
+
+- 用户要求先形成性能问题调查方案草稿，交独立智能体审阅无误后再开始实际分析；分析完成后写出调查报告并给出建议。当前并行专题分支为 `codex/canvas-performance-optimization`。
+- 新增 `docs/task-notes/canvas-performance-investigation-plan.md`，把调查拆为环境冻结、生产基线、状态变化与热点归因、报告与建议四阶段。指标明确分离 generation、renderer `loadMap()`、稳定 draw、交互态、idle commit、DOM / SVG overlay、浏览器 style / layout 和 long task，样本覆盖 10k / 50k / 100k、100k 图层消融、测量重场景、选中态重场景与高频状态切换。
+- 第 269 项当前只允许文档、profile 脚本、Performance API 标记和 renderer 只读 stats；不直接实施优化，不修改渲染结果、交互、地图数据、schema、存档、API、默认图层或 `source/`，不提交或推送。方案审阅得到 `ACCEPT` 前不运行性能采样。
+- 给事中首轮审阅结论为 `BLOCK`：现有 `profile:e2e` 实际是页面就绪后的重新生成，不能称冷启动；固定 cells / overlay 顺序会混入 JIT、缓存与内存累积；`lastDraw / lastOverlayUpdate` 在每个 rAF 重复读取会伪造事件分布；CPU 侧 WebGL 提交不能直接证明 GPU 执行成本；状态切换、稳定判据和 trace 边界也尚未冻结。该轮没有运行构建或性能采样。
+- 第二版草稿补为冷启动与暖态重生成两套协议、每组同动作预热与新 browser process / context 正式重复、逐档独立端口和唯一产物；draw / overlay / mesh / upload 必须按只读递增序号去重，GPU 无 timer / trace 证据时列为盲区。100k 消融加入 `noDomOverlays` 总控，状态切换冻结动作、确定性国家 / hover 目标、连续三帧稳定判据、前后快照、`finally` 恢复和 CDP trace categories / User Timing 边界。第二版仍未开始采样，现交回同一给事中复审。
+- 第二轮复审确认首轮全部方法学阻断已收口，但以 `BLOCK` 指出国家专题真实 mode 是 `states`，草稿误写的 `politics` 会回退到高度着色而形成假样本。方案已改为 `height → states → height`，并要求每次动作后断言 renderer 实际 `colorMode`，不匹配即保留失败样本；本轮同样没有构建或采样，现进行第三轮复审。
+- 第三轮复审结论为 `ACCEPT`：`states` 与正式控件、runtime、renderer 契约一致，动作后 `colorMode` 断言可以拒绝假样本；首轮全部方法学阻断和第二轮 mode 阻断均已收口。第 269 项现按审定方案进入实际调查阶段。
+
+# 2026-08-03：完成第 269 项——正式画布性能调查与优化建议
+
+- 诊断层只增加可观测性：renderer 为 draw、overlay、route / river / selection mesh、surface / line / point refresh、buffer CPU submit 和 viewport preview / commit 记录递增事件、状态、父子边界和有界历史；E2E 与 overlay profile 增加同档预热、独立进程、idle recorder、七变体消融、measurement / selection fixture、前后状态、恢复、renderer failed / WebGL / console / page / health 门禁。新增 `profile:canvas-state` 覆盖冷启动、18 个状态动作和 CDP trace。所有插桩均为只读诊断，没有改变地图、绘制结果或默认行为。
+- Harness 在正式采样前后多次独立审查。Overlay 证据契约曾因缺 frame p50、idle 起点、恢复证明、heavy fixture 物化、variant 保持、baseline failed、瞬时 WebGL error 与 health 分类而被 `BLOCK`；限修通过后，所有受影响的完整图层、消融和 heavy 结果全部重采，旧口径和中途半轮不进入正式统计。
+- 固定环境为 Windows 11、i7-11700、RTX 3060、Chrome `150.0.7871.187`、`1280×820 @ DPR 1`，暖态 seed `canvas-perf-266`、图幅 `1440×960`。`CI=true pnpm.cmd run build:app` 转换 `1295` 个模块并成功；随后严格只读同一生产 `dist`。正式样本为冷启动 `3`、E2E `9`、最终 overlay `17`、状态 `3×18` 和 `fit-to-view` Trace `1`；32 份非 trace JSON 的实际启用门禁全部通过，真实 console / page、WebGL 与 health error 均为 `0`。
+- 主结论是连续视口瓶颈在 DOM / SVG overlay，尤其标签，而不是 WebGL draw CPU submit。100k 完整图层三轮 zoom / pan frame p95 中位 `176.6 / 305.8ms`，draw p95 均 `0.2ms`，overlay p95 `161.6 / 122.7ms`，标签平均占 overlay 约 `93% / 94%`；每个 zoom 的 `18` 次输入对应 `18 draw / 18 overlay`，pan 的 `47` 次有效 pointermove 对应 `47 / 47`，生产路径没有实际启用 overlay 暂停或 rAF 合并。
+- 100k 七变体同轮总控把 full zoom / pan frame p95 `153.0 / 188.3ms` 降到 no-DOM `6.0 / 41.2ms`，两轮隔离复测方向相同；`3887` 个节点仍保留且 overlay 事件仍记录，结果只代表可见 overlay 昂贵分支短路的诊断上界，不是删除节点的测试或产品收益承诺。`noLabels` 是最强单层信号；道路 / 河流对连续 pan 只改善 `6.3%～9.1%`，但 commit running 同轮约改善 `80%`，应归入 idle commit 而非 preview 首因。
+- 次级热点包括：100k `loadMap()` 中 visual cell mesh + shore cache paired 中位 `9.66s`、约占 `79.9%`；`height → states` 中位 `280.0ms` 且重建 `440.8` 万 surface 顶点；labels 组合开关固定产生 `4 draw / 5 overlay`；fit-to-view 中位 `658.2ms`，单份 trace 显示 scripting、style、layout、paint / composite preparation 与 GC 都有显著主线程成本；locate 最终稳定中位 `2743.5ms`，其中约 `2.6s` 为产品 flash，且存在重复 selection / draw。GPU hardware timer 不可用，报告只陈述 WebGL CPU submit，GPU 执行继续列为盲区。
+- `docs/performance/canvas-performance-investigation-report.md` 给出 P0 viewport rAF / overlay 快路径、runtime / measurement 分层、组合图层批事务和 locate 收敛，P1 装载拓扑、surface 几何 / 颜色解耦、route / river commit 与 measurement 独立计时，P2 标签架构、GPU timer 和长期门禁。由于跨进程 checksum 与绝对毫秒波动，长期绝对门禁要求固定序列化快照、至少 5 个独立 Chrome process、随机或平衡交错和独立可见浏览器复核；当前三轮只作为调查基线，事件数与 paired 比率可以先用三轮。
+- 最终报告首轮终审以 `BLOCK` 要求补齐三轮原始值 / 范围、完整 `>20%` 波动审计、嵌套事件、locate 边界、`passed=true` 语义、no-DOM / noRoutes 一致性与长期门禁；二轮只剩 `193` 条阈值观察分类名错误。修正为 main-thread-long-task `36`、未强制阈值观察 `193`、render-frame-gap `0`、health error `0` 后，同一审查智能体最终 `ACCEPT`。四个 `node --check`、生产构建和 `git diff --check` 通过；`source/` 零改动，未实施任何优化，未暂存、提交或推送，当前没有活动权威任务。
+
+# 2026-08-04：登记第 270～272 项——实施画布性能优化
+
+- 用户要求先拉取 main 合入当前并行分支，再按第 269 项方案实施优化，完成后提交推送。调查成果先保存到可恢复 stash，`origin/main` 从 `62dbcdc` 快进合入至 `5bc81fc`，随后恢复全部调查文件；三处文档冲突只来自主线新增第 266～268 项，已保留主线内容并把调查编号顺延为第 269 项。`git merge-base --is-ancestor origin/main HEAD` 通过。
+- 合并后生产构建通过；100k 完整图层三轮基线中，zoom `frame p95 / overlay p95` 为 `117.8～123.6ms / 71.4～80.1ms`，pan 为 `152.9～158.7ms / 60.9～69.7ms`，每轮仍为 zoom `18 draw / 18 overlay`、pan `47 / 47`。主线默认展示改动改善绝对耗时，但逐输入完整 overlay 的根因仍在。
+- 新增 `canvas-performance-optimization-plan.md`，把实施封闭为第 270 项连续视口 / overlay / 批图层 / locate，第 271 项 cell mesh / shore / 颜色与 idle 大事务，以及第 272 项事件预算、三档系统 Chrome 验收和优化前后报告。WebGL / Canvas 标签迁移、全量 buffer 架构重写和无 GPU timestamp 的硬件 SLA 明确排除。
+
+# 2026-08-04：完成第 270～272 项——画布性能优化与门禁
+
+- 连续 wheel / pan 改为 rAF preview：输入即时累计 camera 并取消旧 commit，WebGL 绘制最新 camera，DOM / SVG 与 measurement overlay 依据已提交 camera 应用根变换；preview 不刷新 runtime 面板或重排 overlay，idle commit 才清除变换并执行一次完整刷新。100k 三轮 zoom / pan 均由 `18 / 47` 次完整 overlay 降为 `0 / 0`；同步 `12` 次 wheel 严格合并为 `1 preview / 1 draw / 0 overlay`，真实可见浏览器确认交互中标签、图标和覆盖层持续跟随且适配视图可恢复。
+- renderer / runtime / panel 增加组合图层批事务；100k 状态门禁中 labels、markers/resources、zones 五成员组合均为至多 `1` 次 line / point refresh、draw 和 overlay。locate 仍保持约 `2.6s` 产品闪烁，但最终样本只产生 `16 draw / 15 selection mesh / 1 overlay`，不再逐动画帧重排 DOM。
+- visual-cell 严格凸边界改用线性等价安全验证，非凸和失败路径保留原完整门禁；shore 同次构建缓存相同 side-safety 探针；颜色专题复用 geometry / TypedArray，仅更新颜色与专题相关海岸修正。100k E2E 三轮中 `loadMap` 中位由 `12085.7ms` 降至 `8656.2ms`（`-28.4%`），`cell-visual-mesh + shore-cache` 由 `9657.9ms` 降至 `7069.4ms`（`-26.8%`），点击到出图由 `18804.7ms` 降至 `13633.1ms`（`-27.5%`）。
+- 100k 完整图层三轮 zoom frame p95 中位由合入后 `123.6ms` 降至 `100.1ms`，pan 为 `153.0ms → 152.9ms`；交互 overlay p95 均降为 `0`，但最终一次 commit 集中了路线、河流与 overlay 重建，idle 总时长中位变为 zoom `451.5ms`、pan `498.8ms`。10k 单轮旧 `80ms` idle-frame 观察线仍出现 `141.1 / 112.0ms`，报告按主线程长任务波动保留，不把三轮结果冒充稳定硬件 SLA。
+- 生产构建通过；系统 Chrome 串行完成 10k / 50k / 100k 完整图层、100k measurement-heavy、100k 状态动作和三轮 100k E2E。`regress:viewport-line-preview`、浏览器版本、`regress:label-layout`、`regress:selection-highlight`、`regress:png-options`、`regress:measurement`、`regress:shoreline -- --pure` 与完整海岸浏览器回归通过；海岸正式 10k / 50k 的错侧像素、最长针、冲突、重复和 seam 均为 `0`。测量回归把 `[FMG health] main-thread-long-task` 单独保留为性能健康事件，真正 console / page 错误仍为失败；所有最终样本 WebGL error 为 `0`。
+- 实际结果写入 `docs/performance/canvas-performance-optimization-report.md`，权威任务第 270～272 项同步完成；未修改 `source/`，没有扩入标签渲染迁移、worker / shader extrusion 或生成算法。
+- 提交后首次推送被远端以 `directory file conflict` 拒绝：远端已有 `refs/heads/codex`，不能同时创建 `refs/heads/codex/...`。本地专题分支因此只改名为 `codex-canvas-performance-optimization` 后推送，提交内容不变。

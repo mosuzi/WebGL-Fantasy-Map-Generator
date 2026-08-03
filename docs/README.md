@@ -18,6 +18,9 @@
 - `plans/`：总体验收计划和复刻路线。
 - `milestones/`：里程碑说明。
 - `performance/`：性能基线说明和长期性能对照。
+  - `performance/canvas-performance-investigation-report.md`：权威任务第 269 项正式画布性能实际调查，记录冷 / 暖态、连续视口、idle commit、消融、状态动作、Trace、盲区和分级优化建议。
+  - `performance/canvas-performance-optimization-report.md`：权威任务第 270～272 项实际优化结果，记录交互事件收敛、100k 装载收益、状态动作、回归门禁、真实浏览器结论和剩余风险。
+  - `task-notes/canvas-performance-optimization-plan.md`：权威任务第 270～272 项封闭施工图，冻结交互快路径、装载 / 颜色优化、事件预算与真实浏览器验收边界。
 - `audits/`：审查、复盘和整改方案。
   - `audits/ui-function-and-information-architecture-audit.md`：现有功能入口、复杂度、分组、低优先级能力和浮层遮挡审计。
   - `audits/interaction-usability-audit-results.md`：权威任务第 101～107 项的交互总表、真实浏览器证据摘要、问题账本、跨系统原则和功能变更附录。
