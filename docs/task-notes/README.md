@@ -52,6 +52,7 @@
 - `city-scale-and-provincial-capital-consistency.md`：权威任务第 217～218 项的真实浏览器反例、单一城市规模契约、行政角色附加表达、最终省会重评、锁定保护、旧图兼容和统一验收矩阵。
 - `zone-semantics-natural-regions-and-wilderness.md`：权威任务第 220～222 项施工图，冻结事件参与方、自然 / 自定义地区、中性基础影响、自动无人区连通分块、名称继承、标签与旧图兼容边界。
 - `layer-controls-zone-naming-and-cloud-storage.md`：权威任务第 236～241 项施工图，冻结复合图层、无人区语义命名、纹章入口、共享下拉框与两类云存储的兼容和安全边界。
+- `../deployment/cloud-storage.md`：权威任务第 241、259、261 项的云服务部署入口，记录 OAuth 公开配置、Dropbox 独立回调页与 Google Drive 存档目录配置。
 - `panel-loading-and-zone-regeneration.md`：权威任务第 242～244 项施工图，冻结两处面板加载、共享恢复态、云端组件依赖和地区重生成入口、锁定及空集合边界。
 - `headless-api-ai-docs-wiki.md`：权威任务第 223～226 项施工图，冻结共享核心、无头只读边界、区域聚合、三个标准问题、AI 文档机器目录、Wiki 源稿和发布门禁。
 - `editor-and-stat-panel-inventory.md`：正式版编辑器与统计面板清单。

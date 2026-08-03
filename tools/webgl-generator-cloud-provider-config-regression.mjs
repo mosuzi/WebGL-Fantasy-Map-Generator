@@ -5,6 +5,7 @@ import {
   emptyCloudProviderConfig,
   hasCloudProviderBuildInput,
   normalizeCloudProviderConfig,
+  normalizeGoogleDriveFolderPath,
   readCloudProviderBuildConfig,
   serializeCloudProviderConfig
 } from "./cloud-provider-config.mjs";
@@ -14,7 +15,7 @@ const unified = readCloudProviderBuildConfig({
     version: 1,
     providers: {
       dropbox: {appKey: "fixture-unified-dropbox", redirectUri: "https://fixture.test/callback"},
-      googleDrive: {clientId: "fixture-unified-google.apps.googleusercontent.com"}
+      googleDrive: {clientId: "fixture-unified-google.apps.googleusercontent.com", folderPath: "/fixture/maps"}
     }
   }),
   FMG_DROPBOX_APP_KEY: "must-not-win"
@@ -25,11 +26,12 @@ const individual = readCloudProviderBuildConfig({
   FMG_DROPBOX_APP_KEY: "fixture-new-dropbox",
   VITE_FMG_DROPBOX_APP_KEY: "fixture-legacy-dropbox",
   VITE_FMG_DROPBOX_REDIRECT_URI: "https://fixture.test/legacy-callback",
-  FMG_GOOGLE_CLIENT_ID: "fixture-new-google.apps.googleusercontent.com"
+  FMG_GOOGLE_CLIENT_ID: "fixture-new-google.apps.googleusercontent.com",
+  FMG_GOOGLE_FOLDER_PATH: "/private/webFMG"
 });
 assert.deepEqual(individual.providers, {
   dropbox: {appKey: "fixture-new-dropbox", redirectUri: "https://fixture.test/legacy-callback"},
-  googleDrive: {clientId: "fixture-new-google.apps.googleusercontent.com"}
+  googleDrive: {clientId: "fixture-new-google.apps.googleusercontent.com", folderPath: "/private/webFMG"}
 });
 assert.deepEqual(readCloudProviderBuildConfig({}), emptyCloudProviderConfig());
 assert.equal(hasCloudProviderBuildInput({}), false);
@@ -41,11 +43,14 @@ assert.throws(
   () => normalizeCloudProviderConfig({providers: {googleDrive: {clientId: "GOCSPX-fixture-not-a-client-id"}}}),
   /Google client secret/
 );
+assert.equal(normalizeGoogleDriveFolderPath(" maps\\webFMG/ "), "/maps/webFMG");
+assert.equal(normalizeGoogleDriveFolderPath("/"), "/");
+assert.throws(() => normalizeGoogleDriveFolderPath("/maps/../secret"), /不允许/);
 
 const normalized = normalizeCloudProviderConfig({
   providers: {
     dropbox: {appKey: " fixture ", redirectUri: " https://fixture.test/callback ", ignored: "drop-me"},
-    googleDrive: {clientId: " fixture-google.apps.googleusercontent.com ", ignored: "drop-me"}
+    googleDrive: {clientId: " fixture-google.apps.googleusercontent.com ", folderPath: " worlds//webFMG ", ignored: "drop-me"}
   },
   ignored: "drop-me"
 });
@@ -69,6 +74,7 @@ const officialConfig = normalizeCloudProviderConfig(publicContext.__FMG_CLOUD_PR
 assert(officialConfig.providers.dropbox.appKey, "官方 Dropbox app key 不能为空");
 assert.equal(officialConfig.providers.dropbox.redirectUri, "https://fmg.mosuzi.top/oauth/dropbox/callback", "官方 Dropbox redirect URI 错误");
 assert.match(officialConfig.providers.googleDrive.clientId, /\.apps\.googleusercontent\.com$/, "官方 Google 配置必须是 Client ID");
+assert.equal(officialConfig.providers.googleDrive.folderPath, "/webFMG", "官方 Google 存档目录错误");
 const localContext = {location: {hostname: "localhost", port: "5410"}};
 runInNewContext(publicConfig, localContext);
 const localConfig = normalizeCloudProviderConfig(localContext.__FMG_CLOUD_PROVIDER_CONFIG__);
@@ -95,9 +101,11 @@ for (const name of [
   "FMG_DROPBOX_APP_KEY",
   "FMG_DROPBOX_REDIRECT_URI",
   "FMG_GOOGLE_CLIENT_ID",
+  "FMG_GOOGLE_FOLDER_PATH",
   "VITE_FMG_DROPBOX_APP_KEY",
   "VITE_FMG_DROPBOX_REDIRECT_URI",
-  "VITE_FMG_GOOGLE_CLIENT_ID"
+  "VITE_FMG_GOOGLE_CLIENT_ID",
+  "VITE_FMG_GOOGLE_FOLDER_PATH"
 ]) assert.match(envExample, new RegExp(`^${name}=$`, "m"), `${name} 示例必须为空`);
 assert.match(panel, /providers\.dropbox\.appKey/);
 assert.match(panel, /providers\.googleDrive\.clientId/);
@@ -113,7 +121,7 @@ assert.match(vercelConfig.headers[0].headers[0].value, /no-store/);
 console.log(JSON.stringify({
   ok: true,
   sources: ["runtime-file", "unified-json", "individual-env", "legacy-vite"],
-  serializedFields: 3,
+  serializedFields: 4,
   realValuesPrinted: false
 }, null, 2));
 

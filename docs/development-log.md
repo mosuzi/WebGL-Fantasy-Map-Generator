@@ -1,5 +1,16 @@
 # 开发历史
 
+## 2026-08-03：完成权威任务第 261 项的 Google Drive 存档目录配置
+
+- Cloud Provider Config 新增 `providers.googleDrive.folderPath`，官方默认 `/webFMG`；统一 JSON、`FMG_GOOGLE_FOLDER_PATH` 与旧 `VITE_FMG_GOOGLE_FOLDER_PATH` 均可覆盖，`/` 显式表示根目录。路径会统一斜杠并限制层级、路径段和控制字符，配置仍只包含浏览器可见的公开值。
+- Google Drive 新建存档前逐级查询目录，缺失时按需创建并把最终目录 ID 写入上传 metadata 的 `parents`；连接和刷新列表不创建空目录，已有应用目录直接复用。列表同时保留配置目录和本应用旧根目录存档，覆盖旧文件沿用原 ID，不做静默迁移；权限仍为 `drive.file`。
+- Cloud Provider Config 与云存储 mock 专项覆盖默认目录、多级目录、显式根目录、延迟创建、目录复用、上传父级、旧根目录文件、覆盖 / 下载及配置优先级；生产构建通过。系统 Chrome `5411` 的配置与云面板回归通过，桌面、`390 / 320px` 无溢出，console、page、health 与 WebGL error 为 `0`。本项未启动真实 OAuth、访问云盘、提交或推送，`source/` 零改动。
+
+## 2026-08-03：登记权威任务第 261 项
+
+- 用户发现 Google Drive 新建地图没有 `parents` 元数据，因而默认落在 My Drive 根目录；要求改为 `/webFMG` 并支持自部署配置。官方 Drive API 明确说明未设置 `parents` 时文件进入根目录，目录需要通过 folder MIME type、父级 ID 与 `parents` 层级表达。
+- 本项新增 `providers.googleDrive.folderPath`，默认 `/webFMG`，支持多级路径和显式 `/` 根目录。新建文件按需解析 / 创建目录，列表兼容配置目录与本应用旧根目录存档，覆盖不静默迁移；继续保持 `drive.file` scope，不扫描任意用户文件。
+
 ## 2026-08-03：完成权威任务第 260 项的中文项目更名
 
 - 中文正式名称已统一为“WebGL 幻想地图生成器”，正式页面与加载画卷使用“莫苏子的幻想地图生成器 / 幻想地图生成器”，Web App Manifest 使用完整名称与“幻想地图”短名；SVG 图标标题、加载概念稿、README、部署说明和相关回归同步更新。英文名保持不变，“架空历史创作”等普通语义没有机械替换。

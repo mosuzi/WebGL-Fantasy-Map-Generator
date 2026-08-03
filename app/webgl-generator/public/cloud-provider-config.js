@@ -10,7 +10,8 @@
           : "https://fmg.mosuzi.top/oauth/dropbox/callback"
       },
       googleDrive: {
-        clientId: "821266209218-btadofk8mh9v5c4mofskb9ea0lse3tg1.apps.googleusercontent.com"
+        clientId: "821266209218-btadofk8mh9v5c4mofskb9ea0lse3tg1.apps.googleusercontent.com",
+        folderPath: "/webFMG"
       }
     }
   };

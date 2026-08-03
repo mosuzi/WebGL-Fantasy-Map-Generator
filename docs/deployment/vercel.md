@@ -49,7 +49,7 @@ Vercel 会先把 `/oauth/dropbox/callback` 精确改写到独立轻量回调页�
 1. 选择当前仓库。
 2. Root Directory 保持仓库根目录。
 3. 保留 `vercel.json` 中的构建设置；控制台里不需要手动改 Root Directory。
-4. 本地 / 浏览器存储不需要环境变量。官方部署若要启用云端存储，按[云存储部署配置](./cloud-storage.md)在 Vercel 设置统一的 `FMG_CLOUD_PROVIDER_CONFIG`，或分别设置 `FMG_DROPBOX_APP_KEY`、`FMG_DROPBOX_REDIRECT_URI` 与 `FMG_GOOGLE_CLIENT_ID`。构建会自动生成 `cloud-provider-config.js`；未配置的服务会在界面中明确保持禁用，旧 `VITE_FMG_*` 继续兼容。
+4. 本地 / 浏览器存储不需要环境变量。官方部署若要启用云端存储，按[云存储部署配置](./cloud-storage.md)在 Vercel 设置统一的 `FMG_CLOUD_PROVIDER_CONFIG`，或分别设置 `FMG_DROPBOX_APP_KEY`、`FMG_DROPBOX_REDIRECT_URI`、`FMG_GOOGLE_CLIENT_ID` 与可选的 `FMG_GOOGLE_FOLDER_PATH`。Google Drive 目录不配置时默认为 `/webFMG`。构建会自动生成 `cloud-provider-config.js`；未配置的服务会在界面中明确保持禁用，旧 `VITE_FMG_*` 继续兼容。
 5. 首次部署后访问 Vercel 给出的 Preview URL，确认根路径显示从中央向两侧展开的中国古代画卷加载页，卷面包含“莫苏子”“幻想地图生成器”和当前版本号，并能完成初始生成。
 6. 分别打开 `/prototype/webgl-cells/`、`/prototype/boundary-topology-lab/` 与 `/prototype/loading-scroll-showcase/`，确认原型页面和关键数据 / 模块能直接加载。
 

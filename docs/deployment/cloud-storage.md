@@ -15,7 +15,8 @@ globalThis.__FMG_CLOUD_PROVIDER_CONFIG__ = {
       redirectUri: ""
     },
     googleDrive: {
-      clientId: ""
+      clientId: "",
+      folderPath: "/webFMG"
     }
   }
 };
@@ -26,7 +27,7 @@ globalThis.__FMG_CLOUD_PROVIDER_CONFIG__ = {
 1. 构建时设置下文的部署环境变量，构建会自动生成该文件。
 2. 构建完成后直接替换 `dist/webgl-generator/cloud-provider-config.js`，不必重新打包应用，也不必修改源码。
 
-配置文件只允许填写公开的 Dropbox App key、Dropbox Redirect URI 和 Google OAuth Client ID。不要填写 client secret、refresh token、用户 access token 或其它授权值。
+配置文件只允许填写公开的 Dropbox App key、Dropbox Redirect URI、Google OAuth Client ID，以及不含凭据的 Google Drive 存档目录。不要填写 client secret、refresh token、用户 access token 或其它授权值。
 
 仓库自带的官方配置会按访问地址选择 Dropbox 回调：正式站点使用 `https://fmg.mosuzi.top/oauth/dropbox/callback`；本地开发仅在 `http://localhost:5410` 下使用 `http://localhost:5410/oauth/dropbox/callback`。Dropbox App Console 需要同时登记这两个 Redirect URI；使用 `127.0.0.1` 或其它本地端口时不会冒充 `localhost:5410`，应通过私人部署配置显式覆盖。
 
@@ -35,7 +36,7 @@ globalThis.__FMG_CLOUD_PROVIDER_CONFIG__ = {
 官方 Vercel 部署推荐设置一个统一变量：
 
 ```dotenv
-FMG_CLOUD_PROVIDER_CONFIG={"version":1,"providers":{"dropbox":{"appKey":"...","redirectUri":"https://example.com/oauth/dropbox/callback"},"googleDrive":{"clientId":"...apps.googleusercontent.com"}}}
+FMG_CLOUD_PROVIDER_CONFIG={"version":1,"providers":{"dropbox":{"appKey":"...","redirectUri":"https://example.com/oauth/dropbox/callback"},"googleDrive":{"clientId":"...apps.googleusercontent.com","folderPath":"/webFMG"}}}
 ```
 
 也可以逐项设置：
@@ -44,9 +45,10 @@ FMG_CLOUD_PROVIDER_CONFIG={"version":1,"providers":{"dropbox":{"appKey":"...","r
 FMG_DROPBOX_APP_KEY=
 FMG_DROPBOX_REDIRECT_URI=
 FMG_GOOGLE_CLIENT_ID=
+FMG_GOOGLE_FOLDER_PATH=
 ```
 
-统一 JSON 的优先级高于逐项变量。旧部署中的 `VITE_FMG_DROPBOX_APP_KEY`、`VITE_FMG_DROPBOX_REDIRECT_URI` 和 `VITE_FMG_GOOGLE_CLIENT_ID` 仍可使用；新逐项变量会逐字段优先于旧变量。仓库根目录的 `.env.example` 只保留空模板，真实值应放在未提交的 `.env.local` 或部署平台的加密环境变量中。
+统一 JSON 的优先级高于逐项变量。旧部署中的 `VITE_FMG_DROPBOX_APP_KEY`、`VITE_FMG_DROPBOX_REDIRECT_URI`、`VITE_FMG_GOOGLE_CLIENT_ID` 和 `VITE_FMG_GOOGLE_FOLDER_PATH` 仍可使用；新逐项变量会逐字段优先于旧变量。仓库根目录的 `.env.example` 只保留空模板，真实值应放在未提交的 `.env.local` 或部署平台的加密环境变量中。
 
 ## Dropbox
 
@@ -64,12 +66,13 @@ PKCE verifier 与 `state` 只在授权握手期间放入原窗口的 `sessionSto
 1. 在 Google Cloud Console 为项目启用 Google Drive API，并配置 OAuth consent screen。
 2. 新建 Web application 类型的 OAuth 2.0 Client ID，把部署站点加入 Authorized JavaScript origins。
 3. 把以 `apps.googleusercontent.com` 结尾的 Client ID 填入 `providers.googleDrive.clientId`。不要把以 `GOCSPX-` 开头的 Client secret 放进配置。
+4. 新存档默认放入 `/webFMG`。需要其它位置时，把绝对路径写入 `providers.googleDrive.folderPath`，例如 `/maps/campaign-a`；多级目录会在首次新建存档时按需创建。显式配置为 `/` 才会继续把新文件放到“我的云端硬盘”根目录。
 
-应用使用 Google Identity Services token model，只申请 `drive.file` scope。它只列出和操作由本应用创建、且带有应用标记的地图文件，不浏览用户云盘里的任意文件。
+应用使用 Google Identity Services token model，只申请 `drive.file` scope。它只列出和操作由本应用创建、且带有应用标记的地图文件，不浏览用户云盘里的任意文件。升级前已经保存在根目录的本应用地图仍会显示；覆盖这些旧文件时保留原位置，不会在后台搬到新目录。
 
 ## 数据与安全边界
 
-- 两个服务都只保存完整 gzip 地图，不做后台同步、自动保存、删除、分享、文件夹管理或冲突合并。
+- 两个服务都只保存完整 gzip 地图，不做后台同步、自动保存、删除、分享、交互式文件夹管理或冲突合并；Google Drive 只按部署配置解析并按需创建存档目录。
 - 新建与覆盖目标分开；覆盖必须先选定明确文件并确认。载入也必须确认，因为它会替换当前地图并清空编辑历史。
 - access token 不写入 LocalStorage、IndexedDB、地图文件、日志或公开 API；刷新或关闭页面后需要重新连接。
 - Dropbox 使用远端 `rev` 做条件覆盖，Google Drive 在覆盖前重新读取文件版本；远端已变化时会拒绝覆盖，要求用户刷新列表后重新选择。

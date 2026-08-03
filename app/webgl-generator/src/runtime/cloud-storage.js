@@ -10,6 +10,8 @@ const GOOGLE_DRIVE_API_URL = "https://www.googleapis.com/drive/v3";
 const GOOGLE_DRIVE_UPLOAD_URL = "https://www.googleapis.com/upload/drive/v3";
 const GOOGLE_TOKEN_SCRIPT = "https://accounts.google.com/gsi/client";
 const GOOGLE_APP_PROPERTY = Object.freeze({key: "fmgWebglMap", value: "true"});
+const GOOGLE_FOLDER_PROPERTY = Object.freeze({key: "fmgWebglFolder", value: "true"});
+const GOOGLE_FOLDER_MIME = "application/vnd.google-apps.folder";
 const DROPBOX_HANDSHAKE_MAX_AGE = 10 * 60 * 1000;
 
 export function readCloudStorageConfig(env = import.meta.env || {}, runtimeConfig = globalThis.__FMG_CLOUD_PROVIDER_CONFIG__) {
@@ -22,7 +24,8 @@ export function readCloudStorageConfig(env = import.meta.env || {}, runtimeConfi
       redirectUri: firstConfiguredValue(dropbox.redirectUri, env.VITE_FMG_DROPBOX_REDIRECT_URI)
     }),
     googleDrive: Object.freeze({
-      clientId: firstConfiguredValue(googleDrive.clientId, env.VITE_FMG_GOOGLE_CLIENT_ID)
+      clientId: firstConfiguredValue(googleDrive.clientId, env.VITE_FMG_GOOGLE_CLIENT_ID),
+      folderPath: firstConfiguredValue(googleDrive.folderPath, env.VITE_FMG_GOOGLE_FOLDER_PATH, "/webFMG")
     })
   });
 }
@@ -352,18 +355,27 @@ export function createDropboxProvider({view = globalThis, fetchImpl = view.fetch
 export function createGoogleDriveProvider({view = globalThis, fetchImpl = view.fetch?.bind(view), config = {}, notify = () => {}, oauth = null} = {}) {
   let accessToken = "";
   let expiresAt = 0;
+  let resolvedFolderId = "";
+  let folderResolution = null;
   const clientId = String(config.clientId || "").trim();
+  let folderPath = "/webFMG";
+  let folderPathError = "";
+  try {
+    folderPath = normalizeGoogleDriveFolderPath(config.folderPath);
+  } catch (error) {
+    folderPathError = String(error?.message || error);
+  }
   const configurationError = !clientId
     ? "缺少 Google OAuth client ID"
     : /^GOCSPX-/i.test(clientId)
       ? "检测到 Google client secret；请改用 OAuth Client ID"
-      : "";
+      : folderPathError;
   const configured = !configurationError;
 
   return {
     id: "google-drive",
     label: "Google Drive",
-    getState: () => publicProviderState("google-drive", "Google Drive", configured, tokenValid(), configFields(config, ["clientId"]), configurationError),
+    getState: () => publicProviderState("google-drive", "Google Drive", configured, tokenValid(), configFields({clientId, folderPath}, ["clientId", "folderPath"]), configurationError),
     connect,
     disconnect,
     listFiles,
@@ -390,6 +402,8 @@ export function createGoogleDriveProvider({view = globalThis, fetchImpl = view.f
     const token = accessToken;
     accessToken = "";
     expiresAt = 0;
+    resolvedFolderId = "";
+    folderResolution = null;
     notify();
     if (remote && token) await revokeGoogleToken(view, oauth, token).catch(() => null);
     return {disconnected: true};
@@ -397,14 +411,21 @@ export function createGoogleDriveProvider({view = globalThis, fetchImpl = view.f
 
   async function listFiles() {
     const token = requireToken();
+    const folderId = await resolveConfiguredFolder(token, {create: false});
+    const parentIds = folderId && folderId !== "root" ? [folderId, "root"] : ["root"];
+    const groups = await Promise.all(parentIds.map(parentId => listFilesInParent(token, parentId)));
+    return groups.flat().sort(sortRemoteFiles);
+  }
+
+  async function listFilesInParent(token, parentId) {
     const files = [];
     let pageToken = "";
     do {
       const params = new URLSearchParams({
-        q: `trashed = false and appProperties has { key='${GOOGLE_APP_PROPERTY.key}' and value='${GOOGLE_APP_PROPERTY.value}' }`,
+        q: `trashed = false and '${escapeGoogleDriveQuery(parentId)}' in parents and appProperties has { key='${GOOGLE_APP_PROPERTY.key}' and value='${GOOGLE_APP_PROPERTY.value}' }`,
         spaces: "drive",
         pageSize: "100",
-        fields: "nextPageToken,files(id,name,size,modifiedTime,version,appProperties)"
+        fields: "nextPageToken,files(id,name,size,modifiedTime,version,parents,appProperties)"
       });
       if (pageToken) params.set("pageToken", pageToken);
       const response = await requireFetch(fetchImpl)(`${GOOGLE_DRIVE_API_URL}/files?${params}`, googleRequest(token));
@@ -412,20 +433,25 @@ export function createGoogleDriveProvider({view = globalThis, fetchImpl = view.f
       files.push(...(payload.files || []).filter(file => isCloudMapFilename(file.name)).map(normalizeGoogleFile));
       pageToken = String(payload.nextPageToken || "");
     } while (pageToken);
-    return files.sort(sortRemoteFiles);
+    return files;
   }
 
   async function createFile({filename, blob}) {
     const token = requireToken();
+    const folderId = await resolveConfiguredFolder(token, {create: true});
     const boundary = `fmg-${createRandomUrlToken(view, 18)}`;
-    const metadata = {name: normalizeCloudFilename(filename), appProperties: {[GOOGLE_APP_PROPERTY.key]: GOOGLE_APP_PROPERTY.value}};
+    const metadata = {
+      name: normalizeCloudFilename(filename),
+      parents: [folderId],
+      appProperties: {[GOOGLE_APP_PROPERTY.key]: GOOGLE_APP_PROPERTY.value}
+    };
     const body = new Blob([
       `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(metadata)}\r\n`,
       `--${boundary}\r\nContent-Type: application/gzip\r\n\r\n`,
       blob,
       `\r\n--${boundary}--`
     ]);
-    const response = await requireFetch(fetchImpl)(`${GOOGLE_DRIVE_UPLOAD_URL}/files?uploadType=multipart&fields=id,name,size,modifiedTime,version,appProperties`, {
+    const response = await requireFetch(fetchImpl)(`${GOOGLE_DRIVE_UPLOAD_URL}/files?uploadType=multipart&fields=id,name,size,modifiedTime,version,parents,appProperties`, {
       method: "POST",
       headers: {Authorization: `Bearer ${token}`, "Content-Type": `multipart/related; boundary=${boundary}`},
       body
@@ -465,11 +491,82 @@ export function createGoogleDriveProvider({view = globalThis, fetchImpl = view.f
   function tokenValid() {
     return Boolean(accessToken && expiresAt > Date.now() + 5000);
   }
+
+  async function resolveConfiguredFolder(token, {create}) {
+    if (folderPath === "/") return "root";
+    if (resolvedFolderId) return resolvedFolderId;
+    if (folderResolution) {
+      const pendingFolderId = await folderResolution;
+      if (pendingFolderId || !create) return pendingFolderId;
+    }
+    folderResolution = resolveFolderPath(token, create);
+    try {
+      const folderId = await folderResolution;
+      if (folderId) resolvedFolderId = folderId;
+      return folderId;
+    } finally {
+      folderResolution = null;
+    }
+  }
+
+  async function resolveFolderPath(token, create) {
+    let parentId = "root";
+    for (const segment of folderPath.slice(1).split("/")) {
+      const existing = await findGoogleFolder(token, parentId, segment);
+      if (existing) {
+        parentId = existing.id;
+        continue;
+      }
+      if (!create) return "";
+      parentId = (await createGoogleFolder(token, parentId, segment)).id;
+    }
+    return parentId;
+  }
+
+  async function findGoogleFolder(token, parentId, name) {
+    const params = new URLSearchParams({
+      q: `trashed = false and mimeType = '${GOOGLE_FOLDER_MIME}' and name = '${escapeGoogleDriveQuery(name)}' and '${escapeGoogleDriveQuery(parentId)}' in parents`,
+      spaces: "drive",
+      pageSize: "20",
+      fields: "files(id,name,parents,appProperties)"
+    });
+    const response = await requireFetch(fetchImpl)(`${GOOGLE_DRIVE_API_URL}/files?${params}`, googleRequest(token));
+    const payload = await readJsonResponse(response, "查找 Google Drive 存档目录");
+    const folders = Array.isArray(payload.files) ? payload.files : [];
+    return folders.find(folder => folder.appProperties?.[GOOGLE_FOLDER_PROPERTY.key] === GOOGLE_FOLDER_PROPERTY.value) || folders[0] || null;
+  }
+
+  async function createGoogleFolder(token, parentId, name) {
+    const response = await requireFetch(fetchImpl)(`${GOOGLE_DRIVE_API_URL}/files?fields=id,name,parents,appProperties`, {
+      method: "POST",
+      headers: {Authorization: `Bearer ${token}`, "Content-Type": "application/json; charset=UTF-8"},
+      body: JSON.stringify({
+        name,
+        mimeType: GOOGLE_FOLDER_MIME,
+        parents: [parentId],
+        appProperties: {[GOOGLE_FOLDER_PROPERTY.key]: GOOGLE_FOLDER_PROPERTY.value}
+      })
+    });
+    const folder = await readJsonResponse(response, "创建 Google Drive 存档目录");
+    if (!folder.id) throw new Error("Google Drive 未返回新建目录 ID");
+    return folder;
+  }
 }
 
 export function normalizeCloudFilename(filename) {
   const base = String(filename || "map").trim().replace(/[\\/:*?"<>|\u0000-\u001f]+/g, "-").replace(/\s+/g, " ").slice(0, 180) || "map";
   return base.endsWith(CLOUD_MAP_EXTENSION) ? base : `${base.replace(/(?:\.json(?:\.gz)?|\.gz)$/i, "")}${CLOUD_MAP_EXTENSION}`;
+}
+
+export function normalizeGoogleDriveFolderPath(value = "/webFMG") {
+  const source = String(value || "").trim() || "/webFMG";
+  const segments = source.replace(/\\/g, "/").split("/").map(segment => segment.trim()).filter(Boolean);
+  if (segments.length > 20) throw new Error("Google Drive folderPath 最多支持 20 级目录");
+  for (const segment of segments) {
+    if (segment === "." || segment === "..") throw new Error("Google Drive folderPath 不允许 . 或 .. 路径段");
+    if (/[\u0000-\u001f]/.test(segment) || segment.length > 200) throw new Error("Google Drive folderPath 包含无效目录名");
+  }
+  return segments.length ? `/${segments.join("/")}` : "/";
 }
 
 function publicProviderState(id, label, configured, connected, fields, configurationError = "", authorizationError = "") {
@@ -487,7 +584,11 @@ function normalizeDropboxFile(entry) {
 
 function normalizeGoogleFile(file) {
   const version = String(file.version || "");
-  return Object.freeze({provider: "google-drive", id: String(file.id || ""), name: String(file.name || ""), version, revision: version, size: Number(file.size) || 0, modifiedAt: String(file.modifiedTime || "")});
+  return Object.freeze({provider: "google-drive", id: String(file.id || ""), name: String(file.name || ""), version, revision: version, parents: Object.freeze((file.parents || []).map(String)), size: Number(file.size) || 0, modifiedAt: String(file.modifiedTime || "")});
+}
+
+function escapeGoogleDriveQuery(value) {
+  return String(value || "").replace(/\\/g, "\\\\").replace(/'/g, "\\'");
 }
 
 function sortRemoteFiles(a, b) {

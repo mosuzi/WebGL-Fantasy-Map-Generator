@@ -5,7 +5,7 @@ export function emptyCloudProviderConfig() {
     version: 1,
     providers: {
       dropbox: {appKey: "", redirectUri: ""},
-      googleDrive: {clientId: ""}
+      googleDrive: {clientId: "", folderPath: "/webFMG"}
     }
   };
 }
@@ -29,7 +29,8 @@ export function normalizeCloudProviderConfig(source = {}) {
         redirectUri: clean(dropbox.redirectUri)
       },
       googleDrive: {
-        clientId: googleClientId
+        clientId: googleClientId,
+        folderPath: normalizeGoogleDriveFolderPath(googleDrive.folderPath)
       }
     }
   };
@@ -52,7 +53,8 @@ export function readCloudProviderBuildConfig(env = {}) {
       redirectUri: first(env.FMG_DROPBOX_REDIRECT_URI, env.VITE_FMG_DROPBOX_REDIRECT_URI)
     },
     googleDrive: {
-      clientId: first(env.FMG_GOOGLE_CLIENT_ID, env.VITE_FMG_GOOGLE_CLIENT_ID)
+      clientId: first(env.FMG_GOOGLE_CLIENT_ID, env.VITE_FMG_GOOGLE_CLIENT_ID),
+      folderPath: first(env.FMG_GOOGLE_FOLDER_PATH, env.VITE_FMG_GOOGLE_FOLDER_PATH, "/webFMG")
     }
   });
 }
@@ -63,15 +65,28 @@ export function hasCloudProviderBuildInput(env = {}) {
     "FMG_DROPBOX_APP_KEY",
     "FMG_DROPBOX_REDIRECT_URI",
     "FMG_GOOGLE_CLIENT_ID",
+    "FMG_GOOGLE_FOLDER_PATH",
     "VITE_FMG_DROPBOX_APP_KEY",
     "VITE_FMG_DROPBOX_REDIRECT_URI",
-    "VITE_FMG_GOOGLE_CLIENT_ID"
+    "VITE_FMG_GOOGLE_CLIENT_ID",
+    "VITE_FMG_GOOGLE_FOLDER_PATH"
   ].some(name => Boolean(clean(env[name])));
 }
 
 export function serializeCloudProviderConfig(config) {
   const json = JSON.stringify(normalizeCloudProviderConfig(config), null, 2).replaceAll("<", "\\u003c");
   return `globalThis.__FMG_CLOUD_PROVIDER_CONFIG__ = ${json};\n`;
+}
+
+export function normalizeGoogleDriveFolderPath(value = "/webFMG") {
+  const source = clean(value) || "/webFMG";
+  const segments = source.replace(/\\/g, "/").split("/").map(segment => segment.trim()).filter(Boolean);
+  if (segments.length > 20) throw new Error("Google Drive folderPath 最多支持 20 级目录");
+  for (const segment of segments) {
+    if (segment === "." || segment === "..") throw new Error("Google Drive folderPath 不允许 . 或 .. 路径段");
+    if (/[\u0000-\u001f]/.test(segment) || segment.length > 200) throw new Error("Google Drive folderPath 包含无效目录名");
+  }
+  return segments.length ? `/${segments.join("/")}` : "/";
 }
 
 function first(...values) {

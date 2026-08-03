@@ -10,6 +10,7 @@ import {
   createDropboxProvider,
   createGoogleDriveProvider,
   readCloudStorageConfig,
+  normalizeGoogleDriveFolderPath,
   normalizeCloudFilename
 } from "../app/webgl-generator/src/runtime/cloud-storage.js";
 import {canSelectCloudStorageProvider, reconcileCloudStorageFileList} from "../app/webgl-generator/src/ui/panels/cloud-storage-panel.js";
@@ -243,6 +244,7 @@ async function verifyGoogleDrive() {
   const calls = [];
   let revoked = "";
   let metadataVersion = "7";
+  let uploadedMetadata = null;
   const view = createView({session: createMemoryStorage(), href: "https://maps.test/app"});
   const oauth = {
     requestToken: async request => {
@@ -257,17 +259,34 @@ async function verifyGoogleDrive() {
   const fetchImpl = async (url, options = {}) => {
     calls.push({url: String(url), options});
     const parsed = new URL(String(url));
+    const query = parsed.searchParams.get("q") || "";
+    if (parsed.pathname === "/drive/v3/files" && options.method === "POST") {
+      const metadata = JSON.parse(options.body);
+      assert.equal(metadata.name, "webFMG");
+      assert.equal(metadata.mimeType, "application/vnd.google-apps.folder");
+      assert.deepEqual(metadata.parents, ["root"]);
+      assert.equal(metadata.appProperties.fmgWebglFolder, "true");
+      return jsonResponse({id: "folder-webfmg", ...metadata});
+    }
+    if (parsed.pathname === "/drive/v3/files" && query.includes("mimeType")) {
+      assert.match(query, /name = 'webFMG'/);
+      assert.match(query, /'root' in parents/);
+      return jsonResponse({files: []});
+    }
     if (parsed.pathname === "/drive/v3/files" && !parsed.searchParams.get("pageToken")) {
-      assert.match(parsed.searchParams.get("q"), /appProperties has/);
-      return jsonResponse({files: [{id: "g1", name: `远端${CLOUD_MAP_EXTENSION}`, size: "22", modifiedTime: "2026-08-01T00:00:00Z", version: "7", appProperties: {fmgWebglMap: "true"}}], nextPageToken: "next"});
+      assert.match(query, /appProperties has/);
+      assert.match(query, /'root' in parents/);
+      return jsonResponse({files: [{id: "g1", name: `远端${CLOUD_MAP_EXTENSION}`, parents: ["root"], size: "22", modifiedTime: "2026-08-01T00:00:00Z", version: "7", appProperties: {fmgWebglMap: "true"}}], nextPageToken: "next"});
     }
     if (parsed.pathname === "/drive/v3/files" && parsed.searchParams.get("pageToken") === "next") return jsonResponse({files: []});
     if (parsed.pathname === "/upload/drive/v3/files" && options.method === "POST") {
       assert.equal(parsed.searchParams.get("uploadType"), "multipart");
-      return jsonResponse({id: "g2", name: `新建${CLOUD_MAP_EXTENSION}`, size: "16", modifiedTime: "2026-08-02T00:00:00Z", version: "1", appProperties: {fmgWebglMap: "true"}});
+      uploadedMetadata = await readMultipartMetadata(options.body);
+      assert.deepEqual(uploadedMetadata.parents, ["folder-webfmg"]);
+      return jsonResponse({id: "g2", ...uploadedMetadata, size: "16", modifiedTime: "2026-08-02T00:00:00Z", version: "1"});
     }
     if (parsed.pathname === "/drive/v3/files/g1" && !parsed.searchParams.has("alt")) {
-      return jsonResponse({id: "g1", name: `远端${CLOUD_MAP_EXTENSION}`, size: "22", modifiedTime: metadataVersion === "7" ? "2026-08-01T00:00:00Z" : "2026-08-03T00:00:00Z", version: metadataVersion, appProperties: {fmgWebglMap: "true"}});
+      return jsonResponse({id: "g1", name: `远端${CLOUD_MAP_EXTENSION}`, parents: ["root"], size: "22", modifiedTime: metadataVersion === "7" ? "2026-08-01T00:00:00Z" : "2026-08-03T00:00:00Z", version: metadataVersion, appProperties: {fmgWebglMap: "true"}});
     }
     if (parsed.pathname === "/upload/drive/v3/files/g1" && options.method === "PATCH") {
       assert.equal(parsed.searchParams.get("uploadType"), "media");
@@ -276,14 +295,17 @@ async function verifyGoogleDrive() {
     if (parsed.pathname === "/drive/v3/files/g1" && parsed.searchParams.get("alt") === "media") return new Response(gzipBlob, {status: 200});
     throw new Error(`unexpected Google URL ${url}`);
   };
-  const provider = createGoogleDriveProvider({view, fetchImpl, config: {clientId: "google-client-id"}, oauth});
+  const provider = createGoogleDriveProvider({view, fetchImpl, config: {clientId: "google-client-id", folderPath: "/webFMG"}, oauth});
   await provider.connect();
   assert.equal(provider.getState().connected, true);
   const files = await provider.listFiles();
   assert.equal(files.length, 1);
   assert.equal(files[0].provider, "google-drive");
   assert.equal(files[0].version, "7");
+  assert.deepEqual(files[0].parents, ["root"], "升级后必须继续列出旧根目录存档");
+  assert.equal(calls.filter(call => call.options.method === "POST").length, 0, "连接与列表不得创建空目录");
   await provider.createFile({filename: "新建", blob: gzipBlob});
+  assert.deepEqual(uploadedMetadata.parents, ["folder-webfmg"]);
   await provider.overwriteFile(files[0], {blob: gzipBlob});
   assert.equal((await provider.downloadFile(files[0])).size, gzipBlob.size);
   metadataVersion = "9";
@@ -304,6 +326,93 @@ async function verifyGoogleDrive() {
   const clientSecret = createGoogleDriveProvider({view, fetchImpl, config: {clientId: "GOCSPX-fixture-not-a-client-id"}, oauth});
   assert.equal(clientSecret.getState().configured, false);
   assert.match(clientSecret.getState().configurationError, /client secret/);
+
+  assert.equal(normalizeGoogleDriveFolderPath(" worlds\\campaign/webFMG "), "/worlds/campaign/webFMG");
+  assert.throws(() => normalizeGoogleDriveFolderPath("/worlds/../secret"), /不允许/);
+  await verifyGoogleDriveFolderPaths(oauth);
+}
+
+async function verifyGoogleDriveFolderPaths(oauth) {
+  const folderCreates = [];
+  let uploadMetadata = null;
+  const fetchImpl = async (url, options = {}) => {
+    const parsed = new URL(String(url));
+    const query = parsed.searchParams.get("q") || "";
+    if (parsed.pathname === "/drive/v3/files" && options.method === "POST") {
+      const metadata = JSON.parse(options.body);
+      folderCreates.push(metadata);
+      return jsonResponse({id: `folder-${folderCreates.length}`, ...metadata});
+    }
+    if (parsed.pathname === "/drive/v3/files" && query.includes("mimeType")) return jsonResponse({files: []});
+    if (parsed.pathname === "/upload/drive/v3/files" && options.method === "POST") {
+      uploadMetadata = await readMultipartMetadata(options.body);
+      return jsonResponse({id: "nested-map", ...uploadMetadata, size: "16", modifiedTime: "2026-08-02T00:00:00Z", version: "1"});
+    }
+    throw new Error(`unexpected folder-path Google URL ${url}`);
+  };
+  const provider = createGoogleDriveProvider({
+    view: createView({session: createMemoryStorage(), href: "https://maps.test/app"}),
+    fetchImpl,
+    config: {clientId: "google-client-id", folderPath: "/worlds/campaign/webFMG"},
+    oauth
+  });
+  await provider.connect();
+  await provider.createFile({filename: "多级路径", blob: gzipBlob});
+  assert.deepEqual(folderCreates.map(folder => [folder.name, folder.parents[0]]), [
+    ["worlds", "root"],
+    ["campaign", "folder-1"],
+    ["webFMG", "folder-2"]
+  ]);
+  assert.deepEqual(uploadMetadata.parents, ["folder-3"]);
+
+  let reusedUploadMetadata = null;
+  let reusedFolderCreateCount = 0;
+  const reusedProvider = createGoogleDriveProvider({
+    view: createView({session: createMemoryStorage(), href: "https://maps.test/app"}),
+    fetchImpl: async (url, options = {}) => {
+      const parsed = new URL(String(url));
+      const query = parsed.searchParams.get("q") || "";
+      if (parsed.pathname === "/drive/v3/files" && query.includes("mimeType")) {
+        return jsonResponse({files: [{id: "existing-webfmg", name: "webFMG", parents: ["root"], appProperties: {fmgWebglFolder: "true"}}]});
+      }
+      if (parsed.pathname === "/drive/v3/files" && options.method === "POST") {
+        reusedFolderCreateCount++;
+        throw new Error("已有配置目录时不得重复创建");
+      }
+      if (parsed.pathname === "/upload/drive/v3/files" && options.method === "POST") {
+        reusedUploadMetadata = await readMultipartMetadata(options.body);
+        return jsonResponse({id: "reused-map", ...reusedUploadMetadata, size: "16", modifiedTime: "2026-08-02T00:00:00Z", version: "1"});
+      }
+      throw new Error(`unexpected existing-folder Google URL ${url}`);
+    },
+    config: {clientId: "google-client-id", folderPath: "/webFMG"},
+    oauth
+  });
+  await reusedProvider.connect();
+  await reusedProvider.createFile({filename: "复用目录", blob: gzipBlob});
+  assert.deepEqual(reusedUploadMetadata.parents, ["existing-webfmg"]);
+  assert.equal(reusedFolderCreateCount, 0);
+
+  let rootUploadMetadata = null;
+  let folderRequestCount = 0;
+  const rootProvider = createGoogleDriveProvider({
+    view: createView({session: createMemoryStorage(), href: "https://maps.test/app"}),
+    fetchImpl: async (url, options = {}) => {
+      const parsed = new URL(String(url));
+      if (parsed.pathname === "/upload/drive/v3/files" && options.method === "POST") {
+        rootUploadMetadata = await readMultipartMetadata(options.body);
+        return jsonResponse({id: "root-map", ...rootUploadMetadata, size: "16", modifiedTime: "2026-08-02T00:00:00Z", version: "1"});
+      }
+      folderRequestCount++;
+      throw new Error(`根目录配置不应请求目录 API：${url}`);
+    },
+    config: {clientId: "google-client-id", folderPath: "/"},
+    oauth
+  });
+  await rootProvider.connect();
+  await rootProvider.createFile({filename: "根目录", blob: gzipBlob});
+  assert.deepEqual(rootUploadMetadata.parents, ["root"]);
+  assert.equal(folderRequestCount, 0);
 }
 
 function verifyRegistryAndUiContract() {
@@ -356,19 +465,20 @@ function verifyConfigurationPriority() {
     {
       VITE_FMG_DROPBOX_APP_KEY: "fixture-legacy-dropbox",
       VITE_FMG_DROPBOX_REDIRECT_URI: "https://fixture.test/legacy-callback",
-      VITE_FMG_GOOGLE_CLIENT_ID: "fixture-legacy-google.apps.googleusercontent.com"
+      VITE_FMG_GOOGLE_CLIENT_ID: "fixture-legacy-google.apps.googleusercontent.com",
+      VITE_FMG_GOOGLE_FOLDER_PATH: "/legacy/maps"
     },
     {
       version: 1,
       providers: {
         dropbox: {appKey: "fixture-runtime-dropbox", redirectUri: ""},
-        googleDrive: {clientId: "fixture-runtime-google.apps.googleusercontent.com"}
+        googleDrive: {clientId: "fixture-runtime-google.apps.googleusercontent.com", folderPath: "/runtime/maps"}
       }
     }
   );
   assert.deepEqual(config, {
     dropbox: {appKey: "fixture-runtime-dropbox", redirectUri: "https://fixture.test/legacy-callback"},
-    googleDrive: {clientId: "fixture-runtime-google.apps.googleusercontent.com"}
+    googleDrive: {clientId: "fixture-runtime-google.apps.googleusercontent.com", folderPath: "/runtime/maps"}
   });
 
   const view = createView({session: createMemoryStorage(), href: "https://fixture.test/app"});
@@ -376,7 +486,7 @@ function verifyConfigurationPriority() {
     version: 1,
     providers: {
       dropbox: {appKey: "fixture-runtime-dropbox", redirectUri: "https://fixture.test/callback"},
-      googleDrive: {clientId: "fixture-runtime-google.apps.googleusercontent.com"}
+      googleDrive: {clientId: "fixture-runtime-google.apps.googleusercontent.com", folderPath: "/runtime/maps"}
     }
   };
   const registry = createCloudStorageRegistry({view, fetchImpl: async () => new Response(null, {status: 500})});
@@ -447,6 +557,13 @@ function createMemoryStorage() {
 
 function jsonResponse(payload, status = 200) {
   return new Response(JSON.stringify(payload), {status, headers: {"Content-Type": "application/json"}});
+}
+
+async function readMultipartMetadata(body) {
+  const text = await body.text();
+  const match = text.match(/Content-Type: application\/json; charset=UTF-8\r\n\r\n(\{.*?\})\r\n--/s);
+  assert(match, "Google Drive multipart 请求缺少 metadata");
+  return JSON.parse(match[1]);
 }
 
 function read(file) {

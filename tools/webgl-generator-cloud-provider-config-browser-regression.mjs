@@ -15,14 +15,14 @@ const fixtureConfig = `globalThis.__FMG_CLOUD_PROVIDER_CONFIG__ = {
   version: 1,
   providers: {
     dropbox: {appKey: "fixture-runtime-dropbox", redirectUri: "${baseUrl}/"},
-    googleDrive: {clientId: "fixture-runtime-google.apps.googleusercontent.com"}
+    googleDrive: {clientId: "fixture-runtime-google.apps.googleusercontent.com", folderPath: "/fixture/webFMG"}
   }
 };`;
 const emptyConfig = `globalThis.__FMG_CLOUD_PROVIDER_CONFIG__ = {
   version: 1,
   providers: {
     dropbox: {appKey: "", redirectUri: ""},
-    googleDrive: {clientId: ""}
+    googleDrive: {clientId: "", folderPath: "/webFMG"}
   }
 };`;
 
