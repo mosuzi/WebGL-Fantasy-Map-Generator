@@ -28,10 +28,22 @@
 
 - Dropbox 使用 App Folder、短期令牌与 authorization code + PKCE；Google Drive 使用 `drive.file` 和 Google Identity Services token model。
 - Dropbox app key、redirect URI 与 Google client ID 通过统一的 `VITE_FMG_*` 环境变量配置；仓库只提交空值示例。它们是公开 client identifier，不得填写 client secret、refresh token 或用户 token。
-- access token 只保存在内存；Dropbox 的 PKCE verifier 与 state 只在握手期间写入 `sessionStorage`，完成后立即清理。任何 token 都不得进入日志、导出文件、公开 API 或错误详情。
+- 第 241 项当时把 access token 只保存在内存；第 262 项后，短期 token 只扩展到当前标签页 `sessionStorage`。Dropbox 的 PKCE verifier 与 state 仍只在握手期间写入 `sessionStorage`，完成后立即清理。任何 token 都不得进入日志、导出文件、公开 API 或错误详情。
 - 不实现后台同步、自动保存、远端删除、分享链接、任意云盘文件浏览、文件夹管理、冲突合并或 headless 云写入。
 - 未配置时两个 provider 可见但禁用，并明确指向自部署配置说明；不回退到原作硬编码 app key。
 - 无项目方 OAuth client 与测试账号时，以 fixture、mock transport 和系统 Chrome 完成协议与 UI 验收，并明确保留 live provider 未联调状态。
+
+## 第 262 项：刷新后恢复当前标签页云连接
+
+第 262 项实施前，provider 只把短期 access token 保存在 JavaScript 闭包，应用刷新会重建 registry，因此即使令牌仍有效也必须重新连接。第 262 项把这段生命周期扩展到当前标签页会话，不引入长期凭据或后台能力。
+
+- 成功连接后默认把 access token、绝对到期时间和 provider / origin / 配置 / scope 指纹写入 `sessionStorage`；不增加用户开关。
+- registry 初始化只恢复结构有效、未过期且指纹完全一致的记录。关闭标签页、过期、401、配置变化、记录损坏或主动断开后均不得恢复。
+- registry 与面板普通销毁只释放当前内存引用和到期计时器，不能把刷新流程误当成用户主动断开；用户点击断开仍清除会话并尝试远端 revoke。
+- Google Identity Services 继续使用 token model 与 `drive.file`，但不再强制每次 `prompt: "consent"`；首次或新增权限仍由 Google 正常触发授权，令牌到期后仍须用户手势重新获取。
+- refresh token、LocalStorage、IndexedDB、地图文件、日志、错误详情、公开 API、跨标签页共享、后台同步与自动保存继续排除。
+
+验收必须覆盖两 provider 的写入与重建恢复、过期 / 损坏 / 配置变化拒绝、401 清理、主动断开清理与 revoke、普通 dispose 保留、Google 无强制 consent，以及系统 Chrome 同一标签页刷新和断开后刷新反例。
 
 ## 统一验收
 

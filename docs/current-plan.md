@@ -183,7 +183,7 @@
 
 本节是唯一权威任务清单。README、专题文档和历史日志中的“缺口”“下一步”只提供来源与设计背景，不能覆盖这里的编号、顺序和最小验收。已验收能力不得重新计为待办。
 
-> **执行门禁（2026-08-03）**：第 45～52、54～225、227～261 项已完成，第 53 项已移除；第 226 项本地完成、远端 Wiki 发布仍受 GitHub 私有仓库套餐阻塞。当前没有活动权威任务，不从 README、历史日志或专题文档扩展其它任务。
+> **执行门禁（2026-08-03）**：第 45～52、54～225、227～262 项已完成，第 53 项已移除；第 226 项本地完成、远端 Wiki 发布仍受 GitHub 私有仓库套餐阻塞。当前没有活动权威任务，不从 README、历史日志或专题文档扩展其它任务。
 
 当前 API 基线为：`window.webglGeneratorApi` 覆盖 `17` 个命名空间、`316` 个公开方法和 `179` 个编辑方法，稳定等级为 `308 / 7 / 1`；`316 / 316` 方法可通过 `info.describe` 发现，`planner.listRecipes / getRecipe` 只读公开 `10` 个配方和 `43` 个顶层步骤，`objects` 覆盖 `20` 类对象，`cells` 已提供八个读取、定位、扫描与动作预检方法。完整能力矩阵为 `1196` 行、`covered 1122 / excluded 74 / deferred 0 / gap 0`；复合语义矩阵为 `79` 个动作、`69` 个完整规则事务与 `10` 个玩法配方，`316` 个公开方法全部完成事务分类，结构缺口为 `0`。
 
@@ -1094,7 +1094,7 @@
   - 范围：以统一 provider registry 提供连接、断开、新建、列出、明确目标覆盖和载入；复用完整地图 gzip 与既有导入安全链；提交统一空值环境变量示例和自部署说明。
   - 最小验收：Dropbox PKCE / App Folder 与 Google GIS / `drive.file` 的 fixture 和 mock 浏览器闭环通过；令牌不持久化、不泄露；未配置 provider 稳定禁用；保存不改变 checksum、历史和相机，载入 / 覆盖具有明确确认；旧图导入链、生产构建与差异检查通过。
   - 排除：不复用原作 app key，不接收 client secret，不做自动同步、远端删除、分享链接、冲突合并、任意文件浏览或 headless 云写入。没有项目方 OAuth 配置时不宣称真实账号端到端已联调。
-  - 完成记录：保存菜单新增懒加载云端面板，统一 provider registry 已覆盖 Dropbox PKCE / App Folder 与 Google GIS / `drive.file` 的连接、断开、新建、列出、明确目标覆盖和载入；公开 client identifier 由 `VITE_FMG_*` 环境变量配置，令牌只保存在内存。fixture、mock transport、未配置状态、旧浏览器存档、生产构建与独立复核通过；因没有项目方 OAuth client 与测试账号，真实云账号端到端仍明确标记为未联调。
+  - 完成记录：保存菜单新增懒加载云端面板，统一 provider registry 已覆盖 Dropbox PKCE / App Folder 与 Google GIS / `drive.file` 的连接、断开、新建、列出、明确目标覆盖和载入；公开 client identifier 由 `VITE_FMG_*` 环境变量配置，第 241 项完成时令牌只保存在内存，后由第 262 项调整为当前标签页 `sessionStorage` 中的短期会话。fixture、mock transport、未配置状态、旧浏览器存档、生产构建与独立复核通过；因没有项目方 OAuth client 与测试账号，真实云账号端到端仍明确标记为未联调。
 
 - **第 236～241 项统一执行约束。**
   - 专题施工图：`docs/task-notes/layer-controls-zone-naming-and-cloud-storage.md`。
@@ -1250,6 +1250,16 @@
   - 排除：不扩大 `drive.file` scope，不读取任意用户文件夹，不移动或删除旧根目录存档，不接入 Google Picker、共享云端硬盘或后台迁移，不启动真实 OAuth、提交或推送。
   - 实现记录：构建配置、公开运行时配置和旧 `VITE_FMG_GOOGLE_FOLDER_PATH` 回退统一规范化目录路径；Google provider 在新建前逐级查找目录，缺失时使用 folder MIME type 与父级 `parents` 按需创建，上传 metadata 明确写入最终目录 ID。连接与列表只查询目录，不创建空目录；已有同名应用目录优先复用。
   - 兼容与验收记录：配置目录存在时同时列出该目录和根目录中带应用标记的地图；旧根目录目标继续按原 ID 覆盖，不迁移。Cloud Provider Config、云存储 mock、目录延迟创建 / 多级创建 / 复用 / 根目录 / 旧文件兼容、生产构建和 `5411` 系统 Chrome 云存储两项回归均通过，桌面及 `390 / 320px` 无溢出，console、page、health 与 WebGL error 为 `0`；`source/` 零改动，未启动真实 OAuth、提交或推送。
+
+- **权威任务第 262 项：刷新后自动恢复当前标签页的云存储连接。** `已完成；来源：用户直接要求`
+  - 范围：Dropbox 与 Google Drive 成功连接后，默认把短期 access token、到期时间和 provider / 当前 origin / 配置 / scope 指纹保存到当前标签页的 `sessionStorage`；页面刷新或应用 registry 重建时，只恢复仍未过期且指纹完全一致的连接。Google Identity Services 后续取令牌不再强制 `prompt: "consent"`，复用既有授权记录并继续要求用户手势启动令牌流程。
+  - 清理契约：令牌过期、云 API 返回 `401`、配置或 origin 变化、记录损坏、用户主动断开时同步清除内存与 `sessionStorage`；registry / 面板普通销毁只释放内存与计时器，不撤销或删除仍有效的标签页会话。主动断开继续尝试远端 revoke。
+  - 安全边界：不增加用户开关，不保存 refresh token，不写入 LocalStorage、IndexedDB、地图、日志、错误详情或公开 API；不改变 Dropbox `online` + PKCE、App Folder、Google `drive.file`、远端文件范围和上传下载语义。关闭标签页、令牌到期或授权被服务端撤销后仍需重新连接。
+  - 最小验收：两 provider 的成功写入、刷新恢复、到期 / 损坏 / 配置变化拒绝、401 清理、主动断开清理与 revoke、registry dispose 保留有效会话均有回归；Google 默认请求不含强制 consent。云存储 UI、部署说明和专题安全边界同步；Dropbox 回调、Cloud Provider Config、云存储协议、旧浏览器存储、生产构建与差异检查通过。系统 Chrome 使用 mock transport 验证同一标签页刷新前后两 provider 均保持连接，断开后刷新不恢复，console、page、health 与 WebGL error 为 `0`。
+  - 排除：不做跨标签页共享、关闭浏览器后的长期登录、后端 OAuth / BFF、后台同步、自动保存、远端删除、冲突合并或真实云盘写入；不提交或推送。
+  - 实现记录：共享会话管理器按 provider 生成版本化 key 与 provider / origin / 配置 / scope 指纹，只保存短期 access token 和绝对到期时间；初始化恢复、主动断开、服务端 `401`、记录损坏、指纹变化和到期计时器共用同一清理出口。registry 普通 `dispose` 只销毁内存令牌和计时器，保留当前标签页会话；鉴权请求携带发起时的 token + 连接代次快照，延迟 `401` 只有仍属于当前连接时才允许清理。Google 默认调用 `requestAccessToken()`，不再传强制 consent。
+  - 复核记录：首轮独立复核以 `BLOCK` 指出 Google 旧连接的异步目录解析可能在断开或切换账号后污染新连接缓存。限修为令牌会话增加单调连接代次，并要求目录解析结果同时匹配请求对象、token 与代次后才能写缓存，二轮复核为 `ACCEPT`。最终全差异审计又以 `BLOCK` 复现两 provider 的旧请求延迟 `401` 会误清新连接；限修后 Dropbox / Google 各自的同 provider 断开重连、`dispose` 后重建四类反例均通过，原审计者复验为 `ACCEPT`。
+  - 验收记录：云存储协议、Cloud Provider Config、旧浏览器存储、会话竞态反例、Dropbox 独立回调页与生产构建均通过。系统 Chrome 访问 `http://127.0.0.1:5411`，确认两 provider 刷新后保持连接、分别主动断开后刷新不恢复；云存储面板在桌面、`390px`、`320px` 下 document / content overflow 均为 `0`，console、page、health 与 WebGL error 为 `0`。既有 PID `8856` 服务未重启或停止；未启动真实 OAuth、访问真实云盘、提交或推送，`source/` 零改动。
 
 - **第 211～216 项统一执行约束。**
   - 专题来源与施工图：`docs/task-notes/next-quasi-authoritative-interaction-remediation-tasks-2026-07-20.md`。

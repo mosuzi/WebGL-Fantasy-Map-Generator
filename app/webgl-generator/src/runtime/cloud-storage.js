@@ -13,6 +13,9 @@ const GOOGLE_APP_PROPERTY = Object.freeze({key: "fmgWebglMap", value: "true"});
 const GOOGLE_FOLDER_PROPERTY = Object.freeze({key: "fmgWebglFolder", value: "true"});
 const GOOGLE_FOLDER_MIME = "application/vnd.google-apps.folder";
 const DROPBOX_HANDSHAKE_MAX_AGE = 10 * 60 * 1000;
+const CLOUD_SESSION_TOKEN_VERSION = 1;
+const CLOUD_SESSION_TOKEN_PREFIX = `fmg-cloud-session:v${CLOUD_SESSION_TOKEN_VERSION}`;
+const CLOUD_TOKEN_EXPIRY_SKEW = 5000;
 
 export function readCloudStorageConfig(env = import.meta.env || {}, runtimeConfig = globalThis.__FMG_CLOUD_PROVIDER_CONFIG__) {
   const providers = runtimeConfig?.providers && typeof runtimeConfig.providers === "object" ? runtimeConfig.providers : runtimeConfig || {};
@@ -70,7 +73,7 @@ export function createCloudStorageRegistry(options = {}) {
     dispose() {
       view.removeEventListener?.("message", messageHandler);
       listeners.clear();
-      for (const provider of providers.values()) provider.disconnect({remote: false});
+      for (const provider of providers.values()) provider.dispose();
     }
   };
   void api.handleOAuthCallback();
@@ -86,8 +89,6 @@ function firstConfiguredValue(...values) {
 }
 
 export function createDropboxProvider({view = globalThis, fetchImpl = view.fetch?.bind(view), config = {}, notify = () => {}, oauth = {}} = {}) {
-  let accessToken = "";
-  let expiresAt = 0;
   let pendingState = "";
   let pendingPopup = null;
   let callbackInFlight = false;
@@ -95,6 +96,13 @@ export function createDropboxProvider({view = globalThis, fetchImpl = view.fetch
   const configurationError = validateDropboxConfiguration(config, view);
   const configured = !configurationError;
   const sessionKey = "fmg-cloud-oauth:dropbox";
+  const tokenSession = createCloudTokenSession({
+    view,
+    provider: "dropbox",
+    configured,
+    fingerprint: cloudTokenFingerprint(view, "dropbox", [config.appKey, config.redirectUri, ...DROPBOX_SCOPES]),
+    notify
+  });
 
   return {
     id: "dropbox",
@@ -102,6 +110,7 @@ export function createDropboxProvider({view = globalThis, fetchImpl = view.fetch
     getState,
     connect,
     disconnect,
+    dispose: tokenSession.dispose,
     listFiles,
     createFile,
     overwriteFile,
@@ -252,16 +261,14 @@ export function createDropboxProvider({view = globalThis, fetchImpl = view.fetch
       return false;
     }
     authorizationError = "";
-    accessToken = String(payload.accessToken);
-    expiresAt = Date.now() + Math.max(60, Number(payload.expiresIn) || 14_400) * 1000;
+    tokenSession.set(payload.accessToken, Date.now() + Math.max(60, Number(payload.expiresIn) || 14_400) * 1000);
     notify();
     return true;
   }
 
   async function disconnect({remote = true} = {}) {
-    const token = accessToken;
-    accessToken = "";
-    expiresAt = 0;
+    const token = tokenSession.peek();
+    tokenSession.clear();
     pendingState = "";
     pendingPopup = null;
     callbackInFlight = false;
@@ -275,13 +282,14 @@ export function createDropboxProvider({view = globalThis, fetchImpl = view.fetch
   }
 
   async function listFiles() {
-    const token = requireToken();
+    const session = requireTokenSession();
+    const token = session.token;
     const files = [];
     let cursor = "";
     do {
       const endpoint = cursor ? "files/list_folder/continue" : "files/list_folder";
       const body = cursor ? {cursor} : {path: "", recursive: false, include_deleted: false, limit: 200};
-      const response = await requireFetch(fetchImpl)(`${DROPBOX_API_URL}/${endpoint}`, dropboxJsonRequest(token, body));
+      const response = await authenticatedFetch(`${DROPBOX_API_URL}/${endpoint}`, dropboxJsonRequest(token, body), session);
       const payload = await readJsonResponse(response, "读取 Dropbox 文件");
       files.push(...(payload.entries || []).filter(entry => entry[".tag"] === "file" && isCloudMapFilename(entry.name)).map(normalizeDropboxFile));
       cursor = payload.has_more ? String(payload.cursor || "") : "";
@@ -290,9 +298,10 @@ export function createDropboxProvider({view = globalThis, fetchImpl = view.fetch
   }
 
   async function createFile({filename, blob}) {
-    const token = requireToken();
+    const session = requireTokenSession();
+    const token = session.token;
     const normalizedName = normalizeCloudFilename(filename);
-    const response = await requireFetch(fetchImpl)(`${DROPBOX_CONTENT_URL}/files/upload`, {
+    const response = await authenticatedFetch(`${DROPBOX_CONTENT_URL}/files/upload`, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${token}`,
@@ -300,14 +309,15 @@ export function createDropboxProvider({view = globalThis, fetchImpl = view.fetch
         "Dropbox-API-Arg": JSON.stringify({path: `/${normalizedName}`, mode: "add", autorename: false, mute: false, strict_conflict: true})
       },
       body: blob
-    });
+    }, session);
     return normalizeDropboxFile(await readJsonResponse(response, "保存到 Dropbox"));
   }
 
   async function overwriteFile(file, {blob}) {
-    const token = requireToken();
+    const session = requireTokenSession();
+    const token = session.token;
     if (!file?.path || !file?.rev) throw new Error("覆盖 Dropbox 文件需要明确的文件路径和版本");
-    const response = await requireFetch(fetchImpl)(`${DROPBOX_CONTENT_URL}/files/upload`, {
+    const response = await authenticatedFetch(`${DROPBOX_CONTENT_URL}/files/upload`, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${token}`,
@@ -315,28 +325,35 @@ export function createDropboxProvider({view = globalThis, fetchImpl = view.fetch
         "Dropbox-API-Arg": JSON.stringify({path: file.path, mode: {".tag": "update", update: file.rev}, autorename: false, mute: false, strict_conflict: true})
       },
       body: blob
-    });
+    }, session);
     return normalizeDropboxFile(await readJsonResponse(response, "覆盖 Dropbox 文件"));
   }
 
   async function downloadFile(file) {
-    const token = requireToken();
+    const session = requireTokenSession();
+    const token = session.token;
     if (!file?.path) throw new Error("载入 Dropbox 文件需要明确的文件路径");
-    const response = await requireFetch(fetchImpl)(`${DROPBOX_CONTENT_URL}/files/download`, {
+    const response = await authenticatedFetch(`${DROPBOX_CONTENT_URL}/files/download`, {
       method: "POST",
       headers: {Authorization: `Bearer ${token}`, "Dropbox-API-Arg": JSON.stringify({path: file.path})}
-    });
+    }, session);
     await assertOk(response, "下载 Dropbox 文件");
     return response.blob();
   }
 
-  function requireToken() {
+  function requireTokenSession() {
     if (!tokenValid()) throw new Error("Dropbox 连接已失效，请重新连接。 ");
-    return accessToken;
+    return tokenSession.capture();
   }
 
   function tokenValid() {
-    return Boolean(accessToken && expiresAt > Date.now() + 5000);
+    return tokenSession.valid();
+  }
+
+  async function authenticatedFetch(url, options, session) {
+    const response = await requireFetch(fetchImpl)(url, options);
+    if (response?.status === 401 && tokenSession.isCurrent(session)) tokenSession.clear({notifyState: true});
+    return response;
   }
 
   function readPendingHandshake() {
@@ -353,8 +370,6 @@ export function createDropboxProvider({view = globalThis, fetchImpl = view.fetch
 }
 
 export function createGoogleDriveProvider({view = globalThis, fetchImpl = view.fetch?.bind(view), config = {}, notify = () => {}, oauth = null} = {}) {
-  let accessToken = "";
-  let expiresAt = 0;
   let resolvedFolderId = "";
   let folderResolution = null;
   const clientId = String(config.clientId || "").trim();
@@ -371,6 +386,17 @@ export function createGoogleDriveProvider({view = globalThis, fetchImpl = view.f
       ? "检测到 Google client secret；请改用 OAuth Client ID"
       : folderPathError;
   const configured = !configurationError;
+  const tokenSession = createCloudTokenSession({
+    view,
+    provider: "google-drive",
+    configured,
+    fingerprint: cloudTokenFingerprint(view, "google-drive", [clientId, folderPath, GOOGLE_DRIVE_SCOPE]),
+    notify,
+    onClear: () => {
+      resolvedFolderId = "";
+      folderResolution = null;
+    }
+  });
 
   return {
     id: "google-drive",
@@ -378,6 +404,7 @@ export function createGoogleDriveProvider({view = globalThis, fetchImpl = view.f
     getState: () => publicProviderState("google-drive", "Google Drive", configured, tokenValid(), configFields({clientId, folderPath}, ["clientId", "folderPath"]), configurationError),
     connect,
     disconnect,
+    dispose: tokenSession.dispose,
     listFiles,
     createFile,
     overwriteFile,
@@ -392,16 +419,14 @@ export function createGoogleDriveProvider({view = globalThis, fetchImpl = view.f
     const scopes = String(tokenResponse.scope || "").split(/\s+/).filter(Boolean);
     if (!scopes.includes(GOOGLE_DRIVE_SCOPE)) throw new Error("Google 授权未包含 drive.file 权限，请重新连接并允许所需权限。");
     if (!tokenResponse.access_token) throw new Error("Google 授权未返回访问令牌");
-    accessToken = String(tokenResponse.access_token);
-    expiresAt = Date.now() + Math.max(60, Number(tokenResponse.expires_in) || 3600) * 1000;
+    tokenSession.set(tokenResponse.access_token, Date.now() + Math.max(60, Number(tokenResponse.expires_in) || 3600) * 1000);
     notify();
     return {connected: true};
   }
 
   async function disconnect({remote = true} = {}) {
-    const token = accessToken;
-    accessToken = "";
-    expiresAt = 0;
+    const token = tokenSession.peek();
+    tokenSession.clear();
     resolvedFolderId = "";
     folderResolution = null;
     notify();
@@ -410,14 +435,15 @@ export function createGoogleDriveProvider({view = globalThis, fetchImpl = view.f
   }
 
   async function listFiles() {
-    const token = requireToken();
-    const folderId = await resolveConfiguredFolder(token, {create: false});
+    const session = requireTokenSession();
+    const folderId = await resolveConfiguredFolder(session, {create: false});
     const parentIds = folderId && folderId !== "root" ? [folderId, "root"] : ["root"];
-    const groups = await Promise.all(parentIds.map(parentId => listFilesInParent(token, parentId)));
+    const groups = await Promise.all(parentIds.map(parentId => listFilesInParent(session, parentId)));
     return groups.flat().sort(sortRemoteFiles);
   }
 
-  async function listFilesInParent(token, parentId) {
+  async function listFilesInParent(session, parentId) {
+    const token = session.token;
     const files = [];
     let pageToken = "";
     do {
@@ -428,7 +454,7 @@ export function createGoogleDriveProvider({view = globalThis, fetchImpl = view.f
         fields: "nextPageToken,files(id,name,size,modifiedTime,version,parents,appProperties)"
       });
       if (pageToken) params.set("pageToken", pageToken);
-      const response = await requireFetch(fetchImpl)(`${GOOGLE_DRIVE_API_URL}/files?${params}`, googleRequest(token));
+      const response = await authenticatedFetch(`${GOOGLE_DRIVE_API_URL}/files?${params}`, googleRequest(token), session);
       const payload = await readJsonResponse(response, "读取 Google Drive 文件");
       files.push(...(payload.files || []).filter(file => isCloudMapFilename(file.name)).map(normalizeGoogleFile));
       pageToken = String(payload.nextPageToken || "");
@@ -437,8 +463,9 @@ export function createGoogleDriveProvider({view = globalThis, fetchImpl = view.f
   }
 
   async function createFile({filename, blob}) {
-    const token = requireToken();
-    const folderId = await resolveConfiguredFolder(token, {create: true});
+    const session = requireTokenSession();
+    const token = session.token;
+    const folderId = await resolveConfiguredFolder(session, {create: true});
     const boundary = `fmg-${createRandomUrlToken(view, 18)}`;
     const metadata = {
       name: normalizeCloudFilename(filename),
@@ -451,93 +478,106 @@ export function createGoogleDriveProvider({view = globalThis, fetchImpl = view.f
       blob,
       `\r\n--${boundary}--`
     ]);
-    const response = await requireFetch(fetchImpl)(`${GOOGLE_DRIVE_UPLOAD_URL}/files?uploadType=multipart&fields=id,name,size,modifiedTime,version,parents,appProperties`, {
+    const response = await authenticatedFetch(`${GOOGLE_DRIVE_UPLOAD_URL}/files?uploadType=multipart&fields=id,name,size,modifiedTime,version,parents,appProperties`, {
       method: "POST",
       headers: {Authorization: `Bearer ${token}`, "Content-Type": `multipart/related; boundary=${boundary}`},
       body
-    });
+    }, session);
     return normalizeGoogleFile(await readJsonResponse(response, "保存到 Google Drive"));
   }
 
   async function overwriteFile(file, {blob}) {
-    const token = requireToken();
+    const session = requireTokenSession();
+    const token = session.token;
     const fileId = requireGoogleFileId(file);
-    const metadataResponse = await requireFetch(fetchImpl)(`${GOOGLE_DRIVE_API_URL}/files/${encodeURIComponent(fileId)}?fields=id,name,size,modifiedTime,version,appProperties`, googleRequest(token));
+    const metadataResponse = await authenticatedFetch(`${GOOGLE_DRIVE_API_URL}/files/${encodeURIComponent(fileId)}?fields=id,name,size,modifiedTime,version,appProperties`, googleRequest(token), session);
     const current = normalizeGoogleFile(await readJsonResponse(metadataResponse, "检查 Google Drive 文件版本"));
     if ((file.version && current.version !== file.version) || (file.modifiedAt && current.modifiedAt !== file.modifiedAt)) {
       throw new Error("Google Drive 文件已在其它位置更新。请刷新列表并重新选择，当前操作未覆盖远端文件。");
     }
-    const response = await requireFetch(fetchImpl)(`${GOOGLE_DRIVE_UPLOAD_URL}/files/${encodeURIComponent(fileId)}?uploadType=media&fields=id,name,size,modifiedTime,version,appProperties`, {
+    const response = await authenticatedFetch(`${GOOGLE_DRIVE_UPLOAD_URL}/files/${encodeURIComponent(fileId)}?uploadType=media&fields=id,name,size,modifiedTime,version,appProperties`, {
       method: "PATCH",
       headers: {Authorization: `Bearer ${token}`, "Content-Type": "application/gzip"},
       body: blob
-    });
+    }, session);
     return normalizeGoogleFile(await readJsonResponse(response, "覆盖 Google Drive 文件"));
   }
 
   async function downloadFile(file) {
-    const token = requireToken();
+    const session = requireTokenSession();
+    const token = session.token;
     const fileId = requireGoogleFileId(file);
-    const response = await requireFetch(fetchImpl)(`${GOOGLE_DRIVE_API_URL}/files/${encodeURIComponent(fileId)}?alt=media`, googleRequest(token));
+    const response = await authenticatedFetch(`${GOOGLE_DRIVE_API_URL}/files/${encodeURIComponent(fileId)}?alt=media`, googleRequest(token), session);
     await assertOk(response, "下载 Google Drive 文件");
     return response.blob();
   }
 
-  function requireToken() {
+  function requireTokenSession() {
     if (!tokenValid()) throw new Error("Google Drive 连接已失效，请重新连接。");
-    return accessToken;
+    return tokenSession.capture();
   }
 
   function tokenValid() {
-    return Boolean(accessToken && expiresAt > Date.now() + 5000);
+    return tokenSession.valid();
   }
 
-  async function resolveConfiguredFolder(token, {create}) {
+  async function resolveConfiguredFolder(session, {create}) {
+    const token = session.token;
     if (folderPath === "/") return "root";
     if (resolvedFolderId) return resolvedFolderId;
-    if (folderResolution) {
-      const pendingFolderId = await folderResolution;
+    const sessionGeneration = session.generation;
+    if (folderResolution?.token === token && folderResolution.generation === sessionGeneration) {
+      const pendingFolderId = await folderResolution.promise;
+      if (!tokenSession.matches(token, sessionGeneration)) throw new Error("Google Drive 连接已失效，请重新连接。");
       if (pendingFolderId || !create) return pendingFolderId;
     }
-    folderResolution = resolveFolderPath(token, create);
+    const resolution = {
+      token,
+      generation: sessionGeneration,
+      promise: resolveFolderPath(session, create)
+    };
+    folderResolution = resolution;
     try {
-      const folderId = await folderResolution;
-      if (folderId) resolvedFolderId = folderId;
+      const folderId = await resolution.promise;
+      if (!tokenSession.matches(token, sessionGeneration)) throw new Error("Google Drive 连接已失效，请重新连接。");
+      if (folderResolution === resolution && folderId) resolvedFolderId = folderId;
       return folderId;
     } finally {
-      folderResolution = null;
+      if (folderResolution === resolution) folderResolution = null;
     }
   }
 
-  async function resolveFolderPath(token, create) {
+  async function resolveFolderPath(session, create) {
     let parentId = "root";
     for (const segment of folderPath.slice(1).split("/")) {
-      const existing = await findGoogleFolder(token, parentId, segment);
+      const existing = await findGoogleFolder(session, parentId, segment);
       if (existing) {
         parentId = existing.id;
         continue;
       }
       if (!create) return "";
-      parentId = (await createGoogleFolder(token, parentId, segment)).id;
+      parentId = (await createGoogleFolder(session, parentId, segment)).id;
     }
     return parentId;
   }
 
-  async function findGoogleFolder(token, parentId, name) {
+  async function findGoogleFolder(session, parentId, name) {
+    const token = session.token;
     const params = new URLSearchParams({
       q: `trashed = false and mimeType = '${GOOGLE_FOLDER_MIME}' and name = '${escapeGoogleDriveQuery(name)}' and '${escapeGoogleDriveQuery(parentId)}' in parents`,
       spaces: "drive",
       pageSize: "20",
       fields: "files(id,name,parents,appProperties)"
     });
-    const response = await requireFetch(fetchImpl)(`${GOOGLE_DRIVE_API_URL}/files?${params}`, googleRequest(token));
+    const response = await authenticatedFetch(`${GOOGLE_DRIVE_API_URL}/files?${params}`, googleRequest(token), session);
     const payload = await readJsonResponse(response, "查找 Google Drive 存档目录");
     const folders = Array.isArray(payload.files) ? payload.files : [];
     return folders.find(folder => folder.appProperties?.[GOOGLE_FOLDER_PROPERTY.key] === GOOGLE_FOLDER_PROPERTY.value) || folders[0] || null;
   }
 
-  async function createGoogleFolder(token, parentId, name) {
-    const response = await requireFetch(fetchImpl)(`${GOOGLE_DRIVE_API_URL}/files?fields=id,name,parents,appProperties`, {
+  async function createGoogleFolder(session, parentId, name) {
+    const token = session.token;
+    const response = await authenticatedFetch(`${GOOGLE_DRIVE_API_URL}/files?fields=id,name,parents,appProperties`, {
       method: "POST",
       headers: {Authorization: `Bearer ${token}`, "Content-Type": "application/json; charset=UTF-8"},
       body: JSON.stringify({
@@ -546,10 +586,16 @@ export function createGoogleDriveProvider({view = globalThis, fetchImpl = view.f
         parents: [parentId],
         appProperties: {[GOOGLE_FOLDER_PROPERTY.key]: GOOGLE_FOLDER_PROPERTY.value}
       })
-    });
+    }, session);
     const folder = await readJsonResponse(response, "创建 Google Drive 存档目录");
     if (!folder.id) throw new Error("Google Drive 未返回新建目录 ID");
     return folder;
+  }
+
+  async function authenticatedFetch(url, options, session) {
+    const response = await requireFetch(fetchImpl)(url, options);
+    if (response?.status === 401 && tokenSession.isCurrent(session)) tokenSession.clear({notifyState: true});
+    return response;
   }
 }
 
@@ -651,6 +697,143 @@ function sessionStorageRef(view) {
   }
 }
 
+function cloudTokenFingerprint(view, provider, fields) {
+  return JSON.stringify([CLOUD_SESSION_TOKEN_VERSION, provider, safeOrigin(view), ...fields.map(value => String(value || ""))]);
+}
+
+function createCloudTokenSession({view, provider, configured, fingerprint, notify, onClear = () => {}}) {
+  const storage = sessionStorageRef(view);
+  const key = `${CLOUD_SESSION_TOKEN_PREFIX}:${provider}`;
+  let accessToken = "";
+  let expiresAt = 0;
+  let expiryTimer = null;
+  let generation = 0;
+  restore();
+
+  return {
+    set,
+    clear,
+    dispose,
+    peek: () => accessToken,
+    capture: () => ({token: accessToken, generation}),
+    isCurrent: session => Boolean(session)
+      && session.token === accessToken
+      && session.generation === generation,
+    generation: () => generation,
+    matches: (token, expectedGeneration) => token === accessToken
+      && expectedGeneration === generation
+      && expiresAt > Date.now() + CLOUD_TOKEN_EXPIRY_SKEW,
+    valid
+  };
+
+  function set(token, absoluteExpiry) {
+    const nextToken = String(token || "");
+    const nextExpiry = Number(absoluteExpiry);
+    if (!nextToken || !Number.isFinite(nextExpiry) || nextExpiry <= Date.now() + CLOUD_TOKEN_EXPIRY_SKEW) {
+      clear();
+      return false;
+    }
+    clearTimer();
+    generation++;
+    onClear();
+    accessToken = nextToken;
+    expiresAt = nextExpiry;
+    try {
+      storage?.setItem(key, JSON.stringify({
+        version: CLOUD_SESSION_TOKEN_VERSION,
+        provider,
+        fingerprint,
+        accessToken,
+        expiresAt
+      }));
+    } catch {
+      // sessionStorage 不可用时仍保留当前页面内存连接。
+    }
+    scheduleExpiry();
+    return true;
+  }
+
+  function clear({notifyState = false} = {}) {
+    const changed = Boolean(accessToken || expiresAt);
+    clearTimer();
+    generation++;
+    accessToken = "";
+    expiresAt = 0;
+    onClear();
+    try {
+      storage?.removeItem(key);
+    } catch {
+      // 存储清理失败不应阻断内存令牌失效。
+    }
+    if (changed && notifyState) notify();
+  }
+
+  function dispose() {
+    clearTimer();
+    generation++;
+    accessToken = "";
+    expiresAt = 0;
+    onClear();
+  }
+
+  function valid() {
+    if (!accessToken) return false;
+    if (expiresAt <= Date.now() + CLOUD_TOKEN_EXPIRY_SKEW) {
+      clear();
+      return false;
+    }
+    return true;
+  }
+
+  function restore() {
+    let record = null;
+    try {
+      record = JSON.parse(storage?.getItem(key) || "null");
+    } catch {
+      record = null;
+    }
+    const recordExpiry = Number(record?.expiresAt);
+    const accepted = configured
+      && record?.version === CLOUD_SESSION_TOKEN_VERSION
+      && record?.provider === provider
+      && record?.fingerprint === fingerprint
+      && Boolean(String(record?.accessToken || ""))
+      && Number.isFinite(recordExpiry)
+      && recordExpiry > Date.now() + CLOUD_TOKEN_EXPIRY_SKEW;
+    if (!accepted) {
+      try {
+        storage?.removeItem(key);
+      } catch {
+        // 损坏或不匹配记录在内存中仍视为无连接。
+      }
+      return;
+    }
+    accessToken = String(record.accessToken);
+    expiresAt = recordExpiry;
+    generation++;
+    scheduleExpiry();
+  }
+
+  function scheduleExpiry() {
+    if (typeof view.setTimeout !== "function") return;
+    const remaining = Math.max(0, expiresAt - Date.now() - CLOUD_TOKEN_EXPIRY_SKEW);
+    expiryTimer = view.setTimeout(() => {
+      expiryTimer = null;
+      if (expiresAt > Date.now() + CLOUD_TOKEN_EXPIRY_SKEW) {
+        scheduleExpiry();
+        return;
+      }
+      clear({notifyState: true});
+    }, Math.min(remaining, 2_147_483_647));
+  }
+
+  function clearTimer() {
+    if (expiryTimer === null) return;
+    view.clearTimeout?.(expiryTimer);
+    expiryTimer = null;
+  }
+}
+
 function safeOrigin(view) {
   return String(view.location?.origin || "");
 }
@@ -719,7 +902,7 @@ async function requestGoogleToken(view, options) {
       reject(new Error("Google Identity Services 未能初始化"));
       return;
     }
-    client.requestAccessToken({prompt: "consent"});
+    client.requestAccessToken();
   });
 }
 

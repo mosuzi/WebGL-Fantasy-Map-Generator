@@ -123,6 +123,7 @@
     "regress:dropbox-callback-browser": "node --no-warnings ./tools/webgl-generator-dropbox-callback-browser-regression.mjs",
     "regress:cloud-storage": "node --no-warnings ./tools/webgl-generator-cloud-storage-regression.mjs",
     "regress:cloud-storage-browser": "node --no-warnings ./tools/webgl-generator-cloud-storage-browser-regression.mjs",
+    "regress:cloud-storage-session-browser": "node --no-warnings ./tools/webgl-generator-cloud-storage-session-browser-regression.mjs",
     "regress:panel-load-recovery": "node --no-warnings ./tools/webgl-generator-panel-load-recovery-regression.mjs",
     "regress:zone-regeneration": "node --no-warnings ./tools/webgl-generator-zone-regeneration-regression.mjs",
     "regress:zone-ui-browser": "node --no-warnings ./tools/webgl-generator-zone-ui-browser-regression.mjs",

@@ -29426,3 +29426,17 @@ full 矩阵结果：
 - `regress:city-scale`、`regress:population-adjustment`、`regress:population-transfer`、`regress:provincial-capitals`、`regress:state-topology-ui-api`、生产构建、完整能力矩阵与复合语义陈旧检查通过；矩阵保持 `1173 / covered 1100 / excluded 73 / gap 0`，复合语义保持 `79 / 69 / 10`、结构缺口 `0`。两路只读终轮复核均为 `ACCEPT`，没有修改 `source/`。
 - 系统 Chrome 5410 确认加载当前限修代码；会话中既有旧图的省会全量预览显示变更 `214`、拒绝 `21`，确认按钮在存在拒绝项时正确禁用，取消后预览清空；application console、page 与 WebGL error 为 `0`，只有浏览器扩展带出的 long-task 性能提示。
 - 三条旧回归断言仍保持本批开始前的历史状态：国家拓扑旧 tombstone 往返预期未包含已补齐的 `diplomacySummary`，国家生命周期旧缓存样本期待不可枚举但夹具先写入了可枚举属性，人口调整 UI/API 专项仍把公开方法总数写死为 `208` 而当前为 `305`。它们与本次写入链没有数据流关系，相关动态行为已有新专项覆盖，因此不阻断第 217～218 项，也没有自动转为新的活动权威任务。
+
+# 2026-08-03：登记第 262 项——刷新后恢复当前标签页云连接
+
+- 用户确认不增加“保持连接”开关，要求 Dropbox 与 Google Drive 默认在当前标签页刷新后恢复仍有效的连接，并按既定建议取消 Google 强制重复 consent。
+- 调查确认两 provider 的 `accessToken / expiresAt` 仅存在运行时闭包，应用每次启动重建 registry；Dropbox 使用 `online` + PKCE，Google 使用 GIS token model 且当前固定传入 `prompt: "consent"`。现象属于第 241 项原安全边界，不是 OAuth 配置故障。
+- 第 262 项冻结为 `sessionStorage` 中的短期 access token + 到期时间 + provider / origin / 配置 / scope 指纹恢复；过期、401、配置变化、损坏记录和主动断开必须清理。普通 registry dispose 只释放内存和计时器，避免把刷新误当成主动断开。
+- refresh token、LocalStorage、IndexedDB、跨标签页共享、后台 OAuth / BFF、自动同步、云盘权限扩张和真实云盘写入全部排除。工作树登记前为干净状态，本轮不提交或推送。
+
+# 2026-08-03：完成第 262 项——云连接随当前标签页刷新恢复
+
+- Dropbox 与 Google Drive 统一接入版本化短期令牌会话。成功连接后只把 access token、绝对到期时间和 provider / origin / 配置 / scope 指纹写入当前标签页 `sessionStorage`；刷新或 registry 重建只恢复仍有效且指纹完全一致的记录。到期、损坏、配置或 origin 变化、云 API `401` 和主动断开均清除会话，普通 `dispose` 只释放内存与计时器。
+- Google Identity Services 默认改为无参数 `requestAccessToken()`，不再强制 `prompt: "consent"`；首次授权、权限变化或令牌到期仍需用户手势。面板和部署说明同步明确当前标签页、关闭标签页与短期令牌边界，没有引入开关、refresh token、LocalStorage、IndexedDB、跨标签页共享或后台能力。
+- 首轮独立复核以 `BLOCK` 指出 Google 旧连接的目录解析可能在断开或切换账号后回写新连接缓存。限修加入连接代次与请求身份门禁，旧请求只有同时匹配当前请求、token 和代次时才能写入；固定反例证明旧账号响应只会得到“连接已失效”，新账号只查询自己的目录。二轮复核为 `ACCEPT`。最终全差异审计又以 `BLOCK` 复现旧请求延迟 `401` 会误清新连接；所有鉴权请求现携带发起时 token + 连接代次快照，只有仍属于当前连接的 `401` 才清理。Dropbox / Google 的同 provider 断开重连与 `dispose` 后重建四类反例均通过，原审计者复验为 `ACCEPT`。
+- 云存储协议、Cloud Provider Config、旧浏览器存储、Dropbox 独立回调页、生产构建与差异检查通过。系统 Chrome 在 `http://127.0.0.1:5411` 验证两 provider 刷新保持连接、分别断开后刷新不恢复；桌面、`390px`、`320px` 无 document / content overflow，console、page、health 与 WebGL error 为 `0`。既有 PID `8856` 服务保持运行，未启动真实 OAuth、访问真实云盘、修改 `source/`、提交或推送；当前没有活动权威任务。

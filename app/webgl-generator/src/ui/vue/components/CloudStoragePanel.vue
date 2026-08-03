@@ -2,7 +2,7 @@
   <div class="cloud-storage-panel" :aria-busy="state.busy ? 'true' : 'false'">
     <div class="cloud-storage-notice">
       <strong>把完整地图存档放进自己的云盘</strong>
-      <span>授权只保留在当前页面内存中；关闭或刷新页面后需要重新连接。</span>
+      <span>短期授权保留在当前标签页；刷新后自动恢复，关闭标签页或令牌到期后需要重新连接。</span>
     </div>
 
     <div class="cloud-storage-provider-tabs" role="tablist" aria-label="云存储服务">
@@ -31,7 +31,7 @@
 
       <template v-else>
         <div class="cloud-storage-connection" :data-cloud-state="selectedProvider.connected ? 'connected' : 'disconnected'">
-          <span>{{ selectedProvider.connected ? "已连接；令牌仅存在内存中" : "尚未连接账号" }}</span>
+          <span>{{ selectedProvider.connected ? "已连接；短期令牌保留在当前标签页" : "尚未连接账号" }}</span>
           <UiButton v-if="selectedProvider.connected" variant="secondary" :disabled="state.busy" @click="callbacks.onDisconnect">断开连接</UiButton>
           <UiButton v-else :disabled="state.busy" @click="callbacks.onConnect">连接 {{ selectedProvider.label }}</UiButton>
         </div>

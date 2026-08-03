@@ -17,12 +17,19 @@ import {canSelectCloudStorageProvider, reconcileCloudStorageFileList} from "../a
 
 const root = process.cwd();
 const gzipBlob = new Blob(["fixture-gzip-map"], {type: "application/gzip"});
+const DROPBOX_SESSION_KEY = "fmg-cloud-session:v1:dropbox";
+const GOOGLE_SESSION_KEY = "fmg-cloud-session:v1:google-drive";
 
 assert.equal(normalizeCloudFilename("云图"), `云图${CLOUD_MAP_EXTENSION}`);
 assert.equal(normalizeCloudFilename("bad:/name.json.gz"), `bad-name${CLOUD_MAP_EXTENSION}`);
 
 await verifyDropbox();
 await verifyGoogleDrive();
+await verifyRegistrySessionDispose();
+await verifyGoogleDefaultPrompt();
+await verifyGoogleFolderResolutionRace();
+await verifyDropboxLateUnauthorizedRace();
+await verifyGoogleLateUnauthorizedRace();
 verifyRegistryAndUiContract();
 verifyConfigurationPriority();
 verifyPanelRefreshAndBusyGuard();
@@ -99,6 +106,15 @@ async function verifyDropbox() {
   assert.equal(tokenCall.options.body.get("code_verifier"), handshake.verifier);
   assert.equal(tokenCall.options.body.get("redirect_uri"), "https://maps.test/callback");
   assert.equal(JSON.stringify(callback).includes("dropbox-secret-token"), false, "回调处理结果不得暴露 access token");
+  const savedSession = JSON.parse(session.getItem(DROPBOX_SESSION_KEY));
+  assert.equal(savedSession.provider, "dropbox");
+  assert.equal(savedSession.accessToken, "dropbox-secret-token");
+  assert.ok(savedSession.expiresAt > Date.now());
+  assert.equal("refreshToken" in savedSession || "refresh_token" in savedSession, false);
+  const restored = createDropboxProvider({view, fetchImpl, config: {appKey: "dropbox-app-key", redirectUri: "https://maps.test/callback"}});
+  assert.equal(restored.getState().connected, true, "Dropbox provider 重建后应恢复仍有效的当前标签页连接");
+  restored.dispose();
+  assert.ok(session.getItem(DROPBOX_SESSION_KEY), "普通 provider dispose 不得清除当前标签页会话");
   const tokenCallCount = calls.filter(call => call.url.endsWith("/oauth2/token")).length;
   assert.equal((await provider.handleOAuthCallbackMessage({code: "replay", state}, oauthPopup)).handled, false);
   assert.equal(calls.filter(call => call.url.endsWith("/oauth2/token")).length, tokenCallCount, "重复回调不得再次换令牌");
@@ -119,6 +135,7 @@ async function verifyDropbox() {
   assert.equal((await provider.downloadFile(listed[0])).size, gzipBlob.size);
   await provider.disconnect();
   assert.equal(provider.getState().connected, false);
+  assert.equal(session.getItem(DROPBOX_SESSION_KEY), null, "Dropbox 主动断开必须清除当前标签页会话");
   assert.ok(calls.some(call => call.url.endsWith("/auth/token/revoke")));
   assert.equal(JSON.stringify(provider.getState()).includes("dropbox-secret-token"), false);
 
@@ -131,9 +148,37 @@ async function verifyDropbox() {
   assert.equal(strictState.acceptOAuthResult({ok: true, accessToken: "must-not-pass", expiresIn: 100}), false);
   assert.equal(strictState.getState().connected, false);
 
+  await verifyDropboxSessionRejection(savedSession);
+
   await verifyRejectedDropboxCallback(fetchImpl);
   await verifyLegacyDropboxCallback(fetchImpl);
   await verifyConcurrentDropboxCallback();
+}
+
+async function verifyDropboxSessionRejection(savedSession) {
+  for (const mode of ["expired", "damaged", "configuration", "origin", "unauthorized"]) {
+    const session = createMemoryStorage();
+    session.setItem(DROPBOX_SESSION_KEY, mode === "damaged"
+      ? "{not-json"
+      : JSON.stringify(mode === "expired" ? {...savedSession, expiresAt: Date.now() - 1} : savedSession));
+    const view = createView({session, href: mode === "origin" ? "https://other-maps.test/app" : "https://maps.test/app"});
+    const config = mode === "configuration"
+      ? {appKey: "different-dropbox-app-key", redirectUri: "https://maps.test/callback"}
+      : {appKey: "dropbox-app-key", redirectUri: "https://maps.test/callback"};
+    const provider = createDropboxProvider({
+      view,
+      config,
+      fetchImpl: async () => new Response(null, {status: mode === "unauthorized" ? 401 : 500})
+    });
+    if (mode === "unauthorized") {
+      assert.equal(provider.getState().connected, true);
+      await assert.rejects(() => provider.listFiles(), /HTTP 401/);
+      assert.equal(provider.getState().connected, false, "Dropbox 401 后必须立即失效");
+    } else {
+      assert.equal(provider.getState().connected, false, `Dropbox ${mode} 会话不得恢复`);
+    }
+    assert.equal(session.getItem(DROPBOX_SESSION_KEY), null, `Dropbox ${mode} 会话必须清除`);
+  }
 }
 
 async function verifyRejectedDropboxCallback(fetchImpl) {
@@ -245,7 +290,8 @@ async function verifyGoogleDrive() {
   let revoked = "";
   let metadataVersion = "7";
   let uploadedMetadata = null;
-  const view = createView({session: createMemoryStorage(), href: "https://maps.test/app"});
+  const session = createMemoryStorage();
+  const view = createView({session, href: "https://maps.test/app"});
   const oauth = {
     requestToken: async request => {
       assert.equal(request.clientId, "google-client-id");
@@ -298,6 +344,15 @@ async function verifyGoogleDrive() {
   const provider = createGoogleDriveProvider({view, fetchImpl, config: {clientId: "google-client-id", folderPath: "/webFMG"}, oauth});
   await provider.connect();
   assert.equal(provider.getState().connected, true);
+  const savedSession = JSON.parse(session.getItem(GOOGLE_SESSION_KEY));
+  assert.equal(savedSession.provider, "google-drive");
+  assert.equal(savedSession.accessToken, "google-secret-token");
+  assert.ok(savedSession.expiresAt > Date.now());
+  assert.equal("refreshToken" in savedSession || "refresh_token" in savedSession, false);
+  const restored = createGoogleDriveProvider({view, fetchImpl, config: {clientId: "google-client-id", folderPath: "/webFMG"}, oauth});
+  assert.equal(restored.getState().connected, true, "Google Drive provider 重建后应恢复仍有效的当前标签页连接");
+  restored.dispose();
+  assert.ok(session.getItem(GOOGLE_SESSION_KEY), "普通 provider dispose 不得清除 Google Drive 当前标签页会话");
   const files = await provider.listFiles();
   assert.equal(files.length, 1);
   assert.equal(files[0].provider, "google-drive");
@@ -313,7 +368,10 @@ async function verifyGoogleDrive() {
   assert.equal(calls.filter(call => call.options.method === "PATCH").length, 1);
   await provider.disconnect();
   assert.equal(revoked, "google-secret-token");
+  assert.equal(session.getItem(GOOGLE_SESSION_KEY), null, "Google Drive 主动断开必须清除当前标签页会话");
   assert.equal(JSON.stringify(provider.getState()).includes("google-secret-token"), false);
+
+  await verifyGoogleSessionRejection(savedSession);
 
   const badScope = createGoogleDriveProvider({
     view,
@@ -330,6 +388,32 @@ async function verifyGoogleDrive() {
   assert.equal(normalizeGoogleDriveFolderPath(" worlds\\campaign/webFMG "), "/worlds/campaign/webFMG");
   assert.throws(() => normalizeGoogleDriveFolderPath("/worlds/../secret"), /不允许/);
   await verifyGoogleDriveFolderPaths(oauth);
+}
+
+async function verifyGoogleSessionRejection(savedSession) {
+  for (const mode of ["expired", "damaged", "configuration", "origin", "unauthorized"]) {
+    const session = createMemoryStorage();
+    session.setItem(GOOGLE_SESSION_KEY, mode === "damaged"
+      ? "{not-json"
+      : JSON.stringify(mode === "expired" ? {...savedSession, expiresAt: Date.now() - 1} : savedSession));
+    const view = createView({session, href: mode === "origin" ? "https://other-maps.test/app" : "https://maps.test/app"});
+    const config = mode === "configuration"
+      ? {clientId: "different-google-client-id", folderPath: "/webFMG"}
+      : {clientId: "google-client-id", folderPath: "/webFMG"};
+    const provider = createGoogleDriveProvider({
+      view,
+      config,
+      fetchImpl: async () => new Response(null, {status: mode === "unauthorized" ? 401 : 500})
+    });
+    if (mode === "unauthorized") {
+      assert.equal(provider.getState().connected, true);
+      await assert.rejects(() => provider.listFiles(), /HTTP 401/);
+      assert.equal(provider.getState().connected, false, "Google Drive 401 后必须立即失效");
+    } else {
+      assert.equal(provider.getState().connected, false, `Google Drive ${mode} 会话不得恢复`);
+    }
+    assert.equal(session.getItem(GOOGLE_SESSION_KEY), null, `Google Drive ${mode} 会话必须清除`);
+  }
 }
 
 async function verifyGoogleDriveFolderPaths(oauth) {
@@ -413,6 +497,227 @@ async function verifyGoogleDriveFolderPaths(oauth) {
   await rootProvider.createFile({filename: "根目录", blob: gzipBlob});
   assert.deepEqual(rootUploadMetadata.parents, ["root"]);
   assert.equal(folderRequestCount, 0);
+}
+
+async function verifyRegistrySessionDispose() {
+  const session = createMemoryStorage();
+  const view = createView({session, href: "https://maps.test/app"});
+  const config = {
+    dropbox: {appKey: "", redirectUri: ""},
+    googleDrive: {clientId: "google-client-id", folderPath: "/webFMG"}
+  };
+  const googleOauth = {
+    requestToken: async () => ({access_token: "registry-google-token", expires_in: 3600, scope: GOOGLE_DRIVE_SCOPE})
+  };
+  const registry = createCloudStorageRegistry({view, config, googleOauth, fetchImpl: async () => new Response(null, {status: 500})});
+  await registry.provider("google-drive").connect();
+  const saved = session.getItem(GOOGLE_SESSION_KEY);
+  assert.ok(saved);
+  registry.dispose();
+  assert.equal(session.getItem(GOOGLE_SESSION_KEY), saved, "registry dispose 必须保留有效的当前标签页会话");
+
+  const restored = createCloudStorageRegistry({view, config, googleOauth, fetchImpl: async () => new Response(null, {status: 500})});
+  assert.equal(restored.provider("google-drive").getState().connected, true);
+  await restored.provider("google-drive").disconnect({remote: false});
+  assert.equal(session.getItem(GOOGLE_SESSION_KEY), null);
+  restored.dispose();
+}
+
+async function verifyGoogleDefaultPrompt() {
+  const session = createMemoryStorage();
+  const view = createView({session, href: "https://maps.test/app"});
+  let requestArguments = null;
+  view.google = {
+    accounts: {
+      oauth2: {
+        initTokenClient(options) {
+          return {
+            requestAccessToken(...args) {
+              requestArguments = args;
+              options.callback({access_token: "default-prompt-token", expires_in: 3600, scope: GOOGLE_DRIVE_SCOPE});
+            }
+          };
+        }
+      }
+    }
+  };
+  const provider = createGoogleDriveProvider({
+    view,
+    fetchImpl: async () => new Response(null, {status: 500}),
+    config: {clientId: "google-client-id", folderPath: "/webFMG"}
+  });
+  await provider.connect();
+  assert.deepEqual(requestArguments, [], "Google 取令牌不得强制 prompt=consent");
+  await provider.disconnect({remote: false});
+}
+
+async function verifyGoogleFolderResolutionRace() {
+  const session = createMemoryStorage();
+  const view = createView({session, href: "https://maps.test/app"});
+  const oldFolderResponse = createDeferred();
+  const newFolderResponse = createDeferred();
+  const listParentQueries = [];
+  let tokenSequence = 0;
+  const provider = createGoogleDriveProvider({
+    view,
+    config: {clientId: "google-client-id", folderPath: "/webFMG"},
+    oauth: {
+      requestToken: async () => ({
+        access_token: tokenSequence++ === 0 ? "old-account-token" : "new-account-token",
+        expires_in: 3600,
+        scope: GOOGLE_DRIVE_SCOPE
+      })
+    },
+    fetchImpl: async (url, options = {}) => {
+      const parsed = new URL(String(url));
+      const query = parsed.searchParams.get("q") || "";
+      const authorization = options.headers?.Authorization || "";
+      if (query.includes("mimeType")) {
+        if (authorization === "Bearer old-account-token") return oldFolderResponse.promise;
+        if (authorization === "Bearer new-account-token") return newFolderResponse.promise;
+      }
+      listParentQueries.push({authorization, query});
+      return jsonResponse({files: []});
+    }
+  });
+
+  await provider.connect();
+  const oldList = provider.listFiles();
+  await provider.disconnect({remote: false});
+  await provider.connect();
+  const newList = provider.listFiles();
+
+  oldFolderResponse.resolve(jsonResponse({files: [{id: "old-account-folder", name: "webFMG", appProperties: {fmgWebglFolder: "true"}}]}));
+  await assert.rejects(oldList, /连接已失效/);
+  newFolderResponse.resolve(jsonResponse({files: [{id: "new-account-folder", name: "webFMG", appProperties: {fmgWebglFolder: "true"}}]}));
+  assert.deepEqual(await newList, []);
+  const newQueries = listParentQueries.filter(entry => entry.authorization === "Bearer new-account-token").map(entry => entry.query);
+  assert.ok(newQueries.some(query => query.includes("'new-account-folder' in parents")), "新会话必须使用新账号目录");
+  assert.equal(newQueries.some(query => query.includes("old-account-folder")), false, "旧目录解析不得污染新会话");
+  await provider.disconnect({remote: false});
+}
+
+async function verifyDropboxLateUnauthorizedRace() {
+  const config = {appKey: "dropbox-app-key", redirectUri: "https://maps.test/callback"};
+  const fingerprint = JSON.stringify([1, "dropbox", "https://maps.test", config.appKey, config.redirectUri, ...DROPBOX_SCOPES]);
+  const record = token => JSON.stringify({
+    version: 1,
+    provider: "dropbox",
+    fingerprint,
+    accessToken: token,
+    expiresAt: Date.now() + 60 * 60 * 1000
+  });
+
+  {
+    const session = createMemoryStorage();
+    session.setItem(DROPBOX_SESSION_KEY, record("old-dropbox-token"));
+    const pending = createDeferred();
+    let authorizationUrl = "";
+    const provider = createDropboxProvider({
+      view: createView({session, href: "https://maps.test/app"}),
+      config,
+      fetchImpl: async () => pending.promise,
+      oauth: {open: url => {
+        authorizationUrl = String(url);
+        return {};
+      }}
+    });
+    const oldList = provider.listFiles();
+    await provider.disconnect({remote: false});
+    await provider.connect();
+    const state = new URL(authorizationUrl).searchParams.get("state");
+    assert.equal(provider.acceptOAuthResult({ok: true, state, accessToken: "new-dropbox-token", expiresIn: 3600}), true);
+    pending.resolve(new Response(null, {status: 401}));
+    await assert.rejects(oldList, /HTTP 401/);
+    assert.equal(provider.getState().connected, true, "Dropbox 旧请求晚到的 401 不得断开同一 provider 的新连接");
+    assert.equal(JSON.parse(session.getItem(DROPBOX_SESSION_KEY)).accessToken, "new-dropbox-token");
+    await provider.disconnect({remote: false});
+  }
+
+  {
+    const session = createMemoryStorage();
+    session.setItem(DROPBOX_SESSION_KEY, record("old-dropbox-token"));
+    const pending = createDeferred();
+    const oldProvider = createDropboxProvider({
+      view: createView({session, href: "https://maps.test/app"}),
+      config,
+      fetchImpl: async () => pending.promise
+    });
+    const oldList = oldProvider.listFiles();
+    oldProvider.dispose();
+    session.setItem(DROPBOX_SESSION_KEY, record("new-dropbox-token"));
+    const newProvider = createDropboxProvider({
+      view: createView({session, href: "https://maps.test/app"}),
+      config,
+      fetchImpl: async () => jsonResponse({entries: [], has_more: false})
+    });
+    pending.resolve(new Response(null, {status: 401}));
+    await assert.rejects(oldList, /HTTP 401/);
+    assert.equal(newProvider.getState().connected, true, "Dropbox 已销毁 provider 的 401 不得断开重建后的连接");
+    assert.equal(JSON.parse(session.getItem(DROPBOX_SESSION_KEY)).accessToken, "new-dropbox-token");
+    newProvider.dispose();
+  }
+}
+
+async function verifyGoogleLateUnauthorizedRace() {
+  const config = {clientId: "google-client-id", folderPath: "/"};
+  const fingerprint = JSON.stringify([1, "google-drive", "https://maps.test", config.clientId, config.folderPath, GOOGLE_DRIVE_SCOPE]);
+  const record = token => JSON.stringify({
+    version: 1,
+    provider: "google-drive",
+    fingerprint,
+    accessToken: token,
+    expiresAt: Date.now() + 60 * 60 * 1000
+  });
+
+  {
+    const session = createMemoryStorage();
+    const pending = createDeferred();
+    let tokenSequence = 0;
+    const provider = createGoogleDriveProvider({
+      view: createView({session, href: "https://maps.test/app"}),
+      config,
+      fetchImpl: async () => pending.promise,
+      oauth: {requestToken: async () => ({
+        access_token: tokenSequence++ === 0 ? "old-google-token" : "new-google-token",
+        expires_in: 3600,
+        scope: GOOGLE_DRIVE_SCOPE
+      })}
+    });
+    await provider.connect();
+    const oldList = provider.listFiles();
+    await provider.disconnect({remote: false});
+    await provider.connect();
+    pending.resolve(new Response(null, {status: 401}));
+    await assert.rejects(oldList, /HTTP 401/);
+    assert.equal(provider.getState().connected, true, "Google 旧请求晚到的 401 不得断开同一 provider 的新连接");
+    assert.equal(JSON.parse(session.getItem(GOOGLE_SESSION_KEY)).accessToken, "new-google-token");
+    await provider.disconnect({remote: false});
+  }
+
+  {
+    const session = createMemoryStorage();
+    session.setItem(GOOGLE_SESSION_KEY, record("old-google-token"));
+    const pending = createDeferred();
+    const oldProvider = createGoogleDriveProvider({
+      view: createView({session, href: "https://maps.test/app"}),
+      config,
+      fetchImpl: async () => pending.promise
+    });
+    const oldList = oldProvider.listFiles();
+    oldProvider.dispose();
+    session.setItem(GOOGLE_SESSION_KEY, record("new-google-token"));
+    const newProvider = createGoogleDriveProvider({
+      view: createView({session, href: "https://maps.test/app"}),
+      config,
+      fetchImpl: async () => jsonResponse({files: []})
+    });
+    pending.resolve(new Response(null, {status: 401}));
+    await assert.rejects(oldList, /HTTP 401/);
+    assert.equal(newProvider.getState().connected, true, "Google 已销毁 provider 的 401 不得断开重建后的连接");
+    assert.equal(JSON.parse(session.getItem(GOOGLE_SESSION_KEY)).accessToken, "new-google-token");
+    newProvider.dispose();
+  }
 }
 
 function verifyRegistryAndUiContract() {
@@ -553,6 +858,16 @@ function createMemoryStorage() {
     setItem: (key, value) => values.set(key, String(value)),
     removeItem: key => values.delete(key)
   };
+}
+
+function createDeferred() {
+  let resolve;
+  let reject;
+  const promise = new Promise((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return {promise, resolve, reject};
 }
 
 function jsonResponse(payload, status = 200) {
