@@ -1341,6 +1341,12 @@
   - 排除：不迁移标签渲染架构，不把 no-DOM 消融当产品目标，不声称没有 GPU timestamp 的硬件耗时。
   - 完成记录：overlay profile 新增同步输入 coalescing、preview / draw / overlay 数量、DOM 与 measurement transform 连续性门禁；状态 profile 覆盖 surface geometry 复用、labels / markers / zones 批事务和 locate 相位预算。系统 Chrome 串行完成 10k / 50k / 100k、100k measurement-heavy、100k 状态动作及三轮 100k E2E；生产构建、视口线层纯算法 / 浏览器、标签布局、selection、PNG、测量导入、海岸纯算法 / 浏览器回归均通过，checksum / revision、camera / layers / selection 恢复、console / page / WebGL 错误门禁通过。可见浏览器人工检查确认缩放中标签、图标与覆盖层不断层，commit 和适配视图正常。10k 单轮旧绝对 idle-frame `80ms` 观察线仍记录 zoom / pan `141.1 / 112.0ms`，属于报告保留的长任务波动，不影响事件预算结论，也未被伪装为硬件 SLA。实际优化报告见 `docs/performance/canvas-performance-optimization-report.md`。
 
+- **权威任务第 273 项：合入画布性能优化并重新评估实际收益。** `已完成；来源：用户直接要求`
+  - 范围：把 `codex-canvas-performance-optimization` 以双父提交合入本地 `main`，保留主线第 268 项后续光学居中修正与性能专题两边历史；在合并后的生产构建上重新运行 10k / 50k / 100k 完整图层、100k 三轮 overlay 与 E2E、100k 状态动作、measurement-heavy、关键渲染回归和可见浏览器检查。
+  - 最小验收：合并提交的两父、工作树、`source/` 边界与冲突解决均可审计；结构事件预算、状态恢复、checksum / revision、console / page / WebGL 错误继续通过；100k 装载、交互 frame / overlay、idle commit 与颜色 / 组合图层 / locate 指标按合入后独立样本重新给出中位数和范围，并与第 272 项结果及优化前基线对照。
+  - 排除：本项只复评，不继续实现新的性能优化，不迁移标签架构，不调整绝对阈值掩盖机器长任务，不修改地图生成、数据、schema、业务 API、默认图层或 `source/`；是否推送 `main` 由用户另行授权。
+  - 完成记录：本地 `main` 以双父提交 `cd660ad` 合入性能分支，唯一文档冲突保留双方追加记录，性能代码相对专题提交不变且 `source/` 零改动。合入后 100k 三轮 zoom / pan 交互 overlay 继续为 `0 / 0`，frame p95 中位为 `82.5 / 141.2ms`；100k `loadMap`、visual cell mesh、shore cache 和 paired 中位为 `7982.5 / 2479.9 / 3988.1 / 6404.5ms`，paired 相对优化前仍下降 `33.7%`。状态动作、measurement-heavy、关键渲染 / 海岸回归、生产构建和可见浏览器通过；pan idle 中位 `596.6ms` 的尾延迟波动如实保留。详细复评见 `docs/performance/canvas-performance-optimization-report.md`；本项没有继续写性能实现，也未推送 `main`。
+
 - **第 270～272 项统一执行约束。**
   - 专题施工图：`docs/task-notes/canvas-performance-optimization-plan.md`。
   - 严格按第 270 → 271 → 272 项执行；一项达到最小验收后立即转下一项，不从性能报告其它长期候选扩展范围。构建与读取同一 `dist` 的浏览器回归必须串行。

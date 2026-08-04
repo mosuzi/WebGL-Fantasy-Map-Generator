@@ -29567,3 +29567,18 @@ full 矩阵结果：
 - 生产构建通过；系统 Chrome 串行完成 10k / 50k / 100k 完整图层、100k measurement-heavy、100k 状态动作和三轮 100k E2E。`regress:viewport-line-preview`、浏览器版本、`regress:label-layout`、`regress:selection-highlight`、`regress:png-options`、`regress:measurement`、`regress:shoreline -- --pure` 与完整海岸浏览器回归通过；海岸正式 10k / 50k 的错侧像素、最长针、冲突、重复和 seam 均为 `0`。测量回归把 `[FMG health] main-thread-long-task` 单独保留为性能健康事件，真正 console / page 错误仍为失败；所有最终样本 WebGL error 为 `0`。
 - 实际结果写入 `docs/performance/canvas-performance-optimization-report.md`，权威任务第 270～272 项同步完成；未修改 `source/`，没有扩入标签渲染迁移、worker / shader extrusion 或生成算法。
 - 提交后首次推送被远端以 `directory file conflict` 拒绝：远端已有 `refs/heads/codex`，不能同时创建 `refs/heads/codex/...`。本地专题分支因此只改名为 `codex-canvas-performance-optimization` 后推送，提交内容不变。
+
+# 2026-08-04：登记第 273 项——合入画布性能优化并复评
+
+- 用户要求尝试把性能优化分支合入 `main` 并重新评估优化结果。调查确认本地 / 远端 `main` 为 `9ce8809`，性能分支为 `e6e862f`，双方从 `5bc81fc` 各自前进一个提交，两个工作树起始均 clean。
+- 在 `D:\work\fmg` 的 `main` 工作树执行双父合并，唯一冲突为 `docs/development-log.md` 末尾追加：主线的存档设置图标光学居中记录与性能专题第 269～272 项记录均完整保留；代码与 `source/` 没有冲突。合并提交为 `cd660ad`，随后当前并行工作树快进到同一提交。
+- 本项冻结为只读复评：生产构建后串行运行 10k / 50k / 100k 完整图层、100k 三轮 overlay / E2E、100k 状态动作、measurement-heavy、关键渲染回归和可见浏览器检查；报告必须同时列出结构事件预算、实际中位数 / 范围、与第 272 项及优化前基线的差异，不以单轮波动扩大或否定收益。本项不继续写性能实现，也不自动推送 `main`。
+
+# 2026-08-04：完成第 273 项——性能优化合入主线后复评
+
+- 合并提交 `cd660ad` 的两父顺序、共同基点和冲突范围复核通过；相对主线只引入性能专题，相对性能分支只保留主线存档设置图标修正和双方文档历史，冲突标记为 `0`，`source/` 零改动。
+- 合入后 100k 完整图层三轮 zoom / pan 仍为 `18 / 47 draw`、交互期 `0 / 0 overlay`，根变换连续可见；frame p95 中位为 `82.5 / 141.2ms`，相对优化前分别下降 `33.3% / 7.7%`。zoom idle 中位为 `388.4ms`，pan idle 中位为 `596.6ms`；后者的长尾波动保留为后续独立专题候选，没有据此否定结构收益或调整阈值。
+- 100k E2E 三轮的 `loadMap` 中位为 `7982.5ms`，visual cell mesh / shore cache / paired 为 `2479.9 / 3988.1 / 6404.5ms`；paired 相对优化前 `9657.9ms` 仍下降 `33.7%`。同代码相对第 272 项的额外下降只记为本轮环境观测，不归因为新实现。
+- 状态门禁中 `states / height` 均只产生 `1 surface refresh / 1 draw / 1 overlay` 且复用 geometry；labels、markers/resources、zones 批事务预算保持；locate 为 `2658.1ms / 16 draw / 15 selection mesh / 1 overlay`。measurement-heavy 交互 overlay 为 `0`，测量根变换连续性通过。
+- 生产构建、脚本语法、视口线层、标签布局、selection、PNG、measurement、海岸纯算法与完整系统 Chrome 回归通过。pnpm 包装器因网络获取 `@pnpm/exe` 在测试启动前失败，改用 package script 对应的本地 Node 入口完成同一回归；10k / 50k 海岸错侧像素、针、冲突、重复、seam 与 unfilled 均为 `0`。
+- 可见浏览器检查生产页，缩放时标签、图标和道路持续显示，commit 后与“适配视图”恢复正确，error 日志为 `0`；验收服务、页面、任务进程和端口已清理。实际复评已追加到 `docs/performance/canvas-performance-optimization-report.md`，未新增性能实现或推送 `main`，当前没有活动权威任务。
