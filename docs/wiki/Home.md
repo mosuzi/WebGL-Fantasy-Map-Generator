@@ -35,4 +35,4 @@ WebGL 幻想地图生成器是一款从头实现的 WebGL2 幻想世界地图工
 
 ## 文档状态
 
-Wiki 的可追踪源稿位于主仓库 `docs/wiki/`，当前对应 API `1.0.0` 和地图文档 v2。远端 GitHub Wiki 受当前私有仓库套餐限制，仍未发布；在远端可用以前，以仓库内这些中文源稿为准。项目活动任务与完成状态只以主仓库 `docs/current-plan.md` 为准。
+Wiki 的可追踪源稿位于主仓库 [`docs/wiki/`](https://github.com/mosuzi/WebGL-Fantasy-Map-Generator/tree/main/docs/wiki)，当前对应 API `1.0.0` 和地图文档 v2。远端页面由仓库内 `publish:wiki` 流程从这些源稿重复发布，不在网页端维护第二份独立正文。项目活动任务与完成状态只以主仓库 `docs/current-plan.md` 为准。

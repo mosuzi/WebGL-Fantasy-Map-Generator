@@ -4,7 +4,7 @@
 
 WebGL 幻想地图生成器适合世界构建、TRPG 主持、架空历史创作，也适合单纯喜欢地图的人。项目借鉴 [Fantasy Map Generator](https://github.com/Azgaar/Fantasy-Map-Generator) 生成和呈现世界的思路与视觉风格，应用本身从头独立开发。打开页面即可生成一幅完整地图，之后还可以继续查看、推演和修改其中的世界。
 
-[在线体验](https://fmg.mosuzi.top/) · [开发故事](https://mosuzi.com/docs/webgl-fantasy-map-generator-development/) · [快速开始](#快速开始) · [文档导览](#文档导览)
+[在线体验](https://fmg.mosuzi.top/) · [中文 Wiki](https://github.com/mosuzi/WebGL-Fantasy-Map-Generator/wiki) · [开发故事](https://mosuzi.com/docs/webgl-fantasy-map-generator-development/) · [快速开始](#快速开始) · [文档导览](#文档导览)
 
 | 自然地貌 | 国家视角 |
 |---|---|
@@ -67,7 +67,7 @@ pnpm run build
 | 查看当前唯一有效的任务范围 | [权威任务清单](./docs/current-plan.md#权威任务清单) |
 | 追溯重要决定和验收结果 | [开发日志](./docs/development-log.md) |
 
-以上链接均指向仓库内维护的文档源稿。受当前私有仓库套餐限制，远端 GitHub Wiki 尚未发布。
+以上链接均指向仓库内维护的文档源稿；面向普通用户的版本也已发布到[项目 GitHub Wiki](https://github.com/mosuzi/WebGL-Fantasy-Map-Generator/wiki)。仓库内 `docs/wiki/` 继续作为可追踪、可审计和可重复发布的唯一源稿。
 
 ## 项目状态与边界
 

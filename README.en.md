@@ -4,7 +4,7 @@
 
 WebGL Fantasy Map Generator is made for worldbuilding, tabletop RPGs, alternate-history writing, and anyone who simply enjoys maps. It takes inspiration from how [Fantasy Map Generator](https://github.com/Azgaar/Fantasy-Map-Generator) generates and presents a world, as well as its visual style. The application itself was built from scratch, independently of the original project. You can generate a complete map in a few steps, then inspect, revise, and keep developing the world it describes.
 
-[Try it online](https://fmg.mosuzi.top/) · [Development story (Chinese)](https://mosuzi.com/docs/webgl-fantasy-map-generator-development/) · [Quick start](#quick-start) · [Documentation](#documentation-guide)
+[Try it online](https://fmg.mosuzi.top/) · [Chinese Wiki](https://github.com/mosuzi/WebGL-Fantasy-Map-Generator/wiki) · [Development story (Chinese)](https://mosuzi.com/docs/webgl-fantasy-map-generator-development/) · [Quick start](#quick-start) · [Documentation](#documentation-guide)
 
 | Natural relief | State view |
 |---|---|
@@ -67,7 +67,7 @@ See the [installation and first-run guide (Chinese)](./docs/wiki/安装与快速
 | See the only authoritative scope of current work | [Authoritative task list (Chinese)](./docs/current-plan.md#权威任务清单) |
 | Trace major decisions and acceptance results | [Development log (Chinese)](./docs/development-log.md) |
 
-All of these links point to documentation sources maintained in this repository. The remote GitHub Wiki has not been published because it is unavailable under the repository's current private plan.
+All of these links point to documentation sources maintained in this repository. A reader-facing version is also published to the [project's GitHub Wiki](https://github.com/mosuzi/WebGL-Fantasy-Map-Generator/wiki), while `docs/wiki/` remains the only traceable, auditable, and reproducible source.
 
 ## Project status and scope
 

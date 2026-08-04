@@ -382,7 +382,7 @@ function relativeWikiPath(path) {
 }
 
 function publishWiki(files) {
-  const remote = "https://github.com/mosuzi/fmg-gl.wiki.git";
+  const remote = "https://github.com/mosuzi/WebGL-Fantasy-Map-Generator.wiki.git";
   const work = mkdtempSync(join(tmpdir(), "fmg-wiki-"));
   try {
     execFileSync("git", ["clone", remote, work], {stdio: "inherit"});
