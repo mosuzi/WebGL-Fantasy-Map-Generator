@@ -23,6 +23,7 @@ try {
   browser = await playwright.chromium.launch({headless: true, channel: "chrome"});
   const context = await browser.newContext({viewport: {width: 1280, height: 820}, acceptDownloads: true});
   const page = await context.newPage();
+  const cdp = await context.newCDPSession(page);
   page.setDefaultTimeout(60000);
   const consoleErrors = [];
   const pageErrors = [];
@@ -35,7 +36,7 @@ try {
   await page.getByRole("tab", {name: "生成", exact: true}).click();
   await page.locator("#map-name-input").fill(mapName);
   await page.locator("#map-name-input").dispatchEvent("input");
-  await assertTemplateSettingsCollapsed(page);
+  const initialCdpAlignment = await assertTemplateSettingsCollapsed(page, cdp);
   await page.locator("#toggle-map-filename-template").click();
   assert.equal(await page.locator("#toggle-map-filename-template").getAttribute("aria-expanded"), "true");
   await page.locator("#map-filename-template-input").fill(filenameTemplate);
@@ -66,7 +67,7 @@ try {
   assert.equal(await page.evaluate(key => localStorage.getItem(key), templateStorageKey), filenameTemplate, "刷新后共享模板未保留");
   await openControlPanel(page);
   await page.getByRole("tab", {name: "生成", exact: true}).click();
-  await assertTemplateSettingsCollapsed(page);
+  const refreshedCdpAlignment = await assertTemplateSettingsCollapsed(page, cdp);
   await page.locator("#toggle-map-filename-template").click();
   const layouts = [];
   for (const viewport of [{width: 1440, height: 900}, {width: 390, height: 760}, {width: 320, height: 700}]) {
@@ -98,6 +99,7 @@ try {
     template: filenameTemplate,
     downloads: [localSave.filename, compressedExport.filename],
     refreshPersisted: true,
+    cdpAlignment: [initialCdpAlignment, refreshedCdpAlignment],
     layouts,
     consoleErrors: 0,
     pageErrors: 0,
@@ -131,7 +133,7 @@ async function assertTemplatePreview(page, expected) {
   assert.equal(await page.locator("#map-filename-template-preview").getAttribute("data-state"), "ready");
 }
 
-async function assertTemplateSettingsCollapsed(page) {
+async function assertTemplateSettingsCollapsed(page, cdp) {
   assert.equal(await page.locator("#toggle-map-filename-template").getAttribute("aria-expanded"), "false");
   assert.equal(await page.locator("#map-filename-template-settings").isVisible(), false);
   const style = await page.evaluate(() => {
@@ -151,4 +153,22 @@ async function assertTemplateSettingsCollapsed(page) {
   assert.equal(style.backgroundColor, "rgba(0, 0, 0, 0)", "模板设置图标不应绘制底色");
   assert.equal(style.backgroundImage, "none", "模板设置图标不应绘制渐变底色");
   assert.equal(style.boxShadow, "none", "模板设置图标不应绘制阴影");
+  const {result} = await cdp.send("Runtime.evaluate", {
+    expression: `(() => {
+      const input = document.getElementById("map-name-input").getBoundingClientRect();
+      const button = document.getElementById("toggle-map-filename-template").getBoundingClientRect();
+      const icon = document.querySelector("#toggle-map-filename-template svg").getBoundingClientRect();
+      const center = rect => (rect.top + rect.bottom) / 2;
+      return {
+        inputCenter: center(input),
+        buttonCenter: center(button),
+        iconCenter: center(icon),
+        buttonDelta: center(button) - center(input),
+        iconDelta: center(icon) - center(input)
+      };
+    })()`,
+    returnByValue: true
+  });
+  assert.ok(Math.abs(result.value.iconDelta) <= 0.1, `CDP 测得齿轮图标未垂直居中：${JSON.stringify(result.value)}`);
+  return result.value;
 }

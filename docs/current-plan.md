@@ -1309,7 +1309,7 @@
 - **权威任务第 268 项：地图名称、共享存档模板与 `.webfmg` 扩展名。** `已完成；来源：用户直接要求`
   - 范围：生成 Tab 新增地图名称；名称输入右侧的无边框设置图标按需展开共享存档格式、token 帮助和实时预览。模板支持 `{name}`、`{date}`、`{time}`、`{seed}`、`{checksum}`、`{ext}`，默认 `{name}-{date}-{time}.{ext}`，本地保存、高级压缩导出和云端新建共用同一持久化偏好；云端覆盖仍按原 id / path / revision 和原名执行。
   - 格式与兼容：新建原生存档采用 `.webfmg`，内部继续为 `application/gzip` 的 gzip JSON，不升级 schema；旧 `.webgl-map.json.gz / .json.gz / .gz / .json` 在导入、云端列表、gzip-base64 与两套无头 CLI 中继续兼容。旧图缺少名称时按 seed 回填，名称不进入 checksum，浏览器固定单槽存档 key 不变。
-  - 验收记录：首轮独立复核阻断的换图后云端预览陈旧问题已在统一加载链修复并复验 `ACCEPT`。命名、云端、迁移、无头读写、API 往返和生产构建通过；系统 Chrome 实际捕获本地保存与高级压缩导出的同名 `.webfmg` 并 gunzip 核对，刷新持久化、默认收起、图标展开、无边框垂直居中及 `1440 / 390 / 320px` 无溢出通过，console、page、health 与 WebGL error 为 `0`。`source/` 零改动，未访问真实云盘。
+  - 验收记录：首轮独立复核阻断的换图后云端预览陈旧问题已在统一加载链修复并复验 `ACCEPT`。命名、云端、迁移、无头读写、API 往返和生产构建通过；系统 Chrome 实际捕获本地保存与高级压缩导出的同名 `.webfmg` 并 gunzip 核对，刷新持久化、默认收起、图标展开、无边框及 `1440 / 390 / 320px` 无溢出通过。2026-08-04 CDP 复验测得按钮盒与输入框中心一致、齿轮 SVG 原向上偏 `1.5px`，专属内部位移修正后两轮均为 `0px`；console、page、health 与 WebGL error 为 `0`。`source/` 零改动，未访问真实云盘。
   - 专题施工图：`docs/task-notes/map-save-naming-and-extension.md`。
 
 - **第 263～264 项统一执行约束。**

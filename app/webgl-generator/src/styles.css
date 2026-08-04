@@ -4538,6 +4538,10 @@ select:disabled {
   color: #ffe0a1;
 }
 
+.generation-save-template-toggle.ui-icon-action.el-button > span {
+  transform: translateY(1px);
+}
+
 .generation-save-template-settings {
   display: grid;
   gap: 9px;
