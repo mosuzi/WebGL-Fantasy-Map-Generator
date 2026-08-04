@@ -21,11 +21,14 @@ import {
   resolveMarkerIconVisual
 } from "../app/webgl-generator/src/renderer/canvas-icon-registry.js";
 
-const [rendererSource, panelSource, generatorSource, militaryAssetsSource] = await Promise.all([
+const [rendererSource, cityLayerSource, panelSource, generatorSource, militaryAssetsSource, stylesSource, cityVisualsSource] = await Promise.all([
   readFile(new URL("../app/webgl-generator/src/renderer/placeholder-renderer.js", import.meta.url), "utf8"),
+  readFile(new URL("../app/webgl-generator/src/renderer/city-icon-layer.js", import.meta.url), "utf8"),
   readFile(new URL("../app/webgl-generator/src/ui/vue/components/MarkerPanel.vue", import.meta.url), "utf8"),
   readFile(new URL("../app/webgl-generator/src/generator/markers.js", import.meta.url), "utf8"),
-  readFile(new URL("../app/webgl-generator/src/renderer/military-icon-assets.js", import.meta.url), "utf8")
+  readFile(new URL("../app/webgl-generator/src/renderer/military-icon-assets.js", import.meta.url), "utf8"),
+  readFile(new URL("../app/webgl-generator/src/styles.css", import.meta.url), "utf8"),
+  readFile(new URL("../app/webgl-generator/src/runtime/city-visuals.js", import.meta.url), "utf8")
 ]);
 
 assert.deepEqual(CANVAS_ICON_COUNTS, {
@@ -95,42 +98,60 @@ assert(!panelSource.includes("type:${"), "MarkerPanel 不得把自动 type:* 键
 
 const cityBaseKeys = ["hamlet", "village", "town", "city", "capital", "provincial", "port", "fort", "camp"];
 const cityRequiredParts = {
-  hamlet: ["dwelling", "roof", "homestead-boundary"],
-  village: ["dwellings", "roofs", "village-boundary"],
-  town: ["dwellings", "central-tower", "spire", "partial-wall", "gate"],
-  city: ["ring-wall", "dwellings", "central-tower", "spire", "gate"],
-  capital: ["ring-wall", "dwellings", "capital-tower", "spire", "gate"],
-  provincial: ["dwellings", "provincial-hall", "hall-roof", "partial-wall", "gate"],
-  port: ["water", "harbor-wall", "dwelling", "harbor-tower", "sail"],
-  fort: ["fortress-wall", "corner-towers", "keep", "gate"],
-  camp: ["palisade", "side-tent", "main-tent", "flag"]
+  hamlet: ["primary-outline"],
+  village: ["primary-outline"],
+  town: ["primary-outline"],
+  city: ["primary-outline", "inner-ring"],
+  capital: ["primary-outline"],
+  provincial: ["primary-outline"],
+  port: ["primary-outline", "water-gap"],
+  fort: ["primary-outline"],
+  camp: ["primary-outline"]
 };
+const primaryOutlineGeometries = {};
+const cityDrawableCounts = {};
 assert.deepEqual(new Set(Object.keys(CITY_BASE_ICON_SVGS)), new Set(cityBaseKeys), "九个城市基础剪影键的双向差集不为 0");
 for (const key of cityBaseKeys) {
   const svg = cityBaseIconSvg(key);
   assertSvgContract(svg, `城市 ${key}`);
   assert.match(svg, /viewBox="0 0 34 26"/, `${key} 必须保持 34×26 观察盒`);
-  assert.match(svg, /data-city-language="a-settlement"/, `${key} 未登记 A 方案统一城池语言`);
+  assert.match(svg, /data-city-language="a-minimal-top-down"/, `${key} 未登记方案 A 极简俯视语言`);
   assert.match(svg, new RegExp(`data-city-kind="${key}"`), `${key} 的稳定基础键标记不一致`);
   for (const part of cityRequiredParts[key]) {
     assert.match(svg, new RegExp(`data-city-part="${part}"`), `${key} 缺少结构 ${part}`);
   }
+  primaryOutlineGeometries[key] = cityPartGeometry(svg, "primary-outline");
+  cityDrawableCounts[key] = (svg.match(/<(?:path|circle|ellipse|rect|polygon|polyline|line)\b/g) || []).length;
+  assert(cityDrawableCounts[key] >= 1 && cityDrawableCounts[key] <= 2, `${key} 的可绘制元素不在极简上限内：${cityDrawableCounts[key]}`);
+  assert(!/\sfill=(?!"none")/i.test(svg), `${key} 不得包含实心填充`);
+  assert.equal((svg.match(/class="city-icon-line(?: city-icon-line--thin)?"/g) || []).length, cityDrawableCounts[key], `${key} 存在未使用极简空心线条类的元素`);
 }
-assert.match(CITY_BASE_ICON_SVGS.city, /data-city-part="ring-wall" fill-rule="evenodd"/, "大型城市必须保留完整镂空椭圆环城墙");
-const cityStructurePaths = Object.fromEntries(["ring-wall", "gate", "central-tower", "dwellings"].map(part => [part, cityPartPath(CITY_BASE_ICON_SVGS.city, part)]));
-assert.equal((cityStructurePaths["ring-wall"].match(/[Mm]/g) || []).length, 2, "大型城市环墙必须包含内外两条实际子路径");
-assert.equal((cityStructurePaths["ring-wall"].match(/[Zz]/g) || []).length, 2, "大型城市环墙内外轮廓必须分别闭合");
-assert((cityStructurePaths.gate.match(/[A-Za-z]/g) || []).length >= 3, "大型城市正门缺少实际几何命令");
-assert((cityStructurePaths["central-tower"].match(/[A-Za-z]/g) || []).length >= 3, "大型城市中央高塔缺少实际几何命令");
-assert.equal((cityStructurePaths.dwellings.match(/[Mm]/g) || []).length, 2, "大型城市墙内必须有两组独立屋舍几何");
-assert.equal(new Set(Object.values(cityStructurePaths).map(path => geometryFingerprint(`<path d="${path}"/>`))).size, 4, "大型城市城墙、门、塔与屋舍不得复用同一几何");
+for (const forbiddenPart of ["door", "gate", "gate-opening", "tower-window", "tower-windows", "central-tower", "capital-tower", "provincial-hall", "harbor-tower", "spire", "sail", "flag"]) {
+  assert(!new RegExp(`data-city-part="${forbiddenPart}"`).test(Object.values(CITY_BASE_ICON_SVGS).join("\n")), `俯视图标仍包含立面结构 ${forbiddenPart}`);
+}
+assert.equal(new Set(Object.values(primaryOutlineGeometries).map(geometryFingerprint)).size, 9, "九个城市一级主体轮廓必须真实不同");
+assert.match(primaryOutlineGeometries.hamlet, /^<circle\b/, "小城镇必须使用小圆环");
+assert.match(primaryOutlineGeometries.village, /M17 5 26 20H8Z/, "村镇必须使用三角形");
+assert.match(primaryOutlineGeometries.town, /m17 3\.5 11 9\.5-11 9\.5L6 13Z/, "城镇必须使用菱形");
+assert.equal((CITY_BASE_ICON_SVGS.city.match(/<ellipse\b/g) || []).length, 2, "大城必须使用双环");
+assert.match(primaryOutlineGeometries.capital, /2\.8 6\.8h7\.5l-6 4\.5/, "首都必须使用五角星");
+assert((cityPartPath(CITY_BASE_ICON_SVGS.port, "primary-outline").match(/[Mm]/g) || []).length >= 2, "港口必须保留方案 B 的断口马蹄");
 const scaleKeys = ["hamlet", "village", "town", "city"];
 const cityScaleFingerprints = new Set(scaleKeys.map(key => geometryFingerprint(cityBaseIconSvg(key))));
 assert.equal(cityScaleFingerprints.size, 4, "城市四级基础轮廓必须各自唯一");
 assert.equal(new Set(cityBaseKeys.map(key => geometryFingerprint(cityBaseIconSvg(key)))).size, 9, "九个城市基础剪影必须各自唯一");
 for (const role of Object.keys(CITY_ROLE_BADGE_SVGS)) assertSvgContract(`<svg>${cityRoleBadgeSvg([role])}</svg>`, `城市角色 ${role}`);
-assert.match(rendererSource, /renderCityBaseIconSvg\(item\.silhouette\)/);
-assert.match(rendererSource, /renderCityRoleBadgeSvg\(item\.roles\)/);
+assert.match(rendererSource, /createCityIconWebglLayer\(this\.gl\)/, "正式地图没有创建 WebGL 城镇实例层");
+assert.match(rendererSource, /this\.cityIconLayer\.setInstances\(this\.cityIconItems/, "城镇模型没有批量上传到实例层");
+assert.match(rendererSource, /this\.cityIconLayer\.draw\(/, "正式绘制没有调用城镇实例层");
+assert.match(rendererSource, /visual\.manual \? visual\.silhouette : cityRoleSilhouette\(roles, visual\.silhouette\)/, "自动首都、省会和港口没有使用角色主体图形");
+assert.match(rendererSource, /\["capital", "provincial", "port"\]\.find\(role => roles\.includes\(role\)\)/, "角色主体图形的优先级漂移");
+assert.match(cityLayerSource, /additionalRoleBits\(shape,/, "附加角色没有进入实例数据");
+assert.match(cityLayerSource, /bits &= ~CITY_ICON_ROLE_BITS\.capital/, "首都主体仍会重复叠加首都徽记");
+assert.doesNotMatch(rendererSource, /createElement\("span"\)[\s\S]{0,240}city-map-icon/, "正式地图仍在创建城镇 DOM 图标");
+assert.doesNotMatch(rendererSource, /renderCityBaseIconSvg|renderCityRoleBadgeSvg/, "正式地图仍依赖 SVG 城镇图形");
+assert.match(stylesSource, /\.city-icon-line\s*\{[\s\S]*?fill: none;[\s\S]*?stroke:/, "极简主体没有固定为空心线条");
+for (const label of ["首都五角星", "港口断口马蹄", "大城双环", "城镇菱形", "村镇三角", "小城镇圆环"]) assert(cityVisualsSource.includes(label), `手工视觉选项仍使用旧图形名称：${label}`);
 assert.match(rendererSource, /resolveMarkerIconVisual\(marker\.type,/);
 assert.match(rendererSource, /renderMarkerIconSvg\(item\)/);
 assert(!rendererSource.includes("function cityBaseIconSvg("), "renderer 不得保留第二套城市基础几何");
@@ -163,6 +184,9 @@ console.log(JSON.stringify({
   markerGeometryFingerprints: markerFingerprints.size,
   cityScaleFingerprints: cityScaleFingerprints.size,
   cityBaseFingerprints: 9,
+  cityPrimaryOutlineFingerprints: 9,
+  cityDrawableCounts,
+  formalCityRenderer: "webgl-instanced",
   militaryFingerprints: 10,
   generationWorkerImportsRegistry: false
 }, null, 2));
@@ -185,10 +209,17 @@ function geometryFingerprint(svg) {
     .digest("hex");
 }
 
-function cityPartPath(svg, part) {
+function cityPartGeometry(svg, part) {
   const escaped = part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const match = String(svg).match(new RegExp(`<path[^>]*data-city-part="${escaped}"[^>]*d="([^"]+)"`));
-  assert(match, `大型城市缺少 ${part} 的实际 path`);
+  const match = String(svg).match(new RegExp(`<(?:path|circle|ellipse|rect|polygon|polyline|line)\\b[^>]*data-city-part="${escaped}"[^>]*>`));
+  assert(match, `城市图标缺少 ${part} 的实际几何`);
+  return match[0];
+}
+
+function cityPartPath(svg, part) {
+  const geometry = cityPartGeometry(svg, part);
+  const match = geometry.match(/\sd="([^"]+)"/);
+  assert(match, `城市图标 ${part} 不是 path`);
   return match[1];
 }
 

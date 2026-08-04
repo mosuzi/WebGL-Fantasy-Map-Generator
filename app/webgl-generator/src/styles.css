@@ -1698,6 +1698,19 @@ select:disabled {
   visibility: visible;
 }
 
+.city-label.buffered,
+.custom-label.buffered,
+.zone-label.buffered,
+.city-label.viewport-entering,
+.custom-label.viewport-entering,
+.state-label.viewport-entering,
+.province-label.viewport-entering,
+.zone-label.viewport-entering {
+  opacity: var(--label-opacity, 1);
+  transition: none;
+  visibility: visible;
+}
+
 .city-label.capital {
   max-width: 156px;
   line-height: 1.2;
@@ -1789,11 +1802,11 @@ select:disabled {
   position: absolute;
   left: 0;
   top: 0;
-  width: 34px;
-  height: 26px;
+  width: 30px;
+  height: 23px;
   opacity: 0;
   pointer-events: none;
-  transform: translate(var(--overlay-x, 0px), var(--overlay-y, 0px)) translate(-50%, -80%) scale(var(--city-icon-scale, 1));
+  transform: translate(var(--overlay-x, 0px), var(--overlay-y, 0px)) translate(-50%, -80%) scale(calc(var(--city-icon-scale, 1) * var(--city-icon-preview-scale, 1)));
   transform-origin: 50% 82%;
   transition: opacity 130ms ease, visibility 0s linear 130ms;
   visibility: hidden;
@@ -1879,6 +1892,18 @@ select:disabled {
   opacity: 0.68;
 }
 
+.city-icon-line {
+  fill: none;
+  stroke: var(--city-wall, #cfb884);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2.1;
+}
+
+.city-icon-line--thin {
+  stroke-width: 1.55;
+}
+
 .city-icon-role-badge-bg {
   fill: rgba(31, 25, 18, 0.88);
   stroke: var(--city-accent, #efd69a);
@@ -1912,6 +1937,11 @@ select:disabled {
 .city-map-icon.selected .city-icon-tent {
   stroke: #ffe282;
   stroke-width: 1.45;
+}
+
+.city-map-icon.selected .city-icon-line {
+  stroke: #ffe282;
+  stroke-width: 2.45;
 }
 
 .marker-map-icon {

@@ -1851,7 +1851,7 @@ async function composeMapExportCanvas(documentRef, canvas, options = {}) {
     output.height = Math.max(1, exportFrame.sourceRect.height * pixelScale);
     const context = output.getContext("2d");
     if (!context) return {canvas, crop: exportFrame.crop};
-    if (!copyWebglCanvasTo2d(context, canvas, options.renderer, exportFrame.sourceRect)) {
+    if (!copyWebglCanvasTo2d(context, canvas, options.renderer, exportFrame.sourceRect, options.overlays?.cityIcons !== false)) {
       context.drawImage(canvas, exportFrame.sourceRect.x, exportFrame.sourceRect.y, exportFrame.sourceRect.width, exportFrame.sourceRect.height, 0, 0, output.width, output.height);
     }
     applyCanvasCssFilterToExport(documentRef, output, canvas);
@@ -2023,15 +2023,15 @@ function canvasToBlob(canvas) {
   });
 }
 
-function copyWebglCanvasTo2d(context, canvas, renderer, sourceRect = null) {
+function copyWebglCanvasTo2d(context, canvas, renderer, sourceRect = null, includeCityIcons = true) {
   if (!renderer?.draw) return false;
   const gl = canvas.getContext("webgl2") || canvas.getContext("webgl");
   if (!gl?.readPixels) return false;
-  renderer.draw();
-  const width = gl.drawingBufferWidth || canvas.width;
-  const height = gl.drawingBufferHeight || canvas.height;
-  if (!width || !height) return false;
   try {
+    renderer.draw({drawCityIcons: includeCityIcons});
+    const width = gl.drawingBufferWidth || canvas.width;
+    const height = gl.drawingBufferHeight || canvas.height;
+    if (!width || !height) return false;
     const pixels = new Uint8Array(width * height * 4);
     gl.readPixels(0, 0, width, height, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
     const imageData = context.createImageData(width, height);
@@ -2056,6 +2056,8 @@ function copyWebglCanvasTo2d(context, canvas, renderer, sourceRect = null) {
     return true;
   } catch {
     return false;
+  } finally {
+    if (!includeCityIcons) renderer.draw({updateDynamicBuffers: false, updateOverlay: false, drawDirtyDynamicBuffers: false, drawCityIcons: true});
   }
 }
 
@@ -2087,7 +2089,6 @@ async function drawMapOverlayElements(documentRef, context, canvasRect, scale, o
   const overlay = options.renderer?.overlay || documentRef.querySelector(".map-overlay");
   if (!overlay) return;
   const selectors = [];
-  if (options.overlays?.cityIcons !== false) selectors.push(".city-map-icon.visible");
   if (options.overlays?.markers !== false) selectors.push(".marker-map-icon.visible");
   if (options.overlays?.military !== false) selectors.push(PNG_MILITARY_TEXT_SELECTOR);
   if (options.overlays?.labels !== false) selectors.push(...PNG_SEMANTIC_LABEL_SELECTORS);
@@ -2095,7 +2096,7 @@ async function drawMapOverlayElements(documentRef, context, canvasRect, scale, o
   elements.sort((a, b) => overlayZIndex(a) - overlayZIndex(b));
 
   for (const element of elements) {
-    if (element.matches(".city-map-icon, .marker-map-icon")) {
+    if (element.matches(".marker-map-icon")) {
       await drawSvgOverlayElement(context, element, canvasRect, scale);
     } else if (element.matches(".military-map-icon")) {
       await drawMilitaryOverlayElement(context, element, canvasRect, scale);
@@ -2352,15 +2353,9 @@ async function drawSvgOverlayElement(context, element, canvasRect, scale) {
   const style = element.ownerDocument.defaultView.getComputedStyle(element);
   context.save();
   context.globalAlpha = exportOverlayOpacity(element, style);
-  if (element.classList.contains("city-map-icon")) {
-    context.shadowColor = "rgba(10, 13, 12, 0.38)";
-    context.shadowBlur = 2.5 * Math.min(scale.x, scale.y);
-    context.shadowOffsetY = 1.5 * scale.y;
-  } else {
-    context.shadowColor = "rgba(3, 6, 7, 0.42)";
-    context.shadowBlur = 3 * Math.min(scale.x, scale.y);
-    context.shadowOffsetY = 2 * scale.y;
-  }
+  context.shadowColor = "rgba(3, 6, 7, 0.42)";
+  context.shadowBlur = 3 * Math.min(scale.x, scale.y);
+  context.shadowOffsetY = 2 * scale.y;
   context.drawImage(image, box.x, box.y, box.width, box.height);
   context.restore();
 }

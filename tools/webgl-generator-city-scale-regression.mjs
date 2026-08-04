@@ -108,17 +108,18 @@ const stylesSource = await readFile(new URL("../app/webgl-generator/src/styles.c
 const exportSource = await readFile(new URL("../app/webgl-generator/src/runtime/map-file-io.js", import.meta.url), "utf8");
 assert.ok(!rendererSource.includes("function cityIconKind"), "渲染器不得保留独立规模判断");
 assert.match(rendererSource, /deriveCityScale\(city, scaleContext, burg\)/);
-assert.match(rendererSource, /renderCityRoleBadgeSvg\(item\.roles\)/);
-assert.match(rendererSource, /item\.scale === "city"/);
+assert.match(rendererSource, /cityIconLayer\.setInstances\(this\.cityIconItems/);
+assert.match(rendererSource, /visual\.manual \? visual\.silhouette : cityRoleSilhouette/);
 assert.match(rendererSource, /const roleThreshold = city\.capital \? 0\.95 : city\.provincial \? 1\.2 : city\.port \? 1\.45/);
-assert.match(rendererSource, /Math\.max\(0, scale - 1\)/, "行政角色可改变显示门槛，但不得改变实际图标尺寸");
+assert.match(rendererSource, /cityIconCssSize\(scale, item\.scale\)\.factor/, "正式地图没有使用共享连续尺寸函数");
 assert.doesNotMatch(rendererSource.match(/function cityIconScale[\s\S]*?\n}/)?.[0] || "", /item\.minScale/, "角色可见阈值不得改变实际尺寸");
 assert.match(iconRegistrySource, /if \(roles\.includes\("capital"\)\)/);
 assert.match(iconRegistrySource, /if \(roles\.includes\("provincial"\)\)/);
 assert.match(settlementSource, /return deriveCityScale\(burg, scaleContext\)/);
 assert.match(panelSource, /cityRoleScaleLabel\(city, scaleContext, burg\)/);
 assert.match(stylesSource, /\.city-icon-role-badge-bg/);
-assert.match(exportSource, /\.city-map-icon\.visible/);
+assert.match(exportSource, /drawCityIcons: includeCityIcons/, "PNG 未由 WebGL 城镇绘制开关控制");
+assert.doesNotMatch(exportSource, /selectors\.push\("\.city-map-icon\.visible"\)/, "PNG 仍在叠加旧 DOM 城镇图标");
 
 console.log(JSON.stringify({
   thresholds: {hamletMax: 0.1, villageMax: 2, cityMin: 5, percentile: percentileContext.p90Population},

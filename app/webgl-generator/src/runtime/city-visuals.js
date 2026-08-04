@@ -1,13 +1,13 @@
 export const CITY_SILHOUETTE_OPTIONS = Object.freeze([
-  {value: "capital", label: "都城城墙"},
-  {value: "provincial", label: "省会塔楼"},
-  {value: "port", label: "港镇帆影"},
-  {value: "city", label: "城市屋群"},
-  {value: "town", label: "城镇屋群"},
-  {value: "village", label: "村庄屋群"},
-  {value: "hamlet", label: "村落小屋"},
-  {value: "fort", label: "高地寨堡"},
-  {value: "camp", label: "游牧营帐"}
+  {value: "capital", label: "首都五角星"},
+  {value: "provincial", label: "省会六边形"},
+  {value: "port", label: "港口断口马蹄"},
+  {value: "city", label: "大城双环"},
+  {value: "town", label: "城镇菱形"},
+  {value: "village", label: "村镇三角"},
+  {value: "hamlet", label: "小城镇圆环"},
+  {value: "fort", label: "寨堡方框"},
+  {value: "camp", label: "营帐记号"}
 ]);
 
 export const CITY_PALETTE_OPTIONS = Object.freeze([

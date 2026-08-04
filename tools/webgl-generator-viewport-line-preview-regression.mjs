@@ -61,6 +61,10 @@ assert.equal(
 );
 assert.match(rendererSource, /const shouldContinue = \(\) => this\.viewportCommitVersion === version/);
 assert.match(rendererSource, /drawViewportPreview\(\)[\s\S]*updateDynamicBuffers: false[\s\S]*drawDirtyDynamicBuffers: false/);
+assert.match(rendererSource, /matrix\(\$\{preview\.scale\}, 0, 0, \$\{preview\.scale\}, \$\{preview\.translateX\}, \$\{preview\.translateY\}\)/, "实际 overlay 矩阵没有消费设备像素对齐后的平移值");
+assert.match(rendererSource, /const VIEWPORT_LINE_OVERSCAN_RATIO = 0\.5;/, "道路与河流没有使用半个视口的自适应预取范围");
+assert.match(rendererSource, /const VIEWPORT_LINE_OVERSCAN_MAX_CSS_PX = 720;/, "道路与河流预取范围缺少显式性能上限");
+assert.equal([...rendererSource.matchAll(/viewportWorldBounds\(map, camera, canvas, viewportLineOverscanBackingPx\(canvas\)\)/g)].length, 2, "道路与河流没有共同使用自适应预取范围");
 
 console.log(JSON.stringify({
   ok: true,
@@ -69,5 +73,6 @@ console.log(JSON.stringify({
   zoom,
   pointCases: 5,
   staleCancellation: true,
-  dirtyPreviewLayers: ["routes", "rivers"]
+  dirtyPreviewLayers: ["routes", "rivers"],
+  adaptiveOverscan: {ratio: 0.5, maxCssPx: 720}
 }, null, 2));

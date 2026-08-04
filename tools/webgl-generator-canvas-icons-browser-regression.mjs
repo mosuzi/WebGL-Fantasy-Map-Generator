@@ -54,6 +54,7 @@ try {
         markers: renderer.overlay.querySelectorAll(".marker-map-icon").length,
         military: renderer.overlay.querySelectorAll(".military-map-icon").length
       },
+      cityWebgl: renderer.getStats().cityIconWebgl,
       markerTypesAligned: renderer.markerIconItems.every(item => item.node.querySelector("svg[data-icon-type]")?.dataset.iconType === item.type),
       militaryUsesRegistrySvg: [...renderer.overlay.querySelectorAll(".military-map-icon-image")].every(image => image.src.startsWith("data:image/svg+xml"))
     };
@@ -64,24 +65,30 @@ try {
     markers: realMap.summary.markers,
     military: realMap.summary.regiments
   }, "真实地图图标模型分母与地图摘要不一致");
-  assert.deepEqual(realMap.domCounts, realMap.modelCounts, "真实地图图标 DOM 与模型分母不一致");
+  assert.equal(realMap.domCounts.cities, 0, "正式地图仍在创建 DOM 城镇图标");
+  assert.equal(realMap.cityWebgl.instanceCount, realMap.modelCounts.cities, "WebGL 城镇实例分母与模型不一致");
+  assert.equal(realMap.domCounts.markers, realMap.modelCounts.markers, "Marker DOM 与模型分母不一致");
+  assert.equal(realMap.domCounts.military, realMap.modelCounts.military, "军事 DOM 与模型分母不一致");
   assert(realMap.markerTypesAligned, "真实地图 Marker DOM 没有按实际 type 消费注册表");
   assert(realMap.militaryUsesRegistrySvg, "真实地图军事 DOM 没有消费注册表 SVG");
 
   const locatedMarkerId = await page.evaluate(() => {
     const renderer = window.__webglGeneratorApp.renderer;
-    const target = renderer.markerIconItems[0];
-    if (!target || !renderer.locateObject({kind: "marker", id: target.id}, {minScale: 8})) return null;
+    renderer.setLayersVisible([["markers", true], ["resources", true]]);
+    const target = renderer.markerIconItems.find(item => item.visible) || renderer.markerIconItems[0];
+    if (!target) return null;
+    if (!target.visible && !renderer.locateObject({kind: "marker", id: target.id}, {minScale: 8})) return null;
     return target.id;
   });
   assert.notEqual(locatedMarkerId, null, "真实 Marker 无法定位");
-  await page.waitForFunction(id => window.__webglGeneratorApp.renderer.markerIconItems.find(item => item.id === id)?.visible, locatedMarkerId);
+  await page.waitForFunction(() => !window.__webglGeneratorApp.renderer.overlayInteractionSuspended);
   const markerPick = await page.evaluate(id => {
     const renderer = window.__webglGeneratorApp.renderer;
     const item = renderer.markerIconItems.find(candidate => candidate.id === id);
-    const rect = item.node.getBoundingClientRect();
-    const picked = renderer.pickClientPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
-    return {expectedId: id, kind: picked?.object?.kind || null, id: picked?.object?.id ?? null, checksum: renderer.map?.metadata?.checksum || null};
+    const canvasRect = renderer.canvas.getBoundingClientRect();
+    const screen = renderer.worldToScreen(item.x, item.y, canvasRect);
+    const picked = renderer.pickClientPoint(canvasRect.left + screen.x, canvasRect.top + screen.y);
+    return {expectedId: id, kind: picked?.marker?.kind || null, id: picked?.marker?.id ?? null, checksum: renderer.map?.metadata?.checksum || null};
   }, locatedMarkerId);
   assert.equal(markerPick.kind, "marker", "真实 Marker 图标拾取没有返回 Marker");
   assert.equal(String(markerPick.id), String(markerPick.expectedId), "真实 Marker 图标拾取返回了错误对象");
@@ -95,6 +102,14 @@ try {
   }));
   assert(realMapPng?.ok, `真实地图 PNG 导出失败：${realMapPng?.error?.message || "unknown"}`);
   assert.match(realMapPng.data.dataUrl, /^data:image\/png;base64,/, "真实地图 PNG 没有返回 data URL");
+  const noCityPng = await page.evaluate(async () => window.webglGeneratorApi.data.exportPNG({
+    download: false,
+    includeDataUrl: true,
+    crop: {mode: "viewport"},
+    overlays: {labels: true, cityIcons: false, markers: true, military: true, measurements: false, legend: true, scaleBar: true}
+  }));
+  assert(noCityPng?.ok, `关闭城镇后的 PNG 导出失败：${noCityPng?.error?.message || "unknown"}`);
+  assert.notEqual(noCityPng.data.dataUrl, realMapPng.data.dataUrl, "PNG 的 cityIcons 开关没有改变 WebGL 像素");
   writeFileSync(realMapPngPath, Buffer.from(realMapPng.data.dataUrl.split(",")[1], "base64"));
   assert(statSync(realMapPngPath).size > 0, "真实地图 PNG 文件未生成");
   const realMapAfterInteraction = await page.evaluate(() => {
@@ -405,7 +420,7 @@ try {
       modelCounts: realMap.modelCounts,
       domCounts: realMap.domCounts,
       markerPick,
-      png: {width: realMapPng.data.width, height: realMapPng.data.height, bytes: statSync(realMapPngPath).size},
+      png: {width: realMapPng.data.width, height: realMapPng.data.height, bytes: statSync(realMapPngPath).size, cityToggleChangesPixels: true},
       checksumUnchanged: realMapAfterInteraction.checksum === realMap.summary.checksum,
       revisionUnchanged: realMapAfterInteraction.mapRevision === realMap.summary.mapRevision
     },

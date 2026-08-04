@@ -49,7 +49,6 @@ import {LABEL_TARGET_KIND, OBJECT_KIND, POLITICAL_OBJECT_FIELD, isPointObjectKin
 import {markDynamicCanvasTextNode, semanticLabelClassName, setDynamicCanvasTextContent} from "../runtime/canvas-text-contract.js";
 import {compositeConnectorPoints, pickCompositeConnector} from "./composite-connectors.js";
 import {
-  CITY_ICON_PALETTES,
   cityRoleKeys,
   cityRoleScaleLabel,
   createCityScaleContext,
@@ -69,12 +68,18 @@ import {resolveStateLabelPlacement} from "./state-label-territory.js";
 import {formatMilitary, normalizeUnitPreferences} from "../ui/display-units.js";
 import {militaryIconLabelForVariant, normalizeMilitaryIconVariant} from "./military-icon-assets.js";
 import {
-  cityBaseIconSvg as renderCityBaseIconSvg,
-  cityRoleBadgeSvg as renderCityRoleBadgeSvg,
   markerIconSvg as renderMarkerIconSvg,
   militaryIconDataUrl,
   resolveMarkerIconVisual
 } from "./canvas-icon-registry.js";
+import {
+  CITY_ICON_BASE_CSS_SIZE,
+  CITY_ICON_SCALE_FADE_WIDTH,
+  CITY_ICON_VISIBILITY_TRANSITION_MS,
+  cityIconCssSize,
+  cityIconScaleVisibility,
+  createCityIconWebglLayer
+} from "./city-icon-layer.js";
 import {resizeCanvasToDisplaySize} from "./canvas-display-size.js";
 import {resolveMilitaryLabelPalette} from "./military-label-palette.js";
 import {MILITARY_CITY_LABEL_AVOID_SCALE, militaryLabelBox, resolveMilitaryLabelPlacement} from "./military-label-layout.js";
@@ -106,8 +111,8 @@ const MARKER_ICON_BASE_WIDTH = 28;
 const MARKER_ICON_BASE_HEIGHT = 32;
 const CITY_ICON_MIN_SCALE = 1.05;
 const CITY_ICON_RELAXED_SCALE = 3.8;
-const CITY_ICON_BASE_WIDTH = 34;
-const CITY_ICON_BASE_HEIGHT = 26;
+const CITY_ICON_BASE_WIDTH = CITY_ICON_BASE_CSS_SIZE.width;
+const CITY_ICON_BASE_HEIGHT = CITY_ICON_BASE_CSS_SIZE.height;
 const MILITARY_ICON_MIN_SCALE = 0.76;
 const MILITARY_ICON_RELAXED_SCALE = 2.6;
 const MILITARY_ICON_BASE_WIDTH = 58;
@@ -122,6 +127,15 @@ const MAX_ROUTE_RENDER_VERTICES = 900000;
 const MAX_ROUTE_DASH_PIECES = 20000;
 const MAX_TRADE_FLOW_LINES = 180;
 const MAX_TRADE_FLOW_VERTICES = 18000;
+const OVERLAY_LABEL_PREWARM_RATIO = 0.5;
+const OVERLAY_LABEL_PREWARM_MIN_CSS_PX = 192;
+const OVERLAY_LABEL_PREWARM_MAX_CSS_PX = 720;
+const CITY_ICON_PREWARM_RATIO = 0.5;
+const CITY_ICON_PREWARM_MIN_CSS_PX = 256;
+const CITY_ICON_PREWARM_MAX_CSS_PX = 720;
+const VIEWPORT_LINE_OVERSCAN_RATIO = 0.5;
+const VIEWPORT_LINE_OVERSCAN_MIN_CSS_PX = 256;
+const VIEWPORT_LINE_OVERSCAN_MAX_CSS_PX = 720;
 const RETIRED_MAP_LAYERS = new Set(["tradeFlows"]);
 const MAP_EDGE_FADE_RATIO = 0.055;
 const MAP_EDGE_FADE_MIN_WORLD = 28;
@@ -162,6 +176,7 @@ export class PlaceholderMapRenderer {
     if (!this.gl) throw new Error("当前浏览器不支持 WebGL2");
 
     this.program = createProgram(this.gl, vertexShaderSource, fragmentShaderSource);
+    this.cityIconLayer = createCityIconWebglLayer(this.gl);
     this.locations = {
       position: this.gl.getAttribLocation(this.program, "a_position"),
       color: this.gl.getAttribLocation(this.program, "a_color"),
@@ -236,6 +251,8 @@ export class PlaceholderMapRenderer {
     this.cityIconCount = 0;
     this.visibleCityIconCount = 0;
     this.cityIconScaleThreshold = CITY_ICON_MIN_SCALE;
+    this.cityIconAnimationFrame = 0;
+    this.cityIconAnimationUntil = 0;
     this.markerIconItems = [];
     this.markerIconCount = 0;
     this.visibleMarkerIconCount = 0;
@@ -1053,7 +1070,7 @@ export class PlaceholderMapRenderer {
     this.gl.bufferData(this.gl.ARRAY_BUFFER, mesh.line, this.gl.DYNAMIC_DRAW);
   }
 
-  draw({updateDynamicBuffers = true, updateOverlay = true, drawDirtyDynamicBuffers = true} = {}) {
+  draw({updateDynamicBuffers = true, updateOverlay = true, drawDirtyDynamicBuffers = true, drawCityIcons = true} = {}) {
     if (!this.map || !this.vertexCount) return;
     const startedAt = performance.now();
     const event = this.beginPerformanceEvent("draw", {updateDynamicBuffers, updateOverlay, drawDirtyDynamicBuffers}, startedAt);
@@ -1218,6 +1235,15 @@ export class PlaceholderMapRenderer {
     gl.disable(gl.BLEND);
     gl.uniform1i(this.locations.pointMode, 0);
 
+    const cityIconInstances = this.cityIconLayer.draw({
+      mapSize: this.map.metadata,
+      camera: this.camera,
+      canvas: this.canvas,
+      timeMs: performance.now(),
+      layerVisible: drawCityIcons && this.layerVisibility.cities !== false
+    });
+    if (cityIconInstances > 0) layerOrder.push("cityIcons");
+
     const oceanCurrentProjection = createLineWidthProjection({map: this.map, camera: this.camera, canvas: this.canvas});
     const drawMs = roundMs(performance.now() - startedAt);
     const glError = gl.getError();
@@ -1227,6 +1253,8 @@ export class PlaceholderMapRenderer {
       glError,
       layerOrder,
       gridCellsDrawCalls,
+      cityIconInstances,
+      cityIconDrawCalls: cityIconInstances > 0 ? 1 : 0,
       oceanCurrentScale: this.camera.scale,
       oceanCurrentScreenWidth: {
         min: projectWorldLineWidth(this.oceanCurrentLayerStats.minWidth, oceanCurrentProjection).backingWidth,
@@ -1353,6 +1381,7 @@ export class PlaceholderMapRenderer {
         committedCamera: {...this.overlayCommittedCamera},
         previewTransform: {...this.overlayPreviewTransform}
       },
+      cityIconWebgl: this.cityIconLayer.snapshot(),
       viewportPreview: {
         pendingFrame: Boolean(this.viewportPreviewFrame),
         requests: this.viewportPreviewRequests,
@@ -1821,10 +1850,11 @@ export class PlaceholderMapRenderer {
     const translateY = height * 0.5 * (1 - scale - to.offsetY + scale * from.offsetY);
     this.overlayPreviewTransform = {
       scale: roundValue(scale),
-      translateX: roundValue(translateX),
-      translateY: roundValue(translateY)
+      translateX: snapCssPixel(translateX, this.canvasSize?.pixelRatio),
+      translateY: snapCssPixel(translateY, this.canvasSize?.pixelRatio)
     };
-    this.stage.style.setProperty("--map-interaction-transform", `matrix(${scale}, 0, 0, ${scale}, ${translateX}, ${translateY})`);
+    const preview = this.overlayPreviewTransform;
+    this.stage.style.setProperty("--map-interaction-transform", `matrix(${preview.scale}, 0, 0, ${preview.scale}, ${preview.translateX}, ${preview.translateY})`);
   }
 
   scheduleViewportCommit() {
@@ -2023,6 +2053,7 @@ export class PlaceholderMapRenderer {
       this.labelItems = [];
       this.cityIconItems = [];
       this.cityIconItemsById = new Map();
+      this.cityIconLayer.setInstances([]);
       this.markerIconItems = [];
       this.militaryIconItems = [];
       this.labelCount = 0;
@@ -2074,21 +2105,16 @@ export class PlaceholderMapRenderer {
       return {...item, x: layout.position.x, y: layout.position.y, minScale: layout.minScale, styleType, resolvedStyle, layout, metrics: estimateLabelTextBox(item.text, resolvedStyle), node, glyphNodes, box: null, visible: false};
     });
     this.labelItems = hasManualLabelPriorities(map) ? sortLabelItemsByPriority(labels) : labels;
-    this.cityIconItems = getCityIconItems(map).map(item => {
-      const node = documentRef.createElement("span");
-      node.className = cityIconClassName(item);
-      node.title = item.tooltip;
-      node.setAttribute("aria-label", item.tooltip);
-      node.dataset.cityId = String(item.id);
-      node.dataset.cityKind = item.kind;
-      node.dataset.cityScale = item.scale;
-      node.dataset.cityRoles = item.roles.join(",");
-      applyCityIconPalette(node, item);
-      node.innerHTML = cityIconSvg(item);
-      fragment.append(node);
-      return {...item, node, box: null, visible: false};
-    });
+    this.cityIconItems = getCityIconItems(map).map(item => ({
+      ...item,
+      box: null,
+      visible: false,
+      buffered: false,
+      visibilityTarget: 0,
+      selected: false
+    }));
     this.cityIconItemsById = new Map(this.cityIconItems.map(item => [String(item.id), item]));
+    this.cityIconLayer.setInstances(this.cityIconItems, {nowMs: performance.now()});
     this.markerIconItems = getMarkerIconItems(map).map(item => {
       const node = documentRef.createElement("span");
       node.className = markerIconClassName(item);
@@ -2172,6 +2198,7 @@ export class PlaceholderMapRenderer {
     const scale = this.camera.scale;
     const maxVisible = labelLimitForScale(scale, this.labelOptions.maxCityLabels);
     const padding = labelPaddingForScale(scale);
+    const labelPrewarm = overlayLabelPrewarmCssPx(rect);
     const stateLabelScale = stateLabelScaleBehavior(scale);
     const priorityLayout = hasManualLabelPriorities(this.map);
     const labelItems = priorityLayout ? this.labelItems : automaticPoliticalLabelOrder(this.labelItems);
@@ -2189,7 +2216,10 @@ export class PlaceholderMapRenderer {
       const withinLimit = item.targetKind === LABEL_TARGET_KIND.CITY ? visibleCities < maxVisible : true;
       if (!layerVisible || (!forceVisible && (!withinLimit || scale < item.minScale || (stateLabel && !stateLabelScale.visible)))) {
         item.node.classList.toggle("visible", false);
+        item.node.classList.toggle("buffered", false);
+        item.node.classList.toggle("viewport-entering", false);
         item.visible = false;
+        item.buffered = false;
         item.box = null;
         item.node.classList.remove("collision-fallback", "city-overlap");
         continue;
@@ -2211,19 +2241,27 @@ export class PlaceholderMapRenderer {
       const labelAnchor = politicalLabel ? screen : overlayLabelAnchor(this, item, screen, scale);
       const box = politicalPlacement?.box || labelBoxForItem(item, screen, labelAnchor);
       const onScreen = box.right > 8 && box.bottom > 8 && box.left < rect.width - 8 && box.top < rect.height - 8;
-      const canShow = onScreen;
-      const blocked = canShow && (priorityLayout
+      const canBuffer = !politicalLabel && box.right > -labelPrewarm && box.bottom > -labelPrewarm && box.left < rect.width + labelPrewarm && box.top < rect.height + labelPrewarm;
+      const canRender = onScreen || canBuffer;
+      const blocked = canRender && (priorityLayout
         ? boxesOverlapAny(occupiedByPriority, box, padding)
         : stateLabel
         ? Boolean(politicalPlacement?.peerCollides)
         : provinceLabel
           ? false
           : (stateLabelScale.blocksCities && boxesOverlapAny(occupiedStates, box, padding)) || boxesOverlapAny(occupiedProvinces, box, padding) || boxesOverlapAny(occupied, box, padding));
-      const shouldShow = canShow && (forceVisible || !blocked);
+      const shouldRender = canRender && (forceVisible || !blocked);
+      const shouldShow = onScreen && shouldRender;
+      const shouldBuffer = !onScreen && shouldRender;
+      const entering = shouldShow && !item.visible && !item.buffered;
       item.node.classList.toggle("visible", shouldShow);
+      item.node.classList.toggle("buffered", shouldBuffer);
+      item.node.classList.toggle("viewport-entering", entering);
+      if (entering) clearViewportEnteringClassNextFrame(item.node);
       item.visible = shouldShow;
-      item.box = shouldShow ? box : null;
-      if (!shouldShow) continue;
+      item.buffered = shouldBuffer;
+      item.box = shouldRender ? box : null;
+      if (!shouldRender) continue;
       if (politicalPlacement) applyPoliticalLabelPlacement(item, politicalPlacement);
       else setOverlayNodePosition(item.node, labelAnchor.x, labelAnchor.y);
       item.node.style.setProperty("--label-rotation", `${politicalPlacement ? 0 : item.rotation || 0}deg`);
@@ -2242,14 +2280,14 @@ export class PlaceholderMapRenderer {
         if (item.targetKind === LABEL_TARGET_KIND.CITY) occupiedCityLabels.push(box);
       }
       if (priorityLayout) occupiedByPriority.push(box);
-      visible++;
-      if (item.targetKind === LABEL_TARGET_KIND.CITY) visibleCities++;
-      if (item.targetKind === LABEL_TARGET_KIND.STATE) visibleStates++;
-      if (item.targetKind === LABEL_TARGET_KIND.PROVINCE) {
+      if (shouldShow) visible++;
+      if (shouldShow && item.targetKind === LABEL_TARGET_KIND.CITY) visibleCities++;
+      if (shouldShow && item.targetKind === LABEL_TARGET_KIND.STATE) visibleStates++;
+      if (shouldShow && item.targetKind === LABEL_TARGET_KIND.PROVINCE) {
         visibleProvinces++;
         if (provinceFallback) fallbackProvinces++;
       }
-      if (stateCityOverlap) stateCityOverlaps++;
+      if (shouldShow && stateCityOverlap) stateCityOverlaps++;
     }
 
     this.visibleLabelCount = visible;
@@ -2390,39 +2428,67 @@ export class PlaceholderMapRenderer {
     const scale = this.camera.scale;
     const iconPadding = scale >= CITY_ICON_RELAXED_SCALE ? 2 : 5;
     const occupiedIcons = [];
+    const collisionIcons = [];
+    const stateChanges = [];
+    const prewarm = cityIconPrewarmCssPx(rect);
+    const nowMs = performance.now();
     let visible = 0;
 
     for (const item of this.cityIconItems) {
-      if (this.layerVisibility.cities === false || scale < item.minScale) {
-        item.node.classList.toggle("visible", false);
-        item.node.classList.toggle("selected", isSelectedOrHighlighted(this.selection, this.objectHighlights, OBJECT_KIND.CITY, item.id));
-        item.visible = false;
-        item.box = null;
-        continue;
-      }
+      const selected = isSelectedOrHighlighted(this.selection, this.objectHighlights, OBJECT_KIND.CITY, item.id);
       const screen = this.worldToScreen(item.x, item.y, rect);
       const sizeScale = cityIconScale(scale, item);
       const box = cityIconBoxForItem(item, screen, sizeScale);
       const onScreen = box.right > 4 && box.bottom > 4 && box.left < rect.width - 4 && box.top < rect.height - 4;
-      const canShow = onScreen;
-      const blocked = canShow && scale < CITY_ICON_RELAXED_SCALE && (
+      const inPrewarm = box.right > -prewarm && box.bottom > -prewarm && box.left < rect.width + prewarm && box.top < rect.height + prewarm;
+      const scaleVisible = cityIconScaleVisibility(scale, item.minScale, CITY_ICON_SCALE_FADE_WIDTH) > 0;
+      const canRender = this.layerVisibility.cities !== false && scaleVisible && inPrewarm;
+      const blocked = canRender && scale < CITY_ICON_RELAXED_SCALE && (
         boxesOverlapAny(occupiedLabels, box, iconPadding) ||
-        boxesOverlapAny(occupiedIcons, box, iconPadding)
+        boxesOverlapAny(collisionIcons, box, iconPadding)
       );
-      const shouldShow = canShow && !blocked;
-      item.node.classList.toggle("visible", shouldShow);
-      item.node.classList.toggle("selected", isSelectedOrHighlighted(this.selection, this.objectHighlights, OBJECT_KIND.CITY, item.id));
+      const visibilityTarget = canRender && !blocked ? 1 : 0;
+      const shouldShow = onScreen && visibilityTarget === 1;
+      if (visibilityTarget === 1) collisionIcons.push(box);
+      if (visibilityTarget !== item.visibilityTarget || selected !== item.selected) {
+        stateChanges.push({id: item.id, visibilityTarget, selected});
+      }
+      item.visibilityTarget = visibilityTarget;
+      item.selected = selected;
       item.visible = shouldShow;
+      item.buffered = !onScreen && visibilityTarget === 1;
       item.box = shouldShow ? box : null;
       if (!shouldShow) continue;
-      setOverlayNodePosition(item.node, screen.x, screen.y);
-      item.node.style.setProperty("--city-icon-scale", String(sizeScale));
       occupiedIcons.push(box);
       visible++;
     }
 
+    if (stateChanges.length) {
+      this.cityIconLayer.updateInstanceStates(stateChanges, {nowMs});
+      this.scheduleCityIconAnimation(nowMs);
+    }
+
     this.visibleCityIconCount = visible;
     return occupiedIcons;
+  }
+
+  scheduleCityIconAnimation(nowMs = performance.now()) {
+    this.cityIconAnimationUntil = Math.max(this.cityIconAnimationUntil, nowMs + CITY_ICON_VISIBILITY_TRANSITION_MS + 34);
+    this.requestCityIconAnimationFrame();
+  }
+
+  requestCityIconAnimationFrame() {
+    if (this.cityIconAnimationFrame) return;
+    const view = this.canvas.ownerDocument?.defaultView || globalThis;
+    const requestFrame = typeof view.requestAnimationFrame === "function"
+      ? view.requestAnimationFrame.bind(view)
+      : callback => setTimeout(() => callback(performance.now()), 16);
+    this.cityIconAnimationFrame = requestFrame(timestamp => {
+      this.cityIconAnimationFrame = 0;
+      if (!this.map) return;
+      this.draw({updateDynamicBuffers: false, updateOverlay: false, drawDirtyDynamicBuffers: false});
+      if (timestamp < this.cityIconAnimationUntil) this.requestCityIconAnimationFrame();
+    });
   }
 
   updateMarkerIcons(rect, occupiedLabels = [], cityIconBoxes = []) {
@@ -2880,6 +2946,19 @@ function setOverlayNodePosition(node, x, y) {
   setStylePropertyIfChanged(node, "--overlay-y", overlayCoordinateValue(y));
 }
 
+function clearViewportEnteringClassNextFrame(node) {
+  const view = node?.ownerDocument?.defaultView;
+  if (!view?.requestAnimationFrame) {
+    node?.classList.remove("viewport-entering");
+    return;
+  }
+  view.requestAnimationFrame(() => node.classList.remove("viewport-entering"));
+}
+
+function overlayLabelPrewarmCssPx(rect) {
+  return clamp(Math.max(rect.width, rect.height) * OVERLAY_LABEL_PREWARM_RATIO, OVERLAY_LABEL_PREWARM_MIN_CSS_PX, OVERLAY_LABEL_PREWARM_MAX_CSS_PX);
+}
+
 function appendLabelNodeText(node, item, documentRef, styleType) {
   const political = item.targetKind === LABEL_TARGET_KIND.STATE || item.targetKind === LABEL_TARGET_KIND.PROVINCE;
   if (!political) {
@@ -3091,6 +3170,7 @@ function getCityIconItems(map) {
       const scale = deriveCityScale(city, scaleContext, burg);
       const roles = cityRoleKeys(city, burg);
       const visual = resolveCityVisual(city, culture, burg?.visual, scaleContext, burg);
+      const silhouette = visual.manual ? visual.silhouette : cityRoleSilhouette(roles, visual.silhouette);
       return {
         id: city.id,
         city,
@@ -3098,7 +3178,7 @@ function getCityIconItems(map) {
         kind: scale,
         scale,
         roles,
-        silhouette: visual.silhouette,
+        silhouette,
         tooltip: cityIconTooltip(city, cityRoleScaleLabel(city, scaleContext, burg)),
         priority,
         rank,
@@ -3110,6 +3190,10 @@ function getCityIconItems(map) {
         minScale: cityIconMinScale(city, scale, rank)
       };
     });
+}
+
+function cityRoleSilhouette(roles, fallback) {
+  return ["capital", "provincial", "port"].find(role => roles.includes(role)) || fallback;
 }
 
 function scoreCityIcon(city) {
@@ -3128,30 +3212,6 @@ function cityIconTooltip(city, roleScaleLabel) {
   return `${city.name || "城镇"} / ${roleScaleLabel}${populationText}`;
 }
 
-function cityIconClassName(item) {
-  return `city-map-icon city-map-icon--${item.silhouette} city-map-icon--style-${item.visual.cultureStyle}`;
-}
-
-function applyCityIconPalette(node, item) {
-  const palette = cityIconPalette(item);
-  node.style.setProperty("--city-wall", palette.wall);
-  node.style.setProperty("--city-roof", palette.roof);
-  node.style.setProperty("--city-stroke", palette.stroke);
-  node.style.setProperty("--city-accent", palette.accent);
-  node.style.setProperty("--city-water", palette.water);
-}
-
-function cityIconPalette(item) {
-  const visual = item.visual || {};
-  return CITY_ICON_PALETTES[visual.palette] || CITY_ICON_PALETTES[item.silhouette] || CITY_ICON_PALETTES[item.kind] || CITY_ICON_PALETTES.town;
-}
-
-function cityIconSvg(item) {
-  const base = renderCityBaseIconSvg(item.silhouette);
-  const badges = renderCityRoleBadgeSvg(item.roles);
-  return badges ? base.replace("</svg>", `${badges}</svg>`) : base;
-}
-
 function cityIconBoxForItem(item, screen, sizeScale) {
   const width = CITY_ICON_BASE_WIDTH * sizeScale;
   const height = CITY_ICON_BASE_HEIGHT * sizeScale;
@@ -3165,8 +3225,11 @@ function cityIconBoxForItem(item, screen, sizeScale) {
 }
 
 function cityIconScale(scale, item) {
-  const scaleBonus = item.scale === "city" ? 0.16 : item.scale === "town" ? 0.1 : item.scale === "village" ? 0.05 : 0;
-  return clamp(0.72 + scaleBonus + Math.max(0, scale - 1) * 0.055, 0.72, 1.18);
+  return cityIconCssSize(scale, item.scale).factor;
+}
+
+function cityIconPrewarmCssPx(rect) {
+  return clamp(Math.max(rect.width, rect.height) * CITY_ICON_PREWARM_RATIO, CITY_ICON_PREWARM_MIN_CSS_PX, CITY_ICON_PREWARM_MAX_CSS_PX);
 }
 
 function overlayLabelAnchor(renderer, item, screen, scale) {
@@ -3807,6 +3870,15 @@ function viewportWorldBounds(map, camera, canvas, marginPx = 0) {
   };
 }
 
+function viewportLineOverscanBackingPx(canvas) {
+  const width = Math.max(1, canvas?.width || 1);
+  const height = Math.max(1, canvas?.height || 1);
+  const cssWidth = Math.max(1, canvas?.clientWidth || width);
+  const backingPerCss = width / cssWidth;
+  const cssOverscan = clamp(Math.max(cssWidth, canvas?.clientHeight || height / backingPerCss) * VIEWPORT_LINE_OVERSCAN_RATIO, VIEWPORT_LINE_OVERSCAN_MIN_CSS_PX, VIEWPORT_LINE_OVERSCAN_MAX_CSS_PX);
+  return cssOverscan * backingPerCss;
+}
+
 function screenPixelToWorldPoint(map, camera, width, height, x, y) {
   const clipX = (x / width) * 2 - 1;
   const clipY = 1 - (y / height) * 2;
@@ -3870,7 +3942,7 @@ function createRiverMeshBuild(map, camera, canvas) {
     map,
     context,
     projection,
-    viewportBounds: viewportWorldBounds(map, camera, canvas, 96),
+    viewportBounds: viewportWorldBounds(map, camera, canvas, viewportLineOverscanBackingPx(canvas)),
     vertices: [],
     stats: emptyRiverBuildStats(projection)
   };
@@ -4239,7 +4311,7 @@ function createRouteMeshBuild(map, camera, canvas, selection, objectHighlights, 
   return {
     context,
     projection,
-    viewportBounds: viewportWorldBounds(map, camera, canvas, 96),
+    viewportBounds: viewportWorldBounds(map, camera, canvas, viewportLineOverscanBackingPx(canvas)),
     visualTheme,
     selection,
     objectHighlights,
@@ -4850,6 +4922,11 @@ function gridCellIdMinimumScale(map) {
 
 function roundValue(value) {
   return Math.round(value * 10) / 10;
+}
+
+function snapCssPixel(value, pixelRatio = 1) {
+  const ratio = Math.max(1, Number(pixelRatio) || 1);
+  return Math.round(value * ratio) / ratio;
 }
 
 function formatPopulationPeople(value) {
