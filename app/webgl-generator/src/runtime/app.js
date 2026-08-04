@@ -2472,10 +2472,12 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     }
   });
   state.panels.zone = zonePanel;
-  const renderer = new PlaceholderMapRenderer(canvas, () => {
+  const renderer = new PlaceholderMapRenderer(canvas, viewChange => {
     if (state.map) {
-      updateRuntimePanel(documentRef, state);
-      if (!renderer.getStats?.()?.overlay?.interactionSuspended) updateMeasurementOverlay(state, documentRef);
+      if (viewChange?.phase !== "preview") {
+        updateRuntimePanel(documentRef, state);
+        updateMeasurementOverlay(state, documentRef);
+      }
       state.brushCursorPreview?.refresh();
     }
   }, pick => {
@@ -2608,6 +2610,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     },
     onClimateControls: () => applyClimateControls(state, documentRef, runtimeActions.climate.apply),
     onLayerVisible: (layer, visible) => runtimeActions.layers.setVisible(layer, visible),
+    onLayerGroupVisible: (layers, visible) => setRuntimeLayersVisible(state, documentRef, layers.map(layer => [layer, visible])),
     onOpenGenerationPanel: () => {
       state.panels.generation.open();
     },
@@ -3208,21 +3211,38 @@ function setRuntimeViewMode(state, documentRef, mode) {
 }
 
 function setRuntimeLayerVisible(state, documentRef, layer, visible) {
-  const nextLayer = String(layer || "").trim();
-  if (!nextLayer) throw new Error("缺少图层名称");
+  return setRuntimeLayersVisible(state, documentRef, [[layer, visible]]);
+}
+
+function setRuntimeLayersVisible(state, documentRef, entries) {
+  const normalized = [];
   const knownLayers = state.renderer?.getStats?.()?.layerVisibility || state.renderer?.layerVisibility || {};
-  if (!Object.prototype.hasOwnProperty.call(knownLayers, nextLayer)) throw new Error(`未知图层：${nextLayer}`);
-  const nextVisible = Boolean(visible);
-  return measureHealthOperation(state, "set-layer-visible", {layer: nextLayer, visible: nextVisible}, () => {
-    updateLayerPreference(documentRef, nextLayer, nextVisible);
-    const controls = nextLayer === "coastline" ? ["coastline", "lakeShore"] : [nextLayer];
+  for (const entry of entries || []) {
+    const [rawLayer, rawVisible] = Array.isArray(entry) ? entry : [entry?.layer, entry?.visible];
+    const layer = String(rawLayer || "").trim();
+    if (!layer) throw new Error("缺少图层名称");
+    if (!Object.prototype.hasOwnProperty.call(knownLayers, layer)) throw new Error(`未知图层：${layer}`);
+    normalized.push([layer, Boolean(rawVisible)]);
+  }
+  if (!normalized.length) throw new Error("缺少图层名称");
+  const operation = normalized.length === 1 ? "set-layer-visible" : "set-layer-group-visible";
+  const detail = normalized.length === 1
+    ? {layer: normalized[0][0], visible: normalized[0][1]}
+    : {layers: normalized.map(([layer]) => layer), visible: normalized.every(([, visible]) => visible)};
+  return measureHealthOperation(state, operation, detail, () => {
     const layerControls = [...documentRef.querySelectorAll("[data-layer]")];
-    for (const item of controls) syncRuntimeBooleanControl(layerControls.find(control => control.dataset.layer === item), nextVisible);
-    state.renderer?.setLayerVisible?.(nextLayer, nextVisible);
+    let updatesMeasurements = false;
+    for (const [layer, visible] of normalized) {
+      updateLayerPreference(documentRef, layer, visible);
+      const controls = layer === "coastline" ? ["coastline", "lakeShore"] : [layer];
+      for (const item of controls) syncRuntimeBooleanControl(layerControls.find(control => control.dataset.layer === item), visible);
+      if (layer === "measurements") updatesMeasurements = true;
+    }
+    state.renderer?.setLayersVisible?.(normalized);
     syncLayerGroupControls(documentRef, state.renderer?.getStats?.()?.layerVisibility || state.renderer?.layerVisibility || {});
     updateRuntimePanel(documentRef, state);
-    if (nextLayer === "measurements") updateMeasurementOverlay(state, documentRef);
-    return runtimeDisplayActionResult(state, documentRef, ["display-preference", "renderer", "runtime-panel", ...(nextLayer === "measurements" ? ["measurement-overlay"] : [])]);
+    if (updatesMeasurements) updateMeasurementOverlay(state, documentRef);
+    return runtimeDisplayActionResult(state, documentRef, ["display-preference", "renderer", "runtime-panel", ...(updatesMeasurements ? ["measurement-overlay"] : [])]);
   });
 }
 

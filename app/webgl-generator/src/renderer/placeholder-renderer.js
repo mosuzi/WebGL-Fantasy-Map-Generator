@@ -129,6 +129,7 @@ const MAP_EDGE_FADE_MAX_WORLD = 96;
 const MAP_EDGE_FADE_ALPHA = 0.9;
 const MAX_INCREMENTAL_SURFACE_GAP_FLOATS = 4096;
 const GRID_CELL_ID_LABEL_BUDGET = 240;
+const RENDERER_EVENT_HISTORY_LIMIT = 512;
 
 const MARKER_ICON_PALETTES = Object.freeze({
   natural: {fill: "#7aa35f", stroke: "#203717", symbol: "#f6ffe8"},
@@ -281,20 +282,68 @@ export class PlaceholderMapRenderer {
       rivers: true,
       selection: true
     };
-    this.lastDraw = {drawMs: 0};
+    this.lastDraw = {sequence: 0, drawMs: 0};
     this.lastLoad = emptyRendererLoadStats();
     this.lastOverlayUpdate = emptyOverlayUpdateStats();
+    this.performanceEvents = createRendererPerformanceEvents();
     this.overlayInteractionSuspended = false;
+    this.overlayCommittedCamera = snapshotViewportCamera(this.camera);
+    this.overlayPreviewTransform = {scale: 1, translateX: 0, translateY: 0};
+    this.viewportPreviewFrame = 0;
+    this.viewportPreviewRequests = 0;
+    this.viewportPreviewCoalesced = 0;
     this.viewportCommitTimer = 0;
     this.viewportCommitVersion = 0;
+    this.viewportCommitEvent = null;
     installCanvasInteractions(this.canvas, this.camera, () => {
-      this.drawViewportPreview();
+      this.requestViewportPreview();
     }, event => {
       this.onHover(this.pickClientPoint(event.clientX, event.clientY));
     }, event => {
       this.onSelect(this.pickClientPoint(event.clientX, event.clientY));
     });
     this.installDisplayResizeObserver();
+  }
+
+  beginPerformanceEvent(key, details = {}, startedAt = performance.now()) {
+    return beginRendererPerformanceEvent(this.performanceEvents[key], details, startedAt);
+  }
+
+  queuePerformanceEvent(key, details = {}, queuedAt = performance.now()) {
+    return queueRendererPerformanceEvent(this.performanceEvents[key], details, queuedAt);
+  }
+
+  startQueuedPerformanceEvent(token, startedAt = performance.now()) {
+    return startQueuedRendererPerformanceEvent(token, startedAt);
+  }
+
+  completePerformanceEvent(token, details = {}, completedAt = performance.now()) {
+    return completeRendererPerformanceEvent(token, details, completedAt);
+  }
+
+  cancelPerformanceEvent(token, reason, details = {}, canceledAt = performance.now()) {
+    return cancelRendererPerformanceEvent(token, reason, details, canceledAt);
+  }
+
+  failPerformanceEvent(token, error, details = {}, failedAt = performance.now()) {
+    return failRendererPerformanceEvent(token, error, details, failedAt);
+  }
+
+  recordBufferUpload(action, task, details = {}) {
+    const startedAt = performance.now();
+    const event = this.beginPerformanceEvent("bufferUpload", {action, timingBoundary: "cpu-webgl-call", ...details}, startedAt);
+    try {
+      const result = task();
+      const completed = this.completePerformanceEvent(event, {}, performance.now());
+      return {result, ms: completed.ms};
+    } catch (error) {
+      this.failPerformanceEvent(event, error, {}, performance.now());
+      throw error;
+    }
+  }
+
+  getPerformanceEvents({includeRecent = false} = {}) {
+    return snapshotRendererPerformanceEvents(this.performanceEvents, {includeRecent});
   }
 
   installDisplayResizeObserver() {
@@ -375,28 +424,30 @@ export class PlaceholderMapRenderer {
     this.lineVertexCount = lineVertices.length / 6;
     this.pointVertexCount = pointVertices.length / 6;
     profile.stage("gpu-upload", "上传静态 GPU buffer", () => {
-      this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.vertexBuffer);
-      this.gl.bufferData(this.gl.ARRAY_BUFFER, vertices, this.gl.STATIC_DRAW);
-      uploadShoreSurfaceBuffers(this.gl, this, surfaceBundle);
-      this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.routeBuffer);
-      this.gl.bufferData(this.gl.ARRAY_BUFFER, new Float32Array(), this.gl.DYNAMIC_DRAW);
-      this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.tradeFlowBuffer);
-      this.gl.bufferData(this.gl.ARRAY_BUFFER, new Float32Array(), this.gl.DYNAMIC_DRAW);
-      this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.riverBuffer);
-      this.gl.bufferData(this.gl.ARRAY_BUFFER, new Float32Array(), this.gl.DYNAMIC_DRAW);
-      this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.selectionBuffer);
-      this.gl.bufferData(this.gl.ARRAY_BUFFER, new Float32Array(), this.gl.DYNAMIC_DRAW);
-      this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.heightTransformPreviewBuffer);
-      this.gl.bufferData(this.gl.ARRAY_BUFFER, new Float32Array(), this.gl.DYNAMIC_DRAW);
-      this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.heightCellSelectionBuffer);
-      this.gl.bufferData(this.gl.ARRAY_BUFFER, new Float32Array(), this.gl.DYNAMIC_DRAW);
-      this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.oceanCurrentBuffer);
-      this.gl.bufferData(this.gl.ARRAY_BUFFER, oceanCurrentVertices, this.gl.STATIC_DRAW);
-      this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.lineBuffer);
-      this.gl.bufferData(this.gl.ARRAY_BUFFER, lineVertices, this.gl.STATIC_DRAW);
-      this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.pointBuffer);
-      this.gl.bufferData(this.gl.ARRAY_BUFFER, pointVertices, this.gl.STATIC_DRAW);
-      this.updatePoliticalMeshDebugBuffer();
+      this.recordBufferUpload("load-map-static", () => {
+        this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.vertexBuffer);
+        this.gl.bufferData(this.gl.ARRAY_BUFFER, vertices, this.gl.STATIC_DRAW);
+        uploadShoreSurfaceBuffers(this.gl, this, surfaceBundle);
+        this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.routeBuffer);
+        this.gl.bufferData(this.gl.ARRAY_BUFFER, new Float32Array(), this.gl.DYNAMIC_DRAW);
+        this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.tradeFlowBuffer);
+        this.gl.bufferData(this.gl.ARRAY_BUFFER, new Float32Array(), this.gl.DYNAMIC_DRAW);
+        this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.riverBuffer);
+        this.gl.bufferData(this.gl.ARRAY_BUFFER, new Float32Array(), this.gl.DYNAMIC_DRAW);
+        this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.selectionBuffer);
+        this.gl.bufferData(this.gl.ARRAY_BUFFER, new Float32Array(), this.gl.DYNAMIC_DRAW);
+        this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.heightTransformPreviewBuffer);
+        this.gl.bufferData(this.gl.ARRAY_BUFFER, new Float32Array(), this.gl.DYNAMIC_DRAW);
+        this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.heightCellSelectionBuffer);
+        this.gl.bufferData(this.gl.ARRAY_BUFFER, new Float32Array(), this.gl.DYNAMIC_DRAW);
+        this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.oceanCurrentBuffer);
+        this.gl.bufferData(this.gl.ARRAY_BUFFER, oceanCurrentVertices, this.gl.STATIC_DRAW);
+        this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.lineBuffer);
+        this.gl.bufferData(this.gl.ARRAY_BUFFER, lineVertices, this.gl.STATIC_DRAW);
+        this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.pointBuffer);
+        this.gl.bufferData(this.gl.ARRAY_BUFFER, pointVertices, this.gl.STATIC_DRAW);
+        this.updatePoliticalMeshDebugBuffer();
+      }, {bufferGroup: "static-map"});
     });
     profile.stage("labels", "构建标签", () => this.buildLabels(map));
     this.markAllDynamicBuffersDirty();
@@ -474,28 +525,30 @@ export class PlaceholderMapRenderer {
     this.lineVertexCount = lineVertices.length / 6;
     this.pointVertexCount = pointVertices.length / 6;
     await stage("gpu-upload", "上传静态 GPU buffer", () => {
-      this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.vertexBuffer);
-      this.gl.bufferData(this.gl.ARRAY_BUFFER, vertices, this.gl.STATIC_DRAW);
-      uploadShoreSurfaceBuffers(this.gl, this, surfaceBundle);
-      this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.routeBuffer);
-      this.gl.bufferData(this.gl.ARRAY_BUFFER, new Float32Array(), this.gl.DYNAMIC_DRAW);
-      this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.tradeFlowBuffer);
-      this.gl.bufferData(this.gl.ARRAY_BUFFER, new Float32Array(), this.gl.DYNAMIC_DRAW);
-      this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.riverBuffer);
-      this.gl.bufferData(this.gl.ARRAY_BUFFER, new Float32Array(), this.gl.DYNAMIC_DRAW);
-      this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.selectionBuffer);
-      this.gl.bufferData(this.gl.ARRAY_BUFFER, new Float32Array(), this.gl.DYNAMIC_DRAW);
-      this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.heightTransformPreviewBuffer);
-      this.gl.bufferData(this.gl.ARRAY_BUFFER, new Float32Array(), this.gl.DYNAMIC_DRAW);
-      this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.heightCellSelectionBuffer);
-      this.gl.bufferData(this.gl.ARRAY_BUFFER, new Float32Array(), this.gl.DYNAMIC_DRAW);
-      this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.oceanCurrentBuffer);
-      this.gl.bufferData(this.gl.ARRAY_BUFFER, oceanCurrentVertices, this.gl.STATIC_DRAW);
-      this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.lineBuffer);
-      this.gl.bufferData(this.gl.ARRAY_BUFFER, lineVertices, this.gl.STATIC_DRAW);
-      this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.pointBuffer);
-      this.gl.bufferData(this.gl.ARRAY_BUFFER, pointVertices, this.gl.STATIC_DRAW);
-      this.updatePoliticalMeshDebugBuffer();
+      this.recordBufferUpload("load-map-static", () => {
+        this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.vertexBuffer);
+        this.gl.bufferData(this.gl.ARRAY_BUFFER, vertices, this.gl.STATIC_DRAW);
+        uploadShoreSurfaceBuffers(this.gl, this, surfaceBundle);
+        this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.routeBuffer);
+        this.gl.bufferData(this.gl.ARRAY_BUFFER, new Float32Array(), this.gl.DYNAMIC_DRAW);
+        this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.tradeFlowBuffer);
+        this.gl.bufferData(this.gl.ARRAY_BUFFER, new Float32Array(), this.gl.DYNAMIC_DRAW);
+        this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.riverBuffer);
+        this.gl.bufferData(this.gl.ARRAY_BUFFER, new Float32Array(), this.gl.DYNAMIC_DRAW);
+        this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.selectionBuffer);
+        this.gl.bufferData(this.gl.ARRAY_BUFFER, new Float32Array(), this.gl.DYNAMIC_DRAW);
+        this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.heightTransformPreviewBuffer);
+        this.gl.bufferData(this.gl.ARRAY_BUFFER, new Float32Array(), this.gl.DYNAMIC_DRAW);
+        this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.heightCellSelectionBuffer);
+        this.gl.bufferData(this.gl.ARRAY_BUFFER, new Float32Array(), this.gl.DYNAMIC_DRAW);
+        this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.oceanCurrentBuffer);
+        this.gl.bufferData(this.gl.ARRAY_BUFFER, oceanCurrentVertices, this.gl.STATIC_DRAW);
+        this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.lineBuffer);
+        this.gl.bufferData(this.gl.ARRAY_BUFFER, lineVertices, this.gl.STATIC_DRAW);
+        this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.pointBuffer);
+        this.gl.bufferData(this.gl.ARRAY_BUFFER, pointVertices, this.gl.STATIC_DRAW);
+        this.updatePoliticalMeshDebugBuffer();
+      }, {bufferGroup: "static-map"});
     });
     await stage("labels", "构建标签", () => this.buildLabels(map));
     this.markAllDynamicBuffersDirty();
@@ -575,23 +628,36 @@ export class PlaceholderMapRenderer {
 
   refreshCellSurface({draw = true} = {}) {
     if (!this.map) return;
-    const surfaceBundle = buildPlaceholderSurfaceBundle(this.map, this.colorMode, this.viewOptions, this.shoreVisualPaths, this.stateVisualPaths, this.provinceVisualPaths, this.politicalVisualMeshes, this.cellVisualMesh);
-    const vertices = surfaceBundle.base;
-    this.surfaceVertices = vertices;
-    this.landCorrectionVertices = surfaceBundle.landCorrections;
-    this.waterCorrectionVertices = surfaceBundle.waterCorrections;
-    this.landCoverVertices = surfaceBundle.landCovers;
-    this.waterCoverVertices = surfaceBundle.waterCovers;
-    this.surfaceCellRanges = buildSurfaceCellRanges(this.colorMode, this.viewOptions, this.cellVisualMesh, vertices.length);
-    this.vertexCount = vertices.length / 6;
-    this.landCorrectionVertexCount = surfaceBundle.landCorrections.length / 6;
-    this.waterCorrectionVertexCount = surfaceBundle.waterCorrections.length / 6;
-    this.landCoverVertexCount = surfaceBundle.landCovers.length / 6;
-    this.waterCoverVertexCount = surfaceBundle.waterCovers.length / 6;
-    this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.vertexBuffer);
-    this.gl.bufferData(this.gl.ARRAY_BUFFER, vertices, this.gl.STATIC_DRAW);
-    uploadShoreSurfaceBuffers(this.gl, this, surfaceBundle);
-    if (draw) this.draw();
+    const startedAt = performance.now();
+    const event = this.beginPerformanceEvent("surfaceRefresh", {drawRequested: draw, colorMode: this.colorMode}, startedAt);
+    try {
+      const geometryReused = canReuseCellVisualSurfaceGeometry(this);
+      const surfaceBundle = geometryReused
+        ? recolorCellVisualSurfaceBundle(this)
+        : buildPlaceholderSurfaceBundle(this.map, this.colorMode, this.viewOptions, this.shoreVisualPaths, this.stateVisualPaths, this.provinceVisualPaths, this.politicalVisualMeshes, this.cellVisualMesh);
+      const vertices = surfaceBundle.base;
+      this.surfaceVertices = vertices;
+      this.landCorrectionVertices = surfaceBundle.landCorrections;
+      this.waterCorrectionVertices = surfaceBundle.waterCorrections;
+      this.landCoverVertices = surfaceBundle.landCovers;
+      this.waterCoverVertices = surfaceBundle.waterCovers;
+      this.surfaceCellRanges = buildSurfaceCellRanges(this.colorMode, this.viewOptions, this.cellVisualMesh, vertices.length);
+      this.vertexCount = vertices.length / 6;
+      this.landCorrectionVertexCount = surfaceBundle.landCorrections.length / 6;
+      this.waterCorrectionVertexCount = surfaceBundle.waterCorrections.length / 6;
+      this.landCoverVertexCount = surfaceBundle.landCovers.length / 6;
+      this.waterCoverVertexCount = surfaceBundle.waterCovers.length / 6;
+      const upload = this.recordBufferUpload("surface-refresh", () => {
+        this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.vertexBuffer);
+        this.gl.bufferData(this.gl.ARRAY_BUFFER, vertices, this.gl.STATIC_DRAW);
+        uploadShoreSurfaceBuffers(this.gl, this, surfaceBundle);
+      }, {bufferGroup: "surface"});
+      if (draw) this.draw();
+      this.completePerformanceEvent(event, {uploadMs: upload.ms, vertexCount: this.vertexCount, geometryReused}, performance.now());
+    } catch (error) {
+      this.failPerformanceEvent(event, error, {}, performance.now());
+      throw error;
+    }
   }
 
   refreshHeightCells(gridCells, {draw = true} = {}) {
@@ -710,17 +776,27 @@ export class PlaceholderMapRenderer {
 
   refreshLineLayers({draw = true} = {}) {
     if (!this.map) return;
-    const lineLayer = buildLineVertices(this.map, this.layerVisibility, this.colorMode, this.shoreVisualPaths, this.stateVisualPaths, this.provinceVisualPaths, this.cellVisualMesh, this.viewOptions, this.oceanCurrentHighlights);
-    const lineVertices = lineLayer.vertices;
-    const oceanCurrentVertices = lineLayer.oceanCurrentVertices;
-    this.oceanCurrentLayerStats = lineLayer.oceanCurrents;
-    this.oceanCurrentVertexCount = oceanCurrentVertices.length / 6;
-    this.lineVertexCount = lineVertices.length / 6;
-    this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.oceanCurrentBuffer);
-    this.gl.bufferData(this.gl.ARRAY_BUFFER, oceanCurrentVertices, this.gl.STATIC_DRAW);
-    this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.lineBuffer);
-    this.gl.bufferData(this.gl.ARRAY_BUFFER, lineVertices, this.gl.STATIC_DRAW);
-    if (draw) this.draw();
+    const startedAt = performance.now();
+    const event = this.beginPerformanceEvent("lineRefresh", {drawRequested: draw}, startedAt);
+    try {
+      const lineLayer = buildLineVertices(this.map, this.layerVisibility, this.colorMode, this.shoreVisualPaths, this.stateVisualPaths, this.provinceVisualPaths, this.cellVisualMesh, this.viewOptions, this.oceanCurrentHighlights);
+      const lineVertices = lineLayer.vertices;
+      const oceanCurrentVertices = lineLayer.oceanCurrentVertices;
+      this.oceanCurrentLayerStats = lineLayer.oceanCurrents;
+      this.oceanCurrentVertexCount = oceanCurrentVertices.length / 6;
+      this.lineVertexCount = lineVertices.length / 6;
+      const upload = this.recordBufferUpload("line-refresh", () => {
+        this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.oceanCurrentBuffer);
+        this.gl.bufferData(this.gl.ARRAY_BUFFER, oceanCurrentVertices, this.gl.STATIC_DRAW);
+        this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.lineBuffer);
+        this.gl.bufferData(this.gl.ARRAY_BUFFER, lineVertices, this.gl.STATIC_DRAW);
+      }, {bufferGroup: "line-and-ocean-current"});
+      if (draw) this.draw();
+      this.completePerformanceEvent(event, {uploadMs: upload.ms, lineVertexCount: this.lineVertexCount, oceanCurrentVertexCount: this.oceanCurrentVertexCount}, performance.now());
+    } catch (error) {
+      this.failPerformanceEvent(event, error, {}, performance.now());
+      throw error;
+    }
   }
 
   refreshPoliticalVisualCaches() {
@@ -732,11 +808,21 @@ export class PlaceholderMapRenderer {
 
   refreshPointLayers({draw = true} = {}) {
     if (!this.map) return;
-    const pointVertices = buildPointVertices(this.map, this.layerVisibility);
-    this.pointVertexCount = pointVertices.length / 6;
-    this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.pointBuffer);
-    this.gl.bufferData(this.gl.ARRAY_BUFFER, pointVertices, this.gl.STATIC_DRAW);
-    if (draw) this.draw();
+    const startedAt = performance.now();
+    const event = this.beginPerformanceEvent("pointRefresh", {drawRequested: draw}, startedAt);
+    try {
+      const pointVertices = buildPointVertices(this.map, this.layerVisibility);
+      this.pointVertexCount = pointVertices.length / 6;
+      const upload = this.recordBufferUpload("point-refresh", () => {
+        this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.pointBuffer);
+        this.gl.bufferData(this.gl.ARRAY_BUFFER, pointVertices, this.gl.STATIC_DRAW);
+      }, {bufferGroup: "point"});
+      if (draw) this.draw();
+      this.completePerformanceEvent(event, {uploadMs: upload.ms, pointVertexCount: this.pointVertexCount}, performance.now());
+    } catch (error) {
+      this.failPerformanceEvent(event, error, {}, performance.now());
+      throw error;
+    }
   }
 
   setOceanCurrentHighlights(ids, {draw = true} = {}) {
@@ -810,27 +896,38 @@ export class PlaceholderMapRenderer {
   }
 
   setLayerVisible(layer, visible) {
-    if (!(layer in this.layerVisibility)) return;
-    if (RETIRED_MAP_LAYERS.has(layer)) {
-      this.layerVisibility[layer] = false;
-      this.clearTradeFlowBuffer();
-      return;
+    return this.setLayersVisible([[layer, visible]]);
+  }
+
+  setLayersVisible(entries = []) {
+    const requested = new Map();
+    for (const entry of entries || []) {
+      const [layer, visible] = Array.isArray(entry) ? entry : [entry?.layer, entry?.visible];
+      if (!(layer in this.layerVisibility)) continue;
+      const nextVisible = RETIRED_MAP_LAYERS.has(layer) ? false : Boolean(visible);
+      requested.set(layer, nextVisible);
+      if (layer === "coastline") requested.set("lakeShore", nextVisible);
     }
-    const nextVisible = Boolean(visible);
-    const layers = layer === "coastline" ? ["coastline", "lakeShore"] : [layer];
-    let changed = false;
-    for (const item of layers) {
-      if (!(item in this.layerVisibility) || this.layerVisibility[item] === nextVisible) continue;
-      this.layerVisibility[item] = nextVisible;
-      changed = true;
+    const changed = [];
+    for (const [layer, visible] of requested) {
+      if (this.layerVisibility[layer] === visible) continue;
+      this.layerVisibility[layer] = visible;
+      changed.push(layer);
     }
-    if (!changed) return;
-    if (layer === "gridCells" && nextVisible) void this.ensureGridCellDiagnosticsBuffer();
-    if (layer === "tradeFlows") this.dynamicBuffersDirty.tradeFlows = true;
-    if (layer === "cities" || layer === "population" || layer === "markers" || layer === "resources" || layer === "military") this.refreshPointLayers({draw: false});
-    if (layers.some(item => item === "coastline" || item === "lakeShore" || item === "stateBorders" || item === "provinceBorders" || item === "warFronts" || item === "zones" || item === "zoneEvents" || item === "zoneNatural" || item === "zoneWilderness" || item === "oceanCurrents")) this.refreshLineLayers({draw: false});
-    if (layer === "zoneLabels") this.updateLabels();
+    if (!changed.length) return [];
+    if (changed.includes("gridCells") && this.layerVisibility.gridCells) void this.ensureGridCellDiagnosticsBuffer();
+    if (changed.includes("tradeFlows")) {
+      if (this.layerVisibility.tradeFlows) this.dynamicBuffersDirty.tradeFlows = true;
+      else this.clearTradeFlowBuffer();
+    }
+    if (changed.some(layer => layer === "cities" || layer === "population" || layer === "markers" || layer === "resources" || layer === "military")) {
+      this.refreshPointLayers({draw: false});
+    }
+    if (changed.some(layer => layer === "coastline" || layer === "lakeShore" || layer === "stateBorders" || layer === "provinceBorders" || layer === "warFronts" || layer === "zones" || layer === "zoneEvents" || layer === "zoneNatural" || layer === "zoneWilderness" || layer === "oceanCurrents")) {
+      this.refreshLineLayers({draw: false});
+    }
     this.draw();
+    return changed;
   }
 
   async ensureGridCellDiagnosticsBuffer(options = {}) {
@@ -959,10 +1056,12 @@ export class PlaceholderMapRenderer {
   draw({updateDynamicBuffers = true, updateOverlay = true, drawDirtyDynamicBuffers = true} = {}) {
     if (!this.map || !this.vertexCount) return;
     const startedAt = performance.now();
+    const event = this.beginPerformanceEvent("draw", {updateDynamicBuffers, updateOverlay, drawDirtyDynamicBuffers}, startedAt);
+    try {
     if (updateDynamicBuffers && this.dynamicBuffersDirty.routes && this.layerVisibility.routes) this.updateRouteBuffer();
     if (updateDynamicBuffers && this.dynamicBuffersDirty.tradeFlows && this.layerVisibility.tradeFlows) this.updateTradeFlowBuffer();
     if (updateDynamicBuffers && this.dynamicBuffersDirty.rivers && this.layerVisibility.rivers) this.updateRiverBuffer();
-    if (updateDynamicBuffers && (this.dynamicBuffersDirty.selection || this.locateFlash)) this.updateSelectionBuffer();
+    if (updateDynamicBuffers && this.dynamicBuffersDirty.selection) this.updateSelectionBuffer();
 
     const gl = this.gl;
     gl.viewport(0, 0, this.canvas.width, this.canvas.height);
@@ -1120,9 +1219,12 @@ export class PlaceholderMapRenderer {
     gl.uniform1i(this.locations.pointMode, 0);
 
     const oceanCurrentProjection = createLineWidthProjection({map: this.map, camera: this.camera, canvas: this.canvas});
+    const drawMs = roundMs(performance.now() - startedAt);
+    const glError = gl.getError();
     this.lastDraw = {
-      drawMs: roundMs(performance.now() - startedAt),
-      glError: gl.getError(),
+      sequence: event.sequence,
+      drawMs,
+      glError,
       layerOrder,
       gridCellsDrawCalls,
       oceanCurrentScale: this.camera.scale,
@@ -1131,7 +1233,12 @@ export class PlaceholderMapRenderer {
         max: projectWorldLineWidth(this.oceanCurrentLayerStats.maxWidth, oceanCurrentProjection).backingWidth
       }
     };
+    this.completePerformanceEvent(event, {ms: drawMs, glError, layerOrder: [...layerOrder]}, performance.now());
     if (updateOverlay) this.updateLabels();
+    } catch (error) {
+      this.failPerformanceEvent(event, error, {ms: roundMs(performance.now() - startedAt)}, performance.now());
+      throw error;
+    }
   }
 
   getStats() {
@@ -1236,12 +1343,20 @@ export class PlaceholderMapRenderer {
       oceanCurrentLayer: {...this.oceanCurrentLayerStats, minWidth: Number.isFinite(this.oceanCurrentLayerStats.minWidth) ? this.oceanCurrentLayerStats.minWidth : 0},
       canvasSize: {...this.canvasSize},
       camera: {...this.camera},
+      performanceEvents: this.getPerformanceEvents(),
       loadMap: this.lastLoad,
       draw: this.lastDraw,
       overlay: {
         childCount: this.overlay?.childElementCount || 0,
         update: {...this.lastOverlayUpdate},
-        interactionSuspended: this.overlayInteractionSuspended
+        interactionSuspended: this.overlayInteractionSuspended,
+        committedCamera: {...this.overlayCommittedCamera},
+        previewTransform: {...this.overlayPreviewTransform}
+      },
+      viewportPreview: {
+        pendingFrame: Boolean(this.viewportPreviewFrame),
+        requests: this.viewportPreviewRequests,
+        coalesced: this.viewportPreviewCoalesced
       },
       dynamicMeshCache: {
         routesDirty: this.dynamicBuffersDirty.routes,
@@ -1305,43 +1420,66 @@ export class PlaceholderMapRenderer {
 
   updateRouteBuffer() {
     const startedAt = performance.now();
-    const camera = snapshotCamera(this.camera);
-    const {vertices: routeVertices, stats} = buildRouteMeshVertices(this.map, camera, this.canvas, this.selection, this.objectHighlights, this.visualTheme);
-    this.routeVertexCount = routeVertices.length / 6;
-    this.routeRenderStats = stats;
-    this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.routeBuffer);
-    this.gl.bufferData(this.gl.ARRAY_BUFFER, routeVertices, this.gl.DYNAMIC_DRAW);
-    this.routeBufferCamera = snapshotViewportCamera(camera);
-    this.routeBuildMs = roundMs(performance.now() - startedAt);
-    this.dynamicBuffersDirty.routes = false;
+    const event = this.beginPerformanceEvent("routeMesh", {mode: "sync"}, startedAt);
+    try {
+      const camera = snapshotCamera(this.camera);
+      const {vertices: routeVertices, stats} = buildRouteMeshVertices(this.map, camera, this.canvas, this.selection, this.objectHighlights, this.visualTheme);
+      this.routeVertexCount = routeVertices.length / 6;
+      this.routeRenderStats = stats;
+      const upload = this.recordBufferUpload("route-screen-mesh", () => {
+        this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.routeBuffer);
+        this.gl.bufferData(this.gl.ARRAY_BUFFER, routeVertices, this.gl.DYNAMIC_DRAW);
+      }, {bufferGroup: "route"});
+      this.routeBufferCamera = snapshotViewportCamera(camera);
+      this.routeBuildMs = roundMs(performance.now() - startedAt);
+      this.dynamicBuffersDirty.routes = false;
+      this.completePerformanceEvent(event, {ms: this.routeBuildMs, uploadMs: upload.ms, vertexCount: this.routeVertexCount, aborted: false}, performance.now());
+    } catch (error) {
+      this.failPerformanceEvent(event, error, {ms: roundMs(performance.now() - startedAt)}, performance.now());
+      throw error;
+    }
   }
 
   async updateRouteBufferAsync({yieldToBrowser = () => Promise.resolve(), sliceMs = ROUTE_BUILD_SLICE_MS, shouldContinue = () => true} = {}) {
     const startedAt = performance.now();
-    const camera = snapshotCamera(this.camera);
-    const selection = this.selection ? {...this.selection} : null;
-    const objectHighlights = this.objectHighlights.map(item => ({...item}));
-    const {vertices: routeVertices, stats} = await buildRouteMeshVerticesAsync(this.map, camera, this.canvas, selection, objectHighlights, {
-      yieldToBrowser,
-      sliceMs,
-      shouldContinue
-    }, this.visualTheme);
-    if (stats.aborted || !shouldContinue()) return false;
-    this.routeVertexCount = routeVertices.length / 6;
-    this.routeRenderStats = stats;
-    this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.routeBuffer);
-    this.gl.bufferData(this.gl.ARRAY_BUFFER, routeVertices, this.gl.DYNAMIC_DRAW);
-    this.routeBufferCamera = snapshotViewportCamera(camera);
-    this.routeBuildMs = roundMs(performance.now() - startedAt);
-    this.dynamicBuffersDirty.routes = false;
-    return true;
+    const event = this.beginPerformanceEvent("routeMesh", {mode: "async", sliceMs}, startedAt);
+    try {
+      const camera = snapshotCamera(this.camera);
+      const selection = this.selection ? {...this.selection} : null;
+      const objectHighlights = this.objectHighlights.map(item => ({...item}));
+      const {vertices: routeVertices, stats} = await buildRouteMeshVerticesAsync(this.map, camera, this.canvas, selection, objectHighlights, {
+        yieldToBrowser,
+        sliceMs,
+        shouldContinue
+      }, this.visualTheme);
+      if (stats.aborted || !shouldContinue()) {
+        this.cancelPerformanceEvent(event, stats.aborted ? "builder-aborted" : "viewport-superseded", {ms: roundMs(performance.now() - startedAt), aborted: Boolean(stats.aborted)}, performance.now());
+        return false;
+      }
+      this.routeVertexCount = routeVertices.length / 6;
+      this.routeRenderStats = stats;
+      const upload = this.recordBufferUpload("route-screen-mesh", () => {
+        this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.routeBuffer);
+        this.gl.bufferData(this.gl.ARRAY_BUFFER, routeVertices, this.gl.DYNAMIC_DRAW);
+      }, {bufferGroup: "route"});
+      this.routeBufferCamera = snapshotViewportCamera(camera);
+      this.routeBuildMs = roundMs(performance.now() - startedAt);
+      this.dynamicBuffersDirty.routes = false;
+      this.completePerformanceEvent(event, {ms: this.routeBuildMs, uploadMs: upload.ms, vertexCount: this.routeVertexCount, aborted: false}, performance.now());
+      return true;
+    } catch (error) {
+      this.failPerformanceEvent(event, error, {ms: roundMs(performance.now() - startedAt)}, performance.now());
+      throw error;
+    }
   }
 
   clearRouteBuffer() {
     this.routeVertexCount = 0;
     this.routeRenderStats = normalizeRouteRenderStats(emptyRouteRenderStats());
-    this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.routeBuffer);
-    this.gl.bufferData(this.gl.ARRAY_BUFFER, new Float32Array(), this.gl.DYNAMIC_DRAW);
+    this.recordBufferUpload("route-clear", () => {
+      this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.routeBuffer);
+      this.gl.bufferData(this.gl.ARRAY_BUFFER, new Float32Array(), this.gl.DYNAMIC_DRAW);
+    }, {bufferGroup: "route"});
     this.routeBufferCamera = snapshotViewportCamera(this.camera);
     this.routeBuildMs = 0;
     this.dynamicBuffersDirty.routes = false;
@@ -1415,44 +1553,74 @@ export class PlaceholderMapRenderer {
 
   updateRiverBuffer() {
     const startedAt = performance.now();
-    const camera = snapshotCamera(this.camera);
-    const {vertices, stats} = buildRiverMeshVertices(this.map, camera, this.canvas);
-    this.riverVertexCount = vertices.length / 6;
-    this.riverWidthStats = stats;
-    this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.riverBuffer);
-    this.gl.bufferData(this.gl.ARRAY_BUFFER, vertices, this.gl.DYNAMIC_DRAW);
-    this.riverBufferCamera = snapshotViewportCamera(camera);
-    this.riverBuildMs = roundMs(performance.now() - startedAt);
-    this.dynamicBuffersDirty.rivers = false;
+    const event = this.beginPerformanceEvent("riverMesh", {mode: "sync"}, startedAt);
+    try {
+      const camera = snapshotCamera(this.camera);
+      const {vertices, stats} = buildRiverMeshVertices(this.map, camera, this.canvas);
+      this.riverVertexCount = vertices.length / 6;
+      this.riverWidthStats = stats;
+      const upload = this.recordBufferUpload("river-screen-mesh", () => {
+        this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.riverBuffer);
+        this.gl.bufferData(this.gl.ARRAY_BUFFER, vertices, this.gl.DYNAMIC_DRAW);
+      }, {bufferGroup: "river"});
+      this.riverBufferCamera = snapshotViewportCamera(camera);
+      this.riverBuildMs = roundMs(performance.now() - startedAt);
+      this.dynamicBuffersDirty.rivers = false;
+      this.completePerformanceEvent(event, {ms: this.riverBuildMs, uploadMs: upload.ms, vertexCount: this.riverVertexCount, aborted: false}, performance.now());
+    } catch (error) {
+      this.failPerformanceEvent(event, error, {ms: roundMs(performance.now() - startedAt)}, performance.now());
+      throw error;
+    }
   }
 
   async updateRiverBufferAsync({yieldToBrowser = () => Promise.resolve(), sliceMs = RIVER_BUILD_SLICE_MS, shouldContinue = () => true} = {}) {
     const startedAt = performance.now();
-    const camera = snapshotCamera(this.camera);
-    const {vertices, stats} = await buildRiverMeshVerticesAsync(this.map, camera, this.canvas, {
-      yieldToBrowser,
-      sliceMs,
-      shouldContinue
-    });
-    if (stats.aborted || !shouldContinue()) return false;
-    this.riverVertexCount = vertices.length / 6;
-    this.riverWidthStats = stats;
-    this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.riverBuffer);
-    this.gl.bufferData(this.gl.ARRAY_BUFFER, vertices, this.gl.DYNAMIC_DRAW);
-    this.riverBufferCamera = snapshotViewportCamera(camera);
-    this.riverBuildMs = roundMs(performance.now() - startedAt);
-    this.dynamicBuffersDirty.rivers = false;
-    return true;
+    const event = this.beginPerformanceEvent("riverMesh", {mode: "async", sliceMs}, startedAt);
+    try {
+      const camera = snapshotCamera(this.camera);
+      const {vertices, stats} = await buildRiverMeshVerticesAsync(this.map, camera, this.canvas, {
+        yieldToBrowser,
+        sliceMs,
+        shouldContinue
+      });
+      if (stats.aborted || !shouldContinue()) {
+        this.cancelPerformanceEvent(event, stats.aborted ? "builder-aborted" : "viewport-superseded", {ms: roundMs(performance.now() - startedAt), aborted: Boolean(stats.aborted)}, performance.now());
+        return false;
+      }
+      this.riverVertexCount = vertices.length / 6;
+      this.riverWidthStats = stats;
+      const upload = this.recordBufferUpload("river-screen-mesh", () => {
+        this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.riverBuffer);
+        this.gl.bufferData(this.gl.ARRAY_BUFFER, vertices, this.gl.DYNAMIC_DRAW);
+      }, {bufferGroup: "river"});
+      this.riverBufferCamera = snapshotViewportCamera(camera);
+      this.riverBuildMs = roundMs(performance.now() - startedAt);
+      this.dynamicBuffersDirty.rivers = false;
+      this.completePerformanceEvent(event, {ms: this.riverBuildMs, uploadMs: upload.ms, vertexCount: this.riverVertexCount, aborted: false}, performance.now());
+      return true;
+    } catch (error) {
+      this.failPerformanceEvent(event, error, {ms: roundMs(performance.now() - startedAt)}, performance.now());
+      throw error;
+    }
   }
 
   updateSelectionBuffer() {
     const startedAt = performance.now();
-    const selectionVertices = buildSelectionMeshVertices(this.map, this.camera, this.canvas, this.selection, this.locateFlash, this.objectHighlights);
-    this.selectionVertexCount = selectionVertices.length / 6;
-    this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.selectionBuffer);
-    this.gl.bufferData(this.gl.ARRAY_BUFFER, selectionVertices, this.gl.DYNAMIC_DRAW);
-    this.selectionBuildMs = roundMs(performance.now() - startedAt);
-    this.dynamicBuffersDirty.selection = false;
+    const event = this.beginPerformanceEvent("selectionMesh", {mode: "sync"}, startedAt);
+    try {
+      const selectionVertices = buildSelectionMeshVertices(this.map, this.camera, this.canvas, this.selection, this.locateFlash, this.objectHighlights);
+      this.selectionVertexCount = selectionVertices.length / 6;
+      const upload = this.recordBufferUpload("selection-screen-mesh", () => {
+        this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.selectionBuffer);
+        this.gl.bufferData(this.gl.ARRAY_BUFFER, selectionVertices, this.gl.DYNAMIC_DRAW);
+      }, {bufferGroup: "selection"});
+      this.selectionBuildMs = roundMs(performance.now() - startedAt);
+      this.dynamicBuffersDirty.selection = false;
+      this.completePerformanceEvent(event, {ms: this.selectionBuildMs, uploadMs: upload.ms, vertexCount: this.selectionVertexCount}, performance.now());
+    } catch (error) {
+      this.failPerformanceEvent(event, error, {ms: roundMs(performance.now() - startedAt)}, performance.now());
+      throw error;
+    }
   }
 
   pickThresholdWorld(pixels) {
@@ -1464,17 +1632,29 @@ export class PlaceholderMapRenderer {
 
   setSelection(object, {draw = true} = {}) {
     const previous = this.selection;
-    this.selection = object || null;
+    const next = object || null;
+    if (sameSelectionTarget(previous, next)) {
+      const sameReference = previous === next;
+      this.selection = next;
+      if (!sameReference && !this.overlayInteractionSuspended) this.dynamicBuffersDirty.selection = true;
+      if (draw && this.dynamicBuffersDirty.selection && !this.overlayInteractionSuspended) {
+        this.draw();
+        return true;
+      }
+      return false;
+    }
+    this.selection = next;
     this.dynamicBuffersDirty.selection = true;
     if (previous?.kind === OBJECT_KIND.ROUTE || this.selection?.kind === OBJECT_KIND.ROUTE) {
       this.dynamicBuffersDirty.routes = true;
     }
-    if (!draw) return;
+    if (!draw) return true;
     if (this.overlayInteractionSuspended) {
       this.draw({updateDynamicBuffers: false, updateOverlay: false, drawDirtyDynamicBuffers: false});
-      return;
+      return true;
     }
     this.draw();
+    return true;
   }
 
   setObjectHighlights(objects, {draw = true} = {}) {
@@ -1551,53 +1731,154 @@ export class PlaceholderMapRenderer {
     this.dynamicBuffersDirty.selection = true;
   }
 
+  requestViewportPreview() {
+    if (!this.map) return;
+    this.viewportPreviewRequests += 1;
+    this.prepareViewportPreview();
+    if (this.viewportPreviewFrame) {
+      this.viewportPreviewCoalesced += 1;
+      return;
+    }
+    const view = this.canvas.ownerDocument?.defaultView || globalThis;
+    const requestFrame = typeof view.requestAnimationFrame === "function"
+      ? view.requestAnimationFrame.bind(view)
+      : callback => setTimeout(callback, 0);
+    this.viewportPreviewFrame = requestFrame(() => {
+      this.viewportPreviewFrame = 0;
+      this.flushViewportPreview();
+    });
+  }
+
   drawViewportPreview() {
     if (!this.map) return;
+    const view = this.canvas.ownerDocument?.defaultView || globalThis;
+    if (this.viewportPreviewFrame) {
+      if (typeof view.cancelAnimationFrame === "function") view.cancelAnimationFrame(this.viewportPreviewFrame);
+      else if (typeof view.clearTimeout === "function") view.clearTimeout(this.viewportPreviewFrame);
+      this.viewportPreviewFrame = 0;
+    }
+    this.viewportPreviewRequests += 1;
+    this.prepareViewportPreview();
+    this.flushViewportPreview();
+  }
+
+  prepareViewportPreview() {
     this.viewportCommitVersion += 1;
-    this.resumeOverlayAfterInteraction();
+    this.suspendOverlayForInteraction();
+    this.updateOverlayPreviewTransform();
     this.markViewportBuffersDirty();
-    this.draw({updateDynamicBuffers: false, updateOverlay: true, drawDirtyDynamicBuffers: false});
-    this.onViewChange();
     this.scheduleViewportCommit();
+  }
+
+  flushViewportPreview() {
+    if (!this.map) return;
+    const startedAt = performance.now();
+    const event = this.beginPerformanceEvent("viewportPreview", {
+      version: this.viewportCommitVersion,
+      requests: this.viewportPreviewRequests,
+      coalesced: this.viewportPreviewCoalesced
+    }, startedAt);
+    try {
+      this.updateOverlayPreviewTransform();
+      this.draw({updateDynamicBuffers: false, updateOverlay: false, drawDirtyDynamicBuffers: false});
+      this.onViewChange({phase: "preview"});
+      this.completePerformanceEvent(event, {
+        version: this.viewportCommitVersion,
+        requests: this.viewportPreviewRequests,
+        coalesced: this.viewportPreviewCoalesced,
+        overlayTransform: {...this.overlayPreviewTransform}
+      }, performance.now());
+    } catch (error) {
+      this.failPerformanceEvent(event, error, {version: this.viewportCommitVersion}, performance.now());
+      throw error;
+    }
   }
 
   suspendOverlayForInteraction() {
     if (this.overlayInteractionSuspended) return;
     this.overlayInteractionSuspended = true;
-    this.stage?.classList.add("map-stage--interaction-hidden");
-    this.overlay?.classList.add("map-overlay--interaction-hidden");
+    this.stage?.classList.add("map-stage--interaction-transform");
+    this.overlay?.classList.add("map-overlay--interaction-transform");
   }
 
   resumeOverlayAfterInteraction() {
     if (!this.overlayInteractionSuspended) return;
     this.overlayInteractionSuspended = false;
-    this.stage?.classList.remove("map-stage--interaction-hidden");
-    this.overlay?.classList.remove("map-overlay--interaction-hidden");
+    this.stage?.classList.remove("map-stage--interaction-transform");
+    this.overlay?.classList.remove("map-overlay--interaction-transform");
+    this.stage?.style.removeProperty("--map-interaction-transform");
+    this.overlayPreviewTransform = {scale: 1, translateX: 0, translateY: 0};
+  }
+
+  updateOverlayPreviewTransform() {
+    if (!this.overlayInteractionSuspended || !this.stage) return;
+    const from = this.overlayCommittedCamera || snapshotViewportCamera(this.camera);
+    const to = this.camera;
+    const width = Math.max(1, this.canvas.getBoundingClientRect().width);
+    const height = Math.max(1, this.canvas.getBoundingClientRect().height);
+    const scale = to.scale / Math.max(0.000001, from.scale);
+    const translateX = width * 0.5 * (1 - scale + to.offsetX - scale * from.offsetX);
+    const translateY = height * 0.5 * (1 - scale - to.offsetY + scale * from.offsetY);
+    this.overlayPreviewTransform = {
+      scale: roundValue(scale),
+      translateX: roundValue(translateX),
+      translateY: roundValue(translateY)
+    };
+    this.stage.style.setProperty("--map-interaction-transform", `matrix(${scale}, 0, 0, ${scale}, ${translateX}, ${translateY})`);
   }
 
   scheduleViewportCommit() {
     const view = this.canvas.ownerDocument?.defaultView || globalThis;
-    if (this.viewportCommitTimer && typeof view.clearTimeout === "function") view.clearTimeout(this.viewportCommitTimer);
+    if (this.viewportCommitTimer && typeof view.clearTimeout === "function") {
+      view.clearTimeout(this.viewportCommitTimer);
+      this.viewportCommitTimer = 0;
+    }
+    if (this.viewportCommitEvent) this.cancelPerformanceEvent(this.viewportCommitEvent, "superseded", {version: this.viewportCommitEvent.details.version}, performance.now());
     const setTimer = typeof view.setTimeout === "function" ? view.setTimeout.bind(view) : setTimeout;
     const version = this.viewportCommitVersion;
-    this.viewportCommitTimer = setTimer(() => {
+    const event = this.queuePerformanceEvent("viewportCommit", {version, delayMs: 120}, performance.now());
+    this.viewportCommitEvent = event;
+    try {
+      this.viewportCommitTimer = setTimer(() => {
+        this.viewportCommitTimer = 0;
+        this.startQueuedPerformanceEvent(event, performance.now());
+        void this.commitViewportAfterInteraction(version, event);
+      }, 120);
+    } catch (error) {
       this.viewportCommitTimer = 0;
-      void this.commitViewportAfterInteraction(version);
-    }, 120);
+      if (this.viewportCommitEvent === event) this.viewportCommitEvent = null;
+      this.failPerformanceEvent(event, error, {version, phase: "timer-install"}, performance.now());
+      throw error;
+    }
   }
 
-  async commitViewportAfterInteraction(version) {
+  async commitViewportAfterInteraction(version, scheduledEvent = null) {
+    const event = scheduledEvent || this.beginPerformanceEvent("viewportCommit", {version, delayMs: 0}, performance.now());
     if (!this.map) {
+      this.cancelPerformanceEvent(event, "map-unavailable", {version}, performance.now());
+      if (this.viewportCommitEvent === event) this.viewportCommitEvent = null;
       this.resumeOverlayAfterInteraction();
       return;
     }
     const shouldContinue = () => this.viewportCommitVersion === version;
-    const rebuilt = await this.rebuildViewportDynamicBuffersAsync(shouldContinue);
-    if (!rebuilt || !shouldContinue()) return;
-    this.resumeOverlayAfterInteraction();
-    this.draw({updateDynamicBuffers: false});
-    this.onViewChange();
-    if (this.locateFlash && !this.locateFlashFrame) this.animateLocateFlash();
+    try {
+      const rebuilt = await this.rebuildViewportDynamicBuffersAsync(shouldContinue);
+      if (!rebuilt || !shouldContinue()) {
+        this.cancelPerformanceEvent(event, "superseded", {version}, performance.now());
+        return;
+      }
+      this.resumeOverlayAfterInteraction();
+      this.draw({updateDynamicBuffers: false});
+      this.overlayCommittedCamera = snapshotViewportCamera(this.camera);
+      this.onViewChange({phase: "commit"});
+      if (this.locateFlash && !this.locateFlashFrame) this.animateLocateFlash();
+      this.completePerformanceEvent(event, {version}, performance.now());
+    } catch (error) {
+      this.failPerformanceEvent(event, error, {version}, performance.now());
+      throw error;
+    } finally {
+      if (this.viewportCommitEvent === event) this.viewportCommitEvent = null;
+    }
   }
 
   async rebuildViewportDynamicBuffersAsync(shouldContinue) {
@@ -1623,7 +1904,7 @@ export class PlaceholderMapRenderer {
       await this.yieldViewportCommitFrame();
     }
     if (!shouldContinue()) return false;
-    if (this.dynamicBuffersDirty.selection || this.locateFlash) {
+    if (this.dynamicBuffersDirty.selection) {
       this.updateSelectionBuffer();
       if (!shouldContinue()) return false;
     }
@@ -1701,8 +1982,10 @@ export class PlaceholderMapRenderer {
     this.locateFlash = {
       kind: object.kind,
       id: object.id,
-      until: performance.now() + 2600
+      until: performance.now() + 2600,
+      phase: -1
     };
+    this.dynamicBuffersDirty.selection = true;
     if (deferAnimation && this.locateFlashFrame) {
       const view = this.canvas.ownerDocument?.defaultView || globalThis;
       if (typeof view.cancelAnimationFrame === "function") view.cancelAnimationFrame(this.locateFlashFrame);
@@ -1720,11 +2003,17 @@ export class PlaceholderMapRenderer {
     if (!this.locateFlash || performance.now() > this.locateFlash.until) {
       this.locateFlash = null;
       this.locateFlashFrame = 0;
-      this.draw();
-      this.onViewChange();
+      this.dynamicBuffersDirty.selection = true;
+      this.draw({updateOverlay: false});
+      this.onViewChange({phase: "commit"});
       return;
     }
-    this.draw();
+    const phase = Math.floor((this.locateFlash.until - performance.now()) / 180);
+    if (phase !== this.locateFlash.phase) {
+      this.locateFlash.phase = phase;
+      this.dynamicBuffersDirty.selection = true;
+      this.draw({updateOverlay: false});
+    }
     this.locateFlashFrame = requestAnimationFrame(() => this.animateLocateFlash());
   }
 
@@ -1866,6 +2155,8 @@ export class PlaceholderMapRenderer {
       return;
     }
     const startedAt = performance.now();
+    const event = this.beginPerformanceEvent("overlay", {interactionSuspended: this.overlayInteractionSuspended}, startedAt);
+    try {
     const rect = this.canvas.getBoundingClientRect();
     const occupied = [];
     const occupiedCityLabels = [];
@@ -1983,6 +2274,7 @@ export class PlaceholderMapRenderer {
     this.updateGridCellIdLabels(rect);
     const gridCellIdsMs = roundMs(performance.now() - gridCellIdsStartedAt);
     this.lastOverlayUpdate = {
+      sequence: event.sequence,
       totalMs: roundMs(performance.now() - startedAt),
       labelsMs,
       cityIconsMs,
@@ -2004,6 +2296,22 @@ export class PlaceholderMapRenderer {
       militaryIconItems: this.militaryIconItems.length,
       visibleMilitaryIcons: this.visibleMilitaryIconCount
     };
+    if (!this.overlayInteractionSuspended) this.overlayCommittedCamera = snapshotViewportCamera(this.camera);
+    this.completePerformanceEvent(event, {
+      ms: this.lastOverlayUpdate.totalMs,
+      labelsMs,
+      cityIconsMs,
+      markerIconsMs,
+      militaryIconsMs,
+      selectionMs,
+      gridCellIdsMs,
+      interactionSuspended: this.overlayInteractionSuspended,
+      overlayChildren: this.overlay.childElementCount
+    }, performance.now());
+    } catch (error) {
+      this.failPerformanceEvent(event, error, {ms: roundMs(performance.now() - startedAt)}, performance.now());
+      throw error;
+    }
   }
 
   updateGridCellIdLabels(rect) {
@@ -3138,6 +3446,14 @@ function isSelectedOrHighlighted(selection, highlights, kind, id) {
   return highlights.some(item => item?.kind === kind && String(item.id) === String(id));
 }
 
+function sameSelectionTarget(previous, next) {
+  if (previous === next) return true;
+  if (!previous || !next || previous.kind !== next.kind) return false;
+  if (String(previous.id ?? "") !== String(next.id ?? "")) return false;
+  if (String(previous.targetKind ?? "") !== String(next.targetKind ?? "")) return false;
+  return String(previous.targetId ?? "") === String(next.targetId ?? "");
+}
+
 function deduplicateObjectHighlights(objects) {
   const seen = new Set();
   const highlights = [];
@@ -3308,6 +3624,35 @@ function buildPlaceholderSurfaceBundle(map, colorMode, viewOptions, shoreVisualP
     base: vertices instanceof Float32Array ? vertices : new Float32Array(vertices),
     ...shoreLayers
   };
+}
+
+function canReuseCellVisualSurfaceGeometry(renderer) {
+  if (renderer.viewOptions?.smoothCellBorders === false || !renderer.cellVisualMesh?.cells?.length) return false;
+  if (!(renderer.surfaceVertices instanceof Float32Array) || !renderer.surfaceVertices.length) return false;
+  if (!(renderer.surfaceCellRanges instanceof Map) || renderer.surfaceCellRanges.size !== renderer.cellVisualMesh.cells.length) return false;
+  const lastCell = renderer.cellVisualMesh.cells.at(-1);
+  const lastRange = lastCell ? renderer.surfaceCellRanges.get(lastCell.cell) : null;
+  return lastRange?.end === renderer.surfaceVertices.length;
+}
+
+function recolorCellVisualSurfaceBundle(renderer) {
+  const {map, colorMode, viewOptions, cellVisualMesh, surfaceVertices, surfaceCellRanges} = renderer;
+  for (const cellMesh of cellVisualMesh.cells) {
+    const range = surfaceCellRanges.get(cellMesh.cell);
+    if (!range) continue;
+    const color = colorForCell(cellMesh.cell, map, colorMode, viewOptions);
+    const side = Number(map.grid.cells.h[cellMesh.cell]) >= 20 ? 0.25 : 0.75;
+    for (let offset = range.start; offset < range.end; offset += 6) {
+      surfaceVertices[offset + 2] = color[0];
+      surfaceVertices[offset + 3] = color[1];
+      surfaceVertices[offset + 4] = color[2];
+      surfaceVertices[offset + 5] = side;
+    }
+  }
+  const shoreLayers = shouldDrawShoreVisualBands(colorMode)
+    ? buildShoreSurfaceVertexLayers(createRenderContext(map), colorMode, viewOptions, renderer.shoreVisualPaths)
+    : emptyShoreSurfaceVertexLayers();
+  return {base: surfaceVertices, ...shoreLayers};
 }
 
 function encodeCellVisualSurfaceSides(vertices, cellVisualMesh, map) {
@@ -4294,8 +4639,154 @@ function emptyRendererLoadStats() {
   return {totalMs: 0, stages: [], slowest: null};
 }
 
+function createRendererPerformanceEvents() {
+  return Object.fromEntries([
+    "draw",
+    "overlay",
+    "routeMesh",
+    "riverMesh",
+    "selectionMesh",
+    "surfaceRefresh",
+    "lineRefresh",
+    "pointRefresh",
+    "bufferUpload",
+    "viewportPreview",
+    "viewportCommit"
+  ].map(key => [key, createRendererPerformanceEventChannel()]));
+}
+
+function createRendererPerformanceEventChannel() {
+  return {
+    sequence: 0,
+    pending: false,
+    running: false,
+    pendingCount: 0,
+    runningCount: 0,
+    scheduled: 0,
+    started: 0,
+    completed: 0,
+    canceled: 0,
+    failed: 0,
+    ms: 0,
+    last: null,
+    recent: []
+  };
+}
+
+function beginRendererPerformanceEvent(channel, details, startedAt) {
+  const token = createRendererPerformanceEventToken(channel, details, startedAt, "running");
+  channel.started += 1;
+  channel.runningCount += 1;
+  updateRendererPerformanceEventState(channel);
+  channel.last = rendererPerformanceEventSnapshot(token, "running", startedAt, 0);
+  return token;
+}
+
+function queueRendererPerformanceEvent(channel, details, queuedAt) {
+  const token = createRendererPerformanceEventToken(channel, details, queuedAt, "pending");
+  channel.pendingCount += 1;
+  updateRendererPerformanceEventState(channel);
+  channel.last = rendererPerformanceEventSnapshot(token, "pending", queuedAt, 0);
+  return token;
+}
+
+function createRendererPerformanceEventToken(channel, details, timestamp, phase) {
+  channel.sequence += 1;
+  channel.scheduled += 1;
+  return {
+    channel,
+    sequence: channel.sequence,
+    details: {...details},
+    queuedAt: timestamp,
+    startedAt: phase === "running" ? timestamp : null,
+    phase,
+    finalized: false
+  };
+}
+
+function startQueuedRendererPerformanceEvent(token, startedAt) {
+  if (!token || token.finalized || token.phase !== "pending") return token;
+  token.channel.pendingCount = Math.max(0, token.channel.pendingCount - 1);
+  token.channel.runningCount += 1;
+  token.channel.started += 1;
+  token.startedAt = startedAt;
+  token.phase = "running";
+  updateRendererPerformanceEventState(token.channel);
+  if ((token.channel.last?.sequence || 0) <= token.sequence) token.channel.last = rendererPerformanceEventSnapshot(token, "running", startedAt, 0);
+  return token;
+}
+
+function completeRendererPerformanceEvent(token, details, completedAt) {
+  return finalizeRendererPerformanceEvent(token, "completed", details, completedAt);
+}
+
+function cancelRendererPerformanceEvent(token, reason, details, canceledAt) {
+  return finalizeRendererPerformanceEvent(token, "canceled", {reason, ...details}, canceledAt);
+}
+
+function failRendererPerformanceEvent(token, error, details, failedAt) {
+  return finalizeRendererPerformanceEvent(token, "failed", {error: error instanceof Error ? error.message : String(error), ...details}, failedAt);
+}
+
+function finalizeRendererPerformanceEvent(token, status, details, timestamp) {
+  if (!token || token.finalized) return token?.channel?.last || null;
+  token.finalized = true;
+  if (token.phase === "pending") token.channel.pendingCount = Math.max(0, token.channel.pendingCount - 1);
+  if (token.phase === "running") token.channel.runningCount = Math.max(0, token.channel.runningCount - 1);
+  token.phase = status;
+  token.channel[status] += 1;
+  updateRendererPerformanceEventState(token.channel);
+  const startedAt = token.startedAt ?? token.queuedAt;
+  const event = rendererPerformanceEventSnapshot(token, status, timestamp, roundMs(timestamp - startedAt), details);
+  token.channel.ms = event.ms;
+  if ((token.channel.last?.sequence || 0) <= token.sequence) token.channel.last = event;
+  token.channel.recent.push(event);
+  if (token.channel.recent.length > RENDERER_EVENT_HISTORY_LIMIT) token.channel.recent.splice(0, token.channel.recent.length - RENDERER_EVENT_HISTORY_LIMIT);
+  return event;
+}
+
+function rendererPerformanceEventSnapshot(token, status, timestamp, ms, details = {}) {
+  return {
+    sequence: token.sequence,
+    status,
+    queuedAt: roundMs(token.queuedAt),
+    startedAt: token.startedAt === null ? null : roundMs(token.startedAt),
+    timestamp: roundMs(timestamp),
+    pendingMs: token.startedAt === null ? roundMs(timestamp - token.queuedAt) : roundMs(token.startedAt - token.queuedAt),
+    ms: Object.prototype.hasOwnProperty.call(details, "ms") ? roundMs(details.ms) : roundMs(ms),
+    ...token.details,
+    ...details
+  };
+}
+
+function updateRendererPerformanceEventState(channel) {
+  channel.pending = channel.pendingCount > 0;
+  channel.running = channel.runningCount > 0;
+}
+
+function snapshotRendererPerformanceEvents(events, {includeRecent = false} = {}) {
+  return Object.fromEntries(Object.entries(events).map(([key, channel]) => [key, {
+    sequence: channel.sequence,
+    pending: channel.pending,
+    running: channel.running,
+    pendingCount: channel.pendingCount,
+    runningCount: channel.runningCount,
+    scheduled: channel.scheduled,
+    started: channel.started,
+    completed: channel.completed,
+    canceled: channel.canceled,
+    failed: channel.failed,
+    ms: channel.ms,
+    last: channel.last ? {...channel.last} : null,
+    historyLimit: RENDERER_EVENT_HISTORY_LIMIT,
+    recentCount: channel.recent.length,
+    ...(includeRecent ? {recent: channel.recent.map(event => ({...event}))} : {})
+  }]));
+}
+
 function emptyOverlayUpdateStats() {
   return {
+    sequence: 0,
     totalMs: 0,
     labelsMs: 0,
     cityIconsMs: 0,

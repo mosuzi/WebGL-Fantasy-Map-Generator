@@ -238,7 +238,8 @@ export function triangulateCellVisualBoundarySafely(points) {
       indices: []
     };
   }
-  if (cellVisualBoundarySelfIntersects(candidate)) {
+  const convex = cellVisualBoundaryIsStrictlyConvex(candidate);
+  if (!convex && cellVisualBoundarySelfIntersects(candidate)) {
     return {
       status: "skipped",
       reason: "self-intersecting-boundary",
@@ -249,7 +250,10 @@ export function triangulateCellVisualBoundarySafely(points) {
     };
   }
   const indices = triangulateCellVisualBoundary(candidate);
-  if (!validateCellVisualTriangulation(candidate, indices)) {
+  const valid = convex
+    ? validateConvexCellVisualTriangulation(candidate, indices)
+    : validateCellVisualTriangulation(candidate, indices);
+  if (!valid) {
     return {
       status: "skipped",
       reason: indices.length ? "unsafe-earcut-result" : "earcut-empty",
@@ -267,6 +271,34 @@ export function triangulateCellVisualBoundarySafely(points) {
     points: candidate,
     indices
   };
+}
+
+function cellVisualBoundaryIsStrictlyConvex(points) {
+  if (points.length < 3) return false;
+  let direction = 0;
+  for (let index = 0; index < points.length; index++) {
+    const cross = cross2d(points[index], points[(index + 1) % points.length], points[(index + 2) % points.length]);
+    if (Math.abs(cross) <= 0.000000000001) return false;
+    const nextDirection = Math.sign(cross);
+    if (direction && nextDirection !== direction) return false;
+    direction = nextDirection;
+  }
+  return true;
+}
+
+function validateConvexCellVisualTriangulation(points, indices) {
+  if (!indices.length || indices.length % 3 || indices.length !== (points.length - 2) * 3) return false;
+  const polygonArea = Math.abs(cellVisualBoundaryArea(points));
+  if (polygonArea <= 0.000000001) return false;
+  let triangleArea = 0;
+  for (let index = 0; index < indices.length; index += 3) {
+    const triangle = [points[indices[index]], points[indices[index + 1]], points[indices[index + 2]]];
+    if (triangle.some(point => !point)) return false;
+    const area = Math.abs(cellVisualTriangleArea(triangle));
+    if (area <= 0.000000001) return false;
+    triangleArea += area;
+  }
+  return Math.abs(triangleArea - polygonArea) <= Math.max(0.000001, polygonArea * 0.000001);
 }
 
 export function countCellVisualFanLeaks(center, points) {

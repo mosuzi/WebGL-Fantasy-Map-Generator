@@ -7,6 +7,8 @@
 ## 当前活动专题映射
 
 - 权威任务第 266 项对应 `readme-showcase-capture.md`：集中 fresh session 的默认图层与标签风格，并用隔离系统 Chrome + CDP 从正式 PNG 合成链确定性生成中英文 README 共用的 relief / atlas 两张展示图。
+- 权威任务第 269 项对应 `canvas-performance-investigation-plan.md`，现已完成：调查方案在采样前独立审阅通过，生产构建与系统 Chrome 已分离 generation、`loadMap`、draw、idle commit、overlay 和浏览器主线程成本；实际结论与分级建议见 [`../performance/canvas-performance-investigation-report.md`](../performance/canvas-performance-investigation-report.md)，本项没有直接实施优化。
+- 权威任务第 270～272 项对应 `canvas-performance-optimization-plan.md`，现已完成：连续视口使用 rAF preview 与 overlay 根变换，组合图层和 locate 重复事务已收敛，100k 装载 paired 中位下降 `26.8%`，三档系统 Chrome、状态动作、测量重场景和专项回归已验收；实际结果见 [`../performance/canvas-performance-optimization-report.md`](../performance/canvas-performance-optimization-report.md)，标签渲染架构迁移不在本批。
 - 权威任务第 257～258 项对应 `project-app-icon.md`：设计原创无文字应用图标，生成浏览器与安装入口所需尺寸，并补齐 64 / 256px、favicon、manifest、Apple Touch Icon 和真实浏览器验收；第 258 项的 Cloud Provider Config 见 `docs/deployment/cloud-storage.md`。
 - 权威任务第 263～264 项对应 `app-and-canvas-icon-system.md`：把用户选定的微缩山河城池 A 方案接入应用图标，并以 `9 + 3 + 58 + 10 = 80` 个稳定键统一城镇、Marker / 资源点与军事图标，冻结旧数据、DOM / PNG 和系统 Chrome 验收边界。
 - 权威任务第 259 项对应 `docs/deployment/cloud-storage.md`：把 Dropbox 回调统一为独立轻量页，由原窗口校验 popup、同源、state 与握手期限并换取令牌；Google Drive 不在本项修改范围。

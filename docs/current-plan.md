@@ -183,7 +183,7 @@
 
 本节是唯一权威任务清单。README、专题文档和历史日志中的“缺口”“下一步”只提供来源与设计背景，不能覆盖这里的编号、顺序和最小验收。已验收能力不得重新计为待办。
 
-> **执行门禁（2026-08-03）**：第 45～52、54～225、227～268 项已完成，第 53 项已移除；第 226 项本地完成、远端 Wiki 发布仍受 GitHub 私有仓库套餐阻塞。当前没有活动权威任务；不从 README、历史日志或专题文档扩展其它任务。
+> **执行门禁（2026-08-04）**：第 45～52、54～225、227～269 项已完成，第 53 项已移除；第 226 项本地完成、远端 Wiki 发布仍受 GitHub 私有仓库套餐阻塞。当前没有活动权威任务；不从 README、历史日志或专题文档扩展其它任务。
 
 当前 API 基线为：`window.webglGeneratorApi` 覆盖 `17` 个命名空间、`316` 个公开方法和 `179` 个编辑方法，稳定等级为 `308 / 7 / 1`；`316 / 316` 方法可通过 `info.describe` 发现，`planner.listRecipes / getRecipe` 只读公开 `10` 个配方和 `43` 个顶层步骤，`objects` 覆盖 `20` 类对象，`cells` 已提供八个读取、定位、扫描与动作预检方法。完整能力矩阵为 `1196` 行、`covered 1122 / excluded 74 / deferred 0 / gap 0`；复合语义矩阵为 `79` 个动作、`69` 个完整规则事务与 `10` 个玩法配方，`316` 个公开方法全部完成事务分类，结构缺口为 `0`。
 
@@ -1311,6 +1311,40 @@
   - 格式与兼容：新建原生存档采用 `.webfmg`，内部继续为 `application/gzip` 的 gzip JSON，不升级 schema；旧 `.webgl-map.json.gz / .json.gz / .gz / .json` 在导入、云端列表、gzip-base64 与两套无头 CLI 中继续兼容。旧图缺少名称时按 seed 回填，名称不进入 checksum，浏览器固定单槽存档 key 不变。
   - 验收记录：首轮独立复核阻断的换图后云端预览陈旧问题已在统一加载链修复并复验 `ACCEPT`。命名、云端、迁移、无头读写、API 往返和生产构建通过；系统 Chrome 实际捕获本地保存与高级压缩导出的同名 `.webfmg` 并 gunzip 核对，刷新持久化、默认收起、图标展开、无边框及 `1440 / 390 / 320px` 无溢出通过。2026-08-04 CDP 复验测得按钮盒与输入框中心一致、齿轮 SVG 原向上偏 `1.5px`，专属内部位移修正后两轮均为 `0px`；console、page、health 与 WebGL error 为 `0`。`source/` 零改动，未访问真实云盘。
   - 专题施工图：`docs/task-notes/map-save-naming-and-extension.md`。
+
+- **权威任务第 269 项：调查正式画布性能并形成优化建议。** `已完成；来源：用户直接要求`
+  - 范围：先写调查方案并交独立智能体审阅；审阅通过后，基于当前生产构建和系统 Chrome 调查初次生成 / 装载、连续缩放 / 平移、idle commit、颜色专题 / 图层 / 适配 / 定位 / selection / hover 状态切换，以及完整图层、消融矩阵、测量重场景和选中态重场景。必须分离 generation、renderer `loadMap()`、WebGL draw / mesh / buffer、DOM / SVG overlay、浏览器 style / layout / long task。
+  - 允许的诊断改动：只在现有入口不足时补充可复现的 profile 脚本、Performance API 标记或 renderer 只读 stats；不得改变渲染输出、交互、地图数据、schema、存档、API 或默认图层。原始报告进入 `docs/generated/reports/`，长期结论进入 `docs/performance/`。
+  - 最小验收：独立方案审阅为 `ACCEPT` 后才开始采样；10k / 50k / 100k 生产基线、100k 图层消融、测量 / 选中重场景和状态切换均有可复现证据或明确失败记录；实际报告逐项列出已证实瓶颈、已排除猜测、剩余盲区、指标与代码路径，并给出 `P0 / P1 / P2` 建议、预期收益、风险与长期门禁。同一审查智能体终审证据和建议一致，文档索引、权威计划、开发日志与差异检查同步。
+  - 排除：本项不直接实施优化，不修改 `source/`，不优化生成算法、编辑事务、导入导出、云存储、管理面板或业务 API，不降低画质或改变 picking / 碰撞 / 选择 / 导出表现，不提交或推送。
+  - 专题调查方案：`docs/task-notes/canvas-performance-investigation-plan.md`。
+  - 实施记录：在 renderer 增加只读递增性能事件、父子计时边界与有界历史，在 E2E / overlay profile 中补独立进程预热、idle commit、图层消融、heavy fixture、恢复和错误门禁，并新增 startup / transitions / trace 状态脚本。生产构建后用系统 Chrome 完成冷启动 `3` 轮、E2E `9` 轮、最终 overlay `17` 轮、状态动作 `3×18` 和一份 `fit-to-view` trace；32 份非 trace 正式 JSON 全部通过实际启用的完整性 / 恢复 / 错误门禁，真实 console / page、WebGL 和 health error 为 `0`。
+  - 调查结论：100k 完整图层连续 zoom / pan frame p95 三轮中位为 `176.6 / 305.8ms`，draw CPU p95 均仅 `0.2ms`，overlay p95 为 `161.6 / 122.7ms`，标签占 overlay 平均约 `93% / 94%`。同轮 no-DOM 总控把 frame p95 降到 `6.0 / 41.2ms`，隔离复测方向一致；该结果只作为可见 overlay 工作短路的诊断上界，不承诺产品优化收益。100k 装载另由 visual cell mesh + shore cache paired 中位 `9.66s` 主导；color mode、fit、labels 组合和 locate 也确认全量刷新或重复事务。
+  - 审查与验收记录：调查方案先经两轮 `BLOCK` 修正冷 / 暖态、顺序、事件去重、GPU 证据边界与真实 `states` mode，第三轮 `ACCEPT` 后才采样；诊断和 harness 的证据契约也在审查通过后重采受影响矩阵。最终报告首轮终审以 `BLOCK` 要求补原始值、波动、嵌套边界、no-DOM 上界和长期门禁，二轮只剩阈值观察分类名错误；修正为 `36` 条 main-thread-long-task、`193` 条未强制阈值观察、render-frame-gap `0` 后，同一审查智能体最终 `ACCEPT`。生产构建、四个 `node --check` 与 `git diff --check` 通过；未实施优化、未修改 `source/`、未提交或推送。
+  - 实际调查报告：`docs/performance/canvas-performance-investigation-report.md`。
+
+- **权威任务第 270 项：收敛连续视口与确定性重复事务。** `已完成；来源：用户批准第 269 项方案后直接要求实施`
+  - 范围：为 wheel / pan 建立每 rAF 至多一次的 viewport preview；交互中以 overlay 根节点相机变换保持标签、图标和测量视觉连续，commit 后才完整重排；`onViewChange` 分离 preview / commit；组合图层使用单一批事务；locate selection 去重并按闪烁相位更新 geometry。
+  - 最小验收：固定输入的最终 camera 不变，交互期不完整重排 overlay 且 DOM 层不消失，commit 后变换清零；labels / zones 组合开关各最多一次 draw / overlay / runtime 同步；locate 保持约 `2.6s` 产品时长且 selection rebuild 数量受相位上限约束；picking、selection、测量和 PNG 结果不退化。
+  - 排除：不改地图数据、标签预算、碰撞规则、默认图层、业务 API、生成算法或 `source/`。
+  - 完成记录：wheel / pan 现按 rAF 合并 preview，每个输入仍立即推进 camera、版本号与 idle commit 取消；交互期 WebGL 使用最新 camera，DOM / SVG overlay 与 measurement overlay 使用已提交 camera 到当前 camera 的根变换连续跟随，commit 后清除临时变换并只完整重排一次。100k 三轮均为 zoom `18 preview / 18 draw / 0 overlay`、pan `47 / 47 / 0`，相同输入同步触发 `12` 次 wheel 时严格合并为 `1 preview / 1 draw / 0 overlay`。labels、markers/resources、zones 五成员组合均收敛为至多 `1` 次 refresh / draw / overlay；locate 保留约 `2.6s` 闪烁，最终样本为 `16 draw / 15 selection mesh / 1 overlay`。
+
+- **权威任务第 271 项：优化装载、颜色切换与低频大事务。** `已完成；来源：第 269 项 P1 建议`
+  - 范围：同次岸线构建复用相同安全探针；视觉 cell 的严格凸边界使用等价线性验证，非凸和失败边界保留完整安全回退；颜色专题复用现有 cell geometry / TypedArray，只更新颜色与确实随专题变化的岸线修正层；route / river 保持 idle 异步与版本取消。
+  - 最小验收：三档 cell mesh / 岸线拓扑统计、顶点数、像素与对象保护不变；100k `cell-visual-mesh + shore-cache`、`height ↔ states` 相对合并后基线下降并报告实际值；fit、路线、河流、取消、旧图与导出回归通过。
+  - 排除：不改海岸算法参数、保护门禁、线宽、picking、地图生成或数据格式，不把高风险 worker / shader extrusion 混入本批。
+  - 完成记录：严格凸的已清理 cell 边界在保持相同 earcut 结果后改用线性等价验证，非凸、退化和失败路径保留原完整自交 / 覆盖 / 硬边界回退；岸线同次构建缓存相同 side-safety 探针；颜色专题复用现有 visual-cell geometry 与 TypedArray，仅重写颜色 / side 和专题相关海岸修正层。100k 三轮中 `cell-visual-mesh + shore-cache` 中位由 `9657.9ms` 降为 `7069.4ms`，下降 `26.8%`；`loadMap` 中位由 `12085.7ms` 降为 `8656.2ms`，下降 `28.4%`。100k 状态门禁中 `states / height` 分别为 `139.2 / 138.0ms`，均记录 `geometryReused=true`。
+
+- **权威任务第 272 项：建立画布性能回归门禁并完成真实浏览器验收。** `已完成；来源：第 269 项 P2 建议`
+  - 范围：在现有 profile 上增加 preview / overlay transform / 批图层 / locate 事件预算；生产构建后串行执行专项回归，并用隔离系统 Chrome 覆盖 10k / 50k / 100k 完整图层和 100k 状态动作，形成优化前后报告。
+  - 最小验收：事件预算、状态恢复、checksum / revision、camera / layers / selection、console / page / WebGL / health error 全部通过；绝对毫秒按独立进程报告中位数与范围，不以单轮波动掩盖回归；`git diff --check` 与 `source/` 零改动通过，最后中文提交并推送当前分支。
+  - 排除：不迁移标签渲染架构，不把 no-DOM 消融当产品目标，不声称没有 GPU timestamp 的硬件耗时。
+  - 完成记录：overlay profile 新增同步输入 coalescing、preview / draw / overlay 数量、DOM 与 measurement transform 连续性门禁；状态 profile 覆盖 surface geometry 复用、labels / markers / zones 批事务和 locate 相位预算。系统 Chrome 串行完成 10k / 50k / 100k、100k measurement-heavy、100k 状态动作及三轮 100k E2E；生产构建、视口线层纯算法 / 浏览器、标签布局、selection、PNG、测量导入、海岸纯算法 / 浏览器回归均通过，checksum / revision、camera / layers / selection 恢复、console / page / WebGL 错误门禁通过。可见浏览器人工检查确认缩放中标签、图标与覆盖层不断层，commit 和适配视图正常。10k 单轮旧绝对 idle-frame `80ms` 观察线仍记录 zoom / pan `141.1 / 112.0ms`，属于报告保留的长任务波动，不影响事件预算结论，也未被伪装为硬件 SLA。实际优化报告见 `docs/performance/canvas-performance-optimization-report.md`。
+
+- **第 270～272 项统一执行约束。**
+  - 专题施工图：`docs/task-notes/canvas-performance-optimization-plan.md`。
+  - 严格按第 270 → 271 → 272 项执行；一项达到最小验收后立即转下一项，不从性能报告其它长期候选扩展范围。构建与读取同一 `dist` 的浏览器回归必须串行。
+  - 最终提交前重新 fetch，并确认 `origin/main` 是当前 HEAD 祖先；只暂存本专题文件，中文提交后推送当前分支。
 
 - **第 263～264 项统一执行约束。**
   - 专题施工图：`docs/task-notes/app-and-canvas-icon-system.md`。

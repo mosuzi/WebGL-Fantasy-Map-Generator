@@ -1644,6 +1644,13 @@ select:disabled {
   visibility: hidden;
 }
 
+.map-overlay.map-overlay--interaction-transform,
+.map-stage.map-stage--interaction-transform .measurement-overlay {
+  transform: var(--map-interaction-transform, none);
+  transform-origin: 0 0;
+  will-change: transform;
+}
+
 /* canvas-text-contract: semantic-label-base */
 .city-label,
 .custom-label,
