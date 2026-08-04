@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import {execFileSync} from "node:child_process";
-import {cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync} from "node:fs";
+import {cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {basename, dirname, join, posix, resolve, sep} from "node:path";
 import {fileURLToPath} from "node:url";
@@ -12,6 +12,7 @@ const rootDir = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const source = join(rootDir, "docs", "wiki");
 const manifestFile = "screenshot-manifest.json";
 const manifestPath = join(source, manifestFile);
+const publishedAssetBase = "https://raw.githubusercontent.com/wiki/mosuzi/WebGL-Fantasy-Map-Generator";
 const publish = process.argv.includes("--publish");
 const allFiles = listFiles(source);
 const markdownFiles = allFiles.filter(name => name.endsWith(".md")).sort();
@@ -46,6 +47,7 @@ for (const name of markdownFiles) {
   if (!/^# /m.test(content) && basename(name) !== "_Sidebar.md") failures.push(`${name} 缺少一级标题`);
   auditInternalLinks(name, content, markdownSet, failures);
   auditImages(name, content, referencedAssets, failures, manifestByFile);
+  auditPublishedImages(name, createPublishedMarkdown(name, content), failures);
 }
 
 const matrixPath = join(source, "能力覆盖矩阵.md");
@@ -320,6 +322,26 @@ function normalizeImageReference(markdownFile, rawTarget, errors, line) {
   return resolved;
 }
 
+function createPublishedMarkdown(markdownFile, content) {
+  return content.replace(/!\[([^\]]*)\]\(([^)]+)\)/gu, (match, alt, rawTarget, offset) => {
+    const localErrors = [];
+    const line = content.slice(0, offset).split(/\r?\n/u).length;
+    const asset = normalizeImageReference(markdownFile, rawTarget, localErrors, line);
+    if (!asset || localErrors.length) return match;
+    return `![${alt}](${publishedAssetBase}/${encodeURI(asset)})`;
+  });
+}
+
+function auditPublishedImages(markdownFile, content, errors) {
+  for (const match of content.matchAll(/!\[[^\]]*\]\(([^)]+)\)/gu)) {
+    const target = String(match[1] || "").trim().replace(/^<|>$/gu, "");
+    const line = content.slice(0, match.index).split(/\r?\n/u).length;
+    if (!target.startsWith(`${publishedAssetBase}/assets/`) || !target.toLowerCase().endsWith(".png")) {
+      errors.push(`${markdownFile}:${line} 发布态图片未转换为 Wiki raw 地址：${target}`);
+    }
+  }
+}
+
 function auditInternalLinks(markdownFile, content, files, errors) {
   for (const match of content.matchAll(/\[[^\]]+\]\(([^)]+)\)/gu)) {
     if (match.index > 0 && content[match.index - 1] === "!") continue;
@@ -396,7 +418,8 @@ function publishWiki(files) {
       const from = join(source, ...name.split("/"));
       const to = join(work, ...name.split("/"));
       mkdirSync(dirname(to), {recursive: true});
-      cpSync(from, to, {recursive: false});
+      if (name.endsWith(".md")) writeFileSync(to, createPublishedMarkdown(name, readFileSync(from, "utf8")), "utf8");
+      else cpSync(from, to, {recursive: false});
     }
     execFileSync("git", ["add", "--all"], {cwd: work, stdio: "inherit"});
     const changed = execFileSync("git", ["status", "--porcelain"], {cwd: work, encoding: "utf8"}).trim();

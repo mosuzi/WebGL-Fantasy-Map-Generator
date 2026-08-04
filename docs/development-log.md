@@ -29605,3 +29605,14 @@ full 矩阵结果：
 - `docs/wiki/` 当前固定为 `20` 个 Markdown 页面、`10` 张长期 PNG 与 `1` 份截图清单，共 `31` 个发布文件。README 中英文版和 Wiki 首页已链接公开 Wiki，并明确仓库内源稿是唯一可追踪、可审计和可重复发布的来源。
 - `audit:wiki`、`audit:ai-docs`、同步脚本语法和 `git diff --check` 通过后执行 `publish:wiki`；远端初始化占位页被正式 `Home`、`_Sidebar`、领域正文、截图和清单完整替换，Wiki 提交为 `5af3eec64ff1f58fcaf450631d3a7b613673223f`。重新克隆后确认远端 `31` 个文件与源稿逐项 SHA-256 一致；公开首页、中文正文页和两张代表图片均返回 `200`，侧栏、跨页导航与主仓库回链可读取。
 - 本项只完成既有第 226 项的外部阻塞解除、发布链收口和状态文档同步，不修改产品行为、地图数据、schema、API、默认偏好或 `source/`；当前没有活动权威任务。
+
+# 2026-08-05：登记第 275 项——修复远端 GitHub Wiki 图片裂图
+
+- 用户反馈远端 Wiki 图片全部裂开。现场读取公开首页的实际 HTML，确认 Markdown `assets/01-主界面与地图.png` 被 GitHub 渲染为 `wiki/assets/01-主界面与地图.png`，浏览器解析后的页面路由返回 `406`；同一 `.wiki.git` 文件的 `raw.githubusercontent.com/wiki/...` 地址返回 `200 image/png`。图片文件本身和上次逐文件哈希发布均正常，根因是发布态 Markdown 图片目标不适用于 GitHub Wiki 页面路由。
+- 第 275 项只修发布转换和页面级验收：仓库源稿继续保留可本地预览的相对路径，发布副本自动改写为稳定 raw 地址；远端验收必须读取页面实际 `<img src>`，覆盖全部 `14` 处引用和 `10` 张唯一图片，不能再用手工构造的正确 URL 代替页面渲染结果。
+
+# 2026-08-05：完成第 275 项——远端 GitHub Wiki 图片恢复
+
+- `webgl-generator-wiki-sync.mjs` 新增发布态 Markdown 转换：只在 `.wiki.git` 临时副本中把 `assets/*.png` 改为 `https://raw.githubusercontent.com/wiki/mosuzi/WebGL-Fantasy-Map-Generator/assets/...`，并对中文文件名做 URI 编码；主仓库 `docs/wiki/` 的相对引用、图片像素和截图清单保持不变。静态 Wiki 审计会同步检查转换后的每处图片目标。
+- `publish:wiki` 生成 Wiki 提交 `f16e2ce25db62469bc11473b9cdecf2e80b8124e`，改写 `12` 个含图页面的 `14` 处引用。重新克隆确认远端仍为 `20` 个 Markdown、`10` 张 PNG 和 `1` 份 JSON，非 Markdown 文件逐字节一致，Markdown 除图片目标转换外与源稿语义一致。
+- 公开页面级验收读取了全部 `12` 个含图页面的实际 HTML：`14` 个 `<img src>` 全部指向预期 Wiki raw 资源，覆盖 `10` 张唯一图片；十个请求均为 `200 image/png`，错误的 `wiki/assets/...` 相对路由为 `0`。真实 Chrome 另确认首页图片 `complete=true`，天然尺寸 `1440×960`，实际渲染为 `896×597`，截图中地图与侧栏完整可见；浏览器验收页随后已清理。`audit:wiki`、`audit:ai-docs`、脚本语法、`git diff --check` 和 `source/` 零改动通过；当前没有活动权威任务。
