@@ -4,7 +4,7 @@
 
 WebGL Fantasy Map Generator is made for worldbuilding, tabletop RPGs, alternate-history writing, and anyone who simply enjoys maps. It takes inspiration from how [Fantasy Map Generator](https://github.com/Azgaar/Fantasy-Map-Generator) generates and presents a world, as well as its visual style. The application itself was built from scratch, independently of the original project. You can generate a complete map in a few steps, then inspect, revise, and keep developing the world it describes.
 
-[Try it online](https://fmg.mosuzi.top/) · [Quick start](#quick-start) · [Documentation](#documentation-guide)
+[Try it online](https://fmg.mosuzi.top/) · [Development story (Chinese)](https://mosuzi.com/docs/webgl-fantasy-map-generator-development/) · [Quick start](#quick-start) · [Documentation](#documentation-guide)
 
 | Natural relief | State view |
 |---|---|
@@ -31,6 +31,10 @@ The project provides several supported entry points for scripts and AI-assisted 
 Before an AI tool can work with the current tab, the user must explicitly enable the controlled bridge from the page. The bridge starts read-only and keeps its authorization state visible. High-impact changes still require inspection, explicit confirmation, version checks, and transactional rollback. It neither runs arbitrary scripts nor bypasses the map's editing rules.
 
 This README only outlines what each entry point is for. For exact methods, inputs, and safety boundaries, see [API and automation (Chinese)](./docs/wiki/API与自动化.md). To hand a map to an AI client, begin with the [AI handoff guide (Chinese)](./docs/ai/README.md).
+
+## Development story
+
+The Chinese article [*Building a WebGL fantasy map generator from scratch with AI*](https://mosuzi.com/docs/webgl-fantasy-map-generator-development/) traces the project from its SVG performance baseline and WebGL2 prototype through the independent generator, older-map compatibility, controlled AI APIs, browser acceptance, coastline topology, performance work, and the desktop-packaging experiment.
 
 ## Quick start
 

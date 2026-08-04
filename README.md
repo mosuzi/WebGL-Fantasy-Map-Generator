@@ -4,7 +4,7 @@
 
 WebGL 幻想地图生成器适合世界构建、TRPG 主持、架空历史创作，也适合单纯喜欢地图的人。项目借鉴 [Fantasy Map Generator](https://github.com/Azgaar/Fantasy-Map-Generator) 生成和呈现世界的思路与视觉风格，应用本身从头独立开发。打开页面即可生成一幅完整地图，之后还可以继续查看、推演和修改其中的世界。
 
-[在线体验](https://fmg.mosuzi.top/) · [快速开始](#快速开始) · [文档导览](#文档导览)
+[在线体验](https://fmg.mosuzi.top/) · [开发故事](https://mosuzi.com/docs/webgl-fantasy-map-generator-development/) · [快速开始](#快速开始) · [文档导览](#文档导览)
 
 | 自然地貌 | 国家视角 |
 |---|---|
@@ -31,6 +31,10 @@ WebGL 幻想地图生成器适合世界构建、TRPG 主持、架空历史创作
 AI 操作当前标签页前，须由用户在页面中明确开启受控桥。该桥默认只读，授权状态始终可见。高影响修改仍需经过预检、显式确认、版本检查和事务回滚，受控桥不提供任意脚本执行，也不能绕过地图自身的编辑规则。
 
 README 只说明各入口的用途。精确方法、输入格式和安全边界见 [API 与自动化](./docs/wiki/API与自动化.md)；让 AI 接手地图的步骤见 [AI 接手入口](./docs/ai/README.md)。
+
+## 开发故事
+
+从 SVG 性能基线、WebGL2 原型到独立生成器、旧图兼容和受控 AI API，项目的开发方法、阶段历程与主要困难整理在[《我用 AI 从零开发了一款 WebGL 幻想地图生成器》](https://mosuzi.com/docs/webgl-fantasy-map-generator-development/)中。文章也记录了真实浏览器验收、海岸拓扑、画布性能以及桌面打包试验背后的取舍。
 
 ## 快速开始
 
