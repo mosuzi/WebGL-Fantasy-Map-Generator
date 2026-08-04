@@ -29582,3 +29582,19 @@ full 矩阵结果：
 - 状态门禁中 `states / height` 均只产生 `1 surface refresh / 1 draw / 1 overlay` 且复用 geometry；labels、markers/resources、zones 批事务预算保持；locate 为 `2658.1ms / 16 draw / 15 selection mesh / 1 overlay`。measurement-heavy 交互 overlay 为 `0`，测量根变换连续性通过。
 - 生产构建、脚本语法、视口线层、标签布局、selection、PNG、measurement、海岸纯算法与完整系统 Chrome 回归通过。pnpm 包装器因网络获取 `@pnpm/exe` 在测试启动前失败，改用 package script 对应的本地 Node 入口完成同一回归；10k / 50k 海岸错侧像素、针、冲突、重复、seam 与 unfilled 均为 `0`。
 - 可见浏览器检查生产页，缩放时标签、图标和道路持续显示，commit 后与“适配视图”恢复正确，error 日志为 `0`；验收服务、页面、任务进程和端口已清理。实际复评已追加到 `docs/performance/canvas-performance-optimization-report.md`，未新增性能实现或推送 `main`，当前没有活动权威任务。
+
+# 2026-08-04：登记第 274 项——扩写 Wiki 功能手册与截图说明
+
+- 用户直接指出现有 Wiki 过于简陋，缺少具体功能描述和必要截图。只读盘点确认 `docs/wiki/` 只有 12 个 Markdown 页面、合计 193 行，图片引用为 `0`；多数正文只有 `8～22` 行，无法指导用户完成真实操作。
+- 现有 `audit:wiki` 只检查六个必需页、一级标题、内部链接和 API 命名空间方法数，所以当前简页仍会报告通过。第 226 项原施工图已明确要求细致功能说明、操作步骤、概念解释和截图，本项按连续编号登记为第 274 项，修复原验收缺口。
+- 范围冻结为 Wiki 信息架构、正文、长期图片资产、确定性系统 Chrome 截图脚本及递归同步 / 审计；不修改产品功能、schema、API、默认偏好或 `source/`，不读取私有案例或令牌，不改变仓库可见性，不尝试绕过远端 Wiki 套餐限制，也不提交或推送。
+- 专题施工图为 `docs/task-notes/wiki-functional-manual-and-screenshot-plan.md`。调查阶段确认正式控制面板有七个页签，管理页有五组、二十四个普通用户领域入口，另有对象详情、云端存储和开发模式；后续内容与截图以当前源码和真实生产构建为准，不复用历史数字猜测。
+
+# 2026-08-04：完成第 274 项——中文 Wiki 功能手册与确定性截图链
+
+- `docs/wiki/` 已由 12 个简页、193 行、0 张图片扩展为 20 个中文页面、1544 行、14 处图片引用和 10 张长期 PNG。首页、侧栏、总览和能力矩阵按用户任务导航到生成显示、自然世界、人文世界、表达对象、安全交换与自动化分析；功能页说明入口、用途、关键控件、结果、副作用、历史 / 锁定、安全边界、导出或 API 路由和常见误解。
+- 新增 `webgl-generator-wiki-screenshots.mjs` 与 `screenshot-manifest.json`。固定 `mountains-and-seas` 10k 地图、`1440×960 @ DPR 1`、隔离系统 Chrome 和清空存储构造十个真实 UI 场景；九张保留完整视口，一张从同一全视口做固定无缩放裁切以只呈现导出浮层。高度编辑截图使用真实画布拖选生成 75 处陆地选区，后续场景清理选择；气候面板同时保留全局工具栏、标题、表头和下游区。
+- 两次 clean capture 的十张逐图 SHA-256 和总摘要完全一致，总摘要为 `d449abc847dca78b0fd619c9eb41fdf9f15ad1e09c6365b3ea72195a7dbd2771`。截图门禁直接检查当前 checksum、map identity、生成时间、日期、令牌和 provider identifier 不进入可见文字；application console、page、active health 与 WebGL error 均为 `0`，一次 `main-thread-long-task` 作为独立性能观察保留，专属 Chrome profile 清理为 `0`。
+- Wiki 审计改为递归检查页面、链接、图片、清单、PNG 签名 / 尺寸与发布资产，并从当前代码交叉核对七个页签、十二种专题、五组二十二个图层开关、五组二十四个管理入口、二十九个注册面板和 24 / 24 领域标题归属；20 页、10 图、17 个 API 命名空间及图片 alt / 图注 / 清单三方一致性全部通过。递归 `--publish` 会同步 Markdown、manifest 与图片资产，不再只复制顶层页面。
+- AI 文档同步、控制面板信息架构、两脚本语法、仓库内 Vite 生产构建、`git diff --check` 和 `source/` 零改动通过；`pnpm` 包装器因受限网络尝试获取自身而在项目命令前失败，最终使用仓库内同一 Node / Vite 入口完成门禁。首轮独立复核提出的截图状态 / 裁切、敏感字段漏检、核心页导航、UI 分母、领域路由及图注过度描述均已限修，复核与最终观察使均为 `ACCEPT`。
+- 本项未修改产品行为、地图数据、schema、API、默认偏好或 `source/`，未读取私有案例或令牌，未发布远端 Wiki、改变仓库可见性、暂存、提交或推送；当前没有活动权威任务。

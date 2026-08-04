@@ -59,6 +59,7 @@
 - `../deployment/cloud-storage.md`：权威任务第 241、259、261、262 项的云服务部署入口，记录 OAuth 公开配置、Dropbox 独立回调页、Google Drive 存档目录配置与当前标签页会话恢复边界。
 - `panel-loading-and-zone-regeneration.md`：权威任务第 242～244 项施工图，冻结两处面板加载、共享恢复态、云端组件依赖和地区重生成入口、锁定及空集合边界。
 - `headless-api-ai-docs-wiki.md`：权威任务第 223～226 项施工图，冻结共享核心、无头只读边界、区域聚合、三个标准问题、AI 文档机器目录、Wiki 源稿和发布门禁。
+- `wiki-functional-manual-and-screenshot-plan.md`：权威任务第 274 项施工图，冻结中文 Wiki 的人类任务导航、功能说明模板、真实界面截图清单、隐私边界、确定性门禁和递归发布资产链。
 - `editor-and-stat-panel-inventory.md`：正式版编辑器与统计面板清单。
 - `user-facing-shell-debug-export-and-naming-plan.md`：用户外壳、开发模式、导入导出和命名策略计划。
 - `initialization-loading-flow.md`：页面初始化与地图加载流程规约，记录阶段边界、预算和 Chrome 验证要求。

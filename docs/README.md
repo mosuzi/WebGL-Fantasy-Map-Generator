@@ -28,6 +28,7 @@
 - `deployment/`：部署说明和线上环境约定。
 - `task-notes/`：可入库的专题计划、评估记录、执行细则和功能积压。新增专题前先读 `task-notes/README.md`，并同步更新该索引。
 - `assets/readme/`：由仓库内确定性工具生成、需要随中英文 README 长期入库的展示图片；本地调查截图仍放在 `generated/`。
+- `wiki/assets/`：由固定 `mountains-and-seas` 夹具和隔离系统 Chrome 确定性生成、随中文 Wiki 长期入库的功能说明截图；场景、alt 与图注以 `wiki/screenshot-manifest.json` 为准，审计要求每处 Markdown 引用与之完全一致。
 
 ## 本地或生成内容
 
@@ -41,7 +42,7 @@
 - 长期架构约束放入 `architecture/`。
 - 阶段验收或总体路线放入 `plans/` 或 `milestones/`。
 - 某个功能、专题、source 对照或后续施工图放入 `task-notes/`，并维护 `task-notes/README.md`。
-- 脚本生成的 JSON、Markdown 报告、截图和 profile 输出放入 `generated/`。
+- 脚本生成的 JSON、Markdown 报告、调查截图和 profile 输出放入 `generated/`；只有 `assets/readme/` 与 `wiki/assets/` 中经过确定性工具和审计约束的长期图片例外。
 - 本地 dev server、preview server 和临时静态服务日志放入 `local-logs/`。
 
 如果某个生成报告需要长期保留，应先整理为总结性文档，再放入上面的长期文档目录。`docs/` 根目录出现新的 `.log`、截图或生成报告时，应优先移动到 `local-logs/` 或 `generated/`，不要让根目录重新堆积。

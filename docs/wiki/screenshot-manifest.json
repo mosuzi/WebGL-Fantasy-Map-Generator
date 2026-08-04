@@ -1,0 +1,183 @@
+{
+  "schemaVersion": 1,
+  "capture": {
+    "seed": "mountains-and-seas",
+    "cellsTarget": 10000,
+    "heightmapTemplate": "continents",
+    "statesNumber": 12,
+    "provincesRatio": 30,
+    "viewport": {
+      "width": 1440,
+      "height": 960,
+      "deviceScaleFactor": 1
+    },
+    "browser": "isolated-system-chrome",
+    "source": "production-dist"
+  },
+  "scenes": [
+    {
+      "id": "wiki-01",
+      "file": "assets/01-主界面与地图.png",
+      "title": "主界面与地图",
+      "alt": "固定山海地图与左上全局工具栏",
+      "caption": "图：主界面显示地图画布，以及控制面板、适配视图、测量和工具栏收起入口。",
+      "theme": "atlas",
+      "viewMode": "states",
+      "visibleLayers": ["routes", "rivers", "cities", "labels", "stateLabels", "population", "scaleBar", "coastline", "lakeShore", "stateBorders"],
+      "ui": {
+        "type": "overview",
+        "targetSelector": "#map-canvas"
+      }
+    },
+    {
+      "id": "wiki-02",
+      "file": "assets/02-生成与项目设置.png",
+      "title": "生成与项目设置",
+      "alt": "生成页中的地图名称、种子、规模和存档命名设置",
+      "caption": "图：生成页集中设置地图名称、种子、规模、地形与稳定的存档文件名模板。",
+      "theme": "atlas",
+      "viewMode": "states",
+      "visibleLayers": ["routes", "rivers", "cities", "labels", "stateLabels", "population", "scaleBar", "coastline", "lakeShore", "stateBorders"],
+      "ui": {
+        "type": "control",
+        "tab": "generation",
+        "targetSelector": "[data-control-panel=\"generation\"]",
+        "openFilenameSettings": true
+      }
+    },
+    {
+      "id": "wiki-03",
+      "file": "assets/03-专题与图层.png",
+      "title": "专题与图层",
+      "alt": "国家专题地图与图层分类开关面板",
+      "caption": "图：国家专题视图下，图层页可独立控制水文、边界、对象、地区和标注。",
+      "theme": "atlas",
+      "viewMode": "states",
+      "visibleLayers": ["routes", "rivers", "cities", "labels", "stateLabels", "population", "scaleBar", "coastline", "lakeShore", "stateBorders"],
+      "ui": {
+        "type": "control",
+        "tab": "layers",
+        "targetSelector": "[data-control-panel=\"layers\"]"
+      }
+    },
+    {
+      "id": "wiki-04",
+      "file": "assets/04-高度编辑.png",
+      "title": "高度编辑",
+      "alt": "高度专题地图、高度编辑面板与黄色平滑选区",
+      "caption": "图：高度编辑已启用，地图上的黄色高亮是已涂选的平滑范围；尚未应用，所以地图数据与历史不变。",
+      "theme": "default",
+      "viewMode": "height",
+      "visibleLayers": ["rivers", "scaleBar", "coastline", "lakeShore"],
+      "ui": {
+      "type": "panel",
+      "openerId": "open-height-panel",
+      "panelId": "height-panel",
+      "readyText": "启用高度编辑",
+      "requiredText": "已选 ",
+      "heightSelection": {"start": [930, 420], "end": [1040, 520]}
+      }
+    },
+    {
+      "id": "wiki-05",
+      "file": "assets/05-气候生态与人口.png",
+      "title": "气候生态与人口",
+      "alt": "降水专题地图与气候统计下游更新区",
+      "caption": "图：气候统计面板保留标题与全局工具栏，同时显示温度带摘要和“更新受气候影响的内容”范围。",
+      "theme": "default",
+      "viewMode": "precipitation",
+      "visibleLayers": ["rivers", "scaleBar", "coastline", "lakeShore"],
+      "ui": {
+      "type": "panel",
+      "openerId": "open-climate-panel",
+      "panelId": "climate-panel",
+      "requiredText": "更新受气候影响的内容",
+      "requiredVisibleSelectors": [
+        "#open-generation-panel",
+        ".floating-panel[data-panel-id=\"climate-panel\"] .floating-panel-header",
+        ".climate-downstream-rebuild"
+      ]
+      }
+    },
+    {
+      "id": "wiki-06",
+      "file": "assets/06-政治与聚落.png",
+      "title": "政治与聚落",
+      "alt": "国家专题地图与国家编辑面板",
+      "caption": "图：国家编辑面板显示国家统计、筛选、锁定、定位和对象列表；画布显示国家与省份名称。",
+      "theme": "atlas",
+      "viewMode": "states",
+      "visibleLayers": ["routes", "rivers", "cities", "labels", "stateLabels", "provinceLabels", "population", "scaleBar", "coastline", "lakeShore", "stateBorders", "provinceBorders"],
+      "ui": {
+        "type": "panel",
+        "openerId": "open-state-panel",
+        "panelId": "state-panel",
+        "requiredText": "重新生成国家"
+      }
+    },
+    {
+      "id": "wiki-07",
+      "file": "assets/07-文化宗教与人口.png",
+      "title": "文化宗教与人口",
+      "alt": "文化专题地图与文化管理面板",
+      "caption": "图：文化管理面板显示文化统计、继承树入口、筛选、锁定、定位和对象列表；画布按文化着色。",
+      "theme": "atlas",
+      "viewMode": "cultures",
+      "visibleLayers": ["rivers", "cities", "labels", "stateLabels", "scaleBar", "coastline", "lakeShore", "stateBorders"],
+      "ui": {
+        "type": "panel",
+        "openerId": "open-culture-panel",
+        "panelId": "culture-panel",
+        "requiredText": "文化树总览"
+      }
+    },
+    {
+      "id": "wiki-08",
+      "file": "assets/08-路线经济与军事.png",
+      "title": "路线经济与军事",
+      "alt": "道路与军事图层上的经济总览面板",
+      "caption": "图：经济总览面板打开“商品”范围，显示商品、市场、交易摘要与商品列表；画布同时显示道路和军事标记。",
+      "theme": "atlas",
+      "viewMode": "states",
+      "visibleLayers": ["routes", "rivers", "cities", "labels", "stateLabels", "resources", "markers", "military", "warFronts", "scaleBar", "coastline", "lakeShore", "stateBorders"],
+      "ui": {
+        "type": "panel",
+        "openerId": "open-economy-panel",
+        "panelId": "economy-panel",
+        "readySelector": ".floating-panel[data-panel-id=\"economy-panel\"] .economy-panel-summary"
+      }
+    },
+    {
+      "id": "wiki-09",
+      "file": "assets/09-地区与标注.png",
+      "title": "地区与标注",
+      "alt": "区域专题地图与地区管理面板",
+      "caption": "图：地区管理面板显示纹理图例、地区统计、筛选和对象列表；画布按地区范围与名称呈现。",
+      "theme": "atlas",
+      "viewMode": "regions",
+      "visibleLayers": ["routes", "rivers", "cities", "labels", "stateLabels", "markers", "resources", "zones", "zoneEvents", "zoneNatural", "zoneWilderness", "zoneLabels", "measurements", "scaleBar", "coastline", "lakeShore", "stateBorders"],
+      "ui": {
+        "type": "panel",
+        "openerId": "open-zone-panel",
+        "panelId": "zone-panel",
+        "requiredText": "纹理含义"
+      }
+    },
+    {
+      "id": "wiki-10",
+      "file": "assets/10-保存与导出.png",
+      "title": "保存与导出",
+      "alt": "地图画布上的导出浮层",
+      "caption": "图：导出浮层区分快速图片、完整地图数据和可按需展开的高级导出选项。",
+      "theme": "atlas",
+      "viewMode": "states",
+      "clip": {"x": 610, "y": 350, "width": 390, "height": 300},
+      "visibleLayers": ["routes", "rivers", "cities", "labels", "stateLabels", "population", "scaleBar", "coastline", "lakeShore", "stateBorders"],
+      "ui": {
+      "type": "export",
+      "tab": "about",
+      "targetSelector": "[data-overlay-id=\"project-export\"]"
+      }
+    }
+  ]
+}
