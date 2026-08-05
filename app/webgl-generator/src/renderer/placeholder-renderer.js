@@ -5,7 +5,7 @@ import {createRenderContext, worldToNdcPoint, worldToScreenPixel} from "./render
 import {colorForCell, isLandCell} from "./color-modes.js";
 import {politicalSurfaceMeshForMode, pushGridCells, pushMeshSurfaceVertices, shouldDrawGridCellUnderPoliticalMesh} from "./cell-surface-layer.js";
 import {buildCellVisualGridVertices, buildCellVisualMesh, emptyCellVisualMesh, summarizeCellVisualMesh} from "./cell-visual-layer.js";
-import {buildSelectionMeshVertices, selectionHighlightMode} from "./selection-layer.js";
+import {buildSelectionMeshBundle, drawSelectionMeshBatches, emptySelectionDrawRanges, selectionHighlightMode} from "./selection-layer.js";
 import {buildHeightCellSelectionMesh, buildHeightTransformPreviewMesh, emptyHeightCellSelectionStats, emptyHeightTransformPreviewStats} from "./height-transform-preview-layer.js";
 import {pushZoneTextureLayer} from "./zone-layer.js";
 import {
@@ -29,7 +29,7 @@ import {
   pushShoreLineLayers,
   summarizeShoreVisualPaths
 } from "./shore-layer.js";
-import {withSurfaceSideAlpha} from "./surface-side-depth.js";
+import {drawLandMaskedTriangles, withSurfaceSideAlpha} from "./surface-side-depth.js";
 import {
   PROVINCE_VISUAL_STYLE,
   STATE_VISUAL_STYLE,
@@ -225,6 +225,7 @@ export class PlaceholderMapRenderer {
     this.tradeFlowPickItems = [];
     this.riverVertexCount = 0;
     this.selectionVertexCount = 0;
+    this.selectionDrawRanges = emptySelectionDrawRanges();
     this.heightTransformPreviewVertexCount = 0;
     this.heightTransformPreviewBuildMs = 0;
     this.heightTransformPreviewStats = emptyHeightTransformPreviewStats();
@@ -442,6 +443,8 @@ export class PlaceholderMapRenderer {
     this.routeVertexCount = 0;
     this.routeDrawRanges = emptyRouteDrawRanges();
     this.riverVertexCount = 0;
+    this.selectionVertexCount = 0;
+    this.selectionDrawRanges = emptySelectionDrawRanges();
     this.tradeFlowVertexCount = 0;
     this.tradeFlowPickItems = [];
     this.tradeFlowBuildMs = 0;
@@ -544,6 +547,8 @@ export class PlaceholderMapRenderer {
     this.routeVertexCount = 0;
     this.routeDrawRanges = emptyRouteDrawRanges();
     this.riverVertexCount = 0;
+    this.selectionVertexCount = 0;
+    this.selectionDrawRanges = emptySelectionDrawRanges();
     this.tradeFlowVertexCount = 0;
     this.tradeFlowPickItems = [];
     this.tradeFlowBuildMs = 0;
@@ -1192,7 +1197,7 @@ export class PlaceholderMapRenderer {
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
     if (this.layerVisibility.rivers) {
-      gl.drawArrays(gl.TRIANGLES, 0, this.riverVertexCount);
+      drawLandMaskedTriangles(gl, {first: 0, count: this.riverVertexCount});
       if (this.riverVertexCount > 0) layerOrder.push("rivers");
     }
     gl.disable(gl.BLEND);
@@ -1238,7 +1243,7 @@ export class PlaceholderMapRenderer {
     bindVertexBuffer(gl, this.locations);
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-    if (drawDirtyDynamicBuffers || !this.dynamicBuffersDirty.selection) gl.drawArrays(gl.TRIANGLES, 0, this.selectionVertexCount);
+    if (drawDirtyDynamicBuffers || !this.dynamicBuffersDirty.selection) drawSelectionMeshBatches(gl, this.selectionDrawRanges);
     gl.disable(gl.BLEND);
     gl.bindBuffer(gl.ARRAY_BUFFER, this.pointBuffer);
     gl.uniform1i(this.locations.pointMode, 1);
@@ -1657,8 +1662,9 @@ export class PlaceholderMapRenderer {
     const startedAt = performance.now();
     const event = this.beginPerformanceEvent("selectionMesh", {mode: "sync"}, startedAt);
     try {
-      const selectionVertices = buildSelectionMeshVertices(this.map, this.camera, this.canvas, this.selection, this.locateFlash, this.objectHighlights, this.riverWaypointPreview);
+      const {vertices: selectionVertices, drawRanges} = buildSelectionMeshBundle(this.map, this.camera, this.canvas, this.selection, this.locateFlash, this.objectHighlights, this.riverWaypointPreview);
       this.selectionVertexCount = selectionVertices.length / 6;
+      this.selectionDrawRanges = drawRanges;
       const upload = this.recordBufferUpload("selection-screen-mesh", () => {
         this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.selectionBuffer);
         this.gl.bufferData(this.gl.ARRAY_BUFFER, selectionVertices, this.gl.DYNAMIC_DRAW);

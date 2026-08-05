@@ -164,6 +164,10 @@ export function inspectRiverVisualWaypoint(map, riverId, packCell) {
   if (!river) return invalidRiverVisualWaypoint("river-missing", `找不到河流 #${id}`);
   const point = map?.pack?.cells?.p?.[cell];
   if (!Number.isInteger(cell) || !isPoint(point)) return invalidRiverVisualWaypoint("invalid-cell", "河道控制点必须位于有效 pack cell");
+  const candidateHeight = Number(map?.pack?.cells?.h?.[cell]);
+  if (Number.isFinite(candidateHeight) && candidateHeight < 20) {
+    return {...invalidRiverVisualWaypoint("waypoint-water", "河道控制点必须位于陆地"), riverId: id, packCell: cell};
+  }
   const points = (river.points || []).filter(isPoint).map(item => [...item]);
   if (points.length < 2) return invalidRiverVisualWaypoint("path-too-short", "河流缺少可编辑的成品折线");
   if (points.some(item => Math.hypot(item[0] - point[0], item[1] - point[1]) < 0.25)) {
@@ -184,6 +188,29 @@ export function inspectRiverVisualWaypoint(map, riverId, packCell) {
   }
   const flux = Math.round((Number(points[nearest.index]?.[2]) || 0) + ((Number(points[nearest.index + 1]?.[2]) || 0) - (Number(points[nearest.index]?.[2]) || 0)) * nearest.amount);
   const nextPoint = [roundCoordinate(point[0]), roundCoordinate(point[1]), Math.max(0, flux)];
+  const originalWater = segmentWaterSummary(map, points[nearest.index], points[nearest.index + 1]);
+  const candidateWater = mergeWaterSummaries(
+    segmentWaterSummary(map, points[nearest.index], nextPoint),
+    segmentWaterSummary(map, nextPoint, points[nearest.index + 1])
+  );
+  const waterTolerance = packSampleSpacing(map) * 1.25;
+  const addedWaterCells = [...candidateWater.cells].filter(waterCell => !originalWater.cells.has(waterCell));
+  const addsWater = addedWaterCells.length > 0 || candidateWater.exposure > originalWater.exposure + waterTolerance;
+  if (addsWater) {
+    return {
+      ...invalidRiverVisualWaypoint("waypoint-crosses-water", "候选折线会比原河段新增穿越水域"),
+      riverId: id,
+      packCell: cell,
+      insertIndex: nearest.index + 1,
+      distance: nearest.distance,
+      maxDistance,
+      originalWaterExposure: originalWater.exposure,
+      candidateWaterExposure: candidateWater.exposure,
+      originalWaterCells: [...originalWater.cells],
+      candidateWaterCells: [...candidateWater.cells],
+      addedWaterCells
+    };
+  }
   const nextPoints = [...points.slice(0, nearest.index + 1), nextPoint, ...points.slice(nearest.index + 1)];
   return {
     valid: true,
@@ -198,6 +225,63 @@ export function inspectRiverVisualWaypoint(map, riverId, packCell) {
     points: nextPoints,
     length: polylineLength(nextPoints)
   };
+}
+
+function segmentWaterSummary(map, start, end) {
+  const points = map?.pack?.cells?.p || [];
+  const heights = map?.pack?.cells?.h;
+  if (!heights || !isPoint(start) || !isPoint(end) || !points.length) return emptyWaterSummary();
+  const length = Math.hypot(Number(end[0]) - Number(start[0]), Number(end[1]) - Number(start[1]));
+  if (!(length > 0)) return emptyWaterSummary();
+  const spacing = packSampleSpacing(map);
+  const samples = Math.min(64, Math.max(2, Math.ceil(length / spacing)));
+  const stepLength = length / samples;
+  let exposure = 0;
+  const cells = new Set();
+  for (let sample = 1; sample < samples; sample++) {
+    const amount = sample / samples;
+    const x = Number(start[0]) + (Number(end[0]) - Number(start[0])) * amount;
+    const y = Number(start[1]) + (Number(end[1]) - Number(start[1])) * amount;
+    const nearestCell = nearestPackCell(points, x, y);
+    const height = Number(heights[nearestCell]);
+    if (Number.isFinite(height) && height < 20) {
+      exposure += stepLength;
+      cells.add(nearestCell);
+    }
+  }
+  return {exposure, cells};
+}
+
+function mergeWaterSummaries(...summaries) {
+  const merged = emptyWaterSummary();
+  for (const summary of summaries) {
+    merged.exposure += summary.exposure;
+    for (const cell of summary.cells) merged.cells.add(cell);
+  }
+  return merged;
+}
+
+function emptyWaterSummary() {
+  return {exposure: 0, cells: new Set()};
+}
+
+function packSampleSpacing(map) {
+  const points = map?.pack?.cells?.p || [];
+  return Math.max(0.25, pointCloudDiagonal(points) / Math.max(12, Math.sqrt(Math.max(1, points.length)) * 4));
+}
+
+function nearestPackCell(points, x, y) {
+  let nearest = -1;
+  let minimum = Infinity;
+  for (let index = 0; index < points.length; index++) {
+    const point = points[index];
+    if (!isPoint(point)) continue;
+    const distance = (Number(point[0]) - x) ** 2 + (Number(point[1]) - y) ** 2;
+    if (distance >= minimum) continue;
+    minimum = distance;
+    nearest = index;
+  }
+  return nearest;
 }
 
 function riverVisualWaypointMaxDistance(map, points, segmentIndex) {

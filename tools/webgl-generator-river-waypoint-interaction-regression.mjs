@@ -49,6 +49,17 @@ assert.equal(far.code, "waypoint-too-far");
 assert.ok(far.distance > far.maxDistance);
 assert.throws(() => history.execute(createAddRiverVisualWaypointCommand(river.id, 4), {map}), /超过允许/);
 assert.equal(history.getStats().undo, 0, "无效或过远候选不得写历史");
+const water = inspectRiverVisualWaypoint(map, river.id, 5);
+assert.equal(water.valid, false);
+assert.equal(water.code, "waypoint-water", "水域 pack cell 必须在距离计算前被拒绝");
+const crossingMap = createCrossingFixture();
+const crossing = inspectRiverVisualWaypoint(crossingMap, river.id, 2);
+assert.equal(crossing.valid, false);
+assert.equal(crossing.code, "waypoint-crosses-water", "候选总穿水长度相近但新增水域 cell 时必须拒绝");
+assert.deepEqual(crossing.originalWaterCells, [1]);
+assert.deepEqual(crossing.addedWaterCells, [6]);
+const legalMouth = inspectRiverVisualWaypoint(createLegalMouthFixture(), river.id, 2);
+assert.equal(legalMouth.valid, true, legalMouth.reason || "只经过原有河口水域 cell 的候选必须合法");
 
 for (const metadata of [
   {graphWidth: 100, graphHeight: 100},
@@ -198,7 +209,57 @@ function createFixture() {
   };
   return {
     metadata: {graphWidth: 100, graphHeight: 100},
-    pack: {cells: {p: [[0, 0], [10, 10], [5, 2], [7, 10], [80, 80]]}, rivers: [targetRiver]},
+    pack: {cells: {p: [[0, 0], [10, 10], [5, 2], [7, 10], [80, 80], [6, 4]], h: [35, 32, 30, 30, 30, 10]}, rivers: [targetRiver]},
+    rivers: {rivers: [targetRiver], metadata: {maxFlux: 30}}
+  };
+}
+
+function createCrossingFixture() {
+  const targetRiver = {
+    id: 7,
+    name: "穿水测试河",
+    points: [[0, 0, 10], [10, 0, 30]],
+    cells: [0, 1],
+    parent: 0,
+    basin: 7,
+    flux: 30,
+    discharge: 30,
+    length: 10
+  };
+  return {
+    metadata: {graphWidth: 10, graphHeight: 5},
+    pack: {
+      cells: {
+        p: [[0, 0], [10, 0], [5, 0.8], [2.5, 0], [5, 0], [7.5, 0], [3.5, 0.9]],
+        h: [30, 10, 30, 30, 30, 30, 10]
+      },
+      rivers: [targetRiver]
+    },
+    rivers: {rivers: [targetRiver], metadata: {maxFlux: 30}}
+  };
+}
+
+function createLegalMouthFixture() {
+  const targetRiver = {
+    id: 7,
+    name: "合法河口测试河",
+    points: [[0, 0, 10], [10, 0, 30]],
+    cells: [0, 1],
+    parent: 0,
+    basin: 7,
+    flux: 30,
+    discharge: 30,
+    length: 10
+  };
+  return {
+    metadata: {graphWidth: 10, graphHeight: 5},
+    pack: {
+      cells: {
+        p: [[0, 0], [10, 0], [5, 0.4], [2.5, 0], [5, 0], [7.5, 0]],
+        h: [30, 10, 30, 30, 30, 30]
+      },
+      rivers: [targetRiver]
+    },
     rivers: {rivers: [targetRiver], metadata: {maxFlux: 30}}
   };
 }

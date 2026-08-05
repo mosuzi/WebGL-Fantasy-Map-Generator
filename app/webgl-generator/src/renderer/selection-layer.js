@@ -5,6 +5,7 @@ import {OBJECT_KIND, POLITICAL_OBJECT_FIELD, isPoliticalObjectKind} from "../run
 import {parseDiplomacyRelationIdentity} from "../runtime/diplomacy-relations.js";
 import {compositeConnectorPoints, compositeConnectorSelectionColor} from "./composite-connectors.js";
 import {sampleOceanCurrent} from "../generator/ocean-currents.js";
+import {drawLandMaskedTriangles} from "./surface-side-depth.js";
 
 const SELECTION_HIGHLIGHT_COLORS = Object.freeze({
   [OBJECT_KIND.STATE]: [1, 0.86, 0.28, 0.3],
@@ -37,15 +38,41 @@ const SELECTION_SMOOTHING = Object.freeze({
 const MULTI_HIGHLIGHT_COLOR = Object.freeze([1, 0.46, 0.12, 0.72]);
 
 export function buildSelectionMeshVertices(map, camera, canvas, selection, locateFlash, highlights = [], riverWaypointPreview = null) {
-  const vertices = [];
+  return buildSelectionMeshBundle(map, camera, canvas, selection, locateFlash, highlights, riverWaypointPreview).vertices;
+}
+
+export function buildSelectionMeshBundle(map, camera, canvas, selection, locateFlash, highlights = [], riverWaypointPreview = null) {
+  const ordinaryVertices = [];
+  const landMaskedVertices = [];
   const context = createRenderContext(map, {camera, canvas});
-  pushSelectionTarget(vertices, context, selection, locateFlash);
+  pushSelectionTarget(selection?.kind === OBJECT_KIND.RIVER ? landMaskedVertices : ordinaryVertices, context, selection, locateFlash);
   for (const highlight of highlights) {
     if (sameSelectionTarget(selection, highlight)) continue;
-    pushSelectionTarget(vertices, context, highlight, null, MULTI_HIGHLIGHT_COLOR);
+    pushSelectionTarget(highlight?.kind === OBJECT_KIND.RIVER ? landMaskedVertices : ordinaryVertices, context, highlight, null, MULTI_HIGHLIGHT_COLOR);
   }
-  pushRiverWaypointPreview(vertices, context, riverWaypointPreview);
-  return new Float32Array(vertices);
+  pushRiverWaypointPreview(landMaskedVertices, context, riverWaypointPreview);
+  const ordinaryCount = ordinaryVertices.length / 6;
+  const landMaskedCount = landMaskedVertices.length / 6;
+  return {
+    vertices: new Float32Array([...landMaskedVertices, ...ordinaryVertices]),
+    drawRanges: {
+      landMasked: {first: 0, count: landMaskedCount},
+      ordinary: {first: landMaskedCount, count: ordinaryCount}
+    }
+  };
+}
+
+export function emptySelectionDrawRanges() {
+  return {
+    landMasked: {first: 0, count: 0},
+    ordinary: {first: 0, count: 0}
+  };
+}
+
+export function drawSelectionMeshBatches(gl, ranges) {
+  drawLandMaskedTriangles(gl, ranges?.landMasked);
+  const ordinary = ranges?.ordinary;
+  if (ordinary?.count > 0) gl.drawArrays(gl.TRIANGLES, ordinary.first, ordinary.count);
 }
 
 function pushRiverWaypointPreview(vertices, context, preview) {
