@@ -105,7 +105,7 @@ for (const entry of [...hud, ...diagnostic]) {
 const markerBlock = sourceBlock(renderer, "this.markerIconItems = getMarkerIconItems", "this.militaryIconItems = getMilitaryIconItems");
 assert.match(markerBlock, /node\.title = item\.tooltip/);
 assert.match(markerBlock, /node\.setAttribute\("aria-label", item\.tooltip\)/);
-assert.match(markerBlock, /node\.innerHTML = markerIconSvg\(item\)/);
+assert.match(markerBlock, /content\.innerHTML = markerIconSvg\(item\)/);
 assert.doesNotMatch(markerBlock, /textContent|appendLabelNodeText/, "marker 名称被当作画布文字渲染");
 assert.doesNotMatch(renderer, /(?:river|route)-(?:name|label)/i, "河流或道路名称出现画布文字 renderer");
 assert.doesNotMatch(styles, /\.(?:river|route|marker)-(?:label|name-label)(?:\W|$)/i, "未渲染名称出现画布文字 CSS");

@@ -2297,11 +2297,13 @@ function drawTextOverlayElement(context, element, canvasRect, scale) {
   if (!text) return;
   const isStateLabel = element.classList.contains("state-label");
   const isProvinceLabel = element.classList.contains("province-label");
+  const content = element.querySelector(".map-label-content") || element;
   const politicalGlyphs = isStateLabel || isProvinceLabel ? Array.from(element.querySelectorAll(".political-label-glyph")) : [];
-  const box = politicalGlyphs.length ? unionElementBoxes(politicalGlyphs, canvasRect, scale) : elementBox(element, canvasRect, scale);
+  const box = politicalGlyphs.length ? unionElementBoxes(politicalGlyphs, canvasRect, scale) : elementBox(content, canvasRect, scale);
   if (!box || !boxIntersectsCanvas(box, context.canvas)) return;
-  const style = element.ownerDocument.defaultView.getComputedStyle(element);
-  const opacity = exportOverlayOpacity(element, style);
+  const outerStyle = element.ownerDocument.defaultView.getComputedStyle(element);
+  const style = element.ownerDocument.defaultView.getComputedStyle(content);
+  const opacity = exportOverlayOpacity(element, outerStyle);
   if (opacity <= 0) return;
   const isCustomLabel = element.classList.contains("custom-label");
   const background = style.backgroundColor;
@@ -2326,17 +2328,17 @@ function drawTextOverlayElement(context, element, canvasRect, scale) {
       context.save();
       context.translate(glyphBox.x + glyphBox.width / 2, glyphBox.y + glyphBox.height / 2);
       context.rotate(cssRotationDegrees(glyph) * Math.PI / 180);
-      drawTextWithResolvedStyle(context, element, glyph.textContent || "", 0, 0, glyphMaxWidth, scale);
+      drawTextWithResolvedStyle(context, content, glyph.textContent || "", 0, 0, glyphMaxWidth, scale);
       context.restore();
     }
   } else if (isStateLabel || isProvinceLabel) {
     const rotation = cssRotationDegrees(element);
     context.translate(box.x + box.width / 2, box.y + box.height / 2);
     context.rotate(rotation * Math.PI / 180);
-    drawTextWithResolvedStyle(context, element, text, 0, 0, Math.max(40, box.width * 0.92), scale);
+    drawTextWithResolvedStyle(context, content, text, 0, 0, Math.max(40, box.width * 0.92), scale);
   } else {
     const maxWidth = Math.max(20, box.width - (isCustomLabel ? 10 * scale.x : 0));
-    drawTextWithResolvedStyle(context, element, text, box.x + box.width / 2, box.y + box.height / 2, maxWidth, scale);
+    drawTextWithResolvedStyle(context, content, text, box.x + box.width / 2, box.y + box.height / 2, maxWidth, scale);
   }
   context.restore();
 }

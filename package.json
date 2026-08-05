@@ -55,6 +55,7 @@
     "regress:city-icon-label-ratio-browser": "node --no-warnings ./tools/webgl-generator-city-icon-label-ratio-browser-regression.mjs",
     "regress:city-icon-pan-flicker-browser": "node --no-warnings ./tools/webgl-generator-city-icon-pan-flicker-browser-regression.mjs",
     "regress:overlay-pan-stability-browser": "node --no-warnings ./tools/webgl-generator-overlay-pan-stability-browser-regression.mjs",
+    "regress:overlay-text-interaction-stability-browser": "node --no-warnings ./tools/webgl-generator-overlay-text-interaction-stability-browser-regression.mjs",
     "regress:marker-panel-icon": "node --no-warnings ./tools/webgl-generator-marker-panel-icon-regression.mjs",
     "regress:canvas-icons-browser": "node --no-warnings ./tools/webgl-generator-canvas-icons-browser-regression.mjs",
     "regress:provincial-capitals": "node --no-warnings ./tools/webgl-generator-provincial-capital-regression.mjs",

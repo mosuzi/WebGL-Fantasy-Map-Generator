@@ -222,7 +222,7 @@ async function verifyCustomLabelDrag(page) {
   }, screenPoint);
   const selector = `.custom-label[data-label-target-id="${setup.id}"]`;
   await page.locator(selector).waitFor({state: "visible"});
-  const drag = await cancelTrustedDrag(page, selector, {
+  const drag = await cancelTrustedDrag(page, `${selector} .map-label-content`, {
     observedSelector: selector,
     captureSelector: ".map-overlay",
     expectedKind: "custom-label"

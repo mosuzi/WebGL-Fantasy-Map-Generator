@@ -310,6 +310,7 @@ export class PlaceholderMapRenderer {
     this.performanceEvents = createRendererPerformanceEvents();
     this.overlayInteractionSuspended = false;
     this.viewportInteractionKind = null;
+    this.viewportPointerInteractionKind = null;
     this.overlayCommittedCamera = snapshotViewportCamera(this.camera);
     this.overlayPreviewTransform = {scale: 1, translateX: 0, translateY: 0};
     this.viewportPreviewFrame = 0;
@@ -318,12 +319,16 @@ export class PlaceholderMapRenderer {
     this.viewportCommitTimer = 0;
     this.viewportCommitVersion = 0;
     this.viewportCommitEvent = null;
-    installCanvasInteractions(this.canvas, this.camera, () => {
-      this.requestViewportPreview();
+    installCanvasInteractions(this.canvas, this.camera, interaction => {
+      this.requestViewportPreview(interaction);
     }, event => {
       this.onHover(this.pickClientPoint(event.clientX, event.clientY));
     }, event => {
       this.onSelect(this.pickClientPoint(event.clientX, event.clientY));
+    }, interaction => {
+      this.beginViewportPointerInteraction(interaction);
+    }, interaction => {
+      this.endViewportPointerInteraction(interaction);
     });
     this.installDisplayResizeObserver();
   }
@@ -1766,10 +1771,10 @@ export class PlaceholderMapRenderer {
     this.dynamicBuffersDirty.selection = true;
   }
 
-  requestViewportPreview() {
+  requestViewportPreview(interaction = null) {
     if (!this.map) return;
     this.viewportPreviewRequests += 1;
-    this.prepareViewportPreview();
+    this.prepareViewportPreview(interaction?.kind);
     if (this.viewportPreviewFrame) {
       this.viewportPreviewCoalesced += 1;
       return;
@@ -1797,16 +1802,39 @@ export class PlaceholderMapRenderer {
     this.flushViewportPreview();
   }
 
-  prepareViewportPreview() {
+  prepareViewportPreview(interactionKind = null) {
     const committedScale = Number(this.overlayCommittedCamera?.scale ?? this.camera.scale);
-    const nextKind = Math.abs(this.camera.scale - committedScale) < 0.000001 ? "pan" : "zoom";
+    const nextKind = interactionKind || (Math.abs(this.camera.scale - committedScale) < 0.000001 ? "pan" : "zoom");
     if (!this.overlayInteractionSuspended) this.viewportInteractionKind = nextKind;
     else if (nextKind === "zoom") this.viewportInteractionKind = "zoom";
     this.viewportCommitVersion += 1;
     this.suspendOverlayForInteraction();
     this.updateOverlayPreviewTransform();
     this.markViewportBuffersDirty();
-    this.scheduleViewportCommit();
+    if (!this.viewportPointerInteractionKind) {
+      this.scheduleViewportCommit({delayMs: nextKind === "zoom" ? 180 : 120});
+    }
+  }
+
+  beginViewportPointerInteraction(interaction = null) {
+    if (interaction?.kind !== "pan") return;
+    this.viewportPointerInteractionKind = "pan";
+    const view = this.canvas.ownerDocument?.defaultView || globalThis;
+    if (this.viewportCommitTimer && typeof view.clearTimeout === "function") {
+      view.clearTimeout(this.viewportCommitTimer);
+      this.viewportCommitTimer = 0;
+      if (this.viewportCommitEvent) {
+        this.cancelPerformanceEvent(this.viewportCommitEvent, "pointer-interaction", {version: this.viewportCommitEvent.details.version}, performance.now());
+        this.viewportCommitEvent = null;
+      }
+    }
+    if (this.overlayInteractionSuspended) this.viewportCommitVersion += 1;
+  }
+
+  endViewportPointerInteraction(interaction = null) {
+    if (interaction?.kind !== "pan" || this.viewportPointerInteractionKind !== "pan") return;
+    this.viewportPointerInteractionKind = null;
+    if (this.overlayInteractionSuspended) this.scheduleViewportCommit({delayMs: 24});
   }
 
   flushViewportPreview() {
@@ -1846,6 +1874,8 @@ export class PlaceholderMapRenderer {
     this.stage?.classList.remove("map-stage--interaction-transform");
     this.overlay?.classList.remove("map-overlay--interaction-transform");
     this.stage?.style.removeProperty("--map-interaction-transform");
+    this.stage?.style.removeProperty("--map-interaction-inverse-scale");
+    this.stage?.style.removeProperty("--state-label-preview-opacity");
     this.overlayPreviewTransform = {scale: 1, translateX: 0, translateY: 0};
   }
 
@@ -1859,15 +1889,17 @@ export class PlaceholderMapRenderer {
     const translateX = width * 0.5 * (1 - scale + to.offsetX - scale * from.offsetX);
     const translateY = height * 0.5 * (1 - scale - to.offsetY + scale * from.offsetY);
     this.overlayPreviewTransform = {
-      scale: roundValue(scale),
+      scale: roundTransformScale(scale),
       translateX: snapCssPixel(translateX, this.canvasSize?.pixelRatio),
       translateY: snapCssPixel(translateY, this.canvasSize?.pixelRatio)
     };
     const preview = this.overlayPreviewTransform;
     this.stage.style.setProperty("--map-interaction-transform", `matrix(${preview.scale}, 0, 0, ${preview.scale}, ${preview.translateX}, ${preview.translateY})`);
+    this.stage.style.setProperty("--map-interaction-inverse-scale", String(roundTransformScale(1 / Math.max(0.000001, preview.scale))));
+    this.stage.style.setProperty("--state-label-preview-opacity", String(stateLabelScaleBehavior(to.scale).opacity));
   }
 
-  scheduleViewportCommit() {
+  scheduleViewportCommit({delayMs = 120} = {}) {
     const view = this.canvas.ownerDocument?.defaultView || globalThis;
     if (this.viewportCommitTimer && typeof view.clearTimeout === "function") {
       view.clearTimeout(this.viewportCommitTimer);
@@ -1876,14 +1908,14 @@ export class PlaceholderMapRenderer {
     if (this.viewportCommitEvent) this.cancelPerformanceEvent(this.viewportCommitEvent, "superseded", {version: this.viewportCommitEvent.details.version}, performance.now());
     const setTimer = typeof view.setTimeout === "function" ? view.setTimeout.bind(view) : setTimeout;
     const version = this.viewportCommitVersion;
-    const event = this.queuePerformanceEvent("viewportCommit", {version, delayMs: 120}, performance.now());
+    const event = this.queuePerformanceEvent("viewportCommit", {version, delayMs}, performance.now());
     this.viewportCommitEvent = event;
     try {
       this.viewportCommitTimer = setTimer(() => {
         this.viewportCommitTimer = 0;
         this.startQueuedPerformanceEvent(event, performance.now());
         void this.commitViewportAfterInteraction(version, event);
-      }, 120);
+      }, delayMs);
     } catch (error) {
       this.viewportCommitTimer = 0;
       if (this.viewportCommitEvent === event) this.viewportCommitEvent = null;
@@ -2091,7 +2123,7 @@ export class PlaceholderMapRenderer {
       const styleType = labelStyleTypeForTarget(item.targetKind, item.city);
       node.className = semanticLabelClassName(item.targetKind, item.city);
       markDynamicCanvasTextNode(node, styleType);
-      const glyphNodes = appendLabelNodeText(node, item, documentRef, styleType);
+      const {contentNode, glyphNodes} = appendLabelNodeText(node, item, documentRef, styleType);
       node.dataset.labelTargetKind = item.targetKind;
       node.dataset.labelTargetId = String(item.targetId);
       if (item.targetKind === LABEL_TARGET_KIND.ZONE) node.addEventListener("click", event => {
@@ -2113,7 +2145,7 @@ export class PlaceholderMapRenderer {
       node.classList.toggle("position-locked", layout.locked);
       applyResolvedLabelStyle(node, resolvedStyle);
       fragment.append(node);
-      return {...item, x: layout.position.x, y: layout.position.y, minScale: layout.minScale, styleType, resolvedStyle, layout, metrics: estimateLabelTextBox(item.text, resolvedStyle), node, glyphNodes, box: null, visible: false, buffered: false, politicalCandidateIndex: null};
+      return {...item, x: layout.position.x, y: layout.position.y, minScale: layout.minScale, styleType, resolvedStyle, layout, metrics: estimateLabelTextBox(item.text, resolvedStyle), node, contentNode, glyphNodes, box: null, visible: false, buffered: false, politicalCandidateIndex: null};
     });
     this.labelItems = hasManualLabelPriorities(map) ? sortLabelItemsByPriority(labels) : labels;
     const cityLabelWidths = new Map(labels
@@ -2143,7 +2175,10 @@ export class PlaceholderMapRenderer {
       node.dataset.markerId = String(item.id);
       node.dataset.markerCategory = item.category || "marker";
       applyMarkerIconPalette(node, item);
-      node.innerHTML = markerIconSvg(item);
+      const content = documentRef.createElement("span");
+      content.className = "marker-map-icon-content map-overlay-fixed-content";
+      content.innerHTML = markerIconSvg(item);
+      node.append(content);
       fragment.append(node);
       return {...item, node, box: null, visible: false, buffered: false};
     });
@@ -2166,7 +2201,10 @@ export class PlaceholderMapRenderer {
       const count = documentRef.createElement("span");
       count.className = "military-map-icon-count";
       setDynamicCanvasTextContent(count, "military-count", formatMilitaryTroops(item.troops, this.unitPreferences));
-      node.append(symbol, count);
+      const content = documentRef.createElement("span");
+      content.className = "military-map-icon-content map-overlay-fixed-content";
+      content.append(symbol, count);
+      node.append(content);
       fragment.append(node);
       return {...item, node, box: null, visible: false, buffered: false};
     });
@@ -2216,7 +2254,7 @@ export class PlaceholderMapRenderer {
     let fallbackProvinces = 0;
     let stateCityOverlaps = 0;
     const scale = this.camera.scale;
-    const preservePoliticalCandidate = this.viewportInteractionKind === "pan";
+    const preservePoliticalCandidate = this.viewportInteractionKind === "pan" || this.viewportInteractionKind === "zoom";
     const maxVisible = labelLimitForScale(scale, this.labelOptions.maxCityLabels);
     const padding = labelPaddingForScale(scale);
     const labelPrewarm = overlayLabelPrewarmCssPx(rect);
@@ -2239,6 +2277,7 @@ export class PlaceholderMapRenderer {
         item.node.classList.toggle("visible", false);
         item.node.classList.toggle("buffered", false);
         item.node.classList.toggle("viewport-entering", false);
+        item.node.classList.toggle("scale-entering", false);
         item.visible = false;
         item.buffered = false;
         item.box = null;
@@ -2247,7 +2286,7 @@ export class PlaceholderMapRenderer {
       }
       const baseScreen = this.worldToScreen(item.x, item.y, rect);
       const politicalPrewarm = provinceLabel ? Math.min(labelPrewarm, PROVINCE_LABEL_PREWARM_MAX_CSS_PX) : labelPrewarm;
-      const politicalPlacement = politicalLabel ? resolvePoliticalLabelPlacement({
+      let politicalPlacement = politicalLabel ? resolvePoliticalLabelPlacement({
         item,
         screen: baseScreen,
         obstacles: occupied,
@@ -2261,6 +2300,9 @@ export class PlaceholderMapRenderer {
           ? anchor => stateLabelAnchorAllowed(this, item, anchor, rect)
           : null
       }) : null;
+      if (politicalPlacement && preservePoliticalCandidate && (item.visible || item.buffered)) {
+        politicalPlacement = retainPoliticalPlacementOffset(item, politicalPlacement, baseScreen);
+      }
       const screen = politicalPlacement?.anchor || baseScreen;
       const labelAnchor = politicalLabel ? screen : overlayLabelAnchor(this, item, screen, scale);
       const box = politicalPlacement?.box || labelBoxForItem(item, screen, labelAnchor);
@@ -2280,25 +2322,29 @@ export class PlaceholderMapRenderer {
       const shouldBuffer = !onScreen && shouldRender;
       const wasRendered = item.visible || item.buffered;
       const entering = shouldShow && !wasRendered;
+      const scaleEntering = entering && this.viewportInteractionKind === "zoom";
+      const viewportEntering = entering && !scaleEntering;
       item.node.classList.toggle("visible", shouldShow);
       item.node.classList.toggle("buffered", shouldBuffer);
-      item.node.classList.toggle("viewport-entering", entering);
-      if (entering) clearViewportEnteringClassNextFrame(item.node);
+      item.node.classList.toggle("viewport-entering", viewportEntering);
+      item.node.classList.toggle("scale-entering", scaleEntering);
+      if (viewportEntering) clearOverlayEnteringClassNextFrame(item.node, "viewport-entering");
+      if (scaleEntering) clearOverlayEnteringClassNextFrame(item.node, "scale-entering");
       item.visible = shouldShow;
       item.buffered = shouldBuffer;
       item.box = shouldRender ? box : null;
       if (!shouldRender) {
         if (wasRendered) {
-          if (politicalPlacement) applyPoliticalLabelPlacement(item, politicalPlacement);
-          else setOverlayNodePosition(item.node, labelAnchor.x, labelAnchor.y);
+          if (politicalPlacement) applyPoliticalLabelPlacement(item, politicalPlacement, baseScreen);
+          else applyFixedScreenLabelPlacement(item.node, baseScreen, labelAnchor);
         }
         continue;
       }
       if (politicalPlacement) {
         item.politicalCandidateIndex = politicalPlacement.candidateIndex;
-        applyPoliticalLabelPlacement(item, politicalPlacement);
+        applyPoliticalLabelPlacement(item, politicalPlacement, baseScreen);
       }
-      else setOverlayNodePosition(item.node, labelAnchor.x, labelAnchor.y);
+      else applyFixedScreenLabelPlacement(item.node, baseScreen, labelAnchor);
       item.node.style.setProperty("--label-rotation", `${politicalPlacement ? 0 : item.rotation || 0}deg`);
       const provinceFallback = provinceLabel && Boolean(politicalPlacement?.collides);
       const stateCityOverlap = stateLabel && Boolean(politicalPlacement?.cityCollides);
@@ -2569,7 +2615,7 @@ export class PlaceholderMapRenderer {
       item.node.classList.toggle("visible", shouldShow);
       item.node.classList.toggle("buffered", shouldBuffer);
       item.node.classList.toggle("viewport-entering", entering);
-      if (entering) clearViewportEnteringClassNextFrame(item.node);
+      if (entering) clearOverlayEnteringClassNextFrame(item.node, "viewport-entering");
       item.node.classList.toggle("city-overlap", cityOverlap);
       item.node.classList.toggle("selected", isSelectedOrHighlighted(this.selection, this.objectHighlights, OBJECT_KIND.MARKER, item.id));
       item.visible = shouldShow;
@@ -2648,7 +2694,7 @@ export class PlaceholderMapRenderer {
       if (item.visible !== shouldShow) item.node.classList.toggle("visible", shouldShow);
       item.node.classList.toggle("buffered", shouldBuffer);
       item.node.classList.toggle("viewport-entering", entering);
-      if (entering) clearViewportEnteringClassNextFrame(item.node);
+      if (entering) clearOverlayEnteringClassNextFrame(item.node, "viewport-entering");
       setOverlayItemClassFlag(item, "selectedClass", "selected", selected);
       setOverlayItemClassFlag(item, "fleetClass", "military-map-icon--fleet", item.type === "fleet");
       setOverlayItemClassFlag(item, "cityAvoidedClass", "city-label-avoided", placement.avoided);
@@ -3020,13 +3066,13 @@ function setOverlayNodePosition(node, x, y) {
   setStylePropertyIfChanged(node, "--overlay-y", overlayCoordinateValue(y));
 }
 
-function clearViewportEnteringClassNextFrame(node) {
+function clearOverlayEnteringClassNextFrame(node, className) {
   const view = node?.ownerDocument?.defaultView;
   if (!view?.requestAnimationFrame) {
-    node?.classList.remove("viewport-entering");
+    node?.classList.remove(className);
     return;
   }
-  view.requestAnimationFrame(() => node.classList.remove("viewport-entering"));
+  view.requestAnimationFrame(() => node.classList.remove(className));
 }
 
 function overlayLabelPrewarmCssPx(rect) {
@@ -3043,23 +3089,43 @@ function expandedViewport(rect, padding) {
 
 function appendLabelNodeText(node, item, documentRef, styleType) {
   const political = item.targetKind === LABEL_TARGET_KIND.STATE || item.targetKind === LABEL_TARGET_KIND.PROVINCE;
+  const contentNode = documentRef.createElement("span");
+  contentNode.className = `map-label-content${political ? " map-label-content--political" : ""}`;
+  node.append(contentNode);
   if (!political) {
-    setDynamicCanvasTextContent(node, styleType, item.text);
-    return [];
+    setDynamicCanvasTextContent(contentNode, styleType, item.text);
+    return {contentNode, glyphNodes: []};
   }
   node.setAttribute("aria-label", item.text);
-  return Array.from(item.text || "").map(character => {
+  const glyphNodes = Array.from(item.text || "").map(character => {
     const glyph = documentRef.createElement("span");
     glyph.className = "political-label-glyph";
     glyph.setAttribute("aria-hidden", "true");
     setDynamicCanvasTextContent(glyph, styleType, character);
-    node.append(glyph);
+    contentNode.append(glyph);
     return glyph;
   });
+  return {contentNode, glyphNodes};
 }
 
-function applyPoliticalLabelPlacement(item, placement) {
-  setOverlayNodePosition(item.node, placement.anchor.x, placement.anchor.y);
+function applyPoliticalLabelPlacement(item, placement, baseScreen = placement.anchor) {
+  applyFixedScreenLabelPlacement(item.node, baseScreen, placement.anchor);
+  item.politicalOffsetX = placement.anchor.x - baseScreen.x;
+  item.politicalOffsetY = placement.anchor.y - baseScreen.y;
+  item.politicalPlacementSnapshot = {
+    candidateIndex: placement.candidateIndex,
+    bend: placement.bend,
+    rootSize: placement.rootSize,
+    glyphs: placement.glyphs,
+    boxOffset: {
+      left: placement.box.left - placement.anchor.x,
+      right: placement.box.right - placement.anchor.x,
+      top: placement.box.top - placement.anchor.y,
+      bottom: placement.box.bottom - placement.anchor.y
+    },
+    collides: placement.collides,
+    cityCollides: placement.cityCollides
+  };
   setStylePropertyIfChanged(item.node, "--label-box-width", `${placement.rootSize.width}px`);
   setStylePropertyIfChanged(item.node, "--label-box-height", `${placement.rootSize.height}px`);
   for (let index = 0; index < item.glyphNodes.length; index++) {
@@ -3070,6 +3136,39 @@ function applyPoliticalLabelPlacement(item, placement) {
     setStylePropertyIfChanged(glyph, "--glyph-y", overlayCoordinateValue(layout.y));
     setStylePropertyIfChanged(glyph, "--label-rotation", `${layout.angle}deg`);
   }
+}
+
+function retainPoliticalPlacementOffset(item, placement, baseScreen) {
+  const snapshot = item.politicalPlacementSnapshot;
+  if (!snapshot || !Number.isFinite(item.politicalOffsetX) || !Number.isFinite(item.politicalOffsetY)) return placement;
+  const anchor = {
+    x: baseScreen.x + item.politicalOffsetX,
+    y: baseScreen.y + item.politicalOffsetY
+  };
+  return {
+    ...placement,
+    anchor,
+    candidateIndex: snapshot.candidateIndex,
+    bend: snapshot.bend,
+    rootSize: snapshot.rootSize,
+    glyphs: snapshot.glyphs,
+    box: {
+      ...placement.box,
+      left: anchor.x + snapshot.boxOffset.left,
+      right: anchor.x + snapshot.boxOffset.right,
+      top: anchor.y + snapshot.boxOffset.top,
+      bottom: anchor.y + snapshot.boxOffset.bottom
+    },
+    collides: snapshot.collides,
+    cityCollides: snapshot.cityCollides,
+    peerCollides: false
+  };
+}
+
+function applyFixedScreenLabelPlacement(node, baseScreen, visualAnchor) {
+  setOverlayNodePosition(node, baseScreen.x, baseScreen.y);
+  setStylePropertyIfChanged(node, "--label-offset-x", overlayCoordinateValue(visualAnchor.x - baseScreen.x));
+  setStylePropertyIfChanged(node, "--label-offset-y", overlayCoordinateValue(visualAnchor.y - baseScreen.y));
 }
 
 function setOverlayItemClassFlag(item, cacheKey, className, enabled) {
@@ -3314,11 +3413,11 @@ function cityIconPrewarmCssPx(rect) {
   return clamp(Math.max(rect.width, rect.height) * CITY_ICON_PREWARM_RATIO, CITY_ICON_PREWARM_MIN_CSS_PX, CITY_ICON_PREWARM_MAX_CSS_PX);
 }
 
-function overlayLabelAnchor(renderer, item, screen, scale) {
+function overlayLabelAnchor(renderer, item, screen, _scale) {
   if (item.targetKind !== LABEL_TARGET_KIND.CITY) return {x: screen.x, y: screen.y - 6};
   const cityIcon = renderer.cityIconItemsById?.get(String(item.targetId));
-  const iconVisible = Boolean(cityIcon) && renderer.layerVisibility.cities !== false && scale >= cityIcon.minScale;
-  const iconScale = cityIcon ? cityIconScale(scale, cityIcon) : 0;
+  const iconVisible = Boolean(cityIcon) && renderer.layerVisibility.cities !== false;
+  const iconScale = cityIcon ? cityIconScale(12, cityIcon) : 0;
   const offsetY = cityLabelAnchorOffset({
     iconVisible,
     iconHeight: CITY_ICON_BASE_HEIGHT,
@@ -3628,7 +3727,7 @@ function summarizeObjectHighlight(object) {
   };
 }
 
-function installCanvasInteractions(canvas, camera, onChange, onHover, onSelect) {
+function installCanvasInteractions(canvas, camera, onChange, onHover, onSelect, onInteractionStart, onInteractionEnd) {
   let activePointer = null;
   let lastX = 0;
   let lastY = 0;
@@ -3644,6 +3743,7 @@ function installCanvasInteractions(canvas, camera, onChange, onHover, onSelect) 
       mode,
       moved: false
     };
+    if (mode === "pan") onInteractionStart?.({kind: "pan", pointerId: event.pointerId});
     lastX = event.clientX;
     lastY = event.clientY;
     startX = event.clientX;
@@ -3670,7 +3770,7 @@ function installCanvasInteractions(canvas, camera, onChange, onHover, onSelect) 
     lastY = event.clientY;
     camera.offsetX += (dx / rect.width) * 2;
     camera.offsetY -= (dy / rect.height) * 2;
-    onChange();
+    onChange({kind: "pan"});
     onHover(event);
   });
 
@@ -3679,10 +3779,12 @@ function installCanvasInteractions(canvas, camera, onChange, onHover, onSelect) 
     const pointer = activePointer;
     activePointer = null;
     if (pointer.mode === "select" && !pointer.moved) onSelect(event);
+    if (pointer.mode === "pan") onInteractionEnd?.({kind: "pan", pointerId: event.pointerId});
     canvas.releasePointerCapture(event.pointerId);
   });
 
-  canvas.addEventListener("pointercancel", () => {
+  canvas.addEventListener("pointercancel", event => {
+    if (activePointer?.mode === "pan") onInteractionEnd?.({kind: "pan", pointerId: event.pointerId});
     activePointer = null;
   });
 
@@ -3708,7 +3810,7 @@ function installCanvasInteractions(canvas, camera, onChange, onHover, onSelect) 
       camera.scale = nextScale;
       camera.offsetX = cursorX - worldX * nextScale;
       camera.offsetY = cursorY - worldY * nextScale;
-      onChange();
+      onChange({kind: "zoom"});
     },
     {passive: false}
   );
@@ -5004,6 +5106,10 @@ function gridCellIdMinimumScale(map) {
 
 function roundValue(value) {
   return Math.round(value * 10) / 10;
+}
+
+function roundTransformScale(value) {
+  return Math.round(value * 1e6) / 1e6;
 }
 
 function snapCssPixel(value, pixelRatio = 1) {

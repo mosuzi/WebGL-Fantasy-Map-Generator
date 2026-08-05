@@ -57,6 +57,7 @@ try {
     const read = type => {
       const node = document.querySelector(`[data-label-style-type="${type}"]`);
       const style = getComputedStyle(node);
+      const contentStyle = getComputedStyle(node.querySelector(".map-label-content") || node);
       return {
         text: node.textContent,
         fontFamily: style.fontFamily,
@@ -71,8 +72,8 @@ try {
         webkitFontSmoothing: style.getPropertyValue("-webkit-font-smoothing"),
         willChange: style.willChange,
         transform: style.transform,
-        backgroundColor: style.backgroundColor,
-        borderRadius: style.borderRadius
+        backgroundColor: contentStyle.backgroundColor,
+        borderRadius: contentStyle.borderRadius
       };
     };
     const renderer = window.__webglGeneratorApp.renderer;
