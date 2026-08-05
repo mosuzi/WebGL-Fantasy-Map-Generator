@@ -19,6 +19,7 @@ import {
   cityIconOutlineExtent,
   cityIconRoleBits,
   cityIconScaleVisibility,
+  cityIconSizeFactor,
   createCityIconWebglLayer,
   packCityIconInstances
 } from "../app/webgl-generator/src/renderer/city-icon-layer.js";
@@ -29,6 +30,7 @@ const shapeKeys = ["hamlet", "village", "town", "city", "capital", "provincial",
 assert.deepEqual(Object.keys(CITY_ICON_SHAPE_IDS), shapeKeys, "WebGL 城镇层的九种图形分母漂移");
 assert.equal(new Set(Object.values(CITY_ICON_SHAPE_IDS)).size, 9, "WebGL 城镇图形 id 必须各自唯一");
 assert.deepEqual(Object.keys(CITY_ICON_TIER_SCALES), ["hamlet", "village", "town", "city"], "人口四级尺寸分母漂移");
+assert.deepEqual(CITY_ICON_TIER_SCALES, {hamlet: 0.62, village: 0.76, town: 0.92, city: 1.1}, "人口四级尺寸差异漂移");
 assert.deepEqual(CITY_ICON_ROLE_BITS, {capital: 1, provincial: 2, port: 4}, "附加角色 bit 契约漂移");
 assert.equal(cityIconRoleBits(["capital", "provincial", "port"]), 7, "多角色 bit 不能稳定组合");
 assert.deepEqual(CITY_ICON_BASE_CSS_SIZE, {width: 12.5, height: 9.5}, "城镇图标基准盒漂移");
@@ -44,17 +46,21 @@ const packedInstance = packCityIconInstances([{id: 7, x: 10, y: 20, silhouette: 
 assert.equal(packedInstance.data.length, 11, "单实例 buffer 长度不是 11 floats");
 assert.equal(packedInstance.data[10], 0.625, "名称宽度上限没有写入实例 offset 10");
 
-const scales = [0.5, 0.75, 1, 1.5, 2, 3, 4, 6, 8, 12];
+const scales = [1, 1.5, 2, 2.5, 3, 4, 12];
 const factors = scales.map(cityIconCameraSizeFactor);
 for (let index = 1; index < factors.length; index++) {
   assert(factors[index] > factors[index - 1], `连续尺寸函数在 ${scales[index - 1]}→${scales[index]} 未严格增长`);
 }
 assert(factors.at(-1) < 3, "12× 图标尺寸增长失控");
-assert(factors[6] / factors[2] > 1.8, "1×→4× 图标变化仍不明显");
+assert(factors[5] / factors[0] > 1.8, "1×→4× 图标变化仍不明显");
 for (const tier of Object.keys(CITY_ICON_TIER_SCALES)) {
   const sizes = scales.map(scale => cityIconCssSize(scale, tier));
   assert(sizes.every(size => size.width > 0 && size.height > 0), `${tier} 出现非正尺寸`);
   assert(sizes.at(-1).width > sizes[0].width, `${tier} 没有随相机连续放大`);
+}
+for (const scale of scales) {
+  assertTierProgression(scalesFor(scale), `${scale}× 自然尺寸`);
+  assertTierProgression(scalesFor(scale, 0.9), `${scale}× 名称封顶尺寸`);
 }
 
 const nameWidthCases = [
@@ -86,7 +92,7 @@ assert(visibilitySamples[3] > 0 && visibilitySamples[3] < 1, "阈值中心仍是
 assert.equal(typeof CityIconWebglLayer, "function");
 assert.equal(typeof createCityIconWebglLayer, "function");
 assert.match(CITY_ICON_VERTEX_SHADER_SOURCE, /cameraSizeFactor\(u_cameraScale\)/, "vertex shader 未直接使用当前相机连续尺寸");
-assert.match(CITY_ICON_VERTEX_SHADER_SOURCE, /min\(cameraSizeFactor\(u_cameraScale\) \* a_tierScale, a_maxSizeFactor\)/, "vertex shader 未使用名称宽度实例上限");
+assert.match(CITY_ICON_VERTEX_SHADER_SOURCE, /min\(cameraSizeFactor\(u_cameraScale\), a_maxSizeFactor \/ 1\.10\) \* a_tierScale/, "vertex shader 未先封顶相机尺寸再应用人口级别");
 assert.match(CITY_ICON_VERTEX_SHADER_SOURCE, /centerNdc \* u_cameraScale \+ u_cameraOffset/, "实例中心未与当前相机同帧变换");
 assert.match(CITY_ICON_FRAGMENT_SHADER_SOURCE, /mainShapeDistance/, "fragment shader 缺少解析式主体图形");
 for (const shapeId of Object.values(CITY_ICON_SHAPE_IDS)) {
@@ -118,6 +124,18 @@ assert(drawMethod, "无法定位 WebGL 城镇层 draw 方法");
 assert.doesNotMatch(drawMethod, /bufferData|bufferSubData|setInstances|updateInstanceStates/, "普通相机 draw 帧仍会重建或上传实例 buffer");
 assert.match(source, /setInstances[\s\S]*gl\.bufferData/, "模型变化没有完整实例上传入口");
 assert.match(source, /updateInstanceStates[\s\S]*uploadChangedInstanceRanges/, "visibility/selection 变化没有局部上传入口");
+
+function scalesFor(scale, maxSizeFactor = Number.POSITIVE_INFINITY) {
+  return Object.keys(CITY_ICON_TIER_SCALES).map(tier => cityIconSizeFactor(scale, tier, maxSizeFactor));
+}
+
+function assertTierProgression(values, label) {
+  for (let index = 1; index < values.length; index++) {
+    assert(values[index] > values[index - 1], `${label}四级没有严格递增：${values.join(", ")}`);
+    assert(values[index] / values[index - 1] >= 1.15, `${label}相邻级差不足 15%：${values.join(", ")}`);
+  }
+  assert(values.at(-1) / values[0] >= 1.55, `${label}城市与村落级差不足 55%：${values.join(", ")}`);
+}
 
 console.log(JSON.stringify({
   cityWebglShapes: shapeKeys.length,

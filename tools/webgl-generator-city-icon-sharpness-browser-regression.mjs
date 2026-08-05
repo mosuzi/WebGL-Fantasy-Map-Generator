@@ -16,6 +16,7 @@ const timeoutMs = 120_000;
 const pixelRatios = [1, 1.25, 1.5, 2];
 const cameraScales = [1.5, 2.5, 4];
 const silhouettes = ["hamlet", "village", "town", "city", "capital", "provincial", "port", "fort", "camp"];
+const tierScales = {hamlet: 0.62, village: 0.76, town: 0.92, city: 1.1};
 assert.ok(existsSync(distDir), `构建产物不存在：${distDir}`);
 
 const playwright = createRequire(join(sourceDir, "package.json"))("playwright");
@@ -57,7 +58,7 @@ async function inspectPixelRatio(pixelRatio) {
     consoleErrors.length = 0;
     pageErrors.length = 0;
 
-    const report = await page.evaluate(({cameraScales, silhouettes, targetPixelRatio}) => {
+    const report = await page.evaluate(({cameraScales, silhouettes, tierScales, targetPixelRatio}) => {
       const app = window.__webglGeneratorApp;
       const renderer = app.renderer;
       const layer = renderer.cityIconLayer;
@@ -73,18 +74,18 @@ async function inspectPixelRatio(pixelRatio) {
       const originalItems = renderer.cityIconItems;
       const samples = [];
 
-      const measure = ({silhouette, cameraScale, roles = [], selected = false}) => {
+      const measure = ({silhouette, cameraScale, tier = null, tierScale = 1, roles = [], selected = false, maxSizeFactor = 100}) => {
         layer.setInstances([{
-          id: `sharpness-${silhouette}`,
+          id: `sharpness-${silhouette}-${tier || "base"}`,
           x: mapWidth / 2,
           y: mapHeight / 2,
           silhouette,
-          tierScale: 1,
+          tierScale,
           minScale: 0,
           visible: true,
           roles,
           selected,
-          maxSizeFactor: 100
+          maxSizeFactor
         }], {nowMs: 0});
         gl.bindFramebuffer(gl.FRAMEBUFFER, null);
         gl.viewport(0, 0, canvas.width, canvas.height);
@@ -139,6 +140,7 @@ async function inspectPixelRatio(pixelRatio) {
         }
         return {
           silhouette,
+          tier,
           roles,
           selected,
           cameraScale,
@@ -155,6 +157,19 @@ async function inspectPixelRatio(pixelRatio) {
       for (const cameraScale of cameraScales) {
         for (const silhouette of silhouettes) samples.push(measure({silhouette, cameraScale}));
       }
+      const tierSamples = Object.entries(tierScales).map(([tier, tierScale]) => measure({
+        silhouette: "town",
+        cameraScale: 4,
+        tier,
+        tierScale
+      }));
+      const cappedTierSamples = Object.entries(tierScales).map(([tier, tierScale]) => measure({
+        silhouette: "town",
+        cameraScale: 12,
+        tier,
+        tierScale,
+        maxSizeFactor: 0.9
+      }));
       const roleComposite = measure({silhouette: "town", cameraScale: 2.5, roles: ["capital", "provincial", "port"]});
       const selected = measure({silhouette: "town", cameraScale: 2.5, selected: true});
       canvas.width = originalCanvasSize.width;
@@ -165,12 +180,14 @@ async function inspectPixelRatio(pixelRatio) {
         browserPixelRatio: window.devicePixelRatio,
         actualPixelRatio,
         samples,
+        tierSamples,
+        cappedTierSamples,
         roleComposite,
         selected,
         glError: gl.getError(),
         activeHealthErrors: (app.healthMonitor?.getEvents?.() || []).filter(event => event.severity === "error")
       };
-    }, {cameraScales, silhouettes, targetPixelRatio: pixelRatio});
+    }, {cameraScales, silhouettes, tierScales, targetPixelRatio: pixelRatio});
 
     assert(Math.abs(report.actualPixelRatio - pixelRatio) <= 0.01, `实际 DPR 漂移：${report.actualPixelRatio}`);
     assert.equal(report.samples.length, silhouettes.length * cameraScales.length);
@@ -185,6 +202,20 @@ async function inspectPixelRatio(pixelRatio) {
     assert(meanWidth[0] >= 7.5, `${pixelRatio} DPR 下基础城镇图标仍过小：${meanWidth[0]}`);
     assert(meanWidth[1] > meanWidth[0] + 1, `${pixelRatio} DPR 下 2.5× 图标没有连续放大：${meanWidth.join(", ")}`);
     assert(meanWidth[2] > meanWidth[1] + 1, `${pixelRatio} DPR 下 4× 图标没有连续放大：${meanWidth.join(", ")}`);
+    for (const sample of report.tierSamples) {
+      assert(sample.colored > 0 && sample.dark > 0 && sample.white > 0, `${pixelRatio} DPR 下 ${sample.tier} framebuffer 图形不完整`);
+    }
+    const tierAreas = report.tierSamples.map(sample => sample.widthCss * sample.heightCss);
+    for (let index = 1; index < tierAreas.length; index++) {
+      assert(tierAreas[index] > tierAreas[index - 1], `${pixelRatio} DPR 下四级 framebuffer bbox 未严格递增：${tierAreas.join(", ")}`);
+    }
+    for (const sample of report.cappedTierSamples) {
+      assert(sample.colored > 0 && sample.dark > 0 && sample.white > 0, `${pixelRatio} DPR 下名称封顶后的 ${sample.tier} framebuffer 图形不完整`);
+    }
+    const cappedTierAreas = report.cappedTierSamples.map(sample => sample.widthCss * sample.heightCss);
+    for (let index = 1; index < cappedTierAreas.length; index++) {
+      assert(cappedTierAreas[index] > cappedTierAreas[index - 1], `${pixelRatio} DPR 下名称封顶后的四级 framebuffer bbox 未严格递增：${cappedTierAreas.join(", ")}`);
+    }
     const townBaseline = report.samples.find(sample => sample.cameraScale === 2.5 && sample.silhouette === "town");
     assert(report.roleComposite.colored > townBaseline.colored, `${pixelRatio} DPR 下角色组合没有进入图形`);
     assert(report.roleComposite.dark > 0 && report.roleComposite.white > 0 && report.roleComposite.transition > 0, `${pixelRatio} DPR 下角色组合轮廓不完整`);
@@ -200,6 +231,8 @@ async function inspectPixelRatio(pixelRatio) {
       browserPixelRatio: report.browserPixelRatio,
       pixelRatio: report.actualPixelRatio,
       meanWidth,
+      tierBboxAreas: tierAreas,
+      cappedTierBboxAreas: cappedTierAreas,
       maxTransitionRatio: Math.max(...report.samples.map(sample => sample.transition / sample.colored)),
       roleCompositePixels: report.roleComposite.colored,
       selectedGoldPixels: report.selected.gold,

@@ -12,7 +12,7 @@ import {
 import {CITY_ICON_BASE_CSS_SIZE} from "../app/webgl-generator/src/renderer/city-icon-layer.js";
 
 const iconHeight = CITY_ICON_BASE_CSS_SIZE.height;
-const scales = [0.69, 0.87, 1.0614];
+const scales = [0.62, 0.92, 1.1];
 for (const iconScale of scales) {
   const offset = cityLabelAnchorOffset({iconVisible: true, iconHeight, iconScale});
   const gap = cityLabelIconGap({

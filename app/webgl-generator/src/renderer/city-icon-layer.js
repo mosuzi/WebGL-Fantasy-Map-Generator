@@ -19,10 +19,10 @@ export const CITY_ICON_ROLE_BITS = Object.freeze({
 });
 
 export const CITY_ICON_TIER_SCALES = Object.freeze({
-  hamlet: 0.69,
-  village: 0.75,
-  town: 0.81,
-  city: 0.87
+  hamlet: 0.62,
+  village: 0.76,
+  town: 0.92,
+  city: 1.1
 });
 
 export const CITY_ICON_BASE_CSS_SIZE = Object.freeze({width: 12.5, height: 9.5});
@@ -83,9 +83,10 @@ export function cityIconMaxSizeFactor({silhouette, roles = [], nameWidthCss, bas
 }
 
 export function cityIconSizeFactor(scale, tier, maxSizeFactor = Number.POSITIVE_INFINITY) {
-  const naturalFactor = cityIconCameraSizeFactor(scale) * cityIconTierScale(tier);
+  const tierScale = cityIconTierScale(tier);
   const cap = positiveNumber(maxSizeFactor, Number.POSITIVE_INFINITY);
-  return Math.min(naturalFactor, cap);
+  const cameraFactor = Math.min(cityIconCameraSizeFactor(scale), cap / CITY_ICON_TIER_SCALES.city);
+  return cameraFactor * tierScale;
 }
 
 export function cityIconCssSize(scale, tier, baseSize = CITY_ICON_BASE_CSS_SIZE, maxSizeFactor = Number.POSITIVE_INFINITY) {
@@ -455,7 +456,7 @@ float cameraSizeFactor(float scale) {
 void main() {
   vec2 centerNdc = vec2(a_world.x / u_mapSize.x * 2.0 - 1.0, 1.0 - a_world.y / u_mapSize.y * 2.0);
   vec2 centerClip = centerNdc * u_cameraScale + u_cameraOffset;
-  v_sizeFactor = min(cameraSizeFactor(u_cameraScale) * a_tierScale, a_maxSizeFactor);
+  v_sizeFactor = min(cameraSizeFactor(u_cameraScale), a_maxSizeFactor / 1.10) * a_tierScale;
   vec2 sizeBacking = u_baseSizeCss * u_pixelRatio * v_sizeFactor;
   vec2 anchorBacking = vec2(0.0, sizeBacking.y * 0.32);
   vec2 clipOffset = (a_corner * sizeBacking + anchorBacking) / u_viewportBacking * 2.0;

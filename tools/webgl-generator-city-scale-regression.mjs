@@ -71,7 +71,7 @@ visualPatchCommand.apply({map: visualPatchMap});
 assert.equal(visualPatchMap.settlements.cities[9].visual.silhouette, "city", "局部视觉修改不得丢失统一规模上下文");
 assert.equal(visualPatchMap.pack.burgs[10].visual.silhouette, "city");
 
-const generated = generatePlaceholderMap({seed: "city-scale-217", cellsTarget: 3000, heightmapTemplate: "continents"});
+const generated = generatePlaceholderMap({seed: "city-scale-217", cellsTarget: 10000, heightmapTemplate: "continents"});
 const generatedContext = createCityScaleContext(generated.settlements.cities, generated.pack.burgs);
 for (const city of generated.settlements.cities.filter(Boolean)) {
   const burg = generated.pack.burgs[city.burgId];
@@ -80,6 +80,8 @@ for (const city of generated.settlements.cities.filter(Boolean)) {
   assert.equal(burg?.group, expected, `生成 burg #${city.burgId} group 未与城市同步`);
   if (!city.visual?.manual) assert.equal(city.visual?.silhouette, expected, `生成城市 #${city.id} 自动剪影未使用统一规模`);
 }
+const generatedScaleCounts = Object.fromEntries(["hamlet", "village", "town", "city"].map(scale => [scale, generated.settlements.cities.filter(city => city?.group === scale).length]));
+assert.ok(Object.values(generatedScaleCounts).every(count => count > 0), `真实 10k 生成图必须覆盖四级城镇分母：${JSON.stringify(generatedScaleCounts)}`);
 
 const topologyMap = generatePlaceholderMap({seed: "state-topology-regression", cellsTarget: 3000, heightmapTemplate: "continents"});
 const topologyBefore = groupVisualFingerprint(topologyMap);
@@ -129,6 +131,7 @@ console.log(JSON.stringify({
     284: deriveCityScale(lanhui, counterexampleContext)
   },
   generatedCities: generated.settlements.cities.filter(Boolean).length,
+  generatedScaleCounts,
   cityBurgDiff: 0,
   manualPreserved: true,
   writeSurfaces: {cityPopulation: true, stateTopology: true, stateCreation: true},
