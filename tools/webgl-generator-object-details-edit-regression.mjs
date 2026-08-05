@@ -76,7 +76,7 @@ const riverPanelSource = readSource("../app/webgl-generator/src/ui/vue/component
 assert.match(appSource, /openObjectEditorFromDetails[\s\S]*OBJECT_KIND\.ROUTE[\s\S]*startEditing/, "道路详情未直接进入真实路线编辑草稿");
 assert.match(appSource, /OBJECT_KIND\.RIVER[\s\S]*panels\.river[\s\S]*RIVER_EDIT_WAYPOINT/, "河流详情未接入河流面板与画布控制点模式");
 assert.match(routePanelSource, /startEditing\(routeId\)[\s\S]*editRequestId\+\+/, "路线面板缺少外部启动编辑请求");
-assert.match(riverPanelSource, /添加河道控制点|取消添加控制点/, "河流面板缺少明确的路径编辑动作");
+assert.match(riverPanelSource, /调整河道折线|退出河道折线调整/, "河流面板缺少明确的路径编辑动作");
 assert.doesNotMatch(riverPanelSource, /进入河流编辑/, "河流面板不得保留没有实际动作的伪编辑入口");
 assert.match(detailsSource, /v-if="editAction"/, "对象详情编辑按钮必须受显式能力策略控制");
 assert.doesNotMatch(detailsSource, /function canEditObject/, "对象详情不得恢复默认全部可编辑策略");

@@ -429,7 +429,7 @@ export const CANVAS_TOOL_MODE_FEEDBACK = Object.freeze({
   [CANVAS_TOOL_MODE.ROUTE_DRAW]: canvasToolModeFeedback("绘制路线", "依次单击路线起点和终点，成功创建后退出。", "one-shot", "crosshair"),
   [CANVAS_TOOL_MODE.ROUTE_EDIT_WAYPOINT]: canvasToolModeFeedback("拾取路线途经点", "单击新的途经位置。", "pick", "cell"),
   [CANVAS_TOOL_MODE.RIVER_ADD]: canvasToolModeFeedback("新增河流", "单击合法河源位置。", "one-shot", "crosshair"),
-  [CANVAS_TOOL_MODE.RIVER_EDIT_WAYPOINT]: canvasToolModeFeedback("预览河道控制点", "单击候选位置预览；不会立即修改河流。", "pick", "cell"),
+  [CANVAS_TOOL_MODE.RIVER_EDIT_WAYPOINT]: canvasToolModeFeedback("调整河道折线", "单击候选位置预览；不会立即修改河流。", "pick", "cell"),
   [CANVAS_TOOL_MODE.LAKE_EXCAVATE]: canvasToolModeFeedback("开挖湖泊", "单击开挖中心位置。", "one-shot", "crosshair"),
   [CANVAS_TOOL_MODE.FEATURE_PATCH_SELECT]: canvasToolModeFeedback("拾取水陆修正区域", "单击局部水陆修正的中心。", "pick", "cell"),
   [CANVAS_TOOL_MODE.FEATURE_TOPOLOGY_SELECT]: canvasToolModeFeedback("选择海岸编辑区域", "逐次单击地图区域以组成持续选区。", "persistent", "cell"),
@@ -2244,6 +2244,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     onApplyWaypoint: () => applyRiverWaypointDraft(state, documentRef),
     onReselectWaypoint: () => {
       clearRiverWaypointDraft(state);
+      state.panels.river?.setWaypointFeedback?.({tone: "idle", code: "reselect", message: "候选已清除，请在地图上重新单击河道附近的陆地。"});
       setRiverWaypointFeedback(documentRef, "单击新的候选位置预览；不会立即修改河流。");
       setFileOperationStatus(documentRef, "河道控制点候选已清除，请重新单击地图选择。");
       updateRuntimePanel(documentRef, state);
@@ -2515,6 +2516,13 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       state.riverEdit.waypointDraft = draft;
       state.renderer?.setRiverWaypointPreview?.(draft);
       state.panels.river?.setWaypointDraft?.(draft);
+      if (draft?.valid) {
+        state.panels.river?.setWaypointFeedback?.({
+          tone: "valid",
+          code: "ok",
+          message: "候选尚未保存。橙色实线是新河段，浅色虚线是将被替换的原河段。"
+        });
+      }
     }
   });
   selectionStore = new SelectionStore(({selection, editingObject}, metadata = null) => {
@@ -11805,6 +11813,7 @@ function registerCanvasToolModes(state, documentRef, {stopObjectEditing} = {}) {
       state.riverEdit.waypointRiverId = riverId;
       state.riverEdit.session?.begin(state.map, riverId);
       state.panels.river?.setWaypointMode(true);
+      state.panels.river?.setWaypointFeedback?.({tone: "idle", code: "begin", message: "单击地图上的河道附近位置，只会预览，不会立即修改河流。"});
     },
     onExit: ({reason}) => {
       state.riverEdit.session?.end(reason || "mode-exit");
@@ -12018,6 +12027,7 @@ function applyRiverWaypointDraft(state, documentRef) {
   const validation = state.riverEdit.session?.validate(state.map) || {valid: false, code: "missing-session", reason: "当前没有可应用的河道控制点预览"};
   const draft = validation.draft;
   if (!state.canvasToolModes.isActive(CANVAS_TOOL_MODE.RIVER_EDIT_WAYPOINT) || !validation.valid || Number(draft?.riverId) !== riverId) {
+    state.panels.river?.setWaypointFeedback?.({tone: "error", code: validation.code || "missing-draft", message: validation.reason || "当前没有可应用的河道控制点预览。"});
     setFileOperationStatus(documentRef, validation.reason || "当前没有可应用的河道控制点预览。");
     updateRuntimePanel(documentRef, state);
     return {executed: false, reason: validation.code || "missing-draft"};
@@ -12030,6 +12040,9 @@ function applyRiverWaypointDraft(state, documentRef) {
   });
   if (result.executed) {
     completeCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.RIVER_EDIT_WAYPOINT, {packCell: draft.packCell, riverId, result});
+  } else {
+    state.riverEdit.session?.clear("apply-failed");
+    state.panels.river?.setWaypointFeedback?.({tone: "error", code: "apply-failed", message: "应用失败，候选位置可能已经失效，请重新选择。"});
   }
   updateRuntimePanel(documentRef, state);
   return result;
@@ -13935,6 +13948,8 @@ function bindObjectCreationTools(canvas, state, documentRef) {
       const riverId = state.riverEdit.waypointRiverId;
       const draft = state.riverEdit.session?.stage(state.map, packCell) || inspectRiverVisualWaypoint(state.map, riverId, packCell);
       if (!draft.valid) {
+        state.renderer?.setRiverWaypointPreview?.(draft);
+        state.panels.river?.setWaypointFeedback?.({tone: "error", code: draft.code || "invalid-candidate", message: draft.reason || "该候选位置不可用。"});
         setFileOperationStatus(documentRef, `无法预览河道控制点：${draft.reason}`);
         setRiverWaypointFeedback(documentRef, `${draft.reason}；请单击更靠近河道的候选位置。`);
         updateRuntimePanel(documentRef, state);

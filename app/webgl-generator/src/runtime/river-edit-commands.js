@@ -164,24 +164,30 @@ export function inspectRiverVisualWaypoint(map, riverId, packCell) {
   if (!river) return invalidRiverVisualWaypoint("river-missing", `找不到河流 #${id}`);
   const point = map?.pack?.cells?.p?.[cell];
   if (!Number.isInteger(cell) || !isPoint(point)) return invalidRiverVisualWaypoint("invalid-cell", "河道控制点必须位于有效 pack cell");
-  const candidateHeight = Number(map?.pack?.cells?.h?.[cell]);
-  if (Number.isFinite(candidateHeight) && candidateHeight < 20) {
-    return {...invalidRiverVisualWaypoint("waypoint-water", "河道控制点必须位于陆地"), riverId: id, packCell: cell};
-  }
   const points = (river.points || []).filter(isPoint).map(item => [...item]);
   if (points.length < 2) return invalidRiverVisualWaypoint("path-too-short", "河流缺少可编辑的成品折线");
   if (points.some(item => Math.hypot(item[0] - point[0], item[1] - point[1]) < 0.25)) {
-    return {...invalidRiverVisualWaypoint("duplicate-waypoint", "该位置已经存在河道控制点"), changed: false};
+    return {...invalidRiverVisualWaypoint("duplicate-waypoint", "该位置已经存在河道控制点"), riverId: id, packCell: cell, candidatePoint: [...point], changed: false};
   }
 
   const nearest = nearestRiverSegment(points, point);
+  const diagnostic = {
+    riverId: id,
+    packCell: cell,
+    insertIndex: nearest.index + 1,
+    candidatePoint: [roundCoordinate(point[0]), roundCoordinate(point[1])],
+    nearestPoint: nearest.point.map(roundCoordinate),
+    originalSegment: [points[nearest.index].slice(0, 2), points[nearest.index + 1].slice(0, 2)]
+  };
+  const candidateHeight = Number(map?.pack?.cells?.h?.[cell]);
+  if (Number.isFinite(candidateHeight) && candidateHeight < 20) {
+    return {...invalidRiverVisualWaypoint("waypoint-water", "候选点位于水域，请改选河道附近的陆地"), ...diagnostic};
+  }
   const maxDistance = riverVisualWaypointMaxDistance(map, points, nearest.index);
   if (nearest.distance > maxDistance) {
     return {
       ...invalidRiverVisualWaypoint("waypoint-too-far", `候选点距离最近河段 ${roundCoordinate(nearest.distance)}，超过允许的 ${roundCoordinate(maxDistance)}`),
-      riverId: id,
-      packCell: cell,
-      insertIndex: nearest.index + 1,
+      ...diagnostic,
       distance: nearest.distance,
       maxDistance
     };
@@ -199,9 +205,7 @@ export function inspectRiverVisualWaypoint(map, riverId, packCell) {
   if (addsWater) {
     return {
       ...invalidRiverVisualWaypoint("waypoint-crosses-water", "候选折线会比原河段新增穿越水域"),
-      riverId: id,
-      packCell: cell,
-      insertIndex: nearest.index + 1,
+      ...diagnostic,
       distance: nearest.distance,
       maxDistance,
       originalWaterExposure: originalWater.exposure,
@@ -217,9 +221,7 @@ export function inspectRiverVisualWaypoint(map, riverId, packCell) {
     changed: true,
     code: "ok",
     reason: "",
-    riverId: id,
-    packCell: cell,
-    insertIndex: nearest.index + 1,
+    ...diagnostic,
     distance: nearest.distance,
     maxDistance,
     points: nextPoints,
@@ -694,7 +696,7 @@ function riverVisualWaypointError(preview) {
 }
 
 function nearestRiverSegment(points, point) {
-  let nearest = {index: 0, amount: 0, distance: Infinity};
+  let nearest = {index: 0, amount: 0, distance: Infinity, point: [Number(points[0]?.[0]) || 0, Number(points[0]?.[1]) || 0]};
   for (let index = 0; index < points.length - 1; index++) {
     const start = points[index];
     const end = points[index + 1];
@@ -704,8 +706,9 @@ function nearestRiverSegment(points, point) {
     const amount = lengthSquared > Number.EPSILON
       ? Math.max(0, Math.min(1, ((point[0] - start[0]) * dx + (point[1] - start[1]) * dy) / lengthSquared))
       : 0;
-    const distance = Math.hypot(point[0] - (start[0] + dx * amount), point[1] - (start[1] + dy * amount));
-    if (distance < nearest.distance) nearest = {index, amount, distance};
+    const nearestPoint = [start[0] + dx * amount, start[1] + dy * amount];
+    const distance = Math.hypot(point[0] - nearestPoint[0], point[1] - nearestPoint[1]);
+    if (distance < nearest.distance) nearest = {index, amount, distance, point: nearestPoint};
   }
   return nearest;
 }

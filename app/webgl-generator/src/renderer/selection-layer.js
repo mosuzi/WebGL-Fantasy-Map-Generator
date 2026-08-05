@@ -50,7 +50,7 @@ export function buildSelectionMeshBundle(map, camera, canvas, selection, locateF
     if (sameSelectionTarget(selection, highlight)) continue;
     pushSelectionTarget(highlight?.kind === OBJECT_KIND.RIVER ? landMaskedVertices : ordinaryVertices, context, highlight, null, MULTI_HIGHLIGHT_COLOR);
   }
-  pushRiverWaypointPreview(landMaskedVertices, context, riverWaypointPreview);
+  pushRiverWaypointPreview(landMaskedVertices, ordinaryVertices, context, riverWaypointPreview);
   const ordinaryCount = ordinaryVertices.length / 6;
   const landMaskedCount = landMaskedVertices.length / 6;
   return {
@@ -75,12 +75,47 @@ export function drawSelectionMeshBatches(gl, ranges) {
   if (ordinary?.count > 0) gl.drawArrays(gl.TRIANGLES, ordinary.first, ordinary.count);
 }
 
-function pushRiverWaypointPreview(vertices, context, preview) {
-  if (!preview?.valid || !Array.isArray(preview.points) || preview.points.length < 2) return;
-  const candidate = preview.points[preview.insertIndex];
-  if (!candidate) return;
-  const color = [1, 0.54, 0.08, 0.96];
-  pushScreenPolyline(vertices, context, smoothWorldPath(preview.points, SELECTION_SMOOTHING.river), color, selectionLineWidth(context, 4.8));
+function pushRiverWaypointPreview(landMaskedVertices, ordinaryVertices, context, preview) {
+  const candidate = preview?.candidatePoint || preview?.points?.[preview?.insertIndex];
+  if (!isPoint(candidate)) return;
+  if (!preview.valid) {
+    pushRejectedRiverWaypointPreview(ordinaryVertices, context, preview, candidate);
+    return;
+  }
+  const original = preview.originalSegment;
+  if (!Array.isArray(original) || !isPoint(original[0]) || !isPoint(original[1])) return;
+  const pixelRatio = context.canvas.width / Math.max(1, context.canvas.clientWidth);
+  pushScreenPolyline(
+    landMaskedVertices,
+    context,
+    original,
+    [1, 0.84, 0.54, 0.82],
+    selectionLineWidth(context, 3.2),
+    {dashPx: 6 * pixelRatio, gapPx: 4 * pixelRatio}
+  );
+  const color = [1, 0.54, 0.08, 0.98];
+  pushScreenPolyline(landMaskedVertices, context, [original[0], candidate], color, selectionLineWidth(context, 4.8));
+  pushScreenPolyline(landMaskedVertices, context, [candidate, original[1]], color, selectionLineWidth(context, 4.8));
+  pushWaypointDiamond(landMaskedVertices, context, candidate, color);
+}
+
+function pushRejectedRiverWaypointPreview(vertices, context, preview, candidate) {
+  const color = [1, 0.22, 0.18, 0.98];
+  const pixelRatio = context.canvas.width / Math.max(1, context.canvas.clientWidth);
+  if (isPoint(preview.nearestPoint)) {
+    pushScreenPolyline(
+      vertices,
+      context,
+      [preview.nearestPoint, candidate],
+      color,
+      selectionLineWidth(context, 3.4),
+      {dashPx: 5 * pixelRatio, gapPx: 4 * pixelRatio}
+    );
+  }
+  pushWaypointDiamond(vertices, context, candidate, color);
+}
+
+function pushWaypointDiamond(vertices, context, candidate, color) {
   const center = worldToScreenPixel(context, candidate);
   const radius = selectionLineWidth(context, 7);
   const top = {x: center.x, y: center.y - radius};
@@ -91,6 +126,10 @@ function pushRiverWaypointPreview(vertices, context, preview) {
   pushScreenTriangle(vertices, context, center, right, bottom, color);
   pushScreenTriangle(vertices, context, center, bottom, left, color);
   pushScreenTriangle(vertices, context, center, left, top, color);
+}
+
+function isPoint(point) {
+  return Number.isFinite(Number(point?.[0])) && Number.isFinite(Number(point?.[1]));
 }
 
 function pushSelectionTarget(vertices, context, selection, locateFlash, overrideColor = null) {

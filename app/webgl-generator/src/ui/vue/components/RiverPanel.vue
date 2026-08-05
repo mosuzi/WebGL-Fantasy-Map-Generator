@@ -1,4 +1,33 @@
 <template>
+  <section
+    v-if="state.waypointMode"
+    class="river-waypoint-draft"
+    :class="`is-${waypointTone}`"
+    :role="waypointTone === 'error' ? 'alert' : 'status'"
+    :aria-live="waypointTone === 'error' ? 'assertive' : 'polite'"
+    aria-atomic="true"
+  >
+    <div class="river-waypoint-draft-heading">
+      <strong>调整河道折线</strong>
+      <span>{{ waypointTitle }}</span>
+    </div>
+    <ol class="river-waypoint-steps">
+      <li>在地图上单击候选位置</li>
+      <li>橙色实线是新河段，浅色虚线是将被替换的原河段</li>
+      <li>确认无误后应用；红色节点表示候选被拒绝</li>
+    </ol>
+    <p :class="{'river-waypoint-error': waypointTone === 'error'}">{{ waypointMessage }}</p>
+    <p v-if="state.waypointDraft">
+      插入第 {{ state.waypointDraft.insertIndex }} 河段 · pack cell #{{ state.waypointDraft.packCell }} ·
+      距河道 {{ formatLength(state.waypointDraft.distance) }} · 新长度 {{ formatLength(state.waypointDraft.length) }}
+    </p>
+    <div class="river-waypoint-draft-actions">
+      <UiButton variant="primary" :disabled="!state.waypointDraft || waypointTone === 'error'" @click="callbacks.onApplyWaypoint?.()">应用折点</UiButton>
+      <UiButton variant="secondary" @click="callbacks.onReselectWaypoint?.()">重新选择</UiButton>
+      <UiButton variant="secondary" @click="callbacks.onCancelWaypoint?.()">退出模式</UiButton>
+    </div>
+  </section>
+
   <UiMetricGrid :metrics="summaryMetrics" class-name="river-panel-summary" />
 
   <div class="river-panel-controls">
@@ -40,20 +69,6 @@
   />
 
   <UiDetailGrid class-name="river-panel-details" empty-text="未选中河流" :rows="detailRows" />
-
-  <section v-if="state.waypointMode" class="river-waypoint-draft" aria-live="polite">
-    <strong>{{ state.waypointDraft ? "控制点预览尚未保存" : "请选择控制点候选位置" }}</strong>
-    <p v-if="state.waypointDraft">
-      将在第 {{ state.waypointDraft.insertIndex }} 河段插入 pack cell #{{ state.waypointDraft.packCell }}；
-      距河道 {{ formatLength(state.waypointDraft.distance) }}，新长度 {{ formatLength(state.waypointDraft.length) }}。
-    </p>
-    <p v-else>单击地图上的候选位置查看新河道预览；不会立即修改河流。</p>
-    <div class="river-waypoint-draft-actions">
-      <UiButton variant="primary" :disabled="!state.waypointDraft" @click="callbacks.onApplyWaypoint?.()">应用控制点</UiButton>
-      <UiButton variant="secondary" :disabled="!state.waypointDraft" @click="callbacks.onReselectWaypoint?.()">重新选择</UiButton>
-      <UiButton variant="secondary" @click="callbacks.onCancelWaypoint?.()">取消</UiButton>
-    </div>
-  </section>
 
   <template v-if="selected">
     <UiActionDock host-id="RiverPanel" v-model:active="activeAction" :actions="riverActions" @select="handleRiverActionSelect">
@@ -166,8 +181,11 @@ const filterEmptyAction = computed(() => String(props.state.filter || "").trim()
   : null);
 const totalLength = computed(() => rows.value.reduce((sum, row) => sum + row.length, 0));
 const maxFlux = computed(() => rows.value.reduce((max, row) => Math.max(max, row.flux), 0));
+const waypointTone = computed(() => props.state.waypointFeedback?.tone === "error" ? "error" : props.state.waypointDraft ? "valid" : props.state.waypointFeedback?.tone || "idle");
+const waypointTitle = computed(() => ({valid: "候选可应用", error: "候选被拒绝", idle: "等待选择"})[waypointTone.value]);
+const waypointMessage = computed(() => props.state.waypointFeedback?.message || "单击地图上的河道附近位置，只会预览，不会立即修改河流。");
 const riverActions = computed(() => [
-  {key: "path", resultClass: "toggle-canvas-mode", label: props.state.waypointMode ? "取消添加河道控制点" : "在地图添加河道控制点", icon: "●+", panel: false, active: props.state.waypointMode},
+  {key: "path", resultClass: "toggle-canvas-mode", label: props.state.waypointMode ? "退出河道折线调整" : "调整河道折线", icon: "折", panel: false, active: props.state.waypointMode},
   {key: "rename", resultClass: "open-secondary", label: "重命名", icon: "✎"},
   {key: "width", resultClass: "open-secondary", label: "调整宽度", icon: "↔"},
   {key: "note", resultClass: "open-secondary", label: "编辑备注", icon: "☰"}
@@ -177,7 +195,6 @@ const riverListActions = computed(() => [
   {key: "highlight-selected", label: `高亮选中 ${formatNumber(selectedRiverRows.value.length)}`, icon: "◉", disabled: !selectedRiverRows.value.length},
   {key: "clear-highlights", label: `清除高亮 ${formatNumber(props.state.highlightCount || 0)}`, icon: "○", disabled: !props.state.highlightCount},
   {key: "rename-visible", label: "按名称库重命名筛选河流", icon: "名", disabled: !visibleRows.value.length},
-  {key: "path", label: props.state.waypointMode ? "取消添加河道控制点" : "在地图添加河道控制点", icon: "●+", active: props.state.waypointMode, disabled: !selected.value},
   {key: "delete-selected", label: `批量删除选中 ${formatNumber(selectedRiverRows.value.length)}`, icon: "删", disabled: !selectedRiverRows.value.length},
   {key: "delete", label: "删除选中河流及支流", icon: "删", disabled: !selected.value}
 ]);
@@ -309,7 +326,6 @@ function handleRiverListAction(key) {
   if (key === "clear-highlights") props.callbacks.onClearHighlights?.();
   if (key === "rename-visible") props.callbacks.onRenameVisibleFromNamebase?.(visibleRows.value.map(row => row.id));
   if (key === "locate" && selected.value) props.callbacks.onLocate?.(selected.value);
-  if (key === "path" && selected.value) props.callbacks.onWaypointMode?.(!props.state.waypointMode, selected.value);
   if (key === "delete-selected") props.callbacks.onDeleteMany?.(selectedRiverRows.value.map(row => row.id));
   if (key === "delete" && selected.value) props.callbacks.onDelete?.(selected.value.id);
 }
@@ -402,18 +418,56 @@ function isPoint(point) {
 
 <style scoped>
 .river-waypoint-draft {
+  position: sticky;
+  top: 0;
+  z-index: 4;
   display: grid;
   gap: 8px;
   padding: 10px 12px;
   border: 1px solid rgba(244, 171, 64, 0.58);
   border-radius: 8px;
-  background: rgba(91, 56, 15, 0.28);
+  background: rgba(39, 31, 20, 0.98);
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.28);
+}
+
+.river-waypoint-draft.is-error {
+  border-color: rgba(255, 92, 78, 0.88);
+  background: rgba(61, 25, 25, 0.98);
+}
+
+.river-waypoint-draft.is-valid {
+  border-color: rgba(244, 171, 64, 0.88);
+}
+
+.river-waypoint-draft-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.river-waypoint-draft-heading span {
+  color: var(--panel-muted, #c7bda9);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.river-waypoint-steps {
+  margin: 0;
+  padding-left: 20px;
+  color: var(--panel-muted, #c7bda9);
+  line-height: 1.45;
 }
 
 .river-waypoint-draft p {
   margin: 0;
   color: var(--panel-muted, #c7bda9);
   line-height: 1.5;
+}
+
+.river-waypoint-draft .river-waypoint-error {
+  color: #ffaaa0;
+  font-weight: 650;
 }
 
 .river-waypoint-draft-actions {

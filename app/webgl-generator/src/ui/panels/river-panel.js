@@ -34,6 +34,7 @@ export function createRiverPanel(documentRef, manager, callbacks = {}) {
     createMode: false,
     waypointMode: false,
     waypointDraft: null,
+    waypointFeedback: null,
     version: 0
   });
   const panelCallbacks = {
@@ -143,11 +144,18 @@ export function createRiverPanel(documentRef, manager, callbacks = {}) {
     },
     setWaypointMode(active) {
       panelState.waypointMode = Boolean(active);
-      if (!panelState.waypointMode) panelState.waypointDraft = null;
+      if (!panelState.waypointMode) {
+        panelState.waypointDraft = null;
+        panelState.waypointFeedback = null;
+      }
       panelState.version++;
     },
     setWaypointDraft(draft) {
       panelState.waypointDraft = draft ? markRaw(draft) : null;
+      panelState.version++;
+    },
+    setWaypointFeedback(feedback) {
+      panelState.waypointFeedback = feedback ? markRaw(feedback) : null;
       panelState.version++;
     },
     isOpen() {

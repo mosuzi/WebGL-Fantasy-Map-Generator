@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import {readFileSync} from "node:fs";
 
-import {buildSelectionMeshVertices} from "../app/webgl-generator/src/renderer/selection-layer.js";
+import {buildSelectionMeshBundle, buildSelectionMeshVertices} from "../app/webgl-generator/src/renderer/selection-layer.js";
 import {createCanvasToolModeManager} from "../app/webgl-generator/src/runtime/canvas-tool-mode-manager.js";
 import {EditHistory} from "../app/webgl-generator/src/runtime/edit-history.js";
 import {createAddRiverVisualWaypointCommand, inspectRiverVisualWaypoint} from "../app/webgl-generator/src/runtime/river-edit-commands.js";
@@ -28,6 +28,9 @@ const canvas = {width: 1000, height: 700, clientWidth: 1000, clientHeight: 700};
 const previewVertices = buildSelectionMeshVertices(map, camera, canvas, null, null, [], draft);
 assert.ok(previewVertices.length > 0, "候选折线与节点必须生成独立选择层 mesh");
 assert.ok([...previewVertices].every(Number.isFinite), "候选预览 mesh 不得包含无效坐标");
+const validPreviewBundle = buildSelectionMeshBundle(map, camera, canvas, null, null, [], draft);
+assert.ok(validPreviewBundle.drawRanges.landMasked.count > 0, "有效候选的旧段虚线、新两段和节点必须走陆地遮罩");
+assert.equal(validPreviewBundle.drawRanges.ordinary.count, 0);
 assert.equal(buildSelectionMeshVertices(map, camera, canvas, null, null, [], null).length, 0, "清除候选后选择层不得残留预览");
 
 draft = inspectRiverVisualWaypoint(map, river.id, 3);
@@ -49,6 +52,9 @@ assert.equal(far.code, "waypoint-too-far");
 assert.ok(far.distance > far.maxDistance);
 assert.throws(() => history.execute(createAddRiverVisualWaypointCommand(river.id, 4), {map}), /超过允许/);
 assert.equal(history.getStats().undo, 0, "无效或过远候选不得写历史");
+const rejectedPreviewBundle = buildSelectionMeshBundle(map, camera, canvas, null, null, [], far);
+assert.equal(rejectedPreviewBundle.drawRanges.landMasked.count, 0);
+assert.ok(rejectedPreviewBundle.drawRanges.ordinary.count > 0, "拒绝候选的红色节点与引线不得被陆地 depth 遮掉");
 const water = inspectRiverVisualWaypoint(map, river.id, 5);
 assert.equal(water.valid, false);
 assert.equal(water.code, "waypoint-water", "水域 pack cell 必须在距离计算前被拒绝");
@@ -159,6 +165,21 @@ await assert.rejects(withRiverWaypointPreviewSuppressed(exportRenderer, async ()
 }), /export-failed-after-new-preview/);
 assert.equal(exportRenderer.riverWaypointPreview, newerDraft, "导出失败后不得覆盖期间产生的新预览");
 
+const rejectedExportRenderer = {
+  ...exportRenderer,
+  riverWaypointPreview: far,
+  riverWaypointPreviewRevision: 1,
+  selection: null,
+  objectHighlights: []
+};
+rejectedExportRenderer.draw();
+assert.ok(rejectedExportRenderer.framebuffer.length > 0, "拒绝诊断必须有可见预览");
+await withRiverWaypointPreviewSuppressed(rejectedExportRenderer, async () => {
+  assert.equal(rejectedExportRenderer.riverWaypointPreview, null, "PNG 导出必须抑制拒绝诊断红点");
+  assert.equal(rejectedExportRenderer.framebuffer.length, 0);
+});
+assert.equal(rejectedExportRenderer.riverWaypointPreview, far, "PNG 导出后必须恢复拒绝诊断预览");
+
 const appliedDraft = inspectRiverVisualWaypoint(map, river.id, 2);
 history.execute(createAddRiverVisualWaypointCommand(river.id, appliedDraft.packCell), {map});
 assert.equal(history.getStats().undo, 1, "面板应用必须只写一条历史");
@@ -182,9 +203,16 @@ assert.match(appSource, /function applyRiverWaypointDraft[\s\S]*createAddRiverVi
 assert.match(appSource, /function clearRiverWaypointDraft[\s\S]*clearRiverWaypointPreview/);
 assert.match(appSource, /target-switch|target-deleted|map-replace/);
 assert.match(panelAdapterSource, /onApplyWaypoint[\s\S]*onReselectWaypoint[\s\S]*onCancelWaypoint/);
-for (const label of ["控制点预览尚未保存", "应用控制点", "重新选择", "取消"]) assert.match(panelSource, new RegExp(label));
-assert.match(panelSource, /●\+/);
-assert.doesNotMatch(panelSource, /icon:\s*"⌁"/);
+for (const label of ["调整河道折线", "橙色实线是新河段", "浅色虚线是将被替换的原河段", "红色节点表示候选被拒绝", "应用折点", "重新选择", "退出模式"]) assert.match(panelSource, new RegExp(label));
+assert.equal((panelSource.match(/\{key: "path"/g) || []).length, 1, "河流面板只能保留一个河道折线入口");
+assert.match(panelSource, /icon:\s*"折"/);
+assert.match(panelSource, /position:\s*sticky/);
+assert.match(panelSource, /waypointTone === 'error' \? 'assertive' : 'polite'/);
+assert.match(panelSource, /waypointFeedback\?\.tone === "error" \? "error" : props\.state\.waypointDraft \? "valid"/);
+assert.match(panelAdapterSource, /waypointFeedback:[\s\S]*setWaypointFeedback/);
+assert.match(appSource, /setRiverWaypointPreview\?\.\(draft\)[\s\S]*setWaypointFeedback\?\.\(\{tone: "error"/);
+assert.match(appSource, /session\?\.clear\("apply-failed"\)[\s\S]*tone: "error"/);
+assert.match(rendererSource, /preview\?\.valid \|\|[\s\S]*candidate/);
 assert.match(rendererSource, /setRiverWaypointPreview[\s\S]*riverWaypointPreview/);
 
 console.log(JSON.stringify({

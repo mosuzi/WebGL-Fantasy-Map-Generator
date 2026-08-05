@@ -1727,7 +1727,8 @@ export class PlaceholderMapRenderer {
   }
 
   setRiverWaypointPreview(preview, {draw = true} = {}) {
-    this.riverWaypointPreview = preview?.valid ? preview : null;
+    const candidate = preview?.candidatePoint;
+    this.riverWaypointPreview = preview?.valid || (Number.isFinite(Number(candidate?.[0])) && Number.isFinite(Number(candidate?.[1]))) ? preview : null;
     this.riverWaypointPreviewRevision++;
     this.dynamicBuffersDirty.selection = true;
     if (draw) this.draw();
