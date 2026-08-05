@@ -1589,21 +1589,31 @@ function buildPackRoutes(grid, pack, cities, options = {}) {
   const {burgs} = pack;
   const aliveBurgs = burgs.filter(burg => burg?.i && !burg.removed);
   const cityByBurg = new Map(cities.filter(Boolean).map(city => [city.burgId, city]));
-  const capitalBurgs = groupCapitalBurgs(aliveBurgs, grid);
-  const burgsByProvince = groupBurgs(aliveBurgs, burg => burgProvinceKey(burg));
+  const capitalBurgs = groupCapitalBurgs(aliveBurgs, grid, pack);
+  const burgsByProvinceAndLand = groupBurgsByProvinceAndLand(aliveBurgs, pack);
   const portsByFeature = groupBurgs(aliveBurgs.filter(burg => burg.port), burg => burg.port);
   const pointsArray = preparePackRoutePoints(pack);
   const variation = createRouteVariation(pack, options);
   const search = createRouteSearchScratch(pack.cells.i.length);
   const edgeKeyMultiplier = pack.cells.i.length + 1;
   const riverEdges = buildRiverEdges(pack);
+  const landNetworkCells = collectLandNetworkCells(routes, pack);
 
-  for (const segment of mergeRouteSegments(generateRouteSegments({pack, connections, groups: capitalBurgs, water: false, variation, search, edgeKeyMultiplier, riverEdges, maxVisited: pack.cells.i.length, excludedGroupIds: protectedFeatureIds}))) {
+  const roadSegments = mergeRouteSegments(generateRouteSegments({pack, connections, groups: capitalBurgs, water: false, variation, search, edgeKeyMultiplier, riverEdges, maxVisited: pack.cells.i.length, excludedGroupIds: protectedFeatureIds}));
+  for (const segment of roadSegments) {
     addPackRoute({routes, pack, segment, type: "road", pointsArray, cityByBurg, allocateRouteId});
+    registerLandNetworkCells(landNetworkCells, pack, segment.cells);
   }
 
-  for (const segment of mergeRouteSegments(generateRouteSegments({pack, connections, groups: burgsByProvince, water: false, variation, search, edgeKeyMultiplier, riverEdges, excludedGroupIds: protectedFeatureIds}))) {
-    addPackRoute({routes, pack, segment, type: "trail", pointsArray, cityByBurg, allocateRouteId});
+  for (const {feature, burgs: provinceBurgs} of burgsByProvinceAndLand) {
+    if (provinceBurgs.length < 2 || protectedFeatureIds.has(feature)) continue;
+    const anchoredBurgs = addLandNetworkAnchor(provinceBurgs, feature, landNetworkCells, pack);
+    const groups = new Map([[feature, anchoredBurgs]]);
+    const trailSegments = mergeRouteSegments(generateRouteSegments({pack, connections, groups, water: false, variation, search, edgeKeyMultiplier, riverEdges, maxVisited: pack.cells.i.length}));
+    for (const segment of trailSegments) {
+      addPackRoute({routes, pack, segment, type: "trail", pointsArray, cityByBurg, allocateRouteId});
+      registerLandNetworkCells(landNetworkCells, pack, segment.cells);
+    }
   }
 
   for (const segment of mergeRouteSegments(generateRouteSegments({pack, connections, groups: portsByFeature, water: true, variation, search, edgeKeyMultiplier, riverEdges, excludedGroupIds: protectedFeatureIds}))) {
@@ -2167,10 +2177,72 @@ function groupBurgs(burgs, keyFn) {
   return groups;
 }
 
-function groupCapitalBurgs(burgs, grid) {
+function groupCapitalBurgs(burgs, grid, pack) {
   const capitals = burgs.filter(burg => burg?.capital);
   if (getGridLandRatio(grid) < 0.09) capitals.sort((a, b) => (b.population || 0) - (a.population || 0)).splice(18);
-  return capitals.length >= 3 ? new Map([[1, capitals]]) : new Map();
+  const groups = groupBurgs(capitals, burg => landFeatureAtBurg(pack, burg));
+  for (const [feature, featureCapitals] of groups) {
+    if (featureCapitals.length < 2) groups.delete(feature);
+  }
+  return groups;
+}
+
+function groupBurgsByProvinceAndLand(burgs, pack) {
+  const groups = new Map();
+  for (const burg of burgs) {
+    const province = burgProvinceKey(burg);
+    const feature = landFeatureAtBurg(pack, burg);
+    if (!province || !feature) continue;
+    const key = `${province}:${feature}`;
+    if (!groups.has(key)) groups.set(key, {province, feature, burgs: []});
+    groups.get(key).burgs.push(burg);
+  }
+  return [...groups.values()].sort((left, right) => left.province - right.province || left.feature - right.feature);
+}
+
+function landFeatureAtBurg(pack, burg) {
+  const cell = Number(burg?.cell);
+  return Number.isInteger(cell) && pack.cells.h?.[cell] >= 20 ? Number(pack.cells.f?.[cell]) || 0 : 0;
+}
+
+function collectLandNetworkCells(routes, pack) {
+  const network = new Map();
+  for (const route of routes) {
+    if (!route || route.type === "searoute") continue;
+    registerLandNetworkCells(network, pack, route.packCells);
+  }
+  return network;
+}
+
+function registerLandNetworkCells(network, pack, cells) {
+  for (const cell of cells || []) {
+    if (pack.cells.h?.[cell] < 20) continue;
+    const feature = Number(pack.cells.f?.[cell]) || 0;
+    if (!feature) continue;
+    if (!network.has(feature)) network.set(feature, new Set());
+    network.get(feature).add(cell);
+  }
+}
+
+function addLandNetworkAnchor(burgs, feature, network, pack) {
+  const featureNetwork = network.get(feature);
+  if (!featureNetwork?.size || burgs.some(burg => featureNetwork.has(burg.cell))) return burgs;
+
+  let anchorCell = -1;
+  let bestDistance = Infinity;
+  for (const burg of burgs) {
+    const origin = pack.cells.p[burg.cell];
+    for (const cell of featureNetwork) {
+      const candidateDistance = distanceSquared(origin, pack.cells.p[cell]);
+      if (candidateDistance >= bestDistance) continue;
+      bestDistance = candidateDistance;
+      anchorCell = cell;
+    }
+  }
+  if (anchorCell < 0) return burgs;
+
+  const [x, y] = pack.cells.p[anchorCell];
+  return [...burgs, {i: 0, cell: anchorCell, x, y, state: 0, province: 0}];
 }
 
 function getGridLandRatio(grid) {
