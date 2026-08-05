@@ -80,7 +80,7 @@ async function inspectViewport(width) {
     assert.equal(idle.applyDisabled, true);
     assert.equal(idle.horizontalOverflow, 0);
     assert.ok(idle.cardTop >= idle.bodyTop - 1 && idle.cardBottom <= 720, `${width}px 置顶工作卡必须完整可见`);
-    assert.ok(idle.buttons.every(button => button.width >= 76 && button.right <= width + 1), `${width}px 三按钮不得截字或越界`);
+    assertCompactActionButtons(idle, width, "等待态");
 
     let realWaterReject = null;
     if (width === 1280) {
@@ -128,6 +128,7 @@ async function inspectViewport(width) {
     const error = await measureCard(page);
     assert.equal(error.applyDisabled, true);
     assert.equal(error.horizontalOverflow, 0);
+    assertCompactActionButtons(error, width, "错误态");
 
     await page.getByRole("button", {name: "重新选择"}).click();
     await page.locator(".river-waypoint-draft[role=status]").filter({hasText: "候选已清除"}).waitFor();
@@ -163,7 +164,24 @@ async function measureCard(page) {
     const card = document.querySelector(".river-waypoint-draft");
     const panel = card.closest(".floating-panel");
     const body = card.closest(".floating-panel-body");
+    const actions = card.querySelector(".river-waypoint-draft-actions");
     const apply = [...card.querySelectorAll("button")].find(button => button.textContent.includes("应用折点"));
+    const actionRect = actions.getBoundingClientRect();
+    const buttons = [...actions.querySelectorAll("button")].map(button => {
+      const rect = button.getBoundingClientRect();
+      const style = getComputedStyle(button);
+      return {
+        text: button.textContent.trim(),
+        width: rect.width,
+        height: rect.height,
+        left: rect.left,
+        right: rect.right,
+        top: rect.top,
+        fontSize: Number.parseFloat(style.fontSize),
+        nowrap: style.whiteSpace === "nowrap",
+        textComplete: button.scrollWidth <= button.clientWidth
+      };
+    });
     return {
       bodyTop: body.getBoundingClientRect().top,
       cardTop: card.getBoundingClientRect().top,
@@ -171,12 +189,20 @@ async function measureCard(page) {
       scrollTop: body.scrollTop,
       applyDisabled: apply.disabled,
       horizontalOverflow: Math.max(0, document.documentElement.scrollWidth - document.documentElement.clientWidth),
-      buttons: [...card.querySelectorAll("button")].map(button => {
-        const rect = button.getBoundingClientRect();
-        return {text: button.textContent.trim(), width: rect.width, right: rect.right};
-      })
+      actions: {width: actionRect.width, left: actionRect.left, right: actionRect.right},
+      actionRows: new Set(buttons.map(button => Math.round(button.top))).size,
+      buttons
     };
   });
+}
+
+function assertCompactActionButtons(measurement, width, stateLabel) {
+  assert.deepEqual(measurement.buttons.map(button => button.text), ["应用折点", "重新选择", "退出模式"], `${width}px ${stateLabel}按钮文案必须完整`);
+  assert.equal(measurement.actionRows, 1, `${width}px ${stateLabel}三个按钮应优先保持单排`);
+  assert.ok(measurement.buttons.every(button => Math.abs(button.height - 28) <= 0.5), `${width}px ${stateLabel}按钮高度应为 28px`);
+  assert.ok(measurement.buttons.every(button => button.width < measurement.actions.width - 1), `${width}px ${stateLabel}按钮不得撑满操作区`);
+  assert.ok(measurement.buttons.every(button => button.left >= measurement.actions.left - 1 && button.right <= measurement.actions.right + 1), `${width}px ${stateLabel}按钮不得越出操作区`);
+  assert.ok(measurement.buttons.every(button => button.fontSize === 12 && button.nowrap && button.textComplete), `${width}px ${stateLabel}按钮文字不得缩小、折行或截断`);
 }
 
 async function startStaticServer() {

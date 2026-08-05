@@ -473,6 +473,16 @@ function isPoint(point) {
 .river-waypoint-draft-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 6px;
+}
+
+.river-waypoint-draft-actions :deep(.el-button) {
+  flex: 0 0 auto;
+  width: auto;
+  min-width: 0;
+  height: 28px;
+  padding: 0 10px;
+  font-size: 12px;
+  white-space: nowrap;
 }
 </style>
