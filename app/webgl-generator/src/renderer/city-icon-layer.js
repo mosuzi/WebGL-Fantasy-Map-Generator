@@ -19,17 +19,17 @@ export const CITY_ICON_ROLE_BITS = Object.freeze({
 });
 
 export const CITY_ICON_TIER_SCALES = Object.freeze({
-  hamlet: 0.62,
-  village: 0.76,
-  town: 0.92,
-  city: 1.1
+  hamlet: 0.72,
+  village: 0.86,
+  town: 1.02,
+  city: 1.2
 });
 
 export const CITY_ICON_BASE_CSS_SIZE = Object.freeze({width: 12.5, height: 9.5});
 export const CITY_ICON_VISIBILITY_TRANSITION_MS = 150;
 export const CITY_ICON_SCALE_FADE_WIDTH = 0.24;
-export const CITY_ICON_MIN_OUTLINE_CSS_PX = 4.8;
-export const CITY_ICON_MAX_OUTLINE_CSS_PX = 10.5;
+export const CITY_ICON_MIN_OUTLINE_CSS_PX = 5.4;
+export const CITY_ICON_MAX_OUTLINE_CSS_PX = 12.1;
 export const CITY_ICON_OUTLINE_STROKE_CSS_PX = 2;
 
 export const CITY_ICON_INSTANCE_FLOATS = 11;
@@ -65,7 +65,7 @@ export function cityIconTierScale(tier) {
 export function cityIconOutlineCssLimit(nameWidthCss) {
   const width = Number(nameWidthCss);
   if (!Number.isFinite(width)) return CITY_ICON_MAX_OUTLINE_CSS_PX;
-  return Math.max(CITY_ICON_MIN_OUTLINE_CSS_PX, Math.min(CITY_ICON_MAX_OUTLINE_CSS_PX, width * 0.5 - 1));
+  return Math.max(CITY_ICON_MIN_OUTLINE_CSS_PX, Math.min(CITY_ICON_MAX_OUTLINE_CSS_PX, width * 0.575 - 1));
 }
 
 export function cityIconOutlineExtent(silhouette, roles = []) {
@@ -456,7 +456,7 @@ float cameraSizeFactor(float scale) {
 void main() {
   vec2 centerNdc = vec2(a_world.x / u_mapSize.x * 2.0 - 1.0, 1.0 - a_world.y / u_mapSize.y * 2.0);
   vec2 centerClip = centerNdc * u_cameraScale + u_cameraOffset;
-  v_sizeFactor = min(cameraSizeFactor(u_cameraScale), a_maxSizeFactor / 1.10) * a_tierScale;
+  v_sizeFactor = min(cameraSizeFactor(u_cameraScale), a_maxSizeFactor / 1.20) * a_tierScale;
   vec2 sizeBacking = u_baseSizeCss * u_pixelRatio * v_sizeFactor;
   vec2 anchorBacking = vec2(0.0, sizeBacking.y * 0.32);
   vec2 clipOffset = (a_corner * sizeBacking + anchorBacking) / u_viewportBacking * 2.0;

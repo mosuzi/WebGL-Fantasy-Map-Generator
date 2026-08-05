@@ -6,6 +6,8 @@ import {
   CITY_ICON_FRAGMENT_SHADER_SOURCE,
   CITY_ICON_INSTANCE_FLOATS,
   CITY_ICON_INSTANCE_STRIDE_BYTES,
+  CITY_ICON_MAX_OUTLINE_CSS_PX,
+  CITY_ICON_MIN_OUTLINE_CSS_PX,
   CITY_ICON_ROLE_BITS,
   CITY_ICON_SCALE_FADE_WIDTH,
   CITY_ICON_SHAPE_IDS,
@@ -30,15 +32,17 @@ const shapeKeys = ["hamlet", "village", "town", "city", "capital", "provincial",
 assert.deepEqual(Object.keys(CITY_ICON_SHAPE_IDS), shapeKeys, "WebGL 城镇层的九种图形分母漂移");
 assert.equal(new Set(Object.values(CITY_ICON_SHAPE_IDS)).size, 9, "WebGL 城镇图形 id 必须各自唯一");
 assert.deepEqual(Object.keys(CITY_ICON_TIER_SCALES), ["hamlet", "village", "town", "city"], "人口四级尺寸分母漂移");
-assert.deepEqual(CITY_ICON_TIER_SCALES, {hamlet: 0.62, village: 0.76, town: 0.92, city: 1.1}, "人口四级尺寸差异漂移");
+assert.deepEqual(CITY_ICON_TIER_SCALES, {hamlet: 0.72, village: 0.86, town: 1.02, city: 1.2}, "人口四级尺寸差异漂移");
 assert.deepEqual(CITY_ICON_ROLE_BITS, {capital: 1, provincial: 2, port: 4}, "附加角色 bit 契约漂移");
 assert.equal(cityIconRoleBits(["capital", "provincial", "port"]), 7, "多角色 bit 不能稳定组合");
 assert.deepEqual(CITY_ICON_BASE_CSS_SIZE, {width: 12.5, height: 9.5}, "城镇图标基准盒漂移");
 assert.equal(Math.round(CITY_ICON_BASE_CSS_SIZE.width / 10.5 * 1000) / 1000, 1.19, "城镇图标宽度没有保持约 19% 的小幅放大");
 assert.equal(Math.round(CITY_ICON_BASE_CSS_SIZE.height / 8 * 1000) / 1000, 1.188, "城镇图标高度没有保持约 19% 的小幅放大");
-assert(Math.abs(cityIconOutlineCssLimit(22.1) - 10.05) < 0.001, "短名称上限没有校准到名称约半宽");
-assert.equal(cityIconOutlineCssLimit(8), 4.8, "极短名称没有使用最小可辨轮廓上限");
-assert.equal(cityIconOutlineCssLimit(80), 10.5, "长名称没有使用最大轮廓上限");
+assert.equal(CITY_ICON_MIN_OUTLINE_CSS_PX, 5.4, "最小轮廓上限漂移");
+assert.equal(CITY_ICON_MAX_OUTLINE_CSS_PX, 12.1, "最大轮廓上限漂移");
+assert(Math.abs(cityIconOutlineCssLimit(22.1) - 11.7075) < 0.001, "名称宽度系数没有校准到 0.575");
+assert.equal(cityIconOutlineCssLimit(8), 5.4, "极短名称没有使用最小可辨轮廓上限");
+assert.equal(cityIconOutlineCssLimit(80), 12.1, "长名称没有使用最大轮廓上限");
 assert(CITY_ICON_SCALE_FADE_WIDTH > 0, "缩放阈值必须有非零平滑带");
 assert.equal(CITY_ICON_INSTANCE_FLOATS, 11, "实例属性分母必须覆盖名称宽度上限");
 assert.equal(CITY_ICON_INSTANCE_STRIDE_BYTES, 44, "实例 stride 必须与 11 个 float 一致");
@@ -58,9 +62,11 @@ for (const tier of Object.keys(CITY_ICON_TIER_SCALES)) {
   assert(sizes.every(size => size.width > 0 && size.height > 0), `${tier} 出现非正尺寸`);
   assert(sizes.at(-1).width > sizes[0].width, `${tier} 没有随相机连续放大`);
 }
-for (const scale of scales) {
+const tierAssertionScales = [1, 1.5, 2.5, 4];
+const realFiniteCap = cityIconMaxSizeFactor({silhouette: "town", nameWidthCss: 22.1});
+for (const scale of tierAssertionScales) {
   assertTierProgression(scalesFor(scale), `${scale}× 自然尺寸`);
-  assertTierProgression(scalesFor(scale, 0.9), `${scale}× 名称封顶尺寸`);
+  assertTierProgression(scalesFor(scale, realFiniteCap), `${scale}× 名称封顶尺寸`);
 }
 
 const nameWidthCases = [
@@ -77,7 +83,24 @@ for (const sample of nameWidthCases) {
     return extent * CITY_ICON_BASE_CSS_SIZE.height * size.factor + CITY_ICON_OUTLINE_STROKE_CSS_PX;
   });
   assert(outlineWidths.every(width => width <= outlineLimit + 0.001), `${sample.silhouette} 超过名称驱动的轮廓上限`);
-  assert(outlineWidths.at(-1) <= sample.nameWidthCss * 0.5, `${sample.silhouette} 高倍缩放后没有保持约半个名称宽度`);
+  assert(outlineWidths.at(-1) <= sample.nameWidthCss * 0.575, `${sample.silhouette} 高倍缩放后没有保持 0.575 名称宽度上限`);
+}
+
+const previousTierScales = {hamlet: 0.62, village: 0.76, town: 0.92, city: 1.1};
+const baselineGrowthRatios = [];
+for (const nameWidthCss of [8, 22.1, 80]) {
+  const sample = {silhouette: "town", nameWidthCss};
+  const currentCap = cityIconMaxSizeFactor(sample);
+  const previousCap = previousCityIconMaxSizeFactor(sample);
+  for (const scale of [...tierAssertionScales, 12]) {
+    for (const tier of Object.keys(CITY_ICON_TIER_SCALES)) {
+      const current = cityIconCssSize(scale, tier, CITY_ICON_BASE_CSS_SIZE, currentCap);
+      const previousFactor = Math.min(cityIconCameraSizeFactor(scale), previousCap / previousTierScales.city) * previousTierScales[tier];
+      const previousWidth = CITY_ICON_BASE_CSS_SIZE.width * previousFactor;
+      assert(current.width > previousWidth + 0.001, `${nameWidthCss}px 名称 / ${scale}× / ${tier} 没有大于第294项同名封顶基线`);
+      baselineGrowthRatios.push(current.width / previousWidth);
+    }
+  }
 }
 
 const minScale = 2;
@@ -92,7 +115,7 @@ assert(visibilitySamples[3] > 0 && visibilitySamples[3] < 1, "阈值中心仍是
 assert.equal(typeof CityIconWebglLayer, "function");
 assert.equal(typeof createCityIconWebglLayer, "function");
 assert.match(CITY_ICON_VERTEX_SHADER_SOURCE, /cameraSizeFactor\(u_cameraScale\)/, "vertex shader 未直接使用当前相机连续尺寸");
-assert.match(CITY_ICON_VERTEX_SHADER_SOURCE, /min\(cameraSizeFactor\(u_cameraScale\), a_maxSizeFactor \/ 1\.10\) \* a_tierScale/, "vertex shader 未先封顶相机尺寸再应用人口级别");
+assert.match(CITY_ICON_VERTEX_SHADER_SOURCE, /min\(cameraSizeFactor\(u_cameraScale\), a_maxSizeFactor \/ 1\.20\) \* a_tierScale/, "vertex shader 未先封顶相机尺寸再应用人口级别");
 assert.match(CITY_ICON_VERTEX_SHADER_SOURCE, /centerNdc \* u_cameraScale \+ u_cameraOffset/, "实例中心未与当前相机同帧变换");
 assert.match(CITY_ICON_FRAGMENT_SHADER_SOURCE, /mainShapeDistance/, "fragment shader 缺少解析式主体图形");
 for (const shapeId of Object.values(CITY_ICON_SHAPE_IDS)) {
@@ -137,10 +160,20 @@ function assertTierProgression(values, label) {
   assert(values.at(-1) / values[0] >= 1.55, `${label}城市与村落级差不足 55%：${values.join(", ")}`);
 }
 
+function previousCityIconMaxSizeFactor({silhouette, roles = [], nameWidthCss}) {
+  const width = Number(nameWidthCss);
+  const outlineLimit = Number.isFinite(width) ? Math.max(4.8, Math.min(10.5, width * 0.5 - 1)) : 10.5;
+  const extent = cityIconOutlineExtent(silhouette, roles);
+  return Math.max(1, outlineLimit - CITY_ICON_OUTLINE_STROKE_CSS_PX) / (CITY_ICON_BASE_CSS_SIZE.height * extent);
+}
+
 console.log(JSON.stringify({
   cityWebglShapes: shapeKeys.length,
   roleBits: CITY_ICON_ROLE_BITS,
   sizeFactors: Object.fromEntries(scales.map((scale, index) => [scale, Math.round(factors[index] * 1000) / 1000])),
+  tierScales: CITY_ICON_TIER_SCALES,
+  realFiniteCap: Math.round(realFiniteCap * 1000) / 1000,
+  minimumGrowthOverTask294: Math.round(Math.min(...baselineGrowthRatios) * 1000) / 1000,
   visibilitySamples,
   instancedDrawCallsPerFrame: 1,
   cameraFrameInstanceUploads: 0,

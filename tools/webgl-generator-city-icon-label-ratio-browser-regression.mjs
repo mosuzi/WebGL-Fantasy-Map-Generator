@@ -136,8 +136,8 @@ try {
   });
   console.log(JSON.stringify({phase: "measurements", summaries}, null, 2));
   for (const summary of summaries) {
-    assert(summary.p95 <= 0.5, `${summary.scale}× 图标 / 名称宽度 P95 没有缩到约一半：${summary.p95}`);
-    assert(summary.max <= 0.52, `${summary.scale}× 仍有图标超过约半个名称宽度：${summary.max}`);
+    assert(summary.p95 <= 0.58, `${summary.scale}× 图标 / 名称宽度 P95 超过 0.58：${summary.p95}`);
+    assert(summary.max <= 0.6, `${summary.scale}× 图标 / 名称宽度最大值超过 0.60：${summary.max}`);
     assert.equal(summary.modelUploads, summaries[0].modelUploads, `${summary.scale}× 重新上传了城镇模型实例`);
   }
 

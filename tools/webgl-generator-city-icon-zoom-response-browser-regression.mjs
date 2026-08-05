@@ -40,8 +40,8 @@ try {
     const rect = renderer.canvas.getBoundingClientRect();
     const screen = renderer.worldToScreen(item.x, item.y, rect);
     const summary = window.webglGeneratorApi.info.mapSummary().data;
-    const tier = {hamlet: 0.62, village: 0.76, town: 0.92, city: 1.1}[item.scale] || 0.92;
-    const sizeFactor = scale => Math.min(0.72 + 2.15 * (1 - Math.exp(-0.18 * Math.max(0, scale - 0.5))), item.maxSizeFactor / 1.1) * tier;
+    const tier = {hamlet: 0.72, village: 0.86, town: 1.02, city: 1.2}[item.scale] || 1.02;
+    const sizeFactor = scale => Math.min(0.72 + 2.15 * (1 - Math.exp(-0.18 * Math.max(0, scale - 0.5))), item.maxSizeFactor / 1.2) * tier;
     const stats = renderer.getStats().cityIconWebgl;
     window.__cityZoomAudit = {id: item.id, checksum: summary.checksum, revision: summary.mapRevision};
     window.__cityZoomFrame = new Promise(resolve => {
