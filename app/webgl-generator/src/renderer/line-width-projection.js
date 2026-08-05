@@ -1,7 +1,7 @@
 const ROUTE_WORLD_WIDTHS = Object.freeze({
-  primary: 1.8,
-  secondary: 1.15,
-  minor: 0.7
+  primary: 0.75,
+  secondary: 0.48,
+  minor: 0.28
 });
 
 export const ROUTE_SELECTION_HALO_CSS_PX = 2.4;

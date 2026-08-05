@@ -19,13 +19,18 @@ const projection = (scale, dpr = 1) => createLineWidthProjection({
 
 const scales = [1, 2, 4].map(scale => projectWorldLineWidth(routeWorldWidth("minor"), projection(scale)));
 assert.ok(scales[0].cssWidth < scales[1].cssWidth && scales[1].cssWidth < scales[2].cssWidth, "世界宽度必须随 camera.scale 单调投影");
-assert.deepEqual(scales.map(item => item.cssWidth), [0.7, 1.4, 2.8], "scale 1 / 2 / 4 必须按比例投影 CSS 宽度");
+assert.deepEqual(scales.map(item => item.cssWidth), [0.28, 0.56, 1.12], "scale 1 / 2 / 4 必须按比例投影 CSS 宽度");
 
+assert.deepEqual(
+  [routeWorldWidth("primary"), routeWorldWidth("secondary"), routeWorldWidth("minor")],
+  [0.75, 0.48, 0.28],
+  "道路三级世界宽度必须保持收细后的视觉层级"
+);
 assert.ok(routeWorldWidth("primary") > routeWorldWidth("secondary"), "primary 道路必须宽于 secondary");
 assert.ok(routeWorldWidth("secondary") > routeWorldWidth("minor"), "secondary 道路必须宽于 minor");
 const fitMinor = projectWorldLineWidth(routeWorldWidth("minor"), projection(0.5));
 assert.ok(fitMinor.cssWidth < 1.1, "基础道路不得保留固定 CSS 最小宽度");
-assert.equal(fitMinor.lod, "subpixel");
+assert.equal(fitMinor.lod, "faint");
 assert.ok(fitMinor.alpha > 0 && fitMinor.alpha < 1, "亚像素道路必须使用连续透明度");
 
 const upstreamWorld = riverWorldWidth({flux: 8, pointIndex: 0, widthFactor: 1, sourceWidth: 0.05});
@@ -112,7 +117,7 @@ for (const functionName of ["buildRouteMeshVerticesAsync", "buildRiverMeshVertic
 assert.match(rendererSource, /const camera = snapshotCamera\(this\.camera\)[\s\S]{0,500}?buildRouteMeshVerticesAsync/, "异步道路构建必须使用 camera snapshot");
 assert.match(rendererSource, /const camera = snapshotCamera\(this\.camera\)[\s\S]{0,300}?buildRiverMeshVerticesAsync/, "异步河流构建必须使用 camera snapshot");
 assert.match(pngSource, /markViewportBuffersDirty\?\.\(\)[\s\S]{0,120}?draw\(\{updateDynamicBuffers: true, updateOverlay: true\}\)/, "PNG 世界范围必须复用 dirty + draw 动态线层路径");
-assert.match(pngSource, /function copyWebglCanvasTo2d[\s\S]{0,300}?renderer\.draw\(\)/, "PNG 像素读取前必须复用 renderer.draw");
+assert.match(pngSource, /function copyWebglCanvasTo2d[\s\S]{0,400}?renderer\.draw\(\{drawCityIcons: includeCityIcons\}\)/, "PNG 像素读取前必须复用 renderer.draw 并保留城镇实例导出选项");
 
 console.log(JSON.stringify({
   ok: true,
