@@ -44,5 +44,9 @@ function boxesOverlap(left, right, padding) {
 
 function boxWithinViewport(box, viewport, margin) {
   if (!viewport) return true;
-  return box.left >= margin && box.top >= margin && box.right <= viewport.width - margin && box.bottom <= viewport.height - margin;
+  const left = Number(viewport.left) || 0;
+  const top = Number(viewport.top) || 0;
+  const right = Number.isFinite(Number(viewport.right)) ? Number(viewport.right) : Number(viewport.width) || 0;
+  const bottom = Number.isFinite(Number(viewport.bottom)) ? Number(viewport.bottom) : Number(viewport.height) || 0;
+  return box.left >= left + margin && box.top >= top + margin && box.right <= right - margin && box.bottom <= bottom - margin;
 }

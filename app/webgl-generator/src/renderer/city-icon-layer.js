@@ -25,16 +25,33 @@ export const CITY_ICON_TIER_SCALES = Object.freeze({
   city: 0.87
 });
 
-export const CITY_ICON_BASE_CSS_SIZE = Object.freeze({width: 30, height: 23});
+export const CITY_ICON_BASE_CSS_SIZE = Object.freeze({width: 10.5, height: 8});
 export const CITY_ICON_VISIBILITY_TRANSITION_MS = 150;
 export const CITY_ICON_SCALE_FADE_WIDTH = 0.24;
+export const CITY_ICON_MIN_OUTLINE_CSS_PX = 4;
+export const CITY_ICON_MAX_OUTLINE_CSS_PX = 9;
 
-const INSTANCE_FLOATS = 10;
+export const CITY_ICON_INSTANCE_FLOATS = 11;
+export const CITY_ICON_INSTANCE_STRIDE_BYTES = CITY_ICON_INSTANCE_FLOATS * Float32Array.BYTES_PER_ELEMENT;
+const INSTANCE_FLOATS = CITY_ICON_INSTANCE_FLOATS;
 const FLOAT_BYTES = Float32Array.BYTES_PER_ELEMENT;
-const INSTANCE_STRIDE_BYTES = INSTANCE_FLOATS * FLOAT_BYTES;
+const INSTANCE_STRIDE_BYTES = CITY_ICON_INSTANCE_STRIDE_BYTES;
 const DARK_OUTLINE = Object.freeze([0.055, 0.075, 0.085, 1]);
 const WHITE_INNER_LINE = Object.freeze([0.985, 0.992, 1, 1]);
 const SELECTED_INNER_LINE = Object.freeze([1, 0.86, 0.32, 1]);
+const OUTLINE_STROKE_CSS_PX = 1.8;
+const ROLE_OUTLINE_EXTENT = 0.879;
+const SHAPE_OUTLINE_EXTENTS = Object.freeze({
+  hamlet: 0.48,
+  village: 0.84,
+  town: 0.84,
+  city: 0.8,
+  capital: 0.84,
+  provincial: 0.84,
+  port: 0.7,
+  fort: 0.84,
+  camp: 0.76
+});
 
 export function cityIconCameraSizeFactor(scale) {
   const normalizedScale = Math.max(0, Number(scale) || 0);
@@ -45,8 +62,34 @@ export function cityIconTierScale(tier) {
   return CITY_ICON_TIER_SCALES[tier] || CITY_ICON_TIER_SCALES.town;
 }
 
-export function cityIconCssSize(scale, tier, baseSize = CITY_ICON_BASE_CSS_SIZE) {
-  const factor = cityIconCameraSizeFactor(scale) * cityIconTierScale(tier);
+export function cityIconOutlineCssLimit(nameWidthCss) {
+  const width = Number(nameWidthCss);
+  if (!Number.isFinite(width)) return CITY_ICON_MAX_OUTLINE_CSS_PX;
+  return Math.max(CITY_ICON_MIN_OUTLINE_CSS_PX, Math.min(CITY_ICON_MAX_OUTLINE_CSS_PX, width * 0.45 - 1));
+}
+
+export function cityIconOutlineExtent(silhouette, roles = []) {
+  const normalized = Object.hasOwn(SHAPE_OUTLINE_EXTENTS, silhouette) ? silhouette : "town";
+  const shape = CITY_ICON_SHAPE_IDS[normalized];
+  const roleBits = additionalRoleBits(shape, roles);
+  return roleBits ? Math.max(SHAPE_OUTLINE_EXTENTS[normalized], ROLE_OUTLINE_EXTENT) : SHAPE_OUTLINE_EXTENTS[normalized];
+}
+
+export function cityIconMaxSizeFactor({silhouette, roles = [], nameWidthCss, baseSize = CITY_ICON_BASE_CSS_SIZE} = {}) {
+  const outlineLimit = cityIconOutlineCssLimit(nameWidthCss);
+  const extent = cityIconOutlineExtent(silhouette, roles);
+  const usableOutline = Math.max(1, outlineLimit - OUTLINE_STROKE_CSS_PX);
+  return usableOutline / (positiveNumber(baseSize?.height, CITY_ICON_BASE_CSS_SIZE.height) * extent);
+}
+
+export function cityIconSizeFactor(scale, tier, maxSizeFactor = Number.POSITIVE_INFINITY) {
+  const naturalFactor = cityIconCameraSizeFactor(scale) * cityIconTierScale(tier);
+  const cap = positiveNumber(maxSizeFactor, Number.POSITIVE_INFINITY);
+  return Math.min(naturalFactor, cap);
+}
+
+export function cityIconCssSize(scale, tier, baseSize = CITY_ICON_BASE_CSS_SIZE, maxSizeFactor = Number.POSITIVE_INFINITY) {
+  const factor = cityIconSizeFactor(scale, tier, maxSizeFactor);
   return {width: baseSize.width * factor, height: baseSize.height * factor, factor};
 }
 
@@ -101,12 +144,10 @@ export class CityIconWebglLayer {
   }
 
   setInstances(items = [], {nowMs = 0} = {}) {
-    this.instances = items
-      .map(item => normalizeCityIconInstance(item, nowMs))
-      .filter(Boolean);
+    const packed = packCityIconInstances(items, {nowMs});
+    this.instances = packed.instances;
     this.instanceIndexById = new Map(this.instances.map((item, index) => [String(item.id), index]));
-    this.instanceData = new Float32Array(this.instances.length * INSTANCE_FLOATS);
-    for (let index = 0; index < this.instances.length; index++) writeInstanceData(this.instanceData, index, this.instances[index]);
+    this.instanceData = packed.data;
     const gl = this.gl;
     gl.bindBuffer(gl.ARRAY_BUFFER, this.instanceBuffer);
     gl.bufferData(gl.ARRAY_BUFFER, this.instanceData, gl.DYNAMIC_DRAW);
@@ -224,6 +265,13 @@ export function createCityIconWebglLayer(gl, options = {}) {
   return new CityIconWebglLayer(gl, options);
 }
 
+export function packCityIconInstances(items = [], {nowMs = 0} = {}) {
+  const instances = items.map(item => normalizeCityIconInstance(item, nowMs)).filter(Boolean);
+  const data = new Float32Array(instances.length * INSTANCE_FLOATS);
+  for (let index = 0; index < instances.length; index++) writeInstanceData(data, index, instances[index]);
+  return {instances, data};
+}
+
 function configureCityIconVertexArray(gl, vao, quadBuffer, instanceBuffer) {
   gl.bindVertexArray(vao);
   gl.bindBuffer(gl.ARRAY_BUFFER, quadBuffer);
@@ -236,7 +284,7 @@ function configureCityIconVertexArray(gl, vao, quadBuffer, instanceBuffer) {
 
   gl.bindBuffer(gl.ARRAY_BUFFER, instanceBuffer);
   configureInstanceAttribute(gl, 1, 2, 0);
-  for (let location = 2; location <= 9; location++) configureInstanceAttribute(gl, location, 1, location);
+  for (let location = 2; location <= 10; location++) configureInstanceAttribute(gl, location, 1, location);
   gl.bindVertexArray(null);
 }
 
@@ -264,7 +312,8 @@ function normalizeCityIconInstance(item, nowMs) {
     visibilityTarget: target,
     visibilityStartedMs: Number(item.visibilityStartedMs ?? nowMs) || 0,
     roleBits: additionalRoleBits(shape, Object.hasOwn(item, "roleBits") ? item.roleBits : item.roles),
-    selected: item.selected ? 1 : 0
+    selected: item.selected ? 1 : 0,
+    maxSizeFactor: positiveNumber(item.maxSizeFactor, 1000000)
   };
 }
 
@@ -288,6 +337,7 @@ function writeInstanceData(data, index, item) {
   data[offset + 7] = item.visibilityStartedMs;
   data[offset + 8] = item.roleBits;
   data[offset + 9] = item.selected;
+  data[offset + 10] = item.maxSizeFactor;
 }
 
 function uploadChangedInstanceRanges(gl, buffer, data, indices) {
@@ -379,6 +429,7 @@ layout(location = 6) in float a_visibilityTarget;
 layout(location = 7) in float a_visibilityStartedMs;
 layout(location = 8) in float a_roleBits;
 layout(location = 9) in float a_selected;
+layout(location = 10) in float a_maxSizeFactor;
 
 uniform vec2 u_mapSize;
 uniform vec2 u_viewportBacking;
@@ -404,7 +455,7 @@ float cameraSizeFactor(float scale) {
 void main() {
   vec2 centerNdc = vec2(a_world.x / u_mapSize.x * 2.0 - 1.0, 1.0 - a_world.y / u_mapSize.y * 2.0);
   vec2 centerClip = centerNdc * u_cameraScale + u_cameraOffset;
-  v_sizeFactor = cameraSizeFactor(u_cameraScale) * a_tierScale;
+  v_sizeFactor = min(cameraSizeFactor(u_cameraScale) * a_tierScale, a_maxSizeFactor);
   vec2 sizeBacking = u_baseSizeCss * u_pixelRatio * v_sizeFactor;
   vec2 anchorBacking = vec2(0.0, sizeBacking.y * 0.32);
   vec2 clipOffset = (a_corner * sizeBacking + anchorBacking) / u_viewportBacking * 2.0;
@@ -515,9 +566,9 @@ void main() {
   float normalizedDistance = min(mainShapeDistance(iconPoint, v_shape), roleShapeDistance(iconPoint, v_roleBits, v_shape));
   float halfMinCss = min(u_baseSizeCss.x, u_baseSizeCss.y) * v_sizeFactor * 0.5;
   float distancePx = normalizedDistance * halfMinCss;
-  float antialiasWidth = max(fwidth(distancePx), 0.42);
-  float outerCoverage = 1.0 - smoothstep(1.9 - antialiasWidth, 1.9 + antialiasWidth, distancePx);
-  float innerCoverage = 1.0 - smoothstep(0.72 - antialiasWidth, 0.72 + antialiasWidth, distancePx);
+  float antialiasWidth = max(fwidth(distancePx), 0.28);
+  float outerCoverage = 1.0 - smoothstep(0.9 - antialiasWidth, 0.9 + antialiasWidth, distancePx);
+  float innerCoverage = 1.0 - smoothstep(0.45 - antialiasWidth, 0.45 + antialiasWidth, distancePx);
   float scaleVisibility = smoothstep(v_minScale - u_scaleFadeWidth, v_minScale + u_scaleFadeWidth, u_cameraScale);
   float transitionProgress = smoothstep(0.0, max(1.0, u_transitionMs), u_timeMs - v_visibilityStartedMs);
   float targetVisibility = mix(v_visibilityFrom, v_visibilityTarget, transitionProgress);

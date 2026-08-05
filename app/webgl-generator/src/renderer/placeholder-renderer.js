@@ -77,6 +77,7 @@ import {
   CITY_ICON_SCALE_FADE_WIDTH,
   CITY_ICON_VISIBILITY_TRANSITION_MS,
   cityIconCssSize,
+  cityIconMaxSizeFactor,
   cityIconScaleVisibility,
   createCityIconWebglLayer
 } from "./city-icon-layer.js";
@@ -130,6 +131,10 @@ const MAX_TRADE_FLOW_VERTICES = 18000;
 const OVERLAY_LABEL_PREWARM_RATIO = 0.5;
 const OVERLAY_LABEL_PREWARM_MIN_CSS_PX = 192;
 const OVERLAY_LABEL_PREWARM_MAX_CSS_PX = 720;
+const PROVINCE_LABEL_PREWARM_MAX_CSS_PX = 384;
+const OVERLAY_ICON_PREWARM_RATIO = 0.5;
+const OVERLAY_ICON_PREWARM_MIN_CSS_PX = 192;
+const OVERLAY_ICON_PREWARM_MAX_CSS_PX = 720;
 const CITY_ICON_PREWARM_RATIO = 0.5;
 const CITY_ICON_PREWARM_MIN_CSS_PX = 256;
 const CITY_ICON_PREWARM_MAX_CSS_PX = 720;
@@ -304,6 +309,7 @@ export class PlaceholderMapRenderer {
     this.lastOverlayUpdate = emptyOverlayUpdateStats();
     this.performanceEvents = createRendererPerformanceEvents();
     this.overlayInteractionSuspended = false;
+    this.viewportInteractionKind = null;
     this.overlayCommittedCamera = snapshotViewportCamera(this.camera);
     this.overlayPreviewTransform = {scale: 1, translateX: 0, translateY: 0};
     this.viewportPreviewFrame = 0;
@@ -1792,6 +1798,10 @@ export class PlaceholderMapRenderer {
   }
 
   prepareViewportPreview() {
+    const committedScale = Number(this.overlayCommittedCamera?.scale ?? this.camera.scale);
+    const nextKind = Math.abs(this.camera.scale - committedScale) < 0.000001 ? "pan" : "zoom";
+    if (!this.overlayInteractionSuspended) this.viewportInteractionKind = nextKind;
+    else if (nextKind === "zoom") this.viewportInteractionKind = "zoom";
     this.viewportCommitVersion += 1;
     this.suspendOverlayForInteraction();
     this.updateOverlayPreviewTransform();
@@ -1908,6 +1918,7 @@ export class PlaceholderMapRenderer {
       throw error;
     } finally {
       if (this.viewportCommitEvent === event) this.viewportCommitEvent = null;
+      if (this.viewportCommitVersion === version) this.viewportInteractionKind = null;
     }
   }
 
@@ -2102,11 +2113,20 @@ export class PlaceholderMapRenderer {
       node.classList.toggle("position-locked", layout.locked);
       applyResolvedLabelStyle(node, resolvedStyle);
       fragment.append(node);
-      return {...item, x: layout.position.x, y: layout.position.y, minScale: layout.minScale, styleType, resolvedStyle, layout, metrics: estimateLabelTextBox(item.text, resolvedStyle), node, glyphNodes, box: null, visible: false};
+      return {...item, x: layout.position.x, y: layout.position.y, minScale: layout.minScale, styleType, resolvedStyle, layout, metrics: estimateLabelTextBox(item.text, resolvedStyle), node, glyphNodes, box: null, visible: false, buffered: false, politicalCandidateIndex: null};
     });
     this.labelItems = hasManualLabelPriorities(map) ? sortLabelItemsByPriority(labels) : labels;
+    const cityLabelWidths = new Map(labels
+      .filter(item => item.targetKind === LABEL_TARGET_KIND.CITY)
+      .map(item => [String(item.targetId), item.metrics?.width]));
     this.cityIconItems = getCityIconItems(map).map(item => ({
       ...item,
+      nameWidthCss: cityLabelWidths.get(String(item.id)),
+      maxSizeFactor: cityIconMaxSizeFactor({
+        silhouette: item.silhouette,
+        roles: item.roles,
+        nameWidthCss: cityLabelWidths.get(String(item.id))
+      }),
       box: null,
       visible: false,
       buffered: false,
@@ -2125,7 +2145,7 @@ export class PlaceholderMapRenderer {
       applyMarkerIconPalette(node, item);
       node.innerHTML = markerIconSvg(item);
       fragment.append(node);
-      return {...item, node, box: null, visible: false};
+      return {...item, node, box: null, visible: false, buffered: false};
     });
     this.militaryIconItems = getMilitaryIconItems(map, this.unitPreferences).map(item => {
       const node = documentRef.createElement("span");
@@ -2148,7 +2168,7 @@ export class PlaceholderMapRenderer {
       setDynamicCanvasTextContent(count, "military-count", formatMilitaryTroops(item.troops, this.unitPreferences));
       node.append(symbol, count);
       fragment.append(node);
-      return {...item, node, box: null, visible: false};
+      return {...item, node, box: null, visible: false, buffered: false};
     });
     this.selectionMarker = documentRef.createElement("span");
     this.selectionMarker.className = "selection-marker";
@@ -2196,6 +2216,7 @@ export class PlaceholderMapRenderer {
     let fallbackProvinces = 0;
     let stateCityOverlaps = 0;
     const scale = this.camera.scale;
+    const preservePoliticalCandidate = this.viewportInteractionKind === "pan";
     const maxVisible = labelLimitForScale(scale, this.labelOptions.maxCityLabels);
     const padding = labelPaddingForScale(scale);
     const labelPrewarm = overlayLabelPrewarmCssPx(rect);
@@ -2225,14 +2246,17 @@ export class PlaceholderMapRenderer {
         continue;
       }
       const baseScreen = this.worldToScreen(item.x, item.y, rect);
+      const politicalPrewarm = provinceLabel ? Math.min(labelPrewarm, PROVINCE_LABEL_PREWARM_MAX_CSS_PX) : labelPrewarm;
       const politicalPlacement = politicalLabel ? resolvePoliticalLabelPlacement({
         item,
         screen: baseScreen,
         obstacles: occupied,
         peers: stateLabel ? occupiedStates : [...occupiedStates, ...occupiedProvinces],
-        viewport: {width: rect.width, height: rect.height},
+        viewport: expandedViewport(rect, politicalPrewarm),
         padding,
         locked: item.layout?.locked,
+        preferredCandidateIndex: item.politicalCandidateIndex,
+        retainPreferred: preservePoliticalCandidate && (item.visible || item.buffered),
         anchorAllowed: stateLabel && !item.layout?.locked && item.componentCellSet?.size
           ? anchor => stateLabelAnchorAllowed(this, item, anchor, rect)
           : null
@@ -2241,7 +2265,8 @@ export class PlaceholderMapRenderer {
       const labelAnchor = politicalLabel ? screen : overlayLabelAnchor(this, item, screen, scale);
       const box = politicalPlacement?.box || labelBoxForItem(item, screen, labelAnchor);
       const onScreen = box.right > 8 && box.bottom > 8 && box.left < rect.width - 8 && box.top < rect.height - 8;
-      const canBuffer = !politicalLabel && box.right > -labelPrewarm && box.bottom > -labelPrewarm && box.left < rect.width + labelPrewarm && box.top < rect.height + labelPrewarm;
+      const prewarm = politicalLabel ? politicalPrewarm : labelPrewarm;
+      const canBuffer = box.right > -prewarm && box.bottom > -prewarm && box.left < rect.width + prewarm && box.top < rect.height + prewarm;
       const canRender = onScreen || canBuffer;
       const blocked = canRender && (priorityLayout
         ? boxesOverlapAny(occupiedByPriority, box, padding)
@@ -2253,7 +2278,8 @@ export class PlaceholderMapRenderer {
       const shouldRender = canRender && (forceVisible || !blocked);
       const shouldShow = onScreen && shouldRender;
       const shouldBuffer = !onScreen && shouldRender;
-      const entering = shouldShow && !item.visible && !item.buffered;
+      const wasRendered = item.visible || item.buffered;
+      const entering = shouldShow && !wasRendered;
       item.node.classList.toggle("visible", shouldShow);
       item.node.classList.toggle("buffered", shouldBuffer);
       item.node.classList.toggle("viewport-entering", entering);
@@ -2261,8 +2287,17 @@ export class PlaceholderMapRenderer {
       item.visible = shouldShow;
       item.buffered = shouldBuffer;
       item.box = shouldRender ? box : null;
-      if (!shouldRender) continue;
-      if (politicalPlacement) applyPoliticalLabelPlacement(item, politicalPlacement);
+      if (!shouldRender) {
+        if (wasRendered) {
+          if (politicalPlacement) applyPoliticalLabelPlacement(item, politicalPlacement);
+          else setOverlayNodePosition(item.node, labelAnchor.x, labelAnchor.y);
+        }
+        continue;
+      }
+      if (politicalPlacement) {
+        item.politicalCandidateIndex = politicalPlacement.candidateIndex;
+        applyPoliticalLabelPlacement(item, politicalPlacement);
+      }
       else setOverlayNodePosition(item.node, labelAnchor.x, labelAnchor.y);
       item.node.style.setProperty("--label-rotation", `${politicalPlacement ? 0 : item.rotation || 0}deg`);
       const provinceFallback = provinceLabel && Boolean(politicalPlacement?.collides);
@@ -2500,6 +2535,7 @@ export class PlaceholderMapRenderer {
     const scale = this.camera.scale;
     const iconsEnabled = scale >= this.markerIconScaleThreshold;
     const iconPadding = scale >= MARKER_ICON_RELAXED_SCALE ? 2 : 6;
+    const prewarm = overlayIconPrewarmCssPx(rect);
     const occupiedIcons = [];
     let visible = 0;
 
@@ -2507,32 +2543,46 @@ export class PlaceholderMapRenderer {
       const layerVisible = isMarkerLayerVisible(item, this.layerVisibility);
       if (!iconsEnabled || !layerVisible) {
         item.node.classList.toggle("visible", false);
+        item.node.classList.toggle("buffered", false);
+        item.node.classList.toggle("viewport-entering", false);
         item.node.classList.toggle("city-overlap", false);
         item.node.classList.toggle("selected", isSelectedOrHighlighted(this.selection, this.objectHighlights, OBJECT_KIND.MARKER, item.id));
         item.visible = false;
+        item.buffered = false;
         item.box = null;
         continue;
       }
       const screen = this.worldToScreen(item.x, item.y, rect);
       const box = markerIconBoxForItem(item, screen, scale);
       const onScreen = box.right > 4 && box.bottom > 4 && box.left < rect.width - 4 && box.top < rect.height - 4;
-      const canShow = onScreen;
-      const blocked = canShow && scale < MARKER_ICON_RELAXED_SCALE && (
+      const canRender = box.right > -prewarm && box.bottom > -prewarm && box.left < rect.width + prewarm && box.top < rect.height + prewarm;
+      const blocked = canRender && scale < MARKER_ICON_RELAXED_SCALE && (
         boxesOverlapAny(occupiedLabels, box, iconPadding) ||
         boxesOverlapAny(occupiedIcons, box, iconPadding)
       );
-      const shouldShow = canShow && !blocked;
+      const shouldRender = canRender && !blocked;
+      const shouldShow = onScreen && shouldRender;
+      const shouldBuffer = !onScreen && shouldRender;
+      const wasRendered = item.visible || item.buffered;
+      const entering = shouldShow && !wasRendered;
       const cityOverlap = shouldShow && item.category === "resource" && boxesOverlapAny(cityIconBoxes, box, 0);
       item.node.classList.toggle("visible", shouldShow);
+      item.node.classList.toggle("buffered", shouldBuffer);
+      item.node.classList.toggle("viewport-entering", entering);
+      if (entering) clearViewportEnteringClassNextFrame(item.node);
       item.node.classList.toggle("city-overlap", cityOverlap);
       item.node.classList.toggle("selected", isSelectedOrHighlighted(this.selection, this.objectHighlights, OBJECT_KIND.MARKER, item.id));
       item.visible = shouldShow;
-      item.box = shouldShow ? box : null;
-      if (!shouldShow) continue;
+      item.buffered = shouldBuffer;
+      item.box = shouldRender ? box : null;
+      if (!shouldRender) {
+        if (wasRendered) setOverlayNodePosition(item.node, screen.x, screen.y);
+        continue;
+      }
       setOverlayNodePosition(item.node, screen.x, screen.y);
       item.node.style.setProperty("--marker-icon-scale", String(markerIconScale(scale)));
       occupiedIcons.push(box);
-      visible++;
+      if (shouldShow) visible++;
     }
 
     this.visibleMarkerIconCount = visible;
@@ -2546,6 +2596,8 @@ export class PlaceholderMapRenderer {
 
     const scale = this.camera.scale;
     const iconPadding = scale >= MILITARY_ICON_RELAXED_SCALE ? 2 : 6;
+    const prewarm = overlayIconPrewarmCssPx(rect);
+    const placementViewport = expandedViewport(rect, prewarm);
     const occupiedIcons = [];
     let visible = 0;
 
@@ -2554,9 +2606,12 @@ export class PlaceholderMapRenderer {
       applyMilitaryLabelStatePalette(item, this.map);
       if (this.layerVisibility.military === false || scale < item.minScale) {
         if (item.visible !== false) item.node.classList.toggle("visible", false);
+        item.node.classList.toggle("buffered", false);
+        item.node.classList.toggle("viewport-entering", false);
         setOverlayItemClassFlag(item, "selectedClass", "selected", selected);
         setOverlayItemClassFlag(item, "fleetClass", "military-map-icon--fleet", item.type === "fleet");
         item.visible = false;
+        item.buffered = false;
         item.box = null;
         continue;
       }
@@ -2570,34 +2625,53 @@ export class PlaceholderMapRenderer {
             width,
             height,
             cityLabelBoxes,
-            viewport: {width: rect.width, height: rect.height},
+            viewport: placementViewport,
             padding: iconPadding,
             item
           })
         : {screen, box: militaryLabelBox(screen, width, height, item), avoided: false, blocked: false};
       const box = placement.box;
       const onScreen = box.right > 4 && box.bottom > 4 && box.left < rect.width - 4 && box.top < rect.height - 4;
-      const canShow = onScreen;
-      const blocked = canShow && !selected && (
+      const canRender = box.right > -prewarm && box.bottom > -prewarm && box.left < rect.width + prewarm && box.top < rect.height + prewarm;
+      const blocked = canRender && !selected && (
         placement.blocked ||
         scale < MILITARY_ICON_RELAXED_SCALE && (
           boxesOverlapAny(occupiedLabels, box, iconPadding) ||
           boxesOverlapAny(occupiedIcons, box, iconPadding)
         )
       );
-      const shouldShow = canShow && !blocked;
+      const shouldRender = canRender && !blocked;
+      const shouldShow = onScreen && shouldRender;
+      const shouldBuffer = !onScreen && shouldRender;
+      const wasRendered = item.visible || item.buffered;
+      const entering = shouldShow && !wasRendered;
       if (item.visible !== shouldShow) item.node.classList.toggle("visible", shouldShow);
+      item.node.classList.toggle("buffered", shouldBuffer);
+      item.node.classList.toggle("viewport-entering", entering);
+      if (entering) clearViewportEnteringClassNextFrame(item.node);
       setOverlayItemClassFlag(item, "selectedClass", "selected", selected);
       setOverlayItemClassFlag(item, "fleetClass", "military-map-icon--fleet", item.type === "fleet");
       setOverlayItemClassFlag(item, "cityAvoidedClass", "city-label-avoided", placement.avoided);
       item.node.dataset.cityLabelAvoided = String(placement.avoided);
       item.visible = shouldShow;
-      item.box = shouldShow ? box : null;
-      if (!shouldShow) continue;
+      item.buffered = shouldBuffer;
+      item.box = shouldRender ? box : null;
+      if (!shouldRender) {
+        if (wasRendered) {
+          setOverlayNodePosition(
+            item.node,
+            screen.x + (item.placementOffsetX || 0),
+            screen.y + (item.placementOffsetY || 0)
+          );
+        }
+        continue;
+      }
       setOverlayNodePosition(item.node, placement.screen.x, placement.screen.y);
+      item.placementOffsetX = placement.screen.x - screen.x;
+      item.placementOffsetY = placement.screen.y - screen.y;
       setOverlayItemStyleValue(item, "scaleValue", "--military-icon-scale", String(sizeScale));
       occupiedIcons.push(box);
-      visible++;
+      if (shouldShow) visible++;
     }
 
     this.visibleMilitaryIconCount = visible;
@@ -2959,6 +3033,14 @@ function overlayLabelPrewarmCssPx(rect) {
   return clamp(Math.max(rect.width, rect.height) * OVERLAY_LABEL_PREWARM_RATIO, OVERLAY_LABEL_PREWARM_MIN_CSS_PX, OVERLAY_LABEL_PREWARM_MAX_CSS_PX);
 }
 
+function overlayIconPrewarmCssPx(rect) {
+  return clamp(Math.max(rect.width, rect.height) * OVERLAY_ICON_PREWARM_RATIO, OVERLAY_ICON_PREWARM_MIN_CSS_PX, OVERLAY_ICON_PREWARM_MAX_CSS_PX);
+}
+
+function expandedViewport(rect, padding) {
+  return {left: -padding, top: -padding, right: rect.width + padding, bottom: rect.height + padding};
+}
+
 function appendLabelNodeText(node, item, documentRef, styleType) {
   const political = item.targetKind === LABEL_TARGET_KIND.STATE || item.targetKind === LABEL_TARGET_KIND.PROVINCE;
   if (!political) {
@@ -3225,7 +3307,7 @@ function cityIconBoxForItem(item, screen, sizeScale) {
 }
 
 function cityIconScale(scale, item) {
-  return cityIconCssSize(scale, item.scale).factor;
+  return cityIconCssSize(scale, item.scale, CITY_ICON_BASE_CSS_SIZE, item.maxSizeFactor).factor;
 }
 
 function cityIconPrewarmCssPx(rect) {

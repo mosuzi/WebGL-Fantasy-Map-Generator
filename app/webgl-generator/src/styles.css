@@ -1645,7 +1645,7 @@ select:disabled {
 }
 
 .map-overlay.map-overlay--interaction-transform,
-.map-stage.map-stage--interaction-transform .measurement-overlay {
+.map-stage.map-stage--interaction-transform .measurement-svg {
   transform: var(--map-interaction-transform, none);
   transform-origin: 0 0;
   will-change: transform;
@@ -1700,15 +1700,37 @@ select:disabled {
 
 .city-label.buffered,
 .custom-label.buffered,
+.state-label.buffered,
+.province-label.buffered,
 .zone-label.buffered,
 .city-label.viewport-entering,
 .custom-label.viewport-entering,
 .state-label.viewport-entering,
 .province-label.viewport-entering,
 .zone-label.viewport-entering {
-  opacity: var(--label-opacity, 1);
   transition: none;
   visibility: visible;
+}
+
+.city-label.buffered,
+.custom-label.buffered,
+.province-label.buffered,
+.zone-label.buffered,
+.city-label.viewport-entering,
+.custom-label.viewport-entering,
+.province-label.viewport-entering,
+.zone-label.viewport-entering {
+  opacity: var(--label-opacity, 1);
+}
+
+.state-label.buffered,
+.state-label.viewport-entering {
+  opacity: calc(var(--label-opacity, 1) * var(--state-label-opacity, 1));
+}
+
+.province-label.buffered.collision-fallback,
+.province-label.viewport-entering.collision-fallback {
+  opacity: calc(var(--label-opacity, 1) * var(--province-label-collision-opacity, 0.76));
 }
 
 .city-label.capital {
@@ -1970,6 +1992,13 @@ select:disabled {
   visibility: visible;
 }
 
+.marker-map-icon.buffered,
+.marker-map-icon.viewport-entering {
+  opacity: 1;
+  transition: none;
+  visibility: visible;
+}
+
 .marker-map-icon--resource.visible.city-overlap {
   opacity: 0.42;
   transform: translate(var(--overlay-x, 0px), var(--overlay-y, 0px)) translate(-50%, -98%) scale(calc(var(--marker-icon-scale, 1) * 0.9));
@@ -2060,6 +2089,13 @@ select:disabled {
 .military-map-icon.visible {
   opacity: 1;
   transition-delay: 0s;
+  visibility: visible;
+}
+
+.military-map-icon.buffered,
+.military-map-icon.viewport-entering {
+  opacity: 1;
+  transition: none;
   visibility: visible;
 }
 

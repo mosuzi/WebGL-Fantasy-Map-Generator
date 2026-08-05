@@ -42,6 +42,10 @@ assert.deepEqual(
   avoided,
   "相同输入的政治标签候选必须完全确定"
 );
+const refreshedPreferred = resolvePoliticalLabelPlacement({item: stateItem, screen, obstacles: [cityObstacle], viewport, padding: 6, preferredCandidateIndex: 0});
+const retainedPreferred = resolvePoliticalLabelPlacement({item: stateItem, screen, obstacles: [cityObstacle], viewport, padding: 6, preferredCandidateIndex: 0, retainPreferred: true});
+assert.notEqual(refreshedPreferred.candidateIndex, 0, "普通同缩放布局更新不得粘住已碰撞的旧候选");
+assert.equal(retainedPreferred.candidateIndex, 0, "纯平移滞回应保留旧候选避免提交跳位");
 
 const provinceItem = {targetKind: "province", targetId: 2, text: "霜原行省", rotation: 0, resolvedStyle: provinceStyle};
 const provinceStraight = createPoliticalLabelGlyphLayout(provinceItem.text, provinceStyle, {targetKind: "province", rotation: 0, bend: 0});
@@ -68,6 +72,7 @@ const [rendererSource, stylesSource, mapIoSource] = await Promise.all([
   readFile(new URL("../app/webgl-generator/src/runtime/map-file-io.js", import.meta.url), "utf8")
 ]);
 assert.match(rendererSource, /priorityLayout \? this\.labelItems : automaticPoliticalLabelOrder\(this\.labelItems\)/, "默认标签顺序没有切换为城市优先");
+assert.match(rendererSource, /preservePoliticalCandidate = this\.viewportInteractionKind === "pan"/, "政治标签候选滞回没有限定为纯平移提交");
 assert.match(rendererSource, /provinceLabel\s*\n\s*\? false/, "省份碰撞仍可能被自动布局完全隐藏");
 assert.match(rendererSource, /appendLabelNodeText[\s\S]*political-label-glyph/, "国家 / 省份名称没有拆分为逐字路径节点");
 assert.match(stylesSource, /\.province-label\.collision-fallback[\s\S]*z-index:\s*1/, "省份碰撞降级没有降低层级");

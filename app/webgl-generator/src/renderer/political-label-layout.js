@@ -49,14 +49,15 @@ export function createPoliticalLabelGlyphLayout(text, style, {targetKind = "prov
   };
 }
 
-export function resolvePoliticalLabelPlacement({item, screen, obstacles = [], peers = [], viewport, padding = 0, locked = false, anchorAllowed = null} = {}) {
+export function resolvePoliticalLabelPlacement({item, screen, obstacles = [], peers = [], viewport, padding = 0, locked = false, anchorAllowed = null, preferredCandidateIndex = null, retainPreferred = false} = {}) {
   const targetKind = item?.targetKind === "state" ? "state" : "province";
   const fontSize = positive(item?.resolvedStyle?.fontSize, targetKind === "state" ? 30 : 18);
   const rotation = finite(item?.rotation);
   const candidates = politicalCandidateSpecs(fontSize, rotation, locked);
+  const candidateOrder = preferredCandidateOrder(candidates.length, preferredCandidateIndex);
   let best = null;
 
-  for (let index = 0; index < candidates.length; index++) {
+  for (const index of candidateOrder) {
     const spec = candidates[index];
     const layout = createPoliticalLabelGlyphLayout(item?.text, item?.resolvedStyle, {targetKind, rotation, bend: spec.bend});
     const anchor = {x: finite(screen?.x) + spec.x, y: finite(screen?.y) + spec.y};
@@ -82,6 +83,7 @@ export function resolvePoliticalLabelPlacement({item, screen, obstacles = [], pe
       onScreen: overflow === 0,
       score
     };
+    if (retainPreferred && index === Number(preferredCandidateIndex)) return candidate;
     if (!candidate.collides && candidate.onScreen) return candidate;
     if (!best || candidate.score < best.score) best = candidate;
   }
@@ -164,10 +166,21 @@ function overlapSummary(glyphs, candidateBox, boxes, padding) {
 
 function viewportOverflow(box, viewport, margin) {
   if (!viewport) return 0;
-  return Math.max(0, margin - box.left)
-    + Math.max(0, margin - box.top)
-    + Math.max(0, box.right - (viewport.width - margin))
-    + Math.max(0, box.bottom - (viewport.height - margin));
+  const left = finite(viewport.left);
+  const top = finite(viewport.top);
+  const right = Number.isFinite(Number(viewport.right)) ? Number(viewport.right) : finite(viewport.width);
+  const bottom = Number.isFinite(Number(viewport.bottom)) ? Number(viewport.bottom) : finite(viewport.height);
+  return Math.max(0, left + margin - box.left)
+    + Math.max(0, top + margin - box.top)
+    + Math.max(0, box.right - (right - margin))
+    + Math.max(0, box.bottom - (bottom - margin));
+}
+
+function preferredCandidateOrder(length, preferredCandidateIndex) {
+  const preferred = Number(preferredCandidateIndex);
+  const order = Array.from({length}, (_, index) => index);
+  if (!Number.isInteger(preferred) || preferred < 0 || preferred >= length) return order;
+  return [preferred, ...order.filter(index => index !== preferred)];
 }
 
 function symmetricRootSize(box, fontSize) {

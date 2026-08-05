@@ -11,7 +11,7 @@ import {
 } from "../app/webgl-generator/src/renderer/city-label-icon-layout.js";
 import {CITY_ICON_BASE_CSS_SIZE} from "../app/webgl-generator/src/renderer/city-icon-layer.js";
 
-const iconHeight = 23;
+const iconHeight = 8;
 const scales = [0.69, 0.87, 1.0614];
 for (const iconScale of scales) {
   const offset = cityLabelAnchorOffset({iconVisible: true, iconHeight, iconScale});
@@ -35,7 +35,7 @@ const [rendererSource, cityLayerSource, stylesSource, mapIoSource] = await Promi
 
 assert.match(rendererSource, /cityIconItemsById = new Map/, "渲染器没有建立城镇标签到自身图标的稳定映射");
 assert.match(rendererSource, /renderer\.layerVisibility\.cities !== false && scale >= cityIcon\.minScale/, "城镇标签净空没有遵守图标图层和缩放显隐");
-assert.deepEqual(CITY_ICON_BASE_CSS_SIZE, {width: 30, height: 23}, "WebGL 图标与标签净空的基准盒漂移");
+assert.deepEqual(CITY_ICON_BASE_CSS_SIZE, {width: 10.5, height: 8}, "WebGL 图标与标签净空的基准盒漂移");
 assert.match(rendererSource, /const CITY_ICON_BASE_WIDTH = CITY_ICON_BASE_CSS_SIZE\.width;/, "城镇碰撞宽度没有复用 WebGL 基准盒");
 assert.match(rendererSource, /const CITY_ICON_BASE_HEIGHT = CITY_ICON_BASE_CSS_SIZE\.height;/, "城镇碰撞高度没有复用 WebGL 基准盒");
 assert.match(rendererSource, /setOverlayNodePosition\(item\.node, labelAnchor\.x, labelAnchor\.y\)/, "城镇标签没有应用净空后的锚点");

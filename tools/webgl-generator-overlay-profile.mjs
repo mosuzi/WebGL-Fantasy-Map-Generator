@@ -837,6 +837,7 @@ async function startFrameRecorder(page) {
       if (!renderer) return {};
       const dirty = renderer.dynamicBuffersDirty || {};
       const measurementOverlay = document.getElementById("measurement-overlay");
+      const measurementSvg = document.getElementById("measurement-svg");
       return {
         glError: renderer.lastDraw?.glError ?? null,
         layerOrder: [...(renderer.lastDraw?.layerOrder || [])],
@@ -844,7 +845,7 @@ async function startFrameRecorder(page) {
         layerVisibility: renderer.layerVisibility ? {...renderer.layerVisibility} : {},
         overlayInteractionSuspended: Boolean(renderer.overlayInteractionSuspended),
         overlayTransform: renderer.overlay ? getComputedStyle(renderer.overlay).transform : "none",
-        measurementTransform: measurementOverlay ? getComputedStyle(measurementOverlay).transform : "none",
+        measurementTransform: measurementSvg ? getComputedStyle(measurementSvg).transform : "none",
         overlayChildCount: renderer.overlay?.childElementCount || 0,
         labelCount: renderer.labelCount || 0,
         visibleLabelCount: renderer.visibleLabelCount || 0,
