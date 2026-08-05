@@ -171,6 +171,17 @@ export function inspectRiverVisualWaypoint(map, riverId, packCell) {
   }
 
   const nearest = nearestRiverSegment(points, point);
+  const maxDistance = riverVisualWaypointMaxDistance(map, points, nearest.index);
+  if (nearest.distance > maxDistance) {
+    return {
+      ...invalidRiverVisualWaypoint("waypoint-too-far", `候选点距离最近河段 ${roundCoordinate(nearest.distance)}，超过允许的 ${roundCoordinate(maxDistance)}`),
+      riverId: id,
+      packCell: cell,
+      insertIndex: nearest.index + 1,
+      distance: nearest.distance,
+      maxDistance
+    };
+  }
   const flux = Math.round((Number(points[nearest.index]?.[2]) || 0) + ((Number(points[nearest.index + 1]?.[2]) || 0) - (Number(points[nearest.index]?.[2]) || 0)) * nearest.amount);
   const nextPoint = [roundCoordinate(point[0]), roundCoordinate(point[1]), Math.max(0, flux)];
   const nextPoints = [...points.slice(0, nearest.index + 1), nextPoint, ...points.slice(nearest.index + 1)];
@@ -183,9 +194,41 @@ export function inspectRiverVisualWaypoint(map, riverId, packCell) {
     packCell: cell,
     insertIndex: nearest.index + 1,
     distance: nearest.distance,
+    maxDistance,
     points: nextPoints,
     length: polylineLength(nextPoints)
   };
+}
+
+function riverVisualWaypointMaxDistance(map, points, segmentIndex) {
+  const segmentLength = Math.hypot(
+    Number(points[segmentIndex + 1]?.[0]) - Number(points[segmentIndex]?.[0]),
+    Number(points[segmentIndex + 1]?.[1]) - Number(points[segmentIndex]?.[1])
+  );
+  const pointExtent = pointCloudDiagonal(map?.pack?.cells?.p);
+  const graphWidth = Number(map?.metadata?.graphWidth ?? map?.grid?.metadata?.graphWidth);
+  const graphHeight = Number(map?.metadata?.graphHeight ?? map?.grid?.metadata?.graphHeight);
+  const metadataExtent = graphWidth > 0 && graphHeight > 0 ? Math.hypot(graphWidth, graphHeight) : NaN;
+  const metadataRatio = metadataExtent / pointExtent;
+  const extent = Number.isFinite(metadataRatio) && metadataRatio >= 0.75 && metadataRatio <= 1.25 ? metadataExtent : pointExtent;
+  const scaleFloor = Math.max(3, extent * 0.008);
+  const scaleCeiling = Math.max(scaleFloor, extent * 0.04);
+  return Math.min(scaleCeiling, Math.max(scaleFloor, segmentLength * 2.5));
+}
+
+function pointCloudDiagonal(points) {
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (const point of points || []) {
+    if (!isPoint(point)) continue;
+    minX = Math.min(minX, Number(point[0]));
+    minY = Math.min(minY, Number(point[1]));
+    maxX = Math.max(maxX, Number(point[0]));
+    maxY = Math.max(maxY, Number(point[1]));
+  }
+  return Number.isFinite(minX) ? Math.max(1, Math.hypot(maxX - minX, maxY - minY)) : 100;
 }
 
 export function createAddRiverVisualWaypointCommand(riverId, packCell, {label = "添加河道控制点"} = {}) {

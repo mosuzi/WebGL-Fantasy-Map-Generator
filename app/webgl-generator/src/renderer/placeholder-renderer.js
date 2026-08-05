@@ -268,6 +268,8 @@ export class PlaceholderMapRenderer {
     this.visibleMilitaryIconCount = 0;
     this.selection = null;
     this.objectHighlights = [];
+    this.riverWaypointPreview = null;
+    this.riverWaypointPreviewRevision = 0;
     this.selectionMarker = null;
     this.objectPickingIndex = null;
     this.lastObjectCandidateCount = 0;
@@ -1655,7 +1657,7 @@ export class PlaceholderMapRenderer {
     const startedAt = performance.now();
     const event = this.beginPerformanceEvent("selectionMesh", {mode: "sync"}, startedAt);
     try {
-      const selectionVertices = buildSelectionMeshVertices(this.map, this.camera, this.canvas, this.selection, this.locateFlash, this.objectHighlights);
+      const selectionVertices = buildSelectionMeshVertices(this.map, this.camera, this.canvas, this.selection, this.locateFlash, this.objectHighlights, this.riverWaypointPreview);
       this.selectionVertexCount = selectionVertices.length / 6;
       const upload = this.recordBufferUpload("selection-screen-mesh", () => {
         this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.selectionBuffer);
@@ -1716,6 +1718,17 @@ export class PlaceholderMapRenderer {
 
   clearObjectHighlights(options = {}) {
     this.setObjectHighlights([], options);
+  }
+
+  setRiverWaypointPreview(preview, {draw = true} = {}) {
+    this.riverWaypointPreview = preview?.valid ? preview : null;
+    this.riverWaypointPreviewRevision++;
+    this.dynamicBuffersDirty.selection = true;
+    if (draw) this.draw();
+  }
+
+  clearRiverWaypointPreview(options = {}) {
+    this.setRiverWaypointPreview(null, options);
   }
 
   setHeightTransformPreview(changes, {draw = true} = {}) {

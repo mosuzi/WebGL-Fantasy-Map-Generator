@@ -11,6 +11,7 @@ import {MEASUREMENT_ROUTE_FIT_ROADS, normalizeMeasurementRouteFit} from "./measu
 import {OBJECT_KIND_LABEL} from "./object-kinds.js";
 import {resolveObject} from "./object-resolver.js";
 import {buildHistoryPeek} from "./history-peek.js";
+import {withRiverWaypointPreviewSuppressed} from "./river-waypoint-session.js";
 import {buildApiMethodCoverage} from "./api-capability-coverage.js";
 import {API_METHODS, API_STABILITY, API_VERSION, CONFIRM_REQUIRED_METHODS, buildApiContract, buildApiVersionContract, groupQualifiedMethodNames} from "./api-contract.js";
 import {buildApiDescriptionCoverage, buildApiMethodDescriptionRegistry, describeApiMethod} from "./api-schema-registry.js";
@@ -1817,12 +1818,28 @@ export async function exportPngData(state, documentRef, options = {}) {
   const crop = options.crop ?? readPngExportCrop(documentRef);
   const overlays = options.overlays ?? readPngExportOverlays(documentRef);
   const pngOptions = {includeMapOverlays, transparentBackground, pixelScale, crop, overlays, renderer: state.renderer};
-  if (options.download === true) {
-    const result = await downloadCanvasPng(documentRef, canvas, filename, pngOptions);
-    return {
+  return withRiverWaypointPreviewSuppressed(state.renderer, async () => {
+    if (options.download === true) {
+      const result = await downloadCanvasPng(documentRef, canvas, filename, pngOptions);
+      return {
+        filename,
+        mimeType: "image/png",
+        bytes: result.bytes,
+        width: result.width,
+        height: result.height,
+        pixelScale: result.pixelScale,
+        includeMapOverlays: result.includeMapOverlays,
+        transparentBackground: result.transparentBackground,
+        crop: result.crop,
+        overlays: result.overlays
+      };
+    }
+
+    const result = await createCanvasPngBlob(documentRef, canvas, pngOptions);
+    const data = {
       filename,
       mimeType: "image/png",
-      bytes: result.bytes,
+      bytes: result.blob.size,
       width: result.width,
       height: result.height,
       pixelScale: result.pixelScale,
@@ -1831,23 +1848,9 @@ export async function exportPngData(state, documentRef, options = {}) {
       crop: result.crop,
       overlays: result.overlays
     };
-  }
-
-  const result = await createCanvasPngBlob(documentRef, canvas, pngOptions);
-  const data = {
-    filename,
-    mimeType: "image/png",
-    bytes: result.blob.size,
-    width: result.width,
-    height: result.height,
-    pixelScale: result.pixelScale,
-    includeMapOverlays: result.includeMapOverlays,
-    transparentBackground: result.transparentBackground,
-    crop: result.crop,
-    overlays: result.overlays
-  };
-  if (options.includeDataUrl !== false) data.dataUrl = await blobToDataUrl(documentRef, result.blob);
-  return data;
+    if (options.includeDataUrl !== false) data.dataUrl = await blobToDataUrl(documentRef, result.blob);
+    return data;
+  });
 }
 
 export async function exportHeightmapPngData(state, documentRef, options = {}) {

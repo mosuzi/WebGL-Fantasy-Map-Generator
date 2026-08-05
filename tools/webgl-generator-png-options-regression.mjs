@@ -11,6 +11,7 @@ import {
   resolvePngCropRect
 } from "../app/webgl-generator/src/runtime/map-file-io.js";
 import {PNG_FIXED_TEXT_ELEMENT_IDS, PNG_MILITARY_TEXT_SELECTOR, PNG_SEMANTIC_LABEL_SELECTORS} from "../app/webgl-generator/src/runtime/canvas-text-contract.js";
+import {withRiverWaypointPreviewSuppressed} from "../app/webgl-generator/src/runtime/river-waypoint-session.js";
 
 const defaultOverlays = {labels: true, cityIcons: true, markers: true, military: true, measurements: false, legend: true, scaleBar: true};
 assert.deepEqual(normalizePngExportOptions({}), {
@@ -104,6 +105,29 @@ assert.deepEqual(cleared, [
   [350, 40, 50, 220]
 ]);
 
+const preview = {valid: true, riverId: 7, packCell: 2};
+const pngRenderer = {
+  riverWaypointPreview: preview,
+  riverWaypointPreviewRevision: 1,
+  selection: {kind: "river", id: 7},
+  objectHighlights: [{kind: "river", id: 7}],
+  draws: [],
+  setRiverWaypointPreview(next) {
+    this.riverWaypointPreview = next;
+    this.riverWaypointPreviewRevision++;
+    this.draws.push(next);
+  }
+};
+const pngSelection = pngRenderer.selection;
+const pngHighlights = pngRenderer.objectHighlights;
+await withRiverWaypointPreviewSuppressed(pngRenderer, async () => {
+  assert.equal(pngRenderer.riverWaypointPreview, null, "PNG 读取期间必须抑制未保存河道预览");
+  assert.equal(pngRenderer.selection, pngSelection, "PNG 抑制不得清除普通 selection");
+  assert.equal(pngRenderer.objectHighlights, pngHighlights, "PNG 抑制不得清除普通 highlights");
+});
+assert.equal(pngRenderer.riverWaypointPreview, preview, "PNG 完成后必须恢复河道预览");
+assert.deepEqual(pngRenderer.draws, [null, preview], "PNG 抑制与恢复均必须重绘 renderer");
+
 const [fileIoSource, appSource, apiSource, controlSource] = await Promise.all([
   readFile(new URL("../app/webgl-generator/src/runtime/map-file-io.js", import.meta.url), "utf8"),
   readFile(new URL("../app/webgl-generator/src/runtime/app.js", import.meta.url), "utf8"),
@@ -113,6 +137,7 @@ const [fileIoSource, appSource, apiSource, controlSource] = await Promise.all([
 assert.match(fileIoSource, /if \(options\.includeMapOverlays\) \{[\s\S]*?drawMapOverlayElements[\s\S]*?drawFixedMapUiElements/);
 assert.deepEqual(PNG_SEMANTIC_LABEL_SELECTORS, [".state-label.visible", ".province-label.visible", ".city-label.visible", ".custom-label.visible", ".zone-label.visible"], "PNG 标签生产契约没有完整覆盖六类语义标签");
 assert.match(fileIoSource, /overlays\?\.labels[\s\S]*selectors\.push\(\.\.\.PNG_SEMANTIC_LABEL_SELECTORS\)/, "PNG 标签通道没有消费生产契约");
+assert.match(apiSource, /withRiverWaypointPreviewSuppressed\(state\.renderer[\s\S]*createCanvasPngBlob/, "PNG API 没有在读取画布时抑制未保存河道预览");
 assert.equal(PNG_MILITARY_TEXT_SELECTOR, ".military-map-icon.visible", "军事兵力注记生产契约错误");
 assert.match(fileIoSource, /overlays\?\.military[\s\S]*selectors\.push\(PNG_MILITARY_TEXT_SELECTOR\)/, "军事兵力注记没有保留独立 PNG 通道");
 assert.deepEqual(PNG_FIXED_TEXT_ELEMENT_IDS, {legend: "map-legend", scaleBar: "map-scale-bar"}, "图例或比例尺生产契约错误");

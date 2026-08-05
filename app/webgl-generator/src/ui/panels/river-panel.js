@@ -33,6 +33,7 @@ export function createRiverPanel(documentRef, manager, callbacks = {}) {
     highlightCount: readPanelHighlightCount(callbacks),
     createMode: false,
     waypointMode: false,
+    waypointDraft: null,
     version: 0
   });
   const panelCallbacks = {
@@ -68,6 +69,9 @@ export function createRiverPanel(documentRef, manager, callbacks = {}) {
     onHighlight: rows => highlightPanelRows(panelState, callbacks, rows, riverObject),
     onClearHighlights: () => clearPanelHighlights(panelState, callbacks),
     onWaypointMode: (active, row) => callbacks.onWaypointMode?.(Boolean(active), riverObject(row)),
+    onApplyWaypoint: () => callbacks.onApplyWaypoint?.(),
+    onReselectWaypoint: () => callbacks.onReselectWaypoint?.(),
+    onCancelWaypoint: () => callbacks.onCancelWaypoint?.(),
     onRename: (riverId, name) => callbacks.onRename?.(riverId, name),
     onRenameVisibleFromNamebase: riverIds => callbacks.onRenameVisibleFromNamebase?.(riverIds),
     onDelete: riverId => callbacks.onDelete?.(riverId),
@@ -139,6 +143,11 @@ export function createRiverPanel(documentRef, manager, callbacks = {}) {
     },
     setWaypointMode(active) {
       panelState.waypointMode = Boolean(active);
+      if (!panelState.waypointMode) panelState.waypointDraft = null;
+      panelState.version++;
+    },
+    setWaypointDraft(draft) {
+      panelState.waypointDraft = draft ? markRaw(draft) : null;
       panelState.version++;
     },
     isOpen() {
