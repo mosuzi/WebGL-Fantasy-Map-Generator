@@ -174,7 +174,8 @@ import {
 import {applySocialAssignmentPreview, SOCIAL_ASSIGNMENT_PREVIEW_EFFECTS} from "./social-ownership-edit-commands.js";
 import {resolveObject} from "./object-resolver.js";
 import {MAX_PERSISTENT_OBJECT_HIGHLIGHTS, isPersistentHighlightObjectKind, normalizePersistentHighlights, samePersistentHighlightMembership} from "./persistent-highlights.js";
-import {createAddRiverCommand, createAddRiverVisualWaypointCommand, createDeleteRiverCommand, createRenameRiversFromNamebaseCommand, createSetRiverNoteCommand, createSetRiverWidthFactorCommand} from "./river-edit-commands.js";
+import {createAddRiverCommand, createAddRiverVisualWaypointCommand, createDeleteRiverCommand, createRenameRiversFromNamebaseCommand, createSetRiverNoteCommand, createSetRiverWidthFactorCommand, inspectRiverVisualWaypoint} from "./river-edit-commands.js";
+import {createRiverWaypointSession} from "./river-waypoint-session.js";
 import {createAddRouteCommand, createDeleteRouteCommand, createEditRouteCommand, createSetRouteNoteCommand, inspectRouteEdit} from "./route-edit-commands.js";
 import {createDeleteBatchCommand, createDeleteConfirmationRequiredError, inspectDeleteImpact, requestDeleteConfirmation} from "./delete-impact.js";
 import {
@@ -428,7 +429,7 @@ export const CANVAS_TOOL_MODE_FEEDBACK = Object.freeze({
   [CANVAS_TOOL_MODE.ROUTE_DRAW]: canvasToolModeFeedback("绘制路线", "依次单击路线起点和终点，成功创建后退出。", "one-shot", "crosshair"),
   [CANVAS_TOOL_MODE.ROUTE_EDIT_WAYPOINT]: canvasToolModeFeedback("拾取路线途经点", "单击新的途经位置。", "pick", "cell"),
   [CANVAS_TOOL_MODE.RIVER_ADD]: canvasToolModeFeedback("新增河流", "单击合法河源位置。", "one-shot", "crosshair"),
-  [CANVAS_TOOL_MODE.RIVER_EDIT_WAYPOINT]: canvasToolModeFeedback("添加河道控制点", "单击河道希望经过的位置。", "pick", "cell"),
+  [CANVAS_TOOL_MODE.RIVER_EDIT_WAYPOINT]: canvasToolModeFeedback("预览河道控制点", "单击候选位置预览；不会立即修改河流。", "pick", "cell"),
   [CANVAS_TOOL_MODE.LAKE_EXCAVATE]: canvasToolModeFeedback("开挖湖泊", "单击开挖中心位置。", "one-shot", "crosshair"),
   [CANVAS_TOOL_MODE.FEATURE_PATCH_SELECT]: canvasToolModeFeedback("拾取水陆修正区域", "单击局部水陆修正的中心。", "pick", "cell"),
   [CANVAS_TOOL_MODE.FEATURE_TOPOLOGY_SELECT]: canvasToolModeFeedback("选择海岸编辑区域", "逐次单击地图区域以组成持续选区。", "persistent", "cell"),
@@ -527,7 +528,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     routeCreate: {active: false, type: "road", startPackCell: null},
     routeEdit: {waypointRouteId: null},
     riverCreate: {active: false},
-    riverEdit: {waypointRiverId: null},
+    riverEdit: {waypointRiverId: null, waypointDraft: null, session: null},
     lakeCreate: {active: false, radius: 0},
     featurePatch: {active: false, draft: null},
     featureTopology: {active: false},
@@ -2221,6 +2222,9 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       else cancelCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.RIVER_ADD, "panel-toggle");
     },
     onSelect: object => {
+      if (state.canvasToolModes.isActive(CANVAS_TOOL_MODE.RIVER_EDIT_WAYPOINT) && Number(object?.id) !== state.riverEdit.waypointRiverId) {
+        cancelCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.RIVER_EDIT_WAYPOINT, "target-switch");
+      }
       riverPanel.setSelection({object}, state.editingObject);
       selectFromPanel("river-panel", object);
     },
@@ -2237,6 +2241,14 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       if (active) enterCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.RIVER_EDIT_WAYPOINT, {riverId: object?.id});
       else cancelCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.RIVER_EDIT_WAYPOINT, "panel-toggle");
     },
+    onApplyWaypoint: () => applyRiverWaypointDraft(state, documentRef),
+    onReselectWaypoint: () => {
+      clearRiverWaypointDraft(state);
+      setRiverWaypointFeedback(documentRef, "单击新的候选位置预览；不会立即修改河流。");
+      setFileOperationStatus(documentRef, "河道控制点候选已清除，请重新单击地图选择。");
+      updateRuntimePanel(documentRef, state);
+    },
+    onCancelWaypoint: () => cancelCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.RIVER_EDIT_WAYPOINT, "panel-cancel"),
     onRename: (riverId, name) => {
       const object = {kind: "river", id: riverId};
       const context = {map: state.map};
@@ -2255,6 +2267,9 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       updateEditingInteractionLock(state, documentRef);
     },
     onDelete: riverId => {
+      if (state.canvasToolModes.isActive(CANVAS_TOOL_MODE.RIVER_EDIT_WAYPOINT) && Number(riverId) === state.riverEdit.waypointRiverId) {
+        cancelCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.RIVER_EDIT_WAYPOINT, "target-deleted");
+      }
       const result = executeDeleteWithPreflight(state, documentRef, {
         kind: OBJECT_KIND.RIVER,
         ids: [riverId],
@@ -2265,6 +2280,9 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       return result;
     },
     onDeleteMany: riverIds => {
+      if (state.canvasToolModes.isActive(CANVAS_TOOL_MODE.RIVER_EDIT_WAYPOINT) && riverIds.map(Number).includes(state.riverEdit.waypointRiverId)) {
+        cancelCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.RIVER_EDIT_WAYPOINT, "target-deleted");
+      }
       const result = executeDeleteWithPreflight(state, documentRef, {
         kind: OBJECT_KIND.RIVER,
         ids: riverIds,
@@ -2492,9 +2510,21 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     selectionStore.setSelection(selection);
   });
   state.renderer = renderer;
+  state.riverEdit.session = createRiverWaypointSession({
+    onDraftChange: draft => {
+      state.riverEdit.waypointDraft = draft;
+      state.renderer?.setRiverWaypointPreview?.(draft);
+      state.panels.river?.setWaypointDraft?.(draft);
+    }
+  });
   selectionStore = new SelectionStore(({selection, editingObject}, metadata = null) => {
     state.selection = selection;
     state.editingObject = editingObject;
+    const activeRiverId = state.riverEdit.waypointRiverId;
+    const selectedRiverId = selection?.object?.kind === OBJECT_KIND.RIVER ? Number(selection.object.id) : null;
+    if (state.canvasToolModes.isActive(CANVAS_TOOL_MODE.RIVER_EDIT_WAYPOINT) && selectedRiverId !== activeRiverId) {
+      cancelCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.RIVER_EDIT_WAYPOINT, "target-switch");
+    }
     renderer.setSelection(selection?.object || null);
     const handled = handleSelectionPanel(state, selection, editingObject, {
       documentRef,
@@ -11773,9 +11803,11 @@ function registerCanvasToolModes(state, documentRef, {stopObjectEditing} = {}) {
       const riverId = Number(context.riverId);
       if (!Number.isInteger(riverId) || riverId < 0) throw new Error("添加河道控制点前必须选择河流");
       state.riverEdit.waypointRiverId = riverId;
+      state.riverEdit.session?.begin(state.map, riverId);
       state.panels.river?.setWaypointMode(true);
     },
-    onExit: () => {
+    onExit: ({reason}) => {
+      state.riverEdit.session?.end(reason || "mode-exit");
       state.riverEdit.waypointRiverId = null;
       state.panels.river?.setWaypointMode(false);
     }
@@ -11963,6 +11995,44 @@ function clearCanvasToolModeFeedback(state, documentRef) {
     delete feedback.dataset.category;
   }
   state.renderer?.canvas?.style.removeProperty("cursor");
+}
+
+function setRiverWaypointFeedback(documentRef, message) {
+  const feedback = documentRef.getElementById("canvas-tool-mode-feedback");
+  if (!feedback || feedback.dataset.modeId !== CANVAS_TOOL_MODE.RIVER_EDIT_WAYPOINT) return;
+  feedback.querySelector("[data-canvas-tool-next-action]")?.replaceChildren(String(message || ""));
+}
+
+function clearRiverWaypointDraft(state) {
+  if (state.riverEdit.session) {
+    state.riverEdit.session.clear("clear");
+    return;
+  }
+  state.riverEdit.waypointDraft = null;
+  state.renderer?.clearRiverWaypointPreview?.();
+  state.panels.river?.setWaypointDraft?.(null);
+}
+
+function applyRiverWaypointDraft(state, documentRef) {
+  const riverId = state.riverEdit.waypointRiverId;
+  const validation = state.riverEdit.session?.validate(state.map) || {valid: false, code: "missing-session", reason: "当前没有可应用的河道控制点预览"};
+  const draft = validation.draft;
+  if (!state.canvasToolModes.isActive(CANVAS_TOOL_MODE.RIVER_EDIT_WAYPOINT) || !validation.valid || Number(draft?.riverId) !== riverId) {
+    setFileOperationStatus(documentRef, validation.reason || "当前没有可应用的河道控制点预览。");
+    updateRuntimePanel(documentRef, state);
+    return {executed: false, reason: validation.code || "missing-draft"};
+  }
+  const result = executeEditCommand(state, documentRef, createAddRiverVisualWaypointCommand(riverId, draft.packCell), {
+    context: {map: state.map},
+    status: executed => `已为河流 #${executed.getResult?.().riverId ?? riverId} 应用河道控制点。`,
+    errorStatus: executed => `${executed.label}失败，候选位置可能已失效，请重新选择。`,
+    throwOnError: false
+  });
+  if (result.executed) {
+    completeCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.RIVER_EDIT_WAYPOINT, {packCell: draft.packCell, riverId, result});
+  }
+  updateRuntimePanel(documentRef, state);
+  return result;
 }
 
 function syncPoliticalModePanel(state, kind) {
@@ -13863,13 +13933,15 @@ function bindObjectCreationTools(canvas, state, documentRef) {
 
     if (activeMode === CANVAS_TOOL_MODE.RIVER_EDIT_WAYPOINT) {
       const riverId = state.riverEdit.waypointRiverId;
-      const result = executeEditCommand(state, documentRef, createAddRiverVisualWaypointCommand(riverId, packCell), {
-        context: {map: state.map},
-        status: executed => `已为河流 #${executed.getResult?.().riverId ?? riverId} 添加河道控制点。`,
-        errorStatus: executed => `${executed.label}失败，请选择与现有河道控制点不同的位置。`,
-        throwOnError: false
-      });
-      if (result.executed) completeCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.RIVER_EDIT_WAYPOINT, {packCell, riverId, result});
+      const draft = state.riverEdit.session?.stage(state.map, packCell) || inspectRiverVisualWaypoint(state.map, riverId, packCell);
+      if (!draft.valid) {
+        setFileOperationStatus(documentRef, `无法预览河道控制点：${draft.reason}`);
+        setRiverWaypointFeedback(documentRef, `${draft.reason}；请单击更靠近河道的候选位置。`);
+        updateRuntimePanel(documentRef, state);
+        return;
+      }
+      setFileOperationStatus(documentRef, `已预览河流 #${riverId} 的候选控制点，尚未保存。可继续单击调整，或在河流面板应用 / 取消。`);
+      setRiverWaypointFeedback(documentRef, "预览未保存；可继续单击调整，或在河流面板应用 / 取消。");
       updateRuntimePanel(documentRef, state);
       return;
     }

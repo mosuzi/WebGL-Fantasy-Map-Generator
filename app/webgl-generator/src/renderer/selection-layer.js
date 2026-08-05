@@ -36,7 +36,7 @@ const SELECTION_SMOOTHING = Object.freeze({
 
 const MULTI_HIGHLIGHT_COLOR = Object.freeze([1, 0.46, 0.12, 0.72]);
 
-export function buildSelectionMeshVertices(map, camera, canvas, selection, locateFlash, highlights = []) {
+export function buildSelectionMeshVertices(map, camera, canvas, selection, locateFlash, highlights = [], riverWaypointPreview = null) {
   const vertices = [];
   const context = createRenderContext(map, {camera, canvas});
   pushSelectionTarget(vertices, context, selection, locateFlash);
@@ -44,7 +44,26 @@ export function buildSelectionMeshVertices(map, camera, canvas, selection, locat
     if (sameSelectionTarget(selection, highlight)) continue;
     pushSelectionTarget(vertices, context, highlight, null, MULTI_HIGHLIGHT_COLOR);
   }
+  pushRiverWaypointPreview(vertices, context, riverWaypointPreview);
   return new Float32Array(vertices);
+}
+
+function pushRiverWaypointPreview(vertices, context, preview) {
+  if (!preview?.valid || !Array.isArray(preview.points) || preview.points.length < 2) return;
+  const candidate = preview.points[preview.insertIndex];
+  if (!candidate) return;
+  const color = [1, 0.54, 0.08, 0.96];
+  pushScreenPolyline(vertices, context, smoothWorldPath(preview.points, SELECTION_SMOOTHING.river), color, selectionLineWidth(context, 4.8));
+  const center = worldToScreenPixel(context, candidate);
+  const radius = selectionLineWidth(context, 7);
+  const top = {x: center.x, y: center.y - radius};
+  const right = {x: center.x + radius, y: center.y};
+  const bottom = {x: center.x, y: center.y + radius};
+  const left = {x: center.x - radius, y: center.y};
+  pushScreenTriangle(vertices, context, center, top, right, color);
+  pushScreenTriangle(vertices, context, center, right, bottom, color);
+  pushScreenTriangle(vertices, context, center, bottom, left, color);
+  pushScreenTriangle(vertices, context, center, left, top, color);
 }
 
 function pushSelectionTarget(vertices, context, selection, locateFlash, overrideColor = null) {
