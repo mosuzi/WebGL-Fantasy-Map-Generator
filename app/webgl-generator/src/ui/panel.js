@@ -152,7 +152,7 @@ export function bindRuntimePanel(documentRef, handlers) {
   documentRef.addEventListener("project-map-save", event => {
     if (event.detail?.target === "local-file") handlers.onSaveLocalFile?.();
     if (event.detail?.target === "browser-storage") handlers.onSaveBrowserStorage?.();
-    if (event.detail?.target === "cloud-storage") handlers.onOpenCloudStorage?.();
+    if (event.detail?.target === "cloud-storage") handlers.onOpenCloudStorage?.(event.detail?.mode === "import" ? "import" : "save");
   });
   documentRef.getElementById("export-map-image")?.addEventListener("click", () => handlers.onExportImage?.());
   documentRef.getElementById("export-heightmap-image")?.addEventListener("click", () => handlers.onExportHeightmapImage?.());

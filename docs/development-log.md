@@ -1,5 +1,14 @@
 # 开发历史
 
+## 2026-08-06：完成权威任务第 296 项
+
+- 用户指出云端存储只有保存、没有从云端导入。只读调查确认 provider 和 controller 已有列表 / 下载 / “载入所选地图”半条链，但公开入口藏在保存菜单，面板语义优先新建 / 覆盖；现有浏览器回归只测未配置态布局，没有验证连接态下载到地图替换。
+- 另确认真实功能断点：Dropbox / Google 下载都丢失远端文件名，`.webfmg` 若返回 `application/octet-stream` 会被本地导入解析器当普通 JSON。整改方案固定为显式“从云端导入…”入口、保存 / 导入双区、controller 具名 File 适配并复用唯一 `data.importMap`；不改 provider transport、parser 主体、API、schema 或 OAuth 权限。
+- 独立方案审查首轮因入口未写死、确认 / epoch 边界不足和完整回滚门禁缺失而 `PLAN BLOCK`；收紧为显式入口、单次确认、取消零下载、busy / epoch 保护及地图 / 历史 / 选择 / 编辑 / renderer / 主题 / 单位完整回滚后，二审为 `PLAN ACCEPT`。第 296 项现按该边界实施，完成后独立审查、真实 Chrome 验证、中文提交并直接推送 `main`；第 284 项继续暂缓。
+- 简介页新增“从云端导入…”入口，原本地导入 input、accept 和 change 链保持不变；云端面板明确拆成保存 / 导入双区。下载结果在 controller 边界按远端名称包装为具名 `File`，`.webfmg / .gz` 强制使用 gzip MIME，并以同一对象进入既有 `data.importMap`，没有修改 provider、parser、schema、公开 API 或 OAuth 权限。
+- 独立代码审查先后阻断并修复了 `replaceMap()` 后晚期异常遗漏 revision、早期解析失败重复触发 canvas tool `onRepeat`、专项清空累计 console / page 错误和小视口未测量新入口四项问题，最终为 `CODE REVIEW ACCEPT`。共享回滚现恢复地图、renderer、revision、options、历史、选择 / 编辑、主题、单位、pending generation 与活动工具上下文。
+- 系统 Chrome mock 已覆盖 Dropbox octet-stream `.webfmg`、Google JSON、两 provider 旧 `.gz`、取消零下载、busy 互斥、三类文档拒绝和 renderer / revision 两阶段故障注入；`1440 / 390 / 320px` 入口及双区无越界，非预期 console、page、health 和 WebGL error 为 `0`。地图迁移、显示单位、API 兼容、云存储静态回归和生产构建通过；真实账号 OAuth 联调继续不在本项范围。
+
 ## 2026-08-06：完成权威任务第 295 项
 
 - 四级 WebGL 城镇尺寸由 `0.62 / 0.76 / 0.92 / 1.10` 整体抬高为 `0.72 / 0.86 / 1.02 / 1.20`；名称轮廓范围由 `4.8～10.5px` 调整为 `5.4～12.1px`，名称宽度系数由 `0.5` 调整为 `0.575`。CPU 与 vertex shader 保持第 294 项正确的先封顶、再乘等级顺序，最大等级除数同步为 `1.20`；基准盒、描边、DPR 抗锯齿、九类几何、角色、实例结构和人口阈值未改。

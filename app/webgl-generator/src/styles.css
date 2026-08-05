@@ -9920,6 +9920,41 @@ input.ui-switch-native {
   gap: 8px;
 }
 
+.cloud-storage-mode-section {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding: 11px;
+  border: 1px solid var(--el-border-color-light, #273640);
+  border-radius: 8px;
+  background: var(--el-bg-color-overlay, #0f1519);
+}
+
+.cloud-storage-mode-section.is-active {
+  border-color: var(--el-color-primary, #d7a84f);
+  background: var(--el-color-primary-light-9, #201b11);
+  box-shadow: inset 0 0 0 1px rgba(215, 168, 79, 0.14);
+}
+
+.cloud-storage-mode-section > strong,
+.cloud-storage-mode-heading > strong {
+  color: var(--el-text-color-primary, #edf4f6);
+}
+
+.cloud-storage-mode-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.cloud-storage-mode-heading .el-button,
+.cloud-storage-selected-actions .el-button {
+  width: auto;
+  min-width: 0;
+  margin-left: 0;
+}
+
 .cloud-storage-filename-template {
   display: grid;
   gap: 6px;
@@ -10009,6 +10044,11 @@ input.ui-switch-native {
   background: var(--el-color-primary-light-9, #201b11);
 }
 
+.cloud-storage-file:disabled {
+  cursor: wait;
+  opacity: 0.58;
+}
+
 .cloud-storage-status,
 .cloud-storage-error,
 .cloud-storage-empty,
@@ -10030,6 +10070,11 @@ input.ui-switch-native {
 
 @media (max-width: 560px) {
   .cloud-storage-connection {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .cloud-storage-mode-heading {
     align-items: stretch;
     flex-direction: column;
   }

@@ -1,6 +1,6 @@
 # 云存储部署配置
 
-正式应用可以把完整的 `.webgl-map.json.gz` 地图存档保存到用户自己的 Dropbox App Folder 或 Google Drive。部署时通过 Cloud Provider Config 提供公开的 OAuth client identifier；应用源码、OAuth 权限和文件操作逻辑不需要随部署修改。
+正式应用可以把完整的 `.webfmg` 地图存档保存到用户自己的 Dropbox App Folder 或 Google Drive，也可以从云端列表导入本应用可见的完整地图。部署时通过 Cloud Provider Config 提供公开的 OAuth client identifier；应用源码、OAuth 权限和文件操作逻辑不需要随部署修改。
 
 ## Cloud Provider Config
 
@@ -72,7 +72,7 @@ PKCE verifier 与 `state` 只在授权握手期间放入原窗口的 `sessionSto
 
 ## 数据与安全边界
 
-- 两个服务都只保存完整 gzip 地图，不做后台同步、自动保存、删除、分享、交互式文件夹管理或冲突合并；Google Drive 只按部署配置解析并按需创建存档目录。
+- 两个服务的新建与覆盖都使用完整 gzip 地图；从云端导入还兼容本应用列表中的旧 gzip 名称和未压缩完整 JSON。不做后台同步、自动保存、删除、分享、交互式文件夹管理或冲突合并；Google Drive 只按部署配置解析并按需创建存档目录。
 - 新建与覆盖目标分开；覆盖必须先选定明确文件并确认。载入也必须确认，因为它会替换当前地图并清空编辑历史。
 - access token 不写入 LocalStorage、IndexedDB、地图文件、日志或公开 API，只在当前标签页的 `sessionStorage` 保存到服务端声明的到期时间。刷新会恢复仍有效且配置指纹一致的连接；关闭标签页、令牌到期、云 API 返回 `401`、配置变化、记录损坏或主动断开时会清除，随后需要重新连接。
 - Dropbox 使用远端 `rev` 做条件覆盖，Google Drive 在覆盖前重新读取文件版本；远端已变化时会拒绝覆盖，要求用户刷新列表后重新选择。

@@ -183,7 +183,7 @@
 
 本节是唯一权威任务清单。README、专题文档和历史日志中的“缺口”“下一步”只提供来源与设计背景，不能覆盖这里的编号、顺序和最小验收。已验收能力不得重新计为待办。
 
-> **执行门禁（2026-08-06）**：第 45～52、54～277、279～283、285～295 项已完成，第 53 项已移除，第 278 项的未提交 HTML/SVG 实现已由第 279 项正式 WebGL 方案取代；第 284 项已登记但按用户要求暂缓。第 295 项已在保留四级差异的前提下整体抬高城镇图标可见尺寸并单独中文提交，不推送；当前没有活动权威任务，不得从 README、历史日志或专题文档扩展其它任务。
+> **执行门禁（2026-08-06）**：第 45～52、54～277、279～283、285～296 项已完成，第 53 项已移除，第 278 项的未提交 HTML/SVG 实现已由第 279 项正式 WebGL 方案取代；第 284 项已登记但按用户要求暂缓。第 296 项已补齐云端存档导入的显式入口、具名文件适配、完整回滚和真实字节闭环；当前没有活动权威任务，不得从 README、历史日志或专题文档扩展其它任务。
 
 当前 API 基线为：`window.webglGeneratorApi` 覆盖 `17` 个命名空间、`316` 个公开方法和 `179` 个编辑方法，稳定等级为 `308 / 7 / 1`；`316 / 316` 方法可通过 `info.describe` 发现，`planner.listRecipes / getRecipe` 只读公开 `10` 个配方和 `43` 个顶层步骤，`objects` 覆盖 `20` 类对象，`cells` 已提供八个读取、定位、扫描与动作预检方法。完整能力矩阵为 `1196` 行、`covered 1122 / excluded 74 / deferred 0 / gap 0`；复合语义矩阵为 `79` 个动作、`69` 个完整规则事务与 `10` 个玩法配方，`316` 个公开方法全部完成事务分类，结构缺口为 `0`。
 
@@ -1527,6 +1527,15 @@
   - 排除：不修改人口阈值、P90、四级顺序、九类几何语义、角色 / 文化 / 手工视觉、颜色、基准盒、描边、抗锯齿、生成、地图数据、schema、API、存档、Marker、军事、应用图标或 `source/`。完成后只显式暂存本项文件并中文提交，不推送。
   - 完成记录：四级尺寸由 `0.62 / 0.76 / 0.92 / 1.10` 整体抬高为 `0.72 / 0.86 / 1.02 / 1.20`；名称轮廓范围由 `4.8～10.5px` 放宽为 `5.4～12.1px`，名称宽度系数由 `0.5` 调整为 `0.575`。CPU 与 vertex shader 继续先限制共享相机增长再乘等级，shader 最大等级除数同步为 `1.20`；基准盒、描边、抗锯齿、实例结构和四级顺序未改。全数学样本相对第 294 项同名封顶基线最小增长 `1.091×`，代表性正常名称在 `1.5×～4×` 封顶后四级约增长 `20.6%～28.4%`。
   - 审查与验收：独立审查首轮因缺少真实 `10k` 四级新旧 framebuffer 基线对照而 `BLOCK`；限修后正式 API 固定生成 `city-scale-217 / 10k`，DPR `2` 选取四级各一真实对象并保留实际位置、几何、角色和名称 cap，在相机 `1 / 1.5 / 2.5 / 4` 隔离绘制当前版与严格等价的第 294 项模拟。`16 / 16` 组当前 bbox 面积全部增大，最小面积倍率 `1.0909`、最少增加 `10` 个 backing pixels；DPR `1 / 1.25 / 1.5 / 2` 均保留深色外沿、白色内线与抗锯齿，复核与最终观察使均为 `ACCEPT`。真实 `5410` 名称比例最大 `0.54276`，`839` 个实例保持单批、模型上传 `1`；缩放首帧、平移八帧、标签净空、拾取、选择、PNG 城镇开关和 `1440 / 390 / 320px` 通过，checksum / revision 不变，生产构建及差异检查通过，application console、page、active health 与 WebGL error 均为 `0`。人口阈值、地图数据、runtime、schema、API、存档、生成和 `source/` 未改。
+
+- **权威任务第 296 项：补齐云端存档导入的可发现性与真实字节闭环。** `已完成；来源：用户实测反馈`
+  - 问题证据：Dropbox 与 Google Drive provider 已有列表和 `downloadFile`，云端面板也有底部“载入所选地图”，但唯一公开入口藏在“保存 → 云端存储…”且面板先强调新建 / 覆盖，普通用户合理地会判断为只有保存。更严重的是两个 provider 下载后只返回无文件名 Blob；本地解析器只按文件名或 gzip MIME 判断压缩，Dropbox 常见的 `application/octet-stream` `.webfmg` 会被误当普通 JSON，现有回归只核对下载字节数和源码按钮存在，没有覆盖下载、解压、迁移、替换地图的真实闭环。
+  - 实施范围：在简介页保留原本地 `#import-map-file` 的 id、accept、change 与键盘链，新增并列的显式“从云端导入…”入口；入口模式经 `ui/panel.js` 和 runtime 传入云端面板，每次打开规范为 `save / import`。面板明确分成“保存到云端”和“从云端导入”两区，导入按钮紧邻列表并视觉优先。controller 在下载后按远端文件名把 Blob 包装为具名 File，压缩扩展强制 `application/gzip`、JSON 使用 `application/json`，同一 File 同时作为 payload 与 `sourceFile` 交给唯一 `data.importMap` 解析、迁移、诊断与回滚链；provider 保持纯 transport。
+  - 安全语义：实际导入只确认一次，文案明确会替换当前地图、清空撤销 / 重做且未保存修改不会合并；取消确认不得发送下载请求。busy 时禁止 provider / 文件切换与重复操作，下载完成后、导入前必须复核 operation epoch，陈旧 provider 请求不得替换当前地图。失败先显示包含文件名的 `role=alert`，当前地图与完整可见状态保持；成功保留云端连接和列表选择，不覆盖或删除远端文件。
+  - 最小验收：mock transport 在真实 Chrome 覆盖 Dropbox `application/octet-stream` `.webfmg`、Google 普通 JSON 与旧 `.gz`；成功导入替换 identity / checksum / options 并清空历史，取消为零下载。坏 JSON、损坏 gzip、未来版本和 renderer 注入失败均不得改变 map identity / checksum / revision、options、undo / redo、selection / editing、renderer 当前 map、主题与单位；若现有 map-replace 回滚遗漏，只允许补共享快照 / 恢复。桌面跑完整功能矩阵，`1440 / 390 / 320px` 验入口、双区、按钮顺序和零溢出；本地导入仍可达，生产构建、云存储 / 会话 / 地图迁移相关门禁和最终四类错误通过。
+  - 排除：不新增公开 API，不修改 provider OAuth 权限、目录、列表 / 覆盖协议、refresh token、跨标签页会话、存档 schema 或 parser 主体；不做 dirty 检测、自动保存、后台同步、冲突合并、删除、分享、通用网盘浏览、真实账号联调或 `source/` 修改。
+  - 完成记录：简介页保留原本地导入 input，并新增“从云端导入…”入口；云端面板按保存 / 导入双区重排。下载 Blob 在 controller 边界按远端名称、压缩扩展和修改时间包装为同一个具名 `File`，继续进入唯一 `data.importMap` 的解析、迁移、确认、诊断和事务链。共享地图替换快照补齐 pending generation、map revision、单位和 canvas tool mode；早期解析失败不会重复进入活动工具，renderer 及 `replaceMap()` 后晚期失败均能恢复旧地图、renderer、revision、历史、选择 / 编辑、主题、单位和工具上下文。
+  - 审查与验收：独立方案审查首轮 `BLOCK`、收紧后 `PLAN ACCEPT`；独立代码审查两轮分别阻断 revision 晚期回滚、canvas mode 重入、错误数组清空和三档入口测量缺口，限修后为 `CODE REVIEW ACCEPT`。系统 Chrome mock 覆盖 Dropbox `application/octet-stream` `.webfmg`、Google JSON、Dropbox / Google 旧 `.gz`、取消零下载、busy 互斥、坏 JSON、损坏 gzip、未来版本、renderer 早期失败与 revision 晚期失败；`1440 / 390 / 320px` 的入口、双区、激活态和零溢出通过，非预期 console、page、health 与 WebGL error 为 `0`。生产构建、云存储静态门禁、地图迁移、显示单位和 API 兼容门禁通过；provider、OAuth、目录、parser、schema、公开 API、地图数据和 `source/` 未改，真实账号联调仍不在本项范围。
 
 - **第 270～272 项统一执行约束。**
   - 专题施工图：`docs/task-notes/canvas-performance-optimization-plan.md`。

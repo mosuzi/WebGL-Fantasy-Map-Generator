@@ -46,6 +46,7 @@
             <span>导入</span>
             <input id="import-map-file" type="file" accept=".webfmg,.json,.gz,.webgl-map.json,.webgl-map.json.gz,application/json,application/gzip,application/x-gzip" />
           </label>
+          <UiButton id="open-cloud-import" variant="secondary" @click="openCloudImport">从云端导入…</UiButton>
           <label class="file-import-action secondary-action">
             <span>导入 GEO 数据</span>
             <input id="import-geo-file" type="file" accept=".geojson,.json,application/geo+json,application/json" />
@@ -1295,7 +1296,12 @@ function emitClimateControlsChange() {
 }
 
 function handleSaveCommand(target) {
-  document.dispatchEvent(new CustomEvent("project-map-save", {detail: {target}}));
+  const detail = target === "cloud-storage" ? {target, mode: "save"} : {target};
+  document.dispatchEvent(new CustomEvent("project-map-save", {detail}));
+}
+
+function openCloudImport() {
+  document.dispatchEvent(new CustomEvent("project-map-save", {detail: {target: "cloud-storage", mode: "import"}}));
 }
 
 function handleClimateOptionsSync(event) {

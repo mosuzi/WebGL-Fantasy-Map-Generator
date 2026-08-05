@@ -2582,7 +2582,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       return {filename: exported.filename, blob: exported.blob, metadata: exported.metadata};
     },
     onPreviewFilename: filenameTemplate => createMapArchiveFilename(state.map, {template: filenameTemplate}),
-    onLoadPayload: (blob, file) => runtimeActions.data.importMap(blob, {confirm: true, source: "ui", sourceFile: file, toast: true})
+    onLoadPayload: (payload, sourceFile) => runtimeActions.data.importMap(payload, {confirm: true, source: "ui", sourceFile, toast: true})
   });
   state.panels.cloudStorage.updateFilenamePreview();
   syncSaveFilenameTemplateUi(documentRef, state);
@@ -2789,8 +2789,8 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     onSaveBrowserStorage: () => {
       void saveMapToBrowserStorage(state, documentRef, runtimeActions.data.saveBrowserMap);
     },
-    onOpenCloudStorage: () => {
-      state.panels.cloudStorage.open();
+    onOpenCloudStorage: mode => {
+      state.panels.cloudStorage.open({mode});
     },
     onExportImage: () => exportMapImage(state, documentRef, runtimeActions.data.exportPNG),
     onExportHeightmapImage: () => exportHeightmapImage(state, documentRef, runtimeActions.data.exportHeightmapPNG),
@@ -4109,8 +4109,12 @@ function captureMapReplaceSnapshot(state, documentRef) {
   return {
     map: state.map,
     options: cloneGenerationOptions(state.options),
+    pendingGenerateId: state.pendingGenerateId,
+    mapRevision: state.mapRevision.createSnapshot(),
     history: state.editHistory.createSnapshot(),
     selection: state.selectionStore.getSnapshot(),
+    canvasToolMode: state.canvasToolModes.getActive(),
+    unitPreferences: normalizeUnitPreferences(readControlPreferences(documentRef).units),
     lastEditRefresh: state.lastEditRefresh,
     visualTheme: currentVisualThemeId(documentRef),
     userVisualThemes: listUserVisualThemeDocuments()
@@ -4122,14 +4126,18 @@ async function restoreMapReplaceSnapshot(state, documentRef, snapshot, _error, o
   const mapChanged = state.map !== snapshot.map;
   state.map = snapshot.map;
   state.options = cloneGenerationOptions(snapshot.options);
+  state.pendingGenerateId = snapshot.pendingGenerateId;
   state.lastEditRefresh = snapshot.lastEditRefresh;
   syncGenerationInputs(documentRef, state.options);
+  updateControlPreferences(documentRef, {units: snapshot.unitPreferences});
+  state.renderer?.setUnitPreferences?.(snapshot.unitPreferences);
   replaceUserVisualThemes(snapshot.userVisualThemes || []);
   applyRuntimeVisualThemeState(state, documentRef, snapshot.visualTheme, {force: true});
   if (mapChanged && snapshot.map) {
     if (typeof state.renderer.loadMapAsync === "function") await state.renderer.loadMapAsync(snapshot.map);
     else state.renderer.loadMap(snapshot.map);
   }
+  state.mapRevision.restoreSnapshot(snapshot.mapRevision);
   state.editHistory.restoreSnapshot(snapshot.history);
   state.selectionStore.batch(() => {
     const selected = snapshot.selection?.selection;
@@ -4137,7 +4145,19 @@ async function restoreMapReplaceSnapshot(state, documentRef, snapshot, _error, o
     else state.selectionStore.clear();
     if (snapshot.selection?.editingObject) state.selectionStore.startEditing(snapshot.selection.editingObject);
   });
+  restoreCanvasToolMode(state, documentRef, snapshot.canvasToolMode);
   if (snapshot.map) refreshRuntimeAfterMapLoad(state, documentRef);
+}
+
+function restoreCanvasToolMode(state, documentRef, snapshotMode) {
+  const activeMode = state.canvasToolModes.getActive();
+  if (!snapshotMode?.id) {
+    if (activeMode?.id) cancelCanvasToolMode(state, documentRef, activeMode.id, "map-replace-rollback");
+    return;
+  }
+  if (activeMode?.id === snapshotMode.id && activeMode.context === snapshotMode.context) return;
+  if (activeMode?.id) cancelCanvasToolMode(state, documentRef, activeMode.id, "map-replace-rollback");
+  enterCanvasToolMode(state, documentRef, snapshotMode.id, snapshotMode.context);
 }
 
 function ensureRiverHydrology(map) {

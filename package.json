@@ -140,6 +140,7 @@
     "regress:map-save-template-browser": "node --no-warnings ./tools/webgl-generator-map-save-template-browser-regression.mjs",
     "regress:cloud-storage-browser": "node --no-warnings ./tools/webgl-generator-cloud-storage-browser-regression.mjs",
     "regress:cloud-storage-session-browser": "node --no-warnings ./tools/webgl-generator-cloud-storage-session-browser-regression.mjs",
+    "regress:cloud-import-browser": "node --no-warnings ./tools/webgl-generator-cloud-import-browser-regression.mjs",
     "regress:panel-load-recovery": "node --no-warnings ./tools/webgl-generator-panel-load-recovery-regression.mjs",
     "regress:zone-regeneration": "node --no-warnings ./tools/webgl-generator-zone-regeneration-regression.mjs",
     "regress:zone-ui-browser": "node --no-warnings ./tools/webgl-generator-zone-ui-browser-regression.mjs",

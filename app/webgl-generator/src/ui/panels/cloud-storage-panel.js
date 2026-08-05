@@ -1,6 +1,6 @@
 import {shallowReactive} from "vue";
 import {createLazyVuePanel} from "./lazy-vue-panel.js";
-import {DEFAULT_MAP_FILENAME_TEMPLATE} from "../../runtime/map-filename.js";
+import {DEFAULT_MAP_FILENAME_TEMPLATE, isCompressedMapDocumentFilename} from "../../runtime/map-filename.js";
 
 const CLOUD_STORAGE_PANEL_ID = "cloud-storage-panel";
 export const CLOUD_FILENAME_TEMPLATE_STORAGE_KEY = "webgl-generator-cloud-filename-template";
@@ -21,6 +21,7 @@ export function reconcileCloudStorageFileList(state, files, options = {}) {
 export function createCloudStoragePanel(documentRef, manager, registry, component, callbacks = {}) {
   const panelState = shallowReactive({
     open: false,
+    mode: "save",
     providers: registry.listProviderStates(),
     selectedProviderId: "dropbox",
     files: [],
@@ -44,6 +45,7 @@ export function createCloudStoragePanel(documentRef, manager, registry, componen
       clearFeedback();
     },
     onSelectFile: id => {
+      if (panelState.busy) return;
       panelState.selectedFileId = String(id || "");
     },
     onConnect: () => run("正在打开账号授权…", async (provider, operation) => {
@@ -93,13 +95,22 @@ export function createCloudStoragePanel(documentRef, manager, registry, componen
     onLoad: () => {
       const file = selectedFile();
       if (!file) return;
-      const confirmed = documentRef.defaultView?.confirm?.(`载入“${file.name}”会替换当前地图并清空编辑历史，是否继续？`) ?? false;
+      const confirmed = documentRef.defaultView?.confirm?.(`从云端导入“${file.name}”会替换当前地图并清空撤销与重做历史；未保存更改不会与云端地图合并。是否继续？`) ?? false;
       if (!confirmed) return;
-      return run("正在下载并载入地图…", async (provider, operation) => {
-        const blob = await provider.downloadFile(file);
-        const result = await callbacks.onLoadPayload?.(blob, file);
-        if (!result) throw new Error("地图载入未完成");
-        if (operation.isCurrent()) panelState.status = `已载入“${file.name}”。`;
+      return run("正在下载并导入地图…", async (provider, operation) => {
+        try {
+          const blob = await provider.downloadFile(file);
+          if (!operation.isCurrent()) return null;
+          const sourceFile = createCloudMapFile(documentRef, blob, file);
+          if (!operation.isCurrent()) return null;
+          const result = await callbacks.onLoadPayload?.(sourceFile, sourceFile);
+          if (!operation.isCurrent()) return null;
+          if (!result) throw new Error("地图导入未完成");
+          panelState.status = `已从云端导入“${file.name}”。`;
+          return result;
+        } catch (error) {
+          throw new Error(`导入“${file.name}”失败：${String(error?.message || error || "未知错误")}`);
+        }
       });
     }
   };
@@ -148,14 +159,16 @@ export function createCloudStoragePanel(documentRef, manager, registry, componen
   });
 
   return {
-    open() {
+    open(options = {}) {
+      const mode = normalizeCloudStorageMode(options?.mode ?? options);
+      if (!panelState.busy) panelState.mode = mode;
       panelState.providers = registry.listProviderStates();
       panelState.open = true;
       panelState.version++;
       manager.open(CLOUD_STORAGE_PANEL_ID);
       lazyPanel.load();
       updateFilenamePreview();
-      if (currentProvider()?.getState().connected) void refreshFiles({quiet: true});
+      if (!panelState.busy && currentProvider()?.getState().connected) void refreshFiles({quiet: true});
     },
     unmount() {
       unsubscribe();
@@ -184,11 +197,12 @@ export function createCloudStoragePanel(documentRef, manager, registry, componen
     const provider = currentProvider();
     if (!provider) return null;
     const providerId = panelState.selectedProviderId;
+    const mode = panelState.mode;
     const epoch = ++operationEpoch;
     const operation = {
       providerId,
       epoch,
-      isCurrent: () => operationEpoch === epoch && panelState.selectedProviderId === providerId
+      isCurrent: () => operationEpoch === epoch && panelState.selectedProviderId === providerId && panelState.mode === mode
     };
     panelState.busy = true;
     panelState.error = "";
@@ -249,6 +263,21 @@ export function createCloudStoragePanel(documentRef, manager, registry, componen
       filenameTemplateError: panelState.filenameTemplateError
     };
   }
+}
+
+function createCloudMapFile(documentRef, blob, file) {
+  const FileCtor = documentRef.defaultView?.File;
+  if (typeof FileCtor !== "function") throw new Error("当前浏览器不支持具名文件导入");
+  const name = String(file?.name || "cloud-map.json");
+  const modifiedAt = Date.parse(file?.modifiedAt || "");
+  return new FileCtor([blob], name, {
+    type: isCompressedMapDocumentFilename(name) ? "application/gzip" : "application/json",
+    lastModified: Number.isFinite(modifiedAt) ? modifiedAt : Date.now()
+  });
+}
+
+function normalizeCloudStorageMode(value) {
+  return value === "import" ? "import" : "save";
 }
 
 export function readCloudFilenameTemplate(storage) {

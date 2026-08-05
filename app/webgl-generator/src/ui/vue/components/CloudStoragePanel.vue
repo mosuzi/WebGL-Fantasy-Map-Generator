@@ -1,7 +1,7 @@
 <template>
   <div class="cloud-storage-panel" :aria-busy="state.busy ? 'true' : 'false'">
     <div class="cloud-storage-notice">
-      <strong>把完整地图存档放进自己的云盘</strong>
+      <strong>在自己的云盘保存或导入完整地图</strong>
       <span>短期授权保留在当前标签页；刷新后自动恢复，关闭标签页或令牌到期后需要重新连接。</span>
     </div>
 
@@ -37,36 +37,43 @@
         </div>
 
         <template v-if="selectedProvider.connected">
-          <div class="cloud-storage-filename-template">
-            <span>新建存档文件名</span>
-            <small>文件名模板在控制面板的“生成”页统一设置</small>
-            <code id="cloud-storage-filename-preview">{{ state.filenamePreview || state.filenameTemplateError }}</code>
-          </div>
+          <section class="cloud-storage-mode-section cloud-storage-save-section" :class="{'is-active': state.mode === 'save'}" aria-labelledby="cloud-storage-save-title">
+            <strong id="cloud-storage-save-title">保存到云端</strong>
+            <div class="cloud-storage-filename-template">
+              <span>新建存档文件名</span>
+              <small>文件名模板在控制面板的“生成”页统一设置</small>
+              <code id="cloud-storage-filename-preview">{{ state.filenamePreview || state.filenameTemplateError }}</code>
+            </div>
+            <div class="cloud-storage-actions">
+              <UiButton :disabled="state.busy || !!state.filenameTemplateError" @click="callbacks.onCreate">新建云端存档</UiButton>
+            </div>
+          </section>
 
-          <div class="cloud-storage-actions">
-            <UiButton :disabled="state.busy || !!state.filenameTemplateError" @click="callbacks.onCreate">新建云端存档</UiButton>
-            <UiButton variant="secondary" :disabled="state.busy" @click="callbacks.onRefresh">刷新列表</UiButton>
-          </div>
-
-          <div class="cloud-storage-file-list" aria-label="云端地图文件">
-            <button
-              v-for="file in state.files"
-              :key="file.id"
-              type="button"
-              :class="['cloud-storage-file', {selected: file.id === state.selectedFileId}]"
-              :aria-pressed="file.id === state.selectedFileId ? 'true' : 'false'"
-              @click="callbacks.onSelectFile(file.id)"
-            >
-              <strong>{{ file.name }}</strong>
-              <span>{{ formatFileMeta(file) }}</span>
-            </button>
-            <p v-if="!state.files.length" class="cloud-storage-empty">还没有可选地图。连接后刷新列表，或先新建一份云端存档。</p>
-          </div>
-
-          <div class="cloud-storage-selected-actions">
-            <UiButton variant="secondary" :disabled="state.busy || !state.selectedFileId" @click="callbacks.onOverwrite">覆盖所选文件</UiButton>
-            <UiButton :disabled="state.busy || !state.selectedFileId" @click="callbacks.onLoad">载入所选地图</UiButton>
-          </div>
+          <section class="cloud-storage-mode-section cloud-storage-import-section" :class="{'is-active': state.mode === 'import'}" aria-labelledby="cloud-storage-import-title">
+            <div class="cloud-storage-mode-heading">
+              <strong id="cloud-storage-import-title">从云端导入</strong>
+              <UiButton variant="secondary" :disabled="state.busy" @click="callbacks.onRefresh">刷新列表</UiButton>
+            </div>
+            <div class="cloud-storage-file-list" aria-label="云端地图文件">
+              <button
+                v-for="file in state.files"
+                :key="file.id"
+                type="button"
+                :class="['cloud-storage-file', {selected: file.id === state.selectedFileId}]"
+                :aria-pressed="file.id === state.selectedFileId ? 'true' : 'false'"
+                :disabled="state.busy"
+                @click="callbacks.onSelectFile(file.id)"
+              >
+                <strong>{{ file.name }}</strong>
+                <span>{{ formatFileMeta(file) }}</span>
+              </button>
+              <p v-if="!state.files.length" class="cloud-storage-empty">还没有可选地图。连接后刷新列表，或先新建一份云端存档。</p>
+            </div>
+            <div class="cloud-storage-selected-actions">
+              <UiButton :disabled="state.busy || !state.selectedFileId" @click="callbacks.onLoad">从云端导入所选地图</UiButton>
+              <UiButton variant="secondary" :disabled="state.busy || !state.selectedFileId" @click="callbacks.onOverwrite">覆盖所选文件</UiButton>
+            </div>
+          </section>
         </template>
       </template>
     </template>
