@@ -25,11 +25,12 @@ export const CITY_ICON_TIER_SCALES = Object.freeze({
   city: 0.87
 });
 
-export const CITY_ICON_BASE_CSS_SIZE = Object.freeze({width: 10.5, height: 8});
+export const CITY_ICON_BASE_CSS_SIZE = Object.freeze({width: 12.5, height: 9.5});
 export const CITY_ICON_VISIBILITY_TRANSITION_MS = 150;
 export const CITY_ICON_SCALE_FADE_WIDTH = 0.24;
-export const CITY_ICON_MIN_OUTLINE_CSS_PX = 4;
-export const CITY_ICON_MAX_OUTLINE_CSS_PX = 9;
+export const CITY_ICON_MIN_OUTLINE_CSS_PX = 4.8;
+export const CITY_ICON_MAX_OUTLINE_CSS_PX = 10.5;
+export const CITY_ICON_OUTLINE_STROKE_CSS_PX = 2;
 
 export const CITY_ICON_INSTANCE_FLOATS = 11;
 export const CITY_ICON_INSTANCE_STRIDE_BYTES = CITY_ICON_INSTANCE_FLOATS * Float32Array.BYTES_PER_ELEMENT;
@@ -39,7 +40,6 @@ const INSTANCE_STRIDE_BYTES = CITY_ICON_INSTANCE_STRIDE_BYTES;
 const DARK_OUTLINE = Object.freeze([0.055, 0.075, 0.085, 1]);
 const WHITE_INNER_LINE = Object.freeze([0.985, 0.992, 1, 1]);
 const SELECTED_INNER_LINE = Object.freeze([1, 0.86, 0.32, 1]);
-const OUTLINE_STROKE_CSS_PX = 1.8;
 const ROLE_OUTLINE_EXTENT = 0.879;
 const SHAPE_OUTLINE_EXTENTS = Object.freeze({
   hamlet: 0.48,
@@ -65,7 +65,7 @@ export function cityIconTierScale(tier) {
 export function cityIconOutlineCssLimit(nameWidthCss) {
   const width = Number(nameWidthCss);
   if (!Number.isFinite(width)) return CITY_ICON_MAX_OUTLINE_CSS_PX;
-  return Math.max(CITY_ICON_MIN_OUTLINE_CSS_PX, Math.min(CITY_ICON_MAX_OUTLINE_CSS_PX, width * 0.45 - 1));
+  return Math.max(CITY_ICON_MIN_OUTLINE_CSS_PX, Math.min(CITY_ICON_MAX_OUTLINE_CSS_PX, width * 0.5 - 1));
 }
 
 export function cityIconOutlineExtent(silhouette, roles = []) {
@@ -78,7 +78,7 @@ export function cityIconOutlineExtent(silhouette, roles = []) {
 export function cityIconMaxSizeFactor({silhouette, roles = [], nameWidthCss, baseSize = CITY_ICON_BASE_CSS_SIZE} = {}) {
   const outlineLimit = cityIconOutlineCssLimit(nameWidthCss);
   const extent = cityIconOutlineExtent(silhouette, roles);
-  const usableOutline = Math.max(1, outlineLimit - OUTLINE_STROKE_CSS_PX);
+  const usableOutline = Math.max(1, outlineLimit - CITY_ICON_OUTLINE_STROKE_CSS_PX);
   return usableOutline / (positiveNumber(baseSize?.height, CITY_ICON_BASE_CSS_SIZE.height) * extent);
 }
 
@@ -474,6 +474,7 @@ export const CITY_ICON_FRAGMENT_SHADER_SOURCE = `#version 300 es
 precision highp float;
 
 uniform vec2 u_baseSizeCss;
+uniform float u_pixelRatio;
 uniform float u_cameraScale;
 uniform float u_timeMs;
 uniform float u_transitionMs;
@@ -566,9 +567,9 @@ void main() {
   float normalizedDistance = min(mainShapeDistance(iconPoint, v_shape), roleShapeDistance(iconPoint, v_roleBits, v_shape));
   float halfMinCss = min(u_baseSizeCss.x, u_baseSizeCss.y) * v_sizeFactor * 0.5;
   float distancePx = normalizedDistance * halfMinCss;
-  float antialiasWidth = max(fwidth(distancePx), 0.28);
-  float outerCoverage = 1.0 - smoothstep(0.9 - antialiasWidth, 0.9 + antialiasWidth, distancePx);
-  float innerCoverage = 1.0 - smoothstep(0.45 - antialiasWidth, 0.45 + antialiasWidth, distancePx);
+  float antialiasWidth = max(fwidth(distancePx) * 0.5, 0.22 / max(u_pixelRatio, 1.0));
+  float outerCoverage = 1.0 - smoothstep(1.0 - antialiasWidth, 1.0 + antialiasWidth, distancePx);
+  float innerCoverage = 1.0 - smoothstep(0.5 - antialiasWidth, 0.5 + antialiasWidth, distancePx);
   float scaleVisibility = smoothstep(v_minScale - u_scaleFadeWidth, v_minScale + u_scaleFadeWidth, u_cameraScale);
   float transitionProgress = smoothstep(0.0, max(1.0, u_transitionMs), u_timeMs - v_visibilityStartedMs);
   float targetVisibility = mix(v_visibilityFrom, v_visibilityTarget, transitionProgress);
