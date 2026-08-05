@@ -61,8 +61,15 @@ assert.match(
 assert.match(composableSource, /getRegenerationLockUiSession/);
 assert.match(composableSource, /get selectedCount\(\)/, "地图选中不可见行时动作条仍须使用完整会话计数");
 assert.match(actionsSource, /已选 \{\{ selectedCount \}\} 项/);
-assert.match(actionsSource, /在地图多选/);
-assert.match(stylesSource, /\.regeneration-lock-actions\s*\{[\s\S]*?display:\s*grid;[\s\S]*?gap:\s*8px;/, "共享批量操作没有稳定按钮间距");
+for (const label of ["列表多选", "结束列表多选", "在地图多选", "地图多选中", "锁定选中", "解锁选中", "清空选择"]) {
+  assert.match(actionsSource, new RegExp(`(?:aria-label|title)=[^>]*${label}`), `共享批量操作缺少 ${label} 的稳定名称`);
+}
+for (const icon of ["List", "Location", "Lock", "Unlock", "CircleClose"]) {
+  assert.match(actionsSource, new RegExp(`<${icon} \/>`), `共享批量操作缺少 ${icon} 图标`);
+}
+assert.equal((actionsSource.match(/aria-pressed=/g) || []).length, 2, "两个选择模式必须保留 aria-pressed");
+assert.equal((actionsSource.match(/:disabled="!selectedCount"/g) || []).length, 3, "锁定、解锁和清空必须保留空选择禁用态");
+assert.match(stylesSource, /\.regeneration-lock-actions\s*\{[\s\S]*?display:\s*flex;[\s\S]*?flex-flow:\s*row wrap;[\s\S]*?gap:\s*8px;/, "共享批量操作没有一行优先、安全换行和稳定按钮间距");
 
 const previousWarn = console.warn;
 console.warn = () => {};

@@ -10309,14 +10309,22 @@ input.ui-switch-native {
 }
 
 .regeneration-lock-actions {
-  display: grid;
+  display: flex;
+  flex-flow: row wrap;
+  align-items: center;
   gap: 8px;
   margin: 8px 0;
 }
 
 .regeneration-lock-selection-count {
+  flex: 1 1 auto;
+  min-width: max-content;
   color: #9fb0b9;
   font-size: 12px;
+}
+
+.regeneration-lock-action.el-button {
+  flex: 0 0 32px;
 }
 
 .state-panel-controls .ui-filter-input,

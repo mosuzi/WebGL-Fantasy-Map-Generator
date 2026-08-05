@@ -44,7 +44,8 @@ try {
     await page.setViewportSize({width: viewport.width, height: viewport.height});
     await page.waitForTimeout(120);
     const metrics = await measureZonePanel(page);
-    assert.ok(metrics.gaps.every(gap => gap >= 8), `${viewport.label} 地区批量按钮间距不足 8px`);
+    assert.ok(metrics.gaps.every(gap => gap >= 8), `${viewport.label} 地区批量图标间距不足 8px`);
+    if (viewport === viewports[0]) assert.equal(new Set(metrics.buttonTops).size, 1, "桌面地区批量动作没有保持一行");
     assert.equal(metrics.documentOverflow, 0, `${viewport.label} document 出现横向溢出`);
     assert.ok(metrics.panel.left >= 0 && metrics.panel.right <= viewport.width + 1, `${viewport.label} 地区面板横向越界`);
     assert.ok(metrics.panel.top >= 0 && metrics.panel.bottom <= viewport.height + 1, `${viewport.label} 地区面板纵向越界`);
@@ -135,13 +136,21 @@ async function measureZonePanel(page) {
     const panel = document.querySelector('.floating-panel[data-panel-id="zone-panel"]');
     const labels = ["列表多选", "在地图多选", "锁定选中", "解锁选中", "清空选择"];
     const rects = labels.map(label => {
-      const button = [...panel.querySelectorAll("button")].find(item => item.textContent.trim() === label);
+      const button = panel.querySelector(`button[aria-label="${label}"]`);
       const rect = button.getBoundingClientRect();
-      return {label, top: rect.top, bottom: rect.bottom};
+      return {label, left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom};
     });
+    const gaps = [];
+    for (let index = 1; index < rects.length; index += 1) {
+      const previous = rects[index - 1];
+      const current = rects[index];
+      const sameRow = Math.abs(current.top - previous.top) < 1;
+      gaps.push(Math.round((sameRow ? current.left - previous.right : current.top - previous.bottom) * 100) / 100);
+    }
     const panelRect = panel.getBoundingClientRect();
     return {
-      gaps: rects.slice(1).map((rect, index) => Math.round((rect.top - rects[index].bottom) * 100) / 100),
+      gaps,
+      buttonTops: rects.map(rect => Math.round(rect.top)),
       documentOverflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
       panel: {left: panelRect.left, top: panelRect.top, right: panelRect.right, bottom: panelRect.bottom}
     };
