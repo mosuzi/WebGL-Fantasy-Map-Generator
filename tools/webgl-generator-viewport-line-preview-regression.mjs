@@ -55,9 +55,9 @@ assert.match(rendererSource, /if \(this\.layerVisibility\.rivers\) \{[\s\S]*laye
 assert.match(rendererSource, /this\.routeBufferCamera = snapshotViewportCamera\(camera\)/);
 assert.match(rendererSource, /this\.riverBufferCamera = snapshotViewportCamera\(camera\)/);
 assert.equal(
-  [...rendererSource.matchAll(/this\.routeVertexCount = 0;\s+this\.riverVertexCount = 0;/g)].length,
+  [...rendererSource.matchAll(/this\.routeVertexCount = 0;\s+this\.routeDrawRanges = emptyRouteDrawRanges\(\);\s+this\.riverVertexCount = 0;/g)].length,
   2,
-  "同步与异步切图都必须同时清空道路、河流顶点计数"
+  "同步与异步切图都必须同时清空道路 draw ranges、道路与河流顶点计数"
 );
 assert.match(rendererSource, /const shouldContinue = \(\) => this\.viewportCommitVersion === version/);
 assert.match(rendererSource, /drawViewportPreview\(\)[\s\S]*updateDynamicBuffers: false[\s\S]*drawDirtyDynamicBuffers: false/);

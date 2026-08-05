@@ -1,5 +1,23 @@
 # 开发历史
 
+## 2026-08-05：完成权威任务第 288 项
+
+- 正式路线渲染新增独立样式与三段 draw ranges：普通路线、海路陆地色、海路水面色。未选海路的两份 mesh 位置与透明度完全一致，复用 surface 已写入的最终像素 depth，以严格 `GREATER / LESS` 分别只通过视觉陆地与水面；随后无条件恢复 `DEPTH_TEST` 关闭、`depthMask(false)` 与 `LESS`，最后绘制道路、小径及选中整条金色海路。
+- 该方案自动跟随硬 cell 岸线及平滑岸线 correction / cover，不另建 CPU 岸线求交或缓存失效链，也不修改 canonical `points / cells`、路线生成或拾取。focused regression 直接执行正式样式、mesh builder 与 draw helper，覆盖海白陆棕、两端港口、硬边 / 平滑交点移动、选中态、GL 状态、ordinary-only、透明度、三级线宽及输入不变；第二轮独立审查结论为 `ACCEPT`。
+- 路线样式、线宽投影、viewport line preview、选择高亮、视觉主题、海岸、语法、生产构建和差异检查通过。生产 Chrome 的固定 `10k` 图有 `672` 条路线、`148` 条海路；route #530 的整条金色选择态、取消后的白色水面段 / 棕色陆地段、平滑边界开关、`390 / 320px` 零横向溢出、1x `1600×900` 与 2x `3200×1800` PNG 实际导出均通过，浏览器错误日志和可见错误面为 `0`。地图数据、schema、API、存档和 `source/` 未改；当前没有活动权威任务，第 284 项继续暂缓。
+
+## 2026-08-05：权威任务第 288 项首轮审查 BLOCK，限修中
+
+- 首轮实现按 `route.type === "searoute"` 把整条海路染白；独立审查在真实 Chrome 的 route #530 复现其大段路径位于最终视觉陆地，指出生成器为连接港口会保留陆地边界 cell，整条白色不符合 issue 要求，结论为 `BLOCK`。
+- 限修改为复用正式 surface 的同源像素 depth：surface 已把最终视觉陆地 / 水面写为 `-0.5 / +0.5`，路线位于 `0`；未选海路生成同几何的主题棕色与白色 batch，分别用 `GREATER / LESS` 只通过视觉陆地 / 水面。视觉水面沿用统一 surface side，包含海洋与湖泊，不另造 ocean-only mask。平滑岸线 correction / cover 或硬 cell surface 的变化会直接改变遮罩，不需要 CPU 岸线求交、裁切路线或重建 canonical 数据；选中海路仍走普通 batch，整条金色并在遮罩 batch 后绘制。
+- focused regression 改为跨岸和两端港口夹具，直接执行样式、mesh batch 和 draw helper，并锁定 surface 绘制顺序、深度函数 / 状态恢复、硬边 / 平滑交点、海白陆棕、选中全金、输入不变与 picking 继续读取 canonical points。首轮文档中“整条白色”和“禁止 shoreline / cell 分段”的错误约束同步撤销。
+
+## 2026-08-05：启动权威任务第 288 项
+
+- 用户要求针对 GitHub issue #7 独立切分支完成调查、分析、修正、审查、验证并通过 PR 合入；当前实现分支为 `issue-7-sea-route-color`。
+- 调查确认正式 renderer 的 `routeStyle()` 只按 `route.level` 读取 `routePrimary / routeSecondary / routeMinor`，没有使用已有权威字段 `route.type === "searoute"`，因此海路沿用次级道路的棕色而未形成海陆路线区分。
+- 本项只在正式渲染期让海路的视觉水面片段使用明确白色、视觉陆地 / 港口片段沿用对应 level 主题色；道路 / 小径保持现有主题色，选中态仍为整条金色，世界宽度仍按 level。路线生成 / canonical 几何、海岸平滑算法、主题配置、地图 schema / API / 存档 / 迁移、层级、拾取和 `source/` 均不在范围内，第 284 项继续暂缓。
+
 ## 2026-08-05：完成权威任务第 287 项
 
 - 共享重生成锁定动作栏保留“已选 N 项”和五项独立语义，把原纵向文字按钮收为 `32×32px` 的列表选择、地图选择、锁定、解锁与清空图标；模式按钮使用动态 `title / aria-label / aria-pressed`，三个批量写入动作继续在空选择时禁用。动作栏改为一行优先、窄宽度安全换行的 flex 布局，间距固定 `8px`。

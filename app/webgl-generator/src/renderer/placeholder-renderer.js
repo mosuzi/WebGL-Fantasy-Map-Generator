@@ -87,6 +87,7 @@ import {MILITARY_CITY_LABEL_AVOID_SCALE, militaryLabelBox, resolveMilitaryLabelP
 import {cityLabelAnchorOffset} from "./city-label-icon-layout.js";
 import {isSelectionForLabelItem, shouldShowDefaultSelectionMarker} from "./selection-marker-policy.js";
 import {DEFAULT_VISUAL_THEME_ID, resolveVisualTheme} from "./themes.js";
+import {drawRouteMeshBatches, emptyRouteDrawRanges, resolveRouteStyle, SELECTED_ROUTE_COLOR} from "./route-style.js";
 import {emptyOceanCurrentLayerStats, pushOceanCurrentLayer} from "./ocean-current-layer.js";
 import {pushMilitaryFrontLayer} from "./military-front-layer.js";
 import {snapshotViewportCamera, viewportBufferTransform} from "./viewport-buffer-transform.js";
@@ -102,7 +103,6 @@ import {
   createLineWidthProjection,
   projectWorldLineWidth,
   riverWorldWidth,
-  routeWorldWidth,
   withProjectedLineAlpha
 } from "./line-width-projection.js";
 
@@ -220,6 +220,7 @@ export class PlaceholderMapRenderer {
     this.waterCoverVertexCount = 0;
     this.surfaceCellRanges = new Map();
     this.routeVertexCount = 0;
+    this.routeDrawRanges = emptyRouteDrawRanges();
     this.tradeFlowVertexCount = 0;
     this.tradeFlowPickItems = [];
     this.riverVertexCount = 0;
@@ -437,6 +438,7 @@ export class PlaceholderMapRenderer {
     this.landCoverVertexCount = surfaceBundle.landCovers.length / 6;
     this.waterCoverVertexCount = surfaceBundle.waterCovers.length / 6;
     this.routeVertexCount = 0;
+    this.routeDrawRanges = emptyRouteDrawRanges();
     this.riverVertexCount = 0;
     this.tradeFlowVertexCount = 0;
     this.tradeFlowPickItems = [];
@@ -538,6 +540,7 @@ export class PlaceholderMapRenderer {
     this.landCoverVertexCount = surfaceBundle.landCovers.length / 6;
     this.waterCoverVertexCount = surfaceBundle.waterCovers.length / 6;
     this.routeVertexCount = 0;
+    this.routeDrawRanges = emptyRouteDrawRanges();
     this.riverVertexCount = 0;
     this.tradeFlowVertexCount = 0;
     this.tradeFlowPickItems = [];
@@ -1161,7 +1164,7 @@ export class PlaceholderMapRenderer {
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
     if (this.layerVisibility.routes) {
-      gl.drawArrays(gl.TRIANGLES, 0, this.routeVertexCount);
+      drawRouteMeshBatches(gl, this.routeDrawRanges);
       if (this.routeVertexCount > 0) layerOrder.push("routes");
     }
     gl.disable(gl.BLEND);
@@ -1404,6 +1407,7 @@ export class PlaceholderMapRenderer {
         riversDirty: this.dynamicBuffersDirty.rivers,
         selectionDirty: this.dynamicBuffersDirty.selection,
         routeBufferCamera: {...this.routeBufferCamera},
+        routeDrawRanges: structuredClone(this.routeDrawRanges),
         riverBufferCamera: {...this.riverBufferCamera},
         routePreviewTransform: viewportBufferTransform(this.routeBufferCamera, this.camera),
         riverPreviewTransform: viewportBufferTransform(this.riverBufferCamera, this.camera)
@@ -1463,8 +1467,9 @@ export class PlaceholderMapRenderer {
     const event = this.beginPerformanceEvent("routeMesh", {mode: "sync"}, startedAt);
     try {
       const camera = snapshotCamera(this.camera);
-      const {vertices: routeVertices, stats} = buildRouteMeshVertices(this.map, camera, this.canvas, this.selection, this.objectHighlights, this.visualTheme);
+      const {vertices: routeVertices, stats, drawRanges} = buildRouteMeshVertices(this.map, camera, this.canvas, this.selection, this.objectHighlights, this.visualTheme);
       this.routeVertexCount = routeVertices.length / 6;
+      this.routeDrawRanges = drawRanges;
       this.routeRenderStats = stats;
       const upload = this.recordBufferUpload("route-screen-mesh", () => {
         this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.routeBuffer);
@@ -1487,7 +1492,7 @@ export class PlaceholderMapRenderer {
       const camera = snapshotCamera(this.camera);
       const selection = this.selection ? {...this.selection} : null;
       const objectHighlights = this.objectHighlights.map(item => ({...item}));
-      const {vertices: routeVertices, stats} = await buildRouteMeshVerticesAsync(this.map, camera, this.canvas, selection, objectHighlights, {
+      const {vertices: routeVertices, stats, drawRanges} = await buildRouteMeshVerticesAsync(this.map, camera, this.canvas, selection, objectHighlights, {
         yieldToBrowser,
         sliceMs,
         shouldContinue
@@ -1497,6 +1502,7 @@ export class PlaceholderMapRenderer {
         return false;
       }
       this.routeVertexCount = routeVertices.length / 6;
+      this.routeDrawRanges = drawRanges;
       this.routeRenderStats = stats;
       const upload = this.recordBufferUpload("route-screen-mesh", () => {
         this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.routeBuffer);
@@ -1515,6 +1521,7 @@ export class PlaceholderMapRenderer {
 
   clearRouteBuffer() {
     this.routeVertexCount = 0;
+    this.routeDrawRanges = emptyRouteDrawRanges();
     this.routeRenderStats = normalizeRouteRenderStats(emptyRouteRenderStats());
     this.recordBufferUpload("route-clear", () => {
       this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.routeBuffer);
@@ -4461,7 +4468,7 @@ function emptyTradeFlowRenderStats() {
   };
 }
 
-function buildRouteMeshVertices(map, camera, canvas, selection, objectHighlights, visualTheme) {
+export function buildRouteMeshVertices(map, camera, canvas, selection, objectHighlights, visualTheme) {
   const build = createRouteMeshBuild(map, camera, canvas, selection, objectHighlights, visualTheme);
   for (const route of map.settlements.routes) {
     if (!pushRouteMesh(build, route)) break;
@@ -4500,6 +4507,8 @@ function createRouteMeshBuild(map, camera, canvas, selection, objectHighlights, 
     selection,
     objectHighlights,
     vertices: [],
+    seaLandVertices: [],
+    seaWaterVertices: [],
     stats: emptyRouteRenderStats(projection)
   };
 }
@@ -4517,12 +4526,12 @@ function pushRouteMesh(build, route) {
     return true;
   }
   const selected = isSelectedOrHighlighted(build.selection, build.objectHighlights, OBJECT_KIND.ROUTE, route.id);
-  const style = routeStyle(route, build.visualTheme);
+  const style = resolveRouteStyle(route, build.visualTheme);
   const baseProjection = projectWorldLineWidth(style.worldWidth, build.projection);
   const renderedProjection = selected
     ? projectWorldLineWidth(style.worldWidth, build.projection, {haloCssPx: ROUTE_SELECTION_HALO_CSS_PX})
     : baseProjection;
-  const color = selected ? [1, 0.82, 0.34, 1] : withProjectedLineAlpha(style.color, baseProjection.alpha);
+  const color = selected ? SELECTED_ROUTE_COLOR : withProjectedLineAlpha(style.color, baseProjection.alpha);
   const widthPx = renderedProjection.backingWidth;
   recordProjectedWidth(build.stats, baseProjection);
   if (selected) build.stats.selectedHaloRoutes++;
@@ -4533,9 +4542,18 @@ function pushRouteMesh(build, route) {
   } : null;
   const smoothed = smoothWorldPath(points, LINE_SMOOTHING.route);
   build.stats.smoothedPoints += smoothed.length;
-  const before = build.vertices.length;
-  pushScreenPolyline(build.vertices, build.context, smoothed, color, widthPx, dash);
-  const addedVertices = (build.vertices.length - before) / 6;
+  const isMaskedSeaRoute = route.type === "searoute" && !selected;
+  const target = isMaskedSeaRoute ? build.seaLandVertices : build.vertices;
+  const before = target.length;
+  pushScreenPolyline(target, build.context, smoothed, color, widthPx, dash);
+  let addedVertices = (target.length - before) / 6;
+  if (isMaskedSeaRoute && addedVertices > 0) {
+    const seaBefore = build.seaWaterVertices.length;
+    const seaColor = withProjectedLineAlpha(style.seaColor, baseProjection.alpha);
+    pushScreenPolyline(build.seaWaterVertices, build.context, smoothed, seaColor, widthPx, dash);
+    addedVertices += (build.seaWaterVertices.length - seaBefore) / 6;
+    build.stats.maskedSeaRoutes++;
+  }
   if (addedVertices <= 0) return true;
   build.stats.renderedRoutes++;
   build.stats.vertices += addedVertices;
@@ -4548,8 +4566,16 @@ function pushRouteMesh(build, route) {
 }
 
 function finalizeRouteMeshBuild(build) {
+  const ordinaryCount = build.vertices.length / 6;
+  const seaLandCount = build.seaLandVertices.length / 6;
+  const seaWaterCount = build.seaWaterVertices.length / 6;
   return {
-    vertices: new Float32Array(build.vertices),
+    vertices: new Float32Array([...build.vertices, ...build.seaLandVertices, ...build.seaWaterVertices]),
+    drawRanges: {
+      ordinary: {first: 0, count: ordinaryCount},
+      seaLand: {first: ordinaryCount, count: seaLandCount},
+      seaWater: {first: ordinaryCount + seaLandCount, count: seaWaterCount}
+    },
     stats: normalizeRouteRenderStats(build.stats)
   };
 }
@@ -4631,6 +4657,7 @@ function emptyRouteRenderStats(projection = null) {
     lod: {hidden: 0, faint: 0, subpixel: 0, full: 0},
     selectedHaloCssPx: ROUTE_SELECTION_HALO_CSS_PX,
     selectedHaloRoutes: 0,
+    maskedSeaRoutes: 0,
     pointBudgetExceeded: false,
     vertexBudgetExceeded: false,
     aborted: false
@@ -4673,13 +4700,6 @@ function recordProjectedWidth(stats, projected) {
 
 function finiteWidthStat(value) {
   return value === Infinity ? 0 : roundValue(value);
-}
-
-function routeStyle(route, visualTheme) {
-  const lines = visualTheme?.lines || {};
-  if (route.level === "primary") return {color: lines.routePrimary || [0.56, 0.47, 0.34, 0.88], worldWidth: routeWorldWidth("primary")};
-  if (route.level === "secondary") return {color: lines.routeSecondary || [0.5, 0.43, 0.33, 0.8], worldWidth: routeWorldWidth("secondary")};
-  return {color: lines.routeMinor || [0.43, 0.38, 0.31, 0.64], worldWidth: routeWorldWidth("minor")};
 }
 
 function buildPointVertices(map, visibility = {}) {
