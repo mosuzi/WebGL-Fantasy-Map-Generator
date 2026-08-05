@@ -143,7 +143,7 @@ function definitions() {
         step("入口", FILES.control, ["command=\"local-file\"", "保存到本地"]),
         step("Vue 事件", FILES.control, ["project-map-save", "detail: {target}"]),
         step("DOM 接线", FILES.panelBindings, ["target === \"local-file\"", "handlers.onSaveLocalFile"]),
-        step("runtime handler", FILES.runtime, ["onSaveLocalFile: () => saveMapToLocalFile", "runtimeActions.data.exportMap"]),
+        step("runtime handler", FILES.runtime, ["onSaveLocalFile: () => {", "saveMapToLocalFile", "runtimeActions.data.exportCompressedAll"]),
         step("序列化与下载", FILES.runtime, ["exportAllMapData(state, documentRef", "download: true", "includeText: false"]),
         step("反馈", FILES.runtime, ["正在保存地图到本地", "地图已保存到本地文件"])
       ],
@@ -302,7 +302,7 @@ function definitions() {
         visibleAction("details-locate", "对象详情：定位", [
           sourceRef(FILES.objectDetailsVue, ["@click=\"callbacks.onLocate\""]),
           sourceRef(FILES.objectDetailsWrapper, ["onLocate: () => callbacks.onLocate"]),
-          sourceRef(FILES.runtime, ["onLocate:", "locateAndSelectObject(null"], {anchor: "createObjectDetailsPanel(documentRef", end: "next-panel-factory"}),
+          sourceRef(FILES.runtime, ["onLocate:", "locateObjectFromDetails"], {anchor: "createObjectDetailsPanel(documentRef", end: "next-panel-factory"}),
           sourceRef(FILES.runtime, ["const locateAndSelectObject", "无法定位${kindLabel}", "return located"])
         ], {
           result: "相机定位当前对象并保持统一 selection",
@@ -311,16 +311,16 @@ function definitions() {
           recovery: "定位失败返回 false，地图与 selection 不变，并显示稳定可见反馈"
         }),
         visibleAction("details-edit", "对象详情：进入编辑", [
-          sourceRef(FILES.objectDetailsVue, ["callbacks.onEdit?.()"]),
+          sourceRef(FILES.objectDetailsVue, ["editAction", "callbacks.onEdit?.()"]),
           sourceRef(FILES.objectDetailsWrapper, ["onEdit: () => callbacks.onEdit"]),
-          sourceRef(FILES.runtime, ["onEdit:", "startObjectEditing", "enterStateEditor"], {anchor: "createObjectDetailsPanel(documentRef", end: "next-panel-factory"})
+          sourceRef(FILES.runtime, ["describeObjectDetailsActions", "OBJECT_DETAILS_EDIT_MODE.INLINE_NAME", "openObjectEditorFromDetails"], {anchor: "createObjectDetailsPanel(documentRef", end: "next-panel-factory"})
         ], {
-          result: "设置 editingObject 并启用对应编辑入口与交互锁",
-          historyEffect: "进入编辑态本身不写历史",
-          feedback: "按钮切换为退出编辑，领域编辑控件按对象能力显示",
-          recovery: "退出、关闭详情或 Esc 清理编辑态"
+          result: "按显式能力进入行内名称编辑或真实领域面板；无真实动作时隐藏入口",
+          historyEffect: "进入编辑入口本身不写历史，领域应用动作按各自命令写历史",
+          feedback: "按钮直接说明将打开的领域编辑器；行内名称编辑可切换退出",
+          recovery: "行内编辑可退出或关闭详情；领域面板按自身取消 / 关闭契约清理"
         }),
-        visibleAction("details-cancel-edit", "对象详情：退出编辑", [
+        visibleAction("details-cancel-edit", "对象详情：退出行内名称编辑", [
           sourceRef(FILES.objectDetailsVue, ["callbacks.onCancelEdit?.()"]),
           sourceRef(FILES.objectDetailsWrapper, ["onCancelEdit: () => callbacks.onCancelEdit"]),
           sourceRef(FILES.runtime, ["onCancelEdit:", "stopObjectEditing()"], {anchor: "createObjectDetailsPanel(documentRef", end: "next-panel-factory"})

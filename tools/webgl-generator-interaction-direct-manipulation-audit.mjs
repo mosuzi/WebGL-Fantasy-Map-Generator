@@ -53,6 +53,7 @@ const MODE_DEFINITIONS = Object.freeze([
   oneShotMode("ROUTE_DRAW", "route:draw", "route-panel", "绘制路线", "第一次点击起点，第二次点击终点", "起点在两次点击间保留", "第二次合法点击提交并完成模式", "成功写一条新增路线历史", {continuation: "两阶段一次性模式；第一次点击保留起点，成功创建后退出"}),
   oneShotMode("ROUTE_EDIT_WAYPOINT", "route:edit-waypoint", "route-panel", "拾取路线途经点草稿", "单击新的途经 cell", "面板保存途经点草稿", "拾取后退出模式，应用 / 取消由面板收口", "拾取不写历史，实际应用写一条路线编辑历史"),
   oneShotMode("RIVER_ADD", "river:add", "river-panel", "新增河流", "单击合法河源 cell", "无跨手势草稿", "成功创建后完成模式", "成功写一条新增河流历史"),
+  oneShotMode("RIVER_EDIT_WAYPOINT", "river:edit-waypoint", "river-panel", "添加河道视觉控制点", "单击河道希望经过的 pack cell", "点击前保持原成品折线", "成功插入控制点后完成模式", "成功写一条可撤销河道折线历史；不改水文拓扑"),
   oneShotMode("LAKE_EXCAVATE", "lake:excavate", "lake-panel", "开挖湖泊", "单击中心并按面板半径作用", "面板保存半径参数；画布持续显示模式名、下一步和 crosshair 光标", "成功开挖后完成模式", "成功写一条湖泊开挖历史"),
   oneShotMode("FEATURE_PATCH_SELECT", "feature:patch-select", "lake-panel", "拾取 feature 补丁草稿", "单击目标 pack cell", "选中 cell 进入面板补丁预览", "拾取后退出模式；应用 / 取消由面板收口", "选择本身不写历史，应用补丁写一条历史"),
   persistentMode("FEATURE_TOPOLOGY_SELECT", "feature:topology-select", "feature-panel", "选择 feature 拓扑 cell", "逐次单击 grid cell 组成选区", "选区及拓扑草稿持续显示", "面板应用或取消时退出", "选择不写历史，应用拓扑写一条历史"),
@@ -202,7 +203,7 @@ function verifyMode(item, includedSurfaceIds) {
 }
 
 function registrationEvidence(item) {
-  const directKeys = new Set(["HEIGHT_BRUSH", "STATE_BRUSH", "PROVINCE_BRUSH", "CITY_MOVE", "BIOME_ASSIGN", "SUITABILITY_PAINT", "MARKET_ASSIGN", "MEASUREMENT_DRAW", "MARKER_ADD", "MARKER_MOVE", "ROUTE_DRAW", "ROUTE_EDIT_WAYPOINT", "RIVER_ADD", "LAKE_EXCAVATE", "FEATURE_PATCH_SELECT", "FEATURE_TOPOLOGY_SELECT", "ZONE_ADD", "NOTE_ADD", "REGENERATION_LOCK_SELECT"]);
+  const directKeys = new Set(["HEIGHT_BRUSH", "STATE_BRUSH", "PROVINCE_BRUSH", "CITY_MOVE", "BIOME_ASSIGN", "SUITABILITY_PAINT", "MARKET_ASSIGN", "MEASUREMENT_DRAW", "MARKER_ADD", "MARKER_MOVE", "ROUTE_DRAW", "ROUTE_EDIT_WAYPOINT", "RIVER_ADD", "RIVER_EDIT_WAYPOINT", "LAKE_EXCAVATE", "FEATURE_PATCH_SELECT", "FEATURE_TOPOLOGY_SELECT", "ZONE_ADD", "NOTE_ADD", "REGENERATION_LOCK_SELECT"]);
   if (directKeys.has(item.key)) {
     return [scopedRef(FILES.runtime, `register(CANVAS_TOOL_MODE.${item.key}`, "  register(", [`\"${item.panelId}\"`, "onExit"], ["target", "cancel", "recovery"])];
   }
@@ -262,6 +263,7 @@ function handlerEvidence(item) {
     ROUTE_DRAW: objectToolEvidence(item.key, ["state.routeCreate.startPackCell", "runtimeActions.edit.routes.create"], ["gesture", "preview", "complete", "history"]),
     ROUTE_EDIT_WAYPOINT: objectToolEvidence(item.key, ["setEditWaypoint", "completeCanvasToolMode"], ["gesture", "preview", "complete", "history"]),
     RIVER_ADD: objectToolEvidence(item.key, ["runtimeActions.edit.rivers.create", "completeCanvasToolMode"], ["gesture", "preview", "complete", "history"]),
+    RIVER_EDIT_WAYPOINT: objectToolEvidence(item.key, ["createAddRiverVisualWaypointCommand", "executeEditCommand", "completeCanvasToolMode"], ["gesture", "preview", "complete", "history"]),
     LAKE_EXCAVATE: objectToolEvidence(item.key, ["runtimeActions.edit.lakes.create", "completeCanvasToolMode"], ["gesture", "preview", "complete", "history"]),
     FEATURE_PATCH_SELECT: objectToolEvidence(item.key, ["setPatchCell", "completeCanvasToolMode"], ["gesture", "preview", "complete", "history"]),
     FEATURE_TOPOLOGY_SELECT: [scopedRef(FILES.runtime, "function bindObjectCreationTools", "function bindCustomLabelDrag", ["CANVAS_TOOL_MODE.FEATURE_TOPOLOGY_SELECT", "setTopologyCell"], ["gesture", "preview"]), scopedRef(FILES.runtime, "export function applyFeatureTopologyViaApi", "export function inspectStateTopologyViaApi", ["executeEditCommand", "CANVAS_TOOL_MODE.FEATURE_TOPOLOGY_SELECT"], ["complete", "history"])],

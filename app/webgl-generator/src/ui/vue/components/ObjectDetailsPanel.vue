@@ -9,7 +9,7 @@
       @apply="callbacks.onRename"
     />
     <div class="object-details-actions">
-      <UiButton variant="secondary" @click="callbacks.onLocate">定位</UiButton>
+      <UiButton v-if="actionPolicy.canLocate" variant="secondary" @click="callbacks.onLocate">定位</UiButton>
       <UiButton
         v-if="canRenameFromNamebase"
         variant="secondary"
@@ -18,8 +18,8 @@
       >
         名称库改名
       </UiButton>
-      <UiButton v-if="canEdit" variant="secondary" @click="editing ? callbacks.onCancelEdit?.() : callbacks.onEdit?.()">
-        {{ editing ? "退出编辑" : "编辑" }}
+      <UiButton v-if="editAction" variant="secondary" @click="handleEditAction">
+        {{ editing && editAction.mode === OBJECT_DETAILS_EDIT_MODE.INLINE_NAME ? editAction.editingLabel : editAction.label }}
       </UiButton>
     </div>
   </template>
@@ -33,6 +33,7 @@ import UiTextEditField from "./base/UiTextEditField.vue";
 import {formatArea, formatDistance, formatMilitary, formatNumber, formatPopulation, formatPrecipitation, formatRiverFlow, formatRiverRunoffFlowRange} from "../../display-units.js";
 import {useUnitPreferences} from "../composables/use-unit-preferences.js";
 import {LABEL_TARGET_KIND, OBJECT_KIND, OBJECT_KIND_LABEL} from "../../../runtime/object-kinds.js";
+import {describeObjectDetailsActions, OBJECT_DETAILS_EDIT_MODE} from "../../../runtime/object-details-actions.js";
 import {formatPlayerText, joinPlayerDetailValues, normalizeObjectDetailRows} from "../../object-detail-values.js";
 
 defineOptions({
@@ -52,7 +53,8 @@ const props = defineProps({
 
 const editing = computed(() => isSameObject(props.state.object, props.state.editingObject));
 const title = computed(() => formatObjectTitle(props.state.object));
-const canEdit = computed(() => canEditObject(props.state.object));
+const actionPolicy = computed(() => describeObjectDetailsActions(props.state.object));
+const editAction = computed(() => actionPolicy.value.edit);
 const canRename = computed(() => canRenameObject(props.state.object));
 const canRenameFromNamebase = computed(() => canRenameObjectFromNamebase(props.state.object));
 const editableName = computed(() => props.state.object?.name || props.state.object?.text || props.state.object?.targetName || "");
@@ -258,6 +260,14 @@ function detailRows(object) {
   return OBJECT_DETAIL_ROWS[object.kind]?.(object) || [{label: "类型", value: object.kind || "unknown"}];
 }
 
+function handleEditAction() {
+  if (editing.value && editAction.value?.mode === OBJECT_DETAILS_EDIT_MODE.INLINE_NAME) {
+    props.callbacks.onCancelEdit?.();
+    return;
+  }
+  props.callbacks.onEdit?.();
+}
+
 function participantRoleLabel(role) {
   return ({attacker: "进攻方", defender: "防守方", invader: "入侵方", rebel: "叛乱方", ruler: "统治方", "source-religion": "传播宗教", "target-religion": "目标宗教", "initiator-religion": "发起宗教", origin: "来源", affected: "受影响对象"})[role] || role;
 }
@@ -309,10 +319,6 @@ function canRenameObjectFromNamebase(object) {
   if (object.targetKind === LABEL_TARGET_KIND.CITY) return Number(object.targetId ?? object.id) >= 0;
   if (object.targetKind === LABEL_TARGET_KIND.STATE) return Number(object.targetId ?? object.id) > 0;
   return false;
-}
-
-function canEditObject(object) {
-  return object?.kind !== OBJECT_KIND.TRADE_FLOW;
 }
 
 function formatMarkerTitle(object) {

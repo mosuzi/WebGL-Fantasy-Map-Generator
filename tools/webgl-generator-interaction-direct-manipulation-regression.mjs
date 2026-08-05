@@ -35,16 +35,16 @@ assert.equal(report.modeContracts.filter(item => item.cursor === "mode-cursor").
 assert.deepEqual(report.modeContracts.filter(item => item.locksInteraction === false).map(item => item.modeId), ["measurement:draw"], "测量必须是唯一不锁基础交互的注册模式");
 
 assert.equal(report.totals.directFamilies, 19, "直接操控应为 13 条原生路径加 6 类展开宿主");
-assert.equal(report.totals.directManipulations, 89, "当前直接操控分母应展开为 89 行");
-assert.equal(report.expandedDirectRows.length, 89);
-assert.equal(new Set(report.expandedDirectRows.map(item => item.directRowId)).size, 89, "展开行 ID 不得重复");
+assert.equal(report.totals.directManipulations, 90, "当前直接操控分母应展开为 90 行");
+assert.equal(report.expandedDirectRows.length, 90);
+assert.equal(new Set(report.expandedDirectRows.map(item => item.directRowId)).size, 90, "展开行 ID 不得重复");
 assert.equal(report.totals.missingDirectClassifications, 0);
 assert.equal(report.totals.unresolvedSurfaceRefs, 0);
 assert.ok(report.directManipulations.every(item => item.start && item.move && item.complete && item.clickNoMove && item.cancel && item.pointerCancel && item.captureLost && item.conflicts && item.history && item.recovery), "每类直接操控必须明确完整事件生命周期");
 assert.ok(report.directManipulations.every(item => item.evidenceStatus === "E-C" && item.browserEvidence === "pending-Q107" && item.intB === false), "直接操控正常行为结论不得冒充浏览器通过或整改结论");
 
 const directById = new Map(report.directManipulations.map(item => [item.directId, item]));
-assert.equal(directById.get("DM-14").hostCount, 28, "PanelManager 拖动宿主分母漂移时必须更新审计");
+assert.equal(directById.get("DM-14").hostCount, 29, "PanelManager 拖动宿主分母漂移时必须更新审计");
 assert.equal(directById.get("DM-15").hostCount, 18, "动作坞拖动宿主分母漂移时必须更新审计");
 assert.equal(directById.get("DM-16").hostCount, 1);
 assert.equal(directById.get("DM-17").hostCount, 2);

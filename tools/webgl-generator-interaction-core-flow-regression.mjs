@@ -28,7 +28,7 @@ const byId = new Map(report.flows.map(item => [item.flowId, item]));
 assert.deepEqual(byId.get("HF-02").visibleActions.map(item => item.actionId), ["generate-button", "random-seed-button"], "生成链必须包含生成与换种子两个可见入口");
 assert.ok(byId.get("HF-06").visibleActions.some(item => item.actionId === "quick-export-map"), "快速导出必须包含地图数据按钮");
 assert.equal(byId.get("HF-05").visibleActions.find(item => item.actionId === "import-geo")?.historyEffect, "通过导入编辑命令写入可撤销历史", "GEO 导入不得误用完整地图替换的清历史语义");
-assert.equal(byId.get("HF-10").visibleActions.length, 26, "25 个领域面板入口和 selection 更新动作分母漂移时必须更新审计");
+assert.equal(byId.get("HF-10").visibleActions.length, 25, "24 个领域面板入口和 selection 更新动作分母漂移时必须更新审计");
 assert.equal(byId.get("HF-12").visibleActions.length, 18, "列表定位宿主分母漂移时必须更新审计");
 assert.equal(byId.get("HF-13").visibleActions.length, 15, "重命名宿主分母漂移时必须更新审计");
 assert.equal(byId.get("HF-14").visibleActions.length, 47, "标题栏、内容区与快捷键历史入口分母漂移时必须更新审计");
