@@ -218,6 +218,7 @@
     "regress:economy-display-edit": "node --no-warnings ./tools/webgl-generator-economy-display-edit-regression.mjs",
     "regress:economy-trade-query": "node --no-warnings ./tools/webgl-generator-economy-trade-query-regression.mjs",
     "regress:route-edit": "node --no-warnings ./tools/webgl-generator-route-edit-regression.mjs",
+    "regress:object-details-edit": "node --no-warnings ./tools/webgl-generator-object-details-edit-regression.mjs",
     "regress:route-connectivity": "node --no-warnings ./tools/webgl-generator-route-connectivity-regression.mjs",
     "regress:line-width-projection": "node --no-warnings ./tools/webgl-generator-line-width-projection-regression.mjs",
     "regress:viewport-line-preview": "node --no-warnings ./tools/webgl-generator-viewport-line-preview-regression.mjs",

@@ -37,6 +37,14 @@ const RIVER_CREATE_EFFECTS = Object.freeze({
   derived: Object.freeze(["river-mesh", "river-width-stats", "object-index", "object-panels"])
 });
 
+const RIVER_VISUAL_PATH_EFFECTS = Object.freeze({
+  render: "draw",
+  selection: "refresh",
+  runtimeStats: true,
+  pickPanel: true,
+  derived: Object.freeze(["river-mesh", "river-width-stats", "object-index", "object-panels"])
+});
+
 const RIVER_DELETE_STALE_SYSTEMS = Object.freeze([
   "rivers",
   "routes",
@@ -145,6 +153,78 @@ export function createSetRiverWidthFactorCommand(riverId, nextValue) {
     isNoop(context) {
       const river = findRiver(context.map, riverId);
       return river ? normalizeWidthFactor(river.widthFactor) === nextWidthFactor : true;
+    }
+  };
+}
+
+export function inspectRiverVisualWaypoint(map, riverId, packCell) {
+  const id = Number(riverId);
+  const cell = Number(packCell);
+  const river = findRiver(map, id);
+  if (!river) return invalidRiverVisualWaypoint("river-missing", `找不到河流 #${id}`);
+  const point = map?.pack?.cells?.p?.[cell];
+  if (!Number.isInteger(cell) || !isPoint(point)) return invalidRiverVisualWaypoint("invalid-cell", "河道控制点必须位于有效 pack cell");
+  const points = (river.points || []).filter(isPoint).map(item => [...item]);
+  if (points.length < 2) return invalidRiverVisualWaypoint("path-too-short", "河流缺少可编辑的成品折线");
+  if (points.some(item => Math.hypot(item[0] - point[0], item[1] - point[1]) < 0.25)) {
+    return {...invalidRiverVisualWaypoint("duplicate-waypoint", "该位置已经存在河道控制点"), changed: false};
+  }
+
+  const nearest = nearestRiverSegment(points, point);
+  const flux = Math.round((Number(points[nearest.index]?.[2]) || 0) + ((Number(points[nearest.index + 1]?.[2]) || 0) - (Number(points[nearest.index]?.[2]) || 0)) * nearest.amount);
+  const nextPoint = [roundCoordinate(point[0]), roundCoordinate(point[1]), Math.max(0, flux)];
+  const nextPoints = [...points.slice(0, nearest.index + 1), nextPoint, ...points.slice(nearest.index + 1)];
+  return {
+    valid: true,
+    changed: true,
+    code: "ok",
+    reason: "",
+    riverId: id,
+    packCell: cell,
+    insertIndex: nearest.index + 1,
+    distance: nearest.distance,
+    points: nextPoints,
+    length: polylineLength(nextPoints)
+  };
+}
+
+export function createAddRiverVisualWaypointCommand(riverId, packCell, {label = "添加河道控制点"} = {}) {
+  const id = Number(riverId);
+  let before = null;
+  let after = null;
+  let previousLength = null;
+  let hadLength = false;
+  return {
+    label: `${label} #${id}`,
+    domain: OBJECT_KIND.RIVER,
+    effects: {...RIVER_VISUAL_PATH_EFFECTS, affected: objectAffected(OBJECT_KIND.RIVER, id)},
+    apply(context) {
+      const preview = inspectRiverVisualWaypoint(context.map, id, packCell);
+      if (!preview.valid) throw riverVisualWaypointError(preview);
+      const river = findRiver(context.map, id);
+      before ??= clonePlain(river.points || []);
+      if (!after) {
+        after = clonePlain(preview.points);
+        hadLength = Object.prototype.hasOwnProperty.call(river, "length");
+        previousLength = river.length;
+      }
+      river.points = clonePlain(after);
+      river.length = polylineLength(river.points);
+    },
+    revert(context) {
+      const river = findRiver(context.map, id);
+      if (!river || !before) throw new Error("缺少可撤销的河道折线快照");
+      river.points = clonePlain(before);
+      if (hadLength) river.length = previousLength;
+      else delete river.length;
+    },
+    isNoop(context) {
+      const preview = inspectRiverVisualWaypoint(context.map, id, packCell);
+      if (!preview.valid) throw riverVisualWaypointError(preview);
+      return !preview.changed;
+    },
+    getResult() {
+      return after ? {riverId: id, packCell: Number(packCell), points: after.length, length: polylineLength(after)} : null;
     }
   };
 }
@@ -470,10 +550,45 @@ function invalidRiverCreation(code, reason) {
   return {valid: false, code, reason, path: [], parent: 0, termination: ""};
 }
 
+function invalidRiverVisualWaypoint(code, reason) {
+  return {valid: false, changed: false, code, reason, points: [], length: 0};
+}
+
 function riverCreationError(preview) {
   const error = new Error(preview.reason);
   error.code = preview.code;
   return error;
+}
+
+function riverVisualWaypointError(preview) {
+  const error = new Error(preview.reason);
+  error.code = preview.code;
+  return error;
+}
+
+function nearestRiverSegment(points, point) {
+  let nearest = {index: 0, amount: 0, distance: Infinity};
+  for (let index = 0; index < points.length - 1; index++) {
+    const start = points[index];
+    const end = points[index + 1];
+    const dx = end[0] - start[0];
+    const dy = end[1] - start[1];
+    const lengthSquared = dx * dx + dy * dy;
+    const amount = lengthSquared > Number.EPSILON
+      ? Math.max(0, Math.min(1, ((point[0] - start[0]) * dx + (point[1] - start[1]) * dy) / lengthSquared))
+      : 0;
+    const distance = Math.hypot(point[0] - (start[0] + dx * amount), point[1] - (start[1] + dy * amount));
+    if (distance < nearest.distance) nearest = {index, amount, distance};
+  }
+  return nearest;
+}
+
+function roundCoordinate(value) {
+  return Math.round(Number(value) * 100) / 100;
+}
+
+function isPoint(point) {
+  return Number.isFinite(Number(point?.[0])) && Number.isFinite(Number(point?.[1]));
 }
 
 function cleanupLakeRiverReferences(map, removed) {

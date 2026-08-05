@@ -158,6 +158,7 @@ import {createDeleteNoteCommand, createStandaloneNoteCommand} from "./note-edit-
 import {createDeleteNotesBatchCommand, createImportNotesCommand, inspectNotesImport} from "./note-import.js";
 import {applyMarketAssignmentPreview, buildMarketAssignmentChanges, createApplyMarketAssignmentCommand, createRebuildEconomyCommand, createSetGoodDisplayCommand, createSetMarketDisplayCommand, getMarketAssignmentBrushChanges, inspectMarketAssignment, MARKET_ASSIGNMENT_PREVIEW_EFFECTS, restoreMarketAssignmentPreview} from "./economy-edit-commands.js";
 import {createRenameNamedObjectsFromNamebaseCommand, createRenameObjectCommand, createSetObjectNoteCommand, createSetProvinceColorCommand, createSetStateCapitalCommand} from "./object-edit-commands.js";
+import {describeObjectDetailsActions, OBJECT_DETAILS_EDIT_MODE} from "./object-details-actions.js";
 import {createApplyFeaturePatchCommand, createDeleteLakeCommand, createExcavateLakeCommand, createRenameLakesFromNamebaseCommand, createSetLakeOutletCommand, inspectFeaturePatch, inspectLakeOutletChange} from "./lake-edit-commands.js";
 import {createApplyFeatureTopologyCommand, FEATURE_TOPOLOGY_MODE, inspectFeatureTopology, rebuildFeatureTopology} from "./feature-topology-edit-commands.js";
 import {applyProvinceBrushPreview, createAddProvinceAtCellCommand, createApplyProvinceBrushCommand, createDeleteProvinceCommand, inspectProvinceCreation, PROVINCE_BRUSH_PREVIEW_EFFECTS} from "./province-edit-commands.js";
@@ -173,7 +174,7 @@ import {
 import {applySocialAssignmentPreview, SOCIAL_ASSIGNMENT_PREVIEW_EFFECTS} from "./social-ownership-edit-commands.js";
 import {resolveObject} from "./object-resolver.js";
 import {MAX_PERSISTENT_OBJECT_HIGHLIGHTS, isPersistentHighlightObjectKind, normalizePersistentHighlights, samePersistentHighlightMembership} from "./persistent-highlights.js";
-import {createAddRiverCommand, createDeleteRiverCommand, createRenameRiversFromNamebaseCommand, createSetRiverNoteCommand, createSetRiverWidthFactorCommand} from "./river-edit-commands.js";
+import {createAddRiverCommand, createAddRiverVisualWaypointCommand, createDeleteRiverCommand, createRenameRiversFromNamebaseCommand, createSetRiverNoteCommand, createSetRiverWidthFactorCommand} from "./river-edit-commands.js";
 import {createAddRouteCommand, createDeleteRouteCommand, createEditRouteCommand, createSetRouteNoteCommand, inspectRouteEdit} from "./route-edit-commands.js";
 import {createDeleteBatchCommand, createDeleteConfirmationRequiredError, inspectDeleteImpact, requestDeleteConfirmation} from "./delete-impact.js";
 import {
@@ -390,6 +391,7 @@ export const CANVAS_TOOL_MODE = Object.freeze({
   ROUTE_DRAW: "route:draw",
   ROUTE_EDIT_WAYPOINT: "route:edit-waypoint",
   RIVER_ADD: "river:add",
+  RIVER_EDIT_WAYPOINT: "river:edit-waypoint",
   LAKE_EXCAVATE: "lake:excavate",
   FEATURE_PATCH_SELECT: "feature:patch-select",
   FEATURE_TOPOLOGY_SELECT: "feature:topology-select",
@@ -426,6 +428,7 @@ export const CANVAS_TOOL_MODE_FEEDBACK = Object.freeze({
   [CANVAS_TOOL_MODE.ROUTE_DRAW]: canvasToolModeFeedback("绘制路线", "依次单击路线起点和终点，成功创建后退出。", "one-shot", "crosshair"),
   [CANVAS_TOOL_MODE.ROUTE_EDIT_WAYPOINT]: canvasToolModeFeedback("拾取路线途经点", "单击新的途经位置。", "pick", "cell"),
   [CANVAS_TOOL_MODE.RIVER_ADD]: canvasToolModeFeedback("新增河流", "单击合法河源位置。", "one-shot", "crosshair"),
+  [CANVAS_TOOL_MODE.RIVER_EDIT_WAYPOINT]: canvasToolModeFeedback("添加河道控制点", "单击河道希望经过的位置。", "pick", "cell"),
   [CANVAS_TOOL_MODE.LAKE_EXCAVATE]: canvasToolModeFeedback("开挖湖泊", "单击开挖中心位置。", "one-shot", "crosshair"),
   [CANVAS_TOOL_MODE.FEATURE_PATCH_SELECT]: canvasToolModeFeedback("拾取水陆修正区域", "单击局部水陆修正的中心。", "pick", "cell"),
   [CANVAS_TOOL_MODE.FEATURE_TOPOLOGY_SELECT]: canvasToolModeFeedback("选择海岸编辑区域", "逐次单击地图区域以组成持续选区。", "persistent", "cell"),
@@ -524,6 +527,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     routeCreate: {active: false, type: "road", startPackCell: null},
     routeEdit: {waypointRouteId: null},
     riverCreate: {active: false},
+    riverEdit: {waypointRiverId: null},
     lakeCreate: {active: false, radius: 0},
     featurePatch: {active: false, draft: null},
     featureTopology: {active: false},
@@ -683,17 +687,15 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
   state.openSelectionAwarePanel = openSelectionAwarePanel;
   const objectDetailsPanel = createObjectDetailsPanel(documentRef, panelManager, {
     onEdit: object => {
-      if (object?.kind === OBJECT_KIND.STATE) {
-        enterStateEditor(object);
-        return;
-      }
-      startObjectEditing(object, {select: false});
+      const action = describeObjectDetailsActions(object).edit;
+      if (action?.mode === OBJECT_DETAILS_EDIT_MODE.INLINE_NAME) startObjectEditing(object, {select: false});
+      else if (action?.mode === OBJECT_DETAILS_EDIT_MODE.DOMAIN_PANEL) openObjectEditorFromDetails(state, documentRef, object, {enterStateEditor});
     },
     onCancelEdit: () => {
       stopObjectEditing();
     },
     onLocate: object => {
-      locateAndSelectObject(null, object);
+      locateObjectFromDetails(state, documentRef, object, locateAndSelectObject);
     },
     onRename: (object, name) => {
       const context = {map: state.map};
@@ -2231,8 +2233,9 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     onHighlight: objects => setPersistentObjectHighlights(state, documentRef, objects),
     onClearHighlights: () => clearPersistentObjectHighlights(state, documentRef),
     getHighlightCount: () => persistentObjectHighlightCount(state),
-    onEdit: object => {
-      toggleObjectEditing(object);
+    onWaypointMode: (active, object) => {
+      if (active) enterCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.RIVER_EDIT_WAYPOINT, {riverId: object?.id});
+      else cancelCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.RIVER_EDIT_WAYPOINT, "panel-toggle");
     },
     onRename: (riverId, name) => {
       const object = {kind: "river", id: riverId};
@@ -2273,6 +2276,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     },
     onClose: () => {
       cancelCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.RIVER_ADD, "panel-close");
+      cancelCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.RIVER_EDIT_WAYPOINT, "panel-close");
       if (state.editingObject?.kind === OBJECT_KIND.RIVER) {
         suppressNextRiverPanelOpen = true;
         stopObjectEditing({ifKind: OBJECT_KIND.RIVER});
@@ -6948,6 +6952,97 @@ function openSelectionAwarePanelForState(state, {kind = null, beforeOpen = null,
   open?.(object);
   if (object) afterOpen?.(object);
   return object;
+}
+
+function openObjectEditorFromDetails(state, documentRef, object, {enterStateEditor} = {}) {
+  const resolved = resolveObject(state.map, object) || object;
+  const history = state.editHistory.getStats();
+  state.panels.objectDetails?.clear();
+
+  if (resolved.kind === OBJECT_KIND.STATE) return enterStateEditor?.(resolved) || false;
+  if (resolved.kind === OBJECT_KIND.ROUTE) {
+    state.panels.route?.setSelectedRouteId(resolved.id);
+    state.panels.route?.open(state.map, state.selection, history);
+    state.panels.route?.startEditing?.(resolved.id);
+    return true;
+  }
+  if (resolved.kind === OBJECT_KIND.RIVER) {
+    state.panels.river?.setSelection({object: resolved}, null);
+    state.panels.river?.open(state.map, state.selection, history, null);
+    return true;
+  }
+
+  const openers = {
+    [OBJECT_KIND.PROVINCE]: () => {
+      state.panels.province?.setSelectedProvinceId(resolved.id);
+      state.panels.province?.open(state.map, state.selection, history);
+    },
+    [OBJECT_KIND.CULTURE]: () => {
+      state.panels.culture?.setSelectedCultureId(resolved.id);
+      state.panels.culture?.open(state.map, state.selection, history);
+    },
+    [OBJECT_KIND.RELIGION]: () => {
+      state.panels.religion?.setSelectedReligionId(resolved.id);
+      state.panels.religion?.open(state.map, state.selection, history);
+    },
+    [OBJECT_KIND.ZONE]: () => {
+      state.panels.zone?.setSelection(state.selection);
+      state.panels.zone?.open(state.map, state.selection, history);
+    },
+    [OBJECT_KIND.MARKER]: () => {
+      state.panels.marker?.setSelectedMarkerId(resolved.id);
+      state.panels.marker?.open(state.map, state.selection, history);
+    },
+    [OBJECT_KIND.NOTE]: () => {
+      state.panels.notes?.setSelectedNoteId(resolved.noteId ?? resolved.id);
+      state.panels.notes?.open(state.map, state.selection, history);
+    },
+    [OBJECT_KIND.MEASUREMENT]: () => {
+      state.panels.measurement?.open(state.map, history);
+      startMeasurementObjectEdit(state, resolved, documentRef);
+    },
+    [OBJECT_KIND.MILITARY]: () => {
+      state.panels.military?.setSelectedRegimentId(resolved.id);
+      state.panels.military?.open(state.map, state.selection, history);
+    },
+    [OBJECT_KIND.FEATURE]: () => {
+      state.panels.feature?.setSelectedFeatureId(resolved.id);
+      state.panels.feature?.open(state.map, history);
+    },
+    [OBJECT_KIND.OCEAN_CURRENT]: () => {
+      state.panels.oceanCurrent?.setSelectedId(resolved.id);
+      state.panels.oceanCurrent?.open(state.map, history);
+    },
+    [OBJECT_KIND.ECONOMY_MARKET]: () => {
+      state.panels.economy?.open(state.map, state.selection, history);
+      state.panels.economy?.setSelectedMarketId?.(resolved.id);
+    },
+    [OBJECT_KIND.DIPLOMACY_RELATION]: () => {
+      state.panels.diplomacy?.setRelation?.(resolved.subjectId, resolved.objectId);
+      state.panels.diplomacy?.open(state.map, state.selection, history);
+    },
+    [OBJECT_KIND.LABEL]: () => {
+      state.panels.labelNaming?.setSelectedLabelKey(labelKeyForObject(resolved));
+      state.panels.labelNaming?.open(state.map, state.selection, history);
+    }
+  };
+  const open = openers[resolved.kind];
+  if (!open) return false;
+  open();
+  return true;
+}
+
+function locateObjectFromDetails(state, documentRef, object, locateAndSelectObject) {
+  const resolved = resolveObject(state.map, object) || object;
+  if (resolved.kind === OBJECT_KIND.MEASUREMENT) return locateMeasurement(state, resolved, documentRef);
+  if (resolved.kind === OBJECT_KIND.OCEAN_CURRENT) {
+    const current = (state.map?.oceanCurrents?.currents || []).find(item => String(item?.id) === String(resolved.id)) || resolved;
+    return locateAndSelectObject(null, resolved, {locate: () => {
+      const bounds = oceanCurrentBounds(current);
+      return bounds ? state.renderer.locateBounds(bounds, {status: `ocean-current ${resolved.id}`}) : false;
+    }});
+  }
+  return locateAndSelectObject(null, resolved);
 }
 
 function wrapControlPanelChildOpeners(handlers, panelManager) {
@@ -11673,6 +11768,18 @@ function registerCanvasToolModes(state, documentRef, {stopObjectEditing} = {}) {
       state.panels.river?.setCreateMode(false);
     }
   });
+  register(CANVAS_TOOL_MODE.RIVER_EDIT_WAYPOINT, "river-panel", {
+    onEnter: ({context}) => {
+      const riverId = Number(context.riverId);
+      if (!Number.isInteger(riverId) || riverId < 0) throw new Error("添加河道控制点前必须选择河流");
+      state.riverEdit.waypointRiverId = riverId;
+      state.panels.river?.setWaypointMode(true);
+    },
+    onExit: () => {
+      state.riverEdit.waypointRiverId = null;
+      state.panels.river?.setWaypointMode(false);
+    }
+  });
   register(CANVAS_TOOL_MODE.LAKE_EXCAVATE, "lake-panel", {
     onEnter: ({context}) => {
       state.lakeCreate.active = true;
@@ -13702,7 +13809,7 @@ function bindMarkerEditing(canvas, state, documentRef) {
 function bindObjectCreationTools(canvas, state, documentRef) {
   canvas.addEventListener("pointerdown", event => {
     const activeMode = state.canvasToolModes.getActive()?.id;
-    if (![CANVAS_TOOL_MODE.ROUTE_DRAW, CANVAS_TOOL_MODE.ROUTE_EDIT_WAYPOINT, CANVAS_TOOL_MODE.RIVER_ADD, CANVAS_TOOL_MODE.LAKE_EXCAVATE, CANVAS_TOOL_MODE.FEATURE_PATCH_SELECT, CANVAS_TOOL_MODE.FEATURE_TOPOLOGY_SELECT, CANVAS_TOOL_MODE.CULTURE_CENTER, CANVAS_TOOL_MODE.RELIGION_CENTER, CANVAS_TOOL_MODE.ZONE_ADD, CANVAS_TOOL_MODE.NOTE_ADD].includes(activeMode) || !state.map || !isPrimaryPointerDown(event)) return;
+    if (![CANVAS_TOOL_MODE.ROUTE_DRAW, CANVAS_TOOL_MODE.ROUTE_EDIT_WAYPOINT, CANVAS_TOOL_MODE.RIVER_ADD, CANVAS_TOOL_MODE.RIVER_EDIT_WAYPOINT, CANVAS_TOOL_MODE.LAKE_EXCAVATE, CANVAS_TOOL_MODE.FEATURE_PATCH_SELECT, CANVAS_TOOL_MODE.FEATURE_TOPOLOGY_SELECT, CANVAS_TOOL_MODE.CULTURE_CENTER, CANVAS_TOOL_MODE.RELIGION_CENTER, CANVAS_TOOL_MODE.ZONE_ADD, CANVAS_TOOL_MODE.NOTE_ADD].includes(activeMode) || !state.map || !isPrimaryPointerDown(event)) return;
     event.preventDefault();
     event.stopImmediatePropagation();
     if (activeMode === CANVAS_TOOL_MODE.FEATURE_TOPOLOGY_SELECT) {
@@ -13751,6 +13858,19 @@ function bindObjectCreationTools(canvas, state, documentRef) {
     if (activeMode === CANVAS_TOOL_MODE.RIVER_ADD) {
       const result = state.runtimeActions.edit.rivers.create({sourcePackCell: packCell});
       if (result?.executed) completeCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.RIVER_ADD, {result});
+      return;
+    }
+
+    if (activeMode === CANVAS_TOOL_MODE.RIVER_EDIT_WAYPOINT) {
+      const riverId = state.riverEdit.waypointRiverId;
+      const result = executeEditCommand(state, documentRef, createAddRiverVisualWaypointCommand(riverId, packCell), {
+        context: {map: state.map},
+        status: executed => `已为河流 #${executed.getResult?.().riverId ?? riverId} 添加河道控制点。`,
+        errorStatus: executed => `${executed.label}失败，请选择与现有河道控制点不同的位置。`,
+        throwOnError: false
+      });
+      if (result.executed) completeCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.RIVER_EDIT_WAYPOINT, {packCell, riverId, result});
+      updateRuntimePanel(documentRef, state);
       return;
     }
 

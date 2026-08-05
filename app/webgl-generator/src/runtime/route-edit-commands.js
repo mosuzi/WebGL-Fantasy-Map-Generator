@@ -717,6 +717,11 @@ function packRouteArray(routes) {
       feature: route.feature,
       state: route.state,
       province: route.province,
+      from: route.from,
+      to: route.to,
+      fromProvincial: route.fromProvincial,
+      toProvincial: route.toProvincial,
+      administrativePriority: route.administrativePriority,
       resourceCells: route.resourceCells || 0,
       markerResourceCells: route.markerResourceCells || 0,
       points: (route.points || []).map((point, index) => [point[0], point[1], route.packCells?.[index]])

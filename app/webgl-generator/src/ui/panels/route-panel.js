@@ -37,6 +37,7 @@ export function createRoutePanel(documentRef, manager, callbacks = {}) {
     waypointMode: false,
     editDraft: null,
     editPreview: null,
+    editRequestId: 0,
     selectedRouteId: null,
     version: 0
   });
@@ -156,6 +157,14 @@ export function createRoutePanel(documentRef, manager, callbacks = {}) {
     setSelectedRouteId(routeId) {
       const normalized = normalizeRouteId(routeId);
       if (routeExists(panelState.map, normalized)) panelState.selectedRouteId = normalized;
+    },
+    startEditing(routeId) {
+      const normalized = normalizeRouteId(routeId);
+      if (!routeExists(panelState.map, normalized)) return false;
+      panelState.selectedRouteId = normalized;
+      panelState.editRequestId++;
+      panelState.version++;
+      return true;
     },
     setCreateMode(active) {
       panelState.createMode = Boolean(active);

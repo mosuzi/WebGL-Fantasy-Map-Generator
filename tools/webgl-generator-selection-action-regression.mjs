@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import {readFile} from "node:fs/promises";
 
 import {SelectionStore} from "../app/webgl-generator/src/runtime/selection-store.js";
+import {describeObjectDetailsActions, OBJECT_DETAILS_EDIT_MODE} from "../app/webgl-generator/src/runtime/object-details-actions.js";
+import {OBJECT_KIND} from "../app/webgl-generator/src/runtime/object-kinds.js";
 
 const objects = new Map([
   ["state:1", {kind: "state", id: 1, name: "甲"}],
@@ -68,7 +70,12 @@ assert.match(stateEditorEntry, /state\.panels\.state\.setTargetStateId\(object\.
 assert.match(stateEditorEntry, /state\.panels\.state\.open\(state\.map, state\.editHistory\.getStats\(\)\)/, "国家编辑入口必须打开国家面板");
 assert.match(stateEditorEntry, /enterCanvasToolMode\(state, documentRef, CANVAS_TOOL_MODE\.STATE_BRUSH\)/, "国家编辑入口必须启用国家归属画笔");
 assert.match(stateEditorEntry, /startObjectEditing\(object, \{select: false\}\)/, "国家编辑入口必须同步当前编辑对象且不得重复选择");
-assert.match(appSource, /onEdit: object => \{\s*if \(object\?\.kind === OBJECT_KIND\.STATE\) \{\s*enterStateEditor\(object\);\s*return;\s*\}\s*startObjectEditing\(object, \{select: false\}\);\s*\}/, "对象详情中的国家编辑必须路由到国家编辑器，其他对象保持原入口");
+assert.match(appSource, /onEdit: object => \{\s*const action = describeObjectDetailsActions\(object\)\.edit;[\s\S]*?OBJECT_DETAILS_EDIT_MODE\.INLINE_NAME[\s\S]*?startObjectEditing\(object, \{select: false\}\);[\s\S]*?OBJECT_DETAILS_EDIT_MODE\.DOMAIN_PANEL[\s\S]*?openObjectEditorFromDetails/, "对象详情编辑必须按显式能力路由到行内名称或真实领域面板");
+assert.equal(describeObjectDetailsActions({kind: OBJECT_KIND.ROUTE}).edit?.mode, OBJECT_DETAILS_EDIT_MODE.DOMAIN_PANEL, "道路详情必须进入真实路线面板");
+assert.equal(describeObjectDetailsActions({kind: OBJECT_KIND.RIVER}).edit?.mode, OBJECT_DETAILS_EDIT_MODE.DOMAIN_PANEL, "河流详情必须进入真实河流面板");
+assert.equal(describeObjectDetailsActions({kind: OBJECT_KIND.CITY}).edit?.mode, OBJECT_DETAILS_EDIT_MODE.INLINE_NAME, "城镇详情应保留行内名称编辑");
+assert.equal(describeObjectDetailsActions({kind: OBJECT_KIND.REGION}).edit, null, "没有真实编辑器的 region 不得显示伪编辑入口");
+assert.equal(describeObjectDetailsActions({kind: OBJECT_KIND.TRADE_FLOW}).edit, null, "贸易流不得显示伪编辑入口");
 assert.match(statePanelSource, /onEdit: row => \{[\s\S]*?callbacks\.onActiveChange\?\.\(nextActive\);[\s\S]*?if \(nextActive\) callbacks\.onEdit\?\.\(stateObject\(row\)\);[\s\S]*?\}/, "国家面板必须由 active 变化统一进入 / 退出画笔，只在进入时同步编辑对象");
 assert.match(appSource, /statePanel = createStatePanel[\s\S]*?onActiveChange: active => \{[\s\S]*?CANVAS_TOOL_MODE\.STATE_BRUSH[\s\S]*?onEdit: object => \{\s*startObjectEditing\(object, \{/, "国家面板入口必须保持画笔与编辑对象的单向职责分工");
 
@@ -79,7 +86,8 @@ console.log(JSON.stringify({
   deletedObjectSelection: events.at(-3).snapshot.selection,
   preservedSourcePanelId: events.at(3).metadata.sourcePanelId,
   unifiedCanvasModeEntry: true,
-  stateEditorEntry: "state-panel + state:brush + editingObject"
+  stateEditorEntry: "state-panel + state:brush + editingObject",
+  objectDetailsPolicy: "inline-name | domain-panel | hidden"
 }, null, 2));
 
 function sourceBetween(start, end) {

@@ -143,7 +143,6 @@ const rows = computed(() => {
 });
 const selectedId = computed(() => props.state.selection?.object?.kind === "river" ? props.state.selection.object.id : null);
 const selected = computed(() => findByObjectId(rows.value, selectedId.value));
-const editing = computed(() => props.state.editingObject?.kind === "river" && sameObjectId(props.state.editingObject.id, selectedId.value));
 const visibleRows = computed(() => sortRows(filterRows(rows.value, props.state.filter), props.state.sortKey, props.state.sortDir));
 const regenerationLocks = useRegenerationLockSelection({panelId: "river-panel", kind: "river", rows: visibleRows});
 const {selectedRowIds: selectedRiverIds} = useVisibleRowSelection(visibleRows);
@@ -154,7 +153,7 @@ const filterEmptyAction = computed(() => String(props.state.filter || "").trim()
 const totalLength = computed(() => rows.value.reduce((sum, row) => sum + row.length, 0));
 const maxFlux = computed(() => rows.value.reduce((max, row) => Math.max(max, row.flux), 0));
 const riverActions = computed(() => [
-  {key: "edit", resultClass: "toggle-canvas-mode", label: editing.value ? "退出河流编辑" : "进入河流编辑", icon: "◎", panel: false, active: editing.value},
+  {key: "path", resultClass: "toggle-canvas-mode", label: props.state.waypointMode ? "取消添加河道控制点" : "在地图添加河道控制点", icon: "⌁", panel: false, active: props.state.waypointMode},
   {key: "rename", resultClass: "open-secondary", label: "重命名", icon: "✎"},
   {key: "width", resultClass: "open-secondary", label: "调整宽度", icon: "↔"},
   {key: "note", resultClass: "open-secondary", label: "编辑备注", icon: "☰"}
@@ -164,7 +163,7 @@ const riverListActions = computed(() => [
   {key: "highlight-selected", label: `高亮选中 ${formatNumber(selectedRiverRows.value.length)}`, icon: "◉", disabled: !selectedRiverRows.value.length},
   {key: "clear-highlights", label: `清除高亮 ${formatNumber(props.state.highlightCount || 0)}`, icon: "○", disabled: !props.state.highlightCount},
   {key: "rename-visible", label: "按名称库重命名筛选河流", icon: "名", disabled: !visibleRows.value.length},
-  {key: "edit", label: editing.value ? "退出河流编辑" : "进入河流编辑", icon: "◎", active: editing.value, disabled: !selected.value},
+  {key: "path", label: props.state.waypointMode ? "取消添加河道控制点" : "在地图添加河道控制点", icon: "⌁", active: props.state.waypointMode, disabled: !selected.value},
   {key: "delete-selected", label: `批量删除选中 ${formatNumber(selectedRiverRows.value.length)}`, icon: "删", disabled: !selectedRiverRows.value.length},
   {key: "delete", label: "删除选中河流及支流", icon: "删", disabled: !selected.value}
 ]);
@@ -277,7 +276,7 @@ function sortRows(sourceRows, key, direction) {
 }
 
 function handleRiverActionSelect(key) {
-  if (key === "edit" && selected.value) props.callbacks.onEdit?.(selected.value);
+  if (key === "path" && selected.value) props.callbacks.onWaypointMode?.(!props.state.waypointMode, selected.value);
 }
 
 function openRenameEditor(row) {
@@ -296,7 +295,7 @@ function handleRiverListAction(key) {
   if (key === "clear-highlights") props.callbacks.onClearHighlights?.();
   if (key === "rename-visible") props.callbacks.onRenameVisibleFromNamebase?.(visibleRows.value.map(row => row.id));
   if (key === "locate" && selected.value) props.callbacks.onLocate?.(selected.value);
-  if (key === "edit" && selected.value) props.callbacks.onEdit?.(selected.value);
+  if (key === "path" && selected.value) props.callbacks.onWaypointMode?.(!props.state.waypointMode, selected.value);
   if (key === "delete-selected") props.callbacks.onDeleteMany?.(selectedRiverRows.value.map(row => row.id));
   if (key === "delete" && selected.value) props.callbacks.onDelete?.(selected.value.id);
 }

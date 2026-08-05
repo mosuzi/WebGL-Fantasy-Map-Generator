@@ -237,6 +237,10 @@ watch(activeAction, (next, previous) => {
   else if (previous === "edit") props.callbacks.onEditCancel?.();
 });
 
+watch(() => props.state.editRequestId, requestId => {
+  if (requestId > 0 && selected.value) activeAction.value = "edit";
+}, {immediate: true});
+
 function handleRouteEditApply() {
   if (!props.state.editPreview?.valid || !props.state.editPreview?.changed) return;
   const result = props.callbacks.onEditApply?.();
