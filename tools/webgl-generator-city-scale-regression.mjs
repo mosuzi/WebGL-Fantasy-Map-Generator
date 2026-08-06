@@ -113,7 +113,7 @@ assert.match(rendererSource, /deriveCityScale\(city, scaleContext, burg\)/);
 assert.match(rendererSource, /cityIconLayer\.setInstances\(this\.cityIconItems/);
 assert.match(rendererSource, /visual\.manual \? visual\.silhouette : cityRoleSilhouette/);
 assert.match(rendererSource, /const roleThreshold = city\.capital \? 0\.95 : city\.provincial \? 1\.2 : city\.port \? 1\.45/);
-assert.match(rendererSource, /cityIconCssSize\(scale, item\.scale, CITY_ICON_BASE_CSS_SIZE, item\.maxSizeFactor\)\.factor/, "正式地图没有使用名称封顶的共享连续尺寸函数");
+assert.match(rendererSource, /cityIconCssSize\(scale, item\.scale, CITY_ICON_BASE_CSS_SIZE, item\.maxSizeFactor, item\.roles\)\.factor/, "正式地图没有使用角色感知的共享连续尺寸函数");
 assert.match(rendererSource, /cityIconMaxSizeFactor\(\{[\s\S]*nameWidthCss:/, "正式地图没有按对应名称宽度生成实例尺寸上限");
 assert.doesNotMatch(rendererSource.match(/function cityIconScale[\s\S]*?\n}/)?.[0] || "", /item\.minScale/, "角色可见阈值不得改变实际尺寸");
 assert.match(iconRegistrySource, /if \(roles\.includes\("capital"\)\)/);

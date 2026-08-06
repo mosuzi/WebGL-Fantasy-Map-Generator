@@ -25,6 +25,8 @@ export const CITY_ICON_TIER_SCALES = Object.freeze({
   city: 1.2
 });
 
+export const CITY_ICON_CAPITAL_ROLE_SCALE = 1.25;
+
 export const CITY_ICON_BASE_CSS_SIZE = Object.freeze({width: 12.5, height: 9.5});
 export const CITY_ICON_VISIBILITY_TRANSITION_MS = 150;
 export const CITY_ICON_SCALE_FADE_WIDTH = 0.24;
@@ -82,15 +84,20 @@ export function cityIconMaxSizeFactor({silhouette, roles = [], nameWidthCss, bas
   return usableOutline / (positiveNumber(baseSize?.height, CITY_ICON_BASE_CSS_SIZE.height) * extent);
 }
 
-export function cityIconSizeFactor(scale, tier, maxSizeFactor = Number.POSITIVE_INFINITY) {
+export function cityIconRoleScale(roles = []) {
+  if (!roles || typeof roles[Symbol.iterator] !== "function") return 1;
+  return [...roles].includes("capital") ? CITY_ICON_CAPITAL_ROLE_SCALE : 1;
+}
+
+export function cityIconSizeFactor(scale, tier, maxSizeFactor = Number.POSITIVE_INFINITY, roles = []) {
   const tierScale = cityIconTierScale(tier);
   const cap = positiveNumber(maxSizeFactor, Number.POSITIVE_INFINITY);
   const cameraFactor = Math.min(cityIconCameraSizeFactor(scale), cap / CITY_ICON_TIER_SCALES.city);
-  return cameraFactor * tierScale;
+  return cameraFactor * tierScale * cityIconRoleScale(roles);
 }
 
-export function cityIconCssSize(scale, tier, baseSize = CITY_ICON_BASE_CSS_SIZE, maxSizeFactor = Number.POSITIVE_INFINITY) {
-  const factor = cityIconSizeFactor(scale, tier, maxSizeFactor);
+export function cityIconCssSize(scale, tier, baseSize = CITY_ICON_BASE_CSS_SIZE, maxSizeFactor = Number.POSITIVE_INFINITY, roles = []) {
+  const factor = cityIconSizeFactor(scale, tier, maxSizeFactor, roles);
   return {width: baseSize.width * factor, height: baseSize.height * factor, factor};
 }
 
@@ -185,10 +192,18 @@ export class CityIconWebglLayer {
         }
       }
       if (Object.hasOwn(change, "roles") || Object.hasOwn(change, "roleBits")) {
-        const roleBits = additionalRoleBits(item.shape, Object.hasOwn(change, "roleBits") ? change.roleBits : change.roles);
+        const hasRoles = Object.hasOwn(change, "roles");
+        const roleBits = additionalRoleBits(item.shape, hasRoles ? change.roles : change.roleBits);
         if (roleBits !== item.roleBits) {
           item.roleBits = roleBits;
           changed = true;
+        }
+        if (hasRoles) {
+          const tierScale = item.baseTierScale * cityIconRoleScale(change.roles);
+          if (tierScale !== item.tierScale) {
+            item.tierScale = tierScale;
+            changed = true;
+          }
         }
       }
       if (!changed) continue;
@@ -302,12 +317,14 @@ function normalizeCityIconInstance(item, nowMs) {
   const silhouette = Object.hasOwn(CITY_ICON_SHAPE_IDS, item?.silhouette) ? item.silhouette : "town";
   const shape = CITY_ICON_SHAPE_IDS[silhouette];
   const target = clamp01(Object.hasOwn(item, "visibilityTarget") ? item.visibilityTarget : item?.visible === false ? 0 : 1);
+  const baseTierScale = positiveNumber(item.tierScale, cityIconTierScale(item.scale || item.kind));
   return {
     id: item.id,
     x,
     y,
     shape,
-    tierScale: positiveNumber(item.tierScale, cityIconTierScale(item.scale || item.kind)),
+    baseTierScale,
+    tierScale: baseTierScale * cityIconRoleScale(item.roles),
     minScale: Math.max(0, Number(item.minScale) || 0),
     visibilityFrom: target,
     visibilityTarget: target,

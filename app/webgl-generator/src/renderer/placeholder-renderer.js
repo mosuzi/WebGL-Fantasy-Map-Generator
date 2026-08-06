@@ -3433,7 +3433,7 @@ function cityIconBoxForItem(item, screen, sizeScale) {
 }
 
 function cityIconScale(scale, item) {
-  return cityIconCssSize(scale, item.scale, CITY_ICON_BASE_CSS_SIZE, item.maxSizeFactor).factor;
+  return cityIconCssSize(scale, item.scale, CITY_ICON_BASE_CSS_SIZE, item.maxSizeFactor, item.roles).factor;
 }
 
 function cityIconPrewarmCssPx(rect) {

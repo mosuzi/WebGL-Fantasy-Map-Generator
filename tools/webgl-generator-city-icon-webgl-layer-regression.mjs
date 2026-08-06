@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import {readFile} from "node:fs/promises";
 import {
   CITY_ICON_BASE_CSS_SIZE,
+  CITY_ICON_CAPITAL_ROLE_SCALE,
   CITY_ICON_OUTLINE_STROKE_CSS_PX,
   CITY_ICON_FRAGMENT_SHADER_SOURCE,
   CITY_ICON_INSTANCE_FLOATS,
@@ -20,6 +21,7 @@ import {
   cityIconOutlineCssLimit,
   cityIconOutlineExtent,
   cityIconRoleBits,
+  cityIconRoleScale,
   cityIconScaleVisibility,
   cityIconSizeFactor,
   createCityIconWebglLayer,
@@ -33,6 +35,9 @@ assert.deepEqual(Object.keys(CITY_ICON_SHAPE_IDS), shapeKeys, "WebGL 城镇层�
 assert.equal(new Set(Object.values(CITY_ICON_SHAPE_IDS)).size, 9, "WebGL 城镇图形 id 必须各自唯一");
 assert.deepEqual(Object.keys(CITY_ICON_TIER_SCALES), ["hamlet", "village", "town", "city"], "人口四级尺寸分母漂移");
 assert.deepEqual(CITY_ICON_TIER_SCALES, {hamlet: 0.72, village: 0.86, town: 1.02, city: 1.2}, "人口四级尺寸差异漂移");
+assert.equal(CITY_ICON_CAPITAL_ROLE_SCALE, 1.25, "首都角色尺寸倍率漂移");
+assert.equal(cityIconRoleScale(["capital"]), 1.25, "首都原始角色没有进入尺寸倍率");
+assert.equal(cityIconRoleScale(["provincial", "port"]), 1, "省会或港口不应改变人口级别尺寸");
 assert.deepEqual(CITY_ICON_ROLE_BITS, {capital: 1, provincial: 2, port: 4}, "附加角色 bit 契约漂移");
 assert.equal(cityIconRoleBits(["capital", "provincial", "port"]), 7, "多角色 bit 不能稳定组合");
 assert.deepEqual(CITY_ICON_BASE_CSS_SIZE, {width: 12.5, height: 9.5}, "城镇图标基准盒漂移");
@@ -48,7 +53,14 @@ assert.equal(CITY_ICON_INSTANCE_FLOATS, 11, "实例属性分母必须覆盖名�
 assert.equal(CITY_ICON_INSTANCE_STRIDE_BYTES, 44, "实例 stride 必须与 11 个 float 一致");
 const packedInstance = packCityIconInstances([{id: 7, x: 10, y: 20, silhouette: "capital", scale: "city", roles: ["port"], maxSizeFactor: 0.625}], {nowMs: 90});
 assert.equal(packedInstance.data.length, 11, "单实例 buffer 长度不是 11 floats");
+assert(Math.abs(packedInstance.data[3] - CITY_ICON_TIER_SCALES.city) < 1e-6, "港口或五角星剪影误触发首都尺寸倍率");
 assert.equal(packedInstance.data[10], 0.625, "名称宽度上限没有写入实例 offset 10");
+const packedCapital = packCityIconInstances([{id: 8, x: 10, y: 20, silhouette: "capital", scale: "city", roles: ["capital"]}], {nowMs: 90});
+const packedManualStar = packCityIconInstances([{id: 9, x: 10, y: 20, silhouette: "capital", scale: "city", roles: []}], {nowMs: 90});
+const packedManualCapital = packCityIconInstances([{id: 10, x: 10, y: 20, silhouette: "fort", scale: "city", roles: ["capital"]}], {nowMs: 90});
+assert(Math.abs(packedCapital.data[3] - CITY_ICON_TIER_SCALES.city * 1.25) < 1e-6, "GPU 首都 tierScale 没有只烘入一次 1.25");
+assert(Math.abs(packedManualStar.data[3] - CITY_ICON_TIER_SCALES.city) < 1e-6, "无 capital 角色的手工五角星被误放大");
+assert(Math.abs(packedManualCapital.data[3] - CITY_ICON_TIER_SCALES.city * 1.25) < 1e-6, "保留其它剪影的手工首都没有放大");
 
 const scales = [1, 1.5, 2, 2.5, 3, 4, 12];
 const factors = scales.map(cityIconCameraSizeFactor);
@@ -68,6 +80,17 @@ for (const scale of tierAssertionScales) {
   assertTierProgression(scalesFor(scale), `${scale}× 自然尺寸`);
   assertTierProgression(scalesFor(scale, realFiniteCap), `${scale}× 名称封顶尺寸`);
 }
+for (const maxSizeFactor of [Number.POSITIVE_INFINITY, realFiniteCap]) {
+  for (const scale of tierAssertionScales) {
+    for (const tier of Object.keys(CITY_ICON_TIER_SCALES)) {
+      const ordinary = cityIconSizeFactor(scale, tier, maxSizeFactor);
+      const capital = cityIconSizeFactor(scale, tier, maxSizeFactor, ["capital"]);
+      assert.equal(ordinary, cityIconSizeFactor(scale, tier, maxSizeFactor, ["provincial", "port"]), `${scale}× / ${tier} 非首都角色改变了尺寸`);
+      assert(Math.abs(capital / ordinary - CITY_ICON_CAPITAL_ROLE_SCALE) < 1e-12, `${scale}× / ${tier} 首都不是线性 1.25：${capital / ordinary}`);
+      assert(Math.abs(capital / ordinary - CITY_ICON_CAPITAL_ROLE_SCALE ** 2) > 0.1, `${scale}× / ${tier} 首都误乘为 R²`);
+    }
+  }
+}
 
 const nameWidthCases = [
   {silhouette: "city", roles: [], tier: "city", nameWidthCss: 22.1},
@@ -79,11 +102,12 @@ for (const sample of nameWidthCases) {
   const outlineLimit = cityIconOutlineCssLimit(sample.nameWidthCss);
   const extent = cityIconOutlineExtent(sample.silhouette, sample.roles);
   const outlineWidths = scales.map(scale => {
-    const size = cityIconCssSize(scale, sample.tier, CITY_ICON_BASE_CSS_SIZE, maxSizeFactor);
+    const size = cityIconCssSize(scale, sample.tier, CITY_ICON_BASE_CSS_SIZE, maxSizeFactor, sample.roles);
     return extent * CITY_ICON_BASE_CSS_SIZE.height * size.factor + CITY_ICON_OUTLINE_STROKE_CSS_PX;
   });
-  assert(outlineWidths.every(width => width <= outlineLimit + 0.001), `${sample.silhouette} 超过名称驱动的轮廓上限`);
-  assert(outlineWidths.at(-1) <= sample.nameWidthCss * 0.575, `${sample.silhouette} 高倍缩放后没有保持 0.575 名称宽度上限`);
+  const roleScale = cityIconRoleScale(sample.roles);
+  const roleAdjustedLimit = (outlineLimit - CITY_ICON_OUTLINE_STROKE_CSS_PX) * roleScale + CITY_ICON_OUTLINE_STROKE_CSS_PX;
+  assert(outlineWidths.every(width => width <= roleAdjustedLimit + 0.001), `${sample.silhouette} 超过角色调整后的名称轮廓上限`);
 }
 
 const previousTierScales = {hamlet: 0.62, village: 0.76, town: 0.92, city: 1.1};
@@ -142,6 +166,8 @@ assert.match(source, /gl\.drawArraysInstanced\(gl\.TRIANGLES, 0, 6, this\.instan
 assert.match(source, /vertexAttribDivisor\(location, 1\)/, "实例属性没有设置 divisor");
 assert.match(source, /location <= 10/, "实例 VAO 没有绑定 location 10");
 assert.match(source, /data\[offset \+ 10\] = item\.maxSizeFactor/, "实例 offset 10 没有写入 GPU 尺寸上限");
+assert.match(source, /tierScale: baseTierScale \* cityIconRoleScale\(item\.roles\)/, "GPU 实例没有从原始 roles 烘入首都倍率");
+assert.doesNotMatch(source.match(/function cityIconRoleScale[\s\S]*?\n}/)?.[0] || "", /additionalRoleBits|shape/, "首都倍率不得从附加角色 bit 或剪影推断");
 const drawMethod = source.match(/  draw\(\{mapSize,[\s\S]*?\n  snapshot\(\)/)?.[0] || "";
 assert(drawMethod, "无法定位 WebGL 城镇层 draw 方法");
 assert.doesNotMatch(drawMethod, /bufferData|bufferSubData|setInstances|updateInstanceStates/, "普通相机 draw 帧仍会重建或上传实例 buffer");
@@ -170,6 +196,7 @@ function previousCityIconMaxSizeFactor({silhouette, roles = [], nameWidthCss}) {
 console.log(JSON.stringify({
   cityWebglShapes: shapeKeys.length,
   roleBits: CITY_ICON_ROLE_BITS,
+  capitalRoleScale: CITY_ICON_CAPITAL_ROLE_SCALE,
   sizeFactors: Object.fromEntries(scales.map((scale, index) => [scale, Math.round(factors[index] * 1000) / 1000])),
   tierScales: CITY_ICON_TIER_SCALES,
   realFiniteCap: Math.round(realFiniteCap * 1000) / 1000,

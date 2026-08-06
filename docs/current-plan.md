@@ -183,7 +183,7 @@
 
 本节是唯一权威任务清单。README、专题文档和历史日志中的“缺口”“下一步”只提供来源与设计背景，不能覆盖这里的编号、顺序和最小验收。已验收能力不得重新计为待办。
 
-> **执行门禁（2026-08-06）**：第 45～52、54～277、279～283、285～296 项已完成，第 53 项已移除，第 278 项的未提交 HTML/SVG 实现已由第 279 项正式 WebGL 方案取代；第 284 项已登记但按用户要求暂缓。第 296 项已补齐云端存档导入的显式入口、具名文件适配、完整回滚和真实字节闭环；当前没有活动权威任务，不得从 README、历史日志或专题文档扩展其它任务。
+> **执行门禁（2026-08-06）**：第 45～52、54～277、279～283、285～297 项已完成，第 53 项已移除，第 278 项的未提交 HTML/SVG 实现已由第 279 项正式 WebGL 方案取代；第 284 项已登记但按用户要求暂缓。第 297 项当前首都角色尺寸为 `1.25×`；当前没有活动权威任务，不得扩展其它城镇视觉或数据语义。
 
 当前 API 基线为：`window.webglGeneratorApi` 覆盖 `17` 个命名空间、`316` 个公开方法和 `179` 个编辑方法，稳定等级为 `308 / 7 / 1`；`316 / 316` 方法可通过 `info.describe` 发现，`planner.listRecipes / getRecipe` 只读公开 `10` 个配方和 `43` 个顶层步骤，`objects` 覆盖 `20` 类对象，`cells` 已提供八个读取、定位、扫描与动作预检方法。完整能力矩阵为 `1196` 行、`covered 1122 / excluded 74 / deferred 0 / gap 0`；复合语义矩阵为 `79` 个动作、`69` 个完整规则事务与 `10` 个玩法配方，`316` 个公开方法全部完成事务分类，结构缺口为 `0`。
 
@@ -1536,6 +1536,15 @@
   - 排除：不新增公开 API，不修改 provider OAuth 权限、目录、列表 / 覆盖协议、refresh token、跨标签页会话、存档 schema 或 parser 主体；不做 dirty 检测、自动保存、后台同步、冲突合并、删除、分享、通用网盘浏览、真实账号联调或 `source/` 修改。
   - 完成记录：简介页保留原本地导入 input，并新增“从云端导入…”入口；云端面板按保存 / 导入双区重排。下载 Blob 在 controller 边界按远端名称、压缩扩展和修改时间包装为同一个具名 `File`，继续进入唯一 `data.importMap` 的解析、迁移、确认、诊断和事务链。共享地图替换快照补齐 pending generation、map revision、单位和 canvas tool mode；早期解析失败不会重复进入活动工具，renderer 及 `replaceMap()` 后晚期失败均能恢复旧地图、renderer、revision、历史、选择 / 编辑、主题、单位和工具上下文。
   - 审查与验收：独立方案审查首轮 `BLOCK`、收紧后 `PLAN ACCEPT`；独立代码审查两轮分别阻断 revision 晚期回滚、canvas mode 重入、错误数组清空和三档入口测量缺口，限修后为 `CODE REVIEW ACCEPT`。系统 Chrome mock 覆盖 Dropbox `application/octet-stream` `.webfmg`、Google JSON、Dropbox / Google 旧 `.gz`、取消零下载、busy 互斥、坏 JSON、损坏 gzip、未来版本、renderer 早期失败与 revision 晚期失败；`1440 / 390 / 320px` 的入口、双区、激活态和零溢出通过，非预期 console、page、health 与 WebGL error 为 `0`。生产构建、云存储静态门禁、地图迁移、显示单位和 API 兼容门禁通过；provider、OAuth、目录、parser、schema、公开 API、地图数据和 `source/` 未改，真实账号联调仍不在本项范围。
+
+- **权威任务第 297 项：为首都增加独立角色尺寸并拉开与普通大城镇的视觉差。** `已完成；来源：用户实测反馈`
+  - 问题证据：当前人口四级统一使用 `0.72 / 0.86 / 1.02 / 1.20`，首都只把自动剪影换成五角星，没有任何角色尺寸倍率；五角星轮廓 extent 为 `0.84`，还略大于普通大城双环的 `0.80`，在同一名称宽度上限下会更早封顶。固定 `city-scale-217 / 10k` 实测有 `825` 个城镇和 `20` 个首都，首都人口级别为 `village / town / city = 1 / 9 / 10`；代表性 city 级首都在相机 `1 / 1.5 / 2.5 / 4` 的 factor 为 `1.086 / 1.210 / 1.210 / 1.210`，从 `1.5×` 起即被 cap 锁死，因而继续缩放也没有形成比普通大城更明确的体量差。
+  - 实施范围：保留人口四级和九类解析式几何，为 `capital` 角色增加固定 `R = 1.15` 的独立线性倍率。现有基线公式为 `B = min(camera(scale), M / 1.20) × T`，其中 `M` 是原始 `cityIconMaxSizeFactor`、`T` 是人口 tier；首都最终公式只能是 `F = B × R`，`M` 不得再乘 `R`，禁止自然态漏乘或封顶态得到 `R²`。GPU 不增加实例属性，而是在 pack 时只依据原始 `roles` 把 `T × R` 写入现有 effective tier scale；不得只读会消除同形角色的 additional role bits，也不得用五角星 shape 冒充首都角色。CPU helper 使用同一 roles-derived `R`，碰撞框、标签净空和视口预热消费同一个最终 factor。自动五角星和保留手工剪影的首都都按角色放大，普通大城、省会、港口以及无首都角色但手工选择五角星的对象保持原尺寸；不得新增纹理、DOM / SVG 城镇节点或相机帧实例上传。
+  - 最小验收：数学门禁覆盖四个人口 tier、相机 `1 / 1.5 / 2.5 / 4` 和自然 / 有限 cap，所有非首都对象（普通、省会、港口、无首都角色的手工五角星）factor 与第 296 项基线严格相等；所有首都线性 factor 比均约为 `1.15`，并单列“手工非五角星剪影 + capital role”样本，证明只乘一次。普通对象 collision box / label anchor 必须零差；首都 CPU box 与 GPU factor 一致，scale `12` 的稳定 cap 净空只增加 `1.15` 图标高度带来的差值，`CITY_LABEL_ICON_GAP` 保持常量，不能 `R²` 或让所有名称一起远离。真实 `10k` 固定图冻结全部首都与普通 city 对照，在相机 `1 / 1.5 / 2.5 / 4`、DPR `2` 隔离绘制当前版与第 296 项基线，首都每组线性尺寸比接近 `1.15`、bbox 面积均增大且普通大城像素零差；三档视口人工确认首都与大城层级清楚。四级分母、角色组合、手工视觉、拾取、选择、PNG 城镇开关、单批 draw、相机零模型重传、DPR 清晰度、生产构建和四类错误通过，checksum / revision 不变。
+  - 排除：不修改人口阈值、P90、四级系数、九类几何、颜色、线宽、抗锯齿、首都 / 省会数据、生成、地图数据、runtime 规则、schema、API、存档 / 迁移、Marker、军事、应用图标或 `source/`；本项未授权提交或推送。
+  - 后续微调：用户反馈首都仍需更醒目，本地实现将角色倍率从 `1.15×` 提高为 `1.25×`；普通对象、人口四级、GPU 实例结构、名称 cap 公式和其它角色保持不变，仅同步固定值回归与本记录。
+  - 完成记录：新增 `CITY_ICON_CAPITAL_ROLE_SCALE = 1.15`，CPU 最终 factor 按原始 `roles` 在既有人口 / cap 结果后只乘一次；GPU pack 把 `T × R` 写入既有 `a_tierScale`，`M`、shader、11-float / 44-byte 实例结构和单批绘制均未改。碰撞框、视口预热和 scale `12` 标签净空继续通过同一个角色感知 `cityIconScale`；动态 roles 始终从 `baseTierScale` 重算，添加、重复添加、移除或只改 roleBits 都不会累乘或重建模型。普通、省会、港口、无首都角色的手工五角星完全不变；带首都角色的其它手工剪影同样放大。
+  - 审查与验收：方案审查首轮因 `R²` 风险和手工正反例不足 `BLOCK`，明确 `F = min(camera, M / 1.20) × T × R` 且 `M` 不变后 `PLAN ACCEPT`。代码审查首轮又阻断普通大城 current / baseline 自比较；限修为保持同 roles / shape / cap、直接覆写第 296 项 packed tierScale 的独立 GPU 基线，并补动态角色状态链后 `CODE REVIEW ACCEPT`。固定 `city-scale-217 / 10k`、DPR `2` 的 `20` 个首都 × 四档相机共 `80` 组 factor 均为 `1.15`，bbox 面积最少增加 `17`；`73` 个非首都大城 × 四档共 `292` 组像素 hash / 宽高零差，覆盖普通、省会和港口。DPR `1 / 1.25 / 1.5 / 2` 清晰度、名称比例最大 `0.543`、标签净空、`839` 实例单批 / modelUploads `1`、平移、拾取、选择、PNG 城镇开关和 `1440 / 390 / 320px` 通过；checksum / revision 不变，console、page、health 与 WebGL error 为 `0`。人口四级、几何、地图数据、schema、API、存档和 `source/` 未改，本项未提交或推送。
 
 - **第 270～272 项统一执行约束。**
   - 专题施工图：`docs/task-notes/canvas-performance-optimization-plan.md`。

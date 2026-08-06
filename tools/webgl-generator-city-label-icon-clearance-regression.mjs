@@ -9,7 +9,11 @@ import {
   cityLabelAnchorOffset,
   cityLabelIconGap
 } from "../app/webgl-generator/src/renderer/city-label-icon-layout.js";
-import {CITY_ICON_BASE_CSS_SIZE} from "../app/webgl-generator/src/renderer/city-icon-layer.js";
+import {
+  CITY_ICON_BASE_CSS_SIZE,
+  CITY_ICON_CAPITAL_ROLE_SCALE,
+  cityIconSizeFactor
+} from "../app/webgl-generator/src/renderer/city-icon-layer.js";
 
 const iconHeight = CITY_ICON_BASE_CSS_SIZE.height;
 const scales = [0.72, 1.02, 1.2];
@@ -26,6 +30,17 @@ for (const iconScale of scales) {
 assert.equal(cityLabelAnchorOffset({iconVisible: false, iconHeight, iconScale: 1.18}), -CITY_LABEL_BASE_OFFSET, "图标隐藏时城镇标签没有恢复原位置");
 assert.equal(CITY_ICON_TOP_ANCHOR_RATIO, 0.8, "城镇图标顶部锚点比例发生漂移");
 
+const ordinaryScale = cityIconSizeFactor(12, "city", 1.1);
+const capitalScale = cityIconSizeFactor(12, "city", 1.1, ["capital"]);
+const ordinaryBox = {width: CITY_ICON_BASE_CSS_SIZE.width * ordinaryScale, height: CITY_ICON_BASE_CSS_SIZE.height * ordinaryScale};
+const legacyBox = {width: CITY_ICON_BASE_CSS_SIZE.width * ordinaryScale, height: CITY_ICON_BASE_CSS_SIZE.height * ordinaryScale};
+assert.deepEqual(ordinaryBox, legacyBox, "普通大城碰撞盒不应发生任何变化");
+const ordinaryAnchor = cityLabelAnchorOffset({iconVisible: true, iconHeight, iconScale: ordinaryScale});
+const capitalAnchor = cityLabelAnchorOffset({iconVisible: true, iconHeight, iconScale: capitalScale});
+const expectedAnchorIncrement = -iconHeight * ordinaryScale * (CITY_ICON_CAPITAL_ROLE_SCALE - 1) * CITY_ICON_TOP_ANCHOR_RATIO;
+assert(Math.abs((capitalAnchor - ordinaryAnchor) - expectedAnchorIncrement) < 1e-12, "首都标签锚点没有按单次 1.25 增量让位");
+assert.equal(cityLabelIconGap({labelAnchorY: 100 + capitalAnchor, iconAnchorY: 100, iconHeight, iconScale: capitalScale}), CITY_LABEL_ICON_GAP, "放大后的首都图标没有保持标签净空");
+
 const [rendererSource, cityLayerSource, stylesSource, mapIoSource] = await Promise.all([
   readFile(new URL("../app/webgl-generator/src/renderer/placeholder-renderer.js", import.meta.url), "utf8"),
   readFile(new URL("../app/webgl-generator/src/renderer/city-icon-layer.js", import.meta.url), "utf8"),
@@ -36,6 +51,7 @@ const [rendererSource, cityLayerSource, stylesSource, mapIoSource] = await Promi
 assert.match(rendererSource, /cityIconItemsById = new Map/, "渲染器没有建立城镇标签到自身图标的稳定映射");
 assert.match(rendererSource, /Boolean\(cityIcon\) && renderer\.layerVisibility\.cities !== false/, "城镇标签净空没有遵守图标图层显隐");
 assert.match(rendererSource, /cityIconScale\(12, cityIcon\)/, "城镇标签没有使用稳定的最大图标净空，缩放时仍可能上下跳位");
+assert.match(rendererSource, /cityIconCssSize\(scale, item\.scale, CITY_ICON_BASE_CSS_SIZE, item\.maxSizeFactor, item\.roles\)\.factor/, "碰撞、预热与标签锚点没有复用角色感知的最终尺寸");
 assert.deepEqual(CITY_ICON_BASE_CSS_SIZE, {width: 12.5, height: 9.5}, "WebGL 图标与标签净空的基准盒漂移");
 assert.match(rendererSource, /const CITY_ICON_BASE_WIDTH = CITY_ICON_BASE_CSS_SIZE\.width;/, "城镇碰撞宽度没有复用 WebGL 基准盒");
 assert.match(rendererSource, /const CITY_ICON_BASE_HEIGHT = CITY_ICON_BASE_CSS_SIZE\.height;/, "城镇碰撞高度没有复用 WebGL 基准盒");
