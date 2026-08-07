@@ -49,6 +49,8 @@
     "regress:interaction-final": "node --no-warnings ./tools/webgl-generator-interaction-final-regression.mjs",
     "profile:generation": "node ./tools/webgl-generator-generation-profile.mjs",
     "regress:city-scale": "node --no-warnings ./tools/webgl-generator-city-scale-regression.mjs",
+    "regress:grid-topology-refinement": "node --no-warnings ./tools/webgl-generator-grid-topology-refinement-regression.mjs",
+    "regress:grid-topology-browser": "node --no-warnings ./tools/webgl-generator-grid-topology-browser-regression.mjs",
     "regress:canvas-icon-registry": "node --no-warnings ./tools/webgl-generator-canvas-icon-registry-regression.mjs",
     "regress:city-icon-webgl-layer": "node --no-warnings ./tools/webgl-generator-city-icon-webgl-layer-regression.mjs",
     "regress:city-icon-sharpness-browser": "node --no-warnings ./tools/webgl-generator-city-icon-sharpness-browser-regression.mjs",

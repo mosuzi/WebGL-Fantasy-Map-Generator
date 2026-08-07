@@ -25,6 +25,10 @@ const ERROR_CODES = Object.freeze([
   "inspection-action-mismatch",
   "inspection-input-mismatch",
   "inspection-schema-mismatch"
+  ,"grid-structure-invalid"
+  ,"grid-preparation-invalid"
+  ,"refinement-topology-violation"
+  ,"refinement-invalid-structure"
 ]);
 
 const REFERENCE_RULES = Object.freeze([
@@ -84,6 +88,45 @@ const METHOD_OVERRIDES = Object.freeze({
     ],
     result: pageSchema(),
     examples: [[{type: "city", text: "港"}, {limit: 20}]]
+  },
+  "grid.summary": {
+    arguments: [],
+    result: objectSchema(["apiVersion", "binding", "schema", "fingerprint", "cells", "vertices", "landCells", "waterCells", "height", "neighborDegree", "refinement"]),
+    examples: [[]],
+    businessCodes: ["ok", "api_error", "map-not-ready"]
+  },
+  "grid.snapshot": {
+    arguments: [],
+    result: objectSchema(["schema", "binding", "metadata", "points", "boundary", "cells", "vertices"]),
+    examples: [[]],
+    businessCodes: ["ok", "api_error", "map-not-ready"]
+  },
+  "grid.inspectWrite": {
+    arguments: [argument("document", objectSchema(["schema", "binding", "metadata", "points", "cells", "vertices"]))],
+    result: objectSchema(["action", "valid", "errors", "binding", "source", "target", "schema", "inspectionToken"]),
+    examples: [[{"schema": "webgl-grid-structure@1", "binding": {}, "metadata": {}, "points": [], "boundary": [], "cells": {}, "vertices": {}}]],
+    businessCodes: ["ok", "api_error", "grid-structure-invalid"]
+  },
+  "grid.applyWrite": {
+    arguments: [
+      argument("document", objectSchema(["schema", "binding", "metadata", "points", "cells", "vertices"])),
+      argument("options", {type: "object", required: ["confirm", "inspectionToken"], properties: {confirm: {const: true}, inspectionToken: {type: "string"}}, additionalProperties: false})
+    ],
+    result: objectSchema(["executed", "action", "source", "target", "migration", "feature", "prepareMs", "history", "binding"]),
+    examples: [[{"schema": "webgl-grid-structure@1"}, {confirm: true, inspectionToken: "grid-..."}]],
+    businessCodes: ["ok", "api_error", "confirmation_required", "inspection_required", "inspection_stale", "grid-structure-invalid"]
+  },
+  "grid.inspectRefinement": {
+    arguments: [argument("options", {type: "object", properties: {targetCells: {type: "integer", minimum: 4, maximum: 200000, default: 100000}}, additionalProperties: false}, false)],
+    result: objectSchema(["action", "valid", "errors", "binding", "source", "target", "invariants", "inspectionToken"]),
+    examples: [[{targetCells: 100000}]],
+    businessCodes: ["ok", "api_error", "invalid-target", "map-not-ready"]
+  },
+  "grid.refine": {
+    arguments: [argument("options", {type: "object", required: ["confirm", "inspectionToken"], properties: {targetCells: {type: "integer", minimum: 4, maximum: 200000, default: 100000}, confirm: {const: true}, inspectionToken: {type: "string"}}, additionalProperties: false})],
+    result: objectSchema(["executed", "action", "source", "target", "refinement", "migration", "feature", "prepareMs", "history", "binding"]),
+    examples: [[{targetCells: 100000, confirm: true, inspectionToken: "grid-..."}]],
+    businessCodes: ["ok", "api_error", "confirmation_required", "inspection_required", "inspection_stale", "invalid-target", "refinement-topology-violation"]
   },
   "generate.regenerate": {
     arguments: [

@@ -15,7 +15,7 @@
 
 | 目标 | 入口 | 能力边界 |
 |---|---|---|
-| 当前已打开地图、UI、下载、相机或编辑事务 | `window.webglGeneratorApi` | 316 个公开方法；包含只读、UI 状态和写事务 |
+| 当前已打开地图、UI、下载、相机或编辑事务 | `window.webglGeneratorApi` | 322 个公开方法；包含只读、UI 状态和写事务 |
 | 本地存档的批量 / 自动只读分析 | `createHeadlessMapApi` 或 `tools/webgl-generator-headless-api.mjs` | 无浏览器；文件、对象、Cell、气候、地形、人口、planner、区域分析；严格不写 |
 | 本地存档的受控写入 | `createHeadlessWriteSession` 或 `tools/webgl-generator-headless-write.mjs` | 无浏览器；首批只支持人口调整、高度选区平滑和对象重命名；默认输出新文件 |
 | 当前标签页但调用者不在页面上下文 | `tools/webgl-generator-ai-bridge-server.mjs` + 页面 AI 调试区 | 回环连接、默认只读；写权限与高风险确认都在页面可见控制 |

@@ -6,7 +6,7 @@ export function buildGrid(options, random, heightmap, heightRandom = random) {
   const startedAt = performance.now();
   const profile = createStageProfile();
   const layout = profile.stage("layout", "计算点阵布局", () => createPointLayout(options));
-  const boundary = profile.stage("boundary-points", "生成边界点", () => getBoundaryPoints(options.graphWidth, options.graphHeight, layout.spacing));
+  const boundary = profile.stage("boundary-points", "生成边界点", () => createGridBoundaryPoints(options.graphWidth, options.graphHeight, layout.spacing));
   const points = profile.stage("jittered-grid", "生成扰动点阵", () => getJitteredGrid(options.graphWidth, options.graphHeight, layout.spacing, random));
   const {cells, vertices} = profile.stage("voronoi", "构建 Delaunay / Voronoi", () => calculateVoronoi(points, boundary));
   profile.stage("cell-fields", "初始化 cell 字段", () => {
@@ -58,7 +58,7 @@ function createPointLayout(options) {
   return {spacing, columns, rows};
 }
 
-function getBoundaryPoints(width, height, spacing) {
+export function createGridBoundaryPoints(width, height, spacing) {
   const offset = round(-1 * spacing);
   const boundarySpacing = spacing * 2;
   const boundedWidth = width - offset * 2;

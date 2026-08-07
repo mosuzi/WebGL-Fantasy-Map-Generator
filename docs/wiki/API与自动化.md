@@ -32,7 +32,7 @@ api.info.mapSummary();
 api.info.describe("edit.population.inspectAdjustment");
 ```
 
-当前浏览器 API 有 17 个命名空间、316 个方法。`info.describe()` 是逐方法输入 / 输出 schema、稳定性、副作用、确认要求、业务 code 和示例的权威入口；不要从 Wiki 或旧日志猜参数。
+当前浏览器 API 有 18 个命名空间、322 个方法。`info.describe()` 是逐方法输入 / 输出 schema、稳定性、副作用、确认要求、业务 code 和示例的权威入口；不要从 Wiki 或旧日志猜参数。`grid` 命名空间提供结构摘要、克隆快照、写入 / 细分预检和带确认的事务执行，禁止直接持有运行时网格数组。
 
 ### 返回结构
 

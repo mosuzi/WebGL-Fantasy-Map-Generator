@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sourceDigest": "691c822da72c0ac3acd35bcfa8b39890ea6bf5028316e77b159f953907603fd9",
+  "sourceDigest": "482e2943be850c01a9451e685e85ef77f5c4449609f66581ea452db5d2c7133c",
   "sourceRoots": [
     "app/webgl-generator/index.html",
     "app/webgl-generator/src/**/*.{js,vue}",
@@ -10,11 +10,11 @@
     "interactionSurfaces": 107,
     "includedInteractionSurfaces": 88,
     "excludedInteractionSurfaces": 19,
-    "canvasModes": 29,
-    "runtimeActions": 261,
-    "apiActionBindings": 260,
-    "commandAndInspectorExports": 212,
-    "publicApiMethods": 316
+    "canvasModes": 30,
+    "runtimeActions": 265,
+    "apiActionBindings": 264,
+    "commandAndInspectorExports": 214,
+    "publicApiMethods": 322
   },
   "statusPolicy": {
     "covered": "公共 API 已存在且与底层 action / command 或只读 helper 共路径",
@@ -23,8 +23,8 @@
     "gap": "适合参数化且没有公共 API，必须在第 200 项关闭"
   },
   "totals": {
-    "rows": 1196,
-    "covered": 1122,
+    "rows": 1213,
+    "covered": 1139,
     "excluded": 74,
     "deferred-owned": 0,
     "gap": 0,
@@ -6079,6 +6079,122 @@
       "commandOrInspector": "",
       "apiMethods": [
         "generate.setOptions"
+      ],
+      "inputSpace": "method-schema",
+      "mutates": "map-or-persistent-data",
+      "preflight": "按方法描述",
+      "businessCodes": [],
+      "confirm": "按 API 确认清单",
+      "undoOrRollback": "按方法元数据",
+      "async": false,
+      "compatibility": "UI 与 API 共用同一 runtime action",
+      "evidence": [
+        "app/webgl-generator/src/runtime/console-api.js"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "action:grid.applyWrite",
+      "capabilityId": "grid.applyWrite",
+      "title": "Runtime action grid.applyWrite",
+      "sourceKind": "runtime-action",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/app.js"
+      ],
+      "uiEntry": "",
+      "action": "grid.applyWrite",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "grid.applyWrite"
+      ],
+      "inputSpace": "method-schema",
+      "mutates": "map-or-persistent-data",
+      "preflight": "按方法描述",
+      "businessCodes": [],
+      "confirm": "按 API 确认清单",
+      "undoOrRollback": "按方法元数据",
+      "async": false,
+      "compatibility": "UI 与 API 共用同一 runtime action",
+      "evidence": [
+        "app/webgl-generator/src/runtime/console-api.js"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "action:grid.inspectRefinement",
+      "capabilityId": "grid.inspectRefinement",
+      "title": "Runtime action grid.inspectRefinement",
+      "sourceKind": "runtime-action",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/app.js"
+      ],
+      "uiEntry": "",
+      "action": "grid.inspectRefinement",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "grid.inspectRefinement"
+      ],
+      "inputSpace": "method-schema",
+      "mutates": "none",
+      "preflight": "readonly",
+      "businessCodes": [],
+      "confirm": "按 API 确认清单",
+      "undoOrRollback": "not-applicable",
+      "async": false,
+      "compatibility": "UI 与 API 共用同一 runtime action",
+      "evidence": [
+        "app/webgl-generator/src/runtime/console-api.js"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "action:grid.inspectWrite",
+      "capabilityId": "grid.inspectWrite",
+      "title": "Runtime action grid.inspectWrite",
+      "sourceKind": "runtime-action",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/app.js"
+      ],
+      "uiEntry": "",
+      "action": "grid.inspectWrite",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "grid.inspectWrite"
+      ],
+      "inputSpace": "method-schema",
+      "mutates": "none",
+      "preflight": "readonly",
+      "businessCodes": [],
+      "confirm": "按 API 确认清单",
+      "undoOrRollback": "not-applicable",
+      "async": false,
+      "compatibility": "UI 与 API 共用同一 runtime action",
+      "evidence": [
+        "app/webgl-generator/src/runtime/console-api.js"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "action:grid.refine",
+      "capabilityId": "grid.refine",
+      "title": "Runtime action grid.refine",
+      "sourceKind": "runtime-action",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/app.js"
+      ],
+      "uiEntry": "",
+      "action": "grid.refine",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "grid.refine"
       ],
       "inputSpace": "method-schema",
       "mutates": "map-or-persistent-data",
@@ -13857,6 +13973,126 @@
       "commandOrInspector": "",
       "apiMethods": [
         "generate.setOptions"
+      ],
+      "inputSpace": "method-schema",
+      "mutates": "map-or-persistent-data",
+      "preflight": "公共 API 绑定必须能解析到真实 runtime action",
+      "businessCodes": [],
+      "confirm": "按 API 确认清单",
+      "undoOrRollback": "按方法元数据",
+      "async": false,
+      "compatibility": "旧 API action 路径保持可调用",
+      "evidence": [
+        "tools/webgl-generator-api-action-convergence-regression.mjs"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "api-action-binding:grid.applyWrite",
+      "capabilityId": "grid.applyWrite",
+      "title": "API action 绑定 grid.applyWrite",
+      "sourceKind": "api-action-binding",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/console-api.js",
+        "app/webgl-generator/src/runtime/app.js"
+      ],
+      "uiEntry": "",
+      "action": "grid.applyWrite",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "grid.applyWrite"
+      ],
+      "inputSpace": "method-schema",
+      "mutates": "map-or-persistent-data",
+      "preflight": "公共 API 绑定必须能解析到真实 runtime action",
+      "businessCodes": [],
+      "confirm": "按 API 确认清单",
+      "undoOrRollback": "按方法元数据",
+      "async": false,
+      "compatibility": "旧 API action 路径保持可调用",
+      "evidence": [
+        "tools/webgl-generator-api-action-convergence-regression.mjs"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "api-action-binding:grid.inspectRefinement",
+      "capabilityId": "grid.inspectRefinement",
+      "title": "API action 绑定 grid.inspectRefinement",
+      "sourceKind": "api-action-binding",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/console-api.js",
+        "app/webgl-generator/src/runtime/app.js"
+      ],
+      "uiEntry": "",
+      "action": "grid.inspectRefinement",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "grid.inspectRefinement"
+      ],
+      "inputSpace": "method-schema",
+      "mutates": "none",
+      "preflight": "公共 API 绑定必须能解析到真实 runtime action",
+      "businessCodes": [],
+      "confirm": "按 API 确认清单",
+      "undoOrRollback": "not-applicable",
+      "async": false,
+      "compatibility": "旧 API action 路径保持可调用",
+      "evidence": [
+        "tools/webgl-generator-api-action-convergence-regression.mjs"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "api-action-binding:grid.inspectWrite",
+      "capabilityId": "grid.inspectWrite",
+      "title": "API action 绑定 grid.inspectWrite",
+      "sourceKind": "api-action-binding",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/console-api.js",
+        "app/webgl-generator/src/runtime/app.js"
+      ],
+      "uiEntry": "",
+      "action": "grid.inspectWrite",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "grid.inspectWrite"
+      ],
+      "inputSpace": "method-schema",
+      "mutates": "none",
+      "preflight": "公共 API 绑定必须能解析到真实 runtime action",
+      "businessCodes": [],
+      "confirm": "按 API 确认清单",
+      "undoOrRollback": "not-applicable",
+      "async": false,
+      "compatibility": "旧 API action 路径保持可调用",
+      "evidence": [
+        "tools/webgl-generator-api-action-convergence-regression.mjs"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "api-action-binding:grid.refine",
+      "capabilityId": "grid.refine",
+      "title": "API action 绑定 grid.refine",
+      "sourceKind": "api-action-binding",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/console-api.js",
+        "app/webgl-generator/src/runtime/app.js"
+      ],
+      "uiEntry": "",
+      "action": "grid.refine",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "grid.refine"
       ],
       "inputSpace": "method-schema",
       "mutates": "map-or-persistent-data",
@@ -22764,6 +23000,192 @@
       "commandOrInspector": "",
       "apiMethods": [
         "generate.setOptions"
+      ],
+      "inputSpace": "info.describe(method)",
+      "mutates": "map-or-persistent-data",
+      "preflight": "由 info.describe(method) 与领域 inspector 发现",
+      "businessCodes": [],
+      "confirm": "由 methodMetadata.requiresConfirm 发现",
+      "undoOrRollback": "由 methodMetadata.undoable 与结果 metadata 发现",
+      "async": false,
+      "compatibility": "受 API 主版本和方法稳定性契约保护",
+      "evidence": [
+        "tools/webgl-generator-api-capabilities-regression.mjs",
+        "tools/webgl-generator-api-stability-contract-regression.mjs"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "api:grid.applyWrite",
+      "capabilityId": "grid.applyWrite",
+      "title": "公共 API grid.applyWrite",
+      "sourceKind": "public-api",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/api-contract.js",
+        "app/webgl-generator/src/runtime/console-api.js"
+      ],
+      "uiEntry": "",
+      "action": "grid.applyWrite",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "grid.applyWrite"
+      ],
+      "inputSpace": "info.describe(method)",
+      "mutates": "map-or-persistent-data",
+      "preflight": "由 info.describe(method) 与领域 inspector 发现",
+      "businessCodes": [],
+      "confirm": "由 methodMetadata.requiresConfirm 发现",
+      "undoOrRollback": "由 methodMetadata.undoable 与结果 metadata 发现",
+      "async": false,
+      "compatibility": "受 API 主版本和方法稳定性契约保护",
+      "evidence": [
+        "tools/webgl-generator-api-capabilities-regression.mjs",
+        "tools/webgl-generator-api-stability-contract-regression.mjs"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "api:grid.inspectRefinement",
+      "capabilityId": "grid.inspectRefinement",
+      "title": "公共 API grid.inspectRefinement",
+      "sourceKind": "public-api",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/api-contract.js",
+        "app/webgl-generator/src/runtime/console-api.js"
+      ],
+      "uiEntry": "",
+      "action": "grid.inspectRefinement",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "grid.inspectRefinement"
+      ],
+      "inputSpace": "info.describe(method)",
+      "mutates": "none",
+      "preflight": "由 info.describe(method) 与领域 inspector 发现",
+      "businessCodes": [],
+      "confirm": "由 methodMetadata.requiresConfirm 发现",
+      "undoOrRollback": "由 methodMetadata.undoable 与结果 metadata 发现",
+      "async": false,
+      "compatibility": "受 API 主版本和方法稳定性契约保护",
+      "evidence": [
+        "tools/webgl-generator-api-capabilities-regression.mjs",
+        "tools/webgl-generator-api-stability-contract-regression.mjs"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "api:grid.inspectWrite",
+      "capabilityId": "grid.inspectWrite",
+      "title": "公共 API grid.inspectWrite",
+      "sourceKind": "public-api",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/api-contract.js",
+        "app/webgl-generator/src/runtime/console-api.js"
+      ],
+      "uiEntry": "",
+      "action": "grid.inspectWrite",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "grid.inspectWrite"
+      ],
+      "inputSpace": "info.describe(method)",
+      "mutates": "none",
+      "preflight": "由 info.describe(method) 与领域 inspector 发现",
+      "businessCodes": [],
+      "confirm": "由 methodMetadata.requiresConfirm 发现",
+      "undoOrRollback": "由 methodMetadata.undoable 与结果 metadata 发现",
+      "async": false,
+      "compatibility": "受 API 主版本和方法稳定性契约保护",
+      "evidence": [
+        "tools/webgl-generator-api-capabilities-regression.mjs",
+        "tools/webgl-generator-api-stability-contract-regression.mjs"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "api:grid.refine",
+      "capabilityId": "grid.refine",
+      "title": "公共 API grid.refine",
+      "sourceKind": "public-api",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/api-contract.js",
+        "app/webgl-generator/src/runtime/console-api.js"
+      ],
+      "uiEntry": "",
+      "action": "grid.refine",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "grid.refine"
+      ],
+      "inputSpace": "info.describe(method)",
+      "mutates": "map-or-persistent-data",
+      "preflight": "由 info.describe(method) 与领域 inspector 发现",
+      "businessCodes": [],
+      "confirm": "由 methodMetadata.requiresConfirm 发现",
+      "undoOrRollback": "由 methodMetadata.undoable 与结果 metadata 发现",
+      "async": false,
+      "compatibility": "受 API 主版本和方法稳定性契约保护",
+      "evidence": [
+        "tools/webgl-generator-api-capabilities-regression.mjs",
+        "tools/webgl-generator-api-stability-contract-regression.mjs"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "api:grid.snapshot",
+      "capabilityId": "grid.snapshot",
+      "title": "公共 API grid.snapshot",
+      "sourceKind": "public-api",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/api-contract.js",
+        "app/webgl-generator/src/runtime/console-api.js"
+      ],
+      "uiEntry": "",
+      "action": "grid.snapshot",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "grid.snapshot"
+      ],
+      "inputSpace": "info.describe(method)",
+      "mutates": "map-or-persistent-data",
+      "preflight": "由 info.describe(method) 与领域 inspector 发现",
+      "businessCodes": [],
+      "confirm": "由 methodMetadata.requiresConfirm 发现",
+      "undoOrRollback": "由 methodMetadata.undoable 与结果 metadata 发现",
+      "async": false,
+      "compatibility": "受 API 主版本和方法稳定性契约保护",
+      "evidence": [
+        "tools/webgl-generator-api-capabilities-regression.mjs",
+        "tools/webgl-generator-api-stability-contract-regression.mjs"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "api:grid.summary",
+      "capabilityId": "grid.summary",
+      "title": "公共 API grid.summary",
+      "sourceKind": "public-api",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/api-contract.js",
+        "app/webgl-generator/src/runtime/console-api.js"
+      ],
+      "uiEntry": "",
+      "action": "grid.summary",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "grid.summary"
       ],
       "inputSpace": "info.describe(method)",
       "mutates": "map-or-persistent-data",
@@ -32400,6 +32822,54 @@
       "exclusionReason": ""
     },
     {
+      "matrixId": "command:river-edit-commands.js:createAddRiverVisualWaypointCommand",
+      "capabilityId": "river.createAddRiverVisualWaypointCommand",
+      "title": "river-edit-commands.js / createAddRiverVisualWaypointCommand",
+      "sourceKind": "command-or-inspector",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/river-edit-commands.js"
+      ],
+      "uiEntry": "",
+      "action": "",
+      "commandOrInspector": "createAddRiverVisualWaypointCommand",
+      "apiMethods": [
+        "edit.rivers.create",
+        "edit.rivers.delete",
+        "edit.rivers.inspectCreate",
+        "edit.rivers.inspectDelete",
+        "edit.rivers.rename",
+        "edit.rivers.setNote",
+        "edit.rivers.setWidthFactor",
+        "generate.regenerate",
+        "selection.clear",
+        "selection.clearHighlights",
+        "selection.flash",
+        "selection.get",
+        "selection.highlight",
+        "selection.locate",
+        "selection.pick",
+        "selection.resolve",
+        "selection.select",
+        "selection.startEditing",
+        "selection.stopEditing",
+        "selection.toggleEditing"
+      ],
+      "inputSpace": "domain-options / object-ref / cell-ids / changes",
+      "mutates": "domain-data-or-preview",
+      "preflight": "由领域 API 参数校验或 inspector 提供",
+      "businessCodes": [],
+      "confirm": "按领域 API 确认清单",
+      "undoOrRollback": "EditHistory / transaction",
+      "async": false,
+      "compatibility": "领域 API 复用该 command / inspector 或同一纯 helper",
+      "evidence": [
+        "app/webgl-generator/src/runtime/river-edit-commands.js"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
       "matrixId": "command:river-edit-commands.js:createDeleteRiverCommand",
       "capabilityId": "river.createDeleteRiverCommand",
       "title": "river-edit-commands.js / createDeleteRiverCommand",
@@ -32627,6 +33097,54 @@
       "inputSpace": "domain-options / object-ref / cell-ids / changes",
       "mutates": "none",
       "preflight": "inspectRiverCreation",
+      "businessCodes": [],
+      "confirm": "按领域 API 确认清单",
+      "undoOrRollback": "not-applicable-or-domain-contract",
+      "async": false,
+      "compatibility": "领域 API 复用该 command / inspector 或同一纯 helper",
+      "evidence": [
+        "app/webgl-generator/src/runtime/river-edit-commands.js"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "command:river-edit-commands.js:inspectRiverVisualWaypoint",
+      "capabilityId": "river.inspectRiverVisualWaypoint",
+      "title": "river-edit-commands.js / inspectRiverVisualWaypoint",
+      "sourceKind": "command-or-inspector",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/river-edit-commands.js"
+      ],
+      "uiEntry": "",
+      "action": "",
+      "commandOrInspector": "inspectRiverVisualWaypoint",
+      "apiMethods": [
+        "edit.rivers.create",
+        "edit.rivers.delete",
+        "edit.rivers.inspectCreate",
+        "edit.rivers.inspectDelete",
+        "edit.rivers.rename",
+        "edit.rivers.setNote",
+        "edit.rivers.setWidthFactor",
+        "generate.regenerate",
+        "selection.clear",
+        "selection.clearHighlights",
+        "selection.flash",
+        "selection.get",
+        "selection.highlight",
+        "selection.locate",
+        "selection.pick",
+        "selection.resolve",
+        "selection.select",
+        "selection.startEditing",
+        "selection.stopEditing",
+        "selection.toggleEditing"
+      ],
+      "inputSpace": "domain-options / object-ref / cell-ids / changes",
+      "mutates": "none",
+      "preflight": "inspectRiverVisualWaypoint",
       "businessCodes": [],
       "confirm": "按领域 API 确认清单",
       "undoOrRollback": "not-applicable-or-domain-contract",
@@ -37049,6 +37567,54 @@
       "matrixId": "mode:river:add",
       "capabilityId": "canvas-mode.river:add",
       "title": "画布模式 river:add",
+      "sourceKind": "canvas-mode",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/app.js"
+      ],
+      "uiEntry": "canvas:map-canvas",
+      "action": "",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "edit.rivers.create",
+        "edit.rivers.delete",
+        "edit.rivers.inspectCreate",
+        "edit.rivers.inspectDelete",
+        "edit.rivers.rename",
+        "edit.rivers.setNote",
+        "edit.rivers.setWidthFactor",
+        "generate.regenerate",
+        "selection.clear",
+        "selection.clearHighlights",
+        "selection.flash",
+        "selection.get",
+        "selection.highlight",
+        "selection.locate",
+        "selection.pick",
+        "selection.resolve",
+        "selection.select",
+        "selection.startEditing",
+        "selection.stopEditing",
+        "selection.toggleEditing"
+      ],
+      "inputSpace": "object-ref / grid-cell-id / pack-cell-id / world-point / point-list / changes",
+      "mutates": "map-or-runtime-state",
+      "preflight": "领域 inspector 或参数校验",
+      "businessCodes": [],
+      "confirm": "按领域方法元数据",
+      "undoOrRollback": "EditHistory 或运行时状态取消",
+      "async": false,
+      "compatibility": "画布手势继续可用，API 不模拟指针轨迹",
+      "evidence": [
+        "app/webgl-generator/src/runtime/canvas-tool-mode-manager.js"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "mode:river:edit-waypoint",
+      "capabilityId": "canvas-mode.river:edit-waypoint",
+      "title": "画布模式 river:edit-waypoint",
       "sourceKind": "canvas-mode",
       "sourceFiles": [
         "app/webgl-generator/src/runtime/app.js"

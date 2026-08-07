@@ -6,7 +6,7 @@ const LAND_COAST = 1;
 const WATER_COAST = -1;
 const DEEP_WATER = -2;
 
-export function extractFeatures(grid) {
+export function extractFeatures(grid, options = {}) {
   const profile = createStageProfile();
   const cellCount = grid.points.length;
   const distanceField = new Int8Array(cellCount);
@@ -15,9 +15,11 @@ export function extractFeatures(grid) {
 
   profile.stage("flood-features", "泛洪识别水陆 feature", () => floodGridFeatures({grid, distanceField, featureIds, features}));
   profile.stage("deep-water", "标记深水距离", () => markupDeepWater(distanceField, grid.cells.c));
-  profile.stage("depression-lakes", "识别深洼湖泊", () => addLakesInDeepDepressions({grid, distanceField, featureIds, features}));
-  profile.stage("open-near-sea-lakes", "打开近海湖泊", () => openNearSeaLakes({grid, distanceField, featureIds, features}));
-  profile.stage("supplemental-basin-lakes", "补充内陆洼地湖泊", () => addSupplementalBasinLakes({grid, distanceField, featureIds, features}));
+  if (!options.preserveHeights) {
+    profile.stage("depression-lakes", "识别深洼湖泊", () => addLakesInDeepDepressions({grid, distanceField, featureIds, features}));
+    profile.stage("open-near-sea-lakes", "打开近海湖泊", () => openNearSeaLakes({grid, distanceField, featureIds, features}));
+    profile.stage("supplemental-basin-lakes", "补充内陆洼地湖泊", () => addSupplementalBasinLakes({grid, distanceField, featureIds, features}));
+  }
   profile.stage("rebuild-feature-cells", "重建 feature cell 列表", () => rebuildFeatureCells(features, featureIds, cellCount));
   profile.stage("sync-grid-fields", "同步 feature 字段到 grid", () => {
     grid.cells.t = Array.from(distanceField);
