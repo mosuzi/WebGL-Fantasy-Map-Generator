@@ -25,8 +25,13 @@ try {
   const page = await browser.newPage({viewport: {width: 1440, height: 900}});
   page.setDefaultTimeout(45000);
   const consoleErrors = [];
+  const healthEvents = [];
   const pageErrors = [];
-  page.on("console", message => message.type() === "error" && consoleErrors.push(message.text()));
+  page.on("console", message => {
+    if (message.type() !== "error") return;
+    if (message.text().startsWith("[FMG health]")) healthEvents.push(message.text());
+    else consoleErrors.push(message.text());
+  });
   page.on("pageerror", error => pageErrors.push(error.message));
   await page.goto("http://" + host + ":" + port + "?healthClear=1", {waitUntil: "domcontentloaded"});
   await waitForApiReady(page, 45000);
@@ -170,6 +175,7 @@ try {
     failedRestore,
     screenshotPath,
     consoleErrors,
+    healthEvents,
     pageErrors
   }, null, 2));
 } finally {

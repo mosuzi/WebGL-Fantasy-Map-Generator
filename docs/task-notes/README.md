@@ -6,6 +6,8 @@
 
 ## 专题映射
 
+- 权威任务第 284 项对应 [`task-284-100k-performance-investigation-and-plan.md`](./task-284-100k-performance-investigation-and-plan.md)：先记录精确用户标签页的存档、100k 高度编辑和 renderer / overlay 证据，再拆分 284-A～284-E；调查与方案已完成，284-A～284-D 的存档、编辑、renderer / overlay / picking、导出与 base64 内存优化已验收，当前进入 284-E。
+
 - 权威任务第 298 项对应 [`grid-topology-refinement-and-controlled-api.md`](./grid-topology-refinement-and-controlled-api.md)，现已完成：冻结受控网格快照、母子映射、派生迁移、事务回滚与 10k → 100k 验收门禁，并以系统 Chrome 完成生产链复验。
 
 - 权威任务第 266 项对应 `readme-showcase-capture.md`：集中 fresh session 的默认图层与标签风格，并用隔离系统 Chrome + CDP 从正式 PNG 合成链确定性生成中英文 README 共用的 relief / atlas 两张展示图。

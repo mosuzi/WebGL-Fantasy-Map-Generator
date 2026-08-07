@@ -29902,3 +29902,40 @@ full 矩阵结果：
 - pack 与 feature 在细分后重建，国家、城市、Marker、国家 / 省份中心、路线、河流和地区引用按母子映射迁移；路线 / 河流先在旧网格补齐连续路径，再映射到细分图，保证相邻路径 cell 仍有共享边。固定 `10004 → 100000` 夹具保留旧点和旧高度，陆地 / 水域连通分量保持 `6 / 4`，高度 P10 / P25 / P50 / P75 / P90 为 `2.27 / 5.93 / 14.01 / 27.07 / 44`，海岸 / 湖岸段为 `4849 / 78`；陈旧版本、非对称邻接、非法跨母域关系、故障回滚、撤销 / 重做和旧 / 新存档往返均通过。
 - 用户现有 `http://127.0.0.1:5410/?debug=1` 页面通过新增“网格拓扑”调试区执行同一公开 API：预检为 `10004 → 100000`，执行后稳定显示 100k，撤销回到 10004、重做恢复 100000，WebGL 与应用错误为 `0`。独立生产系统 Chrome 回归耗时约 `7.3s`，细分后 JS 堆约 `660 MiB`，撤销 / 重做后的立即峰值约 `1.20 GiB`、显式回收后约 `696 MiB`；`1440×960` PNG、WebGL2、application console、page、active health 与 WebGL error 均通过，长任务只作为性能遥测单列。
 - API 基线同步为 `18` 个命名空间、`322` 个公开方法、稳定等级 `314 / 7 / 1`，`322 / 322` 方法可发现；完整能力矩阵为 `1213` 行、`covered 1139 / excluded 74 / gap 0`，复合语义矩阵为 `80` 个动作、`70` 个完整事务与 `10` 个配方。生产构建、API 稳定 / 发现契约、两份矩阵检查和差异检查通过，`source/` 零改动；本项未暂存、提交或推送，完成记录按日期归档，当前只剩第 284 项暂缓。
+
+## 2026-08-07：调查第284项并冻结284-A～284-E实施边界
+
+- 按用户要求接管精确的 `http://127.0.0.1:5410/?debug=1` 标签页，未刷新、未导航、未重新生成、未写入或删除用户存档。当前页已有 `webgl-generator-current-map-v1` 的 `Storage.setItem` quota 失败；源代码确认保存链会依次创建完整 JSON、gzip buffer、base64 字符串和 envelope JSON，旧 `type/version=1`、legacy plain 和导出字段必须继续兼容。
+- 在接管初始 100k 快照中，短高度笔刷约 `359～541ms`、长拖约 `8775ms`、短边缘笔刷触碰 `1671` cells；health 记录约 `4.1s` pointerdown / 主线程长任务 / 帧间隔。隔离系统 Chrome 的既有 e2e / overlay profile 对照为：10k renderer load `1608.5ms`、100k `9018.8ms`；10k 平移 frame P95 `79.5ms`、100k `176.5ms`；100k 12 个同帧输入复现 `3 draw / 1 viewport preview`，最长长任务约 `272ms`。
+- 由于浏览器控制面无法安全读取用户页的 `window.localStorage`、`window.performance` 和 API 全局，未伪造当前 quota、raw / gzip 字节数或 heap snapshot；隔离 100k 直接完整序列化在 `300s` 内未返回，作为序列化阻塞证据单列。报告、字段兼容边界和方案已写入 `docs/task-notes/task-284-100k-performance-investigation-and-plan.md`。
+- 后续只允许按 284-A 存档、284-B 高度编辑、284-C renderer / overlay / picking、284-D 导出 / 历史 / 面板、284-E 统一 CDP 基线逐项实施。调查后只读核对发现同一精确页实际已漂移为 `10000` grid、checksum `e63d4fa5`、undo / redo `0 / 0`，不再满足用户指定的当前 100k 前提；无法安全判断归因，也没有可用 redo 分支。因此第284实施门禁暂停，等待用户确认页面恢复方式；本轮没有第284代码改动。
+
+## 2026-08-07：恢复第284项的100k前提并进入284-A
+
+- 用户确认已恢复原 100k 地图；重新接管同一 `http://127.0.0.1:5410/?debug=1` 标签页后，只读核对为 `100000` grid、约 `43000` pack、checksum `28eede3c`、生成 Tab `100000`、WebGL error `0`。没有刷新、导航、生成、细分、保存或导入用户标签页。
+- 第284调查与284-A～284-E方案继续以专题文档为准；状态漂移只保留为调查风险，不把隔离页的存档尺寸或 quota 当作用户页事实。当前进入284-A：在保留旧 LocalStorage key / envelope / legacy plain 读取的前提下，为 quota 失败提供同 envelope 的 IndexedDB 降级存储，随后用隔离 Chrome 做旧存档、新存档、fallback 选择和错误回滚验证。
+
+## 2026-08-07：完成第284-A并进入284-B
+
+- 284-A 在保留旧 `webgl-generator-current-map-v1`、旧 envelope、plain / gzip 读取和 schema 兼容的前提下，新增 IndexedDB `current` 记录作为 LocalStorage quota 降级后端。保存、恢复和两后端按 `savedAt` 选择较新存档的逻辑均不改地图数据；阶段计时以不可持久化返回字段记录 raw JSON、gzip、base64、envelope 和写入成本。
+- 隔离生产构建的 10k / 100k 三次保存回归分别记录原始 JSON `14,320,555 / 64,492,582B`、gzip `2,304,939 / 14,548,855B`、envelope `3,073,531 / 19,398,758B`；编码 p50 为 `481.2 / 3,561.1ms`，写入操作 p50 为 `735.7 / 5,135.8ms`。100k 实际 `99846` Grid Cells 可通过 IndexedDB 保存 / 恢复，正常 10k 路径仍为 LocalStorage。
+- `regress:browser-storage-fallback`、`regress:browser-storage-compatibility`、`regress:api-data-compatibility` 和生产构建通过；application console / page error 均为 `0`。启动与恢复的 main-thread-long-task 作为独立 health 观测保留。第284当前严格进入284-B，高度编辑仍不得在用户标签页执行写操作。
+
+## 2026-08-07：完成第284-B并进入284-C
+
+- 高度笔刷预览改为局部 surface 颜色增量刷新，岸线 / 陆水拓扑重建延后到提交或取消回滚；提交命令绑定 `changedGridCells`，跨高度阈值时仍恢复完整 surface / shoreline。预览不改变历史条目，pointerup 仍只写一条高度事务，取消、撤销和重做继续复用旧命令格式。
+- 隔离生产构建三次交错样本中，100k 连续长拖 pointer-down P95 `38.3ms`、首帧反馈 P95 `27.8ms`、整笔拖动 P95 `218.2ms`，每次触碰 `117` cells、draw 增量 `3`；10k 对照分别为 `27.6 / 12.0 / 169.3ms`、`12` cells、draw 增量 `2`。交互窗口 health 长任务、application console、page error 和 WebGL error 均为 `0`；四类样本均完成撤销 → 重做 → 再撤销。
+- 新增 `regress:height-brush-performance-browser`，并通过 `regress:height-brush`、`regress:height-brush-cadence`、生产构建和 `git diff --check`。边缘 / 大半径 / 高密度区域继续留给 284-E 统一门禁；当前用户标签页仍只读，下一步严格进入284-C。
+
+## 2026-08-07：完成第284-C并进入284-D
+
+- viewport 平移期间不再逐个 pointermove 执行完整 hover / object picking，pointerup 只补一次最终命中；preview draw 增加非持久化事件标记，回归门禁不再把初始化残留 draw 计入“每 rAF 一次”。overlay 子节点移除统一 `will-change` 合成层，viewport 预览宽高改读 ResizeObserver 已缓存的 `canvasSize`，避免 100k overlay 布局在连续输入中被反复同步读取。
+- 隔离生产构建的 10k / 100k profile 通过：同帧探针均为 `1 preview / 1 preview-draw`，连续平移均为 `47 / 47` preview / preview-draw，完整 overlay `0`；平移 frame P95 为 `41.2 / 105.8ms`，缩放 frame P95 为 `41.4 / 82.4ms`，hover、cell / object picking、相机 / 图层 / checksum 恢复、WebGL 与 application console / page / health error 通过。100k 长任务最大约 `273ms` 作为 284-E 风险保留。
+- `regress:png-options`、`regress:height-brush`、`regress:height-brush-cadence`、生产构建和差异检查通过；本项没有改地图数据、schema、存档、API 或 `source/`。用户当前 100k 页已由用户主动保存，后续仍只用隔离上下文测试。
+
+## 2026-08-07：完成第284-D并进入284-E
+
+- D 的只读基线在隔离生产 Chrome 中覆盖控制 / 生成面板、管理面板、国家 / 城市 / 路线面板、完整 JSON、gzip Blob、gzip base64、PNG、高度图和高度编辑历史往返。100k 完整 JSON 约 `72MB / 2.16s`，gzip base64 约 `15.7MB / 5.24s`；旧 base64 路径会额外产生约 `0.6s` 长任务，堆增量约 `304MB`。
+- 根因只落在压缩结果到 base64 的转换：旧实现把大段 Uint8Array 复制成 JS 二进制字符串再调用 `btoa`。现在存档和完整压缩导出均优先用原生 Blob + FileReader 读取 data URL 并去掉 MIME 前缀，FileReader 不可用时才使用原分块 `btoa` 回退；gzip-base64 envelope、旧存档、导出字段和 API 不变。
+- 100k 新路径 base64 操作约 `5.24s`，相对本轮旧路径的 `6.36s` 更短；显式回收后堆增量约 `60KB`，没有额外的约 `0.6s` base64 长任务。100k IndexedDB fallback 保存 / 恢复实际 `99846` cells，raw / gzip / envelope 为 `64492580 / 14548842 / 19398738B`，base64 编码 p50 约 `59.7ms`。
+- 国家 / 城市 / 路线面板打开约 `126～151ms`，撤销 / 重做 / 恢复约 `46.8 / 40.7 / 40.6ms`；地图 checksum、历史恢复、旧浏览器存档、PNG / 高度图像素、application console、page、health、WebGL error 均通过。`build:app`、`regress:browser-storage-fallback -- 100000`、`regress:browser-storage-compatibility`、`regress:png-options`、`regress:heightmap-export-browser`、`regress:height-brush`、`regress:height-brush-cadence` 和 `git diff --check` 通过；本项没有改地图数据、schema 或 `source/`。

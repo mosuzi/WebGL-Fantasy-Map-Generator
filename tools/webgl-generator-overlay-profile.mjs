@@ -328,11 +328,12 @@ async function profileZoom(page) {
 }
 
 async function verifyViewportCoalescing(page) {
+  await waitForOverlayIdle(page);
   const evidence = await page.evaluate(async () => {
     const renderer = window.__webglGeneratorApp?.renderer;
     const canvas = renderer?.canvas;
     if (!renderer || !canvas) return {available: false};
-    const before = renderer.getPerformanceEvents();
+    const before = renderer.getPerformanceEvents({includeRecent: true});
     const rect = canvas.getBoundingClientRect();
     for (let index = 0; index < 12; index++) {
       canvas.dispatchEvent(new WheelEvent("wheel", {
@@ -344,14 +345,17 @@ async function verifyViewportCoalescing(page) {
       }));
     }
     await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-    const after = renderer.getPerformanceEvents();
+    const after = renderer.getPerformanceEvents({includeRecent: true});
     const stats = renderer.getStats();
     return {
       available: true,
       inputCount: 12,
       viewportPreviewCount: Number(after.viewportPreview?.sequence || 0) - Number(before.viewportPreview?.sequence || 0),
-      drawCount: Number(after.draw?.sequence || 0) - Number(before.draw?.sequence || 0),
+      drawCount: (after.draw?.recent || []).filter(event => event.sequence > Number(before.draw?.sequence || 0) && event.viewportPreview === true).length,
       overlayCount: Number(after.overlay?.sequence || 0) - Number(before.overlay?.sequence || 0),
+      drawEvents: (after.draw?.recent || []).filter(event => event.sequence > Number(before.draw?.sequence || 0)),
+      viewportPreviewDrawEvents: (after.draw?.recent || []).filter(event => event.sequence > Number(before.draw?.sequence || 0) && event.viewportPreview === true),
+      viewportPreviewEvents: (after.viewportPreview?.recent || []).filter(event => event.sequence > Number(before.viewportPreview?.sequence || 0)),
       suspended: stats.overlay?.interactionSuspended === true,
       transform: stats.overlay?.previewTransform || null,
       camera: stats.camera || null
@@ -1191,7 +1195,7 @@ function validateContinuousViewportBudget(interaction) {
   const inputType = interaction.id === "zoom" ? "wheel" : "pointermove";
   const inputCount = Number(interaction.events?.byType?.[inputType]?.count || 0);
   const previewCount = Number(interaction.eventSampleCounts?.viewportPreview || 0);
-  const drawCount = Number(interaction.eventSampleCounts?.draw || 0);
+  const drawCount = Number(interaction.eventSampleCounts?.viewportPreviewDraw ?? interaction.eventSampleCounts?.draw ?? 0);
   const overlayCount = Number(interaction.eventSampleCounts?.overlay || 0);
   if (!inputCount) failures.push(`缺少 ${inputType} 输入证据`);
   if (previewCount > inputCount) failures.push(`viewport preview ${previewCount} 超过输入 ${inputCount}`);
@@ -1252,6 +1256,7 @@ function summarizeInteraction(id, label, samples, frameData) {
   const riverBuilds = riverEvents.map(event => event.ms || 0);
   const selectionBuilds = selectionEvents.map(event => event.ms || 0);
   const eventSampleCounts = Object.fromEntries(Object.entries(workEvents).map(([key, events]) => [key, events.length]));
+  eventSampleCounts.viewportPreviewDraw = drawEvents.filter(event => event.viewportPreview === true).length;
   const failedRendererEvents = Object.entries(workEvents).flatMap(([channel, events]) => events
     .filter(event => event?.status === "failed")
     .map(event => ({channel, ...event})));

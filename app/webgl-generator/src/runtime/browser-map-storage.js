@@ -3,13 +3,28 @@ import {decompressGzipBase64Text} from "./map-file-io.js";
 export const BROWSER_MAP_STORAGE_KEY = "webgl-generator-current-map-v1";
 export const BROWSER_MAP_STORAGE_TYPE = "webgl-generator-local-map-storage";
 export const BROWSER_MAP_STORAGE_VERSION = 1;
+export const BROWSER_MAP_STORAGE_FALLBACK_DB = "webgl-generator-map-storage-v1";
+export const BROWSER_MAP_STORAGE_FALLBACK_STORE = "maps";
+export const BROWSER_MAP_STORAGE_FALLBACK_RECORD = "current";
 
 export async function encodeBrowserMapStoragePayload(documentRef, text, map) {
+  const startedAt = storageClock(documentRef);
   const compressed = await compressTextToBase64(documentRef, text);
   const encoded = compressed
     ? {encoding: "gzip-base64", data: compressed.base64, bytes: compressed.bytes}
     : {encoding: "plain", data: text, bytes: text.length};
-  return createBrowserMapStorageEnvelope(text, map, encoded);
+  const envelope = createBrowserMapStorageEnvelope(text, map, encoded);
+  Object.defineProperty(envelope, "__timings", {
+    configurable: false,
+    enumerable: false,
+    value: {
+      gzipMs: compressed?.gzipMs || 0,
+      base64Ms: compressed?.base64Ms || 0,
+      encodingMs: elapsedMs(storageClock(documentRef), startedAt)
+    },
+    writable: false
+  });
+  return envelope;
 }
 
 export async function decodeBrowserMapStoragePayload(documentRef, raw) {
@@ -17,6 +32,45 @@ export async function decodeBrowserMapStoragePayload(documentRef, raw) {
   if (envelope.legacy) return envelope.text;
   if (envelope.encoding === "gzip-base64") return decompressGzipBase64Text(documentRef, envelope.data);
   return envelope.data;
+}
+
+export async function writeBrowserMapStorage(documentRef, raw) {
+  const view = documentRef.defaultView || window;
+  const storage = safeLocalStorage(view);
+  if (storage) {
+    try {
+      storage.setItem(BROWSER_MAP_STORAGE_KEY, raw);
+      await deleteIndexedDbRecord(view).catch(() => {});
+      return {backend: "localStorage", storageKey: BROWSER_MAP_STORAGE_KEY};
+    } catch (error) {
+      if (!isQuotaError(error)) throw error;
+      try {
+        await putIndexedDbRecord(view, raw);
+        return {backend: "indexedDB", storageKey: BROWSER_MAP_STORAGE_FALLBACK_RECORD, fallback: true};
+      } catch {
+        throw error;
+      }
+    }
+  }
+
+  await putIndexedDbRecord(view, raw);
+  return {backend: "indexedDB", storageKey: BROWSER_MAP_STORAGE_FALLBACK_RECORD, fallback: true};
+}
+
+export async function readBrowserMapStorage(documentRef) {
+  const view = documentRef.defaultView || window;
+  const localRaw = safeLocalStorage(view)?.getItem(BROWSER_MAP_STORAGE_KEY) || "";
+  const fallbackRaw = await getIndexedDbRecord(view).catch(() => "");
+  if (!localRaw && !fallbackRaw) return null;
+  if (!localRaw) return {raw: fallbackRaw, backend: "indexedDB", storageKey: BROWSER_MAP_STORAGE_FALLBACK_RECORD, fallback: true};
+  if (!fallbackRaw) return {raw: localRaw, backend: "localStorage", storageKey: BROWSER_MAP_STORAGE_KEY};
+
+  const localSavedAt = savedAtFromRaw(localRaw);
+  const fallbackSavedAt = savedAtFromRaw(fallbackRaw);
+  if (fallbackSavedAt && (!localSavedAt || fallbackSavedAt >= localSavedAt)) {
+    return {raw: fallbackRaw, backend: "indexedDB", storageKey: BROWSER_MAP_STORAGE_FALLBACK_RECORD, fallback: true};
+  }
+  return {raw: localRaw, backend: "localStorage", storageKey: BROWSER_MAP_STORAGE_KEY};
 }
 
 export function createBrowserMapStorageEnvelope(text, map, encoded = {}) {
@@ -59,12 +113,33 @@ export function parseBrowserMapStorageEnvelope(raw) {
 async function compressTextToBase64(documentRef, text) {
   const view = documentRef.defaultView || window;
   if (typeof view.CompressionStream !== "function" || typeof view.Response !== "function" || typeof view.Blob !== "function") return null;
+  const gzipStartedAt = storageClock(documentRef);
   const stream = new view.Blob([text], {type: "application/json;charset=utf-8"}).stream().pipeThrough(new view.CompressionStream("gzip"));
   const buffer = await new view.Response(stream).arrayBuffer();
-  return {base64: arrayBufferToBase64(view, buffer), bytes: buffer.byteLength};
+  const gzipMs = elapsedMs(storageClock(documentRef), gzipStartedAt);
+  const base64StartedAt = storageClock(documentRef);
+  const base64 = await blobToBase64(view, new view.Blob([buffer], {type: "application/gzip"}));
+  return {base64, bytes: buffer.byteLength, gzipMs, base64Ms: elapsedMs(storageClock(documentRef), base64StartedAt)};
 }
 
-function arrayBufferToBase64(view, buffer) {
+function blobToBase64(view, blob) {
+  if (typeof view.FileReader === "function") {
+    return new Promise((resolve, reject) => {
+      const reader = new view.FileReader();
+      reader.addEventListener("load", () => {
+        const dataUrl = String(reader.result || "");
+        const separator = dataUrl.indexOf(",");
+        resolve(separator < 0 ? dataUrl : dataUrl.slice(separator + 1));
+      }, {once: true});
+      reader.addEventListener("error", () => reject(reader.error || new Error("浏览器存档 base64 编码失败")), {once: true});
+      reader.readAsDataURL(blob);
+    });
+  }
+  return arrayBufferToBase64(view, blob.arrayBuffer());
+}
+
+async function arrayBufferToBase64(view, bufferPromise) {
+  const buffer = await bufferPromise;
   const bytes = new Uint8Array(buffer);
   let binary = "";
   const chunkSize = 0x8000;
@@ -72,4 +147,76 @@ function arrayBufferToBase64(view, buffer) {
     binary += String.fromCharCode(...bytes.subarray(index, index + chunkSize));
   }
   return view.btoa(binary);
+}
+
+function safeLocalStorage(view) {
+  try {
+    return view?.localStorage || null;
+  } catch {
+    return null;
+  }
+}
+
+function isQuotaError(error) {
+  return error?.name === "QuotaExceededError"
+    || error?.code === 22
+    || /quota/i.test(String(error?.message || ""));
+}
+
+function savedAtFromRaw(raw) {
+  try {
+    const payload = parseBrowserMapStorageEnvelope(raw);
+    return payload.legacy ? "" : String(payload.savedAt || "");
+  } catch {
+    return "";
+  }
+}
+
+function storageClock(documentRef) {
+  return typeof documentRef?.defaultView?.performance?.now === "function"
+    ? documentRef.defaultView.performance.now()
+    : Date.now();
+}
+
+function elapsedMs(now, startedAt) {
+  return Math.max(0, Number((now - startedAt).toFixed(1)));
+}
+
+function openIndexedDb(view) {
+  const indexedDB = view?.indexedDB;
+  if (!indexedDB) return Promise.reject(new Error("当前浏览器不支持 IndexedDB"));
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(BROWSER_MAP_STORAGE_FALLBACK_DB, 1);
+    request.onerror = () => reject(request.error || new Error("打开 IndexedDB 存档失败"));
+    request.onupgradeneeded = () => {
+      if (!request.result.objectStoreNames.contains(BROWSER_MAP_STORAGE_FALLBACK_STORE)) {
+        request.result.createObjectStore(BROWSER_MAP_STORAGE_FALLBACK_STORE);
+      }
+    };
+    request.onsuccess = () => resolve(request.result);
+  });
+}
+
+function putIndexedDbRecord(view, raw) {
+  return withIndexedDbStore(view, "readwrite", store => store.put({raw, savedAt: savedAtFromRaw(raw), updatedAt: Date.now()}, BROWSER_MAP_STORAGE_FALLBACK_RECORD));
+}
+
+function getIndexedDbRecord(view) {
+  return withIndexedDbStore(view, "readonly", store => store.get(BROWSER_MAP_STORAGE_FALLBACK_RECORD))
+    .then(record => String(record?.raw || ""));
+}
+
+function deleteIndexedDbRecord(view) {
+  return withIndexedDbStore(view, "readwrite", store => store.delete(BROWSER_MAP_STORAGE_FALLBACK_RECORD));
+}
+
+function withIndexedDbStore(view, mode, action) {
+  return openIndexedDb(view).then(db => new Promise((resolve, reject) => {
+    const transaction = db.transaction(BROWSER_MAP_STORAGE_FALLBACK_STORE, mode);
+    const request = action(transaction.objectStore(BROWSER_MAP_STORAGE_FALLBACK_STORE));
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error || new Error("IndexedDB 存档操作失败"));
+    transaction.onerror = () => reject(transaction.error || new Error("IndexedDB 存档事务失败"));
+    transaction.oncomplete = () => db.close();
+  }));
 }

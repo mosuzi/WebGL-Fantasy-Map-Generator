@@ -28,6 +28,7 @@ export const EDIT_REFRESH_PRESETS = Object.freeze({
     selection: "none",
     runtimeStats: false,
     pickPanel: false,
+    deferTerrainRefresh: true,
     derived: Object.freeze(["height-field", "cell-colors"])
   }),
   STATE_SURFACE_ONLY: Object.freeze({
@@ -80,7 +81,7 @@ export function createEditRefreshScheduler({state, documentRef, updateRuntimePan
       }
 
       if (effects.derived.includes("cell-colors") && changedGridCells.length && typeof state.renderer.refreshHeightCells === "function") {
-        state.renderer.refreshHeightCells(changedGridCells);
+        state.renderer.refreshHeightCells(changedGridCells, {deferTopology: effects.deferTerrainRefresh});
       } else if (effects.derived.includes("cell-colors") && typeof state.renderer.refreshCellSurface === "function") {
         state.renderer.refreshCellSurface();
       } else if (effects.render === "draw") {
@@ -128,6 +129,7 @@ export function normalizeEditEffects(effects = {}) {
     selection: effects.selection || DEFAULT_EDIT_EFFECTS.selection,
     runtimeStats: effects.runtimeStats ?? DEFAULT_EDIT_EFFECTS.runtimeStats,
     pickPanel: effects.pickPanel ?? DEFAULT_EDIT_EFFECTS.pickPanel,
+    deferTerrainRefresh: effects.deferTerrainRefresh === true,
     derived: Array.isArray(effects.derived) && effects.derived.length ? [...effects.derived] : [...DEFAULT_EDIT_EFFECTS.derived],
     affected: Array.isArray(effects.affected) ? [...effects.affected] : []
   };

@@ -24,6 +24,7 @@ export function createApplyHeightBrushCommand(changes, {label = "高度笔刷"} 
     domain: "height",
     effects: {
       ...EDIT_REFRESH_PRESETS.HEIGHT_SURFACE_ONLY,
+      changedGridCells: normalized.map(change => change.gridCell),
       derived: [
         ...EDIT_REFRESH_PRESETS.HEIGHT_SURFACE_ONLY.derived,
         ...HEIGHT_DEPENDENT_DERIVED_SYSTEMS.map(system => `defer:${system}`)

@@ -67,7 +67,7 @@ import CloudStoragePanelComponent from "../ui/vue/components/CloudStoragePanel.v
 import ZonePanelComponent from "../ui/vue/components/ZonePanel.vue";
 import {EDIT_REFRESH_PRESETS} from "./edit-refresh-scheduler.js";
 import {createEditRefreshScheduler} from "./edit-refresh-scheduler.js";
-import {BROWSER_MAP_STORAGE_KEY, decodeBrowserMapStoragePayload, encodeBrowserMapStoragePayload} from "./browser-map-storage.js";
+import {BROWSER_MAP_STORAGE_KEY, decodeBrowserMapStoragePayload, encodeBrowserMapStoragePayload, readBrowserMapStorage, writeBrowserMapStorage} from "./browser-map-storage.js";
 import {createCloudStorageRegistry} from "./cloud-storage.js";
 import {createImportFmgCellsHeightCommand} from "./fmg-cells-geojson-import.js";
 import {EditHistory} from "./edit-history.js";
@@ -3722,10 +3722,9 @@ async function restoreBrowserStoredMapOrGenerate(state, documentRef) {
 
 async function restoreMapFromBrowserStorageViaApi(state, documentRef, options = {}, operation = null) {
   if (options.confirm !== true) throw new Error("恢复浏览器存档会替换当前地图并清空编辑历史，需要显式传入 {confirm: true}");
-  const storage = browserStorage(documentRef);
-  if (!storage) throw new Error("当前浏览器不支持 LocalStorage");
-  const raw = storage.getItem(BROWSER_MAP_STORAGE_KEY);
-  if (!raw) return {restored: false, reason: "missing", effects: []};
+  const stored = await readBrowserMapStorage(documentRef);
+  if (!stored) return {restored: false, reason: "missing", effects: []};
+  const raw = stored.raw;
 
   try {
     resetLoadTrace(documentRef);
@@ -3746,8 +3745,9 @@ async function restoreMapFromBrowserStorageViaApi(state, documentRef, options = 
     return {
       ...imported,
       restored: true,
-      storageKey: BROWSER_MAP_STORAGE_KEY,
-      effects: [...new Set([...(imported.effects || []), "browser-storage-read"])]
+      storageKey: stored.storageKey || BROWSER_MAP_STORAGE_KEY,
+      storageBackend: stored.backend,
+      effects: [...new Set([...(imported.effects || []), "browser-storage-read", ...(stored.fallback ? ["browser-storage-fallback-read"] : [])])]
     };
   } catch (error) {
     updateGenerationLoading(documentRef, false);
@@ -4561,21 +4561,44 @@ async function saveMapToBrowserStorage(state, documentRef, saveAction = state.ru
 
 async function saveMapToBrowserStorageViaApi(state, documentRef) {
   assertMapAvailable(state);
-  const storage = browserStorage(documentRef);
-  if (!storage) throw new Error("当前浏览器不支持 LocalStorage");
+  const rawStartedAt = storageClock(documentRef);
   const exported = exportAllMapData(state, documentRef, {download: false, includeText: true});
   const text = exported.text;
+  const rawJsonMs = elapsedStorageMs(documentRef, rawStartedAt);
   const payload = await encodeBrowserMapStoragePayload(documentRef, text, state.map);
-  storage.setItem(BROWSER_MAP_STORAGE_KEY, JSON.stringify(payload));
+  const envelopeStartedAt = storageClock(documentRef);
+  const raw = JSON.stringify(payload);
+  const envelopeMs = elapsedStorageMs(documentRef, envelopeStartedAt);
+  const writeStartedAt = storageClock(documentRef);
+  const stored = await writeBrowserMapStorage(documentRef, raw);
+  const writeMs = elapsedStorageMs(documentRef, writeStartedAt);
   return {
     saved: true,
-    storageKey: BROWSER_MAP_STORAGE_KEY,
+    storageKey: stored.storageKey || BROWSER_MAP_STORAGE_KEY,
+    storageBackend: stored.backend,
     encoding: payload.encoding,
     bytes: payload.bytes,
     originalBytes: payload.originalBytes,
+    storageBytes: raw.length,
     metadata: {...payload.metadata},
-    effects: ["browser-storage-write"]
+    timings: {
+      rawJsonMs,
+      gzipMs: payload.__timings?.gzipMs || 0,
+      base64Ms: payload.__timings?.base64Ms || 0,
+      encodingMs: payload.__timings?.encodingMs || 0,
+      envelopeMs,
+      writeMs
+    },
+    effects: ["browser-storage-write", ...(stored.fallback ? ["browser-storage-fallback-write"] : [])]
   };
+}
+
+function storageClock(documentRef) {
+  return currentLoadTraceTime(documentRef.defaultView || window);
+}
+
+function elapsedStorageMs(documentRef, startedAt) {
+  return Math.max(0, Number((storageClock(documentRef) - startedAt).toFixed(1)));
 }
 
 function exportMapData(state, documentRef, exportAction = state.runtimeActions?.data?.exportMap) {
@@ -5734,7 +5757,8 @@ function browserStorageSaveMessage(payload) {
   const original = formatStorageBytes(payload.originalBytes);
   const stored = formatStorageBytes(payload.bytes || String(payload.data || "").length);
   const compression = payload.encoding === "gzip-base64" ? `，压缩后 ${stored}` : "";
-  return `地图已保存到浏览器 LocalStorage：原始 ${original}${compression}。下次打开会优先恢复此地图。`;
+  const backend = payload.storageBackend === "indexedDB" ? "IndexedDB 降级存储" : "LocalStorage";
+  return `地图已保存到浏览器 ${backend}：原始 ${original}${compression}。下次打开会优先恢复此地图。`;
 }
 
 function formatStorageBytes(bytes) {
@@ -12210,7 +12234,11 @@ function rollbackCanvasToolStroke(state, kind) {
   }
   const restored = restoreCanvasToolStrokePreview(state.map, kind, stroke);
   if (!restored.restoredGridCells) return false;
-  if (kind === "height") state.editRefreshScheduler?.run(EDIT_REFRESH_PRESETS.HEIGHT_BRUSH_PREVIEW);
+  if (kind === "height") state.editRefreshScheduler?.run({
+    ...EDIT_REFRESH_PRESETS.HEIGHT_BRUSH_PREVIEW,
+    deferTerrainRefresh: false,
+    changedGridCells: [...stroke.originals.keys()]
+  });
   else if (kind === "state") state.editRefreshScheduler?.run(STATE_BRUSH_PREVIEW_EFFECTS);
   else if (kind === "province") state.editRefreshScheduler?.run(PROVINCE_BRUSH_PREVIEW_EFFECTS);
   else if (kind === "biome") {

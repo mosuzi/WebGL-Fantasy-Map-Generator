@@ -124,6 +124,10 @@ assert(/state\.pick = state\.renderer\.pickClientPoint\(event\.clientX, event\.c
 assert(/if \(active\) releasePointer\(state\.renderer\?\.canvas, active\.pointerId\)/.test(appSource), "取消范围涂选时没有释放 pointer capture");
 assert(/changedGridCells: changes\.map\(change => change\.gridCell\)/.test(appSource), "高度预览没有携带局部 cell 列表");
 assert(/updateHeightPanel\(state, \{includeMapSummary: false\}\)/.test(appSource), "连续高度交互仍会逐帧统计整图摘要");
+assert(/deferTerrainRefresh: true/.test(refreshSchedulerSource), "高度预览没有声明延后岸线 / 地形派生刷新");
+assert(/refreshHeightCells\(changedGridCells, \{deferTopology: effects\.deferTerrainRefresh\}\)/.test(refreshSchedulerSource), "高度预览没有把地形派生刷新延后到提交阶段");
+assert(/refreshHeightCells\(gridCells, \{draw = true, deferTopology = false\}/.test(rendererSource), "高度 surface 增量刷新没有提供延后拓扑重建参数");
+assert(/changedGridCells: normalized\.map\(change => change\.gridCell\)/.test(await readFile(new URL("../app/webgl-generator/src/runtime/height-edit-commands.js", import.meta.url), "utf8")), "高度提交命令没有绑定实际变更 cell");
 assert(/refreshHeightCells\(gridCells/.test(rendererSource) && /bufferSubData/.test(rendererSource), "renderer 缺少受影响 surface 颜色增量更新");
 assert(/changedGridCells\.length && typeof state\.renderer\.refreshHeightCells/.test(refreshSchedulerSource), "刷新调度器没有优先使用高度局部 surface 更新");
 

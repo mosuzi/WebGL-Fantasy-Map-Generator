@@ -2112,6 +2112,11 @@ function blobToDataUrl(documentRef, blob) {
 
 async function blobToBase64(documentRef, blob) {
   const view = documentRef.defaultView || window;
+  if (typeof view.FileReader === "function") {
+    const dataUrl = await blobToDataUrl(documentRef, blob);
+    const separator = dataUrl.indexOf(",");
+    return separator < 0 ? dataUrl : dataUrl.slice(separator + 1);
+  }
   const buffer = await blob.arrayBuffer();
   const bytes = new Uint8Array(buffer);
   let binary = "";

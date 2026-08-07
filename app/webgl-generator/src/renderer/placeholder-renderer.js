@@ -333,7 +333,7 @@ export class PlaceholderMapRenderer {
       this.beginViewportPointerInteraction(interaction);
     }, interaction => {
       this.endViewportPointerInteraction(interaction);
-    });
+    }, () => ({width: this.canvasSize.cssWidth, height: this.canvasSize.cssHeight}));
     this.installDisplayResizeObserver();
   }
 
@@ -698,15 +698,15 @@ export class PlaceholderMapRenderer {
     }
   }
 
-  refreshHeightCells(gridCells, {draw = true} = {}) {
+  refreshHeightCells(gridCells, {draw = true, deferTopology = false} = {}) {
     const normalizedCells = [...new Set((gridCells || []).map(Number).filter(cell => Number.isInteger(cell) && cell >= 0))].sort((a, b) => a - b);
     if (!this.map || !normalizedCells.length) return {incremental: false, cells: 0, spans: 0};
     if (this.colorMode !== "height" || !(this.surfaceVertices instanceof Float32Array) || !this.surfaceCellRanges.size) {
       this.refreshCellSurface({draw});
       return {incremental: false, cells: normalizedCells.length, spans: 1};
     }
-    const shoreCells = collectShoreVisualCells(this.shoreVisualPaths);
-    const requiresShoreRebuild = normalizedCells.some(gridCell => {
+    const shoreCells = deferTopology ? null : collectShoreVisualCells(this.shoreVisualPaths);
+    const requiresShoreRebuild = !deferTopology && normalizedCells.some(gridCell => {
       const range = this.surfaceCellRanges.get(gridCell);
       const storedSide = range ? this.surfaceVertices[range.start + 5] : null;
       const currentSide = Number(this.map.grid.cells.h[gridCell]) >= 20 ? 0.25 : 0.75;
@@ -1091,10 +1091,10 @@ export class PlaceholderMapRenderer {
     this.gl.bufferData(this.gl.ARRAY_BUFFER, mesh.line, this.gl.DYNAMIC_DRAW);
   }
 
-  draw({updateDynamicBuffers = true, updateOverlay = true, drawDirtyDynamicBuffers = true, drawCityIcons = true} = {}) {
+  draw({updateDynamicBuffers = true, updateOverlay = true, drawDirtyDynamicBuffers = true, drawCityIcons = true, viewportPreview = false} = {}) {
     if (!this.map || !this.vertexCount) return;
     const startedAt = performance.now();
-    const event = this.beginPerformanceEvent("draw", {updateDynamicBuffers, updateOverlay, drawDirtyDynamicBuffers}, startedAt);
+    const event = this.beginPerformanceEvent("draw", {updateDynamicBuffers, updateOverlay, drawDirtyDynamicBuffers, viewportPreview}, startedAt);
     try {
     if (updateDynamicBuffers && this.dynamicBuffersDirty.routes && this.layerVisibility.routes) this.updateRouteBuffer();
     if (updateDynamicBuffers && this.dynamicBuffersDirty.tradeFlows && this.layerVisibility.tradeFlows) this.updateTradeFlowBuffer();
@@ -1874,7 +1874,7 @@ export class PlaceholderMapRenderer {
     }, startedAt);
     try {
       this.updateOverlayPreviewTransform();
-      this.draw({updateDynamicBuffers: false, updateOverlay: false, drawDirtyDynamicBuffers: false});
+      this.draw({updateDynamicBuffers: false, updateOverlay: false, drawDirtyDynamicBuffers: false, viewportPreview: true});
       this.onViewChange({phase: "preview"});
       this.completePerformanceEvent(event, {
         version: this.viewportCommitVersion,
@@ -1910,8 +1910,8 @@ export class PlaceholderMapRenderer {
     if (!this.overlayInteractionSuspended || !this.stage) return;
     const from = this.overlayCommittedCamera || snapshotViewportCamera(this.camera);
     const to = this.camera;
-    const width = Math.max(1, this.canvas.getBoundingClientRect().width);
-    const height = Math.max(1, this.canvas.getBoundingClientRect().height);
+    const width = Math.max(1, Number(this.canvasSize?.cssWidth) || 1);
+    const height = Math.max(1, Number(this.canvasSize?.cssHeight) || 1);
     const scale = to.scale / Math.max(0.000001, from.scale);
     const translateX = width * 0.5 * (1 - scale + to.offsetX - scale * from.offsetX);
     const translateY = height * 0.5 * (1 - scale - to.offsetY + scale * from.offsetY);
@@ -3754,7 +3754,7 @@ function summarizeObjectHighlight(object) {
   };
 }
 
-function installCanvasInteractions(canvas, camera, onChange, onHover, onSelect, onInteractionStart, onInteractionEnd) {
+function installCanvasInteractions(canvas, camera, onChange, onHover, onSelect, onInteractionStart, onInteractionEnd, getViewportSize = () => canvas.getBoundingClientRect()) {
   let activePointer = null;
   let lastX = 0;
   let lastY = 0;
@@ -3789,7 +3789,7 @@ function installCanvasInteractions(canvas, camera, onChange, onHover, onSelect, 
       return;
     }
     event.preventDefault();
-    const rect = canvas.getBoundingClientRect();
+    const rect = getViewportSize();
     const dx = event.clientX - lastX;
     const dy = event.clientY - lastY;
     if (Math.hypot(event.clientX - startX, event.clientY - startY) > 3) activePointer.moved = true;
@@ -3798,7 +3798,6 @@ function installCanvasInteractions(canvas, camera, onChange, onHover, onSelect, 
     camera.offsetX += (dx / rect.width) * 2;
     camera.offsetY -= (dy / rect.height) * 2;
     onChange({kind: "pan"});
-    onHover(event);
   });
 
   canvas.addEventListener("pointerup", event => {
@@ -3806,7 +3805,10 @@ function installCanvasInteractions(canvas, camera, onChange, onHover, onSelect, 
     const pointer = activePointer;
     activePointer = null;
     if (pointer.mode === "select" && !pointer.moved) onSelect(event);
-    if (pointer.mode === "pan") onInteractionEnd?.({kind: "pan", pointerId: event.pointerId});
+    if (pointer.mode === "pan") {
+      onInteractionEnd?.({kind: "pan", pointerId: event.pointerId});
+      onHover(event);
+    }
     canvas.releasePointerCapture(event.pointerId);
   });
 
