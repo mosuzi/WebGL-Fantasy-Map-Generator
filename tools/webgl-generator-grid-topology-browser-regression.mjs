@@ -42,6 +42,7 @@ try {
       cellsTarget: 10_000,
       heightmapTemplate: "continents"
     }), "generate.newMap");
+    const generationInputBefore = document.getElementById("cells-input")?.value || "";
     const api = window.webglGeneratorApi;
     const before = unwrap(api.grid.summary(), "grid.summary.before");
     const beforeHistory = unwrap(api.history.stats(), "history.before");
@@ -54,11 +55,14 @@ try {
     const memoryAfter = performance.memory?.usedJSHeapSize ?? null;
     const afterMap = unwrap(api.info.mapSummary(), "info.mapSummary.after");
     const afterStats = unwrap(api.info.runtimeStats(), "info.runtimeStats.after");
+    const generationInputAfterRefine = document.getElementById("cells-input")?.value || "";
     const png = unwrap(await api.data.exportPNG({download: false, pixelScale: 1, includeDataUrl: false}), "data.exportPNG");
     const undo = unwrap(api.history.undo(), "history.undo");
     const afterUndo = unwrap(api.grid.summary(), "grid.summary.undo");
+    const generationInputAfterUndo = document.getElementById("cells-input")?.value || "";
     const redo = unwrap(api.history.redo(), "history.redo");
     const afterRedo = unwrap(api.grid.summary(), "grid.summary.redo");
+    const generationInputAfterRedo = document.getElementById("cells-input")?.value || "";
     const memoryAfterRedoImmediate = performance.memory?.usedJSHeapSize ?? null;
     globalThis.gc?.();
     await new Promise(resolve => setTimeout(resolve, 0));
@@ -68,6 +72,12 @@ try {
     const healthErrors = unwrap(api.info.healthEvents({severity: "error", limit: 180}), "info.healthEvents");
     return {
       beforeGeneration: {gridCells: beforeGeneration.gridCells || beforeGeneration.summary?.gridCells || null},
+      generationInputs: {
+        before: generationInputBefore,
+        afterRefine: generationInputAfterRefine,
+        afterUndo: generationInputAfterUndo,
+        afterRedo: generationInputAfterRedo
+      },
       before: {cells: before.cells, fingerprint: before.fingerprint, landCells: before.landCells, waterCells: before.waterCells},
       inspection: {target: inspection.target, binding: inspection.binding},
       execution,
@@ -98,6 +108,10 @@ try {
   report.healthErrors = diagnostics.healthErrors;
   report.pageErrors = pageErrors;
   report.passed = report.before.cells >= 9_000
+    && report.generationInputs.before === "10000"
+    && report.generationInputs.afterRefine === "100000"
+    && report.generationInputs.afterUndo === "10000"
+    && report.generationInputs.afterRedo === "100000"
     && report.after.cells === 100_000
     && report.afterUndo.cells === report.before.cells
     && report.afterUndo.fingerprint === report.before.fingerprint

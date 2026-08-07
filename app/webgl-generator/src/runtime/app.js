@@ -4095,6 +4095,7 @@ async function loadMapIntoRuntime(state, documentRef, map, {loadingMessages = []
 
 function refreshRuntimeAfterMapLoad(state, documentRef, {restorePanels = false} = {}) {
   state.panelManager?.clearReturnParents?.();
+  syncGenerationInputs(documentRef, state.options);
   updateHeightPanel(state);
   updateStatePanel(state);
   updateGovernmentPanel(state);
@@ -10657,6 +10658,7 @@ function regenerateMapAttributeCoreViaApi(state, documentRef, kind, options = {}
 
 function refreshMapMutationRollback(state, documentRef) {
   state.options = state.map.options;
+  syncGenerationInputs(documentRef, state.options);
   state.renderer?.refreshObjectPickingIndex?.();
   const effects = {effects: REGENERATION_TRANSACTION_EFFECTS};
   state.selectionStore.batch(() => {
