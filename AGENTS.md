@@ -31,7 +31,8 @@
   - `docs/README.md`：docs 目录结构和文档放置规则。
   - `graphics-reimplementation-plan.md`：早期图形化重实现分析，已被新复刻计划取代，仅作参考。
   - `docs/plans/gl-reimplementation-acceptance-plan.md`：独立 WebGL 地图生成器复刻可验收计划。
-  - `docs/current-plan.md`：唯一权威任务清单、执行状态和最小验收口径；其它文档不得另建当前待办。
+  - `docs/current-plan.md`：唯一权威任务清单，只保留未完成、进行中或暂缓任务及最小验收口径；其它文档不得另建当前待办。
+  - `docs/task-archives/README.md`：已完成权威任务的时间分卷与编号索引；接手执行默认不读，仅在追溯历史决策时按需检索。
   - `docs/development-log.md`：开发历史与决策记录。
   - `docs/performance/performance-baseline.md`：第 0 里程碑 profiling 工具说明。
   - `docs/milestones/milestone-1-webgl-prototype.md`：第 1 里程碑 WebGL cells 原型说明。
@@ -63,6 +64,8 @@
 - PNG/JPEG 导出最终从新应用 canvas 读取；SVG/数据导出在新项目中按能力重新实现，必要时参考原项目格式。
 
 ## 当前状态
+
+2026-08-07 权威任务第 299 项已完成。`docs/current-plan.md` 已从约 `949 KB` 的历史混合清单收敛为只含未完成任务的执行入口；`233` 个既有标准完成 / 取代条目按 `2026-07-08～07-19`、`07-20～07-25`、`07-26～07-31`、`08-01～08-07` 四个时间卷归档，第 299 项完成记录也进入最后一卷。归档索引支持按日期、编号和关键词检索，生成 / 检查脚本会拒绝重复编号和把未完成任务写入归档。当前只剩第 284、298 项按用户要求暂缓，没有活动权威任务。
 
 2026-08-05 权威任务第 279 项已完成。第 278 项极简几何继续采用小圆环、三角、菱形、双环、五角星、六边形、断口马蹄、方框和帐篷，但正式地图不再生成城镇 HTML/SVG 节点；真实 `10k` 地图的 `839` 个城镇由独立 WebGL2 实例层单次绘制，缩放和平移帧只改 uniform，连续尺寸、阈值平滑显隐、纯白内线与深色硬描边均在 shader 中完成。标签增加视口外预热，道路 / 河流 overscan 按视口和 DPR 自适应；生产 Chrome 平移帧 P95 为 `1.7ms`，新进入标签首帧约 `0.90` opacity 且无滤镜。PNG 城镇开关、选中、图层、拾取、三档视口、构建与四类错误门禁通过；人口、角色、文化、手工视觉、存档、schema、API、地图数据和 `source/` 未改，当前没有活动权威任务。
 
@@ -244,4 +247,4 @@ node .\tools\serve-prototype.mjs --port 5400
 10. `docs/task-notes/README.md`
 11. `docs/task-notes/editor-and-stat-panel-inventory.md`
 
-然后只按 `docs/current-plan.md` 的活动权威任务继续。第 248～277 项已完成，当前没有活动权威任务；不得从历史里程碑、README、FOLLOWUPS、矩阵缺口或专题文档的“下一步”自行创造实施任务。规则事务继续遵守既有分层：`cells.inspectAction` 只负责空间 / 原子输入预检，领域 `inspect + execute` 才负责单事务游戏规则，AI planner 只编排多个已授权规则事务。第 195 项继续复用第 200 项现有 `info.describe`、schema registry 与 `objects.*`；独立 prototype 继续作为视觉基线。
+然后只按 `docs/current-plan.md` 的未完成权威任务继续；已完成任务只在需要追溯时查询 `docs/task-archives/README.md`，不要把归档当作默认接手必读。当前第 284、298 项均按用户要求暂缓，没有活动权威任务；不得从历史归档、里程碑、README、FOLLOWUPS、矩阵缺口或专题文档的“下一步”自行创造实施任务。规则事务继续遵守既有分层：`cells.inspectAction` 只负责空间 / 原子输入预检，领域 `inspect + execute` 才负责单事务游戏规则，AI planner 只编排多个已授权规则事务。第 195 项继续复用第 200 项现有 `info.describe`、schema registry 与 `objects.*`；独立 prototype 继续作为视觉基线。
