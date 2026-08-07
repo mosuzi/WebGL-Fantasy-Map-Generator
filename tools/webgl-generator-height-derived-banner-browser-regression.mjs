@@ -5,7 +5,7 @@ import {createServer} from "node:http";
 import {createRequire} from "node:module";
 import {dirname, extname, join, normalize, resolve} from "node:path";
 import {fileURLToPath} from "node:url";
-import {waitForApiReady} from "./webgl-generator-api-browser-ready.mjs";
+import {partitionApiBrowserDiagnostics, waitForApiReady} from "./webgl-generator-api-browser-ready.mjs";
 
 const rootDir = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const sourceDir = join(rootDir, "source", "Fantasy-Map-Generator");
@@ -110,7 +110,11 @@ try {
   assert.equal(await persistentUpdate.isDisabled(), true, "完成更新后永久入口消失或没有恢复禁用");
   await page.evaluate(systems => window.__webglGeneratorApp.panels.height.update({derivedStaleSystems: systems}), heightChange.derivedStaleSystems);
   await banner.waitFor({state: "visible"});
-  assert.deepEqual(consoleErrors, []);
+  const diagnostics = partitionApiBrowserDiagnostics(
+    await page.evaluate(() => window.__webglGeneratorHealth?.getEvents?.() ? {events: window.__webglGeneratorHealth.getEvents()} : {}),
+    consoleErrors
+  );
+  assert.deepEqual(diagnostics.consoleErrors, []);
   assert.deepEqual(pageErrors, []);
 
   await page.screenshot({path: screenshotPath, fullPage: true});
@@ -122,7 +126,8 @@ try {
     heightChange,
     layout,
     screenshotPath,
-    consoleErrors,
+    consoleErrors: diagnostics.consoleErrors,
+    performanceConsoleErrors: diagnostics.performanceConsoleErrors,
     pageErrors
   }, null, 2));
   await context.close();

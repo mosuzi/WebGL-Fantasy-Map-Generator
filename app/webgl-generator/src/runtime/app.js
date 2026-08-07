@@ -101,6 +101,7 @@ import {
   inspectDiplomacyRuleTransaction
 } from "./diplomacy-edit-commands.js";
 import {applyHeightBrushPreview, createApplyHeightBrushCommand} from "./height-edit-commands.js";
+import {createHeightBrushCommitTrace, finishHeightBrushCommitTrace, measureHeightBrushCommitStage, recordHeightBrushCommitStage} from "./height-brush-performance.js";
 import {getGlobalHeightChanges, getHeightBrushChanges, getHeightLineChanges, getHeightRangeTransformChanges, inspectGlobalHeightChanges, inspectHeightFillTarget, inspectHeightRangeTransform} from "./height-brush.js";
 import {acceptHeightBrushSample} from "./height-brush-cadence.js";
 import {composeHeightCellSelection, createHeightCellSelectionFeather, createHeightCellSelectionSet, createHeightCellSelectionSnapshot, createHeightCursorRadiusSelection, restoreHeightCellSelectionSnapshot, transformHeightCellSelection} from "./height-cell-selection.js";
@@ -487,7 +488,9 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       lastAffected: 0,
       lastHeight: "none",
       lastDelta: "none",
-      lastNotice: ""
+      lastNotice: "",
+      activeCommitTrace: null,
+      lastCommitPerformance: null
     },
     stateEdit: {
       activeStroke: null,
@@ -3997,6 +4000,8 @@ async function loadMapIntoRuntime(state, documentRef, map, {loadingMessages = []
   state.heightEdit.lastHeight = "none";
   state.heightEdit.lastDelta = "none";
   state.heightEdit.lastNotice = "";
+  state.heightEdit.activeCommitTrace = null;
+  state.heightEdit.lastCommitPerformance = null;
   state.stateEdit.activeStroke = null;
   state.stateEdit.addMode = false;
   state.stateEdit.deleteMode = false;
@@ -7344,17 +7349,17 @@ function executeEditCommand(state, documentRef, command, options = {}) {
       if (noopStatus) setFileOperationStatus(documentRef, messageFromOption(noopStatus, command));
       return {executed: false, command, result: null, error: null};
     }
-    const executedCommand = state.editHistory.execute(command, context);
+    const executedCommand = measureHeightBrushCommitStage(options.performanceTrace, "historyExecute", () => state.editHistory.execute(command, context));
     const result = readEditCommandResult(executedCommand);
     const refresh = options.refresh || refreshAfterEdit;
     let highlightsChanged = false;
     state.selectionStore.batch(() => {
       options.preparePanelRefresh?.(state, executedCommand, result);
       highlightsChanged = reconcilePersistentObjectHighlights(state, documentRef, {refreshUi: false}).changed;
-      refresh(state, executedCommand);
+      measureHeightBrushCommitStage(options.performanceTrace, "refreshScheduler", () => refresh(state, executedCommand));
     });
     if (options.refreshPanels !== false) {
-      refreshPanelsForEdit(state, highlightsChanged ? {derived: ["object-panels"]} : executedCommand);
+      measureHeightBrushCommitStage(options.performanceTrace, "refreshPanels", () => refreshPanelsForEdit(state, highlightsChanged ? {derived: ["object-panels"]} : executedCommand));
     }
     if (options.status) setFileOperationStatus(documentRef, messageFromOption(options.status, executedCommand));
     return {executed: true, command: executedCommand, result, error: null};
@@ -13113,10 +13118,20 @@ function bindHeightEditing(canvas, state, documentRef) {
     if (!state.heightEdit.activeStroke || state.heightEdit.activeStroke.pointerId !== event.pointerId) return;
     event.preventDefault();
     event.stopImmediatePropagation();
-    flushScheduledHeightBrush(state, documentRef, event);
-    finishHeightStroke(state, documentRef);
-    releasePointer(canvas, event.pointerId);
-    updateHeightPanel(state);
+    flushScheduledHeightBrush(state, documentRef, event, {draw: false});
+    const commitTrace = finishHeightStroke(state, documentRef);
+    try {
+      releasePointer(canvas, event.pointerId);
+      updateHeightPanel(state);
+    } finally {
+      if (commitTrace) {
+        state.heightEdit.lastCommitPerformance = finishHeightBrushCommitTrace(commitTrace, {
+          changedCells: commitTrace.changedCells,
+          renderer: state.renderer?.getPerformanceEvents?.() || null
+        });
+        state.heightEdit.activeCommitTrace = null;
+      }
+    }
   }, true);
 
   canvas.addEventListener("pointercancel", event => {
@@ -14397,11 +14412,11 @@ function scheduleHeightBrushAtEvent(state, event, documentRef) {
   state.heightEdit.brushFrame = typeof view?.requestAnimationFrame === "function" ? view.requestAnimationFrame(run) : view?.setTimeout?.(run, 0) || 0;
 }
 
-function flushScheduledHeightBrush(state, documentRef, finalPointer = null) {
+function flushScheduledHeightBrush(state, documentRef, finalPointer = null, {draw = true} = {}) {
   const pointer = state.heightEdit.pendingBrushPointer;
   cancelScheduledHeightBrush(state, documentRef);
   const resolvedPointer = finalPointer && state.heightEdit.activeStroke?.pointerId === finalPointer.pointerId ? finalPointer : pointer;
-  if (resolvedPointer && state.heightEdit.activeStroke?.pointerId === resolvedPointer.pointerId) applyHeightBrushAtEvent(state, resolvedPointer, documentRef, {force: true});
+  if (resolvedPointer && state.heightEdit.activeStroke?.pointerId === resolvedPointer.pointerId) applyHeightBrushAtEvent(state, resolvedPointer, documentRef, {force: true, draw});
 }
 
 function cancelScheduledHeightBrush(state, documentRef) {
@@ -14413,7 +14428,7 @@ function cancelScheduledHeightBrush(state, documentRef) {
   state.heightEdit.pendingBrushPointer = null;
 }
 
-function applyHeightBrushAtEvent(state, event, documentRef, {force = false} = {}) {
+function applyHeightBrushAtEvent(state, event, documentRef, {force = false, draw = true} = {}) {
   const brush = state.panels.height.getBrush();
   const stroke = state.heightEdit.activeStroke;
   if (!brush.active || !stroke) return;
@@ -14440,7 +14455,11 @@ function applyHeightBrushAtEvent(state, event, documentRef, {force = false} = {}
   state.heightEdit.lastHeight = summarizeChangedHeights(changes);
   state.heightEdit.lastDelta = summarizeChangedHeightDelta(changes);
   state.heightEdit.lastNotice = stroke.notice || "";
-  state.editRefreshScheduler.run({...EDIT_REFRESH_PRESETS.HEIGHT_BRUSH_PREVIEW, changedGridCells: changes.map(change => change.gridCell)});
+  state.editRefreshScheduler.run({
+    ...EDIT_REFRESH_PRESETS.HEIGHT_BRUSH_PREVIEW,
+    render: draw ? "draw" : "none",
+    changedGridCells: changes.map(change => change.gridCell)
+  });
   updatePickPanel(documentRef, state);
 }
 
@@ -14712,22 +14731,37 @@ function finishHeightStroke(state, documentRef) {
   state.heightEdit.activeStroke = null;
   if (!stroke?.originals?.size) return;
 
-  const changes = [];
-  for (const [gridCell, before] of stroke.originals.entries()) {
-    const after = state.map.grid.cells.h[gridCell];
-    if (before !== after) changes.push({gridCell, before, after});
+  const trace = createHeightBrushCommitTrace({
+    originalCells: stroke.originals.size,
+    pointerId: stroke.pointerId ?? null
+  });
+  state.heightEdit.activeCommitTrace = trace;
+  const changes = measureHeightBrushCommitStage(trace, "collectChanges", () => {
+    const next = [];
+    for (const [gridCell, before] of stroke.originals.entries()) {
+      const after = state.map.grid.cells.h[gridCell];
+      if (before !== after) next.push({gridCell, before, after});
+    }
+    return next;
+  });
+  trace.changedCells = changes.length;
+  const command = measureHeightBrushCommitStage(trace, "createCommand", () => createApplyHeightBrushCommand(changes));
+  if (command.isNoop({map: state.map})) {
+    state.heightEdit.lastCommitPerformance = finishHeightBrushCommitTrace(trace, {changedCells: 0, noop: true});
+    state.heightEdit.activeCommitTrace = null;
+    return trace;
   }
-  const command = createApplyHeightBrushCommand(changes);
-  if (command.isNoop({map: state.map})) return;
   state.heightEdit.lastAffected = changes.length;
   state.heightEdit.lastHeight = summarizeChangedHeights(changes);
   state.heightEdit.lastDelta = summarizeChangedHeightDelta(changes);
   executeEditCommand(state, documentRef, command, {
     context: {map: state.map},
     refresh: refreshAfterEdit,
-    refreshPanels: false
+    refreshPanels: false,
+    performanceTrace: trace
   });
   updateHeightPanel(state, {includeMapSummary: false});
+  return trace;
 }
 
 function finishStateStroke(state, documentRef) {
@@ -14860,6 +14894,7 @@ function provinceChange(cells, originals, gridCell, nextValue) {
 }
 
 function updateHeightPanel(state, {includeMapSummary = true} = {}) {
+  const trace = state.heightEdit.activeCommitTrace;
   const update = {
     lastAffected: state.heightEdit.lastAffected,
     lastHeight: state.heightEdit.lastHeight,
@@ -14877,10 +14912,25 @@ function updateHeightPanel(state, {includeMapSummary = true} = {}) {
     history: state.editHistory.getStats()
   };
   if (includeMapSummary) {
-    update.currentHeightStats = summarizeCurrentHeightStats(state.map);
-    update.currentHeightPreview = buildCurrentHeightPreview(state.map);
+    if (trace) {
+      const statsStartedAt = globalThis.performance?.now?.() ?? Date.now();
+      update.currentHeightStats = summarizeCurrentHeightStats(state.map);
+      recordHeightBrushCommitStage(trace, "heightPanelStats", statsStartedAt, {gridCells: state.map?.grid?.cells?.h?.length || 0});
+      const previewStartedAt = globalThis.performance?.now?.() ?? Date.now();
+      update.currentHeightPreview = buildCurrentHeightPreview(state.map);
+      recordHeightBrushCommitStage(trace, "heightPanelPreview", previewStartedAt, {gridCells: state.map?.grid?.cells?.h?.length || 0});
+    } else {
+      update.currentHeightStats = summarizeCurrentHeightStats(state.map);
+      update.currentHeightPreview = buildCurrentHeightPreview(state.map);
+    }
   }
-  state.panels.height?.update(update);
+  if (trace) {
+    const panelStartedAt = globalThis.performance?.now?.() ?? Date.now();
+    state.panels.height?.update(update);
+    recordHeightBrushCommitStage(trace, includeMapSummary ? "heightPanelDom" : "heightPanelLight", panelStartedAt);
+  } else {
+    state.panels.height?.update(update);
+  }
 }
 
 function heightDerivedStaleSystems(map) {

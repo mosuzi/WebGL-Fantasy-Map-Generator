@@ -1,4 +1,5 @@
 import {summarizeAffectedTargets} from "./edit-command-effects.js";
+import {recordHeightBrushCommitStage} from "./height-brush-performance.js";
 
 const DEFAULT_EDIT_EFFECTS = Object.freeze({
   render: "draw",
@@ -81,7 +82,19 @@ export function createEditRefreshScheduler({state, documentRef, updateRuntimePan
       }
 
       if (effects.derived.includes("cell-colors") && changedGridCells.length && typeof state.renderer.refreshHeightCells === "function") {
-        state.renderer.refreshHeightCells(changedGridCells, {deferTopology: effects.deferTerrainRefresh});
+        const trace = state.heightEdit?.activeCommitTrace;
+        if (trace) {
+          const startedAt = globalThis.performance?.now?.() ?? Date.now();
+          const result = state.renderer.refreshHeightCells(changedGridCells, {deferTopology: effects.deferTerrainRefresh, draw: false});
+          recordHeightBrushCommitStage(trace, "refreshHeightCells", startedAt, result || {});
+          if (effects.render === "draw") {
+            const drawStartedAt = globalThis.performance?.now?.() ?? Date.now();
+            state.renderer.draw();
+            recordHeightBrushCommitStage(trace, "heightBrushDraw", drawStartedAt);
+          }
+        } else {
+          state.renderer.refreshHeightCells(changedGridCells, {deferTopology: effects.deferTerrainRefresh, draw: effects.render === "draw"});
+        }
       } else if (effects.derived.includes("cell-colors") && typeof state.renderer.refreshCellSurface === "function") {
         state.renderer.refreshCellSurface();
       } else if (effects.render === "draw") {
@@ -98,10 +111,24 @@ export function createEditRefreshScheduler({state, documentRef, updateRuntimePan
       }
 
       if (effects.runtimeStats) {
-        updateRuntimePanel(documentRef, state);
+        const trace = state.heightEdit?.activeCommitTrace;
+        if (trace) {
+          const startedAt = globalThis.performance?.now?.() ?? Date.now();
+          updateRuntimePanel(documentRef, state);
+          recordHeightBrushCommitStage(trace, "runtimePanel", startedAt);
+        } else {
+          updateRuntimePanel(documentRef, state);
+        }
       }
       if (effects.pickPanel) {
-        updatePickPanel(documentRef, state);
+        const trace = state.heightEdit?.activeCommitTrace;
+        if (trace) {
+          const startedAt = globalThis.performance?.now?.() ?? Date.now();
+          updatePickPanel(documentRef, state);
+          recordHeightBrushCommitStage(trace, "pickPanel", startedAt);
+        } else {
+          updatePickPanel(documentRef, state);
+        }
       }
 
       return state.lastEditRefresh;

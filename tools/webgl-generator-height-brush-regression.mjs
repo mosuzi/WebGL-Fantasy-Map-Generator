@@ -119,13 +119,13 @@ assert(/<details class="height-player-smoothing height-seafloor-reset">/.test(he
 assert(/\.segmented\.height-player-falloff-mode\s*\{[^}]*gap:\s*10px;[^}]*margin:\s*10px 0;/.test(stylesSource), "普通高度模式按钮与启停按钮之间仍缺少明确留白");
 assert(/\.height-player-tool-row\s*\{[^}]*gap:\s*10px;/.test(stylesSource) && /\.height-player-operation-toolbar\s*\{[^}]*gap:\s*10px;/.test(stylesSource), "普通高度图标按钮组仍过于拥挤");
 assert(/scheduleHeightBrushAtEvent/.test(appSource) && /flushScheduledHeightBrush/.test(appSource), "高度画笔没有按动画帧合并并补刷末次落点");
-assert(/flushScheduledHeightBrush\(state, documentRef, event\)/.test(appSource) && /flushScheduledHeightSelectionPaint\(state, documentRef, event\)/.test(appSource), "高度画笔或范围涂选没有提交 pointerup 的真实末次坐标");
+assert(/flushScheduledHeightBrush\(state, documentRef, event(?:, \{draw: false\})?\)/.test(appSource) && /flushScheduledHeightSelectionPaint\(state, documentRef, event\)/.test(appSource), "高度画笔或范围涂选没有提交 pointerup 的真实末次坐标");
 assert(/state\.pick = state\.renderer\.pickClientPoint\(event\.clientX, event\.clientY\);\s*const point = state\.renderer\.screenToWorld/.test(appSource), "高度画笔拖动时没有同步当前悬停落点");
 assert(/if \(active\) releasePointer\(state\.renderer\?\.canvas, active\.pointerId\)/.test(appSource), "取消范围涂选时没有释放 pointer capture");
 assert(/changedGridCells: changes\.map\(change => change\.gridCell\)/.test(appSource), "高度预览没有携带局部 cell 列表");
 assert(/updateHeightPanel\(state, \{includeMapSummary: false\}\)/.test(appSource), "连续高度交互仍会逐帧统计整图摘要");
 assert(/deferTerrainRefresh: true/.test(refreshSchedulerSource), "高度预览没有声明延后岸线 / 地形派生刷新");
-assert(/refreshHeightCells\(changedGridCells, \{deferTopology: effects\.deferTerrainRefresh\}\)/.test(refreshSchedulerSource), "高度预览没有把地形派生刷新延后到提交阶段");
+assert(/refreshHeightCells\(changedGridCells, \{deferTopology: effects\.deferTerrainRefresh(?:, draw: [^}]+)?\}\)/.test(refreshSchedulerSource), "高度预览没有把地形派生刷新延后到提交阶段");
 assert(/refreshHeightCells\(gridCells, \{draw = true, deferTopology = false\}/.test(rendererSource), "高度 surface 增量刷新没有提供延后拓扑重建参数");
 assert(/changedGridCells: normalized\.map\(change => change\.gridCell\)/.test(await readFile(new URL("../app/webgl-generator/src/runtime/height-edit-commands.js", import.meta.url), "utf8")), "高度提交命令没有绑定实际变更 cell");
 assert(/refreshHeightCells\(gridCells/.test(rendererSource) && /bufferSubData/.test(rendererSource), "renderer 缺少受影响 surface 颜色增量更新");

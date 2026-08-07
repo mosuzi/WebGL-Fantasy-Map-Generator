@@ -125,6 +125,7 @@ async function runStroke(page, start, points, label) {
     touchedCells: during.activeStrokeCells || after.lastAffected,
     drawDelta: after.drawCount - before.drawCount,
     surfaceRefreshDelta: after.surfaceRefreshCount - before.surfaceRefreshCount,
+    commitPerformance: after.commitPerformance,
     heapBefore: before.heap,
     heapAfter: after.heap,
     undo: undo.history || null,
@@ -142,6 +143,7 @@ function readBrushSnapshot() {
     lastAffected: app.heightEdit.lastAffected || 0,
     drawCount: events.draw?.completed || 0,
     surfaceRefreshCount: events.surfaceRefresh?.completed || 0,
+    commitPerformance: app.heightEdit.lastCommitPerformance || null,
     heap: performance.memory?.usedJSHeapSize || null
   };
 }

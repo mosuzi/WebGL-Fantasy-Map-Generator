@@ -6,6 +6,8 @@
 
 ## 专题映射
 
+- 权威任务第 300 项对应 [`task-300-height-brush-commit-performance.md`](./task-300-height-brush-commit-performance.md)：只读隔离测量 100k 高度笔刷抬手提交的分段耗时，先区分面板全图统计、局部 / 拓扑渲染和其它主线程阶段，再实施证据驱动的增量优化；不操作用户当前标签页，不改变地图、派生重算、schema、存档、API 或 `source/`。
+
 - 权威任务第 284 项对应 [`task-284-100k-performance-investigation-and-plan.md`](./task-284-100k-performance-investigation-and-plan.md)：先记录精确用户标签页的存档、100k 高度编辑和 renderer / overlay 证据，再拆分 284-A～284-E；调查与方案已完成，284-A～284-D 的存档、编辑、renderer / overlay / picking、导出与 base64 内存优化已验收，当前进入 284-E。
 
 - 权威任务第 298 项对应 [`grid-topology-refinement-and-controlled-api.md`](./grid-topology-refinement-and-controlled-api.md)，现已完成：冻结受控网格快照、母子映射、派生迁移、事务回滚与 10k → 100k 验收门禁，并以系统 Chrome 完成生产链复验。
