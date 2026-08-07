@@ -40,6 +40,12 @@
 - 反例实测：故意把真实岸线陆地 cell 跨过海平面后，`21` 个 cell 发生水陆侧变化，pointerup 约 `7207ms`；其中 `rebuildCellVisualMesh` 约 `2325ms`、`rebuildShoreVisualCache` 约 `4377ms`、`refreshCellSurface` 约 `468ms`。因此该路径仍是已知完整拓扑热点。
 - 边界：后续若实施，必须把跨侧拓扑刷新做成可观察、可取消且最终视觉正确的局部任务；不得用陈旧 shore geometry 冒充已完成视觉更新。空间索引和 Grid→Pack 映射本轮不因“可能”而改动。
 
+## 301-E：高度编辑作用范围高亮与拾取（待后续实施）
+
+- 新发现：开启高度编辑后，当前作用范围高亮会被取消；用户看不到高度编辑的作用范围，且范围内 cell 无法按预期选中或反馈。
+- 边界：只修复高度编辑模式与作用范围 overlay / picking 的生命周期、显隐和优先级；保留普通悬停、cell picking、高度笔刷预览、选择事务及地图数据语义，不在本子任务中修改高度算法或存档。
+- 最小验收：进入和退出高度编辑、切换作用范围、移动光标、点击范围内 / 外 cell、取消笔刷后，高亮均与当前 scope 和半径一致；10k / 100k、桌面 / 窄视口、console / page / health / WebGL 错误为 0。
+
 ## 最小验收与回滚
 
 - 10k / 100k 相同真实指针操作：停手完整耗时 p50 / p95 / 最大值、`500ms+` 长任务数量、最大输入延迟、最大帧间隙、draw / overlay / surface 次数、heap、checksum、地图数据、撤销 / 重做、console、page、health、WebGL 和真实视觉。

@@ -18,6 +18,7 @@
 - 301-B（已实现，待统一收尾）：为岸线 surface correction / cover 建立 cell → GPU buffer span 索引；同水陆侧变化只更新受影响的颜色 buffer，只有 `storedSide !== currentSide` 才进入完整拓扑刷新。隔离生产 Chrome 的 100k 岸线样本触碰 `58` 个 cells，停手墙钟约 `43.4ms`、提交约 `10.4ms`；10k / 100k 正式回归均断言不进入完整拓扑重建且通过。
 - 301-C（明确边界，未实施）：故意将真实岸线陆地 cell 跨过海平面，`21` 个 cell 发生水陆侧变化时仍会触发约 `7207ms` pointerup，其中 `rebuildCellVisualMesh` 约 `2325ms`、`rebuildShoreVisualCache` 约 `4377ms`。该路径必须另行设计可取消且视觉正确的局部拓扑更新，不在 301-B 中静默使用陈旧几何。
 - 301-D：若首次使用的 `height-cell-spatial-index` 或 `__heightEditorPackCellsByGrid` 构建达到卡顿门槛，单独预热或改为受控增量建立；不得把 100k 全图索引构建塞回 pointerup。
+- 301-E（待后续实施）：修复高度编辑开启后作用范围高亮被取消的问题；进入高度编辑时必须保留或恢复当前作用范围的可见高亮，并保证范围内 cell 仍可拾取、选中和反馈，不改变高度编辑数据或事务语义。
 - 最小验收：当前用户标签页只读核对且测试改动可撤销；隔离 10k / 100k 的真实 pointer 操作记录完整停手 p50 / p95 / 最大值、长任务、输入延迟、帧间隙、heap、draw / overlay / surface 次数、checksum、撤销 / 重做、console、page、health 和 WebGL；普通样本停止后不再出现 `500ms+` 主线程阻塞。
 - 回滚与影响：只回退第 301 项 telemetry / 调度优化；不修改地图数据、schema、存档格式、公开 API、生成算法、派生 stale 语义或 `source/`。
 
