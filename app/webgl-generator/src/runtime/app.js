@@ -100,10 +100,11 @@ import {
   DIPLOMACY_RULE_ACTION,
   inspectDiplomacyRuleTransaction
 } from "./diplomacy-edit-commands.js";
-import {applyHeightBrushPreview, createApplyHeightBrushCommand} from "./height-edit-commands.js";
+import {applyHeightBrushPreview, createApplyHeightBrushCommand, prewarmHeightEditorPackCellsByGrid} from "./height-edit-commands.js";
 import {createHeightBrushCommitTrace, finishHeightBrushCommitTrace, measureHeightBrushCommitStage, recordHeightBrushCommitStage} from "./height-brush-performance.js";
 import {getGlobalHeightChanges, getHeightBrushChanges, getHeightLineChanges, getHeightRangeTransformChanges, inspectGlobalHeightChanges, inspectHeightFillTarget, inspectHeightRangeTransform} from "./height-brush.js";
 import {acceptHeightBrushSample} from "./height-brush-cadence.js";
+import {prewarmHeightCellSpatialIndex} from "./height-cell-spatial-index.js";
 import {composeHeightCellSelection, createHeightCellSelectionFeather, createHeightCellSelectionSet, createHeightCellSelectionSnapshot, createHeightCursorRadiusSelection, restoreHeightCellSelectionSnapshot, transformHeightCellSelection} from "./height-cell-selection.js";
 import {createHeightSelectionSmoothingPlan} from "./height-selection-smoothing.js";
 import {captureClimatePopulation, restoreClimatePopulation} from "./climate-population-preservation.js";
@@ -490,7 +491,8 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       lastDelta: "none",
       lastNotice: "",
       activeCommitTrace: null,
-      lastCommitPerformance: null
+      lastCommitPerformance: null,
+      lastCacheWarmup: null
     },
     stateEdit: {
       activeStroke: null,
@@ -11708,6 +11710,7 @@ function registerCanvasToolModes(state, documentRef, {stopObjectEditing} = {}) {
   register(CANVAS_TOOL_MODE.HEIGHT_BRUSH, "height-panel", {
     onEnter: () => {
       state.panels.height?.setActive(true);
+      prewarmHeightEditorCaches(state);
       activateCanvasToolTheme(state, documentRef, "height");
     },
     onExit: () => {
@@ -12032,6 +12035,22 @@ function registerCanvasToolModes(state, documentRef, {stopObjectEditing} = {}) {
     }
   });
   state.canvasToolModes.assertRegistrationComplete();
+}
+
+function prewarmHeightEditorCaches(state) {
+  if (!state?.map) return null;
+  const startedAt = performance.now();
+  const spatialIndex = prewarmHeightCellSpatialIndex(state.map);
+  const packCellsByGrid = prewarmHeightEditorPackCellsByGrid(state.map);
+  const result = {
+    version: 1,
+    gridCells: state.map.grid?.cells?.h?.length || 0,
+    spatialIndex,
+    packCellsByGrid,
+    totalMs: Math.round((performance.now() - startedAt) * 10) / 10
+  };
+  state.heightEdit.lastCacheWarmup = result;
+  return result;
 }
 
 function registerPoliticalOneShotMode(state, documentRef, register, {modeId, kind, flag, panelId, colorMode, objectKind, stopObjectEditing}) {

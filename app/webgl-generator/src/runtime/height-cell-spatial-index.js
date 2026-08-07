@@ -36,6 +36,17 @@ export function queryHeightCellsInRadius(map, centerPoint, radiusValue) {
   return matches;
 }
 
+export function prewarmHeightCellSpatialIndex(map) {
+  const startedAt = performance.now();
+  const index = getHeightCellSpatialIndex(map);
+  return {
+    ready: Boolean(index),
+    cellCount: index?.cellCount || 0,
+    bucketCount: index?.buckets?.size || 0,
+    ms: roundMs(performance.now() - startedAt)
+  };
+}
+
 function getHeightCellSpatialIndex(map) {
   const grid = map?.grid;
   const cells = grid?.cells;
@@ -120,4 +131,8 @@ function normalizePoint(point) {
   const x = Number(Array.isArray(point) ? point[0] : point?.x);
   const y = Number(Array.isArray(point) ? point[1] : point?.y);
   return Number.isFinite(x) && Number.isFinite(y) ? {x, y} : null;
+}
+
+function roundMs(value) {
+  return Math.round(value * 10) / 10;
 }

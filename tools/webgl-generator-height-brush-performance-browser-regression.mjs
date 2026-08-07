@@ -52,7 +52,7 @@ async function profileMap(browserInstance, requestedCells) {
     await page.waitForFunction(seedValue => window.__webglGeneratorApp?.runtimeOperationSnapshot?.busy === false && window.__webglGeneratorApp?.map?.metadata?.seed === seedValue, seed);
     await page.evaluate(() => window.__webglGeneratorApp.panels.height.open(window.__webglGeneratorApp.editHistory.getStats()));
     await page.locator('.floating-panel[data-panel-id="height-panel"]:not(.hidden)').waitFor({state: "visible"});
-    await page.evaluate(() => window.__webglGeneratorApp.panels.height.setActive(true));
+    await page.evaluate(() => window.__webglGeneratorApp.canvasToolModes.enter("height:brush"));
     const healthStart = healthEvents.length;
     const canvas = page.locator("#map-canvas");
     const box = await canvas.boundingBox();
@@ -76,12 +76,15 @@ async function profileMap(browserInstance, requestedCells) {
       gridCells: window.__webglGeneratorApp.map.grid.cells.i.length,
       checksum: window.__webglGeneratorApp.map.metadata.checksum,
       history: window.__webglGeneratorApp.editHistory.getStats(),
+      cacheWarmup: window.__webglGeneratorApp.heightEdit.lastCacheWarmup,
       renderer: window.__webglGeneratorApp.renderer.getStats(),
       webglError: window.__webglGeneratorApp.renderer.gl?.getError?.() ?? 0
     }));
     assert.equal(consoleErrors.length, 0, consoleErrors.join("\n"));
     assert.equal(pageErrors.length, 0, pageErrors.join("\n"));
     assert.equal(map.webglError, 0, `WebGL error: ${map.webglError}`);
+    assert.equal(map.cacheWarmup?.spatialIndex?.ready, true, "高度空间索引未在进入高度编辑时预热");
+    assert.equal(map.cacheWarmup?.packCellsByGrid?.ready, true, "Grid→Pack 高度映射未在进入高度编辑时预热");
     assert.equal(shoreSamples.every(sample => sample.commitPerformance?.stages?.refreshHeightCells?.incremental === true), true, "岸线高度笔刷不应触发完整拓扑重建");
     assert.ok(Math.max(...shoreSamples.map(sample => sample.wallMs)) < 500, `岸线高度笔刷停手仍超过 500ms：${shoreSamples.map(sample => sample.wallMs).join(", ")}`);
     if (!topologySamples.every(sample => sample.commitPerformance?.stages?.refreshHeightCells?.topology === "local")) {
@@ -96,6 +99,7 @@ async function profileMap(browserInstance, requestedCells) {
       actualGridCells: map.gridCells,
       checksum: map.checksum,
       webglError: map.webglError,
+      cacheWarmup: map.cacheWarmup,
       short: summarizeStrokes(shortSamples),
       long: summarizeStrokes(longSamples),
       shore: summarizeStrokes(shoreSamples),

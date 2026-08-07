@@ -52,6 +52,19 @@ export function applyHeightBrushPreview(map, changes) {
   applyHeights(map, normalizeChanges(changes), "after");
 }
 
+export function prewarmHeightEditorPackCellsByGrid(map) {
+  const startedAt = performance.now();
+  const byGrid = ensurePackCellsByGrid(map);
+  let packCellCount = 0;
+  for (const cells of byGrid?.values?.() || []) packCellCount += cells.length;
+  return {
+    ready: Boolean(byGrid),
+    gridCount: byGrid?.size || 0,
+    packCellCount,
+    ms: roundMs(performance.now() - startedAt)
+  };
+}
+
 function normalizeChanges(changes) {
   const byCell = new Map();
   for (const change of changes || []) {
@@ -90,7 +103,17 @@ function markHeightDependentDerivedStale(map) {
 }
 
 function getPackCellsForGrid(map, gridCell) {
-  if (!map?.pack?.cells?.g || !map?.pack?.cells?.h) return [];
+  return ensurePackCellsByGrid(map)?.get(gridCell) || [];
+}
+
+function clampHeight(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return 0;
+  return Math.max(0, Math.min(100, Math.round(numeric)));
+}
+
+function ensurePackCellsByGrid(map) {
+  if (!map?.pack?.cells?.g || !map?.pack?.cells?.h) return null;
   if (!(map.__heightEditorPackCellsByGrid instanceof Map)) {
     const byGrid = new Map();
     for (let packCell = 0; packCell < map.pack.cells.g.length; packCell++) {
@@ -106,11 +129,9 @@ function getPackCellsForGrid(map, gridCell) {
       enumerable: false
     });
   }
-  return map.__heightEditorPackCellsByGrid.get(gridCell) || [];
+  return map.__heightEditorPackCellsByGrid;
 }
 
-function clampHeight(value) {
-  const numeric = Number(value);
-  if (!Number.isFinite(numeric)) return 0;
-  return Math.max(0, Math.min(100, Math.round(numeric)));
+function roundMs(value) {
+  return Math.round(value * 10) / 10;
 }

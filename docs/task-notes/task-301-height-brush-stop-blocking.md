@@ -48,6 +48,13 @@
 - 边界：只修复高度编辑模式与作用范围 overlay / picking 的生命周期、显隐和优先级；保留普通悬停、cell picking、高度笔刷预览、选择事务及地图数据语义，不在本子任务中修改高度算法或存档。
 - 最小验收：进入和退出高度编辑、切换作用范围、移动光标、点击范围内 / 外 cell、取消笔刷后，高亮均与当前 scope 和半径一致；10k / 100k、桌面 / 窄视口、console / page / health / WebGL 错误为 0。
 
+## 301-D：高度编辑首次索引预热（已完成）
+
+- 目标：把高度空间桶和 Grid→Pack 映射的首次全图扫描从 pointerdown / pointerup 移到进入 `height:brush` 模式的受控阶段，避免首次笔刷把索引构建伪装成停手卡顿。
+- 实施：`height-cell-spatial-index` 暴露受控预热并返回 ready、cellCount、bucketCount、耗时；高度命令模块复用同一 `ensurePackCellsByGrid` 建立并缓存 `__heightEditorPackCellsByGrid`，返回 ready、gridCount、packCellCount、耗时。高度工具模式进入时同步执行一次并记录到 `heightEdit.lastCacheWarmup`，缓存仍为运行时非存档字段。
+- 证据：隔离生产 Chrome 的 10k 预热总耗时约 `5.1ms`，100k 实际 `99846` cells 预热总耗时约 `14.5ms`（空间索引 `9.5ms`、Grid→Pack `4.9ms`）；随后正式 10k / 100k 高度笔刷、跨水陆局部拓扑、撤销 / 重做回归通过。
+- 兼容性与回滚：不改变地图数据、schema、存档、公开 API、历史事务、索引查询结果或 `source/`；只回退进入高度模式时的预热调用和两个诊断返回值即可恢复原惰性建立。
+
 ## 最小验收与回滚
 
 - 10k / 100k 相同真实指针操作：停手完整耗时 p50 / p95 / 最大值、`500ms+` 长任务数量、最大输入延迟、最大帧间隙、draw / overlay / surface 次数、heap、checksum、地图数据、撤销 / 重做、console、page、health、WebGL 和真实视觉。
