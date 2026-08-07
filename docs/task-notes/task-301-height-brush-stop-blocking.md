@@ -42,11 +42,12 @@
 - 验证：隔离生产 Chrome 的 100k 跨水陆样本核心 `refreshHeightCells` 约 `144ms`，pointerup 墙钟约 `192ms`；局部与完整重绘的 path key、path geometry、cell mesh、shore edge 和最终 `readPixels` 均一致（像素差 `0`）。正式 10k / 100k 回归的 console、page、health、WebGL 错误为 `0`，撤销 / 重做通过。
 - 兼容性与回滚：不改变地图数据、height / grid schema、存档、公开 API、历史事务或 `source/`；只回退 301-C 的局部拓扑和 surface patch 路径即可恢复 301-B 的完整拓扑安全回退。
 
-## 301-E：高度编辑作用范围高亮与拾取（待后续实施）
+## 301-E：高度编辑作用范围高亮与拾取（已完成）
 
-- 新发现：开启高度编辑后，当前作用范围高亮会被取消；用户看不到高度编辑的作用范围，且范围内 cell 无法按预期选中或反馈。
-- 边界：只修复高度编辑模式与作用范围 overlay / picking 的生命周期、显隐和优先级；保留普通悬停、cell picking、高度笔刷预览、选择事务及地图数据语义，不在本子任务中修改高度算法或存档。
-- 最小验收：进入和退出高度编辑、切换作用范围、移动光标、点击范围内 / 外 cell、取消笔刷后，高亮均与当前 scope 和半径一致；10k / 100k、桌面 / 窄视口、console / page / health / WebGL 错误为 0。
+- 根因：高度选区的权威状态保存在 `heightEdit.terrainSelection`，但部分画布工具退出路径会清空 renderer 共享的高度选区 GPU 缓冲；重新进入高度编辑时若只切换主题，就会出现状态仍在、画面高亮消失的分离状态。
+- 实施：进入 `height:brush` 时完成缓存预热和主题切换后，读取当前 `terrainSelection.cellIds` 及羽化权重，恢复 renderer 高度选区缓冲并补一帧视觉绘制；没有选区时保持原有空状态。普通悬停、brush cursor、cell picking 和选择事务继续复用原链路。
+- 证据：专项回归在真实进入 `height:brush` 前先清空 renderer 选区缓冲、保留运行时权威选区，再通过实际模式入口进入并断言恢复 `1` 个高亮 cell；10k / 100k 的真实笔刷、岸线、跨水陆局部拓扑、撤销 / 重做均通过，console、page、health、WebGL 错误为 `0`。
+- 兼容性与回滚：不改变地图数据、height / grid schema、存档、公开 API、历史事务或 `source/`；只回退模式进入时的视觉状态恢复 helper 与专项断言即可恢复原显示链路。
 
 ## 301-D：高度编辑首次索引预热（已完成）
 

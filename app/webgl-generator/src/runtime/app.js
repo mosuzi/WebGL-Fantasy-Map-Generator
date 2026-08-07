@@ -11712,6 +11712,7 @@ function registerCanvasToolModes(state, documentRef, {stopObjectEditing} = {}) {
       state.panels.height?.setActive(true);
       prewarmHeightEditorCaches(state);
       activateCanvasToolTheme(state, documentRef, "height");
+      restoreHeightEditorVisualState(state);
     },
     onExit: () => {
       rollbackCanvasToolStroke(state, "height");
@@ -12051,6 +12052,15 @@ function prewarmHeightEditorCaches(state) {
   };
   state.heightEdit.lastCacheWarmup = result;
   return result;
+}
+
+function restoreHeightEditorVisualState(state) {
+  const selection = state?.heightEdit?.terrainSelection;
+  const cellIds = selection?.cellIds;
+  if (!cellIds?.length || typeof state.renderer?.setHeightCellSelection !== "function") return false;
+  state.renderer.setHeightCellSelection(cellIds, {weights: selection.featherWeights, draw: false});
+  state.renderer.draw();
+  return true;
 }
 
 function registerPoliticalOneShotMode(state, documentRef, register, {modeId, kind, flag, panelId, colorMode, objectKind, stopObjectEditing}) {

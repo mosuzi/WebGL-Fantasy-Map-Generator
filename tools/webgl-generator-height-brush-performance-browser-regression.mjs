@@ -52,6 +52,19 @@ async function profileMap(browserInstance, requestedCells) {
     await page.waitForFunction(seedValue => window.__webglGeneratorApp?.runtimeOperationSnapshot?.busy === false && window.__webglGeneratorApp?.map?.metadata?.seed === seedValue, seed);
     await page.evaluate(() => window.__webglGeneratorApp.panels.height.open(window.__webglGeneratorApp.editHistory.getStats()));
     await page.locator('.floating-panel[data-panel-id="height-panel"]:not(.hidden)').waitFor({state: "visible"});
+    await page.evaluate(() => {
+      const app = window.__webglGeneratorApp;
+      const cell = 0;
+      app.heightEdit.terrainSelection = {
+        cellIds: Uint32Array.from([cell]),
+        cellSet: new Set([cell]),
+        featherWeights: null,
+        featherRings: 0,
+        summary: {valid: true, count: 1},
+        useForTools: true
+      };
+      app.renderer.setHeightCellSelection([], {draw: false});
+    });
     await page.evaluate(() => window.__webglGeneratorApp.canvasToolModes.enter("height:brush"));
     const healthStart = healthEvents.length;
     const canvas = page.locator("#map-canvas");
@@ -77,6 +90,7 @@ async function profileMap(browserInstance, requestedCells) {
       checksum: window.__webglGeneratorApp.map.metadata.checksum,
       history: window.__webglGeneratorApp.editHistory.getStats(),
       cacheWarmup: window.__webglGeneratorApp.heightEdit.lastCacheWarmup,
+      heightSelectionCells: window.__webglGeneratorApp.renderer.getStats().heightCellSelection.cells,
       renderer: window.__webglGeneratorApp.renderer.getStats(),
       webglError: window.__webglGeneratorApp.renderer.gl?.getError?.() ?? 0
     }));
@@ -85,6 +99,7 @@ async function profileMap(browserInstance, requestedCells) {
     assert.equal(map.webglError, 0, `WebGL error: ${map.webglError}`);
     assert.equal(map.cacheWarmup?.spatialIndex?.ready, true, "高度空间索引未在进入高度编辑时预热");
     assert.equal(map.cacheWarmup?.packCellsByGrid?.ready, true, "Grid→Pack 高度映射未在进入高度编辑时预热");
+    assert.equal(map.heightSelectionCells, 1, "进入高度编辑后已有地形选区高亮未恢复");
     assert.equal(shoreSamples.every(sample => sample.commitPerformance?.stages?.refreshHeightCells?.incremental === true), true, "岸线高度笔刷不应触发完整拓扑重建");
     assert.ok(Math.max(...shoreSamples.map(sample => sample.wallMs)) < 500, `岸线高度笔刷停手仍超过 500ms：${shoreSamples.map(sample => sample.wallMs).join(", ")}`);
     if (!topologySamples.every(sample => sample.commitPerformance?.stages?.refreshHeightCells?.topology === "local")) {
@@ -99,6 +114,7 @@ async function profileMap(browserInstance, requestedCells) {
       actualGridCells: map.gridCells,
       checksum: map.checksum,
       webglError: map.webglError,
+      heightSelectionCells: map.heightSelectionCells,
       cacheWarmup: map.cacheWarmup,
       short: summarizeStrokes(shortSamples),
       long: summarizeStrokes(longSamples),

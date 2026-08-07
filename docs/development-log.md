@@ -30,7 +30,13 @@
 
 - 进入 `height:brush` 模式时同步预热高度空间索引和 Grid→Pack 映射，后续高度笔刷查询直接复用缓存；预热结果写入运行时 `heightEdit.lastCacheWarmup`，不进入地图存档。
 - 100k 实际 `99846` cells 的预热总耗时约 `14.5ms`，其中空间索引 `9.5ms`、Grid→Pack 映射 `4.9ms`；10k 预热约 `5.1ms`。这笔一次性成本从 pointerup 移出，查询结果和高度命令语义不变。
-- 真实 10k / 100k 浏览器专项回归、跨水陆局部拓扑、撤销 / 重做及 console、page、health、WebGL 错误门禁通过；第 301-E 仍待处理高度编辑作用范围高亮与拾取生命周期。
+- 真实 10k / 100k 浏览器专项回归、跨水陆局部拓扑、撤销 / 重做及 console、page、health、WebGL 错误门禁通过；随后由第 301-E 接续处理高度编辑作用范围高亮与拾取生命周期。
+
+## 2026-08-08：第 301-E 完成高度编辑作用范围高亮与拾取恢复
+
+- 高度编辑的权威作用范围仍由 `heightEdit.terrainSelection` 保存；进入 `height:brush` 时，在主题切换后将当前 cell ids 和羽化权重重新写入 renderer 的高度选区 GPU 缓冲，并补一次视觉绘制，修复“状态存在但高亮被清空”的生命周期断裂。
+- 专项回归故意在真实模式入口前清空 renderer 选区缓冲、保留运行时选区，再通过实际 `canvasToolModes.enter("height:brush")` 验证恢复；10k / 100k 均恢复已有高亮 cell，并保持普通悬停、brush cursor、cell picking、选择事务和撤销 / 重做。
+- 10k / 100k 笔刷、岸线、跨水陆局部拓扑与错误门禁通过；console、page、health、WebGL 错误均为 `0`。本子任务不改变地图数据、schema、存档、公开 API、历史事务或 `source/`，第 301 项进入统一验收。
 
 ## 2026-08-07：启动权威任务第 300 项——高度笔刷提交耗时分段与增量优化
 

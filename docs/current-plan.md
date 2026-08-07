@@ -4,7 +4,7 @@
 
 ## 当前状态
 
-> **执行门禁（2026-08-08）**：权威任务第 301 项进行中，用于纠正第 300 项未覆盖的 100k 高度笔刷“停手后整画布卡顿”问题。第 300 项的提交 trace 从末点补刷之后才开始，不能代表完整 pointerup 到下一帧链；本项已补齐完整生命周期证据，完成同水陆侧岸线的局部颜色刷新，并完成跨水陆拓扑变化的局部 mesh、岸线路径和 surface patch 刷新。第 301-D、301-E 仍按封闭子任务顺序推进；不接管或刷新用户当前 Chrome 标签页，不修改 `source/`、地图 schema 或存档语义。其余既有完成状态见归档索引。
+> **执行门禁（2026-08-08）**：权威任务第 301 项进入统一验收，用于纠正第 300 项未覆盖的 100k 高度笔刷“停手后整画布卡顿”问题。第 300 项的提交 trace 从末点补刷之后才开始，不能代表完整 pointerup 到下一帧链；本项已补齐完整生命周期证据，完成同水陆侧岸线的局部颜色刷新、跨水陆拓扑变化的局部 mesh / 岸线路径 / surface patch 刷新、首次索引预热，以及高度编辑作用范围高亮与拾取恢复。第 301-A～E 子任务均已完成，待统一回归与交付确认；不接管或刷新用户当前 Chrome 标签页，不修改 `source/`、地图 schema 或存档语义。其余既有完成状态见归档索引。
 
 当前 API 基线为：`window.webglGeneratorApi` 覆盖 `18` 个命名空间、`322` 个公开方法和 `179` 个编辑方法，稳定等级为 `314 / 7 / 1`；`322 / 322` 方法可通过 `info.describe` 发现，新增 `grid` 六个受控结构摘要、快照、预检与事务方法；`planner.listRecipes / getRecipe` 只读公开 `10` 个配方和 `43` 个顶层步骤，`objects` 覆盖 `20` 类对象，`cells` 已提供八个读取、定位、扫描与动作预检方法。完整能力矩阵为 `1213` 行、`covered 1139 / excluded 74 / deferred 0 / gap 0`；复合语义矩阵为 `80` 个动作、`70` 个完整事务与 `10` 个玩法配方。
 
@@ -18,7 +18,7 @@
 - 301-B（已完成）：为岸线 surface correction / cover 建立 cell → GPU buffer span 索引；同水陆侧变化只更新受影响的颜色 buffer，只有 `storedSide !== currentSide` 才进入拓扑路径。隔离生产 Chrome 的 100k 岸线样本触碰 `58` 个 cells，停手墙钟约 `43.4ms`、提交约 `10.4ms`；10k / 100k 正式回归均断言不进入完整拓扑重建且通过。
 - 301-C（已完成）：跨水陆变化先按 changed cell 的邻接闭包局部重建 cell mesh；岸线按当前完整 source edge 集合复用未变化路径，只重建 source key 变化的路径，失败或局部闭包超过上限时回退完整重建。surface 顶点 span 长度稳定时局部 `bufferSubData`，不稳定时使用独立 surface patch 覆盖受影响 cells；100k 跨水陆样本核心刷新约 `144ms`、pointerup 墙钟约 `192ms`，局部与完整重绘路径、mesh、岸线边集合和最终像素对照均一致，10k / 100k、撤销 / 重做及四类错误门禁通过。
 - 301-D（已完成）：进入 `height:brush` 模式时一次性预热 `height-cell-spatial-index` 和 `__heightEditorPackCellsByGrid`，记录 cell、bucket、映射规模和耗时；100k 预热约 `14.5ms`，后续 pointerdown / pointerup 不再承担首次全图构建。
-- 301-E（待后续实施）：修复高度编辑开启后作用范围高亮被取消的问题；进入高度编辑时必须保留或恢复当前作用范围的可见高亮，并保证范围内 cell 仍可拾取、选中和反馈，不改变高度编辑数据或事务语义。
+- 301-E（已完成）：修复高度编辑开启后作用范围高亮被取消的问题；进入 `height:brush` 模式并完成主题切换后，按运行时权威的 `heightEdit.terrainSelection` 恢复 renderer 高亮缓冲及一次视觉帧，范围内 cell 继续可拾取、选中和反馈，不改变高度编辑数据或事务语义。隔离 10k / 100k 回归均断言已有选区恢复，且 console、page、health、WebGL 错误为 `0`，撤销 / 重做通过。
 - 最小验收：当前用户标签页只读核对且测试改动可撤销；隔离 10k / 100k 的真实 pointer 操作记录完整停手 p50 / p95 / 最大值、长任务、输入延迟、帧间隙、heap、draw / overlay / surface 次数、checksum、撤销 / 重做、console、page、health 和 WebGL；普通样本停止后不再出现 `500ms+` 主线程阻塞。
 - 回滚与影响：只回退第 301 项 telemetry / 调度优化；不修改地图数据、schema、存档格式、公开 API、生成算法、派生 stale 语义或 `source/`。
 
