@@ -1,5 +1,19 @@
 # 开发历史
 
+## 2026-08-08：启动权威任务第 301 项——纠正高度笔刷停手卡顿调查
+
+- 用户指出第 300 项报告的 `3～4ms` 与真实体感不符：连续涂抹停手后整画布仍会卡 `500～1000ms`。复核确认第 300 项 trace 在 pointerup 的末点补刷之后才启动，漏掉了完整停手链。
+- 当前精确 5410 标签页已通过 Chrome 核对；真实连续长路径触发了新的 `input-delay`、`main-thread-long-task`、`render-frame-gap`，阻塞期间撤销按钮输入也曾等待超时，随后样本已撤销恢复。没有刷新、重生成或覆盖用户地图。
+- 代码审计另发现高度空间索引和 Grid→Pack 映射均为首次使用时惰性构建，可能发生在第 300 项 trace 之外；当前 pointerup 仍在提交阶段执行一次最终 `renderer.draw()`。第 301 项先补完整生命周期 telemetry，再按证据决定是否收敛最终 draw 或预热索引，不在调查阶段扩大为全图派生重建。
+- 隔离生产 100k 页进一步固定到真实岸线 cell 后，`292～314` 个受影响 cell 的 pointerup 实测 `6969～7178ms`；其中 `refreshHeightCells` 为 `6951.7～7161.8ms`，返回 `incremental=false, reason=shore-or-land-water-change`，并观察到 `6968～7177ms` 主线程长任务和同等帧间隙。提交使用 `HEIGHT_SURFACE_ONLY` 未延迟拓扑，`refreshHeightCells` 对任一 shore cell 直接进入 `rebuildCellVisualMesh → rebuildShoreVisualCache → refreshCellSurface`，这正是“停手后整画布卡住”的已证实根因；不是单独 cell 写入或 Map 查找。
+
+## 2026-08-08：第 301 项实施同侧岸线局部刷新
+
+- 收紧 `refreshHeightCells` 的完整拓扑重建条件：默认高度面板同水陆侧的岸线 cell 不再因为命中岸线集合而全图重建，只有实际 `storedSide !== currentSide` 才进入 `rebuildCellVisualMesh → rebuildShoreVisualCache`。
+- 为岸线 surface correction / cover 建立四组 cell → GPU buffer span 索引，按正式 `buildShoreSurfaceDrawPacket` 命令顺序复用既有顶点布局；同侧变化只更新受影响颜色并执行局部 `bufferSubData`，没有改变 grid / pack 高度、schema、存档、API、历史或派生 stale 语义。
+- 隔离生产 100k 真实岸线样本从旧版 pointerup 约 `7.5s` 降至约 `22ms`；正式 10k / 100k 浏览器回归的岸线样本均断言 `incremental=true`、停手小于 `500ms`，console、page、health、WebGL 错误为 `0`，撤销 / 重做通过。
+- 故意跨海平面的反例仍固定为已知边界：`21` 个水陆侧变化 cell 的 pointerup 约 `7207ms`，其中 `rebuildCellVisualMesh` 约 `2325ms`、`rebuildShoreVisualCache` 约 `4377ms`；不在本轮用陈旧几何跳过该安全刷新，后续若实施需单独设计可观察、可取消且视觉正确的局部拓扑任务。
+
 ## 2026-08-07：启动权威任务第 300 项——高度笔刷提交耗时分段与增量优化
 
 - 用户确认继续优化 100k 高度编辑抬手后的卡顿，先增加分段 telemetry 找出真正耗时操作，再按证据实施最小范围优化。

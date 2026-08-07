@@ -58,10 +58,13 @@ async function profileMap(browserInstance, requestedCells) {
     const box = await canvas.boundingBox();
     assert.ok(box?.width > 0 && box?.height > 0, "地图 canvas 没有可用尺寸");
     const center = {x: box.x + box.width * 0.68, y: box.y + box.height * 0.52};
+    const shoreCenter = await page.evaluate(findVisibleShoreCellPoint);
     const shortSamples = [];
     const longSamples = [];
+    const shoreSamples = [];
     for (let index = 0; index < 3; index += 1) shortSamples.push(await runStroke(page, center, [center], "短笔刷"));
     for (let index = 0; index < 3; index += 1) longSamples.push(await runStroke(page, center, Array.from({length: 18}, (_, pointIndex) => ({x: center.x + pointIndex * box.width * 0.012, y: center.y + Math.sin(pointIndex / 3) * box.height * 0.02})), "连续长拖"));
+    for (let index = 0; index < 2; index += 1) shoreSamples.push(await runStroke(page, shoreCenter, [shoreCenter], "岸线短笔刷"));
     const map = await page.evaluate(() => ({
       gridCells: window.__webglGeneratorApp.map.grid.cells.i.length,
       checksum: window.__webglGeneratorApp.map.metadata.checksum,
@@ -72,6 +75,8 @@ async function profileMap(browserInstance, requestedCells) {
     assert.equal(consoleErrors.length, 0, consoleErrors.join("\n"));
     assert.equal(pageErrors.length, 0, pageErrors.join("\n"));
     assert.equal(map.webglError, 0, `WebGL error: ${map.webglError}`);
+    assert.equal(shoreSamples.every(sample => sample.commitPerformance?.stages?.refreshHeightCells?.incremental === true), true, "岸线高度笔刷不应触发完整拓扑重建");
+    assert.ok(Math.max(...shoreSamples.map(sample => sample.wallMs)) < 500, `岸线高度笔刷停手仍超过 500ms：${shoreSamples.map(sample => sample.wallMs).join(", ")}`);
     return {
       requestedCells,
       actualGridCells: map.gridCells,
@@ -79,6 +84,7 @@ async function profileMap(browserInstance, requestedCells) {
       webglError: map.webglError,
       short: summarizeStrokes(shortSamples),
       long: summarizeStrokes(longSamples),
+      shore: summarizeStrokes(shoreSamples),
       historyBeforeUndo: map.history,
       drawEvents: summarizeEvent(map.renderer.performanceEvents?.draw),
       surfaceRefreshEvents: summarizeEvent(map.renderer.performanceEvents?.surfaceRefresh),
@@ -89,6 +95,26 @@ async function profileMap(browserInstance, requestedCells) {
   } finally {
     await context.close();
   }
+}
+
+function findVisibleShoreCellPoint() {
+  const app = window.__webglGeneratorApp;
+  const paths = [...(app.renderer.shoreVisualPaths?.coastline || []), ...(app.renderer.shoreVisualPaths?.lakeShore || [])];
+  const cells = app.map.grid.cells;
+  const points = app.map.grid.points;
+  const rect = app.renderer.canvas.getBoundingClientRect();
+  const shoreSurfaceCells = new Set(Object.values(app.renderer.shoreSurfaceCellRanges || {}).flatMap(byCell => byCell instanceof Map ? [...byCell.keys()] : []));
+  const candidates = shoreSurfaceCells.size ? shoreSurfaceCells : new Set(paths.flatMap(path => [...(path.landCells || [])]));
+  for (const gridCell of candidates) {
+    if (Number(cells.h[gridCell]) < 20) continue;
+    const point = points[cells.p[gridCell]];
+    if (!point) continue;
+    const screen = app.renderer.worldToScreen(point[0], point[1], rect);
+    if (screen.x > rect.width * 0.3 && screen.x < rect.width * 0.8 && screen.y > rect.height * 0.3 && screen.y < rect.height * 0.75) {
+      return {x: rect.x + screen.x, y: rect.y + screen.y, gridCell};
+    }
+  }
+  throw new Error("未找到可视岸线 cell");
 }
 
 async function runStroke(page, start, points, label) {

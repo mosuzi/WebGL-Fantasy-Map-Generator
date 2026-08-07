@@ -23,6 +23,7 @@ import {
 } from "./geometry.js";
 import {
   boundaryLineModeForOptions,
+  buildShoreSurfaceDrawPacket,
   buildShoreSurfaceVertexLayers,
   buildShoreVisualPaths,
   emptyShoreVisualPaths,
@@ -219,6 +220,12 @@ export class PlaceholderMapRenderer {
     this.landCoverVertexCount = 0;
     this.waterCoverVertexCount = 0;
     this.surfaceCellRanges = new Map();
+    this.shoreSurfaceCellRanges = {
+      landCorrections: new Map(),
+      waterCorrections: new Map(),
+      landCovers: new Map(),
+      waterCovers: new Map()
+    };
     this.routeVertexCount = 0;
     this.routeDrawRanges = emptyRouteDrawRanges();
     this.tradeFlowVertexCount = 0;
@@ -435,6 +442,7 @@ export class PlaceholderMapRenderer {
     this.landCoverVertices = surfaceBundle.landCovers;
     this.waterCoverVertices = surfaceBundle.waterCovers;
     this.surfaceCellRanges = buildSurfaceCellRanges(this.colorMode, this.viewOptions, this.cellVisualMesh, vertices.length);
+    this.shoreSurfaceCellRanges = buildShoreSurfaceCellRanges(this.shoreVisualPaths, map);
     this.vertexCount = vertices.length / 6;
     this.landCorrectionVertexCount = surfaceBundle.landCorrections.length / 6;
     this.waterCorrectionVertexCount = surfaceBundle.waterCorrections.length / 6;
@@ -539,6 +547,7 @@ export class PlaceholderMapRenderer {
     this.landCoverVertices = surfaceBundle.landCovers;
     this.waterCoverVertices = surfaceBundle.waterCovers;
     this.surfaceCellRanges = buildSurfaceCellRanges(this.colorMode, this.viewOptions, this.cellVisualMesh, vertices.length);
+    this.shoreSurfaceCellRanges = buildShoreSurfaceCellRanges(this.shoreVisualPaths, map);
     this.vertexCount = vertices.length / 6;
     this.landCorrectionVertexCount = surfaceBundle.landCorrections.length / 6;
     this.waterCorrectionVertexCount = surfaceBundle.waterCorrections.length / 6;
@@ -680,6 +689,7 @@ export class PlaceholderMapRenderer {
       this.landCoverVertices = surfaceBundle.landCovers;
       this.waterCoverVertices = surfaceBundle.waterCovers;
       this.surfaceCellRanges = buildSurfaceCellRanges(this.colorMode, this.viewOptions, this.cellVisualMesh, vertices.length);
+      this.shoreSurfaceCellRanges = buildShoreSurfaceCellRanges(this.shoreVisualPaths, this.map);
       this.vertexCount = vertices.length / 6;
       this.landCorrectionVertexCount = surfaceBundle.landCorrections.length / 6;
       this.waterCorrectionVertexCount = surfaceBundle.waterCorrections.length / 6;
@@ -705,12 +715,11 @@ export class PlaceholderMapRenderer {
       this.refreshCellSurface({draw});
       return {incremental: false, cells: normalizedCells.length, spans: 1};
     }
-    const shoreCells = deferTopology ? null : collectShoreVisualCells(this.shoreVisualPaths);
     const requiresShoreRebuild = !deferTopology && normalizedCells.some(gridCell => {
       const range = this.surfaceCellRanges.get(gridCell);
       const storedSide = range ? this.surfaceVertices[range.start + 5] : null;
       const currentSide = Number(this.map.grid.cells.h[gridCell]) >= 20 ? 0.25 : 0.75;
-      return shoreCells.has(gridCell) || storedSide !== currentSide;
+      return storedSide !== currentSide;
     });
     if (requiresShoreRebuild) {
       this.rebuildCellVisualMesh();
@@ -738,8 +747,9 @@ export class PlaceholderMapRenderer {
     const merged = mergeSurfaceRanges(spans);
     this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.vertexBuffer);
     for (const range of merged) this.gl.bufferSubData(this.gl.ARRAY_BUFFER, range.start * Float32Array.BYTES_PER_ELEMENT, this.surfaceVertices.subarray(range.start, range.end));
+    const shoreSpans = refreshShoreSurfaceCellColors(this, normalizedCells);
     if (draw) this.draw();
-    return {incremental: true, cells: changedCells, spans: merged.length};
+    return {incremental: true, cells: changedCells, spans: merged.length, shoreSpans};
   }
 
   refreshLabels() {
@@ -2806,14 +2816,90 @@ export class PlaceholderMapRenderer {
   }
 }
 
-function collectShoreVisualCells(paths) {
-  const cells = new Set();
-  for (const path of [...(paths?.coastline || []), ...(paths?.lakeShore || [])]) {
-    for (const cell of [...(path.landCells || []), ...(path.waterCells || [])]) {
-      if (Number.isInteger(cell)) cells.add(cell);
+function emptyShoreSurfaceCellRanges() {
+  return {
+    landCorrections: new Map(),
+    waterCorrections: new Map(),
+    landCovers: new Map(),
+    waterCovers: new Map()
+  };
+}
+
+function buildShoreSurfaceCellRanges(paths, map) {
+  if (!map || !paths) return emptyShoreSurfaceCellRanges();
+  const ranges = emptyShoreSurfaceCellRanges();
+  const offsets = {
+    landCorrections: 0,
+    waterCorrections: 0,
+    landCovers: 0,
+    waterCovers: 0
+  };
+  for (const path of [...(paths.coastline || []), ...(paths.lakeShore || [])]) {
+    for (const command of buildShoreSurfaceDrawPacket(path, map).commands || []) {
+      const cell = command.side === "land" ? command.landCell : command.waterCell;
+      const key = command.kind === "correction"
+        ? command.side === "land" ? "landCorrections" : "waterCorrections"
+        : command.side === "land" ? "landCovers" : "waterCovers";
+      const length = (command.positions?.length || 0) / 2 * 6;
+      if (!Number.isInteger(cell) || cell < 0 || !length) continue;
+      const range = {start: offsets[key], end: offsets[key] + length};
+      offsets[key] = range.end;
+      const cellRanges = ranges[key].get(cell) || [];
+      cellRanges.push(range);
+      ranges[key].set(cell, cellRanges);
     }
   }
-  return cells;
+  return ranges;
+}
+
+function refreshShoreSurfaceCellColors(renderer, gridCells) {
+  const ranges = renderer.shoreSurfaceCellRanges;
+  if (!ranges || !renderer.map) return 0;
+  const verticesByKey = {
+    landCorrections: renderer.landCorrectionVertices,
+    waterCorrections: renderer.waterCorrectionVertices,
+    landCovers: renderer.landCoverVertices,
+    waterCovers: renderer.waterCoverVertices
+  };
+  const bufferByKey = {
+    landCorrections: renderer.landCorrectionBuffer,
+    waterCorrections: renderer.waterCorrectionBuffer,
+    landCovers: renderer.landCoverBuffer,
+    waterCovers: renderer.waterCoverBuffer
+  };
+  const spansByKey = {
+    landCorrections: [],
+    waterCorrections: [],
+    landCovers: [],
+    waterCovers: []
+  };
+  for (const gridCell of gridCells) {
+    const color = colorForCell(gridCell, renderer.map, renderer.colorMode, renderer.viewOptions);
+    for (const key of Object.keys(verticesByKey)) {
+      const vertices = verticesByKey[key];
+      const cellRanges = ranges[key]?.get(gridCell) || [];
+      for (const range of cellRanges) {
+        for (let offset = range.start; offset < range.end; offset += 6) {
+          vertices[offset + 2] = color[0];
+          vertices[offset + 3] = color[1];
+          vertices[offset + 4] = color[2];
+        }
+        spansByKey[key].push(range);
+      }
+    }
+  }
+  let uploadedSpans = 0;
+  for (const key of Object.keys(verticesByKey)) {
+    const vertices = verticesByKey[key];
+    const merged = mergeSurfaceRanges(spansByKey[key]);
+    if (!merged.length || !(vertices instanceof Float32Array)) continue;
+    renderer.gl.bindBuffer(renderer.gl.ARRAY_BUFFER, bufferByKey[key]);
+    for (const range of merged) {
+      renderer.gl.bufferSubData(renderer.gl.ARRAY_BUFFER, range.start * Float32Array.BYTES_PER_ELEMENT, vertices.subarray(range.start, range.end));
+      uploadedSpans += 1;
+    }
+  }
+  return uploadedSpans;
 }
 
 function isUndevelopedWorldPoint(map, world) {
