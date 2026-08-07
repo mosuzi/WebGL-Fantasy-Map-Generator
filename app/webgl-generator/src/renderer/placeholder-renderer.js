@@ -4,7 +4,7 @@ import {bindVertexBuffer, createProgram} from "./gl-utils.js";
 import {createRenderContext, worldToNdcPoint, worldToScreenPixel} from "./render-context.js";
 import {colorForCell, isLandCell} from "./color-modes.js";
 import {politicalSurfaceMeshForMode, pushGridCells, pushMeshSurfaceVertices, shouldDrawGridCellUnderPoliticalMesh} from "./cell-surface-layer.js";
-import {buildCellVisualGridVertices, buildCellVisualMesh, emptyCellVisualMesh, summarizeCellVisualMesh} from "./cell-visual-layer.js";
+import {buildCellVisualGridVertices, buildCellVisualMesh, emptyCellVisualMesh, refreshCellVisualMeshCells, summarizeCellVisualMesh} from "./cell-visual-layer.js";
 import {buildSelectionMeshBundle, drawSelectionMeshBatches, emptySelectionDrawRanges, selectionHighlightMode} from "./selection-layer.js";
 import {buildHeightCellSelectionMesh, buildHeightTransformPreviewMesh, emptyHeightCellSelectionStats, emptyHeightTransformPreviewStats} from "./height-transform-preview-layer.js";
 import {pushZoneTextureLayer} from "./zone-layer.js";
@@ -23,6 +23,8 @@ import {
 } from "./geometry.js";
 import {
   boundaryLineModeForOptions,
+  buildShoreLinePathVertices,
+  buildIncrementalShoreVisualPaths,
   buildShoreSurfaceDrawPacket,
   buildShoreSurfaceVertexLayers,
   buildShoreVisualPaths,
@@ -192,6 +194,7 @@ export class PlaceholderMapRenderer {
       surfaceSideMode: this.gl.getUniformLocation(this.program, "u_surfaceSideMode")
     };
     this.vertexBuffer = this.gl.createBuffer();
+    this.surfacePatchBuffer = this.gl.createBuffer();
     this.landCorrectionBuffer = this.gl.createBuffer();
     this.waterCorrectionBuffer = this.gl.createBuffer();
     this.landCoverBuffer = this.gl.createBuffer();
@@ -204,6 +207,7 @@ export class PlaceholderMapRenderer {
     this.heightCellSelectionBuffer = this.gl.createBuffer();
     this.oceanCurrentBuffer = this.gl.createBuffer();
     this.lineBuffer = this.gl.createBuffer();
+    this.shoreLineBuffer = this.gl.createBuffer();
     this.pointBuffer = this.gl.createBuffer();
     this.politicalMeshDebugBuffer = this.gl.createBuffer();
     this.gridCellDiagnosticsBuffer = this.gl.createBuffer();
@@ -211,6 +215,10 @@ export class PlaceholderMapRenderer {
     this.gridCellDiagnosticLineBuffer = this.gl.createBuffer();
     this.vertexCount = 0;
     this.surfaceVertices = new Float32Array();
+    this.surfacePatchVertices = new Float32Array();
+    this.surfacePatchCellRanges = new Map();
+    this.surfacePatchCells = new Set();
+    this.surfacePatchVertexCount = 0;
     this.landCorrectionVertices = new Float32Array();
     this.waterCorrectionVertices = new Float32Array();
     this.landCoverVertices = new Float32Array();
@@ -241,6 +249,9 @@ export class PlaceholderMapRenderer {
     this.heightCellSelectionStats = emptyHeightCellSelectionStats();
     this.oceanCurrentVertexCount = 0;
     this.lineVertexCount = 0;
+    this.shoreLineVertexCount = 0;
+    this.shoreLinePathVertices = new Map();
+    this.shoreLinePathObjectVertices = new WeakMap();
     this.pointVertexCount = 0;
     this.politicalMeshDebugMode = "none";
     this.politicalMeshDebugVertexCount = 0;
@@ -433,10 +444,17 @@ export class PlaceholderMapRenderer {
     const vertices = surfaceBundle.base;
     const lineLayer = profile.stage("line-vertices", "构建线层顶点", () => buildLineVertices(map, this.layerVisibility, this.colorMode, this.shoreVisualPaths, this.stateVisualPaths, this.provinceVisualPaths, this.cellVisualMesh, this.viewOptions));
     const lineVertices = lineLayer.vertices;
+    const shoreLineVertices = lineLayer.shoreVertices;
+    this.shoreLinePathVertices = lineLayer.shoreLinePathVertices;
+    this.shoreLinePathObjectVertices = lineLayer.shoreLinePathObjectVertices;
     const oceanCurrentVertices = lineLayer.oceanCurrentVertices;
     this.oceanCurrentLayerStats = lineLayer.oceanCurrents;
     const pointVertices = profile.stage("point-vertices", "构建点图层顶点", () => buildPointVertices(map, this.layerVisibility));
     this.surfaceVertices = vertices;
+    this.surfacePatchVertices = new Float32Array();
+    this.surfacePatchCellRanges = new Map();
+    this.surfacePatchCells = new Set();
+    this.surfacePatchVertexCount = 0;
     this.landCorrectionVertices = surfaceBundle.landCorrections;
     this.waterCorrectionVertices = surfaceBundle.waterCorrections;
     this.landCoverVertices = surfaceBundle.landCovers;
@@ -465,11 +483,14 @@ export class PlaceholderMapRenderer {
     this.heightCellSelectionStats = emptyHeightCellSelectionStats();
     this.oceanCurrentVertexCount = oceanCurrentVertices.length / 6;
     this.lineVertexCount = lineVertices.length / 6;
+    this.shoreLineVertexCount = shoreLineVertices.length / 6;
     this.pointVertexCount = pointVertices.length / 6;
     profile.stage("gpu-upload", "上传静态 GPU buffer", () => {
       this.recordBufferUpload("load-map-static", () => {
         this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.vertexBuffer);
         this.gl.bufferData(this.gl.ARRAY_BUFFER, vertices, this.gl.STATIC_DRAW);
+        this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.surfacePatchBuffer);
+        this.gl.bufferData(this.gl.ARRAY_BUFFER, new Float32Array(), this.gl.DYNAMIC_DRAW);
         uploadShoreSurfaceBuffers(this.gl, this, surfaceBundle);
         this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.routeBuffer);
         this.gl.bufferData(this.gl.ARRAY_BUFFER, new Float32Array(), this.gl.DYNAMIC_DRAW);
@@ -487,6 +508,8 @@ export class PlaceholderMapRenderer {
         this.gl.bufferData(this.gl.ARRAY_BUFFER, oceanCurrentVertices, this.gl.STATIC_DRAW);
         this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.lineBuffer);
         this.gl.bufferData(this.gl.ARRAY_BUFFER, lineVertices, this.gl.STATIC_DRAW);
+        this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.shoreLineBuffer);
+        this.gl.bufferData(this.gl.ARRAY_BUFFER, shoreLineVertices, this.gl.STATIC_DRAW);
         this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.pointBuffer);
         this.gl.bufferData(this.gl.ARRAY_BUFFER, pointVertices, this.gl.STATIC_DRAW);
         this.updatePoliticalMeshDebugBuffer();
@@ -538,10 +561,17 @@ export class PlaceholderMapRenderer {
     const vertices = surfaceBundle.base;
     const lineLayer = await stage("line-vertices", "构建线层顶点", () => buildLineVertices(map, this.layerVisibility, this.colorMode, this.shoreVisualPaths, this.stateVisualPaths, this.provinceVisualPaths, this.cellVisualMesh, this.viewOptions));
     const lineVertices = lineLayer.vertices;
+    const shoreLineVertices = lineLayer.shoreVertices;
+    this.shoreLinePathVertices = lineLayer.shoreLinePathVertices;
+    this.shoreLinePathObjectVertices = lineLayer.shoreLinePathObjectVertices;
     const oceanCurrentVertices = lineLayer.oceanCurrentVertices;
     this.oceanCurrentLayerStats = lineLayer.oceanCurrents;
     const pointVertices = await stage("point-vertices", "构建点图层顶点", () => buildPointVertices(map, this.layerVisibility));
     this.surfaceVertices = vertices;
+    this.surfacePatchVertices = new Float32Array();
+    this.surfacePatchCellRanges = new Map();
+    this.surfacePatchCells = new Set();
+    this.surfacePatchVertexCount = 0;
     this.landCorrectionVertices = surfaceBundle.landCorrections;
     this.waterCorrectionVertices = surfaceBundle.waterCorrections;
     this.landCoverVertices = surfaceBundle.landCovers;
@@ -570,11 +600,14 @@ export class PlaceholderMapRenderer {
     this.heightCellSelectionStats = emptyHeightCellSelectionStats();
     this.oceanCurrentVertexCount = oceanCurrentVertices.length / 6;
     this.lineVertexCount = lineVertices.length / 6;
+    this.shoreLineVertexCount = shoreLineVertices.length / 6;
     this.pointVertexCount = pointVertices.length / 6;
     await stage("gpu-upload", "上传静态 GPU buffer", () => {
       this.recordBufferUpload("load-map-static", () => {
         this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.vertexBuffer);
         this.gl.bufferData(this.gl.ARRAY_BUFFER, vertices, this.gl.STATIC_DRAW);
+        this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.surfacePatchBuffer);
+        this.gl.bufferData(this.gl.ARRAY_BUFFER, new Float32Array(), this.gl.DYNAMIC_DRAW);
         uploadShoreSurfaceBuffers(this.gl, this, surfaceBundle);
         this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.routeBuffer);
         this.gl.bufferData(this.gl.ARRAY_BUFFER, new Float32Array(), this.gl.DYNAMIC_DRAW);
@@ -592,6 +625,8 @@ export class PlaceholderMapRenderer {
         this.gl.bufferData(this.gl.ARRAY_BUFFER, oceanCurrentVertices, this.gl.STATIC_DRAW);
         this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.lineBuffer);
         this.gl.bufferData(this.gl.ARRAY_BUFFER, lineVertices, this.gl.STATIC_DRAW);
+        this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.shoreLineBuffer);
+        this.gl.bufferData(this.gl.ARRAY_BUFFER, shoreLineVertices, this.gl.STATIC_DRAW);
         this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.pointBuffer);
         this.gl.bufferData(this.gl.ARRAY_BUFFER, pointVertices, this.gl.STATIC_DRAW);
         this.updatePoliticalMeshDebugBuffer();
@@ -684,6 +719,10 @@ export class PlaceholderMapRenderer {
         : buildPlaceholderSurfaceBundle(this.map, this.colorMode, this.viewOptions, this.shoreVisualPaths, this.stateVisualPaths, this.provinceVisualPaths, this.politicalVisualMeshes, this.cellVisualMesh);
       const vertices = surfaceBundle.base;
       this.surfaceVertices = vertices;
+      this.surfacePatchVertices = new Float32Array();
+      this.surfacePatchCellRanges = new Map();
+      this.surfacePatchCells = new Set();
+      this.surfacePatchVertexCount = 0;
       this.landCorrectionVertices = surfaceBundle.landCorrections;
       this.waterCorrectionVertices = surfaceBundle.waterCorrections;
       this.landCoverVertices = surfaceBundle.landCovers;
@@ -698,10 +737,125 @@ export class PlaceholderMapRenderer {
       const upload = this.recordBufferUpload("surface-refresh", () => {
         this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.vertexBuffer);
         this.gl.bufferData(this.gl.ARRAY_BUFFER, vertices, this.gl.STATIC_DRAW);
+        this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.surfacePatchBuffer);
+        this.gl.bufferData(this.gl.ARRAY_BUFFER, new Float32Array(), this.gl.DYNAMIC_DRAW);
         uploadShoreSurfaceBuffers(this.gl, this, surfaceBundle);
       }, {bufferGroup: "surface"});
       if (draw) this.draw();
       this.completePerformanceEvent(event, {uploadMs: upload.ms, vertexCount: this.vertexCount, geometryReused}, performance.now());
+    } catch (error) {
+      this.failPerformanceEvent(event, error, {}, performance.now());
+      throw error;
+    }
+  }
+
+  refreshCellSurfaceCells(gridCells, {draw = true} = {}) {
+    if (!this.map || !(this.surfaceVertices instanceof Float32Array) || !this.surfaceCellRanges.size || !this.cellVisualMesh?.cells?.length) return null;
+    const normalizedCells = [...new Set((gridCells || []).map(Number).filter(cell => Number.isInteger(cell) && cell >= 0))];
+    const cellMeshes = new Map(this.cellVisualMesh.cells.map(cellMesh => [cellMesh.cell, cellMesh]));
+    const updates = [];
+    for (const gridCell of normalizedCells) {
+      const cellMesh = cellMeshes.get(gridCell);
+      const range = this.surfaceCellRanges.get(gridCell);
+      if (!cellMesh || !range) return null;
+      const span = buildCellVisualGridVertices(createRenderContext(this.map), this.colorMode, this.viewOptions, {cells: [cellMesh]});
+      if (span.length !== range.end - range.start) return null;
+      for (let offset = 0; offset < span.length; offset += 6) {
+        span[offset + 5] = Number(this.map.grid.cells.h[gridCell]) >= 20 ? 0.25 : 0.75;
+      }
+      updates.push({range, span});
+    }
+    if (!updates.length) return null;
+    const startedAt = performance.now();
+    const event = this.beginPerformanceEvent("surfaceRefresh", {drawRequested: draw, colorMode: this.colorMode, incremental: true}, startedAt);
+    try {
+      const spans = [];
+      for (const {range, span} of updates) {
+        this.surfaceVertices.set(span, range.start);
+        spans.push(range);
+      }
+
+      const merged = mergeSurfaceRanges(spans);
+      const upload = this.recordBufferUpload("surface-refresh-incremental", () => {
+        this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.vertexBuffer);
+        for (const range of merged) {
+          this.gl.bufferSubData(this.gl.ARRAY_BUFFER, range.start * Float32Array.BYTES_PER_ELEMENT, this.surfaceVertices.subarray(range.start, range.end));
+        }
+        const surfaceBundle = shouldDrawShoreVisualBands(this.colorMode)
+          ? buildShoreSurfaceVertexLayers(createRenderContext(this.map), this.colorMode, this.viewOptions, this.shoreVisualPaths)
+          : emptyShoreSurfaceVertexLayers();
+        this.landCorrectionVertices = surfaceBundle.landCorrections;
+        this.waterCorrectionVertices = surfaceBundle.waterCorrections;
+        this.landCoverVertices = surfaceBundle.landCovers;
+        this.waterCoverVertices = surfaceBundle.waterCovers;
+        this.landCorrectionVertexCount = surfaceBundle.landCorrections.length / 6;
+        this.waterCorrectionVertexCount = surfaceBundle.waterCorrections.length / 6;
+        this.landCoverVertexCount = surfaceBundle.landCovers.length / 6;
+        this.waterCoverVertexCount = surfaceBundle.waterCovers.length / 6;
+        this.shoreSurfaceCellRanges = buildShoreSurfaceCellRanges(this.shoreVisualPaths, this.map);
+        uploadShoreSurfaceBuffers(this.gl, this, surfaceBundle);
+      }, {bufferGroup: "surface"});
+      if (draw) this.draw();
+      this.completePerformanceEvent(event, {
+        uploadMs: upload.ms,
+        vertexCount: this.vertexCount,
+        geometryReused: true,
+        incremental: true,
+        spans: merged.length,
+        cells: spans.length
+      }, performance.now());
+      return {cells: spans.length, spans: merged.length, uploadMs: upload.ms};
+    } catch (error) {
+      this.failPerformanceEvent(event, error, {}, performance.now());
+      throw error;
+    }
+  }
+
+  refreshCellSurfacePatchCells(gridCells, {draw = true} = {}) {
+    if (!this.map || !this.cellVisualMesh?.cells?.length) return null;
+    // 拓扑变化先用独立 patch 覆盖受影响 cell，待下一次完整 surface 刷新再回收旧 correction 几何。
+    const normalizedCells = new Set((gridCells || []).map(Number).filter(cell => Number.isInteger(cell) && cell >= 0));
+    const values = [];
+    const ranges = new Map();
+    const context = createRenderContext(this.map);
+    let offset = 0;
+    for (const cellMesh of this.cellVisualMesh.cells) {
+      if (!normalizedCells.has(cellMesh.cell)) continue;
+      const span = buildCellVisualGridVertices(context, this.colorMode, this.viewOptions, {cells: [cellMesh]});
+      for (let index = 0; index < span.length; index += 6) span[index + 5] = Number(this.map.grid.cells.h[cellMesh.cell]) >= 20 ? 0.25 : 0.75;
+      values.push(span);
+      ranges.set(cellMesh.cell, {start: offset, end: offset + span.length});
+      offset += span.length;
+    }
+    if (!values.length) return null;
+    const startedAt = performance.now();
+    const event = this.beginPerformanceEvent("surfaceRefresh", {drawRequested: draw, colorMode: this.colorMode, incremental: true, patch: true}, startedAt);
+    try {
+      const vertices = new Float32Array(offset);
+      let writeOffset = 0;
+      for (const span of values) {
+        vertices.set(span, writeOffset);
+        writeOffset += span.length;
+      }
+      const surfaceBundle = {
+        landCorrections: this.landCorrectionVertices,
+        waterCorrections: this.waterCorrectionVertices,
+        landCovers: this.landCoverVertices,
+        waterCovers: this.waterCoverVertices
+      };
+      this.surfacePatchVertices = vertices;
+      this.surfacePatchCellRanges = ranges;
+      this.surfacePatchCells = new Set(ranges.keys());
+      this.surfacePatchVertexCount = vertices.length / 6;
+      if (shouldDrawShoreVisualBands(this.colorMode)) refreshShoreSurfaceCellColors(this, normalizedCells);
+      const upload = this.recordBufferUpload("surface-refresh-patch", () => {
+        this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.surfacePatchBuffer);
+        this.gl.bufferData(this.gl.ARRAY_BUFFER, vertices, this.gl.DYNAMIC_DRAW);
+        uploadShoreSurfaceBuffers(this.gl, this, surfaceBundle);
+      }, {bufferGroup: "surface"});
+      if (draw) this.draw();
+      this.completePerformanceEvent(event, {uploadMs: upload.ms, vertexCount: this.vertexCount, patchVertexCount: vertices.length / 6, geometryReused: false, incremental: true, patch: true}, performance.now());
+      return {cells: ranges.size, patchVertexCount: vertices.length / 6, uploadMs: upload.ms};
     } catch (error) {
       this.failPerformanceEvent(event, error, {}, performance.now());
       throw error;
@@ -722,6 +876,33 @@ export class PlaceholderMapRenderer {
       return storedSide !== currentSide;
     });
     if (requiresShoreRebuild) {
+      const localMesh = refreshCellVisualMeshCells(this.map, this.cellVisualMesh, normalizedCells);
+      const localShore = buildIncrementalShoreVisualPaths(this.map, this.shoreVisualPaths, normalizedCells);
+      if (localMesh && localShore) {
+        this.cellVisualMesh = localMesh.mesh;
+        this.shoreVisualPaths = localShore;
+        const localSurface = this.refreshCellSurfaceCells(localMesh.changedCells, {draw: false});
+        const localPatch = localSurface ? null : this.refreshCellSurfacePatchCells(localMesh.changedCells, {draw: false});
+        if (!localSurface && !localPatch) {
+          // 局部 span 长度不稳定时必须回退完整重建，不能以旧几何冒充已完成视觉更新。
+          this.surfaceVertices = null;
+          this.surfaceCellRanges = new Map();
+          this.refreshCellSurface({draw: false});
+        }
+        this.refreshShoreLineLayer({draw: false});
+        if (draw) this.draw();
+        return {
+          incremental: true,
+          cells: normalizedCells.length,
+          spans: 1,
+          topology: "local",
+          localMeshMs: localMesh.buildMs,
+          localShoreMs: localShore.topology?.buildMs || 0,
+          localSurfaceMs: localSurface?.cells || localPatch?.cells ? this.performanceEvents.surfaceRefresh?.last?.ms || 0 : null,
+          surfaceGeometryReused: Boolean(localSurface),
+          surfacePatch: Boolean(localPatch)
+        };
+      }
       this.rebuildCellVisualMesh();
       this.rebuildShoreVisualCache();
       this.refreshCellSurface({draw});
@@ -747,6 +928,8 @@ export class PlaceholderMapRenderer {
     const merged = mergeSurfaceRanges(spans);
     this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.vertexBuffer);
     for (const range of merged) this.gl.bufferSubData(this.gl.ARRAY_BUFFER, range.start * Float32Array.BYTES_PER_ELEMENT, this.surfaceVertices.subarray(range.start, range.end));
+    const patchCells = normalizedCells.filter(gridCell => this.surfacePatchCells.has(gridCell));
+    if (patchCells.length) refreshSurfacePatchCellColors(this, patchCells);
     const shoreSpans = refreshShoreSurfaceCellColors(this, normalizedCells);
     if (draw) this.draw();
     return {incremental: true, cells: changedCells, spans: merged.length, shoreSpans};
@@ -829,18 +1012,46 @@ export class PlaceholderMapRenderer {
     try {
       const lineLayer = buildLineVertices(this.map, this.layerVisibility, this.colorMode, this.shoreVisualPaths, this.stateVisualPaths, this.provinceVisualPaths, this.cellVisualMesh, this.viewOptions, this.oceanCurrentHighlights);
       const lineVertices = lineLayer.vertices;
+      const shoreLineVertices = lineLayer.shoreVertices;
+      this.shoreLinePathVertices = lineLayer.shoreLinePathVertices;
+      this.shoreLinePathObjectVertices = lineLayer.shoreLinePathObjectVertices;
       const oceanCurrentVertices = lineLayer.oceanCurrentVertices;
       this.oceanCurrentLayerStats = lineLayer.oceanCurrents;
       this.oceanCurrentVertexCount = oceanCurrentVertices.length / 6;
       this.lineVertexCount = lineVertices.length / 6;
+      this.shoreLineVertexCount = shoreLineVertices.length / 6;
       const upload = this.recordBufferUpload("line-refresh", () => {
         this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.oceanCurrentBuffer);
         this.gl.bufferData(this.gl.ARRAY_BUFFER, oceanCurrentVertices, this.gl.STATIC_DRAW);
         this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.lineBuffer);
         this.gl.bufferData(this.gl.ARRAY_BUFFER, lineVertices, this.gl.STATIC_DRAW);
+        this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.shoreLineBuffer);
+        this.gl.bufferData(this.gl.ARRAY_BUFFER, shoreLineVertices, this.gl.STATIC_DRAW);
       }, {bufferGroup: "line-and-ocean-current"});
       if (draw) this.draw();
       this.completePerformanceEvent(event, {uploadMs: upload.ms, lineVertexCount: this.lineVertexCount, oceanCurrentVertexCount: this.oceanCurrentVertexCount}, performance.now());
+    } catch (error) {
+      this.failPerformanceEvent(event, error, {}, performance.now());
+      throw error;
+    }
+  }
+
+  refreshShoreLineLayer({draw = true} = {}) {
+    if (!this.map) return;
+    const startedAt = performance.now();
+    const event = this.beginPerformanceEvent("shoreLineRefresh", {drawRequested: draw}, startedAt);
+    try {
+      const shoreLineLayer = buildShoreLineVerticesCached(this.map, this.layerVisibility, this.colorMode, this.shoreVisualPaths, this.cellVisualMesh, this.viewOptions, this.shoreLinePathVertices, this.shoreLinePathObjectVertices);
+      const shoreLineVertices = shoreLineLayer.vertices;
+      this.shoreLinePathVertices = shoreLineLayer.pathVertices;
+      this.shoreLinePathObjectVertices = shoreLineLayer.pathObjectVertices;
+      this.shoreLineVertexCount = shoreLineVertices.length / 6;
+      const upload = this.recordBufferUpload("shore-line-refresh", () => {
+        this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.shoreLineBuffer);
+        this.gl.bufferData(this.gl.ARRAY_BUFFER, shoreLineVertices, this.gl.STATIC_DRAW);
+      }, {bufferGroup: "shore-line"});
+      if (draw) this.draw();
+      this.completePerformanceEvent(event, {uploadMs: upload.ms, shoreLineVertexCount: this.shoreLineVertexCount, rebuiltPaths: shoreLineLayer.rebuiltPaths}, performance.now());
     } catch (error) {
       this.failPerformanceEvent(event, error, {}, performance.now());
       throw error;
@@ -1124,6 +1335,7 @@ export class PlaceholderMapRenderer {
     gl.uniform2f(this.locations.offset, this.camera.offsetX, this.camera.offsetY);
     gl.enable(gl.DEPTH_TEST);
     drawSurfaceDepthBatch(gl, this, this.vertexBuffer, this.vertexCount, gl.ALWAYS);
+    drawSurfaceDepthBatch(gl, this, this.surfacePatchBuffer, this.surfacePatchVertexCount, gl.ALWAYS);
     drawSurfaceDepthBatch(gl, this, this.landCorrectionBuffer, this.landCorrectionVertexCount, gl.LESS);
     drawSurfaceDepthBatch(gl, this, this.waterCorrectionBuffer, this.waterCorrectionVertexCount, gl.GREATER);
     drawSurfaceDepthBatch(gl, this, this.landCoverBuffer, this.landCoverVertexCount, gl.LESS);
@@ -1198,6 +1410,10 @@ export class PlaceholderMapRenderer {
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
     gl.drawArrays(gl.TRIANGLES, 0, this.lineVertexCount);
     if (this.lineVertexCount > 0) layerOrder.push("lines");
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.shoreLineBuffer);
+    bindVertexBuffer(gl, this.locations);
+    gl.drawArrays(gl.TRIANGLES, 0, this.shoreLineVertexCount);
+    if (this.shoreLineVertexCount > 0 && this.lineVertexCount === 0) layerOrder.push("lines");
     gl.disable(gl.BLEND);
     const riverPreviewTransform = viewportBufferTransform(this.riverBufferCamera, this.camera);
     gl.bindBuffer(gl.ARRAY_BUFFER, this.riverBuffer);
@@ -2902,6 +3118,31 @@ function refreshShoreSurfaceCellColors(renderer, gridCells) {
   return uploadedSpans;
 }
 
+function refreshSurfacePatchCellColors(renderer, gridCells) {
+  if (!(renderer.surfacePatchVertices instanceof Float32Array) || !renderer.surfacePatchCellRanges.size) return 0;
+  const cells = new Set((gridCells || []).map(Number));
+  let changed = 0;
+  for (const gridCell of cells) {
+    const range = renderer.surfacePatchCellRanges.get(gridCell);
+    if (!range) continue;
+    const color = colorForCell(gridCell, renderer.map, renderer.colorMode, renderer.viewOptions);
+    const side = Number(renderer.map.grid.cells.h[gridCell]) >= 20 ? 0.25 : 0.75;
+    for (let offset = range.start; offset < range.end; offset += 6) {
+      renderer.surfacePatchVertices[offset + 2] = color[0];
+      renderer.surfacePatchVertices[offset + 3] = color[1];
+      renderer.surfacePatchVertices[offset + 4] = color[2];
+      renderer.surfacePatchVertices[offset + 5] = side;
+    }
+    changed++;
+  }
+  if (!changed) return 0;
+  renderer.recordBufferUpload("surface-patch-color", () => {
+    renderer.gl.bindBuffer(renderer.gl.ARRAY_BUFFER, renderer.surfacePatchBuffer);
+    renderer.gl.bufferData(renderer.gl.ARRAY_BUFFER, renderer.surfacePatchVertices, renderer.gl.DYNAMIC_DRAW);
+  }, {bufferGroup: "surface"});
+  return changed;
+}
+
 function isUndevelopedWorldPoint(map, world) {
   const width = Number(map?.metadata?.graphWidth) || 0;
   const height = Number(map?.metadata?.graphHeight) || 0;
@@ -3990,6 +4231,7 @@ function buildPlaceholderSurfaceBundle(map, colorMode, viewOptions, shoreVisualP
 
 function canReuseCellVisualSurfaceGeometry(renderer) {
   if (renderer.viewOptions?.smoothCellBorders === false || !renderer.cellVisualMesh?.cells?.length) return false;
+  if (renderer.surfacePatchCells?.size) return false;
   if (!(renderer.surfaceVertices instanceof Float32Array) || !renderer.surfaceVertices.length) return false;
   if (!(renderer.surfaceCellRanges instanceof Map) || renderer.surfaceCellRanges.size !== renderer.cellVisualMesh.cells.length) return false;
   const lastCell = renderer.cellVisualMesh.cells.at(-1);
@@ -4105,13 +4347,58 @@ function buildLineVertices(map, visibility = {}, colorMode = "height", shoreVisu
   const provincePaths = provinceVisualPaths || buildProvinceVisualPaths(map);
   const themeLines = viewOptions.visualTheme?.lines || {};
   pushMapEdgeFade(vertices, context, map, viewOptions.visualTheme);
-  pushShoreLineLayers(vertices, context, visibility, cellVisualMesh, viewOptions, shoreVisualPaths);
+  const shoreLineLayer = buildShoreLineVerticesCached(map, visibility, colorMode, shoreVisualPaths, cellVisualMesh, viewOptions);
   pushZoneTextureLayer(vertices, context, map, visibility);
   const oceanCurrents = pushOceanCurrentLayer(oceanCurrentVertices, context, map, visibility, oceanCurrentHighlights);
   if (visibility.provinceBorders !== false) pushPoliticalBoundaryStrokes(vertices, provincePaths, context, themeLines.provinceBorder || PROVINCE_VISUAL_STYLE.borderStroke, PROVINCE_VISUAL_STYLE.borderWidthWorld, PROVINCE_VISUAL_STYLE.borderDashWorld);
   if (visibility.stateBorders !== false) pushPoliticalBoundaryStrokes(vertices, statePaths, context, themeLines.stateBorder || STATE_VISUAL_STYLE.borderStroke, STATE_VISUAL_STYLE.borderWidthWorld);
   if (visibility.warFronts !== false) pushMilitaryFrontLayer(vertices, context, map);
-  return {vertices: new Float32Array(vertices), oceanCurrentVertices: new Float32Array(oceanCurrentVertices), oceanCurrents};
+  return {vertices: new Float32Array(vertices), shoreVertices: shoreLineLayer.vertices, shoreLinePathVertices: shoreLineLayer.pathVertices, oceanCurrentVertices: new Float32Array(oceanCurrentVertices), oceanCurrents};
+}
+
+function buildShoreLineVerticesCached(map, visibility, colorMode, shoreVisualPaths, cellVisualMesh, viewOptions, previousPathVertices = null, previousPathObjectVertices = null) {
+  if (!(viewOptions.smoothCellBorders !== false && shoreVisualPaths?.topology)) {
+    const vertices = [];
+    pushShoreLineLayers(vertices, createRenderContext(map), visibility, cellVisualMesh, viewOptions, shoreVisualPaths);
+    return {vertices: new Float32Array(vertices), pathVertices: new Map(), pathObjectVertices: new WeakMap(), rebuiltPaths: 0};
+  }
+  const pathVertices = new Map();
+  const pathObjectVertices = new WeakMap();
+  const pathVertexArrays = [];
+  let vertexLength = 0;
+  let rebuiltPaths = 0;
+  for (const [featureType, enabled, paths] of [
+    ["coastline", visibility.coastline !== false, shoreVisualPaths.coastline],
+    ["lakeShore", visibility.lakeShore !== false, shoreVisualPaths.lakeShore]
+  ]) {
+    if (!enabled) continue;
+    for (const path of paths || []) {
+      const key = shoreLinePathKey(featureType, path);
+      const cachedPathVertexArray = previousPathObjectVertices?.get(path) || previousPathVertices?.get(key);
+      const pathVertexArray = cachedPathVertexArray || buildShoreLinePathVertices(map, path, featureType, viewOptions);
+      if (!cachedPathVertexArray) rebuiltPaths++;
+      pathVertices.set(key, pathVertexArray);
+      pathObjectVertices.set(path, pathVertexArray);
+      pathVertexArrays.push(pathVertexArray);
+      vertexLength += pathVertexArray.length;
+    }
+  }
+  const vertices = new Float32Array(vertexLength);
+  let offset = 0;
+  for (const pathVertexArray of pathVertexArrays) {
+    vertices.set(pathVertexArray, offset);
+    offset += pathVertexArray.length;
+  }
+  return {vertices, pathVertices, pathObjectVertices, rebuiltPaths};
+}
+
+function shoreLinePathKey(featureType, path) {
+  const edges = (path?.sourceEdges || []).map(edge => {
+    const a = edge.a?.join(",") || "";
+    const b = edge.b?.join(",") || "";
+    return `${edge.landCell}:${edge.waterCell}:${a < b ? `${a}:${b}` : `${b}:${a}`}`;
+  }).sort().join("|");
+  return `${featureType}:${edges || (path?.points || []).map(point => point.join(",")).join("|")}`;
 }
 
 function pushMapEdgeFade(vertices, context, map, visualTheme) {
@@ -5032,6 +5319,7 @@ function createRendererPerformanceEvents() {
     "selectionMesh",
     "surfaceRefresh",
     "lineRefresh",
+    "shoreLineRefresh",
     "pointRefresh",
     "bufferUpload",
     "viewportPreview",

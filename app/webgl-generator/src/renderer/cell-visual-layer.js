@@ -90,6 +90,7 @@ export function buildCellVisualMesh(map) {
   return {
     cells,
     edgeCurves,
+    shoreEdges,
     cellCount: cells.length,
     skippedCells,
     boundaryPoints,
@@ -113,6 +114,7 @@ export function emptyCellVisualMesh() {
   return {
     cells: [],
     edgeCurves: new Map(),
+    shoreEdges: new Set(),
     cellCount: 0,
     skippedCells: 0,
     boundaryPoints: 0,
@@ -129,6 +131,103 @@ export function emptyCellVisualMesh() {
     shoreEdgeCount: 0,
     style: CELL_VISUAL_STYLE,
     buildMs: 0
+  };
+}
+
+function buildCellVisualMeshCell(map, cell, edgeCurves, shoreEdges) {
+  const points = buildCellVisualBoundary(map, cell, edgeCurves, shoreEdges);
+  if (points.length < 3) return null;
+  const center = cellCenterPoint(map.grid, cell);
+  const smoothTriangulation = buildCellVisualNdcTriangles(createRenderContext(map), points);
+  let triangulation = smoothTriangulation;
+  let fallbackMode = null;
+  if (smoothTriangulation.skipped) {
+    let hardPoints = buildHardCellVisualBoundary(map, cell, true);
+    triangulation = buildCellVisualNdcTriangles(createRenderContext(map), hardPoints, center);
+    let hardBoundarySource = "resolved";
+    if (triangulation.skipped) {
+      hardPoints = buildHardCellVisualBoundary(map, cell, false);
+      triangulation = buildCellVisualNdcTriangles(createRenderContext(map), hardPoints, center);
+      hardBoundarySource = "stored";
+    }
+    if (!triangulation.skipped) {
+      fallbackMode = triangulation.safeHardFan
+        ? `validated-${hardBoundarySource}-hard-fan`
+        : `${hardBoundarySource}-hard-boundary-earcut`;
+    }
+  }
+  if (triangulation.skipped) return null;
+  const ndcTriangles = triangulation.ndcTriangles;
+  return {
+    cellMesh: {
+      cell,
+      center,
+      points: triangulation.points,
+      ndcTriangles,
+      triangleCount: ndcTriangles.length / 6,
+      triangulationFallback: smoothTriangulation.skipped ? fallbackMode : null
+    }
+  };
+}
+
+function cellVisualBoundaryEdgeKeys(map, cell) {
+  const vertices = map.grid.cells.v[cell] || [];
+  const keys = [];
+  for (let index = 0; index < vertices.length; index++) {
+    const first = vertices[index];
+    const second = vertices[(index + 1) % vertices.length];
+    keys.push(`${Math.min(first, second)}:${Math.max(first, second)}`);
+  }
+  return keys;
+}
+
+export function refreshCellVisualMeshCells(map, previousMesh, changedGridCells) {
+  if (!map || !previousMesh?.cells?.length || !(previousMesh.shoreEdges instanceof Set)) return null;
+  const cells = map.grid?.cells;
+  if (!cells?.c || !cells?.v || !cells?.h) return null;
+  const changed = new Set((changedGridCells || []).map(Number).filter(cell => Number.isInteger(cell) && cell >= 0));
+  if (!changed.size) return {mesh: previousMesh, changedCells: [], buildMs: 0};
+
+  const affected = new Set(changed);
+  for (const cell of changed) for (const neighbor of cells.c[cell] || []) {
+    if (Number.isInteger(neighbor) && neighbor >= 0) affected.add(neighbor);
+  }
+  for (const cell of cells.i || []) {
+    if ((cells.c[cell] || []).some(neighbor => changed.has(neighbor))) affected.add(cell);
+  }
+
+  const edgeCurves = new Map(previousMesh.edgeCurves || []);
+  const shoreEdges = collectShoreCellVisualEdges(map);
+  for (const cell of affected) {
+    for (const key of cellVisualBoundaryEdgeKeys(map, cell)) edgeCurves.delete(key);
+  }
+
+  const entries = new Map(previousMesh.cells.map(cellMesh => [cellMesh.cell, cellMesh]));
+  const startedAt = performance.now();
+  for (const cell of affected) {
+    const next = buildCellVisualMeshCell(map, cell, edgeCurves, shoreEdges);
+    if (!next?.cellMesh || !entries.has(cell)) return null;
+    entries.set(cell, next.cellMesh);
+  }
+
+  const nextCells = previousMesh.cells.map(cellMesh => entries.get(cellMesh.cell));
+  const boundaryPoints = nextCells.reduce((sum, cellMesh) => sum + cellMesh.points.length, 0);
+  const triangleCount = nextCells.reduce((sum, cellMesh) => sum + cellMesh.triangleCount, 0);
+  return {
+    mesh: {
+      ...previousMesh,
+      cells: nextCells,
+      edgeCurves,
+      shoreEdges,
+      cellCount: nextCells.length,
+      boundaryPoints,
+      triangleCount,
+      edgeCurveCount: edgeCurves.size,
+      shoreEdgeCount: shoreEdges.size,
+      buildMs: roundMs(performance.now() - startedAt)
+    },
+    changedCells: [...affected].sort((a, b) => a - b),
+    buildMs: roundMs(performance.now() - startedAt)
   };
 }
 

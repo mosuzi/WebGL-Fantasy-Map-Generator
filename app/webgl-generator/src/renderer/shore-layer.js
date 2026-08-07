@@ -13,10 +13,11 @@ import {
 import {pushWorldLine, pushWorldPolylineMesh, pushWorldVertex} from "./mesh-writer.js";
 import {pickGridCell} from "./picking.js";
 import {createRandom} from "../generator/random.js";
-import {SHORE_TOPOLOGY_ALGORITHM, buildShoreTopologySnapshot} from "./coastline-topology.js";
+import {SHORE_TOPOLOGY_ALGORITHM, buildShoreTopologySnapshot, collectProtectedShoreObjects} from "./coastline-topology.js";
 import polygonClipping from "polygon-clipping";
 import earcut from "earcut";
 import {resolvedGridVertexPoint} from "./grid-vertex-geometry.js";
+import {createRenderContext} from "./render-context.js";
 import {withSurfaceSideAlpha} from "./surface-side-depth.js";
 import {filterShoreRenderSpikes as filterLabShoreRenderSpikes} from "../../../../prototype/boundary-topology-lab/src/shore-render-spike-filter.js";
 
@@ -25,6 +26,7 @@ const shoreRingIndexCache = new WeakMap();
 const shoreBandGeometryCache = new WeakMap();
 const shoreSurfaceCorrectionCache = new WeakMap();
 const shoreSurfaceDrawPacketCache = new WeakMap();
+const shoreProtectedObjectsCache = new WeakMap();
 
 export const SHORE_VISUAL_STYLE = Object.freeze({
   bandWidthWorld: 44,
@@ -61,6 +63,16 @@ export function pushShoreLineLayers(vertices, context, visibility = {}, cellVisu
     drawLakeShore: visibility.lakeShore !== false,
     visualTheme: viewOptions.visualTheme
   });
+}
+
+export function buildShoreLinePathVertices(map, path, featureType, viewOptions = {}) {
+  const vertices = [];
+  const color = featureType === "coastline"
+    ? viewOptions.visualTheme?.lines?.coastline || SHORE_VISUAL_STYLE.coastlineStroke
+    : viewOptions.visualTheme?.lines?.lakeShore || SHORE_VISUAL_STYLE.lakeShoreStroke;
+  const widthWorld = featureType === "coastline" ? SHORE_VISUAL_STYLE.coastlineWidthWorld : SHORE_VISUAL_STYLE.lakeShoreWidthWorld;
+  pushSnapshotShoreLines(vertices, [path], createRenderContext(map), color, widthWorld);
+  return new Float32Array(vertices);
 }
 
 function pushShoreLines(vertices, context, options) {
@@ -1499,8 +1511,62 @@ export function filterShoreRenderSpikes(entries) {
 
 export function buildShoreVisualPaths(map, algorithmOptions = {}) {
   const edges = collectShoreVisualEdges(map);
-  const sideSafetyCache = new Map();
   const options = {
+    ...createShoreVisualBuildOptions(map, algorithmOptions),
+    protectedObjects: collectProtectedShoreObjects(map)
+  };
+  shoreProtectedObjectsCache.set(map, options.protectedObjects);
+  const coastline = buildShoreTopologySnapshot(buildShorePathsFromEdges(edges.coastline), map, options);
+  const lakeShore = buildShoreTopologySnapshot(buildShorePathsFromEdges(edges.lakeShore), map, options);
+  return Object.freeze({
+    coastline: coastline.paths,
+    lakeShore: lakeShore.paths,
+    topology: mergeShoreTopologyStats(coastline.stats, lakeShore.stats)
+  });
+}
+
+export function buildIncrementalShoreVisualPaths(map, previousPaths, changedGridCells, algorithmOptions = {}) {
+  if (!map || !previousPaths?.coastline || !previousPaths?.lakeShore) return null;
+  if ([...(previousPaths.coastline || []), ...(previousPaths.lakeShore || [])].some(path => !Array.isArray(path.sourceEdges))) return null;
+  const changed = new Set((changedGridCells || []).map(Number).filter(cell => Number.isInteger(cell) && cell >= 0));
+  if (!changed.size || changed.size > 2048) return null;
+  const affected = new Set(changed);
+  for (const cell of changed) for (const neighbor of map.grid?.cells?.c?.[cell] || []) {
+    if (Number.isInteger(neighbor) && neighbor >= 0) affected.add(neighbor);
+  }
+
+  const startedAt = performance.now();
+  const protectedObjects = shoreProtectedObjectsCache.get(map) || collectProtectedShoreObjects(map);
+  shoreProtectedObjectsCache.set(map, protectedObjects);
+  const safetyBounds = buildIncrementalShoreSafetyBounds(map, affected);
+  const options = {
+    ...createShoreVisualBuildOptions(map, algorithmOptions),
+    protectedObjects: filterIncrementalProtectedObjects(protectedObjects, safetyBounds),
+    isSideSampleSafe: (point, side) => pointOutsideBounds(point, safetyBounds) || incrementalSideSampleSafe(map, point, side),
+    measureChanges: false
+  };
+  const edges = collectShoreVisualEdges(map);
+  const coastline = rebuildIncrementalShoreType(map, previousPaths.coastline, options, edges.coastline);
+  const lakeShore = rebuildIncrementalShoreType(map, previousPaths.lakeShore, options, edges.lakeShore);
+  if (!coastline || !lakeShore) return null;
+  const topology = {
+    ...(previousPaths.topology || {}),
+    arcCount: coastline.paths.length + lakeShore.paths.length,
+    sourcePointCount: countPathPoints(coastline.paths),
+    renderPointCount: countPathPoints(coastline.paths) + countPathPoints(lakeShore.paths),
+    buildMs: roundMs(performance.now() - startedAt),
+    incremental: true
+  };
+  return Object.freeze({
+    coastline: Object.freeze([...coastline.paths]),
+    lakeShore: Object.freeze([...lakeShore.paths]),
+    topology: Object.freeze(topology)
+  });
+}
+
+function createShoreVisualBuildOptions(map, algorithmOptions = {}) {
+  const sideSafetyCache = new Map();
+  return {
     ...algorithmOptions,
     gates: {
       ...algorithmOptions.gates,
@@ -1515,13 +1581,89 @@ export function buildShoreVisualPaths(map, algorithmOptions = {}) {
       return safe;
     }
   };
-  const coastline = buildShoreTopologySnapshot(buildShorePathsFromEdges(edges.coastline), map, options);
-  const lakeShore = buildShoreTopologySnapshot(buildShorePathsFromEdges(edges.lakeShore), map, options);
-  return Object.freeze({
-    coastline: coastline.paths,
-    lakeShore: lakeShore.paths,
-    topology: mergeShoreTopologyStats(coastline.stats, lakeShore.stats)
-  });
+}
+
+function buildIncrementalShoreSafetyBounds(map, cells, margin = 0) {
+  const points = [];
+  for (const cell of cells || []) points.push(cellCenterPoint(map.grid, cell));
+  const valid = points.filter(isWorldPoint);
+  if (!valid.length) return null;
+  return {
+    minX: Math.min(...valid.map(point => point[0])) - margin,
+    minY: Math.min(...valid.map(point => point[1])) - margin,
+    maxX: Math.max(...valid.map(point => point[0])) + margin,
+    maxY: Math.max(...valid.map(point => point[1])) + margin
+  };
+}
+
+function pointOutsideBounds(point, bounds) {
+  return !bounds || !isWorldPoint(point) || point[0] < bounds.minX || point[0] > bounds.maxX || point[1] < bounds.minY || point[1] > bounds.maxY;
+}
+
+function incrementalSideSampleSafe(map, point, side) {
+  if (!isWorldPoint(point) || !side) return false;
+  const halfWidth = SHORE_VISUAL_STYLE.sidePreflightHalfWidthWorld;
+  const landCell = pickGridCell(map, point[0] + side.x * halfWidth, point[1] + side.y * halfWidth)?.gridCell;
+  const waterCell = pickGridCell(map, point[0] - side.x * halfWidth, point[1] - side.y * halfWidth)?.gridCell;
+  return landCell !== null && landCell !== undefined && waterCell !== null && waterCell !== undefined && isLandCell(landCell, map) && !isLandCell(waterCell, map);
+}
+
+function filterIncrementalProtectedObjects(objects, bounds) {
+  if (!objects || !bounds) return {towns: [], roads: [], rivers: []};
+  const near = points => (points || []).some(point => !pointOutsideBounds(point, bounds));
+  const clip = points => {
+    const result = [];
+    for (let index = 0; index < (points || []).length - 1; index++) {
+      const first = points[index];
+      const second = points[index + 1];
+      if (!isWorldPoint(first) || !isWorldPoint(second)) continue;
+      const minX = Math.min(first[0], second[0]);
+      const maxX = Math.max(first[0], second[0]);
+      const minY = Math.min(first[1], second[1]);
+      const maxY = Math.max(first[1], second[1]);
+      if (maxX < bounds.minX || minX > bounds.maxX || maxY < bounds.minY || minY > bounds.maxY) continue;
+      if (!result.length) result.push([first[0], first[1]]);
+      result.push([second[0], second[1]]);
+    }
+    return result;
+  };
+  return {
+    towns: (objects.towns || []).filter(point => near([point])),
+    roads: (objects.roads || []).map(clip).filter(points => points.length >= 2),
+    rivers: (objects.rivers || []).map(clip).filter(points => points.length >= 2)
+  };
+}
+
+function rebuildIncrementalShoreType(map, previousPaths, options, currentEdges) {
+  const currentPaths = buildShorePathsFromEdges(currentEdges);
+  const previousBySource = new Map((previousPaths || []).map(path => [sourceShorePathKey(path), path]));
+  const paths = [];
+  let rebuilt = 0;
+  for (const sourcePath of currentPaths) {
+    const previous = previousBySource.get(sourceShorePathKey(sourcePath));
+    if (previous) {
+      paths.push(previous);
+      continue;
+    }
+    rebuilt++;
+    if (rebuilt > 512) return null;
+    paths.push(...buildShoreTopologySnapshot([sourcePath], map, options).paths);
+  }
+  return {paths, rebuilt};
+}
+
+function sourceShorePathKey(path) {
+  return (path?.sourceEdges || []).map(edge => {
+    const a = shorePointKey(edge.a);
+    const b = shorePointKey(edge.b);
+    return `${edge.landCell}:${edge.waterCell}:${a < b ? `${a}:${b}` : `${b}:${a}`}`;
+  }).sort().join("|");
+}
+
+function shoreEdgeKey(edge) {
+  const first = shorePointKey(edge.a);
+  const second = shorePointKey(edge.b);
+  return first < second ? `${first}|${second}` : `${second}|${first}`;
 }
 
 function attachOriginalCoastlinePoints(paths, map, featureType) {
@@ -2025,7 +2167,15 @@ function createShorePath(graph, walk) {
     waterCells.push(edge?.waterCell ?? 0);
   }
 
-  return {points, sideVectors, landCells, waterCells};
+  const sourceEdges = walk.edgeIndexes.map(edgeIndex => {
+    const edge = graph.edges[edgeIndex];
+    const a = graph.nodes.get(edge.a)?.point;
+    const b = graph.nodes.get(edge.b)?.point;
+    return edge && a && b
+      ? {a: [a[0], a[1]], b: [b[0], b[1]], landCell: edge.landCell, waterCell: edge.waterCell, side: {...edge.side}}
+      : null;
+  }).filter(Boolean);
+  return {points, sideVectors, landCells, waterCells, sourceEdges};
 }
 
 function averageEdgeSide(graph, edgeIndexes) {
@@ -2042,4 +2192,8 @@ function averageEdgeSide(graph, edgeIndexes) {
 
 function cellCenterPoint(grid, cell) {
   return grid.points[grid.cells.p?.[cell]] || [0, 0];
+}
+
+function roundMs(value) {
+  return Math.round(Number(value || 0) * 10) / 10;
 }

@@ -34,11 +34,13 @@
 - 证据：当前真实岸线样本的 `6.95～7.16s` 明确来自 `shore-or-land-water-change` 分支；普通样本的最终 draw 仅为毫秒级。岸线 cell 在水陆侧未改变时，几何和 shore 路径不变，只需更新对应 surface / correction / cover buffer 的颜色。
 - 边界：新增岸线 cell→GPU buffer span 索引；同侧高度变化走局部 `bufferSubData`，只有水陆侧发生变化或索引不完整时才保留完整拓扑重建。跨海平面不得静默跳过安全刷新。
 
-## 301-C：跨水陆拓扑变化的停手调度（明确后续边界）
+## 301-C：跨水陆拓扑变化的局部刷新（已完成）
 
-- 证据：跨水陆样本仍会进入完整拓扑构建；即使 301-B 解决同侧岸线刷新，也不能把跨侧变化重新塞回 pointerup。
-- 反例实测：故意把真实岸线陆地 cell 跨过海平面后，`21` 个 cell 发生水陆侧变化，pointerup 约 `7207ms`；其中 `rebuildCellVisualMesh` 约 `2325ms`、`rebuildShoreVisualCache` 约 `4377ms`、`refreshCellSurface` 约 `468ms`。因此该路径仍是已知完整拓扑热点。
-- 边界：后续若实施，必须把跨侧拓扑刷新做成可观察、可取消且最终视觉正确的局部任务；不得用陈旧 shore geometry 冒充已完成视觉更新。空间索引和 Grid→Pack 映射本轮不因“可能”而改动。
+- 目标：在不使用陈旧岸线几何的前提下，把跨水陆变化限制到变更 cell 的邻接闭包、受影响的 source path 和 surface 变化区域。
+- 实施：`cell-visual-layer` 新增局部 mesh 刷新，重建变更 cell 及其入 / 出邻接影响 cell，并重新核对当前岸线边集合；`shore-layer` 重新生成当前 source edge 分组，仅对 source key 变化的路径执行拓扑快照，未变化路径复用既有最终几何。局部安全边界、保护对象和 side sample 不足或重建数量超过上限时返回空结果，由 renderer 回退完整重建。
+- surface 边界：稳定的 cell 三角 span 使用局部 `bufferSubData`；拓扑导致 span 长度改变时，将受影响 cell 写入独立 `surfacePatchBuffer` 叠加绘制，同时复用已有 correction / cover buffer 的颜色更新，下一次完整 surface 刷新回收旧 correction 几何。局部路径与完整路径的职责边界可观测，不能以旧几何静默完成。
+- 验证：隔离生产 Chrome 的 100k 跨水陆样本核心 `refreshHeightCells` 约 `144ms`，pointerup 墙钟约 `192ms`；局部与完整重绘的 path key、path geometry、cell mesh、shore edge 和最终 `readPixels` 均一致（像素差 `0`）。正式 10k / 100k 回归的 console、page、health、WebGL 错误为 `0`，撤销 / 重做通过。
+- 兼容性与回滚：不改变地图数据、height / grid schema、存档、公开 API、历史事务或 `source/`；只回退 301-C 的局部拓扑和 surface patch 路径即可恢复 301-B 的完整拓扑安全回退。
 
 ## 301-E：高度编辑作用范围高亮与拾取（待后续实施）
 

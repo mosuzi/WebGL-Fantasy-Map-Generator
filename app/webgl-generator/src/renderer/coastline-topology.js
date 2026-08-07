@@ -23,7 +23,7 @@ export function buildShoreTopologySnapshot(paths, map, options = {}) {
   const startedAt = nowMs();
   const settings = {...SHORE_TOPOLOGY_ALGORITHM, ...options};
   const gates = {...SHORE_TOPOLOGY_GATES, maxDisplacement: settings.maxDisplacement, ...options.gates};
-  const protectedObjects = collectProtectedShoreObjects(map);
+  const protectedObjects = options.protectedObjects || collectProtectedShoreObjects(map);
   const stats = {
     snapshotVersion: 1,
     immutable: true,
@@ -1164,7 +1164,14 @@ function copyPathMetadata(path) {
   return {
     sideVectors: Object.freeze((path?.sideVectors || []).map(side => Object.freeze({x: side?.x || 0, y: side?.y || 0}))),
     landCells: Object.freeze([...(path?.landCells || [])]),
-    waterCells: Object.freeze([...(path?.waterCells || [])])
+    waterCells: Object.freeze([...(path?.waterCells || [])]),
+    sourceEdges: Object.freeze((path?.sourceEdges || []).map(edge => Object.freeze({
+      a: Object.freeze([edge.a[0], edge.a[1]]),
+      b: Object.freeze([edge.b[0], edge.b[1]]),
+      landCell: edge.landCell,
+      waterCell: edge.waterCell,
+      side: Object.freeze({x: edge.side?.x || 0, y: edge.side?.y || 0})
+    })))
   };
 }
 

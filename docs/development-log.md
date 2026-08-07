@@ -14,6 +14,13 @@
 - 隔离生产 100k 真实岸线样本从旧版 pointerup 约 `7.5s` 降至约 `22ms`；正式 10k / 100k 浏览器回归的岸线样本均断言 `incremental=true`、停手小于 `500ms`，console、page、health、WebGL 错误为 `0`，撤销 / 重做通过。
 - 故意跨海平面的反例仍固定为已知边界：`21` 个水陆侧变化 cell 的 pointerup 约 `7207ms`，其中 `rebuildCellVisualMesh` 约 `2325ms`、`rebuildShoreVisualCache` 约 `4377ms`；不在本轮用陈旧几何跳过该安全刷新，后续若实施需单独设计可观察、可取消且视觉正确的局部拓扑任务。
 
+## 2026-08-08：第 301-C 完成跨水陆拓扑局部刷新
+
+- 跨水陆变化改为按 changed cell 的邻接闭包局部重建 cell mesh；岸线先生成当前完整 source edge 分组，再按 source key 复用未变化 path，只对变化 path 建立局部拓扑快照。局部安全边界、保护对象过滤或重建数量超过上限时返回空结果，由 renderer 使用完整重建回退。
+- surface span 长度稳定时只更新受影响的 GPU buffer 区间；拓扑使 span 长度变化时使用独立 surface patch buffer 覆盖受影响 cells，并保持 correction / cover 颜色更新，避免在 pointerup 重新上传全图基础 surface。完整 surface 刷新仍会清理 patch 并重建修正层，兼容边界保持明确。
+- 隔离生产 Chrome 的 100k 跨水陆样本核心刷新约 `144ms`、pointerup 墙钟约 `192ms`；局部与完整重绘的 path、mesh、岸线边集合和 `readPixels` 对照全部一致，像素差为 `0`。正式 10k / 100k 专项回归、撤销 / 重做、console、page、health、WebGL 门禁通过。
+- 本子任务不改变地图数据、schema、存档、公开 API、历史事务或 `source/`；第 301-D 继续处理首次空间索引 / Grid→Pack 映射构建，第 301-E 继续处理高度编辑作用范围高亮与拾取。
+
 ## 2026-08-08：登记第 301-E 项——高度编辑作用范围高亮与拾取
 
 - 用户补充发现：开启高度编辑后，原有作用范围高亮会被取消，因而看不出当前高度编辑作用范围，范围内 cell 也无法按预期选中。

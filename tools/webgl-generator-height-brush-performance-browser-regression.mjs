@@ -65,6 +65,13 @@ async function profileMap(browserInstance, requestedCells) {
     for (let index = 0; index < 3; index += 1) shortSamples.push(await runStroke(page, center, [center], "短笔刷"));
     for (let index = 0; index < 3; index += 1) longSamples.push(await runStroke(page, center, Array.from({length: 18}, (_, pointIndex) => ({x: center.x + pointIndex * box.width * 0.012, y: center.y + Math.sin(pointIndex / 3) * box.height * 0.02})), "连续长拖"));
     for (let index = 0; index < 2; index += 1) shoreSamples.push(await runStroke(page, shoreCenter, [shoreCenter], "岸线短笔刷"));
+    await page.evaluate(() => {
+      const app = window.__webglGeneratorApp;
+      const originalGetBrush = app.panels.height.getBrush;
+      app.panels.height.getBrush = () => ({...originalGetBrush(), action: "lower", scope: "all", preserveSurface: false, strength: 100});
+    });
+    const topologySamples = [];
+    for (let index = 0; index < 2; index += 1) topologySamples.push(await runStroke(page, shoreCenter, [shoreCenter], "跨水陆岸线笔刷"));
     const map = await page.evaluate(() => ({
       gridCells: window.__webglGeneratorApp.map.grid.cells.i.length,
       checksum: window.__webglGeneratorApp.map.metadata.checksum,
@@ -77,6 +84,13 @@ async function profileMap(browserInstance, requestedCells) {
     assert.equal(map.webglError, 0, `WebGL error: ${map.webglError}`);
     assert.equal(shoreSamples.every(sample => sample.commitPerformance?.stages?.refreshHeightCells?.incremental === true), true, "岸线高度笔刷不应触发完整拓扑重建");
     assert.ok(Math.max(...shoreSamples.map(sample => sample.wallMs)) < 500, `岸线高度笔刷停手仍超过 500ms：${shoreSamples.map(sample => sample.wallMs).join(", ")}`);
+    if (!topologySamples.every(sample => sample.commitPerformance?.stages?.refreshHeightCells?.topology === "local")) {
+      console.error(JSON.stringify({requestedCells, topologySamples}, null, 2));
+      assert.fail("跨水陆高度笔刷必须走局部拓扑刷新");
+    }
+    const maxTopologyRefreshMs = Math.max(...topologySamples.map(sample => sample.commitPerformance?.stages?.refreshHeightCells?.ms || Infinity));
+    assert.ok(maxTopologyRefreshMs < 500, `跨水陆高度笔刷核心刷新仍超过 500ms：${topologySamples.map(sample => sample.commitPerformance?.stages?.refreshHeightCells?.ms).join(", ")}`);
+    assert.ok(Math.max(...topologySamples.map(sample => sample.wallMs)) < 650, `跨水陆高度笔刷 pointerup 仍超过 650ms：${topologySamples.map(sample => sample.wallMs).join(", ")}`);
     return {
       requestedCells,
       actualGridCells: map.gridCells,
@@ -85,6 +99,7 @@ async function profileMap(browserInstance, requestedCells) {
       short: summarizeStrokes(shortSamples),
       long: summarizeStrokes(longSamples),
       shore: summarizeStrokes(shoreSamples),
+      topology: summarizeStrokes(topologySamples),
       historyBeforeUndo: map.history,
       drawEvents: summarizeEvent(map.renderer.performanceEvents?.draw),
       surfaceRefreshEvents: summarizeEvent(map.renderer.performanceEvents?.surfaceRefresh),
