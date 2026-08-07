@@ -197,6 +197,7 @@ import {
 import {createRuleInspectionResult, normalizeRuleInspectionInput} from "./rule-inspection-token.js";
 import {executeClimateDownstreamRebuildAsync, inspectClimateDownstreamRebuild} from "./climate-downstream-rebuild.js";
 import {captureMapMutationSnapshot, executeMapSnapshotTransaction, restoreMapMutationSnapshot} from "./map-snapshot-transaction.js";
+import {commitPreparedGridTopology, inspectGridRefinement, inspectGridStructureWrite, prepareGridRefinement, prepareGridStructureWrite} from "./grid-topology-api.js";
 import {SelectionStore} from "./selection-store.js";
 import {decideSelectionPanelRoute, SELECTION_PANEL_BINDINGS, SELECTION_PANEL_ROUTE} from "./selection-panel-policy.js";
 import {installKeyboardShortcuts} from "./keyboard-shortcuts.js";
@@ -2842,6 +2843,17 @@ function createRuntimeActions(state, documentRef, options = {}) {
       refreshMapMutationRollback(state, documentRef);
     }
   });
+  const gridMutationConfig = message => ({
+    message,
+    snapshot: () => captureMapMutationSnapshot(state.map, state.editHistory),
+    rollback: async snapshot => {
+      restoreMapMutationSnapshot(state.map, state.editHistory, snapshot);
+      state.options = state.map.options;
+      if (typeof state.renderer?.loadMapAsync === "function") await state.renderer.loadMapAsync(state.map);
+      else state.renderer?.loadMap?.(state.map);
+      refreshRuntimeAfterMapLoad(state, documentRef);
+    }
+  });
   return {
     history: {
       get: (options = {}) => state.editHistory.getStats(options),
@@ -2855,6 +2867,12 @@ function createRuntimeActions(state, documentRef, options = {}) {
       set: (reference, locked, lockOptions = {}) => setRegenerationLockViaApi(state, documentRef, reference, locked, lockOptions),
       setMany: (references, locked, lockOptions = {}) => setRegenerationLocksViaApi(state, documentRef, references, locked, lockOptions),
       clearKind: (kind, lockOptions = {}) => clearRegenerationLocksViaApi(state, documentRef, kind, lockOptions)
+    },
+    grid: {
+      inspectWrite: document => inspectGridStructureWrite(state.map, state.mapRevision, document),
+      applyWrite: (document, gridOptions = {}) => operation.run("grid.applyWrite", context => applyGridTopologyViaApi(state, documentRef, {document, options: gridOptions, context}), gridMutationConfig("正在写入受控网格结构")),
+      inspectRefinement: (gridOptions = {}) => inspectGridRefinement(state.map, state.mapRevision, gridOptions),
+      refine: (gridOptions = {}) => operation.run("grid.refine", context => applyGridTopologyViaApi(state, documentRef, {options: gridOptions, context}), gridMutationConfig("正在细分现有地图网格"))
     },
     generate: {
       getOptions: () => getGenerationOptionsViaApi(state, documentRef),
@@ -7347,6 +7365,18 @@ export function executeHistoryCommand(state, documentRef, action, options = {}) 
       history: state.editHistory.getStats()
     };
   }
+  if (command.domain === "grid-topology") {
+    state.options = state.map.options;
+    state.renderer?.loadMap?.(state.map);
+    refreshRuntimeAfterMapLoad(state, documentRef);
+    updateEditingInteractionLock(state, documentRef);
+    return {
+      executed: true,
+      action,
+      label: command.label || "",
+      history: state.editHistory.getStats()
+    };
+  }
   const refresh = options.refresh || refreshAfterEdit;
   state.selectionStore.batch(() => {
     if (command.domain === "state-topology") synchronizeStateTopologyHistoryUi(state, command, action);
@@ -10637,6 +10667,48 @@ function refreshMapMutationRollback(state, documentRef) {
   updateHeightPanel(state);
   updateRuntimePanel(documentRef, state);
   updateEditingInteractionLock(state, documentRef);
+}
+
+async function applyGridTopologyViaApi(state, documentRef, {document = null, options = {}, context = null} = {}) {
+  assertMapAvailable(state);
+  context?.report("prepare-grid", {message: document ? "正在校验受控网格结构" : "正在构造拓扑细分"});
+  const prepared = document
+    ? prepareGridStructureWrite(state.map, state.mapRevision, document, options)
+    : prepareGridRefinement(state.map, state.mapRevision, options);
+  context?.throwIfAborted?.();
+  context?.report("commit-grid", {message: "正在提交网格事务"});
+  const transaction = executeMapSnapshotTransaction({
+    map: state.map,
+    editHistory: state.editHistory,
+    label: document ? "写入受控网格结构" : `细分网格至 ${prepared.result.target.cells} cells`,
+    domain: "grid-topology",
+    effects: {
+      render: "draw",
+      selection: "refresh",
+      runtimeStats: true,
+      pickPanel: true,
+      derived: ["render-mesh", "terrain-caches", "political-boundaries", "line-layers", "point-layers", "labels", "object-index", "object-panels"]
+    },
+    execute: () => commitPreparedGridTopology(state.map, prepared),
+    executeCommand: command => executeEditCommand(state, documentRef, command, {
+      context: {map: state.map},
+      refresh: () => {},
+      refreshPanels: false
+    }),
+    onRestore: () => refreshMapMutationRollback(state, documentRef)
+  });
+  state.options = state.map.options;
+  context?.report("reload-renderer", {message: "正在重载细分后的地图渲染"});
+  if (typeof state.renderer?.loadMapAsync === "function") await state.renderer.loadMapAsync(state.map);
+  else state.renderer?.loadMap?.(state.map);
+  state.selectionStore.clear();
+  refreshRuntimeAfterMapLoad(state, documentRef);
+  updateEditingInteractionLock(state, documentRef);
+  return {
+    ...transaction.result,
+    history: state.editHistory.getStats(),
+    binding: state.mapRevision.getSnapshot()
+  };
 }
 
 function normalizeApiRegenerationKind(kind) {

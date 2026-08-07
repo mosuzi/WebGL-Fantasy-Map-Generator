@@ -4,11 +4,11 @@
 
 ## 审计结论
 
-- 上游能力矩阵：1196 行，unknown / unclassified / gap = 0 / 0 / 0。
-- 公开 API：316 / 316 已归类。
-- Cell / 画布动作：48 / 48 已归类；画布模式 29，直接操控 19 类 / 90 个宿主。
-- 规则事务与玩法配方：69 + 10 = 79。
-- 已有完整事务 69，已有写命令但缺 AI inspector 0，多 API 碎片待收敛 0，缺失游戏规则 0，待发布配方 0，可执行配方 10。
+- 上游能力矩阵：1213 行，unknown / unclassified / gap = 0 / 0 / 0。
+- 公开 API：322 / 322 已归类。
+- Cell / 画布动作：49 / 49 已归类；画布模式 30，直接操控 19 类 / 90 个宿主。
+- 规则事务与玩法配方：70 + 10 = 80。
+- 已有完整事务 70，已有写命令但缺 AI inspector 0，多 API 碎片待收敛 0，缺失游戏规则 0，待发布配方 0，可执行配方 10。
 - 结构缺口：0。
 
 ## 边界定义
@@ -24,6 +24,7 @@
 
 | actionId | 领域 | 玩家意图 | 当前状态 | 当前 API | 规范 inspect / execute |
 |---|---|---|---|---|---|
+| `terrain.refine-grid-topology` | 地形、水文与 Feature | 校验版本绑定的网格结构，在保持母子邻接、海陆符号和对象空间引用后原子替换当前地图拓扑。 | `existing-transaction` | `grid.applyWrite`<br>`grid.inspectRefinement`<br>`grid.inspectWrite`<br>`grid.refine` | `grid.inspectWrite / grid.inspectRefinement`<br>`grid.applyWrite / grid.refine` |
 | `world.create` | 世界创建、存档与重算 | 从生成选项创建一张新地图，或换种子重建整张地图。 | `existing-transaction` | `generate.getOptions`<br>`generate.newMap`<br>`generate.rerollSeed`<br>`generate.setOptions` | `generate.getOptions`<br>`generate.newMap / generate.rerollSeed` |
 | `world.regenerate-system` | 世界创建、存档与重算 | 只重建指定系统，同时维护依赖、范围外对象和单条历史。 | `existing-transaction` | `generate.regenerate` | `info.describe(generate.regenerate)`<br>`generate.regenerate` |
 | `world.import-map` | 世界创建、存档与重算 | 导入 JSON、gzip 或浏览器信封中的地图，完成迁移、校验和原子换图。 | `existing-transaction` | `data.importMap` | `data.exportImportDiagnostic`<br>`data.importMap` |
@@ -131,6 +132,6 @@
 
 ## 机器覆盖
 
-- API 分类：`atomic-editor-primitive=54`，`editor-runtime-service=49`，`read-export-service=11`，`read-primitive=38`，`semantic-action=164`。
-- 交互分类：`semantic-input-or-primitive=36`，`ui-boundary=12`。
-- Source digest：`b9ee37c44699866533430fde1739f290e6f9084100946495cd4cc73e5a058a36`。
+- API 分类：`atomic-editor-primitive=54`，`editor-runtime-service=49`，`read-export-service=11`，`read-primitive=40`，`semantic-action=168`。
+- 交互分类：`semantic-input-or-primitive=37`，`ui-boundary=12`。
+- Source digest：`bf772919d588f59a50eee0b6ac8270262c05e829f8f189cfa8d219d4ebadef54`。

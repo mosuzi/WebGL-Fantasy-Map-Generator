@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "scope": "权威任务第 204 项：全游戏复合语义接口、规则动作与玩法配方审计",
   "generatedAtPolicy": "报告不写入动态时间，sourceDigest 变化即要求重新生成",
-  "sourceDigest": "b9ee37c44699866533430fde1739f290e6f9084100946495cd4cc73e5a058a36",
+  "sourceDigest": "bf772919d588f59a50eee0b6ac8270262c05e829f8f189cfa8d219d4ebadef54",
   "definition": {
     "compoundSemanticAction": "一个玩家意图，但执行时需要跨对象/系统、条件分支、业务预检或原子回滚；应由单一规则事务表达。",
     "primitive": "只修改一个稳定字段或纯编辑器显示偏好，可保留为原子 API，不强行包装成复合动作。",
@@ -22,25 +22,25 @@
     "executable-recipe": "已进入公开 planner registry；规划器逐步调用精确事实、预检和执行方法。"
   },
   "denominator": {
-    "fullCapabilityRows": 1196,
+    "fullCapabilityRows": 1213,
     "fullCapabilityUnknown": 0,
     "fullCapabilityUnclassified": 0,
     "fullCapabilityGaps": 0,
-    "publicApiMethods": 316,
-    "classifiedApiMethods": 316,
-    "cellActionRows": 48,
-    "classifiedCellActionRows": 48,
-    "canvasModes": 29,
+    "publicApiMethods": 322,
+    "classifiedApiMethods": 322,
+    "cellActionRows": 49,
+    "classifiedCellActionRows": 49,
+    "canvasModes": 30,
     "directManipulationFamilies": 19,
     "directManipulationInstances": 90
   },
   "totals": {
-    "actions": 79,
-    "ruleTransactions": 69,
+    "actions": 80,
+    "ruleTransactions": 70,
     "plannerRecipes": 10,
     "statuses": {
       "executable-recipe": 10,
-      "existing-transaction": 69
+      "existing-transaction": 70
     },
     "domains": {
       "diplomacy": 5,
@@ -52,18 +52,18 @@
       "politics": 18,
       "settlement": 8,
       "society": 5,
-      "terrain": 13,
+      "terrain": 14,
       "world": 6
     },
     "apiClassifications": {
       "atomic-editor-primitive": 54,
       "editor-runtime-service": 49,
       "read-export-service": 11,
-      "read-primitive": 38,
-      "semantic-action": 164
+      "read-primitive": 40,
+      "semantic-action": 168
     },
     "interactionClassifications": {
-      "semantic-input-or-primitive": 36,
+      "semantic-input-or-primitive": 37,
       "ui-boundary": 12
     },
     "structuralGaps": 0
@@ -154,6 +154,42 @@
     "docMarkerMissing": []
   },
   "actions": [
+    {
+      "tier": "rule-transaction",
+      "variants": [
+        "controlled-write",
+        "topology-refinement"
+      ],
+      "api": [
+        "grid.applyWrite",
+        "grid.inspectRefinement",
+        "grid.inspectWrite",
+        "grid.refine"
+      ],
+      "inspect": "grid.inspectWrite / grid.inspectRefinement",
+      "execute": "grid.applyWrite / grid.refine",
+      "branches": [
+        "schema 拒绝",
+        "版本过期拒绝",
+        "事务提交",
+        "失败回滚",
+        "撤销 / 重做"
+      ],
+      "steps": [],
+      "sourceRefs": [
+        "app/webgl-generator/src/runtime/grid-topology-api.js",
+        "docs/task-notes/grid-topology-refinement-and-controlled-api.md"
+      ],
+      "id": "terrain.refine-grid-topology",
+      "title": "现有地图网格拓扑细分与受控结构写入",
+      "domain": "terrain",
+      "status": "existing-transaction",
+      "intent": "校验版本绑定的网格结构，在保持母子邻接、海陆符号和对象空间引用后原子替换当前地图拓扑。",
+      "gameplayChapter": "地形、水文与 Feature",
+      "invariant": "Grid/Pack、高度、水陆 Feature、河湖、海岸和下游派生必须在事务结束时一致。",
+      "historyPolicy": "成功恰好一条历史且 mapRevision +1；拒绝、no-op、取消和完整回滚不增加历史或 revision。",
+      "compatibilityPolicy": "旧公开方法保留并委托规范规则入口或保持严格等价；旧存档走迁移/回填。"
+    },
     {
       "tier": "rule-transaction",
       "variants": [
@@ -6481,6 +6517,44 @@
       ]
     },
     {
+      "method": "grid.applyWrite",
+      "classification": "semantic-action",
+      "actionIds": [
+        "terrain.refine-grid-topology"
+      ]
+    },
+    {
+      "method": "grid.inspectRefinement",
+      "classification": "semantic-action",
+      "actionIds": [
+        "terrain.refine-grid-topology"
+      ]
+    },
+    {
+      "method": "grid.inspectWrite",
+      "classification": "semantic-action",
+      "actionIds": [
+        "terrain.refine-grid-topology"
+      ]
+    },
+    {
+      "method": "grid.refine",
+      "classification": "semantic-action",
+      "actionIds": [
+        "terrain.refine-grid-topology"
+      ]
+    },
+    {
+      "method": "grid.snapshot",
+      "classification": "read-primitive",
+      "actionIds": []
+    },
+    {
+      "method": "grid.summary",
+      "classification": "read-primitive",
+      "actionIds": []
+    },
+    {
       "method": "history.get",
       "classification": "editor-runtime-service",
       "actionIds": []
@@ -6913,6 +6987,7 @@
         "terrain.edit-height-region",
         "terrain.patch-feature",
         "terrain.rebuild-height-derived",
+        "terrain.refine-grid-topology",
         "terrain.reset-seafloor",
         "terrain.smooth-selection"
       ]
@@ -7243,6 +7318,27 @@
         "terrain.edit-height-region",
         "terrain.patch-feature",
         "terrain.rebuild-height-derived",
+        "terrain.refine-grid-topology",
+        "terrain.reset-seafloor",
+        "terrain.smooth-selection"
+      ]
+    },
+    {
+      "rowId": "mode:river:edit-waypoint",
+      "actionId": "",
+      "classification": "semantic-input-or-primitive",
+      "semanticActionIds": [
+        "hydrology.change-lake-outlet",
+        "hydrology.create-river",
+        "hydrology.delete-lake",
+        "hydrology.delete-river",
+        "hydrology.excavate-lake",
+        "terrain.apply-height-program",
+        "terrain.change-feature-topology",
+        "terrain.edit-height-region",
+        "terrain.patch-feature",
+        "terrain.rebuild-height-derived",
+        "terrain.refine-grid-topology",
         "terrain.reset-seafloor",
         "terrain.smooth-selection"
       ]
@@ -7262,6 +7358,7 @@
         "terrain.edit-height-region",
         "terrain.patch-feature",
         "terrain.rebuild-height-derived",
+        "terrain.refine-grid-topology",
         "terrain.reset-seafloor",
         "terrain.smooth-selection"
       ]
@@ -7281,6 +7378,7 @@
         "terrain.edit-height-region",
         "terrain.patch-feature",
         "terrain.rebuild-height-derived",
+        "terrain.refine-grid-topology",
         "terrain.reset-seafloor",
         "terrain.smooth-selection"
       ]
@@ -7300,6 +7398,7 @@
         "terrain.edit-height-region",
         "terrain.patch-feature",
         "terrain.rebuild-height-derived",
+        "terrain.refine-grid-topology",
         "terrain.reset-seafloor",
         "terrain.smooth-selection"
       ]

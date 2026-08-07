@@ -29,6 +29,7 @@ const DOMAIN_API_PREFIXES = Object.freeze({
   feature: ["edit.features.", "selection."],
   generation: ["generate.", "info.runtimeStats"],
   government: ["edit.states.", "objects.", "selection."],
+  grid: ["grid."],
   height: ["edit.height.", "generate.regenerate"],
   history: ["history."],
   label: ["edit.labels.", "selection."],

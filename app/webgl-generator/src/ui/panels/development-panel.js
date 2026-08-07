@@ -17,8 +17,11 @@ export function createDevelopmentPanel(documentRef, manager) {
     }
   });
 
+  let gridInspection = null;
   const body = createDevelopmentPanelBody(documentRef, {
-    onCollapse: () => collapse()
+    onCollapse: () => collapse(),
+    onInspectGrid: () => inspectGridRefinement(),
+    onApplyGrid: () => applyGridRefinement()
   });
   record.body.replaceChildren(body);
 
@@ -261,6 +264,48 @@ export function createDevelopmentPanel(documentRef, manager) {
     button.textContent = value ? "恢复只读" : "允许本次地图写入";
     button.setAttribute("aria-pressed", value ? "true" : "false");
   }
+
+  function inspectGridRefinement() {
+    const api = documentRef.defaultView.webglGeneratorApi;
+    const targetCells = Number(documentRef.getElementById("grid-refinement-target")?.value || 100000);
+    const result = api?.grid?.inspectRefinement?.({targetCells});
+    if (!result?.ok) {
+      gridInspection = null;
+      updateGridRefinementStatus(result?.error?.message || "网格细分预检失败", "error");
+      updateGridRefinementButton(false);
+      return;
+    }
+    gridInspection = result.data;
+    updateGridRefinementStatus(`预检通过：${result.data.source.cells} → ${result.data.target.cells} cells`, "success");
+    updateGridRefinementButton(true);
+  }
+
+  async function applyGridRefinement() {
+    if (!gridInspection?.inspectionToken) return updateGridRefinementStatus("请先完成当前地图的网格细分预检", "error");
+    updateGridRefinementButton(false);
+    updateGridRefinementStatus("正在细分网格并重载地图…", "loading");
+    const api = documentRef.defaultView.webglGeneratorApi;
+    const result = await api.grid.refine({targetCells: gridInspection.target.cells, confirm: true, inspectionToken: gridInspection.inspectionToken});
+    if (!result?.ok) {
+      gridInspection = null;
+      updateGridRefinementStatus(`细分失败：${result?.error?.message || "未知错误"}`, "error");
+      return;
+    }
+    gridInspection = null;
+    updateGridRefinementStatus(`已细分为 ${result.data.target.cells} cells；可使用撤销恢复`, "success");
+  }
+
+  function updateGridRefinementButton(enabled) {
+    const button = documentRef.getElementById("grid-refinement-apply");
+    if (button) button.disabled = !enabled;
+  }
+
+  function updateGridRefinementStatus(text, state) {
+    const status = documentRef.getElementById("grid-refinement-status");
+    if (!status) return;
+    status.textContent = text;
+    status.dataset.state = state;
+  }
 }
 
 function createDevelopmentPanelBody(documentRef, callbacks) {
@@ -272,11 +317,38 @@ function createDevelopmentPanelBody(documentRef, callbacks) {
     developmentSection(documentRef, "健康监测", [healthEventList(documentRef)]),
     developmentSection(documentRef, "加载追踪", [loadTraceList(documentRef)]),
     developmentSection(documentRef, "运行时", [definitionList(documentRef, "runtime-stats")]),
+    gridRefinementSection(documentRef, callbacks),
     aiBridgeSection(documentRef),
     developmentSection(documentRef, "选择", [definitionList(documentRef, "pick-stats")]),
     developmentSection(documentRef, "边界", [boundaryList(documentRef)])
   );
   return root;
+}
+
+function gridRefinementSection(documentRef, callbacks) {
+  const wrapper = documentRef.createElement("div");
+  wrapper.className = "grid-refinement-controls";
+  const description = paragraph(documentRef, "grid-refinement-description", "仅用于现有地图的受控拓扑细分；先预检，再执行一条可撤销事务。");
+  const target = documentRef.createElement("input");
+  target.id = "grid-refinement-target";
+  target.type = "number";
+  target.min = "4";
+  target.max = "200000";
+  target.step = "1000";
+  target.value = "100000";
+  target.setAttribute("aria-label", "网格细分目标 cells");
+  const actions = documentRef.createElement("div");
+  actions.className = "development-panel-toolbar";
+  const inspect = actionButton(documentRef, "grid-refinement-inspect", "预检网格细分");
+  const apply = actionButton(documentRef, "grid-refinement-apply", "执行可撤销细分");
+  apply.disabled = true;
+  inspect.addEventListener("click", callbacks.onInspectGrid);
+  apply.addEventListener("click", callbacks.onApplyGrid);
+  actions.append(inspect, apply);
+  const status = paragraph(documentRef, "grid-refinement-status", "尚未预检");
+  status.dataset.state = "idle";
+  wrapper.append(description, target, actions, status);
+  return developmentSection(documentRef, "网格拓扑", [wrapper]);
 }
 
 function aiBridgeSection(documentRef) {

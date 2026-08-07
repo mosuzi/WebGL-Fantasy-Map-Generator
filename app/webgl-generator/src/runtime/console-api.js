@@ -18,6 +18,7 @@ import {buildApiDescriptionCoverage, buildApiMethodDescriptionRegistry, describe
 import {getObjectSnapshot, listObjectSnapshots, listObjectTypes, queryObjectSnapshots} from "./object-query-api.js";
 import {getCellAtPoint, getCellNeighbors, getCellSnapshot, queryCells, scanCells} from "./cell-query-api.js";
 import {inspectCellAction, listCellActions} from "./cell-action-inspector-registry.js";
+import {getGridStructureSnapshot, getGridStructureSummary} from "./grid-topology-api.js";
 import {getPlannerRecipe, listPlannerRecipes} from "./planner-recipe-registry.js";
 import {buildMapSummary as buildSharedMapSummary} from "./read-only-map-core.js";
 import {compareAnalysisRegions, compareRegionPower, defineAnalysisRegion, describeAnalysisRegion, diagnoseRegionPopulation, diagnoseRegionTerrain, explainRegionPrecipitation} from "./map-analysis-api.js";
@@ -84,6 +85,14 @@ export function createConsoleApi(documentRef, state, actions = {}) {
         }),
         cellReadonlyApiMetadata(state, "cells.inspectAction")
       )
+    }),
+    grid: Object.freeze({
+      summary: () => apiCall(() => getGridStructureSummary(state.map, state.mapRevision)),
+      snapshot: () => apiCall(() => getGridStructureSnapshot(state.map, state.mapRevision)),
+      inspectWrite: document => apiCall(() => requireApiAction(actions.grid?.inspectWrite, "grid.inspectWrite")(document)),
+      applyWrite: (document, options = {}) => apiCall(() => requireApiAction(actions.grid?.applyWrite, "grid.applyWrite")(document, options)),
+      inspectRefinement: (options = {}) => apiCall(() => requireApiAction(actions.grid?.inspectRefinement, "grid.inspectRefinement")(options)),
+      refine: (options = {}) => apiCall(() => requireApiAction(actions.grid?.refine, "grid.refine")(options))
     }),
     planner: Object.freeze({
       listRecipes: () => apiCall(() => listPlannerRecipes()),
@@ -483,6 +492,7 @@ function buildCapabilities(api) {
       info: "readonly",
       objects: "readonly-object-discovery",
       cells: "readonly-grid-and-pack-cell-discovery",
+      grid: "controlled-grid-structure-snapshot-validation-and-transaction",
       planner: "readonly-planner-recipes",
       analysis: "readonly-regional-analysis",
       regenerationLocks: "persistent-regeneration-protection",
@@ -527,6 +537,14 @@ export function buildMethodMetadata() {
       ,
       actions: {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
       inspectAction: {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false}
+    },
+    grid: {
+      summary: {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
+      snapshot: {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
+      inspectWrite: {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
+      applyWrite: {stable: "draft", mutates: "grid-topology-and-derived-map", undoable: true, async: true, requiresConfirm: true},
+      inspectRefinement: {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
+      refine: {stable: "draft", mutates: "grid-topology-and-derived-map", undoable: true, async: true, requiresConfirm: true}
     },
     planner: {
       listRecipes: {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},

@@ -4,7 +4,9 @@
 
 专题文档中的“下一步”“缺口”只表示候选方向，不自动成为活动任务。当前批准范围和顺序统一查看 [`../current-plan.md`](../current-plan.md#权威任务清单)。
 
-## 当前活动专题映射
+## 专题映射
+
+- 权威任务第 298 项对应 [`grid-topology-refinement-and-controlled-api.md`](./grid-topology-refinement-and-controlled-api.md)，现已完成：冻结受控网格快照、母子映射、派生迁移、事务回滚与 10k → 100k 验收门禁，并以系统 Chrome 完成生产链复验。
 
 - 权威任务第 266 项对应 `readme-showcase-capture.md`：集中 fresh session 的默认图层与标签风格，并用隔离系统 Chrome + CDP 从正式 PNG 合成链确定性生成中英文 README 共用的 relief / atlas 两张展示图。
 - 权威任务第 269 项对应 `canvas-performance-investigation-plan.md`，现已完成：调查方案在采样前独立审阅通过，生产构建与系统 Chrome 已分离 generation、`loadMap`、draw、idle commit、overlay 和浏览器主线程成本；实际结论与分级建议见 [`../performance/canvas-performance-investigation-report.md`](../performance/canvas-performance-investigation-report.md)，本项没有直接实施优化。

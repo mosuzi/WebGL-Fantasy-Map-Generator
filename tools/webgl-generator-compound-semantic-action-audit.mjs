@@ -106,6 +106,19 @@ const REGENERATION_VARIANTS = Object.freeze([
 
 const RULE_ACTIONS = Object.freeze([
   rule({
+    id: "terrain.refine-grid-topology",
+    title: "现有地图网格拓扑细分与受控结构写入",
+    domain: "terrain",
+    status: "existing-transaction",
+    intent: "校验版本绑定的网格结构，在保持母子邻接、海陆符号和对象空间引用后原子替换当前地图拓扑。",
+    variants: ["controlled-write", "topology-refinement"],
+    api: ["grid.inspectWrite", "grid.applyWrite", "grid.inspectRefinement", "grid.refine"],
+    inspect: "grid.inspectWrite / grid.inspectRefinement",
+    execute: "grid.applyWrite / grid.refine",
+    branches: ["schema 拒绝", "版本过期拒绝", "事务提交", "失败回滚", "撤销 / 重做"],
+    sourceRefs: ["app/webgl-generator/src/runtime/grid-topology-api.js", "docs/task-notes/grid-topology-refinement-and-controlled-api.md"]
+  }),
+  rule({
     id: "world.create",
     title: "创建或换种子生成完整世界",
     domain: "world",
@@ -1024,6 +1037,8 @@ const READ_METHODS = new Set([
   "cells.scan",
   "cells.actions",
   "cells.inspectAction",
+  "grid.summary",
+  "grid.snapshot",
   "regenerationLocks.list",
   "regenerationLocks.status",
   "regenerationLocks.inspect",
@@ -1448,7 +1463,8 @@ function classifyInteractionRow(row, actions) {
   if (row.status === "excluded") {
     return {rowId: row.rowId, actionId: row.actionId, classification: "ui-boundary", semanticActionIds: []};
   }
-  const domain = String(row.actionId || "").split(/[.:]/u)[0];
+  const inferredActionId = row.actionId || row.modeId || row.directId || String(row.capabilityId || "").replace(/^canvas-mode\./u, "");
+  const domain = String(inferredActionId).split(/[.:]/u)[0];
   const semanticActionIds = actions
     .filter(action => action.tier === "rule-transaction" && interactionDomainMatches(domain, action))
     .map(action => action.id)

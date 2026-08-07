@@ -7,6 +7,7 @@ export const API_METHODS = Object.freeze({
   info: Object.freeze(["version", "capabilities", "describe", "mapSummary", "runtimeStats", "healthEvents"]),
   objects: Object.freeze(["types", "get", "list", "query"]),
   cells: Object.freeze(["get", "getAtPoint", "neighbors", "query", "locate", "scan", "actions", "inspectAction"]),
+  grid: Object.freeze(["summary", "snapshot", "inspectWrite", "applyWrite", "inspectRefinement", "refine"]),
   planner: Object.freeze(["listRecipes", "getRecipe"]),
   analysis: Object.freeze(["defineRegion", "describeRegion", "compareRegions", "explainPrecipitation", "diagnosePopulation", "comparePower", "diagnoseTerrain"]),
   regenerationLocks: Object.freeze(["list", "status", "inspect", "set", "setMany", "clearKind"]),
@@ -45,6 +46,8 @@ export const CONFIRM_REQUIRED_METHODS = Object.freeze([
   "generate.regenerate",
   "generate.newMap",
   "generate.rerollSeed",
+  "grid.applyWrite",
+  "grid.refine",
   "oceanCurrents.rebuildWorld",
   "data.importMap",
   "data.importGEO",
@@ -95,6 +98,8 @@ const CAPABILITY_GROUPS = Object.freeze({
   "runtime.read": {title: "运行时只读", access: "read"},
   "objects.read": {title: "地图对象发现", access: "read"},
   "cells.read": {title: "地图单元只读", access: "read"},
+  "grid.read": {title: "网格结构只读", access: "read"},
+  "grid.control": {title: "网格结构受控写入", access: "write"},
   "planner.read": {title: "AI 规划器配方", access: "read"},
   "analysis.read": {title: "区域分析", access: "read"},
   "regeneration-locks.control": {title: "重生成对象锁定", access: "write"},
@@ -233,6 +238,7 @@ function resolveCapabilityGroup(namespace, method) {
   if (namespace === "info") return "runtime.read";
   if (namespace === "objects") return "objects.read";
   if (namespace === "cells") return "cells.read";
+  if (namespace === "grid") return /^(summary|snapshot|inspect)/.test(method) ? "grid.read" : "grid.control";
   if (namespace === "planner") return "planner.read";
   if (namespace === "analysis") return "analysis.read";
   if (namespace === "regenerationLocks") return "regeneration-locks.control";
