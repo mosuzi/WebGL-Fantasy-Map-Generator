@@ -62,6 +62,12 @@
 | 303-D | 新增 / 移动 / 删除单事务，撤销重做和导出兼容 | edit command、历史、JSON / gzip / PNG / GeoJSON | 303-A～C、map-file-io | 一次确认一条历史，失败整单回滚，旧档可读 | before / after 河流快照 | 影响河流地图数据、可选存档字段和编辑 API；不改生成算法、source |
 | 303-E | 统一 10k / 100k 与发布门禁 | 隔离 Chrome、窄视口、错误 / health / WebGL 检查 | 303-A～D | 同 cell 多点分别移 / 删、源河口反例、导入导出、PNG 全通过 | 回滚失败子任务提交 | 只新增回归与文档门禁；source 不改 |
 
+## 子任务进度
+
+- 303-A 已完成：新增 `river-control-points.js`，以可选 `river.controlPoints` 保存 `id / x / y / pointIndex / packCell / flux`；地图归一化和河流对象读取会复制并校验该集合，旧河流缺字段时保持 `undefined`，不会把全部 meander 点静默变成控制点。
+- 303-A 回归：`regress:river-control-points-data` 与既有 `regress:river-waypoint-interaction` 通过；同一 pack cell 的两个控制点拥有不同稳定 ID，插入 / 删除路径索引可重排，旧控制点字段缺失兼容。
+- 当前进入 303-B；尚未接入拖动、新增、双击删除和集合预览。
+
 ## 改动边界
 
 - 新增或迁移为稳定顺序 / 标识 + 坐标的控制点集合；`packCell` 只作为可重复的派生定位字段。旧河流没有新字段时仍可显示、编辑、导出和保存。

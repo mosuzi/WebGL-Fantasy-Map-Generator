@@ -4,6 +4,7 @@ import {goodDisplayName} from "../generator/economy-display-properties.js";
 import {describeRiverRelation} from "../generator/river-network.js";
 import {resolveZoneContext} from "./zone-context.js";
 import {normalizeZoneTypeRecord} from "./zone-types.js";
+import {normalizeRiverControlPoints} from "./river-control-points.js";
 
 const OBJECT_RESOLVERS = Object.freeze({
   [OBJECT_KIND.CITY]: resolveCity,
@@ -338,7 +339,8 @@ function resolveRiver(map, object) {
     source: river.source,
     mouth: river.mouth,
     cells: river.cells,
-    points: river.points
+    points: river.points,
+    ...(Array.isArray(river.controlPoints) ? {controlPoints: normalizeRiverControlPoints(river, map.pack?.cells)} : {})
   };
 }
 

@@ -11,6 +11,7 @@ import {normalizeDiplomacyMap} from "./diplomacy-map-compatibility.js";
 import {normalizeUnitPreferences} from "../ui/display-units.js";
 import {normalizeOceanCurrentModel, OCEAN_CURRENT_MODEL_VERSION} from "../generator/ocean-currents.js";
 import {normalizeRiverNetwork} from "../generator/river-network.js";
+import {normalizeRiverControlPoints} from "./river-control-points.js";
 import {normalizeLakeOverflowDiagnostics} from "../generator/lake-overflow.js";
 import {normalizeRegenerationLockStore, validateRegenerationLockStore} from "./regeneration-locks.js";
 import {normalizeZoneMap, resolveZoneContext} from "./zone-context.js";
@@ -659,6 +660,7 @@ function normalizeRiverStore(store, pack) {
     cells: Array.isArray(river.cells) ? [...river.cells] : river.cells,
     gridCells: Array.isArray(river.gridCells) ? [...river.gridCells] : river.gridCells,
     points: Array.isArray(river.points) ? river.points.map(point => Array.isArray(point) ? [...point] : point) : river.points,
+    ...(Array.isArray(river.controlPoints) ? {controlPoints: normalizeRiverControlPoints(river, source.pack?.cells)} : {}),
     hydrology: river.hydrology && typeof river.hydrology === "object" ? {...river.hydrology} : river.hydrology
   } : river);
   const normalized = normalizeRiverNetwork(rivers, pack, {dropIncomplete: false});
