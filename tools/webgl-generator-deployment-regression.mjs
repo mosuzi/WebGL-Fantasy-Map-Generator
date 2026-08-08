@@ -24,13 +24,13 @@ assert.deepEqual(vercel.redirects?.[0], {
   destination: "/prototype/:prototype/",
   permanent: false
 }, "prototype 无尾斜杠入口没有规范化");
-assert.deepEqual(vercel.rewrites?.[0], {
+assert.deepEqual(vercel.rewrites?.find(item => item.source === "/prototype/:prototype/"), {
   source: "/prototype/:prototype/",
   destination: "/prototype/:prototype/index.html"
 }, "prototype 目录入口没有优先改写到自身 index.html");
 assert.deepEqual(vercel.rewrites?.at(-1), {source: "/(.*)", destination: "/index.html"}, "正式应用 SPA fallback 不在路由末尾");
 assert.match(viteSource, /stagePrototypeDeployments\([\s\S]*?"prototype"[\s\S]*?"dist", "webgl-generator", "prototype"/, "Vite 构建没有动态装配 prototype 目录");
-assert.deepEqual(deployments.map(item => item.id), ["boundary-topology-lab", "loading-scroll-showcase", "webgl-cells"], "当前 prototype 分母漂移");
+assert.deepEqual(deployments.map(item => item.id), ["boundary-topology-lab", "loading-scroll-showcase", "river-network-lab", "webgl-cells"], "当前 prototype 分母漂移");
 
 const outputRoot = path.join(projectRoot, vercel.outputDirectory);
 let checkedBuildOutput = false;
@@ -43,6 +43,8 @@ try {
   await access(path.join(outputRoot, "prototype", "boundary-topology-lab", "src", "app.js"));
   await access(path.join(outputRoot, "prototype", "loading-scroll-showcase", "src", "app.js"));
   await access(path.join(outputRoot, "prototype", "loading-scroll-showcase", "src", "styles.css"));
+  await access(path.join(outputRoot, "prototype", "river-network-lab", "src", "app.js"));
+  await access(path.join(outputRoot, "prototype", "river-network-lab", "src", "audit.js"));
   await access(path.join(outputRoot, "prototype", "loading-scroll-showcase", "assets", "mosuzi-seal.png"));
   const [builtIndex, builtSeal] = await Promise.all([
     readFile(path.join(outputRoot, "index.html"), "utf8"),

@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>河流网络算法实验室</title>
+    <link rel="stylesheet" href="./src/styles.css">
+  </head>
+  <body>
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">RIVER NETWORK LAB · 304-A</p>
+        <h1>河流网络算法实验室</h1>
+        <p class="subtitle">固定夹具与生成快照只读审计 · 不写入正式地图</p>
+      </div>
+      <div class="status-pill" id="status">等待审计</div>
+    </header>
+    <main class="layout">
+      <aside class="sidebar">
+        <section>
+          <h2>固定夹具</h2>
+          <div id="fixture-list" class="fixture-list"></div>
+        </section>
+        <section class="legend">
+          <h2>证据等级</h2>
+          <p><span class="dot error"></span>异常候选：需要算法专题处理</p>
+          <p><span class="dot info"></span>观察项：只记录，不自动修复</p>
+          <p><span class="dot river"></span>蓝线：河流折线</p>
+        </section>
+        <button id="run-all" class="run-button" type="button">运行全部夹具</button>
+      </aside>
+      <section class="workspace">
+        <section class="case-head">
+          <div><p class="eyebrow" id="case-category"></p><h2 id="case-name"></h2></div>
+          <p id="case-description"></p>
+        </section>
+        <section class="main-grid">
+          <article class="map-card">
+            <header><h3>只读网络快照</h3><span id="case-metrics"></span></header>
+            <div id="map-view" class="map-view"></div>
+          </article>
+          <article class="report-card">
+            <header><h3>诊断结果</h3><span id="case-state"></span></header>
+            <div id="issue-list" class="issue-list"></div>
+          </article>
+        </section>
+        <section class="matrix-card">
+          <header><div><p class="eyebrow">FIXTURE MATRIX</p><h2>夹具覆盖矩阵</h2></div><span id="matrix-summary"></span></header>
+          <div id="matrix" class="matrix"></div>
+        </section>
+        <section class="boundary-note">
+          <strong>304-A 边界</strong>
+          <span>此页面只读取固定夹具；正式生成器、当前地图、存档、历史和公开 API 均不在实验室写入范围内。</span>
+        </section>
+      </section>
+    </main>
+    <script type="module" src="./src/app.js"></script>
+  </body>
+</html>

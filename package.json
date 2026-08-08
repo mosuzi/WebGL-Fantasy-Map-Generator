@@ -311,7 +311,9 @@
     "diagnose:source-warns": "node ./tools/source-candidate-warn-diagnostics.mjs",
     "start:prototype": "node ./tools/serve-prototype.mjs --port 5400",
     "start:boundary-topology-lab": "node ./tools/serve-prototype.mjs --port 5401 --dir ./prototype/boundary-topology-lab",
-    "start:loading-scroll-showcase": "node ./tools/serve-prototype.mjs --port 5402 --dir ./prototype/loading-scroll-showcase"
+    "start:loading-scroll-showcase": "node ./tools/serve-prototype.mjs --port 5402 --dir ./prototype/loading-scroll-showcase",
+    "start:river-network-lab": "node ./tools/serve-prototype.mjs --port 5403 --dir ./prototype/river-network-lab",
+    "regress:river-network-lab": "node --no-warnings ./tools/river-network-lab-regression.mjs"
   },
   "dependencies": {
     "@element-plus/icons-vue": "^2.3.2",
