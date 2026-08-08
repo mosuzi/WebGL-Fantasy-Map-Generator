@@ -2,7 +2,7 @@
 
 ## 当前状态
 
-待实施。本项只登记权威范围和验收条件，不在登记阶段修改代码、地图数据或用户当前 Chrome 标签页。
+调查完成，按 303-A～303-E 封闭子任务实施。本轮只完成调查与方案同步，不修改代码、地图数据或用户当前 Chrome 标签页。
 
 ## 目标
 
@@ -13,6 +13,54 @@
 - `inspectRiverVisualWaypoint` 和 `createAddRiverVisualWaypointCommand` 当前接收一个 `packCell`，用候选 cell 和距离判断重复并插入 `river.points`。
 - `river-waypoint-session` 只保存一个 draft，`RIVER_EDIT_WAYPOINT` 模式只绑定一个 `riverId`；renderer 的 `riverWaypointPreview` 也只负责一个候选预览。
 - 因此 `packCell` 不能继续作为控制点身份或唯一键；一个 cell 内必须允许多个独立坐标控制点。
+
+## 只读调查报告
+
+### 问题现象
+
+- 当前河流编辑只允许“单击候选位置 → 单个草稿 → 应用一条新增点命令”；没有已有控制点拖动、删除、同 cell 多点和完整控制点高亮。
+- `river.points` 既是生成后的成品显示折线，又是当前新增点的写入目标；数组位置没有稳定控制点身份。
+
+### 可复现步骤
+
+1. 在隔离系统 Chrome 打开固定地图，选中有至少三段 `points` 的河流。
+2. 点击“调整河道折线”，单击近河候选；面板出现一个候选草稿和一个橙色节点。
+3. 再单击另一个候选，前一个草稿被替换；对同一 pack cell 再选时按坐标重复拒绝。
+4. 没有已有控制点拖动入口，也没有双击删除入口；取消 / Escape 只清理单个 draft。
+
+### CDP / 静态证据
+
+- 隔离 Chrome `regress:river-waypoint-browser` 在 `1280 / 390 / 320px` 均通过当前单候选模式，`applicationErrors / pageErrors / activeHealthErrors / WebGL error` 均为 `0`。
+- `river-edit-commands.js` 的 `inspectRiverVisualWaypoint(map, riverId, packCell)` 以 `packCell` 和候选坐标判断重复，并只返回一个插入后的 `points`。
+- `river-waypoint-session.js` 只有一个 `draft`；`placeholder-renderer.js` 只有 `riverWaypointPreview`；`selection-layer.js` 只绘制一个候选菱形；`picking.js` 只建立河流线段索引并返回河流对象。
+- `map-file-io.js` 归一化只复制 `cells / gridCells / points / hydrology`；未知可选字段不会被清除，因此新增 `controlPoints` 有兼容落点。
+- 现有 `regress:river-waypoint-interaction` 通过，确认候选、距离 / 穿水拒绝、PNG 抑制预览、单条历史和水文数据不变；该回归证明旧契约仍稳定，不代表新能力已实现。
+
+### 根因假设及证据等级
+
+- 高可信：控制点没有独立身份，`packCell` 同时承担空间定位和唯一性判断，直接导致同 cell 多点不可能。
+- 高可信：session、renderer preview、selection mesh 和 picking 都是单对象模型，无法表达集合操作。
+- 中可信：直接把当前所有 `river.points` 当作可拖动控制点会把生成器 meander 点暴露为用户编辑点，因此应增加可选 `river.controlPoints`，而不是静默迁移全部旧 points。
+
+### 影响范围与不可破坏边界
+
+- 会影响河流编辑 UI、河流显示折线、selection / picking、撤销 / 重做、可选存档字段和河流对象 API 返回；不应改变 `cells / gridCells / parent / basin / source / mouth / flux / discharge` 等水文与河网字段。
+- 旧 JSON、gzip、浏览器存档和旧导出缺少 `controlPoints` 时必须继续加载；旧河流保持原显示和单候选兼容，不对历史 meander 点做无证据迁移。
+- 所有确认操作以整条河流前后快照为边界；取消、非法拖动、双击竞态、刷新失败和地图替换必须恢复原控制点、points、length、selection、索引和历史。
+
+### 当前明确不实施的方向
+
+- 不把 `packCell` 作为控制点主键，不把控制点写进 `pack.cells.r / fl / conf`，不重算 parent / confluence，不全局重生成河流或路线，不修改 `source/`，不刷新或覆盖用户当前 Chrome 地图。
+
+## 专题方案
+
+| 子任务 | 目标 | 改动边界 | 依赖 | 最小验收 | 回滚方式 | 是否影响地图数据 / schema / API / source |
+|---|---|---|---|---|---|---|
+| 303-A | `controlPoints` 可选集合，稳定 ID / 顺序 / 坐标，packCell 可重复 | 迁移 / 归一化 / 快照；保留 points 兼容 | 旧 points、map-file-io、对象解析 | 新旧存档往返；同 cell 两点身份独立 | 删除可选字段并恢复 points 快照 | 影响可选地图字段和对象 API；不改必填 schema、source |
+| 303-B | 实时预览拖动、新增、双击删除 | canvas pointer capture、session、双击判定和面板文案 | 303-A、canvas mode、direct session | 取消零写入；单击不误新增；双击只删 | session rollback、清理 capture / timer | 影响 UI / 交互；不改水文数据、source |
+| 303-C | 河流 / 控制点高亮、节点 picking、预览折线 | selection mesh、object picking、renderer dirty 刷新 | 303-A/B、renderer / picking | 10k / 100k 视觉和命中通过 | 恢复旧 selection / index / buffer | 影响显示、picking API；不改水文 schema、source |
+| 303-D | 新增 / 移动 / 删除单事务，撤销重做和导出兼容 | edit command、历史、JSON / gzip / PNG / GeoJSON | 303-A～C、map-file-io | 一次确认一条历史，失败整单回滚，旧档可读 | before / after 河流快照 | 影响河流地图数据、可选存档字段和编辑 API；不改生成算法、source |
+| 303-E | 统一 10k / 100k 与发布门禁 | 隔离 Chrome、窄视口、错误 / health / WebGL 检查 | 303-A～D | 同 cell 多点分别移 / 删、源河口反例、导入导出、PNG 全通过 | 回滚失败子任务提交 | 只新增回归与文档门禁；source 不改 |
 
 ## 改动边界
 

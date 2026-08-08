@@ -1,5 +1,11 @@
 # 开发历史
 
+## 2026-08-08：完成第303项只读调查并冻结实施方案
+
+- 只读复核确认当前 `river.points` 同时承担生成后的显示折线和视觉控制点写入目标，`inspectRiverVisualWaypoint` / `createAddRiverVisualWaypointCommand` 仍以单个 `packCell` 和单个 draft 为中心；同一个 cell 的第二个点会被坐标重复门禁拒绝，已有点没有拖动 / 双击删除路径。
+- 隔离系统 Chrome 的现有河流回归在 `1280 / 390 / 320px` 通过，普通 application console、page、health 和 WebGL 错误均为 `0`；这证明旧单点契约稳定，但不把旧回归误记为多控制点能力。
+- 冻结第 303 项为 303-A～303-E：可选 `river.controlPoints` 数据契约、预览交互、河流 / 控制点视觉与 picking、事务 / 导出 / 历史兼容、10k / 100k 隔离 Chrome 最终验收。明确保留旧 `points / cells / gridCells / parent / basin / source / mouth / flux / discharge`，不修改 `source/`，不重写河流生成算法，不接管用户当前 Chrome 标签页。
+
 ## 2026-08-08：完成权威任务第 302 项——城镇手动移位完整闭环
 
 - 只读审计确认既有 `city:move`、`inspectCityMove`、`createMoveCityCommand` 和 `bindCityRelocationDrag` 已覆盖本项冻结的目标规则：普通城镇归属跟随，港城保留 / 改港 / 失效清除，首都不得跨国，省会不得跨省，市场中心保持镜像，陆路局部重寻，失效海路在预检中明示删除，写入失败整单快照恢复。既有事务没有新增必填 schema 字段，旧存档继续兼容。
