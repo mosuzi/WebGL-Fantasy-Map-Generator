@@ -1,5 +1,12 @@
 # 开发历史
 
+## 2026-08-08：完成权威任务第303项——河流多控制点自由编辑
+
+- 303-A～303-D 已完成：新增可选 `river.controlPoints` 稳定控制点集合，允许同一 pack cell 多点；集合 session 支持新增 / 移动 / 删除预览，renderer selection / picking 显示整条河与控制点，确认通过一个 `createEditRiverControlPointsCommand` 写入 `points / controlPoints / length`，撤销 / 重做和旧单点路径保持兼容。
+- 303-E 真实隔离 Chrome 回归通过：10k / 100k 均完成新增、已有点拖动、双击删除、退出取消、重新进入提交、Ctrl+Z / Ctrl+Y；同一 pack cell 双点由数据 / 事务回归确认，真实 Chrome 选择不被面板遮挡的河段完成多控制点操作。旧 `1280 / 390 / 320px` 河流面板、selection / picking、完整导出、PNG / 高度图、API JSON / gzip 往返、旧数据兼容和生产构建通过。
+- 发现并修复控制点模式的输入竞态：全局编辑锁曾拦截 pointerdown，渲染器又在 pointerup 先触发普通对象选中，城市 / overlay 命中会以 `target-switch` 取消河流模式。现明确允许河流控制点模式接收画布输入，并在该模式内抑制普通选中；新增 pointerup 抑制门避免单击新增与普通选中重复。
+- 控制点交互期间 health error、application console error、page error 和 WebGL error 为 `0`；生成阶段长任务仍为已知基线（10k 约 `1.05s`，100k 约 `2.20s` / `4.55s`），不在本项扩大优化。`source/`、用户当前 Chrome 标签页和用户地图未改。
+
 ## 2026-08-08：完成第303项只读调查并冻结实施方案
 
 - 只读复核确认当前 `river.points` 同时承担生成后的显示折线和视觉控制点写入目标，`inspectRiverVisualWaypoint` / `createAddRiverVisualWaypointCommand` 仍以单个 `packCell` 和单个 draft 为中心；同一个 cell 的第二个点会被坐标重复门禁拒绝，已有点没有拖动 / 双击删除路径。

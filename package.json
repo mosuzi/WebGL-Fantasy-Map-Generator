@@ -299,6 +299,7 @@
     "regress:city-relocation-browser": "node --no-warnings ./tools/webgl-generator-city-relocation-browser-regression.mjs",
     "regress:river-control-points-data": "node --no-warnings ./tools/webgl-generator-river-control-points-data-regression.mjs",
     "regress:river-control-points": "node --no-warnings ./tools/webgl-generator-river-control-points-regression.mjs",
+    "regress:river-control-points-browser": "node --no-warnings ./tools/webgl-generator-river-control-points-browser-regression.mjs",
     "regress:shortcuts": "node --no-warnings ./tools/webgl-generator-keyboard-shortcuts-regression.mjs",
     "regress:shortcuts-browser": "node --no-warnings ./tools/webgl-generator-keyboard-shortcuts-browser-regression.mjs",
     "regress:canvas-tools": "node --no-warnings ./tools/webgl-generator-canvas-tool-mode-manager-regression.mjs",

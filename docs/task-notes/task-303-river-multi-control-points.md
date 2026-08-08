@@ -2,7 +2,7 @@
 
 ## 当前状态
 
-调查完成，按 303-A～303-E 封闭子任务实施。本轮只完成调查与方案同步，不修改代码、地图数据或用户当前 Chrome 标签页。
+调查、方案与 303-A～303-E 封闭子任务均已完成，待统一归档并推送。本专题不修改用户当前 Chrome 标签页；`source/` 保持零改动。
 
 ## 目标
 
@@ -71,6 +71,9 @@
 - 303-C 已完成：编辑模式进入时 renderer 接收基线控制点集合；selection layer 绘制控制点节点和变更后的完整预览折线；picking 在预览节点命中时返回 `riverControlPoint {riverId, id, pointIndex, packCell}`，不改变普通河流对象选择。
 - 303-C 回归：`regress:river-control-points` 已覆盖控制点集合 mesh 和稳定 ID picking，`build:app`、`regress:selection-highlight` 与既有三档河流 Chrome 回归通过。
 - 303-D 已完成代码闭环：`createEditRiverControlPointsCommand` 把当前 working state 一次写入 `points / controlPoints / length`，保存字段存在性并支持撤销 / 重做；当前进入 303-E，补完整导出和 10k / 100k 真实指针验收。
+- 303-E 已完成：隔离系统 Chrome 10k / 100k 真实指针回归均完成新增、已有点拖动、双击删除、退出取消、重新进入提交、Ctrl+Z / Ctrl+Y；两档交互期间 health error、application console error、page error 和 WebGL error 均为 `0`。同一 pack cell 多控制点由数据 / 事务回归固定为 `true`；真实 Chrome 选择可见且不被河流面板遮挡的河段完成多控制点手势，避免把面板命中误报为地图输入。
+- 303-E 兼容门禁：完整导出套件、PNG / 高度图、API JSON / gzip 往返、旧数据兼容、selection / picking、旧单点河流交互和 `1280 / 390 / 320px` 河流面板回归均通过；控制点确认只增加一条历史，取消不写地图，`cells / parent / basin / flux / discharge` 保持。生成阶段仍记录已知主线程长任务：10k 约 `1.05s`，100k 约 `2.20s` 与 `4.55s`；交互阶段无 health error，生成长任务不在本项扩大优化。
+- 303-E 交互命中修复：河流控制点模式允许画布输入，并在模式活动期间抑制渲染器的普通对象选中，避免城市 / 面板 overlay 的 pointerup 触发 `target-switch` 取消控制点模式；新增手势仍通过 pointer capture 和事务 session 回滚。
 
 ## 改动边界
 

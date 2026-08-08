@@ -2518,6 +2518,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     updatePickPanel(documentRef, state);
     updateEditingInteractionLock(state, documentRef);
   }, selection => {
+    if (state.canvasToolModes.isActive(CANVAS_TOOL_MODE.RIVER_EDIT_WAYPOINT)) return;
     selectionStore.setSelection(selection);
   });
   state.renderer = renderer;
@@ -11941,6 +11942,7 @@ function registerCanvasToolModes(state, documentRef, {stopObjectEditing} = {}) {
     }
   });
   register(CANVAS_TOOL_MODE.RIVER_EDIT_WAYPOINT, "river-panel", {
+    locksInteraction: false,
     onEnter: ({context}) => {
       const riverId = Number(context.riverId);
       if (!Number.isInteger(riverId) || riverId < 0) throw new Error("添加河道控制点前必须选择河流");

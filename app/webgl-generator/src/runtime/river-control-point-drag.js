@@ -2,6 +2,7 @@ import {findRiverControlPointAtWorld, normalizeRiverControlPoints} from "./river
 
 export function bindRiverControlPointEditing(target, state, documentRef) {
   let drag = null;
+  let suppressSelectPointerId = null;
 
   const onPointerDown = event => {
     if (!isActive(state) || event.button !== 0) return;
@@ -22,6 +23,7 @@ export function bindRiverControlPointEditing(target, state, documentRef) {
       return;
     }
     stageAction(state, documentRef, {type: "add", point: world, packCell: pick.packCell});
+    suppressSelectPointerId = event.pointerId;
   };
 
   const onPointerMove = event => {
@@ -36,6 +38,12 @@ export function bindRiverControlPointEditing(target, state, documentRef) {
   };
 
   const onPointerUp = event => {
+    if (suppressSelectPointerId === event.pointerId) {
+      suppressSelectPointerId = null;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      return;
+    }
     if (!drag || drag.pointerId !== event.pointerId) return;
     const current = drag;
     drag = null;
@@ -46,6 +54,7 @@ export function bindRiverControlPointEditing(target, state, documentRef) {
   };
 
   const onPointerCancel = event => {
+    if (suppressSelectPointerId === event.pointerId) suppressSelectPointerId = null;
     if (!drag || drag.pointerId !== event.pointerId) return;
     const current = drag;
     drag = null;
@@ -95,6 +104,7 @@ export function bindRiverControlPointEditing(target, state, documentRef) {
       target.removeEventListener("pointercancel", onPointerCancel, true);
       target.removeEventListener("dblclick", onDoubleClick, true);
       drag = null;
+      suppressSelectPointerId = null;
     },
     getActiveDrag() {
       return drag ? {...drag} : null;
