@@ -164,6 +164,26 @@ export function pickRiver(map, index, worldX, worldY, maxDistance) {
   return best;
 }
 
+export function pickRiverControlPoint(preview, worldX, worldY, maxDistance) {
+  const controls = preview?.controlPoints || [];
+  let best = null;
+  for (const control of controls) {
+    const distance = Math.hypot(Number(control?.x) - worldX, Number(control?.y) - worldY);
+    if (!Number.isFinite(distance) || distance > maxDistance || (best && distance >= best.distance)) continue;
+    best = {
+      kind: "river-control-point",
+      id: control.id,
+      riverId: Number(preview.riverId),
+      pointIndex: Number(control.pointIndex),
+      packCell: Number.isInteger(Number(control.packCell)) ? Number(control.packCell) : null,
+      worldX: Number(control.x),
+      worldY: Number(control.y),
+      distance
+    };
+  }
+  return best;
+}
+
 export function pickCity(map, index, worldX, worldY, maxDistance) {
   if (!map?.settlements?.cities?.length) return null;
   let best = null;

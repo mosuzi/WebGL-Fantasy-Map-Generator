@@ -1,4 +1,4 @@
-import {buildObjectPickingIndex, pickCity, pickGridCell, pickMarker, pickMilitary, pickPoliticalObject, pickRiver, pickRoute} from "./picking.js";
+import {buildObjectPickingIndex, pickCity, pickGridCell, pickMarker, pickMilitary, pickPoliticalObject, pickRiver, pickRiverControlPoint, pickRoute} from "./picking.js";
 import {goodDisplayName} from "../generator/economy-display-properties.js";
 import {bindVertexBuffer, createProgram} from "./gl-utils.js";
 import {createRenderContext, worldToNdcPoint, worldToScreenPixel} from "./render-context.js";
@@ -1676,14 +1676,15 @@ export class PlaceholderMapRenderer {
     const diplomacyRelation = highlightedConnector?.kind === OBJECT_KIND.DIPLOMACY_RELATION ? highlightedConnector : null;
     const route = this.layerVisibility.routes ? pickRoute(this.map, this.objectPickingIndex, world.x, world.y, this.pickThresholdWorld(7)) : null;
     const river = this.layerVisibility.rivers ? pickRiver(this.map, this.objectPickingIndex, world.x, world.y, this.pickThresholdWorld(9)) : null;
+    const riverControlPoint = pickRiverControlPoint(this.riverWaypointPreview, world.x, world.y, this.pickThresholdWorld(13));
     const lake = pickLakeObject(this.map, result);
     const politicalObject = pickPoliticalObject(this.map, result, this.colorMode);
-    const object = militaryIcon || markerIcon || label || diplomacyRelation || tradeFlow || lake || cityObject || marker || military || river || route || politicalObject;
-    this.lastObjectCandidateCount = (label ? 1 : 0) + (cityObject?.candidateCount || 0) + (marker?.candidateCount || 0) + (military?.candidateCount || 0) + (highlightedConnector?.candidateCount || tradeFlow?.candidateCount || 0) + (route?.candidateCount || 0) + (river?.candidateCount || 0) + (lake ? 1 : 0) + (politicalObject ? 1 : 0);
+    const object = militaryIcon || markerIcon || label || diplomacyRelation || tradeFlow || lake || cityObject || marker || military || riverControlPoint || river || route || politicalObject;
+    this.lastObjectCandidateCount = (label ? 1 : 0) + (cityObject?.candidateCount || 0) + (marker?.candidateCount || 0) + (military?.candidateCount || 0) + (highlightedConnector?.candidateCount || tradeFlow?.candidateCount || 0) + (route?.candidateCount || 0) + (river?.candidateCount || 0) + (riverControlPoint ? 1 : 0) + (lake ? 1 : 0) + (politicalObject ? 1 : 0);
     const gridPackCellCount = Number.isInteger(result.gridCell)
       ? Number(this.gridCellDiagnostics.packCounts?.[result.gridCell] || 0)
       : 0;
-    return result ? {...result, gridPackCellCount, label, cityObject, marker, military, tradeFlow, diplomacyRelation, route, river, lake, politicalObject, object, objectCandidates: this.lastObjectCandidateCount, worldX: roundValue(result.worldX), worldY: roundValue(result.worldY)} : null;
+    return result ? {...result, gridPackCellCount, label, cityObject, marker, military, tradeFlow, diplomacyRelation, route, river, riverControlPoint, lake, politicalObject, object, objectCandidates: this.lastObjectCandidateCount, worldX: roundValue(result.worldX), worldY: roundValue(result.worldY)} : null;
   }
 
   screenToWorld(clientX, clientY) {

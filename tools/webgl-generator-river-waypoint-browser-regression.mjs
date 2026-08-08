@@ -108,7 +108,7 @@ async function inspectViewport(width) {
       realWaterReject = await page.evaluate(() => ({
         draft: window.__webglGeneratorApp.riverEdit.waypointDraft,
         previewCode: window.__webglGeneratorApp.renderer.riverWaypointPreview?.code || null,
-        applyDisabled: [...document.querySelectorAll(".river-waypoint-draft button")].find(button => button.textContent.includes("应用折点"))?.disabled
+        applyDisabled: [...document.querySelectorAll(".river-waypoint-draft button")].find(button => button.textContent.includes("应用控制点"))?.disabled
       }));
       assert.equal(realWaterReject.draft, null, "真实水域拒绝不得留下可应用草稿");
       assert.equal(realWaterReject.previewCode, "waypoint-water", "真实水域拒绝必须把红色诊断送入 renderer");
@@ -165,7 +165,7 @@ async function measureCard(page) {
     const panel = card.closest(".floating-panel");
     const body = card.closest(".floating-panel-body");
     const actions = card.querySelector(".river-waypoint-draft-actions");
-    const apply = [...card.querySelectorAll("button")].find(button => button.textContent.includes("应用折点"));
+    const apply = [...card.querySelectorAll("button")].find(button => button.textContent.includes("应用控制点"));
     const actionRect = actions.getBoundingClientRect();
     const buttons = [...actions.querySelectorAll("button")].map(button => {
       const rect = button.getBoundingClientRect();
@@ -197,7 +197,7 @@ async function measureCard(page) {
 }
 
 function assertCompactActionButtons(measurement, width, stateLabel) {
-  assert.deepEqual(measurement.buttons.map(button => button.text), ["应用折点", "重新选择", "退出模式"], `${width}px ${stateLabel}按钮文案必须完整`);
+  assert.deepEqual(measurement.buttons.map(button => button.text), ["应用控制点", "重新选择", "退出模式"], `${width}px ${stateLabel}按钮文案必须完整`);
   assert.equal(measurement.actionRows, 1, `${width}px ${stateLabel}三个按钮应优先保持单排`);
   assert.ok(measurement.buttons.every(button => Math.abs(button.height - 28) <= 0.5), `${width}px ${stateLabel}按钮高度应为 28px`);
   assert.ok(measurement.buttons.every(button => button.width < measurement.actions.width - 1), `${width}px ${stateLabel}按钮不得撑满操作区`);

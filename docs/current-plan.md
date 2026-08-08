@@ -34,8 +34,8 @@
 |---|---|---|---|---|---|
 | 303-A 数据契约与控制点身份 | 已完成：建立稳定顺序 / ID / 坐标集合，允许同一 cell 多点，旧图缺字段可读 | 当前 points / packCell 单键限制；旧归一化会保留可选字段 | 新增 `river-control-points.js`，接入地图归一化和对象读取；不改生成算法 | 数据回归通过：新旧地图都能读；同 cell 两点 ID 不冲突；字段缺失不报错 | 前后河流快照恢复；影响地图数据与可选存档字段，不改 API 必填 schema |
 | 303-B 预览交互 | 已完成：点击河流非控制点新增预览；已有点 pointer capture 拖动；双击已有点删除；单击 / 双击不写历史 | 当前单候选 pointerdown 已扩展为集合 session 与独立拖动监听 | 依赖 303-A、统一 canvas mode、pointer capture；不写正式图和历史 | 数据 / session 回归通过；正式 Chrome 视觉门禁留给 303-C/E | 取消 / Escape / 换图 / pointercancel 清空或恢复草稿；影响 UI / 交互，不改水文字段 |
-| 303-C 河流视觉、picking 与派生 | 进行中：预览完整控制点集合和折线，控制点可命中，确认只刷新河流显示 / object panel | 当前 selection 只有河流线、picking 只有 river segment | 依赖 303-A/B、renderer selection / picking / edit refresh；不改水文拓扑 | 10k / 100k 高亮、点命中、视觉折线与状态同步；WebGL 无错 | 命令前后快照恢复 points / controlPoints / length / selection；影响 renderer、picking、河流可视字段 |
-| 303-D 命令、导出与历史兼容 | 新增 / 移动 / 删除合并为单事务，撤销 / 重做、JSON / gzip / PNG / GeoJSON 保持一致 | 当前命令只保存 points / length，导出只输出 points | 依赖 303-A～C、`EditHistory`、map-file-io；保留旧字段和导出 LineString | 一次确认一条历史；失败整单回滚；旧存档往返 checksum / schema 不变 | 恢复完整河流快照；影响地图数据、可选存档字段和河流编辑 API，不改生成 API |
+| 303-C 河流视觉、picking 与派生 | 已完成：编辑模式高亮整条河和控制点集合；预览完整折线；picking 返回稳定控制点 ID | selection mesh、riverWaypointPreview、renderer picking 已扩展集合模型 | 依赖 303-A/B、renderer selection / picking / edit refresh；不改水文拓扑 | focused mesh / picking 回归、构建和既有河流 Chrome 回归通过；双档真实指针留给 303-E | 命令前后快照恢复 points / controlPoints / length / selection；影响 renderer、picking、河流可视字段 |
+| 303-D 命令、导出与历史兼容 | 已完成：新增 / 移动 / 删除合并为单事务，撤销 / 重做、JSON / gzip / PNG / GeoJSON 保持一致 | 当前命令只保存 points / length，导出只输出 points | 依赖 303-A～C、`EditHistory`、map-file-io；保留旧字段和导出 LineString | 数据回归已覆盖单事务和历史；完整导出 / PNG / 旧档与最终 Chrome 留给 303-E | 恢复完整河流快照；影响地图数据、可选存档字段和河流编辑 API，不改生成 API |
 | 303-E 统一验收与发布门禁 | 固定 10k / 100k、宽窄视口、错误面和真实指针行为 | 现有 river waypoint focused / browser 回归可复用 | 依赖 303-A～D；使用隔离系统 Chrome，不触碰用户标签页 | 同 cell 多点增删移、源点 / 河口 / 穿水 / 越界拒绝、撤销 / 重做、导入导出、PNG、console / page / health / WebGL 全通过 | 任何失败回退本子任务提交；最终确认后统一提交推送 |
 
 ## 执行与归档规则

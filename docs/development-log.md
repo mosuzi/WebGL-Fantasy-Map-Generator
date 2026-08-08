@@ -18,6 +18,12 @@
 - 新增独立河流控制点 pointer capture：点击非控制点新增预览，已有点拖动实时预览，双击已有点预览删除；无移动点击、pointercancel、Escape、换图和模式退出均不产生半条河流或额外历史。
 - `createEditRiverControlPointsCommand` 已可把当前集合一次写入并完整撤销 / 重做；`regress:river-control-points`、既有单点交互和三档河流面板 Chrome 回归通过。正式集合节点 / 控制点 picking 留给 303-C。
 
+## 2026-08-08：完成第303-C～D子任务——控制点视觉命中与单事务历史
+
+- 编辑模式进入时保留整条河和当前 `controlPoints` 的基线预览；新增 / 移动 / 删除草稿绘制完整预览折线和节点。控制点节点复用选择层 depth 约束，不改变正式水文河道。
+- renderer picking 增加只读 `riverControlPoint` 返回值，包含河流 ID、稳定控制点 ID、折线索引和可重复 pack cell；普通河流 selection 仍由 `river` 返回。
+- `createEditRiverControlPointsCommand` 对当前 working state 单事务写入 `points / controlPoints / length`，完整保存控制点字段存在性并支持撤销 / 重做。focused mesh / picking、数据 / 历史、构建、selection 和既有三档河流面板 Chrome 回归通过；最终 10k / 100k 真实 pointer、导出和兼容门禁留在 303-E。
+
 ## 2026-08-08：完成权威任务第 302 项——城镇手动移位完整闭环
 
 - 只读审计确认既有 `city:move`、`inspectCityMove`、`createMoveCityCommand` 和 `bindCityRelocationDrag` 已覆盖本项冻结的目标规则：普通城镇归属跟随，港城保留 / 改港 / 失效清除，首都不得跨国，省会不得跨省，市场中心保持镜像，陆路局部重寻，失效海路在预检中明示删除，写入失败整单快照恢复。既有事务没有新增必填 schema 字段，旧存档继续兼容。

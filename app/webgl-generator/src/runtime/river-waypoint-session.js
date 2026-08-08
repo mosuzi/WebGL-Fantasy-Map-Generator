@@ -77,6 +77,19 @@ export function createRiverWaypointSession({onDraftChange = () => {}} = {}) {
     getWorkingState() {
       return working ? cloneWorkingState(working) : null;
     },
+    getPreview() {
+      if (!working || !Number.isInteger(riverId)) return null;
+      return {
+        valid: true,
+        changed: false,
+        code: "control-points",
+        reason: "",
+        riverId,
+        points: clonePoints(working.points),
+        controlPoints: cloneControls(working.controlPoints),
+        length: working.length
+      };
+    },
     restoreWorking(previous, reason = "restore") {
       if (!previous) return this.clear(reason);
       working = cloneWorkingState(previous);

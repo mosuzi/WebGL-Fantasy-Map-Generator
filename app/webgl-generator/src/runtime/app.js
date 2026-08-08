@@ -2524,7 +2524,9 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
   state.riverEdit.session = createRiverWaypointSession({
     onDraftChange: draft => {
       state.riverEdit.waypointDraft = draft;
-      state.renderer?.setRiverWaypointPreview?.(draft);
+      const preview = draft || (state.canvasToolModes.isActive(CANVAS_TOOL_MODE.RIVER_EDIT_WAYPOINT) ? state.riverEdit.session?.getPreview?.() : null);
+      state.renderer?.setRiverWaypointPreview?.(preview);
+      state.panels.river?.setWaypointPreview?.(preview);
       state.panels.river?.setWaypointDraft?.(draft);
       if (draft?.valid) {
         state.panels.river?.setWaypointFeedback?.({
@@ -11944,11 +11946,14 @@ function registerCanvasToolModes(state, documentRef, {stopObjectEditing} = {}) {
       if (!Number.isInteger(riverId) || riverId < 0) throw new Error("添加河道控制点前必须选择河流");
       state.riverEdit.waypointRiverId = riverId;
       state.riverEdit.session?.begin(state.map, riverId);
+      state.renderer?.setRiverWaypointPreview?.(state.riverEdit.session?.getPreview?.());
+      state.panels.river?.setWaypointPreview?.(state.riverEdit.session?.getPreview?.());
       state.panels.river?.setWaypointMode(true);
       state.panels.river?.setWaypointFeedback?.({tone: "idle", code: "begin", message: "单击地图上的河道附近位置，只会预览，不会立即修改河流。"});
     },
     onExit: ({reason}) => {
       state.riverEdit.session?.end(reason || "mode-exit");
+      state.renderer?.clearRiverWaypointPreview?.();
       state.riverEdit.waypointRiverId = null;
       state.panels.river?.setWaypointMode(false);
     }
@@ -12176,6 +12181,11 @@ function setRiverWaypointFeedback(documentRef, message) {
 function clearRiverWaypointDraft(state) {
   if (state.riverEdit.session) {
     state.riverEdit.session.clear("clear");
+    if (state.canvasToolModes.isActive(CANVAS_TOOL_MODE.RIVER_EDIT_WAYPOINT)) {
+      const preview = state.riverEdit.session.getPreview?.();
+      state.renderer?.setRiverWaypointPreview?.(preview);
+      state.panels.river?.setWaypointPreview?.(preview);
+    }
     return;
   }
   state.riverEdit.waypointDraft = null;

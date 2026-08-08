@@ -68,7 +68,9 @@
 - 303-A 回归：`regress:river-control-points-data` 与既有 `regress:river-waypoint-interaction` 通过；同一 pack cell 的两个控制点拥有不同稳定 ID，插入 / 删除路径索引可重排，旧控制点字段缺失兼容。
 - 303-B 已完成：新增集合 session action（add / move / delete）和独立 pointer capture 拖动监听；单击非控制点仅更新预览，已有控制点可拖动，双击已有点预览删除；pointercancel / 无移动点击恢复本次手势。
 - 303-B 回归：`regress:river-control-points` 覆盖同 cell 双点分别移动 / 删除、session 连续草稿、取消和单事务命令；既有单点交互与三档窄视口回归保持通过。控制点集合的正式视觉 / picking 仍由 303-C 完成。
-- 当前进入 303-C；尚未把控制点集合绘制到 renderer selection mesh，也尚未增加控制点专用 picking 返回值。
+- 303-C 已完成：编辑模式进入时 renderer 接收基线控制点集合；selection layer 绘制控制点节点和变更后的完整预览折线；picking 在预览节点命中时返回 `riverControlPoint {riverId, id, pointIndex, packCell}`，不改变普通河流对象选择。
+- 303-C 回归：`regress:river-control-points` 已覆盖控制点集合 mesh 和稳定 ID picking，`build:app`、`regress:selection-highlight` 与既有三档河流 Chrome 回归通过。
+- 303-D 已完成代码闭环：`createEditRiverControlPointsCommand` 把当前 working state 一次写入 `points / controlPoints / length`，保存字段存在性并支持撤销 / 重做；当前进入 303-E，补完整导出和 10k / 100k 真实指针验收。
 
 ## 改动边界
 

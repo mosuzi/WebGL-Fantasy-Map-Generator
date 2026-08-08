@@ -76,6 +76,10 @@ export function drawSelectionMeshBatches(gl, ranges) {
 }
 
 function pushRiverWaypointPreview(landMaskedVertices, ordinaryVertices, context, preview) {
+  if (Array.isArray(preview?.controlPoints)) {
+    pushRiverControlPointCollection(landMaskedVertices, context, preview);
+    return;
+  }
   const candidate = preview?.candidatePoint || preview?.points?.[preview?.insertIndex];
   if (!isPoint(candidate)) return;
   if (!preview.valid) {
@@ -97,6 +101,23 @@ function pushRiverWaypointPreview(landMaskedVertices, ordinaryVertices, context,
   pushScreenPolyline(landMaskedVertices, context, [original[0], candidate], color, selectionLineWidth(context, 4.8));
   pushScreenPolyline(landMaskedVertices, context, [candidate, original[1]], color, selectionLineWidth(context, 4.8));
   pushWaypointDiamond(landMaskedVertices, context, candidate, color);
+}
+
+function pushRiverControlPointCollection(vertices, context, preview) {
+  const points = (preview.points || []).filter(isPoint);
+  if (preview.changed && points.length >= 2) {
+    pushScreenPolyline(vertices, context, points, [1, 0.62, 0.12, 0.8], selectionLineWidth(context, 2.8));
+  }
+  for (const control of preview.controlPoints || []) {
+    if (!isPoint([control?.x, control?.y])) continue;
+    const color = preview.action === "delete" && control.id === preview.controlPointId
+      ? [1, 0.22, 0.18, 0.98]
+      : [1, 0.68, 0.12, 0.98];
+    pushWaypointDiamond(vertices, context, [Number(control.x), Number(control.y)], color);
+  }
+  if (isPoint(preview.candidatePoint) && preview.action !== "delete") {
+    pushWaypointDiamond(vertices, context, preview.candidatePoint, [1, 0.82, 0.22, 0.9]);
+  }
 }
 
 function pushRejectedRiverWaypointPreview(vertices, context, preview, candidate) {

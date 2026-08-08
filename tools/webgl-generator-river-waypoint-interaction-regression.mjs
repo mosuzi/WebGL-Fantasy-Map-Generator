@@ -203,7 +203,7 @@ assert.match(appSource, /function applyRiverWaypointDraft[\s\S]*createAddRiverVi
 assert.match(appSource, /function clearRiverWaypointDraft[\s\S]*clearRiverWaypointPreview/);
 assert.match(appSource, /target-switch|target-deleted|map-replace/);
 assert.match(panelAdapterSource, /onApplyWaypoint[\s\S]*onReselectWaypoint[\s\S]*onCancelWaypoint/);
-for (const label of ["调整河道折线", "橙色实线是新河段", "浅色虚线是将被替换的原河段", "红色节点表示候选被拒绝", "应用折点", "重新选择", "退出模式"]) assert.match(panelSource, new RegExp(label));
+for (const label of ["调整河道折线", "单击河流非控制点处新增", "双击已有控制点删除", "同一 cell 可放置多个点", "应用控制点", "重新选择", "退出模式"]) assert.match(panelSource, new RegExp(label));
 assert.equal((panelSource.match(/\{key: "path"/g) || []).length, 1, "河流面板只能保留一个河道折线入口");
 assert.match(panelSource, /icon:\s*"折"/);
 assert.match(panelSource, /position:\s*sticky/);

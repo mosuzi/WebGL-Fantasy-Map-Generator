@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import {createEditRiverControlPointsCommand, inspectRiverControlPointAction} from "../app/webgl-generator/src/runtime/river-edit-commands.js";
 import {EditHistory} from "../app/webgl-generator/src/runtime/edit-history.js";
 import {createRiverWaypointSession} from "../app/webgl-generator/src/runtime/river-waypoint-session.js";
+import {buildSelectionMeshBundle} from "../app/webgl-generator/src/renderer/selection-layer.js";
+import {pickRiverControlPoint} from "../app/webgl-generator/src/renderer/picking.js";
 
 const map = createFixture();
 const river = map.rivers.rivers[0];
@@ -28,6 +30,10 @@ const deleted = inspectRiverControlPointAction(map, river.id, {type: "delete", c
 assert.equal(deleted.valid, true, deleted.reason);
 assert.equal(deleted.controlPoints.length, 1);
 assert.equal(deleted.points.length, river.points.length + 1);
+const previewMesh = buildSelectionMeshBundle(map, {scale: 1, offsetX: 0, offsetY: 0}, {width: 1000, height: 700, clientWidth: 1000, clientHeight: 700}, null, null, [], second);
+assert.ok(previewMesh.vertices.length > 0, "控制点集合预览必须生成选择层 mesh");
+const pickedControl = pickRiverControlPoint(second, second.controlPoints[0].x, second.controlPoints[0].y, 0.1);
+assert.equal(pickedControl.id, second.controlPoints[0].id, "控制点 picking 必须返回稳定 ID");
 
 const session = createRiverWaypointSession();
 session.begin(map, river.id);
