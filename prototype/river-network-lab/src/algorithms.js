@@ -59,11 +59,77 @@ export function runDAGCandidate(snapshot) {
   };
 }
 
+export function analyzeConfluences(snapshot, options = {}) {
+  const settings = {snapTolerance: 12, ...options};
+  const graph = analyzeParentGraph(snapshot);
+  const rivers = graph.rivers;
+  const byId = new Map(rivers.map(river => [river.id, river]));
+  const issues = [];
+  const anchors = [];
+  let protectedOutlets = 0;
+  let changedPoints = 0;
+  let maxDistance = 0;
+  for (const child of rivers) {
+    if (!child.parent) continue;
+    const parent = byId.get(child.parent);
+    const childEnd = child.points.at(-1);
+    if (!parent || !childEnd || parent.points.length < 2) continue;
+    const attachment = closestPointOnPolyline(childEnd, parent.points);
+    maxDistance = Math.max(maxDistance, attachment.distance);
+    if (isProtectedOutlet(child.outletKind)) {
+      protectedOutlets += 1;
+      issues.push({id: "protected-outlet", severity: "info", riverIds: [child.id, parent.id], distance: attachment.distance, message: "保留湖泊、河口或边界出口，不执行几何吸附。"});
+      continue;
+    }
+    if (attachment.distance > settings.snapTolerance) {
+      issues.push({id: "confluence-unattached", severity: "warn", riverIds: [child.id, parent.id], distance: attachment.distance, message: "支流末端超出汇流锚点容差，候选拒绝整体吸附。"});
+      continue;
+    }
+    anchors.push({childId: child.id, parentId: parent.id, from: childEnd, to: attachment.point, distance: attachment.distance});
+    if (attachment.distance > 1e-7) changedPoints += 1;
+  }
+  const rejected = !graph.ok || issues.some(issue => issue.severity === "warn");
+  return {
+    ok: !rejected,
+    issues,
+    anchors,
+    protectedOutlets,
+    metrics: {
+      relations: rivers.filter(river => river.parent).length,
+      attached: anchors.length,
+      unattached: issues.filter(issue => issue.id === "confluence-unattached").length,
+      protectedOutlets,
+      changedPoints,
+      maxDistance: Number(maxDistance.toFixed(3)),
+      snapTolerance: settings.snapTolerance,
+      graphRejected: !graph.ok
+    }
+  };
+}
+
+export function runConfluenceCandidate(snapshot, options = {}) {
+  const graphCandidate = runDAGCandidate(snapshot);
+  const geometry = analyzeConfluences(snapshot, options);
+  if (!graphCandidate.accepted || !geometry.ok) {
+    return {accepted: false, rejection: {reason: !graphCandidate.accepted ? "parent-graph-rejected" : "confluence-anchor-rejected", graph: graphCandidate.rejection, issues: geometry.issues}, metrics: geometry.metrics, candidateRivers: null};
+  }
+  const anchorsByChild = new Map(geometry.anchors.map(anchor => [anchor.childId, anchor.to]));
+  const candidateRivers = graphCandidate.candidateRivers.map(river => {
+    const anchor = anchorsByChild.get(river.id);
+    if (!anchor || isProtectedOutlet(river.outletKind)) return cloneRiver(river);
+    return {...cloneRiver(river), points: [...river.points.slice(0, -1), [...anchor]]};
+  });
+  return {accepted: true, rejection: null, metrics: geometry.metrics, candidateRivers};
+}
+
 function normalizeRivers(snapshot) {
   const source = Array.isArray(snapshot?.rivers) ? snapshot.rivers : [];
   return source.map((river, index) => ({
+    ...river,
     id: Number(river.id ?? index + 1),
     parent: Number(river.parent || 0),
+    outletKind: river.outletKind || "",
+    lakeId: river.lakeId ?? null,
     cells: Array.isArray(river.cells) ? [...river.cells] : [],
     points: Array.isArray(river.points) ? river.points.map(point => point.slice(0, 2)) : []
   })).sort((left, right) => left.id - right.id);
@@ -123,6 +189,29 @@ function topologicalOrderOf(rivers, childrenByParent, selfParents, missingParent
 
 function cloneRiver(river) {
   return {...river, cells: [...river.cells], points: river.points.map(point => [...point])};
+}
+
+function closestPointOnPolyline(point, points) {
+  let best = null;
+  for (let index = 1; index < points.length; index += 1) {
+    const candidate = closestPointOnSegment(point, points[index - 1], points[index]);
+    if (!best || candidate.distance < best.distance) best = candidate;
+  }
+  return best || {point: [...point], distance: 0};
+}
+
+function closestPointOnSegment(point, start, end) {
+  const dx = end[0] - start[0];
+  const dy = end[1] - start[1];
+  const lengthSquared = dx * dx + dy * dy;
+  const ratio = lengthSquared ? Math.max(0, Math.min(1, ((point[0] - start[0]) * dx + (point[1] - start[1]) * dy) / lengthSquared)) : 0;
+  const projected = [start[0] + ratio * dx, start[1] + ratio * dy];
+  return {point: projected, distance: Math.hypot(point[0] - projected[0], point[1] - projected[1])};
+}
+
+function isProtectedOutlet(outletKind) {
+  const value = String(outletKind || "");
+  return value.includes("lake") || value === "ocean" || value === "border";
 }
 
 function sameSet(left, right) {

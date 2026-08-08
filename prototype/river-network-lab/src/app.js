@@ -1,11 +1,11 @@
 import {FIXTURES, FIXTURE_BY_ID} from "./fixtures.js";
 import {auditRiverNetwork} from "./audit.js";
-import {analyzeParentGraph, runDAGCandidate} from "./algorithms.js";
+import {analyzeConfluences, analyzeParentGraph, runConfluenceCandidate, runDAGCandidate} from "./algorithms.js";
 
 const state = {fixtureId: FIXTURES[0].id};
 const elements = Object.fromEntries([
   "status", "fixture-list", "case-category", "case-name", "case-description", "case-metrics",
-  "map-view", "case-state", "issue-list", "algorithm-result", "matrix", "matrix-summary", "run-all"
+  "map-view", "case-state", "issue-list", "algorithm-result", "confluence-result", "matrix", "matrix-summary", "run-all"
 ].map(id => [id, document.getElementById(id)]));
 
 function initialize() {
@@ -19,7 +19,7 @@ function initialize() {
   elements["run-all"].addEventListener("click", renderMatrix);
   render();
   renderMatrix();
-  window.riverNetworkLab = Object.freeze({FIXTURES, FIXTURE_BY_ID, auditRiverNetwork, analyzeParentGraph, runDAGCandidate});
+  window.riverNetworkLab = Object.freeze({FIXTURES, FIXTURE_BY_ID, auditRiverNetwork, analyzeConfluences, analyzeParentGraph, runConfluenceCandidate, runDAGCandidate});
 }
 
 function render() {
@@ -40,6 +40,7 @@ function render() {
   elements["map-view"].innerHTML = renderMap(fixture, result);
   elements["issue-list"].innerHTML = issueMarkup(result, fixture);
   elements["algorithm-result"].innerHTML = algorithmMarkup(runDAGCandidate(fixture));
+  elements["confluence-result"].innerHTML = confluenceMarkup(runConfluenceCandidate(fixture));
 }
 
 function renderMap(fixture, result) {
@@ -76,6 +77,11 @@ function algorithmMarkup(candidate) {
   const graph = analyzeParentGraph(candidate.candidateRivers || {rivers: []});
   const source = candidate.accepted ? `确定性拓扑序：${candidate.topologicalOrder.join(" → ") || "空"}` : `拒绝原因：${candidate.rejection.reason}`;
   return `<div class="algorithm-box ${candidate.accepted ? "pass" : "fail"}"><strong>304-B 父子 DAG 候选：${candidate.accepted ? "接受" : "拒绝"}</strong><span>${source}</span><small>visited ${candidate.metrics.visited}/${candidate.metrics.rivers} · cycles ${candidate.metrics.cycles} · missing ${candidate.metrics.missingParents} · self ${candidate.metrics.selfParents} · 重算 ${graph.metrics.rivers} 条</small></div>`;
+}
+
+function confluenceMarkup(candidate) {
+  const detail = candidate.accepted ? `锚点 ${candidate.metrics.attached} 个 · 改写末端 ${candidate.metrics.changedPoints} 个` : `候选拒绝：${candidate.rejection.reason}`;
+  return `<div class="algorithm-box ${candidate.accepted ? "pass" : "fail"}"><strong>304-C 汇流锚点候选：${candidate.accepted ? "接受" : "拒绝"}</strong><span>${detail}</span><small>关系 ${candidate.metrics.relations} · 未贴合 ${candidate.metrics.unattached} · 保护出口 ${candidate.metrics.protectedOutlets} · 最大距离 ${candidate.metrics.maxDistance}</small></div>`;
 }
 
 function formatMetrics(metrics = {}) {
