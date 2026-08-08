@@ -75,7 +75,7 @@ function renderMatrix() {
 }
 
 function algorithmMarkup(candidate) {
-  const graph = analyzeParentGraph(candidate.candidateRivers || {rivers: []});
+  const graph = analyzeParentGraph({rivers: candidate.candidateRivers || []});
   const source = candidate.accepted ? `确定性拓扑序：${candidate.topologicalOrder.join(" → ") || "空"}` : `拒绝原因：${candidate.rejection.reason}`;
   return `<div class="algorithm-box ${candidate.accepted ? "pass" : "fail"}"><strong>304-B 父子 DAG 候选：${candidate.accepted ? "接受" : "拒绝"}</strong><span>${source}</span><small>visited ${candidate.metrics.visited}/${candidate.metrics.rivers} · cycles ${candidate.metrics.cycles} · missing ${candidate.metrics.missingParents} · self ${candidate.metrics.selfParents} · 重算 ${graph.metrics.rivers} 条</small></div>`;
 }
