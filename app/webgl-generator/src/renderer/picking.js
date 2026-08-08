@@ -457,11 +457,14 @@ function candidateCells(column, row, columns, rows) {
 }
 
 function pointInCell(map, cell, x, y) {
-  const vertexIds = map.grid.cells.v[cell];
+  const vertexIds = map.grid?.cells?.v?.[cell];
+  const vertices = map.grid?.vertices?.p;
+  if (!vertexIds || vertexIds.length < 3 || !vertices) return false;
   let inside = false;
   for (let index = 0, previous = vertexIds.length - 1; index < vertexIds.length; previous = index++) {
-    const a = map.grid.vertices.p[vertexIds[index]];
-    const b = map.grid.vertices.p[vertexIds[previous]];
+    const a = vertices[vertexIds[index]];
+    const b = vertices[vertexIds[previous]];
+    if (!a || !b) return false;
     if ((a[1] > y) !== (b[1] > y) && x < ((b[0] - a[0]) * (y - a[1])) / (b[1] - a[1]) + a[0]) {
       inside = !inside;
     }

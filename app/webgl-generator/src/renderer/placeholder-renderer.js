@@ -1660,10 +1660,11 @@ export class PlaceholderMapRenderer {
       return buildUndevelopedPickResult(this.map, world, "outside-map");
     }
     const result = pickGridCell(this.map, world.x, world.y);
-    if (!result || result.gridCell === null) {
+    if (!result) {
       this.lastObjectCandidateCount = 0;
       return buildUndevelopedPickResult(this.map, world, "no-cell", result?.candidates || 0);
     }
+    const hasGridCell = Number.isInteger(result.gridCell) && result.gridCell >= 0;
     const cityObject = this.layerVisibility.cities || this.layerVisibility.population
       ? pickCity(this.map, this.objectPickingIndex, world.x, world.y, this.pickThresholdWorld(9))
       : null;
@@ -1677,8 +1678,8 @@ export class PlaceholderMapRenderer {
     const route = this.layerVisibility.routes ? pickRoute(this.map, this.objectPickingIndex, world.x, world.y, this.pickThresholdWorld(7)) : null;
     const river = this.layerVisibility.rivers ? pickRiver(this.map, this.objectPickingIndex, world.x, world.y, this.pickThresholdWorld(9)) : null;
     const riverControlPoint = pickRiverControlPoint(this.riverWaypointPreview, world.x, world.y, this.pickThresholdWorld(13));
-    const lake = pickLakeObject(this.map, result);
-    const politicalObject = pickPoliticalObject(this.map, result, this.colorMode);
+    const lake = hasGridCell ? pickLakeObject(this.map, result) : null;
+    const politicalObject = hasGridCell ? pickPoliticalObject(this.map, result, this.colorMode) : null;
     const object = militaryIcon || markerIcon || label || diplomacyRelation || tradeFlow || lake || cityObject || marker || military || riverControlPoint || river || route || politicalObject;
     this.lastObjectCandidateCount = (label ? 1 : 0) + (cityObject?.candidateCount || 0) + (marker?.candidateCount || 0) + (military?.candidateCount || 0) + (highlightedConnector?.candidateCount || tradeFlow?.candidateCount || 0) + (route?.candidateCount || 0) + (river?.candidateCount || 0) + (riverControlPoint ? 1 : 0) + (lake ? 1 : 0) + (politicalObject ? 1 : 0);
     const gridPackCellCount = Number.isInteger(result.gridCell)

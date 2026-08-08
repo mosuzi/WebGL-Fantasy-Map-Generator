@@ -227,6 +227,7 @@
     "regress:route-edit": "node --no-warnings ./tools/webgl-generator-route-edit-regression.mjs",
     "regress:object-details-edit": "node --no-warnings ./tools/webgl-generator-object-details-edit-regression.mjs",
     "regress:river-waypoint-interaction": "node --no-warnings ./tools/webgl-generator-river-waypoint-interaction-regression.mjs",
+    "regress:river-picking": "node --no-warnings ./tools/webgl-generator-river-picking-regression.mjs",
     "regress:river-mouth-rendering": "node --no-warnings ./tools/webgl-generator-river-mouth-rendering-regression.mjs",
     "regress:river-waypoint-browser": "node --no-warnings ./tools/webgl-generator-river-waypoint-browser-regression.mjs",
     "regress:route-connectivity": "node --no-warnings ./tools/webgl-generator-route-connectivity-regression.mjs",
