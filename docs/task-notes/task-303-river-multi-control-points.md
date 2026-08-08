@@ -66,7 +66,9 @@
 
 - 303-A 已完成：新增 `river-control-points.js`，以可选 `river.controlPoints` 保存 `id / x / y / pointIndex / packCell / flux`；地图归一化和河流对象读取会复制并校验该集合，旧河流缺字段时保持 `undefined`，不会把全部 meander 点静默变成控制点。
 - 303-A 回归：`regress:river-control-points-data` 与既有 `regress:river-waypoint-interaction` 通过；同一 pack cell 的两个控制点拥有不同稳定 ID，插入 / 删除路径索引可重排，旧控制点字段缺失兼容。
-- 当前进入 303-B；尚未接入拖动、新增、双击删除和集合预览。
+- 303-B 已完成：新增集合 session action（add / move / delete）和独立 pointer capture 拖动监听；单击非控制点仅更新预览，已有控制点可拖动，双击已有点预览删除；pointercancel / 无移动点击恢复本次手势。
+- 303-B 回归：`regress:river-control-points` 覆盖同 cell 双点分别移动 / 删除、session 连续草稿、取消和单事务命令；既有单点交互与三档窄视口回归保持通过。控制点集合的正式视觉 / picking 仍由 303-C 完成。
+- 当前进入 303-C；尚未把控制点集合绘制到 renderer selection mesh，也尚未增加控制点专用 picking 返回值。
 
 ## 改动边界
 

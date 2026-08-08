@@ -176,8 +176,9 @@ import {
 import {applySocialAssignmentPreview, SOCIAL_ASSIGNMENT_PREVIEW_EFFECTS} from "./social-ownership-edit-commands.js";
 import {resolveObject} from "./object-resolver.js";
 import {MAX_PERSISTENT_OBJECT_HIGHLIGHTS, isPersistentHighlightObjectKind, normalizePersistentHighlights, samePersistentHighlightMembership} from "./persistent-highlights.js";
-import {createAddRiverCommand, createAddRiverVisualWaypointCommand, createDeleteRiverCommand, createRenameRiversFromNamebaseCommand, createSetRiverNoteCommand, createSetRiverWidthFactorCommand, inspectRiverVisualWaypoint} from "./river-edit-commands.js";
+import {createAddRiverCommand, createAddRiverVisualWaypointCommand, createDeleteRiverCommand, createEditRiverControlPointsCommand, createRenameRiversFromNamebaseCommand, createSetRiverNoteCommand, createSetRiverWidthFactorCommand, inspectRiverVisualWaypoint} from "./river-edit-commands.js";
 import {createRiverWaypointSession} from "./river-waypoint-session.js";
+import {bindRiverControlPointEditing} from "./river-control-point-drag.js";
 import {createAddRouteCommand, createDeleteRouteCommand, createEditRouteCommand, createSetRouteNoteCommand, inspectRouteEdit} from "./route-edit-commands.js";
 import {createDeleteBatchCommand, createDeleteConfirmationRequiredError, inspectDeleteImpact, requestDeleteConfirmation} from "./delete-impact.js";
 import {
@@ -2615,6 +2616,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
   bindMarketAssignmentEditing(canvas, state, documentRef);
   bindCityEditing(canvas, state, documentRef);
   bindMarkerEditing(canvas, state, documentRef);
+  state.riverEdit.controlPointDrag = bindRiverControlPointEditing(canvas, state, documentRef);
   bindObjectCreationTools(canvas, state, documentRef);
   bindCustomLabelDrag(state, documentRef);
   bindEditingInteractionLock(canvas, state);
@@ -12191,7 +12193,10 @@ function applyRiverWaypointDraft(state, documentRef) {
     updateRuntimePanel(documentRef, state);
     return {executed: false, reason: validation.code || "missing-draft"};
   }
-  const result = executeEditCommand(state, documentRef, createAddRiverVisualWaypointCommand(riverId, draft.packCell), {
+  const command = draft.action && draft.working
+    ? createEditRiverControlPointsCommand(riverId, draft.working)
+    : createAddRiverVisualWaypointCommand(riverId, draft.packCell);
+  const result = executeEditCommand(state, documentRef, command, {
     context: {map: state.map},
     status: executed => `已为河流 #${executed.getResult?.().riverId ?? riverId} 应用河道控制点。`,
     errorStatus: executed => `${executed.label}失败，候选位置可能已失效，请重新选择。`,

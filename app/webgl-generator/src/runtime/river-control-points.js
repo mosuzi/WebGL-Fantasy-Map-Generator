@@ -77,6 +77,21 @@ export function normalizeControlPointId(value, riverId, usedIds = new Set(), all
   return uniqueControlPointId(value, riverId, usedIds, allocate);
 }
 
+export function findNearestRiverPackCell(packCells, x, y) {
+  return nearestPackCell(packCells, x, y);
+}
+
+export function findRiverControlPointAtWorld(map, river, x, y, maxDistance = Infinity, controls = null) {
+  const normalized = controls || normalizeRiverControlPoints(river, map?.pack?.cells) || [];
+  let best = null;
+  for (const control of normalized) {
+    const distance = Math.hypot(Number(control.x) - Number(x), Number(control.y) - Number(y));
+    if (!Number.isFinite(distance) || distance > maxDistance || (best && distance >= best.distance)) continue;
+    best = {...control, distance};
+  }
+  return best;
+}
+
 function uniqueControlPointId(value, riverId, usedIds, allocate) {
   const candidate = typeof value === "string" && value.trim() ? value.trim() : "";
   if (candidate && !usedIds.has(candidate)) return candidate;

@@ -4,6 +4,7 @@ import {cloneObjectNote, deleteObjectNote, objectNoteId, readObjectNote, restore
 import {OBJECT_KIND} from "./object-kinds.js";
 import {createChineseNameGenerator} from "../generator/names.js";
 import {normalizeRiverNetwork} from "../generator/river-network.js";
+import {createRiverControlPoint, findNearestRiverPackCell, normalizeRiverControlPoints, updateRiverControlPointIndexes} from "./river-control-points.js";
 
 const RIVER_NOTE_EFFECTS = Object.freeze({
   render: "none",
@@ -229,6 +230,159 @@ export function inspectRiverVisualWaypoint(map, riverId, packCell) {
   };
 }
 
+export function inspectRiverControlPointAction(map, riverId, action = {}, base = null) {
+  const id = Number(riverId);
+  const river = findRiver(map, id);
+  if (!river) return invalidRiverControlPoint("river-missing", `找不到河流 #${id}`);
+  const points = (base?.points || river.points || []).filter(isPoint).map(point => [...point]);
+  if (points.length < 2) return invalidRiverControlPoint("path-too-short", "河流缺少可编辑的成品折线");
+  const controls = normalizeRiverControlPoints({...river, points, controlPoints: base?.controlPoints ?? river.controlPoints}, map?.pack?.cells) || [];
+  const type = String(action.type || "").trim().toLowerCase();
+  if (!["add", "move", "delete"].includes(type)) return invalidRiverControlPoint("invalid-action", "不支持的河流控制点操作");
+  if (type === "delete") return inspectDeleteRiverControlPoint(id, points, controls, action.controlPointId);
+
+  const point = normalizeWorldPoint(action.point || action.candidatePoint);
+  if (!point) return invalidRiverControlPoint("invalid-point", "控制点必须包含有效的地图坐标");
+  const packCell = Number.isInteger(Number(action.packCell))
+    ? Number(action.packCell)
+    : findNearestRiverPackCell(map?.pack?.cells, point[0], point[1]);
+  const candidateHeight = Number(map?.pack?.cells?.h?.[packCell]);
+  if (Number.isFinite(candidateHeight) && candidateHeight < 20) return invalidRiverControlPoint("waypoint-water", "控制点不能位于水域", {candidatePoint: point, packCell});
+
+  if (type === "add") {
+    if (controls.some(control => Math.hypot(control.x - point[0], control.y - point[1]) < 0.25)) {
+      return invalidRiverControlPoint("duplicate-waypoint", "该位置已经存在河道控制点", {candidatePoint: point, packCell});
+    }
+    const nearest = nearestRiverSegment(points, point);
+    const maxDistance = riverVisualWaypointMaxDistance(map, points, nearest.index);
+    if (nearest.distance > maxDistance) return invalidRiverControlPoint("waypoint-too-far", `候选点距离最近河段 ${roundCoordinate(nearest.distance)}，超过允许的 ${roundCoordinate(maxDistance)}`, {candidatePoint: point, packCell, distance: nearest.distance, maxDistance, nearestPoint: nearest.point});
+    const nextPoint = [roundCoordinate(point[0]), roundCoordinate(point[1]), interpolatePointFlux(points[nearest.index], points[nearest.index + 1], nearest.amount)];
+    const water = validateReplacementWater(map, points, [nearest.index], [nextPoint], nearest.index, points[nearest.index + 1]);
+    if (!water.valid) return {...water, candidatePoint: nextPoint, packCell, distance: nearest.distance, maxDistance, nearestPoint: nearest.point};
+    const insertIndex = nearest.index + 1;
+    const nextPoints = [...points.slice(0, insertIndex), nextPoint, ...points.slice(insertIndex)];
+    const shiftedControls = updateRiverControlPointIndexes(controls, null, insertIndex);
+    const nextControl = createRiverControlPoint({...river, points, controlPoints: controls}, insertIndex, nextPoint, map?.pack?.cells);
+    return {
+      valid: true,
+      changed: true,
+      code: "ok",
+      action: "add",
+      riverId: id,
+      packCell,
+      insertIndex,
+      candidatePoint: nextPoint,
+      nearestPoint: nearest.point.map(roundCoordinate),
+      originalSegment: [points[nearest.index].slice(0, 2), points[nearest.index + 1].slice(0, 2)],
+      points: nextPoints,
+      controlPoints: [...shiftedControls, nextControl].filter(Boolean).sort((a, b) => a.pointIndex - b.pointIndex),
+      length: polylineLength(nextPoints)
+    };
+  }
+
+  const controlPointId = String(action.controlPointId || "");
+  const control = controls.find(item => item.id === controlPointId);
+  if (!control) return invalidRiverControlPoint("control-point-missing", "找不到要移动的河道控制点", {controlPointId});
+  const pointIndex = Number(control.pointIndex);
+  if (!Number.isInteger(pointIndex) || pointIndex <= 0 || pointIndex >= points.length - 1) return invalidRiverControlPoint("protected-endpoint", "河源和河口控制点不可直接移动", {controlPointId, pointIndex});
+  if (controls.some(item => item.id !== controlPointId && Math.hypot(item.x - point[0], item.y - point[1]) < 0.25)) return invalidRiverControlPoint("duplicate-waypoint", "目标位置已经存在另一个河道控制点", {candidatePoint: point, packCell, controlPointId});
+  const nextPoint = [roundCoordinate(point[0]), roundCoordinate(point[1]), Number.isFinite(Number(control.flux)) ? Number(control.flux) : Number(points[pointIndex]?.[2]) || 0];
+  const affectedSegments = [pointIndex - 1, pointIndex];
+  const water = validateReplacementWater(map, points, affectedSegments, [nextPoint], pointIndex - 1, points[pointIndex + 1]);
+  if (!water.valid) return {...water, candidatePoint: nextPoint, packCell, controlPointId, pointIndex};
+  const nextPoints = points.map((item, index) => index === pointIndex ? nextPoint : [...item]);
+  const nextControls = controls.map(item => item.id === controlPointId
+    ? {...item, x: nextPoint[0], y: nextPoint[1], packCell, flux: nextPoint[2]}
+    : {...item});
+  return {
+    valid: true,
+    changed: nextPoint[0] !== points[pointIndex][0] || nextPoint[1] !== points[pointIndex][1],
+    code: "ok",
+    action: "move",
+    riverId: id,
+    packCell,
+    controlPointId,
+    pointIndex,
+    candidatePoint: nextPoint,
+    points: nextPoints,
+    controlPoints: nextControls,
+    length: polylineLength(nextPoints)
+  };
+}
+
+function inspectDeleteRiverControlPoint(riverId, points, controls, controlPointId) {
+  const id = String(controlPointId || "");
+  const control = controls.find(item => item.id === id);
+  if (!control) return invalidRiverControlPoint("control-point-missing", "找不到要删除的河道控制点", {controlPointId: id});
+  const pointIndex = Number(control.pointIndex);
+  if (!Number.isInteger(pointIndex) || pointIndex <= 0 || pointIndex >= points.length - 1) return invalidRiverControlPoint("protected-endpoint", "河源和河口控制点不可删除", {controlPointId: id, pointIndex});
+  const nextPoints = points.filter((_, index) => index !== pointIndex);
+  const nextControls = updateRiverControlPointIndexes(controls, pointIndex, null);
+  return {
+    valid: true,
+    changed: true,
+    code: "ok",
+    action: "delete",
+    riverId,
+    controlPointId: id,
+    pointIndex,
+    points: nextPoints,
+    controlPoints: nextControls,
+    length: polylineLength(nextPoints)
+  };
+}
+
+function validateReplacementWater(map, points, segmentIndexes, replacementPoints, replacementStartIndex, replacementEndPoint) {
+  const original = replacementWaterSummary();
+  const candidate = replacementWaterSummary();
+  for (const index of segmentIndexes) {
+    if (index < 0 || index >= points.length - 1) continue;
+    mergeWaterSummaryInto(original, segmentWaterSummary(map, points[index], points[index + 1]));
+  }
+  if (replacementPoints.length === 1) {
+    const point = replacementPoints[0];
+    const index = replacementStartIndex;
+    mergeWaterSummaryInto(candidate, segmentWaterSummary(map, points[index], point));
+    mergeWaterSummaryInto(candidate, segmentWaterSummary(map, point, replacementEndPoint || points[index + 1]));
+  }
+  const waterTolerance = packSampleSpacing(map) * 1.25;
+  const addedWaterCells = [...candidate.cells].filter(cell => !original.cells.has(cell));
+  if (addedWaterCells.length || candidate.exposure > original.exposure + waterTolerance) {
+    return {
+      valid: false,
+      changed: false,
+      code: "waypoint-crosses-water",
+      reason: "控制点移动会比原河段新增穿越水域",
+      originalWaterCells: [...original.cells],
+      candidateWaterCells: [...candidate.cells],
+      addedWaterCells
+    };
+  }
+  return {valid: true, changed: true, code: "ok", reason: ""};
+}
+
+function replacementWaterSummary() {
+  return {exposure: 0, cells: new Set()};
+}
+
+function mergeWaterSummaryInto(target, source) {
+  target.exposure += source.exposure;
+  for (const cell of source.cells) target.cells.add(cell);
+}
+
+function interpolatePointFlux(start, end, amount) {
+  return Math.max(0, Math.round((Number(start?.[2]) || 0) + ((Number(end?.[2]) || 0) - (Number(start?.[2]) || 0)) * amount));
+}
+
+function normalizeWorldPoint(point) {
+  if (!isPoint(point)) return null;
+  return [Number(point[0]), Number(point[1])];
+}
+
+function invalidRiverControlPoint(code, reason, detail = {}) {
+  return {valid: false, changed: false, code, reason, points: [], controlPoints: [], ...detail};
+}
+
 function segmentWaterSummary(map, start, end) {
   const points = map?.pack?.cells?.p || [];
   const heights = map?.pack?.cells?.h;
@@ -356,6 +510,74 @@ export function createAddRiverVisualWaypointCommand(riverId, packCell, {label = 
       return after ? {riverId: id, packCell: Number(packCell), points: after.length, length: polylineLength(after)} : null;
     }
   };
+}
+
+export function createEditRiverControlPointsCommand(riverId, nextState, {label = "编辑河道控制点"} = {}) {
+  const id = Number(riverId);
+  let before = null;
+  let after = null;
+  return {
+    label: `${label} #${id}`,
+    domain: OBJECT_KIND.RIVER,
+    effects: {...RIVER_VISUAL_PATH_EFFECTS, affected: objectAffected(OBJECT_KIND.RIVER, id)},
+    apply(context) {
+      const river = findRiver(context.map, id);
+      if (!river) throw new Error(`找不到河流 #${id}`);
+      if (!before) {
+        before = captureRiverControlPointState(river);
+        after = normalizeRiverControlPointState(context.map, river, nextState);
+      }
+      river.points = clonePlain(after.points);
+      river.length = after.length;
+      river.controlPoints = clonePlain(after.controlPoints);
+    },
+    revert(context) {
+      const river = findRiver(context.map, id);
+      if (!river || !before) throw new Error("缺少可撤销的河流控制点快照");
+      restoreRiverControlPointState(river, before);
+    },
+    isNoop(context) {
+      const river = findRiver(context.map, id);
+      if (!river) return true;
+      const preview = normalizeRiverControlPointState(context.map, river, nextState);
+      return riverControlPointStateFingerprint(captureRiverControlPointState(river)) === riverControlPointStateFingerprint(preview);
+    },
+    getResult() {
+      return after ? {riverId: id, controlPoints: after.controlPoints.length, points: after.points.length, length: after.length} : null;
+    }
+  };
+}
+
+function normalizeRiverControlPointState(map, river, state = {}) {
+  const points = (state.points || river.points || []).map(point => [...point]);
+  const controls = normalizeRiverControlPoints({...river, points, controlPoints: state.controlPoints || []}, map?.pack?.cells) || [];
+  return {points, controlPoints: controls, length: polylineLength(points)};
+}
+
+function captureRiverControlPointState(river) {
+  return {
+    points: clonePlain(river.points || []),
+    controlPoints: Object.prototype.hasOwnProperty.call(river, "controlPoints") ? clonePlain(river.controlPoints || []) : undefined,
+    length: Object.prototype.hasOwnProperty.call(river, "length") ? river.length : undefined,
+    hadLength: Object.prototype.hasOwnProperty.call(river, "length"),
+    hadControlPoints: Object.prototype.hasOwnProperty.call(river, "controlPoints")
+  };
+}
+
+function restoreRiverControlPointState(river, snapshot) {
+  river.points = clonePlain(snapshot.points);
+  if (snapshot.hadControlPoints) river.controlPoints = clonePlain(snapshot.controlPoints || []);
+  else delete river.controlPoints;
+  if (snapshot.hadLength) river.length = snapshot.length;
+  else delete river.length;
+}
+
+function riverControlPointStateFingerprint(state) {
+  return JSON.stringify({
+    points: state.points || [],
+    controlPoints: state.controlPoints === undefined ? null : state.controlPoints || [],
+    length: Number.isFinite(Number(state.length)) ? Number(state.length) : null
+  });
 }
 
 export function createSetRiverNoteCommand(riverId, body, {name = ""} = {}) {

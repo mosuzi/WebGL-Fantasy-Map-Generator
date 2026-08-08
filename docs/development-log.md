@@ -12,6 +12,12 @@
 - 地图存档归一化和河流对象 resolver 会校验并复制该可选集合；旧河流没有字段时继续按原 `river.points` 显示和导出，不静默把生成器 meander 点迁移为用户控制点。`source/`、水文 cells、河网关系和生成算法未改。
 - `regress:river-control-points-data` 与既有单点河流回归通过，覆盖稳定 ID、同 cell 双点、索引重排和缺字段兼容。
 
+## 2026-08-08：完成第303-B子任务——河流控制点预览交互
+
+- session 扩展为基于当前工作副本的 `add / move / delete` 集合操作；每次操作只改变预览，确认前不写正式河流和历史。新增控制点仍允许共享 pack cell，已有点按稳定 ID 识别，河源 / 河口端点受保护。
+- 新增独立河流控制点 pointer capture：点击非控制点新增预览，已有点拖动实时预览，双击已有点预览删除；无移动点击、pointercancel、Escape、换图和模式退出均不产生半条河流或额外历史。
+- `createEditRiverControlPointsCommand` 已可把当前集合一次写入并完整撤销 / 重做；`regress:river-control-points`、既有单点交互和三档河流面板 Chrome 回归通过。正式集合节点 / 控制点 picking 留给 303-C。
+
 ## 2026-08-08：完成权威任务第 302 项——城镇手动移位完整闭环
 
 - 只读审计确认既有 `city:move`、`inspectCityMove`、`createMoveCityCommand` 和 `bindCityRelocationDrag` 已覆盖本项冻结的目标规则：普通城镇归属跟随，港城保留 / 改港 / 失效清除，首都不得跨国，省会不得跨省，市场中心保持镜像，陆路局部重寻，失效海路在预检中明示删除，写入失败整单快照恢复。既有事务没有新增必填 schema 字段，旧存档继续兼容。
