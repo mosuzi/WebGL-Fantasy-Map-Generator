@@ -45,6 +45,7 @@ try {
   await access(path.join(outputRoot, "prototype", "loading-scroll-showcase", "src", "styles.css"));
   await access(path.join(outputRoot, "prototype", "river-network-lab", "src", "app.js"));
   await access(path.join(outputRoot, "prototype", "river-network-lab", "src", "audit.js"));
+  await access(path.join(outputRoot, "prototype", "river-network-lab", "src", "algorithms.js"));
   await access(path.join(outputRoot, "prototype", "loading-scroll-showcase", "assets", "mosuzi-seal.png"));
   const [builtIndex, builtSeal] = await Promise.all([
     readFile(path.join(outputRoot, "index.html"), "utf8"),

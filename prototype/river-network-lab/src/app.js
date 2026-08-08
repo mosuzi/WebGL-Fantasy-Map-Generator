@@ -1,10 +1,11 @@
 import {FIXTURES, FIXTURE_BY_ID} from "./fixtures.js";
 import {auditRiverNetwork} from "./audit.js";
+import {analyzeParentGraph, runDAGCandidate} from "./algorithms.js";
 
 const state = {fixtureId: FIXTURES[0].id};
 const elements = Object.fromEntries([
   "status", "fixture-list", "case-category", "case-name", "case-description", "case-metrics",
-  "map-view", "case-state", "issue-list", "matrix", "matrix-summary", "run-all"
+  "map-view", "case-state", "issue-list", "algorithm-result", "matrix", "matrix-summary", "run-all"
 ].map(id => [id, document.getElementById(id)]));
 
 function initialize() {
@@ -18,7 +19,7 @@ function initialize() {
   elements["run-all"].addEventListener("click", renderMatrix);
   render();
   renderMatrix();
-  window.riverNetworkLab = Object.freeze({FIXTURES, FIXTURE_BY_ID, auditRiverNetwork});
+  window.riverNetworkLab = Object.freeze({FIXTURES, FIXTURE_BY_ID, auditRiverNetwork, analyzeParentGraph, runDAGCandidate});
 }
 
 function render() {
@@ -38,6 +39,7 @@ function render() {
   elements["status"].className = `status-pill ${expectedHit ? "pass" : "fail"}`;
   elements["map-view"].innerHTML = renderMap(fixture, result);
   elements["issue-list"].innerHTML = issueMarkup(result, fixture);
+  elements["algorithm-result"].innerHTML = algorithmMarkup(runDAGCandidate(fixture));
 }
 
 function renderMap(fixture, result) {
@@ -68,6 +70,12 @@ function renderMatrix() {
   elements["matrix-summary"].textContent = `${passed}/${results.length} 个夹具命中预期`;
   elements["matrix"].innerHTML = results.map(({fixture, result, hit}) => `<button class="matrix-item ${hit ? "pass" : "fail"}" data-fixture="${fixture.id}"><span>${fixture.name}</span><strong>${hit ? "命中" : "缺口"}</strong><small>${result.issues.map(issue => issue.id).join(" · ") || "无诊断"}</small></button>`).join("");
   elements["matrix"].querySelectorAll("[data-fixture]").forEach(button => button.addEventListener("click", () => { state.fixtureId = button.dataset.fixture; render(); }));
+}
+
+function algorithmMarkup(candidate) {
+  const graph = analyzeParentGraph(candidate.candidateRivers || {rivers: []});
+  const source = candidate.accepted ? `确定性拓扑序：${candidate.topologicalOrder.join(" → ") || "空"}` : `拒绝原因：${candidate.rejection.reason}`;
+  return `<div class="algorithm-box ${candidate.accepted ? "pass" : "fail"}"><strong>304-B 父子 DAG 候选：${candidate.accepted ? "接受" : "拒绝"}</strong><span>${source}</span><small>visited ${candidate.metrics.visited}/${candidate.metrics.rivers} · cycles ${candidate.metrics.cycles} · missing ${candidate.metrics.missingParents} · self ${candidate.metrics.selfParents} · 重算 ${graph.metrics.rivers} 条</small></div>`;
 }
 
 function formatMetrics(metrics = {}) {
