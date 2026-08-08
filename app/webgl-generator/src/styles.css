@@ -2824,6 +2824,14 @@ select:disabled {
   opacity: 0.42;
 }
 
+.ui-icon-action.el-button.active.is-disabled,
+.ui-icon-action.el-button.active:disabled {
+  border-color: #d7a84f;
+  background: linear-gradient(180deg, #3a2f18 0%, #241d10 100%);
+  color: #ffe0a1;
+  opacity: 0.82;
+}
+
 .ui-icon-action.el-button > span,
 .ui-icon-action.el-button .el-button__text {
   display: inline-block;
@@ -3662,6 +3670,14 @@ select:disabled {
   background: linear-gradient(180deg, #3a2f18 0%, #241d10 100%);
   box-shadow: inset 0 0 0 1px rgba(255, 224, 161, 0.08);
   color: #ffe0a1;
+}
+
+.height-action-group button.active:disabled,
+.height-scope-group button.active:disabled {
+  border-color: rgba(215, 168, 79, 0.78);
+  background: linear-gradient(180deg, #3a2f18 0%, #241d10 100%);
+  color: #ffe0a1;
+  opacity: 0.82;
 }
 
 .height-player-tool-row {

@@ -209,7 +209,7 @@ async function testOverlayLifecycleAndIntegration() {
   const previewBind = appSource.indexOf("state.brushCursorPreview = createBrushCursorPreview");
   const heightBind = appSource.indexOf("bindHeightEditing(canvas, state, documentRef)");
   assert.ok(previewBind >= 0 && previewBind < heightBind, "光标监听没有先于会 stopImmediatePropagation 的编辑监听注册");
-  assert.match(appSource, /state\.brushCursorPreview\?\.clear\(\);\s*hooks\.onExit/, "画布模式退出未统一清理光标");
+  assert.match(appSource, /state\.brushCursorPreview\?\.clear\(\);\s*clearCanvasToolModeFeedback\(state, documentRef\);\s*hooks\.onExit/, "画布模式退出未统一清理光标");
   assert.match(appSource, /state\.brushCursorPreview\?\.reset\(\);/, "地图替换未清理光标位置");
 }
 

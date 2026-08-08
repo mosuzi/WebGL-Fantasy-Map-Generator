@@ -1,5 +1,12 @@
 # 开发历史
 
+## 2026-08-08：完成第 301-E 补充验收——高度面板状态、选区高亮与画笔偏好
+
+- 复核确认上一轮 E 的“保留运行时选区、清空 renderer 缓冲后重新进入模式”只覆盖合成状态，没有覆盖真实面板锁定选区和当前画笔作用范围；用户实测高亮仍丢失是有效反例。
+- 进入 `height:brush` 时现在同时恢复 `heightEdit.terrainSelection` 的 cell / 羽化权重、主动调度 brush cursor；debug 动作与作用范围按钮补齐 `.active` / `aria-pressed`，并为普通分段按钮与 Element Plus 图标按钮补充“选中 + disabled”样式。
+- 高度画笔大小新增全局用户偏好 `webgl-generator-height-editor-preferences-v1`，没有偏好时继续为 `28`，修改后跨面板关闭 / 重开、模式重入和页面刷新保持；不进入地图数据、schema、存档和历史。
+- 隔离生产 Chrome 真实 10k / 100k 回归实际点击动作、作用范围和覆盖锁定，形成 `3327 / 39862` 个选区 cells；清空 renderer 缓冲后重入高度模式均恢复，高度动作 / 作用范围 `aria-pressed`、画笔 `42`、光标半径 `42` 和刷新恢复均通过。两档 checksum、撤销 / 重做、console、page、health、WebGL 错误门禁通过；`source/` 零改动。
+
 ## 2026-08-08：补充第 301-E 验收条件并登记第 302、303 项
 
 - 用户补充发现：启用高度编辑后，高度面板中的多个当前选中按钮高亮会丢失；当前源码虽已有部分 `.active` / `aria-pressed`，因此后续必须先区分运行时状态丢失、DOM 语义丢失和“选中 + 禁用”视觉样式被普通 disabled 覆盖，不能只改一个颜色规则。

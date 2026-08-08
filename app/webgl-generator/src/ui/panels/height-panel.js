@@ -18,16 +18,18 @@ import {
 
 const HEIGHT_RADIUS = readBrushRadiusContract(BRUSH_RADIUS_ID.HEIGHT);
 const HEIGHT_SELECTION_RADIUS = readBrushRadiusContract(BRUSH_RADIUS_ID.HEIGHT_SELECTION);
+export const HEIGHT_EDITOR_PREFERENCES_STORAGE_KEY = "webgl-generator-height-editor-preferences-v1";
 
 export function createHeightPanel(documentRef, manager, callbacks = {}) {
   const loadedPrograms = loadUserTerrainPrograms(documentRef);
+  const savedPreferences = loadHeightEditorPreferences(documentRef);
   const panelState = reactive({
     active: false,
     action: "raise",
     affectSeafloor: false,
     scope: "land",
     preserveSurface: true,
-    radius: HEIGHT_RADIUS.defaultValue,
+    radius: savedPreferences.radius,
     strength: 6,
     levelPerturbation: 0,
     selectionSmoothness: 0,
@@ -77,7 +79,7 @@ export function createHeightPanel(documentRef, manager, callbacks = {}) {
     history: null
   });
   const panelCallbacks = {
-    onBrushRadiusChange: () => callbacks.onBrushRadiusChange?.(),
+    onBrushRadiusChange: radius => callbacks.onBrushRadiusChange?.(radius),
     onActiveChange: active => callbacks.onActiveChange?.(active),
     onActionChange: action => callbacks.onActionChange?.(action),
     onUndo: () => callbacks.onUndo?.(),
@@ -437,6 +439,11 @@ export function createHeightPanel(documentRef, manager, callbacks = {}) {
         falloff: panelState.falloff
       };
     },
+    persistBrushRadius(radius = panelState.radius) {
+      const normalized = normalizeBrushRadius(BRUSH_RADIUS_ID.HEIGHT, radius);
+      panelState.radius = normalized;
+      return saveHeightEditorPreferences(documentRef, {radius: normalized});
+    },
     getConditionalTransform() {
       return getConditionalTransform();
     },
@@ -557,6 +564,33 @@ function loadUserTerrainPrograms(documentRef) {
     };
   } catch (error) {
     return {templates: [], recycle: null, notice: `用户模板未恢复：${error.message}`};
+  }
+}
+
+function loadHeightEditorPreferences(documentRef) {
+  const defaultRadius = HEIGHT_RADIUS.defaultValue;
+  try {
+    const storage = documentRef.defaultView?.localStorage;
+    const raw = storage?.getItem(HEIGHT_EDITOR_PREFERENCES_STORAGE_KEY);
+    if (!raw) return {radius: defaultRadius};
+    const parsed = JSON.parse(raw);
+    return {radius: normalizeBrushRadius(BRUSH_RADIUS_ID.HEIGHT, parsed?.radius)};
+  } catch {
+    return {radius: defaultRadius};
+  }
+}
+
+function saveHeightEditorPreferences(documentRef, patch) {
+  try {
+    const storage = documentRef.defaultView?.localStorage;
+    if (!storage) return false;
+    const current = loadHeightEditorPreferences(documentRef);
+    storage.setItem(HEIGHT_EDITOR_PREFERENCES_STORAGE_KEY, JSON.stringify({
+      radius: normalizeBrushRadius(BRUSH_RADIUS_ID.HEIGHT, patch?.radius ?? current.radius)
+    }));
+    return true;
+  } catch {
+    return false;
   }
 }
 

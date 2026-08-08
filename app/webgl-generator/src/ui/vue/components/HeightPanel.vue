@@ -34,7 +34,12 @@
     完成编辑并更新地图
   </UiButton>
 
-  <UiButton :variant="state.active ? 'primary' : 'secondary'" @click="setActive(!state.active)">
+  <UiButton
+    :variant="state.active ? 'primary' : 'secondary'"
+    :active="state.active"
+    :aria-pressed="state.active ? 'true' : 'false'"
+    @click="setActive(!state.active)"
+  >
     {{ state.active ? "停止高度编辑" : "启用高度编辑" }}
   </UiButton>
 
@@ -44,6 +49,7 @@
       :key="action.value"
       type="button"
       :class="{active: state.action === action.value}"
+      :aria-pressed="state.action === action.value ? 'true' : 'false'"
       :data-mode="action.value"
       @click="selectHeightAction(action.value)"
     >
@@ -99,6 +105,7 @@
       :key="scope.value"
       type="button"
       :class="{active: state.scope === scope.value}"
+      :aria-pressed="state.scope === scope.value ? 'true' : 'false'"
       :data-mode="scope.value"
       @click="setScope(scope.value)"
     >
@@ -1241,7 +1248,7 @@ function setScope(scope) {
 
 function setRadius(radius) {
   props.state.radius = normalizeBrushRadius(BRUSH_RADIUS_ID.HEIGHT, radius);
-  props.callbacks.onBrushRadiusChange?.();
+  props.callbacks.onBrushRadiusChange?.(props.state.radius);
 }
 
 function setAffectSeafloor(affectSeafloor) {

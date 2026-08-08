@@ -716,7 +716,10 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
   });
   state.panels.objectDetails = objectDetailsPanel;
   heightPanel = createHeightPanel(documentRef, panelManager, {
-    onBrushRadiusChange: refreshBrushCursor,
+    onBrushRadiusChange: radius => {
+      heightPanel?.persistBrushRadius?.(radius);
+      refreshBrushCursor();
+    },
     onActiveChange: active => {
       if (active) enterCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.HEIGHT_BRUSH);
       else cancelCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.HEIGHT_BRUSH, "panel-toggle");
@@ -12057,10 +12060,14 @@ function prewarmHeightEditorCaches(state) {
 function restoreHeightEditorVisualState(state) {
   const selection = state?.heightEdit?.terrainSelection;
   const cellIds = selection?.cellIds;
-  if (!cellIds?.length || typeof state.renderer?.setHeightCellSelection !== "function") return false;
-  state.renderer.setHeightCellSelection(cellIds, {weights: selection.featherWeights, draw: false});
-  state.renderer.draw();
-  return true;
+  let restoredSelection = false;
+  if (cellIds?.length && typeof state.renderer?.setHeightCellSelection === "function") {
+    state.renderer.setHeightCellSelection(cellIds, {weights: selection.featherWeights, draw: false});
+    restoredSelection = true;
+  }
+  state.brushCursorPreview?.scheduleRefresh();
+  if (restoredSelection) state.renderer.draw();
+  return restoredSelection;
 }
 
 function registerPoliticalOneShotMode(state, documentRef, register, {modeId, kind, flag, panelId, colorMode, objectKind, stopObjectEditing}) {

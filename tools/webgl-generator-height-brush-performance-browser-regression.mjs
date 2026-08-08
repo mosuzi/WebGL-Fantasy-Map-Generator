@@ -23,7 +23,7 @@ try {
   for (const requestedCells of [10000, 100000]) {
     results.push(await profileMap(browser, requestedCells));
   }
-  console.log(JSON.stringify({ok: true, url: `http://${host}:${port}/?healthClear=1`, results}, null, 2));
+  console.log(JSON.stringify({ok: true, url: `http://${host}:${port}/?healthClear=1&debug=1`, results}, null, 2));
 } finally {
   if (browser) await Promise.race([browser.close(), delay(5000)]);
   await new Promise(done => server.close(done));
@@ -43,7 +43,7 @@ async function profileMap(browserInstance, requestedCells) {
   });
   page.on("pageerror", error => pageErrors.push(error.message));
   try {
-    await page.goto(`http://${host}:${port}/?healthClear=1`, {waitUntil: "domcontentloaded"});
+    await page.goto(`http://${host}:${port}/?healthClear=1&debug=1`, {waitUntil: "domcontentloaded"});
     await page.waitForFunction(() => window.__webglGeneratorApp?.renderer?.getStats?.()?.webgl2);
     await page.waitForFunction(() => window.__webglGeneratorApp?.runtimeOperationSnapshot?.busy === false && document.getElementById("generation-loading")?.hidden !== false);
     const seed = `height-brush-performance-${requestedCells}`;
@@ -52,20 +52,8 @@ async function profileMap(browserInstance, requestedCells) {
     await page.waitForFunction(seedValue => window.__webglGeneratorApp?.runtimeOperationSnapshot?.busy === false && window.__webglGeneratorApp?.map?.metadata?.seed === seedValue, seed);
     await page.evaluate(() => window.__webglGeneratorApp.panels.height.open(window.__webglGeneratorApp.editHistory.getStats()));
     await page.locator('.floating-panel[data-panel-id="height-panel"]:not(.hidden)').waitFor({state: "visible"});
-    await page.evaluate(() => {
-      const app = window.__webglGeneratorApp;
-      const cell = 0;
-      app.heightEdit.terrainSelection = {
-        cellIds: Uint32Array.from([cell]),
-        cellSet: new Set([cell]),
-        featherWeights: null,
-        featherRings: 0,
-        summary: {valid: true, count: 1},
-        useForTools: true
-      };
-      app.renderer.setHeightCellSelection([], {draw: false});
-    });
     await page.evaluate(() => window.__webglGeneratorApp.canvasToolModes.enter("height:brush"));
+    const uiState = await exerciseHeightEditorUi(page);
     const healthStart = healthEvents.length;
     const canvas = page.locator("#map-canvas");
     const box = await canvas.boundingBox();
@@ -99,7 +87,7 @@ async function profileMap(browserInstance, requestedCells) {
     assert.equal(map.webglError, 0, `WebGL error: ${map.webglError}`);
     assert.equal(map.cacheWarmup?.spatialIndex?.ready, true, "高度空间索引未在进入高度编辑时预热");
     assert.equal(map.cacheWarmup?.packCellsByGrid?.ready, true, "Grid→Pack 高度映射未在进入高度编辑时预热");
-    assert.equal(map.heightSelectionCells, 1, "进入高度编辑后已有地形选区高亮未恢复");
+    assert.equal(map.heightSelectionCells, uiState.selectionCells, "进入高度编辑后真实地形选区高亮未恢复");
     assert.equal(shoreSamples.every(sample => sample.commitPerformance?.stages?.refreshHeightCells?.incremental === true), true, "岸线高度笔刷不应触发完整拓扑重建");
     assert.ok(Math.max(...shoreSamples.map(sample => sample.wallMs)) < 500, `岸线高度笔刷停手仍超过 500ms：${shoreSamples.map(sample => sample.wallMs).join(", ")}`);
     if (!topologySamples.every(sample => sample.commitPerformance?.stages?.refreshHeightCells?.topology === "local")) {
@@ -109,12 +97,21 @@ async function profileMap(browserInstance, requestedCells) {
     const maxTopologyRefreshMs = Math.max(...topologySamples.map(sample => sample.commitPerformance?.stages?.refreshHeightCells?.ms || Infinity));
     assert.ok(maxTopologyRefreshMs < 500, `跨水陆高度笔刷核心刷新仍超过 500ms：${topologySamples.map(sample => sample.commitPerformance?.stages?.refreshHeightCells?.ms).join(", ")}`);
     assert.ok(Math.max(...topologySamples.map(sample => sample.wallMs)) < 650, `跨水陆高度笔刷 pointerup 仍超过 650ms：${topologySamples.map(sample => sample.wallMs).join(", ")}`);
+    await page.reload({waitUntil: "domcontentloaded"});
+    await page.waitForFunction(() => window.__webglGeneratorApp?.renderer?.getStats?.()?.webgl2);
+    await page.waitForFunction(() => window.__webglGeneratorApp?.runtimeOperationSnapshot?.busy === false && document.getElementById("generation-loading")?.hidden !== false);
+    await page.evaluate(() => window.__webglGeneratorApp.panels.height.open(window.__webglGeneratorApp.editHistory.getStats()));
+    await page.locator('.floating-panel[data-panel-id="height-panel"]:not(.hidden)').waitFor({state: "visible"});
+    const refreshRadius = await page.evaluate(() => window.__webglGeneratorApp.panels.height.getBrush().radius);
+    assert.equal(refreshRadius, 42, "刷新页面后高度画笔大小没有从用户偏好恢复");
     return {
       requestedCells,
       actualGridCells: map.gridCells,
       checksum: map.checksum,
       webglError: map.webglError,
       heightSelectionCells: map.heightSelectionCells,
+      uiState,
+      refreshRadius,
       cacheWarmup: map.cacheWarmup,
       short: summarizeStrokes(shortSamples),
       long: summarizeStrokes(longSamples),
@@ -130,6 +127,63 @@ async function profileMap(browserInstance, requestedCells) {
   } finally {
     await context.close();
   }
+}
+
+async function exerciseHeightEditorUi(page) {
+  const panel = page.locator('.floating-panel[data-panel-id="height-panel"]:not(.hidden)');
+  const action = panel.locator('button[data-mode="lower"]');
+  const scope = panel.locator('button[data-mode="all"]');
+  await action.click();
+  await scope.click();
+  const brushRadius = panel.locator("label").filter({hasText: "画笔大小"}).locator(".ui-slider-number input");
+  await brushRadius.fill("42");
+  await brushRadius.press("Enter");
+  await page.waitForFunction(() => window.__webglGeneratorApp?.panels?.height?.getBrush?.().radius === 42);
+  const beforeLock = await page.evaluate(() => ({
+    action: document.querySelector('.height-action-group button[data-mode="lower"]')?.getAttribute("aria-pressed"),
+    scope: document.querySelector('.height-scope-group button[data-mode="all"]')?.getAttribute("aria-pressed"),
+    radius: window.__webglGeneratorApp.panels.height.getBrush().radius,
+    storedRadius: window.localStorage.getItem("webgl-generator-height-editor-preferences-v1")
+  }));
+  assert.equal(beforeLock.action, "true", "高度动作按钮缺少真实选中语义");
+  assert.equal(beforeLock.scope, "true", "高度作用范围按钮缺少真实选中语义");
+  assert.equal(beforeLock.radius, 42, "高度画笔大小没有响应真实面板输入");
+  assert.match(beforeLock.storedRadius || "", /42/, "高度画笔大小没有写入用户偏好");
+
+  await panel.getByRole("button", {name: "覆盖锁定"}).click();
+  await page.waitForFunction(() => window.__webglGeneratorApp?.heightEdit?.terrainSelection?.cellIds?.length > 0);
+  const selectionCells = await page.evaluate(() => window.__webglGeneratorApp.heightEdit.terrainSelection.cellIds.length);
+  assert.ok(selectionCells > 0, "真实覆盖锁定没有形成高度选区");
+  await page.evaluate(() => window.__webglGeneratorApp.renderer.setHeightCellSelection([], {draw: false}));
+  await panel.getByRole("button", {name: "停止高度编辑"}).click();
+  await panel.getByRole("button", {name: "启用高度编辑"}).click();
+  await page.waitForFunction(expected => window.__webglGeneratorApp?.renderer?.getStats?.().heightCellSelection?.cells === expected, selectionCells);
+  const canvasBox = await page.locator("#map-canvas").boundingBox();
+  assert.ok(canvasBox?.width > 0 && canvasBox?.height > 0, "高度编辑重入后地图 canvas 没有可用尺寸");
+  await page.mouse.move(canvasBox.x + canvasBox.width * 0.52, canvasBox.y + canvasBox.height * 0.48);
+  await page.waitForTimeout(40);
+  const afterReenter = await page.evaluate(() => {
+    const app = window.__webglGeneratorApp;
+    return {
+      action: document.querySelector('.height-action-group button[data-mode="lower"]')?.getAttribute("aria-pressed"),
+      scope: document.querySelector('.height-scope-group button[data-mode="all"]')?.getAttribute("aria-pressed"),
+      radius: app.panels.height.getBrush().radius,
+      selectionCells: app.renderer.getStats().heightCellSelection.cells,
+      cursorRadius: document.querySelector(".brush-cursor-preview")?.dataset.worldRadius || null
+    };
+  });
+  assert.equal(afterReenter.action, "true", "重新进入高度编辑后动作选中态丢失");
+  assert.equal(afterReenter.scope, "true", "重新进入高度编辑后作用范围选中态丢失");
+  assert.equal(afterReenter.radius, 42, "重新进入高度编辑后画笔大小没有保持");
+  assert.equal(afterReenter.selectionCells, selectionCells, "真实高度选区 GPU 高亮没有恢复");
+  await panel.getByRole("button", {name: "关闭面板"}).click();
+  const hiddenPanel = page.locator('.floating-panel[data-panel-id="height-panel"]');
+  await hiddenPanel.waitFor({state: "hidden"});
+  await page.evaluate(() => window.__webglGeneratorApp.panels.height.open(window.__webglGeneratorApp.editHistory.getStats()));
+  await panel.waitFor({state: "visible"});
+  await panel.getByRole("button", {name: "启用高度编辑"}).click();
+  await page.waitForFunction(expected => window.__webglGeneratorApp?.panels?.height?.getBrush?.().radius === 42 && window.__webglGeneratorApp.renderer.getStats().heightCellSelection.cells === expected, selectionCells);
+  return {selectionCells, beforeLock, afterReenter, panelReopen: {radius: 42, selectionCells}};
 }
 
 function findVisibleShoreCellPoint() {

@@ -2,7 +2,7 @@
 
 ## 当前状态
 
-进行中。第 300 项的 `lastCommitPerformance` 只覆盖 `finishHeightStroke` 之后的提交阶段，本项补齐从 pointerdown 到停手后下一帧的完整证据；当前精确 `http://127.0.0.1:5410/?debug=1` 标签页已核对，测试样本已通过撤销恢复，不刷新、不重生成、不覆盖用户地图。默认“陆地 + 保持水陆面”的岸线停手卡顿已完成局部修复；故意跨越海平面的拓扑变化保留为独立边界。
+补充验收完成。第 300 项的 `lastCommitPerformance` 只覆盖 `finishHeightStroke` 之后的提交阶段，本项补齐从 pointerdown 到停手后下一帧的完整证据；当前精确 `http://127.0.0.1:5410/?debug=1` 标签页已核对，测试样本已通过撤销恢复，不刷新、不重生成、不覆盖用户地图。默认“陆地 + 保持水陆面”的岸线停手卡顿已完成局部修复；故意跨越海平面的拓扑变化保留为独立边界。301-E 的真实选区高亮、面板状态语义和画笔偏好也已闭合。
 
 ## 纠正后的问题现象
 
@@ -42,11 +42,12 @@
 - 验证：隔离生产 Chrome 的 100k 跨水陆样本核心 `refreshHeightCells` 约 `144ms`，pointerup 墙钟约 `192ms`；局部与完整重绘的 path key、path geometry、cell mesh、shore edge 和最终 `readPixels` 均一致（像素差 `0`）。正式 10k / 100k 回归的 console、page、health、WebGL 错误为 `0`，撤销 / 重做通过。
 - 兼容性与回滚：不改变地图数据、height / grid schema、存档、公开 API、历史事务或 `source/`；只回退 301-C 的局部拓扑和 surface patch 路径即可恢复 301-B 的完整拓扑安全回退。
 
-## 301-E：高度编辑作用范围高亮与拾取（补充验收进行中）
+## 301-E：高度编辑作用范围高亮与拾取（补充验收完成）
 
 - 根因：高度选区的权威状态保存在 `heightEdit.terrainSelection`，但部分画布工具退出路径会清空 renderer 共享的高度选区 GPU 缓冲；重新进入高度编辑时若只切换主题，就会出现状态仍在、画面高亮消失的分离状态。
-- 实施：进入 `height:brush` 时完成缓存预热和主题切换后，读取当前 `terrainSelection.cellIds` 及羽化权重，恢复 renderer 高度选区缓冲并补一帧视觉绘制；没有选区时保持原有空状态。普通悬停、brush cursor、cell picking 和选择事务继续复用原链路。
-- 证据：专项回归在真实进入 `height:brush` 前先清空 renderer 选区缓冲、保留运行时权威选区，再通过实际模式入口进入并断言恢复 `1` 个高亮 cell；10k / 100k 的真实笔刷、岸线、跨水陆局部拓扑、撤销 / 重做均通过，console、page、health、WebGL 错误为 `0`。
+- 实施：进入 `height:brush` 时完成缓存预热和主题切换后，读取当前 `terrainSelection.cellIds` 及羽化权重，恢复 renderer 高度选区缓冲并补一帧视觉绘制；同时主动调度 brush cursor，保证鼠标重新回到画布后当前 scope / 半径立即可见。没有选区时保持原有空状态。普通悬停、cell picking 和选择事务继续复用原链路。
+- 实施：debug 动作 / 作用范围按钮补齐 `.active` 与 `aria-pressed`；Element Plus 图标按钮、普通高度动作 / 作用范围分段按钮均增加选中且禁用的独立视觉样式，禁用透明度不再遮掉当前选择。全局画笔大小使用 `webgl-generator-height-editor-preferences-v1` 保存并按高度画笔契约归一化，默认值仍为 `28`。
+- 证据：专项回归在真实生产 Chrome 10k / 100k 页面中点击动作、作用范围和“覆盖锁定”，真实形成 `3327 / 39862` 个选区 cells；随后故意清空 renderer 选区缓冲，再通过真实“停止 → 启用”模式入口断言两档恢复原高亮数量。两档动作 / 作用范围 `aria-pressed="true"`、画笔值 `42`、光标半径 `42` 保持，关闭 / 重开面板和页面刷新后的半径仍为 `42`；地图 checksum、撤销 / 重做、console、page、health、WebGL 门禁通过。
 - 兼容性与回滚：不改变地图数据、height / grid schema、存档、公开 API、历史事务或 `source/`；只回退模式进入时的视觉状态恢复 helper 与专项断言即可恢复原显示链路。
 
 ### 301-E 补充验收条件
