@@ -25,6 +25,7 @@ import {buildShortcutDisplayModel} from "../runtime/keyboard-shortcuts.js";
 import {DEFAULT_MAX_CITY_LABELS} from "../runtime/display-defaults.js";
 
 export const CONTROL_PREFERENCES_KEY = "webgl-generator-control-preferences";
+export const VIEW_MODE_SELECTOR = ".ui-segmented-mode-bridge[data-mode]";
 const CRITICAL_CONTROL_CHANGE_DEBOUNCE_MS = 180;
 
 const OBJECT_TITLE_FORMATTERS = Object.freeze({
@@ -202,7 +203,7 @@ export function bindRuntimePanel(documentRef, handlers) {
       setLayerGroupControlState(control, members.map(() => visible));
     });
   }
-  for (const button of documentRef.querySelectorAll("[data-mode]")) {
+  for (const button of documentRef.querySelectorAll(VIEW_MODE_SELECTOR)) {
     button.addEventListener("click", () => {
       setActiveModeButton(documentRef, button.dataset.mode);
       handlers.onMode(button.dataset.mode);
@@ -220,7 +221,7 @@ function bindDelegatedButton(documentRef, id, handler) {
 }
 
 export function setActiveModeButton(documentRef, mode) {
-  documentRef.querySelectorAll("[data-mode]").forEach(item => item.classList.toggle("active", item.dataset.mode === mode));
+  documentRef.querySelectorAll(VIEW_MODE_SELECTOR).forEach(item => item.classList.toggle("active", item.dataset.mode === mode));
   updateControlPreferences(documentRef, {colorMode: mode});
 }
 
@@ -379,7 +380,7 @@ function createDebouncedControlHandler(documentRef, handler, delay = CRITICAL_CO
 function applyControlPreferences(documentRef) {
   const preferences = readControlPreferences(documentRef);
   if (typeof preferences.colorMode === "string") {
-    documentRef.querySelectorAll("[data-mode]").forEach(item => item.classList.toggle("active", item.dataset.mode === preferences.colorMode));
+    documentRef.querySelectorAll(VIEW_MODE_SELECTOR).forEach(item => item.classList.toggle("active", item.dataset.mode === preferences.colorMode));
   }
   if (typeof preferences.showOceanHeight === "boolean") {
     const input = documentRef.getElementById("show-ocean-height");

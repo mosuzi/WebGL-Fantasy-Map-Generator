@@ -135,18 +135,38 @@ async function exerciseHeightEditorUi(page) {
   const scope = panel.locator('button[data-mode="all"]');
   await action.click();
   await scope.click();
+  const modeSync = await page.evaluate(() => window.webglGeneratorApi.layers.setViewMode("height"));
+  assert.equal(modeSync?.ok, true, modeSync?.error?.message || "视图模式同步失败");
   const brushRadius = panel.locator("label").filter({hasText: "画笔大小"}).locator(".ui-slider-number input");
   await brushRadius.fill("42");
   await brushRadius.press("Enter");
   await page.waitForFunction(() => window.__webglGeneratorApp?.panels?.height?.getBrush?.().radius === 42);
-  const beforeLock = await page.evaluate(() => ({
-    action: document.querySelector('.height-action-group button[data-mode="lower"]')?.getAttribute("aria-pressed"),
-    scope: document.querySelector('.height-scope-group button[data-mode="all"]')?.getAttribute("aria-pressed"),
-    radius: window.__webglGeneratorApp.panels.height.getBrush().radius,
-    storedRadius: window.localStorage.getItem("webgl-generator-height-editor-preferences-v1")
-  }));
-  assert.equal(beforeLock.action, "true", "高度动作按钮缺少真实选中语义");
-  assert.equal(beforeLock.scope, "true", "高度作用范围按钮缺少真实选中语义");
+  const beforeLock = await page.evaluate(() => {
+    const readHeightButtonState = selector => {
+      const button = document.querySelector(selector);
+      const style = button ? getComputedStyle(button) : null;
+      return {
+        pressed: button?.getAttribute("aria-pressed") || null,
+        activeClass: button?.classList.contains("active") || false,
+        color: style?.color || null,
+        backgroundImage: style?.backgroundImage || null
+      };
+    };
+    return {
+      action: readHeightButtonState('.height-action-group button[data-mode="lower"]'),
+      scope: readHeightButtonState('.height-scope-group button[data-mode="all"]'),
+      activeViewModes: [...document.querySelectorAll('.ui-segmented-mode-bridge[data-mode].active')].map(button => button.dataset.mode),
+      radius: window.__webglGeneratorApp.panels.height.getBrush().radius,
+      storedRadius: window.localStorage.getItem("webgl-generator-height-editor-preferences-v1")
+    };
+  });
+  assert.equal(beforeLock.action.pressed, "true", "高度动作按钮缺少真实选中语义");
+  assert.equal(beforeLock.scope.pressed, "true", "高度作用范围按钮缺少真实选中语义");
+  assert.equal(beforeLock.action.activeClass, true, "高度动作按钮缺少 active class");
+  assert.equal(beforeLock.scope.activeClass, true, "高度作用范围按钮缺少 active class");
+  assert.equal(beforeLock.action.color, "rgb(255, 224, 161)", "高度动作按钮没有高亮计算样式");
+  assert.equal(beforeLock.scope.color, "rgb(255, 224, 161)", "高度作用范围按钮没有高亮计算样式");
+  assert.deepEqual(beforeLock.activeViewModes, ["height"], "视图模式同步不应清除或污染高度按钮选中态");
   assert.equal(beforeLock.radius, 42, "高度画笔大小没有响应真实面板输入");
   assert.match(beforeLock.storedRadius || "", /42/, "高度画笔大小没有写入用户偏好");
 
@@ -164,16 +184,30 @@ async function exerciseHeightEditorUi(page) {
   await page.waitForTimeout(40);
   const afterReenter = await page.evaluate(() => {
     const app = window.__webglGeneratorApp;
+    const readHeightButtonState = selector => {
+      const button = document.querySelector(selector);
+      const style = button ? getComputedStyle(button) : null;
+      return {
+        pressed: button?.getAttribute("aria-pressed") || null,
+        activeClass: button?.classList.contains("active") || false,
+        color: style?.color || null,
+        backgroundImage: style?.backgroundImage || null
+      };
+    };
     return {
-      action: document.querySelector('.height-action-group button[data-mode="lower"]')?.getAttribute("aria-pressed"),
-      scope: document.querySelector('.height-scope-group button[data-mode="all"]')?.getAttribute("aria-pressed"),
+      action: readHeightButtonState('.height-action-group button[data-mode="lower"]'),
+      scope: readHeightButtonState('.height-scope-group button[data-mode="all"]'),
       radius: app.panels.height.getBrush().radius,
       selectionCells: app.renderer.getStats().heightCellSelection.cells,
       cursorRadius: document.querySelector(".brush-cursor-preview")?.dataset.worldRadius || null
     };
   });
-  assert.equal(afterReenter.action, "true", "重新进入高度编辑后动作选中态丢失");
-  assert.equal(afterReenter.scope, "true", "重新进入高度编辑后作用范围选中态丢失");
+  assert.equal(afterReenter.action.pressed, "true", "重新进入高度编辑后动作选中态丢失");
+  assert.equal(afterReenter.scope.pressed, "true", "重新进入高度编辑后作用范围选中态丢失");
+  assert.equal(afterReenter.action.activeClass, true, "重新进入高度编辑后动作 active class 丢失");
+  assert.equal(afterReenter.scope.activeClass, true, "重新进入高度编辑后作用范围 active class 丢失");
+  assert.equal(afterReenter.action.color, "rgb(255, 224, 161)", "重新进入高度编辑后动作高亮丢失");
+  assert.equal(afterReenter.scope.color, "rgb(255, 224, 161)", "重新进入高度编辑后作用范围高亮丢失");
   assert.equal(afterReenter.radius, 42, "重新进入高度编辑后画笔大小没有保持");
   assert.equal(afterReenter.selectionCells, selectionCells, "真实高度选区 GPU 高亮没有恢复");
   await panel.getByRole("button", {name: "关闭面板"}).click();

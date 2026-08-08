@@ -29,7 +29,7 @@ import {
 import {PanelManager} from "../ui/panel-manager.js";
 import {captureControlPanelLaunchGeometry} from "../ui/control-panel-launch-geometry.js";
 import {createBrushCursorPreview} from "../ui/brush-cursor-preview.js";
-import {bindRuntimePanel, readControlPreferences, readOptionsFromPanel, setActiveModeButton, setEditingInteractionLock, setGenerationLoading, setSeedInput, syncLayerGroupControls, updateControlPreferences, updateLayerPreference, updatePickPanel, updateRegenerationSection, updateRuntimePanel} from "../ui/panel.js";
+import {bindRuntimePanel, readControlPreferences, readOptionsFromPanel, setActiveModeButton, setEditingInteractionLock, setGenerationLoading, setSeedInput, syncLayerGroupControls, updateControlPreferences, updateLayerPreference, updatePickPanel, updateRegenerationSection, updateRuntimePanel, VIEW_MODE_SELECTOR} from "../ui/panel.js";
 import {DEFAULT_MAX_CITY_LABELS} from "./display-defaults.js";
 import {formatArea as formatDisplayArea, formatDistance as formatDisplayDistance, normalizeUnitPreferences} from "../ui/display-units.js";
 import {sameObjectId} from "../ui/object-id.js";
@@ -3261,7 +3261,7 @@ function measureHealthOperation(state, name, detail, task) {
 function setRuntimeViewMode(state, documentRef, mode) {
   const nextMode = String(mode || "").trim();
   if (!nextMode) throw new Error("缺少视图模式");
-  const availableModes = [...documentRef.querySelectorAll("[data-mode]")].map(item => item.dataset.mode).filter(Boolean);
+  const availableModes = [...documentRef.querySelectorAll(VIEW_MODE_SELECTOR)].map(item => item.dataset.mode).filter(Boolean);
   if (availableModes.length && !availableModes.includes(nextMode)) throw new Error(`未知视图模式：${nextMode}`);
   return measureHealthOperation(state, "set-view-mode", {mode: nextMode}, () => {
     if (nextMode === "diplomacy") {

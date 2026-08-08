@@ -57,6 +57,13 @@
 - 最小回归：10k / 100k、普通高度编辑和 debug 高度编辑各覆盖一次；固定选择一个非默认动作、作用范围和画笔大小，执行启用 → 关闭 → 重开 → 刷新 → 再启用链路，断言按钮语义、视觉状态、画笔半径和光标半径一致，地图 checksum、历史、console、page、health、WebGL 不产生非预期变化。
 - 当前不实施：不把按钮状态混入地图存档，不用“全部按钮都保持可用”掩盖状态问题，不仅调整 disabled 颜色而跳过运行时状态 / DOM / 视觉三层核对。
 
+### 301-E 后续纠正：视图模式同步状态隔离
+
+- 追加现象：用户实测仍能看到高度动作和作用范围按钮失去高亮。CDP 证明按钮的 `aria-pressed` 仍为 `true`，但 `active` class 被清除；页面已有对应高亮 CSS。
+- 根因：旧的 `[data-mode]` 全局选择器同时覆盖视图模式桥与高度编辑按钮。视图模式同步调用 `setActiveModeButton()` 时，直接清除高度按钮的 `active` class。
+- 方案与实施边界：将视图模式绑定、模式选中同步、可用模式校验和偏好恢复收敛到 `.ui-segmented-mode-bridge[data-mode]`；编辑锁继续使用全量 `[data-mode]`。不改高度状态字段、地图数据、schema、存档、历史、API 或 `source/`。
+- 最小验收：真实选择高度动作 / 范围后执行 `layers.setViewMode("height")`，同时断言 `aria-pressed=true`、`.active=true`、金色计算颜色，以及 10k / 100k 的重入、重开和刷新链路；回归通过后才允许保留第 301-E 完成结论。
+
 ## 301-D：高度编辑首次索引预热（已完成）
 
 - 目标：把高度空间桶和 Grid→Pack 映射的首次全图扫描从 pointerdown / pointerup 移到进入 `height:brush` 模式的受控阶段，避免首次笔刷把索引构建伪装成停手卡顿。
