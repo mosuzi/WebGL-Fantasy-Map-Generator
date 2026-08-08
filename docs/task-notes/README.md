@@ -8,6 +8,8 @@
 
 - 权威任务第 300 项对应 [`task-300-height-brush-commit-performance.md`](./task-300-height-brush-commit-performance.md)：只读隔离测量 100k 高度笔刷抬手提交的分段耗时，先区分面板全图统计、局部 / 拓扑渲染和其它主线程阶段，再实施证据驱动的增量优化；不操作用户当前标签页，不改变地图、派生重算、schema、存档、API 或 `source/`。
 - 权威任务第 301 项对应 [`task-301-height-brush-stop-blocking.md`](./task-301-height-brush-stop-blocking.md)：纠正第 300 项遗漏的 pointerup 前后完整卡顿链，覆盖末点补刷、待执行 RAF、最终视觉 draw、首次索引构建和真实浏览器长任务；先调查再实施，不操作用户当前标签页，不改变地图、schema、存档或 `source/`。
+- 权威任务第 302 项对应 [`task-302-city-manual-relocation.md`](./task-302-city-manual-relocation.md)：在既有城市移动规则和 `city:move` 基础上，完成城镇手动拖动、预览取消、单事务提交、归属 / 港口 / 路线 / 行政引用同步及旧存档回归。
+- 权威任务第 303 项对应 [`task-303-river-multi-control-points.md`](./task-303-river-multi-control-points.md)：把河流控制点从单 pack cell 候选扩展为可在同一 cell 共存的多控制点，覆盖河流与全部控制点高亮、拖动、新增、双击删除、事务预览和旧存档兼容。
 
 - 权威任务第 284 项对应 [`task-284-100k-performance-investigation-and-plan.md`](./task-284-100k-performance-investigation-and-plan.md)：先记录精确用户标签页的存档、100k 高度编辑和 renderer / overlay 证据，再拆分 284-A～284-E；调查与方案已完成，284-A～284-D 的存档、编辑、renderer / overlay / picking、导出与 base64 内存优化已验收，当前进入 284-E。
 
