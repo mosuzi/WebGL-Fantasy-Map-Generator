@@ -1,11 +1,11 @@
 import {FIXTURES, FIXTURE_BY_ID} from "./fixtures.js";
 import {auditRiverNetwork} from "./audit.js";
-import {analyzeConfluences, analyzeParentGraph, runConfluenceCandidate, runDAGCandidate} from "./algorithms.js";
+import {analyzeConfluences, analyzeHydrology, analyzeParentGraph, runConfluenceCandidate, runDAGCandidate, runHydrologyCandidate} from "./algorithms.js";
 
 const state = {fixtureId: FIXTURES[0].id};
 const elements = Object.fromEntries([
   "status", "fixture-list", "case-category", "case-name", "case-description", "case-metrics",
-  "map-view", "case-state", "issue-list", "algorithm-result", "confluence-result", "matrix", "matrix-summary", "run-all"
+  "map-view", "case-state", "issue-list", "algorithm-result", "confluence-result", "hydrology-result", "matrix", "matrix-summary", "run-all"
 ].map(id => [id, document.getElementById(id)]));
 
 function initialize() {
@@ -19,7 +19,7 @@ function initialize() {
   elements["run-all"].addEventListener("click", renderMatrix);
   render();
   renderMatrix();
-  window.riverNetworkLab = Object.freeze({FIXTURES, FIXTURE_BY_ID, auditRiverNetwork, analyzeConfluences, analyzeParentGraph, runConfluenceCandidate, runDAGCandidate});
+  window.riverNetworkLab = Object.freeze({FIXTURES, FIXTURE_BY_ID, auditRiverNetwork, analyzeConfluences, analyzeHydrology, analyzeParentGraph, runConfluenceCandidate, runDAGCandidate, runHydrologyCandidate});
 }
 
 function render() {
@@ -41,6 +41,7 @@ function render() {
   elements["issue-list"].innerHTML = issueMarkup(result, fixture);
   elements["algorithm-result"].innerHTML = algorithmMarkup(runDAGCandidate(fixture));
   elements["confluence-result"].innerHTML = confluenceMarkup(runConfluenceCandidate(fixture));
+  elements["hydrology-result"].innerHTML = hydrologyMarkup(runHydrologyCandidate(fixture));
 }
 
 function renderMap(fixture, result) {
@@ -82,6 +83,11 @@ function algorithmMarkup(candidate) {
 function confluenceMarkup(candidate) {
   const detail = candidate.accepted ? `锚点 ${candidate.metrics.attached} 个 · 改写末端 ${candidate.metrics.changedPoints} 个` : `候选拒绝：${candidate.rejection.reason}`;
   return `<div class="algorithm-box ${candidate.accepted ? "pass" : "fail"}"><strong>304-C 汇流锚点候选：${candidate.accepted ? "接受" : "拒绝"}</strong><span>${detail}</span><small>关系 ${candidate.metrics.relations} · 未贴合 ${candidate.metrics.unattached} · 保护出口 ${candidate.metrics.protectedOutlets} · 最大距离 ${candidate.metrics.maxDistance}</small></div>`;
+}
+
+function hydrologyMarkup(candidate) {
+  const detail = candidate.accepted ? `流量越级 ${candidate.metrics.dischargeAfter} · 宽度越级 ${candidate.metrics.widthAfter}` : `候选拒绝：${candidate.rejection.reason}`;
+  return `<div class="algorithm-box ${candidate.accepted ? "pass" : "fail"}"><strong>304-D 流量 / 宽度候选：${candidate.accepted ? "可验收" : "拒绝"}</strong><span>${detail}</span><small>隐藏视觉碎片 ${candidate.metrics.hiddenFragments} · 保护出口 ${candidate.metrics.preservedProtected} · 保留锚点延长 ${candidate.metrics.extendedToConfluence}</small></div>`;
 }
 
 function formatMetrics(metrics = {}) {

@@ -122,6 +122,58 @@ export function runConfluenceCandidate(snapshot, options = {}) {
   return {accepted: true, rejection: null, metrics: geometry.metrics, candidateRivers};
 }
 
+export function analyzeHydrology(snapshot, options = {}) {
+  const settings = {minLength: 24, minWidth: 0.035, ...options};
+  const graph = analyzeParentGraph(snapshot);
+  const confluenceGeometry = analyzeConfluences(snapshot, options);
+  const confluence = runConfluenceCandidate(snapshot, options);
+  const sourceRivers = graph.rivers.map(cloneRiver);
+  const candidateRivers = (confluence.candidateRivers || sourceRivers).map(cloneRiver);
+  const byId = new Map(candidateRivers.map(river => [river.id, river]));
+  const childrenByParent = new Map(candidateRivers.map(river => [river.id, []]));
+  for (const river of candidateRivers) {
+    if (childrenByParent.has(river.parent)) childrenByParent.get(river.parent).push(river.id);
+  }
+  const order = graph.topologicalOrder.length ? graph.topologicalOrder : candidateRivers.map(river => river.id).sort((left, right) => left - right);
+  for (const id of [...order].reverse()) {
+    const river = byId.get(id);
+    if (!river) continue;
+    const children = (childrenByParent.get(id) || []).map(childId => byId.get(childId)).filter(Boolean);
+    if (!children.length) continue;
+    const incoming = children.reduce((total, child) => total + Number(child.discharge || child.flux || 0), 0);
+    const maximumChildWidth = Math.max(...children.map(child => Number(child.width || 0)), 0);
+    river.discharge = roundNumber(Math.max(Number(river.discharge || river.flux || 0), incoming));
+    river.flux = roundNumber(Math.max(Number(river.flux || 0), river.discharge));
+    river.width = roundNumber(Math.max(Number(river.width || 0), maximumChildWidth));
+  }
+
+  const before = monotonicityViolations(sourceRivers);
+  const after = monotonicityViolations(candidateRivers);
+  const fragmentPolicies = candidateRivers.map(river => classifyFragment(river, settings, confluenceGeometry));
+  const accepted = graph.ok && after.discharge === 0 && after.width === 0;
+  return {
+    accepted,
+    rejection: accepted ? null : {reason: !graph.ok ? "parent-graph-rejected" : "monotonicity-not-proven", graph: graph.metrics},
+    candidateRivers,
+    fragmentPolicies,
+    metrics: {
+      rivers: candidateRivers.length,
+      dischargeBefore: before.discharge,
+      dischargeAfter: after.discharge,
+      widthBefore: before.width,
+      widthAfter: after.width,
+      hiddenFragments: fragmentPolicies.filter(item => item.policy === "hide-visual-only").length,
+      preservedProtected: fragmentPolicies.filter(item => item.policy === "preserve-protected-outlet").length,
+      extendedToConfluence: fragmentPolicies.filter(item => item.policy === "extend-to-confluence").length,
+      confluenceAccepted: confluence.accepted
+    }
+  };
+}
+
+export function runHydrologyCandidate(snapshot, options = {}) {
+  return analyzeHydrology(snapshot, options);
+}
+
 function normalizeRivers(snapshot) {
   const source = Array.isArray(snapshot?.rivers) ? snapshot.rivers : [];
   return source.map((river, index) => ({
@@ -212,6 +264,41 @@ function closestPointOnSegment(point, start, end) {
 function isProtectedOutlet(outletKind) {
   const value = String(outletKind || "");
   return value.includes("lake") || value === "ocean" || value === "border";
+}
+
+function monotonicityViolations(rivers) {
+  const byId = new Map(rivers.map(river => [river.id, river]));
+  let discharge = 0;
+  let width = 0;
+  for (const river of rivers) {
+    const parent = byId.get(river.parent);
+    if (!parent) continue;
+    if (Number(river.discharge || 0) > Number(parent.discharge || 0) + 1e-7) discharge += 1;
+    if (Number(river.width || 0) > Number(parent.width || 0) + 1e-7) width += 1;
+  }
+  return {discharge, width};
+}
+
+function classifyFragment(river, settings, confluence) {
+  const length = polylineLength(river.points);
+  const width = Number(river.width || 0);
+  const fragment = river.points.length < 3 || length < settings.minLength || width < settings.minWidth;
+  if (!fragment) return {riverId: river.id, policy: "preserve", length: roundNumber(length), width};
+  if (isProtectedOutlet(river.outletKind)) return {riverId: river.id, policy: "preserve-protected-outlet", length: roundNumber(length), width};
+  const hasAnchor = confluence.anchors.some(anchor => anchor.childId === river.id);
+  if (river.parent && hasAnchor) return {riverId: river.id, policy: "extend-to-confluence", length: roundNumber(length), width};
+  if (length < settings.minLength * 0.5 || width < settings.minWidth * 0.5) return {riverId: river.id, policy: "hide-visual-only", length: roundNumber(length), width};
+  return {riverId: river.id, policy: "preserve", length: roundNumber(length), width};
+}
+
+function polylineLength(points) {
+  let length = 0;
+  for (let index = 1; index < points.length; index += 1) length += Math.hypot(points[index][0] - points[index - 1][0], points[index][1] - points[index - 1][1]);
+  return length;
+}
+
+function roundNumber(value) {
+  return Number(Number(value || 0).toFixed(6));
 }
 
 function sameSet(left, right) {
