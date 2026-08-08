@@ -1,5 +1,13 @@
 # 开发历史
 
+## 2026-08-08：完成权威任务第 302 项——城镇手动移位完整闭环
+
+- 只读审计确认既有 `city:move`、`inspectCityMove`、`createMoveCityCommand` 和 `bindCityRelocationDrag` 已覆盖本项冻结的目标规则：普通城镇归属跟随，港城保留 / 改港 / 失效清除，首都不得跨国，省会不得跨省，市场中心保持镜像，陆路局部重寻，失效海路在预检中明示删除，写入失败整单快照恢复。既有事务没有新增必填 schema 字段，旧存档继续兼容。
+- 第302核心回归的一个静态断言落后于统一画布工具管理器：Escape 已由活动模式通用取消，不再直接写出 `CITY_MOVE`。回归改为锁定通用 `activeModeId` 取消入口，并确认 `CITY_MOVE` 注册仍存在；没有改运行时 Escape 语义。
+- 新增 `tools/webgl-generator-city-relocation-browser-regression.mjs` 及 `regress:city-relocation-browser`，用隔离系统 Chrome 对真实面板动作和地图指针完成 10k / 100k 的拖动预览、Escape 取消、重新进入、提交、selection / picking、Ctrl+Z / Ctrl+Y。10k 实际 `10004 / 5968`，港城 #20 预检显示港口失效和两条海路删除警告；100k 实际 `99846 / 63405`，城镇 #21 预览与提交通过。
+- 取消阶段城市位置、grid / pack 占位、checksum、revision 和历史不变；确认各只增加一条历史，撤销 / 重做恢复准确。`regress:city-relocation`、隔离 Chrome 回归、API 往返、完整导出、PNG 选项和旧数据兼容回归通过；application console error、page error 和 WebGL error 为 `0`，`source/` 未改。
+- 100k 隔离操作仍观测到约 `0.93s` 的 `input-delay`，生成 / 重载阶段长任务约 `2.45s`、`4.50s`。这是后续性能专题证据，不在第302越界优化；本项按事务和兼容性边界完成并归档。
+
 ## 2026-08-08：纠正第 301-E 高度面板高亮被视图同步覆盖
 
 - 用户实测确认高度面板的“抬升 / 降低 / 平滑 / 整平 / 扰动 / 填充 / 线段”和“全部 / 仅陆地 / 仅水域”仍会出现选中高亮丢失。精确 `5410/?debug=1` 标签页的 CDP 证据是：选中按钮 `aria-pressed="true"`，但 `class` 为空、计算颜色仍为普通灰色；同时当前页面注入的 `.height-action-group button.active` CSS 规则存在，因此不是缺少 CSS 或禁用态颜色的问题。

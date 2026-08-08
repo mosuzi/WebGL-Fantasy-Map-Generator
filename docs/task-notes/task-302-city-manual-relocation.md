@@ -2,7 +2,7 @@
 
 ## 当前状态
 
-待实施。本项只登记权威范围和验收条件，不在登记阶段修改代码、地图数据或用户当前 Chrome 标签页。
+已完成。第 302 项确认并验收既有城镇移动实现，补齐真实系统 Chrome 回归入口和统一画布工具管理器的静态契约；未接管或刷新用户当前 Chrome 标签页，未修改 `source/`。
 
 ## 目标
 
@@ -35,3 +35,20 @@
 
 - 影响地图数据及既有城市编辑 API / UI 事务语义；不新增必填 schema 字段，旧存档继续可加载，若需要新增诊断字段必须保持可选。
 - 通过移动前后完整快照和既有 `EditHistory` 回滚；预览取消、校验失败或派生刷新失败均不写图、不写历史。
+
+## 完成记录
+
+- 只读审计确认 `inspectCityMove` 已覆盖陆地 / 占位、国家 / 省份边界、普通城镇、港城、首都、省会、市场中心、陆路局部重寻和失效海路明示删除；`createMoveCityCommand` 使用受影响城市、burg、cell、政治、市场和路线的有界快照，写入或派生刷新失败时整单恢复。
+- 既有核心回归的静态契约曾要求 Escape 直接调用 `CITY_MOVE` 取消，但当前统一画布工具管理器已按活动模式通用取消；回归已改为锁定通用 Escape 入口并额外确认 `CITY_MOVE` 注册，不改变运行时语义。
+- 新增 `pnpm run regress:city-relocation-browser`，使用隔离系统 Chrome 和独立 Vite 页面，以真实鼠标指针完成面板入口、城市拖动、落点预览、Escape 取消、重新进入、提交、Ctrl+Z / Ctrl+Y；不使用用户当前标签页，不生成替代用户地图。
+
+## 验收证据
+
+- 隔离 Chrome 10k 实际为 `10004` grid / `5968` pack，选取港城 #20；有效预览迁移至 grid `4496` / pack `2209`，显示港口失效和两条海路删除警告。取消后城市位置、占位、checksum、revision 和历史不变；确认只新增一条历史，picking、selection、撤销和重做通过。
+- 隔离 Chrome 100k 实际为 `99846` grid / `63405` pack，选取城镇 #21；有效预览迁移至 grid `39815` / pack `25764`。取消、单事务提交、selection、picking、撤销和重做均通过。
+- `pnpm run regress:city-relocation`、`pnpm run regress:city-relocation-browser`、`pnpm run regress:api-roundtrip`、`pnpm run regress:exports`、`pnpm run regress:png-options` 和 `pnpm run regress:api-data-compatibility` 通过；旧 JSON / gzip / browser storage 兼容、完整地图导出、PNG / 高度图及 WebGL error `0` 由相应回归覆盖。普通 application console error 和 page error 为 `0`，`source/` 未改。
+- Chrome 回归仍观测到 100k 负载下约 `0.93s` 的 `input-delay`，以及生成 / 重载阶段约 `2.45s`、`4.50s` 的长任务；这些是大地图性能证据，未改变本项的事务正确性验收，后续按性能专题记录，不在第302扩大修改。
+
+## 回滚说明
+
+- 生产代码无需因本项回滚；若只回退本项增补，可删除 `regress:city-relocation-browser` 脚本、撤销旧静态断言更新和本文件的完成证据，不触碰地图数据、存档或 `city:move` 事务实现。

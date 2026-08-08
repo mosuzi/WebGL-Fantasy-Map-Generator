@@ -300,7 +300,8 @@ assert.match(cityRelocationSource, /captureCityMoveSnapshot\(context\.map, inspe
 assert.match(cityRelocationSource, /restoreCityMoveSnapshot\(after\)/);
 assert.match(appSource, /CITY_MOVE: "city:move"/);
 assert.match(appSource, /bindCityRelocationDrag\(canvas/);
-assert.match(appSource, /cancelCanvasToolMode\(state, documentRef, CANVAS_TOOL_MODE\.CITY_MOVE, "escape"\)/);
+assert.match(appSource, /if \(activeModeId\) return cancelCanvasToolMode\(state, documentRef, activeModeId, "escape"\)/);
+assert.match(appSource, /register\(CANVAS_TOOL_MODE\.CITY_MOVE, "city-panel"/);
 assert.match(appSource, /selectionStore\.setSelection\(\{object: \{kind: OBJECT_KIND\.CITY, id: cityId\}\}\)/);
 assert.match(panelSource, /moveMode: false/);
 assert.match(panelSource, /updateMovePreview/);
