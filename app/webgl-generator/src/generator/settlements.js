@@ -1716,8 +1716,12 @@ function buildPackRoutes(grid, pack, cities, options = {}) {
   const aliveBurgs = burgs.filter(burg => burg?.i && !burg.removed);
   const cityByBurg = new Map(cities.filter(Boolean).map(city => [city.burgId, city]));
   const capitalBurgs = groupCapitalBurgs(aliveBurgs, grid, pack);
-  const burgsByProvinceAndLand = groupBurgsByProvinceAndLand(aliveBurgs, pack);
-  const portsByFeature = groupBurgs(aliveBurgs.filter(burg => burg.port), burg => burg.port);
+  const trailBurgs = selectTrailRouteNetworkBurgs(aliveBurgs, pack, routeNetworkEndpointBudget(aliveBurgs.length, "trail"));
+  const burgsByProvinceAndLand = groupBurgsByProvinceAndLand(trailBurgs, pack);
+  const landBurgAnchors = groupBurgs(aliveBurgs.filter(burg => landFeatureAtBurg(pack, burg)), burg => landFeatureAtBurg(pack, burg));
+  const ports = aliveBurgs.filter(burg => burg.port);
+  const seaBurgs = selectSeaRouteNetworkBurgs(ports, routeNetworkEndpointBudget(ports.length, "searoute"));
+  const portsByFeature = groupBurgs(seaBurgs, burg => burg.port);
   const pointsArray = preparePackRoutePoints(pack);
   const variation = createRouteVariation(pack, options);
   const search = createRouteSearchScratch(pack.cells.i.length);
@@ -1725,24 +1729,25 @@ function buildPackRoutes(grid, pack, cities, options = {}) {
   const riverEdges = buildRiverEdges(pack);
   const landNetworkCells = collectLandNetworkCells(routes, pack);
 
-  const roadSegments = mergeRouteSegments(generateRouteSegments({pack, connections, groups: capitalBurgs, water: false, variation, search, edgeKeyMultiplier, riverEdges, maxVisited: pack.cells.i.length, excludedGroupIds: protectedFeatureIds}));
+  const roadSegments = mergeRouteSegments(generateRouteSegments({pack, connections, groups: capitalBurgs, water: false, routeType: "road", variation, search, edgeKeyMultiplier, riverEdges, maxVisited: pack.cells.i.length, excludedGroupIds: protectedFeatureIds}));
   for (const segment of roadSegments) {
     addPackRoute({routes, pack, segment, type: "road", pointsArray, cityByBurg, allocateRouteId});
     registerLandNetworkCells(landNetworkCells, pack, segment.cells);
   }
 
   for (const {feature, burgs: provinceBurgs} of burgsByProvinceAndLand) {
-    if (provinceBurgs.length < 2 || protectedFeatureIds.has(feature)) continue;
-    const anchoredBurgs = addLandNetworkAnchor(provinceBurgs, feature, landNetworkCells, pack);
+    if (!provinceBurgs.length || protectedFeatureIds.has(feature)) continue;
+    const anchoredBurgs = addLandNetworkAnchor(provinceBurgs, feature, landNetworkCells, pack, landBurgAnchors);
+    if (anchoredBurgs.length < 2) continue;
     const groups = new Map([[feature, anchoredBurgs]]);
-    const trailSegments = mergeRouteSegments(generateRouteSegments({pack, connections, groups, water: false, variation, search, edgeKeyMultiplier, riverEdges, maxVisited: pack.cells.i.length}));
+    const trailSegments = mergeRouteSegments(generateRouteSegments({pack, connections, groups, water: false, routeType: "trail", variation, search, edgeKeyMultiplier, riverEdges, maxVisited: pack.cells.i.length}));
     for (const segment of trailSegments) {
       addPackRoute({routes, pack, segment, type: "trail", pointsArray, cityByBurg, allocateRouteId});
       registerLandNetworkCells(landNetworkCells, pack, segment.cells);
     }
   }
 
-  for (const segment of mergeRouteSegments(generateRouteSegments({pack, connections, groups: portsByFeature, water: true, variation, search, edgeKeyMultiplier, riverEdges, excludedGroupIds: protectedFeatureIds}))) {
+  for (const segment of mergeRouteSegments(generateRouteSegments({pack, connections, groups: portsByFeature, water: true, routeType: "searoute", variation, search, edgeKeyMultiplier, riverEdges, excludedGroupIds: protectedFeatureIds}))) {
     addPackRoute({routes, pack, segment, type: "searoute", pointsArray, cityByBurg, allocateRouteId});
   }
 
@@ -1824,6 +1829,7 @@ function generateRouteSegments({
   connections,
   groups,
   water,
+  routeType = water ? "searoute" : "road",
   variation = null,
   search,
   edgeKeyMultiplier,
@@ -1837,7 +1843,7 @@ function generateRouteSegments({
   for (const [feature, burgs] of entries) {
     if (excludedGroupIds.has(Number(feature))) continue;
     const points = burgs.map(burg => routeCandidatePoint(burg, variation, water));
-    const edges = selectRouteEdges(calculateUrquhartEdges(points), points, water);
+    const edges = selectRouteEdges(calculateUrquhartEdges(points), points, water, routeType);
 
     for (const [fromId, toId] of edges) {
       const start = burgs[fromId].cell;
@@ -1854,13 +1860,204 @@ function generateRouteSegments({
   return routeSegments;
 }
 
-function selectRouteEdges(edges, points, water) {
+export function selectRouteEdges(edges, points, water, routeType = null) {
+  if (routeType === "trail" || routeType === "searoute") return selectSparseRouteNetworkEdges(edges, points);
   if (!water || edges.length < 12) return edges;
   const keep = Math.max(1, Math.round(edges.length * 0.65));
   if (keep >= edges.length) return edges;
   return [...edges]
-    .sort((left, right) => distanceSquared(points[right[0]], points[right[1]]) - distanceSquared(points[left[0]], points[left[1]]))
+    .sort((left, right) => distanceSquared(points[left[0]], points[left[1]]) - distanceSquared(points[right[0]], points[right[1]]))
     .slice(0, keep);
+}
+
+export function selectSparseRouteNetworkEdges(edges, points) {
+  const pointCount = points.length;
+  if (pointCount < 2) return [];
+
+  const candidates = normalizeRouteCandidateEdges(edges, points);
+  const selected = [];
+  const selectedKeys = new Set();
+  const parent = Array.from({length: pointCount}, (_, index) => index);
+  const rank = new Uint8Array(pointCount);
+
+  for (const candidate of candidates) {
+    if (!unionRouteCandidateComponents(parent, rank, candidate.from, candidate.to)) continue;
+    selected.push([candidate.from, candidate.to]);
+    selectedKeys.add(candidate.key);
+    if (selected.length === pointCount - 1) break;
+  }
+
+  if (selected.length < pointCount - 1) {
+    const fallback = [];
+    for (let from = 0; from < pointCount; from++) {
+      for (let to = from + 1; to < pointCount; to++) {
+        if (findRouteCandidateComponent(parent, from) === findRouteCandidateComponent(parent, to)) continue;
+        fallback.push(routeCandidateEdge(from, to, points));
+      }
+    }
+    fallback.sort(compareRouteCandidateEdges);
+    for (const candidate of fallback) {
+      if (!unionRouteCandidateComponents(parent, rank, candidate.from, candidate.to)) continue;
+      selected.push([candidate.from, candidate.to]);
+      selectedKeys.add(candidate.key);
+      if (selected.length === pointCount - 1) break;
+    }
+  }
+
+  const degree = new Uint16Array(pointCount);
+  for (const [from, to] of selected) {
+    degree[from]++;
+    degree[to]++;
+  }
+  const extraLimit = pointCount >= 12 ? Math.min(4, Math.floor(Math.sqrt(pointCount) / 3)) : 0;
+  let extras = 0;
+  for (const candidate of candidates) {
+    if (extras >= extraLimit) break;
+    if (selectedKeys.has(candidate.key)) continue;
+    if (degree[candidate.from] >= 6 || degree[candidate.to] >= 6) continue;
+    selected.push([candidate.from, candidate.to]);
+    selectedKeys.add(candidate.key);
+    degree[candidate.from]++;
+    degree[candidate.to]++;
+    extras++;
+  }
+
+  return selected;
+}
+
+export function routeNetworkEndpointBudget(pointCount, routeType) {
+  const count = Math.max(0, Math.floor(Number(pointCount) || 0));
+  if (count < 2) return count;
+  const minimum = routeType === "searoute" ? 12 : 24;
+  const scale = routeType === "searoute" ? 3 : 4;
+  return Math.min(count, Math.max(minimum, Math.ceil(Math.sqrt(count) * scale)));
+}
+
+export function selectRouteNetworkBurgs(burgs, budget) {
+  if (burgs.length <= budget) return burgs;
+  return [...burgs]
+    .sort(compareRouteNetworkBurgs)
+    .slice(0, budget);
+}
+
+export function selectSeaRouteNetworkBurgs(burgs, budget) {
+  if (burgs.length <= budget) return burgs;
+  const groups = [...groupBurgs(burgs, burg => burg.port).entries()]
+    .filter(([, groupBurgs]) => groupBurgs.length >= 2)
+    .map(([feature, groupBurgs]) => ({feature: Number(feature), burgs: [...groupBurgs].sort(compareRouteNetworkBurgs), next: 0}))
+    .sort((left, right) => compareRouteNetworkBurgs(left.burgs[0], right.burgs[0]) || left.feature - right.feature);
+  return selectPairedRouteNetworkGroups(groups, budget);
+}
+
+export function selectTrailRouteNetworkBurgs(burgs, pack, budget) {
+  const groups = groupBurgsByProvinceAndLand(burgs, pack)
+    .map(group => ({...group, burgs: [...group.burgs].sort(compareRouteNetworkBurgs), remaining: []}))
+    .sort((left, right) => compareRouteNetworkBurgs(left.burgs[0], right.burgs[0]) || left.province - right.province || left.feature - right.feature);
+  const selected = [];
+  const participating = [];
+
+  for (const group of groups) {
+    const required = group.burgs.filter(burg => burg.capital || burg.provincial);
+    if (group.burgs.length >= 2) {
+      for (const burg of group.burgs) {
+        if (required.length >= 2) break;
+        if (!required.includes(burg)) required.push(burg);
+      }
+    }
+    if (!required.length) continue;
+    const requiredIds = new Set(required.map(burg => Number(burg.i)));
+    selected.push(...required);
+    group.remaining = group.burgs.filter(burg => !requiredIds.has(Number(burg.i)));
+    if (group.remaining.length) participating.push(group);
+  }
+
+  const target = Math.max(selected.length, budget);
+  let added = true;
+  while (selected.length < target && added) {
+    added = false;
+    for (const group of participating) {
+      if (selected.length >= target || !group.remaining.length) continue;
+      selected.push(group.remaining.shift());
+      added = true;
+    }
+  }
+  return selected;
+}
+
+function selectPairedRouteNetworkGroups(groups, budget) {
+  const selected = [];
+  const participating = [];
+
+  for (const group of groups) {
+    if (selected.length + 2 > budget) break;
+    selected.push(group.burgs[0], group.burgs[1]);
+    group.next = 2;
+    participating.push(group);
+  }
+
+  let added = true;
+  while (selected.length < budget && added) {
+    added = false;
+    for (const group of participating) {
+      if (selected.length >= budget || group.next >= group.burgs.length) continue;
+      selected.push(group.burgs[group.next++]);
+      added = true;
+    }
+  }
+  return selected;
+}
+
+function compareRouteNetworkBurgs(left, right) {
+  return Number(Boolean(right.capital)) - Number(Boolean(left.capital))
+    || Number(Boolean(right.provincial)) - Number(Boolean(left.provincial))
+    || Number(Boolean(right.port)) - Number(Boolean(left.port))
+    || Number(right.population || 0) - Number(left.population || 0)
+    || Number(left.i) - Number(right.i);
+}
+
+function normalizeRouteCandidateEdges(edges, points) {
+  const normalized = new Map();
+  for (const edge of edges) {
+    const left = Number(edge?.[0]);
+    const right = Number(edge?.[1]);
+    if (!Number.isInteger(left) || !Number.isInteger(right) || left === right) continue;
+    if (left < 0 || right < 0 || left >= points.length || right >= points.length) continue;
+    const candidate = routeCandidateEdge(left, right, points);
+    if (!Number.isFinite(candidate.distance) || normalized.has(candidate.key)) continue;
+    normalized.set(candidate.key, candidate);
+  }
+  return [...normalized.values()].sort(compareRouteCandidateEdges);
+}
+
+function routeCandidateEdge(left, right, points) {
+  const from = Math.min(left, right);
+  const to = Math.max(left, right);
+  return {from, to, key: `${from}:${to}`, distance: distanceSquared(points[from], points[to])};
+}
+
+function compareRouteCandidateEdges(left, right) {
+  return left.distance - right.distance || left.from - right.from || left.to - right.to;
+}
+
+function findRouteCandidateComponent(parent, node) {
+  let root = node;
+  while (parent[root] !== root) root = parent[root];
+  while (parent[node] !== node) {
+    const next = parent[node];
+    parent[node] = root;
+    node = next;
+  }
+  return root;
+}
+
+function unionRouteCandidateComponents(parent, rank, left, right) {
+  let leftRoot = findRouteCandidateComponent(parent, left);
+  let rightRoot = findRouteCandidateComponent(parent, right);
+  if (leftRoot === rightRoot) return false;
+  if (rank[leftRoot] < rank[rightRoot]) [leftRoot, rightRoot] = [rightRoot, leftRoot];
+  parent[rightRoot] = leftRoot;
+  if (rank[leftRoot] === rank[rightRoot]) rank[leftRoot]++;
+  return true;
 }
 
 function tracePackPath(pack, start, end, water, connections, variation = null, search = createRouteSearchScratch(pack.cells.i.length), edgeKeyMultiplier = pack.cells.i.length + 1, riverEdges = null, maxVisitedOverride = null) {
@@ -2126,13 +2323,15 @@ function mergeRouteSegments(segments) {
       const next = segments[nextIndex];
       if (next.merged) continue;
       if (next.cells.at(0) !== current.cells.at(-1)) continue;
+      const occupied = new Set(current.cells);
+      if (next.cells.slice(1).some(cell => occupied.has(cell))) continue;
       current.cells = current.cells.concat(next.cells.slice(1));
       next.merged = true;
       mergedCount++;
     }
   }
 
-  return mergedCount > 1 ? mergeRouteSegments(segments) : segments;
+  return mergedCount > 0 ? mergeRouteSegments(segments) : segments;
 }
 
 function addPackRoute({routes, pack, segment, type, pointsArray, cityByBurg, allocateRouteId}) {
@@ -2323,7 +2522,7 @@ function groupBurgsByProvinceAndLand(burgs, pack) {
     if (!groups.has(key)) groups.set(key, {province, feature, burgs: []});
     groups.get(key).burgs.push(burg);
   }
-  return [...groups.values()].sort((left, right) => left.province - right.province || left.feature - right.feature);
+  return [...groups.values()].sort((left, right) => left.feature - right.feature || Number(left.burgs.length < 2) - Number(right.burgs.length < 2) || left.province - right.province);
 }
 
 function landFeatureAtBurg(pack, burg) {
@@ -2350,17 +2549,26 @@ function registerLandNetworkCells(network, pack, cells) {
   }
 }
 
-function addLandNetworkAnchor(burgs, feature, network, pack) {
+function addLandNetworkAnchor(burgs, feature, network, pack, fallbackAnchors = new Map()) {
   const featureNetwork = network.get(feature);
-  if (!featureNetwork?.size || burgs.some(burg => featureNetwork.has(burg.cell))) return burgs;
+  if (!featureNetwork?.size) {
+    if (burgs.length >= 2) return burgs;
+    const fallbackCells = (fallbackAnchors.get(feature) || []).map(burg => burg.cell).filter(cell => cell !== burgs[0]?.cell);
+    return appendNearestLandNetworkAnchor(burgs, fallbackCells, pack);
+  }
+  if (burgs.some(burg => featureNetwork.has(burg.cell))) return burgs;
 
+  return appendNearestLandNetworkAnchor(burgs, featureNetwork, pack);
+}
+
+function appendNearestLandNetworkAnchor(burgs, candidates, pack) {
   let anchorCell = -1;
   let bestDistance = Infinity;
   for (const burg of burgs) {
     const origin = pack.cells.p[burg.cell];
-    for (const cell of featureNetwork) {
+    for (const cell of candidates) {
       const candidateDistance = distanceSquared(origin, pack.cells.p[cell]);
-      if (candidateDistance >= bestDistance) continue;
+      if (candidateDistance > bestDistance || candidateDistance === bestDistance && cell >= anchorCell) continue;
       bestDistance = candidateDistance;
       anchorCell = cell;
     }

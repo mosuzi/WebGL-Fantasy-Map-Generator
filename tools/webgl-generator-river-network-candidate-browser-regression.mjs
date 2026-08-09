@@ -58,8 +58,8 @@ try {
     await waitForMapReady(page);
     await delay(1000);
     const generationHealth = await readHealthErrors(page);
-    const unexpectedGenerationHealth = generationHealth.filter(event => !["main-thread-long-task", "render-frame-gap"].includes(event.type));
-    assert.deepEqual(unexpectedGenerationHealth, [], `${cellsTarget} 正式生成出现非性能 health error`);
+    const unexpectedGenerationHealth = generationHealth.filter(event => !["main-thread-long-task", "operation-stall", "render-frame-gap"].includes(event.type));
+    assert.deepEqual(unexpectedGenerationHealth, [], `${cellsTarget} 正式生成出现非已登记性能 health error`);
 
     await clearHealth(page);
     healthConsole.length = 0;

@@ -170,11 +170,11 @@ function definitions() {
         step("DOM 接线", FILES.panelBindings, ["target === \"browser-storage\"", "handlers.onSaveBrowserStorage"]),
         step("runtime handler", FILES.runtime, ["onSaveBrowserStorage", "saveMapToBrowserStorage"]),
         step("编码与持久化", FILES.runtime, ["saveMapToBrowserStorageViaApi", "storage.setItem(BROWSER_MAP_STORAGE_KEY", "storageKey: BROWSER_MAP_STORAGE_KEY"]),
-        step("反馈", FILES.runtime, ["正在保存地图到浏览器", "browserStorageSaveMessage"])
+        step("反馈", FILES.runtime, ["showMapToast(documentRef, \"保存成功\")", "BROWSER_STORAGE_SAVE_ERROR_TOAST_DURATION_MS"])
       ],
       expectedResult: "把当前完整地图编码写入固定浏览器存储键",
       history: "保存不改变地图和编辑历史",
-      feedback: "文件状态显示占用、编码与成功信息",
+      feedback: "页面下方 toast 提示成功；失败显示原因并延长提示，控制面板不新增保存文案",
       exitRecovery: "存储失败返回明确错误；当前地图保持",
       firstUse: "入口明确区分浏览器与本地文件",
       expertUse: "Ctrl+S 复用相同 runtime action",

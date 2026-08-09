@@ -213,15 +213,16 @@ export function pickRoute(map, index, worldX, worldY, maxDistance) {
   return best;
 }
 
-export function pickRiver(map, index, worldX, worldY, maxDistance) {
+export function pickRiver(map, index, worldX, worldY, maxDistance, predicate = () => true) {
   if (!map?.rivers?.rivers?.length) return null;
   let best = null;
   let candidateCount = 0;
   const riverSegments = index ? queryIndexedItems(index, worldX, worldY, maxDistance, "riverSegments", segment => `${segment.river.id}:${segment.index}`) : allRiverSegments(map);
 
   for (const segment of riverSegments) {
-    candidateCount++;
     const river = segment.river;
+    if (!predicate(river)) continue;
+    candidateCount++;
     const parent = river.parent ? map.rivers.rivers.find(item => Number(item.id ?? item.i) === Number(river.parent)) : null;
     const distance = distanceToSegment(worldX, worldY, segment.a, segment.b);
     if (distance > maxDistance || (best && distance >= best.distance)) continue;

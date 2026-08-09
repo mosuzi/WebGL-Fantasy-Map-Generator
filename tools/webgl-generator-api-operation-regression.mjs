@@ -131,6 +131,7 @@ assert.equal(history.getStats().undo, 1);
 assert.equal(history.getStats().lastLabel, "事务前编辑");
 
 const appSource = await readFile(new URL("../app/webgl-generator/src/runtime/app.js", import.meta.url), "utf8");
+const mapReplaceOperations = new Set(["generate.newMap", "generate.rerollSeed", "data.importMap", "data.importHeightmap", "data.restoreBrowserMap"]);
 for (const operationName of [
   "generate.newMap",
   "generate.rerollSeed",
@@ -149,9 +150,12 @@ for (const operationName of [
   "edit.height.rebuildDownstreamDerived",
   "edit.height.rebuildAllDerived"
 ]) {
-  assert.match(appSource, new RegExp(`operation\\.run(?:Sync)?\\(\\s*\"${operationName.replaceAll(".", "\\.")}\"`));
+  const runner = mapReplaceOperations.has(operationName) ? "runMapReplace" : "operation\\.run(?:Sync)?";
+  assert.match(appSource, new RegExp(`${runner}\\(\\s*\"${operationName.replaceAll(".", "\\.")}\"`));
 }
-assert.match(appSource, /snapshot: \(\) => captureMapReplaceSnapshot/);
+assert.match(appSource, /snapshot: async context =>/);
+assert.match(appSource, /loadingOwner = `map-replace:\$\{context\.id\}`/);
+assert.match(appSource, /operation\.run\(name, task, config\)\.finally/);
 assert.match(appSource, /rollback: \(snapshot, error, context\) => restoreMapReplaceSnapshot/);
 assert.match(appSource, /state\.editHistory\.restoreSnapshot\(snapshot\.history\)/);
 

@@ -1763,7 +1763,9 @@ export class PlaceholderMapRenderer {
       : highlightedConnector?.kind === OBJECT_KIND.TRADE_FLOW ? highlightedConnector : null;
     const diplomacyRelation = highlightedConnector?.kind === OBJECT_KIND.DIPLOMACY_RELATION ? highlightedConnector : null;
     const route = this.layerVisibility.routes ? pickRoute(this.map, this.objectPickingIndex, world.x, world.y, this.pickThresholdWorld(7)) : null;
-    const river = this.layerVisibility.rivers ? pickRiver(this.map, this.objectPickingIndex, world.x, world.y, this.pickThresholdWorld(9)) : null;
+    const river = this.layerVisibility.rivers
+      ? pickRiver(this.map, this.objectPickingIndex, world.x, world.y, this.pickThresholdWorld(9), candidate => isRiverVisibleForRendering(this.map, candidate))
+      : null;
     const riverControlPoint = pickRiverControlPoint(this.riverWaypointPreview, world.x, world.y, this.pickThresholdWorld(13));
     const lake = hasGridCell ? pickLakeObject(this.map, result) : null;
     const politicalObject = hasGridCell ? pickPoliticalObject(this.map, result, this.colorMode) : null;
@@ -3517,6 +3519,7 @@ function getObjectBounds(map, object) {
   }
   if (object.kind === OBJECT_KIND.RIVER) {
     const river = map.rivers.rivers.find(item => item.id === object.id);
+    if (!isRiverVisibleForRendering(map, river)) return null;
     const points = river && isSharedCubicCurve(river.visualCurve) ? sampleCentripetalCatmullRom(river.points).points : river?.points;
     return points ? pointsBounds(points, 42) : null;
   }
@@ -4709,6 +4712,23 @@ function worldPathIntersectsBounds(points, bounds) {
   return maxX >= bounds.minX && minX <= bounds.maxX && maxY >= bounds.minY && minY <= bounds.maxY;
 }
 
+export function riverVisualPolicyForRendering(map, riverOrId) {
+  const rivers = map?.rivers?.rivers || [];
+  const river = riverOrId && typeof riverOrId === "object"
+    ? riverOrId
+    : rivers.find(item => Number(item?.id ?? item?.i) === Number(riverOrId));
+  if (!river) return "preserve";
+  const id = Number(river.id ?? river.i);
+  const locked = (map?.regenerationLocks?.entries || []).some(entry => entry?.kind === "river" && Number(entry.id) === id);
+  if (locked) return "preserve";
+  const policy = String(river.displayPolicy?.fragment || "preserve");
+  return ["hide-visual-only", "preserve-protected-outlet", "extend-to-confluence", "preserve"].includes(policy) ? policy : "preserve";
+}
+
+export function isRiverVisibleForRendering(map, riverOrId) {
+  return riverVisualPolicyForRendering(map, riverOrId) !== "hide-visual-only";
+}
+
 function buildRiverMeshVertices(map, camera, canvas) {
   const build = createRiverMeshBuild(map, camera, canvas);
   for (const river of map.rivers.rivers) {
@@ -4740,10 +4760,14 @@ async function buildRiverMeshVerticesAsync(map, camera, canvas, {yieldToBrowser 
 function createRiverMeshBuild(map, camera, canvas) {
   const context = createRenderContext(map, {camera, canvas});
   const projection = createLineWidthProjection({map, camera, canvas});
+  const hiddenRiverIds = new Set((map.rivers?.rivers || [])
+    .filter(river => !isRiverVisibleForRendering(map, river))
+    .map(river => Number(river.id ?? river.i)));
   return {
     map,
     context,
     projection,
+    hiddenRiverIds,
     viewportBounds: viewportWorldBounds(map, camera, canvas, viewportLineOverscanBackingPx(canvas)),
     vertices: [],
     stats: emptyRiverBuildStats(projection)
@@ -4751,6 +4775,10 @@ function createRiverMeshBuild(map, camera, canvas) {
 }
 
 function pushRiverMesh(build, river) {
+  if (build.hiddenRiverIds.has(Number(river.id ?? river.i))) {
+    build.stats.hiddenFragments++;
+    return;
+  }
   const sourcePoints = Array.isArray(river.points) ? river.points.filter(isWorldPoint) : [];
   if (sourcePoints.length < 2) return;
   if (!worldPathIntersectsBounds(sourcePoints, build.viewportBounds)) {
@@ -4776,6 +4804,7 @@ function finalizeRiverMeshBuild(build) {
 function emptyRiverBuildStats(projection = null) {
   return {
     rivers: 0,
+    hiddenFragments: 0,
     culledRivers: 0,
     segments: 0,
     scale: projection?.scale || 0,
@@ -4859,6 +4888,7 @@ function riverPointFlux(point, cells, cell, river) {
 function normalizeRiverWidthStats(stats) {
   return {
     rivers: stats.rivers,
+    hiddenFragments: stats.hiddenFragments || 0,
     culledRivers: stats.culledRivers || 0,
     segments: stats.segments,
     scale: roundValue(stats.scale),
@@ -4883,6 +4913,7 @@ function normalizeRiverWidthStats(stats) {
 function emptyRiverWidthStats() {
   return {
     rivers: 0,
+    hiddenFragments: 0,
     culledRivers: 0,
     segments: 0,
     scale: 0,

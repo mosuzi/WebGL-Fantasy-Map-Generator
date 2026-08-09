@@ -322,6 +322,7 @@ const STATE_TOPOLOGY_UI_HISTORY = new WeakMap();
 const LOAD_TRACE_EVENT_NAME = "webgl-generator-load-stage";
 const LOAD_TRACE_DELAY_PARAMS = Object.freeze(["loadStepDelay", "debugLoadDelay", "loadTraceDelay"]);
 const MAX_DEBUG_LOAD_DELAY_MS = 2000;
+const BROWSER_STORAGE_SAVE_ERROR_TOAST_DURATION_MS = 6000;
 const NAMEBASE_PREFERENCES_STORAGE_KEY = "webgl-generator-namebase-preferences-v1";
 const CLIMATE_OPTION_KEYS = Object.freeze([
   "climateLatitudeMode",
@@ -1159,10 +1160,13 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
         return false;
       }
     },
-    onRegenerateRivers: () => {
+    onRegenerateRivers: async () => {
       cancelHeightLine(state, documentRef);
-      runtimeActions.generate.regenerate("rivers", {confirm: true});
-      updateHeightPanel(state);
+      try {
+        return await runtimeActions.generate.regenerate("rivers", {confirm: true});
+      } finally {
+        updateHeightPanel(state);
+      }
     },
     onRegenerateBase: () => {
       cancelHeightLine(state, documentRef);
@@ -2883,11 +2887,29 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
 
 function createRuntimeActions(state, documentRef, options = {}) {
   const operation = state.runtimeOperation;
-  const mapReplaceConfig = message => ({
-    message,
-    snapshot: () => captureMapReplaceSnapshot(state, documentRef),
-    rollback: (snapshot, error, context) => restoreMapReplaceSnapshot(state, documentRef, snapshot, error, context)
-  });
+  const runMapReplace = (name, task, message, overrides = {}) => {
+    let loadingOwner = "";
+    const config = {
+      message,
+      loading: false,
+      snapshot: async context => {
+        loadingOwner = `map-replace:${context.id}`;
+        setMythicGenerationLoading(documentRef, true, message, loadingOwner);
+        try {
+          await yieldToBrowser(documentRef);
+          return captureMapReplaceSnapshot(state, documentRef);
+        } catch (error) {
+          clearOwnedGenerationLoading(documentRef, loadingOwner);
+          throw error;
+        }
+      },
+      rollback: (snapshot, error, context) => restoreMapReplaceSnapshot(state, documentRef, snapshot, error, context),
+      ...overrides
+    };
+    return operation.run(name, task, config).finally(() => {
+      if (loadingOwner) clearOwnedGenerationLoading(documentRef, loadingOwner);
+    });
+  };
   const mapMutationConfig = message => ({
     message,
     snapshot: () => captureMapMutationSnapshot(state.map, state.editHistory),
@@ -2930,13 +2952,22 @@ function createRuntimeActions(state, documentRef, options = {}) {
     generate: {
       getOptions: () => getGenerationOptionsViaApi(state, documentRef),
       setOptions: (patch = {}) => setGenerationOptionsViaApi(state, documentRef, patch),
-      newMap: (options = {}) => operation.run("generate.newMap", context => generateNewMapViaApi(state, documentRef, options, context), mapReplaceConfig(loadingMessage("generate"))),
-      rerollSeed: (options = {}) => operation.run("generate.rerollSeed", context => rerollSeedViaApi(state, documentRef, options, context), mapReplaceConfig(loadingMessage("generate"))),
-      regenerate: (kind, options = {}) => operation.runSync("generate.regenerate", context => {
-        context.report("regenerate", {message: `正在重新生成 ${String(kind || "派生数据")}`});
-        return regenerateMapAttributeViaApi(state, documentRef, kind, options);
+      newMap: (options = {}) => runMapReplace("generate.newMap", context => generateNewMapViaApi(state, documentRef, options, context), loadingMessage("generate")),
+      rerollSeed: (options = {}) => runMapReplace("generate.rerollSeed", context => rerollSeedViaApi(state, documentRef, options, context), loadingMessage("generate")),
+      regenerate: (kind, options = {}) => operation.run("generate.regenerate", async context => {
+        const message = `正在重新生成 ${String(kind || "派生数据")}`;
+        context.report("regenerate", {message});
+        setMythicGenerationLoading(documentRef, true, message);
+        try {
+          await yieldToBrowser(documentRef);
+          context.throwIfCancelled();
+          return regenerateMapAttributeViaApi(state, documentRef, kind, options);
+        } finally {
+          updateGenerationLoading(documentRef, false);
+        }
       }, {
         message: "正在重新生成派生数据",
+        loading: false,
         isNoop: result => !result?.executed
       })
     },
@@ -3035,12 +3066,11 @@ function createRuntimeActions(state, documentRef, options = {}) {
         context.report("serialize", {message: "正在保存浏览器存档"});
         return saveMapToBrowserStorageViaApi(state, documentRef, options);
       }, {message: "正在保存浏览器存档"}),
-      restoreBrowserMap: (options = {}) => operation.run("data.restoreBrowserMap", context => restoreMapFromBrowserStorageViaApi(state, documentRef, options, context), {
-        ...mapReplaceConfig(loadingMessage("map-import-read")),
+      restoreBrowserMap: (options = {}) => runMapReplace("data.restoreBrowserMap", context => restoreMapFromBrowserStorageViaApi(state, documentRef, options, context), loadingMessage("map-import-read"), {
         isNoop: result => result?.restored === false
       }),
       inspectCollectionImport: (kind, document, options = {}) => inspectCollectionImportViaApi(state, kind, document, options),
-      importMap: (document, options = {}) => operation.run("data.importMap", context => importMapDocumentViaApi(state, documentRef, document, options, context), mapReplaceConfig(loadingMessage("map-import-read"))),
+      importMap: (document, options = {}) => runMapReplace("data.importMap", context => importMapDocumentViaApi(state, documentRef, document, options, context), loadingMessage("map-import-read")),
       importGEO: (document, options = {}) => operation.runSync("data.importGEO", context => {
         context.report("import", {message: "正在导入 GEO 数据"});
         return importGeoDocumentTransactionViaApi(state, documentRef, document, options);
@@ -3049,8 +3079,7 @@ function createRuntimeActions(state, documentRef, options = {}) {
         message: "正在导入 GEO 数据",
         isNoop: result => result?.imported === false
       }),
-      importHeightmap: (payload, options = {}) => operation.run("data.importHeightmap", context => importHeightmapImageViaApi(state, documentRef, payload, options, context), {
-        ...mapReplaceConfig(loadingMessage("heightmap-read")),
+      importHeightmap: (payload, options = {}) => runMapReplace("data.importHeightmap", context => importHeightmapImageViaApi(state, documentRef, payload, options, context), loadingMessage("heightmap-read"), {
         isNoop: result => result?.imported === false
       })
     },
@@ -3638,17 +3667,29 @@ function normalizeLayerVisibilityPreferences(layers = {}) {
   return normalized;
 }
 
-function setMythicGenerationLoading(documentRef, visible, stageOrKey) {
+function setMythicGenerationLoading(documentRef, visible, stageOrKey, owner = "") {
   if (!visible) {
     updateGenerationLoading(documentRef, false);
     return;
   }
-  updateGenerationLoading(documentRef, true, loadingMessage(stageOrKey));
+  updateGenerationLoading(documentRef, true, loadingMessage(stageOrKey), owner);
 }
 
-function updateGenerationLoading(documentRef, visible, message = "山海初开") {
+function updateGenerationLoading(documentRef, visible, message = "山海初开", owner = "") {
   setGenerationLoading(documentRef, visible, message);
+  const loading = documentRef.getElementById("generation-loading");
+  if (loading) {
+    if (visible && owner) loading.dataset.owner = owner;
+    else if (!visible) delete loading.dataset.owner;
+  }
   getWebglGeneratorHealthMonitor(documentRef)?.markLoading(visible, message);
+}
+
+function clearOwnedGenerationLoading(documentRef, owner) {
+  const loading = documentRef.getElementById("generation-loading");
+  if (!loading || loading.dataset.owner !== owner) return false;
+  updateGenerationLoading(documentRef, false);
+  return true;
 }
 
 function loadingMessage(stageOrKey) {
@@ -3743,23 +3784,30 @@ function clampDebugLoadDelay(value) {
 
 function requestGenerate(state, documentRef, actions = state.runtimeActions) {
   try {
+    const activeOperation = state.runtimeOperation?.getSnapshot?.().current;
+    if (activeOperation) {
+      showMapToast(documentRef, `当前正在执行${activeOperation.message ? `“${activeOperation.message}”` : "另一项任务"}，请稍候再生成`, 2600, {tone: "error"});
+      return false;
+    }
     if (documentRef.getElementById("auto-random-seed").checked) {
       setSeedInput(documentRef, createRandomSeed());
     }
     const options = readOptionsFromPanel(documentRef, state.options);
     state.pendingGenerateRequestId = (state.pendingGenerateRequestId || 0) + 1;
     const requestId = state.pendingGenerateRequestId;
+    const loadingOwner = `generate-request:${requestId}`;
     setGenerationStatus(documentRef, options, "等待生成任务");
-    setMythicGenerationLoading(documentRef, true, "request");
-    scheduleAfterPaint(documentRef, () => {
+    setMythicGenerationLoading(documentRef, true, "request", loadingOwner);
+    void actions.generate.newMap({...options, confirm: true}).catch(error => {
       if (requestId !== state.pendingGenerateRequestId) return;
-      void actions.generate.newMap({...options, confirm: true}).catch(error => {
-        if (!state.map) failStartupLoading(documentRef, error);
-      });
+      clearOwnedGenerationLoading(documentRef, loadingOwner);
+      if (!state.map) failStartupLoading(documentRef, error);
     });
+    return true;
   } catch (error) {
     updateGenerationLoading(documentRef, false);
     reportGenerateError(documentRef, error);
+    return false;
   }
 }
 
@@ -3776,7 +3824,10 @@ async function restoreBrowserStoredMapOrGenerate(state, documentRef) {
 async function restoreMapFromBrowserStorageViaApi(state, documentRef, options = {}, operation = null) {
   if (options.confirm !== true) throw new Error("恢复浏览器存档会替换当前地图并清空编辑历史，需要显式传入 {confirm: true}");
   const stored = await readBrowserMapStorage(documentRef);
-  if (!stored) return {restored: false, reason: "missing", effects: []};
+  if (!stored) {
+    updateGenerationLoading(documentRef, false);
+    return {restored: false, reason: "missing", effects: []};
+  }
   const raw = stored.raw;
 
   try {
@@ -3803,7 +3854,7 @@ async function restoreMapFromBrowserStorageViaApi(state, documentRef, options = 
       effects: [...new Set([...(imported.effects || []), "browser-storage-read", ...(stored.fallback ? ["browser-storage-fallback-read"] : [])])]
     };
   } catch (error) {
-    updateGenerationLoading(documentRef, false);
+    if (!operation) updateGenerationLoading(documentRef, false);
     reportMapImportError(state, documentRef, error, null, {
       source: "browser-storage",
       prefix: "浏览器地图恢复失败，原存档已保留"
@@ -3984,7 +4035,7 @@ async function generateMapViaApi(state, documentRef, options, {completionToast =
       effects: ["replace-map", "clear-history", "renderer", "runtime-panel", "object-panels", "object-index"]
     };
   } catch (error) {
-    updateGenerationLoading(documentRef, false);
+    if (!operation) updateGenerationLoading(documentRef, false);
     reportGenerateError(documentRef, error);
     throw error;
   }
@@ -4198,31 +4249,46 @@ function captureMapReplaceSnapshot(state, documentRef) {
 }
 
 async function restoreMapReplaceSnapshot(state, documentRef, snapshot, _error, operation) {
-  operation?.report("rollback", {message: "正在恢复任务前的地图状态"});
-  const mapChanged = state.map !== snapshot.map;
-  state.map = snapshot.map;
-  state.options = cloneGenerationOptions(snapshot.options);
-  state.pendingGenerateId = snapshot.pendingGenerateId;
-  state.lastEditRefresh = snapshot.lastEditRefresh;
-  syncGenerationInputs(documentRef, state.options);
-  updateControlPreferences(documentRef, {units: snapshot.unitPreferences});
-  state.renderer?.setUnitPreferences?.(snapshot.unitPreferences);
-  replaceUserVisualThemes(snapshot.userVisualThemes || []);
-  applyRuntimeVisualThemeState(state, documentRef, snapshot.visualTheme, {force: true});
-  if (mapChanged && snapshot.map) {
-    if (typeof state.renderer.loadMapAsync === "function") await state.renderer.loadMapAsync(snapshot.map);
-    else state.renderer.loadMap(snapshot.map);
+  const rollbackMessage = "正在恢复任务前的地图状态";
+  operation?.report("rollback", {message: rollbackMessage});
+  setMythicGenerationLoading(documentRef, true, rollbackMessage);
+  try {
+    await yieldToBrowser(documentRef);
+    const mapChanged = state.map !== snapshot.map;
+    state.map = snapshot.map;
+    state.options = cloneGenerationOptions(snapshot.options);
+    state.pendingGenerateId = snapshot.pendingGenerateId;
+    state.lastEditRefresh = snapshot.lastEditRefresh;
+    syncGenerationInputs(documentRef, state.options);
+    updateControlPreferences(documentRef, {units: snapshot.unitPreferences});
+    state.renderer?.setUnitPreferences?.(snapshot.unitPreferences);
+    replaceUserVisualThemes(snapshot.userVisualThemes || []);
+    applyRuntimeVisualThemeState(state, documentRef, snapshot.visualTheme, {force: true});
+    if (mapChanged && snapshot.map) {
+      if (typeof state.renderer.loadMapAsync === "function") {
+        await state.renderer.loadMapAsync(snapshot.map, {
+          onStage: stage => {
+            const message = `正在恢复地图：${loadingMessage(stage)}`;
+            operation?.report(stage.id || "rollback-renderer", {message});
+            setMythicGenerationLoading(documentRef, true, message);
+          },
+          yieldToBrowser: options => yieldToBrowser(documentRef, options)
+        });
+      } else state.renderer.loadMap(snapshot.map);
+    }
+    state.mapRevision.restoreSnapshot(snapshot.mapRevision);
+    state.editHistory.restoreSnapshot(snapshot.history);
+    state.selectionStore.batch(() => {
+      const selected = snapshot.selection?.selection;
+      if (selected) state.selectionStore.setSelection(selected);
+      else state.selectionStore.clear();
+      if (snapshot.selection?.editingObject) state.selectionStore.startEditing(snapshot.selection.editingObject);
+    });
+    restoreCanvasToolMode(state, documentRef, snapshot.canvasToolMode);
+    if (snapshot.map) refreshRuntimeAfterMapLoad(state, documentRef);
+  } finally {
+    updateGenerationLoading(documentRef, false);
   }
-  state.mapRevision.restoreSnapshot(snapshot.mapRevision);
-  state.editHistory.restoreSnapshot(snapshot.history);
-  state.selectionStore.batch(() => {
-    const selected = snapshot.selection?.selection;
-    if (selected) state.selectionStore.setSelection(selected);
-    else state.selectionStore.clear();
-    if (snapshot.selection?.editingObject) state.selectionStore.startEditing(snapshot.selection.editingObject);
-  });
-  restoreCanvasToolMode(state, documentRef, snapshot.canvasToolMode);
-  if (snapshot.map) refreshRuntimeAfterMapLoad(state, documentRef);
 }
 
 function restoreCanvasToolMode(state, documentRef, snapshotMode) {
@@ -4603,15 +4669,13 @@ async function saveMapToLocalFile(state, documentRef, exportAction = state.runti
 }
 
 async function saveMapToBrowserStorage(state, documentRef, saveAction = state.runtimeActions?.data?.saveBrowserMap) {
+  clearLegacyBrowserStorageSaveStatus(documentRef);
   try {
-    setFileOperationStatus(documentRef, "正在保存地图到浏览器...");
     const result = await saveAction({source: "ui"});
-    setFileOperationStatus(documentRef, browserStorageSaveMessage(result));
     showMapToast(documentRef, "保存成功");
     return result;
   } catch (error) {
-    reportFileOperationError(documentRef, "保存到浏览器失败", error);
-    showMapToast(documentRef, "保存失败", 2600, {tone: "error"});
+    showMapToast(documentRef, browserStorageSaveErrorMessage(error), BROWSER_STORAGE_SAVE_ERROR_TOAST_DURATION_MS, {tone: "error"});
     return null;
   }
 }
@@ -5810,12 +5874,16 @@ function browserStorage(documentRef) {
   }
 }
 
-function browserStorageSaveMessage(payload) {
-  const original = formatStorageBytes(payload.originalBytes);
-  const stored = formatStorageBytes(payload.bytes || String(payload.data || "").length);
-  const compression = payload.encoding === "gzip-base64" ? `，压缩后 ${stored}` : "";
-  const backend = payload.storageBackend === "indexedDB" ? "IndexedDB 降级存储" : "LocalStorage";
-  return `地图已保存到浏览器 ${backend}：原始 ${original}${compression}。下次打开会优先恢复此地图。`;
+function clearLegacyBrowserStorageSaveStatus(documentRef) {
+  const status = documentRef.getElementById("file-operation-status");
+  if (!status || !/^(?:正在保存地图到浏览器|地图已保存到浏览器|保存到浏览器失败)/.test(status.textContent.trim())) return;
+  status.textContent = "";
+  delete status.dataset.state;
+}
+
+function browserStorageSaveErrorMessage(error) {
+  const message = error instanceof Error ? error.message : String(error || "未知错误");
+  return `保存到浏览器失败：${message}`;
 }
 
 function formatStorageBytes(bytes) {
@@ -5844,6 +5912,7 @@ async function importMapDocumentViaApi(state, documentRef, document, options = {
     operation?.report("parse", {message: loadingMessage("map-import-read")});
     parsed = await normalizeApiMapImportDocument(documentRef, document);
   } catch (error) {
+    if (!operation) updateGenerationLoading(documentRef, false);
     reportMapImportError(state, documentRef, error, source === "ui" ? document : null, {source, prefix: source === "ui" ? "地图数据导入失败" : "API 导入地图数据失败"});
     throw error;
   }
@@ -5902,7 +5971,7 @@ async function importParsedMapDocumentViaApi(state, documentRef, document, optio
       effects: ["replace-map", "clear-history", "display-preferences", "renderer", "runtime-panel", "object-panels", "object-index"]
     };
   } catch (error) {
-    updateGenerationLoading(documentRef, false);
+    if (!operation) updateGenerationLoading(documentRef, false);
     reportMapImportError(state, documentRef, error, null, {source, prefix: source === "ui" ? "地图数据导入失败" : "API 导入地图数据失败"});
     throw error;
   }
@@ -6179,7 +6248,7 @@ async function importHeightmapImageViaApi(state, documentRef, payload, options =
     recordImportDiagnostic(state, documentRef, diagnostic);
     return {...result, diagnostic};
   } catch (error) {
-    updateGenerationLoading(documentRef, false);
+    if (!operation) updateGenerationLoading(documentRef, false);
     const diagnostic = createImportFailureDiagnostic("heightmap", error, file, createHeightmapSourceSummary(file, settings), {source: options.source === "ui" ? "ui" : "api"});
     reportImportDiagnostic(state, documentRef, diagnostic, options.source === "ui" ? "高度图导入失败" : "API 导入高度图失败", ["heightmap-import-status"]);
     throw attachImportDiagnostic(error, diagnostic);
