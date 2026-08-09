@@ -22,29 +22,18 @@ pnpm run build
 pnpm run preview
 ```
 
-这些脚本分别转发到正式应用的 `start:app / build:app / preview:app`，不会构建或部署 `source/` 参考项目。生产构建完成后，Vite 的 `deploy-prototypes` 插件会动态枚举 `prototype/` 的直接子目录；每个目录必须包含 `index.html`，随后整目录复制到 `dist/webgl-generator/prototype/<目录名>/`。因此新增独立 prototype 时无需再修改构建白名单。
+这些脚本分别转发到正式应用的 `start:app / build:app / preview:app`，不会构建或部署 `source/` 参考项目。生产构建完成后，Vite 的 `deploy-prototypes` 插件会动态枚举 `prototype/` 的直接子目录；每个目录必须包含 `index.html`。通常页面会整目录复制到 `dist/webgl-generator/prototype/<目录名>/`；`boundary-topology-lab` 与 `river-network-lab` 例外：它们会以独立 Vite 子构建输出自包含 `assets/`，把所需共享纯模块纳入实验室 bundle，且边界实验室保留其只读几何依赖。两页不得在生产页面中请求 `/app/webgl-generator/src/**`，也不得新增该类根路径运行时 import。新增其它独立 prototype 时无需再修改构建白名单。
 
-## 线上入口
+## 实验室在线预览
 
-| 内容 | URL |
-|---|---|
-| 正式 WebGL 地图生成器 | `/` |
-| Dropbox OAuth 回调页 | `/oauth/dropbox/callback` |
-| WebGL 单元格实验室 | `/prototype/web-cells/`（兼容别名；静态目录与旧入口为 `/prototype/webgl-cells/`） |
-| 共享边界拓扑实验室 | `/prototype/boundary-topology-lab/` |
-| 画卷加载页文字视觉概念稿 | `/prototype/loading-scroll-showcase/` |
-| 河流网络算法实验室 | `/prototype/river-network-lab/` |
+控制面板“简介 → 实验室”使用下列预览链接：
 
-当前生产自定义域名为 `https://fmg.mosuzi.top`。四个正式实验室入口如下；控制面板“简介 → 实验室”使用同一组链接：
-
-- [WebGL 单元格实验室](https://fmg.mosuzi.top/prototype/web-cells/)（旧的 [webgl-cells 静态入口](https://fmg.mosuzi.top/prototype/webgl-cells/) 继续兼容）
+- [WebGL 单元格实验室](https://fmg.mosuzi.top/prototype/web-cells/)
 - [共享边界拓扑实验室](https://fmg.mosuzi.top/prototype/boundary-topology-lab/)
 - [画卷加载页文字视觉概念稿](https://fmg.mosuzi.top/prototype/loading-scroll-showcase/)
 - [河流网络算法实验室](https://fmg.mosuzi.top/prototype/river-network-lab/)
 
-Vercel 默认域名 `https://fmg-gl.vercel.app` 同样使用上述相对路径，作为备用入口。线上可达性应在每次部署后单独验证；本地构建会装配当前四个目录，不能用历史部署记录替代本次检查。实验室用途、正式应用边界和 AI 操作规则见 [`../architecture/laboratory-prototypes.md`](../architecture/laboratory-prototypes.md)。
-
-Vercel 会先把 `/oauth/dropbox/callback` 精确改写到独立轻量回调页，再把 `/prototype/web-cells/` 及它的相对资源透明改写到 `webgl-cells` 静态目录，随后才处理通用 prototype 与正式应用 SPA fallback，因此 Dropbox 授权小窗口不会装载地图应用，WebGL 单元格实验室也不会落回正式地图。它还会把不带尾斜杠的 `/prototype/<目录名>` 临时重定向到带尾斜杠入口，保证原型内的 `./src/`、`./data/` 等相对地址仍从自身目录解析。prototype 目录入口随后改写到对应 `index.html`；其它真实静态文件由 Vercel 的文件系统优先规则直接提供，最后的正式应用 SPA fallback 不会吞掉回调页、原型模块、样式或数据文件。该顺序依据 Vercel 官方说明：高层 `rewrites` 默认先检查文件系统，通配 fallback 应置于末尾；参见[项目配置](https://vercel.com/docs/project-configuration/vercel-json)和[Vite 部署说明](https://vercel.com/docs/frameworks/frontend/vite)。
+线上可达性应在每次部署后单独验证；本地构建会装配当前四个目录，不能用历史部署记录替代本次检查。实验室用途、正式应用边界和 AI 操作规则见 [`../architecture/laboratory-prototypes.md`](../architecture/laboratory-prototypes.md)。路由细节以 `vercel.json` 与部署回归为准，不在面向使用者的说明中重复展开。
 
 ## Vercel 控制台导入
 
@@ -53,7 +42,7 @@ Vercel 会先把 `/oauth/dropbox/callback` 精确改写到独立轻量回调页�
 3. 保留 `vercel.json` 中的构建设置；控制台里不需要手动改 Root Directory。
 4. 本地 / 浏览器存储不需要环境变量。官方部署若要启用云端存储，按[云存储部署配置](./cloud-storage.md)在 Vercel 设置统一的 `FMG_CLOUD_PROVIDER_CONFIG`，或分别设置 `FMG_DROPBOX_APP_KEY`、`FMG_DROPBOX_REDIRECT_URI`、`FMG_GOOGLE_CLIENT_ID` 与可选的 `FMG_GOOGLE_FOLDER_PATH`。Google Drive 目录不配置时默认为 `/webFMG`。构建会自动生成 `cloud-provider-config.js`；未配置的服务会在界面中明确保持禁用，旧 `VITE_FMG_*` 继续兼容。
 5. 首次部署后访问 Vercel 给出的 Preview URL，确认根路径显示从中央向两侧展开的中国古代画卷加载页，卷面包含“莫苏子”“幻想地图生成器”和当前版本号，并能完成初始生成。
-6. 分别打开 `/prototype/web-cells/`、`/prototype/boundary-topology-lab/`、`/prototype/loading-scroll-showcase/` 与 `/prototype/river-network-lab/`，确认实验室页面和关键数据 / 模块能直接加载；再打开旧的 `/prototype/webgl-cells/`，确认兼容静态入口仍可用。
+6. 分别打开上方四个在线预览，确认实验室页面和关键数据 / 模块能直接加载。
 
 ## 本地验证
 
@@ -62,6 +51,13 @@ Vercel 会先把 `/oauth/dropbox/callback` 精确改写到独立轻量回调页�
 ```powershell
 $env:CI='true'; pnpm run build:app
 pnpm run regress:deployment
+pnpm run regress:prototype-deployment-browser
+```
+
+部署完成后，使用同一个浏览器门禁复核生产域名：
+
+```powershell
+$env:FMG_PROTOTYPE_BASE_URL='<部署域名>'; pnpm run regress:prototype-deployment-browser
 ```
 
 构建产物位于 `dist/webgl-generator`，该目录不会提交到仓库。构建后至少应存在：
@@ -73,11 +69,13 @@ dist/webgl-generator/oauth/dropbox/callback/index.html
 dist/webgl-generator/prototype/webgl-cells/index.html
 dist/webgl-generator/prototype/webgl-cells/data/sample-map.json
 dist/webgl-generator/prototype/boundary-topology-lab/index.html
+dist/webgl-generator/prototype/boundary-topology-lab/assets/*.js
+dist/webgl-generator/prototype/boundary-topology-lab/vendor/earcut.min.mjs
 dist/webgl-generator/prototype/loading-scroll-showcase/index.html
 dist/webgl-generator/prototype/loading-scroll-showcase/src/app.js
 dist/webgl-generator/prototype/loading-scroll-showcase/src/styles.css
 dist/webgl-generator/prototype/river-network-lab/index.html
-dist/webgl-generator/prototype/river-network-lab/src/app.js
+dist/webgl-generator/prototype/river-network-lab/assets/*.js
 ```
 
 当前构建仍会出现既有的 `@vueuse/core` pure annotation 和 chunk size warning；它们来自第三方依赖与当前 bundle 体积提示，不会阻断部署。

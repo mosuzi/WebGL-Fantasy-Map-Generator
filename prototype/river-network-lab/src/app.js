@@ -1,4 +1,4 @@
-import {generatePlaceholderMap} from "/app/webgl-generator/src/generator/index.js";
+import {generatePlaceholderMap} from "../../../app/webgl-generator/src/generator/index.js";
 import {FIXTURES, FIXTURE_BY_ID, SAFETY_FIXTURES} from "./fixtures.js";
 import {auditRiverNetwork, snapshotGeneratedMap} from "./audit.js";
 import {analyzeConfluences, analyzeHydrology, analyzeParentGraph, compareConfluenceCandidate, runConfluenceCandidate, runDAGCandidate, runHydrologyCandidate} from "./algorithms.js";

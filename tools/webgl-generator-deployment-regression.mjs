@@ -6,7 +6,7 @@ import {createServer} from "node:http";
 import path from "node:path";
 import {fileURLToPath} from "node:url";
 
-import {listPrototypeDeployments} from "./prototype-deployment.mjs";
+import {SELF_CONTAINED_PROTOTYPE_IDS, listPrototypeDeployments} from "./prototype-deployment.mjs";
 
 const projectRoot = fileURLToPath(new URL("..", import.meta.url));
 const [vercelSource, viteSource, packageSource] = await Promise.all([
@@ -44,6 +44,7 @@ assert.deepEqual(vercel.rewrites?.find(item => item.source === "/prototype/:prot
 assert.deepEqual(vercel.rewrites?.at(-1), {source: "/(.*)", destination: "/index.html"}, "正式应用 SPA fallback 不在路由末尾");
 assert.match(viteSource, /stagePrototypeDeployments\([\s\S]*?"prototype"[\s\S]*?"dist", "webgl-generator", "prototype"/, "Vite 构建没有动态装配 prototype 目录");
 assert.deepEqual(deployments.map(item => item.id), ["boundary-topology-lab", "loading-scroll-showcase", "river-network-lab", "webgl-cells"], "当前 prototype 分母漂移");
+assert.deepEqual(SELF_CONTAINED_PROTOTYPE_IDS, ["boundary-topology-lab", "river-network-lab"], "依赖正式源码的实验室自包含构建范围漂移");
 
 const outputRoot = path.join(projectRoot, vercel.outputDirectory);
 let checkedBuildOutput = false;
@@ -54,21 +55,23 @@ try {
     await access(path.join(outputRoot, "prototype", deployment.id, "index.html"));
   }
   await access(path.join(outputRoot, "prototype", "webgl-cells", "data", "sample-map.json"));
-  await access(path.join(outputRoot, "prototype", "boundary-topology-lab", "src", "app.js"));
   await access(path.join(outputRoot, "prototype", "loading-scroll-showcase", "src", "app.js"));
   await access(path.join(outputRoot, "prototype", "loading-scroll-showcase", "src", "styles.css"));
-  await access(path.join(outputRoot, "prototype", "river-network-lab", "src", "app.js"));
-  await access(path.join(outputRoot, "prototype", "river-network-lab", "src", "audit.js"));
-  await access(path.join(outputRoot, "prototype", "river-network-lab", "src", "algorithms.js"));
   await access(path.join(outputRoot, "prototype", "loading-scroll-showcase", "assets", "mosuzi-seal.png"));
-  const [builtIndex, builtSeal] = await Promise.all([
+  const [builtIndex, builtSeal, boundaryIndex, riverIndex] = await Promise.all([
     readFile(path.join(outputRoot, "index.html"), "utf8"),
-    readFile(path.join(outputRoot, "assets", "mosuzi-seal.png"))
+    readFile(path.join(outputRoot, "assets", "mosuzi-seal.png")),
+    readFile(path.join(outputRoot, "prototype", "boundary-topology-lab", "index.html"), "utf8"),
+    readFile(path.join(outputRoot, "prototype", "river-network-lab", "index.html"), "utf8")
   ]);
   assert(!builtIndex.includes("__FMG_APP_VERSION__"), "正式产物仍残留版本占位符");
   assert(builtIndex.includes(`v${packageJson.version}`), "正式产物版本号与根 package.json 不一致");
   assert(builtIndex.includes("/assets/mosuzi-seal.png"), "正式构建入口没有引用同源印章资源");
   assert.equal(createHash("sha256").update(builtSeal).digest("hex"), "367ad061211ee469f9fccb57e438edfc52221acdb8c501b5843bf14a3c9de725", "正式构建印章资源不是已确认的莫苏子印3版本");
+  for (const [id, html] of [["boundary-topology-lab", boundaryIndex], ["river-network-lab", riverIndex]]) {
+    assert.match(html, /assets\/.*\.js/, `${id} 没有生成自包含入口 bundle`);
+    assert.ok(!html.includes("/app/webgl-generator/src/"), `${id} 线上入口仍依赖未部署的正式源码`);
+  }
   webCellsAlias = await verifyWebCellsAlias(outputRoot);
   checkedBuildOutput = true;
 } catch (error) {
@@ -80,6 +83,7 @@ console.log(JSON.stringify({
   outputDirectory: vercel.outputDirectory,
   prototypes: deployments.map(item => `/prototype/${item.id}/`),
   aliases: ["/prototype/web-cells/"],
+  selfContainedPrototypes: SELF_CONTAINED_PROTOTYPE_IDS,
   webCellsAlias,
   checkedBuildOutput
 }, null, 2));

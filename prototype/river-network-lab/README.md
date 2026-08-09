@@ -10,12 +10,15 @@
 pnpm run start:river-network-lab
 ```
 
-然后打开 `http://127.0.0.1:5403/`。正式环境入口为 [https://fmg.mosuzi.top/prototype/river-network-lab/](https://fmg.mosuzi.top/prototype/river-network-lab/)。页面中的八类固定夹具分别覆盖孤立细线、未接入汇流、支流越级、父关系循环、合法汇流、非汇流交叉、湖泊路由和边界 / 入海口。
+然后打开 `http://127.0.0.1:5403/`。
+
+在线预览：[河流网络算法实验室](https://fmg.mosuzi.top/prototype/river-network-lab/)。页面中的八类固定夹具分别覆盖孤立细线、未接入汇流、支流越级、父关系循环、合法汇流、非汇流交叉、湖泊路由和边界 / 入海口。
 
 ## 回归
 
 ```powershell
 pnpm run regress:river-network-lab
+pnpm run regress:prototype-deployment-browser
 ```
 
 回归会检查固定夹具预期 issue ID，并在隔离 Node 进程中对固定 seed 的 10k / 50k / 100k 生成结果建立只读河网快照。实验室为保留旧算法 / 新候选 A/B，会通过仅供诊断的内部参数关闭正式候选，然后把同一快照交给共享算法；正式应用的新图与显式河流重生成默认开启候选。

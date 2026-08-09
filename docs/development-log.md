@@ -1,5 +1,12 @@
 # 开发历史
 
+## 2026-08-09：登记第 318 项——边界与河流实验室自包含静态部署（本地验收完成，待发布）
+
+- 用户发现两项正式实验室在线上没有用例。生产页面诊断确认这不是夹具为空：边界页尝试加载 `/app/webgl-generator/src/renderer/coastline-topology.js`，河网页尝试加载 `/app/webgl-generator/src/generator/index.js`；两者均被 SPA fallback 以 HTML 返回，浏览器在模块 MIME 校验阶段中止，因此 `window.boundaryTopologyLab / window.riverNetworkLab` 没有初始化。
+- 本项只调整 prototype 构建装配。`deploy-prototypes` 仍枚举四项实验室，但边界和河网改用独立 Vite 子构建输出自包含 `assets/`；边界页额外保留现有只读几何 vendor。正式应用 bundle、`app/webgl-generator/` 运行时代码、地图、存档、公开 API、生成流程和实验室算法均未修改，实验室页面也不再在生产环境请求 `/app/webgl-generator/src/**`。
+- 本地生产构建、静态部署回归和新增浏览器门禁通过：边界页固定夹具 / 候选 / 矩阵为 `20 / 7 / 20`，河网页为 `8 / 3 / 8`；两页 API 均初始化，console / page error 和正式源码模块请求均为 `0`。控制面板实验室导引在 `1280 / 390 / 320px` 继续通过，构建后的正式主 bundle 指纹保持 `index-9hU9Jxqz.js`，本次临时服务已全部关闭。
+- 拓扑与河网专项回归继续通过。受复用拓扑函数影响的既有 `regress:shoreline` 则报告 `lineTriangleCount=11964` 低于历史 `25000 / 30000` 阈值；本项没有改 `app/`、`shore-layer`、`surface-correction.js` 或任何正式岸线算法，故保留为独立基线问题，不在本任务扩修。`audit:ai-docs` 仍仅报告既有四份机器目录文件陈旧，未重新生成。当前尚未提交或推送，生产域名仍是旧部署，待发布后再运行同一浏览器门禁并归档第 318 项。
+
 ## 2026-08-09：完成第 317 项——正式实验室路径与简介导引
 
 - 用户指定的 WebGL 单元格正式地址现为 `https://fmg.mosuzi.top/prototype/web-cells/`：Vercel 在通用 prototype / SPA fallback 之前，将页面透明改写到 `webgl-cells/index.html`，并把该路径下的相对 `src/`、`data/` 请求改写到同一静态目录；旧的 `/prototype/webgl-cells/` 继续可用。架构总览、逐页 README、AI 路由与部署说明已写入四个绝对生产 URL。

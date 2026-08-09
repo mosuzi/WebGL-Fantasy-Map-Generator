@@ -12,7 +12,7 @@ pnpm run start:loading-scroll-showcase
 
 打开 `http://127.0.0.1:5402/`。
 
-正式环境入口为 [https://fmg.mosuzi.top/prototype/loading-scroll-showcase/](https://fmg.mosuzi.top/prototype/loading-scroll-showcase/)。
+在线预览：[古代画卷加载页概念稿](https://fmg.mosuzi.top/prototype/loading-scroll-showcase/)。
 
 ## 评审操作
 

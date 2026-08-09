@@ -65,6 +65,8 @@
 
 ## 当前状态
 
+2026-08-09 权威任务第 318 项进行中，已完成本地验收、待发布后线上复核。边界与河流实验室线上无用例的根因是页面请求未部署的 `/app/webgl-generator/src/**` 源码模块，SPA fallback 返回 HTML 后触发模块 MIME 错误，初始化在夹具绘制前中止。`deploy-prototypes` 现将两页各自 Vite 构建为自包含 `assets/`，边界页保留既有只读几何 vendor；本地静态浏览器门禁确认边界 `20 / 7 / 20`、河网 `8 / 3 / 8` 个固定夹具 / 附加项 / 矩阵，API 初始化、console / page error 和正式源码模块请求均为 `0`。正式应用 `app/`、运行时、地图、存档、公开 API、生成流程、实验室算法、`source/` 与 Wiki 未改；新增部署说明、实验室 README 与 AI 指引。构建、部署、控制面板导引和专项回归通过，既有 `regress:shoreline` 的 `lineTriangleCount=11964` 低于旧 `25000 / 30000` 阈值未在本项扩修，AI 机器目录四项陈旧状态保持未动。当前改动未提交或推送，生产域名仍是旧部署。
+
 2026-08-09 权威任务第 317 项已完成并归档。`https://fmg.mosuzi.top/prototype/web-cells/` 现以透明兼容改写复用既有 `webgl-cells` 静态目录及相对 `src/`、`data/` 资源，旧 `/prototype/webgl-cells/` 保留；控制面板“简介”新增一个“实验室”下拉，四个中文条目均在新标签页打开正式路径。生产 Chrome `1280 / 390 / 320px`、线上四页标题、相对模块与固定样本均通过，四类错误为 `0`。构建、部署静态路由、交互面、文档链接与差异检查通过；AI 机器目录既有四项陈旧状态保持未动，`source/`、Wiki、地图、存档、API 与生成流程未改，当前没有活动权威任务。
 
 2026-08-09 权威任务第 316 项已完成并归档。`prototype/` 当前固定为 WebGL cells 历史原型、共享边界拓扑实验室、画卷加载概念稿和河流网络实验室四项；统一职责、入口、验证、部署与正式隔离边界见 `docs/architecture/laboratory-prototypes.md`，AI 选择与写入禁止规则见 `docs/ai/laboratory-prototypes.md`。根 README 中英文版、docs / AI 索引和 Vercel 说明均已引用，`docs/wiki/` 未动。拓扑实验室的少量纯函数属于正式岸线受控复用，河网实验室页面只读；专项和部署回归通过。既有 `docs/generated/ai` 机器目录与当前源码不同步，未在本项文档范围再生成；当前没有活动权威任务。

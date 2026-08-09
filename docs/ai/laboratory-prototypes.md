@@ -10,7 +10,7 @@
 
 ## 四个实验室的 AI 边界
 
-正式线上入口都在 `https://fmg.mosuzi.top/prototype/` 下。AI 从正式控制面板“简介 → 实验室”进入时，应预期新标签页分别指向 `web-cells/`、`boundary-topology-lab/`、`loading-scroll-showcase/` 与 `river-network-lab/`；不得把当前正式地图页导航到实验室。WebGL 单元格实验室的静态目录仍为 `webgl-cells/`，旧链接保留为兼容入口。
+AI 从正式控制面板“简介 → 实验室”进入时，应预期在新标签页打开相应实验室的在线预览；不得把当前正式地图页导航到实验室。具体预览链接见[实验室总览](../architecture/laboratory-prototypes.md)。
 
 | 实验室 | AI 可以做什么 | AI 不得做什么 |
 |---|---|---|
@@ -23,7 +23,7 @@
 
 1. 读取本页、架构总览和目标目录 README，随后检查权威任务与工作树状态。
 2. 复用目标实验室的固定夹具、启动命令和专项回归；不要随意改 seed、阈值或夹具名称来“做出通过”。
-3. 若修改拓扑实验室中被正式岸线引用的纯函数，额外按正式岸线改动运行 `pnpm run regress:shoreline`；若修改目录清单、Vite 装配或路径，运行 `pnpm run regress:deployment`。
+3. 若修改拓扑实验室中被正式岸线引用的纯函数，额外按正式岸线改动运行 `pnpm run regress:shoreline`；若修改目录清单、Vite 装配或路径，运行 `pnpm run regress:deployment` 与 `pnpm run regress:prototype-deployment-browser`。后者从静态产物打开边界、河流页面，确认固定用例和运行矩阵存在，且不再请求 `/app/webgl-generator/src/**`。
 4. 若修改控制面板中的实验室导引，再运行 `pnpm run regress:laboratory-guide-browser`，验证四个中文菜单项、窄屏布局和新标签页 URL。
 5. 结论必须区分夹具事实、实验推断和正式产品验收；需要正式接入时登记新的权威任务，单独覆盖兼容、渲染、浏览器与安全门。
 6. 完成后同步目标 README、架构总览、本文及必要的部署说明；不要修改 `docs/wiki/`，除非用户另行明确授权。
@@ -40,6 +40,7 @@ pnpm run regress:loading-scroll-showcase
 pnpm run regress:river-network-lab
 pnpm run regress:river-network-lab-browser
 pnpm run regress:deployment
+pnpm run regress:prototype-deployment-browser
 pnpm run regress:laboratory-guide-browser
 ```
 
