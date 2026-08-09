@@ -30,7 +30,12 @@ export function generatePlaceholderMap(inputOptions = {}, overrides = {}) {
   const heightmap = profile.stage("heightmap", "生成高度模板", () => overrides.heightmap || createHeightmap(options, random));
   const generationOptions = heightmap.template === options.heightmapTemplate ? options : {...options, heightmapTemplate: heightmap.template};
   const diagnostics = normalizeGenerationDiagnostics(inputOptions);
-  const stageOptions = {...generationOptions, ...diagnostics, ...(namebases ? {namebases} : {})};
+  const stageOptions = {
+    ...generationOptions,
+    ...diagnostics,
+    ...(inputOptions.riverNetworkCandidate === false ? {riverNetworkCandidate: false} : {}),
+    ...(namebases ? {namebases} : {})
+  };
   const grid = profile.stage("grid", "构建 grid / Voronoi / 高度", () => buildGrid(generationOptions, gridRandom, heightmap, random));
   const features = profile.stage("features", "提取水陆 feature", () => extractFeatures(grid));
   const climateRandom = profile.stage("random-climate", "初始化气候随机源", () => createRandom(generationOptions.seed));

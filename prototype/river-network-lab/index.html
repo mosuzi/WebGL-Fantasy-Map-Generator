@@ -4,22 +4,30 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>河流网络算法实验室</title>
+    <link rel="icon" href="data:,">
     <link rel="stylesheet" href="./src/styles.css">
   </head>
   <body>
     <header class="topbar">
       <div>
-        <p class="eyebrow">RIVER NETWORK LAB · 304-A～D</p>
+        <p class="eyebrow">RIVER NETWORK LAB · 304-A～G</p>
         <h1>河流网络算法实验室</h1>
-        <p class="subtitle">固定夹具与生成快照只读审计 · 不写入正式地图</p>
+        <p class="subtitle">与正式生成器同源的固定夹具 / 生成快照只读审计 · 页面不写地图</p>
       </div>
-      <div class="status-pill" id="status">等待审计</div>
+      <div class="top-statuses">
+        <div class="status-pill" id="status">等待审计</div>
+        <div class="status-pill" id="candidate-status">等待候选</div>
+      </div>
     </header>
     <main class="layout">
       <aside class="sidebar">
         <section>
           <h2>固定夹具</h2>
           <div id="fixture-list" class="fixture-list"></div>
+        </section>
+        <section>
+          <h2>固定生成快照</h2>
+          <div id="generated-list" class="fixture-list"></div>
         </section>
         <section class="legend">
           <h2>证据等级</h2>
@@ -28,7 +36,7 @@
           <p><span class="dot river"></span>蓝线：河流折线</p>
         </section>
         <button id="run-all" class="run-button" type="button">运行全部夹具</button>
-        <p class="algorithm-note">304-A～D 仅验证内存候选，不改写正式河流折线。</p>
+        <p class="algorithm-note">第313项已让正式新图默认运行同源候选；本页仍只修改对照快照的内存副本。</p>
       </aside>
       <section class="workspace">
         <section class="case-head">
@@ -36,9 +44,12 @@
           <p id="case-description"></p>
         </section>
         <section class="main-grid">
-          <article class="map-card">
-            <header><h3>只读网络快照</h3><span id="case-metrics"></span></header>
-            <div id="map-view" class="map-view"></div>
+          <article class="map-card comparison-card">
+            <header><h3>Baseline / Candidate 只读几何</h3><span id="case-metrics"></span></header>
+            <div class="comparison-grid">
+              <section class="comparison-map" data-view="baseline"><h4>Baseline</h4><div id="baseline-view" class="map-view"></div></section>
+              <section class="comparison-map" data-view="candidate"><h4>Candidate</h4><div id="candidate-view" class="map-view"></div></section>
+            </div>
           </article>
           <article class="report-card">
             <header><h3>诊断结果</h3><span id="case-state"></span></header>
@@ -53,8 +64,8 @@
           <div id="matrix" class="matrix"></div>
         </section>
         <section class="boundary-note">
-          <strong>304-A 边界</strong>
-          <span>此页面只读取固定夹具；正式生成器、当前地图、存档、历史和公开 API 均不在实验室写入范围内。</span>
+          <strong>304-G 边界</strong>
+          <span>此页面用诊断基线与正式共享算法做 A/B；页面本身不写当前地图、存档、历史或公开 API，正式新图与显式河流重生成已默认接入同源候选。</span>
         </section>
       </section>
     </main>

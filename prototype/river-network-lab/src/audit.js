@@ -153,12 +153,14 @@ export function auditRiverNetwork(snapshot, options = {}) {
 
 export function snapshotGeneratedMap(map) {
   const sourceRivers = Array.isArray(map?.rivers?.rivers) ? map.rivers.rivers : Array.isArray(map?.rivers) ? map.rivers : [];
+  const packCells = map?.pack?.cells || {};
   return {
     evidence: "generated",
     metadata: {
       seed: map?.metadata?.seed || map?.options?.seed || "",
       cellsTarget: map?.metadata?.cellsTarget || map?.options?.cellsTarget || 0,
       gridCells: map?.metadata?.gridCells || map?.grid?.metadata?.actualCells || 0,
+      gridSpacing: Number(map?.grid?.metadata?.spacing || 0),
       checksum: map?.metadata?.checksum || map?.summary?.checksum || ""
     },
     rivers: sourceRivers.map(river => ({
@@ -169,10 +171,40 @@ export function snapshotGeneratedMap(map) {
       width: river.width || 0,
       length: river.length || 0,
       cells: Array.isArray(river.cells) ? [...river.cells] : [],
+      hydrologyPath: (Array.isArray(river.cells) ? river.cells : []).map(cell => ({
+        cell,
+        point: Array.isArray(packCells.p?.[cell]) ? packCells.p[cell].slice(0, 2) : null,
+        height: Number(packCells.h?.[cell])
+      })).filter(item => item.point && Number.isFinite(item.height)),
       points: Array.isArray(river.points) ? river.points.map(point => point.slice(0, 2)) : [],
       outletKind: river.outletKind || "",
       mouth: Array.isArray(river.mouth) ? river.mouth.slice(0, 2) : river.mouth || null,
       lakeId: river.lakeId ?? null
+    }))
+  };
+}
+
+export function semanticSnapshotPayload(snapshot) {
+  return {
+    evidence: snapshot?.evidence || "",
+    metadata: {
+      seed: snapshot?.metadata?.seed || "",
+      cellsTarget: Number(snapshot?.metadata?.cellsTarget || 0),
+      gridCells: Number(snapshot?.metadata?.gridCells || 0),
+      gridSpacing: Number(snapshot?.metadata?.gridSpacing || 0)
+    },
+    rivers: (snapshot?.rivers || []).map(river => ({
+      id: Number(river?.id),
+      parent: Number(river?.parent || 0),
+      discharge: Number(river?.discharge || 0),
+      flux: Number(river?.flux || 0),
+      width: Number(river?.width || 0),
+      length: Number(river?.length || 0),
+      cells: Array.isArray(river?.cells) ? [...river.cells] : [],
+      points: Array.isArray(river?.points) ? river.points.map(point => [...point]) : [],
+      outletKind: river?.outletKind || "",
+      mouth: Array.isArray(river?.mouth) ? [...river.mouth] : river?.mouth || null,
+      lakeId: river?.lakeId ?? null
     }))
   };
 }

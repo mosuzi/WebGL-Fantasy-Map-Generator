@@ -3,6 +3,7 @@ import {createChineseNameGenerator} from "./names.js";
 import {createStageProfile} from "./profile.js";
 import {MinPriorityQueue} from "./priority-queue.js";
 import {createRandom} from "./random.js";
+import {applyRiverNetworkCandidate} from "./river-network-candidate.js";
 import {normalizeRiverNetwork} from "./river-network.js";
 import {
   assertFrozenRiverState,
@@ -141,7 +142,14 @@ export function buildRivers(grid, features, pack, options = {}) {
     defineRivers({grid, pack, riverPaths, riverParents, options, nameGenerator, hydrology, lockContext}));
   const normalizedNetwork = profile.stage("normalize-river-network", "校验河流干流关系", () =>
     normalizeRiverNetwork(definedRivers, pack, {dropIncomplete: true, frozenIds: lockContext.frozenIds}));
-  const rivers = normalizedNetwork.rivers;
+  const candidateNetwork = profile.stage("apply-river-network-candidate", "应用河网汇流曲线与水文单调", () =>
+    options.riverNetworkCandidate === false
+      ? disabledRiverNetworkCandidate(normalizedNetwork.rivers)
+      : applyRiverNetworkCandidate(normalizedNetwork.rivers, pack, grid, {
+        frozenIds: lockContext.frozenIds,
+        metadata: {seed: options.seed || "", cellsTarget: options.cellsTarget || grid.metadata.cellsDesired || grid.points.length}
+      }));
+  const rivers = candidateNetwork.rivers;
   profile.stage("mark-confluences", "标记河流 cell 与汇流", () => {
     cells.r = new Uint16Array(cells.i.length);
     cells.conf = new Uint16Array(cells.i.length);
@@ -171,6 +179,7 @@ export function buildRivers(grid, features, pack, options = {}) {
       depressionMode,
       variationSalt: variation?.salt || null,
       networkDiagnostics: normalizedNetwork.diagnostics,
+      networkCandidate: candidateNetwork.metadata,
       incisedTransitions,
       lakeOverflow: summarizeLakeOverflow(pack.features),
       buildMs: timing.totalMs
@@ -264,7 +273,51 @@ function buildEmptyRivers() {
       maxFlux: 0,
       confluences: 0,
       cellsWithRiver: 0,
-      flowModel: "empty"
+      flowModel: "empty",
+      networkCandidate: {
+        algorithm: "river-network-candidate-v1",
+        status: "accepted",
+        accepted: true,
+        rivers: 0,
+        relations: 0,
+        acceptedRelations: 0,
+        rejectedRelations: 0,
+        protectedRelations: 0,
+        appliedRivers: 0,
+        appliedCurves: 0,
+        hydrologyUpdates: 0,
+        frozenSkipped: 0,
+        dischargeViolations: 0,
+        widthViolations: 0,
+        hiddenFragmentSuggestions: 0,
+        rejectionExamples: [],
+        performance: null
+      }
+    }
+  };
+}
+
+function disabledRiverNetworkCandidate(rivers) {
+  return {
+    rivers,
+    metadata: {
+      algorithm: "river-network-candidate-v1",
+      status: "disabled-diagnostic-baseline",
+      accepted: false,
+      rivers: rivers.length,
+      relations: rivers.filter(river => river.parent).length,
+      acceptedRelations: 0,
+      rejectedRelations: 0,
+      protectedRelations: 0,
+      appliedRivers: 0,
+      appliedCurves: 0,
+      hydrologyUpdates: 0,
+      frozenSkipped: 0,
+      dischargeViolations: 0,
+      widthViolations: 0,
+      hiddenFragmentSuggestions: 0,
+      rejectionExamples: [],
+      performance: null
     }
   };
 }
