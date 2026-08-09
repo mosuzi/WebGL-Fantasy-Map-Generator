@@ -1,5 +1,84 @@
 # 开发历史
 
+## 2026-08-09：完成第 313 项——河流实验室候选接入正式河网生成器
+
+- 河流实验室的 DAG / 汇流曲线 / 水文单调 / 六类安全门已抽到正式共享模块 `generator/river-network-candidate.js`；实验室 `algorithms.js` 只保留薄转发，正式与实验页面不再维护两套算法。
+- 正式 `buildRivers` 在 canonical `normalizeRiverNetwork` 之后执行候选阶段。只把通过门禁的显示 `points / length` 与对应 `flux / discharge / width` 合并回原河流；`cells / gridCells / parent / basin / source / mouth`、对象顺序、锁定河流和拒绝关系保持原样。结果摘要写入 `rivers.metadata.networkCandidate`，旧存档加载不自动重写。
+- 固定 10k / 50k / 100k 正式生成均为 candidate accepted，canonical 河网逐字段一致；100k 已知关系 `#760 → #5` 用共享三次曲线实际贴合且保持非零曲率，三条显示曲线应用、77 条水文派生更新，宽度 / 流量越级与拓扑问题均为零。500+ 显示长桥仍精确拒绝，冻结河流、旧 / 新存档、GeoJSON、PNG 与确定性门通过。
+- 隔离正式 Chrome 的 10k / 100k 地图确认使用正式 metadata 与曲线结果；100k 河流 picking 命中修复对象，PNG / Feature GeoJSON 成功，application console、page、active health 与 WebGL error 为 `0`。生成期长任务约 `3.1s / 5.1s`，明确位于交互窗口之前。
+- 发布前顺带收口混合工作树中的城镇严格门：人口点刷新只在交互静默后运行并可被新输入取消；编辑锁 DOM 只在锁签名变化时扫描；路线 typed-array 合并不再制造临时切片数组。连续两轮完整 10k + 100k 的交互长任务均为 `0`，第二轮 100k handler P95 / max `0.1 / 0.1ms`、preview `0.4 / 0.7ms`、提交 `4.7ms`，health / console / page error 为 `0`。
+- `regress:river-network-candidate`、正式 candidate Chrome、河网 / 锁 / 控制点 / GeoJSON / API、实验室 Node / Chrome、城镇 Node / Chrome、生产构建、归档检查和差异检查通过；`source/` 与用户 5410 地图未改。按用户要求，完成改动随后按功能分批中文提交，所有批次统一推送 `main`。
+
+## 2026-08-09：登记第 313 项——河流实验室候选接入正式应用并分批发布
+
+- 用户确认第 312 项实验室正例后，明确批准把同一算法应用到正式河网生成器，并要求把当前完成改动按功能分批提交，最后统一推送。
+- 第 313 项只在正式新图生成 / 显式河流重生成链接入候选：先完成既有 canonical 河网归一化，再对未冻结河流应用通过安全门的显示汇流曲线与派生流量 / 宽度；权威 cells、父子、流域、源头、河口和锁定快照不变，旧存档加载不自动改图。
+- 为防实验室与正式实现再次漂移，候选算法将抽为正式共享模块，实验室只保留薄入口；固定 10k / 50k / 100k、长桥与六类安全反例、锁定河流、存档、导出、正式 Chrome 和错误面构成发布门。通过后按功能显式分批中文提交，全部完成后统一推送 `main`。
+
+## 2026-08-09：完成第 312 项——河流实验室未接入支流可修复正例
+
+- 用户在当前 Chrome 的 5403 河流实验室发现“支流未接入干流”仍显示 rejected。现场读取确认顶部为 `candidateDecision: rejected`，关系 `#2 → #1` 的显示 gap `52/12`，而“证据通过”只表示诊断命中。
+- 源码确认主夹具把真正的未接入修复场景写成了超长桥拒绝反例，浏览器测试还固化其 confluence / hydrology 必须 rejected；与此同时 `shared-cell-display-gap` 已独立覆盖共享水文 cell 也不得生成 500+ 长桥。第 312 项只拆清两者职责：主夹具改为局部尺度内可修复正例，超长桥继续拒绝，不放宽算法门禁或接入正式生成器。
+- 主夹具现保持 `tributary-unattached` 诊断，显示 gap 从 `52` 收敛为 `16`，仍超过旧固定诊断阈值 `12`，但位于 grid spacing、父段、河宽共同形成的局部容差 `20.595445` 内。候选生成曲率 `1.787951` 的 cubic Hermite / Bézier 汇流段，过冲、自交、折返、水域与新非汇流交叉五门全通过，confluence / hydrology 均 accepted。
+- Node 与隔离 Chrome 回归改为要求主夹具 candidate accepted、几何实际变化、页面无拒绝连接段；独立 `shared-cell-display-gap` 继续以 `distance >= 500 / hydrologyDistance = 0` 精确拒绝 `confluence-display-gap`。10k / 50k / 100k 固定生成快照三阶段继续 accepted，100k 旧 baseline 继续 blocked、新 candidate accepted。
+- 用户当前 `http://localhost:5403/` 标签页已刷新并重新选中“支流未接入干流”，现场为 `evidenceOk：true / candidateDecision：accepted`，关系显示 `accepted · display-endpoint · gap 16/20.595445`，C / D 均 accepted、拒绝连接段为 `0`。正式生成器、正式地图、API、存档、用户 5410 和 `source/` 未改。
+
+## 2026-08-09：完成第 311 项——河流控制点拖动后持久预览与应用状态
+
+- 用户反馈拖动控制点后橙色河道变化预览不再持续显示，“应用控制点”同时禁用；再新增并删除一个临时点后 Apply 又恢复，说明 working 修改未丢，只是交互状态错误。
+- 调用链确认 pointermove 已把 working 更新为新位置，pointerup 会再 stage 一次相同末点；`inspectRiverControlPointAction` 合理地对这一次动作返回 `changed=false`，但 session 直接把该局部值写进 draft。RiverPanel 的 disabled 条件与 selection-layer 的曲线绘制都读取 draft.changed，因此同时失效。第 311 项只把 draft.changed 改为 working 相对 begin baseline 的累计 dirty，并补末帧同坐标反例；几何与正式写入不改。
+- `river-waypoint-session.stageAction` 现用 working 相对 begin baseline 的完整指纹重算累计 `changed`，覆盖单次 inspection 的动作局部值；拖动停止后继续复用同一共享三次曲线预览，Apply 立即可用，只有 working 净回到 baseline 才恢复未改状态。
+- Node 门覆盖“最后 RAF 已写入、pointerup 同坐标 no-op”反例，并确认变化曲线 mesh 仍多于仅控制点手柄。隔离 Chrome 10k / 100k 均完成 60 / 120 次真实 pointermove：拖动后 draft / renderer preview 保持 changed，橙色变化曲线持续，按钮启用且无需新增 / 删除绕行即可直接应用；预览与正式提交曲线摘要一致，交互长任务、application console、page 和 interaction health error 为 `0`。100k 生成阶段约 `2.8s / 5.1s` 的既有长任务位于交互窗之前并单列。
+- `regress:river-control-points`、`regress:river-waypoint-interaction`、`regress:river-control-points-browser`、生产构建和差异检查通过；未改正式河网、API、存档、其它面板、`source/` 或用户 5410 地图，未 stage、提交或推送。
+- 用户要求查看的独立河流实验室已在其 Chrome 新标签页打开 `http://127.0.0.1:5403/`；原 5410 地图标签未接管或刷新。
+
+## 2026-08-09：完成第 310 项——城镇连续移动与显式退出
+
+- 用户确认第 309 项城镇移动基本可用，并要求成功提交后继续保持移动模式，以便连续移动同一城镇；退出时机改为点击当前城镇以外的位置或手动点击“退出移动”。
+- 提交链不再调用 `completeCanvasToolMode(CITY_MOVE)`；成功后只清理本次 ghost / pending / preview，保留 mode 与 cityId，并把 `36×36 CSS px` 起拖环更新到城镇新坐标。下一次仍可从新位置直接拖动；非当前城镇 pointerdown 会退出模式并继续普通点击选择链，活动按钮文案改为“退出移动城市”。提交失败仍留在模式内并恢复起拖环，允许用户重试。
+- Node 专项确认同一绑定可连续写入两条移动历史，pointer capture 分别释放，点击别处进入退出回调；静态门禁止成功提交重新调用 CITY_MOVE complete。隔离 Chrome 10k / 100k 均完成“取消拖动 → 第一次提交后仍 active → 同一城镇第二次提交 → 两条独立历史 → 手动退出 → 重新进入后点击别处退出 → 撤销 / 重做”，两次提交后城市管理 grid / pack 与起拖环都指向最新位置。
+- 100k pointer handler P95 / max 为 `0 / 0.1ms`，preview P95 / max 为 `0.3 / 0.5ms`，异步 preflight 最大 `45.9ms`、commit 最大 `16.1ms`；10k / 100k 交互时间窗 `>=50ms` 长任务、active health、console 和 page error 均为 `0`。城镇拾取、对象详情、编辑执行、面板刷新、Grid 细分、生产构建和差异检查通过。生成阶段 `2.724s / 4.760s` 既有长任务位于交互窗之前并单独保留；用户 5410 未接管或写图，`source/` 未改，未 stage、提交或推送。
+
+## 2026-08-09：完成第 309 项——细分 100k 城镇拖动现场修复
+
+- 用户现有 5410 地图是从约 10k cells 拓扑保持式细分到 100k 的地图；此前隔离回归只使用直接生成的 100k，因而漏掉正式拾取器仍以 `row * columns + column` 推导 cell ID 的错误。细分地图保留旧行列元数据并追加子 cell，结果是城市对象可以被拾取，但同一点的 `pickGridCell / pickCellClientPoint` 返回空，移动模式无法建立合法目标。这是此前“脚本通过而现场拖不动”的决定性验收缺口。
+- `pickGridCell` 现从附近母 cell 展开 `grid.refinement.children`，先做细分多边形包含判断，边界数值误差时再在该有界候选集内按生成点距离确定性选取；不会扫描全部 100k cells。城镇水陆预检同时以正式画面使用的 `grid.cells.h` 为权威，不再让旧 pack 高度否决细分后的可见陆地。细分回归新增代表子 cell 与全部迁移城市可拾取门，城镇迁移回归新增 grid / pack 水陆不一致的正反例。
+- 移动交互继续使用半径 `18 CSS px` 的固定屏幕热区和 `36×36 CSS px` 起拖环；密集冲突按屏幕距离选择最近城镇，同距按稳定 ID。ghost 已完全移除第二个全尺寸 WebGL2 context，只保留单 DOM 合成层；进入模式会确保所选城市可见，未命中时给出反馈。城市管理选中详情在提交后局部更新 grid / pack，不重建 100k 全列表。
+- 在用户原 5410 标签页与原地图上，从可见起拖环中心以真实 Windows 鼠标拖到陆地：城市 `#0` 从 `grid 3521 / pack 1660` 提交到 `grid 41503 / pack 19870`，城市管理立即显示新位置且页面保持响应；随后通过应用同一历史事务的公开撤销入口恢复到 `grid 3521 / pack 1660`，并恢复原选择，未刷新或替换用户地图。隔离 10k / 100k 浏览器回归继续通过，100k handler P95 / max 为 `0 / 0.1ms`、preview 为 `0.3 / 0.7ms`、交互长任务为 `0`，交互期 console / health / page error 为空。城镇拾取、迁移、Grid 细分、面板刷新、对象详情、编辑执行、生产构建和差异检查通过；生成期既有长任务不冒充交互结果，`source/` 未改，未 stage、提交或推送。
+
+## 2026-08-09：完成第 308 项——城市对象详情打开城市管理
+
+- 用户要求在选中城市的对象详情中增加“打开城市管理”按钮，并把现有三项动作与新入口排成两行，避免单行拥挤。
+- 城市对象详情现显示“定位 / 打开城市管理 / 名称库改名 / 编辑名称”四项；新入口只在 `OBJECT_KIND.CITY` 出现，复用既有选中感知打开链，把当前城市同步到城市管理。城市动作容器固定为两列，四项稳定形成 `2×2`；其它对象继续使用原自适应布局。
+- 专项 Node 门确认组件、包装层、runtime 和 CSS 接线；隔离真实 Chrome 在 `1280 / 390 / 320px` 下均测得两行各两个按钮，动作区宽 `294 / 294 / 278px`，按钮宽 `143 / 143 / 135px`，横向溢出和文字裁切均为 `0`。点击后城市管理保持城市 `#0`“晴川镇”为选中项，非城市对象不显示入口，health / console / page / WebGL error 为 `0`。
+- 对象详情、面板 overlay、生产构建和差异检查通过。既有 selection-actions 静态门仍要求第 306 / 307 前的 `setSelection({object})` 旧文本，而正式链已使用 `setSelection({object: nextObject})` 支持同点城市循环；该无关旧断言未在本项扩修。城市数据、编辑事务、API、存档、生成算法、`source/` 和用户 5410 均未改，未 stage、提交或推送。
+
+## 2026-08-09：完成第 307 项——城镇移动固定屏幕热区
+
+- 用户确认城镇移动热区必须保持固定的用户视角尺寸，不得随相机或画布缩放；远景密集城镇热区冲突时响应距鼠标最近者。现有实现把所有城镇固定为世界坐标圆形阈值，调用侧只给 `9px`，且城镇图标向锚点上方展开、名称 overlay 不参与命中。5410 当前视图中 28 个可见城镇名称中心距锚点 `13.76～17.47px`，全部超出旧热区。
+- 正式 renderer 现以半径 `18 CSS px` 进行城镇屏幕空间拾取；世界索引仅召回候选，最终命中和排序使用投影后的 CSS 距离。热区冲突时选择最近城镇，距离在 `1e-6px` 内相等时按稳定 ID；同一落点只容忍既有轻量 cell 拾取的 `0.1 world` 释放量化误差，普通同 cell 或远景近邻不再被并入循环候选。移动模式继续优先拖动已选的重合对象。
+- Node 专项覆盖 `0.5 / 1 / 4 / 10x` 的固定边界、密集最近、等距、同 cell 不同位置、精确 / 量化重合循环；城镇迁移与对象详情兼容门、生产构建和差异检查通过。隔离 Chrome 在 10k / 100k 上覆盖 `0.35 / 1 / 4 / 9x`：`17.5px` 全部命中、`18.5px` 全部不命中；两个锚点相距 `24px` 时选择距鼠标 `10px` 的城镇，同距选择较小 ID。
+- 两档真实 `pointerdown` 均从图标锚点外侧 `17.5px` 启动移动，连续 `60` 帧 pointermove 后 Escape 取消；handler P95 / max 分别约 `0.1 / 0.1ms` 与 `0 / 0.1ms`，交互 `>=50ms` 长任务、active health、console、page 和 WebGL error 均为 `0`。用户现有 5410 标签页只做只读可见性检查，未刷新、生成、点击、切换模式或写地图；精确数值以隔离正式 renderer 门禁为准。
+
+## 2026-08-09：完成第 304、305、306 项——河流实验室、河道控制与城镇自由迁移最终通过
+
+- 第 304-F 将“夹具命中”与“候选接受”拆开，阶段失败不再静默回退；semantic checksum 排除运行遥测。304-G 同时约束共享水文关系与真实显示桥接距离，以局部 cell 尺度、河宽和父段长度形成容差；只有真实几何变化才生成 cubic Hermite / Bézier，过冲、自交、折返、水域、新非汇流交叉和保护河口漂移均有固定拒绝反例。10k / 50k / 100k 实验室和浏览器门通过，100k 同快照旧 baseline 仍为 BLOCK、新 candidate 为 accepted。该结论只批准实验候选，不代表已经改动正式河网生成器。
+- 第 305 项移除 `RIVER_EDIT_WAYPOINT` 的旧 `session.stage(packCell)` 输入支路，只保留 `stageAction / working.controlPoints`；控制点以精确世界坐标和稳定 ID 工作，cell 只作派生兼容。共享向心 Catmull–Rom → 分段 cubic Bézier 及可视子段 provenance 已接入预览、正式 renderer、picking、长度、GeoJSON 和存档；点击新预览曲线能映射到正确原始河段。RAF 合并、pointerup 末点、双击删除、水域可见和异常释放 capture 均有故障注入与浏览器证据。
+- 第 306 项把每帧完整路线预检拆为 O(1) 快速 inspector + 独立 WebGL 单实例 ghost；pointerup 只启动一次可取消、可让出的完整 preflight，提交复用同一不可变结果。新增同 cell 多值 city / burg 索引、稳定 singular 代表和 city→routes 邻接，覆盖加载、锁、查询、省会、picking、Grid 细分、软删和历史；完全重合对象可循环选择并再次拖动。路线、人口点、route mesh 与 selection draw 均改为局部或切片刷新，selected-only 不再误启全图动画。
+- 城镇产品规则已落盘：人工移动除水域与结构损坏外不拒绝；允许同 cell 多城；跨省 / 跨国同步归属并重选原省 / 原国首府。目标已有首府时不篡位，缺首府时确定性接纳迁入对象；原国家无候选时允许 `capital=0` 但保持合法本国陆地 center，省份可 `burg=0` 且保持合法 center。港口失效清除，路线无法重寻时事务内删除并警告，同 cell 多市场保留各中心并以稳定代表维持旧单值索引、标记下游 stale。政治扩张、重生成锁、国家画笔与空国合并均已统一这些不变量。
+- 独立终审连续两轮完整 10k + 100k：四档交互窗口 `>=50ms` 长任务均为 `0`；100k pointer handler P95 / max 为 `0.1 / 0.1ms`，ghost preview 为 `0.4 / 0.9ms`，异步 preflight `56.1ms`，commit `28.1ms`，迟到 health / console / page error 为 `0`。河流控制点 10k / 100k 的 60 / 120 次 move P95 / max 均约 `0.1 / 0.1ms`，交互长任务与四类应用错误为 `0`。
+- 用户现有 `http://127.0.0.1:5410/?debug=1` 标签页没有刷新或生成新图。既有 100k 地图上把首都跨境拖入已有城镇所在 cell 后成功提交，再用撤销恢复原坐标；河流草稿完成新增、拖弯、在新预览曲线上继续新增和双击删除，最后未应用退出。验收后选中对象 / 编辑对象均为 none，WebGL error 为 `0`；健康列表与操作前逐条一致，只保留地图生成阶段原有事件，没有新增交互错误。
+- `regress:river-network-lab`、`regress:river-network-lab-browser`、河流 cubic / 控制点 / waypoint / picking / GeoJSON、城镇迁移 / 浏览器、国家生命周期 / 拓扑、Grid / API / 浏览器存储 / 锁 / 路线兼容、生产构建、归档检查和 `git diff --check` 均通过。未修改 `source/`，未 stage、提交或推送。
+
+## 2026-08-08：重新调查河流控制点、城镇拖动与河流实验室——登记第 304-F～G、305、306 项
+
+- 用户在现有 `http://127.0.0.1:5410/?debug=1` 标签页复验推翻第 302、303 项交互验收。精确接管该标签页时，城镇移动失败后 `body` 仍为 `editing-locked`，全局工具栏被禁用，控制台已有长任务 / 帧间隙和三条读取 `undefined.length` 的未捕获异常；按 Escape 可解除锁，证明失败现场残留的工具锁可恢复，但尚无干净触发与完整 stack，不能把异常强归因某一行。本轮没有刷新、生成、提交移动或改变用户地图。
+- 城镇静态链确认 pointerdown / 每个 pointermove 都同步执行完整 `inspectCityMove`，其中扫描全路线并对关联路线执行 A*，同时使 CityPanel 全列表指标 / 筛选 / 排序重算；pointerup、`isNoop`、`apply` 又重复同一预检，提交后宽泛刷新。一次性只读 100k Node 探索观察到 4 条关联陆路远目标单次预检约 `153.6ms`，即使无关联路线 execute / undo / redo 也约 `146 / 110 / 95ms`；该数字尚无固化脚本、seed、预热和样本口径，只用于热点定位，正式预算仍以新增 benchmark 与浏览器真实指针为准。
+- 用户覆盖旧城镇规则：人工移动除水域和结构损坏外不受生成均衡限制，允许同 cell 多城；省会迁出后原省重选，城镇跨国后归目标国家，首都迁出后原国家重选。第 306 项登记 RAF 快速预览、可取消异步预检、immutable preflight、city / burg 多值索引、兼容代表、行政角色重算和异常 finally 清理；港口 / 市场 / 路线派生不得反向否决合法陆地移动，但迁入角色、无候选政治结构、同 cell 多市场和具体降级策略尚未获用户逐项确认。
+- 5410 河流控制点现场出现可见旧候选菱形，但面板仍显示控制点 `0` 个；未点击应用并退出模式。静态链确认新 `stageAction / working.controlPoints` 与旧 `packCell / session.stage / legacy draft` 同时接收输入，自由位置和新预览河段会回落旧链，导致新增、拖动和双击删除状态分裂；预览画折线，正式 renderer 才另做 Chaikin。第 305 项登记唯一输入链、精确世界坐标、RAF 手势、稳定双击和向心参数化 Catmull–Rom 转分段三次 Bézier的共享几何。
+- 第 304 项继续 BLOCK，但纠正原决策门证据：`pnpm run regress:river-network-lab` 的 `ok: true` 没有断言真实候选接受，公开 seed `304-river-network-lab-100000` 的汇流候选因 `16.568 > 12` 实际拒绝，后续水文阶段却回退原始河流并报告接受；正式摘要 checksum 混入 `timing / buildMs`，剔除遥测后三档 semantic digest 与 `networkChecksum` 稳定；原正式页长任务是候选未接入时的 baseline，不能归因候选。新增 304-F 精确验收语义和 304-G 纯 cubic 原语汇流候选 / 新浏览器决策门。
+- 调查、根因、优化阶段、兼容与验收矩阵已写入 `docs/task-notes/task-304-306-river-city-reinvestigation.md`，并同步 `current-plan`、城镇规则、302 / 303 / 304 专题和接手说明。本轮没有修改产品代码、`source/`、地图、存档、schema 或 API，也没有提交 / 推送；工作树原有未提交差异保持原样。
+
 ## 2026-08-08：完成第304-E隔离浏览器决策门——结论 BLOCK
 
 - 独立实验室 `http://127.0.0.1:5403/` 在隔离浏览器中完成真实页面验收：八类固定夹具全部命中，B/C/D 候选卡可见，页面明确显示只读边界；发现并修正候选拓扑序卡片的只读显示缺口，未引入正式应用依赖。
