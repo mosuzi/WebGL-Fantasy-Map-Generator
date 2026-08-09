@@ -17,6 +17,7 @@ for (const cellsTarget of [10000, 50000, 100000]) {
   assert.equal(first.metadata.dischargeViolations, 0, `${cellsTarget} 正式候选仍有流量越级`);
   assert.equal(first.metadata.widthViolations, 0, `${cellsTarget} 正式候选仍有宽度越级`);
   assert.deepEqual(canonicalNetwork(first.rivers), beforeCanonical, `${cellsTarget} 正式候选改写了 canonical 河网`);
+  verifyAcceptedRelationsConnect(first);
 
   const secondRivers = structuredClone(beforeRivers);
   const second = applyRiverNetworkCandidate(secondRivers, map.pack, map.grid);
@@ -34,6 +35,8 @@ for (const cellsTarget of [10000, 50000, 100000]) {
 }
 
 verifyLongBridgeRefusal();
+verifyResidualFormalCases();
+verifyMicroGapSnapsExactly();
 verifyFrozenSnapshot();
 
 const formalMap = generatePlaceholderMap({seed: "river-network-candidate-formal-roundtrip", cellsTarget: 10000, heightmapTemplate: "continents"});
@@ -86,6 +89,17 @@ function verifyKnownHundredKRelation(before, after, result) {
   assert.ok(Object.values(relation.safety.gates).every(Boolean), "100k 已知断接关系未通过全部曲线安全门");
 }
 
+function verifyAcceptedRelationsConnect(result) {
+  const byId = new Map(result.rivers.map(river => [Number(river.id ?? river.i), river]));
+  for (const relation of result.candidate.relations.filter(item => item.status === "accepted")) {
+    const child = byId.get(relation.childId);
+    const parent = byId.get(relation.parentId);
+    assert.ok(child && parent, `accepted 关系缺少河流对象：${relation.childId} -> ${relation.parentId}`);
+    const gap = closestPolylineDistance(child.points.at(-1), parent.points);
+    assert.ok(gap <= 1e-7, `accepted 关系仍有显示 gap：${relation.childId} -> ${relation.parentId} = ${gap}`);
+  }
+}
+
 function verifyLongBridgeRefusal() {
   const rivers = [
     formalRiver(1, 0, [1, 2], [[0, 0], [100, 0]], {discharge: 20, width: 0.2}),
@@ -103,6 +117,42 @@ function verifyLongBridgeRefusal() {
   assert.equal(relation?.reason, "confluence-display-gap", "500+ 显示长桥拒绝原因错误");
   assert.ok(relation.distance >= 500 && relation.hydrologyDistance === 0, "500+ 长桥反例没有同时覆盖共享水文 cell");
   assert.deepEqual(rivers[1].points, beforePoints, "拒绝关系的显示几何被正式候选改写");
+}
+
+function verifyResidualFormalCases() {
+  const cases = [
+    {seed: "314-residual-50000-0", childId: 279, parentId: 283},
+    {seed: "314-residual-50000-3", childId: 12, parentId: 9}
+  ];
+  for (const fixture of cases) {
+    const map = generatePlaceholderMap({seed: fixture.seed, cellsTarget: 50000, heightmapTemplate: "continents", riverNetworkCandidate: false});
+    const result = applyRiverNetworkCandidate(map.rivers.rivers, map.pack, map.grid);
+    const child = result.rivers.find(river => Number(river.id ?? river.i) === fixture.childId);
+    const parent = result.rivers.find(river => Number(river.id ?? river.i) === fixture.parentId);
+    const relation = result.candidate.relations.find(item => item.childId === fixture.childId && item.parentId === fixture.parentId);
+    assert.equal(result.metadata.status, "accepted", `${fixture.seed} 仍残留 partial 河网`);
+    assert.equal(relation?.status, "accepted", `${fixture.seed} 的共享终端 cell 关系未恢复`);
+    assert.equal(relation?.tolerance?.recovery, "shared-terminal-cell", `${fixture.seed} 未记录强水文恢复证据`);
+    assert.ok(relation.distance <= 24, `${fixture.seed} 绕过既有最大桥接上限`);
+    assert.ok(closestPolylineDistance(child.points.at(-1), parent.points) <= 1e-7, `${fixture.seed} 支流末端仍未精确落到干流`);
+  }
+}
+
+function verifyMicroGapSnapsExactly() {
+  const rivers = [
+    formalRiver(1, 0, [1, 2], [[0, 0], [100, 0]], {discharge: 20, width: 0.2}),
+    formalRiver(2, 1, [9, 1], [[0, 20], [49.8, 0.2]], {discharge: 5, width: 0.1})
+  ];
+  const pack = {cells: {p: [], h: []}};
+  pack.cells.p[1] = [50, 0];
+  pack.cells.p[2] = [100, 0];
+  pack.cells.p[9] = [0, 20];
+  pack.cells.h[1] = pack.cells.h[2] = pack.cells.h[9] = 30;
+  const result = applyRiverNetworkCandidate(rivers, pack, {metadata: {spacing: 4}});
+  const relation = result.candidate.relations.find(item => item.childId === 2);
+  assert.equal(relation?.curve?.kind, "cubic-hermite-bezier", "微小 gap 没有使用同源三次曲线精确吸附");
+  assert.equal(relation?.curve?.linear, false, "微小 gap 退化成直线吸附");
+  assert.ok(closestPolylineDistance(rivers[1].points.at(-1), rivers[0].points) <= 1e-7, "微小 gap 仍以已接近为由保留");
 }
 
 function verifyFrozenSnapshot() {

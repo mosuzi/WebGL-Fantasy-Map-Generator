@@ -104,10 +104,23 @@ export function analyzeConfluences(snapshot, options = {}) {
       continue;
     }
     const sampleStart = now();
-    const curve = buildConfluenceCurve(snapshot, child, parent, attachment, tolerance, settings);
+    let curve = buildConfluenceCurve(snapshot, child, parent, attachment, tolerance, settings);
     samplingMs += now() - sampleStart;
     sampledPoints += curve.sampledPoints.length;
-    const safety = validateConfluenceCurve(snapshot, rivers, child, parent, curve, tolerance);
+    let safety = validateConfluenceCurve(snapshot, rivers, child, parent, curve, tolerance);
+    if (!safety.accepted && attachment.sharedTerminalCell) {
+      const fallbackStart = now();
+      const fallbacks = buildConfluenceFallbackCurves(child, attachment, tolerance, settings);
+      samplingMs += now() - fallbackStart;
+      for (const fallback of fallbacks) {
+        sampledPoints += fallback.sampledPoints.length;
+        const fallbackSafety = validateConfluenceCurve(snapshot, rivers, child, parent, fallback, tolerance);
+        if (!fallbackSafety.accepted) continue;
+        curve = fallback;
+        safety = fallbackSafety;
+        break;
+      }
+    }
     if (!safety.accepted) {
       const relation = relationEvidence(child, parent, attachment, tolerance, {status: "rejected", reason: safety.reason, linkDistance, curve, safety});
       relations.push(relation);
@@ -510,6 +523,7 @@ function closestPointOnSegment(point, start, end) {
 function resolveHydrologyAttachment(snapshot, child, parent) {
   const parentCells = new Set(parent.cells);
   const shared = [...child.hydrologyPath].reverse().find(item => parentCells.has(item.cell) && item.point);
+  const childTerminalCell = Number(child.cells.at(-1));
   const hydrologyPoint = shared?.point || child.points.at(-1);
   const hydrologyProjection = closestPointOnPolyline(hydrologyPoint, parent.points);
   const displayProjection = closestPointOnPolyline(child.points.at(-1), parent.points);
@@ -521,6 +535,7 @@ function resolveHydrologyAttachment(snapshot, child, parent) {
     hydrologyDistance: hydrologyProjection.distance,
     source: shared ? "shared-hydrology-cell" : "display-endpoint",
     attachmentMode: shared ? "nearest-display-backed-by-shared-cell" : "display-endpoint",
+    sharedTerminalCell: Boolean(shared && Number(shared.cell) === childTerminalCell),
     gridSpacing: Number(snapshot?.metadata?.gridSpacing || 0)
   };
 }
@@ -533,8 +548,11 @@ function localConfluenceTolerance(snapshot, child, parent, attachment, settings)
   const cellTerm = localScale ? Math.min(settings.maxSnapTolerance, localScale * 4.25, Math.max(settings.snapTolerance, parentSegmentLength * 4)) : settings.snapTolerance;
   const segmentTerm = localScale ? Math.min(2.5, parentSegmentLength * 0.2) : 0;
   const widthTerm = localScale ? Math.min(1.5, localScale * Math.sqrt(width) * 0.5) : 0;
+  const localTotal = Math.min(settings.maxSnapTolerance, Math.max(settings.snapTolerance, cellTerm + segmentTerm + widthTerm));
+  const total = attachment.sharedTerminalCell ? settings.maxSnapTolerance : localTotal;
   return {
-    total: roundNumber(Math.min(settings.maxSnapTolerance, Math.max(settings.snapTolerance, cellTerm + segmentTerm + widthTerm))),
+    total: roundNumber(total),
+    recovery: attachment.sharedTerminalCell ? "shared-terminal-cell" : "local-geometry",
     localScale: roundNumber(localScale),
     childSegmentLength: roundNumber(childSegmentLength),
     parentSegmentLength: roundNumber(parentSegmentLength),
@@ -547,7 +565,7 @@ function buildConfluenceCurve(snapshot, child, parent, attachment, tolerance, se
   const start = [...child.points.at(-1)];
   const end = [...attachment.point];
   const chord = distance(start, end);
-  if (chord < Math.max(0.5, tolerance.localScale * 0.2)) return {kind: "already-attached", segment: null, sampledPoints: [start], curvature: 0, linear: false};
+  if (chord <= 1e-7) return {kind: "already-attached", segment: null, sampledPoints: [start], curvature: 0, linear: false};
   const chordDirection = normalizeVector([end[0] - start[0], end[1] - start[1]]);
   const startDirection = downstreamTangent(hydrologyDirection(child, start), chordDirection);
   const rawEndDirection = normalizeVector([attachment.segmentEnd[0] - attachment.segmentStart[0], attachment.segmentEnd[1] - attachment.segmentStart[1]]);
@@ -564,6 +582,30 @@ function buildConfluenceCurve(snapshot, child, parent, attachment, tolerance, se
   const sampledPoints = sampleCubicBezierPath([segment], {maxSegmentLength, minSamples: 6, maxSamples: 64}).points;
   const curvature = Math.max(...sampledPoints.map(point => closestPointOnSegment(point, start, end).distance), 0);
   return {kind: "cubic-hermite-bezier", segment, sampledPoints, curvature: roundNumber(curvature), linear: false, maxSegmentLength: roundNumber(maxSegmentLength)};
+}
+
+function buildConfluenceFallbackCurves(child, attachment, tolerance, settings) {
+  const start = [...child.points.at(-1)];
+  const end = [...attachment.point];
+  const chord = distance(start, end);
+  if (chord <= 1e-7) return [];
+  const direction = normalizeVector([end[0] - start[0], end[1] - start[1]]);
+  const normal = [-direction[1], direction[0]];
+  const scale = Math.max(0.5, tolerance.localScale || chord * 0.2);
+  const maxSegmentLength = Math.max(0.5, Math.min(Number(settings.maxSegmentLength || 2), tolerance.localScale ? tolerance.localScale * 0.5 : 2, chord / 4));
+  return [0.75, -0.75, 1.25, -1.25].map(factor => {
+    const offset = scale * factor;
+    const segment = {
+      startIndex: 0,
+      p0: start,
+      p1: [start[0] + direction[0] * chord / 3 + normal[0] * offset, start[1] + direction[1] * chord / 3 + normal[1] * offset],
+      p2: [start[0] + direction[0] * chord * 2 / 3 + normal[0] * offset, start[1] + direction[1] * chord * 2 / 3 + normal[1] * offset],
+      p3: end
+    };
+    const sampledPoints = sampleCubicBezierPath([segment], {maxSegmentLength, minSamples: 6, maxSamples: 64}).points;
+    const curvature = Math.max(...sampledPoints.map(point => closestPointOnSegment(point, start, end).distance), 0);
+    return {kind: "cubic-hermite-bezier", variant: "shared-terminal-cell-fallback", segment, sampledPoints, curvature: roundNumber(curvature), linear: false, maxSegmentLength: roundNumber(maxSegmentLength)};
+  });
 }
 
 function validateConfluenceCurve(snapshot, rivers, child, parent, curve, tolerance) {

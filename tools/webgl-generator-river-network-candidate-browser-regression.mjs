@@ -4,6 +4,7 @@ import {createRequire} from "node:module";
 import {join, resolve} from "node:path";
 import {fileURLToPath} from "node:url";
 import {createServer as createViteServer} from "vite";
+import {normalizeOptions} from "../app/webgl-generator/src/generator/options.js";
 import {waitForApiReady} from "./webgl-generator-api-browser-ready.mjs";
 
 const rootDir = resolve(fileURLToPath(new URL("..", import.meta.url)));
@@ -37,46 +38,22 @@ try {
   await waitForMapReady(page);
 
   const reports = [];
-  for (const cellsTarget of [10000, 100000]) {
+  const scenarios = [
+    {cellsTarget: 10000, seed: "304-river-network-lab-10000", generationOptions: formalGenerationOptions("304-river-network-lab-10000", 10000)},
+    {cellsTarget: 50000, seed: "314-residual-50000-0", generationOptions: normalizeOptions({seed: "314-residual-50000-0", cellsTarget: 50000, heightmapTemplate: "continents"})},
+    {cellsTarget: 100000, seed: "304-river-network-lab-100000", generationOptions: formalGenerationOptions("304-river-network-lab-100000", 100000)}
+  ];
+  for (const {cellsTarget, seed, generationOptions} of scenarios) {
     await clearHealth(page);
     healthConsole.length = 0;
-    const seed = `304-river-network-lab-${cellsTarget}`;
-    const generated = await page.evaluate(async ({seed, cellsTarget}) => {
+    const generated = await page.evaluate(async generationOptions => {
       const response = await window.webglGeneratorApi.generate.newMap({
         confirm: true,
-        seed,
-        randomSeed: false,
-        cellsTarget,
-        heightmapTemplate: "continents",
-        graphWidth: 1440,
-        graphHeight: 960,
-        statesNumber: 25,
-        provincesRatio: 20,
-        religionsNumber: 6,
-        culturesNumber: 13,
-        culturesSet: "highFantasy",
-        culturesSetMax: 17,
-        sizeVariety: 7.5,
-        growthRate: 1.4,
-        cultureInheritanceMode: "branching",
-        religionInheritanceMode: "branching",
-        climateLatitudeMode: "auto",
-        climateLatitudeCenter: 0,
-        climateLatitudeSpan: 45,
-        climateMapSizePercent: 25,
-        climateLatitudeRangePercent: 25,
-        climateLongitudeRangePercent: 25,
-        atmosphereDirection: "auto",
-        winds: [225, 45, 225, 315, 135, 315],
-        temperatureEquator: 27,
-        temperatureNorthPole: -18,
-        temperatureSouthPole: -13,
-        heightExponent: 2,
-        precipitation: 74
+        ...generationOptions
       });
       if (!response?.ok) throw new Error(`正式生成失败：${JSON.stringify(response?.error || response)}`);
       return response.data;
-    }, {seed, cellsTarget});
+    }, generationOptions);
     assert.ok(generated, `${cellsTarget} 正式生成没有返回结果`);
     await waitForMapReady(page);
     await delay(1000);
@@ -161,6 +138,22 @@ async function inspectFormalMap(page, cellsTarget) {
     const topology = auditTopology(rivers, app.map.pack.cells);
     if (Object.values(topology).some(Boolean)) throw new Error(`正式候选改坏 canonical 河网：${JSON.stringify(topology)}`);
 
+    const confluenceGaps = rivers
+      .filter(river => Number(river.parent) > 0)
+      .map(child => {
+        const parent = rivers.find(river => Number(river.id ?? river.i) === Number(child.parent));
+        return {
+          childId: Number(child.id ?? child.i),
+          parentId: Number(child.parent),
+          distance: parent && child.points?.length ? closestPolylineDistance(child.points.at(-1), parent.points || []) : Number.POSITIVE_INFINITY
+        };
+      });
+    const maxConfluenceGap = Math.max(0, ...confluenceGaps.map(relation => relation.distance));
+    if (maxConfluenceGap > 1e-6) {
+      const relation = confluenceGaps.find(item => item.distance === maxConfluenceGap);
+      throw new Error(`正式候选仍有声明支流未接入干流：${JSON.stringify(relation)}`);
+    }
+
     let known = null;
     let pick = null;
     if (target === 100000) {
@@ -180,6 +173,13 @@ async function inspectFormalMap(page, cellsTarget) {
       Object.assign(app.renderer.layerVisibility, previousVisibility);
       if (pick?.kind !== "river") throw new Error(`100k 新汇流曲线无法拾取：${JSON.stringify(pick)}`);
       known = {childId: child.id, parentId: child.parent, points: child.points.length, distance, pick};
+    } else if (target === 50000) {
+      const child = rivers.find(river => Number(river.id ?? river.i) === 279);
+      const parent = rivers.find(river => Number(river.id ?? river.i) === Number(child?.parent));
+      if (!child || Number(child.parent) !== 283 || !parent) throw new Error("50k 真实残余汇流关系缺失");
+      const distance = closestPolylineDistance(child.points.at(-1), parent.points);
+      if (distance > 1e-6) throw new Error(`50k 真实残余汇流仍未接入：${distance}`);
+      known = {childId: Number(child.id ?? child.i), parentId: Number(child.parent), points: child.points.length, distance};
     }
 
     const png = await api.data.exportPNG({download: false, pixelScale: 1, includeDataUrl: false});
@@ -195,6 +195,8 @@ async function inspectFormalMap(page, cellsTarget) {
       rivers: rivers.length,
       metadata,
       topology,
+      confluenceRelations: confluenceGaps.length,
+      maxConfluenceGap,
       known,
       png: {bytes: png.data.bytes, mimeType: png.data.mimeType},
       geojson: {bytes: geojson.data.bytes, features: geojson.data.metadata.features},
@@ -224,6 +226,40 @@ async function readHealthErrors(page) {
 
 function summarizeHealth(events) {
   return events.map(event => ({type: event.type, durationMs: event.durationMs, operation: event.operation}));
+}
+
+function formalGenerationOptions(seed, cellsTarget) {
+  return {
+    seed,
+    randomSeed: false,
+    cellsTarget,
+    heightmapTemplate: "continents",
+    graphWidth: 1440,
+    graphHeight: 960,
+    statesNumber: 25,
+    provincesRatio: 20,
+    religionsNumber: 6,
+    culturesNumber: 13,
+    culturesSet: "highFantasy",
+    culturesSetMax: 17,
+    sizeVariety: 7.5,
+    growthRate: 1.4,
+    cultureInheritanceMode: "branching",
+    religionInheritanceMode: "branching",
+    climateLatitudeMode: "auto",
+    climateLatitudeCenter: 0,
+    climateLatitudeSpan: 45,
+    climateMapSizePercent: 25,
+    climateLatitudeRangePercent: 25,
+    climateLongitudeRangePercent: 25,
+    atmosphereDirection: "auto",
+    winds: [225, 45, 225, 315, 135, 315],
+    temperatureEquator: 27,
+    temperatureNorthPole: -18,
+    temperatureSouthPole: -13,
+    heightExponent: 2,
+    precipitation: 74
+  };
 }
 
 function delay(ms) {
