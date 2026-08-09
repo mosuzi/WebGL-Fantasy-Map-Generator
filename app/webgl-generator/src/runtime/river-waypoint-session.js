@@ -1,4 +1,5 @@
-import {inspectRiverControlPointAction, inspectRiverVisualWaypoint} from "./river-edit-commands.js";
+import {inspectRiverControlPointAction} from "./river-edit-commands.js";
+import {normalizeRiverVisualCurve} from "../geometry/cubic-path.js";
 import {normalizeRiverControlPoints} from "./river-control-points.js";
 
 export function createRiverWaypointSession({onDraftChange = () => {}} = {}) {
@@ -17,28 +18,17 @@ export function createRiverWaypointSession({onDraftChange = () => {}} = {}) {
       setDraft(null, "begin");
       return this.getSnapshot();
     },
-    stage(map, packCell) {
-      if (!activeMap || map !== activeMap) return invalidate("map-changed", "地图已变化，请重新开始选择");
-      const inspected = inspectRiverVisualWaypoint(map, riverId, packCell);
-      if (!inspected.valid) {
-        setDraft(null, inspected.code || "invalid-candidate");
-        return inspected;
-      }
-      const baseline = captureBaseline(map, riverId);
-      if (!baseline) return invalidate("river-missing", `找不到河流 #${riverId}`);
-      setDraft({...inspected, baseline}, "stage");
-      return draft;
-    },
     stageAction(map, action) {
       if (!activeMap || map !== activeMap) return invalidate("map-changed", "地图已变化，请重新开始选择");
       if (!baseline) return invalidate("river-missing", `找不到河流 #${riverId}`);
       const inspected = inspectRiverControlPointAction(map, riverId, action, working);
       if (!inspected.valid) {
-        setDraft(null, inspected.code || "invalid-action");
+        restoreWorkingDraft(inspected.code || "invalid-action");
         return inspected;
       }
-      working = {points: clonePoints(inspected.points), controlPoints: cloneControls(inspected.controlPoints), length: inspected.length};
-      setDraft({...inspected, baseline, working: cloneWorkingState(working)}, "action");
+      working = {points: clonePoints(inspected.points), controlPoints: cloneControls(inspected.controlPoints), visualCurve: cloneCurve(inspected.visualCurve), length: inspected.length};
+      const changed = workingChanged(working, baseline);
+      setDraft({...inspected, changed, baseline, working: cloneWorkingState(working)}, "action");
       return draft;
     },
     validate(map) {
@@ -48,15 +38,11 @@ export function createRiverWaypointSession({onDraftChange = () => {}} = {}) {
       if (!baseline) return invalidate("river-missing", `河流 #${riverId} 已不存在`);
       if (baseline.pointsFingerprint !== draft.baseline.pointsFingerprint
         || baseline.lengthFingerprint !== draft.baseline.lengthFingerprint
-        || baseline.controlPointsFingerprint !== draft.baseline.controlPointsFingerprint) {
+        || baseline.controlPointsFingerprint !== draft.baseline.controlPointsFingerprint
+        || baseline.visualCurveFingerprint !== draft.baseline.visualCurveFingerprint) {
         return invalidate("river-changed", `河流 #${riverId} 已变化，请重新选择控制点`);
       }
-      if (draft.action && draft.working) return {valid: true, code: "ok", reason: "", draft, inspected: draft};
-      const inspected = inspectRiverVisualWaypoint(map, riverId, draft.packCell);
-      if (!inspected.valid || pointsFingerprint(inspected.points) !== pointsFingerprint(draft.points)) {
-        return invalidate(inspected.code || "preview-changed", inspected.reason || "河道预览已失效，请重新选择控制点");
-      }
-      return {valid: true, code: "ok", reason: "", draft, inspected};
+      return {valid: true, code: "ok", reason: "", draft, inspected: draft};
     },
     clear(reason = "clear") {
       working = baseline ? cloneWorkingState(baseline) : null;
@@ -81,19 +67,20 @@ export function createRiverWaypointSession({onDraftChange = () => {}} = {}) {
       if (!working || !Number.isInteger(riverId)) return null;
       return {
         valid: true,
-        changed: false,
         code: "control-points",
         reason: "",
         riverId,
         points: clonePoints(working.points),
         controlPoints: cloneControls(working.controlPoints),
+        visualCurve: cloneCurve(working.visualCurve),
+        changed: workingChanged(working, baseline),
         length: working.length
       };
     },
     restoreWorking(previous, reason = "restore") {
       if (!previous) return this.clear(reason);
       working = cloneWorkingState(previous);
-      setDraft(null, reason);
+      restoreWorkingDraft(reason);
       return this.getSnapshot();
     },
     getSnapshot() {
@@ -104,6 +91,24 @@ export function createRiverWaypointSession({onDraftChange = () => {}} = {}) {
   function invalidate(code, reason) {
     setDraft(null, code);
     return invalid(code, reason);
+  }
+
+  function restoreWorkingDraft(reason) {
+    const changed = workingChanged(working, baseline);
+    setDraft(changed ? {
+      valid: true,
+      changed: true,
+      code: "ok",
+      reason: "",
+      action: "restore",
+      riverId,
+      points: clonePoints(working.points),
+      controlPoints: cloneControls(working.controlPoints),
+      visualCurve: cloneCurve(working.visualCurve),
+      length: working.length,
+      baseline,
+      working: cloneWorkingState(working)
+    } : null, reason);
   }
 
   function setDraft(nextDraft, reason) {
@@ -137,8 +142,11 @@ function captureBaseline(map, riverId) {
     riverId: Number(riverId),
     points: clonePoints(river.points),
     controlPoints: cloneControls(normalizeRiverControlPoints(river, map?.pack?.cells)),
+    visualCurve: cloneCurve(normalizeRiverVisualCurve(river.visualCurve)),
+    length: finiteFingerprint(river.length) === "null" ? null : Number(river.length),
     pointsFingerprint: pointsFingerprint(river.points),
     controlPointsFingerprint: controlPointsFingerprint(river.controlPoints, river, map?.pack?.cells),
+    visualCurveFingerprint: JSON.stringify(normalizeRiverVisualCurve(river.visualCurve)),
     lengthFingerprint: finiteFingerprint(river.length)
   };
 }
@@ -147,6 +155,7 @@ function cloneWorkingState(state) {
   return {
     points: clonePoints(state.points),
     controlPoints: cloneControls(state.controlPoints),
+    visualCurve: cloneCurve(state.visualCurve),
     length: finiteFingerprint(state.length) === "null" ? null : Number(state.length)
   };
 }
@@ -157,6 +166,10 @@ function clonePoints(points) {
 
 function cloneControls(controls) {
   return Array.isArray(controls) ? controls.map(control => ({...control})) : [];
+}
+
+function cloneCurve(curve) {
+  return curve && typeof curve === "object" ? {...curve} : null;
 }
 
 function pointsFingerprint(points) {
@@ -172,6 +185,21 @@ function controlPointsFingerprint(rawControls, river, packCells) {
 function finiteFingerprint(value) {
   const numeric = Number(value);
   return Number.isFinite(numeric) ? String(numeric) : "null";
+}
+
+function workingChanged(working, baseline) {
+  if (!working || !baseline) return false;
+  return JSON.stringify({
+    points: working.points,
+    controlPoints: working.controlPoints,
+    visualCurve: working.visualCurve,
+    length: finiteFingerprint(working.length)
+  }) !== JSON.stringify({
+    points: baseline.points,
+    controlPoints: baseline.controlPoints,
+    visualCurve: baseline.visualCurve,
+    length: finiteFingerprint(baseline.length)
+  });
 }
 
 function invalid(code, reason) {

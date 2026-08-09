@@ -4,7 +4,8 @@ import {cloneObjectNote, deleteObjectNote, objectNoteId, readObjectNote, restore
 import {OBJECT_KIND} from "./object-kinds.js";
 import {createChineseNameGenerator} from "../generator/names.js";
 import {normalizeRiverNetwork} from "../generator/river-network.js";
-import {createRiverControlPoint, findNearestRiverPackCell, normalizeRiverControlPoints, updateRiverControlPointIndexes} from "./river-control-points.js";
+import {createRiverVisualCurveDescriptor, isSharedCubicCurve, normalizeRiverVisualCurve, sampleCentripetalCatmullRom, sampledPathLength} from "../geometry/cubic-path.js";
+import {createRiverControlPoint, normalizeRiverControlPoints, updateRiverControlPointIndexes} from "./river-control-points.js";
 
 const RIVER_NOTE_EFFECTS = Object.freeze({
   render: "none",
@@ -165,69 +166,7 @@ export function inspectRiverVisualWaypoint(map, riverId, packCell) {
   if (!river) return invalidRiverVisualWaypoint("river-missing", `找不到河流 #${id}`);
   const point = map?.pack?.cells?.p?.[cell];
   if (!Number.isInteger(cell) || !isPoint(point)) return invalidRiverVisualWaypoint("invalid-cell", "河道控制点必须位于有效 pack cell");
-  const points = (river.points || []).filter(isPoint).map(item => [...item]);
-  if (points.length < 2) return invalidRiverVisualWaypoint("path-too-short", "河流缺少可编辑的成品折线");
-  if (points.some(item => Math.hypot(item[0] - point[0], item[1] - point[1]) < 0.25)) {
-    return {...invalidRiverVisualWaypoint("duplicate-waypoint", "该位置已经存在河道控制点"), riverId: id, packCell: cell, candidatePoint: [...point], changed: false};
-  }
-
-  const nearest = nearestRiverSegment(points, point);
-  const diagnostic = {
-    riverId: id,
-    packCell: cell,
-    insertIndex: nearest.index + 1,
-    candidatePoint: [roundCoordinate(point[0]), roundCoordinate(point[1])],
-    nearestPoint: nearest.point.map(roundCoordinate),
-    originalSegment: [points[nearest.index].slice(0, 2), points[nearest.index + 1].slice(0, 2)]
-  };
-  const candidateHeight = Number(map?.pack?.cells?.h?.[cell]);
-  if (Number.isFinite(candidateHeight) && candidateHeight < 20) {
-    return {...invalidRiverVisualWaypoint("waypoint-water", "候选点位于水域，请改选河道附近的陆地"), ...diagnostic};
-  }
-  const maxDistance = riverVisualWaypointMaxDistance(map, points, nearest.index);
-  if (nearest.distance > maxDistance) {
-    return {
-      ...invalidRiverVisualWaypoint("waypoint-too-far", `候选点距离最近河段 ${roundCoordinate(nearest.distance)}，超过允许的 ${roundCoordinate(maxDistance)}`),
-      ...diagnostic,
-      distance: nearest.distance,
-      maxDistance
-    };
-  }
-  const flux = Math.round((Number(points[nearest.index]?.[2]) || 0) + ((Number(points[nearest.index + 1]?.[2]) || 0) - (Number(points[nearest.index]?.[2]) || 0)) * nearest.amount);
-  const nextPoint = [roundCoordinate(point[0]), roundCoordinate(point[1]), Math.max(0, flux)];
-  const originalWater = segmentWaterSummary(map, points[nearest.index], points[nearest.index + 1]);
-  const candidateWater = mergeWaterSummaries(
-    segmentWaterSummary(map, points[nearest.index], nextPoint),
-    segmentWaterSummary(map, nextPoint, points[nearest.index + 1])
-  );
-  const waterTolerance = packSampleSpacing(map) * 1.25;
-  const addedWaterCells = [...candidateWater.cells].filter(waterCell => !originalWater.cells.has(waterCell));
-  const addsWater = addedWaterCells.length > 0 || candidateWater.exposure > originalWater.exposure + waterTolerance;
-  if (addsWater) {
-    return {
-      ...invalidRiverVisualWaypoint("waypoint-crosses-water", "候选折线会比原河段新增穿越水域"),
-      ...diagnostic,
-      distance: nearest.distance,
-      maxDistance,
-      originalWaterExposure: originalWater.exposure,
-      candidateWaterExposure: candidateWater.exposure,
-      originalWaterCells: [...originalWater.cells],
-      candidateWaterCells: [...candidateWater.cells],
-      addedWaterCells
-    };
-  }
-  const nextPoints = [...points.slice(0, nearest.index + 1), nextPoint, ...points.slice(nearest.index + 1)];
-  return {
-    valid: true,
-    changed: true,
-    code: "ok",
-    reason: "",
-    ...diagnostic,
-    distance: nearest.distance,
-    maxDistance,
-    points: nextPoints,
-    length: polylineLength(nextPoints)
-  };
+  return inspectRiverControlPointAction(map, id, {type: "add", point, packCell: cell});
 }
 
 export function inspectRiverControlPointAction(map, riverId, action = {}, base = null) {
@@ -243,26 +182,17 @@ export function inspectRiverControlPointAction(map, riverId, action = {}, base =
 
   const point = normalizeWorldPoint(action.point || action.candidatePoint);
   if (!point) return invalidRiverControlPoint("invalid-point", "控制点必须包含有效的地图坐标");
-  const packCell = Number.isInteger(Number(action.packCell))
-    ? Number(action.packCell)
-    : findNearestRiverPackCell(map?.pack?.cells, point[0], point[1]);
-  const candidateHeight = Number(map?.pack?.cells?.h?.[packCell]);
-  if (Number.isFinite(candidateHeight) && candidateHeight < 20) return invalidRiverControlPoint("waypoint-water", "控制点不能位于水域", {candidatePoint: point, packCell});
+  if (!isWorldPointInsideMap(map, point)) return invalidRiverControlPoint("point-out-of-bounds", "控制点必须位于地图边界内", {candidatePoint: point});
+  const packCell = validPackCell(map?.pack?.cells, action.packCell);
 
   if (type === "add") {
-    if (controls.some(control => Math.hypot(control.x - point[0], control.y - point[1]) < 0.25)) {
-      return invalidRiverControlPoint("duplicate-waypoint", "该位置已经存在河道控制点", {candidatePoint: point, packCell});
-    }
-    const nearest = nearestRiverSegment(points, point);
-    const maxDistance = riverVisualWaypointMaxDistance(map, points, nearest.index);
-    if (nearest.distance > maxDistance) return invalidRiverControlPoint("waypoint-too-far", `候选点距离最近河段 ${roundCoordinate(nearest.distance)}，超过允许的 ${roundCoordinate(maxDistance)}`, {candidatePoint: point, packCell, distance: nearest.distance, maxDistance, nearestPoint: nearest.point});
-    const nextPoint = [roundCoordinate(point[0]), roundCoordinate(point[1]), interpolatePointFlux(points[nearest.index], points[nearest.index + 1], nearest.amount)];
-    const water = validateReplacementWater(map, points, [nearest.index], [nextPoint], nearest.index, points[nearest.index + 1]);
-    if (!water.valid) return {...water, candidatePoint: nextPoint, packCell, distance: nearest.distance, maxDistance, nearestPoint: nearest.point};
+    const visualCurve = base?.visualCurve ?? river.visualCurve;
+    const nearest = isSharedCubicCurve(visualCurve) ? nearestSharedCurveSegment(points, point) : nearestRiverSegment(points, point);
+    const nextPoint = [point[0], point[1], interpolatePointFlux(points[nearest.index], points[nearest.index + 1], nearest.amount)];
     const insertIndex = nearest.index + 1;
     const nextPoints = [...points.slice(0, insertIndex), nextPoint, ...points.slice(insertIndex)];
     const shiftedControls = updateRiverControlPointIndexes(controls, null, insertIndex);
-    const nextControl = createRiverControlPoint({...river, points, controlPoints: controls}, insertIndex, nextPoint, map?.pack?.cells);
+    const nextControl = createRiverControlPoint({...river, points, controlPoints: controls}, insertIndex, nextPoint, map?.pack?.cells, null, packCell);
     return {
       valid: true,
       changed: true,
@@ -272,11 +202,13 @@ export function inspectRiverControlPointAction(map, riverId, action = {}, base =
       packCell,
       insertIndex,
       candidatePoint: nextPoint,
-      nearestPoint: nearest.point.map(roundCoordinate),
+      distance: nearest.distance,
+      nearestPoint: [...nearest.point],
       originalSegment: [points[nearest.index].slice(0, 2), points[nearest.index + 1].slice(0, 2)],
       points: nextPoints,
       controlPoints: [...shiftedControls, nextControl].filter(Boolean).sort((a, b) => a.pointIndex - b.pointIndex),
-      length: polylineLength(nextPoints)
+      length: sharedCurveLength(nextPoints),
+      visualCurve: createRiverVisualCurveDescriptor()
     };
   }
 
@@ -285,11 +217,7 @@ export function inspectRiverControlPointAction(map, riverId, action = {}, base =
   if (!control) return invalidRiverControlPoint("control-point-missing", "找不到要移动的河道控制点", {controlPointId});
   const pointIndex = Number(control.pointIndex);
   if (!Number.isInteger(pointIndex) || pointIndex <= 0 || pointIndex >= points.length - 1) return invalidRiverControlPoint("protected-endpoint", "河源和河口控制点不可直接移动", {controlPointId, pointIndex});
-  if (controls.some(item => item.id !== controlPointId && Math.hypot(item.x - point[0], item.y - point[1]) < 0.25)) return invalidRiverControlPoint("duplicate-waypoint", "目标位置已经存在另一个河道控制点", {candidatePoint: point, packCell, controlPointId});
-  const nextPoint = [roundCoordinate(point[0]), roundCoordinate(point[1]), Number.isFinite(Number(control.flux)) ? Number(control.flux) : Number(points[pointIndex]?.[2]) || 0];
-  const affectedSegments = [pointIndex - 1, pointIndex];
-  const water = validateReplacementWater(map, points, affectedSegments, [nextPoint], pointIndex - 1, points[pointIndex + 1]);
-  if (!water.valid) return {...water, candidatePoint: nextPoint, packCell, controlPointId, pointIndex};
+  const nextPoint = [point[0], point[1], Number.isFinite(Number(control.flux)) ? Number(control.flux) : Number(points[pointIndex]?.[2]) || 0];
   const nextPoints = points.map((item, index) => index === pointIndex ? nextPoint : [...item]);
   const nextControls = controls.map(item => item.id === controlPointId
     ? {...item, x: nextPoint[0], y: nextPoint[1], packCell, flux: nextPoint[2]}
@@ -306,7 +234,8 @@ export function inspectRiverControlPointAction(map, riverId, action = {}, base =
     candidatePoint: nextPoint,
     points: nextPoints,
     controlPoints: nextControls,
-    length: polylineLength(nextPoints)
+    length: sharedCurveLength(nextPoints),
+    visualCurve: createRiverVisualCurveDescriptor()
   };
 }
 
@@ -328,46 +257,9 @@ function inspectDeleteRiverControlPoint(riverId, points, controls, controlPointI
     pointIndex,
     points: nextPoints,
     controlPoints: nextControls,
-    length: polylineLength(nextPoints)
+    length: sharedCurveLength(nextPoints),
+    visualCurve: createRiverVisualCurveDescriptor()
   };
-}
-
-function validateReplacementWater(map, points, segmentIndexes, replacementPoints, replacementStartIndex, replacementEndPoint) {
-  const original = replacementWaterSummary();
-  const candidate = replacementWaterSummary();
-  for (const index of segmentIndexes) {
-    if (index < 0 || index >= points.length - 1) continue;
-    mergeWaterSummaryInto(original, segmentWaterSummary(map, points[index], points[index + 1]));
-  }
-  if (replacementPoints.length === 1) {
-    const point = replacementPoints[0];
-    const index = replacementStartIndex;
-    mergeWaterSummaryInto(candidate, segmentWaterSummary(map, points[index], point));
-    mergeWaterSummaryInto(candidate, segmentWaterSummary(map, point, replacementEndPoint || points[index + 1]));
-  }
-  const waterTolerance = packSampleSpacing(map) * 1.25;
-  const addedWaterCells = [...candidate.cells].filter(cell => !original.cells.has(cell));
-  if (addedWaterCells.length || candidate.exposure > original.exposure + waterTolerance) {
-    return {
-      valid: false,
-      changed: false,
-      code: "waypoint-crosses-water",
-      reason: "控制点移动会比原河段新增穿越水域",
-      originalWaterCells: [...original.cells],
-      candidateWaterCells: [...candidate.cells],
-      addedWaterCells
-    };
-  }
-  return {valid: true, changed: true, code: "ok", reason: ""};
-}
-
-function replacementWaterSummary() {
-  return {exposure: 0, cells: new Set()};
-}
-
-function mergeWaterSummaryInto(target, source) {
-  target.exposure += source.exposure;
-  for (const cell of source.cells) target.cells.add(cell);
 }
 
 function interpolatePointFlux(start, end, amount) {
@@ -383,133 +275,38 @@ function invalidRiverControlPoint(code, reason, detail = {}) {
   return {valid: false, changed: false, code, reason, points: [], controlPoints: [], ...detail};
 }
 
-function segmentWaterSummary(map, start, end) {
-  const points = map?.pack?.cells?.p || [];
-  const heights = map?.pack?.cells?.h;
-  if (!heights || !isPoint(start) || !isPoint(end) || !points.length) return emptyWaterSummary();
-  const length = Math.hypot(Number(end[0]) - Number(start[0]), Number(end[1]) - Number(start[1]));
-  if (!(length > 0)) return emptyWaterSummary();
-  const spacing = packSampleSpacing(map);
-  const samples = Math.min(64, Math.max(2, Math.ceil(length / spacing)));
-  const stepLength = length / samples;
-  let exposure = 0;
-  const cells = new Set();
-  for (let sample = 1; sample < samples; sample++) {
-    const amount = sample / samples;
-    const x = Number(start[0]) + (Number(end[0]) - Number(start[0])) * amount;
-    const y = Number(start[1]) + (Number(end[1]) - Number(start[1])) * amount;
-    const nearestCell = nearestPackCell(points, x, y);
-    const height = Number(heights[nearestCell]);
-    if (Number.isFinite(height) && height < 20) {
-      exposure += stepLength;
-      cells.add(nearestCell);
-    }
-  }
-  return {exposure, cells};
-}
-
-function mergeWaterSummaries(...summaries) {
-  const merged = emptyWaterSummary();
-  for (const summary of summaries) {
-    merged.exposure += summary.exposure;
-    for (const cell of summary.cells) merged.cells.add(cell);
-  }
-  return merged;
-}
-
-function emptyWaterSummary() {
-  return {exposure: 0, cells: new Set()};
-}
-
-function packSampleSpacing(map) {
-  const points = map?.pack?.cells?.p || [];
-  return Math.max(0.25, pointCloudDiagonal(points) / Math.max(12, Math.sqrt(Math.max(1, points.length)) * 4));
-}
-
-function nearestPackCell(points, x, y) {
-  let nearest = -1;
-  let minimum = Infinity;
-  for (let index = 0; index < points.length; index++) {
-    const point = points[index];
-    if (!isPoint(point)) continue;
-    const distance = (Number(point[0]) - x) ** 2 + (Number(point[1]) - y) ** 2;
-    if (distance >= minimum) continue;
-    minimum = distance;
-    nearest = index;
-  }
-  return nearest;
-}
-
-function riverVisualWaypointMaxDistance(map, points, segmentIndex) {
-  const segmentLength = Math.hypot(
-    Number(points[segmentIndex + 1]?.[0]) - Number(points[segmentIndex]?.[0]),
-    Number(points[segmentIndex + 1]?.[1]) - Number(points[segmentIndex]?.[1])
-  );
-  const pointExtent = pointCloudDiagonal(map?.pack?.cells?.p);
-  const graphWidth = Number(map?.metadata?.graphWidth ?? map?.grid?.metadata?.graphWidth);
-  const graphHeight = Number(map?.metadata?.graphHeight ?? map?.grid?.metadata?.graphHeight);
-  const metadataExtent = graphWidth > 0 && graphHeight > 0 ? Math.hypot(graphWidth, graphHeight) : NaN;
-  const metadataRatio = metadataExtent / pointExtent;
-  const extent = Number.isFinite(metadataRatio) && metadataRatio >= 0.75 && metadataRatio <= 1.25 ? metadataExtent : pointExtent;
-  const scaleFloor = Math.max(3, extent * 0.008);
-  const scaleCeiling = Math.max(scaleFloor, extent * 0.04);
-  return Math.min(scaleCeiling, Math.max(scaleFloor, segmentLength * 2.5));
-}
-
-function pointCloudDiagonal(points) {
-  let minX = Infinity;
-  let minY = Infinity;
-  let maxX = -Infinity;
-  let maxY = -Infinity;
-  for (const point of points || []) {
-    if (!isPoint(point)) continue;
-    minX = Math.min(minX, Number(point[0]));
-    minY = Math.min(minY, Number(point[1]));
-    maxX = Math.max(maxX, Number(point[0]));
-    maxY = Math.max(maxY, Number(point[1]));
-  }
-  return Number.isFinite(minX) ? Math.max(1, Math.hypot(maxX - minX, maxY - minY)) : 100;
-}
-
 export function createAddRiverVisualWaypointCommand(riverId, packCell, {label = "添加河道控制点"} = {}) {
   const id = Number(riverId);
-  let before = null;
-  let after = null;
-  let previousLength = null;
-  let hadLength = false;
+  let delegated = null;
+  let preview = null;
   return {
     label: `${label} #${id}`,
     domain: OBJECT_KIND.RIVER,
     effects: {...RIVER_VISUAL_PATH_EFFECTS, affected: objectAffected(OBJECT_KIND.RIVER, id)},
     apply(context) {
-      const preview = inspectRiverVisualWaypoint(context.map, id, packCell);
-      if (!preview.valid) throw riverVisualWaypointError(preview);
-      const river = findRiver(context.map, id);
-      before ??= clonePlain(river.points || []);
-      if (!after) {
-        after = clonePlain(preview.points);
-        hadLength = Object.prototype.hasOwnProperty.call(river, "length");
-        previousLength = river.length;
-      }
-      river.points = clonePlain(after);
-      river.length = polylineLength(river.points);
+      ensureDelegate(context);
+      delegated.apply(context);
     },
     revert(context) {
-      const river = findRiver(context.map, id);
-      if (!river || !before) throw new Error("缺少可撤销的河道折线快照");
-      river.points = clonePlain(before);
-      if (hadLength) river.length = previousLength;
-      else delete river.length;
+      if (!delegated) throw new Error("缺少可撤销的河道控制点命令");
+      delegated.revert(context);
     },
     isNoop(context) {
-      const preview = inspectRiverVisualWaypoint(context.map, id, packCell);
-      if (!preview.valid) throw riverVisualWaypointError(preview);
-      return !preview.changed;
+      ensureDelegate(context);
+      return delegated.isNoop(context);
     },
     getResult() {
-      return after ? {riverId: id, packCell: Number(packCell), points: after.length, length: polylineLength(after)} : null;
+      const result = delegated?.getResult?.();
+      return result ? {...result, packCell: Number(packCell)} : null;
     }
   };
+
+  function ensureDelegate(context) {
+    if (delegated) return;
+    preview = inspectRiverVisualWaypoint(context.map, id, packCell);
+    if (!preview.valid) throw riverVisualWaypointError(preview);
+    delegated = createEditRiverControlPointsCommand(id, preview, {label});
+  }
 }
 
 export function createEditRiverControlPointsCommand(riverId, nextState, {label = "编辑河道控制点"} = {}) {
@@ -530,6 +327,7 @@ export function createEditRiverControlPointsCommand(riverId, nextState, {label =
       river.points = clonePlain(after.points);
       river.length = after.length;
       river.controlPoints = clonePlain(after.controlPoints);
+      river.visualCurve = clonePlain(after.visualCurve);
     },
     revert(context) {
       const river = findRiver(context.map, id);
@@ -551,16 +349,19 @@ export function createEditRiverControlPointsCommand(riverId, nextState, {label =
 function normalizeRiverControlPointState(map, river, state = {}) {
   const points = (state.points || river.points || []).map(point => [...point]);
   const controls = normalizeRiverControlPoints({...river, points, controlPoints: state.controlPoints || []}, map?.pack?.cells) || [];
-  return {points, controlPoints: controls, length: polylineLength(points)};
+  const visualCurve = normalizeRiverVisualCurve(state.visualCurve) || createRiverVisualCurveDescriptor();
+  return {points, controlPoints: controls, visualCurve, length: sharedCurveLength(points)};
 }
 
 function captureRiverControlPointState(river) {
   return {
     points: clonePlain(river.points || []),
     controlPoints: Object.prototype.hasOwnProperty.call(river, "controlPoints") ? clonePlain(river.controlPoints || []) : undefined,
+    visualCurve: Object.prototype.hasOwnProperty.call(river, "visualCurve") ? clonePlain(river.visualCurve) : undefined,
     length: Object.prototype.hasOwnProperty.call(river, "length") ? river.length : undefined,
     hadLength: Object.prototype.hasOwnProperty.call(river, "length"),
-    hadControlPoints: Object.prototype.hasOwnProperty.call(river, "controlPoints")
+    hadControlPoints: Object.prototype.hasOwnProperty.call(river, "controlPoints"),
+    hadVisualCurve: Object.prototype.hasOwnProperty.call(river, "visualCurve")
   };
 }
 
@@ -568,6 +369,8 @@ function restoreRiverControlPointState(river, snapshot) {
   river.points = clonePlain(snapshot.points);
   if (snapshot.hadControlPoints) river.controlPoints = clonePlain(snapshot.controlPoints || []);
   else delete river.controlPoints;
+  if (snapshot.hadVisualCurve) river.visualCurve = clonePlain(snapshot.visualCurve);
+  else delete river.visualCurve;
   if (snapshot.hadLength) river.length = snapshot.length;
   else delete river.length;
 }
@@ -576,8 +379,27 @@ function riverControlPointStateFingerprint(state) {
   return JSON.stringify({
     points: state.points || [],
     controlPoints: state.controlPoints === undefined ? null : state.controlPoints || [],
+    visualCurve: state.visualCurve === undefined ? null : state.visualCurve,
     length: Number.isFinite(Number(state.length)) ? Number(state.length) : null
   });
+}
+
+function validPackCell(packCells, value) {
+  if (value === null || value === undefined) return null;
+  const cell = Number(value);
+  const count = packCells?.p?.length || packCells?.i?.length || 0;
+  return Number.isInteger(cell) && cell >= 0 && cell < count ? cell : null;
+}
+
+function isWorldPointInsideMap(map, point) {
+  const width = Number(map?.metadata?.graphWidth ?? map?.grid?.metadata?.graphWidth);
+  const height = Number(map?.metadata?.graphHeight ?? map?.grid?.metadata?.graphHeight);
+  return Number.isFinite(width) && Number.isFinite(height) && width > 0 && height > 0
+    && point[0] >= 0 && point[0] <= width && point[1] >= 0 && point[1] <= height;
+}
+
+function sharedCurveLength(points) {
+  return sampledPathLength(sampleCentripetalCatmullRom(points).points);
 }
 
 export function createSetRiverNoteCommand(riverId, body, {name = ""} = {}) {
@@ -933,6 +755,15 @@ function nearestRiverSegment(points, point) {
     if (distance < nearest.distance) nearest = {index, amount, distance, point: nearestPoint};
   }
   return nearest;
+}
+
+function nearestSharedCurveSegment(points, point) {
+  const sampled = sampleCentripetalCatmullRom(points);
+  const nearest = nearestRiverSegment(sampled.points, point);
+  const span = sampled.spans[nearest.index];
+  if (!span) return nearestRiverSegment(points, point);
+  const amount = span.startAmount + (span.endAmount - span.startAmount) * nearest.amount;
+  return {...nearest, index: span.sourceSegmentIndex, amount};
 }
 
 function roundCoordinate(value) {

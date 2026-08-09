@@ -1,40 +1,71 @@
 import {findRiverControlPointAtWorld, normalizeRiverControlPoints} from "./river-control-points.js";
+import {pickGridCell} from "../renderer/picking.js";
+
+const DRAG_SLOP_PX = 4;
+const DOUBLE_CLICK_MS = 360;
+const DOUBLE_CLICK_DISTANCE_PX = 7;
 
 export function bindRiverControlPointEditing(target, state, documentRef) {
   let drag = null;
   let suppressSelectPointerId = null;
+  let pendingMove = null;
+  let moveFrame = null;
+  let lastControlClick = null;
 
   const onPointerDown = event => {
     if (!isActive(state) || event.button !== 0) return;
-    const pick = state.renderer?.pickClientPoint?.(event.clientX, event.clientY) || {};
-    const world = readWorldPoint(pick);
-    if (!world) return;
-    const river = activeRiver(state);
-    const controls = readWorkingControls(state, river);
-    const threshold = state.renderer?.pickThresholdWorld?.(11) || 11;
-    const control = findRiverControlPointAtWorld(state.map, river, world[0], world[1], threshold, controls);
-    const riverPick = Number(pick?.river?.id ?? (pick?.object?.kind === "river" ? pick.object.id : NaN));
-    if (!control && riverPick !== Number(river.id)) return;
-    event.preventDefault();
-    event.stopImmediatePropagation();
-    if (control) {
-      drag = {pointerId: event.pointerId, controlPointId: control.id, before: state.riverEdit.session?.getWorkingState?.(), moved: false};
-      capturePointer(target, event.pointerId);
-      return;
+    let beforeAdd = null;
+    try {
+      const world = readWorldPoint(state, event);
+      if (!world) return;
+      const river = activeRiver(state);
+      const controls = readWorkingControls(state, river);
+      const threshold = state.renderer?.pickThresholdWorld?.(11) || 11;
+      const control = findRiverControlPointAtWorld(state.map, river, world[0], world[1], threshold, controls);
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      if (control) {
+        drag = {
+          pointerId: event.pointerId,
+          controlPointId: control.id,
+          before: state.riverEdit.session?.getWorkingState?.(),
+          startClientX: event.clientX,
+          startClientY: event.clientY,
+          lastClientX: event.clientX,
+          lastClientY: event.clientY,
+          moved: false
+        };
+        capturePointer(target, event.pointerId);
+        return;
+      }
+      beforeAdd = state.riverEdit.session?.getWorkingState?.();
+      stageAction(state, documentRef, pointAction(state, "add", world));
+      suppressSelectPointerId = event.pointerId;
+      lastControlClick = null;
+    } catch (error) {
+      if (!drag && beforeAdd) {
+        try { restoreWorking(beforeAdd, "pointerdown-error"); } catch {}
+      }
+      abortDrag(error, "pointerdown-error");
     }
-    stageAction(state, documentRef, {type: "add", point: world, packCell: pick.packCell});
-    suppressSelectPointerId = event.pointerId;
   };
 
   const onPointerMove = event => {
     if (!drag || drag.pointerId !== event.pointerId || !isActive(state)) return;
-    event.preventDefault();
-    event.stopImmediatePropagation();
-    const pick = state.renderer?.pickClientPoint?.(event.clientX, event.clientY) || {};
-    const world = readWorldPoint(pick);
-    if (!world) return;
-    drag.moved = true;
-    stageAction(state, documentRef, {type: "move", controlPointId: drag.controlPointId, point: world, packCell: pick.packCell});
+    try {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      const world = readWorldPoint(state, event);
+      if (!world) return;
+      drag.lastClientX = event.clientX;
+      drag.lastClientY = event.clientY;
+      if (!drag.moved && Math.hypot(event.clientX - drag.startClientX, event.clientY - drag.startClientY) < DRAG_SLOP_PX) return;
+      drag.moved = true;
+      pendingMove = {world, controlPointId: drag.controlPointId};
+      scheduleMove();
+    } catch (error) {
+      abortDrag(error, "pointermove-error");
+    }
   };
 
   const onPointerUp = event => {
@@ -46,40 +77,50 @@ export function bindRiverControlPointEditing(target, state, documentRef) {
     }
     if (!drag || drag.pointerId !== event.pointerId) return;
     const current = drag;
-    drag = null;
-    releasePointer(target, event.pointerId);
-    event.preventDefault();
-    event.stopImmediatePropagation();
-    if (!current.moved) state.riverEdit.session?.restoreWorking?.(current.before, "click-no-move");
+    try {
+      if (current.moved) {
+        const world = readWorldPoint(state, event);
+        if (world) pendingMove = {world, controlPointId: current.controlPointId};
+        cancelMoveFrame(false);
+        flushMove();
+      } else {
+        registerControlClick(current, event);
+      }
+    } catch (error) {
+      try { restoreWorking(current.before, "pointerup-error"); } catch {}
+      reportInteractionError(error);
+    } finally {
+      drag = null;
+      cancelMoveFrame();
+      releasePointer(target, event.pointerId);
+      event.preventDefault();
+      event.stopImmediatePropagation();
+    }
   };
 
   const onPointerCancel = event => {
     if (suppressSelectPointerId === event.pointerId) suppressSelectPointerId = null;
     if (!drag || drag.pointerId !== event.pointerId) return;
     const current = drag;
-    drag = null;
-    releasePointer(target, event.pointerId);
-    event.preventDefault();
-    event.stopImmediatePropagation();
-    state.riverEdit.session?.restoreWorking?.(current.before, "pointercancel");
-    state.panels.river?.setWaypointFeedback?.({tone: "idle", code: "pointercancel", message: "控制点拖动已取消，预览恢复。"});
+    try {
+      restoreWorking(current.before, "pointercancel");
+      state.panels.river?.setWaypointFeedback?.(null);
+    } catch (error) {
+      reportInteractionError(error);
+    } finally {
+      drag = null;
+      cancelMoveFrame();
+      lastControlClick = null;
+      releasePointer(target, event.pointerId);
+      event.preventDefault();
+      event.stopImmediatePropagation();
+    }
   };
 
   const onDoubleClick = event => {
     if (!isActive(state) || event.button !== 0) return;
-    const pick = state.renderer?.pickClientPoint?.(event.clientX, event.clientY) || {};
-    const world = readWorldPoint(pick);
-    if (!world) return;
-    const river = activeRiver(state);
-    const control = findRiverControlPointAtWorld(state.map, river, world[0], world[1], state.renderer?.pickThresholdWorld?.(13) || 13, readWorkingControls(state, river));
-    if (!control) return;
     event.preventDefault();
     event.stopImmediatePropagation();
-    if (drag) {
-      releasePointer(target, drag.pointerId);
-      drag = null;
-    }
-    stageAction(state, documentRef, {type: "delete", controlPointId: control.id});
   };
 
   target.addEventListener("pointerdown", onPointerDown, true);
@@ -90,11 +131,19 @@ export function bindRiverControlPointEditing(target, state, documentRef) {
 
   return {
     cancel(reason = "cancel") {
+      cancelMoveFrame();
+      lastControlClick = null;
+      suppressSelectPointerId = null;
       if (!drag) return false;
       const current = drag;
-      drag = null;
-      releasePointer(target, current.pointerId);
-      state.riverEdit.session?.restoreWorking?.(current.before, reason);
+      try {
+        restoreWorking(current.before, reason);
+      } catch (error) {
+        reportInteractionError(error);
+      } finally {
+        drag = null;
+        releasePointer(target, current.pointerId);
+      }
       return true;
     },
     dispose() {
@@ -103,13 +152,94 @@ export function bindRiverControlPointEditing(target, state, documentRef) {
       target.removeEventListener("pointerup", onPointerUp, true);
       target.removeEventListener("pointercancel", onPointerCancel, true);
       target.removeEventListener("dblclick", onDoubleClick, true);
-      drag = null;
+      const current = drag;
+      try {
+        if (current) restoreWorking(current.before, "dispose");
+      } catch (error) {
+        reportInteractionError(error);
+      } finally {
+        cancelMoveFrame();
+        drag = null;
+        if (current) releasePointer(target, current.pointerId);
+      }
       suppressSelectPointerId = null;
+      lastControlClick = null;
     },
     getActiveDrag() {
       return drag ? {...drag} : null;
     }
   };
+
+  function scheduleMove() {
+    if (moveFrame !== null) return;
+    const view = documentRef?.defaultView;
+    if (view?.requestAnimationFrame) {
+      moveFrame = view.requestAnimationFrame(() => {
+        moveFrame = null;
+        try { flushMove(); } catch (error) { abortDrag(error, "pointermove-error"); }
+      });
+    } else if (view?.setTimeout) {
+      moveFrame = view.setTimeout(() => {
+        moveFrame = null;
+        try { flushMove(); } catch (error) { abortDrag(error, "pointermove-error"); }
+      }, 16);
+    } else {
+      flushMove();
+    }
+  }
+
+  function flushMove() {
+    const pending = pendingMove;
+    pendingMove = null;
+    if (!pending || !isActive(state)) return;
+    stageAction(state, documentRef, {...pointAction(state, "move", pending.world), controlPointId: pending.controlPointId});
+  }
+
+  function cancelMoveFrame(clearPending = true) {
+    const view = documentRef?.defaultView;
+    if (moveFrame !== null) {
+      try {
+        if (view?.cancelAnimationFrame) view.cancelAnimationFrame(moveFrame);
+        else view?.clearTimeout?.(moveFrame);
+      } catch {}
+    }
+    moveFrame = null;
+    if (clearPending) pendingMove = null;
+  }
+
+  function abortDrag(error, reason) {
+    const current = drag;
+    try {
+      if (current) restoreWorking(current.before, reason);
+    } catch {}
+    finally {
+      drag = null;
+      cancelMoveFrame();
+      lastControlClick = null;
+      if (current) releasePointer(target, current.pointerId);
+    }
+    reportInteractionError(error);
+  }
+
+  function restoreWorking(before, reason) {
+    state.riverEdit.session?.restoreWorking?.(before, reason);
+  }
+
+  function reportInteractionError() {
+    try {
+      state.panels.river?.setWaypointFeedback?.({tone: "error", code: "control-point-interaction-error", message: "河道控制点操作失败，已恢复修改前状态。"});
+    } catch {}
+  }
+
+  function registerControlClick(current, event) {
+    const click = {id: current.controlPointId, time: Number(event.timeStamp), x: event.clientX, y: event.clientY};
+    const previous = lastControlClick;
+    lastControlClick = click;
+    if (!previous || previous.id !== click.id) return;
+    if (click.time - previous.time > DOUBLE_CLICK_MS || Math.hypot(click.x - previous.x, click.y - previous.y) > DOUBLE_CLICK_DISTANCE_PX) return;
+    lastControlClick = null;
+    stageAction(state, documentRef, {type: "delete", controlPointId: click.id});
+  }
 }
 
 function isActive(state) {
@@ -126,20 +256,27 @@ function readWorkingControls(state, river) {
   return normalizeRiverControlPoints({...(river || {}), points: working?.points || river?.points, controlPoints: working?.controlPoints ?? river?.controlPoints}, state.map?.pack?.cells) || [];
 }
 
-function readWorldPoint(pick) {
-  const x = Number(pick?.worldX);
-  const y = Number(pick?.worldY);
+function readWorldPoint(state, event) {
+  const world = state.renderer?.screenToWorld?.(event.clientX, event.clientY);
+  const x = Number(world?.x);
+  const y = Number(world?.y);
   return Number.isFinite(x) && Number.isFinite(y) ? [x, y] : null;
+}
+
+function pointAction(state, type, point) {
+  let pick = null;
+  try { pick = pickGridCell(state.map, point[0], point[1]); } catch {}
+  return {type, point, packCell: Number.isInteger(pick?.packCell) ? pick.packCell : null};
 }
 
 function stageAction(state, documentRef, action) {
   const draft = state.riverEdit.session?.stageAction?.(state.map, action);
   if (!draft?.valid) {
-    state.renderer?.setRiverWaypointPreview?.(draft);
+    state.renderer?.setRiverWaypointPreview?.(state.riverEdit.session?.getPreview?.());
     state.panels.river?.setWaypointFeedback?.({tone: "error", code: draft?.code || "invalid-action", message: draft?.reason || "控制点操作不可用。"});
     return draft;
   }
-  state.panels.river?.setWaypointFeedback?.({tone: "valid", code: draft.action || "ok", message: action.type === "delete" ? "已预览删除控制点，尚未保存。" : action.type === "move" ? "已预览控制点移动，尚未保存。" : "已预览新增控制点，尚未保存。"});
+  state.panels.river?.setWaypointFeedback?.(null);
   return draft;
 }
 

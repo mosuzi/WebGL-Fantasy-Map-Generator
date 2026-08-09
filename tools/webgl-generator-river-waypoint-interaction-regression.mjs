@@ -18,7 +18,7 @@ let draft = inspectRiverVisualWaypoint(map, river.id, 2);
 assert.equal(draft.valid, true, draft.reason);
 assert.equal(draft.insertIndex, 1);
 assert.equal(draft.packCell, 2);
-assert.ok(draft.distance > 0 && draft.distance <= draft.maxDistance);
+assert.ok(draft.distance > 0);
 assert.equal(draft.points.length, pointsBefore.length + 1);
 assert.deepEqual(river.points, pointsBefore, "候选预检不得修改正式河道");
 assert.equal(history.getStats().undo, 0, "候选预检不得写历史");
@@ -29,8 +29,8 @@ const previewVertices = buildSelectionMeshVertices(map, camera, canvas, null, nu
 assert.ok(previewVertices.length > 0, "候选折线与节点必须生成独立选择层 mesh");
 assert.ok([...previewVertices].every(Number.isFinite), "候选预览 mesh 不得包含无效坐标");
 const validPreviewBundle = buildSelectionMeshBundle(map, camera, canvas, null, null, [], draft);
-assert.ok(validPreviewBundle.drawRanges.landMasked.count > 0, "有效候选的旧段虚线、新两段和节点必须走陆地遮罩");
-assert.equal(validPreviewBundle.drawRanges.ordinary.count, 0);
+assert.equal(validPreviewBundle.drawRanges.landMasked.count, 0);
+assert.ok(validPreviewBundle.drawRanges.ordinary.count > 0, "自由控制点曲线与节点必须走不裁剪水域的可见层");
 assert.equal(buildSelectionMeshVertices(map, camera, canvas, null, null, [], null).length, 0, "清除候选后选择层不得残留预览");
 
 draft = inspectRiverVisualWaypoint(map, river.id, 3);
@@ -41,45 +41,44 @@ assert.deepEqual(river.points, pointsBefore, "重新选择或取消草稿不得�
 assert.equal(history.getStats().undo, 0);
 
 const duplicate = inspectRiverVisualWaypoint(map, river.id, 0);
-assert.equal(duplicate.valid, false);
-assert.equal(duplicate.code, "duplicate-waypoint");
+assert.equal(duplicate.valid, true, "同一位置也允许新增独立控制点");
 const invalid = inspectRiverVisualWaypoint(map, river.id, 999);
 assert.equal(invalid.valid, false);
 assert.equal(invalid.code, "invalid-cell");
 const far = inspectRiverVisualWaypoint(map, river.id, 4);
-assert.equal(far.valid, false);
-assert.equal(far.code, "waypoint-too-far");
-assert.ok(far.distance > far.maxDistance);
-assert.throws(() => history.execute(createAddRiverVisualWaypointCommand(river.id, 4), {map}), /超过允许/);
-assert.equal(history.getStats().undo, 0, "无效或过远候选不得写历史");
-const rejectedPreviewBundle = buildSelectionMeshBundle(map, camera, canvas, null, null, [], far);
-assert.equal(rejectedPreviewBundle.drawRanges.landMasked.count, 0);
-assert.ok(rejectedPreviewBundle.drawRanges.ordinary.count > 0, "拒绝候选的红色节点与引线不得被陆地 depth 遮掉");
+assert.equal(far.valid, true, "远离原河段的陆地点也必须允许");
+history.execute(createAddRiverVisualWaypointCommand(river.id, 4), {map});
+assert.equal(history.getStats().undo, 1, "远离原河段的候选也必须可以写历史");
+history.undo({map});
+assert.equal(history.getStats().undo, 0);
+const farPreviewBundle = buildSelectionMeshBundle(map, camera, canvas, null, null, [], far);
+assert.equal(farPreviewBundle.drawRanges.landMasked.count, 0);
+assert.ok(farPreviewBundle.drawRanges.ordinary.count > 0, "远点候选也必须走不裁剪水域的可见层");
 const water = inspectRiverVisualWaypoint(map, river.id, 5);
-assert.equal(water.valid, false);
-assert.equal(water.code, "waypoint-water", "水域 pack cell 必须在距离计算前被拒绝");
+assert.equal(water.valid, true, "兼容 pack-cell 入口也不得恢复水域限制");
+assert.equal(water.visualCurve.kind, "centripetal-catmull-rom-cubic");
+const waterPreviewBundle = buildSelectionMeshBundle(map, camera, canvas, null, null, [], water);
+assert.equal(waterPreviewBundle.drawRanges.landMasked.count, 0);
+assert.ok(waterPreviewBundle.drawRanges.ordinary.count > 0, "水域控制点和预览曲线必须可见");
 const crossingMap = createCrossingFixture();
 const crossing = inspectRiverVisualWaypoint(crossingMap, river.id, 2);
-assert.equal(crossing.valid, false);
-assert.equal(crossing.code, "waypoint-crosses-water", "候选总穿水长度相近但新增水域 cell 时必须拒绝");
-assert.deepEqual(crossing.originalWaterCells, [1]);
-assert.deepEqual(crossing.addedWaterCells, [6]);
+assert.equal(crossing.valid, true, "只要控制点本身在陆地，河道走势可以自由穿过原有水域");
 const legalMouth = inspectRiverVisualWaypoint(createLegalMouthFixture(), river.id, 2);
 assert.equal(legalMouth.valid, true, legalMouth.reason || "只经过原有河口水域 cell 的候选必须合法");
 
-for (const metadata of [
-  {graphWidth: 100, graphHeight: 100},
-  {graphWidth: 1e9, graphHeight: 1e9},
-  {graphWidth: 1, graphHeight: 1},
-  null,
-  {graphWidth: NaN, graphHeight: NaN}
+for (const [metadata, expected] of [
+  [{graphWidth: 100, graphHeight: 100}, true],
+  [{graphWidth: 1e9, graphHeight: 1e9}, true],
+  [{graphWidth: 1, graphHeight: 1}, false],
+  [null, false],
+  [{graphWidth: NaN, graphHeight: NaN}, false]
 ]) {
   const scaledMap = createFixture();
   scaledMap.metadata = metadata;
   const nearCandidate = inspectRiverVisualWaypoint(scaledMap, river.id, 2);
   const farCandidate = inspectRiverVisualWaypoint(scaledMap, river.id, 4);
-  assert.equal(nearCandidate.valid, true, `正常局部候选不得因 metadata=${JSON.stringify(metadata)} 被拒绝`);
-  assert.equal(farCandidate.code, "waypoint-too-far", `远点不得因 metadata=${JSON.stringify(metadata)} 被放行`);
+  assert.equal(nearCandidate.valid, expected, `世界坐标边界判定不符合 metadata=${JSON.stringify(metadata)}`);
+  assert.equal(farCandidate.valid, expected, `世界坐标边界判定不符合 metadata=${JSON.stringify(metadata)}`);
 }
 
 const draftChanges = [];
@@ -91,31 +90,33 @@ manager.register("river:edit-waypoint", {
   onComplete: ({reason}) => session.end(reason)
 });
 manager.enter("river:edit-waypoint");
-assert.equal(session.stage(map, 2).valid, true);
+const stageAt = packCell => session.stageAction(map, {type: "add", point: map.pack.cells.p[packCell], packCell});
+assert.equal(stageAt(2).valid, true);
 assert.equal(session.getSnapshot().hasDraft, true);
-assert.equal(session.stage(map, 0).code, "duplicate-waypoint");
-assert.equal(session.getSnapshot().hasDraft, false, "有效草稿后的重复候选必须清除旧草稿");
-assert.equal(session.stage(map, 2).valid, true);
-assert.equal(session.stage(map, 999).code, "invalid-cell");
-assert.equal(session.getSnapshot().hasDraft, false, "有效草稿后的无效候选必须清除旧草稿");
-assert.equal(session.stage(map, 2).valid, true);
-assert.equal(session.stage(map, 4).code, "waypoint-too-far");
-assert.equal(session.getSnapshot().hasDraft, false, "有效草稿后的过远候选必须清除旧草稿");
-assert.equal(session.stage(map, 2).valid, true);
+assert.equal(stageAt(0).valid, true, "有效草稿后的同点候选也必须可以累加");
+assert.equal(session.getSnapshot().hasDraft, true);
+assert.equal(stageAt(2).valid, true);
+assert.equal(session.stageAction(map, {type: "add", point: [-1, 50]}).code, "point-out-of-bounds");
+assert.equal(session.getSnapshot().hasDraft, true, "无效操作不得清除此前有效的 working 草稿");
+assert.equal(session.getDraft().action, "restore");
+assert.equal(stageAt(2).valid, true);
+assert.equal(stageAt(4).valid, true, "会跨出原河段的世界坐标也必须可以预览");
+assert.equal(session.getSnapshot().hasDraft, true);
+assert.equal(stageAt(2).valid, true);
 manager.cancel("river:edit-waypoint", "escape");
 assert.equal(session.getSnapshot().active, false);
 assert.equal(session.getSnapshot().hasDraft, false, "Escape 必须清除草稿");
 assert.equal(draftChanges.at(-1).reason, "escape");
 
 manager.enter("river:edit-waypoint");
-assert.equal(session.stage(map, 2).valid, true);
+assert.equal(stageAt(2).valid, true);
 river.length += 1;
 const staleLength = session.validate(map);
 assert.equal(staleLength.valid, false);
 assert.equal(staleLength.code, "river-changed");
 assert.equal(session.getSnapshot().hasDraft, false, "基线变化必须清除草稿");
 river.length -= 1;
-assert.equal(session.stage(map, 2).valid, true);
+assert.equal(stageAt(2).valid, true);
 const replacementMap = createFixture();
 const staleMap = session.validate(replacementMap);
 assert.equal(staleMap.code, "map-changed");
@@ -196,24 +197,30 @@ const appSource = readSource("../app/webgl-generator/src/runtime/app.js");
 const panelSource = readSource("../app/webgl-generator/src/ui/vue/components/RiverPanel.vue");
 const panelAdapterSource = readSource("../app/webgl-generator/src/ui/panels/river-panel.js");
 const rendererSource = readSource("../app/webgl-generator/src/renderer/placeholder-renderer.js");
+const sessionSource = readSource("../app/webgl-generator/src/runtime/river-waypoint-session.js");
 assert.match(appSource, /createRiverWaypointSession[\s\S]*onDraftChange[\s\S]*setRiverWaypointPreview/);
-assert.match(appSource, /session\?\.stage\(state\.map, packCell\)/);
+assert.doesNotMatch(appSource, /session\?\.stage\(state\.map, packCell\)/);
 assert.match(appSource, /session\?\.validate\(state\.map\)/);
-assert.match(appSource, /function applyRiverWaypointDraft[\s\S]*createAddRiverVisualWaypointCommand[\s\S]*completeCanvasToolMode/);
+assert.match(appSource, /function applyRiverWaypointDraft[\s\S]*createEditRiverControlPointsCommand[\s\S]*completeCanvasToolMode/);
 assert.match(appSource, /function clearRiverWaypointDraft[\s\S]*clearRiverWaypointPreview/);
+assert.match(appSource, /onExit: \(\{reason\}\) => \{[\s\S]*controlPointDrag\?\.cancel\(reason \|\| "mode-exit"\)[\s\S]*session\?\.end/);
 assert.match(appSource, /target-switch|target-deleted|map-replace/);
 assert.match(panelAdapterSource, /onApplyWaypoint[\s\S]*onReselectWaypoint[\s\S]*onCancelWaypoint/);
 for (const label of ["调整河道折线", "单击河流非控制点处新增", "双击已有控制点删除", "同一 cell 可放置多个点", "应用控制点", "重新选择", "退出模式"]) assert.match(panelSource, new RegExp(label));
 assert.equal((panelSource.match(/\{key: "path"/g) || []).length, 1, "河流面板只能保留一个河道折线入口");
 assert.match(panelSource, /icon:\s*"折"/);
 assert.match(panelSource, /position:\s*sticky/);
-assert.match(panelSource, /waypointTone === 'error' \? 'assertive' : 'polite'/);
-assert.match(panelSource, /waypointFeedback\?\.tone === "error" \? "error" : props\.state\.waypointDraft \? "valid"/);
+assert.match(panelSource, /waypointErrorMessage \? 'assertive' : 'polite'/);
+assert.match(panelSource, /feedback\?\.tone === "error" \? feedback\.message/);
+assert.doesNotMatch(panelSource, /feedback\?\.code === "waypoint-water"/);
+assert.match(panelSource, /世界坐标 \(\$\{formatNumber\(point\[0\]\)\}, \$\{formatNumber\(point\[1\]\)\}\)/);
+assert.doesNotMatch(panelSource, /pack cell #\$\{draft\.packCell\}/);
 assert.match(panelAdapterSource, /waypointFeedback:[\s\S]*setWaypointFeedback/);
-assert.match(appSource, /setRiverWaypointPreview\?\.\(draft\)[\s\S]*setWaypointFeedback\?\.\(\{tone: "error"/);
+assert.match(appSource, /setRiverWaypointPreview\?\.\(state\.riverEdit\.session\?\.getPreview\?\.\(\)\)/);
 assert.match(appSource, /session\?\.clear\("apply-failed"\)[\s\S]*tone: "error"/);
 assert.match(rendererSource, /preview\?\.valid \|\|[\s\S]*candidate/);
 assert.match(rendererSource, /setRiverWaypointPreview[\s\S]*riverWaypointPreview/);
+assert.match(sessionSource, /const changed = workingChanged\(working, baseline\);[\s\S]*setDraft\(\{\.\.\.inspected, changed, baseline/, "stageAction 必须以 working 相对 baseline 的累计变化覆盖单次动作 changed");
 
 console.log(JSON.stringify({
   ok: true,

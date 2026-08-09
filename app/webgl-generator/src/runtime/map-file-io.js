@@ -12,6 +12,7 @@ import {normalizeUnitPreferences} from "../ui/display-units.js";
 import {normalizeOceanCurrentModel, OCEAN_CURRENT_MODEL_VERSION} from "../generator/ocean-currents.js";
 import {normalizeRiverNetwork} from "../generator/river-network.js";
 import {normalizeRiverControlPoints} from "./river-control-points.js";
+import {isSharedCubicCurve, normalizeRiverVisualCurve, sampleCentripetalCatmullRom} from "../geometry/cubic-path.js";
 import {normalizeLakeOverflowDiagnostics} from "../generator/lake-overflow.js";
 import {normalizeRegenerationLockStore, validateRegenerationLockStore} from "./regeneration-locks.js";
 import {normalizeZoneMap, resolveZoneContext} from "./zone-context.js";
@@ -23,6 +24,7 @@ import {
   serializeRouteGeoJsonProperties
 } from "./network-geojson-properties.js";
 import {isCompressedMapDocumentFilename, mapBaseFilename, synchronizeMapName} from "./map-filename.js";
+import {rebuildSettlementCellIndex} from "./settlement-cell-index.js";
 
 export const MAP_DOCUMENT_TYPE = "webgl-generator-map";
 export const MAP_DOCUMENT_VERSION = 2;
@@ -140,6 +142,7 @@ export function migrateMapDocument(document) {
   migrated.map = normalizeLakeOverflowMap(migrated.map);
   migrated.map = normalizeZoneMap(migrated.map);
   applyRegenerationLockCompatibility(migrated.map, versioned.map?.regenerationLocks);
+  rebuildSettlementCellIndex(migrated.map, {syncLegacy: true});
   validateCurrentMapDocument(migrated);
   return migrated;
 }
@@ -660,7 +663,8 @@ function normalizeRiverStore(store, pack) {
     cells: Array.isArray(river.cells) ? [...river.cells] : river.cells,
     gridCells: Array.isArray(river.gridCells) ? [...river.gridCells] : river.gridCells,
     points: Array.isArray(river.points) ? river.points.map(point => Array.isArray(point) ? [...point] : point) : river.points,
-    ...(Array.isArray(river.controlPoints) ? {controlPoints: normalizeRiverControlPoints(river, source.pack?.cells)} : {}),
+    ...(Array.isArray(river.controlPoints) ? {controlPoints: normalizeRiverControlPoints(river, pack?.cells)} : {}),
+    ...(normalizeRiverVisualCurve(river.visualCurve) ? {visualCurve: normalizeRiverVisualCurve(river.visualCurve)} : {}),
     hydrology: river.hydrology && typeof river.hydrology === "object" ? {...river.hydrology} : river.hydrology
   } : river);
   const normalized = normalizeRiverNetwork(rivers, pack, {dropIncomplete: false});
@@ -1512,10 +1516,14 @@ function routeFeatures(map) {
 
 function riverFeatures(map) {
   return (map.rivers?.rivers || []).map(river => {
-    const coordinates = lineCoordinates(river.points, map);
+    const visualPoints = isSharedCubicCurve(river.visualCurve) ? sampleCentripetalCatmullRom(river.points).points : river.points;
+    const coordinates = lineCoordinates(visualPoints, map);
     if (coordinates.length < 2) return null;
     const note = readObjectNote(map, {kind: "river", id: river.id});
-    const stable = serializeRiverGeoJsonProperties(map, river);
+    const stable = {
+      ...serializeRiverGeoJsonProperties(map, river),
+      ...(isSharedCubicCurve(river.visualCurve) ? {segmentCount: Math.max(0, visualPoints.length - 1)} : {})
+    };
     return {
       type: "Feature",
       id: `river-${river.id}`,
@@ -1529,7 +1537,7 @@ function riverFeatures(map) {
         parent: river.parent || 0,
         basin: river.basin || river.id,
         flux: river.flux || river.discharge || 0,
-        length: river.length || roundCoordinate(worldLineLength(river.points)),
+        length: river.length || roundCoordinate(worldLineLength(visualPoints)),
         width: river.width || 0,
         widthFactor: river.widthFactor || 1,
         catchmentArea: river.hydrology?.catchmentArea || 0,

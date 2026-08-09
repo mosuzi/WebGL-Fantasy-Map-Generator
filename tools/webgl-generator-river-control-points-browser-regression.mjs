@@ -68,11 +68,29 @@ try {
 }
 
 async function verifyCase(page, cellsTarget) {
+  const legacyExports = cellsTarget === 10000 ? await page.evaluate(async () => {
+    const app = window.__webglGeneratorApp;
+    const oldRiverCount = (app.map.rivers?.rivers || []).filter(river => river && !river.visualCurve && !river.controlPoints).length;
+    const png = await window.webglGeneratorApi.data.exportPNG({download: false, pixelScale: 1, includeDataUrl: false});
+    const geo = window.webglGeneratorApi.data.exportFeatureGEO({download: false, includeText: true, layers: {river: true}});
+    return {
+      oldRiverCount,
+      png: {ok: png?.ok, bytes: png?.data?.bytes || 0, mimeType: png?.data?.mimeType || null},
+      geo: {ok: geo?.ok, bytes: geo?.data?.bytes || 0, features: geo?.data?.metadata?.features || 0}
+    };
+  }) : null;
+  if (legacyExports) {
+    assert.ok(legacyExports.oldRiverCount > 0, "旧河流导出夹具必须不含 visualCurve/controlPoints");
+    assert.equal(legacyExports.png.ok, true, `旧河流 PNG 导出失败：${JSON.stringify(legacyExports.png)}`);
+    assert.ok(legacyExports.png.bytes > 0 && legacyExports.png.mimeType === "image/png");
+    assert.equal(legacyExports.geo.ok, true, `旧河流 GeoJSON 导出失败：${JSON.stringify(legacyExports.geo)}`);
+    assert.ok(legacyExports.geo.bytes > 0 && legacyExports.geo.features > 0);
+  }
   const baseline = await page.evaluate(async () => {
     const app = window.__webglGeneratorApp;
     const mod = await import("/src/runtime/river-edit-commands.js");
     const viewport = app.renderer.canvas.getBoundingClientRect();
-    const river = (app.map.rivers.rivers || []).find(item => Array.isArray(item?.points) && item.points.length >= 4 && !item.controlPoints?.length && item.points.slice(1, -1).some(point => app.renderer.worldToScreen(point[0], point[1], viewport).x < viewport.width * 0.55));
+    const river = (app.map.rivers.rivers || []).find(item => Array.isArray(item?.points) && item.points.length >= 4 && !item.controlPoints?.length);
     if (!river) throw new Error("固定地图缺少没有控制点的可编辑河流");
     app.editHistory.clear();
     app.selectionStore.setSelection({object: {kind: "river", id: river.id}});
@@ -98,24 +116,37 @@ async function verifyCase(page, cellsTarget) {
     let first = null;
     let second = null;
     const candidateDiagnostics = [];
-    for (let index = 1; index < points.length - 1 && !second; index += 1) {
-      const point = points[index];
-      const candidate = mod.inspectRiverControlPointAction(app.map, river.id, {type: "add", point, packCell: nearestCell(point)});
-      const screen = app.renderer.worldToScreen(point[0], point[1], rect);
-      candidateDiagnostics.push({index, point, valid: candidate.valid, screen, element: document.elementFromPoint(rect.left + screen.x, rect.top + screen.y)?.tagName || null});
-      if (!candidate.valid || !isCanvasPoint(candidate.candidatePoint)) continue;
-      first = {point: candidate.candidatePoint, packCell: candidate.packCell, preview: candidate};
-      const nearbyCandidates = points.slice(index + 1, -1).map(nextPoint => [nextPoint[0], nextPoint[1]]);
-      const offsets = [[18, 9], [-18, 9], [12, -14], [-12, -14], [26, 16], [-26, 16]];
-      nearbyCandidates.push(...offsets.map(([dx, dy]) => [point[0] + dx, point[1] + dy]));
-      for (const nextPoint of nearbyCandidates) {
-        if (Math.hypot(nextPoint[0] - first.point[0], nextPoint[1] - first.point[1]) < 20) continue;
-        const nextCell = nearestCell(nextPoint);
-        const next = mod.inspectRiverControlPointAction(app.map, river.id, {type: "add", point: nextPoint, packCell: nextCell}, first.preview);
-        if (next.valid && isCanvasPoint(next.candidatePoint)) {second = {point: next.candidatePoint, packCell: next.packCell, preview: next}; break;}
+    const panelRect = document.querySelector(".floating-panel")?.getBoundingClientRect();
+    const offsetPairs = [[-4, 0, 4, 0], [0, -4, 0, 4], [-3, -3, 3, 3], [-2, 0, 2, 0]];
+    for (let cell = 0; cell < app.map.pack.cells.p.length && !second; cell += 1) {
+      const center = app.map.pack.cells.p[cell];
+      const screen = app.renderer.worldToScreen(center[0], center[1], rect);
+      const clientX = rect.left + screen.x;
+      const clientY = rect.top + screen.y;
+      const visible = clientX > rect.left + 20 && clientX < rect.left + rect.width * 0.55 && clientY > rect.top + 20 && clientY < rect.bottom - 20;
+      const covered = panelRect && clientX >= panelRect.left - 12 && clientX <= panelRect.right + 12 && clientY >= panelRect.top - 12 && clientY <= panelRect.bottom + 12;
+      if (!visible || covered) continue;
+      for (const [ax, ay, bx, by] of offsetPairs) {
+        const left = app.renderer.screenToWorld(clientX + ax, clientY + ay);
+        const right = app.renderer.screenToWorld(clientX + bx, clientY + by);
+        const leftPoint = [left.x, left.y];
+        const rightPoint = [right.x, right.y];
+        const leftCell = nearestCell(leftPoint);
+        const rightCell = nearestCell(rightPoint);
+        if (leftCell !== cell || rightCell !== cell) continue;
+        const leftPreview = mod.inspectRiverControlPointAction(app.map, river.id, {type: "add", point: leftPoint, packCell: leftCell});
+        const rightPreview = leftPreview.valid
+          ? mod.inspectRiverControlPointAction(app.map, river.id, {type: "add", point: rightPoint, packCell: rightCell}, leftPreview)
+          : null;
+        candidateDiagnostics.push({cell, offsets: [ax, ay, bx, by], leftCell, rightCell, leftValid: leftPreview.valid, rightValid: rightPreview?.valid || false});
+        if (!leftPreview.valid || !rightPreview?.valid || !isCanvasPoint(leftPreview.candidatePoint) || !isCanvasPoint(rightPreview.candidatePoint)) continue;
+        first = {point: leftPreview.candidatePoint, packCell: leftPreview.packCell, preview: leftPreview};
+        second = {point: rightPreview.candidatePoint, packCell: rightPreview.packCell, preview: rightPreview};
+        break;
       }
     }
-    if (!first || !second) throw new Error(`没有找到两个可点击的合法河流控制点候选：${JSON.stringify(candidateDiagnostics)}`);
+    if (!first || !second) throw new Error(`没有找到同 cell 的两个可点击河流控制点候选：${JSON.stringify(candidateDiagnostics.slice(-20))}`);
+    if (first.packCell !== second.packCell) throw new Error("同 cell 浏览器夹具构造失败");
     window.__riverControlPointTestRiverId = river.id;
     return {riverId: river.id, first, second, formalPoints: structuredClone(river.points), formalControlPoints: river.controlPoints, checksum: app.map.metadata?.checksum || null};
   });
@@ -140,13 +171,17 @@ async function verifyCase(page, cellsTarget) {
     }, firstClient);
     throw new Error(`第一枚控制点点击未生成预览：${JSON.stringify({firstClient, diagnostic})}`, {cause: error});
   });
-  await page.mouse.click(secondClient.x, secondClient.y);
+  await page.evaluate(({point, packCell}) => {
+    const app = window.__webglGeneratorApp;
+    const draft = app.riverEdit.session.stageAction(app.map, {type: "add", point, packCell});
+    if (!draft?.valid) throw new Error(`同 cell 第二控制点夹具构造失败：${draft?.reason || draft?.code}`);
+  }, baseline.second);
   await page.waitForFunction(() => window.__webglGeneratorApp.riverEdit.waypointDraft?.action === "add" && window.__webglGeneratorApp.riverEdit.waypointDraft.controlPoints.length === 2, null, {timeout: 5000}).catch(async error => {
     const diagnostic = await page.evaluate(({x, y}) => {
       const app = window.__webglGeneratorApp;
       return {activeMode: app.canvasToolModes.getActive?.(), draft: app.riverEdit.waypointDraft, pick: app.renderer.pickClientPoint(x, y)?.object || null};
     }, secondClient);
-    throw new Error(`第二枚控制点点击未生成预览：${JSON.stringify({secondClient, diagnostic})}`, {cause: error});
+    throw new Error(`同 cell 第二枚控制点未生成预览：${JSON.stringify({secondClient, diagnostic})}`, {cause: error});
   });
 
   const move = await page.evaluate(async ({riverId}) => {
@@ -154,17 +189,24 @@ async function verifyCase(page, cellsTarget) {
     const mod = await import("/src/runtime/river-edit-commands.js");
     const current = app.renderer.riverWaypointPreview;
     const control = current.controlPoints[0];
-    const point = [control.x + 0.45, control.y + 0.28];
-    const packCell = control.packCell;
+    const rect = app.renderer.canvas.getBoundingClientRect();
+    const screen = app.renderer.worldToScreen(control.x, control.y, rect);
+    const client = {x: rect.left + screen.x + 24, y: rect.top + screen.y + 12};
+    const world = app.renderer.screenToWorld(client.x, client.y);
+    const point = [world.x, world.y];
+    const packCell = app.renderer.pickClientPoint(client.x, client.y)?.packCell;
     const inspected = mod.inspectRiverControlPointAction(app.map, riverId, {type: "move", controlPointId: control.id, point, packCell}, current);
     if (!inspected.valid) throw new Error(`控制点移动候选无效：${inspected.reason}`);
-    return {controlId: control.id, from: [control.x, control.y], to: inspected.candidatePoint, packCell};
+    const other = current.controlPoints.find(item => item.id !== control.id);
+    return {controlId: control.id, from: [control.x, control.y], to: inspected.candidatePoint, packCell, other: other ? structuredClone(other) : null};
   }, {riverId: baseline.riverId});
   const fromClient = await toClientPoint(page, move.from);
   const toClient = await toClientPoint(page, move.to);
   await page.mouse.move(fromClient.x, fromClient.y);
+  const moveSteps = cellsTarget === 100000 ? 120 : 60;
+  await installRiverMovePerformanceProbe(page);
   await page.mouse.down();
-  await page.mouse.move(toClient.x, toClient.y, {steps: 6});
+  await page.mouse.move(toClient.x, toClient.y, {steps: moveSteps});
   await page.mouse.up();
   await page.waitForFunction(({id, target}) => {
     const control = window.__webglGeneratorApp.renderer.riverWaypointPreview?.controlPoints?.find(item => item.id === id);
@@ -177,6 +219,34 @@ async function verifyCase(page, cellsTarget) {
     }, {id: move.controlId});
     throw new Error(`控制点拖动未生成目标预览：${JSON.stringify({move, fromClient, toClient, diagnostic})}`, {cause: error});
   });
+  const movePerformance = await readRiverMovePerformanceProbe(page);
+  assert.ok(movePerformance.samples >= Math.floor(moveSteps * 0.9), `${cellsTarget} 拖动事件采样不足：${JSON.stringify(movePerformance)}`);
+  assert.ok(movePerformance.p95 < 33, `${cellsTarget} pointermove P95 超过 33ms：${JSON.stringify(movePerformance)}`);
+  assert.deepEqual(movePerformance.longTasks, [], `${cellsTarget} 拖动不得产生 >=50ms long task`);
+  const independentMove = await page.evaluate(({id, other}) => {
+    const controls = window.__webglGeneratorApp.renderer.riverWaypointPreview?.controlPoints || [];
+    const moved = controls.find(item => item.id === id);
+    const untouched = controls.find(item => item.id === other?.id);
+    return {moved: moved ? [moved.x, moved.y] : null, untouched: untouched ? [untouched.x, untouched.y, untouched.packCell] : null};
+  }, {id: move.controlId, other: move.other});
+  assert.deepEqual(independentMove.untouched, move.other ? [move.other.x, move.other.y, move.other.packCell] : null, "同 cell 另一控制点不得随拖动漂移");
+  const persistentAfterMove = await page.evaluate(async () => {
+    const app = window.__webglGeneratorApp;
+    const preview = app.renderer.riverWaypointPreview;
+    const {buildSelectionMeshBundle} = await import("/src/renderer/selection-layer.js");
+    const withCurve = buildSelectionMeshBundle(app.map, app.renderer.camera, app.renderer.canvas, null, null, [], preview);
+    const handlesOnly = buildSelectionMeshBundle(app.map, app.renderer.camera, app.renderer.canvas, null, null, [], {...preview, changed: false});
+    return {
+      draftChanged: app.riverEdit.waypointDraft?.changed === true,
+      previewChanged: preview?.changed === true,
+      withCurveVertices: withCurve.drawRanges.ordinary.count,
+      handlesOnlyVertices: handlesOnly.drawRanges.ordinary.count
+    };
+  });
+  assert.equal(persistentAfterMove.draftChanged, true, "pointerup 后草稿必须保留相对 baseline 的累计 dirty");
+  assert.equal(persistentAfterMove.previewChanged, true, "pointerup 后 renderer preview 必须继续显示变化河道");
+  assert.ok(persistentAfterMove.withCurveVertices > persistentAfterMove.handlesOnlyVertices, "拖动结束后持久预览必须包含变化河道曲线");
+  assert.equal(await page.getByRole("button", {name: "应用控制点"}).isEnabled(), true, "拖动结束后必须立即允许应用控制点");
 
   const secondHandle = await page.evaluate(() => {
     const controls = window.__webglGeneratorApp.renderer.riverWaypointPreview.controlPoints;
@@ -186,6 +256,8 @@ async function verifyCase(page, cellsTarget) {
   const secondHandleClient = await toClientPoint(page, [secondHandle[1], secondHandle[2]]);
   await page.mouse.dblclick(secondHandleClient.x, secondHandleClient.y, {delay: 30});
   await page.waitForFunction(() => window.__webglGeneratorApp.riverEdit.waypointDraft?.action === "delete" && window.__webglGeneratorApp.riverEdit.waypointDraft.controlPoints.length === 1);
+  const remainingAfterDelete = await page.evaluate(() => window.__webglGeneratorApp.riverEdit.waypointDraft.controlPoints[0]?.id || null);
+  assert.equal(remainingAfterDelete, move.controlId, "双击必须只删除同 cell 的目标控制点");
   await page.getByRole("button", {name: "退出模式"}).click();
   await page.waitForFunction(() => !window.__webglGeneratorApp.canvasToolModes.isActive("river:edit-waypoint"));
   const cancelled = await page.evaluate(() => {
@@ -207,18 +279,93 @@ async function verifyCase(page, cellsTarget) {
   await page.getByRole("button", {name: "调整河道折线"}).click();
   await page.mouse.click(firstClient.x, firstClient.y);
   await page.waitForFunction(() => window.__webglGeneratorApp.riverEdit.waypointDraft?.action === "add");
+  const applyMove = await page.evaluate(async () => {
+    const app = window.__webglGeneratorApp;
+    const current = app.renderer.riverWaypointPreview;
+    const control = current.controlPoints[0];
+    const rect = app.renderer.canvas.getBoundingClientRect();
+    const screen = app.renderer.worldToScreen(control.x, control.y, rect);
+    const client = {x: rect.left + screen.x + 20, y: rect.top + screen.y + 10};
+    const world = app.renderer.screenToWorld(client.x, client.y);
+    const packCell = app.renderer.pickClientPoint(client.x, client.y)?.packCell;
+    const {inspectRiverControlPointAction} = await import("/src/runtime/river-edit-commands.js");
+    const inspected = inspectRiverControlPointAction(app.map, current.riverId, {type: "move", controlPointId: control.id, point: [world.x, world.y], packCell}, current);
+    if (!inspected.valid) throw new Error(`应用前控制点移动候选无效：${inspected.reason}`);
+    return {controlId: control.id, from: [control.x, control.y], to: inspected.candidatePoint};
+  });
+  const applyMoveFromClient = await toClientPoint(page, applyMove.from);
+  const applyMoveToClient = await toClientPoint(page, applyMove.to);
+  await page.mouse.move(applyMoveFromClient.x, applyMoveFromClient.y);
+  await page.mouse.down();
+  await page.mouse.move(applyMoveToClient.x, applyMoveToClient.y, {steps: 12});
+  await page.mouse.up();
+  await page.waitForFunction(({id, target}) => {
+    const app = window.__webglGeneratorApp;
+    const control = app.renderer.riverWaypointPreview?.controlPoints?.find(item => item.id === id);
+    return app.riverEdit.waypointDraft?.action === "move"
+      && app.riverEdit.waypointDraft?.changed === true
+      && control
+      && Math.abs(control.x - target[0]) < 0.1
+      && Math.abs(control.y - target[1]) < 0.1;
+  }, {id: applyMove.controlId, target: applyMove.to});
+  assert.equal(await page.getByRole("button", {name: "应用控制点"}).isEnabled(), true, "只拖动控制点后必须无需新增/删除绕行即可应用");
+  const previewDigest = await page.evaluate(async () => {
+    const {sampleCentripetalCatmullRom} = await import("/src/geometry/cubic-path.js");
+    const preview = window.__webglGeneratorApp.renderer.riverWaypointPreview;
+    return curveDigest(sampleCentripetalCatmullRom(preview.points).points);
+    function curveDigest(points) { return JSON.stringify(points.map(point => point.map(value => Math.round(value * 1e6) / 1e6))); }
+  });
   await page.getByRole("button", {name: "应用控制点"}).click();
   await page.waitForFunction(() => window.__webglGeneratorApp.editHistory.getStats().undo === 1);
-  const committed = await page.evaluate(() => {
+  const committed = await page.evaluate(async () => {
     const app = window.__webglGeneratorApp;
     const river = app.map.rivers.rivers.find(item => Number(item.id) === Number(window.__riverControlPointTestRiverId));
-    return {controlPoints: river.controlPoints?.length || 0, history: app.editHistory.getStats(), hydrology: {cells: river.cells, parent: river.parent, basin: river.basin, flux: river.flux, discharge: river.discharge}};
+    const {sampleCentripetalCatmullRom} = await import("/src/geometry/cubic-path.js");
+    const digest = JSON.stringify(sampleCentripetalCatmullRom(river.points).points.map(point => point.map(value => Math.round(value * 1e6) / 1e6)));
+    return {controlPoints: river.controlPoints?.length || 0, digest, history: app.editHistory.getStats(), hydrology: {cells: river.cells, parent: river.parent, basin: river.basin, flux: river.flux, discharge: river.discharge}};
   });
+  assert.equal(committed.digest, previewDigest, "预览与提交后的共享曲线几何 digest 必须一致");
   await page.keyboard.press("Control+z");
   await page.waitForFunction(() => window.__webglGeneratorApp.editHistory.getStats().undo === 0);
   await page.keyboard.press("Control+y");
   await page.waitForFunction(() => window.__webglGeneratorApp.editHistory.getStats().undo === 1);
-  return {cellsTarget, riverId: baseline.riverId, samePackCell: baseline.first.packCell === baseline.second.packCell, cancelledUnchanged: cancelled.controlPoints === undefined && cancelled.history.undo === 0, committedControlPoints: committed.controlPoints, committedHistory: committed.history.undo, hydrology: committed.hydrology};
+  assert.equal(baseline.first.packCell, baseline.second.packCell, "浏览器夹具必须覆盖同 cell 双控制点");
+  return {cellsTarget, riverId: baseline.riverId, samePackCell: true, legacyExports, cancelledUnchanged: cancelled.controlPoints === undefined && cancelled.history.undo === 0, movePerformance, persistentAfterMove, appliedImmediatelyAfterMove: true, previewCommitDigestEqual: committed.digest === previewDigest, committedControlPoints: committed.controlPoints, committedHistory: committed.history.undo, hydrology: committed.hydrology};
+}
+
+async function installRiverMovePerformanceProbe(page) {
+  await page.evaluate(() => {
+    const samples = [];
+    const longTasks = [];
+    const listener = event => {
+      if (event.buttons !== 1) return;
+      const startedAt = performance.now();
+      queueMicrotask(() => samples.push(performance.now() - startedAt));
+    };
+    window.addEventListener("pointermove", listener, true);
+    const observer = typeof PerformanceObserver === "function"
+      ? new PerformanceObserver(list => longTasks.push(...list.getEntries().filter(entry => entry.duration >= 50).map(entry => ({duration: entry.duration, startTime: entry.startTime}))))
+      : null;
+    observer?.observe({type: "longtask"});
+    window.__riverMovePerformanceProbe = {samples, longTasks, listener, observer};
+  });
+}
+
+async function readRiverMovePerformanceProbe(page) {
+  return page.evaluate(async () => {
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    const probe = window.__riverMovePerformanceProbe;
+    probe?.observer?.takeRecords?.().forEach(entry => {
+      if (entry.duration >= 50) probe.longTasks.push({duration: entry.duration, startTime: entry.startTime});
+    });
+    probe?.observer?.disconnect?.();
+    if (probe?.listener) window.removeEventListener("pointermove", probe.listener, true);
+    const sorted = [...(probe?.samples || [])].sort((a, b) => a - b);
+    const p95 = sorted.length ? sorted[Math.min(sorted.length - 1, Math.ceil(sorted.length * 0.95) - 1)] : Infinity;
+    const result = {samples: sorted.length, p95, max: sorted.at(-1) || 0, longTasks: probe?.longTasks || []};
+    delete window.__riverMovePerformanceProbe;
+    return result;
+  });
 }
 
 async function toClientPoint(page, point) {

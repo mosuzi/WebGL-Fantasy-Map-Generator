@@ -6,6 +6,7 @@ import {parseDiplomacyRelationIdentity} from "../runtime/diplomacy-relations.js"
 import {compositeConnectorPoints, compositeConnectorSelectionColor} from "./composite-connectors.js";
 import {sampleOceanCurrent} from "../generator/ocean-currents.js";
 import {drawLandMaskedTriangles} from "./surface-side-depth.js";
+import {isSharedCubicCurve, sampleCentripetalCatmullRom} from "../geometry/cubic-path.js";
 
 const SELECTION_HIGHLIGHT_COLORS = Object.freeze({
   [OBJECT_KIND.STATE]: [1, 0.86, 0.28, 0.3],
@@ -77,7 +78,7 @@ export function drawSelectionMeshBatches(gl, ranges) {
 
 function pushRiverWaypointPreview(landMaskedVertices, ordinaryVertices, context, preview) {
   if (Array.isArray(preview?.controlPoints)) {
-    pushRiverControlPointCollection(landMaskedVertices, context, preview);
+    pushRiverControlPointCollection(ordinaryVertices, context, preview);
     return;
   }
   const candidate = preview?.candidatePoint || preview?.points?.[preview?.insertIndex];
@@ -106,7 +107,8 @@ function pushRiverWaypointPreview(landMaskedVertices, ordinaryVertices, context,
 function pushRiverControlPointCollection(vertices, context, preview) {
   const points = (preview.points || []).filter(isPoint);
   if (preview.changed && points.length >= 2) {
-    pushScreenPolyline(vertices, context, points, [1, 0.62, 0.12, 0.8], selectionLineWidth(context, 2.8));
+    const previewPoints = isSharedCubicCurve(preview.visualCurve) ? sampleCentripetalCatmullRom(points).points : points;
+    pushScreenPolyline(vertices, context, previewPoints, [1, 0.62, 0.12, 0.8], selectionLineWidth(context, 2.8));
   }
   for (const control of preview.controlPoints || []) {
     if (!isPoint([control?.x, control?.y])) continue;
@@ -200,7 +202,10 @@ function pushSelectionTarget(vertices, context, selection, locateFlash, override
   const fluxFactor = Math.sqrt(Math.max(0, river.flux || 0) / maxFlux);
   const widthPx = (4.2 + fluxFactor * 2.4) * pixelRatio;
   const color = overrideColor || locateFlashColor(selection, locateFlash) || [0.62, 0.88, 1, 1];
-  pushScreenPolyline(vertices, context, smoothWorldPath(river.points, SELECTION_SMOOTHING.river), color, widthPx);
+  const points = isSharedCubicCurve(river.visualCurve)
+    ? sampleCentripetalCatmullRom(river.points).points
+    : smoothWorldPath(river.points, SELECTION_SMOOTHING.river);
+  pushScreenPolyline(vertices, context, points, color, widthPx);
 }
 
 function pushCellFieldSelection(vertices, context, selection, field, fallbackColor, overrideColor) {

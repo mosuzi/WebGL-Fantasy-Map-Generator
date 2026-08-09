@@ -16,6 +16,7 @@ const FILES = Object.freeze({
   brushCursor: "app/webgl-generator/src/ui/brush-cursor-preview.js",
   styles: "app/webgl-generator/src/styles.css",
   cityDrag: "app/webgl-generator/src/runtime/city-relocation-drag.js",
+  riverDrag: "app/webgl-generator/src/runtime/river-control-point-drag.js",
   panelManager: "app/webgl-generator/src/ui/panel-manager.js",
   directManipulationSession: "app/webgl-generator/src/runtime/direct-manipulation-session.js",
   lockSession: "app/webgl-generator/src/runtime/regeneration-lock-ui-session.js",
@@ -53,7 +54,7 @@ const MODE_DEFINITIONS = Object.freeze([
   oneShotMode("ROUTE_DRAW", "route:draw", "route-panel", "绘制路线", "第一次点击起点，第二次点击终点", "起点在两次点击间保留", "第二次合法点击提交并完成模式", "成功写一条新增路线历史", {continuation: "两阶段一次性模式；第一次点击保留起点，成功创建后退出"}),
   oneShotMode("ROUTE_EDIT_WAYPOINT", "route:edit-waypoint", "route-panel", "拾取路线途经点草稿", "单击新的途经 cell", "面板保存途经点草稿", "拾取后退出模式，应用 / 取消由面板收口", "拾取不写历史，实际应用写一条路线编辑历史"),
   oneShotMode("RIVER_ADD", "river:add", "river-panel", "新增河流", "单击合法河源 cell", "无跨手势草稿", "成功创建后完成模式", "成功写一条新增河流历史"),
-  persistentMode("RIVER_EDIT_WAYPOINT", "river:edit-waypoint", "river-panel", "预览并确认河道视觉控制点", "单击靠近河道的 pack cell；后续单击替换候选", "选择层显示候选折线与节点，面板显示草稿详情，原河流不变", "面板应用后提交并完成模式", "候选不写历史；应用成功写一条可撤销河道折线历史且不改水文拓扑", {cancel: "Escape、取消、切换目标、关面板或切图清理候选预览且不写历史"}),
+  persistentMode("RIVER_EDIT_WAYPOINT", "river:edit-waypoint", "river-panel", "预览并确认河道视觉控制点", "单击任意地图世界坐标新增，拖动已有点，双击已有点删除", "选择层以共享三次曲线显示 working 控制点与路径，原河流不变", "面板应用后以单事务提交并完成模式", "候选不写历史；应用成功写一条可撤销河道曲线历史且不改水文拓扑", {cancel: "Escape、取消、切换目标、关面板或切图清理候选预览且不写历史"}),
   oneShotMode("LAKE_EXCAVATE", "lake:excavate", "lake-panel", "开挖湖泊", "单击中心并按面板半径作用", "面板保存半径参数；画布持续显示模式名、下一步和 crosshair 光标", "成功开挖后完成模式", "成功写一条湖泊开挖历史"),
   oneShotMode("FEATURE_PATCH_SELECT", "feature:patch-select", "lake-panel", "拾取 feature 补丁草稿", "单击目标 pack cell", "选中 cell 进入面板补丁预览", "拾取后退出模式；应用 / 取消由面板收口", "选择本身不写历史，应用补丁写一条历史"),
   persistentMode("FEATURE_TOPOLOGY_SELECT", "feature:topology-select", "feature-panel", "选择 feature 拓扑 cell", "逐次单击 grid cell 组成选区", "选区及拓扑草稿持续显示", "面板应用或取消时退出", "选择不写历史，应用拓扑写一条历史"),
@@ -264,8 +265,8 @@ function handlerEvidence(item) {
     ROUTE_EDIT_WAYPOINT: objectToolEvidence(item.key, ["setEditWaypoint", "completeCanvasToolMode"], ["gesture", "preview", "complete", "history"]),
     RIVER_ADD: objectToolEvidence(item.key, ["runtimeActions.edit.rivers.create", "completeCanvasToolMode"], ["gesture", "preview", "complete", "history"]),
     RIVER_EDIT_WAYPOINT: [
-      scopedRef(FILES.runtime, "function bindObjectCreationTools", "function bindCustomLabelDrag", ["inspectRiverVisualWaypoint", "session?.stage", "setRiverWaypointFeedback"], ["gesture", "preview"]),
-      sourceRef(FILES.runtime, ["function applyRiverWaypointDraft", "createAddRiverVisualWaypointCommand", "executeEditCommand", "completeCanvasToolMode", "clearRiverWaypointDraft"], {supports: ["complete", "cancel", "history"]})
+      sourceRef(FILES.riverDrag, ["screenToWorld", "requestAnimationFrame", "stageAction", "pointercancel", "DOUBLE_CLICK_MS"], {supports: ["gesture", "preview", "cancel"]}),
+      sourceRef(FILES.runtime, ["function applyRiverWaypointDraft", "createEditRiverControlPointsCommand", "executeEditCommand", "completeCanvasToolMode", "clearRiverWaypointDraft"], {supports: ["complete", "cancel", "history"]})
     ],
     LAKE_EXCAVATE: objectToolEvidence(item.key, ["runtimeActions.edit.lakes.create", "completeCanvasToolMode"], ["gesture", "preview", "complete", "history"]),
     FEATURE_PATCH_SELECT: objectToolEvidence(item.key, ["setPatchCell", "completeCanvasToolMode"], ["gesture", "preview", "complete", "history"]),

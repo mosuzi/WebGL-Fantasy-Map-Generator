@@ -2,27 +2,25 @@
   <section
     v-if="state.waypointMode"
     class="river-waypoint-draft"
-    :class="`is-${waypointTone}`"
-    :role="waypointTone === 'error' ? 'alert' : 'status'"
-    :aria-live="waypointTone === 'error' ? 'assertive' : 'polite'"
+    :class="{'is-error': waypointErrorMessage}"
+    :role="waypointErrorMessage ? 'alert' : 'status'"
+    :aria-live="waypointErrorMessage ? 'assertive' : 'polite'"
     aria-atomic="true"
   >
     <div class="river-waypoint-draft-heading">
       <strong>调整河道折线</strong>
-      <span>{{ waypointTitle }}</span>
     </div>
     <ol class="river-waypoint-steps">
       <li>单击河流非控制点处新增；拖动已有点调整河道</li>
       <li>双击已有控制点删除；同一 cell 可放置多个点</li>
-      <li>确认无误后应用；红色节点表示操作被拒绝</li>
     </ol>
-    <p :class="{'river-waypoint-error': waypointTone === 'error'}">{{ waypointMessage }}</p>
+    <p v-if="waypointErrorMessage" class="river-waypoint-error">{{ waypointErrorMessage }}</p>
     <p v-if="controlPreview">当前控制点 {{ formatNumber(controlPreview.controlPoints?.length || 0) }} 个；全部操作仍未保存。</p>
     <p v-if="state.waypointDraft">
       {{ draftSummary }}
     </p>
     <div class="river-waypoint-draft-actions">
-      <UiButton variant="primary" :disabled="!state.waypointDraft || !state.waypointDraft.changed || waypointTone === 'error'" @click="callbacks.onApplyWaypoint?.()">应用控制点</UiButton>
+      <UiButton variant="primary" :disabled="!state.waypointDraft || !state.waypointDraft.changed || Boolean(waypointErrorMessage)" @click="callbacks.onApplyWaypoint?.()">应用控制点</UiButton>
       <UiButton variant="secondary" @click="callbacks.onReselectWaypoint?.()">重新选择</UiButton>
       <UiButton variant="secondary" @click="callbacks.onCancelWaypoint?.()">退出模式</UiButton>
     </div>
@@ -181,16 +179,22 @@ const filterEmptyAction = computed(() => String(props.state.filter || "").trim()
   : null);
 const totalLength = computed(() => rows.value.reduce((sum, row) => sum + row.length, 0));
 const maxFlux = computed(() => rows.value.reduce((max, row) => Math.max(max, row.flux), 0));
-const waypointTone = computed(() => props.state.waypointFeedback?.tone === "error" ? "error" : props.state.waypointDraft ? "valid" : props.state.waypointFeedback?.tone || "idle");
-const waypointTitle = computed(() => ({valid: "候选可应用", error: "候选被拒绝", idle: "等待选择"})[waypointTone.value]);
+const waypointErrorMessage = computed(() => {
+  const feedback = props.state.waypointFeedback;
+  return feedback?.tone === "error" ? feedback.message || "控制点操作不可用，请重新选择。" : "";
+});
 const controlPreview = computed(() => props.state.waypointPreview || props.state.waypointDraft);
-const waypointMessage = computed(() => props.state.waypointFeedback?.message || "单击河流非控制点处新增，拖动已有点或双击删除；所有操作只预览，不会立即修改河流。");
 const draftSummary = computed(() => {
   const draft = props.state.waypointDraft;
   if (!draft) return "";
   if (draft.action === "move") return `移动控制点 ${draft.controlPointId} · 新长度 ${formatLength(draft.length)}`;
   if (draft.action === "delete") return `删除控制点 ${draft.controlPointId} · 新长度 ${formatLength(draft.length)}`;
-  return `新增控制点 · pack cell #${draft.packCell} · 新长度 ${formatLength(draft.length)}`;
+  if (draft.action === "restore") return `已保留此前控制点调整 · 新长度 ${formatLength(draft.length)}`;
+  const point = draft.candidatePoint;
+  const location = Number.isFinite(Number(point?.[0])) && Number.isFinite(Number(point?.[1]))
+    ? `世界坐标 (${formatNumber(point[0])}, ${formatNumber(point[1])})`
+    : "自由位置";
+  return `新增控制点 · ${location} · 新长度 ${formatLength(draft.length)}`;
 });
 const riverActions = computed(() => [
   {key: "path", resultClass: "toggle-canvas-mode", label: props.state.waypointMode ? "退出河道折线调整" : "调整河道折线", icon: "折", panel: false, active: props.state.waypointMode},

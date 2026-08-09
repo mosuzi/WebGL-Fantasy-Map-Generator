@@ -82,7 +82,7 @@ async function inspectViewport(width) {
     assert.ok(idle.cardTop >= idle.bodyTop - 1 && idle.cardBottom <= 720, `${width}px 置顶工作卡必须完整可见`);
     assertCompactActionButtons(idle, width, "等待态");
 
-    let realWaterReject = null;
+    let realWaterAccepted = null;
     if (width === 1280) {
       const waterPoint = await page.evaluate(() => {
         const app = window.__webglGeneratorApp;
@@ -103,16 +103,33 @@ async function inspectViewport(width) {
       });
       assert.ok(waterPoint, "桌面视口必须找到未被面板遮挡的真实水域 cell");
       await page.mouse.click(waterPoint.clientX, waterPoint.clientY);
-      const waterAlert = page.locator(".river-waypoint-draft[role=alert]").filter({hasText: "候选点位于水域"});
-      await waterAlert.waitFor();
-      realWaterReject = await page.evaluate(() => ({
-        draft: window.__webglGeneratorApp.riverEdit.waypointDraft,
-        previewCode: window.__webglGeneratorApp.renderer.riverWaypointPreview?.code || null,
-        applyDisabled: [...document.querySelectorAll(".river-waypoint-draft button")].find(button => button.textContent.includes("应用控制点"))?.disabled
-      }));
-      assert.equal(realWaterReject.draft, null, "真实水域拒绝不得留下可应用草稿");
-      assert.equal(realWaterReject.previewCode, "waypoint-water", "真实水域拒绝必须把红色诊断送入 renderer");
-      assert.equal(realWaterReject.applyDisabled, true);
+      await page.waitForFunction(() => window.__webglGeneratorApp.riverEdit.waypointDraft?.action === "add");
+      await page.waitForFunction(() => window.__webglGeneratorApp.renderer.selectionDrawRanges?.ordinary?.count > 0);
+      realWaterAccepted = await page.evaluate(({clientX, clientY}) => {
+        const app = window.__webglGeneratorApp;
+        const hit = app.renderer.pickClientPoint(clientX, clientY)?.riverControlPoint;
+        return {
+          action: app.riverEdit.waypointDraft?.action,
+          controls: app.riverEdit.waypointDraft?.controlPoints?.length || 0,
+          previewCode: app.renderer.riverWaypointPreview?.code || null,
+          curveKind: app.riverEdit.waypointDraft?.visualCurve?.kind || null,
+          ordinaryVertices: app.renderer.selectionDrawRanges?.ordinary?.count || 0,
+          landMaskedVertices: app.renderer.selectionDrawRanges?.landMasked?.count || 0,
+          hit: hit ? {kind: hit.kind, id: hit.id} : null,
+          applyDisabled: (() => {
+            const button = [...document.querySelectorAll(".river-waypoint-draft button")].find(item => item.textContent.includes("应用控制点"));
+            return Boolean(button?.disabled || button?.getAttribute("aria-disabled") === "true" || button?.classList.contains("is-disabled"));
+          })()
+        };
+      }, waterPoint);
+      assert.equal(realWaterAccepted.action, "add", "自由世界坐标不应因所在 cell 为水域而被拒绝");
+      assert.equal(realWaterAccepted.controls, 1);
+      assert.equal(realWaterAccepted.curveKind, "centripetal-catmull-rom-cubic");
+      assert.ok(realWaterAccepted.ordinaryVertices > 0, "水域控制点和预览曲线必须进入普通可见层");
+      assert.equal(realWaterAccepted.hit?.kind, "river-control-point", "水域控制点必须可再次命中");
+      assert.equal(realWaterAccepted.applyDisabled, false);
+      await page.mouse.dblclick(waterPoint.clientX, waterPoint.clientY, {delay: 30});
+      await page.waitForFunction(() => window.__webglGeneratorApp.riverEdit.waypointDraft?.action === "delete" && window.__webglGeneratorApp.riverEdit.waypointDraft?.controlPoints?.length === 0);
       await page.getByRole("button", {name: "重新选择"}).click();
     }
 
@@ -131,7 +148,11 @@ async function inspectViewport(width) {
     assertCompactActionButtons(error, width, "错误态");
 
     await page.getByRole("button", {name: "重新选择"}).click();
-    await page.locator(".river-waypoint-draft[role=status]").filter({hasText: "候选已清除"}).waitFor();
+    await page.waitForFunction(() => {
+      const app = window.__webglGeneratorApp;
+      const preview = app.renderer.riverWaypointPreview;
+      return !app.riverEdit.waypointDraft && (!preview || preview.code === "control-points");
+    });
     await page.getByRole("button", {name: "退出模式"}).click();
     const finalState = await page.evaluate(riverId => {
       const app = window.__webglGeneratorApp;
@@ -153,7 +174,7 @@ async function inspectViewport(width) {
     const applicationErrors = consoleErrors.filter(message => !healthSignals.includes(message));
     assert.deepEqual(applicationErrors, []);
     assert.deepEqual(pageErrors, []);
-    return {width, idle, error, realWaterReject, glError: finalState.glError, activeHealthErrors: finalState.healthErrors, healthSignals, applicationErrors, pageErrors};
+    return {width, idle, error, realWaterAccepted, glError: finalState.glError, activeHealthErrors: finalState.healthErrors, healthSignals, applicationErrors, pageErrors};
   } finally {
     await Promise.race([context.close(), delay(5000)]);
   }
@@ -187,7 +208,7 @@ async function measureCard(page) {
       cardTop: card.getBoundingClientRect().top,
       cardBottom: card.getBoundingClientRect().bottom,
       scrollTop: body.scrollTop,
-      applyDisabled: apply.disabled,
+      applyDisabled: Boolean(apply?.disabled || apply?.getAttribute("aria-disabled") === "true" || apply?.classList.contains("is-disabled")),
       horizontalOverflow: Math.max(0, document.documentElement.scrollWidth - document.documentElement.clientWidth),
       actions: {width: actionRect.width, left: actionRect.left, right: actionRect.right},
       actionRows: new Set(buttons.map(button => Math.round(button.top))).size,

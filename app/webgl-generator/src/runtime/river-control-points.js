@@ -37,14 +37,16 @@ export function normalizeRiverControlPoints(river, packCells = null) {
   return normalized;
 }
 
-export function createRiverControlPoint(river, pointIndex, point, packCells = null, id = null) {
+export function createRiverControlPoint(river, pointIndex, point, packCells = null, id = null, derivedPackCell = undefined) {
   const x = finite(point?.[0]);
   const y = finite(point?.[1]);
   if (x === null || y === null || !Number.isInteger(pointIndex) || pointIndex < 0) return null;
   const controls = normalizeRiverControlPoints(river, packCells) || [];
   const usedIds = new Set(controls.map(control => control.id));
   const controlId = uniqueControlPointId(id, Number(river?.id ?? river?.i), usedIds, () => nextControlOrdinal(controls));
-  const packCell = nearestPackCell(packCells, x, y);
+  const packCell = derivedPackCell === null
+    ? -1
+    : normalizeDerivedPackCell(derivedPackCell, packCells) ?? nearestPackCell(packCells, x, y);
   const flux = finite(point?.[2]);
   return {
     id: controlId,
@@ -133,10 +135,18 @@ function resolvePointIndex(points, rawIndex, x, y, usedIndexes) {
 }
 
 function normalizePackCell(value, packCells, x, y) {
+  if (value === null) return -1;
   const count = packCells?.p?.length || packCells?.i?.length || 0;
   const cell = Number(value);
   if (Number.isInteger(cell) && cell >= 0 && cell < count) return cell;
   return nearestPackCell(packCells, x, y);
+}
+
+function normalizeDerivedPackCell(value, packCells) {
+  if (value === undefined) return null;
+  const count = packCells?.p?.length || packCells?.i?.length || 0;
+  const cell = Number(value);
+  return Number.isInteger(cell) && cell >= 0 && cell < count ? cell : -1;
 }
 
 function nearestPackCell(packCells, x, y) {
