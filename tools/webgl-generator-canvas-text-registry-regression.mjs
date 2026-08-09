@@ -46,7 +46,7 @@ const notRendered = byLayer(CANVAS_TEXT_LAYER.NOT_RENDERED);
 assertSetEqual(ids(semantic), SEMANTIC_LABEL_TEXT_CONTRACT.map(entry => entry.id), "语义 registry 与 renderer 生产契约存在差集");
 assertSetEqual(ids(semantic), LABEL_STYLE_TYPES, "语义 registry 与 LABEL_STYLE_TYPES 存在差集");
 assertSetEqual(ids(annotation), ANNOTATION_TEXT_EXPORT_CONTRACT.map(entry => entry.id), "注记 registry 与 PNG 生产契约存在差集");
-assert.equal(hud.length, 8);
+assert.equal(hud.length, 9);
 assertSetEqual(ids(diagnostic), ["grid-cell-id"], "诊断文字分母错误");
 assertSetEqual(ids(notRendered), ["river-name", "route-name", "marker-name"], "未渲染文字分母错误");
 

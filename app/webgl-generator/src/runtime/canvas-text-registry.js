@@ -86,6 +86,7 @@ export const CANVAS_TEXT_REGISTRY = Object.freeze([
   textEntry({id: "measurement-readout", label: "测量读数", layer: CANVAS_TEXT_LAYER.HUD, selector: "#measurement-readout", styleSource: "HUD CSS"}),
   textEntry({id: "tool-mode", label: "工具模式", layer: CANVAS_TEXT_LAYER.HUD, selector: "#canvas-tool-mode-feedback", styleSource: "HUD CSS"}),
   textEntry({id: "generation-status", label: "生成状态", layer: CANVAS_TEXT_LAYER.HUD, selector: "#generation-loading", styleSource: "HUD CSS"}),
+  textEntry({id: "operation-status", label: "操作等待状态", layer: CANVAS_TEXT_LAYER.HUD, selector: "#operation-loading", styleSource: "HUD CSS"}),
   textEntry({id: "toast", label: "操作提示", layer: CANVAS_TEXT_LAYER.HUD, selector: "#map-toast", styleSource: "HUD CSS"}),
   textEntry({id: "shortcut-hint", label: "快捷提示", layer: CANVAS_TEXT_LAYER.HUD, selector: "#shortcut-toast", styleSource: "HUD CSS"}),
   textEntry({id: "toolbar", label: "地图工具栏", layer: CANVAS_TEXT_LAYER.HUD, selector: "#map-toolbar", styleSource: "HUD CSS"}),

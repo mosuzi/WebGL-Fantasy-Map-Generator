@@ -204,6 +204,8 @@
     "regress:api-edit-coverage": "node --no-warnings ./tools/webgl-generator-api-edit-coverage-regression.mjs",
     "regress:api-action-convergence": "node --no-warnings ./tools/webgl-generator-api-action-convergence-regression.mjs",
     "regress:api-operation": "node --no-warnings ./tools/webgl-generator-api-operation-regression.mjs",
+    "regress:delayed-operation-feedback": "node --no-warnings ./tools/webgl-generator-delayed-operation-feedback-regression.mjs",
+    "regress:delayed-operation-feedback-browser": "node --no-warnings ./tools/webgl-generator-delayed-operation-feedback-browser-regression.mjs",
     "regress:api-data-compatibility": "node --no-warnings ./tools/webgl-generator-api-data-compatibility-regression.mjs",
     "regress:api-stability": "node --no-warnings ./tools/webgl-generator-api-stability-contract-regression.mjs",
     "regress:api-suite-contract": "node --no-warnings ./tools/webgl-generator-api-regression-suite-contract.mjs",

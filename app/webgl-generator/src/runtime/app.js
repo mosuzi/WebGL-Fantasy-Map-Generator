@@ -248,6 +248,7 @@ import {LABEL_TARGET_KIND, OBJECT_KIND, OBJECT_KIND_LABEL} from "./object-kinds.
 import GenerationWorker from "./generation-worker.js?worker";
 import {getWebglGeneratorHealthMonitor} from "./health-monitor.js";
 import {createRuntimeOperationError, createRuntimeOperationManager} from "./runtime-operation.js";
+import {createDelayedOperationFeedback} from "./delayed-operation-feedback.js";
 import {createCanvasToolModeManager} from "./canvas-tool-mode-manager.js";
 import {beginDirectManipulationSession, cancelAllDirectManipulationSessions} from "./direct-manipulation-session.js";
 import {BRUSH_RADIUS_ID, normalizeBrushRadius} from "./brush-radius-contract.js";
@@ -575,6 +576,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     healthMonitor,
     runtimeOperation: null,
     runtimeOperationSnapshot: null,
+    operationFeedback: null,
     canvasToolModes: createCanvasToolModeManager({declaredModeIds: CANVAS_TOOL_MODE_IDS}),
     lazyPanelPreloadScheduled: false,
     panels: {}
@@ -2609,8 +2611,9 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
   registerCanvasToolModes(state, documentRef, {stopObjectEditing});
   state.brushCursorPreview = createBrushCursorPreview(canvas, state, documentRef);
   applyControlPreferencesToRenderer(documentRef, renderer);
+  state.operationFeedback = createDelayedOperationFeedback(documentRef);
   state.runtimeOperation = createRuntimeOperationManager({
-    setLoading: (visible, message) => updateGenerationLoading(documentRef, visible, message),
+    setLoading: (visible, message, operation) => state.operationFeedback.setRuntimeOperation(visible, message, operation),
     beginHealthOperation: (name, detail) => healthMonitor?.beginOperation?.(name, detail),
     recordHealth: (type, detail, severity) => healthMonitor?.record?.(type, detail, severity),
     onStateChange: snapshot => {
