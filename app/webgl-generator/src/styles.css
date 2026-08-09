@@ -4870,6 +4870,19 @@ select:disabled {
   gap: 8px;
 }
 
+.project-laboratory-row {
+  min-width: 0;
+}
+
+.project-laboratory-dropdown,
+.project-laboratory-dropdown .el-button {
+  width: 100%;
+}
+
+.project-laboratory-menu .el-dropdown-menu__item {
+  white-space: nowrap;
+}
+
 .project-about-card a {
   display: inline-flex;
   align-items: center;

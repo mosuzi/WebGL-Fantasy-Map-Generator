@@ -17,6 +17,14 @@
       "destination": "/oauth/dropbox/callback/index.html"
     },
     {
+      "source": "/prototype/web-cells/",
+      "destination": "/prototype/webgl-cells/index.html"
+    },
+    {
+      "source": "/prototype/web-cells/:asset*",
+      "destination": "/prototype/webgl-cells/:asset*"
+    },
+    {
       "source": "/prototype/:prototype/",
       "destination": "/prototype/:prototype/index.html"
     },

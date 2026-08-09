@@ -10,7 +10,7 @@
 pnpm run start:river-network-lab
 ```
 
-然后打开 `http://127.0.0.1:5403/`。页面中的八类固定夹具分别覆盖孤立细线、未接入汇流、支流越级、父关系循环、合法汇流、非汇流交叉、湖泊路由和边界 / 入海口。
+然后打开 `http://127.0.0.1:5403/`。正式环境入口为 [https://fmg.mosuzi.top/prototype/river-network-lab/](https://fmg.mosuzi.top/prototype/river-network-lab/)。页面中的八类固定夹具分别覆盖孤立细线、未接入汇流、支流越级、父关系循环、合法汇流、非汇流交叉、湖泊路由和边界 / 入海口。
 
 ## 回归
 

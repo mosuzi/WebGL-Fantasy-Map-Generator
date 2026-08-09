@@ -2,6 +2,7 @@
 import assert from "node:assert/strict";
 import {createHash} from "node:crypto";
 import {access, readFile} from "node:fs/promises";
+import {createServer} from "node:http";
 import path from "node:path";
 import {fileURLToPath} from "node:url";
 
@@ -24,6 +25,18 @@ assert.deepEqual(vercel.redirects?.[0], {
   destination: "/prototype/:prototype/",
   permanent: false
 }, "prototype 无尾斜杠入口没有规范化");
+const webCellsAliasRewrites = [
+  {
+    source: "/prototype/web-cells/",
+    destination: "/prototype/webgl-cells/index.html"
+  },
+  {
+    source: "/prototype/web-cells/:asset*",
+    destination: "/prototype/webgl-cells/:asset*"
+  }
+];
+assert.deepEqual(vercel.rewrites?.slice(1, 3), webCellsAliasRewrites, "web-cells 正式兼容入口没有同时覆盖页面与相对资源");
+assert.ok(vercel.rewrites.findIndex(item => item.source === "/prototype/web-cells/:asset*") < vercel.rewrites.findIndex(item => item.source === "/prototype/:prototype/"), "web-cells 相对资源改写被通用 prototype 入口抢先处理");
 assert.deepEqual(vercel.rewrites?.find(item => item.source === "/prototype/:prototype/"), {
   source: "/prototype/:prototype/",
   destination: "/prototype/:prototype/index.html"
@@ -34,6 +47,7 @@ assert.deepEqual(deployments.map(item => item.id), ["boundary-topology-lab", "lo
 
 const outputRoot = path.join(projectRoot, vercel.outputDirectory);
 let checkedBuildOutput = false;
+let webCellsAlias = null;
 try {
   await access(path.join(outputRoot, "index.html"));
   for (const deployment of deployments) {
@@ -55,6 +69,7 @@ try {
   assert(builtIndex.includes(`v${packageJson.version}`), "正式产物版本号与根 package.json 不一致");
   assert(builtIndex.includes("/assets/mosuzi-seal.png"), "正式构建入口没有引用同源印章资源");
   assert.equal(createHash("sha256").update(builtSeal).digest("hex"), "367ad061211ee469f9fccb57e438edfc52221acdb8c501b5843bf14a3c9de725", "正式构建印章资源不是已确认的莫苏子印3版本");
+  webCellsAlias = await verifyWebCellsAlias(outputRoot);
   checkedBuildOutput = true;
 } catch (error) {
   if (error?.code !== "ENOENT") throw error;
@@ -64,5 +79,61 @@ console.log(JSON.stringify({
   ok: true,
   outputDirectory: vercel.outputDirectory,
   prototypes: deployments.map(item => `/prototype/${item.id}/`),
+  aliases: ["/prototype/web-cells/"],
+  webCellsAlias,
   checkedBuildOutput
 }, null, 2));
+
+async function verifyWebCellsAlias(outputRoot) {
+  const server = createServer(async (request, response) => {
+    const pathname = new URL(request.url || "/", "http://127.0.0.1").pathname;
+    const route = pathname === "/prototype/web-cells/"
+      ? "/prototype/webgl-cells/index.html"
+      : pathname.startsWith("/prototype/web-cells/")
+        ? pathname.replace("/prototype/web-cells/", "/prototype/webgl-cells/")
+        : pathname === "/prototype/webgl-cells/"
+          ? "/prototype/webgl-cells/index.html"
+          : pathname;
+    const file = path.resolve(outputRoot, `.${route}`);
+    if (!file.startsWith(`${outputRoot}${path.sep}`)) {
+      response.writeHead(403);
+      response.end();
+      return;
+    }
+    try {
+      response.writeHead(200, {"content-type": "application/octet-stream"});
+      response.end(await readFile(file));
+    } catch {
+      response.writeHead(404);
+      response.end();
+    }
+  });
+  await new Promise((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", resolve);
+  });
+  try {
+    const {port} = server.address();
+    const baseUrl = `http://127.0.0.1:${port}`;
+    const [aliasPage, canonicalPage, entryModule, sample] = await Promise.all([
+      fetch(`${baseUrl}/prototype/web-cells/`),
+      fetch(`${baseUrl}/prototype/webgl-cells/`),
+      fetch(`${baseUrl}/prototype/web-cells/src/main.js`),
+      fetch(`${baseUrl}/prototype/web-cells/data/sample-map.json`)
+    ]);
+    for (const response of [aliasPage, canonicalPage, entryModule, sample]) assert.equal(response.status, 200, "web-cells alias 没有解析到预期静态资源");
+    const [aliasHtml, canonicalHtml, entrySource, sampleMap] = await Promise.all([
+      aliasPage.text(),
+      canonicalPage.text(),
+      entryModule.text(),
+      sample.json()
+    ]);
+    assert.equal(aliasHtml, canonicalHtml, "web-cells alias 页面与原静态入口不一致");
+    assert.match(aliasHtml, /FMG WebGL Cells Prototype/, "web-cells alias 没有返回实验室页面");
+    assert.match(entrySource, /\.\/renderer\.js/, "web-cells alias 的相对入口模块没有解析");
+    assert.ok(sampleMap?.grid?.cells?.h?.length > 0, "web-cells alias 的固定样本没有解析");
+    return {page: true, relativeModule: true, relativeData: true};
+  } finally {
+    await new Promise(resolve => server.close(resolve));
+  }
+}

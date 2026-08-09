@@ -8,7 +8,7 @@
 pnpm run start:prototype
 ```
 
-打开 `http://127.0.0.1:5400/`。统一 Vite 构建后可通过 `/prototype/webgl-cells/` 访问。
+打开 `http://127.0.0.1:5400/`。正式环境入口为 [https://fmg.mosuzi.top/prototype/web-cells/](https://fmg.mosuzi.top/prototype/web-cells/)；它透明复用本目录的静态页面和相对资源。统一 Vite 构建后的旧入口 `/prototype/webgl-cells/` 继续兼容。
 
 ## 可观察的内容
 

@@ -1,5 +1,11 @@
 # 开发历史
 
+## 2026-08-09：第 317 项进行中——正式实验室路径与简介导引
+
+- 已把用户指定的 WebGL 单元格正式地址固定为 `https://fmg.mosuzi.top/prototype/web-cells/`：Vercel 在通用 prototype / SPA fallback 之前，将页面透明改写到 `webgl-cells/index.html`，并把该路径下的相对 `src/`、`data/` 请求改写到同一静态目录；旧的 `/prototype/webgl-cells/` 继续可用。架构总览、逐页 README、AI 路由与部署说明已写入四个绝对生产 URL。
+- 控制面板“简介”新增单个“实验室”下拉，菜单依次列出 WebGL 单元格、共享边界拓扑、画卷加载页概念和河流网络算法四项；点击使用 `noopener,noreferrer` 新标签页，不导航当前地图。独立浏览器回归覆盖 1280 / 390 / 320px 菜单完整可见、无横向溢出、四个 URL 与当前页不跳转。
+- `build:app`、部署回归、静态 alias 页面 / 相对模块 / 固定样本实测、交互面审计、Markdown 链接与差异检查通过；`audit:ai-docs` 仍仅报告既有 `docs/generated/ai` 的四个机器文件陈旧，未扩大本项范围生成它们。当前线上 `web-cells` 仍返回正式应用 SPA，必须待本次配置推送、Vercel 部署后复测四个线上标题才可完成并归档；全量 UI 系统审计在其无关的大型面板矩阵超时，已停止其临时 Chrome / 5458 服务。`source/`、Wiki、地图、存档、API 与生成流程未改。
+
 ## 2026-08-09：完成第 316 项——独立实验室文档、README 与 AI 路由
 
 - 当前 `prototype/` 分母已明确收敛为四项：历史 WebGL cells、共享边界拓扑、画卷加载概念稿与河流网络。新增架构总览逐项说明用途、固定数据、启动 / 部署入口、专项回归、正式应用关系和维护规则；缺失的 WebGL cells README 已补齐，其余三份 README 均回链统一说明与 AI 操作边界。

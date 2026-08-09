@@ -12,7 +12,7 @@ pnpm run start:loading-scroll-showcase
 
 打开 `http://127.0.0.1:5402/`。
 
-Vercel 统一构建后可通过 `/prototype/loading-scroll-showcase/` 访问。
+正式环境入口为 [https://fmg.mosuzi.top/prototype/loading-scroll-showcase/](https://fmg.mosuzi.top/prototype/loading-scroll-showcase/)。
 
 ## 评审操作
 

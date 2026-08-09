@@ -156,6 +156,7 @@
     "regress:canvas-resize": "node --no-warnings ./tools/webgl-generator-canvas-resize-regression.mjs",
     "regress:global-shell": "node --no-warnings ./tools/webgl-generator-global-shell-regression.mjs",
     "regress:deployment": "node --no-warnings ./tools/webgl-generator-deployment-regression.mjs",
+    "regress:laboratory-guide-browser": "node --no-warnings ./tools/webgl-generator-laboratory-guide-browser-regression.mjs",
     "regress:diplomacy-export": "node --no-warnings ./tools/webgl-generator-diplomacy-export-regression.mjs",
     "regress:map-import-diagnostics": "node --no-warnings ./tools/webgl-generator-map-import-diagnostics-regression.mjs",
     "regress:png-options": "node --no-warnings ./tools/webgl-generator-png-options-regression.mjs",

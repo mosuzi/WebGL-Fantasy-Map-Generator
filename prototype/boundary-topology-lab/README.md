@@ -10,7 +10,7 @@
 pnpm run start:boundary-topology-lab
 ```
 
-打开 `http://127.0.0.1:5401/`。
+打开 `http://127.0.0.1:5401/`。正式环境入口为 [https://fmg.mosuzi.top/prototype/boundary-topology-lab/](https://fmg.mosuzi.top/prototype/boundary-topology-lab/)。
 
 专项回归：
 

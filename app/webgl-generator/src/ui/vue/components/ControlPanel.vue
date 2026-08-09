@@ -17,6 +17,20 @@
           <a href="https://github.com/Azgaar/Fantasy-Map-Generator" target="_blank" rel="noreferrer">拜访原作</a>
           <a href="https://azgaar.github.io/Fantasy-Map-Generator/" target="_blank" rel="noreferrer">体验原作</a>
         </div>
+        <div class="project-laboratory-row" aria-label="独立实验室">
+          <ElDropdown class="project-laboratory-dropdown" trigger="click" popper-class="ui-panel-io-dropdown project-laboratory-menu" @command="openLaboratory">
+            <UiButton id="open-laboratory-menu" variant="secondary" aria-haspopup="menu">
+              实验室
+            </UiButton>
+            <template #dropdown>
+              <ElDropdownMenu aria-label="实验室列表">
+                <ElDropdownItem v-for="laboratory in laboratories" :key="laboratory.id" :command="laboratory.id">
+                  {{ laboratory.label }}
+                </ElDropdownItem>
+              </ElDropdownMenu>
+            </template>
+          </ElDropdown>
+        </div>
         <div class="project-file-actions" aria-label="本地文件操作">
           <ElDropdown class="project-save-dropdown" trigger="click" popper-class="ui-panel-io-dropdown" @command="handleSaveCommand">
             <UiButton variant="secondary" aria-haspopup="menu">
@@ -808,6 +822,13 @@ const tabs = Object.freeze([
   {id: "units", label: "单位"}
 ]);
 
+const laboratories = Object.freeze([
+  {id: "web-cells", label: "WebGL 单元格实验室", url: "https://fmg.mosuzi.top/prototype/web-cells/"},
+  {id: "boundary-topology", label: "共享边界拓扑实验室", url: "https://fmg.mosuzi.top/prototype/boundary-topology-lab/"},
+  {id: "loading-scroll", label: "画卷加载页概念实验室", url: "https://fmg.mosuzi.top/prototype/loading-scroll-showcase/"},
+  {id: "river-network", label: "河流网络算法实验室", url: "https://fmg.mosuzi.top/prototype/river-network-lab/"}
+]);
+
 const terrainTemplates = Object.freeze([
   {value: "continents", label: "大陆"},
   {value: "mediterranean", label: "地中海"},
@@ -1298,6 +1319,12 @@ function emitClimateControlsChange() {
 function handleSaveCommand(target) {
   const detail = target === "cloud-storage" ? {target, mode: "save"} : {target};
   document.dispatchEvent(new CustomEvent("project-map-save", {detail}));
+}
+
+function openLaboratory(id) {
+  const laboratory = laboratories.find(item => item.id === id);
+  if (!laboratory) return;
+  window.open(laboratory.url, "_blank", "noopener,noreferrer");
 }
 
 function openCloudImport() {
