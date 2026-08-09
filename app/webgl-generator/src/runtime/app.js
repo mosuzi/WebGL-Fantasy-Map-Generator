@@ -8,7 +8,7 @@ import {regeneratePackProvincesWithinStates, regeneratePackStatesAndProvinces} f
 import {finalizeSocietyReligions} from "../generator/society.js";
 import {buildZones} from "../generator/zones.js";
 import {reconcileWarDerivedData} from "../generator/war-consistency.js";
-import {finalizeSettlements, regenerateSettlementsWithinPolitics} from "../generator/settlements.js";
+import {finalizeSettlements, rebuildRelocatedPopulationPointsAsync, regenerateSettlementsWithinPolitics} from "../generator/settlements.js";
 import {DEFAULT_OPTIONS, normalizeOptions} from "../generator/options.js";
 import {normalizeAtmosphereDirection, normalizeClimateLatitudeMode, normalizeWindProfile, windAngleFromDirection} from "../generator/climate-options.js";
 import {createRandom, createRandomSeed} from "../generator/random.js";
@@ -77,8 +77,8 @@ import {createMapDocument, downloadText, mapFileBaseName, parseGeoJsonMeasuremen
 import {createMapArchiveFilename, normalizeMapName} from "./map-filename.js";
 import {attachImportDiagnostic, createHeightmapSourceSummary, createImportFailureDiagnostic, createImportSuccessDiagnostic, createMapImportDiagnostic, formatMapImportDiagnosticLines, inspectGeoImportSource, stringifyMapImportDiagnostic} from "./map-import-diagnostics.js";
 import {createAddCityAtCellCommand, createDeleteCityCommand, createRenameCitiesFromNamebaseCommand, createResetCityVisualCommand, createSetCityNoteCommand, createSetCityPopulationCommand, createSetCityVisualCommand, createSyncCityOwnerToCellCommand, inspectCityCreation} from "./city-edit-commands.js";
-import {createMoveCityCommand, inspectCityMove} from "./city-relocation.js";
-import {bindCityRelocationDrag} from "./city-relocation-drag.js";
+import {createMoveCityCommand, inspectCityMove, inspectCityMoveAsync, inspectCityMoveFast} from "./city-relocation.js";
+import {bindCityRelocationDrag, resolveCityRelocationPointerCityId} from "./city-relocation-drag.js";
 import {createAddCultureCommand, createApplyCultureAssignmentCommand, createDeleteCultureCommand, createSetCultureColorCommand, createSetCultureParentCommand} from "./culture-edit-commands.js";
 import {createApplySocialExpansionCommand, inspectSocialExpansion, normalizeSocialExpansionMap} from "./social-expansion-edit-commands.js";
 import {applyBiomeAssignmentPreview, BIOME_ASSIGNMENT_PREVIEW_EFFECTS, buildBiomeAssignmentChanges, createApplyBiomeAssignmentCommand, getBiomeBrushChanges, inspectBiomeAssignment} from "./biome-edit-commands.js";
@@ -176,7 +176,7 @@ import {
 import {applySocialAssignmentPreview, SOCIAL_ASSIGNMENT_PREVIEW_EFFECTS} from "./social-ownership-edit-commands.js";
 import {resolveObject} from "./object-resolver.js";
 import {MAX_PERSISTENT_OBJECT_HIGHLIGHTS, isPersistentHighlightObjectKind, normalizePersistentHighlights, samePersistentHighlightMembership} from "./persistent-highlights.js";
-import {createAddRiverCommand, createAddRiverVisualWaypointCommand, createDeleteRiverCommand, createEditRiverControlPointsCommand, createRenameRiversFromNamebaseCommand, createSetRiverNoteCommand, createSetRiverWidthFactorCommand, inspectRiverVisualWaypoint} from "./river-edit-commands.js";
+import {createAddRiverCommand, createDeleteRiverCommand, createEditRiverControlPointsCommand, createRenameRiversFromNamebaseCommand, createSetRiverNoteCommand, createSetRiverWidthFactorCommand} from "./river-edit-commands.js";
 import {createRiverWaypointSession} from "./river-waypoint-session.js";
 import {bindRiverControlPointEditing} from "./river-control-point-drag.js";
 import {createAddRouteCommand, createDeleteRouteCommand, createEditRouteCommand, createSetRouteNoteCommand, inspectRouteEdit} from "./route-edit-commands.js";
@@ -419,7 +419,7 @@ export const CANVAS_TOOL_MODE_FEEDBACK = Object.freeze({
   [CANVAS_TOOL_MODE.PROVINCE_DELETE]: canvasToolModeFeedback("删除省份", "单击要删除的省份。", "one-shot", "crosshair"),
   [CANVAS_TOOL_MODE.CITY_ADD]: canvasToolModeFeedback("新增城镇", "单击合法陆地以创建城镇。", "one-shot", "crosshair"),
   [CANVAS_TOOL_MODE.CITY_DELETE]: canvasToolModeFeedback("删除城镇", "单击要删除的城镇。", "one-shot", "crosshair"),
-  [CANVAS_TOOL_MODE.CITY_MOVE]: canvasToolModeFeedback("移动城镇", "拖动所选城镇并在目标处释放。", "move", "grab"),
+  [CANVAS_TOOL_MODE.CITY_MOVE]: canvasToolModeFeedback("移动城镇", "可反复拖动所选城镇；点击别处或手动退出结束。", "move", "grab"),
   [CANVAS_TOOL_MODE.CULTURE_ASSIGN]: canvasToolModeFeedback("文化归属笔刷", "在地图上拖动以调整文化归属。", "brush", "none"),
   [CANVAS_TOOL_MODE.RELIGION_ASSIGN]: canvasToolModeFeedback("宗教归属笔刷", "在地图上拖动以调整宗教归属。", "brush", "none"),
   [CANVAS_TOOL_MODE.CULTURE_CENTER]: canvasToolModeFeedback("拾取文化中心", "单击要设为文化中心的位置。", "pick", "cell"),
@@ -433,7 +433,7 @@ export const CANVAS_TOOL_MODE_FEEDBACK = Object.freeze({
   [CANVAS_TOOL_MODE.ROUTE_DRAW]: canvasToolModeFeedback("绘制路线", "依次单击路线起点和终点，成功创建后退出。", "one-shot", "crosshair"),
   [CANVAS_TOOL_MODE.ROUTE_EDIT_WAYPOINT]: canvasToolModeFeedback("拾取路线途经点", "单击新的途经位置。", "pick", "cell"),
   [CANVAS_TOOL_MODE.RIVER_ADD]: canvasToolModeFeedback("新增河流", "单击合法河源位置。", "one-shot", "crosshair"),
-  [CANVAS_TOOL_MODE.RIVER_EDIT_WAYPOINT]: canvasToolModeFeedback("调整河道折线", "单击候选位置预览；不会立即修改河流。", "pick", "cell"),
+  [CANVAS_TOOL_MODE.RIVER_EDIT_WAYPOINT]: canvasToolModeFeedback("调整河道曲线", "单击任意位置新增；拖动已有点调整，双击已有点删除。", "pick", "world-point"),
   [CANVAS_TOOL_MODE.LAKE_EXCAVATE]: canvasToolModeFeedback("开挖湖泊", "单击开挖中心位置。", "one-shot", "crosshair"),
   [CANVAS_TOOL_MODE.FEATURE_PATCH_SELECT]: canvasToolModeFeedback("拾取水陆修正区域", "单击局部水陆修正的中心。", "pick", "cell"),
   [CANVAS_TOOL_MODE.FEATURE_TOPOLOGY_SELECT]: canvasToolModeFeedback("选择海岸编辑区域", "逐次单击地图区域以组成持续选区。", "persistent", "cell"),
@@ -524,6 +524,14 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       activeDrag: null,
       dragController: null,
       movePreview: null,
+      movePending: false,
+      movePerformanceSamples: [],
+      lastCommitPerformance: null,
+      lastMoveError: null,
+      populationRefreshToken: 0,
+      populationRefreshHandle: null,
+      populationRefreshPerformanceSamples: [],
+      selectionPerformanceSamples: [],
       lastCreatedCityId: null
     },
     markerEdit: {
@@ -643,7 +651,10 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
   let measurementPanel = null;
   let suppressNextRiverPanelOpen = false;
   const selectFromPanel = (panelId, object) => {
-    selectionStore.setSelection({object}, {sourcePanelId: panelId});
+    const nextObject = panelId === "city-panel" && object?.kind === OBJECT_KIND.CITY
+      ? {...object, suppressLabelSelection: true}
+      : object;
+    selectionStore.setSelection({object: nextObject}, {sourcePanelId: panelId});
   };
   const locateAndSelectObject = (panelId, object, {afterSelect = null, locate = null, sourcePanelId = panelId} = {}) => {
     const located = object ? (locate ? locate(object) : state.renderer.locateObject(object)) : false;
@@ -704,6 +715,13 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     },
     onLocate: object => {
       locateObjectFromDetails(state, documentRef, object, locateAndSelectObject);
+    },
+    onOpenCityPanel: () => {
+      openSelectionAwarePanel({
+        kind: OBJECT_KIND.CITY,
+        beforeOpen: object => state.panels.city.setSelectedCityId(object.id),
+        open: () => state.panels.city.open(state.map, state.selection, state.editHistory.getStats())
+      });
     },
     onRename: (object, name) => {
       const context = {map: state.map};
@@ -2254,9 +2272,9 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     onApplyWaypoint: () => applyRiverWaypointDraft(state, documentRef),
     onReselectWaypoint: () => {
       clearRiverWaypointDraft(state);
-      state.panels.river?.setWaypointFeedback?.({tone: "idle", code: "reselect", message: "候选已清除，请在地图上重新单击河道附近的陆地。"});
-      setRiverWaypointFeedback(documentRef, "单击新的候选位置预览；不会立即修改河流。");
-      setFileOperationStatus(documentRef, "河道控制点候选已清除，请重新单击地图选择。");
+      state.panels.river?.setWaypointFeedback?.({tone: "idle", code: "reselect", message: "候选已清除，请重新选择位置。"});
+      setRiverWaypointFeedback(documentRef, "请重新选择位置；当前操作尚未保存。");
+      setFileOperationStatus(documentRef, "河道控制点候选已清除，请重新选择位置。");
       updateRuntimePanel(documentRef, state);
     },
     onCancelWaypoint: () => cancelCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.RIVER_EDIT_WAYPOINT, "panel-cancel"),
@@ -2533,12 +2551,16 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
         state.panels.river?.setWaypointFeedback?.({
           tone: "valid",
           code: "ok",
-          message: "候选尚未保存。橙色实线是新河段，浅色虚线是将被替换的原河段。"
+          message: "控制点预览尚未保存。"
         });
       }
     }
   });
   selectionStore = new SelectionStore(({selection, editingObject}, metadata = null) => {
+    const selectionStartedAt = performance.now();
+    const previousObject = state.selection?.object;
+    const nextObject = selection?.object;
+    const citySelectionSwitch = previousObject?.kind === OBJECT_KIND.CITY && nextObject?.kind === OBJECT_KIND.CITY;
     state.selection = selection;
     state.editingObject = editingObject;
     const activeRiverId = state.riverEdit.waypointRiverId;
@@ -2547,6 +2569,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       cancelCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.RIVER_EDIT_WAYPOINT, "target-switch");
     }
     renderer.setSelection(selection?.object || null);
+    const rendererSelectedAt = performance.now();
     const handled = handleSelectionPanel(state, selection, editingObject, {
       documentRef,
       suppressNextRiverPanelOpen,
@@ -2558,8 +2581,22 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     if (!handled) {
       state.panels.objectDetails.show(selection, editingObject);
     }
-    updateEditingInteractionLock(state, documentRef);
-    refreshRuntimeAndPickPanels(documentRef, state);
+    const panelHandledAt = performance.now();
+    if (!citySelectionSwitch) updateEditingInteractionLock(state, documentRef);
+    const lockUpdatedAt = performance.now();
+    if (citySelectionSwitch) updatePickPanel(documentRef, state);
+    else refreshRuntimeAndPickPanels(documentRef, state);
+    const selectionCompletedAt = performance.now();
+    if (selection?.object?.kind === OBJECT_KIND.CITY) {
+      state.cityEdit.selectionPerformanceSamples.push({
+        rendererMs: roundLoadTraceMs(rendererSelectedAt - selectionStartedAt),
+        panelMs: roundLoadTraceMs(panelHandledAt - rendererSelectedAt),
+        lockMs: roundLoadTraceMs(lockUpdatedAt - panelHandledAt),
+        runtimePanelsMs: roundLoadTraceMs(selectionCompletedAt - lockUpdatedAt),
+        totalMs: roundLoadTraceMs(selectionCompletedAt - selectionStartedAt)
+      });
+      if (state.cityEdit.selectionPerformanceSamples.length > 32) state.cityEdit.selectionPerformanceSamples.shift();
+    }
   }, object => resolveObject(state.map, object));
   state.selectionStore = selectionStore;
   state.editRefreshScheduler = createEditRefreshScheduler({
@@ -3982,6 +4019,8 @@ async function loadMapIntoRuntime(state, documentRef, map, {loadingMessages = []
   emitLoadTrace(documentRef, {phase: "start", id: "load-map", message: "接入地图运行时", delayMs: readDebugLoadDelayMs(documentRef)});
   operation?.report("prepare-map", {message: "正在接入地图运行时"});
   cancelAllDirectManipulationSessions("map-replace");
+  cancelCityPopulationPointRefresh(state, documentRef);
+  state.cityEdit.populationRefreshToken++;
   state.pendingCustomLabelPlacement = null;
   state.customLabelDrag = null;
   state.canvasToolModes.reset("map-replace");
@@ -6920,7 +6959,7 @@ const SELECTION_PANEL_HANDLERS = Object.freeze({
     return routeSelectionToPanel(state, selection, context, {
       panel: state.panels.city,
       prepare: () => state.panels.city.setSelectedCityId(selection.object.id),
-      update: () => updateCityPanel(state)
+      update: () => state.panels.city.updateRelocationContext(state.map, state.selection, state.editHistory.getStats())
     });
   },
   [OBJECT_KIND.PROVINCE]: (state, selection, editingObject, context) => {
@@ -7189,6 +7228,14 @@ function refreshAfterEdit(state, commandOrEffects) {
   state.editRefreshScheduler.run(commandOrEffects);
 }
 
+function refreshCityRelocationAfterEdit(state, command) {
+  state.editRefreshScheduler.run(command);
+  const affected = command?.effects?.affected || [];
+  const cityIds = affected.filter(item => item?.kind === OBJECT_KIND.CITY).map(item => Number(item.id));
+  const routeIds = affected.filter(item => item?.kind === OBJECT_KIND.ROUTE).map(item => Number(item.id));
+  state.renderer?.refreshRelocatedCities?.(cityIds, {routeIds});
+}
+
 function executeDeleteWithPreflight(state, documentRef, {
   kind,
   ids,
@@ -7361,17 +7408,23 @@ function executeEditCommand(state, documentRef, command, options = {}) {
     }
     const executedCommand = measureHeightBrushCommitStage(options.performanceTrace, "historyExecute", () => state.editHistory.execute(command, context));
     const result = readEditCommandResult(executedCommand);
-    const refresh = options.refresh || refreshAfterEdit;
+    const refresh = options.refresh || (command.effects?.derived?.includes("city-relocation") ? refreshCityRelocationAfterEdit : refreshAfterEdit);
     let highlightsChanged = false;
-    state.selectionStore.batch(() => {
-      options.preparePanelRefresh?.(state, executedCommand, result);
-      highlightsChanged = reconcilePersistentObjectHighlights(state, documentRef, {refreshUi: false}).changed;
+    if (options.batchSelection !== false) {
+      measureHeightBrushCommitStage(options.performanceTrace, "selectionBatch", () => state.selectionStore.batch(() => {
+        measureHeightBrushCommitStage(options.performanceTrace, "preparePanelRefresh", () => options.preparePanelRefresh?.(state, executedCommand, result));
+        highlightsChanged = measureHeightBrushCommitStage(options.performanceTrace, "reconcileHighlights", () => reconcilePersistentObjectHighlights(state, documentRef, {refreshUi: false})).changed;
+        measureHeightBrushCommitStage(options.performanceTrace, "refreshScheduler", () => refresh(state, executedCommand));
+      }));
+    } else {
+      measureHeightBrushCommitStage(options.performanceTrace, "preparePanelRefresh", () => options.preparePanelRefresh?.(state, executedCommand, result));
+      highlightsChanged = measureHeightBrushCommitStage(options.performanceTrace, "reconcileHighlights", () => reconcilePersistentObjectHighlights(state, documentRef, {refreshUi: false})).changed;
       measureHeightBrushCommitStage(options.performanceTrace, "refreshScheduler", () => refresh(state, executedCommand));
-    });
+    }
     if (options.refreshPanels !== false) {
       measureHeightBrushCommitStage(options.performanceTrace, "refreshPanels", () => refreshPanelsForEdit(state, highlightsChanged ? {derived: ["object-panels"]} : executedCommand));
     }
-    if (options.status) setFileOperationStatus(documentRef, messageFromOption(options.status, executedCommand));
+    if (options.status) measureHeightBrushCommitStage(options.performanceTrace, "status", () => setFileOperationStatus(documentRef, messageFromOption(options.status, executedCommand)));
     return {executed: true, command: executedCommand, result, error: null};
   } catch (error) {
     const errorStatus = options.errorStatus || renameCommandErrorStatus(command, error);
@@ -7409,7 +7462,7 @@ export function executeHistoryCommand(state, documentRef, action, options = {}) 
     state.options = state.map.options;
     state.renderer?.loadMap?.(state.map);
     refreshRuntimeAfterMapLoad(state, documentRef);
-    updateEditingInteractionLock(state, documentRef);
+    (options.updateEditingInteractionLock || updateEditingInteractionLock)(state, documentRef);
     return {
       executed: true,
       action,
@@ -7417,7 +7470,7 @@ export function executeHistoryCommand(state, documentRef, action, options = {}) 
       history: state.editHistory.getStats()
     };
   }
-  const refresh = options.refresh || refreshAfterEdit;
+  const refresh = options.refresh || (command.effects?.derived?.includes("city-relocation") ? refreshCityRelocationAfterEdit : refreshAfterEdit);
   state.selectionStore.batch(() => {
     if (command.domain === "state-topology") synchronizeStateTopologyHistoryUi(state, command, action);
     if (command.domain === "feature-topology") synchronizeFeatureTopologyHistoryUi(state, command, action);
@@ -7425,9 +7478,10 @@ export function executeHistoryCommand(state, documentRef, action, options = {}) 
     refresh(state, command);
   });
   if (options.refreshPanels !== false) refreshPanelsForEdit(state, {derived: ["object-panels"]});
+  if (command.effects?.derived?.includes("city-relocation")) scheduleCityPopulationPointRefresh(state, documentRef, state.map);
   options.afterRefresh?.(state, command);
   if (command.effects?.derived?.includes("labels")) syncLabelStylesUi(state, documentRef);
-  (options.updateEditingInteractionLock || updateEditingInteractionLock)(state, documentRef);
+  updateEditingInteractionLock(state, documentRef);
   return {
     executed: true,
     action,
@@ -10464,6 +10518,10 @@ function refreshPanelsForEdit(state, commandOrEffects) {
   const affected = Array.isArray(effects.affected) ? effects.affected : [];
   const kinds = new Set(affected.map(item => item?.kind).filter(Boolean));
   const derived = Array.isArray(effects.derived) ? effects.derived : [];
+  if (derived.includes("city-relocation")) {
+    state.panels.city?.updateRelocationContext?.(state.map, state.selection, state.editHistory.getStats());
+    return;
+  }
   if (!kinds.size && !derived.length) {
     updateAllObjectPanels(state);
     return;
@@ -11484,12 +11542,17 @@ function regenerateMarkerResources(state, documentRef, {deferRefresh = false, co
 }
 
 function executeDeferredMarkerRegeneration(state, command) {
-  if (command.isNoop?.({map: state.map})) return null;
-  state.editHistory.execute(command, {map: state.map});
+  const execution = executeEditCommand(state, null, command, {
+    context: {map: state.map},
+    refresh: () => {},
+    refreshPanels: false,
+    throwOnError: true
+  });
+  if (!execution.executed) return null;
   markDerivedFresh(state.map, ["markers", "economy"]);
   markDerivedStale(state.map, ["military", "diplomacy"]);
   refreshGenerationSummary(state.map);
-  return command;
+  return execution.command;
 }
 
 function militaryRegiments(map) {
@@ -11805,6 +11868,7 @@ function registerCanvasToolModes(state, documentRef, {stopObjectEditing} = {}) {
   registerCityOneShotMode(state, documentRef, register, CANVAS_TOOL_MODE.CITY_ADD, "addMode");
   registerCityOneShotMode(state, documentRef, register, CANVAS_TOOL_MODE.CITY_DELETE, "deleteMode");
   register(CANVAS_TOOL_MODE.CITY_MOVE, "city-panel", {
+    locksInteraction: false,
     onEnter: ({context}) => {
       const cityId = Number(context.cityId);
       if (!Number.isInteger(cityId) || cityId < 0) throw new Error("移动城市前必须选择城市");
@@ -11813,11 +11877,15 @@ function registerCanvasToolModes(state, documentRef, {stopObjectEditing} = {}) {
       state.cityEdit.moveMode = true;
       state.cityEdit.moveCityId = cityId;
       state.cityEdit.movePreview = null;
+      state.cityEdit.movePending = false;
+      state.cityEdit.lastMoveError = null;
+      state.renderer?.clearCityMovePreview?.({draw: false});
       state.panels.city?.updateAddMode?.(false);
       state.panels.city?.updateDeleteMode?.(false);
       state.panels.city?.updateMoveMode?.(true, cityId);
       state.panels.city?.updateMovePreview?.(null);
-      activateCanvasToolTheme(state, documentRef, "states");
+      ensureCityMoveStartVisible(state, cityId);
+      showCityMoveStartHandle(state, cityId);
     },
     onExit: () => {
       state.cityEdit.dragController?.cancel("mode-exit", false);
@@ -11826,6 +11894,8 @@ function registerCanvasToolModes(state, documentRef, {stopObjectEditing} = {}) {
       state.cityEdit.moveMode = false;
       state.cityEdit.moveCityId = null;
       state.cityEdit.movePreview = null;
+      state.cityEdit.movePending = false;
+      state.renderer?.clearCityMovePreview?.();
       state.panels.city?.updateMoveMode?.(false, null);
       state.panels.city?.updateMovePreview?.(null);
     }
@@ -11951,9 +12021,10 @@ function registerCanvasToolModes(state, documentRef, {stopObjectEditing} = {}) {
       state.renderer?.setRiverWaypointPreview?.(state.riverEdit.session?.getPreview?.());
       state.panels.river?.setWaypointPreview?.(state.riverEdit.session?.getPreview?.());
       state.panels.river?.setWaypointMode(true);
-      state.panels.river?.setWaypointFeedback?.({tone: "idle", code: "begin", message: "单击地图上的河道附近位置，只会预览，不会立即修改河流。"});
+      state.panels.river?.setWaypointFeedback?.({tone: "idle", code: "begin", message: "单击任意地图位置添加控制点；拖动已有点调整，双击已有点删除。"});
     },
     onExit: ({reason}) => {
+      state.riverEdit.controlPointDrag?.cancel(reason || "mode-exit");
       state.riverEdit.session?.end(reason || "mode-exit");
       state.renderer?.clearRiverWaypointPreview?.();
       state.riverEdit.waypointRiverId = null;
@@ -12205,9 +12276,7 @@ function applyRiverWaypointDraft(state, documentRef) {
     updateRuntimePanel(documentRef, state);
     return {executed: false, reason: validation.code || "missing-draft"};
   }
-  const command = draft.action && draft.working
-    ? createEditRiverControlPointsCommand(riverId, draft.working)
-    : createAddRiverVisualWaypointCommand(riverId, draft.packCell);
+  const command = createEditRiverControlPointsCommand(riverId, draft.working);
   const result = executeEditCommand(state, documentRef, command, {
     context: {map: state.map},
     status: executed => `已为河流 #${executed.getResult?.().riverId ?? riverId} 应用河道控制点。`,
@@ -12260,6 +12329,19 @@ function cancelCanvasToolMode(state, documentRef, modeId, reason = "cancel") {
     updateEditingInteractionLock(state, documentRef);
     updateRuntimePanel(documentRef, state);
     state.brushCursorPreview?.scheduleRefresh();
+  }
+}
+
+function cancelCanvasToolModeAfterPointerMiss(state, documentRef, modeId) {
+  try {
+    return state.canvasToolModes.cancel(modeId, "pointer-miss");
+  } finally {
+    const view = documentRef.defaultView || globalThis;
+    view.requestAnimationFrame(() => {
+      updateEditingInteractionLock(state, documentRef);
+      updateRuntimePanel(documentRef, state);
+      state.brushCursorPreview?.scheduleRefresh();
+    });
   }
 }
 
@@ -13972,37 +14054,101 @@ function bindMarketAssignmentEditing(canvas, state, documentRef) {
 }
 
 function bindCityEditing(canvas, state, documentRef) {
+  const postponePopulationRefresh = () => {
+    if (!state.map?.metadata?.derivedStale?.systems?.includes("population-points")) return;
+    scheduleCityPopulationPointRefresh(state, documentRef, state.map);
+  };
+  canvas.addEventListener("pointerdown", postponePopulationRefresh, true);
+  documentRef.addEventListener("keydown", postponePopulationRefresh, true);
   state.cityEdit.dragController = bindCityRelocationDrag(canvas, {
     isActive: () => Boolean(state.cityEdit.moveMode && state.map),
     isPrimaryPointerDown,
     getCityId: event => getCityIdAtEvent(state, event),
     getSelectedCityId: () => state.cityEdit.moveCityId,
     getTarget: event => cityMoveTargetAtEvent(state, event),
-    inspect: (cityId, target) => inspectCityMove(state.map, cityId, target),
+    inspectFast: (cityId, target) => inspectCityMoveFast(state.map, cityId, target),
+    preflight: (cityId, target, options) => inspectCityMoveAsync(state.map, cityId, target, options),
     capturePointer: pointerId => capturePointer(canvas, pointerId),
     releasePointer: pointerId => releasePointer(canvas, pointerId),
     onDragChange: drag => {
       state.cityEdit.activeDrag = drag;
     },
+    onPerformance: sample => {
+      state.cityEdit.movePerformanceSamples.push(sample);
+      if (state.cityEdit.movePerformanceSamples.length > 1024) state.cityEdit.movePerformanceSamples.shift();
+    },
+    onPointerMiss: () => {
+      cancelCanvasToolModeAfterPointerMiss(state, documentRef, CANVAS_TOOL_MODE.CITY_MOVE);
+      setFileOperationStatus(documentRef, "已退出城市移动。");
+    },
     onPreview: preview => {
       state.cityEdit.movePreview = preview;
-      state.panels.city?.updateMovePreview?.(preview);
+      if (!state.cityEdit.activeDrag || preview?.phase !== "fast") state.panels.city?.updateMovePreview?.(preview);
+      state.renderer?.setCityMovePreview?.(preview);
     },
-    onInvalid: preview => setFileOperationStatus(documentRef, preview.summary),
+    onPendingChange: pending => {
+      state.cityEdit.movePending = Boolean(pending);
+      if (!pending) return;
+      const preview = state.cityEdit.movePreview;
+      const pendingPreview = preview ? {...preview, phase: "pending", summary: "正在规划关联路线，仍可按 Esc 取消……"} : null;
+      state.cityEdit.movePreview = pendingPreview;
+      state.panels.city?.updateMovePreview?.(pendingPreview);
+    },
+    onInvalid: preview => {
+      showCityMoveStartHandle(state, state.cityEdit.moveCityId);
+      setFileOperationStatus(documentRef, preview.summary);
+    },
+    onError: error => {
+      state.cityEdit.movePending = false;
+      state.cityEdit.lastMoveError = error?.message || String(error);
+      state.renderer?.clearCityMovePreview?.();
+      setFileOperationStatus(documentRef, `城市移动失败：${error?.message || "未知错误"}`);
+    },
     onCancel: reason => cancelCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.CITY_MOVE, reason),
-    onCommit: (cityId, target) => {
-      const command = createMoveCityCommand(cityId, target);
+    onCommit: (cityId, target, preflight) => {
+      const commitStartedAt = performance.now();
+      const performanceTrace = {stages: {}, stageOrder: []};
+      const selectedObject = state.selectionStore.getSnapshot()?.selection?.object;
+      const selectionUnchanged = selectedObject?.kind === OBJECT_KIND.CITY && Number(selectedObject.id) === cityId;
+      state.cityEdit.movePending = false;
+      const command = createMoveCityCommand(cityId, target, {preflight});
       const execution = executeEditCommand(state, documentRef, command, {
         context: {map: state.map},
-        status: `已移动城市 #${cityId}。`,
+        status: `已移动城市 #${cityId}；可继续拖动，点击别处或手动退出结束。`,
         errorStatus: `城市 #${cityId} 移动失败。`,
         preparePanelRefresh: targetState => {
           targetState.panels.city?.setSelectedCityId(cityId);
-          targetState.selectionStore.setSelection({object: {kind: OBJECT_KIND.CITY, id: cityId}});
+          const selectedObject = targetState.selectionStore.getSnapshot()?.selection?.object;
+          if (selectedObject?.kind !== OBJECT_KIND.CITY || Number(selectedObject.id) !== cityId) {
+            targetState.selectionStore.setSelection({object: {kind: OBJECT_KIND.CITY, id: cityId}});
+          }
         },
+        performanceTrace,
+        batchSelection: !selectionUnchanged,
         throwOnError: false
       });
-      if (execution.executed) completeCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.CITY_MOVE, {command: execution.command});
+      if (!execution.executed) {
+        state.cityEdit.lastMoveError = execution.error?.message || "城市移动命令未执行";
+        state.renderer?.clearCityMovePreview?.({draw: false});
+        showCityMoveStartHandle(state, cityId);
+        return;
+      }
+      scheduleCityPopulationPointRefresh(state, documentRef, state.map);
+      const cleanupStartedAt = performance.now();
+      try {
+        state.cityEdit.movePreview = null;
+        state.cityEdit.lastMoveError = null;
+        state.renderer?.clearCityMovePreview?.({draw: false});
+        state.panels.city?.updateMovePreview?.(null);
+        showCityMoveStartHandle(state, cityId);
+      } finally {
+        state.cityEdit.lastCommitPerformance = {
+          totalMs: roundLoadTraceMs(performance.now() - commitStartedAt),
+          cleanupMs: roundLoadTraceMs(performance.now() - cleanupStartedAt),
+          stageOrder: [...performanceTrace.stageOrder],
+          stages: Object.fromEntries(performanceTrace.stageOrder.map(name => [name, {...performanceTrace.stages[name]}]))
+        };
+      }
     }
   });
   canvas.addEventListener("pointerdown", event => {
@@ -14052,9 +14198,105 @@ function bindCityEditing(canvas, state, documentRef) {
   }, true);
 }
 
+function ensureCityMoveStartVisible(state, cityId) {
+  const city = state.map?.settlements?.cities?.find(item => Number(item?.id) === Number(cityId) && !item?.removed);
+  const renderer = state.renderer;
+  const rect = renderer?.canvas?.getBoundingClientRect?.();
+  if (!city || !rect || typeof renderer.worldToScreen !== "function") return false;
+  const screen = renderer.worldToScreen(city.x, city.y, rect);
+  const padding = 28;
+  const visible = screen.x >= padding && screen.y >= padding && screen.x <= rect.width - padding && screen.y <= rect.height - padding;
+  if (visible) return true;
+  return renderer.locateObject?.({kind: OBJECT_KIND.CITY, id: city.id}, {minScale: Math.max(4, renderer.camera?.scale || 1)}) ?? false;
+}
+
+function showCityMoveStartHandle(state, cityId) {
+  const city = state.map?.settlements?.cities?.find(item => Number(item?.id) === Number(cityId) && !item?.removed);
+  if (!city) {
+    state.renderer?.clearCityMovePreview?.();
+    return false;
+  }
+  state.renderer?.setCityMovePreview?.({
+    valid: true,
+    changed: false,
+    phase: "ready",
+    city,
+    target: {
+      gridCell: city.cell,
+      packCell: city.packCell,
+      point: [city.x, city.y]
+    }
+  });
+  return true;
+}
+
 function cityMoveTargetAtEvent(state, event) {
-  const pick = state.renderer?.pickClientPoint?.(event.clientX, event.clientY) || {};
-  return {gridCell: pick.gridCell, packCell: pick.packCell};
+  const pick = state.renderer?.pickCellClientPoint?.(event.clientX, event.clientY) || {};
+  return {gridCell: pick.gridCell, packCell: pick.packCell, x: pick.worldX, y: pick.worldY};
+}
+
+function scheduleCityPopulationPointRefresh(state, documentRef, map) {
+  if (!map || !map.metadata?.derivedStale?.systems?.includes("population-points")) return;
+  cancelCityPopulationPointRefresh(state, documentRef);
+  const token = ++state.cityEdit.populationRefreshToken;
+  const revision = state.mapRevision.getSnapshot();
+  const view = documentRef.defaultView || globalThis;
+  const run = async () => {
+    const startedAt = performance.now();
+    state.cityEdit.populationRefreshHandle = null;
+    if (token !== state.cityEdit.populationRefreshToken || state.map !== map) return;
+    const currentRevision = state.mapRevision.getSnapshot();
+    if (currentRevision.mapIdentity !== revision.mapIdentity || currentRevision.mapRevision !== revision.mapRevision) {
+      scheduleCityPopulationPointRefresh(state, documentRef, map);
+      return;
+    }
+    if (!map.metadata?.derivedStale?.systems?.includes("population-points")) return;
+    try {
+      const stillCurrent = () => token === state.cityEdit.populationRefreshToken && state.map === map;
+      const populationPoints = await rebuildRelocatedPopulationPointsAsync(map.grid, map.features, {
+        sliceMs: 2,
+        shouldContinue: stillCurrent,
+        yieldToMain: () => new Promise(resolve => view.setTimeout(resolve, 0))
+      });
+      if (!stillCurrent()) return;
+      const scannedAt = performance.now();
+      map.settlements.populationPoints = populationPoints;
+      map.settlements.metadata ||= {};
+      map.settlements.metadata.ruralPopulationPoints = populationPoints.length;
+      map.metadata.derivedStale.systems = map.metadata.derivedStale.systems.filter(system => system !== "population-points");
+      state.renderer?.refreshPointLayers?.({draw: false});
+      const completedAt = performance.now();
+      state.cityEdit.populationRefreshPerformanceSamples.push({scanMs: roundLoadTraceMs(scannedAt - startedAt), pointRefreshMs: roundLoadTraceMs(completedAt - scannedAt), totalMs: roundLoadTraceMs(completedAt - startedAt)});
+      if (state.cityEdit.populationRefreshPerformanceSamples.length > 32) state.cityEdit.populationRefreshPerformanceSamples.shift();
+    } catch (error) {
+      if (error?.code === "operation_cancelled") return;
+      state.healthMonitor?.record?.("city-population-refresh", {message: error?.message || String(error)}, "error");
+      setFileOperationStatus(documentRef, `城市已移动，但人口点后台刷新失败：${error?.message || "未知错误"}`);
+    }
+  };
+  const queueIdle = () => {
+    if (token !== state.cityEdit.populationRefreshToken || state.map !== map) return;
+    if (typeof view.requestIdleCallback === "function") {
+      const id = view.requestIdleCallback(run, {timeout: 1600});
+      state.cityEdit.populationRefreshHandle = {kind: "idle", id};
+      return;
+    }
+    const id = view.setTimeout(run, 0);
+    state.cityEdit.populationRefreshHandle = {kind: "timeout", id};
+  };
+  const delayId = view.setTimeout(queueIdle, 1200);
+  state.cityEdit.populationRefreshHandle = {kind: "timeout", id: delayId};
+}
+
+function cancelCityPopulationPointRefresh(state, documentRef) {
+  const pending = state.cityEdit.populationRefreshHandle;
+  state.cityEdit.populationRefreshToken++;
+  if (!pending) return false;
+  const view = documentRef.defaultView || globalThis;
+  if (pending.kind === "idle") view.cancelIdleCallback?.(pending.id);
+  else view.clearTimeout?.(pending.id);
+  state.cityEdit.populationRefreshHandle = null;
+  return true;
 }
 
 function bindMarkerEditing(canvas, state, documentRef) {
@@ -14082,7 +14324,7 @@ function bindMarkerEditing(canvas, state, documentRef) {
 function bindObjectCreationTools(canvas, state, documentRef) {
   canvas.addEventListener("pointerdown", event => {
     const activeMode = state.canvasToolModes.getActive()?.id;
-    if (![CANVAS_TOOL_MODE.ROUTE_DRAW, CANVAS_TOOL_MODE.ROUTE_EDIT_WAYPOINT, CANVAS_TOOL_MODE.RIVER_ADD, CANVAS_TOOL_MODE.RIVER_EDIT_WAYPOINT, CANVAS_TOOL_MODE.LAKE_EXCAVATE, CANVAS_TOOL_MODE.FEATURE_PATCH_SELECT, CANVAS_TOOL_MODE.FEATURE_TOPOLOGY_SELECT, CANVAS_TOOL_MODE.CULTURE_CENTER, CANVAS_TOOL_MODE.RELIGION_CENTER, CANVAS_TOOL_MODE.ZONE_ADD, CANVAS_TOOL_MODE.NOTE_ADD].includes(activeMode) || !state.map || !isPrimaryPointerDown(event)) return;
+    if (![CANVAS_TOOL_MODE.ROUTE_DRAW, CANVAS_TOOL_MODE.ROUTE_EDIT_WAYPOINT, CANVAS_TOOL_MODE.RIVER_ADD, CANVAS_TOOL_MODE.LAKE_EXCAVATE, CANVAS_TOOL_MODE.FEATURE_PATCH_SELECT, CANVAS_TOOL_MODE.FEATURE_TOPOLOGY_SELECT, CANVAS_TOOL_MODE.CULTURE_CENTER, CANVAS_TOOL_MODE.RELIGION_CENTER, CANVAS_TOOL_MODE.ZONE_ADD, CANVAS_TOOL_MODE.NOTE_ADD].includes(activeMode) || !state.map || !isPrimaryPointerDown(event)) return;
     event.preventDefault();
     event.stopImmediatePropagation();
     if (activeMode === CANVAS_TOOL_MODE.FEATURE_TOPOLOGY_SELECT) {
@@ -14131,23 +14373,6 @@ function bindObjectCreationTools(canvas, state, documentRef) {
     if (activeMode === CANVAS_TOOL_MODE.RIVER_ADD) {
       const result = state.runtimeActions.edit.rivers.create({sourcePackCell: packCell});
       if (result?.executed) completeCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.RIVER_ADD, {result});
-      return;
-    }
-
-    if (activeMode === CANVAS_TOOL_MODE.RIVER_EDIT_WAYPOINT) {
-      const riverId = state.riverEdit.waypointRiverId;
-      const draft = state.riverEdit.session?.stage(state.map, packCell) || inspectRiverVisualWaypoint(state.map, riverId, packCell);
-      if (!draft.valid) {
-        state.renderer?.setRiverWaypointPreview?.(draft);
-        state.panels.river?.setWaypointFeedback?.({tone: "error", code: draft.code || "invalid-candidate", message: draft.reason || "该候选位置不可用。"});
-        setFileOperationStatus(documentRef, `无法预览河道控制点：${draft.reason}`);
-        setRiverWaypointFeedback(documentRef, `${draft.reason}；请单击更靠近河道的候选位置。`);
-        updateRuntimePanel(documentRef, state);
-        return;
-      }
-      setFileOperationStatus(documentRef, `已预览河流 #${riverId} 的候选控制点，尚未保存。可继续单击调整，或在河流面板应用 / 取消。`);
-      setRiverWaypointFeedback(documentRef, "预览未保存；可继续单击调整，或在河流面板应用 / 取消。");
-      updateRuntimePanel(documentRef, state);
       return;
     }
 
@@ -15328,6 +15553,9 @@ function getProvinceIdAtEvent(state, event) {
 
 function getCityIdAtEvent(state, event) {
   const pick = state.renderer.pickClientPoint(event.clientX, event.clientY);
+  const selectedMoveCityId = state.cityEdit?.moveMode ? state.cityEdit.moveCityId : null;
+  const relocationCityId = resolveCityRelocationPointerCityId(pick, selectedMoveCityId);
+  if (Number.isInteger(relocationCityId)) return relocationCityId;
   const object = pick?.cityObject || pick?.object;
   if (object?.kind === OBJECT_KIND.CITY || object?.kind === "city") {
     const id = Number(object.id);
@@ -15355,7 +15583,11 @@ function updateStatePickAtLastPointer(state) {
 function updateEditingInteractionLock(state, documentRef) {
   const interactionLocked = isEditingInteractionLocked(state);
   const allowedPanelIds = getAllowedEditingPanelIds(state);
-  setEditingInteractionLock(documentRef, interactionLocked, {allowedPanelIds});
+  const signature = `${interactionLocked ? 1 : 0}:${allowedPanelIds.join(",")}`;
+  if (state.editingInteractionLockSignature !== signature) {
+    setEditingInteractionLock(documentRef, interactionLocked, {allowedPanelIds});
+    state.editingInteractionLockSignature = signature;
+  }
   syncEditorStateSnapshot(buildEditorStateSnapshot(state, interactionLocked, allowedPanelIds));
 }
 

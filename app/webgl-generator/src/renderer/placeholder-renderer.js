@@ -1,5 +1,6 @@
-import {buildObjectPickingIndex, pickCity, pickGridCell, pickMarker, pickMilitary, pickPoliticalObject, pickRiver, pickRiverControlPoint, pickRoute} from "./picking.js";
+import {buildObjectPickingIndex, CITY_PICK_RADIUS_CSS_PX, pickCity, pickGridCell, pickMarker, pickMilitary, pickPoliticalObject, pickRiver, pickRiverControlPoint, pickRoute, refreshRoutesInPickingIndex, relocateCityInPickingIndex} from "./picking.js";
 import {goodDisplayName} from "../generator/economy-display-properties.js";
+import {isSharedCubicCurve, sampleCentripetalCatmullRom} from "../geometry/cubic-path.js";
 import {bindVertexBuffer, createProgram} from "./gl-utils.js";
 import {createRenderContext, worldToNdcPoint, worldToScreenPixel} from "./render-context.js";
 import {colorForCell, isLandCell} from "./color-modes.js";
@@ -185,6 +186,32 @@ export class PlaceholderMapRenderer {
 
     this.program = createProgram(this.gl, vertexShaderSource, fragmentShaderSource);
     this.cityIconLayer = createCityIconWebglLayer(this.gl);
+    this.cityMovePreviewCanvas = null;
+    this.cityMovePreviewGl = null;
+    this.cityMovePreviewLayer = null;
+    this.cityMovePreviewFallbackElement = canvas.ownerDocument.createElement("div");
+    this.cityMovePreviewFallbackElement.dataset.layer = "city-move-preview";
+    Object.assign(this.cityMovePreviewFallbackElement.style, {
+      position: "absolute",
+      left: "0",
+      top: "0",
+      width: "18px",
+      height: "18px",
+      display: "none",
+      pointerEvents: "none",
+      transform: "translate3d(-9999px, -9999px, 0) translate(-50%, -50%)",
+      border: "3px solid #fff",
+      borderRadius: "50%",
+      outline: "2px solid #3d291d",
+      background: "rgba(205, 105, 72, 0.82)",
+      boxSizing: "border-box",
+      contain: "strict",
+      willChange: "transform",
+      zIndex: "2"
+    });
+    (this.overlay || canvas.nextSibling)
+      ? canvas.parentElement?.insertBefore(this.cityMovePreviewFallbackElement, this.overlay || canvas.nextSibling)
+      : canvas.parentElement?.append(this.cityMovePreviewFallbackElement);
     this.locations = {
       position: this.gl.getAttribLocation(this.program, "a_position"),
       color: this.gl.getAttribLocation(this.program, "a_color"),
@@ -273,6 +300,7 @@ export class PlaceholderMapRenderer {
     this.visibleProvinceLabelCount = 0;
     this.labelItems = [];
     this.cityIconItems = [];
+    this.cityIconItemsById = new Map();
     this.cityIconCount = 0;
     this.visibleCityIconCount = 0;
     this.cityIconScaleThreshold = CITY_ICON_MIN_SCALE;
@@ -289,9 +317,11 @@ export class PlaceholderMapRenderer {
     this.objectHighlights = [];
     this.riverWaypointPreview = null;
     this.riverWaypointPreviewRevision = 0;
+    this.cityMovePreview = null;
     this.selectionMarker = null;
     this.objectPickingIndex = null;
     this.lastObjectCandidateCount = 0;
+    this.cityPickCycle = {key: "", index: -1};
     this.routeBuildMs = 0;
     this.routeRenderStats = normalizeRouteRenderStats(emptyRouteRenderStats());
     this.tradeFlowBuildMs = 0;
@@ -341,12 +371,15 @@ export class PlaceholderMapRenderer {
     this.viewportCommitTimer = 0;
     this.viewportCommitVersion = 0;
     this.viewportCommitEvent = null;
+    this.routeRefreshTimer = 0;
+    this.routeRefreshVersion = 0;
+    this.routeRefreshActiveVersion = 0;
     installCanvasInteractions(this.canvas, this.camera, interaction => {
       this.requestViewportPreview(interaction);
     }, event => {
       this.onHover(this.pickClientPoint(event.clientX, event.clientY));
     }, event => {
-      this.onSelect(this.pickClientPoint(event.clientX, event.clientY));
+      this.onSelect(this.pickClientPoint(event.clientX, event.clientY, {cycleCities: true}));
     }, interaction => {
       this.beginViewportPointerInteraction(interaction);
     }, interaction => {
@@ -418,6 +451,7 @@ export class PlaceholderMapRenderer {
   resizeToDisplaySize({draw = true} = {}) {
     const result = resizeCanvasToDisplaySize(this.canvas, this.overlay, this.stage);
     this.canvasSize = result.size;
+    this.resizeCityMovePreviewCanvas();
     if (!result.changed) return false;
     this.markViewportBuffersDirty();
     if (draw) {
@@ -427,8 +461,19 @@ export class PlaceholderMapRenderer {
     return true;
   }
 
+  resizeCityMovePreviewCanvas() {
+    if (!this.cityMovePreviewCanvas) return false;
+    const width = Math.max(1, this.canvas.width);
+    const height = Math.max(1, this.canvas.height);
+    if (this.cityMovePreviewCanvas.width === width && this.cityMovePreviewCanvas.height === height) return false;
+    this.cityMovePreviewCanvas.width = width;
+    this.cityMovePreviewCanvas.height = height;
+    return true;
+  }
+
   loadMap(map) {
     const profile = createRendererLoadProfile();
+    this.cancelScheduledRouteBufferRefresh();
     this.map = map;
     this.invalidateGridCellDiagnostics();
     this.objectHighlights = [];
@@ -530,6 +575,7 @@ export class PlaceholderMapRenderer {
   }
 
   async loadMapAsync(map, {onStage = () => {}, onStageEnd = () => {}, yieldToBrowser = () => Promise.resolve()} = {}) {
+    this.cancelScheduledRouteBufferRefresh();
     const profile = createRendererLoadProfile();
     const stage = async (id, label, task) => {
       const startedAt = performance.now();
@@ -1312,10 +1358,12 @@ export class PlaceholderMapRenderer {
     this.gl.bufferData(this.gl.ARRAY_BUFFER, mesh.line, this.gl.DYNAMIC_DRAW);
   }
 
-  draw({updateDynamicBuffers = true, updateOverlay = true, drawDirtyDynamicBuffers = true, drawCityIcons = true, viewportPreview = false} = {}) {
+  draw({updateDynamicBuffers = true, updateOverlay = true, drawDirtyDynamicBuffers = true, drawCityIcons = true, viewportPreview = false, trackPerformance = true} = {}) {
     if (!this.map || !this.vertexCount) return;
     const startedAt = performance.now();
-    const event = this.beginPerformanceEvent("draw", {updateDynamicBuffers, updateOverlay, drawDirtyDynamicBuffers, viewportPreview}, startedAt);
+    const event = trackPerformance
+      ? this.beginPerformanceEvent("draw", {updateDynamicBuffers, updateOverlay, drawDirtyDynamicBuffers, viewportPreview}, startedAt)
+      : {sequence: (this.lastDraw?.sequence || 0) + 1};
     try {
     if (updateDynamicBuffers && this.dynamicBuffersDirty.routes && this.layerVisibility.routes) this.updateRouteBuffer();
     if (updateDynamicBuffers && this.dynamicBuffersDirty.tradeFlows && this.layerVisibility.tradeFlows) this.updateTradeFlowBuffer();
@@ -1490,6 +1538,7 @@ export class PlaceholderMapRenderer {
       layerVisible: drawCityIcons && this.layerVisibility.cities !== false
     });
     if (cityIconInstances > 0) layerOrder.push("cityIcons");
+    const cityMoveGhostInstances = this.cityMovePreview ? 1 : 0;
 
     const oceanCurrentProjection = createLineWidthProjection({map: this.map, camera: this.camera, canvas: this.canvas});
     const drawMs = roundMs(performance.now() - startedAt);
@@ -1502,16 +1551,17 @@ export class PlaceholderMapRenderer {
       gridCellsDrawCalls,
       cityIconInstances,
       cityIconDrawCalls: cityIconInstances > 0 ? 1 : 0,
+      cityMoveGhostInstances,
       oceanCurrentScale: this.camera.scale,
       oceanCurrentScreenWidth: {
         min: projectWorldLineWidth(this.oceanCurrentLayerStats.minWidth, oceanCurrentProjection).backingWidth,
         max: projectWorldLineWidth(this.oceanCurrentLayerStats.maxWidth, oceanCurrentProjection).backingWidth
       }
     };
-    this.completePerformanceEvent(event, {ms: drawMs, glError, layerOrder: [...layerOrder]}, performance.now());
+    if (trackPerformance) this.completePerformanceEvent(event, {ms: drawMs, glError, layerOrder: [...layerOrder]}, performance.now());
     if (updateOverlay) this.updateLabels();
     } catch (error) {
-      this.failPerformanceEvent(event, error, {ms: roundMs(performance.now() - startedAt)}, performance.now());
+      if (trackPerformance) this.failPerformanceEvent(event, error, {ms: roundMs(performance.now() - startedAt)}, performance.now());
       throw error;
     }
   }
@@ -1535,6 +1585,7 @@ export class PlaceholderMapRenderer {
       routeVertexCount: this.routeVertexCount,
       routeTriangleCount: this.routeVertexCount / 3,
       routeBuildMs: this.routeBuildMs,
+      routeRefreshPending: Boolean(this.routeRefreshTimer || this.routeRefreshActiveVersion),
       routeRenderStats: {...this.routeRenderStats},
       routeWidthMode: this.routeWidthMode,
       routeStyleMode: "primary/secondary road + solid trail",
@@ -1629,6 +1680,15 @@ export class PlaceholderMapRenderer {
         previewTransform: {...this.overlayPreviewTransform}
       },
       cityIconWebgl: this.cityIconLayer.snapshot(),
+      cityMoveGhost: {
+        active: Boolean(this.cityMovePreview),
+        cityId: this.cityMovePreview?.cityId ?? null,
+        phase: this.cityMovePreview?.phase || "none",
+        target: this.cityMovePreview?.target ? {...this.cityMovePreview.target} : null,
+        renderer: "dom-overlay",
+        fallbackVisible: this.cityMovePreviewFallbackElement?.style.display !== "none",
+        webgl: null
+      },
       viewportPreview: {
         pendingFrame: Boolean(this.viewportPreviewFrame),
         requests: this.viewportPreviewRequests,
@@ -1649,11 +1709,20 @@ export class PlaceholderMapRenderer {
     };
   }
 
-  pickClientPoint(clientX, clientY) {
+  pickCellClientPoint(clientX, clientY) {
+    if (!this.map) return null;
+    const world = this.screenToWorld(clientX, clientY);
+    if (isUndevelopedWorldPoint(this.map, world)) return buildUndevelopedPickResult(this.map, world, "outside-map");
+    const result = pickGridCell(this.map, world.x, world.y);
+    return result ? {...result, worldX: roundValue(world.x), worldY: roundValue(world.y)} : null;
+  }
+
+  pickClientPoint(clientX, clientY, {cycleCities = false} = {}) {
     if (!this.map) return null;
     const label = this.pickLabel(clientX, clientY);
     const markerIcon = this.pickMarkerIcon(clientX, clientY);
     const militaryIcon = this.pickMilitaryIcon(clientX, clientY);
+    const rect = this.canvas.getBoundingClientRect();
     const world = this.screenToWorld(clientX, clientY);
     if (isUndevelopedWorldPoint(this.map, world)) {
       this.lastObjectCandidateCount = 0;
@@ -1665,9 +1734,27 @@ export class PlaceholderMapRenderer {
       return buildUndevelopedPickResult(this.map, world, "no-cell", result?.candidates || 0);
     }
     const hasGridCell = Number.isInteger(result.gridCell) && result.gridCell >= 0;
-    const cityObject = this.layerVisibility.cities || this.layerVisibility.population
-      ? pickCity(this.map, this.objectPickingIndex, world.x, world.y, this.pickThresholdWorld(9))
+    const cityPickOptions = {
+      maxPickDistance: CITY_PICK_RADIUS_CSS_PX,
+      distanceToCity: city => {
+        const screen = this.worldToScreen(city.x, city.y, rect);
+        return Math.hypot(clientX - rect.left - screen.x, clientY - rect.top - screen.y);
+      }
+    };
+    const cityPickRadiusWorld = this.pickThresholdWorld(CITY_PICK_RADIUS_CSS_PX);
+    let cityObject = this.layerVisibility.cities || this.layerVisibility.population
+      ? pickCity(this.map, this.objectPickingIndex, world.x, world.y, cityPickRadiusWorld, cityPickOptions)
       : null;
+    if (cycleCities && cityObject?.overlapCandidateIds?.length > 1) {
+      const key = `${result.gridCell}:${cityObject.overlapCandidateIds.join(",")}`;
+      const index = this.cityPickCycle.key === key
+        ? (this.cityPickCycle.index + 1) % cityObject.overlapCandidateIds.length
+        : 0;
+      this.cityPickCycle = {key, index};
+      cityObject = pickCity(this.map, this.objectPickingIndex, world.x, world.y, cityPickRadiusWorld, {...cityPickOptions, cycleIndex: index});
+    } else if (cycleCities) {
+      this.cityPickCycle = {key: "", index: -1};
+    }
     const marker = markerIcon || pickMarker(this.map, this.objectPickingIndex, world.x, world.y, this.pickThresholdWorld(8), item => isMarkerLayerVisible(item, this.layerVisibility));
     const military = militaryIcon || (this.layerVisibility.military !== false ? pickMilitary(this.map, this.objectPickingIndex, world.x, world.y, this.pickThresholdWorld(13)) : null);
     const highlightedConnector = this.pickHighlightedConnector(world.x, world.y, this.pickThresholdWorld(9));
@@ -1752,6 +1839,45 @@ export class PlaceholderMapRenderer {
       this.failPerformanceEvent(event, error, {ms: roundMs(performance.now() - startedAt)}, performance.now());
       throw error;
     }
+  }
+
+  scheduleRouteBufferRefresh({delayMs = 0} = {}) {
+    const view = this.canvas.ownerDocument?.defaultView || globalThis;
+    if (this.routeRefreshTimer) view.clearTimeout?.(this.routeRefreshTimer);
+    const version = ++this.routeRefreshVersion;
+    const map = this.map;
+    this.dynamicBuffersDirty.routes = false;
+    const setTimer = typeof view.setTimeout === "function" ? view.setTimeout.bind(view) : setTimeout;
+    this.routeRefreshTimer = setTimer(async () => {
+      this.routeRefreshTimer = 0;
+      this.routeRefreshActiveVersion = version;
+      const shouldContinue = () => this.routeRefreshVersion === version && this.map === map;
+      try {
+        const ready = await this.updateRouteBufferAsync({
+          yieldToBrowser: () => this.yieldViewportCommitFrame(),
+          sliceMs: ROUTE_BUILD_SLICE_MS,
+          shouldContinue
+        });
+        if (!ready || !shouldContinue()) return;
+        this.draw({updateDynamicBuffers: false, updateOverlay: false, drawDirtyDynamicBuffers: false});
+      } catch (error) {
+        if (shouldContinue()) {
+          this.dynamicBuffersDirty.routes = true;
+          throw error;
+        }
+      } finally {
+        if (this.routeRefreshActiveVersion === version) this.routeRefreshActiveVersion = 0;
+      }
+    }, Math.max(0, Number(delayMs) || 0));
+    return version;
+  }
+
+  cancelScheduledRouteBufferRefresh() {
+    const view = this.canvas.ownerDocument?.defaultView || globalThis;
+    if (this.routeRefreshTimer) view.clearTimeout?.(this.routeRefreshTimer);
+    this.routeRefreshTimer = 0;
+    this.routeRefreshActiveVersion = 0;
+    this.routeRefreshVersion++;
   }
 
   clearRouteBuffer() {
@@ -1933,7 +2059,6 @@ export class PlaceholderMapRenderer {
     }
     if (!draw) return true;
     if (this.overlayInteractionSuspended) {
-      this.draw({updateDynamicBuffers: false, updateOverlay: false, drawDirtyDynamicBuffers: false});
       return true;
     }
     this.draw();
@@ -1952,6 +2077,92 @@ export class PlaceholderMapRenderer {
 
   clearObjectHighlights(options = {}) {
     this.setObjectHighlights([], options);
+  }
+
+  refreshRelocatedCities(cityIds, {draw = true, routeIds = []} = {}) {
+    if (!this.map) return {updated: 0};
+    const ids = [...new Set((Array.isArray(cityIds) ? cityIds : [cityIds]).map(Number).filter(Number.isInteger))];
+    const iconChanges = [];
+    const rect = this.canvas.getBoundingClientRect();
+    let updated = 0;
+    for (const cityId of ids) {
+      const city = (this.map.settlements?.cities || []).find(item => Number(item?.id) === cityId && !item.removed);
+      if (!city) continue;
+      const icon = this.cityIconItemsById?.get(String(cityId));
+      const previousPoint = icon ? {x: icon.x, y: icon.y} : null;
+      if (icon) {
+        icon.x = Number(city.x);
+        icon.y = Number(city.y);
+        icon.roles = cityRoleKeys(city);
+        iconChanges.push({id: cityId, x: icon.x, y: icon.y, roles: icon.roles});
+      }
+      for (const label of this.labelItems) {
+        if (label.targetKind !== LABEL_TARGET_KIND.CITY || Number(label.targetId) !== cityId) continue;
+        label.x = Number(city.x);
+        label.y = Number(city.y);
+        const screen = this.worldToScreen(label.x, label.y, rect);
+        applyFixedScreenLabelPlacement(label.node, screen, overlayLabelAnchor(this, label, screen, this.camera.scale));
+      }
+      relocateCityInPickingIndex(this.objectPickingIndex, city, previousPoint);
+      updated++;
+    }
+    if (iconChanges.length) this.cityIconLayer.updateInstanceStates(iconChanges, {nowMs: performance.now()});
+    refreshRoutesInPickingIndex(this.objectPickingIndex, this.map.settlements?.routes || [], routeIds);
+    if (this.dynamicBuffersDirty.routes && this.layerVisibility.routes) {
+      if (routeIds.length) this.scheduleRouteBufferRefresh();
+      else this.dynamicBuffersDirty.routes = false;
+    }
+    if (this.dynamicBuffersDirty.selection) this.updateSelectionBuffer();
+    if (draw) this.draw({updateDynamicBuffers: false, updateOverlay: false, drawDirtyDynamicBuffers: false});
+    return {updated};
+  }
+
+  setCityMovePreview(preview, {draw = true} = {}) {
+    const point = preview?.target?.point;
+    const cityId = Number(preview?.city?.id);
+    const source = this.cityIconItemsById?.get(String(cityId));
+    const active = Boolean(preview?.valid && source && Number.isFinite(Number(point?.[0])) && Number.isFinite(Number(point?.[1])));
+    this.cityMovePreview = active ? {
+      cityId,
+      phase: preview.phase || "fast",
+      target: {gridCell: preview.target.gridCell, packCell: preview.target.packCell, x: Number(point[0]), y: Number(point[1])}
+    } : null;
+    this.cityMovePreviewFallbackElement.style.display = active ? "block" : "none";
+    if (draw && this.map) this.drawCityMovePreview();
+    return this.cityMovePreview ? {...this.cityMovePreview, target: {...this.cityMovePreview.target}} : null;
+  }
+
+  drawCityMovePreview() {
+    this.updateCityMovePreviewFallback();
+  }
+
+  updateCityMovePreviewFallback() {
+    const element = this.cityMovePreviewFallbackElement;
+    if (!element) return false;
+    if (!this.cityMovePreview || this.layerVisibility.cities === false) {
+      element.style.display = "none";
+      return false;
+    }
+    const screen = this.worldToScreen(this.cityMovePreview.target.x, this.cityMovePreview.target.y, this.canvas.getBoundingClientRect());
+    const ready = this.cityMovePreview.phase === "ready";
+    element.style.width = ready ? "36px" : "18px";
+    element.style.height = ready ? "36px" : "18px";
+    element.style.background = ready ? "rgba(205, 105, 72, 0.28)" : "rgba(205, 105, 72, 0.82)";
+    element.style.boxShadow = ready ? "0 0 0 3px rgba(205, 105, 72, 0.42)" : "none";
+    element.style.transform = `translate3d(${screen.x}px, ${screen.y}px, 0) translate(-50%, -50%)`;
+    element.style.display = "block";
+    return true;
+  }
+
+  activateCityMovePreviewFallback({contextLost = false, draw = true} = {}) {
+    this.cityMovePreviewGl = null;
+    this.cityMovePreviewLayer = null;
+    if (draw) this.updateCityMovePreviewFallback();
+    return true;
+  }
+
+  clearCityMovePreview(options = {}) {
+    return this.setCityMovePreview(null, options);
   }
 
   setRiverWaypointPreview(preview, {draw = true} = {}) {
@@ -2766,6 +2977,7 @@ export class PlaceholderMapRenderer {
     const occupiedIcons = [];
     const collisionIcons = [];
     const stateChanges = [];
+    let visibilityChanged = false;
     const prewarm = cityIconPrewarmCssPx(rect);
     const nowMs = performance.now();
     let visible = 0;
@@ -2789,6 +3001,7 @@ export class PlaceholderMapRenderer {
       if (visibilityTarget !== item.visibilityTarget || selected !== item.selected) {
         stateChanges.push({id: item.id, visibilityTarget, selected});
       }
+      if (visibilityTarget !== item.visibilityTarget) visibilityChanged = true;
       item.visibilityTarget = visibilityTarget;
       item.selected = selected;
       item.visible = shouldShow;
@@ -2801,7 +3014,7 @@ export class PlaceholderMapRenderer {
 
     if (stateChanges.length) {
       this.cityIconLayer.updateInstanceStates(stateChanges, {nowMs});
-      this.scheduleCityIconAnimation(nowMs);
+      if (visibilityChanged) this.scheduleCityIconAnimation(nowMs);
     }
 
     this.visibleCityIconCount = visible;
@@ -3304,7 +3517,8 @@ function getObjectBounds(map, object) {
   }
   if (object.kind === OBJECT_KIND.RIVER) {
     const river = map.rivers.rivers.find(item => item.id === object.id);
-    return river ? pointsBounds(river.points, 42) : null;
+    const points = river && isSharedCubicCurve(river.visualCurve) ? sampleCentripetalCatmullRom(river.points).points : river?.points;
+    return points ? pointsBounds(points, 42) : null;
   }
   if (object.kind === OBJECT_KIND.LAKE) {
     return lakeFeatureBounds(map, object.id, 42);
@@ -4607,6 +4821,15 @@ function getRiverRenderPath(river, map, projection, stats, sourcePoints = null) 
     stats.maxFlux = Math.max(stats.maxFlux, runningFlux);
   }
 
+  if (isSharedCubicCurve(river.visualCurve)) {
+    const sampled = sampleCentripetalCatmullRom(points, {values: widths.map((width, index) => [width, alphas[index]])});
+    const baseColor = riverRenderColor(river);
+    return {
+      points: sampled.points,
+      widths: sampled.values.map(value => value[0]),
+      colors: sampled.values.map(value => withProjectedLineAlpha(baseColor, value[1]))
+    };
+  }
   const smoothedPath = smoothWorldPathWithValues(points, widths, LINE_SMOOTHING.river);
   const smoothedAlphas = smoothWorldPathWithValues(points, alphas, LINE_SMOOTHING.river).widths;
   const baseColor = riverRenderColor(river);
@@ -4890,7 +5113,7 @@ async function buildRouteMeshVerticesAsync(map, camera, canvas, selection, objec
     }
     sliceStartedAt = performance.now();
   }
-  return finalizeRouteMeshBuild(build);
+  return finalizeRouteMeshBuildAsync(build, {yieldToBrowser, sliceMs, shouldContinue});
 }
 
 function createRouteMeshBuild(map, camera, canvas, selection, objectHighlights, visualTheme) {
@@ -4972,6 +5195,34 @@ function finalizeRouteMeshBuild(build) {
       ordinary: {first: 0, count: ordinaryCount},
       seaLand: {first: ordinaryCount, count: seaLandCount},
       seaWater: {first: ordinaryCount + seaLandCount, count: seaWaterCount}
+    },
+    stats: normalizeRouteRenderStats(build.stats)
+  };
+}
+
+async function finalizeRouteMeshBuildAsync(build, {yieldToBrowser, sliceMs, shouldContinue}) {
+  const groups = [build.vertices, build.seaLandVertices, build.seaWaterVertices];
+  const counts = groups.map(values => values.length / 6);
+  const vertices = new Float32Array(groups.reduce((sum, values) => sum + values.length, 0));
+  let offset = 0;
+  const chunkSize = Math.max(16384, Math.round(65536 * Math.max(1, Number(sliceMs) || ROUTE_BUILD_SLICE_MS) / ROUTE_BUILD_SLICE_MS));
+  for (const values of groups) {
+    for (let index = 0; index < values.length; index += chunkSize) {
+      if (!shouldContinue()) {
+        build.stats.aborted = true;
+        return {vertices: new Float32Array(), drawRanges: emptyRouteDrawRanges(), stats: normalizeRouteRenderStats(build.stats)};
+      }
+      const end = Math.min(values.length, index + chunkSize);
+      for (let sourceIndex = index; sourceIndex < end; sourceIndex++) vertices[offset++] = values[sourceIndex];
+      await yieldToBrowser();
+    }
+  }
+  return {
+    vertices,
+    drawRanges: {
+      ordinary: {first: 0, count: counts[0]},
+      seaLand: {first: counts[0], count: counts[1]},
+      seaWater: {first: counts[0] + counts[1], count: counts[2]}
     },
     stats: normalizeRouteRenderStats(build.stats)
   };

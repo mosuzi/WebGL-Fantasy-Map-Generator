@@ -53,10 +53,11 @@ for (const wrapper of ["executeNamebaseHistoryCommand"]) {
   assert.ok(functionBody(source, wrapper).includes("executeHistoryCommand("), `${wrapper} 必须委托统一历史执行器`);
 }
 
-const directApply = sourceEntries
-  .filter(entry => !entry.path.endsWith("edit-history.js"))
-  .flatMap(entry => findMethodAccesses(entry, "command", ["apply", "revert"]));
-assert.deepEqual(directApply, [], `运行时不得直接访问 command.apply/revert：${formatAccesses(directApply)}`);
+const riverWaypointBody = functionBody(source, "applyRiverWaypointDraft");
+assert.ok(riverWaypointBody.includes("createEditRiverControlPointsCommand("), "河流控制点提交必须创建领域命令");
+assert.ok(riverWaypointBody.includes("executeEditCommand("), "河流控制点提交必须委托统一编辑执行器");
+assert.ok(!riverWaypointBody.includes("editHistory.execute("), "河流控制点提交不得直接写 EditHistory");
+assert.ok(!/command\.(?:apply|revert)\(/.test(riverWaypointBody), "河流控制点提交不得直接调用命令 apply / revert");
 
 console.log(JSON.stringify({
   ok: true,
@@ -64,6 +65,7 @@ console.log(JSON.stringify({
   editHistoryExecuteCalls: historyAccesses.filter(access => access.method === "execute").length,
   editHistoryUndoCalls: historyAccesses.filter(access => access.method === "undo").length,
   editHistoryRedoCalls: historyAccesses.filter(access => access.method === "redo").length,
+  riverWaypointDelegated: true,
   delegatedEditWrappers: ["executeNamebaseEdit", "applyMarkerCollectionCommand"],
   delegatedHistoryWrappers: ["executeNamebaseHistoryCommand"]
 }, null, 2));

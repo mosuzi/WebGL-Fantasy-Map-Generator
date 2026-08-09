@@ -1,4 +1,10 @@
 import {resolveBiomeDescriptor} from "../generator/biome-registry.js";
+import {isSharedCubicCurve, sampleCentripetalCatmullRom} from "../geometry/cubic-path.js";
+
+export const CITY_PICK_RADIUS_CSS_PX = 18;
+
+const CITY_OVERLAP_POSITION_EPSILON = 0.11;
+const CITY_PICK_DISTANCE_EPSILON = 1e-6;
 
 export function pickGridCell(map, worldX, worldY) {
   if (!map || worldX < 0 || worldY < 0 || worldX > map.metadata.graphWidth || worldY > map.metadata.graphHeight) {
@@ -8,11 +14,14 @@ export function pickGridCell(map, worldX, worldY) {
   const {columns, rows} = map.grid.metadata;
   const column = Math.max(0, Math.min(columns - 1, Math.floor((worldX / map.metadata.graphWidth) * columns)));
   const row = Math.max(0, Math.min(rows - 1, Math.floor((worldY / map.metadata.graphHeight) * rows)));
-  const candidates = candidateCells(column, row, columns, rows);
+  const candidates = expandRefinedCandidateCells(map.grid, candidateCells(column, row, columns, rows));
 
   for (const cell of candidates) {
     if (pointInCell(map, cell, worldX, worldY)) return buildPickResult(map, cell, worldX, worldY, candidates.length);
   }
+
+  const nearest = nearestCandidateCell(map.grid, candidates, worldX, worldY);
+  if (nearest !== null) return buildPickResult(map, nearest, worldX, worldY, candidates.length);
 
   return {
     gridCell: null,
@@ -23,6 +32,38 @@ export function pickGridCell(map, worldX, worldY) {
   };
 }
 
+function nearestCandidateCell(grid, candidates, x, y) {
+  let nearest = null;
+  let distance = Infinity;
+  for (const cell of candidates) {
+    const point = grid?.points?.[cell];
+    if (!point) continue;
+    const next = (Number(point[0]) - x) ** 2 + (Number(point[1]) - y) ** 2;
+    if (next >= distance) continue;
+    nearest = cell;
+    distance = next;
+  }
+  return nearest;
+}
+
+function expandRefinedCandidateCells(grid, sourceCandidates) {
+  const children = grid?.refinement?.children;
+  if (!children?.length) return sourceCandidates;
+  const expanded = [];
+  const seen = new Set();
+  for (const mother of sourceCandidates) {
+    const group = children[mother];
+    const candidates = group?.length ? group : [mother];
+    for (const value of candidates) {
+      const cell = Number(value);
+      if (!Number.isInteger(cell) || cell < 0 || seen.has(cell)) continue;
+      seen.add(cell);
+      expanded.push(cell);
+    }
+  }
+  return expanded;
+}
+
 export function buildObjectPickingIndex(map) {
   const bucketSize = Math.max(28, Math.max(map.metadata.graphWidth, map.metadata.graphHeight) / 48);
   const columns = Math.max(1, Math.ceil(map.metadata.graphWidth / bucketSize));
@@ -31,12 +72,12 @@ export function buildObjectPickingIndex(map) {
   let routeSegmentCount = 0;
   let riverSegmentCount = 0;
 
-  for (const city of map.settlements.cities) {
+  for (const city of map?.settlements?.cities || []) {
     if (!city) continue;
     addToBucket(buckets, columns, rows, bucketSize, city.x, city.y, "cities", city);
   }
 
-  for (const marker of map.markers.markers) {
+  for (const marker of map?.markers?.markers || []) {
     addToBucket(buckets, columns, rows, bucketSize, marker.x, marker.y, "markers", marker);
   }
 
@@ -44,20 +85,22 @@ export function buildObjectPickingIndex(map) {
     addToBucket(buckets, columns, rows, bucketSize, regiment.x, regiment.y, "military", regiment);
   }
 
-  for (const route of map.settlements.routes) {
-    for (let index = 0; index < route.points.length - 1; index++) {
-      const a = route.points[index];
-      const b = route.points[index + 1];
+  for (const route of map?.settlements?.routes || []) {
+    const points = Array.isArray(route?.points) ? route.points : [];
+    for (let index = 0; index < points.length - 1; index++) {
+      const a = points[index];
+      const b = points[index + 1];
       const segment = {kind: "route", route, index, a, b};
       addSegmentToBuckets(buckets, columns, rows, bucketSize, segment, "routeSegments");
       routeSegmentCount++;
     }
   }
 
-  for (const river of map.rivers.rivers) {
-    for (let index = 0; index < river.points.length - 1; index++) {
-      const a = river.points[index];
-      const b = river.points[index + 1];
+  for (const river of map?.rivers?.rivers || []) {
+    const points = riverPickingPoints(river);
+    for (let index = 0; index < points.length - 1; index++) {
+      const a = points[index];
+      const b = points[index + 1];
       const segment = {kind: "river", river, index, a, b};
       addSegmentToBuckets(buckets, columns, rows, bucketSize, segment, "riverSegments");
       riverSegmentCount++;
@@ -75,13 +118,52 @@ export function buildObjectPickingIndex(map) {
     rows,
     buckets,
     bucketCount: buckets.size,
-    cityCount: map.settlements.cities.filter(Boolean).length,
-    markerCount: map.markers.markers.length,
+    cityCount: (map?.settlements?.cities || []).filter(Boolean).length,
+    markerCount: (map?.markers?.markers || []).length,
     militaryCount: militaryRegiments(map).length,
     routeSegmentCount,
     riverSegmentCount,
     maxBucketItems
   };
+}
+
+export function relocateCityInPickingIndex(index, city, previousPoint = null) {
+  if (!index || !city) return false;
+  const id = Number(city.id);
+  const removeFrom = point => {
+    if (!Number.isFinite(Number(point?.x)) || !Number.isFinite(Number(point?.y))) return;
+    const column = clampBucket(Math.floor(Number(point.x) / index.bucketSize), index.columns);
+    const row = clampBucket(Math.floor(Number(point.y) / index.bucketSize), index.rows);
+    const bucket = index.buckets.get(row * index.columns + column);
+    if (bucket) bucket.cities = bucket.cities.filter(item => Number(item?.id) !== id);
+  };
+  removeFrom(previousPoint);
+  addToBucket(index.buckets, index.columns, index.rows, index.bucketSize, Number(city.x), Number(city.y), "cities", city);
+  return true;
+}
+
+export function refreshRoutesInPickingIndex(index, routes, routeIds) {
+  if (!index) return false;
+  const ids = new Set((routeIds || []).map(Number).filter(Number.isInteger));
+  if (!ids.size) return true;
+  for (const bucket of index.buckets.values()) {
+    bucket.routeSegments = bucket.routeSegments.filter(segment => !ids.has(Number(segment?.route?.id)));
+  }
+  for (const route of routes || []) {
+    if (!ids.has(Number(route?.id))) continue;
+    const points = Array.isArray(route.points) ? route.points : [];
+    for (let segmentIndex = 0; segmentIndex < points.length - 1; segmentIndex++) {
+      addSegmentToBuckets(index.buckets, index.columns, index.rows, index.bucketSize, {
+        kind: "route",
+        route,
+        index: segmentIndex,
+        a: points[segmentIndex],
+        b: points[segmentIndex + 1]
+      }, "routeSegments");
+    }
+  }
+  index.routeSegmentCount = (routes || []).reduce((total, route) => total + Math.max(0, (Array.isArray(route?.points) ? route.points.length : 0) - 1), 0);
+  return true;
 }
 
 export function pickMilitary(map, index, worldX, worldY, maxDistance) {
@@ -154,7 +236,7 @@ export function pickRiver(map, index, worldX, worldY, maxDistance) {
       networkIssue: river.networkIssue || "",
       outletKind: river.outletKind || (river.parent ? "confluence" : "unknown"),
       flux: river.flux,
-      length: river.cells.length,
+      length: Array.isArray(river.cells) ? river.cells.length : Array.isArray(river.points) ? river.points.length : 0,
       distance,
       candidateCount
     };
@@ -184,32 +266,41 @@ export function pickRiverControlPoint(preview, worldX, worldY, maxDistance) {
   return best;
 }
 
-export function pickCity(map, index, worldX, worldY, maxDistance) {
+export function pickCity(map, index, worldX, worldY, maxDistance, {cycleIndex = 0, distanceToCity = null, maxPickDistance = maxDistance} = {}) {
   if (!map?.settlements?.cities?.length) return null;
-  let best = null;
   let candidateCount = 0;
   const cities = index ? queryIndexedItems(index, worldX, worldY, maxDistance, "cities", city => city.id) : map.settlements.cities;
-
+  const eligible = [];
   for (const city of cities) {
     if (!city) continue;
     candidateCount++;
-    const distance = Math.hypot(worldX - city.x, worldY - city.y);
-    if (distance > maxDistance || (best && distance >= best.distance)) continue;
-    best = {
-      kind: "city",
-      id: city.id,
-      name: city.name,
-      type: city.capital ? "capital" : city.provincial ? "provincial" : city.port ? "port" : "city",
-      population: city.population,
-      state: map.politics.states[city.state]?.name || "none",
-      province: map.politics.provinces[city.province]?.name || "none",
-      distance,
-      candidateCount
-    };
+    const worldDistance = Math.hypot(worldX - city.x, worldY - city.y);
+    if (worldDistance > maxDistance) continue;
+    const distance = typeof distanceToCity === "function" ? Number(distanceToCity(city)) : worldDistance;
+    if (Number.isFinite(distance) && distance <= maxPickDistance) eligible.push({city, distance, worldDistance});
   }
-
-  if (best) best.candidateCount = candidateCount;
-  return best;
+  if (!eligible.length) return null;
+  eligible.sort((left, right) => {
+    const distanceDelta = left.distance - right.distance;
+    return Math.abs(distanceDelta) > CITY_PICK_DISTANCE_EPSILON ? distanceDelta : Number(left.city.id) - Number(right.city.id);
+  });
+  const nearest = eligible[0];
+  const overlaps = eligible.filter(item => sameCityPosition(item.city, nearest.city));
+  const selected = overlaps[positiveModulo(cycleIndex, overlaps.length)] || nearest;
+  const city = selected.city;
+  return {
+    kind: "city",
+    id: city.id,
+    name: city.name,
+    type: city.capital ? "capital" : city.provincial ? "provincial" : city.port ? "port" : "city",
+    population: city.population,
+    state: map.politics.states[city.state]?.name || "none",
+    province: map.politics.provinces[city.province]?.name || "none",
+    distance: selected.distance,
+    worldDistance: selected.worldDistance,
+    candidateCount,
+    overlapCandidateIds: overlaps.map(item => Number(item.city.id))
+  };
 }
 
 export function pickMarker(map, index, worldX, worldY, maxDistance, predicate = () => true) {
@@ -392,21 +483,22 @@ function religionUrbanPopulation(map, religionId) {
 }
 
 function allRouteSegments(map) {
-  return map.settlements.routes.flatMap(route => route.points.slice(0, -1).map((point, index) => ({
-    route,
-    index,
-    a: point,
-    b: route.points[index + 1]
-  })));
+  return (map?.settlements?.routes || []).flatMap(route => {
+    const points = Array.isArray(route?.points) ? route.points : [];
+    return points.slice(0, -1).map((point, index) => ({route, index, a: point, b: points[index + 1]}));
+  });
 }
 
 function allRiverSegments(map) {
-  return map.rivers.rivers.flatMap(river => river.points.slice(0, -1).map((point, index) => ({
-    river,
-    index,
-    a: point,
-    b: river.points[index + 1]
-  })));
+  return (map?.rivers?.rivers || []).flatMap(river => {
+    const points = riverPickingPoints(river);
+    return points.slice(0, -1).map((point, index) => ({river, index, a: point, b: points[index + 1]}));
+  });
+}
+
+function riverPickingPoints(river) {
+  const points = Array.isArray(river?.points) ? river.points : [];
+  return isSharedCubicCurve(river?.visualCurve) ? sampleCentripetalCatmullRom(points).points : points;
 }
 
 function militaryRegiments(map) {
@@ -532,6 +624,17 @@ function buildPickResult(map, gridCell, worldX, worldY, candidates) {
     worldY,
     candidates
   };
+}
+
+function positiveModulo(value, size) {
+  if (!size) return 0;
+  const normalized = Math.trunc(Number(value) || 0) % size;
+  return normalized < 0 ? normalized + size : normalized;
+}
+
+function sameCityPosition(left, right) {
+  return Math.abs(Number(left?.x) - Number(right?.x)) <= CITY_OVERLAP_POSITION_EPSILON
+    && Math.abs(Number(left?.y) - Number(right?.y)) <= CITY_OVERLAP_POSITION_EPSILON;
 }
 
 function distanceToSegment(x, y, a, b) {
