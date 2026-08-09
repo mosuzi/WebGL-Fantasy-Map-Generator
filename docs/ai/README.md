@@ -36,3 +36,4 @@
 - 数据解释与聚合：[`map-data-model.md`](./map-data-model.md)、[`regional-analysis.md`](./regional-analysis.md)
 - 复杂区域干预：[`regional-intervention-playbook.md`](./regional-intervention-playbook.md)
 - 写入安全：[`safe-change-boundaries.md`](./safe-change-boundaries.md)
+- 独立实验室：[`laboratory-prototypes.md`](./laboratory-prototypes.md)；仅在需求明确指向固定夹具、历史 WebGL 对照或加载视觉概念稿时进入，不替代正式地图入口。

@@ -64,6 +64,7 @@ pnpm run build
 | 使用脚本、无头流程或当前标签页桥 | [API 与自动化](./docs/wiki/API与自动化.md) |
 | 打开旧地图并了解迁移边界 | [旧图兼容](./docs/wiki/旧图兼容.md) |
 | 让 AI 分析或安全修改地图 | [AI 接手入口](./docs/ai/README.md) |
+| 查看或维护独立实验室 / 原型 | [独立实验室与原型说明](./docs/architecture/laboratory-prototypes.md) |
 | 查看当前唯一有效的任务范围 | [权威任务清单](./docs/current-plan.md#权威任务清单) |
 | 追溯重要决定和验收结果 | [开发日志](./docs/development-log.md) |
 

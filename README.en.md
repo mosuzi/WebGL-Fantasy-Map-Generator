@@ -64,6 +64,7 @@ See the [installation and first-run guide (Chinese)](./docs/wiki/安装与快速
 | Use scripts, headless workflows, or the current-tab bridge | [API and automation (Chinese)](./docs/wiki/API与自动化.md) |
 | Open an older map and understand migration limits | [Older-map compatibility (Chinese)](./docs/wiki/旧图兼容.md) |
 | Let an AI analyze or safely modify a map | [AI handoff guide (Chinese)](./docs/ai/README.md) |
+| Inspect or maintain an independent lab / prototype | [Laboratory and prototype guide (Chinese)](./docs/architecture/laboratory-prototypes.md) |
 | See the only authoritative scope of current work | [Authoritative task list (Chinese)](./docs/current-plan.md#权威任务清单) |
 | Trace major decisions and acceptance results | [Development log (Chinese)](./docs/development-log.md) |
 

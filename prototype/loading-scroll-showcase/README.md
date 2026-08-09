@@ -2,6 +2,8 @@
 
 这是正式应用加载页的独立评审原型，只用于确认画卷材质、文字层次和动效方向；当前采用无高光的古朴古画风格，整张旧纸在左右两侧自行卷成厚纸筒，中央保留上下不齐的毛边，以哑光浓墨、干笔斑驳和旧纸污斑为主。卷面不再放“小字莫苏子”款识，品牌印面直接采用用户最终指定的 `莫苏子印3.png`：原图红色区域转换为暗朱印泥，黑色区域镂空并透出旧纸，终态保持轻微左倾。用户明确认可前，不会移植到正式 `app/webgl-generator/index.html`，页面内的定时演示也不会进入真实加载生命周期。
 
+四个实验室的统一定位、部署与维护规则见 [`../../docs/architecture/laboratory-prototypes.md`](../../docs/architecture/laboratory-prototypes.md)；AI 操作边界见 [`../../docs/ai/laboratory-prototypes.md`](../../docs/ai/laboratory-prototypes.md)。
+
 ## 运行
 
 ```powershell

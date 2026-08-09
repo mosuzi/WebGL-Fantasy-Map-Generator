@@ -2,6 +2,8 @@
 
 这是第 128 项边界平滑调研的独立验证原型，用于比较不同简化 / 平滑算法能否在共享边界结构下保持地图拓扑。高风险用例会直接复用正式 renderer 的纯几何函数，但实验室不接入地图生成器、存档或编辑命令。
 
+实验室页面本身始终隔离；不过 `shore-render-spike-filter.js`、`surface-correction.js` 与 `stress-analysis.js` 的纯函数已被正式岸线链和回归受控复用。修改这些文件时必须同时按正式岸线范围验证，不能把它们当作可随意试验的孤立代码。四个实验室的统一入口见 [`../../docs/architecture/laboratory-prototypes.md`](../../docs/architecture/laboratory-prototypes.md)，AI 边界见 [`../../docs/ai/laboratory-prototypes.md`](../../docs/ai/laboratory-prototypes.md)。
+
 ## 运行
 
 ```powershell
