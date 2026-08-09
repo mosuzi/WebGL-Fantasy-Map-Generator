@@ -65,7 +65,7 @@
 
 ## 当前状态
 
-2026-08-09 权威任务第 317 项进行中。已在 `vercel.json` 为用户指定的 `https://fmg.mosuzi.top/prototype/web-cells/` 增加透明兼容改写，连同相对 `src/`、`data/` 资源复用既有 `webgl-cells` 静态目录；正式控制面板“简介”已增加一个“实验室”下拉，四个中文条目均在新标签页打开正式路径。生产环境当前尚未包含这次改写，`web-cells` 仍落入正式 SPA，必须待下一次推送触发 Vercel 部署后再以四个页面标题作线上终验；在此之前不得把第 317 项归档。构建、部署静态路由、专项 Chrome 桌面 / 窄屏、交互面和差异检查通过；AI 机器目录既有四项陈旧状态保持未动，`source/`、Wiki、地图、存档、API 与生成流程未改。
+2026-08-09 权威任务第 317 项已完成并归档。`https://fmg.mosuzi.top/prototype/web-cells/` 现以透明兼容改写复用既有 `webgl-cells` 静态目录及相对 `src/`、`data/` 资源，旧 `/prototype/webgl-cells/` 保留；控制面板“简介”新增一个“实验室”下拉，四个中文条目均在新标签页打开正式路径。生产 Chrome `1280 / 390 / 320px`、线上四页标题、相对模块与固定样本均通过，四类错误为 `0`。构建、部署静态路由、交互面、文档链接与差异检查通过；AI 机器目录既有四项陈旧状态保持未动，`source/`、Wiki、地图、存档、API 与生成流程未改，当前没有活动权威任务。
 
 2026-08-09 权威任务第 316 项已完成并归档。`prototype/` 当前固定为 WebGL cells 历史原型、共享边界拓扑实验室、画卷加载概念稿和河流网络实验室四项；统一职责、入口、验证、部署与正式隔离边界见 `docs/architecture/laboratory-prototypes.md`，AI 选择与写入禁止规则见 `docs/ai/laboratory-prototypes.md`。根 README 中英文版、docs / AI 索引和 Vercel 说明均已引用，`docs/wiki/` 未动。拓扑实验室的少量纯函数属于正式岸线受控复用，河网实验室页面只读；专项和部署回归通过。既有 `docs/generated/ai` 机器目录与当前源码不同步，未在本项文档范围再生成；当前没有活动权威任务。
 

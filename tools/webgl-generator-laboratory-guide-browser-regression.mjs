@@ -12,18 +12,19 @@ const sourceDir = join(rootDir, "source", "Fantasy-Map-Generator");
 const playwright = createRequire(join(sourceDir, "package.json"))("playwright");
 const host = "127.0.0.1";
 const timeoutMs = 180000;
+const configuredBaseUrl = String(process.env.FMG_BASE_URL || "").replace(/\/$/, "");
 const laboratories = [
   {label: "WebGL 单元格实验室", url: "https://fmg.mosuzi.top/prototype/web-cells/"},
   {label: "共享边界拓扑实验室", url: "https://fmg.mosuzi.top/prototype/boundary-topology-lab/"},
   {label: "画卷加载页概念实验室", url: "https://fmg.mosuzi.top/prototype/loading-scroll-showcase/"},
   {label: "河流网络算法实验室", url: "https://fmg.mosuzi.top/prototype/river-network-lab/"}
 ];
-const vite = await createViteServer({configFile: join(rootDir, "vite.config.mjs"), server: {host, port: 0}, logLevel: "error"});
+const vite = configuredBaseUrl ? null : await createViteServer({configFile: join(rootDir, "vite.config.mjs"), server: {host, port: 0}, logLevel: "error"});
 let browser;
 
 try {
-  await vite.listen();
-  const port = vite.httpServer.address().port;
+  if (vite) await vite.listen();
+  const baseUrl = configuredBaseUrl || `http://${host}:${vite.httpServer.address().port}`;
   browser = await playwright.chromium.launch({headless: true, channel: "chrome"});
   const context = await browser.newContext({viewport: {width: 1280, height: 800}, deviceScaleFactor: 1});
   await context.addInitScript(() => {
@@ -43,7 +44,7 @@ try {
   });
   page.on("pageerror", error => pageErrors.push(error.message));
 
-  await page.goto(`http://${host}:${port}/?healthClear=1&laboratoryGuide=317`, {waitUntil: "domcontentloaded"});
+  await page.goto(`${baseUrl}/?healthClear=1&laboratoryGuide=317`, {waitUntil: "domcontentloaded"});
   await waitForApiReady(page, timeoutMs);
   await openControlPanel(page);
   await page.getByRole("tab", {name: "简介", exact: true}).click();
@@ -88,11 +89,11 @@ try {
   assert.deepEqual(pageErrors, [], "实验室导引浏览器回归出现 page error");
   assert.deepEqual(healthErrors, [], "实验室导引浏览器回归出现 health error");
   assert.equal(await page.evaluate(() => window.__webglGeneratorApp?.renderer?.getStats?.()?.draw?.glError ?? null), 0, "实验室导引浏览器回归出现 WebGL error");
-  console.log(JSON.stringify({ok: true, laboratories: targets, layouts, consoleErrors: 0, pageErrors: 0, healthErrors: 0, glError: 0}, null, 2));
+  console.log(JSON.stringify({ok: true, baseUrl, laboratories: targets, layouts, consoleErrors: 0, pageErrors: 0, healthErrors: 0, glError: 0}, null, 2));
   await context.close();
 } finally {
   if (browser) await browser.close();
-  await vite.close();
+  if (vite) await vite.close();
 }
 
 async function openControlPanel(page) {
