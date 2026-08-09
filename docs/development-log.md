@@ -1,5 +1,11 @@
 # 开发历史
 
+## 2026-08-10：完成第 318 项——边界与河流实验室自包含静态部署
+
+- `e1af257` 已推送 `main`，生产部署切换后直接打开两项实验室：边界页固定夹具 / 候选 / 矩阵为 `20 / 7 / 20`，河网页为 `8 / 3 / 8`；两页 API 已初始化，console / page error 与 `/app/webgl-generator/src/**` 模块请求均为 `0`。线上“没有用例”已消除。
+- 两页现由构建阶段各自输出自包含静态 bundle，正式应用运行时代码、地图、存档、公开 API、生成流程与实验室算法没有改动。生产构建、部署回归、新增静态浏览器回归、控制面板实验室导引与归档检查通过；本次启动的临时服务均已关闭。
+- 面向读者的实验室说明已收敛为单个“在线预览”链接，不再展开正式路径、历史入口或路由细节；部署实现仍由配置和回归门禁覆盖。`regress:shoreline` 的既有 `lineTriangleCount=11964` 阈值漂移，以及 AI 机器目录四项陈旧文件保持单列，未在本项扩修。`app/`、`source/`、Wiki、地图、存档、API 与生成流程未改。
+
 ## 2026-08-09：登记第 318 项——边界与河流实验室自包含静态部署（本地验收完成，待发布）
 
 - 用户发现两项正式实验室在线上没有用例。生产页面诊断确认这不是夹具为空：边界页尝试加载 `/app/webgl-generator/src/renderer/coastline-topology.js`，河网页尝试加载 `/app/webgl-generator/src/generator/index.js`；两者均被 SPA fallback 以 HTML 返回，浏览器在模块 MIME 校验阶段中止，因此 `window.boundaryTopologyLab / window.riverNetworkLab` 没有初始化。
