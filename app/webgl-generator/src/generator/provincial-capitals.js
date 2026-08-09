@@ -1,3 +1,5 @@
+import {burgIdsAtPackCell, cityIdsAtGridCell} from "../runtime/settlement-cell-index.js";
+
 const POPULATION_BAND_RATIO = 0.75;
 const SCORE_WEIGHTS = Object.freeze({
   population: 0.6,
@@ -299,12 +301,14 @@ function validProvinceCandidates(map, province) {
     const gridCell = Number.isInteger(city.cell) ? city.cell : Number(map?.pack?.cells?.g?.[packCell]);
     if (!Number.isInteger(packCell) || packCell < 0 || Number(burg.cell) !== packCell) continue;
     if (Number(map?.pack?.cells?.h?.[packCell]) < 20) continue;
-    if (Number(map?.pack?.cells?.burg?.[packCell]) !== Number(city.burgId)) continue;
+    const packBurgIds = burgIdsAtPackCell(map, packCell);
+    if (!packBurgIds.includes(Number(city.burgId)) || Number(map?.pack?.cells?.burg?.[packCell]) !== packBurgIds[0]) continue;
     if (Number(map?.pack?.cells?.province?.[packCell]) !== id || Number(map?.pack?.cells?.state?.[packCell]) !== stateId) continue;
     if (Number(burg.province) !== id || Number(burg.state) !== stateId) continue;
     if (!Number.isInteger(gridCell) || gridCell < 0 || Number(map?.grid?.cells?.h?.[gridCell]) < 20) continue;
     if (Number(map?.pack?.cells?.g?.[packCell]) !== gridCell) continue;
-    if (Number(map?.grid?.cells?.burg?.[gridCell]) !== Number(city.id)) continue;
+    const gridCityIds = cityIdsAtGridCell(map, gridCell);
+    if (!gridCityIds.includes(Number(city.id)) || Number(map?.grid?.cells?.burg?.[gridCell]) !== gridCityIds[0]) continue;
     candidates.push(candidateFromCity(map, city, burg, province, packCell, gridCell));
   }
   return candidates;

@@ -2,6 +2,7 @@ import {cloneObjectNote, deleteObjectNote, objectNoteId, readObjectNote, restore
 import {OBJECT_KIND} from "./object-kinds.js";
 import {objectAffected} from "./edit-command-effects.js";
 import {MinPriorityQueue} from "../generator/priority-queue.js";
+import {invalidateSettlementCellIndex, refreshRoutesInSettlementCellIndex} from "./settlement-cell-index.js";
 
 const ROUTE_NOTE_EFFECTS = Object.freeze({
   render: "none",
@@ -205,18 +206,33 @@ export function createEditRouteCommand(routeId, patch = {}, {label = "编辑路�
 }
 
 export function planRouteRelocation(map, route, cityId, target) {
+  const base = relocationEndpoints(map, route, cityId, target);
+  if (base.result) return base.result;
+  const path = findRelocationRoutePath(map.pack, base.start, base.end, {water: base.water});
+  if (path.length < 2) {
+    return {action: base.water ? "delete" : "failed", route: null, reason: base.water ? "海路无法在目标水体局部重寻，将删除" : "关联陆路或小径无法局部重寻"};
+  }
+  const relocated = buildRelocatedRoute(map, route, path, {
+    cityId,
+    point: target.point,
+    portFeature: target.portFeature,
+    movingFrom: base.movingFrom,
+    movingTo: base.movingTo
+  });
+  return {action: "reroute", route: relocated, reason: "已规划局部重寻", cells: path.length};
+}
+
+function relocationEndpoints(map, route, cityId, target) {
   const movingFrom = Number(route?.from) === Number(cityId);
   const movingTo = Number(route?.to) === Number(cityId);
-  if (!movingFrom && !movingTo) return {action: "unchanged", route: cloneRoute(route), reason: "路线不关联目标城市"};
-
+  if (!movingFrom && !movingTo) return {result: {action: "unchanged", route: cloneRoute(route), reason: "路线不关联目标城市"}};
   const water = route.type === "searoute";
   if (water && (!target.portFeature || !Number.isInteger(target.seaAnchor))) {
-    return {action: "delete", route: null, reason: "目标港口失效，关联海路将删除"};
+    return {result: {action: "delete", route: null, reason: "目标港口失效，关联海路将删除"}};
   }
   if (water && Number(route.feature) > 0 && Number(route.feature) !== Number(target.portFeature)) {
-    return {action: "delete", route: null, reason: "目标港口改连其它水体，原海路将删除"};
+    return {result: {action: "delete", route: null, reason: "目标港口改连其它水体，原海路将删除"}};
   }
-
   const packCells = route.packCells || [];
   const oppositeCityId = movingFrom ? Number(route.to) : Number(route.from);
   const oppositeCity = oppositeCityId >= 0 ? findCity(map, oppositeCityId) : null;
@@ -225,27 +241,85 @@ export function planRouteRelocation(map, route, cityId, target) {
     : Number.isInteger(oppositeCity?.packCell) ? oppositeCity.packCell : movingFrom ? packCells.at(-1) : packCells[0];
   const moving = water ? target.seaAnchor : target.packCell;
   if (!Number.isInteger(moving) || !Number.isInteger(opposite) || moving === opposite) {
-    return {action: water ? "delete" : "failed", route: null, reason: "路线缺少可重寻的另一端"};
+    return {result: {action: water ? "delete" : "failed", route: null, reason: "路线缺少可重寻的另一端"}};
   }
+  return {
+    movingFrom,
+    movingTo,
+    water,
+    start: movingFrom ? moving : opposite,
+    end: movingFrom ? opposite : moving
+  };
+}
 
-  const start = movingFrom ? moving : opposite;
-  const end = movingFrom ? opposite : moving;
-  const path = findRelocationRoutePath(map.pack, start, end, {water});
+export async function planRouteRelocationAsync(map, route, cityId, target, options = {}) {
+  const base = relocationEndpoints(map, route, cityId, target);
+  if (base.result) return base.result;
+  const path = await findRelocationRoutePathAsync(map.pack, base.start, base.end, {
+    water: base.water,
+    signal: options.signal,
+    shouldContinue: options.shouldContinue,
+    yieldToBrowser: options.yieldToBrowser,
+    sliceMs: options.sliceMs
+  });
   if (path.length < 2) {
-    return {action: water ? "delete" : "failed", route: null, reason: water ? "海路无法在目标水体局部重寻，将删除" : "关联陆路或小径无法局部重寻"};
+    return {action: base.water ? "delete" : "failed", route: null, reason: base.water ? "海路无法在目标水体局部重寻，将删除" : "关联陆路或小径无法局部重寻"};
   }
   const relocated = buildRelocatedRoute(map, route, path, {
     cityId,
     point: target.point,
     portFeature: target.portFeature,
-    movingFrom,
-    movingTo
+    movingFrom: base.movingFrom,
+    movingTo: base.movingTo
   });
   return {action: "reroute", route: relocated, reason: "已规划局部重寻", cells: path.length};
 }
 
-export function refreshRouteDerivedAfterCityMove(map) {
-  refreshRouteDerived(map);
+export function refreshRouteDerivedAfterCityMove(map, {routeIds = [], touchedPackCells = []} = {}) {
+  const ids = new Set(routeIds.map(Number).filter(Number.isInteger));
+  if (!ids.size) return;
+  const routes = readRoutes(map);
+  const cells = new Set(touchedPackCells.map(Number).filter(Number.isInteger));
+  for (const route of routes) {
+    if (!ids.has(Number(route?.id))) continue;
+    for (const cell of route.packCells || []) if (Number.isInteger(Number(cell))) cells.add(Number(cell));
+  }
+  map.pack ||= {};
+  map.pack.routes ||= [];
+  for (const id of ids) {
+    const route = routes.find(item => Number(item?.id) === id);
+    if (route) map.pack.routes[id] = packRouteRecord(route);
+    else delete map.pack.routes[id];
+  }
+  map.pack.cells ||= {};
+  map.pack.cells.routes ||= {};
+  const links = map.pack.cells.routes;
+  for (const cell of cells) {
+    const neighbors = links[cell];
+    if (!neighbors) continue;
+    for (const [neighborKey, routeId] of Object.entries(neighbors)) {
+      if (!ids.has(Number(routeId))) continue;
+      delete neighbors[neighborKey];
+      const reverse = links[Number(neighborKey)];
+      if (reverse && Number(reverse[cell]) === Number(routeId)) delete reverse[cell];
+    }
+    if (!Object.keys(neighbors).length) delete links[cell];
+  }
+  for (const route of routes) {
+    if (!ids.has(Number(route?.id))) continue;
+    const packCells = route.packCells || [];
+    for (let index = 0; index < packCells.length - 1; index++) {
+      const from = Number(packCells[index]);
+      const to = Number(packCells[index + 1]);
+      if (!Number.isInteger(from) || !Number.isInteger(to)) continue;
+      links[from] ||= {};
+      links[to] ||= {};
+      links[from][to] = route.id;
+      links[to][from] = route.id;
+    }
+  }
+  refreshRoutesInSettlementCellIndex(map, ids);
+  refreshRouteMetadata(map, routes);
 }
 
 export function createSetRouteNoteCommand(routeId, body, {name = ""} = {}) {
@@ -369,6 +443,7 @@ function cloneRoute(route) {
 }
 
 function refreshRouteDerived(map) {
+  invalidateSettlementCellIndex(map);
   const routes = map?.settlements?.routes || [];
   if (map?.settlements?.metadata) {
     const routeResources = routeResourceStats(routes);
@@ -455,6 +530,59 @@ function findRelocationRoutePath(pack, start, end, {water}) {
     }
   }
   return [];
+}
+
+async function findRelocationRoutePathAsync(pack, start, end, {water, signal = null, shouldContinue = null, yieldToBrowser = null, sliceMs = 4} = {}) {
+  const size = pack.cells?.i?.length || pack.cells?.h?.length || 0;
+  const best = new Float64Array(size);
+  best.fill(Infinity);
+  const previous = new Int32Array(size);
+  previous.fill(-1);
+  const closed = new Uint8Array(size);
+  const queue = new MinPriorityQueue();
+  best[start] = 0;
+  queue.push(start, 0);
+  let visited = 0;
+  let sliceStartedAt = now();
+  const yieldTask = typeof yieldToBrowser === "function" ? yieldToBrowser : defaultYield;
+  while (queue.length && visited < Math.min(size, 50000)) {
+    assertRoutePlanningActive(signal, shouldContinue);
+    const current = queue.pop();
+    if (closed[current]) continue;
+    closed[current] = 1;
+    visited++;
+    if (current === end) return reconstructRoutePath(previous, end);
+    for (const neighbor of pack.cells.c?.[current] || []) {
+      if (closed[neighbor] || !relocationTerrainAllows(pack.cells, neighbor, {water, start, end})) continue;
+      const step = routeStepCost(pack.cells, current, neighbor, water);
+      if (!Number.isFinite(step)) continue;
+      const tentative = best[current] + step;
+      if (tentative >= best[neighbor]) continue;
+      best[neighbor] = tentative;
+      previous[neighbor] = current;
+      queue.push(neighbor, tentative + routeHeuristic(pack.cells, neighbor, end));
+    }
+    if (now() - sliceStartedAt < Math.max(1, Number(sliceMs) || 4)) continue;
+    await yieldTask();
+    assertRoutePlanningActive(signal, shouldContinue);
+    sliceStartedAt = now();
+  }
+  return [];
+}
+
+function assertRoutePlanningActive(signal, shouldContinue) {
+  if (!signal?.aborted && (typeof shouldContinue !== "function" || shouldContinue())) return;
+  const error = new Error("城市移动路线预检已取消");
+  error.code = "operation_cancelled";
+  throw error;
+}
+
+function defaultYield() {
+  return new Promise(resolve => setTimeout(resolve, 0));
+}
+
+function now() {
+  return globalThis.performance?.now?.() ?? Date.now();
 }
 
 function relocationTerrainAllows(cells, cell, {water, start, end}) {
@@ -706,26 +834,40 @@ function routeResourceStats(routes) {
   return {resourceCells, markerResourceCells, routesWithResources};
 }
 
+function refreshRouteMetadata(map, routes) {
+  if (!map?.settlements?.metadata) return;
+  const resources = routeResourceStats(routes);
+  map.settlements.metadata.routes = routes.length;
+  map.settlements.metadata.routeSegments = routes.reduce((sum, route) => sum + Math.max(0, (route?.points || []).length - 1), 0);
+  map.settlements.metadata.routeResourceCells = resources.resourceCells;
+  map.settlements.metadata.routeMarkerResourceCells = resources.markerResourceCells;
+  map.settlements.metadata.routesWithResources = resources.routesWithResources;
+}
+
+function packRouteRecord(route) {
+  return {
+    i: route.id,
+    group: route.type === "road" ? "roads" : route.type === "trail" ? "trails" : "searoutes",
+    feature: route.feature,
+    state: route.state,
+    province: route.province,
+    from: route.from,
+    to: route.to,
+    fromProvincial: route.fromProvincial,
+    toProvincial: route.toProvincial,
+    administrativePriority: route.administrativePriority,
+    resourceCells: route.resourceCells || 0,
+    markerResourceCells: route.markerResourceCells || 0,
+    points: (route.points || []).map((point, index) => [point[0], point[1], route.packCells?.[index]])
+  };
+}
+
 function packRouteArray(routes) {
   const items = [];
   for (const route of routes || []) {
     const id = Number(route.id);
     if (!Number.isInteger(id) || id < 0) continue;
-    items[id] = {
-      i: route.id,
-      group: route.type === "road" ? "roads" : route.type === "trail" ? "trails" : "searoutes",
-      feature: route.feature,
-      state: route.state,
-      province: route.province,
-      from: route.from,
-      to: route.to,
-      fromProvincial: route.fromProvincial,
-      toProvincial: route.toProvincial,
-      administrativePriority: route.administrativePriority,
-      resourceCells: route.resourceCells || 0,
-      markerResourceCells: route.markerResourceCells || 0,
-      points: (route.points || []).map((point, index) => [point[0], point[1], route.packCells?.[index]])
-    };
+    items[id] = packRouteRecord(route);
   }
   return items;
 }

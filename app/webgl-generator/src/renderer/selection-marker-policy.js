@@ -2,6 +2,7 @@ import {LABEL_TARGET_KIND, OBJECT_KIND, isPointObjectKind} from "../runtime/obje
 
 export function isSelectionForLabelItem(selection, item) {
   if (!selection || !item) return false;
+  if (selection.suppressLabelSelection && selection.kind === OBJECT_KIND.CITY) return false;
   if (selection.kind === item.targetKind && sameObjectId(selection.id, item.targetId)) return true;
   if (selection.kind !== OBJECT_KIND.LABEL) return false;
   const targetKind = selection.targetKind || LABEL_TARGET_KIND.CITY;

@@ -66,11 +66,12 @@ assert.deepEqual(river.points, pointsAfter, "重做必须恢复同一河道控�
 assert.deepEqual(hydrologySnapshot(river), hydrologyBefore);
 
 const duplicate = inspectRiverVisualWaypoint(map, river.id, 0);
-assert.equal(duplicate.valid, false);
-assert.equal(duplicate.code, "duplicate-waypoint");
+assert.equal(duplicate.valid, true, "河流视觉控制点允许落在已有河道点位置");
 
 const appSource = readSource("../app/webgl-generator/src/runtime/app.js");
 const detailsSource = readSource("../app/webgl-generator/src/ui/vue/components/ObjectDetailsPanel.vue");
+const detailsWrapperSource = readSource("../app/webgl-generator/src/ui/panels/object-details-panel.js");
+const stylesSource = readSource("../app/webgl-generator/src/styles.css");
 const routePanelSource = readSource("../app/webgl-generator/src/ui/panels/route-panel.js");
 const riverPanelSource = readSource("../app/webgl-generator/src/ui/vue/components/RiverPanel.vue");
 assert.match(appSource, /openObjectEditorFromDetails[\s\S]*OBJECT_KIND\.ROUTE[\s\S]*startEditing/, "道路详情未直接进入真实路线编辑草稿");
@@ -80,6 +81,11 @@ assert.match(riverPanelSource, /调整河道折线|退出河道折线调整/, "�
 assert.doesNotMatch(riverPanelSource, /进入河流编辑/, "河流面板不得保留没有实际动作的伪编辑入口");
 assert.match(detailsSource, /v-if="editAction"/, "对象详情编辑按钮必须受显式能力策略控制");
 assert.doesNotMatch(detailsSource, /function canEditObject/, "对象详情不得恢复默认全部可编辑策略");
+assert.match(detailsSource, /v-if="isCity"[\s\S]*打开城市管理/, "城市对象详情缺少打开城市管理入口");
+assert.match(detailsSource, /object-details-actions-city/, "城市对象详情缺少专属两行动作布局标记");
+assert.match(detailsWrapperSource, /onOpenCityPanel: \(\) => callbacks\.onOpenCityPanel\?\.\(panelState\.object\)/, "对象详情包装层没有传递当前城市");
+assert.match(appSource, /onOpenCityPanel: \(\) => \{[\s\S]*kind: OBJECT_KIND\.CITY[\s\S]*setSelectedCityId\(object\.id\)[\s\S]*panels\.city\.open/, "城市对象详情没有复用选中感知的城市管理打开链");
+assert.match(stylesSource, /\.object-details-actions-city\s*\{[\s\S]*grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\)/, "城市对象详情四个动作没有固定为两列两行");
 
 console.log(JSON.stringify({
   ok: true,
@@ -103,6 +109,7 @@ function createRiverFixture() {
     length: Math.hypot(10, 10)
   };
   return {
+    metadata: {graphWidth: 100, graphHeight: 100},
     pack: {cells: {p: [[0, 0], [10, 10], [5, 2]]}, rivers: [targetRiver]},
     rivers: {rivers: [targetRiver]}
   };

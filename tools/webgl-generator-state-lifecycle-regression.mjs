@@ -5,8 +5,9 @@ import {resolve} from "node:path";
 
 import {generatePlaceholderMap} from "../app/webgl-generator/src/generator/index.js";
 import {EditHistory} from "../app/webgl-generator/src/runtime/edit-history.js";
-import {createMapDocument, createMapFeatureGeoJson} from "../app/webgl-generator/src/runtime/map-file-io.js";
+import {createMapDocument, createMapFeatureGeoJson, parseMapDocument, stringifyMapDocument} from "../app/webgl-generator/src/runtime/map-file-io.js";
 import {resolveObject} from "../app/webgl-generator/src/runtime/object-resolver.js";
+import {captureLockedRegenerationObjects} from "../app/webgl-generator/src/runtime/regeneration-lock-protection.js";
 import {createAddStateAtCellCommand, createApplyStateBrushCommand, createDeleteStateCommand, inspectStateCreation} from "../app/webgl-generator/src/runtime/state-edit-commands.js";
 
 const map = generatePlaceholderMap({seed: "state-lifecycle-regression", cellsTarget: 3000, heightmapTemplate: "continents"});
@@ -122,6 +123,8 @@ assert.ok(expansionPackCells.every(packCell => map.pack.cells.state[packCell] ==
 brushHistory.redo({map});
 assert.equal(map.grid.cells.state[expansionGridCell], created.stateId, "重做必须恢复新国家扩张");
 
+const emptyCapital = verifyEmptyCapitalBrushFallback();
+
 const deleteHistory = new EditHistory();
 const beforeDelete = snapshotStateCollections(map);
 const deletedProvinceIds = (map.politics.provinces || []).filter(province => province && Number(province.state) === created.stateId).map(province => Number(province.i ?? province.id));
@@ -181,6 +184,7 @@ console.log(JSON.stringify({
   },
   faultRollback: true,
   expansion: {gridCell: expansionGridCell, packCells: expansionPackCells, before: expansionBefore, after: created.stateId},
+  emptyCapital,
   deleted: {stateId: created.stateId, provinceIds: deletedProvinceIds},
   history: history.getStats(),
   brushHistory: brushHistory.getStats(),
@@ -229,6 +233,83 @@ function packCellsForGrid(targetMap, gridCell) {
     if (targetMap.pack.cells.h[packCell] >= 20 && Number(targetMap.pack.cells.g?.[packCell]) === gridCell) cells.push(packCell);
   }
   return cells;
+}
+
+function verifyEmptyCapitalBrushFallback() {
+  const targetMap = generatePlaceholderMap({seed: "state-brush-empty-capital", cellsTarget: 5000, heightmapTemplate: "continents"});
+  const sample = findBrushCapitalSample(targetMap);
+  const sourceState = targetMap.politics.states[sample.sourceStateId];
+  const independentPackState = {...targetMap.pack.states[sample.sourceStateId], neighbors: [...(targetMap.pack.states[sample.sourceStateId].neighbors || [])]};
+  targetMap.pack.states = [...targetMap.pack.states];
+  targetMap.pack.states[sample.sourceStateId] = independentPackState;
+  for (const city of targetMap.settlements.cities || []) {
+    if (!city || city.id === sample.capitalCityId || Number(city.state) !== sample.sourceStateId) continue;
+    city.state = sample.targetStateId;
+    const burg = targetMap.pack.burgs?.[city.burgId];
+    if (burg) burg.state = sample.targetStateId;
+  }
+  const before = {
+    capital: sourceState.capital,
+    capitalName: sourceState.capitalName,
+    center: sourceState.center,
+    gridCenter: sourceState.gridCenter,
+    packCapital: independentPackState.capital,
+    packCapitalName: independentPackState.capitalName,
+    packCenter: independentPackState.center,
+    packGridCenter: independentPackState.gridCenter
+  };
+  const history = new EditHistory();
+  const command = createApplyStateBrushCommand([{
+    gridCell: sample.capitalGridCell,
+    before: sample.sourceStateId,
+    after: sample.targetStateId
+  }], {label: "回归：刷走最后首都"});
+  history.execute(command, {map: targetMap});
+  const applied = assertEmptyStateAnchor(targetMap, sample.sourceStateId);
+  assert.deepEqual(
+    [independentPackState.capital, independentPackState.capitalName, independentPackState.center, independentPackState.gridCenter],
+    [sourceState.capital, sourceState.capitalName, sourceState.center, sourceState.gridCenter],
+    "独立 politics / pack 国家镜像必须同步空国锚点"
+  );
+  targetMap.regenerationLocks = {version: 1, entries: [{kind: "state", id: sample.sourceStateId}]};
+  assert.equal(captureLockedRegenerationObjects(targetMap, "state").entries.some(entry => Number(entry.reference.id) === sample.sourceStateId), true, "空国画笔结果必须可捕获国家锁");
+  const roundTrip = parseMapDocument(stringifyMapDocument(createMapDocument(targetMap, targetMap.options))).map;
+  assertEmptyStateAnchor(roundTrip, sample.sourceStateId);
+
+  history.undo({map: targetMap});
+  assert.deepEqual(
+    [sourceState.capital, sourceState.capitalName, sourceState.center, sourceState.gridCenter, independentPackState.capital, independentPackState.capitalName, independentPackState.center, independentPackState.gridCenter],
+    [before.capital, before.capitalName, before.center, before.gridCenter, before.packCapital, before.packCapitalName, before.packCenter, before.packGridCenter],
+    "撤销必须分别恢复 politics / pack 原首都锚点"
+  );
+  history.redo({map: targetMap});
+  assert.deepEqual(assertEmptyStateAnchor(targetMap, sample.sourceStateId), applied, "重做必须稳定复用合法空国锚点");
+  return {...sample, ...applied, history: history.getStats()};
+}
+
+function findBrushCapitalSample(targetMap) {
+  for (const state of targetMap.politics.states || []) {
+    const sourceStateId = Number(state?.i ?? state?.id);
+    if (!state || state.removed || !sourceStateId || !state.capital) continue;
+    const capitalCity = (targetMap.settlements.cities || []).find(city => city?.burgId === state.capital);
+    if (!capitalCity) continue;
+    const remainingLand = Array.from(targetMap.pack.cells.i).filter(cell => Number(targetMap.pack.cells.state[cell]) === sourceStateId && targetMap.pack.cells.h[cell] >= 20 && Number(targetMap.pack.cells.g[cell]) !== capitalCity.cell);
+    if (!remainingLand.length) continue;
+    const targetStateId = Number((targetMap.politics.states || []).find(other => other && !other.removed && Number(other.i ?? other.id) > 0 && Number(other.i ?? other.id) !== sourceStateId)?.i || 0);
+    if (!targetStateId) continue;
+    return {sourceStateId, targetStateId, capitalCityId: capitalCity.id, capitalGridCell: capitalCity.cell};
+  }
+  throw new Error("固定 5k 地图找不到可刷走且仍保留陆地的首都样本");
+}
+
+function assertEmptyStateAnchor(targetMap, stateId) {
+  const state = targetMap.politics.states[stateId];
+  assert.equal(Number(state.capital), 0, "刷走最后首都后必须允许 capital=0");
+  assert.equal(state.capitalName, "", "空国不得残留旧首都名称");
+  assert.ok(Number.isInteger(state.center) && targetMap.pack.cells.h[state.center] >= 20, "空国 center 必须是合法陆地 pack cell");
+  assert.equal(Number(targetMap.pack.cells.state[state.center]), stateId, "空国 center 必须仍归原国家");
+  assert.equal(Number(state.gridCenter), Number(targetMap.pack.cells.g[state.center]), "空国 gridCenter 必须镜像 pack→grid 映射");
+  return {capital: state.capital, center: state.center, gridCenter: state.gridCenter};
 }
 
 function snapshotStateCollections(targetMap) {

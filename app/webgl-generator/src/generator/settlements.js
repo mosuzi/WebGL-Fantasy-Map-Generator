@@ -394,7 +394,11 @@ export function inspectRelocatedSettlementPort(grid, pack, packCell, {wasPort = 
   return {port: 0, source: "cleared", anchor: point, routePackCell: null, reason: "目标不再满足港口条件"};
 }
 
-export function refreshRelocatedSettlementDerived(grid, features, politics, settlements, pack) {
+export function refreshRelocatedSettlementDerived(grid, features, politics, settlements, pack, options = {}) {
+  if (options.local) {
+    refreshRelocatedSettlementDerivedLocal(politics, settlements, pack, options);
+    return;
+  }
   for (const states of new Set([politics?.states, pack?.states].filter(Boolean))) syncStateSettlementStats(pack, states);
   for (const provinces of new Set([politics?.provinces, pack?.provinces].filter(Boolean))) syncProvinceSettlementStats(pack, provinces);
 
@@ -405,6 +409,128 @@ export function refreshRelocatedSettlementDerived(grid, features, politics, sett
   settlements.populationPoints = populationPoints;
   settlements.metadata ||= {};
   Object.assign(settlements.metadata, createSettlementMetadata({grid, features, population, cities, routes, pack, populationPoints}));
+}
+
+export async function rebuildRelocatedPopulationPointsAsync(grid, features, options = {}) {
+  const population = grid?.cells?.pop || [];
+  const limit = Math.min(2400, Math.round((grid?.points?.length || 0) * 0.22));
+  const candidates = [];
+  const sliceMs = Math.max(1, Number(options.sliceMs) || 4);
+  const yieldToMain = typeof options.yieldToMain === "function" ? options.yieldToMain : () => new Promise(resolve => setTimeout(resolve, 0));
+  let sliceStartedAt = performance.now();
+  for (let cell = 0; cell < (grid?.points?.length || 0); cell++) {
+    assertPopulationPointRefreshActive(options);
+    const value = Number(population[cell] || 0);
+    if (value > 42 && isLandFeature(features, grid, cell) && grid.cells.burg?.[cell] === -1) {
+      pushBoundedPopulationCandidate(candidates, cell, grid.points[cell], value, limit);
+    }
+    if (performance.now() - sliceStartedAt < sliceMs) continue;
+    await yieldToMain();
+    assertPopulationPointRefreshActive(options);
+    sliceStartedAt = performance.now();
+  }
+  assertPopulationPointRefreshActive(options);
+  candidates.sort((a, b) => b.population - a.population || a.cell - b.cell);
+  return candidates;
+}
+
+function pushBoundedPopulationCandidate(heap, cell, point, population, limit) {
+  if (limit <= 0) return;
+  if (heap.length < limit) {
+    heap.push({cell, point, population});
+    bubbleWorstPopulationCandidate(heap, heap.length - 1);
+    return;
+  }
+  if (!populationCandidateValuesBetter(cell, population, heap[0])) return;
+  heap[0].cell = cell;
+  heap[0].point = point;
+  heap[0].population = population;
+  sinkWorstPopulationCandidate(heap, 0);
+}
+
+function bubbleWorstPopulationCandidate(heap, index) {
+  while (index > 0) {
+    const parent = Math.floor((index - 1) / 2);
+    if (!populationCandidateWorse(heap[index], heap[parent])) return;
+    [heap[index], heap[parent]] = [heap[parent], heap[index]];
+    index = parent;
+  }
+}
+
+function sinkWorstPopulationCandidate(heap, index) {
+  while (true) {
+    const left = index * 2 + 1;
+    if (left >= heap.length) return;
+    const right = left + 1;
+    let worst = left;
+    if (right < heap.length && populationCandidateWorse(heap[right], heap[left])) worst = right;
+    if (!populationCandidateWorse(heap[worst], heap[index])) return;
+    [heap[index], heap[worst]] = [heap[worst], heap[index]];
+    index = worst;
+  }
+}
+
+function populationCandidateValuesBetter(cell, population, b) {
+  return population > b.population || population === b.population && cell < b.cell;
+}
+
+function populationCandidateWorse(a, b) {
+  return a.population < b.population || a.population === b.population && a.cell > b.cell;
+}
+
+function assertPopulationPointRefreshActive(options) {
+  if (!options.signal?.aborted && (typeof options.shouldContinue !== "function" || options.shouldContinue())) return;
+  const error = new Error("城市移动人口点刷新已取消");
+  error.code = "operation_cancelled";
+  throw error;
+}
+
+function refreshRelocatedSettlementDerivedLocal(politics, settlements, pack, options) {
+  const stateIds = new Set((options.affectedStateIds || []).map(Number).filter(id => Number.isInteger(id) && id >= 0));
+  const provinceIds = new Set((options.affectedProvinceIds || []).map(Number).filter(id => Number.isInteger(id) && id >= 0));
+  const burgs = (pack?.burgs || []).filter(burg => burg?.i && !burg.removed);
+  for (const states of new Set([politics?.states, pack?.states].filter(Boolean))) {
+    for (const id of stateIds) {
+      const state = states[id];
+      if (!state) continue;
+      state.burgs = 0;
+      state.urban = 0;
+      state.civilizationProfile = {};
+      state.civilizationType = null;
+      state.civilizationLabel = null;
+      for (const burg of burgs) {
+        if (Number(burg.state) !== id) continue;
+        state.burgs++;
+        state.urban += Number(burg.population || 0);
+        addCivilizationWeight(state, burg);
+      }
+      state.urban = round(state.urban || 0, 2);
+      finalizeCivilizationProfile(state);
+    }
+  }
+  for (const provinces of new Set([politics?.provinces, pack?.provinces].filter(Boolean))) {
+    for (const id of provinceIds) {
+      const province = provinces[id];
+      if (!province) continue;
+      province.burgs = 0;
+      province.urban = 0;
+      for (const burg of burgs) {
+        if (Number(burg.province) !== id) continue;
+        province.burgs++;
+        province.urban += Number(burg.population || 0);
+      }
+      province.urban = round(province.urban || 0, 2);
+    }
+  }
+  const cities = (settlements?.cities || []).filter(city => city && !city.removed);
+  const routes = (settlements?.routes || []).filter(Boolean);
+  settlements.metadata ||= {};
+  settlements.metadata.cities = cities.length;
+  settlements.metadata.capitals = cities.filter(city => city.capital).length;
+  settlements.metadata.ports = cities.filter(city => city.port).length;
+  settlements.metadata.maxPopulation = cities.reduce((maximum, city) => Math.max(maximum, Number(city.population || 0)), 0);
+  settlements.metadata.routes = routes.length;
+  settlements.metadata.routeSegments = routes.reduce((sum, route) => sum + Math.max(0, (route.points || []).length - 1), 0);
 }
 
 export function deriveRelocatedSettlement(pack, city, burg) {

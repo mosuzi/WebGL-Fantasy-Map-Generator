@@ -39,6 +39,7 @@ export function createCityPanel(documentRef, manager, callbacks = {}) {
     moveMode: false,
     moveCityId: null,
     movePreview: null,
+    relocationVersion: 0,
     version: 0
   });
   const panelCallbacks = {
@@ -132,6 +133,7 @@ export function createCityPanel(documentRef, manager, callbacks = {}) {
       panelState.moveCityId = null;
       panelState.movePreview = null;
       panelState.open = false;
+      record.panel.classList.remove("city-panel-move-active");
       callbacks.onAddMode?.(false);
       callbacks.onDeleteMode?.(false);
       callbacks.onMoveMode?.(false, null);
@@ -152,6 +154,15 @@ export function createCityPanel(documentRef, manager, callbacks = {}) {
       failure: "城市管理加载失败，请检查开发模式日志。"
     }
   );
+  scheduleCityPanelWarmup(documentRef, lazyPanel);
+  const view = documentRef.defaultView || globalThis;
+  const cancelMoveOnEscape = event => {
+    if (event.key !== "Escape" || event.defaultPrevented || !panelState.moveMode) return;
+    event.preventDefault();
+    event.stopImmediatePropagation?.();
+    panelCallbacks.onMoveMode(false, panelState.moveCityId);
+  };
+  view.addEventListener?.("keydown", cancelMoveOnEscape, true);
 
   return {
     open(map, selection, history) {
@@ -175,34 +186,55 @@ export function createCityPanel(documentRef, manager, callbacks = {}) {
       if (!cityExists(map, panelState.selectedCityId)) panelState.selectedCityId = firstCityId(map);
       panelState.version++;
     },
+    updateRelocationContext(map, selection, history) {
+      panelState.map = map ? markRaw(map) : null;
+      panelState.selection = selection;
+      panelState.history = history;
+      if (selection?.object?.kind === "city") panelState.selectedCityId = normalizeCityId(selection.object.id);
+      panelState.relocationVersion++;
+    },
     setSelectedCityId(cityId) {
       const normalized = normalizeCityId(cityId);
       if (cityExists(panelState.map, normalized)) panelState.selectedCityId = normalized;
     },
     updateAddMode(active) {
-      panelState.addMode = Boolean(active);
+      const next = Boolean(active);
+      if (panelState.addMode === next) return;
+      panelState.addMode = next;
       panelState.version++;
     },
     updateDeleteMode(active) {
-      panelState.deleteMode = Boolean(active);
+      const next = Boolean(active);
+      if (panelState.deleteMode === next) return;
+      panelState.deleteMode = next;
       panelState.version++;
     },
     updateMoveMode(active, cityId = null) {
       panelState.moveMode = Boolean(active);
       panelState.moveCityId = panelState.moveMode ? normalizeCityId(cityId) : null;
-      panelState.version++;
+      record.panel.classList.toggle("city-panel-move-active", panelState.moveMode);
     },
     updateMovePreview(preview) {
       panelState.movePreview = preview || null;
-      panelState.version++;
     },
     isOpen() {
       return panelState.open;
     },
     unmount() {
+      view.removeEventListener?.("keydown", cancelMoveOnEscape, true);
       lazyPanel.unmount();
     }
   };
+}
+
+function scheduleCityPanelWarmup(documentRef, lazyPanel) {
+  const view = documentRef.defaultView || globalThis;
+  const load = () => void lazyPanel.load();
+  if (typeof view.requestIdleCallback === "function") {
+    view.requestIdleCallback(load, {timeout: 1600});
+    return;
+  }
+  view.setTimeout?.(load, 0);
 }
 
 function cityObject(row) {

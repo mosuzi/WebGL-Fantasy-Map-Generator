@@ -22,6 +22,7 @@ const baseOptions = {seed: "state-topology-regression", cellsTarget: 3000, heigh
 const report = {ok: true, merge: {}, split: {}, compatibility: {}, performance: {}};
 
 await testMergeTransaction();
+testEmptySurvivorMerge();
 await testSplitTransaction();
 testSplitBattleEventOwnerMapping();
 testCapitalRankingTiebreaks();
@@ -180,6 +181,44 @@ async function testMergeTransaction() {
     history: history.getStats(),
     compressedBytes: compressed.compressedBytes
   };
+}
+
+function testEmptySurvivorMerge() {
+  const map = generatePlaceholderMap({...baseOptions, seed: "state-topology-empty-survivor"});
+  const input = findMergeInspection(map);
+  const survivorState = map.politics.states[input.survivorStateId];
+  const victimCapitalCityId = stateCapitalCityId(map, input.victimStateId);
+  assert.ok(victimCapitalCityId, "空国合并样本的被合并方必须有首都");
+  for (const city of map.settlements.cities || []) {
+    if (!city || Number(city.state) !== input.survivorStateId) continue;
+    city.state = input.victimStateId;
+    city.capital = false;
+    const burg = map.pack.burgs?.[city.burgId];
+    if (burg) {
+      burg.state = input.victimStateId;
+      burg.capital = 0;
+    }
+  }
+  survivorState.capital = 0;
+  const packMirror = map.pack.states[input.survivorStateId];
+  if (packMirror !== survivorState) packMirror.capital = 0;
+  assert.ok(map.pack.cells.h[survivorState.center] >= 20 && Number(map.pack.cells.state[survivorState.center]) === input.survivorStateId, "空国保留方必须保留合法领土中心");
+
+  const inspection = inspectStateMerge(map, input);
+  assert.equal(inspection.valid, true, "空国保留方与有城国家合并预检不得 valid 后执行崩溃");
+  assert.equal(inspection.capitalCityId, victimCapitalCityId, "空国保留方必须优先采用被合并方原首都");
+  const before = topologyDigest(map);
+  const history = new EditHistory();
+  history.execute(createMergeStatesCommand(input), {map});
+  assert.equal(stateCapitalCityId(map, input.survivorStateId), victimCapitalCityId, "空国合并执行必须写入冻结首都");
+  const applied = topologyDigest(map);
+  history.undo({map});
+  assert.deepEqual(topologyDigest(map), before, "空国合并撤销必须恢复原空国模型");
+  history.redo({map});
+  assert.deepEqual(topologyDigest(map), applied, "空国合并重做必须复用冻结首都计划");
+  const roundTrip = parseMapDocument(stringifyMapDocument(createMapDocument(map, map.options))).map;
+  assert.equal(stateCapitalCityId(roundTrip, input.survivorStateId), victimCapitalCityId, "空国合并存档往返必须保留选出的首都");
+  report.emptySurvivorMerge = {survivorStateId: input.survivorStateId, victimStateId: input.victimStateId, capitalCityId: victimCapitalCityId};
 }
 
 async function testSplitTransaction() {
@@ -626,7 +665,7 @@ function testLegacyTombstones() {
   assert.deepEqual(provinceTombstone, provinceValue);
   assert.deepEqual(map.notes.notes.find(note => note.id === noteValue.id), noteValue);
   const roundtrip = parseMapDocument(stringifyMapDocument(createMapDocument(map, map.options)));
-  assert.deepEqual(roundtrip.map.politics.states[stateTombstoneId], {...stateValue, campaigns: []}, "完整地图版本化往返必须保留旧国家 tombstone 并补齐 campaigns");
+  assert.deepEqual(roundtrip.map.politics.states[stateTombstoneId], {...stateValue, campaigns: [], diplomacySummary: {}}, "完整地图版本化往返必须保留旧国家 tombstone 并补齐外交兼容字段");
   assert.deepEqual(roundtrip.map.politics.provinces[provinceTombstoneId], provinceValue, "完整地图往返必须保留旧省份 tombstone");
   report.compatibility.legacyTombstones = {stateTombstoneId, provinceTombstoneId};
 }

@@ -1,4 +1,5 @@
 import {pickGridCell} from "../renderer/picking.js";
+import {burgIdsAtPackCell, cityIdsAtGridCell} from "./settlement-cell-index.js";
 
 const CELL_SPACES = new Set(["grid", "pack"]);
 const QUERY_FIELDS = new Set([
@@ -486,22 +487,28 @@ function cellOccupants(map, ref, mapped) {
   const packCells = ref.space === "pack" ? [ref.id] : mapped.packCells || [];
   const gridCells = ref.space === "grid" ? [ref.id] : mapped.gridCell === null ? [] : [mapped.gridCell];
   const burgIds = new Set();
-  for (const gridCell of gridCells) addPositiveId(burgIds, map.grid?.cells?.burg?.[gridCell]);
-  for (const packCell of packCells) addPositiveId(burgIds, map.pack?.cells?.burg?.[packCell]);
-  const cityIds = [];
+  const cityIds = new Set();
+  for (const gridCell of gridCells) {
+    for (const cityId of cityIdsAtGridCell(map, gridCell)) cityIds.add(cityId);
+  }
+  for (const packCell of packCells) {
+    for (const burgId of burgIdsAtPackCell(map, packCell)) burgIds.add(burgId);
+  }
   const capitalStateIds = [];
   for (const city of map.settlements?.cities || []) {
     if (!activeRecord(city)) continue;
     const matchesGrid = gridCells.includes(optionalInteger(city.cell));
     const matchesPack = packCells.includes(optionalInteger(city.packCell));
-    if (!matchesGrid && !matchesPack && !burgIds.has(optionalInteger(city.id ?? city.i))) continue;
+    const matchesIndex = cityIds.has(optionalInteger(city.id ?? city.i)) || burgIds.has(optionalInteger(city.burgId));
+    if (!matchesGrid && !matchesPack && !matchesIndex) continue;
     const cityId = optionalInteger(city.id ?? city.i);
-    if (cityId !== null) cityIds.push(cityId);
+    if (cityId !== null) cityIds.add(cityId);
+    addPositiveId(burgIds, city.burgId);
     if (city.capital && positiveId(city.state)) capitalStateIds.push(Number(city.state));
   }
   return {
     burgIds: [...burgIds].sort((a, b) => a - b),
-    cityIds: [...new Set(cityIds)].sort((a, b) => a - b),
+    cityIds: [...cityIds].sort((a, b) => a - b),
     capitalStateIds: [...new Set(capitalStateIds)].sort((a, b) => a - b)
   };
 }

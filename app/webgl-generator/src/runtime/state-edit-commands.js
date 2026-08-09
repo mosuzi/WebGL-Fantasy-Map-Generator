@@ -851,9 +851,13 @@ function chooseReplacementCapital(map, stateId) {
   const candidate = chooseReplacementCapitalCandidate(map, stateId);
 
   if (!candidate) {
-    state.capital = 0;
-    state.center = 0;
-    state.gridCenter = 0;
+    const anchor = chooseEmptyStateAnchor(map, stateId, state.center);
+    assignStateCapitalAnchor(map, stateId, {
+      capital: 0,
+      capitalName: "",
+      center: anchor?.center ?? 0,
+      gridCenter: anchor?.gridCenter ?? 0
+    });
     return;
   }
 
@@ -864,10 +868,37 @@ function chooseReplacementCapital(map, stateId) {
   candidate.group = scale;
   burg.capital = 1;
   burg.group = scale;
-  state.capital = burg.i ?? candidate.burgId;
-  state.center = burg.cell ?? candidate.packCell;
-  state.gridCenter = map?.pack?.cells?.g?.[burg.cell] ?? candidate.cell;
-  state.religion = map?.pack?.cells?.religion?.[burg.cell] ?? state.religion;
+  assignStateCapitalAnchor(map, stateId, {
+    capital: burg.i ?? candidate.burgId,
+    center: burg.cell ?? candidate.packCell,
+    gridCenter: map?.pack?.cells?.g?.[burg.cell] ?? candidate.cell,
+    religion: map?.pack?.cells?.religion?.[burg.cell] ?? state.religion
+  });
+}
+
+function chooseEmptyStateAnchor(map, stateId, preferredCenter) {
+  const cells = map?.pack?.cells;
+  const isValid = cell => Number.isInteger(cell)
+    && cell >= 0
+    && cell < Number(cells?.i?.length || 0)
+    && Number(cells?.h?.[cell]) >= 20
+    && Number(cells?.state?.[cell]) === stateId
+    && Number.isInteger(Number(cells?.g?.[cell]));
+  const preferred = Number(preferredCenter);
+  if (isValid(preferred)) return {center: preferred, gridCenter: Number(cells.g[preferred])};
+  let center = null;
+  for (const packCell of cells?.i || []) {
+    const cell = Number(packCell);
+    if (isValid(cell) && (center === null || cell < center)) center = cell;
+  }
+  return center === null ? null : {center, gridCenter: Number(cells.g[center])};
+}
+
+function assignStateCapitalAnchor(map, stateId, anchor) {
+  const politicsState = map?.politics?.states?.[stateId];
+  const packState = map?.pack?.states?.[stateId];
+  if (politicsState) Object.assign(politicsState, anchor);
+  if (packState && packState !== politicsState) Object.assign(packState, anchor);
 }
 
 function chooseReplacementCapitalCandidate(map, stateId, excludedCityIds = new Set()) {
@@ -1090,7 +1121,8 @@ function getPackCellsForGrid(map, gridCell) {
     Object.defineProperty(map, "__stateEditorPackCellsByGrid", {
       value: byGrid,
       configurable: true,
-      writable: true
+      writable: true,
+      enumerable: false
     });
   }
   return map.__stateEditorPackCellsByGrid.get(gridCell) || [];
@@ -1306,10 +1338,12 @@ function snapshotBurg(burg) {
 
 function snapshotState(map, stateId) {
   const state = map?.politics?.states?.[stateId];
+  const packState = map?.pack?.states?.[stateId];
   return state ? {
     stateId,
     state: {
       capital: state.capital,
+      capitalName: state.capitalName,
       center: state.center,
       gridCenter: state.gridCenter,
       religion: state.religion,
@@ -1319,13 +1353,28 @@ function snapshotState(map, stateId) {
       rural: state.rural,
       urban: state.urban,
       neighbors: Array.isArray(state.neighbors) ? [...state.neighbors] : []
-    }
+    },
+    packState: packState && packState !== state ? {
+      capital: packState.capital,
+      capitalName: packState.capitalName,
+      center: packState.center,
+      gridCenter: packState.gridCenter,
+      religion: packState.religion,
+      cells: packState.cells,
+      area: packState.area,
+      burgs: packState.burgs,
+      rural: packState.rural,
+      urban: packState.urban,
+      neighbors: Array.isArray(packState.neighbors) ? [...packState.neighbors] : []
+    } : null
   } : null;
 }
 
 function restoreState(map, snapshot) {
   const state = map?.politics?.states?.[snapshot.stateId];
   if (state) Object.assign(state, snapshot.state, {neighbors: [...(snapshot.state.neighbors || [])]});
+  const packState = map?.pack?.states?.[snapshot.stateId];
+  if (snapshot.packState && packState && packState !== state) Object.assign(packState, snapshot.packState, {neighbors: [...(snapshot.packState.neighbors || [])]});
 }
 
 function captureStateCollectionSnapshot(map) {

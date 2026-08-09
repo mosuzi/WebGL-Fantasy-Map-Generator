@@ -2570,6 +2570,10 @@ select:disabled {
   margin-top: 12px;
 }
 
+.object-details-actions-city {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 .object-name-editor {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 94px;
@@ -7666,10 +7670,21 @@ input.ui-switch-native {
 
 .city-visual-editor {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 96px 96px;
+  grid-template-columns: minmax(0, 1fr) 96px 96px;
   gap: 8px;
   align-items: end;
   margin-top: 8px;
+}
+
+.floating-panel[data-panel-id="city-panel"].city-panel-move-active {
+  pointer-events: none;
+}
+
+.floating-panel[data-panel-id="city-panel"].city-panel-move-active .floating-panel-header,
+.floating-panel[data-panel-id="city-panel"].city-panel-move-active .floating-panel-header *,
+.floating-panel[data-panel-id="city-panel"].city-panel-move-active .ui-action-dock,
+.floating-panel[data-panel-id="city-panel"].city-panel-move-active .ui-action-dock * {
+  pointer-events: auto;
 }
 
 .city-note-editor {

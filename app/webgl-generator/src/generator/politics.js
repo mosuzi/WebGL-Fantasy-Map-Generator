@@ -192,6 +192,10 @@ function repairStateCapitalAnchors(pack, states, protectedIds = new Set()) {
       used.add(Number(state.center));
       continue;
     }
+    if (Number(state.capital) === 0 && validEmptyStateCenter(pack, state, used)) {
+      used.add(Number(state.center));
+      continue;
+    }
     let capital = pack.burgs?.[state.capital];
     if (!capital?.i || capital.removed || pack.cells.h[capital.cell] < 20 || used.has(capital.cell)) {
       capital = (pack.burgs || [])
@@ -412,25 +416,28 @@ function prepareLockedStates(grid, pack, options = {}, lockedProvinces = null) {
       throw stateLockConflict(`锁定国家 #${id} 缺少原对象`, {reason: "missing-state", id});
     }
     const burg = pack.burgs?.[capital];
-    if (!Number.isInteger(capital) || capital <= 0 || !burg || burg.removed || !burg.capital) {
+    const emptyState = capital === 0;
+    if (!emptyState && (!Number.isInteger(capital) || capital <= 0 || !burg || burg.removed || !burg.capital)) {
       throw stateLockConflict(`锁定国家 #${id} 缺少有效首都`, {reason: "invalid-capital", id, capital});
     }
     if (!Number.isInteger(center) || center < 0 || center >= pack.cells.i.length || pack.cells.h?.[center] < 20) {
       throw stateLockConflict(`锁定国家 #${id} 引用了无效或水域中心`, {reason: "invalid-center", id, center});
     }
-    if (Number(burg.cell) !== center || Number(pack.cells.state?.[center]) !== id) {
+    if ((!emptyState && Number(burg.cell) !== center) || Number(pack.cells.state?.[center]) !== id) {
       throw stateLockConflict(`锁定国家 #${id} 的首都、中心或领土镜像不一致`, {reason: "capital-center-mismatch", id, capital, center});
     }
-    if (centers.has(center) || capitalBurgIds.has(capital)) {
+    if (centers.has(center) || !emptyState && capitalBurgIds.has(capital)) {
       throw stateLockConflict(`锁定国家 #${id} 与其它约束复用首都或中心`, {reason: "duplicate-capital", id, capital, center});
     }
     states[id] = state;
     requiredIds.add(id);
     if (locked) ids.add(id);
     centers.add(center);
-    capitalBurgIds.add(capital);
-    if (locked) lockedCapitalBurgIds.add(capital);
-    capitalToState.set(capital, id);
+    if (!emptyState) {
+      capitalBurgIds.add(capital);
+      if (locked) lockedCapitalBurgIds.add(capital);
+      capitalToState.set(capital, id);
+    }
   };
 
   for (const source of provided) addState(source, {locked: true});
@@ -812,7 +819,8 @@ function expandPackStates(pack, states, society, preservedAnchors = null, locked
   for (const state of states) {
     if (!state?.i) continue;
     const capital = burgs[state.capital];
-    const capitalCell = capital.cell;
+    const capitalCell = capital?.i && !capital.removed ? capital.cell : Number(state.center);
+    if (!Number.isInteger(capitalCell) || cells.h?.[capitalCell] < 20) throw new Error(`国家 #${state.i} 缺少合法扩张中心`);
     const cultureCenter = society.cultures[state.culture]?.center ?? capitalCell;
     const nativeBiome = cells.biome[cultureCenter] ?? cells.biome[capitalCell];
     nativeBiomes.set(state.i, nativeBiome);
@@ -888,8 +896,24 @@ function normalizePackStates(pack, states, protectedCells = new Set(), protected
   }
 
   for (const state of states) {
-    if (state?.i && !protectedIds.has(state.i)) state.center = pack.burgs[state.capital].cell;
+    if (!state?.i || protectedIds.has(state.i)) continue;
+    const capital = pack.burgs[state.capital];
+    if (capital?.i && !capital.removed) state.center = capital.cell;
+    else if (cells.h?.[state.center] < 20 || Number(cells.state?.[state.center]) !== Number(state.i)) {
+      const fallback = cells.i.find(cell => cells.h[cell] >= 20 && Number(cells.state?.[cell]) === Number(state.i));
+      if (Number.isInteger(fallback)) state.center = fallback;
+    }
   }
+}
+
+function validEmptyStateCenter(pack, state, used = new Set()) {
+  const center = Number(state?.center);
+  return Number.isInteger(center)
+    && center >= 0
+    && center < Number(pack?.cells?.i?.length || 0)
+    && pack.cells.h?.[center] >= 20
+    && Number(pack.cells.state?.[center]) === Number(state.i)
+    && !used.has(center);
 }
 
 function smoothPackStateBoundarySpikes(pack, states, additionalProtectedCells = new Set(), protectedIds = new Set()) {

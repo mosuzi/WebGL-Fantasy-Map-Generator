@@ -8,8 +8,9 @@
       class-name="object-name-editor"
       @apply="callbacks.onRename"
     />
-    <div class="object-details-actions">
+    <div class="object-details-actions" :class="{ 'object-details-actions-city': isCity }">
       <UiButton v-if="actionPolicy.canLocate" variant="secondary" @click="callbacks.onLocate">定位</UiButton>
+      <UiButton v-if="isCity" variant="secondary" @click="callbacks.onOpenCityPanel?.()">打开城市管理</UiButton>
       <UiButton
         v-if="canRenameFromNamebase"
         variant="secondary"
@@ -55,6 +56,7 @@ const editing = computed(() => isSameObject(props.state.object, props.state.edit
 const title = computed(() => formatObjectTitle(props.state.object));
 const actionPolicy = computed(() => describeObjectDetailsActions(props.state.object));
 const editAction = computed(() => actionPolicy.value.edit);
+const isCity = computed(() => props.state.object?.kind === OBJECT_KIND.CITY);
 const canRename = computed(() => canRenameObject(props.state.object));
 const canRenameFromNamebase = computed(() => canRenameObjectFromNamebase(props.state.object));
 const editableName = computed(() => props.state.object?.name || props.state.object?.text || props.state.object?.targetName || "");

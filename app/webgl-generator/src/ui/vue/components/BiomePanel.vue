@@ -48,7 +48,6 @@
           :min="brushRadius.min"
           :max="brushRadius.max"
           :step="brushRadius.step"
-          unit-label="地图单位"
           @input="callbacks.onAssignmentRadius"
         />
         <UiStateBanner
@@ -89,7 +88,6 @@
           :min="suitabilityBrushRadius.min"
           :max="suitabilityBrushRadius.max"
           :step="suitabilityBrushRadius.step"
-          unit-label="地图单位"
           @input="callbacks.onSuitabilityRadius"
         />
         <UiStateBanner

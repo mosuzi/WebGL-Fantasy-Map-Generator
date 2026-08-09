@@ -8,6 +8,7 @@
   </div>
   <UiRegenerationLockActions v-bind="regenerationLocks.actionProps" v-on="regenerationLocks.actionListeners" />
   <UiObjectTable
+    v-memo="[state.version, state.filter, state.sortKey, state.sortDir, state.columnWidths, state.selectedCityId, state.highlightCount, selectedCityIds]"
     v-bind="regenerationLocks.tableProps"
     v-on="regenerationLocks.tableListeners"
     :columns="columns"
@@ -43,8 +44,8 @@
   <UiDetailGrid class-name="city-panel-details" empty-text="未选中城市" :rows="detailRows" />
 
   <section v-if="state.moveMode || state.movePreview" class="city-move-preview" :data-valid="state.movePreview?.valid === true">
-    <strong>{{ state.moveMode ? "拖动城市到目标 cell" : "最近一次移动预检" }}</strong>
-    <span>{{ state.movePreview?.summary || "请从当前城市按下并拖动，松手前只做只读预检。" }}</span>
+    <strong>{{ state.moveMode ? "连续拖动城市到目标 cell" : "最近一次移动预检" }}</strong>
+    <span>{{ state.movePreview?.summary || "请从地图上所选城市的橙色圆环内按下并拖动；提交后可继续拖动，点击别处或手动退出结束。" }}</span>
     <span v-if="state.movePreview?.owners">归属：国家 #{{ state.movePreview.owners.before.state }} → #{{ state.movePreview.owners.after.state }}；省份 #{{ state.movePreview.owners.before.province }} → #{{ state.movePreview.owners.after.province }}</span>
     <span v-if="state.movePreview?.port">港口：{{ state.movePreview.port.status }}；关联路线重寻 {{ state.movePreview.routes.rerouted }} / 删除 {{ state.movePreview.routes.deleted }}</span>
     <span v-if="state.movePreview?.reasons?.length" class="city-move-preview-error">拒绝：{{ state.movePreview.reasons.join("；") }}</span>
@@ -83,7 +84,6 @@
     <template #visual>
       <div class="city-visual-editor">
         <UiSelectField class-name="city-visual-select" label="剪影" :model-value="visualDraft.silhouette" :options="silhouetteOptions" @update:model-value="visualDraft.silhouette = $event" />
-        <UiSelectField class-name="city-visual-select" label="配色" :model-value="visualDraft.palette" :options="paletteOptions" @update:model-value="visualDraft.palette = $event" />
         <UiButton variant="secondary" @click="applyVisual">应用剪影</UiButton>
         <UiButton variant="secondary" :disabled="!selected.manualVisual" @click="callbacks.onVisualReset(selected.id)">恢复自动</UiButton>
       </div>
@@ -115,10 +115,8 @@ import UiRegenerationLockActions from "./base/UiRegenerationLockActions.vue";
 import UiSelectField from "./base/UiSelectField.vue";
 import UiTextEditField from "./base/UiTextEditField.vue";
 import {
-  CITY_PALETTE_OPTIONS,
   CITY_SILHOUETTE_OPTIONS,
   cityCultureStyleLabel,
-  cityPaletteLabel,
   cityRoleScaleLabel,
   cityScaleLabel,
   citySilhouetteLabel,
@@ -158,9 +156,6 @@ const sortOptions = Object.freeze([
   {key: "id", label: "ID"}
 ]);
 
-const silhouetteOptions = CITY_SILHOUETTE_OPTIONS;
-const paletteOptions = CITY_PALETTE_OPTIONS;
-
 const columns = Object.freeze([
   {key: "id", label: "ID", align: "right"},
   {key: "name", label: "名称"},
@@ -189,16 +184,26 @@ const selectedCityRows = regenerationLocks.selectedRows;
 const filterEmptyAction = computed(() => String(props.state.filter || "").trim()
   ? {key: "clear-filter", label: "清空筛选", icon: "⌫"}
   : null);
-const selected = computed(() => findByObjectId(metrics.value.rows, props.state.selectedCityId));
+const selected = computed(() => {
+  props.state.relocationVersion;
+  const row = findByObjectId(metrics.value.rows, props.state.selectedCityId);
+  return refreshRelocatedSelectedCityRow(props.state.map, row, props.state.selectedCityId);
+});
 const modalActionActive = computed(() => Boolean(props.state.addMode || props.state.deleteMode || props.state.moveMode));
 const visualDraft = reactive({
-  silhouette: "town",
-  palette: "town"
+  silhouette: "town"
+});
+const silhouetteOptions = computed(() => {
+  const baseValues = new Set(["city", "town", "village", "hamlet"]);
+  const options = CITY_SILHOUETTE_OPTIONS.filter(option => baseValues.has(option.value));
+  const current = CITY_SILHOUETTE_OPTIONS.find(option => option.value === visualDraft.silhouette);
+  if (current && !baseValues.has(current.value)) options.push({...current, label: `兼容样式：${current.label}`});
+  return options;
 });
 const cityActions = computed(() => [
   {key: "add", resultClass: "toggle-canvas-mode", label: props.state.addMode ? "取消新增城市" : "新增城市：下一次点击地图 cell", icon: "+", panel: false, active: props.state.addMode, disabled: props.state.deleteMode || props.state.moveMode},
   {key: "delete", resultClass: "toggle-canvas-mode", label: props.state.deleteMode ? "取消删除城市" : "删除城市：下一次点击地图城市", icon: "×", panel: false, active: props.state.deleteMode, disabled: props.state.addMode || props.state.moveMode},
-  {key: "move", resultClass: "toggle-canvas-mode", label: props.state.moveMode ? "取消移动城市" : "移动城市：在地图上拖动所选城市", icon: "↗", panel: false, active: props.state.moveMode, disabled: props.state.addMode || props.state.deleteMode || !selected.value},
+  {key: "move", resultClass: "toggle-canvas-mode", label: props.state.moveMode ? "退出移动城市" : "移动城市：在地图上拖动所选城市", icon: "↗", panel: false, active: props.state.moveMode, disabled: props.state.addMode || props.state.deleteMode || !selected.value},
   {key: "rename", resultClass: "open-secondary", label: "重命名", icon: "✎", disabled: modalActionActive.value || !selected.value},
   {key: "population", resultClass: "open-secondary", label: "调整人口", icon: "#", disabled: modalActionActive.value || !selected.value},
   {key: "owner", resultClass: "open-secondary", label: "同步归属", icon: "⇄", disabled: modalActionActive.value || !selected.value?.canSyncOwner},
@@ -256,7 +261,6 @@ watch(() => selected.value?.id, id => {
   });
 });
 watch(() => selected.value?.silhouette, syncVisualDraft);
-watch(() => selected.value?.palette, syncVisualDraft);
 
 function buildCityMetrics(map) {
   const scaleContext = createCityScaleContext(map?.settlements?.cities, map?.pack?.burgs);
@@ -308,7 +312,7 @@ function buildCityMetrics(map) {
       palette: visual.palette,
       cultureStyle: visual.cultureStyle,
       cultureStyleLabel: cityCultureStyleLabel(visual.cultureStyle),
-      visualLabel: `${citySilhouetteLabel(visual.silhouette)} / ${cityPaletteLabel(visual.palette)}`,
+      visualLabel: citySilhouetteLabel(visual.silhouette),
       noteBody: note?.body || "",
       noteUpdatedAt: note?.updatedAt || "",
       manualVisual: Boolean(visual.manual),
@@ -334,6 +338,42 @@ function cityResourceGoodNames(map, ids) {
     .map(id => map?.economy?.goods?.[id]?.name || map?.pack?.goods?.[id]?.name || `#${id}`)
     .slice(0, 5)
     .join("、");
+}
+
+function refreshRelocatedSelectedCityRow(map, row, cityId) {
+  if (!row) return null;
+  const city = cityRows(map).find(item => sameObjectId(item.id, cityId));
+  if (!city) return row;
+  const burg = findBurgForCity(map, city);
+  const stateId = numberOrFallback(city.state, burg?.state, 0);
+  const provinceId = numberOrFallback(city.province, null, 0);
+  const packCell = numberOrFallback(city.packCell, burg?.cell, null);
+  const gridCell = numberOrFallback(city.cell, map?.pack?.cells?.g?.[packCell], null);
+  const cultureId = numberOrFallback(city.culture, burg?.culture, map?.pack?.cells?.culture?.[packCell]);
+  const religionId = numberOrFallback(city.religion, burg?.religion, map?.pack?.cells?.religion?.[packCell]);
+  const owner = cityOwnerInfo(map, city, burg, {stateId, provinceId, packCell, gridCell});
+  const scaleContext = createCityScaleContext(map?.settlements?.cities, map?.pack?.burgs);
+  return {
+    ...row,
+    type: cityRoleScaleLabel(city, scaleContext, burg),
+    flags: cityFlags(city, burg).join(" / ") || "普通",
+    stateId,
+    stateName: indexedName(map?.politics?.states, stateId),
+    provinceId,
+    provinceName: indexedName(map?.politics?.provinces || map?.pack?.provinces, provinceId),
+    cellOwnerName: owner.cellOwnerName,
+    ownerConsistency: owner.ownerConsistency,
+    waterStatus: owner.waterStatus,
+    ownerWarnings: owner.warnings,
+    canSyncOwner: owner.canSyncOwner,
+    cell: gridCell ?? "none",
+    packCell: packCell ?? "none",
+    culture: indexedName(map?.society?.cultures, cultureId),
+    religion: indexedName(map?.society?.religions, religionId),
+    capital: Boolean(city.capital || burg?.capital),
+    provincial: Boolean(city.provincial),
+    port: Boolean(city.port || burg?.port)
+  };
 }
 
 function handleEmptyAction(key) {
@@ -385,8 +425,7 @@ function handleActionSelect(key) {
 function applyVisual() {
   if (!selected.value) return;
   props.callbacks.onVisualChange?.(selected.value.id, {
-    silhouette: visualDraft.silhouette,
-    palette: visualDraft.palette
+    silhouette: visualDraft.silhouette
   });
 }
 
@@ -418,7 +457,6 @@ function currentTime() {
 
 function syncVisualDraft() {
   visualDraft.silhouette = selected.value?.silhouette || "town";
-  visualDraft.palette = selected.value?.palette || "town";
 }
 
 function cityFlags(city, burg) {

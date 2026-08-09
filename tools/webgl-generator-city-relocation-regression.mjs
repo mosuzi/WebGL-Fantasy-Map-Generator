@@ -2,11 +2,16 @@
 import assert from "node:assert/strict";
 import {readFile} from "node:fs/promises";
 import {generatePlaceholderMap} from "../app/webgl-generator/src/generator/index.js";
-import {createMoveCityCommand, inspectCityMove} from "../app/webgl-generator/src/runtime/city-relocation.js";
-import {bindCityRelocationDrag} from "../app/webgl-generator/src/runtime/city-relocation-drag.js";
+import {reexpandPackPoliticsPreservingIdentity} from "../app/webgl-generator/src/generator/politics.js";
+import {rebuildRelocatedPopulationPointsAsync} from "../app/webgl-generator/src/generator/settlements.js";
+import {createMoveCityCommand, inspectCityMove, inspectCityMoveAsync, inspectCityMoveFast} from "../app/webgl-generator/src/runtime/city-relocation.js";
+import {bindCityRelocationDrag, resolveCityRelocationPointerCityId} from "../app/webgl-generator/src/runtime/city-relocation-drag.js";
 import {EditHistory} from "../app/webgl-generator/src/runtime/edit-history.js";
+import {burgIdsAtPackCell, cityIdsAtGridCell, routesAtCity} from "../app/webgl-generator/src/runtime/settlement-cell-index.js";
 import {API_METHODS} from "../app/webgl-generator/src/runtime/api-contract.js";
 import {createMapDocument, parseMapDocument, stringifyMapDocument} from "../app/webgl-generator/src/runtime/map-file-io.js";
+import {getCellSnapshot} from "../app/webgl-generator/src/runtime/cell-query-api.js";
+import {captureLockedRegenerationObjects} from "../app/webgl-generator/src/runtime/regeneration-lock-protection.js";
 
 const base = sampleMap();
 const pureBefore = structuredClone(base);
@@ -29,20 +34,56 @@ assert.equal(crossProvince.routes.deleted, 1);
 assert.match(crossProvince.warnings.join(" "), /海路/);
 
 assert.equal(inspectCityMove(base, 1, {gridCell: 4, packCell: 4}).valid, false, "水域必须拒绝");
-assert.equal(inspectCityMove(base, 1, {gridCell: 7, packCell: 7}).valid, false, "重复占位必须拒绝");
+const refinedBoundaryMap = sampleMap();
+refinedBoundaryMap.pack.cells.h[2] = 10;
+assert.equal(
+  inspectCityMove(refinedBoundaryMap, 1, {gridCell: 2, packCell: 2}).valid,
+  true,
+  "100k 细分后的可见 grid 陆地与旧 pack 高度不一致时，应以实际渲染的 grid 地形为准"
+);
+refinedBoundaryMap.grid.cells.h[2] = 10;
+refinedBoundaryMap.pack.cells.h[2] = 30;
+assert.equal(
+  inspectCityMove(refinedBoundaryMap, 1, {gridCell: 2, packCell: 2}).valid,
+  false,
+  "100k 细分后的可见 grid 水域不得被旧 pack 陆地误放行"
+);
+const occupiedPreview = inspectCityMove(base, 1, {gridCell: 7, packCell: 7, x: 0.15, y: -0.85});
+assert.equal(occupiedPreview.valid, true, "用户主动移动必须允许同 cell 多城");
+assert.deepEqual(occupiedPreview.occupancy.cityIds, [2]);
 assert.equal(inspectCityMove(base, 1, {gridCell: 99}).code, "missing-cell-mapping");
 
 const capitalMap = sampleMap();
 capitalMap.settlements.cities[1].capital = true;
 capitalMap.pack.burgs[1].capital = 1;
-capitalMap.politics.states[1].capital = 1;
-assert.match(inspectCityMove(capitalMap, 1, {gridCell: 2, packCell: 2}).reasons.join(" "), /首都/);
+for (const states of [capitalMap.politics.states, capitalMap.pack.states]) {
+  Object.assign(states[1], {capital: 1, center: 0, gridCenter: 0});
+  Object.assign(states[2], {capital: 0, center: 2, gridCenter: 2});
+}
+const capitalPreview = inspectCityMove(capitalMap, 1, {gridCell: 2, packCell: 2});
+assert.equal(capitalPreview.valid, true, "首都允许跨国移动");
+assert.equal(capitalPreview.politics.sourceStateReplacementCityId, 3);
+assert.equal(capitalPreview.politics.targetStatePromotion, true);
+new EditHistory().execute(createMoveCityCommand(1, capitalPreview.target, {preflight: capitalPreview}), {map: capitalMap});
+assert.equal(capitalMap.politics.states[1].capital, 3, "原国家应重选首都");
+assert.equal(capitalMap.politics.states[2].capital, 1, "无首都的目标国家应接纳迁入首都");
+assert.equal(capitalMap.settlements.cities[3].capital, true);
 const provincialMap = sampleMap();
 provincialMap.settlements.cities[1].provincial = true;
-provincialMap.politics.provinces[1].burg = 1;
-assert.match(inspectCityMove(provincialMap, 1, {gridCell: 3, packCell: 3}).reasons.join(" "), /省会/);
+provincialMap.pack.burgs[1].provincial = 1;
+for (const provinces of [provincialMap.politics.provinces, provincialMap.pack.provinces]) {
+  Object.assign(provinces[1], {burg: 1, center: 0, gridCenter: 0, state: 1});
+  Object.assign(provinces[2], {burg: 0, center: 3, gridCenter: 3, state: 1});
+}
+const provincialPreview = inspectCityMove(provincialMap, 1, {gridCell: 3, packCell: 3});
+assert.equal(provincialPreview.valid, true, "省会允许跨省移动");
+assert.equal(provincialPreview.politics.sourceProvinceReplacementCityId, 3);
+assert.equal(provincialPreview.politics.targetProvincePromotion, true);
+new EditHistory().execute(createMoveCityCommand(1, provincialPreview.target, {preflight: provincialPreview}), {map: provincialMap});
+assert.equal(provincialMap.politics.provinces[1].burg, 3, "原省份应重选省会");
+assert.equal(provincialMap.politics.provinces[2].burg, 1, "无省会的目标省份应接纳迁入省会");
 const marketGateMap = sampleMap({marketCenter: true});
-assert.match(inspectCityMove(marketGateMap, 1, {gridCell: 2, packCell: 2}).reasons.join(" "), /市场中心/);
+assert.equal(inspectCityMove(marketGateMap, 1, {gridCell: 2, packCell: 2}).valid, true, "市场中心不得阻止用户移动");
 
 const changedFeature = inspectCityMove(base, 1, {gridCell: 8, packCell: 8});
 assert.equal(changedFeature.valid, true);
@@ -83,13 +124,15 @@ const nonPortMap = sampleMap();
 nonPortMap.settlements.cities[1].port = 0;
 nonPortMap.pack.burgs[1].port = 0;
 assert.equal(inspectCityMove(nonPortMap, 1, {gridCell: 1, packCell: 1}).port.status, "unchanged-non-port");
+assert.deepEqual(inspectCityMoveFast(nonPortMap, 1, {gridCell: 7, packCell: 7, x: 0.15, y: -0.85}).target.point, [0.15, -0.85], "非港口目标应保留用户精确坐标");
 
 const unreachable = sampleMap();
 unreachable.pack.cells.c[1] = [4];
 unreachable.pack.cells.c[0] = [3, 7];
 const failedRoad = inspectCityMove(unreachable, 1, {gridCell: 1, packCell: 1});
-assert.equal(failedRoad.valid, false);
-assert.match(failedRoad.reasons.join(" "), /陆路|小径/);
+assert.equal(failedRoad.valid, true, "路线重寻失败不得阻止城市移动");
+assert(failedRoad.routes.items.some(route => route.action === "delete"));
+assert.match(failedRoad.warnings.join(" "), /删除|待重算/);
 
 const moved = sampleMap({marketCenter: true, routeNote: true});
 const before = structuredClone(moved);
@@ -134,10 +177,11 @@ assert.equal(moved.pack.routes.some(route => route?.i === 1), false, "pack.route
 assert.equal(Object.values(moved.pack.cells.routes).some(links => Object.values(links).includes(1)), false, "pack route links 遗留已删除海路");
 assert.equal(moved.pack.markets[1].cell, 3);
 assert.equal(moved.economy.markets[1].cell, 3);
+assert.equal(moved.pack.cells.market[0], 0, "市场中心迁出后源 cell 不得保留陈旧 singular 代表");
 assert.equal(moved.pack.cells.market[3], 1);
 assert.equal(moved.pack.burgs[1].market, 1);
 assert.equal(moved.pack.burgs[1].plaza, 1);
-assert.deepEqual(moved.metadata.derivedStale.systems, ["economy", "diplomacy", "military", "zones"]);
+assert.deepEqual(moved.metadata.derivedStale.systems, ["economy", "diplomacy", "military", "zones", "population-points"]);
 assert.equal(moved.economy.metadata.stale, true);
 assert.equal(moved.diplomacy.metadata.stale, true);
 assert.equal(moved.military.metadata.stale, true);
@@ -239,6 +283,12 @@ assert.equal(sharedPoliticalMap.pack.states[1], sharedStateReference, "共享 st
 assert.equal(sharedPoliticalMap.politics.provinces, sharedProvincesReference, "共享 province 数组别名被破坏");
 
 runDragLifecycleRegression();
+runOverlappingCityPointerRegression();
+await runPendingDragRegression();
+runMultiSettlementCellRegression();
+await runAsyncPreflightRegression();
+await runRouteAdjacencyCancellationRegression();
+await runPopulationPointTopKRegression();
 
 const fullMap = generatePlaceholderMap({seed: "city-relocation-full-map", cellsTarget: 5000, heightmapTemplate: "continents"});
 const realHarborCity = fullMap.settlements.cities.find(city => city && !city.capital && city.port && Number(fullMap.pack.cells.harbor?.[city.packCell]) > 1);
@@ -262,8 +312,7 @@ const executeMs = performance.now() - executeStarted;
 const fullResult = fullCommand.getResult();
 assert.equal(fullMap.unrelatedPayload, unrelatedPayload);
 assert.equal(fullMap.unrelatedPayload.large, unrelatedPayloadArray);
-assert.equal(fullMap.settlements.populationPoints.some(point => point.cell === fullTarget.target.gridCell), false, "城市目标 cell 仍在绘制农村人口点");
-assert.equal(fullMap.settlements.metadata.ruralPopulationPoints, fullMap.settlements.populationPoints.length);
+assert.equal(fullMap.metadata.derivedStale.systems.includes("population-points"), true, "局部事务必须标记农村人口点待异步重建");
 const undoStarted = performance.now();
 fullHistory.undo({map: fullMap});
 const undoMs = performance.now() - undoStarted;
@@ -272,7 +321,7 @@ assert.equal(fullMap.unrelatedPayload, unrelatedPayload, "撤销替换了有界�
 const redoStarted = performance.now();
 fullHistory.redo({map: fullMap});
 const redoMs = performance.now() - redoStarted;
-assert.equal(fullMap.settlements.populationPoints.some(point => point.cell === fullTarget.target.gridCell), false, "重做未移除农村人口点");
+assert.equal(fullMap.metadata.derivedStale.systems.includes("population-points"), true, "重做未恢复农村人口点待重建标志");
 assert.equal(fullMap.unrelatedPayload, unrelatedPayload, "重做替换了有界范围外 payload");
 assert.equal(fullMap.options, fullMapOptionsReference);
 assert.equal(fullMap.grid.cells.h, fullMapHeightReference);
@@ -297,15 +346,20 @@ assert(relocationPortSource);
 assert.doesNotMatch(relocationPortSource, /selectPortCandidates/, "城市迁移港口不得重新参加生成器全图配额");
 assert.doesNotMatch(cityRelocationSource, /structuredClone\((?:context\.)?map\)|cloneValue\((?:context\.)?map\)|restoreMap/, "城市移动不得克隆或重建整张 map");
 assert.match(cityRelocationSource, /captureCityMoveSnapshot\(context\.map, inspection\)/);
-assert.match(cityRelocationSource, /restoreCityMoveSnapshot\(after\)/);
+assert.match(cityRelocationSource, /restoreCityMoveSnapshot\(context\.map, after\)/);
 assert.match(appSource, /CITY_MOVE: "city:move"/);
 assert.match(appSource, /bindCityRelocationDrag\(canvas/);
 assert.match(appSource, /if \(activeModeId\) return cancelCanvasToolMode\(state, documentRef, activeModeId, "escape"\)/);
 assert.match(appSource, /register\(CANVAS_TOOL_MODE\.CITY_MOVE, "city-panel"/);
 assert.match(appSource, /selectionStore\.setSelection\(\{object: \{kind: OBJECT_KIND\.CITY, id: cityId\}\}\)/);
+assert.match(appSource, /onPointerMiss: \(\) => \{\s*cancelCanvasToolModeAfterPointerMiss\(state, documentRef, CANVAS_TOOL_MODE\.CITY_MOVE\)/);
+assert.match(appSource, /function cancelCanvasToolModeAfterPointerMiss[\s\S]+?requestAnimationFrame\(\(\) => \{[\s\S]+?updateEditingInteractionLock[\s\S]+?updateRuntimePanel/);
+assert.doesNotMatch(appSource, /completeCanvasToolMode\(state, documentRef, CANVAS_TOOL_MODE\.CITY_MOVE/);
+assert.match(appSource, /state\.panels\.city\?\.updateMovePreview\?\.\(null\);\s*showCityMoveStartHandle\(state, cityId\)/);
 assert.match(panelSource, /moveMode: false/);
 assert.match(panelSource, /updateMovePreview/);
-assert.match(panelVueSource, /拖动城市到目标 cell/);
+assert.match(panelVueSource, /提交后可继续拖动|连续拖动城市到目标 cell/);
+assert.match(panelVueSource, /退出移动城市/);
 assert.match(consoleSource, /actions\.edit\?\.cities\?\.inspectMove/);
 assert.match(consoleSource, /"cities\.inspectMove": \{stable: "draft", mutates: "none", undoable: false/);
 assert.match(consoleSource, /"cities\.move": \{stable: "draft", mutates: "settlements-routes", undoable: true/);
@@ -437,6 +491,24 @@ function runDragLifecycleRegression() {
   assert.equal(selection, 1, "拖动提交后未保持城市选择");
   assert.deepEqual(released, [7]);
   assert.equal(validBinding.getActiveDrag(), null, "pointerup 后拖动态未清理");
+  validTarget.emit("pointerdown", pointerEvent(17, {cityId: 1, targetCell: {gridCell: 3, packCell: 3}}));
+  validTarget.emit("pointermove", pointerEvent(17, {targetCell: {gridCell: 2, packCell: 2}}));
+  validTarget.emit("pointerup", pointerEvent(17, {targetCell: {gridCell: 2, packCell: 2}}));
+  assert.equal(validHistory.getStats().undo, 2, "同一绑定必须允许连续提交第二次城市移动");
+  assert.equal(validMap.settlements.cities[1].cell, 2, "连续第二次移动未写入目标 cell");
+  assert.deepEqual(released, [7, 17], "连续移动没有分别释放 pointer capture");
+
+  let pointerMisses = 0;
+  const missTarget = createPointerTargetStub();
+  bindCityRelocationDrag(missTarget, {
+    isActive: () => true,
+    isPrimaryPointerDown: () => true,
+    getCityId: event => event.cityId,
+    getSelectedCityId: () => 1,
+    onPointerMiss: () => pointerMisses++
+  });
+  missTarget.emit("pointerdown", pointerEvent(18, {cityId: 2}));
+  assert.equal(pointerMisses, 1, "点击当前城市以外的位置必须交给模式退出回调");
 
   const invalidMap = sampleMap();
   const invalidBefore = structuredClone(invalidMap);
@@ -476,6 +548,327 @@ function runDragLifecycleRegression() {
   assert.equal(cancelBinding.cancel("map-reset", false), true);
   assert.equal(cancelBinding.getActiveDrag(), null, "切图取消后拖动态未清理");
   assert.equal(cancelled, 1, "外部模式退出不得重复触发取消回调");
+
+  const frameTarget = createPointerTargetStub();
+  const frames = new Map();
+  let nextFrameId = 1;
+  let fastInspections = 0;
+  const frameBinding = bindCityRelocationDrag(frameTarget, {
+    isActive: () => true,
+    isPrimaryPointerDown: () => true,
+    getCityId: event => event.cityId,
+    getSelectedCityId: () => 1,
+    getTarget: event => event.targetCell,
+    inspectFast: (cityId, target) => {
+      fastInspections++;
+      return inspectCityMoveFast(sampleMap(), cityId, target);
+    },
+    requestFrame(callback) {
+      const id = nextFrameId++;
+      frames.set(id, callback);
+      return id;
+    },
+    cancelFrame: id => frames.delete(id)
+  });
+  frameTarget.emit("pointerdown", pointerEvent(11, {cityId: 1, targetCell: {gridCell: 1, packCell: 1}}));
+  for (let index = 0; index < 60; index++) {
+    frameTarget.emit("pointermove", pointerEvent(11, {targetCell: {gridCell: 3, packCell: 3, x: index / 100, y: 1}}));
+  }
+  assert.equal(frames.size, 1, "pointermove 洪峰必须合并为一个 RAF 预览");
+  const [[frameId, flush]] = frames;
+  frames.delete(frameId);
+  flush();
+  assert.equal(fastInspections, 1, "同一帧只能运行一次轻量预检");
+  frameBinding.cancel("test-finished", false);
+
+  const throwTarget = createPointerTargetStub();
+  const throwReleases = [];
+  const throwErrors = [];
+  const throwBinding = bindCityRelocationDrag(throwTarget, {
+    isActive: () => true,
+    isPrimaryPointerDown: () => true,
+    getCityId: event => event.cityId,
+    getSelectedCityId: () => 1,
+    getTarget: event => event.targetCell,
+    inspectFast: (cityId, target) => inspectCityMoveFast(sampleMap(), cityId, target),
+    releasePointer: pointerId => throwReleases.push(pointerId),
+    onCommit: () => { throw new Error("commit failed"); },
+    onError: error => throwErrors.push(error.message)
+  });
+  throwTarget.emit("pointerdown", pointerEvent(12, {cityId: 1, targetCell: {gridCell: 1, packCell: 1}}));
+  throwTarget.emit("pointerup", pointerEvent(12, {targetCell: {gridCell: 3, packCell: 3}}));
+  assert.equal(throwBinding.getActiveDrag(), null, "提交异常后拖动态未清理");
+  assert.deepEqual(throwReleases, [12], "提交异常后 pointer capture 未释放");
+  assert.deepEqual(throwErrors, ["commit failed"]);
+
+  const targetErrorTarget = createPointerTargetStub();
+  const targetErrorEvents = [];
+  const targetErrorBinding = bindCityRelocationDrag(targetErrorTarget, {
+    isActive: () => true,
+    isPrimaryPointerDown: () => true,
+    getCityId: event => event.cityId,
+    getSelectedCityId: () => 1,
+    getTarget: () => { throw new Error("target failed"); },
+    inspectFast: () => { throw new Error("inspect must not run"); },
+    onPreview: preview => targetErrorEvents.push(preview === null ? "clear" : "preview"),
+    onCancel: reason => targetErrorEvents.push(reason),
+    onError: error => targetErrorEvents.push(error.message)
+  });
+  targetErrorTarget.emit("pointerdown", pointerEvent(14, {cityId: 1}));
+  targetErrorTarget.emit("pointerup", pointerEvent(14));
+  assert.equal(targetErrorBinding.getActiveDrag(), null, "pointerup getTarget 异常后拖动态未清理");
+  assert.deepEqual(targetErrorEvents, ["target failed", "pointerup-error", "clear"], "pointerup getTarget 异常未清 ghost 或退出模式");
+}
+
+function runOverlappingCityPointerRegression() {
+  const pick = {cityObject: {kind: "city", id: 2, overlapCandidateIds: [2, 9]}};
+  assert.equal(resolveCityRelocationPointerCityId(pick, 9), 9, "重合城市拖动必须优先采用已选候选");
+  assert.equal(resolveCityRelocationPointerCityId(pick, 7), 2, "已选城市不在重合候选时必须保持普通 picking");
+  assert.equal(resolveCityRelocationPointerCityId(pick, null), 2, "无移动选择时必须保持普通 picking");
+}
+
+function runMultiSettlementCellRegression() {
+  const map = sampleMap({marketCenter: true});
+  const secondMarket = {i: 2, id: 2, name: "乙城市", centerBurgId: 2, cell: 7, x: 0, y: -1, state: 1, goods: {}};
+  map.pack.markets[2] = structuredClone(secondMarket);
+  map.economy.markets[2] = structuredClone(secondMarket);
+  map.pack.burgs[2].market = 2;
+  map.pack.burgs[2].plaza = 1;
+  map.settlements.cities[2].market = 2;
+  map.settlements.cities[2].plaza = 1;
+  map.pack.cells.market[7] = 2;
+  const preview = inspectCityMove(map, 1, {gridCell: 7, packCell: 7, x: 0.15, y: -0.85});
+  const command = createMoveCityCommand(1, preview.target, {preflight: preview});
+  const history = new EditHistory();
+  history.execute(command, {map});
+  assert.deepEqual(cityIdsAtGridCell(map, 7), [1, 2], "grid cell 多城索引必须保留全部城市");
+  assert.deepEqual(burgIdsAtPackCell(map, 7), [1, 2], "pack cell 多 burg 索引必须保留全部 burg");
+  assert.equal(map.grid.cells.burg[7], 1, "旧 singular grid 索引应稳定选择最小城市 ID");
+  assert.equal(map.pack.cells.burg[7], 1, "旧 singular pack 索引应稳定选择最小 burg ID");
+  assert.equal(map.pack.cells.market[7], 1, "同 cell 多市场的旧 singular 代表应稳定选择最小市场 ID");
+  assert.equal(map.pack.markets[1].centerBurgId, 1);
+  assert.equal(map.pack.markets[2].centerBurgId, 2);
+  const gridOccupants = getCellSnapshot(map, {space: "grid", id: 7}).occupants;
+  assert.deepEqual(gridOccupants.cityIds, [1, 2], "grid query 未返回同 cell 的 cityIds");
+  assert.deepEqual(gridOccupants.burgIds, [1, 2], "grid query 未区分 cityIds / burgIds");
+  assert.deepEqual(getCellSnapshot(map, {space: "pack", id: 7}).occupants.cityIds, [1, 2], "pack query 遗漏同 cell 城市");
+  map.regenerationLocks = {version: 1, entries: [{kind: "city", id: 2}]};
+  const locked = captureLockedRegenerationObjects(map, "city");
+  assert.deepEqual(locked.entries[0].related.gridCellCityIds, [1, 2], "非 singular 代表城市锁未捕获完整 grid 多值镜像");
+  assert.deepEqual(locked.entries[0].related.packCellBurgIds, [1, 2], "非 singular 代表城市锁未捕获完整 pack 多值镜像");
+  const loaded = parseMapDocument(stringifyMapDocument(createMapDocument(map, map.options))).map;
+  assert.deepEqual(cityIdsAtGridCell(loaded, 7), [1, 2], "多城存档加载后 grid 多值索引丢失");
+  assert.deepEqual(burgIdsAtPackCell(loaded, 7), [1, 2], "多城存档加载后 pack 多值索引丢失");
+  assert.equal(loaded.grid.cells.burg[7], 1, "多城存档加载未恢复稳定 grid singular 代表");
+  assert.equal(loaded.pack.cells.burg[7], 1, "多城存档加载未恢复稳定 pack singular 代表");
+  history.undo({map});
+  assert.deepEqual(cityIdsAtGridCell(map, 7), [2], "撤销后多城索引未恢复");
+  history.redo({map});
+  assert.deepEqual(cityIdsAtGridCell(map, 7), [1, 2], "重做后多城索引未恢复");
+  map.settlements.cities[2].removed = true;
+  map.pack.burgs[2].removed = true;
+  assert.deepEqual(cityIdsAtGridCell(map, 7), [1], "同数组软删除后多城索引不得返回陈旧城市");
+  assert.deepEqual(burgIdsAtPackCell(map, 7), [1], "同数组软删除后多 burg 索引不得返回陈旧 burg");
+  delete map.settlements.cities[2].removed;
+  delete map.pack.burgs[2].removed;
+  assert.deepEqual(cityIdsAtGridCell(map, 7), [1, 2], "软删除撤销后多城索引未恢复");
+  assert.deepEqual(burgIdsAtPackCell(map, 7), [1, 2], "软删除撤销后多 burg 索引未恢复");
+
+  const lastCityMap = sampleMap();
+  for (const id of [2, 3]) {
+    lastCityMap.settlements.cities[id].state = 2;
+    lastCityMap.pack.burgs[id].state = 2;
+  }
+  lastCityMap.settlements.cities[1].capital = true;
+  lastCityMap.pack.burgs[1].capital = 1;
+  for (const states of [lastCityMap.politics.states, lastCityMap.pack.states]) {
+    Object.assign(states[1], {capital: 1, center: 0, gridCenter: 0});
+    Object.assign(states[2], {capital: 2, center: 7, gridCenter: 7});
+  }
+  const lastPreview = inspectCityMove(lastCityMap, 1, {gridCell: 2, packCell: 2});
+  assert.equal(lastPreview.politics.sourceStateReplacementCityId, null);
+  const lastCityHistory = new EditHistory();
+  lastCityHistory.execute(createMoveCityCommand(1, lastPreview.target, {preflight: lastPreview}), {map: lastCityMap});
+  assert.equal(lastCityMap.politics.states[1].capital, 0, "最后一城迁出后原国家允许无首都");
+  assert.equal(lastCityMap.politics.states[1].center, 0, "最后一城迁出后原国家中心应保留合法本国陆地");
+  assert.equal(lastCityMap.politics.states[2].capital, 2, "目标国家已有首都时不得篡位");
+  assert.equal(lastCityMap.settlements.cities[1].capital, false);
+  lastCityHistory.undo({map: lastCityMap});
+  assert.equal(lastCityMap.politics.states[1].capital, 1, "最后一城迁移撤销未恢复首都");
+  lastCityHistory.redo({map: lastCityMap});
+  assert.equal(lastCityMap.politics.states[1].capital, 0, "最后一城迁移重做未恢复空国首都状态");
+  const emptyStateRoundtrip = roundtripMap(lastCityMap);
+  assert.equal(emptyStateRoundtrip.politics.states[1].capital, 0, "空国首都状态未通过存档往返");
+  emptyStateRoundtrip.regenerationLocks = {version: 1, entries: [{kind: "state", id: 1}]};
+  assert.equal(captureLockedRegenerationObjects(emptyStateRoundtrip, "state").entries.length, 1, "空国国家锁捕获失败");
+  emptyStateRoundtrip.pack.cells.t ||= new Int8Array(emptyStateRoundtrip.pack.cells.i.length);
+  emptyStateRoundtrip.pack.cells.area ||= new Float32Array(emptyStateRoundtrip.pack.cells.i.length).fill(1);
+  emptyStateRoundtrip.pack.provinces = [null];
+  const emptyState = structuredClone(emptyStateRoundtrip.pack.states[1]);
+  assert.doesNotThrow(() => reexpandPackPoliticsPreservingIdentity(
+    emptyStateRoundtrip.grid,
+    emptyStateRoundtrip.society,
+    emptyStateRoundtrip.pack,
+    emptyStateRoundtrip.settlements,
+    {lockedStates: [emptyState], lockedCities: [], lockedProvinces: []}
+  ), "空国政治重扩张不应强制补首都");
+  assert.equal(emptyStateRoundtrip.pack.states[1].capital, 0, "空国政治重扩张错误生成首都");
+}
+
+async function runAsyncPreflightRegression() {
+  const map = sampleMap();
+  const controller = new AbortController();
+  controller.abort("test");
+  await assert.rejects(
+    inspectCityMoveAsync(map, 1, {gridCell: 3, packCell: 3}, {signal: controller.signal, sliceMs: 0}),
+    error => error?.code === "operation_cancelled"
+  );
+
+  const preflight = await inspectCityMoveAsync(map, 1, {gridCell: 3, packCell: 3}, {sliceMs: 0});
+  assert.throws(
+    () => createMoveCityCommand(1, {gridCell: 2, packCell: 2}, {preflight}).isNoop({map}),
+    error => error?.code === "inspection_stale",
+    "preflight 不得被用于其它目标"
+  );
+  const command = createMoveCityCommand(1, preflight.target, {preflight});
+  assert.equal(command.isNoop({map}), false);
+  assert.equal(command.getInspection(), preflight, "isNoop 必须复用已完成 preflight");
+  command.apply({map});
+  assert.equal(command.getInspection(), preflight, "apply 不得重复执行 preflight");
+}
+
+async function runRouteAdjacencyCancellationRegression() {
+  for (const routeCount of [0, 4, 10]) {
+    const map = routeCount ? createLongRouteCancellationMap(routeCount) : sampleMap();
+    const template = map.settlements.routes.find(route => Number(route.from) === 1 || Number(route.to) === 1);
+    map.settlements.routes = Array.from({length: routeCount}, (_, index) => ({
+      ...structuredClone(template),
+      id: index,
+      from: 1,
+      to: 2
+    }));
+    assert.equal(routesAtCity(map, 1).length, routeCount, `${routeCount} 条路线的 city 邻接索引不完整`);
+    const controller = new AbortController();
+    let yields = 0;
+    if (!routeCount) controller.abort("cancel-0");
+    await assert.rejects(
+      inspectCityMoveAsync(map, 1, {gridCell: 3, packCell: 3}, {
+        signal: controller.signal,
+        sliceMs: 1,
+        yieldToBrowser: async () => {
+          yields++;
+          controller.abort(`cancel-${routeCount}`);
+        }
+      }),
+      error => error?.code === "operation_cancelled",
+      `${routeCount} 条关联路线时预检未响应取消`
+    );
+    if (routeCount) assert.ok(yields >= 1, `${routeCount} 条关联路线必须在路线规划已开始并完成至少一次切片后取消`);
+  }
+}
+
+function createLongRouteCancellationMap(routeCount) {
+  const map = sampleMap();
+  const size = 20000;
+  const points = Array.from({length: size}, (_, cell) => [cell, 0]);
+  const adjacency = Array.from({length: size}, (_, cell) => [cell - 1, cell + 1].filter(neighbor => neighbor >= 0 && neighbor < size));
+  map.pack.cells = {
+    ...map.pack.cells,
+    i: points.map((_, cell) => cell),
+    p: points,
+    c: adjacency,
+    g: points.map((_, cell) => cell < map.grid.points.length ? cell : 3),
+    h: new Uint8Array(size).fill(40),
+    f: new Uint16Array(size).fill(1),
+    state: new Uint16Array(size).fill(1),
+    province: new Uint16Array(size).fill(1),
+    culture: new Uint16Array(size).fill(1),
+    religion: new Uint16Array(size).fill(1),
+    haven: new Int32Array(size).fill(-1),
+    harbor: new Uint8Array(size),
+    r: new Uint16Array(size),
+    fl: new Uint16Array(size),
+    biome: new Uint8Array(size).fill(6),
+    pop: new Float32Array(size),
+    s: new Float32Array(size),
+    burg: new Uint32Array(size),
+    market: new Uint32Array(size),
+    routes: {},
+    good: new Uint16Array(size),
+    goodSource: new Uint8Array(size),
+    goodSupply: new Float32Array(size)
+  };
+  map.pack.cells.burg[0] = 1;
+  map.pack.cells.burg[size - 1] = 2;
+  map.pack.burgs[2].cell = size - 1;
+  map.settlements.cities[2].packCell = size - 1;
+  const template = map.settlements.routes[0];
+  map.settlements.routes = Array.from({length: routeCount}, (_, index) => ({
+    ...structuredClone(template),
+    id: index,
+    from: 1,
+    to: 2,
+    packCells: [0, size - 1],
+    cells: [0, size - 1],
+    points: [points[0], points[size - 1]]
+  }));
+  return map;
+}
+
+async function runPopulationPointTopKRegression() {
+  const count = 12000;
+  const grid = {
+    points: Array.from({length: count}, (_, cell) => [cell, 0]),
+    cells: {
+      pop: Array.from({length: count}, (_, cell) => 43 + cell % 17),
+      h: new Uint8Array(count).fill(40),
+      f: new Uint16Array(count).fill(1),
+      burg: new Int32Array(count).fill(-1)
+    }
+  };
+  const features = {features: [null, {i: 1, land: true, type: "island"}]};
+  const expected = grid.points.map((point, cell) => ({cell, point, population: grid.cells.pop[cell]}))
+    .sort((a, b) => b.population - a.population || a.cell - b.cell)
+    .slice(0, Math.min(2400, Math.round(count * 0.22)));
+  const actual = await rebuildRelocatedPopulationPointsAsync(grid, features, {sliceMs: 1, yieldToMain: () => Promise.resolve()});
+  assert.deepEqual(actual.map(item => [item.cell, item.population]), expected.map(item => [item.cell, item.population]), "人口点有界 top-K 与全量排序不等价");
+  const controller = new AbortController();
+  controller.abort("test");
+  await assert.rejects(
+    rebuildRelocatedPopulationPointsAsync(grid, features, {signal: controller.signal, sliceMs: 1, yieldToMain: () => Promise.resolve()}),
+    error => error?.code === "operation_cancelled"
+  );
+}
+
+async function runPendingDragRegression() {
+  const map = sampleMap();
+  const target = createPointerTargetStub();
+  let resolvePreflight;
+  let preflightSignal = null;
+  let commits = 0;
+  const binding = bindCityRelocationDrag(target, {
+    isActive: () => true,
+    isPrimaryPointerDown: () => true,
+    getCityId: event => event.cityId,
+    getSelectedCityId: () => 1,
+    getTarget: event => event.targetCell,
+    inspectFast: (cityId, destination) => inspectCityMoveFast(map, cityId, destination),
+    preflight: (_cityId, _destination, options) => {
+      preflightSignal = options.signal;
+      return new Promise(resolve => { resolvePreflight = resolve; });
+    },
+    onCommit: () => commits++
+  });
+  target.emit("pointerdown", pointerEvent(13, {cityId: 1, targetCell: {gridCell: 1, packCell: 1}}));
+  target.emit("pointerup", pointerEvent(13, {targetCell: {gridCell: 3, packCell: 3}}));
+  assert.deepEqual(binding.getPendingPreflight(), {generation: 1, cityId: 1});
+  assert.equal(binding.cancel("map-reset", false), true);
+  assert.equal(preflightSignal.aborted, true, "地图切换必须中止未完成 preflight");
+  resolvePreflight(inspectCityMove(map, 1, {gridCell: 3, packCell: 3}));
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(commits, 0, "已取消的 preflight 不得迟到提交");
+  assert.equal(binding.getPendingPreflight(), null);
 }
 
 function createPointerTargetStub() {

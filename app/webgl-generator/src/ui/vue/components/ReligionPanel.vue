@@ -68,7 +68,6 @@
     :min="brushRadius.min"
     :max="brushRadius.max"
     :step="brushRadius.step"
-    unit-label="地图单位"
     @input="callbacks.onAssignmentRadius"
   />
 

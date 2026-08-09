@@ -10,6 +10,7 @@ import {
   summarizeGridStructure,
   validateGridStructureDocument
 } from "../generator/grid-refinement.js";
+import {invalidateSettlementCellIndex, rebuildSettlementCellIndex} from "./settlement-cell-index.js";
 
 export const GRID_TOPOLOGY_API_VERSION = "1.0.0";
 
@@ -107,6 +108,8 @@ export function commitPreparedGridTopology(map, prepared) {
   assertMap(map);
   if (!prepared?.map || prepared.sourceMap !== map) throw codedError("grid-preparation-invalid", "网格写入准备结果不属于当前地图");
   replaceMapContents(map, prepared.map);
+  invalidateSettlementCellIndex(map);
+  rebuildSettlementCellIndex(map, {syncLegacy: true});
   return prepared.result;
 }
 
@@ -132,6 +135,7 @@ function prepareTopologyReplacement(map, nextGrid, context) {
   };
 
   const migration = migrateSpatialReferences(working, {oldGrid, oldPack, newGrid: working.grid, newPack: working.pack});
+  rebuildSettlementCellIndex(working, {syncLegacy: true});
   working.options = {...(working.options || {}), cellsTarget: working.grid.points.length};
   refreshMapMetadataAndSummary(working);
   working.metadata.gridRefinement = {
@@ -247,8 +251,19 @@ function migrateSpatialReferences(map, {oldGrid, oldPack, newGrid, newPack}) {
     }
   };
 
+  const remapBurg = burg => {
+    if (!burg || burg.removed) return;
+    const oldPackCell = Number(burg.cell ?? burg.packCell);
+    const gridCell = toGrid(oldPackCell);
+    if (gridCell < 0) return;
+    const packCell = toPack(gridCell);
+    burg.cell = packCell;
+    if (Object.prototype.hasOwnProperty.call(burg, "packCell")) burg.packCell = packCell;
+    report.burgs++;
+  };
+
   for (const city of map.settlements?.cities || []) remapObject(city, "cities");
-  for (const burg of map.settlements?.burgs || []) remapObject(burg, "burgs");
+  for (const burg of new Set([...(map.settlements?.burgs || []), ...(map.pack?.burgs || [])])) remapBurg(burg);
   for (const marker of map.markers?.markers || []) remapObject(marker, "markers");
   for (const state of map.politics?.states || []) remapCenter(state, "stateCenters", toGrid, toPack, report);
   for (const province of map.politics?.provinces || []) remapCenter(province, "provinceCenters", toGrid, toPack, report);

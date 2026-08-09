@@ -116,7 +116,7 @@
   <UiSwitchField v-if="!debugEnabled" label="影响海底" field-class="height-check-row" compact-hit-area :checked="state.affectSeafloor" @change="setAffectSeafloor" />
   <p v-if="!debugEnabled && state.affectSeafloor" class="height-action-help">画笔会同时作用于陆地和海底，并允许高度跨越海平面改变海陆分界。</p>
 
-  <UiSliderField v-if="!debugEnabled || (state.action !== 'fill' && state.action !== 'line')" label="画笔大小" :model-value="state.radius" :min="heightRadius.min" :max="heightRadius.max" :step="heightRadius.step" unit-label="地图单位" @input="setRadius" />
+  <UiSliderField v-if="!debugEnabled || (state.action !== 'fill' && state.action !== 'line')" label="画笔大小" :model-value="state.radius" :min="heightRadius.min" :max="heightRadius.max" :step="heightRadius.step" @input="setRadius" />
   <UiSliderField v-if="!debugEnabled || state.action !== 'line'" :label="brushValueLabel" :model-value="brushValue" :min="brushValueMin" :max="18" :step="1" @input="setBrushValue" />
   <UiSliderField v-if="debugEnabled && state.action === 'fill'" label="高度容差" :model-value="state.fillTolerance" :min="0" :max="12" :step="1" @input="setFillTolerance" />
   <UiSliderField v-if="debugEnabled && state.action === 'line'" label="线宽" :model-value="state.lineWidth" :min="2" :max="48" :step="1" @input="setLineWidth" />

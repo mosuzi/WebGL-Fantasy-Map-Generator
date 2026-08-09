@@ -5,6 +5,7 @@ import {describeRiverRelation} from "../generator/river-network.js";
 import {resolveZoneContext} from "./zone-context.js";
 import {normalizeZoneTypeRecord} from "./zone-types.js";
 import {normalizeRiverControlPoints} from "./river-control-points.js";
+import {isSharedCubicCurve, normalizeRiverVisualCurve, sampleCentripetalCatmullRom} from "../geometry/cubic-path.js";
 
 const OBJECT_RESOLVERS = Object.freeze({
   [OBJECT_KIND.CITY]: resolveCity,
@@ -323,6 +324,7 @@ function resolveRiver(map, object) {
   const river = map.rivers.rivers.find(item => item.id === object.id);
   if (!river) return null;
   const relation = describeRiverRelation(river, map.rivers.rivers);
+  const visualPoints = isSharedCubicCurve(river.visualCurve) ? sampleCentripetalCatmullRom(river.points).points : river.points;
   return {
     ...object,
     kind: "river",
@@ -333,14 +335,15 @@ function resolveRiver(map, object) {
     flux: river.flux || river.discharge || river.width || 0,
     discharge: river.discharge || river.flux || 0,
     length: river.length ?? river.cells?.length ?? Math.max(0, (river.points?.length || 0) - 1),
-    segments: Math.max(0, (river.points?.length || 0) - 1),
+    segments: Math.max(0, (visualPoints?.length || 0) - 1),
     widthFactor: Number.isFinite(river.widthFactor) ? river.widthFactor : 1,
     hydrology: river.hydrology || null,
     source: river.source,
     mouth: river.mouth,
     cells: river.cells,
     points: river.points,
-    ...(Array.isArray(river.controlPoints) ? {controlPoints: normalizeRiverControlPoints(river, map.pack?.cells)} : {})
+    ...(Array.isArray(river.controlPoints) ? {controlPoints: normalizeRiverControlPoints(river, map.pack?.cells)} : {}),
+    ...(normalizeRiverVisualCurve(river.visualCurve) ? {visualCurve: normalizeRiverVisualCurve(river.visualCurve)} : {})
   };
 }
 

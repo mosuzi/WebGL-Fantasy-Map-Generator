@@ -60,6 +60,12 @@ export function inspectStateMerge(map, options = {}) {
     .map(city => numberId(city.id))
     .sort(ascending);
   if (!cityIds.length) return invalidInspection("state-without-city", "合并后的国家至少需要一座城市");
+  const survivorCapitalCityId = stateCapitalCityId(map, survivorStateId);
+  const victimCapitalCityId = stateCapitalCityId(map, victimStateId);
+  const capitalCityId = survivorCapitalCityId
+    ?? (cityIds.includes(victimCapitalCityId) ? victimCapitalCityId : null)
+    ?? chooseEmptySurvivorMergeCapital(map, cityIds);
+  if (capitalCityId === null) return invalidInspection("capital-candidate-missing", "合并后的国家找不到可用首都候选");
 
   const nextProvinceId = nextPoliticalId(map, "provinces");
   const preservedProvinceNames = affectedOldProvinceIds.map(id => provinceNameSnapshot(readProvince(map, id)));
@@ -81,11 +87,20 @@ export function inspectStateMerge(map, options = {}) {
     gridCells: cells.gridCells,
     packCells: cells.packCells,
     cityIds,
-    capitalCityId: stateCapitalCityId(map, survivorStateId),
+    capitalCityId,
     selectionTarget: {kind: "state", id: survivorStateId},
     redirects: [{kind: "state", from: victimStateId, to: survivorStateId}],
     summary: `合并国家 #${victimStateId} 至 #${survivorStateId}`
   });
+}
+
+function chooseEmptySurvivorMergeCapital(map, cityIds) {
+  const allowed = new Set(cityIds);
+  return activeCities(map)
+    .filter(city => allowed.has(numberId(city.id)))
+    .sort((a, b) => Number(b.provincial) - Number(a.provincial)
+      || Number(b.population || 0) - Number(a.population || 0)
+      || numberId(a.id) - numberId(b.id))[0]?.id ?? null;
 }
 
 export function inspectStateSplit(map, options = {}) {

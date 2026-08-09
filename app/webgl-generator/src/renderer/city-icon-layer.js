@@ -175,6 +175,14 @@ export class CityIconWebglLayer {
       if (!Number.isInteger(index)) continue;
       const item = this.instances[index];
       let changed = false;
+      if (Object.hasOwn(change, "x") && Number.isFinite(Number(change.x)) && Number(change.x) !== item.x) {
+        item.x = Number(change.x);
+        changed = true;
+      }
+      if (Object.hasOwn(change, "y") && Number.isFinite(Number(change.y)) && Number(change.y) !== item.y) {
+        item.y = Number(change.y);
+        changed = true;
+      }
       if (Object.hasOwn(change, "visibilityTarget") || Object.hasOwn(change, "visible")) {
         const target = clamp01(Object.hasOwn(change, "visibilityTarget") ? change.visibilityTarget : change.visible ? 1 : 0);
         if (target !== item.visibilityTarget) {

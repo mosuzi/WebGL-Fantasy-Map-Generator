@@ -8,6 +8,7 @@ import {
 import {captureMilitaryRegimentSnapshot} from "../generator/military-regeneration-locks.js";
 import {prepareRiverRegenerationLocks} from "../generator/river-regeneration-locks.js";
 import {prepareSocialRegenerationLocks} from "../generator/social-regeneration-locks.js";
+import {burgIdsAtPackCell, cityIdsAtGridCell} from "./settlement-cell-index.js";
 
 export function captureLockedRegenerationObjects(map, kind, {filter = null} = {}) {
   const references = listRegenerationLocks(map, {kind});
@@ -165,7 +166,9 @@ function validateState(map, reference, state) {
   if (!Number.isInteger(center) || center < 0 || center >= Number(map?.pack?.cells?.i?.length || 0) || map.pack.cells.h?.[center] < 20) {
     throw regenerationLockConflict(reference.kind, reference, "invalid_state_center", "锁定国家引用了无效中心", {id, center});
   }
-  if (!Number.isInteger(capital) || capital <= 0 || !burg || burg.removed || Number(burg.cell) !== center || Number(map.pack.cells.state?.[center]) !== id) {
+  const emptyState = capital === 0;
+  if ((!emptyState && (!Number.isInteger(capital) || capital <= 0 || !burg || burg.removed || Number(burg.cell) !== center))
+    || Number(map.pack.cells.state?.[center]) !== id) {
     throw regenerationLockConflict(reference.kind, reference, "invalid_state_capital", "锁定国家缺少一致的首都与领土镜像", {id, capital, center});
   }
 }
@@ -298,7 +301,11 @@ function validateCity(map, reference, city) {
   if (!Number.isInteger(burgId) || burgId <= 0 || !burg || burg.removed || Number(burg.cell) !== packCell) {
     throw regenerationLockConflict(reference.kind, reference, "invalid_city_burg", "锁定城镇缺少一致的 pack burg 镜像", {burgId, packCell});
   }
-  if (Number(map?.pack?.cells?.burg?.[packCell]) !== burgId) {
+  const packBurgIds = burgIdsAtPackCell(map, packCell);
+  const gridCityIds = cityIdsAtGridCell(map, gridCell);
+  if (!packBurgIds.includes(burgId) || !gridCityIds.includes(Number(city.id))
+    || Number(map?.pack?.cells?.burg?.[packCell]) !== packBurgIds[0]
+    || Number(map?.grid?.cells?.burg?.[gridCell]) !== gridCityIds[0]) {
     throw regenerationLockConflict(reference.kind, reference, "invalid_city_cell_mirror", "锁定城镇与 pack cell 的 burg 镜像不一致", {burgId, packCell});
   }
 }
@@ -747,7 +754,9 @@ function captureCityMirrors(map, city) {
   return {
     packBurg: clone(map?.pack?.burgs?.[burgId] || null),
     packCellBurg: Number(map?.pack?.cells?.burg?.[packCell]) || 0,
+    packCellBurgIds: burgIdsAtPackCell(map, packCell),
     gridCellBurg: Number(map?.grid?.cells?.burg?.[gridCell]) || 0,
+    gridCellCityIds: cityIdsAtGridCell(map, gridCell),
     stateAnchor: state && Number(state.capital) === burgId ? pickFields(state, ["capital", "center", "gridCenter", "capitalName"]) : null,
     provinceAnchor: province && Number(province.burg) === burgId ? pickFields(province, ["burg", "center", "gridCenter"]) : null
   };

@@ -1,5 +1,5 @@
 <template>
-  <ElButton :native-type="buttonType" :class="[variantClass, {active}]" @click="event => emit('click', event)">
+  <ElButton :native-type="buttonType" :disabled="disabled" :class="[variantClass, {active}]" @click="event => emit('click', event)">
     <slot />
   </ElButton>
 </template>
@@ -17,6 +17,10 @@ const props = defineProps({
     default: "plain"
   },
   active: {
+    type: Boolean,
+    default: false
+  },
+  disabled: {
     type: Boolean,
     default: false
   },

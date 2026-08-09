@@ -12,6 +12,8 @@ import {
   prepareGridStructureWrite
 } from "../app/webgl-generator/src/runtime/grid-topology-api.js";
 import {validateRefinedMotherAdjacency} from "../app/webgl-generator/src/generator/grid-refinement.js";
+import {burgIdsAtPackCell, cityIdsAtGridCell, rebuildSettlementCellIndex} from "../app/webgl-generator/src/runtime/settlement-cell-index.js";
+import {pickGridCell} from "../app/webgl-generator/src/renderer/picking.js";
 
 const source = generatePlaceholderMap({seed: "grid-topology-298", cellsTarget: 10_000});
 const sourceCells = source.grid.points.length;
@@ -72,6 +74,13 @@ assert.ok(target.features.shore.coastline.length >= sourceCoastlineSegments && t
 assert.ok(sourceLakeShoreSegments === 0 || target.features.shore.lakeShore.length >= sourceLakeShoreSegments, "湖岸细分丢失");
 assert.deepEqual({cities: target.settlements.cities.length, routes: target.settlements.routes.length, rivers: target.rivers.rivers.length}, sourceObjectCounts, "空间对象数量发生漂移");
 assertSpatialReferences(target);
+for (const cell of [0, sourceCells, Math.floor(target.grid.points.length / 2), target.grid.points.length - 1]) {
+  const point = target.grid.points[cell];
+  assert.ok(Number.isInteger(pickGridCell(target, point[0], point[1])?.gridCell), `细分后 cell #${cell} 的世界坐标无法被重新拾取`);
+}
+for (const city of target.settlements.cities.filter(Boolean)) {
+  assert.ok(Number.isInteger(pickGridCell(target, city.x, city.y)?.gridCell), `细分后城市 #${city.id} 的位置无法拾取 grid cell`);
+}
 
 const history = new EditHistory();
 const originalFingerprint = snapshot.binding.sourceFingerprint;
@@ -99,8 +108,17 @@ const controlledInspection = inspectGridStructureWrite(rollbackMap, rollbackRevi
 const controlledPrepared = prepareGridStructureWrite(rollbackMap, rollbackRevision, controlledDocument, {confirm: true, inspectionToken: controlledInspection.inspectionToken});
 assert.equal(controlledPrepared.map.grid.points.length, rollbackMap.grid.points.length, "受控结构写入准备改变了 cell 数");
 assert.deepEqual(controlledPrepared.map.grid.cells.h, rollbackMap.grid.cells.h, "受控结构写入准备改变了高度");
+const [sharedCellAnchor, sharedCellMover] = rollbackMap.settlements.cities.filter(city => city && !city.removed).slice(0, 2);
+assert(sharedCellAnchor && sharedCellMover, "grid 细分样本缺少同 cell 多城候选");
+Object.assign(sharedCellMover, {cell: sharedCellAnchor.cell, packCell: sharedCellAnchor.packCell, x: sharedCellAnchor.x, y: sharedCellAnchor.y});
+Object.assign(rollbackMap.pack.burgs[sharedCellMover.burgId], {cell: sharedCellAnchor.packCell, x: sharedCellAnchor.x, y: sharedCellAnchor.y});
+rebuildSettlementCellIndex(rollbackMap, {syncLegacy: true});
 const rollbackInspection = inspectGridRefinement(rollbackMap, rollbackRevision, {targetCells: 10_000});
 const rollbackPrepared = prepareGridRefinement(rollbackMap, rollbackRevision, {targetCells: 10_000, confirm: true, inspectionToken: rollbackInspection.inspectionToken});
+const refinedSharedCell = rollbackPrepared.map.settlements.cities[sharedCellAnchor.id].cell;
+const refinedSharedPackCell = rollbackPrepared.map.settlements.cities[sharedCellAnchor.id].packCell;
+assert.deepEqual(cityIdsAtGridCell(rollbackPrepared.map, refinedSharedCell), [sharedCellAnchor.id, sharedCellMover.id].sort((a, b) => a - b), "grid 细分丢失同 cell 多城索引");
+assert.deepEqual(burgIdsAtPackCell(rollbackPrepared.map, refinedSharedPackCell), [sharedCellAnchor.burgId, sharedCellMover.burgId].sort((a, b) => a - b), "grid 细分丢失同 cell 多 burg 索引");
 const rollbackCells = rollbackMap.grid.points.length;
 const refinedRoundtrip = parseMapDocument(stringifyMapDocument(createMapDocument(rollbackPrepared.map)));
 assert.equal(refinedRoundtrip.map.grid.points.length, 10_000, "细分地图保存再读取丢失网格");
