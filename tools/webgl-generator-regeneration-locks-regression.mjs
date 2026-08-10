@@ -6,6 +6,7 @@ import {
   REGENERATION_LOCK_KINDS,
   createEmptyRegenerationLockStore,
   createRegenerationLockInspection,
+  ensureRegenerationLockStore,
   getRegenerationLockStatus,
   normalizeRegenerationLockReferences,
   normalizeRegenerationLockStore,
@@ -52,6 +53,44 @@ assert.equal(normalized.diagnostics.removed, 3);
 assert.equal(normalized.store.entries.find(item => item.kind === "diplomacy-relation").id, "1:2");
 assert.deepEqual(validateRegenerationLockStore(normalized.store, map), normalized.store);
 assert.deepEqual(normalizeRegenerationLockStore(null, map).store, createEmptyRegenerationLockStore());
+
+const canonicalMap = fixtureMap();
+canonicalMap.regenerationLocks = normalized.store;
+const canonicalStore = canonicalMap.regenerationLocks;
+const canonicalEntries = canonicalStore.entries;
+const canonicalEntryObjects = [...canonicalEntries];
+assert.equal(ensureRegenerationLockStore(canonicalMap), canonicalStore);
+assert.equal(canonicalMap.regenerationLocks.entries, canonicalEntries);
+assert.deepEqual(canonicalMap.regenerationLocks.entries, canonicalEntryObjects);
+for (let index = 0; index < canonicalEntryObjects.length; index++) {
+  assert.equal(canonicalMap.regenerationLocks.entries[index], canonicalEntryObjects[index]);
+}
+
+const legacyMap = fixtureMap();
+const legacyStore = {version: "1", entries: [{kind: "route", id: "1"}]};
+legacyMap.regenerationLocks = legacyStore;
+const migratedStore = ensureRegenerationLockStore(legacyMap);
+assert.notEqual(migratedStore, legacyStore);
+assert.deepEqual(migratedStore, {version: 1, entries: [{kind: "route", id: 1}]});
+
+const dirtyMap = fixtureMap();
+const dirtyStore = {
+  version: 1,
+  entries: [
+    {kind: "route", id: 1},
+    {kind: "city", id: 1},
+    {kind: "route", id: 1},
+    {kind: "unknown", id: 1},
+    {kind: "state", id: 999}
+  ]
+};
+dirtyMap.regenerationLocks = dirtyStore;
+const cleanedStore = ensureRegenerationLockStore(dirtyMap);
+assert.notEqual(cleanedStore, dirtyStore);
+assert.deepEqual(cleanedStore, {
+  version: 1,
+  entries: [{kind: "city", id: 1}, {kind: "route", id: 1}]
+});
 
 assert.throws(
   () => normalizeRegenerationLockReferences([{kind: "state", id: 1}, {kind: "state", id: 999}], map),

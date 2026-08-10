@@ -250,5 +250,7 @@ const appSource = fs.readFileSync(new URL("../app/webgl-generator/src/runtime/ap
 const protectionSource = fs.readFileSync(new URL("../app/webgl-generator/src/runtime/regeneration-lock-protection.js", import.meta.url), "utf8");
 assert.doesNotMatch(riversSource, /replaceFrozenRiverObjects|restoreFrozenRiverCells|restoreFrozenLakeReferences/, "河流锁仍依赖生成后覆盖");
 assert.doesNotMatch(lockSource, /export function (replaceFrozenRiverObjects|restoreFrozenRiverCells|restoreFrozenLakeReferences)/, "锁 helper 仍暴露末尾恢复入口");
-assert.match(appSource, /function regenerateRivers[\s\S]*allRegenerationObjectsLocked\(map, OBJECT_KIND\.RIVER[\s\S]*captureLockedRegenerationObjects\(map, OBJECT_KIND\.RIVER\)[\s\S]*captureLockedRegenerationObjects\(map, OBJECT_KIND\.ROUTE\)[\s\S]*lockedRivers: riverLocks\.snapshots[\s\S]*lockedRoutes: routeLocks\.snapshots[\s\S]*assertLockedRegenerationSnapshots\(map, riverLocks\)[\s\S]*assertLockedRegenerationSnapshots\(map, routeLocks\)/, "正式河流入口未完整消费河流与道路锁");
+const riverRegenerationSource = appSource.slice(appSource.indexOf("function regenerateRivers"), appSource.indexOf("function regenerateCities"));
+assert.match(riverRegenerationSource, /allRegenerationObjectsLocked\(map, OBJECT_KIND\.RIVER[\s\S]*captureLockedRegenerationObjects\(map, OBJECT_KIND\.RIVER\)[\s\S]*lockedRivers: riverLocks\.snapshots[\s\S]*assertLockedRegenerationSnapshots\(map, riverLocks\)/, "正式河流入口未完整消费河流锁");
+assert.doesNotMatch(riverRegenerationSource, /OBJECT_KIND\.ROUTE|routeLocks|lockedRoutes|finalizeSettlements|route-mesh|道路同步重算/, "正式河流入口仍直接重算或刷新道路");
 assert.match(protectionSource, /OBJECT_KIND\.RIVER[\s\S]*captureRiverMirrors[\s\S]*packRiver[\s\S]*lakeEdges[\s\S]*notes/, "公共 protection 未覆盖河流对象、镜像、水文、湖引用与备注");

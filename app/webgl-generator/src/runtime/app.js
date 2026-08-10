@@ -9,6 +9,7 @@ import {finalizeSocietyReligions} from "../generator/society.js";
 import {buildZones} from "../generator/zones.js";
 import {reconcileWarDerivedData} from "../generator/war-consistency.js";
 import {finalizeSettlements, rebuildRelocatedPopulationPointsAsync, regenerateSettlementsWithinPolitics} from "../generator/settlements.js";
+import {reconcileSettlementCellIdentity} from "./settlement-cell-index.js";
 import {DEFAULT_OPTIONS, normalizeOptions} from "../generator/options.js";
 import {normalizeAtmosphereDirection, normalizeClimateLatitudeMode, normalizeWindProfile, windAngleFromDirection} from "../generator/climate-options.js";
 import {createRandom, createRandomSeed} from "../generator/random.js";
@@ -175,7 +176,7 @@ import {
 } from "./religion-edit-commands.js";
 import {applySocialAssignmentPreview, SOCIAL_ASSIGNMENT_PREVIEW_EFFECTS} from "./social-ownership-edit-commands.js";
 import {resolveObject} from "./object-resolver.js";
-import {MAX_PERSISTENT_OBJECT_HIGHLIGHTS, isPersistentHighlightObjectKind, normalizePersistentHighlights, samePersistentHighlightMembership} from "./persistent-highlights.js";
+import {MAX_PERSISTENT_OBJECT_HIGHLIGHTS, isPersistentHighlightObjectKind, normalizePersistentHighlights, persistentHighlightKey, samePersistentHighlightMembership} from "./persistent-highlights.js";
 import {createAddRiverCommand, createDeleteRiverCommand, createEditRiverControlPointsCommand, createRenameRiversFromNamebaseCommand, createSetRiverNoteCommand, createSetRiverWidthFactorCommand} from "./river-edit-commands.js";
 import {createRiverWaypointSession} from "./river-waypoint-session.js";
 import {bindRiverControlPointEditing} from "./river-control-point-drag.js";
@@ -245,6 +246,7 @@ import {collectionAffected, objectAffected, systemAffected} from "./edit-command
 import {syncEditorStateSnapshot} from "../ui/vue/state-bridge.js";
 import {completeStartupLoading, failStartupLoading} from "../ui/startup-loading.js";
 import {LABEL_TARGET_KIND, OBJECT_KIND, OBJECT_KIND_LABEL} from "./object-kinds.js";
+import {reconcileSettlementPortTopology} from "./settlement-port-topology.js";
 import GenerationWorker from "./generation-worker.js?worker";
 import {getWebglGeneratorHealthMonitor} from "./health-monitor.js";
 import {createRuntimeOperationError, createRuntimeOperationManager} from "./runtime-operation.js";
@@ -344,6 +346,13 @@ const REGENERATION_TRANSACTION_EFFECTS = Object.freeze({
   runtimeStats: true,
   pickPanel: true,
   derived: Object.freeze(["terrain-caches", "height-field", "cell-colors", "political-boundaries", "point-layers", "line-layers", "labels", "river-mesh", "route-mesh", "object-panels", "object-index"])
+});
+const RIVER_REGENERATION_TRANSACTION_EFFECTS = Object.freeze({
+  render: "draw",
+  selection: "refresh",
+  runtimeStats: true,
+  pickPanel: true,
+  derived: Object.freeze(["river-mesh", "river-width-stats", "river-picking", "cell-colors", "point-layers", "object-panels"])
 });
 const CLIMATE_DERIVED_STALE_SYSTEMS = Object.freeze(["cities", "states", "provinces", "religions", "markers", "zones", "military", "economy", "diplomacy"]);
 const FEATURE_TOPOLOGY_UI_HISTORY = new WeakMap();
@@ -7698,10 +7707,25 @@ function reconcilePersistentObjectHighlights(state, documentRef, {refreshUi = tr
   const current = Array.isArray(state.renderer?.objectHighlights) ? state.renderer.objectHighlights : [];
   if (!current.length || typeof state.renderer?.setObjectHighlights !== "function") return {count: 0, changed: false};
   const next = normalizePersistentHighlights(state.map, current).highlights;
-  const changed = !samePersistentHighlightMembership(current, next);
+  const changed = !samePersistentHighlightResolution(current, next);
+  if (!changed) return {count: next.length, changed: false};
   state.renderer.setObjectHighlights(next);
   if (refreshUi && changed) refreshPersistentHighlightUi(state, documentRef);
   return {count: next.length, changed};
+}
+
+function samePersistentHighlightResolution(current, next) {
+  if (!samePersistentHighlightMembership(current, next)) return false;
+  const nextByKey = new Map(next.map(item => [persistentHighlightKey(item), item]));
+  return current.every(item => sameShallowObject(item, nextByKey.get(persistentHighlightKey(item))));
+}
+
+function sameShallowObject(left, right) {
+  if (!left || !right) return left === right;
+  const leftKeys = Object.keys(left);
+  const rightKeys = Object.keys(right);
+  if (leftKeys.length !== rightKeys.length) return false;
+  return leftKeys.every(key => Object.prototype.hasOwnProperty.call(right, key) && Object.is(left[key], right[key]));
 }
 
 function refreshPersistentHighlightUi(state, documentRef) {
@@ -10759,13 +10783,19 @@ function regenerateMapAttributeViaApi(state, documentRef, kind, options = {}) {
   if (options?.preservePopulation === true && !["features", "routes", "rivers"].includes(targetKind)) {
     throw new Error("preservePopulation 仅支持 features、routes 和 rivers 地理派生重算");
   }
+  if (targetKind === "rivers" && allCurrentRiversLocked(state.map)) {
+    return regenerateMapAttributeCoreViaApi(state, documentRef, targetKind, options);
+  }
+  const riverRouteIdentity = targetKind === "rivers" ? captureRiverRouteIdentity(state.map) : null;
+  const riverLockStoreIdentity = targetKind === "rivers" ? state.map.regenerationLocks : null;
+  const riverHistoryBefore = targetKind === "rivers" ? captureRiverBuildDomain(state.map) : null;
   const transaction = executeMapSnapshotTransaction({
     map: state.map,
     editHistory: state.editHistory,
     label: `受约束重生成 ${targetKind}`,
     domain: "regeneration",
     effects: {
-      ...REGENERATION_TRANSACTION_EFFECTS,
+      ...(targetKind === "rivers" ? RIVER_REGENERATION_TRANSACTION_EFFECTS : REGENERATION_TRANSACTION_EFFECTS),
       affected: [{kind: "system", id: targetKind}]
     },
     execute: () => {
@@ -10789,12 +10819,83 @@ function regenerateMapAttributeViaApi(state, documentRef, kind, options = {}) {
       refresh: () => {},
       refreshPanels: false
     }),
-    onRestore: () => refreshMapMutationRollback(state, documentRef)
+    shouldRestoreOnError: error => !(targetKind === "rivers" && error?.riverRegenerationRestored === true),
+    commandFactory: targetKind === "rivers"
+      ? commandOptions => createRiverRegenerationHistoryCommand({
+          ...commandOptions,
+          beforeDomain: riverHistoryBefore,
+          afterDomain: captureRiverBuildDomain(state.map)
+        })
+      : undefined,
+    onRestore: (_reason, _error, {restored = true} = {}) => {
+      if (!restored) {
+        state.options = state.map.options;
+        return;
+      }
+      if (riverRouteIdentity) {
+        refreshRiverMutationRollback(state, documentRef, riverRouteIdentity, riverLockStoreIdentity);
+        return;
+      }
+      refreshMapMutationRollback(state, documentRef);
+    }
   });
   if (transaction.executed) refreshPanelsForEdit(state, {derived: ["object-panels"]});
   return {
     ...transaction.result,
     history: state.editHistory.getStats()
+  };
+}
+
+function allCurrentRiversLocked(map) {
+  const currentRivers = map?.rivers?.rivers || [];
+  return currentRivers.length > 0 && allRegenerationObjectsLocked(map, OBJECT_KIND.RIVER, currentRivers);
+}
+
+function captureRiverRouteIdentity(map) {
+  return {
+    settlementRoutes: map?.settlements?.routes,
+    packRoutes: map?.pack?.routes,
+    packCellRoutes: map?.pack?.cells?.routes
+  };
+}
+
+function restoreRiverRouteIdentity(map, snapshot) {
+  if (map?.settlements) map.settlements.routes = snapshot.settlementRoutes;
+  if (map?.pack) map.pack.routes = snapshot.packRoutes;
+  if (map?.pack?.cells) map.pack.cells.routes = snapshot.packCellRoutes;
+}
+
+function refreshRiverMutationRollback(state, documentRef, routeIdentity, lockStoreIdentity) {
+  restoreRiverRouteIdentity(state.map, routeIdentity);
+  if (lockStoreIdentity) state.map.regenerationLocks = lockStoreIdentity;
+  state.renderer?.refreshObjectPickingIndexPreservingRoutes?.();
+  refreshRegeneratedLayers(state, documentRef, {
+    derived: ["river-mesh", "river-width-stats", "cell-colors", "point-layers", "object-panels"],
+    affected: systemAffected("rivers", collectionAffected(OBJECT_KIND.RIVER, state.map.rivers?.rivers)),
+    picking: "rivers"
+  });
+  state.options = state.map.options;
+}
+
+function createRiverRegenerationHistoryCommand({beforeDomain, afterDomain, label, effects, result}) {
+  let initialApply = true;
+  return {
+    label: String(label || "受约束重生成 rivers"),
+    domain: "river-regeneration",
+    effects,
+    apply(context) {
+      if (initialApply) {
+        initialApply = false;
+        return;
+      }
+      restoreRiverBuildDomain(context.map, afterDomain);
+    },
+    revert(context) {
+      restoreRiverBuildDomain(context.map, beforeDomain);
+    },
+    getResult() {
+      return result;
+    }
   };
 }
 
@@ -11233,12 +11334,15 @@ function regenerateRoutes(state, documentRef) {
   if (currentRoutes.length && allRegenerationObjectsLocked(map, OBJECT_KIND.ROUTE, currentRoutes)) {
     return regenerationResult("routes", "未执行", "当前道路已全部锁定，未推进扰动序号。");
   }
-  const routeLocks = captureLockedRegenerationObjects(map, OBJECT_KIND.ROUTE);
-  const cityLocks = captureLockedRegenerationObjects(map, OBJECT_KIND.CITY);
   const before = map.settlements?.routes?.length || 0;
   const previousSalt = captureRegenerationSalt(map, "routes");
   let routeSalt;
+  let portTopology;
   try {
+    reconcileSettlementCellIdentity(map);
+    portTopology = reconcileSettlementPortTopology(map, {mode: "routes"});
+    const routeLocks = captureLockedRegenerationObjects(map, OBJECT_KIND.ROUTE);
+    const cityLocks = captureLockedRegenerationObjects(map, OBJECT_KIND.CITY);
     routeSalt = nextRegenerationSalt(map, "routes");
     finalizeSettlements(map.grid, map.features, map.politics, map.settlements, map.pack, {
       ...map.options,
@@ -11252,13 +11356,18 @@ function regenerateRoutes(state, documentRef) {
     throw error;
   }
   const after = map.settlements?.routes?.length || 0;
+  markDerivedFresh(map, ["routes"]);
   refreshGenerationSummary(map);
-  appendGenerationLog(map, `regenerate routes: salt=${routeSalt}, routes=${map.settlements.metadata.routes}, segments=${map.settlements.metadata.routeSegments}`);
+  appendGenerationLog(map, `regenerate routes: salt=${routeSalt}, routes=${map.settlements.metadata.routes}, segments=${map.settlements.metadata.routeSegments}, ports-moved=${portTopology?.moved || 0}, ports-cleared=${portTopology?.cleared || 0}`);
   refreshRegeneratedLayers(state, documentRef, {
     derived: ["route-mesh", "object-panels", "object-index"],
     affected: systemAffected("routes", collectionAffected(OBJECT_KIND.ROUTE, map.settlements?.routes))
   });
-  return regenerationResult("routes", `道路已按当前国家、城镇、港口和陆海约束重算（扰动 #${routeSalt}）：${before} -> ${after}`, "陆路仍通过 pack 邻接寻路并避开水域，海路只连接同水体港口。");
+  return regenerationResult(
+    "routes",
+    `道路已按当前国家、城镇、港口和陆海约束重算（扰动 #${routeSalt}）：${before} -> ${after}`,
+    `港口拓扑迁移 ${portTopology?.moved || 0}、清除 ${portTopology?.cleared || 0}、保守跳过 ${portTopology?.skipped || 0}；陆路仍通过 pack 邻接寻路并避开水域，海路只连接同水体港口。`
+  );
 }
 
 function regenerateRivers(state, documentRef, options = {}) {
@@ -11271,12 +11380,9 @@ function regenerateRivers(state, documentRef, options = {}) {
   const riverLocks = constraintBundle
     ? {snapshots: constraintBundle.lockedRivers, ids: new Set(constraintBundle.ids(OBJECT_KIND.RIVER))}
     : captureLockedRegenerationObjects(map, OBJECT_KIND.RIVER);
-  const routeLocks = constraintBundle
-    ? {snapshots: constraintBundle.lockedRoutes}
-    : captureLockedRegenerationObjects(map, OBJECT_KIND.ROUTE);
   const beforeRivers = map.rivers?.rivers?.length || 0;
-  const beforeRoutes = map.settlements?.routes?.length || 0;
   const previousSalt = captureRegenerationSalt(map, "rivers");
+  const previousRiverDomain = captureRiverBuildDomain(map);
   let riverOptions;
   try {
     riverOptions = {
@@ -11296,39 +11402,86 @@ function regenerateRivers(state, documentRef, options = {}) {
     map.climate.biomes = biomes.biomes;
     map.climate.metadata.biomeCounts = biomes.metadata.biomeCounts;
 
-    finalizeSettlements(map.grid, map.features, map.politics, map.settlements, map.pack, {
-      ...map.options,
-      lockedRoutes: routeLocks.snapshots
-    });
     if (constraintBundle) {
       constraintBundle.assertDomain(map, "rivers", "river-build");
-      constraintBundle.assertDomain(map, "routes", "settlement-routes");
     } else {
       assertLockedRegenerationSnapshots(map, riverLocks);
-      assertLockedRegenerationSnapshots(map, routeLocks);
     }
   } catch (error) {
+    restoreRiverBuildDomain(map, previousRiverDomain);
     restoreRegenerationSalt(map, previousSalt);
+    error.riverRegenerationRestored = true;
     throw error;
   }
-  markDerivedFresh(map, ["rivers", "routes", "biomes"]);
-  markDerivedStale(map, ["cities", "provinces", "states", "religions", "markers", "zones", "military", "diplomacy"]);
+  markDerivedFresh(map, ["rivers", "biomes"]);
+  markDerivedStale(map, ["routes", "cities", "provinces", "states", "religions", "markers", "zones", "military", "diplomacy"]);
   refreshGenerationSummary(map);
-  appendGenerationLog(map, `regenerate rivers: salt=${riverOptions.riverRegenerationSalt}, rivers=${map.rivers.metadata.rivers}, routes=${map.settlements.metadata.routes}, stale=${map.metadata.derivedStale.systems.join(",")}`);
+  appendGenerationLog(map, `regenerate rivers: salt=${riverOptions.riverRegenerationSalt}, rivers=${map.rivers.metadata.rivers}, stale=${map.metadata.derivedStale.systems.join(",")}`);
 
   refreshRegeneratedLayers(state, documentRef, {
-    derived: ["river-mesh", "river-width-stats", "route-mesh", "cell-colors", "point-layers", "object-panels", "object-index"],
-    affected: systemAffected("rivers", [
-      ...collectionAffected(OBJECT_KIND.RIVER, map.rivers?.rivers),
-      ...collectionAffected(OBJECT_KIND.ROUTE, map.settlements?.routes)
-    ])
+    derived: ["river-mesh", "river-width-stats", "cell-colors", "point-layers", "object-panels"],
+    affected: systemAffected("rivers", collectionAffected(OBJECT_KIND.RIVER, map.rivers?.rivers)),
+    picking: "rivers"
   });
 
   return regenerationResult(
     "rivers",
-    `河流已按当前高度、降水和湖泊约束重算（扰动 #${riverOptions.riverRegenerationSalt}）：${beforeRivers} -> ${map.rivers.metadata.rivers}；道路同步重算：${beforeRoutes} -> ${map.settlements.metadata.routes}`,
-    "已刷新水文通量、生物群系/人口评分、河流 mesh、道路 mesh 和对象索引；城镇、省份、国家、宗教、标记、区域、军事仍标记为待派生。"
+    `河流已按当前高度、降水和湖泊约束重算（扰动 #${riverOptions.riverRegenerationSalt}）：${beforeRivers} -> ${map.rivers.metadata.rivers}`,
+    "已刷新水文通量、生物群系/人口评分、河流 mesh 和对象索引；道路及其它下游系统已标记为待派生，不会自动重算。"
   );
+}
+
+function captureRiverBuildDomain(map) {
+  return {
+    fields: [
+      captureObjectProperty(map, "rivers"),
+      captureObjectProperty(map.pack, "rivers"),
+      ...["fl", "r", "conf", "biome", "s", "pop", "good", "goodSupply", "goodSource", "suitabilityBase", "suitabilityOverride"]
+        .map(key => captureObjectProperty(map.pack?.cells, key)),
+      ...["biome", "s", "pop"].map(key => captureObjectProperty(map.grid?.cells, key)),
+      captureObjectProperty(map.pack, "goods"),
+      captureObjectProperty(map.pack?.metadata, "rankCellsInputs"),
+      captureObjectProperty(map.pack?.metadata, "resourceGoods"),
+      captureObjectProperty(map.climate, "biomes"),
+      captureObjectProperty(map.climate?.metadata, "biomeCounts"),
+      captureObjectProperty(map, "summary"),
+      ...[map.military, map.zones, map.markers, map.economy, map.diplomacy]
+        .map(system => captureObjectProperty(system?.metadata, "stale"))
+    ],
+    metadata: map.metadata,
+    metadataValue: structuredClone(map.metadata),
+    generationLogExists: Object.prototype.hasOwnProperty.call(map, "generationLog"),
+    generationLogValue: structuredClone(map.generationLog),
+    packFeatures: map.pack?.features,
+    featureValues: (map.pack?.features || []).map(feature => feature && typeof feature === "object" ? structuredClone(feature) : feature)
+  };
+}
+
+function restoreRiverBuildDomain(map, snapshot) {
+  for (const field of snapshot.fields) restoreObjectProperty(field);
+  restoreObjectValue(snapshot.metadata, snapshot.metadataValue);
+  if (snapshot.generationLogExists) map.generationLog = structuredClone(snapshot.generationLogValue);
+  else delete map.generationLog;
+  if (map.pack) map.pack.features = snapshot.packFeatures;
+  for (let index = 0; index < (snapshot.packFeatures?.length || 0); index++) {
+    restoreObjectValue(snapshot.packFeatures[index], snapshot.featureValues[index]);
+  }
+}
+
+function captureObjectProperty(owner, key) {
+  return {owner, key, exists: Boolean(owner && Object.prototype.hasOwnProperty.call(owner, key)), value: owner?.[key]};
+}
+
+function restoreObjectProperty({owner, key, exists, value}) {
+  if (!owner) return;
+  if (exists) owner[key] = value;
+  else delete owner[key];
+}
+
+function restoreObjectValue(target, value) {
+  if (!target || typeof target !== "object" || !value || typeof value !== "object") return;
+  for (const key of Object.keys(target)) delete target[key];
+  Object.assign(target, structuredClone(value));
 }
 
 function regenerateCities(state, documentRef, scope = {kind: "all"}) {
@@ -11683,8 +11836,9 @@ function regenerateDiplomacy(state, documentRef, options = {}) {
   );
 }
 
-function refreshRegeneratedLayers(state, documentRef, {derived, affected}) {
-  state.renderer.refreshObjectPickingIndex?.();
+function refreshRegeneratedLayers(state, documentRef, {derived, affected, picking = "all"}) {
+  if (picking === "rivers") state.renderer.refreshRiverPickingIndex?.();
+  else if (picking !== "none") state.renderer.refreshObjectPickingIndex?.();
   const highlightsChanged = reconcilePersistentObjectHighlights(state, documentRef, {refreshUi: false}).changed;
   refreshAfterEdit(state, {
     render: "draw",

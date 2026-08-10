@@ -24,7 +24,8 @@ import {
   serializeRouteGeoJsonProperties
 } from "./network-geojson-properties.js";
 import {isCompressedMapDocumentFilename, mapBaseFilename, synchronizeMapName} from "./map-filename.js";
-import {rebuildSettlementCellIndex} from "./settlement-cell-index.js";
+import {reconcileSettlementCellIdentity} from "./settlement-cell-index.js";
+import {diagnoseSettlementPortTopology} from "./settlement-port-topology.js";
 
 export const MAP_DOCUMENT_TYPE = "webgl-generator-map";
 export const MAP_DOCUMENT_VERSION = 2;
@@ -142,7 +143,8 @@ export function migrateMapDocument(document) {
   migrated.map = normalizeLakeOverflowMap(migrated.map);
   migrated.map = normalizeZoneMap(migrated.map);
   applyRegenerationLockCompatibility(migrated.map, versioned.map?.regenerationLocks);
-  rebuildSettlementCellIndex(migrated.map, {syncLegacy: true});
+  reconcileSettlementCellIdentity(migrated.map);
+  diagnoseSettlementPortTopology(migrated.map);
   validateCurrentMapDocument(migrated);
   return migrated;
 }

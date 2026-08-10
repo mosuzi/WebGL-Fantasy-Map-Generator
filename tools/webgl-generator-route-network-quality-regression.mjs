@@ -9,7 +9,8 @@ import {
   routeNetworkEndpointBudget,
   selectSeaRouteNetworkBurgs,
   selectTrailRouteNetworkBurgs,
-  selectSparseRouteNetworkEdges
+  selectSparseRouteNetworkEdges,
+  traceSettlementWaterRoutePath
 } from "../app/webgl-generator/src/generator/settlements.js";
 
 const cases = [
@@ -118,12 +119,16 @@ function auditRouteNetwork(map, label) {
     repeatedCell: [],
     cellsMirror: [],
     pointsMirror: [],
+    endpointIdentity: [],
     packRouteMirror: [],
     packCellLinks: [],
     capitalRoad: []
   };
   const riverEdges = collectRiverEdges(map.pack.rivers || []);
   const pathRatios = [];
+  const cityByBurg = new Map((map.settlements?.cities || [])
+    .filter(city => city && !city.removed)
+    .map(city => [Number(city.burgId), city]));
 
   for (const route of routes) {
     const cells = route.packCells || [];
@@ -136,7 +141,7 @@ function auditRouteNetwork(map, label) {
     for (let index = 0; index < cells.length; index++) {
       const cell = cells[index];
       if (route.cells?.[index] !== map.pack.cells.g[cell]) errors.cellsMirror.push(route.id);
-      const expectedPoint = routePoint(map.pack, cell);
+      const expectedPoint = routePoint(map, cityByBurg, cell);
       if (!samePoint(route.points?.[index], expectedPoint)) errors.pointsMirror.push(route.id);
       if (!sameMirrorPoint(packMirror?.points?.[index], expectedPoint, cell)) errors.packRouteMirror.push(route.id);
 
@@ -160,6 +165,11 @@ function auditRouteNetwork(map, label) {
         }
       }
     }
+
+    const expectedFrom = routeEndpointCityId(map, cityByBurg, cells[0]);
+    const expectedTo = routeEndpointCityId(map, cityByBurg, cells.at(-1));
+    if (Number(route.from) !== expectedFrom) errors.endpointIdentity.push({route: route.id, side: "from", actual: route.from, expected: expectedFrom, cell: cells[0]});
+    if (Number(route.to) !== expectedTo) errors.endpointIdentity.push({route: route.id, side: "to", actual: route.to, expected: expectedTo, cell: cells.at(-1)});
 
     if (cells.length > 1) pathRatios.push({
       route: route.id,
@@ -195,6 +205,7 @@ function auditRouteNetwork(map, label) {
   const worstPath = finiteRatios.at(-1) || {ratio: 1};
   const maxPathRatio = worstPath.ratio;
   assert(maxPathRatio <= 12, `${label} 路线实际路径 / 弦长比 ${maxPathRatio.toFixed(3)} 超过 12：${JSON.stringify(worstPath)}`);
+  const waterCoverage = auditReachablePortFeatures(map, routes, label);
 
   return {
     routes: routes.length,
@@ -209,8 +220,30 @@ function auditRouteNetwork(map, label) {
     sparseRouteLimit,
     maxPathRatio: Number(maxPathRatio.toFixed(3)),
     p95PathRatio: Number(percentile(finiteRatios.map(item => item.ratio), 0.95).toFixed(3)),
+    ...waterCoverage,
     ...sparse
   };
+}
+
+function auditReachablePortFeatures(map, routes, label) {
+  const ports = (map.pack?.burgs || []).filter(burg => burg?.i && !burg.removed && Number(burg.port) > 0);
+  const groups = Map.groupBy(ports, burg => Number(burg.port));
+  const routeFeatures = new Set(routes.filter(route => route?.type === "searoute").map(route => Number(route.feature)));
+  const reachable = [];
+  const missing = [];
+  for (const [feature, burgs] of groups) {
+    let hasPath = false;
+    for (let from = 0; from < burgs.length && !hasPath; from++) {
+      for (let to = from + 1; to < burgs.length && !hasPath; to++) {
+        hasPath = traceSettlementWaterRoutePath(map.pack, burgs[from].cell, burgs[to].cell).length > 1;
+      }
+    }
+    if (!hasPath) continue;
+    reachable.push(feature);
+    if (!routeFeatures.has(feature)) missing.push(feature);
+  }
+  assert.deepEqual(missing, [], `${label} 存在正式可达港口对却没有海路：${JSON.stringify(missing)}`);
+  return {reachablePortFeatures: reachable.length, missingReachablePortFeatures: missing.length};
 }
 
 function auditRequiredLandRouteCoverage(map, routes) {
@@ -316,9 +349,28 @@ function auditSparseGroups(map, routes, label) {
   return {sparseGroups: groupRoutes.size, maxEndpointDegree, maxGroupRoutes: Math.max(0, ...groupRoutes.values())};
 }
 
-function routePoint(pack, cell) {
-  const burg = pack.burgs?.[pack.cells.burg?.[cell]];
-  return burg ? [burg.x, burg.y] : pack.cells.p[cell];
+function routePoint(map, cityByBurg, cell) {
+  const burgId = Number(map.pack.cells.burg?.[cell]);
+  const city = cityByBurg.get(burgId);
+  return routeEndpointCityId(map, cityByBurg, cell) >= 0 ? [city.x, city.y] : map.pack.cells.p[cell];
+}
+
+function routeEndpointCityId(map, cityByBurg, cell) {
+  const burgId = Number(map.pack.cells.burg?.[cell]);
+  const city = cityByBurg.get(burgId);
+  const burg = map.pack.burgs?.[burgId];
+  const valid = Number.isInteger(cell)
+    && city
+    && !city.removed
+    && map.settlements.cities[city.id] === city
+    && burg
+    && !burg.removed
+    && Number(burg.i ?? burg.id) === burgId
+    && Number(city.burgId) === burgId
+    && Number(city.packCell) === cell
+    && Number(burg.cell) === cell
+    && Number(map.pack.cells.g?.[cell]) === Number(city.cell);
+  return valid ? Number(city.id) : -1;
 }
 
 function isPortCell(pack, cell) {

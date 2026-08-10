@@ -59,6 +59,149 @@ export function rebuildSettlementCellIndex(map, {syncLegacy = false} = {}) {
   return index;
 }
 
+export function reconcileSettlementCellIdentity(map) {
+  const grid = map?.grid;
+  const pack = map?.pack;
+  const cities = map?.settlements?.cities;
+  const hasSettlementData = Array.isArray(cities) || Array.isArray(pack?.burgs) || pack?.cells?.burg !== undefined;
+  if (!hasSettlementData) return {cities: 0, gridCells: 0, packCells: 0, sharedGridCells: 0, sharedPackCells: 0};
+  if (!grid?.points || !grid?.cells || !pack?.cells?.g || !Array.isArray(cities) || !Array.isArray(pack.burgs)) {
+    throw settlementCellIdentityError("地图缺少城镇 cell 身份一致化所需的数据", {reason: "missing-store"});
+  }
+
+  const gridCount = grid.points.length;
+  const packCount = pack.cells.i?.length ?? pack.cells.g.length;
+  const burgById = new Map();
+  let maxKnownBurgId = Math.max(0, pack.burgs.length - 1);
+  for (let slot = 0; slot < pack.burgs.length; slot++) {
+    const burg = pack.burgs[slot];
+    if (!burg) continue;
+    const rawI = burg.i;
+    const rawId = burg.id;
+    const hasI = rawI !== undefined && rawI !== null && rawI !== "";
+    const hasId = rawId !== undefined && rawId !== null && rawId !== "";
+    const numericI = hasI ? Number(rawI) : null;
+    const numericId = hasId ? Number(rawId) : null;
+    const id = numericI ?? numericId;
+    const validI = !hasI || Number.isInteger(numericI);
+    const validId = !hasId || Number.isInteger(numericId);
+    const matchingIds = !hasI || !hasId || numericI === numericId;
+    if (slot === 0 && id === 0) continue;
+    if (!validI || !validId || !matchingIds || !Number.isInteger(id) || id <= 0) {
+      if (burg.removed) continue;
+      throw settlementCellIdentityError(`活动 burg 槽位 #${slot} 缺少有效 ID`, {
+        reason: "invalid-burg-id",
+        slot,
+        burgId: id,
+        rawI,
+        rawId
+      });
+    }
+    if (burgById.has(id)) throw settlementCellIdentityError(`burg #${id} 身份重复`, {reason: "duplicate-burg", burgId: id});
+    burgById.set(id, burg);
+    maxKnownBurgId = Math.max(maxKnownBurgId, id);
+  }
+
+  const activeCityIds = new Set();
+  const activeBurgIds = new Set();
+  const cityIdsByGridCell = new Map();
+  const burgIdsByPackCell = new Map();
+  const plan = [];
+  let maxBurgId = maxKnownBurgId;
+
+  for (let slot = 0; slot < cities.length; slot++) {
+    const city = cities[slot];
+    if (!city || city.removed) continue;
+    const cityId = Number(city.id ?? city.i);
+    const burgId = Number(city.burgId);
+    const gridCell = Number(city.cell);
+    const packCell = Number(city.packCell);
+    if (!Number.isInteger(cityId) || cityId < 0) {
+      throw settlementCellIdentityError("活动城镇缺少有效 ID", {reason: "invalid-city-id", cityId});
+    }
+    if (cities[cityId] !== city) {
+      throw settlementCellIdentityError(`城镇 #${cityId} 未按 ID 建立直接索引`, {reason: "city-index-mismatch", cityId, slot});
+    }
+    if (activeCityIds.has(cityId)) {
+      throw settlementCellIdentityError(`城镇 #${cityId} 身份重复`, {reason: "duplicate-city", cityId});
+    }
+    if (!Number.isInteger(burgId) || burgId <= 0 || activeBurgIds.has(burgId)) {
+      throw settlementCellIdentityError(`城镇 #${cityId} 的 burgId 无效或重复`, {reason: "invalid-burg-id", cityId, burgId});
+    }
+    if (!Number.isInteger(gridCell) || gridCell < 0 || gridCell >= gridCount) {
+      throw settlementCellIdentityError(`城镇 #${cityId} 引用了无效 grid cell`, {reason: "invalid-grid-cell", cityId, gridCell});
+    }
+    if (!Number.isInteger(packCell) || packCell < 0 || packCell >= packCount) {
+      throw settlementCellIdentityError(`城镇 #${cityId} 引用了无效 pack cell`, {reason: "invalid-pack-cell", cityId, packCell});
+    }
+    if (Number(pack.cells.g[packCell]) !== gridCell) {
+      throw settlementCellIdentityError(`城镇 #${cityId} 的 grid / pack cell 身份不一致`, {
+        reason: "grid-pack-mismatch",
+        cityId,
+        gridCell,
+        packCell,
+        packGridCell: Number(pack.cells.g[packCell])
+      });
+    }
+    const burg = burgById.get(burgId);
+    if (!burg || burg.removed) {
+      throw settlementCellIdentityError(`城镇 #${cityId} 缺少活动 burg #${burgId}`, {reason: "missing-burg", cityId, burgId});
+    }
+    if (pack.burgs[burgId] !== burg) {
+      throw settlementCellIdentityError(`城镇 #${cityId} 的 burg #${burgId} 未按 ID 建立直接索引`, {reason: "burg-index-mismatch", cityId, burgId});
+    }
+    if (!Number.isFinite(Number(city.x)) || !Number.isFinite(Number(city.y))) {
+      throw settlementCellIdentityError(`城镇 #${cityId} 缺少有效坐标`, {reason: "invalid-city-point", cityId});
+    }
+
+    addBucketValue(cityIdsByGridCell, gridCell, cityId);
+    addBucketValue(burgIdsByPackCell, packCell, burgId);
+    activeCityIds.add(cityId);
+    activeBurgIds.add(burgId);
+    maxBurgId = Math.max(maxBurgId, burgId);
+    plan.push({city, burg, cityId, burgId, gridCell, packCell, x: Number(city.x), y: Number(city.y)});
+  }
+
+  for (const [burgId, burg] of burgById) {
+    if (!burg.removed && !activeBurgIds.has(burgId)) {
+      throw settlementCellIdentityError(`活动 burg #${burgId} 没有对应的活动城镇`, {reason: "orphan-burg", burgId, packCell: Number(burg.cell)});
+    }
+  }
+
+  const nextGridBurg = new Array(gridCount).fill(-1);
+  for (const [cell, ids] of cityIdsByGridCell) nextGridBurg[cell] = ids[0];
+  const nextPackBurg = createPackBurgMirror(pack.cells.burg, packCount, maxBurgId);
+  for (const [cell, ids] of burgIdsByPackCell) nextPackBurg[cell] = ids[0];
+
+  for (const item of plan) {
+    item.city.id = item.cityId;
+    item.city.burgId = item.burgId;
+    item.city.cell = item.gridCell;
+    item.city.packCell = item.packCell;
+    item.city.x = item.x;
+    item.city.y = item.y;
+    item.burg.i = item.burgId;
+    if (Object.prototype.hasOwnProperty.call(item.burg, "id")) item.burg.id = item.burgId;
+    item.burg.cityId = item.cityId;
+    item.burg.cell = item.packCell;
+    if (Object.prototype.hasOwnProperty.call(item.burg, "packCell")) item.burg.packCell = item.packCell;
+    item.burg.x = item.x;
+    item.burg.y = item.y;
+  }
+  grid.cells.burg = nextGridBurg;
+  pack.cells.burg = nextPackBurg;
+
+  invalidateSettlementCellIndex(map);
+  rebuildSettlementCellIndex(map);
+  return {
+    cities: plan.length,
+    gridCells: cityIdsByGridCell.size,
+    packCells: burgIdsByPackCell.size,
+    sharedGridCells: [...cityIdsByGridCell.values()].filter(ids => ids.length > 1).length,
+    sharedPackCells: [...burgIdsByPackCell.values()].filter(ids => ids.length > 1).length
+  };
+}
+
 export function invalidateSettlementCellIndex(map) {
   if (map && typeof map === "object") INDEX_BY_MAP.delete(map);
 }
@@ -236,4 +379,16 @@ function routeId(route) {
 
 function uniqueIds(values) {
   return [...new Set(values.map(Number).filter(value => Number.isInteger(value) && value >= 0))];
+}
+
+function createPackBurgMirror(current, length, maxBurgId) {
+  if (Array.isArray(current)) return new Array(length).fill(0);
+  return maxBurgId > 0xffff || current instanceof Uint32Array ? new Uint32Array(length) : new Uint16Array(length);
+}
+
+function settlementCellIdentityError(message, details) {
+  const error = new Error(message);
+  error.code = "settlement_cell_identity_invalid";
+  error.details = details;
+  return error;
 }

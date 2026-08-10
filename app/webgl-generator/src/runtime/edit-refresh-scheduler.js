@@ -80,6 +80,9 @@ export function createEditRefreshScheduler({state, documentRef, updateRuntimePan
       if (effects.derived.includes("object-index") && typeof state.renderer.refreshObjectPickingIndex === "function") {
         state.renderer.refreshObjectPickingIndex();
       }
+      if (effects.derived.includes("river-picking") && typeof state.renderer.refreshRiverPickingIndex === "function") {
+        state.renderer.refreshRiverPickingIndex();
+      }
 
       if (effects.derived.includes("cell-colors") && changedGridCells.length && typeof state.renderer.refreshHeightCells === "function") {
         const trace = state.heightEdit?.activeCommitTrace;

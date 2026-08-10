@@ -127,8 +127,26 @@ export function getRegenerationLockStatus(map, reference) {
 export function ensureRegenerationLockStore(map) {
   if (!map || typeof map !== "object") throw lockError("map_unavailable", "当前没有可用地图");
   const normalized = normalizeRegenerationLockStore(map.regenerationLocks, map);
+  if (isCanonicalRegenerationLockStore(map.regenerationLocks, normalized)) return map.regenerationLocks;
   map.regenerationLocks = normalized.store;
   return map.regenerationLocks;
+}
+
+function isCanonicalRegenerationLockStore(source, normalized) {
+  if (!source || typeof source !== "object" || Array.isArray(source)) return false;
+  if (source.version !== REGENERATION_LOCK_VERSION || !Array.isArray(source.entries)) return false;
+  if (Object.keys(source).length !== 2
+    || !Object.prototype.hasOwnProperty.call(source, "version")
+    || !Object.prototype.hasOwnProperty.call(source, "entries")) return false;
+  if (normalized.diagnostics.removed || source.entries.length !== normalized.store.entries.length) return false;
+  return source.entries.every((entry, index) => {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) return false;
+    if (Object.keys(entry).length !== 2
+      || !Object.prototype.hasOwnProperty.call(entry, "kind")
+      || !Object.prototype.hasOwnProperty.call(entry, "id")) return false;
+    const expected = normalized.store.entries[index];
+    return entry.kind === expected.kind && Object.is(entry.id, expected.id);
+  });
 }
 
 export function regenerationLockObjectExists(map, reference) {

@@ -25,6 +25,8 @@ export function executeMapSnapshotTransaction({
   execute,
   executeCommand,
   isNoop = result => result?.executed === false,
+  shouldRestoreOnError = () => true,
+  commandFactory = createMapSnapshotCommand,
   onRestore
 }) {
   if (typeof execute !== "function") throw new Error("地图事务缺少执行器");
@@ -42,7 +44,7 @@ export function executeMapSnapshotTransaction({
 
     const after = structuredClone(map);
     editHistory.restoreSnapshot(snapshot.history);
-    const command = createMapSnapshotCommand({
+    const command = commandFactory({
       before: snapshot.map,
       after,
       optionsReference: snapshot.optionsReference,
@@ -58,8 +60,13 @@ export function executeMapSnapshotTransaction({
     preserveOptionsReference(map, snapshot.optionsReference);
     return {executed: true, result, command, commandExecution};
   } catch (error) {
-    restoreMapMutationSnapshot(map, editHistory, snapshot);
-    onRestore?.("rollback", error);
+    const restored = shouldRestoreOnError(error) !== false;
+    if (restored) restoreMapMutationSnapshot(map, editHistory, snapshot);
+    else {
+      editHistory.restoreSnapshot(snapshot.history);
+      preserveOptionsReference(map, snapshot.optionsReference);
+    }
+    onRestore?.("rollback", error, {restored});
     throw error;
   }
 }

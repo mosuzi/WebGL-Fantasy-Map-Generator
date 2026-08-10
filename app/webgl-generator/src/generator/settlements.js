@@ -5,6 +5,7 @@ import {createChineseNameGenerator} from "./names.js";
 import {createRandom} from "./random.js";
 import {reassessGeneratedProvincialCapitals} from "./provincial-capitals.js";
 import {createCityScaleContext, defaultCityVisual, deriveCityScale, resolveCityVisual} from "../runtime/city-visuals.js";
+import {reconcileSettlementCellIdentity} from "../runtime/settlement-cell-index.js";
 
 const MIN_PASSABLE_SEA_TEMP = -4;
 const MIN_NAVIGABLE_FLUX = 100;
@@ -37,6 +38,7 @@ export function buildSettlements(grid, features, politics, rivers, random, pack,
 }
 
 export function finalizeSettlements(grid, features, politics, settlements, pack, options = {}) {
+  if (pack?.cells) reconcileSettlementCellIdentity({grid, pack, settlements});
   for (const city of settlements.cities) {
     if (!city || city.removed) continue;
     if (pack?.cells && Number.isInteger(city.packCell) && city.packCell >= 0) {
@@ -58,14 +60,13 @@ export function finalizeSettlements(grid, features, politics, settlements, pack,
     ensureProvinceCityCandidates(grid, pack, politics, settlements, options);
   }
   if (options.pruneNeutralSettlements) pruneNeutralSettlements(grid, settlements, pack);
-  mirrorCitiesToGrid(grid, settlements.cities);
   if (pack?.cells) {
-    mirrorGridBurgsToPack(pack, settlements.cities);
+    reconcileSettlementCellIdentity({grid, pack, settlements});
     syncPoliticalSettlementStats(pack, politics, settlements.cities, options);
     if (options.reassessProvincialCapitals === true) {
       reassessGeneratedProvincialCapitals(grid, pack, settlements, politics, options);
     }
-  }
+  } else mirrorCitiesToGrid(grid, settlements.cities);
   const routes = buildRoutes(grid, features, politics, settlements.cities, pack, options);
   refreshProvincialCapitalRoutePriorities(settlements.cities, routes, pack, {
     lockedRoutes: options.lockedRoutes
@@ -392,6 +393,110 @@ export function inspectRelocatedSettlementPort(grid, pack, packCell, {wasPort = 
   const candidate = createSettlementPortCandidate(grid, pack, relocatedBurg, riversById, options);
   if (candidate) return describeRelocatedPortCandidate(pack, candidate, riversById);
   return {port: 0, source: "cleared", anchor: point, routePackCell: null, reason: "目标不再满足港口条件"};
+}
+
+export function traceSettlementWaterRoutePath(pack, start, end, options = {}) {
+  return traceSettlementRoutePath(pack, start, end, {...options, water: true});
+}
+
+export function traceSettlementRoutePath(pack, start, end, options = {}) {
+  const connections = options.connections instanceof Set ? options.connections : new Set();
+  const blockedConnections = options.blockedConnections instanceof Set ? options.blockedConnections : null;
+  const cellCount = pack?.cells?.i?.length || pack?.cells?.h?.length || 0;
+  if (!cellCount) return [];
+  return tracePackPath(
+    pack,
+    Number(start),
+    Number(end),
+    Boolean(options.water),
+    connections,
+    options.variation || null,
+    createRouteSearchScratch(cellCount),
+    cellCount + 1,
+    buildRiverEdges(pack),
+    options.maxVisited ?? cellCount,
+    blockedConnections
+  );
+}
+
+export function synchronizeRelocatedRoutePath(pack, cities, route, packCells, options = {}) {
+  if (!route || !Array.isArray(packCells) || packCells.length < 2) return false;
+  const preservedEndpointIdentity = options.preserveEndpointIdentity ? {
+    feature: route.feature,
+    from: route.from,
+    to: route.to,
+    fromProvincial: route.fromProvincial,
+    toProvincial: route.toProvincial,
+    administrativePriority: route.administrativePriority
+  } : null;
+  const cityByBurg = new Map((cities || []).filter(city => city && !city.removed).map(city => [Number(city.burgId), city]));
+  const pointsArray = preparePackRoutePoints(pack, cityByBurg);
+  const cells = packCells.map(Number);
+  const {burg: fromBurg, city: fromCity} = resolvePackRouteEndpoint(pack, cityByBurg, cells[0]);
+  const {burg: toBurg, city: toCity} = resolvePackRouteEndpoint(pack, cityByBurg, cells.at(-1));
+  const resources = countRouteResources(pack, cells);
+  const type = route.type;
+  const endpointPort = type === "searoute" && fromBurg?.port && (!toBurg?.port || Number(toBurg.port) === Number(fromBurg.port))
+    ? Number(fromBurg.port)
+    : type === "searoute" && toBurg?.port ? Number(toBurg.port) : Number(route.feature || 0);
+  Object.assign(route, {
+    feature: type === "searoute" ? endpointPort : routeMajorityCellValue(pack, cells, "f"),
+    state: routeMajorityCellValue(pack, cells, "state"),
+    province: type === "searoute" ? 0 : routeMajorityCellValue(pack, cells, "province"),
+    from: fromCity?.id ?? -1,
+    to: toCity?.id ?? -1,
+    fromProvincial: Boolean(fromCity?.provincial),
+    toProvincial: Boolean(toCity?.provincial),
+    administrativePriority: fromCity?.capital || toCity?.capital
+      ? "national"
+      : fromCity?.provincial || toCity?.provincial
+        ? "provincial"
+        : "ordinary",
+    cells: cells.map(cell => pack.cells.g[cell]),
+    packCells: cells,
+    resourceCells: resources.resourceCells,
+    markerResourceCells: resources.markerResourceCells,
+    resourceGoodIds: resources.goodIds,
+    points: cells.map(cell => pointsArray[cell])
+  });
+  if (preservedEndpointIdentity) {
+    Object.assign(route, preservedEndpointIdentity);
+    route.points[0] = routeEndpointPoint(pack, cities, cells[0], preservedEndpointIdentity.from);
+    route.points[route.points.length - 1] = routeEndpointPoint(pack, cities, cells.at(-1), preservedEndpointIdentity.to);
+  }
+  return true;
+}
+
+function routeEndpointPoint(pack, cities, packCell, cityId) {
+  const id = Number(cityId);
+  const city = Number.isInteger(id) && id >= 0 ? cities?.[id] : null;
+  if (city && !city.removed && Number(city.id) === id && Number(city.packCell) === Number(packCell)) {
+    return [Number(city.x), Number(city.y)];
+  }
+  return [...(pack.cells.p?.[packCell] || [0, 0])];
+}
+
+export function rebuildSettlementRouteMirrors(pack, routes) {
+  pack.routes = buildPackRouteMirror(routes || []);
+  pack.cells.routes = buildPackRouteLinks(routes || []);
+  return {routes: routes?.length || 0, segments: (routes || []).reduce((sum, route) => sum + Math.max(0, (route?.packCells?.length || 0) - 1), 0)};
+}
+
+export function isSettlementWaterRoutePathValid(pack, path) {
+  if (!Array.isArray(path) || path.length < 2) return false;
+  const cells = path.map(Number);
+  const cellCount = pack?.cells?.i?.length || pack?.cells?.h?.length || 0;
+  if (cells.some(cell => !Number.isInteger(cell) || cell < 0 || cell >= cellCount)) return false;
+  const riverEdges = buildRiverEdges(pack);
+  const edgeKeyMultiplier = cellCount + 1;
+  for (let index = 1; index < cells.length; index++) {
+    const current = cells[index - 1];
+    const next = cells[index];
+    if (!(pack.cells.c?.[current] || []).includes(next)) return false;
+    if (index === cells.length - 1 && pack.cells.h?.[next] >= 20 && canReachWaterRouteExit(pack, current, next, riverEdges)) continue;
+    if (!Number.isFinite(packRouteStepCost(pack, current, next, true, new Set(), null, edgeKeyMultiplier, riverEdges))) return false;
+  }
+  return true;
 }
 
 export function refreshRelocatedSettlementDerived(grid, features, politics, settlements, pack, options = {}) {
@@ -1710,23 +1815,25 @@ function buildPackRoutes(grid, pack, cities, options = {}) {
   const locked = prepareLockedRoutes(pack, options);
   const protectedFeatureIds = snapshotIds(options.lockedFeatures);
   const connections = locked.connections;
+  const waterConnections = locked.waterConnections;
   const routes = locked.routes;
   const allocateRouteId = createRouteIdAllocator(locked.ids);
   const {burgs} = pack;
   const aliveBurgs = burgs.filter(burg => burg?.i && !burg.removed);
-  const cityByBurg = new Map(cities.filter(Boolean).map(city => [city.burgId, city]));
+  const cityByBurg = new Map(cities.filter(city => city && !city.removed).map(city => [Number(city.burgId), city]));
   const capitalBurgs = groupCapitalBurgs(aliveBurgs, grid, pack);
   const trailBurgs = selectTrailRouteNetworkBurgs(aliveBurgs, pack, routeNetworkEndpointBudget(aliveBurgs.length, "trail"));
   const burgsByProvinceAndLand = groupBurgsByProvinceAndLand(trailBurgs, pack);
   const landBurgAnchors = groupBurgs(aliveBurgs.filter(burg => landFeatureAtBurg(pack, burg)), burg => landFeatureAtBurg(pack, burg));
   const ports = aliveBurgs.filter(burg => burg.port);
-  const seaBurgs = selectSeaRouteNetworkBurgs(ports, routeNetworkEndpointBudget(ports.length, "searoute"));
-  const portsByFeature = groupBurgs(seaBurgs, burg => burg.port);
-  const pointsArray = preparePackRoutePoints(pack);
+  const pointsArray = preparePackRoutePoints(pack, cityByBurg);
   const variation = createRouteVariation(pack, options);
   const search = createRouteSearchScratch(pack.cells.i.length);
   const edgeKeyMultiplier = pack.cells.i.length + 1;
   const riverEdges = buildRiverEdges(pack);
+  const selectedSeaBurgs = selectSeaRouteNetworkBurgs(ports, routeNetworkEndpointBudget(ports.length, "searoute"));
+  const seaBurgs = ensureReachableSeaRouteBurgs(pack, ports, selectedSeaBurgs, search, edgeKeyMultiplier, riverEdges);
+  const portsByFeature = groupBurgs(seaBurgs, burg => burg.port);
   const landNetworkCells = collectLandNetworkCells(routes, pack);
 
   const roadSegments = mergeRouteSegments(generateRouteSegments({pack, connections, groups: capitalBurgs, water: false, routeType: "road", variation, search, edgeKeyMultiplier, riverEdges, maxVisited: pack.cells.i.length, excludedGroupIds: protectedFeatureIds}));
@@ -1735,25 +1842,64 @@ function buildPackRoutes(grid, pack, cities, options = {}) {
     registerLandNetworkCells(landNetworkCells, pack, segment.cells);
   }
 
+  const seaSegments = mergeRouteSegments(generateRouteSegments({pack, connections, groups: portsByFeature, water: true, routeType: "searoute", variation, search, edgeKeyMultiplier, riverEdges, excludedGroupIds: protectedFeatureIds}));
+  for (const segment of seaSegments) {
+    addPackRoute({routes, pack, segment, type: "searoute", pointsArray, cityByBurg, allocateRouteId});
+    addConnections(segment.cells, waterConnections, edgeKeyMultiplier);
+  }
+
   for (const {feature, burgs: provinceBurgs} of burgsByProvinceAndLand) {
     if (!provinceBurgs.length || protectedFeatureIds.has(feature)) continue;
     const anchoredBurgs = addLandNetworkAnchor(provinceBurgs, feature, landNetworkCells, pack, landBurgAnchors);
     if (anchoredBurgs.length < 2) continue;
     const groups = new Map([[feature, anchoredBurgs]]);
-    const trailSegments = mergeRouteSegments(generateRouteSegments({pack, connections, groups, water: false, routeType: "trail", variation, search, edgeKeyMultiplier, riverEdges, maxVisited: pack.cells.i.length}));
+    const trailSegments = mergeRouteSegments(generateRouteSegments({pack, connections, groups, water: false, routeType: "trail", variation, search, edgeKeyMultiplier, riverEdges, maxVisited: pack.cells.i.length, blockedConnections: waterConnections}));
     for (const segment of trailSegments) {
       addPackRoute({routes, pack, segment, type: "trail", pointsArray, cityByBurg, allocateRouteId});
       registerLandNetworkCells(landNetworkCells, pack, segment.cells);
     }
   }
 
-  for (const segment of mergeRouteSegments(generateRouteSegments({pack, connections, groups: portsByFeature, water: true, routeType: "searoute", variation, search, edgeKeyMultiplier, riverEdges, excludedGroupIds: protectedFeatureIds}))) {
-    addPackRoute({routes, pack, segment, type: "searoute", pointsArray, cityByBurg, allocateRouteId});
-  }
-
   pack.routes = buildPackRouteMirror(routes);
   pack.cells.routes = buildPackRouteLinks(routes);
   return routes;
+}
+
+function ensureReachableSeaRouteBurgs(pack, ports, selected, search, edgeKeyMultiplier, riverEdges) {
+  const result = [...selected];
+  const selectedIds = new Set(result.map(burg => Number(burg.i)));
+  const allGroups = groupBurgs(ports, burg => burg.port);
+  const selectedGroups = groupBurgs(result, burg => burg.port);
+
+  for (const [feature, burgs] of [...allGroups.entries()].sort(([left], [right]) => Number(left) - Number(right))) {
+    if (burgs.length < 2 || hasReachableSeaRoutePair(pack, selectedGroups.get(feature) || [], search, edgeKeyMultiplier, riverEdges)) continue;
+    const pair = firstReachableSeaRoutePair(pack, burgs, search, edgeKeyMultiplier, riverEdges);
+    if (!pair) continue;
+    for (const burg of pair) {
+      if (selectedIds.has(Number(burg.i))) continue;
+      selectedIds.add(Number(burg.i));
+      result.push(burg);
+    }
+  }
+  return result;
+}
+
+function hasReachableSeaRoutePair(pack, burgs, search, edgeKeyMultiplier, riverEdges) {
+  return Boolean(firstReachableSeaRoutePair(pack, burgs, search, edgeKeyMultiplier, riverEdges));
+}
+
+function firstReachableSeaRoutePair(pack, burgs, search, edgeKeyMultiplier, riverEdges) {
+  const points = burgs.map(burg => pack.cells.p?.[burg.cell] || [burg.x, burg.y]);
+  const pairs = [];
+  for (let from = 0; from < burgs.length; from++) {
+    for (let to = from + 1; to < burgs.length; to++) pairs.push(routeCandidateEdge(from, to, points));
+  }
+  pairs.sort(compareRouteCandidateEdges);
+  for (const {from, to} of pairs) {
+    const path = tracePackPath(pack, burgs[from].cell, burgs[to].cell, true, new Set(), null, search, edgeKeyMultiplier, riverEdges, pack.cells.i.length);
+    if (path.length > 1) return [burgs[from], burgs[to]];
+  }
+  return null;
 }
 
 function prepareLockedRoutes(pack, options) {
@@ -1763,6 +1909,7 @@ function prepareLockedRoutes(pack, options) {
   const routes = [];
   const ids = new Set();
   const connections = new Set();
+  const waterConnections = new Set();
   const edgeKeyMultiplier = pack.cells.i.length + 1;
 
   for (const source of provided) {
@@ -1796,6 +1943,7 @@ function prepareLockedRoutes(pack, options) {
         throw routeLockConflict(`锁定道路 #${id} 与其它锁路占用同一边`, {reason: "duplicate-edge", id, from: previous, to: cell});
       }
       connections.add(edge);
+      if (route.type === "searoute") waterConnections.add(edge);
     }
 
     route.id = id;
@@ -1803,7 +1951,7 @@ function prepareLockedRoutes(pack, options) {
     routes.push(route);
   }
 
-  return {routes, ids, connections};
+  return {routes, ids, connections, waterConnections};
 }
 
 function createRouteIdAllocator(reservedIds) {
@@ -1835,7 +1983,8 @@ function generateRouteSegments({
   edgeKeyMultiplier,
   riverEdges = null,
   maxVisited = null,
-  excludedGroupIds = new Set()
+  excludedGroupIds = new Set(),
+  blockedConnections = null
 }) {
   const routeSegments = [];
   const entries = [...groups.entries()].sort(([a], [b]) => Number(a) - Number(b));
@@ -1845,15 +1994,37 @@ function generateRouteSegments({
     const points = burgs.map(burg => routeCandidatePoint(burg, variation, water));
     const edges = selectRouteEdges(calculateUrquhartEdges(points), points, water, routeType);
 
+    let createdForGroup = 0;
+
     for (const [fromId, toId] of edges) {
       const start = burgs[fromId].cell;
       const end = burgs[toId].cell;
-      const pathCells = tracePackPath(pack, start, end, water, connections, variation, search, edgeKeyMultiplier, riverEdges, maxVisited);
+      const pathCells = tracePackPath(pack, start, end, water, connections, variation, search, edgeKeyMultiplier, riverEdges, maxVisited, blockedConnections);
 
       for (const cells of getRouteSegments(pathCells, connections, edgeKeyMultiplier)) {
         addConnections(cells, connections, edgeKeyMultiplier);
         routeSegments.push({feature: Number(feature), cells, fromBurg: burgs[fromId].i, toBurg: burgs[toId].i});
+        createdForGroup++;
       }
+    }
+
+    if (!water || createdForGroup || burgs.length < 2) continue;
+    const fallbackEdges = [];
+    for (let from = 0; from < burgs.length; from++) {
+      for (let to = from + 1; to < burgs.length; to++) {
+        fallbackEdges.push(routeCandidateEdge(from, to, points));
+      }
+    }
+    fallbackEdges.sort(compareRouteCandidateEdges);
+    for (const {from, to} of fallbackEdges) {
+      const pathCells = tracePackPath(pack, burgs[from].cell, burgs[to].cell, true, connections, variation, search, edgeKeyMultiplier, riverEdges, maxVisited, blockedConnections);
+      const segments = getRouteSegments(pathCells, connections, edgeKeyMultiplier);
+      if (!segments.length) continue;
+      for (const cells of segments) {
+        addConnections(cells, connections, edgeKeyMultiplier);
+        routeSegments.push({feature: Number(feature), cells, fromBurg: burgs[from].i, toBurg: burgs[to].i});
+      }
+      break;
     }
   }
 
@@ -2060,7 +2231,7 @@ function unionRouteCandidateComponents(parent, rank, left, right) {
   return true;
 }
 
-function tracePackPath(pack, start, end, water, connections, variation = null, search = createRouteSearchScratch(pack.cells.i.length), edgeKeyMultiplier = pack.cells.i.length + 1, riverEdges = null, maxVisitedOverride = null) {
+function tracePackPath(pack, start, end, water, connections, variation = null, search = createRouteSearchScratch(pack.cells.i.length), edgeKeyMultiplier = pack.cells.i.length + 1, riverEdges = null, maxVisitedOverride = null, blockedConnections = null) {
   if (start === end) return [];
 
   const open = new MinPriorityQueue();
@@ -2079,11 +2250,12 @@ function tracePackPath(pack, start, end, water, connections, variation = null, s
 
     for (const neighbor of pack.cells.c[current] || []) {
       if (search.closed[neighbor] === runId) continue;
+      if (blockedConnections?.has(routeEdgeKey(current, neighbor, edgeKeyMultiplier))) continue;
       if (neighbor === end && !water) {
         search.cameFrom[neighbor] = current;
         return reconstructPath(search.cameFrom, neighbor);
       }
-      if (neighbor === end && water && canReachWaterRouteExit(pack, current, end, riverEdges)) {
+      if (neighbor === end && water && pack.cells.h?.[end] >= 20 && canReachWaterRouteExit(pack, current, end, riverEdges)) {
         search.cameFrom[neighbor] = current;
         return reconstructPath(search.cameFrom, neighbor);
       }
@@ -2108,7 +2280,7 @@ function canReachWaterRouteExit(pack, current, exit, riverEdges) {
   if (riverEdges?.get(current)?.has(exit)) return true;
   if (pack.cells.h[current] >= 20) return false;
   const haven = pack.cells.haven?.[exit];
-  return !haven || current === haven;
+  return Boolean(haven) && current === haven;
 }
 
 function packRouteStepCost(pack, current, next, water, connections, variation = null, edgeKeyMultiplier = pack.cells.i.length + 1, riverEdges = null) {
@@ -2128,7 +2300,7 @@ function packRouteStepCost(pack, current, next, water, connections, variation = 
         if (!riverEdges?.get(current)?.has(next)) return Infinity;
       } else {
         const haven = pack.cells.haven?.[current];
-        if (haven && haven !== next) return Infinity;
+        if (!haven || haven !== next) return Infinity;
       }
     }
     if ((pack.cells.temp?.[next] || 0) < MIN_PASSABLE_SEA_TEMP) return Infinity;
@@ -2279,10 +2451,21 @@ function setRouteBest(search, runId, cell, cost, from) {
   search.cameFrom[cell] = from;
 }
 
-function preparePackRoutePoints(pack) {
+function preparePackRoutePoints(pack, cityByBurg) {
   return pack.cells.p.map(([x, y], cell) => {
-    const burg = pack.burgs?.[pack.cells.burg?.[cell]];
-    return burg ? [burg.x, burg.y] : [x, y];
+    const burgId = Number(pack.cells.burg?.[cell]);
+    const city = cityByBurg.get(burgId);
+    const burg = pack.burgs?.[burgId];
+    const valid = city
+      && burg
+      && !burg.removed
+      && Number(city.burgId) === burgId
+      && Number(city.packCell) === cell
+      && Number(burg.cell) === cell
+      && Number(pack.cells.g?.[cell]) === Number(city.cell)
+      && Number.isFinite(Number(city.x))
+      && Number.isFinite(Number(city.y));
+    return valid ? [Number(city.x), Number(city.y)] : [x, y];
   });
 }
 
@@ -2338,7 +2521,7 @@ function addPackRoute({routes, pack, segment, type, pointsArray, cityByBurg, all
   if (segment.merged || segment.cells.length < 2) return;
   const parts = type === "searoute" ? splitSeaRouteCells(pack, segment.cells) : [segment.cells];
 
-  for (const cells of parts) addPackRoutePart({routes, pack, cells, type, feature: segment.feature, pointsArray, cityByBurg, fromBurgId: segment.fromBurg, toBurgId: segment.toBurg, allocateRouteId});
+  for (const cells of parts) addPackRoutePart({routes, pack, cells, type, feature: segment.feature, pointsArray, cityByBurg, allocateRouteId});
 }
 
 function splitSeaRouteCells(pack, cells) {
@@ -2359,12 +2542,10 @@ function splitSeaRouteCells(pack, cells) {
   return parts;
 }
 
-function addPackRoutePart({routes, pack, cells, type, feature, pointsArray, cityByBurg, fromBurgId = null, toBurgId = null, allocateRouteId}) {
+function addPackRoutePart({routes, pack, cells, type, feature, pointsArray, cityByBurg, allocateRouteId}) {
   const id = allocateRouteId();
-  const fromBurg = pack.burgs?.[pack.cells.burg?.[cells[0]]] || pack.burgs?.[fromBurgId];
-  const toBurg = pack.burgs?.[pack.cells.burg?.[cells.at(-1)]] || pack.burgs?.[toBurgId];
-  const fromCity = cityByBurg.get(fromBurg?.i);
-  const toCity = cityByBurg.get(toBurg?.i);
+  const {burg: fromBurg, city: fromCity} = resolvePackRouteEndpoint(pack, cityByBurg, cells[0]);
+  const {burg: toBurg, city: toCity} = resolvePackRouteEndpoint(pack, cityByBurg, cells.at(-1));
   const resources = countRouteResources(pack, cells);
 
   routes.push({
@@ -2390,6 +2571,25 @@ function addPackRoutePart({routes, pack, cells, type, feature, pointsArray, city
     resourceGoodIds: resources.goodIds,
     points: cells.map(cell => pointsArray[cell])
   });
+}
+
+function resolvePackRouteEndpoint(pack, cityByBurg, packCell) {
+  const burgId = Number(pack.cells.burg?.[packCell]);
+  const burg = pack.burgs?.[burgId];
+  const city = cityByBurg.get(burgId);
+  const valid = Number.isInteger(packCell)
+    && Number.isInteger(burgId)
+    && burgId > 0
+    && city
+    && !city.removed
+    && burg
+    && !burg.removed
+    && Number(burg.i ?? burg.id) === burgId
+    && Number(city.burgId) === burgId
+    && Number(city.packCell) === packCell
+    && Number(burg.cell) === packCell
+    && Number(pack.cells.g?.[packCell]) === Number(city.cell);
+  return valid ? {burg, city} : {burg: null, city: null};
 }
 
 function countRouteResources(pack, cells) {

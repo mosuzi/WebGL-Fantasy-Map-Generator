@@ -1,4 +1,4 @@
-import {buildObjectPickingIndex, CITY_PICK_RADIUS_CSS_PX, pickCity, pickGridCell, pickMarker, pickMilitary, pickPoliticalObject, pickRiver, pickRiverControlPoint, pickRoute, refreshRoutesInPickingIndex, relocateCityInPickingIndex} from "./picking.js";
+import {buildObjectPickingIndex, CITY_PICK_RADIUS_CSS_PX, pickCity, pickGridCell, pickMarker, pickMilitary, pickPoliticalObject, pickRiver, pickRiverControlPoint, pickRoute, refreshNonRoutePickingIndexPreservingRoutes, refreshRiversInPickingIndex, refreshRoutesInPickingIndex, relocateCityInPickingIndex} from "./picking.js";
 import {goodDisplayName} from "../generator/economy-display-properties.js";
 import {isSharedCubicCurve, sampleCentripetalCatmullRom} from "../geometry/cubic-path.js";
 import {bindVertexBuffer, createProgram} from "./gl-utils.js";
@@ -1140,6 +1140,16 @@ export class PlaceholderMapRenderer {
     this.objectPickingIndex = buildObjectPickingIndex(this.map);
   }
 
+  refreshRiverPickingIndex() {
+    if (!this.map) return false;
+    return refreshRiversInPickingIndex(this.objectPickingIndex, this.map.rivers?.rivers || []);
+  }
+
+  refreshObjectPickingIndexPreservingRoutes() {
+    if (!this.map) return false;
+    return refreshNonRoutePickingIndexPreservingRoutes(this.objectPickingIndex, this.map);
+  }
+
   rebuildCellVisualMesh() {
     this.cellVisualMesh = this.map ? buildCellVisualMesh(this.map) : emptyCellVisualMesh();
   }
@@ -2068,11 +2078,11 @@ export class PlaceholderMapRenderer {
   }
 
   setObjectHighlights(objects, {draw = true} = {}) {
-    const previousHasRoutes = this.objectHighlights.some(item => item.kind === OBJECT_KIND.ROUTE);
-    this.objectHighlights = deduplicateObjectHighlights(objects);
-    const nextHasRoutes = this.objectHighlights.some(item => item.kind === OBJECT_KIND.ROUTE);
+    const previous = this.objectHighlights;
+    const next = deduplicateObjectHighlights(objects);
+    this.objectHighlights = next;
     this.dynamicBuffersDirty.selection = true;
-    if (previousHasRoutes || nextHasRoutes) this.dynamicBuffersDirty.routes = true;
+    if (!sameRouteHighlightMembership(previous, next)) this.dynamicBuffersDirty.routes = true;
     if (!draw) return;
     this.draw();
   }
@@ -4288,6 +4298,14 @@ function objectHighlightKey(object) {
   const targetKind = object.targetKind || "";
   const targetId = object.targetId ?? object.id ?? "";
   return `${object.kind}:${targetKind}:${targetId}`;
+}
+
+function sameRouteHighlightMembership(previous, next) {
+  const previousKeys = new Set(previous.filter(item => item?.kind === OBJECT_KIND.ROUTE).map(objectHighlightKey));
+  const nextKeys = new Set(next.filter(item => item?.kind === OBJECT_KIND.ROUTE).map(objectHighlightKey));
+  if (previousKeys.size !== nextKeys.size) return false;
+  for (const key of previousKeys) if (!nextKeys.has(key)) return false;
+  return true;
 }
 
 function summarizeObjectHighlight(object) {

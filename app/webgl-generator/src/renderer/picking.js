@@ -166,6 +166,64 @@ export function refreshRoutesInPickingIndex(index, routes, routeIds) {
   return true;
 }
 
+export function refreshRiversInPickingIndex(index, rivers) {
+  if (!index) return false;
+  for (const bucket of index.buckets.values()) bucket.riverSegments = [];
+  let riverSegmentCount = 0;
+  for (const river of rivers || []) {
+    const points = riverPickingPoints(river);
+    for (let segmentIndex = 0; segmentIndex < points.length - 1; segmentIndex++) {
+      addSegmentToBuckets(index.buckets, index.columns, index.rows, index.bucketSize, {
+        kind: "river",
+        river,
+        index: segmentIndex,
+        a: points[segmentIndex],
+        b: points[segmentIndex + 1]
+      }, "riverSegments");
+      riverSegmentCount++;
+    }
+  }
+  index.riverSegmentCount = riverSegmentCount;
+  index.bucketCount = index.buckets.size;
+  index.maxBucketItems = 0;
+  for (const bucket of index.buckets.values()) {
+    index.maxBucketItems = Math.max(index.maxBucketItems, bucket.cities.length + bucket.markers.length + bucket.military.length + bucket.routeSegments.length + bucket.riverSegments.length);
+  }
+  return true;
+}
+
+export function refreshNonRoutePickingIndexPreservingRoutes(index, map) {
+  if (!index || !map) return false;
+  const replacement = buildObjectPickingIndex(map);
+  if (replacement.bucketSize !== index.bucketSize || replacement.columns !== index.columns || replacement.rows !== index.rows) return false;
+  const keys = new Set([...index.buckets.keys(), ...replacement.buckets.keys()]);
+  for (const key of keys) {
+    const current = index.buckets.get(key);
+    const next = replacement.buckets.get(key);
+    const routeSegments = current?.routeSegments || [];
+    if (!next && !routeSegments.length) {
+      index.buckets.delete(key);
+      continue;
+    }
+    const target = current || bucketFor(index.buckets, key);
+    target.cities = next?.cities || [];
+    target.markers = next?.markers || [];
+    target.military = next?.military || [];
+    target.riverSegments = next?.riverSegments || [];
+    target.routeSegments = routeSegments;
+  }
+  index.bucketCount = index.buckets.size;
+  index.cityCount = replacement.cityCount;
+  index.markerCount = replacement.markerCount;
+  index.militaryCount = replacement.militaryCount;
+  index.riverSegmentCount = replacement.riverSegmentCount;
+  index.maxBucketItems = 0;
+  for (const bucket of index.buckets.values()) {
+    index.maxBucketItems = Math.max(index.maxBucketItems, bucket.cities.length + bucket.markers.length + bucket.military.length + bucket.routeSegments.length + bucket.riverSegments.length);
+  }
+  return true;
+}
+
 export function pickMilitary(map, index, worldX, worldY, maxDistance) {
   const regiments = militaryRegiments(map);
   if (!regiments.length) return null;
