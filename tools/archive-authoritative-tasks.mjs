@@ -7,6 +7,7 @@ const currentPlanPath = path.join(root, "docs", "current-plan.md");
 const archiveDir = path.join(root, "docs", "task-archives");
 const checkOnly = process.argv.includes("--check");
 const dateArg = process.argv.find(argument => argument.startsWith("--date="))?.slice(7) ?? "";
+const statusDate = dateArg || new Intl.DateTimeFormat("en-CA", {timeZone: "Asia/Shanghai"}).format(new Date());
 
 const historicalPartitions = [
   {
@@ -187,7 +188,7 @@ function renderCurrentPlan(activeTasks, apiBaseline) {
 
 ## 当前状态
 
-> **执行门禁（2026-08-07）**：当前未归档任务为${activeSummary}。${activeBoundary}第 53 项已移除，第 278 项已由第 279 项取代，其余既有完成状态见归档索引。
+> **执行门禁（${statusDate}）**：当前未归档任务为${activeSummary}。${activeBoundary}第 53 项已移除，第 278 项已由第 279 项取代，其余既有完成状态见归档索引。
 
 ${apiBaseline}
 
