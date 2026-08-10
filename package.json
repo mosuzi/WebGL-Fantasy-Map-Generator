@@ -96,6 +96,7 @@
     "regress:regeneration-lock-route-generator": "node --no-warnings ./tools/webgl-generator-locked-route-generation-regression.mjs",
     "regress:regeneration-lock-river-generator": "node --no-warnings ./tools/webgl-generator-locked-river-generation-regression.mjs",
     "regress:regeneration-lock-river-browser": "node --no-warnings ./tools/webgl-generator-regeneration-lock-river-browser-regression.mjs",
+    "regress:task325-live-map-browser": "node --no-warnings ./tools/webgl-generator-task325-live-map-browser-regression.mjs",
     "regress:regeneration-lock-city-route": "node --no-warnings ./tools/webgl-generator-regeneration-lock-city-route-regression.mjs",
     "regress:settlement-route-identity": "node --no-warnings ./tools/webgl-generator-settlement-route-identity-regression.mjs",
     "regress:regeneration-lock-city-route-browser": "node --no-warnings ./tools/webgl-generator-regeneration-lock-city-route-browser-regression.mjs",
