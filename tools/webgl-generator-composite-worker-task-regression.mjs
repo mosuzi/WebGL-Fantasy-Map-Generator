@@ -3,6 +3,7 @@ import {createHash} from "node:crypto";
 import {readFile} from "node:fs/promises";
 import {serialize} from "node:v8";
 import {createGenerationSummary, generatePlaceholderMap} from "../app/webgl-generator/src/generator/index.js";
+import {RENDER_PREPARATION_LAYERS} from "../app/webgl-generator/src/renderer/render-preparation.js";
 import {
   assertOceanCurrentWorldIdentity,
   rebuildOceanCurrentWorldStage,
@@ -30,6 +31,7 @@ import {
   rebuildHeightDownstreamDerived
 } from "../app/webgl-generator/src/runtime/height-derived-rebuild.js";
 import {ensureLabelStore} from "../app/webgl-generator/src/runtime/label-edit-commands.js";
+import {GENERATION_WORKER_TASK} from "../app/webgl-generator/src/runtime/generation-worker-task.js";
 import {syncMilitaryStateMirrors} from "../app/webgl-generator/src/runtime/military-regeneration-variation.js";
 import {LABEL_TARGET_KIND, OBJECT_KIND} from "../app/webgl-generator/src/runtime/object-kinds.js";
 import {OCEAN_CURRENT_WORLD_WORKER_TASK} from "../app/webgl-generator/src/runtime/ocean-current-world-worker-task.js";
@@ -56,13 +58,15 @@ const binding = {
   operationId: 11,
   operationName: "composite.compute"
 };
-const taskNames = [HEIGHT_DERIVED_WORKER_TASK, CLIMATE_DOWNSTREAM_WORKER_TASK, OCEAN_CURRENT_WORLD_WORKER_TASK];
+const mutationTaskNames = [HEIGHT_DERIVED_WORKER_TASK, CLIMATE_DOWNSTREAM_WORKER_TASK, OCEAN_CURRENT_WORLD_WORKER_TASK];
+const taskNames = [...mutationTaskNames, GENERATION_WORKER_TASK];
 const report = {
   wiring: {},
   registry: [],
   height: {},
   climate: {},
   ocean: {},
+  generation: {},
   locks: {},
   safety: {},
   large: {}
@@ -80,6 +84,42 @@ for (const task of taskNames) {
   assert.equal(typeof getWorkerTaskHandler(task), "function", `${task} 缺少 registry handler`);
 }
 report.registry = taskNames;
+
+console.log("[composite-worker] 正在验证整图生成与渲染准备同源输出");
+const generationPayload = {
+  options: {seed: "generation-worker-result", cellsTarget: 512, heightmapTemplate: "continents"},
+  render: {
+    binding: {mapIdentity: "generated:fixture", mapRevision: 0},
+    layers: [...RENDER_PREPARATION_LAYERS],
+    camera: {scale: 1, offsetX: 0, offsetY: 0},
+    canvas: {width: 1024, height: 768, clientWidth: 1024, clientHeight: 768},
+    visibility: {routes: true, rivers: true, markers: true, cities: true},
+    colorMode: "height",
+    viewOptions: {},
+    labelOptions: {},
+    visualTheme: {},
+    unitPreferences: {}
+  }
+};
+const generationWorker = await runWorkerMode(GENERATION_WORKER_TASK, generationPayload, "generation-worker-result");
+const generationFallback = await runFallbackMode(GENERATION_WORKER_TASK, generationPayload);
+assertStableMapEqual(generationWorker.output.map, generationFallback.output.map, "整图生成 Worker / fallback 地图不同源");
+const generationPreparedLayerKeys = Object.keys(generationWorker.output.preparedRender.layers);
+assert.deepEqual(generationPreparedLayerKeys, [
+  "cellVisual", "shore", "statePaths", "provincePaths", "political", "politicalDebug",
+  "surface", "line", "picking", "labels", "route", "river", "point"
+], "整图生成没有返回完整渲染准备结果");
+assert.equal(Object.hasOwn(generationWorker.output.preparedRender.layers, "cell-visual"), false, "整图生成错误保留了请求层 ID");
+assert.equal(Object.hasOwn(generationWorker.output.preparedRender.layers, "politicalDebug"), true, "整图生成漏掉政治调试准备结果");
+assert.deepEqual(generationWorker.output.preparedRender.binding, generationPayload.render.binding, "整图生成渲染准备绑定漂移");
+assert(generationWorker.outputPackets > 1, "整图生成结果没有经过多包输出");
+assert(collectWorkerTaskTransferables(GENERATION_WORKER_TASK, generationWorker.output).length > 0, "整图生成未暴露可转移结果");
+report.generation = {
+  inputPackets: generationWorker.inputPackets,
+  outputPackets: generationWorker.outputPackets,
+  layers: generationPreparedLayerKeys.length,
+  fallback: generationFallback.output.worker.mode
+};
 
 console.log("[composite-worker] 正在生成 1k 对拍夹具");
 const source = generatePlaceholderMap({seed: "composite-worker", cellsTarget: 1000, heightmapTemplate: "continents"});
@@ -421,6 +461,8 @@ async function verifyFormalRuntimeWiring() {
   const heightAction = extractTopLevelFunctionSource(appSource, "rebuildHeightDerivedViaAction");
   const climateAction = extractTopLevelFunctionSource(appSource, "applyClimateDownstreamRebuildViaApi");
   const oceanAction = extractTopLevelFunctionSource(appSource, "applyOceanCurrentWorldRebuildViaAction");
+  const generationAction = extractTopLevelFunctionSource(appSource, "generateMapOffMainThread");
+  const mapLoadAction = extractTopLevelFunctionSource(appSource, "loadMapIntoRuntime");
   const coordinator = extractTopLevelFunctionSource(appSource, "executeWorkerMapMutation");
   assert.match(heightAction, /executeWorkerMapMutation\(state, documentRef, \{/);
   assert.match(heightAction, /task: HEIGHT_DERIVED_WORKER_TASK/);
@@ -428,6 +470,15 @@ async function verifyFormalRuntimeWiring() {
   assert.match(climateAction, /task: CLIMATE_DOWNSTREAM_WORKER_TASK/);
   assert.match(oceanAction, /executeWorkerMapMutation\(state, documentRef, \{/);
   assert.match(oceanAction, /task: OCEAN_CURRENT_WORLD_WORKER_TASK/);
+  assert.match(generationAction, /workerTaskCoordinator\.run\(GENERATION_WORKER_TASK,/);
+  assert.match(generationAction, /createWorkerRegenerationRenderRequest\(state, "generation", renderBinding, \[\.\.\.RENDER_PREPARATION_LAYERS\]\)/);
+  assert.match(mapLoadAction, /prepareRendererWorkerInstall\(state\.renderer, map, preparedRender,/);
+  assert.match(mapLoadAction, /completePreparedMapLoadAsync\(state\.map, rendererLoadOptions\)/);
+  assert.match(mapLoadAction, /await refreshRuntimeAfterMapLoadAsync\(state, documentRef/);
+  assert.match(appSource, /id:\s*"namebase",\s*run:\s*\(\)\s*=>\s*updateNamebasePanel\(state\)/);
+  assert.match(mapLoadAction, /deferOverlayLayout:\s*true/);
+  assert.match(mapLoadAction, /revealPreparedOverlay:\s*Boolean\(preparedInstall\)/);
+  assert.doesNotMatch(appSource, /GenerationWorker from "\.\/generation-worker\.js\?worker"/);
   assert.match(coordinator, /state\.workerTaskCoordinator\.run\(task,/);
   assert.match(coordinator, /sameRegenerationWorkerBinding\(output\?\.binding, binding\)/);
 
@@ -435,6 +486,7 @@ async function verifyFormalRuntimeWiring() {
     height: heightEntries.map(([, scope]) => scope),
     climate: CLIMATE_DOWNSTREAM_WORKER_TASK,
     ocean: OCEAN_CURRENT_WORLD_WORKER_TASK,
+    generation: GENERATION_WORKER_TASK,
     coordinator: "executeWorkerMapMutation"
   };
 }
@@ -681,7 +733,8 @@ async function verifyCancelAndFault(sourceMap) {
   const cancelCases = [
     [HEIGHT_DERIVED_WORKER_TASK, {map: structuredClone(sourceMap), scope: "all"}],
     [CLIMATE_DOWNSTREAM_WORKER_TASK, {map: structuredClone(sourceMap), systems: ["zones"], seed: "climate-cancel"}],
-    [OCEAN_CURRENT_WORLD_WORKER_TASK, {map: structuredClone(sourceMap), seed: "ocean-cancel"}]
+    [OCEAN_CURRENT_WORLD_WORKER_TASK, {map: structuredClone(sourceMap), seed: "ocean-cancel"}],
+    [GENERATION_WORKER_TASK, structuredClone(generationPayload)]
   ];
   for (const [task, payload] of cancelCases) {
     let checks = 0;
@@ -713,17 +766,19 @@ async function verifyCancelAndFault(sourceMap) {
 }
 
 async function verifyObsoleteFallback(sourceMap) {
-  for (const task of taskNames) {
+  const cases = [
+    [HEIGHT_DERIVED_WORKER_TASK, {map: sourceMap, scope: "base", render: createRenderRequest()}],
+    [CLIMATE_DOWNSTREAM_WORKER_TASK, {map: sourceMap, systems: ["zones"], seed: "climate-obsolete", render: createRenderRequest()}],
+    [OCEAN_CURRENT_WORLD_WORKER_TASK, {map: sourceMap, seed: "ocean-obsolete", render: createRenderRequest()}],
+    [GENERATION_WORKER_TASK, structuredClone(generationPayload)]
+  ];
+  assert.deepEqual(cases.map(([task]) => task), taskNames, "过期 fallback 反例没有覆盖全部正式任务");
+  for (const [task, payload] of cases) {
     let valid = true;
     const coordinator = createWorkerTaskCoordinator({
       getBinding: () => binding,
       validateBinding: () => valid
     });
-    const payload = task === HEIGHT_DERIVED_WORKER_TASK
-      ? {map: sourceMap, scope: "base", render: createRenderRequest()}
-      : task === CLIMATE_DOWNSTREAM_WORKER_TASK
-        ? {map: sourceMap, systems: ["zones"], seed: "climate-obsolete", render: createRenderRequest()}
-        : {map: sourceMap, seed: "ocean-obsolete", render: createRenderRequest()};
     await assert.rejects(
       () => coordinator.run(task, payload, {
         forceFallback: true,
@@ -908,6 +963,11 @@ function stripVolatile(value, seen, path) {
   if (ArrayBuffer.isView(value) || value instanceof ArrayBuffer) return;
   for (const key of Object.keys(value)) {
     const childPath = [...path, key];
+    if (key === "generationLog" && Array.isArray(value[key])) {
+      value[key] = value[key].filter(entry => typeof entry !== "string" || (
+        !entry.startsWith("generation timing:") && !entry.startsWith("grid checksum:")
+      ));
+    }
     if (isVolatileField(key, childPath)) {
       delete value[key];
       continue;

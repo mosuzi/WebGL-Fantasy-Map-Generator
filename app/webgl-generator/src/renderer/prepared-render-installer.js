@@ -115,7 +115,9 @@ export async function prepareRendererWorkerInstall(renderer, map, prepared, opti
   }
 
   return createPreparedInstallTransaction(renderer, map, prepared, decoded, buffers, surfaceBaseBufferSet, {
-    preserveRoutePicking: options.preserveRoutePicking === true
+    preserveRoutePicking: options.preserveRoutePicking === true,
+    resetViewport: options.resetViewport === true,
+    deferOverlayLayout: options.deferOverlayLayout === true
   });
 }
 
@@ -148,6 +150,11 @@ function createPreparedInstallTransaction(renderer, map, prepared, decoded, buff
         routeRefreshWasPending = Boolean(renderer.routeRefreshTimer || renderer.routeRefreshActiveVersion);
         renderer.cancelScheduledRouteBufferRefresh?.();
         routeRefreshWasCancelled = true;
+      }
+      if (options.resetViewport) {
+        assignNested("camera", "scale", 1);
+        assignNested("camera", "offsetX", 0);
+        assignNested("camera", "offsetY", 0);
       }
       assign("map", map);
       if (decoded.cellVisual) assign("cellVisualMesh", decoded.cellVisual);
@@ -369,9 +376,12 @@ function createPreparedInstallTransaction(renderer, map, prepared, decoded, buff
   function installOverlay(bundle) {
     if (!renderer.overlay || !bundle.fragment) return;
     for (const item of bundle.militaryIconItems || []) item.rendererUnitPreferences = renderer.unitPreferences;
+    const fragment = options.deferOverlayLayout
+      ? createDeferredOverlayInstallFragment(bundle.fragment, renderer.overlay.ownerDocument)
+      : bundle.fragment;
     before.set("overlay:nodes", [...renderer.overlay.childNodes]);
     assigned.push("overlay:nodes");
-    renderer.overlay.replaceChildren(bundle.fragment);
+    renderer.overlay.replaceChildren(fragment);
     before.set("overlay:cityIconInstances", snapshotCityIconLayer(renderer.cityIconLayer));
     assigned.push("overlay:cityIconInstances");
     for (const [key, value] of [
@@ -398,6 +408,17 @@ function createPreparedInstallTransaction(renderer, map, prepared, decoded, buff
       ["visibleMilitaryIconCount", 0]
     ]) assign(key, value);
     renderer.cityIconLayer?.setInstances(bundle.cityIconItems, {nowMs: performance.now()});
+  }
+
+  function createDeferredOverlayInstallFragment(fragment, documentRef) {
+    const staged = documentRef.createDocumentFragment();
+    while (fragment.firstChild) {
+      const batch = documentRef.createElement("div");
+      batch.className = "map-overlay-install-batch";
+      for (let index = 0; index < 32 && fragment.firstChild; index++) batch.append(fragment.firstChild);
+      staged.append(batch);
+    }
+    return staged;
   }
 }
 

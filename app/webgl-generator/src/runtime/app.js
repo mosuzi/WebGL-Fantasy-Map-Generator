@@ -1,6 +1,6 @@
 import {defineBiomesAndPopulation} from "../generator/biomes.js";
 import {buildClimate} from "../generator/climate.js";
-import {createGenerationSummary, generatePlaceholderMap} from "../generator/index.js";
+import {createGenerationSummary} from "../generator/index.js";
 import {createNamebaseImportPreview, NAMEBASE_BINDING_TARGETS, parseNamebaseDocument} from "../generator/namebase-store.js";
 import {buildMilitary, MILITARY_STATUSES} from "../generator/military.js";
 import {backfillRiverHydrology, buildRivers, renameHydronymsByCulture} from "../generator/rivers.js";
@@ -257,8 +257,8 @@ import {completeStartupLoading, failStartupLoading} from "../ui/startup-loading.
 import {createRegenerationUserError, regenerationLoadingMessage} from "../ui/regeneration-user-copy.js";
 import {LABEL_TARGET_KIND, OBJECT_KIND, OBJECT_KIND_LABEL} from "./object-kinds.js";
 import {reconcileSettlementPortTopology} from "./settlement-port-topology.js";
-import GenerationWorker from "./generation-worker.js?worker";
 import ComputeWorker from "./compute-worker.js?worker";
+import {GENERATION_WORKER_TASK} from "./generation-worker-task.js";
 import {getWebglGeneratorHealthMonitor} from "./health-monitor.js";
 import {createRuntimeOperationError, createRuntimeOperationManager} from "./runtime-operation.js";
 import {createDelayedOperationFeedback} from "./delayed-operation-feedback.js";
@@ -4094,13 +4094,17 @@ async function generateMapViaApi(state, documentRef, options, {completionToast =
     setMythicGenerationLoading(documentRef, true, "generate");
     operation?.report("generate", {message: loadingMessage("generate")});
     await yieldToBrowser(documentRef, {debugDelay: true});
-    const map = await generateMapOffMainThread(documentRef, generationOptionsWithNamebases(state.options, namebaseSnapshot), generateId);
+    const generated = await generateMapOffMainThread(state, documentRef, generationOptionsWithNamebases(state.options, namebaseSnapshot), generateId, operation);
+    const map = generated.map;
     if (generateId !== state.pendingGenerateId) throw new Error("生成请求已被新的生成任务取代");
     operation?.report("load-map", {message: loadingMessage("cell-visual-mesh")});
     await loadMapIntoRuntime(state, documentRef, map, {
       loadingMessages: [loadingMessage("cell-visual-mesh"), loadingMessage("panel-refresh")],
       completionToast,
-      operation
+      operation,
+      preparedRender: generated.preparedRender,
+      renderBinding: generated.preparedRender?.binding,
+      isCurrent: () => generateId === state.pendingGenerateId
     });
     return {
       options: cloneGenerationOptions(state.options),
@@ -4108,7 +4112,8 @@ async function generateMapViaApi(state, documentRef, options, {completionToast =
       timings: {
         totalMs: roundLoadTraceMs(currentLoadTraceTime(documentRef.defaultView || window) - startedAt),
         generation: {...(state.map?.metadata?.generationTiming || {})},
-        loadMap: state.renderer?.getStats?.().loadMap || null
+        loadMap: state.renderer?.getStats?.().loadMap || null,
+        worker: generated.worker || null
       },
       history: state.editHistory.getStats(),
       effects: ["replace-map", "clear-history", "renderer", "runtime-panel", "object-panels", "object-index"]
@@ -4148,9 +4153,47 @@ function generationApiMapSummary(map) {
   };
 }
 
-async function loadMapIntoRuntime(state, documentRef, map, {loadingMessages = [], completionToast = "", operation = null} = {}) {
+async function loadMapIntoRuntime(state, documentRef, map, {
+  loadingMessages = [],
+  completionToast = "",
+  operation = null,
+  preparedRender = null,
+  renderBinding = null,
+  isCurrent = () => true
+} = {}) {
   emitLoadTrace(documentRef, {phase: "start", id: "load-map", message: "接入地图运行时", delayMs: readDebugLoadDelayMs(documentRef)});
   operation?.report("prepare-map", {message: "正在接入地图运行时"});
+  let preparedInstall = null;
+  try {
+  if (preparedRender) {
+    operation?.report("prepare-map-render", {message: "正在准备地图画面"});
+    const installProfile = {startedAt: performance.now(), stages: []};
+    state.lastPreparedMapInstallProfile = installProfile;
+    try {
+      preparedInstall = await prepareRendererWorkerInstall(state.renderer, map, preparedRender, {
+        binding: renderBinding || preparedRender.binding,
+        signal: operation?.signal || null,
+        isCurrent,
+        resetViewport: true,
+        deferOverlayLayout: true,
+        onProgress: (stage, detail = {}) => {
+          installProfile.stages.push({stage, at: performance.now(), completed: detail.completed ?? null, total: detail.total ?? null});
+          operation?.report("prepare-map-render", {...detail, message: "正在准备地图画面"});
+        }
+      });
+    } finally {
+      installProfile.endedAt = performance.now();
+    }
+  }
+  if (preparedInstall) {
+    operation?.throwIfCancelled?.();
+    if (!isCurrent()) {
+      const error = new Error("地图生成结果已被新的请求取代");
+      error.code = "operation_obsolete";
+      throw error;
+    }
+    await yieldToBrowser(documentRef);
+  }
   cancelAllDirectManipulationSessions("map-replace");
   cancelCityPopulationPointRefresh(state, documentRef);
   state.cityEdit.populationRefreshToken++;
@@ -4227,31 +4270,52 @@ async function loadMapIntoRuntime(state, documentRef, map, {loadingMessages = []
     updateGenerationLoading(documentRef, true, loadingMessages[0]);
     await yieldToBrowser(documentRef, {debugDelay: true});
   }
-  if (typeof state.renderer.loadMapAsync === "function") {
-    await state.renderer.loadMapAsync(state.map, {
-      onStage: stage => {
-        operation?.report(stage.id || "renderer", {message: loadingMessage(stage)});
-        setMythicGenerationLoading(documentRef, true, stage);
-        emitLoadTrace(documentRef, {
-          phase: "start",
-          id: stage.id,
-          label: stage.label,
-          message: loadingMessage(stage),
-          delayMs: readDebugLoadDelayMs(documentRef)
-        });
-      },
-      onStageEnd: stage => {
-        emitLoadTrace(documentRef, {
-          phase: stage.error ? "error" : "end",
-          id: stage.id,
-          label: stage.label,
-          message: stage.error ? `${loadingMessage(stage)}：${stage.error.message || "失败"}` : loadingMessage(stage),
-          ms: stage.ms
-        });
-      },
-      yieldToBrowser: options => yieldToBrowser(documentRef, options)
-    });
+  const rendererLoadOptions = {
+    onStage: stage => {
+      operation?.report(stage.id || "renderer", {message: loadingMessage(stage)});
+      setMythicGenerationLoading(documentRef, true, stage);
+      emitLoadTrace(documentRef, {
+        phase: "start",
+        id: stage.id,
+        label: stage.label,
+        message: loadingMessage(stage),
+        delayMs: readDebugLoadDelayMs(documentRef)
+      });
+    },
+    onStageEnd: stage => {
+      emitLoadTrace(documentRef, {
+        phase: stage.error ? "error" : "end",
+        id: stage.id,
+        label: stage.label,
+        message: stage.error ? `${loadingMessage(stage)}：${stage.error.message || "失败"}` : loadingMessage(stage),
+        ms: stage.ms
+      });
+    },
+    yieldToBrowser: options => yieldToBrowser(documentRef, options),
+    revealPreparedOverlay: Boolean(preparedInstall),
+    signal: operation?.signal || null,
+    isCurrent
+  };
+  if (preparedInstall && typeof state.renderer.completePreparedMapLoadAsync === "function") {
+    operation?.throwIfCancelled?.();
+    if (!isCurrent()) {
+      const error = new Error("地图生成结果已被新的请求取代");
+      error.code = "operation_obsolete";
+      throw error;
+    }
+    preparedInstall.commit();
+    await state.renderer.completePreparedMapLoadAsync(state.map, rendererLoadOptions);
+  } else if (typeof state.renderer.loadMapAsync === "function") {
+    if (preparedInstall) {
+      preparedInstall.rollback();
+      preparedInstall = null;
+    }
+    await state.renderer.loadMapAsync(state.map, rendererLoadOptions);
   } else {
+    if (preparedInstall) {
+      preparedInstall.rollback();
+      preparedInstall = null;
+    }
     state.renderer.loadMap(state.map);
   }
   emitLoadTrace(documentRef, {phase: "start", id: "panel-refresh", message: loadingMessage("panel-refresh"), delayMs: readDebugLoadDelayMs(documentRef)});
@@ -4261,7 +4325,11 @@ async function loadMapIntoRuntime(state, documentRef, map, {loadingMessages = []
     await yieldToBrowser(documentRef, {debugDelay: true});
   }
   state.selectionStore.clear();
-  refreshRuntimeAfterMapLoad(state, documentRef, {restorePanels: true});
+  await refreshRuntimeAfterMapLoadAsync(state, documentRef, {
+    restorePanels: true,
+    operation,
+    isCurrent
+  });
   state.panels.cloudStorage?.updateFilenamePreview?.();
   syncSaveFilenameTemplateUi(documentRef, state);
   syncLabelStylesUi(state, documentRef);
@@ -4279,37 +4347,80 @@ async function loadMapIntoRuntime(state, documentRef, map, {loadingMessages = []
   updateGenerationLoading(documentRef, false);
   showMapToast(documentRef, completionToast);
   scheduleLazyPanelsAfterMapReady(state, documentRef);
+  preparedInstall?.finalize();
+  } catch (error) {
+    if (preparedInstall) {
+      try {
+        preparedInstall.rollback();
+      } catch (rollbackError) {
+        const failure = new Error(`地图画面安装失败且回滚未完成：${error?.message || error}`);
+        failure.code = "map-render-install-rollback-failed";
+        failure.cause = new AggregateError([error, rollbackError], "地图画面安装与回滚均失败");
+        throw failure;
+      }
+    }
+    throw error;
+  }
 }
 
 function refreshRuntimeAfterMapLoad(state, documentRef, {restorePanels = false} = {}) {
-  state.panelManager?.clearReturnParents?.();
-  syncGenerationInputs(documentRef, state.options);
-  updateHeightPanel(state);
-  updateStatePanel(state);
-  updateGovernmentPanel(state);
-  updateProvincePanel(state);
-  updateCityPanel(state);
-  updateClimatePanel(state);
-  updateBiomePanel(state);
-  updatePopulationPanel(state);
-  updateEmblemPanel(state);
-  updateFeaturePanel(state);
-  updateCulturePanel(state);
-  updateReligionPanel(state);
-  updateDiplomacyPanel(state);
-  updateEconomyPanel(state);
-  updateMarkerPanel(state);
-  updateLabelNamingPanel(state);
-  state.panels.namebase.update(state.map, state.editHistory.getStats());
-  state.panels.route.update(state.map, state.selection, state.editHistory.getStats());
-  state.panels.river.update(state.map, state.selection, state.editHistory.getStats(), state.editingObject);
-  state.panels.oceanCurrent.update(state.map, state.editHistory.getStats());
-  updateLakePanel(state);
-  updateMeasurementPanel(state);
-  if (restorePanels) restorePersistedPanels(state);
-  updateEditingInteractionLock(state, documentRef);
-  refreshRuntimeAndPickPanels(documentRef, state);
-  updateMeasurementOverlay(state, documentRef);
+  for (const entry of runtimeAfterMapLoadGroups(state, documentRef, restorePanels)) entry.run();
+}
+
+async function refreshRuntimeAfterMapLoadAsync(state, documentRef, {restorePanels = false, operation = null, isCurrent = null} = {}) {
+  const profile = [];
+  state.lastRuntimeRefreshProfile = profile;
+  for (const entry of runtimeAfterMapLoadGroups(state, documentRef, restorePanels)) {
+    operation?.throwIfCancelled?.();
+    if (typeof isCurrent === "function" && isCurrent() !== true) {
+      const error = new Error("地图运行时刷新结果已被新的请求取代");
+      error.code = "operation_obsolete";
+      throw error;
+    }
+    const sample = {id: entry.id, startedAt: performance.now()};
+    profile.push(sample);
+    entry.run();
+    sample.syncEndedAt = performance.now();
+    await yieldToBrowser(documentRef);
+    sample.endedAt = performance.now();
+  }
+}
+
+function runtimeAfterMapLoadGroups(state, documentRef, restorePanels) {
+  return [
+    {id: "generation-inputs", run: () => {
+      state.panelManager?.clearReturnParents?.();
+      syncGenerationInputs(documentRef, state.options);
+    }},
+    {id: "height", run: () => updateHeightPanel(state)},
+    {id: "state", run: () => updateStatePanel(state)},
+    {id: "government", run: () => updateGovernmentPanel(state)},
+    {id: "province", run: () => updateProvincePanel(state)},
+    {id: "city", run: () => updateCityPanel(state)},
+    {id: "climate", run: () => updateClimatePanel(state)},
+    {id: "biome", run: () => updateBiomePanel(state)},
+    {id: "population", run: () => updatePopulationPanel(state)},
+    {id: "emblem", run: () => updateEmblemPanel(state)},
+    {id: "feature", run: () => updateFeaturePanel(state)},
+    {id: "culture", run: () => updateCulturePanel(state)},
+    {id: "religion", run: () => updateReligionPanel(state)},
+    {id: "diplomacy", run: () => updateDiplomacyPanel(state)},
+    {id: "economy", run: () => updateEconomyPanel(state)},
+    {id: "marker", run: () => updateMarkerPanel(state)},
+    {id: "label-naming", run: () => updateLabelNamingPanel(state)},
+    {id: "namebase", run: () => updateNamebasePanel(state)},
+    {id: "route", run: () => state.panels.route.update(state.map, state.selection, state.editHistory.getStats())},
+    {id: "river", run: () => state.panels.river.update(state.map, state.selection, state.editHistory.getStats(), state.editingObject)},
+    {id: "ocean-current", run: () => state.panels.oceanCurrent.update(state.map, state.editHistory.getStats())},
+    {id: "lake", run: () => updateLakePanel(state)},
+    {id: "measurement-panel", run: () => updateMeasurementPanel(state)},
+    {id: "restore-panels", run: () => {
+      if (restorePanels) restorePersistedPanels(state);
+    }},
+    {id: "editing-lock", run: () => updateEditingInteractionLock(state, documentRef)},
+    {id: "runtime-pick", run: () => refreshRuntimeAndPickPanels(documentRef, state)},
+    {id: "measurement-overlay", run: () => updateMeasurementOverlay(state, documentRef)}
+  ];
 }
 
 function captureMapReplaceSnapshot(state, documentRef) {
@@ -4506,108 +4617,46 @@ function yieldToBrowser(documentRef, options = {}) {
   });
 }
 
-function createGenerationTrace(documentRef) {
-  return {
-    onStageStart: stage => {
-      setMythicGenerationLoading(documentRef, true, stage);
-      emitLoadTrace(documentRef, {
-        phase: "start",
-        id: stage.id,
-        label: stage.label,
-        message: loadingMessage(stage)
-      });
-    },
-    onStageEnd: stage => emitLoadTrace(documentRef, {
-      phase: "end",
-      id: stage.id,
-      label: stage.label,
-      message: loadingMessage(stage),
-      ms: stage.ms
-    })
-  };
-}
-
-function generateMapOffMainThread(documentRef, options, generateId, overrides = {}) {
-  const view = documentRef.defaultView || window;
-  const generationTrace = createGenerationTrace(documentRef);
-  if (typeof view.Worker !== "function") return Promise.resolve(generatePlaceholderMap(options, {...generationTrace, ...fallbackGenerationOverrides(overrides)}));
-
-  let worker;
-  try {
-    worker = new GenerationWorker();
-  } catch {
-    return Promise.resolve(generatePlaceholderMap(options, {...generationTrace, ...fallbackGenerationOverrides(overrides)}));
-  }
-
-  return new Promise((resolve, reject) => {
-    let settled = false;
-    const timeout = view.setTimeout(() => {
-      finish(() => reject(new Error("地图生成超时，请降低 cells 数量后重试")));
-    }, 60000);
-
-    const finish = callback => {
-      if (settled) return;
-      settled = true;
-      view.clearTimeout(timeout);
-      worker.terminate();
-      callback();
-    };
-
-    const fallbackToMainThread = () => {
-      try {
-        const map = generatePlaceholderMap(options, {...generationTrace, ...fallbackGenerationOverrides(overrides)});
-        finish(() => resolve(map));
-      } catch (error) {
-        finish(() => reject(error));
-      }
-    };
-
-    worker.addEventListener("message", event => {
-      const data = event.data || {};
-      if (data.requestId !== generateId) return;
-      if (data.type === "generation-stage") {
-        setMythicGenerationLoading(documentRef, true, data.stage);
-        emitLoadTrace(documentRef, {
-          phase: "start",
-          id: data.stage?.id,
-          label: data.stage?.label,
-          message: loadingMessage(data.stage)
-        });
-        return;
-      }
-      if (data.type === "generation-stage-complete") {
-        emitLoadTrace(documentRef, {
-          phase: "end",
-          id: data.stage?.id,
-          label: data.stage?.label,
-          message: loadingMessage(data.stage),
-          ms: data.stage?.ms
-        });
-        return;
-      }
-      if (data.type === "generated-map") {
-        finish(() => resolve(data.map));
-        return;
-      }
-      const error = new Error(data.message || "地图生成失败");
-      if (data.stack) error.stack = data.stack;
-      finish(() => reject(error));
-    });
-
-    worker.addEventListener("error", fallbackToMainThread);
-    worker.addEventListener("messageerror", fallbackToMainThread);
-
-    worker.postMessage({
-      type: "generate-map",
-      requestId: generateId,
+async function generateMapOffMainThread(state, documentRef, options, generateId, operation = null, overrides = {}) {
+  const requestBinding = createRegenerationWorkerBinding(state, operation);
+  const renderBinding = {mapIdentity: `generated:${generateId}`, mapRevision: 0};
+  const render = createWorkerRegenerationRenderRequest(state, "generation", renderBinding, [...RENDER_PREPARATION_LAYERS]);
+  render.camera = {scale: 1, offsetX: 0, offsetY: 0};
+  render.selection = null;
+  render.objectHighlights = [];
+  render.oceanCurrentHighlightIds = [];
+  return state.workerTaskCoordinator.run(GENERATION_WORKER_TASK, {
+    options,
+    heightmapPayload: overrides.heightmapPayload || null,
+    render
+  }, {
+    binding: requestBinding,
+    signal: operation?.signal || null,
+    fallbackPayloadFactory: () => ({
       options,
-      heightmapPayload: overrides.heightmapPayload || null
-    });
+      heightmapPayload: overrides.heightmapPayload || null,
+      ...(overrides.heightmap ? {heightmap: overrides.heightmap} : {}),
+      render
+    }),
+    onProgress: (stage, detail = {}) => {
+      if (stage === "generation-stage" && detail.stage) {
+        const generationStage = detail.stage;
+        setMythicGenerationLoading(documentRef, true, generationStage);
+        emitLoadTrace(documentRef, {
+          phase: detail.phase === "end" ? "end" : "start",
+          id: generationStage.id,
+          label: generationStage.label,
+          message: loadingMessage(generationStage),
+          ...(detail.phase === "end" ? {ms: generationStage.ms} : {})
+        });
+        return;
+      }
+      operation?.report(stage, {
+        ...detail,
+        message: detail.message || (stage === "render-prepare" ? "正在准备地图画面" : "正在整理地图生成结果")
+      });
+    }
   });
-}
-
-function fallbackGenerationOverrides(overrides = {}) {
-  return overrides.heightmap ? {heightmap: overrides.heightmap} : {};
 }
 
 function setGenerationStatus(documentRef, options, status) {
@@ -6294,10 +6343,11 @@ async function importHeightmapImageViaApi(state, documentRef, payload, options =
     operation?.report("generate", {message: loadingMessage("heightmap-generate")});
     emitLoadTrace(documentRef, {phase: "start", id: "heightmap-generate", message: loadingMessage("heightmap-generate")});
     await yieldToBrowser(documentRef, {debugDelay: true});
-    const map = await generateMapOffMainThread(documentRef, generationOptionsWithNamebases(generationOptions, namebaseSnapshot), importGenerateId, {
+    const generated = await generateMapOffMainThread(state, documentRef, generationOptionsWithNamebases(generationOptions, namebaseSnapshot), importGenerateId, operation, {
       heightmap,
       heightmapPayload: heightmap.workerPayload || null
     });
+    const map = generated.map;
     emitLoadTrace(documentRef, {phase: "end", id: "heightmap-generate", message: loadingMessage("heightmap-generate")});
     if (importGenerateId !== state.pendingGenerateId) {
       clearStaleHeightmapImportStatus(state, documentRef, importGenerateId);
@@ -6307,7 +6357,10 @@ async function importHeightmapImageViaApi(state, documentRef, payload, options =
     await loadMapIntoRuntime(state, documentRef, map, {
       loadingMessages: [loadingMessage("heightmap-render"), loadingMessage("panel-refresh")],
       completionToast: options.toast === false ? "" : "高度图已应用",
-      operation
+      operation,
+      preparedRender: generated.preparedRender,
+      renderBinding: generated.preparedRender?.binding,
+      isCurrent: () => importGenerateId === state.pendingGenerateId
     });
     updateGenerationLoading(documentRef, false);
     setFileOperationStatus(documentRef, heightmapImportSuccessMessage(heightmap), ["heightmap-import-status"]);

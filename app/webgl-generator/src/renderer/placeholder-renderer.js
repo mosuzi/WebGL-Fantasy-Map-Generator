@@ -836,6 +836,71 @@ export class PlaceholderMapRenderer {
     this.lastLoad = profile.finish();
   }
 
+  async completePreparedMapLoadAsync(map, {
+    onStage = () => {},
+    onStageEnd = () => {},
+    yieldToBrowser = () => Promise.resolve(),
+    revealPreparedOverlay = false,
+    signal = null,
+    isCurrent = null
+  } = {}) {
+    this.cancelScheduledRouteBufferRefresh();
+    const profile = createRendererLoadProfile();
+    const stage = async (id, label, task) => {
+      const startedAt = performance.now();
+      onStage({id, label});
+      await yieldToBrowser({debugDelay: true, stageId: id});
+      try {
+        const result = await profile.stageAsync(id, label, task);
+        onStageEnd({id, label, ms: roundMs(performance.now() - startedAt)});
+        await yieldToBrowser({debugDelay: true, stageId: id});
+        return result;
+      } catch (error) {
+        onStageEnd({id, label, ms: roundMs(performance.now() - startedAt), error});
+        throw error;
+      }
+    };
+
+    this.map = map;
+    this.invalidateGridCellDiagnostics();
+    this.objectHighlights = [];
+    this.oceanCurrentHighlights = new Set();
+    applyMapStageBackground(this.stage, map, this.visualTheme);
+    this.selectionVertexCount = 0;
+    this.selectionDrawRanges = emptySelectionDrawRanges();
+    this.tradeFlowVertexCount = 0;
+    this.tradeFlowPickItems = [];
+    this.tradeFlowBuildMs = 0;
+    this.tradeFlowRenderStats = emptyTradeFlowRenderStats();
+    this.heightTransformPreviewVertexCount = 0;
+    this.heightTransformPreviewBuildMs = 0;
+    this.heightTransformPreviewStats = emptyHeightTransformPreviewStats();
+    this.heightCellSelectionVertexCount = 0;
+    this.heightCellSelectionBuildMs = 0;
+    this.heightCellSelectionStats = emptyHeightCellSelectionStats();
+    this.markAllDynamicBuffersDirty();
+    this.dynamicBuffersDirty.routes = false;
+    this.dynamicBuffersDirty.rivers = false;
+    await stage("fit-draw", "适配视图并绘制", () => {
+      this.draw({updateDynamicBuffers: false, updateOverlay: false});
+      this.onViewChange();
+    });
+    await stage("overlay-draw", "刷新标签和图标", () => this.draw({updateDynamicBuffers: false, updateOverlay: true}));
+    if (revealPreparedOverlay) {
+      await stage("overlay-reveal", "呈现标签和图标", async () => {
+        const batches = [...(this.overlay?.children || [])].filter(node => node.classList?.contains("map-overlay-install-batch"));
+        for (const batch of batches) {
+          assertPreparedOverlayRevealCurrent(signal, isCurrent);
+          batch.replaceWith(...batch.childNodes);
+          void this.overlay?.offsetWidth;
+          await yieldToBrowser({stageId: "overlay-reveal"});
+        }
+        assertPreparedOverlayRevealCurrent(signal, isCurrent);
+      });
+    }
+    this.lastLoad = profile.finish();
+  }
+
   fitToView({quick = false} = {}) {
     this.camera.scale = 1;
     this.camera.offsetX = 0;
@@ -3990,6 +4055,14 @@ function emptyPreparedOverlayBundle() {
     selectionMarker: null,
     gridCellIdLayer: null
   };
+}
+
+function assertPreparedOverlayRevealCurrent(signal, isCurrent) {
+  if (signal?.aborted) throw new DOMException(String(signal.reason || "地图画面呈现已取消"), "AbortError");
+  if (typeof isCurrent !== "function" || isCurrent() === true) return;
+  const error = new Error("地图画面呈现结果已被新的请求取代");
+  error.code = "operation_obsolete";
+  throw error;
 }
 
 function createRendererChunkGate({signal = null, isCurrent = null, yieldToMain = defaultRendererYield, budgetMs = 6, onProgress = null} = {}) {

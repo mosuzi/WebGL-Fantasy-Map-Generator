@@ -1671,6 +1671,10 @@ select:disabled {
   visibility: hidden;
 }
 
+.map-overlay > .map-overlay-install-batch {
+  display: none !important;
+}
+
 .map-overlay.map-overlay--interaction-transform,
 .map-stage.map-stage--interaction-transform .measurement-svg {
   transform: var(--map-interaction-transform, none);

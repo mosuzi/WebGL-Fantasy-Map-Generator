@@ -30331,3 +30331,10 @@ full 矩阵结果：
 - 当前任务分支仍与 `main` 同基线，未提交树按阶段 A、B、C、D 分类记录在本地 `work/task322-stage0-checkpoint.md`；旧 10k 通过证据早于后续 renderer 改动，不能证明当前树。
 - 100k 真实链已把剩余主线程成本归因为末端 overlay style / layout 与 `updateLabels`，Worker 单包、解码、GPU、commit 和 UI 均低于 50ms。未命中的 routes DOM 复用实验撤回，不在阶段 A 扩为 keyed DOM 事务。
 - 阶段 A 启用最多两条、每条不超过 75ms 且必须完整归因的过渡预算；阶段 D 重新收紧标签 / DOM / picking，阶段 E 不继承该预算。后续四级流程只在阶段冻结 checkpoint 使用，不再逐夹具循环。
+
+## 2026-08-11：第 322 项阶段 B2 完成整图生成与初始渲染 Worker 闭环
+
+- 新增 `generation.compute`，在 Worker 内完成整图生成、结果编码与初始 render preparation；主线程复用既有 coordinator、prepared installer 和 map replace 事务，正式路径不再重复执行 legacy CPU renderer load，兼容降级路径保持。
+- 100k 初次接入暴露的末端 GPU continuation 与完整 overlay 首次布局长任务，分别通过安装完成后的明确浏览器让步，以及每批 `32` 个节点的隐藏 wrapper 逐批展开收敛；最终 overlay 恢复原直接子节点结构，取消、迟到和回滚仍由同一 prepared transaction 持有。
+- `webgl-generator-prepared-render-installer-regression` 与复合 Worker 专项通过，后者覆盖 generation Worker / fallback、取消、迟到和 `99846` grid cells 大图。生产构建通过；真实 Chrome 的 10k / 100k 分别为 `10004 / 99846` grid cells、prepared load `1 / 1`、legacy load `0 / 0`、输出包 `948 / 4435`、decode 最大 `4.6 / 33.7ms`、overlay reveal `102.8 / 239.8ms`，两档 LongTask、残留批次、非性能 health、普通应用 console、page、WebGL 与 Loading 错误全部为 `0`。
+- 本阶段产品增量约 `434` 行，专项与薄浏览器工具约 `239` 行；浏览器工具为 `171` 行，未新增诊断大脚本。阶段内子智能体启动与等待均为 `0`。阶段 B 已闭合，第 322 项仍处于执行中，后续严格进入阶段 C，集成冻结前不重复启动独立复核角色。

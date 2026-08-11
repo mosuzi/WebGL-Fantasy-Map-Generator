@@ -46,6 +46,11 @@ import {
   MILITARY_POLICY_WORKER_TASK,
   runMilitaryPolicyWorkerTask
 } from "./military-policy-worker-task.js";
+import {
+  collectGenerationWorkerTransferables,
+  GENERATION_WORKER_TASK,
+  runGenerationWorkerTask
+} from "./generation-worker-task.js";
 
 const WORKER_TASK_HANDLERS = Object.freeze({
   "regeneration.compute": runRegenerationWorkerTask,
@@ -59,7 +64,8 @@ const WORKER_TASK_HANDLERS = Object.freeze({
   [ECONOMY_WORKER_TASK]: runEconomyWorkerTask,
   [POPULATION_WORKER_TASK]: runPopulationWorkerTask,
   [ROUTE_PATH_WORKER_TASK]: runRoutePathWorkerTask,
-  [MILITARY_POLICY_WORKER_TASK]: runMilitaryPolicyWorkerTask
+  [MILITARY_POLICY_WORKER_TASK]: runMilitaryPolicyWorkerTask,
+  [GENERATION_WORKER_TASK]: runGenerationWorkerTask
 });
 
 const WORKER_TASK_TRANSFER_COLLECTORS = Object.freeze({
@@ -74,7 +80,8 @@ const WORKER_TASK_TRANSFER_COLLECTORS = Object.freeze({
   [ECONOMY_WORKER_TASK]: collectEconomyWorkerTransferables,
   [POPULATION_WORKER_TASK]: collectPopulationWorkerTransferables,
   [ROUTE_PATH_WORKER_TASK]: collectRoutePathWorkerTransferables,
-  [MILITARY_POLICY_WORKER_TASK]: collectMilitaryPolicyWorkerTransferables
+  [MILITARY_POLICY_WORKER_TASK]: collectMilitaryPolicyWorkerTransferables,
+  [GENERATION_WORKER_TASK]: collectGenerationWorkerTransferables
 });
 
 export function getWorkerTaskHandler(task) {
