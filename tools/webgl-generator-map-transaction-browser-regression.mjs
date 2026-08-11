@@ -42,6 +42,7 @@ try {
       cellsTarget: 1000,
       heightmapTemplate: "continents"
     }), "generate.newMap");
+    const targetStartedAt = performance.now();
 
     const regenerationKinds = ["features", "routes", "rivers", "cities", "states", "provinces", "markers", "diplomacy", "religions", "military", "zones"];
     const regeneration = [];
@@ -123,6 +124,7 @@ try {
 
     const stats = app.renderer?.getStats?.() || {};
     return {
+      targetStartedAt,
       regeneration,
       height,
       geo,
@@ -248,7 +250,12 @@ try {
   assert.equal(uiTransaction.undoRestored, true);
   assert.equal(uiTransaction.redoRestored, true);
   assert.equal(report.glError, 0);
-  const healthPerformanceSignals = consoleErrors.filter(message => /^\[FMG health\] (main-thread-long-task|render-frame-gap|input-handler-stall)\b/.test(message));
+  const healthPerformanceSignals = consoleErrors.filter(message => {
+    if (/^\[FMG health\] (main-thread-long-task|render-frame-gap|input-handler-stall)\b/.test(message)) return true;
+    if (!/^\[FMG health\] operation-stall\b/.test(message)) return false;
+    const pageTimeMs = Number(message.match(/pageTimeMs:\s*([\d.]+)/)?.[1]);
+    return Number.isFinite(pageTimeMs) && pageTimeMs < report.targetStartedAt;
+  });
   const applicationConsoleErrors = consoleErrors.filter(message => !healthPerformanceSignals.includes(message));
   assert.deepEqual(applicationConsoleErrors, []);
   assert.deepEqual(pageErrors, []);

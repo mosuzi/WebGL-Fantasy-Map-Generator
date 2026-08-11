@@ -1,4 +1,5 @@
 import {createGenerationSummary} from "../generator/index.js";
+import {executeRenderPreparationTask} from "../renderer/render-preparation.js";
 import {
   climateDownstreamRegenerationSalt,
   inspectClimateDownstreamRebuild
@@ -49,6 +50,9 @@ const ECONOMY_WRITE_SET = Object.freeze([
 export async function runClimateDownstreamWorkerTask(payload, context = {}) {
   const map = payload?.map;
   if (!map || typeof map !== "object") throw taskError("worker_climate_downstream_map_missing", "气候下游 Worker 缺少地图快照");
+  if (payload?.mode === "render-only") return renderOnly(payload, map, context);
+  const startedAt = currentTime();
+  const timingChunks = [];
   const preview = inspectClimateDownstreamRebuild(map, {
     systems: payload?.systems || payload?.selectedSystems || [],
     seed: payload?.seed
@@ -83,7 +87,9 @@ export async function runClimateDownstreamWorkerTask(payload, context = {}) {
     for (const domain of domains) constraintBundle.assertDomain(map, domain, "before");
     const regenerationSalt = prepareRegenerationSalt(map, preview.seed, step.system);
     failAt(payload?.faultAt, `before:${step.system}`);
+    const stepStartedAt = currentTime();
     const result = executeSystem(map, step.system, constraintBundle);
+    timingChunks.push({id: `system:${step.system}`, blockingMs: roundTiming(currentTime() - stepStartedAt)});
     if (!result || result.executed === false) {
       throw taskError("worker_climate_downstream_incomplete", `气候下游重算未完成：${step.system}`);
     }
@@ -101,6 +107,13 @@ export async function runClimateDownstreamWorkerTask(payload, context = {}) {
   const patch = createDomainPatch(policy.domain, policy.allowedPaths, map);
   report(context, "patch", "正在生成气候下游领域补丁", 0.93);
   checkpoint(context);
+  const preparedRender = payload?.render
+    ? await executeRenderPreparationTask({
+        ...payload.render,
+        map,
+        binding: payload.render.binding || context.binding || null
+      }, context)
+    : null;
   return {
     kind: "climate-downstream",
     binding: context.binding || null,
@@ -111,15 +124,19 @@ export async function runClimateDownstreamWorkerTask(payload, context = {}) {
       requiredSystems: [...preview.requiredSystems],
       selectedSystems: [...preview.selectedSystems],
       executionOrder: [...preview.executionOrder],
+      candidates: preview.candidates.map(candidate => ({...candidate})),
+      estimatedAffected: preview.estimatedAffected,
       steps: steps.map(publicStep),
       staleSystems: [...(map.metadata?.derivedStale?.systems || [])],
-      checksum: map.metadata?.checksum || map.summary?.checksum || ""
+      checksum: map.metadata?.checksum || map.summary?.checksum || "",
+      timings: summarizeTimings(timingChunks, currentTime() - startedAt)
     },
     patch,
     refresh: {
       derived: ["cell-colors", "political-boundaries", "point-layers", "line-layers", "labels", "route-mesh", "object-panels", "object-index"],
       picking: "all"
-    }
+    },
+    preparedRender
   };
 }
 
@@ -136,7 +153,18 @@ export function getClimateDownstreamPatchPolicy(systems = []) {
 }
 
 export function collectClimateDownstreamWorkerTransferables(result) {
-  return collectWorkerTransferables(result?.patch || result);
+  return collectWorkerTransferables({patch: result?.patch || null, preparedRender: result?.preparedRender || null});
+}
+
+async function renderOnly(payload, map, context) {
+  if (!payload.render || typeof payload.render !== "object") {
+    throw taskError("worker_climate_downstream_render_missing", "气候下游渲染准备缺少渲染上下文");
+  }
+  const binding = payload.render.binding || context.binding || null;
+  checkpoint(context);
+  const preparedRender = await executeRenderPreparationTask({...payload.render, map, binding}, context);
+  checkpoint(context);
+  return {mode: "render-only", binding: context.binding || null, preparedRender};
 }
 
 function executeSystem(map, system, constraintBundle) {
@@ -204,17 +232,35 @@ function emptyResult(preview, binding, reason = "no-systems") {
     result: {
       executed: false,
       reason,
+      preview: structuredClone(preview),
       seed: preview.seed,
       requestedSystems: [...preview.requestedSystems],
       requiredSystems: [...preview.requiredSystems],
       selectedSystems: [...preview.selectedSystems],
       executionOrder: [...preview.executionOrder],
       steps: [],
-      staleSystems: [...preview.staleSystems]
+      staleSystems: [...preview.staleSystems],
+      timings: {chunks: [], maxBlockingMs: 0, totalMs: 0}
     },
     patch: createDomainPatch("climate-downstream", [], {}),
     refresh: {derived: [], picking: "none"}
   };
+}
+
+function summarizeTimings(chunks, totalMs) {
+  return {
+    chunks: chunks.map(chunk => ({...chunk})),
+    maxBlockingMs: roundTiming(chunks.reduce((max, chunk) => Math.max(max, chunk.blockingMs), 0)),
+    totalMs: roundTiming(totalMs)
+  };
+}
+
+function currentTime() {
+  return typeof globalThis.performance?.now === "function" ? globalThis.performance.now() : Date.now();
+}
+
+function roundTiming(value) {
+  return Math.round(Number(value || 0) * 100) / 100;
 }
 
 function publicStep(step) {

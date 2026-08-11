@@ -1,4 +1,5 @@
 import {createGenerationSummary} from "../generator/index.js";
+import {executeRenderPreparationTask} from "../renderer/render-preparation.js";
 import {
   assertOceanCurrentWorldIdentity,
   rebuildOceanCurrentWorldStage,
@@ -21,6 +22,9 @@ export const OCEAN_CURRENT_WORLD_WORKER_TASK = "ocean-current-world.compute";
 export async function runOceanCurrentWorldWorkerTask(payload, context = {}) {
   const map = payload?.map;
   if (!map || typeof map !== "object") throw taskError("worker_ocean_current_world_map_missing", "洋流世界 Worker 缺少地图快照");
+  if (payload?.mode === "render-only") return renderOnly(payload, map, context);
+  const startedAt = currentTime();
+  const timingChunks = [];
   const seafloorPlan = payload?.seafloorPlan || null;
   const preview = inspectOceanCurrentWorldRebuild(map, {
     seed: payload?.seed,
@@ -39,11 +43,14 @@ export async function runOceanCurrentWorldWorkerTask(payload, context = {}) {
   checkpoint(context);
   report(context, "prepare", "正在准备洋流世界整链重算", 0.03);
   if (seafloorPlan) {
+    const stepStartedAt = currentTime();
     failAt(payload?.faultAt, "before:seafloor");
     const command = createResetSeafloorCommand(seafloorPlan);
     if (command.isNoop?.({map})) throw taskError("worker_ocean_current_world_seafloor_noop", "海底重设准备阶段没有可应用变化");
     command.apply({map});
-    steps.push({system: "seafloor", result: {executed: true, result: command.getResult?.()}});
+    const durationMs = roundTiming(currentTime() - stepStartedAt);
+    timingChunks.push({id: "world:seafloor", blockingMs: durationMs});
+    steps.push({system: "seafloor", result: {executed: true, result: command.getResult?.()}, durationMs});
     failAt(payload?.faultAt, "after:seafloor");
     checkpoint(context);
   }
@@ -53,6 +60,7 @@ export async function runOceanCurrentWorldWorkerTask(payload, context = {}) {
     report(context, system, `正在重算${systemLabel(system)}`, 0.08 + (index / OCEAN_CURRENT_WORLD_REBUILD_ORDER.length) * 0.8);
     checkpoint(context);
     failAt(payload?.faultAt, `before:${system}`);
+    const stepStartedAt = currentTime();
     const result = await rebuildOceanCurrentWorldStage(map, system, {
       seed: preview.seed,
       signal: context.signal || null,
@@ -61,7 +69,9 @@ export async function runOceanCurrentWorldWorkerTask(payload, context = {}) {
     if (!result || result.executed === false && result.reason !== "domain-fully-locked") {
       throw taskError("worker_ocean_current_world_incomplete", `洋流世界重算未完成：${system}`);
     }
-    steps.push({system, result});
+    const durationMs = roundTiming(currentTime() - stepStartedAt);
+    timingChunks.push({id: `world:${system}`, blockingMs: durationMs});
+    steps.push({system, result, durationMs});
     failAt(payload?.faultAt, `after:${system}`);
     checkpoint(context);
   }
@@ -79,32 +89,66 @@ export async function runOceanCurrentWorldWorkerTask(payload, context = {}) {
   constraintBundle.assertDomain(map, "world", "after");
   checkpoint(context);
   report(context, "replacement", "正在准备洋流世界替换结果", 0.95);
+  const preparedRender = payload?.render
+    ? await executeRenderPreparationTask({
+        ...payload.render,
+        map,
+        binding: payload.render.binding || context.binding || null
+      }, context)
+    : null;
   return {
     kind: "ocean-current-world",
     binding: context.binding || null,
     result: {
       executed: true,
+      preview: structuredClone(preview),
       seed: preview.seed,
       includeSeafloor: Boolean(seafloorPlan),
       executionOrder: [...OCEAN_CURRENT_WORLD_REBUILD_ORDER],
       steps: steps.map(step => ({
-        system: step.system,
+        ...step,
+        result: structuredClone(step.result),
         executed: step.result?.executed !== false,
         reason: step.result?.reason || ""
       })),
       staleSystems: [...(map.metadata?.derivedStale?.systems || [])],
-      checksum: map.metadata?.checksum || map.summary?.checksum || ""
+      checksum: map.metadata?.checksum || map.summary?.checksum || "",
+      timings: summarizeTimings(timingChunks, currentTime() - startedAt),
+      command: {
+        label: seafloorPlan ? "重设海底并重算洋流世界" : "重算洋流与世界派生",
+        domain: "ocean-current-world",
+        effects: {
+          render: "draw",
+          selection: "refresh",
+          runtimeStats: true,
+          pickPanel: true,
+          derived: ["terrain-caches", "height-field", "cell-colors", "political-boundaries", "point-layers", "line-layers", "labels", "route-mesh", "object-panels", "object-index"],
+          affected: OCEAN_CURRENT_WORLD_REBUILD_ORDER.map(id => ({kind: "system", id}))
+        }
+      }
     },
     replacementMap: map,
     refresh: {
       derived: ["terrain-caches", "height-field", "cell-colors", "political-boundaries", "point-layers", "line-layers", "labels", "route-mesh", "river-mesh", "object-panels", "object-index"],
       picking: "all"
-    }
+    },
+    preparedRender
   };
 }
 
 export function collectOceanCurrentWorldWorkerTransferables(result) {
-  return collectWorkerTransferables(result?.replacementMap || result);
+  return collectWorkerTransferables({replacementMap: result?.replacementMap || null, preparedRender: result?.preparedRender || null});
+}
+
+async function renderOnly(payload, map, context) {
+  if (!payload.render || typeof payload.render !== "object") {
+    throw taskError("worker_ocean_current_world_render_missing", "洋流世界渲染准备缺少渲染上下文");
+  }
+  const binding = payload.render.binding || context.binding || null;
+  checkpoint(context);
+  const preparedRender = await executeRenderPreparationTask({...payload.render, map, binding}, context);
+  checkpoint(context);
+  return {mode: "render-only", binding: context.binding || null, preparedRender};
 }
 
 function emptyResult(preview, binding, reason) {
@@ -114,14 +158,32 @@ function emptyResult(preview, binding, reason) {
     result: {
       executed: false,
       reason,
+      preview: structuredClone(preview),
       seed: preview.seed,
       includeSeafloor: Boolean(preview.includeSeafloor),
       executionOrder: [...preview.executionOrder],
-      steps: []
+      steps: [],
+      timings: {chunks: [], maxBlockingMs: 0, totalMs: 0}
     },
     replacementMap: null,
     refresh: {derived: [], picking: "none"}
   };
+}
+
+function summarizeTimings(chunks, totalMs) {
+  return {
+    chunks: chunks.map(chunk => ({...chunk})),
+    maxBlockingMs: roundTiming(chunks.reduce((max, chunk) => Math.max(max, chunk.blockingMs), 0)),
+    totalMs: roundTiming(totalMs)
+  };
+}
+
+function currentTime() {
+  return typeof globalThis.performance?.now === "function" ? globalThis.performance.now() : Date.now();
+}
+
+function roundTiming(value) {
+  return Math.round(Number(value || 0) * 100) / 100;
 }
 
 function clearGeneratedCityLabelHides(map) {

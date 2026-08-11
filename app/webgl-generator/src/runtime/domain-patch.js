@@ -34,6 +34,34 @@ export function createDomainPatchCommand({patch, policy, label, historyDomain, e
   };
 }
 
+export function createMapReplacementCommand({replacementMap, label, historyDomain, effects, result, afterSwap}) {
+  if (!replacementMap || typeof replacementMap !== "object" || Array.isArray(replacementMap)) {
+    throw patchError("worker_replacement_invalid", "Worker 地图替换结果无效");
+  }
+  let alternate = replacementMap;
+  let applied = false;
+  return {
+    label: String(label || "应用地图替换结果"),
+    domain: String(historyDomain || "worker-map-replacement"),
+    effects,
+    apply(context) {
+      alternate = swapObjectContents(context.map, alternate, afterSwap);
+      applied = true;
+    },
+    revert(context) {
+      if (!applied) throw patchError("worker_replacement_revert_invalid", "地图替换结果尚未应用，无法撤销");
+      alternate = swapObjectContents(context.map, alternate, afterSwap);
+      applied = false;
+    },
+    isNoop() {
+      return false;
+    },
+    getResult() {
+      return result;
+    }
+  };
+}
+
 export function assertDomainPatch(patch) {
   if (!patch || patch.version !== DOMAIN_PATCH_VERSION || !patch.domain || !Array.isArray(patch.writeSet) || !Array.isArray(patch.operations)) {
     throw patchError("worker_patch_invalid", "Worker 领域补丁无效");
@@ -234,6 +262,58 @@ function normalizeWriteSet(writeSet) {
     result.push(path);
   }
   return result;
+}
+
+function swapObjectContents(target, replacement, afterSwap) {
+  if (!target || typeof target !== "object" || Array.isArray(target)) {
+    throw patchError("worker_replacement_target_invalid", "地图替换目标无效");
+  }
+  const targetDescriptors = Object.getOwnPropertyDescriptors(target);
+  const replacementDescriptors = Object.getOwnPropertyDescriptors(replacement);
+  preflightObjectReplacement(target, replacementDescriptors);
+  preflightObjectReplacement(replacement, targetDescriptors);
+  try {
+    replaceOwnProperties(target, replacementDescriptors);
+    replaceOwnProperties(replacement, targetDescriptors);
+    afterSwap?.(target);
+  } catch (error) {
+    const rollbackFailures = [];
+    try {
+      replaceOwnProperties(target, targetDescriptors);
+    } catch (failure) {
+      rollbackFailures.push(failure);
+    }
+    try {
+      replaceOwnProperties(replacement, replacementDescriptors);
+    } catch (failure) {
+      rollbackFailures.push(failure);
+    }
+    if (rollbackFailures.length) {
+      const combined = patchError("worker_replacement_rollback_failed", `地图替换失败且回滚失败：${error?.message || error}`);
+      combined.cause = new AggregateError([error, ...rollbackFailures], "地图替换与回滚均存在错误");
+      throw combined;
+    }
+    throw error;
+  }
+  return replacement;
+}
+
+function preflightObjectReplacement(target, nextDescriptors) {
+  for (const key of Reflect.ownKeys(target)) {
+    if (Object.getOwnPropertyDescriptor(target, key)?.configurable === false) {
+      throw patchError("worker_replacement_target_unsafe", `地图替换目标包含不可配置字段：${String(key)}`);
+    }
+  }
+  if (!Object.isExtensible(target)) {
+    const currentKeys = new Set(Reflect.ownKeys(target));
+    const added = Reflect.ownKeys(nextDescriptors).find(key => !currentKeys.has(key));
+    if (added !== undefined) throw patchError("worker_replacement_target_unsafe", `地图替换目标不可扩展：${String(added)}`);
+  }
+}
+
+function replaceOwnProperties(target, descriptors) {
+  for (const key of Reflect.ownKeys(target)) delete target[key];
+  Object.defineProperties(target, descriptors);
 }
 
 function patchError(code, message) {

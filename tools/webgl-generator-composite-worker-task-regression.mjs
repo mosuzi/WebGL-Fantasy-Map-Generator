@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import {createHash} from "node:crypto";
+import {readFile} from "node:fs/promises";
 import {serialize} from "node:v8";
 import {createGenerationSummary, generatePlaceholderMap} from "../app/webgl-generator/src/generator/index.js";
 import {
@@ -16,7 +17,7 @@ import {
   executeClimateDownstreamRebuild,
   inspectClimateDownstreamRebuild
 } from "../app/webgl-generator/src/runtime/climate-downstream-rebuild.js";
-import {createDomainPatchCommand} from "../app/webgl-generator/src/runtime/domain-patch.js";
+import {createDomainPatchCommand, createMapReplacementCommand} from "../app/webgl-generator/src/runtime/domain-patch.js";
 import {
   getHeightDerivedPatchPolicy,
   HEIGHT_DERIVED_WORKER_TASK
@@ -24,7 +25,9 @@ import {
 import {
   HEIGHT_BASE_REBUILD_STEPS,
   HEIGHT_DOWNSTREAM_REBUILD_STEPS,
-  rebuildHeightAllDerived
+  rebuildHeightAllDerived,
+  rebuildHeightBaseDerived,
+  rebuildHeightDownstreamDerived
 } from "../app/webgl-generator/src/runtime/height-derived-rebuild.js";
 import {ensureLabelStore} from "../app/webgl-generator/src/runtime/label-edit-commands.js";
 import {syncMilitaryStateMirrors} from "../app/webgl-generator/src/runtime/military-regeneration-variation.js";
@@ -55,6 +58,7 @@ const binding = {
 };
 const taskNames = [HEIGHT_DERIVED_WORKER_TASK, CLIMATE_DOWNSTREAM_WORKER_TASK, OCEAN_CURRENT_WORLD_WORKER_TASK];
 const report = {
+  wiring: {},
   registry: [],
   height: {},
   climate: {},
@@ -63,6 +67,8 @@ const report = {
   safety: {},
   large: {}
 };
+
+report.wiring = await verifyFormalRuntimeWiring();
 
 assert.deepEqual(
   [...HEIGHT_BASE_REBUILD_STEPS, ...HEIGHT_DOWNSTREAM_REBUILD_STEPS],
@@ -84,17 +90,19 @@ const expectedHeight = structuredClone(source);
 const legacyHeight = runLegacyHeight(expectedHeight);
 assert.equal(legacyHeight.executed, true);
 refreshGenerationSummary(expectedHeight);
-const heightWorker = await runWorkerMode(HEIGHT_DERIVED_WORKER_TASK, {map: source, scope: "all"}, "height-worker");
+const heightWorker = await runWorkerMode(HEIGHT_DERIVED_WORKER_TASK, {map: source, scope: "all", render: createRenderRequest()}, "height-worker");
 const heightWorkingMap = heightWorker.input.map;
 refreshGenerationSummary(heightWorkingMap);
 assertStableMapEqual(heightWorkingMap, expectedHeight, "高度复合 Worker 与既有编排不一致");
 assert.equal(heightWorker.output.binding.mapIdentity, binding.mapIdentity);
+assertPreparedOutput(heightWorker.output, "高度全部派生");
 assert.equal(heightWorker.output.result.executed, true);
 assert.equal(Object.prototype.hasOwnProperty.call(heightWorker.output, "map"), false);
 assert.equal(Object.prototype.hasOwnProperty.call(heightWorker.output, "sourceMap"), false);
 assert(!heightWorker.output.patch.writeSet.includes("summary"), "高度 Worker 不应把运行时 summary 作为领域补丁传回");
 
-const heightFallback = await runFallbackMode(HEIGHT_DERIVED_WORKER_TASK, {map: source, scope: "all"});
+const heightFallback = await runFallbackMode(HEIGHT_DERIVED_WORKER_TASK, {map: source, scope: "all", render: createRenderRequest()});
+assertPreparedOutput(heightFallback.output, "高度全部派生 fallback");
 refreshGenerationSummary(heightFallback.input.map);
 assertStableMapEqual(heightFallback.input.map, heightWorkingMap, "高度 Worker 与 fallback handler 语义不一致");
 assertStableValueEqual(heightFallback.output.result, heightWorker.output.result, "高度 Worker 与 fallback 结果摘要不一致");
@@ -129,6 +137,8 @@ report.height = {
   outputPackets: heightWorker.outputPackets,
   progressStages: heightWorker.progress.map(item => item.stage)
 };
+report.height.scopes = {};
+for (const scope of ["base", "downstream"]) report.height.scopes[scope] = await verifyHeightScopeContract(source, scope);
 console.log("[composite-worker] 高度 legacy / worker / fallback / patch / undo-redo 通过");
 
 const requestedClimateSystems = ["zones"];
@@ -153,20 +163,24 @@ assert.equal(legacyClimate.executed, true);
 const climateWorker = await runWorkerMode(CLIMATE_DOWNSTREAM_WORKER_TASK, {
   map: source,
   systems: requestedClimateSystems,
-  seed: "climate-composite"
+  seed: "climate-composite",
+  render: createRenderRequest()
 }, "climate-worker");
 const climateWorkingMap = climateWorker.input.map;
 refreshGenerationSummary(climateWorkingMap);
 assertStableMapEqual(climateWorkingMap, expectedClimate, "气候下游 Worker 与既有编排不一致");
 assert.equal(climateWorker.output.result.executed, true);
+assertPreparedOutput(climateWorker.output, "气候下游");
 assert.equal(Object.prototype.hasOwnProperty.call(climateWorker.output, "map"), false);
 assert.equal(Object.prototype.hasOwnProperty.call(climateWorker.output, "sourceMap"), false);
 
 const climateFallback = await runFallbackMode(CLIMATE_DOWNSTREAM_WORKER_TASK, {
   map: source,
   systems: requestedClimateSystems,
-  seed: "climate-composite"
+  seed: "climate-composite",
+  render: createRenderRequest()
 });
+assertPreparedOutput(climateFallback.output, "气候下游 fallback");
 refreshGenerationSummary(climateFallback.input.map);
 assertStableMapEqual(climateFallback.input.map, climateWorkingMap, "气候下游 Worker 与 fallback handler 语义不一致");
 const climateFormal = structuredClone(source);
@@ -217,10 +231,12 @@ assert.equal(legacyOcean.executed, true);
 assert.deepEqual(new Set(observedLegacySeeds), new Set([legacyOcean.preview.seed]), "旧整链编排没有显式传递 preview.seed");
 const oceanWorker = await runWorkerMode(OCEAN_CURRENT_WORLD_WORKER_TASK, {
   map: source,
-  seed: "ocean-composite"
+  seed: "ocean-composite",
+  render: createRenderRequest()
 }, "ocean-worker");
 const oceanReplacement = oceanWorker.output.replacementMap;
 assert.equal(oceanWorker.output.result.executed, true);
+assertPreparedOutput(oceanWorker.output, "洋流世界");
 assert.equal(Object.prototype.hasOwnProperty.call(oceanWorker.output, "sourceMap"), false);
 assertStableMapEqual(oceanReplacement, expectedOcean, "洋流世界 Worker 与正式旧整链编排不一致");
 assert.equal(oceanReplacement.grid.cells.temp[0], expectedOcean.grid.cells.temp[0], "洋流世界 seed 漂移导致温度首值不一致");
@@ -230,12 +246,38 @@ assert.equal(
   "洋流气候影响 checksum 不一致"
 );
 assertCompleteAliases(oceanReplacement, "洋流 replacement");
-const oceanFallback = await runFallbackMode(OCEAN_CURRENT_WORLD_WORKER_TASK, {map: source, seed: "ocean-composite"});
+const oceanFallback = await runFallbackMode(OCEAN_CURRENT_WORLD_WORKER_TASK, {map: source, seed: "ocean-composite", render: createRenderRequest()});
+assertPreparedOutput(oceanFallback.output, "洋流世界 fallback");
 assertStableMapEqual(oceanFallback.output.replacementMap, oceanReplacement, "洋流世界 Worker 与 fallback handler 语义不一致");
 assertSourceTypedUnchanged(source.pack.cells.h, sourceHeightCapture, "洋流 Worker 输入");
 assert(oceanWorker.output.replacementMap.pack.cells.h.byteLength > 0, "洋流 replacement 输出 buffer 被 detach");
 assert(oceanWorker.input.map.pack.cells.h.byteLength > 0, "洋流 Worker working buffer 被 output stream detach");
 assert(collectWorkerTaskTransferables(OCEAN_CURRENT_WORLD_WORKER_TASK, oceanWorker.output).length > 0, "洋流 registry 缺少 transferable 收集结果");
+const oceanFormal = structuredClone(source);
+const oceanCommand = createMapReplacementCommand({
+  replacementMap: structuredClone(oceanReplacement),
+  label: "洋流世界 Worker 测试替换",
+  effects: {},
+  result: oceanWorker.output.result
+});
+oceanCommand.apply({map: oceanFormal});
+assertStableMapEqual(oceanFormal, oceanReplacement, "洋流 replacement 没有提交到正式地图");
+assertCompleteAliases(oceanFormal, "洋流 replacement 提交");
+oceanCommand.revert({map: oceanFormal});
+assertStableMapEqual(oceanFormal, source, "洋流 replacement 撤销没有恢复源图");
+oceanCommand.apply({map: oceanFormal});
+assertStableMapEqual(oceanFormal, oceanReplacement, "洋流 replacement 重做没有恢复结果");
+const oceanFaultTarget = structuredClone(source);
+const oceanFaultBefore = structuredClone(oceanFaultTarget);
+const oceanFaultCommand = createMapReplacementCommand({
+  replacementMap: structuredClone(oceanReplacement),
+  effects: {},
+  afterSwap() {
+    throw new Error("replacement-commit-fault");
+  }
+});
+assert.throws(() => oceanFaultCommand.apply({map: oceanFaultTarget}), /replacement-commit-fault/);
+assertStableMapEqual(oceanFaultTarget, oceanFaultBefore, "洋流 replacement 提交故障没有精确回滚");
 
 const seafloorSource = generatePlaceholderMap({seed: "composite-worker-seafloor", cellsTarget: 2000, heightmapTemplate: "continents"});
 const seafloorPlan = buildSeafloorResetPlan(seafloorSource, {seed: "composite-seafloor-plan"});
@@ -259,6 +301,7 @@ assert.equal(expectedSeafloorExecution.preview.includeSeafloor, true);
 const seafloorWorker = await runWorkerMode(OCEAN_CURRENT_WORLD_WORKER_TASK, {
   map: seafloorSource,
   seed: "composite-seafloor-world",
+  render: createRenderRequest(),
   seafloorPlan
 }, "ocean-seafloor-worker");
 assert.equal(seafloorWorker.output.result.includeSeafloor, true);
@@ -283,10 +326,12 @@ report.locks.heightRivers = await verifyHeightRiverLocks(source);
 report.locks.climateZones = await verifyClimateZoneLocks(source);
 report.locks.oceanRivers = await verifyOceanRiverLocks(source);
 await verifyCancelAndFault(source);
+await verifyObsoleteFallback(source);
 report.safety = {
   sourceBufferHash: sourceHeightCapture.hash,
   cancellation: taskNames,
-  faults: ["height-after-rivers", "climate-after-markers", "ocean-after-climate"]
+  faults: ["height-after-rivers", "climate-after-markers", "ocean-after-climate"],
+  obsolete: taskNames
 };
 console.log("[composite-worker] 锁 / 取消 / 故障拒绝通过");
 
@@ -340,6 +385,68 @@ assertStableMapEqual(source, sourceSnapshot, "复合专项结束后正式源图�
 assertCompleteAliases(source, "复合专项源图");
 console.log(JSON.stringify({status: "PASS", ...report}, null, 2));
 
+async function verifyFormalRuntimeWiring() {
+  const [appSource, consoleApiSource] = await Promise.all([
+    readFile(new URL("../app/webgl-generator/src/runtime/app.js", import.meta.url), "utf8"),
+    readFile(new URL("../app/webgl-generator/src/runtime/console-api.js", import.meta.url), "utf8")
+  ]);
+  const heightEntries = [
+    ["rebuildBaseDerived", "base"],
+    ["rebuildDownstreamDerived", "downstream"],
+    ["rebuildAllDerived", "all"]
+  ];
+  for (const [method, scope] of heightEntries) {
+    assert.match(
+      appSource,
+      new RegExp(`${method}: \\(editOptions = \\{\\}\\) => operation\\.run\\([\\s\\S]{0,240}rebuildHeightDerivedViaAction\\(state, documentRef, "${scope}", editOptions, context\\)`),
+      `高度 ${scope} 正式入口未通过 operation.run 接入统一重建动作`
+    );
+    assert.match(
+      consoleApiSource,
+      new RegExp(`"height\\.${method}": \\{[^\\n]+async: true`),
+      `height.${method} 公开元数据未声明 async`
+    );
+  }
+  assert.match(
+    appSource,
+    /applyDownstreamRebuild: \(options = \{\}\) => operation\.run\([\s\S]{0,240}applyClimateDownstreamRebuildViaApi\(state, documentRef, options, context\)/,
+    "气候下游正式入口未通过 operation.run 接入统一重建动作"
+  );
+  assert.match(
+    appSource,
+    /rebuildWorld: \(options = \{\}\) => operation\.run\([\s\S]{0,240}applyOceanCurrentWorldRebuildViaAction\(state, documentRef, options, context\)/,
+    "洋流世界正式入口未通过 operation.run 接入统一重建动作"
+  );
+
+  const heightAction = extractTopLevelFunctionSource(appSource, "rebuildHeightDerivedViaAction");
+  const climateAction = extractTopLevelFunctionSource(appSource, "applyClimateDownstreamRebuildViaApi");
+  const oceanAction = extractTopLevelFunctionSource(appSource, "applyOceanCurrentWorldRebuildViaAction");
+  const coordinator = extractTopLevelFunctionSource(appSource, "executeWorkerMapMutation");
+  assert.match(heightAction, /executeWorkerMapMutation\(state, documentRef, \{/);
+  assert.match(heightAction, /task: HEIGHT_DERIVED_WORKER_TASK/);
+  assert.match(climateAction, /executeWorkerMapMutation\(state, documentRef, \{/);
+  assert.match(climateAction, /task: CLIMATE_DOWNSTREAM_WORKER_TASK/);
+  assert.match(oceanAction, /executeWorkerMapMutation\(state, documentRef, \{/);
+  assert.match(oceanAction, /task: OCEAN_CURRENT_WORLD_WORKER_TASK/);
+  assert.match(coordinator, /state\.workerTaskCoordinator\.run\(task,/);
+  assert.match(coordinator, /sameRegenerationWorkerBinding\(output\?\.binding, binding\)/);
+
+  return {
+    height: heightEntries.map(([, scope]) => scope),
+    climate: CLIMATE_DOWNSTREAM_WORKER_TASK,
+    ocean: OCEAN_CURRENT_WORLD_WORKER_TASK,
+    coordinator: "executeWorkerMapMutation"
+  };
+}
+
+function extractTopLevelFunctionSource(source, name) {
+  const match = new RegExp(`(?:async\\s+)?function\\s+${name}\\s*\\(`).exec(source);
+  assert(match, `未找到正式函数 ${name}`);
+  const end = source.indexOf("\n}\n\n", match.index);
+  assert(end >= 0, `无法确定正式函数 ${name} 的边界`);
+  return source.slice(match.index, end + 2);
+}
+
 async function runWorkerMode(task, payload, streamPrefix) {
   const inputTransit = await graphRoundTrip(payload, `${streamPrefix}:input`);
   const progress = [];
@@ -387,7 +494,7 @@ async function graphRoundTrip(value, streamId) {
   return {value: decoder.finish(), packets, transferredBytes};
 }
 
-function runLegacyHeight(map) {
+function runLegacyHeight(map, scope = "all") {
   const constraintBundle = captureRegenerationConstraintBundle(map, {closure: ["world"]});
   const regenerate = kind => {
     const domain = heightDomain(kind);
@@ -404,9 +511,57 @@ function runLegacyHeight(map) {
     constraintBundle.assertDomain(map, domain, "after");
     return result;
   };
-  const result = rebuildHeightAllDerived(regenerate);
+  const result = scope === "base"
+    ? rebuildHeightBaseDerived(regenerate)
+    : scope === "downstream"
+      ? rebuildHeightDownstreamDerived(regenerate)
+      : rebuildHeightAllDerived(regenerate);
   constraintBundle.assertDomain(map, "world", "after");
   return result;
+}
+
+async function verifyHeightScopeContract(sourceMap, scope) {
+  const expected = structuredClone(sourceMap);
+  const legacy = runLegacyHeight(expected, scope);
+  assert.equal(legacy.executed, true, `高度 ${scope} 旧编排没有执行`);
+  refreshGenerationSummary(expected);
+  const worker = await runWorkerMode(HEIGHT_DERIVED_WORKER_TASK, {
+    map: sourceMap,
+    scope,
+    render: createRenderRequest()
+  }, `height-${scope}-worker`);
+  refreshGenerationSummary(worker.input.map);
+  assertPreparedOutput(worker.output, `高度 ${scope}`);
+  assertStableMapEqual(worker.input.map, expected, `高度 ${scope} Worker 与旧编排不一致`);
+  const fallback = await runFallbackMode(HEIGHT_DERIVED_WORKER_TASK, {
+    map: sourceMap,
+    scope,
+    render: createRenderRequest()
+  });
+  refreshGenerationSummary(fallback.input.map);
+  assertPreparedOutput(fallback.output, `高度 ${scope} fallback`);
+  assertStableMapEqual(fallback.input.map, worker.input.map, `高度 ${scope} fallback 语义不一致`);
+  const formal = structuredClone(sourceMap);
+  const command = createDomainPatchCommand({
+    patch: worker.output.patch,
+    policy: getHeightDerivedPatchPolicy(scope, worker.output.result.changedKinds),
+    label: `高度 ${scope} Worker 测试补丁`,
+    effects: {}
+  });
+  command.apply({map: formal});
+  refreshGenerationSummary(formal);
+  assertStableMapEqual(formal, worker.input.map, `高度 ${scope} 补丁提交不一致`);
+  command.revert({map: formal});
+  refreshGenerationSummary(formal);
+  assertStableMapEqual(formal, sourceMap, `高度 ${scope} 补丁撤销不一致`);
+  command.apply({map: formal});
+  refreshGenerationSummary(formal);
+  assertStableMapEqual(formal, worker.input.map, `高度 ${scope} 补丁重做不一致`);
+  return {
+    patchOperations: worker.output.patch.operations.length,
+    preparedLayers: Object.keys(worker.output.preparedRender.layers),
+    fallback: fallback.output.worker.mode
+  };
 }
 
 function executeClimateSystem(map, system, constraintBundle) {
@@ -555,6 +710,55 @@ async function verifyCancelAndFault(sourceMap) {
       `${task} 故障注入没有返回结构化错误`
     );
   }
+}
+
+async function verifyObsoleteFallback(sourceMap) {
+  for (const task of taskNames) {
+    let valid = true;
+    const coordinator = createWorkerTaskCoordinator({
+      getBinding: () => binding,
+      validateBinding: () => valid
+    });
+    const payload = task === HEIGHT_DERIVED_WORKER_TASK
+      ? {map: sourceMap, scope: "base", render: createRenderRequest()}
+      : task === CLIMATE_DOWNSTREAM_WORKER_TASK
+        ? {map: sourceMap, systems: ["zones"], seed: "climate-obsolete", render: createRenderRequest()}
+        : {map: sourceMap, seed: "ocean-obsolete", render: createRenderRequest()};
+    await assert.rejects(
+      () => coordinator.run(task, payload, {
+        forceFallback: true,
+        onProgress() {
+          valid = false;
+        }
+      }),
+      error => error?.code === "operation_obsolete",
+      `${task} 过期 fallback 结果没有拒绝`
+    );
+  }
+}
+
+function createRenderRequest() {
+  return {
+    binding: {mapIdentity: binding.mapIdentity, mapRevision: binding.mapRevision},
+    layers: ["point"],
+    camera: {scale: 1, offsetX: 0, offsetY: 0},
+    canvas: {width: 1200, height: 720, clientWidth: 1200, clientHeight: 720},
+    visibility: {},
+    visualTheme: {},
+    unitPreferences: {},
+    viewOptions: {},
+    labelOptions: {}
+  };
+}
+
+function assertPreparedOutput(output, label) {
+  assert.deepEqual(output.binding, binding, `${label} 输出绑定不精确`);
+  assert(output.preparedRender, `${label} 缺少 preparedRender`);
+  assert.deepEqual(output.preparedRender.binding, {
+    mapIdentity: binding.mapIdentity,
+    mapRevision: binding.mapRevision
+  }, `${label} preparedRender 绑定不精确`);
+  assert(output.preparedRender.layers.point?.vertices instanceof Float32Array, `${label} 缺少 point 渲染准备结果`);
 }
 
 function lockObjects(map, kind, items) {

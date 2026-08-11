@@ -1,4 +1,5 @@
 import {createDomainPatch} from "./domain-patch.js";
+import {executeRenderPreparationTask} from "../renderer/render-preparation.js";
 import {
   HEIGHT_BASE_REBUILD_STEPS,
   HEIGHT_DOWNSTREAM_REBUILD_STEPS,
@@ -30,6 +31,7 @@ const DOMAIN_BY_KIND = Object.freeze({
 export async function runHeightDerivedWorkerTask(payload, context = {}) {
   const map = payload?.map;
   if (!map || typeof map !== "object") throw taskError("worker_height_derived_map_missing", "高度派生 Worker 缺少地图快照");
+  if (payload?.mode === "render-only") return renderOnly(payload, map, context);
   const scope = normalizeScope(payload?.scope);
   const kinds = scopeKinds(scope);
   const constraintBundle = captureRegenerationConstraintBundle(map, {closure: ["world"]});
@@ -89,6 +91,13 @@ export async function runHeightDerivedWorkerTask(payload, context = {}) {
   const patch = createDomainPatch(policy.domain, executed ? policy.allowedPaths : [], map);
   checkpoint(context);
   report(context, "patch", "正在生成高度派生领域补丁", 0.92);
+  const preparedRender = executed && payload?.render
+    ? await executeRenderPreparationTask({
+        ...payload.render,
+        map,
+        binding: payload.render.binding || context.binding || null
+      }, context)
+    : null;
   return {
     kind: "height-derived",
     scope,
@@ -103,7 +112,8 @@ export async function runHeightDerivedWorkerTask(payload, context = {}) {
     refresh: {
       derived: ["terrain-caches", "height-field", "cell-colors", "political-boundaries", "point-layers", "line-layers", "labels", "route-mesh", "river-mesh", "object-panels", "object-index"],
       picking: "all"
-    }
+    },
+    preparedRender
   };
 }
 
@@ -118,7 +128,18 @@ export function getHeightDerivedPatchPolicy(scope = "all", changedKinds = null) 
 }
 
 export function collectHeightDerivedWorkerTransferables(result) {
-  return collectWorkerTransferables(result?.patch || result);
+  return collectWorkerTransferables({patch: result?.patch || null, preparedRender: result?.preparedRender || null});
+}
+
+async function renderOnly(payload, map, context) {
+  if (!payload.render || typeof payload.render !== "object") {
+    throw taskError("worker_height_derived_render_missing", "高度派生渲染准备缺少渲染上下文");
+  }
+  const binding = payload.render.binding || context.binding || null;
+  checkpoint(context);
+  const preparedRender = await executeRenderPreparationTask({...payload.render, map, binding}, context);
+  checkpoint(context);
+  return {mode: "render-only", binding: context.binding || null, preparedRender};
 }
 
 function buildAggregate(scope, steps) {
@@ -151,7 +172,7 @@ function unionPaths(groups) {
 
 function kindLabel(kind) {
   return ({
-    features: "Feature 与岸线",
+    features: "地理要素与岸线",
     rivers: "河流",
     states: "国家、省份、城镇与道路",
     religions: "宗教",

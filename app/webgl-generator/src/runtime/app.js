@@ -15,7 +15,7 @@ import {normalizeAtmosphereDirection, normalizeClimateLatitudeMode, normalizeWin
 import {createRandom, createRandomSeed} from "../generator/random.js";
 import {PlaceholderMapRenderer} from "../renderer/placeholder-renderer.js";
 import {prepareRendererWorkerInstall} from "../renderer/prepared-render-installer.js";
-import {renderPreparationLayersForRegeneration} from "../renderer/render-preparation.js";
+import {RENDER_PREPARATION_LAYERS, renderPreparationLayersForRegeneration} from "../renderer/render-preparation.js";
 import {
   createUserVisualThemeDocument,
   exportVisualThemeDocument,
@@ -113,18 +113,18 @@ import {createHeightSelectionSmoothingPlan} from "./height-selection-smoothing.j
 import {captureClimatePopulation, restoreClimatePopulation} from "./climate-population-preservation.js";
 import {getHeightTerrainTemplateChanges, heightTerrainTemplateLabel, heightTerrainTemplateUsesSeed, inspectHeightTerrainTemplate} from "./height-terrain-templates.js";
 import {getHeightTerrainTemplateProgramChanges, heightTerrainTemplateProgramUsesSeed, inspectHeightTerrainTemplateProgram} from "./height-terrain-template-programs.js";
-import {createRegenerationResult, HEIGHT_BASE_REBUILD_STEPS, HEIGHT_DOWNSTREAM_REBUILD_STEPS, rebuildHeightAllDerived, rebuildHeightBaseDerived, rebuildHeightDownstreamDerived} from "./height-derived-rebuild.js";
-import {buildSeafloorResetPlan, createResetSeafloorCommand, seafloorResetPreviewChanges} from "./seafloor-reset.js";
+import {createRegenerationResult, HEIGHT_BASE_REBUILD_STEPS, HEIGHT_DOWNSTREAM_REBUILD_STEPS} from "./height-derived-rebuild.js";
+import {buildSeafloorResetPlan, seafloorResetPreviewChanges} from "./seafloor-reset.js";
 import {createRegenerateOceanCurrentsCommand, createRenameOceanCurrentCommand} from "./ocean-current-edit-commands.js";
-import {assertOceanCurrentWorldIdentity, rebuildOceanCurrentWorldStage, snapshotOceanCurrentWorldIdentity} from "../generator/ocean-current-world.js";
-import {executeOceanCurrentWorldRebuild, inspectOceanCurrentWorldRebuild} from "./ocean-current-world-rebuild.js";
+import {assertOceanCurrentWorldIdentity, snapshotOceanCurrentWorldIdentity} from "../generator/ocean-current-world.js";
+import {inspectOceanCurrentWorldRebuild, OCEAN_CURRENT_WORLD_REBUILD_ORDER} from "./ocean-current-world-rebuild.js";
 import {oceanCurrentBounds} from "../renderer/ocean-current-layer.js";
 import {createAddCustomLabelCommand, createDeleteLabelCommand, createMoveCustomLabelCommand, createRenameCustomLabelCommand, createRestoreGeneratedLabelCommand, createSetLabelNoteCommand, ensureLabelStore} from "./label-edit-commands.js";
 import {createPatchLabelStyleCommand, createResetAllLabelStylesCommand, createResetLabelStyleCommand} from "./label-style-edit-commands.js";
 import {LABEL_STYLE_TYPES, readLabelStyleOverride, resolveLabelStyle} from "./label-style-registry.js";
 import {createPatchLabelLayoutCommand} from "./label-layout-edit-commands.js";
 import {readLabelLayoutOverride} from "./label-layout-registry.js";
-import {createAddMarkerCommand, createDeleteMarkerCommand, createMoveMarkerCommand, createRegenerateResourceMarkersCommand, createSetMarkerNoteCommand, createSetMarkerVisualCommand, regenerateResourceMarkersInChunks} from "./marker-edit-commands.js";
+import {createAddMarkerCommand, createDeleteMarkerCommand, createMoveMarkerCommand, createRegenerateResourceMarkersCommand, createSetMarkerNoteCommand, createSetMarkerVisualCommand} from "./marker-edit-commands.js";
 import {createDeleteMeasurementCommand, createImportMeasurementsCommand, createRenameMeasurementCommand, createSaveMeasurementCommand, createUpdateMeasurementPointsCommand} from "./measurement-edit-commands.js";
 import {measurementHighlightObject, measurementShapeClass} from "./measurement-highlights.js";
 import {
@@ -201,12 +201,15 @@ import {
   inspectNamebaseRuleTransaction
 } from "./namebase-rule-transactions.js";
 import {createRuleInspectionResult, normalizeRuleInspectionInput} from "./rule-inspection-token.js";
-import {executeClimateDownstreamRebuildAsync, inspectClimateDownstreamRebuild} from "./climate-downstream-rebuild.js";
+import {inspectClimateDownstreamRebuild} from "./climate-downstream-rebuild.js";
+import {CLIMATE_DOWNSTREAM_WORKER_TASK, getClimateDownstreamPatchPolicy} from "./climate-downstream-worker-task.js";
 import {captureMapMutationSnapshot, executeMapSnapshotTransaction, restoreMapMutationSnapshot} from "./map-snapshot-transaction.js";
-import {createDomainPatchCommand} from "./domain-patch.js";
+import {createDomainPatchCommand, createMapReplacementCommand} from "./domain-patch.js";
+import {getHeightDerivedPatchPolicy, HEIGHT_DERIVED_WORKER_TASK} from "./height-derived-worker-task.js";
 import {getRegenerationPatchPolicy} from "./regeneration-worker-task.js";
 import {createWorkerTaskCoordinator} from "./worker-task-coordinator.js";
 import {createStagedWorkerSnapshot} from "./worker-snapshot.js";
+import {OCEAN_CURRENT_WORLD_WORKER_TASK} from "./ocean-current-world-worker-task.js";
 import {commitPreparedGridTopology, inspectGridRefinement, inspectGridStructureWrite, prepareGridRefinement, prepareGridStructureWrite} from "./grid-topology-api.js";
 import {SelectionStore} from "./selection-store.js";
 import {decideSelectionPanelRoute, SELECTION_PANEL_BINDINGS, SELECTION_PANEL_ROUTE} from "./selection-panel-policy.js";
@@ -1192,17 +1195,35 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
         updateHeightPanel(state);
       }
     },
-    onRegenerateBase: () => {
+    onRegenerateBase: async () => {
       cancelHeightLine(state, documentRef);
-      runtimeActions.edit.height.rebuildBaseDerived({confirm: true});
+      try {
+        return await runtimeActions.edit.height.rebuildBaseDerived({confirm: true});
+      } catch (error) {
+        state.heightEdit.lastNotice = heightDerivedRebuildFailureMessage(error);
+        updateHeightPanel(state);
+        return false;
+      }
     },
-    onRegenerateDownstream: () => {
+    onRegenerateDownstream: async () => {
       cancelHeightLine(state, documentRef);
-      runtimeActions.edit.height.rebuildDownstreamDerived({confirm: true});
+      try {
+        return await runtimeActions.edit.height.rebuildDownstreamDerived({confirm: true});
+      } catch (error) {
+        state.heightEdit.lastNotice = heightDerivedRebuildFailureMessage(error);
+        updateHeightPanel(state);
+        return false;
+      }
     },
-    onRegenerateAll: () => {
+    onRegenerateAll: async () => {
       cancelHeightLine(state, documentRef);
-      runtimeActions.edit.height.rebuildAllDerived({confirm: true});
+      try {
+        return await runtimeActions.edit.height.rebuildAllDerived({confirm: true});
+      } catch (error) {
+        state.heightEdit.lastNotice = heightDerivedRebuildFailureMessage(error);
+        updateHeightPanel(state);
+        return false;
+      }
     }
   });
   state.panels.height = heightPanel;
@@ -3231,19 +3252,19 @@ function createRuntimeActions(state, documentRef, options = {}) {
           context => applySeafloorResetViaAction(state, documentRef, editOptions, context),
           {message: "正在重设海底并重算世界", isNoop: result => !result?.executed}
         ),
-        rebuildBaseDerived: (editOptions = {}) => operation.runSync(
+        rebuildBaseDerived: (editOptions = {}) => operation.run(
           "edit.height.rebuildBaseDerived",
-          () => rebuildHeightDerivedViaAction(state, documentRef, "base", editOptions),
+          context => rebuildHeightDerivedViaAction(state, documentRef, "base", editOptions, context),
           {message: "正在重建高度基础派生", isNoop: result => !result?.executed}
         ),
-        rebuildDownstreamDerived: (editOptions = {}) => operation.runSync(
+        rebuildDownstreamDerived: (editOptions = {}) => operation.run(
           "edit.height.rebuildDownstreamDerived",
-          () => rebuildHeightDerivedViaAction(state, documentRef, "downstream", editOptions),
+          context => rebuildHeightDerivedViaAction(state, documentRef, "downstream", editOptions, context),
           {message: "正在重建高度下游派生", isNoop: result => !result?.executed}
         ),
-        rebuildAllDerived: (editOptions = {}) => operation.runSync(
+        rebuildAllDerived: (editOptions = {}) => operation.run(
           "edit.height.rebuildAllDerived",
-          () => rebuildHeightDerivedViaAction(state, documentRef, "all", editOptions),
+          context => rebuildHeightDerivedViaAction(state, documentRef, "all", editOptions, context),
           {message: "正在重建全部高度派生", isNoop: result => !result?.executed}
         )
       },
@@ -6571,108 +6592,58 @@ async function applyClimateDownstreamRebuildViaApi(state, documentRef, options =
   assertMapAvailable(state);
   if (options?.confirm !== true) throw new Error("气候下游重算会改写多个地图派生系统，需要显式传入 {confirm: true}");
   const map = state.map;
-  const assertCurrent = () => {
-    operationContext?.throwIfCancelled?.();
-    if (state.map !== map || operationContext && !operationContext.isCurrent()) {
-      throw createRuntimeOperationError("operation_obsolete", "气候下游重算请求对应的地图已被替换", {
-        stage: "identity",
-        expected: true
-      });
-    }
-  };
-  assertCurrent();
   const before = regenerationApiSummary(map);
-  updateGenerationLoading(documentRef, true, "正在准备气候下游重算");
+  const systems = options.systems || options.selectedSystems || [];
+  const preview = inspectClimateDownstreamRebuild(map, {systems, seed: options.seed});
+  const constraintBundle = captureRegenerationConstraintBundle(map, {closure: ["world"]});
   try {
-    await yieldToBrowser(documentRef);
-    assertCurrent();
-    const execution = await executeClimateDownstreamRebuildAsync({
-      map,
-      editHistory: state.editHistory,
-      systems: options.systems || options.selectedSystems || [],
-      seed: options.seed,
-      executeSystem: (systemId, context) => {
-        assertCurrent();
-        return executeClimateDownstreamSystem(state, documentRef, systemId, context);
+    const response = await executeWorkerMapMutation(state, documentRef, {
+      task: CLIMATE_DOWNSTREAM_WORKER_TASK,
+      targetKind: "climate-downstream",
+      userLabel: "气候下游内容",
+      payload: {systems, seed: options.seed},
+      renderLayers: [...RENDER_PREPARATION_LAYERS],
+      effects: {
+        ...REGENERATION_TRANSACTION_EFFECTS,
+        affected: preview.selectedSystems.map(id => ({kind: "system", id}))
       },
-      executeCommand: command => executeEditCommand(state, documentRef, command, {
-        context: {map},
-        refresh: () => {},
-        refreshPanels: false
+      createCommand: ({output, result, effects}) => createWorkerRegenerationPatchCommand(state.map, {
+        patch: output.patch,
+        policy: getClimateDownstreamPatchPolicy(result.steps.filter(step => step.executed !== false).map(step => step.system)),
+        label: "气候下游重算",
+        historyDomain: "climate-downstream",
+        effects,
+        result,
+        affectedFactory: () => preview.selectedSystems.map(id => ({kind: "system", id}))
       }),
-      refreshSummary: refreshGenerationSummary,
-      onRestore: map => {
-        if (state.map === map) state.options = map.options;
-      },
-      onProgress: progress => updateGenerationLoading(documentRef, true, progress.message),
-      yieldToMain: () => yieldToBrowser(documentRef),
-      signal: operationContext?.signal,
-      assertCurrent,
-      shouldRestoreHistory: () => state.map === map
-    });
-    assertCurrent();
-    if (!execution.executed) {
+      assertCommitted: () => constraintBundle.assertDomain(state.map, "world", "after"),
+      afterUiRefresh: () => {
+        updateClimatePanel(state);
+        setFileOperationStatus(documentRef, "已完成气候下游内容重算。");
+      }
+    }, operationContext);
+    if (!response.executed) {
       return {
         executed: false,
-        preview: execution.preview,
+        preview: response.preview || preview,
         before,
         after: before,
         history: state.editHistory.getStats(),
-        effects: []
+        effects: [],
+        worker: response.worker
       };
     }
-    updateGenerationLoading(documentRef, true, "正在刷新气候下游结果");
-    await yieldToBrowser(documentRef);
-    assertCurrent();
-    await refreshClimateDownstreamRebuildState(state, documentRef, execution.command);
-    assertCurrent();
-    const result = {
-      executed: true,
-      seed: execution.seed,
-      requestedSystems: execution.requestedSystems,
-      requiredSystems: execution.requiredSystems,
-      selectedSystems: execution.selectedSystems,
-      executionOrder: execution.executionOrder,
-      candidates: execution.preview.candidates,
-      estimatedAffected: execution.preview.estimatedAffected,
-      steps: execution.steps.map(climateDownstreamPublicStep),
-      checksum: execution.checksum,
-      timings: execution.timings,
-      staleSystems: execution.staleSystems,
+    return {
+      ...response,
       before,
       after: regenerationApiSummary(map),
       history: state.editHistory.getStats(),
       effects: ["map-derived", "renderer", "runtime-panel", "object-panels", "object-index"]
     };
-    setFileOperationStatus(documentRef, `已完成气候下游重算：${result.executionOrder.join(" -> ")}`);
-    return result;
   } catch (error) {
-    if (state.map === map) {
-      await refreshClimateDownstreamRebuildState(state, documentRef, {effects: REGENERATION_TRANSACTION_EFFECTS});
-    }
-    setFileOperationStatus(documentRef, `气候下游重算失败并已回滚：${error.message}`);
+    setFileOperationStatus(documentRef, "气候下游重算失败，当前地图未应用本次更改。");
     throw error;
-  } finally {
-    updateGenerationLoading(documentRef, false);
   }
-}
-
-async function executeClimateDownstreamSystem(state, documentRef, systemId, context = {}) {
-  const constraintBundle = context.constraintBundle || null;
-  if (systemId === "markers") {
-    return regenerateMarkerResourcesForClimate(state, documentRef, context.regenerationSalt, constraintBundle);
-  }
-  if (systemId === "economy") {
-    return rebuildEconomyViaAction(state, documentRef, {
-      label: "气候下游重算：经济",
-      deferRefresh: true,
-      constraintBundle
-    });
-  }
-  if (systemId === "cities" || systemId === "provinces") {
-    return regenerateMapAttribute(state, systemId, documentRef, {kind: "all", constraintBundle});
-  }
-  return regenerateMapAttribute(state, systemId, documentRef, {constraintBundle});
 }
 
 function renameOceanCurrentViaApi(state, documentRef, currentId, name) {
@@ -6708,100 +6679,41 @@ async function applyOceanCurrentWorldRebuildViaAction(state, documentRef, option
   const map = state.map;
   const identity = snapshotOceanCurrentWorldIdentity(map);
   const seafloorPlan = options.seafloorPlan || null;
-  const execution = await executeOceanCurrentWorldRebuild({
-    map,
-    editHistory: state.editHistory,
-    seed: options.seed,
-    signal: operationContext.signal,
-    assertCurrent: () => state.map === map && operationContext.isCurrent(),
-    faultAt: options.faultAt,
-    yieldToMain: () => yieldToBrowser(documentRef),
-    onProgress: progress => operationContext.report(progress.system || progress.phase, {message: progress.message}),
-    executePrepare: seafloorPlan ? () => {
-      const command = createResetSeafloorCommand(seafloorPlan);
-      if (command.isNoop?.({map})) return {executed: false};
-      command.apply({map});
-      return {executed: true, result: command.getResult?.()};
-    } : null,
-    executeStage: (system, context) => rebuildOceanCurrentWorldStage(map, system, context),
-    executeCommand: command => executeEditCommand(state, documentRef, command, {
-      context: {map},
-      refresh: () => {},
-      refreshPanels: false
-    }),
-    refreshSummary: () => {
-      assertOceanCurrentWorldIdentity(map, identity);
-      syncMilitaryStateMirrors(map);
-      reconcileWarDerivedData(map);
-      clearGeneratedCityLabelHides(map);
-      markDerivedFresh(map, ["ocean-currents", "climate", "rivers", "biomes", "population", "cultures", "cities", "routes", "states", "provinces", "religions", "markers", "economy", "diplomacy", "military", "zones"]);
-      refreshGenerationSummary(map);
-      appendGenerationLog(map, `rebuild ocean current world: seed=${options.seed || "auto"}, seafloor=${Boolean(seafloorPlan)}`);
-    },
-    onRestore: () => {
-      state.options = map.options;
-    }
-  });
-  if (execution.executed) await refreshClimateDownstreamRebuildState(state, documentRef, execution.command);
-  updateOceanCurrentPanel(state);
-  setFileOperationStatus(documentRef, seafloorPlan ? "已重设海底并完成整链世界重算。" : "已完成洋流、气候与整链世界重算。");
-  return execution;
-}
-
-async function regenerateMarkerResourcesForClimate(state, documentRef, regenerationSalt, constraintBundle = null) {
-  const map = state.map;
-  const resources = (map?.markers?.markers || []).filter(marker => marker?.category === "resource");
-  if (!Array.isArray(map?.markers?.markers)
-    || resources.length > 0 && allRegenerationObjectsLocked(map, OBJECT_KIND.MARKER, resources)) {
-    return regenerationResult("markers", "未执行", "当前资源点已全部锁定，未推进扰动序号。");
+  const constraintBundle = captureRegenerationConstraintBundle(map, {closure: ["world"]});
+  try {
+    return await executeWorkerMapMutation(state, documentRef, {
+      task: OCEAN_CURRENT_WORLD_WORKER_TASK,
+      targetKind: "ocean-current-world",
+      userLabel: "洋流与世界内容",
+      payload: {seed: options.seed, seafloorPlan},
+      renderLayers: [...RENDER_PREPARATION_LAYERS],
+      effects: {
+        ...REGENERATION_TRANSACTION_EFFECTS,
+        affected: OCEAN_CURRENT_WORLD_REBUILD_ORDER.map(id => ({kind: "system", id}))
+      },
+      createCommand: ({output, result, effects}) => createMapReplacementCommand({
+        replacementMap: output.replacementMap,
+        label: seafloorPlan ? "重设海底并重算洋流世界" : "重算洋流与世界派生",
+        historyDomain: "ocean-current-world",
+        effects,
+        result,
+        afterSwap: currentMap => {
+          state.options = currentMap.options;
+        }
+      }),
+      assertCommitted: () => {
+        assertOceanCurrentWorldIdentity(state.map, identity);
+        constraintBundle.assertDomain(state.map, "world", "after");
+      },
+      afterUiRefresh: () => {
+        updateOceanCurrentPanel(state);
+        setFileOperationStatus(documentRef, seafloorPlan ? "已重设海底并完成整链世界重算。" : "已完成洋流、气候与整链世界重算。");
+      }
+    }, operationContext);
+  } catch (error) {
+    setFileOperationStatus(documentRef, "洋流与世界重算失败，当前地图未应用本次更改。");
+    throw error;
   }
-  const beforeResources = map.markers?.metadata?.resourceMarkers || 0;
-  const beforePotential = map.markers?.metadata?.resourcePotential || 0;
-  const salt = nextRegenerationSalt(map, "markers");
-  if (Number.isInteger(regenerationSalt) && regenerationSalt !== salt) throw new Error("气候资源点重算扰动序号不一致");
-  const execution = await regenerateResourceMarkersInChunks(map, {
-    salt,
-    constraintBundle,
-    yieldToMain: () => yieldToBrowser(documentRef)
-  });
-  if (!execution.executed) return regenerationResult("markers", "未执行", "当前地图缺少可用 pack 语义图或标记集合，无法重生成资源点。");
-  markDerivedFresh(map, ["markers", "economy"]);
-  markDerivedStale(map, ["military", "diplomacy"]);
-  refreshGenerationSummary(map);
-  appendGenerationLog(map, `regenerate resources: salt=${salt}, resources=${map.markers.metadata.resourceMarkers}, resourcePotential=${map.markers.metadata.resourcePotential}, markerResourceDeals=${map.economy?.metadata?.resourceTrade?.markerResourceDeals || 0}`);
-  return {
-    ...regenerationResult(
-      "markers",
-      `资源点已按当前地形、河流、生物群系、温度和降水约束重算（扰动 #${salt}）：${beforeResources} -> ${map.markers.metadata.resourceMarkers}；资源潜力 ${beforePotential} -> ${map.markers.metadata.resourcePotential}`,
-      "已刷新资源 marker、正式货物来源、市场库存、交易、国家/省份资源潜力、点图层、对象索引和统计；军事与外交已标记为待派生。"
-    ),
-    timings: execution.timings
-  };
-}
-
-function climateDownstreamPublicStep(step) {
-  return {
-    system: step.system,
-    covers: [...step.covers],
-    regenerationSalt: step.regenerationSalt,
-    executed: step.result?.executed !== false,
-    status: step.result?.status || step.result?.result?.status || ""
-  };
-}
-
-async function refreshClimateDownstreamRebuildState(state, documentRef, commandOrEffects) {
-  state.renderer.refreshObjectPickingIndex?.();
-  await yieldToBrowser(documentRef);
-  state.selectionStore.batch(() => {
-    reconcilePersistentObjectHighlights(state, documentRef, {refreshUi: false});
-    refreshAfterEdit(state, commandOrEffects);
-  });
-  await yieldToBrowser(documentRef);
-  refreshPanelsForEdit(state, commandOrEffects);
-  await yieldToBrowser(documentRef);
-  updateClimatePanel(state);
-  updateRuntimePanel(documentRef, state);
-  updateEditingInteractionLock(state, documentRef);
 }
 
 function normalizeClimateApiPatch(patch, currentOptions = {}) {
@@ -9518,7 +9430,7 @@ export function applyPopulationTransferViaApi(state, documentRef, source, target
   return editApiResult(state, result);
 }
 
-function rebuildHeightDerivedViaAction(state, documentRef, scope, options = {}) {
+async function rebuildHeightDerivedViaAction(state, documentRef, scope, options = {}, operation = null) {
   assertMapAvailable(state);
   if (options?.confirm !== true) throw new Error("高度派生重建会改写当前地图派生数据，需要显式传入 {confirm: true}");
   const before = regenerationApiSummary(state.map);
@@ -9527,83 +9439,45 @@ function rebuildHeightDerivedViaAction(state, documentRef, scope, options = {}) 
     : scope === "base"
       ? [...HEIGHT_BASE_REBUILD_STEPS]
       : [...HEIGHT_DOWNSTREAM_REBUILD_STEPS];
-  const transaction = executeMapSnapshotTransaction({
-    map: state.map,
-    editHistory: state.editHistory,
-    label: `高度${scope === "all" ? "全部" : scope === "base" ? "基础" : "下游"}派生重建`,
-    domain: "height-derived",
+  const constraintBundle = captureRegenerationConstraintBundle(state.map, {closure: ["world"]});
+  const label = `高度${scope === "all" ? "全部" : scope === "base" ? "基础" : "下游"}派生重建`;
+  const response = await executeWorkerMapMutation(state, documentRef, {
+    task: HEIGHT_DERIVED_WORKER_TASK,
+    targetKind: "height-derived",
+    userLabel: label,
+    payload: {scope},
+    renderLayers: [...RENDER_PREPARATION_LAYERS],
     effects: {
       ...REGENERATION_TRANSACTION_EFFECTS,
       affected: kinds.map(id => ({kind: "system", id}))
     },
-    execute: () => {
-      const constraintBundle = captureRegenerationConstraintBundle(state.map, {closure: ["world"]});
-      let changedStage = false;
-      const regenerate = kind => {
-        const domain = heightRegenerationConstraintDomain(kind);
-        constraintBundle.assertDomain(state.map, domain, "before");
-        if (constraintBundle.isDomainFullyLocked(domain)) {
-          constraintBundle.assertDomain(state.map, domain, "skip");
-          return {
-            kind,
-            action: kind,
-            executed: true,
-            skipped: true,
-            status: "锁定领域已完整跳过",
-            constraint: "本阶段全部对象已锁定，未推进阶段 salt、历史或 revision。"
-          };
-        }
-        const result = regenerateMapAttributeCoreViaApi(state, documentRef, kind, {confirm: true, constraintBundle});
-        if (result?.executed) changedStage = true;
-        constraintBundle.assertDomain(state.map, domain, "after");
-        return result;
-      };
-      const result = scope === "all"
-        ? rebuildHeightAllDerived(regenerate)
-        : scope === "base"
-          ? rebuildHeightBaseDerived(regenerate)
-          : rebuildHeightDownstreamDerived(regenerate);
-      constraintBundle.assertDomain(state.map, "world", "after");
-      return changedStage ? result : {
-        ...result,
-        executed: false,
-        status: "所选高度派生阶段均已完整锁定，未执行重建。",
-        constraint: "完整锁定阶段已合法跳过，未推进 salt、历史或 revision。"
-      };
-    },
-    executeCommand: command => executeEditCommand(state, documentRef, command, {
-      context: {map: state.map},
-      refresh: () => {},
-      refreshPanels: false
+    createCommand: ({output, result, effects}) => createWorkerRegenerationPatchCommand(state.map, {
+      patch: output.patch,
+      policy: getHeightDerivedPatchPolicy(scope, result.changedKinds),
+      label,
+      historyDomain: "height-derived",
+      effects,
+      result,
+      affectedFactory: () => kinds.map(id => ({kind: "system", id}))
     }),
-    onRestore: () => refreshMapMutationRollback(state, documentRef)
-  });
-  const result = transaction.result;
-  updateRegenerationSection(documentRef, result);
-  updateHeightPanel(state);
-  updateEditingInteractionLock(state, documentRef);
+    assertCommitted: () => constraintBundle.assertDomain(state.map, "world", "after")
+  }, operation);
   return {
-    ...result,
+    ...response,
     scope,
     before,
-    after: regenerationApiSummary(state.map),
+    after: response.executed ? regenerationApiSummary(state.map) : before,
     staleSystems: [...(state.map?.metadata?.derivedStale?.systems || [])],
     history: state.editHistory.getStats(),
     effects: ["map-derived", "renderer", "runtime-panel", "height-panel", "object-index"]
   };
 }
 
-function heightRegenerationConstraintDomain(kind) {
-  return ({
-    features: "features",
-    rivers: "rivers",
-    states: "states-provinces",
-    religions: "religions",
-    markers: "markers-economy",
-    diplomacy: "diplomacy",
-    military: "military",
-    zones: "zones"
-  })[kind] || kind;
+function heightDerivedRebuildFailureMessage(error) {
+  if (error?.name === "AbortError" || error?.code === "operation_cancelled") return "高度派生重建已取消。";
+  if (error?.code === "operation_obsolete") return "地图已发生变化，本次高度派生结果未应用。";
+  if (error?.code === "regeneration_lock_conflict") return "部分锁定内容与本次高度派生重建冲突，请调整锁定范围后重试。";
+  return "高度派生重建失败，当前地图未应用本次更改。";
 }
 
 function inspectMarketAssignmentViaApi(state, marketId, packCellIds) {
@@ -10913,30 +10787,59 @@ async function regenerateMapAttributeViaWorker(state, documentRef, kind, options
   if (options?.preservePopulation === true && !["features", "routes", "rivers"].includes(targetKind)) {
     throw new Error("preservePopulation 仅支持 features、routes 和 rivers 地理派生重算");
   }
+  const workerOptions = normalizeWorkerRegenerationOptions(options);
+  return executeWorkerMapMutation(state, documentRef, {
+    task: "regeneration.compute",
+    targetKind,
+    userLabel: targetKind,
+    payload: {kind: targetKind, options: workerOptions},
+    renderLayers: renderPreparationLayersForRegeneration(targetKind),
+    preserveRoutePicking: targetKind === "rivers",
+    effects: {
+      ...(targetKind === "rivers" ? RIVER_REGENERATION_TRANSACTION_EFFECTS : REGENERATION_TRANSACTION_EFFECTS),
+      affected: []
+    },
+    createCommand: ({output, result, effects}) => createWorkerRegenerationPatchCommand(state.map, {
+      patch: output.patch,
+      policy: getRegenerationPatchPolicy(targetKind),
+      label: `受约束重生成 ${targetKind}`,
+      historyDomain: targetKind === "rivers" ? "river-regeneration" : "regeneration",
+      effects,
+      result,
+      affectedFactory: map => workerRegenerationAffected(map, targetKind)
+    }),
+    assertCommitted: phase => assertWorkerRegenerationConstraint(options?.constraintBundle, state.map, targetKind, phase)
+  }, operation);
+}
+
+async function executeWorkerMapMutation(state, documentRef, mutation, operation = null) {
+  assertMapAvailable(state);
+  const task = String(mutation?.task || "");
+  const targetKind = String(mutation?.targetKind || "map-derived");
+  const userLabel = String(mutation?.userLabel || "地图内容");
+  const payload = mutation?.payload && typeof mutation.payload === "object" ? mutation.payload : {};
   const sourceMap = state.map;
   const operationStartCityIconLayerStats = {...(state.renderer?.cityIconLayer?.stats || {})};
   const binding = createRegenerationWorkerBinding(state, operation);
-  operation?.report("stream-input", {message: `正在分片传送 ${targetKind} Worker 输入`});
+  operation?.report("stream-input", {message: `正在整理${userLabel}所需资料`});
   operation?.throwIfCancelled?.();
-  const workerOptions = normalizeWorkerRegenerationOptions(options);
-  const renderRequest = createWorkerRegenerationRenderRequest(state, targetKind, binding);
+  const renderRequest = createWorkerRegenerationRenderRequest(state, targetKind, binding, mutation.renderLayers);
   const renderContextToken = createWorkerRegenerationRenderContextToken(state, targetKind);
   let output;
   try {
-    output = await state.workerTaskCoordinator.run("regeneration.compute", {
+    output = await state.workerTaskCoordinator.run(task, {
       map: state.map,
-      kind: targetKind,
-      options: workerOptions,
+      ...payload,
       render: renderRequest
     }, {
       binding,
       signal: operation?.signal,
       sessionMode: "map-mirror",
-      sessionPayload: {kind: targetKind, options: workerOptions, render: renderRequest},
+      sessionPayload: {...payload, render: renderRequest},
       streamBudgetMs: 6,
       streamSliceBytes: 256 * 1024,
       fallbackPayloadFactory: async () => {
-        operation?.report("fallback-snapshot", {message: `正在为 ${targetKind} 安全降级重建快照`});
+        operation?.report("fallback-snapshot", {message: `正在为${userLabel}准备兼容处理资料`});
         if (!validateRegenerationWorkerBinding(state, binding)) {
           const error = new Error("Worker 降级前地图、revision、generation token 或锁已变化");
           error.code = "operation_obsolete";
@@ -10953,7 +10856,7 @@ async function regenerateMapAttributeViaWorker(state, documentRef, kind, options
           error.code = "operation_obsolete";
           throw error;
         }
-        return {map: fallbackPrepared.snapshot, kind: targetKind, options: workerOptions, render: renderRequest};
+        return {map: fallbackPrepared.snapshot, ...payload, render: renderRequest};
       },
       onProgress: (stage, detail) => operation?.report(stage, detail)
     });
@@ -10966,6 +10869,11 @@ async function regenerateMapAttributeViaWorker(state, documentRef, kind, options
     if (!validateRegenerationWorkerBinding(state, binding)) {
       const error = new Error("Worker 结果已因地图、revision、generation token 或锁变化而过期");
       error.code = "operation_obsolete";
+      throw error;
+    }
+    if (!sameRegenerationWorkerBinding(output?.binding, binding)) {
+      const error = new Error("Worker 结果绑定与当前请求不一致");
+      error.code = "worker_protocol_binding_mismatch";
       throw error;
     }
   } catch (error) {
@@ -11003,20 +10911,14 @@ async function regenerateMapAttributeViaWorker(state, documentRef, kind, options
       worker: appendWorkerCommitTelemetry(worker, {commitInstallMs: 0, refreshMs: 0, commitTotalMs: 0})
     };
   }
-  operation?.report("commit", {message: `正在提交 ${targetKind} Worker 补丁`});
-  const effects = {
-    ...(targetKind === "rivers" ? RIVER_REGENERATION_TRANSACTION_EFFECTS : REGENERATION_TRANSACTION_EFFECTS),
-    affected: []
-  };
-  const command = createWorkerRegenerationPatchCommand(state.map, {
-    patch: output.patch,
-    policy: getRegenerationPatchPolicy(targetKind),
-    label: `受约束重生成 ${targetKind}`,
-    historyDomain: targetKind === "rivers" ? "river-regeneration" : "regeneration",
-    effects,
-    result,
-    affectedFactory: map => workerRegenerationAffected(map, targetKind)
-  });
+  operation?.report("commit", {message: `正在应用${userLabel}结果`});
+  const effects = cloneWorkerMutationEffects(mutation.effects);
+  const command = mutation.createCommand?.({output, result, effects, map: state.map});
+  if (!command || typeof command.apply !== "function" || typeof command.revert !== "function") {
+    const error = new Error(`${targetKind} 缺少可提交的领域命令`);
+    error.code = "worker_mutation_command_missing";
+    throw error;
+  }
   const historySnapshot = state.editHistory.createSnapshot();
   const uiSnapshot = captureWorkerRegenerationUiSnapshot(state, documentRef);
   if (uiSnapshot.renderer) uiSnapshot.renderer.cityIconLayerStats = {...operationStartCityIconLayerStats};
@@ -11069,7 +10971,7 @@ async function regenerateMapAttributeViaWorker(state, documentRef, kind, options
       state.workerSessionMutationGuard = false;
     }
     execution = {executed: true};
-    assertWorkerRegenerationConstraint(options?.constraintBundle, state.map, targetKind, "domain");
+    mutation.assertCommitted?.("domain");
     commitInstallMs = roundWorkerTelemetryMs(readCommitTime() - commitStartedAt);
     const committedBinding = {...binding, mapRevision: Number(binding.mapRevision) + 1};
     const installIsCurrent = () => isWorkerRegenerationRenderContextCurrent(state, targetKind, committedBinding, renderContextToken, 0);
@@ -11078,17 +10980,17 @@ async function regenerateMapAttributeViaWorker(state, documentRef, kind, options
       error.code = "operation_obsolete";
       throw error;
     }
-    operation?.report("render-install", {message: `正在分片安装 ${targetKind} Worker 渲染结果`});
+    operation?.report("render-install", {message: `正在更新${userLabel}画面`});
     const renderPrepareStartedAt = readCommitTime();
     try {
       preparedInstall = await prepareRendererWorkerInstall(state.renderer, state.map, output.preparedRender, {
         binding: renderRequest.binding,
         signal: operation?.signal,
-        preserveRoutePicking: targetKind === "rivers",
+        preserveRoutePicking: Boolean(mutation.preserveRoutePicking),
         isCurrent: installIsCurrent,
         onProgress: (stage, detail) => {
           recordWorkerRenderInstallStage(renderInstallStages, stage, detail, readCommitTime() - renderPrepareStartedAt);
-          operation?.report(`render-install-${stage}`, {...detail, message: `正在安装 ${targetKind} 渲染分片`});
+          operation?.report(`render-install-${stage}`, {...detail, message: `正在更新${userLabel}画面`});
         }
       });
     } catch (error) {
@@ -11105,7 +11007,7 @@ async function regenerateMapAttributeViaWorker(state, documentRef, kind, options
     preparedInstall.commit();
     renderInstallCommitMs = roundWorkerTelemetryMs(readCommitTime() - renderCommitStartedAt);
     maybeInjectWorkerRegenerationRefreshFault(documentRef, {targetKind, stage: "after-render", phase: "forward"});
-    assertWorkerRegenerationConstraint(options?.constraintBundle, state.map, targetKind, "world");
+    mutation.assertCommitted?.("world");
     await yieldToBrowser(documentRef);
     operation?.throwIfCancelled?.();
     if (!installIsCurrent()) {
@@ -11131,6 +11033,7 @@ async function regenerateMapAttributeViaWorker(state, documentRef, kind, options
         throw error;
       }
     });
+    await mutation.afterUiRefresh?.({state, documentRef, result, output, command});
     uiRefreshMs = roundWorkerTelemetryMs(readCommitTime() - uiRefreshStartedAt);
     refreshMs = roundWorkerTelemetryMs(renderInstallPrepareMs + renderInstallCommitMs + uiRefreshMs);
     if (targetKind === "military") {
@@ -11162,20 +11065,21 @@ async function regenerateMapAttributeViaWorker(state, documentRef, kind, options
         operation,
         committedWorker,
         deferredPreparedInstalls,
-        readCommitTime
+        readCommitTime,
+        task
       );
       committedWorker = replay.worker;
       renderReplayTelemetry = replay.telemetry;
       workerSessionFinalized = true;
       renderInstallSuspended = Boolean(state.renderer?.workerRenderInstallSuspended > 0);
     } else if (renderInstallSuspended) {
-      state.renderer?.resumeWorkerRenderInstall?.({draw: true, preserveRoutes: targetKind === "rivers"});
+      state.renderer?.resumeWorkerRenderInstall?.({draw: true, preserveRoutes: Boolean(mutation.preserveRoutePicking)});
       renderInstallSuspended = Boolean(state.renderer?.workerRenderInstallSuspended > 0);
     }
     operation?.throwIfCancelled?.();
     const response = {
       ...result,
-      populationPreserved: Boolean(output.populationPreserved),
+      ...(output.populationPreserved !== undefined ? {populationPreserved: Boolean(output.populationPreserved)} : {}),
       history: state.editHistory.getStats(),
       worker: appendWorkerCommitTelemetry(committedWorker, {
         commitInstallMs,
@@ -11242,7 +11146,7 @@ async function regenerateMapAttributeViaWorker(state, documentRef, kind, options
         rollbackFailures.push(failure);
       }
     }
-    if (mapStillCurrent && targetKind === "rivers" && state.renderer?.dynamicBuffersDirty) {
+    if (mapStillCurrent && mutation.preserveRoutePicking && state.renderer?.dynamicBuffersDirty) {
       state.renderer.dynamicBuffersDirty.routes = operationRoutesDirty;
     }
     if (mapStillCurrent) {
@@ -11288,7 +11192,7 @@ async function regenerateMapAttributeViaWorker(state, documentRef, kind, options
       renderInstallSuspended = Boolean(state.renderer?.workerRenderInstallSuspended > 0);
     } else if (renderInstallSuspended) {
       try {
-        state.renderer?.resumeWorkerRenderInstall?.({draw: true, preserveRoutes: targetKind === "rivers"});
+        state.renderer?.resumeWorkerRenderInstall?.({draw: true, preserveRoutes: Boolean(mutation.preserveRoutePicking)});
         renderInstallSuspended = Boolean(state.renderer?.workerRenderInstallSuspended > 0);
       } catch (failure) {
         rollbackFailures.push(failure);
@@ -11326,7 +11230,7 @@ async function regenerateMapAttributeViaWorker(state, documentRef, kind, options
     }
     if (renderInstallSuspended && !renderInstallCleanupAttempted && !state.renderer?.hasDeferredWorkerRenderMutations?.()) {
       try {
-        state.renderer?.resumeWorkerRenderInstall?.({draw: true, preserveRoutes: targetKind === "rivers"});
+        state.renderer?.resumeWorkerRenderInstall?.({draw: true, preserveRoutes: Boolean(mutation.preserveRoutePicking)});
       } catch {
         // finally 仅对无 deferred 的旧路径作便宜解冻，不能覆盖主事务错误。
       }
@@ -11409,6 +11313,14 @@ function assertWorkerRegenerationConstraint(constraintBundle, map, kind, phase) 
   };
   for (const [domain, assertionPhase] of assertions[kind] || []) constraintBundle.assertDomain(map, domain, assertionPhase);
   return true;
+}
+
+function cloneWorkerMutationEffects(effects = REGENERATION_TRANSACTION_EFFECTS) {
+  return {
+    ...effects,
+    derived: [...(effects.derived || [])],
+    affected: (effects.affected || []).map(item => ({...item}))
+  };
 }
 
 function createWorkerRegenerationPatchCommand(map, options) {
@@ -11506,12 +11418,12 @@ function rebuildGenerationSummary(map) {
   );
 }
 
-function createWorkerRegenerationRenderRequest(state, targetKind, binding) {
+function createWorkerRegenerationRenderRequest(state, targetKind, binding, layers = null) {
   const renderer = state.renderer;
   const canvasSize = renderer?.canvasSize || {};
   return {
     binding: {mapIdentity: binding.mapIdentity, mapRevision: binding.mapRevision},
-    layers: renderPreparationLayersForRegeneration(targetKind),
+    layers: Array.isArray(layers) ? [...layers] : renderPreparationLayersForRegeneration(targetKind),
     camera: {...(renderer?.camera || {})},
     canvas: {
       width: Number(renderer?.canvas?.width || canvasSize.width) || 1,
@@ -11576,9 +11488,10 @@ function workerRegenerationDeferredReplayLayers(snapshot, targetKind) {
 }
 
 function createWorkerRegenerationDeferredRenderRequest(state, targetKind, binding, snapshot) {
+  const layers = workerRegenerationDeferredReplayLayers(snapshot, targetKind);
   return {
-    ...createWorkerRegenerationRenderRequest(state, targetKind, binding),
-    layers: workerRegenerationDeferredReplayLayers(snapshot, targetKind)
+    ...createWorkerRegenerationRenderRequest(state, targetKind, binding, layers),
+    layers
   };
 }
 
@@ -11664,7 +11577,7 @@ function resumeWorkerRegenerationPreparedPresentation(state, targetKind, snapsho
   }
 }
 
-async function replayWorkerRegenerationDeferredPresentation(state, documentRef, targetKind, operation, worker, installs, readTime) {
+async function replayWorkerRegenerationDeferredPresentation(state, documentRef, targetKind, operation, worker, installs, readTime, workerTask = "regeneration.compute") {
   const renderer = state.renderer;
   const expectedSessionId = worker?.session?.id;
   const startedAt = readTime();
@@ -11716,7 +11629,7 @@ async function replayWorkerRegenerationDeferredPresentation(state, documentRef, 
 
     operation?.report("render-prepare", {message: "正在准备最终显示效果"});
     const computeStartedAt = readTime();
-    const replayOutput = await state.workerTaskCoordinator.run("regeneration.compute", {
+    const replayOutput = await state.workerTaskCoordinator.run(workerTask, {
       map,
       mode: "render-only",
       render: renderRequest

@@ -235,12 +235,12 @@ export function createWorkerTaskCoordinator({createWorker, getBinding, validateB
             if (settled) return;
             const stage = !inputReady ? "input-stream" : !accepted ? "worker-accept" : !outputDecoder ? "worker-compute" : "output-stream";
             const message = !inputReady
-              ? "正在分片传送 Worker 输入"
+              ? "正在整理地图推演所需资料"
               : !accepted
-                ? "正在等待 Worker 接受任务"
+                ? "正在准备地图推演"
                 : !outputDecoder
-                  ? "Worker 正在执行复杂计算"
-                  : "正在分片接收 Worker 结果";
+                  ? "正在推演地图内容"
+                  : "正在整理地图推演结果";
             try {
               (runOptions.onProgress || onProgress)?.(stage, {message, heartbeat: true}, {
                 task: request.task,

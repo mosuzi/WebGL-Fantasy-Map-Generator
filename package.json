@@ -84,6 +84,7 @@
     "regress:seafloor-reset-browser": "node --no-warnings ./tools/webgl-generator-seafloor-reset-browser-regression.mjs",
     "regress:ocean-currents": "node --no-warnings ./tools/webgl-generator-ocean-current-regression.mjs",
     "regress:ocean-current-density-browser": "node --no-warnings ./tools/webgl-generator-ocean-current-density-browser-regression.mjs",
+    "regress:ocean-current-world-worker-browser": "node --no-warnings ./tools/webgl-generator-ocean-current-world-worker-browser-regression.mjs",
     "regress:ocean-current-ui": "node --no-warnings ./tools/webgl-generator-ocean-current-ui-layer-regression.mjs",
     "regress:ocean-current-world": "node --no-warnings ./tools/webgl-generator-ocean-current-world-rebuild-regression.mjs",
     "regress:river-delete": "node --no-warnings ./tools/webgl-generator-river-delete-regression.mjs",

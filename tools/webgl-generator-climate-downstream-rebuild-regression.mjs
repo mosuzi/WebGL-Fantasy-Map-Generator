@@ -159,11 +159,11 @@ const [appSource, panelModelSource, panelVueSource, consoleApiSource] = await Pr
 assert.match(appSource, /inspectDownstreamRebuild: \(options = \{\}\) => inspectClimateDownstreamRebuildViaApi/);
 assert.match(appSource, /applyDownstreamRebuild: \(options = \{\}\) => operation\.run\(/);
 assert.match(appSource, /context => applyClimateDownstreamRebuildViaApi\(state, documentRef, options, context\)/);
-assert.match(appSource, /await executeClimateDownstreamRebuildAsync\(\{/);
-assert.match(appSource, /yieldToMain: \(\) => yieldToBrowser\(documentRef\)/);
-assert.match(appSource, /regenerateMarkerResourcesForClimate\(state, documentRef, context\.regenerationSalt, constraintBundle\)/);
-assert.match(appSource, /regenerateMapAttribute\(state, systemId, documentRef, \{constraintBundle\}\)/);
-assert.match(appSource, /regenerateResourceMarkersInChunks\(map, \{/);
+const climateActionSource = extractTopLevelFunctionSource(appSource, "applyClimateDownstreamRebuildViaApi");
+assert.match(climateActionSource, /executeWorkerMapMutation\(state, documentRef, \{/);
+assert.match(climateActionSource, /task: CLIMATE_DOWNSTREAM_WORKER_TASK/);
+assert.match(climateActionSource, /createWorkerRegenerationPatchCommand\(state\.map, \{/);
+assert.doesNotMatch(appSource, /function executeClimateDownstreamSystem\(/, "正式接线不应恢复已删除的主线程逐系统重算链");
 assert.match(panelModelSource, /downstreamSystems: \[\]/, "气候面板不应默认全选");
 assert.match(panelModelSource, /confirm: true/);
 assert.match(panelModelSource, /onApplyDownstream: async/);
@@ -364,6 +364,14 @@ function sampleMap() {
     military: {regiments: [{id: 1}, {id: 2}, {id: 3}], metadata: {regiments: 3, stale: true}},
     zones: {zones: [{i: 0}, {i: 1}], metadata: {zones: 2, stale: true}}
   };
+}
+
+function extractTopLevelFunctionSource(source, name) {
+  const match = new RegExp(`(?:async\\s+)?function\\s+${name}\\s*\\(`).exec(source);
+  assert(match, `未找到正式函数 ${name}`);
+  const end = source.indexOf("\n}\n\n", match.index);
+  assert(end >= 0, `无法确定正式函数 ${name} 的边界`);
+  return source.slice(match.index, end + 2);
 }
 
 function checksum(text) {
