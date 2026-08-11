@@ -26,7 +26,6 @@ import {
   boundaryLineModeForOptions,
   buildShoreLinePathVertices,
   buildIncrementalShoreVisualPaths,
-  buildShoreSurfaceDrawPacket,
   buildShoreSurfaceVertexLayers,
   buildShoreVisualPaths,
   emptyShoreVisualPaths,
@@ -86,6 +85,15 @@ import {
   createCityIconWebglLayer
 } from "./city-icon-layer.js";
 import {resizeCanvasToDisplaySize} from "./canvas-display-size.js";
+import {
+  createSurfaceBaseBufferSet,
+  createSurfaceBaseBufferSetAsync,
+  flattenSurfaceBaseBufferSet,
+  isSurfaceBaseBufferSetForVertices,
+  replaceSurfaceBaseBufferSet,
+  summarizeSurfaceBaseBufferSet,
+  uploadSurfaceBaseBufferSetRanges
+} from "./surface-base-buffer-set.js";
 import {resolveMilitaryLabelPalette} from "./military-label-palette.js";
 import {MILITARY_CITY_LABEL_AVOID_SCALE, militaryLabelBox, resolveMilitaryLabelPlacement} from "./military-label-layout.js";
 import {cityLabelAnchorOffset} from "./city-label-icon-layout.js";
@@ -146,6 +154,130 @@ const VIEWPORT_LINE_OVERSCAN_RATIO = 0.5;
 const VIEWPORT_LINE_OVERSCAN_MIN_CSS_PX = 256;
 const VIEWPORT_LINE_OVERSCAN_MAX_CSS_PX = 720;
 const RETIRED_MAP_LAYERS = new Set(["tradeFlows"]);
+
+function normalizeRequestedLayerVisibility(layerVisibility, entries) {
+  const requested = new Map();
+  for (const entry of entries || []) {
+    const [layer, visible] = Array.isArray(entry) ? entry : [entry?.layer, entry?.visible];
+    if (!(layer in (layerVisibility || {}))) continue;
+    const nextVisible = RETIRED_MAP_LAYERS.has(layer) ? false : Boolean(visible);
+    requested.set(layer, nextVisible);
+    if (layer === "coastline") requested.set("lakeShore", nextVisible);
+  }
+  return requested;
+}
+
+function mergeDeferredLayerVisibility(previous, next) {
+  const merged = new Map(previous || []);
+  for (const [layer, visible] of next || []) merged.set(layer, visible);
+  return [...merged];
+}
+
+function hasShallowPresentationChange(current, patch) {
+  return Object.entries(patch || {}).some(([key, value]) => current?.[key] !== value);
+}
+
+function sameStringSet(left, right) {
+  if (left.size !== right?.size) return false;
+  for (const value of left) if (!right.has(value)) return false;
+  return true;
+}
+
+function createDeferredWorkerRenderEffects() {
+  return {
+    surface: false,
+    lines: false,
+    points: false,
+    labels: false,
+    units: false,
+    political: false,
+    routes: false,
+    tradeFlows: false,
+    gridDiagnostics: false
+  };
+}
+
+function cloneDeferredWorkerRenderMutation(mutation) {
+  return {
+    key: String(mutation.key),
+    value: structuredClone(mutation.value),
+    sequence: Number(mutation.sequence) || 0
+  };
+}
+
+function evaluateDeferredWorkerRenderSnapshot(renderer, entries) {
+  const presentation = {
+    colorMode: renderer.colorMode,
+    visualTheme: renderer.visualTheme,
+    viewOptions: {...renderer.viewOptions},
+    labelOptions: {...renderer.labelOptions},
+    unitPreferences: normalizeUnitPreferences(renderer.unitPreferences),
+    layerVisibility: {...renderer.layerVisibility, tradeFlows: false},
+    oceanCurrentHighlights: new Set((renderer.oceanCurrentHighlights || []).values()),
+    politicalMeshDebugMode: normalizePoliticalMeshDebugMode(renderer.politicalMeshDebugMode)
+  };
+  const effects = createDeferredWorkerRenderEffects();
+  for (const mutation of entries) {
+    const value = mutation.value;
+    if (mutation.key === "color-mode") {
+      if (presentation.colorMode === value) continue;
+      presentation.colorMode = value;
+      effects.surface = true;
+    } else if (mutation.key === "diplomacy-subject") {
+      const nextId = normalizePositiveId(value);
+      if (presentation.viewOptions.diplomacySubjectId === nextId) continue;
+      presentation.viewOptions = {...presentation.viewOptions, diplomacySubjectId: nextId};
+      if (presentation.colorMode === "diplomacy") effects.surface = true;
+    } else if (mutation.key === "view-options") {
+      const nextOptions = value || {};
+      if (!hasShallowPresentationChange(presentation.viewOptions, nextOptions)) continue;
+      if (Object.prototype.hasOwnProperty.call(nextOptions, "smoothCellBorders")) effects.lines = true;
+      presentation.viewOptions = {...presentation.viewOptions, ...nextOptions};
+      effects.surface = true;
+    } else if (mutation.key === "visual-theme") {
+      const theme = resolveVisualTheme(value?.themeId);
+      if (!value?.force && presentation.visualTheme?.id === theme.id) continue;
+      presentation.visualTheme = theme;
+      presentation.viewOptions = {...presentation.viewOptions, visualTheme: theme};
+      effects.surface = true;
+      effects.lines = true;
+      effects.labels = true;
+      effects.routes = true;
+    } else if (mutation.key === "label-options") {
+      const maxCityLabels = normalizeMaxCityLabels(value?.maxCityLabels, presentation.labelOptions.maxCityLabels);
+      if (maxCityLabels === presentation.labelOptions.maxCityLabels) continue;
+      presentation.labelOptions = {...presentation.labelOptions, maxCityLabels};
+      effects.labels = true;
+    } else if (mutation.key === "unit-preferences") {
+      const next = normalizeUnitPreferences(value);
+      if (JSON.stringify(next) === JSON.stringify(presentation.unitPreferences)) continue;
+      presentation.unitPreferences = next;
+      effects.units = true;
+    } else if (mutation.key === "ocean-current-highlights") {
+      const next = new Set((value?.ids || []).map(String));
+      if (sameStringSet(next, presentation.oceanCurrentHighlights)) continue;
+      presentation.oceanCurrentHighlights = next;
+      effects.lines = true;
+    } else if (mutation.key === "political-debug") {
+      const nextMode = normalizePoliticalMeshDebugMode(value);
+      if (presentation.politicalMeshDebugMode === nextMode) continue;
+      presentation.politicalMeshDebugMode = nextMode;
+      effects.political = true;
+    } else if (mutation.key === "layer-visibility") {
+      for (const [layer, visible] of normalizeRequestedLayerVisibility(presentation.layerVisibility, value)) {
+        if (presentation.layerVisibility[layer] === visible) continue;
+        presentation.layerVisibility[layer] = visible;
+        if (layer === "gridCells" && visible) effects.gridDiagnostics = true;
+        if (layer === "tradeFlows") effects.tradeFlows = true;
+        if (layer === "cities" || layer === "population" || layer === "markers" || layer === "resources" || layer === "military") effects.points = true;
+        if (layer === "coastline" || layer === "lakeShore" || layer === "stateBorders" || layer === "provinceBorders"
+          || layer === "warFronts" || layer === "zones" || layer === "zoneEvents" || layer === "zoneNatural"
+          || layer === "zoneWilderness" || layer === "oceanCurrents") effects.lines = true;
+      }
+    }
+  }
+  return {presentation, effects};
+}
 const MAP_EDGE_FADE_RATIO = 0.055;
 const MAP_EDGE_FADE_MIN_WORLD = 28;
 const MAP_EDGE_FADE_MAX_WORLD = 96;
@@ -220,7 +352,8 @@ export class PlaceholderMapRenderer {
       pointMode: this.gl.getUniformLocation(this.program, "u_pointMode"),
       surfaceSideMode: this.gl.getUniformLocation(this.program, "u_surfaceSideMode")
     };
-    this.vertexBuffer = this.gl.createBuffer();
+    this.surfaceBaseBufferSet = createSurfaceBaseBufferSet(this.gl, new Float32Array(), {usage: this.gl.STATIC_DRAW});
+    this.vertexBuffer = flattenSurfaceBaseBufferSet(this.surfaceBaseBufferSet)[0];
     this.surfacePatchBuffer = this.gl.createBuffer();
     this.landCorrectionBuffer = this.gl.createBuffer();
     this.waterCorrectionBuffer = this.gl.createBuffer();
@@ -356,6 +489,13 @@ export class PlaceholderMapRenderer {
       rivers: true,
       selection: true
     };
+    this.workerRenderInstallSuspended = 0;
+    this.workerRenderInstallPendingDraw = false;
+    this.workerRenderInstallViewportChanged = false;
+    this.workerRenderInstallApplyingDeferred = false;
+    this.workerRenderInstallDeferredMutations = new Map();
+    this.workerRenderInstallMutationSequence = 0;
+    this.workerRenderInstallEnsureGridDiagnostics = false;
     this.lastDraw = {sequence: 0, drawMs: 0};
     this.lastLoad = emptyRendererLoadStats();
     this.lastOverlayUpdate = emptyOverlayUpdateStats();
@@ -453,6 +593,7 @@ export class PlaceholderMapRenderer {
     this.canvasSize = result.size;
     this.resizeCityMovePreviewCanvas();
     if (!result.changed) return false;
+    if (this.workerRenderInstallSuspended > 0) this.workerRenderInstallViewportChanged = true;
     this.markViewportBuffersDirty();
     if (draw) {
       this.draw();
@@ -504,8 +645,8 @@ export class PlaceholderMapRenderer {
     this.waterCorrectionVertices = surfaceBundle.waterCorrections;
     this.landCoverVertices = surfaceBundle.landCovers;
     this.waterCoverVertices = surfaceBundle.waterCovers;
-    this.surfaceCellRanges = buildSurfaceCellRanges(this.colorMode, this.viewOptions, this.cellVisualMesh, vertices.length);
-    this.shoreSurfaceCellRanges = buildShoreSurfaceCellRanges(this.shoreVisualPaths, map);
+    this.surfaceCellRanges = surfaceBundle.surfaceCellRanges;
+    this.shoreSurfaceCellRanges = surfaceBundle.shoreSurfaceCellRanges;
     this.vertexCount = vertices.length / 6;
     this.landCorrectionVertexCount = surfaceBundle.landCorrections.length / 6;
     this.waterCorrectionVertexCount = surfaceBundle.waterCorrections.length / 6;
@@ -532,8 +673,7 @@ export class PlaceholderMapRenderer {
     this.pointVertexCount = pointVertices.length / 6;
     profile.stage("gpu-upload", "上传静态 GPU buffer", () => {
       this.recordBufferUpload("load-map-static", () => {
-        this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.vertexBuffer);
-        this.gl.bufferData(this.gl.ARRAY_BUFFER, vertices, this.gl.STATIC_DRAW);
+        installSurfaceBaseBufferSet(this, createSurfaceBaseBufferSet(this.gl, vertices, {usage: this.gl.STATIC_DRAW}));
         this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.surfacePatchBuffer);
         this.gl.bufferData(this.gl.ARRAY_BUFFER, new Float32Array(), this.gl.DYNAMIC_DRAW);
         uploadShoreSurfaceBuffers(this.gl, this, surfaceBundle);
@@ -622,8 +762,8 @@ export class PlaceholderMapRenderer {
     this.waterCorrectionVertices = surfaceBundle.waterCorrections;
     this.landCoverVertices = surfaceBundle.landCovers;
     this.waterCoverVertices = surfaceBundle.waterCovers;
-    this.surfaceCellRanges = buildSurfaceCellRanges(this.colorMode, this.viewOptions, this.cellVisualMesh, vertices.length);
-    this.shoreSurfaceCellRanges = buildShoreSurfaceCellRanges(this.shoreVisualPaths, map);
+    this.surfaceCellRanges = surfaceBundle.surfaceCellRanges;
+    this.shoreSurfaceCellRanges = surfaceBundle.shoreSurfaceCellRanges;
     this.vertexCount = vertices.length / 6;
     this.landCorrectionVertexCount = surfaceBundle.landCorrections.length / 6;
     this.waterCorrectionVertexCount = surfaceBundle.waterCorrections.length / 6;
@@ -648,10 +788,13 @@ export class PlaceholderMapRenderer {
     this.lineVertexCount = lineVertices.length / 6;
     this.shoreLineVertexCount = shoreLineVertices.length / 6;
     this.pointVertexCount = pointVertices.length / 6;
-    await stage("gpu-upload", "上传静态 GPU buffer", () => {
+    await stage("gpu-upload", "上传静态 GPU buffer", async () => {
+      const surfaceBaseBufferSet = await createSurfaceBaseBufferSetAsync(this.gl, vertices, {
+        usage: this.gl.STATIC_DRAW,
+        yieldToMain: () => yieldToBrowser({stageId: "gpu-upload-surface-base"})
+      });
+      installSurfaceBaseBufferSet(this, surfaceBaseBufferSet);
       this.recordBufferUpload("load-map-static", () => {
-        this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.vertexBuffer);
-        this.gl.bufferData(this.gl.ARRAY_BUFFER, vertices, this.gl.STATIC_DRAW);
         this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.surfacePatchBuffer);
         this.gl.bufferData(this.gl.ARRAY_BUFFER, new Float32Array(), this.gl.DYNAMIC_DRAW);
         uploadShoreSurfaceBuffers(this.gl, this, surfaceBundle);
@@ -707,6 +850,7 @@ export class PlaceholderMapRenderer {
   }
 
   setColorMode(mode) {
+    if (this.deferWorkerRenderMutation("color-mode", mode, {apply: value => this.setColorMode(value)})) return;
     if (this.colorMode === mode) return;
     this.colorMode = mode;
     if (!this.map) return;
@@ -715,6 +859,7 @@ export class PlaceholderMapRenderer {
   }
 
   setDiplomacySubjectId(stateId) {
+    if (this.deferWorkerRenderMutation("diplomacy-subject", stateId, {apply: value => this.setDiplomacySubjectId(value)})) return;
     const nextId = normalizePositiveId(stateId);
     if (this.viewOptions.diplomacySubjectId === nextId) return;
     this.viewOptions = {...this.viewOptions, diplomacySubjectId: nextId};
@@ -724,6 +869,11 @@ export class PlaceholderMapRenderer {
   }
 
   setViewOptions(options = {}) {
+    const deferredOptions = structuredClone(options || {});
+    if (this.deferWorkerRenderMutation("view-options", deferredOptions, {
+      merge: (previous, next) => ({...(previous || {}), ...(next || {})}),
+      apply: value => this.setViewOptions(value)
+    })) return;
     const shouldRefreshLineLayers = Object.prototype.hasOwnProperty.call(options, "smoothCellBorders");
     this.viewOptions = {...this.viewOptions, ...options};
     if (!this.map) return;
@@ -733,6 +883,9 @@ export class PlaceholderMapRenderer {
   }
 
   setVisualTheme(themeId, {force = false} = {}) {
+    if (this.deferWorkerRenderMutation("visual-theme", {themeId, force}, {
+      apply: value => this.setVisualTheme(value.themeId, {force: value.force})
+    })) return;
     const theme = resolveVisualTheme(themeId);
     if (!force && this.visualTheme.id === theme.id) return;
     this.visualTheme = theme;
@@ -747,6 +900,11 @@ export class PlaceholderMapRenderer {
   }
 
   setLabelOptions(options = {}) {
+    const deferredOptions = structuredClone(options || {});
+    if (this.deferWorkerRenderMutation("label-options", deferredOptions, {
+      merge: (previous, next) => ({...(previous || {}), ...(next || {})}),
+      apply: value => this.setLabelOptions(value)
+    })) return;
     const maxCityLabels = normalizeMaxCityLabels(options.maxCityLabels, this.labelOptions.maxCityLabels);
     if (maxCityLabels === this.labelOptions.maxCityLabels) return;
     this.labelOptions = {...this.labelOptions, maxCityLabels};
@@ -773,16 +931,15 @@ export class PlaceholderMapRenderer {
       this.waterCorrectionVertices = surfaceBundle.waterCorrections;
       this.landCoverVertices = surfaceBundle.landCovers;
       this.waterCoverVertices = surfaceBundle.waterCovers;
-      this.surfaceCellRanges = buildSurfaceCellRanges(this.colorMode, this.viewOptions, this.cellVisualMesh, vertices.length);
-      this.shoreSurfaceCellRanges = buildShoreSurfaceCellRanges(this.shoreVisualPaths, this.map);
+      this.surfaceCellRanges = surfaceBundle.surfaceCellRanges;
+      this.shoreSurfaceCellRanges = surfaceBundle.shoreSurfaceCellRanges;
       this.vertexCount = vertices.length / 6;
       this.landCorrectionVertexCount = surfaceBundle.landCorrections.length / 6;
       this.waterCorrectionVertexCount = surfaceBundle.waterCorrections.length / 6;
       this.landCoverVertexCount = surfaceBundle.landCovers.length / 6;
       this.waterCoverVertexCount = surfaceBundle.waterCovers.length / 6;
       const upload = this.recordBufferUpload("surface-refresh", () => {
-        this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.vertexBuffer);
-        this.gl.bufferData(this.gl.ARRAY_BUFFER, vertices, this.gl.STATIC_DRAW);
+        installSurfaceBaseBufferSet(this, createSurfaceBaseBufferSet(this.gl, vertices, {usage: this.gl.STATIC_DRAW}));
         this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.surfacePatchBuffer);
         this.gl.bufferData(this.gl.ARRAY_BUFFER, new Float32Array(), this.gl.DYNAMIC_DRAW);
         uploadShoreSurfaceBuffers(this.gl, this, surfaceBundle);
@@ -823,10 +980,7 @@ export class PlaceholderMapRenderer {
 
       const merged = mergeSurfaceRanges(spans);
       const upload = this.recordBufferUpload("surface-refresh-incremental", () => {
-        this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.vertexBuffer);
-        for (const range of merged) {
-          this.gl.bufferSubData(this.gl.ARRAY_BUFFER, range.start * Float32Array.BYTES_PER_ELEMENT, this.surfaceVertices.subarray(range.start, range.end));
-        }
+        uploadSurfaceBaseRanges(this, merged);
         const surfaceBundle = shouldDrawShoreVisualBands(this.colorMode)
           ? buildShoreSurfaceVertexLayers(createRenderContext(this.map), this.colorMode, this.viewOptions, this.shoreVisualPaths)
           : emptyShoreSurfaceVertexLayers();
@@ -838,7 +992,7 @@ export class PlaceholderMapRenderer {
         this.waterCorrectionVertexCount = surfaceBundle.waterCorrections.length / 6;
         this.landCoverVertexCount = surfaceBundle.landCovers.length / 6;
         this.waterCoverVertexCount = surfaceBundle.waterCovers.length / 6;
-        this.shoreSurfaceCellRanges = buildShoreSurfaceCellRanges(this.shoreVisualPaths, this.map);
+        this.shoreSurfaceCellRanges = surfaceBundle.shoreSurfaceCellRanges;
         uploadShoreSurfaceBuffers(this.gl, this, surfaceBundle);
       }, {bufferGroup: "surface"});
       if (draw) this.draw();
@@ -908,10 +1062,93 @@ export class PlaceholderMapRenderer {
     }
   }
 
+  refreshHardCellSurfacePatchCells(gridCells, {draw = true} = {}) {
+    if (!this.map || this.viewOptions?.smoothCellBorders !== false || this.colorMode !== "height") return null;
+    const cellCount = this.map.grid?.cells?.v?.length || 0;
+    const patchCells = new Set([
+      ...(this.surfacePatchCells || []),
+      ...(gridCells || [])
+    ].map(Number).filter(cell => Number.isInteger(cell) && cell >= 0 && cell < cellCount));
+    if (!patchCells.size) return null;
+
+    const vertices = [];
+    const ranges = new Map();
+    pushGridCells(
+      vertices,
+      createRenderContext(this.map),
+      this.colorMode,
+      this.viewOptions,
+      cellIndex => patchCells.has(cellIndex),
+      (color, cellIndex) => withSurfaceSideAlpha(color, Number(this.map.grid.cells.h[cellIndex]) >= 20 ? "land" : "water"),
+      (cellIndex, range) => ranges.set(cellIndex, range)
+    );
+    if (!ranges.size || !vertices.length) return null;
+
+    const startedAt = performance.now();
+    const event = this.beginPerformanceEvent("surfaceRefresh", {
+      drawRequested: draw,
+      colorMode: this.colorMode,
+      incremental: true,
+      patch: true,
+      hardCells: true
+    }, startedAt);
+    try {
+      const typedVertices = new Float32Array(vertices);
+      this.surfacePatchVertices = typedVertices;
+      this.surfacePatchCellRanges = ranges;
+      this.surfacePatchCells = new Set(ranges.keys());
+      this.surfacePatchVertexCount = typedVertices.length / 6;
+      const upload = this.recordBufferUpload("surface-refresh-hard-cell-patch", () => {
+        this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.surfacePatchBuffer);
+        this.gl.bufferData(this.gl.ARRAY_BUFFER, typedVertices, this.gl.DYNAMIC_DRAW);
+      }, {bufferGroup: "surface"});
+      if (draw) this.draw();
+      this.completePerformanceEvent(event, {
+        uploadMs: upload.ms,
+        vertexCount: this.vertexCount,
+        patchVertexCount: this.surfacePatchVertexCount,
+        geometryReused: false,
+        incremental: true,
+        patch: true,
+        hardCells: true
+      }, performance.now());
+      return {
+        cells: ranges.size,
+        patchCells: ranges.size,
+        patchVertexCount: this.surfacePatchVertexCount,
+        uploadMs: upload.ms,
+        hardCells: true
+      };
+    } catch (error) {
+      this.failPerformanceEvent(event, error, {}, performance.now());
+      throw error;
+    }
+  }
+
   refreshHeightCells(gridCells, {draw = true, deferTopology = false} = {}) {
     const normalizedCells = [...new Set((gridCells || []).map(Number).filter(cell => Number.isInteger(cell) && cell >= 0))].sort((a, b) => a - b);
     if (!this.map || !normalizedCells.length) return {incremental: false, cells: 0, spans: 0};
-    if (this.colorMode !== "height" || !(this.surfaceVertices instanceof Float32Array) || !this.surfaceCellRanges.size) {
+    if (this.colorMode !== "height" || !(this.surfaceVertices instanceof Float32Array)) {
+      this.refreshCellSurface({draw});
+      return {incremental: false, cells: normalizedCells.length, spans: 1};
+    }
+    if (!this.surfaceCellRanges.size) {
+      if (this.viewOptions?.smoothCellBorders === false) {
+        const patch = this.refreshHardCellSurfacePatchCells(normalizedCells, {draw: false});
+        if (patch) {
+          if (draw) this.draw();
+          return {
+            incremental: true,
+            cells: normalizedCells.length,
+            spans: 1,
+            patchCells: patch.patchCells,
+            surfacePatch: true,
+            hardCells: true,
+            patchVertexCount: patch.patchVertexCount,
+            uploadMs: patch.uploadMs
+          };
+        }
+      }
       this.refreshCellSurface({draw});
       return {incremental: false, cells: normalizedCells.length, spans: 1};
     }
@@ -972,8 +1209,7 @@ export class PlaceholderMapRenderer {
     if (!spans.length) return {incremental: true, cells: 0, spans: 0};
 
     const merged = mergeSurfaceRanges(spans);
-    this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.vertexBuffer);
-    for (const range of merged) this.gl.bufferSubData(this.gl.ARRAY_BUFFER, range.start * Float32Array.BYTES_PER_ELEMENT, this.surfaceVertices.subarray(range.start, range.end));
+    uploadSurfaceBaseRanges(this, merged);
     const patchCells = normalizedCells.filter(gridCell => this.surfacePatchCells.has(gridCell));
     if (patchCells.length) refreshSurfacePatchCellColors(this, patchCells);
     const shoreSpans = refreshShoreSurfaceCellColors(this, normalizedCells);
@@ -1017,13 +1253,17 @@ export class PlaceholderMapRenderer {
   }
 
   setUnitPreferences(preferences = {}) {
+    const deferredPreferences = structuredClone(preferences || {});
+    if (this.deferWorkerRenderMutation("unit-preferences", deferredPreferences, {
+      apply: value => this.setUnitPreferences(value)
+    })) return;
     const next = normalizeUnitPreferences(preferences);
     if (JSON.stringify(next) === JSON.stringify(this.unitPreferences)) return;
     this.unitPreferences = next;
     this.refreshMilitaryIconLabels();
   }
 
-  refreshMilitaryIconLabels() {
+  refreshMilitaryIconLabels({relayout = true} = {}) {
     if (!this.overlay || !this.map) return;
     for (const item of this.militaryIconItems) {
       const troopLabel = formatMilitaryTroops(item.troops, this.unitPreferences);
@@ -1037,7 +1277,7 @@ export class PlaceholderMapRenderer {
       }
       item.tooltip = tooltip;
     }
-    this.updateLabels();
+    if (relayout) this.updateLabels();
   }
 
   updateCustomLabelPosition(labelId, point) {
@@ -1131,6 +1371,10 @@ export class PlaceholderMapRenderer {
   }
 
   setOceanCurrentHighlights(ids, {draw = true} = {}) {
+    const deferredIds = [...(ids || [])];
+    if (this.deferWorkerRenderMutation("ocean-current-highlights", {ids: deferredIds, draw}, {
+      apply: value => this.setOceanCurrentHighlights(value.ids, {draw: value.draw})
+    })) return;
     this.oceanCurrentHighlights = new Set((ids || []).map(String));
     this.refreshLineLayers({draw});
   }
@@ -1194,6 +1438,9 @@ export class PlaceholderMapRenderer {
   }
 
   setPoliticalMeshDebugMode(mode = "none") {
+    if (this.deferWorkerRenderMutation("political-debug", mode, {
+      apply: value => this.setPoliticalMeshDebugMode(value)
+    })) return;
     const nextMode = normalizePoliticalMeshDebugMode(mode);
     if (this.politicalMeshDebugMode === nextMode) return;
     this.politicalMeshDebugMode = nextMode;
@@ -1215,14 +1462,12 @@ export class PlaceholderMapRenderer {
   }
 
   setLayersVisible(entries = []) {
-    const requested = new Map();
-    for (const entry of entries || []) {
-      const [layer, visible] = Array.isArray(entry) ? entry : [entry?.layer, entry?.visible];
-      if (!(layer in this.layerVisibility)) continue;
-      const nextVisible = RETIRED_MAP_LAYERS.has(layer) ? false : Boolean(visible);
-      requested.set(layer, nextVisible);
-      if (layer === "coastline") requested.set("lakeShore", nextVisible);
-    }
+    const requested = normalizeRequestedLayerVisibility(this.layerVisibility, entries);
+    const deferredEntries = [...requested];
+    if (this.deferWorkerRenderMutation("layer-visibility", deferredEntries, {
+      merge: mergeDeferredLayerVisibility,
+      apply: value => this.setLayersVisible(value)
+    })) return [];
     const changed = [];
     for (const [layer, visible] of requested) {
       if (this.layerVisibility[layer] === visible) continue;
@@ -1368,7 +1613,326 @@ export class PlaceholderMapRenderer {
     this.gl.bufferData(this.gl.ARRAY_BUFFER, mesh.line, this.gl.DYNAMIC_DRAW);
   }
 
+  suspendWorkerRenderInstall() {
+    this.workerRenderInstallSuspended++;
+    if (this.workerRenderInstallSuspended === 1) {
+      this.workerRenderInstallViewportChanged = Boolean(
+        this.workerRenderInstallViewportChanged
+        || this.overlayInteractionSuspended
+        || this.viewportPreviewFrame
+        || this.viewportCommitTimer
+        || this.viewportCommitEvent
+        || this.viewportPointerInteractionKind
+      );
+      this.cancelViewportCommitForWorkerInstall();
+    }
+    return this.workerRenderInstallSuspended;
+  }
+
+  deferWorkerRenderMutation(key, value, {merge = (_previous, next) => next} = {}) {
+    if (this.workerRenderInstallSuspended <= 0 || this.workerRenderInstallApplyingDeferred) return false;
+    const normalizedKey = String(key);
+    const previous = this.workerRenderInstallDeferredMutations.get(normalizedKey);
+    this.workerRenderInstallDeferredMutations.set(normalizedKey, {
+      key: normalizedKey,
+      value: previous ? merge(previous.value, value) : value,
+      sequence: ++this.workerRenderInstallMutationSequence
+    });
+    this.workerRenderInstallPendingDraw = true;
+    return true;
+  }
+
+  hasDeferredWorkerRenderMutations() {
+    return this.workerRenderInstallDeferredMutations.size > 0;
+  }
+
+  captureDeferredWorkerRenderPresentation() {
+    return {
+      colorMode: this.colorMode,
+      visualTheme: this.visualTheme,
+      viewOptions: {...this.viewOptions},
+      labelOptions: {...this.labelOptions},
+      unitPreferences: this.unitPreferences,
+      layerVisibility: {...this.layerVisibility},
+      oceanCurrentHighlights: new Set(this.oceanCurrentHighlights || []),
+      politicalMeshDebugMode: this.politicalMeshDebugMode
+    };
+  }
+
+  captureDeferredWorkerRenderSnapshot() {
+    const entries = [...this.workerRenderInstallDeferredMutations.values()]
+      .sort((left, right) => left.sequence - right.sequence)
+      .map(cloneDeferredWorkerRenderMutation);
+    const {presentation, effects} = evaluateDeferredWorkerRenderSnapshot(this, entries);
+    return {
+      entries,
+      maxSequence: entries.reduce((maximum, entry) => Math.max(maximum, entry.sequence), 0),
+      finalPresentation: presentation,
+      effects
+    };
+  }
+
+  applyDeferredWorkerRenderPresentationOnly(snapshot) {
+    const presentation = snapshot?.finalPresentation;
+    if (!presentation || typeof presentation !== "object") return {count: 0, keys: []};
+    const visualTheme = resolveVisualTheme(presentation.visualTheme?.id);
+    this.colorMode = presentation.colorMode;
+    this.visualTheme = visualTheme;
+    this.viewOptions = {...(presentation.viewOptions || {}), visualTheme};
+    this.labelOptions = {...(presentation.labelOptions || {})};
+    if (snapshot.effects?.units) this.unitPreferences = normalizeUnitPreferences(presentation.unitPreferences);
+    this.layerVisibility = {...(presentation.layerVisibility || {}), tradeFlows: false};
+    this.oceanCurrentHighlights = new Set(presentation.oceanCurrentHighlights || []);
+    this.politicalMeshDebugMode = normalizePoliticalMeshDebugMode(presentation.politicalMeshDebugMode);
+    if (this.map && this.visualTheme) applyMapStageBackground(this.stage, this.map, this.visualTheme);
+    if (snapshot.effects?.routes) this.dynamicBuffersDirty.routes = true;
+    if (snapshot.effects?.tradeFlows) this.dynamicBuffersDirty.tradeFlows = true;
+    if (snapshot.effects?.gridDiagnostics) this.workerRenderInstallEnsureGridDiagnostics = true;
+    if (snapshot.entries?.length) this.workerRenderInstallPendingDraw = true;
+    return {
+      count: snapshot.entries?.length || 0,
+      keys: (snapshot.entries || []).map(entry => entry.key)
+    };
+  }
+
+  consumeDeferredWorkerRenderMutationsThrough(sequence) {
+    const maximum = Number(sequence);
+    if (!Number.isFinite(maximum)) return 0;
+    let consumed = 0;
+    for (const [key, mutation] of this.workerRenderInstallDeferredMutations) {
+      if (Number(mutation.sequence) > maximum) continue;
+      this.workerRenderInstallDeferredMutations.delete(key);
+      consumed++;
+    }
+    return consumed;
+  }
+
+  restoreDeferredWorkerRenderPresentation(snapshot) {
+    if (!snapshot) return false;
+    this.colorMode = snapshot.colorMode;
+    this.visualTheme = snapshot.visualTheme;
+    this.viewOptions = {...(snapshot.viewOptions || {})};
+    this.labelOptions = {...(snapshot.labelOptions || {})};
+    this.unitPreferences = snapshot.unitPreferences || normalizeUnitPreferences();
+    this.layerVisibility = {...(snapshot.layerVisibility || {})};
+    this.oceanCurrentHighlights = new Set(snapshot.oceanCurrentHighlights || []);
+    this.politicalMeshDebugMode = snapshot.politicalMeshDebugMode;
+    if (this.map && this.visualTheme) applyMapStageBackground(this.stage, this.map, this.visualTheme);
+    return true;
+  }
+
+  applyDeferredWorkerRenderMutations() {
+    const deferred = [...this.workerRenderInstallDeferredMutations.values()].sort((left, right) => left.sequence - right.sequence);
+    if (!deferred.length) return {count: 0, keys: []};
+    this.workerRenderInstallApplyingDeferred = true;
+    try {
+      this.applyWorkerRenderMutationBatch(deferred);
+    } finally {
+      this.workerRenderInstallApplyingDeferred = false;
+    }
+    return {count: deferred.length, keys: deferred.map(mutation => mutation.key)};
+  }
+
+  applyWorkerRenderMutationBatch(mutations) {
+    let refreshSurface = false;
+    let refreshLines = false;
+    let refreshPoints = false;
+    let refreshLabels = false;
+    let refreshUnits = false;
+    let refreshPoliticalDebug = false;
+    let ensureGridDiagnostics = false;
+    for (const mutation of mutations) {
+      const value = mutation.value;
+      if (mutation.key === "color-mode") {
+        if (this.colorMode === value) continue;
+        this.colorMode = value;
+        refreshSurface = true;
+      } else if (mutation.key === "diplomacy-subject") {
+        const nextId = normalizePositiveId(value);
+        if (this.viewOptions.diplomacySubjectId === nextId) continue;
+        this.viewOptions = {...this.viewOptions, diplomacySubjectId: nextId};
+        if (this.colorMode === "diplomacy") refreshSurface = true;
+      } else if (mutation.key === "view-options") {
+        const nextOptions = value || {};
+        if (!hasShallowPresentationChange(this.viewOptions, nextOptions)) continue;
+        if (Object.prototype.hasOwnProperty.call(nextOptions, "smoothCellBorders")) refreshLines = true;
+        this.viewOptions = {...this.viewOptions, ...nextOptions};
+        refreshSurface = true;
+      } else if (mutation.key === "visual-theme") {
+        const theme = resolveVisualTheme(value?.themeId);
+        if (!value?.force && this.visualTheme.id === theme.id) continue;
+        this.visualTheme = theme;
+        this.viewOptions = {...this.viewOptions, visualTheme: theme};
+        if (this.map) applyMapStageBackground(this.stage, this.map, theme);
+        refreshSurface = true;
+        refreshLines = true;
+        refreshLabels = true;
+        this.dynamicBuffersDirty.routes = true;
+      } else if (mutation.key === "label-options") {
+        const maxCityLabels = normalizeMaxCityLabels(value?.maxCityLabels, this.labelOptions.maxCityLabels);
+        if (maxCityLabels === this.labelOptions.maxCityLabels) continue;
+        this.labelOptions = {...this.labelOptions, maxCityLabels};
+        refreshLabels = true;
+      } else if (mutation.key === "unit-preferences") {
+        const next = normalizeUnitPreferences(value);
+        if (JSON.stringify(next) === JSON.stringify(this.unitPreferences)) continue;
+        this.unitPreferences = next;
+        refreshUnits = true;
+      } else if (mutation.key === "ocean-current-highlights") {
+        const next = new Set((value?.ids || []).map(String));
+        if (sameStringSet(next, this.oceanCurrentHighlights)) continue;
+        this.oceanCurrentHighlights = next;
+        refreshLines = true;
+      } else if (mutation.key === "political-debug") {
+        const nextMode = normalizePoliticalMeshDebugMode(value);
+        if (this.politicalMeshDebugMode === nextMode) continue;
+        this.politicalMeshDebugMode = nextMode;
+        refreshPoliticalDebug = true;
+      } else if (mutation.key === "layer-visibility") {
+        for (const [layer, visible] of value || []) {
+          if (this.layerVisibility[layer] === visible) continue;
+          this.layerVisibility[layer] = visible;
+          if (layer === "gridCells" && visible) ensureGridDiagnostics = true;
+          if (layer === "tradeFlows") {
+            if (visible) this.dynamicBuffersDirty.tradeFlows = true;
+            else this.clearTradeFlowBuffer();
+          }
+          if (layer === "cities" || layer === "population" || layer === "markers" || layer === "resources" || layer === "military") refreshPoints = true;
+          if (layer === "coastline" || layer === "lakeShore" || layer === "stateBorders" || layer === "provinceBorders"
+            || layer === "warFronts" || layer === "zones" || layer === "zoneEvents" || layer === "zoneNatural"
+            || layer === "zoneWilderness" || layer === "oceanCurrents") refreshLines = true;
+        }
+      }
+    }
+    if (!this.map) return;
+    if (refreshPoliticalDebug) this.rebuildPoliticalVisualMeshesIfNeeded();
+    if (refreshSurface) this.refreshCellSurface({draw: false});
+    if (refreshLines) this.refreshLineLayers({draw: false});
+    if (refreshPoints) this.refreshPointLayers({draw: false});
+    if (refreshLabels) this.refreshLabels();
+    else if (refreshUnits) this.refreshMilitaryIconLabels();
+    if (ensureGridDiagnostics) this.workerRenderInstallEnsureGridDiagnostics = true;
+    this.workerRenderInstallPendingDraw = true;
+  }
+
+  resumeWorkerRenderInstall({draw = true, preserveRoutes = false} = {}) {
+    if (this.workerRenderInstallSuspended <= 0) return false;
+    if (this.workerRenderInstallSuspended > 1) {
+      this.workerRenderInstallSuspended -= 1;
+      return false;
+    }
+    const deferredCount = this.workerRenderInstallDeferredMutations.size;
+    const viewportChanged = Boolean(this.workerRenderInstallViewportChanged);
+    const pendingDraw = Boolean(this.workerRenderInstallPendingDraw);
+    try {
+      this.applyDeferredWorkerRenderMutations();
+      this.workerRenderInstallSuspended = 0;
+      if (viewportChanged) {
+        this.workerRenderInstallViewportChanged = false;
+        this.workerRenderInstallPendingDraw = false;
+        this.drawViewportPreview();
+      } else {
+        if (this.dynamicBuffersDirty.tradeFlows) {
+          if (this.layerVisibility.tradeFlows) this.updateTradeFlowBuffer();
+          else this.clearTradeFlowBuffer();
+        }
+        if (this.dynamicBuffersDirty.selection) this.updateSelectionBuffer();
+        if (!preserveRoutes && this.dynamicBuffersDirty.routes && this.layerVisibility.routes) this.scheduleRouteBufferRefresh();
+        this.workerRenderInstallPendingDraw = false;
+        if (draw && (pendingDraw || deferredCount)) this.draw({updateDynamicBuffers: false});
+      }
+      if (deferredCount) this.onViewChange({phase: "worker-render-context"});
+      this.workerRenderInstallDeferredMutations.clear();
+      if (this.workerRenderInstallEnsureGridDiagnostics) {
+        this.workerRenderInstallEnsureGridDiagnostics = false;
+        void this.ensureGridCellDiagnosticsBuffer();
+      }
+      return viewportChanged || pendingDraw || deferredCount > 0;
+    } catch (error) {
+      this.workerRenderInstallSuspended = 1;
+      this.workerRenderInstallViewportChanged = viewportChanged || this.workerRenderInstallViewportChanged;
+      this.workerRenderInstallPendingDraw = pendingDraw || this.workerRenderInstallPendingDraw;
+      this.cancelViewportCommitForWorkerInstall();
+      throw error;
+    }
+  }
+
+  resumePreparedWorkerRenderInstall(snapshot, {draw = true, preserveRoutes = false} = {}) {
+    if (this.workerRenderInstallSuspended <= 0) return false;
+    if (this.workerRenderInstallSuspended > 1) {
+      this.workerRenderInstallSuspended -= 1;
+      return false;
+    }
+    const deferredCount = snapshot?.entries?.length || 0;
+    const maxSequence = Number(snapshot?.maxSequence) || 0;
+    const viewportChanged = Boolean(this.workerRenderInstallViewportChanged);
+    const pendingDraw = Boolean(this.workerRenderInstallPendingDraw);
+    try {
+      this.workerRenderInstallSuspended = 0;
+      if (snapshot?.effects?.units && !snapshot?.effects?.labels) this.refreshMilitaryIconLabels({relayout: false});
+      if (viewportChanged) {
+        this.workerRenderInstallViewportChanged = false;
+        this.workerRenderInstallPendingDraw = false;
+        this.drawViewportPreview();
+      } else {
+        if (this.dynamicBuffersDirty.tradeFlows) {
+          if (this.layerVisibility.tradeFlows) this.updateTradeFlowBuffer();
+          else this.clearTradeFlowBuffer();
+        }
+        if (this.dynamicBuffersDirty.selection) this.updateSelectionBuffer();
+        if (!preserveRoutes && this.dynamicBuffersDirty.routes && this.layerVisibility.routes) this.scheduleRouteBufferRefresh();
+        this.workerRenderInstallPendingDraw = false;
+        if (draw && (pendingDraw || deferredCount)) this.draw({updateDynamicBuffers: false});
+      }
+      if (deferredCount) this.onViewChange({phase: "worker-render-context"});
+      if (this.workerRenderInstallEnsureGridDiagnostics) {
+        this.workerRenderInstallEnsureGridDiagnostics = false;
+        void this.ensureGridCellDiagnosticsBuffer();
+      }
+      this.consumeDeferredWorkerRenderMutationsThrough(maxSequence);
+      if (this.workerRenderInstallDeferredMutations.size) {
+        this.workerRenderInstallSuspended = 1;
+        this.workerRenderInstallPendingDraw = true;
+      }
+      return viewportChanged || pendingDraw || deferredCount > 0;
+    } catch (error) {
+      this.workerRenderInstallSuspended = 1;
+      this.workerRenderInstallViewportChanged = viewportChanged || this.workerRenderInstallViewportChanged;
+      this.workerRenderInstallPendingDraw = pendingDraw || this.workerRenderInstallPendingDraw;
+      this.cancelViewportCommitForWorkerInstall();
+      throw error;
+    }
+  }
+
+  abortWorkerRenderInstall() {
+    this.workerRenderInstallSuspended = 0;
+    this.workerRenderInstallApplyingDeferred = false;
+    this.workerRenderInstallDeferredMutations.clear();
+    this.workerRenderInstallEnsureGridDiagnostics = false;
+    this.workerRenderInstallPendingDraw = false;
+    this.workerRenderInstallViewportChanged = false;
+    this.cancelViewportCommitForWorkerInstall();
+    this.resumeOverlayAfterInteraction();
+    this.markViewportBuffersDirty();
+    return true;
+  }
+
+  cancelViewportCommitForWorkerInstall() {
+    const view = this.canvas.ownerDocument?.defaultView || globalThis;
+    this.viewportCommitVersion += 1;
+    if (this.viewportCommitTimer && typeof view.clearTimeout === "function") view.clearTimeout(this.viewportCommitTimer);
+    this.viewportCommitTimer = 0;
+    if (this.viewportCommitEvent) {
+      this.cancelPerformanceEvent(this.viewportCommitEvent, "worker-render-install", {version: this.viewportCommitEvent.details.version}, performance.now());
+      this.viewportCommitEvent = null;
+    }
+  }
+
   draw({updateDynamicBuffers = true, updateOverlay = true, drawDirtyDynamicBuffers = true, drawCityIcons = true, viewportPreview = false, trackPerformance = true} = {}) {
+    if (this.workerRenderInstallSuspended > 0) {
+      this.workerRenderInstallPendingDraw = true;
+      return;
+    }
     if (!this.map || !this.vertexCount) return;
     const startedAt = performance.now();
     const event = trackPerformance
@@ -1392,7 +1956,7 @@ export class PlaceholderMapRenderer {
     gl.uniform1f(this.locations.scale, this.camera.scale);
     gl.uniform2f(this.locations.offset, this.camera.offsetX, this.camera.offsetY);
     gl.enable(gl.DEPTH_TEST);
-    drawSurfaceDepthBatch(gl, this, this.vertexBuffer, this.vertexCount, gl.ALWAYS);
+    drawSurfaceBase(gl, this, gl.ALWAYS);
     drawSurfaceDepthBatch(gl, this, this.surfacePatchBuffer, this.surfacePatchVertexCount, gl.ALWAYS);
     drawSurfaceDepthBatch(gl, this, this.landCorrectionBuffer, this.landCorrectionVertexCount, gl.LESS);
     drawSurfaceDepthBatch(gl, this, this.waterCorrectionBuffer, this.waterCorrectionVertexCount, gl.GREATER);
@@ -1545,8 +2109,16 @@ export class PlaceholderMapRenderer {
       camera: this.camera,
       canvas: this.canvas,
       timeMs: performance.now(),
-      layerVisible: drawCityIcons && this.layerVisibility.cities !== false
+      layerVisible: drawCityIcons && this.layerVisibility.cities !== false,
+      restoreState: false
     });
+    gl.bindVertexArray(null);
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.pointBuffer);
+    gl.useProgram(this.program);
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+    gl.disable(gl.BLEND);
+    gl.disable(gl.DEPTH_TEST);
+    gl.depthMask(false);
     if (cityIconInstances > 0) layerOrder.push("cityIcons");
     const cityMoveGhostInstances = this.cityMovePreview ? 1 : 0;
 
@@ -1577,19 +2149,21 @@ export class PlaceholderMapRenderer {
   }
 
   getStats() {
+    const surfaceBaseBuffers = summarizeRendererSurfaceBase(this);
     return {
       metadata: this.map?.metadata,
       grid: this.map?.grid?.metadata,
       pack: this.map?.pack?.metadata,
       features: this.map?.features?.metadata,
       vertexCount: this.vertexCount,
+      surfaceBaseBuffers,
       shoreSurfaceDepth: {
         baseVertexCount: this.vertexCount,
         landCorrectionVertexCount: this.landCorrectionVertexCount,
         waterCorrectionVertexCount: this.waterCorrectionVertexCount,
         landCoverVertexCount: this.landCoverVertexCount,
         waterCoverVertexCount: this.waterCoverVertexCount,
-        drawCount: 5,
+        drawCount: surfaceBaseBuffers.segmentCount + 4,
         clearDepth: 0.5
       },
       routeVertexCount: this.routeVertexCount,
@@ -2281,6 +2855,13 @@ export class PlaceholderMapRenderer {
   }
 
   prepareViewportPreview(interactionKind = null) {
+    if (this.workerRenderInstallSuspended > 0) {
+      this.workerRenderInstallViewportChanged = true;
+      this.workerRenderInstallPendingDraw = true;
+      this.viewportCommitVersion += 1;
+      this.markViewportBuffersDirty();
+      return;
+    }
     const committedScale = Number(this.overlayCommittedCamera?.scale ?? this.camera.scale);
     const nextKind = interactionKind || (Math.abs(this.camera.scale - committedScale) < 0.000001 ? "pan" : "zoom");
     if (!this.overlayInteractionSuspended) this.viewportInteractionKind = nextKind;
@@ -2297,6 +2878,11 @@ export class PlaceholderMapRenderer {
   beginViewportPointerInteraction(interaction = null) {
     if (interaction?.kind !== "pan") return;
     this.viewportPointerInteractionKind = "pan";
+    if (this.workerRenderInstallSuspended > 0) {
+      this.workerRenderInstallViewportChanged = true;
+      this.viewportCommitVersion += 1;
+      return;
+    }
     const view = this.canvas.ownerDocument?.defaultView || globalThis;
     if (this.viewportCommitTimer && typeof view.clearTimeout === "function") {
       view.clearTimeout(this.viewportCommitTimer);
@@ -2312,6 +2898,10 @@ export class PlaceholderMapRenderer {
   endViewportPointerInteraction(interaction = null) {
     if (interaction?.kind !== "pan" || this.viewportPointerInteractionKind !== "pan") return;
     this.viewportPointerInteractionKind = null;
+    if (this.workerRenderInstallSuspended > 0) {
+      this.workerRenderInstallViewportChanged = true;
+      return;
+    }
     if (this.overlayInteractionSuspended) this.scheduleViewportCommit({delayMs: 24});
   }
 
@@ -2378,6 +2968,11 @@ export class PlaceholderMapRenderer {
   }
 
   scheduleViewportCommit({delayMs = 120} = {}) {
+    if (this.workerRenderInstallSuspended > 0) {
+      this.workerRenderInstallViewportChanged = true;
+      this.workerRenderInstallPendingDraw = true;
+      return this.viewportCommitVersion;
+    }
     const view = this.canvas.ownerDocument?.defaultView || globalThis;
     if (this.viewportCommitTimer && typeof view.clearTimeout === "function") {
       view.clearTimeout(this.viewportCommitTimer);
@@ -2404,6 +2999,12 @@ export class PlaceholderMapRenderer {
 
   async commitViewportAfterInteraction(version, scheduledEvent = null) {
     const event = scheduledEvent || this.beginPerformanceEvent("viewportCommit", {version, delayMs: 0}, performance.now());
+    if (this.workerRenderInstallSuspended > 0) {
+      this.workerRenderInstallViewportChanged = true;
+      this.cancelPerformanceEvent(event, "worker-render-install", {version}, performance.now());
+      if (this.viewportCommitEvent === event) this.viewportCommitEvent = null;
+      return false;
+    }
     if (!this.map) {
       this.cancelPerformanceEvent(event, "map-unavailable", {version}, performance.now());
       if (this.viewportCommitEvent === event) this.viewportCommitEvent = null;
@@ -2566,6 +3167,126 @@ export class PlaceholderMapRenderer {
       this.draw({updateOverlay: false});
     }
     this.locateFlashFrame = requestAnimationFrame(() => this.animateLocateFlash());
+  }
+
+  async prepareOverlayBundleFromDescriptors(map, descriptors, {signal = null, isCurrent = null, yieldToMain = defaultRendererYield, budgetMs = 6, onProgress = null, unitPreferences = null} = {}) {
+    if (!this.overlay) return emptyPreparedOverlayBundle();
+    const gate = createRendererChunkGate({signal, isCurrent, yieldToMain, budgetMs, onProgress});
+    const frozenUnitPreferences = normalizeUnitPreferences(unitPreferences || this.unitPreferences);
+    const documentRef = this.overlay.ownerDocument || document;
+    const fragment = documentRef.createDocumentFragment();
+    const labels = [];
+    for (let index = 0; index < (descriptors || []).length; index++) {
+      const item = descriptors[index];
+      const node = documentRef.createElement("span");
+      node.className = semanticLabelClassName(item.targetKind, item.city);
+      markDynamicCanvasTextNode(node, item.styleType);
+      const {contentNode, glyphNodes} = appendLabelNodeText(node, item, documentRef, item.styleType);
+      node.dataset.labelTargetKind = item.targetKind;
+      node.dataset.labelTargetId = String(item.targetId);
+      if (item.targetKind === LABEL_TARGET_KIND.ZONE) node.addEventListener("click", event => {
+        event.preventDefault();
+        event.stopPropagation();
+        this.onSelect({object: {kind: OBJECT_KIND.ZONE, id: item.targetId}});
+      });
+      node.dataset.labelStyleType = item.styleType;
+      node.dataset.labelPriority = String(item.layout.priority);
+      node.dataset.labelPriorityMode = item.layout.manualPriority ? "manual" : "auto";
+      node.dataset.labelPositionLocked = String(item.layout.locked);
+      node.classList.toggle("position-locked", item.layout.locked);
+      applyResolvedLabelStyle(node, item.resolvedStyle);
+      fragment.append(node);
+      labels.push({...item, node, contentNode, glyphNodes, box: null, visible: false, buffered: false, politicalCandidateIndex: null});
+      await gate.checkpoint("labels", index + 1, descriptors.length);
+    }
+
+    const cityLabelWidths = new Map(labels
+      .filter(item => item.targetKind === LABEL_TARGET_KIND.CITY)
+      .map(item => [String(item.targetId), item.metrics?.width]));
+    const cityIconItems = getCityIconItems(map).map(item => ({
+      ...item,
+      nameWidthCss: cityLabelWidths.get(String(item.id)),
+      maxSizeFactor: cityIconMaxSizeFactor({
+        silhouette: item.silhouette,
+        roles: item.roles,
+        nameWidthCss: cityLabelWidths.get(String(item.id))
+      }),
+      box: null,
+      visible: false,
+      buffered: false,
+      visibilityTarget: 0,
+      selected: false
+    }));
+    await gate.checkpoint("city-icons", cityIconItems.length, cityIconItems.length);
+
+    const markerIconItems = [];
+    const markerSources = getMarkerIconItems(map);
+    for (let index = 0; index < markerSources.length; index++) {
+      const item = markerSources[index];
+      const node = documentRef.createElement("span");
+      node.className = markerIconClassName(item);
+      node.title = item.tooltip;
+      node.setAttribute("aria-label", item.tooltip);
+      node.dataset.markerId = String(item.id);
+      node.dataset.markerCategory = item.category || "marker";
+      applyMarkerIconPalette(node, item);
+      const content = documentRef.createElement("span");
+      content.className = "marker-map-icon-content map-overlay-fixed-content";
+      content.innerHTML = markerIconSvg(item);
+      node.append(content);
+      fragment.append(node);
+      markerIconItems.push({...item, node, box: null, visible: false, buffered: false});
+      await gate.checkpoint("marker-icons", index + 1, markerSources.length);
+    }
+
+    const militaryIconItems = [];
+    const militarySources = getMilitaryIconItems(map, frozenUnitPreferences);
+    for (let index = 0; index < militarySources.length; index++) {
+      const item = militarySources[index];
+      const node = documentRef.createElement("span");
+      node.className = militaryIconClassName(item);
+      node.title = item.tooltip;
+      node.setAttribute("aria-label", item.tooltip);
+      node.dataset.militaryId = String(item.id);
+      node.dataset.stateId = String(item.stateId);
+      const symbol = documentRef.createElement("span");
+      symbol.className = "military-map-icon-symbol";
+      const icon = documentRef.createElement("img");
+      icon.className = "military-map-icon-image";
+      icon.src = militaryIconDataUrl(item.iconVariant);
+      icon.alt = item.iconLabel || item.dominantUnitLabel || "军种";
+      icon.decoding = "async";
+      icon.draggable = false;
+      symbol.append(icon);
+      const count = documentRef.createElement("span");
+      count.className = "military-map-icon-count";
+      setDynamicCanvasTextContent(count, "military-count", formatMilitaryTroops(item.troops, frozenUnitPreferences));
+      const content = documentRef.createElement("span");
+      content.className = "military-map-icon-content map-overlay-fixed-content";
+      content.append(symbol, count);
+      node.append(content);
+      fragment.append(node);
+      militaryIconItems.push({...item, node, box: null, visible: false, buffered: false});
+      await gate.checkpoint("military-icons", index + 1, militarySources.length);
+    }
+    const selectionMarker = documentRef.createElement("span");
+    selectionMarker.className = "selection-marker";
+    selectionMarker.style.display = "none";
+    fragment.append(selectionMarker);
+    const gridCellIdLayer = documentRef.createElement("div");
+    gridCellIdLayer.className = "grid-cell-diagnostic-label-layer";
+    markDynamicCanvasTextNode(gridCellIdLayer, "grid-cell-id");
+    fragment.append(gridCellIdLayer);
+    gate.assertCurrent();
+    return {
+      fragment,
+      labelItems: labels,
+      cityIconItems,
+      markerIconItems,
+      militaryIconItems,
+      selectionMarker,
+      gridCellIdLayer
+    };
   }
 
   buildLabels(map) {
@@ -3259,6 +3980,47 @@ export class PlaceholderMapRenderer {
   }
 }
 
+function emptyPreparedOverlayBundle() {
+  return {
+    fragment: null,
+    labelItems: [],
+    cityIconItems: [],
+    markerIconItems: [],
+    militaryIconItems: [],
+    selectionMarker: null,
+    gridCellIdLayer: null
+  };
+}
+
+function createRendererChunkGate({signal = null, isCurrent = null, yieldToMain = defaultRendererYield, budgetMs = 6, onProgress = null} = {}) {
+  let deadline = performance.now() + Math.max(1, Number(budgetMs) || 6);
+  return {checkpoint, assertCurrent};
+
+  async function checkpoint(stage, completed, total) {
+    assertCurrent();
+    const current = performance.now();
+    const finished = Number(total) > 0 && Number(completed) >= Number(total);
+    if (finished || current >= deadline) onProgress?.(stage, {completed, total});
+    if (current < deadline) return;
+    await yieldToMain();
+    assertCurrent();
+    deadline = performance.now() + Math.max(1, Number(budgetMs) || 6);
+  }
+
+  function assertCurrent() {
+    if (!signal?.aborted && (typeof isCurrent !== "function" || isCurrent() === true)) return true;
+    const error = new Error(signal?.aborted ? "标签与图标准备已取消" : "标签与图标准备结果已过期");
+    error.name = signal?.aborted ? "AbortError" : "Error";
+    error.code = signal?.aborted ? "render-overlay-preparation-aborted" : "render-overlay-preparation-obsolete";
+    throw error;
+  }
+}
+
+function defaultRendererYield() {
+  if (typeof globalThis.scheduler?.yield === "function") return globalThis.scheduler.yield();
+  return new Promise(resolve => setTimeout(resolve, 0));
+}
+
 function emptyShoreSurfaceCellRanges() {
   return {
     landCorrections: new Map(),
@@ -3266,33 +4028,6 @@ function emptyShoreSurfaceCellRanges() {
     landCovers: new Map(),
     waterCovers: new Map()
   };
-}
-
-function buildShoreSurfaceCellRanges(paths, map) {
-  if (!map || !paths) return emptyShoreSurfaceCellRanges();
-  const ranges = emptyShoreSurfaceCellRanges();
-  const offsets = {
-    landCorrections: 0,
-    waterCorrections: 0,
-    landCovers: 0,
-    waterCovers: 0
-  };
-  for (const path of [...(paths.coastline || []), ...(paths.lakeShore || [])]) {
-    for (const command of buildShoreSurfaceDrawPacket(path, map).commands || []) {
-      const cell = command.side === "land" ? command.landCell : command.waterCell;
-      const key = command.kind === "correction"
-        ? command.side === "land" ? "landCorrections" : "waterCorrections"
-        : command.side === "land" ? "landCovers" : "waterCovers";
-      const length = (command.positions?.length || 0) / 2 * 6;
-      if (!Number.isInteger(cell) || cell < 0 || !length) continue;
-      const range = {start: offsets[key], end: offsets[key] + length};
-      offsets[key] = range.end;
-      const cellRanges = ranges[key].get(cell) || [];
-      cellRanges.push(range);
-      ranges[key].set(cell, cellRanges);
-    }
-  }
-  return ranges;
 }
 
 function refreshShoreSurfaceCellColors(renderer, gridCells) {
@@ -3921,6 +4656,36 @@ function getCustomLabels(map) {
     }));
 }
 
+export function collectLabelLayoutItems(map, {labelOptions = {}, visualTheme = {}} = {}) {
+  const source = [
+    ...getLabelStates(map),
+    ...getLabelProvinces(map),
+    ...getLabelCities(map, labelOptions),
+    ...getLabelZones(map),
+    ...getCustomLabels(map)
+  ].map(item => {
+    const styleType = labelStyleTypeForTarget(item.targetKind, item.city);
+    const resolvedStyle = resolveLabelStyle(map, styleType, visualTheme);
+    const layout = resolveLabelLayout(map, item.targetKind, item.targetId, item.city, {
+      x: item.x,
+      y: item.y,
+      priority: item.priority,
+      minScale: item.minScale
+    });
+    return {
+      ...item,
+      x: layout.position.x,
+      y: layout.position.y,
+      minScale: layout.minScale,
+      styleType,
+      resolvedStyle,
+      layout,
+      metrics: estimateLabelTextBox(item.text, resolvedStyle)
+    };
+  });
+  return hasManualLabelPriorities(map) ? sortLabelItemsByPriority(source) : source;
+}
+
 function getCityIconItems(map) {
   const cities = [...(map?.settlements?.cities || [])];
   const scaleContext = createCityScaleContext(cities, map?.pack?.burgs);
@@ -4419,7 +5184,7 @@ function pointerInteractionMode(event) {
   return event.button === 0 ? "pan" : null;
 }
 
-function buildPlaceholderSurfaceBundle(map, colorMode, viewOptions, shoreVisualPaths = null, stateVisualPaths = null, provinceVisualPaths = null, politicalVisualMeshes = null, cellVisualMesh = null) {
+export function buildPlaceholderSurfaceBundle(map, colorMode, viewOptions, shoreVisualPaths = null, stateVisualPaths = null, provinceVisualPaths = null, politicalVisualMeshes = null, cellVisualMesh = null) {
   const context = createRenderContext(map);
   const statePaths = stateVisualPaths || buildStateVisualPaths(map);
   const provincePaths = provinceVisualPaths || buildProvinceVisualPaths(map);
@@ -4460,9 +5225,14 @@ function buildPlaceholderSurfaceBundle(map, colorMode, viewOptions, shoreVisualP
     for (let offset = politicalBandStart; offset < vertices.length; offset += 6) vertices[offset + 5] = 0.25;
   }
 
+  const base = vertices instanceof Float32Array ? vertices : new Float32Array(vertices);
+  const {cellRanges: shoreSurfaceCellRanges, ...shoreVertices} = shoreLayers;
   return {
-    base: vertices instanceof Float32Array ? vertices : new Float32Array(vertices),
-    ...shoreLayers
+    base,
+    ...shoreVertices,
+    surfaceCellRangesMode: useCellVisualMesh ? "cell-visual" : "unavailable",
+    surfaceCellRanges: buildSurfaceCellRanges(colorMode, viewOptions, cellVisualMesh, base.length),
+    shoreSurfaceCellRanges
   };
 }
 
@@ -4493,7 +5263,13 @@ function recolorCellVisualSurfaceBundle(renderer) {
   const shoreLayers = shouldDrawShoreVisualBands(colorMode)
     ? buildShoreSurfaceVertexLayers(createRenderContext(map), colorMode, viewOptions, renderer.shoreVisualPaths)
     : emptyShoreSurfaceVertexLayers();
-  return {base: surfaceVertices, ...shoreLayers};
+  const {cellRanges: shoreSurfaceCellRanges, ...shoreVertices} = shoreLayers;
+  return {
+    base: surfaceVertices,
+    ...shoreVertices,
+    surfaceCellRanges,
+    shoreSurfaceCellRanges
+  };
 }
 
 function encodeCellVisualSurfaceSides(vertices, cellVisualMesh, map) {
@@ -4511,7 +5287,8 @@ function emptyShoreSurfaceVertexLayers() {
     landCorrections: new Float32Array(),
     waterCorrections: new Float32Array(),
     landCovers: new Float32Array(),
-    waterCovers: new Float32Array()
+    waterCovers: new Float32Array(),
+    cellRanges: emptyShoreSurfaceCellRanges()
   };
 }
 
@@ -4568,6 +5345,67 @@ function uploadShoreSurfaceBuffers(gl, renderer, bundle) {
   }
 }
 
+function installSurfaceBaseBufferSet(renderer, replacement) {
+  const previous = renderer.surfaceBaseBufferSet;
+  const previousBuffers = new Set(flattenSurfaceBaseBufferSet(previous));
+  const legacyBuffer = renderer.vertexBuffer;
+  renderer.surfaceBaseBufferSet = replaceSurfaceBaseBufferSet(renderer.gl, previous, replacement);
+  const buffers = flattenSurfaceBaseBufferSet(renderer.surfaceBaseBufferSet);
+  renderer.vertexBuffer = buffers[0] || null;
+  if (legacyBuffer && !previousBuffers.has(legacyBuffer) && !buffers.includes(legacyBuffer)) {
+    renderer.gl.deleteBuffer(legacyBuffer);
+  }
+  return renderer.surfaceBaseBufferSet;
+}
+
+function currentSurfaceBaseBufferSet(renderer) {
+  const bufferSet = renderer.surfaceBaseBufferSet;
+  const buffers = flattenSurfaceBaseBufferSet(bufferSet);
+  if (buffers[0] !== renderer.vertexBuffer || !isSurfaceBaseBufferSetForVertices(bufferSet, renderer.surfaceVertices)) return null;
+  return bufferSet;
+}
+
+function uploadSurfaceBaseRanges(renderer, ranges) {
+  const bufferSet = currentSurfaceBaseBufferSet(renderer);
+  if (bufferSet) return uploadSurfaceBaseBufferSetRanges(renderer.gl, bufferSet, renderer.surfaceVertices, ranges);
+  renderer.gl.bindBuffer(renderer.gl.ARRAY_BUFFER, renderer.vertexBuffer);
+  for (const range of ranges) {
+    renderer.gl.bufferSubData(
+      renderer.gl.ARRAY_BUFFER,
+      range.start * Float32Array.BYTES_PER_ELEMENT,
+      renderer.surfaceVertices.subarray(range.start, range.end)
+    );
+  }
+  const floats = ranges.reduce((total, range) => total + range.end - range.start, 0);
+  return {ranges: ranges.length, uploads: ranges.length, floats, bytes: floats * Float32Array.BYTES_PER_ELEMENT};
+}
+
+function drawSurfaceBase(gl, renderer, depthFunction) {
+  const bufferSet = currentSurfaceBaseBufferSet(renderer);
+  if (!bufferSet) {
+    drawSurfaceDepthBatch(gl, renderer, renderer.vertexBuffer, renderer.vertexCount, depthFunction);
+    return;
+  }
+  for (const segment of bufferSet.segments) {
+    drawSurfaceDepthBatch(gl, renderer, segment.buffer, segment.vertexCount, depthFunction);
+  }
+}
+
+function summarizeRendererSurfaceBase(renderer) {
+  const bufferSet = currentSurfaceBaseBufferSet(renderer);
+  if (bufferSet) return summarizeSurfaceBaseBufferSet(bufferSet);
+  const floatLength = renderer.surfaceVertices instanceof Float32Array ? renderer.surfaceVertices.length : 0;
+  return {
+    segmentCount: renderer.vertexBuffer ? 1 : 0,
+    floatLength,
+    byteLength: floatLength * Float32Array.BYTES_PER_ELEMENT,
+    vertexCount: renderer.vertexCount,
+    triangleCount: renderer.vertexCount / 3,
+    maxSegmentBytes: floatLength * Float32Array.BYTES_PER_ELEMENT,
+    segmentByteLengths: renderer.vertexBuffer ? [floatLength * Float32Array.BYTES_PER_ELEMENT] : []
+  };
+}
+
 function drawSurfaceDepthBatch(gl, renderer, buffer, vertexCount, depthFunction) {
   if (!vertexCount) return;
   gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
@@ -4576,7 +5414,7 @@ function drawSurfaceDepthBatch(gl, renderer, buffer, vertexCount, depthFunction)
   gl.drawArrays(gl.TRIANGLES, 0, vertexCount);
 }
 
-function buildLineVertices(map, visibility = {}, colorMode = "height", shoreVisualPaths = null, stateVisualPaths = null, provinceVisualPaths = null, cellVisualMesh = null, viewOptions = {}, oceanCurrentHighlights = new Set()) {
+export function buildLineVertices(map, visibility = {}, colorMode = "height", shoreVisualPaths = null, stateVisualPaths = null, provinceVisualPaths = null, cellVisualMesh = null, viewOptions = {}, oceanCurrentHighlights = new Set()) {
   const context = createRenderContext(map);
   const vertices = [];
   const oceanCurrentVertices = [];
@@ -4590,7 +5428,14 @@ function buildLineVertices(map, visibility = {}, colorMode = "height", shoreVisu
   if (visibility.provinceBorders !== false) pushPoliticalBoundaryStrokes(vertices, provincePaths, context, themeLines.provinceBorder || PROVINCE_VISUAL_STYLE.borderStroke, PROVINCE_VISUAL_STYLE.borderWidthWorld, PROVINCE_VISUAL_STYLE.borderDashWorld);
   if (visibility.stateBorders !== false) pushPoliticalBoundaryStrokes(vertices, statePaths, context, themeLines.stateBorder || STATE_VISUAL_STYLE.borderStroke, STATE_VISUAL_STYLE.borderWidthWorld);
   if (visibility.warFronts !== false) pushMilitaryFrontLayer(vertices, context, map);
-  return {vertices: new Float32Array(vertices), shoreVertices: shoreLineLayer.vertices, shoreLinePathVertices: shoreLineLayer.pathVertices, oceanCurrentVertices: new Float32Array(oceanCurrentVertices), oceanCurrents};
+  return {
+    vertices: new Float32Array(vertices),
+    shoreVertices: shoreLineLayer.vertices,
+    shoreLinePathVertices: shoreLineLayer.pathVertices,
+    shoreLinePathObjectVertices: shoreLineLayer.pathObjectVertices,
+    oceanCurrentVertices: new Float32Array(oceanCurrentVertices),
+    oceanCurrents
+  };
 }
 
 function buildShoreLineVerticesCached(map, visibility, colorMode, shoreVisualPaths, cellVisualMesh, viewOptions, previousPathVertices = null, previousPathObjectVertices = null) {
@@ -4629,7 +5474,7 @@ function buildShoreLineVerticesCached(map, visibility, colorMode, shoreVisualPat
   return {vertices, pathVertices, pathObjectVertices, rebuiltPaths};
 }
 
-function shoreLinePathKey(featureType, path) {
+export function shoreLinePathKey(featureType, path) {
   const edges = (path?.sourceEdges || []).map(edge => {
     const a = edge.a?.join(",") || "";
     const b = edge.b?.join(",") || "";
@@ -4747,7 +5592,7 @@ export function isRiverVisibleForRendering(map, riverOrId) {
   return riverVisualPolicyForRendering(map, riverOrId) !== "hide-visual-only";
 }
 
-function buildRiverMeshVertices(map, camera, canvas) {
+export function buildRiverMeshVertices(map, camera, canvas) {
   const build = createRiverMeshBuild(map, camera, canvas);
   for (const river of map.rivers.rivers) {
     pushRiverMesh(build, river);
@@ -5399,7 +6244,7 @@ function finiteWidthStat(value) {
   return value === Infinity ? 0 : roundValue(value);
 }
 
-function buildPointVertices(map, visibility = {}) {
+export function buildPointVertices(map, visibility = {}) {
   const context = createRenderContext(map);
   const vertices = [];
   if (visibility.population !== false) {

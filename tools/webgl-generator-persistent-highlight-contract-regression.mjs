@@ -40,6 +40,26 @@ const measurement = reconciled.highlights.find(object => object.kind === OBJECT_
 assert(measurement?.name === "更新后的测量", "重新解析没有刷新对象摘要");
 assert(samePersistentHighlightMembership(normalized.highlights, reconciled.highlights), "对象摘要更新不应误判为高亮成员变化");
 
+const routeMap = createSyntheticRouteMap();
+const staleRoute = normalizePersistentHighlights(routeMap, [{kind: OBJECT_KIND.ROUTE, id: 0}]).highlights[0];
+routeMap.settlements.cities[1].name = "当前起点";
+routeMap.settlements.cities[2].name = "当前终点";
+routeMap.settlements.routes[0] = {
+  id: 0,
+  type: "trail",
+  level: "local",
+  from: 1,
+  to: 2,
+  points: [[30, 40], [50, 60], [70, 80]]
+};
+const currentRoute = normalizePersistentHighlights(routeMap, [staleRoute]).highlights[0];
+assert(currentRoute !== staleRoute, "切换地图路线后不得继续持有陈旧高亮 DTO 引用");
+assert(currentRoute.from === "当前起点" && currentRoute.to === "当前终点", "路线高亮没有刷新当前地图端点名称");
+assert(currentRoute.fromId === 1 && currentRoute.toId === 2, "路线高亮没有刷新当前地图端点 ID");
+assert(currentRoute.type === "trail" && currentRoute.level === "local", "路线高亮没有刷新当前地图类型摘要");
+assert(currentRoute.points === routeMap.settlements.routes[0].points, "路线高亮没有绑定当前地图路线点集");
+assert(currentRoute.points !== staleRoute.points, "路线高亮仍引用旧地图路线点集");
+
 map.measurements.items = [];
 const afterDelete = normalizePersistentHighlights(map, reconciled.highlights);
 assert(afterDelete.highlights.length === 2 && afterDelete.rejected.length === 1, "删除对象后没有清理陈旧高亮");
@@ -120,6 +140,26 @@ function createSyntheticMap() {
       }]
     },
     settlements: {cities: []}
+  };
+}
+
+function createSyntheticRouteMap() {
+  return {
+    settlements: {
+      cities: [
+        null,
+        {id: 1, name: "旧起点"},
+        {id: 2, name: "旧终点"}
+      ],
+      routes: [{
+        id: 0,
+        type: "road",
+        level: "regional",
+        from: 1,
+        to: 2,
+        points: [[10, 20], [20, 30]]
+      }]
+    }
   };
 }
 

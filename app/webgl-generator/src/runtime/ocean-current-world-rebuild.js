@@ -96,7 +96,7 @@ export async function executeOceanCurrentWorldRebuild({
       ensureActive(signal, assertCurrent, system);
       onProgress?.({phase: "system", system, message: `正在重算${STAGE_LABELS[system]}`});
       const stageStartedAt = now();
-      const result = await executeStage(system, {preview, signal, constraintBundle});
+      const result = await executeStage(system, {preview, seed: preview.seed, signal, constraintBundle});
       const durationMs = roundTiming(now() - stageStartedAt);
       chunks.push({id: `world:${system}`, blockingMs: durationMs});
       if (!result || (result.executed === false && result.reason !== "domain-fully-locked")) {

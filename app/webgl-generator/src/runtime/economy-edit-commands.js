@@ -307,7 +307,7 @@ function applyMarketAssignmentChanges(map, changes, side) {
   for (const change of changes) values[change.packCell] = change[side];
 }
 
-function rebuildMapEconomy(map, constraintBundle = null) {
+export function rebuildMapEconomy(map, constraintBundle = null) {
   const marketCapture = constraintBundle
     ? {snapshots: constraintBundle.lockedMarkets}
     : captureLockedRegenerationObjects(map, OBJECT_KIND.ECONOMY_MARKET);

@@ -89,29 +89,33 @@ export function inspectGridRefinement(map, revisionTracker, options = {}) {
   return inspection;
 }
 
-export function prepareGridStructureWrite(map, revisionTracker, document, options = {}) {
+export function prepareGridStructureWrite(map, revisionTracker, document, options = {}, taskContext = null) {
+  checkpointGridPreparation(taskContext, "inspect-structure");
   const inspection = inspectGridStructureWrite(map, revisionTracker, document);
   assertAuthorizedInspection(inspection, options, "grid.applyWrite");
   const oldGrid = map.grid;
+  checkpointGridPreparation(taskContext, "build-controlled-grid", {cells: document?.points?.length || 0});
   const grid = gridFromStructureDocument(document, oldGrid);
   preserveProjectedFields(oldGrid, grid);
   return prepareTopologyReplacement(map, grid, {
     action: "grid.applyWrite",
     sourceFingerprint: inspection.source.fingerprint,
     inspectionToken: inspection.inspectionToken
-  });
+  }, taskContext);
 }
 
-export function prepareGridRefinement(map, revisionTracker, options = {}) {
+export function prepareGridRefinement(map, revisionTracker, options = {}, taskContext = null) {
+  checkpointGridPreparation(taskContext, "inspect-refinement");
   const inspection = inspectGridRefinement(map, revisionTracker, options);
   assertAuthorizedInspection(inspection, options, "grid.refine");
-  const refined = refineGridTopology(map.grid, inspection.target.cells);
+  checkpointGridPreparation(taskContext, "refine-grid", {sourceCells: map.grid.points.length, targetCells: inspection.target.cells});
+  const refined = refineGridTopology(map.grid, inspection.target.cells, taskContext);
   return prepareTopologyReplacement(map, refined.grid, {
     action: "grid.refine",
     sourceFingerprint: inspection.source.fingerprint,
     inspectionToken: inspection.inspectionToken,
     refinement: refined.report
-  });
+  }, taskContext);
 }
 
 export function commitPreparedGridTopology(map, prepared) {
@@ -122,19 +126,23 @@ export function commitPreparedGridTopology(map, prepared) {
   return prepared.result;
 }
 
-function prepareTopologyReplacement(map, nextGrid, context) {
+function prepareTopologyReplacement(map, nextGrid, context, taskContext = null) {
+  checkpointGridPreparation(taskContext, "clone-map", {sourceCells: map.grid.points.length, targetCells: nextGrid.points.length});
   const startedAt = performance.now();
   const working = structuredClone(map);
+  checkpointGridPreparation(taskContext, "clone-map-complete");
   reconcileSettlementCellIdentity(working);
   const oldGrid = working.grid;
   const oldPack = working.pack;
   const oldFeatures = working.features;
   working.grid = nextGrid;
 
+  checkpointGridPreparation(taskContext, "features");
   const features = extractFeatures(working.grid, {preserveHeights: true});
   transferFeatureMetadata(oldFeatures?.features, features.features, oldGrid, working.grid);
   working.features = features;
 
+  checkpointGridPreparation(taskContext, "pack");
   const generatedPack = buildPack(working.grid, features);
   projectPackCellFields(oldGrid, oldPack, working.grid, generatedPack);
   const packFeatureTransfer = transferPackFeatureMetadata(oldPack?.features, generatedPack.features, oldGrid, oldPack, working.grid, generatedPack);
@@ -145,6 +153,7 @@ function prepareTopologyReplacement(map, nextGrid, context) {
   };
   working.options = {...(working.options || {}), cellsTarget: working.grid.points.length};
 
+  checkpointGridPreparation(taskContext, "migrate-spatial-references");
   const waterFeatureMigration = migrateWaterFeatureReferences(working, packFeatureTransfer.waterRedirects);
   let portTopology;
   const migration = migrateSpatialReferences(working, {oldGrid, oldPack, newGrid: working.grid, newPack: working.pack}, {
@@ -161,6 +170,7 @@ function prepareTopologyReplacement(map, nextGrid, context) {
   migration.waterFeatures = waterFeatureMigration.report;
   migration.portTopology = portTopology;
   markGridRoutesFresh(working);
+  checkpointGridPreparation(taskContext, "refresh-summary");
   refreshMapMetadataAndSummary(working);
   working.metadata.gridRefinement = {
     version: GRID_TOPOLOGY_API_VERSION,
@@ -186,7 +196,22 @@ function prepareTopologyReplacement(map, nextGrid, context) {
     prepareMs: round(performance.now() - startedAt, 2),
     inspectionToken: context.inspectionToken
   };
+  checkpointGridPreparation(taskContext, "complete", {targetCells: working.grid.points.length, packCells: working.pack.cells.i.length});
   return {sourceMap: map, map: working, result};
+}
+
+function checkpointGridPreparation(context, stage, detail = {}) {
+  if (!context) return;
+  if (context.signal?.aborted) throw gridPreparationAbortError(context.signal.reason, stage);
+  context.checkpoint?.({phase: "grid-topology-prepare", stage, ...detail});
+  if (context.signal?.aborted) throw gridPreparationAbortError(context.signal.reason, stage);
+  context.report?.("grid-topology-prepare", {stage, ...detail});
+}
+
+function gridPreparationAbortError(reason, stage) {
+  const error = codedError("grid-preparation-aborted", String(reason || `网格准备已在 ${stage} 阶段取消`), {stage});
+  error.name = "AbortError";
+  return error;
 }
 
 function markGridRoutesFresh(map) {

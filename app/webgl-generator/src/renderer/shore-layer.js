@@ -151,23 +151,38 @@ export function buildShoreSurfaceVertexLayers(context, colorMode, viewOptions, p
     landCovers: [],
     waterCovers: []
   };
+  const cellRanges = {
+    landCorrections: new Map(),
+    waterCorrections: new Map(),
+    landCovers: new Map(),
+    waterCovers: new Map()
+  };
   for (const path of [...paths.coastline, ...paths.lakeShore]) {
-    pushShoreSurfaceCorrections(layers, path, context, colorMode, viewOptions);
+    pushShoreSurfaceCorrections(layers, cellRanges, path, context, colorMode, viewOptions);
   }
-  return Object.fromEntries(Object.entries(layers).map(([key, values]) => [key, new Float32Array(values)]));
+  return {
+    ...Object.fromEntries(Object.entries(layers).map(([key, values]) => [key, new Float32Array(values)])),
+    cellRanges
+  };
 }
 
-function pushShoreSurfaceCorrections(layers, path, context, colorMode, viewOptions) {
+function pushShoreSurfaceCorrections(layers, cellRanges, path, context, colorMode, viewOptions) {
   const {map} = context;
   for (const command of buildShoreSurfaceDrawPacket(path, map).commands) {
     const cell = command.side === "land" ? command.landCell : command.waterCell;
     const color = withSurfaceSideAlpha(colorForCell(cell, map, colorMode, viewOptions), command.side);
-    const target = command.kind === "correction"
-      ? command.side === "land" ? layers.landCorrections : layers.waterCorrections
-      : command.side === "land" ? layers.landCovers : layers.waterCovers;
+    const key = command.kind === "correction"
+      ? command.side === "land" ? "landCorrections" : "waterCorrections"
+      : command.side === "land" ? "landCovers" : "waterCovers";
+    const target = layers[key];
+    const start = target.length;
     for (let index = 0; index < command.positions.length; index += 2) {
       pushWorldVertex(target, context, [command.positions[index], command.positions[index + 1]], color);
     }
+    if (!Number.isInteger(cell) || cell < 0 || target.length === start) continue;
+    const ranges = cellRanges[key].get(cell) || [];
+    ranges.push({start, end: target.length});
+    cellRanges[key].set(cell, ranges);
   }
 }
 

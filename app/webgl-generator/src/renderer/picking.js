@@ -555,7 +555,7 @@ function allRiverSegments(map) {
   });
 }
 
-function riverPickingPoints(river) {
+export function riverPickingPoints(river) {
   const points = Array.isArray(river?.points) ? river.points : [];
   return isSharedCubicCurve(river?.visualCurve) ? sampleCentripetalCatmullRom(points).points : points;
 }

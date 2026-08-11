@@ -21,6 +21,7 @@ import {
 import {formatHistoryStats} from "./history-format.js";
 import {buildHoverRowEntries, formatHoverObjectTitle, hoverViewTitle, isNamedHoverRoute} from "./hover-overlay-content.js";
 import {updateStartupLoadingStatus} from "./startup-loading.js";
+import {regenerationPanelCopy} from "./regeneration-user-copy.js";
 import {buildShortcutDisplayModel} from "../runtime/keyboard-shortcuts.js";
 import {DEFAULT_MAX_CITY_LABELS} from "../runtime/display-defaults.js";
 
@@ -601,17 +602,11 @@ export function updateRegenerationSection(documentRef, result = {}) {
   const constraint = documentRef.getElementById("regeneration-constraint");
   const defaultConstraint = constraint?.dataset.defaultConstraint || "选择目标领域后查看本次替换范围。";
   const debugEnabled = Boolean(documentRef.defaultView?.__webglGeneratorDebug?.enabled);
-  if (status) status.textContent = debugEnabled ? result.status || "" : "";
-  if (constraint) constraint.textContent = debugEnabled && result.constraint ? result.constraint : defaultConstraint;
-  updateRegenerationDebugStatus(documentRef, result);
-}
-
-function updateRegenerationDebugStatus(documentRef, result = {}) {
-  if (!result.status) return;
+  const copy = regenerationPanelCopy(result, {debug: debugEnabled, defaultConstraint});
+  if (status) status.textContent = copy.status;
+  if (constraint) constraint.textContent = copy.constraint;
   const appStatus = documentRef.getElementById("app-status");
-  if (!appStatus) return;
-  const action = result.action ? `${result.action}：` : "";
-  appStatus.textContent = `${action}${result.status}${result.constraint ? ` / ${result.constraint}` : ""}`;
+  if (appStatus && copy.appStatus !== null) appStatus.textContent = copy.appStatus;
 }
 
 export function setGenerationLoading(documentRef, visible, message = "山海初开") {

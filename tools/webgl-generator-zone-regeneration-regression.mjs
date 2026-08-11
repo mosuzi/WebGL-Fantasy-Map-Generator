@@ -16,9 +16,9 @@ const [appSource, controlSource, zoneSource, zoneController] = await Promise.all
   read("app/webgl-generator/src/ui/panels/zone-panel.js")
 ]);
 
-assert.match(controlSource, /\{value: "zones", kind: "zones", label: "地区"/);
+assert.match(controlSource, /\{value: "zones", kind: "zones", label: regenerationKindLabel\("zones"\)/);
 assert.match(zoneSource, /重新生成地区/);
-assert.match(appSource, /onRegenerate: \(\) => runtimeActions\.generate\.regenerate\("zones", \{confirm: true\}\)/);
+assert.match(appSource, /onRegenerate: async \(\) => \{[\s\S]*?await runtimeActions\.generate\.regenerate\("zones", \{confirm: true\}\)[\s\S]*?createRegenerationUserError\("zones", error\)/, "地区面板回调没有安全包装底层错误");
 assert.match(zoneController, /callbacks\.onRegenerate\?\.\(\)/);
 assert.match(appSource, /const currentZones = map\.zones\?\.zones \|\| map\.pack\?\.zones \|\| \[\];/);
 assert.match(appSource, /currentZones\.length > 0 && allRegenerationObjectsLocked\(map, OBJECT_KIND\.ZONE, currentZones\)/);

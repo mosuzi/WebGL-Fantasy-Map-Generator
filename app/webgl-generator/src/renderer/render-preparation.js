@@ -1,0 +1,357 @@
+import {
+  buildLineVertices,
+  buildPlaceholderSurfaceBundle,
+  buildPointVertices,
+  buildRiverMeshVertices,
+  buildRouteMeshVertices,
+  shoreLinePathKey
+} from "./placeholder-renderer.js";
+import {buildLabelLayoutDescriptors} from "./label-layout-descriptor.js";
+import {buildCellVisualMesh} from "./cell-visual-layer.js";
+import {buildShoreVisualPaths} from "./shore-layer.js";
+import {
+  PROVINCE_VISUAL_STYLE,
+  STATE_VISUAL_STYLE,
+  buildPoliticalVisualMeshCache,
+  buildProvinceVisualPaths,
+  buildStateVisualPaths,
+  emptyPoliticalVisualMeshes,
+  normalizePoliticalMeshDebugMode,
+  politicalMeshDebugCache
+} from "./political-layer.js";
+import {
+  packCellVisualMesh,
+  packPoliticalVisualPaths,
+  packShoreVisualPaths,
+  unpackCellVisualMesh,
+  unpackPoliticalVisualPaths,
+  unpackShoreVisualPaths
+} from "./render-cache-dto.js";
+import {buildObjectPickingDto} from "./picking-dto.js";
+import {normalizeUnitPreferences} from "../ui/display-units.js";
+
+export const RENDER_PREPARATION_TASK = "render.prepare";
+export const RENDER_PREPARATION_SCHEMA_VERSION = 1;
+export const RENDER_PREPARATION_LAYERS = Object.freeze([
+  "cell-visual",
+  "shore",
+  "state-paths",
+  "province-paths",
+  "political",
+  "surface",
+  "line",
+  "picking",
+  "labels",
+  "route",
+  "river",
+  "point"
+]);
+
+const REGENERATION_RENDER_LAYERS = Object.freeze({
+  features: Object.freeze(["cell-visual", "shore", "state-paths", "province-paths", "political", "surface", "line", "point", "labels", "picking"]),
+  routes: Object.freeze(["point", "labels", "route", "picking"]),
+  rivers: Object.freeze(["surface", "point", "river", "picking"]),
+  cities: Object.freeze(["point", "labels", "route", "picking"]),
+  states: Object.freeze(["state-paths", "province-paths", "political", "surface", "line", "point", "labels", "route", "picking"]),
+  provinces: Object.freeze(["state-paths", "province-paths", "political", "surface", "line", "point", "labels", "route", "picking"]),
+  markers: Object.freeze(["point", "labels", "picking"]),
+  diplomacy: Object.freeze(["surface", "line", "picking"]),
+  religions: Object.freeze(["surface", "picking"]),
+  military: Object.freeze(["point", "line", "labels", "picking"]),
+  zones: Object.freeze(["surface", "line", "labels", "picking"])
+});
+
+export function renderPreparationLayersForRegeneration(kind) {
+  const layers = REGENERATION_RENDER_LAYERS[String(kind || "").trim().toLowerCase()];
+  if (!layers) throw renderPreparationError("render-regeneration-kind-unsupported", `没有 ${kind || "(empty)"} 的渲染准备范围`);
+  return [...layers];
+}
+
+export async function executeRenderPreparationTask(payload = {}, context = {}) {
+  const map = payload.map;
+  if (!map || typeof map !== "object") throw renderPreparationError("render-map-required", "渲染准备缺少地图快照");
+  const binding = normalizeRenderBinding(payload.binding ?? context.binding);
+  const camera = normalizeCamera(payload.camera);
+  const canvas = normalizeCanvas(payload.canvas);
+  const requested = normalizeRequestedLayers(payload.layers);
+  const result = {
+    schemaVersion: RENDER_PREPARATION_SCHEMA_VERSION,
+    binding,
+    presentation: {
+      unitPreferences: normalizeUnitPreferences(payload.unitPreferences || {}),
+      politicalMeshDebugMode: normalizePoliticalMeshDebugMode(payload.politicalMeshDebugMode)
+    },
+    layers: {}
+  };
+  const cache = {};
+
+  for (let index = 0; index < requested.length; index++) {
+    checkpoint(context, requested[index], index, requested.length);
+    const layer = requested[index];
+    if (layer === "route") {
+      result.layers.route = buildRouteMeshVertices(
+        map,
+        camera,
+        canvas,
+        payload.selection || null,
+        Array.isArray(payload.objectHighlights) ? payload.objectHighlights : [],
+        payload.visualTheme || {}
+      );
+    } else if (layer === "river") {
+      result.layers.river = buildRiverMeshVertices(map, camera, canvas);
+    } else if (layer === "point") {
+      result.layers.point = {vertices: buildPointVertices(map, payload.visibility || {})};
+    } else if (layer === "cell-visual") {
+      cache.cellVisual ||= payload.caches?.cellVisual
+        ? unpackCellVisualMesh(payload.caches.cellVisual, binding)
+        : buildCellVisualMesh(map);
+      result.layers.cellVisual = packCellVisualMesh(cache.cellVisual, binding);
+    } else if (layer === "shore") {
+      cache.shore ||= payload.caches?.shore
+        ? unpackShoreVisualPaths(payload.caches.shore, binding)
+        : buildShoreVisualPaths(map);
+      result.layers.shore = packShoreVisualPaths(cache.shore, binding);
+    } else if (layer === "state-paths") {
+      cache.statePaths ||= payload.caches?.statePaths
+        ? unpackPoliticalVisualPaths(payload.caches.statePaths, binding)
+        : buildStateVisualPaths(map);
+      result.layers.statePaths = packPoliticalVisualPaths(cache.statePaths, binding, "state");
+    } else if (layer === "province-paths") {
+      cache.provincePaths ||= payload.caches?.provincePaths
+        ? unpackPoliticalVisualPaths(payload.caches.provincePaths, binding)
+        : buildProvinceVisualPaths(map);
+      result.layers.provincePaths = packPoliticalVisualPaths(cache.provincePaths, binding, "province");
+    } else if (layer === "political") {
+      const prepared = ensureRenderCaches(map, binding, payload.caches, cache);
+      const political = ensurePoliticalMeshes(map, prepared, payload);
+      const debugMode = result.presentation.politicalMeshDebugMode;
+      result.layers.political = political;
+      result.layers.politicalDebug = {
+        mode: debugMode,
+        vertices: politicalMeshDebugCache(political, debugMode)?.vertices || new Float32Array()
+      };
+    } else if (layer === "surface") {
+      const prepared = ensureRenderCaches(map, binding, payload.caches, cache);
+      const political = ensurePoliticalMeshes(map, prepared, payload);
+      result.layers.surface = buildPlaceholderSurfaceBundle(
+        map,
+        payload.colorMode || "height",
+        payload.viewOptions || {},
+        prepared.shore,
+        prepared.statePaths,
+        prepared.provincePaths,
+        political,
+        prepared.cellVisual
+      );
+    } else if (layer === "line") {
+      const prepared = ensureRenderCaches(map, binding, payload.caches, cache);
+      const line = buildLineVertices(
+        map,
+        payload.visibility || {},
+        payload.colorMode || "height",
+        prepared.shore,
+        prepared.statePaths,
+        prepared.provincePaths,
+        prepared.cellVisual,
+        payload.viewOptions || {},
+        new Set((payload.oceanCurrentHighlightIds || []).map(String))
+      );
+      result.layers.line = {
+        vertices: line.vertices,
+        shoreVertices: line.shoreVertices,
+        shorePathCache: packShoreLinePathCache(line.shoreLinePathVertices, binding),
+        oceanCurrentVertices: line.oceanCurrentVertices,
+        oceanCurrents: line.oceanCurrents
+      };
+    } else if (layer === "picking") {
+      result.layers.picking = buildObjectPickingDto(map, binding);
+    } else if (layer === "labels") {
+      result.layers.labels = buildLabelLayoutDescriptors(map, {
+        labelOptions: payload.labelOptions || {},
+        visualTheme: payload.visualTheme || {}
+      });
+    }
+    context.report?.("render-prepare", {layer, completed: index + 1, total: requested.length});
+  }
+
+  return result;
+}
+
+export function collectRenderPreparationTransfers(value) {
+  const buffers = [];
+  const seenObjects = new Set();
+  const seenBuffers = new Set();
+  collectTransferables(value, buffers, seenObjects, seenBuffers);
+  return buffers;
+}
+
+export function assertRenderPreparationBinding(result, expected) {
+  const actual = normalizeRenderBinding(result?.binding);
+  const target = normalizeRenderBinding(expected);
+  if (actual.mapIdentity !== target.mapIdentity || actual.mapRevision !== target.mapRevision) {
+    throw renderPreparationError("render-result-stale", "渲染准备结果不属于当前地图 revision", {actual, expected: target});
+  }
+  return result;
+}
+
+export function packShoreLinePathCache(pathVertices, binding = {}) {
+  const entries = [...(pathVertices instanceof Map ? pathVertices : new Map()).entries()]
+    .map(([key, vertices]) => [String(key), vertices instanceof Float32Array ? vertices : new Float32Array(vertices || [])])
+    .sort((left, right) => left[0].localeCompare(right[0]));
+  const offsets = new Uint32Array(entries.length + 1);
+  for (let index = 0; index < entries.length; index++) offsets[index + 1] = offsets[index] + entries[index][1].length;
+  const vertices = new Float32Array(offsets.at(-1));
+  for (let index = 0; index < entries.length; index++) vertices.set(entries[index][1], offsets[index]);
+  return {
+    schemaVersion: RENDER_PREPARATION_SCHEMA_VERSION,
+    binding: normalizeRenderBinding(binding),
+    keys: entries.map(([key]) => key),
+    offsets,
+    vertices
+  };
+}
+
+export function rebindShoreLinePathCache(dto, shoreVisualPaths, expectedBinding = null) {
+  if (!dto || Number(dto.schemaVersion) !== RENDER_PREPARATION_SCHEMA_VERSION) {
+    throw renderPreparationError("render-shore-path-cache-version", "岸线路径顶点缓存版本无效");
+  }
+  if (expectedBinding !== null && expectedBinding !== undefined) {
+    const actual = normalizeRenderBinding(dto.binding);
+    const expected = normalizeRenderBinding(expectedBinding);
+    if (actual.mapIdentity !== expected.mapIdentity || actual.mapRevision !== expected.mapRevision) {
+      throw renderPreparationError("render-result-stale", "岸线路径顶点缓存不属于当前地图 revision", {actual, expected});
+    }
+  }
+  if (!Array.isArray(dto.keys) || !(dto.offsets instanceof Uint32Array) || !(dto.vertices instanceof Float32Array)) {
+    throw renderPreparationError("render-shore-path-cache-shape", "岸线路径顶点缓存结构无效");
+  }
+  if (dto.offsets.length !== dto.keys.length + 1 || dto.offsets[0] !== 0 || dto.offsets.at(-1) !== dto.vertices.length) {
+    throw renderPreparationError("render-shore-path-cache-offsets", "岸线路径顶点缓存偏移无效");
+  }
+  const pathVertices = new Map();
+  for (let index = 0; index < dto.keys.length; index++) {
+    const start = dto.offsets[index];
+    const end = dto.offsets[index + 1];
+    if (end < start || end > dto.vertices.length || pathVertices.has(dto.keys[index])) {
+      throw renderPreparationError("render-shore-path-cache-offsets", "岸线路径顶点缓存含重复键或逆序偏移");
+    }
+    pathVertices.set(dto.keys[index], dto.vertices.subarray(start, end));
+  }
+  const pathObjectVertices = new WeakMap();
+  for (const [featureType, paths] of [
+    ["coastline", shoreVisualPaths?.coastline],
+    ["lakeShore", shoreVisualPaths?.lakeShore]
+  ]) {
+    for (const path of paths || []) {
+      const vertices = pathVertices.get(shoreLinePathKey(featureType, path));
+      if (vertices) pathObjectVertices.set(path, vertices);
+    }
+  }
+  return {pathVertices, pathObjectVertices};
+}
+
+function normalizeRequestedLayers(value) {
+  const source = Array.isArray(value) ? value : ["route", "river", "point"];
+  const supported = new Set(RENDER_PREPARATION_LAYERS);
+  const normalized = source.map(String);
+  const unsupported = normalized.filter(layer => !supported.has(layer));
+  if (unsupported.length) throw renderPreparationError("render-layer-unsupported", `不支持的渲染准备图层：${[...new Set(unsupported)].join(", ")}`);
+  const layers = [...new Set(normalized)];
+  if (!layers.length) throw renderPreparationError("render-layer-required", "渲染准备未指定受支持的图层");
+  return layers;
+}
+
+function ensureRenderCaches(map, binding, input = {}, cache = {}) {
+  cache.cellVisual ||= input?.cellVisual ? unpackCellVisualMesh(input.cellVisual, binding) : buildCellVisualMesh(map);
+  cache.shore ||= input?.shore ? unpackShoreVisualPaths(input.shore, binding) : buildShoreVisualPaths(map);
+  cache.statePaths ||= input?.statePaths ? unpackPoliticalVisualPaths(input.statePaths, binding) : buildStateVisualPaths(map);
+  cache.provincePaths ||= input?.provincePaths ? unpackPoliticalVisualPaths(input.provincePaths, binding) : buildProvinceVisualPaths(map);
+  return cache;
+}
+
+function ensurePoliticalMeshes(map, cache, payload = {}) {
+  if (cache.political) return cache.political;
+  const debugMode = normalizePoliticalMeshDebugMode(payload.politicalMeshDebugMode);
+  const shouldBuild = debugMode !== "none"
+    || (payload.viewOptions?.smoothCellBorders !== false && !(cache.cellVisual?.cells?.length));
+  cache.political = shouldBuild
+    ? {
+        states: buildPoliticalVisualMeshCache(map, "state", cache.statePaths, cache.shore, STATE_VISUAL_STYLE),
+        provinces: buildPoliticalVisualMeshCache(map, "province", cache.provincePaths, cache.shore, PROVINCE_VISUAL_STYLE)
+      }
+    : emptyPoliticalVisualMeshes();
+  return cache.political;
+}
+
+function normalizeRenderBinding(value = {}) {
+  const mapIdentity = value.mapIdentity === null || value.mapIdentity === undefined ? null : String(value.mapIdentity);
+  const mapRevision = Number(value.mapRevision);
+  return {
+    mapIdentity,
+    mapRevision: Number.isSafeInteger(mapRevision) && mapRevision >= 0 ? mapRevision : 0
+  };
+}
+
+function normalizeCamera(value = {}) {
+  return {
+    scale: finitePositive(value.scale, 1),
+    offsetX: finiteNumber(value.offsetX, 0),
+    offsetY: finiteNumber(value.offsetY, 0)
+  };
+}
+
+function normalizeCanvas(value = {}) {
+  const width = finitePositive(value.width ?? value.clientWidth, 1);
+  const height = finitePositive(value.height ?? value.clientHeight, 1);
+  return {
+    width,
+    height,
+    clientWidth: finitePositive(value.clientWidth, width),
+    clientHeight: finitePositive(value.clientHeight, height)
+  };
+}
+
+function checkpoint(context, layer, completed, total) {
+  context.checkpoint?.({phase: "render-prepare", layer, completed, total});
+  if (context.signal?.aborted) throw renderPreparationError("render-preparation-aborted", "渲染准备已取消", {layer, completed, total});
+}
+
+function collectTransferables(value, buffers, seenObjects, seenBuffers) {
+  if (!value || typeof value !== "object" || seenObjects.has(value)) return;
+  seenObjects.add(value);
+  if (ArrayBuffer.isView(value)) {
+    const buffer = value.buffer;
+    if (buffer instanceof ArrayBuffer && !seenBuffers.has(buffer)) {
+      seenBuffers.add(buffer);
+      buffers.push(buffer);
+    }
+    return;
+  }
+  if (value instanceof ArrayBuffer) {
+    if (!seenBuffers.has(value)) {
+      seenBuffers.add(value);
+      buffers.push(value);
+    }
+    return;
+  }
+  for (const next of Array.isArray(value) ? value : Object.values(value)) {
+    collectTransferables(next, buffers, seenObjects, seenBuffers);
+  }
+}
+
+function finiteNumber(value, fallback) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : fallback;
+}
+
+function finitePositive(value, fallback) {
+  const number = Number(value);
+  return Number.isFinite(number) && number > 0 ? number : fallback;
+}
+
+function renderPreparationError(code, message, details = {}) {
+  const error = new Error(message);
+  error.code = code;
+  error.details = details;
+  return error;
+}

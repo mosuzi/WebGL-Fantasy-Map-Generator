@@ -142,8 +142,9 @@ export function gridFromStructureDocument(document, previousGrid = null) {
   return grid;
 }
 
-export function refineGridTopology(sourceGrid, targetCells) {
+export function refineGridTopology(sourceGrid, targetCells, taskContext = null) {
   assertGrid(sourceGrid);
+  checkpointRefinement(taskContext, "start", {sourceCells: sourceGrid.points.length, targetCells});
   const startedAt = performance.now();
   const sourceCells = sourceGrid.points.length;
   const target = normalizeTargetCells(targetCells, sourceCells);
@@ -155,6 +156,7 @@ export function refineGridTopology(sourceGrid, targetCells) {
   const children = Array.from({length: sourceCells}, (_, index) => [index]);
 
   for (let mother = 0; mother < sourceCells; mother++) {
+    if (mother % 256 === 0) checkpointRefinement(taskContext, "sample-points", {completed: mother, total: sourceCells}, false);
     const polygon = cellPolygon(sourceGrid, mother);
     for (let ordinal = 1; ordinal < childCounts[mother]; ordinal++) {
       const point = sampleCellPoint(sourceGrid.points[mother], polygon, mother, ordinal, graphWidth, graphHeight);
@@ -167,12 +169,15 @@ export function refineGridTopology(sourceGrid, targetCells) {
 
   const spacing = Math.sqrt((graphWidth * graphHeight) / target);
   const boundary = createGridBoundaryPoints(graphWidth, graphHeight, spacing);
+  checkpointRefinement(taskContext, "voronoi", {points: points.length, boundaryPoints: boundary.length});
   const {cells, vertices} = calculateVoronoi(points, boundary);
+  checkpointRefinement(taskContext, "voronoi-complete", {cells: cells.i.length, vertices: vertices.p.length});
   const removedCrossMotherEdges = constrainNeighborGraph(cells.c, sourceGrid.cells.c, mothers);
   const restoredSourceAdjacencyEdges = ensureSourceAdjacency(cells.c, sourceGrid.cells.c, children);
   cells.p = Array.from(cells.i);
   cells.h = projectHeightField(sourceGrid, points, mothers);
   projectGridFields(sourceGrid, cells, mothers, children);
+  checkpointRefinement(taskContext, "projection-complete", {cells: cells.i.length});
   const topology = validateRefinedMotherAdjacency(sourceGrid.cells.c, cells.c, mothers);
   if (!topology.valid) throw codedError("refinement-topology-violation", `细分产生 ${topology.violations.length} 条跨母邻接`, topology);
 
@@ -207,6 +212,7 @@ export function refineGridTopology(sourceGrid, targetCells) {
   };
   const validation = validateGridStructureDocument(createGridStructureSnapshot(grid));
   if (!validation.valid) throw codedError("refinement-invalid-structure", `细分结构无效：${validation.errors.slice(0, 3).join("；")}`, validation);
+  checkpointRefinement(taskContext, "complete", {cells: grid.points.length, vertices: grid.vertices.p.length});
   return {
     grid,
     report: {
@@ -224,6 +230,20 @@ export function refineGridTopology(sourceGrid, targetCells) {
       buildMs: round(performance.now() - startedAt, 2)
     }
   };
+}
+
+function checkpointRefinement(context, stage, detail = {}, report = true) {
+  if (!context) return;
+  if (context.signal?.aborted) throw refinementAbortError(context.signal.reason, stage);
+  context.checkpoint?.({phase: "grid-refinement", stage, ...detail});
+  if (context.signal?.aborted) throw refinementAbortError(context.signal.reason, stage);
+  if (report) context.report?.("grid-refinement", {stage, ...detail});
+}
+
+function refinementAbortError(reason, stage) {
+  const error = codedError("grid-preparation-aborted", String(reason || `网格细分已在 ${stage} 阶段取消`), {stage});
+  error.name = "AbortError";
+  return error;
 }
 
 export function validateRefinedMotherAdjacency(sourceNeighbors, refinedNeighbors, mothers) {

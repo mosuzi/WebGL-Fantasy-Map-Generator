@@ -27,6 +27,7 @@ import {
   createCityIconWebglLayer,
   packCityIconInstances
 } from "../app/webgl-generator/src/renderer/city-icon-layer.js";
+import {PlaceholderMapRenderer} from "../app/webgl-generator/src/renderer/placeholder-renderer.js";
 
 const source = await readFile(new URL("../app/webgl-generator/src/renderer/city-icon-layer.js", import.meta.url), "utf8");
 const shapeKeys = ["hamlet", "village", "town", "city", "capital", "provincial", "port", "fort", "camp"];
@@ -192,6 +193,351 @@ function previousCityIconMaxSizeFactor({silhouette, roles = [], nameWidthCss}) {
   const extent = cityIconOutlineExtent(silhouette, roles);
   return Math.max(1, outlineLimit - CITY_ICON_OUTLINE_STROKE_CSS_PX) / (CITY_ICON_BASE_CSS_SIZE.height * extent);
 }
+
+class FakeGl {
+  constructor() {
+    Object.assign(this, {
+      ARRAY_BUFFER: 0x8892,
+      ARRAY_BUFFER_BINDING: 0x8894,
+      BLEND: 0x0be2,
+      BLEND_DST_ALPHA: 0x80ca,
+      BLEND_DST_RGB: 0x80c8,
+      BLEND_SRC_ALPHA: 0x80cb,
+      BLEND_SRC_RGB: 0x80c9,
+      COLOR_BUFFER_BIT: 0x4000,
+      CURRENT_PROGRAM: 0x8b8d,
+      DEPTH_BUFFER_BIT: 0x0100,
+      DEPTH_TEST: 0x0b71,
+      DEPTH_WRITEMASK: 0x0b72,
+      FLOAT: 0x1406,
+      GREATER: 0x0204,
+      LESS: 0x0201,
+      LINES: 0x0001,
+      ONE: 1,
+      ONE_MINUS_SRC_ALPHA: 0x0303,
+      POINTS: 0x0000,
+      SRC_ALPHA: 0x0302,
+      TRIANGLES: 0x0004,
+      VERTEX_ARRAY_BINDING: 0x85b5,
+      ZERO: 0,
+      INVALID_OPERATION: 0x0502
+    });
+    this.calls = [];
+    this.queryCounts = {getParameter: 0, isEnabled: 0};
+    this.state = {
+      program: null,
+      vertexArray: null,
+      arrayBuffer: null,
+      blend: false,
+      depthTest: false,
+      depthWrite: false,
+      blendSrcRgb: this.SRC_ALPHA,
+      blendDstRgb: this.ONE_MINUS_SRC_ALPHA,
+      blendSrcAlpha: this.SRC_ALPHA,
+      blendDstAlpha: this.ONE_MINUS_SRC_ALPHA
+    };
+    this.nextError = 0;
+  }
+
+  resetCalls() {
+    this.calls.length = 0;
+    this.queryCounts = {getParameter: 0, isEnabled: 0};
+  }
+
+  snapshotState() {
+    return {...this.state};
+  }
+
+  record(name, ...args) {
+    this.calls.push({name, args});
+  }
+
+  bindBuffer(target, buffer) {
+    this.record("bindBuffer", target, buffer);
+    if (target === this.ARRAY_BUFFER) this.state.arrayBuffer = buffer;
+  }
+
+  bindVertexArray(vertexArray) {
+    this.record("bindVertexArray", vertexArray);
+    this.state.vertexArray = vertexArray;
+  }
+
+  blendFunc(src, dst) {
+    this.record("blendFunc", src, dst);
+    this.state.blendSrcRgb = src;
+    this.state.blendDstRgb = dst;
+    this.state.blendSrcAlpha = src;
+    this.state.blendDstAlpha = dst;
+  }
+
+  blendFuncSeparate(srcRgb, dstRgb, srcAlpha, dstAlpha) {
+    this.record("blendFuncSeparate", srcRgb, dstRgb, srcAlpha, dstAlpha);
+    this.state.blendSrcRgb = srcRgb;
+    this.state.blendDstRgb = dstRgb;
+    this.state.blendSrcAlpha = srcAlpha;
+    this.state.blendDstAlpha = dstAlpha;
+  }
+
+  depthMask(value) {
+    this.record("depthMask", value);
+    this.state.depthWrite = Boolean(value);
+  }
+
+  disable(capability) {
+    this.record("disable", capability);
+    if (capability === this.BLEND) this.state.blend = false;
+    if (capability === this.DEPTH_TEST) this.state.depthTest = false;
+  }
+
+  enable(capability) {
+    this.record("enable", capability);
+    if (capability === this.BLEND) this.state.blend = true;
+    if (capability === this.DEPTH_TEST) this.state.depthTest = true;
+  }
+
+  getError() {
+    this.record("getError");
+    const value = this.nextError;
+    this.nextError = 0;
+    return value;
+  }
+
+  getParameter(parameter) {
+    this.record("getParameter", parameter);
+    this.queryCounts.getParameter++;
+    if (parameter === this.CURRENT_PROGRAM) return this.state.program;
+    if (parameter === this.VERTEX_ARRAY_BINDING) return this.state.vertexArray;
+    if (parameter === this.ARRAY_BUFFER_BINDING) return this.state.arrayBuffer;
+    if (parameter === this.DEPTH_WRITEMASK) return this.state.depthWrite;
+    if (parameter === this.BLEND_SRC_RGB) return this.state.blendSrcRgb;
+    if (parameter === this.BLEND_DST_RGB) return this.state.blendDstRgb;
+    if (parameter === this.BLEND_SRC_ALPHA) return this.state.blendSrcAlpha;
+    if (parameter === this.BLEND_DST_ALPHA) return this.state.blendDstAlpha;
+    throw new Error(`FakeGl 未实现 getParameter(${parameter})`);
+  }
+
+  isEnabled(capability) {
+    this.record("isEnabled", capability);
+    this.queryCounts.isEnabled++;
+    if (capability === this.BLEND) return this.state.blend;
+    if (capability === this.DEPTH_TEST) return this.state.depthTest;
+    throw new Error(`FakeGl 未实现 isEnabled(${capability})`);
+  }
+
+  useProgram(program) {
+    this.record("useProgram", program);
+    this.state.program = program;
+  }
+
+  clear(...args) { this.record("clear", ...args); }
+  clearColor(...args) { this.record("clearColor", ...args); }
+  clearDepth(...args) { this.record("clearDepth", ...args); }
+  depthFunc(...args) { this.record("depthFunc", ...args); }
+  drawArrays(...args) { this.record("drawArrays", ...args); }
+  drawArraysInstanced(...args) { this.record("drawArraysInstanced", ...args); }
+  enableVertexAttribArray(...args) { this.record("enableVertexAttribArray", ...args); }
+  lineWidth(...args) { this.record("lineWidth", ...args); }
+  uniform1f(...args) { this.record("uniform1f", ...args); }
+  uniform1i(...args) { this.record("uniform1i", ...args); }
+  uniform2f(...args) { this.record("uniform2f", ...args); }
+  uniform4fv(...args) { this.record("uniform4fv", ...args); }
+  vertexAttribPointer(...args) { this.record("vertexAttribPointer", ...args); }
+  viewport(...args) { this.record("viewport", ...args); }
+}
+
+function createLayerHarness(gl, instanceCount = 1) {
+  const layer = Object.create(CityIconWebglLayer.prototype);
+  Object.assign(layer, {
+    gl,
+    baseSize: {...CITY_ICON_BASE_CSS_SIZE},
+    transitionMs: 150,
+    scaleFadeWidth: CITY_ICON_SCALE_FADE_WIDTH,
+    program: {name: "city-program"},
+    vao: {name: "city-vao"},
+    instances: Array.from({length: instanceCount}, (_, id) => ({id})),
+    stats: {
+      instanceCount,
+      modelUploads: 0,
+      stateUploads: 0,
+      uploadedBytes: 0,
+      drawCalls: 0,
+      lastDrawInstances: 0,
+      uniformOnlyCameraFrames: 0
+    },
+    locations: Object.fromEntries([
+      "mapSize", "viewportBacking", "pixelRatio", "baseSizeCss", "cameraScale", "cameraOffset", "timeMs",
+      "transitionMs", "scaleFadeWidth", "darkOutline", "whiteInner", "selectedInner"
+    ].map((name, index) => [name, index]))
+  });
+  return layer;
+}
+
+function drawOptions(overrides = {}) {
+  return {
+    mapSize: {width: 100, height: 80},
+    camera: {scale: 2, offsetX: 0.1, offsetY: -0.2},
+    canvas: {width: 800, height: 600, clientWidth: 400, clientHeight: 300},
+    timeMs: 120,
+    ...overrides
+  };
+}
+
+function testStandaloneStateContract() {
+  const gl = new FakeGl();
+  const layer = createLayerHarness(gl);
+  Object.assign(gl.state, {
+    program: {name: "previous-program"},
+    vertexArray: {name: "previous-vao"},
+    arrayBuffer: {name: "previous-buffer"},
+    blend: true,
+    depthTest: true,
+    depthWrite: true,
+    blendSrcRgb: gl.ONE,
+    blendDstRgb: gl.ZERO,
+    blendSrcAlpha: gl.ZERO,
+    blendDstAlpha: gl.ONE
+  });
+  const before = gl.snapshotState();
+  gl.resetCalls();
+  assert.equal(layer.draw(drawOptions()), 1, "独立城镇层默认 draw 未绘制实例");
+  assert.deepEqual(gl.snapshotState(), before, "独立城镇层默认 draw 未恢复任意 GL 状态");
+  assert.equal(gl.queryCounts.getParameter, 8, "独立默认恢复的 getParameter 分母漂移");
+  assert.equal(gl.queryCounts.isEnabled, 2, "独立默认恢复的 isEnabled 分母漂移");
+  assert.equal(gl.calls.filter(call => call.name === "drawArraysInstanced").length, 1, "独立默认 draw 未保持单次 instanced draw");
+
+  const optOut = createLayerHarness(gl);
+  gl.resetCalls();
+  assert.equal(optOut.draw(drawOptions({restoreState: false})), 1);
+  assert.equal(optOut.draw(drawOptions({restoreState: false, timeMs: 140})), 1);
+  assert.deepEqual(gl.queryCounts, {getParameter: 0, isEnabled: 0}, "restoreState:false 仍同步查询 GL 状态");
+  assert.equal(gl.calls.filter(call => call.name === "drawArraysInstanced").length, 2, "重复帧不是每帧一次 instanced draw");
+  assert.deepEqual(optOut.snapshot(), {
+    instanceCount: 1,
+    modelUploads: 0,
+    stateUploads: 0,
+    uploadedBytes: 0,
+    drawCalls: 2,
+    lastDrawInstances: 1,
+    uniformOnlyCameraFrames: 2
+  }, "重复帧 stats 漂移");
+  const beforeHidden = optOut.snapshot();
+  const hiddenCallCount = gl.calls.length;
+  assert.equal(optOut.draw(drawOptions({layerVisible: false, restoreState: false})), 0);
+  assert.equal(gl.calls.length, hiddenCallCount, "隐藏城镇层仍调用 GL");
+  assert.equal(optOut.stats.drawCalls, beforeHidden.drawCalls, "隐藏帧误增 drawCalls");
+  assert.equal(optOut.stats.uniformOnlyCameraFrames, beforeHidden.uniformOnlyCameraFrames, "隐藏帧误增 uniformOnlyCameraFrames");
+  assert.equal(optOut.stats.lastDrawInstances, 0, "隐藏帧未清 lastDrawInstances");
+
+  const empty = createLayerHarness(gl, 0);
+  gl.resetCalls();
+  assert.equal(empty.draw(drawOptions({restoreState: false})), 0);
+  assert.deepEqual(gl.calls, [], "零实例帧仍调用 GL");
+  assert.equal(empty.stats.drawCalls, 0, "零实例帧误增 drawCalls");
+  assert.equal(empty.stats.uniformOnlyCameraFrames, 0, "零实例帧误增 uniformOnlyCameraFrames");
+}
+
+function testPlaceholderDrawTailState() {
+  const gl = new FakeGl();
+  const cityIconLayer = createLayerHarness(gl);
+  const buffer = name => ({name});
+  const mainProgram = {name: "main-program"};
+  const pointBuffer = buffer("point-buffer");
+  const camera = {scale: 1, offsetX: 0, offsetY: 0};
+  const renderer = Object.assign(Object.create(PlaceholderMapRenderer.prototype), {
+    canvas: {width: 800, height: 600, clientWidth: 800, clientHeight: 600},
+    gl,
+    map: {metadata: {width: 100, height: 80, graphWidth: 100, graphHeight: 80}, layers: {background: [0, 0, 0, 1]}},
+    visualTheme: {canvas: {background: [0, 0, 0, 1]}},
+    camera,
+    program: mainProgram,
+    locations: {position: 0, color: 1, scale: 2, offset: 3, pointMode: 4, surfaceSideMode: 5},
+    workerRenderInstallSuspended: 0,
+    dynamicBuffersDirty: {routes: false, tradeFlows: false, rivers: false, selection: false},
+    layerVisibility: {routes: false, tradeFlows: false, rivers: false, gridCells: false, cities: true},
+    surfaceBaseBufferSet: null,
+    surfaceVertices: new Float32Array(18),
+    vertexBuffer: buffer("surface-buffer"),
+    vertexCount: 3,
+    surfacePatchBuffer: buffer("surface-patch-buffer"),
+    surfacePatchVertexCount: 0,
+    landCorrectionBuffer: buffer("land-correction-buffer"),
+    landCorrectionVertexCount: 0,
+    waterCorrectionBuffer: buffer("water-correction-buffer"),
+    waterCorrectionVertexCount: 0,
+    landCoverBuffer: buffer("land-cover-buffer"),
+    landCoverVertexCount: 0,
+    waterCoverBuffer: buffer("water-cover-buffer"),
+    waterCoverVertexCount: 0,
+    oceanCurrentBuffer: buffer("ocean-current-buffer"),
+    oceanCurrentVertexCount: 0,
+    heightCellSelectionBuffer: buffer("height-selection-buffer"),
+    heightCellSelectionVertexCount: 0,
+    heightTransformPreviewBuffer: buffer("height-preview-buffer"),
+    heightTransformPreviewVertexCount: 0,
+    politicalMeshDebugBuffer: buffer("political-debug-buffer"),
+    politicalMeshDebugVertexCount: 0,
+    routeBuffer: buffer("route-buffer"),
+    routeBufferCamera: camera,
+    routeDrawRanges: [],
+    routeVertexCount: 0,
+    tradeFlowBuffer: buffer("trade-flow-buffer"),
+    tradeFlowVertexCount: 0,
+    lineBuffer: buffer("line-buffer"),
+    lineVertexCount: 0,
+    shoreLineBuffer: buffer("shore-line-buffer"),
+    shoreLineVertexCount: 0,
+    riverBuffer: buffer("river-buffer"),
+    riverBufferCamera: camera,
+    riverVertexCount: 0,
+    gridCellDiagnostics: {ready: false},
+    gridCellDiagnosticsBuffer: buffer("grid-buffer"),
+    gridCellDiagnosticsVertexCount: 0,
+    gridCellDiagnosticFillBuffer: buffer("grid-fill-buffer"),
+    gridCellDiagnosticFillVertexCount: 0,
+    gridCellDiagnosticLineBuffer: buffer("grid-line-buffer"),
+    gridCellDiagnosticLineVertexCount: 0,
+    selectionBuffer: buffer("selection-buffer"),
+    selectionDrawRanges: {landMasked: {first: 0, count: 0}, ordinary: {first: 0, count: 0}},
+    pointBuffer,
+    pointVertexCount: 0,
+    cityIconLayer,
+    cityMovePreview: null,
+    oceanCurrentLayerStats: {minWidth: 0, maxWidth: 0},
+    lastDraw: null
+  });
+  gl.resetCalls();
+  gl.nextError = gl.INVALID_OPERATION;
+  renderer.draw({updateDynamicBuffers: false, updateOverlay: false, drawDirtyDynamicBuffers: false, trackPerformance: false});
+  assert.deepEqual(gl.queryCounts, {getParameter: 0, isEnabled: 0}, "正式 renderer 城镇集成仍同步查询 GL 状态");
+  assert.equal(gl.calls.filter(call => call.name === "drawArraysInstanced").length, 1, "正式 renderer 城镇集成不是单次 instanced draw");
+  assert.equal(renderer.lastDraw.glError, gl.INVALID_OPERATION, "lastDraw 未使用正式 gl.getError 返回值");
+  assert.deepEqual(gl.snapshotState(), {
+    program: mainProgram,
+    vertexArray: null,
+    arrayBuffer: pointBuffer,
+    blend: false,
+    depthTest: false,
+    depthWrite: false,
+    blendSrcRgb: gl.SRC_ALPHA,
+    blendDstRgb: gl.ONE_MINUS_SRC_ALPHA,
+    blendSrcAlpha: gl.SRC_ALPHA,
+    blendDstAlpha: gl.ONE_MINUS_SRC_ALPHA
+  }, "正式 renderer 城镇绘制后的已知主尾态漂移");
+  const tail = gl.calls.slice(-8);
+  assert.deepEqual(tail.map(call => call.name), [
+    "bindVertexArray", "bindBuffer", "useProgram", "blendFunc", "disable", "disable", "depthMask", "getError"
+  ], "正式 renderer 城镇主尾态恢复顺序漂移");
+  assert.deepEqual(tail[0].args, [null], "正式 renderer 未先解绑 city VAO");
+  assert.deepEqual(tail[1].args, [gl.ARRAY_BUFFER, pointBuffer], "正式 renderer 未恢复 pointBuffer");
+  assert.deepEqual(tail[2].args, [mainProgram], "正式 renderer 未恢复 main program");
+  assert.deepEqual(tail[3].args, [gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA], "正式 renderer 未恢复主 blendFunc");
+  assert.deepEqual(tail[4].args, [gl.BLEND]);
+  assert.deepEqual(tail[5].args, [gl.DEPTH_TEST]);
+  assert.deepEqual(tail[6].args, [false]);
+}
+
+testStandaloneStateContract();
+testPlaceholderDrawTailState();
 
 console.log(JSON.stringify({
   cityWebglShapes: shapeKeys.length,

@@ -1,5 +1,45 @@
 # 开发历史
 
+## 2026-08-11：第 322 项 Stage A 十一类重生成 Worker 闭环接受
+
+- 连续全锁河流 no-op 的 `113ms` 首败经独立中书舍人归因，确认工具在 CPU surface 指纹后未等待 `PerformanceObserver` 异步投递。新窄诊断把锁定、CPU hash、引用快照、两次 no-op、输入 slice、Loading 与 LoAF 只记录为标量，并在 pre-probe 和 operation 后都执行 `setTimeout(0) + 2 rAF + takeRecords()`；前置唯一 LongTask 为 `120ms`，其中 CPU hash `106.1ms`，正式两次 no-op 窗口 LongTask 为 `0`。后置 surface GPU / CPU 字节、segment / buffer 引用、descriptor、TypedArray、renderer、session 和 Loading 精确门全部保留。
+- 给事中冻结复核确认普通 full 与诊断路径使用同一 observer drain，诊断 flag 只控制 wrapper、artifact 与短路。观察使随后唯一一次运行当前树 `pnpm run regress:worker-session-browser`，exit `0`、最终 JSON `ok=true`；10k 全部正式 operation / 最终 LongTask 为 `0`，非性能 health、应用 console、page、WebGL 与 Loading 错误为 `0`，十一类 fresh / reuse、accepted 后 fallback `0`、取消 / 换图 / 迟到、原子回滚、十个 prepared fail-closed、deferred / recovery、九段 late context 与普通用户纯中文技术词门均通过。
+- 此前冻结的 100k fresh routes 代表门继续有效：Worker 输入投递、输出解码、回传、安装提交和 UI 刷新为 `2.2 / 2.6 / 1.5 / 1.3 / 7.2ms`，两条已完整归因的末端展示任务均为 `57ms`，符合仅限 Stage A 的分阶段预算；Stage D 仍须继续收紧，Stage E 不自动继承。Stage A 据此接受并形成内部 checkpoint，但第 322 项尚未完成，不得据此合入 `main` 或启动第 327 项。证据位于 `work/task322-no-op-attribution/`、`work/task322-stagea-final-10k-rerun/` 和 `work/task322-100k-fresh-routes-diagnostic/`。
+
+## 2026-08-11：第 322 项 Stage A 止损复核与 no-op 主线程阻断
+
+- 用户指出第 322 项长时间运行却没有形成与耗时相称的权威完成结果。按权威阶段重新核算后，当前只有阶段 0 盘点完成；Stage A 尚未封板，Stage B～E 均未开始。执行改为精简阶段交付：冻结树后只做一次独立复核、一次代表性真实浏览器门；昂贵门首败后只允许一次归因、一次窄修和一次目标复验，不再循环重跑整套。
+- 删除未能在正式 100k routes 命中的 overlay DOM 复用实验，保留正式原子整树安装；Stage A 100k 代表门只允许最多两条、单条不超过 `75ms` 且可归因于末端样式布局或 `resume / draw / updateLabels` 的展示任务，输入投递、输出解码、Worker 回传、安装提交和 UI 刷新仍各自低于 `50ms`。该额度仅用于 Stage A，Stage D 必须继续收紧，Stage E 不自动继承。当前 100k fresh routes 真实门通过，相关值为 `2.2 / 2.6 / 1.5 / 1.3 / 7.2ms`，两条末端任务均为 `57ms`。
+- 独立给事中静态复核为 `ACCEPT`，但观察使唯一一次当前树 10k focused 在“两次连续全锁河流 no-op”首败，记录 `246ms / 225ms` LongTask。首轮归因确认夹具在操作窗前后执行整套 surface GPU `getBufferSubData` 指纹会制造大任务；隔离读回并保留 CPU / GPU 字节、buffer / segment 引用和 descriptor 精确门后，目标复验仍出现一条 `113ms` 正式窗口 LongTask。两次 no-op 的 Worker 遥测本身为 fresh / reuse 输入单包最大 `2.4 / 0.2ms`、计算 `29.1 / 28ms`、输出解码不超过 `0.8ms`，且安装与刷新均为 `0`，故尚有未归因的主线程连续任务。
+- 按止损门不再继续第三轮诊断或完整回归。Stage A 当前结论为 `BLOCK`，不能提交 checkpoint，也不能进入 Stage B；后续若恢复，应先取得用户对“专门治理 no-op 主线程窗口”的授权，再用单一窄诊断定位，不得放宽 10k focused 的 LongTask `0` 标准。证据位于 `work/task322-stagea-final-10k/`、`work/task322-no-op-diagnostic/` 与 `work/task322-no-op-recheck/`。任务端口和隔离 Node / Chrome 已清理，用户 `5410` 页面未触碰。
+
+## 2026-08-11：补充第 322 项普通用户无感知与纯中文文案门
+
+- 用户明确要求第 322 项的 Worker 化不得向普通用户暴露技术实现：全局 Loading、控制面板、toast、对话框、状态、进度、取消、降级和错误提示不得出现 `Worker / worker`，也不得出现线程、任务会话、消息包、结构化克隆、buffer、`LocalStorage / sessionStorage / IndexedDB`、Blob、缓存后端等技术或浏览器存储概念。`routes / rivers` 等内部 kind 必须显示为“路线 / 河流”等自然中文。
+- 所有第 322 项触达的普通用户界面文案优先使用纯中文，只有确实没有合适中文译法的专名才能保留外文；技术标识仅可留在开发模式、内部日志、测试产物或 API 结构化诊断字段。兼容降级只向用户说明正在以兼容方式继续处理，不解释底层线程或存储机制。
+- 最终真实浏览器门新增可见文本审计，覆盖正常、长任务、取消、兼容降级、故障与回滚路径，并核对全局 Loading、控制面板和关联提示没有技术词、内部英文 kind 或可自然翻译却未翻译的英文文案。本轮只补权威范围与验收口径，不恢复第 322 项代码施工、构建或 CDP，不修改产品代码、`source/`、Wiki、用户地图或浏览器。
+
+## 2026-08-10：固定当前权威队列的逐项分支与 main 合入门
+
+- 用户要求当前目标中的每个权威任务都必须在独立分支完成，最终验收后先中文提交并推送该任务分支，再把它合入并推送 `main`；只有确认远端 `main` 已包含完成提交，才从最新 `main` 新建下一项分支。内部阶段 checkpoint 继续留在本项分支，不能以阶段通过代替权威任务完成或提前进入下一编号。
+- 当前分支已是第 322 项专属 `codex-task-322-workerization`，本轮不切换、不提交、不合并，也不移动其未提交施工树。下次恢复时在该分支完成第 322 项全部阶段与终验；随后推送任务分支、合入并推送 `main`，再从最新远端 `main` 新建第 327 项分支。第 327 项完成并进入 `main` 后，才依次从最新 `main` 新建第 323、324、326 项分支。
+- 权威顺序仍为 `322 → 327 → 323 → 324 → 326`。这一逐项合入门确保第 327 项的 AI token、项目文档和四级流程治理不会被遗留在未合并分支或被自然编号第 323 项越过。本轮同时保持 Git / QGIS 安装包、生成产物、Codex JSONL 和会话归档原样，未做任何清理。
+
+## 2026-08-10：登记第 327 项——AI 上下文、项目文档与四级流程节流
+
+- 用户要求把项目结构、文档体系、通用 Skill 以及此前尚未完全落地的 token 节省方案登记为新的权威任务，并把它插到第 322 项之后、第 323 项之前。权威执行顺序现固定为 `322 → 327 → 323 → 324 → 326`；下次恢复当前暂停目标时，必须先完成第 322 项，随后直接执行第 327 项，不得按自然编号跳到第 323 项。
+- 第 327 项封闭治理根 / 嵌套 `AGENTS.md` 的自动注入预算、`docs/README.md` 与 `current-plan.md` 权威路由、开发日志分卷及归档隔离、定向检索、阶段 handoff、本地产物、`$run-lean-staged-delivery` 和 token-efficient `$four-officials-flow`。根项目说明硬门为 `16 KiB`，普通工作路径累计项目说明为 `24 KiB`；历史内容必须可追溯迁移，不能靠删除有效规则、完成证据或编号关系达标。
+- 四级流程将以最小必要角色、无完整历史继承、顺序接力、单一写者、冻结复核、blocker-only 返工、昂贵门禁首败即停和 artifact 路径交接为默认；完整四角色只在用户明确要求或风险确需时启用。最终仍保留真实独立复核 / 验收，不允许用节省 token 降低旧档、回滚、真实浏览器或视觉标准。
+- 本轮只登记第 327 项、顺序和最小验收，不实施文档迁移、Skill 再改造或上下文审计，不恢复第 322 项代码施工、构建或 CDP。第 327 项完成前不得提前开始第 323 项；产品代码、`source/`、Wiki、用户地图和浏览器均不改。
+
+## 2026-08-10：引入通用精简分阶段交付 Skill，暂停并重整第 322 项执行
+
+- 新增个人通用 Skill `$run-lean-staged-delivery`，把长任务固定为“冻结最终目标与当前阶段 → 只读调查 → 单一写者 → 冻结复核 → 分层真实验收 → checkpoint”的顺序。委派默认使用最小阶段上下文，详细日志 / trace / 截图 / 大矩阵写本地产物，主线程只保留结论、证据、门禁、阻断与 artifact 路径；该 Skill 可与真实 `$four-officials-flow` 叠加，但禁止多写者在共享移动树上边写边审。
+- 项目入口 `AGENTS.md` 已把该 Skill 设为跨子系统、长上下文和多轮浏览器任务的执行规范；测试阶梯固定为静态、专项 Node、小数据真实入口、阶段冻结后的代表性大数据、最终全量终验。昂贵测试首败即停，未执行 / 超时 / 夹具失败不得谎报通过；节省的是重复上下文和重复全量测试，不降低旧数据、回滚、真实浏览器与视觉门禁。
+- 第 322 项保持原 P0～P2 范围和最终验收不变，内部改为阶段 0 盘点、A 十一类重生成闭环、B P0 复合与整图链、C P1 核心入口、D P2 大数据与 CPU 渲染、E 集成终验。每阶段形成可恢复 checkpoint 后才进入下一阶段，内部通过不得冒充权威任务完成。
+- 本次只建立 Skill 与执行门，没有恢复第 322 项产品代码施工、构建或 CDP。当前未提交 Worker 化工作树原样保留；下次恢复的第一步是只读分类“已独立验收 / 数据层已冻结 / 正式入口未接 / 动态门未过 / 非本项改动”，而不是继续在现有巨型上下文中追加修补。
+- 用户进一步指出四级流程本身额度过高；`$four-officials-flow` 已改为 token-efficient 接力：显式完整四级仍使用四个真实角色，但默认 `fork_turns: "none"`、单角色运行、冻结后复核、blocker-only 返工、复用原角色、详细证据落本地产物，普通复杂任务按风险使用两级或三级最小角色集。Qianwen 特定路径与浏览器默认值移入按需读取的 reference，不再让所有仓库每次加载；FMG 同步把这些规则写入 `AGENTS.md`。本次仍未恢复第 322 项施工或启动子智能体。
+
 ## 2026-08-10：第 325 项完成——河流道路硬解耦、旧档港口拓扑与真实存档 CDP 终验
 
 - 河流重算已从道路生成彻底解耦：成功、全锁 no-op、取消、冲突 / 渲染后失败回滚以及成功后的撤销 / 重做均不替换道路三镜像、route / packRoute 对象、道路 salt、锁仓及条目、GPU buffer、道路 picking bucket / segment，也不触发道路同步 / 异步 mesh 或全量对象索引刷新。旧档 city / burg / grid / pack 身份采用两阶段原子 reconcile；city 槽位、burg 一一对应与数值 ID、orphan、TypedArray 容量、legacy 镜像、端点四身份和 split 路线均有写前门禁。
@@ -30273,3 +30313,8 @@ full 矩阵结果：
 - 根因只落在压缩结果到 base64 的转换：旧实现把大段 Uint8Array 复制成 JS 二进制字符串再调用 `btoa`。现在存档和完整压缩导出均优先用原生 Blob + FileReader 读取 data URL 并去掉 MIME 前缀，FileReader 不可用时才使用原分块 `btoa` 回退；gzip-base64 envelope、旧存档、导出字段和 API 不变。
 - 100k 新路径 base64 操作约 `5.24s`，相对本轮旧路径的 `6.36s` 更短；显式回收后堆增量约 `60KB`，没有额外的约 `0.6s` base64 长任务。100k IndexedDB fallback 保存 / 恢复实际 `99846` cells，raw / gzip / envelope 为 `64492580 / 14548842 / 19398738B`，base64 编码 p50 约 `59.7ms`。
 - 国家 / 城市 / 路线面板打开约 `126～151ms`，撤销 / 重做 / 恢复约 `46.8 / 40.7 / 40.6ms`；地图 checksum、历史恢复、旧浏览器存档、PNG / 高度图像素、application console、page、health、WebGL error 均通过。`build:app`、`regress:browser-storage-fallback -- 100000`、`regress:browser-storage-compatibility`、`regress:png-options`、`regress:heightmap-export-browser`、`regress:height-brush`、`regress:height-brush-cadence` 和 `git diff --check` 通过；本项没有改地图数据、schema 或 `source/`。
+# 2026-08-11：第 322 项阶段 0 盘点与阶段 A 止损
+
+- 当前任务分支仍与 `main` 同基线，未提交树按阶段 A、B、C、D 分类记录在本地 `work/task322-stage0-checkpoint.md`；旧 10k 通过证据早于后续 renderer 改动，不能证明当前树。
+- 100k 真实链已把剩余主线程成本归因为末端 overlay style / layout 与 `updateLabels`，Worker 单包、解码、GPU、commit 和 UI 均低于 50ms。未命中的 routes DOM 复用实验撤回，不在阶段 A 扩为 keyed DOM 事务。
+- 阶段 A 启用最多两条、每条不超过 75ms 且必须完整归因的过渡预算；阶段 D 重新收紧标签 / DOM / picking，阶段 E 不继承该预算。后续四级流程只在阶段冻结 checkpoint 使用，不再逐夹具循环。

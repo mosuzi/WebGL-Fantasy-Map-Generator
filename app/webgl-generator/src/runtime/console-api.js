@@ -1273,10 +1273,13 @@ function buildSelectionSnapshot(state) {
 function buildLayerSnapshot(state, documentRef) {
   const preferences = readControlPreferences(documentRef);
   const rendererStats = state?.renderer?.getStats?.() || {};
+  const layers = {...(rendererStats.layerVisibility || {}), ...(preferences.layers || {})};
+  if (Object.prototype.hasOwnProperty.call(layers, "coastline")) layers.lakeShore = layers.coastline;
+  if (Object.prototype.hasOwnProperty.call(layers, "tradeFlows")) layers.tradeFlows = false;
   return {
-    colorMode: rendererStats.colorMode || preferences.colorMode || "height",
-    visualTheme: rendererStats.viewOptions?.visualTheme?.id || rendererStats.visualTheme || preferences.visualTheme || state?.options?.visualTheme || "default",
-    layers: {...(rendererStats.layerVisibility || preferences.layers || {})},
+    colorMode: preferences.colorMode || rendererStats.colorMode || "height",
+    visualTheme: preferences.visualTheme || rendererStats.viewOptions?.visualTheme?.id || rendererStats.visualTheme || state?.options?.visualTheme || "default",
+    layers,
     diagnostics: {
       gridCells: {...(rendererStats.diagnostics?.gridCells || {})}
     },

@@ -674,6 +674,7 @@
 <script setup>
 import {computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch} from "vue";
 import {storeToRefs} from "pinia";
+import {regenerationFeedbackMessage, regenerationKindLabel, regenerationLoadingMessage} from "../../regeneration-user-copy.js";
 import UiButton from "./base/UiButton.vue";
 import UiActionDock from "./base/UiActionDock.vue";
 import UiColorActionPanel from "./base/UiColorActionPanel.vue";
@@ -1019,15 +1020,17 @@ function managementGroup(id, label, actions) {
 }
 
 const regenerationActions = Object.freeze([
-  {value: "states", kind: "states", label: "国家", impact: "会替换国家与省份归属，并重建城镇、道路及相关下游派生。"},
-  {value: "provinces", kind: "provinces", label: "省份", impact: "会在现有国家内替换省份归属，并重建道路与相关下游派生。"},
-  {value: "cities", kind: "cities", label: "城镇", impact: "会替换城镇与港口，并重建道路及相关下游派生。"},
-  {value: "routes", kind: "routes", label: "道路", impact: "会替换道路网络，不改写国家、省份或城镇。"},
-  {value: "rivers", kind: "rivers", label: "河流", impact: "会替换河流与水文引用，并标记相关下游系统待重算。"},
-  {value: "markers", kind: "markers", label: "资源点", impact: "会替换资源类标记，并刷新资源贸易摘要。"},
-  {value: "diplomacy", kind: "diplomacy", label: "外交", impact: "会替换国家关系、战争与贸易关系摘要。"},
-  {value: "military", kind: "military", label: "军事", impact: "会替换全部军团、兵力、舰队、战线和战役摘要。"},
-  {value: "zones", kind: "zones", label: "地区", impact: "会按当前战争、宗教、军事与地形上下文重新生成未锁定地区，并保留锁定地区。"}
+  {value: "features", kind: "features", label: regenerationKindLabel("features"), impact: "会重新整理水陆、岸线与相关地理归属，并标记后续内容待更新。"},
+  {value: "routes", kind: "routes", label: regenerationKindLabel("routes"), impact: "会替换路线网络，不改写国家、省份或城镇。"},
+  {value: "rivers", kind: "rivers", label: regenerationKindLabel("rivers"), impact: "会替换河流与水文引用，并标记相关下游内容待更新。"},
+  {value: "cities", kind: "cities", label: regenerationKindLabel("cities"), impact: "会替换城镇与港口，并重建路线及相关下游内容。"},
+  {value: "states", kind: "states", label: regenerationKindLabel("states"), impact: "会替换国家与省份归属，并重建城镇、路线及相关下游内容。"},
+  {value: "provinces", kind: "provinces", label: regenerationKindLabel("provinces"), impact: "会在现有国家内替换省份归属，并重建路线及相关下游内容。"},
+  {value: "markers", kind: "markers", label: regenerationKindLabel("markers"), impact: "会替换地图标记，并刷新相关摘要。"},
+  {value: "diplomacy", kind: "diplomacy", label: regenerationKindLabel("diplomacy"), impact: "会替换国家关系、战争与贸易关系摘要。"},
+  {value: "religions", kind: "religions", label: regenerationKindLabel("religions"), impact: "会替换宗教分布，并刷新相关归属与摘要。"},
+  {value: "military", kind: "military", label: regenerationKindLabel("military"), impact: "会替换全部军团、兵力、舰队、战线和战役摘要。"},
+  {value: "zones", kind: "zones", label: regenerationKindLabel("zones"), impact: "会按当前战争、宗教、军事与地形关系重新生成未锁定地区，并保留锁定地区。"}
 ]);
 const selectedRegenerationKind = ref(regenerationActions[0].kind);
 const selectedRegenerationAction = computed(() => regenerationActions.find(action => action.kind === selectedRegenerationKind.value) || regenerationActions[0]);
@@ -1386,16 +1389,16 @@ async function requestRegeneration() {
     regenerationFeedback.value = "重设服务尚未就绪";
     return;
   }
-  regenerationFeedback.value = "重设中…";
+  regenerationFeedback.value = regenerationLoadingMessage(selectedRegenerationKind.value, "initial");
   const response = await regenerate(selectedRegenerationKind.value, {
     confirm: true,
     scope: selectedRegenerationScope.value,
     stateId: selectedRegenerationScope.value === "state" ? Number(selectedRegenerationStateId.value) : undefined,
     provinceId: selectedRegenerationScope.value === "province" ? Number(selectedRegenerationProvinceId.value) : undefined
   });
-  regenerationFeedback.value = response?.ok
-    ? response.data?.status || "重设完成"
-    : `重设失败：${response?.error?.message || "未知错误"}`;
+  regenerationFeedback.value = regenerationFeedbackMessage(selectedRegenerationKind.value, response, {
+    debug: Boolean(globalThis.window?.__webglGeneratorDebug?.enabled)
+  });
 }
 
 function commitLabelStyle(field, value) {

@@ -14,6 +14,8 @@ import {DEFAULT_OPTIONS, normalizeOptions} from "../generator/options.js";
 import {normalizeAtmosphereDirection, normalizeClimateLatitudeMode, normalizeWindProfile, windAngleFromDirection} from "../generator/climate-options.js";
 import {createRandom, createRandomSeed} from "../generator/random.js";
 import {PlaceholderMapRenderer} from "../renderer/placeholder-renderer.js";
+import {prepareRendererWorkerInstall} from "../renderer/prepared-render-installer.js";
+import {renderPreparationLayersForRegeneration} from "../renderer/render-preparation.js";
 import {
   createUserVisualThemeDocument,
   exportVisualThemeDocument,
@@ -201,6 +203,10 @@ import {
 import {createRuleInspectionResult, normalizeRuleInspectionInput} from "./rule-inspection-token.js";
 import {executeClimateDownstreamRebuildAsync, inspectClimateDownstreamRebuild} from "./climate-downstream-rebuild.js";
 import {captureMapMutationSnapshot, executeMapSnapshotTransaction, restoreMapMutationSnapshot} from "./map-snapshot-transaction.js";
+import {createDomainPatchCommand} from "./domain-patch.js";
+import {getRegenerationPatchPolicy} from "./regeneration-worker-task.js";
+import {createWorkerTaskCoordinator} from "./worker-task-coordinator.js";
+import {createStagedWorkerSnapshot} from "./worker-snapshot.js";
 import {commitPreparedGridTopology, inspectGridRefinement, inspectGridStructureWrite, prepareGridRefinement, prepareGridStructureWrite} from "./grid-topology-api.js";
 import {SelectionStore} from "./selection-store.js";
 import {decideSelectionPanelRoute, SELECTION_PANEL_BINDINGS, SELECTION_PANEL_ROUTE} from "./selection-panel-policy.js";
@@ -245,9 +251,11 @@ import {mergePersistedUserVisualThemes, persistUserVisualThemes} from "./visual-
 import {collectionAffected, objectAffected, systemAffected} from "./edit-command-effects.js";
 import {syncEditorStateSnapshot} from "../ui/vue/state-bridge.js";
 import {completeStartupLoading, failStartupLoading} from "../ui/startup-loading.js";
+import {createRegenerationUserError, regenerationLoadingMessage} from "../ui/regeneration-user-copy.js";
 import {LABEL_TARGET_KIND, OBJECT_KIND, OBJECT_KIND_LABEL} from "./object-kinds.js";
 import {reconcileSettlementPortTopology} from "./settlement-port-topology.js";
 import GenerationWorker from "./generation-worker.js?worker";
+import ComputeWorker from "./compute-worker.js?worker";
 import {getWebglGeneratorHealthMonitor} from "./health-monitor.js";
 import {createRuntimeOperationError, createRuntimeOperationManager} from "./runtime-operation.js";
 import {createDelayedOperationFeedback} from "./delayed-operation-feedback.js";
@@ -463,14 +471,20 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
   const canvas = documentRef.getElementById("map-canvas");
   const panelManager = new PanelManager(documentRef, documentRef.querySelector(".map-stage"));
   const mapRevision = new MapRevisionTracker();
+  let state = null;
   const editHistory = new EditHistory({
-    onMutation: () => mapRevision.advance(),
+    onMutation: () => {
+      mapRevision.advance();
+      if (!state?.workerSessionMutationGuard) state?.workerTaskCoordinator?.invalidateSession?.("map-revision-advanced");
+    },
     onSnapshot: () => mapRevision.createSnapshot(),
     onRestore: snapshot => mapRevision.restoreSnapshot(snapshot)
   });
-  const state = {
+  state = {
     options: {...DEFAULT_OPTIONS},
     map: null,
+    workerSessionMutationGuard: false,
+    workerAtomicCommitGuard: false,
     pick: null,
     selection: null,
     editingObject: null,
@@ -586,6 +600,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     healthMonitor,
     runtimeOperation: null,
     runtimeOperationSnapshot: null,
+    workerTaskCoordinator: null,
     operationFeedback: null,
     canvasToolModes: createCanvasToolModeManager({declaredModeIds: CANVAS_TOOL_MODE_IDS}),
     lazyPanelPreloadScheduled: false,
@@ -2529,7 +2544,13 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       updateEditingInteractionLock(state, documentRef);
       return result;
     },
-    onRegenerate: () => runtimeActions.generate.regenerate("zones", {confirm: true}),
+    onRegenerate: async () => {
+      try {
+        return await runtimeActions.generate.regenerate("zones", {confirm: true});
+      } catch (error) {
+        throw createRegenerationUserError("zones", error);
+      }
+    },
     onUndo: () => {
       return executeHistoryCommand(state, documentRef, "undo");
     },
@@ -2541,6 +2562,10 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
   const renderer = new PlaceholderMapRenderer(canvas, viewChange => {
     if (state.map) {
       if (viewChange?.phase !== "preview") {
+        if (viewChange?.phase === "worker-render-context") {
+          syncLayerGroupControls(documentRef, state.renderer?.getStats?.()?.layerVisibility || state.renderer?.layerVisibility || {});
+          updatePickPanel(documentRef, state);
+        }
         updateRuntimePanel(documentRef, state);
         updateMeasurementOverlay(state, documentRef);
       }
@@ -2634,6 +2659,12 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       state.keyboardShortcuts?.refreshAvailability?.();
       state.panels.oceanCurrent?.updateWorldRebuild?.(snapshot);
     }
+  });
+  state.workerTaskCoordinator = createWorkerTaskCoordinator({
+    createWorker: () => new ComputeWorker(),
+    getBinding: () => createRegenerationWorkerBinding(state),
+    validateBinding: binding => validateRegenerationWorkerBinding(state, binding),
+    onFallback: detail => healthMonitor?.record?.("worker-task-fallback", detail, "info")
   });
   runtimeActions = createRuntimeActions(state, documentRef, {
     locateObject: (object, locateOptions = {}) => locateAndSelectObject(null, object, {
@@ -2964,19 +2995,35 @@ function createRuntimeActions(state, documentRef, options = {}) {
       newMap: (options = {}) => runMapReplace("generate.newMap", context => generateNewMapViaApi(state, documentRef, options, context), loadingMessage("generate")),
       rerollSeed: (options = {}) => runMapReplace("generate.rerollSeed", context => rerollSeedViaApi(state, documentRef, options, context), loadingMessage("generate")),
       regenerate: (kind, options = {}) => operation.run("generate.regenerate", async context => {
-        const message = `正在重新生成 ${String(kind || "派生数据")}`;
-        context.report("regenerate", {message});
-        setMythicGenerationLoading(documentRef, true, message);
+        const message = regenerationLoadingMessage(kind, "initial");
+        const loadingOwner = `regenerate:${context.id}`;
+        const visibleOperation = Object.create(context);
+        visibleOperation.report = (stage, detail = {}) => {
+          const reported = context.report(stage, detail);
+          if (reported !== false && detail.loading !== false) {
+            updateGenerationLoading(documentRef, true, regenerationLoadingMessage(kind, stage), loadingOwner);
+          }
+          return reported;
+        };
+        updateGenerationLoading(documentRef, true, message, loadingOwner);
+        visibleOperation.report("regenerate", {message});
         try {
           await yieldToBrowser(documentRef);
-          context.throwIfCancelled();
-          return regenerateMapAttributeViaApi(state, documentRef, kind, options);
+          visibleOperation.throwIfCancelled();
+          const result = await regenerateMapAttributeViaWorker(state, documentRef, kind, options, visibleOperation);
+          updateGenerationLoading(documentRef, true, regenerationLoadingMessage(kind, "complete"), loadingOwner);
+          return result;
+        } catch (error) {
+          const stage = error?.code === "operation_cancelled" || error?.name === "AbortError" ? "cancel" : "failure";
+          updateGenerationLoading(documentRef, true, regenerationLoadingMessage(kind, stage), loadingOwner);
+          throw error;
         } finally {
-          updateGenerationLoading(documentRef, false);
+          clearOwnedGenerationLoading(documentRef, loadingOwner);
         }
       }, {
         message: "正在重新生成派生数据",
         loading: false,
+        measureHealthOperation: false,
         isNoop: result => !result?.executed
       })
     },
@@ -3390,7 +3437,9 @@ function setRuntimeLayersVisible(state, documentRef, entries) {
       if (layer === "measurements") updatesMeasurements = true;
     }
     state.renderer?.setLayersVisible?.(normalized);
-    syncLayerGroupControls(documentRef, state.renderer?.getStats?.()?.layerVisibility || state.renderer?.layerVisibility || {});
+    const rendererLayers = state.renderer?.getStats?.()?.layerVisibility || state.renderer?.layerVisibility || {};
+    const preferredLayers = normalizeLayerVisibilityPreferences(readControlPreferences(documentRef).layers || {});
+    syncLayerGroupControls(documentRef, {...rendererLayers, ...preferredLayers});
     updateRuntimePanel(documentRef, state);
     if (updatesMeasurements) updateMeasurementOverlay(state, documentRef);
     return runtimeDisplayActionResult(state, documentRef, ["display-preference", "renderer", "runtime-panel", ...(updatesMeasurements ? ["measurement-overlay"] : [])]);
@@ -3595,9 +3644,9 @@ function runtimeDisplayActionResult(state, documentRef, effects) {
   const preferences = readControlPreferences(documentRef);
   const stats = state.renderer?.getStats?.() || {};
   return {
-    colorMode: stats.colorMode || preferences.colorMode || "height",
-    visualTheme: stats.viewOptions?.visualTheme?.id || preferences.visualTheme || state.options?.visualTheme || "default",
-    layers: {...(stats.layerVisibility || preferences.layers || {})},
+    colorMode: preferences.colorMode || stats.colorMode || "height",
+    visualTheme: preferences.visualTheme || stats.viewOptions?.visualTheme?.id || state.options?.visualTheme || "default",
+    layers: {...(stats.layerVisibility || {}), ...normalizeLayerVisibilityPreferences(preferences.layers || {})},
     display: {
       showOceanHeight: Boolean(preferences.showOceanHeight),
       smoothCellBorders: Boolean(preferences.smoothCellBorders),
@@ -4089,6 +4138,7 @@ async function loadMapIntoRuntime(state, documentRef, map, {loadingMessages = []
   state.canvasToolModes.reset("map-replace");
   clearCanvasToolModeFeedback(state, documentRef);
   state.brushCursorPreview?.reset();
+  state.workerTaskCoordinator?.invalidateSession?.("map-replaced");
   state.map = map;
   state.regenerationLockUiSession?.clear({keepContext: false});
   normalizeSocialExpansionMap(state.map);
@@ -7481,6 +7531,11 @@ function executeRegenerationLockCommand(state, documentRef, references, locked, 
 function executeEditCommand(state, documentRef, command, options = {}) {
   const context = options.context || {map: state.map};
   if (!command) return {executed: false, command: null, result: null, error: null};
+  if (state.workerAtomicCommitGuard) {
+    const error = new Error("Worker 地图事务正在原子提交，暂不能并发编辑");
+    error.code = "operation_busy";
+    throw error;
+  }
   try {
     if (command.isNoop?.(context)) {
       const noopStatus = options.noopStatus || renameCommandNoopStatus(command);
@@ -7528,6 +7583,11 @@ function renameCommandErrorStatus(command, error) {
 }
 
 export function executeHistoryCommand(state, documentRef, action, options = {}) {
+  if (state.workerAtomicCommitGuard) {
+    const error = new Error("Worker 地图事务正在原子提交，暂不能撤销或重做");
+    error.code = "operation_busy";
+    throw error;
+  }
   const command = action === "redo"
     ? state.editHistory.redo({map: state.map})
     : state.editHistory.undo({map: state.map});
@@ -10846,6 +10906,1275 @@ function regenerateMapAttributeViaApi(state, documentRef, kind, options = {}) {
   };
 }
 
+async function regenerateMapAttributeViaWorker(state, documentRef, kind, options = {}, operation = null) {
+  assertMapAvailable(state);
+  if (options?.confirm !== true) throw new Error("受约束重算会改写当前地图派生数据，需要显式传入 {confirm: true}");
+  const targetKind = normalizeApiRegenerationKind(kind);
+  if (options?.preservePopulation === true && !["features", "routes", "rivers"].includes(targetKind)) {
+    throw new Error("preservePopulation 仅支持 features、routes 和 rivers 地理派生重算");
+  }
+  const sourceMap = state.map;
+  const operationStartCityIconLayerStats = {...(state.renderer?.cityIconLayer?.stats || {})};
+  const binding = createRegenerationWorkerBinding(state, operation);
+  operation?.report("stream-input", {message: `正在分片传送 ${targetKind} Worker 输入`});
+  operation?.throwIfCancelled?.();
+  const workerOptions = normalizeWorkerRegenerationOptions(options);
+  const renderRequest = createWorkerRegenerationRenderRequest(state, targetKind, binding);
+  const renderContextToken = createWorkerRegenerationRenderContextToken(state, targetKind);
+  let output;
+  try {
+    output = await state.workerTaskCoordinator.run("regeneration.compute", {
+      map: state.map,
+      kind: targetKind,
+      options: workerOptions,
+      render: renderRequest
+    }, {
+      binding,
+      signal: operation?.signal,
+      sessionMode: "map-mirror",
+      sessionPayload: {kind: targetKind, options: workerOptions, render: renderRequest},
+      streamBudgetMs: 6,
+      streamSliceBytes: 256 * 1024,
+      fallbackPayloadFactory: async () => {
+        operation?.report("fallback-snapshot", {message: `正在为 ${targetKind} 安全降级重建快照`});
+        if (!validateRegenerationWorkerBinding(state, binding)) {
+          const error = new Error("Worker 降级前地图、revision、generation token 或锁已变化");
+          error.code = "operation_obsolete";
+          throw error;
+        }
+        const fallbackPrepared = await createStagedWorkerSnapshot(state.map, {
+          signal: operation?.signal,
+          yieldToMain: () => yieldToBrowser(documentRef),
+          budgetMs: 6,
+          sliceBytes: 256 * 1024
+        });
+        if (!validateRegenerationWorkerBinding(state, binding)) {
+          const error = new Error("Worker 降级快照已因地图、revision、generation token 或锁变化而过期");
+          error.code = "operation_obsolete";
+          throw error;
+        }
+        return {map: fallbackPrepared.snapshot, kind: targetKind, options: workerOptions, render: renderRequest};
+      },
+      onProgress: (stage, detail) => operation?.report(stage, detail)
+    });
+  } catch (error) {
+    if (state.map === sourceMap) restoreCityIconLayerStatistics(state.renderer, operationStartCityIconLayerStats);
+    throw error;
+  }
+  try {
+    operation?.throwIfCancelled?.();
+    if (!validateRegenerationWorkerBinding(state, binding)) {
+      const error = new Error("Worker 结果已因地图、revision、generation token 或锁变化而过期");
+      error.code = "operation_obsolete";
+      throw error;
+    }
+  } catch (error) {
+    state.workerTaskCoordinator.invalidateSession("result-obsolete");
+    if (state.map === sourceMap) restoreCityIconLayerStatistics(state.renderer, operationStartCityIconLayerStats);
+    throw error;
+  }
+  let workerSessionFinalized = !output.worker?.session?.id;
+  let preparedInstall = null;
+  const deferredPreparedInstalls = [];
+  let renderInstallSuspended = false;
+  let renderInstallFinalized = false;
+  let renderInstallCleanupAttempted = false;
+  let atomicCommitGuarded = false;
+  let expectedRenderContextToken = renderContextToken;
+  let workerOperationSucceeded = false;
+  let committedMap = sourceMap;
+  try {
+  const result = output.result || {};
+  if (!result.executed) {
+    const worker = await commitRegenerationWorkerSession(state, output.worker, operation, {expectedRevisionDelta: 0});
+    operation?.throwIfCancelled?.();
+    if (state.map !== sourceMap || !validateRegenerationWorkerBinding(state, binding)) {
+      const error = new Error("Worker no-op 会话提交期间地图或绑定已变化");
+      error.code = "operation_obsolete";
+      throw error;
+    }
+    updateRegenerationSection(documentRef, result);
+    updateEditingInteractionLock(state, documentRef);
+    workerSessionFinalized = true;
+    workerOperationSucceeded = true;
+    return {
+      ...result,
+      history: state.editHistory.getStats(),
+      worker: appendWorkerCommitTelemetry(worker, {commitInstallMs: 0, refreshMs: 0, commitTotalMs: 0})
+    };
+  }
+  operation?.report("commit", {message: `正在提交 ${targetKind} Worker 补丁`});
+  const effects = {
+    ...(targetKind === "rivers" ? RIVER_REGENERATION_TRANSACTION_EFFECTS : REGENERATION_TRANSACTION_EFFECTS),
+    affected: []
+  };
+  const command = createWorkerRegenerationPatchCommand(state.map, {
+    patch: output.patch,
+    policy: getRegenerationPatchPolicy(targetKind),
+    label: `受约束重生成 ${targetKind}`,
+    historyDomain: targetKind === "rivers" ? "river-regeneration" : "regeneration",
+    effects,
+    result,
+    affectedFactory: map => workerRegenerationAffected(map, targetKind)
+  });
+  const historySnapshot = state.editHistory.createSnapshot();
+  const uiSnapshot = captureWorkerRegenerationUiSnapshot(state, documentRef);
+  if (uiSnapshot.renderer) uiSnapshot.renderer.cityIconLayerStats = {...operationStartCityIconLayerStats};
+  committedMap = state.map;
+  let execution = null;
+  const readCommitTime = () => documentRef.defaultView?.performance?.now?.() ?? Date.now();
+  const commitStartedAt = readCommitTime();
+  let commitInstallMs = 0;
+  let renderInstallPrepareMs = 0;
+  let renderInstallCommitMs = 0;
+  let uiRefreshMs = 0;
+  let refreshMs = 0;
+  const renderInstallStages = {};
+  try {
+    if (command.isNoop?.({map: state.map})) {
+      const worker = await commitRegenerationWorkerSession(state, output.worker, operation, {expectedRevisionDelta: 0});
+      operation?.throwIfCancelled?.();
+      if (state.map !== committedMap || !validateRegenerationWorkerBinding(state, binding)) {
+        const error = new Error("Worker patch no-op 会话提交期间地图或绑定已变化");
+        error.code = "operation_obsolete";
+        throw error;
+      }
+      workerSessionFinalized = true;
+      workerOperationSucceeded = true;
+      return {
+        ...result,
+        executed: false,
+        history: state.editHistory.getStats(),
+        worker: appendWorkerCommitTelemetry(worker, {commitInstallMs: 0, refreshMs: 0, commitTotalMs: 0})
+      };
+    }
+    if (!output.preparedRender) {
+      const error = new Error(`${targetKind} Worker 没有返回绑定的渲染准备结果`);
+      error.code = "worker_regeneration_render_missing";
+      throw error;
+    }
+    if (!isWorkerRegenerationRenderContextCurrent(state, targetKind, binding, renderContextToken, 0)) {
+      const error = new Error("Worker 渲染结果已因地图或视口变化而过期");
+      error.code = "operation_obsolete";
+      throw error;
+    }
+    state.renderer?.suspendWorkerRenderInstall?.();
+    renderInstallSuspended = true;
+    state.workerAtomicCommitGuard = true;
+    atomicCommitGuarded = true;
+    state.workerSessionMutationGuard = true;
+    try {
+      state.editHistory.execute(command, {map: state.map});
+    } finally {
+      state.workerSessionMutationGuard = false;
+    }
+    execution = {executed: true};
+    assertWorkerRegenerationConstraint(options?.constraintBundle, state.map, targetKind, "domain");
+    commitInstallMs = roundWorkerTelemetryMs(readCommitTime() - commitStartedAt);
+    const committedBinding = {...binding, mapRevision: Number(binding.mapRevision) + 1};
+    const installIsCurrent = () => isWorkerRegenerationRenderContextCurrent(state, targetKind, committedBinding, renderContextToken, 0);
+    if (!installIsCurrent()) {
+      const error = new Error("Worker 渲染安装前地图或视口已变化");
+      error.code = "operation_obsolete";
+      throw error;
+    }
+    operation?.report("render-install", {message: `正在分片安装 ${targetKind} Worker 渲染结果`});
+    const renderPrepareStartedAt = readCommitTime();
+    try {
+      preparedInstall = await prepareRendererWorkerInstall(state.renderer, state.map, output.preparedRender, {
+        binding: renderRequest.binding,
+        signal: operation?.signal,
+        preserveRoutePicking: targetKind === "rivers",
+        isCurrent: installIsCurrent,
+        onProgress: (stage, detail) => {
+          recordWorkerRenderInstallStage(renderInstallStages, stage, detail, readCommitTime() - renderPrepareStartedAt);
+          operation?.report(`render-install-${stage}`, {...detail, message: `正在安装 ${targetKind} 渲染分片`});
+        }
+      });
+    } catch (error) {
+      throw normalizeWorkerRegenerationOuterPreparedInstallError(error, operation);
+    }
+    renderInstallPrepareMs = roundWorkerTelemetryMs(readCommitTime() - renderPrepareStartedAt);
+    operation?.throwIfCancelled?.();
+    if (!installIsCurrent()) {
+      const error = new Error("Worker 渲染安装提交前地图或视口已变化");
+      error.code = "operation_obsolete";
+      throw error;
+    }
+    const renderCommitStartedAt = readCommitTime();
+    preparedInstall.commit();
+    renderInstallCommitMs = roundWorkerTelemetryMs(readCommitTime() - renderCommitStartedAt);
+    maybeInjectWorkerRegenerationRefreshFault(documentRef, {targetKind, stage: "after-render", phase: "forward"});
+    assertWorkerRegenerationConstraint(options?.constraintBundle, state.map, targetKind, "world");
+    await yieldToBrowser(documentRef);
+    operation?.throwIfCancelled?.();
+    if (!installIsCurrent()) {
+      const error = new Error("Worker 渲染提交后地图或视口已变化");
+      error.code = "operation_obsolete";
+      throw error;
+    }
+    const uiRefreshStartedAt = readCommitTime();
+    await refreshWorkerRegenerationPreparedUi(state, documentRef, targetKind, output.refresh, result, command.effects.affected, {
+      faultPhase: "forward",
+      onRenderContextSettled: () => {
+        expectedRenderContextToken = createWorkerRegenerationRenderContextToken(state, targetKind);
+      },
+      yieldToMain: () => yieldToBrowser(documentRef),
+      assertCurrent: () => {
+        operation?.throwIfCancelled?.();
+        const current = state.map === committedMap
+          && validateRegenerationWorkerBinding(state, committedBinding)
+          && createWorkerRegenerationRenderContextToken(state, targetKind) === expectedRenderContextToken;
+        if (current) return;
+        const error = new Error("Worker selection 刷新后地图或视口已变化");
+        error.code = "operation_obsolete";
+        throw error;
+      }
+    });
+    uiRefreshMs = roundWorkerTelemetryMs(readCommitTime() - uiRefreshStartedAt);
+    refreshMs = roundWorkerTelemetryMs(renderInstallPrepareMs + renderInstallCommitMs + uiRefreshMs);
+    if (targetKind === "military") {
+      result.details = {
+        ...(result.details || {}),
+        affected: {
+          summary: state.lastEditRefresh?.affected || "none",
+          count: state.lastEditRefresh?.affectedCount || command.effects.affected.length,
+          kinds: state.lastEditRefresh?.affectedKinds || []
+        }
+      };
+    }
+    let committedWorker = await commitRegenerationWorkerSession(state, output.worker, operation, {expectedRevisionDelta: 1});
+    operation?.throwIfCancelled?.();
+    const sessionRenderContextCurrent = createWorkerRegenerationRenderContextToken(state, targetKind) === expectedRenderContextToken;
+    if (state.map !== committedMap || !validateRegenerationWorkerBinding(state, committedBinding) || !sessionRenderContextCurrent) {
+      const error = new Error("Worker 会话提交期间地图或视口已变化");
+      error.code = "operation_obsolete";
+      throw error;
+    }
+    workerSessionFinalized = true;
+    let renderReplayTelemetry = {attempts: 0, layers: [], computeMs: 0, prepareMs: 0, commitMs: 0, totalMs: 0, attemptDetails: []};
+    if (renderInstallSuspended && committedWorker?.session?.id && state.renderer?.hasDeferredWorkerRenderMutations?.()) {
+      workerSessionFinalized = false;
+      const replay = await replayWorkerRegenerationDeferredPresentation(
+        state,
+        documentRef,
+        targetKind,
+        operation,
+        committedWorker,
+        deferredPreparedInstalls,
+        readCommitTime
+      );
+      committedWorker = replay.worker;
+      renderReplayTelemetry = replay.telemetry;
+      workerSessionFinalized = true;
+      renderInstallSuspended = Boolean(state.renderer?.workerRenderInstallSuspended > 0);
+    } else if (renderInstallSuspended) {
+      state.renderer?.resumeWorkerRenderInstall?.({draw: true, preserveRoutes: targetKind === "rivers"});
+      renderInstallSuspended = Boolean(state.renderer?.workerRenderInstallSuspended > 0);
+    }
+    operation?.throwIfCancelled?.();
+    const response = {
+      ...result,
+      populationPreserved: Boolean(output.populationPreserved),
+      history: state.editHistory.getStats(),
+      worker: appendWorkerCommitTelemetry(committedWorker, {
+        commitInstallMs,
+        renderInstallPrepareMs,
+        renderInstallCommitMs,
+        renderInstallStages,
+        uiRefreshMs,
+        refreshMs,
+        commitTotalMs: roundWorkerTelemetryMs(readCommitTime() - commitStartedAt),
+        renderReplayAttempts: renderReplayTelemetry.attempts,
+        renderReplayLayers: renderReplayTelemetry.layers,
+        renderReplayComputeMs: renderReplayTelemetry.computeMs,
+        renderReplayPrepareMs: renderReplayTelemetry.prepareMs,
+        renderReplayCommitMs: renderReplayTelemetry.commitMs,
+        renderReplayTotalMs: renderReplayTelemetry.totalMs,
+        renderReplayAttemptDetails: renderReplayTelemetry.attemptDetails
+      })
+    };
+    workerSessionFinalized = true;
+    workerOperationSucceeded = true;
+    finalizeWorkerRegenerationPreparedInstalls(deferredPreparedInstalls);
+    try {
+      preparedInstall?.finalize?.();
+    } catch {
+      // 已提交结果不得因资源终结失败反向进入事务回滚。
+    }
+    renderInstallFinalized = Boolean(preparedInstall);
+    return response;
+  } catch (error) {
+    const rollbackFailures = error?.rollbackFailed ? [error.cause || error] : [];
+    const mapStillCurrent = state.map === committedMap;
+    const operationRoutesDirty = Boolean(uiSnapshot.renderer?.dynamicBuffersDirty?.routes);
+    let recoveryError = null;
+    renderInstallCleanupAttempted = true;
+    const preparedCleanup = mapStillCurrent
+      ? {mode: "rollback-current", ownerCurrent: true}
+      : {mode: "release-detached", ownerCurrent: false};
+
+    rollbackFailures.push(...cleanupWorkerRegenerationPreparedInstalls(deferredPreparedInstalls, preparedCleanup));
+    rollbackFailures.push(...cleanupWorkerRegenerationPreparedInstalls(preparedInstall ? [preparedInstall] : [], preparedCleanup));
+    renderInstallFinalized = Boolean(preparedInstall);
+
+    if (mapStillCurrent && execution?.executed) {
+      try {
+        command.revert({map: committedMap});
+      } catch (failure) {
+        rollbackFailures.push(failure);
+      }
+      try {
+        state.editHistory.restoreSnapshot(historySnapshot);
+      } catch (failure) {
+        rollbackFailures.push(failure);
+      }
+      state.options = committedMap.options;
+      const hasDeferredPresentation = Boolean(state.renderer?.hasDeferredWorkerRenderMutations?.());
+      const preserveRenderContext = createWorkerRegenerationRenderContextToken(state, targetKind) !== expectedRenderContextToken
+        || hasDeferredPresentation;
+      try {
+        restoreWorkerRegenerationUiSnapshot(state, documentRef, uiSnapshot, targetKind, output.refresh, {
+          preserveRenderContext,
+          restoreDeferredPresentation: hasDeferredPresentation
+        });
+      } catch (failure) {
+        rollbackFailures.push(failure);
+      }
+    }
+    if (mapStillCurrent && targetKind === "rivers" && state.renderer?.dynamicBuffersDirty) {
+      state.renderer.dynamicBuffersDirty.routes = operationRoutesDirty;
+    }
+    if (mapStillCurrent) {
+      try {
+        restoreWorkerRegenerationRendererStatistics(state.renderer, uiSnapshot.renderer);
+      } catch (failure) {
+        rollbackFailures.push(failure);
+      }
+    }
+
+    try {
+      state.workerTaskCoordinator.invalidateSession("commit-or-render-install-failed");
+    } catch (failure) {
+      rollbackFailures.push(failure);
+    }
+    workerSessionFinalized = true;
+
+    if (!mapStillCurrent) {
+      if (rollbackFailures.length && error && typeof error === "object") {
+        try {
+          error.cleanupFailures = [...rollbackFailures];
+        } catch {
+          // 换图后的清理诊断不得覆盖原 operation_obsolete。
+        }
+      }
+      throw error;
+    }
+
+    const hasDeferredPresentation = Boolean(state.renderer?.hasDeferredWorkerRenderMutations?.());
+    if (hasDeferredPresentation) {
+      try {
+        await recoverWorkerRegenerationDeferredPresentation(
+          state,
+          documentRef,
+          targetKind,
+          operation,
+          uiSnapshot.renderer?.deferredPresentation,
+          operationRoutesDirty
+        );
+      } catch (failure) {
+        recoveryError = failure;
+      }
+      renderInstallSuspended = Boolean(state.renderer?.workerRenderInstallSuspended > 0);
+    } else if (renderInstallSuspended) {
+      try {
+        state.renderer?.resumeWorkerRenderInstall?.({draw: true, preserveRoutes: targetKind === "rivers"});
+        renderInstallSuspended = Boolean(state.renderer?.workerRenderInstallSuspended > 0);
+      } catch (failure) {
+        rollbackFailures.push(failure);
+      }
+    }
+
+    if (mapStillCurrent) {
+      try {
+        restoreWorkerRegenerationRendererStatistics(state.renderer, uiSnapshot.renderer);
+      } catch (failure) {
+        rollbackFailures.push(failure);
+      }
+    }
+    if (rollbackFailures.length || recoveryError) {
+      const combined = new Error(`Worker 重生成提交失败且地图恢复未完整完成：${error?.message || error}`);
+      combined.code = "operation_rollback_failed";
+      combined.originalError = error;
+      combined.recoveryError = recoveryError;
+      combined.cause = new AggregateError(
+        [error, ...rollbackFailures, recoveryError].filter(Boolean),
+        "Worker 重生成失败、回滚或显示恢复存在错误"
+      );
+      throw combined;
+    }
+    throw error;
+  }
+  } finally {
+    if (!renderInstallFinalized && !renderInstallCleanupAttempted) {
+      const ownerCurrent = state.map === committedMap;
+      const preparedCleanup = ownerCurrent
+        ? {mode: "rollback-current", ownerCurrent: true}
+        : {mode: "release-detached", ownerCurrent: false};
+      cleanupWorkerRegenerationPreparedInstalls(deferredPreparedInstalls, preparedCleanup);
+      cleanupWorkerRegenerationPreparedInstalls(preparedInstall ? [preparedInstall] : [], preparedCleanup);
+    }
+    if (renderInstallSuspended && !renderInstallCleanupAttempted && !state.renderer?.hasDeferredWorkerRenderMutations?.()) {
+      try {
+        state.renderer?.resumeWorkerRenderInstall?.({draw: true, preserveRoutes: targetKind === "rivers"});
+      } catch {
+        // finally 仅对无 deferred 的旧路径作便宜解冻，不能覆盖主事务错误。
+      }
+    }
+    if (atomicCommitGuarded) state.workerAtomicCommitGuard = false;
+    if (!workerSessionFinalized) state.workerTaskCoordinator.invalidateSession("worker-result-not-committed");
+    if (!workerOperationSucceeded && state.map === committedMap) {
+      restoreCityIconLayerStatistics(state.renderer, operationStartCityIconLayerStats);
+    }
+  }
+}
+
+async function commitRegenerationWorkerSession(state, worker, operation, {expectedRevisionDelta = 1} = {}) {
+  const sessionId = worker?.session?.id;
+  if (!sessionId) return worker;
+  const binding = createRegenerationWorkerBinding(state, operation);
+  try {
+    const committed = await state.workerTaskCoordinator.commitSession(sessionId, binding, {expectedRevisionDelta});
+    if (!committed) {
+      state.workerTaskCoordinator.invalidateSession("session-commit-rejected");
+      const error = new Error("Worker 镜像会话提交已被拒绝");
+      error.code = "worker_session_commit_rejected";
+      throw error;
+    }
+    return {
+      ...worker,
+      session: {...worker.session, pending: false, committed: true, invalidated: false}
+    };
+  } catch (error) {
+    state.workerTaskCoordinator.invalidateSession("session-commit-error");
+    throw error;
+  }
+}
+
+function invalidateRegenerationWorkerResultSession(state, worker, reason) {
+  if (!worker?.session?.id) return worker;
+  state.workerTaskCoordinator.invalidateSession(reason);
+  return {
+    ...worker,
+    session: {...worker.session, pending: false, committed: false, invalidated: true, reason}
+  };
+}
+
+function appendWorkerCommitTelemetry(worker, telemetry) {
+  return {
+    ...(worker || {}),
+    telemetry: {...(worker?.telemetry || {}), ...telemetry}
+  };
+}
+
+function roundWorkerTelemetryMs(value) {
+  return Math.round(Number(value || 0) * 1000) / 1000;
+}
+
+function recordWorkerRenderInstallStage(target, stage, detail, elapsedMs) {
+  const key = String(stage || "unknown");
+  const current = target[key] || {count: 0, firstMs: roundWorkerTelemetryMs(elapsedMs), lastMs: 0, completed: 0, total: 0};
+  current.count += 1;
+  current.lastMs = roundWorkerTelemetryMs(elapsedMs);
+  current.completed = Number(detail?.completed) || current.completed;
+  current.total = Number(detail?.total) || current.total;
+  target[key] = current;
+}
+
+function assertWorkerRegenerationConstraint(constraintBundle, map, kind, phase) {
+  if (typeof constraintBundle?.assertDomain !== "function") return true;
+  if (phase === "world") return constraintBundle.assertDomain(map, "world", "after");
+  const assertions = {
+    features: [["features", "feature-topology"]],
+    routes: [],
+    rivers: [["rivers", "river-build"]],
+    cities: [["cities-routes", "settlement-routes"]],
+    states: [["states-provinces", "politics-settlements"]],
+    provinces: [["states-provinces", "province-settlements"]],
+    markers: [["markers-economy", "marker-economy"]],
+    diplomacy: [["diplomacy", "diplomacy-build"]],
+    religions: [["religions", "religion-finalize"], ["cultures", "religion-culture-support"]],
+    military: [["military", "military-build"]],
+    zones: [["zones", "zone-build"]]
+  };
+  for (const [domain, assertionPhase] of assertions[kind] || []) constraintBundle.assertDomain(map, domain, assertionPhase);
+  return true;
+}
+
+function createWorkerRegenerationPatchCommand(map, options) {
+  const {affectedFactory, ...domainOptions} = options;
+  const domainCommand = createDomainPatchCommand(domainOptions);
+  const beforeSummary = map.summary;
+  let afterSummary = null;
+  return {
+    label: domainCommand.label,
+    domain: domainCommand.domain,
+    effects: domainCommand.effects,
+    apply(context) {
+      let domainApplied = false;
+      try {
+        domainCommand.apply(context);
+        domainApplied = true;
+        afterSummary ||= rebuildGenerationSummary(context.map);
+        context.map.summary = afterSummary;
+        if (typeof affectedFactory === "function") {
+          domainCommand.effects.affected.splice(0, domainCommand.effects.affected.length, ...affectedFactory(context.map));
+        }
+      } catch (error) {
+        if (domainApplied) domainCommand.revert(context);
+        context.map.summary = beforeSummary;
+        throw error;
+      }
+    },
+    revert(context) {
+      domainCommand.revert(context);
+      context.map.summary = beforeSummary;
+    },
+    isNoop: context => domainCommand.isNoop(context),
+    getResult: () => domainCommand.getResult()
+  };
+}
+
+function workerRegenerationAffected(map, kind) {
+  switch (kind) {
+    case "features":
+      return systemAffected("features", collectionAffected(OBJECT_KIND.FEATURE, map?.pack?.features, {includeZero: false}));
+    case "routes":
+      return systemAffected("routes", collectionAffected(OBJECT_KIND.ROUTE, map?.settlements?.routes));
+    case "rivers":
+      return systemAffected("rivers", collectionAffected(OBJECT_KIND.RIVER, map?.rivers?.rivers));
+    case "cities":
+      return systemAffected("cities", [
+        ...collectionAffected(OBJECT_KIND.CITY, map?.settlements?.cities),
+        ...collectionAffected(OBJECT_KIND.ROUTE, map?.settlements?.routes)
+      ]);
+    case "states":
+      return systemAffected("states", [
+        ...collectionAffected(OBJECT_KIND.STATE, map?.politics?.states, {includeZero: false}),
+        ...collectionAffected(OBJECT_KIND.PROVINCE, map?.politics?.provinces, {includeZero: false}),
+        ...collectionAffected(OBJECT_KIND.CITY, map?.settlements?.cities),
+        ...collectionAffected(OBJECT_KIND.ROUTE, map?.settlements?.routes)
+      ]);
+    case "provinces":
+      return systemAffected("provinces", [
+        ...collectionAffected(OBJECT_KIND.PROVINCE, map?.politics?.provinces, {includeZero: false}),
+        ...collectionAffected(OBJECT_KIND.CITY, map?.settlements?.cities),
+        ...collectionAffected(OBJECT_KIND.ROUTE, map?.settlements?.routes)
+      ]);
+    case "markers":
+      return systemAffected("markers", objectAffected(OBJECT_KIND.MARKER, "resources"));
+    case "diplomacy":
+      return systemAffected("diplomacy-regeneration", [{kind: OBJECT_KIND.STATE, id: "all"}]);
+    case "religions":
+      return systemAffected("religions", collectionAffected(OBJECT_KIND.RELIGION, map?.society?.religions, {includeZero: false}));
+    case "military":
+      return systemAffected("military", collectionAffected(OBJECT_KIND.MILITARY, militaryRegiments(map)));
+    case "zones":
+      return systemAffected("zones", collectionAffected(OBJECT_KIND.ZONE, map?.zones?.zones));
+    default:
+      return systemAffected(kind);
+  }
+}
+
+function rebuildGenerationSummary(map) {
+  return createGenerationSummary(
+    map.options,
+    map.grid,
+    map.features,
+    map.climate,
+    map.society,
+    map.politics,
+    map.settlements,
+    map.markers,
+    map.pack,
+    map.rivers,
+    map.layers,
+    map.military,
+    map.zones,
+    map.economy,
+    map.diplomacy
+  );
+}
+
+function createWorkerRegenerationRenderRequest(state, targetKind, binding) {
+  const renderer = state.renderer;
+  const canvasSize = renderer?.canvasSize || {};
+  return {
+    binding: {mapIdentity: binding.mapIdentity, mapRevision: binding.mapRevision},
+    layers: renderPreparationLayersForRegeneration(targetKind),
+    camera: {...(renderer?.camera || {})},
+    canvas: {
+      width: Number(renderer?.canvas?.width || canvasSize.width) || 1,
+      height: Number(renderer?.canvas?.height || canvasSize.height) || 1,
+      clientWidth: Number(canvasSize.cssWidth || renderer?.canvas?.width) || 1,
+      clientHeight: Number(canvasSize.cssHeight || renderer?.canvas?.height) || 1
+    },
+    selection: workerRenderObject(renderer?.selection),
+    objectHighlights: (renderer?.objectHighlights || []).map(workerRenderObject).filter(Boolean),
+    visualTheme: structuredClone(renderer?.visualTheme || {}),
+    unitPreferences: structuredClone(renderer?.unitPreferences || {}),
+    politicalMeshDebugMode: String(renderer?.politicalMeshDebugMode || "none"),
+    visibility: {...(renderer?.layerVisibility || {})},
+    colorMode: String(renderer?.colorMode || "height"),
+    viewOptions: structuredClone(renderer?.viewOptions || {}),
+    labelOptions: structuredClone(renderer?.labelOptions || {}),
+    oceanCurrentHighlightIds: [...(renderer?.oceanCurrentHighlights || [])]
+  };
+}
+
+function workerRenderObject(object) {
+  if (!object?.kind || object.id === undefined || object.id === null) return null;
+  return {kind: String(object.kind), id: object.id};
+}
+
+function createWorkerRegenerationRenderContextToken(state, targetKind) {
+  const renderer = state.renderer;
+  const size = renderer?.canvasSize || {};
+  return JSON.stringify({
+    targetKind,
+    camera: renderer?.camera || null,
+    canvas: [renderer?.canvas?.width || 0, renderer?.canvas?.height || 0, size.cssWidth || 0, size.cssHeight || 0],
+    selection: workerRenderObject(renderer?.selection),
+    highlights: (renderer?.objectHighlights || []).map(workerRenderObject).filter(Boolean),
+    visualTheme: renderer?.visualTheme || null,
+    unitPreferences: renderer?.unitPreferences || null,
+    politicalMeshDebugMode: renderer?.politicalMeshDebugMode || "none",
+    visibility: renderer?.layerVisibility || null,
+    colorMode: renderer?.colorMode || "height",
+    viewOptions: renderer?.viewOptions || null,
+    labelOptions: renderer?.labelOptions || null,
+    oceanCurrentHighlightIds: [...(renderer?.oceanCurrentHighlights || [])]
+  });
+}
+
+function isWorkerRegenerationRenderContextCurrent(state, targetKind, binding, token, revisionDelta) {
+  const expected = {...binding, mapRevision: Number(binding.mapRevision) + Number(revisionDelta || 0)};
+  return validateRegenerationWorkerBinding(state, expected)
+    && createWorkerRegenerationRenderContextToken(state, targetKind) === token;
+}
+
+function workerRegenerationDeferredReplayLayers(snapshot, targetKind) {
+  const effects = snapshot?.effects || {};
+  const layers = [];
+  if (effects.surface) layers.push("surface");
+  if (effects.lines) layers.push("line");
+  if (effects.points) layers.push("point");
+  if (effects.labels) layers.push("labels");
+  if (effects.political) layers.push("political");
+  if (effects.routes && targetKind !== "rivers" && snapshot?.finalPresentation?.layerVisibility?.routes !== false) layers.push("route");
+  return [...new Set(layers)];
+}
+
+function createWorkerRegenerationDeferredRenderRequest(state, targetKind, binding, snapshot) {
+  return {
+    ...createWorkerRegenerationRenderRequest(state, targetKind, binding),
+    layers: workerRegenerationDeferredReplayLayers(snapshot, targetKind)
+  };
+}
+
+function isWorkerRegenerationDeferredReplayContextCurrent(state, targetKind, map, binding, token) {
+  return state.map === map
+    && validateRegenerationWorkerBinding(state, binding)
+    && createWorkerRegenerationRenderContextToken(state, targetKind) === token;
+}
+
+function isWorkerRegenerationDeferredReplaySequenceCurrent(renderer, snapshot) {
+  return renderer?.hasDeferredWorkerRenderMutations?.()
+    && Number(renderer.workerRenderInstallMutationSequence) === Number(snapshot?.maxSequence);
+}
+
+function decideWorkerRegenerationDeferredReplay(contextCurrent, sequenceCurrent) {
+  if (!contextCurrent) return "obsolete";
+  return sequenceCurrent ? "current" : "retry";
+}
+
+function assertWorkerRegenerationDeferredReplayState(state, targetKind, map, binding, token, sequenceCurrent, phase) {
+  const decision = decideWorkerRegenerationDeferredReplay(
+    isWorkerRegenerationDeferredReplayContextCurrent(state, targetKind, map, binding, token),
+    sequenceCurrent
+  );
+  if (decision !== "obsolete") return decision;
+  const error = new Error(`最终显示${phase || "处理"}期间地图或视图已变化`);
+  error.code = "operation_obsolete";
+  throw error;
+}
+
+function discardWorkerRegenerationPreparedInstall(installs, install) {
+  try {
+    install?.rollback?.();
+  } finally {
+    const index = installs.lastIndexOf(install);
+    if (index >= 0) installs.splice(index, 1);
+  }
+}
+
+function isWorkerRegenerationPreparedInstallObsolete(error) {
+  return new Set([
+    "render-install-obsolete",
+    "render-cache-unpack-obsolete",
+    "label-descriptor-rebind-obsolete",
+    "render-overlay-preparation-obsolete"
+  ]).has(String(error?.code || ""));
+}
+
+function normalizeWorkerRegenerationOuterPreparedInstallError(error, operation) {
+  const code = String(error?.code || "");
+  if (!new Set([
+    "render-install-obsolete",
+    "render-cache-unpack-obsolete",
+    "label-descriptor-rebind-obsolete",
+    "render-overlay-preparation-obsolete",
+    "picking-rebind-obsolete"
+  ]).has(code)) return error;
+  return createRuntimeOperationError("operation_obsolete", error?.message || "渲染准备结果已过期", {
+    stage: operation?.stage || "render-install",
+    cause: error,
+    expected: true,
+    details: {internalCode: code}
+  });
+}
+
+function applyWorkerRegenerationDeferredPresentation(state, targetKind, snapshot) {
+  const renderer = state.renderer;
+  const routesDirty = targetKind === "rivers" ? Boolean(renderer?.dynamicBuffersDirty?.routes) : null;
+  const result = renderer?.applyDeferredWorkerRenderPresentationOnly?.(snapshot);
+  if (targetKind === "rivers" && renderer?.dynamicBuffersDirty) renderer.dynamicBuffersDirty.routes = routesDirty;
+  return {result, routesDirty};
+}
+
+function resumeWorkerRegenerationPreparedPresentation(state, targetKind, snapshot, routesDirty) {
+  const renderer = state.renderer;
+  try {
+    return renderer?.resumePreparedWorkerRenderInstall?.(snapshot, {
+      draw: true,
+      preserveRoutes: targetKind === "rivers"
+    });
+  } finally {
+    if (targetKind === "rivers" && renderer?.dynamicBuffersDirty) renderer.dynamicBuffersDirty.routes = routesDirty;
+  }
+}
+
+async function replayWorkerRegenerationDeferredPresentation(state, documentRef, targetKind, operation, worker, installs, readTime) {
+  const renderer = state.renderer;
+  const expectedSessionId = worker?.session?.id;
+  const startedAt = readTime();
+  const telemetry = {
+    attempts: 0,
+    layers: [],
+    computeMs: 0,
+    prepareMs: 0,
+    commitMs: 0,
+    totalMs: 0,
+    attemptDetails: []
+  };
+  let committedWorker = worker;
+  if (!expectedSessionId || !renderer?.hasDeferredWorkerRenderMutations?.()) return {worker: committedWorker, telemetry};
+
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    operation?.throwIfCancelled?.();
+    await yieldToBrowser(documentRef);
+    operation?.throwIfCancelled?.();
+    if (!renderer.hasDeferredWorkerRenderMutations()) break;
+    const snapshot = renderer.captureDeferredWorkerRenderSnapshot?.();
+    if (!snapshot?.entries?.length) break;
+    telemetry.attempts = attempt;
+    const {routesDirty} = applyWorkerRegenerationDeferredPresentation(state, targetKind, snapshot);
+    const binding = createRegenerationWorkerBinding(state, operation);
+    const renderRequest = createWorkerRegenerationDeferredRenderRequest(state, targetKind, binding, snapshot);
+    const token = createWorkerRegenerationRenderContextToken(state, targetKind);
+    const map = state.map;
+    const contextCurrent = () => isWorkerRegenerationDeferredReplayContextCurrent(state, targetKind, map, binding, token);
+    const sequenceCurrent = () => isWorkerRegenerationDeferredReplaySequenceCurrent(renderer, snapshot);
+    const isCurrent = () => contextCurrent() && sequenceCurrent();
+    const detail = {
+      attempt,
+      mutations: snapshot.entries.length,
+      layers: [...renderRequest.layers],
+      computeMs: 0,
+      prepareMs: 0,
+      commitMs: 0
+    };
+    telemetry.layers.push(...renderRequest.layers);
+
+    if (!renderRequest.layers.length) {
+      if (assertWorkerRegenerationDeferredReplayState(state, targetKind, map, binding, token, sequenceCurrent(), "确认") === "retry") continue;
+      resumeWorkerRegenerationPreparedPresentation(state, targetKind, snapshot, routesDirty);
+      telemetry.attemptDetails.push(detail);
+      if (!renderer.hasDeferredWorkerRenderMutations()) break;
+      continue;
+    }
+
+    operation?.report("render-prepare", {message: "正在准备最终显示效果"});
+    const computeStartedAt = readTime();
+    const replayOutput = await state.workerTaskCoordinator.run("regeneration.compute", {
+      map,
+      mode: "render-only",
+      render: renderRequest
+    }, {
+      binding,
+      signal: operation?.signal,
+      sessionMode: "map-mirror",
+      sessionPayload: {mode: "render-only", render: renderRequest},
+      allowFallback: false,
+      streamBudgetMs: 6,
+      streamSliceBytes: 256 * 1024,
+      onProgress: () => operation?.report("render-prepare", {message: "正在准备最终显示效果"})
+    });
+    detail.computeMs = roundWorkerTelemetryMs(readTime() - computeStartedAt);
+    telemetry.computeMs = roundWorkerTelemetryMs(telemetry.computeMs + detail.computeMs);
+    if (replayOutput?.mode !== "render-only"
+      || replayOutput.worker?.session?.id !== expectedSessionId
+      || replayOutput.worker?.session?.reused !== true
+      || replayOutput.worker?.session?.pending !== true) {
+      const error = new Error("最终显示准备未复用当前地图会话");
+      error.code = "worker_protocol_session_stale";
+      throw error;
+    }
+    committedWorker = replayOutput.worker;
+    if (assertWorkerRegenerationDeferredReplayState(state, targetKind, map, binding, token, sequenceCurrent(), "计算") === "retry") {
+      committedWorker = await commitRegenerationWorkerSession(state, replayOutput.worker, operation, {expectedRevisionDelta: 0});
+      operation?.throwIfCancelled?.();
+      telemetry.attemptDetails.push(detail);
+      continue;
+    }
+
+    operation?.report("render-install", {message: "正在更新最终显示效果"});
+    const prepareStartedAt = readTime();
+    let install;
+    try {
+      install = await prepareRendererWorkerInstall(renderer, map, replayOutput.preparedRender, {
+        binding: renderRequest.binding,
+        signal: operation?.signal,
+        preserveRoutePicking: targetKind === "rivers",
+        isCurrent,
+        onProgress: () => operation?.report("render-install", {message: "正在更新最终显示效果"})
+      });
+    } catch (error) {
+      const decision = assertWorkerRegenerationDeferredReplayState(state, targetKind, map, binding, token, sequenceCurrent(), "准备");
+      if (decision === "retry" && isWorkerRegenerationPreparedInstallObsolete(error)) {
+        committedWorker = await commitRegenerationWorkerSession(state, replayOutput.worker, operation, {expectedRevisionDelta: 0});
+        operation?.throwIfCancelled?.();
+        telemetry.attemptDetails.push(detail);
+        continue;
+      }
+      throw error;
+    }
+    detail.prepareMs = roundWorkerTelemetryMs(readTime() - prepareStartedAt);
+    telemetry.prepareMs = roundWorkerTelemetryMs(telemetry.prepareMs + detail.prepareMs);
+    installs.push(install);
+    operation?.throwIfCancelled?.();
+    if (assertWorkerRegenerationDeferredReplayState(state, targetKind, map, binding, token, sequenceCurrent(), "安装准备") === "retry") {
+      discardWorkerRegenerationPreparedInstall(installs, install);
+      committedWorker = await commitRegenerationWorkerSession(state, replayOutput.worker, operation, {expectedRevisionDelta: 0});
+      operation?.throwIfCancelled?.();
+      telemetry.attemptDetails.push(detail);
+      continue;
+    }
+    const commitStartedAt = readTime();
+    install.commit();
+    detail.commitMs = roundWorkerTelemetryMs(readTime() - commitStartedAt);
+    telemetry.commitMs = roundWorkerTelemetryMs(telemetry.commitMs + detail.commitMs);
+    if (assertWorkerRegenerationDeferredReplayState(state, targetKind, map, binding, token, sequenceCurrent(), "安装提交") === "retry") {
+      discardWorkerRegenerationPreparedInstall(installs, install);
+      committedWorker = await commitRegenerationWorkerSession(state, replayOutput.worker, operation, {expectedRevisionDelta: 0});
+      operation?.throwIfCancelled?.();
+      telemetry.attemptDetails.push(detail);
+      continue;
+    }
+    committedWorker = await commitRegenerationWorkerSession(state, replayOutput.worker, operation, {expectedRevisionDelta: 0});
+    operation?.throwIfCancelled?.();
+    if (assertWorkerRegenerationDeferredReplayState(state, targetKind, map, binding, token, sequenceCurrent(), "会话确认") === "retry") {
+      discardWorkerRegenerationPreparedInstall(installs, install);
+      telemetry.attemptDetails.push(detail);
+      continue;
+    }
+    resumeWorkerRegenerationPreparedPresentation(state, targetKind, snapshot, routesDirty);
+    telemetry.attemptDetails.push(detail);
+    if (!renderer.hasDeferredWorkerRenderMutations()) break;
+  }
+
+  telemetry.layers = [...new Set(telemetry.layers)];
+  telemetry.totalMs = roundWorkerTelemetryMs(readTime() - startedAt);
+  if (renderer.hasDeferredWorkerRenderMutations()) {
+    const error = new Error("最终显示在多次确认期间仍持续变化");
+    error.code = "operation_obsolete";
+    throw error;
+  }
+  return {worker: committedWorker, telemetry};
+}
+
+function workerRegenerationPreparedInstallCleanupAction(install, {mode, ownerCurrent} = {}) {
+  if (mode === "rollback-current" && ownerCurrent === true) return "rollback";
+  if (mode === "release-detached" && ownerCurrent === false) return install?.committed ? "finalize" : "rollback";
+  return null;
+}
+
+function cleanupWorkerRegenerationPreparedInstalls(installs, options) {
+  const failures = [];
+  for (const install of [...(installs || [])].reverse()) {
+    const action = workerRegenerationPreparedInstallCleanupAction(install, options);
+    if (!action) {
+      failures.push(new Error("渲染安装清理缺少明确的地图所有权模式"));
+      continue;
+    }
+    try {
+      install?.[action]?.();
+    } catch (error) {
+      failures.push(error);
+    }
+  }
+  if (Array.isArray(installs)) installs.length = 0;
+  return failures;
+}
+
+function finalizeWorkerRegenerationPreparedInstalls(installs) {
+  for (const install of [...(installs || [])].reverse()) {
+    try {
+      install?.finalize?.();
+    } catch {
+      // finalize 仅释放已脱离的资源，不能覆盖已经完成的地图恢复。
+    }
+  }
+  if (Array.isArray(installs)) installs.length = 0;
+}
+
+async function recoverWorkerRegenerationDeferredPresentation(state, documentRef, targetKind, operation, presentation, routesDirty) {
+  const renderer = state.renderer;
+  const recoveryMap = state.map;
+  const view = documentRef.defaultView || globalThis;
+  const controller = new AbortController();
+  const timeout = view.setTimeout?.(() => controller.abort("地图显示恢复超时"), 60_000);
+  const installs = [];
+  try {
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      await yieldToBrowser(documentRef);
+      if (state.map !== recoveryMap) {
+        const error = new Error("地图显示恢复期间当前地图已被替换");
+        error.code = "operation_obsolete";
+        throw error;
+      }
+      if (!renderer?.hasDeferredWorkerRenderMutations?.()) break;
+      const snapshot = renderer.captureDeferredWorkerRenderSnapshot?.();
+      if (!snapshot?.entries?.length) break;
+      applyWorkerRegenerationDeferredPresentation(state, targetKind, snapshot);
+      if (targetKind === "rivers" && renderer?.dynamicBuffersDirty) renderer.dynamicBuffersDirty.routes = routesDirty;
+      const binding = createRegenerationWorkerBinding(state, operation);
+      const renderRequest = createWorkerRegenerationDeferredRenderRequest(state, targetKind, binding, snapshot);
+      const token = createWorkerRegenerationRenderContextToken(state, targetKind);
+      const map = recoveryMap;
+      const contextCurrent = () => isWorkerRegenerationDeferredReplayContextCurrent(state, targetKind, map, binding, token);
+      const sequenceCurrent = () => isWorkerRegenerationDeferredReplaySequenceCurrent(renderer, snapshot);
+      const isCurrent = () => contextCurrent() && sequenceCurrent();
+
+      if (!renderRequest.layers.length) {
+        if (assertWorkerRegenerationDeferredReplayState(state, targetKind, map, binding, token, sequenceCurrent(), "恢复确认") === "retry") continue;
+        resumeWorkerRegenerationPreparedPresentation(state, targetKind, snapshot, routesDirty);
+        if (!renderer.hasDeferredWorkerRenderMutations()) break;
+        continue;
+      }
+
+      operation?.report?.("render-prepare", {message: "正在恢复地图显示"});
+      const staged = await createStagedWorkerSnapshot(map, {
+        signal: controller.signal,
+        yieldToMain: () => yieldToBrowser(documentRef),
+        budgetMs: 6,
+        sliceBytes: 256 * 1024
+      });
+      const stagedDecision = assertWorkerRegenerationDeferredReplayState(state, targetKind, map, binding, token, sequenceCurrent(), "恢复资料准备");
+      if (stagedDecision === "retry") continue;
+      const prepared = await state.workerTaskCoordinator.run("render.prepare", {
+        map: staged.snapshot,
+        ...renderRequest
+      }, {
+        binding,
+        signal: controller.signal,
+        allowFallback: false,
+        payloadIsolated: true,
+        streamBudgetMs: 6,
+        streamSliceBytes: 256 * 1024,
+        onProgress: () => operation?.report?.("render-prepare", {message: "正在恢复地图显示"})
+      });
+      if (prepared.worker?.mode !== "worker" || prepared.worker?.session) {
+        const error = new Error("地图显示恢复未使用独立渲染任务");
+        error.code = "worker_protocol_session_stale";
+        throw error;
+      }
+      if (assertWorkerRegenerationDeferredReplayState(state, targetKind, map, binding, token, sequenceCurrent(), "恢复计算") === "retry") continue;
+
+      let install;
+      try {
+        install = await prepareRendererWorkerInstall(renderer, map, prepared, {
+          binding: renderRequest.binding,
+          signal: controller.signal,
+          preserveRoutePicking: targetKind === "rivers",
+          isCurrent,
+          onProgress: () => operation?.report?.("render-install", {message: "正在恢复地图显示"})
+        });
+      } catch (error) {
+        const decision = assertWorkerRegenerationDeferredReplayState(state, targetKind, map, binding, token, sequenceCurrent(), "恢复准备");
+        if (decision === "retry" && isWorkerRegenerationPreparedInstallObsolete(error)) continue;
+        throw error;
+      }
+      installs.push(install);
+      if (assertWorkerRegenerationDeferredReplayState(state, targetKind, map, binding, token, sequenceCurrent(), "恢复安装准备") === "retry") {
+        discardWorkerRegenerationPreparedInstall(installs, install);
+        continue;
+      }
+      install.commit();
+      if (assertWorkerRegenerationDeferredReplayState(state, targetKind, map, binding, token, sequenceCurrent(), "恢复安装提交") === "retry") {
+        discardWorkerRegenerationPreparedInstall(installs, install);
+        continue;
+      }
+      resumeWorkerRegenerationPreparedPresentation(state, targetKind, snapshot, routesDirty);
+      if (!renderer.hasDeferredWorkerRenderMutations()) break;
+    }
+    if (renderer?.hasDeferredWorkerRenderMutations?.()) {
+      const error = new Error("地图显示在恢复期间持续变化");
+      error.code = "operation_obsolete";
+      throw error;
+    }
+    finalizeWorkerRegenerationPreparedInstalls(installs);
+    return true;
+  } catch (error) {
+    const ownerCurrent = state.map === recoveryMap;
+    const cleanupFailures = cleanupWorkerRegenerationPreparedInstalls(installs, ownerCurrent
+      ? {mode: "rollback-current", ownerCurrent: true}
+      : {mode: "release-detached", ownerCurrent: false});
+    if (!ownerCurrent) {
+      if (cleanupFailures.length && error && typeof error === "object") {
+        try {
+          error.cleanupFailures = new AggregateError(cleanupFailures, "已换图的旧渲染资源清理存在失败");
+        } catch {
+          // 诊断附加失败不得覆盖原 operation_obsolete。
+        }
+      }
+      throw error;
+    }
+    try {
+      renderer?.restoreDeferredWorkerRenderPresentation?.(presentation);
+      if (targetKind === "rivers" && renderer?.dynamicBuffersDirty) renderer.dynamicBuffersDirty.routes = routesDirty;
+    } catch (failure) {
+      cleanupFailures.push(failure);
+    }
+    if (!cleanupFailures.length) throw error;
+    const combined = new Error(`地图显示恢复失败：${error?.message || error}`);
+    combined.code = "operation_rollback_failed";
+    combined.cause = new AggregateError([error, ...cleanupFailures], "地图显示恢复与临时资源清理均存在失败");
+    throw combined;
+  } finally {
+    if (installs.length) {
+      const ownerCurrent = state.map === recoveryMap;
+      cleanupWorkerRegenerationPreparedInstalls(installs, ownerCurrent
+        ? {mode: "rollback-current", ownerCurrent: true}
+        : {mode: "release-detached", ownerCurrent: false});
+    }
+    if (timeout !== undefined) view.clearTimeout?.(timeout);
+  }
+}
+
+async function refreshWorkerRegenerationPreparedUi(state, documentRef, targetKind, refresh, result, affected = null, {
+  faultPhase = "",
+  onRenderContextSettled = null,
+  yieldToMain = null,
+  assertCurrent = null
+} = {}) {
+  const targets = affected || systemAffected(targetKind);
+  const affectedKinds = [...new Set(targets.map(item => String(item?.kind || "")).filter(Boolean))];
+  state.lastEditRefresh = {
+    render: "worker-prepared-install",
+    selection: "refresh",
+    derived: (refresh?.derived || []).join(", "),
+    pendingDerived: "none",
+    affected: targets.length ? `${targets.length} 个对象` : "none",
+    affectedCount: targets.length,
+    affectedPreview: targets.slice(0, 8),
+    affectedKinds
+  };
+  reconcilePersistentObjectHighlights(state, documentRef, {refreshUi: false});
+  state.selectionStore.refresh();
+  onRenderContextSettled?.();
+  await yieldToMain?.();
+  assertCurrent?.();
+  updateRegenerationSection(documentRef, result);
+  maybeInjectWorkerRegenerationRefreshFault(documentRef, {targetKind, stage: "after-status", phase: faultPhase});
+  refreshPanelsForEdit(state, {derived: ["object-panels"], affected: targets});
+  updateHeightPanel(state, {includeMapSummary: false});
+  updateRuntimePanel(documentRef, state);
+  updatePickPanel(documentRef, state);
+  updateEditingInteractionLock(state, documentRef);
+  maybeInjectWorkerRegenerationRefreshFault(documentRef, {targetKind, stage: "after-panels", phase: faultPhase});
+  state.renderer?.updateSelectionBuffer?.();
+  state.renderer?.draw?.({updateDynamicBuffers: false});
+}
+
+function maybeInjectWorkerRegenerationRefreshFault(documentRef, {targetKind, stage, phase}) {
+  if (phase !== "forward") return;
+  const fault = documentRef.defaultView?.__webglGeneratorWorkerRefreshFault;
+  if (!fault || typeof fault !== "object" || fault.enabled === false) return;
+  if (fault.kind && String(fault.kind) !== String(targetKind)) return;
+  if (fault.stage && String(fault.stage) !== String(stage)) return;
+  fault.hits = (Number(fault.hits) || 0) + 1;
+  if (fault.mode === "once" && fault.hits > 1) return;
+  const error = new Error(`Worker 重生成刷新故障注入：${targetKind}/${stage}`);
+  error.code = "worker_regeneration_refresh_fault";
+  error.stage = "render-install";
+  error.suggestion = "故障注入已验证回滚；清除故障注入后重试。";
+  error.details = {kind: targetKind, stage, mode: fault.mode === "persistent" ? "persistent" : "once", hits: fault.hits};
+  throw error;
+}
+
+function captureWorkerRegenerationRendererPresentation(renderer) {
+  if (!renderer) return null;
+  return {
+    camera: {...(renderer.camera || {})},
+    overlayCommittedCamera: {...(renderer.overlayCommittedCamera || renderer.camera || {})},
+    selection: renderer.selection || null,
+    objectHighlights: [...(renderer.objectHighlights || [])],
+    locateFlash: renderer.locateFlash || null,
+    dynamicBuffersDirty: {...(renderer.dynamicBuffersDirty || {})},
+    cityIconLayerStats: {...(renderer.cityIconLayer?.stats || {})},
+    deferredPresentation: renderer.captureDeferredWorkerRenderPresentation?.() || null
+  };
+}
+
+function restoreWorkerRegenerationRendererPresentation(renderer, snapshot) {
+  if (!renderer || !snapshot) return;
+  Object.assign(renderer.camera || {}, snapshot.camera || {});
+  renderer.overlayCommittedCamera = {...(snapshot.overlayCommittedCamera || snapshot.camera || {})};
+  renderer.locateFlash = snapshot.locateFlash || null;
+  renderer.setSelection?.(snapshot.selection, {draw: false});
+  renderer.setObjectHighlights?.(snapshot.objectHighlights, {draw: false});
+  if (renderer.dynamicBuffersDirty) Object.assign(renderer.dynamicBuffersDirty, snapshot.dynamicBuffersDirty || {});
+}
+
+function restoreWorkerRegenerationRendererStatistics(renderer, snapshot) {
+  restoreCityIconLayerStatistics(renderer, snapshot?.cityIconLayerStats);
+}
+
+function restoreCityIconLayerStatistics(renderer, statistics) {
+  const target = renderer?.cityIconLayer?.stats;
+  if (!target || !statistics) return;
+  for (const key of Object.keys(target)) {
+    if (!Object.prototype.hasOwnProperty.call(statistics, key)) delete target[key];
+  }
+  Object.assign(target, statistics);
+}
+
+function captureWorkerRegenerationUiSnapshot(state, documentRef) {
+  return {
+    selection: state.selectionStore.getSnapshot(),
+    renderer: captureWorkerRegenerationRendererPresentation(state.renderer),
+    lastEditRefresh: state.lastEditRefresh,
+    regenerationSection: captureWorkerRegenerationStatus(documentRef)
+  };
+}
+
+function restoreWorkerRegenerationUiSnapshot(state, documentRef, snapshot, targetKind, refresh, {preserveRenderContext = false, restoreDeferredPresentation = false} = {}) {
+  if (!snapshot) return;
+  if (restoreDeferredPresentation) {
+    state.renderer?.restoreDeferredWorkerRenderPresentation?.(snapshot.renderer?.deferredPresentation);
+  }
+  if (!preserveRenderContext) {
+    restoreWorkerRegenerationRendererPresentation(state.renderer, snapshot.renderer);
+    const selection = snapshot.selection || {};
+    state.selectionStore.batch(() => {
+      if (selection.selection) state.selectionStore.setSelection(selection.selection);
+      else state.selectionStore.clear();
+      if (selection.editingObject) state.selectionStore.startEditing(selection.editingObject, {select: false});
+      else state.selectionStore.stopEditing();
+    });
+  } else {
+    reconcilePersistentObjectHighlights(state, documentRef, {refreshUi: false});
+    state.selectionStore.refresh();
+    if (state.renderer?.dynamicBuffersDirty) {
+      state.renderer.dynamicBuffersDirty.selection = true;
+      state.renderer.dynamicBuffersDirty.routes = true;
+    }
+  }
+  state.lastEditRefresh = snapshot.lastEditRefresh;
+  refreshPanelsForEdit(state, {derived: ["object-panels"], affected: workerRegenerationAffected(state.map, targetKind)});
+  updateHeightPanel(state, {includeMapSummary: false});
+  updateRuntimePanel(documentRef, state);
+  updatePickPanel(documentRef, state);
+  updateEditingInteractionLock(state, documentRef);
+  state.renderer?.updateSelectionBuffer?.();
+  state.renderer?.draw?.({updateDynamicBuffers: false});
+  restoreWorkerRegenerationStatus(documentRef, snapshot.regenerationSection);
+}
+
+function captureWorkerRegenerationStatus(documentRef) {
+  const result = {};
+  for (const id of ["regeneration-status", "regeneration-constraint", "app-status"]) {
+    const element = documentRef?.getElementById?.(id);
+    if (element) result[id] = {textContent: element.textContent, hidden: Boolean(element.hidden)};
+  }
+  return result;
+}
+
+function restoreWorkerRegenerationStatus(documentRef, snapshot) {
+  for (const [id, state] of Object.entries(snapshot || {})) {
+    const element = documentRef?.getElementById?.(id);
+    if (!element) continue;
+    element.textContent = state.textContent || "";
+    element.hidden = Boolean(state.hidden);
+  }
+}
+
+function normalizeWorkerRegenerationOptions(options) {
+  const normalized = {};
+  for (const key of ["scope", "regenerationScope", "stateId", "provinceId", "id", "preservePopulation"]) {
+    if (options?.[key] !== undefined) normalized[key] = structuredClone(options[key]);
+  }
+  return normalized;
+}
+
+function createRegenerationWorkerBinding(state, operation = null) {
+  return {
+    ...state.mapRevision.getSnapshot(),
+    generationToken: Number(state.pendingGenerateId) || 0,
+    lockFingerprint: regenerationLockFingerprint(state.map),
+    operationId: Number(operation?.id) || 0,
+    operationName: String(operation?.name || "")
+  };
+}
+
+function sameRegenerationWorkerBinding(left, right) {
+  return left?.mapIdentity === right?.mapIdentity
+    && Number(left?.mapRevision) === Number(right?.mapRevision)
+    && Number(left?.generationToken) === Number(right?.generationToken)
+    && left?.lockFingerprint === right?.lockFingerprint
+    && Number(left?.operationId) === Number(right?.operationId)
+    && String(left?.operationName || "") === String(right?.operationName || "");
+}
+
+function validateRegenerationWorkerBinding(state, binding) {
+  const currentOperation = state.runtimeOperation?.getSnapshot?.().current || null;
+  const operation = binding?.operationId ? {id: currentOperation?.id, name: currentOperation?.name} : null;
+  return sameRegenerationWorkerBinding(binding, createRegenerationWorkerBinding(state, operation));
+}
+
+function regenerationLockFingerprint(map) {
+  const entries = (map?.regenerationLocks?.entries || [])
+    .map(entry => `${String(entry?.kind || "")}:${String(entry?.id ?? "")}`)
+    .sort();
+  let hash = 0x811c9dc5;
+  for (const character of `${Number(map?.regenerationLocks?.version) || 0}|${entries.join("|")}`) {
+    hash ^= character.charCodeAt(0);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return (hash >>> 0).toString(16).padStart(8, "0");
+}
+
 function allCurrentRiversLocked(map) {
   const currentRivers = map?.rivers?.rivers || [];
   return currentRivers.length > 0 && allRegenerationObjectsLocked(map, OBJECT_KIND.RIVER, currentRivers);
@@ -11836,9 +13165,10 @@ function regenerateDiplomacy(state, documentRef, options = {}) {
   );
 }
 
-function refreshRegeneratedLayers(state, documentRef, {derived, affected, picking = "all"}) {
+function refreshRegeneratedLayers(state, documentRef, {derived, affected, picking = "all", onPhase = null}) {
   if (picking === "rivers") state.renderer.refreshRiverPickingIndex?.();
   else if (picking !== "none") state.renderer.refreshObjectPickingIndex?.();
+  onPhase?.("after-picking");
   const highlightsChanged = reconcilePersistentObjectHighlights(state, documentRef, {refreshUi: false}).changed;
   refreshAfterEdit(state, {
     render: "draw",
@@ -11848,9 +13178,11 @@ function refreshRegeneratedLayers(state, documentRef, {derived, affected, pickin
     derived,
     affected
   });
+  onPhase?.("after-render");
   refreshPanelsForEdit(state, highlightsChanged ? {derived: ["object-panels"]} : {derived, affected});
   updateHeightPanel(state);
   updateRuntimePanel(documentRef, state);
+  onPhase?.("after-panels");
 }
 
 function refreshGenerationSummary(map) {

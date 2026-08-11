@@ -131,7 +131,9 @@ export function createRuntimeOperationManager(options = {}) {
       }
     };
     operation.context = context;
-    operation.health = operation.loading ? null : options.beginHealthOperation?.(operation.name, {operationId: operation.id}) || null;
+    operation.health = operation.loading || config.measureHealthOperation === false
+      ? null
+      : options.beginHealthOperation?.(operation.name, {operationId: operation.id}) || null;
     current = operation;
     if (operation.loading) options.setLoading?.(true, operation.message, snapshotOperation(operation));
     publish();
@@ -221,6 +223,15 @@ export function normalizeRuntimeOperationError(error, stage = "run") {
     return new RuntimeOperationError(error.code, message, {
       stage,
       suggestion: error.suggestion,
+      details: error.details,
+      cause: error,
+      expected: true
+    });
+  }
+  if (error?.code === "operation_obsolete") {
+    return new RuntimeOperationError(error.code, message, {
+      stage,
+      suggestion: error.suggestion || DEFAULT_SUGGESTIONS.operation_obsolete,
       details: error.details,
       cause: error,
       expected: true
