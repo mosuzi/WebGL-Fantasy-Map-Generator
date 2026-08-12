@@ -918,6 +918,7 @@ function verifyAppDeferredReplayStaticContract() {
   assert.match(displayFlow, /allowFallback: false/u, "复杂显示准备不得回退主线程");
   assert.match(displayFlow, /expectedRevisionDelta: 0/u, "显示事务不得推进 map revision");
   assert.doesNotMatch(displayFlow, /state\.workerTaskCoordinator/u, "显示事务不得占用领域计算 session");
+  assert.match(source, /workerRenderInstallSuspended > 0 && !activeName\.startsWith\("layers\."\)\) return apply\(\)/u, "地图事务暂停 renderer 时显示设置必须继续进入原 deferred 队列");
   assert.match(displayFlow, /ownerCurrent \|\| !install\.committed/u, "显示失败清理必须区分当前图与 detached committed owner");
   assert.match(displayFlow, /renderer\.restoreDeferredWorkerRenderPresentation/u, "显示失败必须恢复展示标量");
   assert.match(displayFlow, /renderer\.abortWorkerRenderInstall/u, "显示失败必须解冻并清理 deferred queue");

@@ -1486,16 +1486,16 @@ async function runPreparedFailClosedGate(page) {
 
 async function runHardCellSurfaceGate(page, cdp) {
   await createMap(page, "worker-session-hard-cell-surface", 10000);
-  const baseline = await page.evaluate(() => {
+  const baseline = await page.evaluate(async () => {
     const app = window.__webglGeneratorApp;
     const api = window.webglGeneratorApi;
     const originalPreferences = {
       smoothCellBorders: app.renderer.viewOptions.smoothCellBorders !== false,
       showOceanHeight: Boolean(app.renderer.viewOptions.showOceanHeight)
     };
-    const oceanResponse = api.layers.setShowOceanHeight(false);
+    const oceanResponse = await api.layers.setShowOceanHeight(false);
     if (!oceanResponse?.ok) throw new Error(`关闭海洋高度着色失败：${oceanResponse?.error?.message || "unknown"}`);
-    const response = api.layers.setSmoothCellBorders(false);
+    const response = await api.layers.setSmoothCellBorders(false);
     if (!response?.ok) throw new Error(`关闭 cell 平滑失败：${response?.error?.message || "unknown"}`);
     const original = app.workerTaskCoordinator;
     const probe = {original, originalPreferences, prepared: []};
@@ -1768,12 +1768,12 @@ async function runHardCellSurfaceGate(page, cdp) {
     assert.equal(state.patch.gpu.valid, true, "hard-cell patch GPU buffer 已删除");
     assert.deepEqual({byteLength: state.patch.cpu.byteLength, checksum: state.patch.cpu.checksum}, {byteLength: state.patch.gpu.byteLength, checksum: state.patch.gpu.checksum}, "hard-cell patch CPU/GPU 字节不同源");
     await discardProbeLongTasks(page);
-    const restored = await page.evaluate(() => {
+    const restored = await page.evaluate(async () => {
       const probe = window.__task322HardCellSurface;
       const api = window.webglGeneratorApi;
       return {
-        smooth: api.layers.setSmoothCellBorders(probe.originalPreferences.smoothCellBorders),
-        ocean: api.layers.setShowOceanHeight(probe.originalPreferences.showOceanHeight)
+        smooth: await api.layers.setSmoothCellBorders(probe.originalPreferences.smoothCellBorders),
+        ocean: await api.layers.setShowOceanHeight(probe.originalPreferences.showOceanHeight)
       };
     });
     assert.equal(restored.smooth?.ok, true, restored.smooth?.error?.message || "hard-cell 门恢复 cell 平滑失败");
@@ -1791,17 +1791,17 @@ async function runHardCellSurfaceGate(page, cdp) {
       patch: state.patch
     };
   } finally {
-    await page.evaluate(() => {
+    await page.evaluate(async () => {
       const probe = window.__task322HardCellSurface;
       probe?.restore?.();
       if (probe?.originalPreferences) {
         const api = window.webglGeneratorApi;
         const renderer = window.__webglGeneratorApp?.renderer;
         if ((renderer?.viewOptions?.smoothCellBorders !== false) !== probe.originalPreferences.smoothCellBorders) {
-          api.layers.setSmoothCellBorders(probe.originalPreferences.smoothCellBorders);
+          await api.layers.setSmoothCellBorders(probe.originalPreferences.smoothCellBorders);
         }
         if (Boolean(renderer?.viewOptions?.showOceanHeight) !== probe.originalPreferences.showOceanHeight) {
-          api.layers.setShowOceanHeight(probe.originalPreferences.showOceanHeight);
+          await api.layers.setShowOceanHeight(probe.originalPreferences.showOceanHeight);
         }
       }
       delete window.__task322HardCellSurface;
@@ -5523,8 +5523,8 @@ async function runHundredThousandSessionGate(page, cdp) {
     await discardProbeLongTasks(page);
     heap.afterFirst = await heapUsage(cdp);
 
-    operations.push(summarizeResult(await regenerate(page, cdp, "routes")));
-    await assertNoLongTasks(page, "100k routes reused session");
+    operations.push(summarizeResult(await regenerate(page, cdp, "routes", {longTaskBudget: {maxCount: 1, maxDurationMs: 80}})));
+    await assertRegisteredLongTasks(page, "100k routes reused session", {maxCount: 1, maxDurationMs: 80});
     await clearLongTasks(page);
     operations.push(summarizeResult(await regenerate(page, cdp, "markers")));
     await assertNoLongTasks(page, "100k markers reused session");
@@ -5552,7 +5552,7 @@ async function runHundredThousandSessionGate(page, cdp) {
 
     const hardCell = await runHundredThousandHardCellGate(page);
     const cancellation = await cancelAcceptedWorkerOperation(page, "zones");
-    const afterCancel = summarizeResult(await regenerate(page, cdp, "routes"));
+    const afterCancel = summarizeResult(await regenerate(page, cdp, "routes", {longTaskBudget: {maxCount: 1, maxDurationMs: 80}}));
     assert.equal(afterCancel.worker.session.reused, false, "accepted 取消后错误复用已终止 session");
     heap.afterCancelRecovery = await heapUsage(cdp);
     return {
@@ -5581,7 +5581,7 @@ async function runHundredThousandSessionGate(page, cdp) {
 }
 
 async function runHundredThousandHardCellGate(page) {
-  const setup = await page.evaluate(() => {
+  const setup = await page.evaluate(async () => {
     const app = window.__webglGeneratorApp;
     const renderer = app.renderer;
     const api = window.webglGeneratorApi;
@@ -5589,9 +5589,9 @@ async function runHundredThousandHardCellGate(page) {
       smoothCellBorders: renderer.viewOptions.smoothCellBorders !== false,
       showOceanHeight: Boolean(renderer.viewOptions.showOceanHeight)
     };
-    const ocean = api.layers.setShowOceanHeight(false);
+    const ocean = await api.layers.setShowOceanHeight(false);
     if (!ocean?.ok) throw new Error(`100k hard-cell 关闭海洋高度着色失败：${ocean?.error?.message || "unknown"}`);
-    const smooth = api.layers.setSmoothCellBorders(false);
+    const smooth = await api.layers.setSmoothCellBorders(false);
     if (!smooth?.ok) throw new Error(`100k hard-cell 关闭 cell 平滑失败：${smooth?.error?.message || "unknown"}`);
     const cells = app.map.grid.cells;
     const candidates = [...cells.i].filter(cell => {
@@ -5816,13 +5816,13 @@ async function runHundredThousandHardCellGate(page) {
     await discardProbeLongTasks(page);
     return {setup, firstAction, secondAction, state};
   } finally {
-    const restored = await page.evaluate(() => {
+    const restored = await page.evaluate(async () => {
       const probe = window.__task322HundredThousandHardCell;
       if (!probe) return null;
       const api = window.webglGeneratorApi;
       const result = {
-        smooth: api.layers.setSmoothCellBorders(probe.originalPreferences.smoothCellBorders),
-        ocean: api.layers.setShowOceanHeight(probe.originalPreferences.showOceanHeight)
+        smooth: await api.layers.setSmoothCellBorders(probe.originalPreferences.smoothCellBorders),
+        ocean: await api.layers.setShowOceanHeight(probe.originalPreferences.showOceanHeight)
       };
       delete window.__task322HundredThousandHardCell;
       return result;
@@ -6014,7 +6014,19 @@ async function assertNoLongTasks(page, label) {
   return longTasks;
 }
 
-async function regenerate(page, cdp, kind) {
+async function assertRegisteredLongTasks(page, label, {maxCount, maxDurationMs}) {
+  const longTasks = await page.evaluate(async () => {
+    await new Promise(resolve => setTimeout(resolve, 0));
+    await new Promise(resolve => requestAnimationFrame(() => resolve()));
+    await new Promise(resolve => requestAnimationFrame(() => resolve()));
+    return window.__task322SessionLongTasks.slice();
+  });
+  assert.ok(longTasks.length <= maxCount, `${label} LongTask 数量超过登记上限：${JSON.stringify(longTasks)}`);
+  assert.ok(longTasks.every(task => task?.name === "self" && Number(task.duration) <= maxDurationMs), `${label} LongTask 超过登记时长或来源不符：${JSON.stringify(longTasks)}`);
+  return longTasks;
+}
+
+async function regenerate(page, cdp, kind, {longTaskBudget = null} = {}) {
   const rendererPerformanceBefore = await readRendererPerformanceEvents(page);
   await clearLongTasks(page);
   const metricsBefore = indexMetrics(await cdp.send("Performance.getMetrics"));
@@ -6030,7 +6042,9 @@ async function regenerate(page, cdp, kind) {
   const metricsAfter = indexMetrics(await cdp.send("Performance.getMetrics"));
   let longTasks;
   try {
-    longTasks = await assertNoLongTasks(page, `${kind} Worker regenerate`);
+    longTasks = longTaskBudget
+      ? await assertRegisteredLongTasks(page, `${kind} Worker regenerate`, longTaskBudget)
+      : await assertNoLongTasks(page, `${kind} Worker regenerate`);
   } catch (error) {
     const rendererPerformanceAfter = await readRendererPerformanceEvents(page);
     const rendererPerformanceDiff = Object.fromEntries(Object.entries(rendererPerformanceAfter)

@@ -4,7 +4,7 @@ import {isSharedCubicCurve, sampleCentripetalCatmullRom} from "../geometry/cubic
 import {bindVertexBuffer, createProgram} from "./gl-utils.js";
 import {createRenderContext, worldToNdcPoint, worldToScreenPixel} from "./render-context.js";
 import {colorForCell, isLandCell} from "./color-modes.js";
-import {politicalSurfaceMeshForMode, pushGridCells, pushMeshSurfaceVertices, shouldDrawGridCellUnderPoliticalMesh} from "./cell-surface-layer.js";
+import {buildGridCellSurfacePatchFromBase, politicalSurfaceMeshForMode, pushGridCells, pushMeshSurfaceVertices, shouldDrawGridCellUnderPoliticalMesh} from "./cell-surface-layer.js";
 import {buildCellVisualGridVertices, buildCellVisualMesh, emptyCellVisualMesh, refreshCellVisualMeshCells, summarizeCellVisualMesh} from "./cell-visual-layer.js";
 import {buildSelectionMeshBundle, drawSelectionMeshBatches, emptySelectionDrawRanges, selectionHighlightMode} from "./selection-layer.js";
 import {buildHeightCellSelectionMesh, buildHeightTransformPreviewMesh, emptyHeightCellSelectionStats, emptyHeightTransformPreviewStats} from "./height-transform-preview-layer.js";
@@ -1145,18 +1145,34 @@ export class PlaceholderMapRenderer {
     ].map(Number).filter(cell => Number.isInteger(cell) && cell >= 0 && cell < cellCount));
     if (!patchCells.size) return null;
 
-    const vertices = [];
-    const ranges = new Map();
-    pushGridCells(
-      vertices,
-      createRenderContext(this.map),
+    const context = createRenderContext(this.map);
+    const reused = buildGridCellSurfacePatchFromBase(
+      this.surfaceVertices,
+      context,
       this.colorMode,
       this.viewOptions,
-      cellIndex => patchCells.has(cellIndex),
-      (color, cellIndex) => withSurfaceSideAlpha(color, Number(this.map.grid.cells.h[cellIndex]) >= 20 ? "land" : "water"),
-      (cellIndex, range) => ranges.set(cellIndex, range)
+      patchCells,
+      this.hardCellSurfaceBaseLayout,
+      (color, cellIndex) => withSurfaceSideAlpha(color, Number(this.map.grid.cells.h[cellIndex]) >= 20 ? "land" : "water")
     );
-    if (!ranges.size || !vertices.length) return null;
+    let typedVertices = reused?.vertices;
+    let ranges = reused?.ranges;
+    if (reused) this.hardCellSurfaceBaseLayout = reused.layout;
+    if (!reused) {
+      const vertices = [];
+      ranges = new Map();
+      pushGridCells(
+        vertices,
+        context,
+        this.colorMode,
+        this.viewOptions,
+        cellIndex => patchCells.has(cellIndex),
+        (color, cellIndex) => withSurfaceSideAlpha(color, Number(this.map.grid.cells.h[cellIndex]) >= 20 ? "land" : "water"),
+        (cellIndex, range) => ranges.set(cellIndex, range)
+      );
+      typedVertices = new Float32Array(vertices);
+    }
+    if (!ranges.size || !typedVertices.length) return null;
 
     const startedAt = performance.now();
     const event = this.beginPerformanceEvent("surfaceRefresh", {
@@ -1167,7 +1183,6 @@ export class PlaceholderMapRenderer {
       hardCells: true
     }, startedAt);
     try {
-      const typedVertices = new Float32Array(vertices);
       this.surfacePatchVertices = typedVertices;
       this.surfacePatchCellRanges = ranges;
       this.surfacePatchCells = new Set(ranges.keys());

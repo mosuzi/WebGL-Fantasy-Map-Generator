@@ -30407,3 +30407,11 @@ full 矩阵结果：
 - 人口专项 Node 覆盖 10k / 100k、增减 / 转移、legacy 同源、容器 identity、镜像撤销 / 重做、锁、取消、故障、陈旧和非法写集；100k 固定图调整 `706` 个 pack cells、`30` 个城市、输出 `1496` 条 patch path，数据层耗时约 `603ms`。UI / API 动态门、Worker registry、生产构建和差异检查通过。
 - 最终 10k Chrome 对国家 #1 / #2 完成人口增减、转移、双撤销和双重做共 `6` 次正式 Worker 运行 / 提交，后 `5` 次复用同一 session；人口载体、城市、行政汇总、经济需求与 stale 状态精确往返，正式 map / typed arrays / 城镇容器引用保持，最终 session idle。六个操作窗 LongTask、非性能 health、普通应用 console、page、WebGL、Loading 与普通文案技术词均为 `0`。
 - 本切片产品约 `230` 行，测试约 `170` 行，专用浏览器夹具 `138` 行，委派与等待为 `0`。C3b 已建立 checkpoint，第 322 项仍执行中；下一切片严格进入路线 / 城市寻路，军事策略、P2 与最终集成门不在本次混写。
+
+## 2026-08-13：完成第 322 项复杂计算 Worker 化
+
+- A～D 已依次闭合十一类重生成、复合与整图生成、网格 / 社会 / 经济 / 人口 / 路线城市 / 军事核心入口、大型存档与动态显示准备；主线程保留绑定校验、锁、原子提交、历史、DOM 和 GPU 提交，Worker / fallback、取消、迟到、故障、撤销 / 重做及旧数据兼容保持同源。
+- Stage E 的完整 10k 与 100k 正式链通过。100k hard-cell 冷启动原先会在主线程补算整图顶点，单格操作约 `206ms`；现按已提交 `surfaceVertices` 和 grid 拓扑建立轻量 cell float offset，从正式 base 精确复制目标几何并只重写颜色 / side alpha，首格为 `17.4ms`、第二格为 `9.2ms`。base `43,093,008B`、六段 GPU refs / bytes / checksum、patch range / GPU、历史和地图 identity 均通过。
+- 100k routes 的末端样式 / 布局已完成多轮归因和 city 状态恢复、overlay DOM 复用等实质优化，独立目标复验曾连续两次 LongTask 为 `0`；按用户统一处置门，只对 reused 与取消后 fresh 两个窗口各登记最多一条 `≤80ms` 信号，其它 Stage E 操作仍为 LongTask `0`。最终完整 100k 本轮实际 `longTasks=[]`，非性能 health、console、page、WebGL 与 Loading 错误为 `0`。
+- 旧 v1 数据、旧 v2 浏览器存档、`.webfmg` / JSON / gzip、浏览器保存与恢复、D1 真实 map-file Worker 四次运行、API action convergence 和普通用户文案专项通过；D1 浏览器门 `legacyLoads=0 / LongTask=0 / forbiddenMessages=0`。通用 UI 术语旧夹具仍引用仅开发模式可见的高度预览 banner，连续两次在产品断言前超时，已按规则冻结为独立夹具债，不计第 322 项 PASS 或 BLOCK，也未混入本项改动。
+- 当前收尾 diff 为产品约 `+85 / -12`、测试约 `+59 / -25`，主线程之外仅使用一次集成复核和一次最终观察使；观察使只读核对冻结 diff、10k / 100k / 旧档 / D2 artifacts 与廉价专项后给出 `ACCEPT`。第 322 项达到最小验收，进入归档并按队列转向第 327 项。

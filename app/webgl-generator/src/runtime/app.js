@@ -3008,11 +3008,15 @@ function restoreRuntimeDisplayControls(state, documentRef) {
 
 function createRuntimeActions(state, documentRef, options = {}) {
   const operation = state.runtimeOperation;
-  const runDisplayMutation = (name, apply, rollback) => operation.run(
-    name,
-    context => applyRuntimeDisplayMutationViaWorker(state, documentRef, context, {apply, rollback}),
-    {message: "正在更新地图显示"}
-  );
+  const runDisplayMutation = (name, apply, rollback) => {
+    const activeName = state.runtimeOperationSnapshot?.current?.name || "";
+    if (state.renderer?.workerRenderInstallSuspended > 0 && !activeName.startsWith("layers.")) return apply();
+    return operation.run(
+      name,
+      context => applyRuntimeDisplayMutationViaWorker(state, documentRef, context, {apply, rollback}),
+      {message: "正在更新地图显示"}
+    );
+  };
   const runMapReplace = (name, task, message, overrides = {}) => {
     let loadingOwner = "";
     const config = {

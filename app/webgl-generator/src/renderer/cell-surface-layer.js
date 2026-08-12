@@ -23,6 +23,54 @@ export function pushGridCells(vertices, context, colorMode, viewOptions, shouldD
   }
 }
 
+export function buildGridCellSurfacePatchFromBase(surfaceVertices, context, colorMode, viewOptions, cellIndices, cachedLayout = null, transformColor = color => color) {
+  if (!(surfaceVertices instanceof Float32Array)) return null;
+  const grid = context?.map?.grid;
+  const cellVertices = grid?.cells?.v;
+  if (!Array.isArray(cellVertices)) return null;
+  const layout = cachedLayout?.surfaceVertices === surfaceVertices && cachedLayout?.cellVertices === cellVertices
+    ? cachedLayout
+    : buildGridCellSurfaceLayout(surfaceVertices, cellVertices);
+  if (!layout) return null;
+
+  const cells = [...new Set(Array.from(cellIndices || [], Number).filter(cell => Number.isInteger(cell) && cell >= 0 && cell < cellVertices.length))];
+  let floatLength = 0;
+  for (const cell of cells) floatLength += layout.offsets[cell + 1] - layout.offsets[cell];
+  if (!floatLength) return null;
+
+  const vertices = new Float32Array(floatLength);
+  const ranges = new Map();
+  let writeOffset = 0;
+  for (const cell of cells) {
+    const sourceStart = layout.offsets[cell];
+    const sourceEnd = layout.offsets[cell + 1];
+    if (sourceEnd <= sourceStart) continue;
+    const start = writeOffset;
+    vertices.set(surfaceVertices.subarray(sourceStart, sourceEnd), writeOffset);
+    const color = transformColor(colorForCell(cell, context.map, colorMode, viewOptions), cell);
+    for (; writeOffset < start + sourceEnd - sourceStart; writeOffset += 6) {
+      vertices[writeOffset + 2] = color[0];
+      vertices[writeOffset + 3] = color[1];
+      vertices[writeOffset + 4] = color[2];
+      vertices[writeOffset + 5] = color[3];
+    }
+    ranges.set(cell, {start, end: writeOffset});
+  }
+  return {vertices, ranges, layout};
+}
+
+function buildGridCellSurfaceLayout(surfaceVertices, cellVertices) {
+  const offsets = new Uint32Array(cellVertices.length + 1);
+  let offset = 0;
+  for (let cell = 0; cell < cellVertices.length; cell++) {
+    const polygonVertices = cellVertices[cell]?.length || 0;
+    if (polygonVertices >= 3) offset += polygonVertices * 18;
+    offsets[cell + 1] = offset;
+  }
+  if (offset !== surfaceVertices.length) return null;
+  return {surfaceVertices, cellVertices, offsets};
+}
+
 export function politicalSurfaceMeshForMode(colorMode, meshes) {
   if (colorMode === "states" && meshes?.states?.surfaceVertices?.length) return meshes.states;
   if (colorMode === "provinces" && meshes?.provinces?.surfaceVertices?.length) return meshes.provinces;

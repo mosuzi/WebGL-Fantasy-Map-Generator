@@ -12,6 +12,7 @@ import {
   summarizeSurfaceBaseBufferSet,
   uploadSurfaceBaseBufferSetRanges
 } from "../app/webgl-generator/src/renderer/surface-base-buffer-set.js";
+import {buildGridCellSurfacePatchFromBase} from "../app/webgl-generator/src/renderer/cell-surface-layer.js";
 
 class FakeGl {
   constructor() {
@@ -173,6 +174,31 @@ assert.equal(failingGl.buffers[0].deleted, true);
 
 assert.throws(() => createSurfaceBaseBufferSet(gl, new Float32Array(17)), /18-float/);
 assert.throws(() => createSurfaceBaseBufferSet(gl, []), /Float32Array/);
+
+const patchSource = new Float32Array(108);
+for (let index = 0; index < patchSource.length; index++) patchSource[index] = index + 0.25;
+const patchMap = {
+  grid: {cells: {v: [[0, 1, 2], [2, 3, 0]], h: Uint8Array.from([30, 40])}},
+  layers: {ocean: [0, 0, 1, 1]}
+};
+const patch = buildGridCellSurfacePatchFromBase(
+  patchSource,
+  {map: patchMap},
+  "height",
+  {smoothCellBorders: false},
+  new Set([1, 0]),
+  null,
+  (color, cell) => [color[0], color[1], color[2], cell ? 0.5 : 0.25]
+);
+assert.deepEqual([...patch.ranges], [[1, {start: 0, end: 54}], [0, {start: 54, end: 108}]]);
+for (const [cell, range] of patch.ranges) {
+  const sourceStart = patch.layout.offsets[cell];
+  for (let offset = range.start; offset < range.end; offset += 6) {
+    assert.deepEqual([...patch.vertices.subarray(offset, offset + 2)], [...patchSource.subarray(sourceStart + offset - range.start, sourceStart + offset - range.start + 2)]);
+    assert.equal(patch.vertices[offset + 5], cell ? 0.5 : 0.25);
+  }
+}
+assert.equal(buildGridCellSurfacePatchFromBase(new Float32Array(90), {map: patchMap}, "height", {}, [0]), null);
 
 console.log(JSON.stringify({
   ok: true,
