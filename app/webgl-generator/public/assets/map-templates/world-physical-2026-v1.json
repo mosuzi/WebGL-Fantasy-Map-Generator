@@ -1,0 +1,42 @@
+{
+  "id": "world-physical-2026-v1",
+  "version": 1,
+  "binaryFormatVersion": 2,
+  "width": 720,
+  "height": 360,
+  "bounds": {
+    "west": -180,
+    "south": -90,
+    "east": 180,
+    "north": 90
+  },
+  "rowOrder": "north-to-south",
+  "pixelRegistration": "center",
+  "elevationEncoding": "int16-le-metres",
+  "landMaskEncoding": "one-byte-per-pixel",
+  "hydrologyMaskEncoding": "one-byte-per-pixel",
+  "byteLength": 1036816,
+  "sha256": "891878e6f04ded05c19ea2547d4d23438e7484031f16b77429617d7c603bbfc3",
+  "elevationMin": -10603,
+  "elevationMax": 6259,
+  "landPixels": 85074,
+  "hydrologyPixels": 14435,
+  "sources": [
+    {
+      "id": "gebco-2026",
+      "url": "https://dap.ceda.ac.uk/thredds/dodsC/bodc/gebco/global/gebco_2026/ice_surface_elevation/netcdf/GEBCO_2026.nc",
+      "request": "https://dap.ceda.ac.uk/thredds/dodsC/bodc/gebco/global/gebco_2026/ice_surface_elevation/netcdf/GEBCO_2026.nc.ascii?elevation%5B0:120:43199%5D%5B0:120:86399%5D",
+      "stride": 120,
+      "license": "Public Domain",
+      "doi": "10.5285/4f68d5c7-45eb-f999-e063-7086abc036fa"
+    },
+    {
+      "id": "natural-earth-5.1.2",
+      "url": "https://raw.githubusercontent.com/nvkelso/natural-earth-vector/v5.1.2/geojson/ne_10m_land.geojson",
+      "lakesUrl": "https://raw.githubusercontent.com/nvkelso/natural-earth-vector/v5.1.2/geojson/ne_10m_lakes.geojson",
+      "riversUrl": "https://raw.githubusercontent.com/nvkelso/natural-earth-vector/v5.1.2/geojson/ne_10m_rivers_lake_centerlines.geojson",
+      "license": "Public Domain"
+    }
+  ],
+  "generatedBy": "tools/build-map-template-physical-resource.mjs"
+}

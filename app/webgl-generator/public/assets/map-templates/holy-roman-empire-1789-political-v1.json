@@ -1,0 +1,31 @@
+{
+  "id": "holy-roman-empire-1789-political-v1",
+  "version": 1,
+  "binaryFormatVersion": 1,
+  "snapshotYear": 1789,
+  "width": 450,
+  "height": 456,
+  "sourceBounds": {
+    "west": -25,
+    "south": 34,
+    "east": 45,
+    "north": 72
+  },
+  "encoding": "one-byte-political-class",
+  "byteLength": 205216,
+  "sha256": "d3915b76bc4d21cb6768e244fab7ebbac83ac4c44fabc808dc1e261b56b7d15e",
+  "sourceSha256": "af4e93aa297f11aef8d45e329efc93ce13cd3ac9a9b73ef01c1ac31e4002d73c",
+  "source": {
+    "url": "https://commons.wikimedia.org/wiki/File:Map_of_Holy_Roman_Empire_1789.svg",
+    "downloadUrl": "https://commons.wikimedia.org/wiki/Special:Redirect/file/Map%20of%20Holy%20Roman%20Empire%201789.svg",
+    "license": "CC0-1.0",
+    "derivativeNotice": "源文件页面标为 CC0；其说明指向较早的 CC BY-SA 欧洲底图，保留该派生链提示。"
+  },
+  "classes": {
+    "1": "holy-roman-empire"
+  },
+  "classPixels": {
+    "1": 5205
+  },
+  "generatedBy": "tools/build-map-template-historical-resources.mjs"
+}

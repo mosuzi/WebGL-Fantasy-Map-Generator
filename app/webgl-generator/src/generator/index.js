@@ -5,6 +5,7 @@ import {buildDiplomacy} from "./diplomacy.js";
 import {extractFeatures} from "./features.js";
 import {buildGrid} from "./grid.js";
 import {createHeightmap} from "./heightmap.js";
+import {applyMapTemplateGridEvidence} from "./map-template-mapping.js";
 import {buildMarkers} from "./markers.js";
 import {buildMilitary} from "./military.js";
 import {normalizeOptions} from "./options.js";
@@ -28,7 +29,13 @@ export function generatePlaceholderMap(inputOptions = {}, overrides = {}) {
   const gridRandom = profile.stage("random-grid", "初始化 grid 随机源", () => createRandom(options.seed));
   const random = profile.stage("random-main", "初始化主随机源", () => createRandom(options.seed));
   const heightmap = profile.stage("heightmap", "生成高度模板", () => overrides.heightmap || createHeightmap(options, random));
-  const generationOptions = heightmap.template === options.heightmapTemplate ? options : {...options, heightmapTemplate: heightmap.template};
+  const generationOptions = heightmap.template === options.heightmapTemplate
+    ? options
+    : {
+        ...options,
+        heightmapTemplate: heightmap.template,
+        ...(heightmap.source?.mapCoordinates ? {mapTemplateCoordinates: heightmap.source.mapCoordinates} : {})
+      };
   const diagnostics = normalizeGenerationDiagnostics(inputOptions);
   const stageOptions = {
     ...generationOptions,
@@ -37,6 +44,7 @@ export function generatePlaceholderMap(inputOptions = {}, overrides = {}) {
     ...(namebases ? {namebases} : {})
   };
   const grid = profile.stage("grid", "构建 grid / Voronoi / 高度", () => buildGrid(generationOptions, gridRandom, heightmap, random));
+  const mapTemplate = profile.stage("map-template", "映射地图模板证据", () => applyMapTemplateGridEvidence(grid, heightmap));
   const features = profile.stage("features", "提取水陆 feature", () => extractFeatures(grid));
   const climateRandom = profile.stage("random-climate", "初始化气候随机源", () => createRandom(generationOptions.seed));
   const climate = profile.stage("climate", "生成气候", () => buildClimate(grid, features, generationOptions, climateRandom));
@@ -90,7 +98,18 @@ export function generatePlaceholderMap(inputOptions = {}, overrides = {}) {
       checksum: summary.checksum,
       namebases: namebases ? createGenerationNamebaseMetadata(namebases) : null,
       generatedAt,
-      generationTiming
+      generationTiming,
+      mapTemplate: mapTemplate ? {
+        id: heightmap.source.templateId,
+        version: heightmap.source.templateVersion,
+        resourceId: heightmap.source.resourceId,
+        sourceChecksum: heightmap.source.resourceChecksum,
+        semanticChecksum: heightmap.source.semanticChecksum,
+        requestedCells: generationOptions.cellsTarget,
+        actualCells: grid.metadata.actualCells,
+        protectedAnchors: [...heightmap.source.protectedAnchors],
+        degradedAnchors: [...heightmap.source.degradedAnchors]
+      } : null
     },
     options: generationOptions,
     layers,
@@ -117,6 +136,7 @@ export function generatePlaceholderMap(inputOptions = {}, overrides = {}) {
       `normalize options: seed=${generationOptions.seed}, cells=${generationOptions.cellsTarget}, size=${generationOptions.graphWidth}x${generationOptions.graphHeight}`,
       `namebase context: ${namebases ? namebaseContextLog(namebases) : "none"}`,
       `heightmap template: ${heightmap.template}`,
+      ...(mapTemplate ? [`map template: ${mapTemplate.id}@${mapTemplate.version}, checksum=${mapTemplate.semanticChecksum}, hydrologyCells=${mapTemplate.hydrologyCells}`] : []),
       `initialize seeded random: ${summary.randomPreview.join(", ")}`,
       `build grid: ${grid.metadata.actualCells} cells, ${grid.metadata.vertexCount} vertices, ${grid.metadata.triangles} triangles`,
       `extract features: land=${features.metadata.landFeatures}, ocean=${features.metadata.oceanFeatures}, lakes=${features.metadata.lakeFeatures}`,

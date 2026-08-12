@@ -17,7 +17,9 @@ const CLIMATE_OPTIONS = {
 };
 
 export function buildClimate(grid, features, options, random) {
-  const mapCoordinates = calculateMapCoordinates(defineMapSize(options, grid, features, random), options);
+  const mapCoordinates = options.mapTemplateCoordinates
+    ? normalizeTemplateMapCoordinates(options.mapTemplateCoordinates, options)
+    : calculateMapCoordinates(defineMapSize(options, grid, features, random), options);
   const windProfile = resolveAtmosphereWindProfile(options.atmosphereDirection, options.winds || CLIMATE_OPTIONS.winds);
   const climateOptions = {...options, winds: windProfile.winds};
   const temp = calculateTemperatures(grid, mapCoordinates, options);
@@ -58,6 +60,34 @@ export function buildClimate(grid, features, options, random) {
       windProfile: windProfile.winds,
       biomeCounts: Object.fromEntries([...biomeCounts.entries()].map(([id, count]) => [BIOMES[id]?.name || id, count]))
     }
+  };
+}
+
+function normalizeTemplateMapCoordinates(input, options) {
+  const values = [input.latN, input.latS, input.lonW, input.lonE].map(Number);
+  if (!values.every(Number.isFinite)) throw new Error("地图模板地理坐标无效");
+  const latN = clamp(values[0], -90, 90);
+  const latS = clamp(values[1], -90, 90);
+  const lonW = clamp(values[2], -180, 180);
+  const lonE = clamp(values[3], -180, 180);
+  if (!(latN > latS)) throw new Error("地图模板纬度范围无效");
+  const latT = latN - latS;
+  const lonT = Number(input.lonT) > 0 ? Number(input.lonT) : ((lonE - lonW + 360) % 360 || 360);
+  return {
+    latT,
+    latN,
+    latS,
+    latCenter: (latN + latS) / 2,
+    latitudeMode: "template",
+    latitudeLabel: String(input.latitudeLabel || `模板纬度 ${latS}°～${latN}°`),
+    lonT,
+    lonW,
+    lonE,
+    mapSizePercent: latT / 180 * 100,
+    latitudeRangePercent: latT / 180 * 100,
+    longitudeRangePercent: lonT / 360 * 100,
+    atmosphereLabel: atmosphereDirectionLabel(options.atmosphereDirection),
+    projection: String(input.projection || "regional-equirectangular")
   };
 }
 
