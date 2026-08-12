@@ -937,6 +937,11 @@ function verifyAppDeferredReplayStaticContract() {
   }
   assert.doesNotMatch(displayUiRestore, /readControlPreferences/u, "显示控件恢复不得读取已经被用户改写的 DOM 偏好");
   assert.match(source, /invokeRuntimeDisplayActionFromUi\(state, documentRef,[\s\S]*?restoreRuntimeDisplayControls\(state, documentRef\)/u, "UI Promise 拒绝必须回写正式显示状态");
+  const displayErrorMessage = source.match(/function runtimeDisplayActionErrorMessage\(error\) \{[\s\S]*?\n\}/u)?.[0] || "";
+  assert.match(displayErrorMessage, /operation_busy[\s\S]*?当前已有地图操作正在进行，请稍后再试/u, "重叠显示操作必须使用自然中文提示");
+  assert.match(displayErrorMessage, /operation_obsolete[\s\S]*?地图状态已变化，请重新设置/u, "过期显示操作必须使用自然中文提示");
+  assert.doesNotMatch(displayErrorMessage, /error\?\.message|String\(error/u, "普通显示 toast 不得透传内部 action、Worker 或协议错误");
+  assert.match(source, /showMapToast\(documentRef, runtimeDisplayActionErrorMessage\(error\)/u, "显示入口必须经用户文案映射后展示错误");
 
   const replay = source.slice(
     source.indexOf("async function replayWorkerRegenerationDeferredPresentation"),

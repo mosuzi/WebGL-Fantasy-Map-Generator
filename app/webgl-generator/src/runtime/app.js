@@ -2972,8 +2972,14 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
 function invokeRuntimeDisplayActionFromUi(state, documentRef, task) {
   void Promise.resolve().then(task).catch(error => {
     restoreRuntimeDisplayControls(state, documentRef);
-    showMapToast(documentRef, `显示设置未能应用：${error?.message || error}`, 2800, {tone: "error"});
+    showMapToast(documentRef, runtimeDisplayActionErrorMessage(error), 2800, {tone: "error"});
   });
+}
+
+function runtimeDisplayActionErrorMessage(error) {
+  if (error?.code === "operation_busy") return "当前已有地图操作正在进行，请稍后再试";
+  if (error?.code === "operation_obsolete") return "地图状态已变化，请重新设置";
+  return "显示设置未能应用，请稍后重试";
 }
 
 function restoreRuntimeDisplayControls(state, documentRef) {
