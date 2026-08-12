@@ -27,6 +27,32 @@ export async function encodeBrowserMapStoragePayload(documentRef, text, map) {
   return envelope;
 }
 
+export async function encodeBrowserMapStorageBytesPayload(documentRef, bytes, map, metadata = {}) {
+  const view = documentRef.defaultView || window;
+  const source = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes || 0);
+  const base64StartedAt = storageClock(documentRef);
+  const base64 = await blobToBase64(view, new view.Blob([source], {type: "application/gzip"}));
+  const envelope = createBrowserMapStorageEnvelope("", map, {
+    encoding: "gzip-base64",
+    data: base64,
+    bytes: source.byteLength,
+    originalCharacters: metadata.originalCharacters
+  });
+  const base64Ms = elapsedMs(storageClock(documentRef), base64StartedAt);
+  const gzipMs = Math.max(0, Number(metadata.gzipMs) || 0);
+  Object.defineProperty(envelope, "__timings", {
+    configurable: false,
+    enumerable: false,
+    value: {
+      gzipMs,
+      base64Ms,
+      encodingMs: Number((gzipMs + base64Ms).toFixed(1))
+    },
+    writable: false
+  });
+  return envelope;
+}
+
 export async function decodeBrowserMapStoragePayload(documentRef, raw) {
   const envelope = parseBrowserMapStorageEnvelope(raw);
   if (envelope.legacy) return envelope.text;
@@ -76,11 +102,14 @@ export async function readBrowserMapStorage(documentRef) {
 export function createBrowserMapStorageEnvelope(text, map, encoded = {}) {
   const encoding = encoded.encoding === "gzip-base64" ? "gzip-base64" : "plain";
   const data = String(encoded.data ?? text ?? "");
+  const originalCharacters = Number.isFinite(Number(encoded.originalCharacters))
+    ? Math.max(0, Number(encoded.originalCharacters))
+    : String(text || "").length;
   return {
     type: BROWSER_MAP_STORAGE_TYPE,
     version: BROWSER_MAP_STORAGE_VERSION,
     savedAt: new Date().toISOString(),
-    originalBytes: String(text || "").length,
+    originalBytes: originalCharacters,
     metadata: {
       seed: map?.metadata?.seed || map?.options?.seed || "",
       checksum: map?.metadata?.checksum || map?.summary?.checksum || "",

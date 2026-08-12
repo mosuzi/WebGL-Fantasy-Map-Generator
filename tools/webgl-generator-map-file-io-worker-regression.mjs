@@ -2,6 +2,8 @@
 import assert from "node:assert/strict";
 import {readFile} from "node:fs/promises";
 import {Worker} from "node:worker_threads";
+import {generatePlaceholderMap} from "../app/webgl-generator/src/generator/index.js";
+import {PlaceholderMapRenderer} from "../app/webgl-generator/src/renderer/placeholder-renderer.js";
 
 import {
   MAP_FILE_IO_WORKER_OPERATIONS,
@@ -15,10 +17,23 @@ import {
 import {
   BROWSER_MAP_STORAGE_TYPE,
   BROWSER_MAP_STORAGE_VERSION,
-  createBrowserMapStorageEnvelope
+  createBrowserMapStorageEnvelope,
+  encodeBrowserMapStorageBytesPayload
 } from "../app/webgl-generator/src/runtime/browser-map-storage.js";
 
 const fixtureText = await readFile(new URL("./fixtures/webgl-map-v1-minimal.json", import.meta.url), "utf8");
+const preparedPresentationReceiver = {
+  visualTheme: null,
+  viewOptions: {visualTheme: null},
+  unitPreferences: null
+};
+PlaceholderMapRenderer.prototype.setPreparedPresentation.call(preparedPresentationReceiver, {
+  visualTheme: "ancient",
+  unitPreferences: {militaryScale: 1.625}
+});
+assert.equal(preparedPresentationReceiver.visualTheme.id, "ancient");
+assert.equal(preparedPresentationReceiver.viewOptions.visualTheme, preparedPresentationReceiver.visualTheme);
+assert.equal(preparedPresentationReceiver.unitPreferences.militaryScale, 1.6);
 const chunks = splitText(fixtureText, 7);
 const clientLargeText = fixtureText.repeat(1000);
 const preparedText = await prepareMapFileIoWorkerPayload({operation: "import", input: clientLargeText}, {chunkChars: 16 * 1024});
@@ -51,6 +66,23 @@ assert.equal(directImport.map, directImport.document.map, "fallback import DTO �
 assert.equal(workerImport.result.map, workerImport.result.document.map, "Worker import DTO 没有保留 document/map 别名");
 assert.equal(workerImport.result.metadata.checksum, directImport.metadata.checksum);
 assert.deepEqual(workerImport.progress.map(item => item.stage), directProgress.map(item => item.stage));
+
+const renderMap = generatePlaceholderMap({seed: "task322-map-file-render", cellsTarget: 1000, graphWidth: 800, graphHeight: 600});
+const renderDocument = await runMapFileIoWorkerTask({operation: "export", map: renderMap, encoding: "plain", resultType: "text"});
+const renderedImport = await runTaskInWorker({
+  operation: MAP_FILE_IO_WORKER_OPERATIONS.IMPORT,
+  input: renderDocument.data,
+  render: {
+    binding: {mapIdentity: "import-fixture", mapRevision: 0},
+    layers: ["point"],
+    unitPreferences: {distanceUnit: "mi"},
+    visualTheme: {id: "default"}
+  }
+});
+assert.deepEqual(renderedImport.progress.map(item => item.stage), ["read", "parse", "render", "render-prepare", "complete"]);
+assert.deepEqual(renderedImport.result.preparedRender.binding, {mapIdentity: "import-fixture", mapRevision: 0});
+assert.deepEqual(Object.keys(renderedImport.result.preparedRender.layers), ["point"]);
+assert.ok(renderedImport.result.preparedRender.layers.point.vertices instanceof Float32Array);
 
 const directExport = await runMapFileIoWorkerTask({
   operation: MAP_FILE_IO_WORKER_OPERATIONS.EXPORT,
@@ -108,6 +140,14 @@ const browserEnvelope = createBrowserMapStorageEnvelope(exportedText, directImpo
   data: gzipBase64,
   bytes: gzipBytes.byteLength
 });
+const browserBytesEnvelope = await encodeBrowserMapStorageBytesPayload({defaultView: globalThis}, gzipBytes, directImport.map, {
+  originalCharacters: exportedText.length
+});
+assert.equal(browserBytesEnvelope.type, BROWSER_MAP_STORAGE_TYPE);
+assert.equal(browserBytesEnvelope.encoding, "gzip-base64");
+assert.equal(browserBytesEnvelope.originalBytes, exportedText.length);
+assert.equal(browserBytesEnvelope.bytes, gzipBytes.byteLength);
+assert.equal(Buffer.from(browserBytesEnvelope.data, "base64").byteLength, gzipBytes.byteLength);
 const envelopeFallback = await runMapFileIoWorkerTask({operation: "import", input: browserEnvelope});
 const envelopeWorker = await runTaskInWorker({operation: "import", input: JSON.stringify(browserEnvelope)});
 assert.equal(envelopeFallback.metadata.checksum, directImport.metadata.checksum);

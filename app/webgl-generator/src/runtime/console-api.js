@@ -2113,7 +2113,7 @@ function blobToDataUrl(documentRef, blob) {
   });
 }
 
-async function blobToBase64(documentRef, blob) {
+export async function blobToBase64(documentRef, blob) {
   const view = documentRef.defaultView || window;
   if (typeof view.FileReader === "function") {
     const dataUrl = await blobToDataUrl(documentRef, blob);

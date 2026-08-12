@@ -70,13 +70,15 @@ import CloudStoragePanelComponent from "../ui/vue/components/CloudStoragePanel.v
 import ZonePanelComponent from "../ui/vue/components/ZonePanel.vue";
 import {EDIT_REFRESH_PRESETS} from "./edit-refresh-scheduler.js";
 import {createEditRefreshScheduler} from "./edit-refresh-scheduler.js";
-import {BROWSER_MAP_STORAGE_KEY, decodeBrowserMapStoragePayload, encodeBrowserMapStoragePayload, readBrowserMapStorage, writeBrowserMapStorage} from "./browser-map-storage.js";
+import {BROWSER_MAP_STORAGE_KEY, encodeBrowserMapStorageBytesPayload, readBrowserMapStorage, writeBrowserMapStorage} from "./browser-map-storage.js";
 import {createCloudStorageRegistry} from "./cloud-storage.js";
 import {createImportFmgCellsHeightCommand} from "./fmg-cells-geojson-import.js";
 import {EditHistory} from "./edit-history.js";
 import {MapRevisionTracker} from "./map-revision.js";
 import {createGrayscaleHeightmapFromImage, createPaletteHeightmapFromImage, normalizeHeightmapImportPayload} from "./heightmap-import.js";
-import {createMapDocument, downloadText, mapFileBaseName, parseGeoJsonMeasurements, parseMapDocument, parseMapDocumentPayload, stringifyMapDocument} from "./map-file-io.js";
+import {downloadBlob, downloadText, mapFileBaseName, parseGeoJsonMeasurements} from "./map-file-io.js";
+import {prepareMapFileIoWorkerPayload, restoreMapFileIoWorkerResult} from "./map-file-io-worker-client.js";
+import {MAP_FILE_IO_WORKER_OPERATIONS, MAP_FILE_IO_WORKER_TASK_TYPE} from "./map-file-io-worker-task.js";
 import {createMapArchiveFilename, normalizeMapName} from "./map-filename.js";
 import {attachImportDiagnostic, createHeightmapSourceSummary, createImportFailureDiagnostic, createImportSuccessDiagnostic, createMapImportDiagnostic, formatMapImportDiagnosticLines, inspectGeoImportSource, stringifyMapImportDiagnostic} from "./map-import-diagnostics.js";
 import {createAddCityAtCellCommand, createDeleteCityCommand, createRenameCitiesFromNamebaseCommand, createResetCityVisualCommand, createSetCityNoteCommand, createSetCityPopulationCommand, createSetCityVisualCommand, createSyncCityOwnerToCellCommand, inspectCityCreation} from "./city-edit-commands.js";
@@ -295,7 +297,7 @@ import {BRUSH_RADIUS_ID, normalizeBrushRadius} from "./brush-radius-contract.js"
 import {restoreCanvasToolStrokePreview} from "./canvas-tool-preview-rollback.js";
 import {
   exportAllMapData,
-  exportCompressedAllMapData,
+  blobToBase64,
   exportFeatureGeoJsonData,
   exportHeightmapPngData,
   exportMeasurementsData,
@@ -3128,7 +3130,7 @@ function createRuntimeActions(state, documentRef, options = {}) {
       exportFeatureGEO: (options = {}) => exportFeatureGeoJsonData(state, documentRef, options),
       exportCompressedAll: (options = {}) => operation.run("data.exportCompressedAll", context => {
         context.report("serialize", {message: "正在压缩完整地图数据"});
-        return exportCompressedAllMapData(state, documentRef, options);
+        return exportCompressedAllMapDataViaWorker(state, documentRef, options, context);
       }, {message: "正在压缩完整地图数据"}),
       exportPNG: (options = {}) => operation.run("data.exportPNG", context => {
         context.report("render-export", {message: "正在导出 PNG"});
@@ -3143,7 +3145,7 @@ function createRuntimeActions(state, documentRef, options = {}) {
       exportImportDiagnostic: (options = {}) => exportMapImportDiagnosticViaApi(state, documentRef, options),
       saveBrowserMap: (options = {}) => operation.run("data.saveBrowserMap", context => {
         context.report("serialize", {message: "正在保存浏览器存档"});
-        return saveMapToBrowserStorageViaApi(state, documentRef, options);
+        return saveMapToBrowserStorageViaApi(state, documentRef, options, context);
       }, {message: "正在保存浏览器存档"}),
       restoreBrowserMap: (options = {}) => runMapReplace("data.restoreBrowserMap", context => restoreMapFromBrowserStorageViaApi(state, documentRef, options, context), loadingMessage("map-import-read"), {
         isNoop: result => result?.restored === false
@@ -3605,7 +3607,7 @@ function executeVisualThemeCommand(state, documentRef, command) {
   return editApiResult(state, result);
 }
 
-function applyRuntimeVisualThemeState(state, documentRef, themeId, {force = false} = {}) {
+function applyRuntimeVisualThemeState(state, documentRef, themeId, {force = false, preparedPresentation = false} = {}) {
   const id = normalizeVisualThemeId(themeId);
   syncMapVisualThemeStore(state.map, id);
   persistUserVisualThemes(documentRef.defaultView?.localStorage);
@@ -3614,7 +3616,8 @@ function applyRuntimeVisualThemeState(state, documentRef, themeId, {force = fals
   }));
   syncRuntimeControlValue(documentRef, "visual-theme-preset", id);
   updateControlPreferences(documentRef, {visualTheme: id});
-  state.renderer?.setVisualTheme?.(id, {force});
+  if (preparedPresentation) state.renderer?.setPreparedPresentation?.({visualTheme: id});
+  else state.renderer?.setVisualTheme?.(id, {force});
   syncLabelStylesUi(state, documentRef);
   updateRuntimePanel(documentRef, state);
 }
@@ -3966,10 +3969,18 @@ async function restoreMapFromBrowserStorageViaApi(state, documentRef, options = 
     setFileOperationStatus(documentRef, "正在读取浏览器保存的地图...");
     setMythicGenerationLoading(documentRef, true, "map-import-read");
     operation?.report("decode-storage", {message: loadingMessage("map-import-decode")});
-    const document = parseMapDocument(await decodeBrowserMapStoragePayload(documentRef, raw));
+    const importedDocument = await parseMapDocumentViaWorker(state, documentRef, raw, {
+      operation,
+      source: "browser-storage"
+    });
+    const document = importedDocument.document;
     const imported = await importParsedMapDocumentViaApi(state, documentRef, document, {
       source: "browser-storage",
-      toast: false
+      toast: false,
+      preparedRender: importedDocument.preparedRender,
+      renderBinding: importedDocument.preparedRender?.binding,
+      isCurrent: importedDocument.isCurrent,
+      worker: importedDocument.worker
     }, operation);
     updateGenerationLoading(documentRef, false);
     const seed = document.map.metadata?.seed || document.map.options?.seed || "未知";
@@ -4859,13 +4870,17 @@ async function saveMapToBrowserStorage(state, documentRef, saveAction = state.ru
   }
 }
 
-async function saveMapToBrowserStorageViaApi(state, documentRef) {
+async function saveMapToBrowserStorageViaApi(state, documentRef, _options = {}, operation = null) {
   assertMapAvailable(state);
-  const rawStartedAt = storageClock(documentRef);
-  const exported = exportAllMapData(state, documentRef, {download: false, includeText: true});
-  const text = exported.text;
-  const rawJsonMs = elapsedStorageMs(documentRef, rawStartedAt);
-  const payload = await encodeBrowserMapStoragePayload(documentRef, text, state.map);
+  const exported = await exportMapArchiveViaWorker(state, documentRef, {
+    operation,
+    encoding: "gzip",
+    resultType: "bytes"
+  });
+  const payload = await encodeBrowserMapStorageBytesPayload(documentRef, exported.data, state.map, {
+    originalCharacters: exported.originalCharacters,
+    gzipMs: exported.timings?.gzipMs
+  });
   const envelopeStartedAt = storageClock(documentRef);
   const raw = JSON.stringify(payload);
   const envelopeMs = elapsedStorageMs(documentRef, envelopeStartedAt);
@@ -4882,7 +4897,7 @@ async function saveMapToBrowserStorageViaApi(state, documentRef) {
     storageBytes: raw.length,
     metadata: {...payload.metadata},
     timings: {
-      rawJsonMs,
+      rawJsonMs: exported.timings?.stringifyMs || 0,
       gzipMs: payload.__timings?.gzipMs || 0,
       base64Ms: payload.__timings?.base64Ms || 0,
       encodingMs: payload.__timings?.encodingMs || 0,
@@ -4890,6 +4905,107 @@ async function saveMapToBrowserStorageViaApi(state, documentRef) {
       writeMs
     },
     effects: ["browser-storage-write", ...(stored.fallback ? ["browser-storage-fallback-write"] : [])]
+  };
+}
+
+async function exportCompressedAllMapDataViaWorker(state, documentRef, options = {}, operation = null) {
+  assertMapAvailable(state);
+  const map = state.map;
+  const exported = await exportMapArchiveViaWorker(state, documentRef, {
+    operation,
+    encoding: "gzip",
+    resultType: "bytes"
+  });
+  const filename = createMapArchiveFilename(map, {
+    template: options.filenameTemplate === undefined ? "{name}.{ext}" : options.filenameTemplate
+  });
+  const blob = new Blob([exported.data], {type: exported.mimeType});
+  if (options.download === true) downloadBlob(documentRef, blob, filename);
+  const result = {
+    filename,
+    mimeType: exported.mimeType,
+    originalBytes: exported.originalBytes,
+    compressedBytes: exported.bytes,
+    metadata: {
+      type: exported.metadata.type,
+      version: exported.metadata.version,
+      name: exported.metadata.name,
+      seed: exported.metadata.seed,
+      checksum: exported.metadata.checksum
+    }
+  };
+  if (options.includeBlob === true) result.blob = blob;
+  if (options.includeBase64 !== false && options.download !== true) result.base64 = await blobToBase64(documentRef, blob);
+  Object.defineProperty(result, "worker", {enumerable: false, value: exported.worker || null});
+  return result;
+}
+
+async function exportMapArchiveViaWorker(state, documentRef, {operation = null, encoding = "gzip", resultType = "bytes"} = {}) {
+  assertMapAvailable(state);
+  const map = state.map;
+  const units = normalizeUnitPreferences(readControlPreferences(documentRef).units);
+  const payload = {
+    operation: MAP_FILE_IO_WORKER_OPERATIONS.EXPORT,
+    map,
+    options: {
+      ...(state.options || {}),
+      visualTheme: currentVisualThemeId(documentRef),
+      display: {units}
+    },
+    encoding,
+    resultType
+  };
+  const prepared = await prepareMapFileIoWorkerPayload(payload, {signal: operation?.signal || null});
+  const output = await state.workerTaskCoordinator.run(MAP_FILE_IO_WORKER_TASK_TYPE, prepared.payload, {
+    binding: createRegenerationWorkerBinding(state, operation),
+    signal: operation?.signal || null,
+    onProgress: (stage, detail = {}) => operation?.report(stage, {
+      ...detail,
+      message: detail.message || "正在整理地图存档"
+    })
+  });
+  return restoreMapFileIoWorkerResult(output, prepared);
+}
+
+async function parseMapDocumentViaWorker(state, documentRef, input, {operation = null, source = "api", sourceFile = null} = {}) {
+  const importId = (state.pendingMapImportId || 0) + 1;
+  state.pendingMapImportId = importId;
+  const renderBinding = {mapIdentity: `imported:${importId}`, mapRevision: 0};
+  const render = createWorkerRegenerationRenderRequest(state, "generation", renderBinding, [...RENDER_PREPARATION_LAYERS]);
+  render.camera = {scale: 1, offsetX: 0, offsetY: 0};
+  render.selection = null;
+  render.objectHighlights = [];
+  render.oceanCurrentHighlightIds = [];
+  const prepared = await prepareMapFileIoWorkerPayload({
+    operation: MAP_FILE_IO_WORKER_OPERATIONS.IMPORT,
+    input,
+    filename: sourceFile?.name || "",
+    mimeType: sourceFile?.type || "",
+    render
+  }, {
+    signal: operation?.signal || null,
+    Blob: documentRef.defaultView?.Blob || Blob,
+    yieldToMain: () => yieldToBrowser(documentRef)
+  });
+  const output = await state.workerTaskCoordinator.run(MAP_FILE_IO_WORKER_TASK_TYPE, prepared.payload, {
+    binding: createRegenerationWorkerBinding(state, operation),
+    signal: operation?.signal || null,
+    onProgress: (stage, detail = {}) => operation?.report(stage, {
+      ...detail,
+      message: detail.message || (stage === "render-prepare" ? "正在准备地图画面" : "正在辨读地图存档")
+    })
+  });
+  if (state.pendingMapImportId !== importId) {
+    const error = new Error("地图导入结果已被新的请求取代");
+    error.code = "operation_obsolete";
+    throw error;
+  }
+  return {
+    document: output.document,
+    preparedRender: output.preparedRender,
+    worker: output.worker || null,
+    source,
+    isCurrent: () => state.pendingMapImportId === importId
   };
 }
 
@@ -6089,13 +6205,24 @@ async function importMapDocumentViaApi(state, documentRef, document, options = {
   let parsed;
   try {
     operation?.report("parse", {message: loadingMessage("map-import-read")});
-    parsed = await normalizeApiMapImportDocument(documentRef, document);
+    parsed = await parseMapDocumentViaWorker(state, documentRef, document, {
+      operation,
+      source: options.source === "ui" ? "ui" : "api",
+      sourceFile: options.sourceFile || (document instanceof Blob ? document : null)
+    });
   } catch (error) {
     if (!operation) updateGenerationLoading(documentRef, false);
     reportMapImportError(state, documentRef, error, source === "ui" ? document : null, {source, prefix: source === "ui" ? "地图数据导入失败" : "API 导入地图数据失败"});
     throw error;
   }
-  return importParsedMapDocumentViaApi(state, documentRef, parsed, {...options, source}, operation);
+  return importParsedMapDocumentViaApi(state, documentRef, parsed.document, {
+    ...options,
+    source,
+    preparedRender: parsed.preparedRender,
+    renderBinding: parsed.preparedRender?.binding,
+    isCurrent: parsed.isCurrent,
+    worker: parsed.worker
+  }, operation);
 }
 
 async function importParsedMapDocumentViaApi(state, documentRef, document, options = {}, operation = null) {
@@ -6116,16 +6243,19 @@ async function importParsedMapDocumentViaApi(state, documentRef, document, optio
     if (importedUnits && typeof importedUnits === "object") {
       const units = normalizeUnitPreferences(importedUnits);
       updateControlPreferences(documentRef, {units});
-      state.renderer?.setUnitPreferences?.(units);
+      state.renderer?.setPreparedPresentation?.({unitPreferences: units});
     }
-    applyPersistedVisualTheme(state, documentRef, document);
+    applyPersistedVisualTheme(state, documentRef, document, {preparedPresentation: true});
     syncGenerationInputs(documentRef, normalizedOptions);
     state.pendingGenerateId = (state.pendingGenerateId || 0) + 1;
     operation?.report("load-map", {message: loadingMessage("map-import-render")});
     await loadMapIntoRuntime(state, documentRef, document.map, {
       loadingMessages: [loadingMessage("map-import-render"), loadingMessage("panel-refresh")],
       completionToast: options.toast === false ? "" : "地图数据已导入",
-      operation
+      operation,
+      preparedRender: options.preparedRender || null,
+      renderBinding: options.renderBinding || null,
+      isCurrent: options.isCurrent || (() => true)
     });
     const persistedNamebases = createGenerationNamebaseSnapshot(state.map) ? persistNamebasePreferences(state, documentRef) : false;
     updateGenerationLoading(documentRef, false);
@@ -6143,7 +6273,8 @@ async function importParsedMapDocumentViaApi(state, documentRef, document, optio
       },
       timings: {
         totalMs: roundLoadTraceMs(currentLoadTraceTime(documentRef.defaultView || window) - startedAt),
-        loadMap: state.renderer?.getStats?.().loadMap || null
+        loadMap: state.renderer?.getStats?.().loadMap || null,
+        worker: options.worker || null
       },
       persistedNamebases,
       history: state.editHistory.getStats(),
@@ -6154,10 +6285,6 @@ async function importParsedMapDocumentViaApi(state, documentRef, document, optio
     reportMapImportError(state, documentRef, error, null, {source, prefix: source === "ui" ? "地图数据导入失败" : "API 导入地图数据失败"});
     throw error;
   }
-}
-
-async function normalizeApiMapImportDocument(documentRef, document) {
-  return parseMapDocumentPayload(documentRef, document);
 }
 
 async function importGeoData(state, documentRef, file, importAction = state.runtimeActions?.data?.importGEO) {
@@ -6622,10 +6749,10 @@ function setInputValue(documentRef, id, value, {emitChange = true} = {}) {
   if (emitChange) input.dispatchEvent(new Event("change", {bubbles: true}));
 }
 
-function applyPersistedVisualTheme(state, documentRef, document) {
+function applyPersistedVisualTheme(state, documentRef, document, {preparedPresentation = false} = {}) {
   mergePersistedUserVisualThemes(documentRef.defaultView?.localStorage, document?.map?.visualTheme?.userThemes || []);
   const visualTheme = normalizeVisualThemeId(document?.map?.visualTheme?.preset || document?.map?.options?.visualTheme || document?.options?.visualTheme);
-  applyRuntimeVisualThemeState(state, documentRef, visualTheme, {force: true});
+  applyRuntimeVisualThemeState(state, documentRef, visualTheme, {force: true, preparedPresentation});
 }
 
 function currentVisualThemeId(documentRef) {

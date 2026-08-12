@@ -109,9 +109,14 @@ for (const name of ["saveBrowserMap", "restoreBrowserMap", "importHeightmap", "e
 assert.match(appSource, /onSaveBrowserStorage:[\s\S]*runtimeActions\.data\.saveBrowserMap/);
 assert.match(appSource, /onImportHeightmapImage:[\s\S]*runtimeActions\.data\.importHeightmap/);
 assert.match(appSource, /onExportMapImportDiagnostic:[\s\S]*runtimeActions\.data\.exportImportDiagnostic/);
-assert.match(appSource, /operation\.run\("data\.restoreBrowserMap"/);
-assert.match(appSource, /operation\.run\("data\.importHeightmap"/);
-assert.match(appSource, /const exported = exportAllMapData\(state, documentRef, \{download: false, includeText: true\}\)/);
+assert.match(appSource, /restoreBrowserMap: \(options = \{\}\) => runMapReplace\("data\.restoreBrowserMap"/);
+assert.match(appSource, /importHeightmap: \(payload, options = \{\}\) => runMapReplace\("data\.importHeightmap"/);
+assert.match(appSource, /importMap: \(document, options = \{\}\) => runMapReplace\("data\.importMap"/);
+assert.match(appSource, /MAP_FILE_IO_WORKER_TASK_TYPE/);
+assert.match(appSource, /exportMapArchiveViaWorker\(state, documentRef/);
+assert.match(appSource, /parseMapDocumentViaWorker\(state, documentRef/);
+assert.match(appSource, /encodeBrowserMapStorageBytesPayload\(documentRef, exported\.data/);
+assert.doesNotMatch(appSource, /const exported = exportAllMapData\(state, documentRef, \{download: false, includeText: true\}\)/);
 assert.match(appSource, /restoreBrowserMap\(\{confirm: true, startup: true, toast: false\}\)/, "启动恢复没有使用非破坏性参数");
 assert.doesNotMatch(appSource, /storage\.removeItem\(BROWSER_MAP_STORAGE_KEY\)/, "恢复失败仍会删除浏览器原始存档");
 assert.match(appSource, /浏览器地图恢复失败，原存档已保留/, "恢复失败没有明确说明原存档仍保留");

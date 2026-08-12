@@ -1841,7 +1841,7 @@ function finalizeBbox(bbox) {
   return bbox.every(Number.isFinite) ? bbox.map(roundCoordinate) : null;
 }
 
-function downloadBlob(documentRef, blob, filename) {
+export function downloadBlob(documentRef, blob, filename) {
   const view = documentRef.defaultView || window;
   const url = view.URL.createObjectURL(blob);
   const link = documentRef.createElement("a");

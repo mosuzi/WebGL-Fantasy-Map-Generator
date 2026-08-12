@@ -964,6 +964,15 @@ export class PlaceholderMapRenderer {
     this.draw();
   }
 
+  setPreparedPresentation({visualTheme, unitPreferences} = {}) {
+    if (visualTheme !== undefined) {
+      const theme = resolveVisualTheme(visualTheme);
+      this.visualTheme = theme;
+      this.viewOptions = {...this.viewOptions, visualTheme: theme};
+    }
+    if (unitPreferences !== undefined) this.unitPreferences = normalizeUnitPreferences(unitPreferences);
+  }
+
   setLabelOptions(options = {}) {
     const deferredOptions = structuredClone(options || {});
     if (this.deferWorkerRenderMutation("label-options", deferredOptions, {

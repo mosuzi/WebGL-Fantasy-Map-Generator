@@ -10,6 +10,8 @@ import {
   decodeBrowserMapStoragePayload
 } from "./browser-map-storage.js";
 import {isCompressedMapDocumentFilename} from "./map-filename.js";
+import {executeRenderPreparationTask} from "../renderer/render-preparation.js";
+import {mergeUserVisualThemes, normalizeVisualThemeId, resolveVisualTheme} from "../renderer/themes.js";
 
 export const MAP_FILE_IO_WORKER_TASK_TYPE = "map-file-io";
 export const MAP_FILE_IO_WORKER_OPERATIONS = Object.freeze({
@@ -21,7 +23,7 @@ export async function runMapFileIoWorkerTask(payload, context = {}) {
   const operation = String(payload?.operation || "");
   if (operation === MAP_FILE_IO_WORKER_OPERATIONS.IMPORT) return importMapFile(payload, context);
   if (operation === MAP_FILE_IO_WORKER_OPERATIONS.EXPORT) return exportMapFile(payload, context);
-  throw new Error(`不支持的地图存档 Worker 操作：${operation || "未知"}`);
+  throw new Error(`不支持的地图存档操作：${operation || "未知"}`);
 }
 
 export function collectMapFileIoWorkerTransferables(result) {
@@ -32,6 +34,7 @@ export function collectMapFileIoWorkerTransferables(result) {
 }
 
 async function importMapFile(payload, context) {
+  const startedAt = taskNow();
   await taskCheckpoint(context);
   reportTaskProgress(context, "read", 0.05, "读取地图存档输入");
   const source = normalizeImportSource(payload);
@@ -41,23 +44,34 @@ async function importMapFile(payload, context) {
   const document = await parseImportSource(source, payload);
   await taskCheckpoint(context);
 
+  const preparedRender = payload.render
+    ? await prepareImportedMapRender(document, payload.render, context)
+    : null;
+  await taskCheckpoint(context);
+
   reportTaskProgress(context, "complete", 1, "地图存档解析完成");
   return {
     kind: "map-file-import-result",
+    binding: context.binding || null,
     document,
     map: document.map,
-    metadata: mapDocumentMetadata(document)
+    preparedRender,
+    metadata: mapDocumentMetadata(document),
+    timings: {totalMs: roundTaskMs(taskNow() - startedAt)}
   };
 }
 
 async function exportMapFile(payload, context) {
+  const startedAt = taskNow();
   await taskCheckpoint(context);
   reportTaskProgress(context, "normalize", 0.08, "规范化并校验地图文档");
   const document = normalizeExportDocument(payload);
   await taskCheckpoint(context);
 
   reportTaskProgress(context, "stringify", 0.42, "序列化地图文档");
+  const stringifyStartedAt = taskNow();
   const text = stringifyMapDocument(document);
+  const stringifyMs = roundTaskMs(taskNow() - stringifyStartedAt);
   await taskCheckpoint(context);
 
   const encoding = normalizeExportEncoding(payload);
@@ -65,9 +79,12 @@ async function exportMapFile(payload, context) {
   const view = runtimeView();
   let blob;
   let originalBytes;
+  let gzipMs = 0;
   if (encoding === "gzip") {
     reportTaskProgress(context, "compress", 0.68, "压缩地图文档");
+    const gzipStartedAt = taskNow();
     const compressed = await createCompressedMapDocumentBlob({defaultView: view}, document);
+    gzipMs = roundTaskMs(taskNow() - gzipStartedAt);
     blob = compressed.blob;
     originalBytes = compressed.originalBytes;
   } else {
@@ -86,16 +103,38 @@ async function exportMapFile(payload, context) {
     resultType,
     mimeType: encoding === "gzip" ? "application/gzip" : "application/json;charset=utf-8",
     originalBytes,
+    originalCharacters: text.length,
     bytes: blob.size,
     data,
-    metadata: mapDocumentMetadata(document)
+    metadata: mapDocumentMetadata(document),
+    timings: {
+      stringifyMs,
+      gzipMs,
+      totalMs: roundTaskMs(taskNow() - startedAt)
+    }
   };
 }
 
+async function prepareImportedMapRender(document, render, context) {
+  reportTaskProgress(context, "render", 0.72, "准备地图画面");
+  const map = document.map;
+  const userThemes = Array.isArray(map?.visualTheme?.userThemes) ? map.visualTheme.userThemes : [];
+  if (userThemes.length) mergeUserVisualThemes(userThemes);
+  const themeId = normalizeVisualThemeId(map?.visualTheme?.preset || map?.options?.visualTheme || document?.options?.visualTheme);
+  return executeRenderPreparationTask({
+    ...render,
+    map,
+    selection: null,
+    objectHighlights: [],
+    unitPreferences: map?.display?.units || render.unitPreferences,
+    visualTheme: resolveVisualTheme(themeId)
+  }, context);
+}
+
 function normalizeImportSource(payload) {
-  if (!payload || typeof payload !== "object") throw new Error("地图存档 Worker 输入必须是对象");
+  if (!payload || typeof payload !== "object") throw new Error("地图存档输入必须是对象");
   const source = payload.input ?? payload.source;
-  if (source === undefined || source === null) throw new Error("地图存档 Worker 缺少输入数据");
+  if (source === undefined || source === null) throw new Error("地图存档缺少输入数据");
   if (Array.isArray(source)) {
     if (!source.every(chunk => typeof chunk === "string")) throw new Error("地图存档字符串分片必须全部是字符串");
     return source.join("");
@@ -146,7 +185,7 @@ async function parseImportSource(source, payload) {
   if (typeof source === "object" && !Array.isArray(source)) {
     return parseMapDocument(stringifyMapDocument(source));
   }
-  throw new Error("地图存档 Worker 输入必须是 JSON、File/Blob、字节或分片字符串");
+  throw new Error("地图存档输入必须是 JSON、File/Blob、字节或分片字符串");
 }
 
 async function decodeBrowserStorageEnvelope(text, view) {
@@ -187,13 +226,23 @@ async function createExportData(blob, text, resultType) {
 
 function mapDocumentMetadata(document) {
   return {
+    type: String(document?.type || ""),
     version: Number(document?.version) || 0,
+    name: String(document?.metadata?.name || document?.map?.metadata?.name || document?.map?.options?.mapName || ""),
     schemaVersion: Number(document?.map?.metadata?.schemaVersion) || 0,
     seed: String(document?.map?.metadata?.seed || document?.metadata?.seed || ""),
     checksum: String(document?.map?.metadata?.checksum || document?.map?.summary?.checksum || document?.metadata?.checksum || ""),
     gridCells: Number(document?.map?.metadata?.gridCells || document?.map?.grid?.metadata?.actualCells || document?.map?.grid?.cells?.i?.length || document?.map?.grid?.cells?.h?.length || 0),
     packCells: Number(document?.map?.metadata?.packCells || document?.map?.pack?.metadata?.cells || document?.map?.pack?.cells?.i?.length || 0)
   };
+}
+
+function taskNow() {
+  return globalThis.performance?.now?.() ?? Date.now();
+}
+
+function roundTaskMs(value) {
+  return Number(Math.max(0, Number(value) || 0).toFixed(1));
 }
 
 function isTextChunkPacket(value) {
@@ -262,7 +311,7 @@ function reportTaskProgress(context, stage, progress, message) {
 }
 
 function abortError(reason) {
-  const error = new Error(reason instanceof Error ? reason.message : String(reason || "地图存档 Worker 任务已取消"));
+  const error = new Error(reason instanceof Error ? reason.message : String(reason || "地图存档任务已取消"));
   error.name = "AbortError";
   if (reason instanceof Error) error.cause = reason;
   return error;

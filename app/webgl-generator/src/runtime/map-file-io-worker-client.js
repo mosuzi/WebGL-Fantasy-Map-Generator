@@ -1,7 +1,7 @@
 import {MAP_FILE_IO_WORKER_OPERATIONS} from "./map-file-io-worker-task.js";
 
 export async function prepareMapFileIoWorkerPayload(payload, options = {}) {
-  if (!payload || typeof payload !== "object") throw new Error("地图存档 Worker 客户端输入必须是对象");
+  if (!payload || typeof payload !== "object") throw new Error("地图存档输入必须是对象");
   const operation = String(payload.operation || "");
   const prepared = {...payload};
   const requestedResultType = operation === MAP_FILE_IO_WORKER_OPERATIONS.EXPORT
@@ -19,7 +19,7 @@ export async function prepareMapFileIoWorkerPayload(payload, options = {}) {
 export async function restoreMapFileIoWorkerResult(result, prepared, options = {}) {
   const requestedResultType = prepared?.requestedResultType;
   if (!result || requestedResultType === null || requestedResultType === undefined || requestedResultType === "bytes") return result;
-  if (!(result.data instanceof Uint8Array)) throw new Error("地图存档 Worker 未返回可恢复的字节结果");
+  if (!(result.data instanceof Uint8Array)) throw new Error("地图存档处理未返回可恢复的字节结果");
   const BlobType = options.Blob || globalThis.Blob;
   if (typeof BlobType !== "function") throw new Error("当前环境缺少 Blob，无法恢复地图存档输出");
   const blob = new BlobType([result.data], {type: result.mimeType || "application/octet-stream"});
@@ -29,7 +29,7 @@ export async function restoreMapFileIoWorkerResult(result, prepared, options = {
 }
 
 async function prepareImportInput(source, payload, options) {
-  if (source === undefined || source === null) throw new Error("地图存档 Worker 缺少输入数据");
+  if (source === undefined || source === null) throw new Error("地图存档缺少输入数据");
   if (typeof source === "string") return chunkText(source, options);
   const BlobType = options.Blob || globalThis.Blob;
   if (typeof BlobType === "function" && source instanceof BlobType) {
@@ -71,7 +71,7 @@ async function chunkText(text, options) {
 
 function assertNotAborted(signal) {
   if (!signal?.aborted) return true;
-  const error = new Error(signal.reason instanceof Error ? signal.reason.message : String(signal.reason || "地图存档 Worker 客户端任务已取消"));
+  const error = new Error(signal.reason instanceof Error ? signal.reason.message : String(signal.reason || "地图存档任务已取消"));
   error.name = "AbortError";
   error.code = "map-file-worker-client-aborted";
   throw error;

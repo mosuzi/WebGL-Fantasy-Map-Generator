@@ -1,5 +1,12 @@
 # 开发历史
 
+## 2026-08-13：第 322 项 Stage D1 大型存档读写与恢复 Worker 闭环接受
+
+- 大型存档导出、浏览器保存、完整导入与浏览器恢复已改用既有 `map-file-io` Worker；导入 Worker 同一任务完成解析、迁移、校验和完整 renderer prepare，正式主线程只做原子安装、地图替换、GPU / DOM 提交与面板同步。`.webfmg`、JSON、gzip-base64、File / Blob、LocalStorage / IndexedDB、旧迁移和公开返回结构继续保留。
+- 专项 Node、API data compatibility、action convergence、通用 Worker 协议及生产构建通过；10k Chrome 的四条正式入口均为 Worker accepted，两个导入均使用 prepared load、legacy load 为 `0`，地图 seed / checksum、历史、存储后端、Loading、非性能 health、应用 console、page、WebGL 与普通用户技术词门通过。
+- 初次目标门在导入 / 恢复各记录 `729 / 684ms` LongTask。窄时间轴先排除 Worker 单包解码、renderer prepared install、overlay reveal和运行时面板刷新；一次“非持久 Worker 自行关闭”优化复验无收益后已完整撤回。继续沿调用顺序核对发现，导入在 prepared install 前以 `force:true` 把持久化主题应用到即将替换的旧图，触发同步 surface / line / labels 重建和 draw，时间窗与两条信号精确一致。
+- renderer 新增 `setPreparedPresentation`，只接收 Worker 已准备画面对应的主题与规范化单位状态，不刷新旧图；新图背景、GPU、DOM和 overlay 仍由 prepared transaction 与正式 load 链完成。最终 10k Chrome 四条正式入口均 Worker accepted，prepared load `2`、legacy load `0`、prepared presentation `4`、旧图完整主题 / 单位更新均为 `0`；LongTask、非性能 health、应用 console、page、WebGL、Loading和普通用户技术词泄漏均为 `0`。存档专项 Node、API data compatibility / action convergence与生产构建通过。通过证据位于 `work/task322-map-file-io-presentation-fix/`；D1 已接受，阶段 D 下一步只进入 D2 动态 mesh / 标签 / picking 盘点。
+
 ## 2026-08-13：第 322 项 Stage C3d 军事策略 Worker 闭环接受
 
 - `edit.military.setRatios` 与军事面板兵种比例入口已接入 `military-policy.compute` 持久 map-mirror session。Worker 在锁定军团保护下重建部署，返回受控 military / state patch 与 point / line / labels / picking prepared DTO；主线程只做 binding、写集、历史和 renderer 原子提交。军团状态、驻地、基地与战报等局部命令不属于本轮复杂策略计算，保持既有同步路径。
