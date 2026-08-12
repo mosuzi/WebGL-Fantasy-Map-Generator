@@ -179,6 +179,7 @@ node .\\tools\\archive-authoritative-tasks.mjs --check
 
 function renderCurrentPlan(activeTasks, apiBaseline) {
   const activeSummary = activeTasks.map(task => `第 ${task.number} 项`).join("、") || "无";
+  const activeOrder = activeTasks.map(task => task.number).join(" → ");
   const activeBoundary = activeTasks.length
     ? `${activeTasks.map(task => `第 ${task.number} 项保持其条目所列授权边界`).join("；")}。`
     : "当前没有可执行或暂缓的权威任务。";
@@ -188,7 +189,7 @@ function renderCurrentPlan(activeTasks, apiBaseline) {
 
 ## 当前状态
 
-> **执行门禁（${statusDate}）**：当前未归档任务为${activeSummary}。${activeBoundary}第 53 项已移除，第 278 项已由第 279 项取代，其余既有完成状态见归档索引。
+> **执行门禁（${statusDate}）**：当前未归档任务为${activeSummary}。${activeBoundary}${activeTasks.length ? `当前固定顺序为 \`${activeOrder}\`。` : ""}第 53 项已移除，第 278 项已由第 279 项取代，其余既有完成状态见归档索引。
 
 ${apiBaseline}
 

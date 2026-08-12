@@ -158,6 +158,8 @@ export function serializeWorkerTaskError(error) {
     code: String(error?.code || "worker_task_failed"),
     message: String(error?.message || error || "Worker 任务失败"),
     stack: String(error?.stack || ""),
+    ...(error?.stage ? {stage: String(error.stage)} : {}),
+    ...(error?.suggestion ? {suggestion: String(error.suggestion)} : {}),
     details: clonePlain(error?.details)
   };
 }
@@ -167,6 +169,8 @@ export function restoreWorkerTaskError(snapshot) {
   error.name = String(snapshot?.name || "Error");
   error.code = String(snapshot?.code || "worker_task_failed");
   if (snapshot?.stack) error.stack = String(snapshot.stack);
+  if (snapshot?.stage) error.stage = String(snapshot.stage);
+  if (snapshot?.suggestion) error.suggestion = String(snapshot.suggestion);
   if (snapshot?.details !== undefined) error.details = snapshot.details;
   return error;
 }

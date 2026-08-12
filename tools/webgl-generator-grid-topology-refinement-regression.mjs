@@ -15,7 +15,7 @@ import {
   prepareGridStructureWrite,
   selectUniqueWaterFeatureRedirects
 } from "../app/webgl-generator/src/runtime/grid-topology-api.js";
-import {fingerprintGridStructure, validateRefinedMotherAdjacency} from "../app/webgl-generator/src/generator/grid-refinement.js";
+import {cachedGridStructureFingerprint, fingerprintGridStructure, primeGridStructureFingerprint, validateRefinedMotherAdjacency} from "../app/webgl-generator/src/generator/grid-refinement.js";
 import {
   collectGridTopologyWorkerTransferables,
   fingerprintGridTopologyLocks,
@@ -32,6 +32,15 @@ const workerMutationSource = appSource.match(/async function executeWorkerMapMut
 assert.match(workerMutationSource, /taskPayload = mutation\.includeBindingInPayload[\s\S]+\.\.\.taskPayload,\s+render: renderRequest[\s\S]+sessionPayload: \{\.\.\.taskPayload[\s\S]+fallbackPrepared\.snapshot, \.\.\.taskPayload/);
 const gridMutationSource = appSource.match(/async function applyGridTopologyViaApi[\s\S]+?(?=function createGridTopologyWorkerBinding)/)?.[0] || "";
 assert.match(gridMutationSource, /includeBindingInPayload: true,/);
+
+const cacheFixture = generatePlaceholderMap({seed: "grid-fingerprint-cache", cellsTarget: 10});
+const cacheBinding = {mapIdentity: "grid-cache", mapRevision: 1};
+const cacheFingerprint = cachedGridStructureFingerprint(cacheFixture.grid, cacheBinding);
+assert.equal(cachedGridStructureFingerprint(cacheFixture.grid, cacheBinding), cacheFingerprint);
+cacheFixture.grid.cells.h[0] += 1;
+assert.notEqual(cachedGridStructureFingerprint(cacheFixture.grid, {...cacheBinding, mapRevision: 2}), cacheFingerprint, "revision 变化后必须重新计算网格指纹");
+assert.equal(primeGridStructureFingerprint(cacheFixture.grid, {...cacheBinding, mapRevision: 3}, cacheFingerprint), cacheFingerprint);
+assert.equal(cachedGridStructureFingerprint(cacheFixture.grid, {...cacheBinding, mapRevision: 3}), cacheFingerprint);
 
 const workerSource = generatePlaceholderMap({seed: "grid-topology-worker-parity", cellsTarget: 1_000});
 const workerRevision = {getSnapshot: () => ({mapIdentity: "grid-topology-worker-parity", mapRevision: 0})};

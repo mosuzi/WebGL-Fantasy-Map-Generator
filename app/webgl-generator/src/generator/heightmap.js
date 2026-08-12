@@ -491,7 +491,9 @@ function addProminences(context, ridge, spread) {
   for (let index = 0; index < ridge.length; index += 6) {
     let current = ridge[index];
     for (let step = 0; step < spread; step++) {
-      const lowest = context.neighbors[current].reduce((best, neighbor) =>
+      const neighbors = context.neighbors[current];
+      if (!neighbors?.length) break;
+      const lowest = neighbors.reduce((best, neighbor) =>
         context.heights[neighbor] < context.heights[best] ? neighbor : best
       );
       context.heights[lowest] = (context.heights[current] * 2 + context.heights[lowest]) / 3;

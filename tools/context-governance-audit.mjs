@@ -89,11 +89,13 @@ async function inspectDocuments() {
   const routes = await readFile(routesPath, "utf8");
   const currentPlan = await readFile(currentPlanPath, "utf8");
   const currentArchive = await readFile(currentArchivePath, "utf8");
+  const currentTaskNumbers = [...currentPlan.matchAll(/权威任务第 (\d+) 项/gu)].map(match => Number(match[1]));
+  const currentOrder = `当前固定顺序为 \`${currentTaskNumbers.join(" → ")}\``;
   const developmentIndex = await inspectTextFile(join(repoRoot, "docs", "development-log.md"));
   const linkedFiles = [join(repoRoot, "AGENTS.md"), routesPath, currentPlanPath, developmentLogPath, shardIndexPath, taskNotesIndexPath, handoffPath, dryRunPath];
   return {
     defaultRouteDeclared: routes.includes("AGENTS.md → docs/README.md → docs/current-plan.md → 定向 rg / 行段读取"),
-    currentOrderDeclared: currentPlan.includes("323 → 324 → 326 → 328"),
+    currentOrderDeclared: currentPlan.includes(currentOrder),
     task327Archived: /权威任务第 327 项[^\n]+已完成/u.test(currentArchive),
     task322AbsentFromCurrent: !/权威任务第 322 项/u.test(currentPlan),
     developmentIndex,

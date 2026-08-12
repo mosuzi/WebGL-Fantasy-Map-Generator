@@ -204,7 +204,7 @@
         </div>
       </div>
       <UiField label="地图种子" input-id="seed-input" model-value="stage-2-1" :input-attrs="{autocomplete: 'off'}" />
-      <UiField label="地图规模" input-id="cells-input" type="number" :model-value="10000" :input-attrs="{min: 1000, max: 100000, step: 1000}" />
+      <UiField label="地图规模" input-id="cells-input" type="number" :model-value="10000" :input-attrs="{min: 1, max: 100000, step: 1}" />
       <UiField label="宽度" input-id="width-input" type="number" :model-value="1440" :input-attrs="{min: 640, max: 4096, step: 80}" />
       <UiField label="高度" input-id="height-input" type="number" :model-value="960" :input-attrs="{min: 480, max: 4096, step: 80}" />
       <UiField label="地形" input-id="heightmap-template" type="select" model-value="continents" :options="terrainTemplates" />

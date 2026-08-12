@@ -1,9 +1,10 @@
 import {calculateVoronoi, createGridBoundaryPoints} from "./grid.js";
+import {MAP_CELLS_MAX, MAP_CELLS_MIN, normalizeMapCellTarget} from "./map-size.js";
 
 export const GRID_STRUCTURE_SCHEMA = "webgl-grid-structure@1";
 export const GRID_REFINEMENT_VERSION = 1;
 const WATER_LEVEL = 20;
-const MAX_GRID_CELLS = 200_000;
+const gridStructureFingerprintCache = new WeakMap();
 
 export function createGridStructureSnapshot(grid, binding = {}) {
   assertGrid(grid);
@@ -38,13 +39,13 @@ export function createGridStructureSnapshot(grid, binding = {}) {
   };
 }
 
-export function summarizeGridStructure(grid) {
+export function summarizeGridStructure(grid, {fingerprint = null} = {}) {
   assertGrid(grid);
   const heights = Array.from(grid.cells.h || [], Number);
   const degrees = grid.cells.c.map(list => list?.length || 0);
   return {
     schema: GRID_STRUCTURE_SCHEMA,
-    fingerprint: fingerprintGridStructure(grid),
+    fingerprint: fingerprint || fingerprintGridStructure(grid),
     cells: grid.points.length,
     vertices: grid.vertices?.p?.length || 0,
     boundaryPoints: grid.boundary?.length || 0,
@@ -68,7 +69,7 @@ export function validateGridStructureDocument(document, binding = null) {
   const points = document.points;
   const cells = document.cells;
   const vertices = document.vertices;
-  if (!Array.isArray(points) || points.length < 3 || points.length > MAX_GRID_CELLS) errors.push(`points 长度必须在 3～${MAX_GRID_CELLS} 之间`);
+  if (!Array.isArray(points) || points.length < MAP_CELLS_MIN || points.length > MAP_CELLS_MAX) errors.push(`points 长度必须在 ${MAP_CELLS_MIN}～${MAP_CELLS_MAX} 之间`);
   if (!cells || typeof cells !== "object") errors.push("缺少 cells");
   if (!vertices || typeof vertices !== "object") errors.push("缺少 vertices");
   if (errors.length) return {valid: false, errors};
@@ -320,6 +321,28 @@ export function fingerprintGridStructure(grid) {
   return (hash >>> 0).toString(16).padStart(8, "0");
 }
 
+export function cachedGridStructureFingerprint(grid, binding = {}) {
+  assertGrid(grid);
+  const key = gridStructureFingerprintCacheKey(binding);
+  const cached = gridStructureFingerprintCache.get(grid);
+  if (cached?.key === key) return cached.fingerprint;
+  const fingerprint = fingerprintGridStructure(grid);
+  gridStructureFingerprintCache.set(grid, {key, fingerprint});
+  return fingerprint;
+}
+
+export function primeGridStructureFingerprint(grid, binding, fingerprint) {
+  assertGrid(grid);
+  const value = String(fingerprint || "");
+  if (!/^[0-9a-f]{8}$/i.test(value)) throw codedError("invalid-grid-fingerprint", "网格指纹格式无效");
+  gridStructureFingerprintCache.set(grid, {key: gridStructureFingerprintCacheKey(binding), fingerprint: value});
+  return value;
+}
+
+function gridStructureFingerprintCacheKey(binding) {
+  return `${String(binding?.mapIdentity ?? "")}:${Number(binding?.mapRevision) || 0}`;
+}
+
 function allocateChildren(sourceCells, targetCells) {
   const base = Math.floor(targetCells / sourceCells);
   const remainder = targetCells % sourceCells;
@@ -403,9 +426,8 @@ function projectGridFields(sourceGrid, targetCells, mothers, children) {
 }
 
 function normalizeTargetCells(value, sourceCells) {
-  const target = Number(value);
-  if (!Number.isInteger(target) || target <= sourceCells) throw codedError("invalid-target", `目标 cell 数必须是大于 ${sourceCells} 的整数`);
-  if (target > MAX_GRID_CELLS) throw codedError("invalid-target", `目标 cell 数不得超过 ${MAX_GRID_CELLS}`);
+  const target = normalizeMapCellTarget(value, {invalid: "throw"});
+  if (target <= sourceCells) throw codedError("invalid-target", `归一化后的目标 cell 数必须大于 ${sourceCells}`);
   return target;
 }
 

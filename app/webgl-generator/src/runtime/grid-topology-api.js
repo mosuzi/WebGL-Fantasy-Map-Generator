@@ -10,6 +10,7 @@ import {
 } from "../generator/settlements.js";
 import {
   GRID_STRUCTURE_SCHEMA,
+  cachedGridStructureFingerprint,
   createGridStructureSnapshot,
   fingerprintGridStructure,
   gridFromStructureDocument,
@@ -21,6 +22,7 @@ import {reconcileSettlementCellIdentity} from "./settlement-cell-index.js";
 import {reconcileSettlementPortTopology} from "./settlement-port-topology.js";
 import {OBJECT_KIND} from "./object-kinds.js";
 import {deleteObjectNote} from "./object-notes.js";
+import {MAP_CELLS_MAX, normalizeMapCellTarget} from "../generator/map-size.js";
 
 export const GRID_TOPOLOGY_API_VERSION = "1.0.0";
 
@@ -63,21 +65,25 @@ export function inspectGridStructureWrite(map, revisionTracker, document) {
 export function inspectGridRefinement(map, revisionTracker, options = {}) {
   assertMap(map);
   const sourceCells = map.grid.points.length;
-  const targetCells = normalizeTarget(options.targetCells ?? 100_000, sourceCells);
+  const normalizedTarget = normalizeGridRefinementTarget(options.targetCells ?? MAP_CELLS_MAX, sourceCells);
+  const targetCells = normalizedTarget.targetCells;
   const binding = currentBinding(map, revisionTracker);
+  const noOp = normalizedTarget.noOp;
   const inspection = {
     action: "grid.refine",
     valid: true,
     errors: [],
     binding,
     schema: GRID_STRUCTURE_SCHEMA,
-    source: summarizeGridStructure(map.grid),
+    source: summarizeGridStructure(map.grid, {fingerprint: binding.sourceFingerprint}),
     target: {
       cells: targetCells,
       addedCells: targetCells - sourceCells,
       expectedChildrenPerMother: round(targetCells / sourceCells, 3),
       algorithm: "topology-preserving-cell-refinement"
     },
+    noOp,
+    reason: noOp ? "map-cell-limit-reached" : "",
     invariants: [
       "保留全部旧 Grid Cell 编号与高度",
       "新邻接只连接同母或原邻接母 cell",
@@ -104,10 +110,28 @@ export function prepareGridStructureWrite(map, revisionTracker, document, option
   }, taskContext);
 }
 
+export function assertGridRefinementAuthorized(inspection, options = {}) {
+  assertAuthorizedInspection(inspection, options, "grid.refine");
+}
+
 export function prepareGridRefinement(map, revisionTracker, options = {}, taskContext = null) {
   checkpointGridPreparation(taskContext, "inspect-refinement");
   const inspection = inspectGridRefinement(map, revisionTracker, options);
-  assertAuthorizedInspection(inspection, options, "grid.refine");
+  assertGridRefinementAuthorized(inspection, options);
+  if (inspection.noOp) {
+    return {
+      sourceMap: map,
+      map: null,
+      result: {
+        executed: false,
+        action: "grid.refine",
+        reason: inspection.reason,
+        source: inspection.source,
+        target: inspection.target,
+        inspectionToken: inspection.inspectionToken
+      }
+    };
+  }
   checkpointGridPreparation(taskContext, "refine-grid", {sourceCells: map.grid.points.length, targetCells: inspection.target.cells});
   const refined = refineGridTopology(map.grid, inspection.target.cells, taskContext);
   return prepareTopologyReplacement(map, refined.grid, {
@@ -713,7 +737,7 @@ function currentBinding(map, revisionTracker) {
   return {
     mapIdentity: revision.mapIdentity ?? null,
     mapRevision: Number(revision.mapRevision) || 0,
-    sourceFingerprint: fingerprintGridStructure(map.grid)
+    sourceFingerprint: cachedGridStructureFingerprint(map.grid, revision)
   };
 }
 
@@ -766,10 +790,18 @@ function compact(values) {
   return values.filter((value, index) => index === 0 || value !== values[index - 1]);
 }
 
-function normalizeTarget(value, sourceCells) {
-  const target = Number(value);
-  if (!Number.isInteger(target) || target <= sourceCells || target > 200_000) throw codedError("invalid-target", `targetCells 必须是 ${sourceCells + 1}～200000 的整数`);
-  return target;
+export function normalizeGridRefinementTarget(value, sourceCells) {
+  if (!Number.isInteger(sourceCells) || sourceCells < 1) throw codedError("invalid-target", "当前地图 cell 数无效");
+  let target;
+  try {
+    target = normalizeMapCellTarget(value, {invalid: "throw"});
+  } catch {
+    throw codedError("invalid-target", "targetCells 必须是有限数字");
+  }
+  if (target <= sourceCells && !(sourceCells === MAP_CELLS_MAX && target === MAP_CELLS_MAX)) {
+    throw codedError("invalid-target", `归一化后的 targetCells 必须大于 ${sourceCells}`);
+  }
+  return {targetCells: target, noOp: sourceCells === MAP_CELLS_MAX && target === MAP_CELLS_MAX};
 }
 
 function assertMap(map) {

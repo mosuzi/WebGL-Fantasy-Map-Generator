@@ -26,6 +26,7 @@ import {
 import {isCompressedMapDocumentFilename, mapBaseFilename, synchronizeMapName} from "./map-filename.js";
 import {reconcileSettlementCellIdentity} from "./settlement-cell-index.js";
 import {diagnoseSettlementPortTopology} from "./settlement-port-topology.js";
+import {MAP_CELLS_MAX, normalizeMapCellTarget} from "../generator/map-size.js";
 
 export const MAP_DOCUMENT_TYPE = "webgl-generator-map";
 export const MAP_DOCUMENT_VERSION = 2;
@@ -130,6 +131,7 @@ export function migrateMapDocument(document) {
     targetVersion: MAP_DOCUMENT_VERSION,
     registry: MAP_DOCUMENT_MIGRATORS
   });
+  assertMapDocumentCellLimit(versioned.map);
   const migrated = normalizeMapDocumentDisplay({
     ...versioned,
     metadata: {...(versioned.metadata || {}), mapSchemaVersion: MAP_SCHEMA_VERSION},
@@ -576,6 +578,7 @@ function migrateMapDocumentV1ToV2(document) {
 }
 
 function validateCurrentMapDocument(document) {
+  assertMapDocumentCellLimit(document.map);
   if (Number(document?.metadata?.mapSchemaVersion) !== MAP_SCHEMA_VERSION) throw new Error("地图文件缺少当前文档 schema 标记");
   if (Number(document?.map?.metadata?.schemaVersion) !== MAP_SCHEMA_VERSION) throw new Error("地图数据缺少当前 schema 标记");
   if (!Array.isArray(document.map.notes?.notes)) throw new Error("地图数据缺少 notes 存储");
@@ -613,6 +616,20 @@ function validateCurrentMapDocument(document) {
   }
 }
 
+export function assertMapDocumentCellLimit(map) {
+  const pointsCells = Number(map?.grid?.points?.length);
+  const legacyCells = Number(map?.grid?.cells?.i?.length ?? map?.grid?.cells?.h?.length);
+  const actualCells = Number.isInteger(pointsCells) && pointsCells >= 1 ? pointsCells : legacyCells;
+  if (!Number.isInteger(actualCells) || actualCells < 1) throw new Error("地图数据缺少有效的 grid cells");
+  if (actualCells <= MAP_CELLS_MAX) return actualCells;
+  const error = new Error(`地图包含 ${actualCells} 个 grid cells，超过当前 ${MAP_CELLS_MAX} 上限，未替换当前地图`);
+  error.code = "map-cell-limit-exceeded";
+  error.stage = "map-import-validate";
+  error.suggestion = `请选择不超过 ${MAP_CELLS_MAX} 个 grid cells 的地图存档。`;
+  error.details = {actualCells, maximum: MAP_CELLS_MAX};
+  throw error;
+}
+
 function normalizeMapSchemaV2(map, documentOptions = {}) {
   const source = map && typeof map === "object" ? map : {};
   const normalizedCurrent = normalizeCurrentMapSchemaV2(source, documentOptions);
@@ -636,13 +653,16 @@ function normalizeMapSchemaV2(map, documentOptions = {}) {
 
 function normalizeCurrentMapSchemaV2(map, documentOptions = {}) {
   const source = map && typeof map === "object" ? map : {};
-  const options = {...(documentOptions || {}), ...(source.options || {})};
+  const actualCells = Number(source.grid?.points?.length);
+  const fallbackCells = Number.isInteger(actualCells) && actualCells > 0 ? actualCells : 10_000;
+  const cellsTarget = normalizeMapCellTarget(source.options?.cellsTarget ?? documentOptions?.cellsTarget ?? source.metadata?.cellsTarget, {fallback: fallbackCells});
+  const options = {...(documentOptions || {}), ...(source.options || {}), cellsTarget};
   delete options.display;
   const displaySource = documentOptions.display ?? source.display;
   const normalizedRiverStore = normalizeRiverStore(source.rivers, source.pack);
   return synchronizeMapName({
     ...source,
-    metadata: {...(source.metadata || {}), schemaVersion: MAP_SCHEMA_VERSION},
+    metadata: {...(source.metadata || {}), cellsTarget, schemaVersion: MAP_SCHEMA_VERSION},
     options,
     ...(displaySource && typeof displaySource === "object" ? {display: normalizeMapDisplayConfig(displaySource)} : {}),
     notes: backfillNotesStoreV2(source.notes),

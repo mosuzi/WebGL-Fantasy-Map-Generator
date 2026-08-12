@@ -1,4 +1,4 @@
-import {fingerprintGridStructure} from "../generator/grid-refinement.js";
+import {fingerprintGridStructure, primeGridStructureFingerprint} from "../generator/grid-refinement.js";
 import {
   prepareGridRefinement,
   prepareGridStructureWrite
@@ -26,6 +26,7 @@ export async function runGridTopologyWorkerTask(payload = {}, context = {}) {
   const revisionTracker = {
     getSnapshot: () => ({mapIdentity: binding.mapIdentity, mapRevision: binding.mapRevision})
   };
+  primeGridStructureFingerprint(map.grid, binding, sourceFingerprint);
   const options = clonePlainObject(payload.options);
   const taskContext = createPrepareContext(context);
   context.report?.("grid-topology", {stage: "prepare", action, sourceCells: map.grid.points.length});
@@ -33,7 +34,7 @@ export async function runGridTopologyWorkerTask(payload = {}, context = {}) {
     ? prepareGridRefinement(map, revisionTracker, options, taskContext)
     : prepareGridStructureWrite(map, revisionTracker, payload.document, options, taskContext);
 
-  await taskCheckpoint(context, "verify", {action, targetCells: prepared.map.grid.points.length});
+  await taskCheckpoint(context, "verify", {action, targetCells: prepared.map?.grid?.points?.length ?? prepared.result?.target?.cells ?? map.grid.points.length});
   if (fingerprintGridStructure(map.grid) !== sourceFingerprint || fingerprintGridTopologyLocks(map) !== sourceLockFingerprint) {
     throw taskError("grid-worker-input-mutated", "Grid Worker prepare 改写了输入快照");
   }

@@ -332,9 +332,9 @@ function gridRefinementSection(documentRef, callbacks) {
   const target = documentRef.createElement("input");
   target.id = "grid-refinement-target";
   target.type = "number";
-  target.min = "4";
-  target.max = "200000";
-  target.step = "1000";
+  target.min = "1";
+  target.max = "100000";
+  target.step = "1";
   target.value = "100000";
   target.setAttribute("aria-label", "网格细分目标 cells");
   const actions = documentRef.createElement("div");

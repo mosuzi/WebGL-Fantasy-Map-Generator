@@ -215,6 +215,7 @@ export function normalizeRuntimeOperationError(error, stage = "run") {
     return new RuntimeOperationError(String(error.code), message, {
       stage: String(error.stage),
       suggestion: String(error.suggestion),
+      details: error.details,
       cause: error,
       expected: true
     });

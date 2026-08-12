@@ -1,4 +1,5 @@
 import {LABEL_STYLE_TYPES} from "./label-style-registry.js";
+import {MAP_CELLS_MAX, MAP_CELLS_MIN} from "../generator/map-size.js";
 
 export const API_METHOD_SCHEMA_VERSION = "1.0.0";
 
@@ -29,6 +30,7 @@ const ERROR_CODES = Object.freeze([
   ,"grid-preparation-invalid"
   ,"refinement-topology-violation"
   ,"refinement-invalid-structure"
+  ,"map-cell-limit-exceeded"
 ]);
 
 const REFERENCE_RULES = Object.freeze([
@@ -49,6 +51,26 @@ const REFERENCE_RULES = Object.freeze([
 ]);
 
 const METHOD_OVERRIDES = Object.freeze({
+  "generate.getOptions": {
+    arguments: [],
+    result: objectSchema(["options", "map"]),
+    examples: [[]]
+  },
+  "generate.setOptions": {
+    arguments: [argument("patch", generationOptionsSchema())],
+    result: objectSchema(["options", "map", "effects"]),
+    examples: [[{cellsTarget: MAP_CELLS_MAX}]]
+  },
+  "generate.newMap": {
+    arguments: [argument("options", generationOptionsSchema({confirm: true}))],
+    result: objectSchema(["options", "map", "timings", "history", "effects"]),
+    examples: [[{confirm: true, cellsTarget: MAP_CELLS_MAX}]]
+  },
+  "generate.rerollSeed": {
+    arguments: [argument("options", generationOptionsSchema({confirm: true}))],
+    result: objectSchema(["options", "map", "timings", "history", "effects"]),
+    examples: [[{confirm: true, cellsTarget: MAP_CELLS_MAX}]]
+  },
   "info.describe": {
     arguments: [argument("method", stringSchema("公开方法全名，例如 edit.states.rename"))],
     result: objectSchema(["method", "schemaVersion", "inputSchema", "resultSchema", "businessCodes"]),
@@ -117,13 +139,13 @@ const METHOD_OVERRIDES = Object.freeze({
     businessCodes: ["ok", "api_error", "confirmation_required", "inspection_required", "inspection_stale", "grid-structure-invalid"]
   },
   "grid.inspectRefinement": {
-    arguments: [argument("options", {type: "object", properties: {targetCells: {type: "integer", minimum: 4, maximum: 200000, default: 100000}}, additionalProperties: false}, false)],
+    arguments: [argument("options", {type: "object", properties: {targetCells: mapCellTargetSchema()}, additionalProperties: false}, false)],
     result: objectSchema(["action", "valid", "errors", "binding", "source", "target", "invariants", "inspectionToken"]),
     examples: [[{targetCells: 100000}]],
     businessCodes: ["ok", "api_error", "invalid-target", "map-not-ready"]
   },
   "grid.refine": {
-    arguments: [argument("options", {type: "object", required: ["confirm", "inspectionToken"], properties: {targetCells: {type: "integer", minimum: 4, maximum: 200000, default: 100000}, confirm: {const: true}, inspectionToken: {type: "string"}}, additionalProperties: false})],
+    arguments: [argument("options", {type: "object", required: ["confirm", "inspectionToken"], properties: {targetCells: mapCellTargetSchema(), confirm: {const: true}, inspectionToken: {type: "string"}}, additionalProperties: false})],
     result: objectSchema(["executed", "action", "source", "target", "refinement", "migration", "feature", "prepareMs", "history", "binding"]),
     examples: [[{targetCells: 100000, confirm: true, inspectionToken: "grid-..."}]],
     businessCodes: ["ok", "api_error", "confirmation_required", "inspection_required", "inspection_stale", "invalid-target", "refinement-topology-violation"]
@@ -2070,6 +2092,27 @@ function pageSchema() {
 
 function optionalOptionsSchema() {
   return {type: "object", additionalProperties: true};
+}
+
+function mapCellTargetSchema() {
+  return {type: "integer", minimum: MAP_CELLS_MIN, maximum: MAP_CELLS_MAX, default: 10_000};
+}
+
+function generationOptionsSchema({confirm = false} = {}) {
+  return {
+    type: "object",
+    ...(confirm ? {required: ["confirm"]} : {}),
+    properties: {
+      ...(confirm ? {confirm: {const: true}} : {}),
+      cellsTarget: mapCellTargetSchema(),
+      seed: {type: "string"},
+      randomSeed: {type: "boolean"},
+      heightmapTemplate: {type: "string"},
+      graphWidth: {type: "integer"},
+      graphHeight: {type: "integer"}
+    },
+    additionalProperties: true
+  };
 }
 
 function confirmOptionsSchema() {

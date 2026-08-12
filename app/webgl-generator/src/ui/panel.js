@@ -24,6 +24,7 @@ import {updateStartupLoadingStatus} from "./startup-loading.js";
 import {regenerationPanelCopy} from "./regeneration-user-copy.js";
 import {buildShortcutDisplayModel} from "../runtime/keyboard-shortcuts.js";
 import {DEFAULT_MAX_CITY_LABELS} from "../runtime/display-defaults.js";
+import {MAP_CELLS_MAX, MAP_CELLS_MIN, normalizeMapCellTarget} from "../generator/map-size.js";
 
 export const CONTROL_PREFERENCES_KEY = "webgl-generator-control-preferences";
 export const VIEW_MODE_SELECTOR = ".ui-segmented-mode-bridge[data-mode]";
@@ -78,6 +79,7 @@ const DERIVED_STALE_LABELS = Object.freeze({
 
 export function bindRuntimePanel(documentRef, handlers) {
   applyControlPreferences(documentRef);
+  bindMapCellTargetInput(documentRef.getElementById("cells-input"));
   documentRef.getElementById("map-name-input")?.addEventListener("input", event => handlers.onMapName?.(event.target.value));
   documentRef.getElementById("map-filename-template-input")?.addEventListener("input", event => handlers.onMapFilenameTemplate?.(event.target.value, false));
   documentRef.getElementById("map-filename-template-input")?.addEventListener("change", event => handlers.onMapFilenameTemplate?.(event.target.value, true));
@@ -210,6 +212,22 @@ export function bindRuntimePanel(documentRef, handlers) {
       handlers.onMode(button.dataset.mode);
     });
   }
+}
+
+function bindMapCellTargetInput(input) {
+  if (!input) return;
+  input.min = String(MAP_CELLS_MIN);
+  input.max = String(MAP_CELLS_MAX);
+  input.step = "1";
+  const normalize = () => {
+    input.value = String(normalizeMapCellTarget(input.value, {fallback: 10_000}));
+  };
+  input.addEventListener("input", () => {
+    const value = Number(input.value);
+    if (Number.isFinite(value) && (value < MAP_CELLS_MIN || value > MAP_CELLS_MAX)) normalize();
+  });
+  input.addEventListener("change", normalize);
+  input.addEventListener("blur", normalize);
 }
 
 function bindDelegatedButton(documentRef, id, handler) {

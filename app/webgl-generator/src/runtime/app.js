@@ -212,8 +212,8 @@ import {getRegenerationPatchPolicy} from "./regeneration-worker-task.js";
 import {createWorkerTaskCoordinator} from "./worker-task-coordinator.js";
 import {createStagedWorkerSnapshot} from "./worker-snapshot.js";
 import {OCEAN_CURRENT_WORLD_WORKER_TASK} from "./ocean-current-world-worker-task.js";
-import {fingerprintGridStructure} from "../generator/grid-refinement.js";
-import {inspectGridRefinement, inspectGridStructureWrite} from "./grid-topology-api.js";
+import {cachedGridStructureFingerprint, primeGridStructureFingerprint} from "../generator/grid-refinement.js";
+import {assertGridRefinementAuthorized, inspectGridRefinement, inspectGridStructureWrite} from "./grid-topology-api.js";
 import {
   fingerprintGridTopologyLocks,
   GRID_TOPOLOGY_WORKER_ACTION,
@@ -13465,6 +13465,22 @@ function refreshMapMutationRollback(state, documentRef) {
 async function applyGridTopologyViaApi(state, documentRef, {document = null, options = {}, context = null} = {}) {
   assertMapAvailable(state);
   const action = document ? GRID_TOPOLOGY_WORKER_ACTION.APPLY_WRITE : GRID_TOPOLOGY_WORKER_ACTION.REFINE;
+  if (!document) {
+    const inspection = inspectGridRefinement(state.map, state.mapRevision, options);
+    if (inspection.noOp) {
+      assertGridRefinementAuthorized(inspection, options);
+      return {
+        executed: false,
+        action: "grid.refine",
+        reason: inspection.reason,
+        source: inspection.source,
+        target: inspection.target,
+        inspectionToken: inspection.inspectionToken,
+        history: state.editHistory.getStats(),
+        binding: state.mapRevision.getSnapshot()
+      };
+    }
+  }
   const sourceMap = state.map;
   let expectedTarget = null;
   const result = await executeWorkerMapMutation(state, documentRef, {
@@ -13485,6 +13501,7 @@ async function applyGridTopologyViaApi(state, documentRef, {document = null, opt
     assertOutput: ({binding, output}) => assertGridTopologyWorkerOutputCurrent(state, sourceMap, binding, action, output, context),
     createCommand: ({output, result: workerResult, effects}) => {
       expectedTarget = workerResult.target;
+      primeGridStructureFingerprint(output.replacementMap.grid, {...output.binding, mapRevision: Number(output.binding.mapRevision) + 1}, expectedTarget.fingerprint);
       return createMapReplacementCommand({
         replacementMap: output.replacementMap,
         label: document ? "写入受控网格结构" : `细分网格至 ${workerResult.target.cells} cells`,
@@ -13499,7 +13516,7 @@ async function applyGridTopologyViaApi(state, documentRef, {document = null, opt
     assertCommitted: () => {
       if (!expectedTarget
         || state.map.grid.points.length !== Number(expectedTarget.cells)
-        || fingerprintGridStructure(state.map.grid) !== expectedTarget.fingerprint) {
+        || cachedGridStructureFingerprint(state.map.grid, state.mapRevision.getSnapshot()) !== expectedTarget.fingerprint) {
         const error = new Error("网格拓扑提交结果与 Worker 目标不一致");
         error.code = "grid-worker-commit-invalid";
         throw error;
@@ -13519,9 +13536,10 @@ async function applyGridTopologyViaApi(state, documentRef, {document = null, opt
 }
 
 function createGridTopologyWorkerBinding(state, operation = null) {
+  const binding = createRegenerationWorkerBinding(state, operation);
   return {
-    ...createRegenerationWorkerBinding(state, operation),
-    sourceFingerprint: fingerprintGridStructure(state.map.grid),
+    ...binding,
+    sourceFingerprint: cachedGridStructureFingerprint(state.map.grid, binding),
     lockFingerprint: fingerprintGridTopologyLocks(state.map)
   };
 }
@@ -13529,7 +13547,7 @@ function createGridTopologyWorkerBinding(state, operation = null) {
 function assertGridTopologyWorkerOutputCurrent(state, sourceMap, binding, action, output, operation = null) {
   if (state.map !== sourceMap
     || !sameRegenerationWorkerBinding(binding, createRegenerationWorkerBinding(state, operation))
-    || binding.sourceFingerprint !== fingerprintGridStructure(sourceMap.grid)
+    || binding.sourceFingerprint !== cachedGridStructureFingerprint(sourceMap.grid, binding)
     || binding.lockFingerprint !== fingerprintGridTopologyLocks(sourceMap)) {
     const error = new Error("网格准备结果已被新的地图状态取代");
     error.code = "operation_obsolete";

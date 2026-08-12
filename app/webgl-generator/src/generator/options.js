@@ -9,6 +9,7 @@ import {
 } from "./climate-options.js";
 import {DEFAULT_INHERITANCE_MODE, normalizeInheritanceMode} from "./inheritance.js";
 import {DEFAULT_MAP_NAME, normalizeMapName} from "../runtime/map-filename.js";
+import {normalizeMapCellTarget} from "./map-size.js";
 
 export const DEFAULT_OPTIONS = {
   mapName: DEFAULT_MAP_NAME,
@@ -55,7 +56,7 @@ export function normalizeOptions(input = {}) {
     seed,
     randomSeed: Boolean(input.randomSeed),
     heightmapTemplate: HEIGHTMAP_TEMPLATES.has(input.heightmapTemplate) ? input.heightmapTemplate : DEFAULT_OPTIONS.heightmapTemplate,
-    cellsTarget: clampInteger(input.cellsTarget, 1000, 100000, DEFAULT_OPTIONS.cellsTarget),
+    cellsTarget: normalizeMapCellTarget(input.cellsTarget, {fallback: DEFAULT_OPTIONS.cellsTarget}),
     graphWidth: clampInteger(input.graphWidth, 640, 4096, DEFAULT_OPTIONS.graphWidth),
     graphHeight: clampInteger(input.graphHeight, 480, 4096, DEFAULT_OPTIONS.graphHeight),
     statesNumber: clampInteger(input.statesNumber, 0, 100, randomized.statesNumber),
