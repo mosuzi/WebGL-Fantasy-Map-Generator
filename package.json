@@ -30,6 +30,8 @@
     "profile:export-history": "node --no-warnings ./tools/webgl-generator-export-history-profile.mjs",
     "profile:canvas-state": "node ./tools/webgl-generator-canvas-state-profile.mjs",
     "profile:panels": "node ./tools/webgl-generator-panel-open-profile.mjs",
+    "audit:context-governance": "node --no-warnings ./tools/context-governance-audit.mjs",
+    "audit:development-logs": "node --no-warnings ./tools/development-log-shards.mjs",
     "audit:panels": "node ./tools/webgl-generator-panel-layout-audit.mjs",
     "audit:ui-system": "node --no-warnings ./tools/webgl-generator-ui-system-audit.mjs",
     "audit:interaction-surfaces": "node --no-warnings ./tools/webgl-generator-interaction-surface-inventory.mjs --check",

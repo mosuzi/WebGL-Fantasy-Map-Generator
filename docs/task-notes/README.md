@@ -6,6 +6,7 @@
 
 ## 专题映射
 
+- 第 327 项的精简任务包、阶段 checkpoint、委派 brief 和新会话恢复统一使用 [`lean-stage-handoff-template.md`](./lean-stage-handoff-template.md)；改造前后预算见 [`task-327-context-budget-before.md`](./task-327-context-budget-before.md) 与 [`task-327-context-budget-after.md`](./task-327-context-budget-after.md)，任务级角色 dry run 见 [`task-327-flow-dry-run.md`](./task-327-flow-dry-run.md)。只传当前阶段边界、证据结论和 artifact 路径，不复制完整日志或会话。
 - 已完成并归档的权威任务第 304-F～G、305、306 项共用 [`task-304-306-river-city-reinvestigation.md`](./task-304-306-river-city-reinvestigation.md)：保存用户 5410 失败现场、根因调查、实施决议与最终 ACCEPT 证据；第 305 项完成共享三次曲线和唯一控制点输入链，第 306 项完成多城索引、跨境首府重算与不卡顿拖动。
 - 已完成并归档的权威任务第 304、312、313 项对应 [`task-304-river-network-lab.md`](./task-304-river-network-lab.md)：独立河流网络实验室完成 304-F 证据校准与 304-G 汇流曲线候选 / 新决策门；第 312 项把“支流未接入干流”主夹具纠正为可修复 accepted 正例并保留独立超长桥拒绝门；第 313 项把同一实现抽为正式共享模块并接入 canonical 河网归一化后的新图生成链。100k 同快照旧 baseline 保持 BLOCK，实验室与正式候选均 accepted。
 - 权威任务第 300 项对应 [`task-300-height-brush-commit-performance.md`](./task-300-height-brush-commit-performance.md)：只读隔离测量 100k 高度笔刷抬手提交的分段耗时，先区分面板全图统计、局部 / 拓扑渲染和其它主线程阶段，再实施证据驱动的增量优化；不操作用户当前标签页，不改变地图、派生重算、schema、存档、API 或 `source/`。
