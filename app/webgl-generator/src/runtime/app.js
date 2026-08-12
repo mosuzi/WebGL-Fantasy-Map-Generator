@@ -507,6 +507,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
   const editHistory = new EditHistory({
     onMutation: () => {
       mapRevision.advance();
+      state?.renderTaskCoordinator?.invalidateSession?.("map-revision-advanced");
       if (!state?.workerSessionMutationGuard) state?.workerTaskCoordinator?.invalidateSession?.("map-revision-advanced");
     },
     onSnapshot: () => mapRevision.createSnapshot(),
@@ -633,6 +634,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     runtimeOperation: null,
     runtimeOperationSnapshot: null,
     workerTaskCoordinator: null,
+    renderTaskCoordinator: null,
     operationFeedback: null,
     canvasToolModes: createCanvasToolModeManager({declaredModeIds: CANVAS_TOOL_MODE_IDS}),
     lazyPanelPreloadScheduled: false,
@@ -2702,6 +2704,12 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     validateBinding: binding => validateRegenerationWorkerBinding(state, binding),
     onFallback: detail => healthMonitor?.record?.("worker-task-fallback", detail, "info")
   });
+  state.renderTaskCoordinator = createWorkerTaskCoordinator({
+    createWorker: () => new ComputeWorker(),
+    getBinding: () => createRegenerationWorkerBinding(state),
+    validateBinding: binding => validateRegenerationWorkerBinding(state, binding),
+    onFallback: detail => healthMonitor?.record?.("worker-task-fallback", detail, "info")
+  });
   runtimeActions = createRuntimeActions(state, documentRef, {
     locateObject: (object, locateOptions = {}) => locateAndSelectObject(null, object, {
       locate: target => state.renderer.locateObject(target, locateOptions)
@@ -2765,16 +2773,16 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       requestGenerate(state, documentRef, runtimeActions);
     },
     onFitView: () => runtimeActions.layers.fitView(),
-    onShowOceanHeight: showOceanHeight => runtimeActions.layers.setShowOceanHeight(showOceanHeight),
-    onSmoothCellBorders: smoothCellBorders => runtimeActions.layers.setSmoothCellBorders(smoothCellBorders),
-    onVisualTheme: visualTheme => runtimeActions.layers.setTheme(visualTheme),
+    onShowOceanHeight: showOceanHeight => invokeRuntimeDisplayActionFromUi(state, documentRef, () => runtimeActions.layers.setShowOceanHeight(showOceanHeight)),
+    onSmoothCellBorders: smoothCellBorders => invokeRuntimeDisplayActionFromUi(state, documentRef, () => runtimeActions.layers.setSmoothCellBorders(smoothCellBorders)),
+    onVisualTheme: visualTheme => invokeRuntimeDisplayActionFromUi(state, documentRef, () => runtimeActions.layers.setTheme(visualTheme)),
     onCreateVisualTheme: () => runtimeActions.layers.createTheme(),
     onExportVisualTheme: () => runtimeActions.layers.exportTheme(currentVisualThemeId(documentRef), {download: true}),
     onImportVisualTheme: file => importVisualThemeFile(state, documentRef, file, runtimeActions.layers.importTheme),
     onUpdateVisualTheme: (token, color) => runtimeActions.layers.updateTheme(currentVisualThemeId(documentRef), {[token]: color}),
     onDeleteVisualTheme: () => runtimeActions.layers.deleteTheme(currentVisualThemeId(documentRef)),
     onShowHoverInfo: showHoverInfo => runtimeActions.layers.setShowHoverInfo(showHoverInfo),
-    onMaxCityLabels: maxCityLabels => runtimeActions.layers.setMaxCityLabels(maxCityLabels),
+    onMaxCityLabels: maxCityLabels => invokeRuntimeDisplayActionFromUi(state, documentRef, () => runtimeActions.layers.setMaxCityLabels(maxCityLabels)),
     onPatchLabelStyle: (styleType, patch) => runtimeActions.edit.labels.setStyle(styleType, patch),
     onResetLabelStyle: styleType => runtimeActions.edit.labels.resetStyle(styleType),
     onResetAllLabelStyles: () => runtimeActions.edit.labels.resetStyles(),
@@ -2785,8 +2793,8 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       updateMeasurementOverlay(state, documentRef);
     },
     onClimateControls: () => applyClimateControls(state, documentRef, runtimeActions.climate.apply),
-    onLayerVisible: (layer, visible) => runtimeActions.layers.setVisible(layer, visible),
-    onLayerGroupVisible: (layers, visible) => setRuntimeLayersVisible(state, documentRef, layers.map(layer => [layer, visible])),
+    onLayerVisible: (layer, visible) => invokeRuntimeDisplayActionFromUi(state, documentRef, () => runtimeActions.layers.setVisible(layer, visible)),
+    onLayerGroupVisible: (layers, visible) => invokeRuntimeDisplayActionFromUi(state, documentRef, () => runtimeActions.layers.setManyVisible(layers.map(layer => [layer, visible]))),
     onOpenGenerationPanel: () => {
       state.panels.generation.open();
     },
@@ -2940,7 +2948,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     onImportHeightmapImage: payload => importHeightmapImage(state, documentRef, payload, runtimeActions.data.importHeightmap),
     onRegenerate: (kind, regenerationOptions = {}) => runtimeActions.generate.regenerate(kind, {confirm: true, ...regenerationOptions}),
     onDebugModeChange: () => updatePickPanel(documentRef, state),
-    onMode: mode => runtimeActions.layers.setViewMode(mode)
+    onMode: mode => invokeRuntimeDisplayActionFromUi(state, documentRef, () => runtimeActions.layers.setViewMode(mode))
   };
   wrapControlPanelChildOpeners(runtimePanelHandlers, panelManager);
   bindRuntimePanel(documentRef, runtimePanelHandlers);
@@ -2961,8 +2969,44 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
   return state;
 }
 
+function invokeRuntimeDisplayActionFromUi(state, documentRef, task) {
+  void Promise.resolve().then(task).catch(error => {
+    restoreRuntimeDisplayControls(state, documentRef);
+    showMapToast(documentRef, `显示设置未能应用：${error?.message || error}`, 2800, {tone: "error"});
+  });
+}
+
+function restoreRuntimeDisplayControls(state, documentRef) {
+  const renderer = state.renderer;
+  const rendererLayers = renderer?.layerVisibility || {};
+  const colorMode = renderer?.colorMode || "height";
+  const visualTheme = renderer?.visualTheme?.id || "default";
+  const showOceanHeight = Boolean(renderer?.viewOptions?.showOceanHeight);
+  const smoothCellBorders = renderer?.viewOptions?.smoothCellBorders !== false;
+  const maxCityLabels = Number(renderer?.labelOptions?.maxCityLabels) || DEFAULT_MAX_CITY_LABELS;
+  setActiveModeButton(documentRef, colorMode);
+  syncRuntimeControlValue(documentRef, "visual-theme-preset", visualTheme);
+  syncRuntimeBooleanControl(documentRef.getElementById("show-ocean-height"), showOceanHeight);
+  syncRuntimeBooleanControl(documentRef.getElementById("smooth-cell-borders"), smoothCellBorders);
+  syncRuntimeControlValue(documentRef, "max-city-labels", maxCityLabels);
+  updateControlPreferences(documentRef, {colorMode, visualTheme, showOceanHeight, smoothCellBorders, maxCityLabels});
+  for (const control of documentRef.querySelectorAll("[data-layer]")) {
+    const layer = control.dataset.layer;
+    if (!Object.prototype.hasOwnProperty.call(rendererLayers, layer)) continue;
+    syncRuntimeBooleanControl(control, rendererLayers[layer]);
+    updateLayerPreference(documentRef, layer, rendererLayers[layer]);
+  }
+  syncLayerGroupControls(documentRef, rendererLayers);
+  updateRuntimePanel(documentRef, state);
+}
+
 function createRuntimeActions(state, documentRef, options = {}) {
   const operation = state.runtimeOperation;
+  const runDisplayMutation = (name, apply, rollback) => operation.run(
+    name,
+    context => applyRuntimeDisplayMutationViaWorker(state, documentRef, context, {apply, rollback}),
+    {message: "正在更新地图显示"}
+  );
   const runMapReplace = (name, task, message, overrides = {}) => {
     let loadingOwner = "";
     const config = {
@@ -3054,19 +3098,72 @@ function createRuntimeActions(state, documentRef, options = {}) {
     },
     layers: {
       listThemes: () => listRuntimeVisualThemes(documentRef),
-      setViewMode: mode => setRuntimeViewMode(state, documentRef, mode),
-      setVisible: (layer, visible) => setRuntimeLayerVisible(state, documentRef, layer, visible),
-      setTheme: themeId => setRuntimeVisualTheme(state, documentRef, themeId),
+      setViewMode: mode => {
+        const previous = readControlPreferences(documentRef).colorMode || state.renderer?.colorMode || "height";
+        return runDisplayMutation(
+          "layers.setViewMode",
+          () => setRuntimeViewMode(state, documentRef, mode),
+          () => setRuntimeViewMode(state, documentRef, previous)
+        );
+      },
+      setVisible: (layer, visible) => {
+        const previous = Boolean(state.renderer?.layerVisibility?.[layer]);
+        return runDisplayMutation(
+          "layers.setVisible",
+          () => setRuntimeLayerVisible(state, documentRef, layer, visible),
+          () => setRuntimeLayerVisible(state, documentRef, layer, previous)
+        );
+      },
+      setManyVisible: entries => {
+        const previous = (entries || []).map(entry => {
+          const layer = Array.isArray(entry) ? entry[0] : entry?.layer;
+          return [layer, Boolean(state.renderer?.layerVisibility?.[layer])];
+        });
+        return runDisplayMutation(
+          "layers.setManyVisible",
+          () => setRuntimeLayersVisible(state, documentRef, entries),
+          () => setRuntimeLayersVisible(state, documentRef, previous)
+        );
+      },
+      setTheme: themeId => {
+        const previous = currentVisualThemeId(documentRef);
+        return runDisplayMutation(
+          "layers.setTheme",
+          () => setRuntimeVisualTheme(state, documentRef, themeId),
+          () => setRuntimeVisualTheme(state, documentRef, previous)
+        );
+      },
       exportTheme: (themeId, options = {}) => exportRuntimeVisualTheme(documentRef, themeId, options),
       importTheme: (document, options = {}) => importRuntimeVisualTheme(state, documentRef, document, options),
       createTheme: (options = {}) => createRuntimeVisualTheme(state, documentRef, options),
       updateTheme: (themeId, colors = {}) => updateRuntimeVisualTheme(state, documentRef, themeId, colors),
       deleteTheme: themeId => deleteRuntimeVisualTheme(state, documentRef, themeId),
       fitView: () => fitRuntimeView(state, documentRef),
-      setShowOceanHeight: visible => setRuntimeOceanHeightVisible(state, documentRef, visible),
-      setSmoothCellBorders: enabled => setRuntimeSmoothCellBorders(state, documentRef, enabled),
+      setShowOceanHeight: visible => {
+        const previous = Boolean(readControlPreferences(documentRef).showOceanHeight);
+        return runDisplayMutation(
+          "layers.setShowOceanHeight",
+          () => setRuntimeOceanHeightVisible(state, documentRef, visible),
+          () => setRuntimeOceanHeightVisible(state, documentRef, previous)
+        );
+      },
+      setSmoothCellBorders: enabled => {
+        const previous = Boolean(readControlPreferences(documentRef).smoothCellBorders);
+        return runDisplayMutation(
+          "layers.setSmoothCellBorders",
+          () => setRuntimeSmoothCellBorders(state, documentRef, enabled),
+          () => setRuntimeSmoothCellBorders(state, documentRef, previous)
+        );
+      },
       setShowHoverInfo: visible => setRuntimeHoverInfoVisible(state, documentRef, visible),
-      setMaxCityLabels: limit => setRuntimeMaxCityLabels(state, documentRef, limit)
+      setMaxCityLabels: limit => {
+        const previous = Number(readControlPreferences(documentRef).maxCityLabels) || DEFAULT_MAX_CITY_LABELS;
+        return runDisplayMutation(
+          "layers.setMaxCityLabels",
+          () => setRuntimeMaxCityLabels(state, documentRef, limit),
+          () => setRuntimeMaxCityLabels(state, documentRef, previous)
+        );
+      }
     },
     selection: {
       resolve: object => resolveObjectViaApi(state, object),
@@ -3459,6 +3556,171 @@ function measureHealthOperation(state, name, detail, task) {
   const monitor = state.healthMonitor;
   if (!monitor?.measureSyncOperation) return task();
   return monitor.measureSyncOperation(name, detail, task);
+}
+
+async function applyRuntimeDisplayMutationViaWorker(state, documentRef, operation, {apply, rollback}) {
+  const renderer = state.renderer;
+  const map = state.map;
+  if (!renderer || !map) return apply();
+  if (renderer.workerRenderInstallSuspended > 0) {
+    throw createRuntimeOperationError("operation_busy", "当前地图显示正在更新，请稍后再试", {
+      stage: "render-prepare",
+      expected: true
+    });
+  }
+
+  const previousPresentation = renderer.captureDeferredWorkerRenderPresentation?.();
+  let install = null;
+  let mutationApplied = false;
+  let renderSuspended = false;
+  try {
+    renderer.suspendWorkerRenderInstall();
+    renderSuspended = true;
+    const result = apply();
+    mutationApplied = true;
+    const snapshot = renderer.captureDeferredWorkerRenderSnapshot?.();
+    if (!snapshot?.entries?.length) {
+      renderer.resumeWorkerRenderInstall?.({draw: true});
+      renderSuspended = Boolean(renderer.workerRenderInstallSuspended > 0);
+      return result;
+    }
+
+    const layers = workerRegenerationDeferredReplayLayers(snapshot, "display");
+    if (!layers.length) {
+      renderer.resumeWorkerRenderInstall?.({draw: true});
+      renderSuspended = Boolean(renderer.workerRenderInstallSuspended > 0);
+      return result;
+    }
+
+    renderer.applyDeferredWorkerRenderPresentationOnly?.(snapshot);
+    const binding = createRegenerationWorkerBinding(state, operation);
+    const renderRequest = createWorkerRegenerationDeferredRenderRequest(state, "display", binding, snapshot);
+    const token = createWorkerRegenerationRenderContextToken(state, "display");
+    const isCurrent = () => state.map === map
+      && validateRegenerationWorkerBinding(state, binding)
+      && createWorkerRegenerationRenderContextToken(state, "display") === token
+      && isWorkerRegenerationDeferredReplaySequenceCurrent(renderer, snapshot);
+    operation?.report?.("render-prepare", {message: "正在准备地图显示"});
+    await yieldToBrowser(documentRef);
+    operation?.throwIfCancelled?.();
+    if (!isCurrent()) throw runtimeDisplayObsoleteError();
+
+    const prepared = await state.renderTaskCoordinator.run("render.prepare", {
+      map,
+      ...renderRequest
+    }, {
+      binding,
+      signal: operation?.signal,
+      sessionMode: "map-mirror",
+      sessionPayload: renderRequest,
+      allowFallback: false,
+      streamBudgetMs: 6,
+      streamSliceBytes: 256 * 1024,
+      streamYieldToMain: () => yieldToBrowser(documentRef),
+      onProgress: () => operation?.report?.("render-prepare", {message: "正在准备地图显示"})
+    });
+    if (prepared.worker?.mode !== "worker" || !prepared.worker?.session?.id || prepared.worker.session.pending !== true) {
+      const error = new Error("地图显示准备未建立有效会话");
+      error.code = "worker_protocol_session_stale";
+      throw error;
+    }
+    operation?.throwIfCancelled?.();
+    if (!isCurrent()) throw runtimeDisplayObsoleteError();
+
+    operation?.report?.("render-install", {message: "正在更新地图显示"});
+    try {
+      install = await prepareRendererWorkerInstall(renderer, map, prepared, {
+        binding: renderRequest.binding,
+        signal: operation?.signal,
+        isCurrent,
+        onProgress: () => operation?.report?.("render-install", {message: "正在更新地图显示"})
+      });
+    } catch (error) {
+      throw normalizeWorkerRegenerationOuterPreparedInstallError(error, operation);
+    }
+    operation?.throwIfCancelled?.();
+    if (!isCurrent()) throw runtimeDisplayObsoleteError();
+    install.commit();
+    if (!isCurrent()) throw runtimeDisplayObsoleteError();
+
+    const committed = await state.renderTaskCoordinator.commitSession(prepared.worker.session.id, binding, {expectedRevisionDelta: 0});
+    if (!committed) {
+      const error = new Error("地图显示会话提交已被拒绝");
+      error.code = "worker_session_commit_rejected";
+      throw error;
+    }
+    operation?.throwIfCancelled?.();
+    if (!isCurrent()) throw runtimeDisplayObsoleteError();
+    renderer.resumePreparedWorkerRenderInstall?.(snapshot, {draw: true});
+    renderSuspended = Boolean(renderer.workerRenderInstallSuspended > 0);
+    try {
+      install.finalize?.();
+    } catch {
+      // 已提交显示的旧资源释放失败不能反向破坏当前画面。
+    }
+    state.lastDisplayRenderWorker = {
+      layers: [...renderRequest.layers],
+      worker: structuredClone(prepared.worker),
+      session: state.renderTaskCoordinator.getSessionSnapshot?.() || null
+    };
+    return result;
+  } catch (error) {
+    const rollbackFailures = [];
+    const ownerCurrent = state.map === map;
+    const canUseCompatibilityPath = error?.code === "worker_fallback_disabled" && ownerCurrent;
+    state.renderTaskCoordinator?.invalidateSession?.("display-render-failed");
+    if (install) {
+      try {
+        if (ownerCurrent || !install.committed) install.rollback?.();
+        else install.finalize?.();
+      } catch (failure) {
+        rollbackFailures.push(failure);
+      }
+    }
+    if (ownerCurrent) {
+      if (mutationApplied) {
+        try {
+          rollback?.();
+        } catch (failure) {
+          rollbackFailures.push(failure);
+        }
+      }
+      try {
+        renderer.restoreDeferredWorkerRenderPresentation?.(previousPresentation);
+        renderer.abortWorkerRenderInstall?.();
+        renderer.draw?.({updateDynamicBuffers: false});
+        renderSuspended = false;
+      } catch (failure) {
+        rollbackFailures.push(failure);
+      }
+    }
+    if (!rollbackFailures.length && canUseCompatibilityPath) {
+      operation?.report?.("compatibility", {message: "正在改用兼容方式继续处理"});
+      state.healthMonitor?.record?.("worker-task-fallback", {
+        task: "render.prepare",
+        operation: operation?.name || "",
+        cause: error?.cause?.message || error?.message || "unavailable"
+      }, "info");
+      return apply();
+    }
+    if (rollbackFailures.length) {
+      throw createRuntimeOperationError("operation_rollback_failed", `地图显示更新失败且恢复未完整完成：${error?.message || error}`, {
+        stage: "rollback",
+        cause: new AggregateError([error, ...rollbackFailures], "地图显示更新与恢复失败")
+      });
+    }
+    throw error;
+  } finally {
+    if (renderSuspended && state.map === map && !renderer.hasDeferredWorkerRenderMutations?.()) {
+      renderer.abortWorkerRenderInstall?.();
+    }
+  }
+}
+
+function runtimeDisplayObsoleteError() {
+  const error = new Error("地图或显示状态已变化，请重试");
+  error.code = "operation_obsolete";
+  return error;
 }
 
 function setRuntimeViewMode(state, documentRef, mode) {
@@ -4264,6 +4526,7 @@ async function loadMapIntoRuntime(state, documentRef, map, {
   clearCanvasToolModeFeedback(state, documentRef);
   state.brushCursorPreview?.reset();
   state.workerTaskCoordinator?.invalidateSession?.("map-replaced");
+  state.renderTaskCoordinator?.invalidateSession?.("map-replaced");
   state.map = map;
   state.regenerationLockUiSession?.clear({keepContext: false});
   normalizeSocialExpansionMap(state.map);

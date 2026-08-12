@@ -1,5 +1,12 @@
 # 开发历史
 
+## 2026-08-13：第 322 项 Stage D2 动态显示准备 Worker 闭环接受
+
+- 主题、视图模式、单图层 / 图层组可见性、平滑边界、海洋高度和最大城市标签数统一进入独立的 `render.prepare` map-mirror session；领域计算 session 不被占用。首轮传递正式地图，后续显示操作只发送 `3` 个输入包；主线程只应用展示标量、校验 map / revision / token / sequence、提交 prepared renderer、确认 delta `0` session、恢复 UI 并完成 GPU / DOM 原子安装。Worker 预接受不可用时才在完整回滚后执行原同步兼容入口，普通用户只看到“正在改用兼容方式继续处理”。
+- 只读盘点确认普通显示入口没有 picking CPU 重建；数据写事务的 picking 仍由既有 prepared renderer 路径负责。图层组操作合并为一次事务，显示失败按当前图 / 已脱离图区分 rollback 与 finalize；UI Promise 拒绝会从 renderer 已提交的 color mode、主题、view options、label options 和 layer visibility 恢复控件及持久偏好，不读取已经被用户改写的 DOM 值。
+- 同一 100k 地图目标复验中，所有同步 `refreshCellSurface / refreshLineLayers / refreshLabels` 调用为 `0`，独立 session 首次输入 `989` 包、后续复用 `3` 包且最终 idle；视图模式、点图层开关和平滑边界 LongTask 为 `0`。主题从 `905ms` 降至 `55 / 60 / 68ms`，最大城市标签从 `255ms` 降至 `54 / 59ms`，剩余信号已归因于 prepared DOM 的末端样式 / 布局及最终 draw。按用户统一处置门登记 D2 有界例外：主题最多 `3` 条且单条不超过 `75ms`，最大标签最多 `2` 条且单条不超过 `60ms`；不扩张到其它入口，也不带入阶段 E。
+- `node --check`、显示事务静态契约、`regress:api-action-convergence`、完整 Worker task / render preparation 专项和生产构建通过；目标浏览器非性能 health、WebGL、Loading 错误为 `0`。证据摘要位于 `work/task322-d2-presentation-diagnostic-summary.json`。D2 产品 `1` 文件 `+276 / -13`，工具 `2` 文件 `+47 / -3`，专用临时诊断约 `110` 行且不提交，委派等待为 `0`。阶段 D 已闭合并建立 checkpoint，下一步只进入阶段 E 集成终验；用户地图、`source/` 与 Wiki 未改。
+
 ## 2026-08-13：第 322 项 Stage D1 大型存档读写与恢复 Worker 闭环接受
 
 - 大型存档导出、浏览器保存、完整导入与浏览器恢复已改用既有 `map-file-io` Worker；导入 Worker 同一任务完成解析、迁移、校验和完整 renderer prepare，正式主线程只做原子安装、地图替换、GPU / DOM 提交与面板同步。`.webfmg`、JSON、gzip-base64、File / Blob、LocalStorage / IndexedDB、旧迁移和公开返回结构继续保留。

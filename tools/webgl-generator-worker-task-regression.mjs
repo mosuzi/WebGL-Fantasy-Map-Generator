@@ -895,6 +895,49 @@ function verifyAppDeferredReplayStaticContract() {
     assert.equal(normalizeOuterPreparedError(raw, {stage: "render-install"}), raw, `${code} 不得被 outer mapper 误吞`);
   }
 
+  const displayFlow = source.slice(
+    source.indexOf("async function applyRuntimeDisplayMutationViaWorker"),
+    source.indexOf("function runtimeDisplayObsoleteError")
+  );
+  assert.ok(displayFlow.length > 0, "普通显示入口必须接入独立 Worker 渲染事务");
+  const displayOrder = [
+    "renderer.suspendWorkerRenderInstall()",
+    "const result = apply()",
+    "renderer.captureDeferredWorkerRenderSnapshot?.()",
+    "renderer.applyDeferredWorkerRenderPresentationOnly?.(snapshot)",
+    "state.renderTaskCoordinator.run(\"render.prepare\"",
+    "install.commit()",
+    "state.renderTaskCoordinator.commitSession",
+    "renderer.resumePreparedWorkerRenderInstall?.(snapshot",
+    "install.finalize?.()"
+  ].map(marker => displayFlow.indexOf(marker));
+  assert.ok(displayOrder.every(index => index >= 0), "普通显示事务缺少 suspend/apply/prepare/install/session/resume/finalize 链");
+  assert.ok(displayOrder.every((index, position) => position === 0 || index > displayOrder[position - 1]), "普通显示事务顺序不原子");
+  assert.match(displayFlow, /sessionMode: "map-mirror"/u, "普通显示必须复用独立 map mirror session");
+  assert.match(displayFlow, /sessionPayload: renderRequest/u, "普通显示复用请求不得重传 map");
+  assert.match(displayFlow, /allowFallback: false/u, "复杂显示准备不得回退主线程");
+  assert.match(displayFlow, /expectedRevisionDelta: 0/u, "显示事务不得推进 map revision");
+  assert.doesNotMatch(displayFlow, /state\.workerTaskCoordinator/u, "显示事务不得占用领域计算 session");
+  assert.match(displayFlow, /ownerCurrent \|\| !install\.committed/u, "显示失败清理必须区分当前图与 detached committed owner");
+  assert.match(displayFlow, /renderer\.restoreDeferredWorkerRenderPresentation/u, "显示失败必须恢复展示标量");
+  assert.match(displayFlow, /renderer\.abortWorkerRenderInstall/u, "显示失败必须解冻并清理 deferred queue");
+  assert.match(displayFlow, /error\?\.code === "worker_fallback_disabled" && ownerCurrent/u, "仅 Worker 预接受不可用且地图仍属当前事务时允许兼容路径");
+  assert.match(displayFlow, /message: "正在改用兼容方式继续处理"/u, "兼容阶段必须使用普通用户可理解的中文文案");
+  assert.ok(displayFlow.indexOf("renderer.abortWorkerRenderInstall?.()") < displayFlow.lastIndexOf("return apply()"), "兼容路径必须先完整恢复 Worker 事务再执行原同步入口");
+  assert.match(source, /state\?\.renderTaskCoordinator\?\.invalidateSession\?\.\("map-revision-advanced"\)/u, "map revision 前进必须清理显示镜像");
+  assert.match(source, /state\.renderTaskCoordinator\?\.invalidateSession\?\.\("map-replaced"\)/u, "换图必须清理显示镜像");
+  assert.match(source, /onLayerGroupVisible:[\s\S]*?runtimeActions\.layers\.setManyVisible/u, "图层组入口不得绕过统一显示事务");
+  const displayUiRestore = source.slice(
+    source.indexOf("function restoreRuntimeDisplayControls"),
+    source.indexOf("function createRuntimeActions")
+  );
+  assert.ok(displayUiRestore.length > 0, "显示入口失败后必须恢复正式控件状态");
+  for (const marker of ["renderer?.colorMode", "renderer?.visualTheme?.id", "renderer?.viewOptions?.showOceanHeight", "renderer?.viewOptions?.smoothCellBorders", "renderer?.labelOptions?.maxCityLabels", "renderer?.layerVisibility"]) {
+    assert.ok(displayUiRestore.includes(marker), `显示控件恢复缺少正式 renderer 来源：${marker}`);
+  }
+  assert.doesNotMatch(displayUiRestore, /readControlPreferences/u, "显示控件恢复不得读取已经被用户改写的 DOM 偏好");
+  assert.match(source, /invokeRuntimeDisplayActionFromUi\(state, documentRef,[\s\S]*?restoreRuntimeDisplayControls\(state, documentRef\)/u, "UI Promise 拒绝必须回写正式显示状态");
+
   const replay = source.slice(
     source.indexOf("async function replayWorkerRegenerationDeferredPresentation"),
     source.indexOf("async function refreshWorkerRegenerationPreparedUi")
@@ -1088,6 +1131,7 @@ function verifyAppDeferredReplayStaticContract() {
 
   return {
     decision: "context-first",
+    displayRenderSession: "dedicated-map-mirror",
     windows: 4,
     overlayPrepareRetry: true,
     pendingDelta0Closures: (replay.match(/expectedRevisionDelta: 0/gu) || []).length,

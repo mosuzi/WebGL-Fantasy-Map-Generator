@@ -22,9 +22,9 @@ for (const signature of [
 const uiActionSignatures = {
   generation: "onGenerate: () => requestGenerate(state, documentRef, runtimeActions)",
   regeneration: "onRegenerate: (kind, regenerationOptions = {}) => runtimeActions.generate.regenerate(kind, {confirm: true, ...regenerationOptions})",
-  viewMode: "onMode: mode => runtimeActions.layers.setViewMode(mode)",
-  layer: "onLayerVisible: (layer, visible) => runtimeActions.layers.setVisible(layer, visible)",
-  display: "onShowOceanHeight: showOceanHeight => runtimeActions.layers.setShowOceanHeight(showOceanHeight)",
+  viewMode: "onMode: mode => invokeRuntimeDisplayActionFromUi(state, documentRef, () => runtimeActions.layers.setViewMode(mode))",
+  layer: "onLayerVisible: (layer, visible) => invokeRuntimeDisplayActionFromUi(state, documentRef, () => runtimeActions.layers.setVisible(layer, visible))",
+  display: "onShowOceanHeight: showOceanHeight => invokeRuntimeDisplayActionFromUi(state, documentRef, () => runtimeActions.layers.setShowOceanHeight(showOceanHeight))",
   themeCreate: "onCreateVisualTheme: () => runtimeActions.layers.createTheme()",
   themeImport: "onImportVisualTheme: file => importVisualThemeFile(state, documentRef, file, runtimeActions.layers.importTheme)",
   themeUpdate: "onUpdateVisualTheme: (token, color) => runtimeActions.layers.updateTheme(currentVisualThemeId(documentRef), {[token]: color})",
