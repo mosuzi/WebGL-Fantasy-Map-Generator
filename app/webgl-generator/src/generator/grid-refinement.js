@@ -196,7 +196,7 @@ export function refineGridTopology(sourceGrid, targetCells, taskContext = null) 
       vertexCount: vertices.p.length,
       triangles: cells.v.reduce((sum, vertexIds) => sum + Math.max(0, vertexIds.length - 2), 0),
       averageNeighborDegree: round(average(cells.c.map(list => list.length)), 2),
-      maxNeighborDegree: Math.max(...cells.c.map(list => list.length)),
+      maxNeighborDegree: cells.c.reduce((max, list) => Math.max(max, list.length), 0),
       borderCells: cells.b.reduce((sum, value) => sum + (value ? 1 : 0), 0),
       method: "topology-preserving-cell-refinement"
     },

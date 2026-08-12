@@ -3,6 +3,7 @@ import {
   prepareGridRefinement,
   prepareGridStructureWrite
 } from "./grid-topology-api.js";
+import {executeRenderPreparationTask} from "../renderer/render-preparation.js";
 import {collectWorkerTransferables} from "./worker-snapshot.js";
 
 export const GRID_TOPOLOGY_WORKER_TASK = "grid-topology.prepare";
@@ -44,9 +45,13 @@ export async function runGridTopologyWorkerTask(payload = {}, context = {}) {
       executed: false,
       reason: prepared?.result?.reason || "no-op",
       replacementMap: null,
+      preparedRender: null,
       result: prepared?.result || null
     };
   }
+  const preparedRender = payload.render
+    ? await executeRenderPreparationTask({...payload.render, map: prepared.map}, context)
+    : null;
   context.report?.("grid-topology", {stage: "complete", action, targetCells: prepared.map.grid.points.length, progress: 1});
   return {
     kind: "grid-topology-worker-result",
@@ -54,12 +59,16 @@ export async function runGridTopologyWorkerTask(payload = {}, context = {}) {
     binding,
     executed: true,
     replacementMap: prepared.map,
+    preparedRender,
     result: prepared.result
   };
 }
 
 export function collectGridTopologyWorkerTransferables(result) {
-  return collectWorkerTransferables(result?.replacementMap || result);
+  return collectWorkerTransferables({
+    replacementMap: result?.replacementMap || null,
+    preparedRender: result?.preparedRender || null
+  });
 }
 
 export function fingerprintGridTopologyLocks(map) {

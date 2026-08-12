@@ -269,6 +269,7 @@ async function verifyPackedCaches() {
   });
   assert.deepEqual(summarizeCellVisualMesh(asyncCellVisual), summarizeCellVisualMesh(cellVisual));
   assert.ok(unpackYields > 0, "10000 cells 缓存解包必须支持预算式让出主线程");
+  assert.ok(unpackYields < 100, "cell visual 解包让步过碎");
   const unpackAbort = new AbortController();
   await assert.rejects(
     unpackCellVisualMeshInChunks(caches.cellVisual, binding, {

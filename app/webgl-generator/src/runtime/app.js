@@ -210,7 +210,13 @@ import {getRegenerationPatchPolicy} from "./regeneration-worker-task.js";
 import {createWorkerTaskCoordinator} from "./worker-task-coordinator.js";
 import {createStagedWorkerSnapshot} from "./worker-snapshot.js";
 import {OCEAN_CURRENT_WORLD_WORKER_TASK} from "./ocean-current-world-worker-task.js";
-import {commitPreparedGridTopology, inspectGridRefinement, inspectGridStructureWrite, prepareGridRefinement, prepareGridStructureWrite} from "./grid-topology-api.js";
+import {fingerprintGridStructure} from "../generator/grid-refinement.js";
+import {inspectGridRefinement, inspectGridStructureWrite} from "./grid-topology-api.js";
+import {
+  fingerprintGridTopologyLocks,
+  GRID_TOPOLOGY_WORKER_ACTION,
+  GRID_TOPOLOGY_WORKER_TASK
+} from "./grid-topology-worker-task.js";
 import {SelectionStore} from "./selection-store.js";
 import {decideSelectionPanelRoute, SELECTION_PANEL_BINDINGS, SELECTION_PANEL_ROUTE} from "./selection-panel-policy.js";
 import {installKeyboardShortcuts} from "./keyboard-shortcuts.js";
@@ -2979,17 +2985,6 @@ function createRuntimeActions(state, documentRef, options = {}) {
       refreshMapMutationRollback(state, documentRef);
     }
   });
-  const gridMutationConfig = message => ({
-    message,
-    snapshot: () => captureMapMutationSnapshot(state.map, state.editHistory),
-    rollback: async snapshot => {
-      restoreMapMutationSnapshot(state.map, state.editHistory, snapshot);
-      state.options = state.map.options;
-      if (typeof state.renderer?.loadMapAsync === "function") await state.renderer.loadMapAsync(state.map);
-      else state.renderer?.loadMap?.(state.map);
-      refreshRuntimeAfterMapLoad(state, documentRef);
-    }
-  });
   return {
     history: {
       get: (options = {}) => state.editHistory.getStats(options),
@@ -3006,9 +3001,9 @@ function createRuntimeActions(state, documentRef, options = {}) {
     },
     grid: {
       inspectWrite: document => inspectGridStructureWrite(state.map, state.mapRevision, document),
-      applyWrite: (document, gridOptions = {}) => operation.run("grid.applyWrite", context => applyGridTopologyViaApi(state, documentRef, {document, options: gridOptions, context}), gridMutationConfig("正在写入受控网格结构")),
+      applyWrite: (document, gridOptions = {}) => operation.run("grid.applyWrite", context => applyGridTopologyViaApi(state, documentRef, {document, options: gridOptions, context}), {message: "正在写入受控网格结构"}),
       inspectRefinement: (gridOptions = {}) => inspectGridRefinement(state.map, state.mapRevision, gridOptions),
-      refine: (gridOptions = {}) => operation.run("grid.refine", context => applyGridTopologyViaApi(state, documentRef, {options: gridOptions, context}), gridMutationConfig("正在细分现有地图网格"))
+      refine: (gridOptions = {}) => operation.run("grid.refine", context => applyGridTopologyViaApi(state, documentRef, {options: gridOptions, context}), {message: "正在细分现有地图网格"})
     },
     generate: {
       getOptions: () => getGenerationOptionsViaApi(state, documentRef),
@@ -10873,7 +10868,8 @@ async function executeWorkerMapMutation(state, documentRef, mutation, operation 
   const payload = mutation?.payload && typeof mutation.payload === "object" ? mutation.payload : {};
   const sourceMap = state.map;
   const operationStartCityIconLayerStats = {...(state.renderer?.cityIconLayer?.stats || {})};
-  const binding = createRegenerationWorkerBinding(state, operation);
+  const binding = mutation.createBinding?.(state, operation) || createRegenerationWorkerBinding(state, operation);
+  const taskPayload = mutation.includeBindingInPayload === true ? {...payload, binding} : payload;
   operation?.report("stream-input", {message: `正在整理${userLabel}所需资料`});
   operation?.throwIfCancelled?.();
   const renderRequest = createWorkerRegenerationRenderRequest(state, targetKind, binding, mutation.renderLayers);
@@ -10882,13 +10878,13 @@ async function executeWorkerMapMutation(state, documentRef, mutation, operation 
   try {
     output = await state.workerTaskCoordinator.run(task, {
       map: state.map,
-      ...payload,
+      ...taskPayload,
       render: renderRequest
     }, {
       binding,
       signal: operation?.signal,
       sessionMode: "map-mirror",
-      sessionPayload: {...payload, render: renderRequest},
+      sessionPayload: {...taskPayload, render: renderRequest},
       streamBudgetMs: 6,
       streamSliceBytes: 256 * 1024,
       fallbackPayloadFactory: async () => {
@@ -10909,7 +10905,7 @@ async function executeWorkerMapMutation(state, documentRef, mutation, operation 
           error.code = "operation_obsolete";
           throw error;
         }
-        return {map: fallbackPrepared.snapshot, ...payload, render: renderRequest};
+        return {map: fallbackPrepared.snapshot, ...taskPayload, render: renderRequest};
       },
       onProgress: (stage, detail) => operation?.report(stage, detail)
     });
@@ -10929,6 +10925,7 @@ async function executeWorkerMapMutation(state, documentRef, mutation, operation 
       error.code = "worker_protocol_binding_mismatch";
       throw error;
     }
+    mutation.assertOutput?.({state, sourceMap, binding, output, operation});
   } catch (error) {
     state.workerTaskCoordinator.invalidateSession("result-obsolete");
     if (state.map === sourceMap) restoreCityIconLayerStatistics(state.renderer, operationStartCityIconLayerStats);
@@ -12238,17 +12235,17 @@ function refreshMapMutationRollback(state, documentRef) {
 
 async function applyGridTopologyViaApi(state, documentRef, {document = null, options = {}, context = null} = {}) {
   assertMapAvailable(state);
-  context?.report("prepare-grid", {message: document ? "正在校验受控网格结构" : "正在构造拓扑细分"});
-  const prepared = document
-    ? prepareGridStructureWrite(state.map, state.mapRevision, document, options)
-    : prepareGridRefinement(state.map, state.mapRevision, options);
-  context?.throwIfAborted?.();
-  context?.report("commit-grid", {message: "正在提交网格事务"});
-  const transaction = executeMapSnapshotTransaction({
-    map: state.map,
-    editHistory: state.editHistory,
-    label: document ? "写入受控网格结构" : `细分网格至 ${prepared.result.target.cells} cells`,
-    domain: "grid-topology",
+  const action = document ? GRID_TOPOLOGY_WORKER_ACTION.APPLY_WRITE : GRID_TOPOLOGY_WORKER_ACTION.REFINE;
+  const sourceMap = state.map;
+  let expectedTarget = null;
+  const result = await executeWorkerMapMutation(state, documentRef, {
+    task: GRID_TOPOLOGY_WORKER_TASK,
+    targetKind: "grid-topology",
+    userLabel: document ? "受控网格结构" : "网格拓扑",
+    payload: {action, document, options},
+    createBinding: createGridTopologyWorkerBinding,
+    includeBindingInPayload: true,
+    renderLayers: [...RENDER_PREPARATION_LAYERS],
     effects: {
       render: "draw",
       selection: "refresh",
@@ -12256,26 +12253,70 @@ async function applyGridTopologyViaApi(state, documentRef, {document = null, opt
       pickPanel: true,
       derived: ["render-mesh", "terrain-caches", "political-boundaries", "line-layers", "point-layers", "labels", "object-index", "object-panels"]
     },
-    execute: () => commitPreparedGridTopology(state.map, prepared),
-    executeCommand: command => executeEditCommand(state, documentRef, command, {
-      context: {map: state.map},
-      refresh: () => {},
-      refreshPanels: false
-    }),
-    onRestore: () => refreshMapMutationRollback(state, documentRef)
-  });
-  state.options = state.map.options;
-  context?.report("reload-renderer", {message: "正在重载细分后的地图渲染"});
-  if (typeof state.renderer?.loadMapAsync === "function") await state.renderer.loadMapAsync(state.map);
-  else state.renderer?.loadMap?.(state.map);
-  state.selectionStore.clear();
-  refreshRuntimeAfterMapLoad(state, documentRef);
-  updateEditingInteractionLock(state, documentRef);
+    assertOutput: ({binding, output}) => assertGridTopologyWorkerOutputCurrent(state, sourceMap, binding, action, output, context),
+    createCommand: ({output, result: workerResult, effects}) => {
+      expectedTarget = workerResult.target;
+      return createMapReplacementCommand({
+        replacementMap: output.replacementMap,
+        label: document ? "写入受控网格结构" : `细分网格至 ${workerResult.target.cells} cells`,
+        historyDomain: "grid-topology",
+        effects,
+        result: workerResult,
+        afterSwap: currentMap => {
+          state.options = currentMap.options;
+        }
+      });
+    },
+    assertCommitted: () => {
+      if (!expectedTarget
+        || state.map.grid.points.length !== Number(expectedTarget.cells)
+        || fingerprintGridStructure(state.map.grid) !== expectedTarget.fingerprint) {
+        const error = new Error("网格拓扑提交结果与 Worker 目标不一致");
+        error.code = "grid-worker-commit-invalid";
+        throw error;
+      }
+    },
+    afterUiRefresh: async ({output}) => {
+      state.options = state.map.options;
+      syncGenerationInputs(documentRef, state.options);
+      const committedBinding = {...output.binding, mapRevision: Number(output.binding.mapRevision) + 1};
+      await refreshRuntimeAfterMapLoadAsync(state, documentRef, {
+        operation: context,
+        isCurrent: () => state.map === sourceMap && validateRegenerationWorkerBinding(state, committedBinding)
+      });
+    }
+  }, context);
+  return {...result, binding: state.mapRevision.getSnapshot()};
+}
+
+function createGridTopologyWorkerBinding(state, operation = null) {
   return {
-    ...transaction.result,
-    history: state.editHistory.getStats(),
-    binding: state.mapRevision.getSnapshot()
+    ...createRegenerationWorkerBinding(state, operation),
+    sourceFingerprint: fingerprintGridStructure(state.map.grid),
+    lockFingerprint: fingerprintGridTopologyLocks(state.map)
   };
+}
+
+function assertGridTopologyWorkerOutputCurrent(state, sourceMap, binding, action, output, operation = null) {
+  if (state.map !== sourceMap
+    || !sameRegenerationWorkerBinding(binding, createRegenerationWorkerBinding(state, operation))
+    || binding.sourceFingerprint !== fingerprintGridStructure(sourceMap.grid)
+    || binding.lockFingerprint !== fingerprintGridTopologyLocks(sourceMap)) {
+    const error = new Error("网格准备结果已被新的地图状态取代");
+    error.code = "operation_obsolete";
+    throw error;
+  }
+  const shapeValid = output?.kind === "grid-topology-worker-result"
+    && output.action === action
+    && typeof output.executed === "boolean"
+    && (output.executed
+      ? Boolean(output.replacementMap && output.preparedRender && output.result)
+      : output.replacementMap === null && output.preparedRender === null);
+  if (!shapeValid) {
+    const error = new Error("网格准备结果结构无效");
+    error.code = "grid-worker-result-invalid";
+    throw error;
+  }
 }
 
 function normalizeApiRegenerationKind(kind) {

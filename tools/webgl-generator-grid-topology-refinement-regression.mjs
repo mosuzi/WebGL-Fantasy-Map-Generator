@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
+import {readFileSync} from "node:fs";
 import {generatePlaceholderMap} from "../app/webgl-generator/src/generator/index.js";
 import {isSettlementWaterRoutePathValid, traceSettlementWaterRoutePath} from "../app/webgl-generator/src/generator/settlements.js";
 import {EditHistory} from "../app/webgl-generator/src/runtime/edit-history.js";
+import {createMapReplacementCommand} from "../app/webgl-generator/src/runtime/domain-patch.js";
 import {executeMapSnapshotTransaction} from "../app/webgl-generator/src/runtime/map-snapshot-transaction.js";
 import {createMapDocument, parseMapDocument, stringifyMapDocument} from "../app/webgl-generator/src/runtime/map-file-io.js";
 import {
@@ -13,9 +15,60 @@ import {
   prepareGridStructureWrite,
   selectUniqueWaterFeatureRedirects
 } from "../app/webgl-generator/src/runtime/grid-topology-api.js";
-import {validateRefinedMotherAdjacency} from "../app/webgl-generator/src/generator/grid-refinement.js";
+import {fingerprintGridStructure, validateRefinedMotherAdjacency} from "../app/webgl-generator/src/generator/grid-refinement.js";
+import {
+  collectGridTopologyWorkerTransferables,
+  fingerprintGridTopologyLocks,
+  GRID_TOPOLOGY_WORKER_ACTION,
+  runGridTopologyWorkerTask
+} from "../app/webgl-generator/src/runtime/grid-topology-worker-task.js";
 import {burgIdsAtPackCell, cityIdsAtGridCell, rebuildSettlementCellIndex} from "../app/webgl-generator/src/runtime/settlement-cell-index.js";
 import {pickGridCell} from "../app/webgl-generator/src/renderer/picking.js";
+
+const appSource = readFileSync(new URL("../app/webgl-generator/src/runtime/app.js", import.meta.url), "utf8");
+const gridRefinementSource = readFileSync(new URL("../app/webgl-generator/src/generator/grid-refinement.js", import.meta.url), "utf8");
+assert.doesNotMatch(gridRefinementSource, /Math\.max\(\.\.\.cells\.c\.map/, "100k 邻接统计不得展开为函数参数");
+const workerMutationSource = appSource.match(/async function executeWorkerMapMutation[\s\S]+?(?=async function commitRegenerationWorkerSession)/)?.[0] || "";
+assert.match(workerMutationSource, /taskPayload = mutation\.includeBindingInPayload[\s\S]+\.\.\.taskPayload,\s+render: renderRequest[\s\S]+sessionPayload: \{\.\.\.taskPayload[\s\S]+fallbackPrepared\.snapshot, \.\.\.taskPayload/);
+const gridMutationSource = appSource.match(/async function applyGridTopologyViaApi[\s\S]+?(?=function createGridTopologyWorkerBinding)/)?.[0] || "";
+assert.match(gridMutationSource, /includeBindingInPayload: true,/);
+
+const workerSource = generatePlaceholderMap({seed: "grid-topology-worker-parity", cellsTarget: 1_000});
+const workerRevision = {getSnapshot: () => ({mapIdentity: "grid-topology-worker-parity", mapRevision: 0})};
+const workerInspection = inspectGridRefinement(workerSource, workerRevision, {targetCells: 2_000});
+const workerOptions = {targetCells: 2_000, confirm: true, inspectionToken: workerInspection.inspectionToken};
+const workerBinding = {...workerRevision.getSnapshot(), generationToken: 0, operationId: 1, operationName: "grid.refine", sourceFingerprint: fingerprintGridStructure(workerSource.grid), lockFingerprint: fingerprintGridTopologyLocks(workerSource)};
+const workerDirect = prepareGridRefinement(workerSource, workerRevision, workerOptions);
+const workerPayload = {
+  map: workerSource,
+  action: GRID_TOPOLOGY_WORKER_ACTION.REFINE,
+  options: workerOptions,
+  binding: workerBinding,
+  render: {
+    binding: {mapIdentity: workerBinding.mapIdentity, mapRevision: workerBinding.mapRevision},
+    layers: ["point"],
+    camera: {scale: 1, offsetX: 0, offsetY: 0},
+    canvas: {width: 1440, height: 960, clientWidth: 1440, clientHeight: 960},
+    visibility: {}
+  }
+};
+const workerOutput = await runGridTopologyWorkerTask(workerPayload, {binding: workerBinding, checkpoint: () => Promise.resolve()});
+assert.equal(workerOutput.executed, true);
+assert.equal(workerOutput.result.target.fingerprint, workerDirect.result.target.fingerprint, "Grid Worker 与主线程准备结果不同源");
+assert.ok(workerOutput.preparedRender?.layers?.point?.vertices instanceof Float32Array, "Grid Worker 未返回绑定的点图层准备结果");
+assert.ok(collectGridTopologyWorkerTransferables(workerOutput).includes(workerOutput.preparedRender.layers.point.vertices.buffer), "Grid Worker transfer 未覆盖渲染准备结果");
+assert.equal(fingerprintGridStructure(workerSource.grid), workerBinding.sourceFingerprint, "Grid Worker 改写了正式输入");
+await assert.rejects(
+  () => runGridTopologyWorkerTask({...workerPayload, binding: {...workerBinding, sourceFingerprint: "stale"}}, {binding: {...workerBinding, sourceFingerprint: "stale"}}),
+  error => error?.code === "grid-worker-binding-stale"
+);
+const workerSourceIdentity = workerSource;
+const workerCommand = createMapReplacementCommand({replacementMap: workerOutput.replacementMap, historyDomain: "grid-topology", result: workerOutput.result});
+workerCommand.apply({map: workerSource});
+assert.equal(workerSource, workerSourceIdentity, "Grid Worker 替换提交不得更换正式 map identity");
+assert.equal(fingerprintGridStructure(workerSource.grid), workerOutput.result.target.fingerprint, "Grid Worker 替换提交未安装目标网格");
+workerCommand.revert({map: workerSource});
+assert.equal(fingerprintGridStructure(workerSource.grid), workerBinding.sourceFingerprint, "Grid Worker 替换撤销未恢复来源网格");
 
 const source = generatePlaceholderMap({seed: "grid-topology-298", cellsTarget: 10_000});
 const sourceCells = source.grid.points.length;

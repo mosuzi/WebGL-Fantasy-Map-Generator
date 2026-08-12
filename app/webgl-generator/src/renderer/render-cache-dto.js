@@ -1,4 +1,5 @@
 export const RENDER_CACHE_SCHEMA_VERSION = 1;
+const CELL_VISUAL_CHECKPOINT_INTERVAL = 32;
 
 export function packCellVisualMesh(mesh, binding = {}) {
   const cells = (mesh?.cells || []).filter(Boolean);
@@ -75,19 +76,19 @@ export async function unpackCellVisualMeshInChunks(dto, expectedBinding = null, 
       triangleCount: dto.triangleCounts[index],
       triangulationFallback: structuredCloneSafe(dto.triangulationFallbacks?.[index] ?? null)
     });
-    await gate.checkpoint("cells", index + 1, dto.cellIds.length);
+    if (isCellVisualCheckpoint(index + 1, dto.cellIds.length)) await gate.checkpoint("cells", index + 1, dto.cellIds.length);
   }
   const edgeCurves = new Map();
   for (let index = 0; index < dto.edgePointOffsets.length - 1; index++) {
     const a = dto.edgeCells[index * 2];
     const b = dto.edgeCells[index * 2 + 1];
     edgeCurves.set(`${a}:${b}`, unpackPointList(dto.edgePoints, dto.edgePointOffsets, index));
-    await gate.checkpoint("edges", index + 1, dto.edgePointOffsets.length - 1);
+    if (isCellVisualCheckpoint(index + 1, dto.edgePointOffsets.length - 1)) await gate.checkpoint("edges", index + 1, dto.edgePointOffsets.length - 1);
   }
   const shoreEdges = new Set();
   for (let index = 0; index < dto.shoreEdges.length; index += 2) {
     shoreEdges.add(`${dto.shoreEdges[index]}:${dto.shoreEdges[index + 1]}`);
-    await gate.checkpoint("shore-edges", index / 2 + 1, dto.shoreEdges.length / 2);
+    if (isCellVisualCheckpoint(index / 2 + 1, dto.shoreEdges.length / 2)) await gate.checkpoint("shore-edges", index / 2 + 1, dto.shoreEdges.length / 2);
   }
   gate.assertCurrent();
   return {...structuredCloneSafe(dto.summary || {}), cells, edgeCurves, shoreEdges};
@@ -312,7 +313,7 @@ function validateCellTriangleSpans(dto) {
 async function validateCellTriangleSpansInChunks(dto, gate) {
   for (let index = 0; index < dto.cellIds.length; index++) {
     assertCellTriangleSpan(dto, index);
-    await gate.checkpoint("cell-visual-triangle-shape", index + 1, dto.cellIds.length);
+    if (isCellVisualCheckpoint(index + 1, dto.cellIds.length)) await gate.checkpoint("cell-visual-triangle-shape", index + 1, dto.cellIds.length);
   }
 }
 
@@ -356,7 +357,7 @@ async function validateOffsetSpecsInChunks(specs, gate, stage) {
       if (current < previous) throw cacheShapeError(spec.label, `${spec.label} offset 非单调`, {index, previous, current});
       previous = current;
       completed++;
-      await gate.checkpoint(stage, completed, total);
+      if (isCellVisualCheckpoint(completed, total)) await gate.checkpoint(stage, completed, total);
     }
   }
   gate.assertCurrent();
@@ -364,6 +365,10 @@ async function validateOffsetSpecsInChunks(specs, gate, stage) {
 
 function assertTypedArray(value, Type, label) {
   if (!(value instanceof Type)) throw cacheShapeError(label, `${label} 必须为 ${Type.name}`);
+}
+
+function isCellVisualCheckpoint(completed, total) {
+  return completed >= total || completed % CELL_VISUAL_CHECKPOINT_INTERVAL === 0;
 }
 
 function assertTypedArrayLength(value, Type, length, label) {

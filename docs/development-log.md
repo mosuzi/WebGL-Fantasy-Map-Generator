@@ -1,5 +1,23 @@
 # 开发历史
 
+## 2026-08-12：第 322 项 Stage C1 网格拓扑 Worker 闭环接受
+
+- `grid.applyWrite / grid.refine` 已移除独立的主线程整图 snapshot transaction 与 legacy renderer reload，改为复用阶段 A～B 的 `executeWorkerMapMutation`：正式 Worker、持久 map-mirror session、兼容 fallback、prepared renderer、绑定校验、原子地图替换、单历史与失败恢复共用一条提交协议。网格 binding 的 map / revision、generation token、锁和来源网格 fingerprint 同时进入普通请求、session 与 fallback；Worker 在替换地图上准备完整 renderer DTO，主线程只做当前性校验、正式 map identity 内的内容交换、GPU 提交和界面同步。
+- 静态门与生产构建通过；`pnpm run regress:grid-topology-refinement` 真实完成 `10004 → 100000`，保持陆地 / 水体连通分量 `6 / 4`、正式 map identity、Worker prepared point transfer 与撤销来源 fingerprint。阶段增量为产品 `2` 文件 `+98 / -48`、工具 `2` 文件 `+92 / -3`，专用浏览器夹具 `202` 行，符合工具不高于产品及夹具不超过 `500` 行的门禁；本阶段委派和等待均为 `0`。
+- 唯一一次正式浏览器目标复验未进入产品：系统 Chrome `151.0.7922.77` 由 Playwright `1.60.0` 启动后在创建 context / page 前以 `exitCode=0` 自行退出，端口和隔离进程随后为 `0`。该结果归类为环境启动失败，不能替代 CDP 验收；按首败止损未重跑或切换到更弱浏览器。C1 因缺正式浏览器证据保持未接受，未建立 checkpoint、未进入 C2，用户地图与 `source/` 未触碰。
+- 后续同配置空白页诊断确认系统 Chrome context / page 已恢复。重复的 `Maximum call stack size exceeded` 经静态调用链定位到 `refineGridTopology` 在构造 100k metadata 时执行 `Math.max(...cells.c.map(...))`：旧主线程和新 Worker 路径都会运行该语句，而 Chrome / Worker 的函数参数上限低于 Node，因此两条架构同名失败。该处改为等价逐项归约并由源码反例门锁定；`pnpm run regress:grid-topology-refinement` 再次完成 `10004 → 100000`，拓扑、迁移、身份和撤销结果不漂移。
+- 修正后正式 Chrome 已真实完成 Worker accepted / committed、输入 / 输出 `212 / 3954` 包、全部 `13` 个 prepared layer、100k 网格、单历史、撤销 / 重做、PNG、GL 与非性能错误面；旧堆栈阻断已闭合。新首败是目标操作耗时 `51.3s` 并记录 `60 / 165 / 114ms` 三条 LongTask。遥测显示主线程 render install prepare 为 `37.8s`，其中 cell visual shape / triangle / cells / edges 的逐项 `await checkpoint` 约执行一百万次并形成数千个极碎让步，而非 Worker compute、包解码或 GPU commit 阻断。
+- cell visual 五个大循环现每 `32` 项或末项才进入异步 checkpoint，仍保留取消 / 过期检查、`6ms` 时间预算与进度报告；10k render preparation 专项通过并新增让步次数上限门。用户随后明确授权唯一一次 C1 性能复验：render install prepare 从 `37.8s` 降为 `2.9s`，操作从 `51.3s` 降为 `16.4s`，Worker accepted / committed、输入 / 输出 `212 / 3954` 包、全部 `13` 个 prepared layer、100k 网格、单历史、撤销 / 重做、PNG、GL 与非性能错误面通过；但正式窗口仍记录 `59 / 164 / 114ms` 三条 LongTask，且 `legacyLoadUnchanged=false`。阶段因此按首败冻结为 BLOCK，不追加诊断或第二轮。
+- 后续裁定确认两处夹具口径：`legacyLoadUnchanged` 原先在 undo / redo 后才读取，而历史恢复按合同会调用 legacy load；改为 forward refine 后立即取样后真实为 `true`。LongTask observer 也把预检 / 基线与正式操作拆窗，原先 `59ms` 明确属于 setup；一次低侵入诊断中的正式操作窗为 `157 / 109 / 55ms`。按授权只做了“完成解码即释放内部节点索引 + 网格替换复用整图生成已验的隐藏 overlay 分批呈现”一组窄试修，静态、Worker graph、render preparation、100k topology Node 和生产构建均通过，但唯一目标复验仍为 `159 / 112ms`，未形成收益；该组试修已完整撤回，不把推测性架构留在产品。
+- 最新正式复验继续通过 Worker accepted / committed、`212 / 3954` 输入 / 输出包、`13` 层 prepared install、100k 结果、单历史、撤销 / 重做、PNG、GL、Loading 与非性能错误面，旧 renderer 全量 load 也已确认为 `0` 次。用户随后明确批准把操作窗的 `159 / 112ms` 两条 LongTask 先登记放过；C1 自动门固定为最多 `2` 条且单条不超过 `160ms`，任何第三条、超限或其它功能 / 原子性 / 错误面失败仍为 BLOCK。该例外只接受 C1 checkpoint，不宣称性能问题已消除，也不向阶段 D 的 CPU renderer / 标签 / picking 或阶段 E 最终终验自动传递。
+- C1 据此接受并准备建立内部 checkpoint。阶段累计产品 `4` 文件 `+109 / -54`、工具 `3` 文件 `+103 / -4`，专用浏览器夹具 `209` 行；第 322 项已接受 checkpoint 为 A、B1、B2、C1，即 `4 / 6`，本阶段委派等待 `0`。下一阶段按权威顺序进入 C2，不继续扩修 C1。
+
+## 2026-08-12：登记第 328 项——大河参与国家与省份划界
+
+- 用户要求省份自动划界和重新生成省份时适度考虑大河走势，并允许具备足够强度、长度和两岸行政条件的大河成为省界，乃至成为国界。新任务登记为第 328 项，排在现有队列末尾；当前固定执行顺序更新为 `322 → 327 → 323 → 324 → 326 → 328`，不得插入当前第 322 项施工分支提前实现。
+- 第 328 项把大河定义为基于 canonical 流量、宽度、等级和连续长度的可审计软阻隔，而非所有河流都不可跨越的硬墙。国家 / 省份扩张仍综合中心、人口、文化、地形、距离、聚落、港口、道路与合法渡河走廊；只有两岸都具备可持续中心和连通腹地时才允许沿河分省或分国，禁止飞地、单 cell 长条、断裂区域和为贴河而反写河网。
+- 范围只覆盖新图政治生成和用户明确触发的国家 / 省份重生成；旧图载入、普通渲染和手工边界不自动重划，锁定行政对象与用户边界优先。最小验收以强河 / 弱河对照、渡河走廊、锁定、无河及 10k / 50k / 100k 真实入口锁定沿河边界、行政连通、确定性、撤销 / 重做和原子回滚。本轮只登记权威范围、顺序和验收，不修改产品、构建、浏览器、用户地图、`source/` 或 Wiki。
+
 ## 2026-08-11：第 322 项 Stage B1 复合派生 Worker 闭环接受
 
 - 高度基础 / 下游 / 全量、气候下游和洋流世界重算不再各自维护主线程提交链，统一复用阶段 A 的 `executeWorkerMapMutation`：正式 Worker 与兼容 fallback 共用不可变输入、map-mirror session、prepared renderer、binding / revision 校验、单条历史、deferred replay、原子 guard 及独立失败恢复。洋流全图替换命令保持 `state.map` 对象稳定并支持 exact undo / redo；公开高度 API 元数据改为异步。产品增量为 `7` 个文件、`+443 / -321`。

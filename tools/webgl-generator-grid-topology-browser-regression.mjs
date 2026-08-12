@@ -12,6 +12,8 @@ const distDir = join(rootDir, "dist", "webgl-generator");
 const host = "127.0.0.1";
 const port = 5458;
 const timeoutMs = 240_000;
+const STAGE_C1_LONG_TASK_LIMIT_MS = 160;
+const STAGE_C1_LONG_TASK_LIMIT_COUNT = 2;
 if (!existsSync(distDir)) throw new Error(`构建产物不存在：${distDir}`);
 
 const playwright = loadPlaywright(sourceDir);
@@ -44,13 +46,43 @@ try {
     }), "generate.newMap");
     const generationInputBefore = document.getElementById("cells-input")?.value || "";
     const api = window.webglGeneratorApi;
+    const app = window.__webglGeneratorApp;
+    const coordinator = app.workerTaskCoordinator;
+    const rendererLoadBefore = app.renderer?.lastLoad || null;
+    const observedLongTasks = [];
+    const longTaskObserver = typeof PerformanceObserver === "function"
+      ? new PerformanceObserver(list => observedLongTasks.push(...list.getEntries().map(entry => ({startTime: entry.startTime, duration: entry.duration}))))
+      : null;
+    longTaskObserver?.observe({entryTypes: ["longtask"]});
+    let workerRun = null;
+    const wrappedCoordinator = Object.freeze({
+      ...coordinator,
+      async run(task, payload, options) {
+        const output = await coordinator.run(task, payload, options);
+        workerRun = {task, action: payload?.action || "", payloadOwnMap: Object.hasOwn(payload || {}, "map"), mode: output?.worker?.mode || "", accepted: output?.worker?.accepted === true, inputPackets: output?.worker?.telemetry?.inputPackets || 0, outputPackets: output?.worker?.telemetry?.outputPackets || 0, targetCells: output?.result?.target?.cells || 0, preparedLayers: Object.keys(output?.preparedRender?.layers || {})};
+        return output;
+      }
+    });
+    app.workerTaskCoordinator = wrappedCoordinator;
     const before = unwrap(api.grid.summary(), "grid.summary.before");
     const beforeHistory = unwrap(api.history.stats(), "history.before");
     const memoryBefore = performance.memory?.usedJSHeapSize ?? null;
     const inspection = unwrap(api.grid.inspectRefinement({targetCells: 100_000}), "grid.inspectRefinement");
     const startedAt = performance.now();
-    const execution = unwrap(await api.grid.refine({targetCells: 100_000, confirm: true, inspectionToken: inspection.inspectionToken}), "grid.refine");
-    const elapsedMs = performance.now() - startedAt;
+    let execution;
+    try {
+      execution = unwrap(await api.grid.refine({targetCells: 100_000, confirm: true, inspectionToken: inspection.inspectionToken}), "grid.refine");
+    } finally {
+      if (app.workerTaskCoordinator === wrappedCoordinator) app.workerTaskCoordinator = coordinator;
+    }
+    const legacyLoadUnchangedAfterRefine = app.renderer?.lastLoad === rendererLoadBefore;
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    observedLongTasks.push(...(longTaskObserver?.takeRecords?.() || []).map(entry => ({startTime: entry.startTime, duration: entry.duration})));
+    longTaskObserver?.disconnect();
+    const endedAt = performance.now();
+    const longTasks = observedLongTasks.filter(entry => entry.startTime >= startedAt && entry.startTime < endedAt);
+    const setupLongTasks = observedLongTasks.filter(entry => entry.startTime < startedAt);
+    const elapsedMs = endedAt - startedAt;
     const after = unwrap(api.grid.summary(), "grid.summary.after");
     const memoryAfter = performance.memory?.usedJSHeapSize ?? null;
     const afterMap = unwrap(api.info.mapSummary(), "info.mapSummary.after");
@@ -67,7 +99,6 @@ try {
     globalThis.gc?.();
     await new Promise(resolve => setTimeout(resolve, 0));
     const memoryAfterRedo = performance.memory?.usedJSHeapSize ?? null;
-    const app = window.__webglGeneratorApp;
     const rendererStats = app?.renderer?.getStats?.() || {};
     const healthErrors = unwrap(api.info.healthEvents({severity: "error", limit: 180}), "info.healthEvents");
     return {
@@ -80,6 +111,14 @@ try {
       },
       before: {cells: before.cells, fingerprint: before.fingerprint, landCells: before.landCells, waterCells: before.waterCells},
       inspection: {target: inspection.target, binding: inspection.binding},
+      workerRun,
+      longTasks,
+      setupLongTasks,
+      preparedInstall: {
+        stages: Object.keys(execution?.worker?.telemetry?.renderInstallStages || {}).length,
+        legacyLoadUnchanged: legacyLoadUnchangedAfterRefine,
+        suspended: app.renderer?.workerRenderInstallSuspended || 0
+      },
       execution,
       elapsedMs,
       memory: {beforeBytes: memoryBefore, afterBytes: memoryAfter, afterRedoImmediateBytes: memoryAfterRedoImmediate, afterRedoBytes: memoryAfterRedo, deltaBytes: memoryBefore !== null && memoryAfter !== null ? memoryAfter - memoryBefore : null},
@@ -108,6 +147,13 @@ try {
   report.healthErrors = diagnostics.healthErrors;
   report.pageErrors = pageErrors;
   report.passed = report.before.cells >= 9_000
+    && report.workerRun?.task === "grid-topology.prepare" && report.workerRun.action === "grid.refine"
+    && report.workerRun.payloadOwnMap === true && report.workerRun.mode === "worker" && report.workerRun.accepted === true
+    && report.workerRun.inputPackets > 0 && report.workerRun.outputPackets > 0 && report.workerRun.targetCells === 100_000
+    && ["cellVisual", "shore", "statePaths", "provincePaths", "political", "politicalDebug", "surface", "line", "picking", "labels", "route", "river", "point"].every(layer => report.workerRun.preparedLayers.includes(layer))
+    && report.preparedInstall.stages > 0 && report.preparedInstall.legacyLoadUnchanged === true && report.preparedInstall.suspended === 0
+    && report.longTasks.length <= STAGE_C1_LONG_TASK_LIMIT_COUNT
+    && report.longTasks.every(entry => entry.duration <= STAGE_C1_LONG_TASK_LIMIT_MS)
     && report.generationInputs.before === "10000"
     && report.generationInputs.afterRefine === "100000"
     && report.generationInputs.afterUndo === "10000"
