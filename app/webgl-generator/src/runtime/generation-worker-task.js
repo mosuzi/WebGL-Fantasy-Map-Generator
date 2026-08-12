@@ -11,7 +11,7 @@ export async function runGenerationWorkerTask(payload = {}, context = {}) {
   if (!options || typeof options !== "object") throw taskError("generation_options_missing", "整图生成缺少生成参数");
   checkpoint(context);
   const heightmap = payload.heightmap || (payload.mapTemplate
-    ? createMapTemplateHeightmap(options, payload.mapTemplate.manifest, payload.mapTemplate.resource)
+    ? createMapTemplateHeightmap(options, payload.mapTemplate.manifest, payload.mapTemplate.resource, payload.mapTemplate.historicalResource)
     : payload.heightmapPayload ? createSampledHeightmapFromPayload(options, payload.heightmapPayload) : null);
   const map = generatePlaceholderMap(options, {
     ...(heightmap ? {heightmap} : {}),

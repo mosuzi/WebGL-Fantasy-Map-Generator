@@ -8,7 +8,7 @@ self.addEventListener("message", event => {
 
   try {
     const heightmap = mapTemplate
-      ? createMapTemplateHeightmap(options, mapTemplate.manifest, mapTemplate.resource)
+      ? createMapTemplateHeightmap(options, mapTemplate.manifest, mapTemplate.resource, mapTemplate.historicalResource)
       : heightmapPayload ? createSampledHeightmapFromPayload(options, heightmapPayload) : null;
     const map = generatePlaceholderMap(options, {
       ...(heightmap ? {heightmap} : {}),

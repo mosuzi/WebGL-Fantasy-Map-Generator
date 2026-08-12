@@ -10,7 +10,7 @@ import {buildMarkers} from "./markers.js";
 import {buildMilitary} from "./military.js";
 import {normalizeOptions} from "./options.js";
 import {buildPack} from "./pack.js";
-import {buildPolitics} from "./politics.js";
+import {applyMapTemplateHistoricalPolitics, buildPolitics} from "./politics.js";
 import {createStageProfile} from "./profile.js";
 import {createRandom, stableHash} from "./random.js";
 import {buildOceanCurrents} from "./ocean-currents.js";
@@ -65,6 +65,7 @@ export function generatePlaceholderMap(inputOptions = {}, overrides = {}) {
   profile.stage("river-names", "按文化命名河流", () => renameHydronymsByCulture(rivers, pack, stageOptions));
   const settlements = profile.stage("settlements-initial", "生成初始城镇", () => buildSettlements(grid, features, null, rivers, random, pack, stageOptions));
   const politics = profile.stage("politics", "生成国家 / 省份 / 区域", () => buildPolitics(grid, features, society, rivers, random, stageOptions, pack));
+  const historicalPreset = profile.stage("map-template-politics", "应用历史场景政治预设", () => applyMapTemplateHistoricalPolitics(grid, society, settlements, politics, pack, stageOptions));
   profile.stage("settlements-finalize", "按政区整理城镇和路线", () => finalizeSettlements(grid, features, politics, settlements, pack, {
     ...stageOptions,
     pruneNeutralSettlements: true,
@@ -108,7 +109,8 @@ export function generatePlaceholderMap(inputOptions = {}, overrides = {}) {
         requestedCells: generationOptions.cellsTarget,
         actualCells: grid.metadata.actualCells,
         protectedAnchors: [...heightmap.source.protectedAnchors],
-        degradedAnchors: [...heightmap.source.degradedAnchors]
+        degradedAnchors: [...heightmap.source.degradedAnchors],
+        humanPreset: historicalPreset ? {...historicalPreset} : null
       } : null
     },
     options: generationOptions,

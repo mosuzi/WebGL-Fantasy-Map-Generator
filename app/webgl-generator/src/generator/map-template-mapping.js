@@ -3,7 +3,7 @@ import {createSampledHeightmap} from "./heightmap.js";
 const SEA_LEVEL = 20;
 const EQUAL_EARTH = Object.freeze({a1: 1.340264, a2: -0.081106, a3: 0.000893, a4: 0.003796});
 
-export function createMapTemplateHeightmap(options, manifest, resource) {
+export function createMapTemplateHeightmap(options, manifest, resource, historicalResource = null) {
   validateInputs(manifest, resource);
   const width = Math.max(1, Math.round(Number(options.graphWidth) || 1));
   const height = Math.max(1, Math.round(Number(options.graphHeight) || 1));
@@ -23,7 +23,14 @@ export function createMapTemplateHeightmap(options, manifest, resource) {
     }
   }
   const anchors = protectTemplateAnchors(samples, regionMask, width, height, manifest, options.cellsTarget);
-  const semanticChecksum = checksumTemplateEvidence(manifest, resource.metadata.sha256, options, samples, hydrology, regionMask);
+  const semanticChecksum = checksumTemplateEvidence(
+    manifest,
+    `${resource.metadata.sha256}|${historicalResource?.metadata?.sha256 || "geographic"}`,
+    options,
+    samples,
+    hydrology,
+    regionMask
+  );
   const source = {
     template: `map-template:${manifest.id}`,
     name: manifest.name,
@@ -45,6 +52,11 @@ export function createMapTemplateHeightmap(options, manifest, resource) {
     protectedAnchors: anchors.protected,
     degradedAnchors: anchors.degraded
   };
+  if (historicalResource) {
+    source.politicalResourceId = historicalResource.id;
+    source.politicalResourceChecksum = historicalResource.metadata.sha256;
+    source.snapshotYear = historicalResource.metadata.snapshotYear;
+  }
   const heightmap = createSampledHeightmap(options, {
     ...source,
     sampleHeight: point => samples[sampleIndex(point, width, height, options)]
@@ -52,7 +64,17 @@ export function createMapTemplateHeightmap(options, manifest, resource) {
   Object.assign(heightmap.source, source);
   Object.defineProperties(heightmap, {
     sampleTemplateHydrology: {value: point => hydrology[sampleIndex(point, width, height, options)], enumerable: false},
-    sampleTemplateRegion: {value: point => regionMask[sampleIndex(point, width, height, options)], enumerable: false}
+    sampleTemplateRegion: {value: point => regionMask[sampleIndex(point, width, height, options)], enumerable: false},
+    sampleTemplatePolitical: {
+      value: historicalResource ? point => sampleHistorical(historicalResource, unprojectTemplatePoint(
+        manifest,
+        (Number(point?.[0]) || 0) / Math.max(1, Number(options.graphWidth) || width) * width,
+        (Number(point?.[1]) || 0) / Math.max(1, Number(options.graphHeight) || height) * height,
+        width,
+        height
+      )) : () => 0,
+      enumerable: false
+    }
   });
   return heightmap;
 }
@@ -62,23 +84,30 @@ export function applyMapTemplateGridEvidence(grid, heightmap) {
   const count = grid.points.length;
   const hydrology = new Uint8Array(count);
   const regionMask = new Uint8Array(count);
+  const political = new Uint8Array(count);
   let hydrologyCells = 0;
   let regionCells = 0;
   for (let cell = 0; cell < count; cell++) {
     const point = grid.points[cell];
     hydrology[cell] = heightmap.sampleTemplateHydrology(point) ? 1 : 0;
     regionMask[cell] = heightmap.sampleTemplateRegion(point) ? 1 : 0;
+    political[cell] = heightmap.sampleTemplatePolitical(point) || 0;
     hydrologyCells += hydrology[cell];
     regionCells += regionMask[cell];
   }
   grid.cells.templateHydrology = hydrology;
   grid.cells.templateRegion = regionMask;
+  grid.cells.templatePolitical = political;
   grid.metadata.mapTemplate = {
     id: heightmap.source.templateId,
     version: heightmap.source.templateVersion,
     semanticChecksum: heightmap.source.semanticChecksum,
     hydrologyCells,
-    regionCells
+    regionCells,
+    politicalCells: political.reduce((sum, value) => sum + (value ? 1 : 0), 0),
+    politicalResourceId: heightmap.source.politicalResourceId || null,
+    politicalResourceChecksum: heightmap.source.politicalResourceChecksum || null,
+    snapshotYear: heightmap.source.snapshotYear || null
   };
   return grid.metadata.mapTemplate;
 }
@@ -115,6 +144,15 @@ function samplePhysical(resource, longitude, latitude) {
   const y = clamp(Math.floor((90 - latitude) / 180 * resource.height), 0, resource.height - 1);
   const index = y * resource.width + x;
   return {index, elevation: resource.elevations[index], land: resource.landMask[index] === 1};
+}
+
+function sampleHistorical(resource, coordinate) {
+  if (!coordinate) return 0;
+  const bounds = resource.metadata.sourceBounds;
+  if (coordinate.longitude < bounds.west || coordinate.longitude > bounds.east || coordinate.latitude < bounds.south || coordinate.latitude > bounds.north) return 0;
+  const x = clamp(Math.floor((coordinate.longitude - bounds.west) / (bounds.east - bounds.west) * resource.width), 0, resource.width - 1);
+  const y = clamp(Math.floor((bounds.north - coordinate.latitude) / (bounds.north - bounds.south) * resource.height), 0, resource.height - 1);
+  return resource.mask[y * resource.width + x];
 }
 
 function encodeHeight(elevation, land, river) {

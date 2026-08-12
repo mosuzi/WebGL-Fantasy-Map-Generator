@@ -62,6 +62,124 @@ export function buildPolitics(grid, features, society, rivers, random, options, 
   };
 }
 
+export function applyMapTemplateHistoricalPolitics(grid, society, settlements, politics, pack, options = {}) {
+  const template = grid.metadata?.mapTemplate;
+  const political = grid.cells?.templatePolitical;
+  if (!template?.politicalResourceId || !political?.some?.(Boolean) || !pack?.cells?.i?.length) return null;
+  const definition = historicalPresetDefinition(template.id);
+  if (!definition) return null;
+
+  const coreBurg = selectHistoricalCapital(pack, political, definition.coreClasses);
+  if (!coreBurg) throw new Error(`${definition.name}缺少历史疆域内的首都候选`);
+  const selectedCapitals = [coreBurg.i];
+  const coreStateId = positiveStateId(coreBurg.state, 1);
+  let clientStateId = 0;
+  let clientBurg = null;
+  if (definition.clientClasses.length) {
+    clientBurg = selectHistoricalCapital(pack, political, definition.clientClasses, new Set([coreBurg.i]));
+    if (clientBurg) {
+      clientStateId = positiveStateId(clientBurg.state, nextAvailableStateId(pack.states, new Set([coreStateId])));
+      if (clientStateId === coreStateId) clientStateId = nextAvailableStateId(pack.states, new Set([coreStateId]));
+      selectedCapitals.push(clientBurg.i);
+    }
+  }
+
+  const previousStates = pack.states || [];
+  const states = [{id: 0, i: 0, name: "中立", center: 0, culture: 0, type: "Neutral", expansionism: 0}];
+  states[coreStateId] = createHistoricalState(previousStates[coreStateId], coreStateId, coreBurg, pack.cells.g[coreBurg.cell], definition.name, definition.formName);
+  if (clientStateId) states[clientStateId] = createHistoricalState(previousStates[clientStateId], clientStateId, clientBurg, pack.cells.g[clientBurg.cell], definition.clientName, "属邦");
+  pack.states = states;
+  politics.states = states;
+
+  let coreCells = 0;
+  let clientCells = 0;
+  for (const cell of pack.cells.i) {
+    if (pack.cells.h[cell] < 20) {
+      pack.cells.state[cell] = 0;
+      continue;
+    }
+    const value = political[pack.cells.g[cell]] || 0;
+    if (definition.coreClasses.includes(value)) {
+      pack.cells.state[cell] = coreStateId;
+      coreCells++;
+    } else if (clientStateId && definition.clientClasses.includes(value)) {
+      pack.cells.state[cell] = clientStateId;
+      clientCells++;
+    } else pack.cells.state[cell] = 0;
+  }
+  if (!coreCells) throw new Error(`${definition.name}没有映射到有效陆地 cell`);
+
+  applyCapitalSelection(pack, settlements, new Set(selectedCapitals));
+  syncBurgStates(pack);
+  collectStateStatistics(pack, states);
+  findStateNeighbors(pack, states);
+  assignStateColors(states);
+  grid.cells.state = mirrorPackStateToGrid(grid, pack);
+
+  const nameGenerator = createChineseNameGenerator(`${options.seed}|${template.id}|${template.snapshotYear}`, {namebases: options.namebases});
+  const provinces = buildPackProvinces(pack, society, createRandom(`${options.seed}|${template.id}|provinces`), options, nameGenerator);
+  grid.cells.province = mirrorPackProvinceToGrid(grid, pack);
+  politics.provinces = provinces;
+  politics.metadata = {
+    ...createPackPoliticsMetadata(states, provinces, politics.regions),
+    historicalPreset: {
+      id: `${template.id}-human-v1`,
+      snapshotYear: template.snapshotYear,
+      politicalResourceId: template.politicalResourceId,
+      politicalResourceChecksum: template.politicalResourceChecksum,
+      coreStateId,
+      clientStateId: clientStateId || null,
+      coreCells,
+      clientCells
+    }
+  };
+  return politics.metadata.historicalPreset;
+}
+
+function historicalPresetDefinition(templateId) {
+  if (templateId === "roman-empire-117") return {name: "罗马", formName: "帝国", coreClasses: [1, 2], clientClasses: [3], clientName: "罗马"};
+  if (templateId === "holy-roman-empire-1789") return {name: "神圣罗马", formName: "帝国", coreClasses: [1], clientClasses: [], clientName: ""};
+  return null;
+}
+
+function selectHistoricalCapital(pack, political, classes, excluded = new Set()) {
+  return (pack.burgs || [])
+    .filter(burg => burg?.i && !burg.removed && !excluded.has(burg.i) && classes.includes(political[pack.cells.g[burg.cell]] || 0))
+    .sort((left, right) => Number(right.population || 0) - Number(left.population || 0) || left.i - right.i)[0] || null;
+}
+
+function createHistoricalState(source, id, burg, gridCenter, name, formName) {
+  return {
+    ...(source || {}),
+    id,
+    i: id,
+    name,
+    form: "Empire",
+    formName,
+    fullName: `${name}${formName}`,
+    center: burg.cell,
+    gridCenter,
+    capital: burg.i,
+    culture: burg.culture,
+    religion: burg.religion || 0,
+    type: source?.type || "Generic",
+    expansionism: source?.expansionism || 1,
+    removed: false,
+    provinces: []
+  };
+}
+
+function positiveStateId(value, fallback) {
+  const id = Number(value);
+  return Number.isInteger(id) && id > 0 ? id : fallback;
+}
+
+function nextAvailableStateId(states = [], excluded = new Set()) {
+  let id = 1;
+  while (states[id] || excluded.has(id)) id++;
+  return id;
+}
+
 export function regeneratePackStatesAndProvinces(grid, society, options, pack, settlements, {salt = 0} = {}) {
   if (!pack?.cells?.i?.length || !pack?.burgs?.length) return null;
   const profile = createStageProfile();

@@ -65,10 +65,12 @@ const workerResult = await runGenerationWorkerTask({
   mapTemplate: {manifest: china, resource}
 }, {checkpoint: () => true});
 assert.equal(workerResult.map.metadata.mapTemplate.id, "china");
+assert.equal(workerResult.map.metadata.mapTemplate.humanPreset, null);
 assert.equal(workerResult.map.metadata.mapTemplate.sourceChecksum, metadata.sha256);
 assert.equal(workerResult.map.mapCoordinates.latN, china.bounds.north);
 assert.equal(workerResult.map.mapCoordinates.latS, china.bounds.south);
 assert.ok(workerResult.map.grid.metadata.mapTemplate.hydrologyCells > 0);
+assert.equal(workerResult.map.grid.metadata.mapTemplate.politicalCells, 0);
 assert.ok(workerResult.map.rivers.metadata.rivers > 0);
 
 console.log(JSON.stringify({
