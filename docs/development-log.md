@@ -1,5 +1,12 @@
 # 开发历史
 
+## 2026-08-13：第 322 项 Stage C3d 军事策略 Worker 闭环接受
+
+- `edit.military.setRatios` 与军事面板兵种比例入口已接入 `military-policy.compute` 持久 map-mirror session。Worker 在锁定军团保护下重建部署，返回受控 military / state patch 与 point / line / labels / picking prepared DTO；主线程只做 binding、写集、历史和 renderer 原子提交。军团状态、驻地、基地与战报等局部命令不属于本轮复杂策略计算，保持既有同步路径。
+- 军事策略任务新增 Worker 历史模式，撤销 / 重做先在镜像应用目标 patch并准备四层画面，再由主线程移动正式历史栈。专项 Node 的 10k 正例锁住 `17` 条写集、锁定军团、legacy / fallback 同源、对象身份与镜像别名、prepared 四层和历史往返；100k 数据层约 `1.42s`。通用 Worker 协议、registry、API stability / suite / edit coverage 和生产构建通过。
+- 首次 Chrome 门唯一失败是成功阶段把“军事策略 Worker 补丁已准备”写入普通 Loading；任务对用户可见的成功、取消与错误消息现统一使用自然中文，内部 task / code 保持不变。唯一目标复验随后通过正式应用、撤销、重做 `3` 次运行与 `3` 次提交，后两次复用同一 session；数据精确往返、国家 / 军事镜像别名、状态对象身份、LongTask、非性能 health、应用 console、page、WebGL、Loading 与技术词泄漏均为 `0`。
+- C3d 产品 `3` 文件 `+208 / -33`，测试 `3` 文件 `+158 / -5`，专用浏览器夹具 `113` 行，委派等待为 `0`。阶段 C 已闭合并转入阶段 D；用户地图、`source/` 与 Wiki 未改，本 checkpoint 不合入 `main`。
+
 ## 2026-08-13：第 322 项 Stage C3c 路线 / 城市寻路 Worker 闭环接受
 
 - 路线创建 / 改线、城市迁移关联路线重寻及两类历史恢复统一接入 `route-path.compute` 持久 map-mirror session。Worker 负责预检、寻路、正式镜像写入、历史前后 patch 和 route / point / labels / picking 准备；主线程只校验 binding、提交原命令与历史栈、安装 prepared renderer 并同步面板。路线面板与公开 inspect API 使用异步 latest-wins，普通用户文案不暴露 Worker、线程、会话、消息包或浏览器存储概念。

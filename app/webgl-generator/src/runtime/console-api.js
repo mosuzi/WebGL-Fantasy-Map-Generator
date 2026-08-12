@@ -747,7 +747,7 @@ export function buildMethodMetadata() {
       "diplomacy.inspectOverlordChange": {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
       "diplomacy.changeOverlord": {stable: "draft", mutates: "diplomacy-and-war-context", undoable: true, async: false, requiresConfirm: true},
       "military.inspectRatios": {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
-      "military.setRatios": {stable: "draft", mutates: "military", undoable: true, async: false, requiresConfirm: false},
+      "military.setRatios": {stable: "draft", mutates: "military", undoable: true, async: true, requiresConfirm: false},
       "military.inspectStatus": {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
       "military.setStatus": {stable: "draft", mutates: "military", undoable: true, async: false, requiresConfirm: false},
       "military.setStatusBatch": {stable: "draft", mutates: "military", undoable: true, async: false, requiresConfirm: false},

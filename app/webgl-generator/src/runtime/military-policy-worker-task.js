@@ -1,5 +1,6 @@
 import {normalizeUnitRatios} from "../generator/military.js";
-import {createDomainPatch} from "./domain-patch.js";
+import {executeRenderPreparationTask} from "../renderer/render-preparation.js";
+import {createDomainPatch, createDomainPatchCommand} from "./domain-patch.js";
 import {createSetMilitaryRatiosCommand} from "./military-edit-commands.js";
 import {collectWorkerTransferables} from "./worker-snapshot.js";
 
@@ -12,24 +13,25 @@ const MILITARY_ROOTS = Object.freeze(["military", "pack.military"]);
 export async function runMilitaryPolicyWorkerTask(payload = {}, context = {}) {
   const map = payload.map;
   if (!map?.pack?.cells || !Array.isArray(map?.pack?.states)) {
-    throw taskError("military-policy-worker-map-missing", "军事策略 Worker 缺少完整地图快照");
+    throw taskError("military-policy-worker-map-missing", "军事策略计算缺少完整地图资料");
   }
-  const request = normalizeRequest(payload.request);
   const binding = normalizeBinding(payload.binding);
   assertEnvelopeBinding(binding, context.binding);
+  if (payload.historyTransition) return runMilitaryPolicyHistoryTransition(map, binding, payload, context);
+  const request = normalizeRequest(payload.request);
   await taskCheckpoint(context, "validate");
 
   const state = map.pack.states[request.stateId] || map.politics?.states?.[request.stateId];
   if (!state?.i || state.removed) throw taskError("military-policy-worker-state-missing", `找不到国家 #${request.stateId}`);
   const sourceFingerprint = fingerprintMilitaryPolicySource(map, request);
   if (payload.sourceFingerprint !== undefined && String(payload.sourceFingerprint) !== sourceFingerprint) {
-    throw taskError("military-policy-worker-source-stale", "军事策略 Worker 的来源快照已过期");
+    throw taskError("military-policy-worker-source-stale", "军事策略来源已过期");
   }
   if (request.confirm !== true) {
     throw taskError("confirmation_required", "兵种比例会按正式保锁语义重建军事部署，需要 confirm: true");
   }
 
-  const command = createSetMilitaryRatiosCommand(request.stateId, request.ratios, {label: request.label || "Worker 调整兵种比例"});
+  const command = createSetMilitaryRatiosCommand(request.stateId, request.ratios, {label: request.label || "调整兵种比例"});
   const plan = deepFreeze({
     version: MILITARY_POLICY_WORKER_PLAN_VERSION,
     binding: structuredClone(binding),
@@ -53,7 +55,10 @@ export async function runMilitaryPolicyWorkerTask(payload = {}, context = {}) {
     const patch = structuredClone(createDomainPatch("military-policy", changedPaths, map));
     failAt(payload.faultAt, "after-patch");
     await taskCheckpoint(context, "patch");
-    report(context, "complete", "军事策略 Worker 补丁已准备", 1);
+    const preparedRender = payload.render
+      ? await executeRenderPreparationTask({...payload.render, map}, context)
+      : null;
+    report(context, "complete", "军事策略结果已准备", 1);
     return {
       kind: "military-policy",
       binding,
@@ -67,6 +72,7 @@ export async function runMilitaryPolicyWorkerTask(payload = {}, context = {}) {
         changedPaths: [...patch.writeSet]
       },
       patch,
+      preparedRender,
       refresh: {
         derived: ["point-layers", "line-layers", "object-index", "labels", "object-panels"],
         picking: "objects"
@@ -84,9 +90,52 @@ export async function runMilitaryPolicyWorkerTask(payload = {}, context = {}) {
   }
 }
 
+async function runMilitaryPolicyHistoryTransition(map, binding, payload, context) {
+  const transition = payload.historyTransition;
+  const action = transition?.action === "redo" ? "redo" : transition?.action === "undo" ? "undo" : "";
+  if (!action) throw taskError("military-policy-worker-history-action-invalid", "军事策略历史动作无效");
+  const request = normalizeRequest(transition.request);
+  const command = createDomainPatchCommand({
+    patch: transition.patch,
+    policy: getMilitaryPolicyWorkerPatchPolicy(map, transition.patch),
+    label: `军事策略${action === "undo" ? "撤销" : "重做"}`,
+    historyDomain: "military-policy",
+    effects: {},
+    result: null
+  });
+  let applied = false;
+  try {
+    command.apply({map});
+    applied = true;
+    await taskCheckpoint(context, `history-${action}`);
+    const preparedRender = payload.render
+      ? await executeRenderPreparationTask({...payload.render, map}, context)
+      : null;
+    report(context, "complete", `军事策略${action === "undo" ? "撤销" : "重做"}画面已准备`, 1);
+    return {
+      kind: "military-policy-history",
+      binding,
+      history: {action, stateId: request.stateId},
+      result: {executed: true, action, label: String(transition.label || "调整兵种比例")},
+      preparedRender,
+      refresh: militaryPolicyRefresh()
+    };
+  } catch (error) {
+    if (applied) command.revert({map});
+    throw error;
+  }
+}
+
+function militaryPolicyRefresh() {
+  return {
+    derived: ["point-layers", "line-layers", "object-index", "labels", "object-panels"],
+    picking: "objects"
+  };
+}
+
 export function getMilitaryPolicyWorkerPatchPolicy(map, patch) {
   if (!patch || !Array.isArray(patch.writeSet)) {
-    throw taskError("military-policy-worker-policy-patch-missing", "军事策略 Worker 主线程写集策略缺少待验证补丁");
+    throw taskError("military-policy-worker-policy-patch-missing", "军事策略结果缺少待验证变更");
   }
   for (const path of patch.writeSet) assertMilitaryPolicyPatchPath(map, path);
   return {
@@ -109,7 +158,10 @@ export function fingerprintMilitaryPolicySource(map, request = {}) {
 }
 
 export function collectMilitaryPolicyWorkerTransferables(result) {
-  return collectWorkerTransferables(result?.patch || result);
+  return collectWorkerTransferables({
+    patch: result?.patch || null,
+    preparedRender: result?.preparedRender || null
+  });
 }
 
 function emptyResult(binding, plan, sourceFingerprint) {
@@ -127,6 +179,7 @@ function emptyResult(binding, plan, sourceFingerprint) {
       changedPaths: []
     },
     patch: createDomainPatch("military-policy", [], {}),
+    preparedRender: null,
     refresh: {derived: [], picking: "none"}
   };
 }
@@ -209,21 +262,21 @@ function assertMilitaryPolicyPatchPath(map, path) {
   const value = String(path || "");
   if (MILITARY_ROOTS.includes(value)) return;
   const match = /^(pack|politics)\.states\.(\d+)\.(alert|military|militaryPolicy|militaryDiagnostics)$/.exec(value);
-  if (!match) throw taskError("military-policy-worker-policy-path-invalid", `军事策略 Worker 补丁越过领域写集：${value}`);
+  if (!match) throw taskError("military-policy-worker-policy-path-invalid", `军事策略结果越过允许范围：${value}`);
   const states = match[1] === "pack" ? map?.pack?.states : map?.politics?.states;
   const index = Number(match[2]);
   if (!Array.isArray(states) || index < 0 || index >= states.length || !states[index]) {
-    throw taskError("military-policy-worker-policy-index-invalid", `军事策略 Worker 补丁索引越界：${value}`);
+    throw taskError("military-policy-worker-policy-index-invalid", `军事策略结果索引越界：${value}`);
   }
 }
 
 function normalizeRequest(value) {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
-    throw taskError("military-policy-worker-request-invalid", "军事策略 Worker request 必须是对象");
+    throw taskError("military-policy-worker-request-invalid", "军事策略请求必须是对象");
   }
   const stateId = Number(value.stateId ?? value.id);
   if (!Number.isSafeInteger(stateId) || stateId <= 0) {
-    throw taskError("military-policy-worker-state-invalid", "军事策略 Worker stateId 必须是正整数");
+    throw taskError("military-policy-worker-state-invalid", "军事策略国家 ID 必须是正整数");
   }
   return {
     stateId,
@@ -241,7 +294,7 @@ function publicRequest(request) {
 
 function normalizeBinding(value) {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
-    throw taskError("military-policy-worker-binding-missing", "军事策略 Worker 缺少任务绑定");
+    throw taskError("military-policy-worker-binding-missing", "军事策略请求缺少地图绑定");
   }
   const result = {...structuredClone(value)};
   result.mapRevision = Number(value.mapRevision);
@@ -254,7 +307,7 @@ function normalizeBinding(value) {
     || !Number.isSafeInteger(result.operationId) || result.operationId < 0
     || value.mapIdentity === undefined || value.mapIdentity === null
     || !result.lockFingerprint || !result.operationName) {
-    throw taskError("military-policy-worker-binding-invalid", "军事策略 Worker 绑定缺少完整 identity / revision / token / operation / lock 指纹");
+    throw taskError("military-policy-worker-binding-invalid", "军事策略请求的地图绑定不完整");
   }
   return result;
 }
@@ -264,7 +317,7 @@ function assertEnvelopeBinding(binding, envelope) {
   for (const key of ["mapIdentity", "mapRevision", "generationToken", "lockFingerprint", "operationId", "operationName"]) {
     if (!Object.prototype.hasOwnProperty.call(envelope, key)) continue;
     if (String(envelope[key] ?? "") !== String(binding[key] ?? "")) {
-      throw taskError("military-policy-worker-binding-stale", `军事策略 Worker 绑定的 ${key} 已过期`);
+      throw taskError("military-policy-worker-binding-stale", `军事策略请求的 ${key} 已过期`);
     }
   }
 }
@@ -331,9 +384,9 @@ function deepFreeze(value, seen = new WeakSet()) {
 }
 
 async function taskCheckpoint(context, stage) {
-  if (context.signal?.aborted) throw abortError(context.signal.reason || `军事策略 Worker 已在 ${stage} 取消`);
+  if (context.signal?.aborted) throw abortError(context.signal.reason || `军事策略计算已在 ${stage} 取消`);
   const result = await context.checkpoint?.({phase: "military-policy-worker", stage});
-  if (result === false || context.signal?.aborted) throw abortError(context.signal?.reason || `军事策略 Worker 已在 ${stage} 取消`);
+  if (result === false || context.signal?.aborted) throw abortError(context.signal?.reason || `军事策略计算已在 ${stage} 取消`);
 }
 
 function report(context, stage, message, progress) {
@@ -341,7 +394,7 @@ function report(context, stage, message, progress) {
 }
 
 function failAt(requested, stage) {
-  if (String(requested || "") === stage) throw taskError("military-policy-worker-fault", `军事策略 Worker 故障注入：${stage}`);
+  if (String(requested || "") === stage) throw taskError("military-policy-worker-fault", `军事策略故障注入：${stage}`);
 }
 
 function abortError(message) {

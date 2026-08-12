@@ -234,6 +234,10 @@ import {
   assertRoutePathWorkerPlan,
   ROUTE_PATH_WORKER_TASK
 } from "./route-path-worker-task.js";
+import {
+  getMilitaryPolicyWorkerPatchPolicy,
+  MILITARY_POLICY_WORKER_TASK
+} from "./military-policy-worker-task.js";
 import {SelectionStore} from "./selection-store.js";
 import {decideSelectionPanelRoute, SELECTION_PANEL_BINDINGS, SELECTION_PANEL_ROUTE} from "./selection-panel-policy.js";
 import {installKeyboardShortcuts} from "./keyboard-shortcuts.js";
@@ -1875,17 +1879,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     onHighlight: objects => setPersistentObjectHighlights(state, documentRef, objects),
     onClearHighlights: () => clearPersistentObjectHighlights(state, documentRef),
     getHighlightCount: () => persistentObjectHighlightCount(state),
-    onRatiosApply: (stateId, ratios) => {
-      const command = createSetMilitaryRatiosCommand(stateId, ratios);
-      const result = executeEditCommand(state, documentRef, command, {context: {map: state.map}});
-      if (result.executed) {
-        markDerivedFresh(state.map, ["military"]);
-        refreshGenerationSummary(state.map);
-        appendGenerationLog(state.map, `update military ratios: state=${stateId}, regiments=${state.map.military?.metadata?.regiments || 0}`);
-      }
-      updateRuntimePanel(documentRef, state);
-      updateEditingInteractionLock(state, documentRef);
-    },
+    onRatiosApply: (stateId, ratios) => state.runtimeActions.edit.military.setRatios(stateId, ratios),
     onStatusApply: (target, status) => {
       const command = createSetMilitaryStatusCommand(target, status);
       const result = executeEditCommand(state, documentRef, command, {context: {map: state.map}});
@@ -3331,7 +3325,11 @@ function createRuntimeActions(state, documentRef, options = {}) {
       },
       military: {
         inspectRatios: (stateId, ratios) => inspectMilitaryRatiosViaApi(state, stateId, ratios),
-        setRatios: (stateId, ratios, options = {}) => setMilitaryRatiosViaApi(state, documentRef, stateId, ratios, options),
+        setRatios: (stateId, ratios, options = {}) => operation.run(
+          "edit.military.setRatios",
+          context => setMilitaryRatiosViaApi(state, documentRef, stateId, ratios, options, context),
+          {message: "正在调整兵种比例并重建军事部署"}
+        ),
         inspectStatus: (targets, status) => inspectMilitaryStatusViaApi(state, targets, status),
         setStatus: (target, status, options = {}) => setMilitaryStatusViaApi(state, documentRef, target, status, options),
         setStatusBatch: (targets, status, options = {}) => setMilitaryStatusBatchViaApi(state, documentRef, targets, status, options),
@@ -7630,6 +7628,14 @@ export function executeHistoryCommand(state, documentRef, action, options = {}) 
       {message: `正在${verb}${pendingCommand.workerHistory.label}结果`}
     );
   }
+  if (pendingCommand?.workerHistory?.task === MILITARY_POLICY_WORKER_TASK) {
+    const verb = action === "undo" ? "撤销" : "重做";
+    return state.runtimeOperation.run(
+      `history.${action}`,
+      operation => executeMilitaryPolicyWorkerHistory(state, documentRef, action, pendingCommand, operation),
+      {message: `正在${verb}${pendingCommand.workerHistory.label}结果`}
+    );
+  }
   if (pendingCommand?.workerHistory?.task === ROUTE_PATH_WORKER_TASK) {
     const verb = action === "undo" ? "撤销" : "重做";
     return state.runtimeOperation.run(
@@ -7826,6 +7832,54 @@ async function executePopulationWorkerHistory(state, documentRef, action, comman
       refreshGenerationSummary(state.map);
       updatePopulationPanel(state);
       updateRuntimePanel(documentRef, state);
+      setFileOperationStatus(documentRef, `已${verb}${metadata.label}。`);
+    }
+  }, operation);
+}
+
+async function executeMilitaryPolicyWorkerHistory(state, documentRef, action, command, operation) {
+  const metadata = command.workerHistory;
+  const patch = command.getHistoryPatch(action);
+  const verb = action === "undo" ? "撤销" : "重做";
+  return executeWorkerMapMutation(state, documentRef, {
+    task: metadata.task,
+    targetKind: "military-policy",
+    userLabel: `${verb}${metadata.label}结果`,
+    payload: {historyTransition: {action, label: command.label, request: metadata.request, patch}},
+    includeBindingInPayload: true,
+    renderLayers: metadata.renderLayers,
+    effects: command.effects,
+    assertOutput: ({state: currentState, sourceMap, output}) => {
+      if (currentState.map !== sourceMap || currentState.editHistory.peek(action) !== command) {
+        const error = new Error(`${verb}${metadata.label}结果已被新的地图状态取代`);
+        error.code = "operation_obsolete";
+        throw error;
+      }
+      if (output?.kind !== "military-policy-history"
+        || output?.history?.action !== action
+        || Number(output?.history?.stateId) !== Number(metadata.request.stateId)) {
+        const error = new Error(`${verb}${metadata.label}准备结果结构无效`);
+        error.code = "military-policy-worker-history-result-invalid";
+        throw error;
+      }
+    },
+    createCommand: () => command,
+    commitCommand: ({state: currentState}) => {
+      const moved = action === "undo"
+        ? currentState.editHistory.undo({map: currentState.map})
+        : currentState.editHistory.redo({map: currentState.map});
+      if (moved !== command) throw new Error(`${verb}${metadata.label}时历史栈已变化`);
+    },
+    rollbackCommand: ({map}) => {
+      if (action === "undo") command.apply({map});
+      else command.revert({map});
+      refreshGenerationSummary(map);
+    },
+    afterUiRefresh: () => {
+      refreshGenerationSummary(state.map);
+      updateMilitaryPanel(state);
+      updateRuntimePanel(documentRef, state);
+      updateEditingInteractionLock(state, documentRef);
       setFileOperationStatus(documentRef, `已${verb}${metadata.label}。`);
     }
   }, operation);
@@ -10243,14 +10297,82 @@ function setDiplomacyRelationViaApi(state, documentRef, subjectId, objectId, rel
   return editApiResult(state, result);
 }
 
-function setMilitaryRatiosViaApi(state, documentRef, stateId, ratios, options = {}) {
+function setMilitaryRatiosViaApi(state, documentRef, stateId, ratios, options = {}, operationContext = null) {
   const id = normalizeApiInteger(stateId, "国家 ID");
   if (!ratios || typeof ratios !== "object" || Array.isArray(ratios)) throw new Error("兵种比例必须是对象");
   assertRemainingRuleExecution(state, REMAINING_RULE_ACTION.MILITARY_RATIOS, {
     stateId: id,
     ratios: normalizeRuleInspectionInput(ratios)
   }, options);
-  return executeMilitaryCommandViaApi(state, documentRef, createSetMilitaryRatiosCommand(id, ratios), `update military ratios: state=${id}`);
+  const command = createSetMilitaryRatiosCommand(id, ratios);
+  if (!operationContext) return executeMilitaryCommandViaApi(state, documentRef, command, `update military ratios: state=${id}`);
+  return applyMilitaryPolicyMutationViaWorker(state, documentRef, {
+    request: {stateId: id, ratios, confirm: true, label: command.label},
+    command,
+    operationContext,
+    userLabel: `国家 #${id} 兵种比例`
+  });
+}
+
+async function applyMilitaryPolicyMutationViaWorker(state, documentRef, {request, command, operationContext, userLabel}) {
+  const renderLayers = ["point", "line", "labels", "picking"];
+  return executeWorkerMapMutation(state, documentRef, {
+    task: MILITARY_POLICY_WORKER_TASK,
+    targetKind: "military-policy",
+    userLabel,
+    payload: {request},
+    includeBindingInPayload: true,
+    renderLayers,
+    effects: command.effects,
+    assertOutput: ({state: currentState, sourceMap, output}) => {
+      if (currentState.map !== sourceMap) {
+        const error = new Error(`${userLabel}准备结果已被新的地图状态取代`);
+        error.code = "operation_obsolete";
+        throw error;
+      }
+      if (output?.kind !== "military-policy"
+        || typeof output?.plan?.sourceFingerprint !== "string"
+        || !output.plan.sourceFingerprint
+        || Number(output?.plan?.request?.stateId) !== Number(request.stateId)) {
+        const error = new Error(`${userLabel}准备结果结构无效`);
+        error.code = "military-policy-worker-result-invalid";
+        throw error;
+      }
+    },
+    createCommand: ({output, result, effects}) => attachMilitaryPolicyWorkerHistory(createDomainPatchCommand({
+      patch: output.patch,
+      policy: getMilitaryPolicyWorkerPatchPolicy(state.map, output.patch),
+      label: command.label,
+      historyDomain: "military-policy",
+      effects,
+      result
+    }), {request, label: userLabel, renderLayers}),
+    rollbackCommand: ({command: committedCommand, map}) => {
+      committedCommand.revert({map});
+      refreshGenerationSummary(map);
+    },
+    afterUiRefresh: ({result}) => {
+      markDerivedFresh(state.map, ["military"]);
+      refreshGenerationSummary(state.map);
+      appendGenerationLog(state.map, `update military ratios: state=${request.stateId}, regiments=${state.map.military?.metadata?.regiments || 0}`);
+      updateMilitaryPanel(state);
+      updateRuntimePanel(documentRef, state);
+      updateEditingInteractionLock(state, documentRef);
+      setFileOperationStatus(documentRef, result?.executed === false ? "兵种比例没有变化。" : `已调整国家 #${request.stateId} 的兵种比例。`);
+    }
+  }, operationContext);
+}
+
+function attachMilitaryPolicyWorkerHistory(command, metadata) {
+  Object.defineProperty(command, "workerHistory", {
+    value: Object.freeze({
+      task: MILITARY_POLICY_WORKER_TASK,
+      label: metadata.label,
+      request: structuredClone(metadata.request),
+      renderLayers: Object.freeze([...metadata.renderLayers])
+    })
+  });
+  return command;
 }
 
 function setMilitaryStatusViaApi(state, documentRef, target, status, options = {}) {

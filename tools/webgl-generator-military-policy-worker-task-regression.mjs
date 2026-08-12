@@ -33,7 +33,7 @@ async function verifyTenThousandCells() {
 
   const shadow = structuredClone(base);
   const output = await runMilitaryPolicyWorkerTask(
-    {map: shadow, request, binding, sourceFingerprint: fingerprintMilitaryPolicySource(shadow, request)},
+    {map: shadow, request, binding, sourceFingerprint: fingerprintMilitaryPolicySource(shadow, request), render: createRenderRequest(binding)},
     taskContext(binding, "worker")
   );
   assert.equal(output.result.executed, true, "军事策略 Worker 未执行");
@@ -45,6 +45,9 @@ async function verifyTenThousandCells() {
   assert.deepEqual(findRegiment(shadow, state.i, regiment.i), lockedBefore, "锁定军团被军事比例调整改写");
   assert.equal(inputBuffer.byteLength > 0, true, "军事策略输入 buffer 被 detach");
   assert.equal(collectMilitaryPolicyWorkerTransferables(output).includes(inputBuffer), false, "军事策略输出错误转移正式输入 buffer");
+  for (const layer of ["point", "line", "labels", "picking"]) {
+    assert.ok(output.preparedRender?.layers?.[layer], `军事策略 Worker 缺少 ${layer} prepared render`);
+  }
 
   const formal = structuredClone(base);
   createSetMilitaryRatiosCommand(state.i, request.ratios).apply({map: formal});
@@ -54,16 +57,18 @@ async function verifyTenThousandCells() {
   const identities = captureIdentities(target);
   const before = militarySnapshot(target);
   const history = new EditHistory();
-  history.execute(createDomainPatchCommand({
+  const patchCommand = createDomainPatchCommand({
     patch: output.patch,
     policy: getMilitaryPolicyWorkerPatchPolicy(target, output.patch),
     label: "应用 Worker 军事策略"
-  }), {map: target});
+  });
+  history.execute(patchCommand, {map: target});
   assert.deepEqual(normalizeVolatile(militarySnapshot(target)), normalizeVolatile(militarySnapshot(shadow)), "军事策略补丁没有精确复现 shadow");
   assertIdentities(target, identities);
   assertMilitaryAliases(target);
   assert.deepEqual(findRegiment(target, state.i, regiment.i), lockedBefore, "补丁应用改写锁定军团");
   const applied = militarySnapshot(target);
+  const undoPatch = patchCommand.getHistoryPatch("undo");
   history.undo({map: target});
   assert.deepEqual(normalizeVolatile(militarySnapshot(target)), normalizeVolatile(before), "军事策略补丁撤销不精确");
   assertIdentities(target, identities);
@@ -73,8 +78,31 @@ async function verifyTenThousandCells() {
   assertIdentities(target, identities);
   assertMilitaryAliases(target);
 
+  const historyShadow = structuredClone(shadow);
+  const undoBinding = {...binding, mapRevision: binding.mapRevision + 1, operationId: binding.operationId + 1};
+  const workerUndo = await runMilitaryPolicyWorkerTask({
+    map: historyShadow,
+    binding: undoBinding,
+    historyTransition: {action: "undo", label: "调整兵种比例", request, patch: undoPatch},
+    render: createRenderRequest(undoBinding)
+  }, taskContext(undoBinding, "history-undo"));
+  assert.equal(workerUndo.kind, "military-policy-history", "军事策略撤销未走 Worker 历史模式");
+  assert.deepEqual(normalizeVolatile(militarySnapshot(historyShadow)), normalizeVolatile(before), "军事策略 Worker 镜像撤销不精确");
+  const redoBinding = {...undoBinding, mapRevision: undoBinding.mapRevision + 1, operationId: undoBinding.operationId + 1};
+  const workerRedo = await runMilitaryPolicyWorkerTask({
+    map: historyShadow,
+    binding: redoBinding,
+    historyTransition: {action: "redo", label: "调整兵种比例", request, patch: output.patch},
+    render: createRenderRequest(redoBinding)
+  }, taskContext(redoBinding, "history-redo"));
+  assert.equal(workerRedo.kind, "military-policy-history", "军事策略重做未走 Worker 历史模式");
+  assert.deepEqual(normalizeVolatile(militarySnapshot(historyShadow)), normalizeVolatile(applied), "军事策略 Worker 镜像重做不精确");
+  for (const transition of [workerUndo, workerRedo]) {
+    for (const layer of ["point", "line", "labels", "picking"]) assert.ok(transition.preparedRender?.layers?.[layer], `军事策略历史缺少 ${layer} prepared render`);
+  }
+
   const fallbackShadow = structuredClone(base);
-  const fallback = await runMilitaryPolicyWorkerTask({map: fallbackShadow, request, binding}, taskContext(binding, "fallback"));
+  const fallback = await runMilitaryPolicyWorkerTask({map: fallbackShadow, request, binding, render: createRenderRequest(binding)}, taskContext(binding, "fallback"));
   assert.deepEqual(normalizeVolatile(output), normalizeVolatile(fallback), "军事策略 Worker / fallback handler 不同源");
   assert.deepEqual(normalizeVolatile(militarySnapshot(shadow)), normalizeVolatile(militarySnapshot(fallbackShadow)), "军事策略 Worker / fallback shadow 不同源");
 
@@ -94,6 +122,7 @@ async function verifyTenThousandCells() {
     changedPaths: output.patch.writeSet.length,
     legacyParity: true,
     undoRedoAliases: true,
+    workerHistoryPrepared: true,
     lockCancelLateFaultStale: true,
     inputBuffersIntact: true,
     workerFallbackParity: true
@@ -187,6 +216,16 @@ function createBinding(mapIdentity, mapRevision) {
 
 function taskContext(binding, source) {
   return {binding, source, checkpoint: () => true, report: () => {}};
+}
+
+function createRenderRequest(binding) {
+  return {
+    binding: {mapIdentity: binding.mapIdentity, mapRevision: binding.mapRevision},
+    layers: ["point", "line", "labels", "picking"],
+    camera: {scale: 1, offsetX: 0, offsetY: 0},
+    canvas: {width: 1200, height: 720, clientWidth: 1200, clientHeight: 720},
+    visibility: {}, visualTheme: {}, unitPreferences: {}, viewOptions: {}, labelOptions: {}
+  };
 }
 
 function findRegiment(map, stateId, regimentId) {

@@ -156,7 +156,7 @@ const actionSignatures = {
   "states.setGovernmentBatch": "setGovernmentBatch: (stateIds, governmentKey) => setStatesGovernmentBatchViaApi",
   "height.applyChanges": "applyChanges: (changes, editOptions = {}) => applyHeightChangesViaApi",
   "diplomacy.setRelation": "setRelation: (subjectId, objectId, relation, editOptions = {}) => setDiplomacyRelationViaApi",
-  "military.setRatios": "setRatios: (stateId, ratios, options = {}) => setMilitaryRatiosViaApi",
+  "military.setRatios": "setRatios: (stateId, ratios, options = {}) => operation.run(",
   "military.setStatus": "setStatus: (target, status, options = {}) => setMilitaryStatusViaApi",
   "military.setStatusBatch": "setStatusBatch: (targets, status, options = {}) => setMilitaryStatusBatchViaApi",
   "military.moveStation": "moveStation: (target, destination, options = {}) => moveMilitaryStationViaApi",
@@ -168,6 +168,7 @@ const actionSignatures = {
   "zones.setStyle": "setStyle: (zoneId, patch) => setZoneStyleViaApi"
 };
 for (const [method, signature] of Object.entries(actionSignatures)) assert(appSource.includes(signature), `${method} 没有接入对应 API action`);
+assert(appSource.includes("context => setMilitaryRatiosViaApi(state, documentRef, stateId, ratios, options, context)"), "military.setRatios 没有把 operation context 传入军事策略 Worker 入口");
 const editResultSource = /function editApiResult\(state, result\) \{[\s\S]*?\n\}/.exec(appSource)?.[0] || "";
 for (const field of ["affected:", "stale:", "noop:"]) assert(editResultSource.includes(field), `editApiResult 缺少 ${field}`);
 assert(consoleApiSource.includes("buildDebugStateDump(state, documentRef, options, api)"), "debug.dumpState 没有复用真实 API 覆盖对象");
