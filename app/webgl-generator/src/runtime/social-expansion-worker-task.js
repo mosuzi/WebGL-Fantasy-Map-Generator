@@ -1,4 +1,5 @@
-import {createDomainPatch} from "./domain-patch.js";
+import {createDomainPatch, createDomainPatchCommand} from "./domain-patch.js";
+import {executeRenderPreparationTask} from "../renderer/render-preparation.js";
 import {
   createApplyCultureExpansionCommand,
   createApplyReligionExpansionCommand,
@@ -20,9 +21,12 @@ export async function runSocialExpansionWorkerTask(payload = {}, context = {}) {
   if (!map?.grid?.cells || !map?.pack?.cells || !map?.society) {
     throw taskError("social-expansion-worker-map-missing", "文化 / 宗教扩张 Worker 缺少完整地图快照");
   }
-  const request = normalizeTaskRequest(payload.request);
   const binding = normalizeBinding(payload.binding);
   assertEnvelopeBinding(binding, context.binding);
+  if (payload.historyTransition) {
+    return runSocialExpansionHistoryTransition(map, binding, payload, context);
+  }
+  const request = normalizeTaskRequest(payload.request);
   await taskCheckpoint(context, "validate");
 
   const sourceFingerprint = fingerprintSocialExpansionSource(map, request);
@@ -60,7 +64,10 @@ export async function runSocialExpansionWorkerTask(payload = {}, context = {}) {
     const patch = createDomainPatch("social-expansion", changedPaths, map);
     const affected = buildAffected(map, request, coverageBefore, patch);
     const result = command.getResult?.() || null;
-    report(context, "complete", "文化 / 宗教扩张 Worker 补丁已准备", 1);
+    const preparedRender = payload.render
+      ? await executeRenderPreparationTask({...payload.render, map}, context)
+      : null;
+    report(context, "complete", "文化 / 宗教扩张结果已准备", 1);
     return {
       kind: "social-expansion",
       binding,
@@ -73,17 +80,58 @@ export async function runSocialExpansionWorkerTask(payload = {}, context = {}) {
         affected
       },
       patch,
-      refresh: {
-        derived: request.mode === "reexpand"
-          ? ["cell-colors", "political-boundaries", "point-layers", "labels", "object-panels", "object-index"]
-          : ["point-layers", "labels", "object-panels", "object-index"],
-        picking: "objects"
-      }
+      preparedRender,
+      refresh: socialExpansionRefresh(request)
     };
   } catch (error) {
     if (applied) command.revert({map});
     throw error;
   }
+}
+
+async function runSocialExpansionHistoryTransition(map, binding, payload, context) {
+  const transition = payload.historyTransition;
+  const action = transition?.action === "redo" ? "redo" : transition?.action === "undo" ? "undo" : "";
+  if (!action) throw taskError("social-expansion-worker-history-action-invalid", "文化 / 宗教扩张历史动作无效");
+  const request = normalizeTaskRequest(transition.request);
+  const command = createDomainPatchCommand({
+    patch: transition.patch,
+    policy: getSocialExpansionPatchPolicy(map, request),
+    label: `${request.kind === "culture" ? "文化" : "宗教"}${action === "undo" ? "撤销" : "重做"}`,
+    historyDomain: `${request.kind}-expansion`,
+    effects: {},
+    result: null
+  });
+  let applied = false;
+  try {
+    command.apply({map});
+    applied = true;
+    await taskCheckpoint(context, `history-${action}`);
+    const preparedRender = payload.render
+      ? await executeRenderPreparationTask({...payload.render, map}, context)
+      : null;
+    report(context, "complete", `${request.kind === "culture" ? "文化" : "宗教"}${action === "undo" ? "撤销" : "重做"}画面已准备`, 1);
+    return {
+      kind: "social-expansion-history",
+      binding,
+      history: {action, kind: request.kind, id: request.id},
+      result: {executed: true, action, label: String(transition.label || `${request.kind === "culture" ? "文化" : "宗教"}扩张`)},
+      preparedRender,
+      refresh: socialExpansionRefresh(request)
+    };
+  } catch (error) {
+    if (applied) command.revert({map});
+    throw error;
+  }
+}
+
+function socialExpansionRefresh(request) {
+  return {
+    derived: request.mode === "reexpand"
+      ? ["cell-colors", "political-boundaries", "point-layers", "labels", "object-panels", "object-index"]
+      : ["point-layers", "labels", "object-panels", "object-index"],
+    picking: "objects"
+  };
 }
 
 export function getSocialExpansionPatchPolicy(map, request = {}) {
@@ -147,7 +195,10 @@ export function fingerprintSocialExpansionSource(map, request = {}) {
 }
 
 export function collectSocialExpansionWorkerTransferables(result) {
-  return collectWorkerTransferables(result?.patch || result);
+  return collectWorkerTransferables({
+    patch: result?.patch || null,
+    preparedRender: result?.preparedRender || null
+  });
 }
 
 function emptyResult(binding, plan, inspection, reason) {
@@ -163,6 +214,7 @@ function emptyResult(binding, plan, inspection, reason) {
       affected: emptyAffected()
     },
     patch: createDomainPatch("social-expansion", [], {}),
+    preparedRender: null,
     refresh: {derived: [], picking: "none"}
   };
 }

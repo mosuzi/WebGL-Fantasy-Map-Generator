@@ -24,6 +24,18 @@ export function createDomainPatchCommand({patch, policy, label, historyDomain, e
     revert(context) {
       if (!applied || !reverse) throw new Error("Worker 补丁缺少可撤销状态");
       reverse = swapPatch(context.map, reverse, patch);
+      applied = false;
+    },
+    getHistoryPatch(action) {
+      if (action === "undo") {
+        if (!applied || !reverse) throw new Error("Worker 补丁缺少可撤销状态");
+        return exportPatch(reverse);
+      }
+      if (action === "redo") {
+        if (applied) throw new Error("Worker 补丁当前不能重做");
+        return exportPatch(patch);
+      }
+      throw new Error(`未知历史动作：${action}`);
     },
     isNoop() {
       return patch.operations.length === 0;
@@ -31,6 +43,19 @@ export function createDomainPatchCommand({patch, policy, label, historyDomain, e
     getResult() {
       return result;
     }
+  };
+}
+
+function exportPatch(patch) {
+  return {
+    version: patch.version,
+    domain: patch.domain,
+    writeSet: [...patch.writeSet],
+    operations: patch.operations.map(operation => ({
+      path: [...operation.path],
+      exists: operation.exists,
+      value: operation.value
+    }))
   };
 }
 

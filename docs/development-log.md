@@ -1,5 +1,13 @@
 # 开发历史
 
+## 2026-08-12：第 322 项 Stage C2 社会扩张与历史恢复 Worker 闭环接受
+
+- 文化 / 宗教的正式扩张入口已接入 `social-expansion.compute`，并继续复用阶段 A～B 的持久 map-mirror session、prepared renderer、绑定校验、原子提交和失败恢复。历史命令新增只读 Worker patch 描述；C2 命令的撤销 / 重做会在同一 Worker 镜像应用 before / after patch、准备对应 renderer DTO，再由主线程移动历史栈并提交 GPU / DOM。其它领域历史命令不受影响，仍保持既有执行语义。
+- 专项 Worker Node 门通过 10k 文化 / 宗教同源、锁、取消、故障、fallback 和精确 undo / redo 镜像往返；UI / API 契约保持 `322` 个公开方法、`179` 个编辑方法，历史入口允许异步结果；通用十一类 Worker session / packet / ack / cancel 回归和生产构建均通过。普通用户文案不出现 Worker、会话、消息包等实现词。
+- 正式 Chrome 目标门已完成文化应用、撤销、重做、宗教应用、撤销、重做共 `6` 次 Worker 运行与 `6` 次 session 提交；六次操作复用同一 session，revision delta 均为 `1`，前后数据、对象引用、历史栈与最终 idle session 同源。旧历史恢复会同步执行 picking 与完整 surface 刷新，曾形成约 `251～329ms` 主线程阻塞；改造后撤销 / 重做本身不再出现该阻塞。
+- 最终复验只剩首次文化操作启动窗口一条 `56ms` LongTask，比统一 `50ms` 门高 `6ms`；它不属于撤销 / 重做，现有证据只收敛到首次 fresh Worker 创建或首次地图输入流入口，没有把未证实原因写成产品结论。用户明确裁定登记放行：C2 仅允许首次 fresh 启动最多 `1` 条且不超过 `60ms`，不得扩张到后续复用、撤销 / 重做、其它切片或阶段 D / E；阶段 E 仍须按最终性能口径重新审计。
+- C2 累计产品 `7` 文件 `+244 / -22`，既有工具 `2` 文件 `+33 / -7`，专用浏览器夹具 `72` 行，`package.json` 增加 `1` 行脚本；本阶段委派与等待均为 `0`。第 322 项内部 checkpoint 更新为 A、B1、B2、C1、C2，即 `5 / 6`；用户地图、`source/` 与 Wiki 未改，本轮不提交、不合并，也不提前启动第 327 项。
+
 ## 2026-08-12：第 322 项 Stage C1 网格拓扑 Worker 闭环接受
 
 - `grid.applyWrite / grid.refine` 已移除独立的主线程整图 snapshot transaction 与 legacy renderer reload，改为复用阶段 A～B 的 `executeWorkerMapMutation`：正式 Worker、持久 map-mirror session、兼容 fallback、prepared renderer、绑定校验、原子地图替换、单历史与失败恢复共用一条提交协议。网格 binding 的 map / revision、generation token、锁和来源网格 fingerprint 同时进入普通请求、session 与 fallback；Worker 在替换地图上准备完整 renderer DTO，主线程只做当前性校验、正式 map identity 内的内容交换、GPU 提交和界面同步。
@@ -30356,3 +30364,17 @@ full 矩阵结果：
 - 100k 初次接入暴露的末端 GPU continuation 与完整 overlay 首次布局长任务，分别通过安装完成后的明确浏览器让步，以及每批 `32` 个节点的隐藏 wrapper 逐批展开收敛；最终 overlay 恢复原直接子节点结构，取消、迟到和回滚仍由同一 prepared transaction 持有。
 - `webgl-generator-prepared-render-installer-regression` 与复合 Worker 专项通过，后者覆盖 generation Worker / fallback、取消、迟到和 `99846` grid cells 大图。生产构建通过；真实 Chrome 的 10k / 100k 分别为 `10004 / 99846` grid cells、prepared load `1 / 1`、legacy load `0 / 0`、输出包 `948 / 4435`、decode 最大 `4.6 / 33.7ms`、overlay reveal `102.8 / 239.8ms`，两档 LongTask、残留批次、非性能 health、普通应用 console、page、WebGL 与 Loading 错误全部为 `0`。
 - 本阶段产品增量约 `434` 行，专项与薄浏览器工具约 `239` 行；浏览器工具为 `171` 行，未新增诊断大脚本。阶段内子智能体启动与等待均为 `0`。阶段 B 已闭合，第 322 项仍处于执行中，后续严格进入阶段 C，集成冻结前不重复启动独立复核角色。
+
+## 2026-08-12：第 322 项阶段 C3a 完成经济正式入口 Worker 闭环
+
+- 经济重算、市场归属 API、经济面板重算和市场归属预览应用统一进入 `economy.compute` 持久 map-mirror session；Worker 同一事务生成经济领域 patch 与 point / labels / picking prepared render，主线程只做绑定校验、领域 patch 提交、历史、GPU / DOM 与面板同步。经济撤销 / 重做也在 Worker 镜像应用目标历史 patch 并准备正式画面，不再走同步全量刷新。
+- 首次 10k 浏览器门暴露正式入口在主线程前后各遍历整份 `pack / economy` 计算来源指纹，形成约 `274 / 304ms` LongTask；该重复指纹已移除，主线程沿用 map identity、revision、generation token、锁指纹和 session binding 时效门，权威来源指纹继续由 Worker 镜像生成。夹具自身约 `44ms` 的精确经济 digest 已与产品操作拆成独立 macrotask，没有放宽 `<50ms` 产品标准。
+- `webgl-generator-economy-worker-task-regression` 覆盖 10k / 100k、Worker / fallback、锁、取消、故障以及镜像撤销 / 重做；市场归属、通用 Worker 协议、生产构建均通过。最终 10k Chrome 的经济重算、市场改派、撤销、重做共 `4` 次 Worker 运行与提交，后 `3` 次复用同一 session，历史和经济数据精确往返，最终 session idle；LongTask、非性能 health、普通应用 console、page、WebGL、Loading 与普通文案技术词均为 `0`。
+- 本切片产品约 `+252 / -26`，测试约 `+198 / -2`，新浏览器夹具 `174` 行，委派与等待均为 `0`。C3a 已建立 checkpoint，第 322 项仍执行中；下一切片严格处理人口，路线 / 城市寻路、军事策略、P2 与最终集成门均不在本次扩写。
+
+## 2026-08-12：第 322 项阶段 C3b 完成人口正式入口 Worker 闭环
+
+- 人口增减、区域转移和人口面板同源入口统一进入 `population.compute` 持久 map-mirror session；Worker 构造人口分配 plan、来源指纹、领域 patch 与 surface / point / labels / picking prepared render，主线程只保留轻量请求、绑定、领域提交、历史和 UI / GPU / DOM 同步。人口撤销 / 重做也先在 Worker 镜像应用历史 patch并准备画面。
+- 人口专项 Node 覆盖 10k / 100k、增减 / 转移、legacy 同源、容器 identity、镜像撤销 / 重做、锁、取消、故障、陈旧和非法写集；100k 固定图调整 `706` 个 pack cells、`30` 个城市、输出 `1496` 条 patch path，数据层耗时约 `603ms`。UI / API 动态门、Worker registry、生产构建和差异检查通过。
+- 最终 10k Chrome 对国家 #1 / #2 完成人口增减、转移、双撤销和双重做共 `6` 次正式 Worker 运行 / 提交，后 `5` 次复用同一 session；人口载体、城市、行政汇总、经济需求与 stale 状态精确往返，正式 map / typed arrays / 城镇容器引用保持，最终 session idle。六个操作窗 LongTask、非性能 health、普通应用 console、page、WebGL、Loading 与普通文案技术词均为 `0`。
+- 本切片产品约 `230` 行，测试约 `170` 行，专用浏览器夹具 `138` 行，委派与等待为 `0`。C3b 已建立 checkpoint，第 322 项仍执行中；下一切片严格进入路线 / 城市寻路，军事策略、P2 与最终集成门不在本次混写。

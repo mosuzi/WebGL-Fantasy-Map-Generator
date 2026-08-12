@@ -217,6 +217,19 @@ import {
   GRID_TOPOLOGY_WORKER_ACTION,
   GRID_TOPOLOGY_WORKER_TASK
 } from "./grid-topology-worker-task.js";
+import {
+  fingerprintSocialExpansionSource,
+  getSocialExpansionPatchPolicy,
+  SOCIAL_EXPANSION_WORKER_TASK
+} from "./social-expansion-worker-task.js";
+import {
+  ECONOMY_WORKER_TASK,
+  getEconomyWorkerPatchPolicy
+} from "./economy-worker-task.js";
+import {
+  getPopulationWorkerPatchPolicy,
+  POPULATION_WORKER_TASK
+} from "./population-worker-task.js";
 import {SelectionStore} from "./selection-store.js";
 import {decideSelectionPanelRoute, SELECTION_PANEL_BINDINGS, SELECTION_PANEL_ROUTE} from "./selection-panel-policy.js";
 import {installKeyboardShortcuts} from "./keyboard-shortcuts.js";
@@ -1840,7 +1853,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     onCancelMarketAssignment: () => cancelCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.MARKET_ASSIGN, "preview-cancel"),
     onGoodDisplayApply: (goodId, patch) => setGoodDisplayViaApi(state, documentRef, goodId, patch),
     onMarketDisplayApply: (marketId, patch) => setMarketDisplayViaApi(state, documentRef, marketId, patch),
-    onRebuildEconomy: () => rebuildEconomyViaAction(state, documentRef, {label: "重算经济链"}),
+    onRebuildEconomy: () => state.runtimeActions.edit.economy.rebuild({confirm: true, label: "重算经济链"}),
     onClose: () => cancelCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.MARKET_ASSIGN, "panel-close")
   });
   state.panels.economy = economyPanel;
@@ -3271,14 +3284,30 @@ function createRuntimeActions(state, documentRef, options = {}) {
       },
       population: {
         inspectAdjustment: (target, editOptions = {}) => inspectPopulationAdjustmentViaApi(state, target, editOptions),
-        applyAdjustment: (target, editOptions = {}) => applyPopulationAdjustmentViaApi(state, documentRef, target, editOptions),
+        applyAdjustment: (target, editOptions = {}) => operation.run(
+          "edit.population.applyAdjustment",
+          context => applyPopulationAdjustmentViaApi(state, documentRef, target, editOptions, {}, context),
+          {message: "正在调整区域人口"}
+        ),
         inspectTransfer: (source, target, editOptions = {}) => inspectPopulationTransferViaApi(state, source, target, editOptions),
-        transfer: (source, target, editOptions = {}) => applyPopulationTransferViaApi(state, documentRef, source, target, editOptions)
+        transfer: (source, target, editOptions = {}) => operation.run(
+          "edit.population.transfer",
+          context => applyPopulationTransferViaApi(state, documentRef, source, target, editOptions, {}, context),
+          {message: "正在转移区域人口"}
+        )
       },
       economy: {
         inspectAssignment: (marketId, packCellIds) => inspectMarketAssignmentViaApi(state, marketId, packCellIds),
-        assignCells: (marketId, packCellIds, editOptions = {}) => assignMarketCellsViaApi(state, documentRef, marketId, packCellIds, editOptions),
-        rebuild: (editOptions = {}) => rebuildEconomyViaApi(state, documentRef, editOptions),
+        assignCells: (marketId, packCellIds, editOptions = {}) => operation.run(
+          "edit.economy.assignCells",
+          context => assignMarketCellsViaApi(state, documentRef, marketId, packCellIds, editOptions, context),
+          {message: "正在应用市场归属并重算经济链"}
+        ),
+        rebuild: (editOptions = {}) => operation.run(
+          "edit.economy.rebuild",
+          context => rebuildEconomyViaApi(state, documentRef, editOptions, context),
+          {message: "正在重算经济链"}
+        ),
         setGoodDisplay: (goodId, patch) => setGoodDisplayViaApi(state, documentRef, goodId, patch),
         setMarketDisplay: (marketId, patch) => setMarketDisplayViaApi(state, documentRef, marketId, patch)
       },
@@ -3324,7 +3353,11 @@ function createRuntimeActions(state, documentRef, options = {}) {
         add: options => addCultureViaApi(state, documentRef, options),
         assignCells: (cultureId, gridCellIds, options = {}) => assignSocialCellsViaApi(state, documentRef, "culture", cultureId, gridCellIds, options),
         inspectExpansion: (cultureId, options = {}) => inspectSocialExpansionViaApi(state, "culture", cultureId, options),
-        applyExpansion: (cultureId, options = {}) => applySocialExpansionViaApi(state, documentRef, "culture", cultureId, options),
+        applyExpansion: (cultureId, options = {}) => operation.run(
+          "edit.cultures.applyExpansion",
+          context => applySocialExpansionViaApi(state, documentRef, "culture", cultureId, options, {}, context),
+          {message: options?.mode === "reexpand" ? "正在重新扩张文化" : "正在保存文化中心与扩张参数"}
+        ),
         delete: (cultureId, options = {}) => deleteCultureViaApi(state, documentRef, cultureId, options),
         rename: (cultureId, name) => renameCultureViaApi(state, documentRef, cultureId, name),
         setColor: (cultureId, color) => setCultureColorViaApi(state, documentRef, cultureId, color),
@@ -3335,7 +3368,11 @@ function createRuntimeActions(state, documentRef, options = {}) {
         add: options => addReligionViaApi(state, documentRef, options),
         assignCells: (religionId, gridCellIds, options = {}) => assignSocialCellsViaApi(state, documentRef, "religion", religionId, gridCellIds, options),
         inspectExpansion: (religionId, options = {}) => inspectSocialExpansionViaApi(state, "religion", religionId, options),
-        applyExpansion: (religionId, options = {}) => applySocialExpansionViaApi(state, documentRef, "religion", religionId, options),
+        applyExpansion: (religionId, options = {}) => operation.run(
+          "edit.religions.applyExpansion",
+          context => applySocialExpansionViaApi(state, documentRef, "religion", religionId, options, {}, context),
+          {message: options?.mode === "reexpand" ? "正在重新扩张宗教" : "正在保存宗教中心与扩张参数"}
+        ),
         delete: (religionId, options = {}) => deleteReligionViaApi(state, documentRef, religionId, options),
         rename: (religionId, name) => renameReligionViaApi(state, documentRef, religionId, name),
         setColor: (religionId, color) => setReligionColorViaApi(state, documentRef, religionId, color),
@@ -7548,6 +7585,31 @@ export function executeHistoryCommand(state, documentRef, action, options = {}) 
     error.code = "operation_busy";
     throw error;
   }
+  const pendingCommand = state.editHistory.peek(action);
+  if (pendingCommand?.workerHistory?.task === SOCIAL_EXPANSION_WORKER_TASK) {
+    const verb = action === "undo" ? "撤销" : "重做";
+    return state.runtimeOperation.run(
+      `history.${action}`,
+      operation => executeSocialExpansionWorkerHistory(state, documentRef, action, pendingCommand, operation),
+      {message: `正在${verb}${pendingCommand.workerHistory.label}扩张结果`}
+    );
+  }
+  if (pendingCommand?.workerHistory?.task === ECONOMY_WORKER_TASK) {
+    const verb = action === "undo" ? "撤销" : "重做";
+    return state.runtimeOperation.run(
+      `history.${action}`,
+      operation => executeEconomyWorkerHistory(state, documentRef, action, pendingCommand, operation),
+      {message: `正在${verb}${pendingCommand.workerHistory.label}结果`}
+    );
+  }
+  if (pendingCommand?.workerHistory?.task === POPULATION_WORKER_TASK) {
+    const verb = action === "undo" ? "撤销" : "重做";
+    return state.runtimeOperation.run(
+      `history.${action}`,
+      operation => executePopulationWorkerHistory(state, documentRef, action, pendingCommand, operation),
+      {message: `正在${verb}${pendingCommand.workerHistory.label}结果`}
+    );
+  }
   const command = action === "redo"
     ? state.editHistory.redo({map: state.map})
     : state.editHistory.undo({map: state.map});
@@ -7582,13 +7644,163 @@ export function executeHistoryCommand(state, documentRef, action, options = {}) 
   if (command.effects?.derived?.includes("city-relocation")) scheduleCityPopulationPointRefresh(state, documentRef, state.map);
   options.afterRefresh?.(state, command);
   if (command.effects?.derived?.includes("labels")) syncLabelStylesUi(state, documentRef);
-  updateEditingInteractionLock(state, documentRef);
+  (options.updateEditingInteractionLock || updateEditingInteractionLock)(state, documentRef);
   return {
     executed: true,
     action,
     label: command.label || "",
     history: state.editHistory.getStats()
   };
+}
+
+async function executeSocialExpansionWorkerHistory(state, documentRef, action, command, operation) {
+  const metadata = command.workerHistory;
+  const patch = command.getHistoryPatch(action);
+  const verb = action === "undo" ? "撤销" : "重做";
+  return executeWorkerMapMutation(state, documentRef, {
+    task: metadata.task,
+    targetKind: `${metadata.kind}-expansion`,
+    userLabel: `${verb}${metadata.label}扩张结果`,
+    payload: {
+      historyTransition: {
+        action,
+        label: command.label,
+        request: metadata.request,
+        patch
+      }
+    },
+    includeBindingInPayload: true,
+    renderLayers: metadata.renderLayers,
+    effects: command.effects,
+    assertOutput: ({state: currentState, sourceMap, output}) => {
+      if (currentState.map !== sourceMap || currentState.editHistory.peek(action) !== command) {
+        const error = new Error(`${verb}${metadata.label}结果已被新的地图状态取代`);
+        error.code = "operation_obsolete";
+        throw error;
+      }
+      if (output?.kind !== "social-expansion-history"
+        || output?.history?.action !== action
+        || output?.history?.kind !== metadata.kind
+        || Number(output?.history?.id) !== Number(metadata.request.id)) {
+        const error = new Error(`${verb}${metadata.label}准备结果结构无效`);
+        error.code = "social-expansion-worker-history-result-invalid";
+        throw error;
+      }
+    },
+    createCommand: () => command,
+    commitCommand: ({state: currentState}) => {
+      const moved = action === "undo"
+        ? currentState.editHistory.undo({map: currentState.map})
+        : currentState.editHistory.redo({map: currentState.map});
+      if (moved !== command) throw new Error(`${verb}${metadata.label}时历史栈已变化`);
+    },
+    rollbackCommand: ({map}) => {
+      if (action === "undo") command.apply({map});
+      else command.revert({map});
+    },
+    afterUiRefresh: () => setFileOperationStatus(documentRef, `已${verb}${metadata.label}。`)
+  }, operation);
+}
+
+async function executeEconomyWorkerHistory(state, documentRef, action, command, operation) {
+  const metadata = command.workerHistory;
+  const patch = command.getHistoryPatch(action);
+  const verb = action === "undo" ? "撤销" : "重做";
+  return executeWorkerMapMutation(state, documentRef, {
+    task: metadata.task,
+    targetKind: "economy",
+    userLabel: `${verb}${metadata.label}结果`,
+    payload: {
+      historyTransition: {
+        action,
+        label: command.label,
+        request: metadata.request,
+        patch
+      }
+    },
+    includeBindingInPayload: true,
+    renderLayers: metadata.renderLayers,
+    effects: command.effects,
+    assertOutput: ({state: currentState, sourceMap, output}) => {
+      if (currentState.map !== sourceMap || currentState.editHistory.peek(action) !== command) {
+        const error = new Error(`${verb}${metadata.label}结果已被新的地图状态取代`);
+        error.code = "operation_obsolete";
+        throw error;
+      }
+      if (output?.kind !== "economy-history"
+        || output?.history?.action !== action
+        || output?.history?.kind !== metadata.kind) {
+        const error = new Error(`${verb}${metadata.label}准备结果结构无效`);
+        error.code = "economy-worker-history-result-invalid";
+        throw error;
+      }
+    },
+    createCommand: () => command,
+    commitCommand: ({state: currentState}) => {
+      const moved = action === "undo"
+        ? currentState.editHistory.undo({map: currentState.map})
+        : currentState.editHistory.redo({map: currentState.map});
+      if (moved !== command) throw new Error(`${verb}${metadata.label}时历史栈已变化`);
+    },
+    rollbackCommand: ({map}) => {
+      if (action === "undo") command.apply({map});
+      else command.revert({map});
+      refreshGenerationSummary(map);
+    },
+    afterUiRefresh: () => {
+      refreshGenerationSummary(state.map);
+      updateEconomyPanel(state);
+      updateRuntimePanel(documentRef, state);
+      setFileOperationStatus(documentRef, `已${verb}${metadata.label}。`);
+    }
+  }, operation);
+}
+
+async function executePopulationWorkerHistory(state, documentRef, action, command, operation) {
+  const metadata = command.workerHistory;
+  const patch = command.getHistoryPatch(action);
+  const verb = action === "undo" ? "撤销" : "重做";
+  return executeWorkerMapMutation(state, documentRef, {
+    task: metadata.task,
+    targetKind: "population",
+    userLabel: `${verb}${metadata.label}结果`,
+    payload: {historyTransition: {action, label: command.label, request: metadata.request, patch}},
+    includeBindingInPayload: true,
+    renderLayers: metadata.renderLayers,
+    effects: command.effects,
+    assertOutput: ({state: currentState, sourceMap, output}) => {
+      if (currentState.map !== sourceMap || currentState.editHistory.peek(action) !== command) {
+        const error = new Error(`${verb}${metadata.label}结果已被新的地图状态取代`);
+        error.code = "operation_obsolete";
+        throw error;
+      }
+      if (output?.kind !== "population-history"
+        || output?.history?.action !== action
+        || output?.history?.kind !== metadata.kind) {
+        const error = new Error(`${verb}${metadata.label}准备结果结构无效`);
+        error.code = "population-worker-history-result-invalid";
+        throw error;
+      }
+    },
+    createCommand: () => command,
+    commitCommand: ({state: currentState}) => {
+      const moved = action === "undo"
+        ? currentState.editHistory.undo({map: currentState.map})
+        : currentState.editHistory.redo({map: currentState.map});
+      if (moved !== command) throw new Error(`${verb}${metadata.label}时历史栈已变化`);
+    },
+    rollbackCommand: ({map}) => {
+      if (action === "undo") command.apply({map});
+      else command.revert({map});
+      refreshGenerationSummary(map);
+    },
+    afterUiRefresh: () => {
+      refreshGenerationSummary(state.map);
+      updatePopulationPanel(state);
+      updateRuntimePanel(documentRef, state);
+      setFileOperationStatus(documentRef, `已${verb}${metadata.label}。`);
+    }
+  }, operation);
 }
 
 function synchronizeFeatureTopologyHistoryUi(state, command, action) {
@@ -9427,9 +9639,17 @@ export function inspectPopulationAdjustmentViaApi(state, target, options = {}) {
   return inspectPopulationAdjustment(state.map, target, options);
 }
 
-export function applyPopulationAdjustmentViaApi(state, documentRef, target, options = {}, runtimeUi = {}) {
+export function applyPopulationAdjustmentViaApi(state, documentRef, target, options = {}, runtimeUi = {}, operationContext = null) {
   assertMapAvailable(state);
   if (!options || typeof options !== "object" || Array.isArray(options)) throw new Error("人口调整参数必须是对象");
+  if (operationContext) {
+    return applyPopulationMutationViaWorker(state, documentRef, {
+      request: {kind: "adjustment", target, delta: options.delta, label: options.label || "区域人口增减"},
+      operationContext,
+      runtimeUi,
+      userLabel: "区域人口调整"
+    });
+  }
   const plan = buildPopulationAdjustmentPlan(state.map, target, options);
   const command = createApplyPopulationAdjustmentCommand(plan, {label: options.label || "区域人口增减"});
   const result = executeEditCommand(state, documentRef, command, {
@@ -9455,10 +9675,18 @@ export function inspectPopulationTransferViaApi(state, source, target, options =
   return inspectPopulationTransfer(state.map, source, target, options);
 }
 
-export function applyPopulationTransferViaApi(state, documentRef, source, target, options = {}, runtimeUi = {}) {
+export function applyPopulationTransferViaApi(state, documentRef, source, target, options = {}, runtimeUi = {}, operationContext = null) {
   assertMapAvailable(state);
   if (!options || typeof options !== "object" || Array.isArray(options)) throw new Error("人口转移参数必须是对象");
   if (options.confirm !== true) throw new Error("区域人口转移会同时改写两个区域，需要显式传入 {confirm: true}");
+  if (operationContext) {
+    return applyPopulationMutationViaWorker(state, documentRef, {
+      request: {kind: "transfer", source, target, amount: options.amount, confirm: true, label: options.label || "区域人口转移"},
+      operationContext,
+      runtimeUi,
+      userLabel: "区域人口转移"
+    });
+  }
   const plan = buildPopulationTransferPlan(state.map, source, target, options);
   const command = createApplyPopulationTransferCommand(plan, {label: options.label || "区域人口转移"});
   const result = executeEditCommand(state, documentRef, command, {
@@ -9476,6 +9704,75 @@ export function applyPopulationTransferViaApi(state, documentRef, source, target
   (runtimeUi.updateRuntimePanel || updateRuntimePanel)(documentRef, state);
   (runtimeUi.updateEditingInteractionLock || updateEditingInteractionLock)(state, documentRef);
   return editApiResult(state, result);
+}
+
+async function applyPopulationMutationViaWorker(state, documentRef, {request, operationContext, runtimeUi, userLabel}) {
+  const renderLayers = ["surface", "point", "labels", "picking"];
+  const targets = request.kind === "transfer" ? [request.source, request.target] : [request.target];
+  const effects = {
+    render: "draw",
+    selection: "refresh",
+    runtimeStats: true,
+    pickPanel: true,
+    affected: systemAffected("population-adjustment", targets.map(target => ({kind: target.scope, id: target.id}))),
+    derived: ["population-carrying", "population-stats", "point-layers", "labels", "object-panels", "economy-demand", "derived-stale"]
+  };
+  return executeWorkerMapMutation(state, documentRef, {
+    task: POPULATION_WORKER_TASK,
+    targetKind: "population",
+    userLabel,
+    payload: {request},
+    includeBindingInPayload: true,
+    renderLayers,
+    effects,
+    assertOutput: ({state: currentState, sourceMap, output}) => {
+      if (currentState.map !== sourceMap) {
+        const error = new Error(`${userLabel}准备结果已被新的地图状态取代`);
+        error.code = "operation_obsolete";
+        throw error;
+      }
+      if (output?.kind !== "population"
+        || typeof output?.plan?.sourceFingerprint !== "string"
+        || !output.plan.sourceFingerprint
+        || output?.plan?.request?.kind !== request.kind) {
+        const error = new Error(`${userLabel}准备结果结构无效`);
+        error.code = "population-worker-result-invalid";
+        throw error;
+      }
+    },
+    createCommand: ({output, result}) => attachPopulationWorkerHistory(createDomainPatchCommand({
+      patch: output.patch,
+      policy: getPopulationWorkerPatchPolicy(state.map, output.patch),
+      label: request.label,
+      historyDomain: request.kind === "transfer" ? "population-transfer" : "population-adjustment",
+      effects,
+      result
+    }), {request, label: userLabel, renderLayers}),
+    rollbackCommand: ({command, map}) => {
+      command.revert({map});
+      refreshGenerationSummary(map);
+    },
+    afterUiRefresh: () => {
+      refreshGenerationSummary(state.map);
+      (runtimeUi.updatePopulationPanel || updatePopulationPanel)(state);
+      (runtimeUi.updateRuntimePanel || updateRuntimePanel)(documentRef, state);
+      (runtimeUi.updateEditingInteractionLock || updateEditingInteractionLock)(state, documentRef);
+      setFileOperationStatus(documentRef, request.kind === "transfer" ? "已转移区域人口。" : "已调整区域人口。");
+    }
+  }, operationContext);
+}
+
+function attachPopulationWorkerHistory(command, metadata) {
+  Object.defineProperty(command, "workerHistory", {
+    value: Object.freeze({
+      task: POPULATION_WORKER_TASK,
+      kind: metadata.request.kind,
+      label: metadata.label,
+      request: structuredClone(metadata.request),
+      renderLayers: Object.freeze([...metadata.renderLayers])
+    })
+  });
+  return command;
 }
 
 async function rebuildHeightDerivedViaAction(state, documentRef, scope, options = {}, operation = null) {
@@ -9538,13 +9835,21 @@ function inspectMarketAssignmentViaApi(state, marketId, packCellIds) {
   };
 }
 
-function assignMarketCellsViaApi(state, documentRef, marketId, packCellIds, options = {}) {
+function assignMarketCellsViaApi(state, documentRef, marketId, packCellIds, options = {}, operationContext = null) {
   assertMapAvailable(state);
   const changes = buildMarketAssignmentChanges(state.map, marketId, packCellIds);
   const preview = inspectMarketAssignment(state.map, changes);
   if (!preview.valid) throw new Error(`市场归属预检失败：无效市场 ${preview.invalidMarketCells}，水域 ${preview.waterCells}`);
   if (options?.confirm !== true) throw new Error(`市场归属会重算经济链（跨国 ${preview.crossStateCells} cells、无国家 ${preview.unassignedStateCells} cells），需要显式传入 {confirm: true}`);
   const command = createApplyMarketAssignmentCommand(changes, {label: options.label || "API 市场归属"});
+  if (operationContext) {
+    return applyEconomyMutationViaWorker(state, documentRef, {
+      request: {kind: "market-assignment", changes, confirm: true, label: command.label},
+      command,
+      operationContext,
+      userLabel: "市场归属"
+    }).then(response => ({...response, preview}));
+  }
   const result = executeEditCommand(state, documentRef, command, {
     context: {map: state.map},
     afterRefresh: () => refreshGenerationSummary(state.map),
@@ -9557,10 +9862,80 @@ function assignMarketCellsViaApi(state, documentRef, marketId, packCellIds, opti
   return {...editApiResult(state, result), preview};
 }
 
-function rebuildEconomyViaApi(state, documentRef, options = {}) {
+function rebuildEconomyViaApi(state, documentRef, options = {}, operationContext = null) {
   assertMapAvailable(state);
   if (options?.confirm !== true) throw new Error("经济链重算会改写生产、交易、价格压力和财政，需要显式传入 {confirm: true}");
+  if (operationContext) {
+    const command = createRebuildEconomyCommand({label: options.label || "API 重算经济链"});
+    return applyEconomyMutationViaWorker(state, documentRef, {
+      request: {kind: "rebuild", confirm: true, label: command.label},
+      command,
+      operationContext,
+      userLabel: "经济链"
+    });
+  }
   return editApiResult(state, rebuildEconomyViaAction(state, documentRef, {label: options.label || "API 重算经济链"}));
+}
+
+async function applyEconomyMutationViaWorker(state, documentRef, {request, command, operationContext, userLabel}) {
+  const renderLayers = ["point", "labels", "picking"];
+  return executeWorkerMapMutation(state, documentRef, {
+    task: ECONOMY_WORKER_TASK,
+    targetKind: "economy",
+    userLabel,
+    payload: {request},
+    includeBindingInPayload: true,
+    renderLayers,
+    effects: command.effects,
+    assertOutput: ({state: currentState, sourceMap, output}) => {
+      if (currentState.map !== sourceMap) {
+        const error = new Error(`${userLabel}准备结果已被新的地图状态取代`);
+        error.code = "operation_obsolete";
+        throw error;
+      }
+      if (output?.kind !== "economy"
+        || typeof output?.plan?.sourceFingerprint !== "string"
+        || !output.plan.sourceFingerprint
+        || output?.plan?.request?.kind !== request.kind) {
+        const error = new Error(`${userLabel}准备结果结构无效`);
+        error.code = "economy-worker-result-invalid";
+        throw error;
+      }
+    },
+    createCommand: ({output, result, effects}) => attachEconomyWorkerHistory(createDomainPatchCommand({
+      patch: output.patch,
+      policy: getEconomyWorkerPatchPolicy(state.map, output.patch),
+      label: command.label,
+      historyDomain: "economy",
+      effects,
+      result
+    }), {request, label: userLabel, renderLayers}),
+    rollbackCommand: ({command: committedCommand, map}) => {
+      committedCommand.revert({map});
+      refreshGenerationSummary(map);
+    },
+    afterUiRefresh: () => {
+      refreshGenerationSummary(state.map);
+      updateEconomyPanel(state);
+      updateRuntimePanel(documentRef, state);
+      setFileOperationStatus(documentRef, request.kind === "rebuild"
+        ? "已重算经济链。"
+        : "已应用市场归属并重算经济链。");
+    }
+  }, operationContext);
+}
+
+function attachEconomyWorkerHistory(command, metadata) {
+  Object.defineProperty(command, "workerHistory", {
+    value: Object.freeze({
+      task: ECONOMY_WORKER_TASK,
+      kind: metadata.request.kind,
+      label: metadata.label,
+      request: structuredClone(metadata.request),
+      renderLayers: Object.freeze([...metadata.renderLayers])
+    })
+  });
+  return command;
 }
 
 function setGoodDisplayViaApi(state, documentRef, goodId, patch = {}) {
@@ -9937,7 +10312,7 @@ export function inspectSocialExpansionViaApi(state, kind, objectId, options = {}
   return inspectSocialExpansion(state.map, {...options, kind, id});
 }
 
-export function applySocialExpansionViaApi(state, documentRef, kind, objectId, options = {}, runtimeUi = {}) {
+export function applySocialExpansionViaApi(state, documentRef, kind, objectId, options = {}, runtimeUi = {}, operationContext = null) {
   assertMapAvailable(state);
   const label = kind === "culture" ? "文化" : "宗教";
   const id = normalizeApiInteger(objectId, `${label} ID`);
@@ -9954,7 +10329,17 @@ export function applySocialExpansionViaApi(state, documentRef, kind, objectId, o
   if (semanticOptions.mode === "reexpand" && options.confirm !== true) throw new Error(`${label}重新扩张需要显式传入 {confirm: true}`);
   const inspection = inspectSocialExpansion(state.map, {...semanticOptions, kind, id});
   if (!inspection.valid) throw new Error(inspection.reason);
-  const command = createApplySocialExpansionCommand({...semanticOptions, kind, id}, {label: `${label}${semanticOptions.mode === "reexpand" ? "重新扩张" : "中心与参数"}`});
+  const request = {...semanticOptions, kind, id};
+  const command = createApplySocialExpansionCommand(request, {label: `${label}${semanticOptions.mode === "reexpand" ? "重新扩张" : "中心与参数"}`});
+  if (operationContext) {
+    return applySocialExpansionViaWorker(state, documentRef, {
+      kind,
+      label,
+      request,
+      command,
+      operationContext
+    });
+  }
   const result = executeEditCommand(state, documentRef, command, {
     context: {map: state.map},
     ...(runtimeUi.refresh ? {refresh: runtimeUi.refresh} : {}),
@@ -9971,6 +10356,62 @@ export function applySocialExpansionViaApi(state, documentRef, kind, objectId, o
   (runtimeUi.updateRuntimePanel || updateRuntimePanel)(documentRef, state);
   (runtimeUi.updateEditingInteractionLock || updateEditingInteractionLock)(state, documentRef);
   return editApiResult(state, result);
+}
+
+async function applySocialExpansionViaWorker(state, documentRef, {kind, label, request, command, operationContext}) {
+  const sourceFingerprint = fingerprintSocialExpansionSource(state.map, request);
+  return executeWorkerMapMutation(state, documentRef, {
+    task: SOCIAL_EXPANSION_WORKER_TASK,
+    targetKind: `${kind}-expansion`,
+    userLabel: `${label}${request.mode === "reexpand" ? "扩张范围" : "中心与参数"}`,
+    payload: {request, sourceFingerprint},
+    includeBindingInPayload: true,
+    renderLayers: request.mode === "reexpand"
+      ? ["surface", "point", "labels", "picking"]
+      : ["point", "labels", "picking"],
+    effects: command.effects,
+    assertOutput: ({state: currentState, sourceMap, output}) => {
+      if (currentState.map !== sourceMap || fingerprintSocialExpansionSource(sourceMap, request) !== sourceFingerprint) {
+        const error = new Error(`${label}扩张准备结果已被新的地图状态取代`);
+        error.code = "operation_obsolete";
+        throw error;
+      }
+      if (output?.kind !== "social-expansion"
+        || output?.plan?.sourceFingerprint !== sourceFingerprint
+        || output?.plan?.request?.kind !== kind
+        || Number(output?.plan?.request?.id) !== request.id) {
+        const error = new Error(`${label}扩张准备结果结构无效`);
+        error.code = "social-expansion-worker-result-invalid";
+        throw error;
+      }
+    },
+    createCommand: ({output, result, effects}) => attachSocialExpansionWorkerHistory(createDomainPatchCommand({
+      patch: output.patch,
+      policy: getSocialExpansionPatchPolicy(state.map, request),
+      label: command.label,
+      historyDomain: `${kind}-expansion`,
+      effects,
+      result
+    }), {kind, label, request, renderLayers: request.mode === "reexpand" ? ["surface", "point", "labels", "picking"] : ["point", "labels", "picking"]}),
+    afterUiRefresh: () => {
+      setFileOperationStatus(documentRef, request.mode === "reexpand"
+        ? `已重新扩张${label}。`
+        : `已保存${label}中心与扩张参数。`);
+    }
+  }, operationContext);
+}
+
+function attachSocialExpansionWorkerHistory(command, metadata) {
+  Object.defineProperty(command, "workerHistory", {
+    value: Object.freeze({
+      task: SOCIAL_EXPANSION_WORKER_TASK,
+      kind: metadata.kind,
+      label: metadata.label,
+      request: structuredClone(metadata.request),
+      renderLayers: Object.freeze([...metadata.renderLayers])
+    })
+  });
+  return command;
 }
 
 function renameCultureViaApi(state, documentRef, cultureId, name) {
@@ -11016,7 +11457,8 @@ async function executeWorkerMapMutation(state, documentRef, mutation, operation 
     atomicCommitGuarded = true;
     state.workerSessionMutationGuard = true;
     try {
-      state.editHistory.execute(command, {map: state.map});
+      if (typeof mutation.commitCommand === "function") mutation.commitCommand({state, command, map: state.map});
+      else state.editHistory.execute(command, {map: state.map});
     } finally {
       state.workerSessionMutationGuard = false;
     }
@@ -11174,7 +11616,8 @@ async function executeWorkerMapMutation(state, documentRef, mutation, operation 
 
     if (mapStillCurrent && execution?.executed) {
       try {
-        command.revert({map: committedMap});
+        if (typeof mutation.rollbackCommand === "function") mutation.rollbackCommand({state, command, map: committedMap});
+        else command.revert({map: committedMap});
       } catch (failure) {
         rollbackFailures.push(failure);
       }
@@ -16453,7 +16896,7 @@ function cancelMarketAssignmentPreview(state) {
   return changes.length;
 }
 
-function applyPendingMarketAssignment(state, documentRef) {
+async function applyPendingMarketAssignment(state, documentRef) {
   const changes = pendingMarketAssignmentChanges(state);
   const preview = changes.length ? inspectMarketAssignment(state.map, changes) : null;
   if (!preview?.valid) {
@@ -16462,21 +16905,38 @@ function applyPendingMarketAssignment(state, documentRef) {
       : "当前没有可应用的市场归属变化。");
     return {executed: false, reason: "invalid-preview", preview};
   }
+  const sourceMap = state.map;
   restoreMarketAssignmentPreview(state.map, changes);
   const command = createApplyMarketAssignmentCommand(changes);
-  const execution = executeEditCommand(state, documentRef, command, {
-    context: {map: state.map},
-    afterRefresh: () => refreshGenerationSummary(state.map),
-    status: executed => `已应用 ${executed.getResult?.().changed || 0} 个市场归属并重算经济链。`,
-    noopStatus: "市场归属没有变化。"
-  });
-  if (execution.executed) {
+  try {
+    const response = await state.runtimeOperation.run(
+      "edit.economy.assignCells",
+      operationContext => applyEconomyMutationViaWorker(state, documentRef, {
+        request: {kind: "market-assignment", changes, confirm: true, label: command.label},
+        command,
+        operationContext,
+        userLabel: "市场归属"
+      }),
+      {message: "正在应用市场归属并重算经济链"}
+    );
+    if (!response.executed) {
+      applyMarketAssignmentPreview(state.map, changes);
+      return {...response, preview};
+    }
     state.economyEdit.originals = new Map();
     state.economyEdit.preview = null;
     state.renderer?.clearHeightCellSelection?.();
-    completeCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.MARKET_ASSIGN, {command: execution.command});
-  } else applyMarketAssignmentPreview(state.map, changes);
-  return execution;
+    completeCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.MARKET_ASSIGN, {command});
+    updateEconomyPanel(state);
+    return {...response, preview};
+  } catch (error) {
+    if (state.map === sourceMap && state.economyEdit.originals.size) {
+      applyMarketAssignmentPreview(state.map, changes);
+      state.editRefreshScheduler.run(MARKET_ASSIGNMENT_PREVIEW_EFFECTS);
+      updateMarketAssignmentPreview(state);
+    }
+    throw error;
+  }
 }
 
 function rebuildEconomyViaAction(

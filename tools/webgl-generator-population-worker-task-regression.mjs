@@ -64,12 +64,13 @@ async function verifyTenThousandCells() {
   const targetBefore = structuredClone(target);
   const identities = captureContainerIdentities(target);
   const history = new EditHistory();
-  history.execute(createDomainPatchCommand({
+  const patchCommand = createDomainPatchCommand({
     patch: adjustmentOutput.patch,
     policy: getPopulationWorkerPatchPolicy(target, adjustmentOutput.patch),
     label: "Worker 人口增减补丁",
     effects: {}
-  }), {map: target});
+  });
+  history.execute(patchCommand, {map: target});
   refreshGenerationSummary(target);
   assert.deepEqual(target, adjustmentShadow, "人口领域补丁没有精确复现 Worker shadow");
   assertContainerIdentities(target, identities);
@@ -84,6 +85,26 @@ async function verifyTenThousandCells() {
   assert.deepEqual(target, adjustmentShadow, "人口领域补丁重做不精确");
   assertContainerIdentities(target, identities);
   assertPopulationAliases(target, "补丁重做");
+
+  const historyShadow = structuredClone(adjustmentShadow);
+  const undoOutput = await runPopulationWorkerTask({
+    map: historyShadow,
+    binding,
+    historyTransition: {action: "undo", request: adjustmentRequest, patch: patchCommand.getHistoryPatch("undo")}
+  }, taskContext(binding, "history-undo"));
+  refreshGenerationSummary(historyShadow);
+  assert.equal(undoOutput.kind, "population-history");
+  assert.deepEqual(historyShadow, targetBefore, "人口 Worker 镜像撤销不精确");
+  history.undo({map: target});
+  const redoOutput = await runPopulationWorkerTask({
+    map: historyShadow,
+    binding,
+    historyTransition: {action: "redo", request: adjustmentRequest, patch: patchCommand.getHistoryPatch("redo")}
+  }, taskContext(binding, "history-redo"));
+  refreshGenerationSummary(historyShadow);
+  assert.equal(redoOutput.kind, "population-history");
+  assert.deepEqual(historyShadow, adjustmentShadow, "人口 Worker 镜像重做不精确");
+  history.redo({map: target});
 
   const transferRequest = {
     kind: "transfer",
@@ -130,6 +151,7 @@ async function verifyTenThousandCells() {
     aliases: true,
     objectIdentity: true,
     undoRedo: true,
+    workerHistory: true,
     locksCancelFaultStale: true,
     zeroInputRejectedWithoutWrites: true
   };

@@ -71,6 +71,13 @@ assert.match(panelSource, /市场归属预览[\s\S]*应用并重算[\s\S]*取消
 assert.match(panelSource, /function exportCsv[\s\S]*function exportJson[\s\S]*function exportRows\(\)[\s\S]*buildEconomyMetrics/, "经济 CSV/JSON 导出未读取当前重算结果");
 assert.match(rendererSource, /function topTradeFlowDeals\(map\)[\s\S]*map\?\.pack\?\.deals/, "静态贸易流数据未读取重算后的 pack.deals");
 assert.match(consoleSource, /economy\.inspectAssignment[\s\S]*economy\.assignCells[\s\S]*economy\.rebuild/, "控制台 API 缺少市场预检、应用或经济重算");
+assert.match(appSource, /task: ECONOMY_WORKER_TASK[\s\S]*includeBindingInPayload: true[\s\S]*renderLayers/, "经济正式入口未接 Worker prepared 事务");
+assert.match(appSource, /executeEconomyWorkerHistory[\s\S]*historyTransition/, "经济撤销重做未接 Worker 历史事务");
+const economyWorkerEntry = appSource.slice(appSource.indexOf("async function applyEconomyMutationViaWorker"), appSource.indexOf("function attachEconomyWorkerHistory"));
+assert.doesNotMatch(economyWorkerEntry, /fingerprintEconomySource/, "经济正式入口不得在主线程遍历整图计算来源指纹");
+for (const method of ["economy.assignCells", "economy.rebuild"]) {
+  assert.match(consoleSource, new RegExp(`"${method.replace(".", "\\.")}": \\{[^\\n]*async: true`), `${method} 未声明为异步正式入口`);
+}
 
 console.log(JSON.stringify({
   ok: true,

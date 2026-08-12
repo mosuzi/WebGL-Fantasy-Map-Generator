@@ -53,6 +53,12 @@ export class EditHistory {
     return command;
   }
 
+  peek(action) {
+    if (action === "undo") return this.undoStack.at(-1) || null;
+    if (action === "redo") return this.redoStack.at(-1) || null;
+    throw new Error(`未知历史动作：${action}`);
+  }
+
   clear() {
     this.undoStack = [];
     this.redoStack = [];

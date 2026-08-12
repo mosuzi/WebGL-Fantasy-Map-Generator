@@ -87,9 +87,24 @@ async function verifyTenThousandCells() {
   const formal = structuredClone(base);
   createApplyCultureExpansionCommand(cultureRequest.id, cultureRequest).apply({map: formal});
   assert.deepEqual(normalizeVolatile(dataSnapshot(target)), normalizeVolatile(dataSnapshot(formal)), "Worker 与 legacy formal command 结果不一致");
+  const historyMirror = structuredClone(shadow);
+  const undoOutput = await runSocialExpansionWorkerTask({
+    map: historyMirror,
+    binding,
+    historyTransition: {action: "undo", request: cultureRequest, patch: patchCommand.getHistoryPatch("undo")}
+  }, taskContext(binding, "worker-history-undo"));
+  assert.equal(undoOutput.kind, "social-expansion-history", "Worker 撤销结果类型错误");
+  assert.deepEqual(dataSnapshot(historyMirror), targetBefore, "Worker 撤销镜像没有恢复前态");
   history.undo({map: target});
   assert.deepEqual(dataSnapshot(target), targetBefore, "Worker 领域补丁撤销不精确");
   assertIdentities(target, identities);
+  const redoOutput = await runSocialExpansionWorkerTask({
+    map: historyMirror,
+    binding,
+    historyTransition: {action: "redo", request: cultureRequest, patch: patchCommand.getHistoryPatch("redo")}
+  }, taskContext(binding, "worker-history-redo"));
+  assert.equal(redoOutput.history.action, "redo", "Worker 重做动作错误");
+  assert.deepEqual(dataSnapshot(historyMirror), dataSnapshot(shadow), "Worker 重做镜像没有恢复后态");
   history.redo({map: target});
   assert.deepEqual(dataSnapshot(target), dataSnapshot(shadow), "Worker 领域补丁重做不精确");
 

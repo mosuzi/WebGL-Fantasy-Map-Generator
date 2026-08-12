@@ -1,4 +1,5 @@
-import {createDomainPatch} from "./domain-patch.js";
+import {executeRenderPreparationTask} from "../renderer/render-preparation.js";
+import {createDomainPatch, createDomainPatchCommand} from "./domain-patch.js";
 import {
   createApplyMarketAssignmentCommand,
   createRebuildEconomyCommand,
@@ -45,9 +46,12 @@ export async function runEconomyWorkerTask(payload = {}, context = {}) {
   if (!map?.pack?.cells || !Array.isArray(map?.pack?.markets)) {
     throw taskError("economy-worker-map-missing", "经济 Worker 缺少完整地图快照");
   }
-  const request = normalizeRequest(payload.request);
   const binding = normalizeBinding(payload.binding);
   assertEnvelopeBinding(binding, context.binding);
+  if (payload.historyTransition) {
+    return runEconomyHistoryTransition(map, binding, payload, context);
+  }
+  const request = normalizeRequest(payload.request);
   await taskCheckpoint(context, "validate");
 
   const sourceFingerprint = fingerprintEconomySource(map, request);
@@ -80,7 +84,10 @@ export async function runEconomyWorkerTask(payload = {}, context = {}) {
     const patch = structuredClone(createDomainPatch("economy-mutation", changedPaths, map));
     failAt(payload.faultAt, "after-patch");
     await taskCheckpoint(context, "patch");
-    report(context, "complete", "经济 Worker 补丁已准备", 1);
+    const preparedRender = payload.render
+      ? await executeRenderPreparationTask({...payload.render, map}, context)
+      : null;
+    report(context, "complete", "经济结果已准备", 1);
     return {
       kind: "economy",
       binding,
@@ -94,10 +101,8 @@ export async function runEconomyWorkerTask(payload = {}, context = {}) {
         changedPaths: [...patch.writeSet]
       },
       patch,
-      refresh: {
-        derived: ["market-ownership", "burg-markets", "market-production", "market-trades", "market-prices", "state-finance", "economy-summary", "point-layers", "labels", "object-panels", "object-index"],
-        picking: "objects"
-      }
+      preparedRender,
+      refresh: economyRefresh()
     };
   } catch (error) {
     if (applied) {
@@ -110,6 +115,53 @@ export async function runEconomyWorkerTask(payload = {}, context = {}) {
     restoreRoots(map, before);
     throw error;
   }
+}
+
+async function runEconomyHistoryTransition(map, binding, payload, context) {
+  const transition = payload.historyTransition;
+  const action = transition?.action === "redo" ? "redo" : transition?.action === "undo" ? "undo" : "";
+  if (!action) throw taskError("economy-worker-history-action-invalid", "经济历史动作无效");
+  const request = normalizeRequest(transition.request);
+  const command = createDomainPatchCommand({
+    patch: transition.patch,
+    policy: getEconomyWorkerPatchPolicy(map, transition.patch),
+    label: `经济${action === "undo" ? "撤销" : "重做"}`,
+    historyDomain: "economy",
+    effects: {},
+    result: null
+  });
+  let applied = false;
+  try {
+    command.apply({map});
+    applied = true;
+    await taskCheckpoint(context, `history-${action}`);
+    const preparedRender = payload.render
+      ? await executeRenderPreparationTask({...payload.render, map}, context)
+      : null;
+    report(context, "complete", `经济${action === "undo" ? "撤销" : "重做"}画面已准备`, 1);
+    return {
+      kind: "economy-history",
+      binding,
+      history: {action, kind: request.kind},
+      result: {
+        executed: true,
+        action,
+        label: String(transition.label || (request.kind === "rebuild" ? "重算经济链" : "市场归属"))
+      },
+      preparedRender,
+      refresh: economyRefresh()
+    };
+  } catch (error) {
+    if (applied) command.revert({map});
+    throw error;
+  }
+}
+
+function economyRefresh() {
+  return {
+    derived: ["market-ownership", "burg-markets", "market-production", "market-trades", "market-prices", "state-finance", "economy-summary", "point-layers", "labels", "object-panels", "object-index"],
+    picking: "objects"
+  };
 }
 
 export function getEconomyWorkerPatchPolicy(map, patch) {
@@ -136,7 +188,10 @@ export function fingerprintEconomySource(map, request = {}) {
 }
 
 export function collectEconomyWorkerTransferables(result) {
-  return collectWorkerTransferables(result?.patch || result);
+  return collectWorkerTransferables({
+    patch: result?.patch || null,
+    preparedRender: result?.preparedRender || null
+  });
 }
 
 function prepareCommand(map, request) {
@@ -181,6 +236,7 @@ function emptyResult(binding, plan, inspection, reason) {
     inspection,
     result: {executed: false, operation: plan.request.kind, reason, sourceFingerprint: plan.sourceFingerprint, changedPaths: []},
     patch: createDomainPatch("economy-mutation", [], {}),
+    preparedRender: null,
     refresh: {derived: [], picking: "none"}
   };
 }

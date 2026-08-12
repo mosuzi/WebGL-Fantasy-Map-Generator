@@ -69,19 +69,35 @@ async function verifyTenThousandCells() {
   const targetBefore = structuredClone(target);
   const identities = captureContainerIdentities(target);
   const history = new EditHistory();
-  history.execute(createDomainPatchCommand({
+  const patchCommand = createDomainPatchCommand({
     patch: assignmentOutput.patch,
     policy: getEconomyWorkerPatchPolicy(target, assignmentOutput.patch),
     label: "Worker 市场归属补丁",
     effects: {}
-  }), {map: target});
+  });
+  history.execute(patchCommand, {map: target});
   assert.deepEqual(target, assignmentShadow, "经济领域补丁没有精确复现 Worker shadow");
   assertContainerIdentities(target, identities);
   assertEconomyAliases(target, "补丁应用");
+  const historyMirror = structuredClone(assignmentShadow);
+  const undoOutput = await runEconomyWorkerTask({
+    map: historyMirror,
+    binding,
+    historyTransition: {action: "undo", request: assignmentRequest, patch: patchCommand.getHistoryPatch("undo")}
+  }, taskContext(binding, "history-undo"));
+  assert.equal(undoOutput.kind, "economy-history", "经济 Worker 撤销结果类型错误");
+  assert.deepEqual(historyMirror, targetBefore, "经济 Worker 镜像撤销不精确");
   history.undo({map: target});
   assert.deepEqual(target, targetBefore, "经济领域补丁撤销不精确");
   assertContainerIdentities(target, identities);
   assertEconomyAliases(target, "补丁撤销");
+  const redoOutput = await runEconomyWorkerTask({
+    map: historyMirror,
+    binding,
+    historyTransition: {action: "redo", request: assignmentRequest, patch: patchCommand.getHistoryPatch("redo")}
+  }, taskContext(binding, "history-redo"));
+  assert.equal(redoOutput.history.action, "redo", "经济 Worker 重做动作错误");
+  assert.deepEqual(historyMirror, assignmentShadow, "经济 Worker 镜像重做不精确");
   history.redo({map: target});
   assert.deepEqual(target, assignmentShadow, "经济领域补丁重做不精确");
   assertContainerIdentities(target, identities);

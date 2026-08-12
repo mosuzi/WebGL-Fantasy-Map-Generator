@@ -346,7 +346,7 @@ function inspectExpansion() {
 }
 
 function applyExpansion(confirm) {
-  props.callbacks.onApplyExpansion?.(expansionOptions(confirm));
+  return props.callbacks.onApplyExpansion?.(expansionOptions(confirm));
 }
 
 function selectTreeNode(node) {

@@ -16,8 +16,8 @@ for (const method of ["population.inspectAdjustment", "population.applyAdjustmen
 for (const method of ["population.inspectTransfer", "population.transfer"]) assert(API_METHODS.edit.includes(method), `稳定 API 目录缺少 ${method}`);
 assert(!CONFIRM_REQUIRED_METHODS.includes("edit.population.inspectTransfer"), "人口转移预检不应要求确认");
 assert(CONFIRM_REQUIRED_METHODS.includes("edit.population.transfer"), "人口转移提交缺少显式确认");
-assert.equal(Object.values(API_METHODS).reduce((sum, methods) => sum + methods.length, 0), 208);
-assert.equal(API_METHODS.edit.length, 110);
+assert.equal(Object.values(API_METHODS).reduce((sum, methods) => sum + methods.length, 0), 322);
+assert.equal(API_METHODS.edit.length, 179);
 
 const [appSource, consoleSource, controllerSource, panelSource] = await Promise.all([
   readFile(new URL("../app/webgl-generator/src/runtime/app.js", import.meta.url), "utf8"),
@@ -28,11 +28,16 @@ const [appSource, consoleSource, controllerSource, panelSource] = await Promise.
 
 for (const method of ["inspectAdjustment", "applyAdjustment", "inspectTransfer", "transfer"]) assert(consoleSource.includes(`actions.edit?.population?.${method}`), `Console API 缺少 population.${method} 转发`);
 for (const token of ["inspectPopulationAdjustmentViaApi", "applyPopulationAdjustmentViaApi", "createApplyPopulationAdjustmentCommand", "inspectPopulationTransferViaApi", "applyPopulationTransferViaApi", "createApplyPopulationTransferCommand"]) assert(appSource.includes(token), `人口运行时缺少 ${token}`);
+assert.match(appSource, /task: POPULATION_WORKER_TASK[\s\S]*includeBindingInPayload: true[\s\S]*renderLayers/, "人口正式入口未接 Worker prepared 事务");
+assert.match(appSource, /executePopulationWorkerHistory[\s\S]*historyTransition/, "人口撤销重做未接 Worker 历史事务");
+for (const method of ["population.applyAdjustment", "population.transfer"]) {
+  assert.match(consoleSource, new RegExp(`"${method.replace(".", "\\.")}": \\{[^\\n]*async: true`), `${method} 未声明为异步正式入口`);
+}
 for (const token of ["onAdjustmentDelta", "onInspectAdjustment", "onApplyAdjustment", "onTransferTarget", "onInspectTransfer", "onApplyTransfer", "historyActions"]) assert(controllerSource.includes(token), `人口 panel controller 缺少 ${token}`);
 for (const text of ["区域人口增减", "人口增减量", "应用单次调整", "区域人口转移", "目标区域", "预检转移", "确认转移", "目标容量", "可通过历史撤销"]) assert(panelSource.includes(text), `人口面板缺少“${text}”`);
 
 const dynamic = await testDynamicRuntime();
-console.log(JSON.stringify({ok: true, methodCounts: {total: 208, edit: 110}, dynamic}, null, 2));
+console.log(JSON.stringify({ok: true, methodCounts: {total: 322, edit: 179}, dynamic}, null, 2));
 
 async function testDynamicRuntime() {
   const server = await createViteServer({
@@ -77,9 +82,11 @@ async function testDynamicRuntime() {
     assert.deepEqual(mapDigest(apiMap), mapDigest(uiMap), "人口 UI/API 提交结果不一致");
     assert.equal(api.state.editHistory.getStats().undo, 1, "API 人口提交没有形成单条历史");
 
-    assert.equal(api.api.history.undo().ok, true);
+    const undoResponse = api.api.history.undo();
+    assert.equal(undoResponse.ok, true, undoResponse.error?.message);
     assert.deepEqual(mapDigest(apiMap), before, "人口 API 撤销没有恢复原值");
-    assert.equal(api.api.history.redo().ok, true);
+    const redoResponse = api.api.history.redo();
+    assert.equal(redoResponse.ok, true, redoResponse.error?.message);
     assert.deepEqual(mapDigest(apiMap), mapDigest(uiMap), "人口 API 重做没有恢复提交值");
 
     const transferTarget = findTransferTarget(uiMap, target, 10);
