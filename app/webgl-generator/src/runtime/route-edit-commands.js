@@ -59,15 +59,16 @@ export function inspectRouteCreation(map, options = {}) {
   return {valid: true, code: "ok", reason: "", type, startPackCell, endPackCell, path, cells: path.length};
 }
 
-export function createAddRouteCommand(options = {}) {
+export function createAddRouteCommand(options = {}, {preflight = null} = {}) {
   let snapshot = null;
   let created = null;
+  let preview = preflight;
   const command = {
     label: String(options.label || "绘制路线"),
     domain: OBJECT_KIND.ROUTE,
     effects: {...ROUTE_CREATE_EFFECTS, affected: objectAffected(OBJECT_KIND.ROUTE, "new")},
     apply(context) {
-      const preview = inspectRouteCreation(context.map, options);
+      preview = routeCreationPreflight(context.map, options, preview);
       if (!preview.valid) throw creationError(preview);
       snapshot ??= captureRouteCreateSnapshot(context.map);
       created ??= buildRoute(context.map, preview);
@@ -81,7 +82,7 @@ export function createAddRouteCommand(options = {}) {
       restoreRouteCreateSnapshot(context.map, snapshot);
     },
     isNoop(context) {
-      const preview = inspectRouteCreation(context.map, options);
+      preview = routeCreationPreflight(context.map, options, preview);
       if (!preview.valid) throw creationError(preview);
       return false;
     },
@@ -153,19 +154,20 @@ export function inspectRouteEdit(map, routeId, patch = {}) {
   };
 }
 
-export function createEditRouteCommand(routeId, patch = {}, {label = "编辑路线"} = {}) {
+export function createEditRouteCommand(routeId, patch = {}, {label = "编辑路线", preflight = null} = {}) {
   const id = Number(routeId);
   let before = null;
   let after = null;
   let beforeIndex = -1;
   let staleBefore = null;
   let staleAfter = null;
+  let preview = preflight;
   return {
     label: `${label} #${id}`,
     domain: OBJECT_KIND.ROUTE,
     effects: {...ROUTE_EDIT_EFFECTS, affected: objectAffected(OBJECT_KIND.ROUTE, id)},
     apply(context) {
-      const preview = inspectRouteEdit(context.map, id, patch);
+      preview = routeEditPreflight(context.map, id, patch, preview);
       if (!preview.valid) throw routeEditError(preview);
       const routes = readRoutes(context.map);
       const index = routes.findIndex(route => route.id === id);
@@ -195,7 +197,7 @@ export function createEditRouteCommand(routeId, patch = {}, {label = "编辑路�
       else if (context.map?.metadata) delete context.map.metadata.derivedStale;
     },
     isNoop(context) {
-      const preview = inspectRouteEdit(context.map, id, patch);
+      preview = routeEditPreflight(context.map, id, patch, preview);
       if (!preview.valid) throw routeEditError(preview);
       return !preview.changed;
     },
@@ -203,6 +205,49 @@ export function createEditRouteCommand(routeId, patch = {}, {label = "编辑路�
       return after ? {routeId: id, type: after.type, level: after.level, from: after.from, to: after.to, cells: after.packCells.length} : null;
     }
   };
+}
+
+function routeCreationPreflight(map, options, preflight) {
+  if (!preflight) return inspectRouteCreation(map, options);
+  const startPackCell = Number(options.startPackCell);
+  const endPackCell = Number(options.endPackCell);
+  const type = normalizeRouteType(options.type);
+  const valid = preflight.valid === true
+    && Number(preflight.startPackCell) === startPackCell
+    && Number(preflight.endPackCell) === endPackCell
+    && preflight.type === type
+    && Array.isArray(preflight.path)
+    && Number(preflight.path[0]) === startPackCell
+    && Number(preflight.path.at(-1)) === endPackCell
+    && isContinuousPath(map?.pack?.cells, preflight.path);
+  if (!valid) throw preflightError("route-create-preflight-stale", "路线创建计划已过期，请重新规划");
+  return preflight;
+}
+
+function routeEditPreflight(map, routeId, patch, preflight) {
+  if (!preflight) return inspectRouteEdit(map, routeId, patch);
+  const route = findRoute(map, routeId);
+  const expectedType = String(patch.type ?? route?.type ?? "road").trim().toLowerCase();
+  const expectedLevel = String(patch.level ?? route?.level ?? defaultRouteLevel(expectedType)).trim().toLowerCase();
+  const expectedFrom = normalizeEndpointId(patch.fromId ?? patch.from ?? route?.from);
+  const expectedTo = normalizeEndpointId(patch.toId ?? patch.to ?? route?.to);
+  const valid = Boolean(route)
+    && preflight.valid === true
+    && Number(preflight.routeId) === Number(routeId)
+    && preflight.type === expectedType
+    && preflight.level === expectedLevel
+    && Number(preflight.from) === expectedFrom
+    && Number(preflight.to) === expectedTo
+    && Array.isArray(preflight.path)
+    && isContinuousPath(map?.pack?.cells, preflight.path);
+  if (!valid) throw preflightError("route-edit-preflight-stale", "路线编辑计划已过期，请重新规划");
+  return preflight;
+}
+
+function preflightError(code, message) {
+  const error = new Error(message);
+  error.code = code;
+  return error;
 }
 
 export function planRouteRelocation(map, route, cityId, target) {

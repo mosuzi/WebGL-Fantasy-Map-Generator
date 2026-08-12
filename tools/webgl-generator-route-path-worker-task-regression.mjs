@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import {strict as assert} from "node:assert";
 import {performance} from "node:perf_hooks";
+import {readFile} from "node:fs/promises";
 import {generatePlaceholderMap} from "../app/webgl-generator/src/generator/index.js";
 import {EditHistory} from "../app/webgl-generator/src/runtime/edit-history.js";
 import {
@@ -16,7 +17,14 @@ import {
   fingerprintRoutePathSource,
   runRoutePathWorkerTask
 } from "../app/webgl-generator/src/runtime/route-path-worker-task.js";
+import {
+  createMoveCityCommand,
+  importCityMovePreflight,
+  inspectCityMoveAsync,
+  inspectCityMoveFast
+} from "../app/webgl-generator/src/runtime/city-relocation.js";
 
+await verifyFormalEntryContracts();
 const tenK = await verifyTenThousandCells();
 const hundredK = await verifyHundredThousandCells();
 
@@ -29,8 +37,9 @@ async function verifyTenThousandCells() {
   const expectedCreate = inspectRouteCreation(base, createRequest.options);
   assert.equal(expectedCreate.valid, true, expectedCreate.reason);
   const inputBuffer = base.pack.cells.h.buffer;
+  const workerMap = structuredClone(base);
   const output = await runRoutePathWorkerTask(
-    {map: base, request: createRequest, binding, sourceFingerprint: fingerprintRoutePathSource(base, createRequest)},
+    {map: workerMap, request: createRequest, binding, sourceFingerprint: fingerprintRoutePathSource(base, createRequest), render: createRenderRequest(binding)},
     taskContext(binding, "worker")
   );
   assert.deepEqual(output.plan.inspection, expectedCreate, "create Worker 与正式 inspector 不同源");
@@ -39,6 +48,29 @@ async function verifyTenThousandCells() {
   assert.equal(inputBuffer.byteLength > 0, true, "路线 Worker 输入 buffer 被 detach");
   assert.equal(collectRoutePathWorkerTransferables(output).includes(inputBuffer), false, "路线 Worker 输出错误转移输入 buffer");
   assertRoutePathWorkerPlan(output.plan, base, binding);
+  assert.equal(workerMap.settlements.routes.length, base.settlements.routes.length + 1, "Worker 镜像未应用路线结果");
+  assert(output.preparedRender?.layers?.route?.vertices instanceof Float32Array, "路线 Worker 缺少 route prepared render");
+  assert(output.preparedRender?.layers?.picking, "路线 Worker 缺少 picking prepared render");
+  assert(output.history?.beforePatch && output.history?.afterPatch, "路线 Worker 缺少可复制历史补丁");
+
+  const undoBinding = {...binding, mapRevision: binding.mapRevision + 1, operationId: binding.operationId + 1};
+  const undo = await runRoutePathWorkerTask({
+    map: workerMap,
+    binding: undoBinding,
+    historyTransition: {action: "undo", label: "绘制路线", request: createRequest, patch: output.history.beforePatch},
+    render: createRenderRequest(undoBinding)
+  }, taskContext(undoBinding, "history-undo"));
+  assert.equal(undo.kind, "route-path-history", "路线撤销未走 Worker 历史模式");
+  assert.deepEqual(routeSnapshot(workerMap), routeSnapshot(base), "Worker 镜像撤销不精确");
+  const redoBinding = {...undoBinding, mapRevision: undoBinding.mapRevision + 1, operationId: undoBinding.operationId + 1};
+  const redo = await runRoutePathWorkerTask({
+    map: workerMap,
+    binding: redoBinding,
+    historyTransition: {action: "redo", label: "绘制路线", request: createRequest, patch: output.history.afterPatch},
+    render: createRenderRequest(redoBinding)
+  }, taskContext(redoBinding, "history-redo"));
+  assert.equal(redo.kind, "route-path-history", "路线重做未走 Worker 历史模式");
+  assert.equal(workerMap.settlements.routes.length, base.settlements.routes.length + 1, "Worker 镜像重做未恢复路线");
 
   const target = structuredClone(base);
   const identities = captureRouteIdentities(target);
@@ -58,8 +90,17 @@ async function verifyTenThousandCells() {
 
   const editSample = findEditRequest(base);
   const expectedEdit = inspectRouteEdit(base, editSample.routeId, editSample.patch);
+  const editPlanOnlyMap = structuredClone(base);
+  const editPlanOnlyBefore = routeSnapshot(editPlanOnlyMap);
+  const editPlanOnlyOutput = await runRoutePathWorkerTask(
+    {map: editPlanOnlyMap, request: editSample, binding, planOnly: true},
+    taskContext(binding, "edit-plan-only")
+  );
+  assert.deepEqual(editPlanOnlyOutput.inspection, expectedEdit, "edit plan-only Worker 与正式 inspector 不同源");
+  assert.deepEqual(routeSnapshot(editPlanOnlyMap), editPlanOnlyBefore, "edit plan-only Worker 不得改写镜像");
+  assert.equal(editPlanOnlyOutput.history, undefined, "edit plan-only Worker 不得生成历史补丁");
   const editOutput = await runRoutePathWorkerTask(
-    {map: base, request: editSample, binding},
+    {map: structuredClone(base), request: editSample, binding},
     taskContext(binding, "edit-worker")
   );
   assert.deepEqual(editOutput.plan.inspection, expectedEdit, "edit Worker 与正式 inspector 不同源");
@@ -73,6 +114,52 @@ async function verifyTenThousandCells() {
   editHistory.redo({map: editTarget});
   assert.deepEqual(editTarget.settlements.routes.find(route => route.id === editSample.routeId).packCells, expectedEdit.path, "edit plan 重做路径漂移");
   assertRouteAliases(editTarget);
+
+  const cityRequest = findCityMoveRequest(base);
+  const expectedCityMove = await inspectCityMoveAsync(base, cityRequest.cityId, cityRequest.target, {shouldContinue: () => true});
+  const cityWorkerMap = structuredClone(base);
+  const cityOutput = await runRoutePathWorkerTask({
+    map: cityWorkerMap,
+    request: cityRequest,
+    binding,
+    render: createRenderRequest(binding, ["point", "labels", "route", "picking"])
+  }, taskContext(binding, "city-relocation-worker"));
+  assert.deepEqual(cityOutput.inspection, structuredClone(expectedCityMove), "城市迁移 Worker 与正式 async inspector 不同源");
+  const cityPreflight = importCityMovePreflight(cityOutput.cityPreflight);
+  assert.equal(cityPreflight.phase, "full", "城市迁移 Worker 未返回可用冻结预检");
+  assert.equal(cityWorkerMap.settlements.cities.find(city => Number(city?.id) === cityRequest.cityId)?.packCell, cityPreflight.target.packCell, "Worker 镜像未应用城市迁移");
+  for (const layer of ["point", "labels", "route", "picking"]) {
+    assert(cityOutput.preparedRender?.layers?.[layer], `城市迁移 Worker 缺少 ${layer} prepared render`);
+  }
+  assert(cityOutput.history?.beforePatch && cityOutput.history?.afterPatch, "城市迁移 Worker 缺少历史补丁");
+
+  const cityUndoBinding = {...binding, mapRevision: binding.mapRevision + 3, operationId: binding.operationId + 3};
+  await runRoutePathWorkerTask({
+    map: cityWorkerMap,
+    binding: cityUndoBinding,
+    historyTransition: {action: "undo", label: "移动城市", request: cityRequest, patch: cityOutput.history.beforePatch},
+    render: createRenderRequest(cityUndoBinding, ["point", "labels", "route", "picking"])
+  }, taskContext(cityUndoBinding, "city-history-undo"));
+  assert.deepEqual(cityMoveSnapshot(cityWorkerMap), cityMoveSnapshot(base), "城市迁移 Worker 镜像撤销不精确");
+  const cityRedoBinding = {...cityUndoBinding, mapRevision: cityUndoBinding.mapRevision + 1, operationId: cityUndoBinding.operationId + 1};
+  await runRoutePathWorkerTask({
+    map: cityWorkerMap,
+    binding: cityRedoBinding,
+    historyTransition: {action: "redo", label: "移动城市", request: cityRequest, patch: cityOutput.history.afterPatch},
+    render: createRenderRequest(cityRedoBinding, ["point", "labels", "route", "picking"])
+  }, taskContext(cityRedoBinding, "city-history-redo"));
+  assert.equal(cityWorkerMap.settlements.cities.find(city => Number(city?.id) === cityRequest.cityId)?.packCell, cityPreflight.target.packCell, "城市迁移 Worker 镜像重做未恢复目标");
+
+  const cityTarget = structuredClone(base);
+  const cityBefore = cityMoveSnapshot(cityTarget);
+  const cityHistory = new EditHistory();
+  cityHistory.execute(createMoveCityCommand(cityRequest.cityId, cityRequest.target, {preflight: cityPreflight}), {map: cityTarget});
+  const cityAfter = cityMoveSnapshot(cityTarget);
+  assert.notDeepEqual(cityAfter, cityBefore, "冻结城市迁移计划未应用");
+  cityHistory.undo({map: cityTarget});
+  assert.deepEqual(cityMoveSnapshot(cityTarget), cityBefore, "冻结城市迁移计划撤销不精确");
+  cityHistory.redo({map: cityTarget});
+  assert.deepEqual(cityMoveSnapshot(cityTarget), cityAfter, "冻结城市迁移计划重做不精确");
 
   const relocationRequest = findRelocationRequest(base);
   const route = base.settlements.routes.find(item => item.id === relocationRequest.routeId);
@@ -89,7 +176,7 @@ async function verifyTenThousandCells() {
   assert.throws(() => assertRoutePathWorkerPlan(output.plan, base, {...binding, mapRevision: binding.mapRevision + 1}), error => error?.code === "route-path-worker-binding-stale");
   await assertCancelFaultAndLate(base, binding, createRequest);
 
-  const fallback = await runRoutePathWorkerTask({map: base, request: createRequest, binding}, taskContext(binding, "fallback"));
+  const fallback = await runRoutePathWorkerTask({map: structuredClone(base), request: createRequest, binding}, taskContext(binding, "fallback"));
   assert.deepEqual(fallback.plan, output.plan, "route-path Worker / fallback handler 不同源");
 
   return {
@@ -97,6 +184,11 @@ async function verifyTenThousandCells() {
     packCells: base.pack.cells.i.length,
     createCells: output.result.cells,
     editCells: editOutput.result.cells,
+    cityMove: {
+      cityId: cityRequest.cityId,
+      associatedRoutes: cityOutput.result.routes?.associated || 0,
+      undoRedo: true
+    },
     relocationAction: relocationOutput.plan.inspection.action,
     frozenPlan: true,
     undoRedoAliases: true,
@@ -106,13 +198,31 @@ async function verifyTenThousandCells() {
   };
 }
 
+async function verifyFormalEntryContracts() {
+  const [appSource, panelSource, consoleSource] = await Promise.all([
+    readFile(new URL("../app/webgl-generator/src/runtime/app.js", import.meta.url), "utf8"),
+    readFile(new URL("../app/webgl-generator/src/ui/panels/route-panel.js", import.meta.url), "utf8"),
+    readFile(new URL("../app/webgl-generator/src/runtime/console-api.js", import.meta.url), "utf8")
+  ]);
+  assert.doesNotMatch(appSource, /onInspectEdit:\s*\([^)]*\)\s*=>\s*inspectRouteEdit\(/, "路线面板不得回退主线程同步寻路");
+  assert.doesNotMatch(appSource, /inspectCityMove\(state\.map/, "城市公开预检不得回退主线程同步寻路");
+  assert.match(panelSource, /Promise\.resolve\(pending\)\.then/, "路线面板未等待异步 Worker 预检");
+  assert.match(panelSource, /requestId !== panelState\.editRequestId/, "路线面板缺少晚到预检隔离");
+  assert.match(consoleSource, /"cities\.inspectMove": \{[^\n]+async: true/);
+  assert.match(consoleSource, /"routes\.inspectEdit": \{[^\n]+async: true/);
+  const routeHistorySource = appSource.match(/async function executeRoutePathWorkerHistory[\s\S]+?\n}\n\nfunction synchronizeFeatureTopologyHistoryUi/)?.[0] || "";
+  assert.match(routeHistorySource, /createCommand: \(\) => command,\s*skipCommandNoopCheck: true,\s*commitCommand:/, "路线 / 城市 Worker 历史不得重复执行正式命令 no-op 预检");
+  assert.match(appSource, /mutation\.skipCommandNoopCheck !== true && command\.isNoop/, "通用 Worker 提交未限制历史 no-op 跳过范围");
+}
+
 async function verifyHundredThousandCells() {
   const map = createMap("route-path-worker-100k", 100000);
+  const workerMap = structuredClone(map);
   const binding = createBinding("route-path-100k", 12);
   const request = findCreateRequest(map);
   const inputBuffer = map.pack.cells.h.buffer;
   const started = performance.now();
-  const output = await runRoutePathWorkerTask({map, request, binding}, taskContext(binding, "worker-100k"));
+  const output = await runRoutePathWorkerTask({map: workerMap, request, binding}, taskContext(binding, "worker-100k"));
   const durationMs = Math.round((performance.now() - started) * 10) / 10;
   assert.equal(output.plan.valid, true, output.plan.inspection.reason);
   assert.ok(durationMs < 20000, `100k 路线规划超过 20s 预算：${durationMs}ms`);
@@ -194,6 +304,22 @@ function findRelocationRequest(map) {
   };
 }
 
+function findCityMoveRequest(map) {
+  const cities = (map.settlements?.cities || []).filter(city => city && !city.removed && !city.capital && !city.provincial).slice(0, 80);
+  const packCells = map.pack?.cells;
+  for (const city of cities) {
+    for (let packCell = 0; packCell < (packCells?.i?.length || 0); packCell++) {
+      if (Number(packCells.h?.[packCell]) < 20 || Number(packCells.burg?.[packCell]) > 0) continue;
+      const gridCell = Number(packCells.g?.[packCell]);
+      if (!Number.isInteger(gridCell) || gridCell === Number(city.cell)) continue;
+      const target = {gridCell, packCell};
+      const preview = inspectCityMoveFast(map, city.id, target);
+      if (preview.valid && preview.changed) return {kind: "city-relocation", cityId: Number(city.id), target};
+    }
+  }
+  throw new Error("找不到可迁移城市样本");
+}
+
 function createMap(seed, cellsTarget) {
   return generatePlaceholderMap({seed, cellsTarget, heightmapTemplate: "continents"});
 }
@@ -204,6 +330,20 @@ function createBinding(mapIdentity, mapRevision) {
 
 function taskContext(binding, source) {
   return {binding, source, checkpoint: () => true, report: () => {}, shouldContinue: () => true};
+}
+
+function createRenderRequest(binding, layers = ["route", "picking"]) {
+  return {
+    binding: {mapIdentity: binding.mapIdentity, mapRevision: binding.mapRevision},
+    layers,
+    camera: {scale: 1, offsetX: 0, offsetY: 0},
+    canvas: {width: 1200, height: 720, clientWidth: 1200, clientHeight: 720},
+    visibility: {},
+    visualTheme: {},
+    unitPreferences: {},
+    viewOptions: {},
+    labelOptions: {}
+  };
 }
 
 function captureRouteIdentities(map) {
@@ -252,6 +392,32 @@ function routeSnapshot(map) {
     links: map.pack.cells.routes,
     metadata: map.settlements.metadata,
     derivedStale: map.metadata?.derivedStale
+  });
+  if (snapshot.derivedStale?.updatedAt) snapshot.derivedStale.updatedAt = "<timestamp>";
+  return snapshot;
+}
+
+function cityMoveSnapshot(map) {
+  const snapshot = structuredClone({
+    cities: map.settlements.cities,
+    routes: map.settlements.routes,
+    settlementsMetadata: map.settlements.metadata,
+    burgs: map.pack.burgs,
+    packRoutes: map.pack.routes,
+    states: map.pack.states,
+    provinces: map.pack.provinces,
+    markets: map.pack.markets,
+    packBurg: map.pack.cells.burg,
+    packCellRoutes: map.pack.cells.routes,
+    packMarket: map.pack.cells.market,
+    gridBurg: map.grid.cells.burg,
+    politics: map.politics,
+    economy: map.economy,
+    diplomacy: map.diplomacy,
+    military: map.military,
+    zones: map.zones,
+    derivedStale: map.metadata?.derivedStale,
+    notes: map.notes
   });
   if (snapshot.derivedStale?.updatedAt) snapshot.derivedStale.updatedAt = "<timestamp>";
   return snapshot;

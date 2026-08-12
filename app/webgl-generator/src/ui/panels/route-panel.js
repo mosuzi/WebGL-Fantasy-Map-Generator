@@ -84,14 +84,12 @@ export function createRoutePanel(documentRef, manager, callbacks = {}) {
       if (!route) return;
       panelState.editMode = true;
       panelState.editDraft = routeEditDraft(route);
-      panelState.editPreview = callbacks.onInspectEdit?.(route.id, panelState.editDraft) || null;
-      panelState.version++;
+      refreshEditPreview(route.id, panelState.editDraft);
     },
     onEditDraft: patch => {
       if (!panelState.editDraft) return;
       panelState.editDraft = {...panelState.editDraft, ...(patch || {})};
-      panelState.editPreview = callbacks.onInspectEdit?.(panelState.editDraft.routeId, panelState.editDraft) || null;
-      panelState.version++;
+      refreshEditPreview(panelState.editDraft.routeId, panelState.editDraft);
     },
     onWaypointMode: active => callbacks.onWaypointMode?.(Boolean(active), panelState.editDraft?.routeId),
     onEditApply: () => callbacks.onEditApply?.(panelState.editDraft?.routeId, panelState.editDraft),
@@ -185,9 +183,8 @@ export function createRoutePanel(documentRef, manager, callbacks = {}) {
     setEditWaypoint(packCell) {
       if (!panelState.editDraft || !Number.isInteger(packCell)) return;
       panelState.editDraft = {...panelState.editDraft, viaPackCells: [packCell]};
-      panelState.editPreview = callbacks.onInspectEdit?.(panelState.editDraft.routeId, panelState.editDraft) || null;
+      refreshEditPreview(panelState.editDraft.routeId, panelState.editDraft);
       panelState.waypointMode = false;
-      panelState.version++;
     },
     isOpen() {
       return panelState.open;
@@ -196,6 +193,33 @@ export function createRoutePanel(documentRef, manager, callbacks = {}) {
       lazyPanel.unmount();
     }
   };
+
+  function refreshEditPreview(routeId, draft) {
+    const requestId = ++panelState.editRequestId;
+    let pending;
+    try {
+      pending = callbacks.onInspectEdit?.(routeId, draft);
+    } catch (error) {
+      settleEditPreview(requestId, {valid: false, changed: false, code: error?.code || "inspect-failed", summary: error?.message || "路线预检失败"});
+      return;
+    }
+    if (!pending || typeof pending.then !== "function") {
+      settleEditPreview(requestId, pending || null);
+      return;
+    }
+    panelState.editPreview = {valid: false, changed: false, pending: true, code: "pending", summary: "正在规划路线预览……"};
+    panelState.version++;
+    void Promise.resolve(pending).then(
+      preview => settleEditPreview(requestId, preview || null),
+      error => settleEditPreview(requestId, {valid: false, changed: false, code: error?.code || "inspect-failed", summary: error?.message || "路线预检失败"})
+    );
+  }
+
+  function settleEditPreview(requestId, preview) {
+    if (requestId !== panelState.editRequestId || !panelState.editMode) return;
+    panelState.editPreview = preview;
+    panelState.version++;
+  }
 }
 
 function routeObject(row) {

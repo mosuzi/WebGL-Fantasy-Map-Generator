@@ -137,6 +137,29 @@ export async function inspectCityMoveAsync(map, cityId, target = {}, options = {
   return finalizeInspection(map, fast, routePlans);
 }
 
+export function exportCityMovePreflight(preview) {
+  if (!preview?._plan || preview.phase !== "full") {
+    const error = new Error("城市移动预检缺少完整冻结计划");
+    error.code = "city-move-preflight-incomplete";
+    throw error;
+  }
+  return {
+    preview: cloneValue(preview),
+    plan: cloneValue(preview._plan)
+  };
+}
+
+export function importCityMovePreflight(payload) {
+  if (!payload?.preview || !payload?.plan) {
+    const error = new Error("城市移动 Worker 预检结果无效");
+    error.code = "city-move-worker-preflight-invalid";
+    throw error;
+  }
+  const preview = cloneValue(payload.preview);
+  Object.defineProperty(preview, "_plan", {value: deepFreeze(cloneValue(payload.plan)), enumerable: false});
+  return deepFreeze(preview);
+}
+
 export function createMoveCityCommand(cityId, target, {label = "移动城市", faultInjector = null, preflight = null} = {}) {
   const id = Number(cityId);
   let before = null;

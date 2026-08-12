@@ -351,7 +351,7 @@ assert.match(appSource, /CITY_MOVE: "city:move"/);
 assert.match(appSource, /bindCityRelocationDrag\(canvas/);
 assert.match(appSource, /if \(activeModeId\) return cancelCanvasToolMode\(state, documentRef, activeModeId, "escape"\)/);
 assert.match(appSource, /register\(CANVAS_TOOL_MODE\.CITY_MOVE, "city-panel"/);
-assert.match(appSource, /selectionStore\.setSelection\(\{object: \{kind: OBJECT_KIND\.CITY, id: cityId\}\}\)/);
+assert.match(appSource, /selectionStore\.setSelection\(\{object: \{kind: OBJECT_KIND\.CITY, id(?:: cityId)?\}\}\)|selectionStore\.setSelection\(\{object: \{kind: OBJECT_KIND\.CITY, id\}\}\)/);
 assert.match(appSource, /onPointerMiss: \(\) => \{\s*cancelCanvasToolModeAfterPointerMiss\(state, documentRef, CANVAS_TOOL_MODE\.CITY_MOVE\)/);
 assert.match(appSource, /function cancelCanvasToolModeAfterPointerMiss[\s\S]+?requestAnimationFrame\(\(\) => \{[\s\S]+?updateEditingInteractionLock[\s\S]+?updateRuntimePanel/);
 assert.doesNotMatch(appSource, /completeCanvasToolMode\(state, documentRef, CANVAS_TOOL_MODE\.CITY_MOVE/);

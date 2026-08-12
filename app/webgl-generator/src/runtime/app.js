@@ -80,7 +80,7 @@ import {createMapDocument, downloadText, mapFileBaseName, parseGeoJsonMeasuremen
 import {createMapArchiveFilename, normalizeMapName} from "./map-filename.js";
 import {attachImportDiagnostic, createHeightmapSourceSummary, createImportFailureDiagnostic, createImportSuccessDiagnostic, createMapImportDiagnostic, formatMapImportDiagnosticLines, inspectGeoImportSource, stringifyMapImportDiagnostic} from "./map-import-diagnostics.js";
 import {createAddCityAtCellCommand, createDeleteCityCommand, createRenameCitiesFromNamebaseCommand, createResetCityVisualCommand, createSetCityNoteCommand, createSetCityPopulationCommand, createSetCityVisualCommand, createSyncCityOwnerToCellCommand, inspectCityCreation} from "./city-edit-commands.js";
-import {createMoveCityCommand, inspectCityMove, inspectCityMoveAsync, inspectCityMoveFast} from "./city-relocation.js";
+import {createMoveCityCommand, importCityMovePreflight, inspectCityMoveFast} from "./city-relocation.js";
 import {bindCityRelocationDrag, resolveCityRelocationPointerCityId} from "./city-relocation-drag.js";
 import {createAddCultureCommand, createApplyCultureAssignmentCommand, createDeleteCultureCommand, createSetCultureColorCommand, createSetCultureParentCommand} from "./culture-edit-commands.js";
 import {createApplySocialExpansionCommand, inspectSocialExpansion, normalizeSocialExpansionMap} from "./social-expansion-edit-commands.js";
@@ -182,7 +182,7 @@ import {MAX_PERSISTENT_OBJECT_HIGHLIGHTS, isPersistentHighlightObjectKind, norma
 import {createAddRiverCommand, createDeleteRiverCommand, createEditRiverControlPointsCommand, createRenameRiversFromNamebaseCommand, createSetRiverNoteCommand, createSetRiverWidthFactorCommand} from "./river-edit-commands.js";
 import {createRiverWaypointSession} from "./river-waypoint-session.js";
 import {bindRiverControlPointEditing} from "./river-control-point-drag.js";
-import {createAddRouteCommand, createDeleteRouteCommand, createEditRouteCommand, createSetRouteNoteCommand, inspectRouteEdit} from "./route-edit-commands.js";
+import {createAddRouteCommand, createDeleteRouteCommand, createEditRouteCommand, createSetRouteNoteCommand} from "./route-edit-commands.js";
 import {createDeleteBatchCommand, createDeleteConfirmationRequiredError, inspectDeleteImpact, requestDeleteConfirmation} from "./delete-impact.js";
 import {
   assertExistingRuleInspection,
@@ -230,6 +230,10 @@ import {
   getPopulationWorkerPatchPolicy,
   POPULATION_WORKER_TASK
 } from "./population-worker-task.js";
+import {
+  assertRoutePathWorkerPlan,
+  ROUTE_PATH_WORKER_TASK
+} from "./route-path-worker-task.js";
 import {SelectionStore} from "./selection-store.js";
 import {decideSelectionPanelRoute, SELECTION_PANEL_BINDINGS, SELECTION_PANEL_ROUTE} from "./selection-panel-policy.js";
 import {installKeyboardShortcuts} from "./keyboard-shortcuts.js";
@@ -2009,22 +2013,18 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       executeEditCommand(state, documentRef, command, {context});
       updateEditingInteractionLock(state, documentRef);
     },
-    onInspectEdit: (routeId, draft) => inspectRouteEdit(state.map, routeId, draft),
+    onInspectEdit: (routeId, draft) => runtimeActions.edit.routes.inspectEdit(routeId, draft),
     onWaypointMode: (active, routeId) => {
       if (active) enterCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.ROUTE_EDIT_WAYPOINT, {routeId});
       else cancelCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.ROUTE_EDIT_WAYPOINT, "panel-toggle");
     },
     onEditApply: (routeId, draft) => {
       cancelCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.ROUTE_EDIT_WAYPOINT, "edit-apply");
-      const command = createEditRouteCommand(routeId, draft);
-      const result = executeEditCommand(state, documentRef, command, {
-        context: {map: state.map},
-        status: executed => `已更新路线 #${executed.getResult?.().routeId ?? routeId}。`,
-        noopStatus: "路线编辑没有变化。"
+      return Promise.resolve(runtimeActions.edit.routes.update(routeId, draft)).then(result => {
+        if (result?.executed) routePanel.setRouteEditActive(false);
+        updateEditingInteractionLock(state, documentRef);
+        return result;
       });
-      if (result.executed) routePanel.setRouteEditActive(false);
-      updateEditingInteractionLock(state, documentRef);
-      return result;
     },
     onEditCancel: () => {
       cancelCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.ROUTE_EDIT_WAYPOINT, "edit-cancel");
@@ -3189,8 +3189,16 @@ function createRuntimeActions(state, documentRef, options = {}) {
         createAtCell: input => createAtCellViaApi(state, documentRef, "cities", input),
         inspectDelete: cityId => inspectExistingRuleViaApi(state, EXISTING_RULE_ACTION.CITY_DELETE, {id: normalizeApiInteger(cityId, "城市 ID")}),
         delete: (cityId, options = {}) => deleteCityViaApi(state, documentRef, cityId, options),
-        inspectMove: (cityId, target) => inspectCityMoveViaApi(state, cityId, target),
-        move: (cityId, target) => moveCityViaApi(state, documentRef, cityId, target),
+        inspectMove: (cityId, target) => operation.run(
+          "edit.cities.inspectMove",
+          context => inspectRoutePathViaWorker(state, {kind: "city-relocation", cityId: normalizeApiInteger(cityId, "城市 ID"), target}, context),
+          {message: "正在规划城市移动路径"}
+        ),
+        move: (cityId, target) => operation.run(
+          "edit.cities.move",
+          context => moveCityViaApi(state, documentRef, cityId, target, context),
+          {message: "正在规划并移动城市"}
+        ),
         rename: (cityId, name) => renameCityViaApi(state, documentRef, cityId, name),
         setPopulation: (cityId, population) => setCityPopulationViaApi(state, documentRef, cityId, population),
         inspectOwnerSync: cityId => inspectRemainingRuleViaApi(state, REMAINING_RULE_ACTION.CITY_OWNER_SYNC, {cityId: normalizeApiInteger(cityId, "城市 ID")}),
@@ -3379,9 +3387,21 @@ function createRuntimeActions(state, documentRef, options = {}) {
         setParent: (religionId, parentId, options = {}) => setReligionParentViaApi(state, documentRef, religionId, parentId, options)
       },
       routes: {
-        create: options => createRouteViaApi(state, documentRef, options),
-        inspectEdit: (routeId, patch = {}) => inspectRouteEditViaApi(state, routeId, patch),
-        update: (routeId, patch = {}) => updateRouteViaApi(state, documentRef, routeId, patch),
+        create: options => operation.run(
+          "edit.routes.create",
+          context => createRouteViaApi(state, documentRef, options, context),
+          {message: "正在规划并绘制路线"}
+        ),
+        inspectEdit: (routeId, patch = {}) => operation.run(
+          "edit.routes.inspectEdit",
+          context => inspectRouteEditViaApi(state, routeId, patch, context),
+          {message: "正在规划路线预览"}
+        ),
+        update: (routeId, patch = {}) => operation.run(
+          "edit.routes.update",
+          context => updateRouteViaApi(state, documentRef, routeId, patch, context),
+          {message: "正在规划路线改线"}
+        ),
         inspectDelete: routeId => inspectExistingRuleViaApi(state, EXISTING_RULE_ACTION.ROUTE_DELETE, {id: normalizeApiInteger(routeId, "路线 ID")}),
         delete: (routeId, options = {}) => deleteRouteViaApi(state, documentRef, routeId, options),
         setNote: (routeId, body, options = {}) => setRouteNoteViaApi(state, documentRef, routeId, body, options)
@@ -7610,6 +7630,14 @@ export function executeHistoryCommand(state, documentRef, action, options = {}) 
       {message: `正在${verb}${pendingCommand.workerHistory.label}结果`}
     );
   }
+  if (pendingCommand?.workerHistory?.task === ROUTE_PATH_WORKER_TASK) {
+    const verb = action === "undo" ? "撤销" : "重做";
+    return state.runtimeOperation.run(
+      `history.${action}`,
+      operation => executeRoutePathWorkerHistory(state, documentRef, action, pendingCommand, operation),
+      {message: `正在${verb}${pendingCommand.workerHistory.label}结果`}
+    );
+  }
   const command = action === "redo"
     ? state.editHistory.redo({map: state.map})
     : state.editHistory.undo({map: state.map});
@@ -7798,6 +7826,52 @@ async function executePopulationWorkerHistory(state, documentRef, action, comman
       refreshGenerationSummary(state.map);
       updatePopulationPanel(state);
       updateRuntimePanel(documentRef, state);
+      setFileOperationStatus(documentRef, `已${verb}${metadata.label}。`);
+    }
+  }, operation);
+}
+
+async function executeRoutePathWorkerHistory(state, documentRef, action, command, operation) {
+  const metadata = command.workerHistory;
+  const verb = action === "undo" ? "撤销" : "重做";
+  const patch = action === "undo" ? metadata.beforePatch : metadata.afterPatch;
+  return executeWorkerMapMutation(state, documentRef, {
+    task: metadata.task,
+    targetKind: "route-path",
+    userLabel: `${verb}${metadata.label}结果`,
+    payload: {historyTransition: {action, label: command.label, request: metadata.request, patch}},
+    includeBindingInPayload: true,
+    renderLayers: metadata.renderLayers,
+    effects: command.effects,
+    assertOutput: ({state: currentState, sourceMap, output}) => {
+      if (currentState.map !== sourceMap || currentState.editHistory.peek(action) !== command) {
+        const error = new Error(`${verb}${metadata.label}结果已被新的地图状态取代`);
+        error.code = "operation_obsolete";
+        throw error;
+      }
+      if (output?.kind !== "route-path-history"
+        || output?.history?.action !== action
+        || output?.history?.kind !== metadata.kind) {
+        const error = new Error(`${verb}${metadata.label}准备结果结构无效`);
+        error.code = "route-path-worker-history-result-invalid";
+        throw error;
+      }
+    },
+    createCommand: () => command,
+    skipCommandNoopCheck: true,
+    commitCommand: ({state: currentState}) => {
+      const moved = action === "undo"
+        ? currentState.editHistory.undo({map: currentState.map})
+        : currentState.editHistory.redo({map: currentState.map});
+      if (moved !== command) throw new Error(`${verb}${metadata.label}时历史栈已变化`);
+    },
+    rollbackCommand: ({map}) => {
+      if (action === "undo") command.apply({map});
+      else command.revert({map});
+    },
+    afterUiRefresh: () => {
+      updateRuntimePanel(documentRef, state);
+      updateEditingInteractionLock(state, documentRef);
       setFileOperationStatus(documentRef, `已${verb}${metadata.label}。`);
     }
   }, operation);
@@ -8298,28 +8372,24 @@ function createStandaloneNoteViaApi(state, documentRef, options = {}) {
   return editApiResult(state, result);
 }
 
-function createRouteViaApi(state, documentRef, options = {}) {
+async function createRouteViaApi(state, documentRef, options = {}, operationContext = null) {
   if (!options || typeof options !== "object") throw new Error("路线创建参数必须是对象");
-  const command = createAddRouteCommand(options);
-  const result = executeEditCommand(state, documentRef, command, {
-    context: {map: state.map},
-    status: executed => `已绘制路线 #${executed.getResult?.().routeId ?? ""}。`,
-    preparePanelRefresh: (targetState, executed, created) => {
-      if (!Number.isInteger(created?.routeId)) return;
-      targetState.panels.route?.setSelectedRouteId(created.routeId);
-      targetState.selectionStore.setSelection({object: {kind: OBJECT_KIND.ROUTE, id: created.routeId}});
-    },
-    throwOnError: false
+  const response = await applyRoutePathMutationViaWorker(state, documentRef, {
+    request: {kind: "create", options},
+    operationContext,
+    userLabel: "路线绘制"
   });
-  updateRuntimePanel(documentRef, state);
-  updateEditingInteractionLock(state, documentRef);
-  return editApiResult(state, result);
+  return routePathApiResult(response, "路线绘制");
 }
 
-function inspectRouteEditViaApi(state, routeId, patch = {}) {
+async function inspectRouteEditViaApi(state, routeId, patch = {}, operationContext = null) {
   assertMapAvailable(state);
   if (!patch || typeof patch !== "object" || Array.isArray(patch)) throw new Error("路线编辑预检参数必须是对象");
-  return inspectRouteEdit(state.map, normalizeApiInteger(routeId, "路线 ID"), patch);
+  return inspectRoutePathViaWorker(state, {
+    kind: "edit",
+    routeId: normalizeApiInteger(routeId, "路线 ID"),
+    patch
+  }, operationContext);
 }
 
 function inspectExistingRuleViaApi(state, actionId, input) {
@@ -8460,20 +8530,181 @@ function inspectZoneCreationViaApi(state, options = {}) {
   });
 }
 
-function updateRouteViaApi(state, documentRef, routeId, patch = {}) {
+async function updateRouteViaApi(state, documentRef, routeId, patch = {}, operationContext = null) {
   assertMapAvailable(state);
   if (!patch || typeof patch !== "object" || Array.isArray(patch)) throw new Error("路线编辑参数必须是对象");
   const id = normalizeApiInteger(routeId, "路线 ID");
-  const command = createEditRouteCommand(id, patch, {label: "API 编辑路线"});
-  const result = executeEditCommand(state, documentRef, command, {
-    context: {map: state.map},
-    status: `已通过 API 更新路线 #${id}。`,
-    noopStatus: "路线编辑没有变化。",
-    throwOnError: false
+  const response = await applyRoutePathMutationViaWorker(state, documentRef, {
+    request: {kind: "edit", routeId: id, patch},
+    operationContext,
+    userLabel: `路线 #${id} 改线`
   });
-  updateRuntimePanel(documentRef, state);
-  updateEditingInteractionLock(state, documentRef);
-  return editApiResult(state, result);
+  return routePathApiResult(response, `API 编辑路线 #${id}`);
+}
+
+async function applyRoutePathMutationViaWorker(state, documentRef, {request, operationContext, userLabel}) {
+  const renderLayers = ["route", "picking"];
+  const effects = {
+    render: "draw",
+    selection: "refresh",
+    runtimeStats: true,
+    pickPanel: true,
+    affected: objectAffected(OBJECT_KIND.ROUTE, request.kind === "edit" ? request.routeId : "new"),
+    derived: ["route-mesh", "object-panels", "object-index", "economy-stale"]
+  };
+  return executeWorkerMapMutation(state, documentRef, {
+    task: ROUTE_PATH_WORKER_TASK,
+    targetKind: "route-path",
+    userLabel,
+    payload: {request},
+    includeBindingInPayload: true,
+    renderLayers,
+    effects,
+    assertOutput: ({state: currentState, sourceMap, binding, output}) => {
+      if (currentState.map !== sourceMap) {
+        const error = new Error(`${userLabel}准备结果已被新的地图状态取代`);
+        error.code = "operation_obsolete";
+        throw error;
+      }
+      if (output?.kind !== "route-path" || output?.plan?.request?.kind !== request.kind) {
+        const error = new Error(`${userLabel}准备结果结构无效`);
+        error.code = "route-path-worker-result-invalid";
+        throw error;
+      }
+      assertRoutePathWorkerPlan(output.plan, sourceMap, binding);
+    },
+    createCommand: ({output}) => {
+      const command = request.kind === "create"
+        ? createAddRouteCommand(request.options, {preflight: output.inspection})
+        : createEditRouteCommand(request.routeId, request.patch, {label: "API 编辑路线", preflight: output.inspection});
+      return attachRoutePathWorkerHistory(command, {request, userLabel, renderLayers, history: output.history});
+    },
+    rollbackCommand: ({command, map}) => command.revert({map}),
+    afterUiRefresh: ({result, settleRenderContext}) => {
+      const routeId = Number(result?.routeId);
+      if (Number.isInteger(routeId)) {
+        state.panels.route?.setSelectedRouteId(routeId);
+        state.selectionStore.setSelection({object: {kind: OBJECT_KIND.ROUTE, id: routeId}});
+      }
+      updateRuntimePanel(documentRef, state);
+      updateEditingInteractionLock(state, documentRef);
+      setFileOperationStatus(documentRef, request.kind === "create"
+        ? `已绘制路线 #${Number.isInteger(routeId) ? routeId : ""}。`
+        : `已更新路线 #${request.routeId}。`);
+      settleRenderContext?.();
+    }
+  }, operationContext);
+}
+
+function attachRoutePathWorkerHistory(command, metadata) {
+  if (!metadata.history?.beforePatch || !metadata.history?.afterPatch) return command;
+  Object.defineProperty(command, "workerHistory", {
+    value: Object.freeze({
+      task: ROUTE_PATH_WORKER_TASK,
+      kind: metadata.request.kind,
+      label: metadata.userLabel,
+      request: structuredClone(metadata.request),
+      renderLayers: Object.freeze([...metadata.renderLayers]),
+      beforePatch: structuredClone(metadata.history.beforePatch),
+      afterPatch: structuredClone(metadata.history.afterPatch)
+    })
+  });
+  return command;
+}
+
+async function inspectRoutePathViaWorker(state, request, operation) {
+  assertMapAvailable(state);
+  const binding = createRegenerationWorkerBinding(state, operation);
+  let sessionCommitted = false;
+  try {
+    operation?.report("worker-plan", {message: "正在规划路径"});
+    const output = await state.workerTaskCoordinator.run(ROUTE_PATH_WORKER_TASK, {
+      map: state.map,
+      binding,
+      request,
+      planOnly: true
+    }, {
+      binding,
+      signal: operation?.signal,
+      sessionMode: "map-mirror",
+      sessionPayload: {binding, request, planOnly: true},
+      allowFallback: false,
+      streamBudgetMs: 6,
+      streamSliceBytes: 256 * 1024
+    });
+    operation?.throwIfCancelled?.();
+    if (output?.kind !== "route-path" || output?.plan?.request?.kind !== request.kind) {
+      const error = new Error("路径规划 Worker 返回结构无效");
+      error.code = "route-path-worker-inspection-invalid";
+      throw error;
+    }
+    assertRoutePathWorkerPlan(output.plan, state.map, binding);
+    const sessionId = output.worker?.session?.id;
+    if (!sessionId || !validateRegenerationWorkerBinding(state, binding)) {
+      const error = new Error("路径规划 Worker 会话已过期");
+      error.code = "operation_obsolete";
+      throw error;
+    }
+    const committed = await state.workerTaskCoordinator.commitSession(sessionId, binding, {expectedRevisionDelta: 0});
+    if (!committed) {
+      const error = new Error("路径规划 Worker 会话确认失败");
+      error.code = "worker_session_commit_rejected";
+      throw error;
+    }
+    sessionCommitted = true;
+    return output.inspection;
+  } finally {
+    if (!sessionCommitted) state.workerTaskCoordinator.invalidateSession("route-path-inspection-not-committed");
+  }
+}
+
+function routePathApiResult(response, label) {
+  const result = response?.executed ? {
+    ...(Number.isInteger(Number(response.routeId)) ? {
+      routeId: Number(response.routeId),
+      type: response.type,
+      level: response.level,
+      from: response.from,
+      to: response.to,
+      cells: Number(response.cells) || 0
+    } : {}),
+    ...(Number.isInteger(Number(response.cityId)) ? {
+      cityId: Number(response.cityId),
+      burgId: Number(response.burgId),
+      source: response.source,
+      target: response.target,
+      owners: response.owners,
+      roles: response.roles,
+      politics: response.politics,
+      port: response.port,
+      routes: response.routes,
+      staleSystems: response.staleSystems
+    } : {})
+  } : null;
+  const affected = Number.isInteger(result?.routeId)
+    ? objectAffected(OBJECT_KIND.ROUTE, result.routeId)
+    : Number.isInteger(result?.cityId)
+      ? [
+          ...objectAffected(OBJECT_KIND.CITY, result.cityId),
+          ...(result.routes?.items || []).map(route => ({kind: OBJECT_KIND.ROUTE, id: route.id}))
+        ]
+      : [];
+  return {
+    ...response,
+    noop: response?.executed !== true,
+    label,
+    result,
+    affected,
+    stale: ["economy", "military", "diplomacy"],
+    effects: {
+      render: "draw",
+      selection: "refresh",
+      runtimeStats: true,
+      pickPanel: true,
+      derived: ["route-mesh", "object-panels", "object-index", "economy-stale"]
+    },
+    error: null
+  };
 }
 
 function deleteRouteViaApi(state, documentRef, routeId, options = {}) {
@@ -8892,27 +9123,51 @@ function deleteCityViaApi(state, documentRef, cityId, options = {}) {
   return deleteApiResult(state, deletion);
 }
 
-function inspectCityMoveViaApi(state, cityId, target) {
+async function moveCityViaApi(state, documentRef, cityId, target, operationContext = null) {
   const id = normalizeApiInteger(cityId, "城市 ID");
-  return inspectCityMove(state.map, id, target);
-}
-
-function moveCityViaApi(state, documentRef, cityId, target) {
-  const id = normalizeApiInteger(cityId, "城市 ID");
-  const command = createMoveCityCommand(id, target);
-  const result = executeEditCommand(state, documentRef, command, {
-    context: {map: state.map},
-    noopStatus: `城市 #${id} 已位于目标 cell。`,
-    status: `已移动城市 #${id}。`,
-    preparePanelRefresh: targetState => {
-      targetState.panels.city?.setSelectedCityId(id);
-      targetState.selectionStore.setSelection({object: {kind: OBJECT_KIND.CITY, id}});
+  const request = {kind: "city-relocation", cityId: id, target};
+  const renderLayers = ["point", "labels", "route", "picking"];
+  const effects = {
+    render: "draw",
+    selection: "refresh",
+    runtimeStats: true,
+    pickPanel: true,
+    affected: objectAffected(OBJECT_KIND.CITY, id),
+    derived: ["city-relocation", "route-mesh", "state-statistics", "economy-stale", "zones-stale", "defer:population-points"]
+  };
+  const response = await executeWorkerMapMutation(state, documentRef, {
+    task: ROUTE_PATH_WORKER_TASK,
+    targetKind: "city-relocation",
+    userLabel: `城市 #${id} 移动`,
+    payload: {request},
+    includeBindingInPayload: true,
+    renderLayers,
+    effects,
+    assertOutput: ({state: currentState, sourceMap, binding, output}) => {
+      if (currentState.map !== sourceMap || output?.kind !== "route-path" || output?.plan?.request?.kind !== request.kind) {
+        const error = new Error(`城市 #${id} 移动准备结果已过期或结构无效`);
+        error.code = "route-path-worker-city-result-invalid";
+        throw error;
+      }
+      assertRoutePathWorkerPlan(output.plan, sourceMap, binding);
     },
-    throwOnError: false
-  });
-  updateRuntimePanel(documentRef, state);
-  updateEditingInteractionLock(state, documentRef);
-  return editApiResult(state, result);
+    createCommand: ({output}) => {
+      const preflight = importCityMovePreflight(output.cityPreflight);
+      const command = createMoveCityCommand(id, target, {preflight});
+      return attachRoutePathWorkerHistory(command, {request, userLabel: `城市 #${id} 移动`, renderLayers, history: output.history});
+    },
+    rollbackCommand: ({command, map}) => command.revert({map}),
+    afterUiRefresh: ({settleRenderContext}) => {
+      state.panels.city?.setSelectedCityId(id);
+      state.selectionStore.setSelection({object: {kind: OBJECT_KIND.CITY, id}});
+      scheduleCityPopulationPointRefresh(state, documentRef, state.map);
+      updateRuntimePanel(documentRef, state);
+      updateEditingInteractionLock(state, documentRef);
+      setFileOperationStatus(documentRef, `已移动城市 #${id}。`);
+      settleRenderContext?.();
+    }
+  }, operationContext);
+  return routePathApiResult(response, `移动城市 #${id}`);
 }
 
 function addProvinceViaApi(state, documentRef, gridCell) {
@@ -11424,7 +11679,7 @@ async function executeWorkerMapMutation(state, documentRef, mutation, operation 
   let refreshMs = 0;
   const renderInstallStages = {};
   try {
-    if (command.isNoop?.({map: state.map})) {
+    if (mutation.skipCommandNoopCheck !== true && command.isNoop?.({map: state.map})) {
       const worker = await commitRegenerationWorkerSession(state, output.worker, operation, {expectedRevisionDelta: 0});
       operation?.throwIfCancelled?.();
       if (state.map !== committedMap || !validateRegenerationWorkerBinding(state, binding)) {
@@ -11525,7 +11780,16 @@ async function executeWorkerMapMutation(state, documentRef, mutation, operation 
         throw error;
       }
     });
-    await mutation.afterUiRefresh?.({state, documentRef, result, output, command});
+    await mutation.afterUiRefresh?.({
+      state,
+      documentRef,
+      result,
+      output,
+      command,
+      settleRenderContext: () => {
+        expectedRenderContextToken = createWorkerRegenerationRenderContextToken(state, targetKind);
+      }
+    });
     uiRefreshMs = roundWorkerTelemetryMs(readCommitTime() - uiRefreshStartedAt);
     refreshMs = roundWorkerTelemetryMs(renderInstallPrepareMs + renderInstallCommitMs + uiRefreshMs);
     if (targetKind === "military") {
@@ -16075,7 +16339,6 @@ function bindCityEditing(canvas, state, documentRef) {
     getSelectedCityId: () => state.cityEdit.moveCityId,
     getTarget: event => cityMoveTargetAtEvent(state, event),
     inspectFast: (cityId, target) => inspectCityMoveFast(state.map, cityId, target),
-    preflight: (cityId, target, options) => inspectCityMoveAsync(state.map, cityId, target, options),
     capturePointer: pointerId => capturePointer(canvas, pointerId),
     releasePointer: pointerId => releasePointer(canvas, pointerId),
     onDragChange: drag => {
@@ -16113,50 +16376,29 @@ function bindCityEditing(canvas, state, documentRef) {
       setFileOperationStatus(documentRef, `城市移动失败：${error?.message || "未知错误"}`);
     },
     onCancel: reason => cancelCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.CITY_MOVE, reason),
-    onCommit: (cityId, target, preflight) => {
+    onCommit: (cityId, target) => {
       const commitStartedAt = performance.now();
-      const performanceTrace = {stages: {}, stageOrder: []};
-      const selectedObject = state.selectionStore.getSnapshot()?.selection?.object;
-      const selectionUnchanged = selectedObject?.kind === OBJECT_KIND.CITY && Number(selectedObject.id) === cityId;
       state.cityEdit.movePending = false;
-      const command = createMoveCityCommand(cityId, target, {preflight});
-      const execution = executeEditCommand(state, documentRef, command, {
-        context: {map: state.map},
-        status: `已移动城市 #${cityId}；可继续拖动，点击别处或手动退出结束。`,
-        errorStatus: `城市 #${cityId} 移动失败。`,
-        preparePanelRefresh: targetState => {
-          targetState.panels.city?.setSelectedCityId(cityId);
-          const selectedObject = targetState.selectionStore.getSnapshot()?.selection?.object;
-          if (selectedObject?.kind !== OBJECT_KIND.CITY || Number(selectedObject.id) !== cityId) {
-            targetState.selectionStore.setSelection({object: {kind: OBJECT_KIND.CITY, id: cityId}});
-          }
-        },
-        performanceTrace,
-        batchSelection: !selectionUnchanged,
-        throwOnError: false
-      });
-      if (!execution.executed) {
-        state.cityEdit.lastMoveError = execution.error?.message || "城市移动命令未执行";
-        state.renderer?.clearCityMovePreview?.({draw: false});
-        showCityMoveStartHandle(state, cityId);
-        return;
-      }
-      scheduleCityPopulationPointRefresh(state, documentRef, state.map);
-      const cleanupStartedAt = performance.now();
-      try {
+      void Promise.resolve(state.runtimeActions.edit.cities.move(cityId, target)).then(execution => {
+        if (!execution?.executed) throw new Error("城市移动命令未执行");
+        const cleanupStartedAt = performance.now();
         state.cityEdit.movePreview = null;
         state.cityEdit.lastMoveError = null;
         state.renderer?.clearCityMovePreview?.({draw: false});
         state.panels.city?.updateMovePreview?.(null);
         showCityMoveStartHandle(state, cityId);
-      } finally {
         state.cityEdit.lastCommitPerformance = {
           totalMs: roundLoadTraceMs(performance.now() - commitStartedAt),
           cleanupMs: roundLoadTraceMs(performance.now() - cleanupStartedAt),
-          stageOrder: [...performanceTrace.stageOrder],
-          stages: Object.fromEntries(performanceTrace.stageOrder.map(name => [name, {...performanceTrace.stages[name]}]))
+          stageOrder: [],
+          stages: {}
         };
-      }
+      }).catch(error => {
+        state.cityEdit.lastMoveError = error?.message || String(error);
+        state.renderer?.clearCityMovePreview?.({draw: false});
+        showCityMoveStartHandle(state, cityId);
+        setFileOperationStatus(documentRef, `城市移动失败：${error?.message || "未知错误"}`);
+      });
     }
   });
   canvas.addEventListener("pointerdown", event => {
@@ -16361,12 +16603,15 @@ function bindObjectCreationTools(canvas, state, documentRef) {
         updateRuntimePanel(documentRef, state);
         return;
       }
-      const result = state.runtimeActions.edit.routes.create({
+      void Promise.resolve(state.runtimeActions.edit.routes.create({
         startPackCell: state.routeCreate.startPackCell,
         endPackCell: packCell,
         type: state.routeCreate.type
+      })).then(result => {
+        if (result?.executed) completeCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.ROUTE_DRAW, {result});
+      }).catch(error => {
+        setFileOperationStatus(documentRef, `路线绘制失败：${error?.message || "未知错误"}`);
       });
-      if (result?.executed) completeCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.ROUTE_DRAW, {result});
       return;
     }
 

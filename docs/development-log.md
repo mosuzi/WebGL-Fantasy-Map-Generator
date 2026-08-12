@@ -1,5 +1,13 @@
 # 开发历史
 
+## 2026-08-13：第 322 项 Stage C3c 路线 / 城市寻路 Worker 闭环接受
+
+- 路线创建 / 改线、城市迁移关联路线重寻及两类历史恢复统一接入 `route-path.compute` 持久 map-mirror session。Worker 负责预检、寻路、正式镜像写入、历史前后 patch 和 route / point / labels / picking 准备；主线程只校验 binding、提交原命令与历史栈、安装 prepared renderer 并同步面板。路线面板与公开 inspect API 使用异步 latest-wins，普通用户文案不暴露 Worker、线程、会话、消息包或浏览器存储概念。
+- 专项 Node 已覆盖 10k / 100k 的 create / edit / relocation / city-relocation、plan-only、正式镜像撤销 / 重做、取消、故障、陈旧、fallback 与写集；route edit、city relocation、Worker registry / session、API stability / suite / coverage 和生产构建通过。通用 `regress:api` 只命中既有 `generate.newMap` operation-stall health，未发现本切片契约错误。
+- 正式 10k Chrome 已完成路线预检 / 更新 / 撤销 / 重做和城市预检 / 移动 / 撤销 / 重做共 `8` 次 Worker 运行与 `8` 次 session 提交；后 `7` 次复用同一 session，revision delta 为 `[0,1,1,1,0,1,1,1]`，两项操作各产生一条历史，主 map、路线、城市与 burg 权威集合身份稳定，四次撤销 / 重做值精确。旧夹具把会重建的 `pack.routes` 镜像数组引用误当权威身份，现只保留其内容与别名精确门。
+- 初次浏览器门把八次大型 `structuredClone + JSON.stringify` 重指纹也计入 operation observer，得到 `11` 条 `52～194ms` 信号；按产品窗先结算、重指纹后置的方式完成一次夹具优化后，仍记录 `4` 条 `110 / 113 / 132 / 193ms` 级信号。用户按新统一规则登记放行：C3c 自动门最多 `4` 条且单条不超过 `200ms`，不再继续补夹具或重复性能诊断；任何超限、功能 / 原子性 / 回滚 / 错误面失败仍阻断，该例外不适用于军事、阶段 D 或阶段 E。
+- C3c 累计产品 `6` 文件约 `+720 / -121`、测试 `3` 文件约 `+377 / -5`，专用浏览器夹具 `206` 行，委派等待为 `0`。阶段 C 下一切片只处理军事策略，用户地图、`source/` 与 Wiki 未改，本 checkpoint 不提前提交或合入 `main`。
+
 ## 2026-08-12：第 322 项 Stage C2 社会扩张与历史恢复 Worker 闭环接受
 
 - 文化 / 宗教的正式扩张入口已接入 `social-expansion.compute`，并继续复用阶段 A～B 的持久 map-mirror session、prepared renderer、绑定校验、原子提交和失败恢复。历史命令新增只读 Worker patch 描述；C2 命令的撤销 / 重做会在同一 Worker 镜像应用 before / after patch、准备对应 renderer DTO，再由主线程移动历史栈并提交 GPU / DOM。其它领域历史命令不受影响，仍保持既有执行语义。
