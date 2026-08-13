@@ -43,6 +43,7 @@
     "regress:map-template-runtime": "node --no-warnings ./tools/webgl-generator-map-template-runtime-regression.mjs",
     "regress:map-template-browser": "node --no-warnings ./tools/webgl-generator-map-template-browser-regression.mjs",
     "regress:map-template-defaults-browser": "node --no-warnings ./tools/webgl-generator-map-template-defaults-browser-regression.mjs",
+    "regress:map-template-matrix-browser": "node --no-warnings ./tools/webgl-generator-map-template-matrix-browser-regression.mjs",
     "audit:panels": "node ./tools/webgl-generator-panel-layout-audit.mjs",
     "audit:ui-system": "node --no-warnings ./tools/webgl-generator-ui-system-audit.mjs",
     "audit:interaction-surfaces": "node --no-warnings ./tools/webgl-generator-interaction-surface-inventory.mjs --check",

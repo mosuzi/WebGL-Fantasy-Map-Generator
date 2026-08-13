@@ -55,8 +55,8 @@ try {
     featuresDissolved: await exportGeoJson(page, "features", {range: {mode: "bbox", bbox}, layers, dissolvePolitical: true}, join(artifactDir, "features-dissolved.geojson"))
   };
   const files = Object.fromEntries(Object.entries(exports).map(([key, item]) => [key, inspectGeoJson(item.path)]));
-  const rejection = await page.evaluate(() => ({
-    empty: window.webglGeneratorApi.data.exportGEO({includeText: false, range: {mode: "bbox", bbox: [10, 10, 10, 20]}}),
+  const rejection = await page.evaluate(async () => ({
+    empty: await window.webglGeneratorApi.data.exportGEO({includeText: false, range: {mode: "bbox", bbox: [10, 10, 10, 20]}}),
     outside: window.webglGeneratorApi.data.exportFeatureGEO({includeText: false, range: {mode: "bbox", bbox: [-1, 0, 10, 10]}})
   }));
   const ui = await page.evaluate(() => ({

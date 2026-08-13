@@ -77,7 +77,7 @@ import {EditHistory} from "./edit-history.js";
 import {MapRevisionTracker} from "./map-revision.js";
 import {getPublicMapTemplate, listPublicMapTemplates, prepareMapTemplateGeneration} from "./map-template-runtime.js";
 import {createGrayscaleHeightmapFromImage, createPaletteHeightmapFromImage, normalizeHeightmapImportPayload} from "./heightmap-import.js";
-import {downloadBlob, downloadText, mapFileBaseName, parseGeoJsonMeasurements} from "./map-file-io.js";
+import {downloadBlob, downloadText, mapFileBaseName, normalizeGeoJsonExportRange, parseGeoJsonMeasurements} from "./map-file-io.js";
 import {prepareMapFileIoWorkerPayload, restoreMapFileIoWorkerResult} from "./map-file-io-worker-client.js";
 import {MAP_FILE_IO_WORKER_OPERATIONS, MAP_FILE_IO_WORKER_TASK_TYPE} from "./map-file-io-worker-task.js";
 import {createMapArchiveFilename, normalizeMapName} from "./map-filename.js";
@@ -304,9 +304,9 @@ import {
   exportMeasurementsData,
   exportNamebasesData,
   exportNotesData,
-  exportPackGeoJson,
   exportPngData,
-  installConsoleApi
+  installConsoleApi,
+  resolveGeoJsonRangeOptions
 } from "./console-api.js";
 
 const LOADING_MESSAGES = Object.freeze({
@@ -3242,7 +3242,14 @@ function createRuntimeActions(state, documentRef, options = {}) {
     data: {
       exportAll: (options = {}) => exportAllMapData(state, documentRef, options),
       exportMap: (options = {}) => exportAllMapData(state, documentRef, options),
-      exportGEO: (options = {}) => exportPackGeoJson(state, documentRef, options),
+      exportGEO: (options = {}) => {
+        const rangeOptions = resolveGeoJsonRangeOptions(state, options.range);
+        normalizeGeoJsonExportRange(state.map, rangeOptions.range, {viewportBbox: rangeOptions.viewportBbox});
+        return operation.run("data.exportGEO", context => {
+          context.report("geojson", {message: "正在整理地图 GeoJSON"});
+          return exportPackGeoJsonViaWorker(state, documentRef, options, rangeOptions, context);
+        }, {message: "正在整理地图 GeoJSON"});
+      },
       exportFeatureGEO: (options = {}) => exportFeatureGeoJsonData(state, documentRef, options),
       exportCompressedAll: (options = {}) => operation.run("data.exportCompressedAll", context => {
         context.report("serialize", {message: "正在压缩完整地图数据"});
@@ -5291,6 +5298,35 @@ async function exportCompressedAllMapDataViaWorker(state, documentRef, options =
   return result;
 }
 
+async function exportPackGeoJsonViaWorker(state, documentRef, options = {}, rangeOptions = {}, operation = null) {
+  assertMapAvailable(state);
+  const map = state.map;
+  const output = await state.workerTaskCoordinator.run(MAP_FILE_IO_WORKER_TASK_TYPE, {
+    operation: MAP_FILE_IO_WORKER_OPERATIONS.EXPORT_GEOJSON,
+    map,
+    options: rangeOptions
+  }, {
+    binding: createRegenerationWorkerBinding(state, operation),
+    signal: operation?.signal || null,
+    onProgress: (stage, detail = {}) => operation?.report(stage, {
+      ...detail,
+      message: detail.message || "正在整理地图 GeoJSON"
+    })
+  });
+  const filename = `${mapFileBaseName(map)}.geojson`;
+  const blob = new Blob([output.data], {type: output.mimeType});
+  if (options.download === true) downloadBlob(documentRef, blob, filename);
+  const result = {
+    filename,
+    mimeType: output.mimeType,
+    bytes: output.bytes,
+    metadata: output.metadata
+  };
+  if (options.includeText !== false) result.text = await blob.text();
+  Object.defineProperty(result, "worker", {enumerable: false, value: output.timings || null});
+  return result;
+}
+
 async function exportMapArchiveViaWorker(state, documentRef, {operation = null, encoding = "gzip", resultType = "bytes"} = {}) {
   assertMapAvailable(state);
   const map = state.map;
@@ -5396,11 +5432,11 @@ async function exportCompressedMapData(state, documentRef, exportAction = state.
   }
 }
 
-function exportGeoJson(state, documentRef, exportAction = state.runtimeActions?.data?.exportGEO) {
+async function exportGeoJson(state, documentRef, exportAction = state.runtimeActions?.data?.exportGEO) {
   try {
     const range = readGeoJsonExportRangeOption(documentRef);
     setFileOperationStatus(documentRef, "正在导出 GeoJSON...");
-    const result = exportAction({download: true, includeText: false, range});
+    const result = await exportAction({download: true, includeText: false, range});
     setFileOperationStatus(documentRef, `GeoJSON 已导出，共 ${result.metadata.features} 个 cell 面，范围：${geoJsonRangeLabel(result.metadata.exportRange)}。`);
     return result;
   } catch (error) {

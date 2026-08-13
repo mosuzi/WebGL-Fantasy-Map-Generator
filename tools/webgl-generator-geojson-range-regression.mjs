@@ -58,6 +58,7 @@ assert.match(controlPanelSource, /id="geojson-export-bbox-min-x"/);
 assert.match(controlPanelSource, /保留与 bbox 相交的完整要素/);
 assert.match(appSource, /exportAction\(\{download: true, includeText: false, range\}\)/, "pack UI 必须把共享 range 传给 runtime action");
 assert.match(appSource, /exportAction\(\{download: true, includeText: false, layers, dissolvePolitical, range\}\)/, "feature UI 必须把共享 range 传给 runtime action");
+assert.match(appSource, /exportGEO: \(options = \{\}\) => \{[\s\S]*?resolveGeoJsonRangeOptions\(state, options\.range\);[\s\S]*?normalizeGeoJsonExportRange\(state\.map, rangeOptions\.range, \{viewportBbox: rangeOptions\.viewportBbox\}\);[\s\S]*?return operation\.run\("data\.exportGEO"/, "pack GeoJSON 必须在 runtime operation 前完成权威范围预检");
 assert.match(consoleApiSource, /resolveGeoJsonRangeOptions\(state, options\.range\)/, "pack / feature API 必须共用范围解析器");
 assert.match(consoleApiSource, /renderer\.screenToWorld\(rect\.left, rect\.top\)/, "API 当前视口范围必须来自 renderer 世界坐标转换");
 

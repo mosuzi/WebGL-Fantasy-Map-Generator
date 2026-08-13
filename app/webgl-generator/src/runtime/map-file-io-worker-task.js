@@ -1,6 +1,7 @@
 import {
   createCompressedMapDocumentBlob,
   createMapDocument,
+  createMapGeoJson,
   parseMapDocument,
   parseMapDocumentPayload,
   stringifyMapDocument
@@ -16,14 +17,47 @@ import {mergeUserVisualThemes, normalizeVisualThemeId, resolveVisualTheme} from 
 export const MAP_FILE_IO_WORKER_TASK_TYPE = "map-file-io";
 export const MAP_FILE_IO_WORKER_OPERATIONS = Object.freeze({
   IMPORT: "import",
-  EXPORT: "export"
+  EXPORT: "export",
+  EXPORT_GEOJSON: "export-geojson"
 });
 
 export async function runMapFileIoWorkerTask(payload, context = {}) {
   const operation = String(payload?.operation || "");
   if (operation === MAP_FILE_IO_WORKER_OPERATIONS.IMPORT) return importMapFile(payload, context);
   if (operation === MAP_FILE_IO_WORKER_OPERATIONS.EXPORT) return exportMapFile(payload, context);
+  if (operation === MAP_FILE_IO_WORKER_OPERATIONS.EXPORT_GEOJSON) return exportMapGeoJson(payload, context);
   throw new Error(`不支持的地图存档操作：${operation || "未知"}`);
+}
+
+async function exportMapGeoJson(payload, context) {
+  const startedAt = taskNow();
+  await taskCheckpoint(context);
+  reportTaskProgress(context, "geojson-build", 0.2, "构建地图 GeoJSON");
+  const geoJson = createMapGeoJson(payload.map, payload.options || {});
+  await taskCheckpoint(context);
+  reportTaskProgress(context, "geojson-stringify", 0.72, "序列化地图 GeoJSON");
+  const text = JSON.stringify(geoJson);
+  const data = new (runtimeView().TextEncoder)().encode(text);
+  await taskCheckpoint(context);
+  reportTaskProgress(context, "complete", 1, "地图 GeoJSON 已整理完成");
+  return {
+    kind: "map-file-geojson-export-result",
+    mimeType: "application/geo+json;charset=utf-8",
+    bytes: data.byteLength,
+    data,
+    metadata: {
+      type: geoJson.type,
+      name: geoJson.name || "",
+      seed: geoJson.properties?.seed || "",
+      checksum: geoJson.properties?.checksum || "",
+      features: geoJson.features?.length || 0,
+      coordinateReference: geoJson.properties?.coordinateReference || "",
+      worldBounds: geoJson.properties?.worldBounds || null,
+      coordinateBounds: geoJson.properties?.coordinateBounds || null,
+      exportRange: geoJson.properties?.exportRange || null
+    },
+    timings: {totalMs: roundTaskMs(taskNow() - startedAt)}
+  };
 }
 
 export function collectMapFileIoWorkerTransferables(result) {

@@ -838,7 +838,7 @@ export function buildMethodMetadata() {
     data: {
       exportAll: {stable: "draft", mutates: "download-or-export-result", undoable: false, async: false, requiresConfirm: false},
       exportMap: {stable: "draft", mutates: "download-or-export-result", undoable: false, async: false, requiresConfirm: false},
-      exportGEO: {stable: "draft", mutates: "download-or-export-result", undoable: false, async: false, requiresConfirm: false},
+      exportGEO: {stable: "draft", mutates: "download-or-export-result", undoable: false, async: true, requiresConfirm: false},
       exportFeatureGEO: {stable: "draft", mutates: "download-or-export-result", undoable: false, async: false, requiresConfirm: false},
       exportCompressedAll: {stable: "draft", mutates: "download-or-export-result", undoable: false, async: true, requiresConfirm: false},
       exportPNG: {stable: "draft", mutates: "download-or-export-result", undoable: false, async: true, requiresConfirm: false},
@@ -1743,7 +1743,7 @@ export function exportFeatureGeoJsonData(state, documentRef, options = {}) {
   });
 }
 
-function resolveGeoJsonRangeOptions(state, range) {
+export function resolveGeoJsonRangeOptions(state, range) {
   const normalizedRange = range == null ? {mode: "full"} : range;
   if (String(normalizedRange?.mode || "full").toLowerCase() !== "viewport") return {range: normalizedRange};
   const renderer = state?.renderer;

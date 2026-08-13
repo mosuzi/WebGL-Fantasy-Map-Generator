@@ -84,6 +84,22 @@ assert.deepEqual(renderedImport.result.preparedRender.binding, {mapIdentity: "im
 assert.deepEqual(Object.keys(renderedImport.result.preparedRender.layers), ["point"]);
 assert.ok(renderedImport.result.preparedRender.layers.point.vertices instanceof Float32Array);
 
+const directGeoJson = await runMapFileIoWorkerTask({
+  operation: MAP_FILE_IO_WORKER_OPERATIONS.EXPORT_GEOJSON,
+  map: renderMap,
+  options: {range: {mode: "full"}}
+});
+const workerGeoJson = await runTaskInWorker({
+  operation: MAP_FILE_IO_WORKER_OPERATIONS.EXPORT_GEOJSON,
+  map: renderMap,
+  options: {range: {mode: "full"}}
+});
+assert.ok(workerGeoJson.result.data instanceof Uint8Array);
+assert.deepEqual(workerGeoJson.result.data, directGeoJson.data, "Worker/fallback GeoJSON 字节不一致");
+assert.equal(workerGeoJson.result.metadata.features, renderMap.pack.cells.i.length);
+assert.equal(JSON.parse(new TextDecoder().decode(workerGeoJson.result.data)).type, "FeatureCollection");
+assert.equal(collectMapFileIoWorkerTransferables(workerGeoJson.result).length, 1, "GeoJSON DTO 应只传输一个字节 buffer");
+
 const directExport = await runMapFileIoWorkerTask({
   operation: MAP_FILE_IO_WORKER_OPERATIONS.EXPORT,
   document: directImport.document,
