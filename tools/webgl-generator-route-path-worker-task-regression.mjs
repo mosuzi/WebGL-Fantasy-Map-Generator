@@ -13,8 +13,10 @@ import {
 } from "../app/webgl-generator/src/runtime/route-edit-commands.js";
 import {
   assertRoutePathWorkerPlan,
+  assertRoutePathWorkerPlanAsync,
   collectRoutePathWorkerTransferables,
   fingerprintRoutePathSource,
+  fingerprintRoutePathSourceAsync,
   runRoutePathWorkerTask
 } from "../app/webgl-generator/src/runtime/route-path-worker-task.js";
 import {
@@ -48,6 +50,10 @@ async function verifyTenThousandCells() {
   assert.equal(inputBuffer.byteLength > 0, true, "路线 Worker 输入 buffer 被 detach");
   assert.equal(collectRoutePathWorkerTransferables(output).includes(inputBuffer), false, "路线 Worker 输出错误转移输入 buffer");
   assertRoutePathWorkerPlan(output.plan, base, binding);
+  let fingerprintYields = 0;
+  assert.equal(await fingerprintRoutePathSourceAsync(base, createRequest, {budgetMs: 1, yieldToMain: async () => { fingerprintYields += 1; }}), fingerprintRoutePathSource(base, createRequest), "异步路线指纹与同步权威值漂移");
+  assert.equal(fingerprintYields > 0, true, "异步路线指纹没有按预算让步");
+  await assertRoutePathWorkerPlanAsync(output.plan, base, binding, {budgetMs: 1, yieldToMain: async () => {}});
   assert.equal(workerMap.settlements.routes.length, base.settlements.routes.length + 1, "Worker 镜像未应用路线结果");
   assert(output.preparedRender?.layers?.route?.vertices instanceof Float32Array, "路线 Worker 缺少 route prepared render");
   assert(output.preparedRender?.layers?.picking, "路线 Worker 缺少 picking prepared render");
@@ -174,6 +180,8 @@ async function verifyTenThousandCells() {
   staleMap.settlements.routes[0].level = staleMap.settlements.routes[0].level === "primary" ? "secondary" : "primary";
   assert.throws(() => assertRoutePathWorkerPlan(output.plan, staleMap, binding), error => error?.code === "route-path-worker-plan-stale");
   assert.throws(() => assertRoutePathWorkerPlan(output.plan, base, {...binding, mapRevision: binding.mapRevision + 1}), error => error?.code === "route-path-worker-binding-stale");
+  await assert.rejects(() => assertRoutePathWorkerPlanAsync(output.plan, staleMap, binding, {budgetMs: 1, yieldToMain: async () => {}}), error => error?.code === "route-path-worker-plan-stale");
+  await assert.rejects(() => assertRoutePathWorkerPlanAsync(output.plan, base, {...binding, mapRevision: binding.mapRevision + 1}), error => error?.code === "route-path-worker-binding-stale");
   await assertCancelFaultAndLate(base, binding, createRequest);
 
   const fallback = await runRoutePathWorkerTask({map: structuredClone(base), request: createRequest, binding}, taskContext(binding, "fallback"));

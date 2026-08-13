@@ -29,7 +29,7 @@ try {
     const routeSample = findRouteSample(app.map), citySample = findCitySample(app.map);
     if (!routeSample || !citySample) throw new Error("10k 路线 / 城市 Worker 夹具不足");
 
-    const trace = {runs: [], commits: [], longTasks: [], probeLongTasks: [], messages: [], spans: []};
+    const trace = {runs: [], commits: [], longTasks: [], operationLongTasks: [], probeLongTasks: [], messages: [], spans: [], stream: []};
     const originalRun = coordinator.run, originalCommit = coordinator.commitSession;
     const refs = {map: app.map, routes: app.map.settlements.routes, cities: app.map.settlements.cities, burgs: app.map.pack.burgs};
     const digest = name => {
@@ -54,7 +54,7 @@ try {
     };
     let collectProductLongTasks = false;
     const settleFrames = delay => new Promise(done => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(done, delay))));
-    const appendLongTasks = (entries, target) => target.push(...entries.map(({startTime, duration}) => ({startTime, duration})));
+    const appendLongTasks = (entries, target) => target.push(...entries.map(({startTime, duration, name}) => ({startTime, duration, name})));
     const drainLongTasks = target => appendLongTasks(observer.takeRecords(), target);
     const captureDigest = async name => {
       const value = digest(name);
@@ -64,18 +64,45 @@ try {
     };
     const runApi = async (name, task) => {
       const start = performance.now();
+      const longTaskStart = trace.longTasks.length;
       collectProductLongTasks = true;
       try { return unwrap(await task(), name); }
       finally {
         await settleFrames(100);
         drainLongTasks(trace.longTasks);
+        const operationLongTasks = trace.longTasks.slice(longTaskStart).map(entry => ({...entry, operation: name}));
+        trace.longTasks.splice(longTaskStart, trace.longTasks.length - longTaskStart, ...operationLongTasks);
+        trace.operationLongTasks.push({operation: name, longTasks: operationLongTasks});
         collectProductLongTasks = false;
         trace.spans.push({name: `api:${name}`, start, end: performance.now()});
       }
     };
     app.workerTaskCoordinator = {
       run: async (task, payload, options) => {
-        const output = await Reflect.apply(originalRun, coordinator, [task, payload, options]);
+        const startedAt = performance.now();
+        let lastYieldEnd = startedAt, maxCpuSliceMs = 0, maxWaitMs = 0;
+        const slowSlices = [], progress = [];
+        const originalProgress = options?.onProgress;
+        const yieldToMain = options?.streamYieldToMain || (() => globalThis.scheduler?.yield?.() || new Promise(done => setTimeout(done, 0)));
+        const instrumentedOptions = {
+          ...options,
+          onProgress: (stage, detail, context) => {
+            progress.push({stage, at: performance.now(), completed: Number(detail?.completed) || 0, total: Number(detail?.total) || 0});
+            return originalProgress?.(stage, detail, context);
+          },
+          streamYieldToMain: async () => {
+            const started = performance.now();
+            const cpuSliceMs = started - lastYieldEnd;
+            maxCpuSliceMs = Math.max(maxCpuSliceMs, cpuSliceMs);
+            if (cpuSliceMs >= 20) slowSlices.push({stage: progress.at(-1)?.stage || "unknown", started, cpuSliceMs});
+            await yieldToMain();
+            const ended = performance.now();
+            maxWaitMs = Math.max(maxWaitMs, ended - started);
+            lastYieldEnd = ended;
+          }
+        };
+        const output = await Reflect.apply(originalRun, coordinator, [task, payload, instrumentedOptions]);
+        trace.stream.push({task, kind: payload?.request?.kind || payload?.historyTransition?.request?.kind, planOnly: payload?.planOnly === true, startedAt, endedAt: performance.now(), maxCpuSliceMs, maxWaitMs, slowSlices, progress});
         trace.runs.push({
           task,
           kind: payload?.request?.kind || payload?.historyTransition?.request?.kind,
@@ -175,6 +202,7 @@ try {
 
   const performanceSignals = consoleErrors.filter(text => /\[FMG health\] (operation-stall|main-thread-long-task|render-frame-gap|input-handler-stall)/.test(text));
   const applicationErrors = consoleErrors.filter(text => !performanceSignals.includes(text));
+  if (report.trace.longTasks.length) console.error(JSON.stringify({c3cLongTaskDiagnostic: {longTasks: report.trace.longTasks, operationLongTasks: report.trace.operationLongTasks, stream: report.trace.stream, spans: report.trace.spans}}, null, 2));
   assert.equal(report.changed, true, "路线 / 城市操作没有产生正式变化");
   assert.equal(report.refs, true, "主图、路线、城市或 burg 权威集合身份被替换");
   assert.deepEqual(report.exact, {routeUndo: true, routeRedo: true, cityUndo: true, cityRedo: true});
@@ -189,10 +217,19 @@ try {
     assert.ok(run.telemetry?.inputPackets > 0 && run.telemetry?.outputPackets > 0);
   }
   assert.equal(report.finalSession?.status, "idle");
-  assert.ok(report.trace.longTasks.length <= 4 && report.trace.longTasks.every(item => item.duration <= 200), `C3c LongTask 超出登记预算：${JSON.stringify(report.trace.longTasks)}`);
+  assert.deepEqual(report.trace.operationLongTasks.map(item => item.operation), ["route-inspect", "route-update", "route-undo", "route-redo", "city-inspect", "city-move", "city-undo", "city-redo"]);
+  for (const operation of report.trace.operationLongTasks) {
+    if (operation.operation === "city-move") {
+      assert.ok(operation.longTasks.length <= 1, `city-move LongTask 数量超过登记上限：${JSON.stringify(operation.longTasks)}`);
+      assert.ok(operation.longTasks.every(item => item.name === "self" && item.duration <= 100), `city-move LongTask 时长或来源超过登记上限：${JSON.stringify(operation.longTasks)}`);
+    } else {
+      assert.deepEqual(operation.longTasks, [], `${operation.operation} 捕获主线程 LongTask`);
+    }
+  }
+  assert.deepEqual(report.trace.longTasks, report.trace.operationLongTasks.find(item => item.operation === "city-move").longTasks, "C3c 仅允许 city-move 的精确登记 LongTask");
   assert.equal(report.loading.visible, false); assert.equal(report.glError, 0);
   assert.deepEqual(report.health?.events, []); assert.deepEqual(report.forbidden, []); assert.deepEqual(applicationErrors, []); assert.deepEqual(pageErrors, []);
-  console.log(JSON.stringify({ok: true, routeId: report.routeId, cityId: report.cityId, operations: report.trace.runs.length, sessionId: report.finalSession.id, longTasks: report.trace.longTasks, probeLongTasks: report.trace.probeLongTasks, spans: report.trace.spans, performanceSignals}, null, 2));
+  console.log(JSON.stringify({ok: true, routeId: report.routeId, cityId: report.cityId, operations: report.trace.runs.length, sessionId: report.finalSession.id, longTasks: report.trace.longTasks, operationLongTasks: report.trace.operationLongTasks, probeLongTasks: report.trace.probeLongTasks, spans: report.trace.spans, performanceSignals}, null, 2));
 } finally {
   await browser?.close(); server.kill();
   await Promise.race([new Promise(done => server.once("exit", done)), new Promise(done => setTimeout(done, 5000))]);

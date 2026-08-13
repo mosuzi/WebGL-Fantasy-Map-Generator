@@ -12,8 +12,6 @@ const distDir = join(rootDir, "dist", "webgl-generator");
 const host = "127.0.0.1";
 const port = 5458;
 const timeoutMs = 240_000;
-const STAGE_C1_LONG_TASK_LIMIT_MS = 160;
-const STAGE_C1_LONG_TASK_LIMIT_COUNT = 2;
 if (!existsSync(distDir)) throw new Error(`构建产物不存在：${distDir}`);
 
 const playwright = loadPlaywright(sourceDir);
@@ -152,8 +150,7 @@ try {
     && report.workerRun.inputPackets > 0 && report.workerRun.outputPackets > 0 && report.workerRun.targetCells === 100_000
     && ["cellVisual", "shore", "statePaths", "provincePaths", "political", "politicalDebug", "surface", "line", "picking", "labels", "route", "river", "point"].every(layer => report.workerRun.preparedLayers.includes(layer))
     && report.preparedInstall.stages > 0 && report.preparedInstall.legacyLoadUnchanged === true && report.preparedInstall.suspended === 0
-    && report.longTasks.length <= STAGE_C1_LONG_TASK_LIMIT_COUNT
-    && report.longTasks.every(entry => entry.duration <= STAGE_C1_LONG_TASK_LIMIT_MS)
+    && report.longTasks.length === 0
     && report.generationInputs.before === "10000"
     && report.generationInputs.afterRefine === "100000"
     && report.generationInputs.afterUndo === "10000"

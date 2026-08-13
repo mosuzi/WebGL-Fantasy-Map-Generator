@@ -122,7 +122,7 @@ try {
   const injectedNetworkConsole = nonPerformanceConsole.filter(message => message === "Failed to load resource: net::ERR_FAILED");
   const unexpectedConsole = nonPerformanceConsole.filter(message => message !== "Failed to load resource: net::ERR_FAILED");
   assert.equal(injectedNetworkConsole.length, injectedResourceFailures.length, "故障注入请求与浏览器网络错误必须一一对应");
-  assert(registeredLongTasks.every(duration => duration <= 200), `模板浏览器门出现超过登记上限的 LongTask：${registeredLongTasks.join(", ")}`);
+  assert.deepEqual(registeredLongTasks, [], "模板浏览器门捕获主线程 LongTask");
   assert.deepEqual(healthErrors, []);
   assert.deepEqual(unexpectedConsole, []);
   assert.deepEqual(pageErrors, []);

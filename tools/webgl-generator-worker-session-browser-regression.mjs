@@ -4129,7 +4129,7 @@ async function runHundredThousandFreshRoutesDiagnosticGate(page, cdp) {
       preAssertion
     });
     writeFileSync(hundredThousandFreshRoutesDiagnosticPath, `${JSON.stringify(failureDump, null, 2)}\n`, "utf8");
-    assertHundredThousandFreshRoutesStageABudget(rawTrace, response);
+    assertHundredThousandFreshRoutesPerformance(rawTrace, response);
     assert.equal(Number(rawTrace.methodSummary?.["overlay:replaceChildren"]?.count || 0), 1, "100k fresh routes overlay 未精确执行一次原子替换");
     assert.equal(Number(rawTrace.methodSummary?.["city:setInstances"]?.count || 0), 1, "100k fresh routes 未精确更新一次 city instance GPU");
     const slowSync = Object.entries(rawTrace.methodSummary || {})
@@ -4177,24 +4177,9 @@ async function runHundredThousandFreshRoutesDiagnosticGate(page, cdp) {
   }
 }
 
-function assertHundredThousandFreshRoutesStageABudget(trace, response) {
+function assertHundredThousandFreshRoutesPerformance(trace, response) {
   const longTasks = trace.longTasks || [];
-  assert.ok(longTasks.length <= 2, `100k fresh routes 阶段A LongTask 数量超预算：${JSON.stringify(longTasks)}`);
-  const frames = trace.longAnimationFrames || [];
-  const overlaps = trace.longTaskOverlaps || [];
-  for (const task of longTasks) {
-    assert.ok(Number(task.duration) <= 75, `100k fresh routes 阶段A LongTask 时长超预算：${JSON.stringify(task)}`);
-    const start = Number(task.startTime);
-    const end = start + Number(task.duration);
-    const overlap = overlaps.find(item => Number(item.startTime) === start && Number(item.duration) === Number(task.duration));
-    const terminalRenderer = (overlap?.events || []).some(event => event.channel === "renderer"
-      && ["resumeWorkerRenderInstall", "resumePreparedWorkerRenderInstall", "draw", "updateLabels"].includes(event.name));
-    const terminalLayout = frames.some(frame => {
-      const styleStart = Number(frame.styleAndLayoutStart) || 0;
-      return styleStart >= start && styleStart <= end;
-    });
-    assert.ok(terminalRenderer || terminalLayout, `100k fresh routes 出现未归因 LongTask：${JSON.stringify({task, overlap})}`);
-  }
+  assert.deepEqual(longTasks, [], "100k fresh routes 捕获主线程 LongTask");
   const telemetry = response?.data?.worker?.telemetry || {};
   for (const [key, value] of [
     ["inputPostMaxMs", telemetry.inputPostMaxMs],
@@ -5523,8 +5508,7 @@ async function runHundredThousandSessionGate(page, cdp) {
     await discardProbeLongTasks(page);
     heap.afterFirst = await heapUsage(cdp);
 
-    operations.push(summarizeResult(await regenerate(page, cdp, "routes", {longTaskBudget: {maxCount: 1, maxDurationMs: 80}})));
-    await assertRegisteredLongTasks(page, "100k routes reused session", {maxCount: 1, maxDurationMs: 80});
+    operations.push(summarizeResult(await regenerate(page, cdp, "routes")));
     await clearLongTasks(page);
     operations.push(summarizeResult(await regenerate(page, cdp, "markers")));
     await assertNoLongTasks(page, "100k markers reused session");
@@ -5552,7 +5536,7 @@ async function runHundredThousandSessionGate(page, cdp) {
 
     const hardCell = await runHundredThousandHardCellGate(page);
     const cancellation = await cancelAcceptedWorkerOperation(page, "zones");
-    const afterCancel = summarizeResult(await regenerate(page, cdp, "routes", {longTaskBudget: {maxCount: 1, maxDurationMs: 80}}));
+    const afterCancel = summarizeResult(await regenerate(page, cdp, "routes"));
     assert.equal(afterCancel.worker.session.reused, false, "accepted 取消后错误复用已终止 session");
     heap.afterCancelRecovery = await heapUsage(cdp);
     return {
@@ -6014,19 +5998,7 @@ async function assertNoLongTasks(page, label) {
   return longTasks;
 }
 
-async function assertRegisteredLongTasks(page, label, {maxCount, maxDurationMs}) {
-  const longTasks = await page.evaluate(async () => {
-    await new Promise(resolve => setTimeout(resolve, 0));
-    await new Promise(resolve => requestAnimationFrame(() => resolve()));
-    await new Promise(resolve => requestAnimationFrame(() => resolve()));
-    return window.__task322SessionLongTasks.slice();
-  });
-  assert.ok(longTasks.length <= maxCount, `${label} LongTask 数量超过登记上限：${JSON.stringify(longTasks)}`);
-  assert.ok(longTasks.every(task => task?.name === "self" && Number(task.duration) <= maxDurationMs), `${label} LongTask 超过登记时长或来源不符：${JSON.stringify(longTasks)}`);
-  return longTasks;
-}
-
-async function regenerate(page, cdp, kind, {longTaskBudget = null} = {}) {
+async function regenerate(page, cdp, kind) {
   const rendererPerformanceBefore = await readRendererPerformanceEvents(page);
   await clearLongTasks(page);
   const metricsBefore = indexMetrics(await cdp.send("Performance.getMetrics"));
@@ -6042,9 +6014,7 @@ async function regenerate(page, cdp, kind, {longTaskBudget = null} = {}) {
   const metricsAfter = indexMetrics(await cdp.send("Performance.getMetrics"));
   let longTasks;
   try {
-    longTasks = longTaskBudget
-      ? await assertRegisteredLongTasks(page, `${kind} Worker regenerate`, longTaskBudget)
-      : await assertNoLongTasks(page, `${kind} Worker regenerate`);
+    longTasks = await assertNoLongTasks(page, `${kind} Worker regenerate`);
   } catch (error) {
     const rendererPerformanceAfter = await readRendererPerformanceEvents(page);
     const rendererPerformanceDiff = Object.fromEntries(Object.entries(rendererPerformanceAfter)

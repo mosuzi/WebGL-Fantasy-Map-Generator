@@ -56,7 +56,8 @@ try {
   assert.equal(report.initial.unassigned, 0);
   assert.deepEqual([report.initial.stateChecksum, report.initial.provinceChecksum], expected.topology.initial, "初始政治 topology checksum 漂移");
   if (report.fallbackCompatibility) {
-    assert.equal(report.fallbackCompatibility.operation.longTasks.every(task => task.duration <= 200), true, "小图 fallback LongTask 超过登记上限");
+    assert.equal(report.fallbackCompatibility.operation.longTasks.length <= 1, true, "fallback-provinces LongTask 数量超过登记上限");
+    assert.equal(report.fallbackCompatibility.operation.longTasks.every(task => task.name === "self" && task.duration <= 80), true, "fallback-provinces LongTask 时长或来源超过登记上限");
     assert.equal(report.fallbackCompatibility.operation.invariants.valid, true, "小图 fallback 河流、道路、GPU 或 picking 不同源");
     assert.equal(report.fallbackCompatibility.operation.topology.stateFragments, 0);
     assert.equal(report.fallbackCompatibility.operation.topology.provinceFragments, 0);
@@ -64,7 +65,8 @@ try {
   for (const operation of report.operations) {
     const registeredHundredThousandStates = cellsTarget === 100_000 && operation.label === "states";
     if (registeredHundredThousandStates) {
-      assert.equal(operation.longTasks.every(task => task.duration <= 200), true, "100k states LongTask 超过登记上限");
+      assert.equal(operation.longTasks.length <= 1, true, "100k states LongTask 数量超过登记上限");
+      assert.equal(operation.longTasks.every(task => task.name === "self" && task.duration <= 80), true, "100k states LongTask 时长或来源超过登记上限");
     } else {
       assert.deepEqual(operation.longTasks, [], `${operation.label} 捕获主线程 LongTask`);
     }
@@ -95,7 +97,7 @@ async function runBrowserCase({cellsTarget, seed, diagnoseTopology, diagnoseDoma
   const api = window.webglGeneratorApi;
   const app = window.__webglGeneratorApp;
   const longTasks = [];
-  const observer = new PerformanceObserver(list => longTasks.push(...list.getEntries().map(entry => ({startTime: entry.startTime, duration: entry.duration}))));
+  const observer = new PerformanceObserver(list => longTasks.push(...list.getEntries().map(entry => ({startTime: entry.startTime, duration: entry.duration, name: entry.name}))));
   observer.observe({entryTypes: ["longtask"]});
   const operations = [];
   const detailsChecksums = [];
@@ -237,7 +239,7 @@ async function runBrowserCase({cellsTarget, seed, diagnoseTopology, diagnoseDoma
     const startedAt = performance.now();
     const response = await action();
     await settle();
-    longTasks.push(...observer.takeRecords().map(entry => ({startTime: entry.startTime, duration: entry.duration})));
+    longTasks.push(...observer.takeRecords().map(entry => ({startTime: entry.startTime, duration: entry.duration, name: entry.name})));
     const endedAt = performance.now();
     const entry = {
       label,

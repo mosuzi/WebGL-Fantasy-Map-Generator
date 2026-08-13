@@ -301,16 +301,29 @@ function sameData(left, right, seen = new WeakMap()) {
 }
 
 export function assertRoutePathWorkerPlan(plan, map, binding) {
-  if (!plan || plan.version !== ROUTE_PATH_WORKER_PLAN_VERSION || !plan.request || !plan.binding) {
-    throw taskError("route-path-worker-plan-invalid", "路线规划 Worker plan 无效");
-  }
-  const expectedBinding = normalizeBinding(binding);
-  assertEnvelopeBinding(normalizeBinding(plan.binding), expectedBinding);
+  assertRoutePathWorkerPlanEnvelope(plan, binding);
   const currentFingerprint = fingerprintRoutePathSource(map, plan.request);
   if (currentFingerprint !== String(plan.sourceFingerprint || "")) {
     throw taskError("route-path-worker-plan-stale", "路线规划 Worker plan 已过期");
   }
   return true;
+}
+
+export async function assertRoutePathWorkerPlanAsync(plan, map, binding, options = {}) {
+  assertRoutePathWorkerPlanEnvelope(plan, binding);
+  const currentFingerprint = await fingerprintRoutePathSourceAsync(map, plan.request, options);
+  if (currentFingerprint !== String(plan.sourceFingerprint || "")) {
+    throw taskError("route-path-worker-plan-stale", "路线规划 Worker plan 已过期");
+  }
+  return true;
+}
+
+function assertRoutePathWorkerPlanEnvelope(plan, binding) {
+  if (!plan || plan.version !== ROUTE_PATH_WORKER_PLAN_VERSION || !plan.request || !plan.binding) {
+    throw taskError("route-path-worker-plan-invalid", "路线规划 Worker plan 无效");
+  }
+  const expectedBinding = normalizeBinding(binding);
+  assertEnvelopeBinding(normalizeBinding(plan.binding), expectedBinding);
 }
 
 export function fingerprintRoutePathSource(map, request = {}) {
@@ -323,6 +336,18 @@ export function fingerprintRoutePathSource(map, request = {}) {
     burgs: map?.pack?.burgs,
     locks: map?.regenerationLocks
   });
+}
+
+export function fingerprintRoutePathSourceAsync(map, request = {}, options = {}) {
+  const normalized = normalizeRequest(request);
+  return stableFingerprintAsync({
+    request: publicRequest(normalized),
+    packCells: map?.pack?.cells,
+    routes: map?.settlements?.routes,
+    cities: map?.settlements?.cities,
+    burgs: map?.pack?.burgs,
+    locks: map?.regenerationLocks
+  }, options);
 }
 
 export function collectRoutePathWorkerTransferables(result) {
@@ -453,6 +478,66 @@ function stableFingerprint(value) {
   };
   visit(value);
   return (hash >>> 0).toString(16).padStart(8, "0");
+}
+
+async function stableFingerprintAsync(value, {budgetMs = 6, yieldToMain = defaultFingerprintYield} = {}) {
+  let hash = 0x811c9dc5;
+  const seen = new WeakMap();
+  let nextId = 1;
+  const now = () => globalThis.performance?.now?.() ?? Date.now();
+  let deadline = now() + Math.max(1, Number(budgetMs) || 6);
+  const update = item => {
+    const text = String(item ?? "");
+    for (let index = 0; index < text.length; index++) {
+      hash ^= text.charCodeAt(index);
+      hash = Math.imul(hash, 0x01000193);
+    }
+  };
+  const checkpoint = async () => {
+    await yieldToMain();
+    deadline = now() + Math.max(1, Number(budgetMs) || 6);
+  };
+  const stack = [{type: "visit", item: value}];
+  while (stack.length) {
+    const frame = stack.pop();
+    if (frame.type === "object") {
+      if (frame.index >= frame.keys.length) continue;
+      const key = frame.keys[frame.index++];
+      update(key);
+      stack.push(frame, {type: "visit", item: frame.item[key]});
+      if (now() >= deadline) await checkpoint();
+      continue;
+    }
+    const item = frame.item;
+    if (item === null || typeof item !== "object") {
+      update(`${typeof item}:${String(item)}`);
+      if (now() >= deadline) await checkpoint();
+      continue;
+    }
+    if (seen.has(item)) {
+      update(`ref:${seen.get(item)}`);
+      if (now() >= deadline) await checkpoint();
+      continue;
+    }
+    seen.set(item, nextId++);
+    update(item.constructor?.name || "Object");
+    if (ArrayBuffer.isView(item)) {
+      update(item.length);
+      for (let index = 0; index < item.length; index++) {
+        update(item[index]);
+        if (now() >= deadline) await checkpoint();
+      }
+    } else {
+      stack.push({type: "object", item, keys: Object.keys(item).sort(), index: 0});
+    }
+    if (now() >= deadline) await checkpoint();
+  }
+  return (hash >>> 0).toString(16).padStart(8, "0");
+}
+
+function defaultFingerprintYield() {
+  if (typeof globalThis.scheduler?.yield === "function") return globalThis.scheduler.yield();
+  return new Promise(resolve => setTimeout(resolve, 0));
 }
 
 function deepFreeze(value, seen = new WeakSet()) {

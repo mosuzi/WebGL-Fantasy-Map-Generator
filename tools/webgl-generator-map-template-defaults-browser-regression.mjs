@@ -127,7 +127,7 @@ try {
     const longTasks = health.filter(event => event.type === "main-thread-long-task")
       .map(event => event.detail?.durationMs).filter(Number.isFinite);
     const healthErrors = health.filter(event => event.severity === "error" && !performanceTypes.has(event.type));
-    assert(longTasks.every(duration => duration <= 200), `${manifest.id} 出现超过登记上限的 LongTask：${longTasks.join(", ")}`);
+    assert.deepEqual(longTasks, [], `${manifest.id} 捕获主线程 LongTask`);
     assert.deepEqual(healthErrors, [], `${manifest.id} 出现非性能 health 错误`);
     reports.push({
       id: manifest.id,

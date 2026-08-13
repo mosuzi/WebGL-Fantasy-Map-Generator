@@ -47,7 +47,7 @@ try {
     const input = document.getElementById("cells-input");
     const trace = {longTasks: [], technicalCopy: []};
     const pendingLongTasks = [];
-    const observer = new PerformanceObserver(list => pendingLongTasks.push(...list.getEntries().map(({startTime, duration}) => ({startTime, duration}))));
+    const observer = new PerformanceObserver(list => pendingLongTasks.push(...list.getEntries().map(({startTime, duration, name}) => ({startTime, duration, name}))));
     observer.observe({entryTypes: ["longtask"]});
     const visibleTechnical = () => ["generation-loading", "operation-loading", "map-toast", "shortcut-toast", "file-operation-status"]
       .map(id => document.getElementById(id)).filter(node => node && !node.hidden && node.getClientRects().length && !["none", "hidden"].includes(getComputedStyle(node).display))
@@ -55,7 +55,7 @@ try {
     const settle = async () => {
       await new Promise(done => requestAnimationFrame(() => requestAnimationFrame(done)));
       await new Promise(done => setTimeout(done, 100));
-      pendingLongTasks.push(...observer.takeRecords().map(({startTime, duration}) => ({startTime, duration})));
+      pendingLongTasks.push(...observer.takeRecords().map(({startTime, duration, name}) => ({startTime, duration, name})));
     };
     const operation = async (name, task) => {
       await settle();
@@ -146,7 +146,10 @@ try {
   assert.equal(report.noOpState.workerRuns, 0);
   assert.equal(report.noOpState.same, true);
   for (const {schema} of report.schemas) assert.deepEqual({minimum: schema.minimum, maximum: schema.maximum}, {minimum: 1, maximum: 100_000});
-  assert.deepEqual(report.trace.longTasks.filter(entry => entry.duration > 200), [], "第 323 项不得出现超过登记上限的 LongTask");
+  const cappedLongTasks = report.trace.longTasks.filter(entry => entry.operation === "generate-capped");
+  assert.ok(cappedLongTasks.length <= 1, `generate-capped LongTask 数量超过登记上限：${JSON.stringify(cappedLongTasks)}`);
+  assert.ok(cappedLongTasks.every(entry => entry.name === "self" && entry.duration <= 80), `generate-capped LongTask 时长或来源超过登记上限：${JSON.stringify(cappedLongTasks)}`);
+  assert.deepEqual(report.trace.longTasks, cappedLongTasks, "第 323 项仅允许 generate-capped 的精确登记 LongTask");
   assert.deepEqual(report.trace.technicalCopy, []);
   assert.equal(report.loading.visible, false);
   assert.equal(report.glError, 0);

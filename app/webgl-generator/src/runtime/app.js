@@ -234,7 +234,7 @@ import {
   POPULATION_WORKER_TASK
 } from "./population-worker-task.js";
 import {
-  assertRoutePathWorkerPlan,
+  assertRoutePathWorkerPlanAsync,
   ROUTE_PATH_WORKER_TASK
 } from "./route-path-worker-task.js";
 import {
@@ -3310,7 +3310,7 @@ function createRuntimeActions(state, documentRef, options = {}) {
         delete: (cityId, options = {}) => deleteCityViaApi(state, documentRef, cityId, options),
         inspectMove: (cityId, target) => operation.run(
           "edit.cities.inspectMove",
-          context => inspectRoutePathViaWorker(state, {kind: "city-relocation", cityId: normalizeApiInteger(cityId, "城市 ID"), target}, context),
+          context => inspectRoutePathViaWorker(state, documentRef, {kind: "city-relocation", cityId: normalizeApiInteger(cityId, "城市 ID"), target}, context),
           {message: "正在规划城市移动路径"}
         ),
         move: (cityId, target) => operation.run(
@@ -3517,7 +3517,7 @@ function createRuntimeActions(state, documentRef, options = {}) {
         ),
         inspectEdit: (routeId, patch = {}) => operation.run(
           "edit.routes.inspectEdit",
-          context => inspectRouteEditViaApi(state, routeId, patch, context),
+          context => inspectRouteEditViaApi(state, documentRef, routeId, patch, context),
           {message: "正在规划路线预览"}
         ),
         update: (routeId, patch = {}) => operation.run(
@@ -8950,10 +8950,10 @@ async function createRouteViaApi(state, documentRef, options = {}, operationCont
   return routePathApiResult(response, "路线绘制");
 }
 
-async function inspectRouteEditViaApi(state, routeId, patch = {}, operationContext = null) {
+async function inspectRouteEditViaApi(state, documentRef, routeId, patch = {}, operationContext = null) {
   assertMapAvailable(state);
   if (!patch || typeof patch !== "object" || Array.isArray(patch)) throw new Error("路线编辑预检参数必须是对象");
-  return inspectRoutePathViaWorker(state, {
+  return inspectRoutePathViaWorker(state, documentRef, {
     kind: "edit",
     routeId: normalizeApiInteger(routeId, "路线 ID"),
     patch
@@ -9128,7 +9128,7 @@ async function applyRoutePathMutationViaWorker(state, documentRef, {request, ope
     includeBindingInPayload: true,
     renderLayers,
     effects,
-    assertOutput: ({state: currentState, sourceMap, binding, output}) => {
+    assertOutput: async ({state: currentState, sourceMap, binding, output}) => {
       if (currentState.map !== sourceMap) {
         const error = new Error(`${userLabel}准备结果已被新的地图状态取代`);
         error.code = "operation_obsolete";
@@ -9139,7 +9139,7 @@ async function applyRoutePathMutationViaWorker(state, documentRef, {request, ope
         error.code = "route-path-worker-result-invalid";
         throw error;
       }
-      assertRoutePathWorkerPlan(output.plan, sourceMap, binding);
+      await assertRoutePathWorkerPlanAsync(output.plan, sourceMap, binding, {yieldToMain: () => yieldToBrowser(documentRef)});
     },
     createCommand: ({output}) => {
       const command = request.kind === "create"
@@ -9180,7 +9180,7 @@ function attachRoutePathWorkerHistory(command, metadata) {
   return command;
 }
 
-async function inspectRoutePathViaWorker(state, request, operation) {
+async function inspectRoutePathViaWorker(state, documentRef, request, operation) {
   assertMapAvailable(state);
   const binding = createRegenerationWorkerBinding(state, operation);
   let sessionCommitted = false;
@@ -9206,7 +9206,7 @@ async function inspectRoutePathViaWorker(state, request, operation) {
       error.code = "route-path-worker-inspection-invalid";
       throw error;
     }
-    assertRoutePathWorkerPlan(output.plan, state.map, binding);
+    await assertRoutePathWorkerPlanAsync(output.plan, state.map, binding, {yieldToMain: () => yieldToBrowser(documentRef)});
     const sessionId = output.worker?.session?.id;
     if (!sessionId || !validateRegenerationWorkerBinding(state, binding)) {
       const error = new Error("路径规划 Worker 会话已过期");
@@ -9711,13 +9711,13 @@ async function moveCityViaApi(state, documentRef, cityId, target, operationConte
     includeBindingInPayload: true,
     renderLayers,
     effects,
-    assertOutput: ({state: currentState, sourceMap, binding, output}) => {
+    assertOutput: async ({state: currentState, sourceMap, binding, output}) => {
       if (currentState.map !== sourceMap || output?.kind !== "route-path" || output?.plan?.request?.kind !== request.kind) {
         const error = new Error(`城市 #${id} 移动准备结果已过期或结构无效`);
         error.code = "route-path-worker-city-result-invalid";
         throw error;
       }
-      assertRoutePathWorkerPlan(output.plan, sourceMap, binding);
+      await assertRoutePathWorkerPlanAsync(output.plan, sourceMap, binding, {yieldToMain: () => yieldToBrowser(documentRef)});
     },
     createCommand: ({output}) => {
       const preflight = importCityMovePreflight(output.cityPreflight);
@@ -12257,7 +12257,7 @@ async function executeWorkerMapMutation(state, documentRef, mutation, operation 
       error.code = "worker_protocol_binding_mismatch";
       throw error;
     }
-    mutation.assertOutput?.({state, sourceMap, binding, output, operation});
+    await mutation.assertOutput?.({state, sourceMap, binding, output, operation});
   } catch (error) {
     state.workerTaskCoordinator.invalidateSession("result-obsolete");
     if (state.map === sourceMap) restoreCityIconLayerStatistics(state.renderer, operationStartCityIconLayerStats);

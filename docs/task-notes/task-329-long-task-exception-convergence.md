@@ -42,6 +42,17 @@
 - 100k routes 复用已存在的窄入口确认当前为零后移除 `80ms` 额度；不得重新扩写此前已经完成的多轮诊断。
 - 第 328 项只有同一固定 100k states 连续稳定复现后才开启窄诊断；未锁定同步段时不做政治生成器或 renderer 改造。
 
+## 2026-08-13 实施结果
+
+- 机器门已收敛：第 324 项三个模板入口恢复严格零；第 323 项仅 `generate-capped` 可保留 `1×self≤80ms`，其余八项为零；第 328 项仅 `fallback-provinces` 与 `100k states` 各自允许 `1×self≤80ms`，其它入口为零。C1 网格细分当前产品窗实测 LongTask `[]`，旧 `2×160ms` 额度已删除；100k routes 当前同页两次 reused 均为零，正式门的 reused / 取消后 fresh 两个旧额度及通用预算分支已删除。
+- C3c 已按八个入口分窗。首次严格门得到 `route-inspect 109ms / route-update 130ms / city-inspect 106ms / city-move 192ms`，全部从 `workerTaskCoordinator.run` 返回后开始；输入分片最大 `47.2ms`。根因是主线程同步重算 `fingerprintRoutePathSource`。正式实现新增同算法异步指纹并在路线 / 城市结果校验中按浏览器让步，Node 锁定同步 / 异步 checksum 相同和陈旧拒绝不变。
+- 实质优化后的唯一目标复验中，路线预检 / 更新 / 撤销 / 重做、城市预检 / 撤销 / 重做均为零，只剩 `city-move 80ms self`。该信号位于 Worker 返回后的 prepared 城市画面提交窗；依据用户“调查、实质优化一次后，200ms 内仍未消除可精确登记”的规则，最终仅保留 `city-move 1×self≤100ms`，不得扩到其它七项。
+- D2 committed-display 当前复验 LongTask `[]`，主题与最大标签不再保留阶段额度。第 324 项主浏览器入口严格零通过。第 323 项当前唯一 `generate-capped 51ms` 与历史 61ms 同源，因此保留上述精确额度。第 328 项首个 fallback 为 74ms；它由夹具主动 `forceFallback` 进入低频主线程兼容路径，故不扩政治生成器，只保留上述单入口额度。
+
+证据路径：`work/task329-c3c-diagnostic/`、`work/task329-c3c-after-async-fingerprint/`、`work/task329-c1-current/`、`work/task329-100k-routes-current/`、`work/task329-d2-committed-display-current/`、`work/task329-task323-strict/`、`work/task329-task324-strict-primary/`、`work/task329-task328-exact-budget/`。
+
+独立集成复核发现并关闭了最后一个隐藏的 100k fresh routes `2×75ms` 宽门，复查结论为 `ACCEPT`。独立最终观察使亲跑 C3c、第 323 项和第 328 项真实浏览器门：城市移动 `89ms`、100k 截断新图 `52ms`、小图省份 fallback `74ms`、100k 国家重生成 `65ms` 均落在上述精确额度内，其余对应入口 LongTask 为 `0`；功能、回滚、GPU / picking、Loading 与错误面通过，最终结论为 `ACCEPT`。
+
 ## 验收与停止条件
 
 - 最终不存在“任意数量且每条 `≤200ms`”的门，也不存在八个操作共享一个总额度的门。

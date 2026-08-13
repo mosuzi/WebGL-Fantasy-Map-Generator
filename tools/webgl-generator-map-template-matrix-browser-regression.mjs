@@ -219,7 +219,7 @@ async function runCase(browserContext, {templateId, cellsTarget}) {
       unexpectedConsole,
       pageErrors
     }, null, 2)}\n`);
-    assert(longTasks.every(duration => duration <= 200), `${templateId}/${cellsTarget} 出现超过登记上限的 LongTask：${longTasks.join(", ")}`);
+    assert.deepEqual(longTasks, [], `${templateId}/${cellsTarget} 捕获主线程 LongTask`);
     assert.deepEqual(healthErrors, [], `${templateId}/${cellsTarget} 出现非性能 health 错误`);
     assert.deepEqual(unexpectedConsole, [], `${templateId}/${cellsTarget} 出现 console error`);
     assert.deepEqual(pageErrors, [], `${templateId}/${cellsTarget} 出现 page error`);
