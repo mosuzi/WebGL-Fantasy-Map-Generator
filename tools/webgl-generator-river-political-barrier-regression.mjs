@@ -63,6 +63,7 @@ const symmetricOwners = Uint16Array.from(symmetric.cells.i, cell => symmetricAss
 const symmetricInspection = inspectRiverPoliticalBoundaries(symmetricContext, symmetricOwners);
 assert(symmetricInspection.adoptionRate >= 0.7, `强河合格段边界采用率不足：${symmetricInspection.adoptionRate}`);
 assert.equal(ownerChecksum(symmetricOwners), 6811943, "对称强河归属 checksum 漂移");
+assertOwnersConnected(symmetric.cells, symmetricOwners, [1, 2]);
 
 const singleSide = symmetricRiverFixture({strong: false});
 const singleSideContext = createRiverPoliticalBarrier(singleSide);
@@ -146,4 +147,22 @@ function ownerChecksum(values) {
     hash = Math.imul(hash, 16777619) >>> 0;
   }
   return hash;
+}
+
+function assertOwnersConnected(cells, owners, ownerIds) {
+  for (const owner of ownerIds) {
+    const owned = cells.i.filter(cell => owners[cell] === owner);
+    assert(owned.length, `行政区 ${owner} 没有归属 cell`);
+    const visited = new Set([owned[0]]);
+    const queue = [owned[0]];
+    while (queue.length) {
+      const cell = queue.pop();
+      for (const neighbor of cells.c[cell] || []) {
+        if (owners[neighbor] !== owner || visited.has(neighbor)) continue;
+        visited.add(neighbor);
+        queue.push(neighbor);
+      }
+    }
+    assert.equal(visited.size, owned.length, `行政区 ${owner} 被竞争队列拆成多个分量`);
+  }
 }

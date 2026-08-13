@@ -1902,6 +1902,7 @@ export function assignConnectedProvinces(cells, ownedCells, seeds, fixedAssignme
   const allowed = new Set(ownedCells);
   const assignment = new Map(fixedAssignments);
   const anchors = new Map(fixedAssignments);
+  const settled = new Set();
   const costs = new Map();
   const queue = new MinPriorityQueue();
   for (const seed of [...seeds].sort((a, b) => a.provinceId - b.provinceId)) {
@@ -1919,9 +1920,11 @@ export function assignConnectedProvinces(cells, ownedCells, seeds, fixedAssignme
 
   while (queue.length) {
     const {cell, provinceId, cost} = queue.pop();
-    if (cost !== costs.get(cell) || assignment.get(cell) !== provinceId || protectedIds.has(provinceId)) continue;
+    if (settled.has(cell) || cost !== costs.get(cell) || assignment.get(cell) !== provinceId) continue;
+    settled.add(cell);
+    if (protectedIds.has(provinceId)) continue;
     for (const neighbor of cells.c?.[cell] || []) {
-      if (!allowed.has(neighbor)) continue;
+      if (!allowed.has(neighbor) || settled.has(neighbor)) continue;
       const anchorOwner = anchors.get(neighbor);
       if (anchorOwner !== undefined && anchorOwner !== provinceId) continue;
       const nextCost = cost + 1 + riverPoliticalTransition(riverBarrier, cell, neighbor, {level: "province"}).cost;
