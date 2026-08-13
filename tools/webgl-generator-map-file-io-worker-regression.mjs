@@ -153,8 +153,8 @@ const gzipBase64 = Buffer.from(gzipBytes).toString("base64");
 const browserBinaryRecord = createBrowserMapStorageBinaryRecord(gzipBytes, directImport.map, {originalBytes: directExport.bytes});
 assert.equal(browserBinaryRecord.type, BROWSER_MAP_STORAGE_BINARY_TYPE);
 assert.equal(isBrowserMapStorageBinaryRecord(browserBinaryRecord), true);
-assert.equal(shouldWriteBrowserMapStorageBinary(4 * 1024 * 1024 - 1), false);
-assert.equal(shouldWriteBrowserMapStorageBinary(4 * 1024 * 1024), true);
+assert.equal(shouldWriteBrowserMapStorageBinary(0), false);
+assert.equal(shouldWriteBrowserMapStorageBinary(1), true);
 const binaryRecordImport = await runMapFileIoWorkerTask({
   operation: MAP_FILE_IO_WORKER_OPERATIONS.IMPORT,
   input: createBrowserMapStorageBinaryImportSource(browserBinaryRecord)

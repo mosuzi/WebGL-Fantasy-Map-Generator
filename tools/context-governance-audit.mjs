@@ -90,7 +90,7 @@ async function inspectDocuments() {
   const currentPlan = await readFile(currentPlanPath, "utf8");
   const currentArchive = await readFile(currentArchivePath, "utf8");
   const currentTaskNumbers = [...currentPlan.matchAll(/权威任务第 (\d+) 项/gu)].map(match => Number(match[1]));
-  const currentOrder = `当前固定顺序为 \`${currentTaskNumbers.join(" → ")}\``;
+  const currentOrder = `当前固定顺序为 \`${currentTaskNumbers.join(" → ") || "空"}\``;
   const developmentIndex = await inspectTextFile(join(repoRoot, "docs", "development-log.md"));
   const linkedFiles = [join(repoRoot, "AGENTS.md"), routesPath, currentPlanPath, developmentLogPath, shardIndexPath, taskNotesIndexPath, handoffPath, dryRunPath];
   return {

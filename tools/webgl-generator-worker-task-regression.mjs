@@ -9,6 +9,7 @@ import {collectRegenerationWorkerTransferables, getRegenerationPatchPolicy, REGE
 import {createWorkerTaskCoordinator} from "../app/webgl-generator/src/runtime/worker-task-coordinator.js";
 import {getWorkerTaskHandler} from "../app/webgl-generator/src/runtime/worker-task-registry.js";
 import {applyMapReplicaPatch, createMapReplicaPatch} from "../app/webgl-generator/src/runtime/map-replica-journal.js";
+import {computeAppliedMapReplicaPatchTargetChecksum, computeCanonicalMapReplicaChecksum, computeMapReplicaPatchTargetChecksum} from "../app/webgl-generator/src/runtime/map-replica-checksum.js";
 import {createWorkerGraphDecoder, encodeWorkerGraph} from "../app/webgl-generator/src/runtime/worker-graph-stream.js";
 import {createStagedWorkerSnapshot} from "../app/webgl-generator/src/runtime/worker-snapshot.js";
 import {runMapFileIoWorkerTask} from "../app/webgl-generator/src/runtime/map-file-io-worker-task.js";
@@ -55,12 +56,14 @@ class FakeWorker {
       if (request.type === WORKER_TASK_MESSAGE.APPLY_SESSION_PATCH) {
         if (!this.retainedSession || this.retainedSession.status !== "idle" || this.retainedSession.id !== request.sessionId) return;
         applyMapReplicaPatch(this.retainedSession.map, request.patch);
+        const actualChecksum = await computeAppliedMapReplicaPatchTargetChecksum(this.retainedSession.map, request.patch, {yieldToMain: async () => {}});
         this.retainedSession.binding = request.binding;
+        this.retainedSession.checksum = actualChecksum;
         this.retainedSession.request = {...this.retainedSession.request, binding: request.binding, reuseSession: true};
         this.emitMessage(createWorkerTaskMessage(WORKER_TASK_MESSAGE.SESSION_PATCHED, this.retainedSession.request, {
           patchId: request.patch.patchId,
           revision: request.patch.targetRevision,
-          checksum: request.patch.targetChecksum
+          checksum: actualChecksum
         }));
         return;
       }
@@ -172,6 +175,11 @@ class FakeWorker {
       }
       try {
         const handlerPayload = this.request.reuseSession ? {...this.payload, map: this.baseMap} : this.payload;
+        const replicaChecksum = this.request.persistentSession
+          ? this.request.reuseSession
+            ? this.retainedSession?.checksum || null
+            : await computeCanonicalMapReplicaChecksum(handlerPayload.map, {revision: this.request.binding?.mapRevision, yieldToMain: async () => {}})
+          : null;
         const renderOnlyBefore = handlerPayload?.mode === "render-only" ? structuredClone(handlerPayload.map) : null;
         const result = await getWorkerTaskHandler(this.request.task)(handlerPayload, {
           binding: this.request.binding,
@@ -211,11 +219,12 @@ class FakeWorker {
               id: this.request.sessionId,
               status: "pending",
               binding: this.request.binding,
+              checksum: replicaChecksum,
               request: this.request,
               map: handlerPayload.map
             };
           }
-          this.emitMessage(createWorkerTaskMessage(WORKER_TASK_MESSAGE.RESULT, this.request, {resultStreamId: outputStreamId}));
+          this.emitMessage(createWorkerTaskMessage(WORKER_TASK_MESSAGE.RESULT, this.request, {resultStreamId: outputStreamId, replicaChecksum}));
         };
         if (this.options.resultDelayMs) setTimeout(emitResult, this.options.resultDelayMs);
         else await emitResult();
@@ -458,28 +467,40 @@ assert.ok(crossTaskResult.data instanceof Uint8Array);
 assert.equal(sessionWorkers.length, 1, "跨 task 不得重建 Worker 或重传地图");
 assert.ok(crossTaskResult.worker.telemetry.inputPackets < firstSessionResult.worker.telemetry.inputPackets / 4);
 assert.equal(await sessionCoordinator.commitSession(crossTaskResult.worker.session.id, sessionBinding, {expectedRevisionDelta: 0}), true);
+const replicaWrites = [{path: "metadata.name", mode: "replace", value: "副本增量已应用"}];
+const replicaBaseChecksum = sessionCoordinator.getSessionSnapshot().checksum;
 const replicaPatch = createMapReplicaPatch({
   mapIdentity: sessionBinding.mapIdentity,
   patchId: "worker-task-cross-task-patch",
   baseRevision: 2,
   targetRevision: 3,
-  writes: [{path: "metadata.name", value: "副本增量已应用"}]
+  baseChecksum: replicaBaseChecksum,
+  targetChecksum: await computeMapReplicaPatchTargetChecksum(replicaBaseChecksum, replicaWrites, {yieldToMain: async () => {}}),
+  writes: replicaWrites
 });
 sessionFormal.metadata.name = "副本增量已应用";
 sessionBinding = {...sessionBinding, mapRevision: 3, operationId: 12};
 assert.equal(await sessionCoordinator.applySessionPatch(crossTaskResult.worker.session.id, replicaPatch, sessionBinding), true);
 assert.equal(sessionWorkers[0].retainedSession.map.metadata.name, "副本增量已应用");
 assert.equal(sessionCoordinator.getSessionSnapshot()?.binding.mapRevision, 3);
+const queuedWrites4 = [{path: "metadata.generatorStage", mode: "replace", value: "queue-4"}];
+const queuedBaseChecksum4 = sessionCoordinator.getSessionSnapshot().checksum;
 const queuedPatch4 = createMapReplicaPatch({
   mapIdentity: sessionBinding.mapIdentity, patchId: "queued-4", baseRevision: 3, targetRevision: 4,
-  writes: [{path: "metadata.generatorStage", value: "queue-4"}]
+  baseChecksum: queuedBaseChecksum4,
+  targetChecksum: await computeMapReplicaPatchTargetChecksum(queuedBaseChecksum4, queuedWrites4, {yieldToMain: async () => {}}),
+  writes: queuedWrites4
 });
 const binding4 = {...sessionBinding, mapRevision: 4, operationId: 13};
 sessionBinding = binding4;
 const queued4 = sessionCoordinator.applySessionPatch(crossTaskResult.worker.session.id, queuedPatch4, binding4);
+const queuedWrites5 = [{path: "metadata.name", mode: "replace", value: "queue-5"}];
+const queuedTargetChecksum4 = queuedPatch4.targetChecksum;
 const queuedPatch5 = createMapReplicaPatch({
   mapIdentity: sessionBinding.mapIdentity, patchId: "queued-5", baseRevision: 4, targetRevision: 5,
-  writes: [{path: "metadata.name", value: "queue-5"}]
+  baseChecksum: queuedTargetChecksum4,
+  targetChecksum: await computeMapReplicaPatchTargetChecksum(queuedTargetChecksum4, queuedWrites5, {yieldToMain: async () => {}}),
+  writes: queuedWrites5
 });
 const binding5 = {...sessionBinding, mapRevision: 5, operationId: 14};
 sessionBinding = binding5;
@@ -504,6 +525,41 @@ assert.equal(sessionCoordinator.getSessionSnapshot()?.status, "idle", "预取消
 assert.equal(sessionCoordinator.invalidateSession("undo-fixture"), true);
 assert.equal(sessionWorkers[0].terminated, true, "撤销/失效必须 terminate 持久 Worker");
 assert.equal(sessionCoordinator.getSessionSnapshot(), null);
+
+const driftWorkers = [];
+const driftCoordinator = createWorkerTaskCoordinator({
+  createWorker: () => {
+    const worker = new FakeWorker();
+    driftWorkers.push(worker);
+    return worker;
+  },
+  validateBinding: () => true
+});
+const driftMap = structuredClone(sessionFormal);
+let driftBinding = {mapIdentity: "checksum-drift", mapRevision: 0, generationToken: 1, lockFingerprint: "locks", operationId: 1, operationName: "generate.regenerate"};
+const driftResult = await driftCoordinator.run("regeneration.compute", {map: driftMap, kind: "zones"}, {binding: driftBinding, sessionMode: "map-mirror"});
+applyWorkerPatch(driftMap, "zones", driftResult.patch);
+driftBinding = {...driftBinding, mapRevision: 1};
+assert.equal(await driftCoordinator.commitSession(driftResult.worker.session.id, driftBinding, {expectedRevisionDelta: 1}), true);
+const driftBaseChecksum = driftCoordinator.getSessionSnapshot().checksum;
+const driftPatch = createMapReplicaPatch({
+  mapIdentity: driftBinding.mapIdentity,
+  patchId: "checksum-drift",
+  baseRevision: 1,
+  targetRevision: 2,
+  baseChecksum: driftBaseChecksum,
+  targetChecksum: "r1:0000000000000000",
+  writes: [{path: "metadata.name", mode: "replace", value: "应触发重同步"}]
+});
+await assert.rejects(
+  driftCoordinator.applySessionPatch(driftResult.worker.session.id, driftPatch, {...driftBinding, mapRevision: 2}),
+  error => error?.code === "worker_protocol_session_patch_invalid"
+);
+assert.equal(driftCoordinator.getSessionSnapshot(), null, "checksum 漂移必须销毁 Worker 副本");
+const resynced = await driftCoordinator.run("regeneration.compute", {map: driftMap, kind: "zones"}, {binding: driftBinding, sessionMode: "map-mirror"});
+assert.equal(resynced.worker.session.reused, false, "checksum 漂移后的下一次请求必须完整重同步");
+assert.equal(driftWorkers.length, 2);
+driftCoordinator.invalidateSession("checksum-resync-fixture-complete");
 
 const command = createDomainPatchCommand({patch: workerResult.patch, policy: getRegenerationPatchPolicy("zones"), label: "Worker 地区重算", effects: {}, result: workerResult.result});
 command.apply({map: source});
@@ -1049,10 +1105,10 @@ function verifyAppDeferredReplayStaticContract() {
   assert.match(displayFlow, /error\?\.code === "worker_fallback_disabled" && ownerCurrent/u, "仅 Worker 预接受不可用且地图仍属当前事务时允许兼容路径");
   assert.match(displayFlow, /message: "正在改用兼容方式继续处理"/u, "兼容阶段必须使用普通用户可理解的中文文案");
   assert.ok(displayFlow.indexOf("renderer.abortWorkerRenderInstall?.()") < displayFlow.lastIndexOf("return apply()"), "兼容路径必须先完整恢复 Worker 事务再执行原同步入口");
-  assert.match(source, /publishCommandMapReplicaPatch\(state, mutation, before, after, \{[\s\S]*?includeCompute: !state\?\.workerSessionMutationGuard/u, "map revision 前进必须区分 Worker 已更新的计算镜像");
+  assert.match(source, /queueCommandMapReplicaPatch\(state, mutation, before, after, \{[\s\S]*?includeCompute: !state\?\.workerSessionMutationGuard/u, "map revision 前进必须区分 Worker 已更新的计算镜像");
   assert.match(source, /includeCompute[\s\S]*?\[state\.renderTaskCoordinator\]/u, "Worker mutation 必须继续 patch 显示镜像");
-  assert.match(source, /coordinator\.applySessionPatch\(session\.id, patch, nextBinding\)/u, "计算与显示镜像必须消费同一 canonical patch");
-  assert.match(source, /state\?\.renderTaskCoordinator\?\.invalidateSession\?\.\("map-revision-unpatchable"\)/u, "未登记 mutation 必须保守清理显示镜像");
+  assert.match(source, /coordinator\.applySessionPatch\(session\.id, patchPromise, nextBinding\)/u, "计算与显示镜像必须消费同一 canonical patch");
+  assert.match(source, /invalidateMapReplicaCoordinators\(state, includeCompute, "map-revision-unpatchable"\)/u, "未登记 mutation 必须保守清理显示镜像");
   assert.match(source, /state\.renderTaskCoordinator\?\.invalidateSession\?\.\("map-replaced"\)/u, "换图必须清理显示镜像");
   assert.match(source, /onLayerGroupVisible:[\s\S]*?runtimeActions\.layers\.setManyVisible/u, "图层组入口不得绕过统一显示事务");
   const displayUiRestore = source.slice(

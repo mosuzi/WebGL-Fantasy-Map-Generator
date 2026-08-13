@@ -84,6 +84,18 @@ export function createRenameObjectCommand(object, nextName) {
       ...OBJECT_NAME_EFFECTS,
       affected: objectAffected(target.kind, target.id)
     },
+    getReplicaPaths(map) {
+      if (target.kind !== OBJECT_KIND.CITY) return null;
+      const cityIndex = map?.settlements?.cities?.findIndex(city => city && (city.id ?? city.i) === target.id) ?? -1;
+      const city = cityIndex >= 0 ? map.settlements.cities[cityIndex] : null;
+      const burgIndex = map?.pack?.burgs?.findIndex(
+        burg => burg && ((burg.id ?? burg.i) === city?.burgId || burg.cityId === target.id)
+      ) ?? -1;
+      return [
+        ...(cityIndex >= 0 ? [`settlements.cities.${cityIndex}`] : []),
+        ...(burgIndex >= 0 ? [`pack.burgs.${burgIndex}`] : [])
+      ];
+    },
     apply(context) {
       if (!normalizedName) throw new Error("名称不能为空");
       previous ??= readObjectName(context.map, target);

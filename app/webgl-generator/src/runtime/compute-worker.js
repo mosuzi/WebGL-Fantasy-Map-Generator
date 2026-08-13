@@ -13,6 +13,7 @@ import {
   WORKER_TASK_MESSAGE
 } from "./worker-task-protocol.js";
 import {applyMapReplicaPatch, normalizeMapReplicaPatch} from "./map-replica-journal.js";
+import {computeAppliedMapReplicaPatchTargetChecksum, computeCanonicalMapReplicaChecksum} from "./map-replica-checksum.js";
 import {getWorkerTaskHandler} from "./worker-task-registry.js";
 
 const pendingRequests = new Map();
@@ -30,16 +31,22 @@ self.addEventListener("message", async event => {
         throw workerStateError("worker_protocol_session_patch_invalid", "Worker session 不在可更新状态");
       }
       const patch = normalizeMapReplicaPatch(request.patch);
-      if (!isValidReplicaPatchBinding(retainedSession.binding, request.binding, patch)) {
+      if (!isValidReplicaPatchBinding(retainedSession.binding, request.binding, patch)
+        || !retainedSession.checksum
+        || patch.baseChecksum !== retainedSession.checksum
+        || !patch.targetChecksum) {
         throw workerStateError("worker_protocol_session_patch_invalid", "Worker session patch 绑定或 revision 不连续");
       }
       applyMapReplicaPatch(retainedSession.map, patch);
+      const actualChecksum = await computeAppliedMapReplicaPatchTargetChecksum(retainedSession.map, patch);
+      if (actualChecksum !== patch.targetChecksum) throw workerStateError("worker_protocol_replica_checksum_invalid", "Worker session patch checksum 不一致");
       retainedSession.binding = request.binding;
+      retainedSession.checksum = actualChecksum;
       retainedSession.request = {...retainedSession.request, binding: request.binding, reuseSession: true};
       self.postMessage(createWorkerTaskMessage(WORKER_TASK_MESSAGE.SESSION_PATCHED, retainedSession.request, {
         patchId: patch.patchId,
         revision: patch.targetRevision,
-        checksum: patch.targetChecksum
+        checksum: actualChecksum
       }));
       return;
     }
@@ -133,6 +140,11 @@ self.addEventListener("message", async event => {
     const handlerPayload = state.request.reuseSession
       ? {...state.payload, map: state.baseMap}
       : state.payload;
+    const replicaChecksum = state.request.persistentSession
+      ? state.request.reuseSession
+        ? retainedSession?.checksum || null
+        : await computeCanonicalMapReplicaChecksum(handlerPayload.map, {revision: state.request.binding?.mapRevision})
+      : null;
     const computeStartedAt = now();
     const result = await handler(handlerPayload, context);
     const computeMs = roundMs(now() - computeStartedAt);
@@ -144,6 +156,7 @@ self.addEventListener("message", async event => {
         task: state.request.task,
         status: "pending",
         binding: state.request.binding,
+        checksum: replicaChecksum,
         requestId: state.request.requestId,
         request: state.request,
         map: handlerPayload.map,
@@ -152,10 +165,12 @@ self.addEventListener("message", async event => {
     }
     self.postMessage(createWorkerTaskMessage(WORKER_TASK_MESSAGE.RESULT, state.request, {
       resultStreamId: state.outputStreamId,
+      replicaChecksum,
       telemetry: {computeMs, ...outputTelemetry}
     }));
     activeRequests.delete(request.requestId);
   } catch (error) {
+    if (request?.type === WORKER_TASK_MESSAGE.APPLY_SESSION_PATCH) retainedSession = null;
     const fallbackRequest = resolveRequest(request);
     clearRequestState(fallbackRequest.requestId, error);
     self.postMessage(createWorkerTaskMessage(WORKER_TASK_MESSAGE.ERROR, fallbackRequest, {

@@ -1,4 +1,5 @@
 import {createMapReplicaPatch} from "./map-replica-journal.js";
+import {computeMapReplicaPatchTargetChecksum} from "./map-replica-checksum.js";
 
 const DOMAIN_PATHS = Object.freeze({
   "visual-theme": ["visualTheme"],
@@ -16,6 +17,7 @@ const DOMAIN_PATHS = Object.freeze({
   economy: ["economy"],
   "economy-mutation": ["economy"],
   "ocean-current": ["oceanCurrents"],
+  city: ["settlements.cities", "settlements.metadata", "pack.burgs", "pack.cells.burg", "politics.states", "pack.states", "politics.provinces", "pack.provinces"],
   routes: ["settlements.routes", "pack.routes", "pack.cells.routes"],
   "route-path-history": ["settlements.routes", "pack.routes", "pack.cells.routes"],
   population: ["grid.cells.pop", "pack.cells.pop", "settlements.cities"],
@@ -35,25 +37,35 @@ const DOMAIN_PATHS = Object.freeze({
   "political-transfer": ["politics", "grid.cells.state", "grid.cells.province", "pack.cells.state", "pack.cells.province", "settlements.cities"]
 });
 
-export function createCommandMapReplicaPatch({map, command, action = "execute", mapIdentity, baseRevision, targetRevision, patchId} = {}) {
+export async function createCommandMapReplicaPatch({map, command, action = "execute", mapIdentity, baseRevision, targetRevision, patchId, baseChecksum, capturedWrites = null, yieldToMain} = {}) {
   if (!map || typeof map !== "object" || !command) return null;
   const domain = String(command.domain || "none");
-  const commandPaths = typeof command.getReplicaPaths === "function" ? command.getReplicaPaths() : null;
-  const paths = Array.isArray(commandPaths) && commandPaths.length ? commandPaths : DOMAIN_PATHS[domain];
-  if (!paths) return null;
-  const writes = [];
-  for (const path of paths) {
-    const resolved = resolvePath(map, path);
-    if (resolved.found) writes.push({path, mode: "replace", value: resolved.value});
-  }
+  const writes = capturedWrites || captureCommandMapReplicaWrites({map, command});
   if (!writes.length) return null;
+  const targetChecksum = await computeMapReplicaPatchTargetChecksum(baseChecksum, writes, {yieldToMain});
   return createMapReplicaPatch({
     mapIdentity,
     patchId: patchId || `${String(action || "execute")}:${domain}:${targetRevision}`,
     baseRevision,
     targetRevision,
+    baseChecksum,
+    targetChecksum,
     writes
   });
+}
+
+export function captureCommandMapReplicaWrites({map, command} = {}) {
+  if (!map || typeof map !== "object" || !command) return [];
+  const domain = String(command.domain || "none");
+  const commandPaths = typeof command.getReplicaPaths === "function" ? command.getReplicaPaths(map) : null;
+  const paths = Array.isArray(commandPaths) && commandPaths.length ? commandPaths : DOMAIN_PATHS[domain];
+  if (!paths) return [];
+  const writes = [];
+  for (const path of paths) {
+    const resolved = resolvePath(map, path);
+    if (resolved.found) writes.push({path, mode: "replace", value: resolved.value});
+  }
+  return structuredClone(writes);
 }
 
 export function listCommandMapReplicaPaths(domain) {

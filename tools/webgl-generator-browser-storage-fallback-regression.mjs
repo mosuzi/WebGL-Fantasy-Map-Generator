@@ -57,15 +57,11 @@ try {
     const sample = await page.evaluate(() => window.webglGeneratorApi.data.saveBrowserMap({toast: false}));
     assert.equal(sample.ok, true, sample.error?.message || "IndexedDB fallback 保存失败");
     assert.equal(sample.data.storageBackend, "indexedDB");
-    if (requestedCells === 100000) {
-      assert.ok(sample.data.effects.includes("browser-storage-binary-write"), "100k 存档没有走直接二进制 IndexedDB");
-      assert.equal(sample.data.effects.includes("browser-storage-fallback-write"), false, "100k 直接二进制存档被误报为 quota fallback");
-      assert.equal(sample.data.storageBytes, sample.data.bytes, "100k 二进制存档仍包含 base64/envelope 膨胀");
-      assert.equal(sample.data.timings.base64Ms, 0, "100k 二进制存档仍执行了 base64");
-      assert.equal(sample.data.timings.encodingMs, 0, "100k 二进制存档仍执行了文本编码");
-    } else {
-      assert.ok(sample.data.effects.includes("browser-storage-fallback-write"));
-    }
+    assert.ok(sample.data.effects.includes("browser-storage-binary-write"), "默认存档没有走直接二进制 IndexedDB");
+    assert.equal(sample.data.effects.includes("browser-storage-fallback-write"), false, "直接二进制存档被误报为 quota fallback");
+    assert.equal(sample.data.storageBytes, sample.data.bytes, "二进制存档仍包含 base64/envelope 膨胀");
+    assert.equal(sample.data.timings.base64Ms, 0, "二进制存档仍执行了 base64");
+    assert.equal(sample.data.timings.encodingMs, 0, "二进制存档仍执行了文本编码");
     savedSamples.push(sample.data);
   }
   const saved = {data: savedSamples.at(-1)};
@@ -127,14 +123,16 @@ try {
       await normalPage.waitForFunction(() => window.__webglGeneratorApp?.renderer?.getStats?.()?.webgl2);
       await normalPage.waitForFunction(() => window.__webglGeneratorApp?.runtimeOperationSnapshot?.busy === false && document.getElementById("generation-loading")?.hidden !== false);
       const normalGenerated = await normalPage.evaluate(async () => window.webglGeneratorApi.generate.newMap({confirm: true, seed: "browser-storage-local", cellsTarget: 10000}));
-      assert.equal(normalGenerated.ok, true, normalGenerated.error?.message || "LocalStorage 测试地图生成失败");
+      assert.equal(normalGenerated.ok, true, normalGenerated.error?.message || "直接二进制存储测试地图生成失败");
       const normalSaved = await normalPage.evaluate(() => window.webglGeneratorApi.data.saveBrowserMap({toast: false}));
-      assert.equal(normalSaved.ok, true, normalSaved.error?.message || "LocalStorage 保存失败");
-      assert.equal(normalSaved.data.storageBackend, "localStorage");
-      assert.ok(await normalPage.evaluate(key => localStorage.getItem(key), storageKey));
+      assert.equal(normalSaved.ok, true, normalSaved.error?.message || "直接二进制保存失败");
+      assert.equal(normalSaved.data.storageBackend, "indexedDB");
+      assert.equal(normalSaved.data.encoding, "gzip");
+      assert.ok(normalSaved.data.effects.includes("browser-storage-binary-write"));
+      assert.equal(await normalPage.evaluate(key => localStorage.getItem(key), storageKey), null);
       const normalRestored = await normalPage.evaluate(() => window.webglGeneratorApi.data.restoreBrowserMap({confirm: true, toast: false}));
-      assert.equal(normalRestored.ok, true, normalRestored.error?.message || "LocalStorage 恢复失败");
-      assert.equal(normalRestored.data.storageBackend, "localStorage");
+      assert.equal(normalRestored.ok, true, normalRestored.error?.message || "直接二进制恢复失败");
+      assert.equal(normalRestored.data.storageBackend, "indexedDB");
       assert.deepEqual(normalConsoleErrors, []);
       assert.deepEqual(normalPageErrors, []);
       console.log(JSON.stringify({ok: true, requestedCells, url: `http://${host}:${port}/?healthClear=1`, saved: saved.data, saveSamples: savedSamples.map(sample => ({durationMs: sample.operation?.durationMs, originalBytes: sample.originalBytes, bytes: sample.bytes, storageBytes: sample.storageBytes, timings: sample.timings})), saveTiming, restored: restored.data, state, normal: {saved: normalSaved.data, restored: normalRestored.data}, consoleErrors, pageErrors, healthEvents}, null, 2));

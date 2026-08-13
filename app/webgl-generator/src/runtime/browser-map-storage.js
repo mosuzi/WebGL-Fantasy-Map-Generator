@@ -9,7 +9,7 @@ export const BROWSER_MAP_STORAGE_FALLBACK_STORE = "maps";
 export const BROWSER_MAP_STORAGE_FALLBACK_RECORD = "current";
 export const BROWSER_MAP_STORAGE_BINARY_TYPE = "webgl-generator-browser-map-gzip";
 export const BROWSER_MAP_STORAGE_BINARY_VERSION = 1;
-export const BROWSER_MAP_STORAGE_DIRECT_BINARY_MIN_BYTES = 4 * 1024 * 1024;
+export const BROWSER_MAP_STORAGE_DIRECT_BINARY_MIN_BYTES = 1;
 
 export async function encodeBrowserMapStoragePayload(documentRef, text, map) {
   const startedAt = storageClock(documentRef);

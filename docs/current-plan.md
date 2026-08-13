@@ -4,26 +4,12 @@
 
 ## 当前状态
 
-> **执行门禁（2026-08-14）**：当前唯一未归档权威任务为第 333 项。阶段 A～C 已完成 checkpoint，当前只进入 10k / 100k 真实集成验收、独立复核与最终观察使门；不得再扩展容器或副本协议范围。第 53 项已移除，第 278 项已由第 279 项取代，其余既有完成状态见归档索引。
+> **执行门禁（2026-08-14）**：当前未归档任务为无。当前没有可执行或暂缓的权威任务。当前固定顺序为 `空`。第 53 项已移除，第 278 项已由第 279 项取代，其余既有完成状态见归档索引。
 
 当前 API 基线为：`window.webglGeneratorApi` 覆盖 `18` 个命名空间、`328` 个公开方法和 `179` 个编辑方法，稳定等级为 `320 / 7 / 1`；`328 / 328` 方法可通过 `info.describe` 发现，`analysis` 新增地点解析、距离和方位三项只读入口，并保留地图模板三项、`grid` 六个受控结构方法、`planner` `10` 个配方、`objects` `20` 类对象及 `cells` 八个读取 / 预检方法。完整能力矩阵为 `1228` 行、`covered 1154 / excluded 74 / deferred 0 / gap 0`；复合语义矩阵保持 `80` 个动作、`70` 个完整事务与 `10` 个玩法配方。
 
 ## 权威任务清单
 
-- **权威任务第 333 项：共享版本化 Worker 地图副本与紧凑二进制存档** `进行中；阶段 A～C 通过，待阶段 D`
-
-  100k 地图的普通平移、缩放、悬停和选择不得向 Worker 发送整图；但当前计算协调器只保留一个按 `task + binding` 复用的地图会话，跨重生成领域会失效，普通地图 revision 又会同时失效计算与显示副本。因此同一会话热路径虽然只需约 `3` 个输入包，首次操作、跨领域操作、撤销 / 重做和主线程编辑后的下一次 Worker / 显示操作仍可能重复发送约 `941～1053` 个输入包并耗费约 `6～8s`。本项建立与任务类型解耦的版本化地图副本和提交后增量日志，让计算、显示 Worker 各自持有长期副本并消费同一 canonical patch；地图替换才发送完整快照，取消、失败和回滚不得发布未提交 patch，缺包、revision 间隙或 checksum 不符必须显式重同步。
-
-  固定 `99846` cells 的当前存档约为 `61.2MB` JSON、`14.2MB` gzip。只把 TypedArray 改成原始二进制仍不能解决问题：只读审计中结构 JSON 约 `56.2MB`，唯一 TypedArray buffer 仅约 `3.38MB`；主要体积来自 grid / pack 的邻接、顶点、多边形嵌套数组、坐标列及 economy 对象表。本项以同一 canonical 字段注册表建立 `.webfmg v3`：密集标量使用窄类型列，变长邻接 / 多边形使用 CSR，字符串使用字典，对象表按列分区，容器带 magic、版本、section directory、长度和 checksum，并保留用户可变结构区。固定 canonical 100k 基线硬目标为未压缩容器 `≤16MiB`、浏览器原生 gzip 后 `≤8MiB`；用户自定义的无界长文本或未来资产按分区单列体积，不伪造统一硬上限。
-
-  实施顺序固定为：
-
-  1. **A——字段注册表与证据矩阵**：盘点持久字段、派生字段、别名、类型、引用、可变性与精确 round-trip 规则；冻结 10k / 100k 各画布动作的 task、session、fresh / reuse、输入包 / 字节 / 时间和 revision 失效原因，以及存档逐 section / path 体积。
-  2. **B——版本化 Worker 副本与增量日志**：计算和显示副本保持隔离并行，但共享 `mapIdentity / baseRevision / targetRevision / patchId / checksum` 协议；主线程首期仍为权威，主线程编辑、Worker 提交、撤销 / 重做发布同源正向或逆向 patch，跨 task 不再以 task 名义销毁地图副本。设置有界 journal、ACK、背压、合并和一次性全量重同步，禁止陈旧副本静默继续。
-  3. **C——`.webfmg v3` 紧凑二进制容器**：复用 B 的字段注册表与列式编码，完成分区写入 / 读取、取消、损坏诊断和替换前原子校验；继续读取既有纯 JSON、gzip、base64 envelope、File / Blob、LocalStorage / IndexedDB 与云端存档，旧图不得静默丢字段。可读 JSON 保留为兼容 / 调试导出，不再是大图默认存储格式。
-  4. **D——集成与真实验收**：10k / 100k 锁定平移、缩放、悬停、选择零地图传输；热副本下同域和跨域编辑、撤销 / 重做、编辑后视图切换均只传增量；地图替换、Worker 崩溃、缺包、checksum 漂移、取消和回滚只按合同重同步。固定 100k 锁定 raw `≤16MiB`、gzip `≤8MiB`、数据 round-trip / renderer / GPU / picking / history 同源、保存与恢复无 LongTask，并覆盖全部旧格式。
-
-  详细证据、非目标、协议与容器建议见 [`task-notes/task-333-worker-replica-and-binary-map.md`](./task-notes/task-333-worker-replica-and-binary-map.md)。`source/`、用户地图与 Wiki 不在本项范围；复杂功能最终交付时评估 minor 版本递增。
 
 
 ## 执行与归档规则

@@ -208,7 +208,7 @@ import {inspectClimateDownstreamRebuild} from "./climate-downstream-rebuild.js";
 import {CLIMATE_DOWNSTREAM_WORKER_TASK, getClimateDownstreamPatchPolicy} from "./climate-downstream-worker-task.js";
 import {captureMapMutationSnapshot, executeMapSnapshotTransaction, restoreMapMutationSnapshot} from "./map-snapshot-transaction.js";
 import {createDomainPatchCommand, createMapReplacementCommand} from "./domain-patch.js";
-import {createCommandMapReplicaPatch} from "./map-replica-command-patch.js";
+import {captureCommandMapReplicaWrites, createCommandMapReplicaPatch} from "./map-replica-command-patch.js";
 import {getHeightDerivedPatchPolicy, HEIGHT_DERIVED_WORKER_TASK} from "./height-derived-worker-task.js";
 import {getRegenerationPatchPolicy, REGENERATION_WORKER_TASK} from "./regeneration-worker-task.js";
 import {createWorkerTaskCoordinator} from "./worker-task-coordinator.js";
@@ -511,7 +511,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     onMutation: mutation => {
       const before = mapRevision.getSnapshot();
       const after = mapRevision.advance();
-      publishCommandMapReplicaPatch(state, mutation, before, after, {
+      queueCommandMapReplicaPatch(state, mutation, before, after, {
         includeCompute: !state?.workerSessionMutationGuard
       });
     },
@@ -521,6 +521,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
   state = {
     options: {...DEFAULT_OPTIONS},
     map: null,
+    mapReplicaPatchQueue: Promise.resolve(),
     workerSessionMutationGuard: false,
     workerAtomicCommitGuard: false,
     pick: null,
@@ -2707,12 +2708,14 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     createWorker: () => new ComputeWorker(),
     getBinding: () => createRegenerationWorkerBinding(state),
     validateBinding: binding => validateRegenerationWorkerBinding(state, binding),
+    beforeRun: () => state.mapReplicaPatchQueue,
     onFallback: detail => healthMonitor?.record?.("worker-task-fallback", detail, "info")
   });
   state.renderTaskCoordinator = createWorkerTaskCoordinator({
     createWorker: () => new ComputeWorker(),
     getBinding: () => createRegenerationWorkerBinding(state),
     validateBinding: binding => validateRegenerationWorkerBinding(state, binding),
+    beforeRun: () => state.mapReplicaPatchQueue,
     onFallback: detail => healthMonitor?.record?.("worker-task-fallback", detail, "info")
   });
   runtimeActions = createRuntimeActions(state, documentRef, {
@@ -2975,30 +2978,55 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
   return state;
 }
 
-function publishCommandMapReplicaPatch(state, mutation, before, after, {includeCompute = true} = {}) {
-  const patch = createCommandMapReplicaPatch({
-    map: state?.map,
-    command: mutation?.command,
-    action: mutation?.action,
-    mapIdentity: after.mapIdentity,
-    baseRevision: before.mapRevision,
-    targetRevision: after.mapRevision,
-    patchId: `history:${mutation?.action || "mutation"}:${after.mapRevision}`
-  });
-  if (!patch) {
-    if (includeCompute) state?.workerTaskCoordinator?.invalidateSession?.("map-revision-unpatchable");
-    state?.renderTaskCoordinator?.invalidateSession?.("map-revision-unpatchable");
+function queueCommandMapReplicaPatch(state, mutation, before, after, {includeCompute = true} = {}) {
+  let capturedWrites;
+  try {
+    capturedWrites = captureCommandMapReplicaWrites({map: state?.map, command: mutation?.command});
+  } catch {
+    invalidateMapReplicaCoordinators(state, includeCompute, "map-revision-patch-capture-failed");
     return;
   }
-  const nextBinding = createRegenerationWorkerBinding(state);
+  if (!capturedWrites.length) {
+    invalidateMapReplicaCoordinators(state, includeCompute, "map-revision-unpatchable");
+    return;
+  }
+  const previous = state.mapReplicaPatchQueue || Promise.resolve();
   const coordinators = includeCompute
     ? [state.workerTaskCoordinator, state.renderTaskCoordinator]
     : [state.renderTaskCoordinator];
-  for (const coordinator of coordinators) {
-    const session = coordinator?.getSessionSnapshot?.();
-    if (!session || !["idle", "patching"].includes(session.status) || session.binding?.mapIdentity !== after.mapIdentity) continue;
-    void coordinator.applySessionPatch(session.id, patch, nextBinding).catch(() => coordinator.invalidateSession("map-replica-patch-failed"));
-  }
+  const active = coordinators.map(coordinator => ({coordinator, session: coordinator?.getSessionSnapshot?.()}))
+    .filter(({session}) => session && ["idle", "patching"].includes(session.status) && session.binding?.mapIdentity === after.mapIdentity);
+  if (!active.length) return;
+  const nextBinding = {...createRegenerationWorkerBinding(state), mapRevision: after.mapRevision};
+  const patchPromise = previous.catch(() => {}).then(async () => {
+    const sessions = active.map(({coordinator}) => coordinator.getSessionSnapshot?.()).filter(Boolean);
+    const checksums = new Set(sessions.map(session => session.checksum).filter(Boolean));
+    if (sessions.length !== active.length || checksums.size !== 1 || sessions.some(session => !session.checksum || Number(session.binding?.mapRevision) !== Number(before.mapRevision))) {
+      throw Object.assign(new Error("地图副本 checksum 或 revision 不连续"), {code: "map_replica_checksum_mismatch"});
+    }
+    return createCommandMapReplicaPatch({
+      map: state?.map,
+      command: mutation?.command,
+      action: mutation?.action,
+      mapIdentity: after.mapIdentity,
+      baseRevision: before.mapRevision,
+      targetRevision: after.mapRevision,
+      patchId: `history:${mutation?.action || "mutation"}:${after.mapRevision}`,
+      baseChecksum: sessions[0].checksum,
+      capturedWrites
+    });
+  });
+  const operations = active.map(({coordinator, session}) => coordinator.applySessionPatch(session.id, patchPromise, nextBinding)
+    .catch(error => {
+      coordinator.invalidateSession("map-replica-patch-failed");
+      throw error;
+    }));
+  state.mapReplicaPatchQueue = Promise.all(operations).catch(() => {});
+}
+
+function invalidateMapReplicaCoordinators(state, includeCompute, reason) {
+  if (includeCompute) state?.workerTaskCoordinator?.invalidateSession?.(reason);
+  state?.renderTaskCoordinator?.invalidateSession?.(reason);
 }
 
 function invokeRuntimeDisplayActionFromUi(state, documentRef, task) {

@@ -1,5 +1,6 @@
 import {getWorkerTaskHandler} from "./worker-task-registry.js";
 import {createWorkerGraphDecoder, encodeWorkerGraph} from "./worker-graph-stream.js";
+import {computeCanonicalMapReplicaChecksum} from "./map-replica-checksum.js";
 import {
   assertWorkerTaskResponse,
   assertWorkerTaskStreamAck,
@@ -16,13 +17,14 @@ import {
 
 let requestSequence = 0;
 
-export function createWorkerTaskCoordinator({createWorker, getBinding, validateBinding, onProgress, onFallback} = {}) {
+export function createWorkerTaskCoordinator({createWorker, getBinding, validateBinding, beforeRun, onProgress, onFallback} = {}) {
   let persistentSession = null;
   let pendingSessionPatch = null;
   let sessionSequence = 0;
   return Object.freeze({run, commitSession, applySessionPatch, invalidateSession, getSessionSnapshot});
 
   async function run(task, payload, options = {}) {
+    if (typeof beforeRun === "function") await beforeRun();
     if (pendingSessionPatch) await pendingSessionPatch;
     const binding = clonePlain(options.binding ?? getBinding?.() ?? null);
     const signal = options.signal || null;
@@ -42,6 +44,15 @@ export function createWorkerTaskCoordinator({createWorker, getBinding, validateB
         sessionId = `map-${Date.now().toString(36)}-${(++sessionSequence).toString(36)}`;
       }
     }
+    const replicaChecksum = persistent
+      ? reuseSession
+        ? persistentSession?.checksum || null
+        : await computeCanonicalMapReplicaChecksum(payload?.map, {
+          revision: binding?.mapRevision,
+          yieldToMain: options.streamYieldToMain,
+          signal
+        })
+      : null;
     const request = createWorkerTaskRequest({
       requestId: `${Date.now().toString(36)}-${(++requestSequence).toString(36)}`,
       task,
@@ -73,6 +84,7 @@ export function createWorkerTaskCoordinator({createWorker, getBinding, validateB
       ...options,
       persistentSession: persistent,
       reuseSession,
+      replicaChecksum,
       sessionInputPayload: reuseSession ? createSessionInputPayload(payload, options) : payload
     });
   }
@@ -134,7 +146,7 @@ export function createWorkerTaskCoordinator({createWorker, getBinding, validateB
   }
 
   function applySessionPatch(sessionId, patch, binding, options = {}) {
-    const operation = (pendingSessionPatch || Promise.resolve()).then(() => applySessionPatchNow(sessionId, patch, binding, options));
+    const operation = (pendingSessionPatch || Promise.resolve()).then(async () => applySessionPatchNow(sessionId, await patch, await binding, options));
     let tracked;
     tracked = operation.finally(() => {
       if (pendingSessionPatch === tracked) pendingSessionPatch = null;
@@ -147,7 +159,10 @@ export function createWorkerTaskCoordinator({createWorker, getBinding, validateB
     const current = persistentSession;
     if (!current || current.id !== String(sessionId || "") || current.status !== "idle") return Promise.resolve(false);
     const targetBinding = clonePlain(binding);
-    if (!isValidReplicaPatchBinding(current.binding, targetBinding, patch)) {
+    if (!isValidReplicaPatchBinding(current.binding, targetBinding, patch)
+      || !current.checksum
+      || normalizeChecksum(patch?.baseChecksum) !== current.checksum
+      || !normalizeChecksum(patch?.targetChecksum)) {
       invalidateSession("session-patch-discontinuous");
       return Promise.reject(protocolStateError("worker_protocol_session_patch_invalid", "Worker session patch 不连续"));
     }
@@ -175,6 +190,7 @@ export function createWorkerTaskCoordinator({createWorker, getBinding, validateB
           }
           current.binding = targetBinding;
           current.request = {...current.request, binding: targetBinding, reuseSession: true};
+          current.checksum = normalizeChecksum(message.checksum);
           current.status = "idle";
           finish(resolve, true);
         } catch (error) {
@@ -215,6 +231,7 @@ export function createWorkerTaskCoordinator({createWorker, getBinding, validateB
       task: persistentSession.task,
       status: persistentSession.status,
       binding: clonePlain(persistentSession.binding),
+      checksum: persistentSession.checksum,
       requestId: persistentSession.request?.requestId || ""
     };
   }
@@ -432,11 +449,16 @@ export function createWorkerTaskCoordinator({createWorker, getBinding, validateB
             telemetry.outputReceiveMs = roundMs(now() - outputStartedAt);
             const retained = Boolean(runOptions.persistentSession);
             if (retained) {
+              const replicaChecksum = normalizeChecksum(message.replicaChecksum);
+              if (!replicaChecksum || replicaChecksum !== normalizeChecksum(runOptions.replicaChecksum)) {
+                throw protocolStateError("worker_protocol_replica_checksum_invalid", "Worker 初始地图副本 checksum 不一致");
+              }
               persistentSession = {
                 id: request.sessionId,
                 task: request.task,
                 status: "pending",
                 binding: request.binding,
+                checksum: replicaChecksum,
                 request,
                 worker
               };

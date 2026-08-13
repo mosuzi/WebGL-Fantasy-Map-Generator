@@ -131,7 +131,7 @@ section payloads
 ## 5. 阶段 B 实施结果
 
 - Worker 持久 session 的复用条件不再包含 task 名称；同一 binding 下可从重生成直接切换到存档导出等其它 handler，热路径只发送 session payload。
-- 协议新增 `apply-session-patch / session-patched`，严格校验 map identity、相邻 revision、patchId 和 checksum；连续 patch 在协调器内串行，Worker 只在 idle retained map 上原子应用并回 ACK。
+- 协议新增 `apply-session-patch / session-patched`。首次完整副本由主线程和 Worker 分别对 canonical 24 分区计算双 32-bit checksum；后续 patch 携带连续的真实 `baseChecksum / targetChecksum`，Worker 按实际应用后的写集独立复算并 ACK。缺失、漂移或错误 ACK 会销毁副本，下一次请求只能完整重同步。
 - 主线程编辑、撤销和重做从正式 command domain 或 Worker domain write set 生成同源 replace / range patch。普通 mutation 同步计算和显示副本；Worker 事务的计算副本已经包含新结果，因此只向显示副本发布，避免重复应用。
 - 未登记 command、地图替换、revision 间隙、错误 ACK、超时或 Worker 故障均保守销毁对应副本；取消、失败和 rollback 不会进入 `EditHistory.onMutation`，因此不发布未提交 patch。
 - 纯 Node journal、command patch 与完整 Worker 十一类回归通过；跨 task 只创建一个 Worker，后续输入显著少于 fresh，全量构建通过。阶段 B 未启动浏览器。
@@ -150,5 +150,12 @@ section payloads
 - 默认本地文件、浏览器存储和公开压缩导出均写 v3 gzip；plain JSON 与旧 gzip 仍可显式导出，既有纯 JSON、旧 gzip、gzip-base64 envelope、File / Blob、LocalStorage / IndexedDB 二进制记录均保持读取兼容。v3 导入在迁移和校验成功前不替换当前地图，分区损坏会以目录或 checksum 错误拒绝。
 - 固定 `100000` 目标实际 `99846` cells 的 v3 为 raw `13,197,127B`、gzip `7,410,044B`，分别低于 `16MiB / 8MiB` 硬门；encode 约 `1.90s`，完整 encode / gzip / decode / migrate / deep round-trip 约 `10.78s`，全部发生在存档 Worker 内。10k 为 raw `2,496,659B`、gzip `1,172,083B`。
 - v3 100k 精确 round-trip、四类 vertex 拓扑顺序、alias、损坏拒绝、Worker / fallback 文件 I/O、旧浏览器存档兼容和 100k transfer 门通过。误调用的旧浏览器存档兼容脚本启动了隔离测试浏览器并通过，但不计作阶段 D 正式浏览器验收；用户 Chrome、用户地图、`source/` 与 Wiki 未改。
+
+## 8. 阶段 D 实施结果
+
+- 10k / 100k 的首个存档请求分别发送约 `200 / 952` 个输入包；同一版本化副本上的浏览器保存和编辑后再次导出都只发送 `3` 个输入包，且 session id 保持不变。城市改名、撤销和重做分别只发布一条精确对象行写入，三次 checksum 与 revision ACK 连续推进 `0 → 1 → 2 → 3`；导出的 v3 包含重做后的名称。平移、缩放、悬停和选择窗口触发的 Worker 地图任务为 `0`。
+- 浏览器默认保存统一写入 IndexedDB 直接二进制记录，不再让较小 v3 回退到 gzip-base64 / LocalStorage；旧 LocalStorage、gzip-base64 envelope 和 plain JSON 继续只读兼容。固定 100k 浏览器实值为 raw `12,612,324B`、gzip `7,287,937B`，低于 `16MiB / 8MiB`。
+- 初版城市 patch 仍克隆八个整表，100k 在编辑后出现约 `628ms` 主线程冻结；正式重命名命令现只声明目标 city / burg 行，浏览器实测每次 patch 精确写入 city / burg 两行，三次 ACK 后仍复用三包存档。修复后 100k warm 导出起始窗先后观测到一至两次 `55～57ms`，按既定“200ms 内调查修复一次，仍无有效优化则登记放行”规则登记为最多两次、单次 `≤70ms` 的精确例外。100k v3 导入与浏览器恢复从 outer prepare 结束至 renderer load 结束的 commit / reveal 窗各最多一次 `≤70ms`，同属既有失败优化对照后的精确登记；阈值未全局提高，10k 与其它存档阶段仍保持零容忍。
+- 两次失败优化不留产品复杂度；最终产品只保留城市 canonical patch 缺口修复与默认直接二进制浏览器存储。用户 Chrome、用户地图、`source/` 与 Wiki 未改。
 
 第 333 项属于跨协议、存储和运行时的复杂能力；正式完成提交应评估从 `0.2.x` 递增 minor，而不是在本次登记中提前改版本。
