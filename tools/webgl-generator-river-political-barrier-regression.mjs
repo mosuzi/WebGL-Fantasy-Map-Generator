@@ -9,6 +9,7 @@ import {
   summarizeRiverPoliticalBarrier
 } from "../app/webgl-generator/src/generator/river-political-barrier.js";
 import {assignConnectedProvinces} from "../app/webgl-generator/src/runtime/state-topology-commands.js";
+import {generatePlaceholderMap} from "../app/webgl-generator/src/generator/index.js";
 
 const base = fixture();
 const context = createRiverPoliticalBarrier(base);
@@ -78,6 +79,41 @@ assert.equal(lockedAssignment.get(11), 1, "锁定归属必须优先于强河软�
 const repeated = summarizeRiverPoliticalBarrier(createRiverPoliticalBarrier(fixture()));
 assert.deepEqual(repeated, summary, "相同河网的评分不确定");
 assert.equal(JSON.stringify(base), JSON.stringify(fixture()), "河障模型改写了输入");
+
+const browserOptionsMap = generatePlaceholderMap({
+  seed: "task328-calibration-10000",
+  cellsTarget: 10000,
+  heightmapTemplate: "continents",
+  graphWidth: 1440,
+  graphHeight: 960,
+  statesNumber: 20,
+  provincesRatio: 20,
+  religionsNumber: 6,
+  culturesNumber: 12,
+  culturesSet: "oriental",
+  culturesSetMax: 32,
+  sizeVariety: 4,
+  growthRate: 1,
+  cultureInheritanceMode: "branching",
+  religionInheritanceMode: "branching",
+  climateLatitudeMode: "auto",
+  climateLatitudeCenter: 0,
+  climateLatitudeSpan: 45,
+  climateMapSizePercent: 25,
+  climateLatitudeRangePercent: 25,
+  climateLongitudeRangePercent: 25,
+  atmosphereDirection: "customBands",
+  winds: [225, 45, 225, 315, 135, 315],
+  temperatureEquator: 25,
+  temperatureNorthPole: -25,
+  temperatureSouthPole: -15,
+  heightExponent: 2,
+  precipitation: 100
+});
+assertPoliticalOwnersConnected(browserOptionsMap.pack, "state", browserOptionsMap.pack.states);
+assertPoliticalOwnersConnected(browserOptionsMap.pack, "province", browserOptionsMap.pack.provinces);
+assert.equal(browserOptionsMap.pack.cells.state[2173], 0, "隔离中立城镇不得被最近国家隔空认领");
+assert.equal(browserOptionsMap.pack.cells.province[2173], 0, "隔离中立城镇不得生成飞地省份");
 
 console.log(JSON.stringify({
   ok: true,
@@ -164,5 +200,28 @@ function assertOwnersConnected(cells, owners, ownerIds) {
       }
     }
     assert.equal(visited.size, owned.length, `行政区 ${owner} 被竞争队列拆成多个分量`);
+  }
+}
+
+function assertPoliticalOwnersConnected(pack, key, records) {
+  const {cells} = pack;
+  const groups = new Map();
+  for (const cell of cells.i) {
+    const owner = Number(cells[key]?.[cell]) || 0;
+    if (cells.h[cell] < 20 || !records?.[owner] || records[owner].removed) continue;
+    const groupKey = `${owner}:${Number(cells.f?.[cell]) || 0}`;
+    const owned = groups.get(groupKey) || [];
+    owned.push(cell);
+    groups.set(groupKey, owned);
+  }
+  for (const [groupKey, owned] of groups) {
+    const allowed = new Set(owned);
+    const visited = new Set([owned[0]]);
+    const queue = [owned[0]];
+    while (queue.length) for (const neighbor of cells.c[queue.pop()] || []) if (allowed.has(neighbor) && !visited.has(neighbor)) {
+      visited.add(neighbor);
+      queue.push(neighbor);
+    }
+    assert.equal(visited.size, owned.length, `${key} ${groupKey} 仍含断裂分量`);
   }
 }

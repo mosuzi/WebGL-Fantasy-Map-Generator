@@ -1124,34 +1124,12 @@ function claimInhabitedNeutralCells(pack, states, protectedIds = new Set()) {
     }
   }
 
-  claimIsolatedInhabitedNeutralCells(pack, states, protectedIds);
 }
 
 function isInhabitedNeutralCell(cells, cell) {
   if (cells.h?.[cell] < 20) return false;
   if (cells.burg?.[cell]) return true;
   return (cells.s?.[cell] || 0) > 0 && (cells.culture?.[cell] || 0) > 0;
-}
-
-function claimIsolatedInhabitedNeutralCells(pack, states, protectedIds = new Set()) {
-  const {cells} = pack;
-  const centers = states
-    .filter(state => state?.i && !protectedIds.has(state.i) && cells.p?.[state.center])
-    .map(state => ({stateId: state.i, point: cells.p[state.center]}));
-  if (!centers.length) return;
-
-  for (const cell of cells.i) {
-    if (cells.state[cell] || !isInhabitedNeutralCell(cells, cell)) continue;
-    let bestState = 0;
-    let bestDistance = Infinity;
-    for (const center of centers) {
-      const nextDistance = distance(cells.p[cell], center.point);
-      if (nextDistance >= bestDistance) continue;
-      bestState = center.stateId;
-      bestDistance = nextDistance;
-    }
-    if (bestState) cells.state[cell] = bestState;
-  }
 }
 
 function syncBurgStates(pack, protectedBurgIds = new Set()) {
@@ -1856,9 +1834,9 @@ function repairDisconnectedPoliticalComponents(cells, values, records, {
   protectedIds = new Set()
 } = {}) {
   let changed = 0;
-  for (let pass = 0; pass < 4; pass++) {
+  for (let pass = 0; pass < values.length; pass++) {
     const groups = collectPoliticalComponents(cells, values, records);
-    const changes = [];
+    let repaired = false;
     for (const [key, components] of [...groups].sort(([a], [b]) => a.localeCompare(b))) {
       if (components.length < 2) continue;
       const owner = Number(key.split(":", 1)[0]);
@@ -1870,12 +1848,14 @@ function repairDisconnectedPoliticalComponents(cells, values, records, {
         if (component === anchor || component.some(cell => protectedCells.has(cell))) continue;
         const target = connectedComponentAbsorptionTarget(cells, values, records, component, owner, level, riverBarrier, protectedIds);
         if (!target) continue;
-        for (const cell of component) changes.push([cell, target]);
+        for (const cell of component) values[cell] = target;
+        changed += component.length;
+        repaired = true;
+        break;
       }
+      if (repaired) break;
     }
-    if (!changes.length) break;
-    for (const [cell, target] of changes) values[cell] = target;
-    changed += changes.length;
+    if (!repaired) break;
   }
   return changed;
 }
@@ -1915,6 +1895,7 @@ function connectedComponentAbsorptionTarget(cells, values, records, component, o
     if (componentSet.has(neighbor) || cells.h[neighbor] < 20 || (Number(cells.f?.[neighbor]) || 0) !== feature) continue;
     const target = Number(values[neighbor]) || 0;
     if (!target || target === owner || protectedIds.has(target) || !records?.[target] || records[target].removed) continue;
+    if (level === "province" && Number(records[target].state) !== Number(records[owner]?.state)) continue;
     const entry = candidates.get(target) || {edges: 0, cost: 0};
     entry.edges++;
     entry.cost += riverPoliticalTransition(riverBarrier, cell, neighbor, {level}).cost;
