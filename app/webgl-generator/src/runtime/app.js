@@ -15,7 +15,7 @@ import {normalizeAtmosphereDirection, normalizeClimateLatitudeMode, normalizeWin
 import {createRandom, createRandomSeed} from "../generator/random.js";
 import {PlaceholderMapRenderer} from "../renderer/placeholder-renderer.js";
 import {prepareRendererWorkerInstall} from "../renderer/prepared-render-installer.js";
-import {RENDER_PREPARATION_LAYERS, renderPreparationLayersForRegeneration} from "../renderer/render-preparation.js";
+import {RENDER_PREPARATION_LAYERS, renderPreparationLayersForRegeneration, renderPreparationPickingComponentsForRegeneration} from "../renderer/render-preparation.js";
 import {
   createUserVisualThemeDocument,
   exportVisualThemeDocument,
@@ -78,7 +78,7 @@ import {MapRevisionTracker} from "./map-revision.js";
 import {getPublicMapTemplate, listPublicMapTemplates, prepareMapTemplateGeneration} from "./map-template-runtime.js";
 import {createGrayscaleHeightmapFromImage, createPaletteHeightmapFromImage, normalizeHeightmapImportPayload} from "./heightmap-import.js";
 import {downloadBlob, downloadText, mapFileBaseName, normalizeGeoJsonExportRange, parseGeoJsonMeasurements} from "./map-file-io.js";
-import {prepareMapFileIoWorkerPayload, restoreMapFileIoWorkerResult} from "./map-file-io-worker-client.js";
+import {prepareMapFileIoWorkerPayload} from "./map-file-io-worker-client.js";
 import {MAP_FILE_IO_WORKER_OPERATIONS, MAP_FILE_IO_WORKER_TASK_TYPE} from "./map-file-io-worker-task.js";
 import {createMapArchiveFilename, normalizeMapName} from "./map-filename.js";
 import {attachImportDiagnostic, createHeightmapSourceSummary, createImportFailureDiagnostic, createImportSuccessDiagnostic, createMapImportDiagnostic, formatMapImportDiagnosticLines, inspectGeoImportSource, stringifyMapImportDiagnostic} from "./map-import-diagnostics.js";
@@ -209,7 +209,7 @@ import {CLIMATE_DOWNSTREAM_WORKER_TASK, getClimateDownstreamPatchPolicy} from ".
 import {captureMapMutationSnapshot, executeMapSnapshotTransaction, restoreMapMutationSnapshot} from "./map-snapshot-transaction.js";
 import {createDomainPatchCommand, createMapReplacementCommand} from "./domain-patch.js";
 import {getHeightDerivedPatchPolicy, HEIGHT_DERIVED_WORKER_TASK} from "./height-derived-worker-task.js";
-import {getRegenerationPatchPolicy} from "./regeneration-worker-task.js";
+import {getRegenerationPatchPolicy, REGENERATION_WORKER_TASK} from "./regeneration-worker-task.js";
 import {createWorkerTaskCoordinator} from "./worker-task-coordinator.js";
 import {createStagedWorkerSnapshot} from "./worker-snapshot.js";
 import {OCEAN_CURRENT_WORLD_WORKER_TASK} from "./ocean-current-world-worker-task.js";
@@ -5346,9 +5346,8 @@ async function exportMapArchiveViaWorker(state, documentRef, {operation = null, 
   assertMapAvailable(state);
   const map = state.map;
   const units = normalizeUnitPreferences(readControlPreferences(documentRef).units);
-  const payload = {
+  const archive = {
     operation: MAP_FILE_IO_WORKER_OPERATIONS.EXPORT,
-    map,
     options: {
       ...(state.options || {}),
       visualTheme: currentVisualThemeId(documentRef),
@@ -5357,16 +5356,25 @@ async function exportMapArchiveViaWorker(state, documentRef, {operation = null, 
     encoding,
     resultType
   };
-  const prepared = await prepareMapFileIoWorkerPayload(payload, {signal: operation?.signal || null});
-  const output = await state.workerTaskCoordinator.run(MAP_FILE_IO_WORKER_TASK_TYPE, prepared.payload, {
-    binding: createRegenerationWorkerBinding(state, operation),
+  const binding = createRegenerationWorkerBinding(state, operation);
+  const output = await state.workerTaskCoordinator.run(REGENERATION_WORKER_TASK, {map, mode: "archive-export", archive}, {
+    binding,
     signal: operation?.signal || null,
+    sessionMode: "map-mirror",
+    sessionPayload: {mode: "archive-export", archive},
     onProgress: (stage, detail = {}) => operation?.report(stage, {
       ...detail,
       message: progressMessage?.(stage, detail) || detail.message || "正在整理地图存档"
     })
   });
-  return restoreMapFileIoWorkerResult(output, prepared);
+  if (output.mode !== "archive-export" || !output.archive || !sameRegenerationWorkerBinding(output.binding, binding)) {
+    state.workerTaskCoordinator.invalidateSession("archive-export-result-invalid");
+    const error = new Error("地图存档 Worker 返回了无效结果");
+    error.code = "worker_protocol_binding_mismatch";
+    throw error;
+  }
+  const worker = await commitRegenerationWorkerSession(state, output.worker, operation, {expectedRevisionDelta: 0});
+  return {...output.archive, worker};
 }
 
 async function parseMapDocumentViaWorker(state, documentRef, input, {operation = null, source = "api", sourceFile = null} = {}) {
@@ -12830,9 +12838,16 @@ function rebuildGenerationSummary(map) {
 function createWorkerRegenerationRenderRequest(state, targetKind, binding, layers = null) {
   const renderer = state.renderer;
   const canvasSize = renderer?.canvasSize || {};
+  const requestedLayers = Array.isArray(layers) ? [...layers] : renderPreparationLayersForRegeneration(targetKind);
+  const pickingComponents = requestedLayers.includes("picking")
+    ? renderer?.objectPickingIndex && targetKind !== "generation"
+      ? renderPreparationPickingComponentsForRegeneration(targetKind)
+      : ["cities", "markers", "military", "routeSegments", "riverSegments"]
+    : [];
   return {
     binding: {mapIdentity: binding.mapIdentity, mapRevision: binding.mapRevision},
-    layers: Array.isArray(layers) ? [...layers] : renderPreparationLayersForRegeneration(targetKind),
+    layers: requestedLayers,
+    ...(pickingComponents.length ? {pickingComponents} : {}),
     camera: {...(renderer?.camera || {})},
     canvas: {
       width: Number(renderer?.canvas?.width || canvasSize.width) || 1,

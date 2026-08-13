@@ -2,6 +2,7 @@ import {resolveBiomeDescriptor} from "../generator/biome-registry.js";
 import {isSharedCubicCurve, sampleCentripetalCatmullRom} from "../geometry/cubic-path.js";
 
 export const CITY_PICK_RADIUS_CSS_PX = 18;
+export const OBJECT_PICKING_COMPONENTS = Object.freeze(["cities", "markers", "military", "routeSegments", "riverSegments"]);
 
 const CITY_OVERLAP_POSITION_EPSILON = 0.11;
 const CITY_PICK_DISTANCE_EPSILON = 1e-6;
@@ -64,7 +65,9 @@ function expandRefinedCandidateCells(grid, sourceCandidates) {
   return expanded;
 }
 
-export function buildObjectPickingIndex(map) {
+export function buildObjectPickingIndex(map, options = {}) {
+  const components = normalizeObjectPickingComponents(options.components);
+  const enabled = new Set(components);
   const bucketSize = Math.max(28, Math.max(map.metadata.graphWidth, map.metadata.graphHeight) / 48);
   const columns = Math.max(1, Math.ceil(map.metadata.graphWidth / bucketSize));
   const rows = Math.max(1, Math.ceil(map.metadata.graphHeight / bucketSize));
@@ -72,20 +75,21 @@ export function buildObjectPickingIndex(map) {
   let routeSegmentCount = 0;
   let riverSegmentCount = 0;
 
-  for (const city of map?.settlements?.cities || []) {
+  for (const city of enabled.has("cities") ? map?.settlements?.cities || [] : []) {
     if (!city) continue;
     addToBucket(buckets, columns, rows, bucketSize, city.x, city.y, "cities", city);
   }
 
-  for (const marker of map?.markers?.markers || []) {
+  for (const marker of enabled.has("markers") ? map?.markers?.markers || [] : []) {
     addToBucket(buckets, columns, rows, bucketSize, marker.x, marker.y, "markers", marker);
   }
 
-  for (const regiment of militaryRegiments(map)) {
+  const regiments = enabled.has("military") ? militaryRegiments(map) : [];
+  for (const regiment of regiments) {
     addToBucket(buckets, columns, rows, bucketSize, regiment.x, regiment.y, "military", regiment);
   }
 
-  for (const route of map?.settlements?.routes || []) {
+  for (const route of enabled.has("routeSegments") ? map?.settlements?.routes || [] : []) {
     const points = Array.isArray(route?.points) ? route.points : [];
     for (let index = 0; index < points.length - 1; index++) {
       const a = points[index];
@@ -96,7 +100,7 @@ export function buildObjectPickingIndex(map) {
     }
   }
 
-  for (const river of map?.rivers?.rivers || []) {
+  for (const river of enabled.has("riverSegments") ? map?.rivers?.rivers || [] : []) {
     const points = riverPickingPoints(river);
     for (let index = 0; index < points.length - 1; index++) {
       const a = points[index];
@@ -113,18 +117,25 @@ export function buildObjectPickingIndex(map) {
   }
 
   return {
+    components,
     bucketSize,
     columns,
     rows,
     buckets,
     bucketCount: buckets.size,
-    cityCount: (map?.settlements?.cities || []).filter(Boolean).length,
-    markerCount: (map?.markers?.markers || []).length,
-    militaryCount: militaryRegiments(map).length,
+    cityCount: enabled.has("cities") ? (map?.settlements?.cities || []).filter(Boolean).length : 0,
+    markerCount: enabled.has("markers") ? (map?.markers?.markers || []).length : 0,
+    militaryCount: regiments.length,
     routeSegmentCount,
     riverSegmentCount,
     maxBucketItems
   };
+}
+
+function normalizeObjectPickingComponents(components) {
+  if (components === undefined || components === null) return [...OBJECT_PICKING_COMPONENTS];
+  const requested = new Set(Array.isArray(components) ? components.map(String) : []);
+  return OBJECT_PICKING_COMPONENTS.filter(component => requested.has(component));
 }
 
 export function relocateCityInPickingIndex(index, city, previousPoint = null) {

@@ -9,6 +9,7 @@ import {collectRegenerationWorkerTransferables, getRegenerationPatchPolicy, REGE
 import {createWorkerTaskCoordinator} from "../app/webgl-generator/src/runtime/worker-task-coordinator.js";
 import {createWorkerGraphDecoder, encodeWorkerGraph} from "../app/webgl-generator/src/runtime/worker-graph-stream.js";
 import {createStagedWorkerSnapshot} from "../app/webgl-generator/src/runtime/worker-snapshot.js";
+import {runMapFileIoWorkerTask} from "../app/webgl-generator/src/runtime/map-file-io-worker-task.js";
 import {
   createWorkerTaskExecution,
   createWorkerTaskMessage,
@@ -33,6 +34,7 @@ class FakeWorker {
     this.maxOutputInflight = 0;
     this.retainedSession = null;
     this.renderOnlyRecords = [];
+    this.archiveRecords = [];
   }
 
   addEventListener(type, listener) {
@@ -172,6 +174,13 @@ class FakeWorker {
             metadataRegeneration: structuredClone(handlerPayload.map.metadata?.regeneration || {})
           });
         }
+        if (handlerPayload?.mode === "archive-export") {
+          this.archiveRecords.push({
+            inputHasMap: Object.prototype.hasOwnProperty.call(this.payload || {}, "map"),
+            resultKeys: Object.keys(result).sort(),
+            archiveKeys: Object.keys(result.archive || {}).sort()
+          });
+        }
         const emitResult = async () => {
           const outputStreamId = `${this.request.requestId}:output`;
           for await (const packet of encodeWorkerGraph(result, {streamId: outputStreamId, yieldToMain: async () => {}})) {
@@ -292,13 +301,16 @@ assert.equal(mismatchedInput.worker.mode, "fallback", "accepted 前输入 ACK �
 
 const patchTransferView = new Uint8Array([1, 2, 3]);
 const preparedTransferView = new Float32Array([4, 5, 6]);
+const archiveTransferView = new Uint8Array([7, 8, 9]);
 const combinedTransfers = collectRegenerationWorkerTransferables({
   patch: {value: patchTransferView, alias: patchTransferView},
-  preparedRender: {layers: {point: {vertices: preparedTransferView}}}
+  preparedRender: {layers: {point: {vertices: preparedTransferView}}},
+  archive: {data: archiveTransferView}
 });
-assert.equal(combinedTransfers.length, 2, "补丁与 prepared render 的 transfer buffer 必须同时收集且去重");
+assert.equal(combinedTransfers.length, 3, "补丁、prepared render 与存档 bytes 的 transfer buffer 必须同时收集且去重");
 assert.ok(combinedTransfers.includes(patchTransferView.buffer));
 assert.ok(combinedTransfers.includes(preparedTransferView.buffer));
+assert.ok(combinedTransfers.includes(archiveTransferView.buffer));
 await assert.rejects(
   runRegenerationWorkerTask({mode: "render-only", render: {}}, {}),
   error => error?.code === "worker_regeneration_map_missing"
@@ -378,6 +390,30 @@ assert.equal(await sessionCoordinator.commitSession(renderOnlyResult.worker.sess
 assert.equal(sessionCoordinator.getSessionSnapshot()?.status, "idle");
 assert.equal(sessionCoordinator.getSessionSnapshot()?.id, firstSessionResult.worker.session.id);
 sessionBinding = {...sessionBinding, operationId: 9};
+const archiveResult = await sessionCoordinator.run("regeneration.compute", {
+  map: sessionFormal,
+  mode: "archive-export",
+  archive: {operation: "export", encoding: "gzip", resultType: "bytes", options: sessionFormal.options || {}}
+}, {
+  binding: sessionBinding,
+  sessionMode: "map-mirror",
+  sessionPayload: {mode: "archive-export", archive: {operation: "export", encoding: "gzip", resultType: "bytes", options: sessionFormal.options || {}}}
+});
+assert.equal(archiveResult.mode, "archive-export");
+assert.equal(archiveResult.worker.session.reused, true);
+assert.equal(archiveResult.worker.session.id, firstSessionResult.worker.session.id);
+assert.ok(archiveResult.archive.data instanceof Uint8Array);
+assert.equal(archiveResult.archive.timings.serializationPasses, 1);
+assert.equal(sessionWorkers[0].archiveRecords.length, 1);
+assert.equal(sessionWorkers[0].archiveRecords[0].inputHasMap, false, "同图存档不得重传 map");
+assert.deepEqual(sessionWorkers[0].archiveRecords[0].resultKeys, ["archive", "binding", "mode"]);
+const archivedDocument = await runMapFileIoWorkerTask({
+  operation: "import",
+  input: {kind: "bytes", bytes: archiveResult.archive.data, mimeType: "application/gzip"}
+});
+assert.equal(archivedDocument.metadata.checksum, sessionFormal.metadata.checksum);
+assert.equal(await sessionCoordinator.commitSession(archiveResult.worker.session.id, sessionBinding, {expectedRevisionDelta: 0}), true);
+sessionBinding = {...sessionBinding, operationId: 10};
 const secondSessionResult = await sessionCoordinator.run("regeneration.compute", {map: sessionFormal, kind: "routes"}, {
   binding: sessionBinding,
   sessionMode: "map-mirror",
@@ -389,7 +425,7 @@ applyWorkerPatch(sessionFormal, "routes", secondSessionResult.patch);
 sessionBinding = {...sessionBinding, mapRevision: 2};
 assert.equal(await sessionCoordinator.commitSession(secondSessionResult.worker.session.id, sessionBinding, {expectedRevisionDelta: 1}), true);
 assert.equal(sessionWorkers.length, 1, "连续同图重算必须复用同一个 Worker");
-sessionBinding = {...sessionBinding, operationId: 10};
+sessionBinding = {...sessionBinding, operationId: 11};
 const preCancelledSession = new AbortController();
 preCancelledSession.abort("pre-cancelled-session");
 await assert.rejects(

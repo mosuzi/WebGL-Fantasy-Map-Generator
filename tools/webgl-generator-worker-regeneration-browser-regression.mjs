@@ -15,7 +15,9 @@ const timeoutMs = 240000;
 const kinds = ["features", "routes", "rivers", "cities", "states", "provinces", "markers", "diplomacy", "religions", "military", "zones"];
 const dependencyOrder = ["features", "states", "provinces", "cities", "routes", "rivers", "markers", "diplomacy", "religions", "military", "zones"];
 const loadingOnlyKind = String(process.argv.find(argument => argument.startsWith("--loading-kind="))?.split("=")[1] || "");
+const loadingOnlyCells = Number(process.argv.find(argument => argument.startsWith("--cells="))?.split("=")[1] || 10000);
 if (loadingOnlyKind) assert.ok(kinds.includes(loadingOnlyKind), `未知 Loading 诊断类型：${loadingOnlyKind}`);
+if (loadingOnlyKind) assert.ok([10000, 100000].includes(loadingOnlyCells), `Loading 诊断不支持 ${loadingOnlyCells} cells`);
 
 assert.ok(existsSync(distDir), `构建产物不存在：${distDir}`);
 const playwright = createRequire(join(sourceDir, "package.json"))("playwright");
@@ -48,7 +50,7 @@ try {
 
   const independent = {};
   for (const kind of loadingOnlyKind ? [loadingOnlyKind] : kinds) {
-    await createFrozenBaseline(page, "worker-regeneration-browser-baseline", loadingOnlyKind ? 10000 : 1000);
+    await createFrozenBaseline(page, "worker-regeneration-browser-baseline", loadingOnlyKind ? loadingOnlyCells : 1000);
     await clearWindowSignals(page, consoleErrors, pageErrors);
     independent[kind] = await runFormalRegeneration(page, cdp, kind, consoleErrors, pageErrors, {undoRedo: true});
   }

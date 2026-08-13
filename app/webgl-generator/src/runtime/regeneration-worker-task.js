@@ -23,6 +23,7 @@ import {reconcileSettlementCellIdentity} from "./settlement-cell-index.js";
 import {reconcileSettlementPortTopology} from "./settlement-port-topology.js";
 import {regenerateProvincesForStates, withScopedProvinceRegenerationOptions} from "./state-topology-commands.js";
 import {collectWorkerTransferables} from "./worker-snapshot.js";
+import {runMapFileIoWorkerTask} from "./map-file-io-worker-task.js";
 
 export const REGENERATION_WORKER_TASK = "regeneration.compute";
 
@@ -30,7 +31,8 @@ export function collectRegenerationWorkerTransferables(result) {
   if (!result || typeof result !== "object") return collectWorkerTransferables(result);
   return collectWorkerTransferables({
     patch: result.patch || null,
-    preparedRender: result.preparedRender || null
+    preparedRender: result.preparedRender || null,
+    archive: result.archive || null
   });
 }
 
@@ -102,6 +104,13 @@ export async function runRegenerationWorkerTask(payload, context = {}) {
   const taskStartedAt = regenerationTaskNow();
   const map = payload?.map;
   if (!map || typeof map !== "object") throw taskError("worker_regeneration_map_missing", "重生成 Worker 缺少地图快照");
+  if (payload?.mode === "archive-export") {
+    const binding = context.binding || null;
+    context.checkpoint?.();
+    const archive = await runMapFileIoWorkerTask({...payload.archive, map}, context);
+    context.checkpoint?.();
+    return {mode: "archive-export", binding, archive};
+  }
   if (payload?.mode === "render-only") {
     if (!payload.render || typeof payload.render !== "object") {
       throw taskError("worker_regeneration_render_missing", "渲染准备 Worker 缺少渲染上下文");

@@ -58,13 +58,33 @@ const REGENERATION_RENDER_LAYERS = Object.freeze({
   diplomacy: Object.freeze(["surface", "line", "picking"]),
   religions: Object.freeze(["surface", "picking"]),
   military: Object.freeze(["point", "line", "labels", "picking"]),
-  zones: Object.freeze(["surface", "line", "labels", "picking"])
+  zones: Object.freeze(["surface", "line", "labels"])
+});
+
+const REGENERATION_PICKING_COMPONENTS = Object.freeze({
+  features: Object.freeze(["cities", "markers", "military", "routeSegments", "riverSegments"]),
+  routes: Object.freeze(["cities", "routeSegments"]),
+  rivers: Object.freeze(["riverSegments"]),
+  cities: Object.freeze(["cities", "routeSegments"]),
+  states: Object.freeze(["cities", "routeSegments"]),
+  provinces: Object.freeze(["cities", "routeSegments"]),
+  markers: Object.freeze(["markers"]),
+  diplomacy: Object.freeze(["military"]),
+  religions: Object.freeze(["cities"]),
+  military: Object.freeze(["military"]),
+  zones: Object.freeze([])
 });
 
 export function renderPreparationLayersForRegeneration(kind) {
   const layers = REGENERATION_RENDER_LAYERS[String(kind || "").trim().toLowerCase()];
   if (!layers) throw renderPreparationError("render-regeneration-kind-unsupported", `没有 ${kind || "(empty)"} 的渲染准备范围`);
   return [...layers];
+}
+
+export function renderPreparationPickingComponentsForRegeneration(kind) {
+  const components = REGENERATION_PICKING_COMPONENTS[String(kind || "").trim().toLowerCase()];
+  if (!components) throw renderPreparationError("render-regeneration-kind-unsupported", `没有 ${kind || "(empty)"} 的 picking 准备范围`);
+  return [...components];
 }
 
 export async function executeRenderPreparationTask(payload = {}, context = {}) {
@@ -164,7 +184,7 @@ export async function executeRenderPreparationTask(payload = {}, context = {}) {
         oceanCurrents: line.oceanCurrents
       };
     } else if (layer === "picking") {
-      result.layers.picking = buildObjectPickingDto(map, binding);
+      result.layers.picking = buildObjectPickingDto(map, binding, payload.pickingComponents);
     } else if (layer === "labels") {
       result.layers.labels = buildLabelLayoutDescriptors(map, {
         labelOptions: payload.labelOptions || {},

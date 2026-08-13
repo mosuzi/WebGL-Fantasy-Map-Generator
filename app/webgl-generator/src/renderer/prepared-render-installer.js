@@ -11,6 +11,7 @@ import {
   flattenSurfaceBaseBufferSet
 } from "./surface-base-buffer-set.js";
 import {snapshotViewportCamera} from "./viewport-buffer-transform.js";
+import {OBJECT_PICKING_COMPONENTS} from "./picking.js";
 
 const FLOATS_PER_VERTEX = 6;
 const DEFAULT_UPLOAD_SLICE_BYTES = 256 * 1024;
@@ -164,8 +165,12 @@ function createPreparedInstallTransaction(renderer, map, prepared, decoded, buff
       if (decoded.political) assign("politicalVisualMeshes", decoded.political);
       if (layers.politicalDebug) assign("politicalMeshDebugVertexCount", vertexCount(layers.politicalDebug.vertices));
       if (decoded.picking) {
-        if (options.preserveRoutePicking && renderer.objectPickingIndex) {
-          pickingMutation = applyNonRoutePicking(renderer.objectPickingIndex, decoded.picking);
+        const components = options.preserveRoutePicking
+          ? decoded.picking.components.filter(component => component !== "routeSegments")
+          : decoded.picking.components;
+        if (components.length < OBJECT_PICKING_COMPONENTS.length) {
+          if (!renderer.objectPickingIndex) throw renderInstallError("render-picking-partial-base-missing", "局部 picking 安装缺少正式基线");
+          pickingMutation = applyPreparedPickingComponents(renderer.objectPickingIndex, decoded.picking, components);
         } else assign("objectPickingIndex", decoded.picking);
       }
       if (decoded.overlay) installOverlay(decoded.overlay);
@@ -538,43 +543,45 @@ async function uploadPreparedBuffer(gl, values, usage, gate, label) {
   }
 }
 
-function applyNonRoutePicking(current, replacement) {
+export function applyPreparedPickingComponents(current, replacement, components) {
+  const affected = new Set(components);
+  const beforeBucketEntries = [...current.buckets];
   const snapshots = [];
-  const inserted = [];
   const keys = new Set([...current.buckets.keys(), ...replacement.buckets.keys()]);
   for (const key of keys) {
     const existing = current.buckets.get(key);
     const next = replacement.buckets.get(key);
     if (!existing) {
-      const bucket = {
-        cities: next?.cities || [],
-        markers: next?.markers || [],
-        military: next?.military || [],
-        routeSegments: [],
-        riverSegments: next?.riverSegments || []
-      };
+      const bucket = Object.fromEntries(OBJECT_PICKING_COMPONENTS.map(component => [component, affected.has(component) ? next?.[component] || [] : []]));
       current.buckets.set(key, bucket);
-      inserted.push(key);
       continue;
     }
-    snapshots.push([existing, existing.cities, existing.markers, existing.military, existing.riverSegments]);
-    existing.cities = next?.cities || [];
-    existing.markers = next?.markers || [];
-    existing.military = next?.military || [];
-    existing.riverSegments = next?.riverSegments || [];
+    snapshots.push([existing, Object.fromEntries(components.map(component => [component, existing[component]]))]);
+    for (const component of components) existing[component] = next?.[component] || [];
   }
-  const stats = ["bucketCount", "cityCount", "markerCount", "militaryCount", "riverSegmentCount", "maxBucketItems"];
+  for (const [key, bucket] of current.buckets) {
+    if (OBJECT_PICKING_COMPONENTS.some(component => bucket[component]?.length)) continue;
+    current.buckets.delete(key);
+  }
+  const componentStats = {
+    cities: "cityCount",
+    markers: "markerCount",
+    military: "militaryCount",
+    routeSegments: "routeSegmentCount",
+    riverSegments: "riverSegmentCount"
+  };
+  const stats = ["bucketCount", "maxBucketItems", ...components.map(component => componentStats[component])];
   const beforeStats = Object.fromEntries(stats.map(key => [key, current[key]]));
-  for (const key of stats) current[key] = key === "bucketCount" ? current.buckets.size : replacement[key];
+  current.bucketCount = current.buckets.size;
+  for (const component of components) current[componentStats[component]] = replacement[componentStats[component]];
+  current.maxBucketItems = Math.max(0, ...[...current.buckets.values()].map(bucket => (
+    OBJECT_PICKING_COMPONENTS.reduce((sum, component) => sum + (bucket[component]?.length || 0), 0)
+  )));
   return {
     rollback() {
-      for (const key of inserted) current.buckets.delete(key);
-      for (const [bucket, cities, markers, military, rivers] of snapshots) {
-        bucket.cities = cities;
-        bucket.markers = markers;
-        bucket.military = military;
-        bucket.riverSegments = rivers;
-      }
+      for (const [bucket, values] of snapshots) Object.assign(bucket, values);
+      current.buckets.clear();
+      for (const [key, bucket] of beforeBucketEntries) current.buckets.set(key, bucket);
       Object.assign(current, beforeStats);
     }
   };

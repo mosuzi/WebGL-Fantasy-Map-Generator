@@ -1,10 +1,10 @@
-import {buildObjectPickingIndex, riverPickingPoints} from "./picking.js";
+import {buildObjectPickingIndex, OBJECT_PICKING_COMPONENTS, riverPickingPoints} from "./picking.js";
 import {assertCacheBinding} from "./render-cache-dto.js";
 
 export const PICKING_DTO_SCHEMA_VERSION = 1;
 
-export function buildObjectPickingDto(map, binding = {}) {
-  return packObjectPickingIndex(buildObjectPickingIndex(map), binding);
+export function buildObjectPickingDto(map, binding = {}, components = null) {
+  return packObjectPickingIndex(buildObjectPickingIndex(map, {components}), binding);
 }
 
 export function packObjectPickingIndex(index, binding = {}) {
@@ -12,6 +12,7 @@ export function packObjectPickingIndex(index, binding = {}) {
   return {
     schemaVersion: PICKING_DTO_SCHEMA_VERSION,
     binding: normalizeBinding(binding),
+    components: normalizePickingComponents(index?.components),
     bucketSize: Number(index?.bucketSize) || 1,
     columns: Number(index?.columns) || 1,
     rows: Number(index?.rows) || 1,
@@ -34,7 +35,8 @@ export function packObjectPickingIndex(index, binding = {}) {
 }
 
 export function rebindObjectPickingDto(dto, map, expectedBinding = null) {
-  assertPickingDto(dto, expectedBinding);
+  const validation = assertPickingDtoShape(dto, expectedBinding);
+  validatePickingDto(dto, validation);
   const objects = canonicalPickingObjects(map);
   const buckets = new Map();
   for (let bucketIndex = 0; bucketIndex < dto.bucketIds.length; bucketIndex++) {
@@ -51,6 +53,7 @@ export function rebindObjectPickingDto(dto, map, expectedBinding = null) {
     columns: dto.columns,
     rows: dto.rows,
     buckets,
+    components: validation.components,
     ...dto.stats
   };
 }
@@ -77,6 +80,7 @@ export async function rebindObjectPickingDtoInChunks(dto, map, expectedBinding =
     columns: dto.columns,
     rows: dto.rows,
     buckets,
+    components: validation.components,
     ...dto.stats
   };
 }
@@ -97,6 +101,7 @@ function assertPickingDtoShape(dto, expectedBinding = null) {
     throw pickingDtoError("picking-dto-shape", "picking 网格尺寸无效");
   }
   assertTypedArray(dto.bucketIds, Uint32Array, "bucketIds");
+  const components = normalizePickingComponents(dto.components);
   const bucketCount = dto.bucketIds.length;
   const entries = [
     assertPackedPointReferences(dto.cities, bucketCount, "cities"),
@@ -116,7 +121,17 @@ function assertPickingDtoShape(dto, expectedBinding = null) {
   if (dto.stats.bucketCount !== bucketCount) {
     throw pickingDtoError("picking-dto-shape", "picking bucketCount 与 bucketIds 不一致", {expected: bucketCount, actual: dto.stats.bucketCount});
   }
-  return {entries, bucketCount, maxBucketId: dto.columns * dto.rows};
+  return {entries, bucketCount, maxBucketId: dto.columns * dto.rows, components};
+}
+
+function normalizePickingComponents(components) {
+  if (components === undefined || components === null) return [...OBJECT_PICKING_COMPONENTS];
+  if (!Array.isArray(components) || !components.length) throw pickingDtoError("picking-dto-shape", "picking components 无效");
+  const requested = new Set(components.map(String));
+  if (requested.size !== components.length || [...requested].some(component => !OBJECT_PICKING_COMPONENTS.includes(component))) {
+    throw pickingDtoError("picking-dto-shape", "picking components 含重复或未知对象族");
+  }
+  return OBJECT_PICKING_COMPONENTS.filter(component => requested.has(component));
 }
 
 function assertPackedPointReferences(packed, bucketCount, kind) {

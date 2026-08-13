@@ -32,12 +32,15 @@ import {
 } from "../app/webgl-generator/src/renderer/render-cache-dto.js";
 import {buildObjectPickingIndex, pickCity, pickRiver, pickRoute} from "../app/webgl-generator/src/renderer/picking.js";
 import {buildObjectPickingDto, rebindObjectPickingDto, rebindObjectPickingDtoInChunks} from "../app/webgl-generator/src/renderer/picking-dto.js";
+import {applyPreparedPickingComponents} from "../app/webgl-generator/src/renderer/prepared-render-installer.js";
 import {createWorkerTaskCoordinator} from "../app/webgl-generator/src/runtime/worker-task-coordinator.js";
 import {
   assertRenderPreparationBinding,
   collectRenderPreparationTransfers,
   executeRenderPreparationTask,
-  rebindShoreLinePathCache
+  rebindShoreLinePathCache,
+  renderPreparationLayersForRegeneration,
+  renderPreparationPickingComponentsForRegeneration
 } from "../app/webgl-generator/src/renderer/render-preparation.js";
 
 const cellsTarget = Number(process.argv.slice(2).find(value => /^\d+$/u.test(value)) || 10000);
@@ -49,6 +52,13 @@ const canvas = {width: 1440, height: 960, clientWidth: 1440, clientHeight: 960};
 const visibility = {};
 const visualTheme = {};
 const checkpoints = [];
+
+assert.deepEqual(renderPreparationPickingComponentsForRegeneration("routes"), ["cities", "routeSegments"]);
+assert.deepEqual(renderPreparationPickingComponentsForRegeneration("rivers"), ["riverSegments"]);
+assert.deepEqual(renderPreparationPickingComponentsForRegeneration("markers"), ["markers"]);
+assert.deepEqual(renderPreparationPickingComponentsForRegeneration("military"), ["military"]);
+assert.deepEqual(renderPreparationPickingComponentsForRegeneration("zones"), []);
+assert.equal(renderPreparationLayersForRegeneration("zones").includes("picking"), false, "地区重生成不应重建无关对象 picking");
 
 const expected = {
   route: buildRouteMeshVertices(map, camera, canvas, null, [], visualTheme),
@@ -180,6 +190,45 @@ async function verifyPickingDto() {
     chunkUnits: 32,
     yieldToMain: async () => { chunkYields++; }
   });
+  const partialComponents = ["cities", "routeSegments"];
+  const partialDto = buildObjectPickingDto(map, binding, partialComponents);
+  const partial = rebindObjectPickingDto(structuredClone(partialDto), map, binding);
+  assert.deepEqual(partial.components, partialComponents);
+  assert.equal(partial.markerCount, 0);
+  assert.equal(partial.militaryCount, 0);
+  assert.equal(partial.riverSegmentCount, 0);
+  const current = buildObjectPickingIndex(map);
+  const beforeBuckets = new Map([...current.buckets].map(([key, bucket]) => [key, {
+    cities: bucket.cities,
+    markers: bucket.markers,
+    military: bucket.military,
+    routeSegments: bucket.routeSegments,
+    riverSegments: bucket.riverSegments
+  }]));
+  const beforeStats = Object.fromEntries(["bucketCount", "cityCount", "markerCount", "militaryCount", "routeSegmentCount", "riverSegmentCount", "maxBucketItems"].map(key => [key, current[key]]));
+  const partialMutation = applyPreparedPickingComponents(current, partial, partialComponents);
+  assert.equal(current.cityCount, partial.cityCount);
+  assert.equal(current.routeSegmentCount, partial.routeSegmentCount);
+  assert.equal(current.markerCount, beforeStats.markerCount);
+  assert.equal(current.militaryCount, beforeStats.militaryCount);
+  assert.equal(current.riverSegmentCount, beforeStats.riverSegmentCount);
+  for (const [key, before] of beforeBuckets) {
+    const bucket = current.buckets.get(key);
+    assert.equal(bucket.markers, before.markers, `partial picking bucket ${key} 改写了 marker 引用`);
+    assert.equal(bucket.military, before.military, `partial picking bucket ${key} 改写了 military 引用`);
+    assert.equal(bucket.riverSegments, before.riverSegments, `partial picking bucket ${key} 改写了 river 引用`);
+  }
+  partialMutation.rollback();
+  assert.deepEqual(Object.fromEntries(Object.keys(beforeStats).map(key => [key, current[key]])), beforeStats);
+  for (const [key, before] of beforeBuckets) {
+    const bucket = current.buckets.get(key);
+    for (const component of ["cities", "markers", "military", "routeSegments", "riverSegments"]) {
+      assert.equal(bucket[component], before[component], `partial picking rollback 没有恢复 ${key}/${component}`);
+    }
+  }
+  const duplicateComponents = structuredClone(partialDto);
+  duplicateComponents.components.push("cities");
+  assert.throws(() => rebindObjectPickingDto(duplicateComponents, map, binding), error => error?.code === "picking-dto-shape");
   for (const key of ["bucketSize", "columns", "rows", "bucketCount", "cityCount", "markerCount", "militaryCount", "routeSegmentCount", "riverSegmentCount", "maxBucketItems"]) {
     assert.equal(rebound[key], expectedIndex[key], `picking ${key} 必须一致`);
   }
