@@ -6,6 +6,8 @@
 
 ## 专题映射
 
+- 第 329 项的 LongTask 登记例外复核、当前机器门风险、C3c 重点诊断和分级停止条件冻结于 [`task-329-long-task-exception-convergence.md`](./task-329-long-task-exception-convergence.md)；已被后续实现消除的信号只收紧工具，不重复改产品。
+- 第 330 项的全局 Loading、面板懒加载和 `28` 个 Vue 编辑 / 统计面板普通用户文案盘点冻结于 [`task-330-loading-and-panel-copy-polish.md`](./task-330-loading-and-panel-copy-polish.md)；普通界面结果导向，调试诊断保留技术精度。
 - 第 328 项的大河政治软阻隔、统一评分、国家 / 省份 / 局部重分省接线、诊断和分级验收冻结于 [`task-328-river-political-boundary-stage-design.md`](./task-328-river-political-boundary-stage-design.md)。河网只作输入证据，旧图载入、手工边界和非政治操作不自动重划。
 - 第 327 项的精简任务包、阶段 checkpoint、委派 brief 和新会话恢复统一使用 [`lean-stage-handoff-template.md`](./lean-stage-handoff-template.md)；改造前后预算见 [`task-327-context-budget-before.md`](./task-327-context-budget-before.md) 与 [`task-327-context-budget-after.md`](./task-327-context-budget-after.md)，任务级角色 dry run 见 [`task-327-flow-dry-run.md`](./task-327-flow-dry-run.md)。只传当前阶段边界、证据结论和 artifact 路径，不复制完整日志或会话。
 - 已完成并归档的权威任务第 304-F～G、305、306 项共用 [`task-304-306-river-city-reinvestigation.md`](./task-304-306-river-city-reinvestigation.md)：保存用户 5410 失败现场、根因调查、实施决议与最终 ACCEPT 证据；第 305 项完成共享三次曲线和唯一控制点输入链，第 306 项完成多城索引、跨境首府重算与不卡顿拖动。
