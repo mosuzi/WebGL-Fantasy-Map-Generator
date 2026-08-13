@@ -16109,7 +16109,7 @@
         "analysis.measureDistance"
       ],
       "inputSpace": "info.describe(method)",
-      "mutates": "map-or-persistent-data",
+      "mutates": "none",
       "preflight": "由 info.describe(method) 与领域 inspector 发现",
       "businessCodes": [],
       "confirm": "由 methodMetadata.requiresConfirm 发现",

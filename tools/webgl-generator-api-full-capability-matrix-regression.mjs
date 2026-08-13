@@ -17,6 +17,11 @@ const task195Rows = matrix.rows.filter(row => row.owner === "权威任务第 195
 assert.equal(task195Rows.length, 4, "第 195 项四类 Cell 能力分母发生变化");
 assert.ok(task195Rows.every(row => row.status === "covered" && row.apiMethods.length > 0), "第 195 项 Cell 能力没有全部转为 covered");
 assert.equal(matrix.rows.filter(row => row.status === "deferred-owned" && row.owner === "权威任务第 195 项").length, 0, "仍残留 deferred-owned:195");
+for (const method of ["analysis.resolvePlace", "analysis.measureDistance", "analysis.getDirection"]) {
+  const rows = matrix.rows.filter(row => row.action === method);
+  assert.equal(rows.length, 1, `${method} 能力矩阵行数错误`);
+  assert.equal(rows[0].mutates, "none", `${method} 不得标记为写入方法`);
+}
 
 const syntheticGap = structuredClone(matrix);
 syntheticGap.rows.push({

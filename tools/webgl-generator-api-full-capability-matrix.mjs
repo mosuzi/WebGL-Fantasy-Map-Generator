@@ -704,6 +704,7 @@ function flattenApiMethods(methods) {
 }
 
 function actionMutation(action) {
+  if (action === "analysis.measureDistance") return "none";
   if (/(^|\.)(get|list|inspect|describe|version|capabilities|mapSummary|runtimeStats|healthEvents|stats|peek|resolve|export)/.test(action)) return "none";
   if (action.startsWith("selection.") || action.startsWith("layers.") || action.startsWith("units.")) return "runtime-or-display-state";
   return "map-or-persistent-data";
