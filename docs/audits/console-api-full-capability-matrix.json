@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sourceDigest": "482e2943be850c01a9451e685e85ef77f5c4449609f66581ea452db5d2c7133c",
+  "sourceDigest": "5aac9650ce6a58a4d974bf86d3d65c44820ebb57c4bdaba6e5c4d213805ca9a3",
   "sourceRoots": [
     "app/webgl-generator/index.html",
     "app/webgl-generator/src/**/*.{js,vue}",
@@ -11,10 +11,10 @@
     "includedInteractionSurfaces": 88,
     "excludedInteractionSurfaces": 19,
     "canvasModes": 30,
-    "runtimeActions": 265,
-    "apiActionBindings": 264,
-    "commandAndInspectorExports": 214,
-    "publicApiMethods": 322
+    "runtimeActions": 269,
+    "apiActionBindings": 267,
+    "commandAndInspectorExports": 216,
+    "publicApiMethods": 325
   },
   "statusPolicy": {
     "covered": "公共 API 已存在且与底层 action / command 或只读 helper 共路径",
@@ -23,8 +23,8 @@
     "gap": "适合参数化且没有公共 API，必须在第 200 项关闭"
   },
   "totals": {
-    "rows": 1213,
-    "covered": 1139,
+    "rows": 1225,
+    "covered": 1151,
     "excluded": 74,
     "deferred-owned": 0,
     "gap": 0,
@@ -5951,6 +5951,64 @@
       "exclusionReason": ""
     },
     {
+      "matrixId": "action:generate.createFromTemplate",
+      "capabilityId": "generate.createFromTemplate",
+      "title": "Runtime action generate.createFromTemplate",
+      "sourceKind": "runtime-action",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/app.js"
+      ],
+      "uiEntry": "",
+      "action": "generate.createFromTemplate",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "generate.createFromTemplate"
+      ],
+      "inputSpace": "method-schema",
+      "mutates": "map-or-persistent-data",
+      "preflight": "按方法描述",
+      "businessCodes": [],
+      "confirm": "按 API 确认清单",
+      "undoOrRollback": "按方法元数据",
+      "async": false,
+      "compatibility": "UI 与 API 共用同一 runtime action",
+      "evidence": [
+        "app/webgl-generator/src/runtime/console-api.js"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "action:generate.getMapTemplate",
+      "capabilityId": "generate.getMapTemplate",
+      "title": "Runtime action generate.getMapTemplate",
+      "sourceKind": "runtime-action",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/app.js"
+      ],
+      "uiEntry": "",
+      "action": "generate.getMapTemplate",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "generate.getMapTemplate"
+      ],
+      "inputSpace": "method-schema",
+      "mutates": "none",
+      "preflight": "readonly",
+      "businessCodes": [],
+      "confirm": "按 API 确认清单",
+      "undoOrRollback": "not-applicable",
+      "async": false,
+      "compatibility": "UI 与 API 共用同一 runtime action",
+      "evidence": [
+        "app/webgl-generator/src/runtime/console-api.js"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
       "matrixId": "action:generate.getOptions",
       "capabilityId": "generate.getOptions",
       "title": "Runtime action generate.getOptions",
@@ -5963,6 +6021,35 @@
       "commandOrInspector": "",
       "apiMethods": [
         "generate.getOptions"
+      ],
+      "inputSpace": "method-schema",
+      "mutates": "none",
+      "preflight": "readonly",
+      "businessCodes": [],
+      "confirm": "按 API 确认清单",
+      "undoOrRollback": "not-applicable",
+      "async": false,
+      "compatibility": "UI 与 API 共用同一 runtime action",
+      "evidence": [
+        "app/webgl-generator/src/runtime/console-api.js"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "action:generate.listMapTemplates",
+      "capabilityId": "generate.listMapTemplates",
+      "title": "Runtime action generate.listMapTemplates",
+      "sourceKind": "runtime-action",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/app.js"
+      ],
+      "uiEntry": "",
+      "action": "generate.listMapTemplates",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "generate.listMapTemplates"
       ],
       "inputSpace": "method-schema",
       "mutates": "none",
@@ -6463,6 +6550,35 @@
       "businessCodes": [],
       "confirm": "按 API 确认清单",
       "undoOrRollback": "not-applicable",
+      "async": false,
+      "compatibility": "UI 与 API 共用同一 runtime action",
+      "evidence": [
+        "app/webgl-generator/src/runtime/console-api.js"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "action:layers.setManyVisible",
+      "capabilityId": "layers.setManyVisible",
+      "title": "Runtime action layers.setManyVisible",
+      "sourceKind": "runtime-action",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/app.js"
+      ],
+      "uiEntry": "",
+      "action": "layers.setManyVisible",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "layers.setVisible"
+      ],
+      "inputSpace": "method-schema",
+      "mutates": "runtime-or-display-state",
+      "preflight": "按方法描述",
+      "businessCodes": [],
+      "confirm": "按 API 确认清单",
+      "undoOrRollback": "按方法元数据",
       "async": false,
       "compatibility": "UI 与 API 共用同一 runtime action",
       "evidence": [
@@ -13840,6 +13956,66 @@
       "exclusionReason": ""
     },
     {
+      "matrixId": "api-action-binding:generate.createFromTemplate",
+      "capabilityId": "generate.createFromTemplate",
+      "title": "API action 绑定 generate.createFromTemplate",
+      "sourceKind": "api-action-binding",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/console-api.js",
+        "app/webgl-generator/src/runtime/app.js"
+      ],
+      "uiEntry": "",
+      "action": "generate.createFromTemplate",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "generate.createFromTemplate"
+      ],
+      "inputSpace": "method-schema",
+      "mutates": "map-or-persistent-data",
+      "preflight": "公共 API 绑定必须能解析到真实 runtime action",
+      "businessCodes": [],
+      "confirm": "按 API 确认清单",
+      "undoOrRollback": "按方法元数据",
+      "async": false,
+      "compatibility": "旧 API action 路径保持可调用",
+      "evidence": [
+        "tools/webgl-generator-api-action-convergence-regression.mjs"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "api-action-binding:generate.getMapTemplate",
+      "capabilityId": "generate.getMapTemplate",
+      "title": "API action 绑定 generate.getMapTemplate",
+      "sourceKind": "api-action-binding",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/console-api.js",
+        "app/webgl-generator/src/runtime/app.js"
+      ],
+      "uiEntry": "",
+      "action": "generate.getMapTemplate",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "generate.getMapTemplate"
+      ],
+      "inputSpace": "method-schema",
+      "mutates": "none",
+      "preflight": "公共 API 绑定必须能解析到真实 runtime action",
+      "businessCodes": [],
+      "confirm": "按 API 确认清单",
+      "undoOrRollback": "not-applicable",
+      "async": false,
+      "compatibility": "旧 API action 路径保持可调用",
+      "evidence": [
+        "tools/webgl-generator-api-action-convergence-regression.mjs"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
       "matrixId": "api-action-binding:generate.getOptions",
       "capabilityId": "generate.getOptions",
       "title": "API action 绑定 generate.getOptions",
@@ -13853,6 +14029,36 @@
       "commandOrInspector": "",
       "apiMethods": [
         "generate.getOptions"
+      ],
+      "inputSpace": "method-schema",
+      "mutates": "none",
+      "preflight": "公共 API 绑定必须能解析到真实 runtime action",
+      "businessCodes": [],
+      "confirm": "按 API 确认清单",
+      "undoOrRollback": "not-applicable",
+      "async": false,
+      "compatibility": "旧 API action 路径保持可调用",
+      "evidence": [
+        "tools/webgl-generator-api-action-convergence-regression.mjs"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "api-action-binding:generate.listMapTemplates",
+      "capabilityId": "generate.listMapTemplates",
+      "title": "API action 绑定 generate.listMapTemplates",
+      "sourceKind": "api-action-binding",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/console-api.js",
+        "app/webgl-generator/src/runtime/app.js"
+      ],
+      "uiEntry": "",
+      "action": "generate.listMapTemplates",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "generate.listMapTemplates"
       ],
       "inputSpace": "method-schema",
       "mutates": "none",
@@ -22863,6 +23069,68 @@
       "exclusionReason": ""
     },
     {
+      "matrixId": "api:generate.createFromTemplate",
+      "capabilityId": "generate.createFromTemplate",
+      "title": "公共 API generate.createFromTemplate",
+      "sourceKind": "public-api",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/api-contract.js",
+        "app/webgl-generator/src/runtime/console-api.js"
+      ],
+      "uiEntry": "",
+      "action": "generate.createFromTemplate",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "generate.createFromTemplate"
+      ],
+      "inputSpace": "info.describe(method)",
+      "mutates": "map-or-persistent-data",
+      "preflight": "由 info.describe(method) 与领域 inspector 发现",
+      "businessCodes": [],
+      "confirm": "由 methodMetadata.requiresConfirm 发现",
+      "undoOrRollback": "由 methodMetadata.undoable 与结果 metadata 发现",
+      "async": false,
+      "compatibility": "受 API 主版本和方法稳定性契约保护",
+      "evidence": [
+        "tools/webgl-generator-api-capabilities-regression.mjs",
+        "tools/webgl-generator-api-stability-contract-regression.mjs"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "api:generate.getMapTemplate",
+      "capabilityId": "generate.getMapTemplate",
+      "title": "公共 API generate.getMapTemplate",
+      "sourceKind": "public-api",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/api-contract.js",
+        "app/webgl-generator/src/runtime/console-api.js"
+      ],
+      "uiEntry": "",
+      "action": "generate.getMapTemplate",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "generate.getMapTemplate"
+      ],
+      "inputSpace": "info.describe(method)",
+      "mutates": "none",
+      "preflight": "由 info.describe(method) 与领域 inspector 发现",
+      "businessCodes": [],
+      "confirm": "由 methodMetadata.requiresConfirm 发现",
+      "undoOrRollback": "由 methodMetadata.undoable 与结果 metadata 发现",
+      "async": false,
+      "compatibility": "受 API 主版本和方法稳定性契约保护",
+      "evidence": [
+        "tools/webgl-generator-api-capabilities-regression.mjs",
+        "tools/webgl-generator-api-stability-contract-regression.mjs"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
       "matrixId": "api:generate.getOptions",
       "capabilityId": "generate.getOptions",
       "title": "公共 API generate.getOptions",
@@ -22876,6 +23144,37 @@
       "commandOrInspector": "",
       "apiMethods": [
         "generate.getOptions"
+      ],
+      "inputSpace": "info.describe(method)",
+      "mutates": "none",
+      "preflight": "由 info.describe(method) 与领域 inspector 发现",
+      "businessCodes": [],
+      "confirm": "由 methodMetadata.requiresConfirm 发现",
+      "undoOrRollback": "由 methodMetadata.undoable 与结果 metadata 发现",
+      "async": false,
+      "compatibility": "受 API 主版本和方法稳定性契约保护",
+      "evidence": [
+        "tools/webgl-generator-api-capabilities-regression.mjs",
+        "tools/webgl-generator-api-stability-contract-regression.mjs"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "api:generate.listMapTemplates",
+      "capabilityId": "generate.listMapTemplates",
+      "title": "公共 API generate.listMapTemplates",
+      "sourceKind": "public-api",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/api-contract.js",
+        "app/webgl-generator/src/runtime/console-api.js"
+      ],
+      "uiEntry": "",
+      "action": "generate.listMapTemplates",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "generate.listMapTemplates"
       ],
       "inputSpace": "info.describe(method)",
       "mutates": "none",
@@ -32918,6 +33217,54 @@
       "exclusionReason": ""
     },
     {
+      "matrixId": "command:river-edit-commands.js:createEditRiverControlPointsCommand",
+      "capabilityId": "river.createEditRiverControlPointsCommand",
+      "title": "river-edit-commands.js / createEditRiverControlPointsCommand",
+      "sourceKind": "command-or-inspector",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/river-edit-commands.js"
+      ],
+      "uiEntry": "",
+      "action": "",
+      "commandOrInspector": "createEditRiverControlPointsCommand",
+      "apiMethods": [
+        "edit.rivers.create",
+        "edit.rivers.delete",
+        "edit.rivers.inspectCreate",
+        "edit.rivers.inspectDelete",
+        "edit.rivers.rename",
+        "edit.rivers.setNote",
+        "edit.rivers.setWidthFactor",
+        "generate.regenerate",
+        "selection.clear",
+        "selection.clearHighlights",
+        "selection.flash",
+        "selection.get",
+        "selection.highlight",
+        "selection.locate",
+        "selection.pick",
+        "selection.resolve",
+        "selection.select",
+        "selection.startEditing",
+        "selection.stopEditing",
+        "selection.toggleEditing"
+      ],
+      "inputSpace": "domain-options / object-ref / cell-ids / changes",
+      "mutates": "domain-data-or-preview",
+      "preflight": "由领域 API 参数校验或 inspector 提供",
+      "businessCodes": [],
+      "confirm": "按领域 API 确认清单",
+      "undoOrRollback": "EditHistory / transaction",
+      "async": false,
+      "compatibility": "领域 API 复用该 command / inspector 或同一纯 helper",
+      "evidence": [
+        "app/webgl-generator/src/runtime/river-edit-commands.js"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
       "matrixId": "command:river-edit-commands.js:createRenameRiversFromNamebaseCommand",
       "capabilityId": "river.createRenameRiversFromNamebaseCommand",
       "title": "river-edit-commands.js / createRenameRiversFromNamebaseCommand",
@@ -33052,6 +33399,54 @@
       "businessCodes": [],
       "confirm": "按领域 API 确认清单",
       "undoOrRollback": "EditHistory / transaction",
+      "async": false,
+      "compatibility": "领域 API 复用该 command / inspector 或同一纯 helper",
+      "evidence": [
+        "app/webgl-generator/src/runtime/river-edit-commands.js"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "command:river-edit-commands.js:inspectRiverControlPointAction",
+      "capabilityId": "river.inspectRiverControlPointAction",
+      "title": "river-edit-commands.js / inspectRiverControlPointAction",
+      "sourceKind": "command-or-inspector",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/river-edit-commands.js"
+      ],
+      "uiEntry": "",
+      "action": "",
+      "commandOrInspector": "inspectRiverControlPointAction",
+      "apiMethods": [
+        "edit.rivers.create",
+        "edit.rivers.delete",
+        "edit.rivers.inspectCreate",
+        "edit.rivers.inspectDelete",
+        "edit.rivers.rename",
+        "edit.rivers.setNote",
+        "edit.rivers.setWidthFactor",
+        "generate.regenerate",
+        "selection.clear",
+        "selection.clearHighlights",
+        "selection.flash",
+        "selection.get",
+        "selection.highlight",
+        "selection.locate",
+        "selection.pick",
+        "selection.resolve",
+        "selection.select",
+        "selection.startEditing",
+        "selection.stopEditing",
+        "selection.toggleEditing"
+      ],
+      "inputSpace": "domain-options / object-ref / cell-ids / changes",
+      "mutates": "none",
+      "preflight": "inspectRiverControlPointAction",
+      "businessCodes": [],
+      "confirm": "按领域 API 确认清单",
+      "undoOrRollback": "not-applicable-or-domain-contract",
       "async": false,
       "compatibility": "领域 API 复用该 command / inspector 或同一纯 helper",
       "evidence": [
@@ -37992,7 +38387,10 @@
       "action": "",
       "commandOrInspector": "",
       "apiMethods": [
+        "generate.createFromTemplate",
+        "generate.getMapTemplate",
         "generate.getOptions",
+        "generate.listMapTemplates",
         "generate.newMap",
         "generate.regenerate",
         "generate.rerollSeed",
@@ -39829,7 +40227,10 @@
       "action": "",
       "commandOrInspector": "",
       "apiMethods": [
+        "generate.createFromTemplate",
+        "generate.getMapTemplate",
         "generate.getOptions",
+        "generate.listMapTemplates",
         "generate.newMap",
         "generate.regenerate",
         "generate.rerollSeed",

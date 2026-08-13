@@ -19,6 +19,12 @@
       "wikiPage": "docs/wiki/地图数据与区域分析.md"
     },
     {
+      "namespace": "grid",
+      "methodCount": 6,
+      "aiHandbook": "docs/ai/README.md",
+      "wikiPage": "docs/wiki/功能与领域总览.md"
+    },
+    {
       "namespace": "planner",
       "methodCount": 2,
       "aiHandbook": "docs/ai/README.md",
@@ -38,7 +44,7 @@
     },
     {
       "namespace": "generate",
-      "methodCount": 5,
+      "methodCount": 8,
       "aiHandbook": "docs/ai/README.md",
       "wikiPage": "docs/wiki/功能与领域总览.md"
     },

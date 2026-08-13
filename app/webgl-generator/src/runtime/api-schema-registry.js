@@ -61,6 +61,22 @@ const METHOD_OVERRIDES = Object.freeze({
     result: objectSchema(["options", "map", "effects"]),
     examples: [[{cellsTarget: MAP_CELLS_MAX}]]
   },
+  "generate.listMapTemplates": {
+    arguments: [],
+    result: arraySchema(mapTemplateManifestSchema()),
+    examples: [[]]
+  },
+  "generate.getMapTemplate": {
+    arguments: [argument("templateId", stringSchema("地图模板稳定 ID"))],
+    result: mapTemplateManifestSchema(),
+    examples: [["china"]]
+  },
+  "generate.createFromTemplate": {
+    arguments: [argument("request", mapTemplateCreateRequestSchema())],
+    result: objectSchema(["template", "options", "map", "timings", "history", "effects"]),
+    examples: [[{templateId: "china", cellsTarget: 10_000, seed: "china-example", confirm: true}]],
+    businessCodes: ["ok", "api_error", "confirmation_required", "map-template-resource-load-failed", "operation_busy", "operation_cancelled", "operation_obsolete"]
+  },
   "generate.newMap": {
     arguments: [argument("options", generationOptionsSchema({confirm: true}))],
     result: objectSchema(["options", "map", "timings", "history", "effects"]),
@@ -2113,6 +2129,27 @@ function generationOptionsSchema({confirm = false} = {}) {
     },
     additionalProperties: true
   };
+}
+
+function mapTemplateCreateRequestSchema() {
+  return {
+    type: "object",
+    required: ["templateId", "confirm"],
+    properties: {
+      templateId: {type: "string"},
+      cellsTarget: mapCellTargetSchema(),
+      seed: {type: "string"},
+      confirm: {const: true}
+    },
+    additionalProperties: false
+  };
+}
+
+function mapTemplateManifestSchema() {
+  return objectSchema([
+    "id", "name", "category", "description", "version", "bounds", "projection", "recommendedCells",
+    "snapshotYear", "layers", "protectedAnchors", "resourceKeys", "resourceChecksums", "sources"
+  ]);
 }
 
 function confirmOptionsSchema() {

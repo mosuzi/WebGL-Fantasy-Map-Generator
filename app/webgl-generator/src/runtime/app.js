@@ -75,6 +75,7 @@ import {createCloudStorageRegistry} from "./cloud-storage.js";
 import {createImportFmgCellsHeightCommand} from "./fmg-cells-geojson-import.js";
 import {EditHistory} from "./edit-history.js";
 import {MapRevisionTracker} from "./map-revision.js";
+import {getPublicMapTemplate, listPublicMapTemplates, prepareMapTemplateGeneration} from "./map-template-runtime.js";
 import {createGrayscaleHeightmapFromImage, createPaletteHeightmapFromImage, normalizeHeightmapImportPayload} from "./heightmap-import.js";
 import {downloadBlob, downloadText, mapFileBaseName, parseGeoJsonMeasurements} from "./map-file-io.js";
 import {prepareMapFileIoWorkerPayload, restoreMapFileIoWorkerResult} from "./map-file-io-worker-client.js";
@@ -2768,6 +2769,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       syncSaveFilenameTemplateUi(documentRef, state);
     },
     onGenerate: () => requestGenerate(state, documentRef, runtimeActions),
+    onGenerateMapTemplate: () => requestMapTemplateGeneration(state, documentRef, runtimeActions),
     onRandomSeed: () => {
       setSeedInput(documentRef, createRandomSeed());
       requestGenerate(state, documentRef, runtimeActions);
@@ -3071,6 +3073,13 @@ function createRuntimeActions(state, documentRef, options = {}) {
     generate: {
       getOptions: () => getGenerationOptionsViaApi(state, documentRef),
       setOptions: (patch = {}) => setGenerationOptionsViaApi(state, documentRef, patch),
+      listMapTemplates: () => listPublicMapTemplates(),
+      getMapTemplate: templateId => getPublicMapTemplate(templateId),
+      createFromTemplate: (request = {}) => runMapReplace(
+        "generate.createFromTemplate",
+        context => generateMapTemplateViaApi(state, documentRef, request, context),
+        "正在创建地图场景"
+      ),
       newMap: (options = {}) => runMapReplace("generate.newMap", context => generateNewMapViaApi(state, documentRef, options, context), loadingMessage("generate")),
       rerollSeed: (options = {}) => runMapReplace("generate.rerollSeed", context => rerollSeedViaApi(state, documentRef, options, context), loadingMessage("generate")),
       regenerate: (kind, options = {}) => operation.run("generate.regenerate", async context => {
@@ -4215,6 +4224,33 @@ function requestGenerate(state, documentRef, actions = state.runtimeActions) {
   }
 }
 
+function requestMapTemplateGeneration(state, documentRef, actions = state.runtimeActions) {
+  try {
+    const templateId = documentRef.getElementById("map-template-select")?.value || "";
+    if (!templateId) {
+      showMapToast(documentRef, "请先选择地图模板", 2200, {tone: "error"});
+      return false;
+    }
+    if (state.runtimeOperation?.getSnapshot?.().current) {
+      showMapToast(documentRef, "当前已有地图操作正在进行，请稍后再试", 2600, {tone: "error"});
+      return false;
+    }
+    const panelOptions = readOptionsFromPanel(documentRef, state.options);
+    const seed = documentRef.getElementById("auto-random-seed")?.checked ? createRandomSeed() : panelOptions.seed;
+    if (seed !== panelOptions.seed) setSeedInput(documentRef, seed);
+    void actions.generate.createFromTemplate({
+      templateId,
+      cellsTarget: panelOptions.cellsTarget,
+      seed,
+      confirm: true
+    }).catch(error => reportGenerateError(documentRef, error));
+    return true;
+  } catch (error) {
+    reportGenerateError(documentRef, error);
+    return false;
+  }
+}
+
 async function restoreBrowserStoredMapOrGenerate(state, documentRef) {
   try {
     const result = await state.runtimeActions.data.restoreBrowserMap({confirm: true, startup: true, toast: false});
@@ -4413,7 +4449,39 @@ async function rerollSeedViaApi(state, documentRef, options = {}, operation = nu
   return generateMapViaApi(state, documentRef, nextOptions, {completionToast: "生成完成", operation});
 }
 
-async function generateMapViaApi(state, documentRef, options, {completionToast = "", operation = null} = {}) {
+async function generateMapTemplateViaApi(state, documentRef, input = {}, operation = null) {
+  operation?.report("validate", {message: "正在校验地图模板"});
+  if (input?.confirm !== true) throw new Error("地图模板创建会替换当前地图并清空编辑历史，需要显式传入 {confirm: true}");
+  operation?.report("load-template", {message: "正在载入地图模板资源"});
+  let prepared;
+  try {
+    prepared = await prepareMapTemplateGeneration(input, {
+      fallbackCells: state.options?.cellsTarget,
+      fetch: documentRef.defaultView?.fetch?.bind(documentRef.defaultView)
+    });
+  } catch (cause) {
+    const error = new Error(`地图模板资源未能载入：${cause?.message || cause}`);
+    error.code = "map-template-resource-load-failed";
+    error.stage = "map-template-resource";
+    error.suggestion = "请检查本地资源是否完整，然后重新创建地图场景。";
+    error.cause = cause;
+    throw error;
+  }
+  operation?.throwIfCancelled?.();
+  const baseOptions = normalizeApiGenerationOptions(state, documentRef, {
+    cellsTarget: prepared.request.cellsTarget,
+    seed: prepared.request.seed,
+    mapName: prepared.template.name
+  });
+  const result = await generateMapViaApi(state, documentRef, baseOptions, {
+    completionToast: `${prepared.template.name}创建完成`,
+    operation,
+    generationOverrides: {mapTemplate: prepared.workerPayload}
+  });
+  return {...result, template: prepared.template};
+}
+
+async function generateMapViaApi(state, documentRef, options, {completionToast = "", operation = null, generationOverrides = {}} = {}) {
   state.options = options;
   syncGenerationInputs(documentRef, options);
   const namebaseSnapshot = resolveGenerationNamebaseSnapshot(state, documentRef);
@@ -4427,7 +4495,14 @@ async function generateMapViaApi(state, documentRef, options, {completionToast =
     setMythicGenerationLoading(documentRef, true, "generate");
     operation?.report("generate", {message: loadingMessage("generate")});
     await yieldToBrowser(documentRef, {debugDelay: true});
-    const generated = await generateMapOffMainThread(state, documentRef, generationOptionsWithNamebases(state.options, namebaseSnapshot), generateId, operation);
+    const generated = await generateMapOffMainThread(
+      state,
+      documentRef,
+      generationOptionsWithNamebases(state.options, namebaseSnapshot),
+      generateId,
+      operation,
+      generationOverrides
+    );
     const map = generated.map;
     if (generateId !== state.pendingGenerateId) throw new Error("生成请求已被新的生成任务取代");
     operation?.report("load-map", {message: loadingMessage("cell-visual-mesh")});
@@ -4482,7 +4557,8 @@ function generationApiMapSummary(map) {
     cities: map.settlements?.cities?.filter(Boolean).length || 0,
     routes: map.settlements?.routes?.filter(Boolean).length || 0,
     rivers: map.rivers?.rivers?.filter(Boolean).length || 0,
-    markers: map.markers?.markers?.filter(Boolean).length || 0
+    markers: map.markers?.markers?.filter(Boolean).length || 0,
+    mapTemplate: map.metadata?.mapTemplate ? cloneGenerationOptions(map.metadata.mapTemplate) : null
   };
 }
 
@@ -4962,6 +5038,7 @@ async function generateMapOffMainThread(state, documentRef, options, generateId,
   return state.workerTaskCoordinator.run(GENERATION_WORKER_TASK, {
     options,
     heightmapPayload: overrides.heightmapPayload || null,
+    mapTemplate: overrides.mapTemplate || null,
     render
   }, {
     binding: requestBinding,
@@ -4969,6 +5046,7 @@ async function generateMapOffMainThread(state, documentRef, options, generateId,
     fallbackPayloadFactory: () => ({
       options,
       heightmapPayload: overrides.heightmapPayload || null,
+      mapTemplate: overrides.mapTemplate || null,
       ...(overrides.heightmap ? {heightmap: overrides.heightmap} : {}),
       render
     }),

@@ -2,7 +2,7 @@
   "generatedAt": "由 sync 脚本生成；时间不参与一致性比较",
   "apiVersion": "1.0.0",
   "plannerRecipeSchemaVersion": "1.0.0",
-  "browserMethods": 316,
+  "browserMethods": 325,
   "headlessMethods": 23,
   "headlessWriteVersion": "1.0.0",
   "headlessWriteMethods": 6,

@@ -2,6 +2,12 @@ import {normalizeMapCellTarget} from "./map-size.js";
 
 export const MAP_TEMPLATE_CATALOG_VERSION = "1.0.0";
 
+const PHYSICAL_RESOURCE_CHECKSUM = "891878e6f04ded05c19ea2547d4d23438e7484031f16b77429617d7c603bbfc3";
+const POLITICAL_RESOURCE_CHECKSUMS = Object.freeze({
+  "holy-roman-empire-1789": "d3915b76bc4d21cb6768e244fab7ebbac83ac4c44fabc808dc1e261b56b7d15e",
+  "roman-empire-117": "d35001cbad62d9299c915730f1d0d2ec2549d8f2034d11619dda7b44c8e85e02"
+});
+
 export const MAP_TEMPLATE_SOURCES = deepFreeze({
   "natural-earth-5.1.2": {
     name: "Natural Earth 5.1.2",
@@ -152,6 +158,7 @@ function geographic(id, name, bounds, recommendedCells, protectedAnchors, option
     sourceIds: [...PHYSICAL_SOURCES],
     layers: [...PHYSICAL_LAYERS],
     resourceKeys: {physical: "world-physical-2026-v1", political: null},
+    resourceChecksums: {physical: PHYSICAL_RESOURCE_CHECKSUM, political: null},
     protectedAnchors,
     humanPreset: null
   };
@@ -170,6 +177,7 @@ function historical(id, name, bounds, snapshotYear, historicalSourceId, protecte
     sourceIds: [...PHYSICAL_SOURCES, historicalSourceId],
     layers: [...HISTORICAL_LAYERS],
     resourceKeys: {physical: "world-physical-2026-v1", political: `${id}-political-v1`},
+    resourceChecksums: {physical: PHYSICAL_RESOURCE_CHECKSUM, political: POLITICAL_RESOURCE_CHECKSUMS[id]},
     protectedAnchors,
     humanPreset: `${id}-human-v1`
   };

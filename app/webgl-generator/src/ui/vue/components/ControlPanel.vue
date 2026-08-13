@@ -208,6 +208,19 @@
       <UiField label="宽度" input-id="width-input" type="number" :model-value="1440" :input-attrs="{min: 640, max: 4096, step: 80}" />
       <UiField label="高度" input-id="height-input" type="number" :model-value="960" :input-attrs="{min: 480, max: 4096, step: 80}" />
       <UiField label="地形" input-id="heightmap-template" type="select" model-value="continents" :options="terrainTemplates" />
+      <section class="generation-map-template-section" aria-labelledby="map-template-title">
+        <h2 id="map-template-title">地图模板</h2>
+        <UiField
+          label="真实场景"
+          input-id="map-template-select"
+          type="select"
+          :model-value="selectedMapTemplateId"
+          :options="mapTemplateOptions"
+          @update:model-value="selectedMapTemplateId = $event"
+        />
+        <p id="map-template-description" class="generation-map-template-description">{{ selectedMapTemplateDescription }}</p>
+        <UiButton id="generate-map-template" variant="primary" :disabled="!selectedMapTemplateId">按模板创建</UiButton>
+      </section>
       <details class="generation-climate-section">
         <summary id="generation-climate-title">高级气候</summary>
         <input id="climate-latitude-mode" type="hidden" :value="climateLatitudeMode" />
@@ -714,6 +727,7 @@ import {
   windDirectionValueFromAngle
 } from "../../../generator/climate-options.js";
 import {CLIMATE_MAP_SIZE_RANGE, TEMPERATURE_RANGE} from "../../../generator/options.js";
+import {listMapTemplateManifests} from "../../../generator/map-template-catalog.js";
 import {useGlobalConfigStore} from "../stores/global-config-store.js";
 
 defineOptions({
@@ -728,6 +742,7 @@ const CONTROL_PANEL_TAB_IDS = Object.freeze(["about", "generation", "themes", "s
 const activeTab = ref(normalizeControlPanelTab(preferences.value.controlPanelTab));
 const exportPanelOpen = ref(false);
 const saveFilenameSettingsOpen = ref(false);
+const selectedMapTemplateId = ref("");
 const exportAnchorRef = ref(null);
 const exportPanelRef = ref(null);
 const {
@@ -839,6 +854,17 @@ const terrainTemplates = Object.freeze([
   {value: "pangea", label: "盘古大陆"},
   {value: "archipelago", label: "群岛"}
 ]);
+const mapTemplateManifests = listMapTemplateManifests();
+const mapTemplateOptions = Object.freeze([
+  {value: "", label: "请选择地图模板"},
+  ...mapTemplateManifests.map(template => ({value: template.id, label: template.name}))
+]);
+const selectedMapTemplateDescription = computed(() => {
+  const template = mapTemplateManifests.find(item => item.id === selectedMapTemplateId.value);
+  if (!template) return "选择真实地理或固定年代场景；普通地形生成不受影响。";
+  const year = template.snapshotYear ? `，年代 ${template.snapshotYear}` : "";
+  return `${template.description}${year}；推荐规模 ${template.recommendedCells.map(value => value.toLocaleString("zh-CN")).join(" / ")}。`;
+});
 
 const visualThemePresetOptions = ref(visualThemeOptions());
 const activeUserThemeDocument = ref(null);

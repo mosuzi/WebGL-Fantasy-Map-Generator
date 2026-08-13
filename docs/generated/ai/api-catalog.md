@@ -2,7 +2,7 @@
 
 > 由 `pnpm run sync:ai-docs` 生成，请勿手工修改。
 
-## 浏览器 API（316）
+## 浏览器 API（325）
 
 | 方法 | 稳定性 | 副作用 | 确认 | AI 手册 |
 |---|---|---|---|---|
@@ -24,6 +24,12 @@
 | `cells.scan` | stable | none-or-export-result | 否 | `docs/ai/map-data-model.md` |
 | `cells.actions` | stable | none-or-export-result | 否 | `docs/ai/map-data-model.md` |
 | `cells.inspectAction` | stable | none-or-export-result | 否 | `docs/ai/map-data-model.md` |
+| `grid.summary` | stable | map-or-persistent-state | 否 | `docs/ai/runtime-and-loading.md` |
+| `grid.snapshot` | stable | none-or-export-result | 否 | `docs/ai/runtime-and-loading.md` |
+| `grid.inspectWrite` | stable | none-or-export-result | 否 | `docs/ai/runtime-and-loading.md` |
+| `grid.applyWrite` | stable | map-or-persistent-state | 是 | `docs/ai/runtime-and-loading.md` |
+| `grid.inspectRefinement` | stable | none-or-export-result | 否 | `docs/ai/runtime-and-loading.md` |
+| `grid.refine` | stable | map-or-persistent-state | 是 | `docs/ai/runtime-and-loading.md` |
 | `planner.listRecipes` | stable | none-or-export-result | 否 | `docs/ai/runtime-and-loading.md` |
 | `planner.getRecipe` | stable | none-or-export-result | 否 | `docs/ai/runtime-and-loading.md` |
 | `analysis.defineRegion` | stable | map-or-persistent-state | 否 | `docs/ai/regional-analysis.md` |
@@ -41,6 +47,9 @@
 | `regenerationLocks.clearKind` | stable | map-or-persistent-state | 否 | `docs/ai/safe-change-boundaries.md` |
 | `generate.getOptions` | stable | none-or-export-result | 否 | `docs/ai/runtime-and-loading.md` |
 | `generate.setOptions` | stable | map-or-persistent-state | 否 | `docs/ai/runtime-and-loading.md` |
+| `generate.listMapTemplates` | stable | none-or-export-result | 否 | `docs/ai/runtime-and-loading.md` |
+| `generate.getMapTemplate` | stable | none-or-export-result | 否 | `docs/ai/runtime-and-loading.md` |
+| `generate.createFromTemplate` | stable | map-or-persistent-state | 是 | `docs/ai/runtime-and-loading.md` |
 | `generate.newMap` | stable | map-or-persistent-state | 是 | `docs/ai/runtime-and-loading.md` |
 | `generate.rerollSeed` | stable | map-or-persistent-state | 是 | `docs/ai/runtime-and-loading.md` |
 | `generate.regenerate` | stable | map-or-persistent-state | 是 | `docs/ai/runtime-and-loading.md` |

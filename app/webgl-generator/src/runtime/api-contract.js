@@ -11,7 +11,7 @@ export const API_METHODS = Object.freeze({
   planner: Object.freeze(["listRecipes", "getRecipe"]),
   analysis: Object.freeze(["defineRegion", "describeRegion", "compareRegions", "explainPrecipitation", "diagnosePopulation", "comparePower", "diagnoseTerrain"]),
   regenerationLocks: Object.freeze(["list", "status", "inspect", "set", "setMany", "clearKind"]),
-  generate: Object.freeze(["getOptions", "setOptions", "newMap", "rerollSeed", "regenerate"]),
+  generate: Object.freeze(["getOptions", "setOptions", "listMapTemplates", "getMapTemplate", "createFromTemplate", "newMap", "rerollSeed", "regenerate"]),
   oceanCurrents: Object.freeze(["rename", "regenerate", "inspectWorldRebuild", "rebuildWorld", "cancelWorldRebuild"]),
   selection: Object.freeze(["get", "resolve", "select", "clear", "locate", "pick", "flash", "highlight", "clearHighlights", "startEditing", "stopEditing", "toggleEditing"]),
   layers: Object.freeze(["get", "listThemes", "setViewMode", "setVisible", "setTheme", "exportTheme", "importTheme", "createTheme", "updateTheme", "deleteTheme", "fitView", "setShowOceanHeight", "setSmoothCellBorders", "setShowHoverInfo", "setMaxCityLabels"]),
@@ -44,6 +44,7 @@ export const API_METHODS = Object.freeze({
 
 export const CONFIRM_REQUIRED_METHODS = Object.freeze([
   "generate.regenerate",
+  "generate.createFromTemplate",
   "generate.newMap",
   "generate.rerollSeed",
   "grid.applyWrite",

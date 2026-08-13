@@ -85,6 +85,7 @@ export function bindRuntimePanel(documentRef, handlers) {
   documentRef.getElementById("map-filename-template-input")?.addEventListener("change", event => handlers.onMapFilenameTemplate?.(event.target.value, true));
   documentRef.defaultView?.addEventListener("webgl-generator-debug-change", () => handlers.onDebugModeChange?.());
   documentRef.getElementById("generate-map").addEventListener("click", handlers.onGenerate);
+  documentRef.getElementById("generate-map-template")?.addEventListener("click", handlers.onGenerateMapTemplate);
   documentRef.getElementById("random-seed").addEventListener("click", handlers.onRandomSeed);
   documentRef.getElementById("open-generation-panel")?.addEventListener("click", handlers.onOpenGenerationPanel);
   documentRef.getElementById("fit-view").addEventListener("click", handlers.onFitView);

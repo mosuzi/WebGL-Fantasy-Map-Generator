@@ -5269,6 +5269,31 @@ select:disabled {
   margin-top: 4px;
 }
 
+.generation-map-template-section {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid #3a4c58;
+  border-radius: 6px;
+  background: #121c21;
+}
+
+.generation-map-template-section h2,
+.generation-map-template-description {
+  margin: 0;
+}
+
+.generation-map-template-section h2 {
+  color: #edf4f6;
+  font-size: 12px;
+}
+
+.generation-map-template-description {
+  color: #9fb0ba;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
 .heightmap-import-launcher,
 .generation-climate-section {
   display: grid;

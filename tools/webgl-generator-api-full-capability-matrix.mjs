@@ -404,7 +404,11 @@ function domainForMode(mode) {
 
 function buildRuntimeActionRows(runtimeActions, apiMethods) {
   return runtimeActions.map(action => {
-    const publicMethods = apiMethods.includes(action) ? [action] : [];
+    const publicMethods = apiMethods.includes(action)
+      ? [action]
+      : action === "layers.setManyVisible" && apiMethods.includes("layers.setVisible")
+        ? ["layers.setVisible"]
+        : [];
     return createRow({
       matrixId: `action:${action}`,
       capabilityId: action,

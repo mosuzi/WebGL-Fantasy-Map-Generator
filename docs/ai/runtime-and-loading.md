@@ -6,6 +6,10 @@
 
 浏览器 API 依赖 BrowserRuntimeHost 所持有的 document、renderer、相机、下载、历史和 UI action。普通只读数据并不要求开启开发模式；`debug.enable()` 只打开开发 UI，`debug.snapshot / dumpState / renderer / health` 返回运行与渲染诊断，不是地图事实的唯一来源。
 
+### 内置地图模板
+
+`generate.listMapTemplates()` 枚举 16 个离线模板，`generate.getMapTemplate(templateId)` 返回范围、版本、推荐规模、历史年代、来源与资源摘要；两者只读且不会提前加载模板资源。创建前先读取详情，再调用 `generate.createFromTemplate({templateId, cellsTarget, seed, confirm:true})`。创建会替换当前地图，因此必须显式确认；成功后得到普通可编辑地图，模板来源只保留在 metadata，不会持续覆盖后续编辑。资源校验或加载失败时当前地图、revision 和历史保持不变。
+
 ## 无头运行时
 
 Node 模块：

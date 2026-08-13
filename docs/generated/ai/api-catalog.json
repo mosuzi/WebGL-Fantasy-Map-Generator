@@ -3,7 +3,7 @@
     "generatedAt": "由 sync 脚本生成；时间不参与一致性比较",
     "apiVersion": "1.0.0",
     "plannerRecipeSchemaVersion": "1.0.0",
-    "browserMethods": 316,
+    "browserMethods": 325,
     "headlessMethods": 23,
     "headlessWriteVersion": "1.0.0",
     "headlessWriteMethods": 6,
@@ -216,6 +216,72 @@
       "handbook": "docs/ai/map-data-model.md"
     },
     {
+      "method": "grid.summary",
+      "stability": "stable",
+      "mutates": "map-or-persistent-state",
+      "undoable": false,
+      "async": false,
+      "requiresConfirm": false,
+      "capabilityGroup": "grid",
+      "schemaDiscovery": "window.webglGeneratorApi.info.describe(\"grid.summary\")",
+      "handbook": "docs/ai/runtime-and-loading.md"
+    },
+    {
+      "method": "grid.snapshot",
+      "stability": "stable",
+      "mutates": "none-or-export-result",
+      "undoable": false,
+      "async": false,
+      "requiresConfirm": false,
+      "capabilityGroup": "grid",
+      "schemaDiscovery": "window.webglGeneratorApi.info.describe(\"grid.snapshot\")",
+      "handbook": "docs/ai/runtime-and-loading.md"
+    },
+    {
+      "method": "grid.inspectWrite",
+      "stability": "stable",
+      "mutates": "none-or-export-result",
+      "undoable": false,
+      "async": false,
+      "requiresConfirm": false,
+      "capabilityGroup": "grid",
+      "schemaDiscovery": "window.webglGeneratorApi.info.describe(\"grid.inspectWrite\")",
+      "handbook": "docs/ai/runtime-and-loading.md"
+    },
+    {
+      "method": "grid.applyWrite",
+      "stability": "stable",
+      "mutates": "map-or-persistent-state",
+      "undoable": false,
+      "async": false,
+      "requiresConfirm": true,
+      "capabilityGroup": "grid",
+      "schemaDiscovery": "window.webglGeneratorApi.info.describe(\"grid.applyWrite\")",
+      "handbook": "docs/ai/runtime-and-loading.md"
+    },
+    {
+      "method": "grid.inspectRefinement",
+      "stability": "stable",
+      "mutates": "none-or-export-result",
+      "undoable": false,
+      "async": false,
+      "requiresConfirm": false,
+      "capabilityGroup": "grid",
+      "schemaDiscovery": "window.webglGeneratorApi.info.describe(\"grid.inspectRefinement\")",
+      "handbook": "docs/ai/runtime-and-loading.md"
+    },
+    {
+      "method": "grid.refine",
+      "stability": "stable",
+      "mutates": "map-or-persistent-state",
+      "undoable": false,
+      "async": false,
+      "requiresConfirm": true,
+      "capabilityGroup": "grid",
+      "schemaDiscovery": "window.webglGeneratorApi.info.describe(\"grid.refine\")",
+      "handbook": "docs/ai/runtime-and-loading.md"
+    },
+    {
       "method": "planner.listRecipes",
       "stability": "stable",
       "mutates": "none-or-export-result",
@@ -400,6 +466,39 @@
       "requiresConfirm": false,
       "capabilityGroup": "generate",
       "schemaDiscovery": "window.webglGeneratorApi.info.describe(\"generate.setOptions\")",
+      "handbook": "docs/ai/runtime-and-loading.md"
+    },
+    {
+      "method": "generate.listMapTemplates",
+      "stability": "stable",
+      "mutates": "none-or-export-result",
+      "undoable": false,
+      "async": true,
+      "requiresConfirm": false,
+      "capabilityGroup": "generate",
+      "schemaDiscovery": "window.webglGeneratorApi.info.describe(\"generate.listMapTemplates\")",
+      "handbook": "docs/ai/runtime-and-loading.md"
+    },
+    {
+      "method": "generate.getMapTemplate",
+      "stability": "stable",
+      "mutates": "none-or-export-result",
+      "undoable": false,
+      "async": true,
+      "requiresConfirm": false,
+      "capabilityGroup": "generate",
+      "schemaDiscovery": "window.webglGeneratorApi.info.describe(\"generate.getMapTemplate\")",
+      "handbook": "docs/ai/runtime-and-loading.md"
+    },
+    {
+      "method": "generate.createFromTemplate",
+      "stability": "stable",
+      "mutates": "map-or-persistent-state",
+      "undoable": false,
+      "async": true,
+      "requiresConfirm": true,
+      "capabilityGroup": "generate",
+      "schemaDiscovery": "window.webglGeneratorApi.info.describe(\"generate.createFromTemplate\")",
       "handbook": "docs/ai/runtime-and-loading.md"
     },
     {

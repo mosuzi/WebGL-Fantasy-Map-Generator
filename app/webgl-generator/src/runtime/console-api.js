@@ -118,6 +118,9 @@ export function createConsoleApi(documentRef, state, actions = {}) {
     generate: Object.freeze({
       getOptions: () => apiCall(() => requireApiAction(actions.generate?.getOptions, "generate.getOptions")()),
       setOptions: (patch = {}) => apiCall(() => requireApiAction(actions.generate?.setOptions, "generate.setOptions")(patch)),
+      listMapTemplates: () => apiCall(() => requireApiAction(actions.generate?.listMapTemplates, "generate.listMapTemplates")()),
+      getMapTemplate: templateId => apiCall(() => requireApiAction(actions.generate?.getMapTemplate, "generate.getMapTemplate")(templateId)),
+      createFromTemplate: (request = {}) => apiCall(() => requireApiAction(actions.generate?.createFromTemplate, "generate.createFromTemplate")(request)),
       newMap: (options = {}) => apiCall(() => requireApiAction(actions.generate?.newMap, "generate.newMap")(options)),
       rerollSeed: (options = {}) => apiCall(() => requireApiAction(actions.generate?.rerollSeed, "generate.rerollSeed")(options)),
       regenerate: (kind, options = {}) => apiCall(() => requireApiAction(actions.generate?.regenerate, "generate.regenerate")(kind, options))
@@ -644,6 +647,9 @@ export function buildMethodMetadata() {
     generate: {
       getOptions: {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
       setOptions: {stable: "draft", mutates: "generation-options", undoable: false, async: false, requiresConfirm: false},
+      listMapTemplates: {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
+      getMapTemplate: {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
+      createFromTemplate: {stable: "draft", mutates: "replace-map", undoable: false, async: true, requiresConfirm: true},
       regenerate: {stable: "draft", mutates: "map-derived-data", undoable: true, async: true, requiresConfirm: true},
       newMap: {stable: "draft", mutates: "replace-map", undoable: false, async: true, requiresConfirm: true},
       rerollSeed: {stable: "draft", mutates: "replace-map", undoable: false, async: true, requiresConfirm: true}
