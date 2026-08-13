@@ -106,7 +106,7 @@ export function createMeasurementPanel(documentRef, manager, callbacks = {}) {
     {state: panelState, callbacks: panelCallbacks},
     {
       initial: "测量对象将在首次打开时加载。",
-      loading: "正在加载测量对象...",
+      loading: "正在打开测量对象，请稍候片刻。",
       failure: "测量对象加载失败，请检查开发模式日志。"
     }
   );

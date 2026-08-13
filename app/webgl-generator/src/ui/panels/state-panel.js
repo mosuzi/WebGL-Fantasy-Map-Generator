@@ -166,7 +166,7 @@ export function createStatePanel(documentRef, manager, callbacks = {}) {
     {state: panelState, callbacks: panelCallbacks},
     {
       initial: "国家编辑将在首次打开时加载。",
-      loading: "正在加载国家编辑...",
+      loading: "正在打开国家编辑，请稍候片刻。",
       failure: "国家编辑加载失败，请检查开发模式日志。"
     }
   );

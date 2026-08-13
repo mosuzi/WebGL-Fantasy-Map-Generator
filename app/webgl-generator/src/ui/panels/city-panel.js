@@ -150,7 +150,7 @@ export function createCityPanel(documentRef, manager, callbacks = {}) {
     {state: panelState, callbacks: panelCallbacks},
     {
       initial: "城市管理将在首次打开时加载。",
-      loading: "正在加载城市管理...",
+      loading: "正在打开城市管理，请稍候片刻。",
       failure: "城市管理加载失败，请检查开发模式日志。"
     }
   );

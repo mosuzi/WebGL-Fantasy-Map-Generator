@@ -178,7 +178,7 @@ const sortOptions = Object.freeze([
   {key: "economicPower", label: "经济"},
   {key: "resourcePotential", label: "资源"},
   {key: "area", label: "面积"},
-  {key: "cells", label: "cells"},
+  {key: "cells", label: "区域"},
   {key: "stateName", label: "国家"},
   {key: "id", label: "ID"}
 ]);
@@ -187,7 +187,7 @@ const columns = Object.freeze([
   {key: "id", label: "ID", align: "right"},
   {key: "name", label: "名称"},
   {key: "stateName", label: "国家"},
-  {key: "cells", label: "cells", align: "right", format: value => formatNumber(value)},
+  {key: "cells", label: "区域", align: "right", format: value => formatNumber(value)},
   {key: "area", label: "面积", align: "right", format: value => formatAreaValue(value)},
   {key: "economicPower", label: "经济", align: "right", format: value => formatNumber(value)},
   {key: "resourcePotential", label: "资源", align: "right", format: value => formatNumber(value)}
@@ -214,7 +214,7 @@ const canDeleteSelected = computed(() => Boolean(selected.value && !selected.val
 const editActive = computed(() => Boolean(selected.value && props.state.active && selected.value.id === props.state.selectedProvinceId));
 const modalActionActive = computed(() => Boolean(props.state.addMode || props.state.deleteMode));
 const provinceActions = computed(() => [
-  {key: "add", resultClass: "toggle-canvas-mode", label: props.state.addMode ? "取消新增省份" : "新增省份：下一次点击地图 cell 作为中心", icon: "+", panel: false, active: props.state.addMode, disabled: props.state.deleteMode || editActive.value},
+  {key: "add", resultClass: "toggle-canvas-mode", label: props.state.addMode ? "取消新增省份" : "新增省份：下一次点击地图位置作为中心", icon: "+", panel: false, active: props.state.addMode, disabled: props.state.deleteMode || editActive.value},
   {key: "delete", resultClass: "toggle-canvas-mode", label: props.state.deleteMode ? "取消删除省份" : "删除省份：下一次点击地图省份", icon: "×", panel: false, active: props.state.deleteMode, disabled: props.state.addMode || editActive.value},
   {key: "edit", resultClass: "toggle-canvas-mode", label: editActive.value ? "退出省份编辑" : "进入省份编辑", icon: "◎", panel: false, disabled: modalActionActive.value || !canDeleteSelected.value, active: editActive.value},
   {key: "rename", resultClass: "open-secondary", label: "重命名", icon: "✎", disabled: modalActionActive.value || !canDeleteSelected.value},
@@ -248,7 +248,7 @@ const detailRows = computed(() => selected.value ? [
   {label: "中心 grid cell", value: selected.value.gridCenterCell, debug: true},
   {label: "pole", value: selected.value.pole, debug: true},
   {label: "面积", value: formatAreaValue(selected.value.area)},
-  {label: "cells", value: formatNumber(selected.value.cells)},
+  {label: "覆盖区域", value: formatNumber(selected.value.cells)},
   {label: "人口", value: formatPopulationValue(selected.value.population)},
   {label: "实力评分", value: formatNumber(selected.value.powerScore)},
   {label: "经济力", value: formatNumber(selected.value.economicPower)},

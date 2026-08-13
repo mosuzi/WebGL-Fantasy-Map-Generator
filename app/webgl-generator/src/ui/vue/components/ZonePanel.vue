@@ -236,7 +236,7 @@ const zoneHighlightActions = computed(() => [
 const summaryMetrics = computed(() => [
   {label: "地区", value: formatNumber(rows.value.length)},
   {label: "可见", value: formatNumber(visibleCount.value)},
-  {label: "涉及 cells", value: formatNumber(totalCells.value)},
+  {label: "涉及区域", value: formatNumber(totalCells.value)},
   {label: "总面积", value: formatAreaValue(totalArea.value)},
   {label: "高亮", value: formatNumber(props.state.highlightCount || 0)}
 ]);
@@ -252,7 +252,7 @@ const detailRows = computed(() => selected.value ? [
   ...selected.value.participants.map(participant => ({label: zoneRoleLabel(participant.role), value: participant.name})),
   {label: "纹理", value: `${selected.value.patternLabel} / ${selected.value.color}`},
   {label: "涉及国家", value: selected.value.statesLabel},
-  {label: "规模", value: `${formatNumber(selected.value.cells)} cells`},
+  {label: "规模", value: `${formatNumber(selected.value.cells)} 个区域`},
   {label: "面积", value: formatAreaValue(selected.value.area)},
   {label: "状态", value: selected.value.hidden ? "隐藏" : "显示"}
 ] : []);

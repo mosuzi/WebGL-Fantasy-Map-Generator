@@ -138,7 +138,7 @@ const props = defineProps({
 });
 
 const sortOptions = Object.freeze([
-  {key: "cells", label: "cells"},
+  {key: "cells", label: "区域"},
   {key: "area", label: "面积"},
   {key: "population", label: "人口"},
   {key: "suitabilityAvg", label: "适居"},
@@ -150,7 +150,7 @@ const sortOptions = Object.freeze([
 const columns = Object.freeze([
   {key: "id", label: "ID", align: "right"},
   {key: "name", label: "名称"},
-  {key: "cells", label: "cells", align: "right", format: value => formatNumber(value)},
+  {key: "cells", label: "区域", align: "right", format: value => formatNumber(value)},
   {key: "area", label: "面积", align: "right", format: value => formatAreaValue(value)},
   {key: "suitabilityAvg", label: "适居", align: "right", format: value => formatNumber(value)},
   {key: "population", label: "人口", align: "right", format: value => formatPopulationValue(value)}
@@ -189,20 +189,20 @@ const assignmentBanner = computed(() => {
   const targetScope = Number(props.state.selectedBiomeId) === 0 ? "water" : "land";
   if (props.state.assignmentScope !== targetScope) return {kind: "error", message: targetScope === "water" ? "海洋群系只能用于水域。" : "陆地群系不能用于水域。"};
   const preview = props.state.assignmentPreview;
-  if (!preview) return {kind: "info", message: `按住鼠标在地图上涂刷；抬手提交一条历史。最近影响 ${formatNumber(props.state.lastAffected || 0)} cells。`};
+  if (!preview) return {kind: "info", message: `按住鼠标在地图上涂刷；抬手后保存一次修改。最近影响 ${formatNumber(props.state.lastAffected || 0)} 个区域。`};
   if (!preview.valid) return {kind: "error", message: `${preview.code || "invalid"}：${preview.reason || "预览无效"}`};
-  const warning = preview.warningCells ? `；${formatNumber(preview.warningCells)} cells 存在气候或高度异常：${preview.warnings.join("、")}` : "；没有气候高度异常";
-  return {kind: preview.warningCells ? "preview" : "info", message: `预览 ${formatNumber(preview.changedGridCells?.length || 0)} grid cells${warning}`};
+  const warning = preview.warningCells ? `；${formatNumber(preview.warningCells)} 个区域存在气候或高度异常：${preview.warnings.join("、")}` : "；没有发现气候或高度异常";
+  return {kind: preview.warningCells ? "preview" : "info", message: `预计影响 ${formatNumber(preview.changedGridCells?.length || 0)} 个地图区域${warning}`};
 });
 const suitabilityBanner = computed(() => {
   const preview = props.state.suitabilityPreview;
   if (preview && !preview.valid) return {kind: "error", message: `${preview.code || "invalid"}：${preview.reason || "预览无效"}`};
   if (preview?.valid) {
     const verb = preview.mode === "reset" ? "恢复基准" : `设为 ${preview.value}`;
-    return {kind: "preview", message: `预览将 ${formatNumber(preview.changedPackCells?.length || 0)} 个 pack cells ${verb}；水域人口承载恒为 0。`};
+    return {kind: "preview", message: `预计将 ${formatNumber(preview.changedPackCells?.length || 0)} 个区域${verb}；水域不会承载常住人口。`};
   }
   const verb = props.state.suitabilityMode === "reset" ? "恢复自动生成的基准值" : `直接设为 ${formatNumber(props.state.suitabilityValue)}`;
-  return {kind: "info", message: `按住鼠标涂刷，抬手提交一条历史；${verb}。最近影响 ${formatNumber(props.state.suitabilityLastAffected || 0)} 个 grid cells；水域人口承载恒为 0。`};
+  return {kind: "info", message: `按住鼠标涂刷，抬手后保存一次修改；${verb}。最近影响 ${formatNumber(props.state.suitabilityLastAffected || 0)} 个地图区域；水域不会承载常住人口。`};
 });
 
 watch(activeAction, (next, previous) => {
@@ -222,9 +222,9 @@ watch(() => props.state.suitabilityActive, active => {
 
 const summaryMetrics = computed(() => [
   {label: "群系", value: formatNumber(metrics.value.total)},
-  {label: "陆地 cells", value: formatNumber(metrics.value.landCells)},
-  {label: "适居 cells", value: formatNumber(metrics.value.positiveSuitabilityCells)},
-  {label: "人口 cells", value: formatNumber(metrics.value.positivePopulationCells)},
+  {label: "陆地区域", value: formatNumber(metrics.value.landCells)},
+  {label: "适居区域", value: formatNumber(metrics.value.positiveSuitabilityCells)},
+  {label: "有人口区域", value: formatNumber(metrics.value.positivePopulationCells)},
   {label: "总人口", value: formatPopulationValue(metrics.value.population)},
   {label: "最高适居", value: formatNumber(metrics.value.maxSuitability)}
 ]);
@@ -234,8 +234,8 @@ const detailRows = computed(() => selected.value ? [
   {label: "生态说明", value: selected.value.description},
   {label: "颜色", value: selected.value.colorText},
   {label: "基准适居", value: formatNumber(selected.value.habitability)},
-  {label: "pack cells", value: formatNumber(selected.value.cells)},
-  {label: "陆地 cells", value: formatNumber(selected.value.landCells)},
+  {label: "覆盖区域", value: formatNumber(selected.value.cells)},
+  {label: "陆地区域", value: formatNumber(selected.value.landCells)},
   {label: "面积", value: formatAreaValue(selected.value.area)},
   {label: "平均适居", value: formatNumber(selected.value.suitabilityAvg)},
   {label: "最高适居", value: formatNumber(selected.value.suitabilityMax)},

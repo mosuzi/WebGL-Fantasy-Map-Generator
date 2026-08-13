@@ -120,7 +120,7 @@ export function createMarkerPanel(documentRef, manager, callbacks = {}) {
     {state: panelState, callbacks: panelCallbacks},
     {
       initial: "资源点与通用标记将在首次打开时加载。",
-      loading: "正在加载资源点与通用标记...",
+      loading: "正在打开资源点与通用标记，请稍候片刻。",
       failure: "资源点与通用标记加载失败，请检查开发模式日志。"
     }
   );

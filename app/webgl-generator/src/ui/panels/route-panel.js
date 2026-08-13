@@ -125,7 +125,7 @@ export function createRoutePanel(documentRef, manager, callbacks = {}) {
     {state: panelState, callbacks: panelCallbacks},
     {
       initial: "路线管理将在首次打开时加载。",
-      loading: "正在加载路线管理...",
+      loading: "正在打开路线管理，请稍候片刻。",
       failure: "路线管理加载失败，请检查开发模式日志。"
     }
   );

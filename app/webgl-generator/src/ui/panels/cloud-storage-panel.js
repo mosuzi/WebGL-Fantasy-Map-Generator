@@ -138,7 +138,7 @@ export function createCloudStoragePanel(documentRef, manager, registry, componen
     {
       id: CLOUD_STORAGE_PANEL_ID,
       initial: "云端存储将在首次打开时加载。",
-      loading: "正在加载云端存储…",
+      loading: "正在打开云端存储，请稍候片刻。",
       failure: "云端存储加载失败，请检查开发模式日志。"
     }
   );

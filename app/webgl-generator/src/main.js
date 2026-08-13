@@ -8,7 +8,7 @@ import "./styles.css";
 const healthMonitor = installWebglGeneratorHealthMonitor(document);
 
 try {
-  updateStartupLoadingStatus(document, "正在装配地图引擎");
+  updateStartupLoadingStatus(document, "正在展开地图画卷");
   loadUserVisualThemes(window.localStorage);
   initializeVueStateBridge(document);
   createGeneratorApp(document, {healthMonitor});

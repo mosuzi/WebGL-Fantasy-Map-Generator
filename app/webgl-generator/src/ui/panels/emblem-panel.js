@@ -83,7 +83,7 @@ export function createEmblemPanel(documentRef, manager) {
     {state: panelState, callbacks: panelCallbacks},
     {
       initial: "纹章统计将在首次打开时加载。",
-      loading: "正在加载纹章统计...",
+      loading: "正在打开纹章统计，请稍候片刻。",
       failure: "纹章统计加载失败，请检查开发模式日志。"
     }
   );

@@ -178,7 +178,7 @@ export function createEconomyPanel(documentRef, manager, callbacks = {}) {
     {state: panelState, callbacks: panelCallbacks},
     {
       initial: "经济总览将在首次打开时加载。",
-      loading: "正在加载经济总览...",
+      loading: "正在打开经济总览，请稍候片刻。",
       failure: "经济总览加载失败，请检查开发模式日志。"
     }
   );

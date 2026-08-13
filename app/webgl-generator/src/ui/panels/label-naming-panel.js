@@ -107,7 +107,7 @@ export function createLabelNamingPanel(documentRef, manager, callbacks = {}) {
     {state: panelState, callbacks: panelCallbacks},
     {
       initial: "标签管理将在首次打开时加载。",
-      loading: "正在加载标签管理...",
+      loading: "正在打开标签管理，请稍候片刻。",
       failure: "标签管理加载失败，请检查开发模式日志。"
     }
   );

@@ -199,7 +199,7 @@ export function createProvincePanel(documentRef, manager, callbacks = {}) {
     {state: panelState, callbacks: panelCallbacks},
     {
       initial: "省份管理将在首次打开时加载。",
-      loading: "正在加载省份管理...",
+      loading: "正在打开省份管理，请稍候片刻。",
       failure: "省份管理加载失败，请检查开发模式日志。"
     }
   );

@@ -143,7 +143,7 @@ export function createClimatePanel(documentRef, manager, callbacks = {}) {
     {state: panelState, callbacks: panelCallbacks},
     {
       initial: "气候统计将在首次打开时加载。",
-      loading: "正在加载气候统计...",
+      loading: "正在打开气候统计，请稍候片刻。",
       failure: "气候统计加载失败，请检查开发模式日志。"
     }
   );

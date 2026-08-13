@@ -79,7 +79,7 @@
         </div>
         <UiStateBanner
           :kind="state.editPreview?.valid ? 'preview' : 'error'"
-          title="路线编辑预检"
+          title="路线修改影响"
           :message="routeEditPreviewMessage"
           :action-label="state.editPreview?.valid && state.editPreview?.changed ? '应用路线修改' : ''"
           secondary-action-label="取消"
@@ -189,7 +189,7 @@ const routeEditPreviewMessage = computed(() => {
   if (!preview) return "调整字段或在地图选择一个改线点。";
   if (!preview.valid) return `${preview.code || "invalid"}：${preview.reason || "路线修改无效"}`;
   const waypoint = props.state.editDraft?.viaPackCells?.[0];
-  return `${preview.changed ? "可应用" : "没有变化"}；${formatNumberValue(preview.cells)} cells；${formatRouteLength(preview.distance)}${Number.isInteger(waypoint) ? `；经过 pack cell #${waypoint}` : ""}`;
+  return `${preview.changed ? "可以应用" : "没有变化"}；经过 ${formatNumberValue(preview.cells)} 个区域；${formatRouteLength(preview.distance)}${Number.isInteger(waypoint) ? `；途经位置 #${waypoint}` : ""}`;
 });
 const filterEmptyAction = computed(() => String(props.state.filter || "").trim()
   ? {key: "clear-filter", label: "清空筛选", icon: "⌫"}
@@ -220,7 +220,7 @@ const detailRows = computed(() => selected.value ? [
   {label: "终点", value: selected.value.toName},
   {label: "长度", value: formatRouteLength(selected.value.length)},
   {label: "段数", value: formatNumberValue(selected.value.segments)},
-  {label: "资源 cells", value: formatNumberValue(selected.value.resourceCells)},
+  {label: "资源区域", value: formatNumberValue(selected.value.resourceCells)},
   {label: "资源种类", value: selected.value.resourceGoodNames || "无"},
   {label: "grid cells", value: formatNumberValue(selected.value.cellCount), debug: true},
   {label: "pack cells", value: formatNumberValue(selected.value.packCellCount), debug: true},

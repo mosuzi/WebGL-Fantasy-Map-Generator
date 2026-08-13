@@ -103,7 +103,7 @@
     <template #expansion>
       <div class="social-expansion-editor" aria-label="宗教中心与扩张编辑">
         <ElForm label-position="top" size="small">
-          <ElFormItem label="中心 pack cell">
+          <ElFormItem label="分布中心">
             <ElInputNumber v-model="expansionDraft.center" :min="0" :step="1" controls-position="right" />
             <ElButton @click="callbacks.onCenterPickActive?.(!state.centerPickActive)">
               {{ state.centerPickActive ? "取消拾取" : "从画布拾取一次" }}
@@ -133,7 +133,7 @@
           show-icon
         />
         <div class="social-expansion-actions">
-          <ElButton @click="inspectExpansion">只读预检</ElButton>
+          <ElButton @click="inspectExpansion">查看影响范围</ElButton>
           <ElButton v-if="expansionDraft.mode === 'save'" type="primary" :disabled="!state.expansionPreview?.valid" @click="applyExpansion(false)">仅保存</ElButton>
           <ElButton v-else type="danger" :disabled="!state.expansionPreview?.valid" @click="applyExpansion(true)">确认并重新扩张</ElButton>
         </div>
@@ -193,7 +193,7 @@ const props = defineProps({
 });
 
 const sortOptions = Object.freeze([
-  {key: "cells", label: "cells"},
+  {key: "cells", label: "区域"},
   {key: "population", label: "人口"},
   {key: "cities", label: "城市"},
   {key: "cultures", label: "文化"},
@@ -209,7 +209,7 @@ const columns = Object.freeze([
   {key: "form", label: "形态"},
   {key: "parentName", label: "父级"},
   {key: "depth", label: "层", align: "right"},
-  {key: "cells", label: "cells", align: "right", format: value => formatNumber(value)},
+  {key: "cells", label: "区域", align: "right", format: value => formatNumber(value)},
   {key: "population", label: "人口", align: "right", format: value => formatPopulationValue(value)}
 ]);
 
@@ -267,16 +267,16 @@ const isFolk = computed(() => selected.value?.type === "Folk");
 const expansionPreviewText = computed(() => {
   const preview = props.state.expansionPreview;
   if (!preview) return "";
-  if (!preview.valid) return preview.reason || "预检失败";
+  if (!preview.valid) return preview.reason || "无法计算影响范围";
   return preview.mode === "reexpand"
-    ? `预计更新 ${formatNumber(preview.changedPackCells || 0)} 个 pack cells`
+    ? `预计更新 ${formatNumber(preview.changedPackCells || 0)} 个区域`
     : `仅保存中心与 ${formatNumber(preview.parameterChanges?.length || 0)} 个参数，不改变覆盖`;
 });
 
 const summaryMetrics = computed(() => [
   {label: "宗教", value: formatNumber(metrics.value.total)},
   {label: "根系", value: formatNumber(metrics.value.roots)},
-  {label: "派生", value: formatNumber(metrics.value.derived)},
+  {label: "分支宗教", value: formatNumber(metrics.value.derived)},
   {label: "层级", value: formatNumber(metrics.value.maxDepth)},
   {label: "人口", value: formatPopulationValue(metrics.value.population)},
   {label: "城市", value: formatNumber(metrics.value.cities)},
@@ -297,7 +297,7 @@ const detailRows = computed(() => selected.value ? [
   {label: "所属文化", value: selected.value.cultureName},
   {label: "中心 pack cell", value: selected.value.centerCell, debug: true},
   {label: "中心 grid cell", value: selected.value.gridCenterCell, debug: true},
-  {label: "覆盖 cells", value: formatNumber(selected.value.cells)},
+  {label: "覆盖区域", value: formatNumber(selected.value.cells)},
   {label: "面积", value: formatAreaValue(selected.value.area)},
   {label: "乡村人口", value: formatPopulationValue(selected.value.rural)},
   {label: "城市人口", value: formatPopulationValue(selected.value.urban)},

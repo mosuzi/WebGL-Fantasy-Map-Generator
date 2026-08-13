@@ -44,7 +44,7 @@
   <UiDetailGrid class-name="city-panel-details" empty-text="未选中城市" :rows="detailRows" />
 
   <section v-if="state.moveMode || state.movePreview" class="city-move-preview" :data-valid="state.movePreview?.valid === true">
-    <strong>{{ state.moveMode ? "连续拖动城市到目标 cell" : "最近一次移动预检" }}</strong>
+    <strong>{{ state.moveMode ? "连续拖动城市到目标位置" : "最近一次移动影响" }}</strong>
     <span>{{ state.movePreview?.summary || "请从地图上所选城市的橙色圆环内按下并拖动；提交后可继续拖动，点击别处或手动退出结束。" }}</span>
     <span v-if="state.movePreview?.owners">归属：国家 #{{ state.movePreview.owners.before.state }} → #{{ state.movePreview.owners.after.state }}；省份 #{{ state.movePreview.owners.before.province }} → #{{ state.movePreview.owners.after.province }}</span>
     <span v-if="state.movePreview?.port">港口：{{ state.movePreview.port.status }}；关联路线重寻 {{ state.movePreview.routes.rerouted }} / 删除 {{ state.movePreview.routes.deleted }}</span>
@@ -77,7 +77,7 @@
     <template #owner>
       <div class="city-owner-sync">
         <span>归属操作</span>
-        <UiButton variant="secondary" :disabled="!selected.canSyncOwner" @click="callbacks.onSyncOwnerToCell(selected.id)">同步归属到所在 cell</UiButton>
+        <UiButton variant="secondary" :disabled="!selected.canSyncOwner" @click="callbacks.onSyncOwnerToCell(selected.id)">按所在区域更新归属</UiButton>
       </div>
     </template>
 
@@ -201,7 +201,7 @@ const silhouetteOptions = computed(() => {
   return options;
 });
 const cityActions = computed(() => [
-  {key: "add", resultClass: "toggle-canvas-mode", label: props.state.addMode ? "取消新增城市" : "新增城市：下一次点击地图 cell", icon: "+", panel: false, active: props.state.addMode, disabled: props.state.deleteMode || props.state.moveMode},
+  {key: "add", resultClass: "toggle-canvas-mode", label: props.state.addMode ? "取消新增城市" : "新增城市：下一次点击地图位置", icon: "+", panel: false, active: props.state.addMode, disabled: props.state.deleteMode || props.state.moveMode},
   {key: "delete", resultClass: "toggle-canvas-mode", label: props.state.deleteMode ? "取消删除城市" : "删除城市：下一次点击地图城市", icon: "×", panel: false, active: props.state.deleteMode, disabled: props.state.addMode || props.state.moveMode},
   {key: "move", resultClass: "toggle-canvas-mode", label: props.state.moveMode ? "退出移动城市" : "移动城市：在地图上拖动所选城市", icon: "↗", panel: false, active: props.state.moveMode, disabled: props.state.addMode || props.state.deleteMode || !selected.value},
   {key: "rename", resultClass: "open-secondary", label: "重命名", icon: "✎", disabled: modalActionActive.value || !selected.value},
@@ -232,7 +232,7 @@ const detailRows = computed(() => selected.value ? [
   {label: "类型", value: selected.value.type},
   {label: "人口", value: formatPopulationValue(selected.value.population)},
   {label: "标记", value: selected.value.flags},
-  {label: "资源 cells", value: formatNumberValue(selected.value.resourceCells)},
+  {label: "资源区域", value: formatNumberValue(selected.value.resourceCells)},
   {label: "资源种类", value: selected.value.resourceGoodNames || "无"},
   {label: "所属国家", value: selected.value.stateName},
   {label: "所属省份", value: selected.value.provinceName},

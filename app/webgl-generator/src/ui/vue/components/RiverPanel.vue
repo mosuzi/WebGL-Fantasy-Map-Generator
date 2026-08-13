@@ -12,7 +12,7 @@
     </div>
     <ol class="river-waypoint-steps">
       <li>单击河流非控制点处新增；拖动已有点调整河道</li>
-      <li>双击已有控制点删除；同一 cell 可放置多个点</li>
+      <li>双击已有控制点可删除；同一地图位置可放置多个点</li>
     </ol>
     <p v-if="waypointErrorMessage" class="river-waypoint-error">{{ waypointErrorMessage }}</p>
     <p v-if="controlPreview">当前控制点 {{ formatNumber(controlPreview.controlPoints?.length || 0) }} 个；全部操作仍未保存。</p>
@@ -224,7 +224,7 @@ const detailRows = computed(() => selected.value ? [
   {label: "汇入干流", value: selected.value.parentLabel},
   {label: "流域主河", value: selected.value.basinLabel},
   {label: "河网状态", value: selected.value.networkStatusLabel},
-  {label: "汇流 cell", value: selected.value.confluence >= 0 ? `#${selected.value.confluence}` : "—"},
+  {label: "汇流位置", value: selected.value.confluence >= 0 ? `#${selected.value.confluence}` : "—"},
   {label: "长度", value: formatLength(selected.value.length)},
   {label: "流量", value: formatRiverFlow(selected.value.flux)},
   {label: "汇水面积", value: formatHydrologyArea(selected.value.hydrology)},
@@ -297,7 +297,7 @@ function filterRows(sourceRows, filter) {
 function formatNetworkStatus(status, issue = "") {
   if (status === "orphaned") {
     return {
-      "disconnected-path": "河道 cell 不连续",
+      "disconnected-path": "河道路径不连续",
       "invalid-water-outlet": "水体出口无效",
       "invalid-border-outlet": "出界位置无效",
       "invalid-downstream-basin": "下游根河无有效出口",

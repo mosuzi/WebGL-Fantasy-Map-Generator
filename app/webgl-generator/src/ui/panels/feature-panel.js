@@ -134,7 +134,7 @@ export function createFeaturePanel(documentRef, manager, callbacks = {}) {
     {state: panelState, callbacks: panelCallbacks},
     {
       initial: "水体与地貌统计将在首次打开时加载。",
-      loading: "正在加载水体与地貌统计...",
+      loading: "正在打开水体与地貌统计，请稍候片刻。",
       failure: "水体与地貌统计加载失败，请检查开发模式日志。"
     }
   );

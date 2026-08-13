@@ -15,7 +15,7 @@
 
   <div v-if="state.importPreview" class="notes-import-preview namebase-import-preview is-previewing" data-ui-state="preview">
     <div class="namebase-import-preview-header">
-      <strong>备注导入预检</strong>
+      <strong>备注导入影响</strong>
       <span>{{ state.importPreview.filename }}</span>
     </div>
     <UiMetricGrid :metrics="importPreviewMetrics" class-name="namebase-import-preview-metrics" />

@@ -305,7 +305,7 @@ function formatRiverNetworkStatus(object) {
 
 function riverNetworkIssueLabel(issue) {
   return {
-    "disconnected-path": "河道 cell 不连续",
+    "disconnected-path": "河道路径不连续",
     "invalid-water-outlet": "水体出口无效",
     "invalid-border-outlet": "出界位置无效",
     "invalid-downstream-basin": "下游根河无有效出口",

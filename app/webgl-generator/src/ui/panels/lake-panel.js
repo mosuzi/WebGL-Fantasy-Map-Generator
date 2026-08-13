@@ -135,7 +135,7 @@ export function createLakePanel(documentRef, manager, callbacks = {}) {
     {state: panelState, callbacks: panelCallbacks},
     {
       initial: "湖泊管理将在首次打开时加载。",
-      loading: "正在加载湖泊管理...",
+      loading: "正在打开湖泊管理，请稍候片刻。",
       failure: "湖泊管理加载失败，请检查开发模式日志。"
     }
   );

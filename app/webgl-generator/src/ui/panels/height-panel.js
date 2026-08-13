@@ -148,7 +148,7 @@ export function createHeightPanel(documentRef, manager, callbacks = {}) {
     {state: panelState, callbacks: panelCallbacks},
     {
       initial: "高度编辑将在首次打开时加载。",
-      loading: "正在加载高度编辑...",
+      loading: "正在打开高度编辑，请稍候片刻。",
       failure: "高度编辑加载失败，请检查开发模式日志。"
     }
   );

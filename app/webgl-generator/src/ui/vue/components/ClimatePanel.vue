@@ -120,7 +120,7 @@ const TEMPERATURE_BANDS = Object.freeze([
 ]);
 
 const sortOptions = Object.freeze([
-  {key: "cells", label: "cells"},
+  {key: "cells", label: "区域"},
   {key: "landCells", label: "陆地"},
   {key: "avgTemp", label: "均温"},
   {key: "avgPrec", label: "降水"},
@@ -131,7 +131,7 @@ const sortOptions = Object.freeze([
 
 const columns = Object.freeze([
   {key: "name", label: "温度带"},
-  {key: "cells", label: "cells", align: "right", format: value => formatNumber(value)},
+  {key: "cells", label: "区域", align: "right", format: value => formatNumber(value)},
   {key: "landCells", label: "陆地", align: "right", format: value => formatNumber(value)},
   {key: "avgTemp", label: "均温", align: "right", format: value => formatTemperature(value)},
   {key: "avgPrec", label: "降水", align: "right", format: value => formatPrecipitationValue(value)},
@@ -209,9 +209,9 @@ const summaryMetrics = computed(() => [
 const detailRows = computed(() => selected.value ? [
   {label: "温度带", value: selected.value.name},
   {label: "温度范围", value: selected.value.rangeLabel},
-  {label: "cells", value: formatNumber(selected.value.cells)},
-  {label: "陆地 cells", value: formatNumber(selected.value.landCells)},
-  {label: "水域 cells", value: formatNumber(selected.value.waterCells)},
+  {label: "覆盖区域", value: formatNumber(selected.value.cells)},
+  {label: "陆地区域", value: formatNumber(selected.value.landCells)},
+  {label: "水域区域", value: formatNumber(selected.value.waterCells)},
   {label: "平均温度", value: formatTemperature(selected.value.avgTemp)},
   {label: "平均降水", value: formatPrecipitationValue(selected.value.avgPrec)},
   {label: "干旱陆地", value: formatNumber(selected.value.dryCells)},

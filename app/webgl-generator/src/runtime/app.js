@@ -3016,7 +3016,7 @@ function createRuntimeActions(state, documentRef, options = {}) {
     return operation.run(
       name,
       context => applyRuntimeDisplayMutationViaWorker(state, documentRef, context, {apply, rollback}),
-      {message: "正在更新地图显示"}
+      {message: "正在整理地图画面"}
     );
   };
   const runMapReplace = (name, task, message, overrides = {}) => {
@@ -3066,7 +3066,7 @@ function createRuntimeActions(state, documentRef, options = {}) {
     },
     grid: {
       inspectWrite: document => inspectGridStructureWrite(state.map, state.mapRevision, document),
-      applyWrite: (document, gridOptions = {}) => operation.run("grid.applyWrite", context => applyGridTopologyViaApi(state, documentRef, {document, options: gridOptions, context}), {message: "正在写入受控网格结构"}),
+      applyWrite: (document, gridOptions = {}) => operation.run("grid.applyWrite", context => applyGridTopologyViaApi(state, documentRef, {document, options: gridOptions, context}), {message: "正在更新地图网格"}),
       inspectRefinement: (gridOptions = {}) => inspectGridRefinement(state.map, state.mapRevision, gridOptions),
       refine: (gridOptions = {}) => operation.run("grid.refine", context => applyGridTopologyViaApi(state, documentRef, {options: gridOptions, context}), {message: "正在细分现有地图网格"})
     },
@@ -3109,7 +3109,7 @@ function createRuntimeActions(state, documentRef, options = {}) {
           clearOwnedGenerationLoading(documentRef, loadingOwner);
         }
       }, {
-        message: "正在重新生成派生数据",
+        message: "正在更新相关地图内容",
         loading: false,
         measureHealthOperation: false,
         isNoop: result => !result?.executed
@@ -3210,7 +3210,7 @@ function createRuntimeActions(state, documentRef, options = {}) {
         "climate.applyDownstreamRebuild",
         context => applyClimateDownstreamRebuildViaApi(state, documentRef, options, context),
         {
-          message: "正在重算气候下游内容",
+          message: "正在更新受气候影响的地图内容",
           isNoop: result => !result?.executed
         }
       )
@@ -3220,7 +3220,7 @@ function createRuntimeActions(state, documentRef, options = {}) {
       regenerate: (currentOptions = {}) => regenerateOceanCurrentsViaApi(state, documentRef, currentOptions),
       inspectWorldRebuild: (options = {}) => inspectOceanCurrentWorldRebuild(state.map, options),
       rebuildWorld: (options = {}) => operation.run("oceanCurrents.rebuildWorld", context => applyOceanCurrentWorldRebuildViaAction(state, documentRef, options, context), {
-        message: "正在重算洋流与世界"
+        message: "正在更新洋流及其影响的地图内容"
       }),
       cancelWorldRebuild: () => operation.cancelCurrent("用户取消洋流世界重算")
     },
@@ -3311,12 +3311,12 @@ function createRuntimeActions(state, documentRef, options = {}) {
         inspectMove: (cityId, target) => operation.run(
           "edit.cities.inspectMove",
           context => inspectRoutePathViaWorker(state, documentRef, {kind: "city-relocation", cityId: normalizeApiInteger(cityId, "城市 ID"), target}, context),
-          {message: "正在规划城市移动路径"}
+          {message: "正在查看城市移动影响"}
         ),
         move: (cityId, target) => operation.run(
           "edit.cities.move",
           context => moveCityViaApi(state, documentRef, cityId, target, context),
-          {message: "正在规划并移动城市"}
+          {message: "正在移动城市并更新关联路线"}
         ),
         rename: (cityId, name) => renameCityViaApi(state, documentRef, cityId, name),
         setPopulation: (cityId, population) => setCityPopulationViaApi(state, documentRef, cityId, population),
@@ -3385,22 +3385,22 @@ function createRuntimeActions(state, documentRef, options = {}) {
         applySeafloorReset: (editOptions = {}) => operation.run(
           "edit.height.applySeafloorReset",
           context => applySeafloorResetViaAction(state, documentRef, editOptions, context),
-          {message: "正在重设海底并重算世界", isNoop: result => !result?.executed}
+          {message: "正在重设海底并更新相关地图内容", isNoop: result => !result?.executed}
         ),
         rebuildBaseDerived: (editOptions = {}) => operation.run(
           "edit.height.rebuildBaseDerived",
           context => rebuildHeightDerivedViaAction(state, documentRef, "base", editOptions, context),
-          {message: "正在重建高度基础派生", isNoop: result => !result?.executed}
+          {message: "正在更新地貌基础内容", isNoop: result => !result?.executed}
         ),
         rebuildDownstreamDerived: (editOptions = {}) => operation.run(
           "edit.height.rebuildDownstreamDerived",
           context => rebuildHeightDerivedViaAction(state, documentRef, "downstream", editOptions, context),
-          {message: "正在重建高度下游派生", isNoop: result => !result?.executed}
+          {message: "正在更新受高度影响的地图内容", isNoop: result => !result?.executed}
         ),
         rebuildAllDerived: (editOptions = {}) => operation.run(
           "edit.height.rebuildAllDerived",
           context => rebuildHeightDerivedViaAction(state, documentRef, "all", editOptions, context),
-          {message: "正在重建全部高度派生", isNoop: result => !result?.executed}
+          {message: "正在更新全部高度相关内容", isNoop: result => !result?.executed}
         )
       },
       biomes: {
@@ -3428,12 +3428,12 @@ function createRuntimeActions(state, documentRef, options = {}) {
         assignCells: (marketId, packCellIds, editOptions = {}) => operation.run(
           "edit.economy.assignCells",
           context => assignMarketCellsViaApi(state, documentRef, marketId, packCellIds, editOptions, context),
-          {message: "正在应用市场归属并重算经济链"}
+          {message: "正在更新市场与贸易"}
         ),
         rebuild: (editOptions = {}) => operation.run(
           "edit.economy.rebuild",
           context => rebuildEconomyViaApi(state, documentRef, editOptions, context),
-          {message: "正在重算经济链"}
+          {message: "正在更新市场与贸易"}
         ),
         setGoodDisplay: (goodId, patch) => setGoodDisplayViaApi(state, documentRef, goodId, patch),
         setMarketDisplay: (marketId, patch) => setMarketDisplayViaApi(state, documentRef, marketId, patch)
@@ -3453,7 +3453,7 @@ function createRuntimeActions(state, documentRef, options = {}) {
         setRatios: (stateId, ratios, options = {}) => operation.run(
           "edit.military.setRatios",
           context => setMilitaryRatiosViaApi(state, documentRef, stateId, ratios, options, context),
-          {message: "正在调整兵种比例并重建军事部署"}
+          {message: "正在调整兵种并更新部署"}
         ),
         inspectStatus: (targets, status) => inspectMilitaryStatusViaApi(state, targets, status),
         setStatus: (target, status, options = {}) => setMilitaryStatusViaApi(state, documentRef, target, status, options),
@@ -3487,7 +3487,7 @@ function createRuntimeActions(state, documentRef, options = {}) {
         applyExpansion: (cultureId, options = {}) => operation.run(
           "edit.cultures.applyExpansion",
           context => applySocialExpansionViaApi(state, documentRef, "culture", cultureId, options, {}, context),
-          {message: options?.mode === "reexpand" ? "正在重新扩张文化" : "正在保存文化中心与扩张参数"}
+          {message: options?.mode === "reexpand" ? "正在重新划分文化分布" : "正在保存文化中心与分布设置"}
         ),
         delete: (cultureId, options = {}) => deleteCultureViaApi(state, documentRef, cultureId, options),
         rename: (cultureId, name) => renameCultureViaApi(state, documentRef, cultureId, name),
@@ -3502,7 +3502,7 @@ function createRuntimeActions(state, documentRef, options = {}) {
         applyExpansion: (religionId, options = {}) => operation.run(
           "edit.religions.applyExpansion",
           context => applySocialExpansionViaApi(state, documentRef, "religion", religionId, options, {}, context),
-          {message: options?.mode === "reexpand" ? "正在重新扩张宗教" : "正在保存宗教中心与扩张参数"}
+          {message: options?.mode === "reexpand" ? "正在重新划分宗教分布" : "正在保存宗教中心与分布设置"}
         ),
         delete: (religionId, options = {}) => deleteReligionViaApi(state, documentRef, religionId, options),
         rename: (religionId, name) => renameReligionViaApi(state, documentRef, religionId, name),
@@ -3513,17 +3513,17 @@ function createRuntimeActions(state, documentRef, options = {}) {
         create: options => operation.run(
           "edit.routes.create",
           context => createRouteViaApi(state, documentRef, options, context),
-          {message: "正在规划并绘制路线"}
+          {message: "正在绘制新路线"}
         ),
         inspectEdit: (routeId, patch = {}) => operation.run(
           "edit.routes.inspectEdit",
           context => inspectRouteEditViaApi(state, documentRef, routeId, patch, context),
-          {message: "正在规划路线预览"}
+          {message: "正在查看路线走向"}
         ),
         update: (routeId, patch = {}) => operation.run(
           "edit.routes.update",
           context => updateRouteViaApi(state, documentRef, routeId, patch, context),
-          {message: "正在规划路线改线"}
+          {message: "正在调整路线走向"}
         ),
         inspectDelete: routeId => inspectExistingRuleViaApi(state, EXISTING_RULE_ACTION.ROUTE_DELETE, {id: normalizeApiInteger(routeId, "路线 ID")}),
         delete: (routeId, options = {}) => deleteRouteViaApi(state, documentRef, routeId, options),
@@ -3626,7 +3626,7 @@ async function applyRuntimeDisplayMutationViaWorker(state, documentRef, operatio
       && validateRegenerationWorkerBinding(state, binding)
       && createWorkerRegenerationRenderContextToken(state, "display") === token
       && isWorkerRegenerationDeferredReplaySequenceCurrent(renderer, snapshot);
-    operation?.report?.("render-prepare", {message: "正在准备地图显示"});
+    operation?.report?.("render-prepare", {message: "正在整理地图画面"});
     await yieldToBrowser(documentRef);
     operation?.throwIfCancelled?.();
     if (!isCurrent()) throw runtimeDisplayObsoleteError();
@@ -3643,7 +3643,7 @@ async function applyRuntimeDisplayMutationViaWorker(state, documentRef, operatio
       streamBudgetMs: 6,
       streamSliceBytes: 256 * 1024,
       streamYieldToMain: () => yieldToBrowser(documentRef),
-      onProgress: () => operation?.report?.("render-prepare", {message: "正在准备地图显示"})
+      onProgress: () => operation?.report?.("render-prepare", {message: "正在整理地图画面"})
     });
     if (prepared.worker?.mode !== "worker" || !prepared.worker?.session?.id || prepared.worker.session.pending !== true) {
       const error = new Error("地图显示准备未建立有效会话");
@@ -4578,7 +4578,7 @@ async function loadMapIntoRuntime(state, documentRef, map, {
   isCurrent = () => true
 } = {}) {
   emitLoadTrace(documentRef, {phase: "start", id: "load-map", message: "接入地图运行时", delayMs: readDebugLoadDelayMs(documentRef)});
-  operation?.report("prepare-map", {message: "正在接入地图运行时"});
+  operation?.report("prepare-map", {message: "正在打开新地图"});
   let preparedInstall = null;
   try {
   if (preparedRender) {
@@ -17825,7 +17825,7 @@ async function applyPendingMarketAssignment(state, documentRef) {
         operationContext,
         userLabel: "市场归属"
       }),
-      {message: "正在应用市场归属并重算经济链"}
+      {message: "正在更新市场与贸易"}
     );
     if (!response.executed) {
       applyMarketAssignmentPreview(state.map, changes);

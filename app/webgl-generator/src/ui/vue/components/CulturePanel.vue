@@ -109,7 +109,7 @@
     <template #expansion>
       <div class="social-expansion-editor" aria-label="文化中心与扩张编辑">
         <ElForm label-position="top" size="small">
-          <ElFormItem label="中心 pack cell">
+          <ElFormItem label="分布中心">
             <ElInputNumber v-model="expansionDraft.center" :min="0" :step="1" controls-position="right" />
             <ElButton @click="callbacks.onCenterPickActive?.(!state.centerPickActive)">
               {{ state.centerPickActive ? "取消拾取" : "从画布拾取一次" }}
@@ -129,7 +129,7 @@
               <ElRadioButton value="reexpand">重新扩张</ElRadioButton>
             </ElRadioGroup>
           </ElFormItem>
-          <ElCheckbox v-model="expansionDraft.includeReligions" :disabled="expansionDraft.mode !== 'reexpand'">同事务联动宗教（默认关闭）</ElCheckbox>
+          <ElCheckbox v-model="expansionDraft.includeReligions" :disabled="expansionDraft.mode !== 'reexpand'">同时更新宗教分布（默认关闭）</ElCheckbox>
         </ElForm>
         <ElAlert
           v-if="state.expansionPreview"
@@ -139,7 +139,7 @@
           show-icon
         />
         <div class="social-expansion-actions">
-          <ElButton @click="inspectExpansion">只读预检</ElButton>
+          <ElButton @click="inspectExpansion">查看影响范围</ElButton>
           <ElButton v-if="expansionDraft.mode === 'save'" type="primary" :disabled="!state.expansionPreview?.valid" @click="applyExpansion(false)">仅保存</ElButton>
           <ElButton v-else type="danger" :disabled="!state.expansionPreview?.valid" @click="applyExpansion(true)">确认并重新扩张</ElButton>
         </div>
@@ -199,7 +199,7 @@ const props = defineProps({
 });
 
 const sortOptions = Object.freeze([
-  {key: "cells", label: "cells"},
+  {key: "cells", label: "区域"},
   {key: "population", label: "人口"},
   {key: "cities", label: "城市"},
   {key: "states", label: "国家"},
@@ -213,7 +213,7 @@ const columns = Object.freeze([
   {key: "typeLabel", label: "类型"},
   {key: "parentName", label: "父级"},
   {key: "depth", label: "层", align: "right"},
-  {key: "cells", label: "cells", align: "right", format: value => formatNumber(value)},
+  {key: "cells", label: "区域", align: "right", format: value => formatNumber(value)},
   {key: "population", label: "人口", align: "right", format: value => formatPopulationValue(value)},
   {key: "cities", label: "城市", align: "right", format: value => formatNumber(value)}
 ]);
@@ -258,9 +258,9 @@ const expansionDraft = ref({center: 0, type: "Generic", expansionism: 1, mode: "
 const expansionPreviewText = computed(() => {
   const preview = props.state.expansionPreview;
   if (!preview) return "";
-  if (!preview.valid) return preview.reason || "预检失败";
+  if (!preview.valid) return preview.reason || "无法计算影响范围";
   return preview.mode === "reexpand"
-    ? `预计更新 ${formatNumber(preview.changedPackCells || 0)} 个 pack cells${preview.includeReligions ? `，联动宗教 ${formatNumber(preview.linkedReligionPackCells || 0)} 个` : ""}`
+    ? `预计更新 ${formatNumber(preview.changedPackCells || 0)} 个区域${preview.includeReligions ? `，并更新 ${formatNumber(preview.linkedReligionPackCells || 0)} 个宗教区域` : ""}`
     : `仅保存中心与 ${formatNumber(preview.parameterChanges?.length || 0)} 个参数，不改变覆盖`;
 });
 const defaultCultureEmptyAction = Object.freeze({key: "add", label: "新增空文化", icon: "+"});
@@ -281,7 +281,7 @@ const cultureListActions = computed(() => [
 const summaryMetrics = computed(() => [
   {label: "文化", value: formatNumber(metrics.value.total)},
   {label: "根系", value: formatNumber(metrics.value.roots)},
-  {label: "派生", value: formatNumber(metrics.value.derived)},
+  {label: "分支文化", value: formatNumber(metrics.value.derived)},
   {label: "层级", value: formatNumber(metrics.value.maxDepth)},
   {label: "人口", value: formatPopulationValue(metrics.value.population)},
   {label: "城市", value: formatNumber(metrics.value.cities)},
@@ -300,7 +300,7 @@ const detailRows = computed(() => selected.value ? [
   {label: "扩张", value: formatNumber(selected.value.expansionism)},
   {label: "中心 pack cell", value: selected.value.centerCell, debug: true},
   {label: "中心 grid cell", value: selected.value.gridCenterCell, debug: true},
-  {label: "覆盖 cells", value: formatNumber(selected.value.cells)},
+  {label: "覆盖区域", value: formatNumber(selected.value.cells)},
   {label: "面积", value: formatAreaValue(selected.value.area)},
   {label: "乡村人口", value: formatPopulationValue(selected.value.rural)},
   {label: "城市人口", value: formatPopulationValue(selected.value.urban)},

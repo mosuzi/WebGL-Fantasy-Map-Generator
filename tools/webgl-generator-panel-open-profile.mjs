@@ -23,8 +23,13 @@ const markdownPath = resolve(args.markdown || join(rootDir, "docs", "generated",
 const viewport = parseViewport(args.viewport || "1280x820");
 const maxOpenMs = Number(args["max-open-ms"] || 900);
 const maxHealthEvents = Number(args["max-health-events"] || 0);
+const errorHealthOnly = Boolean(args["error-health-only"]);
 
 const defaultPanels = [
+  ["open-height-panel", "height-panel", "高度编辑"],
+  ["open-climate-panel", "climate-panel", "气候统计"],
+  ["open-biome-panel", "biome-panel", "生物群系"],
+  ["open-feature-panel", "feature-panel", "水体与地貌"],
   ["open-state-panel", "state-panel", "国家编辑"],
   ["open-province-panel", "province-panel", "省份管理"],
   ["open-city-panel", "city-panel", "城市管理"],
@@ -36,13 +41,19 @@ const defaultPanels = [
   ["open-military-panel", "military-panel", "军事管理"],
   ["open-route-panel", "route-panel", "路线管理"],
   ["open-river-panel", "river-panel", "河流管理"],
+  ["open-ocean-current-panel", "ocean-current-panel", "洋流管理"],
   ["open-lake-panel", "lake-panel", "湖泊管理"],
+  ["open-population-panel", "population-panel", "人口统计"],
+  ["open-zone-panel", "zone-panel", "地区管理"],
   ["open-marker-panel", "marker-panel", "资源点与通用标记"],
   ["open-label-naming-panel", "label-naming-panel", "标签管理"],
   ["open-notes-panel", "notes-panel", "备注总览"],
   ["open-measurement-panel", "measurement-panel", "测量对象"],
-  ["open-namebase-panel", "namebase-panel", "名称库"]
-].map(([buttonId, panelId, label]) => ({buttonId, panelId, label}));
+  ["open-namebase-panel", "namebase-panel", "名称库"],
+  ["", "emblem-panel", "纹章统计", "emblem"],
+  ["", "cloud-storage-panel", "云端存储", "cloudStorage"],
+  ["", "object-details", "对象详情", "objectDetails"]
+].map(([buttonId, panelId, label, openVia = ""]) => ({buttonId, panelId, label, openVia}));
 const panelFilter = parsePanelFilter(args.panels);
 const panels = panelFilter.length ? defaultPanels.filter(panel => panelFilter.includes(panel.panelId) || panelFilter.includes(panel.buttonId)) : defaultPanels;
 
@@ -91,18 +102,36 @@ try {
   const baseUrl = `http://${host}:${port}`;
   await page.goto(baseUrl, {waitUntil: "domcontentloaded", timeout: timeoutMs});
   await page.waitForFunction(() => window.__webglGeneratorApp?.renderer?.getStats?.()?.webgl2, null, {timeout: timeoutMs});
-  await page.waitForFunction(() => window.__webglGeneratorApp?.map?.metadata?.generationTiming?.totalMs, null, {timeout: timeoutMs});
+  await page.waitForFunction(() => {
+    const app = window.__webglGeneratorApp;
+    return app?.map?.metadata?.generationTiming?.totalMs
+      && !app.runtimeOperation?.getSnapshot?.().current
+      && document.getElementById("generation-loading")?.hidden === true
+      && document.getElementById("operation-loading")?.hidden === true;
+  }, null, {timeout: timeoutMs});
   const generation = await generateCase(page, {cells, seed, template, graphWidth, graphHeight});
   const lazyPreload = await waitForLazyPreload(page);
   await openManagementTab(page);
 
-  const panelReports = [];
+  const panelReports = [await page.evaluate(() => {
+    const root = document.querySelector(".vue-control-panel-root");
+    const leaks = visibleTechnicalTerms(root);
+    return {buttonId: "", panelId: "control-panel", label: "控制面板", openVia: "mounted", elapsedMs: 0, openMs: 0, selectMs: 0, actionMs: 0,
+      panelWidth: Math.round(root?.getBoundingClientRect().width || 0), panelHeight: Math.round(root?.getBoundingClientRect().height || 0), rowCount: 0, actionCount: 0,
+      secondaryPanels: 0, healthEvents: [], longTasks: [], longTaskCount: 0, longTaskTotalMs: 0, longTaskMaxMs: 0, technicalLeaks: leaks};
+    function visibleTechnicalTerms(element) { const text = element?.innerText || ""; return [...new Set(text.match(/\b(?:cell|grid|pack|feature|worker|buffer|revision)\b|镜像|补丁|派生|运行时|同事务/giu) || [])]; }
+  })];
   for (const panel of panels) panelReports.push(await profilePanelOpen(page, panel));
   const failures = [];
   for (const item of panelReports) {
     if (item.elapsedMs > maxOpenMs) failures.push(`${item.label} 打开耗时 ${item.elapsedMs}ms 超过 ${maxOpenMs}ms`);
-    if (item.healthEvents.length > maxHealthEvents) failures.push(`${item.label} health 事件 ${item.healthEvents.length} 个超过 ${maxHealthEvents} 个`);
+    const blockingHealthCount = errorHealthOnly ? item.healthEvents.filter(event => event.severity === "error").length : item.healthEvents.length;
+    if (blockingHealthCount > maxHealthEvents) failures.push(`${item.label} health 事件 ${blockingHealthCount} 个超过 ${maxHealthEvents} 个`);
+    if (item.technicalLeaks?.length) failures.push(`${item.label} 普通文案泄露技术词：${item.technicalLeaks.join("、")}`);
   }
+  if (panelReports.length !== 28) failures.push(`面板覆盖 ${panelReports.length}/28`);
+  const pageOverflowX = await page.evaluate(() => Math.max(0, document.documentElement.scrollWidth - innerWidth));
+  if (pageOverflowX > 1) failures.push(`页面横向溢出 ${pageOverflowX}px`);
   for (const error of consoleErrors) failures.push(`console error: ${error}`);
 
   const report = {
@@ -119,6 +148,8 @@ try {
       browserChannel,
       maxOpenMs,
       maxHealthEvents,
+      errorHealthOnly,
+      pageOverflowX,
       consoleErrors
     },
     generation,
@@ -142,19 +173,13 @@ try {
 }
 
 async function generateCase(page, {cells, seed, template, graphWidth, graphHeight}) {
-  await page.waitForSelector("#cells-input", {state: "attached", timeout: timeoutMs});
-  const startedAt = await page.evaluate(({cells, seed, template, graphWidth, graphHeight}) => {
+  const generation = await page.evaluate(async ({cells, seed, template, graphWidth, graphHeight}) => {
     window.__panelOpenProfilePreviousMap = window.__webglGeneratorApp?.map || null;
-    document.getElementById("auto-random-seed").checked = false;
-    document.getElementById("seed-input").value = seed;
-    document.getElementById("cells-input").value = String(cells);
-    document.getElementById("width-input").value = String(graphWidth);
-    document.getElementById("height-input").value = String(graphHeight);
-    document.getElementById("heightmap-template").value = template;
     const started = performance.now();
-    document.getElementById("generate-map").click();
-    return started;
+    const response = await window.webglGeneratorApi.generate.newMap({confirm: true, seed, cellsTarget: cells, heightmapTemplate: template, graphWidth, graphHeight});
+    return {started, ok: response?.ok === true, error: response?.error || null};
   }, {cells, seed, template, graphWidth, graphHeight});
+  if (!generation.ok) fail(`生成固定面板地图失败：${JSON.stringify(generation.error)}`);
 
   await page.waitForFunction(
     expected => {
@@ -184,7 +209,7 @@ async function generateCase(page, {cells, seed, template, graphWidth, graphHeigh
       gridCells: app.map.metadata.gridCells,
       packCells: app.map.metadata.packCells
     };
-  }, startedAt);
+  }, generation.started);
 }
 
 async function waitForLazyPreload(page) {
@@ -213,11 +238,19 @@ async function profilePanelOpen(page, panel) {
   const result = await page.evaluate(async panel => {
     const roundMs = value => Math.round(value * 10) / 10;
     const startedAt = performance.now();
-    document.getElementById(panel.buttonId)?.click();
+    const app = window.__webglGeneratorApp;
+    if (panel.openVia === "emblem") app.panels.emblem.open(app.map, app.editHistory.getStats());
+    else if (panel.openVia === "cloudStorage") app.panels.cloudStorage.open({mode: "save"});
+    else if (panel.openVia === "objectDetails") {
+      const city = app.map.settlements?.cities?.find(item => item?.id >= 0 && !item.removed);
+      if (!city) throw new Error("对象详情面板缺少可选城市");
+      const response = await window.webglGeneratorApi.selection.select({kind: "city", id: city.id});
+      if (!response?.ok) throw new Error(response?.error?.message || "对象详情面板选择城市失败");
+    } else document.getElementById(panel.buttonId)?.click();
     await waitFor(() => {
       const root = document.querySelector(`.floating-panel[data-panel-id="${panel.panelId}"]:not(.hidden)`);
       const bodyText = root?.querySelector(".floating-panel-body")?.textContent || "";
-      return root && !bodyText.includes("正在加载") && !bodyText.includes("将在首次打开时加载");
+      return root && !root.querySelector("[data-lazy-panel-loading]") && !bodyText.includes("将在首次打开时加载");
     });
     const openedAt = performance.now();
     const root = document.querySelector(`.floating-panel[data-panel-id="${panel.panelId}"]`);
@@ -230,7 +263,9 @@ async function profilePanelOpen(page, panel) {
     const actions = [...(root?.querySelectorAll(".ui-action-dock .ui-icon-action") || [])]
       .filter(button => !button.disabled && button.getBoundingClientRect().width > 0);
     actions[0]?.dispatchEvent(new MouseEvent("click", {bubbles: true, cancelable: true, view: window}));
-    await delay(90);
+    await new Promise(resolve => requestAnimationFrame(resolve));
+    await waitFor(() => !app.runtimeOperation?.getSnapshot?.().current
+      && document.getElementById("operation-loading")?.hidden === true);
     const actionAt = performance.now();
     const secondaryPanels = [...document.querySelectorAll(".ui-secondary-action-panel")]
       .filter(element => element.getBoundingClientRect().width > 0).length;
@@ -246,6 +281,7 @@ async function profilePanelOpen(page, panel) {
       rowCount: rows.length,
       actionCount: actions.length,
       secondaryPanels,
+      technicalLeaks: visibleTechnicalTerms(root),
       healthEvents
     };
 
@@ -270,6 +306,7 @@ async function profilePanelOpen(page, panel) {
     function delay(ms) {
       return new Promise(resolve => setTimeout(resolve, ms));
     }
+    function visibleTechnicalTerms(element) { const text = element?.innerText || ""; return [...new Set(text.match(/\b(?:cell|grid|pack|feature|worker|buffer|revision)\b|镜像|补丁|派生|运行时|同事务/giu) || [])]; }
   }, panel);
   const longTasks = await stopLongTaskRecorder(page);
   await closeOpenPanels(page);

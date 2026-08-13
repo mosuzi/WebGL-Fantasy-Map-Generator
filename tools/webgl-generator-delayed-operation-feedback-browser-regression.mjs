@@ -30,7 +30,13 @@ try {
   page.on("pageerror", error => pageErrors.push(error.message));
   await page.goto(`http://${host}:${port}/?debug=1&feedback=315`, {waitUntil: "domcontentloaded"});
   await waitForApiReady(page, timeoutMs);
-  await page.waitForTimeout(5000);
+  await page.waitForFunction(() => {
+    const app = window.__webglGeneratorApp;
+    return app?.map?.metadata?.generationTiming?.totalMs
+      && !app.runtimeOperation?.getSnapshot?.().current
+      && document.getElementById("generation-loading")?.hidden === true
+      && document.getElementById("operation-loading")?.hidden === true;
+  }, null, {timeout: timeoutMs});
   await page.evaluate(() => {
     window.__webglGeneratorApp?.healthMonitor?.clear?.();
     window.__webglGeneratorHealth?.clear?.();
@@ -132,8 +138,9 @@ try {
   assert.deepEqual(consoleErrors, [], "延迟操作提示产生 console error");
   assert.deepEqual(pageErrors, [], "延迟操作提示产生 page error");
   assert.equal(glError, 0, "延迟操作提示产生 WebGL error");
+  const chunkRecovery = await verifyPanelChunkRecovery(browser, port);
 
-  console.log(JSON.stringify({ok: true, fast, asyncVisible, cancelledCode, failureCode, coexist, narrow, healthErrors, consoleErrors, pageErrors, glError}, null, 2));
+  console.log(JSON.stringify({ok: true, fast, asyncVisible, cancelledCode, failureCode, coexist, narrow, chunkRecovery, healthErrors, consoleErrors, pageErrors, glError}, null, 2));
   await context.close();
 } finally {
   if (browser) await Promise.race([browser.close(), delay(5000)]);
@@ -150,6 +157,38 @@ async function readFeedback(page) {
       text: document.getElementById("operation-loading-text")?.textContent || ""
     };
   });
+}
+
+async function verifyPanelChunkRecovery(browser, port) {
+  const context = await browser.newContext({viewport: {width: 1280, height: 800}, deviceScaleFactor: 1});
+  await context.addInitScript(() => localStorage.clear());
+  const page = await context.newPage();
+  let intercepted = 0;
+  const pattern = "**/StatePanel.vue*";
+  await page.route(pattern, route => {
+    intercepted += 1;
+    return route.abort("failed");
+  });
+  await page.goto(`http://127.0.0.1:${port}/`, {waitUntil: "domcontentloaded"});
+  await waitForApiReady(page, timeoutMs);
+  await page.evaluate(() => document.getElementById("open-state-panel")?.click());
+  const recovery = page.locator('.floating-panel[data-panel-id="state-panel"] .lazy-panel-recovery[data-error-kind="module-fetch"]');
+  await recovery.waitFor({state: "visible"});
+  const text = await recovery.innerText();
+  assert.match(text, /页面版本可能已经更新/);
+  assert.match(text, /先保存尚未保存的地图/);
+  assert.deepEqual(await recovery.locator("button").allTextContents(), ["刷新页面"]);
+  await page.unroute(pattern);
+  await Promise.all([
+    page.waitForNavigation({waitUntil: "domcontentloaded"}),
+    recovery.getByRole("button", {name: "刷新页面"}).click()
+  ]);
+  await waitForApiReady(page, timeoutMs);
+  await page.evaluate(() => document.getElementById("open-state-panel")?.click());
+  await page.locator('.floating-panel[data-panel-id="state-panel"] .state-panel-controls').waitFor({state: "visible"});
+  assert.ok(intercepted >= 1, "没有命中国家面板分包故障注入");
+  await context.close();
+  return {intercepted, recovered: true};
 }
 
 function delay(ms) {

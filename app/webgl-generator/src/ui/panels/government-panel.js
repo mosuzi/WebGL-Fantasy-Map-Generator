@@ -123,7 +123,7 @@ export function createGovernmentPanel(documentRef, manager, callbacks = {}) {
     {state: panelState, callbacks: panelCallbacks},
     {
       initial: "政体管理将在首次打开时加载。",
-      loading: "正在加载政体管理...",
+      loading: "正在打开政体管理，请稍候片刻。",
       failure: "政体管理加载失败，请检查开发模式日志。"
     }
   );

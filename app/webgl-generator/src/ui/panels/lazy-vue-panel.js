@@ -3,6 +3,7 @@ import {pinia} from "../vue/pinia.js";
 
 const lazyVuePanelEntries = new Set();
 const LAZY_PANEL_ERROR_MESSAGE_LIMIT = 240;
+export const DEFAULT_LAZY_PANEL_LOADING_DELAY_MS = 180;
 
 export const LAZY_PANEL_ERROR_KIND = Object.freeze({
   MODULE_FETCH: "module-fetch",
@@ -18,6 +19,11 @@ export function createLazyVuePanel(documentRef, root, loadComponent, props, mess
   let componentPromise = null;
   let disposed = false;
   let lastError = null;
+  let loadingTimer = 0;
+  const view = documentRef.defaultView || globalThis;
+  const setTimer = runtime.setTimeout || view.setTimeout?.bind(view) || globalThis.setTimeout;
+  const clearTimer = runtime.clearTimeout || view.clearTimeout?.bind(view) || globalThis.clearTimeout;
+  const loadingDelayMs = Math.max(0, Number(runtime.loadingDelayMs ?? DEFAULT_LAZY_PANEL_LOADING_DELAY_MS));
 
   const entry = {
     id: resolveLazyPanelId(root, messages),
@@ -41,6 +47,7 @@ export function createLazyVuePanel(documentRef, root, loadComponent, props, mess
     unmount() {
       disposed = true;
       lazyVuePanelEntries.delete(entry);
+      clearLoadingTimer();
       safelyUnmountApp();
     },
     preload() {
@@ -74,6 +81,7 @@ export function createLazyVuePanel(documentRef, root, loadComponent, props, mess
 
   function retry() {
     if (disposed) return;
+    clearLoadingTimer();
     safelyUnmountApp();
     lastError = null;
     componentModule = null;
@@ -86,6 +94,8 @@ export function createLazyVuePanel(documentRef, root, loadComponent, props, mess
   }
 
   function renderLoadFailure(error) {
+    clearLoadingTimer();
+    delete root.dataset.lazyPanelLoading;
     const failure = classifyLazyVuePanelError(error);
     root.replaceChildren?.();
     const container = documentRef.createElement("div");
@@ -98,7 +108,7 @@ export function createLazyVuePanel(documentRef, root, loadComponent, props, mess
 
     if (failure.kind === LAZY_PANEL_ERROR_KIND.MODULE_FETCH) {
       const explanation = documentRef.createElement("p");
-      explanation.textContent = "页面版本可能已经更新，当前页面无法取得原版本的面板资源。请先保存尚未保存的地图，再重试或刷新页面。";
+      explanation.textContent = "页面版本可能已经更新，当前页面无法取得原版本的面板资源。请先保存尚未保存的地图，再刷新页面。";
       container.append(explanation);
     }
 
@@ -109,10 +119,9 @@ export function createLazyVuePanel(documentRef, root, loadComponent, props, mess
 
     const actions = documentRef.createElement("div");
     actions.className = "lazy-panel-recovery-actions";
-    actions.append(createRecoveryButton(documentRef, "重试加载", retry));
     if (failure.kind === LAZY_PANEL_ERROR_KIND.MODULE_FETCH) {
       actions.append(createRecoveryButton(documentRef, "刷新页面", () => documentRef.defaultView?.location?.reload?.()));
-    }
+    } else actions.append(createRecoveryButton(documentRef, "重试加载", retry));
     container.append(actions);
     root.append(container);
   }
@@ -120,10 +129,14 @@ export function createLazyVuePanel(documentRef, root, loadComponent, props, mess
   function ensureApp() {
     if (app) return Promise.resolve(app);
     if (appPromise) return appPromise;
-    root.textContent = messages.loading || "正在加载面板...";
+    root.textContent = "";
+    root.dataset.lazyPanelLoading = "pending";
+    scheduleLoadingMessage();
     appPromise = loadComponentModule().then(module => {
       if (disposed) return null;
       if (app) return app;
+      clearLoadingTimer();
+      delete root.dataset.lazyPanelLoading;
       root.textContent = "";
       app = createVueApp(module.default || module, props);
       app.use(pinia);
@@ -139,6 +152,8 @@ export function createLazyVuePanel(documentRef, root, loadComponent, props, mess
   }
 
   function safelyUnmountApp() {
+    clearLoadingTimer();
+    delete root.dataset.lazyPanelLoading;
     const mountedApp = app;
     app = null;
     if (!mountedApp) return;
@@ -148,6 +163,30 @@ export function createLazyVuePanel(documentRef, root, loadComponent, props, mess
       // 半初始化组件的清理失败不能阻断错误恢复或再次挂载。
     }
   }
+
+  function scheduleLoadingMessage() {
+    clearLoadingTimer();
+    loadingTimer = setTimer(() => {
+      loadingTimer = 0;
+      if (disposed || app || !appPromise) return;
+      root.dataset.lazyPanelLoading = "visible";
+      root.textContent = lazyPanelLoadingMessage(messages.loading);
+    }, loadingDelayMs);
+  }
+
+  function clearLoadingTimer() {
+    if (!loadingTimer) return;
+    clearTimer(loadingTimer);
+    loadingTimer = 0;
+  }
+}
+
+function lazyPanelLoadingMessage(message) {
+  const subject = String(message || "面板")
+    .replace(/^正在(?:加载|打开)/u, "")
+    .replace(/(?:，?请稍候片刻)?[.。…！!，,]*$/u, "")
+    .trim() || "面板";
+  return `正在打开${subject}，请稍候片刻。`;
 }
 
 export function classifyLazyVuePanelError(error) {

@@ -133,7 +133,7 @@ export function createNotesPanel(documentRef, manager, callbacks = {}) {
     {state: panelState, callbacks: panelCallbacks},
     {
       initial: "备注总览将在首次打开时加载。",
-      loading: "正在加载备注总览...",
+      loading: "正在打开备注总览，请稍候片刻。",
       failure: "备注总览加载失败，请检查开发模式日志。"
     }
   );

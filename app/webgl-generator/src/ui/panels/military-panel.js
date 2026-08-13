@@ -162,7 +162,7 @@ export function createMilitaryPanel(documentRef, manager, callbacks = {}) {
     {state: panelState, callbacks: panelCallbacks},
     {
       initial: "军事管理将在首次打开时加载。",
-      loading: "正在加载军事管理...",
+      loading: "正在打开军事管理，请稍候片刻。",
       failure: "军事管理加载失败，请检查开发模式日志。"
     }
   );

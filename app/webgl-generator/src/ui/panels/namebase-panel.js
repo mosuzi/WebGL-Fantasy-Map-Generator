@@ -144,7 +144,7 @@ export function createNamebasePanel(documentRef, manager, callbacks = {}) {
     {state: panelState, callbacks: panelCallbacks},
     {
       initial: "名称库总览将在首次打开时加载。",
-      loading: "正在加载名称库总览...",
+      loading: "正在打开名称库总览，请稍候片刻。",
       failure: "名称库总览加载失败，请检查开发模式日志。"
     }
   );

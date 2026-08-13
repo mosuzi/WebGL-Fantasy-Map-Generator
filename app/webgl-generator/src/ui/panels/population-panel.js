@@ -186,7 +186,7 @@ export function createPopulationPanel(documentRef, manager, callbacks = {}) {
     {state: panelState, callbacks: panelCallbacks},
     {
       initial: "人口统计将在首次打开时加载。",
-      loading: "正在加载人口统计...",
+      loading: "正在打开人口统计，请稍候片刻。",
       failure: "人口统计加载失败，请检查开发模式日志。"
     }
   );

@@ -2,6 +2,7 @@
 import assert from "node:assert/strict";
 import {readFile} from "node:fs/promises";
 import {
+  DEFAULT_LAZY_PANEL_LOADING_DELAY_MS,
   LAZY_PANEL_ERROR_KIND,
   classifyLazyVuePanelError,
   createLazyVuePanel,
@@ -28,6 +29,43 @@ const longError = new Error(`普通组件异常 ${"x".repeat(400)}`);
 const bounded = classifyLazyVuePanelError(longError);
 assert.equal(bounded.kind, LAZY_PANEL_ERROR_KIND.COMPONENT);
 assert.equal(bounded.message.length, 240, "共享错误消息没有限制长度");
+assert.equal(DEFAULT_LAZY_PANEL_LOADING_DELAY_MS, 180, "面板防闪延迟漂移");
+
+async function verifyDelayedLoading() {
+  const fast = createDocumentFixture();
+  const fastPanel = createLazyVuePanel(
+    fast.documentRef,
+    fast.root,
+    () => ({name: "FastPanel"}),
+    {},
+    {id: "fast-loading", initial: "首次打开时载入", loading: "正在打开测试面板，请稍候片刻。"},
+    {loadingDelayMs: 20, createApp: createMountFixture()}
+  );
+  await fastPanel.load();
+  await wait(28);
+  assert.notEqual(fast.root.textContent, "正在打开测试面板，请稍候片刻。", "快速面板闪出等待文案");
+  fastPanel.unmount();
+
+  const slow = createDocumentFixture();
+  let resolveComponent;
+  const componentPromise = new Promise(resolve => { resolveComponent = resolve; });
+  const slowPanel = createLazyVuePanel(
+    slow.documentRef,
+    slow.root,
+    () => componentPromise,
+    {},
+    {id: "slow-loading", initial: "首次打开时载入", loading: "正在打开测试面板，请稍候片刻。"},
+    {loadingDelayMs: 20, createApp: createMountFixture()}
+  );
+  const loading = slowPanel.load();
+  assert.equal(slow.root.textContent, "", "打开慢面板时仍显示首次加载占位");
+  await wait(28);
+  assert.equal(slow.root.textContent, "正在打开测试面板，请稍候片刻。", "慢面板没有在延迟后显示等待文案");
+  resolveComponent({name: "SlowPanel"});
+  await loading;
+  assert.notEqual(slow.root.textContent, "正在打开测试面板，请稍候片刻。", "面板挂载后等待文案未清理");
+  slowPanel.unmount();
+}
 
 async function verifyModuleFetchRecovery() {
   const fixture = createDocumentFixture();
@@ -47,15 +85,11 @@ async function verifyModuleFetchRecovery() {
   assert.equal(recovery.dataset.errorKind, LAZY_PANEL_ERROR_KIND.MODULE_FETCH);
   assert.match(flatText(recovery), /页面版本可能已经更新/);
   assert.match(flatText(recovery), /先保存尚未保存的地图/);
-  assert.deepEqual(buttonLabels(recovery), ["重试加载", "刷新页面"]);
+  assert.deepEqual(buttonLabels(recovery), ["刷新页面"]);
   assert.equal(fixture.reloads(), 0, "模块加载失败后发生了自动刷新");
-
-  findButton(recovery, "重试加载").click();
-  await new Promise(resolve => setTimeout(resolve, 0));
-  assert.equal(attempts, 2, "重试没有重新执行组件加载器");
-  assert.equal(fixture.reloads(), 0, "重试失败后发生了自动刷新");
   findButton(fixture.root.children[0], "刷新页面").click();
   assert.equal(fixture.reloads(), 1, "显式刷新按钮没有刷新页面");
+  assert.equal(attempts, 1, "模块资源失败后仍执行了无效重试");
 
   const stats = getLazyVuePanelPreloadStats().find(entry => entry.id === "module-fetch-fixture");
   assert.equal(stats.errorKind, LAZY_PANEL_ERROR_KIND.MODULE_FETCH);
@@ -159,6 +193,18 @@ function createDocumentFixture() {
   return {documentRef, root: new FakeElement("div"), reloads: () => reloadCount};
 }
 
+function createMountFixture() {
+  return () => ({
+    use() { return this; },
+    mount(root) { root.dataset.mounted = "true"; },
+    unmount() {}
+  });
+}
+
+function wait(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 class FakeElement {
   constructor(tagName) {
     this.tagName = tagName;
@@ -206,9 +252,10 @@ function findButton(node, label) {
 await verifyModuleFetchRecovery();
 await verifyComponentFailure();
 await verifyMountFailureRetry();
+await verifyDelayedLoading();
 
 console.log(JSON.stringify({
   ok: true,
   bundledWithEntry: ["ZonePanel", "CloudStoragePanel"],
-  recovery: {moduleFetch: true, component: true, mountRetry: true, mountCount: 2, automaticReload: false, boundedMessage: 240}
+  recovery: {moduleFetch: true, component: true, mountRetry: true, delayedLoading: true, mountCount: 2, automaticReload: false, boundedMessage: 240}
 }, null, 2));

@@ -50,7 +50,7 @@
           />
           <UiStateBanner
             :kind="state.outletPreview?.valid ? 'preview' : 'error'"
-            title="湖泊出口预检"
+            title="湖泊出口影响"
             :message="outletPreviewMessage"
             :action-label="state.outletPreview?.valid && state.outletPreview?.changed ? '应用出口修改' : ''"
             secondary-action-label="取消"
@@ -80,7 +80,7 @@
           </UiButton>
           <UiStateBanner
             :kind="state.patchPreview?.valid ? 'preview' : state.patchPreview ? 'error' : 'info'"
-            title="局部水陆修正预检"
+            title="局部水陆修正影响"
             :message="patchPreviewMessage"
             :action-label="state.patchPreview?.valid ? '应用局部修正' : ''"
             secondary-action-label="取消"
@@ -178,7 +178,7 @@ const patchTargetOptions = Object.freeze([
   {value: "land", label: "收回为相邻陆地"}
 ]);
 const patchRadiusOptions = Object.freeze([
-  {value: 0, label: "单个 grid cell"},
+  {value: 0, label: "单个地图区域"},
   {value: 1, label: "半径 1"},
   {value: 2, label: "半径 2"}
 ]);
@@ -199,7 +199,7 @@ const patchPreviewMessage = computed(() => {
   const preview = props.state.patchPreview;
   if (!preview) return "先选择修正方向和半径，再到地图上选择中心。预览不会写入历史。";
   if (!preview.valid) return `${preview.code || "invalid"}：${preview.reason || "局部修正无效"}`;
-  return `可应用；${formatNumber(preview.packCells?.length || 0)} pack cells / ${formatNumber(preview.gridCells?.length || 0)} grid cells；目标 feature #${preview.packTargetFeature}`;
+  return `可以应用；影响 ${formatNumber(preview.packCells?.length || 0)} 个地貌区域、${formatNumber(preview.gridCells?.length || 0)} 个地图区域；目标水体 #${preview.packTargetFeature}`;
 });
 const lakeListActions = computed(() => [
   {key: "create", label: props.state.createMode ? "取消开挖湖泊" : "开挖湖泊", icon: "+", active: props.state.createMode},
@@ -213,7 +213,7 @@ const lakeListActions = computed(() => [
 const summaryMetrics = computed(() => [
   {label: "湖泊", value: formatNumber(rows.value.length)},
   {label: "总面积", value: formatAreaValue(totalArea.value)},
-  {label: "水域 cells", value: formatNumber(totalCells.value)},
+  {label: "水域区域", value: formatNumber(totalCells.value)},
   {label: "高亮", value: formatNumber(props.state.highlightCount || 0)},
   {label: "筛选", value: formatNumber(visibleRows.value.length)}
 ]);
@@ -221,7 +221,7 @@ const summaryMetrics = computed(() => [
 const detailRows = computed(() => selected.value ? [
   {label: "选中", value: `#${selected.value.id} / ${selected.value.type}`},
   {label: "面积", value: formatAreaValue(selected.value.area)},
-  {label: "水域 cells", value: formatNumber(selected.value.cells)},
+  {label: "水域区域", value: formatNumber(selected.value.cells)},
   {label: "水位", value: formatNumber(selected.value.height)},
   {label: "补给", value: formatNumber(selected.value.flux)},
   {label: "蒸发", value: formatNumber(selected.value.evaporation)},
@@ -230,7 +230,7 @@ const detailRows = computed(() => selected.value ? [
   {label: "蓄水指数", value: formatNullableNumber(selected.value.storageCapacity)},
   {label: "溢流高程", value: formatNullableNumber(selected.value.spillElevation)},
   {label: "下切需求 / 预算", value: `${formatNullableNumber(selected.value.requiredIncision)} / ${formatNullableNumber(selected.value.incisionBudget)}`},
-  {label: "岸线 cells", value: formatNumber(selected.value.shorelineCells)},
+  {label: "岸线区域", value: formatNumber(selected.value.shorelineCells)},
   {label: "最大补给", value: formatNumber(maxFlux.value)}
 ] : []);
 

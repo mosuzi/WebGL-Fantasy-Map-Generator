@@ -122,7 +122,7 @@
           @update:model-value="updateMergeSurvivorState"
         />
         <div class="state-topology-actions">
-          <UiButton variant="secondary" :disabled="!canInspectMerge" @click="inspectMerge">预检合并</UiButton>
+          <UiButton variant="secondary" :disabled="!canInspectMerge" @click="inspectMerge">查看合并影响</UiButton>
           <UiButton variant="danger" :disabled="!canSubmitTopology" @click="submitMerge">确认合并</UiButton>
         </div>
         <p v-if="topologyError" class="state-topology-error">{{ topologyError }}</p>
@@ -156,7 +156,7 @@
           <ElInput v-model="splitNameDraft" type="text" maxlength="48" @input="invalidateTopologyPreview" />
         </label>
         <div class="state-topology-actions">
-          <UiButton variant="secondary" :disabled="!canInspectSplit" @click="inspectSplit">预检拆分</UiButton>
+          <UiButton variant="secondary" :disabled="!canInspectSplit" @click="inspectSplit">查看拆分影响</UiButton>
           <UiButton variant="danger" :disabled="!canSubmitTopology" @click="submitSplit">确认拆分</UiButton>
         </div>
         <p v-if="topologyError" class="state-topology-error">{{ topologyError }}</p>
@@ -317,7 +317,7 @@ const canInspectSplit = computed(() => splitProvinceIds.value.length > 0 && Numb
 const canSubmitTopology = computed(() => Boolean(topologyInspection.value?.valid));
 const topologyPreviewRows = computed(() => topologyInspection.value?.preview?.rows || []);
 const stateActions = computed(() => [
-  {key: "add", resultClass: "toggle-canvas-mode", label: props.state.addMode ? "取消新增国家" : "新增国家：下一次点击地图 cell 作为首都", icon: "+", panel: false, active: props.state.addMode, disabled: props.state.deleteMode || editActive.value},
+  {key: "add", resultClass: "toggle-canvas-mode", label: props.state.addMode ? "取消新增国家" : "新增国家：下一次点击地图位置作为首都", icon: "+", panel: false, active: props.state.addMode, disabled: props.state.deleteMode || editActive.value},
   {key: "delete", resultClass: "toggle-canvas-mode", label: props.state.deleteMode ? "取消删除国家" : "删除国家：下一次点击地图国家", icon: "×", panel: false, active: props.state.deleteMode, disabled: props.state.addMode || editActive.value},
   {key: "edit", resultClass: "toggle-canvas-mode", label: editActive.value ? "退出国家编辑" : "进入国家编辑", icon: "◎", panel: false, disabled: modalActionActive.value || !canDeleteSelected.value, active: editActive.value},
   {key: "rename", resultClass: "open-secondary", label: "重命名", icon: "✎", disabled: modalActionActive.value || !canDeleteSelected.value},
@@ -556,7 +556,7 @@ function inspectTopology(readInspection) {
   topologyError.value = "";
   try {
     topologyInspection.value = readInspection?.() || null;
-    if (!topologyInspection.value?.valid) topologyError.value = topologyInspection.value?.rejection?.reason || topologyInspection.value?.summary || "预检未通过";
+    if (!topologyInspection.value?.valid) topologyError.value = topologyInspection.value?.rejection?.reason || topologyInspection.value?.summary || "无法计算影响范围";
   } catch (error) {
     topologyInspection.value = null;
     topologyError.value = error?.message || String(error);

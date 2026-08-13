@@ -18,10 +18,12 @@
     :rows="visibleRows"
     :selected-id="state.selectedId"
     empty-text="当前地图没有洋流"
+    :empty-action="filterEmptyAction"
     selectable-rows
     :selected-row-ids="selectedRowIds"
     @select="callbacks.onSelect"
     @locate="callbacks.onLocate"
+    @empty-action="handleEmptyAction"
     @selection-change="selectedRowIds = $event"
   />
 
@@ -83,6 +85,9 @@ const visibleRows = computed(() => {
   if (!query) return rows.value;
   return rows.value.filter(row => `${row.name} ${row.temperatureLabel} ${row.hemisphereLabel}`.toLowerCase().includes(query));
 });
+const filterEmptyAction = computed(() => String(props.state.filter || "").trim()
+  ? {key: "clear-filter", label: "清空筛选", icon: "⌫"}
+  : null);
 const regenerationLocks = useRegenerationLockSelection({panelId: "ocean-current-panel", kind: "ocean-current", rows: visibleRows});
 const selected = computed(() => rows.value.find(row => String(row.id) === String(props.state.selectedId)) || null);
 const selectedRows = regenerationLocks.selectedRows;
@@ -109,4 +114,8 @@ const detailRows = computed(() => selected.value ? [
   {label: "强度", value: selected.value.strengthLabel},
   {label: "西边界增强", value: selected.value.westernBoundary ? "是" : "否"}
 ] : []);
+
+function handleEmptyAction(key) {
+  if (key === "clear-filter") props.callbacks.onFilter?.("");
+}
 </script>

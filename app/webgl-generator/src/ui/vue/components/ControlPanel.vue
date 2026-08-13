@@ -495,8 +495,8 @@
             <label><span>单位符号</span><input v-model="customUnitDraft.symbol" maxlength="12" required /></label>
             <label><span>1 单位等于</span><input v-model="customUnitDraft.kmPerUnit" type="number" min="0.000000000001" max="1000000000000" step="any" required /><em>km</em></label>
             <p>面积信息留空时，会按距离单位自动生成平方名称、符号和换算系数。</p>
-            <label><span>面积名称</span><input v-model="customUnitDraft.areaName" maxlength="40" placeholder="自动派生" /></label>
-            <label><span>面积符号</span><input v-model="customUnitDraft.areaSymbol" maxlength="16" placeholder="自动派生" /></label>
+            <label><span>面积名称</span><input v-model="customUnitDraft.areaName" maxlength="40" placeholder="自动计算" /></label>
+            <label><span>面积符号</span><input v-model="customUnitDraft.areaSymbol" maxlength="16" placeholder="自动计算" /></label>
             <label><span>1 面积单位等于</span><input v-model="customUnitDraft.squareKmPerUnit" type="number" min="0.000000000001" max="1000000000000" step="any" placeholder="自动平方" /><em>km²</em></label>
             <p v-if="customUnitError" class="unit-custom-error" role="alert">{{ customUnitError }}</p>
             <div class="unit-custom-editor-actions">
@@ -1048,10 +1048,10 @@ function managementGroup(id, label, actions) {
 const regenerationActions = Object.freeze([
   {value: "features", kind: "features", label: regenerationKindLabel("features"), impact: "会重新整理水陆、岸线与相关地理归属，并标记后续内容待更新。"},
   {value: "routes", kind: "routes", label: regenerationKindLabel("routes"), impact: "会替换路线网络，不改写国家、省份或城镇。"},
-  {value: "rivers", kind: "rivers", label: regenerationKindLabel("rivers"), impact: "会替换河流与水文引用，并标记相关下游内容待更新。"},
-  {value: "cities", kind: "cities", label: regenerationKindLabel("cities"), impact: "会替换城镇与港口，并重建路线及相关下游内容。"},
-  {value: "states", kind: "states", label: regenerationKindLabel("states"), impact: "会替换国家与省份归属，并重建城镇、路线及相关下游内容。"},
-  {value: "provinces", kind: "provinces", label: regenerationKindLabel("provinces"), impact: "会在现有国家内替换省份归属，并重建路线及相关下游内容。"},
+  {value: "rivers", kind: "rivers", label: regenerationKindLabel("rivers"), impact: "会替换河流与水文引用，并标记相关地图内容待更新。"},
+  {value: "cities", kind: "cities", label: regenerationKindLabel("cities"), impact: "会替换城镇与港口，并更新路线及相关地图内容。"},
+  {value: "states", kind: "states", label: regenerationKindLabel("states"), impact: "会替换国家与省份归属，并更新城镇、路线及相关地图内容。"},
+  {value: "provinces", kind: "provinces", label: regenerationKindLabel("provinces"), impact: "会在现有国家内替换省份归属，并更新路线及相关地图内容。"},
   {value: "markers", kind: "markers", label: regenerationKindLabel("markers"), impact: "会替换地图标记，并刷新相关摘要。"},
   {value: "diplomacy", kind: "diplomacy", label: regenerationKindLabel("diplomacy"), impact: "会替换国家关系、战争与贸易关系摘要。"},
   {value: "religions", kind: "religions", label: regenerationKindLabel("religions"), impact: "会替换宗教分布，并刷新相关归属与摘要。"},

@@ -118,7 +118,7 @@ export function createZonePanel(documentRef, manager, component, callbacks = {})
     {state: panelState, callbacks: panelCallbacks},
     {
       initial: "地区管理将在首次打开时加载。",
-      loading: "正在加载地区管理...",
+      loading: "正在打开地区管理，请稍候片刻。",
       failure: "地区管理加载失败，请检查开发模式日志。"
     }
   );

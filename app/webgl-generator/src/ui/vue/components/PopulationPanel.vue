@@ -42,7 +42,7 @@
           </ElFormItem>
         </ElForm>
         <div class="population-adjustment-actions">
-          <UiButton variant="secondary" @click="callbacks.onInspectAdjustment">预检</UiButton>
+          <UiButton variant="secondary" @click="callbacks.onInspectAdjustment">查看影响范围</UiButton>
           <UiButton v-if="state.adjustmentInspection?.valid" variant="primary" @click="callbacks.onApplyAdjustment">应用单次调整</UiButton>
         </div>
         <UiStateBanner
@@ -77,7 +77,7 @@
           </ElFormItem>
         </ElForm>
         <div class="population-adjustment-actions">
-          <UiButton variant="secondary" @click="callbacks.onInspectTransfer">预检转移</UiButton>
+          <UiButton variant="secondary" @click="callbacks.onInspectTransfer">查看转移影响</UiButton>
           <UiButton v-if="state.transferInspection?.valid" variant="primary" @click="callbacks.onApplyTransfer">确认转移</UiButton>
         </div>
         <UiStateBanner
@@ -163,7 +163,7 @@ const adjustmentFeedback = computed(() => {
   props.state.version;
   const inspection = props.state.adjustmentInspection;
   if (inspection) {
-    if (!inspection.valid) return {kind: "error", title: "预检未通过", message: inspection.reason || "人口调整参数无效"};
+    if (!inspection.valid) return {kind: "error", title: "无法调整人口", message: inspection.reason || "人口调整条件无效"};
     return {
       kind: "preview",
       title: `${inspection.targetName}：${signedPopulation(inspection.delta)}`,
@@ -177,14 +177,14 @@ const adjustmentFeedback = computed(() => {
   return {
     kind: "selected",
     title: "人口调整已提交",
-    message: `已更新 ${formatNumber(result.result?.packCells || 0)} 个人口 cells 和 ${formatNumber(result.result?.cities || 0)} 个城市，可通过历史撤销。`
+    message: `已更新 ${formatNumber(result.result?.packCells || 0)} 个人口区域和 ${formatNumber(result.result?.cities || 0)} 个城市，可通过历史撤销。`
   };
 });
 const transferFeedback = computed(() => {
   props.state.version;
   const inspection = props.state.transferInspection;
   if (inspection) {
-    if (!inspection.valid) return {kind: "error", title: "转移预检未通过", message: inspection.reason || "人口转移参数无效"};
+    if (!inspection.valid) return {kind: "error", title: "无法转移人口", message: inspection.reason || "人口转移条件无效"};
     return {
       kind: "preview",
       title: `${inspection.sourceName} → ${inspection.targetName}`,
@@ -207,8 +207,8 @@ const summaryMetrics = computed(() => [
   {label: "乡村", value: formatPopulationValue(metrics.value.rural)},
   {label: "城市", value: formatPopulationValue(metrics.value.urban)},
   {label: "城镇", value: formatNumber(metrics.value.cities)},
-  {label: "人口 cells", value: formatNumber(metrics.value.populationCells)},
-  {label: "最高 cell", value: formatPopulationValue(metrics.value.maxCellPopulation)}
+  {label: "有人口区域", value: formatNumber(metrics.value.populationCells)},
+  {label: "区域人口峰值", value: formatPopulationValue(metrics.value.maxCellPopulation)}
 ]);
 
 const detailRows = computed(() => selected.value ? [

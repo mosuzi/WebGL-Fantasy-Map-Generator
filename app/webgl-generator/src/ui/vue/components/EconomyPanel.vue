@@ -47,14 +47,14 @@
       <UiButton variant="secondary" :active="state.marketAssignmentActive" @click="callbacks.onMarketAssignmentActive(!state.marketAssignmentActive)">
         {{ state.marketAssignmentActive ? "退出归属笔刷" : "编辑市场归属" }}
       </UiButton>
-      <UiButton variant="secondary" :disabled="state.marketAssignmentActive" @click="callbacks.onRebuildEconomy">重算经济链</UiButton>
+      <UiButton variant="secondary" :disabled="state.marketAssignmentActive" @click="callbacks.onRebuildEconomy">更新市场与贸易</UiButton>
     </div>
     <UiStateBanner
       v-if="state.marketAssignmentActive"
       kind="preview"
       title="市场归属预览"
       :message="marketAssignmentPreviewMessage"
-      action-label="应用并重算"
+      action-label="应用并更新"
       secondary-action-label="取消预览"
       @action="callbacks.onApplyMarketAssignment"
       @secondary-action="callbacks.onCancelMarketAssignment"
@@ -437,10 +437,10 @@ const marketAssignmentPreviewMessage = computed(() => {
   const preview = props.state.assignmentPreview;
   if (!preview?.changed) return "在地图上拖动笔刷预览归属变化；取消不会修改经济数据。";
   const warnings = [];
-  if (preview.crossStateCells) warnings.push(`跨国覆盖 ${formatNumber(preview.crossStateCells)} cells`);
-  if (preview.unassignedStateCells) warnings.push(`无国家覆盖 ${formatNumber(preview.unassignedStateCells)} cells`);
+  if (preview.crossStateCells) warnings.push(`跨国区域 ${formatNumber(preview.crossStateCells)} 个`);
+  if (preview.unassignedStateCells) warnings.push(`无国家区域 ${formatNumber(preview.unassignedStateCells)} 个`);
   if (preview.invalidMarketCells || preview.waterCells) warnings.push("存在无效覆盖，不能应用");
-  return `待应用 ${formatNumber(preview.changed)} cells${warnings.length ? `；${warnings.join("；")}` : "；未发现跨国或无国家覆盖"}`;
+  return `将更新 ${formatNumber(preview.changed)} 个区域${warnings.length ? `；${warnings.join("；")}` : "；未发现跨国或无国家区域"}`;
 });
 const tradeQueryOptions = computed(() => {
   props.state.version;
@@ -503,8 +503,8 @@ const diagnosticRows = computed(() => [
   {label: "无市场城镇", value: formatNumber(metrics.value.diagnostics.burgsWithoutMarket)},
   {label: "缺中心市场", value: formatNumber(metrics.value.diagnostics.marketsWithoutCenter)},
   {label: "无覆盖市场", value: formatNumber(metrics.value.diagnostics.marketsWithoutCells)},
-  {label: "跨国覆盖 cells", value: formatNumber(metrics.value.diagnostics.foreignMarketCells)},
-  {label: "无效归属 cells", value: formatNumber(metrics.value.diagnostics.invalidMarketCells)},
+  {label: "跨国区域", value: formatNumber(metrics.value.diagnostics.foreignMarketCells)},
+  {label: "归属异常区域", value: formatNumber(metrics.value.diagnostics.invalidMarketCells)},
   {label: "无库存商品", value: formatNumber(metrics.value.diagnostics.goodsWithoutStock)},
   {label: "孤儿交易", value: formatNumber(metrics.value.diagnostics.invalidDeals)},
   {label: "无税交易", value: formatNumber(metrics.value.diagnostics.untaxedDeals)}
@@ -556,7 +556,7 @@ function buildGoodDetail(good) {
       {
         title: "来源与流向",
         rows: [
-          {label: "资源 cells", value: formatNumber(good.sourceCells)},
+          {label: "资源区域", value: formatNumber(good.sourceCells)},
           {label: "生产记录", value: formatNumber(good.production)},
           {label: "流入 / 流出", value: `${formatNumber(good.tradeInUnits)} / ${formatNumber(good.tradeOutUnits)}`},
           {label: "交易记录", value: formatNumber(good.deals)}
@@ -629,7 +629,7 @@ function buildMarketDetail(market) {
       {
         title: "覆盖范围",
         rows: [
-          {label: "覆盖 cells", value: formatNumber(market.cells)},
+          {label: "覆盖区域", value: formatNumber(market.cells)},
           {label: "陆地覆盖", value: formatNumber(market.landCells)},
           {label: "本国覆盖", value: formatNumber(market.homeCells)},
           {label: "跨国覆盖", value: formatNumber(market.foreignCells)},
@@ -1076,7 +1076,7 @@ function exportColumns() {
     {key: "name", label: "市场"},
     {key: "stateName", label: "国家"},
     {key: "cityName", label: "中心城镇"},
-    {key: "cells", label: "覆盖Cells"},
+    {key: "cells", label: "覆盖区域"},
     {key: "landCells", label: "陆地覆盖"},
     {key: "homeCells", label: "本国覆盖"},
     {key: "foreignCells", label: "跨国覆盖"},
