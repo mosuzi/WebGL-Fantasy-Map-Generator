@@ -144,6 +144,7 @@
 - `government-system-and-state-title-plan.md`：政体系统、国家国号后缀和政体影响规则。
 - `military-battle-plan.md`：静态军事图层与管理面板设计。
 - `emblems-coa-plan.md`：纹章与 Coat of Arms 远期资料；用户已明确短期不深化，不得自动入队。
+- `task-326-place-analysis-stage-design.md`：权威任务第 326 项的地点解析、行政代表点、距离 / 方位口径与三阶段交付冻结稿。
 
 ## 维护规则
 

@@ -32,6 +32,7 @@
     "profile:panels": "node ./tools/webgl-generator-panel-open-profile.mjs",
     "audit:context-governance": "node --no-warnings ./tools/context-governance-audit.mjs",
     "audit:development-logs": "node --no-warnings ./tools/development-log-shards.mjs",
+    "regress:place-analysis": "node --no-warnings ./tools/webgl-generator-place-analysis-regression.mjs",
     "regress:task323-map-size-browser": "node --no-warnings ./tools/webgl-generator-task323-map-size-browser-regression.mjs",
     "regress:map-template-catalog": "node --no-warnings ./tools/webgl-generator-map-template-catalog-regression.mjs",
     "build:map-template-physical": "node --no-warnings ./tools/build-map-template-physical-resource.mjs",

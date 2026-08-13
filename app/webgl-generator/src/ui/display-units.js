@@ -127,6 +127,17 @@ export function mapUnitsToKm(value, preferences = {}) {
   return numberOrZero(value) * units.mapScaleKmPerCm / CSS_PX_PER_CM;
 }
 
+export function convertMapDistance(value, preferences = {}) {
+  const units = normalizeUnitPreferences(preferences);
+  const kilometers = mapUnitsToKm(value, units);
+  const definition = resolveDistanceUnit(units.distanceUnit, units.customUnits) || DISTANCE_UNITS.get(DEFAULT_UNIT_PREFERENCES.distanceUnit);
+  return {
+    value: kilometers / definition.kmPerUnit,
+    kilometers,
+    unit: {id: definition.value, symbol: definition.symbol}
+  };
+}
+
 export function mapUnitsToSquareKm(value, preferences = {}) {
   const units = normalizeUnitPreferences(preferences);
   const kmPerUnit = units.mapScaleKmPerCm / CSS_PX_PER_CM;
@@ -135,9 +146,8 @@ export function mapUnitsToSquareKm(value, preferences = {}) {
 
 export function formatDistance(value, preferences = {}) {
   const units = normalizeUnitPreferences(preferences);
-  const km = mapUnitsToKm(value, units);
-  const definition = resolveDistanceUnit(units.distanceUnit, units.customUnits) || DISTANCE_UNITS.get(DEFAULT_UNIT_PREFERENCES.distanceUnit);
-  return `${formatNumber(km / definition.kmPerUnit, units, {maximumFractionDigits: 1})} ${definition.symbol}`;
+  const converted = convertMapDistance(value, units);
+  return `${formatNumber(converted.value, units, {maximumFractionDigits: 1})} ${converted.unit.symbol}`;
 }
 
 export function formatArea(value, preferences = {}) {
