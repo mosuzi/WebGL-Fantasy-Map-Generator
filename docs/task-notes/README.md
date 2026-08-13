@@ -6,6 +6,7 @@
 
 ## 专题映射
 
+- 第 333 项的 Worker 全图重传调查、共享版本化副本 / 增量日志和 `.webfmg v3` 列式二进制存档方案冻结于 [`task-333-worker-replica-and-binary-map.md`](./task-333-worker-replica-and-binary-map.md)；同一 canonical 字段注册表同时服务跨任务 Worker 副本、撤销 / 重做 patch 和新存档格式，避免两套数据描述再次漂移。
 - 第 331 项的 100k 重生成 / 存档瓶颈、真实阶段 Loading、单次序列化、二进制 IndexedDB、canonical map mirror 与增量 prepared renderer 边界冻结于 [`task-331-save-regeneration-performance.md`](./task-331-save-regeneration-performance.md)；普通用户只看山河推演 / 存档阶段，调试数据保留 transport、compute、render、serialize、compress 和 storage 精确标量。
 - 第 332 项的 100k 视图切换瓶颈、持久 Worker 渲染缓存、冷启动与精确 LongTask 登记边界冻结于 [`task-332-view-switch-performance.md`](./task-332-view-switch-performance.md)。
 - 第 329 项的 LongTask 登记例外复核、当前机器门风险、C3c 重点诊断和分级停止条件冻结于 [`task-329-long-task-exception-convergence.md`](./task-329-long-task-exception-convergence.md)；已被后续实现消除的信号只收紧工具，不重复改产品。
