@@ -31,6 +31,13 @@ const ERROR_CODES = Object.freeze([
   ,"refinement-topology-violation"
   ,"refinement-invalid-structure"
   ,"map-cell-limit-exceeded"
+  ,"invalid_place_reference"
+  ,"invalid_place_kind"
+  ,"invalid_place_id"
+  ,"place_not_found"
+  ,"place_removed"
+  ,"place_anchor_invalid"
+  ,"screen_distance_unavailable"
 ]);
 
 const REFERENCE_RULES = Object.freeze([
@@ -51,6 +58,38 @@ const REFERENCE_RULES = Object.freeze([
 ]);
 
 const METHOD_OVERRIDES = Object.freeze({
+  "analysis.resolvePlace": {
+    arguments: [
+      argument("reference", placeReferenceSchema()),
+      argument("options", placeResolveOptionsSchema(), false)
+    ],
+    result: placeResolutionSchema(),
+    examples: [["同名"], [{kind: "city", id: 1}]],
+    referenceSpaces: ["object:state", "object:province", "object:city"],
+    businessCodes: ["ok", "invalid_place_reference", "invalid_place_kind", "invalid_place_id", "place_not_found", "place_removed"]
+  },
+  "analysis.measureDistance": {
+    arguments: [
+      argument("from", placeReferenceSchema()),
+      argument("to", placeReferenceSchema()),
+      argument("options", placeMeasurementOptionsSchema(), false)
+    ],
+    result: placeDistanceSchema(),
+    examples: [[{kind: "state", id: 1}, {kind: "city", id: 2}], ["同名", "另一地", {includeScreenDistance: true}]],
+    referenceSpaces: ["object:state", "object:province", "object:city", "worldPoint"],
+    businessCodes: ["ok", "invalid_place_reference", "invalid_place_kind", "invalid_place_id", "place_not_found", "place_removed", "place_anchor_invalid", "screen_distance_unavailable", "unsupported_coordinate_space"]
+  },
+  "analysis.getDirection": {
+    arguments: [
+      argument("from", placeReferenceSchema()),
+      argument("to", placeReferenceSchema()),
+      argument("options", placeDirectionOptionsSchema(), false)
+    ],
+    result: placeDirectionSchema(),
+    examples: [[{kind: "province", id: 1}, {kind: "city", id: 2}]],
+    referenceSpaces: ["object:state", "object:province", "object:city", "worldPoint"],
+    businessCodes: ["ok", "invalid_place_reference", "invalid_place_kind", "invalid_place_id", "place_not_found", "place_removed", "place_anchor_invalid", "screen_distance_unavailable", "unsupported_coordinate_space"]
+  },
   "generate.getOptions": {
     arguments: [],
     result: objectSchema(["options", "map"]),
@@ -845,6 +884,150 @@ function validDescription(description) {
     && description.schemaVersion === API_METHOD_SCHEMA_VERSION
     && description.inputSchema.prefixItems?.every(item => item.title && item.title !== "input" && (item.type || item.anyOf || item.oneOf || item.const))
   );
+}
+
+function placeReferenceSchema() {
+  return {
+    anyOf: [
+      {type: "string", minLength: 1, description: "完整地点名称；只去除首尾空白，不做模糊匹配"},
+      {
+        type: "object",
+        required: ["kind", "id"],
+        properties: {
+          kind: {type: "string", enum: ["state", "province", "city"]},
+          id: {type: "integer", minimum: 1}
+        },
+        additionalProperties: false
+      }
+    ]
+  };
+}
+
+function placeResolveOptionsSchema() {
+  return {type: "object", properties: {}, additionalProperties: false};
+}
+
+function placeMeasurementOptionsSchema() {
+  return {
+    type: "object",
+    properties: {
+      units: {type: "object", description: "可选单位覆盖；省略时浏览器使用会话单位，无头使用存档单位或默认单位"},
+      includeScreenDistance: {type: "boolean", default: false, description: "仅浏览器可用的画布设备像素距离诊断"}
+    },
+    additionalProperties: false
+  };
+}
+
+function placeDirectionOptionsSchema() {
+  const schema = placeMeasurementOptionsSchema();
+  return {
+    ...schema,
+    properties: {
+      ...schema.properties,
+      epsilon: {type: "number", exclusiveMinimum: 0, description: "重合判定的世界坐标 epsilon"}
+    }
+  };
+}
+
+function placeCandidateSchema() {
+  return {
+    type: "object",
+    required: ["kind", "id", "name", "matchedBy"],
+    properties: {
+      kind: {type: "string", enum: ["state", "province", "city"]},
+      id: {type: "integer", minimum: 1},
+      name: {type: "string"},
+      fullName: {type: "string"},
+      matchedBy: {type: "string", enum: ["id", "name", "fullName"]}
+    },
+    additionalProperties: false
+  };
+}
+
+function mapRevisionSchema() {
+  return {
+    type: "object",
+    required: ["mapIdentity", "mapRevision"],
+    properties: {
+      mapIdentity: {type: ["string", "null"]},
+      mapRevision: {type: "integer", minimum: 0}
+    },
+    additionalProperties: false
+  };
+}
+
+function placeResolutionSchema() {
+  return {
+    type: "object",
+    required: ["selected", "candidates", "candidateCount", "priorityRule", "matchedBy", "revision"],
+    properties: {
+      selected: placeCandidateSchema(),
+      candidates: arraySchema(placeCandidateSchema()),
+      candidateCount: {type: "integer", minimum: 1},
+      priorityRule: {type: "string"},
+      matchedBy: {type: "string"},
+      revision: mapRevisionSchema()
+    },
+    additionalProperties: false
+  };
+}
+
+function placeEndpointSchema() {
+  return {
+    type: "object",
+    required: ["kind", "id", "name", "matchedBy", "x", "y", "anchorSource", "mapRevision"],
+    properties: {
+      ...placeCandidateSchema().properties,
+      x: {type: "number"},
+      y: {type: "number"},
+      anchorSource: {type: "string", enum: ["city-coordinate", "state-capital", "state-center-cell", "province-capital", "province-pole", "province-center-cell"]},
+      mapRevision: {type: "integer", minimum: 0}
+    },
+    additionalProperties: false
+  };
+}
+
+function placeDistanceSchema() {
+  return {
+    type: "object",
+    required: ["from", "to", "distanceWorld", "distanceValue", "kilometers", "unit", "formatted", "unitSource", "precision", "approximate", "reason", "revision"],
+    properties: {
+      from: placeEndpointSchema(),
+      to: placeEndpointSchema(),
+      distanceWorld: {type: "number", minimum: 0},
+      distanceValue: {type: "number", minimum: 0},
+      kilometers: {type: "number", minimum: 0},
+      unit: objectSchema(["id", "symbol"]),
+      formatted: {type: "string"},
+      unitSource: {type: "string", enum: ["explicit", "browser-session", "saved", "defaulted"]},
+      precision: {type: "string", enum: ["coordinate", "representative-anchor"]},
+      approximate: {type: "boolean"},
+      reason: arraySchema({type: "string"}),
+      revision: mapRevisionSchema(),
+      screenDistancePx: {type: "number", minimum: 0},
+      screenDistanceSpace: {const: "canvas-device-pixel"},
+      devicePixelRatio: {type: "number", exclusiveMinimum: 0}
+    },
+    additionalProperties: false
+  };
+}
+
+function placeDirectionSchema() {
+  return {
+    type: "object",
+    required: ["from", "to", "dx", "dy", "bearingDegrees", "direction", "distance", "revision"],
+    properties: {
+      from: placeEndpointSchema(),
+      to: placeEndpointSchema(),
+      dx: {type: "number"},
+      dy: {type: "number"},
+      bearingDegrees: {type: ["number", "null"], minimum: 0, maximum: 360},
+      direction: {type: "string", enum: ["北", "东北", "东", "东南", "南", "西南", "西", "西北", "重合"]},
+      distance: placeDistanceSchema(),
+      revision: mapRevisionSchema()
+    },
+    additionalProperties: false
+  };
 }
 
 function argument(name, schema, required = true) {

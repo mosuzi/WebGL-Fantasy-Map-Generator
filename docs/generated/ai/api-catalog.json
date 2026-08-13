@@ -3,8 +3,8 @@
     "generatedAt": "由 sync 脚本生成；时间不参与一致性比较",
     "apiVersion": "1.0.0",
     "plannerRecipeSchemaVersion": "1.0.0",
-    "browserMethods": 325,
-    "headlessMethods": 23,
+    "browserMethods": 328,
+    "headlessMethods": 26,
     "headlessWriteVersion": "1.0.0",
     "headlessWriteMethods": 6,
     "recipes": 10,
@@ -306,7 +306,7 @@
     {
       "method": "analysis.defineRegion",
       "stability": "stable",
-      "mutates": "map-or-persistent-state",
+      "mutates": "none-or-export-result",
       "undoable": false,
       "async": false,
       "requiresConfirm": false,
@@ -328,7 +328,7 @@
     {
       "method": "analysis.compareRegions",
       "stability": "stable",
-      "mutates": "map-or-persistent-state",
+      "mutates": "none-or-export-result",
       "undoable": false,
       "async": false,
       "requiresConfirm": false,
@@ -339,7 +339,7 @@
     {
       "method": "analysis.explainPrecipitation",
       "stability": "stable",
-      "mutates": "map-or-persistent-state",
+      "mutates": "none-or-export-result",
       "undoable": false,
       "async": false,
       "requiresConfirm": false,
@@ -350,7 +350,7 @@
     {
       "method": "analysis.diagnosePopulation",
       "stability": "stable",
-      "mutates": "map-or-persistent-state",
+      "mutates": "none-or-export-result",
       "undoable": false,
       "async": false,
       "requiresConfirm": false,
@@ -361,7 +361,7 @@
     {
       "method": "analysis.comparePower",
       "stability": "stable",
-      "mutates": "map-or-persistent-state",
+      "mutates": "none-or-export-result",
       "undoable": false,
       "async": false,
       "requiresConfirm": false,
@@ -372,12 +372,45 @@
     {
       "method": "analysis.diagnoseTerrain",
       "stability": "stable",
-      "mutates": "map-or-persistent-state",
+      "mutates": "none-or-export-result",
       "undoable": false,
       "async": false,
       "requiresConfirm": false,
       "capabilityGroup": "analysis",
       "schemaDiscovery": "window.webglGeneratorApi.info.describe(\"analysis.diagnoseTerrain\")",
+      "handbook": "docs/ai/regional-analysis.md"
+    },
+    {
+      "method": "analysis.resolvePlace",
+      "stability": "stable",
+      "mutates": "none-or-export-result",
+      "undoable": false,
+      "async": false,
+      "requiresConfirm": false,
+      "capabilityGroup": "analysis",
+      "schemaDiscovery": "window.webglGeneratorApi.info.describe(\"analysis.resolvePlace\")",
+      "handbook": "docs/ai/regional-analysis.md"
+    },
+    {
+      "method": "analysis.measureDistance",
+      "stability": "stable",
+      "mutates": "none-or-export-result",
+      "undoable": false,
+      "async": false,
+      "requiresConfirm": false,
+      "capabilityGroup": "analysis",
+      "schemaDiscovery": "window.webglGeneratorApi.info.describe(\"analysis.measureDistance\")",
+      "handbook": "docs/ai/regional-analysis.md"
+    },
+    {
+      "method": "analysis.getDirection",
+      "stability": "stable",
+      "mutates": "none-or-export-result",
+      "undoable": false,
+      "async": false,
+      "requiresConfirm": false,
+      "capabilityGroup": "analysis",
+      "schemaDiscovery": "window.webglGeneratorApi.info.describe(\"analysis.getDirection\")",
       "handbook": "docs/ai/regional-analysis.md"
     },
     {
@@ -3728,6 +3761,24 @@
     },
     {
       "method": "analysis.diagnoseTerrain",
+      "runtime": "headless",
+      "mutates": "none",
+      "handbook": "docs/ai/regional-analysis.md"
+    },
+    {
+      "method": "analysis.resolvePlace",
+      "runtime": "headless",
+      "mutates": "none",
+      "handbook": "docs/ai/regional-analysis.md"
+    },
+    {
+      "method": "analysis.measureDistance",
+      "runtime": "headless",
+      "mutates": "none",
+      "handbook": "docs/ai/regional-analysis.md"
+    },
+    {
+      "method": "analysis.getDirection",
       "runtime": "headless",
       "mutates": "none",
       "handbook": "docs/ai/regional-analysis.md"

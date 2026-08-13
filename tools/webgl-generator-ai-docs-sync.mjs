@@ -21,7 +21,8 @@ const headlessCatalog = [
   "info.mapSummary", "info.document", "objects.types", "objects.get", "objects.list", "objects.query",
   "cells.get", "cells.getAtPoint", "cells.neighbors", "cells.query", "cells.scan", "climate.get", "terrain.get", "population.get",
   "planner.listRecipes", "planner.getRecipe", "analysis.defineRegion", "analysis.describeRegion", "analysis.compareRegions",
-  "analysis.explainPrecipitation", "analysis.diagnosePopulation", "analysis.comparePower", "analysis.diagnoseTerrain"
+  "analysis.explainPrecipitation", "analysis.diagnosePopulation", "analysis.comparePower", "analysis.diagnoseTerrain",
+  "analysis.resolvePlace", "analysis.measureDistance", "analysis.getDirection"
 ].map(method => ({method, runtime: "headless", mutates: "none", handbook: routeForMethod(method)}));
 const headlessWriteCatalog = HEADLESS_WRITE_METHODS.map(method => ({
   method,
@@ -122,7 +123,7 @@ function buildProblemPatterns() {
 
 function buildBrowserCatalogRow(namespace, name) {
   const method = `${namespace}.${name}`;
-  const readonly = ["info", "objects", "cells", "planner"].includes(namespace) || /^(get|list|query|inspect|export|snapshot|dump|health|renderer|peek|stats|types|actions|version|capabilities|describe)/.test(name);
+  const readonly = ["info", "objects", "cells", "planner", "analysis"].includes(namespace) || /^(get|list|query|inspect|export|snapshot|dump|health|renderer|peek|stats|types|actions|version|capabilities|describe)/.test(name);
   return {
     method,
     stability: namespace === "debug" ? "experimental" : method === "data.exportAll" ? "deprecated" : "stable",

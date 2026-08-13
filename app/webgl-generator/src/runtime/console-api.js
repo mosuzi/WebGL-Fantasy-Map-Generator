@@ -22,6 +22,7 @@ import {getGridStructureSnapshot, getGridStructureSummary} from "./grid-topology
 import {getPlannerRecipe, listPlannerRecipes} from "./planner-recipe-registry.js";
 import {buildMapSummary as buildSharedMapSummary} from "./read-only-map-core.js";
 import {compareAnalysisRegions, compareRegionPower, defineAnalysisRegion, describeAnalysisRegion, diagnoseRegionPopulation, diagnoseRegionTerrain, explainRegionPrecipitation} from "./map-analysis-api.js";
+import {getPlaceDirection, measurePlaceDistance, resolvePlace} from "./place-analysis-api.js";
 
 export function installConsoleApi(documentRef, state, options = {}) {
   const view = documentRef.defaultView || window;
@@ -105,7 +106,19 @@ export function createConsoleApi(documentRef, state, actions = {}) {
       explainPrecipitation: (specification, options = {}) => apiCall(() => explainRegionPrecipitation(state.map, specification, options)),
       diagnosePopulation: (specification, options = {}) => apiCall(() => diagnoseRegionPopulation(state.map, specification, options)),
       comparePower: (left, right, options = {}) => apiCall(() => compareRegionPower(state.map, left, right, options)),
-      diagnoseTerrain: (specification, options = {}) => apiCall(() => diagnoseRegionTerrain(state.map, specification, options))
+      diagnoseTerrain: (specification, options = {}) => apiCall(() => diagnoseRegionTerrain(state.map, specification, options)),
+      resolvePlace: (reference, options = {}) => apiCall(() => resolvePlace(state.map, reference, {
+        revision: state.mapRevision?.getSnapshot?.()
+      })),
+      measureDistance: (from, to, options = {}) => apiCall(() => withBrowserScreenDistance(
+        measurePlaceDistance(state.map, from, to, browserPlaceAnalysisOptions(state, documentRef, options)),
+        state,
+        options
+      )),
+      getDirection: (from, to, options = {}) => apiCall(() => {
+        const direction = getPlaceDirection(state.map, from, to, browserPlaceAnalysisOptions(state, documentRef, options));
+        return {...direction, distance: withBrowserScreenDistance(direction.distance, state, options)};
+      })
     }),
     regenerationLocks: Object.freeze({
       list: (options = {}) => apiCall(() => requireApiAction(actions.regenerationLocks?.list, "regenerationLocks.list")(options)),
@@ -497,7 +510,7 @@ function buildCapabilities(api) {
       cells: "readonly-grid-and-pack-cell-discovery",
       grid: "controlled-grid-structure-snapshot-validation-and-transaction",
       planner: "readonly-planner-recipes",
-      analysis: "readonly-regional-analysis",
+      analysis: "readonly-regional-and-place-analysis",
       regenerationLocks: "persistent-regeneration-protection",
       generate: "map-regeneration",
       oceanCurrents: "ocean-current-edit-and-world-rebuild",
@@ -560,7 +573,10 @@ export function buildMethodMetadata() {
       explainPrecipitation: {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
       diagnosePopulation: {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
       comparePower: {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
-      diagnoseTerrain: {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false}
+      diagnoseTerrain: {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
+      resolvePlace: {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
+      measureDistance: {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
+      getDirection: {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false}
     },
     regenerationLocks: {
       list: {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
@@ -947,6 +963,43 @@ function cellReadonlyApiMetadata(state, action) {
     readonly: true,
     ...(state.mapRevision?.getSnapshot?.() || {mapIdentity: null, mapRevision: 0})
   };
+}
+
+function browserPlaceAnalysisOptions(state, documentRef, options = {}) {
+  const explicitUnits = options?.units && typeof options.units === "object" ? options.units : null;
+  return {
+    ...options,
+    revision: state.mapRevision?.getSnapshot?.(),
+    units: normalizeUnitPreferences(explicitUnits || readControlPreferences(documentRef).units),
+    unitSource: explicitUnits ? "explicit" : "browser-session"
+  };
+}
+
+function withBrowserScreenDistance(distance, state, options = {}) {
+  if (options?.includeScreenDistance !== true) return distance;
+  const renderer = state?.renderer;
+  const canvas = renderer?.canvas;
+  const rect = canvas?.getBoundingClientRect?.();
+  if (!renderer?.worldToScreen || !rect?.width || !rect?.height || !canvas?.width || !canvas?.height) {
+    const error = new Error("当前浏览器画布无法计算屏幕距离");
+    error.code = "screen_distance_unavailable";
+    throw error;
+  }
+  const from = renderer.worldToScreen(distance.from.x, distance.from.y, rect);
+  const to = renderer.worldToScreen(distance.to.x, distance.to.y, rect);
+  const scaleX = canvas.width / rect.width;
+  const scaleY = canvas.height / rect.height;
+  return {
+    ...distance,
+    screenDistancePx: Math.hypot((to.x - from.x) * scaleX, (to.y - from.y) * scaleY),
+    screenDistanceSpace: "canvas-device-pixel",
+    devicePixelRatio: Number(documentRefDevicePixelRatio(canvas.ownerDocument))
+  };
+}
+
+function documentRefDevicePixelRatio(documentRef) {
+  const ratio = Number(documentRef?.defaultView?.devicePixelRatio);
+  return Number.isFinite(ratio) && ratio > 0 ? ratio : 1;
 }
 
 function locateCellViaApi(state, actions, reference, options = {}) {

@@ -2,7 +2,7 @@
 
 > 由 `pnpm run sync:ai-docs` 生成，请勿手工修改。
 
-## 浏览器 API（325）
+## 浏览器 API（328）
 
 | 方法 | 稳定性 | 副作用 | 确认 | AI 手册 |
 |---|---|---|---|---|
@@ -32,13 +32,16 @@
 | `grid.refine` | stable | map-or-persistent-state | 是 | `docs/ai/runtime-and-loading.md` |
 | `planner.listRecipes` | stable | none-or-export-result | 否 | `docs/ai/runtime-and-loading.md` |
 | `planner.getRecipe` | stable | none-or-export-result | 否 | `docs/ai/runtime-and-loading.md` |
-| `analysis.defineRegion` | stable | map-or-persistent-state | 否 | `docs/ai/regional-analysis.md` |
+| `analysis.defineRegion` | stable | none-or-export-result | 否 | `docs/ai/regional-analysis.md` |
 | `analysis.describeRegion` | stable | none-or-export-result | 否 | `docs/ai/regional-analysis.md` |
-| `analysis.compareRegions` | stable | map-or-persistent-state | 否 | `docs/ai/regional-analysis.md` |
-| `analysis.explainPrecipitation` | stable | map-or-persistent-state | 否 | `docs/ai/regional-analysis.md` |
-| `analysis.diagnosePopulation` | stable | map-or-persistent-state | 否 | `docs/ai/regional-analysis.md` |
-| `analysis.comparePower` | stable | map-or-persistent-state | 否 | `docs/ai/regional-analysis.md` |
-| `analysis.diagnoseTerrain` | stable | map-or-persistent-state | 否 | `docs/ai/regional-analysis.md` |
+| `analysis.compareRegions` | stable | none-or-export-result | 否 | `docs/ai/regional-analysis.md` |
+| `analysis.explainPrecipitation` | stable | none-or-export-result | 否 | `docs/ai/regional-analysis.md` |
+| `analysis.diagnosePopulation` | stable | none-or-export-result | 否 | `docs/ai/regional-analysis.md` |
+| `analysis.comparePower` | stable | none-or-export-result | 否 | `docs/ai/regional-analysis.md` |
+| `analysis.diagnoseTerrain` | stable | none-or-export-result | 否 | `docs/ai/regional-analysis.md` |
+| `analysis.resolvePlace` | stable | none-or-export-result | 否 | `docs/ai/regional-analysis.md` |
+| `analysis.measureDistance` | stable | none-or-export-result | 否 | `docs/ai/regional-analysis.md` |
+| `analysis.getDirection` | stable | none-or-export-result | 否 | `docs/ai/regional-analysis.md` |
 | `regenerationLocks.list` | stable | none-or-export-result | 否 | `docs/ai/safe-change-boundaries.md` |
 | `regenerationLocks.status` | stable | map-or-persistent-state | 否 | `docs/ai/safe-change-boundaries.md` |
 | `regenerationLocks.inspect` | stable | none-or-export-result | 否 | `docs/ai/safe-change-boundaries.md` |
@@ -332,7 +335,7 @@
 | `debug.health` | experimental | none-or-export-result | 否 | `docs/ai/runtime-and-loading.md` |
 | `debug.profileNextRender` | experimental | runtime-or-ui-state | 否 | `docs/ai/runtime-and-loading.md` |
 
-## 无头只读 API（23）
+## 无头只读 API（26）
 
 | 方法 | AI 手册 |
 |---|---|
@@ -359,6 +362,9 @@
 | `analysis.diagnosePopulation` | `docs/ai/regional-analysis.md` |
 | `analysis.comparePower` | `docs/ai/regional-analysis.md` |
 | `analysis.diagnoseTerrain` | `docs/ai/regional-analysis.md` |
+| `analysis.resolvePlace` | `docs/ai/regional-analysis.md` |
+| `analysis.measureDistance` | `docs/ai/regional-analysis.md` |
+| `analysis.getDirection` | `docs/ai/regional-analysis.md` |
 
 ## 无头写入 API（6）
 

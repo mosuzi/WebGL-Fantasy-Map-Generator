@@ -8,6 +8,9 @@ import {
   resolvePlaceAnchor
 } from "../app/webgl-generator/src/runtime/place-analysis-api.js";
 import {convertMapDistance} from "../app/webgl-generator/src/ui/display-units.js";
+import {createHeadlessMapApi} from "../app/webgl-generator/src/runtime/headless-map-api.js";
+import {API_METHODS} from "../app/webgl-generator/src/runtime/api-contract.js";
+import {buildApiMethodDescriptionRegistry} from "../app/webgl-generator/src/runtime/api-schema-registry.js";
 
 const map = createFixture();
 const before = JSON.stringify(map);
@@ -92,6 +95,29 @@ const overlap = getPlaceDirection(map, {kind: "city", id: 50}, {kind: "city", id
 assert.equal(overlap.direction, "重合");
 assert.equal(overlap.bearingDegrees, null);
 
+const descriptions = buildApiMethodDescriptionRegistry(API_METHODS, createMethodMetadata());
+for (const method of ["analysis.resolvePlace", "analysis.measureDistance", "analysis.getDirection"]) {
+  const description = descriptions[method];
+  assert.ok(description, `${method} 应进入 schema 发现目录`);
+  assert.equal(description.metadata.mutates, "none");
+  assert.equal(description.metadata.requiresConfirm, false);
+  assert.ok(description.businessCodes.includes("ok"));
+}
+
+const headlessApi = createHeadlessMapApi({type: "webgl-generator-map", version: 2, metadata: {checksum: "place-document"}, map: {...map, display: {units}}});
+const headlessResolution = headlessApi.analysis.resolvePlace("同名");
+assert.equal(headlessResolution.ok, true);
+assert.equal(headlessResolution.metadata.sourceChecksum, "place-analysis-fixture");
+const headlessDistance = headlessApi.analysis.measureDistance({kind: "city", id: 3}, {kind: "city", id: 7});
+assert.equal(headlessDistance.ok, true);
+assert.equal(headlessDistance.data.distanceWorld, distance.distanceWorld);
+assert.equal(headlessDistance.data.distanceValue, distance.distanceValue);
+assert.equal(headlessDistance.data.unitSource, "saved");
+assert.deepEqual(headlessDistance.data.revision, {mapIdentity: null, mapRevision: 0});
+const unavailableScreen = headlessApi.analysis.measureDistance({kind: "city", id: 3}, {kind: "city", id: 7}, {includeScreenDistance: true});
+assert.equal(unavailableScreen.ok, false);
+assert.equal(unavailableScreen.error.code, "unsupported_coordinate_space");
+
 assert.equal(JSON.stringify(map), before, "地点分析不得修改地图");
 
 console.log(JSON.stringify({
@@ -102,6 +128,21 @@ console.log(JSON.stringify({
   distanceWorld: distance.distanceWorld,
   unit: distance.unit
 }, null, 2));
+
+function createMethodMetadata() {
+  return Object.fromEntries(Object.entries(API_METHODS).map(([namespace, methods]) => [namespace,
+    Object.fromEntries(methods.map(method => [method, {
+      stable: "draft",
+      stability: "stable",
+      since: "1.0.0",
+      capabilityGroup: namespace === "analysis" ? "analysis.read" : `${namespace}.read`,
+      mutates: "none",
+      undoable: false,
+      async: false,
+      requiresConfirm: false
+    }]))
+  ]));
+}
 
 function createFixture() {
   const cities = [

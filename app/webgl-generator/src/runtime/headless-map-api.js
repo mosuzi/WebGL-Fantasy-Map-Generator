@@ -5,6 +5,8 @@ import {getObjectSnapshot, listObjectSnapshots, listObjectTypes, queryObjectSnap
 import {getPlannerRecipe, listPlannerRecipes} from "./planner-recipe-registry.js";
 import {buildMapSummary} from "./read-only-map-core.js";
 import {compareAnalysisRegions, compareRegionPower, defineAnalysisRegion, describeAnalysisRegion, diagnoseRegionPopulation, diagnoseRegionTerrain, explainRegionPrecipitation} from "./map-analysis-api.js";
+import {getPlaceDirection, measurePlaceDistance, resolvePlace} from "./place-analysis-api.js";
+import {normalizeUnitPreferences} from "../ui/display-units.js";
 
 export const HEADLESS_API_VERSION = "1.0.0";
 
@@ -52,13 +54,34 @@ export function createHeadlessMapApi(document) {
       explainPrecipitation: (specification, options = {}) => apiCall(() => explainRegionPrecipitation(map, specification, options), metadata("analysis.explainPrecipitation")),
       diagnosePopulation: (specification, options = {}) => apiCall(() => diagnoseRegionPopulation(map, specification, options), metadata("analysis.diagnosePopulation")),
       comparePower: (left, right, options = {}) => apiCall(() => compareRegionPower(map, left, right, options), metadata("analysis.comparePower")),
-      diagnoseTerrain: (specification, options = {}) => apiCall(() => diagnoseRegionTerrain(map, specification, options), metadata("analysis.diagnoseTerrain"))
+      diagnoseTerrain: (specification, options = {}) => apiCall(() => diagnoseRegionTerrain(map, specification, options), metadata("analysis.diagnoseTerrain")),
+      resolvePlace: (reference, options = {}) => apiCall(() => resolvePlace(map, reference), metadata("analysis.resolvePlace")),
+      measureDistance: (from, to, options = {}) => apiCall(
+        () => measurePlaceDistance(map, from, to, headlessPlaceAnalysisOptions(map, options)),
+        metadata("analysis.measureDistance")
+      ),
+      getDirection: (from, to, options = {}) => apiCall(
+        () => getPlaceDirection(map, from, to, headlessPlaceAnalysisOptions(map, options)),
+        metadata("analysis.getDirection")
+      )
     }),
     planner: Object.freeze({
       listRecipes: () => apiCall(() => listPlannerRecipes(), metadata("planner.listRecipes")),
       getRecipe: recipeId => apiCall(() => getPlannerRecipe(recipeId), metadata("planner.getRecipe"))
     })
   });
+}
+
+function headlessPlaceAnalysisOptions(map, options = {}) {
+  if (options?.includeScreenDistance === true) throw codedError("unsupported_coordinate_space", "无头运行时不支持屏幕像素距离");
+  const explicitUnits = options?.units && typeof options.units === "object" ? options.units : null;
+  const savedUnits = map.display?.units && typeof map.display.units === "object" ? map.display.units : null;
+  return {
+    ...options,
+    revision: {mapIdentity: null, mapRevision: 0},
+    units: normalizeUnitPreferences(explicitUnits || savedUnits || {}),
+    unitSource: explicitUnits ? "explicit" : savedUnits ? "saved" : "defaulted"
+  };
 }
 
 export function loadHeadlessMapDocument(input) {

@@ -9,7 +9,7 @@ export const API_METHODS = Object.freeze({
   cells: Object.freeze(["get", "getAtPoint", "neighbors", "query", "locate", "scan", "actions", "inspectAction"]),
   grid: Object.freeze(["summary", "snapshot", "inspectWrite", "applyWrite", "inspectRefinement", "refine"]),
   planner: Object.freeze(["listRecipes", "getRecipe"]),
-  analysis: Object.freeze(["defineRegion", "describeRegion", "compareRegions", "explainPrecipitation", "diagnosePopulation", "comparePower", "diagnoseTerrain"]),
+  analysis: Object.freeze(["defineRegion", "describeRegion", "compareRegions", "explainPrecipitation", "diagnosePopulation", "comparePower", "diagnoseTerrain", "resolvePlace", "measureDistance", "getDirection"]),
   regenerationLocks: Object.freeze(["list", "status", "inspect", "set", "setMany", "clearKind"]),
   generate: Object.freeze(["getOptions", "setOptions", "listMapTemplates", "getMapTemplate", "createFromTemplate", "newMap", "rerollSeed", "regenerate"]),
   oceanCurrents: Object.freeze(["rename", "regenerate", "inspectWorldRebuild", "rebuildWorld", "cancelWorldRebuild"]),

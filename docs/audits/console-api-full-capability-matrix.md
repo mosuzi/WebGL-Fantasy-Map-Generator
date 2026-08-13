@@ -9,12 +9,12 @@
 - runtime actions：269
 - API action 绑定：267
 - command / inspector 导出：216
-- 公共 API 方法：325
-- 矩阵总行数：1225
+- 公共 API 方法：328
+- 矩阵总行数：1228
 
 ## 分类结果
 
-- covered：1151
+- covered：1154
 - excluded：74
 - deferred-owned：0
 - gap：0

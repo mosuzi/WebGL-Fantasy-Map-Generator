@@ -1,5 +1,25 @@
 # 区域定义与证据化分析
 
+## 地点解析、距离与方位
+
+国家、省份和城镇使用同一套只读地点引用：完整名称，或精确 `{kind:"state|province|city",id}`。需要可复现结果时必须先解析名称，再用返回的精确引用测量：
+
+```js
+const resolved = await api.analysis.resolvePlace("同名");
+// selected 是自动首选；candidates 保留全部同名候选
+const from = {kind: resolved.data.selected.kind, id: resolved.data.selected.id};
+const to = {kind: "city", id: 27};
+const distance = await api.analysis.measureDistance(from, to);
+const direction = await api.analysis.getDirection(from, to);
+```
+
+- 名称只去除首尾空白并做完整匹配；国家同时接受 `name / fullName`。跨类型按“国家 > 省份 > 城镇”，同类型按数值 ID 升序，绝不隐藏未选中的同名候选，也不做模糊猜测。
+- 城镇使用当前坐标；国家依次使用首都、中心 cell；省份依次使用唯一省会、`pole`、中心 cell。结果中的 `anchorSource` 说明采用的代表点，因此行政区域距离不是边界最短距离、道路里程或航路长度。
+- `measureDistance` 返回世界距离、正式单位换算、格式、精度、近似原因和地图 revision。浏览器默认使用当前会话单位，无头优先使用显式 `options.units`、其次存档单位、最后默认单位并标记近似。
+- 浏览器传 `{includeScreenDistance:true}` 时另返回 `canvas-device-pixel` 口径的 `screenDistancePx`；它随相机、DPR 和视口改变，不得当作正式地理距离或写入存档。无头环境明确拒绝该选项。
+- `getDirection` 以地图正北为 `0°`，顺时针返回角度和八方位中文结果；Y 减小表示北。两端在统一 epsilon 内重合时返回“重合”。
+- `invalid_place_reference / kind / id`、`place_not_found / removed` 和 `place_anchor_invalid` 都是结构化失败；不要自行换成相近名称或其它对象。
+
 ## 区域定义
 
 `analysis.defineRegion(spec)` 支持：

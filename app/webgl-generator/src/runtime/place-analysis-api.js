@@ -48,6 +48,7 @@ export function measurePlaceDistance(map, from, to, options = {}) {
     kilometers: converted.kilometers,
     unit: converted.unit,
     formatted: formatDistance(distanceWorld, units),
+    unitSource: String(options.unitSource || "explicit"),
     precision: fromAnchor.kind === "city" && toAnchor.kind === "city" ? "coordinate" : "representative-anchor",
     approximate: reasons.length > 0,
     reason: reasons,
