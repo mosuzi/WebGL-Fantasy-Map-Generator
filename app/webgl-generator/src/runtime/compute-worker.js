@@ -56,7 +56,8 @@ self.addEventListener("message", async event => {
         inputStreamId: `${request.requestId}:input`,
         inputReady: false,
         payload: undefined,
-        baseMap: request.reuseSession ? retainedSession.map : null
+        baseMap: request.reuseSession ? retainedSession.map : null,
+        renderCache: request.reuseSession ? retainedSession.renderCache : Object.create(null)
       });
       self.postMessage(createWorkerTaskMessage(WORKER_TASK_MESSAGE.READY, request));
       return;
@@ -106,7 +107,8 @@ self.addEventListener("message", async event => {
     activeRequests.set(request.requestId, state);
     self.postMessage(createWorkerTaskMessage(WORKER_TASK_MESSAGE.ACCEPTED, state.request));
     const handler = getWorkerTaskHandler(request.task);
-    const context = createWorkerContext(state.request);
+    if (!canReuseRenderCache(state.request.task, state.payload)) state.renderCache = Object.create(null);
+    const context = createWorkerContext(state.request, state.renderCache);
     const handlerPayload = state.request.reuseSession
       ? {...state.payload, map: state.baseMap}
       : state.payload;
@@ -123,7 +125,8 @@ self.addEventListener("message", async event => {
         binding: state.request.binding,
         requestId: state.request.requestId,
         request: state.request,
-        map: handlerPayload.map
+        map: handlerPayload.map,
+        renderCache: context.renderCache
       };
     }
     self.postMessage(createWorkerTaskMessage(WORKER_TASK_MESSAGE.RESULT, state.request, {
@@ -256,9 +259,10 @@ function workerStateError(code, message) {
   return error;
 }
 
-function createWorkerContext(request) {
+function createWorkerContext(request, renderCache = Object.create(null)) {
   return Object.freeze({
     binding: request.binding,
+    renderCache,
     signal: null,
     report(stage, detail = {}) {
       self.postMessage(createWorkerTaskMessage(WORKER_TASK_MESSAGE.PROGRESS, request, {
@@ -270,6 +274,10 @@ function createWorkerContext(request) {
       return true;
     }
   });
+}
+
+function canReuseRenderCache(task, payload) {
+  return task === "render.prepare" || (task === "regeneration.compute" && payload?.mode === "render-only");
 }
 
 function sameBinding(left, right) {

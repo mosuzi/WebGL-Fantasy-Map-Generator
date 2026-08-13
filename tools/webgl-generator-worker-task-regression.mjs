@@ -819,6 +819,7 @@ for (const kind of REGENERATION_WORKER_KINDS) {
 assert.ok(representativeRegenerationNumeric, "未检查代表性 routes regeneration output");
 
 const computeWorkerSessionGuards = await verifyComputeWorkerSessionGuards(original, binding);
+const computeWorkerRenderCacheContract = verifyComputeWorkerRenderCacheContract();
 
 console.log(JSON.stringify({
   protocol: "PASS",
@@ -830,6 +831,7 @@ console.log(JSON.stringify({
   acceptedFailureFallbacks: 0,
   cancellationTerminated: true,
   computeWorkerSessionGuards,
+  computeWorkerRenderCacheContract,
   computeWorkerOutputNumericBatchValues,
   representativeRegenerationNumeric,
   deferredRendererSummary,
@@ -842,6 +844,14 @@ function verifyComputeWorkerOutputBatchContract() {
   const sendResultStream = source.match(/async function sendResultStream\(state, result, context\) \{[\s\S]*?\n\}/u)?.[0] || "";
   assert.match(sendResultStream, /encodeWorkerGraph\(result, \{[\s\S]*?numericBatchValues:\s*32\s*\*\s*1024/u, "Compute Worker 正式输出必须使用 32k numeric batch");
   return 32 * 1024;
+}
+
+function verifyComputeWorkerRenderCacheContract() {
+  const source = readFileSync(new URL("../app/webgl-generator/src/runtime/compute-worker.js", import.meta.url), "utf8");
+  assert.match(source, /renderCache:\s*request\.reuseSession\s*\?\s*retainedSession\.renderCache/u, "复用 Worker session 必须继承渲染缓存");
+  assert.match(source, /task === "render\.prepare" \|\| \(task === "regeneration\.compute" && payload\?\.mode === "render-only"\)/u, "只有只读渲染任务可以复用渲染缓存");
+  assert.match(source, /renderCache:\s*context\.renderCache/u, "持久 Worker session 必须保存本次渲染缓存");
+  return {renderPrepare: true, renderOnly: true, mutatingTasks: false};
 }
 
 function inspectPlainDenseNumericArrays(value) {
@@ -966,6 +976,8 @@ function verifyAppDeferredReplayStaticContract() {
   assert.match(displayFlow, /sessionPayload: renderRequest/u, "普通显示复用请求不得重传 map");
   assert.match(displayFlow, /allowFallback: false/u, "复杂显示准备不得回退主线程");
   assert.match(displayFlow, /expectedRevisionDelta: 0/u, "显示事务不得推进 map revision");
+  assert.match(displayFlow, /cache: structuredClone\(prepared\.cache \|\| null\)/u, "显示诊断必须记录正式 Worker 渲染缓存命中");
+  assert.match(displayFlow, /operation: \{id: operation\?\.id \|\| "", name: operation\?\.name \|\| ""\}/u, "显示诊断必须绑定当前 operation 身份");
   assert.doesNotMatch(displayFlow, /state\.workerTaskCoordinator/u, "显示事务不得占用领域计算 session");
   assert.match(source, /workerRenderInstallSuspended > 0 && !activeName\.startsWith\("layers\."\)\) return apply\(\)/u, "地图事务暂停 renderer 时显示设置必须继续进入原 deferred 队列");
   assert.match(displayFlow, /ownerCurrent \|\| !install\.committed/u, "显示失败清理必须区分当前图与 detached committed owner");

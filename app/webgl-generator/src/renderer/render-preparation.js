@@ -103,7 +103,8 @@ export async function executeRenderPreparationTask(payload = {}, context = {}) {
     },
     layers: {}
   };
-  const cache = {};
+  const cacheState = resolveRenderPreparationCache(context.renderCache, binding);
+  const cache = cacheState.cache;
 
   for (let index = 0; index < requested.length; index++) {
     checkpoint(context, requested[index], index, requested.length);
@@ -194,6 +195,13 @@ export async function executeRenderPreparationTask(payload = {}, context = {}) {
     context.report?.("render-prepare", {layer, completed: index + 1, total: requested.length});
   }
 
+  result.cache = {
+    reused: cacheState.reused,
+    cellVisual: Boolean(cache.cellVisual),
+    shore: Boolean(cache.shore),
+    statePaths: Boolean(cache.statePaths),
+    provincePaths: Boolean(cache.provincePaths)
+  };
   return result;
 }
 
@@ -301,6 +309,20 @@ function ensurePoliticalMeshes(map, cache, payload = {}) {
       }
     : emptyPoliticalVisualMeshes();
   return cache.political;
+}
+
+function resolveRenderPreparationCache(candidate, binding) {
+  const cache = candidate && typeof candidate === "object" ? candidate : Object.create(null);
+  const previous = cache.renderBinding;
+  const reused = previous?.mapIdentity === binding.mapIdentity
+    && Number(previous?.mapRevision) === Number(binding.mapRevision)
+    && Boolean(cache.cellVisual || cache.shore || cache.statePaths || cache.provincePaths);
+  if (!reused) {
+    for (const key of ["cellVisual", "shore", "statePaths", "provincePaths", "political"]) delete cache[key];
+    cache.renderBinding = {...binding};
+  }
+  delete cache.political;
+  return {cache, reused};
 }
 
 function normalizeRenderBinding(value = {}) {

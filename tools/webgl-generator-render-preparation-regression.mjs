@@ -87,6 +87,18 @@ assert.equal(new Set(transfers).size, transfers.length, "transfer list 不得包
 assertNoFormalMapBuffers(transfers, map);
 assert.throws(() => assertRenderPreparationBinding(actual, {...binding, mapRevision: 8}), error => error?.code === "render-result-stale");
 
+const retainedRenderCache = Object.create(null);
+const firstSurface = await executeRenderPreparationTask({map, binding, camera, canvas, layers: ["surface"]}, {renderCache: retainedRenderCache});
+const retainedRefs = Object.fromEntries(["cellVisual", "shore", "statePaths", "provincePaths"].map(key => [key, retainedRenderCache[key]]));
+const secondSurface = await executeRenderPreparationTask({map, binding, camera, canvas, colorMode: "states", layers: ["surface"]}, {renderCache: retainedRenderCache});
+assert.equal(firstSurface.cache.reused, false, "同 revision 首次 surface 准备不得虚报复用");
+assert.equal(secondSurface.cache.reused, true, "同 revision 第二次 surface 准备必须复用渲染几何缓存");
+for (const [key, value] of Object.entries(retainedRefs)) assert.equal(retainedRenderCache[key], value, `同 revision 不得重建 ${key}`);
+const nextBinding = {...binding, mapRevision: binding.mapRevision + 1};
+const nextRevisionSurface = await executeRenderPreparationTask({map, binding: nextBinding, camera, canvas, colorMode: "provinces", layers: ["surface"]}, {renderCache: retainedRenderCache});
+assert.equal(nextRevisionSurface.cache.reused, false, "revision 变化必须拒绝旧渲染几何缓存");
+assert.ok(Object.entries(retainedRefs).every(([key, value]) => retainedRenderCache[key] !== value), "revision 变化必须重建全部地图绑定缓存");
+
 const aborted = new AbortController();
 aborted.abort();
 await assert.rejects(
@@ -111,6 +123,7 @@ console.log(JSON.stringify({
   }])),
   routeDrawRanges: actual.layers.route.drawRanges,
   transfers: transfers.length,
+  retainedRenderCache: {first: firstSurface.cache, second: secondSurface.cache, nextRevision: nextRevisionSurface.cache},
   cacheSummary,
   pickingSummary,
   labelSummary,

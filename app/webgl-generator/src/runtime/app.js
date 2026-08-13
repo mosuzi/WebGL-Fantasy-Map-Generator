@@ -3686,7 +3686,9 @@ async function applyRuntimeDisplayMutationViaWorker(state, documentRef, operatio
       // 已提交显示的旧资源释放失败不能反向破坏当前画面。
     }
     state.lastDisplayRenderWorker = {
+      operation: {id: operation?.id || "", name: operation?.name || ""},
       layers: [...renderRequest.layers],
+      cache: structuredClone(prepared.cache || null),
       worker: structuredClone(prepared.worker),
       session: state.renderTaskCoordinator.getSessionSnapshot?.() || null
     };
