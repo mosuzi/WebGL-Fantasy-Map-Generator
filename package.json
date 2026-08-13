@@ -124,6 +124,7 @@
     "regress:regeneration-lock-city-route-browser": "node --no-warnings ./tools/webgl-generator-regeneration-lock-city-route-browser-regression.mjs",
     "regress:regeneration-lock-province-generator": "node --no-warnings ./tools/webgl-generator-regeneration-lock-province-regression.mjs",
     "regress:regeneration-lock-state-generator": "node --no-warnings ./tools/webgl-generator-regeneration-lock-state-regression.mjs",
+    "regress:river-political-barrier": "node --no-warnings ./tools/webgl-generator-river-political-barrier-regression.mjs",
     "regress:regeneration-lock-politics-browser": "node --no-warnings ./tools/webgl-generator-regeneration-lock-politics-browser-regression.mjs",
     "regress:regeneration-lock-ui": "node --no-warnings ./tools/webgl-generator-regeneration-lock-ui-regression.mjs",
     "regress:regeneration-lock-matrix": "node --no-warnings ./tools/webgl-generator-regeneration-lock-coverage-matrix.mjs --check",

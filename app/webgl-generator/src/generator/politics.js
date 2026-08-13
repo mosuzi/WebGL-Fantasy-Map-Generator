@@ -5,6 +5,12 @@ import {legacyProvinceForm, provinceFormForState} from "./province-naming.js";
 import {createStageProfile} from "./profile.js";
 import {createRandom} from "./random.js";
 import {createCityScaleContext, deriveCityScale} from "../runtime/city-visuals.js";
+import {
+  createRiverPoliticalBarrier,
+  inspectRiverPoliticalBoundaries,
+  riverPoliticalTransition,
+  summarizeRiverPoliticalBarrier
+} from "./river-political-barrier.js";
 
 const STATE_ROOTS = ["昭宁", "雁川", "青岚", "星渚", "南衡", "白麓", "清河", "苍原", "岚湾", "云麓", "河洛", "云渡", "栖梧", "北辰", "东衡", "西麓", "南浦", "霜川", "泽阳", "柏原", "海津", "长岚", "玄丘", "玉津"];
 const REGION_NAMES = ["北境", "南陆", "西岭", "东湾", "中原", "湖泽"];
@@ -29,15 +35,16 @@ export function buildPolitics(grid, features, society, rivers, random, options, 
   const settledCells = profile.stage("settled-cells", "收集已定居 cell", () => landCells.filter(item => (grid.cells.culture?.[item.cell] || 0) > 0 && (grid.cells.pop?.[item.cell] || 0) > 0));
   const politicalCells = settledCells.length ? settledCells : landCells;
   const riverCells = profile.stage("river-cell-index", "建立河流 cell 索引", () => new Set(rivers.rivers.flatMap(river => river.gridCells || river.cells)));
+  const riverBarrier = profile.stage("river-political-barrier", "建立大河政治阻隔", () => createRiverPoliticalBarrier({cells: grid.cells, rivers: rivers.rivers}, {cellPathKey: "gridCells"}));
 
   const states = profile.stage("states-build", "生成国家中心", () => buildStates(grid, politicalCells, society, random));
-  grid.cells.state = profile.stage("states-expand", "扩张国家", () => expandStates(grid, features, states, riverCells));
+  grid.cells.state = profile.stage("states-expand", "扩张国家", () => expandStates(grid, features, states, riverCells, riverBarrier));
   profile.stage("states-neighbors", "计算国家相邻关系", () => findGridStateNeighbors(grid, states));
   profile.stage("states-governments", "定义国家政体与国号", () => defineStateGovernments(states, options));
   profile.stage("states-colors", "分配国家颜色", () => assignStateColors(states));
 
   const provinces = profile.stage("provinces-build", "生成省份中心", () => buildProvinces(grid, politicalCells, states, society, random));
-  grid.cells.province = profile.stage("provinces-expand", "扩张省份", () => expandProvinces(grid, features, provinces, riverCells));
+  grid.cells.province = profile.stage("provinces-expand", "扩张省份", () => expandProvinces(grid, features, provinces, riverCells, riverBarrier));
   profile.stage("provinces-neighbors", "计算省份相邻关系", () => findGridProvinceNeighbors(grid, provinces));
   profile.stage("provinces-colors", "分配省份颜色", () => assignProvinceColors(provinces));
 
@@ -57,7 +64,8 @@ export function buildPolitics(grid, features, society, rivers, random, options, 
       stateNames: states.map(state => state.fullName || state.name),
       stateGovernments: summarizeStateGovernments(states),
       provinceNames: provinces.map(province => province.name),
-      regionNames: regions.map(region => region.name)
+      regionNames: regions.map(region => region.name),
+      riverBoundaries: politicalRiverBoundaryDiagnostics(riverBarrier, grid.cells.state, grid.cells.province)
     }
   };
 }
@@ -117,11 +125,11 @@ export function applyMapTemplateHistoricalPolitics(grid, society, settlements, p
   grid.cells.state = mirrorPackStateToGrid(grid, pack);
 
   const nameGenerator = createChineseNameGenerator(`${options.seed}|${template.id}|${template.snapshotYear}`, {namebases: options.namebases});
-  const provinces = buildPackProvinces(pack, society, createRandom(`${options.seed}|${template.id}|provinces`), options, nameGenerator);
+  const provinces = buildPackProvinces(pack, society, createRandom(`${options.seed}|${template.id}|provinces`), options, nameGenerator, null, new Set(), createRiverPoliticalBarrier(pack));
   grid.cells.province = mirrorPackProvinceToGrid(grid, pack);
   politics.provinces = provinces;
   politics.metadata = {
-    ...createPackPoliticsMetadata(states, provinces, politics.regions),
+    ...createPackPoliticsMetadata(states, provinces, politics.regions, createRiverPoliticalBarrier(pack), pack.cells),
     historicalPreset: {
       id: `${template.id}-human-v1`,
       snapshotYear: template.snapshotYear,
@@ -188,15 +196,16 @@ export function regeneratePackStatesAndProvinces(grid, society, options, pack, s
   const supportingProvinces = profile.stage("states-province-support", "收集锁国省份支撑快照", () => collectLockedStateProvinceSnapshots(pack, options));
   const lockedProvinces = profile.stage("provinces-locks", "校验锁定省份", () => prepareLockedProvinces(grid, pack, options, supportingProvinces));
   const lockedStates = profile.stage("states-locks", "校验锁定国家", () => prepareLockedStates(grid, pack, options, lockedProvinces));
+  const riverBarrier = profile.stage("river-political-barrier", "建立大河政治阻隔", () => createRiverPoliticalBarrier(pack));
 
   const selectedCapitals = profile.stage("capitals-select", "重新选择国家首都", () => selectRegeneratedCapitalBurgs(pack, settlements, options, random, lockedStates));
   if (!selectedCapitals.length) return null;
 
   const states = profile.stage("states-build", "生成国家对象", () => buildPackStates(pack, society, random, nameGenerator, lockedStates));
-  profile.stage("states-expand", "扩张 pack 国家", () => expandPackStates(pack, states, society, null, lockedStates));
-  profile.stage("states-normalize", "整理国家边界", () => normalizePackStates(pack, states, lockedStates.packCells, lockedStates.ids));
+  profile.stage("states-expand", "扩张 pack 国家", () => expandPackStates(pack, states, society, null, lockedStates, riverBarrier));
+  profile.stage("states-normalize", "整理国家边界", () => normalizePackStates(pack, states, lockedStates.packCells, lockedStates.ids, riverBarrier));
   profile.stage("states-claim-neutral", "吸收已定居中立 cell", () => claimInhabitedNeutralCells(pack, states, lockedStates.ids));
-  profile.stage("states-smooth-spikes", "吸收国家边界毛刺", () => smoothPackStateBoundarySpikes(pack, states, lockedStates.packCells, lockedStates.ids));
+  profile.stage("states-smooth-spikes", "吸收国家边界毛刺", () => smoothPackStateBoundarySpikes(pack, states, lockedStates.packCells, lockedStates.ids, riverBarrier));
   profile.stage("states-sync-burgs", "同步城市国家归属", () => syncBurgStates(pack, lockedStates.protectedBurgIds));
   profile.stage("states-statistics", "统计国家数据", () => collectStateStatistics(pack, states, lockedStates.ids));
   profile.stage("states-name-orientation", "校正国家方位名", () => orientPackStateDirectionalNames(pack, states, lockedStates.ids));
@@ -205,7 +214,7 @@ export function regeneratePackStatesAndProvinces(grid, society, options, pack, s
   profile.stage("states-colors", "分配国家颜色", () => assignStateColors(states, lockedStates.ids));
   grid.cells.state = profile.stage("states-mirror-grid", "镜像国家到 grid", () => mirrorPackStateToGrid(grid, pack, lockedStates.gridOwners, lockedStates.ids));
 
-  const provinces = profile.stage("provinces-rebuild", "重建 pack 省份", () => buildPackProvinces(pack, society, createRandom(regenerationSeed(options, "regenerate-provinces", salt)), options, nameGenerator, lockedProvinces, lockedStates.ids));
+  const provinces = profile.stage("provinces-rebuild", "重建 pack 省份", () => buildPackProvinces(pack, society, createRandom(regenerationSeed(options, "regenerate-provinces", salt)), options, nameGenerator, lockedProvinces, lockedStates.ids, riverBarrier));
   grid.cells.province = profile.stage("provinces-mirror-grid", "镜像省份到 grid", () => mirrorPackProvinceToGrid(grid, pack, lockedProvinces.gridOwners, lockedProvinces.ids));
 
   const timing = profile.finish();
@@ -214,7 +223,7 @@ export function regeneratePackStatesAndProvinces(grid, society, options, pack, s
     provinces,
     timing,
     provinceTiming: provinces.timing || null,
-    metadata: createPackPoliticsMetadata(states, provinces)
+    metadata: createPackPoliticsMetadata(states, provinces, [], riverBarrier, pack.cells)
   };
 }
 
@@ -224,7 +233,8 @@ export function regeneratePackProvincesWithinStates(grid, society, options, pack
   const random = profile.stage("random-provinces", "初始化省份重算随机源", () => createRandom(regenerationSeed(options, "regenerate-provinces", salt)));
   const nameGenerator = profile.stage("name-generator", "初始化省份命名器", () => createChineseNameGenerator(regenerationSeed(options, "regenerate-province-names", salt), {namebases: options.namebases}));
   const locked = profile.stage("provinces-locks", "校验锁定省份", () => prepareLockedProvinces(grid, pack, options));
-  const provinces = profile.stage("provinces-rebuild", "重建 pack 省份", () => buildPackProvinces(pack, society, random, options, nameGenerator, locked));
+  const riverBarrier = profile.stage("river-political-barrier", "建立大河政治阻隔", () => createRiverPoliticalBarrier(pack));
+  const provinces = profile.stage("provinces-rebuild", "重建 pack 省份", () => buildPackProvinces(pack, society, random, options, nameGenerator, locked, new Set(), riverBarrier));
   grid.cells.province = profile.stage("provinces-mirror-grid", "镜像省份到 grid", () => mirrorPackProvinceToGrid(grid, pack, locked.gridOwners, locked.ids));
   const timing = profile.finish();
   return {
@@ -233,7 +243,8 @@ export function regeneratePackProvincesWithinStates(grid, society, options, pack
     provinceTiming: provinces.timing || null,
     metadata: {
       provinces: provinces.filter(province => province?.i).length,
-      provinceNames: provinces.filter(province => province?.i).map(province => province.fullName || province.name)
+      provinceNames: provinces.filter(province => province?.i).map(province => province.fullName || province.name),
+      riverBoundaries: politicalRiverBoundaryDiagnostics(riverBarrier, pack.cells.state, pack.cells.province)
     }
   };
 }
@@ -432,13 +443,14 @@ function assertProtectedPoliticalSnapshots(items, snapshots = [], label) {
 function buildPackPolitics(grid, features, society, rivers, random, options, pack) {
   const profile = createStageProfile();
   const riverCells = profile.stage("river-cell-index", "建立河流 cell 索引", () => new Set(rivers.rivers.flatMap(river => river.gridCells || river.cells)));
+  const riverBarrier = profile.stage("river-political-barrier", "建立大河政治阻隔", () => createRiverPoliticalBarrier(pack));
 
   const nameGenerator = profile.stage("name-generator", "初始化政区命名器", () => createChineseNameGenerator(options.seed, {namebases: options.namebases}));
   const states = profile.stage("states-build", "生成国家对象", () => buildPackStates(pack, society, random, nameGenerator));
-  profile.stage("states-expand", "扩张 pack 国家", () => expandPackStates(pack, states, society));
-  profile.stage("states-normalize", "整理国家边界", () => normalizePackStates(pack, states));
+  profile.stage("states-expand", "扩张 pack 国家", () => expandPackStates(pack, states, society, null, null, riverBarrier));
+  profile.stage("states-normalize", "整理国家边界", () => normalizePackStates(pack, states, new Set(), new Set(), riverBarrier));
   profile.stage("states-claim-neutral", "吸收已定居中立 cell", () => claimInhabitedNeutralCells(pack, states));
-  profile.stage("states-smooth-spikes", "吸收国家边界毛刺", () => smoothPackStateBoundarySpikes(pack, states));
+  profile.stage("states-smooth-spikes", "吸收国家边界毛刺", () => smoothPackStateBoundarySpikes(pack, states, new Set(), new Set(), riverBarrier));
   profile.stage("states-sync-burgs", "同步城市国家归属", () => syncBurgStates(pack));
   profile.stage("states-statistics", "统计国家数据", () => collectStateStatistics(pack, states));
   profile.stage("states-name-orientation", "校正国家方位名", () => orientPackStateDirectionalNames(pack, states));
@@ -447,7 +459,7 @@ function buildPackPolitics(grid, features, society, rivers, random, options, pac
   profile.stage("states-colors", "分配国家颜色", () => assignStateColors(states));
   grid.cells.state = profile.stage("states-mirror-grid", "镜像国家到 grid", () => mirrorPackStateToGrid(grid, pack));
 
-  const provinces = profile.stage("provinces-build", "生成 pack 省份", () => buildPackProvinces(pack, society, createRandom(options.seed), options, nameGenerator));
+  const provinces = profile.stage("provinces-build", "生成 pack 省份", () => buildPackProvinces(pack, society, createRandom(options.seed), options, nameGenerator, null, new Set(), riverBarrier));
   grid.cells.province = profile.stage("provinces-mirror-grid", "镜像省份到 grid", () => mirrorPackProvinceToGrid(grid, pack));
 
   const regions = profile.stage("regions-build", "生成区域定义", () => buildRegions());
@@ -468,7 +480,8 @@ function buildPackPolitics(grid, features, society, rivers, random, options, pac
       stateNames: validStates.map(state => state.fullName || state.name),
       stateGovernments: summarizeStateGovernments(validStates),
       provinceNames: provinces.filter(province => province?.i).map(province => province.name),
-      regionNames: regions.map(region => region.name)
+      regionNames: regions.map(region => region.name),
+      riverBoundaries: politicalRiverBoundaryDiagnostics(riverBarrier, pack.cells.state, pack.cells.province)
     }
   };
 }
@@ -777,7 +790,7 @@ function applyCapitalSelection(pack, settlements, selectedBurgIds, protectedBurg
   }
 }
 
-function createPackPoliticsMetadata(states, provinces, regions = []) {
+function createPackPoliticsMetadata(states, provinces, regions = [], riverBarrier = null, cells = null) {
   const validStates = states.filter(state => state?.i && !state.removed);
   const validProvinces = provinces.filter(province => province?.i && !province.removed);
   return {
@@ -787,8 +800,35 @@ function createPackPoliticsMetadata(states, provinces, regions = []) {
     stateNames: validStates.map(state => state.fullName || state.name),
     stateGovernments: summarizeStateGovernments(validStates),
     provinceNames: validProvinces.map(province => province.fullName || province.name),
-    regionNames: regions.map(region => region.name)
+    regionNames: regions.map(region => region.name),
+    ...(riverBarrier && cells ? {riverBoundaries: politicalRiverBoundaryDiagnostics(riverBarrier, cells.state, cells.province)} : {})
   };
+}
+
+function politicalRiverBoundaryDiagnostics(riverBarrier, stateOwners, provinceOwners) {
+  const model = summarizeRiverPoliticalBarrier(riverBarrier);
+  const states = inspectRiverPoliticalBoundaries(riverBarrier, stateOwners);
+  const provinces = inspectRiverPoliticalBoundaries(riverBarrier, provinceOwners);
+  return {
+    version: model.version,
+    candidates: model.candidates,
+    strong: model.strong,
+    weak: model.weak,
+    states: compactRiverBoundaryInspection(states),
+    provinces: compactRiverBoundaryInspection(provinces)
+  };
+}
+
+function compactRiverBoundaryInspection(inspection) {
+  return {
+    eligibleCells: inspection.eligibleCells,
+    adoptedCells: inspection.adoptedCells,
+    adoptionRate: inspection.adoptionRate
+  };
+}
+
+function isStrongRiverPoliticalTransition(riverBarrier, from, to, level) {
+  return riverPoliticalTransition(riverBarrier, from, to, {level}).strong;
 }
 
 function orientPackStateDirectionalNames(pack, states, protectedIds = new Set()) {
@@ -926,7 +966,7 @@ function defineStateGovernments(states, options = {}, protectedIds = new Set()) 
   }
 }
 
-function expandPackStates(pack, states, society, preservedAnchors = null, locked = null) {
+function expandPackStates(pack, states, society, preservedAnchors = null, locked = null, riverBarrier = null) {
   const {cells, burgs} = pack;
   cells.state = new Uint16Array(cells.i.length);
   const costs = new Float64Array(cells.i.length).fill(Infinity);
@@ -944,25 +984,25 @@ function expandPackStates(pack, states, society, preservedAnchors = null, locked
     nativeBiomes.set(state.i, nativeBiome);
     cells.state[capitalCell] = state.i;
     costs[capitalCell] = 1;
-    queue.push({cell: capitalCell, stateId: state.i, nativeBiome, cost: 0}, 0);
+    queue.push({cell: capitalCell, stateId: state.i, nativeBiome, cost: 0, growthCost: 0}, 0);
   }
   for (const anchor of preservedAnchors?.anchors || []) {
     const state = states[anchor.stateId];
     if (!state?.i || state.removed || cells.h[anchor.cell] < 20) continue;
     cells.state[anchor.cell] = state.i;
     costs[anchor.cell] = 1;
-    queue.push({cell: anchor.cell, stateId: state.i, nativeBiome: nativeBiomes.get(state.i) ?? cells.biome[anchor.cell], cost: 0}, 0);
+    queue.push({cell: anchor.cell, stateId: state.i, nativeBiome: nativeBiomes.get(state.i) ?? cells.biome[anchor.cell], cost: 0, growthCost: 0}, 0);
   }
   for (const [cell, stateId] of locked?.packOwners || []) {
     const state = states[stateId];
     if (!state?.i || state.removed || cells.h[cell] < 20) continue;
     cells.state[cell] = stateId;
     costs[cell] = 1;
-    queue.push({cell, stateId, nativeBiome: nativeBiomes.get(stateId) ?? cells.biome[cell], cost: 0}, 0);
+    queue.push({cell, stateId, nativeBiome: nativeBiomes.get(stateId) ?? cells.biome[cell], cost: 0, growthCost: 0}, 0);
   }
 
   while (queue.length) {
-    const {cell, stateId, nativeBiome, cost} = queue.pop();
+    const {cell, stateId, nativeBiome, cost, growthCost} = queue.pop();
     if (cost > costs[cell] && costs[cell] !== 1) continue;
     const state = states[stateId];
     if (!state) continue;
@@ -978,15 +1018,19 @@ function expandPackStates(pack, states, society, preservedAnchors = null, locked
       const populationCost = cells.h[neighbor] < 20 ? 0 : cells.s[neighbor] ? Math.max(20 - cells.s[neighbor], 0) : 5000;
       const biomeCost = getStateBiomeCost(nativeBiome, cells.biome[neighbor], state.type);
       const heightCost = getStateHeightCost(pack.features[cells.f[neighbor]], cells.h[neighbor], state.type);
-      const riverCost = getStateRiverCost(cells.r?.[neighbor], cells.fl?.[neighbor], state.type);
+      const riverCost = riverBarrier
+        ? riverPoliticalTransition(riverBarrier, cell, neighbor, {level: "state"}).cost
+        : getStateRiverCost(cells.r?.[neighbor], cells.fl?.[neighbor], state.type);
       const typeCost = getStateTypeCost(cells.t[neighbor], state.type);
-      const cellCost = Math.max(cultureCost + populationCost + biomeCost + heightCost + riverCost + typeCost, 0);
-      const totalCost = cost + 10 + cellCost / Math.max(0.1, state.expansionism || 1);
+      const expansionism = Math.max(0.1, state.expansionism || 1);
+      const baseCellCost = Math.max(cultureCost + populationCost + biomeCost + heightCost + typeCost, 0);
+      const nextGrowthCost = growthCost + 10 + baseCellCost / expansionism;
+      const totalCost = cost + 10 + (baseCellCost + riverCost) / expansionism;
 
-      if (totalCost > growthRate || totalCost >= costs[neighbor]) continue;
+      if (nextGrowthCost > growthRate || totalCost >= costs[neighbor]) continue;
       if (cells.h[neighbor] >= 20) cells.state[neighbor] = stateId;
       costs[neighbor] = totalCost;
-      queue.push({cell: neighbor, stateId, nativeBiome, cost: totalCost}, totalCost);
+      queue.push({cell: neighbor, stateId, nativeBiome, cost: totalCost, growthCost: nextGrowthCost}, totalCost);
     }
   }
 
@@ -997,14 +1041,14 @@ function expandPackStates(pack, states, society, preservedAnchors = null, locked
   }
 }
 
-function normalizePackStates(pack, states, protectedCells = new Set(), protectedIds = new Set()) {
+function normalizePackStates(pack, states, protectedCells = new Set(), protectedIds = new Set(), riverBarrier = null) {
   const {cells, burgs} = pack;
 
   for (const cell of cells.i) {
     if (protectedCells.has(cell)) continue;
     if (cells.h[cell] < 20 || cells.burg[cell]) continue;
     if ((cells.c[cell] || []).some(neighbor => burgs[cells.burg[neighbor]]?.capital)) continue;
-    const landNeighbors = (cells.c[cell] || []).filter(neighbor => cells.h[neighbor] >= 20);
+    const landNeighbors = (cells.c[cell] || []).filter(neighbor => cells.h[neighbor] >= 20 && !isStrongRiverPoliticalTransition(riverBarrier, cell, neighbor, "state"));
     const adversaries = landNeighbors.filter(neighbor => cells.state[neighbor] !== cells.state[cell]);
     if (adversaries.length < 2) continue;
     const buddies = landNeighbors.filter(neighbor => cells.state[neighbor] === cells.state[cell]);
@@ -1034,7 +1078,7 @@ function validEmptyStateCenter(pack, state, used = new Set()) {
     && !used.has(center);
 }
 
-function smoothPackStateBoundarySpikes(pack, states, additionalProtectedCells = new Set(), protectedIds = new Set()) {
+function smoothPackStateBoundarySpikes(pack, states, additionalProtectedCells = new Set(), protectedIds = new Set(), riverBarrier = null) {
   const {cells, burgs} = pack;
   const protectedCells = new Set(
     burgs
@@ -1047,7 +1091,7 @@ function smoothPackStateBoundarySpikes(pack, states, additionalProtectedCells = 
     passes: 3,
     protectedCells,
     canInspect: cell => cells.h[cell] >= 20 && Boolean(states[cells.state[cell]]),
-    canUseNeighbor: neighbor => cells.h[neighbor] >= 20,
+    canUseNeighbor: (neighbor, cell) => cells.h[neighbor] >= 20 && !isStrongRiverPoliticalTransition(riverBarrier, cell, neighbor, "state"),
     canAbsorbTo: value => value > 0 && Boolean(states[value]) && !protectedIds.has(value)
   });
 }
@@ -1484,7 +1528,7 @@ function provinceLockConflict(message, details = {}) {
   return error;
 }
 
-function buildPackProvinces(pack, society, random, options, nameGenerator, locked = null, protectedStateIds = new Set()) {
+function buildPackProvinces(pack, society, random, options, nameGenerator, locked = null, protectedStateIds = new Set(), riverBarrier = null) {
   const profile = createStageProfile();
   const {cells, states, burgs} = pack;
   const constraints = locked || {provinces: [null], ids: new Set(), centers: new Set(), burgIds: new Set(), packOwners: new Map(), gridOwners: new Map()};
@@ -1549,10 +1593,10 @@ function buildPackProvinces(pack, society, random, options, nameGenerator, locke
     }
   });
 
-  profile.stage("expand-provinces", "扩张省份", () => expandPackProvinces(pack, provinces, provinceIds, maxGrowth, constraints.packOwners));
-  profile.stage("justify-provinces", "整理省份边界", () => justifyPackProvinces(pack, provinces, provinceIds, constraints.packOwners));
-  profile.stage("fill-unassigned", "填充未归属省份 cell", () => fillUnassignedProvinceCells(pack, provinces, provinceIds, random, maxGrowth, nameGenerator, allocateProvinceId, protectedStateIds));
-  profile.stage("smooth-spikes", "吸收省份边界毛刺", () => smoothPackProvinceBoundarySpikes(pack, provinces, provinceIds, constraints.packOwners));
+  profile.stage("expand-provinces", "扩张省份", () => expandPackProvinces(pack, provinces, provinceIds, maxGrowth, constraints.packOwners, riverBarrier));
+  profile.stage("justify-provinces", "整理省份边界", () => justifyPackProvinces(pack, provinces, provinceIds, constraints.packOwners, riverBarrier));
+  profile.stage("fill-unassigned", "填充未归属省份 cell", () => fillUnassignedProvinceCells(pack, provinces, provinceIds, random, maxGrowth, nameGenerator, allocateProvinceId, protectedStateIds, riverBarrier));
+  profile.stage("smooth-spikes", "吸收省份边界毛刺", () => smoothPackProvinceBoundarySpikes(pack, provinces, provinceIds, constraints.packOwners, riverBarrier));
   profile.stage("statistics", "统计省份数据", () => collectProvinceStatistics(pack, provinces, provinceIds, constraints.ids));
   profile.stage("assign-poles", "计算省份 pole", () => assignProvincePoles(pack, provinces, provinceIds, constraints.ids));
   profile.stage("neighbors", "计算省份相邻关系", () => findPackProvinceNeighbors(pack, provinces, provinceIds, constraints.ids));
@@ -1653,7 +1697,7 @@ function provinceColorId(province) {
   return province.i ?? province.id;
 }
 
-function expandPackProvinces(pack, provinces, provinceIds, maxGrowth, fixedOwners = new Map()) {
+function expandPackProvinces(pack, provinces, provinceIds, maxGrowth, fixedOwners = new Map(), riverBarrier = null) {
   const {cells} = pack;
   const costs = new Float64Array(cells.i.length).fill(Infinity);
   const queue = new MinPriorityQueue();
@@ -1667,12 +1711,12 @@ function expandPackProvinces(pack, provinces, provinceIds, maxGrowth, fixedOwner
     }
     for (const cell of fixedCells.length ? fixedCells : [province.center]) {
       costs[cell] = 1;
-      queue.push({cell, province: province.i, state: province.state, cost: 0}, 0);
+      queue.push({cell, province: province.i, state: province.state, cost: 0, growthCost: 0}, 0);
     }
   }
 
   while (queue.length) {
-    const {cell, province, state, cost} = queue.pop();
+    const {cell, province, state, cost, growthCost} = queue.pop();
     if (cost > costs[cell] && costs[cell] !== 1) continue;
 
     for (const neighbor of cells.c[cell] || []) {
@@ -1683,22 +1727,23 @@ function expandPackProvinces(pack, provinces, provinceIds, maxGrowth, fixedOwner
       if (!land && !cells.t[neighbor]) continue;
       if (land && cells.state[neighbor] !== state) continue;
       const elevationCost = cells.h[neighbor] >= 70 ? 100 : cells.h[neighbor] >= 50 ? 30 : cells.h[neighbor] >= 20 ? 10 : 100;
-      const totalCost = cost + elevationCost;
-      if (totalCost > maxGrowth || totalCost >= costs[neighbor]) continue;
+      const nextGrowthCost = growthCost + elevationCost;
+      const totalCost = cost + elevationCost + riverPoliticalTransition(riverBarrier, cell, neighbor, {level: "province"}).cost;
+      if (nextGrowthCost > maxGrowth || totalCost >= costs[neighbor]) continue;
       if (land) provinceIds[neighbor] = province;
       costs[neighbor] = totalCost;
-      queue.push({cell: neighbor, province, state, cost: totalCost}, totalCost);
+      queue.push({cell: neighbor, province, state, cost: totalCost, growthCost: nextGrowthCost}, totalCost);
     }
   }
 }
 
-function justifyPackProvinces(pack, provinces, provinceIds, fixedOwners = new Map()) {
+function justifyPackProvinces(pack, provinces, provinceIds, fixedOwners = new Map(), riverBarrier = null) {
   const {cells} = pack;
   const fixedProvinceIds = new Set(fixedOwners.values());
   for (const cell of cells.i) {
     if (fixedOwners.has(cell)) continue;
     if (cells.burg[cell]) continue;
-    const sameStateNeighbors = (cells.c[cell] || []).filter(neighbor => cells.state[neighbor] === cells.state[cell]);
+    const sameStateNeighbors = (cells.c[cell] || []).filter(neighbor => cells.state[neighbor] === cells.state[cell] && !isStrongRiverPoliticalTransition(riverBarrier, cell, neighbor, "province"));
     const neighborProvinces = sameStateNeighbors.map(neighbor => provinceIds[neighbor]);
     const adversaries = neighborProvinces.filter(province => province !== provinceIds[cell]);
     if (adversaries.length < 2) continue;
@@ -1717,7 +1762,7 @@ function justifyPackProvinces(pack, provinces, provinceIds, fixedOwners = new Ma
   }
 }
 
-function smoothPackProvinceBoundarySpikes(pack, provinces, provinceIds, fixedOwners = new Map()) {
+function smoothPackProvinceBoundarySpikes(pack, provinces, provinceIds, fixedOwners = new Map(), riverBarrier = null) {
   const {cells} = pack;
   const protectedCells = new Set();
   const fixedProvinceIds = new Set(fixedOwners.values());
@@ -1733,7 +1778,7 @@ function smoothPackProvinceBoundarySpikes(pack, provinces, provinceIds, fixedOwn
     passes: 3,
     protectedCells,
     canInspect: cell => cells.h[cell] >= 20 && Boolean(provinces[provinceIds[cell]]),
-    canUseNeighbor: (neighbor, cell) => cells.h[neighbor] >= 20 && cells.state[neighbor] === cells.state[cell],
+    canUseNeighbor: (neighbor, cell) => cells.h[neighbor] >= 20 && cells.state[neighbor] === cells.state[cell] && !isStrongRiverPoliticalTransition(riverBarrier, cell, neighbor, "province"),
     canAbsorbTo: value => value > 0 && Boolean(provinces[value]) && !fixedProvinceIds.has(value)
   });
 }
@@ -1794,7 +1839,7 @@ function boundarySpikeAbsorptionValue(cells, values, cell, canUseNeighbor, canAb
   return null;
 }
 
-function fillUnassignedProvinceCells(pack, provinces, provinceIds, random, maxGrowth, nameGenerator, allocateProvinceId = () => provinces.length, protectedStateIds = new Set()) {
+function fillUnassignedProvinceCells(pack, provinces, provinceIds, random, maxGrowth, nameGenerator, allocateProvinceId = () => provinces.length, protectedStateIds = new Set(), riverBarrier = null) {
   const {cells, states, burgs} = pack;
   const unassignedByState = collectUnassignedProvinceCellsByState(cells, states, provinceIds);
   const remaining = new Uint8Array(cells.i.length);
@@ -1815,36 +1860,37 @@ function fillUnassignedProvinceCells(pack, provinces, provinceIds, random, maxGr
     while (remainingCount) {
       const center = pickUnassignedProvinceCenter(stateUnassigned, remaining, cells.burg);
       if (center === -1) break;
-      const provinceId = allocateProvinceId();
       const burgId = cells.burg[center] || 0;
       const burg = burgs[burgId];
-      const provinceName = nameGenerator.makeProvinceName({
-        id: provinceId,
-        cell: center,
-        culture: burg?.culture || state.culture,
-        cultureType: pack.cultures?.[burg?.culture || state.culture]?.nameStyle || pack.cultures?.[burg?.culture || state.culture]?.type,
-        state: state.i,
-        baseName: burg?.name || state.name,
-        formName: provinceFormForState(state, pack.cultures)
-      });
-      if (!burg) provinceName.formName = "边地";
-      provinceName.fullName = `${provinceName.name}${provinceName.formName}`;
-      const province = {
-        id: provinceId,
-        i: provinceId,
-        state: state.i,
-        center,
-        gridCenter: cells.g[center],
-        burg: burgId,
-        name: provinceName.name,
-        formName: provinceName.formName,
-        fullName: provinceName.fullName,
-        color: state.color,
-        cells: 0,
-        area: 0
-      };
-      provinces[provinceId] = province;
-      if (!protectedStateIds.has(state.i)) state.provinces.push(provinceId);
+      const attachedProvinceId = burg ? 0 : nearestExistingProvinceId(cells, provinces, provinceIds, state, center);
+      const provinceId = attachedProvinceId || allocateProvinceId();
+      if (!attachedProvinceId) {
+        const provinceName = nameGenerator.makeProvinceName({
+          id: provinceId,
+          cell: center,
+          culture: burg?.culture || state.culture,
+          cultureType: pack.cultures?.[burg?.culture || state.culture]?.nameStyle || pack.cultures?.[burg?.culture || state.culture]?.type,
+          state: state.i,
+          baseName: burg?.name || state.name,
+          formName: provinceFormForState(state, pack.cultures)
+        });
+        provinceName.fullName = `${provinceName.name}${provinceName.formName}`;
+        provinces[provinceId] = {
+          id: provinceId,
+          i: provinceId,
+          state: state.i,
+          center,
+          gridCenter: cells.g[center],
+          burg: burgId,
+          name: provinceName.name,
+          formName: provinceName.formName,
+          fullName: provinceName.fullName,
+          color: state.color,
+          cells: 0,
+          area: 0
+        };
+        if (!protectedStateIds.has(state.i)) state.provinces.push(provinceId);
+      }
 
       runId++;
       costs[center] = 0;
@@ -1852,19 +1898,20 @@ function fillUnassignedProvinceCells(pack, provinces, provinceIds, random, maxGr
       provinceIds[center] = provinceId;
       remaining[center] = 0;
       remainingCount--;
-      queue.push({cell: center, cost: 0}, 0);
+      queue.push({cell: center, cost: 0, growthCost: 0}, 0);
 
       while (queue.length) {
-        const {cell, cost} = queue.pop();
+        const {cell, cost, growthCost} = queue.pop();
         if (seen[cell] !== runId || cost !== costs[cell]) continue;
         for (const neighbor of cells.c[cell] || []) {
           if (provinceIds[neighbor]) continue;
           if (cells.state[neighbor] && cells.state[neighbor] !== state.i) continue;
           const land = cells.h[neighbor] >= 20;
           const step = land ? (cells.state[neighbor] === state.i ? 3 : 20) : cells.t[neighbor] ? 10 : 30;
-          const nextCost = cost + step;
+          const nextGrowthCost = growthCost + step;
+          const nextCost = cost + step + riverPoliticalTransition(riverBarrier, cell, neighbor, {level: "province"}).cost;
           const currentCost = seen[neighbor] === runId ? costs[neighbor] : Infinity;
-          if (nextCost > maxGrowth || nextCost >= currentCost) continue;
+          if (nextGrowthCost > maxGrowth || nextCost >= currentCost) continue;
           if (land && cells.state[neighbor] === state.i) {
             provinceIds[neighbor] = provinceId;
             if (remaining[neighbor]) {
@@ -1874,11 +1921,29 @@ function fillUnassignedProvinceCells(pack, provinces, provinceIds, random, maxGr
           }
           costs[neighbor] = nextCost;
           seen[neighbor] = runId;
-          queue.push({cell: neighbor, cost: nextCost}, nextCost);
+          queue.push({cell: neighbor, cost: nextCost, growthCost: nextGrowthCost}, nextCost);
         }
       }
     }
   }
+}
+
+function nearestExistingProvinceId(cells, provinces, provinceIds, state, center) {
+  const direct = (cells.c?.[center] || []).map(neighbor => Number(provinceIds?.[neighbor]) || 0).filter(id => Number(provinces[id]?.state) === Number(state.i));
+  if (direct.length) return Math.min(...direct);
+  const point = cells.p?.[center];
+  if (!point) return 0;
+  let bestId = 0;
+  let bestDistance = Infinity;
+  for (const province of provinces) {
+    if (!province?.i || Number(province.state) !== Number(state.i) || !cells.p?.[province.center]) continue;
+    const [x, y] = cells.p[province.center];
+    const squared = (point[0] - x) ** 2 + (point[1] - y) ** 2;
+    if (squared > bestDistance || squared === bestDistance && province.i >= bestId) continue;
+    bestId = province.i;
+    bestDistance = squared;
+  }
+  return bestId;
 }
 
 function collectUnassignedProvinceCellsByState(cells, states, provinceIds) {
@@ -2040,7 +2105,7 @@ function buildRegions() {
   return REGION_NAMES.map((name, id) => ({id, name}));
 }
 
-function expandStates(grid, features, states, riverCells) {
+function expandStates(grid, features, states, riverCells, riverBarrier = null) {
   const centers = states.map(state => ({
     id: state.id,
     cell: state.center,
@@ -2053,12 +2118,14 @@ function expandStates(grid, features, states, riverCells) {
     const cultureCost = grid.cells.culture[to] === center.culture ? -8 : 72;
     const religionCost = grid.cells.religion[to] === center.religion ? 0 : 18;
     const mountainCost = height > 72 ? (height - 72) * 8 : height > 58 ? (height - 58) * 2 : 0;
-    const riverCost = riverCells.has(to) && !riverCells.has(from) ? 28 : 0;
+    const riverCost = riverBarrier
+      ? riverPoliticalTransition(riverBarrier, from, to, {level: "state"}).cost
+      : riverCells.has(to) && !riverCells.has(from) ? 28 : 0;
     return Math.max(6, distance(grid.points[from], grid.points[to]) + cultureCost + religionCost + mountainCost + slope * 4 + riverCost);
   });
 }
 
-function expandProvinces(grid, features, provinces, riverCells) {
+function expandProvinces(grid, features, provinces, riverCells, riverBarrier = null) {
   const values = new Array(grid.points.length).fill(-1);
   const byState = new Map();
   for (const province of provinces) {
@@ -2071,7 +2138,9 @@ function expandProvinces(grid, features, provinces, riverCells) {
       if (grid.cells.state[to] !== state) return Infinity;
       const height = grid.cells.h[to];
       const slope = Math.abs(height - grid.cells.h[from]);
-      const riverCost = riverCells.has(to) && !riverCells.has(from) ? 20 : 0;
+      const riverCost = riverBarrier
+        ? riverPoliticalTransition(riverBarrier, from, to, {level: "province"}).cost
+        : riverCells.has(to) && !riverCells.has(from) ? 20 : 0;
       return distance(grid.points[from], grid.points[to]) + Math.max(0, height - 60) * 2.5 + slope * 3 + riverCost;
     });
 
