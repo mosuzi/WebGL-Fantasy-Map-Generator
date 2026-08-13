@@ -1,6 +1,6 @@
 # 第 333 项：共享版本化 Worker 地图副本与紧凑二进制存档
 
-> **执行状态（2026-08-14）**：阶段 A～B 已完成。canonical registry v1 覆盖 `24` 个顶层 section、`60` 个字段 / 形状描述；计算与显示 Worker 已保留跨 task 长期副本，并通过连续 revision patch、ACK 和串行队列同步。普通编辑同步两个副本，Worker 事务只同步未参与计算的显示副本，未知写集保守失效。阶段 C～D 尚未实施。
+> **执行状态（2026-08-14）**：阶段 A～C 已完成。canonical registry v1 覆盖 `24` 个顶层 section、`60` 个字段 / 形状描述；计算与显示 Worker 已保留跨 task 长期副本，并通过连续 revision patch、ACK 和串行队列同步。默认 `.webfmg` 已切换为 v3 紧凑分区容器，旧 JSON / gzip / base64 envelope 继续可读；当前只待阶段 D 真实集成、独立复核与最终验收。
 
 ## 1. 调查结论
 
@@ -143,5 +143,12 @@ section payloads
 - 不把画面参数误做 map patch，不把两个 Worker 强行合并为单一串行 Worker；
 - 不用换压缩算法掩盖 56MB 结构浪费，不把 base64 当新格式；
 - 发现 registry 无法精确表达旧字段、某类 patch 无法可靠生成 inverse、v3 round-trip 改变地图语义，或连续两次真实浏览器阻断时必须冻结并请用户裁定。
+
+## 7. 阶段 C 实施结果
+
+- `.webfmg v3` 使用固定 magic、容器 / schema 版本、分区目录、offset / length 和逐 section FNV checksum；紧凑 value codec 覆盖窄整数、稀疏列、定点小数、定长 tuple、ragged CSR、对象表、字符串字典和 TypedArray。Grid / Pack 的 vertex-cell 与 vertex-neighbor 冗余拓扑由 cell polygon 确定性重建，并以排列码和例外行精确保留原顺序。
+- 默认本地文件、浏览器存储和公开压缩导出均写 v3 gzip；plain JSON 与旧 gzip 仍可显式导出，既有纯 JSON、旧 gzip、gzip-base64 envelope、File / Blob、LocalStorage / IndexedDB 二进制记录均保持读取兼容。v3 导入在迁移和校验成功前不替换当前地图，分区损坏会以目录或 checksum 错误拒绝。
+- 固定 `100000` 目标实际 `99846` cells 的 v3 为 raw `13,197,127B`、gzip `7,410,044B`，分别低于 `16MiB / 8MiB` 硬门；encode 约 `1.90s`，完整 encode / gzip / decode / migrate / deep round-trip 约 `10.78s`，全部发生在存档 Worker 内。10k 为 raw `2,496,659B`、gzip `1,172,083B`。
+- v3 100k 精确 round-trip、四类 vertex 拓扑顺序、alias、损坏拒绝、Worker / fallback 文件 I/O、旧浏览器存档兼容和 100k transfer 门通过。误调用的旧浏览器存档兼容脚本启动了隔离测试浏览器并通过，但不计作阶段 D 正式浏览器验收；用户 Chrome、用户地图、`source/` 与 Wiki 未改。
 
 第 333 项属于跨协议、存储和运行时的复杂能力；正式完成提交应评估从 `0.2.x` 递增 minor，而不是在本次登记中提前改版本。

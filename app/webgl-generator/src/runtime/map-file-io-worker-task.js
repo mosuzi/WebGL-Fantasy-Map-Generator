@@ -12,6 +12,7 @@ import {
   decodeBrowserMapStoragePayload
 } from "./browser-map-storage.js";
 import {isCompressedMapDocumentFilename} from "./map-filename.js";
+import {encodeWebfmgV3Document, gzipWebfmgV3Bytes} from "./webfmg-v3-container.js";
 import {executeRenderPreparationTask} from "../renderer/render-preparation.js";
 import {mergeUserVisualThemes, normalizeVisualThemeId, resolveVisualTheme} from "../renderer/themes.js";
 
@@ -105,19 +106,27 @@ async function exportMapFile(payload, context) {
   const normalizeMs = roundTaskMs(taskNow() - normalizeStartedAt);
   await taskCheckpoint(context);
 
-  reportTaskProgress(context, "stringify", 0.42, "序列化地图文档");
+  const encoding = normalizeExportEncoding(payload);
+  reportTaskProgress(context, "stringify", 0.42, encoding === "webfmg-v3" ? "编排紧凑地图分区" : "序列化地图文档");
   const stringifyStartedAt = taskNow();
-  const text = stringifyMapDocument(document);
+  const text = encoding === "webfmg-v3" ? "" : stringifyMapDocument(document);
+  const binary = encoding === "webfmg-v3" ? encodeWebfmgV3Document(document) : null;
   const stringifyMs = roundTaskMs(taskNow() - stringifyStartedAt);
   await taskCheckpoint(context);
 
-  const encoding = normalizeExportEncoding(payload);
   const resultType = normalizeExportResultType(payload);
   const view = runtimeView();
   let blob;
   let originalBytes;
   let compressMs = 0;
-  if (encoding === "gzip") {
+  if (encoding === "webfmg-v3") {
+    reportTaskProgress(context, "compress", 0.68, "压缩紧凑地图分区");
+    const gzipStartedAt = taskNow();
+    const compressed = await gzipWebfmgV3Bytes(binary, view);
+    compressMs = roundTaskMs(taskNow() - gzipStartedAt);
+    blob = new view.Blob([compressed], {type: "application/gzip"});
+    originalBytes = binary.byteLength;
+  } else if (encoding === "gzip") {
     reportTaskProgress(context, "compress", 0.68, "压缩地图文档");
     const gzipStartedAt = taskNow();
     const compressed = await createCompressedMapTextBlob({defaultView: view}, text);
@@ -140,7 +149,7 @@ async function exportMapFile(payload, context) {
     kind: "map-file-export-result",
     encoding,
     resultType,
-    mimeType: encoding === "gzip" ? "application/gzip" : "application/json;charset=utf-8",
+    mimeType: encoding === "webfmg-v3" || encoding === "gzip" ? "application/gzip" : "application/json;charset=utf-8",
     originalBytes,
     originalCharacters: text.length,
     bytes: blob.size,
@@ -200,12 +209,12 @@ function normalizeImportSource(payload) {
 async function parseImportSource(source, payload) {
   const view = runtimeView();
   if (typeof source === "string") {
-    const text = await decodeBrowserStorageEnvelope(source, view);
-    return parseMapDocument(text);
+    const decoded = await decodeBrowserStorageEnvelope(source, view);
+    return parseMapDocumentPayload({defaultView: view}, decoded);
   }
   if (source?.type === BROWSER_MAP_STORAGE_TYPE) {
-    const text = await decodeBrowserMapStoragePayload({defaultView: view}, JSON.stringify(source));
-    return parseMapDocument(text);
+    const decoded = await decodeBrowserMapStoragePayload({defaultView: view}, JSON.stringify(source));
+    return parseMapDocumentPayload({defaultView: view}, decoded);
   }
   if (isBinarySource(source)) {
     const bytes = binarySourceBytes(source);
@@ -250,7 +259,8 @@ function normalizeExportDocument(payload) {
 function normalizeExportEncoding(payload) {
   const encoding = String(payload?.encoding || "plain").toLowerCase();
   if (encoding === "plain" || encoding === "json") return "plain";
-  if (encoding === "gzip" || encoding === "webfmg") return "gzip";
+  if (encoding === "gzip") return "gzip";
+  if (encoding === "webfmg" || encoding === "webfmg-v3") return "webfmg-v3";
   throw new Error(`不支持的地图存档导出编码：${payload?.encoding || "未知"}`);
 }
 

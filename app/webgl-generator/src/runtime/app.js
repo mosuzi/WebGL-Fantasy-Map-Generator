@@ -5264,7 +5264,7 @@ async function saveMapToBrowserStorageViaApi(state, documentRef, _options = {}, 
   assertMapAvailable(state);
   const exported = await exportMapArchiveViaWorker(state, documentRef, {
     operation,
-    encoding: "gzip",
+    encoding: "webfmg-v3",
     resultType: "bytes",
     progressMessage: stage => browserMapSaveLoadingMessage(stage)
   });
@@ -5272,6 +5272,7 @@ async function saveMapToBrowserStorageViaApi(state, documentRef, _options = {}, 
   const envelopeStartedAt = storageClock(documentRef);
   const directBinary = shouldWriteBrowserMapStorageBinary(exported.data.byteLength);
   const payload = directBinary ? null : await encodeBrowserMapStorageBytesPayload(documentRef, exported.data, state.map, {
+    originalBytes: exported.originalBytes,
     originalCharacters: exported.originalCharacters,
     gzipMs: exported.timings?.gzipMs
   });
@@ -5317,7 +5318,7 @@ async function exportCompressedAllMapDataViaWorker(state, documentRef, options =
   const map = state.map;
   const exported = await exportMapArchiveViaWorker(state, documentRef, {
     operation,
-    encoding: "gzip",
+    encoding: "webfmg-v3",
     resultType: "bytes"
   });
   const filename = createMapArchiveFilename(map, {
@@ -5373,7 +5374,7 @@ async function exportPackGeoJsonViaWorker(state, documentRef, options = {}, rang
   return result;
 }
 
-async function exportMapArchiveViaWorker(state, documentRef, {operation = null, encoding = "gzip", resultType = "bytes", progressMessage = null} = {}) {
+async function exportMapArchiveViaWorker(state, documentRef, {operation = null, encoding = "webfmg-v3", resultType = "bytes", progressMessage = null} = {}) {
   assertMapAvailable(state);
   const map = state.map;
   const units = normalizeUnitPreferences(readControlPreferences(documentRef).units);

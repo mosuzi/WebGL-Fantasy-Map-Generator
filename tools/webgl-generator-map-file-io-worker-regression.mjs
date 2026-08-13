@@ -138,6 +138,8 @@ const gzipExport = await runTaskInWorker({
   resultType: "blob"
 });
 assert.ok(gzipExport.result.data instanceof Blob, "Worker .webfmg 导出没有返回 Blob");
+assert.equal(gzipExport.result.encoding, "webfmg-v3", "`.webfmg` 必须导出 v3 分区容器");
+assert.equal(gzipExport.result.originalCharacters, 0, "v3 导出不得先生成完整 JSON 字符串");
 assert.equal(gzipExport.result.data.type, "application/gzip");
 const gzipBytes = new Uint8Array(await gzipExport.result.data.arrayBuffer());
 const preparedBlob = await prepareMapFileIoWorkerPayload({
@@ -177,11 +179,12 @@ const browserEnvelope = createBrowserMapStorageEnvelope(exportedText, directImpo
   bytes: gzipBytes.byteLength
 });
 const browserBytesEnvelope = await encodeBrowserMapStorageBytesPayload({defaultView: globalThis}, gzipBytes, directImport.map, {
+  originalBytes: gzipExport.result.originalBytes,
   originalCharacters: exportedText.length
 });
 assert.equal(browserBytesEnvelope.type, BROWSER_MAP_STORAGE_TYPE);
 assert.equal(browserBytesEnvelope.encoding, "gzip-base64");
-assert.equal(browserBytesEnvelope.originalBytes, exportedText.length);
+assert.equal(browserBytesEnvelope.originalBytes, gzipExport.result.originalBytes);
 assert.equal(browserBytesEnvelope.bytes, gzipBytes.byteLength);
 assert.equal(Buffer.from(browserBytesEnvelope.data, "base64").byteLength, gzipBytes.byteLength);
 const envelopeFallback = await runMapFileIoWorkerTask({operation: "import", input: browserEnvelope});

@@ -27,6 +27,13 @@ import {isCompressedMapDocumentFilename, mapBaseFilename, synchronizeMapName} fr
 import {reconcileSettlementCellIdentity} from "./settlement-cell-index.js";
 import {diagnoseSettlementPortTopology} from "./settlement-port-topology.js";
 import {MAP_CELLS_MAX, normalizeMapCellTarget} from "../generator/map-size.js";
+import {
+  decodeWebfmgV3Document,
+  encodeWebfmgV3Document,
+  gunzipWebfmgV3Bytes,
+  gzipWebfmgV3Bytes,
+  isWebfmgV3Bytes
+} from "./webfmg-v3-container.js";
 
 export const MAP_DOCUMENT_TYPE = "webgl-generator-map";
 export const MAP_DOCUMENT_VERSION = 2;
@@ -86,10 +93,11 @@ export function parseMapDocument(text) {
 
 export async function parseMapDocumentPayload(documentRef, payload) {
   if (typeof payload === "string") return parseMapDocument(payload);
+  if (payload instanceof ArrayBuffer || ArrayBuffer.isView(payload)) return parseBinaryMapDocumentPayload(documentRef, payload);
   if (isMapDocumentFileLike(payload)) return parseMapDocumentFile(documentRef, payload);
   if (isGzipBase64MapPayload(payload)) {
     const data = payload.base64 ?? payload.data;
-    return parseMapDocument(await decompressGzipBase64Text(documentRef, data));
+    return parseBinaryMapDocumentPayload(documentRef, await decompressGzipBase64Bytes(documentRef, data));
   }
   if (payload?.encoding === "plain") return parseMapDocument(String(payload.data || ""));
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
@@ -100,9 +108,8 @@ export async function parseMapDocumentPayload(documentRef, payload) {
 
 export async function parseMapDocumentFile(documentRef, file) {
   if (!file) throw new Error("未选择地图文件");
-  const text = isCompressedMapDocumentFile(file)
-    ? await decompressMapDocumentFile(documentRef, file)
-    : await file.text();
+  if (typeof file.arrayBuffer === "function") return parseBinaryMapDocumentPayload(documentRef, await file.arrayBuffer());
+  const text = isCompressedMapDocumentFile(file) ? await decompressMapDocumentFile(documentRef, file) : await file.text();
   return parseMapDocument(text);
 }
 
@@ -116,8 +123,32 @@ export async function downloadCompressedMapDocument(documentRef, document, filen
 }
 
 export async function createCompressedMapDocumentBlob(documentRef, document) {
-  const text = stringifyMapDocument(document);
-  return createCompressedMapTextBlob(documentRef, text);
+  const view = documentRef?.defaultView || globalThis;
+  const raw = encodeWebfmgV3Document(document);
+  const compressed = await gzipWebfmgV3Bytes(raw, view);
+  return {
+    blob: new view.Blob([compressed], {type: "application/gzip"}),
+    originalBytes: raw.byteLength,
+    compressedBytes: compressed.byteLength,
+    encoding: "webfmg-v3",
+    mimeType: "application/gzip"
+  };
+}
+
+export async function parseBinaryMapDocumentPayload(documentRef, source) {
+  const view = documentRef?.defaultView || globalThis;
+  const bytes = source instanceof Uint8Array
+    ? source
+    : source instanceof ArrayBuffer
+      ? new Uint8Array(source)
+      : new Uint8Array(source.buffer, source.byteOffset, source.byteLength);
+  if (isWebfmgV3Bytes(bytes)) return migrateMapDocument(decodeWebfmgV3Document(bytes));
+  if (isGzipBytes(bytes)) {
+    const decompressed = await gunzipWebfmgV3Bytes(bytes, view);
+    if (isWebfmgV3Bytes(decompressed)) return migrateMapDocument(decodeWebfmgV3Document(decompressed));
+    return parseMapDocument(new view.TextDecoder().decode(decompressed));
+  }
+  return parseMapDocument(new view.TextDecoder().decode(bytes));
 }
 
 export async function createCompressedMapTextBlob(documentRef, text) {
@@ -924,12 +955,17 @@ async function decompressMapDocumentFile(documentRef, file) {
 
 export async function decompressGzipBase64Text(documentRef, data) {
   const view = documentRef?.defaultView || globalThis;
+  return new view.TextDecoder().decode(await decompressGzipBase64Bytes(documentRef, data));
+}
+
+export async function decompressGzipBase64Bytes(documentRef, data) {
+  const view = documentRef?.defaultView || globalThis;
   if (typeof view.DecompressionStream !== "function" || typeof view.Response !== "function" || typeof view.Blob !== "function") {
     throw new Error("当前浏览器不支持读取压缩地图文件");
   }
   const bytes = base64ToUint8Array(view, data);
   const stream = new view.Blob([bytes], {type: "application/gzip"}).stream().pipeThrough(new view.DecompressionStream("gzip"));
-  return new view.Response(stream).text();
+  return new Uint8Array(await new view.Response(stream).arrayBuffer());
 }
 
 async function createGzipTextBlob(documentRef, text) {
@@ -962,6 +998,10 @@ function base64ToUint8Array(view, base64) {
     bytes[index] = binary.charCodeAt(index);
   }
   return bytes;
+}
+
+function isGzipBytes(bytes) {
+  return bytes.byteLength >= 2 && bytes[0] === 0x1f && bytes[1] === 0x8b;
 }
 
 function projectWorldPoint(point, map) {

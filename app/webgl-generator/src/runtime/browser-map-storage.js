@@ -1,4 +1,5 @@
-import {decompressGzipBase64Text} from "./map-file-io.js";
+import {decompressGzipBase64Bytes} from "./map-file-io.js";
+import {isWebfmgV3Bytes} from "./webfmg-v3-container.js";
 
 export const BROWSER_MAP_STORAGE_KEY = "webgl-generator-current-map-v1";
 export const BROWSER_MAP_STORAGE_TYPE = "webgl-generator-local-map-storage";
@@ -39,6 +40,7 @@ export async function encodeBrowserMapStorageBytesPayload(documentRef, bytes, ma
     encoding: "gzip-base64",
     data: base64,
     bytes: source.byteLength,
+    originalBytes: metadata.originalBytes,
     originalCharacters: metadata.originalCharacters
   });
   const base64Ms = elapsedMs(storageClock(documentRef), base64StartedAt);
@@ -59,7 +61,12 @@ export async function encodeBrowserMapStorageBytesPayload(documentRef, bytes, ma
 export async function decodeBrowserMapStoragePayload(documentRef, raw) {
   const envelope = parseBrowserMapStorageEnvelope(raw);
   if (envelope.legacy) return envelope.text;
-  if (envelope.encoding === "gzip-base64") return decompressGzipBase64Text(documentRef, envelope.data);
+  if (envelope.encoding === "gzip-base64") {
+    const bytes = await decompressGzipBase64Bytes(documentRef, envelope.data);
+    if (isWebfmgV3Bytes(bytes)) return bytes;
+    const view = documentRef?.defaultView || globalThis;
+    return new view.TextDecoder().decode(bytes);
+  }
   return envelope.data;
 }
 
@@ -143,11 +150,14 @@ export function createBrowserMapStorageEnvelope(text, map, encoded = {}) {
   const originalCharacters = Number.isFinite(Number(encoded.originalCharacters))
     ? Math.max(0, Number(encoded.originalCharacters))
     : String(text || "").length;
+  const originalBytes = Number.isFinite(Number(encoded.originalBytes))
+    ? Math.max(0, Number(encoded.originalBytes))
+    : originalCharacters;
   return {
     type: BROWSER_MAP_STORAGE_TYPE,
     version: BROWSER_MAP_STORAGE_VERSION,
     savedAt: new Date().toISOString(),
-    originalBytes: originalCharacters,
+    originalBytes,
     metadata: createBrowserMapStorageMetadata(map),
     encoding,
     data,
