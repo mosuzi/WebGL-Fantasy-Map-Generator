@@ -5,13 +5,14 @@ import {browserMapSaveLoadingMessage} from "../app/webgl-generator/src/ui/map-st
 
 const expected = Object.freeze({
   initial: "正在收拢全图资料",
+  "input-stream-complete": "正在收拢全图资料",
   normalize: "正在收拢全图资料",
   stringify: "正在收拢全图资料",
   compress: "正在压制存档体积",
   package: "正在整理存档内容",
   "result-stream-complete": "正在整理存档内容",
   "storage-write": "正在妥存至浏览器",
-  complete: "地图存档已经妥善收好"
+  complete: "正在整理存档内容"
 });
 
 for (const [stage, message] of Object.entries(expected)) {
