@@ -3,6 +3,7 @@ import {
   assertWorkerTaskExecution,
   assertWorkerTaskRequest,
   assertWorkerTaskSessionCommit,
+  assertWorkerTaskSessionPatch,
   assertWorkerTaskStreamAck,
   assertWorkerTaskStreamPacket,
   createWorkerTaskMessage,
@@ -11,6 +12,7 @@ import {
   serializeWorkerTaskError,
   WORKER_TASK_MESSAGE
 } from "./worker-task-protocol.js";
+import {applyMapReplicaPatch, normalizeMapReplicaPatch} from "./map-replica-journal.js";
 import {getWorkerTaskHandler} from "./worker-task-registry.js";
 
 const pendingRequests = new Map();
@@ -22,6 +24,25 @@ const OUTPUT_ACK_TIMEOUT_MS = 5000;
 self.addEventListener("message", async event => {
   let request = event.data;
   try {
+    if (request?.type === WORKER_TASK_MESSAGE.APPLY_SESSION_PATCH) {
+      request = assertWorkerTaskSessionPatch(request);
+      if (!retainedSession || retainedSession.id !== request.sessionId || retainedSession.status !== "idle" || retainedSession.requestId !== request.requestId) {
+        throw workerStateError("worker_protocol_session_patch_invalid", "Worker session 不在可更新状态");
+      }
+      const patch = normalizeMapReplicaPatch(request.patch);
+      if (!isValidReplicaPatchBinding(retainedSession.binding, request.binding, patch)) {
+        throw workerStateError("worker_protocol_session_patch_invalid", "Worker session patch 绑定或 revision 不连续");
+      }
+      applyMapReplicaPatch(retainedSession.map, patch);
+      retainedSession.binding = request.binding;
+      retainedSession.request = {...retainedSession.request, binding: request.binding, reuseSession: true};
+      self.postMessage(createWorkerTaskMessage(WORKER_TASK_MESSAGE.SESSION_PATCHED, retainedSession.request, {
+        patchId: patch.patchId,
+        revision: patch.targetRevision,
+        checksum: patch.targetChecksum
+      }));
+      return;
+    }
     if (request?.type === WORKER_TASK_MESSAGE.COMMIT_SESSION) {
       request = assertWorkerTaskSessionCommit(request);
       if (!retainedSession || retainedSession.id !== request.sessionId || retainedSession.status !== "pending" || retainedSession.requestId !== request.requestId) {
@@ -43,7 +64,7 @@ self.addEventListener("message", async event => {
         throw workerStateError("worker_protocol_duplicate_run", "Worker 请求已初始化");
       }
       if (request.reuseSession) {
-        if (!retainedSession || retainedSession.id !== request.sessionId || retainedSession.status !== "idle" || retainedSession.task !== request.task || !sameSessionBinding(retainedSession.binding, request.binding)) {
+        if (!retainedSession || retainedSession.id !== request.sessionId || retainedSession.status !== "idle" || !sameSessionBinding(retainedSession.binding, request.binding)) {
           throw workerStateError("worker_protocol_session_stale", "Worker session 镜像与请求绑定不一致");
         }
         retainedSession.status = "running";
@@ -299,6 +320,14 @@ function isValidSessionCommitBinding(previous, next) {
     || String(previous?.operationName || "") !== String(next?.operationName || "")) return false;
   const revisionDelta = Number(next?.mapRevision) - Number(previous?.mapRevision);
   return revisionDelta === 0 || revisionDelta === 1;
+}
+
+function isValidReplicaPatchBinding(previous, next, patch) {
+  return previous?.mapIdentity === next?.mapIdentity
+    && patch.mapIdentity === next?.mapIdentity
+    && Number(previous?.generationToken) === Number(next?.generationToken)
+    && Number(previous?.mapRevision) === patch.baseRevision
+    && Number(next?.mapRevision) === patch.targetRevision;
 }
 
 function stableStringify(value) {

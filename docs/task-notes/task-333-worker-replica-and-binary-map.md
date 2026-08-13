@@ -1,6 +1,6 @@
 # 第 333 项：共享版本化 Worker 地图副本与紧凑二进制存档
 
-> **执行状态（2026-08-14）**：阶段 A 已完成。canonical registry v1 现覆盖 `24` 个顶层 section、`60` 个字段 / 形状描述；固定 10k / 100k 纯 Node 审计通过，确认 CSR、坐标对、固定 shore 元组、bitset、字典列和对象表边界，且拒绝 JS holey array。阶段 B～D 尚未实施。
+> **执行状态（2026-08-14）**：阶段 A～B 已完成。canonical registry v1 覆盖 `24` 个顶层 section、`60` 个字段 / 形状描述；计算与显示 Worker 已保留跨 task 长期副本，并通过连续 revision patch、ACK 和串行队列同步。普通编辑同步两个副本，Worker 事务只同步未参与计算的显示副本，未知写集保守失效。阶段 C～D 尚未实施。
 
 ## 1. 调查结论
 
@@ -128,9 +128,17 @@ section payloads
 - v3 raw / gzip 体积达标，保存 / 恢复无 LongTask，数据、历史、renderer、GPU、picking 同源；
 - 旧纯 JSON、gzip-base64、IndexedDB、File / Blob 和云端存档全部兼容；超限 / 损坏文件在替换前拒绝并保留当前图。
 
-## 5. 非目标与停止条件
+## 5. 阶段 B 实施结果
 
-- 本轮不实施产品代码、协议、格式迁移、构建或浏览器复验；
+- Worker 持久 session 的复用条件不再包含 task 名称；同一 binding 下可从重生成直接切换到存档导出等其它 handler，热路径只发送 session payload。
+- 协议新增 `apply-session-patch / session-patched`，严格校验 map identity、相邻 revision、patchId 和 checksum；连续 patch 在协调器内串行，Worker 只在 idle retained map 上原子应用并回 ACK。
+- 主线程编辑、撤销和重做从正式 command domain 或 Worker domain write set 生成同源 replace / range patch。普通 mutation 同步计算和显示副本；Worker 事务的计算副本已经包含新结果，因此只向显示副本发布，避免重复应用。
+- 未登记 command、地图替换、revision 间隙、错误 ACK、超时或 Worker 故障均保守销毁对应副本；取消、失败和 rollback 不会进入 `EditHistory.onMutation`，因此不发布未提交 patch。
+- 纯 Node journal、command patch 与完整 Worker 十一类回归通过；跨 task 只创建一个 Worker，后续输入显著少于 fresh，全量构建通过。阶段 B 未启动浏览器。
+
+## 6. 非目标与停止条件
+
+- 阶段 B 不提前实施格式迁移或浏览器复验；
 - 不修改 `source/`、用户当前 Chrome、用户地图或 Wiki；
 - 不把画面参数误做 map patch，不把两个 Worker 强行合并为单一串行 Worker；
 - 不用换压缩算法掩盖 56MB 结构浪费，不把 base64 当新格式；

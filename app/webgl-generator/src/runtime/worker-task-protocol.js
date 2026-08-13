@@ -15,6 +15,8 @@ export const WORKER_TASK_MESSAGE = Object.freeze({
   RESULT: "result",
   COMMIT_SESSION: "commit-session",
   SESSION_COMMITTED: "session-committed",
+  APPLY_SESSION_PATCH: "apply-session-patch",
+  SESSION_PATCHED: "session-patched",
   ERROR: "error"
 });
 
@@ -81,6 +83,13 @@ export function createWorkerTaskSessionCommit(request, binding) {
   });
 }
 
+export function createWorkerTaskSessionPatch(request, patch, binding) {
+  return createWorkerTaskMessage(WORKER_TASK_MESSAGE.APPLY_SESSION_PATCH, request, {
+    patch,
+    binding: clonePlain(binding)
+  });
+}
+
 export function assertWorkerTaskRequest(value) {
   assertProtocolEnvelope(value);
   if (value.type !== WORKER_TASK_MESSAGE.RUN) throw protocolError("worker_protocol_message_invalid", "Worker 请求类型无效");
@@ -131,6 +140,14 @@ export function assertWorkerTaskSessionCommit(value) {
   return value;
 }
 
+export function assertWorkerTaskSessionPatch(value) {
+  assertProtocolEnvelope(value);
+  if (value.type !== WORKER_TASK_MESSAGE.APPLY_SESSION_PATCH || !value.requestId || !value.task || !value.sessionId || !value.binding || !value.patch) {
+    throw protocolError("worker_protocol_session_patch_invalid", "Worker session patch 消息无效");
+  }
+  return value;
+}
+
 export function assertWorkerTaskResponse(value, request) {
   assertProtocolEnvelope(value);
   if (value.requestId !== request.requestId || value.task !== request.task || String(value.sessionId || "") !== String(request.sessionId || "")) {
@@ -145,6 +162,7 @@ export function assertWorkerTaskResponse(value, request) {
     WORKER_TASK_MESSAGE.OUTPUT_PACKET,
     WORKER_TASK_MESSAGE.RESULT,
     WORKER_TASK_MESSAGE.SESSION_COMMITTED,
+    WORKER_TASK_MESSAGE.SESSION_PATCHED,
     WORKER_TASK_MESSAGE.ERROR
   ].includes(value.type)) {
     throw protocolError("worker_protocol_message_invalid", "Worker 响应类型无效");

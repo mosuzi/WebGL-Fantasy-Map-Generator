@@ -7,6 +7,7 @@ import {
   createWorkerTaskExecution,
   createWorkerTaskRequest,
   createWorkerTaskSessionCommit,
+  createWorkerTaskSessionPatch,
   createWorkerTaskStreamAck,
   createWorkerTaskStreamPacket,
   restoreWorkerTaskError,
@@ -17,10 +18,12 @@ let requestSequence = 0;
 
 export function createWorkerTaskCoordinator({createWorker, getBinding, validateBinding, onProgress, onFallback} = {}) {
   let persistentSession = null;
+  let pendingSessionPatch = null;
   let sessionSequence = 0;
-  return Object.freeze({run, commitSession, invalidateSession, getSessionSnapshot});
+  return Object.freeze({run, commitSession, applySessionPatch, invalidateSession, getSessionSnapshot});
 
   async function run(task, payload, options = {}) {
+    if (pendingSessionPatch) await pendingSessionPatch;
     const binding = clonePlain(options.binding ?? getBinding?.() ?? null);
     const signal = options.signal || null;
     if (signal?.aborted) throw abortError(signal.reason);
@@ -29,13 +32,13 @@ export function createWorkerTaskCoordinator({createWorker, getBinding, validateB
     let sessionId = "";
     let worker = null;
     if (persistent) {
-      if (persistentSession && persistentSession.status === "idle" && persistentSession.task === task && sameSessionBinding(persistentSession.binding, binding)) {
+      if (persistentSession && persistentSession.status === "idle" && sameSessionBinding(persistentSession.binding, binding)) {
         worker = persistentSession.worker;
         sessionId = persistentSession.id;
         reuseSession = true;
         persistentSession.status = "running";
       } else {
-        invalidateSession("binding-mismatch");
+        invalidateSession("replica-binding-mismatch");
         sessionId = `map-${Date.now().toString(36)}-${(++sessionSequence).toString(36)}`;
       }
     }
@@ -124,6 +127,71 @@ export function createWorkerTaskCoordinator({createWorker, getBinding, validateB
       current.worker.addEventListener?.("messageerror", onMessageError);
       try {
         current.worker.postMessage(createWorkerTaskSessionCommit(current.request, committedBinding));
+      } catch (error) {
+        finish(reject, error, {invalidate: true});
+      }
+    });
+  }
+
+  function applySessionPatch(sessionId, patch, binding, options = {}) {
+    const operation = (pendingSessionPatch || Promise.resolve()).then(() => applySessionPatchNow(sessionId, patch, binding, options));
+    let tracked;
+    tracked = operation.finally(() => {
+      if (pendingSessionPatch === tracked) pendingSessionPatch = null;
+    });
+    pendingSessionPatch = tracked;
+    return tracked;
+  }
+
+  function applySessionPatchNow(sessionId, patch, binding, options = {}) {
+    const current = persistentSession;
+    if (!current || current.id !== String(sessionId || "") || current.status !== "idle") return Promise.resolve(false);
+    const targetBinding = clonePlain(binding);
+    if (!isValidReplicaPatchBinding(current.binding, targetBinding, patch)) {
+      invalidateSession("session-patch-discontinuous");
+      return Promise.reject(protocolStateError("worker_protocol_session_patch_invalid", "Worker session patch 不连续"));
+    }
+    current.status = "patching";
+    return new Promise((resolve, reject) => {
+      let settled = false;
+      const finish = (callback, value, {invalidate = false} = {}) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        current.worker.removeEventListener?.("message", onMessage);
+        current.worker.removeEventListener?.("error", onError);
+        current.worker.removeEventListener?.("messageerror", onMessageError);
+        if (invalidate) invalidateSession("session-patch-failed");
+        callback(value);
+      };
+      const onMessage = event => {
+        try {
+          const message = assertWorkerTaskResponse(event.data, current.request);
+          if (message.type !== WORKER_TASK_MESSAGE.SESSION_PATCHED
+            || message.patchId !== patch.patchId
+            || Number(message.revision) !== Number(targetBinding.mapRevision)
+            || normalizeChecksum(message.checksum) !== normalizeChecksum(patch.targetChecksum)) {
+            throw protocolStateError("worker_protocol_session_patch_invalid", "Worker session patch 确认无效");
+          }
+          current.binding = targetBinding;
+          current.request = {...current.request, binding: targetBinding, reuseSession: true};
+          current.status = "idle";
+          finish(resolve, true);
+        } catch (error) {
+          finish(reject, error, {invalidate: true});
+        }
+      };
+      const onError = event => finish(reject, event?.error || new Error(event?.message || "Worker session patch 失败"), {invalidate: true});
+      const onMessageError = event => finish(reject, event?.error || new Error("Worker session patch 响应无法反序列化"), {invalidate: true});
+      const timer = setTimeout(
+        () => finish(reject, protocolStateError("worker_session_patch_timeout", "Worker session patch 超时"), {invalidate: true}),
+        Math.max(100, Number(options.timeoutMs) || 2500)
+      );
+      current.worker.addEventListener?.("message", onMessage);
+      current.worker.addEventListener?.("error", onError);
+      current.worker.addEventListener?.("messageerror", onMessageError);
+      try {
+        current.worker.postMessage(createWorkerTaskSessionPatch(current.request, patch, targetBinding));
       } catch (error) {
         finish(reject, error, {invalidate: true});
       }
@@ -555,6 +623,19 @@ function isValidSessionCommitBinding(previous, next, expectedRevisionDelta) {
   const revisionDelta = Number(next?.mapRevision) - Number(previous?.mapRevision);
   if (Number.isInteger(expectedRevisionDelta)) return revisionDelta === expectedRevisionDelta;
   return revisionDelta === 0 || revisionDelta === 1;
+}
+
+function isValidReplicaPatchBinding(previous, next, patch) {
+  return previous?.mapIdentity === next?.mapIdentity
+    && patch?.mapIdentity === next?.mapIdentity
+    && Number(previous?.generationToken) === Number(next?.generationToken)
+    && Number(previous?.mapRevision) === Number(patch?.baseRevision)
+    && Number(next?.mapRevision) === Number(patch?.targetRevision)
+    && Number(patch?.targetRevision) === Number(patch?.baseRevision) + 1;
+}
+
+function normalizeChecksum(value) {
+  return value === null || value === undefined || value === "" ? null : String(value);
 }
 
 function createSessionInputPayload(payload, options) {

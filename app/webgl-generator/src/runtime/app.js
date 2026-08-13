@@ -208,6 +208,7 @@ import {inspectClimateDownstreamRebuild} from "./climate-downstream-rebuild.js";
 import {CLIMATE_DOWNSTREAM_WORKER_TASK, getClimateDownstreamPatchPolicy} from "./climate-downstream-worker-task.js";
 import {captureMapMutationSnapshot, executeMapSnapshotTransaction, restoreMapMutationSnapshot} from "./map-snapshot-transaction.js";
 import {createDomainPatchCommand, createMapReplacementCommand} from "./domain-patch.js";
+import {createCommandMapReplicaPatch} from "./map-replica-command-patch.js";
 import {getHeightDerivedPatchPolicy, HEIGHT_DERIVED_WORKER_TASK} from "./height-derived-worker-task.js";
 import {getRegenerationPatchPolicy, REGENERATION_WORKER_TASK} from "./regeneration-worker-task.js";
 import {createWorkerTaskCoordinator} from "./worker-task-coordinator.js";
@@ -507,10 +508,12 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
   const mapRevision = new MapRevisionTracker();
   let state = null;
   const editHistory = new EditHistory({
-    onMutation: () => {
-      mapRevision.advance();
-      state?.renderTaskCoordinator?.invalidateSession?.("map-revision-advanced");
-      if (!state?.workerSessionMutationGuard) state?.workerTaskCoordinator?.invalidateSession?.("map-revision-advanced");
+    onMutation: mutation => {
+      const before = mapRevision.getSnapshot();
+      const after = mapRevision.advance();
+      publishCommandMapReplicaPatch(state, mutation, before, after, {
+        includeCompute: !state?.workerSessionMutationGuard
+      });
     },
     onSnapshot: () => mapRevision.createSnapshot(),
     onRestore: snapshot => mapRevision.restoreSnapshot(snapshot)
@@ -2970,6 +2973,32 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
   healthMonitor?.record?.("app-ready", {hasCanvas: Boolean(canvas)}, "info");
   void restoreBrowserStoredMapOrGenerate(state, documentRef);
   return state;
+}
+
+function publishCommandMapReplicaPatch(state, mutation, before, after, {includeCompute = true} = {}) {
+  const patch = createCommandMapReplicaPatch({
+    map: state?.map,
+    command: mutation?.command,
+    action: mutation?.action,
+    mapIdentity: after.mapIdentity,
+    baseRevision: before.mapRevision,
+    targetRevision: after.mapRevision,
+    patchId: `history:${mutation?.action || "mutation"}:${after.mapRevision}`
+  });
+  if (!patch) {
+    if (includeCompute) state?.workerTaskCoordinator?.invalidateSession?.("map-revision-unpatchable");
+    state?.renderTaskCoordinator?.invalidateSession?.("map-revision-unpatchable");
+    return;
+  }
+  const nextBinding = createRegenerationWorkerBinding(state);
+  const coordinators = includeCompute
+    ? [state.workerTaskCoordinator, state.renderTaskCoordinator]
+    : [state.renderTaskCoordinator];
+  for (const coordinator of coordinators) {
+    const session = coordinator?.getSessionSnapshot?.();
+    if (!session || !["idle", "patching"].includes(session.status) || session.binding?.mapIdentity !== after.mapIdentity) continue;
+    void coordinator.applySessionPatch(session.id, patch, nextBinding).catch(() => coordinator.invalidateSession("map-replica-patch-failed"));
+  }
 }
 
 function invokeRuntimeDisplayActionFromUi(state, documentRef, task) {
@@ -12772,7 +12801,8 @@ function createWorkerRegenerationPatchCommand(map, options) {
       context.map.summary = beforeSummary;
     },
     isNoop: context => domainCommand.isNoop(context),
-    getResult: () => domainCommand.getResult()
+    getResult: () => domainCommand.getResult(),
+    getReplicaPaths: () => domainCommand.getReplicaPaths()
   };
 }
 

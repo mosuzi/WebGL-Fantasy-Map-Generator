@@ -42,6 +42,9 @@ export function createDomainPatchCommand({patch, policy, label, historyDomain, e
     },
     getResult() {
       return result;
+    },
+    getReplicaPaths() {
+      return patch.operations.map(operation => operation.path.join("."));
     }
   };
 }

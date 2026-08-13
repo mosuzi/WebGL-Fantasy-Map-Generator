@@ -7,6 +7,8 @@ import {PlaceholderMapRenderer} from "../app/webgl-generator/src/renderer/placeh
 import {createDomainPatchCommand} from "../app/webgl-generator/src/runtime/domain-patch.js";
 import {collectRegenerationWorkerTransferables, getRegenerationPatchPolicy, REGENERATION_WORKER_KINDS, runRegenerationWorkerTask} from "../app/webgl-generator/src/runtime/regeneration-worker-task.js";
 import {createWorkerTaskCoordinator} from "../app/webgl-generator/src/runtime/worker-task-coordinator.js";
+import {getWorkerTaskHandler} from "../app/webgl-generator/src/runtime/worker-task-registry.js";
+import {applyMapReplicaPatch, createMapReplicaPatch} from "../app/webgl-generator/src/runtime/map-replica-journal.js";
 import {createWorkerGraphDecoder, encodeWorkerGraph} from "../app/webgl-generator/src/runtime/worker-graph-stream.js";
 import {createStagedWorkerSnapshot} from "../app/webgl-generator/src/runtime/worker-snapshot.js";
 import {runMapFileIoWorkerTask} from "../app/webgl-generator/src/runtime/map-file-io-worker-task.js";
@@ -50,6 +52,18 @@ class FakeWorker {
     queueMicrotask(async () => {
       if (this.terminated) return;
       request = clonedRequest;
+      if (request.type === WORKER_TASK_MESSAGE.APPLY_SESSION_PATCH) {
+        if (!this.retainedSession || this.retainedSession.status !== "idle" || this.retainedSession.id !== request.sessionId) return;
+        applyMapReplicaPatch(this.retainedSession.map, request.patch);
+        this.retainedSession.binding = request.binding;
+        this.retainedSession.request = {...this.retainedSession.request, binding: request.binding, reuseSession: true};
+        this.emitMessage(createWorkerTaskMessage(WORKER_TASK_MESSAGE.SESSION_PATCHED, this.retainedSession.request, {
+          patchId: request.patch.patchId,
+          revision: request.patch.targetRevision,
+          checksum: request.patch.targetChecksum
+        }));
+        return;
+      }
       if (request.type === WORKER_TASK_MESSAGE.COMMIT_SESSION) {
         if (!this.retainedSession || this.retainedSession.status !== "pending" || this.retainedSession.id !== request.sessionId) return;
         this.retainedSession.status = "idle";
@@ -159,7 +173,7 @@ class FakeWorker {
       try {
         const handlerPayload = this.request.reuseSession ? {...this.payload, map: this.baseMap} : this.payload;
         const renderOnlyBefore = handlerPayload?.mode === "render-only" ? structuredClone(handlerPayload.map) : null;
-        const result = await runRegenerationWorkerTask(handlerPayload, {
+        const result = await getWorkerTaskHandler(this.request.task)(handlerPayload, {
           binding: this.request.binding,
           checkpoint: () => true,
           report: () => {}
@@ -426,6 +440,55 @@ sessionBinding = {...sessionBinding, mapRevision: 2};
 assert.equal(await sessionCoordinator.commitSession(secondSessionResult.worker.session.id, sessionBinding, {expectedRevisionDelta: 1}), true);
 assert.equal(sessionWorkers.length, 1, "连续同图重算必须复用同一个 Worker");
 sessionBinding = {...sessionBinding, operationId: 11};
+const crossTaskResult = await sessionCoordinator.run("map-file-io", {
+  map: sessionFormal,
+  operation: "export",
+  encoding: "gzip",
+  resultType: "bytes",
+  options: sessionFormal.options || {}
+}, {
+  binding: sessionBinding,
+  sessionMode: "map-mirror",
+  sessionPayload: {operation: "export", encoding: "gzip", resultType: "bytes", options: sessionFormal.options || {}}
+});
+assert.equal(crossTaskResult.worker.session.reused, true, "跨 task 必须复用同一地图副本");
+assert.equal(crossTaskResult.worker.session.id, firstSessionResult.worker.session.id);
+assert.equal(crossTaskResult.kind, "map-file-export-result");
+assert.ok(crossTaskResult.data instanceof Uint8Array);
+assert.equal(sessionWorkers.length, 1, "跨 task 不得重建 Worker 或重传地图");
+assert.ok(crossTaskResult.worker.telemetry.inputPackets < firstSessionResult.worker.telemetry.inputPackets / 4);
+assert.equal(await sessionCoordinator.commitSession(crossTaskResult.worker.session.id, sessionBinding, {expectedRevisionDelta: 0}), true);
+const replicaPatch = createMapReplicaPatch({
+  mapIdentity: sessionBinding.mapIdentity,
+  patchId: "worker-task-cross-task-patch",
+  baseRevision: 2,
+  targetRevision: 3,
+  writes: [{path: "metadata.name", value: "副本增量已应用"}]
+});
+sessionFormal.metadata.name = "副本增量已应用";
+sessionBinding = {...sessionBinding, mapRevision: 3, operationId: 12};
+assert.equal(await sessionCoordinator.applySessionPatch(crossTaskResult.worker.session.id, replicaPatch, sessionBinding), true);
+assert.equal(sessionWorkers[0].retainedSession.map.metadata.name, "副本增量已应用");
+assert.equal(sessionCoordinator.getSessionSnapshot()?.binding.mapRevision, 3);
+const queuedPatch4 = createMapReplicaPatch({
+  mapIdentity: sessionBinding.mapIdentity, patchId: "queued-4", baseRevision: 3, targetRevision: 4,
+  writes: [{path: "metadata.generatorStage", value: "queue-4"}]
+});
+const binding4 = {...sessionBinding, mapRevision: 4, operationId: 13};
+sessionBinding = binding4;
+const queued4 = sessionCoordinator.applySessionPatch(crossTaskResult.worker.session.id, queuedPatch4, binding4);
+const queuedPatch5 = createMapReplicaPatch({
+  mapIdentity: sessionBinding.mapIdentity, patchId: "queued-5", baseRevision: 4, targetRevision: 5,
+  writes: [{path: "metadata.name", value: "queue-5"}]
+});
+const binding5 = {...sessionBinding, mapRevision: 5, operationId: 14};
+sessionBinding = binding5;
+const queued5 = sessionCoordinator.applySessionPatch(crossTaskResult.worker.session.id, queuedPatch5, binding5);
+assert.deepEqual(await Promise.all([queued4, queued5]), [true, true], "连续地图 patch 必须按 revision 串行 ACK");
+assert.equal(sessionWorkers[0].retainedSession.map.metadata.generatorStage, "queue-4");
+assert.equal(sessionWorkers[0].retainedSession.map.metadata.name, "queue-5");
+assert.equal(sessionCoordinator.getSessionSnapshot()?.binding.mapRevision, 5);
+sessionBinding = {...sessionBinding, operationId: 15};
 const preCancelledSession = new AbortController();
 preCancelledSession.abort("pre-cancelled-session");
 await assert.rejects(
@@ -986,7 +1049,10 @@ function verifyAppDeferredReplayStaticContract() {
   assert.match(displayFlow, /error\?\.code === "worker_fallback_disabled" && ownerCurrent/u, "仅 Worker 预接受不可用且地图仍属当前事务时允许兼容路径");
   assert.match(displayFlow, /message: "正在改用兼容方式继续处理"/u, "兼容阶段必须使用普通用户可理解的中文文案");
   assert.ok(displayFlow.indexOf("renderer.abortWorkerRenderInstall?.()") < displayFlow.lastIndexOf("return apply()"), "兼容路径必须先完整恢复 Worker 事务再执行原同步入口");
-  assert.match(source, /state\?\.renderTaskCoordinator\?\.invalidateSession\?\.\("map-revision-advanced"\)/u, "map revision 前进必须清理显示镜像");
+  assert.match(source, /publishCommandMapReplicaPatch\(state, mutation, before, after, \{[\s\S]*?includeCompute: !state\?\.workerSessionMutationGuard/u, "map revision 前进必须区分 Worker 已更新的计算镜像");
+  assert.match(source, /includeCompute[\s\S]*?\[state\.renderTaskCoordinator\]/u, "Worker mutation 必须继续 patch 显示镜像");
+  assert.match(source, /coordinator\.applySessionPatch\(session\.id, patch, nextBinding\)/u, "计算与显示镜像必须消费同一 canonical patch");
+  assert.match(source, /state\?\.renderTaskCoordinator\?\.invalidateSession\?\.\("map-revision-unpatchable"\)/u, "未登记 mutation 必须保守清理显示镜像");
   assert.match(source, /state\.renderTaskCoordinator\?\.invalidateSession\?\.\("map-replaced"\)/u, "换图必须清理显示镜像");
   assert.match(source, /onLayerGroupVisible:[\s\S]*?runtimeActions\.layers\.setManyVisible/u, "图层组入口不得绕过统一显示事务");
   const displayUiRestore = source.slice(
