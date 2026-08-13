@@ -725,6 +725,15 @@ for (const kind of REGENERATION_WORKER_KINDS) {
   const expected = structuredClone(fixture);
   const patched = structuredClone(fixture);
   const direct = await runRegenerationWorkerTask({map: expected, kind}, {checkpoint() {}, report() {}});
+  if (["states", "provinces"].includes(kind) && direct.result.executed) {
+    const diagnostics = direct.result.details?.riverBoundaries;
+    assert(diagnostics?.model?.candidates > 0, `${kind} 缺少逐河结构化诊断`);
+    assert.equal(diagnostics.model.rivers.length, diagnostics.model.candidates, `${kind} 逐河诊断数量不一致`);
+    assert.equal(typeof diagnostics.model.checksum, "number", `${kind} 缺少河障 checksum`);
+    assert.equal(typeof diagnostics.states.adoptionRate, "number", `${kind} 缺少国家采用率`);
+    assert.equal(typeof diagnostics.provinces.adoptionRate, "number", `${kind} 缺少省份采用率`);
+    assert.equal(Object.hasOwn(expected.politics.metadata.riverBoundaries, "rivers"), false, `${kind} 持久 metadata 不得携带逐河大数组`);
+  }
   if (kind === "routes") {
     const denseArrays = inspectPlainDenseNumericArrays(direct);
     assert.ok(denseArrays.count > 0, "代表性 routes regeneration output 缺少 plain dense numeric Array");

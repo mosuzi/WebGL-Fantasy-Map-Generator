@@ -1,6 +1,13 @@
 import {systemAffected} from "./edit-command-effects.js";
 import {createChineseNameGenerator} from "../generator/names.js";
+import {MinPriorityQueue} from "../generator/priority-queue.js";
 import {provinceFormForState} from "../generator/province-naming.js";
+import {
+  compactRiverPoliticalBoundaryDiagnostics,
+  createRiverPoliticalBarrier,
+  describeRiverPoliticalBoundaries,
+  riverPoliticalTransition
+} from "../generator/river-political-barrier.js";
 import {refreshCityScaleVisuals} from "./city-visuals.js";
 
 const STATE_TOPOLOGY_EFFECTS = Object.freeze({
@@ -1520,10 +1527,12 @@ export function regenerateProvincesForStates(map, stateIds, options = scopedProv
   };
   const provinceResult = rebuildAffectedProvinces(map, plan);
   refreshPoliticalTopology(map, plan);
+  map.politics.metadata.riverBoundaries = compactRiverPoliticalBoundaryDiagnostics(provinceResult.riverBoundaries);
   return {
     stateIds: [...resultStateIds],
     provinceIds: [...locked.selectedIds, ...provinceResult.newProvinceIds].sort(ascending),
-    tombstonedProvinceIds: [...affectedOldProvinceIds]
+    tombstonedProvinceIds: [...affectedOldProvinceIds],
+    riverBoundaries: provinceResult.riverBoundaries
   };
 }
 
@@ -1759,6 +1768,7 @@ function synchronizeCityOwnershipAndCapitals(map, plan) {
 }
 
 function rebuildAffectedProvinces(map, plan) {
+  const riverBarrier = plan.operation === "regenerate" ? createRiverPoliticalBarrier(map.pack) : null;
   for (const id of plan.affectedOldProvinceIds) {
     const old = readProvince(map, id);
     if (!old) continue;
@@ -1800,7 +1810,8 @@ function rebuildAffectedProvinces(map, plan) {
       cells,
       centers.map((city, index) => ({cell: cityPackCell(city), provinceId: provinceIds[index]})),
       stateFixedAssignments,
-      plan.lockedProvinces?.selectedIds || new Set()
+      plan.lockedProvinces?.selectedIds || new Set(),
+      riverBarrier
     );
     plans.push({
       stateId,
@@ -1833,7 +1844,11 @@ function rebuildAffectedProvinces(map, plan) {
     }
   }
   refreshProvinceNeighbors(map, expectedIds, plan.affectedOldProvinceIds, plan.lockedProvinces?.allIds);
-  return {plans, newProvinceIds: expectedIds};
+  return {
+    plans,
+    newProvinceIds: expectedIds,
+    riverBoundaries: riverBarrier ? describeRiverPoliticalBoundaries(riverBarrier, map.pack.cells.state, map.pack.cells.province) : null
+  };
 }
 
 function chooseProvinceCenters(map, stateId, cities, count) {
@@ -1883,30 +1898,40 @@ function chooseMergeProvinceCenters(map, stateId, stateCells, cities, count, pre
   return centers;
 }
 
-function assignConnectedProvinces(cells, ownedCells, seeds, fixedAssignments = new Map(), protectedIds = new Set()) {
+export function assignConnectedProvinces(cells, ownedCells, seeds, fixedAssignments = new Map(), protectedIds = new Set(), riverBarrier = null) {
   const allowed = new Set(ownedCells);
   const assignment = new Map(fixedAssignments);
-  let frontier = [];
+  const anchors = new Map(fixedAssignments);
+  const costs = new Map();
+  const queue = new MinPriorityQueue();
   for (const seed of [...seeds].sort((a, b) => a.provinceId - b.provinceId)) {
     if (!allowed.has(seed.cell)) throw new Error("省会不在所属国家陆地内");
     const previous = assignment.get(seed.cell);
-    if (previous === undefined || seed.provinceId < previous) assignment.set(seed.cell, seed.provinceId);
-  }
-  frontier = [...assignment].map(([cell, provinceId]) => ({cell, provinceId}));
-
-  while (frontier.length) {
-    const candidates = new Map();
-    for (const item of frontier) {
-      if (protectedIds.has(item.provinceId)) continue;
-      for (const neighbor of cells.c?.[item.cell] || []) {
-        if (!allowed.has(neighbor) || assignment.has(neighbor)) continue;
-        const previous = candidates.get(neighbor);
-        if (previous === undefined || item.provinceId < previous) candidates.set(neighbor, item.provinceId);
-      }
+    if (previous === undefined || seed.provinceId < previous) {
+      assignment.set(seed.cell, seed.provinceId);
+      anchors.set(seed.cell, seed.provinceId);
     }
-    if (!candidates.size) break;
-    frontier = [...candidates].sort((a, b) => a[0] - b[0]).map(([cell, provinceId]) => ({cell, provinceId}));
-    for (const item of frontier) assignment.set(item.cell, item.provinceId);
+  }
+  for (const [cell, provinceId] of [...assignment].sort((a, b) => a[1] - b[1] || a[0] - b[0])) {
+    costs.set(cell, 0);
+    queue.push({cell, provinceId, cost: 0}, 0);
+  }
+
+  while (queue.length) {
+    const {cell, provinceId, cost} = queue.pop();
+    if (cost !== costs.get(cell) || assignment.get(cell) !== provinceId || protectedIds.has(provinceId)) continue;
+    for (const neighbor of cells.c?.[cell] || []) {
+      if (!allowed.has(neighbor)) continue;
+      const anchorOwner = anchors.get(neighbor);
+      if (anchorOwner !== undefined && anchorOwner !== provinceId) continue;
+      const nextCost = cost + 1 + riverPoliticalTransition(riverBarrier, cell, neighbor, {level: "province"}).cost;
+      const previousCost = costs.get(neighbor) ?? Infinity;
+      const previousOwner = assignment.get(neighbor) ?? Infinity;
+      if (nextCost > previousCost || nextCost === previousCost && provinceId >= previousOwner) continue;
+      assignment.set(neighbor, provinceId);
+      costs.set(neighbor, nextCost);
+      queue.push({cell: neighbor, provinceId, cost: nextCost}, nextCost);
+    }
   }
   if (assignment.size !== allowed.size) throw new Error("局部重新分省无法覆盖全部国家陆地");
   return assignment;

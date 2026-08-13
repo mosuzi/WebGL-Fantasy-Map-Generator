@@ -1,4 +1,4 @@
-const STRONG_RIVER_THRESHOLD = 0.65;
+const STRONG_RIVER_THRESHOLD = 0.58;
 const WEAK_RIVER_THRESHOLD = 0.35;
 
 export const RIVER_POLITICAL_BARRIER_VERSION = 1;
@@ -76,6 +76,7 @@ export function summarizeRiverPoliticalBarrier(context) {
     candidates: rivers.length,
     strong: rivers.filter(river => river.strength >= STRONG_RIVER_THRESHOLD).length,
     weak: rivers.filter(river => river.strength < WEAK_RIVER_THRESHOLD).length,
+    checksum: riverBarrierChecksum(rivers),
     rivers: rivers.map(river => ({
       id: river.id,
       parent: river.parent,
@@ -93,16 +94,30 @@ export function summarizeRiverPoliticalBarrier(context) {
 export function inspectRiverPoliticalBoundaries(context, owners) {
   const adopted = new Map();
   const crossings = new Map();
+  const corridorsByRiver = new Map();
+  const corridorCounts = new Map();
+  const visitedCorridors = new Set();
   for (const river of context?.riverById?.values?.() || []) {
     let boundaryCells = 0;
     let sameOwnerCrossings = 0;
+    const riverCorridors = new Map();
     for (const cell of river.cells) {
       const neighboringOwners = new Set([owners?.[cell], ...(context.cells.c?.[cell] || []).map(neighbor => owners?.[neighbor])].filter(value => Number(value) > 0));
       if (neighboringOwners.size > 1) boundaryCells++;
       else if (neighboringOwners.size === 1) sameOwnerCrossings++;
+      for (const neighbor of context.cells.c?.[cell] || []) {
+        const key = cell < neighbor ? `${cell}:${neighbor}` : `${neighbor}:${cell}`;
+        if (visitedCorridors.has(key)) continue;
+        visitedCorridors.add(key);
+        const transition = riverPoliticalTransition(context, cell, neighbor, {level: "province"});
+        if (transition.corridor === "none") continue;
+        corridorCounts.set(transition.corridor, (corridorCounts.get(transition.corridor) || 0) + 1);
+        riverCorridors.set(transition.corridor, (riverCorridors.get(transition.corridor) || 0) + 1);
+      }
     }
     adopted.set(river.id, boundaryCells);
     crossings.set(river.id, sameOwnerCrossings);
+    corridorsByRiver.set(river.id, Object.fromEntries([...riverCorridors].sort(([a], [b]) => a.localeCompare(b))));
   }
   const rivers = [...context.riverById.values()];
   const eligibleCells = rivers.filter(river => river.strength >= STRONG_RIVER_THRESHOLD).reduce((sum, river) => sum + river.cells.length, 0);
@@ -112,12 +127,47 @@ export function inspectRiverPoliticalBoundaries(context, owners) {
     eligibleCells,
     adoptedCells,
     adoptionRate: eligibleCells ? round(adoptedCells / eligibleCells) : 0,
+    corridors: Object.fromEntries([...corridorCounts].sort(([a], [b]) => a.localeCompare(b))),
     rivers: rivers.map(river => ({
       id: river.id,
       strength: river.strength,
       boundaryCells: adopted.get(river.id) || 0,
-      sameOwnerCrossings: crossings.get(river.id) || 0
+      boundaryLength: round(river.length * (adopted.get(river.id) || 0) / Math.max(1, river.cells.length)),
+      sameOwnerCrossings: crossings.get(river.id) || 0,
+      corridors: corridorsByRiver.get(river.id),
+      adoptionReason: adopted.get(river.id)
+        ? "river-boundary"
+        : Object.keys(corridorsByRiver.get(river.id) || {}).length
+          ? "corridor-crossing"
+          : crossings.get(river.id)
+            ? "political-structure"
+            : "no-owned-territory"
     }))
+  };
+}
+
+export function describeRiverPoliticalBoundaries(context, stateOwners, provinceOwners) {
+  return {
+    model: summarizeRiverPoliticalBarrier(context),
+    states: inspectRiverPoliticalBoundaries(context, stateOwners),
+    provinces: inspectRiverPoliticalBoundaries(context, provinceOwners)
+  };
+}
+
+export function compactRiverPoliticalBoundaryDiagnostics(diagnostics) {
+  const compactInspection = inspection => ({
+    eligibleCells: inspection?.eligibleCells || 0,
+    adoptedCells: inspection?.adoptedCells || 0,
+    adoptionRate: inspection?.adoptionRate || 0
+  });
+  return {
+    version: diagnostics?.model?.version || RIVER_POLITICAL_BARRIER_VERSION,
+    candidates: diagnostics?.model?.candidates || 0,
+    strong: diagnostics?.model?.strong || 0,
+    weak: diagnostics?.model?.weak || 0,
+    checksum: diagnostics?.model?.checksum || 0,
+    states: compactInspection(diagnostics?.states),
+    provinces: compactInspection(diagnostics?.provinces)
   };
 }
 
@@ -199,6 +249,17 @@ function clamp(value, min, max) {
 
 function round(value) {
   return Math.round(value * 1e6) / 1e6;
+}
+
+function riverBarrierChecksum(rivers) {
+  let hash = 2166136261;
+  for (const river of rivers) {
+    for (const value of [river.id, river.parent, river.order, river.cells.length, Math.round(river.strength * 1e6)]) {
+      hash ^= value;
+      hash = Math.imul(hash, 16777619) >>> 0;
+    }
+  }
+  return hash;
 }
 
 function ascending(a, b) {

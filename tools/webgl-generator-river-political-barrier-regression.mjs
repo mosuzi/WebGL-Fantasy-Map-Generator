@@ -1,11 +1,14 @@
 import assert from "node:assert/strict";
 import {
+  compactRiverPoliticalBoundaryDiagnostics,
   createRiverPoliticalBarrier,
+  describeRiverPoliticalBoundaries,
   deriveRiverOrders,
   inspectRiverPoliticalBoundaries,
   riverPoliticalTransition,
   summarizeRiverPoliticalBarrier
 } from "../app/webgl-generator/src/generator/river-political-barrier.js";
+import {assignConnectedProvinces} from "../app/webgl-generator/src/runtime/state-topology-commands.js";
 
 const base = fixture();
 const context = createRiverPoliticalBarrier(base);
@@ -32,6 +35,10 @@ const road = riverPoliticalTransition(createRiverPoliticalBarrier(roadMap), 1, 2
 assert.equal(road.corridor, "road");
 assert(road.cost < strong.cost, "道路应适度降低河障成本");
 assert(road.cost > 0, "道路不得把强河变成零成本通道");
+const roadDiagnostics = describeRiverPoliticalBoundaries(createRiverPoliticalBarrier(roadMap), new Uint16Array(10).fill(1), new Uint16Array(10).fill(1));
+assert(roadDiagnostics.provinces.corridors.road > 0, "道路渡河走廊没有进入结构化诊断");
+assert(roadDiagnostics.provinces.rivers.some(river => river.adoptionReason === "corridor-crossing"));
+assert.equal(Object.hasOwn(compactRiverPoliticalBoundaryDiagnostics(roadDiagnostics), "rivers"), false, "紧凑诊断不得持有逐河数组");
 
 const portMap = fixture();
 portMap.cells.burg = new Uint16Array(10);
@@ -51,19 +58,21 @@ assert(inspected.adoptedCells > 0);
 
 const symmetric = symmetricRiverFixture({strong: true});
 const symmetricContext = createRiverPoliticalBarrier(symmetric);
-const symmetricOwners = assignOwners(symmetric.cells.c, [{cell: 6, owner: 1}, {cell: 8, owner: 2}], symmetricContext);
+const symmetricAssignment = assignConnectedProvinces(symmetric.cells, symmetric.cells.i, [{cell: 6, provinceId: 1}, {cell: 8, provinceId: 2}], new Map(), new Set(), symmetricContext);
+const symmetricOwners = Uint16Array.from(symmetric.cells.i, cell => symmetricAssignment.get(cell) || 0);
 const symmetricInspection = inspectRiverPoliticalBoundaries(symmetricContext, symmetricOwners);
 assert(symmetricInspection.adoptionRate >= 0.7, `强河合格段边界采用率不足：${symmetricInspection.adoptionRate}`);
 assert.equal(ownerChecksum(symmetricOwners), 6811943, "对称强河归属 checksum 漂移");
 
 const singleSide = symmetricRiverFixture({strong: false});
 const singleSideContext = createRiverPoliticalBarrier(singleSide);
-const singleSideOwners = assignOwners(singleSide.cells.c, [{cell: 6, owner: 1}], singleSideContext);
+const singleSideAssignment = assignConnectedProvinces(singleSide.cells, singleSide.cells.i, [{cell: 6, provinceId: 1}], new Map(), new Set(), singleSideContext);
+const singleSideOwners = Uint16Array.from(singleSide.cells.i, cell => singleSideAssignment.get(cell) || 0);
 assert(singleSideOwners.every(owner => owner === 1), "弱河或单侧无中心时不应制造政治碎片");
 assert.equal(inspectRiverPoliticalBoundaries(singleSideContext, singleSideOwners).adoptionRate, 0);
 
-const lockedOwners = assignOwners(symmetric.cells.c, [{cell: 6, owner: 1}, {cell: 8, owner: 2}], symmetricContext, new Map([[11, 1]]));
-assert.equal(lockedOwners[11], 1, "锁定归属必须优先于强河软阻隔");
+const lockedAssignment = assignConnectedProvinces(symmetric.cells, symmetric.cells.i, [{cell: 6, provinceId: 1}, {cell: 8, provinceId: 2}], new Map([[11, 1]]), new Set([1]), symmetricContext);
+assert.equal(lockedAssignment.get(11), 1, "锁定归属必须优先于强河软阻隔");
 
 const repeated = summarizeRiverPoliticalBarrier(createRiverPoliticalBarrier(fixture()));
 assert.deepEqual(repeated, summary, "相同河网的评分不确定");
@@ -128,38 +137,6 @@ function symmetricRiverFixture({strong}) {
     routes: [],
     burgs: []
   };
-}
-
-function assignOwners(adjacency, centers, context, fixedOwners = new Map()) {
-  const owners = new Uint16Array(adjacency.length);
-  const costs = new Float64Array(adjacency.length).fill(Infinity);
-  const pending = [];
-  for (const center of centers) {
-    owners[center.cell] = center.owner;
-    costs[center.cell] = 0;
-    pending.push({cell: center.cell, owner: center.owner, cost: 0});
-  }
-  for (const [cell, owner] of fixedOwners) {
-    owners[cell] = owner;
-    costs[cell] = -1;
-    pending.push({cell, owner, cost: -1});
-  }
-
-  while (pending.length) {
-    pending.sort((a, b) => a.cost - b.cost || a.owner - b.owner || a.cell - b.cell);
-    const current = pending.shift();
-    if (current.cost > costs[current.cell] || owners[current.cell] !== current.owner) continue;
-    for (const neighbor of adjacency[current.cell] || []) {
-      const lockedOwner = fixedOwners.get(neighbor);
-      if (lockedOwner && lockedOwner !== current.owner) continue;
-      const nextCost = current.cost + 1 + riverPoliticalTransition(context, current.cell, neighbor, {level: "province"}).cost;
-      if (nextCost > costs[neighbor] || nextCost === costs[neighbor] && owners[neighbor] <= current.owner) continue;
-      owners[neighbor] = current.owner;
-      costs[neighbor] = nextCost;
-      pending.push({cell: neighbor, owner: current.owner, cost: nextCost});
-    }
-  }
-  return owners;
 }
 
 function ownerChecksum(values) {

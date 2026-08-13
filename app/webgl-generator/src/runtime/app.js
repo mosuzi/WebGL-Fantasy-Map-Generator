@@ -13878,7 +13878,7 @@ function regenerateStates(state, documentRef, options = {}) {
   markDerivedFresh(map, ["states", "provinces", "cities"]);
   markDerivedStale(map, ["religions", "markers", "zones", "military", "economy", "diplomacy"]);
   refreshGenerationSummary(map);
-  appendGenerationLog(map, `regenerate states: salt=${stateSalt}, states=${map.politics.metadata.states}, provinces=${map.politics.metadata.provinces}, routes=${map.settlements.metadata.routes}, stale=${map.metadata.derivedStale?.systems?.join(",") || "none"}`);
+  appendGenerationLog(map, `regenerate states: salt=${stateSalt}, states=${map.politics.metadata.states}, provinces=${map.politics.metadata.provinces}, routes=${map.settlements.metadata.routes}, ${riverBoundaryLog(result.riverBoundaries)}, stale=${map.metadata.derivedStale?.systems?.join(",") || "none"}`);
 
   refreshRegeneratedLayers(state, documentRef, {
     derived: ["cell-colors", "political-boundaries", "point-layers", "labels", "route-mesh", "object-panels", "object-index"],
@@ -13893,7 +13893,8 @@ function regenerateStates(state, documentRef, options = {}) {
   return regenerationResult(
     "states",
     `国家已重选首都并按当前文化、人口和地形约束重算（扰动 #${stateSalt}）：${beforeStates} -> ${map.politics.metadata.states}；省份 ${beforeProvinces} -> ${map.politics.metadata.provinces}；道路 ${beforeRoutes} -> ${map.settlements.metadata.routes}`,
-    "已刷新国家/省份归属、城市政区、路线、标签、边界和对象索引；宗教、标记、区域、军事、经济已标记为待派生。"
+    "已刷新国家/省份归属、城市政区、路线、标签、边界和对象索引；宗教、标记、区域、军事、经济已标记为待派生。",
+    {riverBoundaries: result.riverBoundaries}
   );
 }
 
@@ -14007,7 +14008,7 @@ function regenerateProvinces(state, documentRef, scope = {kind: "all"}) {
   markDerivedFresh(map, ["provinces", "cities"]);
   markDerivedStale(map, ["markers", "zones", "military", "economy", "diplomacy"]);
   refreshGenerationSummary(map);
-  appendGenerationLog(map, `regenerate provinces: scope=${regenerationScopeLog(scope)}, salt=${provinceSalt}, provinces=${map.politics.metadata.provinces}, routes=${map.settlements.metadata.routes}, stale=${map.metadata.derivedStale?.systems?.join(",") || "none"}`);
+  appendGenerationLog(map, `regenerate provinces: scope=${regenerationScopeLog(scope)}, salt=${provinceSalt}, provinces=${map.politics.metadata.provinces}, routes=${map.settlements.metadata.routes}, ${riverBoundaryLog(result.riverBoundaries)}, stale=${map.metadata.derivedStale?.systems?.join(",") || "none"}`);
 
   refreshRegeneratedLayers(state, documentRef, {
     derived: ["cell-colors", "political-boundaries", "point-layers", "labels", "route-mesh", "object-panels", "object-index"],
@@ -14021,7 +14022,8 @@ function regenerateProvinces(state, documentRef, scope = {kind: "all"}) {
   return regenerationResult(
     "provinces",
     `省份已在${regenerationScopeLabel(map, scope)}内重算（扰动 #${provinceSalt}）：${beforeProvinces} -> ${map.politics.metadata.provinces}；道路 ${beforeRoutes} -> ${map.settlements.metadata.routes}`,
-    "已刷新省份归属、省会/城市省份、路线、标签、边界和对象索引；标记、区域、军事、经济已标记为待派生。"
+    "已刷新省份归属、省会/城市省份、路线、标签、边界和对象索引；标记、区域、军事、经济已标记为待派生。",
+    {riverBoundaries: result.riverBoundaries}
   );
 }
 
@@ -14671,6 +14673,13 @@ function clearGeneratedCityLabelHides(map, cityIds = null) {
 function regenerationResult(kind, status, constraint, details = null) {
   const result = createRegenerationResult(kind, status, constraint);
   return details ? {...result, details} : result;
+}
+
+function riverBoundaryLog(diagnostics) {
+  const model = diagnostics?.model;
+  const states = diagnostics?.states;
+  const provinces = diagnostics?.provinces;
+  return `river-boundaries=${model?.strong || 0}/${model?.candidates || 0}, state-adoption=${states?.adoptionRate || 0}, province-adoption=${provinces?.adoptionRate || 0}`;
 }
 
 function shouldSwitchDiplomacySubjectForSelection(state) {

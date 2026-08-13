@@ -32,6 +32,12 @@ function testProvinceScope() {
     .map(provinceSnapshot);
   const outsideCellsBefore = Array.from(map.pack.cells.province, (provinceId, cell) => Number(map.pack.cells.state[cell]) === stateId ? null : Number(provinceId));
   const oldProvinceIds = activeProvinces(map).filter(province => Number(province.state) === stateId).map(province => Number(province.i));
+  const riversRef = map.rivers.rivers;
+  const riverItemRefs = [...riversRef];
+  const riversBefore = JSON.stringify(riversRef);
+  const routesRef = map.pack.routes;
+  const routeItemRefs = [...routesRef];
+  const routesBefore = JSON.stringify(routesRef);
 
   const result = regenerateProvincesForStates(map, [stateId]);
   assert(result.provinceIds.length > 0, "局部重设没有生成新省份");
@@ -47,7 +53,32 @@ function testProvinceScope() {
     outsideCellsBefore,
     "局部重设省份改写了目标国家外的单元格归属"
   );
-  report.provinces = {stateId, oldProvinceIds, newProvinceIds: result.provinceIds};
+  assert(result.riverBoundaries?.model?.candidates > 0, "局部重设没有返回逐河结构化诊断");
+  assert.equal(result.riverBoundaries.model.rivers.length, result.riverBoundaries.model.candidates);
+  assert.equal(map.politics.metadata.riverBoundaries.candidates, result.riverBoundaries.model.candidates);
+  assert.equal(Object.hasOwn(map.politics.metadata.riverBoundaries, "rivers"), false, "持久 metadata 不得重复逐河大数组");
+  assert.equal(map.rivers.rivers, riversRef, "局部重设替换了 canonical 河流数组");
+  assert.deepEqual(map.rivers.rivers, riverItemRefs, "局部重设替换了 canonical 河流对象");
+  assert.equal(JSON.stringify(map.rivers.rivers), riversBefore, "局部重设改写了 canonical 河网");
+  assert.equal(map.pack.routes, routesRef, "局部重设替换了道路数组");
+  assert.deepEqual(map.pack.routes, routeItemRefs, "局部重设替换了道路对象");
+  assert.equal(JSON.stringify(map.pack.routes), routesBefore, "局部重设改写了道路数据");
+
+  const repeatedMap = generatePlaceholderMap(options);
+  const repeated = regenerateProvincesForStates(repeatedMap, [stateId]);
+  assert.equal(repeated.riverBoundaries.model.checksum, result.riverBoundaries.model.checksum, "同 seed 河障 checksum 不确定");
+  assert.deepEqual(Array.from(repeatedMap.pack.cells.province), Array.from(map.pack.cells.province), "同 seed 局部重分省结果不确定");
+  report.provinces = {
+    stateId,
+    oldProvinceIds,
+    newProvinceIds: result.provinceIds,
+    riverBoundaries: {
+      candidates: result.riverBoundaries.model.candidates,
+      strong: result.riverBoundaries.model.strong,
+      checksum: result.riverBoundaries.model.checksum,
+      adoptionRate: result.riverBoundaries.provinces.adoptionRate
+    }
+  };
 }
 
 function testCityScope(kind) {

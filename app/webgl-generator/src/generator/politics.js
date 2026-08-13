@@ -6,10 +6,10 @@ import {createStageProfile} from "./profile.js";
 import {createRandom} from "./random.js";
 import {createCityScaleContext, deriveCityScale} from "../runtime/city-visuals.js";
 import {
+  compactRiverPoliticalBoundaryDiagnostics,
   createRiverPoliticalBarrier,
-  inspectRiverPoliticalBoundaries,
-  riverPoliticalTransition,
-  summarizeRiverPoliticalBarrier
+  describeRiverPoliticalBoundaries,
+  riverPoliticalTransition
 } from "./river-political-barrier.js";
 
 const STATE_ROOTS = ["昭宁", "雁川", "青岚", "星渚", "南衡", "白麓", "清河", "苍原", "岚湾", "云麓", "河洛", "云渡", "栖梧", "北辰", "东衡", "西麓", "南浦", "霜川", "泽阳", "柏原", "海津", "长岚", "玄丘", "玉津"];
@@ -223,7 +223,8 @@ export function regeneratePackStatesAndProvinces(grid, society, options, pack, s
     provinces,
     timing,
     provinceTiming: provinces.timing || null,
-    metadata: createPackPoliticsMetadata(states, provinces, [], riverBarrier, pack.cells)
+    metadata: createPackPoliticsMetadata(states, provinces, [], riverBarrier, pack.cells),
+    riverBoundaries: describeRiverPoliticalBoundaries(riverBarrier, pack.cells.state, pack.cells.province)
   };
 }
 
@@ -241,6 +242,7 @@ export function regeneratePackProvincesWithinStates(grid, society, options, pack
     provinces,
     timing,
     provinceTiming: provinces.timing || null,
+    riverBoundaries: describeRiverPoliticalBoundaries(riverBarrier, pack.cells.state, pack.cells.province),
     metadata: {
       provinces: provinces.filter(province => province?.i).length,
       provinceNames: provinces.filter(province => province?.i).map(province => province.fullName || province.name),
@@ -806,25 +808,7 @@ function createPackPoliticsMetadata(states, provinces, regions = [], riverBarrie
 }
 
 function politicalRiverBoundaryDiagnostics(riverBarrier, stateOwners, provinceOwners) {
-  const model = summarizeRiverPoliticalBarrier(riverBarrier);
-  const states = inspectRiverPoliticalBoundaries(riverBarrier, stateOwners);
-  const provinces = inspectRiverPoliticalBoundaries(riverBarrier, provinceOwners);
-  return {
-    version: model.version,
-    candidates: model.candidates,
-    strong: model.strong,
-    weak: model.weak,
-    states: compactRiverBoundaryInspection(states),
-    provinces: compactRiverBoundaryInspection(provinces)
-  };
-}
-
-function compactRiverBoundaryInspection(inspection) {
-  return {
-    eligibleCells: inspection.eligibleCells,
-    adoptedCells: inspection.adoptedCells,
-    adoptionRate: inspection.adoptionRate
-  };
+  return compactRiverPoliticalBoundaryDiagnostics(describeRiverPoliticalBoundaries(riverBarrier, stateOwners, provinceOwners));
 }
 
 function isStrongRiverPoliticalTransition(riverBarrier, from, to, level) {
