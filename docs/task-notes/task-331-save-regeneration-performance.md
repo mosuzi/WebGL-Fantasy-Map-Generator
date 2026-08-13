@@ -81,3 +81,10 @@
 - runtime operation 阶段快照新增 `progress / completed / total / layer` 标量白名单，不保留任意对象；重生成 Worker 增加 setup / domain compute / patch / Worker render prepare，存档 Worker 增加 normalize / stringify / compress / package 计时。
 - 10k 路线真实 Chrome 的可见文案依次覆盖六个阶段，fresh 输入 `214` 包 / `1108ms`、领域计算 `50.5ms`、patch `0.3ms`、Worker render prepare `34.1ms`、主线程 render install `888.3ms`，LongTask `0`。10k 存档四入口 Worker / prepared load、普通技术词、LongTask、health、console、page、WebGL 与 Loading 清理通过。
 - 旧 `loading-single-source` 夹具仍拦截已不再使用的 `File.text()` 和 legacy `renderer.loadMapAsync`，连续两次夹具首败后已撤回局部迁移；阶段 A 改用现有 Worker 重生成工具的 `--loading-kind` 窄入口，不把旧夹具未执行断言计为通过。
+
+## 8. 阶段 B checkpoint
+
+- 当前 live map 导出不再以 stringify / parse 深拷贝做二次规范化；`createMapDocument` 直接经过当前 schema 校验。gzip helper 消费唯一正式 JSON 文本，Worker telemetry 固定 `serializationPasses = 1`；旧 document 导出仍保留既有迁移往返。
+- 压缩结果达到 `4 MiB` 时不再先做 base64、JSON envelope 和必然超额的 LocalStorage 尝试，而是写入版本化 gzip bytes IndexedDB 记录；恢复把同一 `Uint8Array` 交给既有 map-file Worker。小存档、quota fallback、旧 plain / gzip-base64 envelope、LocalStorage 和旧 IndexedDB 字符串记录继续兼容。
+- 10k quota fallback 连续三次保存为 `1.501～1.591s`，正式 JSON 序列化约 `143～153ms`、gzip约 `342～348ms`，普通 LocalStorage 与 fallback IndexedDB 均能恢复。固定 `99846` cells 连续三次保存由基线 `16.316～18.804s` 降至 `10.817～11.455s`；gzip `14,209,461B` 直接存储，`storageBytes === bytes`，base64 / encoding 均为 `0ms`，IndexedDB 写入约 `17ms`，二进制恢复保持 `99846` cells。
+- map-file Worker Node、生产构建、10k / 100k 保存恢复、旧 v2 gzip-base64 LocalStorage 恢复与损坏存档保留均通过；application console / page error 为 `0`。剩余约 `6.23s` graph 输入与 `5.15s` Worker 内规范化 / stringify / gzip 是阶段 C 的 canonical mirror 优化对象，不能把阶段 B 当作最终性能完成。

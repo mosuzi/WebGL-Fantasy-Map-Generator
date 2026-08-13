@@ -15,10 +15,15 @@ import {
   restoreMapFileIoWorkerResult
 } from "../app/webgl-generator/src/runtime/map-file-io-worker-client.js";
 import {
+  BROWSER_MAP_STORAGE_BINARY_TYPE,
   BROWSER_MAP_STORAGE_TYPE,
   BROWSER_MAP_STORAGE_VERSION,
+  createBrowserMapStorageBinaryImportSource,
+  createBrowserMapStorageBinaryRecord,
   createBrowserMapStorageEnvelope,
-  encodeBrowserMapStorageBytesPayload
+  encodeBrowserMapStorageBytesPayload,
+  isBrowserMapStorageBinaryRecord,
+  shouldWriteBrowserMapStorageBinary
 } from "../app/webgl-generator/src/runtime/browser-map-storage.js";
 
 const fixtureText = await readFile(new URL("./fixtures/webgl-map-v1-minimal.json", import.meta.url), "utf8");
@@ -118,6 +123,7 @@ assert.ok(workerExport.result.data instanceof Uint8Array);
 for (const key of ["normalizeMs", "stringifyMs", "compressMs", "packageMs", "totalMs"]) {
   assert.ok(Number.isFinite(directExport.timings[key]) && directExport.timings[key] >= 0, `存档导出缺少 ${key} 阶段计时`);
 }
+assert.equal(directExport.timings.serializationPasses, 1, "地图导出必须只序列化一次正式 JSON 文本");
 assert.equal(directExport.timings.gzipMs, directExport.timings.compressMs, "兼容 gzipMs 与 compressMs 漂移");
 assert.deepEqual(workerExport.result.data, directExport.data, "Worker/fallback plain JSON 字节不一致");
 const exportedText = new TextDecoder().decode(workerExport.result.data);
@@ -142,6 +148,16 @@ const preparedBlob = await prepareMapFileIoWorkerPayload({
 assert.equal(preparedBlob.payload.input.kind, "bytes");
 assert.deepEqual(preparedBlob.payload.input.bytes, gzipBytes, "Blob 必须在进入图流前转换为字节");
 const gzipBase64 = Buffer.from(gzipBytes).toString("base64");
+const browserBinaryRecord = createBrowserMapStorageBinaryRecord(gzipBytes, directImport.map, {originalBytes: directExport.bytes});
+assert.equal(browserBinaryRecord.type, BROWSER_MAP_STORAGE_BINARY_TYPE);
+assert.equal(isBrowserMapStorageBinaryRecord(browserBinaryRecord), true);
+assert.equal(shouldWriteBrowserMapStorageBinary(4 * 1024 * 1024 - 1), false);
+assert.equal(shouldWriteBrowserMapStorageBinary(4 * 1024 * 1024), true);
+const binaryRecordImport = await runMapFileIoWorkerTask({
+  operation: MAP_FILE_IO_WORKER_OPERATIONS.IMPORT,
+  input: createBrowserMapStorageBinaryImportSource(browserBinaryRecord)
+});
+assert.equal(binaryRecordImport.metadata.checksum, directImport.metadata.checksum);
 const gzipFallback = await runMapFileIoWorkerTask({
   operation: MAP_FILE_IO_WORKER_OPERATIONS.IMPORT,
   input: gzipExport.result.data,

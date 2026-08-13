@@ -70,7 +70,7 @@ import CloudStoragePanelComponent from "../ui/vue/components/CloudStoragePanel.v
 import ZonePanelComponent from "../ui/vue/components/ZonePanel.vue";
 import {EDIT_REFRESH_PRESETS} from "./edit-refresh-scheduler.js";
 import {createEditRefreshScheduler} from "./edit-refresh-scheduler.js";
-import {BROWSER_MAP_STORAGE_KEY, encodeBrowserMapStorageBytesPayload, readBrowserMapStorage, writeBrowserMapStorage} from "./browser-map-storage.js";
+import {BROWSER_MAP_STORAGE_KEY, encodeBrowserMapStorageBytesPayload, readBrowserMapStorage, shouldWriteBrowserMapStorageBinary, writeBrowserMapStorage, writeBrowserMapStorageBinary} from "./browser-map-storage.js";
 import {createCloudStorageRegistry} from "./cloud-storage.js";
 import {createImportFmgCellsHeightCommand} from "./fmg-cells-geojson-import.js";
 import {EditHistory} from "./edit-history.js";
@@ -4307,7 +4307,7 @@ async function restoreMapFromBrowserStorageViaApi(state, documentRef, options = 
       restored: true,
       storageKey: stored.storageKey || BROWSER_MAP_STORAGE_KEY,
       storageBackend: stored.backend,
-      effects: [...new Set([...(imported.effects || []), "browser-storage-read", ...(stored.fallback ? ["browser-storage-fallback-read"] : [])])]
+      effects: [...new Set([...(imported.effects || []), "browser-storage-read", ...(stored.directBinary ? ["browser-storage-binary-read"] : []), ...(stored.fallback ? ["browser-storage-fallback-read"] : [])])]
     };
   } catch (error) {
     if (!operation) updateGenerationLoading(documentRef, false);
@@ -5238,42 +5238,46 @@ async function saveMapToBrowserStorageViaApi(state, documentRef, _options = {}, 
     progressMessage: stage => browserMapSaveLoadingMessage(stage)
   });
   operation?.report("storage-package", {message: browserMapSaveLoadingMessage("package")});
-  const payload = await encodeBrowserMapStorageBytesPayload(documentRef, exported.data, state.map, {
+  const envelopeStartedAt = storageClock(documentRef);
+  const directBinary = shouldWriteBrowserMapStorageBinary(exported.data.byteLength);
+  const payload = directBinary ? null : await encodeBrowserMapStorageBytesPayload(documentRef, exported.data, state.map, {
     originalCharacters: exported.originalCharacters,
     gzipMs: exported.timings?.gzipMs
   });
-  const envelopeStartedAt = storageClock(documentRef);
-  const raw = JSON.stringify(payload);
+  const raw = payload ? JSON.stringify(payload) : "";
   const envelopeMs = elapsedStorageMs(documentRef, envelopeStartedAt);
   operation?.report("storage-write", {message: browserMapSaveLoadingMessage("write-storage")});
   const writeStartedAt = storageClock(documentRef);
-  const stored = await writeBrowserMapStorage(documentRef, raw);
+  const stored = directBinary
+    ? await writeBrowserMapStorageBinary(documentRef, exported.data, state.map, {originalBytes: exported.originalBytes})
+    : await writeBrowserMapStorage(documentRef, raw);
   const writeMs = elapsedStorageMs(documentRef, writeStartedAt);
+  const storedMetadata = stored.record?.metadata || payload?.metadata || {};
   return {
     saved: true,
     storageKey: stored.storageKey || BROWSER_MAP_STORAGE_KEY,
     storageBackend: stored.backend,
-    encoding: payload.encoding,
-    bytes: payload.bytes,
-    originalBytes: payload.originalBytes,
-    storageBytes: raw.length,
-    metadata: {...payload.metadata},
+    encoding: directBinary ? "gzip" : payload.encoding,
+    bytes: exported.data.byteLength,
+    originalBytes: directBinary ? exported.originalBytes : payload.originalBytes,
+    storageBytes: directBinary ? exported.data.byteLength : raw.length,
+    metadata: {...storedMetadata},
     timings: {
       rawJsonMs: exported.timings?.stringifyMs || 0,
       normalizeMs: exported.timings?.normalizeMs || 0,
-      gzipMs: payload.__timings?.gzipMs || 0,
+      gzipMs: exported.timings?.gzipMs || 0,
       packageMs: exported.timings?.packageMs || 0,
       workerTotalMs: exported.timings?.totalMs || 0,
       inputPackets: exported.worker?.telemetry?.inputPackets || 0,
       inputStreamMs: exported.worker?.telemetry?.inputStreamMs || 0,
       outputPackets: exported.worker?.telemetry?.outputPackets || 0,
       outputReceiveMs: exported.worker?.telemetry?.outputReceiveMs || 0,
-      base64Ms: payload.__timings?.base64Ms || 0,
-      encodingMs: payload.__timings?.encodingMs || 0,
+      base64Ms: payload?.__timings?.base64Ms || 0,
+      encodingMs: payload?.__timings?.encodingMs || 0,
       envelopeMs,
       writeMs
     },
-    effects: ["browser-storage-write", ...(stored.fallback ? ["browser-storage-fallback-write"] : [])]
+    effects: ["browser-storage-write", ...(stored.directBinary ? ["browser-storage-binary-write"] : []), ...(stored.fallback ? ["browser-storage-fallback-write"] : [])]
   };
 }
 

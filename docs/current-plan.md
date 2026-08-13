@@ -12,7 +12,7 @@
 
 ### 331. 收敛 100k 重生成与存档耗时，并让 Loading 与真实阶段同源
 
-- **状态**：进行中；独立只读调查与阶段 A 已完成，当前进入阶段 B。
+- **状态**：进行中；独立只读调查与阶段 A～B 已完成，当前进入阶段 C。
 - **用户目标**：100k 地图重新生成和保存到浏览器不能继续把十几秒耗时笼统显示为“正在计算 / 正在保存”；先以正式阶段计时锁定整图输入、领域计算、渲染安装、存档规范化、序列化、压缩和写入，再消除已经确认的重复工作。
 - **阶段 A——阶段计时与用户文案**：普通 Loading 只显示“汇拢地图资料、推演新内容、收束结果、重整画面 / 收拢全图资料、压制存档、妥存至浏览器”等用户可理解阶段，不出现 Worker、线程、消息包、picking、IndexedDB、LocalStorage、buffer 或浏览器内部概念；调试模式和正式 operation / Worker telemetry 精确保留 input、domain compute、patch、render prepare、normalize、stringify、compress、package、output、storage 等标量时间，禁止伪进度。
 - **阶段 B——保存链**：当前 live map 导出只做一次权威 JSON 序列化，gzip 直接消费同一文本或字节，不再在 normalize、正式 stringify 和压缩 helper 间重复遍历完整 100k 文档；浏览器大存档根据实际压缩体积直接以二进制写 IndexedDB，不先 base64、信封 stringify 或尝试注定超额的 LocalStorage。小存档仍可保持兼容路径，旧 plain / gzip-base64、LocalStorage、IndexedDB、`.webfmg`、JSON、旧 schema 和旧导出全部继续读取。

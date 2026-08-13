@@ -1,10 +1,11 @@
 import {
-  createCompressedMapDocumentBlob,
+  createCompressedMapTextBlob,
   createMapDocument,
   createMapGeoJson,
   parseMapDocument,
   parseMapDocumentPayload,
-  stringifyMapDocument
+  stringifyMapDocument,
+  validateMapDocumentForExport
 } from "./map-file-io.js";
 import {
   BROWSER_MAP_STORAGE_TYPE,
@@ -119,7 +120,7 @@ async function exportMapFile(payload, context) {
   if (encoding === "gzip") {
     reportTaskProgress(context, "compress", 0.68, "压缩地图文档");
     const gzipStartedAt = taskNow();
-    const compressed = await createCompressedMapDocumentBlob({defaultView: view}, document);
+    const compressed = await createCompressedMapTextBlob({defaultView: view}, text);
     compressMs = roundTaskMs(taskNow() - gzipStartedAt);
     blob = compressed.blob;
     originalBytes = compressed.originalBytes;
@@ -151,6 +152,7 @@ async function exportMapFile(payload, context) {
       compressMs,
       gzipMs: compressMs,
       packageMs,
+      serializationPasses: 1,
       totalMs: roundTaskMs(taskNow() - startedAt)
     }
   };
@@ -240,7 +242,7 @@ function normalizeExportDocument(payload) {
   }
   if (payload?.map && typeof payload.map === "object") {
     const created = createMapDocument(payload.map, payload.options || payload.map.options || {});
-    return parseMapDocument(stringifyMapDocument(created));
+    return validateMapDocumentForExport(created);
   }
   throw new Error("地图存档 Worker 导出缺少 document 或 map");
 }

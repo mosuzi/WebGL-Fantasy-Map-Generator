@@ -117,13 +117,23 @@ export async function downloadCompressedMapDocument(documentRef, document, filen
 
 export async function createCompressedMapDocumentBlob(documentRef, document) {
   const text = stringifyMapDocument(document);
-  const originalBytes = textByteLength(documentRef, text);
-  const blob = await createGzipTextBlob(documentRef, text);
+  return createCompressedMapTextBlob(documentRef, text);
+}
+
+export async function createCompressedMapTextBlob(documentRef, text) {
+  const source = String(text || "");
+  const originalBytes = textByteLength(documentRef, source);
+  const blob = await createGzipTextBlob(documentRef, source);
   return {
     blob,
     originalBytes,
     compressedBytes: blob.size
   };
+}
+
+export function validateMapDocumentForExport(document) {
+  validateCurrentMapDocument(document);
+  return document;
 }
 
 export function migrateMapDocument(document) {

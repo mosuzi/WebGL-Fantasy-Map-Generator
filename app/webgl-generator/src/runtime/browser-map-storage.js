@@ -6,6 +6,9 @@ export const BROWSER_MAP_STORAGE_VERSION = 1;
 export const BROWSER_MAP_STORAGE_FALLBACK_DB = "webgl-generator-map-storage-v1";
 export const BROWSER_MAP_STORAGE_FALLBACK_STORE = "maps";
 export const BROWSER_MAP_STORAGE_FALLBACK_RECORD = "current";
+export const BROWSER_MAP_STORAGE_BINARY_TYPE = "webgl-generator-browser-map-gzip";
+export const BROWSER_MAP_STORAGE_BINARY_VERSION = 1;
+export const BROWSER_MAP_STORAGE_DIRECT_BINARY_MIN_BYTES = 4 * 1024 * 1024;
 
 export async function encodeBrowserMapStoragePayload(documentRef, text, map) {
   const startedAt = storageClock(documentRef);
@@ -83,18 +86,53 @@ export async function writeBrowserMapStorage(documentRef, raw) {
   return {backend: "indexedDB", storageKey: BROWSER_MAP_STORAGE_FALLBACK_RECORD, fallback: true};
 }
 
+export function shouldWriteBrowserMapStorageBinary(bytes) {
+  return Math.max(0, Number(bytes) || 0) >= BROWSER_MAP_STORAGE_DIRECT_BINARY_MIN_BYTES;
+}
+
+export function createBrowserMapStorageBinaryRecord(bytes, map, metadata = {}) {
+  const source = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes || 0);
+  return {
+    type: BROWSER_MAP_STORAGE_BINARY_TYPE,
+    version: BROWSER_MAP_STORAGE_BINARY_VERSION,
+    savedAt: new Date().toISOString(),
+    originalBytes: Math.max(0, Number(metadata.originalBytes) || 0),
+    metadata: createBrowserMapStorageMetadata(map),
+    encoding: "gzip",
+    bytes: source.byteLength,
+    data: source
+  };
+}
+
+export async function writeBrowserMapStorageBinary(documentRef, bytes, map, metadata = {}) {
+  const view = documentRef.defaultView || window;
+  const record = createBrowserMapStorageBinaryRecord(bytes, map, metadata);
+  await putIndexedDbRecord(view, record);
+  try {
+    safeLocalStorage(view)?.removeItem(BROWSER_MAP_STORAGE_KEY);
+  } catch {
+    // IndexedDB 已是本次权威存档；受限环境中清理旧 LocalStorage 失败不应损坏新存档。
+  }
+  return {
+    backend: "indexedDB",
+    storageKey: BROWSER_MAP_STORAGE_FALLBACK_RECORD,
+    directBinary: true,
+    record
+  };
+}
+
 export async function readBrowserMapStorage(documentRef) {
   const view = documentRef.defaultView || window;
   const localRaw = safeLocalStorage(view)?.getItem(BROWSER_MAP_STORAGE_KEY) || "";
   const fallbackRaw = await getIndexedDbRecord(view).catch(() => "");
   if (!localRaw && !fallbackRaw) return null;
-  if (!localRaw) return {raw: fallbackRaw, backend: "indexedDB", storageKey: BROWSER_MAP_STORAGE_FALLBACK_RECORD, fallback: true};
+  if (!localRaw) return createIndexedDbReadResult(fallbackRaw);
   if (!fallbackRaw) return {raw: localRaw, backend: "localStorage", storageKey: BROWSER_MAP_STORAGE_KEY};
 
-  const localSavedAt = savedAtFromRaw(localRaw);
-  const fallbackSavedAt = savedAtFromRaw(fallbackRaw);
+  const localSavedAt = savedAtFromStoredValue(localRaw);
+  const fallbackSavedAt = savedAtFromStoredValue(fallbackRaw);
   if (fallbackSavedAt && (!localSavedAt || fallbackSavedAt >= localSavedAt)) {
-    return {raw: fallbackRaw, backend: "indexedDB", storageKey: BROWSER_MAP_STORAGE_FALLBACK_RECORD, fallback: true};
+    return createIndexedDbReadResult(fallbackRaw);
   }
   return {raw: localRaw, backend: "localStorage", storageKey: BROWSER_MAP_STORAGE_KEY};
 }
@@ -110,12 +148,7 @@ export function createBrowserMapStorageEnvelope(text, map, encoded = {}) {
     version: BROWSER_MAP_STORAGE_VERSION,
     savedAt: new Date().toISOString(),
     originalBytes: originalCharacters,
-    metadata: {
-      seed: map?.metadata?.seed || map?.options?.seed || "",
-      checksum: map?.metadata?.checksum || map?.summary?.checksum || "",
-      gridCells: map?.metadata?.gridCells || map?.grid?.metadata?.actualCells || 0,
-      packCells: map?.metadata?.packCells || map?.pack?.metadata?.cells || 0
-    },
+    metadata: createBrowserMapStorageMetadata(map),
     encoding,
     data,
     bytes: Math.max(0, Number(encoded.bytes) || data.length)
@@ -201,6 +234,51 @@ function savedAtFromRaw(raw) {
   }
 }
 
+function savedAtFromStoredValue(value) {
+  if (isBrowserMapStorageBinaryRecord(value)) return String(value.savedAt || "");
+  return savedAtFromRaw(value);
+}
+
+function createIndexedDbReadResult(value) {
+  if (isBrowserMapStorageBinaryRecord(value)) {
+    return {
+      raw: createBrowserMapStorageBinaryImportSource(value),
+      backend: "indexedDB",
+      storageKey: BROWSER_MAP_STORAGE_FALLBACK_RECORD,
+      directBinary: true,
+      metadata: {...(value.metadata || {})}
+    };
+  }
+  return {raw: String(value || ""), backend: "indexedDB", storageKey: BROWSER_MAP_STORAGE_FALLBACK_RECORD, fallback: true};
+}
+
+export function createBrowserMapStorageBinaryImportSource(record) {
+  if (!isBrowserMapStorageBinaryRecord(record)) throw new Error("浏览器二进制存档记录无效");
+  return {
+    kind: "bytes",
+    bytes: record.data,
+    mimeType: "application/gzip",
+    filename: "browser-storage.webfmg"
+  };
+}
+
+export function isBrowserMapStorageBinaryRecord(value) {
+  return value?.type === BROWSER_MAP_STORAGE_BINARY_TYPE
+    && value?.version === BROWSER_MAP_STORAGE_BINARY_VERSION
+    && value?.encoding === "gzip"
+    && value?.data instanceof Uint8Array
+    && value.data.byteLength === Number(value.bytes);
+}
+
+function createBrowserMapStorageMetadata(map) {
+  return {
+    seed: map?.metadata?.seed || map?.options?.seed || "",
+    checksum: map?.metadata?.checksum || map?.summary?.checksum || "",
+    gridCells: map?.metadata?.gridCells || map?.grid?.metadata?.actualCells || 0,
+    packCells: map?.metadata?.packCells || map?.pack?.metadata?.cells || 0
+  };
+}
+
 function storageClock(documentRef) {
   return typeof documentRef?.defaultView?.performance?.now === "function"
     ? documentRef.defaultView.performance.now()
@@ -227,12 +305,12 @@ function openIndexedDb(view) {
 }
 
 function putIndexedDbRecord(view, raw) {
-  return withIndexedDbStore(view, "readwrite", store => store.put({raw, savedAt: savedAtFromRaw(raw), updatedAt: Date.now()}, BROWSER_MAP_STORAGE_FALLBACK_RECORD));
+  return withIndexedDbStore(view, "readwrite", store => store.put({raw, savedAt: savedAtFromStoredValue(raw), updatedAt: Date.now()}, BROWSER_MAP_STORAGE_FALLBACK_RECORD));
 }
 
 function getIndexedDbRecord(view) {
   return withIndexedDbStore(view, "readonly", store => store.get(BROWSER_MAP_STORAGE_FALLBACK_RECORD))
-    .then(record => String(record?.raw || ""));
+    .then(record => record?.raw || "");
 }
 
 function deleteIndexedDbRecord(view) {

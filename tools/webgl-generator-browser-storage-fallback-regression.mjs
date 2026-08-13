@@ -57,16 +57,55 @@ try {
     const sample = await page.evaluate(() => window.webglGeneratorApi.data.saveBrowserMap({toast: false}));
     assert.equal(sample.ok, true, sample.error?.message || "IndexedDB fallback 保存失败");
     assert.equal(sample.data.storageBackend, "indexedDB");
-    assert.ok(sample.data.effects.includes("browser-storage-fallback-write"));
+    if (requestedCells === 100000) {
+      assert.ok(sample.data.effects.includes("browser-storage-binary-write"), "100k 存档没有走直接二进制 IndexedDB");
+      assert.equal(sample.data.effects.includes("browser-storage-fallback-write"), false, "100k 直接二进制存档被误报为 quota fallback");
+      assert.equal(sample.data.storageBytes, sample.data.bytes, "100k 二进制存档仍包含 base64/envelope 膨胀");
+      assert.equal(sample.data.timings.base64Ms, 0, "100k 二进制存档仍执行了 base64");
+      assert.equal(sample.data.timings.encodingMs, 0, "100k 二进制存档仍执行了文本编码");
+    } else {
+      assert.ok(sample.data.effects.includes("browser-storage-fallback-write"));
+    }
     savedSamples.push(sample.data);
   }
   const saved = {data: savedSamples.at(-1)};
   assert.equal(await page.evaluate(key => localStorage.getItem(key), storageKey), null, "quota fallback 不应写入 LocalStorage");
+  const indexedDbRecord = await page.evaluate(async () => {
+    const request = indexedDB.open("webgl-generator-map-storage-v1", 1);
+    const db = await new Promise((resolveOpen, rejectOpen) => {
+      request.onsuccess = () => resolveOpen(request.result);
+      request.onerror = () => rejectOpen(request.error);
+    });
+    try {
+      const transaction = db.transaction("maps", "readonly");
+      const recordRequest = transaction.objectStore("maps").get("current");
+      const record = await new Promise((resolveRecord, rejectRecord) => {
+        recordRequest.onsuccess = () => resolveRecord(recordRequest.result);
+        recordRequest.onerror = () => rejectRecord(recordRequest.error);
+      });
+      return {
+        rawType: typeof record?.raw,
+        type: record?.raw?.type || "",
+        bytes: Number(record?.raw?.bytes) || 0,
+        dataBytes: Number(record?.raw?.data?.byteLength) || 0
+      };
+    } finally {
+      db.close();
+    }
+  });
+  if (requestedCells === 100000) {
+    assert.equal(indexedDbRecord.type, "webgl-generator-browser-map-gzip");
+    assert.equal(indexedDbRecord.dataBytes, saved.data.bytes);
+    assert.equal(indexedDbRecord.bytes, saved.data.bytes);
+  } else {
+    assert.equal(indexedDbRecord.rawType, "string", "10k quota fallback 不再保存兼容 envelope");
+  }
 
   const restored = await page.evaluate(() => window.webglGeneratorApi.data.restoreBrowserMap({confirm: true, toast: false}));
   assert.equal(restored.ok, true, restored.error?.message || "IndexedDB fallback 恢复失败");
   assert.equal(restored.data.storageBackend, "indexedDB");
-  assert.ok(restored.data.effects.includes("browser-storage-fallback-read"));
+  if (requestedCells === 100000) assert.ok(restored.data.effects.includes("browser-storage-binary-read"));
+  else assert.ok(restored.data.effects.includes("browser-storage-fallback-read"));
   const state = await page.evaluate(() => ({seed: window.__webglGeneratorApp.map.metadata.seed, gridCells: window.__webglGeneratorApp.map.grid.cells.i.length}));
   assert.equal(state.seed, fallbackSeed);
   assert.ok(state.gridCells >= requestedCells * 0.95, `实际 grid cells 过少：${state.gridCells}`);
