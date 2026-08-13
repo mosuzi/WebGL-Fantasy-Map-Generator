@@ -36,20 +36,21 @@ for (const [kind, label] of Object.entries(expectedKinds)) {
 assert.equal(regenerationKindLabel("unknown-worker-kind"), "地图内容", "未知领域泄漏英文名称");
 
 const expectedStages = Object.freeze({
-  regenerate: "正在开始重新生成路线",
-  "stream-input": "正在准备路线所需资料",
-  compute: "正在计算新的路线",
-  "fallback-snapshot": "正在改用兼容方式继续处理路线",
-  commit: "正在应用新的路线",
-  "render-install-picking": "正在更新路线画面",
-  complete: "路线重新生成完成",
+  regenerate: "正在梳理现有路线",
+  "stream-input": "正在汇拢路线所需的山河脉络",
+  compute: "正在推演新的路线",
+  "result-stream-complete": "正在收束路线推演结果",
+  "fallback-snapshot": "正在换一种稳妥方式继续推演路线",
+  commit: "正在将新的路线归入地图",
+  "render-install-picking": "正在重整地图上的路线细节",
+  complete: "新的路线已经铺陈完成",
   cancel: "路线重新生成已取消",
   failure: "路线重新生成未能完成"
 });
 for (const [stage, expected] of Object.entries(expectedStages)) {
   assert.equal(regenerationLoadingMessage("routes", stage, {message: technicalMessage}), expected, `${stage} 阶段文案错误`);
 }
-assert.equal(regenerationLoadingMessage("routes", "worker-output-packet", {message: technicalMessage}), "正在计算新的路线", "未知底层阶段未收敛为计算文案");
+assert.equal(regenerationLoadingMessage("routes", "worker-output-packet", {message: technicalMessage}), "正在推演新的路线", "未知底层阶段未收敛为推演文案");
 
 for (const [kind, label] of Object.entries(expectedKinds)) {
   assert.equal(regenerationResultMessage(kind, {executed: true, status: technicalMessage}), `${label}重新生成完成。`);

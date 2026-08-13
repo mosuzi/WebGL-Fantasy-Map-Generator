@@ -43,15 +43,16 @@ export function regenerationKindLabel(kind) {
 export function regenerationLoadingMessage(kind, stage = "initial") {
   const label = regenerationKindLabel(kind);
   switch (regenerationLoadingPhase(stage)) {
-    case "preparation": return `正在准备${label}所需资料`;
-    case "calculation": return `正在计算新的${label}`;
-    case "compatibility": return `正在改用兼容方式继续处理${label}`;
-    case "commit": return `正在应用新的${label}`;
-    case "render": return `正在更新${label}画面`;
-    case "complete": return `${label}重新生成完成`;
+    case "preparation": return `正在汇拢${label}所需的山河脉络`;
+    case "calculation": return `正在推演新的${label}`;
+    case "result": return `正在收束${label}推演结果`;
+    case "compatibility": return `正在换一种稳妥方式继续推演${label}`;
+    case "commit": return `正在将新的${label}归入地图`;
+    case "render": return `正在重整地图上的${label}细节`;
+    case "complete": return `新的${label}已经铺陈完成`;
     case "cancel": return `${label}重新生成已取消`;
     case "failure": return `${label}重新生成未能完成`;
-    default: return `正在开始重新生成${label}`;
+    default: return `正在梳理现有${label}`;
   }
 }
 
@@ -110,6 +111,7 @@ function resolveRegenerationKind(kind, result = {}) {
 function regenerationLoadingPhase(stage) {
   const value = String(stage || "").trim().toLowerCase();
   if (/cancel|abort/.test(value)) return "cancel";
+  if (/result-stream|output-stream|patch/.test(value)) return "result";
   if (/complete|success|finish|done/.test(value)) return "complete";
   if (/fail|error|rollback/.test(value)) return "failure";
   if (/fallback|compat/.test(value)) return "compatibility";

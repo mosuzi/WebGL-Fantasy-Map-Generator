@@ -14,6 +14,8 @@ const port = 5527;
 const timeoutMs = 240000;
 const kinds = ["features", "routes", "rivers", "cities", "states", "provinces", "markers", "diplomacy", "religions", "military", "zones"];
 const dependencyOrder = ["features", "states", "provinces", "cities", "routes", "rivers", "markers", "diplomacy", "religions", "military", "zones"];
+const loadingOnlyKind = String(process.argv.find(argument => argument.startsWith("--loading-kind="))?.split("=")[1] || "");
+if (loadingOnlyKind) assert.ok(kinds.includes(loadingOnlyKind), `未知 Loading 诊断类型：${loadingOnlyKind}`);
 
 assert.ok(existsSync(distDir), `构建产物不存在：${distDir}`);
 const playwright = createRequire(join(sourceDir, "package.json"))("playwright");
@@ -45,27 +47,29 @@ try {
   await cdp.send("Performance.enable");
 
   const independent = {};
-  for (const kind of kinds) {
-    await createFrozenBaseline(page, "worker-regeneration-browser-baseline", 1000);
+  for (const kind of loadingOnlyKind ? [loadingOnlyKind] : kinds) {
+    await createFrozenBaseline(page, "worker-regeneration-browser-baseline", loadingOnlyKind ? 10000 : 1000);
     await clearWindowSignals(page, consoleErrors, pageErrors);
     independent[kind] = await runFormalRegeneration(page, cdp, kind, consoleErrors, pageErrors, {undoRedo: true});
   }
   assert.ok(Object.values(independent).every(item => item.worker.session.reused === false), "独立基线不得错误复用旧地图 Worker 镜像");
 
-  await createFrozenBaseline(page, "worker-regeneration-browser-chain", 10000);
-  await clearWindowSignals(page, consoleErrors, pageErrors);
   const chain = [];
-  for (const kind of dependencyOrder) {
-    chain.push(await runFormalRegeneration(page, cdp, kind, consoleErrors, pageErrors, {undoRedo: false}));
+  if (!loadingOnlyKind) {
+    await createFrozenBaseline(page, "worker-regeneration-browser-chain", 10000);
     await clearWindowSignals(page, consoleErrors, pageErrors);
+    for (const kind of dependencyOrder) {
+      chain.push(await runFormalRegeneration(page, cdp, kind, consoleErrors, pageErrors, {undoRedo: false}));
+      await clearWindowSignals(page, consoleErrors, pageErrors);
+    }
+    assert.equal(chain[0].worker.session.reused, false, "连续链首项必须建立全量 Worker 镜像");
+    assert.ok(chain.slice(1).every(item => item.worker.session.reused === true), "连续链后续项必须复用 Worker 镜像");
+    assert.ok(chain.every(item => item.worker.session.id === chain[0].worker.session.id), "连续链必须复用同一个 Worker session");
+    assert.ok(
+      chain.slice(1).every(item => Number(item.telemetry.inputPackets) < Number(chain[0].telemetry.inputPackets) / 4),
+      "复用镜像后的输入包数必须较首次全图传输骤降"
+    );
   }
-  assert.equal(chain[0].worker.session.reused, false, "连续链首项必须建立全量 Worker 镜像");
-  assert.ok(chain.slice(1).every(item => item.worker.session.reused === true), "连续链后续项必须复用 Worker 镜像");
-  assert.ok(chain.every(item => item.worker.session.id === chain[0].worker.session.id), "连续链必须复用同一个 Worker session");
-  assert.ok(
-    chain.slice(1).every(item => Number(item.telemetry.inputPackets) < Number(chain[0].telemetry.inputPackets) / 4),
-    "复用镜像后的输入包数必须较首次全图传输骤降"
-  );
 
   console.log(JSON.stringify({ok: true, independent, chain}, null, 2));
 } finally {

@@ -284,6 +284,7 @@ import {mergePersistedUserVisualThemes, persistUserVisualThemes} from "./visual-
 import {collectionAffected, objectAffected, systemAffected} from "./edit-command-effects.js";
 import {syncEditorStateSnapshot} from "../ui/vue/state-bridge.js";
 import {completeStartupLoading, failStartupLoading} from "../ui/startup-loading.js";
+import {browserMapSaveLoadingMessage} from "../ui/map-storage-user-copy.js";
 import {createRegenerationUserError, regenerationLoadingMessage} from "../ui/regeneration-user-copy.js";
 import {LABEL_TARGET_KIND, OBJECT_KIND, OBJECT_KIND_LABEL} from "./object-kinds.js";
 import {reconcileSettlementPortTopology} from "./settlement-port-topology.js";
@@ -3267,9 +3268,9 @@ function createRuntimeActions(state, documentRef, options = {}) {
       exportMeasurements: (options = {}) => exportMeasurementsData(state, documentRef, options),
       exportImportDiagnostic: (options = {}) => exportMapImportDiagnosticViaApi(state, documentRef, options),
       saveBrowserMap: (options = {}) => operation.run("data.saveBrowserMap", context => {
-        context.report("serialize", {message: "正在保存浏览器存档"});
+        context.report("collect", {message: browserMapSaveLoadingMessage("collect")});
         return saveMapToBrowserStorageViaApi(state, documentRef, options, context);
-      }, {message: "正在保存浏览器存档"}),
+      }, {message: browserMapSaveLoadingMessage("initial")}),
       restoreBrowserMap: (options = {}) => runMapReplace("data.restoreBrowserMap", context => restoreMapFromBrowserStorageViaApi(state, documentRef, options, context), loadingMessage("map-import-read"), {
         isNoop: result => result?.restored === false
       }),
@@ -5233,8 +5234,10 @@ async function saveMapToBrowserStorageViaApi(state, documentRef, _options = {}, 
   const exported = await exportMapArchiveViaWorker(state, documentRef, {
     operation,
     encoding: "gzip",
-    resultType: "bytes"
+    resultType: "bytes",
+    progressMessage: stage => browserMapSaveLoadingMessage(stage)
   });
+  operation?.report("storage-package", {message: browserMapSaveLoadingMessage("package")});
   const payload = await encodeBrowserMapStorageBytesPayload(documentRef, exported.data, state.map, {
     originalCharacters: exported.originalCharacters,
     gzipMs: exported.timings?.gzipMs
@@ -5242,6 +5245,7 @@ async function saveMapToBrowserStorageViaApi(state, documentRef, _options = {}, 
   const envelopeStartedAt = storageClock(documentRef);
   const raw = JSON.stringify(payload);
   const envelopeMs = elapsedStorageMs(documentRef, envelopeStartedAt);
+  operation?.report("storage-write", {message: browserMapSaveLoadingMessage("write-storage")});
   const writeStartedAt = storageClock(documentRef);
   const stored = await writeBrowserMapStorage(documentRef, raw);
   const writeMs = elapsedStorageMs(documentRef, writeStartedAt);
@@ -5256,7 +5260,14 @@ async function saveMapToBrowserStorageViaApi(state, documentRef, _options = {}, 
     metadata: {...payload.metadata},
     timings: {
       rawJsonMs: exported.timings?.stringifyMs || 0,
+      normalizeMs: exported.timings?.normalizeMs || 0,
       gzipMs: payload.__timings?.gzipMs || 0,
+      packageMs: exported.timings?.packageMs || 0,
+      workerTotalMs: exported.timings?.totalMs || 0,
+      inputPackets: exported.worker?.telemetry?.inputPackets || 0,
+      inputStreamMs: exported.worker?.telemetry?.inputStreamMs || 0,
+      outputPackets: exported.worker?.telemetry?.outputPackets || 0,
+      outputReceiveMs: exported.worker?.telemetry?.outputReceiveMs || 0,
       base64Ms: payload.__timings?.base64Ms || 0,
       encodingMs: payload.__timings?.encodingMs || 0,
       envelopeMs,
@@ -5327,7 +5338,7 @@ async function exportPackGeoJsonViaWorker(state, documentRef, options = {}, rang
   return result;
 }
 
-async function exportMapArchiveViaWorker(state, documentRef, {operation = null, encoding = "gzip", resultType = "bytes"} = {}) {
+async function exportMapArchiveViaWorker(state, documentRef, {operation = null, encoding = "gzip", resultType = "bytes", progressMessage = null} = {}) {
   assertMapAvailable(state);
   const map = state.map;
   const units = normalizeUnitPreferences(readControlPreferences(documentRef).units);
@@ -5348,7 +5359,7 @@ async function exportMapArchiveViaWorker(state, documentRef, {operation = null, 
     signal: operation?.signal || null,
     onProgress: (stage, detail = {}) => operation?.report(stage, {
       ...detail,
-      message: detail.message || "正在整理地图存档"
+      message: progressMessage?.(stage, detail) || detail.message || "正在整理地图存档"
     })
   });
   return restoreMapFileIoWorkerResult(output, prepared);
@@ -12474,6 +12485,7 @@ async function executeWorkerMapMutation(state, documentRef, mutation, operation 
       ...(output.populationPreserved !== undefined ? {populationPreserved: Boolean(output.populationPreserved)} : {}),
       history: state.editHistory.getStats(),
       worker: appendWorkerCommitTelemetry(committedWorker, {
+        ...(output.timings || {}),
         commitInstallMs,
         renderInstallPrepareMs,
         renderInstallCommitMs,

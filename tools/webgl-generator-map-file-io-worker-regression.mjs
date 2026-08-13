@@ -115,6 +115,10 @@ const workerExport = await runTaskInWorker({
 
 assert.ok(directExport.data instanceof Uint8Array);
 assert.ok(workerExport.result.data instanceof Uint8Array);
+for (const key of ["normalizeMs", "stringifyMs", "compressMs", "packageMs", "totalMs"]) {
+  assert.ok(Number.isFinite(directExport.timings[key]) && directExport.timings[key] >= 0, `存档导出缺少 ${key} 阶段计时`);
+}
+assert.equal(directExport.timings.gzipMs, directExport.timings.compressMs, "兼容 gzipMs 与 compressMs 漂移");
 assert.deepEqual(workerExport.result.data, directExport.data, "Worker/fallback plain JSON 字节不一致");
 const exportedText = new TextDecoder().decode(workerExport.result.data);
 const exported = await runMapFileIoWorkerTask({operation: "import", input: exportedText});

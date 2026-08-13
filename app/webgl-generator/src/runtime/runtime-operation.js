@@ -144,7 +144,7 @@ export function createRuntimeOperationManager(options = {}) {
     if (current !== operation) return false;
     operation.stage = String(stage || operation.stage || "run");
     operation.message = String(detail.message || operation.message || "");
-    operation.stages.push({stage: operation.stage, message: operation.message, atMs: roundMs(now() - operation.startedAt)});
+    operation.stages.push(operationStageSnapshot(operation, detail, now));
     if (operation.stages.length > 24) operation.stages.shift();
     if (operation.loading && detail.loading !== false) options.setLoading?.(true, operation.message, snapshotOperation(operation));
     options.recordHealth?.("operation-stage", {name: operation.name, operationId: operation.id, stage: operation.stage}, "info");
@@ -206,6 +206,16 @@ export function createRuntimeOperationManager(options = {}) {
   function publish() {
     options.onStateChange?.(getSnapshot());
   }
+}
+
+function operationStageSnapshot(operation, detail, now) {
+  const snapshot = {stage: operation.stage, message: operation.message, atMs: roundMs(now() - operation.startedAt)};
+  for (const key of ["progress", "completed", "total"]) {
+    const value = Number(detail?.[key]);
+    if (Number.isFinite(value)) snapshot[key] = value;
+  }
+  if (detail?.layer !== undefined) snapshot.layer = String(detail.layer);
+  return snapshot;
 }
 
 export function normalizeRuntimeOperationError(error, stage = "run") {

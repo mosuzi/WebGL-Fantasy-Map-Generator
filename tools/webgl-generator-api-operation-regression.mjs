@@ -16,12 +16,22 @@ const manager = createRuntimeOperationManager({
 });
 
 const success = await manager.run("success", context => {
-  context.report("work", {message: "处理中"});
+  context.report("work", {message: "处理中", progress: 0.4, completed: 4, total: 10, layer: "labels", privateObject: {ignored: true}});
   return {value: 1};
 });
 assert.equal(success.value, 1);
 assert.equal(success.operation.status, "success");
 assert.equal(success.operation.stage, "work");
+assert.deepEqual(success.operation.stages.at(-1), {
+  stage: "work",
+  message: "处理中",
+  atMs: 5,
+  progress: 0.4,
+  completed: 4,
+  total: 10,
+  layer: "labels"
+});
+assert.equal("privateObject" in success.operation.stages.at(-1), false, "operation 阶段不得保留任意对象");
 assert.equal(loading.at(-1).visible, false);
 
 const noop = manager.runSync("noop", () => ({executed: false}), {isNoop: result => !result.executed});

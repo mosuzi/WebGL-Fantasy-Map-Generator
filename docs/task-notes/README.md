@@ -6,6 +6,7 @@
 
 ## 专题映射
 
+- 第 331 项的 100k 重生成 / 存档瓶颈、真实阶段 Loading、单次序列化、二进制 IndexedDB、canonical map mirror 与增量 prepared renderer 边界冻结于 [`task-331-save-regeneration-performance.md`](./task-331-save-regeneration-performance.md)；普通用户只看山河推演 / 存档阶段，调试数据保留 transport、compute、render、serialize、compress 和 storage 精确标量。
 - 第 329 项的 LongTask 登记例外复核、当前机器门风险、C3c 重点诊断和分级停止条件冻结于 [`task-329-long-task-exception-convergence.md`](./task-329-long-task-exception-convergence.md)；已被后续实现消除的信号只收紧工具，不重复改产品。
 - 第 330 项的全局 Loading、面板懒加载和 `28` 个 Vue 编辑 / 统计面板普通用户文案盘点冻结于 [`task-330-loading-and-panel-copy-polish.md`](./task-330-loading-and-panel-copy-polish.md)；普通界面结果导向，调试诊断保留技术精度。
 - 第 328 项的大河政治软阻隔、统一评分、国家 / 省份 / 局部重分省接线、诊断和分级验收冻结于 [`task-328-river-political-boundary-stage-design.md`](./task-328-river-political-boundary-stage-design.md)。河网只作输入证据，旧图载入、手工边界和非政治操作不自动重划。

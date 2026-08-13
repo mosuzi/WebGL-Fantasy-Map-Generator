@@ -335,6 +335,10 @@ const firstSessionResult = await sessionCoordinator.run("regeneration.compute", 
   sessionPayload: {kind: "zones"}
 });
 assert.equal(firstSessionResult.worker.session.reused, false);
+for (const key of ["setupMs", "domainComputeMs", "patchCaptureMs", "renderPrepareWorkerMs", "totalTaskMs"]) {
+  assert.ok(Number.isFinite(firstSessionResult.timings?.[key]) && firstSessionResult.timings[key] >= 0, `重生成缺少 ${key} 阶段计时`);
+}
+assert.ok(firstSessionResult.timings.totalTaskMs >= firstSessionResult.timings.domainComputeMs, "领域计算时间大于 Worker 任务总时间");
 applyWorkerPatch(sessionFormal, "zones", firstSessionResult.patch);
 sessionBinding = {...sessionBinding, mapRevision: 1};
 assert.equal(await sessionCoordinator.commitSession(firstSessionResult.worker.session.id, sessionBinding, {expectedRevisionDelta: 1}), true);

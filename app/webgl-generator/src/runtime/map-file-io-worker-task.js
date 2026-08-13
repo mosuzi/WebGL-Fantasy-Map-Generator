@@ -99,7 +99,9 @@ async function exportMapFile(payload, context) {
   const startedAt = taskNow();
   await taskCheckpoint(context);
   reportTaskProgress(context, "normalize", 0.08, "规范化并校验地图文档");
+  const normalizeStartedAt = taskNow();
   const document = normalizeExportDocument(payload);
+  const normalizeMs = roundTaskMs(taskNow() - normalizeStartedAt);
   await taskCheckpoint(context);
 
   reportTaskProgress(context, "stringify", 0.42, "序列化地图文档");
@@ -113,12 +115,12 @@ async function exportMapFile(payload, context) {
   const view = runtimeView();
   let blob;
   let originalBytes;
-  let gzipMs = 0;
+  let compressMs = 0;
   if (encoding === "gzip") {
     reportTaskProgress(context, "compress", 0.68, "压缩地图文档");
     const gzipStartedAt = taskNow();
     const compressed = await createCompressedMapDocumentBlob({defaultView: view}, document);
-    gzipMs = roundTaskMs(taskNow() - gzipStartedAt);
+    compressMs = roundTaskMs(taskNow() - gzipStartedAt);
     blob = compressed.blob;
     originalBytes = compressed.originalBytes;
   } else {
@@ -128,7 +130,9 @@ async function exportMapFile(payload, context) {
   await taskCheckpoint(context);
 
   reportTaskProgress(context, "package", 0.9, "封装地图存档输出");
+  const packageStartedAt = taskNow();
   const data = await createExportData(blob, text, resultType);
+  const packageMs = roundTaskMs(taskNow() - packageStartedAt);
   await taskCheckpoint(context);
   reportTaskProgress(context, "complete", 1, "地图存档序列化完成");
   return {
@@ -142,8 +146,11 @@ async function exportMapFile(payload, context) {
     data,
     metadata: mapDocumentMetadata(document),
     timings: {
+      normalizeMs,
       stringifyMs,
-      gzipMs,
+      compressMs,
+      gzipMs: compressMs,
+      packageMs,
       totalMs: roundTaskMs(taskNow() - startedAt)
     }
   };

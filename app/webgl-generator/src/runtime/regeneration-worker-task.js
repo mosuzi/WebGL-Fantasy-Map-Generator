@@ -99,6 +99,7 @@ const WRITE_SETS = Object.freeze({
 });
 
 export async function runRegenerationWorkerTask(payload, context = {}) {
+  const taskStartedAt = regenerationTaskNow();
   const map = payload?.map;
   if (!map || typeof map !== "object") throw taskError("worker_regeneration_map_missing", "重生成 Worker 缺少地图快照");
   if (payload?.mode === "render-only") {
@@ -112,6 +113,7 @@ export async function runRegenerationWorkerTask(payload, context = {}) {
     return {mode: "render-only", binding, preparedRender};
   }
   const kind = normalizeRegenerationKind(payload?.kind);
+  const setupStartedAt = regenerationTaskNow();
   context.checkpoint?.();
   context.report?.("compute", {message: `正在 Worker 中重算 ${kind}`, progress: 0.15});
   const before = regenerationSummary(map);
@@ -121,13 +123,19 @@ export async function runRegenerationWorkerTask(payload, context = {}) {
   if (populationSnapshot && !["features", "routes", "rivers"].includes(kind)) {
     throw taskError("worker_regeneration_option_invalid", "preservePopulation 仅支持 features、routes 和 rivers 地理派生重算");
   }
+  const setupMs = regenerationTaskMs(regenerationTaskNow() - setupStartedAt);
+  const domainStartedAt = regenerationTaskNow();
   const result = regenerateMapAttribute(map, kind, {...scope, constraintBundle, rejectLockedDiplomacy: kind === "states"});
   if (populationSnapshot) restoreClimatePopulation(map, populationSnapshot);
   if (constraintBundle) constraintBundle.assertDomain(map, "world", "after");
+  const domainComputeMs = regenerationTaskMs(regenerationTaskNow() - domainStartedAt);
   context.checkpoint?.();
   context.report?.("patch", {message: `正在生成 ${kind} 领域补丁`, progress: 0.85});
+  const patchStartedAt = regenerationTaskNow();
   const patch = createDomainPatch(kind, result.executed ? WRITE_SETS[kind] : [], map);
   assertRegenerationWriteSet(kind, patch);
+  const patchCaptureMs = regenerationTaskMs(regenerationTaskNow() - patchStartedAt);
+  const renderStartedAt = regenerationTaskNow();
   const preparedRender = result.executed && payload?.render
     ? await executeRenderPreparationTask({
         ...payload.render,
@@ -135,6 +143,7 @@ export async function runRegenerationWorkerTask(payload, context = {}) {
         binding: payload.render.binding || context.binding || null
       }, context)
     : null;
+  const renderPrepareWorkerMs = regenerationTaskMs(regenerationTaskNow() - renderStartedAt);
   return {
     kind,
     binding: context.binding || null,
@@ -148,8 +157,23 @@ export async function runRegenerationWorkerTask(payload, context = {}) {
     patch,
     refresh: regenerationRefresh(kind),
     preparedRender,
-    populationPreserved: Boolean(populationSnapshot)
+    populationPreserved: Boolean(populationSnapshot),
+    timings: {
+      setupMs,
+      domainComputeMs,
+      patchCaptureMs,
+      renderPrepareWorkerMs,
+      totalTaskMs: regenerationTaskMs(regenerationTaskNow() - taskStartedAt)
+    }
   };
+}
+
+function regenerationTaskNow() {
+  return globalThis.performance?.now?.() ?? Date.now();
+}
+
+function regenerationTaskMs(value) {
+  return Math.round(Number(value || 0) * 10) / 10;
 }
 
 function regenerateMapAttribute(map, kind, options) {
