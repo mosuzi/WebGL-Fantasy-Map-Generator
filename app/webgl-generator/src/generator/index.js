@@ -110,6 +110,7 @@ export function generatePlaceholderMap(inputOptions = {}, overrides = {}) {
         actualCells: grid.metadata.actualCells,
         protectedAnchors: [...heightmap.source.protectedAnchors],
         degradedAnchors: [...heightmap.source.degradedAnchors],
+        snapshotYear: heightmap.source.snapshotYear ?? null,
         humanPreset: historicalPreset ? {...historicalPreset} : null
       } : null
     },

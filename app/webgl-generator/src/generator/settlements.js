@@ -732,6 +732,9 @@ function buildPackSettlements(grid, features, politics, random, pack, options) {
   const {cells} = pack;
   const nameGenerator = createChineseNameGenerator(options.seed, {namebases: options.namebases});
   const populated = cells.i.filter(cell => isPopulatedPackCell(cells, cell));
+  const needsLandCapitalFallback = Number(options.statesNumber) > 0
+    && getCapitalsNumber(populated.length, options.statesNumber) === 0;
+  const capitalCandidates = needsLandCapitalFallback ? cells.i.filter(cell => cells.h?.[cell] >= 20) : populated;
   const cities = [];
   const burgs = [null];
   const occupied = new Set();
@@ -739,7 +742,7 @@ function buildPackSettlements(grid, features, politics, random, pack, options) {
   const spacingIndex = new SpacingIndex(16);
 
   cells.burg = new Uint16Array(cells.i.length);
-  if (!populated.length) {
+  if (!capitalCandidates.length) {
     pack.burgs = burgs;
     return {cities};
   }
@@ -747,16 +750,53 @@ function buildPackSettlements(grid, features, politics, random, pack, options) {
   if (politics?.states?.length) {
     for (const state of politics.states) {
       if (!state || state.i === 0) continue;
-      const packCell = findPackCellForGrid(grid, pack, state.center, populated);
-      addPackCity({grid, pack, cities, burgs, occupied, occupiedGrid, spacingIndex, packCell, random, nameGenerator, flags: {capital: true, state: state.id}});
+      const packCell = findPackCellForGrid(grid, pack, state.center, capitalCandidates);
+      addPackCity({
+        grid,
+        pack,
+        cities,
+        burgs,
+        occupied,
+        occupiedGrid,
+        spacingIndex,
+        packCell,
+        random,
+        nameGenerator,
+        flags: {capital: true, state: state.id, required: needsLandCapitalFallback}
+      });
     }
 
     for (const province of politics.provinces || []) {
-      const packCell = findPackCellForGrid(grid, pack, province.center, populated);
-      addPackCity({grid, pack, cities, burgs, occupied, occupiedGrid, spacingIndex, packCell, random, nameGenerator, flags: {provincial: true, state: province.state}});
+      const packCell = findPackCellForGrid(grid, pack, province.center, capitalCandidates);
+      addPackCity({
+        grid,
+        pack,
+        cities,
+        burgs,
+        occupied,
+        occupiedGrid,
+        spacingIndex,
+        packCell,
+        random,
+        nameGenerator,
+        flags: {provincial: true, state: province.state, required: needsLandCapitalFallback}
+      });
     }
   } else {
-    generatePackCapitals({grid, pack, cities, burgs, occupied, occupiedGrid, spacingIndex, populated, random, nameGenerator, options});
+    generatePackCapitals({
+      grid,
+      pack,
+      cities,
+      burgs,
+      occupied,
+      occupiedGrid,
+      spacingIndex,
+      populated: capitalCandidates,
+      random,
+      nameGenerator,
+      options,
+      required: needsLandCapitalFallback
+    });
   }
 
   const targetTowns = getTownsNumber(populated.length, grid.points.length);
@@ -1138,7 +1178,7 @@ function addRegeneratedTowns({
   }
 }
 
-function generatePackCapitals({grid, pack, cities, burgs, occupied, occupiedGrid, spacingIndex, populated, random, nameGenerator, options}) {
+function generatePackCapitals({grid, pack, cities, burgs, occupied, occupiedGrid, spacingIndex, populated, random, nameGenerator, options, required = false}) {
   const {cells} = pack;
   const capitalsNumber = getCapitalsNumber(populated.length, options.statesNumber);
   if (!capitalsNumber) return;
@@ -1163,7 +1203,19 @@ function generatePackCapitals({grid, pack, cities, burgs, occupied, occupiedGrid
   }
 
   for (const packCell of selected) {
-    addPackCity({grid, pack, cities, burgs, occupied, occupiedGrid, spacingIndex, packCell, random, nameGenerator, flags: {capital: true}});
+    addPackCity({
+      grid,
+      pack,
+      cities,
+      burgs,
+      occupied,
+      occupiedGrid,
+      spacingIndex,
+      packCell,
+      random,
+      nameGenerator,
+      flags: {capital: true, required}
+    });
   }
 }
 

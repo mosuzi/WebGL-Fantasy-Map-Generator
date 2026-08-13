@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import {readFile} from "node:fs/promises";
 import {join} from "node:path";
 import {fileURLToPath} from "node:url";
-import {normalizeOptions} from "../app/webgl-generator/src/generator/options.js";
+import {DEFAULT_OPTIONS, normalizeOptions} from "../app/webgl-generator/src/generator/options.js";
 import {runGenerationWorkerTask} from "../app/webgl-generator/src/runtime/generation-worker-task.js";
 import {API_METHODS, CONFIRM_REQUIRED_METHODS} from "../app/webgl-generator/src/runtime/api-contract.js";
 import {createMapDocument, parseMapDocument, stringifyMapDocument} from "../app/webgl-generator/src/runtime/map-file-io.js";
@@ -81,6 +81,43 @@ assert.equal(generated.map.heightmap.source.kind, "map-template");
 for (const field of ["templateHydrology", "templateRegion", "templatePolitical"]) {
   assert.equal(generated.map.grid.cells[field].length, generated.map.grid.points.length);
 }
+
+const antarctica = await prepareMapTemplateGeneration({
+  templateId: "antarctica",
+  cellsTarget: 10_000,
+  seed: "task324-default-antarctica"
+}, {baseUrl: "/task324-runtime-assets", fetch: fetchResource});
+const antarcticaGenerated = await runGenerationWorkerTask({
+  options: normalizeOptions({
+    ...DEFAULT_OPTIONS,
+    seed: antarctica.request.seed,
+    cellsTarget: antarctica.request.cellsTarget,
+    graphWidth: 1440,
+    graphHeight: 960,
+    statesNumber: 20,
+    provincesRatio: 20,
+    mapName: antarctica.template.name
+  }),
+  mapTemplate: antarctica.workerPayload
+});
+assert.equal(antarcticaGenerated.map.metadata.mapTemplate.id, "antarctica");
+assert(antarcticaGenerated.map.settlements.cities.some(city => city?.capital));
+assert.equal(antarcticaGenerated.map.pack.states, antarcticaGenerated.map.politics.states);
+assert.equal(antarcticaGenerated.map.pack.provinces, antarcticaGenerated.map.politics.provinces);
+
+const romanGenerated = await runGenerationWorkerTask({
+  options: normalizeOptions({
+    ...DEFAULT_OPTIONS,
+    seed: "task324-default-roman-empire-117",
+    cellsTarget: roman.request.cellsTarget,
+    graphWidth: 1440,
+    graphHeight: 960,
+    mapName: roman.template.name
+  }),
+  mapTemplate: roman.workerPayload
+});
+assert.equal(romanGenerated.map.metadata.mapTemplate.snapshotYear, 117);
+assert.equal(romanGenerated.map.metadata.mapTemplate.humanPreset.snapshotYear, 117);
 
 const restored = parseMapDocument(stringifyMapDocument(createMapDocument(generated.map, generated.map.options))).map;
 assert.deepEqual(restored.metadata.mapTemplate, generated.map.metadata.mapTemplate);
