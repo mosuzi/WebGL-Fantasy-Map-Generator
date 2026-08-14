@@ -2,7 +2,7 @@
   <div class="segmented ui-segmented" role="group" :aria-label="label">
     <ElSegmented
       class="ui-segmented-el"
-      :model-value="currentValue"
+      :model-value="displayValue"
       :options="options"
       block
       size="small"
@@ -27,7 +27,7 @@
 </template>
 
 <script setup>
-import {nextTick, ref, watch} from "vue";
+import {computed, nextTick, ref, watch} from "vue";
 
 defineOptions({
   name: "UiSegmented"
@@ -55,14 +55,15 @@ const props = defineProps({
 const emit = defineEmits(["select"]);
 const currentValue = ref(props.modelValue);
 const bridgeButtons = ref([]);
+const displayValue = computed(() => props.dataMode ? props.modelValue : currentValue.value);
 
 watch(() => props.modelValue, value => {
   currentValue.value = value;
 });
 
 function commitValue(value, {dispatchBridge = true} = {}) {
-  if (value === currentValue.value) return;
-  currentValue.value = value;
+  if (value === displayValue.value) return;
+  if (!props.dataMode) currentValue.value = value;
   emit("select", value);
   if (!props.dataMode || !dispatchBridge) return;
   nextTick(() => {

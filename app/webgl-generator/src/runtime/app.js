@@ -3665,6 +3665,15 @@ async function applyRuntimeDisplayMutationViaWorker(state, documentRef, operatio
     totalMs: 0
   };
   let suspendedStartedAt = 0;
+  let lastProgressStage = "";
+  let lastProgressAt = Number.NEGATIVE_INFINITY;
+  const reportDisplayProgress = (stage, message, force = false) => {
+    const current = performance.now();
+    if (!force && stage === lastProgressStage && current - lastProgressAt < 80) return;
+    lastProgressStage = stage;
+    lastProgressAt = current;
+    operation?.report?.(stage, {message});
+  };
   try {
     const applyStartedAt = performance.now();
     renderer.beginDeferredWorkerRenderMutationCapture?.();
@@ -3702,7 +3711,7 @@ async function applyRuntimeDisplayMutationViaWorker(state, documentRef, operatio
       && validateRegenerationWorkerBinding(state, binding)
       && createWorkerRegenerationRenderContextToken(state, "display") === sourceToken
       && isWorkerRegenerationDeferredReplaySequenceCurrent(renderer, snapshot);
-    operation?.report?.("render-prepare", {message: "正在整理地图画面"});
+    reportDisplayProgress("render-prepare", "正在整理地图画面", true);
     await yieldToBrowser(documentRef);
     operation?.throwIfCancelled?.();
     if (!isSourceCurrent()) throw runtimeDisplayObsoleteError();
@@ -3720,7 +3729,7 @@ async function applyRuntimeDisplayMutationViaWorker(state, documentRef, operatio
       streamBudgetMs: 6,
       streamSliceBytes: 256 * 1024,
       streamYieldToMain: () => yieldToBrowser(documentRef),
-      onProgress: () => operation?.report?.("render-prepare", {message: "正在整理地图画面"})
+      onProgress: () => reportDisplayProgress("render-prepare", "正在整理地图画面")
     });
     timings.workerMs = roundWorkerTelemetryMs(performance.now() - workerStartedAt);
     if (prepared.worker?.mode !== "worker" || !prepared.worker?.session?.id || prepared.worker.session.pending !== true) {
@@ -3731,14 +3740,18 @@ async function applyRuntimeDisplayMutationViaWorker(state, documentRef, operatio
     operation?.throwIfCancelled?.();
     if (!isSourceCurrent()) throw runtimeDisplayObsoleteError();
 
-    operation?.report?.("render-install", {message: "正在更新地图显示"});
+    reportDisplayProgress("render-install", "正在更新地图显示", true);
+    const inPlaceSurfaceColorPatch = renderRequest.layers.length === 1
+      && renderRequest.layers[0] === "surface"
+      && prepared.layers?.surface?.mode === "cell-colors";
     const installPrepareStartedAt = performance.now();
     try {
       install = await prepareRendererWorkerInstall(renderer, map, prepared, {
         binding: renderRequest.binding,
         signal: operation?.signal,
         isCurrent: isSourceCurrent,
-        onProgress: () => operation?.report?.("render-install", {message: "正在更新地图显示"})
+        inPlaceSurfaceColorPatch,
+        onProgress: () => reportDisplayProgress("render-install", "正在更新地图显示")
       });
     } catch (error) {
       throw normalizeWorkerRegenerationOuterPreparedInstallError(error, operation);
@@ -3756,6 +3769,10 @@ async function applyRuntimeDisplayMutationViaWorker(state, documentRef, operatio
       && createWorkerRegenerationRenderContextToken(state, "display") === targetToken
       && isWorkerRegenerationDeferredReplaySequenceCurrent(renderer, snapshot);
     const installCommitStartedAt = performance.now();
+    await install.prepareCommit?.({
+      signal: operation?.signal,
+      isCurrent: isTargetCurrent
+    });
     install.commit();
     timings.installCommitMs = roundWorkerTelemetryMs(performance.now() - installCommitStartedAt);
     if (!isTargetCurrent()) throw runtimeDisplayObsoleteError();
@@ -3804,7 +3821,8 @@ async function applyRuntimeDisplayMutationViaWorker(state, documentRef, operatio
     state.mapWorkerCoordinator?.invalidateSession?.("display-render-failed");
     if (install) {
       try {
-        if (ownerCurrent || !install.committed) install.rollback?.();
+        if (ownerCurrent && typeof install.rollbackAsync === "function") await install.rollbackAsync();
+        else if (ownerCurrent || !install.committed) install.rollback?.();
         else install.finalize?.();
       } catch (failure) {
         rollbackFailures.push(failure);

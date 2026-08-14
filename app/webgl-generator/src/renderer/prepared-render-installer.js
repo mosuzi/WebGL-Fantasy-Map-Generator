@@ -8,7 +8,9 @@ import {
 import {assertRenderPreparationBinding} from "./render-preparation.js";
 import {
   createSurfaceBaseBufferSetAsync,
-  flattenSurfaceBaseBufferSet
+  flattenSurfaceBaseBufferSet,
+  isSurfaceBaseBufferSetForVertices,
+  uploadSurfaceBaseBufferSetRanges
 } from "./surface-base-buffer-set.js";
 import {snapshotViewportCamera} from "./viewport-buffer-transform.js";
 import {OBJECT_PICKING_COMPONENTS} from "./picking.js";
@@ -28,6 +30,7 @@ export async function prepareRendererWorkerInstall(renderer, map, prepared, opti
   const buffers = new Map();
   let surfaceBaseBufferSet = null;
   let surfaceValues = null;
+  let surfaceColorPatch = null;
 
   try {
     validatePreparedLayerShapes(layers);
@@ -71,9 +74,15 @@ export async function prepareRendererWorkerInstall(renderer, map, prepared, opti
     const shorePaths = decoded.shore || renderer.shoreVisualPaths;
     if (layers.line?.shorePathCache) decoded.shoreLine = rebindShorePathCache(layers.line.shorePathCache, shorePaths, binding);
     if (layers.surface) {
-      surfaceValues = layers.surface.mode === "cell-colors"
-        ? await materializePreparedSurfaceColorPatch(renderer, map, layers.surface, gate)
-        : layers.surface;
+      const inPlaceColorPatch = layers.surface.mode === "cell-colors" && options.inPlaceSurfaceColorPatch === true;
+      if (inPlaceColorPatch) {
+        surfaceColorPatch = await prepareInPlaceSurfaceColorPatch(renderer, map, layers.surface, gate);
+        surfaceValues = layers.surface;
+      } else {
+        surfaceValues = layers.surface.mode === "cell-colors"
+          ? await materializePreparedSurfaceColorPatch(renderer, map, layers.surface, gate)
+          : layers.surface;
+      }
       decoded.surfaceCellRanges = layers.surface.mode === "cell-colors"
         ? renderer.surfaceCellRanges
         : await normalizePreparedSurfaceCellRanges(
@@ -90,12 +99,14 @@ export async function prepareRendererWorkerInstall(renderer, map, prepared, opti
         gridCellCount(map),
         gate
       );
-      surfaceBaseBufferSet = await createSurfaceBaseBufferSetAsync(renderer.gl, surfaceValues.base, {
-        usage: renderer.gl.STATIC_DRAW,
-        yieldToMain: gate.yieldToMain,
-        assertCurrent: gate.assertCurrent,
-        onProgress: detail => gate.onProgress("gpu:surfaceBaseBufferSet", detail)
-      });
+      if (!inPlaceColorPatch) {
+        surfaceBaseBufferSet = await createSurfaceBaseBufferSetAsync(renderer.gl, surfaceValues.base, {
+          usage: renderer.gl.STATIC_DRAW,
+          yieldToMain: gate.yieldToMain,
+          assertCurrent: gate.assertCurrent,
+          onProgress: detail => gate.onProgress("gpu:surfaceBaseBufferSet", detail)
+        });
+      }
       for (const [key, values] of [
         ["landCorrectionBuffer", surfaceValues.landCorrections],
         ["waterCorrectionBuffer", surfaceValues.waterCorrections],
@@ -124,7 +135,10 @@ export async function prepareRendererWorkerInstall(renderer, map, prepared, opti
   return createPreparedInstallTransaction(renderer, map, prepared, decoded, buffers, surfaceBaseBufferSet, surfaceValues, {
     preserveRoutePicking: options.preserveRoutePicking === true,
     resetViewport: options.resetViewport === true,
-    deferOverlayLayout: options.deferOverlayLayout === true
+    deferOverlayLayout: options.deferOverlayLayout === true,
+    surfaceColorPatch,
+    yieldToMain: gate.yieldToMain,
+    onProgress: detail => gate.onProgress("gpu:surfaceColorPatch", detail)
   });
 }
 
@@ -139,16 +153,33 @@ function createPreparedInstallTransaction(renderer, map, prepared, decoded, buff
   let routeRefreshWasPending = false;
   let routeRefreshWasCancelled = false;
   let surfaceBaseBefore = null;
+  const surfaceColorPatch = options.surfaceColorPatch || null;
+  let surfaceColorPatchDirty = false;
   let ownsPreparedSurfaceBase = Boolean(surfaceBaseBufferSet);
   let ownsPreviousSurfaceBase = false;
   if (ownsPreparedSurfaceBase) retainSurfaceBaseBufferSet(surfaceBaseBufferSet);
 
   return Object.freeze({
+    prepareCommit,
     commit,
     rollback,
+    rollbackAsync,
     finalize,
     get committed() { return committed; }
   });
+
+  async function prepareCommit(runtimeOptions = {}) {
+    if (!surfaceColorPatch) return false;
+    if (committed || finalized || surfaceColorPatchDirty) throw renderInstallError("render-install-state", "Worker 渲染结果已提交、应用或释放");
+    assertInPlaceSurfaceOwner(renderer, map, surfaceColorPatch);
+    surfaceColorPatchDirty = true;
+    await applyInPlaceSurfaceColors(renderer, surfaceColorPatch, surfaceColorPatch.colors, {
+      ...runtimeOptions,
+      yieldToMain: options.yieldToMain,
+      onProgress: options.onProgress
+    });
+    return true;
+  }
 
   function commit() {
     if (committed || finalized) throw renderInstallError("render-install-state", "Worker 渲染结果已提交或释放");
@@ -181,19 +212,21 @@ function createPreparedInstallTransaction(renderer, map, prepared, decoded, buff
       }
       if (decoded.overlay) installOverlay(decoded.overlay);
       if (layers.surface) {
+      if (!surfaceColorPatch) {
       assignSurfaceBaseBufferSet(surfaceBaseBufferSet);
       assign("surfaceVertices", surfaceValues.base);
+      }
       assign("landCorrectionVertices", surfaceValues.landCorrections);
       assign("waterCorrectionVertices", surfaceValues.waterCorrections);
       assign("landCoverVertices", surfaceValues.landCovers);
       assign("waterCoverVertices", surfaceValues.waterCovers);
-      assign("surfaceCellRanges", decoded.surfaceCellRanges);
+      if (!surfaceColorPatch) assign("surfaceCellRanges", decoded.surfaceCellRanges);
       assign("shoreSurfaceCellRanges", decoded.shoreSurfaceCellRanges);
       assign("surfacePatchVertices", new Float32Array());
       assign("surfacePatchCellRanges", new Map());
       assign("surfacePatchCells", new Set());
       assign("surfacePatchVertexCount", 0);
-      assign("vertexCount", vertexCount(surfaceValues.base));
+      if (!surfaceColorPatch) assign("vertexCount", vertexCount(surfaceValues.base));
       assign("landCorrectionVertexCount", vertexCount(surfaceValues.landCorrections));
       assign("waterCorrectionVertexCount", vertexCount(surfaceValues.waterCorrections));
       assign("landCoverVertexCount", vertexCount(surfaceValues.landCovers));
@@ -308,6 +341,34 @@ function createPreparedInstallTransaction(renderer, map, prepared, decoded, buff
     return true;
   }
 
+  async function rollbackAsync(runtimeOptions = {}) {
+    const shouldRestoreSurface = surfaceColorPatchDirty && hasInPlaceSurfaceOwner(renderer, map, surfaceColorPatch);
+    const failures = [];
+    try {
+      rollback();
+    } catch (error) {
+      failures.push(error);
+    }
+    if (shouldRestoreSurface) {
+      try {
+        await applyInPlaceSurfaceColors(renderer, surfaceColorPatch, surfaceColorPatch.previousColors, {
+          ...runtimeOptions,
+          yieldToMain: options.yieldToMain,
+          onProgress: options.onProgress
+        });
+        surfaceColorPatchDirty = false;
+      } catch (error) {
+        failures.push(error);
+      }
+    }
+    if (failures.length) {
+      const error = renderInstallError("render-install-rollback-failed", "Worker 渲染安装回滚未能完整恢复");
+      error.cause = failures.length === 1 ? failures[0] : new AggregateError(failures, "Worker 渲染安装回滚存在多个失败");
+      throw error;
+    }
+    return true;
+  }
+
   function finalize() {
     if (finalized) return false;
     if (!committed) {
@@ -321,6 +382,7 @@ function createPreparedInstallTransaction(renderer, map, prepared, decoded, buff
     deletePreparedBuffersBestEffort(renderer.gl, detachedBuffers);
     releasePreviousSurfaceBaseBestEffort();
     releasePreparedSurfaceBaseBestEffort();
+    surfaceColorPatchDirty = false;
     finalized = true;
     return true;
   }
@@ -528,7 +590,7 @@ async function materializePreparedSurfaceColorPatch(renderer, map, patch, gate) 
     const green = patch.colors[colorOffset + 1];
     const blue = patch.colors[colorOffset + 2];
     const side = patch.colors[colorOffset + 3];
-    if (![red, green, blue, side].every(Number.isFinite)) {
+    if (!Number.isFinite(red) || !Number.isFinite(green) || !Number.isFinite(blue) || !Number.isFinite(side)) {
       throw renderInstallError("render-surface-color-patch-shape", "Worker surface 颜色补丁包含无效数值");
     }
     for (let offset = range.start; offset < range.end; offset += FLOATS_PER_VERTEX) {
@@ -550,6 +612,122 @@ async function materializePreparedSurfaceColorPatch(renderer, map, patch, gate) 
     waterCovers: patch.waterCovers,
     shoreSurfaceCellRanges: patch.shoreSurfaceCellRanges
   };
+}
+
+async function prepareInPlaceSurfaceColorPatch(renderer, map, patch, gate) {
+  const source = renderer.surfaceVertices;
+  const ranges = renderer.surfaceCellRanges;
+  const bufferSet = renderer.surfaceBaseBufferSet;
+  if (!(source instanceof Float32Array) || !source.length || !(ranges instanceof Map) || !ranges.size
+    || !isSurfaceBaseBufferSetForVertices(bufferSet, source)
+    || renderer.vertexBuffer !== bufferSet.segments[0]?.buffer
+    || renderer.viewOptions?.smoothCellBorders === false || renderer.surfacePatchCells?.size) {
+    throw renderInstallError("render-surface-color-patch-base", "当前 surface geometry 不支持原位颜色补丁");
+  }
+  if (patch.scope === "all" && patch.cellIds.length !== ranges.size) {
+    throw renderInstallError("render-surface-color-patch-coverage", "Worker surface 全量颜色补丁未覆盖当前 geometry");
+  }
+  const cellRanges = new Uint32Array(patch.cellIds.length * 2);
+  const previousColors = new Float32Array(patch.colors.length);
+  let previousCell = -1;
+  for (let index = 0; index < patch.cellIds.length; index++) {
+    const cell = Number(patch.cellIds[index]);
+    const range = ranges.get(cell);
+    if (!Number.isInteger(cell) || cell <= previousCell || !range || range.start < 0 || range.end > source.length
+      || range.start >= range.end || range.start % FLOATS_PER_VERTEX !== 0 || range.end % FLOATS_PER_VERTEX !== 0
+      || (patch.scope === "water" && Number(map.grid.cells.h[cell]) >= 20)) {
+      throw renderInstallError("render-surface-color-patch-coverage", "Worker surface 颜色补丁 cell 范围无效");
+    }
+    const colorOffset = index * 4;
+    const red = patch.colors[colorOffset];
+    const green = patch.colors[colorOffset + 1];
+    const blue = patch.colors[colorOffset + 2];
+    const side = patch.colors[colorOffset + 3];
+    if (!Number.isFinite(red) || !Number.isFinite(green) || !Number.isFinite(blue) || !Number.isFinite(side)) {
+      throw renderInstallError("render-surface-color-patch-shape", "Worker surface 颜色补丁包含无效数值");
+    }
+    previousColors[colorOffset] = source[range.start + 2];
+    previousColors[colorOffset + 1] = source[range.start + 3];
+    previousColors[colorOffset + 2] = source[range.start + 4];
+    previousColors[colorOffset + 3] = source[range.start + 5];
+    cellRanges[index * 2] = range.start;
+    cellRanges[index * 2 + 1] = range.end;
+    previousCell = cell;
+    if ((index + 1) % 256 === 0 || index + 1 === patch.cellIds.length) {
+      await gate.checkpoint("surface-color-snapshot", index + 1, patch.cellIds.length);
+    }
+  }
+  return {
+    source,
+    ranges,
+    bufferSet,
+    cellRanges,
+    colors: patch.colors,
+    previousColors
+  };
+}
+
+async function applyInPlaceSurfaceColors(renderer, patch, colors, options = {}) {
+  const signal = options.signal || null;
+  const isCurrent = typeof options.isCurrent === "function" ? options.isCurrent : null;
+  const yieldToMain = typeof options.yieldToMain === "function" ? options.yieldToMain : defaultYield;
+  const budgetMs = Math.max(1, Number(options.budgetMs) || 6);
+  let deadline = now() + budgetMs;
+  const assertCurrent = () => {
+    if (!signal?.aborted && (!isCurrent || isCurrent() === true)) return;
+    const error = new Error(signal?.aborted ? "Worker 渲染安装已取消" : "Worker 渲染安装已因显示状态变化而过期");
+    error.name = signal?.aborted ? "AbortError" : "Error";
+    error.code = signal?.aborted ? "render-install-aborted" : "render-install-obsolete";
+    throw error;
+  };
+  assertCurrent();
+  const cellCount = patch.cellRanges.length / 2;
+  for (let index = 0; index < cellCount; index++) {
+    const start = patch.cellRanges[index * 2];
+    const end = patch.cellRanges[index * 2 + 1];
+    const colorOffset = index * 4;
+    const red = colors[colorOffset];
+    const green = colors[colorOffset + 1];
+    const blue = colors[colorOffset + 2];
+    const side = colors[colorOffset + 3];
+    for (let offset = start; offset < end; offset += FLOATS_PER_VERTEX) {
+      patch.source[offset + 2] = red;
+      patch.source[offset + 3] = green;
+      patch.source[offset + 4] = blue;
+      patch.source[offset + 5] = side;
+    }
+    if ((index & 255) === 255 && now() >= deadline) {
+      options.onProgress?.({phase: "cpu", completed: index + 1, total: cellCount});
+      await yieldToMain();
+      assertCurrent();
+      deadline = now() + budgetMs;
+    }
+  }
+  for (let index = 0; index < patch.bufferSet.segments.length; index++) {
+    assertCurrent();
+    const segment = patch.bufferSet.segments[index];
+    uploadSurfaceBaseBufferSetRanges(renderer.gl, patch.bufferSet, patch.source, [{
+      start: segment.floatStart,
+      end: segment.floatEnd
+    }]);
+    options.onProgress?.({phase: "gpu", completed: index + 1, total: patch.bufferSet.segments.length});
+    if (index + 1 < patch.bufferSet.segments.length) {
+      await yieldToMain();
+      assertCurrent();
+    }
+  }
+}
+
+function assertInPlaceSurfaceOwner(renderer, map, patch) {
+  if (!hasInPlaceSurfaceOwner(renderer, map, patch)) {
+    throw renderInstallError("render-surface-color-patch-obsolete", "surface 颜色补丁的正式缓冲已变化");
+  }
+}
+
+function hasInPlaceSurfaceOwner(renderer, map, patch) {
+  return Boolean(patch && renderer.map === map && renderer.surfaceVertices === patch.source
+    && renderer.surfaceCellRanges === patch.ranges && renderer.surfaceBaseBufferSet === patch.bufferSet
+    && renderer.vertexBuffer === patch.bufferSet.segments[0]?.buffer);
 }
 
 function assertPreparedPoliticalCache(value, field, label) {

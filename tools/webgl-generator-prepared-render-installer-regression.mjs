@@ -61,8 +61,9 @@ await testCommitFaultRollback();
 await testNestedRollbackOwnership();
 await testNestedFinalizeOwnership();
 await testSurfaceColorPatchTransaction();
+await testInPlaceSurfaceColorPatchTransaction();
 
-console.log(JSON.stringify({ok: true, cases: 6, nestedOwnership: true, surfaceColorPatch: true}));
+console.log(JSON.stringify({ok: true, cases: 7, nestedOwnership: true, surfaceColorPatch: true, inPlaceSurfaceColorPatch: true}));
 
 async function testUncommittedCleanup() {
   const gl = new FakeGl();
@@ -218,6 +219,93 @@ async function testSurfaceColorPatchTransaction() {
   assert.equal(renderer.surfaceBaseBufferSet, beforeSet);
   assert.equal(renderer.surfaceVertices, beforeVertices);
   assert.deepEqual(new Uint8Array(beforeVertices.buffer, beforeVertices.byteOffset, beforeVertices.byteLength), beforeBytes);
+}
+
+async function testInPlaceSurfaceColorPatchTransaction() {
+  const gl = new FakeGl();
+  const renderer = createRenderer(gl);
+  renderer.map = renderer.nextMap;
+  renderer.surfaceCellRanges = new Map([[0, {start: 0, end: 18}]]);
+  const beforeSet = renderer.surfaceBaseBufferSet;
+  const beforeSegments = beforeSet.segments;
+  const beforeAlias = renderer.vertexBuffer;
+  const beforeVertices = renderer.surfaceVertices;
+  const beforeCpu = bytesOf(beforeVertices);
+  const beforeGpu = beforeSet.segments.map(segment => segment.buffer.bytes.slice());
+  const prepared = createColorPatchPrepared([0.1, 0.2, 0.3, 0.75]);
+  const liveBefore = liveBuffers(gl);
+  const transaction = await prepareRendererWorkerInstall(renderer, renderer.map, prepared, {
+    binding,
+    inPlaceSurfaceColorPatch: true,
+    budgetMs: 1,
+    yieldToMain: async () => {}
+  });
+  const preparedBuffers = liveBuffers(gl).filter(buffer => !liveBefore.includes(buffer));
+  assert.equal(preparedBuffers.length, 5, "原位颜色补丁只允许准备岸线与 patch buffers");
+  assert.equal(renderer.surfaceBaseBufferSet, beforeSet);
+  assert.equal(renderer.surfaceVertices, beforeVertices);
+  assert.deepEqual(bytesOf(beforeVertices), beforeCpu);
+  assert.equal(await transaction.prepareCommit(), true);
+  assert.equal(renderer.surfaceBaseBufferSet, beforeSet);
+  assert.equal(renderer.surfaceBaseBufferSet.segments, beforeSegments);
+  assert.equal(renderer.vertexBuffer, beforeAlias);
+  assert.equal(renderer.surfaceVertices, beforeVertices);
+  const expectedColor = [...new Float32Array([0.1, 0.2, 0.3, 0.75])];
+  for (let offset = 0; offset < beforeVertices.length; offset += 6) {
+    assert.deepEqual([...beforeVertices.subarray(offset + 2, offset + 6)], expectedColor);
+  }
+  assert.deepEqual(beforeSet.segments.map(segment => [...segment.buffer.bytes]), [
+    [...bytesOf(beforeVertices)]
+  ]);
+  transaction.commit();
+  assert.equal(renderer.surfaceBaseBufferSet, beforeSet);
+  assert.equal(renderer.surfaceVertices, beforeVertices);
+  assert.equal(await transaction.rollbackAsync(), true);
+  assert.deepEqual(bytesOf(beforeVertices), beforeCpu);
+  assert.deepEqual(beforeSet.segments.map(segment => [...segment.buffer.bytes]), beforeGpu.map(bytes => [...bytes]));
+  assert.ok(preparedBuffers.every(buffer => !gl.isBuffer(buffer)));
+
+  const detached = await prepareRendererWorkerInstall(renderer, renderer.map, prepared, {
+    binding,
+    inPlaceSurfaceColorPatch: true,
+    yieldToMain: async () => {}
+  });
+  await detached.prepareCommit();
+  const newVertices = smallSurface(77);
+  const newSet = createSurfaceBaseBufferSet(gl, newVertices);
+  renderer.map = {id: "replacement-map"};
+  renderer.surfaceVertices = newVertices;
+  renderer.surfaceBaseBufferSet = newSet;
+  renderer.vertexBuffer = newSet.segments[0].buffer;
+  const replacementBytes = bytesOf(newVertices);
+  await detached.rollbackAsync();
+  assert.equal(renderer.surfaceBaseBufferSet, newSet);
+  assert.equal(renderer.surfaceVertices, newVertices);
+  assert.deepEqual(bytesOf(newVertices), replacementBytes, "detached rollback 不得覆写新地图 surface");
+}
+
+function createColorPatchPrepared(colors) {
+  return {
+    binding,
+    presentation: {},
+    layers: {
+      surface: {
+        mode: "cell-colors",
+        scope: "water",
+        cellIds: new Uint32Array([0]),
+        colors: new Float32Array(colors),
+        landCorrections: new Float32Array(),
+        waterCorrections: new Float32Array(),
+        landCovers: new Float32Array(),
+        waterCovers: new Float32Array(),
+        shoreSurfaceCellRanges: emptyShoreRanges()
+      }
+    }
+  };
+}
+
+function bytesOf(values) {
+  return new Uint8Array(values.buffer, values.byteOffset, values.byteLength).slice();
 }
 
 async function prepareSurfaceTransaction(renderer, base) {

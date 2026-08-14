@@ -177,3 +177,10 @@ diagnostic artifact 为 `work/task332-view-switch-100000/raw-result.json`；该�
 - `pack.cells.temp / prec` 是 `grid.cells.temp / prec` 经 `pack.cells.g` 映射得到的重复列；正式主线程 renderer、查询与编辑路径使用 grid 原列，旧生成算法才可能同步读取 pack 副本。adoption 现在先逐项确认两侧完全同源，再把 pack 两列改为可枚举、可写的惰性属性。
 - 普通读取 / 展示不再长期保留两份各约 100k 项的派生数组；兼容导出或仍未迁移的旧路径首次读取时会按当前 grid 与映射精确物化，字段和存档格式不变。任一长度、映射或数值漂移都会保留原数组，禁止用推导掩盖旧数据差异。
 - 10k 与 `99846` cells 的 v3 往返均通过；100k raw / gzip 为 `13,197,139 / 7,410,037B`，24 sections，惰性前后文档深等。产品 `2` 文件（其中 `1` 个新投影模块）、既有 Node 工具 `1` 文件；浏览器、用户 5410、专用浏览器夹具、委派与等待均为 `0`。版本升至 `0.3.11`，C2-C 尚未完成。
+
+## 17. B2 后续：视图状态收敛与 surface 原位颜色事务
+
+- 用户 5410 标签页的实际 DOM 一度为 `governments`，但视图组件会在异步显示事务提交前乐观切换本地高亮；busy、失败或回滚后父偏好仍为旧值，watcher 不会再次触发，遂可能形成“画面 / bridge 已提交国家、Tab 仍高亮政体”及后续点击观感反转。`data-mode` segmented 现只展示父级已提交值，普通 segmented 仍保留既有本地交互。快捷键的 Element Plus 子项定位同时由 `nth-child` 改为 `nth-of-type`，公开视图 schema 统一使用 `cultures / religions / governments` 正式复数值。
+- Worker 早已只回传约 `1.60MB` 的全图 cell colors，但 installer 仍复制整份约 `105MB` CPU surface，并新建一组 segmented GPU base。显示事务现仅在“单一 surface + cell-colors”路径保存紧凑旧 RGBA 与 range，短暂停绘后分片改写既有 CPU vertices、按既有不超过 `8MiB` 的 segments 原位上传；成功保持 buffer set / segment / alias / CPU 数组 identity，失败异步恢复旧 CPU / GPU 字节，detached owner 不覆写新地图。其它全量 surface、主题、标签、重生成与 renderer 安装仍走原独立临时 buffer 事务。
+- 10k 专用门通过。固定 `99846` cells 复验中，国家 / 省份 / 生物群系 / 人口 / 高度 wall 为 `235.9 / 256.9 / 221.7 / 142.0 / 142.3ms`，对应 install prepare 为 `60.1 / 70.0 / 67.0 / 40.8 / 41.7ms`，五项 LongTask 均为 `0`；冻结旧国家视图约 `290.4ms`、旧 install prepare 约 `175.1ms`。一次尝试复用旧岸线 ranges 被人口视图真实 geometry 长度变化拒绝并完整撤销，没有把错误假设留在产品。
+- 用户原 5410 标签页未刷新、未生成或替换地图；HMR 后直接切换政体 / 国家，最终分别严格收敛为 `governments + 政体`、`states + 国家`，Loading 清理且无新增应用错误。该 debug 页每次显示事务原会同步发布约 `40` 条重复 `operation-stage`，现同阶段进度最多每 `80ms` 发布一次，阶段切换仍立即可见；现场 health 首阶段至 success 降为约 `245 / 213ms`，每次只保留 `3～4` 条 stage。版本升至 `0.3.12`；本后续不宣称 C2-C 或第 334 项完成，下一步仍只迁移主线程有界投影。
