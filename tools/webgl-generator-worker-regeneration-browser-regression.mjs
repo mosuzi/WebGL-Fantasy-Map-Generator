@@ -16,6 +16,7 @@ const kinds = ["features", "routes", "rivers", "cities", "states", "provinces", 
 const dependencyOrder = ["features", "states", "provinces", "cities", "routes", "rivers", "markers", "diplomacy", "religions", "military", "zones"];
 const loadingOnlyKind = String(process.argv.find(argument => argument.startsWith("--loading-kind="))?.split("=")[1] || "");
 const loadingOnlyCells = Number(process.argv.find(argument => argument.startsWith("--cells="))?.split("=")[1] || 10000);
+const rejectionSessionOnly = process.argv.includes("--rejection-session");
 if (loadingOnlyKind) assert.ok(kinds.includes(loadingOnlyKind), `未知 Loading 诊断类型：${loadingOnlyKind}`);
 if (loadingOnlyKind) assert.ok([10000, 100000].includes(loadingOnlyCells), `Loading 诊断不支持 ${loadingOnlyCells} cells`);
 
@@ -49,35 +50,87 @@ try {
   await cdp.send("Performance.enable");
 
   const independent = {};
-  for (const kind of loadingOnlyKind ? [loadingOnlyKind] : kinds) {
-    await createFrozenBaseline(page, "worker-regeneration-browser-baseline", loadingOnlyKind ? loadingOnlyCells : 1000);
-    await clearWindowSignals(page, consoleErrors, pageErrors);
-    independent[kind] = await runFormalRegeneration(page, cdp, kind, consoleErrors, pageErrors, {undoRedo: true});
+  const rejectionSession = rejectionSessionOnly
+    ? await runRejectedRegenerationSessionGate(page, consoleErrors, pageErrors)
+    : null;
+  if (!rejectionSessionOnly) {
+    for (const kind of loadingOnlyKind ? [loadingOnlyKind] : kinds) {
+      await createFrozenBaseline(page, "worker-regeneration-browser-baseline", loadingOnlyKind ? loadingOnlyCells : 1000);
+      await clearWindowSignals(page, consoleErrors, pageErrors);
+      independent[kind] = await runFormalRegeneration(page, cdp, kind, consoleErrors, pageErrors, {undoRedo: true});
+    }
+    assert.ok(Object.values(independent).every(item => item.worker.session.reused === true), "新图 adoption 后的首次重生成没有复用 MapWorker");
   }
-  assert.ok(Object.values(independent).every(item => item.worker.session.reused === false), "独立基线不得错误复用旧地图 Worker 镜像");
 
   const chain = [];
-  if (!loadingOnlyKind) {
+  if (!loadingOnlyKind && !rejectionSessionOnly) {
     await createFrozenBaseline(page, "worker-regeneration-browser-chain", 10000);
     await clearWindowSignals(page, consoleErrors, pageErrors);
     for (const kind of dependencyOrder) {
       chain.push(await runFormalRegeneration(page, cdp, kind, consoleErrors, pageErrors, {undoRedo: false}));
       await clearWindowSignals(page, consoleErrors, pageErrors);
     }
-    assert.equal(chain[0].worker.session.reused, false, "连续链首项必须建立全量 Worker 镜像");
-    assert.ok(chain.slice(1).every(item => item.worker.session.reused === true), "连续链后续项必须复用 Worker 镜像");
+    assert.equal(chain[0].worker.session.reused, true, "连续链首项没有复用新图 adoption MapWorker");
+    assert.ok(chain.every(item => item.worker.session.reused === true), "连续链存在未复用 MapWorker 的重生成");
     assert.ok(chain.every(item => item.worker.session.id === chain[0].worker.session.id), "连续链必须复用同一个 Worker session");
-    assert.ok(
-      chain.slice(1).every(item => Number(item.telemetry.inputPackets) < Number(chain[0].telemetry.inputPackets) / 4),
-      "复用镜像后的输入包数必须较首次全图传输骤降"
-    );
+    assert.ok(chain.every(item => Number(item.telemetry.inputPackets) <= 4), "新图 adoption 后的重生成仍在传输完整地图");
   }
 
-  console.log(JSON.stringify({ok: true, independent, chain}, null, 2));
+  console.log(JSON.stringify({ok: true, independent, chain, rejectionSession}, null, 2));
 } finally {
   if (context) await Promise.race([context.close(), delay(5000)]);
   if (browser) await Promise.race([browser.close(), delay(5000)]);
   await new Promise(done => server.close(done));
+}
+
+async function runRejectedRegenerationSessionGate(page, consoleErrors, pageErrors) {
+  const results = [];
+  for (const kind of ["provinces", "cities"]) {
+    await createFrozenBaseline(page, `worker-regeneration-rejection-${kind}`, 10000);
+    await clearWindowSignals(page, consoleErrors, pageErrors);
+    const before = await page.evaluate(() => {
+      const app = window.__webglGeneratorApp;
+      const province = app.map.politics.provinces.find(item => item?.i && !item.removed);
+      const packProvince = app.map.pack.provinces[province.i];
+      app.workerTaskCoordinator.invalidateSession("test-preflight-rejection");
+      const original = province.burg;
+      province.burg = Number(original || 0) + 1000000;
+      return {provinceId: province.i, original, packBurg: packProvince.burg, history: app.editHistory.getStats(), revision: app.mapRevision};
+    });
+    const response = await page.evaluate(targetKind => window.webglGeneratorApi.generate.regenerate(targetKind, {confirm: true}), kind);
+    assert.equal(response?.ok, false, `${kind} 冲突预检没有拒绝`);
+    assert.equal(response.error?.code, "regeneration_preflight_rejected", `${kind} 冲突预检公开码错误`);
+    assert.equal(response.error?.stage, "preflight", `${kind} 冲突预检阶段错误`);
+    assert.equal(response.error?.details?.rejected?.[0]?.code, "current-capital-inconsistent", `${kind} 冲突明细未保留`);
+    const worker = response.error?.details?.worker;
+    assert.equal(worker?.session?.committed, true, `${kind} 预期拒绝没有 delta0 提交 session`);
+    assert.equal(worker?.session?.pending, false, `${kind} 预期拒绝留下 pending session`);
+    const after = await page.evaluate(input => {
+      const app = window.__webglGeneratorApp;
+      const session = app.workerTaskCoordinator.getSessionSnapshot();
+      const health = window.__webglGeneratorHealth?.getEvents?.(180) || [];
+      const signals = {
+        loadingVisible: Number(Boolean(document.getElementById("generation-loading") && !document.getElementById("generation-loading").hidden))
+          + Number(Boolean(document.getElementById("operation-loading") && !document.getElementById("operation-loading").hidden)),
+        healthErrors: health.filter(event => event.severity === "error"),
+        glError: Number(app.renderer.getStats().draw?.glError ?? 0)
+      };
+      app.map.politics.provinces[input.provinceId].burg = input.original;
+      app.workerTaskCoordinator.invalidateSession("test-preflight-cleanup");
+      return {session, history: app.editHistory.getStats(), revision: app.mapRevision, signals};
+    }, before);
+    assert.equal(after.session?.id, worker.session.id, `${kind} 预期拒绝销毁了 MapWorker session`);
+    assert.equal(after.session?.status, "idle", `${kind} 预期拒绝后 session 不是 idle`);
+    assert.deepEqual(after.history, before.history, `${kind} 预期拒绝写入历史`);
+    assert.deepEqual(after.revision, before.revision, `${kind} 预期拒绝推进 revision`);
+    assert.equal(after.signals.loadingVisible, 0, `${kind} 预期拒绝后 Loading 未清理`);
+    assert.deepEqual(after.signals.healthErrors, [], `${kind} 预期拒绝产生 error health`);
+    assert.equal(after.signals.glError, 0, `${kind} 预期拒绝产生 WebGL error`);
+    results.push({kind, code: response.error.code, internalCode: response.error.details.rejected[0].code, session: worker.session});
+  }
+  assert.deepEqual(consoleErrors, [], "预期拒绝出现 console error");
+  assert.deepEqual(pageErrors, [], "预期拒绝出现 page error");
+  return results;
 }
 
 async function createFrozenBaseline(page, seed, cellsTarget) {

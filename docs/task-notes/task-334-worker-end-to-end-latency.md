@@ -203,3 +203,16 @@ diagnostic artifact 为 `work/task332-view-switch-100000/raw-result.json`；该�
 - 根因是 `createWorkerRegenerationDeferredRenderRequest` 先捕获了正确的 `snapshot.finalPresentation`，却仍从旧 renderer 构造 Worker 请求；目标展示只在准备完成后才原子应用，因此 Worker 的 compact surface color patch 永远按上一种视图计算。现由目标快照权威覆盖 `colorMode / visualTheme / viewOptions / visibility / labels / units / political debug / ocean highlights`，旧 renderer 只继续提供相机、选择与画布等准备上下文。
 - 用户授权的 5410 原标签页已按“国家实际画面 → 硬刷新 → 第一次点高度 → 第一次即呈现高度 → 再点国家 → 国家画面 → 真实 wheel 缩放”复验，未再出现首次失效或反转；临时诊断日志已删除。专项静态门锁定目标展示字段必须在基础请求之后覆盖，版本升至 `0.3.15`。第 334 项仍进行中，下一步仍只进入 C2-C。
 - 用户原 `5410/?debug=1` 标签在不刷新、不重生成地图的前提下完成国家→平移→缩放→政体→国家目标复验：每一步可见 Tab 与隐藏桥严格同源，政体画面出现正式政体图例，回到国家后图例清除且国家配色恢复。Chrome 原生滚轮注入有一次工具超时，未计作产品通过；随后由同一画布正式 wheel 处理器完成相机变化并通过状态门。
+
+## 21. B2 后续：平滑 cell 缺面兜底
+
+- 用户截图中陆海散布的深色三角实测为 `RGB(92,125,163)`，与默认画布背景 `#5c7da3` 完全一致，不是额外深色 mesh。根因是旧图或细分异常 cell 的平滑边界和两级安全硬边界均无法三角化时，视觉 mesh 会安全跳过整个 cell，最终把画布底色暴露出来。
+- 正常 Earcut、安全硬边界 Earcut 和校验扇形继续维持原约束；仅最终仍被拒绝的 cell 使用硬边模式相同的 resolved canonical center fan，并在 base buffer 中先绘。所有正常平滑 cell 随后覆盖，因此不放宽正常三角化、不删除海岸 XOR 窄面，也不新增整图 underlay 或第二份 surface。
+- 窄 Node 门确认 10k / 50k 正常地图 emergency 数均为 `0`、缺面为 `0`；固定自交旧 cell 由 `1` 个 emergency fan、`4` 个三角形补齐。隔离 Chrome 的高度 / 国家 / 省份平滑与硬边六组切换通过，正常图 emergency / unfilled 均为 `0`，WebGL 与应用错误为 `0`。既有 pure shoreline 另在未改的海岸覆盖率阈值 `0.4489 < 0.5` 首败，未放宽。本修版本为 `0.3.16`；用户原 5410 标签当前不可连接，仍需在同一旧图原地开关作最终现场确认。
+
+## 22. 最终收敛：重生成预检、prepared render 与 picking 分片
+
+- 省份与城镇重生成在进入正式写入前检查当前省会镜像；已知不一致以 `regeneration_preflight_rejected / current-capital-inconsistent` 安全拒绝。拒绝结果仍对同一 MapWorker session 作 delta `0` 提交，保持 `idle / committed / pending=false`，不推进 revision、history 或销毁可复用副本；隔离浏览器同时锁定 Loading、health、console、page 与 WebGL 清理。
+- 省份 prepared render 只准备当前展示实际消费的 layer；可原位提交的全 cell color patch 不再复制整套 surface。picking DTO 的校验与 canonical 回绑合为分片单遍，且在单个巨大 bucket 内每 `256` 条引用检查时间预算。`500000` 条同 bucket 反例持续让出且同步切片 `<50ms`，shape、统计、唯一 segment、取消、过期与 rollback 门未放宽。
+- 固定 100k 证据中，省份由约 `9529ms` 降至 `2799ms`，Worker render prepare 由约 `4886ms` 降至 `121.9ms`；城镇由约 `2558ms` 降至 `1197ms`，picking rebind 收敛到 `42.7～121.3ms`，两者均只输入 `3` 包并复用同一长期 owner。城镇 LongTask 为 `0`；省份剩余单条 `92ms` 已按用户“调查并实质优化一次后，200ms 内可精确登记”的规则登记，不提高通用阈值。
+- 第 334 项以“唯一长期 MapWorker 作为 canonical 计算 / 存档 owner，主线程保留现有 UI、编辑兼容 map 投影”为最终兼容边界；测得的暖重生成不再全量传图。用户已要求本项在该边界验收后合入 `main`，因此此前继续移除主线程兼容 map 的探索不再作为当前未完成任务。用户旧 5410 截图对应的异常 cell 已有固定反例与隔离六模式证据，但未冒充在已不可连接旧标签上的现场复验。

@@ -12384,7 +12384,13 @@ async function regenerateMapAttributeViaWorker(state, documentRef, kind, options
     targetKind,
     userLabel: targetKind,
     payload: {kind: targetKind, options: workerOptions},
-    renderLayers: renderPreparationLayersForRegeneration(targetKind),
+    renderLayers: renderPreparationLayersForRegeneration(targetKind, {
+      colorMode: state.renderer?.colorMode,
+      visibility: state.renderer?.layerVisibility,
+      viewOptions: state.renderer?.viewOptions,
+      politicalMeshDebugMode: state.renderer?.politicalMeshDebugMode,
+      hasCellVisual: Boolean(state.renderer?.cellVisualMesh?.cells?.length)
+    }),
     preserveRoutePicking: targetKind === "rivers",
     effects: {
       ...(targetKind === "rivers" ? RIVER_REGENERATION_TRANSACTION_EFFECTS : REGENERATION_TRANSACTION_EFFECTS),
@@ -12494,9 +12500,21 @@ async function executeWorkerMapMutation(state, documentRef, mutation, operation 
       error.code = "operation_obsolete";
       throw error;
     }
+    workerSessionFinalized = true;
+    if (result.rejection) {
+      const rejection = result.rejection;
+      throw createRuntimeOperationError(rejection.code || "regeneration_preflight_rejected", result.constraint || "重生成预检未通过", {
+        stage: rejection.stage || "preflight",
+        suggestion: rejection.suggestion || "修复冲突数据后重试。",
+        expected: true,
+        details: {
+          ...(rejection.details || {}),
+          worker: appendWorkerCommitTelemetry(worker, {...(output.timings || {}), commitInstallMs: 0, refreshMs: 0, commitTotalMs: 0})
+        }
+      });
+    }
     updateRegenerationSection(documentRef, result);
     updateEditingInteractionLock(state, documentRef);
-    workerSessionFinalized = true;
     workerOperationSucceeded = true;
     return {
       ...result,
@@ -12576,11 +12594,13 @@ async function executeWorkerMapMutation(state, documentRef, mutation, operation 
     }
     operation?.report("render-install", {message: `正在更新${userLabel}画面`});
     const renderPrepareStartedAt = readCommitTime();
+    const inPlaceSurfaceColorPatch = output.preparedRender.layers?.surface?.mode === "cell-colors";
     try {
       preparedInstall = await prepareRendererWorkerInstall(state.renderer, state.map, output.preparedRender, {
         binding: renderRequest.binding,
         signal: operation?.signal,
         preserveRoutePicking: Boolean(mutation.preserveRoutePicking),
+        inPlaceSurfaceColorPatch,
         isCurrent: installIsCurrent,
         onProgress: (stage, detail) => {
           recordWorkerRenderInstallStage(renderInstallStages, stage, detail, readCommitTime() - renderPrepareStartedAt);
@@ -12598,6 +12618,7 @@ async function executeWorkerMapMutation(state, documentRef, mutation, operation 
       throw error;
     }
     const renderCommitStartedAt = readCommitTime();
+    await preparedInstall.prepareCommit?.({signal: operation?.signal, isCurrent: installIsCurrent});
     preparedInstall.commit();
     renderInstallCommitMs = roundWorkerTelemetryMs(readCommitTime() - renderCommitStartedAt);
     maybeInjectWorkerRegenerationRefreshFault(documentRef, {targetKind, stage: "after-render", phase: "forward"});
@@ -12723,7 +12744,15 @@ async function executeWorkerMapMutation(state, documentRef, mutation, operation 
       : {mode: "release-detached", ownerCurrent: false};
 
     rollbackFailures.push(...cleanupWorkerRegenerationPreparedInstalls(deferredPreparedInstalls, preparedCleanup));
-    rollbackFailures.push(...cleanupWorkerRegenerationPreparedInstalls(preparedInstall ? [preparedInstall] : [], preparedCleanup));
+    if (preparedInstall && mapStillCurrent && typeof preparedInstall.rollbackAsync === "function") {
+      try {
+        await preparedInstall.rollbackAsync({isCurrent: () => state.map === committedMap});
+      } catch (failure) {
+        rollbackFailures.push(failure);
+      }
+    } else {
+      rollbackFailures.push(...cleanupWorkerRegenerationPreparedInstalls(preparedInstall ? [preparedInstall] : [], preparedCleanup));
+    }
     renderInstallFinalized = Boolean(preparedInstall);
 
     if (mapStillCurrent && execution?.executed) {
@@ -13033,10 +13062,17 @@ function createWorkerRegenerationRenderRequest(state, targetKind, binding, layer
       ? renderPreparationPickingComponentsForRegeneration(targetKind)
       : ["cities", "markers", "military", "routeSegments", "riverSegments"]
     : [];
+  const surfacePatchScope = targetKind === "provinces"
+    && requestedLayers.includes("surface")
+    && String(renderer?.colorMode || "height") === "provinces"
+    && renderer?.canPrepareSurfaceColorPatch?.("all")
+    ? "all"
+    : null;
   return {
     binding: {mapIdentity: binding.mapIdentity, mapRevision: binding.mapRevision},
     layers: requestedLayers,
     ...(pickingComponents.length ? {pickingComponents} : {}),
+    ...(surfacePatchScope ? {surfacePatchScope} : {}),
     camera: {...(renderer?.camera || {})},
     canvas: {
       width: Number(renderer?.canvas?.width || canvasSize.width) || 1,

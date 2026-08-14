@@ -63,17 +63,33 @@ export async function rebindObjectPickingDtoInChunks(dto, map, expectedBinding =
   const objects = canonicalPickingObjects(map);
   const buckets = new Map();
   const gate = createPickingChunkGate(options);
-  await validatePickingDtoInChunks(dto, validation, gate);
+  assertPointReferenceCounts(dto);
+  for (const entry of validation.entries) validatePackedIdTable(entry);
+  let previousBucket = -1;
+  let maxBucketItems = 0;
+  const routeSegments = new Set();
+  const riverSegments = new Set();
   for (let bucketIndex = 0; bucketIndex < dto.bucketIds.length; bucketIndex++) {
+    const bucketId = dto.bucketIds[bucketIndex];
+    validateBucketId(bucketId, previousBucket, validation.maxBucketId, bucketIndex);
+    previousBucket = bucketId;
+    for (const entry of validation.entries) validatePackedBucketRange(entry, bucketIndex);
     const bucket = {cities: [], markers: [], military: [], routeSegments: [], riverSegments: []};
-    rebindPointReferences(bucket.cities, dto.cities, bucketIndex, objects.cities, "city");
-    rebindPointReferences(bucket.markers, dto.markers, bucketIndex, objects.markers, "marker");
-    rebindPointReferences(bucket.military, dto.military, bucketIndex, objects.military, "military");
-    rebindSegmentReferences(bucket.routeSegments, dto.routeSegments, bucketIndex, objects.routes, route => route.points || [], "route");
-    rebindSegmentReferences(bucket.riverSegments, dto.riverSegments, bucketIndex, objects.rivers, riverPickingPoints, "river");
-    buckets.set(dto.bucketIds[bucketIndex], bucket);
-    await gate.checkpoint(bucketIndex + 1, dto.bucketIds.length);
+    await rebindPointReferencesInChunks(bucket.cities, dto.cities, bucketIndex, objects.cities, "city", gate);
+    await rebindPointReferencesInChunks(bucket.markers, dto.markers, bucketIndex, objects.markers, "marker", gate);
+    await rebindPointReferencesInChunks(bucket.military, dto.military, bucketIndex, objects.military, "military", gate);
+    await rebindSegmentReferencesInChunks(bucket.routeSegments, dto.routeSegments, bucketIndex, objects.routes, route => route.points || [], "route", routeSegments, gate);
+    await rebindSegmentReferencesInChunks(bucket.riverSegments, dto.riverSegments, bucketIndex, objects.rivers, riverPickingPoints, "river", riverSegments, gate);
+    maxBucketItems = Math.max(maxBucketItems, bucket.cities.length + bucket.markers.length + bucket.military.length + bucket.routeSegments.length + bucket.riverSegments.length);
+    buckets.set(bucketId, bucket);
+    const pending = gate.checkpoint(bucketIndex + 1, dto.bucketIds.length);
+    if (pending) await pending;
   }
+  if (maxBucketItems !== dto.stats.maxBucketItems) {
+    throw pickingDtoError("picking-dto-shape", "picking maxBucketItems 与 bucket 内容不一致", {expected: maxBucketItems, actual: dto.stats.maxBucketItems});
+  }
+  assertReboundUniqueSegmentCount(routeSegments, dto.stats.routeSegmentCount, "route");
+  assertReboundUniqueSegmentCount(riverSegments, dto.stats.riverSegmentCount, "river");
   gate.assertCurrent();
   return {
     bucketSize: dto.bucketSize,
@@ -176,7 +192,8 @@ async function validatePickingDtoInChunks(dto, validation, gate) {
     const bucketId = dto.bucketIds[index];
     validateBucketId(bucketId, previousBucket, validation.maxBucketId, index);
     previousBucket = bucketId;
-    await gate.checkpoint(++completed, total);
+    const pending = gate.checkpoint(++completed, total);
+    if (pending) await pending;
   }
   for (const entry of validation.entries) {
     let previous = entry.packed.offsets[0];
@@ -184,17 +201,20 @@ async function validatePickingDtoInChunks(dto, validation, gate) {
       const current = entry.packed.offsets[index];
       if (current < previous) throw pickingDtoError("picking-dto-shape", `picking ${entry.kind}.offsets 非单调`, {index, previous, current});
       previous = current;
-      await gate.checkpoint(++completed, total);
+      const pending = gate.checkpoint(++completed, total);
+      if (pending) await pending;
     }
     for (let index = 0; index < entry.packed.idTable.length; index++) {
       if (typeof entry.packed.idTable[index] !== "string") {
         throw pickingDtoError("picking-dto-shape", `picking ${entry.kind}.idTable 含非字符串 ID`, {index});
       }
-      await gate.checkpoint(++completed, total);
+      const pending = gate.checkpoint(++completed, total);
+      if (pending) await pending;
     }
     for (let index = 0; index < entry.packed.idIndexes.length; index++) {
       validatePackedReferenceIndex(entry, index);
-      await gate.checkpoint(++completed, total);
+      const pending = gate.checkpoint(++completed, total);
+      if (pending) await pending;
     }
   }
   await validatePickingStatsInChunks(dto, gate);
@@ -259,7 +279,8 @@ async function validatePickingStatsInChunks(dto, gate) {
   let maxBucketItems = 0;
   for (let bucketIndex = 0; bucketIndex < dto.bucketIds.length; bucketIndex++) {
     maxBucketItems = Math.max(maxBucketItems, countBucketReferences(dto, bucketIndex));
-    await gate.checkpoint(bucketIndex + 1, dto.bucketIds.length);
+    const pending = gate.checkpoint(bucketIndex + 1, dto.bucketIds.length);
+    if (pending) await pending;
   }
   if (maxBucketItems !== dto.stats.maxBucketItems) {
     throw pickingDtoError("picking-dto-shape", "picking maxBucketItems 与 bucket 内容不一致", {expected: maxBucketItems, actual: dto.stats.maxBucketItems});
@@ -297,7 +318,8 @@ async function assertUniqueSegmentCountInChunks(packed, expected, kind, gate) {
   const unique = new Set();
   for (let index = 0; index < packed.idIndexes.length; index++) {
     unique.add(`${packed.idIndexes[index]}:${packed.segments[index]}`);
-    await gate.checkpoint(index + 1, packed.idIndexes.length);
+    const pending = gate.checkpoint(index + 1, packed.idIndexes.length);
+    if (pending) await pending;
   }
   if (unique.size !== expected) {
     throw pickingDtoError("picking-dto-shape", `picking ${kind} segment 统计与唯一引用不一致`, {expected, actual: unique.size});
@@ -344,8 +366,9 @@ function packSegmentReferences(bucketEntries, key, getId) {
   return {kind: key === "routeSegments" ? "route" : "river", offsets, idTable, idIndexes, segments};
 }
 
-function rebindPointReferences(target, packed, bucketIndex, objects, kind) {
+function rebindPointReferences(target, packed, bucketIndex, objects, kind, validateIndexes = false) {
   for (let index = packed.offsets[bucketIndex]; index < packed.offsets[bucketIndex + 1]; index++) {
+    if (validateIndexes) validatePackedReferenceIndex({packed, kind, segment: false}, index);
     const id = packed.idTable[packed.idIndexes[index]];
     const object = objects.get(id);
     if (!object) throw pickingDtoError("picking-rebind-missing", `picking ${kind} #${id} 已不存在`, {kind, id});
@@ -353,8 +376,9 @@ function rebindPointReferences(target, packed, bucketIndex, objects, kind) {
   }
 }
 
-function rebindSegmentReferences(target, packed, bucketIndex, objects, getPoints, kind) {
+function rebindSegmentReferences(target, packed, bucketIndex, objects, getPoints, kind, unique = null, validateIndexes = false) {
   for (let index = packed.offsets[bucketIndex]; index < packed.offsets[bucketIndex + 1]; index++) {
+    if (validateIndexes) validatePackedReferenceIndex({packed, kind, segment: true}, index);
     const id = packed.idTable[packed.idIndexes[index]];
     const object = objects.get(id);
     const segment = packed.segments[index];
@@ -363,7 +387,66 @@ function rebindSegmentReferences(target, packed, bucketIndex, objects, getPoints
     if (!Array.isArray(points?.[segment]) || !Array.isArray(points?.[segment + 1])) {
       throw pickingDtoError("picking-rebind-segment", `picking ${kind} #${id} 的 segment 已失效`, {kind, id, segment});
     }
+    unique?.add(`${packed.idIndexes[index]}:${segment}`);
     target.push({kind, [kind]: object, index: segment, a: points[segment], b: points[segment + 1]});
+  }
+}
+
+async function rebindPointReferencesInChunks(target, packed, bucketIndex, objects, kind, gate) {
+  const start = packed.offsets[bucketIndex];
+  const end = packed.offsets[bucketIndex + 1];
+  for (let index = start; index < end; index++) {
+    validatePackedReferenceIndex({packed, kind, segment: false}, index);
+    const id = packed.idTable[packed.idIndexes[index]];
+    const object = objects.get(id);
+    if (!object) throw pickingDtoError("picking-rebind-missing", `picking ${kind} #${id} 已不存在`, {kind, id});
+    target.push(object);
+    if ((index - start + 1) % 256 === 0 || index + 1 === end) {
+      const pending = gate.checkpoint(index - start + 1, end - start);
+      if (pending) await pending;
+    }
+  }
+}
+
+async function rebindSegmentReferencesInChunks(target, packed, bucketIndex, objects, getPoints, kind, unique, gate) {
+  const start = packed.offsets[bucketIndex];
+  const end = packed.offsets[bucketIndex + 1];
+  for (let index = start; index < end; index++) {
+    validatePackedReferenceIndex({packed, kind, segment: true}, index);
+    const id = packed.idTable[packed.idIndexes[index]];
+    const object = objects.get(id);
+    const segment = packed.segments[index];
+    if (!object) throw pickingDtoError("picking-rebind-missing", `picking ${kind} #${id} 已不存在`, {kind, id, segment});
+    const points = getPoints(object);
+    if (!Array.isArray(points?.[segment]) || !Array.isArray(points?.[segment + 1])) {
+      throw pickingDtoError("picking-rebind-segment", `picking ${kind} #${id} 的 segment 已失效`, {kind, id, segment});
+    }
+    unique.add(`${packed.idIndexes[index]}:${segment}`);
+    target.push({kind, [kind]: object, index: segment, a: points[segment], b: points[segment + 1]});
+    if ((index - start + 1) % 256 === 0 || index + 1 === end) {
+      const pending = gate.checkpoint(index - start + 1, end - start);
+      if (pending) await pending;
+    }
+  }
+}
+
+function validatePackedIdTable(entry) {
+  for (let index = 0; index < entry.packed.idTable.length; index++) {
+    if (typeof entry.packed.idTable[index] !== "string") {
+      throw pickingDtoError("picking-dto-shape", `picking ${entry.kind}.idTable 含非字符串 ID`, {index});
+    }
+  }
+}
+
+function validatePackedBucketRange(entry, bucketIndex) {
+  const start = entry.packed.offsets[bucketIndex];
+  const end = entry.packed.offsets[bucketIndex + 1];
+  if (end < start) throw pickingDtoError("picking-dto-shape", `picking ${entry.kind}.offsets 非单调`, {index: bucketIndex + 1, previous: start, current: end});
+}
+
+function assertReboundUniqueSegmentCount(unique, expected, kind) {
+  if (unique.size !== expected) {
+    throw pickingDtoError("picking-dto-shape", `picking ${kind} segment 统计与唯一引用不一致`, {expected, actual: unique.size});
   }
 }
 
@@ -415,7 +498,7 @@ function createPickingChunkGate(options = {}) {
   let units = 0;
   let deadline = pickingNow() + budgetMs;
   return {
-    async checkpoint(completed, total) {
+    checkpoint(completed, total) {
       assertCurrent();
       units++;
       const current = pickingNow();
@@ -425,18 +508,19 @@ function createPickingChunkGate(options = {}) {
       if (report) options.onProgress?.("picking-rebind", {completed, total});
       if (chunkBoundary) {
         units = 0;
-        await yieldToMain();
-        assertCurrent();
-        deadline = pickingNow() + budgetMs;
-        return;
+        return Promise.resolve(yieldToMain()).then(() => {
+          assertCurrent();
+          deadline = pickingNow() + budgetMs;
+        });
       }
       if (current < deadline) {
-        return;
+        return null;
       }
       units = 0;
-      await yieldToMain();
-      assertCurrent();
-      deadline = pickingNow() + budgetMs;
+      return Promise.resolve(yieldToMain()).then(() => {
+        assertCurrent();
+        deadline = pickingNow() + budgetMs;
+      });
     },
     assertCurrent
   };

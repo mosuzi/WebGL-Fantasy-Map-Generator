@@ -1190,6 +1190,13 @@ function verifyAppDeferredReplayStaticContract() {
   assert.match(displayFlow, /allowFallback: false/u, "复杂显示准备不得回退主线程");
   assert.match(displayFlow, /expectedRevisionDelta: 0/u, "显示事务不得推进 map revision");
   assert.match(source, /surfacePatchScope = layers\.includes\("surface"\)[\s\S]*?canPrepareDeferredSurfaceColorPatch/u, "surface 显示事务必须优先选择 compact color patch");
+  const regenerationFlow = source.slice(
+    source.indexOf("async function regenerateMapAttributeViaWorker"),
+    source.indexOf("async function commitRegenerationWorkerSession")
+  );
+  assert.match(regenerationFlow, /inPlaceSurfaceColorPatch/u, "省份颜色重生成必须允许复用正式 surface geometry");
+  assert.ok(regenerationFlow.indexOf("preparedInstall.prepareCommit") < regenerationFlow.indexOf("preparedInstall.commit()"), "surface 颜色补丁必须先准备后提交");
+  assert.match(regenerationFlow, /await preparedInstall\.rollbackAsync\(\{isCurrent:/u, "失败回滚必须恢复原位 surface 颜色");
   const deferredRequestFlow = source.slice(
     source.indexOf("function createWorkerRegenerationDeferredRenderRequest"),
     source.indexOf("function isWorkerRegenerationDeferredReplayContextCurrent")

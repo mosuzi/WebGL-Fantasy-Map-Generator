@@ -15,6 +15,7 @@ export function buildCellVisualMesh(map) {
   const startedAt = performance.now();
   const context = createRenderContext(map);
   const cells = [];
+  const emergencyHardFanCells = [];
   const edgeCurves = new Map();
   const shoreEdges = collectShoreCellVisualEdges(map);
   let boundaryPoints = 0;
@@ -25,6 +26,7 @@ export function buildCellVisualMesh(map) {
   let triangulationSkippedCells = 0;
   let triangulationHardFallbackCells = 0;
   let triangulationHardFanFallbackCells = 0;
+  let triangulationEmergencyHardFanCells = 0;
   let triangulationUnfilledCells = 0;
   const triangulationFailures = [];
 
@@ -49,10 +51,19 @@ export function buildCellVisualMesh(map) {
         triangulation = buildCellVisualNdcTriangles(context, hardPoints, center);
         hardBoundarySource = "stored";
       }
+      if (triangulation.skipped) {
+        const emergency = buildEmergencyHardCellVisualTriangles(context, map, cell, center);
+        if (emergency) {
+          hardPoints = emergency.points;
+          triangulation = emergency;
+          fallbackMode = "emergency-hard-surface-fan";
+          triangulationEmergencyHardFanCells++;
+        }
+      }
       if (!triangulation.skipped) {
         triangulationHardFallbackCells++;
         if (triangulation.safeHardFan) triangulationHardFanFallbackCells++;
-        fallbackMode = triangulation.safeHardFan
+        fallbackMode ||= triangulation.safeHardFan
           ? `validated-${hardBoundarySource}-hard-fan`
           : `${hardBoundarySource}-hard-boundary-earcut`;
       }
@@ -75,23 +86,25 @@ export function buildCellVisualMesh(map) {
       continue;
     }
     const ndcTriangles = triangulation.ndcTriangles;
-    cells.push({
+    const cellMesh = {
       cell,
       center,
       points: triangulation.points,
       ndcTriangles,
       triangleCount: ndcTriangles.length / 6,
       triangulationFallback: smoothTriangulation.skipped ? fallbackMode : null
-    });
+    };
+    if (fallbackMode === "emergency-hard-surface-fan") emergencyHardFanCells.push(cellMesh);
+    else cells.push(cellMesh);
     boundaryPoints += triangulation.points.length;
     triangleCount += ndcTriangles.length / 6;
   }
 
   return {
-    cells,
+    cells: [...emergencyHardFanCells, ...cells],
     edgeCurves,
     shoreEdges,
-    cellCount: cells.length,
+    cellCount: emergencyHardFanCells.length + cells.length,
     skippedCells,
     boundaryPoints,
     triangleCount,
@@ -101,6 +114,7 @@ export function buildCellVisualMesh(map) {
     triangulationSkippedCells,
     triangulationHardFallbackCells,
     triangulationHardFanFallbackCells,
+    triangulationEmergencyHardFanCells,
     triangulationUnfilledCells,
     triangulationFailures,
     edgeCurveCount: edgeCurves.size,
@@ -125,6 +139,7 @@ export function emptyCellVisualMesh() {
     triangulationSkippedCells: 0,
     triangulationHardFallbackCells: 0,
     triangulationHardFanFallbackCells: 0,
+    triangulationEmergencyHardFanCells: 0,
     triangulationUnfilledCells: 0,
     triangulationFailures: [],
     edgeCurveCount: 0,
@@ -150,8 +165,16 @@ function buildCellVisualMeshCell(map, cell, edgeCurves, shoreEdges) {
       triangulation = buildCellVisualNdcTriangles(createRenderContext(map), hardPoints, center);
       hardBoundarySource = "stored";
     }
+    if (triangulation.skipped) {
+      const emergency = buildEmergencyHardCellVisualTriangles(createRenderContext(map), map, cell, center);
+      if (emergency) {
+        hardPoints = emergency.points;
+        triangulation = emergency;
+        fallbackMode = "emergency-hard-surface-fan";
+      }
+    }
     if (!triangulation.skipped) {
-      fallbackMode = triangulation.safeHardFan
+      fallbackMode ||= triangulation.safeHardFan
         ? `validated-${hardBoundarySource}-hard-fan`
         : `${hardBoundarySource}-hard-boundary-earcut`;
     }
@@ -210,7 +233,11 @@ export function refreshCellVisualMeshCells(map, previousMesh, changedGridCells) 
     entries.set(cell, next.cellMesh);
   }
 
-  const nextCells = previousMesh.cells.map(cellMesh => entries.get(cellMesh.cell));
+  const refreshedCells = previousMesh.cells.map(cellMesh => entries.get(cellMesh.cell));
+  const nextCells = [
+    ...refreshedCells.filter(cellMesh => cellMesh.triangulationFallback === "emergency-hard-surface-fan"),
+    ...refreshedCells.filter(cellMesh => cellMesh.triangulationFallback !== "emergency-hard-surface-fan")
+  ];
   const boundaryPoints = nextCells.reduce((sum, cellMesh) => sum + cellMesh.points.length, 0);
   const triangleCount = nextCells.reduce((sum, cellMesh) => sum + cellMesh.triangleCount, 0);
   return {
@@ -243,6 +270,7 @@ export function summarizeCellVisualMesh(mesh) {
     triangulationSkippedCells: mesh?.triangulationSkippedCells || 0,
     triangulationHardFallbackCells: mesh?.triangulationHardFallbackCells || 0,
     triangulationHardFanFallbackCells: mesh?.triangulationHardFanFallbackCells || 0,
+    triangulationEmergencyHardFanCells: mesh?.triangulationEmergencyHardFanCells || 0,
     triangulationUnfilledCells: mesh?.triangulationUnfilledCells || 0,
     triangulationFailures: [...(mesh?.triangulationFailures || [])],
     averageBoundaryPoints: roundRatio(mesh?.boundaryPoints || 0, mesh?.cellCount || 0),
@@ -456,6 +484,32 @@ function buildValidatedHardBoundaryFanIndices(points, center) {
   }
   if (!validateCellVisualTriangulation(fanPoints, indices, points)) return [];
   return indices;
+}
+
+function buildEmergencyHardCellVisualTriangles(context, map, cell, center) {
+  if (!isWorldPoint(center)) return null;
+  const points = (map?.grid?.cells?.v?.[cell] || [])
+    .map(vertex => resolvedGridVertexPoint(map.grid, vertex))
+    .filter(isWorldPoint);
+  if (points.length < 3) return null;
+  const ndcTriangles = new Float32Array(points.length * 6);
+  let offset = 0;
+  for (let index = 0; index < points.length; index++) {
+    for (const point of [center, points[index], points[(index + 1) % points.length]]) {
+      const ndc = worldToNdcPoint(context, point);
+      ndcTriangles[offset++] = ndc[0];
+      ndcTriangles[offset++] = ndc[1];
+    }
+  }
+  return {
+    ndcTriangles,
+    fallback: true,
+    skipped: false,
+    retried: true,
+    reason: "emergency-hard-surface-fan",
+    points,
+    safeHardFan: false
+  };
 }
 
 function cleanCellVisualBoundary(points) {

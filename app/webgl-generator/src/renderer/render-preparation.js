@@ -76,10 +76,21 @@ const REGENERATION_PICKING_COMPONENTS = Object.freeze({
   zones: Object.freeze([])
 });
 
-export function renderPreparationLayersForRegeneration(kind) {
-  const layers = REGENERATION_RENDER_LAYERS[String(kind || "").trim().toLowerCase()];
+export function renderPreparationLayersForRegeneration(kind, presentation = {}) {
+  const normalizedKind = String(kind || "").trim().toLowerCase();
+  const layers = REGENERATION_RENDER_LAYERS[normalizedKind];
   if (!layers) throw renderPreparationError("render-regeneration-kind-unsupported", `没有 ${kind || "(empty)"} 的渲染准备范围`);
-  return [...layers];
+  if (normalizedKind !== "provinces") return [...layers];
+  const colorMode = String(presentation?.colorMode || "height");
+  const visibility = presentation?.visibility || {};
+  const needsPoliticalMeshes = normalizePoliticalMeshDebugMode(presentation?.politicalMeshDebugMode) !== "none"
+    || (presentation?.viewOptions?.smoothCellBorders !== false && presentation?.hasCellVisual !== true);
+  return layers.filter(layer => (
+    layer !== "state-paths"
+    && (layer !== "political" || needsPoliticalMeshes)
+    && (layer !== "surface" || colorMode === "provinces")
+    && (layer !== "line" || visibility.provinceBorders !== false)
+  ));
 }
 
 export function renderPreparationPickingComponentsForRegeneration(kind) {

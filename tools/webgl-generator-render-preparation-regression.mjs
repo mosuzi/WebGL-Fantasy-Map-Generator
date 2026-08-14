@@ -60,6 +60,34 @@ assert.deepEqual(renderPreparationPickingComponentsForRegeneration("markers"), [
 assert.deepEqual(renderPreparationPickingComponentsForRegeneration("military"), ["military"]);
 assert.deepEqual(renderPreparationPickingComponentsForRegeneration("zones"), []);
 assert.equal(renderPreparationLayersForRegeneration("zones").includes("picking"), false, "地区重生成不应重建无关对象 picking");
+assert.deepEqual(
+  renderPreparationLayersForRegeneration("provinces", {
+    colorMode: "states",
+    visibility: {provinceBorders: false},
+    viewOptions: {smoothCellBorders: true},
+    hasCellVisual: true
+  }),
+  ["province-paths", "point", "labels", "route", "picking"],
+  "省份重生成不得准备当前画面不消费的 state/political/surface/line"
+);
+assert.deepEqual(
+  renderPreparationLayersForRegeneration("provinces", {
+    colorMode: "provinces",
+    visibility: {provinceBorders: true},
+    viewOptions: {smoothCellBorders: true},
+    hasCellVisual: true
+  }),
+  ["province-paths", "surface", "line", "point", "labels", "route", "picking"],
+  "省份视图必须保留颜色与边界更新"
+);
+assert.ok(
+  renderPreparationLayersForRegeneration("provinces", {
+    politicalMeshDebugMode: "provinces",
+    viewOptions: {smoothCellBorders: true},
+    hasCellVisual: true
+  }).includes("political"),
+  "政治网格调试开启时不得复用旧政治 mesh"
+);
 
 const expected = {
   route: buildRouteMeshVertices(map, camera, canvas, null, [], visualTheme),
@@ -293,6 +321,52 @@ async function verifyPickingDto() {
     error => error?.code === "picking-dto-shape",
     "picking terminal offset 截短时必须在对象回绑前拒绝"
   );
+  await assert.rejects(
+    rebindObjectPickingDtoInChunks(malformedOffsets, map, binding, {yieldToMain: async () => {}}),
+    error => error?.code === "picking-dto-shape",
+    "分片 picking 回绑不得绕过 terminal offset 校验"
+  );
+  const malformedIndex = structuredClone(dto);
+  malformedIndex.routeSegments.idIndexes[0] = malformedIndex.routeSegments.idTable.length;
+  await assert.rejects(
+    rebindObjectPickingDtoInChunks(malformedIndex, map, binding, {yieldToMain: async () => {}}),
+    error => error?.code === "picking-dto-shape",
+    "分片 picking 回绑不得绕过引用索引校验"
+  );
+  const largeReferenceCount = 500_000;
+  const largeCity = map.settlements.cities.find(Boolean);
+  const largeBucketDto = {
+    schemaVersion: dto.schemaVersion,
+    binding: structuredClone(dto.binding),
+    components: ["cities"],
+    bucketSize: dto.bucketSize,
+    columns: 1,
+    rows: 1,
+    bucketIds: Uint32Array.of(0),
+    cities: {kind: "cities", offsets: Uint32Array.of(0, largeReferenceCount), idTable: [String(largeCity.id)], idIndexes: new Uint32Array(largeReferenceCount)},
+    markers: {kind: "markers", offsets: Uint32Array.of(0, 0), idTable: [], idIndexes: new Uint32Array()},
+    military: {kind: "military", offsets: Uint32Array.of(0, 0), idTable: [], idIndexes: new Uint32Array()},
+    routeSegments: {kind: "route", offsets: Uint32Array.of(0, 0), idTable: [], idIndexes: new Uint32Array(), segments: new Int32Array()},
+    riverSegments: {kind: "river", offsets: Uint32Array.of(0, 0), idTable: [], idIndexes: new Uint32Array(), segments: new Int32Array()},
+    stats: {bucketCount: 1, cityCount: largeReferenceCount, markerCount: 0, militaryCount: 0, routeSegmentCount: 0, riverSegmentCount: 0, maxBucketItems: largeReferenceCount}
+  };
+  let largeBucketYields = 0;
+  let largeBucketMaxSliceMs = 0;
+  let largeBucketSliceStartedAt = performance.now();
+  const largeBucketRebound = await rebindObjectPickingDtoInChunks(largeBucketDto, map, binding, {
+    budgetMs: 1,
+    yieldToMain: async () => {
+      largeBucketMaxSliceMs = Math.max(largeBucketMaxSliceMs, performance.now() - largeBucketSliceStartedAt);
+      largeBucketYields++;
+      await new Promise(resolve => setImmediate(resolve));
+      largeBucketSliceStartedAt = performance.now();
+    }
+  });
+  largeBucketMaxSliceMs = Math.max(largeBucketMaxSliceMs, performance.now() - largeBucketSliceStartedAt);
+  assert.ok(largeBucketYields > 0, "单 bucket 大引用集必须在 bucket 内让出主线程");
+  assert.ok(largeBucketMaxSliceMs < 50, `单 bucket picking 回绑同步切片超预算：${largeBucketMaxSliceMs.toFixed(1)}ms`);
+  assert.equal(largeBucketRebound.cityCount, largeReferenceCount);
+  assert.equal(largeBucketRebound.buckets.get(0).cities.length, largeReferenceCount);
   for (const [bucketId, expectedBucket] of expectedIndex.buckets) {
     const actualBucket = rebound.buckets.get(bucketId);
     assert.ok(actualBucket, `picking bucket ${bucketId} 必须存在`);

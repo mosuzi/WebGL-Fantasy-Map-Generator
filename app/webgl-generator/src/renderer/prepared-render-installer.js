@@ -17,6 +17,7 @@ import {OBJECT_PICKING_COMPONENTS} from "./picking.js";
 
 const FLOATS_PER_VERTEX = 6;
 const DEFAULT_UPLOAD_SLICE_BYTES = 256 * 1024;
+const PICKING_REBIND_BUDGET_MS = 24;
 const surfaceBaseBufferOwners = new WeakMap();
 
 export async function prepareRendererWorkerInstall(renderer, map, prepared, options = {}) {
@@ -48,7 +49,10 @@ export async function prepareRendererWorkerInstall(renderer, map, prepared, opti
     }
     if (layers.political) decoded.political = layers.political;
     if (layers.picking) {
-      decoded.picking = await rebindObjectPickingDtoInChunks(layers.picking, map, binding, gate.options("picking"));
+      decoded.picking = await rebindObjectPickingDtoInChunks(layers.picking, map, binding, {
+        ...gate.options("picking"),
+        budgetMs: PICKING_REBIND_BUDGET_MS
+      });
     }
     if (layers.labels) {
       decoded.labels = await unpackLabelLayoutDescriptorsInChunks(layers.labels, map, gate.options("labels"));

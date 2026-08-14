@@ -1789,8 +1789,12 @@ export class PlaceholderMapRenderer {
 
   canPrepareDeferredSurfaceColorPatch(snapshot) {
     const scope = snapshot?.effects?.surfacePatchScope;
+    return this.canPrepareSurfaceColorPatch(scope, snapshot?.finalPresentation?.viewOptions);
+  }
+
+  canPrepareSurfaceColorPatch(scope, nextViewOptions = this.viewOptions) {
     if (scope !== "all" && scope !== "water") return false;
-    if (this.viewOptions?.smoothCellBorders === false || snapshot?.finalPresentation?.viewOptions?.smoothCellBorders === false) return false;
+    if (this.viewOptions?.smoothCellBorders === false || nextViewOptions?.smoothCellBorders === false) return false;
     if (!this.map || !this.cellVisualMesh?.cells?.length || this.surfacePatchCells?.size) return false;
     if (!(this.surfaceVertices instanceof Float32Array) || !this.surfaceVertices.length) return false;
     if (!(this.surfaceCellRanges instanceof Map) || this.surfaceCellRanges.size !== this.cellVisualMesh.cells.length) return false;

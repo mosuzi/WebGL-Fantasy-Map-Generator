@@ -833,6 +833,20 @@ function runPureRegression() {
   assert.equal(skippedTriangulation.status, "skipped", "不可修复边界必须安全 skip");
   assert.equal(skippedTriangulation.reason, "self-intersecting-boundary", "安全 skip 必须提供可定位原因");
   assert.ok(countCellVisualFanLeaks([5, 8], concaveBoundary) > 0, "强制恢复旧中心扇形的破坏反例必须稳定越界");
+  const emergencyFallbackMap = {
+    metadata: {graphWidth: 8, graphHeight: 8},
+    grid: {
+      points: [[4, 4]],
+      cells: {i: [0], c: [[]], v: [[0, 1, 2, 3]], p: [0], h: new Uint8Array([10])},
+      vertices: {p: irreparableBoundary, c: [[], [], [], []]}
+    }
+  };
+  const emergencyFallbackMesh = buildCellVisualMesh(emergencyFallbackMap);
+  assert.equal(emergencyFallbackMesh.triangulationUnfilledCells, 0, "不可修复旧图 cell 不得再透出画布底色");
+  assert.equal(emergencyFallbackMesh.triangulationEmergencyHardFanCells, 1, "不可修复旧图 cell 必须进入硬表面兜底");
+  assert.equal(emergencyFallbackMesh.cells[0]?.triangulationFallback, "emergency-hard-surface-fan", "硬表面兜底必须保留可诊断原因");
+  assert.equal(emergencyFallbackMesh.cells[0]?.triangleCount, 4, "硬表面兜底必须覆盖 canonical cell 的全部边");
+  assert.ok(emergencyFallbackMesh.cells[0]?.ndcTriangles.every(Number.isFinite), "硬表面兜底不得写入非法 GPU 坐标");
 
   const performanceResults = [];
   for (const [pointCount, limitMs] of [[10000, 1000], [50000, 3500]]) {
