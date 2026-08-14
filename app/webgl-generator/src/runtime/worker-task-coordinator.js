@@ -28,12 +28,13 @@ export function createWorkerTaskCoordinator({createWorker, getBinding, validateB
     const binding = clonePlain(options.binding ?? getBinding?.() ?? null);
     const signal = options.signal || null;
     if (signal?.aborted) throw abortError(signal.reason);
-    const persistent = options.sessionMode === "map-mirror";
+    const adoptResultMap = options.sessionMode === "adopt-result-map";
+    const persistent = options.sessionMode === "map-mirror" || adoptResultMap;
     let reuseSession = false;
     let sessionId = "";
     let worker = null;
     if (persistent) {
-      if (persistentSession && persistentSession.status === "idle" && sameSessionBinding(persistentSession.binding, binding)) {
+      if (!adoptResultMap && persistentSession && persistentSession.status === "idle" && sameSessionBinding(persistentSession.binding, binding)) {
         worker = persistentSession.worker;
         sessionId = persistentSession.id;
         reuseSession = true;
@@ -51,7 +52,8 @@ export function createWorkerTaskCoordinator({createWorker, getBinding, validateB
       payload,
       sessionId,
       reuseSession,
-      persistentSession: persistent
+      persistentSession: persistent,
+      adoptResultMap
     });
     try {
       if (options.forceFallback) {
@@ -75,6 +77,7 @@ export function createWorkerTaskCoordinator({createWorker, getBinding, validateB
       ...options,
       persistentSession: persistent,
       reuseSession,
+      adoptResultMap,
       replicaChecksum,
       mainReplicaChecksumMs: 0,
       sessionInputPayload: reuseSession ? createSessionInputPayload(payload, options) : payload
@@ -89,7 +92,8 @@ export function createWorkerTaskCoordinator({createWorker, getBinding, validateB
       invalidateSession("session-commit-obsolete");
       return Promise.reject(obsoleteError("Worker session 提交绑定已过期"));
     }
-    if (!isValidSessionCommitBinding(current.binding, committedBinding, options.expectedRevisionDelta)) {
+    const adoptResultMap = current.adoptResultMap === true && options.adoptResultMap === true;
+    if (!isValidSessionCommitBinding(current.binding, committedBinding, options.expectedRevisionDelta, {adoptResultMap})) {
       invalidateSession("session-commit-discontinuous");
       return Promise.reject(protocolStateError("worker_protocol_session_commit_invalid", "Worker session 提交绑定不连续"));
     }
@@ -130,7 +134,7 @@ export function createWorkerTaskCoordinator({createWorker, getBinding, validateB
       current.worker.addEventListener?.("error", onError);
       current.worker.addEventListener?.("messageerror", onMessageError);
       try {
-        current.worker.postMessage(createWorkerTaskSessionCommit(current.request, committedBinding));
+        current.worker.postMessage(createWorkerTaskSessionCommit(current.request, committedBinding, {adoptResultMap}));
       } catch (error) {
         finish(reject, error, {invalidate: true});
       }
@@ -224,6 +228,7 @@ export function createWorkerTaskCoordinator({createWorker, getBinding, validateB
       status: persistentSession.status,
       binding: clonePlain(persistentSession.binding),
       checksum: persistentSession.checksum,
+      adopted: persistentSession.adoptResultMap === true,
       requestId: persistentSession.request?.requestId || ""
     };
   }
@@ -424,7 +429,7 @@ export function createWorkerTaskCoordinator({createWorker, getBinding, validateB
           try {
             const decodeStartedAt = now();
             if (!outputStartedAt) outputStartedAt = decodeStartedAt;
-            if (!outputDecoder) outputDecoder = createWorkerGraphDecoder({streamId: outputStreamId});
+            if (!outputDecoder) outputDecoder = createWorkerGraphDecoder({streamId: outputStreamId, checksum: runOptions.adoptResultMap});
             const decodeCpuStartedAt = now();
             outputComplete = outputDecoder.push(message.packet);
             const decodeCpuMs = roundMs(now() - decodeCpuStartedAt);
@@ -452,8 +457,10 @@ export function createWorkerTaskCoordinator({createWorker, getBinding, validateB
             telemetry.outputReceiveMs = roundMs(now() - outputStartedAt);
             const retained = Boolean(runOptions.persistentSession);
             if (retained) {
+              const retainedAdoption = Boolean(runOptions.adoptResultMap || (runOptions.reuseSession && persistentSession?.adoptResultMap));
               const replicaChecksum = normalizeChecksum(message.replicaChecksum);
-              if (!replicaChecksum || replicaChecksum !== normalizeChecksum(runOptions.replicaChecksum)) {
+              const expectedReplicaChecksum = runOptions.adoptResultMap ? outputDecoder.checksum : normalizeChecksum(runOptions.replicaChecksum);
+              if (!replicaChecksum || replicaChecksum !== expectedReplicaChecksum) {
                 throw protocolStateError("worker_protocol_replica_checksum_invalid", "Worker 初始地图副本 checksum 不一致");
               }
               persistentSession = {
@@ -462,6 +469,7 @@ export function createWorkerTaskCoordinator({createWorker, getBinding, validateB
                 status: "pending",
                 binding: request.binding,
                 checksum: replicaChecksum,
+                adoptResultMap: retainedAdoption,
                 request,
                 worker
               };
@@ -509,7 +517,7 @@ export function createWorkerTaskCoordinator({createWorker, getBinding, validateB
           sliceBytes: runOptions.streamSliceBytes,
           budgetMs: runOptions.streamBudgetMs,
           yieldToMain: runOptions.streamYieldToMain,
-          checksum: runOptions.persistentSession && !runOptions.reuseSession,
+          checksum: runOptions.persistentSession && !runOptions.reuseSession && !runOptions.adoptResultMap,
           onProgress(stage, detail) {
             (runOptions.onProgress || onProgress)?.(`input-stream-${stage}`, detail, {
               task: request.task,
@@ -521,7 +529,7 @@ export function createWorkerTaskCoordinator({createWorker, getBinding, validateB
           assertCurrentBinding(request.binding, request.binding);
           const message = createWorkerTaskStreamPacket(WORKER_TASK_MESSAGE.INPUT_PACKET, request, packet.message);
           if (packet.message.done) inputPacketsFinished = true;
-          if (packet.message.done && runOptions.persistentSession && !runOptions.reuseSession) {
+          if (packet.message.done && runOptions.persistentSession && !runOptions.reuseSession && !runOptions.adoptResultMap) {
             runOptions.replicaChecksum = packet.message.checksum || null;
           }
           const postStartedAt = now();
@@ -649,7 +657,14 @@ function sameSessionBinding(left, right) {
     && String(left?.lockFingerprint || "") === String(right?.lockFingerprint || "");
 }
 
-function isValidSessionCommitBinding(previous, next, expectedRevisionDelta) {
+function isValidSessionCommitBinding(previous, next, expectedRevisionDelta, {adoptResultMap = false} = {}) {
+  if (adoptResultMap) {
+    return Boolean(next?.mapIdentity)
+      && Number(next?.mapRevision) === 0
+      && Number(previous?.generationToken) === Number(next?.generationToken)
+      && Number(previous?.operationId) === Number(next?.operationId)
+      && String(previous?.operationName || "") === String(next?.operationName || "");
+  }
   if (previous?.mapIdentity !== next?.mapIdentity
     || Number(previous?.generationToken) !== Number(next?.generationToken)
     || String(previous?.lockFingerprint || "") !== String(next?.lockFingerprint || "")

@@ -52,7 +52,7 @@ try {
     const originalUnits = renderer.setUnitPreferences;
     const wrappedCoordinator = {
       async run(task, payload, options) {
-        const record = {task, operation: payload?.operation || payload?.mode || "", inputKind: payload?.input?.kind || typeof payload?.input, requestLayers: [...(payload?.render?.layers || [])], payloadOwnMap: Object.hasOwn(payload || {}, "map"), sessionPayloadOwnMap: Object.hasOwn(options?.sessionPayload || {}, "map")};
+        const record = {task, operation: payload?.operation || payload?.mode || "", inputKind: payload?.input?.kind || typeof payload?.input, requestLayers: [...(payload?.render?.layers || [])], payloadOwnMap: Object.hasOwn(payload || {}, "map"), sessionPayloadOwnMap: Object.hasOwn(options?.sessionPayload || {}, "map"), sessionMode: options?.sessionMode || "", allowFallback: options?.allowFallback !== false};
         trace.runs.push(record);
         const result = await Reflect.apply(originalRun, coordinator, [task, payload, options]);
         Object.assign(record, {
@@ -159,6 +159,7 @@ try {
       };
       const city = app.map.settlements.cities.find(item => item && !item.removed);
       const before = {seed: app.map.metadata.seed, checksum: app.map.metadata.checksum, cityId: city.id ?? city.i, cityName: city.name};
+      const initialSession = coordinator.getSessionSnapshot();
       const exported = await runOperation("export", () => app.runtimeActions.data.exportCompressedAll({download: false, includeBlob: true, includeBase64: false}));
       const saved = await runOperation("save", () => app.runtimeActions.data.saveBrowserMap({toast: false}));
       const localRunStart = trace.runs.length;
@@ -190,6 +191,7 @@ try {
       const imported = await runOperation("import", () => app.runtimeActions.data.importMap(patchedExport.blob, {confirm: true, toast: false}));
       const importedCityName = app.map.settlements.cities.find(item => (item.id ?? item.i) === before.cityId)?.name || "";
       const restored = await runOperation("restore", () => app.runtimeActions.data.restoreBrowserMap({confirm: true, toast: false}));
+      const restoredExport = await runOperation("restored-export", () => app.runtimeActions.data.exportCompressedAll({download: false, includeBlob: true, includeBase64: false}));
       await new Promise(done => requestAnimationFrame(() => requestAnimationFrame(done)));
       await new Promise(done => setTimeout(done, 100));
       for (const entry of observer.takeRecords()) trace.longTasks.push({startTime: entry.startTime, duration: entry.duration});
@@ -205,9 +207,11 @@ try {
         localCanvas: {startedAt: localCanvasStartedAt, endedAt: localCanvasEndedAt},
         importWorker: imported.timings?.worker || null,
         restoreWorker: restored.timings?.worker || null,
+        restoredExport: {bytes: restoredExport.compressedBytes, originalBytes: restoredExport.originalBytes},
         history: app.editHistory.getStats(),
         loading: api.info.runtimeStats().data?.loading || {},
         session: coordinator.getSessionSnapshot(),
+        initialSession,
         trace,
         forbiddenMessages: [...new Set(trace.visibleMessages)].filter(text => new RegExp(forbiddenSource, "i").test(text)),
         nonPerformanceHealth: health.filter(event => event.severity === "error" && !performanceTypes.includes(event.type)),
@@ -229,11 +233,11 @@ try {
   const targetConsole = consoleErrors.slice(consoleStart);
   const applicationConsole = targetConsole.filter(message => !performanceTypes.some(type => message.includes(`[FMG health] ${type}`)));
   console.log(JSON.stringify({ok: true, report, applicationConsole, pageErrors}, null, 2));
-  assert.equal(report.trace.runs.length, 5, "五条存档入口没有各自执行一次正式任务");
-  assert.deepEqual(report.trace.runs.map(run => [run.task, run.operation]), [["regeneration.compute", "archive-export"], ["regeneration.compute", "archive-export"], ["regeneration.compute", "archive-export"], ["map-file-io", "import"], ["map-file-io", "import"]]);
+  assert.equal(report.trace.runs.length, 6, "六条存档入口没有各自执行一次正式任务");
+  assert.deepEqual(report.trace.runs.map(run => [run.task, run.operation]), [["regeneration.compute", "archive-export"], ["regeneration.compute", "archive-export"], ["regeneration.compute", "archive-export"], ["map-file-io", "import"], ["map-file-io", "import"], ["regeneration.compute", "archive-export"]]);
   assert.ok(report.trace.runs.every(run => run.mode === "worker" && run.accepted), "存档入口发生主线程降级");
   assert.ok(report.trace.runs.every(run => run.telemetry?.inputPackets > 0 && run.telemetry?.outputPackets > 0), "存档任务缺少流式遥测");
-  assert.ok(report.trace.runs.slice(3).every(run => run.preparedLayers.length === 13), "导入没有准备完整 renderer 图层");
+  assert.ok(report.trace.runs.slice(3, 5).every(run => run.preparedLayers.length === 13), "导入没有准备完整 renderer 图层");
   assert.equal(report.trace.preparedLoads.length, 2);
   assert.equal(report.trace.legacyLoads, 0);
   assert.equal(report.trace.preparedPresentations, 2);
@@ -245,16 +249,22 @@ try {
   assert.equal(report.after.gridCells, expectedCells);
   assert.ok(report.export.bytes > 0 && report.export.originalBytes > report.export.bytes && report.export.hasBlob);
   assert.equal(report.trace.runs[0].outputEncoding, "webfmg-v3");
-  assert.equal(report.trace.runs[0].session?.reused, false);
-  assert.match(report.trace.runs[0].sessionChecksum, /^s1:[0-9a-f]{16}$/u, "cold 存档必须以输入流 checksum 建立唯一地图会话");
+  assert.equal(report.initialSession?.status, "idle", "新图完成后必须已经存在 idle MapWorker owner");
+  assert.equal(report.initialSession?.adopted, true, "新图 owner 必须来自生成结果 adoption");
+  assert.equal(report.trace.runs[0].session?.reused, true);
+  assert.equal(report.trace.runs[0].session?.id, report.initialSession?.id);
+  assert.match(report.trace.runs[0].sessionChecksum, /^s1:[0-9a-f]{16}$/u, "新图 adoption 必须以结果流 checksum 建立唯一地图会话");
   assert.equal(report.trace.runs[1].sessionChecksum, report.trace.runs[0].sessionChecksum, "warm 存档不得重算或漂移初始地图 checksum");
   assert.ok(report.trace.runs.slice(0, 3).every(run => run.telemetry.mainReplicaChecksumMs === 0 && run.telemetry.workerReplicaChecksumMs === 0), "存档链仍执行独立 canonical 深扫");
   assert.equal(report.trace.runs[1].session?.reused, true);
   assert.equal(report.trace.runs[2].session?.reused, true);
   assert.equal(report.trace.runs[1].session?.id, report.trace.runs[0].session?.id);
   assert.equal(report.trace.runs[2].session?.id, report.trace.runs[0].session?.id);
-  assert.ok(report.trace.runs[0].telemetry.inputPackets > (requestedCells === 100000 ? 100 : 10));
-  assert.ok(report.trace.runs.slice(1, 3).every(run => run.telemetry.inputPackets <= 3 && run.sessionPayloadOwnMap === false), "warm 存档仍重传完整地图");
+  assert.ok(report.trace.runs.slice(0, 3).every(run => run.telemetry.inputPackets <= 3 && run.sessionPayloadOwnMap === false), "新图后的首次 / 暖存档仍重传完整地图");
+  assert.ok(report.trace.runs.slice(3, 5).every(run => run.sessionMode === "adopt-result-map" && run.allowFallback === false && run.session?.reused === false), "导入 / 恢复没有建立 fresh adoption owner");
+  assert.equal(report.trace.runs[5].session?.reused, true, "恢复后的首次存档没有复用 adopted owner");
+  assert.equal(report.trace.runs[5].session?.id, report.trace.runs[4].session?.id);
+  assert.ok(report.trace.runs[5].telemetry.inputPackets <= 3 && report.trace.runs[5].sessionPayloadOwnMap === false, "恢复后的首次存档仍重传完整地图");
   assert.equal(report.trace.patches.length, 3, "改名 / 撤销 / 重做没有各发布一个 patch");
   assert.ok(report.trace.patches.every((patch, index) => patch.result === true && patch.targetRevision === patch.baseRevision + 1 && (!index || patch.baseRevision === report.trace.patches[index - 1].targetRevision)), "revision patch 未连续 ACK");
   assert.equal(report.localCanvasRunDelta, 0, "平移 / 缩放 / 悬停 / 选择触发了 Worker 地图任务");
@@ -269,24 +279,26 @@ try {
   }
   assert.equal(report.history.undo, 0);
   assert.equal(report.loading.visible, false);
-  assert.equal(report.session, null);
+  assert.equal(report.session?.status, "idle");
+  assert.equal(report.session?.adopted, true);
+  assert.equal(report.session?.id, report.trace.runs[4].session?.id);
   const archiveOperationLongTasks = report.trace.longTasks.filter(entry => report.trace.operations.some(operation => entry.startTime >= operation.startedAt - 5 && entry.startTime < operation.endedAt));
   const loadOperations = ["import", "restore"].map(label => report.trace.operations.find(operation => operation.label === label));
-  const patchedExportOperation = report.trace.operations.find(operation => operation.label === "patched-export");
+  const warmExportOperations = ["patched-export", "restored-export"].map(label => report.trace.operations.find(operation => operation.label === label));
   const registeredLoadLongTasks = requestedCells === 100000
     ? loadOperations.map((operation, index) => archiveOperationLongTasks.filter(entry => entry.duration <= 80
       && entry.startTime >= Number(operation?.preparedInstall?.endedAt || Infinity)
       && entry.startTime + entry.duration <= Number(report.trace.preparedLoads[index]?.endedAt || -Infinity)))
     : [[], []];
   const registeredWarmExportLongTasks = requestedCells === 100000
-    ? archiveOperationLongTasks.filter(entry => entry.duration <= 80
-      && entry.startTime >= Number(patchedExportOperation?.startedAt || Infinity)
-      && entry.startTime < Number(patchedExportOperation?.endedAt || -Infinity))
+    ? warmExportOperations.flatMap(operation => archiveOperationLongTasks.filter(entry => entry.duration <= 80
+      && entry.startTime >= Number(operation?.startedAt || Infinity)
+      && entry.startTime < Number(operation?.endedAt || -Infinity)))
     : [];
   const registeredArchiveLongTasks = [...new Set([...registeredLoadLongTasks.flat(), ...registeredWarmExportLongTasks])];
   const unexpectedArchiveLongTasks = archiveOperationLongTasks.filter(entry => !registeredArchiveLongTasks.includes(entry));
   assert.ok(registeredLoadLongTasks.every(entries => entries.length <= 1), "100k 导入 / 恢复 commit 单入口登记例外超过一次");
-  assert.ok(registeredWarmExportLongTasks.length <= 2, "100k warm 导出登记例外超过两次");
+  assert.ok(registeredWarmExportLongTasks.length <= 4, "100k warm 导出登记例外超过每入口两次");
   assert.deepEqual(unexpectedArchiveLongTasks, [], "保存 / 恢复操作出现未登记 LongTask");
   assert.deepEqual(report.forbiddenMessages, []);
   assert.deepEqual(report.nonPerformanceHealth, []);

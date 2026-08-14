@@ -116,7 +116,7 @@ class FakeWorker {
         }
         if (!this.decoder) this.decoder = createWorkerGraphDecoder({
           streamId: `${this.request.requestId}:input`,
-          checksum: this.request.persistentSession && !this.request.reuseSession
+          checksum: this.request.persistentSession && !this.request.reuseSession && !this.request.adoptResultMap
         });
         const complete = this.decoder.push(request.packet);
         if (complete) {
@@ -181,7 +181,7 @@ class FakeWorker {
       }
       try {
         const handlerPayload = this.request.reuseSession ? {...this.payload, map: this.baseMap} : this.payload;
-        const replicaChecksum = this.request.persistentSession
+        let replicaChecksum = this.request.persistentSession
           ? this.request.reuseSession
             ? this.retainedSession?.checksum || null
             : this.replicaChecksum
@@ -211,13 +211,19 @@ class FakeWorker {
         }
         const emitResult = async () => {
           const outputStreamId = `${this.request.requestId}:output`;
-          for await (const packet of encodeWorkerGraph(result, {streamId: outputStreamId, yieldToMain: async () => {}})) {
+          const retainedAdoption = Boolean(this.request.adoptResultMap || (this.request.reuseSession && this.retainedSession?.adoptResultMap));
+          for await (const packet of encodeWorkerGraph(result, {
+            streamId: outputStreamId,
+            checksum: this.request.adoptResultMap === true,
+            yieldToMain: async () => {}
+          })) {
             while (this.outputInflight.size >= 4) await new Promise(resolve => this.outputWaiters.add(resolve));
             this.outputInflight.add(packet.message.sequence);
             this.maxOutputInflight = Math.max(this.maxOutputInflight, this.outputInflight.size);
             const outputMessage = createWorkerTaskStreamPacket(WORKER_TASK_MESSAGE.OUTPUT_PACKET, this.request, packet.message);
             if (this.options.mismatchOutputSequence) outputMessage.sequence += 1;
             this.emitMessage(outputMessage, packet.transferables);
+            if (packet.message.done && this.request.adoptResultMap) replicaChecksum = packet.message.checksum;
           }
           while (this.outputInflight.size) await new Promise(resolve => this.outputWaiters.add(resolve));
           if (this.request.persistentSession) {
@@ -227,7 +233,8 @@ class FakeWorker {
               binding: this.request.binding,
               checksum: replicaChecksum,
               request: this.request,
-              map: handlerPayload.map
+              map: this.request.adoptResultMap ? result.map : handlerPayload.map,
+              adoptResultMap: retainedAdoption
             };
           }
           this.emitMessage(createWorkerTaskMessage(WORKER_TASK_MESSAGE.RESULT, this.request, {resultStreamId: outputStreamId, replicaChecksum}));
@@ -441,6 +448,51 @@ const archivedDocument = await runMapFileIoWorkerTask({
   input: {kind: "bytes", bytes: archiveResult.archive.data, mimeType: "application/gzip"}
 });
 assert.equal(archivedDocument.metadata.checksum, sessionFormal.metadata.checksum);
+
+let adoptionBinding = {...binding, mapIdentity: "before-import", operationId: 30};
+const adoptionWorkers = [];
+const adoptionCoordinator = createWorkerTaskCoordinator({
+  createWorker: () => {
+    const worker = new FakeWorker();
+    adoptionWorkers.push(worker);
+    return worker;
+  },
+  getBinding: () => adoptionBinding,
+  validateBinding: expected => JSON.stringify(expected) === JSON.stringify(adoptionBinding)
+});
+const adoptedImport = await adoptionCoordinator.run("map-file-io", {
+  operation: "import",
+  input: {kind: "bytes", bytes: archiveResult.archive.data, mimeType: "application/gzip"}
+}, {
+  binding: adoptionBinding,
+  sessionMode: "adopt-result-map",
+  allowFallback: false
+});
+assert.equal(adoptedImport.worker.session.reused, false);
+assert.equal(adoptionCoordinator.getSessionSnapshot()?.status, "pending");
+assert.equal(adoptionCoordinator.getSessionSnapshot()?.adopted, true);
+assert.ok(adoptionCoordinator.getSessionSnapshot()?.checksum, "adoption 必须以结果流 checksum 建立 owner");
+adoptionBinding = {...adoptionBinding, mapIdentity: "imported-map", mapRevision: 0};
+assert.equal(await adoptionCoordinator.commitSession(adoptedImport.worker.session.id, adoptionBinding, {adoptResultMap: true}), true);
+assert.equal(adoptionCoordinator.getSessionSnapshot()?.status, "idle");
+assert.equal(adoptionWorkers[0].retainedSession.map.metadata.checksum, adoptedImport.map.metadata.checksum);
+const adoptedSave = await adoptionCoordinator.run("map-file-io", {
+  map: adoptedImport.map,
+  operation: "export",
+  encoding: "gzip",
+  resultType: "bytes",
+  options: adoptedImport.map.options || {}
+}, {
+  binding: adoptionBinding,
+  sessionMode: "map-mirror",
+  sessionPayload: {operation: "export", encoding: "gzip", resultType: "bytes", options: adoptedImport.map.options || {}},
+  allowFallback: false
+});
+assert.equal(adoptedSave.worker.session.reused, true, "导入 adoption 后首次保存必须复用同一 owner");
+assert.equal(adoptionWorkers.length, 1, "导入 adoption 后首次保存不得重建 Worker");
+assert.ok(adoptedSave.worker.telemetry.inputPackets <= 3, `导入 adoption 后首次保存不得重传地图：${adoptedSave.worker.telemetry.inputPackets}`);
+assert.equal(await adoptionCoordinator.commitSession(adoptedSave.worker.session.id, adoptionBinding, {expectedRevisionDelta: 0}), true);
+assert.equal(adoptionCoordinator.getSessionSnapshot()?.adopted, true, "后续复用保存不得丢失 adoption owner 来源");
 assert.equal(await sessionCoordinator.commitSession(archiveResult.worker.session.id, sessionBinding, {expectedRevisionDelta: 0}), true);
 sessionBinding = {...sessionBinding, operationId: 10};
 const secondSessionResult = await sessionCoordinator.run("regeneration.compute", {map: sessionFormal, kind: "routes"}, {
@@ -974,7 +1026,7 @@ console.log(JSON.stringify({
 
 function verifyComputeWorkerOutputBatchContract() {
   const source = readFileSync(new URL("../app/webgl-generator/src/runtime/compute-worker.js", import.meta.url), "utf8");
-  const sendResultStream = source.match(/async function sendResultStream\(state, result, context\) \{[\s\S]*?\n\}/u)?.[0] || "";
+  const sendResultStream = source.match(/async function sendResultStream\(state, result, context(?:, \{checksum = false\} = \{\})?\) \{[\s\S]*?\n\}/u)?.[0] || "";
   assert.match(sendResultStream, /encodeWorkerGraph\(result, \{[\s\S]*?numericBatchValues:\s*32\s*\*\s*1024/u, "Compute Worker 正式输出必须使用 32k numeric batch");
   return 32 * 1024;
 }
@@ -1338,6 +1390,36 @@ function verifyAppDeferredReplayStaticContract() {
   assert.deepEqual(recoveryCleanupCalls, ["finalize"], "recovery committed install 换图后只能 finalize");
   assert.deepEqual(recoveryState.renderer, {sentinel: "new-renderer", presentation: "new-presentation", routesDirty: false}, "recovery 换图不得改写新 renderer presentation/routes sentinel");
 
+  const generationFlow = source.slice(
+    source.indexOf("async function generateMapOffMainThread"),
+    source.indexOf("function setGenerationStatus")
+  );
+  assert.match(generationFlow, /sessionMode: "adopt-result-map"/u, "生成必须在唯一 MapWorker 中 adoption");
+  assert.match(generationFlow, /allowFallback: false/u, "生成 adoption 不得回退主线程");
+  assert.doesNotMatch(generationFlow, /fallbackPayloadFactory/u, "生成 adoption 不得保留主线程完整生成回退");
+  const importFlow = source.slice(
+    source.indexOf("async function parseMapDocumentViaWorker"),
+    source.indexOf("function storageClock")
+  );
+  assert.match(importFlow, /sessionMode: "adopt-result-map"/u, "导入必须在唯一 MapWorker 中 adoption");
+  assert.match(importFlow, /allowFallback: false/u, "导入 adoption 不得回退主线程");
+  for (const [label, start, end] of [
+    ["浏览器恢复", "async function restoreMapFromBrowserStorageViaApi", "async function saveMapToBrowserStorageViaApi"],
+    ["地图导入", "async function importMapDocumentViaApi", "async function importParsedMapDocumentViaApi"]
+  ]) {
+    const flow = source.slice(source.indexOf(start), source.indexOf(end));
+    assert.match(flow, /state\.pendingGenerateId = \(state\.pendingGenerateId \|\| 0\) \+ 1[\s\S]*?parseMapDocumentViaWorker/u, `${label} 必须先淘汰旧生成 token 再建立 adoption binding`);
+  }
+  const parsedImportFlow = source.slice(source.indexOf("async function importParsedMapDocumentViaApi"), source.indexOf("async function importGeoData"));
+  assert.doesNotMatch(parsedImportFlow, /pendingGenerateId\s*=/u, "解析完成后不得再次漂移 adoption generation token");
+  const loadFlow = source.slice(
+    source.indexOf("async function loadMapIntoRuntime"),
+    source.indexOf("function refreshRuntimeAfterMapLoad")
+  );
+  assert.match(loadFlow, /if \(!workerAdoption\?\.session\?\.id\) invalidateMapReplicaCoordinators/u, "adoption 装载不得销毁待提交 owner");
+  assert.match(loadFlow, /commitSession\(workerAdoption\.session\.id, adoptedBinding, \{adoptResultMap: true\}\)/u, "装载后必须显式提交 adopted owner");
+  assert.match(loadFlow, /invalidateSession\("map-adoption-failed"\)/u, "adoption 失败不得残留 pending owner");
+
   return {
     decision: "context-first",
     displayRenderSession: "shared-map-worker",
@@ -1350,7 +1432,8 @@ function verifyAppDeferredReplayStaticContract() {
     deferredQueuePreservedOnFailure: true,
     detachedTransactionCleanup: [...detachedCalls],
     sameMapRollbackOrder: [...sameMapCalls],
-    detachedRecoveryCleanup: [...recoveryCleanupCalls]
+    detachedRecoveryCleanup: [...recoveryCleanupCalls],
+    mapAdoption: "generation-import-owner"
   };
 }
 

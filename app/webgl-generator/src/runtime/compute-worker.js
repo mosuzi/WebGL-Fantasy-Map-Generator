@@ -55,7 +55,8 @@ self.addEventListener("message", async event => {
       if (!retainedSession || retainedSession.id !== request.sessionId || retainedSession.status !== "pending" || retainedSession.requestId !== request.requestId) {
         throw workerStateError("worker_protocol_session_commit_invalid", "Worker session 不在可提交状态");
       }
-      if (!isValidSessionCommitBinding(retainedSession.binding, request.binding)) {
+      const adoptResultMap = retainedSession.adoptResultMap === true && request.adoptResultMap === true;
+      if (!isValidSessionCommitBinding(retainedSession.binding, request.binding, {adoptResultMap})) {
         throw workerStateError("worker_protocol_session_commit_invalid", "Worker session 提交绑定不连续");
       }
       retainedSession.binding = request.binding;
@@ -100,7 +101,7 @@ self.addEventListener("message", async event => {
       }
       if (!state.decoder) state.decoder = createWorkerGraphDecoder({
         streamId: state.inputStreamId,
-        checksum: state.request.persistentSession && !state.request.reuseSession
+        checksum: state.request.persistentSession && !state.request.reuseSession && !state.request.adoptResultMap
       });
       const decodeStartedAt = now();
       const complete = state.decoder.push(request.packet);
@@ -150,12 +151,12 @@ self.addEventListener("message", async event => {
     const handlerPayload = state.request.reuseSession
       ? {...state.payload, map: state.baseMap}
       : state.payload;
-    const replicaChecksum = state.request.persistentSession
+    let replicaChecksum = state.request.persistentSession
       ? state.request.reuseSession
         ? retainedSession?.checksum || null
         : state.replicaChecksum
       : null;
-    if (state.request.persistentSession && !replicaChecksum) {
+    if (state.request.persistentSession && !state.request.adoptResultMap && !replicaChecksum) {
       throw workerStateError("worker_protocol_replica_checksum_invalid", "Worker 初始地图副本缺少流式 checksum");
     }
     const workerReplicaChecksumMs = 0;
@@ -163,7 +164,13 @@ self.addEventListener("message", async event => {
     const result = await handler(handlerPayload, context);
     const computeMs = roundMs(now() - computeStartedAt);
     context.checkpoint();
-    const outputTelemetry = await sendResultStream(state, result, context);
+    const outputStream = await sendResultStream(state, result, context, {checksum: state.request.adoptResultMap});
+    if (state.request.adoptResultMap) replicaChecksum = outputStream.checksum;
+    const retainedMap = state.request.adoptResultMap ? result?.map : handlerPayload.map;
+    const retainedAdoption = Boolean(state.request.adoptResultMap || (state.request.reuseSession && retainedSession?.adoptResultMap));
+    if (state.request.persistentSession && (!replicaChecksum || !retainedMap || typeof retainedMap !== "object")) {
+      throw workerStateError("worker_protocol_replica_checksum_invalid", "Worker adoption 结果缺少地图或流式 checksum");
+    }
     if (state.request.persistentSession) {
       retainedSession = {
         id: state.request.sessionId,
@@ -171,9 +178,10 @@ self.addEventListener("message", async event => {
         status: "pending",
         binding: state.request.binding,
         checksum: replicaChecksum,
+        adoptResultMap: retainedAdoption,
         requestId: state.request.requestId,
         request: state.request,
-        map: handlerPayload.map,
+        map: retainedMap,
         renderCache: context.renderCache
       };
     }
@@ -185,7 +193,7 @@ self.addEventListener("message", async event => {
         inputDecodeCpuMaxMs: state.inputDecodeCpuMaxMs,
         workerReplicaChecksumMs,
         computeMs,
-        ...outputTelemetry
+        ...outputStream.telemetry
       }
     }));
     activeRequests.delete(request.requestId);
@@ -212,11 +220,12 @@ self.addEventListener("messageerror", event => {
   }));
 });
 
-async function sendResultStream(state, result, context) {
+async function sendResultStream(state, result, context, {checksum = false} = {}) {
   const startedAt = now();
   let packets = 0;
   let postMaxMs = 0;
   let ackWaitMs = 0;
+  let streamChecksum = null;
   for await (const packet of encodeWorkerGraph(result, {
     streamId: state.outputStreamId,
     packetUnits: 1024,
@@ -224,6 +233,7 @@ async function sendResultStream(state, result, context) {
     numericBatchValues: 32 * 1024,
     sliceBytes: 128 * 1024,
     budgetMs: 4,
+    checksum,
     onProgress(stage, detail) {
       context.report(`result-stream-${stage}`, detail);
     }
@@ -236,14 +246,18 @@ async function sendResultStream(state, result, context) {
     );
     postMaxMs = Math.max(postMaxMs, roundMs(now() - postStartedAt));
     packets += 1;
+    if (packet.message.done) streamChecksum = packet.message.checksum || null;
     state.outputInflight.add(packet.message.sequence);
   }
   while (state.outputInflight.size) ackWaitMs += await waitForOutputAckMeasured(state);
   return {
-    outputWorkerPackets: packets,
-    outputWorkerPostMaxMs: postMaxMs,
-    outputWorkerAckWaitMs: roundMs(ackWaitMs),
-    outputWorkerStreamMs: roundMs(now() - startedAt)
+    checksum: streamChecksum,
+    telemetry: {
+      outputWorkerPackets: packets,
+      outputWorkerPostMaxMs: postMaxMs,
+      outputWorkerAckWaitMs: roundMs(ackWaitMs),
+      outputWorkerStreamMs: roundMs(now() - startedAt)
+    }
   };
 }
 
@@ -359,7 +373,14 @@ function sameSessionBinding(left, right) {
     && String(left?.lockFingerprint || "") === String(right?.lockFingerprint || "");
 }
 
-function isValidSessionCommitBinding(previous, next) {
+function isValidSessionCommitBinding(previous, next, {adoptResultMap = false} = {}) {
+  if (adoptResultMap) {
+    return Boolean(next?.mapIdentity)
+      && Number(next?.mapRevision) === 0
+      && Number(previous?.generationToken) === Number(next?.generationToken)
+      && Number(previous?.operationId) === Number(next?.operationId)
+      && String(previous?.operationName || "") === String(next?.operationName || "");
+  }
   if (previous?.mapIdentity !== next?.mapIdentity
     || Number(previous?.generationToken) !== Number(next?.generationToken)
     || String(previous?.lockFingerprint || "") !== String(next?.lockFingerprint || "")

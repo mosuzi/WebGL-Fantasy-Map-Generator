@@ -140,3 +140,11 @@ diagnostic artifact 为 `work/task332-view-switch-100000/raw-result.json`；该�
 - 固定 `99846` cells 的 100k 存档门通过：cold 首存 `952` 输入包、约 `12.9s`，两侧独立 checksum 计时均为 `0`；相对 B1 的主扫 `10.615s + 输入 8.997s + Worker 扫 13.199s`，完整副本建立不再额外承担约 `23.8s` 双深扫。两次 warm 存档均只发 `3` 包、约 `3～4ms` 输入且 session id / `s1` checksum 不变；改名、撤销、重做各发布一次连续 patch，第三次导出以 `r1` checksum 读取同一 owner。
 - v3 raw / gzip 约 `12.61MB / 7.29MB`，IndexedDB 直接二进制写入、旧格式文件导入与浏览器恢复、地图 / renderer / history 同源、Loading、非性能 health、console / page 与 WebGL 均通过。导入 / 恢复 commit 类既有已调查 LongTask 本轮抖动至 `71ms`，只把该精确登记上界从 `70ms` 调为 `80ms`；通用阈值和其它窗口未放宽。
 - C1 产品 `4` 文件约 `+140 / -40` 行，既有 Node / 浏览器工具 `3` 文件约 `+50` 行，没有新建浏览器夹具；委派与等待为 `0`。graph checksum 正常 / buffer 篡改 / checksum 篡改、11 类 Worker、patch、build 与 100k cold / warm 门通过。版本为 `0.3.6`，下一步只进入 C2 owner adoption 与紧凑 transport。
+
+## 12. 阶段 C2-A：生成 / 导入结果 adoption
+
+- 生成与地图文件导入使用 `adopt-result-map` fresh 持久会话。Worker 不再把输入地图当 owner，而是以结果流 `s1` checksum 和 `result.map` 建立唯一 canonical owner；新图装载完成、map identity 切换后显式提交 adoption binding。导入在解析前递增 generation token，避免装载期再次漂移；取消、失败或安装回滚会销毁 pending owner。
+- 生成 / 导入 adoption 均设置 `allowFallback: false`，生成入口移除完整主线程 fallback payload。后续 map-mirror 保存继续保留 adopted 来源，history patch、revision 与 checksum 协议不变。
+- 固定 `99846` cells 的 100k 真实入口证明：新图后的首次、浏览器保存与改名后导出均只发 `3` 个输入包；文件导入与浏览器恢复各只接收 `4` 个小输入包并建立 fresh adopted owner，恢复后首次导出仍为同一 owner、`3` 个输入包。地图 checksum、城市改名、撤销 / 重做、v3、IndexedDB、Loading、非性能 health、console / page 与 WebGL 均保持同源。
+- 本子阶段只闭合“结果留驻 owner 与首次保存不重传”，不宣称 C2 完成。导入 / 恢复仍把完整 map、prepared render 与 DTO 作为通用 graph 结果回传：各 `4410` 包，主线程 decode CPU 约 `10.0 / 11.0s`，单包峰值 `637 / 622ms`，操作窗出现最高 `641 / 626ms` LongTask。C2-B 必须改为紧凑 section handoff，禁止登记放行这些长任务。
+- C2-A 产品 `4` 文件约 `+120 / -30` 行，既有 Node / 浏览器工具 `2` 文件约 `+90` 行，没有新建浏览器夹具；委派与等待为 `0`。语法、差异、graph stream、11 类 Worker、生产构建通过；100k 门的功能断言通过并在紧凑 handoff 性能硬门失败。版本为 `0.3.7`，下一步只进入 C2-B。

@@ -20,7 +20,7 @@ export const WORKER_TASK_MESSAGE = Object.freeze({
   ERROR: "error"
 });
 
-export function createWorkerTaskRequest({requestId, task, binding, payload, sessionId = "", reuseSession = false, persistentSession = false}) {
+export function createWorkerTaskRequest({requestId, task, binding, payload, sessionId = "", reuseSession = false, persistentSession = false, adoptResultMap = false}) {
   return {
     protocol: WORKER_TASK_PROTOCOL,
     version: WORKER_TASK_PROTOCOL_VERSION,
@@ -31,6 +31,7 @@ export function createWorkerTaskRequest({requestId, task, binding, payload, sess
     sessionId: String(sessionId || ""),
     reuseSession: Boolean(reuseSession),
     persistentSession: Boolean(persistentSession),
+    adoptResultMap: Boolean(adoptResultMap),
     payload
   };
 }
@@ -52,7 +53,8 @@ export function createWorkerTaskExecution(request, inputStreamId) {
   return createWorkerTaskMessage(WORKER_TASK_MESSAGE.EXECUTE, request, {
     inputStreamId: String(inputStreamId || ""),
     reuseSession: Boolean(request.reuseSession),
-    persistentSession: Boolean(request.persistentSession)
+    persistentSession: Boolean(request.persistentSession),
+    adoptResultMap: Boolean(request.adoptResultMap)
   });
 }
 
@@ -77,9 +79,10 @@ export function createWorkerTaskStreamAck(type, request, {streamId, sequence} = 
   });
 }
 
-export function createWorkerTaskSessionCommit(request, binding) {
+export function createWorkerTaskSessionCommit(request, binding, {adoptResultMap = false} = {}) {
   return createWorkerTaskMessage(WORKER_TASK_MESSAGE.COMMIT_SESSION, request, {
-    binding: clonePlain(binding)
+    binding: clonePlain(binding),
+    adoptResultMap: Boolean(adoptResultMap)
   });
 }
 
@@ -95,6 +98,7 @@ export function assertWorkerTaskRequest(value) {
   if (value.type !== WORKER_TASK_MESSAGE.RUN) throw protocolError("worker_protocol_message_invalid", "Worker 请求类型无效");
   if (!value.requestId || !value.task) throw protocolError("worker_protocol_request_invalid", "Worker 请求缺少 requestId 或 task");
   if (value.persistentSession && !value.sessionId) throw protocolError("worker_protocol_session_invalid", "持久 Worker 请求缺少 sessionId");
+  if (value.adoptResultMap && (!value.persistentSession || value.reuseSession)) throw protocolError("worker_protocol_session_invalid", "地图 adoption 请求必须创建 fresh 持久会话");
   return value;
 }
 
@@ -104,6 +108,7 @@ export function assertWorkerTaskExecution(value) {
   if (!value.requestId || !value.task) throw protocolError("worker_protocol_request_invalid", "Worker 执行消息缺少 requestId 或 task");
   if (!value.inputStreamId) throw protocolError("worker_protocol_stream_invalid", "Worker 执行消息缺少输入流标识");
   if (value.persistentSession && !value.sessionId) throw protocolError("worker_protocol_session_invalid", "持久 Worker 执行消息缺少 sessionId");
+  if (value.adoptResultMap && (!value.persistentSession || value.reuseSession)) throw protocolError("worker_protocol_session_invalid", "地图 adoption 执行消息必须创建 fresh 持久会话");
   return value;
 }
 

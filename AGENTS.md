@@ -67,7 +67,7 @@
 
 ## 当前状态
 
-- 第 334 项 C1 已闭合：计算与显示共用同一个长期 `MapWorker` session，兼容 coordinator 字段只指向同一对象；fresh 完整输入以 graph packet 的 `s1` checksum 取代主线程与 Worker 两次 canonical 深扫，后续 patch 实际写集复算、错误 ACK 销毁和 fresh 重同步不变。100k cold 存档完整输入约 `12.9s / 952包`，两侧独立 checksum 为 `0`；warm 只发 `3包 / 3～4ms`，改名 / 撤销 / 重做连续推进 checksum。下一阶段只进入 C2：生成 / 导入 adoption、owner 内保存、紧凑 section handoff 与主线程有界投影。当前版本为 `0.3.6`。
+- 第 334 项 C2-A 已闭合：新图生成与存档导入在唯一 `MapWorker` 内建立 fresh adoption session，装载成功后以新 map binding 原子提交，失败销毁 pending owner，且禁止主线程 fallback。100k 新图后的首次 / 暖保存均只发 `3` 个输入包；导入与浏览器恢复各以 `4` 个小输入包建立 adopted owner，恢复后首次保存继续只发 `3` 包。下一步只进入 C2-B 紧凑 section handoff：当前导入仍回传 `4410` 包完整结果，主线程 decode 约 `10.0～11.0s`，并产生最高 `641 / 626ms` LongTask，不得登记放行。当前版本为 `0.3.7`。
 
 - 第 322 项已完成、归档并合入远端 `main`。
 - 第 327 项已完成、归档并合入远端 `main`。

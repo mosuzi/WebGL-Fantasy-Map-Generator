@@ -4392,6 +4392,7 @@ async function restoreMapFromBrowserStorageViaApi(state, documentRef, options = 
     setFileOperationStatus(documentRef, "正在读取浏览器保存的地图...");
     setMythicGenerationLoading(documentRef, true, "map-import-read");
     operation?.report("decode-storage", {message: loadingMessage("map-import-decode")});
+    state.pendingGenerateId = (state.pendingGenerateId || 0) + 1;
     const importedDocument = await parseMapDocumentViaWorker(state, documentRef, raw, {
       operation,
       source: "browser-storage"
@@ -4627,6 +4628,7 @@ async function generateMapViaApi(state, documentRef, options, {completionToast =
       operation,
       preparedRender: generated.preparedRender,
       renderBinding: generated.preparedRender?.binding,
+      workerAdoption: generated.worker,
       isCurrent: () => generateId === state.pendingGenerateId
     });
     return {
@@ -4683,6 +4685,7 @@ async function loadMapIntoRuntime(state, documentRef, map, {
   operation = null,
   preparedRender = null,
   renderBinding = null,
+  workerAdoption = null,
   isCurrent = () => true
 } = {}) {
   emitLoadTrace(documentRef, {phase: "start", id: "load-map", message: "接入地图运行时", delayMs: readDebugLoadDelayMs(documentRef)});
@@ -4726,7 +4729,7 @@ async function loadMapIntoRuntime(state, documentRef, map, {
   state.canvasToolModes.reset("map-replace");
   clearCanvasToolModeFeedback(state, documentRef);
   state.brushCursorPreview?.reset();
-  invalidateMapReplicaCoordinators(state, true, "map-replaced");
+  if (!workerAdoption?.session?.id) invalidateMapReplicaCoordinators(state, true, "map-replaced");
   state.map = map;
   state.regenerationLockUiSession?.clear({keepContext: false});
   normalizeSocialExpansionMap(state.map);
@@ -4858,6 +4861,16 @@ async function loadMapIntoRuntime(state, documentRef, map, {
   syncSaveFilenameTemplateUi(documentRef, state);
   syncLabelStylesUi(state, documentRef);
   state.mapRevision.replaceMap();
+  if (workerAdoption?.session?.id) {
+    const adoptedBinding = createRegenerationWorkerBinding(state, operation);
+    const adopted = await state.mapWorkerCoordinator.commitSession(workerAdoption.session.id, adoptedBinding, {adoptResultMap: true});
+    if (!adopted) {
+      const error = new Error("地图 Worker owner 接纳新地图失败");
+      error.code = "worker_session_commit_rejected";
+      throw error;
+    }
+    workerAdoption.session = {...workerAdoption.session, pending: false, committed: true, invalidated: false};
+  }
   emitLoadTrace(documentRef, {phase: "end", id: "panel-refresh", message: loadingMessage("panel-refresh")});
   emitLoadTrace(documentRef, {phase: "end", id: "load-map", message: "接入地图运行时"});
   emitLoadTrace(documentRef, {phase: "complete", id: "complete", message: "地图进入可交互状态"});
@@ -4873,6 +4886,10 @@ async function loadMapIntoRuntime(state, documentRef, map, {
   scheduleLazyPanelsAfterMapReady(state, documentRef);
   preparedInstall?.finalize();
   } catch (error) {
+    if (workerAdoption?.session?.id && workerAdoption.session.committed !== true) {
+      state.mapWorkerCoordinator.invalidateSession("map-adoption-failed");
+      workerAdoption.session = {...workerAdoption.session, pending: false, committed: false, invalidated: true};
+    }
     if (preparedInstall) {
       try {
         preparedInstall.rollback();
@@ -5157,13 +5174,8 @@ async function generateMapOffMainThread(state, documentRef, options, generateId,
   }, {
     binding: requestBinding,
     signal: operation?.signal || null,
-    fallbackPayloadFactory: () => ({
-      options,
-      heightmapPayload: overrides.heightmapPayload || null,
-      mapTemplate: overrides.mapTemplate || null,
-      ...(overrides.heightmap ? {heightmap: overrides.heightmap} : {}),
-      render
-    }),
+    sessionMode: "adopt-result-map",
+    allowFallback: false,
     onProgress: (stage, detail = {}) => {
       if (stage === "generation-stage" && detail.stage) {
         const generationStage = detail.stage;
@@ -5507,6 +5519,8 @@ async function parseMapDocumentViaWorker(state, documentRef, input, {operation =
   const output = await state.workerTaskCoordinator.run(MAP_FILE_IO_WORKER_TASK_TYPE, prepared.payload, {
     binding: createRegenerationWorkerBinding(state, operation),
     signal: operation?.signal || null,
+    sessionMode: "adopt-result-map",
+    allowFallback: false,
     onProgress: (stage, detail = {}) => operation?.report(stage, {
       ...detail,
       message: detail.message || (stage === "render-prepare" ? "正在准备地图画面" : "正在辨读地图存档")
@@ -6719,6 +6733,7 @@ async function importMapDocumentViaApi(state, documentRef, document, options = {
   if (options?.confirm !== true) throw new Error("导入完整地图会替换当前地图并清空编辑历史，需要显式传入 {confirm: true}");
   const source = options.source === "ui" ? "ui" : "api";
   state.lastMapImportDiagnostic = null;
+  state.pendingGenerateId = (state.pendingGenerateId || 0) + 1;
   let parsed;
   try {
     operation?.report("parse", {message: loadingMessage("map-import-read")});
@@ -6764,7 +6779,6 @@ async function importParsedMapDocumentViaApi(state, documentRef, document, optio
     }
     applyPersistedVisualTheme(state, documentRef, document, {preparedPresentation: true});
     syncGenerationInputs(documentRef, normalizedOptions);
-    state.pendingGenerateId = (state.pendingGenerateId || 0) + 1;
     operation?.report("load-map", {message: loadingMessage("map-import-render")});
     await loadMapIntoRuntime(state, documentRef, document.map, {
       loadingMessages: [loadingMessage("map-import-render"), loadingMessage("panel-refresh")],
@@ -6772,6 +6786,7 @@ async function importParsedMapDocumentViaApi(state, documentRef, document, optio
       operation,
       preparedRender: options.preparedRender || null,
       renderBinding: options.renderBinding || null,
+      workerAdoption: options.worker || null,
       isCurrent: options.isCurrent || (() => true)
     });
     const persistedNamebases = createGenerationNamebaseSnapshot(state.map) ? persistNamebasePreferences(state, documentRef) : false;
@@ -7054,6 +7069,7 @@ async function importHeightmapImageViaApi(state, documentRef, payload, options =
       operation,
       preparedRender: generated.preparedRender,
       renderBinding: generated.preparedRender?.binding,
+      workerAdoption: generated.worker,
       isCurrent: () => importGenerateId === state.pendingGenerateId
     });
     updateGenerationLoading(documentRef, false);
