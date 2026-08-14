@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import {
   SURFACE_BASE_FLOATS_PER_TRIANGLE,
+  SURFACE_BASE_ASYNC_UPLOAD_SLICE_BYTES,
   SURFACE_BASE_MAX_SEGMENT_BYTES,
   SURFACE_BASE_MAX_SEGMENT_FLOATS,
   createSurfaceBaseBufferSet,
@@ -40,10 +41,10 @@ class FakeGl {
   bufferData(target, source, usage) {
     assert.equal(target, this.ARRAY_BUFFER);
     assert.ok(this.boundBuffer);
-    assert.ok(source instanceof Float32Array);
-    this.boundBuffer.data = new Float32Array(source);
+    assert.ok(typeof source === "number" || source instanceof Float32Array);
+    this.boundBuffer.data = typeof source === "number" ? new Float32Array(source / Float32Array.BYTES_PER_ELEMENT) : new Float32Array(source);
     this.boundBuffer.usage = usage;
-    this.bufferDataCalls.push({buffer: this.boundBuffer, byteLength: source.byteLength, usage});
+    this.bufferDataCalls.push({buffer: this.boundBuffer, byteLength: typeof source === "number" ? source : source.byteLength, usage});
   }
 
   bufferSubData(target, byteOffset, source) {
@@ -62,6 +63,7 @@ class FakeGl {
 }
 
 assert.equal(SURFACE_BASE_MAX_SEGMENT_BYTES, 8 * 1024 * 1024);
+assert.equal(SURFACE_BASE_ASYNC_UPLOAD_SLICE_BYTES, 4 * 1024 * 1024);
 assert.equal(SURFACE_BASE_MAX_SEGMENT_FLOATS % SURFACE_BASE_FLOATS_PER_TRIANGLE, 0);
 assert.ok(SURFACE_BASE_MAX_SEGMENT_FLOATS * Float32Array.BYTES_PER_ELEMENT <= SURFACE_BASE_MAX_SEGMENT_BYTES);
 assert.ok((SURFACE_BASE_MAX_SEGMENT_FLOATS + SURFACE_BASE_FLOATS_PER_TRIANGLE) * Float32Array.BYTES_PER_ELEMENT > SURFACE_BASE_MAX_SEGMENT_BYTES);
@@ -156,10 +158,12 @@ const asyncSet = await createSurfaceBaseBufferSetAsync(asyncGl, asyncSource, {
   onProgress: value => progress.push(value)
 });
 assert.equal(asyncSet.segments.length, 2);
-assert.equal(yields, 1);
-assert.equal(currentChecks, 5);
+assert.equal(yields, 2);
+assert.equal(currentChecks, 9);
 assert.deepEqual(progress.map(value => [value.completed, value.total]), [[1, 2], [2, 2]]);
 assert.ok(asyncGl.bufferDataCalls.every(call => call.byteLength <= SURFACE_BASE_MAX_SEGMENT_BYTES));
+assert.equal(asyncGl.bufferSubDataCalls.length, 3);
+assert.ok(asyncGl.bufferSubDataCalls.every(call => call.values.byteLength <= SURFACE_BASE_ASYNC_UPLOAD_SLICE_BYTES));
 
 const failingGl = new FakeGl();
 await assert.rejects(

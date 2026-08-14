@@ -1,6 +1,7 @@
 import {
   buildLineVertices,
   buildPlaceholderSurfaceBundle,
+  buildPlaceholderSurfaceColorPatch,
   buildPointVertices,
   buildRiverMeshVertices,
   buildRouteMeshVertices,
@@ -153,17 +154,28 @@ export async function executeRenderPreparationTask(payload = {}, context = {}) {
       };
     } else if (layer === "surface") {
       const prepared = ensureRenderCaches(map, binding, payload.caches, cache);
-      const political = ensurePoliticalMeshes(map, prepared, payload);
-      result.layers.surface = buildPlaceholderSurfaceBundle(
-        map,
-        payload.colorMode || "height",
-        payload.viewOptions || {},
-        prepared.shore,
-        prepared.statePaths,
-        prepared.provincePaths,
-        political,
-        prepared.cellVisual
-      );
+      if (payload.surfacePatchScope === "all" || payload.surfacePatchScope === "water") {
+        result.layers.surface = buildPlaceholderSurfaceColorPatch(
+          map,
+          payload.colorMode || "height",
+          payload.viewOptions || {},
+          prepared.shore,
+          prepared.cellVisual,
+          payload.surfacePatchScope
+        );
+      } else {
+        const political = ensurePoliticalMeshes(map, prepared, payload);
+        result.layers.surface = buildPlaceholderSurfaceBundle(
+          map,
+          payload.colorMode || "height",
+          payload.viewOptions || {},
+          prepared.shore,
+          prepared.statePaths,
+          prepared.provincePaths,
+          political,
+          prepared.cellVisual
+        );
+      }
     } else if (layer === "line") {
       const prepared = ensureRenderCaches(map, binding, payload.caches, cache);
       const line = buildLineVertices(

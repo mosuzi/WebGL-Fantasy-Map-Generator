@@ -1,6 +1,7 @@
 export const SURFACE_BASE_FLOATS_PER_VERTEX = 6;
 export const SURFACE_BASE_FLOATS_PER_TRIANGLE = SURFACE_BASE_FLOATS_PER_VERTEX * 3;
 export const SURFACE_BASE_MAX_SEGMENT_BYTES = 8 * 1024 * 1024;
+export const SURFACE_BASE_ASYNC_UPLOAD_SLICE_BYTES = 4 * 1024 * 1024;
 export const SURFACE_BASE_MAX_SEGMENT_FLOATS = Math.floor(
   SURFACE_BASE_MAX_SEGMENT_BYTES / Float32Array.BYTES_PER_ELEMENT / SURFACE_BASE_FLOATS_PER_TRIANGLE
 ) * SURFACE_BASE_FLOATS_PER_TRIANGLE;
@@ -26,12 +27,17 @@ export async function createSurfaceBaseBufferSetAsync(gl, vertices, options = {}
   const yieldToMain = typeof options.yieldToMain === "function" ? options.yieldToMain : defaultYield;
   const assertCurrent = typeof options.assertCurrent === "function" ? options.assertCurrent : () => {};
   const onProgress = typeof options.onProgress === "function" ? options.onProgress : null;
+  const uploadSliceBytes = Math.max(256 * 1024, Number(options.uploadSliceBytes) || SURFACE_BASE_ASYNC_UPLOAD_SLICE_BYTES);
   const ranges = surfaceBaseSegmentRanges(source.length);
   const segments = [];
   try {
     for (let index = 0; index < ranges.length; index++) {
       assertCurrent();
-      const segment = uploadSegment(gl, source, ranges[index], usage);
+      const segment = await uploadSegmentAsync(gl, source, ranges[index], usage, {
+        uploadSliceBytes,
+        yieldToMain,
+        assertCurrent
+      });
       segments.push(segment);
       onProgress?.({completed: index + 1, total: ranges.length, floatEnd: segment.floatEnd, floatLength: source.length});
       assertCurrent();
@@ -43,6 +49,46 @@ export async function createSurfaceBaseBufferSetAsync(gl, vertices, options = {}
     return buildBufferSet(source.length, segments);
   } catch (error) {
     deleteBuffers(gl, segments.map(segment => segment.buffer));
+    throw error;
+  }
+}
+
+async function uploadSegmentAsync(gl, source, range, usage, {uploadSliceBytes, yieldToMain, assertCurrent}) {
+  if (!gl?.createBuffer || !gl?.bindBuffer || !gl?.bufferData || !gl?.bufferSubData) {
+    throw new TypeError("surface base 缺少有效 WebGL context");
+  }
+  const buffer = gl.createBuffer();
+  if (!buffer) throw new Error("无法创建 surface base GPU buffer");
+  try {
+    gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+    const floatLength = range.end - range.start;
+    gl.bufferData(gl.ARRAY_BUFFER, floatLength * Float32Array.BYTES_PER_ELEMENT, usage);
+    const sliceFloats = Math.max(1, Math.floor(uploadSliceBytes / Float32Array.BYTES_PER_ELEMENT));
+    for (let offset = range.start; offset < range.end; offset += sliceFloats) {
+      assertCurrent();
+      const end = Math.min(range.end, offset + sliceFloats);
+      gl.bufferSubData(
+        gl.ARRAY_BUFFER,
+        (offset - range.start) * Float32Array.BYTES_PER_ELEMENT,
+        source.subarray(offset, end)
+      );
+      if (end < range.end) {
+        await yieldToMain();
+        assertCurrent();
+        gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+      }
+    }
+    return Object.freeze({
+      buffer,
+      floatStart: range.start,
+      floatEnd: range.end,
+      floatLength,
+      byteLength: floatLength * Float32Array.BYTES_PER_ELEMENT,
+      vertexCount: floatLength / SURFACE_BASE_FLOATS_PER_VERTEX,
+      triangleCount: floatLength / SURFACE_BASE_FLOATS_PER_TRIANGLE
+    });
+  } catch (error) {
+    gl.deleteBuffer?.(buffer);
     throw error;
   }
 }

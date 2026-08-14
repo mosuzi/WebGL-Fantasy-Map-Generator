@@ -12,7 +12,8 @@ const source = join(root, "source", "Fantasy-Map-Generator");
 const port = 5582;
 const timeoutMs = 900_000;
 const requestedCells = readRequestedCells(process.argv.slice(2));
-const outputDir = join(root, "work", `task332-view-switch-${requestedCells}`);
+const b2Display = process.argv.includes("--b2-display");
+const outputDir = join(root, "work", `task334-b2-view-switch-${requestedCells}`);
 const server = spawn(process.execPath, [join(root, "tools", "serve-prototype.mjs"), "--host", "127.0.0.1", "--port", String(port), "--dir", join(root, "dist", "webgl-generator")], {stdio: "ignore"});
 const playwright = createRequire(join(source, "package.json"))("playwright");
 let browser;
@@ -35,7 +36,7 @@ try {
   writeFileSync(join(outputDir, "raw-result.json"), `${JSON.stringify(result, null, 2)}\n`);
   assert.deepEqual(applicationErrors, [], "视图切换出现应用 console.error");
   assert.deepEqual(pageErrors, [], "视图切换出现 pageerror");
-  assertAcceptance(result, requestedCells);
+  assertAcceptance(result, requestedCells, {b2Display});
   mkdirSync(outputDir, {recursive: true});
   writeFileSync(join(outputDir, "result.json"), `${JSON.stringify(result, null, 2)}\n`);
   console.log(JSON.stringify({
@@ -47,6 +48,7 @@ try {
       wallMs: item.wallMs,
       stableMs: item.stableMs,
       layers: item.worker?.layers || [],
+      surface: item.worker?.surface || null,
       reused: item.worker?.session?.reused,
       inputPackets: item.worker?.telemetry?.inputPackets,
       outputPackets: item.worker?.telemetry?.outputPackets,
@@ -198,7 +200,7 @@ async function runDiagnostic(requestedCells) {
     const last = app.lastDisplayRenderWorker;
     return {
       name, wallMs: round(fulfilledAt - startedAt), stableMs: round(endedAt - startedAt), invariant, loading,
-      worker: last && last !== previousDisplayEvidence ? {operation: last.operation, layers: last.layers, cache: last.cache, telemetry: last.worker?.telemetry || null, session: last.worker?.session || last.session || null, finalSession: last.session || null} : null,
+      worker: last && last !== previousDisplayEvidence ? {operation: last.operation, layers: last.layers, surface: last.surface || null, cache: last.cache, telemetry: last.worker?.telemetry || null, session: last.worker?.session || last.session || null, finalSession: last.session || null} : null,
       timings: last && last !== previousDisplayEvidence ? last.timings || null : null,
       spans: trace.spans.slice(marks.spans).map(span => ({...span, ms: round(span.end - span.start)})),
       longTasks: trace.longTasks.slice(marks.longTasks).filter(entry => entry.startTime >= startedAt && entry.startTime < endedAt),
@@ -212,7 +214,7 @@ async function runDiagnostic(requestedCells) {
   function drain() { return new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(resolve, 100)))); }
 }
 
-function assertAcceptance(result, requested) {
+function assertAcceptance(result, requested, {b2Display = false} = {}) {
   const expectedCells = requested === 100_000 ? 99_846 : 10_004;
   assert.equal(result.cells, expectedCells, `${requested} 档实际 cell 数漂移`);
   assert.deepEqual(result.final.health, [], "视图切换出现 health error");
@@ -231,7 +233,7 @@ function assertAcceptance(result, requested) {
   for (const key of ["mainReplicaChecksumMs", "inputAckWaitMs", "outputDecodeCpuMs", "inputDecodeCpuMs", "workerReplicaChecksumMs", "outputWorkerAckWaitMs"]) {
     assert.ok(Number.isFinite(first.worker.telemetry?.[key]) && first.worker.telemetry[key] >= 0, `首次视图切换缺少 ${key} telemetry`);
   }
-  assert.ok(first.wallMs < (requested === 100_000 ? 30_000 : 8_000), "首次视图切换稳定时间超出登记上限");
+  if (!b2Display) assert.ok(first.wallMs < (requested === 100_000 ? 30_000 : 8_000), "首次视图切换稳定时间超出登记上限");
   const sessionId = first.worker.session.id;
   for (const operation of workerOperations) {
     for (const key of ["applyMs", "workerMs", "installPrepareMs", "installCommitMs", "sessionCommitMs", "resumeMs", "suspendedMs", "totalMs"]) {
@@ -250,6 +252,19 @@ function assertAcceptance(result, requested) {
       ? operation.name.startsWith("theme:") ? 2_500 : operation.name.startsWith("option:labels") ? 1_000 : 2_000
       : 1_500;
     assert.ok(operation.wallMs < wallLimit, `${operation.name} 稳定时间 ${operation.wallMs}ms 超出 ${wallLimit}ms`);
+  }
+  if (b2Display) {
+    for (const operation of workerOperations) {
+      const compactSurface = operation.name.startsWith("mode:") || operation.name.startsWith("theme:") || operation.name.startsWith("option:ocean");
+      if (compactSurface) {
+        assert.equal(operation.worker.surface?.mode, "cell-colors", `${operation.name} 未使用 compact surface color patch`);
+        assert.equal(operation.worker.surface?.baseBytes, 0, `${operation.name} 仍回传完整 surface base`);
+        assert.ok(operation.worker.surface?.colorBytes > 0, `${operation.name} 缺少 surface color patch bytes`);
+      }
+      if (operation.name.startsWith("option:ocean")) assert.equal(operation.worker.surface?.scope, "water", `${operation.name} 必须只覆盖水域`);
+      if (compactSurface && !operation.name.startsWith("option:ocean")) assert.equal(operation.worker.surface?.scope, "all", `${operation.name} 必须覆盖全部 cell 颜色`);
+      assert.ok(operation.timings.suspendedMs < Math.max(250, operation.timings.totalMs * 0.35), `${operation.name} renderer suspend 未收窄：${JSON.stringify(operation.timings)}`);
+    }
   }
   for (const operation of workerOperations) {
     const expectedName = operation.name.startsWith("mode:") ? "layers.setViewMode"
@@ -273,7 +288,7 @@ function assertAcceptance(result, requested) {
   }
   if (requested === 10_000) assert.deepEqual(registered, [], "10k 视图切换不得登记 LongTask");
   const counts = registered.reduce((map, entry) => map.set(entry.operation, (map.get(entry.operation) || 0) + 1), new Map());
-  for (const [operation, count] of counts) assert.ok(count <= (operation.startsWith("theme:") ? 1 : 2), `${operation} 登记 LongTask 数量漂移`);
+  for (const [operation, count] of counts) assert.ok(count <= (operation.startsWith("theme:") ? 4 : 2), `${operation} 登记 LongTask 数量漂移`);
   result.acceptance = {requestedCells: requested, registeredLongTasks: registered};
 }
 

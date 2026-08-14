@@ -3656,6 +3656,7 @@ async function applyRuntimeDisplayMutationViaWorker(state, documentRef, operatio
   const previousPresentation = renderer.captureDeferredWorkerRenderPresentation?.();
   let install = null;
   let mutationApplied = false;
+  let mutationCaptureActive = false;
   let renderSuspended = false;
   const displayStartedAt = performance.now();
   const timings = {
@@ -3670,39 +3671,46 @@ async function applyRuntimeDisplayMutationViaWorker(state, documentRef, operatio
   };
   let suspendedStartedAt = 0;
   try {
-    suspendedStartedAt = performance.now();
-    renderer.suspendWorkerRenderInstall();
-    renderSuspended = true;
     const applyStartedAt = performance.now();
-    const result = apply();
+    renderer.beginDeferredWorkerRenderMutationCapture?.();
+    mutationCaptureActive = true;
+    let result;
+    try {
+      result = apply();
+    } finally {
+      renderer.endDeferredWorkerRenderMutationCapture?.();
+      mutationCaptureActive = false;
+    }
     timings.applyMs = roundWorkerTelemetryMs(performance.now() - applyStartedAt);
     mutationApplied = true;
     const snapshot = renderer.captureDeferredWorkerRenderSnapshot?.();
     if (!snapshot?.entries?.length) {
-      renderer.resumeWorkerRenderInstall?.({draw: true});
-      renderSuspended = Boolean(renderer.workerRenderInstallSuspended > 0);
       return result;
     }
 
     const layers = workerRegenerationDeferredReplayLayers(snapshot, "display");
     if (!layers.length) {
+      suspendedStartedAt = performance.now();
+      renderer.suspendWorkerRenderInstall();
+      renderSuspended = true;
       renderer.resumeWorkerRenderInstall?.({draw: true});
       renderSuspended = Boolean(renderer.workerRenderInstallSuspended > 0);
+      timings.suspendedMs = roundWorkerTelemetryMs(performance.now() - suspendedStartedAt);
+      timings.totalMs = roundWorkerTelemetryMs(performance.now() - displayStartedAt);
       return result;
     }
 
-    renderer.applyDeferredWorkerRenderPresentationOnly?.(snapshot);
     const binding = createRegenerationWorkerBinding(state, operation);
     const renderRequest = createWorkerRegenerationDeferredRenderRequest(state, "display", binding, snapshot);
-    const token = createWorkerRegenerationRenderContextToken(state, "display");
-    const isCurrent = () => state.map === map
+    const sourceToken = createWorkerRegenerationRenderContextToken(state, "display");
+    const isSourceCurrent = () => state.map === map
       && validateRegenerationWorkerBinding(state, binding)
-      && createWorkerRegenerationRenderContextToken(state, "display") === token
+      && createWorkerRegenerationRenderContextToken(state, "display") === sourceToken
       && isWorkerRegenerationDeferredReplaySequenceCurrent(renderer, snapshot);
     operation?.report?.("render-prepare", {message: "正在整理地图画面"});
     await yieldToBrowser(documentRef);
     operation?.throwIfCancelled?.();
-    if (!isCurrent()) throw runtimeDisplayObsoleteError();
+    if (!isSourceCurrent()) throw runtimeDisplayObsoleteError();
 
     const workerStartedAt = performance.now();
     const prepared = await state.renderTaskCoordinator.run("render.prepare", {
@@ -3726,7 +3734,7 @@ async function applyRuntimeDisplayMutationViaWorker(state, documentRef, operatio
       throw error;
     }
     operation?.throwIfCancelled?.();
-    if (!isCurrent()) throw runtimeDisplayObsoleteError();
+    if (!isSourceCurrent()) throw runtimeDisplayObsoleteError();
 
     operation?.report?.("render-install", {message: "正在更新地图显示"});
     const installPrepareStartedAt = performance.now();
@@ -3734,7 +3742,7 @@ async function applyRuntimeDisplayMutationViaWorker(state, documentRef, operatio
       install = await prepareRendererWorkerInstall(renderer, map, prepared, {
         binding: renderRequest.binding,
         signal: operation?.signal,
-        isCurrent,
+        isCurrent: isSourceCurrent,
         onProgress: () => operation?.report?.("render-install", {message: "正在更新地图显示"})
       });
     } catch (error) {
@@ -3742,11 +3750,20 @@ async function applyRuntimeDisplayMutationViaWorker(state, documentRef, operatio
     }
     timings.installPrepareMs = roundWorkerTelemetryMs(performance.now() - installPrepareStartedAt);
     operation?.throwIfCancelled?.();
-    if (!isCurrent()) throw runtimeDisplayObsoleteError();
+    if (!isSourceCurrent()) throw runtimeDisplayObsoleteError();
+    suspendedStartedAt = performance.now();
+    renderer.suspendWorkerRenderInstall();
+    renderSuspended = true;
+    renderer.applyDeferredWorkerRenderPresentationOnly?.(snapshot);
+    const targetToken = createWorkerRegenerationRenderContextToken(state, "display");
+    const isTargetCurrent = () => state.map === map
+      && validateRegenerationWorkerBinding(state, binding)
+      && createWorkerRegenerationRenderContextToken(state, "display") === targetToken
+      && isWorkerRegenerationDeferredReplaySequenceCurrent(renderer, snapshot);
     const installCommitStartedAt = performance.now();
     install.commit();
     timings.installCommitMs = roundWorkerTelemetryMs(performance.now() - installCommitStartedAt);
-    if (!isCurrent()) throw runtimeDisplayObsoleteError();
+    if (!isTargetCurrent()) throw runtimeDisplayObsoleteError();
 
     const sessionCommitStartedAt = performance.now();
     const committed = await state.renderTaskCoordinator.commitSession(prepared.worker.session.id, binding, {expectedRevisionDelta: 0});
@@ -3757,7 +3774,7 @@ async function applyRuntimeDisplayMutationViaWorker(state, documentRef, operatio
       throw error;
     }
     operation?.throwIfCancelled?.();
-    if (!isCurrent()) throw runtimeDisplayObsoleteError();
+    if (!isTargetCurrent()) throw runtimeDisplayObsoleteError();
     const resumeStartedAt = performance.now();
     renderer.resumePreparedWorkerRenderInstall?.(snapshot, {draw: true});
     timings.resumeMs = roundWorkerTelemetryMs(performance.now() - resumeStartedAt);
@@ -3772,6 +3789,13 @@ async function applyRuntimeDisplayMutationViaWorker(state, documentRef, operatio
     state.lastDisplayRenderWorker = {
       operation: {id: operation?.id || "", name: operation?.name || ""},
       layers: [...renderRequest.layers],
+      surface: prepared.layers?.surface ? {
+        mode: prepared.layers.surface.mode || "full",
+        scope: prepared.layers.surface.scope || "all",
+        cells: prepared.layers.surface.cellIds?.length || 0,
+        colorBytes: prepared.layers.surface.colors?.byteLength || 0,
+        baseBytes: prepared.layers.surface.base?.byteLength || 0
+      } : null,
       cache: structuredClone(prepared.cache || null),
       worker: structuredClone(prepared.worker),
       session: state.renderTaskCoordinator.getSessionSnapshot?.() || null,
@@ -3825,6 +3849,7 @@ async function applyRuntimeDisplayMutationViaWorker(state, documentRef, operatio
     }
     throw error;
   } finally {
+    if (mutationCaptureActive) renderer.endDeferredWorkerRenderMutationCapture?.();
     if (renderSuspended && state.map === map && !renderer.hasDeferredWorkerRenderMutations?.()) {
       renderer.abortWorkerRenderInstall?.();
     }
@@ -13002,9 +13027,13 @@ function workerRegenerationDeferredReplayLayers(snapshot, targetKind) {
 
 function createWorkerRegenerationDeferredRenderRequest(state, targetKind, binding, snapshot) {
   const layers = workerRegenerationDeferredReplayLayers(snapshot, targetKind);
+  const surfacePatchScope = layers.includes("surface") && state.renderer?.canPrepareDeferredSurfaceColorPatch?.(snapshot)
+    ? snapshot.effects.surfacePatchScope
+    : null;
   return {
     ...createWorkerRegenerationRenderRequest(state, targetKind, binding, layers),
-    layers
+    layers,
+    ...(surfacePatchScope ? {surfacePatchScope} : {})
   };
 }
 

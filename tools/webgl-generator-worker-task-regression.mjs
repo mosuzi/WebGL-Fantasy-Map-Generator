@@ -1087,22 +1087,28 @@ function verifyAppDeferredReplayStaticContract() {
   );
   assert.ok(displayFlow.length > 0, "普通显示入口必须接入独立 Worker 渲染事务");
   const displayOrder = [
-    "renderer.suspendWorkerRenderInstall()",
-    "const result = apply()",
-    "renderer.captureDeferredWorkerRenderSnapshot?.()",
-    "renderer.applyDeferredWorkerRenderPresentationOnly?.(snapshot)",
-    "state.renderTaskCoordinator.run(\"render.prepare\"",
-    "install.commit()",
-    "state.renderTaskCoordinator.commitSession",
-    "renderer.resumePreparedWorkerRenderInstall?.(snapshot",
-    "install.finalize?.()"
-  ].map(marker => displayFlow.indexOf(marker));
-  assert.ok(displayOrder.every(index => index >= 0), "普通显示事务缺少 suspend/apply/prepare/install/session/resume/finalize 链");
-  assert.ok(displayOrder.every((index, position) => position === 0 || index > displayOrder[position - 1]), "普通显示事务顺序不原子");
+    displayFlow.indexOf("renderer.beginDeferredWorkerRenderMutationCapture?.()"),
+    displayFlow.indexOf("result = apply()"),
+    displayFlow.indexOf("renderer.endDeferredWorkerRenderMutationCapture?.()"),
+    displayFlow.indexOf("renderer.captureDeferredWorkerRenderSnapshot?.()"),
+    displayFlow.indexOf("state.renderTaskCoordinator.run(\"render.prepare\""),
+    displayFlow.indexOf("install = await prepareRendererWorkerInstall"),
+    displayFlow.lastIndexOf("renderer.suspendWorkerRenderInstall()"),
+    displayFlow.indexOf("renderer.applyDeferredWorkerRenderPresentationOnly?.(snapshot)"),
+    displayFlow.indexOf("install.commit()"),
+    displayFlow.indexOf("state.renderTaskCoordinator.commitSession"),
+    displayFlow.indexOf("renderer.resumePreparedWorkerRenderInstall?.(snapshot"),
+    displayFlow.indexOf("install.finalize?.()")
+  ];
+  assert.ok(displayOrder.every(index => index >= 0), "普通显示事务缺少 capture/apply/prepare/短挂起/install/session/resume/finalize 链");
+  assert.ok(displayOrder.every((index, position) => position === 0 || index > displayOrder[position - 1]), "普通显示事务顺序未把挂起收窄到原子安装窗");
+  assert.ok(displayFlow.lastIndexOf("renderer.suspendWorkerRenderInstall()") > displayFlow.indexOf("install = await prepareRendererWorkerInstall"), "Worker 准备和临时安装期间不得挂起旧画面");
+  assert.match(displayFlow, /const sourceToken[\s\S]*?isCurrent: isSourceCurrent[\s\S]*?const targetToken/u, "显示事务必须分别校验旧画面准备上下文与新画面提交上下文");
   assert.match(displayFlow, /sessionMode: "map-mirror"/u, "普通显示必须复用独立 map mirror session");
   assert.match(displayFlow, /sessionPayload: renderRequest/u, "普通显示复用请求不得重传 map");
   assert.match(displayFlow, /allowFallback: false/u, "复杂显示准备不得回退主线程");
   assert.match(displayFlow, /expectedRevisionDelta: 0/u, "显示事务不得推进 map revision");
+  assert.match(source, /surfacePatchScope = layers\.includes\("surface"\)[\s\S]*?canPrepareDeferredSurfaceColorPatch/u, "surface 显示事务必须优先选择 compact color patch");
   assert.match(displayFlow, /cache: structuredClone\(prepared\.cache \|\| null\)/u, "显示诊断必须记录正式 Worker 渲染缓存命中");
   assert.match(displayFlow, /operation: \{id: operation\?\.id \|\| "", name: operation\?\.name \|\| ""\}/u, "显示诊断必须绑定当前 operation 身份");
   assert.doesNotMatch(displayFlow, /state\.workerTaskCoordinator/u, "显示事务不得占用领域计算 session");
@@ -1343,6 +1349,25 @@ function verifyAppDeferredReplayStaticContract() {
 }
 
 function verifyDeferredRendererReplay() {
+  const captureRenderer = createDeferredRendererFixture();
+  captureRenderer.workerRenderInstallSuspended = 0;
+  captureRenderer.beginDeferredWorkerRenderMutationCapture();
+  captureRenderer.setColorMode("biomes");
+  captureRenderer.endDeferredWorkerRenderMutationCapture();
+  assert.equal(captureRenderer.workerRenderInstallSuspended, 0, "effect capture 不得提前挂起 renderer");
+  assert.equal(captureRenderer.colorMode, "height", "effect capture 期间必须继续呈现旧画面");
+  assert.equal(captureRenderer.cpuRefreshCalls, 0, "effect capture 不得同步重建 surface");
+  const captureSnapshot = captureRenderer.captureDeferredWorkerRenderSnapshot();
+  assert.equal(captureSnapshot.finalPresentation.colorMode, "biomes", "effect capture 必须生成不可变目标展示快照");
+  assert.equal(captureSnapshot.effects.surfacePatchScope, "all", "颜色模式切换必须声明全 cell 颜色补丁");
+
+  const oceanRenderer = createDeferredRendererFixture();
+  oceanRenderer.setViewOptions({showOceanHeight: true});
+  assert.equal(oceanRenderer.captureDeferredWorkerRenderSnapshot().effects.surfacePatchScope, "water", "显示海底只能声明水域颜色补丁");
+  const smoothRenderer = createDeferredRendererFixture();
+  smoothRenderer.setViewOptions({smoothCellBorders: false});
+  assert.equal(smoothRenderer.captureDeferredWorkerRenderSnapshot().effects.surfacePatchScope, "unavailable", "边界几何变化不得伪装成颜色补丁");
+
   const renderer = createDeferredRendererFixture();
   renderer.setColorMode("biomes");
   renderer.setDiplomacySubjectId(3);
@@ -1526,6 +1551,7 @@ function createDeferredRendererFixture() {
   renderer.workerRenderInstallPendingDraw = false;
   renderer.workerRenderInstallViewportChanged = false;
   renderer.workerRenderInstallApplyingDeferred = false;
+  renderer.workerRenderMutationCaptureDepth = 0;
   renderer.workerRenderInstallDeferredMutations = new Map();
   renderer.workerRenderInstallMutationSequence = 0;
   renderer.workerRenderInstallEnsureGridDiagnostics = false;

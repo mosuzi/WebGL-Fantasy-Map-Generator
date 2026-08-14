@@ -67,7 +67,7 @@
 
 ## 当前状态
 
-- 第 334 项 B1 已闭合标量根因：100k 冷首切 `39.853s`，主 / Worker checksum `10.615 / 13.199s`，完整输入 `8.997s / 1013包`，compute `6.078s`，renderer suspend `39.849s`。暖海底开 / 关 `711 / 657ms`，compute `116 / 86ms`，仍回传 `446` 包完整 surface，suspend `707 / 653ms`。唯一 `MapWorker` owner 门保持：不得保留计算 / 显示两份长期完整镜像，新图 / 导入须在 owner 内 adoption，主线程只收 renderer transfer 与小型投影。下一阶段只实施 B2 显示 effect / surface patch 与短 commit suspension；随后才进入 session / checksum 和存档 transport。当前版本为 `0.3.4`。
+- 第 334 项 B2 已闭合显示事务：Worker / 临时安装期间继续呈现旧画面，只在 commit / session / resume 短窗挂起；100k 暖颜色视图约 `291ms`，海底开 / 关约 `444 / 420ms`，挂起仅 `9 / 11ms`。颜色视图回传约 `1.60MB` cell colors，海底只回传约 `0.88MB / 55022` 个水域 cell，不再回传完整 surface base；临时 GPU set 分片构建并原子交换。主题入口四条 `≤97ms` 已归因 LongTask 按用户规则登记，海底与颜色视图为 `0`。下一阶段只进入 C1：合并计算 / 显示 session，并以 stream checksum 取代两次完整深扫；唯一 `MapWorker` owner 与 adoption 门不变。当前版本为 `0.3.5`。
 
 - 第 322 项已完成、归档并合入远端 `main`。
 - 第 327 项已完成、归档并合入远端 `main`。

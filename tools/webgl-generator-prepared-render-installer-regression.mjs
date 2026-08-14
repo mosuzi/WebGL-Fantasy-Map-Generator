@@ -60,8 +60,9 @@ await testCommittedRollbackAndFinalize();
 await testCommitFaultRollback();
 await testNestedRollbackOwnership();
 await testNestedFinalizeOwnership();
+await testSurfaceColorPatchTransaction();
 
-console.log(JSON.stringify({ok: true, cases: 5, nestedOwnership: true}));
+console.log(JSON.stringify({ok: true, cases: 6, nestedOwnership: true, surfaceColorPatch: true}));
 
 async function testUncommittedCleanup() {
   const gl = new FakeGl();
@@ -174,6 +175,51 @@ async function testNestedFinalizeOwnership() {
   assert.equal(renderer.vertexBuffer, innerSet.segments[0].buffer);
 }
 
+async function testSurfaceColorPatchTransaction() {
+  const gl = new FakeGl();
+  const renderer = createRenderer(gl);
+  renderer.surfaceCellRanges = new Map([[0, {start: 0, end: 18}]]);
+  const beforeSet = renderer.surfaceBaseBufferSet;
+  const beforeVertices = renderer.surfaceVertices;
+  const beforeBytes = new Uint8Array(beforeVertices.buffer, beforeVertices.byteOffset, beforeVertices.byteLength).slice();
+  const prepared = {
+    binding,
+    presentation: {},
+    layers: {
+      surface: {
+        mode: "cell-colors",
+        scope: "water",
+        cellIds: new Uint32Array([0]),
+        colors: new Float32Array([0.1, 0.2, 0.3, 0.75]),
+        landCorrections: new Float32Array(),
+        waterCorrections: new Float32Array(),
+        landCovers: new Float32Array(),
+        waterCovers: new Float32Array(),
+        shoreSurfaceCellRanges: emptyShoreRanges()
+      }
+    }
+  };
+  const transaction = await prepareRendererWorkerInstall(renderer, renderer.nextMap, prepared, {
+    binding,
+    budgetMs: 1,
+    yieldToMain: async () => {}
+  });
+  assert.equal(renderer.surfaceBaseBufferSet, beforeSet, "surface patch prepare 不得提前替换正式 buffer set");
+  assert.equal(renderer.surfaceVertices, beforeVertices, "surface patch prepare 不得提前替换正式 CPU vertices");
+  assert.deepEqual(new Uint8Array(beforeVertices.buffer, beforeVertices.byteOffset, beforeVertices.byteLength), beforeBytes, "surface patch prepare 不得原地改写正式 CPU vertices");
+  transaction.commit();
+  assert.notEqual(renderer.surfaceBaseBufferSet, beforeSet);
+  assert.notEqual(renderer.surfaceVertices, beforeVertices);
+  const expectedColor = [...new Float32Array([0.1, 0.2, 0.3, 0.75])];
+  for (let offset = 0; offset < renderer.surfaceVertices.length; offset += 6) {
+    assert.deepEqual([...renderer.surfaceVertices.subarray(offset + 2, offset + 6)], expectedColor);
+  }
+  assert.equal(transaction.rollback(), true);
+  assert.equal(renderer.surfaceBaseBufferSet, beforeSet);
+  assert.equal(renderer.surfaceVertices, beforeVertices);
+  assert.deepEqual(new Uint8Array(beforeVertices.buffer, beforeVertices.byteOffset, beforeVertices.byteLength), beforeBytes);
+}
+
 async function prepareSurfaceTransaction(renderer, base) {
   const prepared = {
     binding,
@@ -208,7 +254,7 @@ function createRenderer(gl) {
   const renderer = {
     gl,
     map: {id: "old-map"},
-    nextMap: {grid: {cells: {i: new Uint32Array([0])}}},
+    nextMap: {grid: {cells: {i: new Uint32Array([0]), h: new Uint8Array([10])}}},
     surfaceBaseBufferSet,
     vertexBuffer: surfaceBaseBufferSet.segments[0].buffer,
     surfaceVertices,
@@ -222,6 +268,7 @@ function createRenderer(gl) {
     surfacePatchCellRanges: new Map(),
     surfacePatchCells: new Set(),
     surfacePatchVertexCount: 0,
+    viewOptions: {smoothCellBorders: true},
     vertexCount: surfaceVertices.length / 6,
     landCorrectionVertexCount: 0,
     waterCorrectionVertexCount: 0,

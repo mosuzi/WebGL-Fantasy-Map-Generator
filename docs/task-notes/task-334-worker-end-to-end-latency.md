@@ -124,3 +124,11 @@ B0 唯一写者为主线程；本阶段只修改权威文档与版本，不修�
 - 标签开 / 关：Worker 仅 `48 / 47ms`、`6` 包，但 installer prepare `274 / 263ms`、session commit `52 / 50ms`、resume `35 / 36ms`，wall `425 / 413ms`。theme restore 另有 `52 / 55ms` 两条已归因 LongTask，B2 不得放宽。
 
 diagnostic artifact 为 `work/task332-view-switch-100000/raw-result.json`；该运行是 B1 取证，不是显示性能通过。Node 存档专项、通用 Worker 专项、语法、差异和生产构建通过。B1 产品 `4` 文件约 `+89 / -4`，既有工具 `3` 文件约 `+16`，新浏览器夹具 `0`，委派与等待为 `0`。下一阶段只实施显示 effect / surface patch 与短 commit suspension。
+
+## 10. 阶段 B2：显示 effect、compact surface 与短挂起
+
+- 显示设置先在 renderer 的 capture-only 状态生成不可变 mutation snapshot；Worker `render.prepare`、主线程分片 materialize 和临时 GPU / DOM 安装期间继续绘制最后已提交画面。只有 presentation apply、transaction commit、session delta0 和 prepared resume 位于 suspend 窗。
+- 颜色视图使用 `cell-colors` compact surface：全图只回传 `cellIds + RGBA` 颜色列和必要岸线呈现，海底开关进一步只覆盖水域 cell。主线程分片复制正式 CPU surface、生成独立 segmented GPU set，成功后原子 swap；失败 / obsolete / detached owner 继续按既有 transaction 恢复或释放，绝不原地覆写 active buffer。
+- 固定 100k 中，暖省份视图约 `291ms`，对比 B1 的 `833ms`；海底开 / 关约 `444 / 420ms`，对比 `711 / 657ms`。renderer suspend 分别约 `9 / 11ms`，不再覆盖完整 wall。海底 patch 为 `55022` 个水域 cell、约 `0.88MB` colors；普通颜色 patch 为 `99845` 个 cell、约 `1.60MB`，均不含完整 surface base，output 从 `446` 包降至 `57` 包。
+- 10k 全入口通过且 LongTask 为 `0`。100k 第一次目标门发现主题临时 surface 上传附近新增 `74ms`，改为 `4MiB bufferSubData + yield` 后该原形消失；复验仍有主题 DOM / draw 与浏览器提交窗 `61 / 57 / 97 / 56ms`，均小于 `100ms` 且已归因，按用户“200ms 内调查、实质优化一次后仍未消除则登记”规则精确放行。海底和普通颜色视图 LongTask 为 `0`，全局阈值没有提高。
+- B2 产品 `5` 文件约 `+300` 行，既有专项 / 浏览器工具 `5` 文件约 `+130` 行，没有新建浏览器夹具；委派与等待为 `0`。语法、差异、surface / installer / render-preparation / Worker Node、生产构建与 10k / 100k 真实入口证据齐全。版本为 `0.3.5`，下一步只进入 C1 session / checksum 统一。

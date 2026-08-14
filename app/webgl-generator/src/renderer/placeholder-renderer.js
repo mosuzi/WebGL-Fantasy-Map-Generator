@@ -186,6 +186,7 @@ function sameStringSet(left, right) {
 function createDeferredWorkerRenderEffects() {
   return {
     surface: false,
+    surfacePatchScope: "none",
     lines: false,
     points: false,
     labels: false,
@@ -195,6 +196,16 @@ function createDeferredWorkerRenderEffects() {
     tradeFlows: false,
     gridDiagnostics: false
   };
+}
+
+function requestDeferredSurfaceEffect(effects, patchScope) {
+  effects.surface = true;
+  if (effects.surfacePatchScope === "unavailable" || patchScope === "unavailable") {
+    effects.surfacePatchScope = "unavailable";
+    return;
+  }
+  if (patchScope === "all" || effects.surfacePatchScope === "all") effects.surfacePatchScope = "all";
+  else if (patchScope === "water") effects.surfacePatchScope = "water";
 }
 
 function cloneDeferredWorkerRenderMutation(mutation) {
@@ -222,24 +233,28 @@ function evaluateDeferredWorkerRenderSnapshot(renderer, entries) {
     if (mutation.key === "color-mode") {
       if (presentation.colorMode === value) continue;
       presentation.colorMode = value;
-      effects.surface = true;
+      requestDeferredSurfaceEffect(effects, "all");
     } else if (mutation.key === "diplomacy-subject") {
       const nextId = normalizePositiveId(value);
       if (presentation.viewOptions.diplomacySubjectId === nextId) continue;
       presentation.viewOptions = {...presentation.viewOptions, diplomacySubjectId: nextId};
-      if (presentation.colorMode === "diplomacy") effects.surface = true;
+      if (presentation.colorMode === "diplomacy") requestDeferredSurfaceEffect(effects, "all");
     } else if (mutation.key === "view-options") {
       const nextOptions = value || {};
       if (!hasShallowPresentationChange(presentation.viewOptions, nextOptions)) continue;
       if (Object.prototype.hasOwnProperty.call(nextOptions, "smoothCellBorders")) effects.lines = true;
       presentation.viewOptions = {...presentation.viewOptions, ...nextOptions};
-      effects.surface = true;
+      const changedKeys = Object.keys(nextOptions).filter(key => renderer.viewOptions?.[key] !== nextOptions[key]);
+      const patchScope = changedKeys.includes("smoothCellBorders")
+        ? "unavailable"
+        : changedKeys.every(key => key === "showOceanHeight") ? "water" : "all";
+      requestDeferredSurfaceEffect(effects, patchScope);
     } else if (mutation.key === "visual-theme") {
       const theme = resolveVisualTheme(value?.themeId);
       if (!value?.force && presentation.visualTheme?.id === theme.id) continue;
       presentation.visualTheme = theme;
       presentation.viewOptions = {...presentation.viewOptions, visualTheme: theme};
-      effects.surface = true;
+      requestDeferredSurfaceEffect(effects, "all");
       effects.lines = true;
       effects.labels = true;
       effects.routes = true;
@@ -493,6 +508,7 @@ export class PlaceholderMapRenderer {
     this.workerRenderInstallPendingDraw = false;
     this.workerRenderInstallViewportChanged = false;
     this.workerRenderInstallApplyingDeferred = false;
+    this.workerRenderMutationCaptureDepth = 0;
     this.workerRenderInstallDeferredMutations = new Map();
     this.workerRenderInstallMutationSequence = 0;
     this.workerRenderInstallEnsureGridDiagnostics = false;
@@ -1718,8 +1734,18 @@ export class PlaceholderMapRenderer {
     return this.workerRenderInstallSuspended;
   }
 
+  beginDeferredWorkerRenderMutationCapture() {
+    this.workerRenderMutationCaptureDepth++;
+    return this.workerRenderMutationCaptureDepth;
+  }
+
+  endDeferredWorkerRenderMutationCapture() {
+    if (this.workerRenderMutationCaptureDepth > 0) this.workerRenderMutationCaptureDepth--;
+    return this.workerRenderMutationCaptureDepth;
+  }
+
   deferWorkerRenderMutation(key, value, {merge = (_previous, next) => next} = {}) {
-    if (this.workerRenderInstallSuspended <= 0 || this.workerRenderInstallApplyingDeferred) return false;
+    if ((this.workerRenderInstallSuspended <= 0 && this.workerRenderMutationCaptureDepth <= 0) || this.workerRenderInstallApplyingDeferred) return false;
     const normalizedKey = String(key);
     const previous = this.workerRenderInstallDeferredMutations.get(normalizedKey);
     this.workerRenderInstallDeferredMutations.set(normalizedKey, {
@@ -1759,6 +1785,17 @@ export class PlaceholderMapRenderer {
       finalPresentation: presentation,
       effects
     };
+  }
+
+  canPrepareDeferredSurfaceColorPatch(snapshot) {
+    const scope = snapshot?.effects?.surfacePatchScope;
+    if (scope !== "all" && scope !== "water") return false;
+    if (this.viewOptions?.smoothCellBorders === false || snapshot?.finalPresentation?.viewOptions?.smoothCellBorders === false) return false;
+    if (!this.map || !this.cellVisualMesh?.cells?.length || this.surfacePatchCells?.size) return false;
+    if (!(this.surfaceVertices instanceof Float32Array) || !this.surfaceVertices.length) return false;
+    if (!(this.surfaceCellRanges instanceof Map) || this.surfaceCellRanges.size !== this.cellVisualMesh.cells.length) return false;
+    const lastCell = this.cellVisualMesh.cells.at(-1);
+    return Boolean(lastCell && this.surfaceCellRanges.get(lastCell.cell)?.end === this.surfaceVertices.length);
   }
 
   applyDeferredWorkerRenderPresentationOnly(snapshot) {
@@ -1996,6 +2033,7 @@ export class PlaceholderMapRenderer {
   abortWorkerRenderInstall() {
     this.workerRenderInstallSuspended = 0;
     this.workerRenderInstallApplyingDeferred = false;
+    this.workerRenderMutationCaptureDepth = 0;
     this.workerRenderInstallDeferredMutations.clear();
     this.workerRenderInstallEnsureGridDiagnostics = false;
     this.workerRenderInstallPendingDraw = false;
@@ -5329,6 +5367,36 @@ export function buildPlaceholderSurfaceBundle(map, colorMode, viewOptions, shore
     ...shoreVertices,
     surfaceCellRangesMode: useCellVisualMesh ? "cell-visual" : "unavailable",
     surfaceCellRanges: buildSurfaceCellRanges(colorMode, viewOptions, cellVisualMesh, base.length),
+    shoreSurfaceCellRanges
+  };
+}
+
+export function buildPlaceholderSurfaceColorPatch(map, colorMode, viewOptions, shoreVisualPaths, cellVisualMesh, scope = "all") {
+  if (viewOptions?.smoothCellBorders === false || !cellVisualMesh?.cells?.length) {
+    throw new Error("surface color patch 需要稳定的 cell visual geometry");
+  }
+  const normalizedScope = scope === "water" ? "water" : "all";
+  const selected = normalizedScope === "water"
+    ? cellVisualMesh.cells.filter(cellMesh => Number(map.grid.cells.h[cellMesh.cell]) < 20)
+    : cellVisualMesh.cells;
+  const cellIds = new Uint32Array(selected.length);
+  const colors = new Float32Array(selected.length * 4);
+  for (let index = 0; index < selected.length; index++) {
+    const cell = selected[index].cell;
+    const color = colorForCell(cell, map, colorMode, viewOptions);
+    cellIds[index] = cell;
+    colors.set([color[0], color[1], color[2], Number(map.grid.cells.h[cell]) >= 20 ? 0.25 : 0.75], index * 4);
+  }
+  const shoreLayers = shouldDrawShoreVisualBands(colorMode)
+    ? buildShoreSurfaceVertexLayers(createRenderContext(map), colorMode, viewOptions, shoreVisualPaths)
+    : emptyShoreSurfaceVertexLayers();
+  const {cellRanges: shoreSurfaceCellRanges, ...shoreVertices} = shoreLayers;
+  return {
+    mode: "cell-colors",
+    scope: normalizedScope,
+    cellIds,
+    colors,
+    ...shoreVertices,
     shoreSurfaceCellRanges
   };
 }

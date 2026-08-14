@@ -5,6 +5,7 @@ import {generatePlaceholderMap} from "../app/webgl-generator/src/generator/index
 import {
   buildLineVertices,
   buildPlaceholderSurfaceBundle,
+  buildPlaceholderSurfaceColorPatch,
   buildPointVertices,
   buildRiverMeshVertices,
   buildRouteMeshVertices
@@ -94,6 +95,32 @@ const secondSurface = await executeRenderPreparationTask({map, binding, camera, 
 assert.equal(firstSurface.cache.reused, false, "同 revision 首次 surface 准备不得虚报复用");
 assert.equal(secondSurface.cache.reused, true, "同 revision 第二次 surface 准备必须复用渲染几何缓存");
 for (const [key, value] of Object.entries(retainedRefs)) assert.equal(retainedRenderCache[key], value, `同 revision 不得重建 ${key}`);
+const expectedOceanPatch = buildPlaceholderSurfaceColorPatch(
+  map,
+  "height",
+  {showOceanHeight: true, smoothCellBorders: true},
+  retainedRenderCache.shore,
+  retainedRenderCache.cellVisual,
+  "water"
+);
+const oceanPatch = await executeRenderPreparationTask({
+  map,
+  binding,
+  camera,
+  canvas,
+  colorMode: "height",
+  viewOptions: {showOceanHeight: true, smoothCellBorders: true},
+  surfacePatchScope: "water",
+  layers: ["surface"]
+}, {renderCache: retainedRenderCache});
+assert.equal(oceanPatch.layers.surface.mode, "cell-colors");
+assert.equal(oceanPatch.layers.surface.scope, "water");
+assert.deepEqual(oceanPatch.layers.surface.cellIds, expectedOceanPatch.cellIds);
+assert.equal(byteChecksum(oceanPatch.layers.surface.colors), byteChecksum(expectedOceanPatch.colors));
+assert.ok(oceanPatch.layers.surface.cellIds.length > 0 && oceanPatch.layers.surface.cellIds.length < map.grid.cells.i.length, "海底补丁必须只覆盖水域 cell");
+assert.ok(oceanPatch.layers.surface.cellIds.every(cell => Number(map.grid.cells.h[cell]) < 20), "海底补丁不得包含陆地 cell");
+assert.equal("base" in oceanPatch.layers.surface, false, "surface color patch 不得回传完整 base geometry");
+assert.ok(collectRenderPreparationTransfers(oceanPatch).some(buffer => buffer === oceanPatch.layers.surface.colors.buffer), "surface color patch colors 必须可 transfer");
 const nextBinding = {...binding, mapRevision: binding.mapRevision + 1};
 const nextRevisionSurface = await executeRenderPreparationTask({map, binding: nextBinding, camera, canvas, colorMode: "provinces", layers: ["surface"]}, {renderCache: retainedRenderCache});
 assert.equal(nextRevisionSurface.cache.reused, false, "revision 变化必须拒绝旧渲染几何缓存");
@@ -124,6 +151,7 @@ console.log(JSON.stringify({
   routeDrawRanges: actual.layers.route.drawRanges,
   transfers: transfers.length,
   retainedRenderCache: {first: firstSurface.cache, second: secondSurface.cache, nextRevision: nextRevisionSurface.cache},
+  oceanPatch: {cells: oceanPatch.layers.surface.cellIds.length, bytes: oceanPatch.layers.surface.colors.byteLength, checksum: byteChecksum(oceanPatch.layers.surface.colors)},
   cacheSummary,
   pickingSummary,
   labelSummary,
