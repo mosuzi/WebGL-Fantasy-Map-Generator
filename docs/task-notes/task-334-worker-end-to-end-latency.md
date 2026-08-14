@@ -171,3 +171,9 @@ diagnostic artifact 为 `work/task332-view-switch-100000/raw-result.json`；该�
 - 成功与 checksum / 长度等失败路径都会清空 handoff 的 chunk 引用。v3 容器 header、目录、schema、section 数、边界、checksum、别名和派生 topology 仍 fail-closed；旧同步 / 单 buffer 解码入口保持兼容。
 - 本 checkpoint 仅移除 materialize 前额外的一份整容器连续副本，尚未移除主线程最终完整 map，也不宣称 C2-C 或第 334 项完成。下一步仍须把同步 UI / 编辑 / renderer 消费面迁移到有界投影，最终完整 canonical map 只留在唯一 `MapWorker`。
 - v3 10k 专项通过：`10004` cells、24 sections、raw `2,496,662B`、gzip `1,172,097B`；任意非整齐 chunk 边界往返、截断拒绝、checksum 失败与成功 / 失败引用释放均通过。Worker 十一类、协议、session、取消和 deferred replay 专项通过。产品 `2` 文件、既有 Node 工具 `1` 文件，没有新建浏览器夹具、浏览器运行或委派等待。版本升至 `0.3.10`。
+
+## 16. C2-C checkpoint 2：主线程派生列惰性投影
+
+- `pack.cells.temp / prec` 是 `grid.cells.temp / prec` 经 `pack.cells.g` 映射得到的重复列；正式主线程 renderer、查询与编辑路径使用 grid 原列，旧生成算法才可能同步读取 pack 副本。adoption 现在先逐项确认两侧完全同源，再把 pack 两列改为可枚举、可写的惰性属性。
+- 普通读取 / 展示不再长期保留两份各约 100k 项的派生数组；兼容导出或仍未迁移的旧路径首次读取时会按当前 grid 与映射精确物化，字段和存档格式不变。任一长度、映射或数值漂移都会保留原数组，禁止用推导掩盖旧数据差异。
+- 10k 与 `99846` cells 的 v3 往返均通过；100k raw / gzip 为 `13,197,139 / 7,410,037B`，24 sections，惰性前后文档深等。产品 `2` 文件（其中 `1` 个新投影模块）、既有 Node 工具 `1` 文件；浏览器、用户 5410、专用浏览器夹具、委派与等待均为 `0`。版本升至 `0.3.11`，C2-C 尚未完成。

@@ -3,6 +3,7 @@ import {generatePlaceholderMap} from "../app/webgl-generator/src/generator/index
 import {createMapDocument, migrateMapDocument, parseMapDocument, stringifyMapDocument} from "../app/webgl-generator/src/runtime/map-file-io.js";
 import {decodeCompactBinaryValue, decodeCompactBinaryValueAsync, encodeCompactBinaryValue} from "../app/webgl-generator/src/runtime/compact-binary-value-codec.js";
 import {createMapAdoptionHandoff, materializeMapAdoptionHandoff} from "../app/webgl-generator/src/runtime/map-adoption-handoff.js";
+import {applyMainThreadMapProjection} from "../app/webgl-generator/src/runtime/main-thread-map-projection.js";
 import {
   decodeWebfmgV3Document,
   decodeWebfmgV3DocumentAsync,
@@ -42,8 +43,14 @@ assert.deepEqual(decodedAsync, decoded, "v3 async decode 必须与同步兼容�
 assert.ok(asyncYields > 0, "v3 async decode 没有执行有界让步");
 const handoff = createMapAdoptionHandoff(document);
 assert.ok(handoff.chunks.length > 1 && handoff.chunks.every(chunk => chunk.byteLength <= 256 * 1024), "adoption handoff 必须使用独立有界分片");
-assert.deepEqual(await materializeMapAdoptionHandoff(handoff), decoded, "adoption handoff materialize 漂移");
+const materialized = await materializeMapAdoptionHandoff(handoff);
+for (const key of ["temp", "prec"]) assert.equal(typeof Object.getOwnPropertyDescriptor(materialized.map.pack.cells, key)?.get, "function", `main-thread ${key} 派生列必须保持惰性`);
+assert.deepEqual(materialized, decoded, "adoption handoff materialize 漂移");
+for (const key of ["temp", "prec"]) assert.ok(Array.isArray(Object.getOwnPropertyDescriptor(materialized.map.pack.cells, key)?.value), `main-thread ${key} 首次读取后必须精确物化`);
 assert.ok(handoff.chunks.every(chunk => chunk === null), "adoption handoff 解码后必须释放全部 chunk 引用");
+const divergent = {grid: {cells: {temp: [1, 2], prec: [3, 4]}}, pack: {cells: {g: [0, 1], temp: [1, 9], prec: [3, 4]}}};
+applyMainThreadMapProjection(divergent);
+assert.equal(Object.getOwnPropertyDescriptor(divergent.pack.cells, "temp")?.get, undefined, "非同源 pack 派生列不得被惰性投影掩盖");
 const directChunkBytes = 1021;
 const directChunks = Array.from({length: Math.ceil(raw.byteLength / directChunkBytes)}, (_, index) => raw.slice(index * directChunkBytes, Math.min(raw.byteLength, (index + 1) * directChunkBytes)));
 assert.deepEqual(await decodeWebfmgV3DocumentChunksAsync(directChunks, {byteLength: raw.byteLength}), decoded, "任意边界 v3 chunks 解码漂移");

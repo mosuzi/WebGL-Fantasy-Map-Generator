@@ -3,6 +3,7 @@ import {
   encodeWebfmgV3Document,
   inspectWebfmgV3Container
 } from "./webfmg-v3-container.js";
+import {applyMainThreadMapProjection} from "./main-thread-map-projection.js";
 
 export const MAP_ADOPTION_HANDOFF_KIND = "map-adoption-v3-sections";
 export const MAP_ADOPTION_HANDOFF_CHUNK_BYTES = 256 * 1024;
@@ -34,7 +35,7 @@ export async function materializeMapAdoptionHandoff(handoff, options = {}) {
   }
   const yieldToMain = typeof options.yieldToMain === "function" ? options.yieldToMain : defaultYield;
   try {
-    return await decodeWebfmgV3DocumentChunksAsync(handoff.chunks, {
+    const document = await decodeWebfmgV3DocumentChunksAsync(handoff.chunks, {
       ...options,
       byteLength,
       expectedSections: Number(handoff.sections),
@@ -42,6 +43,8 @@ export async function materializeMapAdoptionHandoff(handoff, options = {}) {
       consumeChunks: true,
       yieldToMain
     });
+    applyMainThreadMapProjection(document.map);
+    return document;
   } finally {
     handoff.chunks.fill(null);
   }
