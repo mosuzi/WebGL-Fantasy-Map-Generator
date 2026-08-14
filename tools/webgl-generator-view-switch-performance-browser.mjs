@@ -146,9 +146,10 @@ async function runDiagnostic(requestedCells) {
     ["option:labels-restore", () => api.layers.setMaxCityLabels(original.labels)]
   ];
   const operations = [];
-  let uiConvergence;
+  let uiConvergence, viewCameraConvergence;
   try {
     for (const [name, action] of actions) operations.push(await runAction(name, action));
+    viewCameraConvergence = await runViewCameraConvergence();
     uiConvergence = await runUiConvergence();
   } finally {
     longTaskObserver.disconnect();
@@ -157,7 +158,7 @@ async function runDiagnostic(requestedCells) {
   }
   const finalHealth = unwrap(api.info.healthEvents({severity: "error", limit: 100}), "health");
   const finalStats = unwrap(api.info.runtimeStats(), "runtime stats");
-  return {ok: true, cells: app.map.grid.cells.i.length, operations, uiConvergence, final: {health: finalHealth.events || [], loading: finalStats.loading, glError: app.renderer.getStats().draw?.glError ?? app.renderer.lastDraw?.glError ?? 0}};
+  return {ok: true, cells: app.map.grid.cells.i.length, operations, viewCameraConvergence, uiConvergence, final: {health: finalHealth.events || [], loading: finalStats.loading, glError: app.renderer.getStats().draw?.glError ?? app.renderer.lastDraw?.glError ?? 0}};
 
   async function runAction(name, action) {
     await drain();
@@ -211,6 +212,44 @@ async function runDiagnostic(requestedCells) {
     };
   }
 
+  async function runViewCameraConvergence() {
+    await drain();
+    const longTaskStart = trace.longTasks.length;
+    const previousMode = app.renderer.colorMode;
+    const cameraBefore = JSON.stringify(app.renderer.camera);
+    const target = [...document.querySelectorAll('[role="radiogroup"][aria-label="视图"] label')].find(item => item.textContent?.trim() === "国家")?.querySelector("input");
+    ensure(target, "缺少国家视图可见控件");
+    target.click();
+    await Promise.resolve();
+    await Promise.resolve();
+    ensure(app.runtimeOperation.getSnapshot().busy, "国家视图可见点击未启动显示事务");
+    const during = {
+      renderer: app.renderer.colorMode,
+      selected: document.querySelector('[role="radiogroup"][aria-label="视图"] .el-segmented__item.is-selected .el-segmented__item-label')?.textContent?.trim() || "",
+      bridge: document.querySelector('.ui-segmented-mode-bridge.active')?.dataset?.mode || ""
+    };
+    ensure(during.renderer === previousMode && during.selected === "高度" && during.bridge === previousMode, `未提交视图提前亮起：${JSON.stringify(during)}`);
+    const canvas = app.renderer.canvas;
+    const rect = canvas.getBoundingClientRect();
+    canvas.dispatchEvent(new WheelEvent("wheel", {bubbles: true, cancelable: true, clientX: rect.left + rect.width * 0.6, clientY: rect.top + rect.height * 0.55, deltaY: -120}));
+    const deadline = performance.now() + 30_000;
+    while (app.runtimeOperation.getSnapshot().busy && performance.now() < deadline) await new Promise(resolve => setTimeout(resolve, 20));
+    ensure(!app.runtimeOperation.getSnapshot().busy, "相机变化期间国家视图未在时限内结束");
+    await drain();
+    trace.longTasks.push(...longTaskObserver.takeRecords().map(entry => ({startTime: entry.startTime, duration: entry.duration, name: entry.name})));
+    const after = {
+      renderer: app.renderer.colorMode,
+      selected: document.querySelector('[role="radiogroup"][aria-label="视图"] .el-segmented__item.is-selected .el-segmented__item-label')?.textContent?.trim() || "",
+      bridge: document.querySelector('.ui-segmented-mode-bridge.active')?.dataset?.mode || "",
+      api: unwrap(api.layers.get(), "相机变化后的视图状态").colorMode,
+      cameraChanged: JSON.stringify(app.renderer.camera) !== cameraBefore
+    };
+    ensure(after.renderer === "states" && after.selected === "国家" && after.bridge === "states" && after.api === "states" && after.cameraChanged, `相机变化后的国家视图未收敛：${JSON.stringify(after)}`);
+    unwrap(await api.layers.setViewMode(previousMode), "恢复高度视图");
+    await drain();
+    return {previousMode, during, after, longTasks: trace.longTasks.slice(longTaskStart)};
+  }
+
   async function runUiConvergence() {
     const control = document.getElementById("show-ocean-height");
     ensure(control, "缺少显示海底控件");
@@ -243,6 +282,9 @@ function assertAcceptance(result, requested, {b2Display = false} = {}) {
   assert.equal(result.operations.length, 14, "视图切换操作分母漂移");
   assert.equal(result.operations[0].name, "mode:height-initial", "视图切换必须从 height 起步");
   assert.equal(result.operations[0].worker, null, "初始 height 同值设置必须保持 no-op");
+  assert.deepEqual(result.viewCameraConvergence.longTasks, [], "相机变化期间视图切换不得出现 LongTask");
+  assert.deepEqual(result.viewCameraConvergence.during, {renderer: "height", selected: "高度", bridge: "height"}, "未提交视图控件必须保持已提交模式");
+  assert.deepEqual(result.viewCameraConvergence.after, {renderer: "states", selected: "国家", bridge: "states", api: "states", cameraChanged: true}, "相机变化后的视图状态必须同源收敛");
   const workerOperations = result.operations.slice(1);
   for (const operation of workerOperations) assert.ok(operation.worker, `${operation.name} 未产生当前 Worker 显示证据`);
   const first = workerOperations[0];

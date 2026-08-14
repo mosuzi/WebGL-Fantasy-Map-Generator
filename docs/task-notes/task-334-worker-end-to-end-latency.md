@@ -184,3 +184,10 @@ diagnostic artifact 为 `work/task332-view-switch-100000/raw-result.json`；该�
 - Worker 早已只回传约 `1.60MB` 的全图 cell colors，但 installer 仍复制整份约 `105MB` CPU surface，并新建一组 segmented GPU base。显示事务现仅在“单一 surface + cell-colors”路径保存紧凑旧 RGBA 与 range，短暂停绘后分片改写既有 CPU vertices、按既有不超过 `8MiB` 的 segments 原位上传；成功保持 buffer set / segment / alias / CPU 数组 identity，失败异步恢复旧 CPU / GPU 字节，detached owner 不覆写新地图。其它全量 surface、主题、标签、重生成与 renderer 安装仍走原独立临时 buffer 事务。
 - 10k 专用门通过。固定 `99846` cells 复验中，国家 / 省份 / 生物群系 / 人口 / 高度 wall 为 `235.9 / 256.9 / 221.7 / 142.0 / 142.3ms`，对应 install prepare 为 `60.1 / 70.0 / 67.0 / 40.8 / 41.7ms`，五项 LongTask 均为 `0`；冻结旧国家视图约 `290.4ms`、旧 install prepare 约 `175.1ms`。一次尝试复用旧岸线 ranges 被人口视图真实 geometry 长度变化拒绝并完整撤销，没有把错误假设留在产品。
 - 用户原 5410 标签页未刷新、未生成或替换地图；HMR 后直接切换政体 / 国家，最终分别严格收敛为 `governments + 政体`、`states + 国家`，Loading 清理且无新增应用错误。该 debug 页每次显示事务原会同步发布约 `40` 条重复 `operation-stage`，现同阶段进度最多每 `80ms` 发布一次，阶段切换仍立即可见；现场 health 首阶段至 success 降为约 `245 / 213ms`，每次只保留 `3～4` 条 stage。版本升至 `0.3.12`；本后续不宣称 C2-C 或第 334 项完成，下一步仍只迁移主线程有界投影。
+
+## 18. B2 后续：相机竞争与已提交视图状态
+
+- 5410 现场按“首次切换 → 平移 / 缩放 → 再切换”复现：旧链在 Worker 完成前先写 control preference / active bridge，出现“国家 Tab 已亮、renderer 与政体图例尚未提交”的中间态；纯 surface 显示事务又把 camera / canvas 纳入过期令牌，用户在等待窗内平移或缩放会令本来与相机无关的颜色结果以 `operation_obsolete` 退出。
+- 显示事务现只在成功提交或失败恢复后从正式 renderer 同步控件；未提交期间 Tab、bridge 和 renderer 维持旧值。仅 `layers=[surface]` 的紧凑颜色准备忽略 camera / canvas 漂移，仍严格校验地图 binding、selection / highlight、主题、单位、可见性、模式、view / label options 与 deferred sequence；主题、标签、路线等相机相关准备继续使用完整令牌。可见 segmented 仍经唯一隐藏 bridge 进入旧运行时，但隐藏 bridge 不再反向触发 Vue 提交，单次用户点击只形成一个显示意图。
+- 生产 10k 入口真实通过：国家视图 wall `75.9ms`、Worker 输入 `3` 包、compact colors `160064B`、挂起 `11.5ms`、LongTask `0`。专门竞争门在请求未提交时严格观察到 `height / 高度 / height`，随后真实 wheel 改变相机，操作仍收敛为 `states / 国家 / states`，公开 API 同源；非性能 health、Loading、应用错误与 WebGL error 为 `0`。artifact 为 `work/task334-b2-view-switch-10000/result.json`。
+- 本阶段产品 `2` 文件、工具 `3` 文件，专用浏览器工具保持 `372` 行；没有新建夹具、没有委派和等待。语法、视图控件专项、Worker app replay 静态门、生产构建与唯一 10k 浏览器门通过。版本升至 `0.3.13`；第 334 项仍进行中，下一步仍只进入 C2-C 有界投影。

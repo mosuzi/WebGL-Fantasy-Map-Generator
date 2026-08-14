@@ -3028,7 +3028,8 @@ function invalidateMapReplicaCoordinators(state, includeCompute, reason) {
 function invokeRuntimeDisplayActionFromUi(state, documentRef, task) {
   void Promise.resolve().then(task).catch(error => {
     showMapToast(documentRef, runtimeDisplayActionErrorMessage(error), 2800, {tone: "error"});
-  }).finally(() => restoreRuntimeDisplayControls(state, documentRef));
+    restoreRuntimeDisplayControls(state, documentRef);
+  });
 }
 
 function runtimeDisplayActionErrorMessage(error) {
@@ -3065,10 +3066,15 @@ function createRuntimeActions(state, documentRef, options = {}) {
   const operation = state.runtimeOperation;
   const runDisplayMutation = (name, apply, rollback) => {
     const activeName = state.runtimeOperationSnapshot?.current?.name || "";
-    if (state.renderer?.workerRenderInstallSuspended > 0 && !activeName.startsWith("layers.")) return apply();
+    const onCommitted = () => restoreRuntimeDisplayControls(state, documentRef);
+    if (state.renderer?.workerRenderInstallSuspended > 0 && !activeName.startsWith("layers.")) {
+      const result = apply();
+      onCommitted();
+      return result;
+    }
     return operation.run(
       name,
-      context => applyRuntimeDisplayMutationViaWorker(state, documentRef, context, {apply, rollback}),
+      context => applyRuntimeDisplayMutationViaWorker(state, documentRef, context, {apply, rollback, onCommitted}),
       {message: "正在整理地图画面"}
     );
   };
@@ -3637,10 +3643,14 @@ function measureHealthOperation(state, name, detail, task) {
   return monitor.measureSyncOperation(name, detail, task);
 }
 
-async function applyRuntimeDisplayMutationViaWorker(state, documentRef, operation, {apply, rollback}) {
+async function applyRuntimeDisplayMutationViaWorker(state, documentRef, operation, {apply, rollback, onCommitted}) {
   const renderer = state.renderer;
   const map = state.map;
-  if (!renderer || !map) return apply();
+  if (!renderer || !map) {
+    const result = apply();
+    onCommitted?.();
+    return result;
+  }
   if (renderer.workerRenderInstallSuspended > 0) {
     throw createRuntimeOperationError("operation_busy", "当前地图显示正在更新，请稍后再试", {
       stage: "render-prepare",
@@ -3689,6 +3699,7 @@ async function applyRuntimeDisplayMutationViaWorker(state, documentRef, operatio
     mutationApplied = true;
     const snapshot = renderer.captureDeferredWorkerRenderSnapshot?.();
     if (!snapshot?.entries?.length) {
+      onCommitted?.();
       return result;
     }
 
@@ -3701,15 +3712,18 @@ async function applyRuntimeDisplayMutationViaWorker(state, documentRef, operatio
       renderSuspended = Boolean(renderer.workerRenderInstallSuspended > 0);
       timings.suspendedMs = roundWorkerTelemetryMs(performance.now() - suspendedStartedAt);
       timings.totalMs = roundWorkerTelemetryMs(performance.now() - displayStartedAt);
+      onCommitted?.();
       return result;
     }
 
     const binding = createRegenerationWorkerBinding(state, operation);
     const renderRequest = createWorkerRegenerationDeferredRenderRequest(state, "display", binding, snapshot);
-    const sourceToken = createWorkerRegenerationRenderContextToken(state, "display");
+    const viewportIndependent = layers.length === 1 && layers[0] === "surface";
+    const tokenOptions = {includeViewport: !viewportIndependent};
+    const sourceToken = createWorkerRegenerationRenderContextToken(state, "display", tokenOptions);
     const isSourceCurrent = () => state.map === map
       && validateRegenerationWorkerBinding(state, binding)
-      && createWorkerRegenerationRenderContextToken(state, "display") === sourceToken
+      && createWorkerRegenerationRenderContextToken(state, "display", tokenOptions) === sourceToken
       && isWorkerRegenerationDeferredReplaySequenceCurrent(renderer, snapshot);
     reportDisplayProgress("render-prepare", "正在整理地图画面", true);
     await yieldToBrowser(documentRef);
@@ -3763,10 +3777,10 @@ async function applyRuntimeDisplayMutationViaWorker(state, documentRef, operatio
     renderer.suspendWorkerRenderInstall();
     renderSuspended = true;
     renderer.applyDeferredWorkerRenderPresentationOnly?.(snapshot);
-    const targetToken = createWorkerRegenerationRenderContextToken(state, "display");
+    const targetToken = createWorkerRegenerationRenderContextToken(state, "display", tokenOptions);
     const isTargetCurrent = () => state.map === map
       && validateRegenerationWorkerBinding(state, binding)
-      && createWorkerRegenerationRenderContextToken(state, "display") === targetToken
+      && createWorkerRegenerationRenderContextToken(state, "display", tokenOptions) === targetToken
       && isWorkerRegenerationDeferredReplaySequenceCurrent(renderer, snapshot);
     const installCommitStartedAt = performance.now();
     await install.prepareCommit?.({
@@ -3793,6 +3807,7 @@ async function applyRuntimeDisplayMutationViaWorker(state, documentRef, operatio
     renderSuspended = Boolean(renderer.workerRenderInstallSuspended > 0);
     timings.suspendedMs = roundWorkerTelemetryMs(performance.now() - suspendedStartedAt);
     timings.totalMs = roundWorkerTelemetryMs(performance.now() - displayStartedAt);
+    onCommitted?.();
     try {
       install.finalize?.();
     } catch {
@@ -3886,12 +3901,17 @@ function setRuntimeViewMode(state, documentRef, mode) {
       state.panels.diplomacy?.setSelectedStateId?.(subjectId);
       state.renderer?.setDiplomacySubjectId?.(subjectId);
     }
-    setActiveModeButton(documentRef, nextMode);
-    updateControlPreferences(documentRef, {colorMode: nextMode});
     state.renderer?.setColorMode?.(nextMode);
-    updateRuntimePanel(documentRef, state);
-    updatePickPanel(documentRef, state);
-    return runtimeDisplayActionResult(state, documentRef, ["display-preference", "renderer", "runtime-panel"]);
+    if (state.renderer?.colorMode === nextMode) {
+      setActiveModeButton(documentRef, nextMode);
+      updateControlPreferences(documentRef, {colorMode: nextMode});
+      updateRuntimePanel(documentRef, state);
+      updatePickPanel(documentRef, state);
+    }
+    return {
+      ...runtimeDisplayActionResult(state, documentRef, ["display-preference", "renderer", "runtime-panel"]),
+      colorMode: nextMode
+    };
   });
 }
 
@@ -13042,13 +13062,15 @@ function workerRenderObject(object) {
   return {kind: String(object.kind), id: object.id};
 }
 
-function createWorkerRegenerationRenderContextToken(state, targetKind) {
+function createWorkerRegenerationRenderContextToken(state, targetKind, {includeViewport = true} = {}) {
   const renderer = state.renderer;
   const size = renderer?.canvasSize || {};
   return JSON.stringify({
     targetKind,
-    camera: renderer?.camera || null,
-    canvas: [renderer?.canvas?.width || 0, renderer?.canvas?.height || 0, size.cssWidth || 0, size.cssHeight || 0],
+    ...(includeViewport ? {
+      camera: renderer?.camera || null,
+      canvas: [renderer?.canvas?.width || 0, renderer?.canvas?.height || 0, size.cssWidth || 0, size.cssHeight || 0]
+    } : {}),
     selection: workerRenderObject(renderer?.selection),
     highlights: (renderer?.objectHighlights || []).map(workerRenderObject).filter(Boolean),
     visualTheme: renderer?.visualTheme || null,

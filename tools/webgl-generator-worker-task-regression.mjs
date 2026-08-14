@@ -1166,9 +1166,10 @@ function verifyAppDeferredReplayStaticContract() {
     source.indexOf("function runtimeDisplayObsoleteError")
   );
   assert.ok(displayFlow.length > 0, "普通显示入口必须接入共享 MapWorker 渲染事务");
+  const captureStart = displayFlow.indexOf("renderer.beginDeferredWorkerRenderMutationCapture?.()");
   const displayOrder = [
-    displayFlow.indexOf("renderer.beginDeferredWorkerRenderMutationCapture?.()"),
-    displayFlow.indexOf("result = apply()"),
+    captureStart,
+    displayFlow.indexOf("result = apply()", captureStart),
     displayFlow.indexOf("renderer.endDeferredWorkerRenderMutationCapture?.()"),
     displayFlow.indexOf("renderer.captureDeferredWorkerRenderSnapshot?.()"),
     displayFlow.indexOf("state.mapWorkerCoordinator.run(\"render.prepare\""),
@@ -1192,7 +1193,7 @@ function verifyAppDeferredReplayStaticContract() {
   assert.match(displayFlow, /cache: structuredClone\(prepared\.cache \|\| null\)/u, "显示诊断必须记录正式 Worker 渲染缓存命中");
   assert.match(displayFlow, /operation: \{id: operation\?\.id \|\| "", name: operation\?\.name \|\| ""\}/u, "显示诊断必须绑定当前 operation 身份");
   assert.match(source, /state\.workerTaskCoordinator = state\.mapWorkerCoordinator;[\s\S]*?state\.renderTaskCoordinator = state\.mapWorkerCoordinator;/u, "计算与显示必须共用唯一 MapWorker coordinator");
-  assert.match(source, /workerRenderInstallSuspended > 0 && !activeName\.startsWith\("layers\."\)\) return apply\(\)/u, "地图事务暂停 renderer 时显示设置必须继续进入原 deferred 队列");
+  assert.match(source, /workerRenderInstallSuspended > 0 && !activeName\.startsWith\("layers\."\)\) \{[\s\S]*?const result = apply\(\);[\s\S]*?onCommitted\(\);[\s\S]*?return result;/u, "地图事务暂停 renderer 时显示设置必须继续进入原 deferred 队列并回显当前提交状态");
   assert.match(displayFlow, /ownerCurrent \|\| !install\.committed/u, "显示失败清理必须区分当前图与 detached committed owner");
   assert.match(displayFlow, /renderer\.restoreDeferredWorkerRenderPresentation/u, "显示失败必须恢复展示标量");
   assert.match(displayFlow, /renderer\.abortWorkerRenderInstall/u, "显示失败必须解冻并清理 deferred queue");
@@ -1214,7 +1215,9 @@ function verifyAppDeferredReplayStaticContract() {
     assert.ok(displayUiRestore.includes(marker), `显示控件恢复缺少正式 renderer 来源：${marker}`);
   }
   assert.doesNotMatch(displayUiRestore, /readControlPreferences/u, "显示控件恢复不得读取已经被用户改写的 DOM 偏好");
-  assert.match(source, /invokeRuntimeDisplayActionFromUi\(state, documentRef,[\s\S]*?\.finally\(\(\) => restoreRuntimeDisplayControls\(state, documentRef\)\)/u, "UI 显示操作无论成功或拒绝都必须回写最终提交状态");
+  assert.match(source, /invokeRuntimeDisplayActionFromUi\(state, documentRef,[\s\S]*?catch\(error => \{[\s\S]*?restoreRuntimeDisplayControls\(state, documentRef\)/u, "UI 显示操作拒绝后必须回写最终提交状态");
+  assert.match(source, /const onCommitted = \(\) => restoreRuntimeDisplayControls\(state, documentRef\)[\s\S]*?applyRuntimeDisplayMutationViaWorker\(state, documentRef, context, \{apply, rollback, onCommitted\}\)/u, "显示操作成功后必须从正式 renderer 单次收敛控件");
+  assert.match(source, /viewportIndependent = layers\.length === 1 && layers\[0\] === "surface"[\s\S]*?includeViewport: !viewportIndependent/u, "纯 surface 显示准备不得因相机或画布变化作废");
   const displayErrorMessage = source.match(/function runtimeDisplayActionErrorMessage\(error\) \{[\s\S]*?\n\}/u)?.[0] || "";
   assert.match(displayErrorMessage, /operation_busy[\s\S]*?当前已有地图操作正在进行，请稍后再试/u, "重叠显示操作必须使用自然中文提示");
   assert.match(displayErrorMessage, /operation_obsolete[\s\S]*?地图状态已变化，请重新设置/u, "过期显示操作必须使用自然中文提示");

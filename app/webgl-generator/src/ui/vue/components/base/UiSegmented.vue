@@ -19,7 +19,6 @@
       :data-mode="dataMode ? option.value : null"
       tabindex="-1"
       aria-hidden="true"
-      @click="commitValue(option.value, {dispatchBridge: false})"
     >
       {{ option.label }}
     </button>
@@ -61,11 +60,13 @@ watch(() => props.modelValue, value => {
   currentValue.value = value;
 });
 
-function commitValue(value, {dispatchBridge = true} = {}) {
+function commitValue(value) {
   if (value === displayValue.value) return;
-  if (!props.dataMode) currentValue.value = value;
-  emit("select", value);
-  if (!props.dataMode || !dispatchBridge) return;
+  if (!props.dataMode) {
+    currentValue.value = value;
+    emit("select", value);
+    return;
+  }
   nextTick(() => {
     const button = bridgeButtons.value.find(item => item?.dataset?.mode === String(value));
     button?.dispatchEvent(new MouseEvent("click", {bubbles: true}));
