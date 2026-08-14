@@ -83,6 +83,8 @@ self.addEventListener("message", async event => {
         decoder: null,
         inputStreamId: `${request.requestId}:input`,
         inputReady: false,
+        inputDecodeCpuMs: 0,
+        inputDecodeCpuMaxMs: 0,
         payload: undefined,
         baseMap: request.reuseSession ? retainedSession.map : null,
         renderCache: request.reuseSession ? retainedSession.renderCache : Object.create(null)
@@ -97,11 +99,15 @@ self.addEventListener("message", async event => {
         throw workerStateError("worker_protocol_input_stream_invalid", "Worker 输入流标识或次序无效");
       }
       if (!state.decoder) state.decoder = createWorkerGraphDecoder({streamId: state.inputStreamId});
+      const decodeStartedAt = now();
       const complete = state.decoder.push(request.packet);
       if (complete) {
         state.payload = state.decoder.finish();
         state.inputReady = true;
       }
+      const decodeMs = roundMs(now() - decodeStartedAt);
+      state.inputDecodeCpuMs = roundMs(state.inputDecodeCpuMs + decodeMs);
+      state.inputDecodeCpuMaxMs = Math.max(state.inputDecodeCpuMaxMs, decodeMs);
       self.postMessage(createWorkerTaskStreamAck(WORKER_TASK_MESSAGE.INPUT_ACK, state.request, {
         streamId: state.inputStreamId,
         sequence: request.sequence
@@ -140,11 +146,15 @@ self.addEventListener("message", async event => {
     const handlerPayload = state.request.reuseSession
       ? {...state.payload, map: state.baseMap}
       : state.payload;
+    const checksumStartedAt = now();
     const replicaChecksum = state.request.persistentSession
       ? state.request.reuseSession
         ? retainedSession?.checksum || null
         : await computeCanonicalMapReplicaChecksum(handlerPayload.map, {revision: state.request.binding?.mapRevision})
       : null;
+    const workerReplicaChecksumMs = state.request.persistentSession && !state.request.reuseSession
+      ? roundMs(now() - checksumStartedAt)
+      : 0;
     const computeStartedAt = now();
     const result = await handler(handlerPayload, context);
     const computeMs = roundMs(now() - computeStartedAt);
@@ -166,7 +176,13 @@ self.addEventListener("message", async event => {
     self.postMessage(createWorkerTaskMessage(WORKER_TASK_MESSAGE.RESULT, state.request, {
       resultStreamId: state.outputStreamId,
       replicaChecksum,
-      telemetry: {computeMs, ...outputTelemetry}
+      telemetry: {
+        inputDecodeCpuMs: state.inputDecodeCpuMs,
+        inputDecodeCpuMaxMs: state.inputDecodeCpuMaxMs,
+        workerReplicaChecksumMs,
+        computeMs,
+        ...outputTelemetry
+      }
     }));
     activeRequests.delete(request.requestId);
   } catch (error) {
@@ -196,6 +212,7 @@ async function sendResultStream(state, result, context) {
   const startedAt = now();
   let packets = 0;
   let postMaxMs = 0;
+  let ackWaitMs = 0;
   for await (const packet of encodeWorkerGraph(result, {
     streamId: state.outputStreamId,
     packetUnits: 1024,
@@ -207,7 +224,7 @@ async function sendResultStream(state, result, context) {
       context.report(`result-stream-${stage}`, detail);
     }
   })) {
-    while (state.outputInflight.size >= OUTPUT_WINDOW) await waitForOutputAck(state);
+    while (state.outputInflight.size >= OUTPUT_WINDOW) ackWaitMs += await waitForOutputAckMeasured(state);
     const postStartedAt = now();
     self.postMessage(
       createWorkerTaskStreamPacket(WORKER_TASK_MESSAGE.OUTPUT_PACKET, state.request, packet.message),
@@ -217,8 +234,19 @@ async function sendResultStream(state, result, context) {
     packets += 1;
     state.outputInflight.add(packet.message.sequence);
   }
-  while (state.outputInflight.size) await waitForOutputAck(state);
-  return {outputWorkerPackets: packets, outputWorkerPostMaxMs: postMaxMs, outputWorkerStreamMs: roundMs(now() - startedAt)};
+  while (state.outputInflight.size) ackWaitMs += await waitForOutputAckMeasured(state);
+  return {
+    outputWorkerPackets: packets,
+    outputWorkerPostMaxMs: postMaxMs,
+    outputWorkerAckWaitMs: roundMs(ackWaitMs),
+    outputWorkerStreamMs: roundMs(now() - startedAt)
+  };
+}
+
+async function waitForOutputAckMeasured(state) {
+  const startedAt = now();
+  await waitForOutputAck(state);
+  return now() - startedAt;
 }
 
 function waitForOutputAck(state) {

@@ -125,6 +125,9 @@ for (const key of ["normalizeMs", "stringifyMs", "compressMs", "packageMs", "tot
 }
 assert.equal(directExport.timings.serializationPasses, 1, "地图导出必须只序列化一次正式 JSON 文本");
 assert.equal(directExport.timings.gzipMs, directExport.timings.compressMs, "兼容 gzipMs 与 compressMs 漂移");
+for (const key of ["parseMs", "renderPrepareMs", "totalMs"]) {
+  assert.ok(Number.isFinite(directImport.timings[key]) && directImport.timings[key] >= 0, `地图导入缺少 ${key} 阶段计时`);
+}
 assert.deepEqual(workerExport.result.data, directExport.data, "Worker/fallback plain JSON 字节不一致");
 const exportedText = new TextDecoder().decode(workerExport.result.data);
 const exported = await runMapFileIoWorkerTask({operation: "import", input: exportedText});

@@ -67,7 +67,7 @@
 
 ## 当前状态
 
-- 第 334 项阶段 A 已冻结根因：100k 冷 archive 除 `6.483s` 输入和 `1.988s` encode / gzip 外，主 / Worker 两次 telemetry 外 canonical checksum 约占 `23.564s`；暖保存 `1.897s` 主要为压缩。导入 / 恢复约 `15.1 / 15.4s`，瓶颈为 Worker 解析 / 全层准备与 `4410` 包输出。显示海底约 `0.67～0.90s`，compute 仅约 `0.10s`，但回传完整 surface 且 renderer suspend 几乎覆盖全窗，LongTask 为 `0`。B0 已冻结唯一 `MapWorker` owner：不得保留计算 / 显示两份长期完整镜像，新图 / 导入须在 owner 内 adoption，主线程只收 renderer transfer 与小型投影。下一阶段只补标量 telemetry 和一次 100k 窄诊断，再依次实施显示 patch、stream checksum、紧凑 handoff与 owner 迁移；冲突操作继续锁定。当前版本为 `0.3.3`。
+- 第 334 项 B1 已闭合标量根因：100k 冷首切 `39.853s`，主 / Worker checksum `10.615 / 13.199s`，完整输入 `8.997s / 1013包`，compute `6.078s`，renderer suspend `39.849s`。暖海底开 / 关 `711 / 657ms`，compute `116 / 86ms`，仍回传 `446` 包完整 surface，suspend `707 / 653ms`。唯一 `MapWorker` owner 门保持：不得保留计算 / 显示两份长期完整镜像，新图 / 导入须在 owner 内 adoption，主线程只收 renderer transfer 与小型投影。下一阶段只实施 B2 显示 effect / surface patch 与短 commit suspension；随后才进入 session / checksum 和存档 transport。当前版本为 `0.3.4`。
 
 - 第 322 项已完成、归档并合入远端 `main`。
 - 第 327 项已完成、归档并合入远端 `main`。

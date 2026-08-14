@@ -52,6 +52,7 @@ try {
       outputPackets: item.worker?.telemetry?.outputPackets,
       computeMs: item.worker?.telemetry?.computeMs,
       renderPrepareMs: item.worker?.telemetry?.renderPrepareMs,
+      timings: item.timings,
       longTasks: item.longTasks,
       slowSpans: item.spans.filter(span => span.ms >= 20)
     }))
@@ -198,6 +199,7 @@ async function runDiagnostic(requestedCells) {
     return {
       name, wallMs: round(fulfilledAt - startedAt), stableMs: round(endedAt - startedAt), invariant, loading,
       worker: last && last !== previousDisplayEvidence ? {operation: last.operation, layers: last.layers, cache: last.cache, telemetry: last.worker?.telemetry || null, session: last.worker?.session || last.session || null, finalSession: last.session || null} : null,
+      timings: last && last !== previousDisplayEvidence ? last.timings || null : null,
       spans: trace.spans.slice(marks.spans).map(span => ({...span, ms: round(span.end - span.start)})),
       longTasks: trace.longTasks.slice(marks.longTasks).filter(entry => entry.startTime >= startedAt && entry.startTime < endedAt),
       loafs: trace.loafs.slice(marks.loafs).filter(entry => entry.startTime < endedAt && entry.startTime + entry.duration > startedAt),
@@ -226,8 +228,16 @@ function assertAcceptance(result, requested) {
   assert.equal(first.worker.session?.reused, false, "首次视图切换必须建立新 Worker 镜像");
   assert.equal(first.worker.cache?.reused, false, "首次视图切换不得虚报缓存命中");
   assert.ok(first.worker.telemetry?.inputPackets > 100, "首次视图切换必须记录完整地图镜像输入");
+  for (const key of ["mainReplicaChecksumMs", "inputAckWaitMs", "outputDecodeCpuMs", "inputDecodeCpuMs", "workerReplicaChecksumMs", "outputWorkerAckWaitMs"]) {
+    assert.ok(Number.isFinite(first.worker.telemetry?.[key]) && first.worker.telemetry[key] >= 0, `首次视图切换缺少 ${key} telemetry`);
+  }
   assert.ok(first.wallMs < (requested === 100_000 ? 30_000 : 8_000), "首次视图切换稳定时间超出登记上限");
   const sessionId = first.worker.session.id;
+  for (const operation of workerOperations) {
+    for (const key of ["applyMs", "workerMs", "installPrepareMs", "installCommitMs", "sessionCommitMs", "resumeMs", "suspendedMs", "totalMs"]) {
+      assert.ok(Number.isFinite(operation.timings?.[key]) && operation.timings[key] >= 0, `${operation.name} 缺少 ${key} 显示事务计时`);
+    }
+  }
   for (const operation of workerOperations.slice(1)) {
     const run = operation.worker;
     assert.equal(run.session?.reused, true, `${operation.name} 必须复用同一 Worker 镜像`);

@@ -77,12 +77,16 @@ async function importMapFile(payload, context) {
   await taskCheckpoint(context);
 
   reportTaskProgress(context, "parse", 0.45, "解析、迁移并校验地图文档");
+  const parseStartedAt = taskNow();
   const document = await parseImportSource(source, payload);
+  const parseMs = roundTaskMs(taskNow() - parseStartedAt);
   await taskCheckpoint(context);
 
+  const renderPrepareStartedAt = taskNow();
   const preparedRender = payload.render
     ? await prepareImportedMapRender(document, payload.render, context)
     : null;
+  const renderPrepareMs = roundTaskMs(taskNow() - renderPrepareStartedAt);
   await taskCheckpoint(context);
 
   reportTaskProgress(context, "complete", 1, "地图存档解析完成");
@@ -93,7 +97,7 @@ async function importMapFile(payload, context) {
     map: document.map,
     preparedRender,
     metadata: mapDocumentMetadata(document),
-    timings: {totalMs: roundTaskMs(taskNow() - startedAt)}
+    timings: {parseMs, renderPrepareMs, totalMs: roundTaskMs(taskNow() - startedAt)}
   };
 }
 

@@ -444,6 +444,14 @@ const secondSessionResult = await sessionCoordinator.run("regeneration.compute",
 });
 assert.equal(secondSessionResult.worker.session.reused, true);
 assert.ok(secondSessionResult.worker.telemetry.inputPackets < firstSessionResult.worker.telemetry.inputPackets / 4, "复用 Worker 镜像后输入包数必须骤降");
+for (const key of ["mainReplicaChecksumMs", "inputAckWaitMs", "outputDecodeCpuMs", "outputDecodeCpuMaxMs", "outputAckPostMaxMs"]) {
+  assert.ok(Number.isFinite(firstSessionResult.worker.telemetry[key]) && firstSessionResult.worker.telemetry[key] >= 0, `首次 Worker 会话缺少 ${key} telemetry`);
+}
+assert.equal(secondSessionResult.worker.telemetry.mainReplicaChecksumMs, 0, "复用会话不应再次扫描主线程 checksum");
+const computeWorkerSource = readFileSync(new URL("../app/webgl-generator/src/runtime/compute-worker.js", import.meta.url), "utf8");
+for (const key of ["inputDecodeCpuMs", "inputDecodeCpuMaxMs", "workerReplicaChecksumMs", "outputWorkerAckWaitMs"]) {
+  assert.match(computeWorkerSource, new RegExp(`\\b${key}\\b`, "u"), `正式 compute-worker 缺少 ${key} telemetry`);
+}
 applyWorkerPatch(sessionFormal, "routes", secondSessionResult.patch);
 sessionBinding = {...sessionBinding, mapRevision: 2};
 assert.equal(await sessionCoordinator.commitSession(secondSessionResult.worker.session.id, sessionBinding, {expectedRevisionDelta: 1}), true);

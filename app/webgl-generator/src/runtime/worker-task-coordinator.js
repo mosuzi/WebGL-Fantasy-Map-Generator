@@ -44,6 +44,8 @@ export function createWorkerTaskCoordinator({createWorker, getBinding, validateB
         sessionId = `map-${Date.now().toString(36)}-${(++sessionSequence).toString(36)}`;
       }
     }
+    let mainReplicaChecksumMs = 0;
+    const replicaChecksumStartedAt = now();
     const replicaChecksum = persistent
       ? reuseSession
         ? persistentSession?.checksum || null
@@ -53,6 +55,7 @@ export function createWorkerTaskCoordinator({createWorker, getBinding, validateB
           signal
         })
       : null;
+    if (persistent && !reuseSession) mainReplicaChecksumMs = roundMs(now() - replicaChecksumStartedAt);
     const request = createWorkerTaskRequest({
       requestId: `${Date.now().toString(36)}-${(++requestSequence).toString(36)}`,
       task,
@@ -85,6 +88,7 @@ export function createWorkerTaskCoordinator({createWorker, getBinding, validateB
       persistentSession: persistent,
       reuseSession,
       replicaChecksum,
+      mainReplicaChecksumMs,
       sessionInputPayload: reuseSession ? createSessionInputPayload(payload, options) : payload
     });
   }
@@ -251,11 +255,16 @@ export function createWorkerTaskCoordinator({createWorker, getBinding, validateB
       let inputStartedAt = 0;
       let outputStartedAt = 0;
       const telemetry = {
+        mainReplicaChecksumMs: roundMs(runOptions.mainReplicaChecksumMs),
         inputPackets: 0,
         inputPostMaxMs: 0,
+        inputAckWaitMs: 0,
         inputStreamMs: 0,
         outputPackets: 0,
         outputDecodeMaxMs: 0,
+        outputDecodeCpuMs: 0,
+        outputDecodeCpuMaxMs: 0,
+        outputAckPostMaxMs: 0,
         outputReceiveMs: 0
       };
       const inputStreamId = `${request.requestId}:input`;
@@ -428,11 +437,17 @@ export function createWorkerTaskCoordinator({createWorker, getBinding, validateB
             const decodeStartedAt = now();
             if (!outputStartedAt) outputStartedAt = decodeStartedAt;
             if (!outputDecoder) outputDecoder = createWorkerGraphDecoder({streamId: outputStreamId});
+            const decodeCpuStartedAt = now();
             outputComplete = outputDecoder.push(message.packet);
+            const decodeCpuMs = roundMs(now() - decodeCpuStartedAt);
+            telemetry.outputDecodeCpuMs = roundMs(telemetry.outputDecodeCpuMs + decodeCpuMs);
+            telemetry.outputDecodeCpuMaxMs = Math.max(telemetry.outputDecodeCpuMaxMs, decodeCpuMs);
+            const ackPostStartedAt = now();
             worker.postMessage(createWorkerTaskStreamAck(WORKER_TASK_MESSAGE.OUTPUT_ACK, request, {
               streamId: outputStreamId,
               sequence: message.sequence
             }));
+            telemetry.outputAckPostMaxMs = Math.max(telemetry.outputAckPostMaxMs, roundMs(now() - ackPostStartedAt));
             telemetry.outputPackets += 1;
             telemetry.outputDecodeMaxMs = Math.max(telemetry.outputDecodeMaxMs, roundMs(now() - decodeStartedAt));
           } catch (error) {
@@ -513,7 +528,7 @@ export function createWorkerTaskCoordinator({createWorker, getBinding, validateB
             });
           }
         })) {
-          while (inputInflight.size >= maxInflight) await waitForInputAck();
+          while (inputInflight.size >= maxInflight) await waitForInputAckMeasured();
           assertCurrentBinding(request.binding, request.binding);
           const message = createWorkerTaskStreamPacket(WORKER_TASK_MESSAGE.INPUT_PACKET, request, packet.message);
           if (packet.message.done) inputPacketsFinished = true;
@@ -524,7 +539,7 @@ export function createWorkerTaskCoordinator({createWorker, getBinding, validateB
           inputInflight.add(packet.message.sequence);
         }
         if (!inputPacketsFinished) throw protocolStateError("worker_input_stream_incomplete", "Worker 输入流缺少完成包");
-        while (inputInflight.size) await waitForInputAck();
+        while (inputInflight.size) await waitForInputAckMeasured();
         if (!inputReady && !settled) {
           phaseTimer = setTimeout(
             () => fail(protocolStateError("worker_input_ready_timeout", "Worker 输入流组装超时")),
@@ -543,6 +558,12 @@ export function createWorkerTaskCoordinator({createWorker, getBinding, validateB
           }, Math.max(100, Number(runOptions.streamAckTimeoutMs) || 5000));
           inputWaiters.add(waiter);
         });
+      }
+
+      async function waitForInputAckMeasured() {
+        const startedAt = now();
+        await waitForInputAck();
+        telemetry.inputAckWaitMs = roundMs(telemetry.inputAckWaitMs + now() - startedAt);
       }
 
       function resolveInputWaiters() {

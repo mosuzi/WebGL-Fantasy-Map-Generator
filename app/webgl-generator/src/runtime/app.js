@@ -3657,10 +3657,25 @@ async function applyRuntimeDisplayMutationViaWorker(state, documentRef, operatio
   let install = null;
   let mutationApplied = false;
   let renderSuspended = false;
+  const displayStartedAt = performance.now();
+  const timings = {
+    applyMs: 0,
+    workerMs: 0,
+    installPrepareMs: 0,
+    installCommitMs: 0,
+    sessionCommitMs: 0,
+    resumeMs: 0,
+    suspendedMs: 0,
+    totalMs: 0
+  };
+  let suspendedStartedAt = 0;
   try {
+    suspendedStartedAt = performance.now();
     renderer.suspendWorkerRenderInstall();
     renderSuspended = true;
+    const applyStartedAt = performance.now();
     const result = apply();
+    timings.applyMs = roundWorkerTelemetryMs(performance.now() - applyStartedAt);
     mutationApplied = true;
     const snapshot = renderer.captureDeferredWorkerRenderSnapshot?.();
     if (!snapshot?.entries?.length) {
@@ -3689,6 +3704,7 @@ async function applyRuntimeDisplayMutationViaWorker(state, documentRef, operatio
     operation?.throwIfCancelled?.();
     if (!isCurrent()) throw runtimeDisplayObsoleteError();
 
+    const workerStartedAt = performance.now();
     const prepared = await state.renderTaskCoordinator.run("render.prepare", {
       map,
       ...renderRequest
@@ -3703,6 +3719,7 @@ async function applyRuntimeDisplayMutationViaWorker(state, documentRef, operatio
       streamYieldToMain: () => yieldToBrowser(documentRef),
       onProgress: () => operation?.report?.("render-prepare", {message: "正在整理地图画面"})
     });
+    timings.workerMs = roundWorkerTelemetryMs(performance.now() - workerStartedAt);
     if (prepared.worker?.mode !== "worker" || !prepared.worker?.session?.id || prepared.worker.session.pending !== true) {
       const error = new Error("地图显示准备未建立有效会话");
       error.code = "worker_protocol_session_stale";
@@ -3712,6 +3729,7 @@ async function applyRuntimeDisplayMutationViaWorker(state, documentRef, operatio
     if (!isCurrent()) throw runtimeDisplayObsoleteError();
 
     operation?.report?.("render-install", {message: "正在更新地图显示"});
+    const installPrepareStartedAt = performance.now();
     try {
       install = await prepareRendererWorkerInstall(renderer, map, prepared, {
         binding: renderRequest.binding,
@@ -3722,12 +3740,17 @@ async function applyRuntimeDisplayMutationViaWorker(state, documentRef, operatio
     } catch (error) {
       throw normalizeWorkerRegenerationOuterPreparedInstallError(error, operation);
     }
+    timings.installPrepareMs = roundWorkerTelemetryMs(performance.now() - installPrepareStartedAt);
     operation?.throwIfCancelled?.();
     if (!isCurrent()) throw runtimeDisplayObsoleteError();
+    const installCommitStartedAt = performance.now();
     install.commit();
+    timings.installCommitMs = roundWorkerTelemetryMs(performance.now() - installCommitStartedAt);
     if (!isCurrent()) throw runtimeDisplayObsoleteError();
 
+    const sessionCommitStartedAt = performance.now();
     const committed = await state.renderTaskCoordinator.commitSession(prepared.worker.session.id, binding, {expectedRevisionDelta: 0});
+    timings.sessionCommitMs = roundWorkerTelemetryMs(performance.now() - sessionCommitStartedAt);
     if (!committed) {
       const error = new Error("地图显示会话提交已被拒绝");
       error.code = "worker_session_commit_rejected";
@@ -3735,8 +3758,12 @@ async function applyRuntimeDisplayMutationViaWorker(state, documentRef, operatio
     }
     operation?.throwIfCancelled?.();
     if (!isCurrent()) throw runtimeDisplayObsoleteError();
+    const resumeStartedAt = performance.now();
     renderer.resumePreparedWorkerRenderInstall?.(snapshot, {draw: true});
+    timings.resumeMs = roundWorkerTelemetryMs(performance.now() - resumeStartedAt);
     renderSuspended = Boolean(renderer.workerRenderInstallSuspended > 0);
+    timings.suspendedMs = roundWorkerTelemetryMs(performance.now() - suspendedStartedAt);
+    timings.totalMs = roundWorkerTelemetryMs(performance.now() - displayStartedAt);
     try {
       install.finalize?.();
     } catch {
@@ -3747,7 +3774,8 @@ async function applyRuntimeDisplayMutationViaWorker(state, documentRef, operatio
       layers: [...renderRequest.layers],
       cache: structuredClone(prepared.cache || null),
       worker: structuredClone(prepared.worker),
-      session: state.renderTaskCoordinator.getSessionSnapshot?.() || null
+      session: state.renderTaskCoordinator.getSessionSnapshot?.() || null,
+      timings: {...timings}
     };
     return result;
   } catch (error) {

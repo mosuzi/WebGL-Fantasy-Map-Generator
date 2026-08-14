@@ -111,3 +111,16 @@ Worker-only 计算期间冲突控件可以保持禁用，但浏览器 RAF / Load
 | D | 双档真实入口、独立集成复核、最终验收 | 权威 D 门全部通过 | 只验收，不扩修相邻重构 |
 
 B0 唯一写者为主线程；本阶段只修改权威文档与版本，不修改产品、测试、构建、浏览器、`source/`、Wiki、用户 Chrome 或用户地图。首个廉价门为文档差异与版本注入检查。
+
+## 9. 阶段 B1：标量时间轴结果
+
+产品现为 Worker 通用协议补齐主线程 canonical checksum、输入 ACK 等待、输出 decode CPU / ACK post，Worker 输入 decode、canonical checksum、输出 ACK 等待，并把导入 parse / render prepare 与显示 apply / Worker / installer / session commit / resume / suspend 纳入返回 telemetry。全部字段只记录数字，不保留地图、packet、GPU bytes、DOM 或 heap。
+
+唯一 `100000` 视图窄诊断产生 `99846` cells；旧“首次视图切换 `<30s`”硬门以 `39.853s` 真实失败，但 raw artifact 已在断言前完整落盘并闭合时间轴：
+
+- 首次 `height → states`：主线程 checksum `10.615s`、完整输入流 `8.997s / 1013包`，Worker 输入 decode CPU `1.720s`、Worker checksum `13.199s`、compute `6.078s`、输出 Worker stream `676ms`、主线程 decode CPU `161ms`、installer prepare `202ms`；renderer suspend `39.849s`，几乎覆盖完整 wall。
+- 暖 `states → provinces`：输入 `3包 / 6.2ms`，两侧 checksum 均 `0`；compute `98.5ms`，Worker output `578ms`、主线程 decode CPU `142ms`、installer `123ms`，wall / suspend `833 / 829ms`。
+- 海底开 / 关：wall `711 / 657ms`、suspend `707 / 653ms`；compute `116 / 86ms`，Worker output `459 / 450ms`，主线程 decode CPU `130 / 102ms`。完整 surface 的 `446` 包输出与全窗 suspend 是当前 B2 直接目标。
+- 标签开 / 关：Worker 仅 `48 / 47ms`、`6` 包，但 installer prepare `274 / 263ms`、session commit `52 / 50ms`、resume `35 / 36ms`，wall `425 / 413ms`。theme restore 另有 `52 / 55ms` 两条已归因 LongTask，B2 不得放宽。
+
+diagnostic artifact 为 `work/task332-view-switch-100000/raw-result.json`；该运行是 B1 取证，不是显示性能通过。Node 存档专项、通用 Worker 专项、语法、差异和生产构建通过。B1 产品 `4` 文件约 `+89 / -4`，既有工具 `3` 文件约 `+16`，新浏览器夹具 `0`，委派与等待为 `0`。下一阶段只实施显示 effect / surface patch 与短 commit suspension。
