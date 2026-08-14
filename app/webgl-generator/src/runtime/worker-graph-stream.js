@@ -6,6 +6,10 @@ const REFERENCE_VALUE = "reference";
 const DEFAULT_PACKET_UNITS = 4096;
 const DEFAULT_RECORD_UNITS = 512;
 const DEFAULT_NUMERIC_BATCH_VALUES = 256 * 1024;
+const STREAM_CHECKSUM_OFFSET = 0x811c9dc5;
+const STREAM_CHECKSUM_MIX_OFFSET = 0x9e3779b9;
+const STREAM_CHECKSUM_PRIME = 0x01000193;
+const STREAM_CHECKSUM_MIX_PRIME = 0x85ebca6b;
 
 export async function* encodeWorkerGraph(value, options = {}) {
   const streamId = String(options.streamId || createStreamId());
@@ -16,6 +20,7 @@ export async function* encodeWorkerGraph(value, options = {}) {
   const budgetMs = Math.max(1, Number(options.budgetMs) || 6);
   const yieldToMain = typeof options.yieldToMain === "function" ? options.yieldToMain : defaultYield;
   const report = typeof options.onProgress === "function" ? options.onProgress : () => {};
+  const streamChecksum = options.checksum === true ? createStreamChecksum() : null;
   const ids = new Map();
   const nodes = [];
   let deadline = now() + budgetMs;
@@ -91,13 +96,16 @@ export async function* encodeWorkerGraph(value, options = {}) {
   let records = [];
   let units = 0;
   const makePacket = (transferables = [], done = false) => {
+    const packetSequence = sequence++;
+    if (streamChecksum) updateStreamChecksumValue(streamChecksum, ["packet", packetSequence, done, records]);
     const message = {
       protocol: WORKER_GRAPH_STREAM_PROTOCOL,
       version: WORKER_GRAPH_STREAM_VERSION,
       streamId,
-      sequence: sequence++,
+      sequence: packetSequence,
       records,
-      done
+      done,
+      ...(done && streamChecksum ? {checksum: finishStreamChecksum(streamChecksum)} : {})
     };
     records = [];
     units = 0;
@@ -229,8 +237,15 @@ export function createWorkerGraphDecoder(options = {}) {
   let expectedNodes = null;
   let decodedEntries = 0;
   let failure = null;
+  const streamChecksum = options.checksum === true ? createStreamChecksum() : null;
+  let verifiedChecksum = null;
 
-  return Object.freeze({push, finish, get complete() { return ended && !failure; }});
+  return Object.freeze({
+    push,
+    finish,
+    get complete() { return ended && !failure; },
+    get checksum() { return verifiedChecksum; }
+  });
 
   function push(packet) {
     if (failure) throw poisonedError(failure);
@@ -241,6 +256,18 @@ export function createWorkerGraphDecoder(options = {}) {
       if (packet.sequence !== nextSequence) throw graphError("worker_graph_sequence_invalid", "Worker 图数据包乱序或缺失");
       nextSequence += 1;
       if (ended) throw graphError("worker_graph_already_complete", "Worker 图数据流已结束");
+      if (streamChecksum) {
+        updateStreamChecksumValue(streamChecksum, ["packet", packet.sequence, packet.done, packet.records]);
+        if (packet.done) {
+          const actual = finishStreamChecksum(streamChecksum);
+          if (!isStreamChecksum(packet.checksum) || packet.checksum !== actual) {
+            throw graphError("worker_graph_checksum_invalid", "Worker 图数据流 checksum 不一致");
+          }
+          verifiedChecksum = actual;
+        } else if (packet.checksum !== undefined) {
+          throw graphError("worker_graph_checksum_invalid", "Worker 图数据流 checksum 出现时机无效");
+        }
+      }
       for (let index = 0; index < packet.records.length; index += 1) {
         const record = packet.records[index];
         if (record?.type === "end" && index !== packet.records.length - 1) {
@@ -518,6 +545,76 @@ function assertPacket(packet) {
   if (!packet.streamId || !Number.isSafeInteger(packet.sequence) || packet.sequence < 0 || !Array.isArray(packet.records) || typeof packet.done !== "boolean") {
     throw graphError("worker_graph_packet_invalid", "Worker 图数据包字段无效");
   }
+}
+
+function createStreamChecksum() {
+  return {hash: STREAM_CHECKSUM_OFFSET, mix: STREAM_CHECKSUM_MIX_OFFSET};
+}
+
+function updateStreamChecksumValue(state, value) {
+  if (value === null) return updateStreamChecksumText(state, "null;");
+  const type = typeof value;
+  if (type === "undefined") return updateStreamChecksumText(state, "undefined;");
+  if (type === "string") return updateStreamChecksumText(state, `string:${value.length}:${value};`);
+  if (type === "boolean") return updateStreamChecksumText(state, value ? "true;" : "false;");
+  if (type === "number") {
+    if (Number.isNaN(value)) return updateStreamChecksumText(state, "number:nan;");
+    if (value === Infinity) return updateStreamChecksumText(state, "number:infinity;");
+    if (value === -Infinity) return updateStreamChecksumText(state, "number:-infinity;");
+    if (Object.is(value, -0)) return updateStreamChecksumText(state, "number:-0;");
+    return updateStreamChecksumText(state, `number:${value};`);
+  }
+  if (type === "bigint") return updateStreamChecksumText(state, `bigint:${value};`);
+  if (value instanceof ArrayBuffer) {
+    updateStreamChecksumText(state, `buffer:${value.byteLength}:`);
+    updateStreamChecksumBytes(state, new Uint8Array(value));
+    return updateStreamChecksumText(state, ";");
+  }
+  if (ArrayBuffer.isView(value)) {
+    updateStreamChecksumText(state, `view:${value.constructor.name}:${value.byteLength}:`);
+    updateStreamChecksumBytes(state, new Uint8Array(value.buffer, value.byteOffset, value.byteLength));
+    return updateStreamChecksumText(state, ";");
+  }
+  if (Array.isArray(value)) {
+    updateStreamChecksumText(state, `array:${value.length}:`);
+    for (const item of value) updateStreamChecksumValue(state, item);
+    return updateStreamChecksumText(state, ";");
+  }
+  if (!value || type !== "object") throw graphError("worker_graph_checksum_value_invalid", "Worker 图 checksum 值无效");
+  const keys = Object.keys(value).sort();
+  updateStreamChecksumText(state, `object:${keys.length}:`);
+  for (const key of keys) {
+    updateStreamChecksumText(state, `key:${key.length}:${key}:`);
+    updateStreamChecksumValue(state, value[key]);
+  }
+  updateStreamChecksumText(state, ";");
+}
+
+function updateStreamChecksumText(state, value) {
+  for (let index = 0; index < value.length; index += 1) {
+    const code = value.charCodeAt(index);
+    updateStreamChecksumByte(state, code & 0xff);
+    updateStreamChecksumByte(state, code >>> 8);
+  }
+}
+
+function updateStreamChecksumBytes(state, bytes) {
+  for (let index = 0; index < bytes.length; index += 1) updateStreamChecksumByte(state, bytes[index]);
+}
+
+function updateStreamChecksumByte(state, value) {
+  state.hash ^= value;
+  state.hash = Math.imul(state.hash, STREAM_CHECKSUM_PRIME) >>> 0;
+  state.mix ^= value;
+  state.mix = Math.imul(state.mix, STREAM_CHECKSUM_MIX_PRIME) >>> 0;
+}
+
+function finishStreamChecksum(state) {
+  return `s1:${(state.hash >>> 0).toString(16).padStart(8, "0")}${(state.mix >>> 0).toString(16).padStart(8, "0")}`;
+}
+
+function isStreamChecksum(value) {
+  return typeof value === "string" && /^s1:[0-9a-f]{16}$/u.test(value);
 }
 
 function poisonedError(cause) {

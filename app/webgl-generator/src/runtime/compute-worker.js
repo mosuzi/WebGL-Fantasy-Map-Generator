@@ -13,7 +13,7 @@ import {
   WORKER_TASK_MESSAGE
 } from "./worker-task-protocol.js";
 import {applyMapReplicaPatch, normalizeMapReplicaPatch} from "./map-replica-journal.js";
-import {computeAppliedMapReplicaPatchTargetChecksum, computeCanonicalMapReplicaChecksum} from "./map-replica-checksum.js";
+import {computeAppliedMapReplicaPatchTargetChecksum} from "./map-replica-checksum.js";
 import {getWorkerTaskHandler} from "./worker-task-registry.js";
 
 const pendingRequests = new Map();
@@ -98,11 +98,15 @@ self.addEventListener("message", async event => {
       if (state.inputReady || request.streamId !== state.inputStreamId) {
         throw workerStateError("worker_protocol_input_stream_invalid", "Worker 输入流标识或次序无效");
       }
-      if (!state.decoder) state.decoder = createWorkerGraphDecoder({streamId: state.inputStreamId});
+      if (!state.decoder) state.decoder = createWorkerGraphDecoder({
+        streamId: state.inputStreamId,
+        checksum: state.request.persistentSession && !state.request.reuseSession
+      });
       const decodeStartedAt = now();
       const complete = state.decoder.push(request.packet);
       if (complete) {
         state.payload = state.decoder.finish();
+        state.replicaChecksum = state.decoder.checksum;
         state.inputReady = true;
       }
       const decodeMs = roundMs(now() - decodeStartedAt);
@@ -146,15 +150,15 @@ self.addEventListener("message", async event => {
     const handlerPayload = state.request.reuseSession
       ? {...state.payload, map: state.baseMap}
       : state.payload;
-    const checksumStartedAt = now();
     const replicaChecksum = state.request.persistentSession
       ? state.request.reuseSession
         ? retainedSession?.checksum || null
-        : await computeCanonicalMapReplicaChecksum(handlerPayload.map, {revision: state.request.binding?.mapRevision})
+        : state.replicaChecksum
       : null;
-    const workerReplicaChecksumMs = state.request.persistentSession && !state.request.reuseSession
-      ? roundMs(now() - checksumStartedAt)
-      : 0;
+    if (state.request.persistentSession && !replicaChecksum) {
+      throw workerStateError("worker_protocol_replica_checksum_invalid", "Worker 初始地图副本缺少流式 checksum");
+    }
+    const workerReplicaChecksumMs = 0;
     const computeStartedAt = now();
     const result = await handler(handlerPayload, context);
     const computeMs = roundMs(now() - computeStartedAt);

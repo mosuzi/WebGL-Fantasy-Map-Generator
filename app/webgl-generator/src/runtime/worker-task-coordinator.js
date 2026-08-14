@@ -1,6 +1,5 @@
 import {getWorkerTaskHandler} from "./worker-task-registry.js";
 import {createWorkerGraphDecoder, encodeWorkerGraph} from "./worker-graph-stream.js";
-import {computeCanonicalMapReplicaChecksum} from "./map-replica-checksum.js";
 import {
   assertWorkerTaskResponse,
   assertWorkerTaskStreamAck,
@@ -44,18 +43,7 @@ export function createWorkerTaskCoordinator({createWorker, getBinding, validateB
         sessionId = `map-${Date.now().toString(36)}-${(++sessionSequence).toString(36)}`;
       }
     }
-    let mainReplicaChecksumMs = 0;
-    const replicaChecksumStartedAt = now();
-    const replicaChecksum = persistent
-      ? reuseSession
-        ? persistentSession?.checksum || null
-        : await computeCanonicalMapReplicaChecksum(payload?.map, {
-          revision: binding?.mapRevision,
-          yieldToMain: options.streamYieldToMain,
-          signal
-        })
-      : null;
-    if (persistent && !reuseSession) mainReplicaChecksumMs = roundMs(now() - replicaChecksumStartedAt);
+    const replicaChecksum = persistent && reuseSession ? persistentSession?.checksum || null : null;
     const request = createWorkerTaskRequest({
       requestId: `${Date.now().toString(36)}-${(++requestSequence).toString(36)}`,
       task,
@@ -88,7 +76,7 @@ export function createWorkerTaskCoordinator({createWorker, getBinding, validateB
       persistentSession: persistent,
       reuseSession,
       replicaChecksum,
-      mainReplicaChecksumMs,
+      mainReplicaChecksumMs: 0,
       sessionInputPayload: reuseSession ? createSessionInputPayload(payload, options) : payload
     });
   }
@@ -521,6 +509,7 @@ export function createWorkerTaskCoordinator({createWorker, getBinding, validateB
           sliceBytes: runOptions.streamSliceBytes,
           budgetMs: runOptions.streamBudgetMs,
           yieldToMain: runOptions.streamYieldToMain,
+          checksum: runOptions.persistentSession && !runOptions.reuseSession,
           onProgress(stage, detail) {
             (runOptions.onProgress || onProgress)?.(`input-stream-${stage}`, detail, {
               task: request.task,
@@ -532,6 +521,9 @@ export function createWorkerTaskCoordinator({createWorker, getBinding, validateB
           assertCurrentBinding(request.binding, request.binding);
           const message = createWorkerTaskStreamPacket(WORKER_TASK_MESSAGE.INPUT_PACKET, request, packet.message);
           if (packet.message.done) inputPacketsFinished = true;
+          if (packet.message.done && runOptions.persistentSession && !runOptions.reuseSession) {
+            runOptions.replicaChecksum = packet.message.checksum || null;
+          }
           const postStartedAt = now();
           worker.postMessage(message, packet.transferables);
           telemetry.inputPackets += 1;

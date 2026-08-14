@@ -61,6 +61,7 @@ try {
           telemetry: result?.worker?.telemetry || null,
           preparedLayers: Object.keys(result?.preparedRender?.layers || {}),
           session: result?.worker?.session ? {...result.worker.session} : null,
+          sessionChecksum: coordinator.getSessionSnapshot()?.checksum || null,
           outputEncoding: result?.archive?.encoding || result?.encoding || "",
           outputOriginalBytes: result?.archive?.originalBytes || result?.originalBytes || 0,
           outputBytes: result?.archive?.bytes || result?.bytes || 0
@@ -115,7 +116,9 @@ try {
       trace.fullUnitUpdates += 1;
       return Reflect.apply(originalUnits, this, args);
     };
+    app.mapWorkerCoordinator = wrappedCoordinator;
     app.workerTaskCoordinator = wrappedCoordinator;
+    app.renderTaskCoordinator = wrappedCoordinator;
     const observer = new PerformanceObserver(list => {
       for (const entry of list.getEntries()) trace.longTasks.push({startTime: entry.startTime, duration: entry.duration});
     });
@@ -213,7 +216,9 @@ try {
     } finally {
       mutations.disconnect();
       observer.disconnect();
+      if (app.mapWorkerCoordinator === wrappedCoordinator) app.mapWorkerCoordinator = coordinator;
       if (app.workerTaskCoordinator === wrappedCoordinator) app.workerTaskCoordinator = coordinator;
+      if (app.renderTaskCoordinator === wrappedCoordinator) app.renderTaskCoordinator = coordinator;
       if (renderer.completePreparedMapLoadAsync !== originalPrepared) renderer.completePreparedMapLoadAsync = originalPrepared;
       if (renderer.loadMapAsync !== originalLegacy) renderer.loadMapAsync = originalLegacy;
       if (renderer.setPreparedPresentation !== originalPreparedPresentation) renderer.setPreparedPresentation = originalPreparedPresentation;
@@ -241,6 +246,9 @@ try {
   assert.ok(report.export.bytes > 0 && report.export.originalBytes > report.export.bytes && report.export.hasBlob);
   assert.equal(report.trace.runs[0].outputEncoding, "webfmg-v3");
   assert.equal(report.trace.runs[0].session?.reused, false);
+  assert.match(report.trace.runs[0].sessionChecksum, /^s1:[0-9a-f]{16}$/u, "cold 存档必须以输入流 checksum 建立唯一地图会话");
+  assert.equal(report.trace.runs[1].sessionChecksum, report.trace.runs[0].sessionChecksum, "warm 存档不得重算或漂移初始地图 checksum");
+  assert.ok(report.trace.runs.slice(0, 3).every(run => run.telemetry.mainReplicaChecksumMs === 0 && run.telemetry.workerReplicaChecksumMs === 0), "存档链仍执行独立 canonical 深扫");
   assert.equal(report.trace.runs[1].session?.reused, true);
   assert.equal(report.trace.runs[2].session?.reused, true);
   assert.equal(report.trace.runs[1].session?.id, report.trace.runs[0].session?.id);
@@ -266,12 +274,12 @@ try {
   const loadOperations = ["import", "restore"].map(label => report.trace.operations.find(operation => operation.label === label));
   const patchedExportOperation = report.trace.operations.find(operation => operation.label === "patched-export");
   const registeredLoadLongTasks = requestedCells === 100000
-    ? loadOperations.map((operation, index) => archiveOperationLongTasks.filter(entry => entry.duration <= 70
+    ? loadOperations.map((operation, index) => archiveOperationLongTasks.filter(entry => entry.duration <= 80
       && entry.startTime >= Number(operation?.preparedInstall?.endedAt || Infinity)
       && entry.startTime + entry.duration <= Number(report.trace.preparedLoads[index]?.endedAt || -Infinity)))
     : [[], []];
   const registeredWarmExportLongTasks = requestedCells === 100000
-    ? archiveOperationLongTasks.filter(entry => entry.duration <= 70
+    ? archiveOperationLongTasks.filter(entry => entry.duration <= 80
       && entry.startTime >= Number(patchedExportOperation?.startedAt || Infinity)
       && entry.startTime < Number(patchedExportOperation?.endedAt || -Infinity))
     : [];

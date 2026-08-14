@@ -58,6 +58,31 @@ assert.equal({}.safeOwnKey, undefined);
 assert.ok(fixtureClone.packetStats.every(item => item.records <= 16));
 assert.equal(sharedBuffer.byteLength, 96, "正式输入 buffer 不得被转移或脱离");
 
+const checksumPackets = [];
+for await (const packet of encodeWorkerGraph({map: {cells: [1, 2, 3]}, kind: "zones"}, {
+  streamId: "checksum",
+  checksum: true,
+  yieldToMain: async () => {}
+})) {
+  checksumPackets.push(structuredClone(packet.message));
+}
+const checksumDecoder = createWorkerGraphDecoder({streamId: "checksum", checksum: true});
+for (const packet of checksumPackets) checksumDecoder.push(packet);
+assert.deepEqual(checksumDecoder.finish(), {map: {cells: [1, 2, 3]}, kind: "zones"});
+assert.match(checksumDecoder.checksum, /^s1:[0-9a-f]{16}$/u, "完整输入流必须生成稳定 s1 checksum");
+const poisonedChecksumDecoder = createWorkerGraphDecoder({streamId: "checksum", checksum: true});
+assert.throws(() => {
+  for (const packet of checksumPackets) poisonedChecksumDecoder.push(packet.done ? {...packet, checksum: "s1:0000000000000000"} : packet);
+}, error => error?.code === "worker_graph_checksum_invalid");
+assert.throws(() => poisonedChecksumDecoder.finish(), error => error?.code === "worker_graph_decoder_poisoned");
+const tamperedChecksumPackets = structuredClone(checksumPackets);
+const numericRecord = tamperedChecksumPackets.flatMap(packet => packet.records).find(record => record.type === "numeric-arrays");
+new Uint8Array(numericRecord.buffer)[0] ^= 0xff;
+const tamperedChecksumDecoder = createWorkerGraphDecoder({streamId: "checksum", checksum: true});
+assert.throws(() => {
+  for (const packet of tamperedChecksumPackets) tamperedChecksumDecoder.push(packet);
+}, error => error?.code === "worker_graph_checksum_invalid");
+
 const numericBatchValues = 32 * 1024;
 const numericGroups = Array.from({length: 12}, (_, group) => Array.from(
   {length: 24_577},

@@ -114,9 +114,15 @@ class FakeWorker {
           this.emitMessage(createWorkerTaskMessage(WORKER_TASK_MESSAGE.PROGRESS, this.request, {stage: "invalid-order"}));
           return;
         }
-        if (!this.decoder) this.decoder = createWorkerGraphDecoder({streamId: `${this.request.requestId}:input`});
+        if (!this.decoder) this.decoder = createWorkerGraphDecoder({
+          streamId: `${this.request.requestId}:input`,
+          checksum: this.request.persistentSession && !this.request.reuseSession
+        });
         const complete = this.decoder.push(request.packet);
-        if (complete) this.payload = this.decoder.finish();
+        if (complete) {
+          this.payload = this.decoder.finish();
+          this.replicaChecksum = this.decoder.checksum;
+        }
         this.unackedInputs += 1;
         this.maxInputInflight = Math.max(this.maxInputInflight, this.unackedInputs);
         const ack = createWorkerTaskStreamAck(WORKER_TASK_MESSAGE.INPUT_ACK, this.request, {
@@ -178,7 +184,7 @@ class FakeWorker {
         const replicaChecksum = this.request.persistentSession
           ? this.request.reuseSession
             ? this.retainedSession?.checksum || null
-            : await computeCanonicalMapReplicaChecksum(handlerPayload.map, {revision: this.request.binding?.mapRevision, yieldToMain: async () => {}})
+            : this.replicaChecksum
           : null;
         const renderOnlyBefore = handlerPayload?.mode === "render-only" ? structuredClone(handlerPayload.map) : null;
         const result = await getWorkerTaskHandler(this.request.task)(handlerPayload, {
@@ -1085,18 +1091,18 @@ function verifyAppDeferredReplayStaticContract() {
     source.indexOf("async function applyRuntimeDisplayMutationViaWorker"),
     source.indexOf("function runtimeDisplayObsoleteError")
   );
-  assert.ok(displayFlow.length > 0, "普通显示入口必须接入独立 Worker 渲染事务");
+  assert.ok(displayFlow.length > 0, "普通显示入口必须接入共享 MapWorker 渲染事务");
   const displayOrder = [
     displayFlow.indexOf("renderer.beginDeferredWorkerRenderMutationCapture?.()"),
     displayFlow.indexOf("result = apply()"),
     displayFlow.indexOf("renderer.endDeferredWorkerRenderMutationCapture?.()"),
     displayFlow.indexOf("renderer.captureDeferredWorkerRenderSnapshot?.()"),
-    displayFlow.indexOf("state.renderTaskCoordinator.run(\"render.prepare\""),
+    displayFlow.indexOf("state.mapWorkerCoordinator.run(\"render.prepare\""),
     displayFlow.indexOf("install = await prepareRendererWorkerInstall"),
     displayFlow.lastIndexOf("renderer.suspendWorkerRenderInstall()"),
     displayFlow.indexOf("renderer.applyDeferredWorkerRenderPresentationOnly?.(snapshot)"),
     displayFlow.indexOf("install.commit()"),
-    displayFlow.indexOf("state.renderTaskCoordinator.commitSession"),
+    displayFlow.indexOf("state.mapWorkerCoordinator.commitSession"),
     displayFlow.indexOf("renderer.resumePreparedWorkerRenderInstall?.(snapshot"),
     displayFlow.indexOf("install.finalize?.()")
   ];
@@ -1104,14 +1110,14 @@ function verifyAppDeferredReplayStaticContract() {
   assert.ok(displayOrder.every((index, position) => position === 0 || index > displayOrder[position - 1]), "普通显示事务顺序未把挂起收窄到原子安装窗");
   assert.ok(displayFlow.lastIndexOf("renderer.suspendWorkerRenderInstall()") > displayFlow.indexOf("install = await prepareRendererWorkerInstall"), "Worker 准备和临时安装期间不得挂起旧画面");
   assert.match(displayFlow, /const sourceToken[\s\S]*?isCurrent: isSourceCurrent[\s\S]*?const targetToken/u, "显示事务必须分别校验旧画面准备上下文与新画面提交上下文");
-  assert.match(displayFlow, /sessionMode: "map-mirror"/u, "普通显示必须复用独立 map mirror session");
+  assert.match(displayFlow, /sessionMode: "map-mirror"/u, "普通显示必须复用共享 map mirror session");
   assert.match(displayFlow, /sessionPayload: renderRequest/u, "普通显示复用请求不得重传 map");
   assert.match(displayFlow, /allowFallback: false/u, "复杂显示准备不得回退主线程");
   assert.match(displayFlow, /expectedRevisionDelta: 0/u, "显示事务不得推进 map revision");
   assert.match(source, /surfacePatchScope = layers\.includes\("surface"\)[\s\S]*?canPrepareDeferredSurfaceColorPatch/u, "surface 显示事务必须优先选择 compact color patch");
   assert.match(displayFlow, /cache: structuredClone\(prepared\.cache \|\| null\)/u, "显示诊断必须记录正式 Worker 渲染缓存命中");
   assert.match(displayFlow, /operation: \{id: operation\?\.id \|\| "", name: operation\?\.name \|\| ""\}/u, "显示诊断必须绑定当前 operation 身份");
-  assert.doesNotMatch(displayFlow, /state\.workerTaskCoordinator/u, "显示事务不得占用领域计算 session");
+  assert.match(source, /state\.workerTaskCoordinator = state\.mapWorkerCoordinator;[\s\S]*?state\.renderTaskCoordinator = state\.mapWorkerCoordinator;/u, "计算与显示必须共用唯一 MapWorker coordinator");
   assert.match(source, /workerRenderInstallSuspended > 0 && !activeName\.startsWith\("layers\."\)\) return apply\(\)/u, "地图事务暂停 renderer 时显示设置必须继续进入原 deferred 队列");
   assert.match(displayFlow, /ownerCurrent \|\| !install\.committed/u, "显示失败清理必须区分当前图与 detached committed owner");
   assert.match(displayFlow, /renderer\.restoreDeferredWorkerRenderPresentation/u, "显示失败必须恢复展示标量");
@@ -1120,10 +1126,10 @@ function verifyAppDeferredReplayStaticContract() {
   assert.match(displayFlow, /message: "正在改用兼容方式继续处理"/u, "兼容阶段必须使用普通用户可理解的中文文案");
   assert.ok(displayFlow.indexOf("renderer.abortWorkerRenderInstall?.()") < displayFlow.lastIndexOf("return apply()"), "兼容路径必须先完整恢复 Worker 事务再执行原同步入口");
   assert.match(source, /queueCommandMapReplicaPatch\(state, mutation, before, after, \{[\s\S]*?includeCompute: !state\?\.workerSessionMutationGuard/u, "map revision 前进必须区分 Worker 已更新的计算镜像");
-  assert.match(source, /includeCompute[\s\S]*?\[state\.renderTaskCoordinator\]/u, "Worker mutation 必须继续 patch 显示镜像");
-  assert.match(source, /coordinator\.applySessionPatch\(session\.id, patchPromise, nextBinding\)/u, "计算与显示镜像必须消费同一 canonical patch");
+  assert.match(source, /if \(!includeCompute\) return;[\s\S]*?const coordinators = \[state\.mapWorkerCoordinator \|\| state\.workerTaskCoordinator\]/u, "Worker 已原地推进唯一 owner 时不得重复应用 canonical patch");
+  assert.match(source, /coordinator\.applySessionPatch\(session\.id, patchPromise, nextBinding\)/u, "唯一 MapWorker 镜像必须消费 canonical patch");
   assert.match(source, /invalidateMapReplicaCoordinators\(state, includeCompute, "map-revision-unpatchable"\)/u, "未登记 mutation 必须保守清理显示镜像");
-  assert.match(source, /state\.renderTaskCoordinator\?\.invalidateSession\?\.\("map-replaced"\)/u, "换图必须清理显示镜像");
+  assert.match(source, /invalidateMapReplicaCoordinators\(state, true, "map-replaced"\)/u, "换图必须只清理一次共享 MapWorker 镜像");
   assert.match(source, /onLayerGroupVisible:[\s\S]*?runtimeActions\.layers\.setManyVisible/u, "图层组入口不得绕过统一显示事务");
   const displayUiRestore = source.slice(
     source.indexOf("function restoreRuntimeDisplayControls"),
@@ -1334,7 +1340,7 @@ function verifyAppDeferredReplayStaticContract() {
 
   return {
     decision: "context-first",
-    displayRenderSession: "dedicated-map-mirror",
+    displayRenderSession: "shared-map-worker",
     windows: 4,
     overlayPrepareRetry: true,
     pendingDelta0Closures: (replay.match(/expectedRevisionDelta: 0/gu) || []).length,
@@ -1633,6 +1639,7 @@ async function verifyComputeWorkerSessionGuards(map, baseBinding) {
     const outputInputStreamId = `${outputRequest.requestId}:input`;
     for await (const packet of encodeWorkerGraph({map: structuredClone(map), kind: "features", options: {}}, {
       streamId: outputInputStreamId,
+      checksum: true,
       yieldToMain: async () => {}
     })) {
       await dispatch(createWorkerTaskStreamPacket(WORKER_TASK_MESSAGE.INPUT_PACKET, outputRequest, packet.message));

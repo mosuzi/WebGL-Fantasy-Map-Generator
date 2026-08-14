@@ -639,6 +639,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     healthMonitor,
     runtimeOperation: null,
     runtimeOperationSnapshot: null,
+    mapWorkerCoordinator: null,
     workerTaskCoordinator: null,
     renderTaskCoordinator: null,
     operationFeedback: null,
@@ -2704,20 +2705,15 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       state.panels.oceanCurrent?.updateWorldRebuild?.(snapshot);
     }
   });
-  state.workerTaskCoordinator = createWorkerTaskCoordinator({
+  state.mapWorkerCoordinator = createWorkerTaskCoordinator({
     createWorker: () => new ComputeWorker(),
     getBinding: () => createRegenerationWorkerBinding(state),
     validateBinding: binding => validateRegenerationWorkerBinding(state, binding),
     beforeRun: () => state.mapReplicaPatchQueue,
     onFallback: detail => healthMonitor?.record?.("worker-task-fallback", detail, "info")
   });
-  state.renderTaskCoordinator = createWorkerTaskCoordinator({
-    createWorker: () => new ComputeWorker(),
-    getBinding: () => createRegenerationWorkerBinding(state),
-    validateBinding: binding => validateRegenerationWorkerBinding(state, binding),
-    beforeRun: () => state.mapReplicaPatchQueue,
-    onFallback: detail => healthMonitor?.record?.("worker-task-fallback", detail, "info")
-  });
+  state.workerTaskCoordinator = state.mapWorkerCoordinator;
+  state.renderTaskCoordinator = state.mapWorkerCoordinator;
   runtimeActions = createRuntimeActions(state, documentRef, {
     locateObject: (object, locateOptions = {}) => locateAndSelectObject(null, object, {
       locate: target => state.renderer.locateObject(target, locateOptions)
@@ -2979,6 +2975,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
 }
 
 function queueCommandMapReplicaPatch(state, mutation, before, after, {includeCompute = true} = {}) {
+  if (!includeCompute) return;
   let capturedWrites;
   try {
     capturedWrites = captureCommandMapReplicaWrites({map: state?.map, command: mutation?.command});
@@ -2991,9 +2988,7 @@ function queueCommandMapReplicaPatch(state, mutation, before, after, {includeCom
     return;
   }
   const previous = state.mapReplicaPatchQueue || Promise.resolve();
-  const coordinators = includeCompute
-    ? [state.workerTaskCoordinator, state.renderTaskCoordinator]
-    : [state.renderTaskCoordinator];
+  const coordinators = [state.mapWorkerCoordinator || state.workerTaskCoordinator];
   const active = coordinators.map(coordinator => ({coordinator, session: coordinator?.getSessionSnapshot?.()}))
     .filter(({session}) => session && ["idle", "patching"].includes(session.status) && session.binding?.mapIdentity === after.mapIdentity);
   if (!active.length) return;
@@ -3025,8 +3020,8 @@ function queueCommandMapReplicaPatch(state, mutation, before, after, {includeCom
 }
 
 function invalidateMapReplicaCoordinators(state, includeCompute, reason) {
-  if (includeCompute) state?.workerTaskCoordinator?.invalidateSession?.(reason);
-  state?.renderTaskCoordinator?.invalidateSession?.(reason);
+  if (!includeCompute) return;
+  (state?.mapWorkerCoordinator || state?.workerTaskCoordinator)?.invalidateSession?.(reason);
 }
 
 function invokeRuntimeDisplayActionFromUi(state, documentRef, task) {
@@ -3713,7 +3708,7 @@ async function applyRuntimeDisplayMutationViaWorker(state, documentRef, operatio
     if (!isSourceCurrent()) throw runtimeDisplayObsoleteError();
 
     const workerStartedAt = performance.now();
-    const prepared = await state.renderTaskCoordinator.run("render.prepare", {
+    const prepared = await state.mapWorkerCoordinator.run("render.prepare", {
       map,
       ...renderRequest
     }, {
@@ -3766,7 +3761,7 @@ async function applyRuntimeDisplayMutationViaWorker(state, documentRef, operatio
     if (!isTargetCurrent()) throw runtimeDisplayObsoleteError();
 
     const sessionCommitStartedAt = performance.now();
-    const committed = await state.renderTaskCoordinator.commitSession(prepared.worker.session.id, binding, {expectedRevisionDelta: 0});
+    const committed = await state.mapWorkerCoordinator.commitSession(prepared.worker.session.id, binding, {expectedRevisionDelta: 0});
     timings.sessionCommitMs = roundWorkerTelemetryMs(performance.now() - sessionCommitStartedAt);
     if (!committed) {
       const error = new Error("地图显示会话提交已被拒绝");
@@ -3798,7 +3793,7 @@ async function applyRuntimeDisplayMutationViaWorker(state, documentRef, operatio
       } : null,
       cache: structuredClone(prepared.cache || null),
       worker: structuredClone(prepared.worker),
-      session: state.renderTaskCoordinator.getSessionSnapshot?.() || null,
+      session: state.mapWorkerCoordinator.getSessionSnapshot?.() || null,
       timings: {...timings}
     };
     return result;
@@ -3806,7 +3801,7 @@ async function applyRuntimeDisplayMutationViaWorker(state, documentRef, operatio
     const rollbackFailures = [];
     const ownerCurrent = state.map === map;
     const canUseCompatibilityPath = error?.code === "worker_fallback_disabled" && ownerCurrent;
-    state.renderTaskCoordinator?.invalidateSession?.("display-render-failed");
+    state.mapWorkerCoordinator?.invalidateSession?.("display-render-failed");
     if (install) {
       try {
         if (ownerCurrent || !install.committed) install.rollback?.();
@@ -4731,8 +4726,7 @@ async function loadMapIntoRuntime(state, documentRef, map, {
   state.canvasToolModes.reset("map-replace");
   clearCanvasToolModeFeedback(state, documentRef);
   state.brushCursorPreview?.reset();
-  state.workerTaskCoordinator?.invalidateSession?.("map-replaced");
-  state.renderTaskCoordinator?.invalidateSession?.("map-replaced");
+  invalidateMapReplicaCoordinators(state, true, "map-replaced");
   state.map = map;
   state.regenerationLockUiSession?.clear({keepContext: false});
   normalizeSocialExpansionMap(state.map);

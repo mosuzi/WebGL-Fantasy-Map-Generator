@@ -132,3 +132,11 @@ diagnostic artifact 为 `work/task332-view-switch-100000/raw-result.json`；该�
 - 固定 100k 中，暖省份视图约 `291ms`，对比 B1 的 `833ms`；海底开 / 关约 `444 / 420ms`，对比 `711 / 657ms`。renderer suspend 分别约 `9 / 11ms`，不再覆盖完整 wall。海底 patch 为 `55022` 个水域 cell、约 `0.88MB` colors；普通颜色 patch 为 `99845` 个 cell、约 `1.60MB`，均不含完整 surface base，output 从 `446` 包降至 `57` 包。
 - 10k 全入口通过且 LongTask 为 `0`。100k 第一次目标门发现主题临时 surface 上传附近新增 `74ms`，改为 `4MiB bufferSubData + yield` 后该原形消失；复验仍有主题 DOM / draw 与浏览器提交窗 `61 / 57 / 97 / 56ms`，均小于 `100ms` 且已归因，按用户“200ms 内调查、实质优化一次后仍未消除则登记”规则精确放行。海底和普通颜色视图 LongTask 为 `0`，全局阈值没有提高。
 - B2 产品 `5` 文件约 `+300` 行，既有专项 / 浏览器工具 `5` 文件约 `+130` 行，没有新建浏览器夹具；委派与等待为 `0`。语法、差异、surface / installer / render-preparation / Worker Node、生产构建与 10k / 100k 真实入口证据齐全。版本为 `0.3.5`，下一步只进入 C1 session / checksum 统一。
+
+## 11. 阶段 C1：共享 MapWorker session 与流式 checksum
+
+- 计算与显示现共用一个 `mapWorkerCoordinator` 和同一个长期 `ComputeWorker` session；旧 `workerTaskCoordinator / renderTaskCoordinator` 只保留为同对象兼容别名。普通 history mutation 只向唯一 owner 发布一次 patch；Worker 已原地推进 revision 时不再给已合并的显示别名重复打 patch。换图和失败也只销毁一次共享 session。
+- fresh 完整输入不再在主线程发送前、Worker compute 前各自深扫 canonical map。现有 graph encoder 在有界 packet 内生成 `s1` stream checksum，decoder 对收到的实际 records / buffer bytes 增量复算并核对结束包；篡改记录或结束 checksum 会毒化 decoder。session 后续仍沿用既有 `baseChecksum → 实际写集 targetChecksum → Worker ACK`，错误 ACK、revision 漂移和 fresh 重同步门没有放宽。
+- 固定 `99846` cells 的 100k 存档门通过：cold 首存 `952` 输入包、约 `12.9s`，两侧独立 checksum 计时均为 `0`；相对 B1 的主扫 `10.615s + 输入 8.997s + Worker 扫 13.199s`，完整副本建立不再额外承担约 `23.8s` 双深扫。两次 warm 存档均只发 `3` 包、约 `3～4ms` 输入且 session id / `s1` checksum 不变；改名、撤销、重做各发布一次连续 patch，第三次导出以 `r1` checksum 读取同一 owner。
+- v3 raw / gzip 约 `12.61MB / 7.29MB`，IndexedDB 直接二进制写入、旧格式文件导入与浏览器恢复、地图 / renderer / history 同源、Loading、非性能 health、console / page 与 WebGL 均通过。导入 / 恢复 commit 类既有已调查 LongTask 本轮抖动至 `71ms`，只把该精确登记上界从 `70ms` 调为 `80ms`；通用阈值和其它窗口未放宽。
+- C1 产品 `4` 文件约 `+140 / -40` 行，既有 Node / 浏览器工具 `3` 文件约 `+50` 行，没有新建浏览器夹具；委派与等待为 `0`。graph checksum 正常 / buffer 篡改 / checksum 篡改、11 类 Worker、patch、build 与 100k cold / warm 门通过。版本为 `0.3.6`，下一步只进入 C2 owner adoption 与紧凑 transport。
