@@ -2,6 +2,8 @@ import {generatePlaceholderMap} from "../generator/index.js";
 import {createSampledHeightmapFromPayload} from "../generator/heightmap.js";
 import {createMapTemplateHeightmap} from "../generator/map-template-mapping.js";
 import {executeRenderPreparationTask} from "../renderer/render-preparation.js";
+import {createMapAdoptionHandoff} from "./map-adoption-handoff.js";
+import {createMapDocument} from "./map-file-io.js";
 import {collectWorkerTransferables} from "./worker-snapshot.js";
 
 export const GENERATION_WORKER_TASK = "generation.compute";
@@ -13,16 +15,31 @@ export async function runGenerationWorkerTask(payload = {}, context = {}) {
   const heightmap = payload.heightmap || (payload.mapTemplate
     ? createMapTemplateHeightmap(options, payload.mapTemplate.manifest, payload.mapTemplate.resource, payload.mapTemplate.historicalResource)
     : payload.heightmapPayload ? createSampledHeightmapFromPayload(options, payload.heightmapPayload) : null);
-  const map = generatePlaceholderMap(options, {
+  const generatedMap = generatePlaceholderMap(options, {
     ...(heightmap ? {heightmap} : {}),
     onStageStart: stage => context.report?.("generation-stage", {phase: "start", stage}),
     onStageEnd: stage => context.report?.("generation-stage", {phase: "end", stage})
   });
   checkpoint(context);
+  const adoption = typeof context.adoptMap === "function";
+  const document = adoption ? createMapDocument(generatedMap, generatedMap.options || options) : null;
+  const map = document?.map || generatedMap;
   const preparedRender = payload.render
     ? await executeRenderPreparationTask({...payload.render, map}, context)
     : null;
   checkpoint(context);
+  if (adoption) {
+    const handoffStartedAt = taskNow();
+    const handoff = createMapAdoptionHandoff(document);
+    context.adoptMap(map);
+    checkpoint(context);
+    return {
+      binding: context.binding || null,
+      handoff,
+      preparedRender,
+      timings: {handoffEncodeMs: roundTaskMs(taskNow() - handoffStartedAt)}
+    };
+  }
   return {
     binding: context.binding || null,
     map,
@@ -31,7 +48,15 @@ export async function runGenerationWorkerTask(payload = {}, context = {}) {
 }
 
 export function collectGenerationWorkerTransferables(result) {
-  return collectWorkerTransferables({map: result?.map || null, preparedRender: result?.preparedRender || null});
+  return collectWorkerTransferables({map: result?.map || null, handoff: result?.handoff || null, preparedRender: result?.preparedRender || null});
+}
+
+function taskNow() {
+  return globalThis.performance?.now?.() ?? Date.now();
+}
+
+function roundTaskMs(value) {
+  return Number(Math.max(0, Number(value) || 0).toFixed(1));
 }
 
 function checkpoint(context) {

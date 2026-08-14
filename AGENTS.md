@@ -67,7 +67,7 @@
 
 ## 当前状态
 
-- 第 334 项 C2-A 已闭合：新图生成与存档导入在唯一 `MapWorker` 内建立 fresh adoption session，装载成功后以新 map binding 原子提交，失败销毁 pending owner，且禁止主线程 fallback。100k 新图后的首次 / 暖保存均只发 `3` 个输入包；导入与浏览器恢复各以 `4` 个小输入包建立 adopted owner，恢复后首次保存继续只发 `3` 包。下一步只进入 C2-B 紧凑 section handoff：当前导入仍回传 `4410` 包完整结果，主线程 decode 约 `10.0～11.0s`，并产生最高 `641 / 626ms` LongTask，不得登记放行。当前版本为 `0.3.7`。
+- 第 334 项 C2-B 已闭合：唯一 `MapWorker` 保留 adopted canonical map，正式生成 / 导入只回传 v3 紧凑 handoff 与 prepared render；大 ArrayBuffer 按 `256KiB` 有序 chunk 发送，section decode 与主线程还原分片让步。100k 导入 / 浏览器恢复各为 `4` 个输入包、`1472` 个输出包，单包 decode 峰值 `16.7 / 15.1ms`，C2-A 的 `600ms` 级大包阻塞已消失。下一步只进入 C2-C，移除主线程完整兼容地图并收敛为 UI / renderer / GPU 与有界查询投影；本地兼容保存夹具的 `67 / 597ms` 信号未作为 C2-B 通过。当前版本为 `0.3.8`。
 
 - 第 322 项已完成、归档并合入远端 `main`。
 - 第 327 项已完成、归档并合入远端 `main`。

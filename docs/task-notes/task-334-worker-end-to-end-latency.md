@@ -148,3 +148,11 @@ diagnostic artifact 为 `work/task332-view-switch-100000/raw-result.json`；该�
 - 固定 `99846` cells 的 100k 真实入口证明：新图后的首次、浏览器保存与改名后导出均只发 `3` 个输入包；文件导入与浏览器恢复各只接收 `4` 个小输入包并建立 fresh adopted owner，恢复后首次导出仍为同一 owner、`3` 个输入包。地图 checksum、城市改名、撤销 / 重做、v3、IndexedDB、Loading、非性能 health、console / page 与 WebGL 均保持同源。
 - 本子阶段只闭合“结果留驻 owner 与首次保存不重传”，不宣称 C2 完成。导入 / 恢复仍把完整 map、prepared render 与 DTO 作为通用 graph 结果回传：各 `4410` 包，主线程 decode CPU 约 `10.0 / 11.0s`，单包峰值 `637 / 622ms`，操作窗出现最高 `641 / 626ms` LongTask。C2-B 必须改为紧凑 section handoff，禁止登记放行这些长任务。
 - C2-A 产品 `4` 文件约 `+120 / -30` 行，既有 Node / 浏览器工具 `2` 文件约 `+90` 行，没有新建浏览器夹具；委派与等待为 `0`。语法、差异、graph stream、11 类 Worker、生产构建通过；100k 门的功能断言通过并在紧凑 handoff 性能硬门失败。版本为 `0.3.7`，下一步只进入 C2-B。
+
+## 13. 阶段 C2-B：紧凑 section handoff 与有界传输
+
+- 新图与存档导入的 adopted canonical map 继续留在唯一 `MapWorker`。Worker 结果不再返回 `map` / `document` 对象图，而是从 v3 canonical sections 生成独立 `256KiB` 分块的紧凑 handoff；prepared render 仍按正式层输出。直接调用 handler 的旧专项兼容返回未改，正式 adoption 路径禁止主线程 fallback。
+- graph output 对大 ArrayBuffer 使用有序 `buffer-start / buffer-chunk` 协议，按 `256KiB` 分块发送和确认；decoder 验证顺序、长度与完整性后才恢复 view。v3 section checksum、派生 vertex topology 与紧凑值解码均提供分片异步路径，主线程 materialize 使用 `scheduler.yield` / `setTimeout(0)` 让步，不以同步长任务重建地图。
+- 固定 `99846` cells 的 100k 真实门通过：文件导入 / 浏览器恢复均只输入 `4` 包，输出各 `1472` 包；主线程单包 decode 峰值为 `16.7 / 15.1ms`，累计 decode CPU 为 `2.965 / 2.916s`，对比 C2-A 的约 `10.0 / 11.0s` 与 `637 / 622ms` 单包峰值已消除大包阻塞。handoff 异步还原总时长为 `1.967 / 1.599s`，Worker handoff encode 为 `1.928 / 2.125s`；两次 owner 均 fresh adopted、最终 idle，恢复后保存继续复用同一 owner。
+- 地图 checksum、城市改名、撤销 / 重做、v3 导出、IndexedDB、renderer / history、Loading、禁词、非性能 health、应用 console / page 与 WebGL 均通过。导入 / 恢复各保留一条 `55ms` 的既有 commit / reveal 类信号，低于 C1 已登记的 `80ms` 精确上界；本地兼容保存夹具另记录 `67 / 597ms`，不属于 handoff 输出窗，也未作为 C2-B 性能通过，留待 C2-C / D 收敛。
+- C2-B 产品 `8` 文件约 `+565 / -19` 行，既有 Node / 浏览器工具 `4` 文件约 `+59 / -7` 行，没有新建浏览器夹具；委派与等待为 `0`。语法、差异、graph stream、v3 container、11 类 Worker、地图文件 Worker、生产构建与唯一最终 100k 浏览器门通过。版本为 `0.3.8`，下一步只进入 C2-C 主线程有界投影。

@@ -1,5 +1,5 @@
 import {listCanonicalMapSections} from "./canonical-map-field-registry.js";
-import {decodeCompactBinaryValue, encodeCompactBinaryValue} from "./compact-binary-value-codec.js";
+import {decodeCompactBinaryValue, decodeCompactBinaryValueAsync, encodeCompactBinaryValue} from "./compact-binary-value-codec.js";
 
 export const WEBFMG_V3_CONTAINER_VERSION = 3;
 export const WEBFMG_V3_MIME_TYPE = "application/x-webfmg-v3";
@@ -98,6 +98,50 @@ export function decodeWebfmgV3Document(source) {
   return document;
 }
 
+export async function decodeWebfmgV3DocumentAsync(source, options = {}) {
+  const bytes = source instanceof Uint8Array ? source : new Uint8Array(source);
+  if (!isWebfmgV3Bytes(bytes)) throw containerError("webfmg_v3_magic_invalid", "文件不是 `.webfmg v3` 容器");
+  if (bytes.byteLength < HEADER_BYTES) throw containerError("webfmg_v3_truncated", "v3 地图容器头被截断");
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const version = view.getUint16(8, true);
+  if (version !== WEBFMG_V3_CONTAINER_VERSION) throw containerError("webfmg_v3_version_unsupported", `不支持 v3 容器版本 ${version}`);
+  const count = view.getUint32(12, true);
+  if (!count || HEADER_BYTES + count * DIRECTORY_BYTES > bytes.byteLength) throw containerError("webfmg_v3_directory_invalid", "v3 地图分区目录无效");
+  const descriptors = listCanonicalMapSections();
+  const seen = new Set();
+  const checkpoint = createAsyncCheckpoint(options);
+  let header = null;
+  const map = {};
+  for (let index = 0; index < count; index += 1) {
+    const offset = HEADER_BYTES + index * DIRECTORY_BYTES;
+    const id = view.getUint16(offset, true);
+    const codec = view.getUint16(offset + 2, true);
+    const start = view.getUint32(offset + 4, true);
+    const length = view.getUint32(offset + 8, true);
+    const rawLength = view.getUint32(offset + 12, true);
+    const checksum = view.getUint32(offset + 16, true);
+    if (seen.has(id) || codec !== CODEC_COMPACT_VALUE || rawLength !== length || start < HEADER_BYTES + count * DIRECTORY_BYTES || start + length > bytes.byteLength) {
+      throw containerError("webfmg_v3_directory_invalid", `v3 地图分区目录项无效：${id}`);
+    }
+    seen.add(id);
+    const payload = bytes.subarray(start, start + length);
+    if (await checksumBytesAsync(payload, checkpoint) !== checksum) throw containerError("webfmg_v3_checksum_mismatch", `v3 地图分区 checksum 不一致：${id}`);
+    const value = await decodeCompactBinaryValueAsync(payload, options);
+    if (id === 0) header = value;
+    else {
+      const descriptor = descriptors[id - 1];
+      if (!descriptor) throw containerError("webfmg_v3_section_unknown", `v3 地图分区 ID 未登记：${id}`);
+      map[descriptor.path] = await restoreDecodedSectionAsync(descriptor.path, value, checkpoint);
+    }
+    await checkpoint(true);
+  }
+  if (!header || !seen.has(0)) throw containerError("webfmg_v3_document_invalid", "v3 地图容器缺少文档头");
+  applyAliases(map, header.aliases || []);
+  const document = {...header, map};
+  delete document.aliases;
+  return document;
+}
+
 export function isWebfmgV3Bytes(source) {
   const bytes = source instanceof Uint8Array ? source : source instanceof ArrayBuffer ? new Uint8Array(source) : null;
   return Boolean(bytes && bytes.byteLength >= MAGIC.length && MAGIC.every((byte, index) => bytes[index] === byte));
@@ -158,6 +202,14 @@ function restoreDecodedSection(name, value) {
   return value;
 }
 
+async function restoreDecodedSectionAsync(name, value, checkpoint) {
+  if ((name === "grid" || name === "pack") && value?.cells?.v) {
+    value.vertices.c = await decodeDerivedVertexRowsAsync(value.cells.v, value.vertices.c, "cells", value.vertices.p?.length || 0, checkpoint);
+    value.vertices.v = await decodeDerivedVertexRowsAsync(value.cells.v, value.vertices.v, "vertices", value.vertices.p?.length || 0, checkpoint);
+  }
+  return value;
+}
+
 function encodeDerivedVertexRows(cellVertices, rows, kind) {
   const derived = deriveVertexRows(cellVertices, rows.length, kind);
   const permutations = new Uint8Array(rows.length).fill(255);
@@ -189,6 +241,24 @@ function decodeDerivedVertexRows(cellVertices, descriptor, kind, rows) {
   return output;
 }
 
+async function decodeDerivedVertexRowsAsync(cellVertices, descriptor, kind, rows, checkpoint) {
+  if (descriptor?.format !== TOPOLOGY_MARKER || descriptor.kind !== kind || descriptor.rows !== rows) {
+    throw containerError("webfmg_v3_topology_invalid", `v3 ${kind} 拓扑描述无效`);
+  }
+  const output = await deriveVertexRowsAsync(cellVertices, rows, kind, checkpoint);
+  const exceptions = new Map(descriptor.exceptions.map(entry => [entry.index, entry.row]));
+  for (let index = 0; index < output.length; index += 1) {
+    if (descriptor.permutations[index] === 255) {
+      const row = exceptions.get(index);
+      if (!row) throw containerError("webfmg_v3_topology_invalid", `v3 ${kind} 拓扑例外缺失：${index}`);
+      output[index] = row;
+    } else output[index] = applyPermutationRank(output[index], descriptor.permutations[index]);
+    if (!(index & 1023)) await checkpoint();
+  }
+  if (exceptions.size !== descriptor.exceptions.length) throw containerError("webfmg_v3_topology_invalid", `v3 ${kind} 拓扑例外重复`);
+  return output;
+}
+
 function deriveVertexRows(cellVertices, count, kind) {
   const sets = Array.from({length: count}, () => new Set());
   for (let cell = 0; cell < cellVertices.length; cell += 1) {
@@ -208,6 +278,31 @@ function deriveVertexRows(cellVertices, count, kind) {
     if (kind === "vertices" && row.length === 2) row.unshift(-1);
     return row;
   });
+}
+
+async function deriveVertexRowsAsync(cellVertices, count, kind, checkpoint) {
+  const sets = Array.from({length: count}, () => new Set());
+  for (let cell = 0; cell < cellVertices.length; cell += 1) {
+    const vertices = cellVertices[cell];
+    for (let index = 0; index < vertices.length; index += 1) {
+      const vertex = vertices[index];
+      if (!sets[vertex]) continue;
+      if (kind === "cells") sets[vertex].add(cell);
+      else {
+        sets[vertex].add(vertices[(index + vertices.length - 1) % vertices.length]);
+        sets[vertex].add(vertices[(index + 1) % vertices.length]);
+      }
+    }
+    if (!(cell & 1023)) await checkpoint();
+  }
+  const output = new Array(sets.length);
+  for (let index = 0; index < sets.length; index += 1) {
+    const row = [...sets[index]].sort((left, right) => left - right);
+    if (kind === "vertices" && row.length === 2) row.unshift(-1);
+    output[index] = row;
+    if (!(index & 1023)) await checkpoint();
+  }
+  return output;
 }
 
 function permutationRank(row, sorted) {
@@ -278,6 +373,36 @@ function checksumBytes(bytes) {
     checksum = Math.imul(checksum, 0x01000193) >>> 0;
   }
   return checksum;
+}
+
+async function checksumBytesAsync(bytes, checkpoint) {
+  let checksum = 0x811c9dc5;
+  for (let index = 0; index < bytes.length; index += 1) {
+    checksum ^= bytes[index];
+    checksum = Math.imul(checksum, 0x01000193) >>> 0;
+    if (!(index & 0x3ffff)) await checkpoint();
+  }
+  return checksum;
+}
+
+function createAsyncCheckpoint(options) {
+  const budgetMs = Math.max(1, Number(options.budgetMs) || 6);
+  const yieldToMain = typeof options.yieldToMain === "function" ? options.yieldToMain : defaultAsyncYield;
+  let deadline = containerNow() + budgetMs;
+  return async (force = false) => {
+    if (!force && containerNow() < deadline) return;
+    await yieldToMain();
+    deadline = containerNow() + budgetMs;
+  };
+}
+
+function defaultAsyncYield() {
+  if (typeof globalThis.scheduler?.yield === "function") return globalThis.scheduler.yield();
+  return new Promise(resolve => setTimeout(resolve, 0));
+}
+
+function containerNow() {
+  return globalThis.performance?.now?.() ?? Date.now();
 }
 
 function containerError(code, message) {

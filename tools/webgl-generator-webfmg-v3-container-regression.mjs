@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
 import {generatePlaceholderMap} from "../app/webgl-generator/src/generator/index.js";
 import {createMapDocument, migrateMapDocument, parseMapDocument, stringifyMapDocument} from "../app/webgl-generator/src/runtime/map-file-io.js";
-import {decodeCompactBinaryValue, encodeCompactBinaryValue} from "../app/webgl-generator/src/runtime/compact-binary-value-codec.js";
+import {decodeCompactBinaryValue, decodeCompactBinaryValueAsync, encodeCompactBinaryValue} from "../app/webgl-generator/src/runtime/compact-binary-value-codec.js";
+import {createMapAdoptionHandoff, materializeMapAdoptionHandoff} from "../app/webgl-generator/src/runtime/map-adoption-handoff.js";
 import {
   decodeWebfmgV3Document,
+  decodeWebfmgV3DocumentAsync,
   encodeWebfmgV3Document,
   gzipWebfmgV3Bytes,
   inspectWebfmgV3Container,
@@ -23,6 +25,7 @@ const fixture = {
   ]
 };
 assert.deepEqual(decodeCompactBinaryValue(encodeCompactBinaryValue(fixture)), fixture);
+assert.deepEqual(await decodeCompactBinaryValueAsync(encodeCompactBinaryValue(fixture)), fixture);
 assert.throws(() => encodeCompactBinaryValue(new Array(8)), error => error?.code === "compact_binary_holey_array");
 
 const map = generatePlaceholderMap({seed: `canonical-map-registry-${target}`, cellsTarget: target, heightmapTemplate: "continents"});
@@ -32,6 +35,13 @@ const raw = encodeWebfmgV3Document(document);
 const encodedAt = performance.now();
 const gzip = await gzipWebfmgV3Bytes(raw);
 const decoded = decodeWebfmgV3Document(raw);
+let asyncYields = 0;
+const decodedAsync = await decodeWebfmgV3DocumentAsync(raw, {yieldToMain: async () => { asyncYields++; }});
+assert.deepEqual(decodedAsync, decoded, "v3 async decode 必须与同步兼容入口同源");
+assert.ok(asyncYields > 0, "v3 async decode 没有执行有界让步");
+const handoff = createMapAdoptionHandoff(document);
+assert.ok(handoff.chunks.length > 1 && handoff.chunks.every(chunk => chunk.byteLength <= 256 * 1024), "adoption handoff 必须使用独立有界分片");
+assert.deepEqual(await materializeMapAdoptionHandoff(handoff), decoded, "adoption handoff materialize 漂移");
 const migrated = migrateMapDocument(decoded);
 const legacyExpected = parseMapDocument(stringifyMapDocument(document));
 const completedAt = performance.now();

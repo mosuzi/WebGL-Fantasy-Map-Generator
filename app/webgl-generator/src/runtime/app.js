@@ -80,6 +80,7 @@ import {createGrayscaleHeightmapFromImage, createPaletteHeightmapFromImage, norm
 import {downloadBlob, downloadText, mapFileBaseName, normalizeGeoJsonExportRange, parseGeoJsonMeasurements} from "./map-file-io.js";
 import {prepareMapFileIoWorkerPayload} from "./map-file-io-worker-client.js";
 import {MAP_FILE_IO_WORKER_OPERATIONS, MAP_FILE_IO_WORKER_TASK_TYPE} from "./map-file-io-worker-task.js";
+import {materializeMapAdoptionHandoff} from "./map-adoption-handoff.js";
 import {createMapArchiveFilename, normalizeMapName} from "./map-filename.js";
 import {attachImportDiagnostic, createHeightmapSourceSummary, createImportFailureDiagnostic, createImportSuccessDiagnostic, createMapImportDiagnostic, formatMapImportDiagnosticLines, inspectGeoImportSource, stringifyMapImportDiagnostic} from "./map-import-diagnostics.js";
 import {createAddCityAtCellCommand, createDeleteCityCommand, createRenameCitiesFromNamebaseCommand, createResetCityVisualCommand, createSetCityNoteCommand, createSetCityPopulationCommand, createSetCityVisualCommand, createSyncCityOwnerToCellCommand, inspectCityCreation} from "./city-edit-commands.js";
@@ -4404,7 +4405,8 @@ async function restoreMapFromBrowserStorageViaApi(state, documentRef, options = 
       preparedRender: importedDocument.preparedRender,
       renderBinding: importedDocument.preparedRender?.binding,
       isCurrent: importedDocument.isCurrent,
-      worker: importedDocument.worker
+      worker: importedDocument.worker,
+      workerTimings: importedDocument.timings
     }, operation);
     updateGenerationLoading(documentRef, false);
     const seed = document.map.metadata?.seed || document.map.options?.seed || "未知";
@@ -4638,6 +4640,7 @@ async function generateMapViaApi(state, documentRef, options, {completionToast =
         totalMs: roundLoadTraceMs(currentLoadTraceTime(documentRef.defaultView || window) - startedAt),
         generation: {...(state.map?.metadata?.generationTiming || {})},
         loadMap: state.renderer?.getStats?.().loadMap || null,
+        handoff: generated.timings || null,
         worker: generated.worker || null
       },
       history: state.editHistory.getStats(),
@@ -5158,6 +5161,12 @@ function yieldToBrowser(documentRef, options = {}) {
   });
 }
 
+function yieldMapHandoffDecode(documentRef) {
+  const view = documentRef.defaultView || window;
+  if (typeof view.scheduler?.yield === "function") return view.scheduler.yield();
+  return new Promise(resolve => view.setTimeout(resolve, 0));
+}
+
 async function generateMapOffMainThread(state, documentRef, options, generateId, operation = null, overrides = {}) {
   const requestBinding = createRegenerationWorkerBinding(state, operation);
   const renderBinding = {mapIdentity: `generated:${generateId}`, mapRevision: 0};
@@ -5166,7 +5175,7 @@ async function generateMapOffMainThread(state, documentRef, options, generateId,
   render.selection = null;
   render.objectHighlights = [];
   render.oceanCurrentHighlightIds = [];
-  return state.workerTaskCoordinator.run(GENERATION_WORKER_TASK, {
+  const output = await state.workerTaskCoordinator.run(GENERATION_WORKER_TASK, {
     options,
     heightmapPayload: overrides.heightmapPayload || null,
     mapTemplate: overrides.mapTemplate || null,
@@ -5195,6 +5204,17 @@ async function generateMapOffMainThread(state, documentRef, options, generateId,
       });
     }
   });
+  const handoffDecodeStartedAt = currentLoadTraceTime(documentRef.defaultView || window);
+  const document = await materializeMapAdoptionHandoff(output.handoff, {yieldToMain: () => yieldMapHandoffDecode(documentRef)});
+  return {
+    ...output,
+    document,
+    map: document.map,
+    timings: {
+      ...(output.timings || {}),
+      handoffDecodeMs: roundLoadTraceMs(currentLoadTraceTime(documentRef.defaultView || window) - handoffDecodeStartedAt)
+    }
+  };
 }
 
 function setGenerationStatus(documentRef, options, status) {
@@ -5531,10 +5551,16 @@ async function parseMapDocumentViaWorker(state, documentRef, input, {operation =
     error.code = "operation_obsolete";
     throw error;
   }
+  const handoffDecodeStartedAt = currentLoadTraceTime(documentRef.defaultView || window);
+  const document = await materializeMapAdoptionHandoff(output.handoff, {yieldToMain: () => yieldMapHandoffDecode(documentRef)});
   return {
-    document: output.document,
+    document,
     preparedRender: output.preparedRender,
     worker: output.worker || null,
+    timings: {
+      ...(output.timings || {}),
+      handoffDecodeMs: roundLoadTraceMs(currentLoadTraceTime(documentRef.defaultView || window) - handoffDecodeStartedAt)
+    },
     source,
     isCurrent: () => state.pendingMapImportId === importId
   };
@@ -6753,7 +6779,8 @@ async function importMapDocumentViaApi(state, documentRef, document, options = {
     preparedRender: parsed.preparedRender,
     renderBinding: parsed.preparedRender?.binding,
     isCurrent: parsed.isCurrent,
-    worker: parsed.worker
+    worker: parsed.worker,
+    workerTimings: parsed.timings
   }, operation);
 }
 
@@ -6806,6 +6833,7 @@ async function importParsedMapDocumentViaApi(state, documentRef, document, optio
       timings: {
         totalMs: roundLoadTraceMs(currentLoadTraceTime(documentRef.defaultView || window) - startedAt),
         loadMap: state.renderer?.getStats?.().loadMap || null,
+        workerTask: options.workerTimings || null,
         worker: options.worker || null
       },
       persistedNamebases,

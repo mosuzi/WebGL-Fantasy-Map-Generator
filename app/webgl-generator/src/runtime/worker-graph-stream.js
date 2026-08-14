@@ -17,6 +17,8 @@ export async function* encodeWorkerGraph(value, options = {}) {
   const packetUnits = Math.max(16, Number(options.packetUnits) || DEFAULT_PACKET_UNITS);
   const recordUnits = Math.max(8, Math.min(packetUnits, Number(options.recordUnits) || DEFAULT_RECORD_UNITS));
   const sliceBytes = Math.max(16 * 1024, Number(options.sliceBytes) || 256 * 1024);
+  const bufferPacketBytes = Math.max(16 * 1024, Number(options.bufferPacketBytes) || 1024 * 1024);
+  const bufferChunkBytes = Math.max(0, Number(options.bufferChunkBytes) || 0);
   const budgetMs = Math.max(1, Number(options.budgetMs) || 6);
   const yieldToMain = typeof options.yieldToMain === "function" ? options.yieldToMain : defaultYield;
   const report = typeof options.onProgress === "function" ? options.onProgress : () => {};
@@ -120,14 +122,30 @@ export async function* encodeWorkerGraph(value, options = {}) {
   let bufferTransferBytes = 0;
   for (const node of nodes) {
     if (node.kind !== "buffer") continue;
-    const buffer = await copyArrayBuffer(node.source, sliceBytes, checkpoint);
-    addRecord({type: "buffer", id: node.id, buffer});
-    bufferTransfers.push(buffer);
-    bufferTransferBytes += buffer.byteLength;
-    if (bufferTransfers.length >= 64 || bufferTransferBytes >= 1024 * 1024 || units >= packetUnits) {
-      yield makePacket(bufferTransfers);
-      bufferTransfers = [];
-      bufferTransferBytes = 0;
+    if (bufferChunkBytes && node.source.byteLength > bufferChunkBytes) {
+      if (bufferTransfers.length || records.length) {
+        yield makePacket(bufferTransfers);
+        bufferTransfers = [];
+        bufferTransferBytes = 0;
+      }
+      addRecord({type: "buffer-start", id: node.id, byteLength: node.source.byteLength});
+      yield makePacket();
+      for (let offset = 0; offset < node.source.byteLength; offset += bufferChunkBytes) {
+        const buffer = node.source.slice(offset, Math.min(node.source.byteLength, offset + bufferChunkBytes));
+        addRecord({type: "buffer-chunk", id: node.id, offset, buffer});
+        yield makePacket([buffer]);
+        await checkpoint();
+      }
+    } else {
+      const buffer = await copyArrayBuffer(node.source, sliceBytes, checkpoint);
+      addRecord({type: "buffer", id: node.id, buffer});
+      bufferTransfers.push(buffer);
+      bufferTransferBytes += buffer.byteLength;
+      if (bufferTransfers.length >= 64 || bufferTransferBytes >= bufferPacketBytes || units >= packetUnits) {
+        yield makePacket(bufferTransfers);
+        bufferTransfers = [];
+        bufferTransferBytes = 0;
+      }
     }
     await checkpoint();
   }
@@ -229,6 +247,7 @@ export async function* encodeWorkerGraph(value, options = {}) {
 export function createWorkerGraphDecoder(options = {}) {
   const expectedStreamId = options.streamId === undefined ? null : String(options.streamId);
   const nodes = new Map();
+  const bufferProgress = new Map();
   let streamId = expectedStreamId;
   let nextSequence = 0;
   let root;
@@ -290,6 +309,9 @@ export function createWorkerGraphDecoder(options = {}) {
     if (expectedNodes !== null && nodes.size !== expectedNodes) {
       throw graphError("worker_graph_node_count_invalid", "Worker 图节点数量不匹配");
     }
+    if ([...bufferProgress].some(([id, offset]) => offset !== getNode(id).byteLength)) {
+      throw graphError("worker_graph_buffer_incomplete", "Worker 图分片 buffer 尚未完整接收");
+    }
     return root;
   }
 
@@ -297,6 +319,25 @@ export function createWorkerGraphDecoder(options = {}) {
     if (!record || typeof record !== "object") throw graphError("worker_graph_record_invalid", "Worker 图记录必须是对象");
     if (record.type === "buffer") {
       defineNode(record.id, assertArrayBuffer(record.buffer));
+      return;
+    }
+    if (record.type === "buffer-start") {
+      const id = assertId(record.id);
+      const buffer = new ArrayBuffer(assertLength(record.byteLength));
+      defineNode(id, buffer);
+      bufferProgress.set(id, 0);
+      return;
+    }
+    if (record.type === "buffer-chunk") {
+      const id = assertId(record.id);
+      const target = getNode(id);
+      const source = assertArrayBuffer(record.buffer);
+      const offset = assertLength(record.offset);
+      if (!(target instanceof ArrayBuffer) || !bufferProgress.has(id) || bufferProgress.get(id) !== offset || offset + source.byteLength > target.byteLength) {
+        throw graphError("worker_graph_buffer_chunk_invalid", "Worker 图 buffer 分片顺序或长度无效");
+      }
+      new Uint8Array(target, offset, source.byteLength).set(new Uint8Array(source));
+      bufferProgress.set(id, offset + source.byteLength);
       return;
     }
     if (record.type === "object") {
@@ -328,6 +369,9 @@ export function createWorkerGraphDecoder(options = {}) {
     if (record.type === "view") {
       const buffer = getNode(record.buffer);
       if (!(buffer instanceof ArrayBuffer)) throw graphError("worker_graph_view_buffer_invalid", "Worker 图视图缺少 ArrayBuffer");
+      if (bufferProgress.has(record.buffer) && bufferProgress.get(record.buffer) !== buffer.byteLength) {
+        throw graphError("worker_graph_buffer_incomplete", "Worker 图视图引用的分片 buffer 尚未完整接收");
+      }
       defineNode(record.id, createView(record, buffer));
       return;
     }

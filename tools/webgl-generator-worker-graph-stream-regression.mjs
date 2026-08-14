@@ -141,6 +141,26 @@ assert.deepEqual(smallBufferClone.value, manySmallBuffers);
 assert.ok(smallBufferYields < 128, `小 buffer 不得逐个强制让步：${smallBufferYields}`);
 assert.ok(manySmallBuffers.every(view => view.byteLength === 2), "小 buffer 正式输入不得 detach");
 
+const boundedBuffers = [new Uint8Array(1024 * 1024).fill(7), ...Array.from({length: 4}, (_, index) => new Uint8Array(256 * 1024).fill(index))];
+let boundedPackets = 0;
+let maxBoundedPacketBytes = 0;
+const boundedDecoder = createWorkerGraphDecoder({streamId: "bounded-buffer-packets", checksum: true});
+for await (const packet of encodeWorkerGraph(boundedBuffers, {
+  streamId: "bounded-buffer-packets",
+  bufferPacketBytes: 256 * 1024,
+  bufferChunkBytes: 256 * 1024,
+  checksum: true,
+  yieldToMain: async () => {}
+})) {
+  boundedPackets += 1;
+  maxBoundedPacketBytes = Math.max(maxBoundedPacketBytes, packet.transferables.reduce((total, buffer) => total + buffer.byteLength, 0));
+  boundedDecoder.push(structuredClone(packet.message, packet.transferables.length ? {transfer: packet.transferables} : undefined));
+}
+const boundedClone = boundedDecoder.finish();
+assert.deepEqual(boundedClone, boundedBuffers, "有界 buffer 分片往返漂移");
+assert.ok(boundedPackets > boundedBuffers.length, "大 buffer 没有实际分片输出");
+assert.ok(maxBoundedPacketBytes <= 256 * 1024, `有界 buffer 包超过 256KiB：${maxBoundedPacketBytes}`);
+
 const cellsTarget = Math.max(1000, Number(process.env.FMG_WORKER_GRAPH_CELLS) || 10000);
 const map = generatePlaceholderMap({seed: "worker-graph-stream", cellsTarget, heightmapTemplate: "continents"});
 const sourceGridBuffer = map.grid.cells.i.buffer;

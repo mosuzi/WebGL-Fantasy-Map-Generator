@@ -34,6 +34,23 @@ export function decodeCompactBinaryValue(bytes) {
   return value;
 }
 
+export async function decodeCompactBinaryValueAsync(bytes, options = {}) {
+  const reader = new BinaryReader(bytes);
+  const checkpoint = createDecodeCheckpoint(options);
+  if (reader.u8() !== 0x43 || reader.u8() !== 0x42 || reader.u8() !== 0x56 || reader.u8() !== 0x31) {
+    throw codecError("compact_binary_magic_invalid", "紧凑二进制分区 magic 无效");
+  }
+  const stringCount = reader.varuint();
+  const strings = new Array(stringCount);
+  for (let index = 0; index < stringCount; index += 1) {
+    strings[index] = reader.text();
+    if (!(index & 255)) await checkpoint();
+  }
+  const value = await readValueAsync(reader, strings, checkpoint);
+  if (!reader.done()) throw codecError("compact_binary_trailing_bytes", "紧凑二进制分区存在尾随字节");
+  return value;
+}
+
 function writeValue(writer, value, stringIds) {
   if (value === null) return writer.u8(TAG.NULL);
   if (value === false) return writer.u8(TAG.FALSE);
@@ -283,6 +300,163 @@ function readTypedArray(reader) {
   return new Constructor(copy.buffer);
 }
 
+async function readValueAsync(reader, strings, checkpoint) {
+  const tag = reader.u8();
+  if (tag === TAG.NULL) return null;
+  if (tag === TAG.FALSE) return false;
+  if (tag === TAG.TRUE) return true;
+  if (tag === TAG.UNDEFINED) return undefined;
+  if (tag === TAG.INTEGER) return reader.svarint();
+  if (tag === TAG.FLOAT64) return reader.f64();
+  if (tag === TAG.STRING) return requireString(strings, reader.varuint());
+  if (tag === TAG.ARRAY) {
+    const output = new Array(reader.varuint());
+    for (let index = 0; index < output.length; index += 1) {
+      output[index] = await readValueAsync(reader, strings, checkpoint);
+      if (!(index & 255)) await checkpoint();
+    }
+    return output;
+  }
+  if (tag === TAG.OBJECT) {
+    const output = {};
+    for (let index = 0, length = reader.varuint(); index < length; index += 1) {
+      output[requireString(strings, reader.varuint())] = await readValueAsync(reader, strings, checkpoint);
+      if (!(index & 255)) await checkpoint();
+    }
+    return output;
+  }
+  if (tag === TAG.TYPED_ARRAY) return readTypedArrayAsync(reader, checkpoint);
+  if (tag === TAG.PACKED_TYPED_ARRAY) {
+    const Constructor = TYPED_ARRAYS[reader.u8()];
+    if (!Constructor) throw codecError("compact_binary_typed_array_unsupported", "TypedArray 类型无效");
+    return new Constructor(await readValueAsync(reader, strings, checkpoint));
+  }
+  if (tag === TAG.INTEGER_ARRAY) return readPackedIntegersAsync(reader, checkpoint);
+  if (tag === TAG.FLOAT64_ARRAY) {
+    const output = new Array(reader.varuint());
+    for (let index = 0; index < output.length; index += 1) {
+      output[index] = reader.f64();
+      if (!(index & 1023)) await checkpoint();
+    }
+    return output;
+  }
+  if (tag === TAG.DECIMAL_ARRAY) {
+    const scale = 10 ** reader.u8();
+    const output = await readPackedIntegersAsync(reader, checkpoint);
+    for (let index = 0; index < output.length; index += 1) {
+      output[index] /= scale;
+      if (!(index & 1023)) await checkpoint();
+    }
+    return output;
+  }
+  if (tag === TAG.RAGGED_INTEGER) return readRaggedIntegersAsync(reader, checkpoint);
+  if (tag === TAG.FIXED_FLOAT_TUPLES) {
+    const rows = reader.varuint();
+    const columns = reader.varuint();
+    const output = new Array(rows);
+    for (let row = 0; row < rows; row += 1) {
+      output[row] = Array.from({length: columns}, () => reader.f64());
+      if (!(row & 511)) await checkpoint();
+    }
+    return output;
+  }
+  if (tag === TAG.FIXED_DECIMAL_TUPLES) {
+    const rows = reader.varuint();
+    const columns = reader.varuint();
+    const scale = 10 ** reader.u8();
+    const flat = await readPackedIntegersAsync(reader, checkpoint);
+    const output = new Array(rows);
+    for (let row = 0; row < rows; row += 1) {
+      output[row] = flat.slice(row * columns, (row + 1) * columns).map(value => value / scale);
+      if (!(row & 511)) await checkpoint();
+    }
+    return output;
+  }
+  if (tag === TAG.OBJECT_TABLE) {
+    const rows = reader.varuint();
+    const keys = Array.from({length: reader.varuint()}, () => requireString(strings, reader.varuint()));
+    const columns = [];
+    for (let index = 0; index < keys.length; index += 1) columns.push(await readValueAsync(reader, strings, checkpoint));
+    const output = new Array(rows);
+    for (let row = 0; row < rows; row += 1) {
+      output[row] = Object.fromEntries(keys.map((key, column) => [key, columns[column][row]]));
+      if (!(row & 255)) await checkpoint();
+    }
+    return output;
+  }
+  if (tag === TAG.SPARSE_INTEGER) {
+    const output = new Array(reader.varuint()).fill(reader.svarint());
+    let index = -1;
+    for (let count = reader.varuint(), entry = 0; entry < count; entry += 1) {
+      index += reader.varuint() + 1;
+      output[index] = reader.svarint();
+      if (!(entry & 1023)) await checkpoint();
+    }
+    return output;
+  }
+  throw codecError("compact_binary_tag_invalid", `未知紧凑二进制 tag：${tag}`);
+}
+
+async function readTypedArrayAsync(reader, checkpoint) {
+  const Constructor = TYPED_ARRAYS[reader.u8()];
+  if (!Constructor) throw codecError("compact_binary_typed_array_unsupported", "TypedArray 类型无效");
+  const length = reader.varuint();
+  const byteLength = length * Constructor.BYTES_PER_ELEMENT;
+  const bytes = reader.bytes(byteLength);
+  const copy = new Uint8Array(byteLength);
+  for (let offset = 0; offset < byteLength; offset += 256 * 1024) {
+    copy.set(bytes.subarray(offset, Math.min(byteLength, offset + 256 * 1024)), offset);
+    await checkpoint();
+  }
+  return new Constructor(copy.buffer);
+}
+
+async function readPackedIntegersAsync(reader, checkpoint) {
+  const length = reader.varuint();
+  const min = reader.svarint();
+  const bits = reader.u8();
+  if (!bits) return new Array(length).fill(min);
+  return unpackIntegersAsync(reader.bytes(reader.varuint()), length, min, bits, checkpoint);
+}
+
+async function readRaggedIntegersAsync(reader, checkpoint) {
+  const lengths = new Array(reader.varuint());
+  for (let index = 0; index < lengths.length; index += 1) {
+    lengths[index] = reader.varuint();
+    if (!(index & 1023)) await checkpoint();
+  }
+  const mode = reader.u8();
+  let flat;
+  if (mode === 1) {
+    const first = await readPackedIntegersAsync(reader, checkpoint);
+    const deltas = await readPackedIntegersAsync(reader, checkpoint);
+    flat = [];
+    let firstIndex = 0;
+    let deltaIndex = 0;
+    for (let row = 0; row < lengths.length; row += 1) {
+      const length = lengths[row];
+      if (length) {
+        let value = first[firstIndex++];
+        flat.push(value);
+        for (let index = 1; index < length; index += 1) {
+          value += deltas[deltaIndex++];
+          flat.push(value);
+        }
+      }
+      if (!(row & 511)) await checkpoint();
+    }
+  } else if (mode === 0) flat = await readPackedIntegersAsync(reader, checkpoint);
+  else throw codecError("compact_binary_ragged_mode_invalid", "紧凑二进制 CSR 模式无效");
+  const output = new Array(lengths.length);
+  let offset = 0;
+  for (let row = 0; row < lengths.length; row += 1) {
+    output[row] = flat.slice(offset, offset + lengths[row]);
+    offset += lengths[row];
+    if (!(row & 511)) await checkpoint();
+  }
+  return output;
+}
+
 function readPackedIntegers(reader) {
   const length = reader.varuint();
   const min = reader.svarint();
@@ -377,6 +551,45 @@ function unpackIntegers(bytes, length, min, bits) {
     available -= bits;
   }
   return output;
+}
+
+async function unpackIntegersAsync(bytes, length, min, bits, checkpoint) {
+  const output = new Array(length);
+  const mask = (1n << BigInt(bits)) - 1n;
+  let accumulator = 0n;
+  let available = 0;
+  let offset = 0;
+  for (let index = 0; index < length; index += 1) {
+    while (available < bits) {
+      accumulator |= BigInt(bytes[offset++]) << BigInt(available);
+      available += 8;
+    }
+    output[index] = min + Number(accumulator & mask);
+    accumulator >>= BigInt(bits);
+    available -= bits;
+    if (!(index & 1023)) await checkpoint();
+  }
+  return output;
+}
+
+function createDecodeCheckpoint(options) {
+  const budgetMs = Math.max(1, Number(options.budgetMs) || 6);
+  const yieldToMain = typeof options.yieldToMain === "function" ? options.yieldToMain : defaultDecodeYield;
+  let deadline = codecNow() + budgetMs;
+  return async (force = false) => {
+    if (!force && codecNow() < deadline) return;
+    await yieldToMain();
+    deadline = codecNow() + budgetMs;
+  };
+}
+
+function defaultDecodeYield() {
+  if (typeof globalThis.scheduler?.yield === "function") return globalThis.scheduler.yield();
+  return new Promise(resolve => setTimeout(resolve, 0));
+}
+
+function codecNow() {
+  return globalThis.performance?.now?.() ?? Date.now();
 }
 
 function collectStrings(root) {

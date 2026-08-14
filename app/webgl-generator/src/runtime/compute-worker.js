@@ -147,7 +147,10 @@ self.addEventListener("message", async event => {
     self.postMessage(createWorkerTaskMessage(WORKER_TASK_MESSAGE.ACCEPTED, state.request));
     const handler = getWorkerTaskHandler(request.task);
     if (!canReuseRenderCache(state.request.task, state.payload)) state.renderCache = Object.create(null);
-    const context = createWorkerContext(state.request, state.renderCache);
+    let adoptedMap = null;
+    const context = createWorkerContext(state.request, state.renderCache, map => {
+      adoptedMap = map;
+    });
     const handlerPayload = state.request.reuseSession
       ? {...state.payload, map: state.baseMap}
       : state.payload;
@@ -166,7 +169,7 @@ self.addEventListener("message", async event => {
     context.checkpoint();
     const outputStream = await sendResultStream(state, result, context, {checksum: state.request.adoptResultMap});
     if (state.request.adoptResultMap) replicaChecksum = outputStream.checksum;
-    const retainedMap = state.request.adoptResultMap ? result?.map : handlerPayload.map;
+    const retainedMap = state.request.adoptResultMap ? adoptedMap : handlerPayload.map;
     const retainedAdoption = Boolean(state.request.adoptResultMap || (state.request.reuseSession && retainedSession?.adoptResultMap));
     if (state.request.persistentSession && (!replicaChecksum || !retainedMap || typeof retainedMap !== "object")) {
       throw workerStateError("worker_protocol_replica_checksum_invalid", "Worker adoption 结果缺少地图或流式 checksum");
@@ -232,6 +235,8 @@ async function sendResultStream(state, result, context, {checksum = false} = {})
     recordUnits: 128,
     numericBatchValues: 32 * 1024,
     sliceBytes: 128 * 1024,
+    bufferPacketBytes: checksum ? 256 * 1024 : 1024 * 1024,
+    bufferChunkBytes: checksum ? 256 * 1024 : 0,
     budgetMs: 4,
     checksum,
     onProgress(stage, detail) {
@@ -341,7 +346,7 @@ function workerStateError(code, message) {
   return error;
 }
 
-function createWorkerContext(request, renderCache = Object.create(null)) {
+function createWorkerContext(request, renderCache = Object.create(null), adoptMap = null) {
   return Object.freeze({
     binding: request.binding,
     renderCache,
@@ -354,7 +359,15 @@ function createWorkerContext(request, renderCache = Object.create(null)) {
     },
     checkpoint() {
       return true;
-    }
+    },
+    ...(request.adoptResultMap && typeof adoptMap === "function" ? {
+      adoptMap(map) {
+        if (!map || typeof map !== "object") {
+          throw workerStateError("worker_protocol_adoption_invalid", "Worker adoption 地图无效");
+        }
+        adoptMap(map);
+      }
+    } : {})
   });
 }
 

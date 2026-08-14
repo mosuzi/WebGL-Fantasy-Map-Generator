@@ -13,6 +13,7 @@ import {
 } from "./browser-map-storage.js";
 import {isCompressedMapDocumentFilename} from "./map-filename.js";
 import {encodeWebfmgV3Document, gzipWebfmgV3Bytes} from "./webfmg-v3-container.js";
+import {createMapAdoptionHandoff} from "./map-adoption-handoff.js";
 import {executeRenderPreparationTask} from "../renderer/render-preparation.js";
 import {mergeUserVisualThemes, normalizeVisualThemeId, resolveVisualTheme} from "../renderer/themes.js";
 
@@ -90,6 +91,25 @@ async function importMapFile(payload, context) {
   await taskCheckpoint(context);
 
   reportTaskProgress(context, "complete", 1, "地图存档解析完成");
+  if (typeof context.adoptMap === "function") {
+    const handoffStartedAt = taskNow();
+    const handoff = createMapAdoptionHandoff(document);
+    context.adoptMap(document.map);
+    await taskCheckpoint(context);
+    return {
+      kind: "map-file-import-result",
+      binding: context.binding || null,
+      handoff,
+      preparedRender,
+      metadata: mapDocumentMetadata(document),
+      timings: {
+        parseMs,
+        renderPrepareMs,
+        handoffEncodeMs: roundTaskMs(taskNow() - handoffStartedAt),
+        totalMs: roundTaskMs(taskNow() - startedAt)
+      }
+    };
+  }
   return {
     kind: "map-file-import-result",
     binding: context.binding || null,

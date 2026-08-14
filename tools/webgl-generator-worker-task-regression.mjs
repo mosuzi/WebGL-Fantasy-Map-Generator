@@ -13,6 +13,7 @@ import {computeAppliedMapReplicaPatchTargetChecksum, computeCanonicalMapReplicaC
 import {createWorkerGraphDecoder, encodeWorkerGraph} from "../app/webgl-generator/src/runtime/worker-graph-stream.js";
 import {createStagedWorkerSnapshot} from "../app/webgl-generator/src/runtime/worker-snapshot.js";
 import {runMapFileIoWorkerTask} from "../app/webgl-generator/src/runtime/map-file-io-worker-task.js";
+import {materializeMapAdoptionHandoff} from "../app/webgl-generator/src/runtime/map-adoption-handoff.js";
 import {
   createWorkerTaskExecution,
   createWorkerTaskMessage,
@@ -187,10 +188,12 @@ class FakeWorker {
             : this.replicaChecksum
           : null;
         const renderOnlyBefore = handlerPayload?.mode === "render-only" ? structuredClone(handlerPayload.map) : null;
+        let adoptedMap = null;
         const result = await getWorkerTaskHandler(this.request.task)(handlerPayload, {
           binding: this.request.binding,
           checkpoint: () => true,
-          report: () => {}
+          report: () => {},
+          ...(this.request.adoptResultMap ? {adoptMap: map => { adoptedMap = map; }} : {})
         });
         if (renderOnlyBefore) {
           assert.deepEqual(handlerPayload.map, renderOnlyBefore, "render-only handler 不得改写 Worker 地图镜像");
@@ -233,7 +236,7 @@ class FakeWorker {
               binding: this.request.binding,
               checksum: replicaChecksum,
               request: this.request,
-              map: this.request.adoptResultMap ? result.map : handlerPayload.map,
+              map: this.request.adoptResultMap ? adoptedMap : handlerPayload.map,
               adoptResultMap: retainedAdoption
             };
           }
@@ -468,6 +471,10 @@ const adoptedImport = await adoptionCoordinator.run("map-file-io", {
   sessionMode: "adopt-result-map",
   allowFallback: false
 });
+assert.equal(Object.hasOwn(adoptedImport, "map"), false, "adoption 输出不得回传完整 map 对象图");
+assert.equal(Object.hasOwn(adoptedImport, "document"), false, "adoption 输出不得回传完整 document 对象图");
+const adoptedDocument = await materializeMapAdoptionHandoff(adoptedImport.handoff);
+assert.equal(adoptedDocument.map.metadata.checksum, sessionFormal.metadata.checksum);
 assert.equal(adoptedImport.worker.session.reused, false);
 assert.equal(adoptionCoordinator.getSessionSnapshot()?.status, "pending");
 assert.equal(adoptionCoordinator.getSessionSnapshot()?.adopted, true);
@@ -475,17 +482,17 @@ assert.ok(adoptionCoordinator.getSessionSnapshot()?.checksum, "adoption 必须�
 adoptionBinding = {...adoptionBinding, mapIdentity: "imported-map", mapRevision: 0};
 assert.equal(await adoptionCoordinator.commitSession(adoptedImport.worker.session.id, adoptionBinding, {adoptResultMap: true}), true);
 assert.equal(adoptionCoordinator.getSessionSnapshot()?.status, "idle");
-assert.equal(adoptionWorkers[0].retainedSession.map.metadata.checksum, adoptedImport.map.metadata.checksum);
+assert.equal(adoptionWorkers[0].retainedSession.map.metadata.checksum, adoptedDocument.map.metadata.checksum);
 const adoptedSave = await adoptionCoordinator.run("map-file-io", {
-  map: adoptedImport.map,
+  map: adoptedDocument.map,
   operation: "export",
   encoding: "gzip",
   resultType: "bytes",
-  options: adoptedImport.map.options || {}
+  options: adoptedDocument.map.options || {}
 }, {
   binding: adoptionBinding,
   sessionMode: "map-mirror",
-  sessionPayload: {operation: "export", encoding: "gzip", resultType: "bytes", options: adoptedImport.map.options || {}},
+  sessionPayload: {operation: "export", encoding: "gzip", resultType: "bytes", options: adoptedDocument.map.options || {}},
   allowFallback: false
 });
 assert.equal(adoptedSave.worker.session.reused, true, "导入 adoption 后首次保存必须复用同一 owner");
@@ -493,6 +500,19 @@ assert.equal(adoptionWorkers.length, 1, "导入 adoption 后首次保存不得�
 assert.ok(adoptedSave.worker.telemetry.inputPackets <= 3, `导入 adoption 后首次保存不得重传地图：${adoptedSave.worker.telemetry.inputPackets}`);
 assert.equal(await adoptionCoordinator.commitSession(adoptedSave.worker.session.id, adoptionBinding, {expectedRevisionDelta: 0}), true);
 assert.equal(adoptionCoordinator.getSessionSnapshot()?.adopted, true, "后续复用保存不得丢失 adoption owner 来源");
+
+let adoptedGenerationMap = null;
+const adoptedGeneration = await getWorkerTaskHandler("generation.compute")({
+  options: {seed: "worker-adoption-generation", cellsTarget: 1000, heightmapTemplate: "continents"}
+}, {
+  binding,
+  checkpoint: () => true,
+  report: () => {},
+  adoptMap: map => { adoptedGenerationMap = map; }
+});
+assert.equal(Object.hasOwn(adoptedGeneration, "map"), false, "生成 adoption 输出不得回传完整 map 对象图");
+const adoptedGenerationDocument = await materializeMapAdoptionHandoff(adoptedGeneration.handoff);
+assert.equal(adoptedGenerationMap.metadata.checksum, adoptedGenerationDocument.map.metadata.checksum);
 assert.equal(await sessionCoordinator.commitSession(archiveResult.worker.session.id, sessionBinding, {expectedRevisionDelta: 0}), true);
 sessionBinding = {...sessionBinding, operationId: 10};
 const secondSessionResult = await sessionCoordinator.run("regeneration.compute", {map: sessionFormal, kind: "routes"}, {
