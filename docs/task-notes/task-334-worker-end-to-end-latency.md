@@ -191,3 +191,9 @@ diagnostic artifact 为 `work/task332-view-switch-100000/raw-result.json`；该�
 - 显示事务现只在成功提交或失败恢复后从正式 renderer 同步控件；未提交期间 Tab、bridge 和 renderer 维持旧值。仅 `layers=[surface]` 的紧凑颜色准备忽略 camera / canvas 漂移，仍严格校验地图 binding、selection / highlight、主题、单位、可见性、模式、view / label options 与 deferred sequence；主题、标签、路线等相机相关准备继续使用完整令牌。可见 segmented 仍经唯一隐藏 bridge 进入旧运行时，但隐藏 bridge 不再反向触发 Vue 提交，单次用户点击只形成一个显示意图。
 - 生产 10k 入口真实通过：国家视图 wall `75.9ms`、Worker 输入 `3` 包、compact colors `160064B`、挂起 `11.5ms`、LongTask `0`。专门竞争门在请求未提交时严格观察到 `height / 高度 / height`，随后真实 wheel 改变相机，操作仍收敛为 `states / 国家 / states`，公开 API 同源；非性能 health、Loading、应用错误与 WebGL error 为 `0`。artifact 为 `work/task334-b2-view-switch-10000/result.json`。
 - 本阶段产品 `2` 文件、工具 `3` 文件，专用浏览器工具保持 `372` 行；没有新建夹具、没有委派和等待。语法、视图控件专项、Worker app replay 静态门、生产构建与唯一 10k 浏览器门通过。版本升至 `0.3.13`；第 334 项仍进行中，下一步仍只进入 C2-C 有界投影。
+
+## 19. B2 纠正：热更新后视图桥监听失效
+
+- 前一阶段错误地把隔离生产门通过当成用户原 5410 标签已修复；现场复验确认运行时仍在启动时逐个绑定隐藏视图按钮，并在点击时提前调用 `setActiveModeButton`。Vue 热更新替换按钮后，新节点失去监听；未热更新时也仍保留一段未提交 active 抢跑窗口。
+- 视图桥改为 `document` 级单一事件委托，节点替换后继续接收当前隐藏桥事件；点击只提交用户意图，不再提前改变 active / preference，最终仍由 Worker 正式提交或回滚后的 `restoreRuntimeDisplayControls` 统一收敛。版本升至 `0.3.14`；本纠正不扩到其它控制面或 C2-C。
+- 用户原 `5410/?debug=1` 标签在不刷新、不重生成地图的前提下完成国家→平移→缩放→政体→国家目标复验：每一步可见 Tab 与隐藏桥严格同源，政体画面出现正式政体图例，回到国家后图例清除且国家配色恢复。Chrome 原生滚轮注入有一次工具超时，未计作产品通过；随后由同一画布正式 wheel 处理器完成相机变化并通过状态门。

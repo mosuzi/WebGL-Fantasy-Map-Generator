@@ -207,12 +207,11 @@ export function bindRuntimePanel(documentRef, handlers) {
       setLayerGroupControlState(control, members.map(() => visible));
     });
   }
-  for (const button of documentRef.querySelectorAll(VIEW_MODE_SELECTOR)) {
-    button.addEventListener("click", () => {
-      setActiveModeButton(documentRef, button.dataset.mode);
-      handlers.onMode(button.dataset.mode);
-    });
-  }
+  documentRef.addEventListener("click", event => {
+    const button = event.target?.closest?.(VIEW_MODE_SELECTOR);
+    if (!button || !documentRef.contains(button)) return;
+    handlers.onMode(button.dataset.mode);
+  });
 }
 
 function bindMapCellTargetInput(input) {
