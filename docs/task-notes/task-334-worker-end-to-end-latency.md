@@ -50,3 +50,42 @@ Worker-only 计算期间冲突控件可以保持禁用，但浏览器 RAF / Load
 - 100k 代表动作给出相对第 333 项基线的阶段和总耗时改善，且不存在未归因 LongTask；Worker-only 窗 RAF / heartbeat 持续，冲突操作仍被拒绝且任务队列不增长；
 - 非性能 health、应用 console / page、WebGL、Loading 残留为 `0`；
 - 不修改 `source/`、Wiki、用户 Chrome 或用户地图；不采用 main-thread fallback、降低地图 / 标签 / picking 精度、删除图层、放宽阈值或只修改夹具。
+
+## 7. 阶段 A 只读调查结论
+
+### 7.1 存档
+
+固定 `99846` cells 的第 333 项最终 artifact 给出以下端到端分解；导入 / 恢复的 Worker 输出流与主线程 receive / decode 重叠，二者不得相加：
+
+| 入口 | wall | Worker 输入 | Worker compute | Worker 输出流 / 主线程 receive | prepared install | 结论 |
+| --- | ---: | ---: | ---: | ---: | ---: | --- |
+| 冷 archive 代理 | `32.037s` | `6.483s / 952包` | `1.988s` | `4.7ms / 1.8ms` | 不适用 | 另有 `23.564s` 未进入旧 telemetry |
+| 暖浏览器保存 | `1.897s` | `3.3ms / 3包` | `1.875s` | `4.2ms / 2.6ms` | 不适用 | v3 encode / gzip 是主成本，storage 与其它开销上界约 `21ms` |
+| 文件导入 | `15.137s` | `6.6ms / 4包` | `6.669s` | `7.020s / 4.560s`，`4410包` | `800.6ms` | 读取瓶颈是 Worker 解析 / 全层准备与通用 graph 大结果交接 |
+| 浏览器恢复 | `15.362s` | `7.9ms / 4包` | `6.611s` | `7.326s / 4.867s`，`4410包` | `778.2ms` | IndexedDB 不是主瓶颈 |
+
+`worker-task-coordinator` 在发送输入前计算一次完整 canonical checksum；Worker 又在 `computeStartedAt` 之前计算一次，因此两次深遍历均被旧 telemetry 漏记。冷 wall 扣除输入、compute 和输出后恰余约 `23.564s`，源码与数值共同锁定首存最优先问题为“双重 checksum 深遍历”，不是 IndexedDB。
+
+### 7.2 显示入口
+
+固定 100k artifact 的暖操作如下：
+
+| 入口 | wall / renderer suspend | Worker layers | Worker compute | 输出 |
+| --- | ---: | --- | ---: | ---: |
+| `states → provinces` | `826.6 / 806.3ms` | `surface` | `106ms` | `446包`，Worker `552.7ms`，主线程 receive `384ms` |
+| 显示海底 | `668.9 / 648.5ms` | `surface` | `101.3ms` | `446包`，Worker `412.2ms`，主线程 receive `305ms` |
+| 隐藏海底 | `903.9 / 887.3ms` | `surface` | `111.9ms` | `446包`，Worker `635.3ms`，主线程 receive `368.9ms` |
+| 平滑边界 | `591.4 / 575.6ms` | `surface + line` | `487.6ms` | `6包` |
+| 最大标签数 | `403.2 / 364.2ms` | `labels` | `34.3ms` | `6包` |
+
+这些动作的 LongTask 为 `0`，但 renderer suspend 几乎覆盖整个 wall；suspend 又会取消 viewport commit，`draw()` 只登记 pending 后返回。因此主要“假死”是产品主动停绘叠加 yielded output decode，不是 Worker compute 在主线程同步执行。海底开关虽然没有错误扩大到全部十三层，却仍传回完整 surface；point / line 类的显示 / 隐藏也会无条件重建对应 buffer，其它纯可见层才只 draw。
+
+### 7.3 冻结根因与实施顺序
+
+1. **先补 telemetry**：把主 / Worker checksum、parse / migrate / render prepare、encode / gzip、输出 encode / ACK wait、主线程累计 decode CPU、storage、renderer suspend / pending draw、RAF / heartbeat / LoAF 纳入同一绝对时间轴；只复用既有 harness 运行一次 100k 窄诊断。
+2. **显示事务**：先生成不可变 effect plan，Worker 准备期间保留最后已提交画面，只在短原子 swap 窗暂停；海底和颜色视图返回 per-cell color / surface range 或 segment patch，不回传完整 surface geometry。point / line 按分类缓存，纯 visibility 不启动 Worker。
+3. **冷 / 暖保存**：在既有 input graph encode / Worker decode 遍历中生成双方可核的 stream checksum，移除发送前和 compute 前的独立深遍历；patch checksum、错误 ACK 销毁与 fresh 重同步不放宽。随后再按 telemetry 判断 v3 section encode 与 gzip 是否需要流水化。
+4. **读取**：以 v3 既有 canonical section directory 和 transferable typed buffers 建紧凑 handoff；旧格式仍在 Worker 迁移到同一 handoff。目标是消除 `4410` 包通用 graph 往返和重复 materialize，不把完整 JSON 图搬回主线程。
+5. **统一副本生命周期**：现有计算 / 显示 coordinator 各自冷建副本，generation / import Worker 的结果也未被长期 session 接管。实施阶段须评估单 owner 下共用 canonical session、保留 render cache，以及 generation / import 结果原地 adoption，避免一张新图为首次显示和首次保存分别付冷副本成本。
+
+明确拒绝：主线程重计算 fallback、后台预热掩盖冷成本、开放并发 / 排队、延长 Loading、放宽 LongTask、删除图层 / picking / 标签、把 Worker output 与 main receive 重复相加，或让兼容读取重新构造完整 JSON 图。

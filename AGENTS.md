@@ -67,7 +67,7 @@
 
 ## 当前状态
 
-- 第 334 项已登记进行中。第 333 项已解决跨任务重复全图输入与 `.webfmg v3` 体积，但 100k 保存 / 读取、显示海底、视图 / 图层切换和 Worker 期间画布响应仍未达标。本项先拆分 Worker 输入 / 计算 / 输出、主线程 decode / install、style / layout / draw 与 renderer suspension，再分别收敛显示事务和存档链；冲突地图操作保持锁定，最后已提交画面与页面事件循环不得因 Worker-only 计算无故冻结。当前版本为 `0.3.1`。
+- 第 334 项阶段 A 已冻结根因：100k 冷 archive 除 `6.483s` 输入和 `1.988s` encode / gzip 外，主 / Worker 两次 telemetry 外 canonical checksum 约占 `23.564s`；暖保存 `1.897s` 主要为压缩。导入 / 恢复约 `15.1 / 15.4s`，瓶颈为 Worker 解析 / 全层准备与 `4410` 包输出。显示海底约 `0.67～0.90s`，compute 仅约 `0.10s`，但回传完整 surface 且 renderer suspend 几乎覆盖全窗，LongTask 为 `0`。下一阶段只补标量 telemetry 和一次 100k 窄诊断，再依次实施显示 patch、stream checksum、读取紧凑 handoff与副本生命周期统一；冲突操作继续锁定。当前版本为 `0.3.2`。
 
 - 第 322 项已完成、归档并合入远端 `main`。
 - 第 327 项已完成、归档并合入远端 `main`。
