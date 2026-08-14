@@ -142,6 +142,84 @@ export async function decodeWebfmgV3DocumentAsync(source, options = {}) {
   return document;
 }
 
+export async function decodeWebfmgV3DocumentChunksAsync(sourceChunks, options = {}) {
+  if (!Array.isArray(sourceChunks) || !sourceChunks.length) throw containerError("webfmg_v3_truncated", "v3 地图容器缺少分片");
+  const chunks = sourceChunks.map(normalizeContainerChunk);
+  const offsets = [0];
+  for (const chunk of chunks) offsets.push(offsets[offsets.length - 1] + chunk.byteLength);
+  const byteLength = offsets[offsets.length - 1];
+  if (Number.isFinite(Number(options.byteLength)) && Number(options.byteLength) !== byteLength) {
+    throw containerError("webfmg_v3_truncated", "v3 地图容器分片长度不一致");
+  }
+  const headerBytes = readChunkRange(chunks, offsets, 0, HEADER_BYTES);
+  if (!isWebfmgV3Bytes(headerBytes)) throw containerError("webfmg_v3_magic_invalid", "文件不是 `.webfmg v3` 容器");
+  const headerView = new DataView(headerBytes.buffer, headerBytes.byteOffset, headerBytes.byteLength);
+  const version = headerView.getUint16(8, true);
+  if (version !== WEBFMG_V3_CONTAINER_VERSION) throw containerError("webfmg_v3_version_unsupported", `不支持 v3 容器版本 ${version}`);
+  const schemaVersion = headerView.getUint16(10, true);
+  const count = headerView.getUint32(12, true);
+  const directoryEnd = HEADER_BYTES + count * DIRECTORY_BYTES;
+  if (!count || directoryEnd > byteLength) throw containerError("webfmg_v3_directory_invalid", "v3 地图分区目录无效");
+  if (Number.isFinite(Number(options.expectedSections)) && Number(options.expectedSections) !== count) {
+    throw containerError("webfmg_v3_directory_invalid", "v3 地图分区数量与 handoff 不一致");
+  }
+  if (Number.isFinite(Number(options.expectedSchemaVersion)) && Number(options.expectedSchemaVersion) !== schemaVersion) {
+    throw containerError("webfmg_v3_version_unsupported", "v3 地图 schema 与 handoff 不一致");
+  }
+
+  const directoryBytes = readChunkRange(chunks, offsets, 0, directoryEnd);
+  const directoryView = new DataView(directoryBytes.buffer, directoryBytes.byteOffset, directoryBytes.byteLength);
+  const descriptors = listCanonicalMapSections();
+  const seen = new Set();
+  const entries = [];
+  const chunkUses = new Uint32Array(chunks.length);
+  for (let index = 0; index < count; index += 1) {
+    const offset = HEADER_BYTES + index * DIRECTORY_BYTES;
+    const entry = {
+      id: directoryView.getUint16(offset, true),
+      codec: directoryView.getUint16(offset + 2, true),
+      start: directoryView.getUint32(offset + 4, true),
+      length: directoryView.getUint32(offset + 8, true),
+      rawLength: directoryView.getUint32(offset + 12, true),
+      checksum: directoryView.getUint32(offset + 16, true)
+    };
+    if (seen.has(entry.id) || entry.codec !== CODEC_COMPACT_VALUE || entry.rawLength !== entry.length || entry.start < directoryEnd || entry.start + entry.length > byteLength) {
+      throw containerError("webfmg_v3_directory_invalid", `v3 地图分区目录项无效：${entry.id}`);
+    }
+    seen.add(entry.id);
+    entries.push(entry);
+    forEachChunkRange(offsets, entry.start, entry.start + entry.length, chunkIndex => { chunkUses[chunkIndex]++; });
+  }
+
+  const checkpoint = createAsyncCheckpoint(options);
+  let documentHeader = null;
+  const map = {};
+  releaseUnusedChunks(chunks, sourceChunks, chunkUses, options.consumeChunks === true);
+  for (const entry of entries) {
+    const payload = readChunkRange(chunks, offsets, entry.start, entry.start + entry.length);
+    if (await checksumBytesAsync(payload, checkpoint) !== entry.checksum) {
+      throw containerError("webfmg_v3_checksum_mismatch", `v3 地图分区 checksum 不一致：${entry.id}`);
+    }
+    const value = await decodeCompactBinaryValueAsync(payload, options);
+    if (entry.id === 0) documentHeader = value;
+    else {
+      const descriptor = descriptors[entry.id - 1];
+      if (!descriptor) throw containerError("webfmg_v3_section_unknown", `v3 地图分区 ID 未登记：${entry.id}`);
+      map[descriptor.path] = await restoreDecodedSectionAsync(descriptor.path, value, checkpoint);
+    }
+    forEachChunkRange(offsets, entry.start, entry.start + entry.length, chunkIndex => {
+      chunkUses[chunkIndex]--;
+      if (!chunkUses[chunkIndex]) releaseChunk(chunks, sourceChunks, chunkIndex, options.consumeChunks === true);
+    });
+    await checkpoint(true);
+  }
+  if (!documentHeader || !seen.has(0)) throw containerError("webfmg_v3_document_invalid", "v3 地图容器缺少文档头");
+  applyAliases(map, documentHeader.aliases || []);
+  const document = {...documentHeader, map};
+  delete document.aliases;
+  return document;
+}
+
 export function isWebfmgV3Bytes(source) {
   const bytes = source instanceof Uint8Array ? source : source instanceof ArrayBuffer ? new Uint8Array(source) : null;
   return Boolean(bytes && bytes.byteLength >= MAGIC.length && MAGIC.every((byte, index) => bytes[index] === byte));
@@ -192,6 +270,54 @@ function prepareSectionForEncoding(name, value, aliases) {
     };
   }
   return section;
+}
+
+function normalizeContainerChunk(value) {
+  if (value instanceof Uint8Array) return value;
+  if (value instanceof ArrayBuffer) return new Uint8Array(value);
+  if (ArrayBuffer.isView(value)) return new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
+  throw containerError("webfmg_v3_truncated", "v3 地图容器分片无效");
+}
+
+function readChunkRange(chunks, offsets, start, end) {
+  if (!Number.isInteger(start) || !Number.isInteger(end) || start < 0 || end < start || end > offsets[offsets.length - 1]) {
+    throw containerError("webfmg_v3_truncated", "v3 地图容器读取范围无效");
+  }
+  const length = end - start;
+  if (!length) return new Uint8Array(0);
+  let first = 0;
+  while (first < chunks.length && offsets[first + 1] <= start) first++;
+  if (first >= chunks.length || !chunks[first]) throw containerError("webfmg_v3_truncated", "v3 地图容器分片已缺失");
+  if (end <= offsets[first + 1]) return chunks[first].subarray(start - offsets[first], end - offsets[first]);
+  const output = new Uint8Array(length);
+  let outputOffset = 0;
+  for (let index = first; index < chunks.length && offsets[index] < end; index += 1) {
+    const chunk = chunks[index];
+    if (!chunk) throw containerError("webfmg_v3_truncated", "v3 地图容器分片已缺失");
+    const localStart = Math.max(start, offsets[index]) - offsets[index];
+    const localEnd = Math.min(end, offsets[index + 1]) - offsets[index];
+    output.set(chunk.subarray(localStart, localEnd), outputOffset);
+    outputOffset += localEnd - localStart;
+  }
+  return output;
+}
+
+function forEachChunkRange(offsets, start, end, callback) {
+  if (end <= start) return;
+  let index = 0;
+  while (index + 1 < offsets.length && offsets[index + 1] <= start) index++;
+  while (index + 1 < offsets.length && offsets[index] < end) callback(index++);
+}
+
+function releaseUnusedChunks(chunks, sourceChunks, chunkUses, consume) {
+  for (let index = 0; index < chunks.length; index += 1) {
+    if (!chunkUses[index]) releaseChunk(chunks, sourceChunks, index, consume);
+  }
+}
+
+function releaseChunk(chunks, sourceChunks, index, consume) {
+  chunks[index] = null;
+  if (consume) sourceChunks[index] = null;
 }
 
 function restoreDecodedSection(name, value) {

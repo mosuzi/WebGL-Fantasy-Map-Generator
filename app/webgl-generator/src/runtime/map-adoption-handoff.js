@@ -1,8 +1,7 @@
 import {
-  decodeWebfmgV3DocumentAsync,
+  decodeWebfmgV3DocumentChunksAsync,
   encodeWebfmgV3Document,
-  inspectWebfmgV3Container,
-  isWebfmgV3Bytes
+  inspectWebfmgV3Container
 } from "./webfmg-v3-container.js";
 
 export const MAP_ADOPTION_HANDOFF_KIND = "map-adoption-v3-sections";
@@ -34,21 +33,18 @@ export async function materializeMapAdoptionHandoff(handoff, options = {}) {
     throw handoffError("map_adoption_handoff_mismatch", "Worker 地图 adoption handoff 分片长度不一致");
   }
   const yieldToMain = typeof options.yieldToMain === "function" ? options.yieldToMain : defaultYield;
-  const bytes = new Uint8Array(byteLength);
-  let offset = 0;
-  for (const chunk of chunks) {
-    bytes.set(chunk, offset);
-    offset += chunk.byteLength;
-    await yieldToMain();
+  try {
+    return await decodeWebfmgV3DocumentChunksAsync(handoff.chunks, {
+      ...options,
+      byteLength,
+      expectedSections: Number(handoff.sections),
+      expectedSchemaVersion: Number(handoff.schemaVersion),
+      consumeChunks: true,
+      yieldToMain
+    });
+  } finally {
+    handoff.chunks.fill(null);
   }
-  if (!isWebfmgV3Bytes(bytes)) {
-    throw handoffError("map_adoption_handoff_invalid", "Worker 地图 adoption handoff 不是 v3 分区容器");
-  }
-  const container = inspectWebfmgV3Container(bytes);
-  if (Number(handoff.sections) !== container.sections || Number(handoff.schemaVersion) !== container.schemaVersion) {
-    throw handoffError("map_adoption_handoff_mismatch", "Worker 地图 adoption handoff 元数据不一致");
-  }
-  return decodeWebfmgV3DocumentAsync(bytes, {...options, yieldToMain});
 }
 
 function splitBytes(bytes) {

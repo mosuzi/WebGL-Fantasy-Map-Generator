@@ -164,3 +164,10 @@ diagnostic artifact 为 `work/task332-view-switch-100000/raw-result.json`；该�
 - 根因二是显示控件先更新 DOM 偏好再异步提交。快速重复点击时，第二次被 operation owner 以 busy 拒绝并从旧 renderer 回写；第一次随后成功却没有 success-final 同步，导致控件可停在与最终 renderer 相反的状态。UI 显示动作现无论成功或拒绝，最终都从正式 renderer 恢复控件；仍不排队、不并发执行第二个意图。
 - 唯一 100k 目标复验通过：首次国家视图 `290.4ms`、cache/session 均真实复用、输入 `3` 包、compute `21ms`；显示海底开 / 关 `263.1 / 254.0ms`，三者 LongTask 均为 `0`。快速双击后 renderer、复选框与公开 API 都为 `true`，LongTask `0`；非性能 health、应用错误、Loading 残留与 WebGL error 为 `0`。主题 / 标签保留本项既有 `50～56ms` 精确登记，不在本窄修扩改。
 - 本后续产品 `2` 文件 `+12 / -2`，既有工具 `2` 文件 `+32 / -5`，没有新增浏览器夹具或委派等待。语法、差异、Worker 十一类、API action convergence、生产构建与唯一 100k 浏览器门通过；artifact 为 `work/task334-view-switch-undersea-fix-100000/` 与 `work/task334-b2-view-switch-100000/result.json`。版本升至 `0.3.9`，下一步仍只进入 C2-C。
+
+## 15. C2-C checkpoint 1：分区解码与 handoff 引用释放
+
+- 主线程 materialize 不再先把全部 `256KiB` handoff chunks 拼成一份完整连续 v3 容器。解码器直接从 chunk 目录读取各 canonical section；跨 chunk 时只为当前 section 建立临时连续 payload，完成 checksum、紧凑值解码与拓扑恢复后立即释放不再被后续 section 使用的源 chunk。
+- 成功与 checksum / 长度等失败路径都会清空 handoff 的 chunk 引用。v3 容器 header、目录、schema、section 数、边界、checksum、别名和派生 topology 仍 fail-closed；旧同步 / 单 buffer 解码入口保持兼容。
+- 本 checkpoint 仅移除 materialize 前额外的一份整容器连续副本，尚未移除主线程最终完整 map，也不宣称 C2-C 或第 334 项完成。下一步仍须把同步 UI / 编辑 / renderer 消费面迁移到有界投影，最终完整 canonical map 只留在唯一 `MapWorker`。
+- v3 10k 专项通过：`10004` cells、24 sections、raw `2,496,662B`、gzip `1,172,097B`；任意非整齐 chunk 边界往返、截断拒绝、checksum 失败与成功 / 失败引用释放均通过。Worker 十一类、协议、session、取消和 deferred replay 专项通过。产品 `2` 文件、既有 Node 工具 `1` 文件，没有新建浏览器夹具、浏览器运行或委派等待。版本升至 `0.3.10`。

@@ -6,6 +6,7 @@ import {createMapAdoptionHandoff, materializeMapAdoptionHandoff} from "../app/we
 import {
   decodeWebfmgV3Document,
   decodeWebfmgV3DocumentAsync,
+  decodeWebfmgV3DocumentChunksAsync,
   encodeWebfmgV3Document,
   gzipWebfmgV3Bytes,
   inspectWebfmgV3Container,
@@ -42,6 +43,16 @@ assert.ok(asyncYields > 0, "v3 async decode 没有执行有界让步");
 const handoff = createMapAdoptionHandoff(document);
 assert.ok(handoff.chunks.length > 1 && handoff.chunks.every(chunk => chunk.byteLength <= 256 * 1024), "adoption handoff 必须使用独立有界分片");
 assert.deepEqual(await materializeMapAdoptionHandoff(handoff), decoded, "adoption handoff materialize 漂移");
+assert.ok(handoff.chunks.every(chunk => chunk === null), "adoption handoff 解码后必须释放全部 chunk 引用");
+const directChunkBytes = 1021;
+const directChunks = Array.from({length: Math.ceil(raw.byteLength / directChunkBytes)}, (_, index) => raw.slice(index * directChunkBytes, Math.min(raw.byteLength, (index + 1) * directChunkBytes)));
+assert.deepEqual(await decodeWebfmgV3DocumentChunksAsync(directChunks, {byteLength: raw.byteLength}), decoded, "任意边界 v3 chunks 解码漂移");
+await assert.rejects(() => decodeWebfmgV3DocumentChunksAsync([raw.slice(0, raw.byteLength - 1)], {byteLength: raw.byteLength}), error => error?.code === "webfmg_v3_truncated");
+const corruptedHandoff = createMapAdoptionHandoff(document);
+const corruptedChunk = corruptedHandoff.chunks.at(-1);
+corruptedChunk[corruptedChunk.byteLength - 1] ^= 1;
+await assert.rejects(() => materializeMapAdoptionHandoff(corruptedHandoff), error => error?.code === "webfmg_v3_checksum_mismatch");
+assert.ok(corruptedHandoff.chunks.every(chunk => chunk === null), "adoption handoff 失败后必须释放全部 chunk 引用");
 const migrated = migrateMapDocument(decoded);
 const legacyExpected = parseMapDocument(stringifyMapDocument(document));
 const completedAt = performance.now();
