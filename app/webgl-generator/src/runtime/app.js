@@ -3027,9 +3027,8 @@ function invalidateMapReplicaCoordinators(state, includeCompute, reason) {
 
 function invokeRuntimeDisplayActionFromUi(state, documentRef, task) {
   void Promise.resolve().then(task).catch(error => {
-    restoreRuntimeDisplayControls(state, documentRef);
     showMapToast(documentRef, runtimeDisplayActionErrorMessage(error), 2800, {tone: "error"});
-  });
+  }).finally(() => restoreRuntimeDisplayControls(state, documentRef));
 }
 
 function runtimeDisplayActionErrorMessage(error) {

@@ -59,6 +59,7 @@ self.addEventListener("message", async event => {
       if (!isValidSessionCommitBinding(retainedSession.binding, request.binding, {adoptResultMap})) {
         throw workerStateError("worker_protocol_session_commit_invalid", "Worker session 提交绑定不连续");
       }
+      if (adoptResultMap) rebindAdoptedRenderCache(retainedSession.renderCache, request.binding);
       retainedSession.binding = request.binding;
       retainedSession.status = "idle";
       retainedSession.request = {...retainedSession.request, binding: request.binding, reuseSession: true};
@@ -373,6 +374,16 @@ function createWorkerContext(request, renderCache = Object.create(null), adoptMa
 
 function canReuseRenderCache(task, payload) {
   return task === "render.prepare" || (task === "regeneration.compute" && payload?.mode === "render-only");
+}
+
+function rebindAdoptedRenderCache(cache, binding) {
+  if (!cache || typeof cache !== "object") return false;
+  if (!["cellVisual", "shore", "statePaths", "provincePaths"].some(key => cache[key])) return false;
+  cache.renderBinding = {
+    mapIdentity: String(binding?.mapIdentity || ""),
+    mapRevision: Number(binding?.mapRevision) || 0
+  };
+  return true;
 }
 
 function sameBinding(left, right) {

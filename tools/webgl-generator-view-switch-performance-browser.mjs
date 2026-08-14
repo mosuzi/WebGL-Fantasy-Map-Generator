@@ -146,8 +146,10 @@ async function runDiagnostic(requestedCells) {
     ["option:labels-restore", () => api.layers.setMaxCityLabels(original.labels)]
   ];
   const operations = [];
+  let uiConvergence;
   try {
     for (const [name, action] of actions) operations.push(await runAction(name, action));
+    uiConvergence = await runUiConvergence();
   } finally {
     longTaskObserver.disconnect();
     loafObserver?.disconnect();
@@ -155,7 +157,7 @@ async function runDiagnostic(requestedCells) {
   }
   const finalHealth = unwrap(api.info.healthEvents({severity: "error", limit: 100}), "health");
   const finalStats = unwrap(api.info.runtimeStats(), "runtime stats");
-  return {ok: true, cells: app.map.grid.cells.i.length, operations, final: {health: finalHealth.events || [], loading: finalStats.loading, glError: app.renderer.getStats().draw?.glError ?? app.renderer.lastDraw?.glError ?? 0}};
+  return {ok: true, cells: app.map.grid.cells.i.length, operations, uiConvergence, final: {health: finalHealth.events || [], loading: finalStats.loading, glError: app.renderer.getStats().draw?.glError ?? app.renderer.lastDraw?.glError ?? 0}};
 
   async function runAction(name, action) {
     await drain();
@@ -209,6 +211,24 @@ async function runDiagnostic(requestedCells) {
     };
   }
 
+  async function runUiConvergence() {
+    const control = document.getElementById("show-ocean-height");
+    ensure(control, "缺少显示海底控件");
+    const before = Boolean(app.renderer.viewOptions.showOceanHeight);
+    const longTaskStart = trace.longTasks.length;
+    control.click();
+    control.click();
+    await Promise.resolve();
+    const deadline = performance.now() + 30_000;
+    while (app.runtimeOperation.getSnapshot().busy && performance.now() < deadline) await new Promise(resolve => setTimeout(resolve, 25));
+    ensure(!app.runtimeOperation.getSnapshot().busy, "连续显示海底操作未在时限内结束");
+    await drain();
+    trace.longTasks.push(...longTaskObserver.takeRecords().map(entry => ({startTime: entry.startTime, duration: entry.duration, name: entry.name})));
+    const renderer = Boolean(app.renderer.viewOptions.showOceanHeight);
+    const apiState = Boolean(unwrap(api.layers.get(), "连续显示海底状态").display.showOceanHeight);
+    return {before, renderer, control: Boolean(control.checked), api: apiState, longTasks: trace.longTasks.slice(longTaskStart)};
+  }
+
   function summarize(object) { return object ? {kind: object.kind, id: object.id ?? object.i} : null; }
   function round(value) { return Math.round(Number(value || 0) * 10) / 10; }
   function drain() { return new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(resolve, 100)))); }
@@ -227,9 +247,10 @@ function assertAcceptance(result, requested, {b2Display = false} = {}) {
   for (const operation of workerOperations) assert.ok(operation.worker, `${operation.name} 未产生当前 Worker 显示证据`);
   const first = workerOperations[0];
   assert.equal(first.name, "mode:states", "首次真实切换必须为 states");
-  assert.equal(first.worker.session?.reused, false, "首次视图切换必须建立新 Worker 镜像");
-  assert.equal(first.worker.cache?.reused, false, "首次视图切换不得虚报缓存命中");
-  assert.ok(first.worker.telemetry?.inputPackets > 100, "首次视图切换必须记录完整地图镜像输入");
+  assert.equal(first.worker.session?.reused, true, "首次视图切换必须复用新图 adoption owner");
+  assert.equal(first.worker.cache?.reused, true, "首次视图切换必须复用生成阶段渲染缓存");
+  assert.ok(first.worker.telemetry?.inputPackets <= 3, "首次视图切换不得重新输入完整地图");
+  if (b2Display) assert.ok(first.wallMs < (requested === 100_000 ? 2_000 : 1_000), `首次视图切换 ${first.wallMs}ms 未达到 adopted cache 边界`);
   for (const key of ["mainReplicaChecksumMs", "inputAckWaitMs", "outputDecodeCpuMs", "inputDecodeCpuMs", "workerReplicaChecksumMs", "outputWorkerAckWaitMs"]) {
     assert.ok(Number.isFinite(first.worker.telemetry?.[key]) && first.worker.telemetry[key] >= 0, `首次视图切换缺少 ${key} telemetry`);
   }
@@ -287,6 +308,10 @@ function assertAcceptance(result, requested, {b2Display = false} = {}) {
     }
   }
   if (requested === 10_000) assert.deepEqual(registered, [], "10k 视图切换不得登记 LongTask");
+  assert.equal(result.uiConvergence.renderer, !result.uiConvergence.before, "连续显示海底操作没有提交首个合法意图");
+  assert.equal(result.uiConvergence.control, result.uiConvergence.renderer, "显示海底控件与 renderer 最终状态反转");
+  assert.equal(result.uiConvergence.api, result.uiConvergence.renderer, "显示海底 API 与 renderer 最终状态反转");
+  assert.deepEqual(result.uiConvergence.longTasks, [], "连续显示海底操作出现 LongTask");
   const counts = registered.reduce((map, entry) => map.set(entry.operation, (map.get(entry.operation) || 0) + 1), new Map());
   for (const [operation, count] of counts) assert.ok(count <= (operation.startsWith("theme:") ? 4 : 2), `${operation} 登记 LongTask 数量漂移`);
   result.acceptance = {requestedCells: requested, registeredLongTasks: registered};

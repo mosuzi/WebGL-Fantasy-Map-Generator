@@ -156,3 +156,11 @@ diagnostic artifact 为 `work/task332-view-switch-100000/raw-result.json`；该�
 - 固定 `99846` cells 的 100k 真实门通过：文件导入 / 浏览器恢复均只输入 `4` 包，输出各 `1472` 包；主线程单包 decode 峰值为 `16.7 / 15.1ms`，累计 decode CPU 为 `2.965 / 2.916s`，对比 C2-A 的约 `10.0 / 11.0s` 与 `637 / 622ms` 单包峰值已消除大包阻塞。handoff 异步还原总时长为 `1.967 / 1.599s`，Worker handoff encode 为 `1.928 / 2.125s`；两次 owner 均 fresh adopted、最终 idle，恢复后保存继续复用同一 owner。
 - 地图 checksum、城市改名、撤销 / 重做、v3 导出、IndexedDB、renderer / history、Loading、禁词、非性能 health、应用 console / page 与 WebGL 均通过。导入 / 恢复各保留一条 `55ms` 的既有 commit / reveal 类信号，低于 C1 已登记的 `80ms` 精确上界；本地兼容保存夹具另记录 `67 / 597ms`，不属于 handoff 输出窗，也未作为 C2-B 性能通过，留待 C2-C / D 收敛。
 - C2-B 产品 `8` 文件约 `+565 / -19` 行，既有 Node / 浏览器工具 `4` 文件约 `+59 / -7` 行，没有新建浏览器夹具；委派与等待为 `0`。语法、差异、graph stream、v3 container、11 类 Worker、地图文件 Worker、生产构建与唯一最终 100k 浏览器门通过。版本为 `0.3.8`，下一步只进入 C2-C 主线程有界投影。
+
+## 14. C2-B 后续：首次显示缓存与控件状态收敛
+
+- 用户在 `0.3.8` 预览反馈切换视图、显示海底仍卡，并可能出现“显示反而不显示、隐藏反而显示”。匿名请求该预览只返回 Vercel 登录页，无法冒充线上实测；本轮使用同一分支生产构建和固定 `99846` cells 复现产品路径。
+- 根因一是生成阶段已在唯一 `MapWorker` 建立完整渲染缓存，但 adoption 提交只迁移 session binding，没有把 cache binding 从临时 `generated:*` identity 重绑到正式 map identity。首次 `height → states` 因而误判 cache miss，重新计算 cell visual、岸线与国家 / 省份路径，wall 约 `6.13s`。adoption commit 现只对同一被接管结果重绑缓存 identity / revision，不复制地图也不改变缓存内容。
+- 根因二是显示控件先更新 DOM 偏好再异步提交。快速重复点击时，第二次被 operation owner 以 busy 拒绝并从旧 renderer 回写；第一次随后成功却没有 success-final 同步，导致控件可停在与最终 renderer 相反的状态。UI 显示动作现无论成功或拒绝，最终都从正式 renderer 恢复控件；仍不排队、不并发执行第二个意图。
+- 唯一 100k 目标复验通过：首次国家视图 `290.4ms`、cache/session 均真实复用、输入 `3` 包、compute `21ms`；显示海底开 / 关 `263.1 / 254.0ms`，三者 LongTask 均为 `0`。快速双击后 renderer、复选框与公开 API 都为 `true`，LongTask `0`；非性能 health、应用错误、Loading 残留与 WebGL error 为 `0`。主题 / 标签保留本项既有 `50～56ms` 精确登记，不在本窄修扩改。
+- 本后续产品 `2` 文件 `+12 / -2`，既有工具 `2` 文件 `+32 / -5`，没有新增浏览器夹具或委派等待。语法、差异、Worker 十一类、API action convergence、生产构建与唯一 100k 浏览器门通过；artifact 为 `work/task334-view-switch-undersea-fix-100000/` 与 `work/task334-b2-view-switch-100000/result.json`。版本升至 `0.3.9`，下一步仍只进入 C2-C。

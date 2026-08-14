@@ -1056,6 +1056,8 @@ function verifyComputeWorkerRenderCacheContract() {
   assert.match(source, /renderCache:\s*request\.reuseSession\s*\?\s*retainedSession\.renderCache/u, "复用 Worker session 必须继承渲染缓存");
   assert.match(source, /task === "render\.prepare" \|\| \(task === "regeneration\.compute" && payload\?\.mode === "render-only"\)/u, "只有只读渲染任务可以复用渲染缓存");
   assert.match(source, /renderCache:\s*context\.renderCache/u, "持久 Worker session 必须保存本次渲染缓存");
+  assert.match(source, /if \(adoptResultMap\) rebindAdoptedRenderCache\(retainedSession\.renderCache, request\.binding\)/u, "adoption 提交必须把既有渲染缓存重绑到正式 map identity");
+  assert.match(source, /\["cellVisual", "shore", "statePaths", "provincePaths"\][\s\S]*?cache\.renderBinding = \{[\s\S]*?mapIdentity:[\s\S]*?mapRevision:/u, "adoption 缓存重绑必须保留正式渲染基础缓存并更新 binding");
   return {renderPrepare: true, renderOnly: true, mutatingTasks: false};
 }
 
@@ -1212,7 +1214,7 @@ function verifyAppDeferredReplayStaticContract() {
     assert.ok(displayUiRestore.includes(marker), `显示控件恢复缺少正式 renderer 来源：${marker}`);
   }
   assert.doesNotMatch(displayUiRestore, /readControlPreferences/u, "显示控件恢复不得读取已经被用户改写的 DOM 偏好");
-  assert.match(source, /invokeRuntimeDisplayActionFromUi\(state, documentRef,[\s\S]*?restoreRuntimeDisplayControls\(state, documentRef\)/u, "UI Promise 拒绝必须回写正式显示状态");
+  assert.match(source, /invokeRuntimeDisplayActionFromUi\(state, documentRef,[\s\S]*?\.finally\(\(\) => restoreRuntimeDisplayControls\(state, documentRef\)\)/u, "UI 显示操作无论成功或拒绝都必须回写最终提交状态");
   const displayErrorMessage = source.match(/function runtimeDisplayActionErrorMessage\(error\) \{[\s\S]*?\n\}/u)?.[0] || "";
   assert.match(displayErrorMessage, /operation_busy[\s\S]*?当前已有地图操作正在进行，请稍后再试/u, "重叠显示操作必须使用自然中文提示");
   assert.match(displayErrorMessage, /operation_obsolete[\s\S]*?地图状态已变化，请重新设置/u, "过期显示操作必须使用自然中文提示");
