@@ -6,6 +6,7 @@
 
 ## 专题映射
 
+- 第 334 项的 100k Worker 端到端延迟、显示事务 effect / layer 矩阵、renderer suspension、存档输出 / 读取 transport 与画布心跳边界冻结于 [`task-334-worker-end-to-end-latency.md`](./task-334-worker-end-to-end-latency.md)；坚持 Worker 化和单一 operation owner，不开放冲突任务积压。
 - 第 333 项的 Worker 全图重传调查、共享版本化副本 / 增量日志和 `.webfmg v3` 列式二进制存档方案冻结于 [`task-333-worker-replica-and-binary-map.md`](./task-333-worker-replica-and-binary-map.md)；同一 canonical 字段注册表同时服务跨任务 Worker 副本、撤销 / 重做 patch 和新存档格式，避免两套数据描述再次漂移。
 - 第 331 项的 100k 重生成 / 存档瓶颈、真实阶段 Loading、单次序列化、二进制 IndexedDB、canonical map mirror 与增量 prepared renderer 边界冻结于 [`task-331-save-regeneration-performance.md`](./task-331-save-regeneration-performance.md)；普通用户只看山河推演 / 存档阶段，调试数据保留 transport、compute、render、serialize、compress 和 storage 精确标量。
 - 第 332 项的 100k 视图切换瓶颈、持久 Worker 渲染缓存、冷启动与精确 LongTask 登记边界冻结于 [`task-332-view-switch-performance.md`](./task-332-view-switch-performance.md)。
