@@ -1190,6 +1190,15 @@ function verifyAppDeferredReplayStaticContract() {
   assert.match(displayFlow, /allowFallback: false/u, "复杂显示准备不得回退主线程");
   assert.match(displayFlow, /expectedRevisionDelta: 0/u, "显示事务不得推进 map revision");
   assert.match(source, /surfacePatchScope = layers\.includes\("surface"\)[\s\S]*?canPrepareDeferredSurfaceColorPatch/u, "surface 显示事务必须优先选择 compact color patch");
+  const deferredRequestFlow = source.slice(
+    source.indexOf("function createWorkerRegenerationDeferredRenderRequest"),
+    source.indexOf("function isWorkerRegenerationDeferredReplayContextCurrent")
+  );
+  assert.match(deferredRequestFlow, /const presentation = snapshot\?\.finalPresentation \|\| \{\}/u, "deferred render request 必须以目标展示快照为权威");
+  for (const field of ["visualTheme", "unitPreferences", "politicalMeshDebugMode", "visibility", "colorMode", "viewOptions", "labelOptions", "oceanCurrentHighlightIds"]) {
+    assert.match(deferredRequestFlow, new RegExp(`${field}:`), `deferred render request 缺少目标 ${field}`);
+  }
+  assert.ok(deferredRequestFlow.indexOf("...createWorkerRegenerationRenderRequest") < deferredRequestFlow.indexOf("colorMode: String(presentation.colorMode"), "目标展示字段必须覆盖旧 renderer 请求，禁止首次切换落后一帧");
   assert.match(displayFlow, /cache: structuredClone\(prepared\.cache \|\| null\)/u, "显示诊断必须记录正式 Worker 渲染缓存命中");
   assert.match(displayFlow, /operation: \{id: operation\?\.id \|\| "", name: operation\?\.name \|\| ""\}/u, "显示诊断必须绑定当前 operation 身份");
   assert.match(source, /state\.workerTaskCoordinator = state\.mapWorkerCoordinator;[\s\S]*?state\.renderTaskCoordinator = state\.mapWorkerCoordinator;/u, "计算与显示必须共用唯一 MapWorker coordinator");

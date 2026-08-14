@@ -196,4 +196,10 @@ diagnostic artifact 为 `work/task332-view-switch-100000/raw-result.json`；该�
 
 - 前一阶段错误地把隔离生产门通过当成用户原 5410 标签已修复；现场复验确认运行时仍在启动时逐个绑定隐藏视图按钮，并在点击时提前调用 `setActiveModeButton`。Vue 热更新替换按钮后，新节点失去监听；未热更新时也仍保留一段未提交 active 抢跑窗口。
 - 视图桥改为 `document` 级单一事件委托，节点替换后继续接收当前隐藏桥事件；点击只提交用户意图，不再提前改变 active / preference，最终仍由 Worker 正式提交或回滚后的 `restoreRuntimeDisplayControls` 统一收敛。版本升至 `0.3.14`；本纠正不扩到其它控制面或 C2-C。
+
+## 20. B2 再纠正：首次颜色准备落后一帧
+
+- 用户要求直接硬刷新 5410 原标签页后首次切换。真实复现确认：初始高度图点击“国家”后，Tab、hidden bridge、`renderer.colorMode` 和显示事务均报告 `states`，但实际 WebGL 画布仍为高度色；第二次切换才呈现上一次请求的颜色，随后平移 / 缩放会暴露 Tab 与画面错位。此前只验了控件、API 和 renderer 标量，没有验证首次点击后的实际 surface，属于验收缺口。
+- 根因是 `createWorkerRegenerationDeferredRenderRequest` 先捕获了正确的 `snapshot.finalPresentation`，却仍从旧 renderer 构造 Worker 请求；目标展示只在准备完成后才原子应用，因此 Worker 的 compact surface color patch 永远按上一种视图计算。现由目标快照权威覆盖 `colorMode / visualTheme / viewOptions / visibility / labels / units / political debug / ocean highlights`，旧 renderer 只继续提供相机、选择与画布等准备上下文。
+- 用户授权的 5410 原标签页已按“国家实际画面 → 硬刷新 → 第一次点高度 → 第一次即呈现高度 → 再点国家 → 国家画面 → 真实 wheel 缩放”复验，未再出现首次失效或反转；临时诊断日志已删除。专项静态门锁定目标展示字段必须在基础请求之后覆盖，版本升至 `0.3.15`。第 334 项仍进行中，下一步仍只进入 C2-C。
 - 用户原 `5410/?debug=1` 标签在不刷新、不重生成地图的前提下完成国家→平移→缩放→政体→国家目标复验：每一步可见 Tab 与隐藏桥严格同源，政体画面出现正式政体图例，回到国家后图例清除且国家配色恢复。Chrome 原生滚轮注入有一次工具超时，未计作产品通过；随后由同一画布正式 wheel 处理器完成相机变化并通过状态门。

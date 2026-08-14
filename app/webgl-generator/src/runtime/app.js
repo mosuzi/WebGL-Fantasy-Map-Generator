@@ -13107,9 +13107,18 @@ function createWorkerRegenerationDeferredRenderRequest(state, targetKind, bindin
   const surfacePatchScope = layers.includes("surface") && state.renderer?.canPrepareDeferredSurfaceColorPatch?.(snapshot)
     ? snapshot.effects.surfacePatchScope
     : null;
+  const presentation = snapshot?.finalPresentation || {};
   return {
     ...createWorkerRegenerationRenderRequest(state, targetKind, binding, layers),
     layers,
+    visualTheme: structuredClone(presentation.visualTheme || {}),
+    unitPreferences: structuredClone(presentation.unitPreferences || {}),
+    politicalMeshDebugMode: String(presentation.politicalMeshDebugMode || "none"),
+    visibility: {...(presentation.layerVisibility || {})},
+    colorMode: String(presentation.colorMode || "height"),
+    viewOptions: structuredClone(presentation.viewOptions || {}),
+    labelOptions: structuredClone(presentation.labelOptions || {}),
+    oceanCurrentHighlightIds: [...(presentation.oceanCurrentHighlights || [])],
     ...(surfacePatchScope ? {surfacePatchScope} : {})
   };
 }
