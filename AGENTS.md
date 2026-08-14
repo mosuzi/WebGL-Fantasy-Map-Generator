@@ -17,7 +17,7 @@
 
 - `docs/current-plan.md` 是唯一当前任务清单；README、开发日志、专题和归档不得另建当前待办。
 - 已批准的编号范围是封闭范围。达到该项最小验收后立即归档并转向下一项；不影响当前验收的新发现只记录，不顺手实施。
-- 当前唯一活动权威任务为第 334 项，独立分支为 `codex-task-334-worker-end-to-end-latency`。阶段固定为 `A 证据冻结 → B 显示事务收敛 → C 存档输出 / 读取收敛 → D 双档真实验收`；坚持 Worker 化与单一 operation owner，不开放冲突任务积压，也不得以主线程回退或降低渲染质量换取提速。
+- 当前唯一活动权威任务为第 334 项，独立分支为 `codex-task-334-worker-end-to-end-latency`。阶段固定为 `A 证据冻结 → B1 标量诊断 → B2 显示事务 → C1 session / checksum → C2 唯一 MapWorker owner 与存档 transport → D 双档真实验收`；最终只允许一个长期 `MapWorker` 持有完整 canonical map，主线程只保留 UI / renderer / GPU 与有界投影，其它辅助 Worker 不得持有完整地图或提交权。坚持 Worker 化与单一 operation owner，不开放冲突任务积压，也不得以主线程回退或降低渲染质量换取提速。
 - 遇到范围歧义、需要产品决策、夹具连续两次失败或同一阻断再次出现时，必须冻结并请用户裁定；不得继续“补夹具—跑全门”循环。
 - 全部必需任务完成后停止，不得自行创造后续工作。
 
@@ -67,7 +67,7 @@
 
 ## 当前状态
 
-- 第 334 项阶段 A 已冻结根因：100k 冷 archive 除 `6.483s` 输入和 `1.988s` encode / gzip 外，主 / Worker 两次 telemetry 外 canonical checksum 约占 `23.564s`；暖保存 `1.897s` 主要为压缩。导入 / 恢复约 `15.1 / 15.4s`，瓶颈为 Worker 解析 / 全层准备与 `4410` 包输出。显示海底约 `0.67～0.90s`，compute 仅约 `0.10s`，但回传完整 surface 且 renderer suspend 几乎覆盖全窗，LongTask 为 `0`。下一阶段只补标量 telemetry 和一次 100k 窄诊断，再依次实施显示 patch、stream checksum、读取紧凑 handoff与副本生命周期统一；冲突操作继续锁定。当前版本为 `0.3.2`。
+- 第 334 项阶段 A 已冻结根因：100k 冷 archive 除 `6.483s` 输入和 `1.988s` encode / gzip 外，主 / Worker 两次 telemetry 外 canonical checksum 约占 `23.564s`；暖保存 `1.897s` 主要为压缩。导入 / 恢复约 `15.1 / 15.4s`，瓶颈为 Worker 解析 / 全层准备与 `4410` 包输出。显示海底约 `0.67～0.90s`，compute 仅约 `0.10s`，但回传完整 surface 且 renderer suspend 几乎覆盖全窗，LongTask 为 `0`。B0 已冻结唯一 `MapWorker` owner：不得保留计算 / 显示两份长期完整镜像，新图 / 导入须在 owner 内 adoption，主线程只收 renderer transfer 与小型投影。下一阶段只补标量 telemetry 和一次 100k 窄诊断，再依次实施显示 patch、stream checksum、紧凑 handoff与 owner 迁移；冲突操作继续锁定。当前版本为 `0.3.3`。
 
 - 第 322 项已完成、归档并合入远端 `main`。
 - 第 327 项已完成、归档并合入远端 `main`。

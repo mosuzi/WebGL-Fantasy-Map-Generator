@@ -86,6 +86,28 @@ Worker-only 计算期间冲突控件可以保持禁用，但浏览器 RAF / Load
 2. **显示事务**：先生成不可变 effect plan，Worker 准备期间保留最后已提交画面，只在短原子 swap 窗暂停；海底和颜色视图返回 per-cell color / surface range 或 segment patch，不回传完整 surface geometry。point / line 按分类缓存，纯 visibility 不启动 Worker。
 3. **冷 / 暖保存**：在既有 input graph encode / Worker decode 遍历中生成双方可核的 stream checksum，移除发送前和 compute 前的独立深遍历；patch checksum、错误 ACK 销毁与 fresh 重同步不放宽。随后再按 telemetry 判断 v3 section encode 与 gzip 是否需要流水化。
 4. **读取**：以 v3 既有 canonical section directory 和 transferable typed buffers 建紧凑 handoff；旧格式仍在 Worker 迁移到同一 handoff。目标是消除 `4410` 包通用 graph 往返和重复 materialize，不把完整 JSON 图搬回主线程。
-5. **统一副本生命周期**：现有计算 / 显示 coordinator 各自冷建副本，generation / import Worker 的结果也未被长期 session 接管。实施阶段须评估单 owner 下共用 canonical session、保留 render cache，以及 generation / import 结果原地 adoption，避免一张新图为首次显示和首次保存分别付冷副本成本。
+5. **统一副本生命周期**：现有计算 / 显示 coordinator 各自冷建副本，generation / import Worker 的结果也未被长期 session 接管。最终只允许一个长期 `MapWorker` 持有完整 canonical map；generation / import 结果必须原地 adoption，显示、保存、撤销 / 重做共用同一 owner 与 render cache，不允许一张新图为首次显示和首次保存分别建立副本。
 
 明确拒绝：主线程重计算 fallback、后台预热掩盖冷成本、开放并发 / 排队、延长 Loading、放宽 LongTask、删除图层 / picking / 标签、把 Worker output 与 main receive 重复相加，或让兼容读取重新构造完整 JSON 图。
+
+## 8. 阶段 B0：唯一 MapWorker 架构冻结
+
+用户进一步明确：100k 地图即使只完整复制一次也属于必须治理的冷成本。第 334 项不得收敛为“保留多个完整镜像、只把 `postMessage` 调快”，而须按以下所有权实施：
+
+- 一个长期 `MapWorker` 是 canonical map、revision、checksum、history、锁、派生缓存与存档编码状态的唯一 owner；所有正式地图写入、生成、导入、保存、撤销和重做仍由单一 operation owner 串行提交。
+- 主线程只持有 UI / camera / tool 状态、renderer 与 GPU buffers、picking 紧凑索引、当前选择和面板所需的小型 DTO；迁移期间的兼容门面不得成为第二个长期完整 canonical map。
+- 计算 / 显示不得继续由两个 coordinator 各自保留完整地图。纯显示请求只传 effect plan；需要派生时只回传 transferable renderer buffer、range / segment patch、label descriptor 或小型查询 DTO。
+- 新图直接在 `MapWorker` 中生成并留下；存档直接在同一 owner 中解压、校验、迁移并 adoption。保存直接从 owner 的 canonical sections 编码 / 压缩，仅把最终 bytes / Blob 所需 transferable buffer 交给主线程。
+- 辅助 Worker 若经性能证据证明有必要，只能消费明确的不可变 section、typed buffer 或共享只读列；不得持有完整地图、history、revision 或提交权。普通对象 `postMessage` 深克隆、重复 graph encode / decode、后台预热和多副本 checksum 均不算合格方案。
+
+阶段矩阵：
+
+| 阶段 | 单一交付 | 最小验收 | 非目标 / 停止条件 |
+| --- | --- | --- | --- |
+| B1 | 补齐 checksum、stream、decode、storage、suspend / RAF 标量时间轴 | 静态 / Node 门；唯一 100k 窄诊断得到可闭合时间轴 | 不改算法；诊断或夹具连续两次失败即冻结 |
+| B2 | effect matrix、surface patch 与短 commit suspension | 10k 入口、100k 海底 / 视图 / 图层目标门；Worker-only RAF 持续 | 不开放冲突操作，不删层 / 标签 / picking |
+| C1 | 合并计算 / 显示 session，stream checksum 取代两次独立深扫 | fresh / reuse / patch / cancel / rollback Node 与 100k 冷暖保存门 | 不以后台预热掩盖首次成本 |
+| C2 | generation / import adoption、owner 内保存、紧凑 section handoff与主线程投影 | 新图 / 导入完整 owner 恰一、全图再次输入零；旧格式双档兼容 | 若同步 API 合同需产品决策则停止，不伪造异步兼容 |
+| D | 双档真实入口、独立集成复核、最终验收 | 权威 D 门全部通过 | 只验收，不扩修相邻重构 |
+
+B0 唯一写者为主线程；本阶段只修改权威文档与版本，不修改产品、测试、构建、浏览器、`source/`、Wiki、用户 Chrome 或用户地图。首个廉价门为文档差异与版本注入检查。
