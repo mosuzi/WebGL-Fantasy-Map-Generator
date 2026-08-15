@@ -162,7 +162,7 @@ const VIEWPORT_LINE_OVERSCAN_RATIO = 0.5;
 const VIEWPORT_LINE_OVERSCAN_MIN_CSS_PX = 256;
 const VIEWPORT_LINE_OVERSCAN_MAX_CSS_PX = 720;
 const RETIRED_MAP_LAYERS = new Set(["tradeFlows"]);
-const GPU_RESIDENT_COLOR_MODES = Object.freeze({height: 1, biomes: 2, population: 3});
+const GPU_RESIDENT_COLOR_MODES = Object.freeze({height: 1, biomes: 2, population: 3, states: 4, provinces: 5});
 const HEIGHT_COLOR_TABLE_SIZE = 101;
 
 function normalizeRequestedLayerVisibility(layerVisibility, entries) {
@@ -391,6 +391,7 @@ export class PlaceholderMapRenderer {
       cellTextureSize: this.gl.getUniformLocation(this.surfaceProgram, "u_cellTextureSize"),
       terrainTexture: this.gl.getUniformLocation(this.surfaceProgram, "u_terrainTexture"),
       numericTexture: this.gl.getUniformLocation(this.surfaceProgram, "u_numericTexture"),
+      identityTexture: this.gl.getUniformLocation(this.surfaceProgram, "u_identityTexture"),
       paletteTexture: this.gl.getUniformLocation(this.surfaceProgram, "u_paletteTexture"),
       paletteWidth: this.gl.getUniformLocation(this.surfaceProgram, "u_paletteWidth"),
       heightColors: this.gl.getUniformLocation(this.surfaceProgram, "u_heightColors[0]"),
@@ -5673,7 +5674,8 @@ function configureGpuResidentSurfaceColors(gl, renderer) {
   const store = renderer.cellAttributeStore;
   gl.uniform1i(renderer.surfaceLocations.cellColorMode, mode && store ? mode : 0);
   if (!mode || !store) return;
-  const palette = store.textures.palettes.biomes;
+  const paletteMode = renderer.colorMode === "states" || renderer.colorMode === "provinces" ? renderer.colorMode : "biomes";
+  const palette = store.textures.palettes[paletteMode];
   gl.uniform1ui(renderer.surfaceLocations.cellCount, store.snapshot.cellCount);
   gl.uniform2i(renderer.surfaceLocations.cellTextureSize, store.layout.width, store.layout.height);
   gl.activeTexture(gl.TEXTURE0);
@@ -5685,7 +5687,10 @@ function configureGpuResidentSurfaceColors(gl, renderer) {
   gl.activeTexture(gl.TEXTURE2);
   gl.bindTexture(gl.TEXTURE_2D, palette);
   gl.uniform1i(renderer.surfaceLocations.paletteTexture, 2);
-  gl.uniform1ui(renderer.surfaceLocations.paletteWidth, store.snapshot.palettes.biomes.length / 4);
+  gl.activeTexture(gl.TEXTURE3);
+  gl.bindTexture(gl.TEXTURE_2D, store.textures.identities);
+  gl.uniform1i(renderer.surfaceLocations.identityTexture, 3);
+  gl.uniform1ui(renderer.surfaceLocations.paletteWidth, store.snapshot.palettes[paletteMode].length / 4);
   gl.uniform4fv(renderer.surfaceLocations.heightColors, surfaceHeightColorTable(renderer));
   gl.uniform1f(renderer.surfaceLocations.maxPopulation, Math.max(1, Number(renderer.map?.settlements?.metadata?.maxPopulation) || 1));
   gl.uniform4fv(renderer.surfaceLocations.oceanColor, renderer.map?.layers?.ocean || [0.2, 0.4, 0.6, 1]);
@@ -7024,6 +7029,7 @@ uniform uint u_cellCount;
 uniform ivec2 u_cellTextureSize;
 uniform highp usampler2D u_terrainTexture;
 uniform highp sampler2D u_numericTexture;
+uniform highp usampler2D u_identityTexture;
 uniform highp sampler2D u_paletteTexture;
 uniform uint u_paletteWidth;
 uniform vec4 u_heightColors[101];
@@ -7041,6 +7047,11 @@ vec4 resolveCellColor(uint cellId) {
   if (terrain.a == 0u || u_cellColorMode == 1) return heightColor;
   if (u_cellColorMode == 2) {
     uint paletteIndex = terrain.g + 1u;
+    return paletteIndex < u_paletteWidth ? texelFetch(u_paletteTexture, ivec2(int(paletteIndex), 0), 0) : a_color;
+  }
+  if (u_cellColorMode == 4 || u_cellColorMode == 5) {
+    uvec4 identities = texelFetch(u_identityTexture, coord, 0);
+    uint paletteIndex = u_cellColorMode == 4 ? identities.r : identities.g;
     return paletteIndex < u_paletteWidth ? texelFetch(u_paletteTexture, ivec2(int(paletteIndex), 0), 0) : a_color;
   }
   float population = texelFetch(u_numericTexture, coord, 0).r;

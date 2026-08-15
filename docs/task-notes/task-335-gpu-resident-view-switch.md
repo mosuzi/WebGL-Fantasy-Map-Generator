@@ -118,3 +118,10 @@ Worker 化继续用于生成、重生成、地图编辑、派生拓扑、撤销 
 - 非平滑基面在现有 `pushGridCells` 遍历中同步记录连续 `grid-cells` ranges；installer 要求 cell `0..N-1` 有序、无缺口、完整覆盖 base，非法输入在 GPU 安装前拒绝且不泄漏 buffer / texture。shader 通过 packed cell ID 读取 terrain / numeric texture 与 biome palette；高度颜色表复用正式 `colorForHeight`，人口公式与 CPU 权威实现同源。
 - 固定 `10004` cells 的真实 Chrome 验收通过：高度 / 生物群系 / 人口 framebuffer checksum 分别为 `2949860715 / 1641731067 / 2261249289`，与 D 实施前 Worker 基线精确一致；三次切换的 Worker run、surface refresh、LongTask 均为 `0`，surface set / segments / alias、cell attributes、picking 与 overlay 引用全部不变，控件、API 和 renderer 同源。重指纹 `34.6～37.7ms` 在产品 observer 断开后单列，不冒充切换耗时；artifact 为 `work/task335-d-gpu-resident-views-10000/result.json`。
 - 语法、差异、surface base / cell attributes / prepared installer 三项专项 Node、生产构建和 10k 目标门通过。产品 `3` 文件约 `+145 / -11`，工具 `2` 文件约 `+140 / -4`，新浏览器夹具 `123` 行且未超过 `500` 行。版本为 `0.3.20`，下一阶段只进入 335-E。
+
+## 11. 335-E：政治 palette 与 topology cache 解耦（已接受）
+
+- 关闭平滑边界且 surface ranges 完整覆盖全部 grid cells 时，国家 / 省份分别从 identity texture 的 state / province 通道读取偏移编码 ID，再查询 states / provinces palette；颜色切换不再调用 Worker、重建 surface 或触碰政治 mesh。平滑政治 surface 与 correction 仍留在既有安全路径，335-G 前不冒充已优化。
+- 政治生成跨独立 `newMap` 运行的最终颜色并非稳定 checksum 分母，因此验收没有把一次偶然数字改写成新 expected。正式工具在同一张图内先强制旧 Worker 生成国家 / 省份 framebuffer，再以最终旧画面资源为 baseline 执行 GPU 切换；两种模式逐像素 `mismatches=0 / maxDelta=0`，同时要求目标操作 Worker / surface refresh / LongTask 为 `0`。
+- 固定 `10004` cells 的目标门中，国家 / 省份同图 checksum 分别为 `4293181400 / 2882771796`，GPU 与各自 Worker 基线一致；surface set / segments / alias、cell attributes、political cache、picking 和 overlay 引用全部不变，控件、API、renderer、health、Loading 与 WebGL error 同源。artifact 为 `work/task335-e-political-views-10000/result.json`。
+- 产品 `1` 文件 `+14 / -3`；复用 D 浏览器夹具约 `+50 / -18`，测试增量高于产品是因为必须在页内保留同图双 framebuffer、隔离旧 Worker 基线和产品 LongTask 后再逐像素比较，未新建第二套浏览器 harness，文件总长 `154` 行。语法、差异、cell attributes / prepared installer Node、生产构建和 10k 目标门通过。版本为 `0.3.21`，下一阶段只进入 335-F。

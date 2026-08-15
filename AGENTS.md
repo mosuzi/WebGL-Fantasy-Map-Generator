@@ -67,5 +67,5 @@
 
 ## 当前状态
 
-- 第 335-A～335-D 已接受，当前只进入 335-E：让国家 / 省份颜色读取 GPU palette，并把政治 topology cache 与普通颜色切换解耦；平滑 correction 留给 335-G。详细阶段与验收见 `docs/current-plan.md` 和 `docs/task-notes/task-335-gpu-resident-view-switch.md`。
-- 第 335-D checkpoint 版本为 `0.3.20`；第 335 项每个接受阶段必须独立递增版本并本地提交，但所有 checkpoint 在最终统一验收前不得推送。
+- 第 335-A～335-E 已接受，当前只进入 335-F：把主题、海底和不改变几何的普通图层切换移出 Worker render preparation；平滑 correction 留给 335-G。详细阶段与验收见 `docs/current-plan.md` 和 `docs/task-notes/task-335-gpu-resident-view-switch.md`。
+- 第 335-E checkpoint 版本为 `0.3.21`；第 335 项每个接受阶段必须独立递增版本并本地提交，但所有 checkpoint 在最终统一验收前不得推送。
