@@ -14,7 +14,7 @@ import {
   unpackSurfaceBaseIdentity,
   uploadSurfaceBaseBufferSetRanges
 } from "../app/webgl-generator/src/renderer/surface-base-buffer-set.js";
-import {buildGridCellSurfacePatchFromBase} from "../app/webgl-generator/src/renderer/cell-surface-layer.js";
+import {buildGridCellSurfacePatchFromBase, pushGridCells} from "../app/webgl-generator/src/renderer/cell-surface-layer.js";
 
 class FakeGl {
   constructor() {
@@ -183,6 +183,11 @@ const patch = buildGridCellSurfacePatchFromBase(patchSource, {map: patchMap}, "h
   (color, cell) => [color[0], color[1], color[2], cell ? 0.5 : 0.25]);
 assert.deepEqual([...patch.ranges], [[1, {start: 0, end: 54}], [0, {start: 54, end: 108}]]);
 assert.equal(buildGridCellSurfacePatchFromBase(new Float32Array(90), {map: patchMap}, "height", {}, [0]), null);
+
+const concaveVertices = [], concavePoints = [[0, 0], [4, 0], [4, 4], [2, 1], [0, 4]];
+const concaveMap = {metadata: {graphWidth: 4, graphHeight: 4}, grid: {points: [[3.5, 3.5]], cells: {p: [0], v: [[0, 1, 2, 3, 4]], h: [30]}, vertices: {p: concavePoints}}, features: {features: [{land: true}]}, layers: {ocean: [0, 0, 1, 1]}};
+pushGridCells(concaveVertices, {map: concaveMap}, "height", {});
+assert.equal(concaveVertices.length, (concavePoints.length - 2) * 3 * 6, "非凸 hard cell 必须使用安全三角剖分，不能以外置中心扇分越界");
 
 console.log(JSON.stringify({ok: true, maxSegmentBytes: SURFACE_BASE_MAX_SEGMENT_BYTES, syncSegments: 2, asyncSegments: 2, packedIdentity: true}));
 

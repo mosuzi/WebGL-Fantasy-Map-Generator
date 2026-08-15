@@ -1456,7 +1456,8 @@ export class PlaceholderMapRenderer {
       this.viewOptions,
       patchCells,
       this.hardCellSurfaceBaseLayout,
-      (color, cellIndex) => withSurfaceSideAlpha(color, Number(this.map.grid.cells.h[cellIndex]) >= 20 ? "land" : "water")
+      (color, cellIndex) => withSurfaceSideAlpha(color, Number(this.map.grid.cells.h[cellIndex]) >= 20 ? "land" : "water"),
+      this.surfaceCellRanges
     );
     let typedVertices = reused?.vertices;
     let ranges = reused?.ranges;

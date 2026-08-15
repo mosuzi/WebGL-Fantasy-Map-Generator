@@ -1,6 +1,7 @@
 import {colorForCell, isLandCell} from "./color-modes.js";
 import {resolvedGridVertexPoints} from "./grid-vertex-geometry.js";
 import {pushWorldVertex} from "./mesh-writer.js";
+import {triangulateCellVisualBoundarySafely} from "./cell-visual-layer.js";
 
 export function pushGridCells(vertices, context, colorMode, viewOptions, shouldDrawCell = () => true, transformColor = color => color, onCellRange = null) {
   const {map} = context;
@@ -13,24 +14,30 @@ export function pushGridCells(vertices, context, colorMode, viewOptions, shouldD
     const start = vertices.length;
     const center = grid.points[grid.cells.p[cellIndex]];
     const color = transformColor(colorForCell(cellIndex, map, colorMode, viewOptions), cellIndex);
-    for (let index = 0; index < vertexIds.length; index++) {
-      const nextIndex = (index + 1) % vertexIds.length;
-      pushWorldVertex(vertices, context, center, color);
-      pushWorldVertex(vertices, context, vertexPoints[vertexIds[index]], color);
-      pushWorldVertex(vertices, context, vertexPoints[vertexIds[nextIndex]], color);
+    const points = vertexIds.map(vertex => vertexPoints[vertex]);
+    const triangulation = triangulateCellVisualBoundarySafely(points);
+    if (triangulation.status === "ok") {
+      for (const index of triangulation.indices) pushWorldVertex(vertices, context, triangulation.points[index], color);
+    } else {
+      for (let index = 0; index < vertexIds.length; index++) {
+        const nextIndex = (index + 1) % vertexIds.length;
+        pushWorldVertex(vertices, context, center, color);
+        pushWorldVertex(vertices, context, vertexPoints[vertexIds[index]], color);
+        pushWorldVertex(vertices, context, vertexPoints[vertexIds[nextIndex]], color);
+      }
     }
     onCellRange?.(cellIndex, {start, end: vertices.length});
   }
 }
 
-export function buildGridCellSurfacePatchFromBase(surfaceVertices, context, colorMode, viewOptions, cellIndices, cachedLayout = null, transformColor = color => color) {
+export function buildGridCellSurfacePatchFromBase(surfaceVertices, context, colorMode, viewOptions, cellIndices, cachedLayout = null, transformColor = color => color, surfaceCellRanges = null) {
   if (!(surfaceVertices instanceof Float32Array)) return null;
   const grid = context?.map?.grid;
   const cellVertices = grid?.cells?.v;
   if (!Array.isArray(cellVertices)) return null;
   const layout = cachedLayout?.surfaceVertices === surfaceVertices && cachedLayout?.cellVertices === cellVertices
     ? cachedLayout
-    : buildGridCellSurfaceLayout(surfaceVertices, cellVertices);
+    : buildGridCellSurfaceLayout(surfaceVertices, cellVertices, surfaceCellRanges);
   if (!layout) return null;
 
   const cells = [...new Set(Array.from(cellIndices || [], Number).filter(cell => Number.isInteger(cell) && cell >= 0 && cell < cellVertices.length))];
@@ -59,8 +66,16 @@ export function buildGridCellSurfacePatchFromBase(surfaceVertices, context, colo
   return {vertices, ranges, layout};
 }
 
-function buildGridCellSurfaceLayout(surfaceVertices, cellVertices) {
+function buildGridCellSurfaceLayout(surfaceVertices, cellVertices, surfaceCellRanges) {
   const offsets = new Uint32Array(cellVertices.length + 1);
+  if (surfaceCellRanges instanceof Map && surfaceCellRanges.size === cellVertices.length) {
+    for (let cell = 0; cell < cellVertices.length; cell++) {
+      const range = surfaceCellRanges.get(cell);
+      if (!range || range.start !== offsets[cell] || range.end < range.start) return null;
+      offsets[cell + 1] = range.end;
+    }
+    return offsets[cellVertices.length] === surfaceVertices.length ? {surfaceVertices, cellVertices, offsets} : null;
+  }
   let offset = 0;
   for (let cell = 0; cell < cellVertices.length; cell++) {
     const polygonVertices = cellVertices[cell]?.length || 0;
