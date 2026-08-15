@@ -3,7 +3,7 @@ import {goodDisplayName} from "../generator/economy-display-properties.js";
 import {isSharedCubicCurve, sampleCentripetalCatmullRom} from "../geometry/cubic-path.js";
 import {bindVertexBuffer, createProgram} from "./gl-utils.js";
 import {createRenderContext, worldToNdcPoint, worldToScreenPixel} from "./render-context.js";
-import {colorForCell, isLandCell} from "./color-modes.js";
+import {colorForCell, colorForHeight, isLandCell} from "./color-modes.js";
 import {buildGridCellSurfacePatchFromBase, politicalSurfaceMeshForMode, pushGridCells, pushMeshSurfaceVertices, shouldDrawGridCellUnderPoliticalMesh} from "./cell-surface-layer.js";
 import {buildCellVisualGridVertices, buildCellVisualMesh, emptyCellVisualMesh, refreshCellVisualMeshCells, summarizeCellVisualMesh} from "./cell-visual-layer.js";
 import {buildSelectionMeshBundle, drawSelectionMeshBatches, emptySelectionDrawRanges, selectionHighlightMode} from "./selection-layer.js";
@@ -162,6 +162,8 @@ const VIEWPORT_LINE_OVERSCAN_RATIO = 0.5;
 const VIEWPORT_LINE_OVERSCAN_MIN_CSS_PX = 256;
 const VIEWPORT_LINE_OVERSCAN_MAX_CSS_PX = 720;
 const RETIRED_MAP_LAYERS = new Set(["tradeFlows"]);
+const GPU_RESIDENT_COLOR_MODES = Object.freeze({height: 1, biomes: 2, population: 3});
+const HEIGHT_COLOR_TABLE_SIZE = 101;
 
 function normalizeRequestedLayerVisibility(layerVisibility, entries) {
   const requested = new Map();
@@ -383,11 +385,23 @@ export class PlaceholderMapRenderer {
       scale: this.gl.getUniformLocation(this.surfaceProgram, "u_scale"),
       offset: this.gl.getUniformLocation(this.surfaceProgram, "u_offset"),
       pointMode: this.gl.getUniformLocation(this.surfaceProgram, "u_pointMode"),
-      surfaceSideMode: this.gl.getUniformLocation(this.surfaceProgram, "u_surfaceSideMode")
+      surfaceSideMode: this.gl.getUniformLocation(this.surfaceProgram, "u_surfaceSideMode"),
+      cellColorMode: this.gl.getUniformLocation(this.surfaceProgram, "u_cellColorMode"),
+      cellCount: this.gl.getUniformLocation(this.surfaceProgram, "u_cellCount"),
+      cellTextureSize: this.gl.getUniformLocation(this.surfaceProgram, "u_cellTextureSize"),
+      terrainTexture: this.gl.getUniformLocation(this.surfaceProgram, "u_terrainTexture"),
+      numericTexture: this.gl.getUniformLocation(this.surfaceProgram, "u_numericTexture"),
+      paletteTexture: this.gl.getUniformLocation(this.surfaceProgram, "u_paletteTexture"),
+      paletteWidth: this.gl.getUniformLocation(this.surfaceProgram, "u_paletteWidth"),
+      heightColors: this.gl.getUniformLocation(this.surfaceProgram, "u_heightColors[0]"),
+      maxPopulation: this.gl.getUniformLocation(this.surfaceProgram, "u_maxPopulation"),
+      oceanColor: this.gl.getUniformLocation(this.surfaceProgram, "u_oceanColor")
     };
     this.surfaceBaseBufferSet = createSurfaceBaseBufferSet(this.gl, new Float32Array(), {usage: this.gl.STATIC_DRAW});
     this.vertexBuffer = flattenSurfaceBaseBufferSet(this.surfaceBaseBufferSet)[0];
     this.cellAttributeStore = null;
+    this.surfaceHeightColorTable = null;
+    this.surfaceHeightColorTableKey = "";
     this.surfacePatchBuffer = this.gl.createBuffer();
     this.landCorrectionBuffer = this.gl.createBuffer();
     this.waterCorrectionBuffer = this.gl.createBuffer();
@@ -958,10 +972,25 @@ export class PlaceholderMapRenderer {
   setColorMode(mode) {
     if (this.deferWorkerRenderMutation("color-mode", mode, {apply: value => this.setColorMode(value)})) return;
     if (this.colorMode === mode) return;
+    if (this.canPresentGpuResidentColorMode(mode)) {
+      const previous = this.colorMode;
+      this.colorMode = mode;
+      try { this.draw(); }
+      catch (error) { this.colorMode = previous; this.draw(); throw error; }
+      return;
+    }
     this.colorMode = mode;
     if (!this.map) return;
     this.refreshCellSurface({draw: false});
     this.draw();
+  }
+
+  canPresentGpuResidentColorMode(mode) {
+    const identity = String(this.map?.metadata?.mapIdentity || this.map?.metadata?.id || "");
+    return Boolean(GPU_RESIDENT_COLOR_MODES[mode] && this.cellAttributeStore?.snapshot?.mapIdentity === identity
+      && this.viewOptions?.smoothCellBorders === false && !this.surfacePatchCells?.size
+      && this.surfaceCellRanges?.size === this.cellAttributeStore.snapshot.cellCount
+      && !this.landCorrectionVertexCount && !this.waterCorrectionVertexCount && !this.landCoverVertexCount && !this.waterCoverVertexCount);
   }
 
   refreshCellAttributeCells(gridCells) {
@@ -1234,6 +1263,7 @@ export class PlaceholderMapRenderer {
     const event = this.beginPerformanceEvent("surfaceRefresh", {
       drawRequested: draw,
       colorMode: this.colorMode,
+      surfaceColorMode: GPU_RESIDENT_COLOR_MODES[this.colorMode] && this.cellAttributeStore ? "gpu-cell-attributes" : "legacy-vertex-color",
       incremental: true,
       patch: true,
       hardCells: true
@@ -2329,6 +2359,7 @@ export class PlaceholderMapRenderer {
       vertexCount: this.vertexCount,
       surfaceBaseBuffers,
       cellAttributeStore: this.cellAttributeStore ? summarizeCellAttributeStore(this.cellAttributeStore) : null,
+      surfaceColorMode: GPU_RESIDENT_COLOR_MODES[this.colorMode] && this.cellAttributeStore ? "gpu-cell-attributes" : "legacy-vertex-color",
       shoreSurfaceDepth: {
         baseVertexCount: this.vertexCount,
         landCorrectionVertexCount: this.landCorrectionVertexCount,
@@ -5372,6 +5403,7 @@ export function buildPlaceholderSurfaceBundle(map, colorMode, viewOptions, shore
   const smoothCellBorders = viewOptions.smoothCellBorders !== false;
   const useCellVisualMesh = smoothCellBorders && cellVisualMesh?.cells?.length;
   const usePoliticalSurface = smoothCellBorders && politicalSurface;
+  const gridSurfaceCellRanges = new Map();
   const vertices = useCellVisualMesh ? buildCellVisualGridVertices(context, colorMode, viewOptions, cellVisualMesh) : [];
   if (useCellVisualMesh) encodeCellVisualSurfaceSides(vertices, cellVisualMesh, map);
 
@@ -5382,7 +5414,8 @@ export function buildPlaceholderSurfaceBundle(map, colorMode, viewOptions, shore
       colorMode,
       viewOptions,
       cellIndex => shouldDrawGridCellUnderPoliticalMesh(map, colorMode, cellIndex),
-      (color, cellIndex) => withSurfaceSideAlpha(color, Number(map.grid.cells.h[cellIndex]) >= 20 ? "land" : "water")
+      (color, cellIndex) => withSurfaceSideAlpha(color, Number(map.grid.cells.h[cellIndex]) >= 20 ? "land" : "water"),
+      (cellIndex, range) => gridSurfaceCellRanges.set(cellIndex, range)
     );
     pushMeshSurfaceVertices(vertices, politicalSurface, color => withSurfaceSideAlpha(color, "land"));
   } else if (!useCellVisualMesh) {
@@ -5392,7 +5425,8 @@ export function buildPlaceholderSurfaceBundle(map, colorMode, viewOptions, shore
       colorMode,
       viewOptions,
       () => true,
-      (color, cellIndex) => withSurfaceSideAlpha(color, Number(map.grid.cells.h[cellIndex]) >= 20 ? "land" : "water")
+      (color, cellIndex) => withSurfaceSideAlpha(color, Number(map.grid.cells.h[cellIndex]) >= 20 ? "land" : "water"),
+      (cellIndex, range) => gridSurfaceCellRanges.set(cellIndex, range)
     );
   }
   const shoreLayers = smoothCellBorders && shouldDrawShoreVisualBands(colorMode) && shoreVisualPaths
@@ -5407,11 +5441,18 @@ export function buildPlaceholderSurfaceBundle(map, colorMode, viewOptions, shore
 
   const base = vertices instanceof Float32Array ? vertices : new Float32Array(vertices);
   const {cellRanges: shoreSurfaceCellRanges, ...shoreVertices} = shoreLayers;
+  const gridCellIds = map.grid.cells.i;
+  const lastGridCell = Number(gridCellIds[gridCellIds.length - 1]);
+  const completeGridSurfaceRanges = !usePoliticalSurface
+    && gridSurfaceCellRanges.size === gridCellIds.length
+    && gridSurfaceCellRanges.get(lastGridCell)?.end === base.length;
   return {
     base,
     ...shoreVertices,
-    surfaceCellRangesMode: useCellVisualMesh ? "cell-visual" : "unavailable",
-    surfaceCellRanges: buildSurfaceCellRanges(colorMode, viewOptions, cellVisualMesh, base.length),
+    surfaceCellRangesMode: useCellVisualMesh ? "cell-visual" : completeGridSurfaceRanges ? "grid-cells" : "unavailable",
+    surfaceCellRanges: useCellVisualMesh
+      ? buildSurfaceCellRanges(colorMode, viewOptions, cellVisualMesh, base.length)
+      : completeGridSurfaceRanges ? gridSurfaceCellRanges : new Map(),
     shoreSurfaceCellRanges
   };
 }
@@ -5606,6 +5647,7 @@ function drawSurfaceBase(gl, renderer, depthFunction) {
   gl.uniform1i(renderer.surfaceLocations.surfaceSideMode, 1);
   gl.uniform1f(renderer.surfaceLocations.scale, renderer.camera.scale);
   gl.uniform2f(renderer.surfaceLocations.offset, renderer.camera.offsetX, renderer.camera.offsetY);
+  configureGpuResidentSurfaceColors(gl, renderer);
   gl.depthFunc(depthFunction);
   for (const segment of bufferSet.segments) {
     if (!segment.vertexCount) continue;
@@ -5624,6 +5666,40 @@ function drawSurfaceBase(gl, renderer, depthFunction) {
   gl.uniform1i(renderer.locations.surfaceSideMode, 1);
   gl.uniform1f(renderer.locations.scale, renderer.camera.scale);
   gl.uniform2f(renderer.locations.offset, renderer.camera.offsetX, renderer.camera.offsetY);
+}
+
+function configureGpuResidentSurfaceColors(gl, renderer) {
+  const mode = GPU_RESIDENT_COLOR_MODES[renderer.colorMode] || 0;
+  const store = renderer.cellAttributeStore;
+  gl.uniform1i(renderer.surfaceLocations.cellColorMode, mode && store ? mode : 0);
+  if (!mode || !store) return;
+  const palette = store.textures.palettes.biomes;
+  gl.uniform1ui(renderer.surfaceLocations.cellCount, store.snapshot.cellCount);
+  gl.uniform2i(renderer.surfaceLocations.cellTextureSize, store.layout.width, store.layout.height);
+  gl.activeTexture(gl.TEXTURE0);
+  gl.bindTexture(gl.TEXTURE_2D, store.textures.terrain);
+  gl.uniform1i(renderer.surfaceLocations.terrainTexture, 0);
+  gl.activeTexture(gl.TEXTURE1);
+  gl.bindTexture(gl.TEXTURE_2D, store.textures.numeric);
+  gl.uniform1i(renderer.surfaceLocations.numericTexture, 1);
+  gl.activeTexture(gl.TEXTURE2);
+  gl.bindTexture(gl.TEXTURE_2D, palette);
+  gl.uniform1i(renderer.surfaceLocations.paletteTexture, 2);
+  gl.uniform1ui(renderer.surfaceLocations.paletteWidth, store.snapshot.palettes.biomes.length / 4);
+  gl.uniform4fv(renderer.surfaceLocations.heightColors, surfaceHeightColorTable(renderer));
+  gl.uniform1f(renderer.surfaceLocations.maxPopulation, Math.max(1, Number(renderer.map?.settlements?.metadata?.maxPopulation) || 1));
+  gl.uniform4fv(renderer.surfaceLocations.oceanColor, renderer.map?.layers?.ocean || [0.2, 0.4, 0.6, 1]);
+  gl.activeTexture(gl.TEXTURE0);
+}
+
+function surfaceHeightColorTable(renderer) {
+  const key = JSON.stringify([renderer.map?.layers?.ocean, renderer.viewOptions?.showOceanHeight, renderer.visualTheme?.water?.fill, renderer.visualTheme?.land?.fill, renderer.visualTheme?.terrain?.heightRamp]);
+  if (renderer.surfaceHeightColorTable && renderer.surfaceHeightColorTableKey === key) return renderer.surfaceHeightColorTable;
+  const table = new Float32Array(HEIGHT_COLOR_TABLE_SIZE * 4);
+  for (let height = 0; height < HEIGHT_COLOR_TABLE_SIZE; height++) table.set(colorForHeight(height, renderer.map.layers, renderer.viewOptions), height * 4);
+  renderer.surfaceHeightColorTable = table;
+  renderer.surfaceHeightColorTableKey = key;
+  return table;
 }
 
 function summarizeRendererSurfaceBase(renderer) {
@@ -6943,10 +7019,39 @@ uniform float u_scale;
 uniform vec2 u_offset;
 uniform bool u_pointMode;
 uniform bool u_surfaceSideMode;
+uniform int u_cellColorMode;
+uniform uint u_cellCount;
+uniform ivec2 u_cellTextureSize;
+uniform highp usampler2D u_terrainTexture;
+uniform highp sampler2D u_numericTexture;
+uniform highp sampler2D u_paletteTexture;
+uniform uint u_paletteWidth;
+uniform vec4 u_heightColors[101];
+uniform float u_maxPopulation;
+uniform vec4 u_oceanColor;
 out vec4 v_color;
 
+vec4 resolveCellColor(uint cellId) {
+  if (u_cellColorMode == 0 || cellId >= u_cellCount) return a_color;
+  uint textureWidth = uint(u_cellTextureSize.x);
+  ivec2 coord = ivec2(int(cellId % textureWidth), int(cellId / textureWidth));
+  uvec4 terrain = texelFetch(u_terrainTexture, coord, 0);
+  uint height = min(terrain.r, 100u);
+  vec4 heightColor = u_heightColors[int(height)];
+  if (terrain.a == 0u || u_cellColorMode == 1) return heightColor;
+  if (u_cellColorMode == 2) {
+    uint paletteIndex = terrain.g + 1u;
+    return paletteIndex < u_paletteWidth ? texelFetch(u_paletteTexture, ivec2(int(paletteIndex), 0), 0) : a_color;
+  }
+  float population = texelFetch(u_numericTexture, coord, 0).r;
+  if (population <= 0.0) return mix(u_oceanColor, vec4(0.06, 0.1, 0.08, 1.0), 0.4);
+  float amount = sqrt(min(1.0, population / max(1.0, u_maxPopulation)));
+  return mix(vec4(0.2, 0.36, 0.24, 1.0), vec4(0.92, 0.72, 0.34, 1.0), amount);
+}
+
 void main() {
-  v_color = a_color;
+  uint cellId = a_packedCellIdAndSide >> 1u;
+  v_color = resolveCellColor(cellId);
   gl_PointSize = 4.0;
   bool water = (a_packedCellIdAndSide & 1u) == 1u;
   float z = u_surfaceSideMode ? (water ? 0.5 : -0.5) : 0.0;

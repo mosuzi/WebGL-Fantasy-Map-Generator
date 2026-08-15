@@ -1028,12 +1028,15 @@ async function normalizePreparedShoreSurfaceCellRanges(value, surface, cellCount
 
 async function normalizePreparedSurfaceCellRanges(value, surfaceFloatLength, mode, cellVisualMesh, cellCount, gate) {
   if (!(value instanceof Map)) throw renderInstallError("render-surface-ranges-shape", "Worker surface cell ranges 缺失或结构无效");
-  if (mode !== "cell-visual" && mode !== "unavailable") throw renderInstallError("render-surface-ranges-shape", "Worker surface cell ranges 模式无效");
+  if (mode !== "cell-visual" && mode !== "grid-cells" && mode !== "unavailable") throw renderInstallError("render-surface-ranges-shape", "Worker surface cell ranges 模式无效");
   if (mode === "unavailable" && value.size) throw renderInstallError("render-surface-ranges-shape", "Worker unavailable surface cell ranges 必须为空");
   if (mode === "cell-visual" && surfaceFloatLength > 0 && !value.size) throw renderInstallError("render-surface-ranges-shape", "Worker cell-visual surface cell ranges 不得为空");
   const expectedCells = mode === "cell-visual" ? (cellVisualMesh?.cells || []).filter(cell => (cell?.ndcTriangles?.length || 0) > 0) : [];
   if (mode === "cell-visual" && value.size !== expectedCells.length) {
     throw renderInstallError("render-surface-ranges-shape", "Worker surface cell ranges 与 cell visual mesh 数量不一致");
+  }
+  if (mode === "grid-cells" && value.size !== cellCount) {
+    throw renderInstallError("render-surface-ranges-shape", "Worker grid-cells surface cell ranges 未覆盖完整 grid");
   }
   const result = new Map();
   let previousEnd = 0;
@@ -1048,7 +1051,8 @@ async function normalizePreparedSurfaceCellRanges(value, surfaceFloatLength, mod
       || !Number.isInteger(start) || !Number.isInteger(end)
       || start !== previousEnd || end <= start || end > surfaceFloatLength
       || start % FLOATS_PER_VERTEX !== 0 || end % FLOATS_PER_VERTEX !== 0
-      || (mode === "cell-visual" && (normalizedCell !== Number(expectedCell?.cell) || end - start !== expectedLength))) {
+      || (mode === "cell-visual" && (normalizedCell !== Number(expectedCell?.cell) || end - start !== expectedLength))
+      || (mode === "grid-cells" && normalizedCell !== cellIndex)) {
       throw renderInstallError("render-surface-ranges-shape", "Worker surface cell range 偏移无效");
     }
     if (result.has(normalizedCell)) throw renderInstallError("render-surface-ranges-shape", "Worker surface cell id 归一化后重复");

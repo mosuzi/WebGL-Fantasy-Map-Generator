@@ -111,3 +111,10 @@ Worker 化继续用于生成、重生成、地图编辑、派生拓扑、撤销 
 - changed cells 先去重排序，再按 texture row 合并 `texSubImage2D`；GPU 任一写入失败会尝试写回旧值，只有三张纹理全部成功后才更新 snapshot。map identity / 越界 / 空 patch 均先拒绝。context restore 从同一 snapshot 建立八张新纹理，事务 prepare、commit、rollback、finalize、commit fault 与嵌套 installer 都按 store owner 计数释放，既不提前删当前纹理，也不泄漏 detached 纹理。
 - 纯 FakeGL 门覆盖 `7` cells、八张纹理、跨三行九次局部写入、应用 / 回滚、故障恢复、context restore、尺寸上限和资源释放；prepared installer 的双重删除会直接报错，七类既有 surface transaction 连同 cell store 所有权全部通过。正式 10k 浏览器门为 `10004` cells、cell 三张 texture 各 `160064B`、palette 合计 `1068B`；局部 patch 后重建保持 snapshot identity，旧八张全部删除、新八张全部有效。
 - 现有 14 类视图 / 主题 / 海底 / 平滑 / 标签操作、相机与控件收敛继续通过，LongTask、health、Loading、应用错误和 WebGL error 均为 `0`；artifact 为 `work/task335-c-cell-attributes-10000/result.json`。产品 `3` 文件约 `+401 / -2`，工具 `3` 文件约 `+268 / -16`；浏览器夹具机械压缩后 `499` 行，仍未超过 `500` 行。语法、差异、两项专项 Node、生产构建和 10k 目标门通过。版本为 `0.3.19`，下一阶段只进入 335-D。
+
+## 10. 335-D：普通颜色视图直接读取 GPU 常驻属性（已接受）
+
+- 高度、生物群系和人口在 `smoothCellBorders=false`、无 correction / hard-cell patch 且 surface ranges 完整覆盖全部 grid cells 时，只切换 shader 模式并重绘；不调用 MapWorker、不执行 surface refresh、不重建 geometry、overlay 或 picking。其它模式、平滑政治面和不完整 ranges 继续走既有 Worker 路径，避免把政治 topology 或 correction 误当普通颜色切换。
+- 非平滑基面在现有 `pushGridCells` 遍历中同步记录连续 `grid-cells` ranges；installer 要求 cell `0..N-1` 有序、无缺口、完整覆盖 base，非法输入在 GPU 安装前拒绝且不泄漏 buffer / texture。shader 通过 packed cell ID 读取 terrain / numeric texture 与 biome palette；高度颜色表复用正式 `colorForHeight`，人口公式与 CPU 权威实现同源。
+- 固定 `10004` cells 的真实 Chrome 验收通过：高度 / 生物群系 / 人口 framebuffer checksum 分别为 `2949860715 / 1641731067 / 2261249289`，与 D 实施前 Worker 基线精确一致；三次切换的 Worker run、surface refresh、LongTask 均为 `0`，surface set / segments / alias、cell attributes、picking 与 overlay 引用全部不变，控件、API 和 renderer 同源。重指纹 `34.6～37.7ms` 在产品 observer 断开后单列，不冒充切换耗时；artifact 为 `work/task335-d-gpu-resident-views-10000/result.json`。
+- 语法、差异、surface base / cell attributes / prepared installer 三项专项 Node、生产构建和 10k 目标门通过。产品 `3` 文件约 `+145 / -11`，工具 `2` 文件约 `+140 / -4`，新浏览器夹具 `123` 行且未超过 `500` 行。版本为 `0.3.20`，下一阶段只进入 335-E。

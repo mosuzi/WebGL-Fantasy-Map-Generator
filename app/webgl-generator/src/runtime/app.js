@@ -3065,13 +3065,37 @@ function restoreRuntimeDisplayControls(state, documentRef) {
 
 function createRuntimeActions(state, documentRef, options = {}) {
   const operation = state.runtimeOperation;
-  const runDisplayMutation = (name, apply, rollback) => {
+  const runDisplayMutation = (name, apply, rollback, {gpuResident = false} = {}) => {
     const activeName = state.runtimeOperationSnapshot?.current?.name || "";
     const onCommitted = () => restoreRuntimeDisplayControls(state, documentRef);
     if (state.renderer?.workerRenderInstallSuspended > 0 && !activeName.startsWith("layers.")) {
       const result = apply();
       onCommitted();
       return result;
+    }
+    if (gpuResident) {
+      return operation.run(name, context => {
+        const startedAt = performance.now();
+        try {
+          const result = apply();
+          onCommitted();
+          const totalMs = roundWorkerTelemetryMs(performance.now() - startedAt);
+          state.lastDisplayRenderWorker = {
+            localGpu: true,
+            operation: {id: context?.id || "", name},
+            layers: [],
+            surface: {mode: "gpu-cell-attributes", scope: "all", cells: state.map?.grid?.cells?.i?.length || 0, colorBytes: 0, baseBytes: 0},
+            cache: {reused: true, gpuResident: true},
+            worker: {mode: "gpu-resident", telemetry: {inputPackets: 0, outputPackets: 0, computeMs: 0, renderPrepareMs: 0}},
+            session: state.mapWorkerCoordinator?.getSessionSnapshot?.() || null,
+            timings: {applyMs: totalMs, workerMs: 0, installPrepareMs: 0, installCommitMs: 0, sessionCommitMs: 0, resumeMs: 0, suspendedMs: 0, totalMs}
+          };
+          return result;
+        } catch (error) {
+          rollback?.();
+          throw error;
+        }
+      }, {message: "正在整理地图画面"});
     }
     return operation.run(
       name,
@@ -3182,7 +3206,8 @@ function createRuntimeActions(state, documentRef, options = {}) {
         return runDisplayMutation(
           "layers.setViewMode",
           () => setRuntimeViewMode(state, documentRef, mode),
-          () => setRuntimeViewMode(state, documentRef, previous)
+          () => setRuntimeViewMode(state, documentRef, previous),
+          {gpuResident: state.renderer?.canPresentGpuResidentColorMode?.(mode) === true}
         );
       },
       setVisible: (layer, visible) => {

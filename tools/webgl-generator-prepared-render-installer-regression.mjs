@@ -120,8 +120,9 @@ await testNestedRollbackOwnership();
 await testNestedFinalizeOwnership();
 await testSurfaceColorPatchTransaction();
 await testInPlaceSurfaceColorPatchTransaction();
+await testGridSurfaceRangeContract();
 
-console.log(JSON.stringify({ok: true, cases: 7, nestedOwnership: true, surfaceColorPatch: true, inPlaceSurfaceColorPatch: true}));
+console.log(JSON.stringify({ok: true, cases: 8, nestedOwnership: true, surfaceColorPatch: true, inPlaceSurfaceColorPatch: true, gridSurfaceRanges: true}));
 
 async function testUncommittedCleanup() {
   const gl = new FakeGl();
@@ -371,6 +372,19 @@ async function testInPlaceSurfaceColorPatchTransaction() {
   assert.deepEqual(bytesOf(newVertices), replacementBytes, "detached rollback 不得覆写新地图 surface");
 }
 
+async function testGridSurfaceRangeContract() {
+  const gl = new FakeGl();
+  const renderer = createRenderer(gl);
+  const liveBefore = liveBuffers(gl);
+  const texturesBefore = liveTextures(gl);
+  await assert.rejects(
+    prepareSurfaceTransaction(renderer, smallSurface(61), {surfaceCellRanges: new Map()}),
+    error => error?.code === "render-surface-ranges-shape" && /未覆盖完整 grid/.test(error.message)
+  );
+  assert.deepEqual(liveBuffers(gl), liveBefore, "无效 grid-cells ranges 不得泄漏 GPU buffer");
+  assert.deepEqual(liveTextures(gl), texturesBefore, "无效 grid-cells ranges 不得泄漏 cell attribute texture");
+}
+
 function createColorPatchPrepared(colors) {
   return {
     binding,
@@ -395,7 +409,7 @@ function bytesOf(values) {
   return new Uint8Array(values.buffer, values.byteOffset, values.byteLength).slice();
 }
 
-async function prepareSurfaceTransaction(renderer, base) {
+async function prepareSurfaceTransaction(renderer, base, {surfaceCellRanges = new Map([[0, {start: 0, end: base.length}]])} = {}) {
   const prepared = {
     binding,
     layers: {
@@ -405,8 +419,8 @@ async function prepareSurfaceTransaction(renderer, base) {
         waterCorrections: new Float32Array(),
         landCovers: new Float32Array(),
         waterCovers: new Float32Array(),
-        surfaceCellRanges: new Map(),
-        surfaceCellRangesMode: "unavailable",
+        surfaceCellRanges,
+        surfaceCellRangesMode: "grid-cells",
         shoreSurfaceCellRanges: {
           landCorrections: new Map(),
           waterCorrections: new Map(),
