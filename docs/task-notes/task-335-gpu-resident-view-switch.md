@@ -155,3 +155,11 @@ Worker 化继续用于生成、重生成、地图编辑、派生拓扑、撤销 
 - Vite 用当前 package version 注入编译时 build id；Worker request、stream、response、session commit / patch 全部沿协议 envelope 带回并逐条验证。页面 / Worker build 不一致返回 `worker_build_mismatch`、明确提示保存后刷新，且 coordinator 在 accepted 前也直接拒绝，禁止退回主线程计算。
 - 仅当完整 display rollback 已结束且错误链精确含 `worker_protocol_session_stale` 或 `worker_session_commit_rejected` 时，当前显示 operation 才清理旧 session 并重试一次；第二次失败原样保留。真实 10k 中首次 states 提交后 renderer / API / active Tab 同源；同步 height→provinces→biomes 加真实 wheel 后，前两项 obsolete、最终三处均为 biomes。commit rejected 与 stale 各自 `runCalls=2 / selfHealAttempts=1` 并提交目标状态；build mismatch `runCalls=1 / fallbackRuns=0` 且旧状态精确保留。artifact 为 `work/task335-i-display-consistency-10000/result.json`。
 - 新增纯 latest-wins Node 门并扩充 Worker build 失配反例；产品新增约 `99` 行，测试 / 工具新增约 `97` 行，复用浏览器夹具总长 `316` 行。语法、差异、latest-wins、Worker app static / 全合同、display ledger、API 收敛、生产构建与目标 Chrome 均通过。版本为 `0.3.25`，下一阶段只进入 335-J 统一终验。
+
+## 16. 335-J：统一终验（已接受）
+
+- 固定 10k、50k、100k 的高度 / 生物群系 / 人口 framebuffer checksum 均已冻结并通过；三档普通视图均不调用 Worker、不重建 surface，正式 GPU、overlay 与 picking 引用稳定，LongTask 为 `0`。100k 主题 / 海底 / 标签 / 路线分别为 `105.5 / 16.1 / 17.3 / 15.6ms`，全部不进入 Worker、surface、overlay 或 picking 重建，像素与旧同图基线逐通道一致。
+- 主题本地提交在边界线调色后增加一次确定性让步，将 100k 原先连续累积的 `70～71ms` 主线程任务拆开；最终主题总响应仍为 `105.5ms`，单任务 `<50ms`。该修正不改变显示事务所有权、失败回滚或 latest-wins。
+- 100k 存档 Worker 浏览器门通过：`99846` cells 导出压缩为 `7,288,011B`，导入与浏览器恢复均保持 checksum、TypedArray、MapWorker session、历史和 Loading 同源，输出 decode 最大 `19.2ms`。用户原 `http://127.0.0.1:5410/?debug=1` 标签页先正式保存，再在当前 `0.4.0` 服务恢复同一 100k 地图；真实指针验证政体→国家，缩放后省份→生物群系→国家，首次点击与后续高亮均未反转。
+- 正式 renderer 监听 `webglcontextlost / webglcontextrestored`。恢复时不重新编译 CPU 地图，而从 retained surface / correction / line / shore 与 cell attribute snapshot 分片重建全部 WebGL program、buffer、texture 和城市实例，再按当前相机恢复动态路线 / 河流 / 选择。真实 10k 强制丢失与恢复后，高度 / 生物群系 / 国家逐像素 `mismatches=0 / maxDelta=0`，正式 GPU 引用全部重建，LongTask、health、Loading 和 WebGL error 为 `0`；artifact 为 `work/task335-j-context-restore-10000/result.json`。
+- 独立集成复核接受 A～I 冻结 diff 与 J 主题让步；最终观察使指出真实 context restore 缺失后，主线程补齐正式监听并在唯一目标复验关闭阻断。语法、差异、上下文 / 开发日志审计、surface / cell attribute / correction / installer / display intent / Worker 全合同、旧档迁移、生产构建和真实浏览器门通过。复用浏览器夹具保持 `335` 行，未超过 `500` 行。最终版本为 `0.4.0`。

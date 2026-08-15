@@ -285,6 +285,7 @@ function createPreparedInstallTransaction(renderer, map, prepared, decoded, buff
       assign("shoreLinePathVertices", decoded.shoreLine?.pathVertices || new Map());
       assign("shoreLinePathObjectVertices", decoded.shoreLine?.pathObjectVertices || new WeakMap());
       assign("oceanCurrentLayerStats", layers.line.oceanCurrents);
+      assign("oceanCurrentVertices", layers.line.oceanCurrentVertices);
       assign("lineVertexCount", vertexCount(layers.line.vertices));
       assign("shoreLineVertexCount", vertexCount(layers.line.shoreVertices));
       assign("oceanCurrentVertexCount", vertexCount(layers.line.oceanCurrentVertices));

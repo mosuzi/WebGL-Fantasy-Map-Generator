@@ -331,6 +331,33 @@ const MARKER_ICON_PALETTES = Object.freeze({
   mystery: {fill: "#715cc7", stroke: "#271f51", symbol: "#f7f1ff"}
 });
 
+function initializeWebGlResources(renderer) {
+  const gl = renderer.gl;
+  renderer.program = createProgram(gl, vertexShaderSource, fragmentShaderSource);
+  renderer.surfaceProgram = createProgram(gl, surfaceVertexShaderSource, fragmentShaderSource);
+  renderer.cityIconLayer = createCityIconWebglLayer(gl);
+  renderer.locations = {
+    position: gl.getAttribLocation(renderer.program, "a_position"), color: gl.getAttribLocation(renderer.program, "a_color"),
+    scale: gl.getUniformLocation(renderer.program, "u_scale"), offset: gl.getUniformLocation(renderer.program, "u_offset"),
+    pointMode: gl.getUniformLocation(renderer.program, "u_pointMode"), surfaceSideMode: gl.getUniformLocation(renderer.program, "u_surfaceSideMode")
+  };
+  renderer.surfaceLocations = {
+    position: gl.getAttribLocation(renderer.surfaceProgram, "a_position"), identity: gl.getAttribLocation(renderer.surfaceProgram, "a_packedCellIdAndSide"),
+    color: gl.getAttribLocation(renderer.surfaceProgram, "a_color"), scale: gl.getUniformLocation(renderer.surfaceProgram, "u_scale"),
+    offset: gl.getUniformLocation(renderer.surfaceProgram, "u_offset"), pointMode: gl.getUniformLocation(renderer.surfaceProgram, "u_pointMode"),
+    surfaceSideMode: gl.getUniformLocation(renderer.surfaceProgram, "u_surfaceSideMode"), cellColorMode: gl.getUniformLocation(renderer.surfaceProgram, "u_cellColorMode"),
+    cellCount: gl.getUniformLocation(renderer.surfaceProgram, "u_cellCount"), cellTextureSize: gl.getUniformLocation(renderer.surfaceProgram, "u_cellTextureSize"),
+    terrainTexture: gl.getUniformLocation(renderer.surfaceProgram, "u_terrainTexture"), numericTexture: gl.getUniformLocation(renderer.surfaceProgram, "u_numericTexture"),
+    identityTexture: gl.getUniformLocation(renderer.surfaceProgram, "u_identityTexture"), paletteTexture: gl.getUniformLocation(renderer.surfaceProgram, "u_paletteTexture"),
+    paletteWidth: gl.getUniformLocation(renderer.surfaceProgram, "u_paletteWidth"), heightColors: gl.getUniformLocation(renderer.surfaceProgram, "u_heightColors[0]"),
+    maxPopulation: gl.getUniformLocation(renderer.surfaceProgram, "u_maxPopulation"), oceanColor: gl.getUniformLocation(renderer.surfaceProgram, "u_oceanColor")
+  };
+  renderer.surfaceBaseBufferSet = createSurfaceBaseBufferSet(gl, new Float32Array(), {usage: gl.STATIC_DRAW});
+  renderer.vertexBuffer = flattenSurfaceBaseBufferSet(renderer.surfaceBaseBufferSet)[0];
+  renderer.cellVisualCorrectionBufferSet = createCellVisualCorrectionBufferSet(gl, new Float32Array(), gl.STATIC_DRAW);
+  for (const key of ["surfacePatchBuffer", "landCorrectionBuffer", "waterCorrectionBuffer", "landCoverBuffer", "waterCoverBuffer", "routeBuffer", "tradeFlowBuffer", "riverBuffer", "selectionBuffer", "heightTransformPreviewBuffer", "heightCellSelectionBuffer", "oceanCurrentBuffer", "lineBuffer", "shoreLineBuffer", "pointBuffer", "politicalMeshDebugBuffer", "gridCellDiagnosticsBuffer", "gridCellDiagnosticFillBuffer", "gridCellDiagnosticLineBuffer"]) renderer[key] = gl.createBuffer();
+}
+
 export class PlaceholderMapRenderer {
   constructor(canvas, onViewChange = () => {}, onHover = () => {}, onSelect = () => {}) {
     this.canvas = canvas;
@@ -349,9 +376,7 @@ export class PlaceholderMapRenderer {
     });
     if (!this.gl) throw new Error("当前浏览器不支持 WebGL2");
 
-    this.program = createProgram(this.gl, vertexShaderSource, fragmentShaderSource);
-    this.surfaceProgram = createProgram(this.gl, surfaceVertexShaderSource, fragmentShaderSource);
-    this.cityIconLayer = createCityIconWebglLayer(this.gl);
+    initializeWebGlResources(this);
     this.cityMovePreviewCanvas = null;
     this.cityMovePreviewGl = null;
     this.cityMovePreviewLayer = null;
@@ -378,65 +403,16 @@ export class PlaceholderMapRenderer {
     (this.overlay || canvas.nextSibling)
       ? canvas.parentElement?.insertBefore(this.cityMovePreviewFallbackElement, this.overlay || canvas.nextSibling)
       : canvas.parentElement?.append(this.cityMovePreviewFallbackElement);
-    this.locations = {
-      position: this.gl.getAttribLocation(this.program, "a_position"),
-      color: this.gl.getAttribLocation(this.program, "a_color"),
-      scale: this.gl.getUniformLocation(this.program, "u_scale"),
-      offset: this.gl.getUniformLocation(this.program, "u_offset"),
-      pointMode: this.gl.getUniformLocation(this.program, "u_pointMode"),
-      surfaceSideMode: this.gl.getUniformLocation(this.program, "u_surfaceSideMode")
-    };
-    this.surfaceLocations = {
-      position: this.gl.getAttribLocation(this.surfaceProgram, "a_position"),
-      identity: this.gl.getAttribLocation(this.surfaceProgram, "a_packedCellIdAndSide"),
-      color: this.gl.getAttribLocation(this.surfaceProgram, "a_color"),
-      scale: this.gl.getUniformLocation(this.surfaceProgram, "u_scale"),
-      offset: this.gl.getUniformLocation(this.surfaceProgram, "u_offset"),
-      pointMode: this.gl.getUniformLocation(this.surfaceProgram, "u_pointMode"),
-      surfaceSideMode: this.gl.getUniformLocation(this.surfaceProgram, "u_surfaceSideMode"),
-      cellColorMode: this.gl.getUniformLocation(this.surfaceProgram, "u_cellColorMode"),
-      cellCount: this.gl.getUniformLocation(this.surfaceProgram, "u_cellCount"),
-      cellTextureSize: this.gl.getUniformLocation(this.surfaceProgram, "u_cellTextureSize"),
-      terrainTexture: this.gl.getUniformLocation(this.surfaceProgram, "u_terrainTexture"),
-      numericTexture: this.gl.getUniformLocation(this.surfaceProgram, "u_numericTexture"),
-      identityTexture: this.gl.getUniformLocation(this.surfaceProgram, "u_identityTexture"),
-      paletteTexture: this.gl.getUniformLocation(this.surfaceProgram, "u_paletteTexture"),
-      paletteWidth: this.gl.getUniformLocation(this.surfaceProgram, "u_paletteWidth"),
-      heightColors: this.gl.getUniformLocation(this.surfaceProgram, "u_heightColors[0]"),
-      maxPopulation: this.gl.getUniformLocation(this.surfaceProgram, "u_maxPopulation"),
-      oceanColor: this.gl.getUniformLocation(this.surfaceProgram, "u_oceanColor")
-    };
-    this.surfaceBaseBufferSet = createSurfaceBaseBufferSet(this.gl, new Float32Array(), {usage: this.gl.STATIC_DRAW});
-    this.vertexBuffer = flattenSurfaceBaseBufferSet(this.surfaceBaseBufferSet)[0];
     this.cellVisualCorrectionGeometry = new Float32Array();
-    this.cellVisualCorrectionBufferSet = createCellVisualCorrectionBufferSet(this.gl, this.cellVisualCorrectionGeometry, this.gl.STATIC_DRAW);
     this.gpuResidentSmoothShoreSurfaceKey = "";
     this.cellAttributeStore = null;
     this.surfaceHeightColorTable = null;
     this.surfaceHeightColorTableKey = "";
-    this.surfacePatchBuffer = this.gl.createBuffer();
-    this.landCorrectionBuffer = this.gl.createBuffer();
-    this.waterCorrectionBuffer = this.gl.createBuffer();
-    this.landCoverBuffer = this.gl.createBuffer();
-    this.waterCoverBuffer = this.gl.createBuffer();
-    this.routeBuffer = this.gl.createBuffer();
-    this.tradeFlowBuffer = this.gl.createBuffer();
-    this.riverBuffer = this.gl.createBuffer();
-    this.selectionBuffer = this.gl.createBuffer();
-    this.heightTransformPreviewBuffer = this.gl.createBuffer();
-    this.heightCellSelectionBuffer = this.gl.createBuffer();
-    this.oceanCurrentBuffer = this.gl.createBuffer();
-    this.lineBuffer = this.gl.createBuffer();
-    this.shoreLineBuffer = this.gl.createBuffer();
-    this.pointBuffer = this.gl.createBuffer();
-    this.politicalMeshDebugBuffer = this.gl.createBuffer();
-    this.gridCellDiagnosticsBuffer = this.gl.createBuffer();
-    this.gridCellDiagnosticFillBuffer = this.gl.createBuffer();
-    this.gridCellDiagnosticLineBuffer = this.gl.createBuffer();
     this.vertexCount = 0;
     this.surfaceVertices = new Float32Array();
     this.lineVertices = new Float32Array();
     this.shoreLineVertices = new Float32Array();
+    this.oceanCurrentVertices = new Float32Array();
     this.gpuResidentSmoothShoreLineVertices = new Float32Array();
     this.gpuResidentHardShoreLineVertices = new Float32Array();
     this.surfacePatchVertices = new Float32Array();
@@ -592,6 +568,21 @@ export class PlaceholderMapRenderer {
     }, interaction => {
       this.endViewportPointerInteraction(interaction);
     }, () => ({width: this.canvasSize.cssWidth, height: this.canvasSize.cssHeight}));
+    this.webGlContextLost = false;
+    this.webGlContextRestorePromise = null;
+    this.lastWebGlContextRestoreError = null;
+    this.canvas.addEventListener("webglcontextlost", event => {
+      event.preventDefault();
+      this.webGlContextLost = true;
+    });
+    this.canvas.addEventListener("webglcontextrestored", () => {
+      if (this.webGlContextRestorePromise) return;
+      this.webGlContextRestorePromise = this.restoreWebGlContext().catch(error => {
+        this.lastWebGlContextRestoreError = error;
+      }).finally(() => {
+        this.webGlContextRestorePromise = null;
+      });
+    });
     this.installDisplayResizeObserver();
   }
 
@@ -655,6 +646,41 @@ export class PlaceholderMapRenderer {
     view.addEventListener("resize", this.handleDisplayResize, {passive: true});
   }
 
+  async restoreWebGlContext() {
+    const map = this.map;
+    initializeWebGlResources(this);
+    if (map) {
+      const view = this.canvas.ownerDocument?.defaultView || globalThis;
+      const yieldToBrowser = () => new Promise(resolve => view.requestAnimationFrame(() => resolve()));
+      const upload = async (buffer, values, usage) => {
+        this.gl.bindBuffer(this.gl.ARRAY_BUFFER, buffer);
+        this.gl.bufferData(this.gl.ARRAY_BUFFER, values, usage);
+        await yieldToBrowser();
+      };
+      installSurfaceBaseBufferSet(this, await createSurfaceBaseBufferSetAsync(this.gl, this.surfaceVertices, {usage: this.gl.STATIC_DRAW, surfaceCellRanges: this.surfaceCellRanges, yieldToMain: yieldToBrowser}));
+      installCellVisualCorrectionBufferSet(this, await createCellVisualCorrectionBufferSetAsync(this.gl, this.cellVisualCorrectionGeometry, {usage: this.gl.STATIC_DRAW, yieldToMain: yieldToBrowser}));
+      this.restoreCellAttributeStore();
+      await upload(this.surfacePatchBuffer, this.surfacePatchVertices, this.gl.DYNAMIC_DRAW);
+      for (const [buffer, values] of [[this.landCorrectionBuffer, this.landCorrectionVertices], [this.waterCorrectionBuffer, this.waterCorrectionVertices], [this.landCoverBuffer, this.landCoverVertices], [this.waterCoverBuffer, this.waterCoverVertices], [this.oceanCurrentBuffer, this.oceanCurrentVertices], [this.lineBuffer, this.lineVertices], [this.shoreLineBuffer, this.shoreLineVertices]]) await upload(buffer, values, this.gl.STATIC_DRAW);
+      const pointLayer = buildPointLayer(map);
+      this.pointDrawRanges = pointLayer.drawRanges;
+      this.pointBufferVertexCount = pointLayer.vertices.length / 6;
+      this.pointVertexCount = countVisiblePointVertices(this.pointDrawRanges, this.layerVisibility);
+      await upload(this.pointBuffer, pointLayer.vertices, this.gl.STATIC_DRAW);
+      this.cityIconLayer.setInstances(this.cityIconItems);
+      this.updatePoliticalMeshDebugBuffer();
+      this.markViewportBuffersDirty();
+      await this.updateRouteBufferAsync({yieldToBrowser});
+      this.updateRiverBuffer();
+      this.updateSelectionBuffer();
+      this.draw({updateDynamicBuffers: false});
+      this.onViewChange();
+    }
+    this.webGlContextLost = false;
+    this.lastWebGlContextRestoreError = null;
+    return true;
+  }
+
   resizeToDisplaySize({draw = true} = {}) {
     const result = resizeCanvasToDisplaySize(this.canvas, this.overlay, this.stage);
     this.canvasSize = result.size;
@@ -706,6 +732,7 @@ export class PlaceholderMapRenderer {
     this.shoreLinePathVertices = lineLayer.shoreLinePathVertices;
     this.shoreLinePathObjectVertices = lineLayer.shoreLinePathObjectVertices;
     const oceanCurrentVertices = lineLayer.oceanCurrentVertices;
+    this.oceanCurrentVertices = oceanCurrentVertices;
     this.oceanCurrentLayerStats = lineLayer.oceanCurrents;
     const pointLayer = profile.stage("point-vertices", "构建点图层顶点", () => buildPointLayer(map));
     const pointVertices = pointLayer.vertices;
@@ -837,6 +864,7 @@ export class PlaceholderMapRenderer {
     this.shoreLinePathVertices = lineLayer.shoreLinePathVertices;
     this.shoreLinePathObjectVertices = lineLayer.shoreLinePathObjectVertices;
     const oceanCurrentVertices = lineLayer.oceanCurrentVertices;
+    this.oceanCurrentVertices = oceanCurrentVertices;
     this.oceanCurrentLayerStats = lineLayer.oceanCurrents;
     const pointLayer = await stage("point-vertices", "构建点图层顶点", () => buildPointLayer(map));
     const pointVertices = pointLayer.vertices;
@@ -1179,6 +1207,7 @@ export class PlaceholderMapRenderer {
     applyMapStageBackground(this.stage, map, theme);
     if (this.viewOptions.smoothCellBorders !== false) this.refreshGpuResidentShoreSurface();
     this.refreshVisualThemeLineColors(previousTheme, theme);
+    await yieldToMain();
     await this.refreshLabelThemeStyles({yieldToMain});
     if (this.layerVisibility.routes) {
       const ready = await this.updateRouteBufferAsync({
@@ -1670,6 +1699,7 @@ export class PlaceholderMapRenderer {
       this.shoreLinePathVertices = lineLayer.shoreLinePathVertices;
       this.shoreLinePathObjectVertices = lineLayer.shoreLinePathObjectVertices;
       const oceanCurrentVertices = lineLayer.oceanCurrentVertices;
+      this.oceanCurrentVertices = oceanCurrentVertices;
       this.oceanCurrentLayerStats = lineLayer.oceanCurrents;
       this.oceanCurrentVertexCount = oceanCurrentVertices.length / 6;
       this.lineVertexCount = lineVertices.length / 6;

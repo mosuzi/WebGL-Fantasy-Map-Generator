@@ -10,10 +10,10 @@ import {waitForApiReady} from "./webgl-generator-api-browser-ready.mjs";
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const source = join(root, "source", "Fantasy-Map-Generator");
 const political = process.argv.includes("--political");
-const display = process.argv.includes("--display"), smooth = process.argv.includes("--smooth"), identity = process.argv.includes("--identity"), consistency = process.argv.includes("--consistency"), cellsTarget = process.argv.includes("--100k") ? 100000 : 10000;
-const outputDir = join(root, "work", consistency ? `task335-i-display-consistency-${cellsTarget}` : identity ? `task335-h-layer-identity-${cellsTarget}` : smooth ? `task335-g-smooth-borders-${cellsTarget}` : display ? "task335-f-display-mutations-10000" : political ? "task335-e-political-views-10000" : "task335-d-gpu-resident-views-10000");
+const contextRestore = process.argv.includes("--context-restore"), display = process.argv.includes("--display"), smooth = process.argv.includes("--smooth"), identity = process.argv.includes("--identity"), consistency = process.argv.includes("--consistency"), cellsTarget = process.argv.includes("--100k") ? 100000 : process.argv.includes("--50k") ? 50000 : 10000;
+const outputDir = join(root, "work", contextRestore ? `task335-j-context-restore-${cellsTarget}` : consistency ? `task335-i-display-consistency-${cellsTarget}` : identity ? `task335-h-layer-identity-${cellsTarget}` : smooth ? `task335-g-smooth-borders-${cellsTarget}` : display ? `task335-f-display-mutations-${cellsTarget}` : political ? `task335-e-political-views-${cellsTarget}` : `task335-d-gpu-resident-views-${cellsTarget}`);
 const verify = process.argv.includes("--verify");
-const expectedChecksums = Object.freeze({height: 2949860715, biomes: 1641731067, population: 2261249289});
+const expectedChecksums = Object.freeze(cellsTarget === 100000 ? {height: 2864157934, biomes: 1442997136, population: 2603628230} : cellsTarget === 50000 ? {height: 219435668, biomes: 863896970, population: 2055490544} : {height: 2949860715, biomes: 1641731067, population: 2261249289});
 const expectedLabels = Object.freeze({height: "高度", biomes: "生物群系", population: "人口", states: "国家", provinces: "省份"});
 const server = spawn(process.execPath, [join(root, "tools", "serve-prototype.mjs"), "--host", "127.0.0.1", "--port", "5583", "--dir", join(root, "dist", "webgl-generator")], {stdio: "ignore"});
 const playwright = createRequire(join(source, "package.json"))("playwright");
@@ -28,15 +28,18 @@ try {
   page.on("pageerror", error => pageErrors.push(error.message));
   await page.goto("http://127.0.0.1:5583?healthClear=1", {waitUntil: "domcontentloaded"});
   await waitForApiReady(page, 120_000);
-  const report = await page.evaluate(run, {verify, political, display, smooth, identity, consistency, cellsTarget});
+  const report = await page.evaluate(run, {verify, political, contextRestore, display, smooth, identity, consistency, cellsTarget});
   mkdirSync(outputDir, {recursive: true});
   writeFileSync(join(outputDir, "attempt.json"), `${JSON.stringify(report, null, 2)}\n`);
   const applicationErrors = consoleErrors.filter(text => !/\[FMG health\] (operation-stall|main-thread-long-task|render-frame-gap|input-handler-stall)/.test(text));
   assert.deepEqual(applicationErrors, []);
   assert.deepEqual(pageErrors, []);
   if (verify) {
-    assert.ok(cellsTarget === 100000 ? report.cells >= 99000 && report.cells <= 100000 : report.cells === 10004, `335-${consistency ? "I" : identity ? "H" : smooth ? "G" : display ? "F" : political ? "E" : "D"} 固定地图规模漂移`);
-    if (consistency) {
+    assert.ok(cellsTarget === 100000 ? report.cells >= 99000 && report.cells <= 100000 : report.cells === (cellsTarget === 50000 ? 50142 : 10004), `335-${consistency ? "I" : identity ? "H" : smooth ? "G" : display ? "F" : political ? "E" : "D"} 固定地图规模漂移`);
+    if (contextRestore) {
+      assert.equal(report.restored, true); assert.equal(report.referencesRecreated, true); assert.deepEqual(report.longTasks, []);
+      assert.deepEqual(report.operations.map(item => [item.mode, item.pixelParity]), [["height", {mismatches: 0, maxDelta: 0}], ["biomes", {mismatches: 0, maxDelta: 0}], ["states", {mismatches: 0, maxDelta: 0}]]);
+    } else if (consistency) {
       assert.deepEqual(report.first, {response: true, renderer: "states", api: "states", active: "states"});
       assert.deepEqual(report.rapid.responses, ["operation_obsolete", "operation_obsolete", "ok"]); assert.deepEqual(report.rapid.final, {renderer: "biomes", api: "biomes", active: "biomes"}); assert.equal(report.rapid.cameraChanged, true);
       for (const key of ["commitRejected", "staleSession"]) assert.deepEqual(report[key], {ok: true, runCalls: 2, selfHealAttempts: 1, finalState: true}, `${key} 未精确自愈一次`);
@@ -75,7 +78,7 @@ try {
     } else if (political) {
       for (const item of report.operations) assert.deepEqual(item.pixelParity, {mismatches: 0, maxDelta: 0}, `${item.mode} shader framebuffer 与同图 Worker 基线不一致`);
     } else assert.deepEqual(Object.fromEntries(report.operations.map(item => [item.mode, item.checksum])), expectedChecksums, "335-D shader framebuffer 与旧 Worker 基线不一致");
-    if (!display && !smooth && !identity && !consistency) for (const item of report.operations) {
+    if (!contextRestore && !display && !smooth && !identity && !consistency) for (const item of report.operations) {
       assert.equal(item.workerRuns, 0, `${item.mode} 仍调用 Worker`);
       assert.equal(item.surfaceRefreshes, 0, `${item.mode} 仍重建 surface`);
       assert.deepEqual(item.identity, {surfaceSet: true, segments: true, alias: true, attributes: true, political: true, picking: true, overlay: true}, `${item.mode} 正式引用漂移`);
@@ -96,13 +99,14 @@ try {
   await Promise.race([new Promise(done => server.once("exit", done)), new Promise(done => setTimeout(done, 5000))]);
 }
 
-async function run({verify, political, display, smooth, identity, consistency, cellsTarget}) {
+async function run({verify, political, contextRestore, display, smooth, identity, consistency, cellsTarget}) {
   const app = window.__webglGeneratorApp, api = window.webglGeneratorApi;
   const unwrap = (response, label) => { if (!response?.ok) throw new Error(`${label}: ${response?.error?.code || "api_error"} ${response?.error?.message || ""}`); return response.data; };
   unwrap(await api.generate.newMap({confirm: true, seed: "task335-d-gpu-resident", cellsTarget, heightmapTemplate: "continents"}), "newMap");
   unwrap(await api.layers.setSmoothCellBorders(false), "disable smoothing");
   await drain();
   window.__webglGeneratorHealth?.clear?.();
+  if (contextRestore) return runContextRestore();
   if (consistency) return runConsistency();
   if (identity) return runLayerIdentity();
   if (smooth) return runSmoothBorders();
@@ -161,6 +165,21 @@ async function run({verify, political, display, smooth, identity, consistency, c
   }
   const health = unwrap(api.info.healthEvents({severity: "error", limit: 100}), "health"), runtime = unwrap(api.info.runtimeStats(), "runtime");
   return {verify, cells: app.map.grid.cells.i.length, operations, final: {health: health.events || [], loading: Boolean(runtime.loading.visible), glError: renderer.gl.getError()}};
+
+  async function runContextRestore() {
+    const renderer = app.renderer, modes = ["height", "biomes", "states"], baselines = new Map(), operations = [];
+    for (const mode of modes) { unwrap(await api.layers.setViewMode(mode), `${mode} baseline`); await drain(); baselines.set(mode, framebufferPixels(renderer)); }
+    const old = {program: renderer.program, surface: renderer.surfaceBaseBufferSet, attributes: renderer.cellAttributeStore, point: renderer.pointBuffer};
+    const extension = renderer.gl.getExtension("WEBGL_lose_context"); if (!extension) throw new Error("浏览器不支持 WEBGL_lose_context");
+    const longTasks = [], observer = new PerformanceObserver(list => longTasks.push(...list.getEntries().map(entry => ({startTime: entry.startTime, duration: entry.duration, name: entry.name})))); observer.observe({type: "longtask", buffered: false});
+    try {
+      await new Promise((resolve, reject) => { const timeout = setTimeout(() => reject(new Error("WebGL context restore 超时")), 30_000); renderer.canvas.addEventListener("webglcontextrestored", async () => { try { if (renderer.webGlContextRestorePromise) await renderer.webGlContextRestorePromise; clearTimeout(timeout); resolve(); } catch (error) { reject(error); } }, {once: true}); extension.loseContext(); setTimeout(() => extension.restoreContext(), 50); });
+      await drain(); longTasks.push(...observer.takeRecords().map(entry => ({startTime: entry.startTime, duration: entry.duration, name: entry.name})));
+    } finally { observer.disconnect(); }
+    for (const mode of modes) { unwrap(await api.layers.setViewMode(mode), `${mode} restored`); await drain(); operations.push({mode, pixelParity: comparePixels(baselines.get(mode), framebufferPixels(renderer))}); }
+    const health = unwrap(api.info.healthEvents({severity: "error", limit: 100}), "health"), runtime = unwrap(api.info.runtimeStats(), "runtime");
+    return {verify, cells: app.map.grid.cells.i.length, operations, restored: renderer.webGlContextLost === false && !renderer.lastWebGlContextRestoreError, referencesRecreated: renderer.program !== old.program && renderer.surfaceBaseBufferSet !== old.surface && renderer.cellAttributeStore !== old.attributes && renderer.pointBuffer !== old.point, longTasks, final: {health: health.events || [], loading: Boolean(runtime.loading.visible), glError: renderer.gl.getError()}};
+  }
 
   function checksumPixels(pixels) {
     let hash = 2166136261;
@@ -294,7 +313,7 @@ async function run({verify, political, display, smooth, identity, consistency, c
     } finally {
       if (app.mapWorkerCoordinator === wrappedCoordinator) app.mapWorkerCoordinator = coordinator;
       renderer.refreshCellSurface = originalRefresh; renderer.refreshObjectPickingIndex = originalPicking; renderer.overlay.replaceChildren = originalReplace; }
-    async function operation(name, task) {
+    async function operation(name, task) { await new Promise(done => setTimeout(done, 0));
       const before = {workerRuns, surfaceRefreshes, overlayReplaces, pickingRefreshes}, longTasks = [];
       const observer = new PerformanceObserver(list => longTasks.push(...list.getEntries().map(entry => ({startTime: entry.startTime, duration: entry.duration, name: entry.name})))); observer.observe({type: "longtask", buffered: false});
       const startedAt = performance.now(); let wallMs;
