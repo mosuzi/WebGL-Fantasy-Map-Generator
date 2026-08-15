@@ -13,7 +13,8 @@ const port = 5582;
 const timeoutMs = 900_000;
 const requestedCells = readRequestedCells(process.argv.slice(2));
 const b2Display = process.argv.includes("--b2-display");
-const outputDir = join(root, "work", `task334-b2-view-switch-${requestedCells}`);
+const stageALedger = process.argv.includes("--stage-a-ledger");
+const outputDir = join(root, "work", `${stageALedger ? "task335-a-view-ledger" : "task334-b2-view-switch"}-${requestedCells}`);
 const server = spawn(process.execPath, [join(root, "tools", "serve-prototype.mjs"), "--host", "127.0.0.1", "--port", String(port), "--dir", join(root, "dist", "webgl-generator")], {stdio: "ignore"});
 const playwright = createRequire(join(source, "package.json"))("playwright");
 let browser;
@@ -28,7 +29,7 @@ try {
   page.on("pageerror", error => pageErrors.push(error.message));
   await page.goto(`http://127.0.0.1:${port}?healthClear=1`, {waitUntil: "domcontentloaded"});
   await waitForApiReady(page, timeoutMs);
-  const report = await page.evaluate(runDiagnostic, requestedCells);
+  const report = await page.evaluate(runDiagnostic, {requestedCells, stageALedger});
   const performanceErrors = consoleErrors.filter(text => /\[FMG health\] (operation-stall|main-thread-long-task|render-frame-gap|input-handler-stall)/.test(text));
   const applicationErrors = consoleErrors.filter(text => !performanceErrors.includes(text));
   const result = {...report, console: {performanceErrors, applicationErrors, pageErrors}};
@@ -36,7 +37,7 @@ try {
   writeFileSync(join(outputDir, "raw-result.json"), `${JSON.stringify(result, null, 2)}\n`);
   assert.deepEqual(applicationErrors, [], "视图切换出现应用 console.error");
   assert.deepEqual(pageErrors, [], "视图切换出现 pageerror");
-  assertAcceptance(result, requestedCells, {b2Display});
+  assertAcceptance(result, requestedCells, {b2Display, stageALedger});
   mkdirSync(outputDir, {recursive: true});
   writeFileSync(join(outputDir, "result.json"), `${JSON.stringify(result, null, 2)}\n`);
   console.log(JSON.stringify({
@@ -55,6 +56,7 @@ try {
       computeMs: item.worker?.telemetry?.computeMs,
       renderPrepareMs: item.worker?.telemetry?.renderPrepareMs,
       timings: item.timings,
+      ledger: item.worker?.ledger || null,
       longTasks: item.longTasks,
       slowSpans: item.spans.filter(span => span.ms >= 20)
     }))
@@ -65,7 +67,7 @@ try {
   await Promise.race([new Promise(done => server.once("exit", done)), delay(5000)]);
 }
 
-async function runDiagnostic(requestedCells) {
+async function runDiagnostic({requestedCells, stageALedger}) {
   const api = window.webglGeneratorApi;
   const app = window.__webglGeneratorApp;
   const ensure = (condition, message) => { if (!condition) throw new Error(message); };
@@ -146,11 +148,12 @@ async function runDiagnostic(requestedCells) {
     ["option:labels-restore", () => api.layers.setMaxCityLabels(original.labels)]
   ];
   const operations = [];
-  let uiConvergence, viewCameraConvergence;
+  let uiConvergence, viewCameraConvergence, stageA;
   try {
     for (const [name, action] of actions) operations.push(await runAction(name, action));
     viewCameraConvergence = await runViewCameraConvergence();
     uiConvergence = await runUiConvergence();
+    if (stageALedger) stageA = await runStageAMatrix();
   } finally {
     longTaskObserver.disconnect();
     loafObserver?.disconnect();
@@ -158,7 +161,7 @@ async function runDiagnostic(requestedCells) {
   }
   const finalHealth = unwrap(api.info.healthEvents({severity: "error", limit: 100}), "health");
   const finalStats = unwrap(api.info.runtimeStats(), "runtime stats");
-  return {ok: true, cells: app.map.grid.cells.i.length, operations, viewCameraConvergence, uiConvergence, final: {health: finalHealth.events || [], loading: finalStats.loading, glError: app.renderer.getStats().draw?.glError ?? app.renderer.lastDraw?.glError ?? 0}};
+  return {ok: true, cells: app.map.grid.cells.i.length, operations, viewCameraConvergence, uiConvergence, stageA, final: {health: finalHealth.events || [], loading: finalStats.loading, glError: app.renderer.getStats().draw?.glError ?? app.renderer.lastDraw?.glError ?? 0}};
 
   async function runAction(name, action) {
     await drain();
@@ -203,7 +206,7 @@ async function runDiagnostic(requestedCells) {
     const last = app.lastDisplayRenderWorker;
     return {
       name, wallMs: round(fulfilledAt - startedAt), stableMs: round(endedAt - startedAt), invariant, loading,
-      worker: last && last !== previousDisplayEvidence ? {operation: last.operation, layers: last.layers, surface: last.surface || null, cache: last.cache, telemetry: last.worker?.telemetry || null, session: last.worker?.session || last.session || null, finalSession: last.session || null} : null,
+      worker: last && last !== previousDisplayEvidence ? {operation: last.operation, layers: last.layers, surface: last.surface || null, cache: last.cache, telemetry: last.worker?.telemetry || null, session: last.worker?.session || last.session || null, finalSession: last.session || null, ledger: structuredClone(last.ledger || null)} : null,
       timings: last && last !== previousDisplayEvidence ? last.timings || null : null,
       spans: trace.spans.slice(marks.spans).map(span => ({...span, ms: round(span.end - span.start)})),
       longTasks: trace.longTasks.slice(marks.longTasks).filter(entry => entry.startTime >= startedAt && entry.startTime < endedAt),
@@ -268,12 +271,51 @@ async function runDiagnostic(requestedCells) {
     return {before, renderer, control: Boolean(control.checked), api: apiState, longTasks: trace.longTasks.slice(longTaskStart)};
   }
 
+  async function runStageAMatrix() {
+    const city = app.map.settlements?.cities?.find(item => item && !item.removed);
+    ensure(city, "335-A 缺少 revision 推进用城市");
+    const sessionBeforeRevision = app.mapWorkerCoordinator.getSessionSnapshot();
+    const revisionBefore = app.mapRevision.getSnapshot().mapRevision;
+    unwrap(await api.edit.cities.rename(city.id ?? city.i, `${city.name || "城市"}-A`), "335-A revision rename");
+    const revisionAfter = app.mapRevision.getSnapshot().mapRevision;
+    ensure(revisionAfter === revisionBefore + 1, "335-A 正式编辑未推进唯一 revision");
+    const revisionWarm = await runAction("stage-a:revision-warm", () => api.layers.setViewMode("states"));
+    const sessionBeforeLoss = app.mapWorkerCoordinator.getSessionSnapshot();
+    ensure(app.mapWorkerCoordinator.invalidateSession("task335-a-session-lost") === true, "335-A 未能构造 session 丢失边界");
+    const sessionLost = await runAction("stage-a:session-lost", () => api.layers.setViewMode("provinces"));
+    const rapid = await runRapidViewConvergence();
+    return {revisionBefore, revisionAfter, sessionBeforeRevision, sessionBeforeLoss, revisionWarm, sessionLost, rapid};
+  }
+
+  async function runRapidViewConvergence() {
+    await drain();
+    const longTaskStart = trace.longTasks.length;
+    const first = api.layers.setViewMode("states");
+    await Promise.resolve();
+    const second = api.layers.setViewMode("height");
+    const [firstResponse, secondResponse] = await Promise.all([first, second]);
+    await drain();
+    trace.longTasks.push(...longTaskObserver.takeRecords().map(entry => ({startTime: entry.startTime, duration: entry.duration, name: entry.name})));
+    const renderer = app.renderer.colorMode;
+    const selectedText = document.querySelector('[role="radiogroup"][aria-label="视图"] .el-segmented__item.is-selected .el-segmented__item-label')?.textContent?.trim() || "";
+    const control = new Map([["高度", "height"], ["国家", "states"], ["省份", "provinces"], ["生物群系", "biomes"], ["人口", "population"], ["文化", "cultures"], ["宗教", "religions"], ["政体", "governments"]]).get(selectedText) || "";
+    const bridge = document.querySelector('.ui-segmented-mode-bridge.active')?.dataset?.mode || "";
+    const apiMode = unwrap(api.layers.get(), "335-A rapid state").colorMode;
+    ensure(renderer === control && renderer === bridge && renderer === apiMode, `335-A 快速切换最终状态未同源：${JSON.stringify({renderer, control, bridge, apiMode})}`);
+    return {
+      first: {ok: firstResponse?.ok === true, code: firstResponse?.error?.code || null},
+      second: {ok: secondResponse?.ok === true, code: secondResponse?.error?.code || null},
+      final: {renderer, control, selectedText, bridge, api: apiMode},
+      longTasks: trace.longTasks.slice(longTaskStart)
+    };
+  }
+
   function summarize(object) { return object ? {kind: object.kind, id: object.id ?? object.i} : null; }
   function round(value) { return Math.round(Number(value || 0) * 10) / 10; }
   function drain() { return new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(resolve, 100)))); }
 }
 
-function assertAcceptance(result, requested, {b2Display = false} = {}) {
+function assertAcceptance(result, requested, {b2Display = false, stageALedger = false} = {}) {
   const expectedCells = requested === 100_000 ? 99_846 : 10_004;
   assert.equal(result.cells, expectedCells, `${requested} 档实际 cell 数漂移`);
   assert.deepEqual(result.final.health, [], "视图切换出现 health error");
@@ -337,6 +379,25 @@ function assertAcceptance(result, requested, {b2Display = false} = {}) {
             : "layers.setMaxCityLabels";
     assert.ok(operation.worker.operation?.id, `${operation.name} 缺少当前 operation ID`);
     assert.equal(operation.worker.operation?.name, expectedName, `${operation.name} Worker 证据错归到其它操作`);
+  }
+  if (stageALedger) {
+    for (const operation of workerOperations) {
+      assert.equal(operation.worker.ledger?.path, "warm", `${operation.name} 未归入 warm 账本`);
+      assert.equal(operation.worker.ledger?.reused, true, `${operation.name} warm 账本复用标志错误`);
+      assert.ok(Number.isFinite(operation.worker.ledger?.frames?.firstAnimationFrameMs), `${operation.name} 缺少首个 animation frame 时间`);
+      assert.ok(Number.isFinite(operation.worker.ledger?.frames?.presentedFrameMs), `${operation.name} 缺少已呈现 frame 时间`);
+    }
+    const matrix = result.stageA;
+    assert.equal(matrix.revisionAfter, matrix.revisionBefore + 1, "335-A revision 分母漂移");
+    assert.equal(matrix.revisionWarm.worker.ledger.path, "warm", "revision 推进后必须复用已同步 session");
+    assert.equal(matrix.revisionWarm.worker.ledger.sessionBefore.binding.mapRevision, matrix.revisionAfter, "revision warm session 未推进到当前 revision");
+    assert.equal(matrix.sessionLost.worker.ledger.path, "cold", "session 丢失后必须归入 cold");
+    assert.equal(matrix.sessionLost.worker.ledger.reused, false, "session 丢失后不得伪报复用");
+    assert.ok(matrix.sessionLost.worker.ledger.inputPackets > 3, "session 丢失后未记录完整输入分母");
+    assert.notEqual(matrix.sessionBeforeLoss.id, matrix.sessionLost.worker.finalSession.id, "session 丢失后仍沿用旧 session id");
+    assert.deepEqual(matrix.rapid.first, {ok: true, code: null}, "快速切换首个意图基线漂移");
+    assert.deepEqual(matrix.rapid.second, {ok: false, code: "operation_busy"}, "快速切换第二意图 busy 基线漂移");
+    assert.deepEqual(matrix.rapid.longTasks, [], "快速视图竞争出现 LongTask");
   }
   const registered = [];
   for (const operation of result.operations) {

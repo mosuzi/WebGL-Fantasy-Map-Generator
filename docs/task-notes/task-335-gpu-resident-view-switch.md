@@ -1,0 +1,98 @@
+# 第 335 项：GPU 常驻视图与零重编译切换
+
+## 1. 问题定义
+
+100k 视图切换的用户等待时间不能再用 Worker 内部算法耗时代表。历史 fresh 路径总计约 `10.029s`，其中完整地图输入约 `6.829s`、领域计算约 `0.546s`、结果接收约 `0.373s`、主线程渲染安装约 `1.887s`；旧省份重生成约 `9.529s`，其中领域算法约 `1.346s`，但 Worker 内构建政治路径、surface、线、标签与 picking 等渲染资料约 `4.886s`。真正 WebGL draw 通常只有毫秒至几十毫秒。
+
+第 334 项通过长期 MapWorker、副本复用、约 `1.60MB` cell color patch 和约 `0.88MB` 水域 patch，把固定 100k 暖颜色视图降到约 `142～257ms`；主题和平滑仍约 `0.59～1.16s`。该结果没有证明 cold / session 失效、长期开发页旧模块混用或所有显示入口都不会退回全量准备。第 335 项要改变视图的数据模型，不继续给全量编译链打补丁。
+
+## 2. 最终架构
+
+普通视图从当前链路：
+
+```text
+点击 → operation → Worker 地图副本 → CPU 渲染准备 → 分包回传
+→ 主线程解码 → 临时 GPU 资源 → 原子安装 → overlay / picking → draw
+```
+
+改为：
+
+```text
+点击 → display intent sequence → colorMode / palette / uniform → draw → 提交控件状态
+```
+
+地图数据真正变化时继续坚持：
+
+```text
+MapWorker canonical 计算 → canonical patch → GPU 属性区间更新
+→ 必要的 topology cache 失效 / 重建 → 原子提交
+```
+
+Worker 化继续用于生成、重生成、地图编辑、派生拓扑、撤销 / 重做和存档 owner；纯显示状态不再伪装成地图计算。
+
+## 3. 数据与渲染设计
+
+### 3.1 稳定 surface geometry
+
+当前 surface base 每顶点为 `x / y / r / g / b / side`，共 `6 × Float32 = 24 bytes`。固定 100k 约 `439` 万顶点，单份 base 约 `105MB`。颜色在每个三角顶点重复烘焙，导致颜色模式变化也需要重写大数组。
+
+目标顶点为 `x / y / packedCellIdAndSide`：位置保持 Float32，cellId 与 land / water side 用 Uint32 打包；三角顺序、cell range、hard-cell fallback、局部高度编辑、分段 buffer、回滚和 picking 语义不变。预计 base 降至约 `53MB`，颜色不再随几何重复。
+
+### 3.2 GPU cell attribute store
+
+按 cell 常驻高度、biome、state、province、culture、religion、population、水陆 / feature flags 等窄类型纹理或 buffer；state / province / biome palette 单独维护。shader 通过 packed cellId 读取属性，再按 `u_colorMode` 选择高度梯度、人口梯度或政治 / biome palette。GPU 派生数据不写入存档，WebGL context restore 时从主线程兼容投影重新上传。
+
+地图 patch 只提供 changed cell / state / province / biome / population ID 与 topology change 标志；连续 cell 合并后以 `texSubImage2D` 或等价有界写入更新，不上传整图。
+
+### 3.3 政治与平滑几何
+
+国家 / 省份 topology cache 以 `mapIdentity + mapRevision + topologyRevision + smoothMode` 为键。主题、颜色、选择和 debug 样式只更新 palette / uniform，不重建路径。平滑边界优先使用只覆盖受影响边界 cell 的 correction mesh；若证据证明 correction 接近全图，才采用明确计入地图 ready 的受控双缓存，不允许把预热藏到新图完成后。
+
+### 3.4 overlay 与 picking
+
+颜色视图不得重建 label descriptors、调用全量 `replaceChildren`、重装 city instance 或重绑路线 / 河流 /对象 picking。标签节点保持 identity，只在国家 / 省份等真实语义显隐变化时 keyed 更新；picking 只在对象几何或 canonical 引用改变时刷新对应 component。
+
+### 3.5 UI 和版本一致性
+
+显示意图使用递增 sequence。按钮在 renderer 正式提交后才成为 active；旧 Promise、平移缩放或 obsolete 操作不得覆盖最新意图。页面、Worker 与 renderer protocol 交换 build / protocol version，版本不一致时拒绝提交并提示保存后刷新。仅对已完整回滚的 session stale / commit rejected 做一次新会话重试，第二次仍失败则保留真实结构化诊断。
+
+## 4. 内部阶段
+
+| 阶段 | 唯一目标 | 最小门 | 非目标 |
+| --- | --- | --- | --- |
+| 335-A | 冻结完整端到端账本和 cold / warm / stale 分母 | 静态遥测合同、10k 单入口、100k 一次代表性基线 | 不优化产品 |
+| 335-B | surface 顶点去颜色化并保留所有权 / rollback | 纯 Node 重组、FakeGL transaction、10k 视觉同源 | 不迁移全部视图 |
+| 335-C | GPU cell attribute / palette store 与 patch | 类型、纹理布局、context restore、增量反例 | 不改变存档 |
+| 335-D | 高度 / biome / population shader 化 | 0 Worker / 0 geometry rebuild、像素和 picking 同源 | 不处理政治 topology |
+| 335-E | 国家 / 省份 palette 与 topology cache 解耦 | 首次 / 重复、revision 失效、平滑关闭 | 不处理平滑 correction |
+| 335-F | 主题、海底、普通图层移出 Worker prepare | 0 map input、0 overlay / picking rebuild | 不处理几何型选项 |
+| 335-G | 平滑边界 correction / cache | 异常三角、岸线、政治边界、冷热性能 | 不降低视觉精度 |
+| 335-H | overlay / city / picking identity 稳定 | 节点 / 对象 / GPU 引用与必要增量 | 不重做 UI 状态机 |
+| 335-I | latest-wins、正式提交控件、build handshake、自愈 | 首次点击、快速 A/B/C、缩放、stale session | 不扩大地图写并发 |
+| 335-J | 冷热、故障、旧数据、视觉和用户原标签页终验 | 10k / 50k / 100k、PNG、context restore、错误面 | 不新增功能 |
+
+## 5. 性能与正确性验收
+
+- 固定 100k 普通颜色视图 cold 首次 `≤150ms`、warm `≤50ms`。
+- 颜色视图 Worker 地图输入 `0 bytes`、`render.prepare=0`、surface geometry build `0`、overlay replace `0`、picking rebuild `0`。
+- 主题 `≤150ms`、海底 `≤100ms`、普通图层 `≤50ms`。
+- 平滑边界首次 `≤300ms`、重复 `≤100ms`。
+- 所有入口单个主线程 task `<50ms`、LongTask `0`；不继承既有 `≤200ms` 登记。
+- 10k / 50k / 100k 的高度、国家、省份、biome、population、主题、海底和平滑截图 / 像素、PNG、标签、城市、路线、河流、选择、高亮与 picking 同源。
+- cold、warm、revision 变化、Worker 重启、快速切换、切换中 / 后平移缩放、撤销 / 重做、保存 / 读取和 WebGL context restore 均通过。
+
+## 6. 执行与 Git 规则
+
+- 唯一任务分支为 `codex/task-335-gpu-resident-views`，主线程为唯一写者。
+- 每个 335-A～J 接受后各做一次本地中文 checkpoint commit，并按仓库规则同步递增版本；阶段提交不推送、不合入 `main`。
+- 静态、专项 Node、小数据浏览器、代表性 100k 和最终全量逐级运行；昂贵门首败即停，只允许一次窄诊断和一次目标复验。
+- 全部阶段集成冻结后统一验收；该架构升级最终评估升至 `0.4.0`，验收通过后才推送任务分支、合入并推送 `main`。
+- 不修改 `source/`、Wiki、用户地图或持久存档 schema；用户原标签页只有在确认已保存并取得刷新授权后才现场验收。
+
+## 7. 335-A：端到端账本（已接受）
+
+- 新增独立显示账本，按运行前 session 与正式 binding 把路径精确区分为 `warm / cold / stale-map / stale-revision / stale-context / busy-restart / inconsistent-reuse`，并记录输入 / 输出分包、传输时间、首个 animation frame 与已呈现 frame。该证据只进入开发态对象和测试 artifact，不进入普通界面文案。
+- 10k 真实入口通过：暖普通颜色约 `38～99ms`，主题约 `181～209ms`，平滑约 `73～124ms`；正式 revision 推进后继续复用同一 session，主动丢失 session 后准确进入 cold，快速两次视图意图保持 renderer、可见 Tab、bridge 与 API 同源，LongTask 为 `0`。artifact 为 `work/task335-a-view-ledger-10000/result.json`。
+- 固定 `99846` cells 的 100k 账本通过：暖普通颜色 `101～186ms / 3` 输入包，主题 `538～678ms`，海底 `127～145ms`，平滑 `576～747ms`，标签 `293～299ms`。正式城市改名把 revision `0→1` 后，下一次视图仍只输入 `3` 包，但 Worker 渲染 cache 因 revision 全失效，wall 为 `5.02s`；session 丢失后 cold 输入 `1032` 包、输入流 `12.21s`、wall `21.07s`。两类慢路径均无 LongTask，证明帧可让步不能替代端到端消除复制与重编译。artifact 为 `work/task335-a-view-ledger-100000/result.json`。
+- 100k 首轮暴露并修复一项前置产品错误：`0.3.16` emergency hard fan 为保证先绘而被放到 `cellVisualMesh.cells` 前端，颜色补丁沿用几何顺序后不再满足 installer 的严格递增 ID 合同。现在只对补丁项按 cell ID 排序，surface 几何与 emergency 覆盖顺序不变；Node 反例和目标 100k 复验均通过。
+- 阶段门通过：上下文 / 日志审计、语法与差异、账本纯 Node、Worker app replay、render preparation、生产构建、10k 与一次代表性 100k。产品 `3` 文件约 `+76 / -2`，工具 `3` 文件约 `+123 / -8`；A 为一次性测量阶段，工具增量高于产品增量的原因已在动手前登记，浏览器夹具最终 `438` 行且未超过 `500` 行。版本为 `0.3.17`，下一阶段只进入 335-B。

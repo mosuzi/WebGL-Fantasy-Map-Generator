@@ -131,6 +131,19 @@ const expectedOceanPatch = buildPlaceholderSurfaceColorPatch(
   retainedRenderCache.cellVisual,
   "water"
 );
+const emergencyFirstVisual = {
+  ...retainedRenderCache.cellVisual,
+  cells: [retainedRenderCache.cellVisual.cells.at(-1), ...retainedRenderCache.cellVisual.cells.slice(0, -1)]
+};
+const orderedEmergencyPatch = buildPlaceholderSurfaceColorPatch(
+  map,
+  "states",
+  {smoothCellBorders: true},
+  retainedRenderCache.shore,
+  emergencyFirstVisual,
+  "all"
+);
+assert.ok(orderedEmergencyPatch.cellIds.every((cell, index, cells) => index === 0 || cells[index - 1] < cell), "emergency-first geometry 的颜色补丁仍须按 cell ID 严格递增");
 const oceanPatch = await executeRenderPreparationTask({
   map,
   binding,

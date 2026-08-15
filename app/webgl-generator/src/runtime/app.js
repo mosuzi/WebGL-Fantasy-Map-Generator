@@ -34,6 +34,7 @@ import {captureControlPanelLaunchGeometry} from "../ui/control-panel-launch-geom
 import {createBrushCursorPreview} from "../ui/brush-cursor-preview.js";
 import {bindRuntimePanel, readControlPreferences, readOptionsFromPanel, setActiveModeButton, setEditingInteractionLock, setGenerationLoading, setSeedInput, syncLayerGroupControls, updateControlPreferences, updateLayerPreference, updatePickPanel, updateRegenerationSection, updateRuntimePanel, VIEW_MODE_SELECTOR} from "../ui/panel.js";
 import {DEFAULT_MAX_CITY_LABELS} from "./display-defaults.js";
+import {createDisplayWorkerLedger, scheduleDisplayWorkerFrames} from "./display-worker-ledger.js";
 import {formatArea as formatDisplayArea, formatDistance as formatDisplayDistance, normalizeUnitPreferences} from "../ui/display-units.js";
 import {sameObjectId} from "../ui/object-id.js";
 import {createBiomePanel} from "../ui/panels/biome-panel.js";
@@ -3664,6 +3665,7 @@ async function applyRuntimeDisplayMutationViaWorker(state, documentRef, operatio
   let mutationCaptureActive = false;
   let renderSuspended = false;
   const displayStartedAt = performance.now();
+  const sessionBefore = state.mapWorkerCoordinator?.getSessionSnapshot?.() || null;
   const timings = {
     applyMs: 0,
     workerMs: 0,
@@ -3813,7 +3815,7 @@ async function applyRuntimeDisplayMutationViaWorker(state, documentRef, operatio
     } catch {
       // 已提交显示的旧资源释放失败不能反向破坏当前画面。
     }
-    state.lastDisplayRenderWorker = {
+    const evidence = {
       operation: {id: operation?.id || "", name: operation?.name || ""},
       layers: [...renderRequest.layers],
       surface: prepared.layers?.surface ? {
@@ -3826,8 +3828,11 @@ async function applyRuntimeDisplayMutationViaWorker(state, documentRef, operatio
       cache: structuredClone(prepared.cache || null),
       worker: structuredClone(prepared.worker),
       session: state.mapWorkerCoordinator.getSessionSnapshot?.() || null,
-      timings: {...timings}
+      timings: {...timings},
+      ledger: createDisplayWorkerLedger({sessionBefore, binding, worker: prepared.worker})
     };
+    state.lastDisplayRenderWorker = evidence;
+    scheduleDisplayWorkerFrames(evidence.ledger, displayStartedAt, documentRef?.defaultView?.requestAnimationFrame?.bind(documentRef.defaultView));
     return result;
   } catch (error) {
     const rollbackFailures = [];

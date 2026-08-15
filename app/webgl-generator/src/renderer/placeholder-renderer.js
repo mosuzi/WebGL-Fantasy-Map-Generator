@@ -5380,9 +5380,9 @@ export function buildPlaceholderSurfaceColorPatch(map, colorMode, viewOptions, s
     throw new Error("surface color patch 需要稳定的 cell visual geometry");
   }
   const normalizedScope = scope === "water" ? "water" : "all";
-  const selected = normalizedScope === "water"
+  const selected = (normalizedScope === "water"
     ? cellVisualMesh.cells.filter(cellMesh => Number(map.grid.cells.h[cellMesh.cell]) < 20)
-    : cellVisualMesh.cells;
+    : [...cellVisualMesh.cells]).sort((left, right) => Number(left.cell) - Number(right.cell));
   const cellIds = new Uint32Array(selected.length);
   const colors = new Float32Array(selected.length * 4);
   for (let index = 0; index < selected.length; index++) {
