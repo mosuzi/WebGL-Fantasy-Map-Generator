@@ -14,6 +14,12 @@ import {
 } from "./surface-base-buffer-set.js";
 import {snapshotViewportCamera} from "./viewport-buffer-transform.js";
 import {OBJECT_PICKING_COMPONENTS} from "./picking.js";
+import {
+  createCellAttributeStore,
+  deleteUnownedCellAttributeStore,
+  releaseCellAttributeStore,
+  retainCellAttributeStore
+} from "./cell-attribute-store.js";
 
 const FLOATS_PER_VERTEX = 6;
 const DEFAULT_UPLOAD_SLICE_BYTES = 256 * 1024;
@@ -32,9 +38,15 @@ export async function prepareRendererWorkerInstall(renderer, map, prepared, opti
   let surfaceBaseBufferSet = null;
   let surfaceValues = null;
   let surfaceColorPatch = null;
+  let cellAttributeStore = null;
 
   try {
     validatePreparedLayerShapes(layers);
+    if (renderer.map !== map) {
+      gate.assertCurrent();
+      cellAttributeStore = createCellAttributeStore(renderer.gl, map);
+      gate.assertCurrent();
+    }
     if (layers.cellVisual) {
       decoded.cellVisual = await unpackCellVisualMeshInChunks(layers.cellVisual, binding, gate.options("cell-visual"));
     }
@@ -134,10 +146,11 @@ export async function prepareRendererWorkerInstall(renderer, map, prepared, opti
   } catch (error) {
     deletePreparedBuffers(renderer.gl, buffers.values());
     deleteUnownedSurfaceBaseBuffers(renderer.gl, surfaceBaseBufferSet, renderer.surfaceBaseBufferSet);
+    deleteUnownedCellAttributeStore(renderer.gl, cellAttributeStore, renderer.cellAttributeStore);
     throw error;
   }
 
-  return createPreparedInstallTransaction(renderer, map, prepared, decoded, buffers, surfaceBaseBufferSet, surfaceValues, {
+  return createPreparedInstallTransaction(renderer, map, prepared, decoded, buffers, surfaceBaseBufferSet, surfaceValues, cellAttributeStore, {
     preserveRoutePicking: options.preserveRoutePicking === true,
     resetViewport: options.resetViewport === true,
     deferOverlayLayout: options.deferOverlayLayout === true,
@@ -147,7 +160,7 @@ export async function prepareRendererWorkerInstall(renderer, map, prepared, opti
   });
 }
 
-function createPreparedInstallTransaction(renderer, map, prepared, decoded, buffers, surfaceBaseBufferSet, surfaceValues, options) {
+function createPreparedInstallTransaction(renderer, map, prepared, decoded, buffers, surfaceBaseBufferSet, surfaceValues, cellAttributeStore, options) {
   const layers = prepared.layers;
   const before = new Map();
   const assigned = [];
@@ -162,7 +175,11 @@ function createPreparedInstallTransaction(renderer, map, prepared, decoded, buff
   let surfaceColorPatchDirty = false;
   let ownsPreparedSurfaceBase = Boolean(surfaceBaseBufferSet);
   let ownsPreviousSurfaceBase = false;
+  let cellAttributeStoreBefore = null;
+  let ownsPreparedCellAttributes = Boolean(cellAttributeStore);
+  let ownsPreviousCellAttributes = false;
   if (ownsPreparedSurfaceBase) retainSurfaceBaseBufferSet(surfaceBaseBufferSet);
+  if (ownsPreparedCellAttributes) retainCellAttributeStore(cellAttributeStore);
 
   return Object.freeze({
     prepareCommit,
@@ -200,6 +217,7 @@ function createPreparedInstallTransaction(renderer, map, prepared, decoded, buff
         assignNested("camera", "offsetY", 0);
       }
       assign("map", map);
+      assignCellAttributeStore(cellAttributeStore);
       if (decoded.cellVisual) assign("cellVisualMesh", decoded.cellVisual);
       if (decoded.shore) assign("shoreVisualPaths", decoded.shore);
       if (decoded.statePaths) assign("stateVisualPaths", decoded.statePaths);
@@ -286,6 +304,7 @@ function createPreparedInstallTransaction(renderer, map, prepared, decoded, buff
     if (!committed) {
       deletePreparedBuffers(renderer.gl, buffers.values());
       releasePreparedSurfaceBase();
+      releasePreparedCellAttributes();
       finalized = true;
       return true;
     }
@@ -308,6 +327,8 @@ function createPreparedInstallTransaction(renderer, map, prepared, decoded, buff
         } else if (key === "surfaceBaseBufferSet") {
           renderer.surfaceBaseBufferSet = before.get(key).bufferSet;
           renderer.vertexBuffer = before.get(key).vertexBuffer;
+        } else if (key === "cellAttributeStore") {
+          renderer.cellAttributeStore = before.get(key);
         } else renderer[key] = before.get(key);
       } catch (error) {
         failures.push(error);
@@ -328,6 +349,8 @@ function createPreparedInstallTransaction(renderer, map, prepared, decoded, buff
     } catch (error) {
       failures.push(error);
     }
+    try { releasePreparedCellAttributes(); } catch (error) { failures.push(error); }
+    try { releasePreviousCellAttributes(); } catch (error) { failures.push(error); }
     if (routeRefreshWasCancelled && routeRefreshWasPending) {
       try {
         renderer.dynamicBuffersDirty.routes = true;
@@ -379,6 +402,7 @@ function createPreparedInstallTransaction(renderer, map, prepared, decoded, buff
     if (!committed) {
       deletePreparedBuffersBestEffort(renderer.gl, buffers.values());
       releasePreparedSurfaceBaseBestEffort();
+      releasePreparedCellAttributesBestEffort();
       finalized = true;
       return true;
     }
@@ -387,6 +411,8 @@ function createPreparedInstallTransaction(renderer, map, prepared, decoded, buff
     deletePreparedBuffersBestEffort(renderer.gl, detachedBuffers);
     releasePreviousSurfaceBaseBestEffort();
     releasePreparedSurfaceBaseBestEffort();
+    releasePreviousCellAttributesBestEffort();
+    releasePreparedCellAttributesBestEffort();
     surfaceColorPatchDirty = false;
     finalized = true;
     return true;
@@ -421,6 +447,16 @@ function createPreparedInstallTransaction(renderer, map, prepared, decoded, buff
     renderer.vertexBuffer = buffers[0];
   }
 
+  function assignCellAttributeStore(store) {
+    if (!store) return;
+    cellAttributeStoreBefore = renderer.cellAttributeStore;
+    retainCellAttributeStore(cellAttributeStoreBefore);
+    ownsPreviousCellAttributes = Boolean(cellAttributeStoreBefore);
+    before.set("cellAttributeStore", cellAttributeStoreBefore);
+    assigned.push("cellAttributeStore");
+    renderer.cellAttributeStore = store;
+  }
+
   function releasePreparedSurfaceBase() {
     if (!ownsPreparedSurfaceBase) return;
     ownsPreparedSurfaceBase = false;
@@ -449,6 +485,28 @@ function createPreparedInstallTransaction(renderer, map, prepared, decoded, buff
     } catch {
       // finalize 延续既有资源释放 best-effort 语义。
     }
+  }
+
+  function releasePreparedCellAttributes() {
+    if (!ownsPreparedCellAttributes) return;
+    ownsPreparedCellAttributes = false;
+    releaseCellAttributeStore(cellAttributeStore);
+    deleteUnownedCellAttributeStore(renderer.gl, cellAttributeStore, renderer.cellAttributeStore);
+  }
+
+  function releasePreviousCellAttributes() {
+    if (!ownsPreviousCellAttributes) return;
+    ownsPreviousCellAttributes = false;
+    releaseCellAttributeStore(cellAttributeStoreBefore);
+    deleteUnownedCellAttributeStore(renderer.gl, cellAttributeStoreBefore, renderer.cellAttributeStore);
+  }
+
+  function releasePreparedCellAttributesBestEffort() {
+    try { releasePreparedCellAttributes(); } catch {}
+  }
+
+  function releasePreviousCellAttributesBestEffort() {
+    try { releasePreviousCellAttributes(); } catch {}
   }
 
   function installOverlay(bundle) {

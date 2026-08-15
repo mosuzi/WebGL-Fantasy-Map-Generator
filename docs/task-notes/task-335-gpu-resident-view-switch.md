@@ -104,3 +104,10 @@ Worker 化继续用于生成、重生成、地图编辑、派生拓扑、撤销 
 - 纯 Node 证明跨段位置重组、packed identity / side、缺少 cell range 时的显式 sentinel、跨段颜色更新、async 取消与失败释放；FakeGL 证明未提交、已提交回滚、finalize、commit fault、嵌套 installer 和原位颜色补丁均不会提前删除或覆写正式资源。
 - 正式 10k 浏览器门通过：`452091` 顶点，geometry / compatibility RGB 各 `5425092B`；从 WebGL 回读逐顶点核对位置、cell、side、颜色、alias 和聚合字节，并分别用 legacy 与 packed shader 绘制同一 base，整张 framebuffer checksum 为 `781237281` 且逐通道差异 `0`。14 类视图、相机 / 控件收敛、回滚不变量、LongTask、health、Loading 与 WebGL error 均为 `0`；artifact 为 `work/task335-b-surface-10000/result.json`。
 - 产品 `3` 文件 `+306 / -106`，工具 `3` 文件 `+200 / -133`；浏览器夹具 `475` 行，未超过 `500` 行。语法、差异、两项专项 Node、生产构建和增强后 10k 目标门通过。版本为 `0.3.18`，下一阶段只进入 335-C。
+
+## 9. 335-C：GPU cell attribute / palette store（已接受）
+
+- 新增与持久存档解耦的 GPU 派生投影：`RGBA32UI` identity 保存 state / province / culture / religion，`RGBA32UI` terrain 保存 height / biome / feature / land，`RGBA32F` numeric 保存 population / temperature / precipitation / region；states、provinces、biomes、cultures、religions 使用五张 `RGBA8` palette。三张 cell texture 共享二维布局，负一 ID 以偏移编码保留，CPU typed snapshot 仅作为 GPU 恢复与局部 patch 的派生源。
+- changed cells 先去重排序，再按 texture row 合并 `texSubImage2D`；GPU 任一写入失败会尝试写回旧值，只有三张纹理全部成功后才更新 snapshot。map identity / 越界 / 空 patch 均先拒绝。context restore 从同一 snapshot 建立八张新纹理，事务 prepare、commit、rollback、finalize、commit fault 与嵌套 installer 都按 store owner 计数释放，既不提前删当前纹理，也不泄漏 detached 纹理。
+- 纯 FakeGL 门覆盖 `7` cells、八张纹理、跨三行九次局部写入、应用 / 回滚、故障恢复、context restore、尺寸上限和资源释放；prepared installer 的双重删除会直接报错，七类既有 surface transaction 连同 cell store 所有权全部通过。正式 10k 浏览器门为 `10004` cells、cell 三张 texture 各 `160064B`、palette 合计 `1068B`；局部 patch 后重建保持 snapshot identity，旧八张全部删除、新八张全部有效。
+- 现有 14 类视图 / 主题 / 海底 / 平滑 / 标签操作、相机与控件收敛继续通过，LongTask、health、Loading、应用错误和 WebGL error 均为 `0`；artifact 为 `work/task335-c-cell-attributes-10000/result.json`。产品 `3` 文件约 `+401 / -2`，工具 `3` 文件约 `+268 / -16`；浏览器夹具机械压缩后 `499` 行，仍未超过 `500` 行。语法、差异、两项专项 Node、生产构建和 10k 目标门通过。版本为 `0.3.19`，下一阶段只进入 335-D。

@@ -6,14 +6,36 @@ import {
   createSurfaceBaseBufferSet,
   flattenSurfaceBaseBufferSet
 } from "../app/webgl-generator/src/renderer/surface-base-buffer-set.js";
+import {
+  collectCellAttributeTextures,
+  createCellAttributeStore
+} from "../app/webgl-generator/src/renderer/cell-attribute-store.js";
 
 class FakeGl {
   constructor() {
     this.ARRAY_BUFFER = 0x8892;
     this.STATIC_DRAW = 0x88e4;
     this.DYNAMIC_DRAW = 0x88e8;
+    this.TEXTURE_2D = 0x0de1;
+    this.TEXTURE_MIN_FILTER = 0x2801;
+    this.TEXTURE_MAG_FILTER = 0x2800;
+    this.TEXTURE_WRAP_S = 0x2802;
+    this.TEXTURE_WRAP_T = 0x2803;
+    this.NEAREST = 0x2600;
+    this.CLAMP_TO_EDGE = 0x812f;
+    this.RGBA32UI = 0x8d70;
+    this.RGBA_INTEGER = 0x8d99;
+    this.UNSIGNED_INT = 0x1405;
+    this.RGBA32F = 0x8814;
+    this.RGBA = 0x1908;
+    this.FLOAT = 0x1406;
+    this.RGBA8 = 0x8058;
+    this.UNSIGNED_BYTE = 0x1401;
+    this.MAX_TEXTURE_SIZE = 0x0d33;
     this.buffers = [];
+    this.textures = [];
     this.boundBuffer = null;
+    this.boundTexture = null;
     this.deleteCalls = [];
   }
 
@@ -51,6 +73,42 @@ class FakeGl {
     buffer.deleted = true;
     this.deleteCalls.push(buffer);
   }
+
+  createTexture() {
+    const texture = {id: this.textures.length + 1, bytes: new Uint8Array(), deleted: false};
+    this.textures.push(texture);
+    return texture;
+  }
+
+  bindTexture(target, texture) {
+    assert.equal(target, this.TEXTURE_2D);
+    assert.equal(this.isTexture(texture), true);
+    this.boundTexture = texture;
+  }
+
+  texParameteri() {}
+
+  texImage2D(target, level, internalFormat, width, height, border, format, type, source) {
+    assert.equal(target, this.TEXTURE_2D);
+    assert.ok(this.boundTexture);
+    this.boundTexture.bytes = new Uint8Array(source.buffer, source.byteOffset, source.byteLength).slice();
+    this.boundTexture.width = width;
+    this.boundTexture.height = height;
+  }
+
+  getParameter(parameter) {
+    if (parameter === this.MAX_TEXTURE_SIZE) return 4096;
+    return null;
+  }
+
+  isTexture(texture) {
+    return Boolean(texture && this.textures.includes(texture) && !texture.deleted);
+  }
+
+  deleteTexture(texture) {
+    if (!this.isTexture(texture)) throw new Error(`double-delete-texture:${texture?.id ?? "missing"}`);
+    texture.deleted = true;
+  }
 }
 
 const binding = {mapIdentity: "task322-segmented-installer", mapRevision: 1};
@@ -71,6 +129,7 @@ async function testUncommittedCleanup() {
   const beforeSet = renderer.surfaceBaseBufferSet;
   const beforeAlias = renderer.vertexBuffer;
   const liveBefore = liveBuffers(gl);
+  const textureBefore = liveTextures(gl);
   const transaction = await prepareSurfaceTransaction(renderer, largeSurface(11));
   const preparedBuffers = liveBuffers(gl).filter(buffer => !liveBefore.includes(buffer));
   assert.ok(preparedBuffers.length >= 6);
@@ -78,6 +137,7 @@ async function testUncommittedCleanup() {
   assert.equal(renderer.surfaceBaseBufferSet, beforeSet);
   assert.equal(renderer.vertexBuffer, beforeAlias);
   assert.ok(preparedBuffers.every(buffer => !gl.isBuffer(buffer)));
+  assert.ok(liveTextures(gl).every(texture => textureBefore.includes(texture)));
   assert.equal(transaction.finalize(), false);
 }
 
@@ -86,28 +146,37 @@ async function testCommittedRollbackAndFinalize() {
   const rollbackRenderer = createRenderer(rollbackGl);
   const rollbackBeforeSet = rollbackRenderer.surfaceBaseBufferSet;
   const rollbackBeforeAlias = rollbackRenderer.vertexBuffer;
+  const rollbackBeforeAttributes = rollbackRenderer.cellAttributeStore;
   const rollbackValues = largeSurface(21);
   const rollbackTransaction = await prepareSurfaceTransaction(rollbackRenderer, rollbackValues);
   rollbackTransaction.commit();
   const committedSet = rollbackRenderer.surfaceBaseBufferSet;
+  const committedAttributes = rollbackRenderer.cellAttributeStore;
   assert.notEqual(committedSet, rollbackBeforeSet);
   assertSurfaceBaseSetMatches(committedSet, rollbackRenderer.vertexBuffer, rollbackValues, rollbackGl);
   assert.equal(rollbackTransaction.rollback(), true);
   assert.equal(rollbackRenderer.surfaceBaseBufferSet, rollbackBeforeSet);
   assert.equal(rollbackRenderer.vertexBuffer, rollbackBeforeAlias);
+  assert.equal(rollbackRenderer.cellAttributeStore, rollbackBeforeAttributes);
   assert.ok(flattenSurfaceBaseBufferSet(committedSet).every(buffer => !rollbackGl.isBuffer(buffer)));
   assert.ok(flattenSurfaceBaseBufferSet(rollbackBeforeSet).every(buffer => rollbackGl.isBuffer(buffer)));
+  assert.ok(collectCellAttributeTextures(committedAttributes).every(texture => !rollbackGl.isTexture(texture)));
+  assert.ok(collectCellAttributeTextures(rollbackBeforeAttributes).every(texture => rollbackGl.isTexture(texture)));
 
   const finalizeGl = new FakeGl();
   const finalizeRenderer = createRenderer(finalizeGl);
   const finalizeBeforeSet = finalizeRenderer.surfaceBaseBufferSet;
+  const finalizeBeforeAttributes = finalizeRenderer.cellAttributeStore;
   const finalizeTransaction = await prepareSurfaceTransaction(finalizeRenderer, smallSurface(22));
   finalizeTransaction.commit();
   const finalizedSet = finalizeRenderer.surfaceBaseBufferSet;
+  const finalizedAttributes = finalizeRenderer.cellAttributeStore;
   assert.equal(finalizeTransaction.finalize(), true);
   assert.ok(flattenSurfaceBaseBufferSet(finalizeBeforeSet).every(buffer => !finalizeGl.isBuffer(buffer)));
   assert.ok(flattenSurfaceBaseBufferSet(finalizedSet).every(buffer => finalizeGl.isBuffer(buffer)));
   assert.equal(finalizeRenderer.vertexBuffer, finalizedSet.segments[0].buffer);
+  assert.ok(collectCellAttributeTextures(finalizeBeforeAttributes).every(texture => !finalizeGl.isTexture(texture)));
+  assert.ok(collectCellAttributeTextures(finalizedAttributes).every(texture => finalizeGl.isTexture(texture)));
 }
 
 async function testCommitFaultRollback() {
@@ -116,6 +185,7 @@ async function testCommitFaultRollback() {
   const beforeSet = renderer.surfaceBaseBufferSet;
   const beforeAlias = renderer.vertexBuffer;
   const beforeSurface = captureSurfaceBaseSet(beforeSet, beforeAlias);
+  const beforeAttributes = renderer.cellAttributeStore;
   const liveBefore = liveBuffers(gl);
   let landCorrectionBuffer = renderer.landCorrectionBuffer;
   let rejectNextAssignment = true;
@@ -136,6 +206,8 @@ async function testCommitFaultRollback() {
   assert.equal(renderer.surfaceBaseBufferSet, beforeSet);
   assert.equal(renderer.vertexBuffer, beforeAlias);
   assertSurfaceBaseSetExact(renderer.surfaceBaseBufferSet, renderer.vertexBuffer, beforeSurface, gl);
+  assert.equal(renderer.cellAttributeStore, beforeAttributes);
+  assert.ok(collectCellAttributeTextures(beforeAttributes).every(texture => gl.isTexture(texture)));
   assert.ok(preparedBuffers.every(buffer => !gl.isBuffer(buffer)));
   assert.equal(transaction.rollback(), false);
 }
@@ -146,16 +218,22 @@ async function testNestedRollbackOwnership() {
   const outer = await prepareSurfaceTransaction(renderer, smallSurface(41));
   outer.commit();
   const outerSet = renderer.surfaceBaseBufferSet;
+  const outerAttributes = renderer.cellAttributeStore;
+  renderer.nextMap = createMapFixture("nested-rollback");
   const inner = await prepareSurfaceTransaction(renderer, smallSurface(42));
   inner.commit();
   const innerSet = renderer.surfaceBaseBufferSet;
+  const innerAttributes = renderer.cellAttributeStore;
   assert.equal(outer.finalize(), true);
   assert.ok(flattenSurfaceBaseBufferSet(outerSet).every(buffer => gl.isBuffer(buffer)), "inner rollback ownership 必须保留 outer set");
+  assert.ok(collectCellAttributeTextures(outerAttributes).every(texture => gl.isTexture(texture)));
   assert.equal(inner.rollback(), true);
   assert.equal(renderer.surfaceBaseBufferSet, outerSet);
   assert.equal(renderer.vertexBuffer, outerSet.segments[0].buffer);
+  assert.equal(renderer.cellAttributeStore, outerAttributes);
   assert.ok(flattenSurfaceBaseBufferSet(outerSet).every(buffer => gl.isBuffer(buffer)));
   assert.ok(flattenSurfaceBaseBufferSet(innerSet).every(buffer => !gl.isBuffer(buffer)));
+  assert.ok(collectCellAttributeTextures(innerAttributes).every(texture => !gl.isTexture(texture)));
 }
 
 async function testNestedFinalizeOwnership() {
@@ -164,13 +242,19 @@ async function testNestedFinalizeOwnership() {
   const outer = await prepareSurfaceTransaction(renderer, smallSurface(51));
   outer.commit();
   const outerSet = renderer.surfaceBaseBufferSet;
+  const outerAttributes = renderer.cellAttributeStore;
+  renderer.nextMap = createMapFixture("nested-finalize");
   const inner = await prepareSurfaceTransaction(renderer, smallSurface(52));
   inner.commit();
   const innerSet = renderer.surfaceBaseBufferSet;
+  const innerAttributes = renderer.cellAttributeStore;
   assert.equal(inner.finalize(), true);
   assert.ok(flattenSurfaceBaseBufferSet(outerSet).every(buffer => gl.isBuffer(buffer)), "outer transaction owner 必须保留 detached set");
+  assert.ok(collectCellAttributeTextures(outerAttributes).every(texture => gl.isTexture(texture)));
   assert.equal(outer.finalize(), true);
   assert.ok(flattenSurfaceBaseBufferSet(outerSet).every(buffer => !gl.isBuffer(buffer)));
+  assert.ok(collectCellAttributeTextures(outerAttributes).every(texture => !gl.isTexture(texture)));
+  assert.ok(collectCellAttributeTextures(innerAttributes).every(texture => gl.isTexture(texture)));
   assert.ok(flattenSurfaceBaseBufferSet(innerSet).every(buffer => gl.isBuffer(buffer)));
   assert.equal(renderer.surfaceBaseBufferSet, innerSet);
   assert.equal(renderer.vertexBuffer, innerSet.segments[0].buffer);
@@ -342,10 +426,12 @@ async function prepareSurfaceTransaction(renderer, base) {
 function createRenderer(gl) {
   const surfaceVertices = smallSurface(1);
   const surfaceBaseBufferSet = createSurfaceBaseBufferSet(gl, surfaceVertices);
+  const map = createMapFixture("old-map");
   const renderer = {
     gl,
-    map: {id: "old-map"},
-    nextMap: {grid: {cells: {i: new Uint32Array([0]), h: new Uint8Array([10])}}},
+    map,
+    nextMap: createMapFixture(binding.mapIdentity),
+    cellAttributeStore: createCellAttributeStore(gl, map),
     surfaceBaseBufferSet,
     vertexBuffer: surfaceBaseBufferSet.segments[0].buffer,
     surfaceVertices,
@@ -377,6 +463,23 @@ function createRenderer(gl) {
   return renderer;
 }
 
+function createMapFixture(mapIdentity) {
+  return {
+    metadata: {mapIdentity},
+    grid: {cells: {
+      i: new Uint32Array([0]), h: new Uint8Array([10]), f: new Uint32Array([0]),
+      state: new Int32Array([-1]), province: new Int32Array([-1]), culture: new Int32Array([-1]), religion: new Int32Array([-1]),
+      biome: new Uint8Array([0]), pop: new Float32Array([0]), temp: new Int8Array([0]), prec: new Uint8Array([0]), region: new Int32Array([-1])
+    }},
+    features: {features: [{land: false}]},
+    layers: {ocean: [0.2, 0.4, 0.7, 1]},
+    politics: {states: [], provinces: []},
+    society: {cultures: [], religions: []},
+    climate: {biomes: []},
+    settlements: {metadata: {maxPopulation: 1}}
+  };
+}
+
 function emptyShoreRanges() {
   return {
     landCorrections: new Map(),
@@ -401,6 +504,10 @@ function largeSurface(seed) {
 
 function liveBuffers(gl) {
   return gl.buffers.filter(buffer => gl.isBuffer(buffer));
+}
+
+function liveTextures(gl) {
+  return gl.textures.filter(texture => gl.isTexture(texture));
 }
 
 function captureSurfaceBaseSet(bufferSet, alias) {

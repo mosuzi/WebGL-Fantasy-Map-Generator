@@ -95,6 +95,14 @@ import {
   uploadSurfaceBaseBufferSetRanges
 } from "./surface-base-buffer-set.js";
 import {resolveMilitaryLabelPalette} from "./military-label-palette.js";
+import {
+  applyCellAttributePatch,
+  createCellAttributeStore,
+  deleteCellAttributeStore,
+  prepareCellAttributePatch,
+  restoreCellAttributeStore as restoreGpuCellAttributeStore,
+  summarizeCellAttributeStore
+} from "./cell-attribute-store.js";
 import {MILITARY_CITY_LABEL_AVOID_SCALE, militaryLabelBox, resolveMilitaryLabelPlacement} from "./military-label-layout.js";
 import {cityLabelAnchorOffset} from "./city-label-icon-layout.js";
 import {isSelectionForLabelItem, shouldShowDefaultSelectionMarker} from "./selection-marker-policy.js";
@@ -379,6 +387,7 @@ export class PlaceholderMapRenderer {
     };
     this.surfaceBaseBufferSet = createSurfaceBaseBufferSet(this.gl, new Float32Array(), {usage: this.gl.STATIC_DRAW});
     this.vertexBuffer = flattenSurfaceBaseBufferSet(this.surfaceBaseBufferSet)[0];
+    this.cellAttributeStore = null;
     this.surfacePatchBuffer = this.gl.createBuffer();
     this.landCorrectionBuffer = this.gl.createBuffer();
     this.waterCorrectionBuffer = this.gl.createBuffer();
@@ -642,6 +651,7 @@ export class PlaceholderMapRenderer {
     const profile = createRendererLoadProfile();
     this.cancelScheduledRouteBufferRefresh();
     this.map = map;
+    profile.stage("cell-attribute-store", "建立 cell attribute store", () => installRendererCellAttributeStore(this, createCellAttributeStore(this.gl, map)));
     this.invalidateGridCellDiagnostics();
     this.objectHighlights = [];
     this.oceanCurrentHighlights = new Set();
@@ -762,6 +772,7 @@ export class PlaceholderMapRenderer {
     };
 
     this.map = map;
+    await stage("cell-attribute-store", "建立 cell attribute store", () => installRendererCellAttributeStore(this, createCellAttributeStore(this.gl, map)));
     this.invalidateGridCellDiagnostics();
     this.objectHighlights = [];
     this.oceanCurrentHighlights = new Set();
@@ -951,6 +962,18 @@ export class PlaceholderMapRenderer {
     if (!this.map) return;
     this.refreshCellSurface({draw: false});
     this.draw();
+  }
+
+  refreshCellAttributeCells(gridCells) {
+    if (!this.map || !this.cellAttributeStore) return false;
+    const patch = prepareCellAttributePatch(this.cellAttributeStore, this.map, gridCells);
+    return applyCellAttributePatch(this.gl, patch);
+  }
+
+  restoreCellAttributeStore() {
+    if (!this.cellAttributeStore) return false;
+    installRendererCellAttributeStore(this, restoreGpuCellAttributeStore(this.gl, this.cellAttributeStore.snapshot));
+    return true;
   }
 
   setDiplomacySubjectId(stateId) {
@@ -2305,6 +2328,7 @@ export class PlaceholderMapRenderer {
       features: this.map?.features?.metadata,
       vertexCount: this.vertexCount,
       surfaceBaseBuffers,
+      cellAttributeStore: this.cellAttributeStore ? summarizeCellAttributeStore(this.cellAttributeStore) : null,
       shoreSurfaceDepth: {
         baseVertexCount: this.vertexCount,
         landCorrectionVertexCount: this.landCorrectionVertexCount,
@@ -5542,6 +5566,14 @@ function installSurfaceBaseBufferSet(renderer, replacement) {
     renderer.gl.deleteBuffer(legacyBuffer);
   }
   return renderer.surfaceBaseBufferSet;
+}
+
+function installRendererCellAttributeStore(renderer, replacement) {
+  const previous = renderer.cellAttributeStore;
+  if (previous === replacement) return replacement;
+  renderer.cellAttributeStore = replacement;
+  deleteCellAttributeStore(renderer.gl, previous, {preserve: replacement});
+  return replacement;
 }
 
 function currentSurfaceBaseBufferSet(renderer) {
