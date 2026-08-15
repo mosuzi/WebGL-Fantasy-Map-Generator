@@ -106,6 +106,7 @@ export async function prepareRendererWorkerInstall(renderer, map, prepared, opti
       if (!inPlaceColorPatch) {
         surfaceBaseBufferSet = await createSurfaceBaseBufferSetAsync(renderer.gl, surfaceValues.base, {
           usage: renderer.gl.STATIC_DRAW,
+          surfaceCellRanges: decoded.surfaceCellRanges,
           yieldToMain: gate.yieldToMain,
           assertCurrent: gate.assertCurrent,
           onProgress: detail => gate.onProgress("gpu:surfaceBaseBufferSet", detail)

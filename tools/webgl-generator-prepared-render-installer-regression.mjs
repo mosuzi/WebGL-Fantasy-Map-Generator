@@ -231,7 +231,10 @@ async function testInPlaceSurfaceColorPatchTransaction() {
   const beforeAlias = renderer.vertexBuffer;
   const beforeVertices = renderer.surfaceVertices;
   const beforeCpu = bytesOf(beforeVertices);
-  const beforeGpu = beforeSet.segments.map(segment => segment.buffer.bytes.slice());
+  const beforeGpu = beforeSet.segments.map(segment => ({
+    geometry: segment.geometryBuffer.bytes.slice(),
+    colors: segment.colorBuffer.bytes.slice()
+  }));
   const prepared = createColorPatchPrepared([0.1, 0.2, 0.3, 0.75]);
   const liveBefore = liveBuffers(gl);
   const transaction = await prepareRendererWorkerInstall(renderer, renderer.map, prepared, {
@@ -254,15 +257,15 @@ async function testInPlaceSurfaceColorPatchTransaction() {
   for (let offset = 0; offset < beforeVertices.length; offset += 6) {
     assert.deepEqual([...beforeVertices.subarray(offset + 2, offset + 6)], expectedColor);
   }
-  assert.deepEqual(beforeSet.segments.map(segment => [...segment.buffer.bytes]), [
-    [...bytesOf(beforeVertices)]
-  ]);
+  assert.deepEqual(beforeSet.segments.map(segment => [...segment.geometryBuffer.bytes]), beforeGpu.map(entry => [...entry.geometry]));
+  assert.deepEqual([...new Float32Array(beforeSet.segments[0].colorBuffer.bytes.buffer)], [...expectedColor, ...expectedColor, ...expectedColor].filter((_, index) => index % 4 !== 3));
   transaction.commit();
   assert.equal(renderer.surfaceBaseBufferSet, beforeSet);
   assert.equal(renderer.surfaceVertices, beforeVertices);
   assert.equal(await transaction.rollbackAsync(), true);
   assert.deepEqual(bytesOf(beforeVertices), beforeCpu);
-  assert.deepEqual(beforeSet.segments.map(segment => [...segment.buffer.bytes]), beforeGpu.map(bytes => [...bytes]));
+  assert.deepEqual(beforeSet.segments.map(segment => [...segment.geometryBuffer.bytes]), beforeGpu.map(entry => [...entry.geometry]));
+  assert.deepEqual(beforeSet.segments.map(segment => [...segment.colorBuffer.bytes]), beforeGpu.map(entry => [...entry.colors]));
   assert.ok(preparedBuffers.every(buffer => !gl.isBuffer(buffer)));
 
   const detached = await prepareRendererWorkerInstall(renderer, renderer.map, prepared, {
@@ -408,9 +411,11 @@ function captureSurfaceBaseSet(bufferSet, alias) {
     descriptors: bufferSet.segments.map(segment => ({
       segment,
       buffer: segment.buffer,
+      colorBuffer: segment.colorBuffer,
       floatStart: segment.floatStart,
       floatEnd: segment.floatEnd,
-      bytes: segment.buffer.bytes.slice()
+      bytes: segment.buffer.bytes.slice(),
+      colorBytes: segment.colorBuffer.bytes.slice()
     }))
   };
 }
@@ -426,38 +431,53 @@ function assertSurfaceBaseSetExact(bufferSet, alias, before, gl) {
     const expected = before.descriptors[index];
     assert.equal(actual, expected.segment);
     assert.equal(actual.buffer, expected.buffer);
+    assert.equal(actual.colorBuffer, expected.colorBuffer);
     assert.equal(actual.floatStart, expected.floatStart);
     assert.equal(actual.floatEnd, expected.floatEnd);
     assert.equal(gl.isBuffer(actual.buffer), true);
+    assert.equal(gl.isBuffer(actual.colorBuffer), true);
     assert.deepEqual(actual.buffer.bytes, expected.bytes);
+    assert.deepEqual(actual.colorBuffer.bytes, expected.colorBytes);
   }
 }
 
 function assertSurfaceBaseSetMatches(bufferSet, alias, values, gl) {
   assert.equal(alias, bufferSet.segments[0].buffer);
   assert.equal(bufferSet.floatLength, values.length);
-  assert.equal(bufferSet.byteLength, values.byteLength);
+  assert.equal(bufferSet.byteLength, values.length / 6 * 12);
+  assert.equal(bufferSet.colorByteLength, values.length / 6 * 12);
   let cursor = 0;
-  let hash = 2166136261;
-  let bytes = 0;
+  let geometryBytes = 0;
+  let colorBytes = 0;
   for (const segment of bufferSet.segments) {
     assert.equal(segment.floatStart, cursor);
     assert.equal(segment.floatEnd % 18, 0);
     assert.equal(segment.floatLength, segment.floatEnd - segment.floatStart);
-    assert.equal(segment.byteLength, segment.floatLength * Float32Array.BYTES_PER_ELEMENT);
+    assert.equal(segment.byteLength, segment.vertexCount * 12);
+    assert.equal(segment.colorByteLength, segment.vertexCount * 12);
     assert.ok(segment.byteLength <= 8 * 1024 * 1024);
     assert.equal(segment.vertexCount, segment.floatLength / 6);
     assert.equal(segment.triangleCount, segment.floatLength / 18);
     assert.equal(gl.isBuffer(segment.buffer), true);
+    assert.equal(gl.isBuffer(segment.colorBuffer), true);
     assert.equal(segment.buffer.bytes.byteLength, segment.byteLength);
-    hash = hashBytes(segment.buffer.bytes, hash);
-    bytes += segment.buffer.bytes.byteLength;
+    assert.equal(segment.colorBuffer.bytes.byteLength, segment.colorByteLength);
+    const geometry = new Float32Array(segment.buffer.bytes.buffer, segment.buffer.bytes.byteOffset, segment.buffer.bytes.byteLength / 4);
+    const startVertex = segment.floatStart / 6;
+    for (let vertex = 0; vertex < segment.vertexCount; vertex++) {
+      assert.equal(geometry[vertex * 3], values[(startVertex + vertex) * 6]);
+      assert.equal(geometry[vertex * 3 + 1], values[(startVertex + vertex) * 6 + 1]);
+      const sourceOffset = (startVertex + vertex) * 6;
+      const colors = new Float32Array(segment.colorBuffer.bytes.buffer, segment.colorBuffer.bytes.byteOffset, segment.colorBuffer.bytes.byteLength / 4);
+      assert.deepEqual([...colors.subarray(vertex * 3, vertex * 3 + 3)], [...values.subarray(sourceOffset + 2, sourceOffset + 5)]);
+    }
+    geometryBytes += segment.buffer.bytes.byteLength;
+    colorBytes += segment.colorBuffer.bytes.byteLength;
     cursor = segment.floatEnd;
   }
-  const expectedBytes = new Uint8Array(values.buffer, values.byteOffset, values.byteLength);
   assert.equal(cursor, values.length);
-  assert.equal(bytes, expectedBytes.byteLength);
-  assert.equal(hash, hashBytes(expectedBytes));
+  assert.equal(geometryBytes, bufferSet.byteLength);
+  assert.equal(colorBytes, bufferSet.colorByteLength);
 }
 
 function hashBytes(values, initial = 2166136261) {

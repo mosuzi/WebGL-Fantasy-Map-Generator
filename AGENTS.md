@@ -67,5 +67,5 @@
 
 ## 当前状态
 
-- 第 335-A 已接受，当前只进入 335-B：把 100k surface base 改为位置 + packed cell identity / side 的稳定几何，并保持分段 GPU 所有权、回滚、缺面兜底和 picking 语义。详细阶段与验收见 `docs/current-plan.md` 和 `docs/task-notes/task-335-gpu-resident-view-switch.md`。
-- 第 335-A checkpoint 版本为 `0.3.17`；第 335 项每个接受阶段必须独立递增版本并本地提交，但所有 checkpoint 在最终统一验收前不得推送。
+- 第 335-A、335-B 已接受，当前只进入 335-C：在稳定 packed surface geometry 上建立 GPU cell attribute / palette store、context restore 与增量更新；不改变持久存档。详细阶段与验收见 `docs/current-plan.md` 和 `docs/task-notes/task-335-gpu-resident-view-switch.md`。
+- 第 335-B checkpoint 版本为 `0.3.18`；第 335 项每个接受阶段必须独立递增版本并本地提交，但所有 checkpoint 在最终统一验收前不得推送。

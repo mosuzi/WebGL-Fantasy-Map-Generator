@@ -96,3 +96,11 @@ Worker 化继续用于生成、重生成、地图编辑、派生拓扑、撤销 
 - 固定 `99846` cells 的 100k 账本通过：暖普通颜色 `101～186ms / 3` 输入包，主题 `538～678ms`，海底 `127～145ms`，平滑 `576～747ms`，标签 `293～299ms`。正式城市改名把 revision `0→1` 后，下一次视图仍只输入 `3` 包，但 Worker 渲染 cache 因 revision 全失效，wall 为 `5.02s`；session 丢失后 cold 输入 `1032` 包、输入流 `12.21s`、wall `21.07s`。两类慢路径均无 LongTask，证明帧可让步不能替代端到端消除复制与重编译。artifact 为 `work/task335-a-view-ledger-100000/result.json`。
 - 100k 首轮暴露并修复一项前置产品错误：`0.3.16` emergency hard fan 为保证先绘而被放到 `cellVisualMesh.cells` 前端，颜色补丁沿用几何顺序后不再满足 installer 的严格递增 ID 合同。现在只对补丁项按 cell ID 排序，surface 几何与 emergency 覆盖顺序不变；Node 反例和目标 100k 复验均通过。
 - 阶段门通过：上下文 / 日志审计、语法与差异、账本纯 Node、Worker app replay、render preparation、生产构建、10k 与一次代表性 100k。产品 `3` 文件约 `+76 / -2`，工具 `3` 文件约 `+123 / -8`；A 为一次性测量阶段，工具增量高于产品增量的原因已在动手前登记，浏览器夹具最终 `438` 行且未超过 `500` 行。版本为 `0.3.17`，下一阶段只进入 335-B。
+
+## 8. 335-B：稳定 surface geometry（已接受）
+
+- 正式 surface base 现以三字 `Float32 / Uint32` 同一底层布局保存 `x / y / packed(cellId, side)`，每顶点 `12 bytes`；cell identity 允许稳定回查，land / water side 不再借用颜色 alpha。8MiB 分段继续保持完整三角对齐，geometry / color 两个 buffer 作为同一 segment 的共同所有权参与 prepare、commit、rollback、finalize、嵌套事务和失败清理，旧 `vertexBuffer` 只保留为首段 geometry alias。
+- 335-C 尚未建立 per-cell attribute store，因此 B 只保留独立 Float32 RGB 兼容流。它不属于稳定 geometry，颜色 patch 只更新该流，不再上传位置或 packed identity；本阶段 geometry 从旧 `24` 降到 `12 bytes/vertex`，两流合计暂仍为 `24 bytes/vertex`，C 接管后移除逐顶点 RGB。曾尝试 4-byte Uint8 RGB，但正式 framebuffer 有 `64692` 个通道发生最大 `1/255` 的提前量化差异，未放宽视觉标准，已撤回该方案。
+- 纯 Node 证明跨段位置重组、packed identity / side、缺少 cell range 时的显式 sentinel、跨段颜色更新、async 取消与失败释放；FakeGL 证明未提交、已提交回滚、finalize、commit fault、嵌套 installer 和原位颜色补丁均不会提前删除或覆写正式资源。
+- 正式 10k 浏览器门通过：`452091` 顶点，geometry / compatibility RGB 各 `5425092B`；从 WebGL 回读逐顶点核对位置、cell、side、颜色、alias 和聚合字节，并分别用 legacy 与 packed shader 绘制同一 base，整张 framebuffer checksum 为 `781237281` 且逐通道差异 `0`。14 类视图、相机 / 控件收敛、回滚不变量、LongTask、health、Loading 与 WebGL error 均为 `0`；artifact 为 `work/task335-b-surface-10000/result.json`。
+- 产品 `3` 文件 `+306 / -106`，工具 `3` 文件 `+200 / -133`；浏览器夹具 `475` 行，未超过 `500` 行。语法、差异、两项专项 Node、生产构建和增强后 10k 目标门通过。版本为 `0.3.18`，下一阶段只进入 335-C。

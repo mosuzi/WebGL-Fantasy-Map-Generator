@@ -332,6 +332,7 @@ export class PlaceholderMapRenderer {
     if (!this.gl) throw new Error("当前浏览器不支持 WebGL2");
 
     this.program = createProgram(this.gl, vertexShaderSource, fragmentShaderSource);
+    this.surfaceProgram = createProgram(this.gl, surfaceVertexShaderSource, fragmentShaderSource);
     this.cityIconLayer = createCityIconWebglLayer(this.gl);
     this.cityMovePreviewCanvas = null;
     this.cityMovePreviewGl = null;
@@ -366,6 +367,15 @@ export class PlaceholderMapRenderer {
       offset: this.gl.getUniformLocation(this.program, "u_offset"),
       pointMode: this.gl.getUniformLocation(this.program, "u_pointMode"),
       surfaceSideMode: this.gl.getUniformLocation(this.program, "u_surfaceSideMode")
+    };
+    this.surfaceLocations = {
+      position: this.gl.getAttribLocation(this.surfaceProgram, "a_position"),
+      identity: this.gl.getAttribLocation(this.surfaceProgram, "a_packedCellIdAndSide"),
+      color: this.gl.getAttribLocation(this.surfaceProgram, "a_color"),
+      scale: this.gl.getUniformLocation(this.surfaceProgram, "u_scale"),
+      offset: this.gl.getUniformLocation(this.surfaceProgram, "u_offset"),
+      pointMode: this.gl.getUniformLocation(this.surfaceProgram, "u_pointMode"),
+      surfaceSideMode: this.gl.getUniformLocation(this.surfaceProgram, "u_surfaceSideMode")
     };
     this.surfaceBaseBufferSet = createSurfaceBaseBufferSet(this.gl, new Float32Array(), {usage: this.gl.STATIC_DRAW});
     this.vertexBuffer = flattenSurfaceBaseBufferSet(this.surfaceBaseBufferSet)[0];
@@ -689,7 +699,10 @@ export class PlaceholderMapRenderer {
     this.pointVertexCount = pointVertices.length / 6;
     profile.stage("gpu-upload", "上传静态 GPU buffer", () => {
       this.recordBufferUpload("load-map-static", () => {
-        installSurfaceBaseBufferSet(this, createSurfaceBaseBufferSet(this.gl, vertices, {usage: this.gl.STATIC_DRAW}));
+        installSurfaceBaseBufferSet(this, createSurfaceBaseBufferSet(this.gl, vertices, {
+          usage: this.gl.STATIC_DRAW,
+          surfaceCellRanges: this.surfaceCellRanges
+        }));
         this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.surfacePatchBuffer);
         this.gl.bufferData(this.gl.ARRAY_BUFFER, new Float32Array(), this.gl.DYNAMIC_DRAW);
         uploadShoreSurfaceBuffers(this.gl, this, surfaceBundle);
@@ -807,6 +820,7 @@ export class PlaceholderMapRenderer {
     await stage("gpu-upload", "上传静态 GPU buffer", async () => {
       const surfaceBaseBufferSet = await createSurfaceBaseBufferSetAsync(this.gl, vertices, {
         usage: this.gl.STATIC_DRAW,
+        surfaceCellRanges: this.surfaceCellRanges,
         yieldToMain: () => yieldToBrowser({stageId: "gpu-upload-surface-base"})
       });
       installSurfaceBaseBufferSet(this, surfaceBaseBufferSet);
@@ -1029,7 +1043,10 @@ export class PlaceholderMapRenderer {
       this.landCoverVertexCount = surfaceBundle.landCovers.length / 6;
       this.waterCoverVertexCount = surfaceBundle.waterCovers.length / 6;
       const upload = this.recordBufferUpload("surface-refresh", () => {
-        installSurfaceBaseBufferSet(this, createSurfaceBaseBufferSet(this.gl, vertices, {usage: this.gl.STATIC_DRAW}));
+        installSurfaceBaseBufferSet(this, createSurfaceBaseBufferSet(this.gl, vertices, {
+          usage: this.gl.STATIC_DRAW,
+          surfaceCellRanges: this.surfaceCellRanges
+        }));
         this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.surfacePatchBuffer);
         this.gl.bufferData(this.gl.ARRAY_BUFFER, new Float32Array(), this.gl.DYNAMIC_DRAW);
         uploadShoreSurfaceBuffers(this.gl, this, surfaceBundle);
@@ -5551,13 +5568,30 @@ function uploadSurfaceBaseRanges(renderer, ranges) {
 
 function drawSurfaceBase(gl, renderer, depthFunction) {
   const bufferSet = currentSurfaceBaseBufferSet(renderer);
-  if (!bufferSet) {
-    drawSurfaceDepthBatch(gl, renderer, renderer.vertexBuffer, renderer.vertexCount, depthFunction);
-    return;
-  }
+  if (!bufferSet) return;
+  gl.useProgram(renderer.surfaceProgram);
+  gl.uniform1i(renderer.surfaceLocations.pointMode, 0);
+  gl.uniform1i(renderer.surfaceLocations.surfaceSideMode, 1);
+  gl.uniform1f(renderer.surfaceLocations.scale, renderer.camera.scale);
+  gl.uniform2f(renderer.surfaceLocations.offset, renderer.camera.offsetX, renderer.camera.offsetY);
+  gl.depthFunc(depthFunction);
   for (const segment of bufferSet.segments) {
-    drawSurfaceDepthBatch(gl, renderer, segment.buffer, segment.vertexCount, depthFunction);
+    if (!segment.vertexCount) continue;
+    gl.bindBuffer(gl.ARRAY_BUFFER, segment.geometryBuffer);
+    gl.enableVertexAttribArray(renderer.surfaceLocations.position);
+    gl.vertexAttribPointer(renderer.surfaceLocations.position, 2, gl.FLOAT, false, 3 * Float32Array.BYTES_PER_ELEMENT, 0);
+    gl.enableVertexAttribArray(renderer.surfaceLocations.identity);
+    gl.vertexAttribIPointer(renderer.surfaceLocations.identity, 1, gl.UNSIGNED_INT, 3 * Float32Array.BYTES_PER_ELEMENT, 2 * Float32Array.BYTES_PER_ELEMENT);
+    gl.bindBuffer(gl.ARRAY_BUFFER, segment.colorBuffer);
+    gl.enableVertexAttribArray(renderer.surfaceLocations.color);
+    gl.vertexAttribPointer(renderer.surfaceLocations.color, 3, gl.FLOAT, false, 3 * Float32Array.BYTES_PER_ELEMENT, 0);
+    gl.drawArrays(gl.TRIANGLES, 0, segment.vertexCount);
   }
+  gl.useProgram(renderer.program);
+  gl.uniform1i(renderer.locations.pointMode, 0);
+  gl.uniform1i(renderer.locations.surfaceSideMode, 1);
+  gl.uniform1f(renderer.locations.scale, renderer.camera.scale);
+  gl.uniform2f(renderer.locations.offset, renderer.camera.offsetX, renderer.camera.offsetY);
 }
 
 function summarizeRendererSurfaceBase(renderer) {
@@ -6866,6 +6900,24 @@ void main() {
   v_color = a_color;
   gl_PointSize = 4.0;
   float z = u_surfaceSideMode ? (a_color.a < 0.5 ? -0.5 : 0.5) : 0.0;
+  gl_Position = vec4(a_position * u_scale + u_offset, z, 1.0);
+}`;
+
+const surfaceVertexShaderSource = `#version 300 es
+in vec2 a_position;
+in uint a_packedCellIdAndSide;
+in vec4 a_color;
+uniform float u_scale;
+uniform vec2 u_offset;
+uniform bool u_pointMode;
+uniform bool u_surfaceSideMode;
+out vec4 v_color;
+
+void main() {
+  v_color = a_color;
+  gl_PointSize = 4.0;
+  bool water = (a_packedCellIdAndSide & 1u) == 1u;
+  float z = u_surfaceSideMode ? (water ? 0.5 : -0.5) : 0.0;
   gl_Position = vec4(a_position * u_scale + u_offset, z, 1.0);
 }`;
 
