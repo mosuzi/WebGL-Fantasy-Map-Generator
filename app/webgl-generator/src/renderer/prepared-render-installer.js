@@ -256,6 +256,8 @@ function createPreparedInstallTransaction(renderer, map, prepared, decoded, buff
       assign("waterCoverVertexCount", vertexCount(surfaceValues.waterCovers));
       }
       if (layers.line) {
+      assign("lineVertices", layers.line.vertices);
+      assign("shoreLineVertices", layers.line.shoreVertices);
       assign("shoreLinePathVertices", decoded.shoreLine?.pathVertices || new Map());
       assign("shoreLinePathObjectVertices", decoded.shoreLine?.pathObjectVertices || new WeakMap());
       assign("oceanCurrentLayerStats", layers.line.oceanCurrents);

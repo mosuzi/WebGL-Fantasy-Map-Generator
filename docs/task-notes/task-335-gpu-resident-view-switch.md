@@ -125,3 +125,11 @@ Worker 化继续用于生成、重生成、地图编辑、派生拓扑、撤销 
 - 政治生成跨独立 `newMap` 运行的最终颜色并非稳定 checksum 分母，因此验收没有把一次偶然数字改写成新 expected。正式工具在同一张图内先强制旧 Worker 生成国家 / 省份 framebuffer，再以最终旧画面资源为 baseline 执行 GPU 切换；两种模式逐像素 `mismatches=0 / maxDelta=0`，同时要求目标操作 Worker / surface refresh / LongTask 为 `0`。
 - 固定 `10004` cells 的目标门中，国家 / 省份同图 checksum 分别为 `4293181400 / 2882771796`，GPU 与各自 Worker 基线一致；surface set / segments / alias、cell attributes、political cache、picking 和 overlay 引用全部不变，控件、API、renderer、health、Loading 与 WebGL error 同源。artifact 为 `work/task335-e-political-views-10000/result.json`。
 - 产品 `1` 文件 `+14 / -3`；复用 D 浏览器夹具约 `+50 / -18`，测试增量高于产品是因为必须在页内保留同图双 framebuffer、隔离旧 Worker 基线和产品 LongTask 后再逐像素比较，未新建第二套浏览器 harness，文件总长 `154` 行。语法、差异、cell attributes / prepared installer Node、生产构建和 10k 目标门通过。版本为 `0.3.21`，下一阶段只进入 335-F。
+
+## 12. 335-F：主题、海底和普通图层本地显示提交（已接受）
+
+- 海底开关只在当前颜色模式满足 GPU 常驻条件时改 `showOceanHeight` 并重绘，不再刷新 surface / line；不满足条件时仍保留原 Worker 安全路径，平滑 correction 不在本阶段越界处理。
+- 普通图层只对白名单中的独立 draw gate 开放本地提交：标签、国家 / 省份 / 地区标签、测量、比例尺、地图徽记，以及缓存新鲜的路线 / 河流。城市、人口、Marker、资源、军事、岸线、政治边界、地区线、洋流、首次网格诊断和 dirty 动态 buffer 明确拒绝本地快路，不能把真实几何变化伪装成零重建。
+- 主题切换在 GPU 常驻 surface 上不再调用 Worker：surface 直接读取新主题 uniform；既有标签节点原位更新 resolved style 并分片让步；正式 line / shore CPU 顶点只改主题颜色并原位上传，不再遍历全部 hard-cell 岸线邻接；道路继续使用既有异步分片 builder。目标链不替换 overlay、不重绑 picking、不重建 surface，失败用同一异步本地路径恢复旧主题。
+- 固定 `10004` cells 的 Chrome 目标门中，主题、海底、标签、路线响应分别为 `48.6 / 12.5 / 14.2 / 13.2ms`，全部低于 `150 / 100 / 50 / 50ms` 门限。主题和海底与同图 Worker framebuffer 均为 `mismatches=0 / maxDelta=0`，标签 resolved style 同源；四项 Worker run、surface refresh、overlay replace、picking rebuild 与 LongTask 均为 `0`，surface、overlay、picking 和 route buffer 引用不变，health、Loading 与 WebGL error 为 `0`。artifact 为 `work/task335-f-display-mutations-10000/result.json`。
+- 新增纯 Node 契约门并复用 GPU 视图浏览器夹具；产品 `3` 文件 `+165 / -15`，工具新增约 `+104 / -6`，浏览器夹具总长 `207` 行，未超过 `500` 行且测试增量低于产品。语法、差异、专项 Node、Worker 全合同、prepared installer、主题 / API 收敛 / display ledger、生产构建和目标浏览器门均通过。版本为 `0.3.22`，下一阶段只进入 335-G。

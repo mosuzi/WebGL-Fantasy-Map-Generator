@@ -3074,10 +3074,10 @@ function createRuntimeActions(state, documentRef, options = {}) {
       return result;
     }
     if (gpuResident) {
-      return operation.run(name, context => {
+      return operation.run(name, async context => {
         const startedAt = performance.now();
         try {
-          const result = apply();
+          const result = await apply();
           onCommitted();
           const totalMs = roundWorkerTelemetryMs(performance.now() - startedAt);
           state.lastDisplayRenderWorker = {
@@ -3092,7 +3092,7 @@ function createRuntimeActions(state, documentRef, options = {}) {
           };
           return result;
         } catch (error) {
-          rollback?.();
+          await rollback?.();
           throw error;
         }
       }, {message: "正在整理地图画面"});
@@ -3215,7 +3215,8 @@ function createRuntimeActions(state, documentRef, options = {}) {
         return runDisplayMutation(
           "layers.setVisible",
           () => setRuntimeLayerVisible(state, documentRef, layer, visible),
-          () => setRuntimeLayerVisible(state, documentRef, layer, previous)
+          () => setRuntimeLayerVisible(state, documentRef, layer, previous),
+          {gpuResident: state.renderer?.canApplyGpuResidentLayerVisibility?.([[layer, visible]]) === true}
         );
       },
       setManyVisible: entries => {
@@ -3226,15 +3227,18 @@ function createRuntimeActions(state, documentRef, options = {}) {
         return runDisplayMutation(
           "layers.setManyVisible",
           () => setRuntimeLayersVisible(state, documentRef, entries),
-          () => setRuntimeLayersVisible(state, documentRef, previous)
+          () => setRuntimeLayersVisible(state, documentRef, previous),
+          {gpuResident: state.renderer?.canApplyGpuResidentLayerVisibility?.(entries) === true}
         );
       },
       setTheme: themeId => {
         const previous = currentVisualThemeId(documentRef);
+        const gpuResident = state.renderer?.canApplyGpuResidentVisualTheme?.() === true;
         return runDisplayMutation(
           "layers.setTheme",
-          () => setRuntimeVisualTheme(state, documentRef, themeId),
-          () => setRuntimeVisualTheme(state, documentRef, previous)
+          () => setRuntimeVisualTheme(state, documentRef, themeId, {gpuResident}),
+          () => setRuntimeVisualTheme(state, documentRef, previous, {gpuResident}),
+          {gpuResident}
         );
       },
       exportTheme: (themeId, options = {}) => exportRuntimeVisualTheme(documentRef, themeId, options),
@@ -3248,7 +3252,8 @@ function createRuntimeActions(state, documentRef, options = {}) {
         return runDisplayMutation(
           "layers.setShowOceanHeight",
           () => setRuntimeOceanHeightVisible(state, documentRef, visible),
-          () => setRuntimeOceanHeightVisible(state, documentRef, previous)
+          () => setRuntimeOceanHeightVisible(state, documentRef, previous),
+          {gpuResident: state.renderer?.canApplyGpuResidentOceanHeight?.() === true}
         );
       },
       setSmoothCellBorders: enabled => {
@@ -3983,14 +3988,17 @@ function setRuntimeLayersVisible(state, documentRef, entries) {
   });
 }
 
-function setRuntimeVisualTheme(state, documentRef, themeId) {
+function setRuntimeVisualTheme(state, documentRef, themeId, {gpuResident = false} = {}) {
   const rawThemeId = String(themeId || "").trim();
   if (!rawThemeId) throw new Error("缺少视觉主题");
   const nextThemeId = normalizeVisualThemeId(rawThemeId);
   if (nextThemeId !== rawThemeId) throw new Error(`未知视觉主题：${themeId}`);
   return measureHealthOperation(state, "set-visual-theme", {visualTheme: nextThemeId}, () => {
     syncMapVisualThemeStore(state.map, nextThemeId);
-    applyRuntimeVisualThemeState(state, documentRef, nextThemeId);
+    const applied = applyRuntimeVisualThemeState(state, documentRef, nextThemeId, {gpuResident});
+    if (applied && typeof applied.then === "function") {
+      return applied.then(() => runtimeDisplayActionResult(state, documentRef, ["display-preference", "renderer", "runtime-panel"]));
+    }
     return runtimeDisplayActionResult(state, documentRef, ["display-preference", "renderer", "runtime-panel"]);
   });
 }
@@ -4071,7 +4079,7 @@ function executeVisualThemeCommand(state, documentRef, command) {
   return editApiResult(state, result);
 }
 
-function applyRuntimeVisualThemeState(state, documentRef, themeId, {force = false, preparedPresentation = false} = {}) {
+function applyRuntimeVisualThemeState(state, documentRef, themeId, {force = false, preparedPresentation = false, gpuResident = false} = {}) {
   const id = normalizeVisualThemeId(themeId);
   syncMapVisualThemeStore(state.map, id);
   persistUserVisualThemes(documentRef.defaultView?.localStorage);
@@ -4080,10 +4088,17 @@ function applyRuntimeVisualThemeState(state, documentRef, themeId, {force = fals
   }));
   syncRuntimeControlValue(documentRef, "visual-theme-preset", id);
   updateControlPreferences(documentRef, {visualTheme: id});
-  if (preparedPresentation) state.renderer?.setPreparedPresentation?.({visualTheme: id});
-  else state.renderer?.setVisualTheme?.(id, {force});
-  syncLabelStylesUi(state, documentRef);
-  updateRuntimePanel(documentRef, state);
+  let applied;
+  if (preparedPresentation) applied = state.renderer?.setPreparedPresentation?.({visualTheme: id});
+  else if (gpuResident) applied = state.renderer?.setVisualThemeGpuResident?.(id, {force});
+  else applied = state.renderer?.setVisualTheme?.(id, {force});
+  const finalize = () => {
+    syncLabelStylesUi(state, documentRef);
+    updateRuntimePanel(documentRef, state);
+  };
+  if (applied && typeof applied.then === "function") return applied.then(finalize);
+  finalize();
+  return applied;
 }
 
 function syncMapVisualThemeStore(map, preset) {

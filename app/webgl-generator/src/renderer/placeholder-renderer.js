@@ -424,6 +424,8 @@ export class PlaceholderMapRenderer {
     this.gridCellDiagnosticLineBuffer = this.gl.createBuffer();
     this.vertexCount = 0;
     this.surfaceVertices = new Float32Array();
+    this.lineVertices = new Float32Array();
+    this.shoreLineVertices = new Float32Array();
     this.surfacePatchVertices = new Float32Array();
     this.surfacePatchCellRanges = new Map();
     this.surfacePatchCells = new Set();
@@ -682,6 +684,8 @@ export class PlaceholderMapRenderer {
     const lineLayer = profile.stage("line-vertices", "构建线层顶点", () => buildLineVertices(map, this.layerVisibility, this.colorMode, this.shoreVisualPaths, this.stateVisualPaths, this.provinceVisualPaths, this.cellVisualMesh, this.viewOptions));
     const lineVertices = lineLayer.vertices;
     const shoreLineVertices = lineLayer.shoreVertices;
+    this.lineVertices = lineVertices;
+    this.shoreLineVertices = shoreLineVertices;
     this.shoreLinePathVertices = lineLayer.shoreLinePathVertices;
     this.shoreLinePathObjectVertices = lineLayer.shoreLinePathObjectVertices;
     const oceanCurrentVertices = lineLayer.oceanCurrentVertices;
@@ -803,6 +807,8 @@ export class PlaceholderMapRenderer {
     const lineLayer = await stage("line-vertices", "构建线层顶点", () => buildLineVertices(map, this.layerVisibility, this.colorMode, this.shoreVisualPaths, this.stateVisualPaths, this.provinceVisualPaths, this.cellVisualMesh, this.viewOptions));
     const lineVertices = lineLayer.vertices;
     const shoreLineVertices = lineLayer.shoreVertices;
+    this.lineVertices = lineVertices;
+    this.shoreLineVertices = shoreLineVertices;
     this.shoreLinePathVertices = lineLayer.shoreLinePathVertices;
     this.shoreLinePathObjectVertices = lineLayer.shoreLinePathObjectVertices;
     const oceanCurrentVertices = lineLayer.oceanCurrentVertices;
@@ -994,6 +1000,25 @@ export class PlaceholderMapRenderer {
       && !this.landCorrectionVertexCount && !this.waterCorrectionVertexCount && !this.landCoverVertexCount && !this.waterCoverVertexCount);
   }
 
+  canApplyGpuResidentOceanHeight() {
+    return this.canPresentGpuResidentColorMode(this.colorMode);
+  }
+
+  canApplyGpuResidentVisualTheme() {
+    return this.canPresentGpuResidentColorMode(this.colorMode);
+  }
+
+  canApplyGpuResidentLayerVisibility(entries = []) {
+    const requested = normalizeRequestedLayerVisibility(this.layerVisibility, entries);
+    const directLayers = new Set(["routes", "rivers", "labels", "stateLabels", "provinceLabels", "zoneLabels", "measurements", "scaleBar", "mapBadge"]);
+    for (const [layer, visible] of requested) {
+      if (!directLayers.has(layer)) return false;
+      if (visible && layer === "routes" && this.dynamicBuffersDirty.routes) return false;
+      if (visible && layer === "rivers" && this.dynamicBuffersDirty.rivers) return false;
+    }
+    return true;
+  }
+
   refreshCellAttributeCells(gridCells) {
     if (!this.map || !this.cellAttributeStore) return false;
     const patch = prepareCellAttributePatch(this.cellAttributeStore, this.map, gridCells);
@@ -1022,9 +1047,15 @@ export class PlaceholderMapRenderer {
       merge: (previous, next) => ({...(previous || {}), ...(next || {})}),
       apply: value => this.setViewOptions(value)
     })) return;
+    const optionKeys = Object.keys(options || {});
+    const gpuResidentOceanHeight = optionKeys.length === 1 && optionKeys[0] === "showOceanHeight" && this.canApplyGpuResidentOceanHeight();
     const shouldRefreshLineLayers = Object.prototype.hasOwnProperty.call(options, "smoothCellBorders");
     this.viewOptions = {...this.viewOptions, ...options};
     if (!this.map) return;
+    if (gpuResidentOceanHeight) {
+      this.draw();
+      return;
+    }
     this.refreshCellSurface({draw: false});
     if (shouldRefreshLineLayers) this.refreshLineLayers({draw: false});
     this.draw();
@@ -1045,6 +1076,67 @@ export class PlaceholderMapRenderer {
     this.dynamicBuffersDirty.routes = true;
     this.refreshLabels();
     this.draw();
+  }
+
+  async setVisualThemeGpuResident(themeId, {force = false, yieldToMain = defaultRendererYield} = {}) {
+    if (!this.canApplyGpuResidentVisualTheme()) throw new Error("当前显示状态不能直接切换视觉主题");
+    const theme = resolveVisualTheme(themeId);
+    if (!force && this.visualTheme.id === theme.id) return;
+    const map = this.map;
+    const previousTheme = this.visualTheme;
+    this.visualTheme = theme;
+    this.viewOptions = {...this.viewOptions, visualTheme: theme};
+    applyMapStageBackground(this.stage, map, theme);
+    this.refreshVisualThemeLineColors(previousTheme, theme);
+    await this.refreshLabelThemeStyles({yieldToMain});
+    if (this.layerVisibility.routes) {
+      const ready = await this.updateRouteBufferAsync({
+        yieldToBrowser: yieldToMain,
+        shouldContinue: () => this.map === map && this.visualTheme === theme
+      });
+      if (!ready) throw new Error("视觉主题更新期间地图显示状态已变化");
+    } else {
+      this.dynamicBuffersDirty.routes = true;
+    }
+    this.draw({updateDynamicBuffers: false});
+  }
+
+  async refreshLabelThemeStyles({yieldToMain = defaultRendererYield, budgetMs = 6} = {}) {
+    if (!this.map || !this.overlay) return;
+    const startedAt = performance.now();
+    const event = this.beginPerformanceEvent("labelThemeRefresh", {budgetMs}, startedAt);
+    let sliceStartedAt = performance.now();
+    try {
+      for (const item of this.labelItems) {
+        const resolvedStyle = resolveLabelStyle(this.map, item.styleType, this.visualTheme);
+        item.resolvedStyle = resolvedStyle;
+        item.metrics = estimateLabelTextBox(item.text, resolvedStyle);
+        applyResolvedLabelStyle(item.node, resolvedStyle);
+        if (performance.now() - sliceStartedAt < budgetMs) continue;
+        await yieldToMain();
+        sliceStartedAt = performance.now();
+      }
+      this.completePerformanceEvent(event, {ms: roundMs(performance.now() - startedAt), labels: this.labelItems.length}, performance.now());
+    } catch (error) {
+      this.failPerformanceEvent(event, error, {ms: roundMs(performance.now() - startedAt)}, performance.now());
+      throw error;
+    }
+  }
+
+  refreshVisualThemeLineColors(previousTheme, nextTheme) {
+    if (this.lineVertices.length !== this.lineVertexCount * 6 || this.shoreLineVertices.length !== this.shoreLineVertexCount * 6) {
+      this.refreshLineLayers({draw: false});
+      return {reused: false};
+    }
+    recolorThemeLineVertices(this.lineVertices, previousTheme, nextTheme, {shore: false});
+    recolorThemeLineVertices(this.shoreLineVertices, previousTheme, nextTheme, {shore: true});
+    const upload = this.recordBufferUpload("theme-line-recolor", () => {
+      this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.lineBuffer);
+      this.gl.bufferSubData(this.gl.ARRAY_BUFFER, 0, this.lineVertices);
+      this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.shoreLineBuffer);
+      this.gl.bufferSubData(this.gl.ARRAY_BUFFER, 0, this.shoreLineVertices);
+    }, {bufferGroup: "line-and-shore"});
+    return {reused: true, uploadMs: upload.ms};
   }
 
   setPreparedPresentation({visualTheme, unitPreferences} = {}) {
@@ -1475,6 +1567,8 @@ export class PlaceholderMapRenderer {
       const lineLayer = buildLineVertices(this.map, this.layerVisibility, this.colorMode, this.shoreVisualPaths, this.stateVisualPaths, this.provinceVisualPaths, this.cellVisualMesh, this.viewOptions, this.oceanCurrentHighlights);
       const lineVertices = lineLayer.vertices;
       const shoreLineVertices = lineLayer.shoreVertices;
+      this.lineVertices = lineVertices;
+      this.shoreLineVertices = shoreLineVertices;
       this.shoreLinePathVertices = lineLayer.shoreLinePathVertices;
       this.shoreLinePathObjectVertices = lineLayer.shoreLinePathObjectVertices;
       const oceanCurrentVertices = lineLayer.oceanCurrentVertices;
@@ -1505,6 +1599,7 @@ export class PlaceholderMapRenderer {
     try {
       const shoreLineLayer = buildShoreLineVerticesCached(this.map, this.layerVisibility, this.colorMode, this.shoreVisualPaths, this.cellVisualMesh, this.viewOptions, this.shoreLinePathVertices, this.shoreLinePathObjectVertices);
       const shoreLineVertices = shoreLineLayer.vertices;
+      this.shoreLineVertices = shoreLineVertices;
       this.shoreLinePathVertices = shoreLineLayer.pathVertices;
       this.shoreLinePathObjectVertices = shoreLineLayer.pathObjectVertices;
       this.shoreLineVertexCount = shoreLineVertices.length / 6;
@@ -6733,6 +6828,43 @@ function withAlpha(color, alpha) {
   return [color?.[0] ?? 0, color?.[1] ?? 0, color?.[2] ?? 0, alpha];
 }
 
+function recolorThemeLineVertices(vertices, previousTheme, nextTheme, {shore = false} = {}) {
+  const previousLines = previousTheme?.lines || {};
+  const nextLines = nextTheme?.lines || {};
+  const replacements = shore
+    ? [
+        [previousLines.coastline, nextLines.coastline],
+        [previousLines.lakeShore, nextLines.lakeShore]
+      ]
+    : [
+        [previousLines.stateBorder, nextLines.stateBorder],
+        [previousLines.provinceBorder, nextLines.provinceBorder]
+      ];
+  const previousBackground = previousTheme?.canvas?.background;
+  const nextBackground = nextTheme?.canvas?.background;
+  for (let offset = 2; offset < vertices.length; offset += 6) {
+    const replacement = replacements.find(([previous]) => themeVertexColorMatches(vertices, offset, previous, true));
+    if (replacement) {
+      writeThemeVertexColor(vertices, offset, replacement[1], true);
+      continue;
+    }
+    if (!shore && themeVertexColorMatches(vertices, offset, previousBackground, false)) writeThemeVertexColor(vertices, offset, nextBackground, false);
+  }
+}
+
+function themeVertexColorMatches(vertices, offset, color, includeAlpha) {
+  if (!Array.isArray(color)) return false;
+  const channels = includeAlpha ? 4 : 3;
+  for (let index = 0; index < channels; index++) if (vertices[offset + index] !== Math.fround(Number(color[index]) || 0)) return false;
+  return true;
+}
+
+function writeThemeVertexColor(vertices, offset, color, includeAlpha) {
+  if (!Array.isArray(color)) return;
+  const channels = includeAlpha ? 4 : 3;
+  for (let index = 0; index < channels; index++) vertices[offset + index] = color[index];
+}
+
 function snapshotCamera(camera) {
   return {
     scale: Number(camera?.scale) || 1,
@@ -6782,6 +6914,7 @@ function createRendererPerformanceEvents() {
     "selectionMesh",
     "surfaceRefresh",
     "lineRefresh",
+    "labelThemeRefresh",
     "shoreLineRefresh",
     "pointRefresh",
     "bufferUpload",
