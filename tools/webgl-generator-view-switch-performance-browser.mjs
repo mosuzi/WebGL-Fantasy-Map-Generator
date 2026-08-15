@@ -6,18 +6,19 @@ import {createRequire} from "node:module";
 import {dirname, join, resolve} from "node:path";
 import {fileURLToPath} from "node:url";
 import {waitForApiReady} from "./webgl-generator-api-browser-ready.mjs";
-
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const source = join(root, "source", "Fantasy-Map-Generator");
 const port = 5582;
 const timeoutMs = 900_000;
 const requestedCells = readRequestedCells(process.argv.slice(2));
 const b2Display = process.argv.includes("--b2-display");
-const outputDir = join(root, "work", `task334-b2-view-switch-${requestedCells}`);
+const stageALedger = process.argv.includes("--stage-a-ledger");
+const stageBSurface = process.argv.includes("--stage-b-surface");
+const stageCCellAttributes = process.argv.includes("--stage-c-cell-attributes");
+const outputDir = join(root, "work", `${stageCCellAttributes ? "task335-c-cell-attributes" : stageBSurface ? "task335-b-surface" : stageALedger ? "task335-a-view-ledger" : "task334-b2-view-switch"}-${requestedCells}`);
 const server = spawn(process.execPath, [join(root, "tools", "serve-prototype.mjs"), "--host", "127.0.0.1", "--port", String(port), "--dir", join(root, "dist", "webgl-generator")], {stdio: "ignore"});
 const playwright = createRequire(join(source, "package.json"))("playwright");
 let browser;
-
 try {
   await waitServer();
   browser = await playwright.chromium.launch({headless: true, channel: "chrome"});
@@ -28,7 +29,7 @@ try {
   page.on("pageerror", error => pageErrors.push(error.message));
   await page.goto(`http://127.0.0.1:${port}?healthClear=1`, {waitUntil: "domcontentloaded"});
   await waitForApiReady(page, timeoutMs);
-  const report = await page.evaluate(runDiagnostic, requestedCells);
+  const report = await page.evaluate(runDiagnostic, {requestedCells, stageALedger, stageBSurface, stageCCellAttributes});
   const performanceErrors = consoleErrors.filter(text => /\[FMG health\] (operation-stall|main-thread-long-task|render-frame-gap|input-handler-stall)/.test(text));
   const applicationErrors = consoleErrors.filter(text => !performanceErrors.includes(text));
   const result = {...report, console: {performanceErrors, applicationErrors, pageErrors}};
@@ -36,7 +37,7 @@ try {
   writeFileSync(join(outputDir, "raw-result.json"), `${JSON.stringify(result, null, 2)}\n`);
   assert.deepEqual(applicationErrors, [], "视图切换出现应用 console.error");
   assert.deepEqual(pageErrors, [], "视图切换出现 pageerror");
-  assertAcceptance(result, requestedCells, {b2Display});
+  assertAcceptance(result, requestedCells, {b2Display, stageALedger, stageBSurface, stageCCellAttributes});
   mkdirSync(outputDir, {recursive: true});
   writeFileSync(join(outputDir, "result.json"), `${JSON.stringify(result, null, 2)}\n`);
   console.log(JSON.stringify({
@@ -55,6 +56,7 @@ try {
       computeMs: item.worker?.telemetry?.computeMs,
       renderPrepareMs: item.worker?.telemetry?.renderPrepareMs,
       timings: item.timings,
+      ledger: item.worker?.ledger || null,
       longTasks: item.longTasks,
       slowSpans: item.spans.filter(span => span.ms >= 20)
     }))
@@ -64,8 +66,7 @@ try {
   server.kill();
   await Promise.race([new Promise(done => server.once("exit", done)), delay(5000)]);
 }
-
-async function runDiagnostic(requestedCells) {
+async function runDiagnostic({requestedCells, stageALedger, stageBSurface, stageCCellAttributes}) {
   const api = window.webglGeneratorApi;
   const app = window.__webglGeneratorApp;
   const ensure = (condition, message) => { if (!condition) throw new Error(message); };
@@ -80,7 +81,6 @@ async function runDiagnostic(requestedCells) {
   if (route) unwrap(api.selection.highlight([{kind: "route", id: route.id ?? route.i}]), "highlight route");
   await drain();
   window.__webglGeneratorHealth?.clear?.();
-
   const trace = {spans: [], longTasks: [], loafs: []};
   const restores = [];
   const wrap = (owner, name, label = name) => {
@@ -109,7 +109,6 @@ async function runDiagnostic(requestedCells) {
   ]) wrap(app.renderer, name, `renderer:${name}`);
   wrap(app.renderer?.overlay, "replaceChildren", "overlay:replaceChildren");
   wrap(app.renderer?.cityIconLayer, "setInstances", "city:setInstances");
-
   const longTaskObserver = new PerformanceObserver(list => trace.longTasks.push(...list.getEntries().map(entry => ({startTime: entry.startTime, duration: entry.duration, name: entry.name}))));
   longTaskObserver.observe({type: "longtask", buffered: false});
   const loafObserver = PerformanceObserver.supportedEntryTypes?.includes("long-animation-frame") ? new PerformanceObserver(list => trace.loafs.push(...list.getEntries().map(entry => ({
@@ -118,7 +117,6 @@ async function runDiagnostic(requestedCells) {
     scripts: [...(entry.scripts || [])].map(script => ({startTime: script.startTime, duration: script.duration, sourceFunctionName: script.sourceFunctionName || ""})).filter(script => script.duration >= 5)
   })))) : null;
   loafObserver?.observe({type: "long-animation-frame", buffered: false});
-
   const themes = unwrap(api.layers.listThemes(), "list themes");
   const currentTheme = themes.current || app.renderer.visualTheme?.id || "default";
   const alternateTheme = themes.themes.map(item => item.value || item.id).find(value => value && value !== currentTheme);
@@ -146,11 +144,14 @@ async function runDiagnostic(requestedCells) {
     ["option:labels-restore", () => api.layers.setMaxCityLabels(original.labels)]
   ];
   const operations = [];
-  let uiConvergence, viewCameraConvergence;
+  let uiConvergence, viewCameraConvergence, stageA, stageB, stageC;
   try {
     for (const [name, action] of actions) operations.push(await runAction(name, action));
     viewCameraConvergence = await runViewCameraConvergence();
     uiConvergence = await runUiConvergence();
+    if (stageALedger) stageA = await runStageAMatrix();
+    if (stageBSurface) stageB = runStageBSurfaceParity();
+    if (stageCCellAttributes) stageC = runStageCCellAttributes();
   } finally {
     longTaskObserver.disconnect();
     loafObserver?.disconnect();
@@ -158,8 +159,7 @@ async function runDiagnostic(requestedCells) {
   }
   const finalHealth = unwrap(api.info.healthEvents({severity: "error", limit: 100}), "health");
   const finalStats = unwrap(api.info.runtimeStats(), "runtime stats");
-  return {ok: true, cells: app.map.grid.cells.i.length, operations, viewCameraConvergence, uiConvergence, final: {health: finalHealth.events || [], loading: finalStats.loading, glError: app.renderer.getStats().draw?.glError ?? app.renderer.lastDraw?.glError ?? 0}};
-
+  return {ok: true, cells: app.map.grid.cells.i.length, operations, viewCameraConvergence, uiConvergence, stageA, stageB, stageC, final: {health: finalHealth.events || [], loading: finalStats.loading, glError: app.renderer.getStats().draw?.glError ?? app.renderer.lastDraw?.glError ?? 0}};
   async function runAction(name, action) {
     await drain();
     trace.longTasks.push(...longTaskObserver.takeRecords().map(entry => ({startTime: entry.startTime, duration: entry.duration, name: entry.name})));
@@ -203,7 +203,7 @@ async function runDiagnostic(requestedCells) {
     const last = app.lastDisplayRenderWorker;
     return {
       name, wallMs: round(fulfilledAt - startedAt), stableMs: round(endedAt - startedAt), invariant, loading,
-      worker: last && last !== previousDisplayEvidence ? {operation: last.operation, layers: last.layers, surface: last.surface || null, cache: last.cache, telemetry: last.worker?.telemetry || null, session: last.worker?.session || last.session || null, finalSession: last.session || null} : null,
+      worker: last && last !== previousDisplayEvidence ? {operation: last.operation, layers: last.layers, surface: last.surface || null, cache: last.cache, telemetry: last.worker?.telemetry || null, session: last.worker?.session || last.session || null, finalSession: last.session || null, ledger: structuredClone(last.ledger || null)} : null,
       timings: last && last !== previousDisplayEvidence ? last.timings || null : null,
       spans: trace.spans.slice(marks.spans).map(span => ({...span, ms: round(span.end - span.start)})),
       longTasks: trace.longTasks.slice(marks.longTasks).filter(entry => entry.startTime >= startedAt && entry.startTime < endedAt),
@@ -268,12 +268,102 @@ async function runDiagnostic(requestedCells) {
     return {before, renderer, control: Boolean(control.checked), api: apiState, longTasks: trace.longTasks.slice(longTaskStart)};
   }
 
+  async function runStageAMatrix() {
+    const city = app.map.settlements?.cities?.find(item => item && !item.removed);
+    ensure(city, "335-A 缺少 revision 推进用城市");
+    const sessionBeforeRevision = app.mapWorkerCoordinator.getSessionSnapshot();
+    const revisionBefore = app.mapRevision.getSnapshot().mapRevision;
+    unwrap(await api.edit.cities.rename(city.id ?? city.i, `${city.name || "城市"}-A`), "335-A revision rename");
+    const revisionAfter = app.mapRevision.getSnapshot().mapRevision;
+    ensure(revisionAfter === revisionBefore + 1, "335-A 正式编辑未推进唯一 revision");
+    const revisionWarm = await runAction("stage-a:revision-warm", () => api.layers.setViewMode("states"));
+    const sessionBeforeLoss = app.mapWorkerCoordinator.getSessionSnapshot();
+    ensure(app.mapWorkerCoordinator.invalidateSession("task335-a-session-lost") === true, "335-A 未能构造 session 丢失边界");
+    const sessionLost = await runAction("stage-a:session-lost", () => api.layers.setViewMode("provinces"));
+    const rapid = await runRapidViewConvergence();
+    return {revisionBefore, revisionAfter, sessionBeforeRevision, sessionBeforeLoss, revisionWarm, sessionLost, rapid};
+  }
+
+  async function runRapidViewConvergence() {
+    await drain();
+    const longTaskStart = trace.longTasks.length;
+    const first = api.layers.setViewMode("states");
+    await Promise.resolve();
+    const second = api.layers.setViewMode("height");
+    const [firstResponse, secondResponse] = await Promise.all([first, second]);
+    await drain();
+    trace.longTasks.push(...longTaskObserver.takeRecords().map(entry => ({startTime: entry.startTime, duration: entry.duration, name: entry.name})));
+    const renderer = app.renderer.colorMode;
+    const selectedText = document.querySelector('[role="radiogroup"][aria-label="视图"] .el-segmented__item.is-selected .el-segmented__item-label')?.textContent?.trim() || "";
+    const control = new Map([["高度", "height"], ["国家", "states"], ["省份", "provinces"], ["生物群系", "biomes"], ["人口", "population"], ["文化", "cultures"], ["宗教", "religions"], ["政体", "governments"]]).get(selectedText) || "";
+    const bridge = document.querySelector('.ui-segmented-mode-bridge.active')?.dataset?.mode || "";
+    const apiMode = unwrap(api.layers.get(), "335-A rapid state").colorMode;
+    ensure(renderer === control && renderer === bridge && renderer === apiMode, `335-A 快速切换最终状态未同源：${JSON.stringify({renderer, control, bridge, apiMode})}`);
+    return {
+      first: {ok: firstResponse?.ok === true, code: firstResponse?.error?.code || null},
+      second: {ok: secondResponse?.ok === true, code: secondResponse?.error?.code || null},
+      final: {renderer, control, selectedText, bridge, api: apiMode},
+      longTasks: trace.longTasks.slice(longTaskStart)
+    };
+  }
+
+  function runStageBSurfaceParity() {
+    const renderer = app.renderer, gl = renderer.gl, set = renderer.surfaceBaseBufferSet, source = renderer.surfaceVertices;
+    ensure(set?.segments?.length && source instanceof Float32Array, "335-B 缺少正式 surface base");
+    ensure(renderer.vertexBuffer === set.segments[0].geometryBuffer, "335-B legacy alias 未指向首段稳定几何");
+    const spans = [...renderer.surfaceCellRanges].map(([cellId, range]) => ({cellId, ...range})).sort((a, b) => a.start - b.start);
+    let spanIndex = 0, sourceOffset = 0, vertices = 0, geometryBytes = 0, colorBytes = 0;
+    const originalBinding = gl.getParameter(gl.ARRAY_BUFFER_BINDING);
+    try {
+      for (const segment of set.segments) {
+        ensure(segment.geometryBuffer !== segment.colorBuffer && segment.byteLength <= 8 * 1024 * 1024, "335-B 分段 buffer 结构错误");
+        const geometry = new Float32Array(segment.vertexCount * 3), identity = new Uint32Array(geometry.buffer), colors = new Float32Array(segment.vertexCount * 3);
+        gl.bindBuffer(gl.ARRAY_BUFFER, segment.geometryBuffer); gl.getBufferSubData(gl.ARRAY_BUFFER, 0, geometry);
+        gl.bindBuffer(gl.ARRAY_BUFFER, segment.colorBuffer); gl.getBufferSubData(gl.ARRAY_BUFFER, 0, colors);
+        for (let vertex = 0; vertex < segment.vertexCount; vertex++, sourceOffset += 6) {
+          while (spanIndex < spans.length && spans[spanIndex].end <= sourceOffset) spanIndex++;
+          const span = spans[spanIndex], expectedCell = span && span.start <= sourceOffset && sourceOffset < span.end ? span.cellId : 0x3fffffff;
+          const packed = identity[vertex * 3 + 2], expectedWater = source[sourceOffset + 5] >= 0.5 ? 1 : 0;
+          ensure(geometry[vertex * 3] === source[sourceOffset] && geometry[vertex * 3 + 1] === source[sourceOffset + 1], "335-B GPU position 漂移");
+          ensure((packed >>> 1) === expectedCell && (packed & 1) === expectedWater, "335-B GPU cell identity / side 漂移");
+          for (let channel = 0; channel < 3; channel++) ensure(colors[vertex * 3 + channel] === source[sourceOffset + 2 + channel], "335-B GPU color 漂移");
+        }
+        vertices += segment.vertexCount; geometryBytes += segment.byteLength; colorBytes += segment.colorByteLength;
+      }
+    } finally { gl.bindBuffer(gl.ARRAY_BUFFER, originalBinding); }
+    ensure(sourceOffset === source.length && vertices === renderer.vertexCount && geometryBytes === set.byteLength && colorBytes === set.colorByteLength, "335-B surface 聚合统计漂移");
+    const pixels = compareSurfaceBasePixels(renderer, source, set);
+    return {segments: set.segments.length, vertices, geometryBytes, colorBytes, totalGpuBytes: set.totalGpuByteLength, alias: true, pixels, glError: gl.getError()};
+  }
+
+  function compareSurfaceBasePixels(renderer, source, set) {
+    const gl = renderer.gl, pixels = () => { const value = new Uint8Array(renderer.canvas.width * renderer.canvas.height * 4); gl.readPixels(0, 0, renderer.canvas.width, renderer.canvas.height, gl.RGBA, gl.UNSIGNED_BYTE, value); return value; };
+    const clear = () => { gl.viewport(0, 0, renderer.canvas.width, renderer.canvas.height); gl.clearColor(...renderer.visualTheme.canvas.background); gl.depthMask(true); gl.clearDepth(0.5); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT); gl.enable(gl.DEPTH_TEST); gl.depthFunc(gl.ALWAYS); };
+    const legacy = gl.createBuffer(); let packedPixels, legacyPixels;
+    try {
+      clear(); gl.useProgram(renderer.surfaceProgram); gl.uniform1i(renderer.surfaceLocations.pointMode, 0); gl.uniform1i(renderer.surfaceLocations.surfaceSideMode, 1); gl.uniform1f(renderer.surfaceLocations.scale, renderer.camera.scale); gl.uniform2f(renderer.surfaceLocations.offset, renderer.camera.offsetX, renderer.camera.offsetY);
+      for (const segment of set.segments) { gl.bindBuffer(gl.ARRAY_BUFFER, segment.geometryBuffer); gl.enableVertexAttribArray(renderer.surfaceLocations.position); gl.vertexAttribPointer(renderer.surfaceLocations.position, 2, gl.FLOAT, false, 12, 0); gl.enableVertexAttribArray(renderer.surfaceLocations.identity); gl.vertexAttribIPointer(renderer.surfaceLocations.identity, 1, gl.UNSIGNED_INT, 12, 8); gl.bindBuffer(gl.ARRAY_BUFFER, segment.colorBuffer); gl.enableVertexAttribArray(renderer.surfaceLocations.color); gl.vertexAttribPointer(renderer.surfaceLocations.color, 3, gl.FLOAT, false, 12, 0); gl.drawArrays(gl.TRIANGLES, 0, segment.vertexCount); }
+      packedPixels = pixels();
+      clear(); gl.useProgram(renderer.program); gl.uniform1i(renderer.locations.pointMode, 0); gl.uniform1i(renderer.locations.surfaceSideMode, 1); gl.uniform1f(renderer.locations.scale, renderer.camera.scale); gl.uniform2f(renderer.locations.offset, renderer.camera.offsetX, renderer.camera.offsetY); gl.bindBuffer(gl.ARRAY_BUFFER, legacy); gl.bufferData(gl.ARRAY_BUFFER, source, gl.STATIC_DRAW); gl.enableVertexAttribArray(renderer.locations.position); gl.vertexAttribPointer(renderer.locations.position, 2, gl.FLOAT, false, 24, 0); gl.enableVertexAttribArray(renderer.locations.color); gl.vertexAttribPointer(renderer.locations.color, 4, gl.FLOAT, false, 24, 8); gl.drawArrays(gl.TRIANGLES, 0, renderer.vertexCount); legacyPixels = pixels();
+      let hash = 2166136261, mismatches = 0, maxDelta = 0, first = null;
+      for (let index = 0; index < packedPixels.length; index++) { const delta = Math.abs(packedPixels[index] - legacyPixels[index]); hash = Math.imul((hash ^ packedPixels[index]) >>> 0, 16777619) >>> 0; if (!delta) continue; mismatches++; maxDelta = Math.max(maxDelta, delta); first ||= {index, packed: packedPixels[index], legacy: legacyPixels[index]}; }
+      return {checksum: hash, mismatches, maxDelta, first};
+    } finally { gl.deleteBuffer(legacy); renderer.draw({updateDynamicBuffers: false, updateOverlay: false}); }
+  }
+
+  function runStageCCellAttributes() {
+    const renderer = app.renderer, before = renderer.cellAttributeStore, textures = store => [store.textures.identities, store.textures.terrain, store.textures.numeric, ...Object.values(store.textures.palettes)];
+    const oldTextures = textures(before); ensure(renderer.refreshCellAttributeCells([0, 1, renderer.map.grid.cells.i.length - 1]) === true, "335-C 局部 attribute patch 未执行"); ensure(renderer.restoreCellAttributeStore() === true, "335-C attribute restore 未执行");
+    const after = renderer.cellAttributeStore, current = textures(after), stats = renderer.getStats().cellAttributeStore;
+    return {sameSnapshot: after.snapshot === before.snapshot, replaced: oldTextures.every(texture => !renderer.gl.isTexture(texture)) && current.every(texture => renderer.gl.isTexture(texture)), textures: current.length, stats, glError: renderer.gl.getError()};
+  }
+
   function summarize(object) { return object ? {kind: object.kind, id: object.id ?? object.i} : null; }
   function round(value) { return Math.round(Number(value || 0) * 10) / 10; }
   function drain() { return new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(resolve, 100)))); }
 }
 
-function assertAcceptance(result, requested, {b2Display = false} = {}) {
+function assertAcceptance(result, requested, {b2Display = false, stageALedger = false, stageBSurface = false, stageCCellAttributes = false} = {}) {
   const expectedCells = requested === 100_000 ? 99_846 : 10_004;
   assert.equal(result.cells, expectedCells, `${requested} 档实际 cell 数漂移`);
   assert.deepEqual(result.final.health, [], "视图切换出现 health error");
@@ -337,6 +427,37 @@ function assertAcceptance(result, requested, {b2Display = false} = {}) {
             : "layers.setMaxCityLabels";
     assert.ok(operation.worker.operation?.id, `${operation.name} 缺少当前 operation ID`);
     assert.equal(operation.worker.operation?.name, expectedName, `${operation.name} Worker 证据错归到其它操作`);
+  }
+  if (stageALedger) {
+    for (const operation of workerOperations) {
+      assert.equal(operation.worker.ledger?.path, "warm", `${operation.name} 未归入 warm 账本`);
+      assert.equal(operation.worker.ledger?.reused, true, `${operation.name} warm 账本复用标志错误`);
+      assert.ok(Number.isFinite(operation.worker.ledger?.frames?.firstAnimationFrameMs), `${operation.name} 缺少首个 animation frame 时间`);
+      assert.ok(Number.isFinite(operation.worker.ledger?.frames?.presentedFrameMs), `${operation.name} 缺少已呈现 frame 时间`);
+    }
+    const matrix = result.stageA;
+    assert.equal(matrix.revisionAfter, matrix.revisionBefore + 1, "335-A revision 分母漂移");
+    assert.equal(matrix.revisionWarm.worker.ledger.path, "warm", "revision 推进后必须复用已同步 session");
+    assert.equal(matrix.revisionWarm.worker.ledger.sessionBefore.binding.mapRevision, matrix.revisionAfter, "revision warm session 未推进到当前 revision");
+    assert.equal(matrix.sessionLost.worker.ledger.path, "cold", "session 丢失后必须归入 cold");
+    assert.equal(matrix.sessionLost.worker.ledger.reused, false, "session 丢失后不得伪报复用");
+    assert.ok(matrix.sessionLost.worker.ledger.inputPackets > 3, "session 丢失后未记录完整输入分母");
+    assert.notEqual(matrix.sessionBeforeLoss.id, matrix.sessionLost.worker.finalSession.id, "session 丢失后仍沿用旧 session id");
+    assert.deepEqual(matrix.rapid.first, {ok: true, code: null}, "快速切换首个意图基线漂移");
+    assert.deepEqual(matrix.rapid.second, {ok: false, code: "operation_busy"}, "快速切换第二意图 busy 基线漂移");
+    assert.deepEqual(matrix.rapid.longTasks, [], "快速视图竞争出现 LongTask");
+  }
+  if (stageBSurface) {
+    assert.equal(requested, 10_000, "335-B 浏览器门只允许 10k");
+    assert.equal(result.stageB.alias, true, "335-B surface alias 漂移");
+    assert.equal(result.stageB.glError, 0, "335-B surface parity 后 WebGL error");
+    assert.equal(result.stageB.geometryBytes, result.stageB.vertices * 12, "335-B 几何未收敛为12 bytes/vertex");
+    assert.equal(result.stageB.colorBytes, result.stageB.vertices * 12, "335-B 兼容颜色流未收敛为12 bytes/vertex");
+    assert.deepEqual({mismatches: result.stageB.pixels.mismatches, maxDelta: result.stageB.pixels.maxDelta, first: result.stageB.pixels.first}, {mismatches: 0, maxDelta: 0, first: null}, "335-B packed surface 像素与 legacy surface 不同源");
+  }
+  if (stageCCellAttributes) {
+    assert.equal(requested, 10_000, "335-C 浏览器门只允许 10k");
+    assert.deepEqual({sameSnapshot: result.stageC.sameSnapshot, replaced: result.stageC.replaced, textures: result.stageC.textures, cells: result.stageC.stats.cellCount, glError: result.stageC.glError}, {sameSnapshot: true, replaced: true, textures: 8, cells: result.cells, glError: 0}, "335-C 真实纹理 patch / restore 漂移");
   }
   const registered = [];
   for (const operation of result.operations) {

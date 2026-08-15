@@ -288,6 +288,10 @@ export function createWorkerTaskCoordinator({createWorker, getBinding, validateB
       };
       const onAbort = () => finish(reject, abortError(signal?.reason));
       const fail = error => {
+        if (error?.code === "worker_build_mismatch") {
+          finish(reject, error);
+          return;
+        }
         if (accepted) {
           finish(reject, error);
           return;

@@ -20,6 +20,7 @@ import {
   createWorkerTaskRequest,
   createWorkerTaskStreamAck,
   createWorkerTaskStreamPacket,
+  WORKER_TASK_BUILD_ID,
   WORKER_TASK_MESSAGE
 } from "../app/webgl-generator/src/runtime/worker-task-protocol.js";
 
@@ -259,6 +260,7 @@ class FakeWorker {
   }
 
   emitMessage(message, transferables = []) {
+    if (this.options.mismatchBuild) message = {...message, buildId: "stale-worker-build"};
     const cloned = structuredClone(message, transferables.length ? {transfer: transferables} : undefined);
     this.emit("message", {data: cloned});
   }
@@ -317,6 +319,21 @@ for (const fixture of strictFallbackCases) {
   assert.equal(strictFallbacks, 0, `${fixture.name} 禁止降级时不得触发 onFallback`);
   assert.equal(strictCoordinator.getSessionSnapshot(), null, `${fixture.name} 禁止降级失败后不得保留 session`);
 }
+
+let buildMismatchFallbacks = 0;
+await assert.rejects(
+  createWorkerTaskCoordinator({
+    createWorker: () => new FakeWorker({mismatchBuild: true}),
+    getBinding: () => binding,
+    validateBinding: () => true,
+    onFallback: () => { buildMismatchFallbacks++; }
+  }).run("regeneration.compute", {map: original, kind: "zones"}),
+  error => error?.code === "worker_build_mismatch"
+    && error?.details?.expectedBuildId === WORKER_TASK_BUILD_ID
+    && error?.details?.actualBuildId === "stale-worker-build",
+  "页面与 Worker build 失配必须直接拒绝"
+);
+assert.equal(buildMismatchFallbacks, 0, "build 失配不得降级到主线程");
 
 const boundedWorker = new FakeWorker({inputAckDelayMs: 2});
 const boundedResult = await createWorkerTaskCoordinator({
@@ -1213,7 +1230,7 @@ function verifyAppDeferredReplayStaticContract() {
   assert.match(displayFlow, /ownerCurrent \|\| !install\.committed/u, "显示失败清理必须区分当前图与 detached committed owner");
   assert.match(displayFlow, /renderer\.restoreDeferredWorkerRenderPresentation/u, "显示失败必须恢复展示标量");
   assert.match(displayFlow, /renderer\.abortWorkerRenderInstall/u, "显示失败必须解冻并清理 deferred queue");
-  assert.match(displayFlow, /error\?\.code === "worker_fallback_disabled" && ownerCurrent/u, "仅 Worker 预接受不可用且地图仍属当前事务时允许兼容路径");
+  assert.match(displayFlow, /error\?\.code === "worker_fallback_disabled" && ownerCurrent && !isRetryableDisplaySessionError\(error\)/u, "仅非会话自愈错误且地图仍属当前事务时允许兼容路径");
   assert.match(displayFlow, /message: "正在改用兼容方式继续处理"/u, "兼容阶段必须使用普通用户可理解的中文文案");
   assert.ok(displayFlow.indexOf("renderer.abortWorkerRenderInstall?.()") < displayFlow.lastIndexOf("return apply()"), "兼容路径必须先完整恢复 Worker 事务再执行原同步入口");
   assert.match(source, /queueCommandMapReplicaPatch\(state, mutation, before, after, \{[\s\S]*?includeCompute: !state\?\.workerSessionMutationGuard/u, "map revision 前进必须区分 Worker 已更新的计算镜像");
@@ -1231,8 +1248,10 @@ function verifyAppDeferredReplayStaticContract() {
     assert.ok(displayUiRestore.includes(marker), `显示控件恢复缺少正式 renderer 来源：${marker}`);
   }
   assert.doesNotMatch(displayUiRestore, /readControlPreferences/u, "显示控件恢复不得读取已经被用户改写的 DOM 偏好");
-  assert.match(source, /invokeRuntimeDisplayActionFromUi\(state, documentRef,[\s\S]*?catch\(error => \{[\s\S]*?restoreRuntimeDisplayControls\(state, documentRef\)/u, "UI 显示操作拒绝后必须回写最终提交状态");
-  assert.match(source, /const onCommitted = \(\) => restoreRuntimeDisplayControls\(state, documentRef\)[\s\S]*?applyRuntimeDisplayMutationViaWorker\(state, documentRef, context, \{apply, rollback, onCommitted\}\)/u, "显示操作成功后必须从正式 renderer 单次收敛控件");
+  assert.match(source, /invokeRuntimeDisplayActionFromUi\(state, documentRef,[\s\S]*?catch\(error => \{[\s\S]*?isSupersededDisplayIntent\(error\)[\s\S]*?restoreRuntimeDisplayControls\(state, documentRef\)/u, "UI 必须忽略被取代意图并仅为真实失败恢复正式控件");
+  assert.match(source, /createLatestDisplayIntentQueue\(\)[\s\S]*?displayIntents\.run\(async intent =>/u, "显示入口必须进入独立 latest-wins 队列");
+  assert.match(source, /const onCommitted = \(\) => \{[\s\S]*?intent\.isCurrent\(\)[\s\S]*?restoreRuntimeDisplayControls\(state, documentRef\)/u, "只有最新正式 renderer 提交才能收敛控件");
+  assert.match(source, /let selfHealAttempts = 0;[\s\S]*?selfHealAttempts > 0 \|\| !isRetryableDisplaySessionError\(error\)[\s\S]*?display-session-self-heal/u, "显示会话只允许一次 stale / commit rejected 自愈");
   assert.match(source, /viewportIndependent = layers\.length === 1 && layers\[0\] === "surface"[\s\S]*?includeViewport: !viewportIndependent/u, "纯 surface 显示准备不得因相机或画布变化作废");
   const displayErrorMessage = source.match(/function runtimeDisplayActionErrorMessage\(error\) \{[\s\S]*?\n\}/u)?.[0] || "";
   assert.match(displayErrorMessage, /operation_busy[\s\S]*?当前已有地图操作正在进行，请稍后再试/u, "重叠显示操作必须使用自然中文提示");

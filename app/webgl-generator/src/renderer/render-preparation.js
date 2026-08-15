@@ -2,7 +2,7 @@ import {
   buildLineVertices,
   buildPlaceholderSurfaceBundle,
   buildPlaceholderSurfaceColorPatch,
-  buildPointVertices,
+  buildPointLayer,
   buildRiverMeshVertices,
   buildRouteMeshVertices,
   shoreLinePathKey
@@ -133,7 +133,7 @@ export async function executeRenderPreparationTask(payload = {}, context = {}) {
     } else if (layer === "river") {
       result.layers.river = buildRiverMeshVertices(map, camera, canvas);
     } else if (layer === "point") {
-      result.layers.point = {vertices: buildPointVertices(map, payload.visibility || {})};
+      result.layers.point = buildPointLayer(map);
     } else if (layer === "cell-visual") {
       cache.cellVisual ||= payload.caches?.cellVisual
         ? unpackCellVisualMesh(payload.caches.cellVisual, binding)
@@ -203,6 +203,8 @@ export async function executeRenderPreparationTask(payload = {}, context = {}) {
       result.layers.line = {
         vertices: line.vertices,
         shoreVertices: line.shoreVertices,
+        gpuResidentSmoothShoreVertices: line.gpuResidentSmoothShoreVertices,
+        gpuResidentHardShoreVertices: line.gpuResidentHardShoreVertices,
         shorePathCache: packShoreLinePathCache(line.shoreLinePathVertices, binding),
         oceanCurrentVertices: line.oceanCurrentVertices,
         oceanCurrents: line.oceanCurrents

@@ -6,6 +6,7 @@
 
 ## 专题映射
 
+- 第 335 项的 GPU 常驻 cell attribute / palette、surface 顶点去颜色化、普通视图零 Worker 重编译、政治 topology cache、平滑 correction、overlay / picking identity、UI latest-wins 和版本握手冻结于 [`task-335-gpu-resident-view-switch.md`](./task-335-gpu-resident-view-switch.md)；每个 335-A～J 阶段只在独立任务分支本地提交，统一验收后再推送。
 - 第 334 项的 100k Worker 端到端延迟、显示事务 effect / layer 矩阵、renderer suspension、存档输出 / 读取 transport 与画布心跳边界冻结于 [`task-334-worker-end-to-end-latency.md`](./task-334-worker-end-to-end-latency.md)；坚持 Worker 化和单一 operation owner，不开放冲突任务积压。
 - 第 333 项的 Worker 全图重传调查、共享版本化副本 / 增量日志和 `.webfmg v3` 列式二进制存档方案冻结于 [`task-333-worker-replica-and-binary-map.md`](./task-333-worker-replica-and-binary-map.md)；同一 canonical 字段注册表同时服务跨任务 Worker 副本、撤销 / 重做 patch 和新存档格式，避免两套数据描述再次漂移。
 - 第 331 项的 100k 重生成 / 存档瓶颈、真实阶段 Loading、单次序列化、二进制 IndexedDB、canonical map mirror 与增量 prepared renderer 边界冻结于 [`task-331-save-regeneration-performance.md`](./task-331-save-regeneration-performance.md)；普通用户只看山河推演 / 存档阶段，调试数据保留 transport、compute、render、serialize、compress 和 storage 精确标量。

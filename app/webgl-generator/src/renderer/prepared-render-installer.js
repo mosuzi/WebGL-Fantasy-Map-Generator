@@ -14,11 +14,22 @@ import {
 } from "./surface-base-buffer-set.js";
 import {snapshotViewportCamera} from "./viewport-buffer-transform.js";
 import {OBJECT_PICKING_COMPONENTS} from "./picking.js";
+import {
+  createCellAttributeStore,
+  deleteUnownedCellAttributeStore,
+  releaseCellAttributeStore,
+  retainCellAttributeStore
+} from "./cell-attribute-store.js";
+import {
+  createCellVisualCorrectionBufferSetAsync,
+  flattenCellVisualCorrectionBufferSet
+} from "./cell-visual-surface-correction.js";
 
 const FLOATS_PER_VERTEX = 6;
 const DEFAULT_UPLOAD_SLICE_BYTES = 256 * 1024;
 const PICKING_REBIND_BUDGET_MS = 24;
 const surfaceBaseBufferOwners = new WeakMap();
+const cellVisualCorrectionBufferOwners = new WeakMap();
 
 export async function prepareRendererWorkerInstall(renderer, map, prepared, options = {}) {
   if (!renderer?.gl || !map || !prepared?.layers) throw renderInstallError("render-install-input", "Worker 渲染安装缺少 renderer、地图或准备结果");
@@ -30,11 +41,18 @@ export async function prepareRendererWorkerInstall(renderer, map, prepared, opti
   const decoded = {};
   const buffers = new Map();
   let surfaceBaseBufferSet = null;
+  let cellVisualCorrectionBufferSet = null;
   let surfaceValues = null;
   let surfaceColorPatch = null;
+  let cellAttributeStore = null;
 
   try {
     validatePreparedLayerShapes(layers);
+    if (renderer.map !== map) {
+      gate.assertCurrent();
+      cellAttributeStore = createCellAttributeStore(renderer.gl, map);
+      gate.assertCurrent();
+    }
     if (layers.cellVisual) {
       decoded.cellVisual = await unpackCellVisualMeshInChunks(layers.cellVisual, binding, gate.options("cell-visual"));
     }
@@ -106,10 +124,19 @@ export async function prepareRendererWorkerInstall(renderer, map, prepared, opti
       if (!inPlaceColorPatch) {
         surfaceBaseBufferSet = await createSurfaceBaseBufferSetAsync(renderer.gl, surfaceValues.base, {
           usage: renderer.gl.STATIC_DRAW,
+          surfaceCellRanges: decoded.surfaceCellRanges,
           yieldToMain: gate.yieldToMain,
           assertCurrent: gate.assertCurrent,
           onProgress: detail => gate.onProgress("gpu:surfaceBaseBufferSet", detail)
         });
+        if (surfaceValues.cellVisualCorrection instanceof Float32Array) {
+          cellVisualCorrectionBufferSet = await createCellVisualCorrectionBufferSetAsync(renderer.gl, surfaceValues.cellVisualCorrection, {
+            usage: renderer.gl.STATIC_DRAW,
+            yieldToMain: gate.yieldToMain,
+            assertCurrent: gate.assertCurrent,
+            onProgress: detail => gate.onProgress("gpu:cellVisualCorrection", detail)
+          });
+        }
       }
       for (const [key, values] of [
         ["landCorrectionBuffer", surfaceValues.landCorrections],
@@ -133,10 +160,12 @@ export async function prepareRendererWorkerInstall(renderer, map, prepared, opti
   } catch (error) {
     deletePreparedBuffers(renderer.gl, buffers.values());
     deleteUnownedSurfaceBaseBuffers(renderer.gl, surfaceBaseBufferSet, renderer.surfaceBaseBufferSet);
+    deleteUnownedCellVisualCorrectionBuffers(renderer.gl, cellVisualCorrectionBufferSet, renderer.cellVisualCorrectionBufferSet);
+    deleteUnownedCellAttributeStore(renderer.gl, cellAttributeStore, renderer.cellAttributeStore);
     throw error;
   }
 
-  return createPreparedInstallTransaction(renderer, map, prepared, decoded, buffers, surfaceBaseBufferSet, surfaceValues, {
+  return createPreparedInstallTransaction(renderer, map, prepared, decoded, buffers, surfaceBaseBufferSet, cellVisualCorrectionBufferSet, surfaceValues, cellAttributeStore, {
     preserveRoutePicking: options.preserveRoutePicking === true,
     resetViewport: options.resetViewport === true,
     deferOverlayLayout: options.deferOverlayLayout === true,
@@ -146,7 +175,7 @@ export async function prepareRendererWorkerInstall(renderer, map, prepared, opti
   });
 }
 
-function createPreparedInstallTransaction(renderer, map, prepared, decoded, buffers, surfaceBaseBufferSet, surfaceValues, options) {
+function createPreparedInstallTransaction(renderer, map, prepared, decoded, buffers, surfaceBaseBufferSet, cellVisualCorrectionBufferSet, surfaceValues, cellAttributeStore, options) {
   const layers = prepared.layers;
   const before = new Map();
   const assigned = [];
@@ -161,7 +190,15 @@ function createPreparedInstallTransaction(renderer, map, prepared, decoded, buff
   let surfaceColorPatchDirty = false;
   let ownsPreparedSurfaceBase = Boolean(surfaceBaseBufferSet);
   let ownsPreviousSurfaceBase = false;
+  let cellVisualCorrectionBefore = null;
+  let ownsPreparedCellVisualCorrection = Boolean(cellVisualCorrectionBufferSet);
+  let ownsPreviousCellVisualCorrection = false;
+  let cellAttributeStoreBefore = null;
+  let ownsPreparedCellAttributes = Boolean(cellAttributeStore);
+  let ownsPreviousCellAttributes = false;
   if (ownsPreparedSurfaceBase) retainSurfaceBaseBufferSet(surfaceBaseBufferSet);
+  if (ownsPreparedCellVisualCorrection) retainCellVisualCorrectionBufferSet(cellVisualCorrectionBufferSet);
+  if (ownsPreparedCellAttributes) retainCellAttributeStore(cellAttributeStore);
 
   return Object.freeze({
     prepareCommit,
@@ -199,6 +236,7 @@ function createPreparedInstallTransaction(renderer, map, prepared, decoded, buff
         assignNested("camera", "offsetY", 0);
       }
       assign("map", map);
+      assignCellAttributeStore(cellAttributeStore);
       if (decoded.cellVisual) assign("cellVisualMesh", decoded.cellVisual);
       if (decoded.shore) assign("shoreVisualPaths", decoded.shore);
       if (decoded.statePaths) assign("stateVisualPaths", decoded.statePaths);
@@ -218,7 +256,10 @@ function createPreparedInstallTransaction(renderer, map, prepared, decoded, buff
       if (layers.surface) {
       if (!surfaceColorPatch) {
       assignSurfaceBaseBufferSet(surfaceBaseBufferSet);
+      assignCellVisualCorrectionBufferSet(cellVisualCorrectionBufferSet);
       assign("surfaceVertices", surfaceValues.base);
+      assign("cellVisualCorrectionGeometry", surfaceValues.cellVisualCorrection || new Float32Array());
+      assign("gpuResidentSmoothShoreSurfaceKey", surfaceValues.smoothShoreSurfaceKey || "");
       }
       assign("landCorrectionVertices", surfaceValues.landCorrections);
       assign("waterCorrectionVertices", surfaceValues.waterCorrections);
@@ -231,20 +272,29 @@ function createPreparedInstallTransaction(renderer, map, prepared, decoded, buff
       assign("surfacePatchCells", new Set());
       assign("surfacePatchVertexCount", 0);
       if (!surfaceColorPatch) assign("vertexCount", vertexCount(surfaceValues.base));
-      assign("landCorrectionVertexCount", vertexCount(surfaceValues.landCorrections));
-      assign("waterCorrectionVertexCount", vertexCount(surfaceValues.waterCorrections));
-      assign("landCoverVertexCount", vertexCount(surfaceValues.landCovers));
-      assign("waterCoverVertexCount", vertexCount(surfaceValues.waterCovers));
+      assign("landCorrectionVertexCount", surfaceValues.shoreSurfaceEnabled !== false ? vertexCount(surfaceValues.landCorrections) : 0);
+      assign("waterCorrectionVertexCount", surfaceValues.shoreSurfaceEnabled !== false ? vertexCount(surfaceValues.waterCorrections) : 0);
+      assign("landCoverVertexCount", surfaceValues.shoreSurfaceEnabled !== false ? vertexCount(surfaceValues.landCovers) : 0);
+      assign("waterCoverVertexCount", surfaceValues.shoreSurfaceEnabled !== false ? vertexCount(surfaceValues.waterCovers) : 0);
       }
       if (layers.line) {
+      assign("lineVertices", layers.line.vertices);
+      assign("shoreLineVertices", layers.line.shoreVertices);
+      assign("gpuResidentSmoothShoreLineVertices", layers.line.gpuResidentSmoothShoreVertices || new Float32Array());
+      assign("gpuResidentHardShoreLineVertices", layers.line.gpuResidentHardShoreVertices || new Float32Array());
       assign("shoreLinePathVertices", decoded.shoreLine?.pathVertices || new Map());
       assign("shoreLinePathObjectVertices", decoded.shoreLine?.pathObjectVertices || new WeakMap());
       assign("oceanCurrentLayerStats", layers.line.oceanCurrents);
+      assign("oceanCurrentVertices", layers.line.oceanCurrentVertices);
       assign("lineVertexCount", vertexCount(layers.line.vertices));
       assign("shoreLineVertexCount", vertexCount(layers.line.shoreVertices));
       assign("oceanCurrentVertexCount", vertexCount(layers.line.oceanCurrentVertices));
       }
-      if (layers.point) assign("pointVertexCount", vertexCount(layers.point.vertices));
+      if (layers.point) {
+      assign("pointDrawRanges", layers.point.drawRanges || []);
+      assign("pointBufferVertexCount", vertexCount(layers.point.vertices));
+      assign("pointVertexCount", countVisiblePointVertices(layers.point.drawRanges, renderer.layerVisibility));
+      }
       if (layers.route) {
       assign("routeVertexCount", vertexCount(layers.route.vertices));
       assign("routeDrawRanges", layers.route.drawRanges);
@@ -285,6 +335,8 @@ function createPreparedInstallTransaction(renderer, map, prepared, decoded, buff
     if (!committed) {
       deletePreparedBuffers(renderer.gl, buffers.values());
       releasePreparedSurfaceBase();
+      releasePreparedCellVisualCorrection();
+      releasePreparedCellAttributes();
       finalized = true;
       return true;
     }
@@ -307,6 +359,10 @@ function createPreparedInstallTransaction(renderer, map, prepared, decoded, buff
         } else if (key === "surfaceBaseBufferSet") {
           renderer.surfaceBaseBufferSet = before.get(key).bufferSet;
           renderer.vertexBuffer = before.get(key).vertexBuffer;
+        } else if (key === "cellVisualCorrectionBufferSet") {
+          renderer.cellVisualCorrectionBufferSet = before.get(key);
+        } else if (key === "cellAttributeStore") {
+          renderer.cellAttributeStore = before.get(key);
         } else renderer[key] = before.get(key);
       } catch (error) {
         failures.push(error);
@@ -319,14 +375,18 @@ function createPreparedInstallTransaction(renderer, map, prepared, decoded, buff
     }
     try {
       releasePreparedSurfaceBase();
+      releasePreparedCellVisualCorrection();
     } catch (error) {
       failures.push(error);
     }
     try {
       releasePreviousSurfaceBase();
+      releasePreviousCellVisualCorrection();
     } catch (error) {
       failures.push(error);
     }
+    try { releasePreparedCellAttributes(); } catch (error) { failures.push(error); }
+    try { releasePreviousCellAttributes(); } catch (error) { failures.push(error); }
     if (routeRefreshWasCancelled && routeRefreshWasPending) {
       try {
         renderer.dynamicBuffersDirty.routes = true;
@@ -378,6 +438,8 @@ function createPreparedInstallTransaction(renderer, map, prepared, decoded, buff
     if (!committed) {
       deletePreparedBuffersBestEffort(renderer.gl, buffers.values());
       releasePreparedSurfaceBaseBestEffort();
+      releasePreparedCellVisualCorrectionBestEffort();
+      releasePreparedCellAttributesBestEffort();
       finalized = true;
       return true;
     }
@@ -386,6 +448,10 @@ function createPreparedInstallTransaction(renderer, map, prepared, decoded, buff
     deletePreparedBuffersBestEffort(renderer.gl, detachedBuffers);
     releasePreviousSurfaceBaseBestEffort();
     releasePreparedSurfaceBaseBestEffort();
+    releasePreviousCellVisualCorrectionBestEffort();
+    releasePreparedCellVisualCorrectionBestEffort();
+    releasePreviousCellAttributesBestEffort();
+    releasePreparedCellAttributesBestEffort();
     surfaceColorPatchDirty = false;
     finalized = true;
     return true;
@@ -420,6 +486,27 @@ function createPreparedInstallTransaction(renderer, map, prepared, decoded, buff
     renderer.vertexBuffer = buffers[0];
   }
 
+  function assignCellVisualCorrectionBufferSet(bufferSet) {
+    if (!bufferSet) return;
+    if (!flattenCellVisualCorrectionBufferSet(bufferSet).length) throw renderInstallError("render-buffer-create", "平滑边界 correction 临时 GPU buffer 缺失");
+    cellVisualCorrectionBefore = renderer.cellVisualCorrectionBufferSet;
+    retainCellVisualCorrectionBufferSet(cellVisualCorrectionBefore);
+    ownsPreviousCellVisualCorrection = Boolean(cellVisualCorrectionBefore);
+    before.set("cellVisualCorrectionBufferSet", cellVisualCorrectionBefore);
+    assigned.push("cellVisualCorrectionBufferSet");
+    renderer.cellVisualCorrectionBufferSet = bufferSet;
+  }
+
+  function assignCellAttributeStore(store) {
+    if (!store) return;
+    cellAttributeStoreBefore = renderer.cellAttributeStore;
+    retainCellAttributeStore(cellAttributeStoreBefore);
+    ownsPreviousCellAttributes = Boolean(cellAttributeStoreBefore);
+    before.set("cellAttributeStore", cellAttributeStoreBefore);
+    assigned.push("cellAttributeStore");
+    renderer.cellAttributeStore = store;
+  }
+
   function releasePreparedSurfaceBase() {
     if (!ownsPreparedSurfaceBase) return;
     ownsPreparedSurfaceBase = false;
@@ -432,6 +519,20 @@ function createPreparedInstallTransaction(renderer, map, prepared, decoded, buff
     ownsPreviousSurfaceBase = false;
     releaseSurfaceBaseBufferSet(surfaceBaseBefore?.bufferSet);
     deleteUnownedSurfaceBaseBuffers(renderer.gl, surfaceBaseBefore?.bufferSet, renderer.surfaceBaseBufferSet);
+  }
+
+  function releasePreparedCellVisualCorrection() {
+    if (!ownsPreparedCellVisualCorrection) return;
+    ownsPreparedCellVisualCorrection = false;
+    releaseCellVisualCorrectionBufferSet(cellVisualCorrectionBufferSet);
+    deleteUnownedCellVisualCorrectionBuffers(renderer.gl, cellVisualCorrectionBufferSet, renderer.cellVisualCorrectionBufferSet);
+  }
+
+  function releasePreviousCellVisualCorrection() {
+    if (!ownsPreviousCellVisualCorrection) return;
+    ownsPreviousCellVisualCorrection = false;
+    releaseCellVisualCorrectionBufferSet(cellVisualCorrectionBefore);
+    deleteUnownedCellVisualCorrectionBuffers(renderer.gl, cellVisualCorrectionBefore, renderer.cellVisualCorrectionBufferSet);
   }
 
   function releasePreparedSurfaceBaseBestEffort() {
@@ -448,6 +549,36 @@ function createPreparedInstallTransaction(renderer, map, prepared, decoded, buff
     } catch {
       // finalize 延续既有资源释放 best-effort 语义。
     }
+  }
+
+  function releasePreparedCellVisualCorrectionBestEffort() {
+    try { releasePreparedCellVisualCorrection(); } catch {}
+  }
+
+  function releasePreviousCellVisualCorrectionBestEffort() {
+    try { releasePreviousCellVisualCorrection(); } catch {}
+  }
+
+  function releasePreparedCellAttributes() {
+    if (!ownsPreparedCellAttributes) return;
+    ownsPreparedCellAttributes = false;
+    releaseCellAttributeStore(cellAttributeStore);
+    deleteUnownedCellAttributeStore(renderer.gl, cellAttributeStore, renderer.cellAttributeStore);
+  }
+
+  function releasePreviousCellAttributes() {
+    if (!ownsPreviousCellAttributes) return;
+    ownsPreviousCellAttributes = false;
+    releaseCellAttributeStore(cellAttributeStoreBefore);
+    deleteUnownedCellAttributeStore(renderer.gl, cellAttributeStoreBefore, renderer.cellAttributeStore);
+  }
+
+  function releasePreparedCellAttributesBestEffort() {
+    try { releasePreparedCellAttributes(); } catch {}
+  }
+
+  function releasePreviousCellAttributesBestEffort() {
+    try { releasePreviousCellAttributes(); } catch {}
   }
 
   function installOverlay(bundle) {
@@ -542,7 +673,10 @@ function validatePreparedLayerShapes(layers) {
       assertPreparedVertexArray(layers.line[key], `line.${key}`);
     }
   }
-  if (layers.point) assertPreparedPointVertexArray(layers.point.vertices, "point.vertices");
+  if (layers.point) {
+    assertPreparedPointVertexArray(layers.point.vertices, "point.vertices");
+    assertPreparedPointDrawRanges(layers.point.drawRanges, layers.point.vertices.length / FLOATS_PER_VERTEX);
+  }
   if (layers.route) {
     assertPreparedVertexArray(layers.route.vertices, "route.vertices");
     assertPreparedRouteDrawRanges(layers.route.drawRanges, layers.route.vertices.length / FLOATS_PER_VERTEX);
@@ -757,6 +891,22 @@ function assertPreparedPointVertexArray(value, label) {
   }
 }
 
+function assertPreparedPointDrawRanges(value, vertexCount) {
+  if (!Array.isArray(value)) throw renderInstallError("render-point-ranges-shape", "Worker point draw ranges 缺失");
+  const layers = new Set(["population", "cities", "markers", "resources", "military"]);
+  let cursor = 0;
+  for (const range of value) {
+    const first = Number(range?.first);
+    const count = Number(range?.count);
+    if (!layers.has(range?.layer) || !Number.isInteger(first) || !Number.isInteger(count)
+      || first !== cursor || count <= 0 || first + count > vertexCount) {
+      throw renderInstallError("render-point-ranges-shape", "Worker point draw range 无效");
+    }
+    cursor += count;
+  }
+  if (cursor !== vertexCount) throw renderInstallError("render-point-ranges-shape", "Worker point draw ranges 未完整覆盖顶点数组");
+}
+
 function assertPreparedRouteDrawRanges(value, vertexCount) {
   if (!value || typeof value !== "object") throw renderInstallError("render-route-ranges-shape", "Worker route draw ranges 缺失");
   let cursor = 0;
@@ -969,12 +1119,15 @@ async function normalizePreparedShoreSurfaceCellRanges(value, surface, cellCount
 
 async function normalizePreparedSurfaceCellRanges(value, surfaceFloatLength, mode, cellVisualMesh, cellCount, gate) {
   if (!(value instanceof Map)) throw renderInstallError("render-surface-ranges-shape", "Worker surface cell ranges 缺失或结构无效");
-  if (mode !== "cell-visual" && mode !== "unavailable") throw renderInstallError("render-surface-ranges-shape", "Worker surface cell ranges 模式无效");
+  if (mode !== "cell-visual" && mode !== "grid-cells" && mode !== "unavailable") throw renderInstallError("render-surface-ranges-shape", "Worker surface cell ranges 模式无效");
   if (mode === "unavailable" && value.size) throw renderInstallError("render-surface-ranges-shape", "Worker unavailable surface cell ranges 必须为空");
   if (mode === "cell-visual" && surfaceFloatLength > 0 && !value.size) throw renderInstallError("render-surface-ranges-shape", "Worker cell-visual surface cell ranges 不得为空");
   const expectedCells = mode === "cell-visual" ? (cellVisualMesh?.cells || []).filter(cell => (cell?.ndcTriangles?.length || 0) > 0) : [];
   if (mode === "cell-visual" && value.size !== expectedCells.length) {
     throw renderInstallError("render-surface-ranges-shape", "Worker surface cell ranges 与 cell visual mesh 数量不一致");
+  }
+  if (mode === "grid-cells" && value.size !== cellCount) {
+    throw renderInstallError("render-surface-ranges-shape", "Worker grid-cells surface cell ranges 未覆盖完整 grid");
   }
   const result = new Map();
   let previousEnd = 0;
@@ -989,7 +1142,8 @@ async function normalizePreparedSurfaceCellRanges(value, surfaceFloatLength, mod
       || !Number.isInteger(start) || !Number.isInteger(end)
       || start !== previousEnd || end <= start || end > surfaceFloatLength
       || start % FLOATS_PER_VERTEX !== 0 || end % FLOATS_PER_VERTEX !== 0
-      || (mode === "cell-visual" && (normalizedCell !== Number(expectedCell?.cell) || end - start !== expectedLength))) {
+      || (mode === "cell-visual" && (normalizedCell !== Number(expectedCell?.cell) || end - start !== expectedLength))
+      || (mode === "grid-cells" && normalizedCell !== cellIndex)) {
       throw renderInstallError("render-surface-ranges-shape", "Worker surface cell range 偏移无效");
     }
     if (result.has(normalizedCell)) throw renderInstallError("render-surface-ranges-shape", "Worker surface cell id 归一化后重复");
@@ -1024,6 +1178,29 @@ function releaseSurfaceBaseBufferSet(bufferSet) {
   }
 }
 
+function retainCellVisualCorrectionBufferSet(bufferSet) {
+  for (const buffer of flattenCellVisualCorrectionBufferSet(bufferSet)) {
+    cellVisualCorrectionBufferOwners.set(buffer, (cellVisualCorrectionBufferOwners.get(buffer) || 0) + 1);
+  }
+}
+
+function releaseCellVisualCorrectionBufferSet(bufferSet) {
+  for (const buffer of flattenCellVisualCorrectionBufferSet(bufferSet)) {
+    const owners = cellVisualCorrectionBufferOwners.get(buffer) || 0;
+    if (owners <= 1) cellVisualCorrectionBufferOwners.delete(buffer);
+    else cellVisualCorrectionBufferOwners.set(buffer, owners - 1);
+  }
+}
+
+function deleteUnownedCellVisualCorrectionBuffers(gl, bufferSet, currentBufferSet) {
+  const currentBuffers = new Set(flattenCellVisualCorrectionBufferSet(currentBufferSet));
+  for (const buffer of flattenCellVisualCorrectionBufferSet(bufferSet)) {
+    if (currentBuffers.has(buffer) || (cellVisualCorrectionBufferOwners.get(buffer) || 0) > 0) continue;
+    if (typeof gl.isBuffer === "function" && gl.isBuffer(buffer) !== true) continue;
+    gl.deleteBuffer(buffer);
+  }
+}
+
 function deleteUnownedSurfaceBaseBuffers(gl, bufferSet, currentBufferSet) {
   const currentBuffers = new Set(flattenSurfaceBaseBufferSet(currentBufferSet));
   for (const buffer of flattenSurfaceBaseBufferSet(bufferSet)) {
@@ -1052,6 +1229,12 @@ function deletePreparedBuffersBestEffort(gl, buffers) {
 
 function vertexCount(values) {
   return Math.floor((values?.length || 0) / FLOATS_PER_VERTEX);
+}
+
+function countVisiblePointVertices(drawRanges, visibility) {
+  let count = 0;
+  for (const range of drawRanges || []) if (visibility?.[range.layer] !== false) count += range.count;
+  return count;
 }
 
 function sameBinding(left, right) {
