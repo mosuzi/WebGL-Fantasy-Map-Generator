@@ -12,19 +12,14 @@ export function pushGridCells(vertices, context, colorMode, viewOptions, shouldD
     const vertexIds = grid.cells.v[cellIndex];
     if (vertexIds.length < 3) continue;
     const start = vertices.length;
-    const center = grid.points[grid.cells.p[cellIndex]];
     const color = transformColor(colorForCell(cellIndex, map, colorMode, viewOptions), cellIndex);
     const points = vertexIds.map(vertex => vertexPoints[vertex]);
-    const triangulation = triangulateCellVisualBoundarySafely(points);
+    let triangulation = triangulateCellVisualBoundarySafely(points);
+    if (triangulation.status !== "ok") {
+      triangulation = triangulateCellVisualBoundarySafely(vertexIds.map(vertex => grid.vertices.p[vertex]));
+    }
     if (triangulation.status === "ok") {
       for (const index of triangulation.indices) pushWorldVertex(vertices, context, triangulation.points[index], color);
-    } else {
-      for (let index = 0; index < vertexIds.length; index++) {
-        const nextIndex = (index + 1) % vertexIds.length;
-        pushWorldVertex(vertices, context, center, color);
-        pushWorldVertex(vertices, context, vertexPoints[vertexIds[index]], color);
-        pushWorldVertex(vertices, context, vertexPoints[vertexIds[nextIndex]], color);
-      }
     }
     onCellRange?.(cellIndex, {start, end: vertices.length});
   }

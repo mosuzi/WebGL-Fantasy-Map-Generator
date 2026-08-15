@@ -15,6 +15,7 @@ import {
   uploadSurfaceBaseBufferSetRanges
 } from "../app/webgl-generator/src/renderer/surface-base-buffer-set.js";
 import {buildGridCellSurfacePatchFromBase, pushGridCells} from "../app/webgl-generator/src/renderer/cell-surface-layer.js";
+import {stabilizeResolvedGridVertexPoints} from "../app/webgl-generator/src/renderer/grid-vertex-geometry.js";
 
 class FakeGl {
   constructor() {
@@ -188,6 +189,20 @@ const concaveVertices = [], concavePoints = [[0, 0], [4, 0], [4, 4], [2, 1], [0,
 const concaveMap = {metadata: {graphWidth: 4, graphHeight: 4}, grid: {points: [[3.5, 3.5]], cells: {p: [0], v: [[0, 1, 2, 3, 4]], h: [30]}, vertices: {p: concavePoints}}, features: {features: [{land: true}]}, layers: {ocean: [0, 0, 1, 1]}};
 pushGridCells(concaveVertices, {map: concaveMap}, "height", {});
 assert.equal(concaveVertices.length, (concavePoints.length - 2) * 3 * 6, "非凸 hard cell 必须使用安全三角剖分，不能以外置中心扇分越界");
+
+const invalidVertices = [], invalidPoints = [[0, 0], [4, 4], [4, 0], [0, 4]];
+const invalidMap = {metadata: {graphWidth: 4, graphHeight: 4}, grid: {points: [[2, 2]], cells: {p: [0], v: [[0, 1, 2, 3]], h: [30]}, vertices: {p: invalidPoints}}, features: {features: [{land: true}]}, layers: {ocean: [0, 0, 1, 1]}};
+pushGridCells(invalidVertices, {map: invalidMap}, "height", {});
+assert.equal(invalidVertices.length, 0, "两套边界都不安全时不得恢复越界中心扇分");
+
+const storedBoundary = [[0, 0], [4, 0], [4, 4], [0, 4], [4, 0], [8, 0], [8, 4], [4, 4]];
+const resolvedBoundary = storedBoundary.map(point => [...point]);
+resolvedBoundary[1] = [-1, 3];
+resolvedBoundary[4] = [3.8, 0.2];
+const sharedGroup = [1, 4];
+stabilizeResolvedGridVertexPoints(storedBoundary, resolvedBoundary, [[0, 1, 2, 3], [4, 5, 6, 7]], new Map([[1, sharedGroup], [4, sharedGroup]]));
+assert.equal(resolvedBoundary[1], storedBoundary[1], "导致关联 cell 自交的精细共享顶点必须整组回退");
+assert.equal(resolvedBoundary[4], storedBoundary[4], "相邻 cell 必须与回退共享组保持同一边界");
 
 console.log(JSON.stringify({ok: true, maxSegmentBytes: SURFACE_BASE_MAX_SEGMENT_BYTES, syncSegments: 2, asyncSegments: 2, packedIdentity: true}));
 

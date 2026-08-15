@@ -18,17 +18,40 @@ export function resolvedGridVertexPoints(grid) {
   }
 
   const resolved = storedPoints.slice();
+  const refinedGroupsByVertex = new Map();
   for (const group of groups.values()) {
     if (group.length < 2) continue;
     const precisePoints = group.map(vertex => preciseVoronoiVertex(grid, vertex));
     if (precisePoints.some(point => !point) || maximumPointSpread(precisePoints) > MAX_COLLAPSED_VERTEX_SPREAD) continue;
-    for (const vertex of group) {
-      resolved[vertex] = precisePoints[group.indexOf(vertex)];
+    for (let index = 0; index < group.length; index++) {
+      const vertex = group[index];
+      resolved[vertex] = precisePoints[index];
+      refinedGroupsByVertex.set(vertex, group);
     }
   }
 
+  stabilizeResolvedGridVertexPoints(storedPoints, resolved, grid?.cells?.v, refinedGroupsByVertex);
+
   resolvedVertexCache.set(grid, resolved);
   return resolved;
+}
+
+export function stabilizeResolvedGridVertexPoints(storedPoints, resolvedPoints, cellVertices, refinedGroupsByVertex) {
+  if (!Array.isArray(storedPoints) || !Array.isArray(resolvedPoints) || !Array.isArray(cellVertices)) return resolvedPoints;
+  const unsafeGroups = new Set();
+  for (const vertices of cellVertices) {
+    if (!Array.isArray(vertices) || vertices.length < 4) continue;
+    const points = vertices.map(vertex => resolvedPoints[vertex]);
+    if (!cellBoundarySelfIntersects(points)) continue;
+    for (const vertex of vertices) {
+      const group = refinedGroupsByVertex?.get(vertex);
+      if (group) unsafeGroups.add(group);
+    }
+  }
+  for (const group of unsafeGroups) {
+    for (const vertex of group) resolvedPoints[vertex] = storedPoints[vertex];
+  }
+  return resolvedPoints;
 }
 
 export function resolvedGridVertexPoint(grid, vertex) {
@@ -68,4 +91,41 @@ function maximumPointSpread(points) {
 
 function isWorldPoint(point) {
   return Array.isArray(point) && Number.isFinite(point[0]) && Number.isFinite(point[1]);
+}
+
+function cellBoundarySelfIntersects(points) {
+  if (points.some(point => !isWorldPoint(point))) return true;
+  for (let first = 0; first < points.length; first++) {
+    const firstNext = (first + 1) % points.length;
+    for (let second = first + 1; second < points.length; second++) {
+      const secondNext = (second + 1) % points.length;
+      if (first === secondNext || firstNext === second) continue;
+      if (segmentsIntersect(points[first], points[firstNext], points[second], points[secondNext])) return true;
+    }
+  }
+  return false;
+}
+
+function segmentsIntersect(a, b, c, d) {
+  const abC = orientation(a, b, c);
+  const abD = orientation(a, b, d);
+  const cdA = orientation(c, d, a);
+  const cdB = orientation(c, d, b);
+  if (abC * abD < 0 && cdA * cdB < 0) return true;
+  return (abC === 0 && pointOnSegment(c, a, b))
+    || (abD === 0 && pointOnSegment(d, a, b))
+    || (cdA === 0 && pointOnSegment(a, c, d))
+    || (cdB === 0 && pointOnSegment(b, c, d));
+}
+
+function orientation(a, b, c) {
+  const cross = (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
+  return Math.abs(cross) <= 1e-12 ? 0 : Math.sign(cross);
+}
+
+function pointOnSegment(point, start, end) {
+  return point[0] >= Math.min(start[0], end[0]) - 1e-12
+    && point[0] <= Math.max(start[0], end[0]) + 1e-12
+    && point[1] >= Math.min(start[1], end[1]) - 1e-12
+    && point[1] <= Math.max(start[1], end[1]) + 1e-12;
 }
