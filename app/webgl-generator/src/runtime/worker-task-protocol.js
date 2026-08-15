@@ -1,5 +1,6 @@
 export const WORKER_TASK_PROTOCOL = "webgl-generator-worker-task";
 export const WORKER_TASK_PROTOCOL_VERSION = 1;
+export const WORKER_TASK_BUILD_ID = typeof __FMG_APP_BUILD_ID__ !== "undefined" ? String(__FMG_APP_BUILD_ID__) : "development";
 
 export const WORKER_TASK_MESSAGE = Object.freeze({
   RUN: "run",
@@ -24,6 +25,7 @@ export function createWorkerTaskRequest({requestId, task, binding, payload, sess
   return {
     protocol: WORKER_TASK_PROTOCOL,
     version: WORKER_TASK_PROTOCOL_VERSION,
+    buildId: WORKER_TASK_BUILD_ID,
     type: WORKER_TASK_MESSAGE.RUN,
     requestId: String(requestId || ""),
     task: String(task || ""),
@@ -40,6 +42,7 @@ export function createWorkerTaskMessage(type, request, detail = {}) {
   return {
     protocol: WORKER_TASK_PROTOCOL,
     version: WORKER_TASK_PROTOCOL_VERSION,
+    buildId: WORKER_TASK_BUILD_ID,
     type,
     requestId: request.requestId,
     task: request.task,
@@ -203,6 +206,17 @@ function assertProtocolEnvelope(value) {
   if (value.protocol !== WORKER_TASK_PROTOCOL || value.version !== WORKER_TASK_PROTOCOL_VERSION) {
     throw protocolError("worker_protocol_version_mismatch", "Worker 协议版本不匹配");
   }
+  if (value.buildId !== WORKER_TASK_BUILD_ID) throw buildMismatchError(value.buildId);
+}
+
+function buildMismatchError(actualBuildId) {
+  const error = new Error("页面与 Worker 构建版本不一致");
+  error.code = "worker_build_mismatch";
+  error.stage = "worker-handshake";
+  error.suggestion = "请先保存当前地图，然后刷新页面以加载同一版本。";
+  error.expected = true;
+  error.details = {expectedBuildId: WORKER_TASK_BUILD_ID, actualBuildId: String(actualBuildId || "missing")};
+  return error;
 }
 
 function protocolError(code, message) {

@@ -295,6 +295,7 @@ import ComputeWorker from "./compute-worker.js?worker";
 import {GENERATION_WORKER_TASK} from "./generation-worker-task.js";
 import {getWebglGeneratorHealthMonitor} from "./health-monitor.js";
 import {createRuntimeOperationError, createRuntimeOperationManager} from "./runtime-operation.js";
+import {createLatestDisplayIntentQueue, isSupersededDisplayIntent} from "./display-intent-queue.js";
 import {createDelayedOperationFeedback} from "./delayed-operation-feedback.js";
 import {createCanvasToolModeManager} from "./canvas-tool-mode-manager.js";
 import {beginDirectManipulationSession, cancelAllDirectManipulationSessions} from "./direct-manipulation-session.js";
@@ -3028,6 +3029,7 @@ function invalidateMapReplicaCoordinators(state, includeCompute, reason) {
 
 function invokeRuntimeDisplayActionFromUi(state, documentRef, task) {
   void Promise.resolve().then(task).catch(error => {
+    if (isSupersededDisplayIntent(error)) return;
     showMapToast(documentRef, runtimeDisplayActionErrorMessage(error), 2800, {tone: "error"});
     restoreRuntimeDisplayControls(state, documentRef);
   });
@@ -3036,6 +3038,7 @@ function invokeRuntimeDisplayActionFromUi(state, documentRef, task) {
 function runtimeDisplayActionErrorMessage(error) {
   if (error?.code === "operation_busy") return "当前已有地图操作正在进行，请稍后再试";
   if (error?.code === "operation_obsolete") return "地图状态已变化，请重新设置";
+  if (error?.code === "worker_build_mismatch") return "页面与后台版本不一致，请先保存地图后刷新页面";
   return "显示设置未能应用，请稍后重试";
 }
 
@@ -3065,9 +3068,12 @@ function restoreRuntimeDisplayControls(state, documentRef) {
 
 function createRuntimeActions(state, documentRef, options = {}) {
   const operation = state.runtimeOperation;
-  const runDisplayMutation = (name, apply, rollback, {gpuResident = false} = {}) => {
+  const displayIntents = createLatestDisplayIntentQueue();
+  const runDisplayMutation = (name, apply, rollback, {gpuResident = false} = {}) => displayIntents.run(async intent => {
     const activeName = state.runtimeOperationSnapshot?.current?.name || "";
-    const onCommitted = () => restoreRuntimeDisplayControls(state, documentRef);
+    const onCommitted = () => {
+      if (intent.isCurrent()) restoreRuntimeDisplayControls(state, documentRef);
+    };
     if (state.renderer?.workerRenderInstallSuspended > 0 && !activeName.startsWith("layers.")) {
       const result = apply();
       onCommitted();
@@ -3097,12 +3103,22 @@ function createRuntimeActions(state, documentRef, options = {}) {
         }
       }, {message: "正在整理地图画面"});
     }
-    return operation.run(
-      name,
-      context => applyRuntimeDisplayMutationViaWorker(state, documentRef, context, {apply, rollback, onCommitted}),
-      {message: "正在整理地图画面"}
-    );
-  };
+    return operation.run(name, async context => {
+      let selfHealAttempts = 0;
+      while (true) {
+        try {
+          const result = await applyRuntimeDisplayMutationViaWorker(state, documentRef, context, {apply, rollback, onCommitted});
+          if (selfHealAttempts > 0 && state.lastDisplayRenderWorker) state.lastDisplayRenderWorker.selfHeal = {attempts: selfHealAttempts, reason: "stale-session"};
+          return result;
+        } catch (error) {
+          if (selfHealAttempts > 0 || !isRetryableDisplaySessionError(error)) throw error;
+          selfHealAttempts += 1;
+          state.mapWorkerCoordinator?.invalidateSession?.("display-session-self-heal");
+          state.healthMonitor?.record?.("worker-session-self-heal", {name, attempt: selfHealAttempts}, "info");
+        }
+      }
+    }, {message: "正在整理地图画面"});
+  });
   const runMapReplace = (name, task, message, overrides = {}) => {
     let loadingOwner = "";
     const config = {
@@ -3868,7 +3884,7 @@ async function applyRuntimeDisplayMutationViaWorker(state, documentRef, operatio
   } catch (error) {
     const rollbackFailures = [];
     const ownerCurrent = state.map === map;
-    const canUseCompatibilityPath = error?.code === "worker_fallback_disabled" && ownerCurrent;
+    const canUseCompatibilityPath = error?.code === "worker_fallback_disabled" && ownerCurrent && !isRetryableDisplaySessionError(error);
     state.mapWorkerCoordinator?.invalidateSession?.("display-render-failed");
     if (install) {
       try {
@@ -3918,6 +3934,18 @@ async function applyRuntimeDisplayMutationViaWorker(state, documentRef, operatio
       renderer.abortWorkerRenderInstall?.();
     }
   }
+}
+
+function isRetryableDisplaySessionError(error) {
+  const retryable = new Set(["worker_protocol_session_stale", "worker_session_commit_rejected"]);
+  const visited = new Set();
+  let current = error;
+  while (current && typeof current === "object" && !visited.has(current)) {
+    visited.add(current);
+    if (retryable.has(current.code)) return true;
+    current = current.cause;
+  }
+  return false;
 }
 
 function runtimeDisplayObsoleteError() {

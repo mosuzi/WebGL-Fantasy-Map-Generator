@@ -148,3 +148,10 @@ Worker 化继续用于生成、重生成、地图编辑、派生拓扑、撤销 
 - 城市总开关不再把图层可见性写入全部城市实例的 `visibilityTarget`，WebGL 层以统一 draw gate 隐藏 / 显示；隐藏期间仍维护视口和碰撞目标，避免恢复时重装实例。城市开关只执行轻量 city / marker / military overlay 更新，不重新布局全部标签；Marker 等真实碰撞变化仍保留完整 overlay 语义。
 - 固定 `99846` cells 十次反转 / 恢复响应为 `12.2～38.5ms`，固定 `10004` cells 为 `11.1～19.6ms`。两档 Worker run、point refresh、overlay replace、picking rebuild、city `setInstances` 与 LongTask 全为 `0`；城市 / 人口开关的实例状态上传为 `0`，point buffer / ranges、overlay 节点、label / marker / military / city items、city instance buffer 与 picking 引用不变，隐藏 / 恢复 picking 语义正确，最终 framebuffer `mismatches=0 / maxDelta=0`。artifact 为 `work/task335-h-layer-identity-10000/result.json` 与 `work/task335-h-layer-identity-100000/result.json`。
 - 修复过程中 100k 城市恢复曾由全标签重排产生 `67 / 58ms`，改为轻量 overlay 后剩余 `57 / 52ms`；进一步移除图层总开关对全部城市实例状态的写入后，最终复验为 `38.5ms / LongTask 0`，没有以登记阈值替代最终门。浏览器夹具总长 `275` 行，仍低于 `500` 行；语法、差异、点层 / city WebGL / render preparation / prepared installer、Worker 全合同、API 收敛、主题、生产构建与两档 Chrome 均通过。版本为 `0.3.24`，下一阶段只进入 335-I。
+
+## 15. 335-I：latest-wins、build handshake 与一次性自愈（已接受）
+
+- 所有正式显示入口进入独立递增 sequence 队列。同一事件循环内连续 A→B→C 时，尚未执行的 A / B 以结构化 `operation_obsolete` 结束，只执行 C；已经运行的旧意图可完成原子资源事务，但 `intent.isCurrent()` 为假时不得再回写控件。UI 对被新意图取代的预期错误不弹错误 toast、不恢复旧控件；真实失败仍从 renderer 恢复。
+- Vite 用当前 package version 注入编译时 build id；Worker request、stream、response、session commit / patch 全部沿协议 envelope 带回并逐条验证。页面 / Worker build 不一致返回 `worker_build_mismatch`、明确提示保存后刷新，且 coordinator 在 accepted 前也直接拒绝，禁止退回主线程计算。
+- 仅当完整 display rollback 已结束且错误链精确含 `worker_protocol_session_stale` 或 `worker_session_commit_rejected` 时，当前显示 operation 才清理旧 session 并重试一次；第二次失败原样保留。真实 10k 中首次 states 提交后 renderer / API / active Tab 同源；同步 height→provinces→biomes 加真实 wheel 后，前两项 obsolete、最终三处均为 biomes。commit rejected 与 stale 各自 `runCalls=2 / selfHealAttempts=1` 并提交目标状态；build mismatch `runCalls=1 / fallbackRuns=0` 且旧状态精确保留。artifact 为 `work/task335-i-display-consistency-10000/result.json`。
+- 新增纯 latest-wins Node 门并扩充 Worker build 失配反例；产品新增约 `99` 行，测试 / 工具新增约 `97` 行，复用浏览器夹具总长 `316` 行。语法、差异、latest-wins、Worker app static / 全合同、display ledger、API 收敛、生产构建与目标 Chrome 均通过。版本为 `0.3.25`，下一阶段只进入 335-J 统一终验。

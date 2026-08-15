@@ -10,8 +10,8 @@ import {waitForApiReady} from "./webgl-generator-api-browser-ready.mjs";
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const source = join(root, "source", "Fantasy-Map-Generator");
 const political = process.argv.includes("--political");
-const display = process.argv.includes("--display"), smooth = process.argv.includes("--smooth"), identity = process.argv.includes("--identity"), cellsTarget = process.argv.includes("--100k") ? 100000 : 10000;
-const outputDir = join(root, "work", identity ? `task335-h-layer-identity-${cellsTarget}` : smooth ? `task335-g-smooth-borders-${cellsTarget}` : display ? "task335-f-display-mutations-10000" : political ? "task335-e-political-views-10000" : "task335-d-gpu-resident-views-10000");
+const display = process.argv.includes("--display"), smooth = process.argv.includes("--smooth"), identity = process.argv.includes("--identity"), consistency = process.argv.includes("--consistency"), cellsTarget = process.argv.includes("--100k") ? 100000 : 10000;
+const outputDir = join(root, "work", consistency ? `task335-i-display-consistency-${cellsTarget}` : identity ? `task335-h-layer-identity-${cellsTarget}` : smooth ? `task335-g-smooth-borders-${cellsTarget}` : display ? "task335-f-display-mutations-10000" : political ? "task335-e-political-views-10000" : "task335-d-gpu-resident-views-10000");
 const verify = process.argv.includes("--verify");
 const expectedChecksums = Object.freeze({height: 2949860715, biomes: 1641731067, population: 2261249289});
 const expectedLabels = Object.freeze({height: "高度", biomes: "生物群系", population: "人口", states: "国家", provinces: "省份"});
@@ -28,15 +28,20 @@ try {
   page.on("pageerror", error => pageErrors.push(error.message));
   await page.goto("http://127.0.0.1:5583?healthClear=1", {waitUntil: "domcontentloaded"});
   await waitForApiReady(page, 120_000);
-  const report = await page.evaluate(run, {verify, political, display, smooth, identity, cellsTarget});
+  const report = await page.evaluate(run, {verify, political, display, smooth, identity, consistency, cellsTarget});
   mkdirSync(outputDir, {recursive: true});
   writeFileSync(join(outputDir, "attempt.json"), `${JSON.stringify(report, null, 2)}\n`);
   const applicationErrors = consoleErrors.filter(text => !/\[FMG health\] (operation-stall|main-thread-long-task|render-frame-gap|input-handler-stall)/.test(text));
   assert.deepEqual(applicationErrors, []);
   assert.deepEqual(pageErrors, []);
   if (verify) {
-    assert.ok(cellsTarget === 100000 ? report.cells >= 99000 && report.cells <= 100000 : report.cells === 10004, `335-${identity ? "H" : smooth ? "G" : display ? "F" : political ? "E" : "D"} 固定地图规模漂移`);
-    if (identity) {
+    assert.ok(cellsTarget === 100000 ? report.cells >= 99000 && report.cells <= 100000 : report.cells === 10004, `335-${consistency ? "I" : identity ? "H" : smooth ? "G" : display ? "F" : political ? "E" : "D"} 固定地图规模漂移`);
+    if (consistency) {
+      assert.deepEqual(report.first, {response: true, renderer: "states", api: "states", active: "states"});
+      assert.deepEqual(report.rapid.responses, ["operation_obsolete", "operation_obsolete", "ok"]); assert.deepEqual(report.rapid.final, {renderer: "biomes", api: "biomes", active: "biomes"}); assert.equal(report.rapid.cameraChanged, true);
+      for (const key of ["commitRejected", "staleSession"]) assert.deepEqual(report[key], {ok: true, runCalls: 2, selfHealAttempts: 1, finalState: true}, `${key} 未精确自愈一次`);
+      assert.deepEqual(report.buildMismatch, {code: "worker_build_mismatch", runCalls: 1, statePreserved: true, fallbackRuns: 0});
+    } else if (identity) {
       assert.deepEqual(report.operations.map(item => item.layer), ["cities", "population", "markers", "resources", "military", "cities", "population", "markers", "resources", "military"]);
       for (const item of report.operations) {
         for (const [key, label] of [["workerRuns", "Worker"], ["pointRefreshes", "point"], ["overlayReplaces", "overlay"], ["pickingRefreshes", "picking"], ["cityInstalls", "city instances"]]) assert.equal(item[key], 0, `${item.layer} 仍触发 ${label}`);
@@ -70,7 +75,7 @@ try {
     } else if (political) {
       for (const item of report.operations) assert.deepEqual(item.pixelParity, {mismatches: 0, maxDelta: 0}, `${item.mode} shader framebuffer 与同图 Worker 基线不一致`);
     } else assert.deepEqual(Object.fromEntries(report.operations.map(item => [item.mode, item.checksum])), expectedChecksums, "335-D shader framebuffer 与旧 Worker 基线不一致");
-    if (!display && !smooth && !identity) for (const item of report.operations) {
+    if (!display && !smooth && !identity && !consistency) for (const item of report.operations) {
       assert.equal(item.workerRuns, 0, `${item.mode} 仍调用 Worker`);
       assert.equal(item.surfaceRefreshes, 0, `${item.mode} 仍重建 surface`);
       assert.deepEqual(item.identity, {surfaceSet: true, segments: true, alias: true, attributes: true, political: true, picking: true, overlay: true}, `${item.mode} 正式引用漂移`);
@@ -91,13 +96,14 @@ try {
   await Promise.race([new Promise(done => server.once("exit", done)), new Promise(done => setTimeout(done, 5000))]);
 }
 
-async function run({verify, political, display, smooth, identity, cellsTarget}) {
+async function run({verify, political, display, smooth, identity, consistency, cellsTarget}) {
   const app = window.__webglGeneratorApp, api = window.webglGeneratorApi;
   const unwrap = (response, label) => { if (!response?.ok) throw new Error(`${label}: ${response?.error?.code || "api_error"} ${response?.error?.message || ""}`); return response.data; };
   unwrap(await api.generate.newMap({confirm: true, seed: "task335-d-gpu-resident", cellsTarget, heightmapTemplate: "continents"}), "newMap");
   unwrap(await api.layers.setSmoothCellBorders(false), "disable smoothing");
   await drain();
   window.__webglGeneratorHealth?.clear?.();
+  if (consistency) return runConsistency();
   if (identity) return runLayerIdentity();
   if (smooth) return runSmoothBorders();
   if (display) return runDisplayMutations();
@@ -177,6 +183,38 @@ async function run({verify, political, display, smooth, identity, cellsTarget}) 
     return pixels;
   }
   function drain() { return new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(resolve, 100)))); }
+
+  async function runConsistency() {
+    const renderer = app.renderer, original = app.mapWorkerCoordinator;
+    unwrap(await api.layers.setViewMode("states"), "first states"); await drain();
+    const first = {response: true, renderer: renderer.colorMode, api: unwrap(api.layers.get(), "first api").colorMode, active: document.querySelector(".ui-segmented-mode-bridge.active")?.dataset.mode || ""};
+    const scaleBefore = renderer.camera.scale;
+    const pending = [api.layers.setViewMode("height"), api.layers.setViewMode("provinces"), api.layers.setViewMode("biomes")];
+    renderer.canvas.dispatchEvent(new WheelEvent("wheel", {deltaY: -120, clientX: 320, clientY: 240, bubbles: true, cancelable: true}));
+    const rapidResponses = await Promise.all(pending); await drain();
+    const rapid = {responses: rapidResponses.map(response => response.ok ? "ok" : response.error?.code || "error"), final: {renderer: renderer.colorMode, api: unwrap(api.layers.get(), "rapid api").colorMode, active: document.querySelector(".ui-segmented-mode-bridge.active")?.dataset.mode || ""}, cameraChanged: renderer.camera.scale !== scaleBefore};
+    const initialCoastline = renderer.layerVisibility.coastline !== false;
+    const commitRejected = await faultScenario("commit", !initialCoastline);
+    const staleSession = await faultScenario("stale", initialCoastline);
+    let mismatchRuns = 0, fallbackRuns = 0;
+    const mismatchCoordinator = wrapCoordinator({run(...args) { mismatchRuns++; const error = new Error("页面与 Worker 构建版本不一致"); error.code = "worker_build_mismatch"; error.stage = "worker-handshake"; error.suggestion = "请先保存当前地图，然后刷新页面以加载同一版本。"; error.expected = true; error.details = {expectedBuildId: "current", actualBuildId: "stale"}; return Promise.reject(error); }});
+    app.mapWorkerCoordinator = mismatchCoordinator;
+    const mismatchResponse = await api.layers.setVisible("coastline", !initialCoastline); await drain();
+    if (app.mapWorkerCoordinator === mismatchCoordinator) app.mapWorkerCoordinator = original;
+    const buildMismatch = {code: mismatchResponse.error?.code || "", runCalls: mismatchRuns, statePreserved: renderer.layerVisibility.coastline === initialCoastline, fallbackRuns};
+    const final = finalSignals();
+    return {verify, cells: app.map.grid.cells.i.length, first, rapid, commitRejected, staleSession, buildMismatch, final};
+
+    async function faultScenario(mode, target) {
+      let runCalls = 0, faulted = false, commitCalls = 0;
+      const wrapped = wrapCoordinator({run(...args) { runCalls++; if (mode === "stale" && !faulted) { faulted = true; const cause = Object.assign(new Error("stale session"), {code: "worker_protocol_session_stale"}); return Promise.reject(Object.assign(new Error("strict worker"), {code: "worker_fallback_disabled", cause})); } return original.run(...args); }, commitSession(...args) { commitCalls++; if (mode === "commit" && !faulted) { faulted = true; return Promise.resolve(false); } return original.commitSession(...args); }});
+      app.mapWorkerCoordinator = wrapped;
+      try { const response = await api.layers.setVisible("coastline", target); await drain(); return {ok: response.ok === true, runCalls, selfHealAttempts: app.lastDisplayRenderWorker?.selfHeal?.attempts || 0, finalState: renderer.layerVisibility.coastline === target}; }
+      finally { if (app.mapWorkerCoordinator === wrapped) app.mapWorkerCoordinator = original; }
+    }
+    function wrapCoordinator(overrides = {}) { return Object.freeze({run: overrides.run || original.run.bind(original), commitSession: overrides.commitSession || original.commitSession.bind(original), applySessionPatch: original.applySessionPatch.bind(original), invalidateSession: original.invalidateSession.bind(original), getSessionSnapshot: original.getSessionSnapshot.bind(original)}); }
+    function finalSignals() { const health = unwrap(api.info.healthEvents({severity: "error", limit: 100}), "health"), runtime = unwrap(api.info.runtimeStats(), "runtime"); return {health: health.events || [], loading: Boolean(runtime.loading.visible), glError: renderer.gl.getError()}; }
+  }
 
   async function runLayerIdentity() {
     const renderer = app.renderer, coordinator = app.mapWorkerCoordinator, layers = ["cities", "population", "markers", "resources", "military"];

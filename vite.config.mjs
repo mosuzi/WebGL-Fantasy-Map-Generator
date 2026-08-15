@@ -102,6 +102,9 @@ export default defineConfig(({mode}) => {
     root: "app/webgl-generator",
     envDir: projectRoot,
     base: "./",
+    define: {
+      __FMG_APP_BUILD_ID__: JSON.stringify(packageJson.version)
+    },
     plugins: [
       serveDropboxOAuthCallback(),
       injectAppVersion(),

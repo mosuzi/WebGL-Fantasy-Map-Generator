@@ -67,5 +67,5 @@
 
 ## 当前状态
 
-- 第 335-A～335-H 已接受，当前只进入 335-I：实现 UI latest-wins、正式提交后高亮、页面 / Worker build handshake 与一次性会话自愈。普通颜色、政治颜色、主题、海底、普通图层、平滑边界及稳定 point / overlay / city / picking identity 已完成。详细阶段与验收见 `docs/current-plan.md` 和 `docs/task-notes/task-335-gpu-resident-view-switch.md`。
-- 第 335-H checkpoint 版本为 `0.3.24`；第 335 项每个接受阶段必须独立递增版本并本地提交，但所有 checkpoint 在最终统一验收前不得推送。
+- 第 335-A～335-I 已接受，当前只进入 335-J：完成冷热、故障、旧数据、视觉、真实用户标签页和 100k 统一终验。GPU 常驻显示、稳定引用、latest-wins、正式提交控件、页面 / Worker build handshake 与一次性会话自愈均已完成。详细阶段与验收见 `docs/current-plan.md` 和 `docs/task-notes/task-335-gpu-resident-view-switch.md`。
+- 第 335-I checkpoint 版本为 `0.3.25`；第 335 项每个接受阶段必须独立递增版本并本地提交，但所有 checkpoint 在最终统一验收前不得推送。
