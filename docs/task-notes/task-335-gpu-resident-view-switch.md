@@ -133,3 +133,11 @@ Worker 化继续用于生成、重生成、地图编辑、派生拓扑、撤销 
 - 主题切换在 GPU 常驻 surface 上不再调用 Worker：surface 直接读取新主题 uniform；既有标签节点原位更新 resolved style 并分片让步；正式 line / shore CPU 顶点只改主题颜色并原位上传，不再遍历全部 hard-cell 岸线邻接；道路继续使用既有异步分片 builder。目标链不替换 overlay、不重绑 picking、不重建 surface，失败用同一异步本地路径恢复旧主题。
 - 固定 `10004` cells 的 Chrome 目标门中，主题、海底、标签、路线响应分别为 `48.6 / 12.5 / 14.2 / 13.2ms`，全部低于 `150 / 100 / 50 / 50ms` 门限。主题和海底与同图 Worker framebuffer 均为 `mismatches=0 / maxDelta=0`，标签 resolved style 同源；四项 Worker run、surface refresh、overlay replace、picking rebuild 与 LongTask 均为 `0`，surface、overlay、picking 和 route buffer 引用不变，health、Loading 与 WebGL error 为 `0`。artifact 为 `work/task335-f-display-mutations-10000/result.json`。
 - 新增纯 Node 契约门并复用 GPU 视图浏览器夹具；产品 `3` 文件 `+165 / -15`，工具新增约 `+104 / -6`，浏览器夹具总长 `207` 行，未超过 `500` 行且测试增量低于产品。语法、差异、专项 Node、Worker 全合同、prepared installer、主题 / API 收敛 / display ledger、生产构建和目标浏览器门均通过。版本为 `0.3.22`，下一阶段只进入 335-G。
+
+## 13. 335-G：平滑边界 correction 与岸线双态缓存（已接受）
+
+- GPU 常驻颜色模式不再为平滑边界重新三角化整张 cell surface。正式 hard surface 始终保持稳定，内部非岸线曲边只生成 `x/y/packed(cellId, side)` correction 三角层；曲线向某个 cell 内弯时，条带由对侧 cell 覆盖，岸线仍交给既有拓扑 correction。这样既保留原平滑几何，也从结构上消除整 cell 重三角化产生深色三角的风险。
+- correction 按完整三角和 `8MiB` 上限分段上传，prepared installer 对整个 buffer set 实施 retain / rollback / finalize 所有权；失败、取消和嵌套事务不会覆盖正式 set 或泄漏临时 WebGLBuffer。100k correction 为 `3` 段、`539440` 个三角、`19,419,840B`。
+- Worker 在正式全量渲染时同时准备当前颜色的平滑岸线面，以及平滑 / 硬岸线线条两套轻量缓存。切换时只启停岸线 correction draw count、上传已缓存岸线线条并重绘；颜色或主题改变时才按真实语义刷新岸线颜色。没有删 point / labels / political / shore 图层，也没有降低精度或放宽 LongTask 阈值。
+- 固定 `10004` cells 的首次开启 / 关闭 / 重复开启为 `14.7 / 13.9 / 13.1ms`；固定 `99846` cells 为 `20.2 / 18.7 / 16.4ms`。两档均与同图旧 Worker framebuffer `mismatches=0 / maxDelta=0`，Worker run、完整 surface refresh、完整 line refresh 与 LongTask 均为 `0`；surface、correction、cell attributes、overlay、picking 引用不变，health、Loading 和 WebGL error 为 `0`。artifact 为 `work/task335-g-smooth-borders-10000/result.json` 与 `work/task335-g-smooth-borders-100000/result.json`。
+- 产品 `5` 文件约 `+460` 行，专项 / 复用工具约 `+180` 行；浏览器夹具总长 `241` 行，未超过 `500` 行且测试增量低于产品。语法、差异、correction / display mutation / prepared installer、Worker 全合同、render preparation、主题、生产构建以及 10k / 100k Chrome 门均通过。版本为 `0.3.23`，下一阶段只进入 335-H。

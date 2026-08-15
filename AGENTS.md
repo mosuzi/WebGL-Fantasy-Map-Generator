@@ -67,5 +67,5 @@
 
 ## 当前状态
 
-- 第 335-A～335-F 已接受，当前只进入 335-G：收敛平滑边界 correction / cache，主题、海底和不改变几何的普通图层已经移出 Worker render preparation。详细阶段与验收见 `docs/current-plan.md` 和 `docs/task-notes/task-335-gpu-resident-view-switch.md`。
-- 第 335-F checkpoint 版本为 `0.3.22`；第 335 项每个接受阶段必须独立递增版本并本地提交，但所有 checkpoint 在最终统一验收前不得推送。
+- 第 335-A～335-G 已接受，当前只进入 335-H：保持 overlay / city / picking identity，只按真实语义变化增量更新。普通颜色、政治颜色、主题、海底、普通图层和平滑边界已经脱离整图 Worker render preparation。详细阶段与验收见 `docs/current-plan.md` 和 `docs/task-notes/task-335-gpu-resident-view-switch.md`。
+- 第 335-G checkpoint 版本为 `0.3.23`；第 335 项每个接受阶段必须独立递增版本并本地提交，但所有 checkpoint 在最终统一验收前不得推送。

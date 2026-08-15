@@ -23,6 +23,13 @@ const oceanRenderer = {viewOptions: {showOceanHeight: false, smoothCellBorders: 
 prototype.setViewOptions.call(oceanRenderer, {showOceanHeight: true});
 assert.deepEqual([oceanRenderer.viewOptions.showOceanHeight, oceanDraws], [true, 1]);
 
+let smoothRefreshes = 0;
+const smoothRenderer = {viewOptions: {smoothCellBorders: false}, map: {}, deferWorkerRenderMutation: () => false,
+  canApplyGpuResidentSmoothCellBorders: () => true, refreshGpuResidentSmoothCellBorders: () => smoothRefreshes++,
+  refreshCellSurface: () => assert.fail("不应刷新完整 surface"), refreshLineLayers: () => assert.fail("不应刷新完整 line")};
+prototype.setViewOptions.call(smoothRenderer, {smoothCellBorders: true});
+assert.deepEqual([smoothRenderer.viewOptions.smoothCellBorders, smoothRefreshes], [true, 1]);
+
 const calls = [], themeRenderer = {map: {layers: {background: [0, 0, 0, 1]}}, stage: {style: {backgroundColor: "", setProperty() {}, removeProperty() {}}},
   visualTheme: {id: "default"}, viewOptions: {smoothCellBorders: false}, layerVisibility: {routes: false}, dynamicBuffersDirty: {routes: false},
   canApplyGpuResidentVisualTheme: () => true, refreshVisualThemeLineColors: () => calls.push(["lines"]),
@@ -41,5 +48,6 @@ assert.deepEqual([...recolorRenderer.shoreLineVertices.slice(2, 6)], ancientThem
 
 const appSource = readFileSync(new URL("../app/webgl-generator/src/runtime/app.js", import.meta.url), "utf8");
 for (const pattern of [/setTheme:[\s\S]+canApplyGpuResidentVisualTheme/, /setShowOceanHeight:[\s\S]+canApplyGpuResidentOceanHeight/,
-  /setVisible:[\s\S]+canApplyGpuResidentLayerVisibility/, /const result = await apply\(\)/, /await rollback\?\.\(\)/]) assert.match(appSource, pattern);
-console.log(JSON.stringify({ok: true, directLayers: 3, oceanDraws, themeCalls: calls.length}));
+  /setSmoothCellBorders:[\s\S]+canApplyGpuResidentSmoothCellBorders/, /setVisible:[\s\S]+canApplyGpuResidentLayerVisibility/,
+  /const result = await apply\(\)/, /await rollback\?\.\(\)/]) assert.match(appSource, pattern);
+console.log(JSON.stringify({ok: true, directLayers: 3, oceanDraws, smoothRefreshes, themeCalls: calls.length}));

@@ -10,6 +10,10 @@ import {
   collectCellAttributeTextures,
   createCellAttributeStore
 } from "../app/webgl-generator/src/renderer/cell-attribute-store.js";
+import {
+  createCellVisualCorrectionBufferSet,
+  flattenCellVisualCorrectionBufferSet
+} from "../app/webgl-generator/src/renderer/cell-visual-surface-correction.js";
 
 class FakeGl {
   constructor() {
@@ -146,20 +150,25 @@ async function testCommittedRollbackAndFinalize() {
   const rollbackGl = new FakeGl();
   const rollbackRenderer = createRenderer(rollbackGl);
   const rollbackBeforeSet = rollbackRenderer.surfaceBaseBufferSet;
+  const rollbackBeforeCorrection = rollbackRenderer.cellVisualCorrectionBufferSet;
   const rollbackBeforeAlias = rollbackRenderer.vertexBuffer;
   const rollbackBeforeAttributes = rollbackRenderer.cellAttributeStore;
   const rollbackValues = largeSurface(21);
   const rollbackTransaction = await prepareSurfaceTransaction(rollbackRenderer, rollbackValues);
   rollbackTransaction.commit();
   const committedSet = rollbackRenderer.surfaceBaseBufferSet;
+  const committedCorrection = rollbackRenderer.cellVisualCorrectionBufferSet;
   const committedAttributes = rollbackRenderer.cellAttributeStore;
   assert.notEqual(committedSet, rollbackBeforeSet);
   assertSurfaceBaseSetMatches(committedSet, rollbackRenderer.vertexBuffer, rollbackValues, rollbackGl);
   assert.equal(rollbackTransaction.rollback(), true);
   assert.equal(rollbackRenderer.surfaceBaseBufferSet, rollbackBeforeSet);
+  assert.equal(rollbackRenderer.cellVisualCorrectionBufferSet, rollbackBeforeCorrection);
   assert.equal(rollbackRenderer.vertexBuffer, rollbackBeforeAlias);
   assert.equal(rollbackRenderer.cellAttributeStore, rollbackBeforeAttributes);
   assert.ok(flattenSurfaceBaseBufferSet(committedSet).every(buffer => !rollbackGl.isBuffer(buffer)));
+  assert.ok(flattenCellVisualCorrectionBufferSet(committedCorrection).every(buffer => !rollbackGl.isBuffer(buffer)));
+  assert.ok(flattenCellVisualCorrectionBufferSet(rollbackBeforeCorrection).every(buffer => rollbackGl.isBuffer(buffer)));
   assert.ok(flattenSurfaceBaseBufferSet(rollbackBeforeSet).every(buffer => rollbackGl.isBuffer(buffer)));
   assert.ok(collectCellAttributeTextures(committedAttributes).every(texture => !rollbackGl.isTexture(texture)));
   assert.ok(collectCellAttributeTextures(rollbackBeforeAttributes).every(texture => rollbackGl.isTexture(texture)));
@@ -167,13 +176,17 @@ async function testCommittedRollbackAndFinalize() {
   const finalizeGl = new FakeGl();
   const finalizeRenderer = createRenderer(finalizeGl);
   const finalizeBeforeSet = finalizeRenderer.surfaceBaseBufferSet;
+  const finalizeBeforeCorrection = finalizeRenderer.cellVisualCorrectionBufferSet;
   const finalizeBeforeAttributes = finalizeRenderer.cellAttributeStore;
   const finalizeTransaction = await prepareSurfaceTransaction(finalizeRenderer, smallSurface(22));
   finalizeTransaction.commit();
   const finalizedSet = finalizeRenderer.surfaceBaseBufferSet;
+  const finalizedCorrection = finalizeRenderer.cellVisualCorrectionBufferSet;
   const finalizedAttributes = finalizeRenderer.cellAttributeStore;
   assert.equal(finalizeTransaction.finalize(), true);
   assert.ok(flattenSurfaceBaseBufferSet(finalizeBeforeSet).every(buffer => !finalizeGl.isBuffer(buffer)));
+  assert.ok(flattenCellVisualCorrectionBufferSet(finalizeBeforeCorrection).every(buffer => !finalizeGl.isBuffer(buffer)));
+  assert.ok(flattenCellVisualCorrectionBufferSet(finalizedCorrection).every(buffer => finalizeGl.isBuffer(buffer)));
   assert.ok(flattenSurfaceBaseBufferSet(finalizedSet).every(buffer => finalizeGl.isBuffer(buffer)));
   assert.equal(finalizeRenderer.vertexBuffer, finalizedSet.segments[0].buffer);
   assert.ok(collectCellAttributeTextures(finalizeBeforeAttributes).every(texture => !finalizeGl.isTexture(texture)));
@@ -415,6 +428,7 @@ async function prepareSurfaceTransaction(renderer, base, {surfaceCellRanges = ne
     layers: {
       surface: {
         base,
+        cellVisualCorrection: smallCorrection(base[0]),
         landCorrections: new Float32Array(),
         waterCorrections: new Float32Array(),
         landCovers: new Float32Array(),
@@ -440,6 +454,8 @@ async function prepareSurfaceTransaction(renderer, base, {surfaceCellRanges = ne
 function createRenderer(gl) {
   const surfaceVertices = smallSurface(1);
   const surfaceBaseBufferSet = createSurfaceBaseBufferSet(gl, surfaceVertices);
+  const cellVisualCorrectionGeometry = smallCorrection(1);
+  const cellVisualCorrectionBufferSet = createCellVisualCorrectionBufferSet(gl, cellVisualCorrectionGeometry, gl.STATIC_DRAW);
   const map = createMapFixture("old-map");
   const renderer = {
     gl,
@@ -448,6 +464,8 @@ function createRenderer(gl) {
     cellAttributeStore: createCellAttributeStore(gl, map),
     surfaceBaseBufferSet,
     vertexBuffer: surfaceBaseBufferSet.segments[0].buffer,
+    cellVisualCorrectionGeometry,
+    cellVisualCorrectionBufferSet,
     surfaceVertices,
     landCorrectionVertices: new Float32Array(),
     waterCorrectionVertices: new Float32Array(),
@@ -505,6 +523,12 @@ function emptyShoreRanges() {
 
 function smallSurface(seed) {
   const values = new Float32Array(18);
+  values.fill(seed);
+  return values;
+}
+
+function smallCorrection(seed) {
+  const values = new Float32Array(9);
   values.fill(seed);
   return values;
 }

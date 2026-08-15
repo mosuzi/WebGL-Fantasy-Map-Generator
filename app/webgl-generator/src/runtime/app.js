@@ -3261,7 +3261,8 @@ function createRuntimeActions(state, documentRef, options = {}) {
         return runDisplayMutation(
           "layers.setSmoothCellBorders",
           () => setRuntimeSmoothCellBorders(state, documentRef, enabled),
-          () => setRuntimeSmoothCellBorders(state, documentRef, previous)
+          () => setRuntimeSmoothCellBorders(state, documentRef, previous),
+          {gpuResident: state.renderer?.canApplyGpuResidentSmoothCellBorders?.() === true}
         );
       },
       setShowHoverInfo: visible => setRuntimeHoverInfoVisible(state, documentRef, visible),

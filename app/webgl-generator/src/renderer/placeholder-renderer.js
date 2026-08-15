@@ -94,6 +94,14 @@ import {
   summarizeSurfaceBaseBufferSet,
   uploadSurfaceBaseBufferSetRanges
 } from "./surface-base-buffer-set.js";
+import {
+  buildCellVisualSurfaceCorrection,
+  createCellVisualCorrectionBufferSet,
+  createCellVisualCorrectionBufferSetAsync,
+  flattenCellVisualCorrectionBufferSet,
+  replaceCellVisualCorrectionBufferSet,
+  summarizeCellVisualCorrectionBufferSet
+} from "./cell-visual-surface-correction.js";
 import {resolveMilitaryLabelPalette} from "./military-label-palette.js";
 import {
   applyCellAttributePatch,
@@ -400,6 +408,9 @@ export class PlaceholderMapRenderer {
     };
     this.surfaceBaseBufferSet = createSurfaceBaseBufferSet(this.gl, new Float32Array(), {usage: this.gl.STATIC_DRAW});
     this.vertexBuffer = flattenSurfaceBaseBufferSet(this.surfaceBaseBufferSet)[0];
+    this.cellVisualCorrectionGeometry = new Float32Array();
+    this.cellVisualCorrectionBufferSet = createCellVisualCorrectionBufferSet(this.gl, this.cellVisualCorrectionGeometry, this.gl.STATIC_DRAW);
+    this.gpuResidentSmoothShoreSurfaceKey = "";
     this.cellAttributeStore = null;
     this.surfaceHeightColorTable = null;
     this.surfaceHeightColorTableKey = "";
@@ -426,6 +437,8 @@ export class PlaceholderMapRenderer {
     this.surfaceVertices = new Float32Array();
     this.lineVertices = new Float32Array();
     this.shoreLineVertices = new Float32Array();
+    this.gpuResidentSmoothShoreLineVertices = new Float32Array();
+    this.gpuResidentHardShoreLineVertices = new Float32Array();
     this.surfacePatchVertices = new Float32Array();
     this.surfacePatchCellRanges = new Map();
     this.surfacePatchCells = new Set();
@@ -686,12 +699,16 @@ export class PlaceholderMapRenderer {
     const shoreLineVertices = lineLayer.shoreVertices;
     this.lineVertices = lineVertices;
     this.shoreLineVertices = shoreLineVertices;
+    this.gpuResidentSmoothShoreLineVertices = lineLayer.gpuResidentSmoothShoreVertices;
+    this.gpuResidentHardShoreLineVertices = lineLayer.gpuResidentHardShoreVertices;
     this.shoreLinePathVertices = lineLayer.shoreLinePathVertices;
     this.shoreLinePathObjectVertices = lineLayer.shoreLinePathObjectVertices;
     const oceanCurrentVertices = lineLayer.oceanCurrentVertices;
     this.oceanCurrentLayerStats = lineLayer.oceanCurrents;
     const pointVertices = profile.stage("point-vertices", "构建点图层顶点", () => buildPointVertices(map, this.layerVisibility));
     this.surfaceVertices = vertices;
+    this.cellVisualCorrectionGeometry = surfaceBundle.cellVisualCorrection;
+    this.gpuResidentSmoothShoreSurfaceKey = surfaceBundle.smoothShoreSurfaceKey;
     this.surfacePatchVertices = new Float32Array();
     this.surfacePatchCellRanges = new Map();
     this.surfacePatchCells = new Set();
@@ -703,10 +720,10 @@ export class PlaceholderMapRenderer {
     this.surfaceCellRanges = surfaceBundle.surfaceCellRanges;
     this.shoreSurfaceCellRanges = surfaceBundle.shoreSurfaceCellRanges;
     this.vertexCount = vertices.length / 6;
-    this.landCorrectionVertexCount = surfaceBundle.landCorrections.length / 6;
-    this.waterCorrectionVertexCount = surfaceBundle.waterCorrections.length / 6;
-    this.landCoverVertexCount = surfaceBundle.landCovers.length / 6;
-    this.waterCoverVertexCount = surfaceBundle.waterCovers.length / 6;
+    this.landCorrectionVertexCount = surfaceBundle.shoreSurfaceEnabled ? surfaceBundle.landCorrections.length / 6 : 0;
+    this.waterCorrectionVertexCount = surfaceBundle.shoreSurfaceEnabled ? surfaceBundle.waterCorrections.length / 6 : 0;
+    this.landCoverVertexCount = surfaceBundle.shoreSurfaceEnabled ? surfaceBundle.landCovers.length / 6 : 0;
+    this.waterCoverVertexCount = surfaceBundle.shoreSurfaceEnabled ? surfaceBundle.waterCovers.length / 6 : 0;
     this.routeVertexCount = 0;
     this.routeDrawRanges = emptyRouteDrawRanges();
     this.riverVertexCount = 0;
@@ -732,6 +749,7 @@ export class PlaceholderMapRenderer {
           usage: this.gl.STATIC_DRAW,
           surfaceCellRanges: this.surfaceCellRanges
         }));
+        installCellVisualCorrectionBufferSet(this, createCellVisualCorrectionBufferSet(this.gl, surfaceBundle.cellVisualCorrection, this.gl.STATIC_DRAW));
         this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.surfacePatchBuffer);
         this.gl.bufferData(this.gl.ARRAY_BUFFER, new Float32Array(), this.gl.DYNAMIC_DRAW);
         uploadShoreSurfaceBuffers(this.gl, this, surfaceBundle);
@@ -809,12 +827,16 @@ export class PlaceholderMapRenderer {
     const shoreLineVertices = lineLayer.shoreVertices;
     this.lineVertices = lineVertices;
     this.shoreLineVertices = shoreLineVertices;
+    this.gpuResidentSmoothShoreLineVertices = lineLayer.gpuResidentSmoothShoreVertices;
+    this.gpuResidentHardShoreLineVertices = lineLayer.gpuResidentHardShoreVertices;
     this.shoreLinePathVertices = lineLayer.shoreLinePathVertices;
     this.shoreLinePathObjectVertices = lineLayer.shoreLinePathObjectVertices;
     const oceanCurrentVertices = lineLayer.oceanCurrentVertices;
     this.oceanCurrentLayerStats = lineLayer.oceanCurrents;
     const pointVertices = await stage("point-vertices", "构建点图层顶点", () => buildPointVertices(map, this.layerVisibility));
     this.surfaceVertices = vertices;
+    this.cellVisualCorrectionGeometry = surfaceBundle.cellVisualCorrection;
+    this.gpuResidentSmoothShoreSurfaceKey = surfaceBundle.smoothShoreSurfaceKey;
     this.surfacePatchVertices = new Float32Array();
     this.surfacePatchCellRanges = new Map();
     this.surfacePatchCells = new Set();
@@ -826,10 +848,10 @@ export class PlaceholderMapRenderer {
     this.surfaceCellRanges = surfaceBundle.surfaceCellRanges;
     this.shoreSurfaceCellRanges = surfaceBundle.shoreSurfaceCellRanges;
     this.vertexCount = vertices.length / 6;
-    this.landCorrectionVertexCount = surfaceBundle.landCorrections.length / 6;
-    this.waterCorrectionVertexCount = surfaceBundle.waterCorrections.length / 6;
-    this.landCoverVertexCount = surfaceBundle.landCovers.length / 6;
-    this.waterCoverVertexCount = surfaceBundle.waterCovers.length / 6;
+    this.landCorrectionVertexCount = surfaceBundle.shoreSurfaceEnabled ? surfaceBundle.landCorrections.length / 6 : 0;
+    this.waterCorrectionVertexCount = surfaceBundle.shoreSurfaceEnabled ? surfaceBundle.waterCorrections.length / 6 : 0;
+    this.landCoverVertexCount = surfaceBundle.shoreSurfaceEnabled ? surfaceBundle.landCovers.length / 6 : 0;
+    this.waterCoverVertexCount = surfaceBundle.shoreSurfaceEnabled ? surfaceBundle.waterCovers.length / 6 : 0;
     this.routeVertexCount = 0;
     this.routeDrawRanges = emptyRouteDrawRanges();
     this.riverVertexCount = 0;
@@ -856,6 +878,11 @@ export class PlaceholderMapRenderer {
         yieldToMain: () => yieldToBrowser({stageId: "gpu-upload-surface-base"})
       });
       installSurfaceBaseBufferSet(this, surfaceBaseBufferSet);
+      const correctionBufferSet = await createCellVisualCorrectionBufferSetAsync(this.gl, surfaceBundle.cellVisualCorrection, {
+        usage: this.gl.STATIC_DRAW,
+        yieldToMain: () => yieldToBrowser({stageId: "gpu-upload-cell-visual-correction"})
+      });
+      installCellVisualCorrectionBufferSet(this, correctionBufferSet);
       this.recordBufferUpload("load-map-static", () => {
         this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.surfacePatchBuffer);
         this.gl.bufferData(this.gl.ARRAY_BUFFER, new Float32Array(), this.gl.DYNAMIC_DRAW);
@@ -982,8 +1009,15 @@ export class PlaceholderMapRenderer {
     if (this.canPresentGpuResidentColorMode(mode)) {
       const previous = this.colorMode;
       this.colorMode = mode;
-      try { this.draw(); }
-      catch (error) { this.colorMode = previous; this.draw(); throw error; }
+      try {
+        if (this.viewOptions.smoothCellBorders !== false) this.refreshGpuResidentShoreSurface();
+        this.draw();
+      } catch (error) {
+        this.colorMode = previous;
+        if (this.viewOptions.smoothCellBorders !== false) this.refreshGpuResidentShoreSurface();
+        this.draw();
+        throw error;
+      }
       return;
     }
     this.colorMode = mode;
@@ -995,9 +1029,9 @@ export class PlaceholderMapRenderer {
   canPresentGpuResidentColorMode(mode) {
     const identity = String(this.map?.metadata?.mapIdentity || this.map?.metadata?.id || "");
     return Boolean(GPU_RESIDENT_COLOR_MODES[mode] && this.cellAttributeStore?.snapshot?.mapIdentity === identity
-      && this.viewOptions?.smoothCellBorders === false && !this.surfacePatchCells?.size
+      && !this.surfacePatchCells?.size && currentCellVisualCorrectionBufferSet(this)
       && this.surfaceCellRanges?.size === this.cellAttributeStore.snapshot.cellCount
-      && !this.landCorrectionVertexCount && !this.waterCorrectionVertexCount && !this.landCoverVertexCount && !this.waterCoverVertexCount);
+    );
   }
 
   canApplyGpuResidentOceanHeight() {
@@ -1005,6 +1039,10 @@ export class PlaceholderMapRenderer {
   }
 
   canApplyGpuResidentVisualTheme() {
+    return this.canPresentGpuResidentColorMode(this.colorMode);
+  }
+
+  canApplyGpuResidentSmoothCellBorders() {
     return this.canPresentGpuResidentColorMode(this.colorMode);
   }
 
@@ -1049,6 +1087,7 @@ export class PlaceholderMapRenderer {
     })) return;
     const optionKeys = Object.keys(options || {});
     const gpuResidentOceanHeight = optionKeys.length === 1 && optionKeys[0] === "showOceanHeight" && this.canApplyGpuResidentOceanHeight();
+    const gpuResidentSmoothBorders = optionKeys.length === 1 && optionKeys[0] === "smoothCellBorders" && this.canApplyGpuResidentSmoothCellBorders();
     const shouldRefreshLineLayers = Object.prototype.hasOwnProperty.call(options, "smoothCellBorders");
     this.viewOptions = {...this.viewOptions, ...options};
     if (!this.map) return;
@@ -1056,9 +1095,50 @@ export class PlaceholderMapRenderer {
       this.draw();
       return;
     }
+    if (gpuResidentSmoothBorders) {
+      this.refreshGpuResidentSmoothCellBorders();
+      return;
+    }
     this.refreshCellSurface({draw: false});
     if (shouldRefreshLineLayers) this.refreshLineLayers({draw: false});
     this.draw();
+  }
+
+  refreshGpuResidentSmoothCellBorders() {
+    this.refreshGpuResidentShoreSurface();
+    this.refreshShoreLineLayer({draw: false});
+    this.draw();
+  }
+
+  refreshGpuResidentShoreSurface() {
+    if (this.viewOptions.smoothCellBorders === false || !shouldDrawShoreVisualBands(this.colorMode)) {
+      this.landCorrectionVertexCount = 0;
+      this.waterCorrectionVertexCount = 0;
+      this.landCoverVertexCount = 0;
+      this.waterCoverVertexCount = 0;
+      return null;
+    }
+    const key = gpuResidentShoreSurfaceKey(this.colorMode, this.viewOptions);
+    if (this.gpuResidentSmoothShoreSurfaceKey === key) {
+      this.landCorrectionVertexCount = this.landCorrectionVertices.length / 6;
+      this.waterCorrectionVertexCount = this.waterCorrectionVertices.length / 6;
+      this.landCoverVertexCount = this.landCoverVertices.length / 6;
+      this.waterCoverVertexCount = this.waterCoverVertices.length / 6;
+      return null;
+    }
+    const surfaceBundle = buildShoreSurfaceVertexLayers(createRenderContext(this.map), this.colorMode, this.viewOptions, this.shoreVisualPaths);
+    this.landCorrectionVertices = surfaceBundle.landCorrections;
+    this.waterCorrectionVertices = surfaceBundle.waterCorrections;
+    this.landCoverVertices = surfaceBundle.landCovers;
+    this.waterCoverVertices = surfaceBundle.waterCovers;
+    this.shoreSurfaceCellRanges = surfaceBundle.cellRanges;
+    this.gpuResidentSmoothShoreSurfaceKey = key;
+    this.landCorrectionVertexCount = surfaceBundle.landCorrections.length / 6;
+    this.waterCorrectionVertexCount = surfaceBundle.waterCorrections.length / 6;
+    this.landCoverVertexCount = surfaceBundle.landCovers.length / 6;
+    this.waterCoverVertexCount = surfaceBundle.waterCovers.length / 6;
+    uploadShoreSurfaceBuffers(this.gl, this, surfaceBundle);
+    return surfaceBundle;
   }
 
   setVisualTheme(themeId, {force = false} = {}) {
@@ -1087,6 +1167,7 @@ export class PlaceholderMapRenderer {
     this.visualTheme = theme;
     this.viewOptions = {...this.viewOptions, visualTheme: theme};
     applyMapStageBackground(this.stage, map, theme);
+    if (this.viewOptions.smoothCellBorders !== false) this.refreshGpuResidentShoreSurface();
     this.refreshVisualThemeLineColors(previousTheme, theme);
     await this.refreshLabelThemeStyles({yieldToMain});
     if (this.layerVisibility.routes) {
@@ -1129,7 +1210,9 @@ export class PlaceholderMapRenderer {
       return {reused: false};
     }
     recolorThemeLineVertices(this.lineVertices, previousTheme, nextTheme, {shore: false});
-    recolorThemeLineVertices(this.shoreLineVertices, previousTheme, nextTheme, {shore: true});
+    for (const vertices of new Set([this.shoreLineVertices, this.gpuResidentSmoothShoreLineVertices, this.gpuResidentHardShoreLineVertices])) {
+      if (vertices instanceof Float32Array) recolorThemeLineVertices(vertices, previousTheme, nextTheme, {shore: true});
+    }
     const upload = this.recordBufferUpload("theme-line-recolor", () => {
       this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.lineBuffer);
       this.gl.bufferSubData(this.gl.ARRAY_BUFFER, 0, this.lineVertices);
@@ -1172,6 +1255,8 @@ export class PlaceholderMapRenderer {
         : buildPlaceholderSurfaceBundle(this.map, this.colorMode, this.viewOptions, this.shoreVisualPaths, this.stateVisualPaths, this.provinceVisualPaths, this.politicalVisualMeshes, this.cellVisualMesh);
       const vertices = surfaceBundle.base;
       this.surfaceVertices = vertices;
+      this.cellVisualCorrectionGeometry = surfaceBundle.cellVisualCorrection;
+      this.gpuResidentSmoothShoreSurfaceKey = surfaceBundle.smoothShoreSurfaceKey;
       this.surfacePatchVertices = new Float32Array();
       this.surfacePatchCellRanges = new Map();
       this.surfacePatchCells = new Set();
@@ -1183,15 +1268,16 @@ export class PlaceholderMapRenderer {
       this.surfaceCellRanges = surfaceBundle.surfaceCellRanges;
       this.shoreSurfaceCellRanges = surfaceBundle.shoreSurfaceCellRanges;
       this.vertexCount = vertices.length / 6;
-      this.landCorrectionVertexCount = surfaceBundle.landCorrections.length / 6;
-      this.waterCorrectionVertexCount = surfaceBundle.waterCorrections.length / 6;
-      this.landCoverVertexCount = surfaceBundle.landCovers.length / 6;
-      this.waterCoverVertexCount = surfaceBundle.waterCovers.length / 6;
+      this.landCorrectionVertexCount = surfaceBundle.shoreSurfaceEnabled ? surfaceBundle.landCorrections.length / 6 : 0;
+      this.waterCorrectionVertexCount = surfaceBundle.shoreSurfaceEnabled ? surfaceBundle.waterCorrections.length / 6 : 0;
+      this.landCoverVertexCount = surfaceBundle.shoreSurfaceEnabled ? surfaceBundle.landCovers.length / 6 : 0;
+      this.waterCoverVertexCount = surfaceBundle.shoreSurfaceEnabled ? surfaceBundle.waterCovers.length / 6 : 0;
       const upload = this.recordBufferUpload("surface-refresh", () => {
         installSurfaceBaseBufferSet(this, createSurfaceBaseBufferSet(this.gl, vertices, {
           usage: this.gl.STATIC_DRAW,
           surfaceCellRanges: this.surfaceCellRanges
         }));
+        installCellVisualCorrectionBufferSet(this, createCellVisualCorrectionBufferSet(this.gl, surfaceBundle.cellVisualCorrection, this.gl.STATIC_DRAW));
         this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.surfacePatchBuffer);
         this.gl.bufferData(this.gl.ARRAY_BUFFER, new Float32Array(), this.gl.DYNAMIC_DRAW);
         uploadShoreSurfaceBuffers(this.gl, this, surfaceBundle);
@@ -1569,6 +1655,8 @@ export class PlaceholderMapRenderer {
       const shoreLineVertices = lineLayer.shoreVertices;
       this.lineVertices = lineVertices;
       this.shoreLineVertices = shoreLineVertices;
+      this.gpuResidentSmoothShoreLineVertices = lineLayer.gpuResidentSmoothShoreVertices;
+      this.gpuResidentHardShoreLineVertices = lineLayer.gpuResidentHardShoreVertices;
       this.shoreLinePathVertices = lineLayer.shoreLinePathVertices;
       this.shoreLinePathObjectVertices = lineLayer.shoreLinePathObjectVertices;
       const oceanCurrentVertices = lineLayer.oceanCurrentVertices;
@@ -1597,6 +1685,20 @@ export class PlaceholderMapRenderer {
     const startedAt = performance.now();
     const event = this.beginPerformanceEvent("shoreLineRefresh", {drawRequested: draw}, startedAt);
     try {
+      const cached = this.viewOptions.smoothCellBorders !== false
+        ? this.gpuResidentSmoothShoreLineVertices
+        : this.gpuResidentHardShoreLineVertices;
+      if (this.canApplyGpuResidentSmoothCellBorders() && cached instanceof Float32Array) {
+        this.shoreLineVertices = cached;
+        this.shoreLineVertexCount = cached.length / 6;
+        const upload = this.recordBufferUpload("shore-line-refresh", () => {
+          this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.shoreLineBuffer);
+          this.gl.bufferData(this.gl.ARRAY_BUFFER, cached, this.gl.STATIC_DRAW);
+        }, {bufferGroup: "shore-line"});
+        if (draw) this.draw();
+        this.completePerformanceEvent(event, {uploadMs: upload.ms, shoreLineVertexCount: this.shoreLineVertexCount, rebuiltPaths: 0, gpuResidentCache: true}, performance.now());
+        return;
+      }
       const shoreLineLayer = buildShoreLineVerticesCached(this.map, this.layerVisibility, this.colorMode, this.shoreVisualPaths, this.cellVisualMesh, this.viewOptions, this.shoreLinePathVertices, this.shoreLinePathObjectVertices);
       const shoreLineVertices = shoreLineLayer.vertices;
       this.shoreLineVertices = shoreLineVertices;
@@ -2254,6 +2356,7 @@ export class PlaceholderMapRenderer {
     gl.uniform2f(this.locations.offset, this.camera.offsetX, this.camera.offsetY);
     gl.enable(gl.DEPTH_TEST);
     drawSurfaceBase(gl, this, gl.ALWAYS);
+    drawCellVisualCorrection(gl, this);
     drawSurfaceDepthBatch(gl, this, this.surfacePatchBuffer, this.surfacePatchVertexCount, gl.ALWAYS);
     drawSurfaceDepthBatch(gl, this, this.landCorrectionBuffer, this.landCorrectionVertexCount, gl.LESS);
     drawSurfaceDepthBatch(gl, this, this.waterCorrectionBuffer, this.waterCorrectionVertexCount, gl.GREATER);
@@ -2447,6 +2550,7 @@ export class PlaceholderMapRenderer {
 
   getStats() {
     const surfaceBaseBuffers = summarizeRendererSurfaceBase(this);
+    const cellVisualCorrectionBuffers = summarizeRendererCellVisualCorrection(this);
     return {
       metadata: this.map?.metadata,
       grid: this.map?.grid?.metadata,
@@ -2454,6 +2558,7 @@ export class PlaceholderMapRenderer {
       features: this.map?.features?.metadata,
       vertexCount: this.vertexCount,
       surfaceBaseBuffers,
+      cellVisualCorrectionBuffers,
       cellAttributeStore: this.cellAttributeStore ? summarizeCellAttributeStore(this.cellAttributeStore) : null,
       surfaceColorMode: GPU_RESIDENT_COLOR_MODES[this.colorMode] && this.cellAttributeStore ? "gpu-cell-attributes" : "legacy-vertex-color",
       shoreSurfaceDepth: {
@@ -2462,7 +2567,7 @@ export class PlaceholderMapRenderer {
         waterCorrectionVertexCount: this.waterCorrectionVertexCount,
         landCoverVertexCount: this.landCoverVertexCount,
         waterCoverVertexCount: this.waterCoverVertexCount,
-        drawCount: surfaceBaseBuffers.segmentCount + 4,
+        drawCount: surfaceBaseBuffers.segmentCount + cellVisualCorrectionBuffers.segmentCount + 4,
         clearDepth: 0.5
       },
       routeVertexCount: this.routeVertexCount,
@@ -5497,8 +5602,9 @@ export function buildPlaceholderSurfaceBundle(map, colorMode, viewOptions, shore
   const provincePaths = provinceVisualPaths || buildProvinceVisualPaths(map);
   const politicalSurface = politicalSurfaceMeshForMode(colorMode, politicalVisualMeshes);
   const smoothCellBorders = viewOptions.smoothCellBorders !== false;
-  const useCellVisualMesh = smoothCellBorders && cellVisualMesh?.cells?.length;
-  const usePoliticalSurface = smoothCellBorders && politicalSurface;
+  const useGpuResidentSurface = Boolean(GPU_RESIDENT_COLOR_MODES[colorMode] && cellVisualMesh?.cells?.length);
+  const useCellVisualMesh = smoothCellBorders && cellVisualMesh?.cells?.length && !useGpuResidentSurface;
+  const usePoliticalSurface = smoothCellBorders && politicalSurface && !useGpuResidentSurface;
   const gridSurfaceCellRanges = new Map();
   const vertices = useCellVisualMesh ? buildCellVisualGridVertices(context, colorMode, viewOptions, cellVisualMesh) : [];
   if (useCellVisualMesh) encodeCellVisualSurfaceSides(vertices, cellVisualMesh, map);
@@ -5525,7 +5631,7 @@ export function buildPlaceholderSurfaceBundle(map, colorMode, viewOptions, shore
       (cellIndex, range) => gridSurfaceCellRanges.set(cellIndex, range)
     );
   }
-  const shoreLayers = smoothCellBorders && shouldDrawShoreVisualBands(colorMode) && shoreVisualPaths
+  const shoreLayers = (smoothCellBorders || useGpuResidentSurface) && shouldDrawShoreVisualBands(colorMode) && shoreVisualPaths
     ? buildShoreSurfaceVertexLayers(context, colorMode, viewOptions, shoreVisualPaths)
     : emptyShoreSurfaceVertexLayers();
   if (smoothCellBorders && !useCellVisualMesh) {
@@ -5544,6 +5650,9 @@ export function buildPlaceholderSurfaceBundle(map, colorMode, viewOptions, shore
     && gridSurfaceCellRanges.get(lastGridCell)?.end === base.length;
   return {
     base,
+    cellVisualCorrection: useGpuResidentSurface ? buildCellVisualSurfaceCorrection(map, cellVisualMesh) : new Float32Array(),
+    shoreSurfaceEnabled: smoothCellBorders,
+    smoothShoreSurfaceKey: useGpuResidentSurface ? gpuResidentShoreSurfaceKey(colorMode, viewOptions) : "",
     ...shoreVertices,
     surfaceCellRangesMode: useCellVisualMesh ? "cell-visual" : completeGridSurfaceRanges ? "grid-cells" : "unavailable",
     surfaceCellRanges: useCellVisualMesh
@@ -5639,6 +5748,17 @@ function emptyShoreSurfaceVertexLayers() {
   };
 }
 
+function gpuResidentShoreSurfaceKey(colorMode, viewOptions) {
+  return JSON.stringify([
+    colorMode,
+    Boolean(viewOptions?.showOceanHeight),
+    viewOptions?.visualTheme?.id || "default",
+    viewOptions?.visualTheme?.water?.fill || null,
+    viewOptions?.visualTheme?.land?.fill || null,
+    viewOptions?.visualTheme?.terrain?.heightRamp || null
+  ]);
+}
+
 function buildSurfaceCellRanges(colorMode, viewOptions, cellVisualMesh, surfaceFloatLength) {
   if (viewOptions?.smoothCellBorders === false || !cellVisualMesh?.cells?.length || !Number.isFinite(surfaceFloatLength)) return new Map();
   const ranges = new Map();
@@ -5705,6 +5825,15 @@ function installSurfaceBaseBufferSet(renderer, replacement) {
   return renderer.surfaceBaseBufferSet;
 }
 
+function installCellVisualCorrectionBufferSet(renderer, replacement) {
+  renderer.cellVisualCorrectionBufferSet = replaceCellVisualCorrectionBufferSet(
+    renderer.gl,
+    renderer.cellVisualCorrectionBufferSet,
+    replacement
+  );
+  return renderer.cellVisualCorrectionBufferSet;
+}
+
 function installRendererCellAttributeStore(renderer, replacement) {
   const previous = renderer.cellAttributeStore;
   if (previous === replacement) return replacement;
@@ -5718,6 +5847,11 @@ function currentSurfaceBaseBufferSet(renderer) {
   const buffers = flattenSurfaceBaseBufferSet(bufferSet);
   if (buffers[0] !== renderer.vertexBuffer || !isSurfaceBaseBufferSetForVertices(bufferSet, renderer.surfaceVertices)) return null;
   return bufferSet;
+}
+
+function currentCellVisualCorrectionBufferSet(renderer) {
+  const bufferSet = renderer.cellVisualCorrectionBufferSet;
+  return bufferSet?.wordLength === renderer.cellVisualCorrectionGeometry?.length ? bufferSet : null;
 }
 
 function uploadSurfaceBaseRanges(renderer, ranges) {
@@ -5757,6 +5891,36 @@ function drawSurfaceBase(gl, renderer, depthFunction) {
     gl.vertexAttribPointer(renderer.surfaceLocations.color, 3, gl.FLOAT, false, 3 * Float32Array.BYTES_PER_ELEMENT, 0);
     gl.drawArrays(gl.TRIANGLES, 0, segment.vertexCount);
   }
+  gl.useProgram(renderer.program);
+  gl.uniform1i(renderer.locations.pointMode, 0);
+  gl.uniform1i(renderer.locations.surfaceSideMode, 1);
+  gl.uniform1f(renderer.locations.scale, renderer.camera.scale);
+  gl.uniform2f(renderer.locations.offset, renderer.camera.offsetX, renderer.camera.offsetY);
+}
+
+function drawCellVisualCorrection(gl, renderer) {
+  if (renderer.viewOptions?.smoothCellBorders === false || !GPU_RESIDENT_COLOR_MODES[renderer.colorMode]) return;
+  const bufferSet = currentCellVisualCorrectionBufferSet(renderer);
+  if (!bufferSet?.vertexCount) return;
+  gl.useProgram(renderer.surfaceProgram);
+  gl.uniform1i(renderer.surfaceLocations.pointMode, 0);
+  gl.uniform1i(renderer.surfaceLocations.surfaceSideMode, 1);
+  gl.uniform1f(renderer.surfaceLocations.scale, renderer.camera.scale);
+  gl.uniform2f(renderer.surfaceLocations.offset, renderer.camera.offsetX, renderer.camera.offsetY);
+  configureGpuResidentSurfaceColors(gl, renderer);
+  gl.depthFunc(gl.ALWAYS);
+  gl.disableVertexAttribArray(renderer.surfaceLocations.color);
+  gl.vertexAttrib3f(renderer.surfaceLocations.color, 0, 0, 0);
+  for (const segment of bufferSet.segments) {
+    if (!segment.vertexCount) continue;
+    gl.bindBuffer(gl.ARRAY_BUFFER, segment.buffer);
+    gl.enableVertexAttribArray(renderer.surfaceLocations.position);
+    gl.vertexAttribPointer(renderer.surfaceLocations.position, 2, gl.FLOAT, false, 3 * Float32Array.BYTES_PER_ELEMENT, 0);
+    gl.enableVertexAttribArray(renderer.surfaceLocations.identity);
+    gl.vertexAttribIPointer(renderer.surfaceLocations.identity, 1, gl.UNSIGNED_INT, 3 * Float32Array.BYTES_PER_ELEMENT, 2 * Float32Array.BYTES_PER_ELEMENT);
+    gl.drawArrays(gl.TRIANGLES, 0, segment.vertexCount);
+  }
+  gl.enableVertexAttribArray(renderer.surfaceLocations.color);
   gl.useProgram(renderer.program);
   gl.uniform1i(renderer.locations.pointMode, 0);
   gl.uniform1i(renderer.locations.surfaceSideMode, 1);
@@ -5817,6 +5981,17 @@ function summarizeRendererSurfaceBase(renderer) {
   };
 }
 
+function summarizeRendererCellVisualCorrection(renderer) {
+  const bufferSet = currentCellVisualCorrectionBufferSet(renderer);
+  return bufferSet ? summarizeCellVisualCorrectionBufferSet(bufferSet) : {
+    segmentCount: 0,
+    vertexCount: 0,
+    triangleCount: 0,
+    byteLength: 0,
+    maxSegmentBytes: 0
+  };
+}
+
 function drawSurfaceDepthBatch(gl, renderer, buffer, vertexCount, depthFunction) {
   if (!vertexCount) return;
   gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
@@ -5834,6 +6009,7 @@ export function buildLineVertices(map, visibility = {}, colorMode = "height", sh
   const themeLines = viewOptions.visualTheme?.lines || {};
   pushMapEdgeFade(vertices, context, map, viewOptions.visualTheme);
   const shoreLineLayer = buildShoreLineVerticesCached(map, visibility, colorMode, shoreVisualPaths, cellVisualMesh, viewOptions);
+  const gpuResidentShoreLines = buildGpuResidentShoreLinePair(map, visibility, colorMode, shoreVisualPaths, cellVisualMesh, viewOptions, shoreLineLayer);
   pushZoneTextureLayer(vertices, context, map, visibility);
   const oceanCurrents = pushOceanCurrentLayer(oceanCurrentVertices, context, map, visibility, oceanCurrentHighlights);
   if (visibility.provinceBorders !== false) pushPoliticalBoundaryStrokes(vertices, provincePaths, context, themeLines.provinceBorder || PROVINCE_VISUAL_STYLE.borderStroke, PROVINCE_VISUAL_STYLE.borderWidthWorld, PROVINCE_VISUAL_STYLE.borderDashWorld);
@@ -5844,9 +6020,22 @@ export function buildLineVertices(map, visibility = {}, colorMode = "height", sh
     shoreVertices: shoreLineLayer.vertices,
     shoreLinePathVertices: shoreLineLayer.pathVertices,
     shoreLinePathObjectVertices: shoreLineLayer.pathObjectVertices,
+    gpuResidentSmoothShoreVertices: gpuResidentShoreLines.smooth,
+    gpuResidentHardShoreVertices: gpuResidentShoreLines.hard,
     oceanCurrentVertices: new Float32Array(oceanCurrentVertices),
     oceanCurrents
   };
+}
+
+function buildGpuResidentShoreLinePair(map, visibility, colorMode, shoreVisualPaths, cellVisualMesh, viewOptions, current) {
+  if (!GPU_RESIDENT_COLOR_MODES[colorMode]) return {smooth: new Float32Array(), hard: new Float32Array()};
+  const smooth = viewOptions.smoothCellBorders !== false
+    ? current.vertices
+    : buildShoreLineVerticesCached(map, visibility, colorMode, shoreVisualPaths, cellVisualMesh, {...viewOptions, smoothCellBorders: true}).vertices;
+  const hard = viewOptions.smoothCellBorders === false
+    ? current.vertices
+    : buildShoreLineVerticesCached(map, visibility, colorMode, shoreVisualPaths, cellVisualMesh, {...viewOptions, smoothCellBorders: false}).vertices;
+  return {smooth, hard};
 }
 
 function buildShoreLineVerticesCached(map, visibility, colorMode, shoreVisualPaths, cellVisualMesh, viewOptions, previousPathVertices = null, previousPathObjectVertices = null) {

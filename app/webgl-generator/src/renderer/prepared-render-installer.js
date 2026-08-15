@@ -20,11 +20,16 @@ import {
   releaseCellAttributeStore,
   retainCellAttributeStore
 } from "./cell-attribute-store.js";
+import {
+  createCellVisualCorrectionBufferSetAsync,
+  flattenCellVisualCorrectionBufferSet
+} from "./cell-visual-surface-correction.js";
 
 const FLOATS_PER_VERTEX = 6;
 const DEFAULT_UPLOAD_SLICE_BYTES = 256 * 1024;
 const PICKING_REBIND_BUDGET_MS = 24;
 const surfaceBaseBufferOwners = new WeakMap();
+const cellVisualCorrectionBufferOwners = new WeakMap();
 
 export async function prepareRendererWorkerInstall(renderer, map, prepared, options = {}) {
   if (!renderer?.gl || !map || !prepared?.layers) throw renderInstallError("render-install-input", "Worker 渲染安装缺少 renderer、地图或准备结果");
@@ -36,6 +41,7 @@ export async function prepareRendererWorkerInstall(renderer, map, prepared, opti
   const decoded = {};
   const buffers = new Map();
   let surfaceBaseBufferSet = null;
+  let cellVisualCorrectionBufferSet = null;
   let surfaceValues = null;
   let surfaceColorPatch = null;
   let cellAttributeStore = null;
@@ -123,6 +129,14 @@ export async function prepareRendererWorkerInstall(renderer, map, prepared, opti
           assertCurrent: gate.assertCurrent,
           onProgress: detail => gate.onProgress("gpu:surfaceBaseBufferSet", detail)
         });
+        if (surfaceValues.cellVisualCorrection instanceof Float32Array) {
+          cellVisualCorrectionBufferSet = await createCellVisualCorrectionBufferSetAsync(renderer.gl, surfaceValues.cellVisualCorrection, {
+            usage: renderer.gl.STATIC_DRAW,
+            yieldToMain: gate.yieldToMain,
+            assertCurrent: gate.assertCurrent,
+            onProgress: detail => gate.onProgress("gpu:cellVisualCorrection", detail)
+          });
+        }
       }
       for (const [key, values] of [
         ["landCorrectionBuffer", surfaceValues.landCorrections],
@@ -146,11 +160,12 @@ export async function prepareRendererWorkerInstall(renderer, map, prepared, opti
   } catch (error) {
     deletePreparedBuffers(renderer.gl, buffers.values());
     deleteUnownedSurfaceBaseBuffers(renderer.gl, surfaceBaseBufferSet, renderer.surfaceBaseBufferSet);
+    deleteUnownedCellVisualCorrectionBuffers(renderer.gl, cellVisualCorrectionBufferSet, renderer.cellVisualCorrectionBufferSet);
     deleteUnownedCellAttributeStore(renderer.gl, cellAttributeStore, renderer.cellAttributeStore);
     throw error;
   }
 
-  return createPreparedInstallTransaction(renderer, map, prepared, decoded, buffers, surfaceBaseBufferSet, surfaceValues, cellAttributeStore, {
+  return createPreparedInstallTransaction(renderer, map, prepared, decoded, buffers, surfaceBaseBufferSet, cellVisualCorrectionBufferSet, surfaceValues, cellAttributeStore, {
     preserveRoutePicking: options.preserveRoutePicking === true,
     resetViewport: options.resetViewport === true,
     deferOverlayLayout: options.deferOverlayLayout === true,
@@ -160,7 +175,7 @@ export async function prepareRendererWorkerInstall(renderer, map, prepared, opti
   });
 }
 
-function createPreparedInstallTransaction(renderer, map, prepared, decoded, buffers, surfaceBaseBufferSet, surfaceValues, cellAttributeStore, options) {
+function createPreparedInstallTransaction(renderer, map, prepared, decoded, buffers, surfaceBaseBufferSet, cellVisualCorrectionBufferSet, surfaceValues, cellAttributeStore, options) {
   const layers = prepared.layers;
   const before = new Map();
   const assigned = [];
@@ -175,10 +190,14 @@ function createPreparedInstallTransaction(renderer, map, prepared, decoded, buff
   let surfaceColorPatchDirty = false;
   let ownsPreparedSurfaceBase = Boolean(surfaceBaseBufferSet);
   let ownsPreviousSurfaceBase = false;
+  let cellVisualCorrectionBefore = null;
+  let ownsPreparedCellVisualCorrection = Boolean(cellVisualCorrectionBufferSet);
+  let ownsPreviousCellVisualCorrection = false;
   let cellAttributeStoreBefore = null;
   let ownsPreparedCellAttributes = Boolean(cellAttributeStore);
   let ownsPreviousCellAttributes = false;
   if (ownsPreparedSurfaceBase) retainSurfaceBaseBufferSet(surfaceBaseBufferSet);
+  if (ownsPreparedCellVisualCorrection) retainCellVisualCorrectionBufferSet(cellVisualCorrectionBufferSet);
   if (ownsPreparedCellAttributes) retainCellAttributeStore(cellAttributeStore);
 
   return Object.freeze({
@@ -237,7 +256,10 @@ function createPreparedInstallTransaction(renderer, map, prepared, decoded, buff
       if (layers.surface) {
       if (!surfaceColorPatch) {
       assignSurfaceBaseBufferSet(surfaceBaseBufferSet);
+      assignCellVisualCorrectionBufferSet(cellVisualCorrectionBufferSet);
       assign("surfaceVertices", surfaceValues.base);
+      assign("cellVisualCorrectionGeometry", surfaceValues.cellVisualCorrection || new Float32Array());
+      assign("gpuResidentSmoothShoreSurfaceKey", surfaceValues.smoothShoreSurfaceKey || "");
       }
       assign("landCorrectionVertices", surfaceValues.landCorrections);
       assign("waterCorrectionVertices", surfaceValues.waterCorrections);
@@ -250,14 +272,16 @@ function createPreparedInstallTransaction(renderer, map, prepared, decoded, buff
       assign("surfacePatchCells", new Set());
       assign("surfacePatchVertexCount", 0);
       if (!surfaceColorPatch) assign("vertexCount", vertexCount(surfaceValues.base));
-      assign("landCorrectionVertexCount", vertexCount(surfaceValues.landCorrections));
-      assign("waterCorrectionVertexCount", vertexCount(surfaceValues.waterCorrections));
-      assign("landCoverVertexCount", vertexCount(surfaceValues.landCovers));
-      assign("waterCoverVertexCount", vertexCount(surfaceValues.waterCovers));
+      assign("landCorrectionVertexCount", surfaceValues.shoreSurfaceEnabled !== false ? vertexCount(surfaceValues.landCorrections) : 0);
+      assign("waterCorrectionVertexCount", surfaceValues.shoreSurfaceEnabled !== false ? vertexCount(surfaceValues.waterCorrections) : 0);
+      assign("landCoverVertexCount", surfaceValues.shoreSurfaceEnabled !== false ? vertexCount(surfaceValues.landCovers) : 0);
+      assign("waterCoverVertexCount", surfaceValues.shoreSurfaceEnabled !== false ? vertexCount(surfaceValues.waterCovers) : 0);
       }
       if (layers.line) {
       assign("lineVertices", layers.line.vertices);
       assign("shoreLineVertices", layers.line.shoreVertices);
+      assign("gpuResidentSmoothShoreLineVertices", layers.line.gpuResidentSmoothShoreVertices || new Float32Array());
+      assign("gpuResidentHardShoreLineVertices", layers.line.gpuResidentHardShoreVertices || new Float32Array());
       assign("shoreLinePathVertices", decoded.shoreLine?.pathVertices || new Map());
       assign("shoreLinePathObjectVertices", decoded.shoreLine?.pathObjectVertices || new WeakMap());
       assign("oceanCurrentLayerStats", layers.line.oceanCurrents);
@@ -306,6 +330,7 @@ function createPreparedInstallTransaction(renderer, map, prepared, decoded, buff
     if (!committed) {
       deletePreparedBuffers(renderer.gl, buffers.values());
       releasePreparedSurfaceBase();
+      releasePreparedCellVisualCorrection();
       releasePreparedCellAttributes();
       finalized = true;
       return true;
@@ -329,6 +354,8 @@ function createPreparedInstallTransaction(renderer, map, prepared, decoded, buff
         } else if (key === "surfaceBaseBufferSet") {
           renderer.surfaceBaseBufferSet = before.get(key).bufferSet;
           renderer.vertexBuffer = before.get(key).vertexBuffer;
+        } else if (key === "cellVisualCorrectionBufferSet") {
+          renderer.cellVisualCorrectionBufferSet = before.get(key);
         } else if (key === "cellAttributeStore") {
           renderer.cellAttributeStore = before.get(key);
         } else renderer[key] = before.get(key);
@@ -343,11 +370,13 @@ function createPreparedInstallTransaction(renderer, map, prepared, decoded, buff
     }
     try {
       releasePreparedSurfaceBase();
+      releasePreparedCellVisualCorrection();
     } catch (error) {
       failures.push(error);
     }
     try {
       releasePreviousSurfaceBase();
+      releasePreviousCellVisualCorrection();
     } catch (error) {
       failures.push(error);
     }
@@ -404,6 +433,7 @@ function createPreparedInstallTransaction(renderer, map, prepared, decoded, buff
     if (!committed) {
       deletePreparedBuffersBestEffort(renderer.gl, buffers.values());
       releasePreparedSurfaceBaseBestEffort();
+      releasePreparedCellVisualCorrectionBestEffort();
       releasePreparedCellAttributesBestEffort();
       finalized = true;
       return true;
@@ -413,6 +443,8 @@ function createPreparedInstallTransaction(renderer, map, prepared, decoded, buff
     deletePreparedBuffersBestEffort(renderer.gl, detachedBuffers);
     releasePreviousSurfaceBaseBestEffort();
     releasePreparedSurfaceBaseBestEffort();
+    releasePreviousCellVisualCorrectionBestEffort();
+    releasePreparedCellVisualCorrectionBestEffort();
     releasePreviousCellAttributesBestEffort();
     releasePreparedCellAttributesBestEffort();
     surfaceColorPatchDirty = false;
@@ -449,6 +481,17 @@ function createPreparedInstallTransaction(renderer, map, prepared, decoded, buff
     renderer.vertexBuffer = buffers[0];
   }
 
+  function assignCellVisualCorrectionBufferSet(bufferSet) {
+    if (!bufferSet) return;
+    if (!flattenCellVisualCorrectionBufferSet(bufferSet).length) throw renderInstallError("render-buffer-create", "平滑边界 correction 临时 GPU buffer 缺失");
+    cellVisualCorrectionBefore = renderer.cellVisualCorrectionBufferSet;
+    retainCellVisualCorrectionBufferSet(cellVisualCorrectionBefore);
+    ownsPreviousCellVisualCorrection = Boolean(cellVisualCorrectionBefore);
+    before.set("cellVisualCorrectionBufferSet", cellVisualCorrectionBefore);
+    assigned.push("cellVisualCorrectionBufferSet");
+    renderer.cellVisualCorrectionBufferSet = bufferSet;
+  }
+
   function assignCellAttributeStore(store) {
     if (!store) return;
     cellAttributeStoreBefore = renderer.cellAttributeStore;
@@ -473,6 +516,20 @@ function createPreparedInstallTransaction(renderer, map, prepared, decoded, buff
     deleteUnownedSurfaceBaseBuffers(renderer.gl, surfaceBaseBefore?.bufferSet, renderer.surfaceBaseBufferSet);
   }
 
+  function releasePreparedCellVisualCorrection() {
+    if (!ownsPreparedCellVisualCorrection) return;
+    ownsPreparedCellVisualCorrection = false;
+    releaseCellVisualCorrectionBufferSet(cellVisualCorrectionBufferSet);
+    deleteUnownedCellVisualCorrectionBuffers(renderer.gl, cellVisualCorrectionBufferSet, renderer.cellVisualCorrectionBufferSet);
+  }
+
+  function releasePreviousCellVisualCorrection() {
+    if (!ownsPreviousCellVisualCorrection) return;
+    ownsPreviousCellVisualCorrection = false;
+    releaseCellVisualCorrectionBufferSet(cellVisualCorrectionBefore);
+    deleteUnownedCellVisualCorrectionBuffers(renderer.gl, cellVisualCorrectionBefore, renderer.cellVisualCorrectionBufferSet);
+  }
+
   function releasePreparedSurfaceBaseBestEffort() {
     try {
       releasePreparedSurfaceBase();
@@ -487,6 +544,14 @@ function createPreparedInstallTransaction(renderer, map, prepared, decoded, buff
     } catch {
       // finalize 延续既有资源释放 best-effort 语义。
     }
+  }
+
+  function releasePreparedCellVisualCorrectionBestEffort() {
+    try { releasePreparedCellVisualCorrection(); } catch {}
+  }
+
+  function releasePreviousCellVisualCorrectionBestEffort() {
+    try { releasePreviousCellVisualCorrection(); } catch {}
   }
 
   function releasePreparedCellAttributes() {
@@ -1086,6 +1151,29 @@ function releaseSurfaceBaseBufferSet(bufferSet) {
     const owners = surfaceBaseBufferOwners.get(buffer) || 0;
     if (owners <= 1) surfaceBaseBufferOwners.delete(buffer);
     else surfaceBaseBufferOwners.set(buffer, owners - 1);
+  }
+}
+
+function retainCellVisualCorrectionBufferSet(bufferSet) {
+  for (const buffer of flattenCellVisualCorrectionBufferSet(bufferSet)) {
+    cellVisualCorrectionBufferOwners.set(buffer, (cellVisualCorrectionBufferOwners.get(buffer) || 0) + 1);
+  }
+}
+
+function releaseCellVisualCorrectionBufferSet(bufferSet) {
+  for (const buffer of flattenCellVisualCorrectionBufferSet(bufferSet)) {
+    const owners = cellVisualCorrectionBufferOwners.get(buffer) || 0;
+    if (owners <= 1) cellVisualCorrectionBufferOwners.delete(buffer);
+    else cellVisualCorrectionBufferOwners.set(buffer, owners - 1);
+  }
+}
+
+function deleteUnownedCellVisualCorrectionBuffers(gl, bufferSet, currentBufferSet) {
+  const currentBuffers = new Set(flattenCellVisualCorrectionBufferSet(currentBufferSet));
+  for (const buffer of flattenCellVisualCorrectionBufferSet(bufferSet)) {
+    if (currentBuffers.has(buffer) || (cellVisualCorrectionBufferOwners.get(buffer) || 0) > 0) continue;
+    if (typeof gl.isBuffer === "function" && gl.isBuffer(buffer) !== true) continue;
+    gl.deleteBuffer(buffer);
   }
 }
 

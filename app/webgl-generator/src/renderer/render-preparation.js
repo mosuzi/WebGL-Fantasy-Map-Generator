@@ -203,6 +203,8 @@ export async function executeRenderPreparationTask(payload = {}, context = {}) {
       result.layers.line = {
         vertices: line.vertices,
         shoreVertices: line.shoreVertices,
+        gpuResidentSmoothShoreVertices: line.gpuResidentSmoothShoreVertices,
+        gpuResidentHardShoreVertices: line.gpuResidentHardShoreVertices,
         shorePathCache: packShoreLinePathCache(line.shoreLinePathVertices, binding),
         oceanCurrentVertices: line.oceanCurrentVertices,
         oceanCurrents: line.oceanCurrents
