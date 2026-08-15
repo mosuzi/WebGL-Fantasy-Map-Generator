@@ -3840,6 +3840,16 @@ async function applyRuntimeDisplayMutationViaWorker(state, documentRef, operatio
     timings.installCommitMs = roundWorkerTelemetryMs(performance.now() - installCommitStartedAt);
     if (!isTargetCurrent()) throw runtimeDisplayObsoleteError();
 
+    operation?.throwIfCancelled?.();
+    if (!isTargetCurrent()) throw runtimeDisplayObsoleteError();
+    const resumeStartedAt = performance.now();
+    renderer.resumePreparedWorkerRenderInstall?.(snapshot, {draw: true});
+    timings.resumeMs = roundWorkerTelemetryMs(performance.now() - resumeStartedAt);
+    renderSuspended = Boolean(renderer.workerRenderInstallSuspended > 0);
+    timings.suspendedMs = roundWorkerTelemetryMs(performance.now() - suspendedStartedAt);
+    operation?.throwIfCancelled?.();
+    if (!isTargetCurrent()) throw runtimeDisplayObsoleteError();
+    onCommitted?.();
     const sessionCommitStartedAt = performance.now();
     const committed = await state.mapWorkerCoordinator.commitSession(prepared.worker.session.id, binding, {expectedRevisionDelta: 0});
     timings.sessionCommitMs = roundWorkerTelemetryMs(performance.now() - sessionCommitStartedAt);
@@ -3848,15 +3858,7 @@ async function applyRuntimeDisplayMutationViaWorker(state, documentRef, operatio
       error.code = "worker_session_commit_rejected";
       throw error;
     }
-    operation?.throwIfCancelled?.();
-    if (!isTargetCurrent()) throw runtimeDisplayObsoleteError();
-    const resumeStartedAt = performance.now();
-    renderer.resumePreparedWorkerRenderInstall?.(snapshot, {draw: true});
-    timings.resumeMs = roundWorkerTelemetryMs(performance.now() - resumeStartedAt);
-    renderSuspended = Boolean(renderer.workerRenderInstallSuspended > 0);
-    timings.suspendedMs = roundWorkerTelemetryMs(performance.now() - suspendedStartedAt);
     timings.totalMs = roundWorkerTelemetryMs(performance.now() - displayStartedAt);
-    onCommitted?.();
     try {
       install.finalize?.();
     } catch {

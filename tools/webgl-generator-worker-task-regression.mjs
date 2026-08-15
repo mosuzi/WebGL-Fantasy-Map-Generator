@@ -409,10 +409,9 @@ for (const key of ["setupMs", "domainComputeMs", "patchCaptureMs", "renderPrepar
 assert.ok(firstSessionResult.timings.totalTaskMs >= firstSessionResult.timings.domainComputeMs, "领域计算时间大于 Worker 任务总时间");
 applyWorkerPatch(sessionFormal, "zones", firstSessionResult.patch);
 sessionBinding = {...sessionBinding, mapRevision: 1};
-assert.equal(await sessionCoordinator.commitSession(firstSessionResult.worker.session.id, sessionBinding, {expectedRevisionDelta: 1}), true);
-sessionBinding = {...sessionBinding, operationId: 8};
 const renderOnlyFormalBefore = structuredClone(sessionFormal);
-const renderOnlyResult = await sessionCoordinator.run("regeneration.compute", {
+let queuedRenderOnlySettled = false;
+const queuedRenderOnly = sessionCoordinator.run("regeneration.compute", {
   map: sessionFormal,
   mode: "render-only",
   kind: "must-not-be-normalized",
@@ -428,6 +427,12 @@ const renderOnlyResult = await sessionCoordinator.run("regeneration.compute", {
   sessionMode: "map-mirror",
   allowFallback: false
 });
+void queuedRenderOnly.finally(() => { queuedRenderOnlySettled = true; });
+await Promise.resolve();
+assert.equal(queuedRenderOnlySettled, false, "主线程未发 commit ACK 前，后续持久 Worker 任务必须排队");
+assert.equal(sessionWorkers.length, 1, "pending-install 期间不得创建第二个 MapWorker");
+assert.equal(await sessionCoordinator.commitSession(firstSessionResult.worker.session.id, sessionBinding, {expectedRevisionDelta: 1}), true);
+const renderOnlyResult = await queuedRenderOnly;
 assert.equal(renderOnlyResult.mode, "render-only");
 assert.equal(renderOnlyResult.worker.session.reused, true);
 assert.equal(renderOnlyResult.worker.session.id, firstSessionResult.worker.session.id);
@@ -1184,6 +1189,7 @@ function verifyAppDeferredReplayStaticContract() {
   );
   assert.ok(displayFlow.length > 0, "普通显示入口必须接入共享 MapWorker 渲染事务");
   const captureStart = displayFlow.indexOf("renderer.beginDeferredWorkerRenderMutationCapture?.()");
+  const preparedResume = displayFlow.indexOf("renderer.resumePreparedWorkerRenderInstall?.(snapshot");
   const displayOrder = [
     captureStart,
     displayFlow.indexOf("result = apply()", captureStart),
@@ -1194,8 +1200,9 @@ function verifyAppDeferredReplayStaticContract() {
     displayFlow.lastIndexOf("renderer.suspendWorkerRenderInstall()"),
     displayFlow.indexOf("renderer.applyDeferredWorkerRenderPresentationOnly?.(snapshot)"),
     displayFlow.indexOf("install.commit()"),
+    preparedResume,
+    displayFlow.indexOf("onCommitted?.()", preparedResume),
     displayFlow.indexOf("state.mapWorkerCoordinator.commitSession"),
-    displayFlow.indexOf("renderer.resumePreparedWorkerRenderInstall?.(snapshot"),
     displayFlow.indexOf("install.finalize?.()")
   ];
   assert.ok(displayOrder.every(index => index >= 0), "普通显示事务缺少 capture/apply/prepare/短挂起/install/session/resume/finalize 链");
@@ -1206,6 +1213,7 @@ function verifyAppDeferredReplayStaticContract() {
   assert.match(displayFlow, /sessionPayload: renderRequest/u, "普通显示复用请求不得重传 map");
   assert.match(displayFlow, /allowFallback: false/u, "复杂显示准备不得回退主线程");
   assert.match(displayFlow, /expectedRevisionDelta: 0/u, "显示事务不得推进 map revision");
+  assert.doesNotMatch(displayFlow.slice(displayFlow.indexOf("state.mapWorkerCoordinator.commitSession")), /throwIfCancelled|isTargetCurrent\(\).*throw/u, "commit ACK 后不得再执行可失败的主线程当前性检查");
   assert.match(source, /surfacePatchScope = layers\.includes\("surface"\)[\s\S]*?canPrepareDeferredSurfaceColorPatch/u, "surface 显示事务必须优先选择 compact color patch");
   const regenerationFlow = source.slice(
     source.indexOf("async function regenerateMapAttributeViaWorker"),

@@ -1140,7 +1140,7 @@ async function normalizePreparedSurfaceCellRanges(value, surfaceFloatLength, mod
     const expectedLength = ((expectedCell?.ndcTriangles?.length || 0) / 2) * FLOATS_PER_VERTEX;
     if (!Number.isInteger(normalizedCell) || normalizedCell < 0 || normalizedCell >= cellCount
       || !Number.isInteger(start) || !Number.isInteger(end)
-      || start !== previousEnd || end <= start || end > surfaceFloatLength
+      || start !== previousEnd || end < start || (mode === "cell-visual" && end === start) || end > surfaceFloatLength
       || start % FLOATS_PER_VERTEX !== 0 || end % FLOATS_PER_VERTEX !== 0
       || (mode === "cell-visual" && (normalizedCell !== Number(expectedCell?.cell) || end - start !== expectedLength))
       || (mode === "grid-cells" && normalizedCell !== cellIndex)) {
@@ -1151,6 +1151,9 @@ async function normalizePreparedSurfaceCellRanges(value, surfaceFloatLength, mod
     previousEnd = end;
     cellIndex++;
     if ((result.size & 255) === 0 || result.size === value.size) await gate.checkpoint("surface-ranges", result.size, value.size);
+  }
+  if (mode === "grid-cells" && surfaceFloatLength === 0) {
+    throw renderInstallError("render-surface-ranges-shape", "Worker grid-cells surface 不得全部为空");
   }
   if (result.size && previousEnd !== surfaceFloatLength) {
     throw renderInstallError("render-surface-ranges-shape", "Worker surface cell ranges 未完整覆盖顶点数组");

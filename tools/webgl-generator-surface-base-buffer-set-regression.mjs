@@ -116,6 +116,14 @@ assert.deepEqual(reconstructedIdentities[0], {cellId: 19, water: false});
 assert.deepEqual(reconstructedIdentities.at(-1), {cellId: 27, water: true});
 assert.deepEqual(reconstructedColors.slice(0, 3), [0.25, 0.5, 0.75]);
 
+const zeroRangeSource = createSurface(18);
+const zeroRangeSet = createSurfaceBaseBufferSet(gl, zeroRangeSource, {surfaceCellRanges: new Map([
+  [0, {start: 0, end: 0}],
+  [1, {start: 0, end: 18}]
+])});
+const zeroRangeIdentities = new Uint32Array(zeroRangeSet.segments[0].geometryBuffer.bytes.buffer);
+assert.deepEqual(unpackSurfaceBaseIdentity(zeroRangeIdentities[2]), {cellId: 1, water: false}, "零长度 cell range 不得吞掉后续 cell identity");
+
 const geometryBefore = bufferSet.segments.map(segment => segment.geometryBuffer.bytes.slice());
 for (let offset = SURFACE_BASE_MAX_SEGMENT_FLOATS - 18; offset < source.length; offset += 6) {
   source[offset + 2] = 1;
@@ -190,10 +198,11 @@ const concaveMap = {metadata: {graphWidth: 4, graphHeight: 4}, grid: {points: [[
 pushGridCells(concaveVertices, {map: concaveMap}, "height", {});
 assert.equal(concaveVertices.length, (concavePoints.length - 2) * 3 * 6, "非凸 hard cell 必须使用安全三角剖分，不能以外置中心扇分越界");
 
-const invalidVertices = [], invalidPoints = [[0, 0], [4, 4], [4, 0], [0, 4]];
+const invalidVertices = [], invalidRanges = new Map(), invalidPoints = [[0, 0], [4, 4], [4, 0], [0, 4]];
 const invalidMap = {metadata: {graphWidth: 4, graphHeight: 4}, grid: {points: [[2, 2]], cells: {p: [0], v: [[0, 1, 2, 3]], h: [30]}, vertices: {p: invalidPoints}}, features: {features: [{land: true}]}, layers: {ocean: [0, 0, 1, 1]}};
-pushGridCells(invalidVertices, {map: invalidMap}, "height", {});
+pushGridCells(invalidVertices, {map: invalidMap}, "height", {}, () => true, color => color, (cell, range) => invalidRanges.set(cell, range));
 assert.equal(invalidVertices.length, 0, "两套边界都不安全时不得恢复越界中心扇分");
+assert.deepEqual([...invalidRanges], [[0, {start: 0, end: 0}]], "安全跳过的 cell 必须留下可审计零长度 range");
 
 const storedBoundary = [[0, 0], [4, 0], [4, 4], [0, 4], [4, 0], [8, 0], [8, 4], [4, 4]];
 const resolvedBoundary = storedBoundary.map(point => [...point]);

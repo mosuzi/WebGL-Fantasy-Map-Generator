@@ -19,10 +19,23 @@ let requestSequence = 0;
 export function createWorkerTaskCoordinator({createWorker, getBinding, validateBinding, beforeRun, onProgress, onFallback} = {}) {
   let persistentSession = null;
   let pendingSessionPatch = null;
+  let persistentRunTail = Promise.resolve();
   let sessionSequence = 0;
   return Object.freeze({run, commitSession, applySessionPatch, invalidateSession, getSessionSnapshot});
 
-  async function run(task, payload, options = {}) {
+  function run(task, payload, options = {}) {
+    const persistent = options.sessionMode === "map-mirror" || options.sessionMode === "adopt-result-map";
+    if (!persistent) return runNow(task, payload, options);
+    const terminal = createSessionTerminal();
+    const operation = persistentRunTail.catch(() => {}).then(() => runNow(task, payload, {...options, sessionTerminal: terminal}));
+    persistentRunTail = operation.then(
+      result => result?.worker?.session?.pending === true ? terminal.promise : undefined,
+      () => undefined
+    );
+    return operation;
+  }
+
+  async function runNow(task, payload, options = {}) {
     if (typeof beforeRun === "function") await beforeRun();
     if (pendingSessionPatch) await pendingSessionPatch;
     const binding = clonePlain(options.binding ?? getBinding?.() ?? null);
@@ -119,6 +132,7 @@ export function createWorkerTaskCoordinator({createWorker, getBinding, validateB
           current.binding = committedBinding;
           current.request = {...current.request, binding: committedBinding, reuseSession: true};
           current.status = "idle";
+          settleSessionTerminal(current, "committed");
           finish(resolve, true);
         } catch (error) {
           finish(reject, error, {invalidate: true});
@@ -216,6 +230,7 @@ export function createWorkerTaskCoordinator({createWorker, getBinding, validateB
     if (!current) return false;
     current.status = "invalid";
     current.reason = String(reason || "invalidated");
+    settleSessionTerminal(current, current.reason);
     current.worker?.terminate?.();
     return true;
   }
@@ -475,8 +490,16 @@ export function createWorkerTaskCoordinator({createWorker, getBinding, validateB
                 checksum: replicaChecksum,
                 adoptResultMap: retainedAdoption,
                 request,
-                worker
+                worker,
+                sessionTerminal: runOptions.sessionTerminal || null,
+                sessionTerminalTimer: 0
               };
+              const retainedSession = persistentSession;
+              retainedSession.sessionTerminalTimer = setTimeout(() => {
+                if (persistentSession === retainedSession && retainedSession.status === "pending") {
+                  invalidateSession("session-main-commit-timeout");
+                }
+              }, Math.max(1000, Number(runOptions.mainCommitTimeoutMs) || 120000));
             }
             finish(resolve, {
               ...result,
@@ -619,6 +642,22 @@ export function createWorkerTaskCoordinator({createWorker, getBinding, validateB
     if (!sameBinding(expected, returned)) throw obsoleteError("Worker 返回的绑定已损坏");
     if (validateBinding && validateBinding(expected) !== true) throw obsoleteError("地图、revision、generation token 或锁已变化");
   }
+}
+
+function createSessionTerminal() {
+  let settle;
+  const promise = new Promise(resolve => { settle = resolve; });
+  return {promise, settle, settled: false};
+}
+
+function settleSessionTerminal(session, outcome) {
+  if (session?.sessionTerminalTimer) clearTimeout(session.sessionTerminalTimer);
+  session.sessionTerminalTimer = 0;
+  const terminal = session?.sessionTerminal;
+  if (!terminal || terminal.settled) return false;
+  terminal.settled = true;
+  terminal.settle(String(outcome || "settled"));
+  return true;
 }
 
 function fallbackAllowed(options) {

@@ -67,4 +67,5 @@
 
 ## 当前状态
 
+- 第 338 项已完成并归档：grid-cells 局部零长度 surface range 不再被误判为协议损坏；显示结果只在主线程完成安装、恢复绘制和最终提交后向 Worker 发 commit ACK，持久 MapWorker transaction 在前项 commit / invalidate 终态前排队，失败、取消与超时均会释放队列。用户原 5410 的 100k 地图刷新后通过快速奇数切换与并发偶数触发，政治底色、控件、Loading、health 与 WebGL error 同源；版本为 `0.4.3`，当前没有未归档权威任务。
 - 第 335-A～335-J 已全部接受：GPU 常驻显示、稳定引用、latest-wins、正式提交控件、页面 / Worker build handshake、一次性会话自愈、三档规模、旧档与用户原 5410 标签页终验均已完成。最终版本为 `0.4.0`，详细证据见任务归档与 `docs/task-notes/task-335-gpu-resident-view-switch.md`。

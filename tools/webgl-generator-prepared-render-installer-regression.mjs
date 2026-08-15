@@ -397,6 +397,19 @@ async function testGridSurfaceRangeContract() {
   );
   assert.deepEqual(liveBuffers(gl), liveBefore, "无效 grid-cells ranges 不得泄漏 GPU buffer");
   assert.deepEqual(liveTextures(gl), texturesBefore, "无效 grid-cells ranges 不得泄漏 cell attribute texture");
+
+  renderer.nextMap = createMapFixture(binding.mapIdentity, 2);
+  const zeroThenValid = new Map([[0, {start: 0, end: 0}], [1, {start: 0, end: 18}]]);
+  const zeroRangeTransaction = await prepareSurfaceTransaction(renderer, smallSurface(62), {surfaceCellRanges: zeroThenValid});
+  zeroRangeTransaction.commit();
+  assert.deepEqual([...renderer.surfaceCellRanges], [...zeroThenValid], "安全跳过的 grid cell 必须保留零长度 range，且后续 range 连续");
+  assert.equal(zeroRangeTransaction.rollback(), true);
+
+  const allZero = new Map([[0, {start: 0, end: 0}], [1, {start: 0, end: 0}]]);
+  await assert.rejects(
+    prepareSurfaceTransaction(renderer, new Float32Array(), {surfaceCellRanges: allZero}),
+    error => error?.code === "render-surface-ranges-shape" && /不得全部为空/.test(error.message)
+  );
 }
 
 function createColorPatchPrepared(colors) {
@@ -516,13 +529,14 @@ function createRenderer(gl) {
   return renderer;
 }
 
-function createMapFixture(mapIdentity) {
+function createMapFixture(mapIdentity, cellCount = 1) {
+  const indices = Uint32Array.from({length: cellCount}, (_, index) => index);
   return {
     metadata: {mapIdentity},
     grid: {cells: {
-      i: new Uint32Array([0]), h: new Uint8Array([10]), f: new Uint32Array([0]),
-      state: new Int32Array([-1]), province: new Int32Array([-1]), culture: new Int32Array([-1]), religion: new Int32Array([-1]),
-      biome: new Uint8Array([0]), pop: new Float32Array([0]), temp: new Int8Array([0]), prec: new Uint8Array([0]), region: new Int32Array([-1])
+      i: indices, h: new Uint8Array(cellCount).fill(10), f: new Uint32Array(cellCount),
+      state: new Int32Array(cellCount).fill(-1), province: new Int32Array(cellCount).fill(-1), culture: new Int32Array(cellCount).fill(-1), religion: new Int32Array(cellCount).fill(-1),
+      biome: new Uint8Array(cellCount), pop: new Float32Array(cellCount), temp: new Int8Array(cellCount), prec: new Uint8Array(cellCount), region: new Int32Array(cellCount).fill(-1)
     }},
     features: {features: [{land: false}]},
     layers: {ocean: [0.2, 0.4, 0.7, 1]},
