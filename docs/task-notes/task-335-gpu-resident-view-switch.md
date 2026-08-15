@@ -141,3 +141,10 @@ Worker 化继续用于生成、重生成、地图编辑、派生拓扑、撤销 
 - Worker 在正式全量渲染时同时准备当前颜色的平滑岸线面，以及平滑 / 硬岸线线条两套轻量缓存。切换时只启停岸线 correction draw count、上传已缓存岸线线条并重绘；颜色或主题改变时才按真实语义刷新岸线颜色。没有删 point / labels / political / shore 图层，也没有降低精度或放宽 LongTask 阈值。
 - 固定 `10004` cells 的首次开启 / 关闭 / 重复开启为 `14.7 / 13.9 / 13.1ms`；固定 `99846` cells 为 `20.2 / 18.7 / 16.4ms`。两档均与同图旧 Worker framebuffer `mismatches=0 / maxDelta=0`，Worker run、完整 surface refresh、完整 line refresh 与 LongTask 均为 `0`；surface、correction、cell attributes、overlay、picking 引用不变，health、Loading 和 WebGL error 为 `0`。artifact 为 `work/task335-g-smooth-borders-10000/result.json` 与 `work/task335-g-smooth-borders-100000/result.json`。
 - 产品 `5` 文件约 `+460` 行，专项 / 复用工具约 `+180` 行；浏览器夹具总长 `241` 行，未超过 `500` 行且测试增量低于产品。语法、差异、correction / display mutation / prepared installer、Worker 全合同、render preparation、主题、生产构建以及 10k / 100k Chrome 门均通过。版本为 `0.3.23`，下一阶段只进入 335-H。
+
+## 14. 335-H：overlay、城市与 picking identity 稳定（已接受）
+
+- point buffer 改为一次构建人口、城市、Marker、资源与军事的稳定顶点，并按原顺序保存可见 draw ranges；图层开关只选择 ranges，不再重建 / 上传 point buffer。Worker render preparation 与 prepared installer 同步传递、校验和原子安装 ranges；真实地图数据变化仍使用既有完整 point refresh，不把写操作误走显示快路。
+- 城市总开关不再把图层可见性写入全部城市实例的 `visibilityTarget`，WebGL 层以统一 draw gate 隐藏 / 显示；隐藏期间仍维护视口和碰撞目标，避免恢复时重装实例。城市开关只执行轻量 city / marker / military overlay 更新，不重新布局全部标签；Marker 等真实碰撞变化仍保留完整 overlay 语义。
+- 固定 `99846` cells 十次反转 / 恢复响应为 `12.2～38.5ms`，固定 `10004` cells 为 `11.1～19.6ms`。两档 Worker run、point refresh、overlay replace、picking rebuild、city `setInstances` 与 LongTask 全为 `0`；城市 / 人口开关的实例状态上传为 `0`，point buffer / ranges、overlay 节点、label / marker / military / city items、city instance buffer 与 picking 引用不变，隐藏 / 恢复 picking 语义正确，最终 framebuffer `mismatches=0 / maxDelta=0`。artifact 为 `work/task335-h-layer-identity-10000/result.json` 与 `work/task335-h-layer-identity-100000/result.json`。
+- 修复过程中 100k 城市恢复曾由全标签重排产生 `67 / 58ms`，改为轻量 overlay 后剩余 `57 / 52ms`；进一步移除图层总开关对全部城市实例状态的写入后，最终复验为 `38.5ms / LongTask 0`，没有以登记阈值替代最终门。浏览器夹具总长 `275` 行，仍低于 `500` 行；语法、差异、点层 / city WebGL / render preparation / prepared installer、Worker 全合同、API 收敛、主题、生产构建与两档 Chrome 均通过。版本为 `0.3.24`，下一阶段只进入 335-I。

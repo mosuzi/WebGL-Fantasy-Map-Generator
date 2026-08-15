@@ -2,7 +2,7 @@ import {
   buildLineVertices,
   buildPlaceholderSurfaceBundle,
   buildPlaceholderSurfaceColorPatch,
-  buildPointVertices,
+  buildPointLayer,
   buildRiverMeshVertices,
   buildRouteMeshVertices,
   shoreLinePathKey
@@ -133,7 +133,7 @@ export async function executeRenderPreparationTask(payload = {}, context = {}) {
     } else if (layer === "river") {
       result.layers.river = buildRiverMeshVertices(map, camera, canvas);
     } else if (layer === "point") {
-      result.layers.point = {vertices: buildPointVertices(map, payload.visibility || {})};
+      result.layers.point = buildPointLayer(map);
     } else if (layer === "cell-visual") {
       cache.cellVisual ||= payload.caches?.cellVisual
         ? unpackCellVisualMesh(payload.caches.cellVisual, binding)

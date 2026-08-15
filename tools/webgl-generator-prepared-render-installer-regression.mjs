@@ -125,8 +125,9 @@ await testNestedFinalizeOwnership();
 await testSurfaceColorPatchTransaction();
 await testInPlaceSurfaceColorPatchTransaction();
 await testGridSurfaceRangeContract();
+await testPointDrawRangeContract();
 
-console.log(JSON.stringify({ok: true, cases: 8, nestedOwnership: true, surfaceColorPatch: true, inPlaceSurfaceColorPatch: true, gridSurfaceRanges: true}));
+console.log(JSON.stringify({ok: true, cases: 9, nestedOwnership: true, surfaceColorPatch: true, inPlaceSurfaceColorPatch: true, gridSurfaceRanges: true, pointDrawRanges: true}));
 
 async function testUncommittedCleanup() {
   const gl = new FakeGl();
@@ -451,6 +452,22 @@ async function prepareSurfaceTransaction(renderer, base, {surfaceCellRanges = ne
   });
 }
 
+async function testPointDrawRangeContract() {
+  const gl = new FakeGl(), renderer = createRenderer(gl), beforeBuffer = renderer.pointBuffer, beforeRanges = renderer.pointDrawRanges;
+  const vertices = new Float32Array(18), drawRanges = [{layer: "cities", first: 0, count: 1}, {layer: "resources", first: 1, count: 2}];
+  const transaction = await prepareRendererWorkerInstall(renderer, renderer.nextMap, {binding, layers: {point: {vertices, drawRanges}}}, {binding, yieldToMain: async () => {}});
+  transaction.commit();
+  assert.notEqual(renderer.pointBuffer, beforeBuffer);
+  assert.equal(renderer.pointDrawRanges, drawRanges);
+  assert.deepEqual([renderer.pointBufferVertexCount, renderer.pointVertexCount], [3, 3]);
+  transaction.rollback();
+  assert.equal(renderer.pointBuffer, beforeBuffer);
+  assert.equal(renderer.pointDrawRanges, beforeRanges);
+  for (const invalid of [null, [{layer: "cities", first: 1, count: 2}], [{layer: "unknown", first: 0, count: 3}], [{layer: "cities", first: 0, count: 2}]]) {
+    await assert.rejects(prepareRendererWorkerInstall(renderer, renderer.nextMap, {binding, layers: {point: {vertices, drawRanges: invalid}}}, {binding, yieldToMain: async () => {}}), error => error?.code === "render-point-ranges-shape");
+  }
+}
+
 function createRenderer(gl) {
   const surfaceVertices = smallSurface(1);
   const surfaceBaseBufferSet = createSurfaceBaseBufferSet(gl, surfaceVertices);
@@ -484,9 +501,13 @@ function createRenderer(gl) {
     landCoverVertexCount: 0,
     waterCoverVertexCount: 0,
     dynamicBuffersDirty: {routes: false, rivers: false},
+    layerVisibility: {population: true, cities: true, markers: true, resources: true, military: true},
+    pointDrawRanges: [],
+    pointBufferVertexCount: 0,
+    pointVertexCount: 0,
     camera: {scale: 1, offsetX: 0, offsetY: 0}
   };
-  for (const key of ["landCorrectionBuffer", "waterCorrectionBuffer", "landCoverBuffer", "waterCoverBuffer", "surfacePatchBuffer"]) {
+  for (const key of ["landCorrectionBuffer", "waterCorrectionBuffer", "landCoverBuffer", "waterCoverBuffer", "surfacePatchBuffer", "pointBuffer"]) {
     const buffer = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(), gl.STATIC_DRAW);

@@ -10,8 +10,8 @@ import {waitForApiReady} from "./webgl-generator-api-browser-ready.mjs";
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const source = join(root, "source", "Fantasy-Map-Generator");
 const political = process.argv.includes("--political");
-const display = process.argv.includes("--display"), smooth = process.argv.includes("--smooth"), cellsTarget = process.argv.includes("--100k") ? 100000 : 10000;
-const outputDir = join(root, "work", smooth ? `task335-g-smooth-borders-${cellsTarget}` : display ? "task335-f-display-mutations-10000" : political ? "task335-e-political-views-10000" : "task335-d-gpu-resident-views-10000");
+const display = process.argv.includes("--display"), smooth = process.argv.includes("--smooth"), identity = process.argv.includes("--identity"), cellsTarget = process.argv.includes("--100k") ? 100000 : 10000;
+const outputDir = join(root, "work", identity ? `task335-h-layer-identity-${cellsTarget}` : smooth ? `task335-g-smooth-borders-${cellsTarget}` : display ? "task335-f-display-mutations-10000" : political ? "task335-e-political-views-10000" : "task335-d-gpu-resident-views-10000");
 const verify = process.argv.includes("--verify");
 const expectedChecksums = Object.freeze({height: 2949860715, biomes: 1641731067, population: 2261249289});
 const expectedLabels = Object.freeze({height: "高度", biomes: "生物群系", population: "人口", states: "国家", provinces: "省份"});
@@ -28,15 +28,26 @@ try {
   page.on("pageerror", error => pageErrors.push(error.message));
   await page.goto("http://127.0.0.1:5583?healthClear=1", {waitUntil: "domcontentloaded"});
   await waitForApiReady(page, 120_000);
-  const report = await page.evaluate(run, {verify, political, display, smooth, cellsTarget});
+  const report = await page.evaluate(run, {verify, political, display, smooth, identity, cellsTarget});
   mkdirSync(outputDir, {recursive: true});
   writeFileSync(join(outputDir, "attempt.json"), `${JSON.stringify(report, null, 2)}\n`);
   const applicationErrors = consoleErrors.filter(text => !/\[FMG health\] (operation-stall|main-thread-long-task|render-frame-gap|input-handler-stall)/.test(text));
   assert.deepEqual(applicationErrors, []);
   assert.deepEqual(pageErrors, []);
   if (verify) {
-    assert.ok(cellsTarget === 100000 ? report.cells >= 99000 && report.cells <= 100000 : report.cells === 10004, `335-${smooth ? "G" : display ? "F" : political ? "E" : "D"} 固定地图规模漂移`);
-    if (smooth) {
+    assert.ok(cellsTarget === 100000 ? report.cells >= 99000 && report.cells <= 100000 : report.cells === 10004, `335-${identity ? "H" : smooth ? "G" : display ? "F" : political ? "E" : "D"} 固定地图规模漂移`);
+    if (identity) {
+      assert.deepEqual(report.operations.map(item => item.layer), ["cities", "population", "markers", "resources", "military", "cities", "population", "markers", "resources", "military"]);
+      for (const item of report.operations) {
+        for (const [key, label] of [["workerRuns", "Worker"], ["pointRefreshes", "point"], ["overlayReplaces", "overlay"], ["pickingRefreshes", "picking"], ["cityInstalls", "city instances"]]) assert.equal(item[key], 0, `${item.layer} 仍触发 ${label}`);
+        if (item.layer === "cities" || item.layer === "population") assert.equal(item.cityStateUpdates, 0, `${item.layer} 仍触发 city instance state`);
+        assert.equal(item.localGpu, true, `${item.layer} 未走本地显示提交`); assert.ok(item.wallMs <= 50, `${item.layer} 响应 ${item.wallMs}ms 超过 50ms`);
+        const registered = item.layer === "cities" && item.visible === true ? item.longTasks.filter(entry => entry.duration < 200) : [];
+        assert.deepEqual(item.longTasks, registered, `${item.layer} 出现未登记 LongTask`);
+      }
+      assert.deepEqual(report.identity, {pointBuffer: true, pointRanges: true, overlay: true, labelItems: true, markerItems: true, militaryItems: true, cityItems: true, cityBuffer: true, picking: true});
+      assert.deepEqual(report.parity, {mismatches: 0, maxDelta: 0}); assert.deepEqual(report.picking, {toggled: {cityHidden: true, markerShown: true, militaryShown: true}, restored: {cityShown: true, markerHidden: true, militaryHidden: true}});
+    } else if (smooth) {
       assert.deepEqual(report.parity, {mismatches: 0, maxDelta: 0});
       assert.ok(report.correction.vertexCount > 0 && report.correction.segmentCount > 0, "平滑边界 correction 未安装");
       for (const item of report.operations) {
@@ -59,7 +70,7 @@ try {
     } else if (political) {
       for (const item of report.operations) assert.deepEqual(item.pixelParity, {mismatches: 0, maxDelta: 0}, `${item.mode} shader framebuffer 与同图 Worker 基线不一致`);
     } else assert.deepEqual(Object.fromEntries(report.operations.map(item => [item.mode, item.checksum])), expectedChecksums, "335-D shader framebuffer 与旧 Worker 基线不一致");
-    if (!display && !smooth) for (const item of report.operations) {
+    if (!display && !smooth && !identity) for (const item of report.operations) {
       assert.equal(item.workerRuns, 0, `${item.mode} 仍调用 Worker`);
       assert.equal(item.surfaceRefreshes, 0, `${item.mode} 仍重建 surface`);
       assert.deepEqual(item.identity, {surfaceSet: true, segments: true, alias: true, attributes: true, political: true, picking: true, overlay: true}, `${item.mode} 正式引用漂移`);
@@ -80,13 +91,14 @@ try {
   await Promise.race([new Promise(done => server.once("exit", done)), new Promise(done => setTimeout(done, 5000))]);
 }
 
-async function run({verify, political, display, smooth, cellsTarget}) {
+async function run({verify, political, display, smooth, identity, cellsTarget}) {
   const app = window.__webglGeneratorApp, api = window.webglGeneratorApi;
   const unwrap = (response, label) => { if (!response?.ok) throw new Error(`${label}: ${response?.error?.code || "api_error"} ${response?.error?.message || ""}`); return response.data; };
   unwrap(await api.generate.newMap({confirm: true, seed: "task335-d-gpu-resident", cellsTarget, heightmapTemplate: "continents"}), "newMap");
   unwrap(await api.layers.setSmoothCellBorders(false), "disable smoothing");
   await drain();
   window.__webglGeneratorHealth?.clear?.();
+  if (identity) return runLayerIdentity();
   if (smooth) return runSmoothBorders();
   if (display) return runDisplayMutations();
   const renderer = app.renderer, coordinator = app.mapWorkerCoordinator;
@@ -165,6 +177,31 @@ async function run({verify, political, display, smooth, cellsTarget}) {
     return pixels;
   }
   function drain() { return new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(resolve, 100)))); }
+
+  async function runLayerIdentity() {
+    const renderer = app.renderer, coordinator = app.mapWorkerCoordinator, layers = ["cities", "population", "markers", "resources", "military"];
+    await new Promise(resolve => setTimeout(resolve, 250)); await drain();
+    const initialVisibility = Object.fromEntries(layers.map(layer => [layer, renderer.layerVisibility[layer] !== false]));
+    const baselinePixels = framebufferPixels(renderer), baseline = {pointBuffer: renderer.pointBuffer, pointRanges: renderer.pointDrawRanges, overlay: [...renderer.overlay.childNodes], labelItems: [...renderer.labelItems], markerItems: [...renderer.markerIconItems], militaryItems: [...renderer.militaryIconItems], cityItems: [...renderer.cityIconItems], cityBuffer: renderer.cityIconLayer.instanceBuffer, picking: renderer.objectPickingIndex};
+    const originalPoint = renderer.refreshPointLayers, originalPicking = renderer.refreshObjectPickingIndex, originalReplace = renderer.overlay.replaceChildren.bind(renderer.overlay), originalCities = renderer.cityIconLayer.setInstances, originalCityStates = renderer.cityIconLayer.updateInstanceStates;
+    let workerRuns = 0, pointRefreshes = 0, overlayReplaces = 0, pickingRefreshes = 0, cityInstalls = 0, cityStateUpdates = 0;
+    const wrappedCoordinator = Object.freeze({run(...args) { workerRuns++; return coordinator.run(...args); }, commitSession: coordinator.commitSession.bind(coordinator), applySessionPatch: coordinator.applySessionPatch.bind(coordinator), invalidateSession: coordinator.invalidateSession.bind(coordinator), getSessionSnapshot: coordinator.getSessionSnapshot.bind(coordinator)});
+    app.mapWorkerCoordinator = wrappedCoordinator; renderer.refreshPointLayers = function(...args) { pointRefreshes++; return Reflect.apply(originalPoint, this, args); }; renderer.refreshObjectPickingIndex = function(...args) { pickingRefreshes++; return Reflect.apply(originalPicking, this, args); }; renderer.overlay.replaceChildren = function(...args) { overlayReplaces++; return originalReplace(...args); }; renderer.cityIconLayer.setInstances = function(...args) { cityInstalls++; return Reflect.apply(originalCities, this, args); }; renderer.cityIconLayer.updateInstanceStates = function(...args) { cityStateUpdates++; return Reflect.apply(originalCityStates, this, args); };
+    const operations = [];
+    try {
+      for (const layer of layers) await operation(layer, !initialVisibility[layer]);
+      const toggledPicking = {city: pickKind(renderer.cityIconItems[0], "cityObject"), marker: pickKind(renderer.markerIconItems[0], "marker"), military: pickKind(renderer.militaryIconItems[0], "military")};
+      for (const layer of layers) await operation(layer, initialVisibility[layer]);
+      for (const layer of layers) if (unwrap(api.layers.get(), `${layer} state`).layers[layer] !== initialVisibility[layer]) throw new Error(`${layer} 最终状态未恢复`);
+      const restoredPicking = {city: pickKind(renderer.cityIconItems[0], "cityObject"), marker: pickKind(renderer.markerIconItems[0], "marker"), military: pickKind(renderer.militaryIconItems[0], "military")};
+      const finalPixels = framebufferPixels(renderer), identityResult = {pointBuffer: renderer.pointBuffer === baseline.pointBuffer, pointRanges: renderer.pointDrawRanges === baseline.pointRanges, overlay: sameRefs(renderer.overlay.childNodes, baseline.overlay), labelItems: sameRefs(renderer.labelItems, baseline.labelItems), markerItems: sameRefs(renderer.markerIconItems, baseline.markerItems), militaryItems: sameRefs(renderer.militaryIconItems, baseline.militaryItems), cityItems: sameRefs(renderer.cityIconItems, baseline.cityItems), cityBuffer: renderer.cityIconLayer.instanceBuffer === baseline.cityBuffer, picking: renderer.objectPickingIndex === baseline.picking};
+      return {verify, cells: app.map.grid.cells.i.length, operations, identity: identityResult, parity: comparePixels(baselinePixels, finalPixels), picking: {toggled: {cityHidden: toggledPicking.city === null, markerShown: toggledPicking.marker !== null, militaryShown: toggledPicking.military !== null}, restored: {cityShown: restoredPicking.city !== null, markerHidden: restoredPicking.marker === null, militaryHidden: restoredPicking.military === null}}, final: finalSignals()};
+    } finally { if (app.mapWorkerCoordinator === wrappedCoordinator) app.mapWorkerCoordinator = coordinator; renderer.refreshPointLayers = originalPoint; renderer.refreshObjectPickingIndex = originalPicking; renderer.overlay.replaceChildren = originalReplace; renderer.cityIconLayer.setInstances = originalCities; renderer.cityIconLayer.updateInstanceStates = originalCityStates; }
+    function pickKind(item, key) { if (!item) return null; const rect = renderer.canvas.getBoundingClientRect(), point = renderer.worldToScreen(item.x, item.y, rect); return renderer.pickClientPoint(rect.left + point.x, rect.top + point.y)?.[key]?.id ?? null; }
+    async function operation(layer, visible) { const before = {workerRuns, pointRefreshes, overlayReplaces, pickingRefreshes, cityInstalls, cityStateUpdates}, longTasks = [], observer = new PerformanceObserver(list => longTasks.push(...list.getEntries().map(entry => ({startTime: entry.startTime, duration: entry.duration, name: entry.name})))); observer.observe({type: "longtask", buffered: false}); const startedAt = performance.now(); let wallMs; try { unwrap(await api.layers.setVisible(layer, visible), `${layer}:${visible}`); wallMs = performance.now() - startedAt; await drain(); longTasks.push(...observer.takeRecords().map(entry => ({startTime: entry.startTime, duration: entry.duration, name: entry.name}))); } finally { observer.disconnect(); } operations.push({layer, visible, wallMs, workerRuns: workerRuns - before.workerRuns, pointRefreshes: pointRefreshes - before.pointRefreshes, overlayReplaces: overlayReplaces - before.overlayReplaces, pickingRefreshes: pickingRefreshes - before.pickingRefreshes, cityInstalls: cityInstalls - before.cityInstalls, cityStateUpdates: cityStateUpdates - before.cityStateUpdates, localGpu: app.lastDisplayRenderWorker?.localGpu === true, draw: {...renderer.lastDraw}, overlay: {...renderer.lastOverlayUpdate}, longTasks}); }
+    function sameRefs(current, before) { return current.length === before.length && before.every((item, index) => current[index] === item); }
+    function finalSignals() { const health = unwrap(api.info.healthEvents({severity: "error", limit: 100}), "health"), runtime = unwrap(api.info.runtimeStats(), "runtime"); return {health: health.events || [], loading: Boolean(runtime.loading.visible), glError: renderer.gl.getError()}; }
+  }
 
   async function runSmoothBorders() {
     const renderer = app.renderer, coordinator = app.mapWorkerCoordinator;

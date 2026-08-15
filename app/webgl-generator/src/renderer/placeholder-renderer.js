@@ -477,6 +477,8 @@ export class PlaceholderMapRenderer {
     this.shoreLinePathVertices = new Map();
     this.shoreLinePathObjectVertices = new WeakMap();
     this.pointVertexCount = 0;
+    this.pointBufferVertexCount = 0;
+    this.pointDrawRanges = [];
     this.politicalMeshDebugMode = "none";
     this.politicalMeshDebugVertexCount = 0;
     this.gridCellDiagnosticsVertexCount = 0;
@@ -705,7 +707,8 @@ export class PlaceholderMapRenderer {
     this.shoreLinePathObjectVertices = lineLayer.shoreLinePathObjectVertices;
     const oceanCurrentVertices = lineLayer.oceanCurrentVertices;
     this.oceanCurrentLayerStats = lineLayer.oceanCurrents;
-    const pointVertices = profile.stage("point-vertices", "构建点图层顶点", () => buildPointVertices(map, this.layerVisibility));
+    const pointLayer = profile.stage("point-vertices", "构建点图层顶点", () => buildPointLayer(map));
+    const pointVertices = pointLayer.vertices;
     this.surfaceVertices = vertices;
     this.cellVisualCorrectionGeometry = surfaceBundle.cellVisualCorrection;
     this.gpuResidentSmoothShoreSurfaceKey = surfaceBundle.smoothShoreSurfaceKey;
@@ -742,7 +745,9 @@ export class PlaceholderMapRenderer {
     this.oceanCurrentVertexCount = oceanCurrentVertices.length / 6;
     this.lineVertexCount = lineVertices.length / 6;
     this.shoreLineVertexCount = shoreLineVertices.length / 6;
-    this.pointVertexCount = pointVertices.length / 6;
+    this.pointDrawRanges = pointLayer.drawRanges;
+    this.pointBufferVertexCount = pointVertices.length / 6;
+    this.pointVertexCount = countVisiblePointVertices(this.pointDrawRanges, this.layerVisibility);
     profile.stage("gpu-upload", "上传静态 GPU buffer", () => {
       this.recordBufferUpload("load-map-static", () => {
         installSurfaceBaseBufferSet(this, createSurfaceBaseBufferSet(this.gl, vertices, {
@@ -833,7 +838,8 @@ export class PlaceholderMapRenderer {
     this.shoreLinePathObjectVertices = lineLayer.shoreLinePathObjectVertices;
     const oceanCurrentVertices = lineLayer.oceanCurrentVertices;
     this.oceanCurrentLayerStats = lineLayer.oceanCurrents;
-    const pointVertices = await stage("point-vertices", "构建点图层顶点", () => buildPointVertices(map, this.layerVisibility));
+    const pointLayer = await stage("point-vertices", "构建点图层顶点", () => buildPointLayer(map));
+    const pointVertices = pointLayer.vertices;
     this.surfaceVertices = vertices;
     this.cellVisualCorrectionGeometry = surfaceBundle.cellVisualCorrection;
     this.gpuResidentSmoothShoreSurfaceKey = surfaceBundle.smoothShoreSurfaceKey;
@@ -870,7 +876,9 @@ export class PlaceholderMapRenderer {
     this.oceanCurrentVertexCount = oceanCurrentVertices.length / 6;
     this.lineVertexCount = lineVertices.length / 6;
     this.shoreLineVertexCount = shoreLineVertices.length / 6;
-    this.pointVertexCount = pointVertices.length / 6;
+    this.pointDrawRanges = pointLayer.drawRanges;
+    this.pointBufferVertexCount = pointVertices.length / 6;
+    this.pointVertexCount = countVisiblePointVertices(this.pointDrawRanges, this.layerVisibility);
     await stage("gpu-upload", "上传静态 GPU buffer", async () => {
       const surfaceBaseBufferSet = await createSurfaceBaseBufferSetAsync(this.gl, vertices, {
         usage: this.gl.STATIC_DRAW,
@@ -1048,9 +1056,11 @@ export class PlaceholderMapRenderer {
 
   canApplyGpuResidentLayerVisibility(entries = []) {
     const requested = normalizeRequestedLayerVisibility(this.layerVisibility, entries);
-    const directLayers = new Set(["routes", "rivers", "labels", "stateLabels", "provinceLabels", "zoneLabels", "measurements", "scaleBar", "mapBadge"]);
+    const pointLayers = new Set(["cities", "population", "markers", "resources", "military"]);
+    const directLayers = new Set(["routes", "rivers", "labels", "stateLabels", "provinceLabels", "zoneLabels", "measurements", "scaleBar", "mapBadge", ...pointLayers]);
     for (const [layer, visible] of requested) {
       if (!directLayers.has(layer)) return false;
+      if (pointLayers.has(layer) && (!Array.isArray(this.pointDrawRanges) || !Number.isInteger(this.pointBufferVertexCount) || this.pointBufferVertexCount < 0)) return false;
       if (visible && layer === "routes" && this.dynamicBuffersDirty.routes) return false;
       if (visible && layer === "rivers" && this.dynamicBuffersDirty.rivers) return false;
     }
@@ -1729,8 +1739,11 @@ export class PlaceholderMapRenderer {
     const startedAt = performance.now();
     const event = this.beginPerformanceEvent("pointRefresh", {drawRequested: draw}, startedAt);
     try {
-      const pointVertices = buildPointVertices(this.map, this.layerVisibility);
-      this.pointVertexCount = pointVertices.length / 6;
+      const pointLayer = buildPointLayer(this.map);
+      const pointVertices = pointLayer.vertices;
+      this.pointDrawRanges = pointLayer.drawRanges;
+      this.pointBufferVertexCount = pointVertices.length / 6;
+      this.pointVertexCount = countVisiblePointVertices(this.pointDrawRanges, this.layerVisibility);
       const upload = this.recordBufferUpload("point-refresh", () => {
         this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.pointBuffer);
         this.gl.bufferData(this.gl.ARRAY_BUFFER, pointVertices, this.gl.STATIC_DRAW);
@@ -1853,14 +1866,39 @@ export class PlaceholderMapRenderer {
       if (this.layerVisibility.tradeFlows) this.dynamicBuffersDirty.tradeFlows = true;
       else this.clearTradeFlowBuffer();
     }
-    if (changed.some(layer => layer === "cities" || layer === "population" || layer === "markers" || layer === "resources" || layer === "military")) {
-      this.refreshPointLayers({draw: false});
-    }
+    if (changed.some(layer => layer === "cities" || layer === "population" || layer === "markers" || layer === "resources" || layer === "military")) this.pointVertexCount = countVisiblePointVertices(this.pointDrawRanges, this.layerVisibility);
     if (changed.some(layer => layer === "coastline" || layer === "lakeShore" || layer === "stateBorders" || layer === "provinceBorders" || layer === "warFronts" || layer === "zones" || layer === "zoneEvents" || layer === "zoneNatural" || layer === "zoneWilderness" || layer === "oceanCurrents")) {
       this.refreshLineLayers({draw: false});
     }
-    this.draw();
+    const canvasPointOnly = changed.every(layer => layer === "cities" || layer === "population");
+    if (canvasPointOnly && changed.includes("cities")) this.refreshCityLayerOverlay();
+    this.draw(canvasPointOnly ? {updateOverlay: false} : undefined);
     return changed;
+  }
+
+  refreshCityLayerOverlay() {
+    if (!this.overlay || !this.map) return;
+    const startedAt = performance.now();
+    const event = this.beginPerformanceEvent("overlay", {cityLayerVisibility: true}, startedAt);
+    const rect = this.canvas.getBoundingClientRect();
+    const renderedLabels = this.labelItems.filter(item => item.box && (item.visible || item.buffered));
+    const politicalBoxes = renderedLabels.filter(item => item.targetKind === LABEL_TARGET_KIND.STATE || item.targetKind === LABEL_TARGET_KIND.PROVINCE).map(item => item.box);
+    const ordinaryBoxes = renderedLabels.filter(item => item.targetKind !== LABEL_TARGET_KIND.STATE && item.targetKind !== LABEL_TARGET_KIND.PROVINCE).map(item => item.box);
+    const cityLabelBoxes = renderedLabels.filter(item => item.targetKind === LABEL_TARGET_KIND.CITY).slice(-MAX_OVERLAY_COLLISION_BOXES).map(item => item.box);
+    const cityStartedAt = performance.now();
+    const cityIconBoxes = this.updateCityIcons(rect, politicalBoxes);
+    const cityIconsMs = roundMs(performance.now() - cityStartedAt);
+    const markerStartedAt = performance.now();
+    this.updateMarkerIcons(rect, [...ordinaryBoxes, ...politicalBoxes, ...cityIconBoxes], cityIconBoxes);
+    const markerIconsMs = roundMs(performance.now() - markerStartedAt);
+    const militaryStartedAt = performance.now();
+    this.updateMilitaryIcons(rect, [...ordinaryBoxes, ...politicalBoxes, ...cityIconBoxes], cityLabelBoxes);
+    const militaryIconsMs = roundMs(performance.now() - militaryStartedAt);
+    this.updateSelectionMarker(rect);
+    this.lastOverlayUpdate = {...this.lastOverlayUpdate, sequence: event.sequence, totalMs: roundMs(performance.now() - startedAt), labelsMs: 0, cityIconsMs, markerIconsMs, militaryIconsMs,
+      visibleCityIcons: this.visibleCityIconCount, visibleMarkerIcons: this.visibleMarkerIconCount, visibleMilitaryIcons: this.visibleMilitaryIconCount};
+    this.overlayCommittedCamera = snapshotViewportCamera(this.camera);
+    this.completePerformanceEvent(event, {...this.lastOverlayUpdate}, performance.now());
   }
 
   async ensureGridCellDiagnosticsBuffer(options = {}) {
@@ -2500,7 +2538,7 @@ export class PlaceholderMapRenderer {
     bindVertexBuffer(gl, this.locations);
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-    gl.drawArrays(gl.POINTS, 0, this.pointVertexCount);
+    drawPointLayerRanges(gl, this.pointDrawRanges, this.layerVisibility);
     gl.disable(gl.BLEND);
     gl.uniform1i(this.locations.pointMode, 0);
 
@@ -2631,6 +2669,7 @@ export class PlaceholderMapRenderer {
         gridCells: summarizeGridCellDiagnostics(this.gridCellDiagnostics)
       },
       pointVertexCount: this.pointVertexCount,
+      pointBufferVertexCount: this.pointBufferVertexCount,
       cityIconCount: this.cityIconCount,
       visibleCityIconCount: this.visibleCityIconCount,
       cityIconScaleThreshold: this.cityIconScaleThreshold,
@@ -4085,7 +4124,7 @@ export class PlaceholderMapRenderer {
   updateSelectionMarker(rect) {
     const shouldShow = shouldShowDefaultSelectionMarker(this.selection, {
       labels: this.labelItems,
-      cities: this.cityIconItems,
+      cities: this.layerVisibility.cities === false ? [] : this.cityIconItems,
       markers: this.markerIconItems,
       military: this.militaryIconItems
     });
@@ -4117,6 +4156,7 @@ export class PlaceholderMapRenderer {
     let visibilityChanged = false;
     const prewarm = cityIconPrewarmCssPx(rect);
     const nowMs = performance.now();
+    const layerVisible = this.layerVisibility.cities !== false;
     let visible = 0;
 
     for (const item of this.cityIconItems) {
@@ -4127,7 +4167,7 @@ export class PlaceholderMapRenderer {
       const onScreen = box.right > 4 && box.bottom > 4 && box.left < rect.width - 4 && box.top < rect.height - 4;
       const inPrewarm = box.right > -prewarm && box.bottom > -prewarm && box.left < rect.width + prewarm && box.top < rect.height + prewarm;
       const scaleVisible = cityIconScaleVisibility(scale, item.minScale, CITY_ICON_SCALE_FADE_WIDTH) > 0;
-      const canRender = this.layerVisibility.cities !== false && scaleVisible && inPrewarm;
+      const canRender = scaleVisible && inPrewarm;
       const blocked = canRender && scale < CITY_ICON_RELAXED_SCALE && (
         boxesOverlapAny(occupiedLabels, box, iconPadding) ||
         boxesOverlapAny(collisionIcons, box, iconPadding)
@@ -4154,8 +4194,8 @@ export class PlaceholderMapRenderer {
       if (visibilityChanged) this.scheduleCityIconAnimation(nowMs);
     }
 
-    this.visibleCityIconCount = visible;
-    return occupiedIcons;
+    this.visibleCityIconCount = layerVisible ? visible : 0;
+    return layerVisible ? occupiedIcons : [];
   }
 
   scheduleCityIconAnimation(nowMs = performance.now()) {
@@ -6844,32 +6884,69 @@ function finiteWidthStat(value) {
   return value === Infinity ? 0 : roundValue(value);
 }
 
-export function buildPointVertices(map, visibility = {}) {
+export function buildPointLayer(map) {
   const context = createRenderContext(map);
   const vertices = [];
-  if (visibility.population !== false) {
+  const drawRanges = [];
+  const appendRange = (layer, task) => {
+    const first = vertices.length / 6;
+    task();
+    const count = vertices.length / 6 - first;
+    if (count > 0) drawRanges.push({layer, first, count});
+  };
+  appendRange("population", () => {
     for (const point of map.settlements.populationPoints) {
       const alpha = Math.min(0.8, 0.25 + point.population / Math.max(1, map.settlements.metadata.maxPopulation));
       pushWorldVertex(vertices, context, point.point, [0.25, 0.42, 0.24, alpha]);
     }
-  }
-  if (visibility.cities !== false) {
+  });
+  appendRange("cities", () => {
     for (const city of map.settlements.cities) {
       if (!city) continue;
       const color = city.capital ? [0.98, 0.82, 0.32, 1] : city.port ? [0.35, 0.72, 0.95, 1] : [0.92, 0.72, 0.38, 1];
       pushWorldVertex(vertices, context, [city.x, city.y], color);
     }
-  }
-  if (visibility.markers !== false || visibility.resources !== false) {
-    for (const marker of map.markers.markers) {
-      if (!isMarkerLayerVisible(marker, visibility)) continue;
+  });
+  let markerLayer = null;
+  for (const marker of map.markers.markers) {
+    const layer = marker.category === "resource" ? "resources" : "markers";
+    if (layer !== markerLayer) {
+      markerLayer = layer;
+      appendRange(layer, () => pushWorldVertex(vertices, context, [marker.x, marker.y], colorForMarker(marker)));
+    } else {
       pushWorldVertex(vertices, context, [marker.x, marker.y], colorForMarker(marker));
+      drawRanges[drawRanges.length - 1].count++;
     }
   }
-  if (visibility.military !== false) {
+  appendRange("military", () => {
     for (const regiment of militaryRegiments(map)) pushWorldVertex(vertices, context, [regiment.x, regiment.y], colorForRegiment(regiment));
+  });
+  return {vertices: new Float32Array(vertices), drawRanges};
+}
+
+export function buildPointVertices(map, visibility = {}) {
+  const layer = buildPointLayer(map);
+  const visibleRanges = layer.drawRanges.filter(range => visibility[range.layer] !== false);
+  const result = new Float32Array(visibleRanges.reduce((sum, range) => sum + range.count * 6, 0));
+  let offset = 0;
+  for (const range of visibleRanges) {
+    const values = layer.vertices.subarray(range.first * 6, (range.first + range.count) * 6);
+    result.set(values, offset);
+    offset += values.length;
   }
-  return new Float32Array(vertices);
+  return result;
+}
+
+function countVisiblePointVertices(drawRanges, visibility) {
+  let count = 0;
+  for (const range of drawRanges || []) if (visibility[range.layer] !== false) count += range.count;
+  return count;
+}
+
+function drawPointLayerRanges(gl, drawRanges, visibility) {
+  for (const range of drawRanges || []) {
+    if (visibility[range.layer] !== false) gl.drawArrays(gl.POINTS, range.first, range.count);
+  }
 }
 
 function isMarkerLayerVisible(marker, visibility = {}) {

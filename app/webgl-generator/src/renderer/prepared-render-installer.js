@@ -289,7 +289,11 @@ function createPreparedInstallTransaction(renderer, map, prepared, decoded, buff
       assign("shoreLineVertexCount", vertexCount(layers.line.shoreVertices));
       assign("oceanCurrentVertexCount", vertexCount(layers.line.oceanCurrentVertices));
       }
-      if (layers.point) assign("pointVertexCount", vertexCount(layers.point.vertices));
+      if (layers.point) {
+      assign("pointDrawRanges", layers.point.drawRanges || []);
+      assign("pointBufferVertexCount", vertexCount(layers.point.vertices));
+      assign("pointVertexCount", countVisiblePointVertices(layers.point.drawRanges, renderer.layerVisibility));
+      }
       if (layers.route) {
       assign("routeVertexCount", vertexCount(layers.route.vertices));
       assign("routeDrawRanges", layers.route.drawRanges);
@@ -668,7 +672,10 @@ function validatePreparedLayerShapes(layers) {
       assertPreparedVertexArray(layers.line[key], `line.${key}`);
     }
   }
-  if (layers.point) assertPreparedPointVertexArray(layers.point.vertices, "point.vertices");
+  if (layers.point) {
+    assertPreparedPointVertexArray(layers.point.vertices, "point.vertices");
+    assertPreparedPointDrawRanges(layers.point.drawRanges, layers.point.vertices.length / FLOATS_PER_VERTEX);
+  }
   if (layers.route) {
     assertPreparedVertexArray(layers.route.vertices, "route.vertices");
     assertPreparedRouteDrawRanges(layers.route.drawRanges, layers.route.vertices.length / FLOATS_PER_VERTEX);
@@ -881,6 +888,22 @@ function assertPreparedPointVertexArray(value, label) {
   if (!(value instanceof Float32Array) || value.length % FLOATS_PER_VERTEX !== 0) {
     throw renderInstallError("render-vertex-shape", `Worker ${label} 顶点数组结构无效`);
   }
+}
+
+function assertPreparedPointDrawRanges(value, vertexCount) {
+  if (!Array.isArray(value)) throw renderInstallError("render-point-ranges-shape", "Worker point draw ranges 缺失");
+  const layers = new Set(["population", "cities", "markers", "resources", "military"]);
+  let cursor = 0;
+  for (const range of value) {
+    const first = Number(range?.first);
+    const count = Number(range?.count);
+    if (!layers.has(range?.layer) || !Number.isInteger(first) || !Number.isInteger(count)
+      || first !== cursor || count <= 0 || first + count > vertexCount) {
+      throw renderInstallError("render-point-ranges-shape", "Worker point draw range 无效");
+    }
+    cursor += count;
+  }
+  if (cursor !== vertexCount) throw renderInstallError("render-point-ranges-shape", "Worker point draw ranges 未完整覆盖顶点数组");
 }
 
 function assertPreparedRouteDrawRanges(value, vertexCount) {
@@ -1205,6 +1228,12 @@ function deletePreparedBuffersBestEffort(gl, buffers) {
 
 function vertexCount(values) {
   return Math.floor((values?.length || 0) / FLOATS_PER_VERTEX);
+}
+
+function countVisiblePointVertices(drawRanges, visibility) {
+  let count = 0;
+  for (const range of drawRanges || []) if (visibility?.[range.layer] !== false) count += range.count;
+  return count;
 }
 
 function sameBinding(left, right) {

@@ -6,6 +6,7 @@ import {
   buildLineVertices,
   buildPlaceholderSurfaceBundle,
   buildPlaceholderSurfaceColorPatch,
+  buildPointLayer,
   buildPointVertices,
   buildRiverMeshVertices,
   buildRouteMeshVertices
@@ -92,7 +93,7 @@ assert.ok(
 const expected = {
   route: buildRouteMeshVertices(map, camera, canvas, null, [], visualTheme),
   river: buildRiverMeshVertices(map, camera, canvas),
-  point: {vertices: buildPointVertices(map, visibility)}
+  point: buildPointLayer(map)
 };
 const actual = await executeRenderPreparationTask({map, binding, camera, canvas, visibility, visualTheme}, {
   checkpoint: value => checkpoints.push(value)
@@ -102,6 +103,7 @@ assertRenderPreparationBinding(actual, binding);
 assert.deepEqual(actual.layers.route.drawRanges, expected.route.drawRanges);
 assert.deepEqual(actual.layers.route.stats, expected.route.stats);
 assert.deepEqual(actual.layers.river.stats, expected.river.stats);
+assert.deepEqual(actual.layers.point.drawRanges, expected.point.drawRanges, "point draw ranges 必须与稳定点层同源");
 for (const layer of ["route", "river", "point"]) {
   assert.ok(actual.layers[layer].vertices instanceof Float32Array, `${layer} 必须输出 Float32Array`);
   assert.equal(actual.layers[layer].vertices.length, expected[layer].vertices.length, `${layer} 顶点长度必须一致`);
