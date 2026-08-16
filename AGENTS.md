@@ -67,6 +67,7 @@
 
 ## 当前状态
 
+- 第 341 项已完成并归档：generation / import / browser restore adoption owner 不再被普通 `120s` pending watchdog 提前销毁，只由装载事务显式 commit / invalidate；普通 `map-mirror` 防死锁门保持。用户当前 5410 精确标签页已重新直载原 100k 地图到 `map-ready`，版本为 `0.4.6`；约 `23.3s` 恢复性能告警仍单列，未在本项扩修。
 - 第 340 项已完成并归档：旧 100k 精化存档中 15 个整数化共线 cell 在既有安全路径全部失败后，使用 cell / 邻居中心与地图矩形的 Voronoi 半平面交集恢复只读渲染边界；平滑与 hard surface 均达到 `100000 / 100000` 非零安全覆盖，原文件与地图 checksum 不变。用户原 5410 已恢复实际 100k 地图并通过平滑开关与全图视觉验收，版本为 `0.4.5`。
 - 第 339 项已完成并归档：显示内容 current token 与 viewport 独立；成功 resume 消费 deferred 队列后按 committed sequence 验证，不再把空队列误判 obsolete。unsafe center fan 与正式零 range 兜底已移除，三档 cell 覆盖完整。用户原 5410 当前 10k 地图的文化 / 政体并发缩放、快速 latest-wins 与平滑奇数切换通过，版本为 `0.4.4`。
 - 第 338 项已完成并归档：grid-cells 局部零长度 surface range 不再被误判为协议损坏；显示结果只在主线程完成安装、恢复绘制和最终提交后向 Worker 发 commit ACK，持久 MapWorker transaction 在前项 commit / invalidate 终态前排队，失败、取消与超时均会释放队列。用户原 5410 的 100k 地图刷新后通过快速奇数切换与并发偶数触发，版本为 `0.4.3`；第 339 项继续收敛其后发现的 viewport 误杀与最终覆盖缺口。

@@ -495,11 +495,13 @@ export function createWorkerTaskCoordinator({createWorker, getBinding, validateB
                 sessionTerminalTimer: 0
               };
               const retainedSession = persistentSession;
-              retainedSession.sessionTerminalTimer = setTimeout(() => {
-                if (persistentSession === retainedSession && retainedSession.status === "pending") {
-                  invalidateSession("session-main-commit-timeout");
-                }
-              }, Math.max(1000, Number(runOptions.mainCommitTimeoutMs) || 120000));
+              if (!runOptions.adoptResultMap) {
+                retainedSession.sessionTerminalTimer = setTimeout(() => {
+                  if (persistentSession === retainedSession && retainedSession.status === "pending") {
+                    invalidateSession("session-main-commit-timeout");
+                  }
+                }, Math.max(1000, Number(runOptions.mainCommitTimeoutMs) || 120000));
+              }
             }
             finish(resolve, {
               ...result,

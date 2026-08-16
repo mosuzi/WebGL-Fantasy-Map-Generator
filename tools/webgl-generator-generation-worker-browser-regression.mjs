@@ -143,7 +143,9 @@ try {
   assert.ok(report.map.gridCells >= Math.floor(cellsTarget * 0.99) && report.map.packCells > 0);
   assert.equal(report.history.undo, 0);
   assert.equal(report.history.redo, 0);
-  assert.equal(report.coordinator, null, "非持久整图生成遗留了 Worker 会话");
+  assert.equal(report.coordinator?.id, report.response.timings.worker.session.id, "整图生成没有保留同一 adopted owner");
+  assert.equal(report.coordinator?.status, "idle", "整图生成 adopted owner 未完成主线程终态提交");
+  assert.equal(report.coordinator?.adopted, true, "整图生成 owner 未标记为 adoption 来源");
   assert.equal(report.loading.visible, false);
   assert.equal(report.pendingOverlayBatches, 0);
   assert.deepEqual(report.trace.longTasks, []);

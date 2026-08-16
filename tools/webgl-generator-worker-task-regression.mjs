@@ -491,6 +491,7 @@ const adoptedImport = await adoptionCoordinator.run("map-file-io", {
 }, {
   binding: adoptionBinding,
   sessionMode: "adopt-result-map",
+  mainCommitTimeoutMs: 1,
   allowFallback: false
 });
 assert.equal(Object.hasOwn(adoptedImport, "map"), false, "adoption 输出不得回传完整 map 对象图");
@@ -501,6 +502,8 @@ assert.equal(adoptedImport.worker.session.reused, false);
 assert.equal(adoptionCoordinator.getSessionSnapshot()?.status, "pending");
 assert.equal(adoptionCoordinator.getSessionSnapshot()?.adopted, true);
 assert.ok(adoptionCoordinator.getSessionSnapshot()?.checksum, "adoption 必须以结果流 checksum 建立 owner");
+await new Promise(resolve => setTimeout(resolve, 1100));
+assert.equal(adoptionCoordinator.getSessionSnapshot()?.status, "pending", "adoption owner 不得被普通 transaction 的墙钟 watchdog 提前销毁");
 adoptionBinding = {...adoptionBinding, mapIdentity: "imported-map", mapRevision: 0};
 assert.equal(await adoptionCoordinator.commitSession(adoptedImport.worker.session.id, adoptionBinding, {adoptResultMap: true}), true);
 assert.equal(adoptionCoordinator.getSessionSnapshot()?.status, "idle");
