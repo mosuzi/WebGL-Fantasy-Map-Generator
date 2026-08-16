@@ -66,6 +66,12 @@ dirtyLocked.pack.burgs[11].provincial = false;
 const dirtyLockedPreview = inspectProvincialCapitalReassessment(dirtyLocked, {provinceId: 1});
 assert.equal(dirtyLockedPreview.code, "rejected", "锁定脏数据不应被误报为 protected");
 assert.equal(dirtyLockedPreview.rejected[0].code, "locked-capital-inconsistent");
+const dirtyLockedRepairPreview = inspectProvincialCapitalReassessment(dirtyLocked, {
+  provinceId: 1,
+  repairInconsistentCurrent: true
+});
+assert.equal(dirtyLockedRepairPreview.code, "protected", "重生成事务应保留脏锁对象并继续其余省份");
+assert.equal(dirtyLockedRepairPreview.rejected.length, 0, "脏锁对象不应整批阻断主动重生成");
 const dirtyLockedCenter = clone(closePopulation);
 dirtyLockedCenter.regenerationLocks.entries = [{kind: "province", id: 1}];
 dirtyLockedCenter.politics.provinces[1].center = 1;
@@ -166,6 +172,25 @@ const brokenPreview = inspectProvincialCapitalReassessment(brokenMap, {provinceI
 assert.equal(brokenPreview.code, "rejected");
 assert.equal(brokenPreview.rejected[0].code, "current-capital-inconsistent");
 assert.deepEqual(brokenMap, brokenBefore, "只读预览修改了旧图或破损图");
+const brokenRepairPreview = inspectProvincialCapitalReassessment(brokenMap, {
+  provinceId: 1,
+  repairInconsistentCurrent: true
+});
+assert.equal(brokenRepairPreview.allowed, true, "重生成事务未能接纳可修复的旧省会失配");
+assert.equal(brokenRepairPreview.rejected.length, 0, "重生成事务仍把旧省会失配当成硬拒绝");
+applyProvincialCapitalPlan(brokenMap, brokenRepairPreview);
+assert.notEqual(brokenMap.politics.provinces[1].burg, 999, "重生成事务没有替换悬空省会");
+assert.equal(brokenMap.politics.provinces[1].burg, brokenMap.pack.provinces[1].burg, "修复后的省会镜像不一致");
+
+const brokenMirrorMap = clone(counterexample);
+brokenMirrorMap.pack.provinces[1].center = 999;
+const brokenMirrorPreview = inspectProvincialCapitalReassessment(brokenMirrorMap, {
+  provinceId: 1,
+  repairInconsistentCurrent: true
+});
+assert.equal(brokenMirrorPreview.allowed, true, "重生成事务未能接纳可修复的省份镜像失配");
+applyProvincialCapitalPlan(brokenMirrorMap, brokenMirrorPreview);
+assert.equal(brokenMirrorMap.pack.provinces[1].center, brokenMirrorMap.politics.provinces[1].center, "重生成事务没有同步省份中心镜像");
 
 for (const mutate of [
   map => { map.pack.provinces[1].center = 999; },

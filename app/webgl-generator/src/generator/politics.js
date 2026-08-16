@@ -193,7 +193,10 @@ export function regeneratePackStatesAndProvinces(grid, society, options, pack, s
   const profile = createStageProfile();
   const random = profile.stage("random-states", "初始化国家重算随机源", () => createRandom(regenerationSeed(options, "regenerate-states", salt)));
   const nameGenerator = profile.stage("name-generator", "初始化政区命名器", () => createChineseNameGenerator(regenerationSeed(options, "regenerate-politics-names", salt), {namebases: options.namebases}));
-  const supportingProvinces = profile.stage("states-province-support", "收集锁国省份支撑快照", () => collectLockedStateProvinceSnapshots(pack, options));
+  const supportingProvinces = profile.stage("states-province-support", "收集锁国与锁定省会支撑快照", () => [
+    ...collectLockedStateProvinceSnapshots(pack, options),
+    ...collectLockedCityProvinceSnapshots(pack, options)
+  ]);
   const lockedProvinces = profile.stage("provinces-locks", "校验锁定省份", () => prepareLockedProvinces(grid, pack, options, supportingProvinces));
   const lockedStates = profile.stage("states-locks", "校验锁定国家", () => prepareLockedStates(grid, pack, options, lockedProvinces));
   const riverBarrier = profile.stage("river-political-barrier", "建立大河政治阻隔", () => createRiverPoliticalBarrier(pack));
@@ -239,7 +242,12 @@ export function regeneratePackProvincesWithinStates(grid, society, options, pack
   const profile = createStageProfile();
   const random = profile.stage("random-provinces", "初始化省份重算随机源", () => createRandom(regenerationSeed(options, "regenerate-provinces", salt)));
   const nameGenerator = profile.stage("name-generator", "初始化省份命名器", () => createChineseNameGenerator(regenerationSeed(options, "regenerate-province-names", salt), {namebases: options.namebases}));
-  const locked = profile.stage("provinces-locks", "校验锁定省份", () => prepareLockedProvinces(grid, pack, options));
+  const locked = profile.stage("provinces-locks", "校验锁定省份", () => prepareLockedProvinces(
+    grid,
+    pack,
+    options,
+    collectLockedCityProvinceSnapshots(pack, options)
+  ));
   const riverBarrier = profile.stage("river-political-barrier", "建立大河政治阻隔", () => createRiverPoliticalBarrier(pack));
   const provinces = profile.stage("provinces-rebuild", "重建 pack 省份", () => buildPackProvinces(pack, society, random, options, nameGenerator, locked, new Set(), riverBarrier));
   grid.cells.province = profile.stage("provinces-mirror-grid", "镜像省份到 grid", () => mirrorPackProvinceToGrid(grid, pack, locked.gridOwners, locked.ids));
@@ -1495,6 +1503,34 @@ function prepareLockedProvinces(grid, pack, options = {}, supporting = []) {
   }
 
   return {provinces, ids, centers, burgIds, packOwners, gridOwners};
+}
+
+function collectLockedCityProvinceSnapshots(pack, options = {}) {
+  const lockedCities = options.lockedCities ?? options.preservedCities ?? [];
+  if (!Array.isArray(lockedCities)) throw provinceLockConflict("锁定城市约束必须是数组", {reason: "invalid-city-constraint"});
+  const snapshots = [];
+  const seen = new Set();
+  for (const city of lockedCities) {
+    const provinceId = Number(city?.province || 0);
+    const burgId = Number(city?.burgId || 0);
+    const province = pack?.provinces?.[provinceId];
+    if (!province?.i || province.removed || seen.has(provinceId)) continue;
+    if (!city?.provincial && Number(province.burg || 0) !== burgId) continue;
+    if (!lockedCityProvinceAnchorConsistent(pack, city, province)) continue;
+    snapshots.push(structuredClone(province));
+    seen.add(provinceId);
+  }
+  return snapshots;
+}
+
+function lockedCityProvinceAnchorConsistent(pack, city, province) {
+  const provinceId = Number(province?.i ?? province?.id);
+  const center = Number(province?.center);
+  return Number(province?.burg || 0) === Number(city?.burgId || 0)
+    && center === Number(city?.packCell)
+    && Number(province?.state) === Number(city?.state)
+    && Number(pack?.cells?.province?.[center]) === provinceId
+    && Number(pack?.cells?.state?.[center]) === Number(province?.state);
 }
 
 function provinceLockConflict(message, details = {}) {

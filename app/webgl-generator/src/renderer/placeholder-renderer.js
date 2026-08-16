@@ -5819,7 +5819,16 @@ function canReuseCellVisualSurfaceGeometry(renderer) {
 }
 
 function recolorCellVisualSurfaceBundle(renderer) {
-  const {map, colorMode, viewOptions, cellVisualMesh, surfaceVertices, surfaceCellRanges} = renderer;
+  const {
+    map,
+    colorMode,
+    viewOptions,
+    cellVisualMesh,
+    surfaceVertices,
+    surfaceCellRanges,
+    cellVisualCorrectionGeometry,
+    gpuResidentSmoothShoreSurfaceKey
+  } = renderer;
   for (const cellMesh of cellVisualMesh.cells) {
     const range = surfaceCellRanges.get(cellMesh.cell);
     if (!range) continue;
@@ -5838,9 +5847,12 @@ function recolorCellVisualSurfaceBundle(renderer) {
   const {cellRanges: shoreSurfaceCellRanges, ...shoreVertices} = shoreLayers;
   return {
     base: surfaceVertices,
+    cellVisualCorrection: cellVisualCorrectionGeometry,
+    smoothShoreSurfaceKey: gpuResidentSmoothShoreSurfaceKey,
     ...shoreVertices,
     surfaceCellRanges,
-    shoreSurfaceCellRanges
+    shoreSurfaceCellRanges,
+    shoreSurfaceEnabled: shouldDrawShoreVisualBands(colorMode)
   };
 }
 

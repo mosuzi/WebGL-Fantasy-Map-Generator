@@ -703,6 +703,16 @@ function summarizeTopLevelChanges(before, after) {
         added: currentRows.filter(value => !previousSet.has(value)).slice(0, 6)
       }];
     }
+    if (previous && current && typeof previous === "object" && typeof current === "object") {
+      const fields = changedTopLevelFields(previous, current);
+      return [field, {
+        fields,
+        changes: Object.fromEntries(fields.slice(0, 12).map(key => [key, {
+          before: String(stableSnapshot(previous[key])).slice(0, 120),
+          after: String(stableSnapshot(current[key])).slice(0, 120)
+        }]))
+      }];
+    }
     return [field, {before: stableSnapshot(previous).slice(0, 240), after: stableSnapshot(current).slice(0, 240)}];
   }));
 }
@@ -751,14 +761,27 @@ function captureCityMirrors(map, city) {
   const gridCell = Number(city.cell);
   const state = map?.politics?.states?.[Number(city.state)] || map?.pack?.states?.[Number(city.state)];
   const province = map?.politics?.provinces?.[Number(city.province)] || map?.pack?.provinces?.[Number(city.province)];
+  const provinceId = Number(province?.i ?? province?.id);
+  const provinceCenter = Number(province?.center);
+  const packProvince = map?.pack?.provinces?.[provinceId] || null;
+  const packBurg = clone(map?.pack?.burgs?.[burgId] || null);
+  if (packBurg) packBurg.provincial = Boolean(packBurg.provincial);
+  const consistentProvinceAnchor = province
+    && packProvince
+    && Number(province.burg) === burgId
+    && provinceCenter === packCell
+    && Number(province.state) === Number(city.state)
+    && ["state", "burg", "center", "gridCenter"].every(key => Number(packProvince[key] ?? 0) === Number(province[key] ?? 0))
+    && Number(map?.pack?.cells?.province?.[provinceCenter]) === provinceId
+    && Number(map?.pack?.cells?.state?.[provinceCenter]) === Number(province.state);
   return {
-    packBurg: clone(map?.pack?.burgs?.[burgId] || null),
+    packBurg,
     packCellBurg: Number(map?.pack?.cells?.burg?.[packCell]) || 0,
     packCellBurgIds: burgIdsAtPackCell(map, packCell),
     gridCellBurg: Number(map?.grid?.cells?.burg?.[gridCell]) || 0,
     gridCellCityIds: cityIdsAtGridCell(map, gridCell),
     stateAnchor: state && Number(state.capital) === burgId ? pickFields(state, ["capital", "center", "gridCenter", "capitalName"]) : null,
-    provinceAnchor: province && Number(province.burg) === burgId ? pickFields(province, ["burg", "center", "gridCenter"]) : null
+    provinceAnchor: consistentProvinceAnchor ? pickFields(province, ["burg", "center", "gridCenter"]) : null
   };
 }
 

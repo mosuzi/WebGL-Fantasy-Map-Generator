@@ -1,26 +1,54 @@
 import assert from "node:assert/strict";
-import {inspectRegenerationWorkerPreflight} from "../app/webgl-generator/src/runtime/regeneration-worker-task.js";
+import {generatePlaceholderMap} from "../app/webgl-generator/src/generator/index.js";
+import {runRegenerationWorkerTask} from "../app/webgl-generator/src/runtime/regeneration-worker-task.js";
 
-const province = {i: 1, state: 1, burg: 9, center: 0, gridCenter: 0};
-const map = {
-  politics: {states: [null, {i: 1, capital: 0}], provinces: [null, {...province}]},
-  pack: {
-    states: [null, {i: 1, capital: 0}],
-    provinces: [null, {...province}],
-    burgs: [],
-    cells: {g: new Uint32Array([0]), state: new Uint16Array([1]), province: new Uint16Array([1]), h: new Uint8Array([50]), s: new Float32Array([1]), pop: new Float32Array([1])}
-  },
-  settlements: {cities: []},
-  regenerationLocks: {version: 1, entries: []}
-};
+const results = [];
+for (const kind of ["provinces", "cities"]) {
+  const map = generatePlaceholderMap({
+    seed: `regeneration-priority-${kind}`,
+    cellsTarget: 3000,
+    heightmapTemplate: "continents"
+  });
+  const active = activeProvinces(map);
+  assert(active.length > 0, `${kind} 固定样本没有活动省份`);
+  for (const province of active) {
+    const invalidBurg = 1000000 + Number(province.i);
+    province.burg = invalidBurg;
+    map.pack.provinces[province.i].burg = invalidBurg;
+  }
+  map.pack.provinces[active[0].i].center = 1000000 + Number(active[0].i);
 
-for (const [kind, scope] of [["provinces", {kind: "all"}], ["cities", {kind: "province", id: 1}]]) {
-  const result = inspectRegenerationWorkerPreflight(map, kind, scope);
-  assert.equal(result.executed, false, `${kind} 预检拒绝必须是未执行`);
-  assert.equal(result.rejection.code, "regeneration_preflight_rejected", `${kind} 预检稳定码错误`);
-  assert.equal(result.rejection.stage, "preflight", `${kind} 预检阶段错误`);
-  assert.deepEqual(result.rejection.details.rejected, [{provinceId: 1, code: "current-capital-inconsistent", summary: "省份 #1 的 province.burg 找不到对应城市，拒绝静默覆盖。"}]);
+  const output = await runRegenerationWorkerTask({map, kind}, {checkpoint() {}, report() {}});
+  assert.equal(output.result.executed, true, `${kind} 仍被可修复的旧省会状态拒绝`);
+  assert.equal(output.result.rejection, undefined, `${kind} 仍返回 regeneration_preflight_rejected`);
+  assertProvinceCapitalMirrors(map, kind);
+  results.push({kind, provinces: activeProvinces(map).length, status: output.result.status});
 }
 
-assert.equal(inspectRegenerationWorkerPreflight(map, "routes", {kind: "all"}), null, "非省份/城镇不得进入省会预检");
-console.log(JSON.stringify({ok: true, code: "current-capital-inconsistent", kinds: ["provinces", "cities"]}));
+console.log(JSON.stringify({ok: true, repaired: results}));
+
+function activeProvinces(map) {
+  return (map.politics?.provinces || []).filter(province => province?.i && !province.removed);
+}
+
+function assertProvinceCapitalMirrors(map, kind) {
+  const failures = [];
+  for (const province of activeProvinces(map)) {
+    const packProvince = map.pack?.provinces?.[province.i];
+    const capitals = (map.settlements?.cities || [])
+      .filter(city => city && !city.removed && Number(city.province) === Number(province.i) && city.provincial);
+    const capital = capitals[0];
+    const burg = capital ? map.pack?.burgs?.[capital.burgId] : null;
+    if (!packProvince || capitals.length !== 1 || !capital || !burg
+      || Number(province.burg) !== Number(capital.burgId)
+      || Number(packProvince.burg) !== Number(capital.burgId)
+      || Number(province.center) !== Number(capital.packCell)
+      || Number(packProvince.center) !== Number(capital.packCell)
+      || Number(province.gridCenter) !== Number(capital.cell)
+      || Number(packProvince.gridCenter) !== Number(capital.cell)
+      || burg.provincial !== true) {
+      failures.push({provinceId: province.i, capitals: capitals.length});
+    }
+  }
+  assert.deepEqual(failures, [], `${kind} 重生成后省会镜像仍不一致`);
+}

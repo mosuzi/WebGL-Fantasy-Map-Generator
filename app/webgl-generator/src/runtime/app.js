@@ -14213,7 +14213,8 @@ function regenerateStates(state, documentRef, options = {}) {
       lockedProvinces: lockedPoliticalProvinces,
       lockedCities: lockedPoliticalCities,
       lockedRoutes: routeLocks.snapshots,
-      reassessProvincialCapitals: true
+      reassessProvincialCapitals: true,
+      repairInconsistentProvincialCapitals: true
     }, map.pack, map.settlements, {salt: stateSalt});
     if (!result) {
       restoreRegenerationSalt(map, previousSalt);
@@ -14341,11 +14342,15 @@ function regenerateProvinces(state, documentRef, scope = {kind: "all"}) {
   try {
     provinceSalt = nextRegenerationSalt(map, "provinces");
     result = scope.kind === "state"
-      ? withScopedProvinceRegenerationOptions(map, {lockedProvinces: provinceLocks.snapshots}, () => regenerateProvincesForStates(map, [scope.id]))
+      ? withScopedProvinceRegenerationOptions(map, {
+        lockedProvinces: provinceLocks.snapshots,
+        lockedCities: cityLocks.snapshots
+      }, () => regenerateProvincesForStates(map, [scope.id]))
       : regeneratePackProvincesWithinStates(map.grid, map.society, {
         ...map.options,
         namebases: map.namebases,
-        lockedProvinces: provinceLocks.snapshots
+        lockedProvinces: provinceLocks.snapshots,
+        lockedCities: cityLocks.snapshots
       }, map.pack, {salt: provinceSalt});
     if (!result) {
       restoreRegenerationSalt(map, previousSalt);
@@ -14360,7 +14365,8 @@ function regenerateProvinces(state, documentRef, scope = {kind: "all"}) {
       lockedCities: lockedPoliticalCities,
       lockedRoutes: routeLocks.snapshots,
       settlementScope: scope.kind === "state" ? {kind: "state", id: scope.id} : null,
-      reassessProvincialCapitals: true
+      reassessProvincialCapitals: true,
+      repairInconsistentProvincialCapitals: true
     });
     if (constraintBundle) constraintBundle.assertDomain(map, "states-provinces", "province-settlements");
     else {
@@ -14588,7 +14594,8 @@ function regenerateCities(state, documentRef, scope = {kind: "all"}) {
       settlementScope,
       lockedCities: cityLocks.snapshots,
       lockedRoutes: routeLocks.snapshots,
-      reassessProvincialCapitals: true
+      reassessProvincialCapitals: true,
+      repairInconsistentProvincialCapitals: true
     });
     if (constraintBundle) constraintBundle.assertDomain(map, "cities-routes", "settlement-routes");
     else {

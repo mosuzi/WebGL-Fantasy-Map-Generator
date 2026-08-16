@@ -1537,8 +1537,26 @@ export function regenerateProvincesForStates(map, stateIds, options = scopedProv
 }
 
 function prepareScopedLockedProvinces(map, selectedStateIds, options = {}) {
-  const provided = options.lockedProvinces ?? options.preservedProvinces ?? [];
-  if (!Array.isArray(provided)) throw scopedProvinceLockConflict("锁定省份约束必须是数组", {reason: "invalid-constraint"});
+  const requested = options.lockedProvinces ?? options.preservedProvinces ?? [];
+  const lockedCities = options.lockedCities ?? options.preservedCities ?? [];
+  if (!Array.isArray(requested)) throw scopedProvinceLockConflict("锁定省份约束必须是数组", {reason: "invalid-constraint"});
+  if (!Array.isArray(lockedCities)) throw scopedProvinceLockConflict("锁定城市约束必须是数组", {reason: "invalid-city-constraint"});
+  const provided = requested.slice();
+  const providedIds = new Set(provided.map(source => numberId(source?.id ?? source?.i)).filter(Boolean));
+  for (const city of lockedCities) {
+    const provinceIdValue = numberId(city?.province);
+    const province = readProvince(map, provinceIdValue);
+    if (!province || province.removed || providedIds.has(provinceIdValue)) continue;
+    if (!city?.provincial && numberId(province.burg) !== numberId(city?.burgId)) continue;
+    const center = numberId(province.center);
+    if (numberId(province.burg) !== numberId(city?.burgId)
+      || center !== numberId(city?.packCell)
+      || numberId(province.state) !== numberId(city?.state)
+      || numberId(map.pack.cells.province?.[center]) !== provinceIdValue
+      || numberId(map.pack.cells.state?.[center]) !== numberId(province.state)) continue;
+    provided.push(structuredClone(province));
+    providedIds.add(provinceIdValue);
+  }
   const allIds = new Set();
   const selectedIds = new Set();
   const byState = new Map();

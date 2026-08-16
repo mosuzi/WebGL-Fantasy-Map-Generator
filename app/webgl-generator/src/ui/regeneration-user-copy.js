@@ -69,10 +69,22 @@ export function regenerationFeedbackMessage(kind, response, {debug = false} = {}
   if (debug) {
     return response?.ok
       ? response.data?.status || "重设完成"
-      : `重设失败：${response?.error?.message || "未知错误"}`;
+      : `重设失败：${response?.error?.message || "未知错误"}${debugRegenerationErrorDetails(response?.error)}`;
   }
   if (response?.ok) return regenerationResultMessage(kind, response.data);
   return regenerationErrorMessage(response?.error?.code);
+}
+
+function debugRegenerationErrorDetails(error) {
+  const details = error?.details;
+  if (!details || typeof details !== "object") return "";
+  const lock = details.reference || details.worker?.details?.reference || null;
+  const reason = details.reason || details.worker?.details?.reason || "";
+  const changed = details.changedFields || details.worker?.details?.changedFields || [];
+  const changedSummary = details.changedSummary || details.worker?.details?.changedSummary || null;
+  if (!lock && !reason && !changed.length && !changedSummary) return "";
+  const summary = changedSummary ? JSON.stringify(changedSummary).slice(0, 600) : "";
+  return `（${[lock ? `${lock.kind || "object"} #${lock.id}` : "", reason, changed.length ? `字段 ${changed.join("、")}` : "", summary].filter(Boolean).join("；")}）`;
 }
 
 export function createRegenerationUserError(kind, error) {

@@ -39,8 +39,10 @@ export function buildSettlements(grid, features, politics, rivers, random, pack,
 
 export function finalizeSettlements(grid, features, politics, settlements, pack, options = {}) {
   if (pack?.cells) reconcileSettlementCellIdentity({grid, pack, settlements});
+  const protectedCityIds = snapshotIds(options.lockedCities || options.preservedCities);
   for (const city of settlements.cities) {
     if (!city || city.removed) continue;
+    if (protectedCityIds.has(Number(city.id))) continue;
     if (pack?.cells && Number.isInteger(city.packCell) && city.packCell >= 0) {
       city.state = pack.cells.state?.[city.packCell] ?? city.state;
       city.province = pack.cells.province?.[city.packCell] ?? city.province;

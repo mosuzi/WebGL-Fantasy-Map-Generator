@@ -33,7 +33,7 @@ export function inspectProvincialCapitalReassessment(map, request = {}) {
 
   for (const id of requestedIds) {
     const province = provinceFromMap(map, id);
-    const evaluation = evaluateProvince(map, province, lockKeys);
+    const evaluation = evaluateProvince(map, province, lockKeys, normalized);
     evaluations.push(evaluation);
     if (evaluation.status === "protected") protectedItems.push(evaluation);
     else if (evaluation.status === "rejected") rejected.push(evaluation);
@@ -99,7 +99,10 @@ export function reassessGeneratedProvincialCapitals(grid, pack, settlements, pol
     }
   };
   const provinceIds = generationProvinceScope(options, politics);
-  const preview = inspectProvincialCapitalReassessment(map, {provinceIds});
+  const preview = inspectProvincialCapitalReassessment(map, {
+    provinceIds,
+    repairInconsistentCurrent: options.repairInconsistentProvincialCapitals === true
+  });
   if (preview.rejected.length) {
     throw provincialCapitalError(preview.rejected[0]?.code || "rejected", preview.summary, {
       rejected: preview.rejected.map(item => ({
@@ -155,9 +158,10 @@ export function markProvincialCapitalDerivedStale(map) {
   map.metadata.derivedStale = {...stale, systems: [...systems]};
 }
 
-function evaluateProvince(map, province, lockKeys) {
+function evaluateProvince(map, province, lockKeys, request) {
   const id = provinceId(province);
-  if (!provinceMirrorsConsistent(map, id)) {
+  const repairProvinceMirror = !provinceMirrorsConsistent(map, id);
+  if (repairProvinceMirror && request.repairInconsistentCurrent !== true) {
     return evaluationBase(province, null, {
       status: "rejected",
       code: "province-mirror-inconsistent",
@@ -166,11 +170,19 @@ function evaluateProvince(map, province, lockKeys) {
   }
   const currentBurgId = Number(province?.burg || 0);
   const currentCity = cityByBurg(map, currentBurgId);
-  if (currentBurgId > 0 && !currentCity) {
+  if (currentBurgId > 0 && !currentCity && request.repairInconsistentCurrent !== true) {
     return evaluationBase(province, null, {
       status: "rejected",
       code: "current-capital-inconsistent",
       summary: `省份 #${id} 的 province.burg 找不到对应城市，拒绝静默覆盖。`
+    });
+  }
+  if (request.repairInconsistentCurrent === true
+    && (lockKeys.has(`province:${id}`) || (currentCity && lockKeys.has(`city:${Number(currentCity.id)}`)))) {
+    return evaluationBase(province, currentCity, {
+      status: "protected",
+      code: lockKeys.has(`province:${id}`) ? "province-locked" : "capital-city-locked",
+      summary: `省份 #${id} 或当前省会受到锁保护，重生成将保留该对象并继续处理其余省份。`
     });
   }
   const lockedCapitalConflicts = (map?.settlements?.cities || []).filter(city => {
@@ -181,7 +193,7 @@ function evaluateProvince(map, province, lockKeys) {
   });
   if (lockedCapitalConflicts.length) {
     return evaluationBase(province, currentCity, {
-      status: "rejected",
+      status: request.repairInconsistentCurrent === true ? "protected" : "rejected",
       code: "locked-capital-inconsistent",
       summary: `省份 #${id} 的非现任锁定城市仍带有省会标记，拒绝改写锁定对象。`
     });
@@ -194,7 +206,8 @@ function evaluateProvince(map, province, lockKeys) {
       summary: `省份 #${id} 没有 city / burg / pack / politics 一致的陆地候选。`
     });
   }
-  if (currentCity && !candidates.some(candidate => candidate.cityId === Number(currentCity.id))) {
+  if (currentCity && !candidates.some(candidate => candidate.cityId === Number(currentCity.id))
+    && request.repairInconsistentCurrent !== true) {
     return evaluationBase(province, currentCity, {
       status: "rejected",
       code: "current-capital-inconsistent",
@@ -204,7 +217,7 @@ function evaluateProvince(map, province, lockKeys) {
   if (lockKeys.has(`province:${id}`) || (currentCity && lockKeys.has(`city:${Number(currentCity.id)}`))) {
     if (!lockedProvinceCapitalConsistent(map, province, currentCity)) {
       return evaluationBase(province, currentCity, {
-        status: "rejected",
+        status: request.repairInconsistentCurrent === true ? "protected" : "rejected",
         code: "locked-capital-inconsistent",
         summary: `省份 #${id} 的锁定省会数据不一致，拒绝以保护状态掩盖冲突。`
       });
@@ -221,14 +234,15 @@ function evaluateProvince(map, province, lockKeys) {
   if (nationalCapital) {
     if (lockKeys.has(`city:${nationalCapital.cityId}`) && nationalCapital.cityId !== Number(currentCity?.id)) {
       return evaluationBase(province, currentCity, {
-        status: "rejected",
+        status: request.repairInconsistentCurrent === true ? "protected" : "rejected",
         code: "national-capital-locked-conflict",
         summary: `国家首都城市 #${nationalCapital.cityId} 已锁定且不是当前省会。`
       });
     }
     return selectedEvaluation(province, currentCity, nationalCapital, candidates, {
       selectionReason: "national-capital",
-      needsSync: provinceCapitalNeedsSync(map, province, nationalCapital)
+      needsSync: repairProvinceMirror || provinceCapitalNeedsSync(map, province, nationalCapital),
+      repairProvinceMirror
     });
   }
 
@@ -239,7 +253,7 @@ function evaluateProvince(map, province, lockKeys) {
   const selectable = band.filter(candidate => !lockedBandCandidates.includes(candidate));
   if (!selectable.length) {
     return evaluationBase(province, currentCity, {
-      status: "rejected",
+      status: request.repairInconsistentCurrent === true ? "protected" : "rejected",
       code: "candidate-locked-conflict",
       summary: `省份 #${id} 的前列候选均受到城市锁保护。`
     });
@@ -248,7 +262,8 @@ function evaluateProvince(map, province, lockKeys) {
   selectable.sort(compareCandidates);
   return selectedEvaluation(province, currentCity, selectable[0], candidates, {
     selectionReason: "deterministic-score",
-    needsSync: provinceCapitalNeedsSync(map, province, selectable[0]),
+    needsSync: repairProvinceMirror || provinceCapitalNeedsSync(map, province, selectable[0]),
+    repairProvinceMirror,
     populationThreshold: round(threshold, 6),
     candidateBand: selectable.map(candidateSummary)
   });
@@ -410,6 +425,7 @@ function candidateSummary(candidate) {
 }
 
 function applyProvinceCapital(map, change) {
+  if (change.repairProvinceMirror) repairProvinceMirrorCollections(map, change.provinceId);
   const province = provinceFromMap(map, change.provinceId);
   const selectedCity = cityFromMap(map, change.nextCityId);
   const selectedBurg = burgFromMap(map, change.nextBurgId);
@@ -440,10 +456,20 @@ function applyProvinceCapital(map, change) {
   for (const collection of uniqueCollections(map?.politics?.provinces, map?.pack?.provinces)) {
     const target = collection[change.provinceId];
     if (!target) continue;
+    target.state = Number(province.state);
     target.burg = change.nextBurgId;
     target.center = change.nextPackCell;
     target.gridCenter = change.nextGridCell;
   }
+}
+
+function repairProvinceMirrorCollections(map, id) {
+  const politics = map?.politics?.provinces;
+  const pack = map?.pack?.provinces;
+  const canonical = politics?.[id] || pack?.[id];
+  if (!canonical) return;
+  if (politics && !politics[id]) politics[id] = structuredClone(canonical);
+  if (pack && !pack[id]) pack[id] = structuredClone(canonical);
 }
 
 function inspection(allowed, code, summary, payload, map) {
@@ -498,16 +524,17 @@ function relevantFingerprintState(map, evaluations) {
 }
 
 function normalizeRequest(request) {
-  if (request == null) return {provinceIds: null};
-  if (typeof request === "number") return {provinceIds: [normalizeProvinceId(request)]};
+  if (request == null) return {provinceIds: null, repairInconsistentCurrent: false};
+  if (typeof request === "number") return {provinceIds: [normalizeProvinceId(request)], repairInconsistentCurrent: false};
   if (typeof request !== "object" || Array.isArray(request)) {
     throw provincialCapitalError("invalid-request", "省会重评请求必须是省份 ID 或参数对象");
   }
-  if (request.all === true || request.provinceIds == null && request.provinceId == null) return {provinceIds: null};
+  const repairInconsistentCurrent = request.repairInconsistentCurrent === true;
+  if (request.all === true || request.provinceIds == null && request.provinceId == null) return {provinceIds: null, repairInconsistentCurrent};
   const source = request.provinceIds ?? [request.provinceId];
   if (!Array.isArray(source) || !source.length) throw provincialCapitalError("invalid-request", "省会重评省份列表不能为空");
   const ids = [...new Set(source.map(normalizeProvinceId))].sort((a, b) => a - b);
-  return {provinceIds: ids};
+  return {provinceIds: ids, repairInconsistentCurrent};
 }
 
 function normalizeProvinceId(value) {

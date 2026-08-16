@@ -51,7 +51,7 @@ try {
 
   const independent = {};
   const rejectionSession = rejectionSessionOnly
-    ? await runRejectedRegenerationSessionGate(page, consoleErrors, pageErrors)
+    ? await runRepairableRegenerationSessionGate(page, consoleErrors, pageErrors)
     : null;
   if (!rejectionSessionOnly) {
     for (const kind of loadingOnlyKind ? [loadingOnlyKind] : kinds) {
@@ -83,53 +83,86 @@ try {
   await new Promise(done => server.close(done));
 }
 
-async function runRejectedRegenerationSessionGate(page, consoleErrors, pageErrors) {
+async function runRepairableRegenerationSessionGate(page, consoleErrors, pageErrors) {
   const results = [];
   for (const kind of ["provinces", "cities"]) {
-    await createFrozenBaseline(page, `worker-regeneration-rejection-${kind}`, 10000);
+    await createFrozenBaseline(page, `worker-regeneration-repair-${kind}`, 10000);
     await clearWindowSignals(page, consoleErrors, pageErrors);
     const before = await page.evaluate(() => {
       const app = window.__webglGeneratorApp;
-      const province = app.map.politics.provinces.find(item => item?.i && !item.removed);
-      const packProvince = app.map.pack.provinces[province.i];
-      app.workerTaskCoordinator.invalidateSession("test-preflight-rejection");
-      const original = province.burg;
-      province.burg = Number(original || 0) + 1000000;
-      return {provinceId: province.i, original, packBurg: packProvince.burg, history: app.editHistory.getStats(), revision: app.mapRevision};
+      const active = app.map.politics.provinces.filter(item => item?.i && !item.removed);
+      const invalidBurg = 1000000 + app.map.pack.burgs.length;
+      for (const province of active) {
+        province.burg = invalidBurg + province.i;
+        const packProvince = app.map.pack.provinces[province.i];
+        if (packProvince && packProvince !== province) packProvince.burg = invalidBurg + province.i;
+      }
+      return {
+        provinces: active.length,
+        invalidBurg,
+        history: app.editHistory.getStats(),
+        revision: app.mapRevision.getSnapshot()
+      };
     });
     const response = await page.evaluate(targetKind => window.webglGeneratorApi.generate.regenerate(targetKind, {confirm: true}), kind);
-    assert.equal(response?.ok, false, `${kind} 冲突预检没有拒绝`);
-    assert.equal(response.error?.code, "regeneration_preflight_rejected", `${kind} 冲突预检公开码错误`);
-    assert.equal(response.error?.stage, "preflight", `${kind} 冲突预检阶段错误`);
-    assert.equal(response.error?.details?.rejected?.[0]?.code, "current-capital-inconsistent", `${kind} 冲突明细未保留`);
-    const worker = response.error?.details?.worker;
-    assert.equal(worker?.session?.committed, true, `${kind} 预期拒绝没有 delta0 提交 session`);
-    assert.equal(worker?.session?.pending, false, `${kind} 预期拒绝留下 pending session`);
-    const after = await page.evaluate(input => {
+    assert.equal(response?.ok, true, `${kind} 被旧省会状态阻断：${response?.error?.message || "unknown"}`);
+    const worker = response.data?.worker;
+    assert.equal(worker?.session?.committed, true, `${kind} 修复结果没有提交 session`);
+    assert.equal(worker?.session?.pending, false, `${kind} 修复结果留下 pending session`);
+    const after = await page.evaluate(() => {
       const app = window.__webglGeneratorApp;
       const session = app.workerTaskCoordinator.getSessionSnapshot();
       const health = window.__webglGeneratorHealth?.getEvents?.(180) || [];
+      const mismatches = [];
+      for (const province of app.map.politics.provinces || []) {
+        if (!province?.i || province.removed) continue;
+        const cities = app.map.settlements.cities.filter(city => city && !city.removed
+          && Number(city.province) === Number(province.i) && city.provincial);
+        const capital = cities[0];
+        const burg = capital ? app.map.pack.burgs[capital.burgId] : null;
+        const packProvince = app.map.pack.provinces[province.i];
+        if (cities.length !== 1 || !capital || !burg
+          || Number(province.burg) !== Number(capital.burgId)
+          || Number(province.center) !== Number(capital.packCell)
+          || Number(province.gridCenter) !== Number(capital.cell)
+          || Number(packProvince?.burg) !== Number(province.burg)
+          || !burg.provincial) {
+          mismatches.push(Number(province.i));
+        }
+      }
       const signals = {
         loadingVisible: Number(Boolean(document.getElementById("generation-loading") && !document.getElementById("generation-loading").hidden))
           + Number(Boolean(document.getElementById("operation-loading") && !document.getElementById("operation-loading").hidden)),
         healthErrors: health.filter(event => event.severity === "error"),
         glError: Number(app.renderer.getStats().draw?.glError ?? 0)
       };
-      app.map.politics.provinces[input.provinceId].burg = input.original;
-      app.workerTaskCoordinator.invalidateSession("test-preflight-cleanup");
-      return {session, history: app.editHistory.getStats(), revision: app.mapRevision, signals};
-    }, before);
-    assert.equal(after.session?.id, worker.session.id, `${kind} 预期拒绝销毁了 MapWorker session`);
-    assert.equal(after.session?.status, "idle", `${kind} 预期拒绝后 session 不是 idle`);
-    assert.deepEqual(after.history, before.history, `${kind} 预期拒绝写入历史`);
-    assert.deepEqual(after.revision, before.revision, `${kind} 预期拒绝推进 revision`);
-    assert.equal(after.signals.loadingVisible, 0, `${kind} 预期拒绝后 Loading 未清理`);
-    assert.deepEqual(after.signals.healthErrors, [], `${kind} 预期拒绝产生 error health`);
-    assert.equal(after.signals.glError, 0, `${kind} 预期拒绝产生 WebGL error`);
-    results.push({kind, code: response.error.code, internalCode: response.error.details.rejected[0].code, session: worker.session});
+      return {session, history: app.editHistory.getStats(), revision: app.mapRevision.getSnapshot(), signals, mismatches};
+    });
+    assert.equal(after.session?.id, worker.session.id, `${kind} 修复结果切换了 MapWorker session`);
+    assert.equal(after.session?.status, "idle", `${kind} 修复后 session 不是 idle`);
+    assert.equal(after.history.undo, before.history.undo + 1, `${kind} 修复没有形成单条历史`);
+    assert.equal(after.revision.mapRevision, before.revision.mapRevision + 1, `${kind} 修复没有单次推进 map revision`);
+    assert.deepEqual(after.mismatches, [], `${kind} 修复后仍有省会镜像不一致`);
+    assert.equal(after.signals.loadingVisible, 0, `${kind} 修复后 Loading 未清理`);
+    const nonPerformanceHealth = after.signals.healthErrors.filter(event => !["main-thread-long-task", "operation-stall", "render-frame-gap", "input-handler-stall"].includes(event.type));
+    assert.deepEqual(nonPerformanceHealth, [], `${kind} 修复产生非性能 health error`);
+    assert.equal(after.signals.glError, 0, `${kind} 修复产生 WebGL error`);
+    const undoRoundTrip = await page.evaluate(() => {
+      const app = window.__webglGeneratorApp;
+      const beforeGeometry = app.renderer.cellVisualCorrectionGeometry;
+      const undo = window.webglGeneratorApi.history.undo();
+      const afterGeometry = app.renderer.cellVisualCorrectionGeometry;
+      return {
+        undo,
+        beforeGeometry: {type: beforeGeometry?.constructor?.name, length: beforeGeometry?.length, byteLength: beforeGeometry?.byteLength},
+        afterGeometry: {type: afterGeometry?.constructor?.name, length: afterGeometry?.length, byteLength: afterGeometry?.byteLength}
+      };
+    });
+    assert.equal(undoRoundTrip.undo?.ok, true, `${kind} 修复结果无法撤销：${JSON.stringify(undoRoundTrip)}`);
+    results.push({kind, provinces: before.provinces, session: worker.session});
   }
-  assert.deepEqual(consoleErrors, [], "预期拒绝出现 console error");
-  assert.deepEqual(pageErrors, [], "预期拒绝出现 page error");
+  assert.deepEqual(consoleErrors.filter(message => !/^\[FMG health\] (?:main-thread-long-task|operation-stall|render-frame-gap|input-handler-stall)\b/.test(message)), [], "修复入口出现应用 console error");
+  assert.deepEqual(pageErrors, [], "修复入口出现 page error");
   return results;
 }
 

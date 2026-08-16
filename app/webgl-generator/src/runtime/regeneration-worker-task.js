@@ -17,7 +17,6 @@ import {createRegenerateResourceMarkersCommand} from "./marker-edit-commands.js"
 import {createRegenerateMilitaryCommand} from "./military-edit-commands.js";
 import {compareMilitaryVariation, snapshotMilitaryVariation} from "./military-regeneration-variation.js";
 import {LABEL_TARGET_KIND, OBJECT_KIND} from "./object-kinds.js";
-import {inspectProvincialCapitalReassessment} from "../generator/provincial-capitals.js";
 import {captureRegenerationConstraintBundle} from "./regeneration-constraint-bundle.js";
 import {allRegenerationObjectsLocked, assertLockedRegenerationSnapshots, captureLockedRegenerationObjects, regenerationLockConflict} from "./regeneration-lock-protection.js";
 import {reconcileSettlementCellIdentity} from "./settlement-cell-index.js";
@@ -135,8 +134,7 @@ export async function runRegenerationWorkerTask(payload, context = {}) {
   }
   const setupMs = regenerationTaskMs(regenerationTaskNow() - setupStartedAt);
   const domainStartedAt = regenerationTaskNow();
-  const rejection = inspectRegenerationWorkerPreflight(map, kind, scope);
-  const result = rejection || regenerateMapAttribute(map, kind, {...scope, constraintBundle, rejectLockedDiplomacy: kind === "states"});
+  const result = regenerateMapAttribute(map, kind, {...scope, constraintBundle, rejectLockedDiplomacy: kind === "states"});
   if (populationSnapshot) restoreClimatePopulation(map, populationSnapshot);
   if (constraintBundle) constraintBundle.assertDomain(map, "world", "after");
   const domainComputeMs = regenerationTaskMs(regenerationTaskNow() - domainStartedAt);
@@ -177,35 +175,6 @@ export async function runRegenerationWorkerTask(payload, context = {}) {
       totalTaskMs: regenerationTaskMs(regenerationTaskNow() - taskStartedAt)
     }
   };
-}
-
-export function inspectRegenerationWorkerPreflight(map, kind, scope) {
-  if (kind !== "provinces" && kind !== "cities") return null;
-  const provinceIds = regenerationProvinceScopeIds(map, kind, scope);
-  if (!provinceIds.length) return null;
-  const inspection = inspectProvincialCapitalReassessment(map, {provinceIds});
-  if (!inspection.rejected?.length) return null;
-  const rejected = inspection.rejected.map(item => ({
-    provinceId: Number(item.provinceId),
-    code: String(item.code || "rejected"),
-    summary: String(item.summary || "省会数据不一致")
-  }));
-  return {
-    ...regenerationResult(kind, "未执行", inspection.summary),
-    rejection: {
-      code: "regeneration_preflight_rejected",
-      stage: "preflight",
-      suggestion: "先修复列出的省份、省会或锁定数据后再重试。",
-      details: {kind, rejected}
-    }
-  };
-}
-
-function regenerationProvinceScopeIds(map, kind, scope) {
-  if (kind === "cities" && scope.kind === "province") return [Number(scope.id)];
-  return (map?.politics?.provinces || [])
-    .filter(province => province?.i && !province.removed && (scope.kind === "all" || Number(province.state) === Number(scope.id)))
-    .map(province => Number(province.i));
 }
 
 function regenerationTaskNow() {
@@ -402,7 +371,8 @@ function regenerateCities(map, options = {}) {
     settlementScope,
     lockedCities: cityLocks.snapshots,
     lockedRoutes: routeLocks.snapshots,
-    reassessProvincialCapitals: true
+    reassessProvincialCapitals: true,
+    repairInconsistentProvincialCapitals: true
   });
   if (constraintBundle) constraintBundle.assertDomain(map, "cities-routes", "settlement-routes");
   else {
@@ -448,7 +418,8 @@ function regenerateStates(map, options = {}) {
     lockedProvinces,
     lockedCities,
     lockedRoutes: routeLocks.snapshots,
-    reassessProvincialCapitals: true
+    reassessProvincialCapitals: true,
+    repairInconsistentProvincialCapitals: true
   }, map.pack, map.settlements, {salt});
   if (!result) {
     restoreRegenerationSalt(map, previousSalt);
@@ -491,8 +462,16 @@ function regenerateProvinces(map, options = {}) {
   const previousSalt = captureRegenerationSalt(map, "provinces");
   const salt = nextRegenerationSalt(map, "provinces");
   const result = scope.kind === "state"
-    ? withScopedProvinceRegenerationOptions(map, {lockedProvinces: provinceLocks.snapshots}, () => regenerateProvincesForStates(map, [scope.id]))
-    : regeneratePackProvincesWithinStates(map.grid, map.society, {...map.options, namebases: map.namebases, lockedProvinces: provinceLocks.snapshots}, map.pack, {salt});
+    ? withScopedProvinceRegenerationOptions(map, {
+      lockedProvinces: provinceLocks.snapshots,
+      lockedCities: cityLocks.snapshots
+    }, () => regenerateProvincesForStates(map, [scope.id]))
+    : regeneratePackProvincesWithinStates(map.grid, map.society, {
+      ...map.options,
+      namebases: map.namebases,
+      lockedProvinces: provinceLocks.snapshots,
+      lockedCities: cityLocks.snapshots
+    }, map.pack, {salt});
   if (!result) {
     restoreRegenerationSalt(map, previousSalt);
     return regenerationResult("provinces", "未执行", "当前地图缺少可用国家或 pack 语义图，无法在国家内重建省份。");
@@ -506,7 +485,8 @@ function regenerateProvinces(map, options = {}) {
     lockedCities,
     lockedRoutes: routeLocks.snapshots,
     settlementScope: scope.kind === "state" ? {kind: "state", id: scope.id} : null,
-    reassessProvincialCapitals: true
+    reassessProvincialCapitals: true,
+    repairInconsistentProvincialCapitals: true
   });
   if (constraintBundle) constraintBundle.assertDomain(map, "states-provinces", "province-settlements");
   else for (const capture of [provinceLocks, cityLocks, routeLocks]) assertLockedRegenerationSnapshots(map, capture);
