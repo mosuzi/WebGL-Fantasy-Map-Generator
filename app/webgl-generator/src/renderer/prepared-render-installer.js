@@ -1,5 +1,5 @@
 import {unpackLabelLayoutDescriptorsInChunks} from "./label-layout-descriptor.js";
-import {rebindObjectPickingDtoInChunks} from "./picking-dto.js";
+import {rebindObjectPickingDtoInChunks, rebuildObjectPickingIndexFromDto} from "./picking-dto.js";
 import {
   unpackCellVisualMeshInChunks,
   unpackPoliticalVisualPathsInChunks,
@@ -69,10 +69,17 @@ export async function prepareRendererWorkerInstall(renderer, map, prepared, opti
     }
     if (layers.political) decoded.political = layers.political;
     if (layers.picking) {
-      decoded.picking = await rebindObjectPickingDtoInChunks(layers.picking, map, binding, {
-        ...gate.options("picking"),
-        budgetMs: PICKING_REBIND_BUDGET_MS
-      });
+      if (options.rebuildPickingFromMap === true) {
+        gate.assertCurrent();
+        decoded.picking = rebuildObjectPickingIndexFromDto(layers.picking, map, binding);
+        gate.assertCurrent();
+        gate.onProgress("picking-direct", {completed: decoded.picking.bucketCount, total: decoded.picking.bucketCount});
+      } else {
+        decoded.picking = await rebindObjectPickingDtoInChunks(layers.picking, map, binding, {
+          ...gate.options("picking"),
+          budgetMs: PICKING_REBIND_BUDGET_MS
+        });
+      }
     }
     if (layers.labels) {
       decoded.labels = await unpackLabelLayoutDescriptorsInChunks(layers.labels, map, gate.options("labels"));

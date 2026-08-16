@@ -3183,6 +3183,7 @@ function createRuntimeActions(state, documentRef, options = {}) {
       newMap: (options = {}) => runMapReplace("generate.newMap", context => generateNewMapViaApi(state, documentRef, options, context), loadingMessage("generate")),
       rerollSeed: (options = {}) => runMapReplace("generate.rerollSeed", context => rerollSeedViaApi(state, documentRef, options, context), loadingMessage("generate")),
       regenerate: (kind, options = {}) => operation.run("generate.regenerate", async context => {
+        const profileStartedAt = documentRef.defaultView?.performance?.now?.() ?? Date.now();
         let visibleLoading = regenerationLoadingState(kind, "initial");
         const loadingOwner = `regenerate:${context.id}`;
         const visibleOperation = Object.create(context);
@@ -3203,6 +3204,7 @@ function createRuntimeActions(state, documentRef, options = {}) {
           await yieldToBrowser(documentRef);
           visibleOperation.throwIfCancelled();
           const result = await regenerateMapAttributeViaWorker(state, documentRef, kind, options, visibleOperation);
+          publishRegenerationPerformanceProfile(documentRef, kind, result, profileStartedAt);
           updateGenerationLoading(documentRef, true, regenerationLoadingMessage(kind, "complete"), loadingOwner);
           return result;
         } catch (error) {
@@ -12479,6 +12481,7 @@ async function regenerateMapAttributeViaWorker(state, documentRef, kind, options
       hasCellVisual: Boolean(state.renderer?.cellVisualMesh?.cells?.length)
     }),
     preserveRoutePicking: targetKind === "rivers",
+    rebuildPickingFromMap: targetKind === "cities",
     effects: {
       ...(targetKind === "rivers" ? RIVER_REGENERATION_TRANSACTION_EFFECTS : REGENERATION_TRANSACTION_EFFECTS),
       affected: []
@@ -12687,6 +12690,7 @@ async function executeWorkerMapMutation(state, documentRef, mutation, operation 
         binding: renderRequest.binding,
         signal: operation?.signal,
         preserveRoutePicking: Boolean(mutation.preserveRoutePicking),
+        rebuildPickingFromMap: Boolean(mutation.rebuildPickingFromMap),
         inPlaceSurfaceColorPatch,
         isCurrent: installIsCurrent,
         onProgress: (stage, detail) => {
@@ -13004,6 +13008,42 @@ function appendWorkerCommitTelemetry(worker, telemetry) {
 
 function roundWorkerTelemetryMs(value) {
   return Math.round(Number(value || 0) * 1000) / 1000;
+}
+
+function publishRegenerationPerformanceProfile(documentRef, kind, result, startedAt) {
+  const view = documentRef.defaultView || window;
+  if (new URLSearchParams(view.location?.search || "").get("debug") !== "1") return;
+  const telemetry = result?.worker?.telemetry || {};
+  const timingKeys = [
+    "inputPackets", "inputStreamMs", "inputPostMaxMs",
+    "setupMs", "domainComputeMs", "patchCaptureMs", "renderPrepareWorkerMs", "totalTaskMs",
+    "outputPackets", "outputWorkerStreamMs", "outputWorkerPostMaxMs", "outputReceiveMs", "outputDecodeMaxMs",
+    "commitInstallMs", "renderInstallPrepareMs", "renderInstallCommitMs", "uiRefreshMs", "commitTotalMs",
+    "renderReplayAttempts", "renderReplayComputeMs", "renderReplayPrepareMs", "renderReplayCommitMs", "renderReplayTotalMs"
+  ];
+  const profile = {
+    version: 1,
+    kind: String(kind || ""),
+    elapsedMs: roundWorkerTelemetryMs((view.performance?.now?.() ?? Date.now()) - Number(startedAt || 0)),
+    executed: Boolean(result?.executed),
+    replacementMode: String(result?.details?.replacementMode || ""),
+    marineCities: Number(result?.details?.marineCities) || 0,
+    sessionReused: Boolean(result?.worker?.session?.reused),
+    timings: Object.fromEntries(timingKeys.map(key => [key, roundWorkerTelemetryMs(telemetry[key])])),
+    renderInstallStages: Object.fromEntries(Object.entries(telemetry.renderInstallStages || {}).map(([stage, detail]) => [
+      stage,
+      {
+        count: Number(detail?.count) || 0,
+        firstMs: roundWorkerTelemetryMs(detail?.firstMs),
+        lastMs: roundWorkerTelemetryMs(detail?.lastMs),
+        completed: Number(detail?.completed) || 0,
+        total: Number(detail?.total) || 0
+      }
+    ]))
+  };
+  const serialized = JSON.stringify(profile);
+  documentRef.documentElement.dataset.regenerationPerformanceProfile = serialized;
+  documentRef.dispatchEvent(new CustomEvent("webgl-generator-regeneration-performance-profile", {detail: serialized}));
 }
 
 function recordWorkerRenderInstallStage(target, stage, detail, elapsedMs) {
@@ -13433,6 +13473,7 @@ async function replayWorkerRegenerationDeferredPresentation(state, documentRef, 
         binding: renderRequest.binding,
         signal: operation?.signal,
         preserveRoutePicking: targetKind === "rivers",
+        rebuildPickingFromMap: targetKind === "cities",
         isCurrent,
         onProgress: () => operation?.report("render-install", {message: "正在更新最终显示效果"})
       });
@@ -13594,6 +13635,7 @@ async function recoverWorkerRegenerationDeferredPresentation(state, documentRef,
           binding: renderRequest.binding,
           signal: controller.signal,
           preserveRoutePicking: targetKind === "rivers",
+          rebuildPickingFromMap: targetKind === "cities",
           isCurrent,
           onProgress: () => operation?.report?.("render-install", {message: "正在恢复地图显示"})
         });

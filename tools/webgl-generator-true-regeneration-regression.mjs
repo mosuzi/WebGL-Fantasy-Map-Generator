@@ -9,6 +9,8 @@ const marineFixture = forceOrdinaryCityIntoWater(map);
 
 const first = regenerateMapAttributeForWorker(map, "cities", {scope: "all"});
 assert.equal(first.executed, true, "第一次全图城镇重算未执行");
+assert.equal(first.details?.replacementMode, "from-empty", "城镇重算结果 details 没有声明 from-empty");
+assert.equal(first.details?.marineCities, 0, "城镇重算结果 details 没有声明水域城镇为 0");
 assertLandCities(map, "第一次全图重算");
 assert.equal(activeCities(map).some(city => originalObjects.has(city)), false, "未锁旧城镇对象被直接复用");
 const afterFirst = cityFingerprint(map);

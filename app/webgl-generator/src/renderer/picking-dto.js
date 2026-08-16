@@ -7,6 +7,22 @@ export function buildObjectPickingDto(map, binding = {}, components = null) {
   return packObjectPickingIndex(buildObjectPickingIndex(map, {components}), binding);
 }
 
+export function rebuildObjectPickingIndexFromDto(dto, map, expectedBinding = null) {
+  const validation = assertPickingDtoShape(dto, expectedBinding);
+  const rebuilt = buildObjectPickingIndex(map, {components: validation.components});
+  for (const field of ["bucketSize", "columns", "rows"]) {
+    if (rebuilt[field] !== dto[field]) {
+      throw pickingDtoError("picking-dto-shape", `picking ${field} 与地图重建结果不一致`, {expected: dto[field], actual: rebuilt[field]});
+    }
+  }
+  for (const field of ["bucketCount", "cityCount", "markerCount", "militaryCount", "routeSegmentCount", "riverSegmentCount", "maxBucketItems"]) {
+    if (rebuilt[field] !== dto.stats[field]) {
+      throw pickingDtoError("picking-dto-shape", `picking stats.${field} 与地图重建结果不一致`, {expected: dto.stats[field], actual: rebuilt[field]});
+    }
+  }
+  return rebuilt;
+}
+
 export function packObjectPickingIndex(index, binding = {}) {
   const bucketEntries = [...(index?.buckets || new Map()).entries()].sort((left, right) => left[0] - right[0]);
   return {
@@ -67,8 +83,8 @@ export async function rebindObjectPickingDtoInChunks(dto, map, expectedBinding =
   for (const entry of validation.entries) validatePackedIdTable(entry);
   let previousBucket = -1;
   let maxBucketItems = 0;
-  const routeSegments = new Set();
-  const riverSegments = new Set();
+  const routeSegments = createSegmentReferenceTracker();
+  const riverSegments = createSegmentReferenceTracker();
   for (let bucketIndex = 0; bucketIndex < dto.bucketIds.length; bucketIndex++) {
     const bucketId = dto.bucketIds[bucketIndex];
     validateBucketId(bucketId, previousBucket, validation.maxBucketId, bucketIndex);
@@ -421,13 +437,33 @@ async function rebindSegmentReferencesInChunks(target, packed, bucketIndex, obje
     if (!Array.isArray(points?.[segment]) || !Array.isArray(points?.[segment + 1])) {
       throw pickingDtoError("picking-rebind-segment", `picking ${kind} #${id} 的 segment 已失效`, {kind, id, segment});
     }
-    unique.add(`${packed.idIndexes[index]}:${segment}`);
+    unique.add(packed.idIndexes[index], segment, points.length - 1);
     target.push({kind, [kind]: object, index: segment, a: points[segment], b: points[segment + 1]});
     if ((index - start + 1) % 256 === 0 || index + 1 === end) {
       const pending = gate.checkpoint(index - start + 1, end - start);
       if (pending) await pending;
     }
   }
+}
+
+function createSegmentReferenceTracker() {
+  const referencesByObject = [];
+  let size = 0;
+  return {
+    add(objectIndex, segment, segmentCount) {
+      let references = referencesByObject[objectIndex];
+      if (!references) {
+        references = new Uint8Array(segmentCount);
+        referencesByObject[objectIndex] = references;
+      }
+      if (references[segment]) return;
+      references[segment] = 1;
+      size++;
+    },
+    get size() {
+      return size;
+    }
+  };
 }
 
 function validatePackedIdTable(entry) {
@@ -536,7 +572,29 @@ function createPickingChunkGate(options = {}) {
 
 function defaultPickingYield() {
   if (typeof globalThis.scheduler?.yield === "function") return globalThis.scheduler.yield();
+  if (typeof globalThis.MessageChannel === "function") return yieldPickingWithMessageChannel();
   return new Promise(resolve => setTimeout(resolve, 0));
+}
+
+let pickingYieldChannel = null;
+const pickingYieldQueue = [];
+
+function yieldPickingWithMessageChannel() {
+  if (!pickingYieldChannel) {
+    pickingYieldChannel = new globalThis.MessageChannel();
+    pickingYieldChannel.port1.onmessage = () => {
+      const resolve = pickingYieldQueue.shift();
+      resolve?.();
+      if (pickingYieldQueue.length) pickingYieldChannel.port2.postMessage(null);
+    };
+    pickingYieldChannel.port1.unref?.();
+    pickingYieldChannel.port2.unref?.();
+  }
+  return new Promise(resolve => {
+    const isFirst = pickingYieldQueue.length === 0;
+    pickingYieldQueue.push(resolve);
+    if (isFirst) pickingYieldChannel.port2.postMessage(null);
+  });
 }
 
 function pickingNow() {

@@ -33,7 +33,7 @@ import {
   unpackShoreVisualPaths
 } from "../app/webgl-generator/src/renderer/render-cache-dto.js";
 import {buildObjectPickingIndex, pickCity, pickRiver, pickRoute} from "../app/webgl-generator/src/renderer/picking.js";
-import {buildObjectPickingDto, rebindObjectPickingDto, rebindObjectPickingDtoInChunks} from "../app/webgl-generator/src/renderer/picking-dto.js";
+import {buildObjectPickingDto, rebindObjectPickingDto, rebindObjectPickingDtoInChunks, rebuildObjectPickingIndexFromDto} from "../app/webgl-generator/src/renderer/picking-dto.js";
 import {applyPreparedPickingComponents} from "../app/webgl-generator/src/renderer/prepared-render-installer.js";
 import {createWorkerTaskCoordinator} from "../app/webgl-generator/src/runtime/worker-task-coordinator.js";
 import {
@@ -277,7 +277,12 @@ async function verifyPickingDto() {
   const partialComponents = ["cities", "routeSegments"];
   const partialDto = buildObjectPickingDto(map, binding, partialComponents);
   const partial = rebindObjectPickingDto(structuredClone(partialDto), map, binding);
+  const partialDirect = rebuildObjectPickingIndexFromDto(structuredClone(partialDto), map, binding);
   assert.deepEqual(partial.components, partialComponents);
+  assert.deepEqual(partialDirect.components, partialComponents);
+  assert.equal(partialDirect.buckets.size, partial.buckets.size);
+  assert.equal(partialDirect.cityCount, partial.cityCount);
+  assert.equal(partialDirect.routeSegmentCount, partial.routeSegmentCount);
   assert.equal(partial.markerCount, 0);
   assert.equal(partial.militaryCount, 0);
   assert.equal(partial.riverSegmentCount, 0);
@@ -313,6 +318,10 @@ async function verifyPickingDto() {
   const duplicateComponents = structuredClone(partialDto);
   duplicateComponents.components.push("cities");
   assert.throws(() => rebindObjectPickingDto(duplicateComponents, map, binding), error => error?.code === "picking-dto-shape");
+  assert.throws(() => rebuildObjectPickingIndexFromDto(duplicateComponents, map, binding), error => error?.code === "picking-dto-shape");
+  const mismatchedStats = structuredClone(partialDto);
+  mismatchedStats.stats.routeSegmentCount++;
+  assert.throws(() => rebuildObjectPickingIndexFromDto(mismatchedStats, map, binding), error => error?.code === "picking-dto-shape");
   for (const key of ["bucketSize", "columns", "rows", "bucketCount", "cityCount", "markerCount", "militaryCount", "routeSegmentCount", "riverSegmentCount", "maxBucketItems"]) {
     assert.equal(rebound[key], expectedIndex[key], `picking ${key} 必须一致`);
   }
