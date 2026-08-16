@@ -1,7 +1,7 @@
 import {colorForCell, isLandCell} from "./color-modes.js";
 import {resolvedGridVertexPoints} from "./grid-vertex-geometry.js";
 import {pushWorldVertex} from "./mesh-writer.js";
-import {buildCanonicalOrderedCellVisualBoundary, triangulateCellVisualBoundarySafely} from "./cell-visual-layer.js";
+import {buildCanonicalOrderedCellVisualBoundary, buildVoronoiRecoveredCellVisualBoundary, triangulateCellVisualBoundarySafely} from "./cell-visual-layer.js";
 
 export function pushGridCells(vertices, context, colorMode, viewOptions, shouldDrawCell = () => true, transformColor = color => color, onCellRange = null) {
   const {map} = context;
@@ -23,6 +23,9 @@ export function pushGridCells(vertices, context, colorMode, viewOptions, shouldD
     }
     if (triangulation.status !== "ok") {
       triangulation = triangulateCellVisualBoundarySafely(buildCanonicalOrderedCellVisualBoundary(map, cellIndex, false));
+    }
+    if (triangulation.status !== "ok") {
+      triangulation = triangulateCellVisualBoundarySafely(buildVoronoiRecoveredCellVisualBoundary(map, cellIndex));
     }
     if (triangulation.status === "ok") {
       for (const index of triangulation.indices) pushWorldVertex(vertices, context, triangulation.points[index], color);

@@ -210,6 +210,27 @@ assert.equal(countCellVisualTriangulationLeaks(invalidVisualMesh.cells[0].points
 const collapsedMap = {metadata: {graphWidth: 4, graphHeight: 4}, grid: {points: [[2, 0]], cells: {i: [0], c: [[]], p: [0], v: [[0, 1, 2]], h: [30]}, vertices: {p: [[0, 0], [2, 0], [4, 0]], c: [[], [], []]}}, features: {features: [{land: true}]}, layers: {ocean: [0, 0, 1, 1]}};
 assert.throws(() => pushGridCells([], {map: collapsedMap}, "height", {}), error => error?.code === "grid-cell-surface-unfilled", "无法恢复的 cell 必须 fail-closed，不能提交零长度 range");
 
+const recoverableCollapsedMap = {
+  metadata: {graphWidth: 10, graphHeight: 10},
+  grid: {
+    points: [[5, 5], [2, 5], [8, 5], [5, 2], [5, 8]],
+    cells: {i: [0], c: [[1, 2, 3, 4]], p: [0], v: [[0, 1, 2, 3]], h: [30, 30, 30, 30, 30]},
+    vertices: {p: [[5, 1], [5, 4], [5, 6], [5, 9]], c: [[], [], [], []]}
+  },
+  features: {features: [{land: true}]},
+  layers: {ocean: [0, 0, 1, 1]}
+};
+const recoveredVertices = [], recoveredRanges = new Map();
+pushGridCells(recoveredVertices, {map: recoverableCollapsedMap}, "height", {}, () => true, color => color, (cell, range) => recoveredRanges.set(cell, range));
+assert.equal(recoveredVertices.length, 36, "共线旧 cell 必须由邻居 Voronoi 半平面恢复为两个安全三角");
+assert.deepEqual([...recoveredRanges], [[0, {start: 0, end: 36}]], "Voronoi 恢复必须形成非空连续 hard surface range");
+const recoveredVisualMesh = buildCellVisualMesh(recoverableCollapsedMap);
+assert.equal(recoveredVisualMesh.triangulationUnfilledCells, 0, "Voronoi 恢复不得留下平滑表面缺面");
+assert.equal(recoveredVisualMesh.triangulationVoronoiRecoveryCells, 1, "平滑视觉层必须记录一次 Voronoi 恢复");
+assert.deepEqual(recoveredVisualMesh.triangulationVoronoiRecoveryCellIds, [0], "Voronoi 恢复 cell 身份必须可诊断");
+assert.equal(recoveredVisualMesh.cells[0]?.triangulationFallback, "voronoi-recovered-hard-boundary-earcut", "Voronoi 恢复必须保留 fallback 来源");
+assert.equal(countCellVisualTriangulationLeaks(recoveredVisualMesh.cells[0].points), 0, "Voronoi 恢复三角不得越界");
+
 const storedBoundary = [[0, 0], [4, 0], [4, 4], [0, 4], [4, 0], [8, 0], [8, 4], [4, 4]];
 const resolvedBoundary = storedBoundary.map(point => [...point]);
 resolvedBoundary[1] = [-1, 3];

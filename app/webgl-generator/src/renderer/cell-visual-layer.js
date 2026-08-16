@@ -27,7 +27,9 @@ export function buildCellVisualMesh(map) {
   let triangulationHardFanFallbackCells = 0;
   let triangulationEmergencyHardFanCells = 0;
   let triangulationCanonicalOrderFallbackCells = 0;
+  let triangulationVoronoiRecoveryCells = 0;
   let triangulationUnfilledCells = 0;
+  const triangulationVoronoiRecoveryCellIds = [];
   const triangulationFailures = [];
 
   for (const cell of map?.grid?.cells?.i || []) {
@@ -61,10 +63,19 @@ export function buildCellVisualMesh(map) {
         triangulation = buildCellVisualNdcTriangles(context, hardPoints, center);
         hardBoundarySource = "canonical-stored";
       }
+      if (triangulation.skipped) {
+        hardPoints = buildVoronoiRecoveredCellVisualBoundary(map, cell);
+        triangulation = buildCellVisualNdcTriangles(context, hardPoints, center);
+        hardBoundarySource = "voronoi-recovered";
+      }
       if (!triangulation.skipped) {
         triangulationHardFallbackCells++;
         if (triangulation.safeHardFan) triangulationHardFanFallbackCells++;
         if (hardBoundarySource.startsWith("canonical-")) triangulationCanonicalOrderFallbackCells++;
+        if (hardBoundarySource === "voronoi-recovered") {
+          triangulationVoronoiRecoveryCells++;
+          triangulationVoronoiRecoveryCellIds.push(cell);
+        }
         fallbackMode ||= triangulation.safeHardFan
           ? `validated-${hardBoundarySource}-hard-fan`
           : `${hardBoundarySource}-hard-boundary-earcut`;
@@ -117,6 +128,8 @@ export function buildCellVisualMesh(map) {
     triangulationHardFanFallbackCells,
     triangulationEmergencyHardFanCells,
     triangulationCanonicalOrderFallbackCells,
+    triangulationVoronoiRecoveryCells,
+    triangulationVoronoiRecoveryCellIds,
     triangulationUnfilledCells,
     triangulationFailures,
     edgeCurveCount: edgeCurves.size,
@@ -143,6 +156,8 @@ export function emptyCellVisualMesh() {
     triangulationHardFanFallbackCells: 0,
     triangulationEmergencyHardFanCells: 0,
     triangulationCanonicalOrderFallbackCells: 0,
+    triangulationVoronoiRecoveryCells: 0,
+    triangulationVoronoiRecoveryCellIds: [],
     triangulationUnfilledCells: 0,
     triangulationFailures: [],
     edgeCurveCount: 0,
@@ -177,6 +192,11 @@ function buildCellVisualMeshCell(map, cell, edgeCurves, shoreEdges) {
       hardPoints = buildCanonicalOrderedCellVisualBoundary(map, cell, false);
       triangulation = buildCellVisualNdcTriangles(createRenderContext(map), hardPoints, center);
       hardBoundarySource = "canonical-stored";
+    }
+    if (triangulation.skipped) {
+      hardPoints = buildVoronoiRecoveredCellVisualBoundary(map, cell);
+      triangulation = buildCellVisualNdcTriangles(createRenderContext(map), hardPoints, center);
+      hardBoundarySource = "voronoi-recovered";
     }
     if (!triangulation.skipped) {
       fallbackMode ||= triangulation.safeHardFan
@@ -277,6 +297,8 @@ export function summarizeCellVisualMesh(mesh) {
     triangulationHardFanFallbackCells: mesh?.triangulationHardFanFallbackCells || 0,
     triangulationEmergencyHardFanCells: mesh?.triangulationEmergencyHardFanCells || 0,
     triangulationCanonicalOrderFallbackCells: mesh?.triangulationCanonicalOrderFallbackCells || 0,
+    triangulationVoronoiRecoveryCells: mesh?.triangulationVoronoiRecoveryCells || 0,
+    triangulationVoronoiRecoveryCellIds: [...(mesh?.triangulationVoronoiRecoveryCellIds || [])],
     triangulationUnfilledCells: mesh?.triangulationUnfilledCells || 0,
     triangulationFailures: [...(mesh?.triangulationFailures || [])],
     averageBoundaryPoints: roundRatio(mesh?.boundaryPoints || 0, mesh?.cellCount || 0),
@@ -497,6 +519,79 @@ export function buildCanonicalOrderedCellVisualBoundary(map, cell, resolved = tr
   const boundary = cleanCellVisualBoundary(points);
   if (boundary.length < 3 || cellVisualBoundarySelfIntersects(boundary) || !pointInCellVisualBoundary(center, boundary)) return [];
   return triangulateCellVisualBoundarySafely(boundary).status === "ok" ? boundary : [];
+}
+
+export function buildVoronoiRecoveredCellVisualBoundary(map, cell) {
+  const grid = map?.grid;
+  const center = cellCenterPoint(grid, cell);
+  const width = Number(map?.metadata?.graphWidth || grid?.metadata?.graphWidth);
+  const height = Number(map?.metadata?.graphHeight || grid?.metadata?.graphHeight);
+  if (!isWorldPoint(center) || !(width > 0) || !(height > 0)) return [];
+  if (center[0] < 0 || center[0] > width || center[1] < 0 || center[1] > height) return [];
+
+  const neighborPoints = [];
+  const seen = new Set();
+  for (const neighbor of grid?.cells?.c?.[cell] || []) {
+    const point = grid?.points?.[neighbor];
+    if (!isWorldPoint(point) || pointsNear(point, center, 0.000000001)) continue;
+    const key = `${point[0]}:${point[1]}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    neighborPoints.push(point);
+  }
+  if (neighborPoints.length < 3) return [];
+
+  let boundary = [[0, 0], [width, 0], [width, height], [0, height]];
+  for (const neighbor of neighborPoints) {
+    boundary = clipVoronoiRecoveryBoundary(boundary, center, neighbor);
+    if (boundary.length < 3) return [];
+  }
+  boundary = cleanCellVisualBoundary(boundary);
+  if (boundary.length < 3 || (!pointInCellVisualBoundary(center, boundary) && !pointOnCellVisualBoundary(center, boundary))) return [];
+  return triangulateCellVisualBoundarySafely(boundary).status === "ok" ? boundary : [];
+}
+
+function pointOnCellVisualBoundary(point, boundary) {
+  const span = Math.max(
+    Math.max(...boundary.map(item => item[0])) - Math.min(...boundary.map(item => item[0])),
+    Math.max(...boundary.map(item => item[1])) - Math.min(...boundary.map(item => item[1])),
+    1
+  );
+  const epsilon = Math.max(0.0000001, span * 0.00000001);
+  for (let index = 0; index < boundary.length; index++) {
+    if (pointSegmentDistance(point, boundary[index], boundary[(index + 1) % boundary.length]) <= epsilon) return true;
+  }
+  return false;
+}
+
+function clipVoronoiRecoveryBoundary(boundary, center, neighbor) {
+  if (boundary.length < 3) return [];
+  const normalX = neighbor[0] - center[0];
+  const normalY = neighbor[1] - center[1];
+  const midpointX = (neighbor[0] + center[0]) / 2;
+  const midpointY = (neighbor[1] + center[1]) / 2;
+  const epsilon = Math.max(0.000000001, Math.hypot(normalX, normalY) * 0.000000001);
+  const signedDistance = point => (point[0] - midpointX) * normalX + (point[1] - midpointY) * normalY;
+  const output = [];
+  for (let index = 0; index < boundary.length; index++) {
+    const start = boundary[index];
+    const end = boundary[(index + 1) % boundary.length];
+    const startDistance = signedDistance(start);
+    const endDistance = signedDistance(end);
+    const startInside = startDistance <= epsilon;
+    const endInside = endDistance <= epsilon;
+    if (startInside !== endInside) {
+      const divisor = startDistance - endDistance;
+      if (Math.abs(divisor) <= 0.000000000001) return [];
+      const t = startDistance / divisor;
+      output.push([
+        start[0] + (end[0] - start[0]) * t,
+        start[1] + (end[1] - start[1]) * t
+      ]);
+    }
+    if (endInside) output.push([...end]);
+  }
+  return output;
 }
 
 function buildValidatedHardBoundaryFanIndices(points, center) {
