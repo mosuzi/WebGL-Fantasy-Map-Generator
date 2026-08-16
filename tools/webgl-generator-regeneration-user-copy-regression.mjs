@@ -8,6 +8,7 @@ import {
   regenerationFeedbackMessage,
   regenerationKindLabel,
   regenerationLoadingMessage,
+  regenerationLoadingState,
   regenerationPanelCopy,
   regenerationResultMessage
 } from "../app/webgl-generator/src/ui/regeneration-user-copy.js";
@@ -26,31 +27,65 @@ const expectedKinds = Object.freeze({
   military: "军事",
   zones: "地区"
 });
+const expectedPreparationCopy = Object.freeze({
+  features: "正在汇集山川水陆与海岸轮廓",
+  routes: "正在汇集城邑、港口与通行地势",
+  rivers: "正在汇集地势高低、雨水与湖泊",
+  cities: "正在汇集山河、人烟、文化与政区",
+  states: "正在汇集城邑、疆域、文化与人烟",
+  provinces: "正在汇集国家、城邑与地形脉络",
+  markers: "正在汇集地貌、物产与人烟分布",
+  diplomacy: "正在汇集诸国关系、战争与往来",
+  religions: "正在汇集文化、城邑与人口分布",
+  military: "正在汇集诸国、城邑、地势与战局",
+  zones: "正在汇集战争、信仰、军事与地貌"
+});
 const forbidden = /\b(?:worker|features?|routes?|rivers?|cities|states|provinces|markers|diplomacy|religions|military|zones|kind|pack|mesh|haven|harbor|buffer|localstorage|sessionstorage|indexeddb|blob)\b|线程|任务会话|消息包|结构化克隆|缓存后端/iu;
 const technicalMessage = "Worker session 正在发送 routes 消息包并写入 WebGL buffer / IndexedDB Blob 缓存后端";
 
 assert.deepEqual(REGENERATION_KIND_LABELS, expectedKinds, "十一类重新生成中文名称不完整或顺序漂移");
 for (const [kind, label] of Object.entries(expectedKinds)) {
   assert.equal(regenerationKindLabel(kind), label, `${kind} 中文名称错误`);
+  assert.equal(regenerationLoadingMessage(kind, "stream-input"), expectedPreparationCopy[kind], `${kind} 资料汇集文案没有说明真实上游`);
 }
 assert.equal(regenerationKindLabel("unknown-worker-kind"), "地图内容", "未知领域泄漏英文名称");
 
 const expectedStages = Object.freeze({
-  regenerate: "正在梳理现有路线",
-  "stream-input": "正在汇拢路线所需的山河脉络",
-  compute: "正在推演新的路线",
-  "result-stream-complete": "正在收束路线推演结果",
-  "fallback-snapshot": "正在换一种稳妥方式继续推演路线",
-  commit: "正在将新的路线归入地图",
-  "render-install-picking": "正在重整地图上的路线细节",
-  complete: "新的路线已经铺陈完成",
-  cancel: "路线重新生成已取消",
-  failure: "路线重新生成未能完成"
+  regenerate: "正在为路线重开一卷",
+  "stream-input": "正在汇集城邑、港口与通行地势",
+  compute: "正在重新铺陈路线",
+  "result-stream-complete": "正在校定新路线的彼此关系",
+  "fallback-snapshot": "正在另择稳妥路径铺陈路线",
+  commit: "正在将新路线落定成图",
+  "render-install-picking": "正在描清新路线的图上细节",
+  complete: "路线新卷已经落定",
+  cancel: "已停下本次路线重绘",
+  failure: "本次路线未能落定"
 });
 for (const [stage, expected] of Object.entries(expectedStages)) {
   assert.equal(regenerationLoadingMessage("routes", stage, {message: technicalMessage}), expected, `${stage} 阶段文案错误`);
 }
-assert.equal(regenerationLoadingMessage("routes", "worker-output-packet", {message: technicalMessage}), "正在推演新的路线", "未知底层阶段未收敛为推演文案");
+assert.equal(regenerationLoadingMessage("routes", "worker-output-packet", {message: technicalMessage}), "正在重新铺陈路线", "未知底层阶段未收敛为铺陈文案");
+assert.equal(regenerationLoadingMessage("routes", "render-prepare"), "正在重新铺陈路线", "后台画面预备不应冒充正式上屏");
+
+const observedStages = ["regenerate", "stream-input", "compute", "render-prepare", "result-stream-complete", "worker-output-packet", "commit", "render-install-picking", "complete"];
+const visibleSequence = [];
+let visibleState = {rank: -1, message: ""};
+for (const stage of observedStages) {
+  const next = regenerationLoadingState("routes", stage);
+  if (next.rank < visibleState.rank || next.message === visibleState.message) continue;
+  visibleState = next;
+  visibleSequence.push(next.message);
+}
+assert.deepEqual(visibleSequence, [
+  "正在为路线重开一卷",
+  "正在汇集城邑、港口与通行地势",
+  "正在重新铺陈路线",
+  "正在校定新路线的彼此关系",
+  "正在将新路线落定成图",
+  "正在描清新路线的图上细节",
+  "路线新卷已经落定"
+], "Loading 阶段必须单调前进且相同文案去重");
 
 for (const [kind, label] of Object.entries(expectedKinds)) {
   assert.equal(regenerationResultMessage(kind, {executed: true, status: technicalMessage}), `${label}重新生成完成。`);
@@ -152,6 +187,8 @@ const [appSource, panelSource, controlPanelSource] = await Promise.all([
 ]);
 const regenerateActionSource = sliceBetween(appSource, "regenerate: (kind, options = {})", "    layers: {");
 assert.match(regenerateActionSource, /regenerationLoadingMessage\(kind, stage\)/, "Loading 没有使用固定阶段映射");
+assert.match(regenerateActionSource, /nextLoading\.rank >= visibleLoading\.rank/, "Loading 没有阻止迟到阶段倒退");
+assert.match(regenerateActionSource, /nextLoading\.message !== visibleLoading\.message/, "Loading 没有去除重复文案刷新");
 assert.doesNotMatch(regenerateActionSource, /updateGenerationLoading\([^;]+detail\.message/s, "Loading 仍采信底层 detail.message");
 assert.match(regenerateActionSource, /regenerationLoadingMessage\(kind, "complete"\)/, "Loading 缺少完成阶段");
 assert.match(regenerateActionSource, /\? "cancel" : "failure"/, "Loading 缺少取消阶段");

@@ -288,7 +288,7 @@ import {collectionAffected, objectAffected, systemAffected} from "./edit-command
 import {syncEditorStateSnapshot} from "../ui/vue/state-bridge.js";
 import {completeStartupLoading, failStartupLoading} from "../ui/startup-loading.js";
 import {browserMapSaveLoadingMessage} from "../ui/map-storage-user-copy.js";
-import {createRegenerationUserError, regenerationLoadingMessage} from "../ui/regeneration-user-copy.js";
+import {createRegenerationUserError, regenerationLoadingMessage, regenerationLoadingState} from "../ui/regeneration-user-copy.js";
 import {LABEL_TARGET_KIND, OBJECT_KIND, OBJECT_KIND_LABEL} from "./object-kinds.js";
 import {reconcileSettlementPortTopology} from "./settlement-port-topology.js";
 import ComputeWorker from "./compute-worker.js?worker";
@@ -3183,18 +3183,22 @@ function createRuntimeActions(state, documentRef, options = {}) {
       newMap: (options = {}) => runMapReplace("generate.newMap", context => generateNewMapViaApi(state, documentRef, options, context), loadingMessage("generate")),
       rerollSeed: (options = {}) => runMapReplace("generate.rerollSeed", context => rerollSeedViaApi(state, documentRef, options, context), loadingMessage("generate")),
       regenerate: (kind, options = {}) => operation.run("generate.regenerate", async context => {
-        const message = regenerationLoadingMessage(kind, "initial");
+        let visibleLoading = regenerationLoadingState(kind, "initial");
         const loadingOwner = `regenerate:${context.id}`;
         const visibleOperation = Object.create(context);
         visibleOperation.report = (stage, detail = {}) => {
           const reported = context.report(stage, detail);
           if (reported !== false && detail.loading !== false) {
-            updateGenerationLoading(documentRef, true, regenerationLoadingMessage(kind, stage), loadingOwner);
+            const nextLoading = regenerationLoadingState(kind, stage);
+            if (nextLoading.rank >= visibleLoading.rank && nextLoading.message !== visibleLoading.message) {
+              visibleLoading = nextLoading;
+              updateGenerationLoading(documentRef, true, nextLoading.message, loadingOwner);
+            }
           }
           return reported;
         };
-        updateGenerationLoading(documentRef, true, message, loadingOwner);
-        visibleOperation.report("regenerate", {message});
+        updateGenerationLoading(documentRef, true, visibleLoading.message, loadingOwner);
+        visibleOperation.report("regenerate", {message: visibleLoading.message});
         try {
           await yieldToBrowser(documentRef);
           visibleOperation.throwIfCancelled();
