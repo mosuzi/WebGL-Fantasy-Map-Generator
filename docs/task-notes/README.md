@@ -6,6 +6,7 @@
 
 ## 专题映射
 
+- 第 345 项的十一类完全重生成语义、城镇从空重建、行政角色生成后重选、陆地不变量、身份变化与用户原图 Chrome 验收冻结于 [`task-345-true-regeneration-semantics.md`](./task-345-true-regeneration-semantics.md)；只有显式锁和局部范围外对象可以保留。
 - 第 344 项的城镇主动重生成优先级、无有效省会候选事务内收敛、Worker / 回退一致性与用户原图 Chrome 验收冻结于 [`task-344-city-regeneration-priority.md`](./task-344-city-regeneration-priority.md)；显式锁、结构与事务安全门保持不变。
 - 第 343 项的用户主动重生成优先级、旧省会不一致事务内修复、十一类地理硬门审计与原图 Chrome 验收冻结于 [`task-343-regeneration-priority-and-geographic-gates.md`](./task-343-regeneration-priority-and-geographic-gates.md)；显式锁、结构完整性、回滚和撤销仍是硬门。
 - 第 335 项的 GPU 常驻 cell attribute / palette、surface 顶点去颜色化、普通视图零 Worker 重编译、政治 topology cache、平滑 correction、overlay / picking identity、UI latest-wins 和版本握手冻结于 [`task-335-gpu-resident-view-switch.md`](./task-335-gpu-resident-view-switch.md)；每个 335-A～J 阶段只在独立任务分支本地提交，统一验收后再推送。

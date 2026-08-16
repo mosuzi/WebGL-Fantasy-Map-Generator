@@ -304,8 +304,6 @@ export function createRegenerateMilitaryCommand({
       assertLockedMilitaryPoliticsMirrors(context.map, locked);
       snapshot ??= snapshotMilitary(context.map);
       const before = unlockedMilitaryVariationSnapshot(context.map, locked.ids);
-      const previousEvents = clonePlain(context.map?.military?.events || []);
-      const eventSequence = Number(context.map?.military?.metadata?.eventSequence) || 0;
       const attemptLimit = Math.max(1, Math.min(20, Number(maxAttempts) || 6));
       const baseSeed = String(seed || `${context.map?.options?.seed || "map"}:regenerate-military`);
       let attempts = 0;
@@ -325,7 +323,6 @@ export function createRegenerateMilitaryCommand({
           variation = compareMilitaryVariation(before, unlockedMilitaryVariationSnapshot(context.map, locked.ids));
         } while (!variation.changed && attempts < attemptLimit);
 
-        restoreMilitaryRegenerationEvents(context.map, previousEvents, eventSequence, locked.ids);
         injectMilitaryRegenerationFault(faultAt, "after-events");
         const currentLocked = prepareLockedMilitaryRegiments(context.map.pack, {lockedMilitaryRegiments: lockedSnapshots});
         assertLockedMilitaryRegiments(context.map.pack, currentLocked);
@@ -817,31 +814,6 @@ function allMilitaryRegimentsLocked(map, lockedIds) {
 
 function unlockedMilitaryVariationSnapshot(map, lockedIds) {
   return snapshotMilitaryVariation(map).filter(item => !lockedIds.has(item.id));
-}
-
-function restoreMilitaryRegenerationEvents(map, previousEvents, eventSequence, lockedIds) {
-  const generatedLockedEvents = (map?.military?.events || []).filter(event => lockedIds.has(militaryEventRegimentId(event)));
-  const archivedEvents = previousEvents
-    .filter(event => !lockedIds.has(militaryEventRegimentId(event)))
-    .map(event => ({
-      ...event,
-      archived: true,
-      archiveReason: "military-regeneration"
-    }));
-  map.military.events = [...generatedLockedEvents, ...archivedEvents];
-  map.military.metadata = {
-    ...(map.military.metadata || {}),
-    events: map.military.events.length,
-    eventSequence
-  };
-  if (map?.pack) map.pack.military = map.military;
-}
-
-function militaryEventRegimentId(event = {}) {
-  if (event.regimentObjectId) return String(event.regimentObjectId);
-  const stateId = Number(event.stateId);
-  const regimentId = Number(event.regimentId);
-  return Number.isInteger(stateId) && Number.isInteger(regimentId) ? `${stateId}:${regimentId}` : "";
 }
 
 function assertLockedMilitaryPoliticsMirrors(map, locked) {

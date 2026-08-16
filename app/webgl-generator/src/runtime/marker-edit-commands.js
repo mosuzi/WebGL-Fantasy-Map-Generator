@@ -254,18 +254,15 @@ export function createRegenerateResourceMarkersCommand({salt = 0, constraintBund
           : captureLockedRegenerationObjects(context.map, OBJECT_KIND.MARKER);
         featureCapture ??= captureFeatureLocks(context.map, constraintBundle);
         const lockedIds = lockCapture.ids;
-        const resourceCount = markerRows(context.map).filter(marker => marker.category === "resource").length;
         const preserved = markerRows(context.map).filter(marker =>
           marker.category !== "resource"
           || lockedIds.has(String(marker.id))
           || markerTouchesLockedFeature(context.map, marker, featureCapture.ids)
         );
-        const lockedResourceCount = preserved.filter(marker => marker.category === "resource").length;
         const resources = regenerateResourceMarkers(context.map.grid, context.map.pack, context.map.politics, context.map.rivers, {
           ...context.map.options,
           lockedFeatures: featureCapture.snapshots,
-          resourceRegenerationSalt: salt,
-          ...(resourceCount > 0 ? {targetResourceCount: Math.max(0, resourceCount - lockedResourceCount)} : {})
+          resourceRegenerationSalt: salt
         }, preserved);
         const identifiedResources = assignReservedNumericIds(resources.map(cloneMarker), new Set(preserved.map(marker => marker.id)));
         writeMarkerCollection(context.map, [...preserved, ...identifiedResources], constraintBundle, featureCapture);
@@ -321,12 +318,10 @@ export async function regenerateResourceMarkersInChunks(
       || lockCapture.ids.has(String(marker.id))
       || markerTouchesLockedFeature(map, marker, featureCapture.ids)
     );
-    const lockedResourceCount = preserved.filter(marker => marker.category === "resource").length;
     const resources = await markerRegenerationChunk("generate-resources", () => regenerateResourceMarkers(map.grid, map.pack, map.politics, map.rivers, {
       ...map.options,
       lockedFeatures: featureCapture.snapshots,
-      resourceRegenerationSalt: salt,
-      ...(currentResources.length > 0 ? {targetResourceCount: Math.max(0, currentResources.length - lockedResourceCount)} : {})
+      resourceRegenerationSalt: salt
     }, preserved), {chunks, now, yieldToMain});
     const normalized = await markerRegenerationChunk("write-markers", () => {
       const identifiedResources = assignReservedNumericIds(resources.map(cloneMarker), new Set(preserved.map(marker => marker.id)));

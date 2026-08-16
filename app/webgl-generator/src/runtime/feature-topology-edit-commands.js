@@ -170,14 +170,14 @@ export function rebuildFeatureTopology(map, options = {}) {
   const locked = prepareLockedFeatureConstraints(map, options);
   const rollback = locked.ids.size ? captureFeatureTopologySnapshot(map) : null;
   try {
-    return rebuildFeatureTopologyInternal(map, locked);
+    return rebuildFeatureTopologyInternal(map, locked, options);
   } catch (error) {
     if (rollback) restoreFeatureTopologySnapshot(map, rollback);
     throw error;
   }
 }
 
-function rebuildFeatureTopologyInternal(map, locked) {
+function rebuildFeatureTopologyInternal(map, locked, options = {}) {
   const beforeGrid = captureFeatureIdentity(map?.features?.features, map?.grid?.cells?.f, map?.grid?.cells);
   const beforePack = captureFeatureIdentity(map?.pack?.features, map?.pack?.cells?.f, map?.pack?.cells);
   const spatialReferencesBefore = captureSpatialFeatureState(map);
@@ -185,7 +185,9 @@ function rebuildFeatureTopologyInternal(map, locked) {
   const gridTopology = buildComponents(map.grid.cells, null);
   const rawGridFeatures = createGridFeatures(gridTopology, map.grid);
   const rawGridCellFeatures = gridTopology.cellComponent.map(id => id + 1);
-  const stableGrid = stabilizeFeatureIds(rawGridFeatures, rawGridCellFeatures, beforeGrid, {grid: true, locked: locked.grid});
+  const stableGrid = options.resetUnlockedIdentity === true
+    ? rebuildFeatureIdsFromEmpty(rawGridFeatures, rawGridCellFeatures, beforeGrid, {grid: true, locked: locked.grid})
+    : stabilizeFeatureIds(rawGridFeatures, rawGridCellFeatures, beforeGrid, {grid: true, locked: locked.grid});
   map.grid.cells.f = stableGrid.cellFeatures;
   map.grid.cells.t = buildDistanceField(map.grid.cells);
   map.features.features = stableGrid.features;
@@ -194,7 +196,9 @@ function rebuildFeatureTopologyInternal(map, locked) {
   refreshGridFeatureMetadata(map);
 
   refreshPackFeatures(map.pack, map.grid);
-  const stablePack = stabilizeFeatureIds(map.pack.features, map.pack.cells.f, beforePack, {grid: false, locked: locked.pack});
+  const stablePack = options.resetUnlockedIdentity === true
+    ? rebuildFeatureIdsFromEmpty(map.pack.features, map.pack.cells.f, beforePack, {grid: false, locked: locked.pack})
+    : stabilizeFeatureIds(map.pack.features, map.pack.cells.f, beforePack, {grid: false, locked: locked.pack});
   map.pack.features = stablePack.features;
   map.pack.cells.f = stablePack.cellFeatures;
   for (let cell = 0; cell < map.pack.cells.f.length; cell++) {
@@ -608,6 +612,52 @@ function stabilizeFeatureIds(rawFeatures, rawCellFeatures, before, {grid, locked
   for (let id = 1; id < before.features.length; id++) {
     if (features[id] || !before.features[id]) continue;
     features[id] = clonePlain(before.features[id]);
+  }
+  return {features, cellFeatures, redirects, removedIds};
+}
+
+function rebuildFeatureIdsFromEmpty(rawFeatures, rawCellFeatures, before, {grid, locked = {entries: new Map(), ids: new Set()}}) {
+  const rawIds = activeFeatures(rawFeatures).map(featureId);
+  const rawCellsById = cellsByFeature(rawCellFeatures);
+  const assignments = new Map();
+  const claimed = new Set();
+  for (const [lockedId, entry] of locked.entries) {
+    const matching = rawIds.filter(rawId => sameIntegerCells(rawCellsById.get(rawId) || [], entry.cells));
+    if (matching.length !== 1) {
+      throw featureLockConflict(`锁定 Feature #${lockedId} 无法在完全重算结果中保持唯一分量`, {reason: "locked-feature-topology-changed", id: lockedId, grid});
+    }
+    assignments.set(matching[0], lockedId);
+    claimed.add(lockedId);
+  }
+  let nextId = 1;
+  for (const rawId of rawIds) {
+    if (assignments.has(rawId)) continue;
+    while (claimed.has(nextId)) nextId += 1;
+    assignments.set(rawId, nextId);
+    claimed.add(nextId);
+    nextId += 1;
+  }
+
+  const maxId = Math.max(0, ...claimed);
+  const features = new Array(maxId + 1).fill(null);
+  features[0] = null;
+  const cellFeatures = cloneCellFeatureArray(rawCellFeatures, maxId);
+  for (let cell = 0; cell < rawCellFeatures.length; cell++) cellFeatures[cell] = assignments.get(Number(rawCellFeatures[cell])) || 0;
+  for (const rawId of rawIds) {
+    const id = assignments.get(rawId);
+    const lockedEntry = locked.entries.get(id);
+    features[id] = lockedEntry ? clonePlain(lockedEntry.feature) : mergeFeatureIdentity(null, rawFeatures[rawId], id, grid);
+  }
+
+  const redirects = new Map();
+  const activeIds = new Set(activeFeatures(features).map(featureId));
+  const removedIds = [];
+  const oldCellsById = cellsByFeature(before.cellFeatures);
+  for (const old of activeFeatures(before.features)) {
+    const oldId = featureId(old);
+    const target = overlapCandidates(oldCellsById.get(oldId) || [], cellFeatures)[0] || 0;
+    if (target && target !== oldId) redirects.set(oldId, target);
+    if (!activeIds.has(oldId)) removedIds.push(oldId);
   }
   return {features, cellFeatures, redirects, removedIds};
 }

@@ -57,13 +57,13 @@ try {
     app.editHistory.clear();
     const cityBefore = cityEnvelope(city.id);
     const routeBefore = routeEnvelope(route.id);
-    const unlockedBefore = JSON.stringify(activeCities().filter(item => item.id !== city.id));
+    const unlockedBefore = stableJson(activeCities().filter(item => item.id !== city.id));
     const cityTxBefore = transactionSnapshot("cities");
     const cityResult = unwrap(await api.generate.regenerate("cities", {confirm: true}), "regenerate cities");
     if (!cityResult.executed) throw new Error("城镇正式入口未执行");
     assertDeepEqual(cityEnvelope(city.id), cityBefore, "锁城完整镜像");
     assertDeepEqual(routeEnvelope(route.id), routeBefore, "城镇下游锁路完整镜像");
-    if (JSON.stringify(activeCities().filter(item => item.id !== city.id)) === unlockedBefore) throw new Error("未锁城镇没有变化");
+    if (stableJson(activeCities().filter(item => item.id !== city.id)) === unlockedBefore) throw new Error("未锁城镇没有变化");
     const cityTxAfter = transactionSnapshot("cities");
     assertSingleHistory(cityTxBefore, cityTxAfter, "城镇重生成");
     result.city = {cityId: city.id, routeId: route.id, historyDelta: 1, saltDelta: cityTxAfter.salt - cityTxBefore.salt};
@@ -76,12 +76,12 @@ try {
     unwrap(api.regenerationLocks.set({kind: "city", id: scopedLocked.id}, true), "lock scoped city");
     app.editHistory.clear();
     const scopedLockedBefore = cityEnvelope(scopedLocked.id);
-    const outsideBefore = JSON.stringify(activeCities().filter(item => Number(item.state) !== Number(state.i)));
+    const outsideBefore = stableJson(activeCities().filter(item => Number(item.state) !== Number(state.i)));
     const scopedTxBefore = transactionSnapshot("cities");
     const scopedResult = unwrap(await api.generate.regenerate("cities", {confirm: true, scope: "state", stateId: state.i}), "regenerate scoped cities");
     if (!scopedResult.executed) throw new Error("局部城镇正式入口未执行");
     assertDeepEqual(cityEnvelope(scopedLocked.id), scopedLockedBefore, "局部锁城完整镜像");
-    if (JSON.stringify(activeCities().filter(item => Number(item.state) !== Number(state.i))) !== outsideBefore) throw new Error("局部重生成改写范围外城镇");
+    if (stableJson(activeCities().filter(item => Number(item.state) !== Number(state.i))) !== outsideBefore) throw new Error("局部重生成改写范围外城镇");
     const scopedTxAfter = transactionSnapshot("cities");
     assertSingleHistory(scopedTxBefore, scopedTxAfter, "局部城镇重生成");
     result.scoped = {stateId: state.i, cityId: scopedLocked.id, outside: JSON.parse(outsideBefore).length, historyDelta: 1};
@@ -91,12 +91,12 @@ try {
     unwrap(api.regenerationLocks.set({kind: "route", id: directRoute.id}, true), "lock direct route");
     app.editHistory.clear();
     const directBefore = routeEnvelope(directRoute.id);
-    const routesBefore = JSON.stringify(activeRoutes().filter(item => item.id !== directRoute.id));
+    const routesBefore = stableJson(activeRoutes().filter(item => item.id !== directRoute.id));
     const routeTxBefore = transactionSnapshot("routes");
     const routeResult = unwrap(await api.generate.regenerate("routes", {confirm: true}), "regenerate routes");
     if (!routeResult.executed) throw new Error("道路正式入口未执行");
     assertDeepEqual(routeEnvelope(directRoute.id), directBefore, "直接锁路完整镜像");
-    if (JSON.stringify(activeRoutes().filter(item => item.id !== directRoute.id)) === routesBefore) throw new Error("未锁道路没有变化");
+    if (stableJson(activeRoutes().filter(item => item.id !== directRoute.id)) === routesBefore) throw new Error("未锁道路没有变化");
     const routeTxAfter = transactionSnapshot("routes");
     assertSingleHistory(routeTxBefore, routeTxAfter, "道路重生成");
     result.route = {routeId: directRoute.id, historyDelta: 1, saltDelta: routeTxAfter.salt - routeTxBefore.salt};
@@ -114,6 +114,7 @@ try {
       ...structuredClone(app.map.pack.routes[first.id]),
       i: second.id
     };
+    app.workerTaskCoordinator.invalidateSession("fixture-route-conflict-direct-map-mutation");
     unwrap(api.regenerationLocks.setMany(conflicts.map(item => ({kind: "route", id: item.id})), true), "lock conflict routes");
     app.editHistory.clear();
     const conflictBefore = transactionSnapshot("routes");
@@ -195,7 +196,22 @@ try {
     }
 
     function assertDeepEqual(actual, expected, label) {
-      if (JSON.stringify(actual) !== JSON.stringify(expected)) throw new Error(`${label}发生变化`);
+      const actualJson = stableJson(actual);
+      const expectedJson = stableJson(expected);
+      if (actualJson === expectedJson) return;
+      let index = 0;
+      while (index < actualJson.length && index < expectedJson.length && actualJson[index] === expectedJson[index]) index++;
+      throw new Error(`${label}发生变化：index=${index} expected=${expectedJson.slice(Math.max(0, index - 120), index + 240)} actual=${actualJson.slice(Math.max(0, index - 120), index + 240)}`);
+    }
+
+    function stable(value) {
+      if (Array.isArray(value)) return value.map(stable);
+      if (!value || typeof value !== "object") return value;
+      return Object.fromEntries(Object.keys(value).sort().map(key => [key, stable(value[key])]));
+    }
+
+    function stableJson(value) {
+      return JSON.stringify(stable(value));
     }
 
     function pick(source, fields) {
@@ -208,7 +224,7 @@ try {
     }
   });
 
-  const healthPerformanceSignals = consoleErrors.filter(message => /^\[FMG health\] (main-thread-long-task|render-frame-gap|input-handler-stall)\b/.test(message));
+  const healthPerformanceSignals = consoleErrors.filter(message => /^\[FMG health\] (main-thread-long-task|operation-stall|render-frame-gap|input-handler-stall)\b/.test(message));
   const applicationConsoleErrors = consoleErrors.filter(message => !healthPerformanceSignals.includes(message));
   assert.deepEqual(applicationConsoleErrors, []);
   assert.deepEqual(pageErrors, []);

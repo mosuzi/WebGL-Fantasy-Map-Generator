@@ -285,7 +285,7 @@ function regenerateFeatures(map, options = {}) {
   const locks = constraintBundle ? {snapshots: constraintBundle.lockedFeatures} : captureLockedRegenerationObjects(map, OBJECT_KIND.FEATURE);
   const before = map.features?.metadata?.featureCount || 0;
   nextRegenerationSalt(map, "features");
-  const result = rebuildFeatureTopology(map, {lockedFeatures: locks.snapshots});
+  const result = rebuildFeatureTopology(map, {lockedFeatures: locks.snapshots, resetUnlockedIdentity: true});
   if (constraintBundle) constraintBundle.assertDomain(map, "features", "feature-topology");
   else assertLockedRegenerationSnapshots(map, locks);
   markDerivedFresh(map, ["features"]);
@@ -374,6 +374,7 @@ function regenerateCities(map, options = {}) {
     reassessProvincialCapitals: true,
     repairInconsistentProvincialCapitals: true
   });
+  const landCheck = assertRegeneratedCitiesOnLand(map, settlementScope, scopedLockedIds);
   if (constraintBundle) constraintBundle.assertDomain(map, "cities-routes", "settlement-routes");
   else {
     assertLockedRegenerationSnapshots(map, cityLocks);
@@ -384,7 +385,16 @@ function regenerateCities(map, options = {}) {
   markDerivedStale(map, ["provinces", "states", "religions", "markers", "zones", "military", "diplomacy"]);
   refreshGenerationSummary(map);
   appendGenerationLog(map, `regenerate settlements: scope=${regenerationScopeLog(scope)}, salt=${citySalt}, cities=${map.settlements.metadata.cities}, ports=${map.settlements.metadata.ports}, routes=${map.settlements.metadata.routes}, stale=${map.metadata.derivedStale?.systems?.join(",") || "none"}`);
-  return regenerationResult("cities", `${regenerationScopeLabel(map, scope)}城镇已按当前适居度、文化、政区、港口和间距约束重算（扰动 #${citySalt}）：${beforeCities} -> ${map.settlements.metadata.cities}；港口 ${beforePorts} -> ${map.settlements.metadata.ports}；道路 ${beforeRoutes} -> ${map.settlements.metadata.routes}`, "已保留目标范围内的国家首都、省会锚点与目标范围外城镇身份，只替换目标范围内普通城镇；道路按全图关系同步重建。");
+  return regenerationResult("cities", `${regenerationScopeLabel(map, scope)}城镇已从空结果按当前适居度、文化、政区、港口和间距约束重算（扰动 #${citySalt}）：${beforeCities} -> ${map.settlements.metadata.cities}；港口 ${beforePorts} -> ${map.settlements.metadata.ports}；道路 ${beforeRoutes} -> ${map.settlements.metadata.routes}`, "目标范围内只保留显式锁城镇；其它旧城镇、旧位置与旧行政锚点均未参与生成，国家首都和省会已在新城镇生成后重选，新生成城镇均落在陆地；范围外城镇不变。", {replacementMode: "from-empty", ...landCheck});
+}
+
+function assertRegeneratedCitiesOnLand(map, settlementScope, lockedIds) {
+  const checked = (map.settlements?.cities || []).filter(city => city && !city.removed
+    && !lockedIds.has(Number(city.id))
+    && (!settlementScope || settlementScopeContainsCity(map, settlementScope, city)));
+  const marine = checked.filter(city => !(Number(map.pack?.cells?.h?.[city.packCell]) >= 20));
+  if (marine.length) throw taskError("city_regeneration_water_anchor", `城镇重算产生了 ${marine.length} 个水域落点，已拒绝提交`);
+  return {checkedCities: checked.length, marineCities: 0};
 }
 
 function regenerateStates(map, options = {}) {

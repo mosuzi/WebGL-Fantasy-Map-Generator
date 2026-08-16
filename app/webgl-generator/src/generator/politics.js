@@ -716,9 +716,9 @@ function buildPackStates(pack, society, random, nameGenerator, locked = null) {
 
 function selectRegeneratedCapitalBurgs(pack, settlements, options, random, locked = null) {
   const aliveBurgs = (pack.burgs || []).filter(burg => burg?.i && !burg.removed && pack.cells.h?.[burg.cell] >= 20);
-  const currentCapitals = aliveBurgs.filter(burg => burg.capital);
   const requiredCapitals = aliveBurgs.filter(burg => locked?.capitalBurgIds?.has(burg.i));
-  const target = clamp(Math.max(currentCapitals.length || Number(options.statesNumber) || 12, requiredCapitals.length), 1, Math.min(aliveBurgs.length, 40));
+  const requested = Number(options.statesNumber);
+  const target = clamp(Math.max(Number.isFinite(requested) && requested > 0 ? requested : 12, requiredCapitals.length), 1, Math.min(aliveBurgs.length, 40));
   if (!target) return [];
 
   const candidates = aliveBurgs

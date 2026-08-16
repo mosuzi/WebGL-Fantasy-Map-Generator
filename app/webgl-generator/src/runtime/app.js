@@ -12362,7 +12362,7 @@ function regenerateFeatures(state, documentRef, options = {}) {
   let result;
   try {
     nextRegenerationSalt(map, "features");
-    result = rebuildFeatureTopology(map, {lockedFeatures: featureLocks.snapshots});
+    result = rebuildFeatureTopology(map, {lockedFeatures: featureLocks.snapshots, resetUnlockedIdentity: true});
     if (constraintBundle) constraintBundle.assertDomain(map, "features", "feature-topology");
     else assertLockedRegenerationSnapshots(map, featureLocks);
   } catch (error) {
@@ -14581,6 +14581,7 @@ function regenerateCities(state, documentRef, scope = {kind: "all"}) {
   const beforeRoutes = map.settlements?.routes?.length || 0;
   const previousSalt = captureRegenerationSalt(map, "cities");
   let citySalt;
+  let landCheck;
   const targetCityIds = settlementScope
     ? targetCities.filter(city => !scopedLockedIds.has(Number(city.id))).map(city => city.id)
     : null;
@@ -14597,6 +14598,7 @@ function regenerateCities(state, documentRef, scope = {kind: "all"}) {
       reassessProvincialCapitals: true,
       repairInconsistentProvincialCapitals: true
     });
+    landCheck = assertRegeneratedCitiesOnLand(map, settlementScope, scopedLockedIds);
     if (constraintBundle) constraintBundle.assertDomain(map, "cities-routes", "settlement-routes");
     else {
       assertLockedRegenerationSnapshots(map, cityLocks);
@@ -14622,9 +14624,23 @@ function regenerateCities(state, documentRef, scope = {kind: "all"}) {
 
   return regenerationResult(
     "cities",
-    `${regenerationScopeLabel(map, scope)}城镇已按当前适居度、文化、政区、港口和间距约束重算（扰动 #${citySalt}）：${beforeCities} -> ${map.settlements.metadata.cities}；港口 ${beforePorts} -> ${map.settlements.metadata.ports}；道路 ${beforeRoutes} -> ${map.settlements.metadata.routes}`,
-    "已保留目标范围内的国家首都、省会锚点与目标范围外城镇身份，只替换目标范围内普通城镇；道路按全图关系同步重建。"
+    `${regenerationScopeLabel(map, scope)}城镇已从空结果按当前适居度、文化、政区、港口和间距约束重算（扰动 #${citySalt}）：${beforeCities} -> ${map.settlements.metadata.cities}；港口 ${beforePorts} -> ${map.settlements.metadata.ports}；道路 ${beforeRoutes} -> ${map.settlements.metadata.routes}`,
+    "目标范围内只保留显式锁城镇；其它旧城镇、旧位置与旧行政锚点均未参与生成，国家首都和省会已在新城镇生成后重选，新生成城镇均落在陆地；范围外城镇不变。",
+    {replacementMode: "from-empty", ...landCheck}
   );
+}
+
+function assertRegeneratedCitiesOnLand(map, settlementScope, lockedIds) {
+  const checked = (map.settlements?.cities || []).filter(city => city && !city.removed
+    && !lockedIds.has(Number(city.id))
+    && (!settlementScope || settlementScopeContainsCity(map, settlementScope, city)));
+  const marine = checked.filter(city => !(Number(map.pack?.cells?.h?.[city.packCell]) >= 20));
+  if (marine.length) {
+    const error = new Error(`城镇重算产生了 ${marine.length} 个水域落点，已拒绝提交`);
+    error.code = "city_regeneration_water_anchor";
+    throw error;
+  }
+  return {checkedCities: checked.length, marineCities: 0};
 }
 
 function regenerateReligions(state, documentRef, options = {}) {

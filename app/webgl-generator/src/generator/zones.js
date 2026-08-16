@@ -42,8 +42,7 @@ export function buildZones(pack, options = {}) {
   const random = createRandom(`${options.seed}:zones`);
   const target = getTargetZoneCount(pack);
   const types = getZoneTypePlan(target);
-  const persistent = (pack.zones || []).filter(zone => zone && (zone.category && zone.category !== "event" || zone.source === "manual"));
-  const zones = uniqueZones([...(options.preservedZones || []), ...persistent]).map(zone => structuredClone(zone));
+  const zones = uniqueZones(options.preservedZones || []).map(zone => structuredClone(zone));
   const occupied = new Set(zones.filter(zone => (zone.coverage || (zone.category === "event" ? "overlay" : "base")) === "overlay").flatMap(zone => zone?.cells || []).filter(Number.isInteger));
   const reservedIds = new Set(zones.map(zone => Number(zone?.i ?? zone?.id)).filter(Number.isInteger));
   let eventCount = zones.filter(zone => !zone.category || zone.category === "event").length;

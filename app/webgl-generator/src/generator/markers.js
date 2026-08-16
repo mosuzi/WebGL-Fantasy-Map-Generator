@@ -222,11 +222,12 @@ export function regenerateResourceMarkers(grid, pack, politics, rivers, options 
   const occupied = new Set(existingMarkers.map(marker => marker?.packCell).filter(Number.isInteger));
   const protectedFeatureIds = protectedObjectIds(options.lockedFeatures);
   const markers = [];
-  const previousResourceCount = existingMarkers.filter(marker => marker?.category === "resource").length;
+  const lockedResourceCount = existingMarkers.filter(marker => marker?.category === "resource").length;
   const requestedTarget = Number(options.targetResourceCount);
+  const generatedTarget = Math.max(3, Math.round((getTargetMarkerCount(pack, options) * RESOURCE_MARKER_WEIGHT) / MARKER_TYPES.reduce((sum, config) => sum + config.weight, 0)));
   const target = Number.isInteger(requestedTarget) && requestedTarget >= 0
     ? requestedTarget
-    : Math.max(3, previousResourceCount || Math.round((getTargetMarkerCount(pack, options) * RESOURCE_MARKER_WEIGHT) / MARKER_TYPES.reduce((sum, config) => sum + config.weight, 0)));
+    : Math.max(0, generatedTarget - lockedResourceCount);
   if (!target) return [];
   const quotas = markerTypeQuotas(RESOURCE_MARKER_TYPES, target);
 
