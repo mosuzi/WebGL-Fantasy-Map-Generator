@@ -2071,6 +2071,12 @@ export class PlaceholderMapRenderer {
     return this.workerRenderInstallSuspended;
   }
 
+  markWorkerRenderInstallViewportChanged() {
+    this.workerRenderInstallViewportChanged = true;
+    this.workerRenderInstallPendingDraw = true;
+    this.markViewportBuffersDirty();
+  }
+
   beginDeferredWorkerRenderMutationCapture() {
     this.workerRenderMutationCaptureDepth++;
     return this.workerRenderMutationCaptureDepth;
@@ -5673,6 +5679,11 @@ export function buildPlaceholderSurfaceBundle(map, colorMode, viewOptions, shore
   const provincePaths = provinceVisualPaths || buildProvinceVisualPaths(map);
   const politicalSurface = politicalSurfaceMeshForMode(colorMode, politicalVisualMeshes);
   const smoothCellBorders = viewOptions.smoothCellBorders !== false;
+  if (smoothCellBorders && Number(cellVisualMesh?.triangulationUnfilledCells) > 0) {
+    const error = new Error(`平滑表面仍有 ${cellVisualMesh.triangulationUnfilledCells} 个 cell 未覆盖`);
+    error.code = "cell-visual-surface-unfilled";
+    throw error;
+  }
   const useGpuResidentSurface = Boolean(GPU_RESIDENT_COLOR_MODES[colorMode] && cellVisualMesh?.cells?.length);
   const useCellVisualMesh = smoothCellBorders && cellVisualMesh?.cells?.length && !useGpuResidentSurface;
   const usePoliticalSurface = smoothCellBorders && politicalSurface && !useGpuResidentSurface;

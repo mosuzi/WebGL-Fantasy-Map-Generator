@@ -1,7 +1,7 @@
 import {colorForCell, isLandCell} from "./color-modes.js";
 import {resolvedGridVertexPoints} from "./grid-vertex-geometry.js";
 import {pushWorldVertex} from "./mesh-writer.js";
-import {triangulateCellVisualBoundarySafely} from "./cell-visual-layer.js";
+import {buildCanonicalOrderedCellVisualBoundary, triangulateCellVisualBoundarySafely} from "./cell-visual-layer.js";
 
 export function pushGridCells(vertices, context, colorMode, viewOptions, shouldDrawCell = () => true, transformColor = color => color, onCellRange = null) {
   const {map} = context;
@@ -18,8 +18,18 @@ export function pushGridCells(vertices, context, colorMode, viewOptions, shouldD
     if (triangulation.status !== "ok") {
       triangulation = triangulateCellVisualBoundarySafely(vertexIds.map(vertex => grid.vertices.p[vertex]));
     }
+    if (triangulation.status !== "ok") {
+      triangulation = triangulateCellVisualBoundarySafely(buildCanonicalOrderedCellVisualBoundary(map, cellIndex, true));
+    }
+    if (triangulation.status !== "ok") {
+      triangulation = triangulateCellVisualBoundarySafely(buildCanonicalOrderedCellVisualBoundary(map, cellIndex, false));
+    }
     if (triangulation.status === "ok") {
       for (const index of triangulation.indices) pushWorldVertex(vertices, context, triangulation.points[index], color);
+    } else {
+      const error = new Error(`grid cell ${cellIndex} 无法形成安全表面`);
+      error.code = "grid-cell-surface-unfilled";
+      throw error;
     }
     onCellRange?.(cellIndex, {start, end: vertices.length});
   }

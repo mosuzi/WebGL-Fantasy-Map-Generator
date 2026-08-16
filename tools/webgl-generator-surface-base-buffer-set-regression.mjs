@@ -15,6 +15,7 @@ import {
   uploadSurfaceBaseBufferSetRanges
 } from "../app/webgl-generator/src/renderer/surface-base-buffer-set.js";
 import {buildGridCellSurfacePatchFromBase, pushGridCells} from "../app/webgl-generator/src/renderer/cell-surface-layer.js";
+import {buildCellVisualMesh, countCellVisualTriangulationLeaks} from "../app/webgl-generator/src/renderer/cell-visual-layer.js";
 import {stabilizeResolvedGridVertexPoints} from "../app/webgl-generator/src/renderer/grid-vertex-geometry.js";
 
 class FakeGl {
@@ -117,12 +118,10 @@ assert.deepEqual(reconstructedIdentities.at(-1), {cellId: 27, water: true});
 assert.deepEqual(reconstructedColors.slice(0, 3), [0.25, 0.5, 0.75]);
 
 const zeroRangeSource = createSurface(18);
-const zeroRangeSet = createSurfaceBaseBufferSet(gl, zeroRangeSource, {surfaceCellRanges: new Map([
+assert.throws(() => createSurfaceBaseBufferSet(gl, zeroRangeSource, {surfaceCellRanges: new Map([
   [0, {start: 0, end: 0}],
   [1, {start: 0, end: 18}]
-])});
-const zeroRangeIdentities = new Uint32Array(zeroRangeSet.segments[0].geometryBuffer.bytes.buffer);
-assert.deepEqual(unpackSurfaceBaseIdentity(zeroRangeIdentities[2]), {cellId: 1, water: false}, "零长度 cell range 不得吞掉后续 cell identity");
+])}), /cell range 无效/, "零长度 cell range 不得作为成功画面进入 GPU");
 
 const geometryBefore = bufferSet.segments.map(segment => segment.geometryBuffer.bytes.slice());
 for (let offset = SURFACE_BASE_MAX_SEGMENT_FLOATS - 18; offset < source.length; offset += 6) {
@@ -199,10 +198,17 @@ pushGridCells(concaveVertices, {map: concaveMap}, "height", {});
 assert.equal(concaveVertices.length, (concavePoints.length - 2) * 3 * 6, "非凸 hard cell 必须使用安全三角剖分，不能以外置中心扇分越界");
 
 const invalidVertices = [], invalidRanges = new Map(), invalidPoints = [[0, 0], [4, 4], [4, 0], [0, 4]];
-const invalidMap = {metadata: {graphWidth: 4, graphHeight: 4}, grid: {points: [[2, 2]], cells: {p: [0], v: [[0, 1, 2, 3]], h: [30]}, vertices: {p: invalidPoints}}, features: {features: [{land: true}]}, layers: {ocean: [0, 0, 1, 1]}};
+const invalidMap = {metadata: {graphWidth: 4, graphHeight: 4}, grid: {points: [[2, 2]], cells: {i: [0], c: [[]], p: [0], v: [[0, 1, 2, 3]], h: [30]}, vertices: {p: invalidPoints, c: [[], [], [], []]}}, features: {features: [{land: true}]}, layers: {ocean: [0, 0, 1, 1]}};
 pushGridCells(invalidVertices, {map: invalidMap}, "height", {}, () => true, color => color, (cell, range) => invalidRanges.set(cell, range));
-assert.equal(invalidVertices.length, 0, "两套边界都不安全时不得恢复越界中心扇分");
-assert.deepEqual([...invalidRanges], [[0, {start: 0, end: 0}]], "安全跳过的 cell 必须留下可审计零长度 range");
+assert.equal(invalidVertices.length, 36, "自交 Voronoi 顶点必须恢复 canonical 环序并安全覆盖，不能恢复越界中心扇分");
+assert.deepEqual([...invalidRanges], [[0, {start: 0, end: 36}]], "canonical 环序 fallback 必须产出非空连续 range");
+const invalidVisualMesh = buildCellVisualMesh(invalidMap);
+assert.equal(invalidVisualMesh.triangulationUnfilledCells, 0, "平滑视觉层不得为乱序 Voronoi cell 留下缺面");
+assert.equal(invalidVisualMesh.triangulationEmergencyHardFanCells, 0, "平滑视觉层不得恢复非安全中心扇分");
+assert.equal(invalidVisualMesh.triangulationCanonicalOrderFallbackCells, 1, "平滑视觉层必须记录 canonical 环序恢复");
+assert.equal(countCellVisualTriangulationLeaks(invalidVisualMesh.cells[0].points), 0, "canonical 环序恢复不得产生越界三角");
+const collapsedMap = {metadata: {graphWidth: 4, graphHeight: 4}, grid: {points: [[2, 0]], cells: {i: [0], c: [[]], p: [0], v: [[0, 1, 2]], h: [30]}, vertices: {p: [[0, 0], [2, 0], [4, 0]], c: [[], [], []]}}, features: {features: [{land: true}]}, layers: {ocean: [0, 0, 1, 1]}};
+assert.throws(() => pushGridCells([], {map: collapsedMap}, "height", {}), error => error?.code === "grid-cell-surface-unfilled", "无法恢复的 cell 必须 fail-closed，不能提交零长度 range");
 
 const storedBoundary = [[0, 0], [4, 0], [4, 4], [0, 4], [4, 0], [8, 0], [8, 4], [4, 4]];
 const resolvedBoundary = storedBoundary.map(point => [...point]);

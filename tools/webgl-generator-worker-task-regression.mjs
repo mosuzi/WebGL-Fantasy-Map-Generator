@@ -1146,6 +1146,11 @@ function verifyAppDeferredReplayStaticContract() {
   assert.equal(decide(true, false), "retry", "仅 deferred sequence 漂移可以重试");
   assert.equal(decide(false, true), "obsolete", "render context 漂移不得重试");
   assert.equal(decide(false, false), "obsolete", "context 漂移必须优先于 sequence 漂移");
+  const committedSequenceMatch = source.match(/function isWorkerRegenerationDeferredReplaySequenceCommitted\(renderer, snapshot\) \{[\s\S]*?\n\}/u);
+  assert.ok(committedSequenceMatch, "app 必须区分提交前队列存在与提交后队列已消费");
+  const isCommittedSequence = runInNewContext(`(${committedSequenceMatch[0]})`);
+  assert.equal(isCommittedSequence({workerRenderInstallMutationSequence: 7, hasDeferredWorkerRenderMutations: () => false}, {maxSequence: 7}), true, "成功 resume 清空队列后不得被误判 obsolete");
+  assert.equal(isCommittedSequence({workerRenderInstallMutationSequence: 8, hasDeferredWorkerRenderMutations: () => true}, {maxSequence: 7}), false, "晚到显示 mutation 必须使旧提交失效");
   const obsoleteMatch = source.match(/function isWorkerRegenerationPreparedInstallObsolete\(error\) \{[\s\S]*?\n\}/u);
   assert.ok(obsoleteMatch, "app 必须显式收口 prepared install sequence-only obsolete code");
   const isPreparedObsolete = runInNewContext(`(${obsoleteMatch[0]})`);
@@ -1260,7 +1265,11 @@ function verifyAppDeferredReplayStaticContract() {
   assert.match(source, /createLatestDisplayIntentQueue\(\)[\s\S]*?displayIntents\.run\(async intent =>/u, "显示入口必须进入独立 latest-wins 队列");
   assert.match(source, /const onCommitted = \(\) => \{[\s\S]*?intent\.isCurrent\(\)[\s\S]*?restoreRuntimeDisplayControls\(state, documentRef\)/u, "只有最新正式 renderer 提交才能收敛控件");
   assert.match(source, /let selfHealAttempts = 0;[\s\S]*?selfHealAttempts > 0 \|\| !isRetryableDisplaySessionError\(error\)[\s\S]*?display-session-self-heal/u, "显示会话只允许一次 stale / commit rejected 自愈");
-  assert.match(source, /viewportIndependent = layers\.length === 1 && layers\[0\] === "surface"[\s\S]*?includeViewport: !viewportIndependent/u, "纯 surface 显示准备不得因相机或画布变化作废");
+  assert.match(displayFlow, /sourceToken = createWorkerRegenerationRenderContextToken\(state, "display", \{includeViewport: false\}\)[\s\S]*?sourceViewportToken = createWorkerRegenerationViewportToken\(state\)/u, "显示内容身份与视口版本必须分别冻结");
+  assert.match(displayFlow, /createWorkerRegenerationViewportToken\(state\) !== sourceViewportToken[\s\S]*?markWorkerRenderInstallViewportChanged/u, "Worker 期间视口漂移必须转为最新视口重绘，不能作废显示事务");
+  assert.match(displayFlow, /isTargetCurrent = \(\)[\s\S]*?isWorkerRegenerationDeferredReplaySequenceCurrent[\s\S]*?isTargetCommitted = \(\)[\s\S]*?isWorkerRegenerationDeferredReplaySequenceCommitted/u, "显示事务必须分开准备期队列与提交后消费态");
+  assert.match(displayFlow, /resumePreparedWorkerRenderInstall[\s\S]*?if \(!isTargetCommitted\(\)\) throw runtimeDisplayObsoleteError\("after-resume"\)/u, "成功 resume 后不得继续要求 deferred 队列存在");
+  assert.doesNotMatch(displayFlow, /includeViewport: true/u, "显示事务 current gate 不得包含相机或画布");
   const displayErrorMessage = source.match(/function runtimeDisplayActionErrorMessage\(error\) \{[\s\S]*?\n\}/u)?.[0] || "";
   assert.match(displayErrorMessage, /operation_busy[\s\S]*?当前已有地图操作正在进行，请稍后再试/u, "重叠显示操作必须使用自然中文提示");
   assert.match(displayErrorMessage, /operation_obsolete[\s\S]*?地图状态已变化，请重新设置/u, "过期显示操作必须使用自然中文提示");
@@ -1649,6 +1658,13 @@ function verifyDeferredRendererReplay() {
   assert.equal(viewportRenderer.cheapCalls.viewport, 1, "prepared resume 必须保留 viewport 恢复");
   assert.equal(viewportRenderer.cheapCalls.draw, 0, "viewport 恢复不得额外重复 draw");
   assert.equal(viewportRenderer.cheapCalls.view, 1);
+
+  const lateViewportRenderer = createDeferredRendererFixture();
+  lateViewportRenderer.workerRenderInstallSuspended = 1;
+  lateViewportRenderer.markWorkerRenderInstallViewportChanged();
+  assert.equal(lateViewportRenderer.workerRenderInstallViewportChanged, true, "晚到视口变化必须保留到 prepared resume");
+  assert.equal(lateViewportRenderer.workerRenderInstallPendingDraw, true, "晚到视口变化必须登记最终重绘");
+  assert.deepEqual(lateViewportRenderer.dynamicBuffersDirty, {routes: true, tradeFlows: false, rivers: true, selection: true}, "晚到视口变化必须标记最新视口动态层");
 
   const faultRenderer = createDeferredRendererFixture();
   faultRenderer.setLabelOptions({maxCityLabels: 32});

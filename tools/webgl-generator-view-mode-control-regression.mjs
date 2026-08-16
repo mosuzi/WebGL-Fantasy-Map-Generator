@@ -28,10 +28,13 @@ assert.doesNotMatch(bindRuntimePanelSource, /querySelectorAll\(VIEW_MODE_SELECTO
 assert.doesNotMatch(bindRuntimePanelSource, /setActiveModeButton\(documentRef, button\.dataset\.mode\)/);
 assert.match(schemaSource, /\["height", "temperature", "precipitation", "biomes", "cultures", "religions", "diplomacy", "governments", "states", "provinces", "regions", "population"\]/);
 assert.match(appSource, /stage === lastProgressStage && current - lastProgressAt < 80/);
-assert.match(appSource, /const onCommitted = \(\) => restoreRuntimeDisplayControls\(state, documentRef\)/);
-assert.match(appSource, /viewportIndependent = layers\.length === 1 && layers\[0\] === "surface"/);
-assert.match(appSource, /createWorkerRegenerationRenderContextToken\(state, "display", tokenOptions\)/);
+assert.match(appSource, /const onCommitted = \(\) => \{[\s\S]*?intent\.isCurrent\(\)[\s\S]*?restoreRuntimeDisplayControls\(state, documentRef\)/);
+assert.match(appSource, /createWorkerRegenerationRenderContextToken\(state, "display", \{includeViewport: false\}\)/);
+assert.match(appSource, /const sourceViewportToken = createWorkerRegenerationViewportToken\(state\)/);
+assert.match(appSource, /markWorkerRenderInstallViewportChanged/);
+assert.match(appSource, /resumePreparedWorkerRenderInstall[\s\S]*?isTargetCommitted\(\)[\s\S]*?runtimeDisplayObsoleteError\("after-resume"\)/);
+assert.match(appSource, /function isWorkerRegenerationDeferredReplaySequenceCommitted\(renderer, snapshot\)/);
 assert.match(appSource, /function createWorkerRegenerationRenderContextToken\(state, targetKind, \{includeViewport = true\} = \{\}\)/);
 assert.match(appSource, /state\.renderer\?\.setColorMode\?\.\(nextMode\);[\s\S]*?if \(state\.renderer\?\.colorMode === nextMode\) \{/);
 
-console.log(JSON.stringify({ok: true, viewShortcuts: 4, committedHighlight: true, delegatedBridge: true, singleIntent: true, viewportIndependentSurface: true, canonicalModes: true, progressThrottleMs: 80}));
+console.log(JSON.stringify({ok: true, viewShortcuts: 4, committedHighlight: true, delegatedBridge: true, singleIntent: true, viewportIndependentDisplay: true, canonicalModes: true, progressThrottleMs: 80}));

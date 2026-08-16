@@ -400,15 +400,16 @@ async function testGridSurfaceRangeContract() {
 
   renderer.nextMap = createMapFixture(binding.mapIdentity, 2);
   const zeroThenValid = new Map([[0, {start: 0, end: 0}], [1, {start: 0, end: 18}]]);
-  const zeroRangeTransaction = await prepareSurfaceTransaction(renderer, smallSurface(62), {surfaceCellRanges: zeroThenValid});
-  zeroRangeTransaction.commit();
-  assert.deepEqual([...renderer.surfaceCellRanges], [...zeroThenValid], "安全跳过的 grid cell 必须保留零长度 range，且后续 range 连续");
-  assert.equal(zeroRangeTransaction.rollback(), true);
+  await assert.rejects(
+    prepareSurfaceTransaction(renderer, smallSurface(62), {surfaceCellRanges: zeroThenValid}),
+    error => error?.code === "render-surface-ranges-shape" && /偏移无效/.test(error.message),
+    "零长度 grid cell 不得提交为成功画面"
+  );
 
   const allZero = new Map([[0, {start: 0, end: 0}], [1, {start: 0, end: 0}]]);
   await assert.rejects(
     prepareSurfaceTransaction(renderer, new Float32Array(), {surfaceCellRanges: allZero}),
-    error => error?.code === "render-surface-ranges-shape" && /不得全部为空/.test(error.message)
+    error => error?.code === "render-surface-ranges-shape" && /偏移无效/.test(error.message)
   );
 }
 

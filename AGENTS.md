@@ -17,7 +17,7 @@
 
 - `docs/current-plan.md` 是唯一当前任务清单；README、开发日志、专题和归档不得另建当前待办。
 - 已批准的编号范围是封闭范围。达到该项最小验收后立即归档并转向下一项；不影响当前验收的新发现只记录，不顺手实施。
-- 第 335 项已完成统一验收，当前没有活动权威任务；本次只待提交、推送任务分支并合入远端 `main`，不得从旧日志自行恢复新任务。
+- 第 339 项已完成统一验收，当前没有活动权威任务；本次只待提交、推送任务分支并合入远端 `main`，不得从旧日志自行恢复新任务。
 - 遇到范围歧义、需要产品决策、夹具连续两次失败或同一阻断再次出现时，必须冻结并请用户裁定；不得继续“补夹具—跑全门”循环。
 - 全部必需任务完成后停止，不得自行创造后续工作。
 
@@ -67,5 +67,6 @@
 
 ## 当前状态
 
-- 第 338 项已完成并归档：grid-cells 局部零长度 surface range 不再被误判为协议损坏；显示结果只在主线程完成安装、恢复绘制和最终提交后向 Worker 发 commit ACK，持久 MapWorker transaction 在前项 commit / invalidate 终态前排队，失败、取消与超时均会释放队列。用户原 5410 的 100k 地图刷新后通过快速奇数切换与并发偶数触发，政治底色、控件、Loading、health 与 WebGL error 同源；版本为 `0.4.3`，当前没有未归档权威任务。
+- 第 339 项已完成并归档：显示内容 current token 与 viewport 独立；成功 resume 消费 deferred 队列后按 committed sequence 验证，不再把空队列误判 obsolete。unsafe center fan 与正式零 range 兜底已移除，三档 cell 覆盖完整。用户原 5410 当前 10k 地图的文化 / 政体并发缩放、快速 latest-wins 与平滑奇数切换通过，版本为 `0.4.4`。
+- 第 338 项已完成并归档：grid-cells 局部零长度 surface range 不再被误判为协议损坏；显示结果只在主线程完成安装、恢复绘制和最终提交后向 Worker 发 commit ACK，持久 MapWorker transaction 在前项 commit / invalidate 终态前排队，失败、取消与超时均会释放队列。用户原 5410 的 100k 地图刷新后通过快速奇数切换与并发偶数触发，版本为 `0.4.3`；第 339 项继续收敛其后发现的 viewport 误杀与最终覆盖缺口。
 - 第 335-A～335-J 已全部接受：GPU 常驻显示、稳定引用、latest-wins、正式提交控件、页面 / Worker build handshake、一次性会话自愈、三档规模、旧档与用户原 5410 标签页终验均已完成。最终版本为 `0.4.0`，详细证据见任务归档与 `docs/task-notes/task-335-gpu-resident-view-switch.md`。

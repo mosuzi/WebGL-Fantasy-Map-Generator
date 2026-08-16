@@ -319,7 +319,7 @@ function normalizeCellRanges(ranges, floatLength) {
   let cursor = 0;
   for (const span of spans) {
     if (!Number.isInteger(span.cellId) || span.cellId < 0 || span.cellId >= SURFACE_BASE_INVALID_CELL_ID
-      || !Number.isInteger(span.start) || !Number.isInteger(span.end) || span.start < cursor || span.end < span.start
+      || !Number.isInteger(span.start) || !Number.isInteger(span.end) || span.start < cursor || span.end <= span.start
       || span.end > floatLength || span.start % SURFACE_SOURCE_FLOATS_PER_VERTEX !== 0
       || span.end % SURFACE_SOURCE_FLOATS_PER_VERTEX !== 0) {
       throw new RangeError("surface base cell range 无效");

@@ -843,9 +843,10 @@ function runPureRegression() {
   };
   const emergencyFallbackMesh = buildCellVisualMesh(emergencyFallbackMap);
   assert.equal(emergencyFallbackMesh.triangulationUnfilledCells, 0, "不可修复旧图 cell 不得再透出画布底色");
-  assert.equal(emergencyFallbackMesh.triangulationEmergencyHardFanCells, 1, "不可修复旧图 cell 必须进入硬表面兜底");
-  assert.equal(emergencyFallbackMesh.cells[0]?.triangulationFallback, "emergency-hard-surface-fan", "硬表面兜底必须保留可诊断原因");
-  assert.equal(emergencyFallbackMesh.cells[0]?.triangleCount, 4, "硬表面兜底必须覆盖 canonical cell 的全部边");
+  assert.equal(emergencyFallbackMesh.triangulationEmergencyHardFanCells, 0, "不可修复旧图 cell 不得恢复非安全中心扇分");
+  assert.equal(emergencyFallbackMesh.triangulationCanonicalOrderFallbackCells, 1, "乱序 Voronoi cell 必须进入 canonical 环序兜底");
+  assert.equal(emergencyFallbackMesh.cells[0]?.triangulationFallback, "canonical-resolved-hard-boundary-earcut", "canonical 环序兜底必须保留可诊断原因");
+  assert.equal(emergencyFallbackMesh.cells[0]?.triangleCount, 2, "canonical 环序兜底必须以安全 Earcut 覆盖完整 cell");
   assert.ok(emergencyFallbackMesh.cells[0]?.ndcTriangles.every(Number.isFinite), "硬表面兜底不得写入非法 GPU 坐标");
 
   const performanceResults = [];
