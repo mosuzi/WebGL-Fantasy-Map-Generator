@@ -200,6 +200,19 @@ function evaluateProvince(map, province, lockKeys, request) {
   }
   const candidates = validProvinceCandidates(map, province);
   if (!candidates.length) {
+    if (request.repairInconsistentCurrent === true) {
+      return evaluationBase(province, currentCity, {
+        status: "selected",
+        code: "cleared-no-candidate",
+        summary: `省份 #${id} 当前没有可用城市，重生成将清空悬空省会引用并继续。`,
+        nextCityId: null,
+        nextBurgId: 0,
+        candidateCount: 0,
+        needsSync: provinceCapitalClearNeedsSync(map, province),
+        clearCapital: true,
+        repairProvinceMirror
+      });
+    }
     return evaluationBase(province, currentCity, {
       status: "rejected",
       code: "no-valid-candidate",
@@ -302,6 +315,13 @@ function provinceCapitalNeedsSync(map, province, selected) {
     || !selectedBurg?.provincial
     || provinceCities.some(city => Number(city.id) !== selected.cityId && city.provincial)
     || provinceBurgs.some(burg => Number(burg.i ?? burg.id) !== selected.burgId && burg.provincial);
+}
+
+function provinceCapitalClearNeedsSync(map, province) {
+  const id = provinceId(province);
+  if (!provinceMirrorsConsistent(map, id) || Number(province?.burg || 0) !== 0) return true;
+  return (map?.settlements?.cities || []).some(city => city && !city.removed && Number(city.province) === id && city.provincial)
+    || (map?.pack?.burgs || []).some(burg => burg && !burg.removed && Number(burg.province) === id && burg.provincial);
 }
 
 function validProvinceCandidates(map, province) {
@@ -427,6 +447,11 @@ function candidateSummary(candidate) {
 function applyProvinceCapital(map, change) {
   if (change.repairProvinceMirror) repairProvinceMirrorCollections(map, change.provinceId);
   const province = provinceFromMap(map, change.provinceId);
+  if (change.clearCapital) {
+    if (!province) throw provincialCapitalError("mirror-missing", `省份 #${change.provinceId} 的省份镜像已失效`);
+    clearProvinceCapital(map, province, change);
+    return;
+  }
   const selectedCity = cityFromMap(map, change.nextCityId);
   const selectedBurg = burgFromMap(map, change.nextBurgId);
   if (!province || !selectedCity || !selectedBurg) {
@@ -460,6 +485,31 @@ function applyProvinceCapital(map, change) {
     target.burg = change.nextBurgId;
     target.center = change.nextPackCell;
     target.gridCenter = change.nextGridCell;
+  }
+}
+
+function clearProvinceCapital(map, province, change) {
+  const provinceId = Number(change.provinceId);
+  const currentBurgId = Number(change.currentBurgId || 0);
+  const currentCityId = Number(change.currentCityId || 0);
+  for (const city of map?.settlements?.cities || []) {
+    if (!city || city.removed) continue;
+    if (Number(city.province) === provinceId || currentCityId > 0 && Number(city.id) === currentCityId) city.provincial = false;
+  }
+  for (const burg of map?.pack?.burgs || []) {
+    if (!burg || burg.removed) continue;
+    if (Number(burg.province) === provinceId || currentBurgId > 0 && Number(burg.i ?? burg.id) === currentBurgId) burg.provincial = false;
+  }
+  const center = Number(province.center || 0);
+  const gridCenter = Number(province.gridCenter || 0);
+  const state = Number(province.state || 0);
+  for (const collection of uniqueCollections(map?.politics?.provinces, map?.pack?.provinces)) {
+    const target = collection[provinceId];
+    if (!target) continue;
+    target.state = state;
+    target.burg = 0;
+    target.center = center;
+    target.gridCenter = gridCenter;
   }
 }
 

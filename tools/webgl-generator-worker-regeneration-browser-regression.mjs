@@ -88,7 +88,7 @@ async function runRepairableRegenerationSessionGate(page, consoleErrors, pageErr
   for (const kind of ["provinces", "cities"]) {
     await createFrozenBaseline(page, `worker-regeneration-repair-${kind}`, 10000);
     await clearWindowSignals(page, consoleErrors, pageErrors);
-    const before = await page.evaluate(() => {
+    const before = await page.evaluate(targetKind => {
       const app = window.__webglGeneratorApp;
       const active = app.map.politics.provinces.filter(item => item?.i && !item.removed);
       const invalidBurg = 1000000 + app.map.pack.burgs.length;
@@ -97,13 +97,30 @@ async function runRepairableRegenerationSessionGate(page, consoleErrors, pageErr
         const packProvince = app.map.pack.provinces[province.i];
         if (packProvince && packProvince !== province) packProvince.burg = invalidBurg + province.i;
       }
+      const orphanProvinceId = targetKind === "cities" ? Number(active.at(-1)?.i || 0) : 0;
+      if (orphanProvinceId) {
+        for (const cell of app.map.pack.cells.i || []) {
+          if (Number(app.map.pack.cells.province[cell]) === orphanProvinceId) app.map.pack.cells.province[cell] = 0;
+        }
+        for (const city of app.map.settlements.cities || []) {
+          if (!city || city.removed || Number(city.province) !== orphanProvinceId) continue;
+          city.province = 0;
+          city.provincial = false;
+          const burg = app.map.pack.burgs?.[city.burgId];
+          if (burg) {
+            burg.province = 0;
+            burg.provincial = false;
+          }
+        }
+      }
       return {
         provinces: active.length,
         invalidBurg,
+        orphanProvinceId,
         history: app.editHistory.getStats(),
         revision: app.mapRevision.getSnapshot()
       };
-    });
+    }, kind);
     const response = await page.evaluate(targetKind => window.webglGeneratorApi.generate.regenerate(targetKind, {confirm: true}), kind);
     assert.equal(response?.ok, true, `${kind} 被旧省会状态阻断：${response?.error?.message || "unknown"}`);
     const worker = response.data?.worker;
@@ -121,6 +138,13 @@ async function runRepairableRegenerationSessionGate(page, consoleErrors, pageErr
         const capital = cities[0];
         const burg = capital ? app.map.pack.burgs[capital.burgId] : null;
         const packProvince = app.map.pack.provinces[province.i];
+        const hasTerritory = Array.from(app.map.pack.cells.province || []).some(id => Number(id) === Number(province.i));
+        if (!hasTerritory) {
+          if (cities.length !== 0 || Number(province.burg || 0) !== 0 || Number(packProvince?.burg || 0) !== 0) {
+            mismatches.push(Number(province.i));
+          }
+          continue;
+        }
         if (cities.length !== 1 || !capital || !burg
           || Number(province.burg) !== Number(capital.burgId)
           || Number(province.center) !== Number(capital.packCell)
@@ -159,7 +183,7 @@ async function runRepairableRegenerationSessionGate(page, consoleErrors, pageErr
       };
     });
     assert.equal(undoRoundTrip.undo?.ok, true, `${kind} 修复结果无法撤销：${JSON.stringify(undoRoundTrip)}`);
-    results.push({kind, provinces: before.provinces, session: worker.session});
+    results.push({kind, provinces: before.provinces, orphanProvinceId: before.orphanProvinceId, session: worker.session});
   }
   assert.deepEqual(consoleErrors.filter(message => !/^\[FMG health\] (?:main-thread-long-task|operation-stall|render-frame-gap|input-handler-stall)\b/.test(message)), [], "修复入口出现应用 console error");
   assert.deepEqual(pageErrors, [], "修复入口出现 page error");
