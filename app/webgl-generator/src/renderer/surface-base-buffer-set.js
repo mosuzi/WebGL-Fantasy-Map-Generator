@@ -11,6 +11,49 @@ export const SURFACE_BASE_MAX_SEGMENT_VERTICES = Math.floor(
 export const SURFACE_BASE_FLOATS_PER_TRIANGLE = SURFACE_SOURCE_FLOATS_PER_TRIANGLE;
 export const SURFACE_BASE_MAX_SEGMENT_FLOATS = SURFACE_BASE_MAX_SEGMENT_VERTICES * SURFACE_SOURCE_FLOATS_PER_VERTEX;
 
+export function createSurfaceResourceOwner(binding, options = {}) {
+  const mapIdentity = String(binding?.mapIdentity ?? "");
+  const mapRevision = Number(binding?.mapRevision ?? 0);
+  const surfaceFloatLength = Number(options.surfaceFloatLength ?? 0);
+  const correctionWordLength = Number(options.correctionWordLength ?? 0);
+  if (!mapIdentity || !Number.isSafeInteger(mapRevision) || mapRevision < 0
+    || !Number.isSafeInteger(surfaceFloatLength) || surfaceFloatLength < 0
+    || surfaceFloatLength % SURFACE_SOURCE_FLOATS_PER_TRIANGLE !== 0
+    || !Number.isSafeInteger(correctionWordLength) || correctionWordLength < 0 || correctionWordLength % 9 !== 0) {
+    throw new TypeError("surface resource owner 绑定无效");
+  }
+  return Object.freeze({
+    mapIdentity,
+    mapRevision,
+    surfaceFloatLength,
+    correctionWordLength,
+    rangeFingerprint: fingerprintSurfaceCellRanges(options.surfaceCellRanges, surfaceFloatLength)
+  });
+}
+
+export function fingerprintSurfaceCellRanges(ranges, floatLength) {
+  if (!(ranges instanceof Map)) throw new TypeError("surface resource owner 缺少 cell ranges");
+  let hash = 0x811c9dc5;
+  const mix = value => {
+    hash ^= Number(value) >>> 0;
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  };
+  mix(floatLength);
+  mix(ranges.size);
+  const entries = [...ranges].map(([cellId, range]) => [Number(cellId), Number(range?.start), Number(range?.end)])
+    .sort((left, right) => left[0] - right[0]);
+  for (const [cellId, start, end] of entries) {
+    if (!Number.isSafeInteger(cellId) || cellId < 0 || !Number.isSafeInteger(start) || !Number.isSafeInteger(end)
+      || start < 0 || end < start || end > floatLength) {
+      throw new RangeError("surface resource owner cell range 无效");
+    }
+    mix(cellId);
+    mix(start);
+    mix(end);
+  }
+  return hash.toString(16).padStart(8, "0");
+}
+
 export function createSurfaceBaseBufferSet(gl, vertices, options = {}) {
   const source = assertSurfaceVertices(vertices);
   const spans = normalizeCellRanges(options.surfaceCellRanges, source.length);
@@ -20,7 +63,7 @@ export function createSurfaceBaseBufferSet(gl, vertices, options = {}) {
     for (const range of surfaceBaseSegmentRanges(source.length)) {
       segments.push(uploadSegment(gl, materializeSegment(source, range, spans), range, usage));
     }
-    return buildBufferSet(source.length, segments);
+    return buildBufferSet(source.length, segments, options.owner || null);
   } catch (error) {
     deleteBuffers(gl, segments.flatMap(segmentBuffers));
     throw error;
@@ -54,7 +97,7 @@ export async function createSurfaceBaseBufferSetAsync(gl, vertices, options = {}
         assertCurrent();
       }
     }
-    return buildBufferSet(source.length, segments);
+    return buildBufferSet(source.length, segments, options.owner || null);
   } catch (error) {
     deleteBuffers(gl, segments.flatMap(segmentBuffers));
     throw error;
@@ -131,11 +174,12 @@ export function summarizeSurfaceBaseBufferSet(bufferSet) {
   };
 }
 
-export function isSurfaceBaseBufferSetForVertices(bufferSet, vertices) {
+export function isSurfaceBaseBufferSetForVertices(bufferSet, vertices, owner = null) {
   if (!(vertices instanceof Float32Array)) return false;
   try {
     const set = assertBufferSet(bufferSet);
-    return set.floatLength === vertices.length
+    return (!owner || set.owner === owner)
+      && set.floatLength === vertices.length
       && set.vertexCount === vertices.length / SURFACE_SOURCE_FLOATS_PER_VERTEX;
   } catch {
     return false;
@@ -230,11 +274,12 @@ function createSegmentDescriptor(range, geometryBuffer, colorBuffer) {
   });
 }
 
-function buildBufferSet(floatLength, segments) {
+function buildBufferSet(floatLength, segments, owner) {
   const vertexCount = floatLength / SURFACE_SOURCE_FLOATS_PER_VERTEX;
   const byteLength = segments.reduce((total, segment) => total + segment.byteLength, 0);
   const colorByteLength = segments.reduce((total, segment) => total + segment.colorByteLength, 0);
   return Object.freeze({
+    owner,
     segments: Object.freeze([...segments]),
     floatLength,
     byteLength,

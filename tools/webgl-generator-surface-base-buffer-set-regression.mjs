@@ -6,6 +6,7 @@ import {
   SURFACE_BASE_MAX_SEGMENT_FLOATS,
   createSurfaceBaseBufferSet,
   createSurfaceBaseBufferSetAsync,
+  createSurfaceResourceOwner,
   deleteSurfaceBaseBufferSet,
   flattenSurfaceBaseBufferSet,
   isSurfaceBaseBufferSetForVertices,
@@ -78,7 +79,17 @@ const ranges = new Map([
   [19, {start: 0, end: SURFACE_BASE_MAX_SEGMENT_FLOATS}],
   [27, {start: SURFACE_BASE_MAX_SEGMENT_FLOATS, end: source.length}]
 ]);
-const bufferSet = createSurfaceBaseBufferSet(gl, source, {surfaceCellRanges: ranges});
+const ownerA = createSurfaceResourceOwner({mapIdentity: "same-size-a", mapRevision: 7}, {
+  surfaceFloatLength: source.length,
+  correctionWordLength: 0,
+  surfaceCellRanges: ranges
+});
+const ownerB = createSurfaceResourceOwner({mapIdentity: "same-size-b", mapRevision: 7}, {
+  surfaceFloatLength: source.length,
+  correctionWordLength: 0,
+  surfaceCellRanges: new Map(ranges)
+});
+const bufferSet = createSurfaceBaseBufferSet(gl, source, {surfaceCellRanges: ranges, owner: ownerA});
 const summary = summarizeSurfaceBaseBufferSet(bufferSet);
 const vertexCount = source.length / 6;
 assert.deepEqual(summary, {
@@ -97,6 +108,8 @@ assert.equal(flattenSurfaceBaseBufferSet(bufferSet).length, 4);
 assert.ok(bufferSet.segments.every(segment => segment.floatStart % 18 === 0 && segment.floatEnd % 18 === 0));
 assert.ok(bufferSet.segments.every(segment => segment.byteLength <= SURFACE_BASE_MAX_SEGMENT_BYTES));
 assert.equal(isSurfaceBaseBufferSetForVertices(bufferSet, source), true);
+assert.equal(isSurfaceBaseBufferSetForVertices(bufferSet, source, ownerA), true);
+assert.equal(isSurfaceBaseBufferSetForVertices(bufferSet, source, ownerB), false, "同长度不同地图 owner 不得复用 surface buffer");
 assert.equal(isSurfaceBaseBufferSetForVertices(bufferSet, new Float32Array(18)), false);
 
 const reconstructedPositions = [];

@@ -30,8 +30,9 @@ export function buildCellVisualSurfaceCorrection(map, cellVisualMesh) {
   return new Float32Array(triangles);
 }
 
-export function createCellVisualCorrectionBufferSet(gl, geometry, usage = gl?.STATIC_DRAW) {
-  return createBufferSet(gl, geometry, usage);
+export function createCellVisualCorrectionBufferSet(gl, geometry, usageOrOptions = gl?.STATIC_DRAW) {
+  const options = usageOrOptions && typeof usageOrOptions === "object" ? usageOrOptions : {usage: usageOrOptions};
+  return createBufferSet(gl, geometry, options.usage ?? gl?.STATIC_DRAW, options.owner || null);
 }
 
 export async function createCellVisualCorrectionBufferSetAsync(gl, geometry, options = {}) {
@@ -54,7 +55,7 @@ export async function createCellVisualCorrectionBufferSetAsync(gl, geometry, opt
       options.onProgress?.({completed: index + 1, total: ranges.length, wordEnd: range.end, wordLength: source.length});
       if (index + 1 < ranges.length) await yieldToMain();
     }
-    return freezeBufferSet(source.length, segments);
+    return freezeBufferSet(source.length, segments, options.owner || null);
   } catch (error) {
     deleteCellVisualCorrectionBufferSet(gl, {segments});
     throw error;
@@ -89,7 +90,7 @@ export function packCellVisualCorrectionIdentity(cellId, water = false) {
   return ((cellId & SURFACE_BASE_INVALID_CELL_ID) << 1 | Number(Boolean(water))) >>> 0;
 }
 
-function createBufferSet(gl, geometry, usage) {
+function createBufferSet(gl, geometry, usage, owner) {
   const source = assertGeometry(geometry);
   assertGl(gl);
   const segments = [];
@@ -101,7 +102,7 @@ function createBufferSet(gl, geometry, usage) {
       gl.bufferData(gl.ARRAY_BUFFER, source.subarray(range.start, range.end), usage);
       segments.push(segmentDescriptor(buffer, range));
     }
-    return freezeBufferSet(source.length, segments);
+    return freezeBufferSet(source.length, segments, owner);
   } catch (error) {
     deleteCellVisualCorrectionBufferSet(gl, {segments});
     throw error;
@@ -157,8 +158,8 @@ function segmentDescriptor(buffer, range) {
   return Object.freeze({buffer, wordStart: range.start, wordEnd: range.end, wordLength: range.end - range.start, vertexCount, triangleCount: vertexCount / 3, byteLength: (range.end - range.start) * 4});
 }
 
-function freezeBufferSet(wordLength, segments) {
-  return Object.freeze({segments: Object.freeze([...segments]), wordLength, vertexCount: wordLength / 3, triangleCount: wordLength / 9, byteLength: wordLength * 4});
+function freezeBufferSet(wordLength, segments, owner) {
+  return Object.freeze({owner, segments: Object.freeze([...segments]), wordLength, vertexCount: wordLength / 3, triangleCount: wordLength / 9, byteLength: wordLength * 4});
 }
 
 function assertGeometry(value) {

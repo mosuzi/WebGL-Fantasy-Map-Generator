@@ -4,6 +4,7 @@ import {prepareRendererWorkerInstall} from "../app/webgl-generator/src/renderer/
 import {
   SURFACE_BASE_MAX_SEGMENT_FLOATS,
   createSurfaceBaseBufferSet,
+  createSurfaceResourceOwner,
   flattenSurfaceBaseBufferSet
 } from "../app/webgl-generator/src/renderer/surface-base-buffer-set.js";
 import {
@@ -278,8 +279,9 @@ async function testNestedFinalizeOwnership() {
 async function testSurfaceColorPatchTransaction() {
   const gl = new FakeGl();
   const renderer = createRenderer(gl);
-  renderer.surfaceCellRanges = new Map([[0, {start: 0, end: 18}]]);
   const beforeSet = renderer.surfaceBaseBufferSet;
+  const beforeOwner = renderer.surfaceResourceOwner;
+  const beforeBinding = renderer.surfaceResourceBinding;
   const beforeVertices = renderer.surfaceVertices;
   const beforeBytes = new Uint8Array(beforeVertices.buffer, beforeVertices.byteOffset, beforeVertices.byteLength).slice();
   const prepared = {
@@ -310,6 +312,8 @@ async function testSurfaceColorPatchTransaction() {
   transaction.commit();
   assert.notEqual(renderer.surfaceBaseBufferSet, beforeSet);
   assert.notEqual(renderer.surfaceVertices, beforeVertices);
+  assert.notEqual(renderer.surfaceResourceOwner, beforeOwner);
+  assertSurfaceOwnerGroup(renderer);
   const expectedColor = [...new Float32Array([0.1, 0.2, 0.3, 0.75])];
   for (let offset = 0; offset < renderer.surfaceVertices.length; offset += 6) {
     assert.deepEqual([...renderer.surfaceVertices.subarray(offset + 2, offset + 6)], expectedColor);
@@ -317,15 +321,18 @@ async function testSurfaceColorPatchTransaction() {
   assert.equal(transaction.rollback(), true);
   assert.equal(renderer.surfaceBaseBufferSet, beforeSet);
   assert.equal(renderer.surfaceVertices, beforeVertices);
+  assert.equal(renderer.surfaceResourceOwner, beforeOwner);
+  assert.equal(renderer.surfaceResourceBinding, beforeBinding);
+  assertSurfaceOwnerGroup(renderer);
   assert.deepEqual(new Uint8Array(beforeVertices.buffer, beforeVertices.byteOffset, beforeVertices.byteLength), beforeBytes);
 }
 
 async function testInPlaceSurfaceColorPatchTransaction() {
   const gl = new FakeGl();
   const renderer = createRenderer(gl);
-  renderer.map = renderer.nextMap;
-  renderer.surfaceCellRanges = new Map([[0, {start: 0, end: 18}]]);
   const beforeSet = renderer.surfaceBaseBufferSet;
+  const beforeOwner = renderer.surfaceResourceOwner;
+  const beforeBinding = renderer.surfaceResourceBinding;
   const beforeSegments = beforeSet.segments;
   const beforeAlias = renderer.vertexBuffer;
   const beforeVertices = renderer.surfaceVertices;
@@ -361,6 +368,8 @@ async function testInPlaceSurfaceColorPatchTransaction() {
   transaction.commit();
   assert.equal(renderer.surfaceBaseBufferSet, beforeSet);
   assert.equal(renderer.surfaceVertices, beforeVertices);
+  assert.equal(renderer.surfaceResourceOwner, beforeOwner);
+  assert.equal(renderer.surfaceResourceBinding, beforeBinding);
   assert.equal(await transaction.rollbackAsync(), true);
   assert.deepEqual(bytesOf(beforeVertices), beforeCpu);
   assert.deepEqual(beforeSet.segments.map(segment => [...segment.geometryBuffer.bytes]), beforeGpu.map(entry => [...entry.geometry]));
@@ -437,6 +446,23 @@ function bytesOf(values) {
   return new Uint8Array(values.buffer, values.byteOffset, values.byteLength).slice();
 }
 
+function assertSurfaceOwnerGroup(renderer) {
+  const owner = renderer.surfaceResourceOwner;
+  const resourceBinding = renderer.surfaceResourceBinding;
+  assert.ok(owner);
+  assert.equal(renderer.surfaceBaseBufferSet.owner, owner);
+  assert.equal(renderer.cellVisualCorrectionBufferSet.owner, owner);
+  assert.equal(renderer.surfaceVerticesOwner, owner);
+  assert.equal(renderer.surfaceCellRangesOwner, owner);
+  assert.equal(renderer.cellVisualCorrectionGeometryOwner, owner);
+  assert.equal(renderer.cellAttributeStoreOwner, owner);
+  assert.equal(resourceBinding.owner, owner);
+  assert.equal(resourceBinding.surfaceVertices, renderer.surfaceVertices);
+  assert.equal(resourceBinding.surfaceCellRanges, renderer.surfaceCellRanges);
+  assert.equal(resourceBinding.cellVisualCorrectionGeometry, renderer.cellVisualCorrectionGeometry);
+  assert.equal(resourceBinding.cellAttributeStore, renderer.cellAttributeStore);
+}
+
 async function prepareSurfaceTransaction(renderer, base, {surfaceCellRanges = new Map([[0, {start: 0, end: base.length}]])} = {}) {
   const prepared = {
     binding,
@@ -484,25 +510,44 @@ async function testPointDrawRangeContract() {
 
 function createRenderer(gl) {
   const surfaceVertices = smallSurface(1);
-  const surfaceBaseBufferSet = createSurfaceBaseBufferSet(gl, surfaceVertices);
   const cellVisualCorrectionGeometry = smallCorrection(1);
-  const cellVisualCorrectionBufferSet = createCellVisualCorrectionBufferSet(gl, cellVisualCorrectionGeometry, gl.STATIC_DRAW);
   const map = createMapFixture("old-map");
+  const surfaceCellRanges = new Map([[0, {start: 0, end: surfaceVertices.length}]]);
+  const surfaceResourceOwner = createSurfaceResourceOwner({mapIdentity: "old-map", mapRevision: 0}, {
+    surfaceFloatLength: surfaceVertices.length,
+    correctionWordLength: cellVisualCorrectionGeometry.length,
+    surfaceCellRanges
+  });
+  const surfaceBaseBufferSet = createSurfaceBaseBufferSet(gl, surfaceVertices, {surfaceCellRanges, owner: surfaceResourceOwner});
+  const cellVisualCorrectionBufferSet = createCellVisualCorrectionBufferSet(gl, cellVisualCorrectionGeometry, {usage: gl.STATIC_DRAW, owner: surfaceResourceOwner});
+  const cellAttributeStore = createCellAttributeStore(gl, map);
   const renderer = {
     gl,
     map,
     nextMap: createMapFixture(binding.mapIdentity),
-    cellAttributeStore: createCellAttributeStore(gl, map),
+    cellAttributeStore,
+    cellAttributeStoreOwner: surfaceResourceOwner,
     surfaceBaseBufferSet,
     vertexBuffer: surfaceBaseBufferSet.segments[0].buffer,
     cellVisualCorrectionGeometry,
+    cellVisualCorrectionGeometryOwner: surfaceResourceOwner,
     cellVisualCorrectionBufferSet,
     surfaceVertices,
+    surfaceVerticesOwner: surfaceResourceOwner,
     landCorrectionVertices: new Float32Array(),
     waterCorrectionVertices: new Float32Array(),
     landCoverVertices: new Float32Array(),
     waterCoverVertices: new Float32Array(),
-    surfaceCellRanges: new Map(),
+    surfaceCellRanges,
+    surfaceCellRangesOwner: surfaceResourceOwner,
+    surfaceResourceOwner,
+    surfaceResourceBinding: Object.freeze({
+      owner: surfaceResourceOwner,
+      surfaceVertices,
+      surfaceCellRanges,
+      cellVisualCorrectionGeometry,
+      cellAttributeStore
+    }),
     shoreSurfaceCellRanges: emptyShoreRanges(),
     surfacePatchVertices: new Float32Array(),
     surfacePatchCellRanges: new Map(),

@@ -193,7 +193,7 @@ function writeCellAttributes(map, cell, identities, terrain, numeric, offset) {
   ], offset);
   const feature = Number(cells.f?.[cell]);
   const land = Boolean(map.features?.features?.[feature]?.land) || Number(cells.h?.[cell]) >= 20;
-  terrain.set([toUint(cells.h?.[cell]), toUint(cells.biome?.[cell]), encodeSignedId(feature), land ? 1 : 0], offset);
+  terrain.set([encodeHeight(cells.h?.[cell]), toUint(cells.biome?.[cell]), encodeSignedId(feature), land ? 1 : 0], offset);
   numeric.set([
     finite(cells.pop?.[cell]), finite(cells.temp?.[cell]), finite(cells.prec?.[cell]), finite(cells.region?.[cell])
   ], offset);
@@ -298,6 +298,13 @@ function encodeSignedId(value) {
 function toUint(value) {
   const number = Number(value);
   return Number.isFinite(number) && number > 0 ? Math.round(number) >>> 0 : 0;
+}
+
+function encodeHeight(value) {
+  const height = Number(value);
+  if (!Number.isFinite(height) || height <= 0) return 0;
+  const encoded = Math.round(height);
+  return height < 20 ? Math.min(19, encoded) : Math.max(20, encoded);
 }
 
 function finite(value) {

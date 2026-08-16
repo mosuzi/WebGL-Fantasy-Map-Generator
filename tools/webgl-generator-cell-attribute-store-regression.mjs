@@ -52,6 +52,15 @@ assert.deepEqual([...snapshot.numeric.subarray(0, 8)], [0, -2, 10, 0, 5, 3, 20, 
 assert.equal(snapshot.palettes.states.length, 16);
 assert.deepEqual([...snapshot.palettes.states.subarray(8, 12)], [17, 34, 51, 255]);
 
+const thresholdMap = createMap();
+thresholdMap.grid.cells.h = Float32Array.from([19.99, 20.01, 19.5, 20.5, 0, -1, 100]);
+const thresholdSnapshot = buildCellAttributeSnapshot(thresholdMap);
+assert.deepEqual(
+  [thresholdSnapshot.terrain[0], thresholdSnapshot.terrain[4], thresholdSnapshot.terrain[8], thresholdSnapshot.terrain[12]],
+  [19, 20, 19, 21],
+  "GPU 高度量化不得让合法水域跨过 20 的水陆阈值"
+);
+
 const gl = new FakeGl();
 const store = createCellAttributeStore(gl, snapshot);
 assert.deepEqual(summarizeCellAttributeStore(store), {

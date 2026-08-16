@@ -99,6 +99,7 @@ try {
     renderer.setObjectHighlights([{kind: "route", id: route.id}], {draw: false});
     renderer.setPoliticalMeshDebugMode("states");
     renderer.draw();
+    const ownerGuard = verifySurfaceOwnerGuard(renderer);
 
     const request = () => ({
       map,
@@ -263,6 +264,7 @@ try {
     const healthErrors = (window.__webglGeneratorHealth?.getEvents?.(240) || []).filter(event => event.severity === "error");
     return {
       actualCells: map.grid?.cells?.h?.length || 0,
+      ownerGuard,
       equivalence,
       committed: {
         labelCount: committed.labelCount,
@@ -287,6 +289,7 @@ try {
       return {
         buffers: Object.fromEntries(bufferNames.map(name => [name, {ref: target[name], fingerprint: gpuBufferFingerprint(target.gl, target[name])}])),
         surfaceBase: captureSurfaceBaseState(target),
+        surfaceOwner: captureSurfaceOwnerState(target),
         cellVisual: target.cellVisualMesh,
         shore: target.shoreVisualPaths,
         statePaths: target.stateVisualPaths,
@@ -358,6 +361,8 @@ try {
 
     function assertCommittedEquivalence(target, candidate, after, before) {
       assertCommittedSurfaceBase(target, candidate.layers.surface.base, after.surfaceBase, before.surfaceBase);
+      assertSurfaceOwnerGroup(target, after.surfaceOwner);
+      if (after.surfaceOwner.ownerRef === before.surfaceOwner.ownerRef) throw new Error("surface owner commit 未切换 owner token");
       for (const [name, item] of Object.entries(after.buffers)) {
         const layerValues = ({
           landCorrectionBuffer: candidate.layers.surface.landCorrections,
@@ -387,6 +392,8 @@ try {
     function assertExactRollback(target, baseline) {
       const after = captureRendererState(target, {captureNodes: true});
       assertExactSurfaceBaseRollback(target.gl, after.surfaceBase, baseline.surfaceBase);
+      if (after.surfaceOwner.ownerRef !== baseline.surfaceOwner.ownerRef || after.surfaceOwner.bindingRef !== baseline.surfaceOwner.bindingRef) throw new Error("surface owner rollback 未恢复 owner / binding identity");
+      assertSurfaceOwnerGroup(target, after.surfaceOwner);
       for (const [name, item] of Object.entries(baseline.buffers)) {
         if (after.buffers[name].ref !== item.ref) throw new Error(`${name} rollback 未恢复 buffer identity`);
         if (after.buffers[name].fingerprint.hash !== item.fingerprint.hash || after.buffers[name].fingerprint.bytes !== item.fingerprint.bytes) throw new Error(`${name} rollback 改写旧 GPU bytes`);
@@ -502,14 +509,17 @@ try {
       if (!bufferSet || !Array.isArray(bufferSet.segments) || !bufferSet.segments.length) throw new Error("renderer surface base buffer set 缺失");
       const segments = bufferSet.segments.map(segment => ({
         segmentRef: segment,
-        bufferRef: segment.buffer,
+        bufferRef: segment.geometryBuffer,
+        colorBufferRef: segment.colorBuffer,
         floatStart: segment.floatStart,
         floatEnd: segment.floatEnd,
         floatLength: segment.floatLength,
         byteLength: segment.byteLength,
         vertexCount: segment.vertexCount,
         triangleCount: segment.triangleCount,
-        fingerprint: gpuBufferFingerprint(target.gl, segment.buffer)
+        fingerprint: surfaceSegmentSourceFingerprint(target.gl, segment),
+        geometryFingerprint: gpuBufferFingerprint(target.gl, segment.geometryBuffer),
+        colorFingerprint: gpuBufferFingerprint(target.gl, segment.colorBuffer)
       }));
       return {
         setRef: bufferSet,
@@ -520,8 +530,59 @@ try {
         vertexCount: bufferSet.vertexCount,
         triangleCount: bufferSet.triangleCount,
         segments,
-        fingerprint: gpuBufferSequenceFingerprint(target.gl, bufferSet.segments.map(segment => segment.buffer))
+        ownerRef: bufferSet.owner,
+        fingerprint: surfaceBufferSetSourceFingerprint(target.gl, bufferSet)
       };
+    }
+
+    function captureSurfaceOwnerState(target) {
+      return {
+        ownerRef: target.surfaceResourceOwner,
+        bindingRef: target.surfaceResourceBinding,
+        verticesOwner: target.surfaceVerticesOwner,
+        rangesOwner: target.surfaceCellRangesOwner,
+        correctionOwner: target.cellVisualCorrectionGeometryOwner,
+        attributesOwner: target.cellAttributeStoreOwner
+      };
+    }
+
+    function assertSurfaceOwnerGroup(target, state) {
+      const owner = state.ownerRef;
+      const resourceBinding = state.bindingRef;
+      if (!owner || target.surfaceBaseBufferSet.owner !== owner || target.cellVisualCorrectionBufferSet.owner !== owner
+        || state.verticesOwner !== owner || state.rangesOwner !== owner || state.correctionOwner !== owner || state.attributesOwner !== owner
+        || resourceBinding?.owner !== owner || resourceBinding.surfaceVertices !== target.surfaceVertices
+        || resourceBinding.surfaceCellRanges !== target.surfaceCellRanges
+        || resourceBinding.cellVisualCorrectionGeometry !== target.cellVisualCorrectionGeometry
+        || resourceBinding.cellAttributeStore !== target.cellAttributeStore) {
+        throw new Error("surface owner 资源组未成组绑定");
+      }
+    }
+
+    function verifySurfaceOwnerGuard(target) {
+      const beforeVertices = target.surfaceVertices;
+      const beforeFrame = canvasFingerprint(target);
+      target.surfaceVertices = new Float32Array(beforeVertices);
+      let code = "";
+      try {
+        target.draw({updateDynamicBuffers: false});
+      } catch (error) {
+        code = String(error?.code || error?.message || error);
+      } finally {
+        target.surfaceVertices = beforeVertices;
+      }
+      const afterFrame = canvasFingerprint(target);
+      if (code !== "surface-resource-owner-mismatch") throw new Error(`同长度跨 owner geometry 未 fail-closed：${code}`);
+      if (beforeFrame.bytes !== afterFrame.bytes || beforeFrame.hash !== afterFrame.hash) throw new Error("owner mismatch 在拒绝前改写了上一帧");
+      target.draw({updateDynamicBuffers: false});
+      return {sameLengthRejected: true, previousFramePreserved: true};
+    }
+
+    function canvasFingerprint(target) {
+      const gl = target.gl;
+      const bytes = new Uint8Array(target.canvas.width * target.canvas.height * 4);
+      gl.readPixels(0, 0, target.canvas.width, target.canvas.height, gl.RGBA, gl.UNSIGNED_BYTE, bytes);
+      return {bytes: bytes.byteLength, hash: hashBytes(bytes)};
     }
 
     function assertCommittedSurfaceBase(target, values, after, before) {
@@ -537,14 +598,16 @@ try {
         if (segment.floatStart !== cursor || segment.floatEnd < segment.floatStart || segment.floatEnd > values.length
           || segment.floatStart % 18 !== 0 || segment.floatEnd % 18 !== 0
           || segment.floatLength !== segment.floatEnd - segment.floatStart
-          || segment.byteLength !== segment.floatLength * Float32Array.BYTES_PER_ELEMENT
+          || segment.byteLength !== segment.floatLength / 2 * Float32Array.BYTES_PER_ELEMENT
           || segment.byteLength > 8 * 1024 * 1024
-          || segment.fingerprint.bytes !== segment.byteLength
+          || segment.fingerprint.bytes !== segment.floatLength * Float32Array.BYTES_PER_ELEMENT
+          || segment.geometryFingerprint.bytes !== segment.byteLength
+          || segment.colorFingerprint.bytes !== segment.byteLength
           || segment.vertexCount !== segment.floatLength / 6
           || segment.triangleCount !== segment.floatLength / 18) {
           throw new Error(`surface base segment descriptor 无效：${JSON.stringify(segment)}`);
         }
-        if (before.segments.some(item => item.bufferRef === segment.bufferRef)) throw new Error("surface base commit 复用了旧 segment buffer");
+        if (before.segments.some(item => item.bufferRef === segment.bufferRef || item.colorBufferRef === segment.colorBufferRef)) throw new Error("surface base commit 复用了旧 segment buffer");
         cursor = segment.floatEnd;
       }
       if (cursor !== values.length) throw new Error(`surface base segments 未覆盖完整顶点：${cursor}/${values.length}`);
@@ -562,11 +625,12 @@ try {
       for (let index = 0; index < before.segments.length; index++) {
         const actual = after.segments[index];
         const expected = before.segments[index];
-        if (actual.segmentRef !== expected.segmentRef || actual.bufferRef !== expected.bufferRef
+        if (actual.segmentRef !== expected.segmentRef || actual.bufferRef !== expected.bufferRef || actual.colorBufferRef !== expected.colorBufferRef
           || actual.floatStart !== expected.floatStart || actual.floatEnd !== expected.floatEnd
           || actual.floatLength !== expected.floatLength || actual.byteLength !== expected.byteLength
           || actual.vertexCount !== expected.vertexCount || actual.triangleCount !== expected.triangleCount
-          || actual.fingerprint.bytes !== expected.fingerprint.bytes || actual.fingerprint.hash !== expected.fingerprint.hash) {
+          || actual.fingerprint.bytes !== expected.fingerprint.bytes || actual.fingerprint.hash !== expected.fingerprint.hash
+          || actual.geometryFingerprint.hash !== expected.geometryFingerprint.hash || actual.colorFingerprint.hash !== expected.colorFingerprint.hash) {
           throw new Error(`surface base rollback segment #${index} 不精确`);
         }
       }
@@ -574,11 +638,47 @@ try {
     }
 
     function assertSurfaceBaseBuffersLive(gl, state, label) {
-      for (const segment of state.segments) if (!gl.isBuffer(segment.bufferRef)) throw new Error(`${label} segment GPU buffer 已失效`);
+      for (const segment of state.segments) if (!gl.isBuffer(segment.bufferRef) || !gl.isBuffer(segment.colorBufferRef)) throw new Error(`${label} segment GPU buffer 已失效`);
     }
 
     function assertSurfaceBaseBuffersDeleted(gl, state, label) {
-      for (const segment of state.segments) if (gl.isBuffer(segment.bufferRef)) throw new Error(`${label} segment GPU buffer 未释放`);
+      for (const segment of state.segments) if (gl.isBuffer(segment.bufferRef) || gl.isBuffer(segment.colorBufferRef)) throw new Error(`${label} segment GPU buffer 未释放`);
+    }
+
+    function surfaceBufferSetSourceFingerprint(gl, bufferSet) {
+      const chunks = bufferSet.segments.map(segment => surfaceSegmentSourceBytes(gl, segment));
+      let bytes = 0;
+      let hash = 2166136261;
+      for (const chunk of chunks) {
+        bytes += chunk.byteLength;
+        hash = hashBytes(chunk, hash);
+      }
+      return {bytes, hash};
+    }
+
+    function surfaceSegmentSourceFingerprint(gl, segment) {
+      const values = surfaceSegmentSourceBytes(gl, segment);
+      return {bytes: values.byteLength, hash: hashBytes(values)};
+    }
+
+    function surfaceSegmentSourceBytes(gl, segment) {
+      const geometryBytes = readGpuBufferBytes(gl, segment.geometryBuffer);
+      const colorBytes = readGpuBufferBytes(gl, segment.colorBuffer);
+      const geometry = new Float32Array(geometryBytes.buffer, geometryBytes.byteOffset, geometryBytes.byteLength / 4);
+      const identities = new Uint32Array(geometryBytes.buffer, geometryBytes.byteOffset, geometryBytes.byteLength / 4);
+      const colors = new Float32Array(colorBytes.buffer, colorBytes.byteOffset, colorBytes.byteLength / 4);
+      const source = new Float32Array(segment.vertexCount * 6);
+      for (let vertex = 0; vertex < segment.vertexCount; vertex++) {
+        const geometryOffset = vertex * 3;
+        const sourceOffset = vertex * 6;
+        source[sourceOffset] = geometry[geometryOffset];
+        source[sourceOffset + 1] = geometry[geometryOffset + 1];
+        source[sourceOffset + 2] = colors[geometryOffset];
+        source[sourceOffset + 3] = colors[geometryOffset + 1];
+        source[sourceOffset + 4] = colors[geometryOffset + 2];
+        source[sourceOffset + 5] = identities[geometryOffset + 2] & 1 ? 0.75 : 0.25;
+      }
+      return new Uint8Array(source.buffer);
     }
 
     function gpuBufferFingerprint(gl, buffer) {

@@ -88,6 +88,8 @@ import {resizeCanvasToDisplaySize} from "./canvas-display-size.js";
 import {
   createSurfaceBaseBufferSet,
   createSurfaceBaseBufferSetAsync,
+  createSurfaceResourceOwner,
+  fingerprintSurfaceCellRanges,
   flattenSurfaceBaseBufferSet,
   isSurfaceBaseBufferSetForVertices,
   replaceSurfaceBaseBufferSet,
@@ -404,6 +406,13 @@ export class PlaceholderMapRenderer {
       ? canvas.parentElement?.insertBefore(this.cityMovePreviewFallbackElement, this.overlay || canvas.nextSibling)
       : canvas.parentElement?.append(this.cityMovePreviewFallbackElement);
     this.cellVisualCorrectionGeometry = new Float32Array();
+    this.surfaceResourceOwner = null;
+    this.surfaceResourceBinding = null;
+    this.surfaceVerticesOwner = null;
+    this.surfaceCellRangesOwner = null;
+    this.cellVisualCorrectionGeometryOwner = null;
+    this.cellAttributeStoreOwner = null;
+    this.lastSurfaceResourceOwnerError = null;
     this.gpuResidentSmoothShoreSurfaceKey = "";
     this.cellAttributeStore = null;
     this.surfaceHeightColorTable = null;
@@ -650,6 +659,11 @@ export class PlaceholderMapRenderer {
     const map = this.map;
     initializeWebGlResources(this);
     if (map) {
+      const surfaceOwner = this.surfaceResourceOwner || createRendererSurfaceResourceOwner(this, map, {
+        base: this.surfaceVertices,
+        cellVisualCorrection: this.cellVisualCorrectionGeometry,
+        surfaceCellRanges: this.surfaceCellRanges
+      });
       const view = this.canvas.ownerDocument?.defaultView || globalThis;
       const yieldToBrowser = () => new Promise(resolve => view.requestAnimationFrame(() => resolve()));
       const upload = async (buffer, values, usage) => {
@@ -657,9 +671,10 @@ export class PlaceholderMapRenderer {
         this.gl.bufferData(this.gl.ARRAY_BUFFER, values, usage);
         await yieldToBrowser();
       };
-      installSurfaceBaseBufferSet(this, await createSurfaceBaseBufferSetAsync(this.gl, this.surfaceVertices, {usage: this.gl.STATIC_DRAW, surfaceCellRanges: this.surfaceCellRanges, yieldToMain: yieldToBrowser}));
-      installCellVisualCorrectionBufferSet(this, await createCellVisualCorrectionBufferSetAsync(this.gl, this.cellVisualCorrectionGeometry, {usage: this.gl.STATIC_DRAW, yieldToMain: yieldToBrowser}));
+      installSurfaceBaseBufferSet(this, await createSurfaceBaseBufferSetAsync(this.gl, this.surfaceVertices, {usage: this.gl.STATIC_DRAW, surfaceCellRanges: this.surfaceCellRanges, owner: surfaceOwner, yieldToMain: yieldToBrowser}));
+      installCellVisualCorrectionBufferSet(this, await createCellVisualCorrectionBufferSetAsync(this.gl, this.cellVisualCorrectionGeometry, {usage: this.gl.STATIC_DRAW, owner: surfaceOwner, yieldToMain: yieldToBrowser}));
       this.restoreCellAttributeStore();
+      adoptRendererSurfaceResourceOwner(this, surfaceOwner);
       await upload(this.surfacePatchBuffer, this.surfacePatchVertices, this.gl.DYNAMIC_DRAW);
       for (const [buffer, values] of [[this.landCorrectionBuffer, this.landCorrectionVertices], [this.waterCorrectionBuffer, this.waterCorrectionVertices], [this.landCoverBuffer, this.landCoverVertices], [this.waterCoverBuffer, this.waterCoverVertices], [this.oceanCurrentBuffer, this.oceanCurrentVertices], [this.lineBuffer, this.lineVertices], [this.shoreLineBuffer, this.shoreLineVertices]]) await upload(buffer, values, this.gl.STATIC_DRAW);
       const pointLayer = buildPointLayer(map);
@@ -722,6 +737,7 @@ export class PlaceholderMapRenderer {
     profile.stage("political-meshes", "构建政治视觉 mesh", () => this.rebuildPoliticalVisualMeshesIfNeeded());
     const surfaceBundle = profile.stage("surface-vertices", "构建 surface 顶点", () => buildPlaceholderSurfaceBundle(map, this.colorMode, this.viewOptions, this.shoreVisualPaths, this.stateVisualPaths, this.provinceVisualPaths, this.politicalVisualMeshes, this.cellVisualMesh));
     const vertices = surfaceBundle.base;
+    const surfaceOwner = createRendererSurfaceResourceOwner(this, map, surfaceBundle);
     const lineLayer = profile.stage("line-vertices", "构建线层顶点", () => buildLineVertices(map, this.layerVisibility, this.colorMode, this.shoreVisualPaths, this.stateVisualPaths, this.provinceVisualPaths, this.cellVisualMesh, this.viewOptions));
     const lineVertices = lineLayer.vertices;
     const shoreLineVertices = lineLayer.shoreVertices;
@@ -779,9 +795,10 @@ export class PlaceholderMapRenderer {
       this.recordBufferUpload("load-map-static", () => {
         installSurfaceBaseBufferSet(this, createSurfaceBaseBufferSet(this.gl, vertices, {
           usage: this.gl.STATIC_DRAW,
-          surfaceCellRanges: this.surfaceCellRanges
+          surfaceCellRanges: this.surfaceCellRanges,
+          owner: surfaceOwner
         }));
-        installCellVisualCorrectionBufferSet(this, createCellVisualCorrectionBufferSet(this.gl, surfaceBundle.cellVisualCorrection, this.gl.STATIC_DRAW));
+        installCellVisualCorrectionBufferSet(this, createCellVisualCorrectionBufferSet(this.gl, surfaceBundle.cellVisualCorrection, {usage: this.gl.STATIC_DRAW, owner: surfaceOwner}));
         this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.surfacePatchBuffer);
         this.gl.bufferData(this.gl.ARRAY_BUFFER, new Float32Array(), this.gl.DYNAMIC_DRAW);
         uploadShoreSurfaceBuffers(this.gl, this, surfaceBundle);
@@ -808,6 +825,7 @@ export class PlaceholderMapRenderer {
         this.updatePoliticalMeshDebugBuffer();
       }, {bufferGroup: "static-map"});
     });
+    adoptRendererSurfaceResourceOwner(this, surfaceOwner);
     profile.stage("labels", "构建标签", () => this.buildLabels(map));
     this.markAllDynamicBuffersDirty();
     profile.stage("fit-draw", "适配视图并绘制", () => this.fitToView({quick: true}));
@@ -854,6 +872,7 @@ export class PlaceholderMapRenderer {
     await stage("political-meshes", "构建政治视觉 mesh", () => this.rebuildPoliticalVisualMeshesIfNeeded());
     const surfaceBundle = await stage("surface-vertices", "构建 surface 顶点", () => buildPlaceholderSurfaceBundle(map, this.colorMode, this.viewOptions, this.shoreVisualPaths, this.stateVisualPaths, this.provinceVisualPaths, this.politicalVisualMeshes, this.cellVisualMesh));
     const vertices = surfaceBundle.base;
+    const surfaceOwner = createRendererSurfaceResourceOwner(this, map, surfaceBundle);
     const lineLayer = await stage("line-vertices", "构建线层顶点", () => buildLineVertices(map, this.layerVisibility, this.colorMode, this.shoreVisualPaths, this.stateVisualPaths, this.provinceVisualPaths, this.cellVisualMesh, this.viewOptions));
     const lineVertices = lineLayer.vertices;
     const shoreLineVertices = lineLayer.shoreVertices;
@@ -911,11 +930,13 @@ export class PlaceholderMapRenderer {
       const surfaceBaseBufferSet = await createSurfaceBaseBufferSetAsync(this.gl, vertices, {
         usage: this.gl.STATIC_DRAW,
         surfaceCellRanges: this.surfaceCellRanges,
+        owner: surfaceOwner,
         yieldToMain: () => yieldToBrowser({stageId: "gpu-upload-surface-base"})
       });
       installSurfaceBaseBufferSet(this, surfaceBaseBufferSet);
       const correctionBufferSet = await createCellVisualCorrectionBufferSetAsync(this.gl, surfaceBundle.cellVisualCorrection, {
         usage: this.gl.STATIC_DRAW,
+        owner: surfaceOwner,
         yieldToMain: () => yieldToBrowser({stageId: "gpu-upload-cell-visual-correction"})
       });
       installCellVisualCorrectionBufferSet(this, correctionBufferSet);
@@ -946,6 +967,7 @@ export class PlaceholderMapRenderer {
         this.updatePoliticalMeshDebugBuffer();
       }, {bufferGroup: "static-map"});
     });
+    adoptRendererSurfaceResourceOwner(this, surfaceOwner);
     await stage("labels", "构建标签", () => this.buildLabels(map));
     this.markAllDynamicBuffersDirty();
     await stage("fit-draw", "适配视图并绘制", () => this.fitToView({quick: true}));
@@ -1065,6 +1087,7 @@ export class PlaceholderMapRenderer {
   canPresentGpuResidentColorMode(mode) {
     const identity = String(this.map?.metadata?.mapIdentity || this.map?.metadata?.id || "");
     return Boolean(GPU_RESIDENT_COLOR_MODES[mode] && this.cellAttributeStore?.snapshot?.mapIdentity === identity
+      && !surfaceResourceOwnerMismatch(this)
       && !this.surfacePatchCells?.size && currentCellVisualCorrectionBufferSet(this)
       && this.surfaceCellRanges?.size === this.cellAttributeStore.snapshot.cellCount
     );
@@ -1293,6 +1316,7 @@ export class PlaceholderMapRenderer {
         ? recolorCellVisualSurfaceBundle(this)
         : buildPlaceholderSurfaceBundle(this.map, this.colorMode, this.viewOptions, this.shoreVisualPaths, this.stateVisualPaths, this.provinceVisualPaths, this.politicalVisualMeshes, this.cellVisualMesh);
       const vertices = surfaceBundle.base;
+      const surfaceOwner = createRendererSurfaceResourceOwner(this, this.map, surfaceBundle);
       this.surfaceVertices = vertices;
       this.cellVisualCorrectionGeometry = surfaceBundle.cellVisualCorrection;
       this.gpuResidentSmoothShoreSurfaceKey = surfaceBundle.smoothShoreSurfaceKey;
@@ -1314,13 +1338,15 @@ export class PlaceholderMapRenderer {
       const upload = this.recordBufferUpload("surface-refresh", () => {
         installSurfaceBaseBufferSet(this, createSurfaceBaseBufferSet(this.gl, vertices, {
           usage: this.gl.STATIC_DRAW,
-          surfaceCellRanges: this.surfaceCellRanges
+          surfaceCellRanges: this.surfaceCellRanges,
+          owner: surfaceOwner
         }));
-        installCellVisualCorrectionBufferSet(this, createCellVisualCorrectionBufferSet(this.gl, surfaceBundle.cellVisualCorrection, this.gl.STATIC_DRAW));
+        installCellVisualCorrectionBufferSet(this, createCellVisualCorrectionBufferSet(this.gl, surfaceBundle.cellVisualCorrection, {usage: this.gl.STATIC_DRAW, owner: surfaceOwner}));
         this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.surfacePatchBuffer);
         this.gl.bufferData(this.gl.ARRAY_BUFFER, new Float32Array(), this.gl.DYNAMIC_DRAW);
         uploadShoreSurfaceBuffers(this.gl, this, surfaceBundle);
       }, {bufferGroup: "surface"});
+      adoptRendererSurfaceResourceOwner(this, surfaceOwner);
       if (draw) this.draw();
       this.completePerformanceEvent(event, {uploadMs: upload.ms, vertexCount: this.vertexCount, geometryReused}, performance.now());
     } catch (error) {
@@ -2413,6 +2439,14 @@ export class PlaceholderMapRenderer {
       ? this.beginPerformanceEvent("draw", {updateDynamicBuffers, updateOverlay, drawDirtyDynamicBuffers, viewportPreview}, startedAt)
       : {sequence: (this.lastDraw?.sequence || 0) + 1};
     try {
+      const ownerMismatch = surfaceResourceOwnerMismatch(this);
+      if (ownerMismatch) {
+        const error = new Error(`surface resource owner 不一致：${ownerMismatch}`);
+        error.code = "surface-resource-owner-mismatch";
+        this.lastSurfaceResourceOwnerError = Object.freeze({code: error.code, reason: ownerMismatch});
+        throw error;
+      }
+      this.lastSurfaceResourceOwnerError = null;
     if (updateDynamicBuffers && this.dynamicBuffersDirty.routes && this.layerVisibility.routes) this.updateRouteBuffer();
     if (updateDynamicBuffers && this.dynamicBuffersDirty.tradeFlows && this.layerVisibility.tradeFlows) this.updateTradeFlowBuffer();
     if (updateDynamicBuffers && this.dynamicBuffersDirty.rivers && this.layerVisibility.rivers) this.updateRiverBuffer();
@@ -5927,13 +5961,72 @@ function installRendererCellAttributeStore(renderer, replacement) {
 function currentSurfaceBaseBufferSet(renderer) {
   const bufferSet = renderer.surfaceBaseBufferSet;
   const buffers = flattenSurfaceBaseBufferSet(bufferSet);
-  if (buffers[0] !== renderer.vertexBuffer || !isSurfaceBaseBufferSetForVertices(bufferSet, renderer.surfaceVertices)) return null;
+  if (buffers[0] !== renderer.vertexBuffer || !isSurfaceBaseBufferSetForVertices(bufferSet, renderer.surfaceVertices, renderer.surfaceResourceOwner)) return null;
   return bufferSet;
 }
 
 function currentCellVisualCorrectionBufferSet(renderer) {
   const bufferSet = renderer.cellVisualCorrectionBufferSet;
-  return bufferSet?.wordLength === renderer.cellVisualCorrectionGeometry?.length ? bufferSet : null;
+  return bufferSet?.owner === renderer.surfaceResourceOwner
+    && bufferSet.wordLength === renderer.cellVisualCorrectionGeometry?.length ? bufferSet : null;
+}
+
+function createRendererSurfaceResourceOwner(renderer, map, bundle, binding = null) {
+  const mapIdentity = String(binding?.mapIdentity
+    || map?.metadata?.mapIdentity
+    || map?.metadata?.id
+    || map?.metadata?.seed
+    || "local-map");
+  const previous = renderer.surfaceResourceOwner;
+  const mapRevision = binding?.mapRevision ?? (previous?.mapIdentity === mapIdentity ? previous.mapRevision : 0);
+  return createSurfaceResourceOwner({mapIdentity, mapRevision}, {
+    surfaceFloatLength: bundle?.base?.length || 0,
+    correctionWordLength: bundle?.cellVisualCorrection?.length || 0,
+    surfaceCellRanges: bundle?.surfaceCellRanges
+  });
+}
+
+function adoptRendererSurfaceResourceOwner(renderer, owner) {
+  if (!owner || owner.surfaceFloatLength !== renderer.surfaceVertices?.length
+    || owner.correctionWordLength !== renderer.cellVisualCorrectionGeometry?.length
+    || owner.rangeFingerprint !== fingerprintSurfaceCellRanges(renderer.surfaceCellRanges, renderer.surfaceVertices?.length || 0)
+    || renderer.surfaceBaseBufferSet?.owner !== owner || renderer.cellVisualCorrectionBufferSet?.owner !== owner) {
+    throw new Error("surface resource owner 无法接纳当前资源组");
+  }
+  renderer.surfaceVerticesOwner = owner;
+  renderer.surfaceCellRangesOwner = owner;
+  renderer.cellVisualCorrectionGeometryOwner = owner;
+  renderer.cellAttributeStoreOwner = owner;
+  renderer.surfaceResourceOwner = owner;
+  renderer.surfaceResourceBinding = Object.freeze({
+    owner,
+    surfaceVertices: renderer.surfaceVertices,
+    surfaceCellRanges: renderer.surfaceCellRanges,
+    cellVisualCorrectionGeometry: renderer.cellVisualCorrectionGeometry,
+    cellAttributeStore: renderer.cellAttributeStore
+  });
+  renderer.lastSurfaceResourceOwnerError = null;
+  return owner;
+}
+
+function surfaceResourceOwnerMismatch(renderer) {
+  const owner = renderer.surfaceResourceOwner;
+  const binding = renderer.surfaceResourceBinding;
+  if (!owner) return "missing-owner";
+  if (!binding || binding.owner !== owner) return "missing-binding";
+  if (binding.surfaceVertices !== renderer.surfaceVertices) return "surface-vertices-reference";
+  if (binding.surfaceCellRanges !== renderer.surfaceCellRanges) return "surface-cell-ranges-reference";
+  if (binding.cellVisualCorrectionGeometry !== renderer.cellVisualCorrectionGeometry) return "cell-visual-correction-reference";
+  if (binding.cellAttributeStore !== renderer.cellAttributeStore) return "cell-attribute-store-reference";
+  if (renderer.surfaceVerticesOwner !== owner) return "surface-vertices";
+  if (renderer.surfaceCellRangesOwner !== owner) return "surface-cell-ranges";
+  if (renderer.cellVisualCorrectionGeometryOwner !== owner) return "cell-visual-correction-geometry";
+  if (renderer.cellAttributeStoreOwner !== owner) return "cell-attribute-store";
+  if (renderer.surfaceBaseBufferSet?.owner !== owner) return "surface-base-buffer-set";
+  if (renderer.cellVisualCorrectionBufferSet?.owner !== owner) return "cell-visual-correction-buffer-set";
+  if (owner.surfaceFloatLength !== renderer.surfaceVertices?.length) return "surface-float-length";
+  if (owner.correctionWordLength !== renderer.cellVisualCorrectionGeometry?.length) return "correction-word-length";
+  return "";
 }
 
 function uploadSurfaceBaseRanges(renderer, ranges) {

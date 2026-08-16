@@ -67,6 +67,7 @@
 
 ## 当前状态
 
+- 第 342 项已完成并归档：surface base / correction / ranges / CPU geometry / cell attributes 共享不可变 owner，跨 owner 混装在清屏前拒绝；原档海上深绿色块的直接根因是合法水域 `19.5～19.99` 被 GPU 高度量化为陆地阈值 `20`，现量化保持水陆侧。用户精确 `5410` 标签页恢复原 100k 存档后，高度 / 国家 × 平滑开 / 关四种局部画面均通过，最终 WebGL error `0`，版本为 `0.4.7`。
 - 第 341 项已完成并归档：generation / import / browser restore adoption owner 不再被普通 `120s` pending watchdog 提前销毁，只由装载事务显式 commit / invalidate；普通 `map-mirror` 防死锁门保持。用户当前 5410 精确标签页已重新直载原 100k 地图到 `map-ready`，版本为 `0.4.6`；约 `23.3s` 恢复性能告警仍单列，未在本项扩修。
 - 第 340 项已完成并归档：旧 100k 精化存档中 15 个整数化共线 cell 在既有安全路径全部失败后，使用 cell / 邻居中心与地图矩形的 Voronoi 半平面交集恢复只读渲染边界；平滑与 hard surface 均达到 `100000 / 100000` 非零安全覆盖，原文件与地图 checksum 不变。用户原 5410 已恢复实际 100k 地图并通过平滑开关与全图视觉验收，版本为 `0.4.5`。
 - 第 339 项已完成并归档：显示内容 current token 与 viewport 独立；成功 resume 消费 deferred 队列后按 committed sequence 验证，不再把空队列误判 obsolete。unsafe center fan 与正式零 range 兜底已移除，三档 cell 覆盖完整。用户原 5410 当前 10k 地图的文化 / 政体并发缩放、快速 latest-wins 与平滑奇数切换通过，版本为 `0.4.4`。

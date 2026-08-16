@@ -8,6 +8,7 @@ import {
 import {assertRenderPreparationBinding} from "./render-preparation.js";
 import {
   createSurfaceBaseBufferSetAsync,
+  createSurfaceResourceOwner,
   flattenSurfaceBaseBufferSet,
   isSurfaceBaseBufferSetForVertices,
   uploadSurfaceBaseBufferSetRanges
@@ -43,6 +44,7 @@ export async function prepareRendererWorkerInstall(renderer, map, prepared, opti
   let surfaceBaseBufferSet = null;
   let cellVisualCorrectionBufferSet = null;
   let surfaceValues = null;
+  let surfaceResourceOwner = null;
   let surfaceColorPatch = null;
   let cellAttributeStore = null;
 
@@ -122,9 +124,15 @@ export async function prepareRendererWorkerInstall(renderer, map, prepared, opti
         gate
       );
       if (!inPlaceColorPatch) {
+        surfaceResourceOwner = createSurfaceResourceOwner(binding, {
+          surfaceFloatLength: surfaceValues.base?.length || 0,
+          correctionWordLength: surfaceValues.cellVisualCorrection?.length || 0,
+          surfaceCellRanges: decoded.surfaceCellRanges
+        });
         surfaceBaseBufferSet = await createSurfaceBaseBufferSetAsync(renderer.gl, surfaceValues.base, {
           usage: renderer.gl.STATIC_DRAW,
           surfaceCellRanges: decoded.surfaceCellRanges,
+          owner: surfaceResourceOwner,
           yieldToMain: gate.yieldToMain,
           assertCurrent: gate.assertCurrent,
           onProgress: detail => gate.onProgress("gpu:surfaceBaseBufferSet", detail)
@@ -132,6 +140,7 @@ export async function prepareRendererWorkerInstall(renderer, map, prepared, opti
         if (surfaceValues.cellVisualCorrection instanceof Float32Array) {
           cellVisualCorrectionBufferSet = await createCellVisualCorrectionBufferSetAsync(renderer.gl, surfaceValues.cellVisualCorrection, {
             usage: renderer.gl.STATIC_DRAW,
+            owner: surfaceResourceOwner,
             yieldToMain: gate.yieldToMain,
             assertCurrent: gate.assertCurrent,
             onProgress: detail => gate.onProgress("gpu:cellVisualCorrection", detail)
@@ -165,7 +174,7 @@ export async function prepareRendererWorkerInstall(renderer, map, prepared, opti
     throw error;
   }
 
-  return createPreparedInstallTransaction(renderer, map, prepared, decoded, buffers, surfaceBaseBufferSet, cellVisualCorrectionBufferSet, surfaceValues, cellAttributeStore, {
+  return createPreparedInstallTransaction(renderer, map, prepared, decoded, buffers, surfaceBaseBufferSet, cellVisualCorrectionBufferSet, surfaceValues, surfaceResourceOwner, cellAttributeStore, {
     preserveRoutePicking: options.preserveRoutePicking === true,
     resetViewport: options.resetViewport === true,
     deferOverlayLayout: options.deferOverlayLayout === true,
@@ -175,7 +184,7 @@ export async function prepareRendererWorkerInstall(renderer, map, prepared, opti
   });
 }
 
-function createPreparedInstallTransaction(renderer, map, prepared, decoded, buffers, surfaceBaseBufferSet, cellVisualCorrectionBufferSet, surfaceValues, cellAttributeStore, options) {
+function createPreparedInstallTransaction(renderer, map, prepared, decoded, buffers, surfaceBaseBufferSet, cellVisualCorrectionBufferSet, surfaceValues, surfaceResourceOwner, cellAttributeStore, options) {
   const layers = prepared.layers;
   const before = new Map();
   const assigned = [];
@@ -272,6 +281,21 @@ function createPreparedInstallTransaction(renderer, map, prepared, decoded, buff
       assign("surfacePatchCells", new Set());
       assign("surfacePatchVertexCount", 0);
       if (!surfaceColorPatch) assign("vertexCount", vertexCount(surfaceValues.base));
+      if (!surfaceColorPatch) {
+        assign("surfaceVerticesOwner", surfaceResourceOwner);
+        assign("surfaceCellRangesOwner", surfaceResourceOwner);
+        assign("cellVisualCorrectionGeometryOwner", surfaceResourceOwner);
+        assign("cellAttributeStoreOwner", surfaceResourceOwner);
+        assign("surfaceResourceOwner", surfaceResourceOwner);
+        assign("surfaceResourceBinding", Object.freeze({
+          owner: surfaceResourceOwner,
+          surfaceVertices: renderer.surfaceVertices,
+          surfaceCellRanges: renderer.surfaceCellRanges,
+          cellVisualCorrectionGeometry: renderer.cellVisualCorrectionGeometry,
+          cellAttributeStore: renderer.cellAttributeStore
+        }));
+        assign("lastSurfaceResourceOwnerError", null);
+      }
       assign("landCorrectionVertexCount", surfaceValues.shoreSurfaceEnabled !== false ? vertexCount(surfaceValues.landCorrections) : 0);
       assign("waterCorrectionVertexCount", surfaceValues.shoreSurfaceEnabled !== false ? vertexCount(surfaceValues.waterCorrections) : 0);
       assign("landCoverVertexCount", surfaceValues.shoreSurfaceEnabled !== false ? vertexCount(surfaceValues.landCovers) : 0);
@@ -744,6 +768,10 @@ async function materializePreparedSurfaceColorPatch(renderer, map, patch, gate) 
   }
   return {
     base,
+    cellVisualCorrection: renderer.cellVisualCorrectionGeometry instanceof Float32Array
+      ? renderer.cellVisualCorrectionGeometry
+      : new Float32Array(),
+    smoothShoreSurfaceKey: renderer.gpuResidentSmoothShoreSurfaceKey || "",
     landCorrections: patch.landCorrections,
     waterCorrections: patch.waterCorrections,
     landCovers: patch.landCovers,
@@ -756,8 +784,13 @@ async function prepareInPlaceSurfaceColorPatch(renderer, map, patch, gate) {
   const source = renderer.surfaceVertices;
   const ranges = renderer.surfaceCellRanges;
   const bufferSet = renderer.surfaceBaseBufferSet;
+  const owner = renderer.surfaceResourceOwner;
+  const resourceBinding = renderer.surfaceResourceBinding;
   if (!(source instanceof Float32Array) || !source.length || !(ranges instanceof Map) || !ranges.size
-    || !isSurfaceBaseBufferSetForVertices(bufferSet, source)
+    || !owner || renderer.surfaceVerticesOwner !== owner || renderer.surfaceCellRangesOwner !== owner
+    || renderer.cellAttributeStoreOwner !== owner || !isSurfaceBaseBufferSetForVertices(bufferSet, source, owner)
+    || resourceBinding?.owner !== owner || resourceBinding.surfaceVertices !== source
+    || resourceBinding.surfaceCellRanges !== ranges || resourceBinding.cellAttributeStore !== renderer.cellAttributeStore
     || renderer.vertexBuffer !== bufferSet.segments[0]?.buffer
     || renderer.viewOptions?.smoothCellBorders === false || renderer.surfacePatchCells?.size) {
     throw renderInstallError("render-surface-color-patch-base", "当前 surface geometry 不支持原位颜色补丁");
@@ -863,8 +896,14 @@ function assertInPlaceSurfaceOwner(renderer, map, patch) {
 }
 
 function hasInPlaceSurfaceOwner(renderer, map, patch) {
-  return Boolean(patch && renderer.map === map && renderer.surfaceVertices === patch.source
+  const owner = renderer.surfaceResourceOwner;
+  const resourceBinding = renderer.surfaceResourceBinding;
+  return Boolean(patch && owner && renderer.map === map && renderer.surfaceVertices === patch.source
     && renderer.surfaceCellRanges === patch.ranges && renderer.surfaceBaseBufferSet === patch.bufferSet
+    && renderer.surfaceVerticesOwner === owner && renderer.surfaceCellRangesOwner === owner
+    && renderer.cellAttributeStoreOwner === owner && patch.bufferSet.owner === owner
+    && resourceBinding?.owner === owner && resourceBinding.surfaceVertices === patch.source
+    && resourceBinding.surfaceCellRanges === patch.ranges && resourceBinding.cellAttributeStore === renderer.cellAttributeStore
     && renderer.vertexBuffer === patch.bufferSet.segments[0]?.buffer);
 }
 
