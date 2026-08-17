@@ -909,12 +909,16 @@ function rebuildPackSettlementsWithoutImplicitAnchors(grid, politics, pack, rand
       synchronizeStateCapital(politics, pack, retainedCapital);
       continue;
     }
-    const packCell = selectRegeneratedAdministrativeCell(pack, cells.i.filter(cell => cellInScope(cell) && Number(cells.state?.[cell]) === stateId), occupied, occupiedGrid, random);
+    const stateCells = cells.i.filter(cell => cellInScope(cell) && Number(cells.state?.[cell]) === stateId);
+    const packCell = selectRegeneratedAdministrativeCell(pack, stateCells, occupied, occupiedGrid, random);
     const city = addPackCity({
       grid, pack, cities, burgs, occupied, occupiedGrid, spacingIndex, packCell, random, nameGenerator,
       flags: {capital: true, required: true, state: stateId, cityId: allocateCityId(), burgId: allocateBurgId()}
     });
-    if (!city) continue;
+    if (!city) {
+      clearStateCapital(politics, pack, stateId);
+      continue;
+    }
     generated.push(city);
     synchronizeStateCapital(politics, pack, city);
   }
@@ -970,6 +974,8 @@ function rebuildPackSettlementsWithoutImplicitAnchors(grid, politics, pack, rand
   shiftPortsAndRiverBurgs(grid, pack, cities, generatedBurgs, nameGenerator, options);
   defineCityTypes(pack, generated, burgs, options);
   specifyBurgs(pack, generated, burgs, nameGenerator, options);
+  fillIdentityArrayHoles(cities);
+  fillIdentityArrayHoles(burgs);
   return {cities};
 }
 
@@ -1000,7 +1006,7 @@ function selectRegeneratedAdministrativeCell(pack, candidates, occupied, occupie
     && !occupiedGrid.has(Number(pack.cells.g?.[cell])));
   const preferred = available.filter(cell => isPopulatedPackCell(pack.cells, cell));
   const pool = preferred.length ? preferred : available;
-  return pool
+  return [...pool]
     .map(cell => ({cell, score: (citySiteScore(pack, cell) + 1) * random.range(0.55, 1.45)}))
     .sort((left, right) => right.score - left.score || left.cell - right.cell)[0]?.cell ?? -1;
 }
@@ -1016,6 +1022,15 @@ function synchronizeStateCapital(politics, pack, city) {
     state.center = city.packCell;
     state.gridCenter = city.cell;
     state.capitalName = city.name;
+  }
+}
+
+function clearStateCapital(politics, pack, stateId) {
+  for (const collection of [...new Set([politics?.states, pack?.states].filter(Array.isArray))]) {
+    const state = collection[Number(stateId)];
+    if (!state || state.removed) continue;
+    state.capital = 0;
+    state.capitalName = "";
   }
 }
 
@@ -2666,6 +2681,7 @@ function cityResourceStats(cities) {
   let citiesWithResources = 0;
 
   for (const city of cities || []) {
+    if (!city) continue;
     const cityResourceCells = Number(city.resourceCells || 0);
     resourceCells += cityResourceCells;
     markerResourceCells += Number(city.markerResourceCells || 0);
@@ -2869,7 +2885,14 @@ function buildPackRouteMirror(routes) {
       points: route.points.map((point, index) => [point[0], point[1], route.packCells[index]])
     };
   }
-  return mirror;
+  return fillIdentityArrayHoles(mirror);
+}
+
+function fillIdentityArrayHoles(values) {
+  for (let index = 0; index < values.length; index++) {
+    if (!Object.hasOwn(values, index)) values[index] = null;
+  }
+  return values;
 }
 
 function createRoute(grid, features, from, to, type, id) {
@@ -2947,6 +2970,7 @@ function buildPopulationPoints(grid, features, population) {
 function pruneNeutralSettlements(grid, settlements, pack) {
   const kept = [];
   for (const city of settlements.cities || []) {
+    if (!city) continue;
     if ((city.state || 0) > 0) {
       city.id = kept.length;
       kept.push(city);

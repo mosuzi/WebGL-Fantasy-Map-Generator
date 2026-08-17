@@ -29,6 +29,7 @@ export function reconcileSettlementPortTopology(map, options = {}) {
 
 export function inspectSettlementPortTopology(map, options = {}) {
   const mode = options.mode === "load" ? "load" : options.mode === "refine" ? "refine" : "routes";
+  const repairProtectedDerived = options.repairProtectedDerived === true;
   const unresolvedPortCityIds = new Set([...(options.unresolvedPortCityIds || [])].map(Number));
   const cities = activeCities(map);
   const lockContext = readPortTopologyLocks(map);
@@ -113,7 +114,7 @@ export function inspectSettlementPortTopology(map, options = {}) {
 
   assertLockedSeaRoutesCompatible(map, lockContext, byCityId);
   const lockedInvalid = invalidRecords.filter(record => record.locked);
-  if (lockedInvalid.length) {
+  if (lockedInvalid.length && !repairProtectedDerived) {
     throw portTopologyConflict("锁定城镇或锁定路线端点的港口拓扑已失效，无法自动迁移", {
       reason: "protected-port-invalid",
       cityIds: lockedInvalid.map(record => record.cityId)
@@ -121,7 +122,8 @@ export function inspectSettlementPortTopology(map, options = {}) {
   }
 
   const syncableRecords = invalidRecords.filter(record => record.syncable);
-  const movable = invalidRecords.filter(record => !record.syncable);
+  const protectedClearable = repairProtectedDerived ? lockedInvalid.filter(record => !record.syncable) : [];
+  const movable = invalidRecords.filter(record => !record.syncable && !record.locked);
   const candidateIndex = indexPortCandidateCells(map);
   for (const record of movable) {
     record.candidates = buildPortCandidates(map, record, occupiedPackCells, candidateIndex);
@@ -135,7 +137,8 @@ export function inspectSettlementPortTopology(map, options = {}) {
   const patches = syncableRecords.map(record => createPortMirrorSyncPatch(map, record));
   const synced = syncableRecords.map(record => record.cityId);
   const moved = [];
-  const cleared = [];
+  const cleared = protectedClearable.map(record => record.cityId);
+  for (const record of protectedClearable) patches.push(createPortPatch(map, record, null));
   for (const record of movable) {
     const candidate = assignments.get(record.cityId) || null;
     if (candidate) {
@@ -148,7 +151,7 @@ export function inspectSettlementPortTopology(map, options = {}) {
   }
 
   assertNoDuplicatePlannedPortCells(records, patches);
-  assertPatchesDoNotTouchLocks(patches, lockContext);
+  if (!repairProtectedDerived) assertPatchesDoNotTouchLocks(patches, lockContext);
   const skipped = [];
   const report = createReport(mode, records, invalidRecords, moved, cleared, [], skipped, reachability, synced);
   return {mode, records, patches, report};

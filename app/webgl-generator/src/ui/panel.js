@@ -787,7 +787,7 @@ function syncLabelLimitControlBounds(documentRef, map, stats) {
   const input = documentRef.getElementById("max-city-labels");
   const output = documentRef.getElementById("max-city-labels-value");
   if (!input) return;
-  const cityTotal = map.settlements?.cities?.length || map.settlements?.metadata?.cities || 48;
+  const cityTotal = map.settlements?.metadata?.cities ?? ((map.settlements?.cities || []).filter(Boolean).length || 48);
   const max = Math.max(8, Math.min(5000, cityTotal));
   input.max = String(max);
   const current = normalizeMaxCityLabels(stats.labelOptions?.maxCityLabels ?? input.value);
@@ -797,7 +797,7 @@ function syncLabelLimitControlBounds(documentRef, map, stats) {
 }
 
 function formatCityLabelLimit(map, stats) {
-  const cityTotal = map.settlements?.cities?.length || map.settlements?.metadata?.cities || 0;
+  const cityTotal = map.settlements?.metadata?.cities ?? (map.settlements?.cities || []).filter(Boolean).length;
   const configured = normalizeMaxCityLabels(stats.labelOptions?.maxCityLabels ?? DEFAULT_MAX_CITY_LABELS);
   return String(cityTotal ? Math.min(configured, cityTotal) : configured);
 }

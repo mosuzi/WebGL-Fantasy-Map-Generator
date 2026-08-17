@@ -302,7 +302,7 @@ function regenerateRoutes(map) {
   }
   const before = currentRoutes.length;
   reconcileSettlementCellIdentity(map);
-  const portTopology = reconcileSettlementPortTopology(map, {mode: "routes"});
+  const portTopology = reconcileSettlementPortTopology(map, {mode: "routes", repairProtectedDerived: true});
   const routeLocks = captureLockedRegenerationObjects(map, OBJECT_KIND.ROUTE);
   const cityLocks = captureLockedRegenerationObjects(map, OBJECT_KIND.CITY);
   const routeSalt = nextRegenerationSalt(map, "routes");

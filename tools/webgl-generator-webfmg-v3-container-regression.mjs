@@ -31,6 +31,20 @@ assert.deepEqual(await decodeCompactBinaryValueAsync(encodeCompactBinaryValue(fi
 assert.throws(() => encodeCompactBinaryValue(new Array(8)), error => error?.code === "compact_binary_holey_array");
 
 const map = generatePlaceholderMap({seed: `canonical-map-registry-${target}`, cellsTarget: target, heightmapTemplate: "continents"});
+const holeyMap = structuredClone(map);
+const holeyArrays = [holeyMap.settlements.cities, holeyMap.pack.burgs, holeyMap.pack.routes];
+for (const values of holeyArrays) values.length += 2;
+const rescuedDocument = createMapDocument(holeyMap, holeyMap.options);
+for (const values of holeyArrays) assert.equal(Object.hasOwn(values, values.length - 1), false, "抢救保存不得改写当前内存地图");
+for (const values of [rescuedDocument.map.settlements.cities, rescuedDocument.map.pack.burgs, rescuedDocument.map.pack.routes]) {
+  assert.equal(values.at(-1), null, "抢救保存必须把 canonical array hole 转为显式 null");
+  assert.equal(Object.hasOwn(values, values.length - 1), true, "抢救保存输出仍含数组 hole");
+}
+const rescuedRaw = encodeWebfmgV3Document(rescuedDocument);
+const rescuedRoundTrip = decodeWebfmgV3Document(rescuedRaw);
+for (const values of [rescuedRoundTrip.map.settlements.cities, rescuedRoundTrip.map.pack.burgs, rescuedRoundTrip.map.pack.routes]) {
+  assert.equal(values.at(-1), null, "抢救保存往返未保留显式占位");
+}
 const document = createMapDocument(map, map.options);
 const startedAt = performance.now();
 const raw = encodeWebfmgV3Document(document);

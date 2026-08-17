@@ -232,7 +232,7 @@ export function createGenerationSummary(options, grid, features, climate, societ
       cityCount: settlements.metadata.cities,
       routeCount: settlements.metadata.routes,
       populationCells: settlements.metadata.populationCells,
-      sampleCities: settlements.cities.slice(0, 8).map(city => ({
+      sampleCities: settlements.cities.filter(Boolean).slice(0, 8).map(city => ({
         id: city.id,
         name: city.name,
         cell: city.cell,

@@ -2,12 +2,14 @@
 import assert from "node:assert/strict";
 import {readFile} from "node:fs/promises";
 
-import {generatePlaceholderMap} from "../app/webgl-generator/src/generator/index.js";
+import {createGenerationSummary, generatePlaceholderMap} from "../app/webgl-generator/src/generator/index.js";
 import {regenerateSettlementsWithinPolitics} from "../app/webgl-generator/src/generator/settlements.js";
+import {createMapDocument, createMapFeatureGeoJson} from "../app/webgl-generator/src/runtime/map-file-io.js";
 import {
   assertLockedRegenerationSnapshots,
   captureLockedRegenerationObjects
 } from "../app/webgl-generator/src/runtime/regeneration-lock-protection.js";
+import {decodeWebfmgV3Document, encodeWebfmgV3Document} from "../app/webgl-generator/src/runtime/webfmg-v3-container.js";
 
 const options = {
   seed: "regeneration-lock-city-route",
@@ -29,8 +31,8 @@ console.log(JSON.stringify(report, null, 2));
 function testFullRegeneration() {
   const map = generatePlaceholderMap(options);
   const provinceAnchors = new Set(activeProvinces(map).map(province => Number(province.burg)));
-  const lockedCity = activeCities(map).find(city => !city.capital && !provinceAnchors.has(Number(city.burgId)));
-  const lockedRoute = activeRoutes(map).find(route => route.packCells?.length >= 3);
+  const lockedCity = activeCities(map).filter(city => !city.capital && !provinceAnchors.has(Number(city.burgId))).sort((left, right) => right.id - left.id)[0];
+  const lockedRoute = activeRoutes(map).filter(route => route.packCells?.length >= 3).sort((left, right) => right.id - left.id)[0];
   assert(lockedCity && lockedRoute, "固定地图缺少可锁定的普通城镇或道路");
   map.regenerationLocks = {
     version: 1,
@@ -57,12 +59,42 @@ function testFullRegeneration() {
   assert.notEqual(JSON.stringify(activeCities(map).filter(city => city.id !== lockedCity.id)), unlockedBefore, "未锁城镇必须继续发生变化");
   assert.equal(new Set(activeCities(map).map(city => city.id)).size, activeCities(map).length, "新城镇不得复用锁定 city ID");
   assert.equal(new Set(activeCities(map).map(city => city.burgId)).size, activeCities(map).length, "新城镇不得复用锁定 burg ID");
+  assertStateCapitalMirrors(map);
+  for (const [path, values] of [["settlements.cities", map.settlements.cities], ["pack.burgs", map.pack.burgs], ["pack.routes", map.pack.routes]]) {
+    assertDenseArray(values, `${path} 不得因保留高编号锁定对象产生 hole`);
+  }
+  const summary = createGenerationSummary(
+    map.options,
+    map.grid,
+    map.features,
+    map.climate,
+    map.society,
+    map.politics,
+    map.settlements,
+    map.markers,
+    map.pack,
+    map.rivers,
+    map.layers,
+    map.military,
+    map.zones,
+    map.economy,
+    map.diplomacy
+  );
+  assert(summary.settlements.sampleCities.every(city => Number.isInteger(city.id)), "生成摘要不得把显式 null 占位当作城镇读取");
+  const featureGeoJson = createMapFeatureGeoJson(map, {layers: {city: true}});
+  assert.equal(featureGeoJson.features.filter(feature => feature.properties?.layer === "city").length, activeCities(map).length, "GeoJSON 城镇导出不得读取显式 null 占位");
+  const raw = encodeWebfmgV3Document(createMapDocument(map, map.options));
+  const roundTrip = decodeWebfmgV3Document(raw).map;
+  for (const [path, values] of [["settlements.cities", roundTrip.settlements.cities], ["pack.burgs", roundTrip.pack.burgs], ["pack.routes", roundTrip.pack.routes]]) {
+    assertDenseArray(values, `${path} 紧凑保存往返后不得出现 hole`);
+  }
   report.full = {
     lockedCity: lockedCity.id,
     lockedBurg: lockedCity.burgId,
     lockedRoute: lockedRoute.id,
     cities: activeCities(map).length,
-    routes: activeRoutes(map).length
+    routes: activeRoutes(map).length,
+    compactBytes: raw.byteLength
   };
 }
 
@@ -180,4 +212,26 @@ function cityInScope(map, city, scope) {
 
 function clone(value) {
   return structuredClone(value);
+}
+
+function assertDenseArray(values, message) {
+  for (let index = 0; index < values.length; index++) assert(Object.hasOwn(values, index), `${message}：index ${index}`);
+}
+
+function assertStateCapitalMirrors(map) {
+  const cities = activeCities(map);
+  for (const state of activeStates(map)) {
+    const stateCities = cities.filter(city => Number(city.state) === Number(state.i));
+    const capitals = stateCities.filter(city => city.capital);
+    if (!stateCities.length) {
+      assert.equal(Number(state.capital || 0), 0, `空国家 ${state.i} 不得保留悬空首都`);
+      assert.equal(Number(map.pack.states?.[state.i]?.capital || 0), 0, `空国家 ${state.i} 的 pack 镜像不得保留悬空首都`);
+      continue;
+    }
+    assert.equal(capitals.length, 1, `国家 ${state.i} 必须恰好有一个首都`);
+    const capital = capitals[0];
+    assert.equal(Number(state.capital), Number(capital.burgId), `国家 ${state.i} 的 politics 首都镜像失配`);
+    assert.equal(Number(map.pack.states?.[state.i]?.capital), Number(capital.burgId), `国家 ${state.i} 的 pack 首都镜像失配`);
+    assert.equal(Boolean(map.pack.burgs?.[capital.burgId]?.capital), true, `国家 ${state.i} 的 burg 首都标记失配`);
+  }
 }

@@ -288,7 +288,7 @@ import {collectionAffected, objectAffected, systemAffected} from "./edit-command
 import {syncEditorStateSnapshot} from "../ui/vue/state-bridge.js";
 import {completeStartupLoading, failStartupLoading} from "../ui/startup-loading.js";
 import {browserMapSaveLoadingMessage} from "../ui/map-storage-user-copy.js";
-import {createRegenerationUserError, regenerationLoadingMessage, regenerationLoadingState} from "../ui/regeneration-user-copy.js";
+import {createRegenerationUserError, regenerationErrorMessage, regenerationLoadingMessage, regenerationLoadingState, regenerationResultMessage} from "../ui/regeneration-user-copy.js";
 import {LABEL_TARGET_KIND, OBJECT_KIND, OBJECT_KIND_LABEL} from "./object-kinds.js";
 import {reconcileSettlementPortTopology} from "./settlement-port-topology.js";
 import ComputeWorker from "./compute-worker.js?worker";
@@ -1539,7 +1539,16 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
         afterSelect: target => cityPanel.setSelectedCityId(target.id)
       });
     },
-    onRegenerate: () => runtimeActions.generate.regenerate("cities", {confirm: true}),
+    onRegenerate: async () => {
+      try {
+        const result = await runtimeActions.generate.regenerate("cities", {confirm: true});
+        showMapToast(documentRef, regenerationResultMessage("cities", result));
+        return result;
+      } catch (error) {
+        showMapToast(documentRef, regenerationErrorMessage(error?.code), 2800, {tone: "error"});
+        return null;
+      }
+    },
     onHighlight: objects => setPersistentObjectHighlights(state, documentRef, objects),
     onClearHighlights: () => clearPersistentObjectHighlights(state, documentRef),
     getHighlightCount: () => persistentObjectHighlightCount(state),
@@ -14458,7 +14467,7 @@ function regenerateRoutes(state, documentRef) {
   let portTopology;
   try {
     reconcileSettlementCellIdentity(map);
-    portTopology = reconcileSettlementPortTopology(map, {mode: "routes"});
+    portTopology = reconcileSettlementPortTopology(map, {mode: "routes", repairProtectedDerived: true});
     const routeLocks = captureLockedRegenerationObjects(map, OBJECT_KIND.ROUTE);
     const cityLocks = captureLockedRegenerationObjects(map, OBJECT_KIND.CITY);
     routeSalt = nextRegenerationSalt(map, "routes");

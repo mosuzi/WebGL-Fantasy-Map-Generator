@@ -689,7 +689,32 @@ function normalizeMapSchemaV2(map, documentOptions = {}) {
   };
   const compatible = normalizeZoneMap(normalizeLakeOverflowMap(normalizeDiplomacyMap(normalizeEconomyDisplayMap(normalizeSocialExpansionMap(normalized)))));
   applyRegenerationLockCompatibility(compatible, source.regenerationLocks);
-  return compatible;
+  return normalizeCanonicalIdentityArrays(compatible);
+}
+
+function normalizeCanonicalIdentityArrays(map) {
+  const cities = copyIdentityArrayWithExplicitHoles(map?.settlements?.cities);
+  const burgs = copyIdentityArrayWithExplicitHoles(map?.pack?.burgs);
+  const routes = copyIdentityArrayWithExplicitHoles(map?.pack?.routes);
+  if (cities === map?.settlements?.cities && burgs === map?.pack?.burgs && routes === map?.pack?.routes) return map;
+  return {
+    ...map,
+    ...(map.settlements ? {settlements: {...map.settlements, cities}} : {}),
+    ...(map.pack ? {pack: {...map.pack, burgs, routes}} : {})
+  };
+}
+
+function copyIdentityArrayWithExplicitHoles(values) {
+  if (!Array.isArray(values)) return values;
+  let hasHoles = false;
+  for (let index = 0; index < values.length; index++) {
+    if (!Object.hasOwn(values, index)) {
+      hasHoles = true;
+      break;
+    }
+  }
+  if (!hasHoles) return values;
+  return Array.from({length: values.length}, (_, index) => Object.hasOwn(values, index) ? values[index] : null);
 }
 
 function normalizeCurrentMapSchemaV2(map, documentOptions = {}) {
@@ -1299,7 +1324,7 @@ function provinceFeatures(map, options = {}) {
 }
 
 function cityFeatures(map) {
-  return (map.settlements?.cities || []).map(city => {
+  return (map.settlements?.cities || []).filter(Boolean).map(city => {
     const burg = findCityBurg(map, city);
     const coordinate = projectWorldPoint([city.x ?? burg?.x, city.y ?? burg?.y], map);
     if (!coordinate) return null;

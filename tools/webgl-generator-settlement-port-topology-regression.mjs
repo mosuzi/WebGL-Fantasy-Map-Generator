@@ -96,6 +96,19 @@ assert.throws(
 );
 assert.deepEqual(lockedMirror.map, lockedMirrorBefore, "锁定城镇单侧 port 冲突后地图发生写入");
 
+const activeLockedMirror = makeMissingPortMirrorFixture(fixture, "burg");
+activeLockedMirror.map.regenerationLocks = {version: 1, entries: [{kind: OBJECT_KIND.CITY, id: activeLockedMirror.cityId}]};
+const activeLockedMirrorPosition = portPositionFacts(activeLockedMirror.map, activeLockedMirror.cityId);
+const activeLockedMirrorLocks = structuredClone(activeLockedMirror.map.regenerationLocks);
+const activeLockedMirrorReport = reconcileSettlementPortTopology(activeLockedMirror.map, {mode: "routes", repairProtectedDerived: true});
+assert.equal(activeLockedMirrorReport.synced, 1, "主动道路重生成没有修复锁定城镇的单侧 port 镜像");
+assert.equal(activeLockedMirrorReport.moved, 0, "主动道路重生成错误搬迁了锁定城镇");
+assert.equal(activeLockedMirrorReport.cleared, 0, "主动道路重生成错误清除了可原地修复的锁定港口");
+assert.deepEqual(portPositionFacts(activeLockedMirror.map, activeLockedMirror.cityId), activeLockedMirrorPosition, "主动修复锁定港口镜像改变了位置");
+assert.deepEqual(activeLockedMirror.map.regenerationLocks, activeLockedMirrorLocks, "主动修复锁定港口镜像改写了锁存储");
+const activeLockedMirrorFacts = portFacts(activeLockedMirror.map, activeLockedMirror.cityId);
+assert.equal(Number(activeLockedMirrorFacts.city.port), Number(activeLockedMirrorFacts.burg.port), "主动修复后 city / burg port 仍不一致");
+
 const lockedRouteMirror = makeLockedRouteMissingPortMirrorFixture(fixture);
 const lockedRouteMirrorBefore = structuredClone(lockedRouteMirror);
 assert.throws(
@@ -159,6 +172,16 @@ assert.throws(
   "锁定城镇的失效港口没有在写入前冲突"
 );
 assert.deepEqual(cityLocked, cityLockedBefore, "锁定城镇港口冲突后地图发生写入");
+
+const activeCityLocked = makeInvalidPortFixture(fixture).map;
+const activeCityLockedId = stale.cityId;
+activeCityLocked.regenerationLocks = {version: 1, entries: [{kind: OBJECT_KIND.CITY, id: activeCityLockedId}]};
+const activeCityLockedPosition = portPositionFacts(activeCityLocked, activeCityLockedId);
+const activeCityLockedReport = reconcileSettlementPortTopology(activeCityLocked, {mode: "routes", repairProtectedDerived: true});
+assert.equal(activeCityLockedReport.cleared, 1, "主动道路重生成没有清理无法原地修复的锁定港口派生关系");
+assert.deepEqual(portPositionFacts(activeCityLocked, activeCityLockedId), activeCityLockedPosition, "清理锁定港口派生关系改变了城镇位置");
+assert.equal(Number(activeCityLocked.settlements.cities[activeCityLockedId].port), 0, "锁定城镇失效 city.port 未清理");
+assert.equal(Number(activeCityLocked.pack.burgs[activeCityLocked.settlements.cities[activeCityLockedId].burgId].port), 0, "锁定城镇失效 burg.port 未清理");
 
 const lockedEndpoint = makeInvalidLockedSeaEndpoint(fixture);
 const lockedEndpointBefore = structuredClone(lockedEndpoint);
