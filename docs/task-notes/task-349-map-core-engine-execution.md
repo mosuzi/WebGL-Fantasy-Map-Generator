@@ -131,6 +131,6 @@ planned → computed → validated → projections-prepared
 - 不变量：legacy revision / history 写入 `0`、map cache `0`、runtime import `0`；projection 集合不可漂移，settled 只接受 ready / degraded；interactive、headless 与 adoption profile 均由既有 revision validator 约束。
 - 门禁：core typecheck / contracts / manifests / facade 和 production build 通过，构建保持 `1361 modules`；`source/` 零改动。
 - 版本：`0.5.12 → 0.5.13`；浏览器未启动、未操作、未执行。
-- 评审：checkpoint 冻结后交同一只读评审智能体；未 `ACCEPT` 前不进入 `349-6`。
+- 评审：首轮 `BLOCK` 四项 P1：嵌套 borrow 可写/逃逸、同一 legacy 转换可重复认领、rollback 后 operation 可复活、公开 projection update 可绕过 coordinator；另有根 `AGENTS.md` 当前状态滞后。最窄修正加入可撤销只读 membrane、owner transition claim、rollback 终态与 Core 内部 projection 转移/settled 判定，修正候选版本 `0.5.14`；待同一智能体 blocker-only 复审，未 `ACCEPT` 前不进入 `349-6`。
 
 阶段结果在每次 checkpoint 后更新，长日志只记录命令和 artifact 路径，不粘贴到本文。

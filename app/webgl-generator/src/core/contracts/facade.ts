@@ -46,6 +46,5 @@ export interface ShadowOperationRecord {
 
 export interface ShadowCommitUpdate {
   readonly commitId: CommitId;
-  readonly lifecycle: "published" | "projections-settled";
   readonly projections: readonly ProjectionStatus[];
 }
