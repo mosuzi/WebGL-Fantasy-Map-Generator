@@ -1,10 +1,10 @@
 # TypeScript 核心契约与领域接入渐进式引入计划
 
-> 状态：候选施工计划，当前仅记录方案，不代表已批准实施。
+> 状态：第 349 项已批准施工计划；当前按 [统一执行记录](./task-349-map-core-engine-execution.md) 与引擎计划的唯一阶段链实施。
 >
-> 用途：由当前项目整理后手动转移到 `D:\work\fmg-parallel`，作为后续架构施工的输入。
+> 分支：只在 `codex/map-core-engine-architecture-plan` 与 `main` 并行推进，不得合入 `main`。
 >
-> 当前结论：引入 TypeScript，但只优先覆盖地图核心契约、Worker DTO、领域 Manifest、事务 / patch、Render layer contract 和新业务领域；不进行一次性全项目迁移。
+> 当前结论：引入 TypeScript，但只优先覆盖地图核心契约、Worker DTO、领域 Manifest、事务 / patch、Render layer contract 和迁移切片；不进行一次性全项目迁移。全阶段不执行浏览器验收，最终只形成并评估浏览器验收方案。
 
 ## 1. 背景与决策
 
@@ -50,7 +50,7 @@ TypeScript 类型不能替代运行时 schema。JSON、旧存档、Worker struct
 
 ```text
 现有 JS 实现
-      │ 保持行为不变
+      │ adapter / shadow audit，保持行为不变
       ▼
 TS 核心契约与 DTO
       │ 编译期约束
@@ -59,7 +59,7 @@ DomainModuleManifest
       │ 注册依赖、Worker、视图、图层、面板
       ▼
 一个低风险业务域试点
-      │ 证明接入成本和验收方式
+      │ notes / markers / Worker 分离切片
       ▼
 逐个迁移核心 Worker / renderer / domain
 ```
@@ -92,7 +92,8 @@ runtime schema：负责运行时输入、旧数据和跨线程数据校验
     "noEmit": true,
     "isolatedModules": true,
     "verbatimModuleSyntax": true,
-    "allowJs": false,
+    "allowJs": true,
+    "checkJs": false,
     "skipLibCheck": true
   },
   "include": [
@@ -102,7 +103,7 @@ runtime schema：负责运行时输入、旧数据和跨线程数据校验
 }
 ```
 
-后续如果需要检查旧 JS，再单独增加受控配置，不首期全局打开 `checkJs`。
+`allowJs: true / checkJs: false` 只允许新 TS adapter 解析既有 JS 依赖，不把旧 JS 纳入类型整改；核心 adapter 必须使用显式 `.d.ts`、JSDoc 边界或 runtime validator 收窄 `unknown`，不得长期依赖隐式 `any`。后续若需要检查旧 JS，再单独增加受控配置，不首期全局打开 `checkJs`。
 
 ### 4.3 依赖和脚本
 
@@ -111,7 +112,7 @@ runtime schema：负责运行时输入、旧数据和跨线程数据校验
 - `typescript` 开发依赖；
 - `tsc --noEmit` 静态门；
 - Vite 原有 TS 转译能力；
-- 现有 Node / browser regression。
+- 现有 Node regression，以及只在 `349-11` 盘点而不执行的 browser regression 方案。
 
 建议新增脚本：
 
@@ -182,17 +183,27 @@ interface RevisionVector {
   mapRevision: MapRevision;
   topologyRevision: number;
   domainRevisions: Readonly<Record<string, number>>;
-  presentationRevision: number;
-  renderGeneration: number;
-  generationToken: number;
-  lockFingerprint: string;
+}
+
+interface OperationBinding {
+  readonly operationId: OperationId;
+  readonly sourceRevision: RevisionVector;
+  readonly generationToken: number;
+  readonly lockFingerprint: string;
+}
+
+interface RenderResourceBinding {
+  readonly mapIdentity: MapIdentity;
+  readonly sourceRevision: MapRevision;
+  readonly topologyRevision: number;
+  readonly renderGeneration: number;
 }
 ```
 
 要求：
 
 - map identity 变化不能伪装成 revision 增长；
-- presentation revision 不得被当作 canonical revision；
+- presentation revision 和 render generation 使用独立类型，不得被当作 canonical revision；
 - topology revision 变化必须触发正确的几何 / picking 失效；
 - 对外兼容 API 可以返回旧的 `mapRevision`，内部使用完整 vector。
 
@@ -202,27 +213,28 @@ Snapshot 不应暴露任意可写的完整地图对象：
 
 ```ts
 type SnapshotPurpose = "worker" | "query" | "render" | "persistence";
+type SnapshotOwnership = "borrowed" | "cloned" | "transferable" | "shared-readonly";
 
 interface MapSnapshot<Sections = unknown> {
   readonly purpose: SnapshotPurpose;
-  readonly identity: RevisionVector;
+  readonly ownership: SnapshotOwnership;
+  readonly revision: RevisionVector;
   readonly checksum: string;
   readonly sections: Readonly<Sections>;
 }
 ```
 
-实际实现应支持按 section、字段和 purpose 取快照，避免纯显示操作传输整张地图。
+`Readonly<Sections>` 只是编译期浅只读，不能阻止嵌套对象或 TypedArray 修改，也不能表达 ArrayBuffer transfer / detach。实际实现必须同时用 runtime ownership validator 约束 borrowed、clone、transfer 和 shared buffer，并支持按 section、字段和 purpose 取快照，避免纯显示操作传输整张地图。
 
 ### 6.3 Patch
 
 ```ts
 type PatchMode = "replace" | "ranges" | "sparse-values" | "table-rows";
 
-interface DomainPatch<WriteSet extends string = string> {
+interface ComputedDomainPatch<WriteSet extends string = string> {
   readonly patchId: string;
   readonly mapIdentity: MapIdentity;
   readonly baseRevision: MapRevision;
-  readonly targetRevision: MapRevision;
   readonly domain: string;
   readonly writeSet: readonly WriteSet[];
   readonly mode: PatchMode;
@@ -231,9 +243,15 @@ interface DomainPatch<WriteSet extends string = string> {
   readonly baseChecksum: string;
   readonly targetChecksum: string;
 }
+
+interface CommittedDomainPatch<WriteSet extends string = string>
+  extends ComputedDomainPatch<WriteSet> {
+  readonly commitId: CommitId;
+  readonly targetRevision: MapRevision;
+}
 ```
 
-类型只保证结构，具体 path、范围、对象身份和 checksum 仍由 runtime patch policy 验证。
+Worker 只能返回 `ComputedDomainPatch`，不得提前宣称 canonical `targetRevision`。core 在校验并接纳时分配 revision 和 commit identity，形成 `CommittedDomainPatch`。类型只保证结构，具体 path、范围、对象身份和 checksum 仍由 runtime patch policy 验证。
 
 ### 6.4 Commit envelope
 
@@ -261,8 +279,7 @@ Commit envelope 是核心内部协议和诊断对象，不直接进入普通 UI 
 ```ts
 interface WorkerBinding {
   readonly mapIdentity: MapIdentity;
-  readonly revision: RevisionVector;
-  readonly commitId: CommitId;
+  readonly sourceRevision: RevisionVector;
   readonly operationId: OperationId;
   readonly operationName: string;
   readonly generationToken: number;
@@ -273,7 +290,7 @@ interface WorkerBinding {
 }
 ```
 
-页面、计算 Worker、渲染准备 Worker 和存档 Worker 只能使用这一类 binding 适配自己的 task，不再各自发明相似字段。
+页面、计算 Worker、渲染准备 Worker 和存档 Worker 共享 operation binding vocabulary，但用判别字段表达各自 profile。计算阶段不得要求尚未产生的 `commitId`；只有已提交 replica patch 的 projection binding 携带 `commitId`。
 
 ### 7.2 统一 Worker result
 
@@ -291,10 +308,14 @@ Worker 不得直接写正式地图。必须经过：
 capture snapshot
 → Worker compute
 → validate binding / lock / patch policy
-→ core commit
-→ replica patch ACK
-→ render invalidation / install
+→ prepare required projections without publishing
+→ core commit canonical + history + revision
+→ publish commit to UI / API / persistence
+→ coordinator settle replica ACK / renderer install
+→ projection failure enters degraded / retry / resync
 ```
+
+publish 前失败可以回滚 canonical / history 和释放 prepared projection；publish 后不得因为 replica 或 renderer 失败反向改写已观察的 canonical history。
 
 纯 view / palette / visibility 操作不创建业务 Worker result。
 
@@ -318,6 +339,12 @@ interface DomainModuleManifest {
   readonly persistence: PersistenceDescriptor;
   readonly api?: ApiDescriptor;
   readonly locks?: LockDescriptor;
+  readonly capabilities: Readonly<{
+    worker: "required" | "optional" | "not-required";
+    regeneration: "required" | "optional" | "unsupported";
+    view: "required" | "optional" | "not-required";
+    renderLayer: "required" | "optional" | "not-required";
+  }>;
 }
 ```
 
@@ -349,110 +376,29 @@ domains/trade-policy/
 ├─ view.ts                  # view mode / palette
 ├─ render-layer.ts          # geometry / overlay / picking
 ├─ panel.ts                 # 面板生命周期和领域控件
-└─ regression.ts            # Node / browser / old-data matrix
+└─ regression.ts            # Node / old-data matrix 与 browser 待执行方案元数据
 ```
 
 面板可以是自定义 Vue / DOM 实现，但生命周期、查询、命令、Loading、history 和 stale revision 必须通过 core adapter。
 
-## 9. 新领域的实施顺序
+## 9. 统一实施顺序
 
-### 阶段 0：准备与基线
+TypeScript 不再维护一套与引擎计划冲突的独立阶段。唯一顺序为：
 
-**目标**：只引入 TS 工具链，不改变产品。
+1. `349-0` 计划与权威冻结；
+2. `349-1` 只读盘点真实 owner、事务、buffer ownership 和构建边界；
+3. `349-2` 受限 TS 工具链，运行行为和构建产物除版本注入外不变；
+4. `349-3` 核心契约与 runtime validator，不接管旧 action；
+5. `349-4` capability-aware Manifest 与影子审计；
+6. `349-5` 薄 facade 与 commit / projection 影子记录；
+7. `349-6` notes 事务 / 存档切片；
+8. `349-7` markers layer / picking 切片；
+9. `349-8` 一个真实 Worker task 协议切片；
+10. `349-9` dependency / projection 接线；
+11. `349-10.x` 逐域迁移与 legacy 收口；
+12. `349-11` build、typecheck、非浏览器终验和浏览器验收方案评估。
 
-**动作**：
-
-- 新增 `typescript` 开发依赖；
-- 新增受限 `tsconfig.core.json`；
-- 新增 `typecheck:core`；
-- 验证 Vite build、现有 Node regression 和现有浏览器入口；
-- 记录 clean build / incremental build 时间基线。
-
-**门禁**：JS 代码行为、构建产物、版本和 `source/` 不变。
-
-### 阶段 1：核心契约
-
-**目标**：建立身份、revision、snapshot、patch、commit、Worker binding 类型。
-
-**动作**：
-
-- 创建 `src/core/contracts`；
-- 为旧 JS runtime 写只读 adapter；
-- 不迁移现有命令和算法；
-- 增加契约构造和非法组合的 Node regression。
-
-**门禁**：`tsc --noEmit`、package build、旧 API / save / history 回归通过。
-
-### 阶段 2：依赖图与 Manifest
-
-**目标**：使新领域的接入面可枚举、可审计。
-
-**动作**：
-
-- 定义 `DomainModuleManifest`；
-- 定义 field / derived / layer / panel / API descriptor；
-- 建立注册器和静态审计工具；
-- 先注册一个空的试点领域，不改变地图行为；
-- 校验未声明读写、未注册 command、缺迁移等错误。
-
-**门禁**：注册器能拒绝不完整领域；现有 API capability matrix 不下降。
-
-### 阶段 3：低风险领域试点
-
-**推荐领域**：markers、notes 或 measurements。
-
-**不推荐首期**：政治拓扑、城市、路线、河流、地形和大规模重生成。
-
-**试点必须完成**：
-
-- canonical schema；
-- object identity；
-- field registry；
-- command / inspect / revert；
-- history / undo / redo；
-- Worker task 或明确声明无需 Worker；
-- regeneration 或明确声明不可重生成；
-- query / API；
-- panel；
-- view / layer；
-- old-data migration；
-- save / load / export；
-- Node、浏览器和 failure injection。
-
-**门禁**：新领域独立接入后，既有领域、旧存档、GPU / picking、Loading 和错误面不受影响。
-
-### 阶段 4：Worker 协议迁移
-
-**目标**：将新领域 Worker 接入统一 binding、patch 和 commit。
-
-**动作**：
-
-- Worker 只消费 typed snapshot / DTO；
-- 结果必须是 typed patch / replacement / query；
-- core 验证 revision、checksum、lock、write set；
-- replica 只消费已提交 patch；
-- 取消、obsolete、Worker restart 和 gap 触发明确失效 / resync。
-
-**门禁**：10k、100k、快速重复操作、旧数据和 Worker 重启通过；无陈旧结果覆盖新 revision。
-
-### 阶段 5：真实 renderer layer 迁移
-
-**目标**：验证新领域能独立提供视图和图层。
-
-**动作**：
-
-- 新领域 layer 只读 snapshot；
-- 纯 view 走 palette / uniform / visibility；
-- 几何变化走 prepare / install / rollback；
-- picking 使用同一 identity / geometry version；
-- context restore 从 snapshot 重建资源；
-- PNG / overlay / label 行为明确声明。
-
-**门禁**：普通 view 不触发地图 Worker；业务修改只失效依赖图命中的 layer；WebGL error 为 `0`。
-
-### 阶段 6：扩大范围
-
-只有低风险试点通过后，才考虑迁移 economy、diplomacy、military、settlements 等复杂领域。每次只迁移一个领域，保留旧 JS adapter 和回滚开关，不能批量改名或批量重写。
+每阶段都有独立 checkpoint 和只读智能体评审。不得为了满足 Manifest 人工制造无业务意义的 Worker、regeneration、view 或 layer；缺失能力必须通过 `capabilities` 显式声明。
 
 ## 10. 编辑、重生成、视图和面板的验收矩阵
 
@@ -478,9 +424,9 @@ domains/trade-policy/
 - Vite 转译 / 打包时间；
 - `tsc --noEmit` 类型检查时间；
 - Node regression 总时间；
-- 浏览器真正的 map / Worker / render / UI 时间。
+- `349-11` 浏览器方案中预定记录的 map / Worker / render / UI 时间分段与采样方法；本任务不执行采样。
 
-不能把类型检查时间误报成产品运行时性能，也不能为了构建速度取消真实浏览器门。
+不能把类型检查时间误报成产品运行时性能，也不能把“浏览器方案已评估”误报成“真实浏览器门已通过”。
 
 阶段性目标：
 
@@ -514,7 +460,7 @@ domains/trade-policy/
 
 ## 13. 最终交付物
 
-手动转移到 `fmg-parallel` 后，计划阶段应产出：
+第 349 项完成时应产出：
 
 1. `tsconfig.core.json`；
 2. `typecheck:core` 脚本；
@@ -524,8 +470,9 @@ domains/trade-policy/
 6. dependency / layer / panel descriptor 类型；
 7. 一个低风险领域完整试点；
 8. core contract audit；
-9. 类型检查时间、Vite build 时间和浏览器性能对照报告；
-10. 旧 JS、旧存档、API、Worker、renderer 和浏览器回归报告。
+9. 类型检查时间、Vite build 时间和非浏览器性能对照报告；
+10. 旧 JS、旧存档、API、Worker、renderer 的非浏览器回归报告；
+11. 未执行但经过可行性评估的浏览器验收方案。
 
 ## 14. 停止条件
 
@@ -534,7 +481,7 @@ domains/trade-policy/
 - 需要修改业务规则才能通过类型检查；
 - 需要批量改名旧模块才能建立首个契约；
 - runtime schema 与 TS 类型无法确定谁是权威来源；
-- 类型检查开始遮蔽真实浏览器或旧数据失败；
+- 类型检查开始遮蔽旧数据失败，或计划文本把未执行的浏览器方案误报为已通过；
 - Vite / Worker 构建出现无法归因的行为变化；
 - 试点领域无法在不改既有语义的前提下完成完整回归；
 - 同一个构建或类型阻断连续两次出现。
@@ -543,6 +490,6 @@ domains/trade-policy/
 
 最稳妥的第一步不是“把项目改成 TS”，而是：
 
-> 在 `fmg-parallel` 新建 `src/core/contracts`，用 TypeScript 定义 `RevisionVector`、`MapSnapshot`、`DomainPatch`、`CommitEnvelope`、`WorkerBinding` 和 `DomainModuleManifest`，再用 markers / notes / measurements 之一做完整接入试点。
+> 先完成 `349-1` 的真实 owner 与状态机盘点，再在本分支新建 `src/core/contracts`，用 TypeScript 分别定义 canonical revision、operation binding、snapshot ownership、commit lifecycle、Worker DTO 和 capability-aware Manifest；随后以 notes、markers 和一个真实 Worker task 三个独立切片验证。
 
-如果这一步能证明新增领域的 Worker、重生成、视图、图层、面板、编辑、API、存档和验收都能通过统一 Manifest 接入，才继续扩大 TS 覆盖面。
+只有三个切片分别证明事务 / 持久化、renderer / picking 和 Worker 协议可接入，且没有第二 canonical owner，才继续扩大 TS 覆盖面。

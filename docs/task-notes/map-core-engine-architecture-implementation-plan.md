@@ -1,10 +1,10 @@
 # 地图核心引擎化与领域模块接入实施计划
 
-> 状态：候选施工计划，当前仅记录方案，不代表已批准实施。
+> 状态：第 349 项已批准施工计划；当前按 [统一执行记录](./task-349-map-core-engine-execution.md) 逐阶段实施。
 >
-> 用途：由当前项目整理后手动转移到 `D:\work\fmg-parallel`，与 [TypeScript 核心契约计划](./typescript-core-contract-migration-plan.md) 配套使用。
+> 分支：只在 `codex/map-core-engine-architecture-plan` 与 `main` 并行推进，不得合入 `main`。
 >
-> 施工原则：先契约、后 facade；先接入、后迁移；先低风险领域、后复杂领域；不一次性重写现有 runtime、generator、renderer 和 UI。
+> 施工原则：先盘点与状态机、后契约与 facade；先影子审计、后垂直切片；先低风险领域、后复杂领域；不一次性重写现有 runtime、generator、renderer 和 UI。全阶段不执行浏览器验收，只在最终阶段形成并评估浏览器验收方案。
 
 ## 1. 为什么现在需要引擎化
 
@@ -32,8 +32,11 @@ UI / Console API / Headless API
               ▼
         MapCoreEngine
   canonical state / revision / transaction
-  dependency graph / derived index / Worker protocol
-              │ immutable snapshot / committed patch
+              │ committed patch / invalidation intent
+              ▼
+      MapRuntimeCoordinator
+  Worker replica / projection state / persistence
+              │ owned snapshot / prepared projection
               ▼
          RenderEngine
   GPU resident data / topology cache / layers
@@ -46,13 +49,13 @@ UI / Console API / Headless API
 
 1. 建立唯一的地图 canonical owner。
 2. 将 canonical、derived、presentation、cache 四类数据分开。
-3. 用统一 revision vector 表示地图、拓扑、领域、presentation 和 render resource 状态。
+3. 用 canonical revision vector、operation binding、presentation revision 和 render resource binding 分别表示地图事实、运行令牌、显示意图和资源代际。
 4. 将 edit、regenerate、import、undo、redo、adoption 统一为 commit envelope。
 5. 将 field、derived system、index、render layer 和 query 的依赖关系注册化。
 6. 让 Worker 成为计算和副本执行者，不绕过 core 正式提交。
-7. 让纯视图切换不触发地图 Worker、整图 snapshot 或全量 render preparation。
-8. 让新增业务域能够同时拥有自己的 schema、Worker、重生成、查询、视图、图层、面板、编辑逻辑和存档迁移。
-9. 保持旧 API、旧存档、撤销 / 重做、锁、picking、PNG、WebGL 视觉和性能门。
+7. 让纯视图切换不触发地图 Worker、整图 snapshot 或全量 render preparation，并让 headless 模式不依赖 renderer 才能提交 canonical 事务。
+8. 让新增业务域按自身 capability 明确拥有或明确不需要 schema、Worker、重生成、查询、视图、图层、面板、编辑逻辑和存档迁移。
+9. 保持旧 API、旧存档、撤销 / 重做、锁与非浏览器回归；picking、PNG、WebGL 视觉和性能门在本任务中形成待执行方案。
 10. 让新增功能可以通过领域 Manifest 审计其完整接入面。
 
 ### 2.2 非目标
@@ -63,8 +66,8 @@ UI / Console API / Headless API
 - 不使用全局 event bus、ECS 或不可追踪的隐式响应式状态替代事务；
 - 不因引擎化改变生成算法、业务语义或视觉精度；
 - 不用删图层、减标签、降 picking、隐藏预热或放宽 LongTask 阈值换取成绩；
-- 不将 UI、相机、Loading 文案和 WebGL 资源管理塞进 MapCoreEngine；
-- 不把本计划自动加入 `docs/current-plan.md` 的权威任务清单。
+- 不将 UI、相机、Loading 文案、Worker 会话所有权和 WebGL 资源管理塞进 MapCoreEngine；这些由 App shell、MapRuntimeCoordinator 和 RenderEngine 分别负责；
+- 不在本分支合入或推送 `main`，不执行浏览器验收。
 
 ## 3. 当前模块到目标职责的映射
 
@@ -75,7 +78,7 @@ UI / Console API / Headless API
 | revision / history | `map-revision.js`、`edit-history.js` | Core revision / transaction / history adapter |
 | domain patch | `domain-patch.js`、各领域 Worker task | Core patch validation / commit |
 | map snapshot transaction | `map-snapshot-transaction.js` | Core replacement transaction |
-| Worker session / ACK / checksum | `worker-task-coordinator.js`、`compute-worker.js` | Core worker boundary |
+| Worker session / ACK / checksum | `worker-task-coordinator.js`、`compute-worker.js` | Runtime coordinator worker boundary |
 | field / transport / save registry | `canonical-map-field-registry.js` | Canonical schema / patch / persistence registry |
 | render preparation | `render-preparation.js` | Render preparation adapter |
 | prepared install / GPU owner | `prepared-render-installer.js` | RenderEngine resource transaction |
@@ -84,7 +87,7 @@ UI / Console API / Headless API
 | API / schema / capability | `console-api.js`、`api-contract.js`、`api-schema-registry.js` | Core action / query adapters |
 | panel callbacks | `runtime/app.js`、`ui/` | Panel registry + UI shell |
 
-现有模块不需要立即移动。第一阶段只增加 adapter 和 contract，避免出现第二份地图状态。
+现有模块不需要立即移动。第一阶段先盘点真实 owner、事务和失败恢复，不创建 adapter；后续只增加薄 contract / adapter，避免出现第二份地图状态。
 
 ## 4. 四类数据模型
 
@@ -131,7 +134,7 @@ presentation 变化不推进 canonical map revision，不产生 undo，不发布
 - overlay DOM node、label layout、picking bucket；
 - Worker retained session。
 
-cache 必须绑定 `mapIdentity + sourceRevision + topologyRevision + renderGeneration`，不得伪装成 canonical 数据。
+cache 必须绑定专用的 `RenderResourceBinding`，至少包含 `mapIdentity + sourceRevision + topologyRevision + renderGeneration`，不得把 operation token 或 lock fingerprint 伪装成 canonical revision。
 
 ## 5. MapCoreEngine 职责
 
@@ -159,11 +162,9 @@ core.commit.last()
 - commit envelope 创建；
 - write set / lock / checksum / binding 验证；
 - dependency graph 失效计划；
-- Worker snapshot / patch 发布；
-- replica ACK 和 resync；
-- renderer invalidation 通知；
-- history、save、API 与 UI 使用同一个 commit identity；
-- cancel、obsolete、failure、rollback 的一致性。
+- 为 runtime coordinator 产生 owned snapshot、committed patch 和 invalidation intent；
+- canonical history、revision 和 commit identity 的原子一致性；
+- publish 前 cancel / obsolete / failure / rollback 的一致性。
 
 ### 5.3 不负责
 
@@ -172,6 +173,15 @@ core.commit.last()
 - shader、buffer、texture 的具体实现；
 - 领域算法本身；
 - 某个 layer 的颜色、图形和视觉设计。
+
+### 5.4 MapRuntimeCoordinator 职责
+
+`MapCoreEngine` 只决定 canonical 事务是否接纳以及产生什么 commit / invalidation；`MapRuntimeCoordinator` 负责把已接纳事实投影到 Worker replica、renderer、persistence dirty state 和交互运行时。
+
+- interactive、headless、worker-only 使用不同 projection profile；headless 没有 renderer 也能完成 canonical commit；
+- 可失败投影尽量在 canonical publish 前 prepare；publish 后失败进入 `degraded / retry / resync`，不得悄悄反向改写已观察的 canonical history；
+- Worker snapshot / patch 发布、replica ACK / resync、renderer invalidation / install 和 persistence dirty projection 只由 coordinator 负责；
+- facade 只做组合入口，不成为 service locator，不拥有第二份 map、history 或 renderer state。
 
 ## 6. Revision vector 与提交协议
 
@@ -189,11 +199,7 @@ core.commit.last()
     settlements,
     economy,
     tradePolicy
-  },
-  presentationRevision,
-  renderGeneration,
-  generationToken,
-  lockFingerprint
+  }
 }
 ```
 
@@ -203,8 +209,10 @@ core.commit.last()
 - canonical 写入推进 `mapRevision`；
 - grid / pack topology、坐标或身份变化推进 `topologyRevision`；
 - 领域局部重建推进对应 `domainRevisions`；
-- 纯显示状态只推进 `presentationRevision`；
-- GPU context restore 或资源全量替换推进 `renderGeneration`。
+- undo / redo 产生新的单调 `mapRevision`，不能把 canonical revision 倒回旧值；
+- 纯显示状态使用独立 `PresentationRevision`；
+- GPU context restore 或资源全量替换使用独立 `RenderResourceBinding.renderGeneration`；
+- `generationToken` 和 `lockFingerprint` 属于 `OperationBinding`，不参与 canonical revision vector。
 
 ### 6.2 Commit envelope
 
@@ -220,8 +228,7 @@ core.commit.last()
   beforeChecksum,
   afterChecksum,
   writeSet,
-  affectedObjects,
-  affectedCells,
+  affected,
   invalidatedSystems,
   rebuiltSystems,
   workerPatchIds,
@@ -233,7 +240,7 @@ core.commit.last()
 }
 ```
 
-commit envelope 不保存完整地图，不进入普通用户文案，只供 core、Worker、renderer、history、API 和 debug 共享。
+commit envelope 不保存完整地图，也不内联无上限对象 / cell 清单；`affected` 使用有界摘要、范围或 artifact 引用。checksum 必须声明 canonical 字段范围和增量 / 完整计算策略。该对象不进入普通用户文案，只供 core、runtime coordinator、history、API 和 debug 共享。
 
 ## 7. Dependency Registry
 
@@ -287,8 +294,7 @@ commit envelope 不保存完整地图，不进入普通用户文案，只供 cor
 ```js
 {
   mapIdentity,
-  revisionVector,
-  commitId,
+  sourceRevision,
   operationId,
   operationName,
   generationToken,
@@ -298,6 +304,8 @@ commit envelope 不保存完整地图，不进入普通用户文案，只供 cor
   sourceChecksum
 }
 ```
+
+Worker 计算阶段尚无正式 commit，统一 binding 不得要求 `commitId`。只有消费已提交 patch 的 replica projection 才携带 `commitId`。
 
 ### 8.3 统一 Worker result
 
@@ -318,16 +326,22 @@ commit envelope 不保存完整地图，不进入普通用户文案，只供 cor
 ### 8.4 正式提交顺序
 
 ```text
-core capture source snapshot
+core capture owned source snapshot
 → Worker compute
 → validate binding / lock / patch policy
-→ core commit canonical patch
-→ update history and map revision
-→ publish replica patch and await ACK
 → build dependency invalidation plan
-→ prepare render delta
-→ renderer atomic install
-→ UI / API observe the same commit
+→ prepare required projections without publishing
+→ core atomically commit canonical patch + history + revision
+→ publish commit to UI / API / persistence
+→ runtime coordinator settle replica / renderer projections
+→ failed projection enters retry / resync without rewriting published history
+```
+
+提交生命周期固定为：
+
+```text
+planned → computed → validated → projections-prepared
+→ canonical-committed → published → projections-settled
 ```
 
 Worker 不得绕过 core 直接覆盖正式地图或 GPU 资源。
@@ -370,7 +384,7 @@ Worker 不得绕过 core 直接覆盖正式地图或 GPU 资源。
 
 ### 10.1 目标
 
-新业务域必须通过一个 Manifest 声明完整接入面，避免新增功能只接了 UI 或只接了 Worker，却漏掉存档、历史、渲染或旧数据。
+新业务域必须通过一个 Manifest 声明其完整 capability 面：需要的能力必须注册，不适用的 Worker、regeneration、view 或 layer 也必须显式声明 `not-required / unsupported`，避免新增功能只接了 UI 或只接了 Worker，也避免为了形式完整制造无业务意义的入口。
 
 ### 10.2 Manifest 内容
 
@@ -389,7 +403,13 @@ Worker 不得绕过 core 直接覆盖正式地图或 GPU 资源。
   panels: ["trade-policy-panel"],
   persistence: ["tradePolicy"],
   api: ["tradePolicy.*"],
-  locks: ["trade-policy-object"]
+  locks: ["trade-policy-object"],
+  capabilities: {
+    worker: "required",
+    regeneration: "required",
+    view: "required",
+    renderLayer: "required"
+  }
 }
 ```
 
@@ -407,6 +427,8 @@ Worker 不得绕过 core 直接覆盖正式地图或 GPU 资源。
 - regression 是否覆盖 save、undo、worker、view、layer 和 failure。
 
 ## 11. 新业务域完整接入流程
+
+本节描述 capability 的全集，不要求每个领域全部实现。注册器只对 Manifest 声明为 `required / optional` 的能力执行对应审计；`not-required / unsupported` 必须附理由并由专项回归证明没有隐藏调用点。
 
 以下以新增“贸易政策”为例。
 
@@ -535,59 +557,24 @@ Manifest 声明：
 
 新增领域没有旧数据时，也要先定义缺失字段默认值和迁移版本，不能让旧地图读取依赖“字段肯定存在”。
 
-## 12. 分阶段施工顺序
+## 12. 统一分阶段施工顺序
 
-### 阶段 A：架构盘点与契约冻结
+唯一阶段权威见 [第 349 项执行记录](./task-349-map-core-engine-execution.md)。两份专题不得再维护相互冲突的独立顺序。
 
-不改代码，生成字段—命令—Worker—派生—layer—panel—API—存档映射表。
+1. `349-0`：校正计划、登记权威任务、冻结无浏览器与评审规则。
+2. `349-1`：只读盘点 owner、现有事务状态机、snapshot / buffer ownership、checksum 成本、interactive / headless 差异；未确定 owner 为阻断。
+3. `349-2`：引入受限 TS 工具链；不迁移业务实现。
+4. `349-3`：实现 identity、revision、operation、snapshot ownership、commit lifecycle 类型与 runtime validator；不接管旧 action。
+5. `349-4`：实现 capability-aware Manifest、注册器和影子审计；不改变运行路由。
+6. `349-5`：实现薄 `MapCoreEngine + MapRuntimeCoordinator` facade，在影子模式产生 commit / projection 记录。
+7. `349-6`：迁移 notes 的 command / history / query / persistence / API 切片，明确声明无需 Worker、regeneration 和 render layer。
+8. `349-7`：迁移 markers 的 presentation / layer / picking 切片，不伪造重生成能力。
+9. `349-8`：选择一个真实现有 Worker task，迁移 binding / result / patch / ACK / resync。
+10. `349-9`：接入 dependency registry、projection 状态和局部失效；未知依赖显式 full rebuild。
+11. `349-10.x`：根据 `349-1` 盘点逐域拆分 economy、diplomacy、military、settlements、politics、terrain / climate 等复杂域；每个子阶段单独 checkpoint 和评审。
+12. `349-11`：执行 build、typecheck 和非浏览器回归终验，形成完整浏览器验收方案但不执行。
 
-**门禁**：所有已存在领域和 Worker task 均能归类；未确定 owner 的字段列为阻断。
-
-### 阶段 B：核心 contract 与薄 facade
-
-新增 core contract 和 `MapCoreEngine` facade，包装现有 state、history、revision、coordinator。
-
-**门禁**：旧 command、API、save、undo / redo 行为一致；不能出现第二个 canonical map owner。
-
-### 阶段 C：统一 revision / commit
-
-接入 revision vector、commit envelope、history、replica patch、renderer invalidation。
-
-**门禁**：edit、regenerate、import、undo、redo、adoption 的 before / after、checksum、history 和 renderer 状态一致。
-
-### 阶段 D：依赖图与派生索引
-
-先注册 city picking、route picking、cell attribute、political topology、labels、overlay object index。
-
-**门禁**：固定 10k / 100k 场景只重建命中的系统；无法局部化的系统显式记录 full-map。
-
-### 阶段 E：统一 Worker 协议
-
-统一 binding、result、patch、ACK、checksum、session state 和 resync。
-
-**门禁**：首次 full snapshot、warm reuse、cross-task reuse、patch gap、restart、cancel、obsolete、adoption 全通过。
-
-### 阶段 F：RenderEngine layer registry
-
-先迁移 cell attribute / palette，再迁移政治 topology，最后迁移 overlay、icon、label、picking。
-
-**门禁**：纯 view 不触发 Worker；几何变化原子安装；旧帧保留；context restore 正确；WebGL error 为 `0`。
-
-### 阶段 G：低风险领域试点
-
-选择 markers、notes 或 measurements，完整验证 schema、命令、Worker、重生成、视图、图层、面板、API、存档和回滚。
-
-**门禁**：新领域可以仅通过 Manifest 接入，不修改无关领域核心流程。
-
-### 阶段 H：复杂领域迁移
-
-逐个迁移 economy、diplomacy、military、settlements、politics 等复杂领域。每次保留 legacy adapter 和回滚边界。
-
-**门禁**：单领域完成完整旧数据、100k、视觉、性能和错误面验收后，才能进入下一个领域。
-
-### 阶段 I：旧路径收口
-
-仅在所有调用点已进入 core、且 adapter 运行一段审计期后，才考虑删除重复 stale、binding、patch 和 refresh 逻辑。
+每阶段主线程唯一写入，静态 / 专项 Node 门通过并 checkpoint 后，由同一只读评审智能体给出 `ACCEPT / BLOCK`。计划外必需项插入新的 `349-x` 子阶段，并重新排序全部未完成阶段。
 
 ## 13. 验证矩阵
 
@@ -616,7 +603,7 @@ Manifest 声明：
 - identity 稠密化和 holey legacy；
 - failure injection。
 
-### 13.3 浏览器小数据门
+### 13.3 浏览器小数据方案（本任务只设计，不执行）
 
 固定 10k 地图覆盖：
 
@@ -629,7 +616,7 @@ Manifest 声明：
 - Worker restart、context loss / restore；
 - Loading、health、console、page、WebGL error。
 
-### 13.4 浏览器大数据门
+### 13.4 浏览器大数据方案（本任务只设计，不执行）
 
 固定 100k 地图覆盖：
 
@@ -676,10 +663,10 @@ core inspect
 | --- | --- |
 | 产生第二份 map store | facade 只包装现有 canonical owner，禁止第二权威状态 |
 | Dependency registry 漏项 | 未知依赖默认 full rebuild，并要求静态审计和故障注入 |
-| Worker 新旧结果竞态 | 统一 binding + commitId + checksum；过期结果拒绝提交 |
+| Worker 新旧结果竞态 | 统一 operation binding + source revision + checksum；过期结果拒绝提交，正式接纳后才产生 commitId |
 | Render layer 失败污染上一帧 | prepared install 双缓冲、owner 引用计数、rollback 保留上一资源 |
 | 新业务数据保存不兼容 | registry、migration、backfill、old sample、round-trip 同步完成 |
-| 新领域只注册了 UI | Manifest 审计要求 Worker / schema / history / persistence / regression |
+| 新领域只注册了 UI | Manifest 按 capability 审计 schema / history / persistence / regression；只有声明需要时才强制 Worker / regeneration / layer |
 | 迁移范围失控 | 每阶段只迁移一个边界，保留 legacy adapter |
 | 复杂领域试点失败 | 先使用 markers / notes / measurements，不首期改政治拓扑 |
 | 性能退化 | 每阶段 paired profile，纯 display 和 full rebuild 分开验收 |
@@ -690,7 +677,7 @@ core inspect
 - dependency plan 不确定时使用完整重建，禁止不可信局部复用；
 - Worker patch gap / checksum 错误时销毁 session 并一次 full resync；
 - renderer install 失败保留上一帧和上一组 GPU owner；
-- commit 失败同时恢复 canonical、history、replica 和 renderer；
+- publish 前 canonical commit 或 prepared projection 失败时恢复 canonical / history 并释放未发布投影；publish 后 replica / renderer 失败只进入 degraded / retry / resync，不反向恢复已观察的 canonical history；
 - 新领域 layer / panel / API adapter 可独立关闭，不影响既有地图；
 - 新存档字段迁移失败保留原始输入，不覆盖用户地图。
 
@@ -718,7 +705,14 @@ TypeScript 计划：把这些边界变成可检查的类型和 Manifest
 
 ## 18. 推荐首个试点
 
-推荐选择 `markers`、`notes` 或 `measurements` 之一，原因是：
+不再要求一个“全能试点”同时证明所有能力，改为两个独立垂直切片：
+
+- `notes`：验证 command、history、query、panel、API、persistence 和旧数据；明确声明无需 Worker、regeneration、view 和 layer；
+- `markers`：验证 canonical identity、presentation、layer、picking、export 和 context-restore source contract；不伪造独有 Worker 或重生成。
+
+另在 `349-8` 选择一个真实现有 Worker task 独立验证 Worker 协议。这样可以区分核心事务、渲染和跨线程问题，不把框架失败与业务复杂度混在一起。
+
+选择这些切片的原因是：
 
 - 业务边界相对独立；
 - 对底层拓扑依赖较少；
@@ -734,26 +728,22 @@ TypeScript 计划：把这些边界变成可检查的类型和 Manifest
 本架构计划不以“文件夹建出来”作为完成，而以以下结果为完成：
 
 1. 核心 owner、revision、commit、dependency、Worker、render layer 边界可被静态审计；
-2. 一个低风险新领域能通过 Manifest 完整接入；
-3. 新领域具备独有 command、regeneration、Worker、view、layer、panel、API、persistence 和 regression；
+2. notes、markers 和一个真实 Worker task 三个切片合计通过 Manifest 覆盖事务 / persistence、renderer / picking 和 Worker 协议；
+3. 每个领域只实现其 `capabilities` 声明的能力，不为完整表面人工制造无业务意义的 command、regeneration、Worker、view 或 layer；
 4. 纯 view 不触发地图计算；
 5. 业务 commit 能正确驱动 replica、derived、renderer、history 和 UI；
-6. 旧地图、旧存档、旧 API、撤销 / 重做和真实浏览器行为不退化；
-7. 10k / 100k 性能、视觉、picking、PNG、Worker restart、context restore 和错误面通过；
+6. 旧地图、旧存档、旧 API、撤销 / 重做通过非浏览器回归；真实浏览器行为只形成待执行方案；
+7. 10k / 100k 性能、视觉、picking、PNG、Worker restart、context restore 和错误面形成完整浏览器验收方案并通过可执行性评估，本任务不实际运行；
 8. 复杂领域仍可在不破坏既有领域的前提下逐个迁移。
 
-## 20. 手动转移清单
+## 20. 分支与验收约束
 
-转移到 `fmg-parallel` 时按以下顺序：
-
-1. 先复制本文件；
-2. 再复制 `typescript-core-contract-migration-plan.md`；
-3. 在 `fmg-parallel/docs/task-notes/README.md` 登记两份专题；
-4. 只在 `fmg-parallel` 当前 `main` 创建独立任务分支；
-5. 先做阶段 A 只读盘点，不创建代码；
-6. 阶段 A 完成并得到明确 owner / dependency 表后，再登记权威实施任务；
-7. 首个实现阶段只做 core contract、Manifest 和低风险领域试点；
-8. 不把本计划中的阶段自动视为当前任务，不从旧日志自行扩展范围。
+1. 本计划只在 `codex/map-core-engine-architecture-plan` 实施并保留独立 checkpoint；
+2. 不合入或推送 `main`；
+3. 不执行真实浏览器、视觉或 WebGL 门；
+4. 浏览器验收所需入口、数据、断言、性能阈值、截图与恢复步骤在 `349-11` 写入文档并评估可执行性；
+5. 每个实现阶段冻结后必须先通过只读评审智能体，才能开始下一阶段；
+6. 计划外必需项必须显式插入阶段记录，不能以“顺手修复”混入当前 checkpoint。
 
 ## 21. 最终建议
 
