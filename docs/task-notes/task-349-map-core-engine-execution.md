@@ -20,7 +20,7 @@
 | 349-0 | 校正两份计划、登记权威任务、冻结阶段链 | 文档引用、编号、版本、diff check；只读评审 ACCEPT | 不改产品代码 | ACCEPT |
 | 349-1 | 现有 owner、事务状态机、Worker / renderer / persistence 依赖盘点与 ADR | 全部现有任务和 owner 可归类；未知 owner 为阻断 | 不创建 facade、不迁移代码 | ACCEPT |
 | 349-2 | 受限 TypeScript 工具链 | `typecheck:core`、build、既有静态门；运行产物除版本注入外不变 | 不启用全局 `checkJs` | ACCEPT |
-| 349-3 | 身份、canonical revision、operation binding、snapshot ownership、commit lifecycle 类型与运行时校验 | 类型负例、validator、Node regression | 不接管旧 action | 待执行 |
+| 349-3 | 身份、canonical revision、operation binding、snapshot ownership、commit lifecycle 类型与运行时校验 | 类型负例、validator、Node regression | 不接管旧 action | ACCEPT |
 | 349-3a | canonical field registry、persisted / live presentation 分类、普通 document identity 定义 / 迁移与 identity adapters 闭合 | 五个遗漏字段、旧数据、checksum、patch、document identity 迁移和身份混用负例通过 | 不实现 Manifest、不接管 action | 349-1 强制插入 |
 | 349-4 | Capability-aware Domain Manifest、注册器与影子审计 | 不完整 manifest 拒绝；notes / markers / Worker 试点可登记 | 不改变运行路由 | 待执行 |
 | 349-5 | 薄 `MapCoreEngine` 与 `MapRuntimeCoordinator` facade，影子产生 commit / projection 状态 | 旧 history / revision 行为不变；无第二 map owner | 不迁移复杂领域 | 待执行 |
@@ -52,14 +52,14 @@ planned → computed → validated → projections-prepared
 
 | 字段 | 内容 |
 | --- | --- |
-| 当前阶段 | `349-3` 核心身份、revision、operation、snapshot 与 commit 契约 |
-| 冻结点 | `349-2` 已 `ACCEPT`（版本 `0.5.7`，本地 checkpoint 待建立） |
-| 允许文件 | `src/core/contracts` 类型 / validator、专项 Node / 类型负例门、package script、阶段文档 |
-| 禁止文件 | 旧 action 接管、facade、Manifest、canonical registry 修复、`source/`、main、浏览器 |
-| 必须保持 | 类型与 runtime validator 同源；Computed patch 不含正式 commit / target revision；身份命名空间不可混用 |
-| 首个廉价门 | 冻结 contract 文件边界、公共 discriminant 和运行时错误码 |
-| 冻结门 | `typecheck:core`、类型负例、validator Node regression、production build、评审智能体 ACCEPT |
-| 停止条件 | 契约必须依赖第二 map owner、要求提前修改 registry / action，或 TS 无法表达并校验 ownership |
+| 当前阶段 | `349-3a` canonical registry、普通 document identity 与 identity adapters |
+| 冻结点 | `349-3` 已 `ACCEPT`（版本 `0.5.8`，本地 checkpoint 待建立） |
+| 允许文件 | canonical registry / checksum / patch 描述、map-file-io identity migration、core identity adapters、专项 Node、阶段文档 |
+| 禁止文件 | Manifest、facade、旧 action 接管、领域迁移、`source/`、main、浏览器 |
+| 必须保持 | 五个持久字段进入唯一 registry；普通 document identity 有默认 / 派生 / 迁移；各 identity 只能显式转换 |
+| 首个廉价门 | 核对五字段默认 / migration / patch mode 与普通文档 metadata 现状，冻结 adapter 输入输出 |
+| 冻结门 | registry / old-data / checksum / patch / identity migration / 混用负例、typecheck、build、评审 ACCEPT |
+| 停止条件 | 字段无法归类 canonical / persisted presentation，或 identity 迁移会重写用户语义而非补充 metadata |
 
 ## 阶段结果
 
@@ -92,5 +92,15 @@ planned → computed → validated → projections-prepared
 - 评审：同一只读评审智能体首轮 `ACCEPT`。
 - 浏览器：未启动、未操作、未执行。
 - 下一步：`349-3`，只实现核心类型与 runtime validator，不接管旧 action。
+
+### 349-3 — ACCEPT
+
+- 完成：`10` 个 TypeScript contract 文件 / `635+` 行，覆盖品牌身份、双 revision profile、operation / projection binding、snapshot ownership、computed / committed patch、commit lifecycle、envelope 与 runtime error。
+- 专项工具：`1` 文件；同一 TypeScript validator 编译后由 Node 执行，不维护第二份 JS validator。
+- 产品接线：旧 runtime import `0`；旧 action / registry / facade / Manifest 改动 `0`。
+- 门禁：typecheck 与类型负例、core contract Node regression、tool syntax、runtime import audit、production build `1360` modules、diff check 通过。
+- 评审：首轮 `BLOCK` 五项类型 / validator / 覆盖一致性，逐项补负例后同一只读评审智能体复审 `ACCEPT`。
+- 版本：`0.5.7 → 0.5.8`；浏览器未启动、未操作、未执行。
+- 下一步：强制插入的 `349-3a`，先闭合 registry 与 identity adapter，再开始 Manifest。
 
 阶段结果在每次 checkpoint 后更新，长日志只记录命令和 artifact 路径，不粘贴到本文。

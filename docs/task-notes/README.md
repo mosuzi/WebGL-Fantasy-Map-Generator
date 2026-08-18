@@ -11,6 +11,7 @@
 - 第 349 项统一阶段、checkpoint、只读评审与动态插入记录见 [`task-349-map-core-engine-execution.md`](./task-349-map-core-engine-execution.md)。
 - 第 349-1 阶段的现有 canonical owner、五类事务、`13` 个 Worker task、snapshot / buffer ownership、身份命名空间和强制插入 `349-3a` 的 ADR 见 [`task-349-core-architecture-inventory.md`](./task-349-core-architecture-inventory.md)。
 - 第 349-2 阶段的受限 `tsconfig.core.json`、TypeScript 版本、`typecheck:core` 与同版本 production build 摘要见 [`task-349-typescript-toolchain.md`](./task-349-typescript-toolchain.md)。
+- 第 349-3 阶段的品牌身份、两类 revision profile、operation / projection binding、snapshot ownership、computed / committed patch、commit lifecycle 和 runtime validator 见 [`task-349-core-contracts.md`](./task-349-core-contracts.md)。
 - 地图核心引擎化与领域模块接入实施计划见 [`map-core-engine-architecture-implementation-plan.md`](./map-core-engine-architecture-implementation-plan.md)：冻结 MapCoreEngine、MapRuntimeCoordinator、RenderEngine、Worker、revision、commit、dependency registry、DomainModuleManifest 与逐阶段验收边界。
 - TypeScript 核心契约与领域接入渐进式引入计划见 [`typescript-core-contract-migration-plan.md`](./typescript-core-contract-migration-plan.md)：只类型化核心契约、Worker DTO、领域 Manifest、事务 / patch、Render layer 和垂直切片，不一次性迁移现有 JavaScript。
 

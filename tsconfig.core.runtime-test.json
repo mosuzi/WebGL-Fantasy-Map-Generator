@@ -1,0 +1,17 @@
+{
+  "extends": "./tsconfig.core.json",
+  "compilerOptions": {
+    "allowJs": false,
+    "noEmit": false,
+    "rootDir": "app/webgl-generator/src/core",
+    "outDir": ".cache/core-contract-test",
+    "declaration": false,
+    "sourceMap": false
+  },
+  "include": [
+    "app/webgl-generator/src/core/contracts/**/*.ts"
+  ],
+  "exclude": [
+    "app/webgl-generator/src/core/contracts/contract.type-test.ts"
+  ]
+}
