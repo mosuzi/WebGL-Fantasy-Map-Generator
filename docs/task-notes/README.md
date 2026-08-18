@@ -6,6 +6,8 @@
 
 ## 专题映射
 
+- 地图核心引擎架构调查与新方案见 [`map-core-engine-architecture-proposal.md`](./map-core-engine-architecture-proposal.md)：基于当前 canonical map、事务 / 历史、Worker 副本、GPU resident renderer、存档和 API 的实际边界，提出 `MapCoreEngine + RenderEngine + UI shell` 的渐进式契约方案；本文是未授权实施的架构评估，不自动进入当前任务清单。
+
 - 第 347 项的 100k 城镇完全重生成端到端账本、picking 安装热点优化、`9969ms → 1886.3ms` 和用户原图撤销验收记录于 [`task-347-city-regeneration-performance.md`](./task-347-city-regeneration-performance.md)；没有以 Loading 文案、降数量、删依赖层或放宽语义换取成绩。
 - 第 346 项的用户当前地图真实重生成 Profile、阶段耗时拆解和 Loading 文案优化冻结于 [`task-346-regeneration-profile-loading-copy.md`](./task-346-regeneration-profile-loading-copy.md)；Profile 后必须撤销恢复原图，普通界面不得泄漏内部实现概念。
 - 第 345 项的十一类完全重生成语义、城镇从空重建、行政角色生成后重选、陆地不变量、身份变化与用户原图 Chrome 验收冻结于 [`task-345-true-regeneration-semantics.md`](./task-345-true-regeneration-semantics.md)；只有显式锁和局部范围外对象可以保留。
