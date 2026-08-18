@@ -23,7 +23,7 @@
 | 349-3 | 身份、canonical revision、operation binding、snapshot ownership、commit lifecycle 类型与运行时校验 | 类型负例、validator、Node regression | 不接管旧 action | ACCEPT |
 | 349-3a | canonical field registry、persisted / live presentation 分类、普通 document identity 定义 / 迁移与 identity adapters 闭合 | 五个遗漏字段、旧数据、checksum、patch、document identity 迁移和身份混用负例通过 | 不实现 Manifest、不接管 action | ACCEPT |
 | 349-4 | Capability-aware Domain Manifest、注册器与影子审计 | 不完整 manifest 拒绝；notes / markers / Worker 试点可登记 | 不改变运行路由 | ACCEPT |
-| 349-5 | 薄 `MapCoreEngine` 与 `MapRuntimeCoordinator` facade，影子产生 commit / projection 状态 | 旧 history / revision 行为不变；无第二 map owner | 不迁移复杂领域 | 进行中 |
+| 349-5 | 薄 `MapCoreEngine` 与 `MapRuntimeCoordinator` facade，影子产生 commit / projection 状态 | 旧 history / revision 行为不变；无第二 map owner | 不迁移复杂领域 | 待评审 |
 | 349-6 | notes command / history / query / persistence / API 垂直切片 | 新增、编辑、删除、undo / redo、旧数据、save 回归 | 不伪造 Worker / regeneration / layer | 待执行 |
 | 349-7 | markers presentation / layer / picking 垂直切片 | identity、draw、pick、export 的 Node / source 契约 | 不执行真实视觉浏览器门 | 待执行 |
 | 349-8 | 一个真实 Worker task 的统一 binding / result / patch 切片 | checksum、stale、cancel、gap、restart 的专项回归 | 不批量迁移 Worker | 待执行 |
@@ -52,8 +52,8 @@ planned → computed → validated → projections-prepared
 
 | 字段 | 内容 |
 | --- | --- |
-| 当前阶段 | `349-5` 薄 `MapCoreEngine + MapRuntimeCoordinator` facade 与影子 commit / projection 记录 |
-| 冻结点 | `349-4` 复审 `ACCEPT`，版本 `0.5.12`；Manifest registry 可作为 facade 的只读领域分母 |
+| 当前阶段 | `349-5` 薄 facade 与影子 commit / projection 记录，checkpoint 待评审 |
+| 冻结点 | `349-5` 候选版本 `0.5.13`；七步 lifecycle、发布前 rollback、发布后 degraded / retry / resync、runtime import `0` |
 | 允许文件 | facade / coordinator 类型与纯 runtime validator、影子记录 adapter、专项 Node、阶段文档 |
 | 禁止文件 | 旧 action 路由切换、领域行为迁移、第二 map store、`source/`、main、浏览器 |
 | 必须保持 | facade 只持有现有 canonical owner 的访问器；影子记录不得推进旧 revision / history、不得发布到 UI / API / persistence |
@@ -123,5 +123,14 @@ planned → computed → validated → projections-prepared
 - 版本：首轮 `0.5.10 → 0.5.11`，评审修正候选 `0.5.11 → 0.5.12`；浏览器未启动、未操作、未执行。
 - 评审：首轮 `BLOCK` 四项 P1：可缺省 resolver、API 自填矩阵、Marker delete / headless profile 事实漂移、regeneration 未进入唯一性账本。四项最窄修正与反例完成后，同一只读评审智能体 blocker-only 复审 `ACCEPT`。
 - 下一步：`349-5` 只建立薄 facade 和不改变旧行为的 commit / projection 影子记录。
+
+### 349-5 — 待评审
+
+- 完成：getter-only `MapCoreEngine`、`MapRuntimeCoordinator`、facade contract 与专项 Node；只观察 legacy owner 已发生的 revision / history 事实，不执行 command 或保存 map。
+- lifecycle：七步严格推进；`commitId` 只在真实 canonical commit 后分配；publish 再核 owner；publish 前 rollback 和 publish 后 degraded / retry / resync 分离。
+- 不变量：legacy revision / history 写入 `0`、map cache `0`、runtime import `0`；projection 集合不可漂移，settled 只接受 ready / degraded；interactive、headless 与 adoption profile 均由既有 revision validator 约束。
+- 门禁：core typecheck / contracts / manifests / facade 和 production build 通过，构建保持 `1361 modules`；`source/` 零改动。
+- 版本：`0.5.12 → 0.5.13`；浏览器未启动、未操作、未执行。
+- 评审：checkpoint 冻结后交同一只读评审智能体；未 `ACCEPT` 前不进入 `349-6`。
 
 阶段结果在每次 checkpoint 后更新，长日志只记录命令和 artifact 路径，不粘贴到本文。

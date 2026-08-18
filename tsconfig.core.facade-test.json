@@ -1,0 +1,19 @@
+{
+  "extends": "./tsconfig.core.json",
+  "compilerOptions": {
+    "allowJs": false,
+    "noEmit": false,
+    "rootDir": "app/webgl-generator/src",
+    "outDir": ".cache/core-facade-test",
+    "declaration": false,
+    "sourceMap": false
+  },
+  "include": [
+    "app/webgl-generator/src/core/contracts/**/*.ts",
+    "app/webgl-generator/src/core/map-core-engine.ts",
+    "app/webgl-generator/src/core/map-runtime-coordinator.ts"
+  ],
+  "exclude": [
+    "app/webgl-generator/src/core/contracts/*.type-test.ts"
+  ]
+}
