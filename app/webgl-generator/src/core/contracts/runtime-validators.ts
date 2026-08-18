@@ -88,6 +88,14 @@ function nonEmptyString(value: unknown, path: string): string {
   return value;
 }
 
+function persistedDocumentId(value: unknown, path: string): PersistedDocumentId {
+  const normalized = typeof value === "string" ? value.trim() : "";
+  if (!normalized || normalized.length > 160 || !/^[\p{L}\p{N}][\p{L}\p{N}._:-]*$/u.test(normalized)) {
+    fail("EXPECTED_NON_EMPTY_STRING", path, "必须是合法的普通持久文档身份");
+  }
+  return normalized as PersistedDocumentId;
+}
+
 function nonNegativeInteger(value: unknown, path: string): number {
   if (!Number.isInteger(value) || Number(value) < 0) fail("EXPECTED_NON_NEGATIVE_INTEGER", path, "必须是非负整数");
   return Number(value);
@@ -251,7 +259,7 @@ export function validatePersistedDocumentBinding(value: unknown, path = "persist
   forbid(source, "canonicalRevision", path);
   if (source.identityVersion !== 1) fail("EXPECTED_ENUM_VALUE", `${path}.identityVersion`, "当前必须是 1");
   return Object.freeze({
-    documentId: nonEmptyString(requireField(source, "documentId", path), `${path}.documentId`) as PersistedDocumentId,
+    documentId: persistedDocumentId(requireField(source, "documentId", path), `${path}.documentId`),
     identityVersion: 1
   });
 }

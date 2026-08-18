@@ -1,4 +1,8 @@
-import {CANONICAL_MAP_FIELD_REGISTRY_VERSION, listCanonicalMapSections} from "./canonical-map-field-registry.js";
+import {
+  CANONICAL_MAP_FIELD_REGISTRY,
+  CANONICAL_MAP_FIELD_REGISTRY_VERSION,
+  listCanonicalMapSections
+} from "./canonical-map-field-registry.js";
 
 const FNV_OFFSET = 0x811c9dc5;
 const FNV_PRIME = 0x01000193;
@@ -9,20 +13,32 @@ const checksumCache = new WeakMap();
 export async function computeCanonicalMapReplicaChecksum(map, {revision = 0, budgetMs = 4, yieldToMain = defaultYield, signal = null} = {}) {
   if (!map || typeof map !== "object") throw checksumError("map_replica_checksum_target_invalid", "地图副本 checksum 目标无效");
   const key = Number(revision);
+  const checksumOptions = {budgetMs, yieldToMain, signal};
+  const presentationChecksum = await computePersistedPresentationChecksum(map, checksumOptions);
   const cached = checksumCache.get(map);
-  if (cached?.revision === key) return cached.promise;
+  if (cached?.revision === key && cached.presentationChecksum === presentationChecksum) return cached.promise;
   const promise = computeChecksum([
     "canonical-map",
     CANONICAL_MAP_FIELD_REGISTRY_VERSION,
     ...listCanonicalMapSections().flatMap(descriptor => [descriptor.path, map[descriptor.path]])
-  ], {budgetMs, yieldToMain, signal});
-  checksumCache.set(map, {revision: key, promise});
+  ], checksumOptions);
+  checksumCache.set(map, {revision: key, presentationChecksum, promise});
   try {
     return await promise;
   } catch (error) {
     if (checksumCache.get(map)?.promise === promise) checksumCache.delete(map);
     throw error;
   }
+}
+
+function computePersistedPresentationChecksum(map, options) {
+  return computeChecksum([
+    "persisted-presentation",
+    CANONICAL_MAP_FIELD_REGISTRY_VERSION,
+    ...CANONICAL_MAP_FIELD_REGISTRY
+      .filter(descriptor => descriptor.stateKind === "persisted-presentation")
+      .flatMap(descriptor => [descriptor.path, resolveOptionalPath(map, descriptor.path)])
+  ], options);
 }
 
 export async function computeMapReplicaPatchTargetChecksum(baseChecksum, writes, options = {}) {
@@ -149,6 +165,15 @@ function resolvePath(root, path) {
   let value = root;
   for (const part of String(path || "").split(".")) {
     if (!value || typeof value !== "object" || !Object.hasOwn(value, part)) throw checksumError("map_replica_path_invalid", `地图副本 path 不存在：${path}`);
+    value = value[part];
+  }
+  return value;
+}
+
+function resolveOptionalPath(root, path) {
+  let value = root;
+  for (const part of String(path || "").split(".")) {
+    if (!value || typeof value !== "object" || !Object.hasOwn(value, part)) return undefined;
     value = value[part];
   }
   return value;

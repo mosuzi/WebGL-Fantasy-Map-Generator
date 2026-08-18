@@ -56,6 +56,14 @@ const patch = createMapReplicaPatch({
 const patchedMap = applyMapReplicaPatch(structuredClone(baseMap), patch);
 assert.equal(await computeAppliedMapReplicaPatchTargetChecksum(patchedMap, patch), targetChecksum, "五字段 applied patch checksum 不一致");
 assert.notEqual(await computeCanonicalMapReplicaChecksum(patchedMap, {revision: 1}), baseChecksum, "五字段修改没有改变 full canonical checksum");
+const cachedPresentationMap = structuredClone(document.map);
+const beforePresentationChecksum = await computeCanonicalMapReplicaChecksum(cachedPresentationMap, {revision: 7});
+cachedPresentationMap.visualTheme = {...cachedPresentationMap.visualTheme, preset: "default"};
+cachedPresentationMap.options = {...cachedPresentationMap.options, visualTheme: "default"};
+const afterPresentationChecksum = await computeCanonicalMapReplicaChecksum(cachedPresentationMap, {revision: 7});
+const freshPresentationChecksum = await computeCanonicalMapReplicaChecksum(structuredClone(cachedPresentationMap), {revision: 7});
+assert.notEqual(afterPresentationChecksum, beforePresentationChecksum, "同 canonical revision 的 persisted presentation 修改没有失效 checksum cache");
+assert.equal(afterPresentationChecksum, freshPresentationChecksum, "persisted presentation 修改后的缓存 checksum 与 fresh map 不一致");
 assert.throws(
   () => createMapReplicaPatch({mapIdentity: "registry-document-map", patchId: "unknown", baseRevision: 1, targetRevision: 2, writes: [{path: "unknown.value", value: 1}]}),
   error => error?.code === "map_replica_path_unregistered",
@@ -68,6 +76,10 @@ const editedSource = structuredClone(source);
 editedSource.metadata.checksum = "after-edit-checksum";
 editedSource.summary = {...editedSource.summary, checksum: "after-edit-checksum"};
 assert.equal(createMapDocument(editedSource, editedSource.options).metadata.documentId, repeated.metadata.documentId, "同一旧 map 编辑后不得改变派生 identity");
+const refinedSource = structuredClone(source);
+refinedSource.grid.metadata = {...(refinedSource.grid.metadata || {}), actualCells: Number(refinedSource.grid.metadata?.actualCells || 0) + 1};
+refinedSource.pack.metadata = {...(refinedSource.pack.metadata || {}), cells: Number(refinedSource.pack.metadata?.cells || 0) + 1};
+assert.equal(createMapDocument(refinedSource, refinedSource.options).metadata.documentId, repeated.metadata.documentId, "同一旧 map 拓扑细分后不得改变派生 identity");
 const different = createMapDocument(generatePlaceholderMap({seed: "registry-document-identity-b", cellsTarget: 1000}), {});
 assert.notEqual(different.metadata.documentId, repeated.metadata.documentId, "不同旧 map 不得派生相同 identity");
 const custom = createMapDocument({...source, metadata: {...source.metadata, documentId: "custom-document:42"}}, source.options);
@@ -86,6 +98,16 @@ assert.throws(
   error => error?.code === "persisted_document_identity_invalid",
   "显式非法 document identity 必须拒绝"
 );
+assert.throws(
+  () => createMapDocument({...source, metadata: {...source.metadata, documentId: " invalid identity "}}, source.options),
+  error => error?.code === "persisted_document_identity_invalid",
+  "直接导出必须拒绝显式非法 document identity"
+);
+assert.throws(
+  () => createMapDocument({...source, metadata: {...source.metadata, documentIdentityVersion: 2}}, source.options),
+  error => error?.code === "persisted_document_identity_version_invalid",
+  "直接导出必须拒绝没有 id 的未知 identity version"
+);
 
 console.log(JSON.stringify({
   ok: true,
@@ -93,5 +115,6 @@ console.log(JSON.stringify({
   webfmgSections: 29,
   documentIdentityVersion: document.metadata.documentIdentityVersion,
   patchChecksumValidated: true,
+  presentationCacheInvalidationValidated: true,
   unknownPatchPathRejected: true
 }, null, 2));

@@ -40,20 +40,25 @@ export function adaptPersistedDocumentBinding(value: unknown): PersistedDocument
   const metadata = record(document.metadata, "document.metadata");
   const map = record(document.map, "document.map");
   const mapMetadata = record(map.metadata, "document.map.metadata");
-  if (metadata.documentId !== mapMetadata.documentId) {
+  const documentBinding = validatePersistedDocumentBinding({
+    documentId: metadata.documentId,
+    identityVersion: metadata.documentIdentityVersion
+  }, "document.metadata");
+  const mapBinding = validatePersistedDocumentBinding({
+    documentId: mapMetadata.documentId,
+    identityVersion: mapMetadata.documentIdentityVersion
+  }, "document.map.metadata");
+  if (documentBinding.documentId !== mapBinding.documentId) {
     throw new CoreContractError("IDENTITY_MISMATCH", "document.map.metadata.documentId", "必须与 document.metadata.documentId 相同");
   }
-  if (metadata.documentIdentityVersion !== mapMetadata.documentIdentityVersion) {
+  if (documentBinding.identityVersion !== mapBinding.identityVersion) {
     throw new CoreContractError(
       "IDENTITY_MISMATCH",
       "document.map.metadata.documentIdentityVersion",
       "必须与 document.metadata.documentIdentityVersion 相同"
     );
   }
-  return validatePersistedDocumentBinding({
-    documentId: metadata.documentId,
-    identityVersion: metadata.documentIdentityVersion
-  });
+  return documentBinding;
 }
 
 export function adaptLegacyPresentationBinding(value: unknown): PresentationBinding {

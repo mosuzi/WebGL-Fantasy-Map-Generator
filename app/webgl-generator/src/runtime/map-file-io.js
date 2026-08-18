@@ -29,6 +29,7 @@ import {diagnoseSettlementPortTopology} from "./settlement-port-topology.js";
 import {MAP_CELLS_MAX, normalizeMapCellTarget} from "../generator/map-size.js";
 import {
   PERSISTED_DOCUMENT_IDENTITY_VERSION,
+  inspectPersistedDocumentIdentityMetadata,
   normalizePersistedDocumentId,
   resolvePersistedDocumentIdentity,
   validatePersistedDocumentIdentity
@@ -176,34 +177,18 @@ export function validateMapDocumentForExport(document) {
 }
 
 export function migrateMapDocument(document) {
-  const versioned = migrateMapDocumentWithRegistry(document, {
+  const identityPrepared = preparePersistedDocumentIdentityMigration(document);
+  const versioned = migrateMapDocumentWithRegistry(identityPrepared, {
     targetVersion: MAP_DOCUMENT_VERSION,
     registry: MAP_DOCUMENT_MIGRATORS
   });
   assertMapDocumentCellLimit(versioned.map);
-  const rawIdentityHint = versioned.metadata?.documentId;
-  const rawMapIdentity = versioned.map?.metadata?.documentId;
-  const identityHint = normalizePersistedDocumentId(rawIdentityHint);
-  const mapIdentity = normalizePersistedDocumentId(rawMapIdentity);
-  if ((rawIdentityHint !== undefined && rawIdentityHint !== null && !identityHint) || (rawMapIdentity !== undefined && rawMapIdentity !== null && !mapIdentity)) {
-    const error = new Error("地图文档持久身份无效");
-    error.code = "persisted_document_identity_invalid";
-    throw error;
-  }
+  const identityHint = normalizePersistedDocumentId(versioned.metadata?.documentId);
+  const mapIdentity = normalizePersistedDocumentId(versioned.map?.metadata?.documentId);
   if (identityHint && mapIdentity && identityHint !== mapIdentity) {
     const error = new Error("地图文档与 map 的持久身份不一致");
     error.code = "persisted_document_identity_mismatch";
     throw error;
-  }
-  for (const [scope, id, version] of [
-    ["document", identityHint, versioned.metadata?.documentIdentityVersion],
-    ["map", mapIdentity, versioned.map?.metadata?.documentIdentityVersion]
-  ]) {
-    if (id && version !== undefined && Number(version) !== PERSISTED_DOCUMENT_IDENTITY_VERSION) {
-      const error = new Error(`${scope} 的持久身份版本无效`);
-      error.code = "persisted_document_identity_version_invalid";
-      throw error;
-    }
   }
   const sourceMap = identityHint && !mapIdentity
     ? {
@@ -238,6 +223,28 @@ export function migrateMapDocument(document) {
   diagnoseSettlementPortTopology(migrated.map);
   validateCurrentMapDocument(migrated);
   return migrated;
+}
+
+function preparePersistedDocumentIdentityMigration(document) {
+  const documentIdentity = inspectPersistedDocumentIdentityMetadata(document?.metadata, {scope: "document"});
+  const mapIdentity = inspectPersistedDocumentIdentityMetadata(document?.map?.metadata, {scope: "map"});
+  if (documentIdentity.documentId && mapIdentity.documentId && documentIdentity.documentId !== mapIdentity.documentId) {
+    const error = new Error("地图文档与 map 的持久身份不一致");
+    error.code = "persisted_document_identity_mismatch";
+    throw error;
+  }
+  if (!documentIdentity.documentId || mapIdentity.documentId) return document;
+  return {
+    ...document,
+    map: {
+      ...document.map,
+      metadata: {
+        ...(document.map?.metadata || {}),
+        documentId: documentIdentity.documentId,
+        documentIdentityVersion: PERSISTED_DOCUMENT_IDENTITY_VERSION
+      }
+    }
+  };
 }
 
 export function migrateMapDocumentWithRegistry(document, options = {}) {

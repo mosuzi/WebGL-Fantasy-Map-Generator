@@ -51,6 +51,7 @@ const descriptorRows = [
   ["labels", "labels", "structured", "replace"],
   ["visual-theme", "visualTheme", "structured", "replace", {stateKind: "persisted-presentation"}],
   ["display", "display", "structured", "replace", {optional: true, stateKind: "persisted-presentation"}],
+  ["options-visual-theme", "options.visualTheme", "structured", "replace", {stateKind: "persisted-presentation"}],
 
   ["grid-cells-v", "grid.cells.v", "csr", "replace", {valueType: "uint32", item: "cell-polygon"}],
   ["grid-cells-c", "grid.cells.c", "csr", "replace", {valueType: "uint32", item: "cell-neighbors"}],

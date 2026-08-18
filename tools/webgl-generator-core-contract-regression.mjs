@@ -79,6 +79,14 @@ const persistedDocument = {
 assert.equal(adaptPersistedDocumentBinding(persistedDocument).documentId, "fmg-doc-v1-0123456789abcdef");
 expectContractError(
   () => adaptPersistedDocumentBinding({
+    metadata: {documentId: " invalid identity ", documentIdentityVersion: 1},
+    map: {metadata: {documentId: " invalid identity ", documentIdentityVersion: 1}}
+  }),
+  "EXPECTED_NON_EMPTY_STRING",
+  "document.metadata.documentId"
+);
+expectContractError(
+  () => adaptPersistedDocumentBinding({
     ...persistedDocument,
     map: {metadata: {...persistedDocument.map.metadata, documentId: "fmg-doc-v1-fedcba9876543210"}}
   }),

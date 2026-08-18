@@ -18,6 +18,15 @@ import {ensureLabelStore} from "../app/webgl-generator/src/runtime/label-edit-co
 
 const fixtureText = await readFile(new URL("./fixtures/webgl-map-v1-minimal.json", import.meta.url), "utf8");
 const migrated = parseMapDocument(fixtureText);
+const legacyHeaderOnly = JSON.parse(fixtureText, (_key, value) => {
+  const Constructor = value?.__webglGeneratorTypedArray && globalThis[value.__webglGeneratorTypedArray];
+  return typeof Constructor === "function" ? new Constructor(value.data || []) : value;
+});
+legacyHeaderOnly.metadata.documentId = "legacy-header-only:1";
+legacyHeaderOnly.metadata.documentIdentityVersion = 1;
+const migratedLegacyHeaderOnly = migrateMapDocument(legacyHeaderOnly);
+assert.equal(migratedLegacyHeaderOnly.metadata.documentId, "legacy-header-only:1", "v1 header-only identity 没有保留");
+assert.equal(migratedLegacyHeaderOnly.map.metadata.documentId, "legacy-header-only:1", "v1 header-only identity 没有在 normalization 前传给 map");
 
 assert.equal(MAP_DOCUMENT_VERSION, 2);
 assert.equal(MAP_SCHEMA_VERSION, 2);
@@ -136,6 +145,16 @@ assert.throws(
   () => migrateMapDocument(conflictingIdentity),
   error => error?.code === "persisted_document_identity_mismatch",
   "冲突 document identity 必须拒绝"
+);
+
+const versionWithoutIdentity = structuredClone(current);
+delete versionWithoutIdentity.metadata.documentId;
+delete versionWithoutIdentity.map.metadata.documentId;
+versionWithoutIdentity.metadata.documentIdentityVersion = 2;
+assert.throws(
+  () => migrateMapDocument(versionWithoutIdentity),
+  error => error?.code === "persisted_document_identity_version_invalid",
+  "没有 id 的未知 document identity version 也必须拒绝"
 );
 
 const futureRegistry = createMapDocumentMigrationRegistry({

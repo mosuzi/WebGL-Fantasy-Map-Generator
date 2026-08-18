@@ -4,7 +4,7 @@
 
 本阶段闭合 `349-1` 发现的两个 Manifest 前置阻断：持久字段注册遗漏与身份命名空间混用。没有实现 Domain Manifest、`MapCoreEngine` facade，也没有接管旧 action。
 
-canonical field registry 从版本 `1` 升至 `2`，由 `60` 个 descriptor、`24` 个顶层 section 扩为 `65 / 29`。新增字段是 `notes`、`measurements`、`labels`、`visualTheme`、`display`；前三者分类为 `canonical`，后两者分类为 `persisted-presentation`。既有 `layers` 同步明确为 `persisted-presentation`。
+canonical field registry 从版本 `1` 升至 `2`，由 `60` 个 descriptor、`24` 个顶层 section 扩为 `66 / 29`。新增持久字段是 `notes`、`measurements`、`labels`、`visualTheme`、`display`；另加一个不占顶层 section id 的 `options.visualTheme` 精确分类 descriptor。前三个字段分类为 `canonical`，`layers / visualTheme / display / options.visualTheme` 分类为 `persisted-presentation`。
 
 这里的 persisted presentation 是存档可重复恢复的地图配置，不等于 live presentation。viewport、当前 display intent、pending render request、presentation revision 与 renderer resource owner 仍属于 runtime projection，不进入普通文档身份，也不与 canonical revision 共用时间线。
 
@@ -14,6 +14,7 @@ canonical field registry 从版本 `1` 升至 `2`，由 `60` 个 descriptor、`2
 - `display` 仍是 optional；旧 v3 不含该 section 时由既有 v2 migration 按当前默认规则回填。
 - `notes / measurements / labels / visualTheme` 沿用 `map-file-io` 的已有默认化与校验，不另建第二套 schema。
 - full replica checksum、v3 persistence、replica patch path audit 与后续 Manifest audit 共用 registry 描述；普通 commit 仍使用增量 patch checksum，不改为每次全图 hash。
+- full checksum 仍覆盖全部持久 section；缓存键由 canonical revision 与 persisted-presentation 小集合 checksum 共同组成，因此不推进 canonical revision 的主题 / display 修改也不会返回陈旧值。
 - patch 可写路径必须由精确、通配或最具体祖先 descriptor 覆盖。这样保留 `metadata.name`、`pack.burgs.1` 等既有精细写路径，同时拒绝未登记的新顶层状态。
 
 ## 3. 普通 persisted document identity v1
@@ -27,7 +28,7 @@ canonical field registry 从版本 `1` 升至 `2`，由 `60` 个 descriptor、`2
 
 1. 两处已有相同合法 id 时原样保留；
 2. 仅 header 有 id 时回填到 map metadata；
-3. 旧图两处均缺失时，根据 seed、generatedAt、尺寸与 cell 数等不随普通编辑变化的来源信息确定性派生 `fmg-doc-v1-<16 hex>`；
+3. 旧图两处均缺失时，仅根据 seed 与 generatedAt 等不随内容、checksum 或 topology 编辑变化的来源信息确定性派生 `fmg-doc-v1-<16 hex>`；
 4. 两处 id 冲突时以 `persisted_document_identity_mismatch` 拒绝；
 5. 显式非法 id 以 `persisted_document_identity_invalid` 拒绝，未知 identity version 以 `persisted_document_identity_version_invalid` 拒绝；
 6. 地图内容与 checksum 改变不改变旧图派生 id；导出只修改 normalized copy，不向当前运行时 map 原地写入身份。
@@ -50,7 +51,7 @@ adapter 复用 `349-3` 的 runtime validators；document header 与 map metadata
 
 - `pnpm run typecheck:core`；
 - `pnpm run regress:core-contracts`；
-- `pnpm run audit:canonical-map-fields`：registry `2 / 65 / 29`，旧 24 section 路径顺序不变；
+- `pnpm run audit:canonical-map-fields`：registry `2 / 66 / 29`，旧 24 section 路径顺序不变；
 - `pnpm run regress:registry-document-identity`：五字段 v3 `29` section 往返、full / patch / applied checksum、未知 patch path、identity 稳定性与版本拒绝；
 - `pnpm run regress:map-migration`：v1 / 稀疏 v2 回填、source non-mutation、header-only 与冲突 identity；
 - `node --no-warnings ./tools/webgl-generator-webfmg-v3-container-regression.mjs`；
@@ -72,4 +73,4 @@ adapter 复用 `349-3` 的 runtime validators；document header 与 map metadata
 → 349-11
 ```
 
-只读评审 `ACCEPT` 前不得开启 `349-4`。
+同一只读评审智能体首轮提出四项 P1；最窄修正与反例闭合后复审 `ACCEPT`。后续进入 `349-4`。

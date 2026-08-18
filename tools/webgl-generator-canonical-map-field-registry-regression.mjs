@@ -16,7 +16,7 @@ const normalizedMap = createMapDocument(map, {...map.options, display: {units: {
 const validation = validateCanonicalMapFieldRegistry();
 
 assert.equal(validation.version, 2);
-assert.equal(validation.fields, 65);
+assert.equal(validation.fields, 66);
 assert.equal(validation.sections, 29);
 assert.equal(validation.fields, CANONICAL_MAP_FIELD_REGISTRY.length);
 assert.equal(getCanonicalMapFieldDescriptor("grid-cells-v")?.encoding, "csr");
@@ -29,6 +29,7 @@ assert.equal(resolveCanonicalMapFieldDescriptor("measurements")?.stateKind, "can
 assert.equal(resolveCanonicalMapFieldDescriptor("labels")?.stateKind, "canonical");
 assert.equal(resolveCanonicalMapFieldDescriptor("visualTheme")?.stateKind, "persisted-presentation");
 assert.equal(resolveCanonicalMapFieldDescriptor("display")?.stateKind, "persisted-presentation");
+assert.equal(resolveCanonicalMapFieldDescriptor("options.visualTheme")?.stateKind, "persisted-presentation");
 assert.equal(resolveCanonicalMapFieldDescriptor("display")?.optional, true);
 assert.equal(resolveCanonicalMapFieldDescriptor("unknown.path"), null);
 assert.equal(resolveCanonicalMapWriteDescriptor("notes.notes.0.body")?.id, "notes");

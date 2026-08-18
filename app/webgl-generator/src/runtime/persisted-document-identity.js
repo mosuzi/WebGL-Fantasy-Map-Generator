@@ -6,13 +6,25 @@ const FNV_PRIME = 0x01000193;
 
 export function resolvePersistedDocumentIdentity(map) {
   const source = map && typeof map === "object" ? map : {};
-  const existing = normalizePersistedDocumentId(source.metadata?.documentId);
-  if (existing) return Object.freeze({documentId: existing, version: PERSISTED_DOCUMENT_IDENTITY_VERSION, source: "existing"});
+  const existing = inspectPersistedDocumentIdentityMetadata(source.metadata, {scope: "map"});
+  if (existing.documentId) return Object.freeze({documentId: existing.documentId, version: PERSISTED_DOCUMENT_IDENTITY_VERSION, source: "existing"});
   return Object.freeze({
     documentId: `${DOCUMENT_ID_PREFIX}${hashIdentitySource(identitySource(source, false))}${hashIdentitySource(identitySource(source, true))}`,
     version: PERSISTED_DOCUMENT_IDENTITY_VERSION,
     source: "legacy-derived"
   });
+}
+
+export function inspectPersistedDocumentIdentityMetadata(metadata, {scope = "document"} = {}) {
+  const source = metadata && typeof metadata === "object" && !Array.isArray(metadata) ? metadata : {};
+  const hasDocumentId = Object.hasOwn(source, "documentId") && source.documentId !== undefined && source.documentId !== null;
+  const hasVersion = Object.hasOwn(source, "documentIdentityVersion") && source.documentIdentityVersion !== undefined && source.documentIdentityVersion !== null;
+  const documentId = normalizePersistedDocumentId(source.documentId);
+  if (hasDocumentId && !documentId) throw identityError("persisted_document_identity_invalid", `${scope} 的持久身份无效`);
+  if (hasVersion && Number(source.documentIdentityVersion) !== PERSISTED_DOCUMENT_IDENTITY_VERSION) {
+    throw identityError("persisted_document_identity_version_invalid", `${scope} 的持久身份版本无效`);
+  }
+  return Object.freeze({documentId, version: hasVersion ? PERSISTED_DOCUMENT_IDENTITY_VERSION : null});
 }
 
 export function normalizePersistedDocumentId(value) {
@@ -23,8 +35,10 @@ export function normalizePersistedDocumentId(value) {
 }
 
 export function validatePersistedDocumentIdentity(document) {
-  const documentId = normalizePersistedDocumentId(document?.metadata?.documentId);
-  const mapDocumentId = normalizePersistedDocumentId(document?.map?.metadata?.documentId);
+  const documentIdentity = inspectPersistedDocumentIdentityMetadata(document?.metadata, {scope: "document"});
+  const mapIdentity = inspectPersistedDocumentIdentityMetadata(document?.map?.metadata, {scope: "map"});
+  const documentId = documentIdentity.documentId;
+  const mapDocumentId = mapIdentity.documentId;
   const documentVersion = Number(document?.metadata?.documentIdentityVersion);
   const mapVersion = Number(document?.map?.metadata?.documentIdentityVersion);
   if (!documentId || !mapDocumentId) throw identityError("persisted_document_identity_missing", "地图文档缺少持久身份");
@@ -38,11 +52,7 @@ export function validatePersistedDocumentIdentity(document) {
 function identitySource(map, reverse) {
   const values = [
     map.metadata?.seed ?? map.options?.seed ?? "",
-    map.metadata?.generatedAt ?? "",
-    map.metadata?.graphWidth ?? map.options?.graphWidth ?? "",
-    map.metadata?.graphHeight ?? map.options?.graphHeight ?? "",
-    map.grid?.metadata?.actualCells ?? map.grid?.points?.length ?? map.grid?.cells?.h?.length ?? "",
-    map.pack?.metadata?.cells ?? map.pack?.cells?.i?.length ?? ""
+    map.metadata?.generatedAt ?? ""
   ].map(value => String(value));
   if (reverse) values.reverse();
   return values.map(value => `${value.length}:${value}`).join("|");
