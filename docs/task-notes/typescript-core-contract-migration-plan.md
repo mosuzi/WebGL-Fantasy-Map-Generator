@@ -327,6 +327,7 @@ publish 前失败可以回滚 canonical / history 和释放 prepared projection�
 interface DomainModuleManifest {
   readonly id: string;
   readonly version: number;
+  readonly status: "shadow" | "active";
   readonly canonicalSections: readonly string[];
   readonly derivedSystems: readonly DerivedSystemDescriptor[];
   readonly commands: readonly CommandDescriptor[];
@@ -339,12 +340,14 @@ interface DomainModuleManifest {
   readonly persistence: PersistenceDescriptor;
   readonly api?: ApiDescriptor;
   readonly locks?: LockDescriptor;
+  readonly regression: RegressionDescriptor;
   readonly capabilities: Readonly<{
     worker: "required" | "optional" | "not-required";
     regeneration: "required" | "optional" | "unsupported";
     view: "required" | "optional" | "not-required";
     renderLayer: "required" | "optional" | "not-required";
   }>;
+  readonly capabilityReasons: Partial<Record<"worker" | "regeneration" | "view" | "renderLayer", string>>;
 }
 ```
 
@@ -357,7 +360,8 @@ interface DomainModuleManifest {
 - layer 读取了未声明的字段；
 - panel 调用了未注册的 command；
 - persistence 没有 migration / backfill / old-sample；
-- API 方法未进入 schema 和能力矩阵。
+- API 方法未声明可解析的 command / query / regeneration target，或未进入 schema、能力、错误码与文档矩阵；
+- regression gate 不存在，或未按领域实际能力覆盖 save、undo、worker、regeneration、view、layer 与 failure。
 
 ### 8.2 新业务域示例
 

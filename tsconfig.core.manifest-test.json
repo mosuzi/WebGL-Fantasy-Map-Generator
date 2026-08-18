@@ -1,0 +1,16 @@
+{
+  "extends": "./tsconfig.core.json",
+  "compilerOptions": {
+    "allowJs": false,
+    "noEmit": false,
+    "rootDir": "app/webgl-generator/src",
+    "outDir": ".cache/core-manifest-test",
+    "declaration": false,
+    "sourceMap": false
+  },
+  "include": [
+    "app/webgl-generator/src/core/contracts/domain-module.ts",
+    "app/webgl-generator/src/core/domain-manifest-registry.ts",
+    "app/webgl-generator/src/domains/*/manifest.ts"
+  ]
+}

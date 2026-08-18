@@ -22,7 +22,7 @@
 | 349-2 | 受限 TypeScript 工具链 | `typecheck:core`、build、既有静态门；运行产物除版本注入外不变 | 不启用全局 `checkJs` | ACCEPT |
 | 349-3 | 身份、canonical revision、operation binding、snapshot ownership、commit lifecycle 类型与运行时校验 | 类型负例、validator、Node regression | 不接管旧 action | ACCEPT |
 | 349-3a | canonical field registry、persisted / live presentation 分类、普通 document identity 定义 / 迁移与 identity adapters 闭合 | 五个遗漏字段、旧数据、checksum、patch、document identity 迁移和身份混用负例通过 | 不实现 Manifest、不接管 action | ACCEPT |
-| 349-4 | Capability-aware Domain Manifest、注册器与影子审计 | 不完整 manifest 拒绝；notes / markers / Worker 试点可登记 | 不改变运行路由 | 进行中 |
+| 349-4 | Capability-aware Domain Manifest、注册器与影子审计 | 不完整 manifest 拒绝；notes / markers / Worker 试点可登记 | 不改变运行路由 | 待评审 |
 | 349-5 | 薄 `MapCoreEngine` 与 `MapRuntimeCoordinator` facade，影子产生 commit / projection 状态 | 旧 history / revision 行为不变；无第二 map owner | 不迁移复杂领域 | 待执行 |
 | 349-6 | notes command / history / query / persistence / API 垂直切片 | 新增、编辑、删除、undo / redo、旧数据、save 回归 | 不伪造 Worker / regeneration / layer | 待执行 |
 | 349-7 | markers presentation / layer / picking 垂直切片 | identity、draw、pick、export 的 Node / source 契约 | 不执行真实视觉浏览器门 | 待执行 |
@@ -52,8 +52,8 @@ planned → computed → validated → projections-prepared
 
 | 字段 | 内容 |
 | --- | --- |
-| 当前阶段 | `349-4` capability-aware Domain Manifest、注册器与影子审计 |
-| 冻结点 | `349-3a` 复审 `ACCEPT`，版本 `0.5.10`；registry `66 / 29` 与 identity v1 可作为 Manifest 分母 |
+| 当前阶段 | `349-4` capability-aware Domain Manifest、注册器与影子审计，checkpoint 待评审 |
+| 冻结点 | `349-4` 实现冻结于版本 `0.5.11`；`3` 个 shadow domain、`44` 个分类 descriptor、`19` 类负例，runtime route import `0` |
 | 允许文件 | core manifest 类型 / validator / registry、只读 shadow audit、notes / markers / Worker 示例 manifest、专项 Node、阶段文档 |
 | 禁止文件 | facade、旧 action 路由切换、领域行为迁移、`source/`、main、浏览器 |
 | 必须保持 | Manifest 只描述 capability / read-write / dependency / projection / execution profile；不得成为第二状态 owner 或改变旧调用路径 |
@@ -114,5 +114,13 @@ planned → computed → validated → projections-prepared
 - 版本：首轮 checkpoint `0.5.8 → 0.5.9`，评审修正 checkpoint `0.5.9 → 0.5.10`。
 - 评审：首轮 `BLOCK` 四项身份 / checksum P1；加入对应反例并完成最窄修正后，同一只读评审智能体复审 `ACCEPT`。
 - 下一步：`349-4` 只建立 capability-aware Manifest、注册器与影子审计，不改变运行路由。
+
+### 349-4 — 待评审
+
+- 完成：TypeScript `DomainModuleManifest`、runtime validator / registry、notes / markers / population 三份 shadow Manifest；后者绑定真实 `population.compute` Worker task。
+- 审计：canonical read / write、command undo、regeneration revision / binding / lock / replacement、Worker result / binding / patch、panel 引用、persistence、API target / schema / capability / errors / documentation、regression gate / coverage 与 capability reason。
+- 专项：登记 `3` 个领域、`44` 个分类 descriptor、`19` 类拒绝 / 原子失败负例；公开 API method 对照 `API_METHODS`，runtime route import `0`，Manifest 不成为第二 owner。
+- 版本：`0.5.10 → 0.5.11`；浏览器未启动、未操作、未执行。
+- 评审：checkpoint 冻结后交同一只读评审智能体；未 `ACCEPT` 前不进入 `349-5`。
 
 阶段结果在每次 checkpoint 后更新，长日志只记录命令和 artifact 路径，不粘贴到本文。

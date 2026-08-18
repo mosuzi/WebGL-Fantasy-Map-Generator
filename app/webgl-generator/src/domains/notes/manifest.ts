@@ -1,0 +1,27 @@
+import type {DomainModuleManifest} from "../../core/contracts/domain-module.js";
+
+const noteCommands = ["notes.createStandalone", "notes.set", "notes.delete", "notes.import", "notes.deleteBatch"] as const;
+
+export const notesManifest = {
+  id: "notes",
+  version: 1,
+  status: "shadow",
+  canonicalSections: ["notes"],
+  derivedSystems: [{id: "notes.object-panels", reads: ["notes"], writes: [], invalidates: ["object-panels"]}],
+  commands: noteCommands.map(id => ({id, writeSet: ["notes"], undoPolicy: "required", profiles: ["interactive", "headless"]})),
+  queries: [
+    {id: "notes.list", reads: ["notes"], profiles: ["interactive", "headless"]},
+    {id: "notes.get", reads: ["notes"], profiles: ["interactive", "headless"]}
+  ],
+  panels: [{id: "notes.panel", commands: [...noteCommands], queries: ["notes.list", "notes.get"], selectionKind: "note"}],
+  persistence: {schemaVersion: 2, migration: "map-document-v1-v2", backfill: "notes-v2-default", oldSample: "tools/fixtures/webgl-map-v1-minimal.json"},
+  api: {methods: noteCommands.map(id => ({id: `edit.${id}`, method: `edit.${id}`, target: id, schema: `${id}.v1`, capability: "command", errorCodes: [], documentation: `notes/${id}`}))},
+  regression: {gates: ["regress:object-creation", "regress:object-details-edit", "regress:api-data-compatibility"], coverage: ["save", "undo", "failure"]},
+  capabilities: {worker: "not-required", regeneration: "unsupported", view: "not-required", renderLayer: "not-required"},
+  capabilityReasons: {
+    worker: "备注为小型同步文档，不需要业务 Worker",
+    regeneration: "备注没有从上游重生成语义",
+    view: "备注通过对象和面板查询，不定义地图颜色视图",
+    renderLayer: "独立备注在 349-6 不拥有几何或 picking 图层"
+  }
+} as const satisfies DomainModuleManifest;

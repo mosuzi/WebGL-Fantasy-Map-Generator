@@ -392,6 +392,7 @@ Worker 不得绕过 core 直接覆盖正式地图或 GPU 资源。
 {
   id: "trade-policy",
   version: 1,
+  status: "shadow",
   canonicalSections: ["tradePolicy"],
   derivedSystems: ["trade-policy-effects", "trade-policy-index"],
   commands: ["trade-policy.set", "trade-policy.delete"],
@@ -404,12 +405,17 @@ Worker 不得绕过 core 直接覆盖正式地图或 GPU 资源。
   persistence: ["tradePolicy"],
   api: ["tradePolicy.*"],
   locks: ["trade-policy-object"],
+  regression: {
+    gates: ["regress:trade-policy"],
+    coverage: ["save", "undo", "worker", "regeneration", "view", "layer", "failure"]
+  },
   capabilities: {
     worker: "required",
     regeneration: "required",
     view: "required",
     renderLayer: "required"
-  }
+  },
+  capabilityReasons: {}
 }
 ```
 
@@ -423,7 +429,7 @@ Worker 不得绕过 core 直接覆盖正式地图或 GPU 资源。
 - layer 是否只读取声明字段；
 - panel 是否只调用注册 command / query；
 - persistence 是否有 migration、backfill、旧样本；
-- API 是否进入 schema、capability 和错误码矩阵；
+- API 是否绑定已注册 command / query / regeneration，并进入 schema、capability、错误码和文档矩阵；
 - regression 是否覆盖 save、undo、worker、view、layer 和 failure。
 
 ## 11. 新业务域完整接入流程

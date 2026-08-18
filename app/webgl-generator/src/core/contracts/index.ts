@@ -1,4 +1,5 @@
 export * from "./commit.js";
+export * from "./domain-module.js";
 export * from "./identity.js";
 export * from "./operation.js";
 export * from "./patch.js";
