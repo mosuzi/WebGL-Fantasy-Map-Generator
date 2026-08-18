@@ -28,6 +28,12 @@ import {reconcileSettlementCellIdentity} from "./settlement-cell-index.js";
 import {diagnoseSettlementPortTopology} from "./settlement-port-topology.js";
 import {MAP_CELLS_MAX, normalizeMapCellTarget} from "../generator/map-size.js";
 import {
+  PERSISTED_DOCUMENT_IDENTITY_VERSION,
+  normalizePersistedDocumentId,
+  resolvePersistedDocumentIdentity,
+  validatePersistedDocumentIdentity
+} from "./persisted-document-identity.js";
+import {
   decodeWebfmgV3Document,
   encodeWebfmgV3Document,
   gunzipWebfmgV3Bytes,
@@ -71,6 +77,8 @@ export function createMapDocument(map, options = {}) {
     exportedAt: new Date().toISOString(),
     app: "fmg-webgl-reimplementation",
     metadata: {
+      documentId: normalizedMap.metadata.documentId,
+      documentIdentityVersion: normalizedMap.metadata.documentIdentityVersion,
       name: normalizedMap.metadata?.name || normalizedMap.options?.mapName,
       seed: normalizedMap.metadata?.seed || documentOptions.seed,
       checksum: normalizedMap.metadata?.checksum || null,
@@ -173,11 +181,51 @@ export function migrateMapDocument(document) {
     registry: MAP_DOCUMENT_MIGRATORS
   });
   assertMapDocumentCellLimit(versioned.map);
+  const rawIdentityHint = versioned.metadata?.documentId;
+  const rawMapIdentity = versioned.map?.metadata?.documentId;
+  const identityHint = normalizePersistedDocumentId(rawIdentityHint);
+  const mapIdentity = normalizePersistedDocumentId(rawMapIdentity);
+  if ((rawIdentityHint !== undefined && rawIdentityHint !== null && !identityHint) || (rawMapIdentity !== undefined && rawMapIdentity !== null && !mapIdentity)) {
+    const error = new Error("地图文档持久身份无效");
+    error.code = "persisted_document_identity_invalid";
+    throw error;
+  }
+  if (identityHint && mapIdentity && identityHint !== mapIdentity) {
+    const error = new Error("地图文档与 map 的持久身份不一致");
+    error.code = "persisted_document_identity_mismatch";
+    throw error;
+  }
+  for (const [scope, id, version] of [
+    ["document", identityHint, versioned.metadata?.documentIdentityVersion],
+    ["map", mapIdentity, versioned.map?.metadata?.documentIdentityVersion]
+  ]) {
+    if (id && version !== undefined && Number(version) !== PERSISTED_DOCUMENT_IDENTITY_VERSION) {
+      const error = new Error(`${scope} 的持久身份版本无效`);
+      error.code = "persisted_document_identity_version_invalid";
+      throw error;
+    }
+  }
+  const sourceMap = identityHint && !mapIdentity
+    ? {
+        ...versioned.map,
+        metadata: {
+          ...(versioned.map?.metadata || {}),
+          documentId: identityHint,
+          documentIdentityVersion: PERSISTED_DOCUMENT_IDENTITY_VERSION
+        }
+      }
+    : versioned.map;
+  const normalizedMap = normalizeCurrentMapSchemaV2(sourceMap, versioned.options);
   const migrated = normalizeMapDocumentDisplay({
     ...versioned,
-    metadata: {...(versioned.metadata || {}), mapSchemaVersion: MAP_SCHEMA_VERSION},
+    metadata: {
+      ...(versioned.metadata || {}),
+      documentId: normalizedMap.metadata.documentId,
+      documentIdentityVersion: normalizedMap.metadata.documentIdentityVersion,
+      mapSchemaVersion: MAP_SCHEMA_VERSION
+    },
     options: {...(versioned.options || {})},
-    map: normalizeCurrentMapSchemaV2(versioned.map, versioned.options)
+    map: normalizedMap
   });
   backfillEconomyDisplayProperties(migrated.map);
   backfillProvinceNames(migrated.map);
@@ -620,6 +668,7 @@ function migrateMapDocumentV1ToV2(document) {
 
 function validateCurrentMapDocument(document) {
   assertMapDocumentCellLimit(document.map);
+  validatePersistedDocumentIdentity(document);
   if (Number(document?.metadata?.mapSchemaVersion) !== MAP_SCHEMA_VERSION) throw new Error("地图文件缺少当前文档 schema 标记");
   if (Number(document?.map?.metadata?.schemaVersion) !== MAP_SCHEMA_VERSION) throw new Error("地图数据缺少当前 schema 标记");
   if (!Array.isArray(document.map.notes?.notes)) throw new Error("地图数据缺少 notes 存储");
@@ -719,6 +768,7 @@ function copyIdentityArrayWithExplicitHoles(values) {
 
 function normalizeCurrentMapSchemaV2(map, documentOptions = {}) {
   const source = map && typeof map === "object" ? map : {};
+  const persistedIdentity = resolvePersistedDocumentIdentity(source);
   const actualCells = Number(source.grid?.points?.length);
   const fallbackCells = Number.isInteger(actualCells) && actualCells > 0 ? actualCells : 10_000;
   const cellsTarget = normalizeMapCellTarget(source.options?.cellsTarget ?? documentOptions?.cellsTarget ?? source.metadata?.cellsTarget, {fallback: fallbackCells});
@@ -728,7 +778,13 @@ function normalizeCurrentMapSchemaV2(map, documentOptions = {}) {
   const normalizedRiverStore = normalizeRiverStore(source.rivers, source.pack);
   return synchronizeMapName({
     ...source,
-    metadata: {...(source.metadata || {}), cellsTarget, schemaVersion: MAP_SCHEMA_VERSION},
+    metadata: {
+      ...(source.metadata || {}),
+      documentId: persistedIdentity.documentId,
+      documentIdentityVersion: persistedIdentity.version,
+      cellsTarget,
+      schemaVersion: MAP_SCHEMA_VERSION
+    },
     options,
     ...(displaySource && typeof displaySource === "object" ? {display: normalizeMapDisplayConfig(displaySource)} : {}),
     notes: backfillNotesStoreV2(source.notes),

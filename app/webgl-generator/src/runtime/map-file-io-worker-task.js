@@ -305,6 +305,8 @@ function mapDocumentMetadata(document) {
   return {
     type: String(document?.type || ""),
     version: Number(document?.version) || 0,
+    documentId: String(document?.metadata?.documentId || ""),
+    documentIdentityVersion: Number(document?.metadata?.documentIdentityVersion) || 0,
     name: String(document?.metadata?.name || document?.map?.metadata?.name || document?.map?.options?.mapName || ""),
     schemaVersion: Number(document?.map?.metadata?.schemaVersion) || 0,
     seed: String(document?.map?.metadata?.seed || document?.metadata?.seed || ""),

@@ -1,4 +1,4 @@
-import type {CommitId, OperationId, RenderPreparationId, RuntimeMapSessionId} from "./identity.js";
+import type {CommitId, OperationId, PersistedDocumentId, RenderPreparationId, RuntimeMapSessionId} from "./identity.js";
 import type {ComputedDomainPatch} from "./patch.js";
 import type {RenderPreparationOperationBinding} from "./operation.js";
 import type {CanonicalRevision, PresentationRevision} from "./revision.js";
@@ -7,6 +7,7 @@ declare const runtimeMapSessionId: RuntimeMapSessionId;
 declare const operationId: OperationId;
 declare const commitId: CommitId;
 declare const renderPreparationId: RenderPreparationId;
+declare const persistedDocumentId: PersistedDocumentId;
 declare const canonicalRevision: CanonicalRevision;
 declare const presentationRevision: PresentationRevision;
 declare const computedPatch: ComputedDomainPatch;
@@ -22,6 +23,8 @@ acceptsRuntimeMapSession(operationId);
 acceptsOperation(commitId);
 // @ts-expect-error Render preparation identity cannot masquerade as a runtime map session identity.
 acceptsRuntimeMapSession(renderPreparationId);
+// @ts-expect-error Persisted document identity cannot masquerade as a runtime map session identity.
+acceptsRuntimeMapSession(persistedDocumentId);
 // @ts-expect-error Presentation revision cannot advance canonical history.
 acceptsCanonicalRevision(presentationRevision);
 // @ts-expect-error A computed patch has no canonical commit identity before acceptance.

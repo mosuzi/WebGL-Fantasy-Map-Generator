@@ -23,6 +23,9 @@ assert.equal(MAP_DOCUMENT_VERSION, 2);
 assert.equal(MAP_SCHEMA_VERSION, 2);
 assert.equal(migrated.version, 2);
 assert.equal(migrated.metadata.mapSchemaVersion, 2);
+assert.match(migrated.metadata.documentId, /^fmg-doc-v1-[0-9a-f]{16}$/u);
+assert.equal(migrated.metadata.documentId, migrated.map.metadata.documentId);
+assert.equal(migrated.metadata.documentIdentityVersion, 1);
 assert.equal(migrated.map.metadata.schemaVersion, 2);
 assert.ok(migrated.map.grid.cells.h instanceof Uint8Array, "v1 typed array 应在迁移后保持类型");
 assert.deepEqual([...migrated.map.grid.cells.h], [12, 20, 48]);
@@ -40,12 +43,18 @@ assert.deepEqual(migrateMapDocument(migrated), migrated, "当前版本重复迁�
 
 const sourceMap = {metadata: {seed: "new-map"}, options: {visualTheme: "night"}, grid: {cells: {h: new Uint8Array([20, 21])}}};
 const current = createMapDocument(sourceMap, sourceMap.options);
+const currentAgain = createMapDocument(sourceMap, sourceMap.options);
 assert.equal(current.version, 2);
+assert.equal(current.metadata.documentId, current.map.metadata.documentId);
+assert.equal(current.metadata.documentIdentityVersion, 1);
+assert.equal(current.metadata.documentId, currentAgain.metadata.documentId, "同一无 identity map 重复导出必须稳定派生");
 assert.equal(current.map.metadata.schemaVersion, 2);
 assert.equal(current.map.visualTheme.preset, "night");
 assert.equal(sourceMap.metadata.schemaVersion, undefined, "导出不得原地改写运行时 map metadata");
+assert.equal(sourceMap.metadata.documentId, undefined, "导出不得原地写入运行时 document identity");
 assert.equal(sourceMap.measurements, undefined, "导出不得向运行时 map 注入缺失存储");
 const currentRoundtrip = parseMapDocument(stringifyMapDocument(current));
+assert.equal(currentRoundtrip.metadata.documentId, current.metadata.documentId, "v2 往返没有保留 document identity");
 assert.deepEqual([...currentRoundtrip.map.grid.cells.h], [20, 21], "v2 stringify / parse 应保持 typed array");
 
 assert.throws(() => migrateMapDocument({type: MAP_DOCUMENT_TYPE, version: 3, map: {}}), /暂不支持的地图格式版本：3/);
@@ -88,7 +97,11 @@ for (const invalidOverride of [null, false, 0, "", []]) {
 
 const sparseLegacyV2 = structuredClone(current);
 delete sparseLegacyV2.metadata.mapSchemaVersion;
+delete sparseLegacyV2.metadata.documentId;
+delete sparseLegacyV2.metadata.documentIdentityVersion;
 delete sparseLegacyV2.map.metadata.schemaVersion;
+delete sparseLegacyV2.map.metadata.documentId;
+delete sparseLegacyV2.map.metadata.documentIdentityVersion;
 delete sparseLegacyV2.map.notes;
 delete sparseLegacyV2.map.measurements;
 delete sparseLegacyV2.map.labels;
@@ -98,6 +111,8 @@ delete sparseLegacyV2.map.oceanCurrents;
 sparseLegacyV2.map.display = {units: {distanceUnit: "km"}};
 const backfilledLegacyV2 = migrateMapDocument(sparseLegacyV2);
 assert.equal(backfilledLegacyV2.metadata.mapSchemaVersion, MAP_SCHEMA_VERSION, "旧 v2 文档 schema 标记没有回填");
+assert.match(backfilledLegacyV2.metadata.documentId, /^fmg-doc-v1-[0-9a-f]{16}$/u, "旧 v2 document identity 没有派生");
+assert.equal(backfilledLegacyV2.metadata.documentId, backfilledLegacyV2.map.metadata.documentId, "旧 v2 文档与 map identity 不一致");
 assert.equal(backfilledLegacyV2.map.metadata.schemaVersion, MAP_SCHEMA_VERSION, "旧 v2 地图 schema 标记没有回填");
 assert.ok(backfilledLegacyV2.map.grid.cells.h instanceof Uint8Array, "旧 v2 typed array 在回填时丢失");
 assert.deepEqual(backfilledLegacyV2.map.notes.notes, [], "旧 v2 notes 没有回填");
@@ -108,6 +123,20 @@ assert.ok(Array.isArray(backfilledLegacyV2.map.oceanCurrents.currents), "旧 v2 
 assert.ok(backfilledLegacyV2.map.diplomacy && Array.isArray(backfilledLegacyV2.map.diplomacy.chronicle), "旧 v2 diplomacy 没有回填");
 assert.ok(Array.isArray(backfilledLegacyV2.map.display.units.customUnits), "旧 v2 自定义单位表没有回填");
 assert.deepEqual(migrateMapDocument(backfilledLegacyV2), backfilledLegacyV2, "旧 v2 回填结果重复迁移不幂等");
+
+const headerOnlyIdentity = structuredClone(current);
+delete headerOnlyIdentity.map.metadata.documentId;
+delete headerOnlyIdentity.map.metadata.documentIdentityVersion;
+const migratedHeaderOnlyIdentity = migrateMapDocument(headerOnlyIdentity);
+assert.equal(migratedHeaderOnlyIdentity.map.metadata.documentId, current.metadata.documentId, "header identity 没有迁移到 map metadata");
+
+const conflictingIdentity = structuredClone(current);
+conflictingIdentity.map.metadata.documentId = "fmg-doc-v1-fedcba9876543210";
+assert.throws(
+  () => migrateMapDocument(conflictingIdentity),
+  error => error?.code === "persisted_document_identity_mismatch",
+  "冲突 document identity 必须拒绝"
+);
 
 const futureRegistry = createMapDocumentMigrationRegistry({
   1: document => ({...document, version: 2, map: {...document.map, migrationPath: ["v1-v2"]}})

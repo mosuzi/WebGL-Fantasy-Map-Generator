@@ -1,4 +1,4 @@
-export const CANONICAL_MAP_FIELD_REGISTRY_VERSION = 1;
+export const CANONICAL_MAP_FIELD_REGISTRY_VERSION = 2;
 
 export const CANONICAL_MAP_ENCODINGS = Object.freeze([
   "structured",
@@ -18,10 +18,12 @@ export const CANONICAL_MAP_PATCH_MODES = Object.freeze([
   "table-rows"
 ]);
 
+export const CANONICAL_MAP_STATE_KINDS = Object.freeze(["canonical", "persisted-presentation"]);
+
 const descriptorRows = [
   ["metadata", "metadata", "structured", "replace"],
   ["options", "options", "structured", "replace"],
-  ["layers", "layers", "structured", "replace"],
+  ["layers", "layers", "structured", "replace", {stateKind: "persisted-presentation"}],
   ["heightmap", "heightmap", "structured", "replace"],
   ["grid", "grid", "structured", "replace"],
   ["climate", "climate", "structured", "replace"],
@@ -43,6 +45,12 @@ const descriptorRows = [
   ["summary", "summary", "structured", "replace"],
   ["generation-log", "generationLog", "string-dictionary", "replace"],
   ["status", "status", "structured", "replace"],
+  // Keep new top-level sections after the original 24 entries so existing webfmg v3 section ids stay stable.
+  ["notes", "notes", "structured", "replace"],
+  ["measurements", "measurements", "structured", "replace"],
+  ["labels", "labels", "structured", "replace"],
+  ["visual-theme", "visualTheme", "structured", "replace", {stateKind: "persisted-presentation"}],
+  ["display", "display", "structured", "replace", {optional: true, stateKind: "persisted-presentation"}],
 
   ["grid-cells-v", "grid.cells.v", "csr", "replace", {valueType: "uint32", item: "cell-polygon"}],
   ["grid-cells-c", "grid.cells.c", "csr", "replace", {valueType: "uint32", item: "cell-neighbors"}],
@@ -99,6 +107,14 @@ export function resolveCanonicalMapFieldDescriptor(path) {
   return descriptorsBySpecificity.find(descriptor => pathMatches(descriptor.path, normalized)) || null;
 }
 
+export function resolveCanonicalMapWriteDescriptor(path) {
+  const normalized = normalizePath(path);
+  return descriptorsBySpecificity.find(descriptor => (
+    pathMatches(descriptor.path, normalized)
+    || (!descriptor.path.includes("*") && normalized.startsWith(`${descriptor.path}.`))
+  )) || null;
+}
+
 export function listCanonicalMapSections() {
   return CANONICAL_MAP_FIELD_REGISTRY.filter(descriptor => !descriptor.path.includes(".") && !descriptor.path.includes("*"));
 }
@@ -117,6 +133,7 @@ export function validateCanonicalMapFieldRegistry(registry = CANONICAL_MAP_FIELD
     paths.add(descriptor.path);
     if (!CANONICAL_MAP_ENCODINGS.includes(descriptor.encoding)) throw new Error(`字段 encoding 无效：${descriptor.encoding}`);
     if (!CANONICAL_MAP_PATCH_MODES.includes(descriptor.patchMode)) throw new Error(`字段 patch mode 无效：${descriptor.patchMode}`);
+    if (!CANONICAL_MAP_STATE_KINDS.includes(descriptor.stateKind)) throw new Error(`字段 state kind 无效：${descriptor.stateKind}`);
     if (descriptor.encoding === "csr" && descriptor.patchMode !== "replace") throw new Error(`CSR 字段首期必须整体替换：${descriptor.path}`);
   }
   return Object.freeze({version: CANONICAL_MAP_FIELD_REGISTRY_VERSION, fields: registry.length, sections: listCanonicalMapSections().length});
@@ -128,7 +145,8 @@ function createDescriptor([id, path, encoding, patchMode, options = {}]) {
     path,
     encoding,
     patchMode,
-    persistence: "canonical",
+    persistence: "map-document",
+    stateKind: options.stateKind || "canonical",
     optional: options.optional === true,
     ...(options.valueType ? {valueType: options.valueType} : {}),
     ...(options.item ? {item: options.item} : {})

@@ -6,6 +6,7 @@ import type {
   HeadlessDocumentId,
   LockFingerprint,
   OperationId,
+  PersistedDocumentId,
   RenderPreparationId,
   RuntimeMapSessionId,
   TransactionId
@@ -22,7 +23,7 @@ import type {
   RenderGeneration,
   TopologyRevision
 } from "./revision.js";
-import type {PresentationBinding, RenderResourceBinding} from "./projection.js";
+import type {PersistedDocumentBinding, PresentationBinding, RenderResourceBinding} from "./projection.js";
 import type {
   MapSnapshot,
   SnapshotOwnerState,
@@ -241,6 +242,17 @@ export function validatePresentationBinding(value: unknown, path = "presentation
       requireField(source, "presentationRevision", path),
       `${path}.presentationRevision`
     ) as PresentationRevision
+  });
+}
+
+export function validatePersistedDocumentBinding(value: unknown, path = "persistedDocumentBinding"): PersistedDocumentBinding {
+  const source = record(value, path);
+  forbid(source, "runtimeMapSessionId", path);
+  forbid(source, "canonicalRevision", path);
+  if (source.identityVersion !== 1) fail("EXPECTED_ENUM_VALUE", `${path}.identityVersion`, "当前必须是 1");
+  return Object.freeze({
+    documentId: nonEmptyString(requireField(source, "documentId", path), `${path}.documentId`) as PersistedDocumentId,
+    identityVersion: 1
   });
 }
 

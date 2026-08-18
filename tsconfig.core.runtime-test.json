@@ -9,7 +9,8 @@
     "sourceMap": false
   },
   "include": [
-    "app/webgl-generator/src/core/contracts/**/*.ts"
+    "app/webgl-generator/src/core/contracts/**/*.ts",
+    "app/webgl-generator/src/core/adapters/**/*.ts"
   ],
   "exclude": [
     "app/webgl-generator/src/core/contracts/contract.type-test.ts"

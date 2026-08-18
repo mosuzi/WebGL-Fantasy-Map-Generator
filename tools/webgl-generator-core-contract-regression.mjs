@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 
 const contractsUrl = new URL("../.cache/core-contract-test/contracts/runtime-validators.js", import.meta.url).href;
+const adaptersUrl = new URL("../.cache/core-contract-test/adapters/identity-adapters.js", import.meta.url).href;
 const {
   CoreContractError,
   validateCanonicalRevisionVector,
@@ -13,6 +14,13 @@ const {
   validatePresentationBinding,
   validateRenderResourceBinding
 } = await import(contractsUrl);
+const {
+  adaptHeadlessDocumentRevision,
+  adaptLegacyInteractiveRevision,
+  adaptLegacyPresentationBinding,
+  adaptLegacyRenderResourceBinding,
+  adaptPersistedDocumentBinding
+} = await import(adaptersUrl);
 
 function expectContractError(callback, code, path) {
   assert.throws(callback, error => {
@@ -46,6 +54,36 @@ expectContractError(
   () => validateCanonicalRevisionVector({...revision0, headlessDocumentId: "headless:wrong"}),
   "UNEXPECTED_FIELD",
   "revision.headlessDocumentId"
+);
+
+assert.equal(adaptLegacyInteractiveRevision({mapIdentity: "runtime-map:test", mapRevision: 0}).profile, "interactive");
+assert.equal(adaptHeadlessDocumentRevision({documentId: "headless-document:test", revision: 0}).profile, "headless");
+assert.equal(
+  adaptLegacyPresentationBinding({mapIdentity: "runtime-map:test", presentationRevision: 8}).presentationRevision,
+  8
+);
+assert.equal(
+  adaptLegacyRenderResourceBinding({
+    mapIdentity: "runtime-map:test",
+    mapRevision: 0,
+    topologyRevision: 3,
+    renderPreparationId: "render-preparation:test",
+    renderGeneration: 2
+  }).renderPreparationId,
+  "render-preparation:test"
+);
+const persistedDocument = {
+  metadata: {documentId: "fmg-doc-v1-0123456789abcdef", documentIdentityVersion: 1},
+  map: {metadata: {documentId: "fmg-doc-v1-0123456789abcdef", documentIdentityVersion: 1}}
+};
+assert.equal(adaptPersistedDocumentBinding(persistedDocument).documentId, "fmg-doc-v1-0123456789abcdef");
+expectContractError(
+  () => adaptPersistedDocumentBinding({
+    ...persistedDocument,
+    map: {metadata: {...persistedDocument.map.metadata, documentId: "fmg-doc-v1-fedcba9876543210"}}
+  }),
+  "IDENTITY_MISMATCH",
+  "document.map.metadata.documentId"
 );
 expectContractError(
   () => validateCanonicalRevisionVector({...headless0, runtimeMapSessionId: "runtime-map:wrong"}),
@@ -261,6 +299,7 @@ console.log(
     revisionProfiles: ["interactive", "headless"],
     bindingPhases: ["pre-commit", "committed-projection"],
     renderPreparationIdentityValidated: true,
+    explicitIdentityAdaptersValidated: true,
     computedPatchRejectsCommitFields: true,
     ownershipValidated: true,
     lifecycleValidated: true,

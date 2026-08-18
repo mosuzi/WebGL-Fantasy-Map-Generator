@@ -21,7 +21,7 @@
 | 349-1 | 现有 owner、事务状态机、Worker / renderer / persistence 依赖盘点与 ADR | 全部现有任务和 owner 可归类；未知 owner 为阻断 | 不创建 facade、不迁移代码 | ACCEPT |
 | 349-2 | 受限 TypeScript 工具链 | `typecheck:core`、build、既有静态门；运行产物除版本注入外不变 | 不启用全局 `checkJs` | ACCEPT |
 | 349-3 | 身份、canonical revision、operation binding、snapshot ownership、commit lifecycle 类型与运行时校验 | 类型负例、validator、Node regression | 不接管旧 action | ACCEPT |
-| 349-3a | canonical field registry、persisted / live presentation 分类、普通 document identity 定义 / 迁移与 identity adapters 闭合 | 五个遗漏字段、旧数据、checksum、patch、document identity 迁移和身份混用负例通过 | 不实现 Manifest、不接管 action | 349-1 强制插入 |
+| 349-3a | canonical field registry、persisted / live presentation 分类、普通 document identity 定义 / 迁移与 identity adapters 闭合 | 五个遗漏字段、旧数据、checksum、patch、document identity 迁移和身份混用负例通过 | 不实现 Manifest、不接管 action | 待评审 |
 | 349-4 | Capability-aware Domain Manifest、注册器与影子审计 | 不完整 manifest 拒绝；notes / markers / Worker 试点可登记 | 不改变运行路由 | 待执行 |
 | 349-5 | 薄 `MapCoreEngine` 与 `MapRuntimeCoordinator` facade，影子产生 commit / projection 状态 | 旧 history / revision 行为不变；无第二 map owner | 不迁移复杂领域 | 待执行 |
 | 349-6 | notes command / history / query / persistence / API 垂直切片 | 新增、编辑、删除、undo / redo、旧数据、save 回归 | 不伪造 Worker / regeneration / layer | 待执行 |
@@ -52,8 +52,8 @@ planned → computed → validated → projections-prepared
 
 | 字段 | 内容 |
 | --- | --- |
-| 当前阶段 | `349-3a` canonical registry、普通 document identity 与 identity adapters |
-| 冻结点 | `349-3` 已 `ACCEPT`（版本 `0.5.8`，本地 checkpoint 待建立） |
+| 当前阶段 | `349-3a` canonical registry、普通 document identity 与 identity adapters 待评审 |
+| 冻结点 | `349-3a` 实现与 Node / build 证据已冻结，版本 `0.5.9` checkpoint 待评审 |
 | 允许文件 | canonical registry / checksum / patch 描述、map-file-io identity migration、core identity adapters、专项 Node、阶段文档 |
 | 禁止文件 | Manifest、facade、旧 action 接管、领域迁移、`source/`、main、浏览器 |
 | 必须保持 | 五个持久字段进入唯一 registry；普通 document identity 有默认 / 派生 / 迁移；各 identity 只能显式转换 |
@@ -102,5 +102,15 @@ planned → computed → validated → projections-prepared
 - 评审：首轮 `BLOCK` 五项类型 / validator / 覆盖一致性，逐项补负例后同一只读评审智能体复审 `ACCEPT`。
 - 版本：`0.5.7 → 0.5.8`；浏览器未启动、未操作、未执行。
 - 下一步：强制插入的 `349-3a`，先闭合 registry 与 identity adapter，再开始 Manifest。
+
+### 349-3a — 待评审
+
+- 完成：registry `60 → 65` 字段、`24 → 29` 顶层 section；补入 `notes / measurements / labels / visualTheme / display`，并把 `layers / visualTheme / display` 标成 `persisted-presentation`，live viewport / intent / pending render 继续留在 runtime projection。
+- 兼容：五个新 section 追加在原 `24` 个顶层 section 之后，旧 `.webfmg v3` section id 不移动；缺失字段仍由既有 v2 migration 回填，五字段齐备的 v3 为 `29` section。
+- identity：普通地图文档新增独立 `PersistedDocumentId` v1；旧图按稳定元数据确定性派生，既有合法 id 保留，document / map metadata 冲突或未知版本拒绝，导出不改写源 map。它不替代 runtime session、render preparation 或 `headlessWrite.documentId`。
+- patch：replica write path 现在必须由同一 registry 的精确、通配或祖先 descriptor 覆盖；五字段 patch 的 target / applied checksum 已同源验证，未知顶层路径拒绝。
+- TypeScript：新增普通文档 binding 及 legacy interactive、headless、presentation、render resource 的显式 identity adapters；类型和 runtime 负例禁止命名空间混用。
+- 门禁：typecheck、core contracts、registry、五字段 / identity、migration、v3 container、replica journal / command patch、map-file Worker、production build 和 diff check；浏览器未启动、未操作、未执行。
+- 版本：`0.5.8 → 0.5.9`。评审 `ACCEPT` 前不得进入 `349-4`。
 
 阶段结果在每次 checkpoint 后更新，长日志只记录命令和 artifact 路径，不粘贴到本文。

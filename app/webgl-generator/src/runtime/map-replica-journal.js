@@ -1,3 +1,5 @@
+import {resolveCanonicalMapWriteDescriptor} from "./canonical-map-field-registry.js";
+
 export const MAP_REPLICA_PATCH_VERSION = 1;
 
 export function createMapReplicaJournal({mapIdentity, revision = 0, checksum = null, limit = 128} = {}) {
@@ -122,6 +124,7 @@ function normalizeWrite(write, index, paths) {
   if (!write || typeof write !== "object" || Array.isArray(write)) throw replicaError("map_replica_write_invalid", `地图副本 write ${index} 无效`);
   const path = normalizePath(write.path);
   if (!path || paths.has(path)) throw replicaError("map_replica_write_duplicate", `地图副本 write path 重复或为空：${path}`);
+  if (!resolveCanonicalMapWriteDescriptor(path)) throw replicaError("map_replica_path_unregistered", `地图副本 write path 未登记：${path}`);
   paths.add(path);
   const mode = String(write.mode || "replace");
   if (mode === "replace") return Object.freeze({path, mode, value: write.value});

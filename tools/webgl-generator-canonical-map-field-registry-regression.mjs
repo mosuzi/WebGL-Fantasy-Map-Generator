@@ -1,29 +1,54 @@
 import assert from "node:assert/strict";
 import {generatePlaceholderMap} from "../app/webgl-generator/src/generator/index.js";
+import {createMapDocument} from "../app/webgl-generator/src/runtime/map-file-io.js";
 import {
   CANONICAL_MAP_FIELD_REGISTRY,
   getCanonicalMapFieldDescriptor,
   listCanonicalMapSections,
   resolveCanonicalMapFieldDescriptor,
+  resolveCanonicalMapWriteDescriptor,
   validateCanonicalMapFieldRegistry
 } from "../app/webgl-generator/src/runtime/canonical-map-field-registry.js";
 
 const cellsTarget = Math.max(1000, Number(process.env.FMG_CANONICAL_MAP_CELLS) || 10000);
 const map = generatePlaceholderMap({seed: `canonical-map-registry-${cellsTarget}`, cellsTarget, heightmapTemplate: "continents"});
+const normalizedMap = createMapDocument(map, {...map.options, display: {units: {}}}).map;
 const validation = validateCanonicalMapFieldRegistry();
 
-assert.equal(validation.version, 1);
+assert.equal(validation.version, 2);
+assert.equal(validation.fields, 65);
+assert.equal(validation.sections, 29);
 assert.equal(validation.fields, CANONICAL_MAP_FIELD_REGISTRY.length);
 assert.equal(getCanonicalMapFieldDescriptor("grid-cells-v")?.encoding, "csr");
 assert.equal(resolveCanonicalMapFieldDescriptor("grid.cells.v")?.id, "grid-cells-v");
 assert.equal(resolveCanonicalMapFieldDescriptor("grid.cells.state")?.id, "grid-cell-columns");
 assert.equal(resolveCanonicalMapFieldDescriptor("pack.cells.type")?.encoding, "string-dictionary");
 assert.equal(resolveCanonicalMapFieldDescriptor("economy.deals")?.encoding, "object-table");
+assert.equal(resolveCanonicalMapFieldDescriptor("notes")?.stateKind, "canonical");
+assert.equal(resolveCanonicalMapFieldDescriptor("measurements")?.stateKind, "canonical");
+assert.equal(resolveCanonicalMapFieldDescriptor("labels")?.stateKind, "canonical");
+assert.equal(resolveCanonicalMapFieldDescriptor("visualTheme")?.stateKind, "persisted-presentation");
+assert.equal(resolveCanonicalMapFieldDescriptor("display")?.stateKind, "persisted-presentation");
+assert.equal(resolveCanonicalMapFieldDescriptor("display")?.optional, true);
 assert.equal(resolveCanonicalMapFieldDescriptor("unknown.path"), null);
+assert.equal(resolveCanonicalMapWriteDescriptor("notes.notes.0.body")?.id, "notes");
+assert.equal(resolveCanonicalMapWriteDescriptor("pack.burgs.1")?.id, "pack");
+assert.equal(resolveCanonicalMapWriteDescriptor("unknown.path"), null);
 
 const sectionPaths = new Set(listCanonicalMapSections().map(descriptor => descriptor.path));
 const uncoveredSections = Object.keys(map).filter(key => !sectionPaths.has(key));
 assert.deepEqual(uncoveredSections, [], `canonical 顶层 section 未登记：${uncoveredSections.join(", ")}`);
+const missingNormalizedSections = ["notes", "measurements", "labels", "visualTheme", "display"].filter(key => !Object.hasOwn(normalizedMap, key));
+assert.deepEqual(missingNormalizedSections, [], `存档顶层 section 未标准化：${missingNormalizedSections.join(", ")}`);
+assert.deepEqual(
+  listCanonicalMapSections().slice(0, 24).map(descriptor => descriptor.path),
+  [
+    "metadata", "options", "layers", "heightmap", "grid", "climate", "oceanCurrents", "mapCoordinates",
+    "society", "politics", "settlements", "economy", "diplomacy", "military", "markers", "zones",
+    "pack", "features", "rivers", "regenerationLocks", "namebases", "summary", "generationLog", "status"
+  ],
+  "旧 webfmg v3 section id 顺序不得变化"
+);
 
 const dominantPaths = [
   "grid.cells.v", "grid.cells.c", "grid.cells.p", "grid.vertices.v", "grid.vertices.c", "grid.vertices.p",
