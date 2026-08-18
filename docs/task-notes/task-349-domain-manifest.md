@@ -17,11 +17,11 @@
 - regeneration 必须声明 source revision、binding、lock policy、replacement policy 和 write set；
 - Worker task 必须存在于真实 Worker registry，并声明 result kind、binding、patch policy 和 write set；
 - panel 只能引用同一 Manifest 已注册的 command / query；
-- API binding 必须声明唯一 id、真实公开 method、target、schema、capability、错误码矩阵和文档入口；method 必须存在于 `API_METHODS`，target 必须解析到同一 Manifest 的 command / query / regeneration；
+- API binding 必须声明唯一 id、真实公开 method、target、schema version、capability group、mutates / undo / confirm、完整 business codes 和权威文档入口；必填 resolver 将其逐项对照 `api-contract + api-schema-registry` 的真实 description / metadata，target 必须解析到同一 Manifest 的 command / query / regeneration；
 - persistence 必须声明 schema version、migration、backfill 和旧样本；
 - regression gate 必须存在于根 `package.json`，并按实际能力覆盖 save、undo、worker、regeneration、view、layer 和 failure；
 - `required` 能力缺 descriptor、`not-required / unsupported` 能力存在 descriptor 或缺理由均拒绝；未知 capability reason 拒绝；
-- render layer 只读，不得声明 canonical write；注册失败不得部分污染全局 descriptor registry。
+- render layer 只读，不得声明 canonical write；regeneration 也进入全局分类 ID 账本；任何注册失败不得部分污染 registry。
 
 ## 三个影子样本
 
@@ -35,9 +35,9 @@
 
 ## 专项回归
 
-`regress:core-manifests` 编译并直接执行同一套 TypeScript validator，当前登记 `3` 个领域、`44` 个分类 descriptor，核对 `population.compute` 的真实 Worker 注册及 write set，并确认 runtime 对 Manifest 的 import 为 `0`。
+`regress:core-manifests` 编译并直接执行同一套 TypeScript validator，当前登记 `3` 个领域、`45` 个分类 descriptor，核对 `population.compute` 的真实 Worker 注册及 write set，并确认 runtime 对 Manifest 的 import 为 `0`。canonical、Worker、package regression gate 与 API description 四类 resolver 都是必填依赖，不能在缺上下文时降级放行。
 
-负例共 `19` 类，覆盖缺 persistence、未知 canonical field、空 command write set、required capability 缺 descriptor、未知 Worker task、layer 写 canonical、panel 悬空引用、重复领域、not-required 隐藏 layer、regeneration 缺 lock policy、Worker 缺 result / patch、persistence 缺 backfill、API 缺 schema / target、未知公开 API method、regression 缺能力覆盖、未知 capability reason，以及注册冲突后的原子性。
+负例共 `28` 类，除原有 Manifest / capability / reference / 原子失败门外，新增三类缺失 resolver、未知 regression gate、API schema / capability / business codes / documentation 漂移，以及跨领域 regeneration ID 冲突。专项还将每个 descriptor 的 `headless` profile 与 `HEADLESS_WRITE_METHODS` 精确对照，并断言 `markers.delete` 的真实写集包含 `notes`。
 
 ## 阶段验收口径
 
@@ -51,6 +51,10 @@
 
 - `typecheck:core`、`regress:core-contracts`、`regress:core-manifests`、`audit:canonical-map-fields` 全部通过；registry 为 `66 fields / 29 sections`。
 - 既有 `regress:object-creation`、`regress:auxiliary-object-creation`、`regress:population-adjustment`、`regress:population-transfer`、`regress:api-data-compatibility` 通过，证明三份影子样本引用的现有入口没有因本阶段漂移。
-- `build:app` 以版本 `0.5.11` 通过，共转换 `1361` 个模块；chunk size 既有提示保留为非阻断观察。
+- 首轮与评审修正后的 `build:app` 分别以版本 `0.5.11 / 0.5.12` 通过，均转换 `1361` 个模块；chunk size 既有提示保留为非阻断观察。修正后另通过 `regress:api-ai-discovery` 的 `328 / 328` 描述覆盖、`regress:headless-write` 与 Marker / notes 辅助对象专项。
 - `git diff --check` 通过，`source/` 状态为空；分支仍为 `codex/map-core-engine-architecture-plan`，`main` 是本分支祖先而不包含本分支 HEAD。
 - 未启动、未操作、未执行任何浏览器验收。
+
+## 首轮评审修正
+
+同一只读评审智能体首轮给出四项 P1。修正后，外部 resolver 全部必填且有缺失 / false 反例；API 不再只校验自填非空字符串，而是通过 Vite SSR 读取既有 `buildMethodMetadata`，与 `api-schema-registry` 的真实 description 逐项对照；`markers.delete` 补入备注删除写集，notes / markers 与 population transfer 的虚假 headless profile 被移除；regeneration 纳入唯一性和原子注册预检。该修正不改变任何正式运行路由。

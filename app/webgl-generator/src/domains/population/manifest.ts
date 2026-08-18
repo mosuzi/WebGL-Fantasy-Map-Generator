@@ -1,4 +1,5 @@
 import type {DomainModuleManifest} from "../../core/contracts/domain-module.js";
+import {API_DOCUMENTATION, API_SCHEMA_VERSION, DEFAULT_API_BUSINESS_CODES} from "../api-manifest-evidence.js";
 
 const populationWriteSet = [
   "pack.cells.pop",
@@ -32,21 +33,21 @@ export const populationManifest = {
   derivedSystems: [{id: "population.downstream", reads: ["grid.cells.pop", "pack.cells.pop", "settlements.cities"], writes: ["metadata.derivedStale", "economy.metadata", "military.metadata.stale", "diplomacy.metadata.stale", "zones.metadata.stale"], invalidates: ["population-stats", "point-layers", "labels", "economy-demand", "object-index"]}],
   commands: [
     {id: "population.applyAdjustment", writeSet: [...populationWriteSet], undoPolicy: "required", profiles: ["interactive", "headless"]},
-    {id: "population.transfer", writeSet: [...populationWriteSet], undoPolicy: "required", profiles: ["interactive", "headless"]}
+    {id: "population.transfer", writeSet: [...populationWriteSet], undoPolicy: "required", profiles: ["interactive"]}
   ],
   workerTasks: [{id: "population.compute", resultKinds: ["population", "population-history"], writeSet: [...populationWriteSet], bindingPolicy: "pre-commit", patchPolicy: "domain-policy-required"}],
   queries: [
-    {id: "population.inspectAdjustment", reads: ["grid.cells.pop", "pack.cells.pop", "settlements.cities"], profiles: ["interactive", "headless", "worker-only"]},
-    {id: "population.inspectTransfer", reads: ["grid.cells.pop", "pack.cells.pop", "settlements.cities"], profiles: ["interactive", "headless", "worker-only"]}
+    {id: "population.inspectAdjustment", reads: ["grid.cells.pop", "pack.cells.pop", "settlements.cities"], profiles: ["interactive", "headless"]},
+    {id: "population.inspectTransfer", reads: ["grid.cells.pop", "pack.cells.pop", "settlements.cities"], profiles: ["interactive"]}
   ],
   views: [{id: "population.density", reads: ["grid.cells.pop", "pack.cells.pop"], presentationOnly: true}],
   panels: [{id: "population.panel", commands: ["population.applyAdjustment", "population.transfer"], queries: ["population.inspectAdjustment", "population.inspectTransfer"], selectionKind: "population-target"}],
   persistence: {schemaVersion: 2, migration: "map-document-v1-v2", backfill: "population-columns-default", oldSample: "tools/fixtures/webgl-map-v1-minimal.json"},
   api: {methods: [
-    {id: "edit.population.inspectAdjustment", method: "edit.population.inspectAdjustment", target: "population.inspectAdjustment", schema: "population.inspectAdjustment.v1", capability: "query", errorCodes: [], documentation: "population/adjustment-inspection"},
-    {id: "edit.population.applyAdjustment", method: "edit.population.applyAdjustment", target: "population.applyAdjustment", schema: "population.applyAdjustment.v1", capability: "command", errorCodes: ["population-worker-source-stale"], documentation: "population/adjustment"},
-    {id: "edit.population.inspectTransfer", method: "edit.population.inspectTransfer", target: "population.inspectTransfer", schema: "population.inspectTransfer.v1", capability: "query", errorCodes: [], documentation: "population/transfer-inspection"},
-    {id: "edit.population.transfer", method: "edit.population.transfer", target: "population.transfer", schema: "population.transfer.v1", capability: "command", errorCodes: ["confirmation_required", "population-worker-source-stale"], documentation: "population/transfer"}
+    {id: "edit.population.inspectAdjustment", method: "edit.population.inspectAdjustment", target: "population.inspectAdjustment", schemaVersion: API_SCHEMA_VERSION, capability: "query", capabilityGroup: "map.edit", mutates: "none", undoable: false, requiresConfirm: false, errorCodes: DEFAULT_API_BUSINESS_CODES, documentation: API_DOCUMENTATION},
+    {id: "edit.population.applyAdjustment", method: "edit.population.applyAdjustment", target: "population.applyAdjustment", schemaVersion: API_SCHEMA_VERSION, capability: "command", capabilityGroup: "map.edit", mutates: "population-and-economy-demand", undoable: true, requiresConfirm: false, errorCodes: DEFAULT_API_BUSINESS_CODES, documentation: API_DOCUMENTATION},
+    {id: "edit.population.inspectTransfer", method: "edit.population.inspectTransfer", target: "population.inspectTransfer", schemaVersion: API_SCHEMA_VERSION, capability: "query", capabilityGroup: "map.edit", mutates: "none", undoable: false, requiresConfirm: false, errorCodes: DEFAULT_API_BUSINESS_CODES, documentation: API_DOCUMENTATION},
+    {id: "edit.population.transfer", method: "edit.population.transfer", target: "population.transfer", schemaVersion: API_SCHEMA_VERSION, capability: "command", capabilityGroup: "map.edit", mutates: "population-and-economy-demand", undoable: true, requiresConfirm: true, errorCodes: DEFAULT_API_BUSINESS_CODES, documentation: API_DOCUMENTATION}
   ]},
   regression: {gates: ["regress:population-adjustment", "regress:population-transfer", "regress:api-data-compatibility"], coverage: ["save", "undo", "worker", "view", "failure"]},
   capabilities: {worker: "required", regeneration: "unsupported", view: "required", renderLayer: "not-required"},

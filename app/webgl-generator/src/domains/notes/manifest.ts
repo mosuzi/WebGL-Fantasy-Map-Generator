@@ -1,4 +1,5 @@
 import type {DomainModuleManifest} from "../../core/contracts/domain-module.js";
+import {API_DOCUMENTATION, API_SCHEMA_VERSION, COLLECTION_IMPORT_API_BUSINESS_CODES, DEFAULT_API_BUSINESS_CODES} from "../api-manifest-evidence.js";
 
 const noteCommands = ["notes.createStandalone", "notes.set", "notes.delete", "notes.import", "notes.deleteBatch"] as const;
 
@@ -8,14 +9,26 @@ export const notesManifest = {
   status: "shadow",
   canonicalSections: ["notes"],
   derivedSystems: [{id: "notes.object-panels", reads: ["notes"], writes: [], invalidates: ["object-panels"]}],
-  commands: noteCommands.map(id => ({id, writeSet: ["notes"], undoPolicy: "required", profiles: ["interactive", "headless"]})),
+  commands: noteCommands.map(id => ({id, writeSet: ["notes"], undoPolicy: "required", profiles: ["interactive"]})),
   queries: [
-    {id: "notes.list", reads: ["notes"], profiles: ["interactive", "headless"]},
-    {id: "notes.get", reads: ["notes"], profiles: ["interactive", "headless"]}
+    {id: "notes.list", reads: ["notes"], profiles: ["interactive"]},
+    {id: "notes.get", reads: ["notes"], profiles: ["interactive"]}
   ],
   panels: [{id: "notes.panel", commands: [...noteCommands], queries: ["notes.list", "notes.get"], selectionKind: "note"}],
   persistence: {schemaVersion: 2, migration: "map-document-v1-v2", backfill: "notes-v2-default", oldSample: "tools/fixtures/webgl-map-v1-minimal.json"},
-  api: {methods: noteCommands.map(id => ({id: `edit.${id}`, method: `edit.${id}`, target: id, schema: `${id}.v1`, capability: "command", errorCodes: [], documentation: `notes/${id}`}))},
+  api: {methods: noteCommands.map(id => ({
+    id: `edit.${id}`,
+    method: `edit.${id}`,
+    target: id,
+    schemaVersion: API_SCHEMA_VERSION,
+    capability: "command",
+    capabilityGroup: "map.edit",
+    mutates: "notes",
+    undoable: true,
+    requiresConfirm: id === "notes.deleteBatch",
+    errorCodes: id === "notes.import" ? COLLECTION_IMPORT_API_BUSINESS_CODES : DEFAULT_API_BUSINESS_CODES,
+    documentation: API_DOCUMENTATION
+  }))},
   regression: {gates: ["regress:object-creation", "regress:object-details-edit", "regress:api-data-compatibility"], coverage: ["save", "undo", "failure"]},
   capabilities: {worker: "not-required", regeneration: "unsupported", view: "not-required", renderLayer: "not-required"},
   capabilityReasons: {

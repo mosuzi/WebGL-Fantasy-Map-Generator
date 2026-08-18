@@ -28,9 +28,9 @@ export type DomainManifestErrorCode =
 
 export interface DomainManifestValidationContext {
   readonly resolveCanonicalPath: (path: string) => unknown | null;
-  readonly hasWorkerTask?: (task: string) => boolean;
-  readonly hasRegressionGate?: (gate: string) => boolean;
-  readonly hasApiMethod?: (method: string) => boolean;
+  readonly hasWorkerTask: (task: string) => boolean;
+  readonly hasRegressionGate: (gate: string) => boolean;
+  readonly resolveApiMethod: (method: string) => unknown | null;
 }
 
 export class DomainManifestError extends Error {
@@ -46,6 +46,7 @@ export class DomainManifestError extends Error {
 }
 
 export function validateDomainModuleManifest(value: unknown, context: DomainManifestValidationContext): DomainModuleManifest {
+  validateContext(context);
   const source = record(value, "manifest");
   const id = identifier(source.id, "manifest.id");
   const version = positiveInteger(source.version, "manifest.version");
@@ -65,7 +66,7 @@ export function validateDomainModuleManifest(value: unknown, context: DomainMani
   const locks = source.locks === undefined ? undefined : validateLocks(source.locks, "manifest.locks");
   const regression = validateRegression(source.regression, "manifest.regression");
   for (const gate of regression.gates) {
-    if (context.hasRegressionGate && !context.hasRegressionGate(gate)) manifestError("MANIFEST_REFERENCE_MISSING", `${id}.regression.gates.${gate}`, "package scripts 中不存在该回归门");
+    if (!context.hasRegressionGate(gate)) manifestError("MANIFEST_REFERENCE_MISSING", `${id}.regression.gates.${gate}`, "package scripts 中不存在该回归门");
   }
   const capabilities = validateCapabilities(source.capabilities, "manifest.capabilities");
   const capabilityReasons = validateCapabilityReasons(source.capabilityReasons, "manifest.capabilityReasons");
@@ -80,7 +81,7 @@ export function validateDomainModuleManifest(value: unknown, context: DomainMani
   }
   if (regeneration) for (const path of regeneration.writeSet) assertDomainPath(id, regeneration.id, path, canonicalSections, context);
   for (const task of workerTasks || []) {
-    if (context.hasWorkerTask && !context.hasWorkerTask(task.id)) {
+    if (!context.hasWorkerTask(task.id)) {
       manifestError("MANIFEST_WORKER_TASK_UNKNOWN", `${id}.workerTasks.${task.id}`, "Worker registry 中不存在该任务");
     }
   }
@@ -93,7 +94,7 @@ export function validateDomainModuleManifest(value: unknown, context: DomainMani
     for (const query of panel.queries) if (!queryIds.has(query)) manifestError("MANIFEST_REFERENCE_MISSING", `${id}.panels.${panel.id}.queries`, `未注册 query ${query}`);
   }
   for (const method of api?.methods || []) {
-    if (context.hasApiMethod && !context.hasApiMethod(method.method)) manifestError("MANIFEST_REFERENCE_MISSING", `${id}.api.${method.id}.method`, `公开 API 中不存在 ${method.method}`);
+    validateApiEvidence(id, method, context.resolveApiMethod(method.method));
     const targets = method.capability === "command" ? commandIds : method.capability === "query" ? queryIds : regenerationIds;
     if (!targets.has(method.target)) manifestError("MANIFEST_REFERENCE_MISSING", `${id}.api.${method.id}.target`, `未注册 ${method.capability} ${method.target}`);
   }
@@ -216,8 +217,36 @@ function validateApi(value: unknown, path: string): ApiDescriptor {
   const source = record(value, path);
   return {methods: descriptors(source.methods, `${path}.methods`, (item, itemPath): ApiMethodDescriptor => {
     const method = record(item, itemPath);
-    return {id: identifier(method.id, `${itemPath}.id`), method: identifier(method.method, `${itemPath}.method`), target: identifier(method.target, `${itemPath}.target`), schema: nonEmptyString(method.schema, `${itemPath}.schema`), capability: enumValue(method.capability, ["query", "command", "regeneration"] as const, `${itemPath}.capability`), errorCodes: uniqueStrings(method.errorCodes, `${itemPath}.errorCodes`), documentation: nonEmptyString(method.documentation, `${itemPath}.documentation`)};
+    if (method.documentation !== "api-description-registry") manifestError("MANIFEST_INVALID", `${itemPath}.documentation`, "必须绑定权威 API description registry");
+    return {
+      id: identifier(method.id, `${itemPath}.id`),
+      method: identifier(method.method, `${itemPath}.method`),
+      target: identifier(method.target, `${itemPath}.target`),
+      schemaVersion: nonEmptyString(method.schemaVersion, `${itemPath}.schemaVersion`),
+      capability: enumValue(method.capability, ["query", "command", "regeneration"] as const, `${itemPath}.capability`),
+      capabilityGroup: nonEmptyString(method.capabilityGroup, `${itemPath}.capabilityGroup`),
+      mutates: nonEmptyString(method.mutates, `${itemPath}.mutates`),
+      undoable: booleanValue(method.undoable, `${itemPath}.undoable`),
+      requiresConfirm: booleanValue(method.requiresConfirm, `${itemPath}.requiresConfirm`),
+      errorCodes: uniqueStrings(method.errorCodes, `${itemPath}.errorCodes`, {nonEmpty: true}),
+      documentation: "api-description-registry"
+    };
   })};
+}
+
+function validateApiEvidence(domain: string, method: ApiMethodDescriptor, value: unknown): void {
+  const path = `${domain}.api.${method.id}`;
+  if (!value) manifestError("MANIFEST_REFERENCE_MISSING", `${path}.method`, `公开 API 中不存在 ${method.method}`);
+  const evidence = record(value, `${path}.evidence`);
+  if (evidence.schemaVersion !== method.schemaVersion) manifestError("MANIFEST_CAPABILITY_MISMATCH", `${path}.schemaVersion`, "与权威 API schema version 不一致");
+  if (evidence.documentation !== true) manifestError("MANIFEST_REFERENCE_MISSING", `${path}.documentation`, "权威 API description registry 中没有文档记录");
+  const metadata = record(evidence.metadata, `${path}.evidence.metadata`);
+  if (metadata.capabilityGroup !== method.capabilityGroup || metadata.mutates !== method.mutates || metadata.undoable !== method.undoable || metadata.requiresConfirm !== method.requiresConfirm) {
+    manifestError("MANIFEST_CAPABILITY_MISMATCH", `${path}.capability`, "与权威 API capability metadata 不一致");
+  }
+  if (method.capability === "query" ? method.mutates !== "none" : method.mutates === "none") manifestError("MANIFEST_CAPABILITY_MISMATCH", `${path}.capability`, "query / mutation 语义与 mutates 不一致");
+  const businessCodes = uniqueStrings(evidence.businessCodes, `${path}.evidence.businessCodes`, {nonEmpty: true});
+  if (!sameStrings(method.errorCodes, businessCodes)) manifestError("MANIFEST_CAPABILITY_MISMATCH", `${path}.errorCodes`, "与权威 API business codes 不一致");
 }
 
 function validateLocks(value: unknown, path: string) {
@@ -278,7 +307,18 @@ function assertRegisteredPath(path: string, context: DomainManifestValidationCon
 }
 
 function descriptorGroups(manifest: DomainModuleManifest): Array<[string, readonly {readonly id: string}[]]> {
-  return [["derived", manifest.derivedSystems], ["command", manifest.commands], ["worker", manifest.workerTasks || []], ["query", manifest.queries || []], ["view", manifest.views || []], ["layer", manifest.layers || []], ["panel", manifest.panels || []], ["api", manifest.api?.methods || []]];
+  return [["derived", manifest.derivedSystems], ["command", manifest.commands], ["regeneration", manifest.regeneration ? [manifest.regeneration] : []], ["worker", manifest.workerTasks || []], ["query", manifest.queries || []], ["view", manifest.views || []], ["layer", manifest.layers || []], ["panel", manifest.panels || []], ["api", manifest.api?.methods || []]];
+}
+
+function validateContext(value: unknown): asserts value is DomainManifestValidationContext {
+  const context = record(value, "context");
+  for (const resolver of ["resolveCanonicalPath", "hasWorkerTask", "hasRegressionGate", "resolveApiMethod"] as const) {
+    if (typeof context[resolver] !== "function") manifestError("MANIFEST_INVALID", `context.${resolver}`, "必须提供权威 resolver");
+  }
+}
+
+function sameStrings(left: readonly string[], right: readonly string[]): boolean {
+  return left.length === right.length && left.every((item, index) => item === right[index]);
 }
 
 function descriptors<T>(value: unknown, path: string, validate: (item: unknown, path: string) => T): readonly T[] {

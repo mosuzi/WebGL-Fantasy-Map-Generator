@@ -75,10 +75,14 @@ export interface ApiMethodDescriptor {
   readonly id: string;
   readonly method: string;
   readonly target: string;
-  readonly schema: string;
+  readonly schemaVersion: string;
   readonly capability: "query" | "command" | "regeneration";
+  readonly capabilityGroup: string;
+  readonly mutates: string;
+  readonly undoable: boolean;
+  readonly requiresConfirm: boolean;
   readonly errorCodes: readonly string[];
-  readonly documentation: string;
+  readonly documentation: "api-description-registry";
 }
 
 export interface ApiDescriptor {

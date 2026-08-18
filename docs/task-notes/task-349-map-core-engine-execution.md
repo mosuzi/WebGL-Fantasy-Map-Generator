@@ -22,8 +22,8 @@
 | 349-2 | 受限 TypeScript 工具链 | `typecheck:core`、build、既有静态门；运行产物除版本注入外不变 | 不启用全局 `checkJs` | ACCEPT |
 | 349-3 | 身份、canonical revision、operation binding、snapshot ownership、commit lifecycle 类型与运行时校验 | 类型负例、validator、Node regression | 不接管旧 action | ACCEPT |
 | 349-3a | canonical field registry、persisted / live presentation 分类、普通 document identity 定义 / 迁移与 identity adapters 闭合 | 五个遗漏字段、旧数据、checksum、patch、document identity 迁移和身份混用负例通过 | 不实现 Manifest、不接管 action | ACCEPT |
-| 349-4 | Capability-aware Domain Manifest、注册器与影子审计 | 不完整 manifest 拒绝；notes / markers / Worker 试点可登记 | 不改变运行路由 | 待评审 |
-| 349-5 | 薄 `MapCoreEngine` 与 `MapRuntimeCoordinator` facade，影子产生 commit / projection 状态 | 旧 history / revision 行为不变；无第二 map owner | 不迁移复杂领域 | 待执行 |
+| 349-4 | Capability-aware Domain Manifest、注册器与影子审计 | 不完整 manifest 拒绝；notes / markers / Worker 试点可登记 | 不改变运行路由 | ACCEPT |
+| 349-5 | 薄 `MapCoreEngine` 与 `MapRuntimeCoordinator` facade，影子产生 commit / projection 状态 | 旧 history / revision 行为不变；无第二 map owner | 不迁移复杂领域 | 进行中 |
 | 349-6 | notes command / history / query / persistence / API 垂直切片 | 新增、编辑、删除、undo / redo、旧数据、save 回归 | 不伪造 Worker / regeneration / layer | 待执行 |
 | 349-7 | markers presentation / layer / picking 垂直切片 | identity、draw、pick、export 的 Node / source 契约 | 不执行真实视觉浏览器门 | 待执行 |
 | 349-8 | 一个真实 Worker task 的统一 binding / result / patch 切片 | checksum、stale、cancel、gap、restart 的专项回归 | 不批量迁移 Worker | 待执行 |
@@ -52,12 +52,12 @@ planned → computed → validated → projections-prepared
 
 | 字段 | 内容 |
 | --- | --- |
-| 当前阶段 | `349-4` capability-aware Domain Manifest、注册器与影子审计，checkpoint 待评审 |
-| 冻结点 | `349-4` 实现冻结于版本 `0.5.11`；`3` 个 shadow domain、`44` 个分类 descriptor、`19` 类负例，runtime route import `0` |
-| 允许文件 | core manifest 类型 / validator / registry、只读 shadow audit、notes / markers / Worker 示例 manifest、专项 Node、阶段文档 |
-| 禁止文件 | facade、旧 action 路由切换、领域行为迁移、`source/`、main、浏览器 |
-| 必须保持 | Manifest 只描述 capability / read-write / dependency / projection / execution profile；不得成为第二状态 owner 或改变旧调用路径 |
-| 首个廉价门 | 盘点现有 notes、markers 与一个 Worker task 的真实 capability / write path，冻结必填字段和拒绝规则 |
+| 当前阶段 | `349-5` 薄 `MapCoreEngine + MapRuntimeCoordinator` facade 与影子 commit / projection 记录 |
+| 冻结点 | `349-4` 复审 `ACCEPT`，版本 `0.5.12`；Manifest registry 可作为 facade 的只读领域分母 |
+| 允许文件 | facade / coordinator 类型与纯 runtime validator、影子记录 adapter、专项 Node、阶段文档 |
+| 禁止文件 | 旧 action 路由切换、领域行为迁移、第二 map store、`source/`、main、浏览器 |
+| 必须保持 | facade 只持有现有 canonical owner 的访问器；影子记录不得推进旧 revision / history、不得发布到 UI / API / persistence |
+| 首个廉价门 | 冻结 facade 的 owner accessor、legacy observation 输入、commit lifecycle 与 projection degraded / retry / resync 输出，不连接业务入口 |
 | 冻结门 | 缺字段 / 重复 domain / 未登记 path / capability 矛盾负例，三类示例登记与 shadow audit、typecheck、build、评审 ACCEPT |
 | 停止条件 | Manifest 无法由既有源码事实静态证明，或影子审计必须接管 runtime 路由才能成立 |
 
@@ -115,12 +115,13 @@ planned → computed → validated → projections-prepared
 - 评审：首轮 `BLOCK` 四项身份 / checksum P1；加入对应反例并完成最窄修正后，同一只读评审智能体复审 `ACCEPT`。
 - 下一步：`349-4` 只建立 capability-aware Manifest、注册器与影子审计，不改变运行路由。
 
-### 349-4 — 待评审
+### 349-4 — ACCEPT
 
 - 完成：TypeScript `DomainModuleManifest`、runtime validator / registry、notes / markers / population 三份 shadow Manifest；后者绑定真实 `population.compute` Worker task。
 - 审计：canonical read / write、command undo、regeneration revision / binding / lock / replacement、Worker result / binding / patch、panel 引用、persistence、API target / schema / capability / errors / documentation、regression gate / coverage 与 capability reason。
-- 专项：登记 `3` 个领域、`44` 个分类 descriptor、`19` 类拒绝 / 原子失败负例；公开 API method 对照 `API_METHODS`，runtime route import `0`，Manifest 不成为第二 owner。
-- 版本：`0.5.10 → 0.5.11`；浏览器未启动、未操作、未执行。
-- 评审：checkpoint 冻结后交同一只读评审智能体；未 `ACCEPT` 前不进入 `349-5`。
+- 专项：登记 `3` 个领域、`45` 个分类 descriptor、`28` 类拒绝 / 原子失败负例；公开 API 对照真实 schema description / capability metadata / business codes，runtime route import `0`，Manifest 不成为第二 owner。
+- 版本：首轮 `0.5.10 → 0.5.11`，评审修正候选 `0.5.11 → 0.5.12`；浏览器未启动、未操作、未执行。
+- 评审：首轮 `BLOCK` 四项 P1：可缺省 resolver、API 自填矩阵、Marker delete / headless profile 事实漂移、regeneration 未进入唯一性账本。四项最窄修正与反例完成后，同一只读评审智能体 blocker-only 复审 `ACCEPT`。
+- 下一步：`349-5` 只建立薄 facade 和不改变旧行为的 commit / projection 影子记录。
 
 阶段结果在每次 checkpoint 后更新，长日志只记录命令和 artifact 路径，不粘贴到本文。

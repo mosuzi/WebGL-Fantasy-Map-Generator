@@ -2,9 +2,12 @@
 import assert from "node:assert/strict";
 import {readFile, readdir} from "node:fs/promises";
 import path from "node:path";
+import {createServer} from "vite";
 
 import {resolveCanonicalMapWriteDescriptor} from "../app/webgl-generator/src/runtime/canonical-map-field-registry.js";
-import {API_METHODS} from "../app/webgl-generator/src/runtime/api-contract.js";
+import {API_METHODS, buildApiContract} from "../app/webgl-generator/src/runtime/api-contract.js";
+import {buildApiMethodDescriptionRegistry} from "../app/webgl-generator/src/runtime/api-schema-registry.js";
+import {HEADLESS_WRITE_METHODS} from "../app/webgl-generator/src/runtime/headless-write-api.js";
 import {listWorkerTasks} from "../app/webgl-generator/src/runtime/worker-task-registry.js";
 
 const compiledRoot = new URL("../.cache/core-manifest-test/", import.meta.url);
@@ -17,12 +20,34 @@ const workerTasks = new Set(listWorkerTasks());
 const repoRoot = path.resolve(new URL("..", import.meta.url).pathname.replace(/^\/(?:[A-Za-z]:)/u, value => value.slice(1)));
 const packageDocument = JSON.parse(await readFile(path.join(repoRoot, "package.json"), "utf8"));
 const regressionGates = new Set(Object.keys(packageDocument.scripts || {}));
-const apiMethods = new Set(Object.entries(API_METHODS).flatMap(([namespace, methods]) => methods.map(method => `${namespace}.${method}`)));
+const vite = await createServer({
+  configFile: path.join(repoRoot, "vite.config.mjs"),
+  server: {middlewareMode: true},
+  ssr: {noExternal: ["element-plus", /@element-plus/]},
+  appType: "custom",
+  logLevel: "silent"
+});
+let apiDescriptions;
+try {
+  const {buildMethodMetadata} = await vite.ssrLoadModule("/src/runtime/console-api.js");
+  const contract = buildApiContract(API_METHODS, buildMethodMetadata());
+  apiDescriptions = buildApiMethodDescriptionRegistry(API_METHODS, contract.methodMetadata);
+} finally {
+  await vite.close();
+}
 const context = {
   resolveCanonicalPath: pathValue => resolveCanonicalMapWriteDescriptor(pathValue),
   hasWorkerTask: task => workerTasks.has(task),
   hasRegressionGate: gate => regressionGates.has(gate),
-  hasApiMethod: method => apiMethods.has(method)
+  resolveApiMethod: method => {
+    const description = apiDescriptions[method];
+    return description ? {
+      schemaVersion: description.schemaVersion,
+      businessCodes: description.businessCodes,
+      documentation: true,
+      metadata: description.metadata
+    } : null;
+  }
 };
 const registry = createDomainManifestRegistry(context);
 for (const manifest of [notesManifest, markersManifest, populationManifest]) registry.register(manifest);
@@ -34,6 +59,7 @@ assert.ok(Object.isFrozen(registry.get("notes")) && Object.isFrozen(registry.get
 assert.equal(registry.get("notes").capabilities.worker, "not-required");
 assert.equal(registry.get("markers").layers[0].picking, true);
 assert.equal(registry.get("population").workerTasks[0].id, "population.compute");
+assert.equal(registry.snapshot().descriptors, 45);
 
 function expectManifestError(callback, code, pathValue) {
   assert.throws(callback, error => {
@@ -87,6 +113,20 @@ collidingMarkers.api.methods[4].target = "notes.set";
 expectManifestError(() => atomicRegistry.register(collidingMarkers), "MANIFEST_DUPLICATE_ID", "markers.command.notes.set");
 assert.deepEqual(atomicRegistry.snapshot(), {domains: 1, ids: ["notes"], descriptors: 14});
 
+const regenerationRegistry = createDomainManifestRegistry(context);
+regenerationRegistry.register(markersManifest);
+const duplicateRegeneration = clone(notesManifest);
+duplicateRegeneration.id = "notes-two";
+duplicateRegeneration.derivedSystems = [];
+duplicateRegeneration.commands = [];
+duplicateRegeneration.queries = [];
+duplicateRegeneration.panels = [];
+duplicateRegeneration.api = {methods: []};
+duplicateRegeneration.regeneration = {...clone(markersManifest.regeneration), writeSet: ["notes"]};
+duplicateRegeneration.capabilities.regeneration = "optional";
+duplicateRegeneration.regression.coverage = ["save", "regeneration", "failure"];
+expectManifestError(() => regenerationRegistry.register(duplicateRegeneration), "MANIFEST_DUPLICATE_ID", "notes-two.regeneration.markers.regenerateResources");
+
 const hiddenLayer = clone(notesManifest);
 hiddenLayer.layers = [{...clone(markersManifest.layers[0]), reads: ["notes"]}];
 expectManifestError(() => createDomainManifestRegistry(context).register(hiddenLayer), "MANIFEST_CAPABILITY_MISMATCH", "notes.capabilities.renderLayer");
@@ -108,8 +148,8 @@ delete missingBackfill.persistence.backfill;
 expectManifestError(() => createDomainManifestRegistry(context).register(missingBackfill), "MANIFEST_INVALID", "manifest.persistence.backfill");
 
 const missingApiSchema = clone(notesManifest);
-delete missingApiSchema.api.methods[0].schema;
-expectManifestError(() => createDomainManifestRegistry(context).register(missingApiSchema), "MANIFEST_INVALID", "manifest.api.methods[0].schema");
+delete missingApiSchema.api.methods[0].schemaVersion;
+expectManifestError(() => createDomainManifestRegistry(context).register(missingApiSchema), "MANIFEST_INVALID", "manifest.api.methods[0].schemaVersion");
 
 const missingApiTarget = clone(notesManifest);
 missingApiTarget.api.methods[0].target = "notes.missing";
@@ -119,6 +159,22 @@ const unknownApiMethod = clone(markersManifest);
 unknownApiMethod.api.methods.at(-1).method = "generate.regenerateMarkers";
 expectManifestError(() => createDomainManifestRegistry(context).register(unknownApiMethod), "MANIFEST_REFERENCE_MISSING", "markers.api.markers.regenerationApi.method");
 
+const apiSchemaDrift = clone(notesManifest);
+apiSchemaDrift.api.methods[0].schemaVersion = "9.9.9";
+expectManifestError(() => createDomainManifestRegistry(context).register(apiSchemaDrift), "MANIFEST_CAPABILITY_MISMATCH", "notes.api.edit.notes.createStandalone.schemaVersion");
+
+const apiCapabilityDrift = clone(notesManifest);
+apiCapabilityDrift.api.methods[0].mutates = "none";
+expectManifestError(() => createDomainManifestRegistry(context).register(apiCapabilityDrift), "MANIFEST_CAPABILITY_MISMATCH", "notes.api.edit.notes.createStandalone.capability");
+
+const apiErrorsDrift = clone(notesManifest);
+apiErrorsDrift.api.methods[0].errorCodes = apiErrorsDrift.api.methods[0].errorCodes.slice(1);
+expectManifestError(() => createDomainManifestRegistry(context).register(apiErrorsDrift), "MANIFEST_CAPABILITY_MISMATCH", "notes.api.edit.notes.createStandalone.errorCodes");
+
+const apiDocumentationDrift = clone(notesManifest);
+apiDocumentationDrift.api.methods[0].documentation = "invented-documentation";
+expectManifestError(() => createDomainManifestRegistry(context).register(apiDocumentationDrift), "MANIFEST_INVALID", "manifest.api.methods[0].documentation");
+
 const missingRegressionCoverage = clone(populationManifest);
 missingRegressionCoverage.regression.coverage = missingRegressionCoverage.regression.coverage.filter(item => item !== "worker");
 expectManifestError(() => createDomainManifestRegistry(context).register(missingRegressionCoverage), "MANIFEST_CAPABILITY_MISMATCH", "population.regression.coverage");
@@ -126,6 +182,16 @@ expectManifestError(() => createDomainManifestRegistry(context).register(missing
 const unknownCapabilityReason = clone(notesManifest);
 unknownCapabilityReason.capabilityReasons.database = "不存在的能力";
 expectManifestError(() => createDomainManifestRegistry(context).register(unknownCapabilityReason), "MANIFEST_INVALID", "manifest.capabilityReasons.database");
+
+const unknownRegressionGate = clone(notesManifest);
+unknownRegressionGate.regression.gates = ["regress:missing"];
+expectManifestError(() => createDomainManifestRegistry(context).register(unknownRegressionGate), "MANIFEST_REFERENCE_MISSING", "notes.regression.gates.regress:missing");
+
+for (const resolver of ["hasWorkerTask", "hasRegressionGate", "resolveApiMethod"]) {
+  const incompleteContext = {...context};
+  delete incompleteContext[resolver];
+  expectManifestError(() => createDomainManifestRegistry(incompleteContext).register(notesManifest), "MANIFEST_INVALID", `context.${resolver}`);
+}
 
 const evidence = {
   notes: await joinSources([
@@ -150,6 +216,16 @@ for (const token of ["createStandaloneNoteCommand", "createDeleteNoteCommand", "
 for (const token of ["createAddMarkerCommand", "createDeleteMarkerCommand", "createMoveMarkerCommand", "createSetMarkerNoteCommand", "createSetMarkerVisualCommand", "createRegenerateResourceMarkersCommand", "edit.markers.add", "createMarkerPanel"]) assert.ok(evidence.markers.includes(token), `markers shadow evidence 缺少 ${token}`);
 for (const token of ["POPULATION_WORKER_TASK", "population.compute", "kind: \"population\"", "getPopulationWorkerPatchPolicy", "edit.population.applyAdjustment", "createPopulationPanel"]) assert.ok(evidence.population.includes(token), `population shadow evidence 缺少 ${token}`);
 for (const pathValue of populationManifest.workerTasks[0].writeSet) assert.ok(evidence.population.includes(`\"${pathValue}\"`), `population Worker 源码未声明 ${pathValue}`);
+assert.ok(markersManifest.commands.find(command => command.id === "markers.delete").writeSet.includes("notes"), "markers.delete 必须覆盖真实备注删除写集");
+
+const headlessMethods = new Set(HEADLESS_WRITE_METHODS);
+for (const manifest of [notesManifest, markersManifest, populationManifest]) {
+  for (const descriptor of [...manifest.commands, ...(manifest.queries || [])]) {
+    const api = manifest.api?.methods.find(method => method.target === descriptor.id);
+    if (!api) continue;
+    assert.equal(descriptor.profiles.includes("headless"), headlessMethods.has(api.method), `${manifest.id}.${descriptor.id} headless profile 与真实 registry 漂移`);
+  }
+}
 
 const runtimeDir = path.join(repoRoot, "app/webgl-generator/src/runtime");
 const runtimeEntries = await readdir(runtimeDir, {recursive: true, withFileTypes: true});
@@ -166,7 +242,7 @@ console.log(JSON.stringify({
   domains: registry.list().map(manifest => ({id: manifest.id, status: manifest.status, capabilities: manifest.capabilities})),
   workerTaskVerified: "population.compute",
   runtimeRouteImports: 0,
-  negativeCases: 19
+  negativeCases: 28
 }, null, 2));
 
 async function joinSources(files) {
