@@ -565,14 +565,23 @@ Manifest 声明：
 2. `349-1`：只读盘点 owner、现有事务状态机、snapshot / buffer ownership、checksum 成本、interactive / headless 差异；未确定 owner 为阻断。
 3. `349-2`：引入受限 TS 工具链；不迁移业务实现。
 4. `349-3`：实现 identity、revision、operation、snapshot ownership、commit lifecycle 类型与 runtime validator；不接管旧 action。
-5. `349-4`：实现 capability-aware Manifest、注册器和影子审计；不改变运行路由。
-6. `349-5`：实现薄 `MapCoreEngine + MapRuntimeCoordinator` facade，在影子模式产生 commit / projection 记录。
-7. `349-6`：迁移 notes 的 command / history / query / persistence / API 切片，明确声明无需 Worker、regeneration 和 render layer。
-8. `349-7`：迁移 markers 的 presentation / layer / picking 切片，不伪造重生成能力。
-9. `349-8`：选择一个真实现有 Worker task，迁移 binding / result / patch / ACK / resync。
-10. `349-9`：接入 dependency registry、projection 状态和局部失效；未知依赖显式 full rebuild。
-11. `349-10.x`：根据 `349-1` 盘点逐域拆分 economy、diplomacy、military、settlements、politics、terrain / climate 等复杂域；每个子阶段单独 checkpoint 和评审。
-12. `349-11`：执行 build、typecheck 和非浏览器回归终验，形成完整浏览器验收方案但不执行。
+5. `349-3a`：补全 canonical field registry，分离 persisted / live presentation，定义普通 persisted document identity 的派生 / 默认值 / 迁移，并建立 runtime session、document、render preparation 与 headless identity adapter；不实现 Manifest。
+6. `349-4`：实现 capability-aware Manifest、注册器和影子审计；不改变运行路由。
+7. `349-5`：实现薄 `MapCoreEngine + MapRuntimeCoordinator` facade，在影子模式产生 commit / projection 记录。
+8. `349-6`：迁移 notes 的 command / history / query / persistence / API 切片，明确声明无需 Worker、regeneration 和 render layer。
+9. `349-7`：迁移 markers 的 presentation / layer / picking 切片，不伪造重生成能力。
+10. `349-8`：以 `population.compute` 为默认真实 Worker task，迁移 binding / result / patch / ACK / resync；替换 pilot 必须重新登记理由。
+11. `349-9`：接入 dependency registry、projection 状态和局部失效；未知依赖显式 full rebuild。
+12. `349-10a`：迁移 terrain / grid / height-derived / climate / ocean / topology 基础域。
+13. `349-10b`：迁移 society / politics 与 pack mirror。
+14. `349-10c`：迁移 settlements / zones / labels / measurements。
+15. `349-10d`：迁移 routes / rivers / features / resource markers。
+16. `349-10e`：迁移 economy / diplomacy / military。
+17. `349-10f`：收口 generation / import / adoption / export / headless profile。
+18. `349-10g`：移除已证明冗余的 legacy adapter、重复 revision / history 路径和影子双写。
+19. `349-11`：执行 build、typecheck 和非浏览器回归终验，形成完整浏览器验收方案但不执行。
+
+`349-1` 的现状证据、ADR、身份命名空间、`13` 个 Worker task 分类和阶段插入依据见 [核心架构盘点](./task-349-core-architecture-inventory.md)。
 
 每阶段主线程唯一写入，静态 / 专项 Node 门通过并 checkpoint 后，由同一只读评审智能体给出 `ACCEPT / BLOCK`。计划外必需项插入新的 `349-x` 子阶段，并重新排序全部未完成阶段。
 

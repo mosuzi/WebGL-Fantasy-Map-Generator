@@ -389,14 +389,23 @@ TypeScript 不再维护一套与引擎计划冲突的独立阶段。唯一顺序
 2. `349-1` 只读盘点真实 owner、事务、buffer ownership 和构建边界；
 3. `349-2` 受限 TS 工具链，运行行为和构建产物除版本注入外不变；
 4. `349-3` 核心契约与 runtime validator，不接管旧 action；
-5. `349-4` capability-aware Manifest 与影子审计；
-6. `349-5` 薄 facade 与 commit / projection 影子记录；
-7. `349-6` notes 事务 / 存档切片；
-8. `349-7` markers layer / picking 切片；
-9. `349-8` 一个真实 Worker task 协议切片；
-10. `349-9` dependency / projection 接线；
-11. `349-10.x` 逐域迁移与 legacy 收口；
-12. `349-11` build、typecheck、非浏览器终验和浏览器验收方案评估。
+5. `349-3a` canonical field registry、persisted / live presentation、普通 document identity 定义 / 迁移和 identity adapter 闭合；
+6. `349-4` capability-aware Manifest 与影子审计；
+7. `349-5` 薄 facade 与 commit / projection 影子记录；
+8. `349-6` notes 事务 / 存档切片；
+9. `349-7` markers layer / picking 切片；
+10. `349-8` 以 `population.compute` 为默认真实 Worker task 的协议切片；
+11. `349-9` dependency / projection 接线；
+12. `349-10a` terrain / grid / height-derived / climate / ocean / topology；
+13. `349-10b` society / politics 与 pack mirror；
+14. `349-10c` settlements / zones / labels / measurements；
+15. `349-10d` routes / rivers / features / resource markers；
+16. `349-10e` economy / diplomacy / military；
+17. `349-10f` generation / import / adoption / export / headless profile；
+18. `349-10g` legacy adapter、重复 revision / history 和影子双写收口；
+19. `349-11` build、typecheck、非浏览器终验和浏览器验收方案评估。
+
+`349-3a` 不是扩张 TypeScript 范围：它修复 `349-1` 证实的现有存档字段注册遗漏，定义普通 persisted document identity 的派生 / 默认值 / 迁移，并强制各类 identity 通过显式 adapter 转换；完整证据与 ADR 见 [核心架构盘点](./task-349-core-architecture-inventory.md)。
 
 每阶段都有独立 checkpoint 和只读智能体评审。不得为了满足 Manifest 人工制造无业务意义的 Worker、regeneration、view 或 layer；缺失能力必须通过 `capabilities` 显式声明。
 
