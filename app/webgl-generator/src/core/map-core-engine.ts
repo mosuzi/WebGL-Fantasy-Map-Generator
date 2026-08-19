@@ -324,11 +324,23 @@ function createReadOnlyBorrow<T>(value: T): {readonly value: Readonly<T>; readon
       get(target, property) {
         if (isBorrowMutation(target, property)) return () => mutationRejected(property);
         if (ArrayBuffer.isView(target) && property === "buffer") return target.buffer.slice(0);
+        if (!requiresNativeReceiver(target) && isAccessorProperty(target, property)) {
+          throw new CoreFacadeError("FACADE_OWNER_ESCAPE", `borrowed canonical owner 不执行 accessor ${String(property)}`);
+        }
         return wrap(Reflect.get(target, property, requiresNativeReceiver(target) ? target : proxy));
       },
       getOwnPropertyDescriptor(target, property) {
         const descriptor = Reflect.getOwnPropertyDescriptor(target, property);
-        if (!descriptor || !("value" in descriptor) || (typeof descriptor.value !== "object" && typeof descriptor.value !== "function") || descriptor.value === null) return descriptor;
+        if (!descriptor) return descriptor;
+        if (!("value" in descriptor)) {
+          if (!descriptor.configurable) throw new CoreFacadeError("FACADE_OWNER_ESCAPE", `不可安全借用 ${String(property)} accessor descriptor`);
+          return {
+            ...descriptor,
+            get: descriptor.get ? () => mutationRejected(property) : undefined,
+            set: descriptor.set ? () => mutationRejected(property) : undefined
+          };
+        }
+        if ((typeof descriptor.value !== "object" && typeof descriptor.value !== "function") || descriptor.value === null) return descriptor;
         if (!descriptor.configurable && !descriptor.writable) throw new CoreFacadeError("FACADE_OWNER_ESCAPE", `不可安全借用 ${String(property)} descriptor`);
         return {...descriptor, value: wrap(descriptor.value)};
       },
@@ -342,7 +354,12 @@ function createReadOnlyBorrow<T>(value: T): {readonly value: Readonly<T>; readon
       preventExtensions: () => mutationRejected("[[Extensible]]"),
       apply(target, thisArgument, argumentsList) {
         const receiver = targets.get(thisArgument as object) || thisArgument;
-        const result = Reflect.apply(target as (...args: unknown[]) => unknown, requiresNativeReceiver(receiver) ? receiver : thisArgument, argumentsList.map(argument => targets.get(argument as object) || argument));
+        const safeArguments = argumentsList.map(argument => typeof argument === "function"
+          ? function (this: unknown, ...callbackArguments: unknown[]) {
+              return Reflect.apply(argument, this, callbackArguments.map(wrap));
+            }
+          : argument);
+        const result = Reflect.apply(target as (...args: unknown[]) => unknown, requiresNativeReceiver(receiver) ? receiver : thisArgument, safeArguments);
         return wrap(result);
       }
     });
@@ -372,7 +389,19 @@ function isBorrowMutation(target: object, property: PropertyKey): boolean {
   if (target instanceof Map) return ["clear", "delete", "set"].includes(property);
   if (target instanceof Set) return ["add", "clear", "delete"].includes(property);
   if (ArrayBuffer.isView(target)) return ["copyWithin", "fill", "reverse", "set", "sort"].includes(property) || (target instanceof DataView && property.startsWith("set"));
+  if (target instanceof ArrayBuffer) return ["resize", "transfer", "transferToFixedLength"].includes(property);
+  if (typeof SharedArrayBuffer !== "undefined" && target instanceof SharedArrayBuffer) return property === "grow";
   if (target instanceof Date) return property.startsWith("set");
+  return false;
+}
+
+function isAccessorProperty(target: object, property: PropertyKey): boolean {
+  let owner: object | null = target;
+  while (owner) {
+    const descriptor = Reflect.getOwnPropertyDescriptor(owner, property);
+    if (descriptor) return !("value" in descriptor);
+    owner = Reflect.getPrototypeOf(owner);
+  }
   return false;
 }
 

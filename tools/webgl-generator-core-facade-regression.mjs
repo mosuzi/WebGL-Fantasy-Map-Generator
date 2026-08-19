@@ -7,7 +7,16 @@ const compiledRoot = new URL("../.cache/core-facade-test/core/", import.meta.url
 const {CoreFacadeError, createMapCoreEngine} = await import(new URL("map-core-engine.js", compiledRoot));
 const {createMapRuntimeCoordinator} = await import(new URL("map-runtime-coordinator.js", compiledRoot));
 
-let map = {name: "first", cells: [1, 2, 3], typed: new Uint8Array([7, 8])};
+const accessorRaw = [11];
+let map = {
+  name: "first",
+  cells: [1, 2, 3],
+  typed: new Uint8Array([7, 8]),
+  buffer: new ArrayBuffer(4),
+  get accessorLeak() {
+    return accessorRaw;
+  }
+};
 let revision = interactiveRevision(0);
 let historyFingerprint = "history:0";
 let commitIdsCreated = 0;
@@ -35,6 +44,19 @@ core.readCanonical(current => {
   return current.typed[0];
 });
 assert.equal(map.typed[0], 7, "typed array buffer borrow 必须与 owner backing store 隔离");
+expectFacadeError(() => core.readCanonical(current => current.typed.forEach((_value, _index, rawView) => {
+  rawView[0] = 41;
+})), "FACADE_OWNER_ESCAPE");
+assert.equal(map.typed[0], 7, "原生容器 callback 不得收到真实 typed array owner");
+let accessorGetter;
+core.readCanonical(current => {
+  accessorGetter = Object.getOwnPropertyDescriptor(current, "accessorLeak").get;
+  return current.name;
+});
+expectFacadeError(() => accessorGetter(), "FACADE_OWNER_ESCAPE");
+assert.deepEqual(accessorRaw, [11], "accessor descriptor 不得暴露捕获真实 owner 的 getter");
+expectFacadeError(() => core.readCanonical(current => current.buffer.transfer()), "FACADE_OWNER_ESCAPE");
+assert.equal(map.buffer.byteLength, 4, "ArrayBuffer transfer 不得 detach owner backing store");
 let escapedCells;
 core.readCanonical(current => {
   escapedCells = current.cells;
@@ -191,6 +213,9 @@ console.log(JSON.stringify({
   rollbackBeforePublish: rolledBack.rollback,
   ownerCached: false,
   nestedBorrowProtected: true,
+  nativeCallbackProtected: true,
+  accessorDescriptorProtected: true,
+  backingStoreProtected: true,
   transitionClaimExclusive: true,
   rollbackTerminal: true,
   projectionBypassRejected: true,

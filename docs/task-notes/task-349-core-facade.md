@@ -43,7 +43,7 @@ resyncing → ready / degraded
 - 完整七步 lifecycle；pre-commit `commitId` 分配为 `0`；
 - facade 对 legacy revision / history 写调用均为 `0`；owner 替换后读取立即看到新引用，证明没有缓存第二 map；
 - interactive 普通提交、headless 普通提交与 adoption 新 session / revision `0` 均复用第 349-3 的 revision validator；
-- async borrow、根或嵌套 owner 逃逸、嵌套写入、读取期换 owner、source revision 漂移、重复 projection、非法 lifecycle 均拒绝；
+- async borrow、根或嵌套 owner 逃逸、嵌套写入、原生容器 callback、accessor descriptor、backing-store mutator、读取期换 owner、source revision 漂移、重复 projection、非法 lifecycle 均拒绝；
 - 并发 operation 不能重复认领同一次 owner/history 转换；rollback 后操作不可复活，且这些拒绝均不消耗 `commitId`；
 - publish 前 canonical commit 可在 legacy 恢复后记为 rolled-back，不能再发布；
 - publish 后 Worker degraded 不影响 revision / history，并可 `retrying → resyncing → ready`；已 ready renderer 也可因 context loss 进入 degraded 后恢复；
@@ -56,3 +56,5 @@ resyncing → ready / degraded
 - production build 保持 `1361 modules transformed`，构建模块分母不因 shadow facade 进入正式 import graph；
 - `source/` 零改动，浏览器执行为 `0`；
 - checkpoint 由同一只读评审智能体复核，只有 `ACCEPT` 才进入 notes 垂直切片 `349-6`。
+
+最终 checkpoint `0.5.15` 已由同一只读评审智能体 `ACCEPT`；本阶段未接管 runtime、未修改 `source/`、未执行浏览器。
