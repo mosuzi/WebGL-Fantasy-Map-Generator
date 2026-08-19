@@ -33,4 +33,4 @@
 
 ## 阶段结论
 
-首轮只读评审对 `10b442b / 0.5.46` 给出 `BLOCK`：preload / 校验失败可能遗留 pending Worker session，临时 renderer binding 未冻结 topology revision，解包文档的 checksum / cell count 仍可能只与自报 metadata 自洽。`0.5.47` 已做最窄修正：从 Worker 返回到 `loadMapIntoRuntime` 接管前的全部失败 / 提前返回路径立即 invalidate，临时 render binding 明确并校验 topology revision，cell count 从真实 identity 容器读取且核对已有 metadata，document / map checksum 必须一致；新增失败接纳后下一持久任务立即运行的真实 coordinator 回归。未发现必须改 canonical owner 或插入新阶段的阻断，未完成顺序仍为 `349-10g → 349-11`；当前修正 checkpoint 待 blocker-only 复审。
+首轮只读评审对 `10b442b / 0.5.46` 给出 `BLOCK`：preload / 校验失败可能遗留 pending Worker session，临时 renderer binding 未冻结 topology revision，解包文档的 checksum / cell count 仍可能只与自报 metadata 自洽。`0.5.47` 已做最窄修正：从 Worker 返回到 `loadMapIntoRuntime` 接管前的全部失败 / 提前返回路径立即 invalidate，临时 render binding 明确并校验 topology revision，cell count 从真实 identity 容器读取且核对已有 metadata，document / map checksum 必须一致；新增失败接纳后下一持久任务立即运行的真实 coordinator 回归。同一只读评审职责的干净复审智能体对 `6bcd0cf / 0.5.47` 给出 `ACCEPT`，无剩余 P0 / P1，浏览器执行 `0`。未完成顺序仍为 `349-10g → 349-11`。

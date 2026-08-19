@@ -271,7 +271,7 @@ planned → computed → validated → projections-prepared
 - 后续复审：`0.5.42` 的精确结果形状、经济整对象、全局军事根与第三国 Warzone cell 四类 P1 在 `0.5.43` 收紧；再由 `0.5.44` 冻结不涉及目标国家的 campaign / front，并从提交后军团重算军事汇总。协议负例最终为 `38` 类，10k / 100k 与全套静态 / Node 门通过。
 - 终验：同一只读评审智能体对 `9bfe682 / 0.5.44` 给出 `ACCEPT`；无剩余 P0 / P1，浏览器执行 `0`。下一步进入 349-10f。
 
-### 349-10f — 待评审
+### 349-10f — 已接受
 
 - 冻结目标：收口全图 generation、JSON / compressed import、adoption handoff、export persistence 与隔离 headless write profile，使新 session / revision、rollback、旧档 identity、checksum 与 projection 状态使用既有 core vocabulary；不删除未证明冗余的 legacy adapter。
 - 首个廉价门：盘点 generation.compute、map-file-io、map-adoption-handoff、archive export 与 headless-write 的真实 owner、binding、事务终态和现有 Node 专项；任何共享 result owner 未登记或必须改 canonical owner 的发现先登记并重排。
@@ -279,6 +279,13 @@ planned → computed → validated → projections-prepared
 - 实现：登记 generation / persistence import / persistence export / headless write 四个唯一 profile owner；新增 TypeScript receipt 契约和统一 runtime validator。生成 / 导入在 handoff 前后双门校验，导出在 Worker session commit 前校验 identity / checksum / byte receipt，headless 成功返回前校验 persisted identity 保持与 revision 精确 `+1`，失败沿既有事务回滚。
 - 门禁：专项覆盖 `4` 个 owner、`15` 类负例、新 session、v1 旧档、source 不变、checksum、真实 headless commit；map-file 100k、Worker adoption / archive、headless write / read、document identity、typecheck、build 和 diff check 通过。既有 map-file 夹具的 render binding 单行同步 `topologyRevision: 0`；浏览器执行 `0`。
 - 首轮评审：`10b442b / 0.5.46` 为 `BLOCK`，三个 P1 分别是 preload 失败未立即释放 pending session、临时 renderer binding 未核对 topology revision、解包文档的 checksum / cell count 可只与自报 metadata 自洽。`0.5.47` 已覆盖从 Worker 返回到 load 接管前的全部 cleanup，冻结 topology revision，并从真实 cell identity 容器及 document / map 双侧 checksum 核对回执；真实 coordinator 证明失败接纳后下一持久任务可立即运行。
-- 详细证据：[整图 profile 核心切片](./task-349-whole-map-profile-core-slice.md)。当前修正 checkpoint 待 blocker-only 复审；未完成顺序仍为 `349-10g → 349-11`。
+- 终验：同一只读评审职责的干净复审智能体对 `6bcd0cf / 0.5.47` 给出 `ACCEPT`；三个 P1 全部闭合，无剩余 P0 / P1，浏览器执行 `0`。
+- 详细证据：[整图 profile 核心切片](./task-349-whole-map-profile-core-slice.md)。下一步进入 349-10g。
+
+### 349-10g — 执行中
+
+- 冻结目标：只移除已有调用证据、唯一 owner / revision / history 门和专项回归共同证明冗余的 legacy adapter、重复 revision / history 路径或影子双写；不按命名或代码年代推断可删除性。
+- 首个廉价门：对 identity adapters、MapRevisionTracker / EditHistory、MapCoreEngine shadow facade、领域 runtime、Worker pre-commit validators 与 legacy action 入口建立“定义—引用—正式 owner—测试”矩阵；零引用不自动等于可删除，未知 owner 立即停止该候选。
+- 禁止项：不改变算法、wire DTO、公开 API、地图格式或 canonical owner，不批量改名，不执行浏览器脚本，不修改 `source/`，不提前做 349-11 最终全门。
 
 阶段结果在每次 checkpoint 后更新，长日志只记录命令和 artifact 路径，不粘贴到本文。
