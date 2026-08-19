@@ -1,5 +1,6 @@
 import {buildObjectPickingIndex, OBJECT_PICKING_COMPONENTS, riverPickingPoints} from "./picking.js";
 import {assertCacheBinding} from "./render-cache-dto.js";
+import {markerPresentationRecords} from "../domains/markers/presentation.js";
 
 export const PICKING_DTO_SCHEMA_VERSION = 1;
 
@@ -488,7 +489,7 @@ function assertReboundUniqueSegmentCount(unique, expected, kind) {
 
 function canonicalPickingObjects(map) {
   const cities = new Map((map?.settlements?.cities || []).filter(Boolean).map(item => [String(item.id), item]));
-  const markers = new Map((map?.markers?.markers || []).filter(Boolean).map(item => [String(item.id), item]));
+  const markers = new Map(markerPresentationRecords(map).map(item => [String(item.id), item]));
   const routes = new Map((map?.settlements?.routes || []).filter(Boolean).map(item => [String(item.id), item]));
   const rivers = new Map((map?.rivers?.rivers || []).filter(Boolean).map(item => [String(item.id ?? item.i), item]));
   const militaryItems = (map?.politics?.states || map?.pack?.states || [])

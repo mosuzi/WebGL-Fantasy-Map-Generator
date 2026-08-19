@@ -27,6 +27,7 @@ export function createMarkerPanel(documentRef, manager, callbacks = {}) {
   const panelState = shallowReactive({
     open: false,
     map: null,
+    markers: [],
     selection: null,
     history: null,
     filter: listPreferences.filter,
@@ -128,11 +129,12 @@ export function createMarkerPanel(documentRef, manager, callbacks = {}) {
   return {
     open(map, selection, history) {
       panelState.map = map ? markRaw(map) : null;
+      panelState.markers = markRaw(callbacks.listMarkers?.() || []);
       panelState.selection = selection;
       panelState.history = history;
       syncPanelHighlightCount(panelState, callbacks);
       if (selection?.object?.kind === "marker") panelState.selectedMarkerId = normalizeMarkerId(selection.object.id);
-      if (!markerExists(map, panelState.selectedMarkerId)) panelState.selectedMarkerId = firstMarkerId(map);
+      if (!markerExists(panelState.markers, panelState.selectedMarkerId)) panelState.selectedMarkerId = firstMarkerId(panelState.markers);
       panelState.open = true;
       panelState.version++;
       manager.open("marker-panel");
@@ -140,16 +142,17 @@ export function createMarkerPanel(documentRef, manager, callbacks = {}) {
     },
     update(map, selection, history) {
       panelState.map = map ? markRaw(map) : null;
+      panelState.markers = markRaw(callbacks.listMarkers?.() || []);
       panelState.selection = selection;
       panelState.history = history;
       syncPanelHighlightCount(panelState, callbacks);
       if (selection?.object?.kind === "marker") panelState.selectedMarkerId = normalizeMarkerId(selection.object.id);
-      if (!markerExists(map, panelState.selectedMarkerId)) panelState.selectedMarkerId = firstMarkerId(map);
+      if (!markerExists(panelState.markers, panelState.selectedMarkerId)) panelState.selectedMarkerId = firstMarkerId(panelState.markers);
       panelState.version++;
     },
     setSelectedMarkerId(markerId) {
       const normalized = normalizeMarkerId(markerId);
-      if (markerExists(panelState.map, normalized)) panelState.selectedMarkerId = normalized;
+      if (markerExists(panelState.markers, normalized)) panelState.selectedMarkerId = normalized;
     },
     updateEditMode(editMode) {
       panelState.editMode = editMode?.mode || null;
@@ -186,15 +189,15 @@ function markerObject(row) {
   };
 }
 
-function markerExists(map, markerId) {
+function markerExists(markers, markerId) {
   markerId = normalizeMarkerId(markerId);
-  return Boolean(Number.isInteger(markerId) && (map?.markers?.markers || []).some(marker => marker?.id === markerId));
+  return Boolean(Number.isInteger(markerId) && (markers || []).some(marker => marker?.id === markerId));
 }
 
 function normalizeMarkerId(markerId) {
   return toIntegerId(markerId);
 }
 
-function firstMarkerId(map) {
-  return (map?.markers?.markers || []).find(marker => marker && Number.isInteger(marker.id))?.id ?? null;
+function firstMarkerId(markers) {
+  return (markers || []).find(marker => marker && Number.isInteger(marker.id))?.id ?? null;
 }

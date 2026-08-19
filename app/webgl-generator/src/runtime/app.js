@@ -10,6 +10,7 @@ import {buildZones} from "../generator/zones.js";
 import {reconcileWarDerivedData} from "../generator/war-consistency.js";
 import {finalizeSettlements, rebuildRelocatedPopulationPointsAsync, regenerateSettlementsWithinPolitics} from "../generator/settlements.js";
 import {createNotesDomainRuntime} from "../domains/notes/runtime.ts";
+import {createMarkersPresentationRuntime} from "../domains/markers/runtime.ts";
 import {reconcileSettlementCellIdentity} from "./settlement-cell-index.js";
 import {DEFAULT_OPTIONS, normalizeOptions} from "../generator/options.js";
 import {normalizeAtmosphereDirection, normalizeClimateLatitudeMode, normalizeWindProfile, windAngleFromDirection} from "../generator/climate-options.js";
@@ -534,6 +535,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     editHistory,
     mapRevision,
     notesDomain: null,
+    markersDomain: null,
     editRefreshScheduler: null,
     brushCursorPreview: null,
     heightEdit: {
@@ -2069,6 +2071,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
   });
   state.panels.route = routePanel;
   markerPanel = createMarkerPanel(documentRef, panelManager, {
+    listMarkers: () => state.markersDomain?.list?.() || [],
     onSelect: object => {
       selectFromPanel("marker-panel", object);
       markerPanel.setSelectedMarkerId(object.id);
@@ -3068,6 +3071,11 @@ function restoreRuntimeDisplayControls(state, documentRef) {
 function createRuntimeActions(state, documentRef, options = {}) {
   const operation = state.runtimeOperation;
   state.notesDomain ||= createNotesDomainRuntime({
+    getMap: () => state.map,
+    getLegacyRevision: () => state.mapRevision.getSnapshot(),
+    getHistoryFingerprint: () => JSON.stringify(state.editHistory.getStats({affectedLimit: 50}))
+  });
+  state.markersDomain ||= createMarkersPresentationRuntime({
     getMap: () => state.map,
     getLegacyRevision: () => state.mapRevision.getSnapshot(),
     getHistoryFingerprint: () => JSON.stringify(state.editHistory.getStats({affectedLimit: 50}))

@@ -1,4 +1,5 @@
 import {readObjectNote} from "./object-notes.js";
+import {markerPresentationCount, markerPresentationRecords} from "../domains/markers/presentation.js";
 import {normalizeVisualThemeDocument} from "../renderer/themes.js";
 import {normalizeLabelStyleStore, validateLabelStyleStore} from "./label-style-registry.js";
 import {normalizeLabelLayoutStore, validateLabelLayoutStore} from "./label-layout-registry.js";
@@ -410,7 +411,7 @@ export function createMapFeatureGeoJson(map, options = {}) {
       cities: layers.city ? map.settlements?.cities?.length || 0 : 0,
       routes: layers.route ? map.settlements?.routes?.length || 0 : 0,
       rivers: layers.river ? map.rivers?.rivers?.length || 0 : 0,
-      markers: layers.marker ? map.markers?.markers?.length || 0 : 0,
+      markers: layers.marker ? markerPresentationCount(map) : 0,
       zones: layers.zone ? map.zones?.zones?.length || 0 : 0
     },
     features
@@ -1717,7 +1718,7 @@ function riverFeatures(map) {
 }
 
 function markerFeatures(map) {
-  return (map.markers?.markers || []).map(marker => {
+  return markerPresentationRecords(map).map(marker => {
     const coordinate = projectWorldPoint([marker.x, marker.y], map);
     if (!coordinate) return null;
     const note = readObjectNote(map, {kind: "marker", id: marker.id});

@@ -246,7 +246,7 @@ watch(() => selected.value?.symbol, syncVisualDraft);
 watch(() => selected.value?.palette, syncVisualDraft);
 
 function buildMarkerMetrics(map) {
-  const rows = markerRows(map).map(marker => {
+  const rows = markerRows(props.state.markers).map(marker => {
     const stateId = marker.data?.state ?? 0;
     const provinceId = marker.data?.province ?? 0;
     const storedVisual = marker.visual || marker.data?.visual || {};
@@ -286,8 +286,8 @@ function buildMarkerMetrics(map) {
   };
 }
 
-function markerRows(map) {
-  return (map?.markers?.markers || []).filter(marker => marker && Number.isInteger(marker.id));
+function markerRows(markers) {
+  return (markers || []).filter(marker => marker && Number.isInteger(marker.id));
 }
 
 function applyScope(rows, scope) {

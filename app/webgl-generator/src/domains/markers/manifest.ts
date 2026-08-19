@@ -27,7 +27,7 @@ export const markersManifest = {
     {id: "markers.regenerationApi", method: "generate.regenerate", target: "markers.regenerateResources", schemaVersion: API_SCHEMA_VERSION, capability: "regeneration", capabilityGroup: "map.generate", mutates: "map-derived-data", undoable: true, requiresConfirm: true, errorCodes: DEFAULT_API_BUSINESS_CODES, documentation: API_DOCUMENTATION}
   ]},
   locks: {kinds: ["marker", "feature", "economy-market", "trade-flow"], policy: "regeneration-lock-protection"},
-  regression: {gates: ["regress:auxiliary-object-creation", "regress:object-details-edit", "regress:api-data-compatibility"], coverage: ["save", "undo", "regeneration", "view", "layer", "failure"]},
+  regression: {gates: ["regress:markers-core", "regress:auxiliary-object-creation", "regress:object-details-edit", "regress:api-data-compatibility"], coverage: ["save", "undo", "regeneration", "view", "layer", "failure"]},
   capabilities: {worker: "not-required", regeneration: "optional", view: "optional", renderLayer: "required"},
   capabilityReasons: {worker: "marker CRUD 当前由同步 command 提交；资源重生成继续沿用既有外层 Worker 编排"}
 } as const satisfies DomainModuleManifest;

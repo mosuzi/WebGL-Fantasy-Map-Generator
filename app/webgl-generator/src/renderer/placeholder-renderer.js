@@ -75,6 +75,7 @@ import {
   militaryIconDataUrl,
   resolveMarkerIconVisual
 } from "./canvas-icon-registry.js";
+import {markerPresentationRecords} from "../domains/markers/presentation.js";
 import {
   CITY_ICON_BASE_CSS_SIZE,
   CITY_ICON_SCALE_FADE_WIDTH,
@@ -5299,7 +5300,7 @@ function overlayLabelAnchor(renderer, item, screen, _scale) {
 }
 
 function getMarkerIconItems(map) {
-  return [...(map?.markers?.markers || [])]
+  return markerPresentationRecords(map)
     .filter(marker => marker && Number.isFinite(marker.x) && Number.isFinite(marker.y))
     .sort((a, b) => markerIconPriority(b) - markerIconPriority(a))
     .map(marker => {
@@ -7055,7 +7056,7 @@ export function buildPointLayer(map) {
     }
   });
   let markerLayer = null;
-  for (const marker of map.markers.markers) {
+  for (const marker of markerPresentationRecords(map)) {
     const layer = marker.category === "resource" ? "resources" : "markers";
     if (layer !== markerLayer) {
       markerLayer = layer;

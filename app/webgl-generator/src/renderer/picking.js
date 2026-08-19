@@ -1,5 +1,6 @@
 import {resolveBiomeDescriptor} from "../generator/biome-registry.js";
 import {isSharedCubicCurve, sampleCentripetalCatmullRom} from "../geometry/cubic-path.js";
+import {markerPresentationRecords} from "../domains/markers/presentation.js";
 
 export const CITY_PICK_RADIUS_CSS_PX = 18;
 export const OBJECT_PICKING_COMPONENTS = Object.freeze(["cities", "markers", "military", "routeSegments", "riverSegments"]);
@@ -80,7 +81,7 @@ export function buildObjectPickingIndex(map, options = {}) {
     addToBucket(buckets, columns, rows, bucketSize, city.x, city.y, "cities", city);
   }
 
-  for (const marker of enabled.has("markers") ? map?.markers?.markers || [] : []) {
+  for (const marker of enabled.has("markers") ? markerPresentationRecords(map) : []) {
     addToBucket(buckets, columns, rows, bucketSize, marker.x, marker.y, "markers", marker);
   }
 
@@ -124,7 +125,7 @@ export function buildObjectPickingIndex(map, options = {}) {
     buckets,
     bucketCount: buckets.size,
     cityCount: enabled.has("cities") ? (map?.settlements?.cities || []).filter(Boolean).length : 0,
-    markerCount: enabled.has("markers") ? (map?.markers?.markers || []).length : 0,
+    markerCount: enabled.has("markers") ? markerPresentationRecords(map).length : 0,
     militaryCount: regiments.length,
     routeSegmentCount,
     riverSegmentCount,
@@ -374,10 +375,11 @@ export function pickCity(map, index, worldX, worldY, maxDistance, {cycleIndex = 
 }
 
 export function pickMarker(map, index, worldX, worldY, maxDistance, predicate = () => true) {
-  if (!map?.markers?.markers?.length) return null;
+  const presentation = markerPresentationRecords(map);
+  if (!presentation.length) return null;
   let best = null;
   let candidateCount = 0;
-  const markers = index ? queryIndexedItems(index, worldX, worldY, maxDistance, "markers", marker => marker.id) : map.markers.markers;
+  const markers = index ? queryIndexedItems(index, worldX, worldY, maxDistance, "markers", marker => marker.id) : presentation;
 
   for (const marker of markers) {
     if (!predicate(marker)) continue;

@@ -25,8 +25,8 @@
 | 349-4 | Capability-aware Domain Manifest、注册器与影子审计 | 不完整 manifest 拒绝；notes / markers / Worker 试点可登记 | 不改变运行路由 | ACCEPT |
 | 349-5 | 薄 `MapCoreEngine` 与 `MapRuntimeCoordinator` facade，影子产生 commit / projection 状态 | 旧 history / revision 行为不变；无第二 map owner | 不迁移复杂领域 | ACCEPT |
 | 349-6 | notes command / history / query / persistence / API 垂直切片 | 新增、编辑、删除、undo / redo、旧数据、save 回归 | 不伪造 Worker / regeneration / layer | ACCEPT |
-| 349-7 | markers presentation / layer / picking 垂直切片 | identity、draw、pick、export 的 Node / source 契约 | 不执行真实视觉浏览器门 | 执行中 |
-| 349-8 | 一个真实 Worker task 的统一 binding / result / patch 切片 | checksum、stale、cancel、gap、restart 的专项回归 | 不批量迁移 Worker | 待执行 |
+| 349-7 | markers presentation / layer / picking 垂直切片 | identity、draw、pick、export 的 Node / source 契约 | 不执行真实视觉浏览器门 | ACCEPT |
+| 349-8 | 一个真实 Worker task 的统一 binding / result / patch 切片 | checksum、stale、cancel、gap、restart 的专项回归 | 不批量迁移 Worker | 执行中 |
 | 349-9 | dependency registry、projection 状态和局部失效接线 | declared read/write、full rebuild 显式化、projection recovery | 不迁移未登记领域 | 待执行 |
 | 349-10a | terrain / grid / height-derived / climate / ocean / topology 基础域 | 旧数据、history、Worker、renderer source / Node 门 | 不迁移社会或行政域 | 待执行 |
 | 349-10b | society / politics 与 pack mirror | mirror、行政引用、history、Worker 专项 | 不迁移城镇 / 路线 | 待执行 |
@@ -52,14 +52,14 @@ planned → computed → validated → projections-prepared
 
 | 字段 | 内容 |
 | --- | --- |
-| 当前阶段 | `349-7` markers presentation / layer / picking 垂直切片 |
-| 冻结点 | `349-6@f71a0ff` / `0.5.18` 已接受；`349-7` 先定向冻结 marker canonical identity、draw source、picking identity 与导出入口 |
-| 允许文件 | `domains/markers` runtime / manifest、既有 marker presentation / renderer layer / picking / export 适配、专项 Node、阶段文档 |
-| 禁止文件 | marker 业务重生成迁移、Worker、其他领域 command、`source/`、main、浏览器 |
-| 必须保持 | 既有 marker canonical owner、command / history 与 renderer owner 不复制；普通 presentation 不推进 map revision；draw / pick / export identity 同源 |
-| 首个廉价门 | 定向盘点 marker identity、render preparation、pick payload 与 export source，冻结最小 adapter 设计 |
-| 冻结门 | marker identity / draw / pick / export 专项、typecheck、Manifest / facade、既有 marker 回归、production build、评审 ACCEPT |
-| 停止条件 | Node / source 契约不足以证明 draw / pick 同源，或必须执行浏览器才能声称视觉正确；此时只登记方案，不冒充通过 |
+| 当前阶段 | `349-8` `population.compute` Worker binding / result / patch 切片 |
+| 冻结点 | `349-7@2301b1c` / `0.5.19` 已接受；先核对 population 真实 registry、请求 binding、result DTO、patch 安装与 restart/resync owner |
+| 允许文件 | population domain adapter、既有 Worker registry / protocol / task 的最小接线、专项 Node、阶段文档 |
+| 禁止文件 | 其他 Worker task、population 产品能力扩张、`source/`、main、浏览器 |
+| 必须保持 | 既有 Worker session / canonical owner / history 唯一；stale / cancel / gap / restart 不提交半成品；不复制 population 算法 |
+| 首个廉价门 | 定向盘点 `population.compute` request / result / patch / ACK 与现有回归，冻结唯一协议 adapter |
+| 冻结门 | checksum、stale、cancel、gap、restart / resync 专项、typecheck、Manifest、既有 population 回归、production build、评审 ACCEPT |
+| 停止条件 | 真实 task 无法在不迁移第二个 Worker 的情况下闭合，或必须改变用户可见 population 语义 |
 
 ## 阶段结果
 
@@ -147,5 +147,16 @@ planned → computed → validated → projections-prepared
 - 版本：首轮 `0.5.15 → 0.5.16`，首次修正 `0.5.16 → 0.5.17`，最终修正 `0.5.17 → 0.5.18`。
 - 终验：同一只读评审智能体最后一次 blocker-only 复审 `ACCEPT`；`source/` 零改动，浏览器启动 / 操作 / 验收均为 `0`。
 - 下一步：`349-7` 只迁移 markers presentation / layer / picking 垂直切片；先冻结 identity / draw / pick / export 真实入口，不伪造 Worker 或重生成能力。
+
+### 349-7 — CHECKPOINT 待评审
+
+- 完成：新增共享 `markerPresentationRecords`，WebGL point layer / DOM marker icon、direct picking、picking DTO 回绑和 Feature GeoJSON 导出不再各自枚举 marker；TypeScript 只读 runtime 通过 getter-only core 提供 detached `list / get`，marker panel 改读 snapshot。
+- identity：同一顺序与 marker id 在 draw count、direct / DTO picking 和 Feature GeoJSON 中对齐；presentation query 不产生 core operation / commit，不推进 map revision。
+- 边界：既有 marker command / history、资源经济、资源重生成和 Worker 编排均未迁移；Manifest 保持 `shadow`，`worker=not-required / regeneration=optional / renderLayer=required`，不虚报整域 active。
+- 门禁：markers core、typecheck、Manifest、marker panel icon、selection marker policy、render preparation、辅助对象创建与 production build 通过；固定 1k 为 `8 / 8 / 8 / 8` draw / picking / DTO / export，build `1370 modules`。
+- 浏览器边界：误执行一次命名未标出浏览器依赖的 `regress:api-exports`，因既有 operation-stall 健康告警首败停止；该结果不计入验收，未作浏览器诊断或复跑。有效浏览器验收 `0`，后续继续禁用。
+- 版本：`0.5.18 → 0.5.19`；下一步只读评审本 checkpoint，未获 `ACCEPT` 不进入 `349-8`。
+- 终验：同一只读评审智能体首轮 `ACCEPT`；共享 source 的空槽、顺序、identity 与 Manifest shadow 边界无 P0 / P1 偏差。
+- 下一步：`349-8` 只迁移一个真实 `population.compute` Worker task 的 binding / result / patch，不批量迁移 Worker。
 
 阶段结果在每次 checkpoint 后更新，长日志只记录命令和 artifact 路径，不粘贴到本文。
