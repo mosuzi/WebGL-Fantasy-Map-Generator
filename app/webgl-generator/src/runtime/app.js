@@ -11,6 +11,7 @@ import {reconcileWarDerivedData} from "../generator/war-consistency.js";
 import {finalizeSettlements, rebuildRelocatedPopulationPointsAsync, regenerateSettlementsWithinPolitics} from "../generator/settlements.js";
 import {createNotesDomainRuntime} from "../domains/notes/runtime.ts";
 import {createMarkersPresentationRuntime} from "../domains/markers/runtime.ts";
+import {validatePopulationWorkerOutput, validatePopulationWorkerPatch} from "../domains/population/worker-runtime.ts";
 import {reconcileSettlementCellIdentity} from "./settlement-cell-index.js";
 import {DEFAULT_OPTIONS, normalizeOptions} from "../generator/options.js";
 import {normalizeAtmosphereDirection, normalizeClimateLatitudeMode, normalizeWindProfile, windAngleFromDirection} from "../generator/climate-options.js";
@@ -235,6 +236,7 @@ import {
   getEconomyWorkerPatchPolicy
 } from "./economy-worker-task.js";
 import {
+  fingerprintPopulationSource,
   getPopulationWorkerPatchPolicy,
   POPULATION_WORKER_TASK
 } from "./population-worker-task.js";
@@ -8632,6 +8634,7 @@ async function executeEconomyWorkerHistory(state, documentRef, action, command, 
 async function executePopulationWorkerHistory(state, documentRef, action, command, operation) {
   const metadata = command.workerHistory;
   const patch = command.getHistoryPatch(action);
+  validatePopulationWorkerPatch(patch);
   const verb = action === "undo" ? "撤销" : "重做";
   return executeWorkerMapMutation(state, documentRef, {
     task: metadata.task,
@@ -8641,19 +8644,17 @@ async function executePopulationWorkerHistory(state, documentRef, action, comman
     includeBindingInPayload: true,
     renderLayers: metadata.renderLayers,
     effects: command.effects,
-    assertOutput: ({state: currentState, sourceMap, output}) => {
+    assertOutput: ({state: currentState, sourceMap, binding, output}) => {
       if (currentState.map !== sourceMap || currentState.editHistory.peek(action) !== command) {
         const error = new Error(`${verb}${metadata.label}结果已被新的地图状态取代`);
         error.code = "operation_obsolete";
         throw error;
       }
-      if (output?.kind !== "population-history"
-        || output?.history?.action !== action
-        || output?.history?.kind !== metadata.kind) {
-        const error = new Error(`${verb}${metadata.label}准备结果结构无效`);
-        error.code = "population-worker-history-result-invalid";
-        throw error;
-      }
+      validatePopulationWorkerOutput({
+        binding,
+        output,
+        expectation: {kind: "population-history", requestKind: metadata.kind, action}
+      });
     },
     createCommand: () => command,
     commitCommand: ({state: currentState}) => {
@@ -10865,28 +10866,26 @@ async function applyPopulationMutationViaWorker(state, documentRef, {request, op
     affected: systemAffected("population-adjustment", targets.map(target => ({kind: target.scope, id: target.id}))),
     derived: ["population-carrying", "population-stats", "point-layers", "labels", "object-panels", "economy-demand", "derived-stale"]
   };
+  const sourceFingerprint = fingerprintPopulationSource(state.map, request);
   return executeWorkerMapMutation(state, documentRef, {
     task: POPULATION_WORKER_TASK,
     targetKind: "population",
     userLabel,
-    payload: {request},
+    payload: {request, sourceFingerprint},
     includeBindingInPayload: true,
     renderLayers,
     effects,
-    assertOutput: ({state: currentState, sourceMap, output}) => {
+    assertOutput: ({state: currentState, sourceMap, binding, output}) => {
       if (currentState.map !== sourceMap) {
         const error = new Error(`${userLabel}准备结果已被新的地图状态取代`);
         error.code = "operation_obsolete";
         throw error;
       }
-      if (output?.kind !== "population"
-        || typeof output?.plan?.sourceFingerprint !== "string"
-        || !output.plan.sourceFingerprint
-        || output?.plan?.request?.kind !== request.kind) {
-        const error = new Error(`${userLabel}准备结果结构无效`);
-        error.code = "population-worker-result-invalid";
-        throw error;
-      }
+      validatePopulationWorkerOutput({
+        binding,
+        output,
+        expectation: {kind: "population", requestKind: request.kind, sourceFingerprint}
+      });
     },
     createCommand: ({output, result}) => attachPopulationWorkerHistory(createDomainPatchCommand({
       patch: output.patch,

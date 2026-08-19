@@ -26,7 +26,7 @@
 | 349-5 | 薄 `MapCoreEngine` 与 `MapRuntimeCoordinator` facade，影子产生 commit / projection 状态 | 旧 history / revision 行为不变；无第二 map owner | 不迁移复杂领域 | ACCEPT |
 | 349-6 | notes command / history / query / persistence / API 垂直切片 | 新增、编辑、删除、undo / redo、旧数据、save 回归 | 不伪造 Worker / regeneration / layer | ACCEPT |
 | 349-7 | markers presentation / layer / picking 垂直切片 | identity、draw、pick、export 的 Node / source 契约 | 不执行真实视觉浏览器门 | ACCEPT |
-| 349-8 | 一个真实 Worker task 的统一 binding / result / patch 切片 | checksum、stale、cancel、gap、restart 的专项回归 | 不批量迁移 Worker | 执行中 |
+| 349-8 | 一个真实 Worker task 的统一 binding / result / patch 切片 | checksum、stale、cancel、gap、restart 的专项回归 | 不批量迁移 Worker | CHECKPOINT 待评审 |
 | 349-9 | dependency registry、projection 状态和局部失效接线 | declared read/write、full rebuild 显式化、projection recovery | 不迁移未登记领域 | 待执行 |
 | 349-10a | terrain / grid / height-derived / climate / ocean / topology 基础域 | 旧数据、history、Worker、renderer source / Node 门 | 不迁移社会或行政域 | 待执行 |
 | 349-10b | society / politics 与 pack mirror | mirror、行政引用、history、Worker 专项 | 不迁移城镇 / 路线 | 待执行 |
@@ -52,8 +52,8 @@ planned → computed → validated → projections-prepared
 
 | 字段 | 内容 |
 | --- | --- |
-| 当前阶段 | `349-8` `population.compute` Worker binding / result / patch 切片 |
-| 冻结点 | `349-7@2301b1c` / `0.5.19` 已接受；先核对 population 真实 registry、请求 binding、result DTO、patch 安装与 restart/resync owner |
+| 当前阶段 | `349-8` `population.compute` Worker binding / result / patch 切片，checkpoint 待评审 |
+| 冻结点 | `349-7@57e05d5` / `0.5.19` 已接受；349-8 候选版本 `0.5.20` |
 | 允许文件 | population domain adapter、既有 Worker registry / protocol / task 的最小接线、专项 Node、阶段文档 |
 | 禁止文件 | 其他 Worker task、population 产品能力扩张、`source/`、main、浏览器 |
 | 必须保持 | 既有 Worker session / canonical owner / history 唯一；stale / cancel / gap / restart 不提交半成品；不复制 population 算法 |
@@ -158,5 +158,16 @@ planned → computed → validated → projections-prepared
 - 版本：`0.5.18 → 0.5.19`；下一步只读评审本 checkpoint，未获 `ACCEPT` 不进入 `349-8`。
 - 终验：同一只读评审智能体首轮 `ACCEPT`；共享 source 的空槽、顺序、identity 与 Manifest shadow 边界无 P0 / P1 偏差。
 - 下一步：`349-8` 只迁移一个真实 `population.compute` Worker task 的 binding / result / patch，不批量迁移 Worker。
+
+### 349-8 — CHECKPOINT 待评审
+
+- 完成：新增 TypeScript population Worker protocol adapter；正式主线程在发送请求前计算既有 population source fingerprint，commit 前统一验证 request / output / plan binding、result kind、请求类型、来源指纹、patch writeSet / operations 与 Manifest 根写集。
+- binding：legacy 数字 operation id 保留在 wire DTO，并显式适配为核心 `compute / pre-commit` binding；不把 legacy DTO 假装成核心契约，不建立第二 Worker session 或 canonical owner。
+- patch：普通结果和 history 输入都过同一写集门；legacy v1 patch 缺少 base / target checksum 与 revision，故不伪造 `ComputedDomainPatch`，后续 wire format 升级仍留在逐域迁移阶段。
+- 原子性：专项拒绝 generation、stale revision、operation gap、source checksum、错误 result kind、未知 / 重复写路径；apply 后取消验证来源指纹完全恢复。通用 Worker 门继续覆盖 ACK、late reject、cancel terminate、rollback / recovery 与 restart / resync owner。
+- 门禁：population core protocol、typecheck、Manifest、人口增减 / 转移、10k / 100k population Worker、通用 Worker registry 和 production build `1373 modules` 通过；100k 为约 `627.7ms / 1560 patch paths`。
+- 既有首败：`regress:population-adjustment-ui-api` 在未改动的 HEAD 面板文案上仍期待“预检转移”，实际为“查看转移影响”；本阶段不改产品文案，未声称该门通过。
+- 版本：`0.5.19 → 0.5.20`；浏览器未启动、未操作、未执行。
+- 下一步：提交 checkpoint 后交同一只读评审智能体；未获 `ACCEPT` 不进入 `349-9`。
 
 阶段结果在每次 checkpoint 后更新，长日志只记录命令和 artifact 路径，不粘贴到本文。
