@@ -20,12 +20,28 @@
       "seed": "legacy-v1-sample"
     },
     "grid": {
+      "points": [[0, 0], [1, 0], [2, 0]],
       "cells": {
+        "i": [0, 1, 2],
+        "burg": [-1, -1, -1],
         "h": {
           "__webglGeneratorTypedArray": "Uint8Array",
           "data": [12, 20, 48]
         }
       }
+    },
+    "pack": {
+      "cells": {
+        "i": [0, 1, 2],
+        "g": [0, 1, 2],
+        "burg": [0, 0, 0]
+      },
+      "burgs": [],
+      "routes": []
+    },
+    "settlements": {
+      "cities": [],
+      "routes": []
     },
     "notes": {
       "notes": [

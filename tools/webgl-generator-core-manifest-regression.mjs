@@ -17,6 +17,10 @@ const {markersManifest} = await import(new URL("domains/markers/manifest.js", co
 const {populationManifest} = await import(new URL("domains/population/manifest.js", compiledRoot));
 const {foundationManifest} = await import(new URL("domains/foundation/manifest.js", compiledRoot));
 const {SOCIETY_POLITICS_WRITE_SETS, societyPoliticsManifest} = await import(new URL("domains/society-politics/manifest.js", compiledRoot));
+const {settlementsManifest} = await import(new URL("domains/settlements/manifest.js", compiledRoot));
+const {zonesManifest} = await import(new URL("domains/zones/manifest.js", compiledRoot));
+const {labelsManifest} = await import(new URL("domains/labels/manifest.js", compiledRoot));
+const {measurementsManifest} = await import(new URL("domains/measurements/manifest.js", compiledRoot));
 
 const workerTasks = new Set(listWorkerTasks());
 const repoRoot = path.resolve(new URL("..", import.meta.url).pathname.replace(/^\/(?:[A-Za-z]:)/u, value => value.slice(1)));
@@ -52,10 +56,10 @@ const context = {
   }
 };
 const registry = createDomainManifestRegistry(context);
-for (const manifest of [notesManifest, markersManifest, populationManifest, foundationManifest, societyPoliticsManifest]) registry.register(manifest);
+for (const manifest of [notesManifest, markersManifest, populationManifest, foundationManifest, societyPoliticsManifest, settlementsManifest, zonesManifest, labelsManifest, measurementsManifest]) registry.register(manifest);
 
-assert.deepEqual(registry.snapshot().ids, ["foundation", "markers", "notes", "population", "society-politics"]);
-assert.equal(registry.snapshot().domains, 5);
+assert.deepEqual(registry.snapshot().ids, ["foundation", "labels", "markers", "measurements", "notes", "population", "settlements", "society-politics", "zones"]);
+assert.equal(registry.snapshot().domains, 9);
 assert.equal(registry.get("notes"), registry.list().find(manifest => manifest.id === "notes"));
 assert.ok(Object.isFrozen(registry.get("notes")) && Object.isFrozen(registry.get("notes").commands));
 assert.equal(registry.get("notes").capabilities.worker, "not-required");
@@ -65,7 +69,11 @@ assert.equal(registry.get("population").workerTasks[0].task, "population.compute
 assert.equal(registry.get("foundation").workerTasks.length, 4);
 assert.equal(registry.get("society-politics").workerTasks[0].id, "society-politics.regeneration-worker");
 assert.equal(registry.get("society-politics").workerTasks[0].task, "regeneration.compute");
-assert.equal(registry.snapshot().descriptors, 78);
+assert.equal(registry.get("settlements").workerTasks[0].resultKinds[0], "cities");
+assert.equal(registry.get("zones").workerTasks[0].resultKinds[0], "zones");
+assert.equal(registry.get("labels").capabilities.worker, "not-required");
+assert.equal(registry.get("measurements").capabilities.regeneration, "unsupported");
+assert.equal(registry.snapshot().descriptors, 135);
 
 function expectManifestError(callback, code, pathValue) {
   assert.throws(callback, error => {
@@ -267,6 +275,11 @@ const evidence = {
     "app/webgl-generator/src/runtime/app.js",
     "app/webgl-generator/src/generator/settlements.js",
     "app/webgl-generator/src/generator/ocean-current-world.js"
+  ]),
+  settlementZones: await joinSources([
+    "app/webgl-generator/src/runtime/regeneration-worker-task.js",
+    "app/webgl-generator/src/runtime/app.js",
+    "app/webgl-generator/src/domains/settlements/worker-runtime.ts"
   ])
 };
 for (const token of ["createStandaloneNoteCommand", "createDeleteNoteCommand", "createImportNotesCommand", "createSetObjectNoteCommand", "edit.notes.createStandalone", "createNotesPanel"]) assert.ok(evidence.notes.includes(token), `notes shadow evidence 缺少 ${token}`);
@@ -278,6 +291,7 @@ for (const [kind, writeSet] of Object.entries(SOCIETY_POLITICS_WRITE_SETS)) for 
   assert.ok(evidence.societyPolitics.includes(`\"${pathValue}\"`), `${kind} Worker 源码未声明 ${pathValue}`);
   assert.ok(societyPoliticsManifest.regeneration.writeSet.includes(pathValue), `${kind} 写集未纳入 manifest union: ${pathValue}`);
 }
+for (const token of ["validateSettlementZoneWorkerOutput", "cities", "zones", "regeneration.compute"]) assert.ok(evidence.settlementZones.includes(token), `settlements-zones evidence 缺少 ${token}`);
 assert.ok(markersManifest.commands.find(command => command.id === "markers.delete").writeSet.includes("notes"), "markers.delete 必须覆盖真实备注删除写集");
 
 const headlessMethods = new Set(HEADLESS_WRITE_METHODS);
@@ -304,7 +318,7 @@ console.log(JSON.stringify({
   domains: registry.list().map(manifest => ({id: manifest.id, status: manifest.status, capabilities: manifest.capabilities})),
   workerTasksVerified: ["population.compute", "regeneration.compute"],
   runtimeRouteImports: 0,
-  sharedWorkerTransport: {task: "regeneration.compute", owners: ["society-politics", "settlements-worker-test"], overlappingResultRejected: "states"},
+  sharedWorkerTransport: {task: "regeneration.compute", owners: ["society-politics", "settlements", "zones"], resultKinds: ["religions", "states", "provinces", "cities", "zones"], overlappingResultRejected: "states"},
   negativeCases: 35
 }, null, 2));
 

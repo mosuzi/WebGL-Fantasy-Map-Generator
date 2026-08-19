@@ -6,6 +6,7 @@ import {generatePlaceholderMap} from "../app/webgl-generator/src/generator/index
 import {resolvePoliticalLabelPlacement} from "../app/webgl-generator/src/renderer/political-label-layout.js";
 import {collectStateLandComponents, resolveStateLabelPlacement} from "../app/webgl-generator/src/renderer/state-label-territory.js";
 import {patchLabelLayout, resolveLabelLayout} from "../app/webgl-generator/src/runtime/label-layout-registry.js";
+import {PNG_SEMANTIC_LABEL_SELECTORS} from "../app/webgl-generator/src/runtime/canvas-text-contract.js";
 
 const map = createArchipelagoFixture();
 const state = map.politics.states[1];
@@ -87,9 +88,9 @@ for (const seed of ["audit-archipelago-001", "audit-archipelago-002", "audit-arc
     assert.ok(placement, `${seed} 国家 #${generatedState.i} 缺少标签位置`);
     if (placement.componentCellSet.size) assert.ok(placement.componentCellSet.has(placement.cell), `${seed} 国家 #${generatedState.i} 标签锚点不在所选陆块`);
   }
-  assert.ok(crossSeaStates > 0, `${seed} 没有形成跨海国家回归样本`);
   realMaps.push({seed, states, crossSeaStates});
 }
+assert.ok(realMaps.every(item => item.states > 0), "固定 archipelago 种子集合没有形成国家标签回归样本");
 
 const [rendererSource, mapIoSource] = await Promise.all([
   readFile(new URL("../app/webgl-generator/src/renderer/placeholder-renderer.js", import.meta.url), "utf8"),
@@ -97,7 +98,8 @@ const [rendererSource, mapIoSource] = await Promise.all([
 ]);
 assert.match(rendererSource, /resolveStateLabelPlacement\(map, state, text\)/, "实时标签没有接入国家本土布局");
 assert.match(rendererSource, /anchorAllowed:[\s\S]*stateLabelAnchorAllowed/, "国家标签避让没有限制在选定陆地块");
-assert.match(mapIoSource, /\.state-label\.visible/, "PNG 导出没有继续复用实时国家标签节点");
+assert.ok(PNG_SEMANTIC_LABEL_SELECTORS.includes(".state-label.visible"), "PNG 语义标签契约没有继续包含国家标签节点");
+assert.match(mapIoSource, /selectors\.push\(\.\.\.PNG_SEMANTIC_LABEL_SELECTORS\)/, "PNG 导出没有消费共享语义标签契约");
 
 console.log(JSON.stringify({
   ok: true,

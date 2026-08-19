@@ -13,6 +13,7 @@ import {createNotesDomainRuntime} from "../domains/notes/runtime.ts";
 import {createMarkersPresentationRuntime} from "../domains/markers/runtime.ts";
 import {validatePopulationWorkerOutput, validatePopulationWorkerPatch} from "../domains/population/worker-runtime.ts";
 import {validateSocietyPoliticsWorkerOutput} from "../domains/society-politics/worker-runtime.ts";
+import {validateSettlementZoneWorkerOutput} from "../domains/settlements/worker-runtime.ts";
 import {
   createCommittedFoundationWorkerBinding,
   createFoundationWorkerBinding,
@@ -12528,6 +12529,13 @@ async function regenerateMapAttributeViaWorker(state, documentRef, kind, options
           output,
           policy: getRegenerationPatchPolicy(targetKind)
         })
+      : ["cities", "zones"].includes(targetKind)
+        ? ({binding, output}) => validateSettlementZoneWorkerOutput({
+            kind: targetKind,
+            binding,
+            output,
+            policy: getRegenerationPatchPolicy(targetKind)
+          })
       : undefined,
     createCommand: ({output, result, effects}) => createWorkerRegenerationPatchCommand(state.map, {
       patch: output.patch,

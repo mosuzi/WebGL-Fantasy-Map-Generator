@@ -22,15 +22,16 @@ import {LABEL_TARGET_KIND} from "../app/webgl-generator/src/runtime/object-kinds
 const map = {
   metadata: {seed: "label-layout-regression", checksum: "layout-must-not-change-geography"},
   options: {},
+  grid: {points: [[0, 0], [24, 36]], cells: {i: [0, 1], h: [30, 30], burg: [0, 1]}},
   settlements: {cities: [
-    {id: 0, name: "王城", capital: true, x: 20, y: 30, population: 80},
-    {id: 1, name: "边城", capital: false, x: 24, y: 34, population: 20}
-  ]},
+    {id: 0, burgId: 1, cell: 0, packCell: 0, name: "王城", capital: true, x: 20, y: 30, population: 80},
+    {id: 1, burgId: 2, cell: 1, packCell: 1, name: "边城", capital: false, x: 24, y: 34, population: 20}
+  ], routes: []},
   politics: {
     states: [null, {i: 1, name: "北国", fullName: "北境王国", center: 1, area: 300, burgs: 2}],
     provinces: [null, {i: 1, state: 1, name: "霜原", pole: [24, 36], center: 1, area: 100, burgs: 1}]
   },
-  pack: {cells: {p: [[0, 0], [24, 36]]}}
+  pack: {cells: {i: [0, 1], g: [0, 1], burg: [1, 2], p: [[0, 0], [24, 36]]}, burgs: [null, {i: 1, id: 1, cityId: 0, cell: 0, name: "王城", capital: 1, x: 20, y: 30, population: 80}, {i: 2, id: 2, cityId: 1, cell: 1, name: "边城", capital: 0, x: 24, y: 34, population: 20}], routes: []}
 };
 const store = ensureLabelStore(map);
 store.custom.push({id: 1, text: "古道", x: 40, y: 50});

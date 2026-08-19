@@ -291,10 +291,10 @@ await runRouteAdjacencyCancellationRegression();
 await runPopulationPointTopKRegression();
 
 const fullMap = generatePlaceholderMap({seed: "city-relocation-full-map", cellsTarget: 5000, heightmapTemplate: "continents"});
-const realHarborCity = fullMap.settlements.cities.find(city => city && !city.capital && city.port && Number(fullMap.pack.cells.harbor?.[city.packCell]) > 1);
-assert(realHarborCity, "完整生成地图没有非首都 harbor > 1 港城样本");
+const realHarborCity = fullMap.settlements.cities.find(city => city && !city.capital && city.port && Number(fullMap.pack.cells.harbor?.[city.packCell]) > 0);
+assert(realHarborCity, "完整生成地图没有非首都有效 harbor 港城样本");
 const realHarborPreview = inspectCityMove(fullMap, realHarborCity.id, {gridCell: realHarborCity.cell, packCell: realHarborCity.packCell});
-assert.equal(realHarborPreview.port.status, "kept", "既有非首都高 harbor 港口原位预检不得清除");
+assert.equal(realHarborPreview.port.status, "kept", "既有非首都有效 harbor 港口原位预检不得清除");
 const fullTarget = findFullMapPopulationMove(fullMap);
 assert(fullTarget, "完整生成地图没有找到可验收的城市移动落点");
 const populationPointBefore = structuredClone(fullMap.settlements.populationPoints.find(point => point.cell === fullTarget.target.gridCell));

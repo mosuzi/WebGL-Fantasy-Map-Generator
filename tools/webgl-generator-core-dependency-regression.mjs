@@ -14,6 +14,10 @@ try {
   const {populationManifest} = await vite.ssrLoadModule("/src/domains/population/manifest.ts");
   const {foundationManifest} = await vite.ssrLoadModule("/src/domains/foundation/manifest.ts");
   const {societyPoliticsManifest} = await vite.ssrLoadModule("/src/domains/society-politics/manifest.ts");
+  const {settlementsManifest} = await vite.ssrLoadModule("/src/domains/settlements/manifest.ts");
+  const {zonesManifest} = await vite.ssrLoadModule("/src/domains/zones/manifest.ts");
+  const {labelsManifest} = await vite.ssrLoadModule("/src/domains/labels/manifest.ts");
+  const {measurementsManifest} = await vite.ssrLoadModule("/src/domains/measurements/manifest.ts");
   const targets = {
     "object-panels": ["ui"],
     "point-layers": ["renderer"],
@@ -28,7 +32,8 @@ try {
     "climate-statistics": ["ui"],
     "line-layers": ["renderer"],
     "cell-colors": ["renderer"],
-    "political-boundaries": ["renderer"]
+    "political-boundaries": ["renderer"],
+    "measurement-overlay": ["renderer"]
   };
   const registry = createDependencyRegistry({invalidationTargets: targets});
   registry.register(notesManifest);
@@ -36,7 +41,11 @@ try {
   registry.register(populationManifest);
   registry.register(foundationManifest);
   registry.register(societyPoliticsManifest);
-  assert.deepEqual(registry.snapshot().ids, ["foundation.climate", "foundation.height-topology", "foundation.ocean-current-layer", "markers.point-layer", "markers.resource-economy", "notes.object-panels", "population.downstream", "society-politics.administrative-mirror", "society-politics.social-assignment"]);
+  registry.register(settlementsManifest);
+  registry.register(zonesManifest);
+  registry.register(labelsManifest);
+  registry.register(measurementsManifest);
+  assert.deepEqual(registry.snapshot().ids, ["foundation.climate", "foundation.height-topology", "foundation.ocean-current-layer", "labels.layout-projection", "markers.point-layer", "markers.resource-economy", "measurements.overlay-projection", "notes.object-panels", "population.downstream", "settlements.city-projection", "society-politics.administrative-mirror", "society-politics.social-assignment", "zones.region-projection"]);
 
   const topologyFull = registry.planCanonical({writeSet: ["grid"]});
   assert.equal(topologyFull.mode, "full-rebuild");
@@ -66,12 +75,28 @@ try {
   const politicsFull = registry.planCanonical({writeSet: ["politics.provinces"], affected: {province: [1]}});
   assert.equal(politicsFull.mode, "full-rebuild");
   assert.ok(politicsFull.systems.includes("society-politics.administrative-mirror"));
-  assert.deepEqual(new Set(politicsFull.invalidated), new Set(["cell-colors", "political-boundaries", "labels", "object-index", "picking"]));
+  assert.deepEqual(new Set(politicsFull.invalidated), new Set(["cell-colors", "political-boundaries", "labels", "object-index", "picking", "point-layers", "object-panels"]));
 
   const religionFull = registry.planCanonical({writeSet: ["society.religions"], affected: {religion: [1]}});
   assert.equal(religionFull.mode, "full-rebuild");
   assert.ok(religionFull.systems.includes("society-politics.social-assignment"));
   assert.deepEqual(new Set(religionFull.invalidated), new Set(["cell-colors", "labels", "object-index"]));
+
+  const settlementsFull = registry.planCanonical({writeSet: ["settlements.cities"], affected: {city: [1]}});
+  assert.equal(settlementsFull.mode, "full-rebuild");
+  assert.ok(settlementsFull.systems.includes("settlements.city-projection"));
+  assert.ok(settlementsFull.systems.includes("labels.layout-projection"));
+  assert.ok(settlementsFull.invalidated.includes("point-layers"));
+
+  const zonesFull = registry.planCanonical({writeSet: ["zones.zones"], affected: {zone: [0]}});
+  assert.equal(zonesFull.mode, "full-rebuild");
+  assert.ok(zonesFull.systems.includes("zones.region-projection"));
+  assert.ok(zonesFull.systems.includes("labels.layout-projection"));
+
+  const measurementsFull = registry.planCanonical({writeSet: ["measurements.items"], affected: {measurement: ["m-1"]}});
+  assert.equal(measurementsFull.mode, "full-rebuild");
+  assert.deepEqual(measurementsFull.systems, ["measurements.overlay-projection"]);
+  assert.deepEqual(measurementsFull.invalidated, ["measurement-overlay"]);
 
   const unknown = registry.planCanonical({writeSet: ["unregistered.section"]});
   assert.equal(unknown.mode, "full-rebuild");
@@ -112,10 +137,11 @@ try {
   console.log(JSON.stringify({
     ok: true,
     registry: registry.snapshot(),
-    modes: [notesLocal.mode, populationFull.mode, politicsFull.mode, religionFull.mode, presentation.mode, unknown.mode, exactRegistry.planCanonical({writeSet: ["document.title"]}).mode],
+    modes: [notesLocal.mode, populationFull.mode, politicsFull.mode, religionFull.mode, settlementsFull.mode, zonesFull.mode, measurementsFull.mode, presentation.mode, unknown.mode, exactRegistry.planCanonical({writeSet: ["document.title"]}).mode],
     notes: {systems: notesLocal.systems, projections: notesLocal.projections},
     population: {systems: populationFull.systems, invalidated: populationFull.invalidated, projections: populationFull.projections},
     societyPolitics: {politics: politicsFull.systems, religion: religionFull.systems},
+    settlementZonesAnnotations: {settlements: settlementsFull.systems, zones: zonesFull.systems, measurements: measurementsFull.systems},
     negative: ["missing-scope", "unknown-write", "duplicate-domain", "invalidatedBy-outside-reads", "invalid-projection", "missing-invalidation-target", "manifest-mutation-after-register"]
   }, null, 2));
 } finally {

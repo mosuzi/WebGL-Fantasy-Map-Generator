@@ -117,7 +117,7 @@ map.zones.zones.splice(-2);
 const preserved = structuredClone(normalizedNatural);
 const pack = {...map.pack, zones: [preserved], military: {fronts: []}, burgs: [], religions: [], cultures: [], provinces: [], markers: [], rivers: []};
 const rebuilt = buildZones(pack, {seed: "zone-natural-preserve"});
-assert.ok(rebuilt.zones.some(item => item.i === preserved.i && item.category === "natural"), "事件地区重生成保留自然地区");
+assert.equal(rebuilt.zones.some(item => item.i === preserved.i), false, "主动地区重生成必须从空结果重建，不得隐式保留旧自然地区");
 const roundtrip = JSON.parse(JSON.stringify({zones: {zones: [preserved]}, pack: {...map.pack, zones: [preserved]}}));
 normalizeZoneMap(roundtrip);
 assert.deepEqual(roundtrip.zones.zones[0].effects, preserved.effects, "完整 JSON 往返保留地区影响");

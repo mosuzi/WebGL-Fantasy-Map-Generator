@@ -1,6 +1,6 @@
 {
   "name": "fmg-webgl-reimplementation",
-  "version": "0.5.32",
+  "version": "0.5.33",
   "description": "由 mosuzi 创作并完全通过 Codex + GPT 生成的 WebGL 幻想地图生成器。",
   "private": true,
   "author": "mosuzi",
@@ -27,6 +27,7 @@
     "regress:core-dependencies": "node --no-warnings ./tools/webgl-generator-core-dependency-regression.mjs",
     "regress:foundation-core-protocol": "node --no-warnings ./tools/webgl-generator-foundation-core-protocol-regression.mjs && node --no-warnings ./tools/webgl-generator-height-derived-rebuild-regression.mjs && node --no-warnings ./tools/webgl-generator-climate-downstream-rebuild-regression.mjs && node --no-warnings ./tools/webgl-generator-ocean-current-regression.mjs && node --no-warnings ./tools/webgl-generator-grid-topology-worker-regression.mjs && node --no-warnings ./tools/webgl-generator-render-preparation-regression.mjs && node --no-warnings ./tools/webgl-generator-surface-base-buffer-set-regression.mjs",
     "regress:society-politics-core-protocol": "node --no-warnings ./tools/webgl-generator-society-politics-core-protocol-regression.mjs && node --no-warnings ./tools/webgl-generator-regeneration-lock-society-regression.mjs && node --no-warnings ./tools/webgl-generator-provincial-capital-regression.mjs && node --no-warnings ./tools/webgl-generator-regeneration-preflight-regression.mjs && node --no-warnings ./tools/webgl-generator-ocean-current-world-rebuild-regression.mjs && node --no-warnings ./tools/webgl-generator-ocean-current-world-constraint-bundle-regression.mjs --society-politics-only",
+    "regress:settlements-zones-annotations-core-protocol": "node --no-warnings ./tools/webgl-generator-settlements-zones-annotations-core-protocol-regression.mjs",
     "regress:notes-core": "node --no-warnings ./tools/webgl-generator-notes-core-regression.mjs",
     "regress:markers-core": "node --no-warnings ./tools/webgl-generator-markers-core-regression.mjs",
     "regress:markers-resource-economy-core": "node --no-warnings ./tools/webgl-generator-zero-resource-marker-regression.mjs && node --no-warnings ./tools/webgl-generator-core-dependency-regression.mjs",

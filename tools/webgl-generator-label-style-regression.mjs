@@ -29,12 +29,13 @@ import {resolveVisualTheme} from "../app/webgl-generator/src/renderer/themes.js"
 const map = {
   metadata: {seed: "label-style-regression", checksum: "checksum-must-stay"},
   options: {},
-  settlements: {cities: [{id: 0, name: "王城", capital: true, x: 20, y: 30}]},
+  grid: {points: [[0, 0], [24, 36]], cells: {i: [0, 1], h: [30, 30], burg: [0, -1]}},
+  settlements: {cities: [{id: 0, burgId: 1, cell: 0, packCell: 0, name: "王城", capital: true, x: 20, y: 30}], routes: []},
   politics: {
     states: [null, {i: 1, name: "北国", fullName: "北境王国", center: 1}],
     provinces: [null, {i: 1, state: 1, name: "霜原", pole: [24, 36], center: 1}]
   },
-  pack: {cells: {p: [[0, 0], [24, 36]]}}
+  pack: {cells: {i: [0, 1], g: [0, 1], burg: [1, 0], p: [[0, 0], [24, 36]]}, burgs: [null, {i: 1, id: 1, cityId: 0, cell: 0, name: "王城", capital: 1, x: 20, y: 30}], routes: []}
 };
 const store = ensureLabelStore(map);
 assert.equal(store.styles.version, 1);
@@ -259,7 +260,7 @@ assert.equal(stylePanelSource.match(/unit-label="px"/g)?.length, 6, "样式页 p
 assert.match(stylesSource, /\.label-style-panel \.ui-slider-field\s*\{[^}]*grid-template-columns:\s*72px minmax\(0, 1fr\) 84px;/, "样式页无单位滑动条没有为长标签保留列宽");
 assert.match(stylesSource, /\.label-style-panel \.ui-slider-field-has-unit\s*\{[^}]*grid-template-columns:\s*72px minmax\(0, 1fr\) 84px max-content;/, "样式页带单位滑动条没有保持数值与单位独立列");
 assert.match(stylesSource, /\.label-style-panel \.ui-slider-field > span:first-child\s*\{[^}]*white-space:\s*nowrap;/, "样式页滑动条标签仍可能折行");
-assert.match(stylesSource, /\.custom-label\s*\{[^}]*padding:\s*2px 5px;[^}]*border-radius:\s*2px;/, "手工标签没有使用现代图册窄注记底板");
+assert.match(stylesSource, /\.custom-label \.map-label-content\s*\{[^}]*padding:\s*2px 5px;[^}]*border-radius:\s*2px;/, "手工标签没有使用现代图册窄注记底板");
 assert.ok(PNG_SEMANTIC_LABEL_SELECTORS.includes(".province-label.visible"), "PNG overlay 没有纳入省份名称");
 assert.ok(PNG_SEMANTIC_LABEL_SELECTORS.includes(".zone-label.visible"), "PNG overlay 没有纳入地区名称");
 assert.match(mapIoSource, /selectors\.push\(\.\.\.PNG_SEMANTIC_LABEL_SELECTORS\)/, "PNG overlay 没有消费语义标签生产契约");

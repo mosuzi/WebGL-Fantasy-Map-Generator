@@ -238,7 +238,7 @@ assert.doesNotMatch(riverBlock, /finalizeSettlements|routeLocks|lockedRoutes|OBJ
 assert.match(riverBlock, /picking: "rivers"/, "河流重算没有使用只更新河流的 picking 路径");
 assert.doesNotMatch(riverBlock, /"object-index"/, "河流重算仍触发全量对象 picking 重建");
 const routeBlock = sourceFunctionBlock(appSource, "regenerateRoutes", "regenerateRivers");
-assert.match(routeBlock, /allRegenerationObjectsLocked[\s\S]*reconcileSettlementCellIdentity\(map\)[\s\S]*reconcileSettlementPortTopology\(map, \{mode: "routes"\}\)[\s\S]*captureLockedRegenerationObjects\(map, OBJECT_KIND\.CITY\)/, "显式道路重算没有在全锁 no-op 后、锁快照前统一修复城镇与港口身份");
+assert.match(routeBlock, /allRegenerationObjectsLocked[\s\S]*reconcileSettlementCellIdentity\(map\)[\s\S]*reconcileSettlementPortTopology\(map, \{mode: "routes", repairProtectedDerived: true\}\)[\s\S]*captureLockedRegenerationObjects\(map, OBJECT_KIND\.CITY\)/, "显式道路重算没有在全锁 no-op 后、锁快照前统一修复城镇与港口身份");
 
 console.log(JSON.stringify({
   ok: true,

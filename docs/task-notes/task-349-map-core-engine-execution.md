@@ -230,4 +230,15 @@ planned → computed → validated → projections-prepared
 - 终验：同一只读评审智能体首轮 `ACCEPT`；共享正例、重叠拒绝、兼容边界和阶段文档无 P0 / P1 偏差。
 - 下一步：返回 `349-10c`，继续 settlements / zones / labels / measurements。
 
+### 349-10c — CHECKPOINT 待评审
+
+- 完成：新增 settlements / zones / labels / measurements 四份 shadow Manifest；正式 cities / zones Worker commit 前统一校验 binding、policy / patch、容器、city↔burg / route / politics 与 zone↔pack 身份镜像。
+- 依赖：注册表增至 `9 domains / 135 descriptors`、dependency 为 `13 systems`；四类 projection 均进入统一传播，labels / measurements 不虚报 Worker 或独立重生成。
+- 兼容：真实 2k cities / zones、history commit / undo / redo、标签备注、测量保存 / 纯 Node 导入、v1 migration 通过；旧 v1 夹具只补当前安全读取必需的 grid / pack / settlement 空身份结构。
+- 夹具：校准 harbor `0/1`、地区 from-empty、`repairProtectedDerived`、共享 PNG selector 与生成种子不再保证每图跨海国家等已接受语义；确定性手工跨海夹具继续保留。
+- 浏览器：误触一次实际启动 Playwright 的 `regress:measurement` 后立即终止，不计验收、不使用结果；有效浏览器验收仍为 `0`。Manifest 改用纯 Node measurement gates，最终方案须加入浏览器脚本静态识别。
+- 门禁：typecheck、Manifest、dependency、新领域协议、map migration、四域代表性 Node 专项与 build `1382 modules` 通过；`source/` 改动 `0`。
+- 版本：`0.5.32 → 0.5.33`；专题记录 `docs/task-notes/task-349-settlements-zones-annotations-core-slice.md`。
+- 下一步：只读评审本 checkpoint；仅 `ACCEPT` 后进入 349-10d，并先复现锁定 Feature 港口引用 `382 → 366`。
+
 阶段结果在每次 checkpoint 后更新，长日志只记录命令和 artifact 路径，不粘贴到本文。
