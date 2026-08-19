@@ -4,7 +4,9 @@
 
 本轮只执行经静态防误触审计登记的 Node、TypeScript 与 production build 门。没有启动或操作浏览器，没有运行名称或命令体含浏览器 / 驱动 / Chrome-CDP / Vite dev-preview 入口的脚本，没有进行视觉、截图或 UI 通过声明。
 
-`audit:task-349-final-gates` 固定 27 个 package gate、36 个 Node 入口；终验前后各执行一次均通过，`browserRuns = 0`。27 个 gate 全部通过，未发现需插入的新阶段。
+`audit:task-349-final-gates` 固定 27 个 package gate、36 个 Node 入口，并递归扫描入口源码与本地 tools 导入链；它拒绝浏览器驱动包、浏览器 launch、CDP、WebDriver 与浏览器进程启动原语，并以名称 / package command / 入口文件名均不含禁词、但源码实际启动 Chromium 的 `regress:measurement` 作为必须拒绝的反例。终验前后各执行一次均通过，`browserRuns = 0`。27 个 gate 全部通过，未发现需插入的新阶段。
+
+首轮最终评审确认本轮 36 个入口经额外源码扫描没有启动原语、27 / 27 门通过且没有实际误触，但阻断初版审计未自行读取源码 / 导入链的证明缺口；`0.5.55` 已将该额外核对固化为正式门，待 blocker-only 复审。
 
 ## 最终门矩阵
 

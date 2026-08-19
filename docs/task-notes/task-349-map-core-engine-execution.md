@@ -312,6 +312,7 @@ planned → computed → validated → projections-prepared
 - 禁止项：不启动浏览器，不执行任何浏览器命名或实际 UI 门，不修改产品语义，不修改 `source/`，不合入或推送 `main`。
 - 实现：新增终验防误触审计，固定 27 个 package gate / 36 个 Node 入口并拒绝浏览器、驱动、Chrome-CDP 与 Vite dev-preview 命令；为 10f 已接受的 map-file IO 与通用 Worker task 补正式 package script。浏览器方案覆盖 10k / 100k / v1 / holey / fault 五类数据，列出候选自动化入口、identity / revision / history / Worker / projection / renderer / persistence 断言、性能阈值、截图、恢复、停止条件和可执行性评估。
 - 门禁：27 个非浏览器 gate 全部通过；核心为 `66 fields / 29 sections / 15 domains / 216 descriptors / 19 derived systems`，整图为 `4 owners / 15 negatives`，map-file 100k、通用 Worker 11 result kinds、economy / military-policy 10k / 100k、headless、v1 migration、API data compatibility、typecheck `1077.6ms` 与 build `1392 modules / 1.64s` 通过。完整工具墙钟约 4 分钟；浏览器执行 `0`，`source/` 改动 `0`。
+- 首轮最终评审：`e95472c / 0.5.54` 为 `BLOCK`。27 / 27 门、浏览器方案、分支与 `source/` 边界均正确且本轮没有实际误触，但防误触审计只检查 script / command / 入口文件名，无法拒绝仓库中名称不可见却在源码加载 Playwright 并启动 Chromium 的真实反例。`0.5.55` 已递归读取每个 Node 入口及其本地 tools 导入链，拒绝浏览器驱动包、Chromium / Firefox / WebKit / Puppeteer launch、CDP、WebDriver 与浏览器进程启动原语，并要求 `regress:measurement` 反例必定被拒绝，待 blocker-only 复审。
 - 详细证据：[最终非浏览器验收](./task-349-final-non-browser-acceptance.md) 与 [浏览器验收方案](./task-349-browser-acceptance-plan.md)。当前冻结 checkpoint，待最终只读评审。
 - 详细证据：[旧核心路径收口](./task-349-legacy-core-path-closure.md)。当前冻结 checkpoint，待只读评审。
 
