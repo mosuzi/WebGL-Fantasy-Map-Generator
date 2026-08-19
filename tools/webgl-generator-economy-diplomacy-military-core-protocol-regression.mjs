@@ -343,6 +343,11 @@ try {
   operation(policyRootField.patch, "pack.military").value.protocolDrift = true;
   assertProtocol(() => validate("military-policy", policyRootField), "military-policy-root-scope-invalid");
 
+  const policyMetadataSummary = structuredClone(outputs["military-policy"].output);
+  operation(policyMetadataSummary.patch, "military").value.metadata.troops = 999999999;
+  operation(policyMetadataSummary.patch, "pack.military").value.metadata.troops = 999999999;
+  assertProtocol(() => validate("military-policy", policyMetadataSummary), "military-metadata-count-invalid");
+
   const policyCampaign = structuredClone(outputs["military-policy"].output);
   const policyCampaignMilitary = operation(policyCampaign.patch, "military").value;
   const policyCampaignPackMilitary = operation(policyCampaign.patch, "pack.military").value;
@@ -367,7 +372,24 @@ try {
   }
   assertProtocol(() => validate("military-policy", policyFront), "military-front-reference-invalid");
 
-  console.log(JSON.stringify({ok: true, manifests: ["economy", "diplomacy", "military"], workers: ["economy.compute", "regeneration.compute:diplomacy", "regeneration.compute:military", "military-policy.compute"], writes: {economyRoots: ECONOMY_WORKER_WRITE_SET.length, diplomacy: DIPLOMACY_WORKER_WRITE_SET.length, military: MILITARY_REGENERATION_WORKER_WRITE_SET.length, militaryPolicyRoots: MILITARY_POLICY_WORKER_WRITE_SET.length}, rejected: ["stale-binding", "partial-write-set", "required-delete", "generation-log-shape", "generation-log-prefix", "generation-counter", "path-escape", "data-view", "economy-mirror", "economy-item-replacement", "economy-item-reference-replacement", "economy-unknown-field", "economy-deal-field", "economy-metadata-field", "economy-collection-replacement", "economy-burg-object-replacement", "diplomacy-mirror", "diplomacy-relation", "diplomacy-warzone-cell", "diplomacy-warzone-state", "diplomacy-warzone-third-state-cell", "diplomacy-zone-metadata", "military-mirror", "military-reference", "military-event-archive", "military-event-content", "military-event-generation", "military-event-item-generation", "military-event-sequence", "military-policy-mirror", "military-policy-cross-state", "military-policy-result-state", "military-policy-event-scope", "military-policy-root-scope", "military-policy-campaign-reference", "military-policy-front-reference"], browserRuns: 0}, null, 2));
+  const unrelatedSource = generatePlaceholderMap({seed: "policy-valid-unrelated", cellsTarget: 10000, heightmapTemplate: "continents"});
+  unrelatedSource.politics.states = structuredClone(unrelatedSource.pack.states);
+  const unrelatedTarget = unrelatedSource.pack.states.find(item => item?.i && !item.removed && item.military?.length);
+  assert.ok(unrelatedTarget, "军事策略非目标战线负例缺少目标国家");
+  const unrelatedRatios = normalizeUnitRatios(unrelatedTarget.militaryPolicy?.unitRatios || {});
+  const unrelatedRequest = {stateId: unrelatedTarget.i, ratios: normalizeUnitRatios({...unrelatedRatios, infantry: unrelatedRatios.infantry + 0.7, cavalry: unrelatedRatios.cavalry * 0.35}), confirm: true};
+  const unrelatedOutput = await runMilitaryPolicyWorkerTask({map: structuredClone(unrelatedSource), request: unrelatedRequest, binding}, context(binding));
+  const unrelatedPolicy = getMilitaryPolicyWorkerPatchPolicy(unrelatedSource, unrelatedOutput.patch, unrelatedRequest.stateId);
+  const unrelatedFrontOutput = structuredClone(unrelatedOutput);
+  const unrelatedMilitary = operation(unrelatedFrontOutput.patch, "military").value;
+  const unrelatedPackMilitary = operation(unrelatedFrontOutput.patch, "pack.military").value;
+  const unrelatedFrontIndex = unrelatedMilitary.fronts.findIndex(front => Number(front.attacker) !== unrelatedRequest.stateId && Number(front.defender) !== unrelatedRequest.stateId);
+  assert.ok(unrelatedFrontIndex >= 0, "军事策略非目标战线负例缺少真实战线");
+  unrelatedMilitary.fronts[unrelatedFrontIndex].label = "request-scope-drift";
+  unrelatedPackMilitary.fronts[unrelatedFrontIndex].label = "request-scope-drift";
+  assertProtocol(() => validateEconomyDiplomacyMilitaryWorkerOutput({kind: "military-policy", sourceMap: unrelatedSource, binding, output: unrelatedFrontOutput, policy: unrelatedPolicy, expectation: {stateId: unrelatedRequest.stateId}}), "military-policy-front-scope-invalid");
+
+  console.log(JSON.stringify({ok: true, manifests: ["economy", "diplomacy", "military"], workers: ["economy.compute", "regeneration.compute:diplomacy", "regeneration.compute:military", "military-policy.compute"], writes: {economyRoots: ECONOMY_WORKER_WRITE_SET.length, diplomacy: DIPLOMACY_WORKER_WRITE_SET.length, military: MILITARY_REGENERATION_WORKER_WRITE_SET.length, militaryPolicyRoots: MILITARY_POLICY_WORKER_WRITE_SET.length}, rejected: ["stale-binding", "partial-write-set", "required-delete", "generation-log-shape", "generation-log-prefix", "generation-counter", "path-escape", "data-view", "economy-mirror", "economy-item-replacement", "economy-item-reference-replacement", "economy-unknown-field", "economy-deal-field", "economy-metadata-field", "economy-collection-replacement", "economy-burg-object-replacement", "diplomacy-mirror", "diplomacy-relation", "diplomacy-warzone-cell", "diplomacy-warzone-state", "diplomacy-warzone-third-state-cell", "diplomacy-zone-metadata", "military-mirror", "military-reference", "military-event-archive", "military-event-content", "military-event-generation", "military-event-item-generation", "military-event-sequence", "military-policy-mirror", "military-policy-cross-state", "military-policy-result-state", "military-policy-event-scope", "military-policy-root-scope", "military-policy-metadata-summary", "military-policy-campaign-reference", "military-policy-front-reference", "military-policy-unrelated-front"], browserRuns: 0}, null, 2));
 
   function validate(kind, output) {
     return validateEconomyDiplomacyMilitaryWorkerOutput({kind, sourceMap: outputs[kind].sourceMap, binding, output, policy: outputs[kind].policy, expectation: outputs[kind].expectation});

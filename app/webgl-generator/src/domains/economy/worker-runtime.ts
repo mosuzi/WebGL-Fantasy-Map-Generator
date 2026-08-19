@@ -312,21 +312,32 @@ function validateMilitary(militaryValue: unknown, packMilitaryValue: unknown, po
   const cellCount = indexedLength(record(sourcePack.cells, "military.sourceMap.pack.cells").i, "military.sourceMap.pack.cells.i");
   const states = indexedValues(packStatesValue, "military.pack.states");
   const ids = new Set<string>();
+  let statesWithMilitary = 0;
+  let troops = 0;
+  let navalRegiments = 0;
+  const statuses: Record<string, number> = {};
   for (let stateId = 1; stateId < states.length; stateId++) {
     const state = states[stateId];
     if (!isPlainRecord(state) || state.removed) continue;
     if (Number(state.i) !== stateId) throw protocolError("military-state-identity-invalid", `军事国家槽 #${stateId} 身份无效`);
-    for (const regimentValue of array(state.military, `military.state.${stateId}.regiments`)) {
+    const regiments = array(state.military, `military.state.${stateId}.regiments`);
+    if (regiments.length) statesWithMilitary += 1;
+    for (const regimentValue of regiments) {
       const regiment = record(regimentValue, "military.regiment");
       const id = String(regiment.id ?? `${stateId}:${String(regiment.i ?? "")}`);
       const cell = Number(regiment.cell);
       if (!id || ids.has(id) || Number(regiment.state ?? regiment.stateId) !== stateId || !Number.isSafeInteger(cell) || cell < 0 || cell >= cellCount) throw protocolError("military-regiment-reference-invalid", `国家 #${stateId} 军团身份、归属或 cell 无效`);
       ids.add(id);
+      troops += Number(regiment.a || 0);
+      if (regiment.n) navalRegiments += 1;
+      const status = String(regiment.status);
+      statuses[status] = (statuses[status] || 0) + 1;
     }
   }
   const military = record(militaryValue, "military.document");
   const metadata = record(military.metadata, "military.metadata");
-  if (Number(metadata.regiments) !== ids.size) throw protocolError("military-metadata-count-invalid", "军事 metadata.regiments 与军团集合不一致");
+  if (metadata.statesWithMilitary !== statesWithMilitary || metadata.regiments !== ids.size || metadata.troops !== Math.round(troops) || metadata.navalRegiments !== navalRegiments || !sameData(metadata.statuses, statuses)
+    || typeof metadata.buildMs !== "number" || !Number.isFinite(metadata.buildMs) || metadata.buildMs < 0) throw protocolError("military-metadata-count-invalid", "军事 metadata 与实际军团汇总不一致");
   const events = array(military.events ?? [], "military.events");
   if (Number(metadata.events || 0) !== events.length) throw protocolError("military-event-count-invalid", "军事 metadata.events 与战报集合不一致");
   validateMilitaryCampaignsAndFronts(military, states, cellCount);
@@ -346,7 +357,7 @@ function validateMilitaryCampaignsAndFronts(military: UnknownRecord, states: unk
   const metadata = record(military.metadata, "military.metadata");
   const campaigns = array(military.campaigns ?? [], "military.campaigns");
   const fronts = array(military.fronts ?? [], "military.fronts");
-  if (Number(metadata.campaigns || 0) !== campaigns.length || Number(metadata.fronts || 0) !== fronts.length) throw protocolError("military-metadata-count-invalid", "军事 metadata 的战役或战线计数不一致");
+  if (metadata.campaigns !== campaigns.length || metadata.fronts !== fronts.length) throw protocolError("military-metadata-count-invalid", "军事 metadata 的战役或战线计数不一致");
   const frontIds = new Set<string>();
   for (const frontValue of fronts) {
     const front = record(frontValue, "military.front");
@@ -373,6 +384,7 @@ function validateMilitaryCampaignsAndFronts(military: UnknownRecord, states: unk
 
 function validateMilitaryPolicy(patch: Map<string, UnknownRecord>, sourceMapValue: unknown, expectedStateId?: number): void {
   if (!Number.isSafeInteger(expectedStateId) || Number(expectedStateId) <= 0) throw protocolError("military-policy-worker-expectation-invalid", "军事策略校验缺少目标国家");
+  const stateId = Number(expectedStateId);
   const source = record(sourceMapValue, "military-policy.sourceMap");
   const sourcePack = record(source.pack, "military-policy.sourceMap.pack");
   const sourcePolitics = record(source.politics, "military-policy.sourceMap.politics");
@@ -385,6 +397,8 @@ function validateMilitaryPolicy(patch: Map<string, UnknownRecord>, sourceMapValu
   const nextMetadata = record(nextMilitary.metadata, "military-policy.military.metadata");
   const sourceMetadata = record(sourceMilitary.metadata, "military-policy.sourceMap.military.metadata");
   for (const field of ["events", "eventSequence", "eventArchiveGeneration"]) assertDeepEqual(nextMetadata[field], sourceMetadata[field], "military-policy-events-invalid", `军事策略结果改变了战报元数据 ${field}`);
+  assertDeepEqual(unrelatedMilitaryRecords(nextMilitary.campaigns, stateId, "military-policy.campaigns"), unrelatedMilitaryRecords(sourceMilitary.campaigns, stateId, "military-policy.sourceMap.campaigns"), "military-policy-campaign-scope-invalid", "军事策略结果改变了请求国家之外的战役");
+  assertDeepEqual(unrelatedMilitaryRecords(nextMilitary.fronts, stateId, "military-policy.fronts"), unrelatedMilitaryRecords(sourceMilitary.fronts, stateId, "military-policy.sourceMap.fronts"), "military-policy-front-scope-invalid", "军事策略结果改变了请求国家之外的战线");
   for (const field of new Set([...Object.keys(sourceMilitary), ...Object.keys(nextMilitary)])) {
     if (!["campaigns", "fronts", "metadata", "events"].includes(field)) assertDeepEqual(nextMilitary[field], sourceMilitary[field], "military-policy-root-scope-invalid", `军事策略结果改变了请求外军事字段 ${field}`);
   }
@@ -392,6 +406,13 @@ function validateMilitaryPolicy(patch: Map<string, UnknownRecord>, sourceMapValu
   for (const field of new Set([...Object.keys(sourceMetadata), ...Object.keys(nextMetadata)])) {
     if (!mutableMetadata.has(field)) assertDeepEqual(nextMetadata[field], sourceMetadata[field], "military-policy-root-scope-invalid", `军事策略结果改变了请求外军事 metadata ${field}`);
   }
+}
+
+function unrelatedMilitaryRecords(value: unknown, stateId: number, path: string): unknown[] {
+  return array(value ?? [], path).filter((item, index) => {
+    const row = record(item, `${path}.${index}`);
+    return Number(row.attacker) !== stateId && Number(row.defender) !== stateId;
+  });
 }
 
 function economyView(sourceMapValue: unknown): UnknownRecord {
