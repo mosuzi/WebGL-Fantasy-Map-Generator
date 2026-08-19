@@ -25,7 +25,7 @@
 
 ## 专项验收
 
-- `regress:whole-map-profile-core-protocol`：4 个 owner、12 类协议负例、新生成 session、普通导入、v1 旧档 identity 派生、导出 source 不变、checksum / byte receipt 与真实 headless commit。
+- `regress:whole-map-profile-core-protocol`：4 个 owner、15 类协议负例、新生成 session、普通导入、v1 旧档 identity 派生、导出 source 不变、checksum / byte receipt 与真实 headless commit。
 - `webgl-generator-map-file-io-worker-regression.mjs`：plain / gzip / webfmg-v3、损坏输入及轻量 100k 存档通过；夹具同步当前 `topologyRevision: 0` render binding。
 - `webgl-generator-worker-task-regression.mjs`：generation / import adoption owner、archive export、session ACK / invalidate / rollback 与全领域 parity 通过。
 - `regress:headless-write`、`regress:headless-api`、`regress:registry-document-identity`、`typecheck:core`、`build:app` 与 `git diff --check` 通过。
@@ -33,4 +33,4 @@
 
 ## 阶段结论
 
-未发现必须改 canonical owner 或插入新阶段的阻断。既有 map-file 专项有一处旧 render binding 断言漂移，已在本阶段作为单行夹具维护同步；未完成顺序仍为 `349-10g → 349-11`。当前 checkpoint 待同一只读评审智能体给出 `ACCEPT / BLOCK`。
+首轮只读评审对 `10b442b / 0.5.46` 给出 `BLOCK`：preload / 校验失败可能遗留 pending Worker session，临时 renderer binding 未冻结 topology revision，解包文档的 checksum / cell count 仍可能只与自报 metadata 自洽。`0.5.47` 已做最窄修正：从 Worker 返回到 `loadMapIntoRuntime` 接管前的全部失败 / 提前返回路径立即 invalidate，临时 render binding 明确并校验 topology revision，cell count 从真实 identity 容器读取且核对已有 metadata，document / map checksum 必须一致；新增失败接纳后下一持久任务立即运行的真实 coordinator 回归。未发现必须改 canonical owner 或插入新阶段的阻断，未完成顺序仍为 `349-10g → 349-11`；当前修正 checkpoint 待 blocker-only 复审。

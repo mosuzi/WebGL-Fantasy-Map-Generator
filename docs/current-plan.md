@@ -12,7 +12,7 @@
 
 ### 第 349 项：地图核心引擎化与 TypeScript 核心契约渐进迁移
 
-- 状态：进行中，`349-0`～`349-10e` 已接受，`349-10f / 0.5.46` checkpoint 待评审。
+- 状态：进行中，`349-0`～`349-10e` 已接受；`349-10f / 0.5.46` 首轮评审 BLOCK 的三个 P1 已在 `0.5.47` 闭合，待 blocker-only 复审。
 - 目标：在不重写现有算法、不产生第二 canonical owner 的前提下，建立可审计的核心事务、revision、snapshot ownership、领域 Manifest、Worker、依赖和 renderer layer 契约，并通过低风险垂直切片逐步接管旧路径。
 - 阶段：`349-0` 计划冻结；`349-1` 现状盘点；`349-2` TS 工具链；`349-3` 核心契约；`349-3a` 字段注册表与身份适配器闭合；`349-4` Manifest；`349-5` 薄 facade；`349-6` notes 切片；`349-7` markers 切片；`349-8` Worker 切片；`349-9` dependency / projection；`349-10a / 10b` 已接受；动态插入 `349-10c0` 共享 Worker result ownership；随后 `349-10c`～`349-10g` 依赖序逐域迁移与旧路径收口；`349-11` 非浏览器终验与浏览器验收方案。
 - `349-1` 强制插入依据：存档已存在的 `notes / measurements / labels / visualTheme / display` 未进入 canonical field registry，且普通 persisted document 尚无稳定 identity，不能与 runtime、render preparation、headless identity 混用；两项均会阻断 Manifest、checksum 与统一 binding，因此必须在 `349-4` 前单独验收。

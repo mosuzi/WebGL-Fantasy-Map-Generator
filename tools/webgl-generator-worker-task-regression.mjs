@@ -526,6 +526,38 @@ assert.ok(adoptedSave.worker.telemetry.inputPackets <= 3, `导入 adoption 后�
 assert.equal(await adoptionCoordinator.commitSession(adoptedSave.worker.session.id, adoptionBinding, {expectedRevisionDelta: 0}), true);
 assert.equal(adoptionCoordinator.getSessionSnapshot()?.adopted, true, "后续复用保存不得丢失 adoption owner 来源");
 
+const failedAdoptionWorkers = [];
+const failedAdoptionCoordinator = createWorkerTaskCoordinator({
+  createWorker: () => {
+    const worker = new FakeWorker();
+    failedAdoptionWorkers.push(worker);
+    return worker;
+  },
+  getBinding: () => binding,
+  validateBinding: expected => JSON.stringify(expected) === JSON.stringify(binding)
+});
+const failedAdoption = await failedAdoptionCoordinator.run("map-file-io", {
+  operation: "import",
+  input: {kind: "bytes", bytes: archiveResult.archive.data, mimeType: "application/gzip"}
+}, {binding, sessionMode: "adopt-result-map", allowFallback: false});
+assert.equal(failedAdoption.worker.session.pending, true);
+failedAdoptionCoordinator.invalidateSession("whole-map-preload-validation-failed");
+const taskAfterFailedAdoption = await failedAdoptionCoordinator.run("map-file-io", {
+  map: sessionFormal,
+  operation: "export",
+  encoding: "gzip",
+  resultType: "bytes",
+  options: sessionFormal.options || {}
+}, {
+  binding,
+  sessionMode: "map-mirror",
+  sessionPayload: {operation: "export", encoding: "gzip", resultType: "bytes", options: sessionFormal.options || {}},
+  allowFallback: false
+});
+assert.equal(taskAfterFailedAdoption.kind, "map-file-export-result", "adoption preload 失败释放后下一持久任务必须可运行");
+assert.equal(await failedAdoptionCoordinator.commitSession(taskAfterFailedAdoption.worker.session.id, binding, {expectedRevisionDelta: 0}), true);
+assert.equal(failedAdoptionWorkers.length, 2, "失败 adoption owner 必须销毁并由下一任务重建");
+
 let adoptedGenerationMap = null;
 const adoptedGeneration = await getWorkerTaskHandler("generation.compute")({
   options: {seed: "worker-adoption-generation", cellsTarget: 1000, heightmapTemplate: "continents"}

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import {readFileSync} from "node:fs";
+import {runInNewContext} from "node:vm";
 import {generatePlaceholderMap} from "../app/webgl-generator/src/generator/index.js";
 import {runGenerationWorkerTask} from "../app/webgl-generator/src/runtime/generation-worker-task.js";
 import {createHeadlessWriteSession} from "../app/webgl-generator/src/runtime/headless-write-api.js";
@@ -79,6 +80,28 @@ const wrongEnvelopeChecksum = structuredClone(await generationEnvelopeFixture())
 wrongEnvelopeChecksum.metadata.checksum = "wrong-checksum";
 const wrongEnvelopeDocument = await materializeMapAdoptionHandoff(wrongEnvelopeChecksum.handoff);
 assertProtocol(() => validateWholeMapAdoptionDocument({profile: "generation-adoption", metadata: wrongEnvelopeChecksum.metadata, document: wrongEnvelopeDocument}), "whole-map-adoption-document-mismatch");
+const topologyMismatch = await generationEnvelopeFixture();
+topologyMismatch.preparedRender = {schemaVersion: 1, binding: {mapIdentity: "temporary-map", mapRevision: 0, topologyRevision: 999}};
+assertProtocol(() => validateWholeMapAdoptionEnvelope({
+  profile: "generation-adoption",
+  binding,
+  output: topologyMismatch,
+  renderBinding: {mapIdentity: "temporary-map", mapRevision: 0, topologyRevision: 0}
+}), "whole-map-adoption-render-binding-mismatch");
+const wrongDocumentChecksum = structuredClone(generatedDocument);
+wrongDocumentChecksum.metadata.checksum = "wrong-document-checksum";
+assertProtocol(() => validateWholeMapAdoptionDocument({
+  profile: "generation-adoption",
+  metadata: generation.metadata,
+  document: wrongDocumentChecksum
+}), "whole-map-document-checksum-mismatch");
+const wrongDocumentCells = structuredClone(generatedDocument);
+wrongDocumentCells.map.grid.cells.i = wrongDocumentCells.map.grid.cells.i.slice(0, -1);
+assertProtocol(() => validateWholeMapAdoptionDocument({
+  profile: "generation-adoption",
+  metadata: generation.metadata,
+  document: wrongDocumentCells
+}), "whole-map-document-cell-count-mismatch");
 
 const wrongExportBinding = structuredClone(exported);
 wrongExportBinding.binding.generationToken += 1;
@@ -149,11 +172,30 @@ assert.ok(importFlow.indexOf("validateWholeMapAdoptionEnvelope") < importFlow.in
 assert.ok(importFlow.indexOf("materializeMapAdoptionHandoff") < importFlow.indexOf("validateWholeMapAdoptionDocument"), "导入必须在解包后核对文档回执");
 const exportFlow = appSource.slice(appSource.indexOf("async function exportMapArchiveViaWorker"), appSource.indexOf("async function parseMapDocumentViaWorker"));
 assert.ok(exportFlow.indexOf("validateWholeMapExportResult") < exportFlow.indexOf("commitRegenerationWorkerSession"), "导出必须在 session commit 前校验整图回执");
+assert.match(generationFlow, /catch \(error\)[\s\S]*invalidatePendingWholeMapWorkerSession\(state, output, "generation-adoption-preload-failed"\)/u, "生成 preload 失败必须释放 pending session");
+assert.match(importFlow, /catch \(error\)[\s\S]*invalidatePendingWholeMapWorkerSession\(state, output, "map-import-preload-failed"\)/u, "导入 preload 失败必须释放 pending session");
+assert.match(exportFlow, /catch \(error\)[\s\S]*invalidatePendingWholeMapWorkerSession\(state, output, "archive-export-result-invalid"\)/u, "导出结果失败必须立即释放 pending session");
+const cleanupSource = appSource.slice(appSource.indexOf("function invalidatePendingWholeMapWorkerSession"), appSource.indexOf("function storageClock"));
+const cleanupCalls = [];
+const cleanupOutput = {worker: {session: {id: "pending-whole-map", pending: true}}};
+runInNewContext(`${cleanupSource}\ninvalidatePendingWholeMapWorkerSession(state, output, "fixture-invalid");`, {
+  state: {workerTaskCoordinator: {invalidateSession: reason => cleanupCalls.push(reason)}},
+  output: cleanupOutput
+});
+assert.deepEqual(cleanupCalls, ["fixture-invalid"]);
+assert.equal(JSON.stringify(cleanupOutput.worker.session), JSON.stringify({id: "pending-whole-map", pending: false, committed: false, invalidated: true}));
+const generationActionFlow = appSource.slice(appSource.indexOf("async function generateMapViaApi"), appSource.indexOf("function normalizeApiGenerationOptions"));
+assert.match(generationActionFlow, /catch \(error\)[\s\S]*invalidatePendingWholeMapWorkerSession\(state, generated, "generation-adoption-load-failed"\)/u, "生成结果返回后、load 接管前失败也必须释放 pending session");
+const parsedImportFlow = appSource.slice(appSource.indexOf("async function importParsedMapDocumentViaApi"), appSource.indexOf("async function importGeoData"));
+assert.match(parsedImportFlow, /catch \(error\)[\s\S]*invalidatePendingWholeMapWorkerSession\(state, \{worker: options\.worker \|\| null\}, "map-import-load-failed"\)/u, "导入解包后、load 接管前失败也必须释放 pending session");
+const heightmapFlow = appSource.slice(appSource.indexOf("async function importHeightmapImageViaApi"), appSource.indexOf("function heightmapImportSuccessMessage"));
+assert.match(heightmapFlow, /heightmap-generation-obsolete/u, "高度图生成结果提前返回必须释放 pending session");
+assert.match(heightmapFlow, /heightmap-generation-load-failed/u, "高度图生成 load 前失败必须释放 pending session");
 
 console.log(JSON.stringify({
   status: "pass",
   owners: WHOLE_MAP_PROFILE_OWNERS.length,
-  negativeCases: 12,
+  negativeCases: 15,
   generationCells: generationReceipt.gridCells,
   importDocumentId: importReceipt.binding.documentId,
   legacyDocumentId: legacyDocument.metadata.documentId,

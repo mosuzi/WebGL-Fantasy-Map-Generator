@@ -175,7 +175,9 @@ function validatePreparedRender(value, expected) {
   if (prepared.schemaVersion !== 1) throw protocolError("whole-map-adoption-render-schema-invalid", "整图 adoption render schema 无效");
   if (!expected) return;
   const binding = record(prepared.binding, "wholeMap.adoption.output.preparedRender.binding");
-  if (binding.mapIdentity !== expected.mapIdentity || Number(binding.mapRevision) !== Number(expected.mapRevision)) {
+  if (binding.mapIdentity !== expected.mapIdentity
+    || Number(binding.mapRevision) !== Number(expected.mapRevision)
+    || Number(binding.topologyRevision) !== Number(expected.topologyRevision)) {
     throw protocolError("whole-map-adoption-render-binding-mismatch", "整图 adoption render binding 与临时接纳身份不一致");
   }
 }
@@ -243,18 +245,37 @@ function validateTimings(value, path) {
 }
 
 function wholeMapCellCount(map, kind) {
-  const count = kind === "grid"
-    ? Number(map.metadata?.gridCells || map.grid?.metadata?.actualCells || map.grid?.cells?.i?.length || map.grid?.cells?.h?.length || 0)
-    : Number(map.metadata?.packCells || map.pack?.metadata?.cells || map.pack?.cells?.i?.length || 0);
-  return safeInteger(count, `wholeMap.document.${kind}Cells`, {positive: true});
+  const identityCells = kind === "grid" ? map?.grid?.cells?.i : map?.pack?.cells?.i;
+  const fallbackCells = kind === "grid" ? map?.grid?.cells?.h : null;
+  const count = collectionLength(identityCells) || collectionLength(fallbackCells);
+  const actual = safeInteger(count, `wholeMap.document.${kind}Cells`, {positive: true});
+  const declared = kind === "grid"
+    ? [map?.metadata?.gridCells, map?.grid?.metadata?.actualCells]
+    : [map?.metadata?.packCells, map?.pack?.metadata?.cells];
+  for (const value of declared) {
+    if (value === undefined || value === null || value === "") continue;
+    if (safeInteger(value, `wholeMap.document.${kind}CellsMetadata`, {positive: true}) !== actual) {
+      throw protocolError("whole-map-document-cell-count-mismatch", `整图文档 ${kind} cell metadata 与 identity 容器不一致`);
+    }
+  }
+  return actual;
 }
 
 function documentChecksum(document) {
-  return mapChecksum(document?.map) || String(document?.metadata?.checksum || "");
+  const canonical = mapChecksum(document?.map);
+  const documentValue = String(document?.metadata?.checksum || "");
+  if (canonical && documentValue && canonical !== documentValue) {
+    throw protocolError("whole-map-document-checksum-mismatch", "整图 document / map checksum 不一致");
+  }
+  return canonical || documentValue;
 }
 
 function mapChecksum(map) {
   return String(map?.metadata?.checksum || map?.summary?.checksum || "");
+}
+
+function collectionLength(value) {
+  return Array.isArray(value) || ArrayBuffer.isView(value) ? value.length : 0;
 }
 
 function exportDataBytes(value, resultType) {

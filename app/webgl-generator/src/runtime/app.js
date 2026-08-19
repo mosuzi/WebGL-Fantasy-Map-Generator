@@ -4760,6 +4760,7 @@ async function generateMapViaApi(state, documentRef, options, {completionToast =
   state.pendingGenerateId = (state.pendingGenerateId || 0) + 1;
   const generateId = state.pendingGenerateId;
   const startedAt = currentLoadTraceTime(documentRef.defaultView || window);
+  let generated = null;
   try {
     resetLoadTrace(documentRef);
     emitLoadTrace(documentRef, {phase: "request", id: "api-generate", message: loadingMessage("request")});
@@ -4767,7 +4768,7 @@ async function generateMapViaApi(state, documentRef, options, {completionToast =
     setMythicGenerationLoading(documentRef, true, "generate");
     operation?.report("generate", {message: loadingMessage("generate")});
     await yieldToBrowser(documentRef, {debugDelay: true});
-    const generated = await generateMapOffMainThread(
+    generated = await generateMapOffMainThread(
       state,
       documentRef,
       generationOptionsWithNamebases(state.options, namebaseSnapshot),
@@ -4801,6 +4802,7 @@ async function generateMapViaApi(state, documentRef, options, {completionToast =
       effects: ["replace-map", "clear-history", "renderer", "runtime-panel", "object-panels", "object-index"]
     };
   } catch (error) {
+    invalidatePendingWholeMapWorkerSession(state, generated, "generation-adoption-load-failed");
     if (!operation) updateGenerationLoading(documentRef, false);
     reportGenerateError(documentRef, error);
     throw error;
@@ -5323,59 +5325,65 @@ function yieldMapHandoffDecode(documentRef) {
 
 async function generateMapOffMainThread(state, documentRef, options, generateId, operation = null, overrides = {}) {
   const requestBinding = createRegenerationWorkerBinding(state, operation);
-  const renderBinding = {mapIdentity: `generated:${generateId}`, mapRevision: 0};
+  const renderBinding = {mapIdentity: `generated:${generateId}`, mapRevision: 0, topologyRevision: 0};
   const render = createWorkerRegenerationRenderRequest(state, "generation", renderBinding, [...RENDER_PREPARATION_LAYERS]);
   render.camera = {scale: 1, offsetX: 0, offsetY: 0};
   render.selection = null;
   render.objectHighlights = [];
   render.oceanCurrentHighlightIds = [];
-  const output = await state.workerTaskCoordinator.run(GENERATION_WORKER_TASK, {
-    options,
-    heightmapPayload: overrides.heightmapPayload || null,
-    mapTemplate: overrides.mapTemplate || null,
-    render
-  }, {
-    binding: requestBinding,
-    signal: operation?.signal || null,
-    sessionMode: "adopt-result-map",
-    allowFallback: false,
-    onProgress: (stage, detail = {}) => {
-      if (stage === "generation-stage" && detail.stage) {
-        const generationStage = detail.stage;
-        setMythicGenerationLoading(documentRef, true, generationStage);
-        emitLoadTrace(documentRef, {
-          phase: detail.phase === "end" ? "end" : "start",
-          id: generationStage.id,
-          label: generationStage.label,
-          message: loadingMessage(generationStage),
-          ...(detail.phase === "end" ? {ms: generationStage.ms} : {})
+  let output = null;
+  try {
+    output = await state.workerTaskCoordinator.run(GENERATION_WORKER_TASK, {
+      options,
+      heightmapPayload: overrides.heightmapPayload || null,
+      mapTemplate: overrides.mapTemplate || null,
+      render
+    }, {
+      binding: requestBinding,
+      signal: operation?.signal || null,
+      sessionMode: "adopt-result-map",
+      allowFallback: false,
+      onProgress: (stage, detail = {}) => {
+        if (stage === "generation-stage" && detail.stage) {
+          const generationStage = detail.stage;
+          setMythicGenerationLoading(documentRef, true, generationStage);
+          emitLoadTrace(documentRef, {
+            phase: detail.phase === "end" ? "end" : "start",
+            id: generationStage.id,
+            label: generationStage.label,
+            message: loadingMessage(generationStage),
+            ...(detail.phase === "end" ? {ms: generationStage.ms} : {})
+          });
+          return;
+        }
+        operation?.report(stage, {
+          ...detail,
+          message: detail.message || (stage === "render-prepare" ? "正在准备地图画面" : "正在整理地图生成结果")
         });
-        return;
       }
-      operation?.report(stage, {
-        ...detail,
-        message: detail.message || (stage === "render-prepare" ? "正在准备地图画面" : "正在整理地图生成结果")
-      });
-    }
-  });
-  validateWholeMapAdoptionEnvelope({
-    profile: "generation-adoption",
-    binding: requestBinding,
-    output,
-    renderBinding
-  });
-  const handoffDecodeStartedAt = currentLoadTraceTime(documentRef.defaultView || window);
-  const document = await materializeMapAdoptionHandoff(output.handoff, {yieldToMain: () => yieldMapHandoffDecode(documentRef)});
-  validateWholeMapAdoptionDocument({profile: "generation-adoption", metadata: output.metadata, document});
-  return {
-    ...output,
-    document,
-    map: document.map,
-    timings: {
-      ...(output.timings || {}),
-      handoffDecodeMs: roundLoadTraceMs(currentLoadTraceTime(documentRef.defaultView || window) - handoffDecodeStartedAt)
-    }
-  };
+    });
+    validateWholeMapAdoptionEnvelope({
+      profile: "generation-adoption",
+      binding: requestBinding,
+      output,
+      renderBinding
+    });
+    const handoffDecodeStartedAt = currentLoadTraceTime(documentRef.defaultView || window);
+    const document = await materializeMapAdoptionHandoff(output.handoff, {yieldToMain: () => yieldMapHandoffDecode(documentRef)});
+    validateWholeMapAdoptionDocument({profile: "generation-adoption", metadata: output.metadata, document});
+    return {
+      ...output,
+      document,
+      map: document.map,
+      timings: {
+        ...(output.timings || {}),
+        handoffDecodeMs: roundLoadTraceMs(currentLoadTraceTime(documentRef.defaultView || window) - handoffDecodeStartedAt)
+      }
+    };
+  } catch (error) {
+    invalidatePendingWholeMapWorkerSession(state, output, "generation-adoption-preload-failed");
+    throw error;
+  }
 }
 
 function setGenerationStatus(documentRef, options, status) {
@@ -5667,13 +5675,17 @@ async function exportMapArchiveViaWorker(state, documentRef, {operation = null, 
       message: progressMessage?.(stage, detail) || detail.message || "正在整理地图存档"
     })
   });
-  if (output.mode !== "archive-export" || !output.archive || !sameRegenerationWorkerBinding(output.binding, binding)) {
-    state.workerTaskCoordinator.invalidateSession("archive-export-result-invalid");
-    const error = new Error("地图存档 Worker 返回了无效结果");
-    error.code = "worker_protocol_binding_mismatch";
+  try {
+    if (output.mode !== "archive-export" || !output.archive || !sameRegenerationWorkerBinding(output.binding, binding)) {
+      const error = new Error("地图存档 Worker 返回了无效结果");
+      error.code = "worker_protocol_binding_mismatch";
+      throw error;
+    }
+    validateWholeMapExportResult({binding, output: output.archive, sourceMap: map});
+  } catch (error) {
+    invalidatePendingWholeMapWorkerSession(state, output, "archive-export-result-invalid");
     throw error;
   }
-  validateWholeMapExportResult({binding, output: output.archive, sourceMap: map});
   const worker = await commitRegenerationWorkerSession(state, output.worker, operation, {expectedRevisionDelta: 0});
   return {...output.archive, worker};
 }
@@ -5681,7 +5693,7 @@ async function exportMapArchiveViaWorker(state, documentRef, {operation = null, 
 async function parseMapDocumentViaWorker(state, documentRef, input, {operation = null, source = "api", sourceFile = null} = {}) {
   const importId = (state.pendingMapImportId || 0) + 1;
   state.pendingMapImportId = importId;
-  const renderBinding = {mapIdentity: `imported:${importId}`, mapRevision: 0};
+  const renderBinding = {mapIdentity: `imported:${importId}`, mapRevision: 0, topologyRevision: 0};
   const render = createWorkerRegenerationRenderRequest(state, "generation", renderBinding, [...RENDER_PREPARATION_LAYERS]);
   render.camera = {scale: 1, offsetX: 0, offsetY: 0};
   render.selection = null;
@@ -5699,41 +5711,54 @@ async function parseMapDocumentViaWorker(state, documentRef, input, {operation =
     yieldToMain: () => yieldToBrowser(documentRef)
   });
   const requestBinding = createRegenerationWorkerBinding(state, operation);
-  const output = await state.workerTaskCoordinator.run(MAP_FILE_IO_WORKER_TASK_TYPE, prepared.payload, {
-    binding: requestBinding,
-    signal: operation?.signal || null,
-    sessionMode: "adopt-result-map",
-    allowFallback: false,
-    onProgress: (stage, detail = {}) => operation?.report(stage, {
-      ...detail,
-      message: detail.message || (stage === "render-prepare" ? "正在准备地图画面" : "正在辨读地图存档")
-    })
-  });
-  if (state.pendingMapImportId !== importId) {
-    const error = new Error("地图导入结果已被新的请求取代");
-    error.code = "operation_obsolete";
+  let output = null;
+  try {
+    output = await state.workerTaskCoordinator.run(MAP_FILE_IO_WORKER_TASK_TYPE, prepared.payload, {
+      binding: requestBinding,
+      signal: operation?.signal || null,
+      sessionMode: "adopt-result-map",
+      allowFallback: false,
+      onProgress: (stage, detail = {}) => operation?.report(stage, {
+        ...detail,
+        message: detail.message || (stage === "render-prepare" ? "正在准备地图画面" : "正在辨读地图存档")
+      })
+    });
+    if (state.pendingMapImportId !== importId) {
+      const error = new Error("地图导入结果已被新的请求取代");
+      error.code = "operation_obsolete";
+      throw error;
+    }
+    validateWholeMapAdoptionEnvelope({
+      profile: "persistence-import",
+      binding: requestBinding,
+      output,
+      renderBinding
+    });
+    const handoffDecodeStartedAt = currentLoadTraceTime(documentRef.defaultView || window);
+    const document = await materializeMapAdoptionHandoff(output.handoff, {yieldToMain: () => yieldMapHandoffDecode(documentRef)});
+    validateWholeMapAdoptionDocument({profile: "persistence-import", metadata: output.metadata, document});
+    return {
+      document,
+      preparedRender: output.preparedRender,
+      worker: output.worker || null,
+      timings: {
+        ...(output.timings || {}),
+        handoffDecodeMs: roundLoadTraceMs(currentLoadTraceTime(documentRef.defaultView || window) - handoffDecodeStartedAt)
+      },
+      source,
+      isCurrent: () => state.pendingMapImportId === importId
+    };
+  } catch (error) {
+    invalidatePendingWholeMapWorkerSession(state, output, "map-import-preload-failed");
     throw error;
   }
-  validateWholeMapAdoptionEnvelope({
-    profile: "persistence-import",
-    binding: requestBinding,
-    output,
-    renderBinding
-  });
-  const handoffDecodeStartedAt = currentLoadTraceTime(documentRef.defaultView || window);
-  const document = await materializeMapAdoptionHandoff(output.handoff, {yieldToMain: () => yieldMapHandoffDecode(documentRef)});
-  validateWholeMapAdoptionDocument({profile: "persistence-import", metadata: output.metadata, document});
-  return {
-    document,
-    preparedRender: output.preparedRender,
-    worker: output.worker || null,
-    timings: {
-      ...(output.timings || {}),
-      handoffDecodeMs: roundLoadTraceMs(currentLoadTraceTime(documentRef.defaultView || window) - handoffDecodeStartedAt)
-    },
-    source,
-    isCurrent: () => state.pendingMapImportId === importId
-  };
+}
+
+function invalidatePendingWholeMapWorkerSession(state, output, reason) {
+  if (output?.worker?.session?.pending !== true) return false;
+  state.workerTaskCoordinator.invalidateSession(reason);
+  output.worker.session = {...output.worker.session, pending: false, committed: false, invalidated: true};
+  return true;
 }
 
 function storageClock(documentRef) {
@@ -7011,6 +7036,7 @@ async function importParsedMapDocumentViaApi(state, documentRef, document, optio
       effects: ["replace-map", "clear-history", "display-preferences", "renderer", "runtime-panel", "object-panels", "object-index"]
     };
   } catch (error) {
+    invalidatePendingWholeMapWorkerSession(state, {worker: options.worker || null}, "map-import-load-failed");
     if (!operation) updateGenerationLoading(documentRef, false);
     reportMapImportError(state, documentRef, error, null, {source, prefix: source === "ui" ? "地图数据导入失败" : "API 导入地图数据失败"});
     throw error;
@@ -7225,6 +7251,7 @@ async function importHeightmapImageViaApi(state, documentRef, payload, options =
   let file = null;
   let settings = {};
   const startedAt = currentLoadTraceTime(documentRef.defaultView || window);
+  let generated = null;
   try {
     ({file, settings} = normalizeHeightmapImportPayload(payload, documentRef));
     if (!file) throw new Error("请选择一张高度图");
@@ -7250,13 +7277,14 @@ async function importHeightmapImageViaApi(state, documentRef, payload, options =
     operation?.report("generate", {message: loadingMessage("heightmap-generate")});
     emitLoadTrace(documentRef, {phase: "start", id: "heightmap-generate", message: loadingMessage("heightmap-generate")});
     await yieldToBrowser(documentRef, {debugDelay: true});
-    const generated = await generateMapOffMainThread(state, documentRef, generationOptionsWithNamebases(generationOptions, namebaseSnapshot), importGenerateId, operation, {
+    generated = await generateMapOffMainThread(state, documentRef, generationOptionsWithNamebases(generationOptions, namebaseSnapshot), importGenerateId, operation, {
       heightmap,
       heightmapPayload: heightmap.workerPayload || null
     });
     const map = generated.map;
     emitLoadTrace(documentRef, {phase: "end", id: "heightmap-generate", message: loadingMessage("heightmap-generate")});
     if (importGenerateId !== state.pendingGenerateId) {
+      invalidatePendingWholeMapWorkerSession(state, generated, "heightmap-generation-obsolete");
       clearStaleHeightmapImportStatus(state, documentRef, importGenerateId);
       return {imported: false, reason: "superseded", effects: []};
     }
@@ -7289,6 +7317,7 @@ async function importHeightmapImageViaApi(state, documentRef, payload, options =
     recordImportDiagnostic(state, documentRef, diagnostic);
     return {...result, diagnostic};
   } catch (error) {
+    invalidatePendingWholeMapWorkerSession(state, generated, "heightmap-generation-load-failed");
     if (!operation) updateGenerationLoading(documentRef, false);
     const diagnostic = createImportFailureDiagnostic("heightmap", error, file, createHeightmapSourceSummary(file, settings), {source: options.source === "ui" ? "ui" : "api"});
     reportImportDiagnostic(state, documentRef, diagnostic, options.source === "ui" ? "高度图导入失败" : "API 导入高度图失败", ["heightmap-import-status"]);
