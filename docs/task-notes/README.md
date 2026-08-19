@@ -20,6 +20,8 @@
 - 第 349-8 阶段的 `population.compute` legacy → core binding adapter、来源指纹、result / patch 写集与取消回滚契约见 [`task-349-population-worker-core-protocol.md`](./task-349-population-worker-core-protocol.md)。
 - 第 349-9 阶段的 dependency descriptor、exact / local / presentation / explicit-full planner 与 projection retry / resync 契约见 [`task-349-dependency-projection.md`](./task-349-dependency-projection.md)。
 - 第 349-10g 阶段的 legacy adapter 定义—引用—owner—测试矩阵、唯一 revision / history owner 审计与保留 / 删除依据见 [`task-349-legacy-core-path-closure.md`](./task-349-legacy-core-path-closure.md)。
+- 第 349-11 阶段未执行但已评估的 10k / 100k / 旧档 / 故障浏览器验收方案、性能阈值、截图与恢复步骤见 [`task-349-browser-acceptance-plan.md`](./task-349-browser-acceptance-plan.md)。
+- 第 349-11 阶段的 27 个防误触非浏览器 gate、最终协议矩阵、工具时间与完成标准对照见 [`task-349-final-non-browser-acceptance.md`](./task-349-final-non-browser-acceptance.md)。
 - 地图核心引擎化与领域模块接入实施计划见 [`map-core-engine-architecture-implementation-plan.md`](./map-core-engine-architecture-implementation-plan.md)：冻结 MapCoreEngine、MapRuntimeCoordinator、RenderEngine、Worker、revision、commit、dependency registry、DomainModuleManifest 与逐阶段验收边界。
 - TypeScript 核心契约与领域接入渐进式引入计划见 [`typescript-core-contract-migration-plan.md`](./typescript-core-contract-migration-plan.md)：只类型化核心契约、Worker DTO、领域 Manifest、事务 / patch、Render layer 和垂直切片，不一次性迁移现有 JavaScript。
 

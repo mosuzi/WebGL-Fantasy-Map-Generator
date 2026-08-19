@@ -37,7 +37,7 @@
 | 349-10f | generation / import / adoption / export / headless profile 收口 | 新 session、rollback、旧档、checksum、无 DOM headless 专项 | 不删除未证明冗余的 legacy adapter | ACCEPT |
 | 349-10g | legacy adapter、重复 revision / history 路径与影子审计收口 | 正式入口清单无双写、无第二 owner、非浏览器核心 / 领域回归 | 不扩大产品能力 | ACCEPT |
 | 349-10g-a | markers 能力夹具契约同步 | Manifest、markers、地理网络资源专项 | 不回退现行 Manifest，不改产品能力 | 动态插入，ACCEPT |
-| 349-11 | 非浏览器集成终验与浏览器验收方案 | build、typecheck、全量非浏览器回归、方案完整性评估 | 不执行浏览器方案 | 执行中 |
+| 349-11 | 非浏览器集成终验与浏览器验收方案 | build、typecheck、全量非浏览器回归、方案完整性评估 | 不执行浏览器方案 | 待评审 |
 
 ## 提交与投影状态机冻结目标
 
@@ -304,12 +304,15 @@ planned → computed → validated → projections-prepared
 - 门禁：markers presentation 为 `8` 个 canonical / point / picking / DTO / GeoJSON 同源对象，core operations `0`；core Manifest `15 domains / 216 descriptors / 35 negative cases`、地理网络资源协议、typecheck 与 production build `1392 modules` 通过。浏览器执行 `0`，`source/` 改动 `0`，待只读评审。
 - 终验：同一只读评审智能体对 `a084d4a / 0.5.52` 给出 `ACCEPT`；产品代码差异为 `0`，范围、契约与文档一致，无 P0 / P1，浏览器执行 `0`。
 
-### 349-11 — 执行中
+### 349-11 — 待评审
 
 - 冻结目标：对第 349 项执行最终静态、TypeScript、核心、领域、整图、headless、旧档与 production build 非浏览器终验；形成浏览器验收方案并评估可执行性，但绝不执行该方案。
 - 首个廉价门：静态枚举所有拟纳入的命令，拒绝脚本名或命令体含 `browser`、Playwright、Chrome、CDP、Puppeteer、Selenium 或 UI 自动化启动入口；只有通过防误触审计的命令才可执行。
 - 方案内容：环境与精确标签页接管、10k / 100k / v1 旧档样本、identity / revision / history / Worker / projection / render / persistence 断言、性能分段、截图、错误面、恢复与清理步骤、预计成本及阻断条件。
 - 禁止项：不启动浏览器，不执行任何浏览器命名或实际 UI 门，不修改产品语义，不修改 `source/`，不合入或推送 `main`。
+- 实现：新增终验防误触审计，固定 27 个 package gate / 36 个 Node 入口并拒绝浏览器、驱动、Chrome-CDP 与 Vite dev-preview 命令；为 10f 已接受的 map-file IO 与通用 Worker task 补正式 package script。浏览器方案覆盖 10k / 100k / v1 / holey / fault 五类数据，列出候选自动化入口、identity / revision / history / Worker / projection / renderer / persistence 断言、性能阈值、截图、恢复、停止条件和可执行性评估。
+- 门禁：27 个非浏览器 gate 全部通过；核心为 `66 fields / 29 sections / 15 domains / 216 descriptors / 19 derived systems`，整图为 `4 owners / 15 negatives`，map-file 100k、通用 Worker 11 result kinds、economy / military-policy 10k / 100k、headless、v1 migration、API data compatibility、typecheck `1077.6ms` 与 build `1392 modules / 1.64s` 通过。完整工具墙钟约 4 分钟；浏览器执行 `0`，`source/` 改动 `0`。
+- 详细证据：[最终非浏览器验收](./task-349-final-non-browser-acceptance.md) 与 [浏览器验收方案](./task-349-browser-acceptance-plan.md)。当前冻结 checkpoint，待最终只读评审。
 - 详细证据：[旧核心路径收口](./task-349-legacy-core-path-closure.md)。当前冻结 checkpoint，待只读评审。
 
 阶段结果在每次 checkpoint 后更新，长日志只记录命令和 artifact 路径，不粘贴到本文。
