@@ -76,7 +76,8 @@ export const societyPoliticsManifest = {
     replacementPolicy: "mixed"
   },
   workerTasks: [{
-    id: "regeneration.compute",
+    id: "society-politics.regeneration-worker",
+    task: "regeneration.compute",
     resultKinds: ["religions", "states", "provinces"],
     writeSet: SOCIETY_POLITICS_WORKER_WRITE_SET,
     bindingPolicy: "pre-commit",

@@ -61,8 +61,10 @@ assert.ok(Object.isFrozen(registry.get("notes")) && Object.isFrozen(registry.get
 assert.equal(registry.get("notes").capabilities.worker, "not-required");
 assert.equal(registry.get("markers").layers[0].picking, true);
 assert.equal(registry.get("population").workerTasks[0].id, "population.compute");
+assert.equal(registry.get("population").workerTasks[0].task, "population.compute");
 assert.equal(registry.get("foundation").workerTasks.length, 4);
-assert.equal(registry.get("society-politics").workerTasks[0].id, "regeneration.compute");
+assert.equal(registry.get("society-politics").workerTasks[0].id, "society-politics.regeneration-worker");
+assert.equal(registry.get("society-politics").workerTasks[0].task, "regeneration.compute");
 assert.equal(registry.snapshot().descriptors, 78);
 
 function expectManifestError(callback, code, pathValue) {
@@ -105,8 +107,41 @@ delete requiredWorkerMissing.capabilityReasons.worker;
 expectManifestError(() => createDomainManifestRegistry(context).register(requiredWorkerMissing), "MANIFEST_CAPABILITY_MISMATCH", "notes.capabilities.worker");
 
 const unknownWorker = clone(populationManifest);
-unknownWorker.workerTasks[0].id = "population.unknown";
-expectManifestError(() => createDomainManifestRegistry(context).register(unknownWorker), "MANIFEST_WORKER_TASK_UNKNOWN", "population.workerTasks.population.unknown");
+unknownWorker.workerTasks[0].task = "population.unknown";
+expectManifestError(() => createDomainManifestRegistry(context).register(unknownWorker), "MANIFEST_WORKER_TASK_UNKNOWN", "population.workerTasks.population.compute.task");
+
+const missingWorkerTaskBinding = clone(populationManifest);
+delete missingWorkerTaskBinding.workerTasks[0].task;
+expectManifestError(() => createDomainManifestRegistry(context).register(missingWorkerTaskBinding), "MANIFEST_INVALID", "manifest.workerTasks[0].task");
+
+const sharedWorkerRegistry = createDomainManifestRegistry(context);
+sharedWorkerRegistry.register(societyPoliticsManifest);
+const sharedWorkerManifest = clone(societyPoliticsManifest);
+sharedWorkerManifest.id = "settlements-worker-test";
+sharedWorkerManifest.derivedSystems = [];
+sharedWorkerManifest.commands = [];
+delete sharedWorkerManifest.regeneration;
+sharedWorkerManifest.workerTasks[0].id = "settlements-worker-test.regeneration-worker";
+sharedWorkerManifest.workerTasks[0].resultKinds = ["cities"];
+sharedWorkerManifest.queries = [];
+sharedWorkerManifest.views = [];
+sharedWorkerManifest.capabilities.regeneration = "unsupported";
+sharedWorkerManifest.capabilities.view = "not-required";
+sharedWorkerManifest.capabilityReasons.regeneration = "共享 transport 的 result owner 测试不登记重生成入口。";
+sharedWorkerManifest.capabilityReasons.view = "共享 transport 的 result owner 测试不登记视图。";
+sharedWorkerManifest.regression.coverage = ["save", "worker", "failure"];
+sharedWorkerRegistry.register(sharedWorkerManifest);
+assert.equal(sharedWorkerRegistry.get("settlements-worker-test").workerTasks[0].task, "regeneration.compute");
+const overlappingWorkerManifest = clone(sharedWorkerManifest);
+overlappingWorkerManifest.id = "overlapping-worker-test";
+overlappingWorkerManifest.workerTasks[0].id = "overlapping-worker-test.regeneration-worker";
+overlappingWorkerManifest.workerTasks[0].resultKinds = ["states"];
+expectManifestError(() => sharedWorkerRegistry.register(overlappingWorkerManifest), "MANIFEST_DUPLICATE_ID", "overlapping-worker-test.worker.regeneration.compute.states");
+assert.equal(sharedWorkerRegistry.snapshot().domains, 2, "重叠 Worker result claim 失败后 registry 必须原子不变");
+const intraManifestOverlap = clone(sharedWorkerManifest);
+intraManifestOverlap.id = "intra-worker-overlap-test";
+intraManifestOverlap.workerTasks.push({...clone(intraManifestOverlap.workerTasks[0]), id: "intra-worker-overlap-test.second-worker"});
+expectManifestError(() => createDomainManifestRegistry(context).register(intraManifestOverlap), "MANIFEST_DUPLICATE_ID", "intra-worker-overlap-test.worker.regeneration.compute.cities");
 
 const layerWrites = clone(markersManifest);
 layerWrites.layers[0].writes = ["markers"];
@@ -269,7 +304,8 @@ console.log(JSON.stringify({
   domains: registry.list().map(manifest => ({id: manifest.id, status: manifest.status, capabilities: manifest.capabilities})),
   workerTasksVerified: ["population.compute", "regeneration.compute"],
   runtimeRouteImports: 0,
-  negativeCases: 31
+  sharedWorkerTransport: {task: "regeneration.compute", owners: ["society-politics", "settlements-worker-test"], overlappingResultRejected: "states"},
+  negativeCases: 35
 }, null, 2));
 
 async function joinSources(files) {

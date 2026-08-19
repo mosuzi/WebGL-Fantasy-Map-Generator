@@ -36,6 +36,7 @@ export interface RegenerationDescriptor {
 
 export interface WorkerTaskDescriptor {
   readonly id: string;
+  readonly task: string;
   readonly resultKinds: readonly string[];
   readonly writeSet: readonly string[];
   readonly bindingPolicy: WorkerBindingPolicy;

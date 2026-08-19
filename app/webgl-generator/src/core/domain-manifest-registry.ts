@@ -86,8 +86,8 @@ export function validateDomainModuleManifest(value: unknown, context: DomainMani
   }
   if (regeneration) for (const path of regeneration.writeSet) assertDomainPath(id, regeneration.id, path, canonicalSections, context);
   for (const task of workerTasks || []) {
-    if (!context.hasWorkerTask(task.id)) {
-      manifestError("MANIFEST_WORKER_TASK_UNKNOWN", `${id}.workerTasks.${task.id}`, "Worker registry 中不存在该任务");
+    if (!context.hasWorkerTask(task.task)) {
+      manifestError("MANIFEST_WORKER_TASK_UNKNOWN", `${id}.workerTasks.${task.id}.task`, `Worker registry 中不存在任务 ${task.task}`);
     }
   }
 
@@ -135,12 +135,15 @@ export function validateDomainModuleManifest(value: unknown, context: DomainMani
 export function createDomainManifestRegistry(context: DomainManifestValidationContext) {
   const manifests = new Map<string, DomainModuleManifest>();
   const globalIds = new Map<string, string>();
+  const workerResultOwners = new Map<string, string>();
   return Object.freeze({register, get, list, snapshot});
 
   function register(value: unknown): DomainModuleManifest {
     const manifest = validateDomainModuleManifest(value, context);
     if (manifests.has(manifest.id)) manifestError("MANIFEST_DUPLICATE_ID", `manifest.${manifest.id}`, "领域 id 重复");
     const registrations: Array<readonly [string, string]> = [];
+    const workerClaims: Array<readonly [string, string]> = [];
+    const pendingWorkerClaims = new Set<string>();
     for (const [category, items] of descriptorGroups(manifest)) {
       for (const item of items) {
         const key = `${category}:${item.id}`;
@@ -149,7 +152,15 @@ export function createDomainManifestRegistry(context: DomainManifestValidationCo
         registrations.push([key, manifest.id]);
       }
     }
+    for (const task of manifest.workerTasks || []) for (const resultKind of task.resultKinds) {
+      const key = `${task.task}:${resultKind}`;
+      const owner = workerResultOwners.get(key);
+      if (owner || pendingWorkerClaims.has(key)) manifestError("MANIFEST_DUPLICATE_ID", `${manifest.id}.worker.${task.task}.${resultKind}`, `Worker result kind 已由 ${owner || manifest.id} 拥有`);
+      workerClaims.push([key, manifest.id]);
+      pendingWorkerClaims.add(key);
+    }
     for (const [key, owner] of registrations) globalIds.set(key, owner);
+    for (const [key, owner] of workerClaims) workerResultOwners.set(key, owner);
     manifests.set(manifest.id, manifest);
     return manifest;
   }
@@ -203,7 +214,7 @@ function validateRegeneration(value: unknown, path: string): RegenerationDescrip
 
 function validateWorkerTask(value: unknown, path: string): WorkerTaskDescriptor {
   const source = record(value, path);
-  return {id: identifier(source.id, `${path}.id`), resultKinds: uniqueStrings(source.resultKinds, `${path}.resultKinds`, {nonEmpty: true}), writeSet: uniqueStrings(source.writeSet, `${path}.writeSet`, {nonEmpty: true}), bindingPolicy: enumValue(source.bindingPolicy, ["pre-commit", "committed-projection"] as const, `${path}.bindingPolicy`), patchPolicy: enumValue(source.patchPolicy, ["domain-policy-required", "replace-only", "read-only"] as const, `${path}.patchPolicy`)};
+  return {id: identifier(source.id, `${path}.id`), task: identifier(source.task, `${path}.task`), resultKinds: uniqueStrings(source.resultKinds, `${path}.resultKinds`, {nonEmpty: true}), writeSet: uniqueStrings(source.writeSet, `${path}.writeSet`, {nonEmpty: true}), bindingPolicy: enumValue(source.bindingPolicy, ["pre-commit", "committed-projection"] as const, `${path}.bindingPolicy`), patchPolicy: enumValue(source.patchPolicy, ["domain-policy-required", "replace-only", "read-only"] as const, `${path}.patchPolicy`)};
 }
 
 function validateQuery(value: unknown, path: string): QueryDescriptor {

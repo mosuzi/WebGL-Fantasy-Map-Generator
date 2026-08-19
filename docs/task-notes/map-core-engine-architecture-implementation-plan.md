@@ -580,12 +580,13 @@ Manifest 声明：
 11. `349-9`：接入 dependency registry、projection 状态和局部失效；未知依赖显式 full rebuild。
 12. `349-10a`：迁移 terrain / grid / height-derived / climate / ocean / topology 基础域。
 13. `349-10b`：迁移 society / politics 与 pack mirror。
-14. `349-10c`：迁移 settlements / zones / labels / measurements。
-15. `349-10d`：迁移 routes / rivers / features / resource markers；首门固定复现并修复锁定 Feature 的港口引用在 `cities-routes` 后从 `382 → 366` 的引用丢失，不得把引用集合从锁保护中删除。
-16. `349-10e`：迁移 economy / diplomacy / military。
-17. `349-10f`：收口 generation / import / adoption / export / headless profile。
-18. `349-10g`：移除已证明冗余的 legacy adapter、重复 revision / history 路径和影子双写。
-19. `349-11`：执行 build、typecheck 和非浏览器回归终验，形成完整浏览器验收方案但不执行。
+14. `349-10c0`：动态插入；分离领域内 Worker binding descriptor id 与真实共享 transport task id，以 `task + resultKind` 作为唯一 owner key，不改 wire DTO 或 runtime registry。
+15. `349-10c`：迁移 settlements / zones / labels / measurements。
+16. `349-10d`：迁移 routes / rivers / features / resource markers；首门固定复现并修复锁定 Feature 的港口引用在 `cities-routes` 后从 `382 → 366` 的引用丢失，不得把引用集合从锁保护中删除。
+17. `349-10e`：迁移 economy / diplomacy / military。
+18. `349-10f`：收口 generation / import / adoption / export / headless profile。
+19. `349-10g`：移除已证明冗余的 legacy adapter、重复 revision / history 路径和影子双写。
+20. `349-11`：执行 build、typecheck 和非浏览器回归终验，形成完整浏览器验收方案但不执行。
 
 `349-1` 的现状证据、ADR、身份命名空间、`13` 个 Worker task 分类和阶段插入依据见 [核心架构盘点](./task-349-core-architecture-inventory.md)。
 

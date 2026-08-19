@@ -35,7 +35,7 @@ export const populationManifest = {
     {id: "population.applyAdjustment", writeSet: [...populationWriteSet], undoPolicy: "required", profiles: ["interactive", "headless"]},
     {id: "population.transfer", writeSet: [...populationWriteSet], undoPolicy: "required", profiles: ["interactive"]}
   ],
-  workerTasks: [{id: "population.compute", resultKinds: ["population", "population-history"], writeSet: [...populationWriteSet], bindingPolicy: "pre-commit", patchPolicy: "domain-policy-required"}],
+  workerTasks: [{id: "population.compute", task: "population.compute", resultKinds: ["population", "population-history"], writeSet: [...populationWriteSet], bindingPolicy: "pre-commit", patchPolicy: "domain-policy-required"}],
   queries: [
     {id: "population.inspectAdjustment", reads: ["grid.cells.pop", "pack.cells.pop", "settlements.cities"], profiles: ["interactive", "headless"]},
     {id: "population.inspectTransfer", reads: ["grid.cells.pop", "pack.cells.pop", "settlements.cities"], profiles: ["interactive"]}

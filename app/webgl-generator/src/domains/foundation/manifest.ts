@@ -57,10 +57,10 @@ export const foundationManifest = {
     {id: "grid.applyWrite", writeSet: FOUNDATION_DOCUMENT_WRITE_SET, undoPolicy: "required", profiles: ["interactive", "headless"]}
   ],
   workerTasks: [
-    {id: "height-derived.compute", resultKinds: ["height-derived"], writeSet: FOUNDATION_DOCUMENT_WRITE_SET, bindingPolicy: "pre-commit", patchPolicy: "domain-policy-required"},
-    {id: "climate-downstream.compute", resultKinds: ["climate-downstream"], writeSet: FOUNDATION_DOCUMENT_WRITE_SET, bindingPolicy: "pre-commit", patchPolicy: "domain-policy-required"},
-    {id: "ocean-current-world.compute", resultKinds: ["ocean-current-world"], writeSet: FOUNDATION_DOCUMENT_WRITE_SET, bindingPolicy: "pre-commit", patchPolicy: "replace-only"},
-    {id: "grid-topology.prepare", resultKinds: ["grid-topology-worker-result"], writeSet: FOUNDATION_DOCUMENT_WRITE_SET, bindingPolicy: "pre-commit", patchPolicy: "replace-only"}
+    {id: "height-derived.compute", task: "height-derived.compute", resultKinds: ["height-derived"], writeSet: FOUNDATION_DOCUMENT_WRITE_SET, bindingPolicy: "pre-commit", patchPolicy: "domain-policy-required"},
+    {id: "climate-downstream.compute", task: "climate-downstream.compute", resultKinds: ["climate-downstream"], writeSet: FOUNDATION_DOCUMENT_WRITE_SET, bindingPolicy: "pre-commit", patchPolicy: "domain-policy-required"},
+    {id: "ocean-current-world.compute", task: "ocean-current-world.compute", resultKinds: ["ocean-current-world"], writeSet: FOUNDATION_DOCUMENT_WRITE_SET, bindingPolicy: "pre-commit", patchPolicy: "replace-only"},
+    {id: "grid-topology.prepare", task: "grid-topology.prepare", resultKinds: ["grid-topology-worker-result"], writeSet: FOUNDATION_DOCUMENT_WRITE_SET, bindingPolicy: "pre-commit", patchPolicy: "replace-only"}
   ],
   queries: [
     {id: "foundation.height", reads: ["heightmap", "grid", "pack"], profiles: ["interactive", "headless"]},

@@ -30,6 +30,7 @@
 | 349-9 | dependency registry、projection 状态和局部失效接线 | declared read/write、full rebuild 显式化、projection recovery | 不迁移未登记领域 | ACCEPT |
 | 349-10a | terrain / grid / height-derived / climate / ocean / topology 基础域 | 旧数据、history、Worker、renderer source / Node 门 | 不迁移社会或行政域 | ACCEPT |
 | 349-10b | society / politics 与 pack mirror | mirror、行政引用、history、Worker 专项 | 不迁移城镇 / 路线 | ACCEPT |
+| 349-10c0 | 分离领域 Worker binding id 与共享 transport task，按 result kind 唯一拥有 | disjoint result kind 可共享 task；重叠 owner 原子拒绝 | 不迁移任何业务领域 | ACCEPT |
 | 349-10c | settlements / zones / labels / measurements | 身份槽、锁、旧数据、history、projection 专项 | 不迁移路线 / 经济 | 进行中 |
 | 349-10d | routes / rivers / features / resource markers | topology、引用、picking、Worker、history 专项 | 不迁移经济 / 军事 | 待执行 |
 | 349-10e | economy / diplomacy / military | 跨域引用、history、Worker、旧数据专项 | 不收口全图 adoption | 待执行 |
@@ -53,13 +54,13 @@ planned → computed → validated → projections-prepared
 | 字段 | 内容 |
 | --- | --- |
 | 当前阶段 | `349-10c` settlements / zones / labels / measurements |
-| 冻结点 | `349-10b / 0.5.31` 已由同一评审智能体接受 |
+| 冻结点 | `349-10c0 / 0.5.32` 已由同一评审智能体接受 |
 | 允许文件 | settlements / zones / labels / measurements Manifest / adapter、身份槽与锁契约、history / projection 专项、阶段文档 |
 | 禁止文件 | routes / rivers / features / economy / military 正式迁移、业务算法无关改写、`source/`、main、浏览器 |
 | 必须保持 | 单一 canonical owner；city / burg 与 zone identity 稳定；旧档、锁、history 和 view-only revision 语义不退化 |
-| 首个廉价门 | 盘点四域真实 command / regeneration / view / persistence / Worker owner 和精确写集，重复 owner 或未知入口为阻断 |
+| 首个廉价门 | 继续盘点四域真实 command / regeneration / view / persistence owner 和精确写集；共享 Worker owner 阻断已由 10c0 闭合 |
 | 冻结门 | 四域 Manifest、身份槽 / 锁 / 旧数据、history、projection、相关 Worker、typecheck、build、评审 ACCEPT |
-| 停止条件 | 发现 settlements 必须与 routes 同事务才能维持正式引用，或 zones 无法与 diplomacy / military 分离出安全边界 |
+| 停止条件 | settlements 必须与 routes 同事务才能维持正式引用，或 zones 无法与 diplomacy / military 分离出安全边界 |
 
 ## 阶段结果
 
@@ -218,5 +219,15 @@ planned → computed → validated → projections-prepared
 - 第二轮最窄修复：cell 路径只接纳 Array 或非 DataView TypedArray；记录路径只接纳 plain / null-prototype object，排除 ArrayBuffer view、Map、Set、Date 等原生容器。专项新增 DataView cell、TypedArray politics 和 Map settlements 三类 pre-commit 拒绝，版本 `0.5.30 → 0.5.31`，待同一智能体复审。
 - 终验：同一只读评审智能体对第二轮修正 checkpoint `ACCEPT`；两轮 P1 全部闭合且无新增 P0 / P1。
 - 下一步：进入 `349-10c`，先盘点 settlements / zones / labels / measurements 的真实 owner 与边界，不提前迁移 routes / economy。
+
+### 349-10c0 — CHECKPOINT 待评审
+
+- 插入原因：10c 首门确认 `WorkerTaskDescriptor.id` 同时承担领域 descriptor identity 与真实 task registry key；`regeneration.compute` 已由 society-politics 登记后，cities / zones 即使 result kind 不重叠也无法由独立领域如实登记。
+- 契约：新增必填 `task` 绑定真实 Worker transport，`id` 只表示领域 descriptor；唯一 result owner key 改为 `task + resultKind`。disjoint result kind 可共享 transport，跨领域或单 Manifest 重叠均在注册前原子拒绝。
+- 兼容：foundation / population 显式声明同名 task；society-politics 使用领域专属 descriptor id 绑定既有 `regeneration.compute`。正式 Worker registry、wire DTO、业务入口与 canonical owner 改动 `0`。
+- 门禁：typecheck、Manifest 正式 `5 domains / 78 descriptors`、共享 transport 正例和 `35` 类负例、既有三类 Worker protocol、build、diff check；`source/` 与浏览器执行 `0`。
+- 版本：`0.5.31 → 0.5.32`；下一步只读评审本 checkpoint，`ACCEPT` 后返回 349-10c。
+- 终验：同一只读评审智能体首轮 `ACCEPT`；共享正例、重叠拒绝、兼容边界和阶段文档无 P0 / P1 偏差。
+- 下一步：返回 `349-10c`，继续 settlements / zones / labels / measurements。
 
 阶段结果在每次 checkpoint 后更新，长日志只记录命令和 artifact 路径，不粘贴到本文。

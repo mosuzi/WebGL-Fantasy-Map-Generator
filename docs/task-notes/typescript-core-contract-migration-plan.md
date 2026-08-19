@@ -402,12 +402,13 @@ TypeScript 不再维护一套与引擎计划冲突的独立阶段。唯一顺序
 11. `349-9` dependency / projection 接线；
 12. `349-10a` terrain / grid / height-derived / climate / ocean / topology；
 13. `349-10b` society / politics 与 pack mirror；
-14. `349-10c` settlements / zones / labels / measurements；
-15. `349-10d` routes / rivers / features / resource markers；首门覆盖锁定 Feature 的港口引用集合在 `cities-routes` 后 `382 → 366` 的稳定性，保留引用契约而非放宽锁快照；
-16. `349-10e` economy / diplomacy / military；
-17. `349-10f` generation / import / adoption / export / headless profile；
-18. `349-10g` legacy adapter、重复 revision / history 和影子双写收口；
-19. `349-11` build、typecheck、非浏览器终验和浏览器验收方案评估。
+14. `349-10c0` 动态插入：`WorkerTaskDescriptor.id` 表示领域 binding，`task` 表示真实 transport route；一个 task 可由多个领域拥有 disjoint result kind，同一 `task + resultKind` 仍全局唯一；
+15. `349-10c` settlements / zones / labels / measurements；
+16. `349-10d` routes / rivers / features / resource markers；首门覆盖锁定 Feature 的港口引用集合在 `cities-routes` 后 `382 → 366` 的稳定性，保留引用契约而非放宽锁快照；
+17. `349-10e` economy / diplomacy / military；
+18. `349-10f` generation / import / adoption / export / headless profile；
+19. `349-10g` legacy adapter、重复 revision / history 和影子双写收口；
+20. `349-11` build、typecheck、非浏览器终验和浏览器验收方案评估。
 
 `349-3a` 不是扩张 TypeScript 范围：它修复 `349-1` 证实的现有存档字段注册遗漏，定义普通 persisted document identity 的派生 / 默认值 / 迁移，并强制各类 identity 通过显式 adapter 转换；完整证据与 ADR 见 [核心架构盘点](./task-349-core-architecture-inventory.md)。
 
