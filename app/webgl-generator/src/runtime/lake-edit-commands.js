@@ -573,6 +573,11 @@ function riverExitsLake(cells, riverCells, lakeCells) {
     const next = Number(riverCells[index + 1]);
     if (lakeCells.has(current) && Number(cells?.h?.[next]) >= WATER_LEVEL) return true;
   }
+  const source = Number(riverCells[0]);
+  if (Number.isInteger(source) && Number(cells?.h?.[source]) >= WATER_LEVEL) {
+    const neighbors = cells?.c?.[source] || [];
+    if (neighbors.some(cell => lakeCells.has(Number(cell)))) return true;
+  }
   return false;
 }
 

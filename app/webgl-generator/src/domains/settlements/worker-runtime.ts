@@ -44,7 +44,7 @@ export function validateSettlementZoneWorkerOutput(input: {
   const result = record(output.result, "settlement-zone.output.result");
   if (typeof result.executed !== "boolean") throw protocolError("settlement-zone-worker-result-invalid", "城镇地区 Worker 缺少 executed 结果");
   const values = validatePatch(output.patch, input.kind, expectedPaths, input.policy, result.executed);
-  if (result.executed) input.kind === "cities" ? validateCityMirrors(values, input.sourceMap) : validateZoneMirrors(values, input.sourceMap);
+  if (result.executed) input.kind === "cities" ? validateSettlementCityMirrors(values, input.sourceMap) : validateZoneMirrors(values, input.sourceMap);
   return Object.freeze({binding: adaptBinding(input.kind, sourceBinding), kind: input.kind, writeSet: Object.freeze([...values.keys()])});
 }
 
@@ -112,7 +112,7 @@ function validOperationValue(path: string, exists: unknown, value: unknown): boo
   return isPlainRecord(value);
 }
 
-function validateCityMirrors(values: Map<string, unknown>, sourceMapValue: unknown): void {
+export function validateSettlementCityMirrors(values: Map<string, unknown>, sourceMapValue: unknown): void {
   const settlements = record(values.get("settlements"), "settlement-zone.patch.settlements");
   const politics = record(values.get("politics"), "settlement-zone.patch.politics");
   const cities = denseArray(settlements.cities, "settlement-zone.patch.settlements.cities");

@@ -115,7 +115,7 @@ operationResults.channel = {corridor: channelFixture.corridor, lakeCell: channel
 
 const roundtrip = parseMapDocument(stringifyMapDocument(createMapDocument(channelMap, channelMap.options)));
 assert(roundtrip.map.pack.features[packLakeId]?.removed, "完整地图往返丢失 Feature tombstone");
-assert(Number(roundtrip.map.settlements.cities.find(city => Number(city.id) === portFixture.city.id)?.port) === oceanPackId, "完整地图往返丢失港口重定向");
+assert(Number(roundtrip.map.settlements.cities[portFixture.city.id]?.port) === oceanPackId, "完整地图往返丢失港口重定向");
 
 const protectedMap = createCleanMap();
 const protectedDraft = findSingleCellInspection(protectedMap, FEATURE_TOPOLOGY_MODE.CARVE_COAST);
@@ -208,7 +208,8 @@ assert(portFaultHistory.getStats().undo === 0, "端口引用故障不应写入�
 
 const nonCrossingMap = heightFixture();
 createApplyHeightBrushCommand([{gridCell: 0, before: 30, after: 31}]).apply({map: nonCrossingMap});
-assert(!nonCrossingMap.metadata.derivedStale, "未跨海平面的普通高度编辑不应标记 Feature 待派生");
+assert(nonCrossingMap.metadata.derivedStale.systems.includes("features"), "普通高度编辑必须保守标记 Feature 待派生");
+assert(nonCrossingMap.pack.cells.h[0] === 31 && nonCrossingMap.pack.cells.h[1] === 31, "普通高度编辑没有同步全部 pack 镜像");
 const crossingMap = heightFixture();
 const crossingCommand = createApplyHeightBrushCommand([{gridCell: 0, before: 20, after: 19}]);
 crossingCommand.apply({map: crossingMap});
@@ -221,7 +222,7 @@ console.log(JSON.stringify({
   ok: true,
   operations: operationResults,
   invalid: {protected: protectedInspection.code, disconnected: disconnected.code},
-  height: {nonCrossingStale: false, crossingFirstStale: "features"},
+  height: {nonCrossingStale: true, crossingFirstStale: "features"},
   compatibility: {independentBurg: independentBurgInspection.code, distantPortIgnored: true, legacyTypeBackfill: true, faultStages: 5, roundtrip: true}
 }, null, 2));
 
@@ -319,16 +320,16 @@ function attachLakePort(map, lakeId, corridorGridCell) {
     if (corridorPack.has(cell) || map.pack.cells.h[cell] < 20) continue;
     const haven = Number(map.pack.cells.haven?.[cell]);
     if (!Number.isInteger(haven) || Number(map.pack.cells.f?.[haven]) !== lakeId) continue;
-    const id = 9001;
+    const id = 1;
     const burg = {i: id, id, cityId: id, cell, port: lakeId, capital: 0, x: map.pack.cells.p[cell][0], y: map.pack.cells.p[cell][1]};
     const city = {id, burgId: id, packCell: cell, cell: Number(map.pack.cells.g[cell]), port: lakeId, capital: false, x: burg.x, y: burg.y};
-    map.pack.burgs.push(burg);
+    map.pack.burgs[id] = burg;
     const placement = inspectRelocatedSettlementPort(map.grid, map.pack, cell, {wasPort: lakeId, burgId: id, options: map.options || {}});
     if (!placement.port) {
-      map.pack.burgs.pop();
+      map.pack.burgs[id] = null;
       continue;
     }
-    map.settlements.cities.push(city);
+    map.settlements.cities[id] = city;
     map.pack.cells.burg[cell] = id;
     return {city, burg, cell};
   }

@@ -18,6 +18,9 @@ try {
   const {zonesManifest} = await vite.ssrLoadModule("/src/domains/zones/manifest.ts");
   const {labelsManifest} = await vite.ssrLoadModule("/src/domains/labels/manifest.ts");
   const {measurementsManifest} = await vite.ssrLoadModule("/src/domains/measurements/manifest.ts");
+  const {featuresManifest} = await vite.ssrLoadModule("/src/domains/features/manifest.ts");
+  const {routesManifest} = await vite.ssrLoadModule("/src/domains/routes/manifest.ts");
+  const {riversManifest} = await vite.ssrLoadModule("/src/domains/rivers/manifest.ts");
   const targets = {
     "object-panels": ["ui"],
     "point-layers": ["renderer"],
@@ -45,7 +48,10 @@ try {
   registry.register(zonesManifest);
   registry.register(labelsManifest);
   registry.register(measurementsManifest);
-  assert.deepEqual(registry.snapshot().ids, ["foundation.climate", "foundation.height-topology", "foundation.ocean-current-layer", "labels.layout-projection", "markers.point-layer", "markers.resource-economy", "measurements.overlay-projection", "notes.object-panels", "population.downstream", "settlements.city-projection", "society-politics.administrative-mirror", "society-politics.social-assignment", "zones.region-projection"]);
+  registry.register(featuresManifest);
+  registry.register(routesManifest);
+  registry.register(riversManifest);
+  assert.deepEqual(registry.snapshot().ids, ["features.topology-projection", "foundation.climate", "foundation.height-topology", "foundation.ocean-current-layer", "labels.layout-projection", "markers.point-layer", "markers.resource-economy", "measurements.overlay-projection", "notes.object-panels", "population.downstream", "rivers.hydrology-projection", "routes.line-projection", "settlements.city-projection", "society-politics.administrative-mirror", "society-politics.social-assignment", "zones.region-projection"]);
 
   const topologyFull = registry.planCanonical({writeSet: ["grid"]});
   assert.equal(topologyFull.mode, "full-rebuild");
@@ -98,6 +104,21 @@ try {
   assert.deepEqual(measurementsFull.systems, ["measurements.overlay-projection"]);
   assert.deepEqual(measurementsFull.invalidated, ["measurement-overlay"]);
 
+  const featuresFull = registry.planCanonical({writeSet: ["pack.features"]});
+  assert.equal(featuresFull.mode, "full-rebuild");
+  assert.ok(featuresFull.systems.includes("features.topology-projection"));
+  assert.ok(featuresFull.invalidated.includes("render-mesh"));
+
+  const routesFull = registry.planCanonical({writeSet: ["pack.routes"]});
+  assert.equal(routesFull.mode, "full-rebuild");
+  assert.ok(routesFull.systems.includes("routes.line-projection"));
+  assert.ok(routesFull.invalidated.includes("line-layers"));
+
+  const riversFull = registry.planCanonical({writeSet: ["pack.rivers"]});
+  assert.equal(riversFull.mode, "full-rebuild");
+  assert.ok(riversFull.systems.includes("rivers.hydrology-projection"));
+  assert.ok(riversFull.invalidated.includes("cell-colors"));
+
   const unknown = registry.planCanonical({writeSet: ["unregistered.section"]});
   assert.equal(unknown.mode, "full-rebuild");
   assert.ok(unknown.fallbackReasons[0].includes("未声明写路径"));
@@ -137,11 +158,12 @@ try {
   console.log(JSON.stringify({
     ok: true,
     registry: registry.snapshot(),
-    modes: [notesLocal.mode, populationFull.mode, politicsFull.mode, religionFull.mode, settlementsFull.mode, zonesFull.mode, measurementsFull.mode, presentation.mode, unknown.mode, exactRegistry.planCanonical({writeSet: ["document.title"]}).mode],
+    modes: [notesLocal.mode, populationFull.mode, politicsFull.mode, religionFull.mode, settlementsFull.mode, zonesFull.mode, measurementsFull.mode, featuresFull.mode, routesFull.mode, riversFull.mode, presentation.mode, unknown.mode, exactRegistry.planCanonical({writeSet: ["document.title"]}).mode],
     notes: {systems: notesLocal.systems, projections: notesLocal.projections},
     population: {systems: populationFull.systems, invalidated: populationFull.invalidated, projections: populationFull.projections},
     societyPolitics: {politics: politicsFull.systems, religion: religionFull.systems},
     settlementZonesAnnotations: {settlements: settlementsFull.systems, zones: zonesFull.systems, measurements: measurementsFull.systems},
+    featuresNetworksResources: {features: featuresFull.systems, routes: routesFull.systems, rivers: riversFull.systems},
     negative: ["missing-scope", "unknown-write", "duplicate-domain", "invalidatedBy-outside-reads", "invalid-projection", "missing-invalidation-target", "manifest-mutation-after-register"]
   }, null, 2));
 } finally {

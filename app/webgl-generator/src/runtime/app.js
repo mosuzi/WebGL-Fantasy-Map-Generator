@@ -14,6 +14,7 @@ import {createMarkersPresentationRuntime} from "../domains/markers/runtime.ts";
 import {validatePopulationWorkerOutput, validatePopulationWorkerPatch} from "../domains/population/worker-runtime.ts";
 import {validateSocietyPoliticsWorkerOutput} from "../domains/society-politics/worker-runtime.ts";
 import {validateSettlementZoneWorkerOutput} from "../domains/settlements/worker-runtime.ts";
+import {validateFeaturesNetworksResourcesWorkerOutput} from "../domains/features/worker-runtime.ts";
 import {
   createCommittedFoundationWorkerBinding,
   createFoundationWorkerBinding,
@@ -12537,6 +12538,14 @@ async function regenerateMapAttributeViaWorker(state, documentRef, kind, options
             output,
             policy: getRegenerationPatchPolicy(targetKind)
           })
+        : ["features", "routes", "rivers", "markers"].includes(targetKind)
+          ? ({sourceMap, binding, output}) => validateFeaturesNetworksResourcesWorkerOutput({
+              kind: targetKind,
+              sourceMap,
+              binding,
+              output,
+              policy: getRegenerationPatchPolicy(targetKind)
+            })
       : undefined,
     createCommand: ({output, result, effects}) => createWorkerRegenerationPatchCommand(state.map, {
       patch: output.patch,

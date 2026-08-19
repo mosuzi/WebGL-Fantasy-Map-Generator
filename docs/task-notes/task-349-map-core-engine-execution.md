@@ -243,4 +243,14 @@ planned → computed → validated → projections-prepared
 - 终验：同一只读评审智能体 blocker-only 复审 `ACCEPT`；三个 P1 均已闭合，无新增 P0 / P1。
 - 下一步：进入 349-10d，并先复现锁定 Feature 港口引用 `382 → 366`。
 
+### 349-10d — CHECKPOINT 待评审
+
+- 首门：完整 world constraint 稳定复现 cities-routes 后锁定 Feature 直接引用 `382 → 366`，16 条删除项均为携 `port: 1` 的历史 city / burg tombstone；from-empty 城镇重建复用其数值槽时没有保留直接引用墓碑。现先冻结引用墓碑及 counterpart ID，再生成活动城市，完整门恢复为 `11 stages / 15 locked kinds`。
+- 第二个真实缺口：主动 Feature 重建会给原本只携 `port` 的锁定引用对象补写 `feature` 字段。Feature topology 重建现捕获锁定 Feature 的 city / burg / route / marker / port diagnostics 直接引用字段并在最终锁断言前原样恢复；独立 pre-commit validator 同时验证锁定 Feature 对象、grid / pack cell 归属与直接引用集合。
+- 协议：新增 features / routes / rivers 三份 shadow Manifest，并把 markers 的真实 regeneration Worker 能力补齐；`regeneration.compute` 的 features / routes / rivers / markers 与 `route-path.compute` 进入独立 result ownership。正式主线程 commit 前统一校验 binding、精确写集、合法容器、Feature 镜像与锁包络、route city / market / adjacency、river parent / cell、marker cell 与 economy / politics 镜像。
+- 依赖：总注册表从 `9 domains / 135 descriptors` 增至 `12 domains / 175 descriptors`，dependency 从 `13` 增至 `16 systems`；Feature topology、路线 line projection、河流水文 projection 进入传播规划，markers resource economy 保持原系统。
+- 必需插入维护：路线面板门同步当前“路线修改影响”权威文案；Feature topology 夹具改用已接受的 city / burg ID 直接槽，并同步当前高度编辑保守失效语义；route quality 主动城镇重建显式开启既有省会镜像修复。另修复生成器与湖泊编辑器的真实兼容缺口：自然出口河流可从与湖直接相邻的岸上 spill cell 起步，不再被错误判为 invalid outlet。
+- 门禁：`typecheck:core`、core Manifest、core dependency、新地理网络资源协议、route edit / connectivity / quality / locked、river network / delete / locked / control points、Feature topology / patch / locked、marker resource economy、v1 migration、完整 world constraint、production build `1387 modules` 与 diff check 通过；浏览器执行 `0`，`source/` 改动 `0`。
+- 版本：`0.5.35 → 0.5.36`；专题记录 `docs/task-notes/task-349-features-networks-resources-core-slice.md`。下一步冻结 checkpoint，交同一只读评审智能体审查；仅 `ACCEPT` 后进入 `349-10e`。
+
 阶段结果在每次 checkpoint 后更新，长日志只记录命令和 artifact 路径，不粘贴到本文。

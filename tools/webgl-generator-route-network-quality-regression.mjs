@@ -33,7 +33,8 @@ for (const testCase of cases) {
     namebases: map.namebases,
     settlementRegenerationSalt: 31,
     routeRegenerationSalt: 31,
-    reassessProvincialCapitals: true
+    reassessProvincialCapitals: true,
+    repairInconsistentProvincialCapitals: true
   });
   stages.afterCities = auditRouteNetwork(map, `${testCase.cellsTarget}:cities`);
 

@@ -870,6 +870,15 @@ function rebuildPackSettlementsWithoutImplicitAnchors(grid, politics, pack, rand
   const cityIds = new Set();
   const burgIds = new Set();
   const retainedCityIds = new Set();
+  preserveLockedFeatureReferenceTombstones({
+    previousCities,
+    previousBurgs,
+    lockedFeatures: options.lockedFeatures,
+    cities,
+    burgs,
+    cityIds,
+    burgIds
+  });
 
   for (const city of previousCities) {
     if (!city || city.removed || cityInScope(city) && !locked.cityIds.has(Number(city.id))) continue;
@@ -981,6 +990,40 @@ function rebuildPackSettlementsWithoutImplicitAnchors(grid, politics, pack, rand
   fillIdentityArrayHoles(cities);
   fillIdentityArrayHoles(burgs);
   return {cities};
+}
+
+function preserveLockedFeatureReferenceTombstones({previousCities, previousBurgs, lockedFeatures, cities, burgs, cityIds, burgIds}) {
+  const protectedFeatureIds = snapshotIds(lockedFeatures);
+  if (!protectedFeatureIds.size) return;
+  const selectedCityIds = new Set();
+  const selectedBurgIds = new Set();
+  const referencesProtectedFeature = object => protectedFeatureIds.has(Number(object?.feature))
+    || protectedFeatureIds.has(Number(object?.port))
+    || protectedFeatureIds.has(Number(object?.data?.feature));
+
+  for (const city of previousCities || []) {
+    if (!city?.removed || !referencesProtectedFeature(city)) continue;
+    selectedCityIds.add(Number(city.id ?? city.i));
+    selectedBurgIds.add(Number(city.burgId));
+  }
+  for (const burg of previousBurgs || []) {
+    if (!burg?.removed || !referencesProtectedFeature(burg)) continue;
+    selectedBurgIds.add(Number(burg.i ?? burg.id));
+    selectedCityIds.add(Number(burg.cityId));
+  }
+
+  for (const id of selectedCityIds) {
+    if (!Number.isInteger(id) || id < 0) continue;
+    const city = previousCities?.[id];
+    if (city?.removed) cities[id] = structuredClone(city);
+    cityIds.add(id);
+  }
+  for (const id of selectedBurgIds) {
+    if (!Number.isInteger(id) || id <= 0) continue;
+    const burg = previousBurgs?.[id];
+    if (burg?.removed) burgs[id] = structuredClone(burg);
+    burgIds.add(id);
+  }
 }
 
 function seedRetainedCities(grid, cells, cities, burgs, occupied, occupiedGrid, spacingIndex) {

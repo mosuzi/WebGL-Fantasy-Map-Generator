@@ -79,7 +79,7 @@ const pickingSource = readFileSync(new URL("../app/webgl-generator/src/renderer/
 assert.match(appSource, /ROUTE_EDIT_WAYPOINT/, "路线改线画布模式未接入");
 assert.match(appSource, /setEditWaypoint/, "路线面板未接收画布改线点");
 assert.match(appSource, /createEditRouteCommand/, "路线 UI 未共用路线编辑命令");
-assert.match(panelSource, /在地图选择改线点[\s\S]*路线编辑预检[\s\S]*应用路线修改/, "路线面板缺少改线、预检或应用入口");
+assert.match(panelSource, /在地图选择改线点[\s\S]*路线修改影响[\s\S]*应用路线修改/, "路线面板缺少改线、影响预览或应用入口");
 assert.match(consoleSource, /routes\.inspectEdit[\s\S]*routes\.update/, "控制台 API 缺少路线预检或更新方法");
 assert.match(pickingSource, /map\?\.settlements\?\.routes[\s\S]*Array\.isArray\(route\?\.points\)/, "路线 picking 未读取编辑后的 points");
 

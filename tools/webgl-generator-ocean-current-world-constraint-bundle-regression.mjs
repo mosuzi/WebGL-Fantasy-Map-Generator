@@ -289,6 +289,11 @@ const compositeReferences = representativeWorldReferences(compositeMap);
 assert.equal(compositeReferences.length, 15, "10k 复合 world 未覆盖 15 类锁");
 compositeMap.regenerationLocks = {version: 1, entries: compositeReferences};
 const compositeBundle = captureRegenerationConstraintBundle(compositeMap, {closure: ["world"]});
+const compositeLockedFeatureId = Number(compositeBundle.lockedFeatures[0]?.i ?? compositeBundle.lockedFeatures[0]?.id);
+const lockedFeatureBurgTombstones = (compositeMap.pack.burgs || [])
+  .filter(burg => burg?.removed && (Number(burg.feature) === compositeLockedFeatureId || Number(burg.port) === compositeLockedFeatureId || Number(burg.data?.feature) === compositeLockedFeatureId))
+  .map(burg => ({index: Number(burg.i ?? burg.id), value: structuredClone(burg)}));
+assert.equal(lockedFeatureBurgTombstones.length, 16, "10k 复合 world 未覆盖锁定 Feature 的历史 burg 引用槽");
 const lockedZoneBefore = JSON.stringify(compositeBundle.lockedZones[0]);
 const lockedWarzoneId = Number(compositeBundle.lockedZones[0]?.i ?? compositeBundle.lockedZones[0]?.id);
 assert.equal(compositeBundle.lockedZones[0]?.type, "Warzone", "10k 复合 world 未捕获战区代表样本");
@@ -307,6 +312,11 @@ for (const system of Object.keys(stageKeys)) {
     constraintBundle: compositeBundle
   });
   assert.equal(stageResult.executed, true, `复合 world ${system} stage 未执行`);
+  if (system === "cities-routes") {
+    for (const tombstone of lockedFeatureBurgTombstones) {
+      assert.deepEqual(compositeMap.pack.burgs[tombstone.index], tombstone.value, `锁定 Feature 的历史 burg #${tombstone.index} 引用槽被复用`);
+    }
+  }
 }
 compositeBundle.assertDomain(compositeMap, "world", "after");
 const supportingPairAfter = captureWarSupportEnvelope(

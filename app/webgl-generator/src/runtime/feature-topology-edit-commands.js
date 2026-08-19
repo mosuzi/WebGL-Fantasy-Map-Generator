@@ -181,6 +181,7 @@ function rebuildFeatureTopologyInternal(map, locked, options = {}) {
   const beforeGrid = captureFeatureIdentity(map?.features?.features, map?.grid?.cells?.f, map?.grid?.cells);
   const beforePack = captureFeatureIdentity(map?.pack?.features, map?.pack?.cells?.f, map?.pack?.cells);
   const spatialReferencesBefore = captureSpatialFeatureState(map);
+  const lockedReferencesBefore = captureLockedFeatureReferenceState(map, locked.pack?.ids);
   const gridShared = map.grid?.features === map.features?.features;
   const gridTopology = buildComponents(map.grid.cells, null);
   const rawGridFeatures = createGridFeatures(gridTopology, map.grid);
@@ -207,12 +208,28 @@ function rebuildFeatureTopologyInternal(map, locked, options = {}) {
   refreshPackFeatureMetadata(map);
   remapFeatureReferences(map, stablePack.redirects);
   syncSpatialFeatureReferences(map, spatialReferencesBefore);
+  restoreFeatureReferences(lockedReferencesBefore);
   assertLockedFeatureConstraints(map, locked);
   return {
     activeFeatureIds: activeFeatures(map.pack.features).map(featureId),
     removedFeatureIds: stablePack.removedIds,
     redirects: [...stablePack.redirects].map(([from, to]) => ({from, to}))
   };
+}
+
+function captureLockedFeatureReferenceState(map, lockedFeatureIds = new Set()) {
+  if (!lockedFeatureIds?.size) return [];
+  const entries = [];
+  const capture = object => {
+    if (!object || typeof object !== "object") return;
+    if (!lockedFeatureIds.has(Number(object.feature)) && !lockedFeatureIds.has(Number(object.port)) && !lockedFeatureIds.has(Number(object.data?.feature))) return;
+    for (const key of ["feature", "port"]) entries.push({target: object, key, present: Object.prototype.hasOwnProperty.call(object, key), value: object[key]});
+    if (object.data) entries.push({target: object.data, key: "feature", present: Object.prototype.hasOwnProperty.call(object.data, "feature"), value: object.data.feature});
+  };
+  for (const collection of [map.pack?.burgs, map.settlements?.cities, map.pack?.routes, map.settlements?.routes, map.markers?.markers, map.pack?.portDiagnostics?.features]) {
+    for (const object of collection || []) capture(object);
+  }
+  return entries;
 }
 
 function applyFeatureTopologyPlan(map, plan, options = {}) {
