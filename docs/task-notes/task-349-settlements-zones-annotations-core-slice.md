@@ -6,7 +6,7 @@
 | --- | --- |
 | 权威编号与目标 | `349-10c`；登记 settlements / zones / labels / measurements 的真实领域边界，并让 cities / zones Worker 结果在 canonical commit 前统一验真 |
 | 当前阶段 | 四领域 shadow Manifest、共享 Worker result validator、dependency projection 与无浏览器专项 |
-| 冻结点 | `codex/map-core-engine-architecture-plan / 0.5.34` blocker-only 复审候选 |
+| 冻结点 | `codex/map-core-engine-architecture-plan / 0.5.34` 已接受 |
 | 允许文件 | 四领域目录、正式 Worker commit 接线、Manifest / dependency / 专项工具、v1 夹具与本阶段文档 |
 | 禁止文件 | `source/`、routes / rivers / features 正式迁移、economy / military 正式迁移、浏览器验收、`main` |
 | 必须保持 | 唯一 `state.map`、city↔burg / route 双表示、zone↔pack 镜像、旧图迁移、锁、单条 history、view-only 不推进 revision |
@@ -30,4 +30,4 @@
 - 浏览器边界：误调用命名不显式的 `regress:measurement` 后确认其会启动 Playwright，随即终止且不计验收；未读取或声明浏览器结果，后续从 Manifest 门移除该脚本，改用纯 Node 证据。连同 349-7 的一次误触，最终方案文档必须列出“执行前静态识别浏览器脚本”的防误触门。
 - 延后：完整 world constraint 的锁定 Feature 港口引用 `382 → 366` 仍由既定 `349-10d` 首门处理；本阶段没有迁移 routes / features owner。
 - 未完成顺序复评：`349-10d → 349-10e → 349-10f → 349-10g → 349-11` 不变。
-- 当前状态：首轮评审为 `BLOCK`；三个 P1 已形成 `0.5.34` blocker-only 修正候选，待同一只读评审智能体复审。未获 `ACCEPT` 不进入 349-10d。
+- 终验：同一只读评审智能体 blocker-only 复审 `ACCEPT`；三个 P1 均已闭合，无新增 P0 / P1。阶段转入 `349-10d`。

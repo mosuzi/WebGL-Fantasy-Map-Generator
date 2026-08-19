@@ -18,7 +18,7 @@
 - `docs/current-plan.md` 是唯一当前任务清单；README、开发日志、专题和归档不得另建当前待办。
 - 已批准的编号范围是封闭范围。达到该项最小验收后立即归档并转向下一项；不影响当前验收的新发现只记录，不顺手实施。
 - 第 349 项已获批准并在 `codex/map-core-engine-architecture-plan` 并行分支执行；当前阶段链含盘点后强制插入的 `349-3a`、10c 首门插入的共享 Worker result ownership `349-10c0`，以及拆分后的 `349-10a`～`349-10g`，每阶段冻结后由只读评审智能体验收。该分支不得合入 `main`，全阶段不得执行浏览器验收，只在最终阶段形成并评估浏览器验收方案。
-- `349-10c / 0.5.34` 已形成 settlements / zones / labels / measurements blocker-only 修正候选：首轮评审指出的行政首府、城镇 cell 镜像与 zone cell 边界三个 P1 已补 sourceMap 验证及负例，当前只待同一评审智能体复审；未获 `ACCEPT` 不进入 349-10d。349-10c 误触的 `regress:measurement` 实为 Playwright 脚本，已立即终止且不计验收。
+- `349-10c / 0.5.34` 已由同一评审智能体 blocker-only 复审 `ACCEPT`；当前进入 `349-10d`，先复现锁定 Feature 港口引用在 cities-routes 后 `382 → 366` 的丢失，再迁移 routes / rivers / features / resource markers。349-10c 误触的 `regress:measurement` 实为 Playwright 脚本，已立即终止且不计验收。
 - 遇到范围歧义、需要产品决策、夹具连续两次失败或同一阻断再次出现时，必须冻结并请用户裁定；不得继续“补夹具—跑全门”循环。
 - 全部必需任务完成后停止，不得自行创造后续工作。
 
@@ -68,7 +68,7 @@
 
 ## 当前状态
 
-- 第 349 项进行中：`349-0`～`349-10c0` 已由同一只读评审智能体 `ACCEPT`；动态插入的 `349-10c0 / 0.5.32` 已分离领域 Worker descriptor id 与真实 task id，并按 `task + resultKind` 防重复 owner。当前返回 `349-10c`，只迁移 settlements / zones / labels / measurements，不提前迁移 routes / economy。完整约束门另暴露锁定 Feature 的港口引用在 cities-routes 后由 `382 → 366`，已按 owner 归入原定 `349-10d` 首门。349-7 曾误触发一次带浏览器的既有导出脚本，已首败停止且不计为验收，后续继续禁止浏览器。权威阶段、动态插入规则和无浏览器边界见 `docs/current-plan.md` 与 `docs/task-notes/task-349-map-core-engine-execution.md`。
+- 第 349 项进行中：`349-0`～`349-10c` 已由同一只读评审智能体 `ACCEPT`；当前 `349-10d` 迁移 routes / rivers / features / resource markers，首门处理完整约束门暴露的锁定 Feature 港口引用在 cities-routes 后由 `382 → 366` 的丢失，不得放宽引用保护。349-7 曾误触发一次带浏览器的既有导出脚本，已首败停止且不计为验收，后续继续禁止浏览器。权威阶段、动态插入规则和无浏览器边界见 `docs/current-plan.md` 与 `docs/task-notes/task-349-map-core-engine-execution.md`。
 - 第 348 项已完成并归档：主动重生成保留高编号锁定对象时，cities / burgs / routes 身份槽显式稠密；正式导出可在不改写内存地图的前提下抢救旧 holey 数组。用户主动城镇 / 路线重生成允许事务内修复失效港口派生关系，TypedArray 行政候选恢复正确评分，城镇面板补齐结果反馈。用户精确 `5410` 标签页完成原图保存、`949 → 1194` 重生成、结果保存及两份 v3 UI 回读，最终恢复 `949 / 21 / 218`，holey / 保存 / 接纳 / WebGL 错误均为 `0`，版本为 `0.5.3`。
 - 第 347 项已完成并归档：开发模式匿名账本确认用户当前存档城镇重生成的主瓶颈为数十万路线拾取引用对象化回绑；城镇安装现校验 Worker DTO 摘要后从已提交新地图直接构建 `cities + routeSegments` 局部索引。固定 100k 为 `1276.4ms / picking 2.8ms / LongTask 0`；用户精确 5410 当前存档由 `9969ms` 降至 `1886.3ms`，`949 → 1017`、`from-empty / marineCities 0`，撤销恢复原 `949` 与名称序列，版本为 `0.5.2`。
 - 第 346 项已完成并归档：用户精确 5410 当前地图正式城镇重生成端到端墙钟为 `9.969s`；十一类 Loading 现按真实上游资料和单调阶段显示，迟到阶段不倒退、相同文案不重复刷新，普通界面不泄漏内部术语。新版 UI 正式重生成后撤销恢复浏览器原存档 `949` 城镇与原始名称序列，版本为 `0.5.1`。

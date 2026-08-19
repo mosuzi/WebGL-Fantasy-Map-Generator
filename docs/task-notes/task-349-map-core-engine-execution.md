@@ -31,8 +31,8 @@
 | 349-10a | terrain / grid / height-derived / climate / ocean / topology 基础域 | 旧数据、history、Worker、renderer source / Node 门 | 不迁移社会或行政域 | ACCEPT |
 | 349-10b | society / politics 与 pack mirror | mirror、行政引用、history、Worker 专项 | 不迁移城镇 / 路线 | ACCEPT |
 | 349-10c0 | 分离领域 Worker binding id 与共享 transport task，按 result kind 唯一拥有 | disjoint result kind 可共享 task；重叠 owner 原子拒绝 | 不迁移任何业务领域 | ACCEPT |
-| 349-10c | settlements / zones / labels / measurements | 身份槽、锁、旧数据、history、projection 专项 | 不迁移路线 / 经济 | 进行中 |
-| 349-10d | routes / rivers / features / resource markers | topology、引用、picking、Worker、history 专项 | 不迁移经济 / 军事 | 待执行 |
+| 349-10c | settlements / zones / labels / measurements | 身份槽、锁、旧数据、history、projection 专项 | 不迁移路线 / 经济 | ACCEPT |
+| 349-10d | routes / rivers / features / resource markers | topology、引用、picking、Worker、history 专项 | 不迁移经济 / 军事 | 进行中 |
 | 349-10e | economy / diplomacy / military | 跨域引用、history、Worker、旧数据专项 | 不收口全图 adoption | 待执行 |
 | 349-10f | generation / import / adoption / export / headless profile 收口 | 新 session、rollback、旧档、checksum、无 DOM headless 专项 | 不删除未证明冗余的 legacy adapter | 待执行 |
 | 349-10g | legacy adapter、重复 revision / history 路径与影子审计收口 | 正式入口清单无双写、无第二 owner、非浏览器全回归 | 不扩大产品能力 | 待执行 |
@@ -53,8 +53,8 @@ planned → computed → validated → projections-prepared
 
 | 字段 | 内容 |
 | --- | --- |
-| 当前阶段 | `349-10c` settlements / zones / labels / measurements |
-| 冻结点 | `349-10c0 / 0.5.32` 已由同一评审智能体接受 |
+| 当前阶段 | `349-10d` routes / rivers / features / resource markers |
+| 冻结点 | `349-10c / 0.5.34` 已由同一评审智能体接受 |
 | 允许文件 | settlements / zones / labels / measurements Manifest / adapter、身份槽与锁契约、history / projection 专项、阶段文档 |
 | 禁止文件 | routes / rivers / features / economy / military 正式迁移、业务算法无关改写、`source/`、main、浏览器 |
 | 必须保持 | 单一 canonical owner；city / burg 与 zone identity 稳定；旧档、锁、history 和 view-only revision 语义不退化 |
@@ -230,7 +230,7 @@ planned → computed → validated → projections-prepared
 - 终验：同一只读评审智能体首轮 `ACCEPT`；共享正例、重叠拒绝、兼容边界和阶段文档无 P0 / P1 偏差。
 - 下一步：返回 `349-10c`，继续 settlements / zones / labels / measurements。
 
-### 349-10c — BLOCKER-ONLY 复审待定
+### 349-10c — ACCEPT
 
 - 完成：新增 settlements / zones / labels / measurements 四份 shadow Manifest；正式 cities / zones Worker commit 前统一校验 binding、policy / patch、容器、city↔burg / route / politics 与 zone↔pack 身份镜像。
 - 依赖：注册表增至 `9 domains / 135 descriptors`、dependency 为 `13 systems`；四类 projection 均进入统一传播，labels / measurements 不虚报 Worker 或独立重生成。
@@ -240,6 +240,7 @@ planned → computed → validated → projections-prepared
 - 门禁：typecheck、Manifest、dependency、新领域协议、map migration、四域代表性 Node 专项与 build `1382 modules` 通过；`source/` 改动 `0`。
 - 版本：`0.5.32 → 0.5.33`；专题记录 `docs/task-notes/task-349-settlements-zones-annotations-core-slice.md`。
 - 首轮评审：`BLOCK`；发现行政首府引用、grid / pack burg cell 镜像、zone cell 源拓扑边界三个 P1。`0.5.34` 复用既有行政 validator 并接入 before-image sourceMap，新增 dangling / 清零 / 重复 claim、双 cell 镜像与 zone 越界反例；core typecheck、新领域协议与 society-politics 全专项通过，浏览器运行 `0`。
-- 下一步：同一评审智能体 blocker-only 复审；仅 `ACCEPT` 后进入 349-10d，并先复现锁定 Feature 港口引用 `382 → 366`。
+- 终验：同一只读评审智能体 blocker-only 复审 `ACCEPT`；三个 P1 均已闭合，无新增 P0 / P1。
+- 下一步：进入 349-10d，并先复现锁定 Feature 港口引用 `382 → 366`。
 
 阶段结果在每次 checkpoint 后更新，长日志只记录命令和 artifact 路径，不粘贴到本文。
