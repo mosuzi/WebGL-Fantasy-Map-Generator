@@ -40,4 +40,6 @@
 - notes、whole-map profile、headless write、`typecheck:core` 与 production build（1392 modules）；
 - `source/` 改动 0，浏览器执行 0。
 
-`regress:markers-core` 暴露一个起点已存在的夹具断言漂移：349-8 已把 markers Worker / regeneration 能力登记为 `required / required`，而 349-7 夹具仍断言 `not-required / optional`。现行 Manifest 已由 core Manifest 与地理网络资源协议门验证，故不回退产品契约；该计划外但必需的夹具同步独立插入 `349-10g-a`，未完成顺序改为 `349-10g -> 349-10g-a -> 349-11`。
+`regress:markers-core` 暴露一个起点已存在的夹具断言漂移：349-10d 已把 markers Worker / regeneration 能力登记为 `required / required`，而 349-7 夹具仍断言 `not-required / optional`。现行 Manifest 已由 core Manifest 与地理网络资源协议门验证，故不回退产品契约；该计划外但必需的夹具同步独立插入 `349-10g-a`，未完成顺序改为 `349-10g -> 349-10g-a -> 349-11`。
+
+首轮只读评审确认删除 / 保留结论，但指出初版审计对 owner、canonical map、Manifest 分母与共享 metadata builder 的证明弱于文档声称，且 markers 正式契约来源阶段写错。修正后审计遍历全部产品源码，精确约束唯一 revision / history owner、`runtime/app.js` 内正式装载与 history restore 两个 `state.map` 赋值点、`15 / 1 / 14` Manifest 分布，以及 map-file 三个结果点调用唯一 `createWholeMapDocumentMetadata`；文档统一改为 349-10d。

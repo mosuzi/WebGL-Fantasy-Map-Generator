@@ -30,11 +30,22 @@ for (const name of adapterNames.slice(1)) {
 }
 assert.equal(referenceCount(appSources, "revisionProfile") + referenceCount(toolSources, "revisionProfile"), 0, "已证冗余 revisionProfile 又被引入");
 
-assert.equal(matches(appSource, /new MapRevisionTracker\(/gu), 1, "正式 app 必须只有一个 MapRevisionTracker owner");
-assert.equal(matches(appSource, /new EditHistory\(/gu), 1, "正式 app 必须只有一个 EditHistory owner");
+const revisionOwnerCount = referenceCount(appSources, "new MapRevisionTracker(");
+const historyOwnerCount = referenceCount(appSources, "new EditHistory(");
+assert.equal(revisionOwnerCount, 1, "全部产品源码必须只有一个 MapRevisionTracker owner");
+assert.equal(historyOwnerCount, 1, "全部产品源码必须只有一个 EditHistory owner");
 assert.equal(matches(appSource, /mapRevision\.advance\(/gu), 1, "canonical revision 只能由 EditHistory onMutation 推进一次");
 assert.equal(matches(appSource, /state\.mapRevision\.replaceMap\(/gu), 1, "整图接纳只能在 loadMapIntoRuntime 替换一次 revision session");
 assert.match(appSource, /onSnapshot: \(\) => mapRevision\.createSnapshot\(\)[\s\S]*onRestore: snapshot => mapRevision\.restoreSnapshot\(snapshot\)/u, "history snapshot / restore 必须复用同一 revision owner");
+
+const canonicalMapAssignments = [...appSources.entries()].flatMap(([path, source]) => Array.from(
+  {length: matches(source, /\bstate\.map\s*=(?!=)/gu)},
+  () => path.replaceAll("\\", "/")
+));
+assert.equal(canonicalMapAssignments.length, 2, "canonical map 只允许正式装载与 history restore 两个赋值点");
+assert.ok(canonicalMapAssignments.every(path => path.endsWith("runtime/app.js")), "canonical map 赋值不得逃出 runtime/app.js owner");
+assert.match(appSource, /state\.map\s*=\s*map;/u, "正式装载必须写入 state.map");
+assert.match(appSource, /state\.map\s*=\s*snapshot\.map;/u, "history restore 必须写回同一 state.map owner");
 
 const coreRuntimeImports = [...appSources.entries()].filter(([path, source]) => path.replaceAll("\\", "/").includes("/core/")
   && /runtime\/(?:map-revision|edit-history)\.js/u.test(source.replaceAll("\\", "/")));
@@ -52,7 +63,7 @@ for (const suffix of ["domains/notes/runtime.ts", "domains/markers/runtime.ts"])
 }
 
 const manifestFiles = [...appSources.entries()].filter(([path]) => /domains[\\/][^\\/]+[\\/]manifest\.ts$/u.test(path));
-assert.ok(manifestFiles.length >= 14, "领域 Manifest 分母异常");
+assert.equal(manifestFiles.length, 15, "领域 Manifest 必须保持 15 个登记项");
 const activeManifests = manifestFiles.filter(([, source]) => /status:\s*"active"/u.test(source)).map(([path]) => path.replaceAll("\\", "/"));
 assert.deepEqual(activeManifests.map(path => path.match(/domains\/([^/]+)\/manifest\.ts$/u)?.[1]), ["notes"], "只有完整接管 command/history 的 notes Manifest 可以 active");
 for (const [path, source] of manifestFiles) {
@@ -60,7 +71,7 @@ for (const [path, source] of manifestFiles) {
   assert.match(source, /status:\s*"shadow"/u, `${path} 未经 owner 切换不得宣称 active`);
 }
 
-for (const validator of [
+const preCommitValidators = [
   "validateFoundationWorkerOutput",
   "validatePopulationWorkerOutput",
   "validateSocietyPoliticsWorkerOutput",
@@ -69,18 +80,21 @@ for (const validator of [
   "validateEconomyDiplomacyMilitaryWorkerOutput",
   "validateWholeMapAdoptionEnvelope",
   "validateWholeMapExportResult"
-]) assert.ok(matches(appSource, new RegExp(`\\b${validator}\\(`, "gu")) >= 1, `正式入口缺少 ${validator}`);
+];
+for (const validator of preCommitValidators) assert.ok(matches(appSource, new RegExp(`\\b${validator}\\(`, "gu")) >= 1, `正式入口缺少 ${validator}`);
 
 const mapFileWorker = sourceBySuffix(appSources, "runtime/map-file-io-worker-task.js");
-assert.doesNotMatch(mapFileWorker, /function mapDocumentMetadata\(/u, "map-file Worker 不得恢复与整图 receipt 重复的 metadata builder");
+assert.match(mapFileWorker, /import \{createWholeMapDocumentMetadata\} from "\.\/whole-map-profile-protocol\.js";/u, "map-file Worker 必须使用唯一共享 metadata builder");
+assert.equal(matches(mapFileWorker, /metadata:\s*createWholeMapDocumentMetadata\(document\)/gu), 3, "map-file 三个结果点必须统一创建真实文档 metadata");
+assert.equal(referenceCount(appSources, "export function createWholeMapDocumentMetadata"), 1, "整图文档 metadata builder 必须只有一个定义");
 
 console.log(JSON.stringify({
   status: "pass",
   removed: ["revisionProfile"],
   retainedAdapters: adapterMatrix,
-  canonicalOwners: {revision: 1, history: 1, map: "state.map"},
+  canonicalOwners: {revision: revisionOwnerCount, history: historyOwnerCount, map: canonicalMapAssignments.length === 2 ? "state.map" : null},
   manifests: {active: activeManifests.length, shadow: manifestFiles.length - activeManifests.length},
-  preCommitValidators: 8,
+  preCommitValidators: preCommitValidators.length,
   browserRuns: 0
 }, null, 2));
 
@@ -101,7 +115,7 @@ function sourceFiles(directory) {
 }
 
 function referenceCount(sources, name) {
-  const pattern = new RegExp(`\\b${name}\\b`, "gu");
+  const pattern = new RegExp(name.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&").replace(/^([A-Za-z_$])/u, "\\b$1").replace(/([A-Za-z0-9_$])$/u, "$1\\b"), "gu");
   return [...sources.values()].reduce((sum, source) => sum + matches(source, pattern), 0);
 }
 

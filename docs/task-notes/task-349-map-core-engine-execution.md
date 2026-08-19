@@ -290,7 +290,8 @@ planned → computed → validated → projections-prepared
 - 禁止项：不改变算法、wire DTO、公开 API、地图格式或 canonical owner，不批量改名，不执行浏览器脚本，不修改 `source/`，不提前做 349-11 最终全门。
 - 实现：定义—引用—正式 owner—测试矩阵只证明 `revisionProfile` 同时为 `0 / 0` 引用且无独立协议职责，已删除该函数及其无用类型导入。四个零产品引用的 headless / persisted / presentation / render-resource adapter 仍承担跨 profile 类型与 runtime 负例，明确保留。新增静态审计固定唯一 `state.map`、单一 revision / history owner、getter-only facade、`1 active / 14 shadow` Manifest、八个 pre-commit validator 与 map-file receipt 无重复实现。
 - 门禁：静态审计、core contracts / manifests / facade / dependencies、六组领域协议、notes、whole-map profile、headless write、typecheck 与 production build `1392 modules` 通过；浏览器执行 `0`，`source/` 改动 `0`。
-- 动态插入：`regress:markers-core` 连续两次暴露起点夹具漂移——349-8 的正式 Manifest 已为 `worker / regeneration = required / required`，349-7 夹具仍断言 `not-required / optional`。现行产品契约由 Manifest 与地理网络资源协议门通过，不回退；新增独立阶段 `349-10g-a` 同步夹具。未完成顺序复评为 `349-10g -> 349-10g-a -> 349-11`。
+- 动态插入：`regress:markers-core` 连续两次暴露起点夹具漂移——349-10d 的正式 Manifest 已为 `worker / regeneration = required / required`，349-7 夹具仍断言 `not-required / optional`。现行产品契约由 Manifest 与地理网络资源协议门通过，不回退；新增独立阶段 `349-10g-a` 同步夹具。未完成顺序复评为 `349-10g -> 349-10g-a -> 349-11`。
+- 首轮评审：`911b0aa / 0.5.49` 为 `BLOCK`。删除 / 保留结论成立，但审计脚本只在 app.js 统计 owner、未实际断言 canonical map、允许 Manifest 分母少一项，并只按旧 helper 名排除重复 metadata；文档还把 markers 正式契约来源误记为 349-8。`0.5.50` 已改为全产品源码 owner 统计、精确两个 `state.map` 赋值点、精确 `15 / 1 / 14` Manifest、map-file 三个结果点共用唯一 metadata builder，并统一更正为 349-10d，待 blocker-only 复审。
 - 详细证据：[旧核心路径收口](./task-349-legacy-core-path-closure.md)。当前冻结 checkpoint，待只读评审。
 
 阶段结果在每次 checkpoint 后更新，长日志只记录命令和 artifact 路径，不粘贴到本文。
