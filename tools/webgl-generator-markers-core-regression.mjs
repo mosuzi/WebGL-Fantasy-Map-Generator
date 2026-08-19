@@ -52,10 +52,10 @@ try {
   assert.equal(markerFeatures.length, canonical.length);
   assert.deepEqual(markerFeatures.map(feature => feature.properties.id), canonical.map(marker => marker.id));
 
-  assert.equal(markersManifest.status, "shadow", "command / regeneration 未迁移前不得虚报 active");
+  assert.equal(markersManifest.status, "shadow", "command owner 未完整接管前不得虚报 active");
   assert.equal(markersManifest.capabilities.renderLayer, "required");
-  assert.equal(markersManifest.capabilities.worker, "not-required");
-  assert.equal(markersManifest.capabilities.regeneration, "optional");
+  assert.equal(markersManifest.capabilities.worker, "required");
+  assert.equal(markersManifest.capabilities.regeneration, "required");
 
   const sourceFiles = [
     "app/webgl-generator/src/renderer/placeholder-renderer.js",
