@@ -30,7 +30,7 @@ export const populationManifest = {
   version: 1,
   status: "shadow",
   canonicalSections: ["grid", "pack", "settlements", "politics", "society", "economy", "metadata", "military", "diplomacy", "zones"],
-  derivedSystems: [{id: "population.downstream", reads: ["grid.cells.pop", "pack.cells.pop", "settlements.cities"], writes: ["metadata.derivedStale", "economy.metadata", "military.metadata.stale", "diplomacy.metadata.stale", "zones.metadata.stale"], invalidatedBy: ["grid.cells.pop", "pack.cells.pop", "settlements.cities"], invalidates: ["population-stats", "point-layers", "labels", "economy-demand", "object-index"], scope: "full-map", rebuild: "worker", reuseAcrossPresentation: true, verify: "verifyPopulationDownstream"}],
+  derivedSystems: [{id: "population.downstream", reads: ["grid.cells.pop", "pack.cells.pop", "settlements.cities"], writes: ["metadata.derivedStale", "economy.metadata", "military.metadata.stale", "diplomacy.metadata.stale", "zones.metadata.stale"], invalidatedBy: ["grid.cells.pop", "pack.cells.pop", "settlements.cities"], invalidates: ["population-stats", "point-layers", "labels", "economy-demand", "object-index"], scope: "full-map", rebuild: "worker", reuseAcrossPresentation: true, verify: "regress:population-core-protocol"}],
   commands: [
     {id: "population.applyAdjustment", writeSet: [...populationWriteSet], undoPolicy: "required", profiles: ["interactive", "headless"]},
     {id: "population.transfer", writeSet: [...populationWriteSet], undoPolicy: "required", profiles: ["interactive"]}
@@ -49,7 +49,7 @@ export const populationManifest = {
     {id: "edit.population.inspectTransfer", method: "edit.population.inspectTransfer", target: "population.inspectTransfer", schemaVersion: API_SCHEMA_VERSION, capability: "query", capabilityGroup: "map.edit", mutates: "none", undoable: false, requiresConfirm: false, errorCodes: DEFAULT_API_BUSINESS_CODES, documentation: API_DOCUMENTATION},
     {id: "edit.population.transfer", method: "edit.population.transfer", target: "population.transfer", schemaVersion: API_SCHEMA_VERSION, capability: "command", capabilityGroup: "map.edit", mutates: "population-and-economy-demand", undoable: true, requiresConfirm: true, errorCodes: DEFAULT_API_BUSINESS_CODES, documentation: API_DOCUMENTATION}
   ]},
-  regression: {gates: ["regress:population-adjustment", "regress:population-transfer", "regress:api-data-compatibility"], coverage: ["save", "undo", "worker", "view", "failure"]},
+  regression: {gates: ["regress:population-core-protocol", "regress:population-adjustment", "regress:population-transfer", "regress:api-data-compatibility"], coverage: ["save", "undo", "worker", "view", "failure"]},
   capabilities: {worker: "required", regeneration: "unsupported", view: "required", renderLayer: "not-required"},
   capabilityReasons: {
     regeneration: "人口调整是显式增减和转移，不是从上游重生成",

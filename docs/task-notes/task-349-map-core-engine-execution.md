@@ -52,8 +52,8 @@ planned → computed → validated → projections-prepared
 
 | 字段 | 内容 |
 | --- | --- |
-| 当前阶段 | `349-9` dependency registry、projection 状态与局部失效接线，checkpoint 待评审 |
-| 冻结点 | `349-8@4411e86` / `0.5.22` 已接受；349-9 候选版本 `0.5.23` |
+| 当前阶段 | `349-9` dependency registry、projection 状态与局部失效接线，首轮评审 P1 已修正，等待 blocker-only 复审 |
+| 冻结点 | `349-8@4411e86` / `0.5.22` 已接受；349-9 修正候选版本 `0.5.24` |
 | 允许文件 | core dependency contract / registry / planner、coordinator 的最小 projection recovery 接线、三份已登记 Manifest、专项 Node、阶段文档 |
 | 禁止文件 | 未登记领域迁移、业务算法、renderer / Worker 大改、`source/`、main、浏览器 |
 | 必须保持 | dependency 只解释声明的 reads / writes；未知依赖显式 full rebuild；presentation-only 不污染 canonical revision；projection 失败不回滚已发布 history |
@@ -174,14 +174,15 @@ planned → computed → validated → projections-prepared
 - 终验：同一只读评审智能体最后一次 blocker-only 复审 `ACCEPT`；真实读取集、旧数据 goods fallback、binding / result / patch 与 coordinator owner 无 P0 / P1 偏差。
 - 下一步：`349-9` 只接 dependency registry、projection 状态与局部失效，不迁移未登记领域。
 
-### 349-9 — CHECKPOINT 待评审
+### 349-9 — 首轮评审 P1 已修正，待 blocker-only 复审
 
 - 完成：Manifest derived system 补齐 `invalidatedBy / scope / rebuild / reuseAcrossPresentation / verify`；新增冻结 descriptor snapshot 的 dependency registry / planner，沿 reads / writes 传播下游失效。
 - 分类：notes 带 affected object 为 `local`；无派生消费者的已知写入为 `exact`；theme / visibility 为 `presentation-only` 且只触发 renderer / UI；宽依赖、未知写、缺 affected scope 或缺 projection target 显式为 `full-rebuild` 并记录原因。
 - 接线：active notes runtime 的 projection 与 invalidated IDs 改由 planner 提供；commit `rebuilt` 不提前记录尚未完成的 UI projection。markers / population 只进入统一规划测试，未扩大 active 路由。
-- 恢复：coordinator 新增 degraded → retrying / resyncing → ready 的受控执行；失败带原因回到 degraded，已发布 revision / history 不回滚。
-- 门禁：core dependencies、Manifest `30` 类负例、facade recovery、notes core `13` commit / revision、markers core、population core protocol、typecheck 与 production build `1375 modules` 通过。
-- 版本：`0.5.22 → 0.5.23`；`source/` 与浏览器执行均为 `0`。
-- 下一步：完成冻结门并提交后交同一只读评审智能体；未获 `ACCEPT` 不进入 `349-10a`。
+- 恢复：coordinator 新增 degraded → retrying / resyncing → ready 的受控执行；失败带原因回到 degraded，已发布 revision / history 不回滚。首轮评审发现非法 runtime mode 可在清理边界外占锁、空错误消息可能滞留中间态，现已将模式校验与首转换纳入清理边界，并保证失败原因非空。
+- verifier：首轮评审发现 derived system 的 `verify` 只是未解析名称，现强制它属于本领域 `regression.gates`，而所有 gate 继续由 package script 注册门校验，notes / markers / population 均绑定真实专项门。
+- 门禁：修正后 core dependencies、Manifest `31` 类负例、facade recovery、notes core `13` commit / revision、markers core、population core protocol、typecheck 与 production build `1375 modules` 通过。
+- 版本：初始 checkpoint `0.5.22 → 0.5.23`，评审修正 `0.5.23 → 0.5.24`；`source/` 与浏览器执行均为 `0`。
+- 下一步：提交修正后交同一只读评审智能体做 blocker-only 复审；未获 `ACCEPT` 不进入 `349-10a`。
 
 阶段结果在每次 checkpoint 后更新，长日志只记录命令和 artifact 路径，不粘贴到本文。

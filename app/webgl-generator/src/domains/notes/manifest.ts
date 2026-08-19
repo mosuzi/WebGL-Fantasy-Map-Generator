@@ -8,7 +8,7 @@ export const notesManifest = {
   version: 1,
   status: "active",
   canonicalSections: ["notes"],
-  derivedSystems: [{id: "notes.object-panels", reads: ["notes"], writes: [], invalidatedBy: ["notes"], invalidates: ["object-panels"], scope: "affected-objects", rebuild: "main-thread", reuseAcrossPresentation: true, verify: "verifyNotesObjectPanels"}],
+  derivedSystems: [{id: "notes.object-panels", reads: ["notes"], writes: [], invalidatedBy: ["notes"], invalidates: ["object-panels"], scope: "affected-objects", rebuild: "main-thread", reuseAcrossPresentation: true, verify: "regress:notes-core"}],
   commands: noteCommands.map(id => ({id, writeSet: ["notes"], undoPolicy: "required", profiles: ["interactive"]})),
   queries: [
     {id: "notes.list", reads: ["notes"], profiles: ["interactive"]},

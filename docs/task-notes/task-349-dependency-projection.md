@@ -12,7 +12,7 @@
 - `scope = affected-objects | affected-cells | full-map`；
 - `rebuild = worker | main-thread | gpu-patch`；
 - `reuseAcrossPresentation` 与非空 `verify`；
-- `invalidatedBy` 必须由 `reads` 覆盖，所有 canonical 路径继续通过 field registry 审计。
+- `invalidatedBy` 必须由 `reads` 覆盖，所有 canonical 路径继续通过 field registry 审计；`verify` 必须指向本领域 `regression.gates` 中已注册的真实 package script，不能使用未解析的说明性名称。
 
 当前真实分类为：notes object panels 使用 affected objects / main thread；marker point layer 使用 affected objects / GPU patch；marker resource economy 显式 full map / main thread；population downstream 显式 full map / Worker。宽依赖会传播到下游并保持 full rebuild，不冒充局部化。
 
@@ -27,13 +27,13 @@
 ## 正式接线与恢复
 
 - active notes runtime 不再硬编码 `projections: [persistence, ui]` 或 `invalidated: [object-panels]`，改由同一 dependency plan 提供；commit 的 `rebuilt` 仍只记录已完成事实，不把计划中的 UI rebuild 提前记为完成。
-- coordinator `recover` 只接受 degraded projection，显式进入 retrying / resyncing；成功转 ready，失败带原因回到 degraded。已发布 canonical revision / history 不回滚，并拒绝并发或非法状态恢复。
+- coordinator `recover` 只接受 degraded projection 与 `retrying | resyncing` 模式，显式进入对应中间态；成功转 ready，失败（包括空错误消息）带非空原因回到 degraded。模式校验和首个状态转换也位于清理边界内，不会泄漏 recovery lock；已发布 canonical revision / history 不回滚，并拒绝并发或非法状态恢复。
 - markers / population Manifest 进入统一规划测试，但业务提交路由仍保持各阶段既有边界。
 
 ## 验收
 
 - `regress:core-dependencies`：三域、四个 derived system；覆盖 `local / full-rebuild / presentation-only / exact`，下游传播、缺 scope、未知写路径、缺 projection target、重复领域、非法 read/invalidation、非法 projection 与注册后篡改。
-- `regress:core-manifests`：三域 `45` descriptor、`30` 类负例；新增 dependency descriptor 缺字段和 undeclared invalidation read 拒绝。
-- `regress:core-facade`：projection retry / resync 成功、失败回到 degraded、最终恢复 ready；失败时 revision / history 不变。
+- `regress:core-manifests`：三域 `45` descriptor、`31` 类负例；新增 dependency descriptor 缺字段、undeclared invalidation read 与未注册 verifier 拒绝。
+- `regress:core-facade`：projection retry / resync 成功、普通失败与空错误失败均回到 degraded，非法恢复模式不占用锁，最终可恢复 ready；失败时 revision / history 不变。
 - `regress:notes-core`：`13` 次 commit / revision，notes local plan 仍为 persistence / UI，旧数据与 post-commit UI degraded 行为保持。
-- `typecheck:core`、markers core、population core protocol 与 production build `1375 modules` 通过；浏览器执行为 `0`。
+- `typecheck:core`、markers core、population core protocol 与 production build `1375 modules` 通过；评审指出的两项 P1 均已用窄回归闭合，浏览器执行为 `0`。

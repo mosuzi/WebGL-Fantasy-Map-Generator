@@ -91,6 +91,10 @@ const undeclaredInvalidationRead = clone(notesManifest);
 undeclaredInvalidationRead.derivedSystems[0].invalidatedBy = ["markers"];
 expectManifestError(() => createDomainManifestRegistry(context).register(undeclaredInvalidationRead), "MANIFEST_INVALID", "manifest.derivedSystems[0].invalidatedBy");
 
+const unknownDerivedVerifier = clone(notesManifest);
+unknownDerivedVerifier.derivedSystems[0].verify = "regress:missing-derived-verifier";
+expectManifestError(() => createDomainManifestRegistry(context).register(unknownDerivedVerifier), "MANIFEST_REFERENCE_MISSING", "notes.derivedSystems.notes.object-panels.verify");
+
 const requiredWorkerMissing = clone(notesManifest);
 requiredWorkerMissing.capabilities.worker = "required";
 delete requiredWorkerMissing.capabilityReasons.worker;
@@ -250,7 +254,7 @@ console.log(JSON.stringify({
   domains: registry.list().map(manifest => ({id: manifest.id, status: manifest.status, capabilities: manifest.capabilities})),
   workerTaskVerified: "population.compute",
   runtimeRouteImports: 0,
-  negativeCases: 30
+  negativeCases: 31
 }, null, 2));
 
 async function joinSources(files) {

@@ -120,6 +120,14 @@ expectFacadeError(() => core.observeRollback("operation-1", "renderer failed"), 
 assert.equal(revision.canonicalRevision, 1, "发布后投影失败不得反向修改 canonical revision");
 assert.equal(historyFingerprint, "history:1", "发布后投影失败不得反向修改 history");
 
+await assert.rejects(coordinator.recover(firstCommit.commitId, "worker", "invalid-mode", async () => {}), error => error?.code === "FACADE_LIFECYCLE_INVALID");
+assert.equal(coordinator.snapshot().recoveries, 0, "非法 recovery mode 不得残留并发锁");
+assert.equal(core.getCommit(firstCommit.commitId).projections.find(item => item.projection === "worker").state, "degraded");
+await assert.rejects(coordinator.recover(firstCommit.commitId, "worker", "retrying", async () => { throw new Error(""); }), error => error instanceof Error);
+assert.equal(coordinator.snapshot().recoveries, 0, "空错误消息的 recovery 失败不得残留并发锁");
+assert.equal(core.getCommit(firstCommit.commitId).projections.find(item => item.projection === "worker").state, "degraded");
+assert.ok(core.getCommit(firstCommit.commitId).projections.find(item => item.projection === "worker").detail, "recovery 失败必须保留非空 degraded 原因");
+
 await coordinator.recover(firstCommit.commitId, "worker", "resyncing", async () => {});
 coordinator.transition(firstCommit.commitId, "renderer", "degraded", "context lost");
 await coordinator.recover(firstCommit.commitId, "renderer", "retrying", () => true);

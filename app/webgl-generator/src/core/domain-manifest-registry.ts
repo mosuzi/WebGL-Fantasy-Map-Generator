@@ -68,6 +68,11 @@ export function validateDomainModuleManifest(value: unknown, context: DomainMani
   for (const gate of regression.gates) {
     if (!context.hasRegressionGate(gate)) manifestError("MANIFEST_REFERENCE_MISSING", `${id}.regression.gates.${gate}`, "package scripts 中不存在该回归门");
   }
+  for (const system of derivedSystems) {
+    if (!regression.gates.includes(system.verify)) {
+      manifestError("MANIFEST_REFERENCE_MISSING", `${id}.derivedSystems.${system.id}.verify`, `verifier ${system.verify} 未进入本领域 regression gates`);
+    }
+  }
   const capabilities = validateCapabilities(source.capabilities, "manifest.capabilities");
   const capabilityReasons = validateCapabilityReasons(source.capabilityReasons, "manifest.capabilityReasons");
 

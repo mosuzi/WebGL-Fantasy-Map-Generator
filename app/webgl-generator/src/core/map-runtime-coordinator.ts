@@ -52,17 +52,22 @@ export function createMapRuntimeCoordinator(options: {readonly core: CoreProject
     attempt: () => unknown | Promise<unknown>
   ): Promise<readonly ProjectionStatus[]> {
     if (typeof attempt !== "function") throw new CoreFacadeError("FACADE_LIFECYCLE_INVALID", "projection recovery 缺少执行函数");
+    if (mode !== "retrying" && mode !== "resyncing") throw new CoreFacadeError("FACADE_LIFECYCLE_INVALID", `未知 projection recovery mode ${String(mode)}`);
     const current = states.get(commitId)?.get(projection);
     if (current?.state !== "degraded") throw new CoreFacadeError("FACADE_LIFECYCLE_INVALID", `${projection} 只有 degraded 状态可以恢复`);
     const key = `${commitId}:${projection}`;
     if (recoveries.has(key)) throw new CoreFacadeError("FACADE_LIFECYCLE_INVALID", `${projection} 已有恢复任务运行中`);
     recoveries.add(key);
-    transition(commitId, projection, mode);
     try {
+      transition(commitId, projection, mode);
       await attempt();
       return transition(commitId, projection, "ready");
     } catch (error) {
-      transition(commitId, projection, "degraded", error instanceof Error ? error.message : String(error));
+      const reason = String(error instanceof Error ? error.message || error.name : error || "projection recovery failed").trim() || "projection recovery failed";
+      const failedState = states.get(commitId)?.get(projection)?.state;
+      if (failedState === "retrying" || failedState === "resyncing" || failedState === "degraded") {
+        transition(commitId, projection, "degraded", reason);
+      }
       throw error;
     } finally {
       recoveries.delete(key);
