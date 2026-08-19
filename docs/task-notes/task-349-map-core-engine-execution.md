@@ -34,8 +34,9 @@
 | 349-10c | settlements / zones / labels / measurements | 身份槽、锁、旧数据、history、projection 专项 | 不迁移路线 / 经济 | ACCEPT |
 | 349-10d | routes / rivers / features / resource markers | topology、引用、picking、Worker、history 专项 | 不迁移经济 / 军事 | ACCEPT |
 | 349-10e | economy / diplomacy / military | 跨域引用、history、Worker、旧数据专项 | 不收口全图 adoption | ACCEPT |
-| 349-10f | generation / import / adoption / export / headless profile 收口 | 新 session、rollback、旧档、checksum、无 DOM headless 专项 | 不删除未证明冗余的 legacy adapter | 进行中 |
-| 349-10g | legacy adapter、重复 revision / history 路径与影子审计收口 | 正式入口清单无双写、无第二 owner、非浏览器全回归 | 不扩大产品能力 | 待执行 |
+| 349-10f | generation / import / adoption / export / headless profile 收口 | 新 session、rollback、旧档、checksum、无 DOM headless 专项 | 不删除未证明冗余的 legacy adapter | ACCEPT |
+| 349-10g | legacy adapter、重复 revision / history 路径与影子审计收口 | 正式入口清单无双写、无第二 owner、非浏览器核心 / 领域回归 | 不扩大产品能力 | 待评审 |
+| 349-10g-a | markers 能力夹具契约同步 | Manifest、markers、地理网络资源专项 | 不回退现行 Manifest，不改产品能力 | 动态插入，待执行 |
 | 349-11 | 非浏览器集成终验与浏览器验收方案 | build、typecheck、全量非浏览器回归、方案完整性评估 | 不执行浏览器方案 | 待执行 |
 
 ## 提交与投影状态机冻结目标
@@ -287,5 +288,9 @@ planned → computed → validated → projections-prepared
 - 冻结目标：只移除已有调用证据、唯一 owner / revision / history 门和专项回归共同证明冗余的 legacy adapter、重复 revision / history 路径或影子双写；不按命名或代码年代推断可删除性。
 - 首个廉价门：对 identity adapters、MapRevisionTracker / EditHistory、MapCoreEngine shadow facade、领域 runtime、Worker pre-commit validators 与 legacy action 入口建立“定义—引用—正式 owner—测试”矩阵；零引用不自动等于可删除，未知 owner 立即停止该候选。
 - 禁止项：不改变算法、wire DTO、公开 API、地图格式或 canonical owner，不批量改名，不执行浏览器脚本，不修改 `source/`，不提前做 349-11 最终全门。
+- 实现：定义—引用—正式 owner—测试矩阵只证明 `revisionProfile` 同时为 `0 / 0` 引用且无独立协议职责，已删除该函数及其无用类型导入。四个零产品引用的 headless / persisted / presentation / render-resource adapter 仍承担跨 profile 类型与 runtime 负例，明确保留。新增静态审计固定唯一 `state.map`、单一 revision / history owner、getter-only facade、`1 active / 14 shadow` Manifest、八个 pre-commit validator 与 map-file receipt 无重复实现。
+- 门禁：静态审计、core contracts / manifests / facade / dependencies、六组领域协议、notes、whole-map profile、headless write、typecheck 与 production build `1392 modules` 通过；浏览器执行 `0`，`source/` 改动 `0`。
+- 动态插入：`regress:markers-core` 连续两次暴露起点夹具漂移——349-8 的正式 Manifest 已为 `worker / regeneration = required / required`，349-7 夹具仍断言 `not-required / optional`。现行产品契约由 Manifest 与地理网络资源协议门通过，不回退；新增独立阶段 `349-10g-a` 同步夹具。未完成顺序复评为 `349-10g -> 349-10g-a -> 349-11`。
+- 详细证据：[旧核心路径收口](./task-349-legacy-core-path-closure.md)。当前冻结 checkpoint，待只读评审。
 
 阶段结果在每次 checkpoint 后更新，长日志只记录命令和 artifact 路径，不粘贴到本文。

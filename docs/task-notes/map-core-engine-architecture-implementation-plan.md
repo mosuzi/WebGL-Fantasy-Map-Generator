@@ -586,7 +586,8 @@ Manifest 声明：
 17. `349-10e`：迁移 economy / diplomacy / military。
 18. `349-10f`：收口 generation / import / adoption / export / headless profile。
 19. `349-10g`：移除已证明冗余的 legacy adapter、重复 revision / history 路径和影子双写。
-20. `349-11`：执行 build、typecheck 和非浏览器回归终验，形成完整浏览器验收方案但不执行。
+20. `349-10g-a`：动态插入，同步 349-7 markers 专项与 349-8 已接入的 Worker / regeneration Manifest 契约，不回退产品能力。
+21. `349-11`：执行 build、typecheck 和非浏览器回归终验，形成完整浏览器验收方案但不执行。
 
 `349-1` 的现状证据、ADR、身份命名空间、`13` 个 Worker task 分类和阶段插入依据见 [核心架构盘点](./task-349-core-architecture-inventory.md)。
 

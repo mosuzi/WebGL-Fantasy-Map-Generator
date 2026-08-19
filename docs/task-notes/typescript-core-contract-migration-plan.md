@@ -408,7 +408,8 @@ TypeScript 不再维护一套与引擎计划冲突的独立阶段。唯一顺序
 17. `349-10e` economy / diplomacy / military；
 18. `349-10f` generation / import / adoption / export / headless profile；
 19. `349-10g` legacy adapter、重复 revision / history 和影子双写收口；
-20. `349-11` build、typecheck、非浏览器终验和浏览器验收方案评估。
+20. `349-10g-a` 动态插入：同步 markers 专项中的旧 capability 断言与已经接入的 Worker / regeneration Manifest 契约；
+21. `349-11` build、typecheck、非浏览器终验和浏览器验收方案评估。
 
 `349-3a` 不是扩张 TypeScript 范围：它修复 `349-1` 证实的现有存档字段注册遗漏，定义普通 persisted document identity 的派生 / 默认值 / 迁移，并强制各类 identity 通过显式 adapter 转换；完整证据与 ADR 见 [核心架构盘点](./task-349-core-architecture-inventory.md)。
 

@@ -1,5 +1,5 @@
 import type {PersistedDocumentBinding, PresentationBinding, RenderResourceBinding} from "../contracts/projection.js";
-import type {CanonicalRevisionVector, HeadlessRevisionVector, InteractiveRevisionVector} from "../contracts/revision.js";
+import type {HeadlessRevisionVector, InteractiveRevisionVector} from "../contracts/revision.js";
 import {
   CoreContractError,
   validateCanonicalRevisionVector,
@@ -78,10 +78,6 @@ export function adaptLegacyRenderResourceBinding(value: unknown): RenderResource
     renderPreparationId: source.renderPreparationId,
     renderGeneration: source.renderGeneration
   }, "legacyRenderResourceBinding");
-}
-
-export function revisionProfile(value: CanonicalRevisionVector): "interactive" | "headless" {
-  return value.profile;
 }
 
 function record(value: unknown, path: string): UnknownRecord {
