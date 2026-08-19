@@ -53,7 +53,7 @@ planned → computed → validated → projections-prepared
 | 字段 | 内容 |
 | --- | --- |
 | 当前阶段 | `349-6` notes command / history / query / persistence / API 垂直切片 |
-| 冻结点 | `349-6` 候选版本 `0.5.16`：五条 notes command、同一 history / revision、只读 query 与 persistence / UI projection 已接线，等待同一智能体只读评审 |
+| 冻结点 | `349-6` 修正候选版本 `0.5.17`：首轮评审的 post-commit projection P1 已补普通 command 与 undo 复现，等待 blocker-only 复审 |
 | 允许文件 | `domains/notes` runtime / manifest、notes 既有 UI / API 路由、备注摘要查询、专项 Node、阶段文档 |
 | 禁止文件 | 其他领域 command 收口、全图压缩保存重构、Worker / regeneration / view / layer、`source/`、main、浏览器 |
 | 必须保持 | `state.map` 与既有 `EditHistory / MapRevisionTracker` 仍是唯一 owner；不复制 notes 算法、不建第二 history；invalid / no-op 不产生 commit |
@@ -139,9 +139,10 @@ planned → computed → validated → projections-prepared
 
 - 完成：新增 TypeScript notes runtime adapter；五条 Manifest command 进入 active 路由，复用既有 command、`EditHistory`、`MapRevisionTracker` 和唯一 `state.map`，不复制业务算法或建立第二 owner。
 - 入口：独立备注新增 / 重命名、对象备注正文、单条 / 批量删除、摘要导入、undo / redo、备注面板查询与备注摘要导出均经同一 adapter；全图压缩保存仍按 `349-10f` 保留既有路径。
-- 契约：成功提交产生七步 lifecycle 和 persistence / UI settled projection；invalid / no-op 保持 notes、revision、history 与 commit sequence 不变；query / persistence 返回冻结的 detached snapshot。
+- 契约：成功提交产生七步 lifecycle 和 persistence / UI settled projection；history 已提交后的 UI 失败仍记录 canonical commit 并把 UI projection 标为 degraded，不再冒充 no-op / rollback；invalid / no-op 保持 notes、revision、history 与 commit sequence 不变；query / persistence 返回冻结的 detached snapshot。
 - 兼容：当前 save round-trip 与 v1 旧备注保留通过；notes 不伪造 Worker、regeneration、view 或 render layer。既有 `regress:note-import` 的标题断言与 HEAD 文案漂移，已只修正测试期待，产品文案未改。
-- 门禁：`regress:notes-core`、`typecheck:core`、core Manifest / facade、note import、对象新增 / 详情、API 数据兼容、map migration 与 production build 通过；build 为 `1368 modules`；浏览器执行 `0`。
-- 版本：`0.5.15 → 0.5.16`；下一步只读评审本 checkpoint，未获 `ACCEPT` 不进入 `349-7`。
+- 首轮评审：`BLOCK` 一项 P1——legacy history 已提交后 UI 刷新异常会被 adapter 误判为提交前拒绝，留下 map / revision / history 已前进而 core commit 为 `0`。最窄修正按 revision + history 双事实识别已提交转换，普通 command 返回真实 `executed:true`，undo / redo 可继续抛刷新异常但 commit / persistence 保留、UI degraded。
+- 门禁：修正后 `regress:notes-core` 为 `11` 次单调 revision / commit，并覆盖 command 与 undo 两种 post-commit UI 失败；`typecheck:core`、core facade 通过。完整兼容门与 build 在 `0.5.17` checkpoint 重跑；浏览器执行 `0`。
+- 版本：首轮 `0.5.15 → 0.5.16`，评审修正 `0.5.16 → 0.5.17`；下一步 blocker-only 复审，未获 `ACCEPT` 不进入 `349-7`。
 
 阶段结果在每次 checkpoint 后更新，长日志只记录命令和 artifact 路径，不粘贴到本文。

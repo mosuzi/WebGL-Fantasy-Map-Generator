@@ -4,7 +4,7 @@
 
 ## 当前状态
 
-> **执行门禁（2026-08-19）**：第 349 项“地图核心引擎化与 TypeScript 核心契约渐进迁移”已获用户明确批准；`349-0`～`349-5` 已由同一只读评审智能体 `ACCEPT`，`349-6` notes 垂直切片已形成 `0.5.16` checkpoint，当前等待同一智能体评审。该任务仅在 `codex/map-core-engine-architecture-plan` 并行分支推进，不得合入 `main`；全阶段不执行浏览器验收，只在最终阶段形成并评估浏览器验收方案。
+> **执行门禁（2026-08-19）**：第 349 项“地图核心引擎化与 TypeScript 核心契约渐进迁移”已获用户明确批准；`349-0`～`349-5` 已由同一只读评审智能体 `ACCEPT`。`349-6` 首轮评审发现 post-commit UI 失败会丢失 core commit，最窄修正已形成 `0.5.17` checkpoint，当前等待 blocker-only 复审。该任务仅在 `codex/map-core-engine-architecture-plan` 并行分支推进，不得合入 `main`；全阶段不执行浏览器验收，只在最终阶段形成并评估浏览器验收方案。
 
 当前 API 基线为：`window.webglGeneratorApi` 覆盖 `18` 个命名空间、`328` 个公开方法和 `179` 个编辑方法，稳定等级为 `320 / 7 / 1`；`328 / 328` 方法可通过 `info.describe` 发现，`analysis` 新增地点解析、距离和方位三项只读入口，并保留地图模板三项、`grid` 六个受控结构方法、`planner` `10` 个配方、`objects` `20` 类对象及 `cells` 八个读取 / 预检方法。完整能力矩阵为 `1228` 行、`covered 1154 / excluded 74 / deferred 0 / gap 0`；复合语义矩阵保持 `80` 个动作、`70` 个完整事务与 `10` 个玩法配方。
 

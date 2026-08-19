@@ -137,6 +137,42 @@ try {
   assert.deepEqual(runtime.persistenceSnapshot(), beforeFailureNotes);
   assert.equal(commitSequence, 9, "invalid / no-op 不得产生 commitId");
 
+  const uiFailureCommand = createStandaloneNoteCommand({id: "ui-failure", body: "已提交但刷新失败", packCell: 1});
+  const uiFailure = new Error("模拟 command 提交后的 UI 刷新失败");
+  const uiFailureResult = runtime.executeCommand({
+    commandId: "notes.createStandalone",
+    command: uiFailureCommand,
+    execute: () => {
+      executeLegacy(history, map, uiFailureCommand);
+      return {executed: false, command: uiFailureCommand, result: null, error: uiFailure};
+    }
+  });
+  assert.equal(uiFailureResult.executed, true, "history 已提交后的 projection 失败不得冒充 no-op");
+  assert.equal(runtime.get("note:ui-failure").body, "已提交但刷新失败");
+  assert.equal(tracker.getSnapshot().mapRevision, 10);
+  assert.equal(commitSequence, 10);
+  assert.deepEqual(runtime.getLastCommit().projections, [
+    {projection: "persistence", state: "ready"},
+    {projection: "ui", state: "degraded", detail: uiFailure.message}
+  ]);
+
+  const historyUiFailure = new Error("模拟 undo 提交后的 UI 刷新失败");
+  assert.throws(() => runtime.executeHistory({
+    action: "undo",
+    command: history.peek("undo"),
+    execute: () => {
+      executeLegacyHistory(history, map, "undo");
+      throw historyUiFailure;
+    }
+  }), error => error === historyUiFailure);
+  assert.equal(runtime.get("note:ui-failure"), null);
+  assert.equal(tracker.getSnapshot().mapRevision, 11);
+  assert.equal(commitSequence, 11, "undo projection 失败仍必须留下 canonical commit");
+  assert.deepEqual(runtime.getLastCommit().projections, [
+    {projection: "persistence", state: "ready"},
+    {projection: "ui", state: "degraded", detail: historyUiFailure.message}
+  ]);
+
   const oldDocumentText = await readFile(path.join(repoRoot, "tools/fixtures/webgl-map-v1-minimal.json"), "utf8");
   const oldMap = parseMapDocument(oldDocumentText).map;
   assert.deepEqual(oldMap.notes, {

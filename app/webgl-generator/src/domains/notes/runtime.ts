@@ -23,6 +23,7 @@ type AffectedTarget = Readonly<{kind: string; id: string | number}>;
 type LegacyCommand = {
   readonly label?: string;
   readonly effects?: Readonly<{affected?: readonly AffectedTarget[]}>;
+  readonly getResult?: () => unknown;
 };
 type LegacyExecution = Readonly<{
   executed: boolean;
@@ -136,21 +137,50 @@ export function createNotesDomainRuntime<TMap>(options: {
     core.observeValidated(operationId);
     core.observeProjectionsPrepared(operationId);
     const notesBefore = notesFingerprint();
+    const historyBefore = options.getHistoryFingerprint();
     const startedAt = now();
     let result: LegacyExecution;
     try {
       result = input.execute();
     } catch (error) {
+      const committedAfter = detectCommittedTransition(before, historyBefore);
+      if (committedAfter) {
+        const commit = observeCommittedMutation(operationId, input, committedAfter, startedAt);
+        settleProjections(commit, error);
+        throw error;
+      }
       assertUnchangedAfterRejectedMutation(notesBefore);
       core.observeRollback(operationId, `legacy ${input.operationName} rejected`);
       throw error;
     }
     if (!result?.executed) {
+      const committedAfter = detectCommittedTransition(before, historyBefore);
+      if (committedAfter) {
+        const commit = observeCommittedMutation(operationId, input, committedAfter, startedAt);
+        settleProjections(commit, result?.error || new Error(`legacy ${input.operationName} projection failed`));
+        return {
+          ...result,
+          executed: true,
+          command: result.command || input.command,
+          result: result.result ?? input.command.getResult?.() ?? null
+        };
+      }
       assertUnchangedAfterRejectedMutation(notesBefore);
       core.observeRollback(operationId, result?.error ? `legacy ${input.operationName} failed` : `legacy ${input.operationName} noop`);
       return result;
     }
     const after = currentRevision();
+    const commit = observeCommittedMutation(operationId, input, after, startedAt);
+    settleProjections(commit);
+    return result;
+  }
+
+  function observeCommittedMutation(
+    operationId: OperationId,
+    input: {readonly command: LegacyCommand; readonly operationName: string},
+    after: InteractiveRevisionVector,
+    startedAt: number
+  ): CommitEnvelope {
     const commit = core.observeCanonicalCommit(operationId, {
       after,
       writeSet: ["notes"],
@@ -160,11 +190,10 @@ export function createNotesDomainRuntime<TMap>(options: {
       timings: {legacyCommit: Math.max(0, now() - startedAt)}
     });
     core.observePublished(commit.commitId);
-    settleProjections(commit);
-    return result;
+    return commit;
   }
 
-  function settleProjections(commit: CommitEnvelope): void {
+  function settleProjections(commit: CommitEnvelope, uiError?: unknown): void {
     coordinator.attach(commit.commitId);
     try {
       persistenceSnapshot();
@@ -172,7 +201,16 @@ export function createNotesDomainRuntime<TMap>(options: {
     } catch (error) {
       coordinator.transition(commit.commitId, "persistence", "degraded", error instanceof Error ? error.message : String(error));
     }
-    coordinator.transition(commit.commitId, "ui", "ready");
+    if (uiError) coordinator.transition(commit.commitId, "ui", "degraded", uiError instanceof Error ? uiError.message : String(uiError));
+    else coordinator.transition(commit.commitId, "ui", "ready");
+  }
+
+  function detectCommittedTransition(before: InteractiveRevisionVector, historyBefore: string): InteractiveRevisionVector | null {
+    const after = currentRevision();
+    const revisionChanged = !sameInteractiveRevision(before, after);
+    const historyChanged = options.getHistoryFingerprint() !== historyBefore;
+    if (revisionChanged !== historyChanged) throw new Error("notes legacy mutation 只推进了 revision 或 history 之一");
+    return revisionChanged ? after : null;
   }
 
   function currentRevision(): InteractiveRevisionVector {
@@ -240,4 +278,11 @@ function readNotesArray(map: unknown): unknown[] {
 
 function now(): number {
   return globalThis.performance?.now?.() ?? Date.now();
+}
+
+function sameInteractiveRevision(left: InteractiveRevisionVector, right: InteractiveRevisionVector): boolean {
+  return left.runtimeMapSessionId === right.runtimeMapSessionId
+    && left.canonicalRevision === right.canonicalRevision
+    && left.topologyRevision === right.topologyRevision
+    && left.domainRevisions.notes === right.domainRevisions.notes;
 }
