@@ -36,8 +36,8 @@
 | 349-10e | economy / diplomacy / military | 跨域引用、history、Worker、旧数据专项 | 不收口全图 adoption | ACCEPT |
 | 349-10f | generation / import / adoption / export / headless profile 收口 | 新 session、rollback、旧档、checksum、无 DOM headless 专项 | 不删除未证明冗余的 legacy adapter | ACCEPT |
 | 349-10g | legacy adapter、重复 revision / history 路径与影子审计收口 | 正式入口清单无双写、无第二 owner、非浏览器核心 / 领域回归 | 不扩大产品能力 | ACCEPT |
-| 349-10g-a | markers 能力夹具契约同步 | Manifest、markers、地理网络资源专项 | 不回退现行 Manifest，不改产品能力 | 动态插入，待评审 |
-| 349-11 | 非浏览器集成终验与浏览器验收方案 | build、typecheck、全量非浏览器回归、方案完整性评估 | 不执行浏览器方案 | 待执行 |
+| 349-10g-a | markers 能力夹具契约同步 | Manifest、markers、地理网络资源专项 | 不回退现行 Manifest，不改产品能力 | 动态插入，ACCEPT |
+| 349-11 | 非浏览器集成终验与浏览器验收方案 | build、typecheck、全量非浏览器回归、方案完整性评估 | 不执行浏览器方案 | 执行中 |
 
 ## 提交与投影状态机冻结目标
 
@@ -294,7 +294,7 @@ planned → computed → validated → projections-prepared
 - 首轮评审：`911b0aa / 0.5.49` 为 `BLOCK`。删除 / 保留结论成立，但审计脚本只在 app.js 统计 owner、未实际断言 canonical map、允许 Manifest 分母少一项，并只按旧 helper 名排除重复 metadata；文档还把 markers 正式契约来源误记为 349-8。`0.5.50` 已改为全产品源码 owner 统计、精确两个 `state.map` 赋值点、精确 `15 / 1 / 14` Manifest、map-file 三个结果点共用唯一 metadata builder，并统一更正为 349-10d，待 blocker-only 复审。
 - 终验：同一只读评审智能体对 `e628f17 / 0.5.50` 给出 `ACCEPT`；两项 P1 均闭合，删除 / 保留结论成立，无新增 P0 / P1，浏览器执行 `0`。
 
-### 349-10g-a — 执行中
+### 349-10g-a — 已接受
 
 - 插入依据：349-7 的 `regress:markers-core` 仍断言 `worker / regeneration = not-required / optional`，但 349-10d 已为真实 marker regeneration Worker 登记 `required / required`；旧夹具连续两次阻断非浏览器回归。
 - 冻结目标：只把该专项的两项 capability 断言同步为已接受的正式 Manifest，不修改 Manifest、领域 runtime、算法、wire、API 或地图格式。
@@ -302,6 +302,14 @@ planned → computed → validated → projections-prepared
 - 禁止项：不扩大到 marker 行为或展示修正，不执行浏览器脚本，不修改 `source/`，不提前做 349-11 全量终验。
 - 实现：专项仍断言 Manifest 为 `shadow`，但把 Worker / regeneration capability 从旧 `not-required / optional` 同步为正式 `required / required`；状态说明改为“command owner 未完整接管前不得虚报 active”。产品 Manifest 与 runtime 改动均为 `0`。
 - 门禁：markers presentation 为 `8` 个 canonical / point / picking / DTO / GeoJSON 同源对象，core operations `0`；core Manifest `15 domains / 216 descriptors / 35 negative cases`、地理网络资源协议、typecheck 与 production build `1392 modules` 通过。浏览器执行 `0`，`source/` 改动 `0`，待只读评审。
+- 终验：同一只读评审智能体对 `a084d4a / 0.5.52` 给出 `ACCEPT`；产品代码差异为 `0`，范围、契约与文档一致，无 P0 / P1，浏览器执行 `0`。
+
+### 349-11 — 执行中
+
+- 冻结目标：对第 349 项执行最终静态、TypeScript、核心、领域、整图、headless、旧档与 production build 非浏览器终验；形成浏览器验收方案并评估可执行性，但绝不执行该方案。
+- 首个廉价门：静态枚举所有拟纳入的命令，拒绝脚本名或命令体含 `browser`、Playwright、Chrome、CDP、Puppeteer、Selenium 或 UI 自动化启动入口；只有通过防误触审计的命令才可执行。
+- 方案内容：环境与精确标签页接管、10k / 100k / v1 旧档样本、identity / revision / history / Worker / projection / render / persistence 断言、性能分段、截图、错误面、恢复与清理步骤、预计成本及阻断条件。
+- 禁止项：不启动浏览器，不执行任何浏览器命名或实际 UI 门，不修改产品语义，不修改 `source/`，不合入或推送 `main`。
 - 详细证据：[旧核心路径收口](./task-349-legacy-core-path-closure.md)。当前冻结 checkpoint，待只读评审。
 
 阶段结果在每次 checkpoint 后更新，长日志只记录命令和 artifact 路径，不粘贴到本文。
