@@ -7,7 +7,7 @@
 ## 协议闭合
 
 - 主线程在发起人口计算前用既有 `fingerprintPopulationSource` 计算来源指纹并随请求发送；Worker 已有 stale 门验证输入，回包 adapter 再要求 plan / result 指纹与主线程请求一致。
-- 来源指纹覆盖全部 population 可写根和算法额外读取依赖：grid points / height / burg / feature、Feature、settlement routes、pack cell identity / height / grid / administration / burg / market、goods，以及独立 politics / society / economy / stale metadata mirror；同 revision 下任一 mirror 漂移都在 apply 前拒绝。
+- 来源指纹覆盖全部 population 可写根和算法额外读取依赖：grid points / height / burg / feature、Feature、settlement routes、pack cell identity / height / grid / administration / burg / market、`pack.goods` 及旧数据 fallback `economy.goods`，以及独立 politics / society / economy / stale metadata mirror；同 revision 下任一有效读取源漂移都在 apply 前拒绝。
 - legacy `mapIdentity / mapRevision / generationToken / lockFingerprint / operationId / operationName` 显式映射为核心 `ComputeOperationBinding`；transaction identity 由同一请求字段确定性组成，不把数字 operation id 冒充品牌字符串。
 - 普通结果必须同时匹配 output binding、plan binding、请求 kind、result kind、来源指纹、patch domain 和 `result.changedPaths`；历史结果必须匹配 action、请求 kind 和 binding。
 - patch 的 `writeSet` 与 operations 路径必须一一对应、无重复，且每条路径属于 population Manifest 声明的根写集。历史 undo / redo patch 在发送给 Worker 前经过同一门。
@@ -21,9 +21,9 @@
 
 ## 验收证据
 
-- `regress:population-core-protocol`：固定 1k 实际 task，普通 / history 两种 result kind，`145` 条实际 patch 路径；拒绝 generation、stale、operation gap、checksum、真实读取依赖 mirror 漂移、错误 result kind、未知 / 重复写路径，并验证取消回滚。
+- `regress:population-core-protocol`：固定 1k 实际 task，普通 / history 两种 result kind，`145` 条实际 patch 路径；拒绝 generation、stale、operation gap、checksum、真实读取依赖 mirror 漂移及 `pack.goods` 缺失时的 `economy.goods` fallback 漂移、错误 result kind、未知 / 重复写路径，并验证取消回滚。
 - `regress:population-adjustment`、`regress:population-transfer`：领域语义、旧图、save、undo / redo 与 fault 门通过。
-- `webgl-generator-population-worker-task-regression.mjs`：10k / 100k、legacy parity、identity、history、locks / cancel / fault / stale 通过；扩充真实读取集后的 100k 本轮约 `966.5ms`，`1560` 条 patch path。
+- `webgl-generator-population-worker-task-regression.mjs`：10k / 100k、legacy parity、identity、history、locks / cancel / fault / stale 通过；最终扩充真实读取集后的 100k 本轮约 `983.7ms`，`1560` 条 patch path。
 - `webgl-generator-worker-task-regression.mjs`：通用协议、late reject、cancel terminate、ACK、rollback / recovery / session owner 通过。
 - `typecheck:core`、`regress:core-manifests` 与 production build `1373 modules` 通过。
 - `regress:population-adjustment-ui-api` 的静态文案断言仍期待“预检转移”，而本阶段起点 `HEAD` 已为“查看转移影响”；该首败与本阶段 diff 无关，未修改产品文案，也不把此门声称为通过。

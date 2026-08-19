@@ -26,8 +26,8 @@
 | 349-5 | 薄 `MapCoreEngine` 与 `MapRuntimeCoordinator` facade，影子产生 commit / projection 状态 | 旧 history / revision 行为不变；无第二 map owner | 不迁移复杂领域 | ACCEPT |
 | 349-6 | notes command / history / query / persistence / API 垂直切片 | 新增、编辑、删除、undo / redo、旧数据、save 回归 | 不伪造 Worker / regeneration / layer | ACCEPT |
 | 349-7 | markers presentation / layer / picking 垂直切片 | identity、draw、pick、export 的 Node / source 契约 | 不执行真实视觉浏览器门 | ACCEPT |
-| 349-8 | 一个真实 Worker task 的统一 binding / result / patch 切片 | checksum、stale、cancel、gap、restart 的专项回归 | 不批量迁移 Worker | CHECKPOINT 待评审 |
-| 349-9 | dependency registry、projection 状态和局部失效接线 | declared read/write、full rebuild 显式化、projection recovery | 不迁移未登记领域 | 待执行 |
+| 349-8 | 一个真实 Worker task 的统一 binding / result / patch 切片 | checksum、stale、cancel、gap、restart 的专项回归 | 不批量迁移 Worker | ACCEPT |
+| 349-9 | dependency registry、projection 状态和局部失效接线 | declared read/write、full rebuild 显式化、projection recovery | 不迁移未登记领域 | 执行中 |
 | 349-10a | terrain / grid / height-derived / climate / ocean / topology 基础域 | 旧数据、history、Worker、renderer source / Node 门 | 不迁移社会或行政域 | 待执行 |
 | 349-10b | society / politics 与 pack mirror | mirror、行政引用、history、Worker 专项 | 不迁移城镇 / 路线 | 待执行 |
 | 349-10c | settlements / zones / labels / measurements | 身份槽、锁、旧数据、history、projection 专项 | 不迁移路线 / 经济 | 待执行 |
@@ -52,14 +52,14 @@ planned → computed → validated → projections-prepared
 
 | 字段 | 内容 |
 | --- | --- |
-| 当前阶段 | `349-8` `population.compute` Worker binding / result / patch 切片，checkpoint 待评审 |
-| 冻结点 | `349-7@57e05d5` / `0.5.19` 已接受；349-8 候选版本 `0.5.20` |
-| 允许文件 | population domain adapter、既有 Worker registry / protocol / task 的最小接线、专项 Node、阶段文档 |
-| 禁止文件 | 其他 Worker task、population 产品能力扩张、`source/`、main、浏览器 |
-| 必须保持 | 既有 Worker session / canonical owner / history 唯一；stale / cancel / gap / restart 不提交半成品；不复制 population 算法 |
-| 首个廉价门 | 定向盘点 `population.compute` request / result / patch / ACK 与现有回归，冻结唯一协议 adapter |
-| 冻结门 | checksum、stale、cancel、gap、restart / resync 专项、typecheck、Manifest、既有 population 回归、production build、评审 ACCEPT |
-| 停止条件 | 真实 task 无法在不迁移第二个 Worker 的情况下闭合，或必须改变用户可见 population 语义 |
+| 当前阶段 | `349-9` dependency registry、projection 状态与局部失效接线 |
+| 冻结点 | `349-8@4411e86` / `0.5.22` 已接受；先盘点 Manifest derivedSystems、edit refresh effects 与 coordinator projection 的真实交点 |
+| 允许文件 | core dependency contract / registry / planner、coordinator 的最小 projection recovery 接线、三份已登记 Manifest、专项 Node、阶段文档 |
+| 禁止文件 | 未登记领域迁移、业务算法、renderer / Worker 大改、`source/`、main、浏览器 |
+| 必须保持 | dependency 只解释声明的 reads / writes；未知依赖显式 full rebuild；presentation-only 不污染 canonical revision；projection 失败不回滚已发布 history |
+| 首个廉价门 | 盘点三份 Manifest derivedSystems 与既有 effects / invalidation 字符串，冻结唯一 ID 和 full rebuild fallback |
+| 冻结门 | dependency plan 的 exact / local / presentation / explicit-full 分类、未声明读写拒绝、projection degraded → retry / resync、typecheck、Manifest、facade、production build、评审 ACCEPT |
+| 停止条件 | 必须迁移第四个领域才能证明 registry，或局部化需要改变业务算法 / 用户语义 |
 
 ## 阶段结果
 
@@ -167,9 +167,11 @@ planned → computed → validated → projections-prepared
 - 原子性：专项拒绝 generation、stale revision、operation gap、source checksum、错误 result kind、未知 / 重复写路径；apply 后取消验证来源指纹完全恢复。通用 Worker 门继续覆盖 ACK、late reject、cancel terminate、rollback / recovery 与 restart / resync owner。
 - 首轮评审：`BLOCK` 一项 P1——原 source fingerprint 未覆盖 settlement routes、grid points / burg / feature、Feature 及独立 mirror 等真实读取依赖，同 revision 的漂移 Worker mirror 可绕过 checksum 并覆盖 `settlements.metadata`。
 - 最窄修正：来源指纹改为覆盖全部 population 可写根及算法额外读取集；专项逐项漂移 route、grid、Feature、pack-grid、politics / society mirror、economy / stale metadata，并以真实携旧指纹 task 验证 apply 前拒绝。
-- 门禁：修正后 population core protocol、typecheck、Manifest、人口 10k / 100k Worker、通用 Worker registry 与 production build `1373 modules` 通过；100k 为约 `966.5ms / 1560 patch paths`。
+- 首次 blocker-only 复审：`BLOCK` 同类 P1——旧数据在 `pack.goods` 缺失时读取 `economy.goods`，首轮修正只覆盖前者；漂移 fallback goods 仍可改变 demand patch。最终窄修同时指纹化两份存在性和 effective goods，并补真实携旧指纹 task 拒绝。
+- 门禁：最终修正后 population core protocol、typecheck、Manifest、人口 10k / 100k Worker、通用 Worker registry 与 production build `1373 modules` 通过；100k 为约 `983.7ms / 1560 patch paths`。
 - 既有首败：`regress:population-adjustment-ui-api` 在未改动的 HEAD 面板文案上仍期待“预检转移”，实际为“查看转移影响”；本阶段不改产品文案，未声称该门通过。
-- 版本：首轮 `0.5.19 → 0.5.20`，评审修正 `0.5.20 → 0.5.21`；浏览器未启动、未操作、未执行。
-- 下一步：提交修正 checkpoint 后交同一只读评审智能体 blocker-only 复审；未获 `ACCEPT` 不进入 `349-9`。
+- 版本：首轮 `0.5.19 → 0.5.20`，首次评审修正 `0.5.20 → 0.5.21`，最终修正 `0.5.21 → 0.5.22`；浏览器未启动、未操作、未执行。
+- 终验：同一只读评审智能体最后一次 blocker-only 复审 `ACCEPT`；真实读取集、旧数据 goods fallback、binding / result / patch 与 coordinator owner 无 P0 / P1 偏差。
+- 下一步：`349-9` 只接 dependency registry、projection 状态与局部失效，不迁移未登记领域。
 
 阶段结果在每次 checkpoint 后更新，长日志只记录命令和 artifact 路径，不粘贴到本文。

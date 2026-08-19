@@ -208,7 +208,9 @@ export function fingerprintPopulationSource(map, request = {}) {
       packCellReligion: map?.pack?.cells?.religion,
       packCellBurg: map?.pack?.cells?.burg,
       packCellMarket: map?.pack?.cells?.market,
-      packGoods: map?.pack?.goods
+      packGoods: map?.pack?.goods,
+      economyGoods: map?.economy?.goods,
+      effectiveGoods: map?.pack?.goods || map?.economy?.goods
     },
     locks: map?.regenerationLocks
   });

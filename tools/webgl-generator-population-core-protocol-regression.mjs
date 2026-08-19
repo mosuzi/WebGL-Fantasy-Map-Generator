@@ -51,6 +51,17 @@ try {
     runPopulationWorkerTask({map: staleRouteMap, request, binding, sourceFingerprint}, taskContext(binding)),
     error => error?.code === "population-worker-source-stale"
   );
+  const fallbackGoodsSource = structuredClone(source);
+  fallbackGoodsSource.economy.goods = structuredClone(fallbackGoodsSource.pack.goods);
+  delete fallbackGoodsSource.pack.goods;
+  const fallbackGoodsFingerprint = fingerprintPopulationSource(fallbackGoodsSource, request);
+  const staleFallbackGoodsMap = structuredClone(fallbackGoodsSource);
+  staleFallbackGoodsMap.economy.goods[1].demandCoverage = {urban: 99, rural: 99};
+  assert.notEqual(fingerprintPopulationSource(staleFallbackGoodsMap, request), fallbackGoodsFingerprint, "来源指纹漏掉 economy.goods fallback");
+  await assert.rejects(
+    runPopulationWorkerTask({map: staleFallbackGoodsMap, request, binding, sourceFingerprint: fallbackGoodsFingerprint}, taskContext(binding)),
+    error => error?.code === "population-worker-source-stale"
+  );
   const workerMap = structuredClone(source);
   const output = await runPopulationWorkerTask({map: workerMap, request, binding, sourceFingerprint}, taskContext(binding));
   const accepted = validatePopulationWorkerOutput({
@@ -141,7 +152,7 @@ try {
       phase: accepted.binding.bindingPhase,
       revision: accepted.binding.sourceRevision.canonicalRevision
     },
-    rejected: ["generation", "stale", "gap", "checksum", "read-dependency-drift", "result-kind", "unknown-write", "duplicate-write", "unsafe-write", "overlap-write", "cancel-rollback"]
+    rejected: ["generation", "stale", "gap", "checksum", "read-dependency-drift", "economy-goods-fallback-drift", "result-kind", "unknown-write", "duplicate-write", "unsafe-write", "overlap-write", "cancel-rollback"]
   }, null, 2));
 } finally {
   await vite.close();
