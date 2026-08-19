@@ -73,22 +73,23 @@ assert.equal(affectedSummary.count, regiments.length + 1, "affected 总数没有
 assert.equal(affectedSummary.kinds[0]?.kind, "derived-system", "affected 缺少军事系统目标");
 assert(affectedSummary.text.startsWith("derived-system#military"), "affected 摘要没有以军事系统开头");
 
-const [appSource, controlSource] = await Promise.all([
+const [appSource, controlSource, militaryCommandSource] = await Promise.all([
   readFile(new URL("../app/webgl-generator/src/runtime/app.js", import.meta.url), "utf8"),
-  readFile(new URL("../app/webgl-generator/src/ui/vue/components/ControlPanel.vue", import.meta.url), "utf8")
+  readFile(new URL("../app/webgl-generator/src/ui/vue/components/ControlPanel.vue", import.meta.url), "utf8"),
+  readFile(new URL("../app/webgl-generator/src/runtime/military-edit-commands.js", import.meta.url), "utf8")
 ]);
 const militaryBlock = functionBlock(appSource, "regenerateMilitary");
-assert.match(controlSource, /\{value: "military", kind: "military", label: "军事", impact:/, "控制面板缺少军事重生成入口");
+assert.match(controlSource, /\{value: "military", kind: "military", label: regenerationKindLabel\("military"\), impact:/, "控制面板缺少军事重生成入口");
 assert.match(appSource, /\["military", "army", "armies"\]\.includes\(value\)/, "API 缺少 military 别名归一化");
 assert.match(militaryBlock, /validStates\.length/, "军事重生成没有拒绝缺少有效国家的地图");
 assert.match(militaryBlock, /nextRegenerationSalt\(map, "military"\)/, "军事重生成没有推进扰动编号");
 assert.match(militaryBlock, /markDerivedFresh\(map, \["military"\]\)/, "军事重生成没有把 military 标为 fresh");
 assert.match(militaryBlock, /markDerivedStale\(map, \["zones"\]\)/, "军事重生成没有把 zones 标为 stale");
-assert.match(militaryBlock, /archiveReason: "military-regeneration"[\s\S]*map\.military\.events = archivedEvents/, "军事重生成没有保留并标记全局战报档案");
-assert.match(militaryBlock, /preservedBattleEvents: archivedEvents\.length/, "军事结果没有返回保留战报数");
+assert.match(militaryCommandSource, /archiveReason: "military-regeneration"[\s\S]*map\.military\.events = archivedEvents/, "军事重生成命令没有保留并标记全局战报档案");
+assert.match(militaryCommandSource, /preservedBattleEvents: archivedEvents\.length/, "军事命令结果没有返回保留战报数");
 assert.match(militaryBlock, /regenerationSalt: salt/, "军事结果没有返回扰动编号");
-assert.match(militaryBlock, /attempts < 6/, "军事重生成没有在同构结果下自动更换扰动重试");
-assert.match(militaryBlock, /syncMilitaryStateMirrors\(map\)/, "军事重生成没有同步序列化后断开的国家军事镜像");
+assert.match(militaryCommandSource, /attempts < attemptLimit/, "军事重生成没有在同构结果下自动更换扰动重试");
+assert.match(militaryCommandSource, /syncMilitaryStateMirrors\(map\)/, "军事重生成没有同步序列化后断开的国家军事镜像");
 assert.match(militaryBlock, /variation,/, "军事结果没有返回实际变化摘要");
 assert.match(militaryBlock, /\["point-layers", "line-layers", "labels", "object-panels", "object-index"\]/, "军事重生成没有同步刷新图标、标签和战线");
 assert.match(militaryBlock, /before,\s+after,/, "军事结果没有返回前后摘要");

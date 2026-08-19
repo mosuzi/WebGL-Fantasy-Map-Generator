@@ -294,6 +294,9 @@ export function createRegenerateMilitaryCommand({
       affected: systemAffected("military-regeneration", [{kind: "military", id: "all"}])
     },
     apply(context) {
+      const previousEvents = clonePlain(context.map?.military?.events || context.map?.pack?.military?.events || []);
+      const previousEventSequence = Number(context.map?.military?.metadata?.eventSequence || context.map?.pack?.military?.metadata?.eventSequence || 0);
+      const previousEventArchiveGeneration = Number(context.map?.military?.metadata?.eventArchiveGeneration || context.map?.pack?.military?.metadata?.eventArchiveGeneration || 0);
       const lockedSnapshots = collectLockedMilitaryRegiments(context.map, {preservedRegiments, lockedMilitaryRegiments});
       const lockedIds = new Set(lockedSnapshots.map(snapshot => snapshot.id));
       if (allMilitaryRegimentsLocked(context.map, lockedIds)) {
@@ -323,6 +326,7 @@ export function createRegenerateMilitaryCommand({
           variation = compareMilitaryVariation(before, unlockedMilitaryVariationSnapshot(context.map, locked.ids));
         } while (!variation.changed && attempts < attemptLimit);
 
+        const archivedEvents = archiveMilitaryRegenerationEvents(context.map, previousEvents, previousEventSequence, previousEventArchiveGeneration);
         injectMilitaryRegenerationFault(faultAt, "after-events");
         const currentLocked = prepareLockedMilitaryRegiments(context.map.pack, {lockedMilitaryRegiments: lockedSnapshots});
         assertLockedMilitaryRegiments(context.map.pack, currentLocked);
@@ -332,6 +336,7 @@ export function createRegenerateMilitaryCommand({
           executed: true,
           attempts,
           lockedRegiments: currentLocked.ids.size,
+          preservedBattleEvents: archivedEvents.length,
           variation
         };
       } catch (error) {
@@ -357,6 +362,19 @@ export function createRegenerateMilitaryCommand({
       return result ? clonePlain(result) : null;
     }
   };
+}
+
+function archiveMilitaryRegenerationEvents(map, previousEvents, previousEventSequence, previousEventArchiveGeneration) {
+  const archiveGeneration = Number(previousEventArchiveGeneration || 0) + 1;
+  const archivedEvents = (previousEvents || []).map(event => ({...clonePlain(event), archived: true, archiveReason: "military-regeneration", archiveGeneration}));
+  map.military ||= {};
+  map.military.events = archivedEvents;
+  map.military.metadata ||= {};
+  map.military.metadata.events = archivedEvents.length;
+  map.military.metadata.eventSequence = previousEventSequence;
+  map.military.metadata.eventArchiveGeneration = archiveGeneration;
+  if (map.pack) map.pack.military = map.military;
+  return archivedEvents;
 }
 
 export function createSetMilitaryRatiosCommand(stateId, ratios, {label = "调整兵种比例"} = {}) {

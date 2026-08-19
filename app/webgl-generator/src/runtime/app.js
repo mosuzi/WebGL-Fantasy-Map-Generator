@@ -15,6 +15,7 @@ import {validatePopulationWorkerOutput, validatePopulationWorkerPatch} from "../
 import {validateSocietyPoliticsWorkerOutput} from "../domains/society-politics/worker-runtime.ts";
 import {validateSettlementZoneWorkerOutput} from "../domains/settlements/worker-runtime.ts";
 import {validateFeaturesNetworksResourcesWorkerOutput} from "../domains/features/worker-runtime.ts";
+import {validateEconomyDiplomacyMilitaryWorkerOutput} from "../domains/economy/worker-runtime.ts";
 import {
   createCommittedFoundationWorkerBinding,
   createFoundationWorkerBinding,
@@ -8557,7 +8558,7 @@ async function executeSocialExpansionWorkerHistory(state, documentRef, action, c
     includeBindingInPayload: true,
     renderLayers: metadata.renderLayers,
     effects: command.effects,
-    assertOutput: ({state: currentState, sourceMap, output}) => {
+    assertOutput: ({state: currentState, sourceMap, binding, output}) => {
       if (currentState.map !== sourceMap || currentState.editHistory.peek(action) !== command) {
         const error = new Error(`${verb}${metadata.label}结果已被新的地图状态取代`);
         error.code = "operation_obsolete";
@@ -11059,6 +11060,7 @@ async function applyEconomyMutationViaWorker(state, documentRef, {request, comma
         error.code = "economy-worker-result-invalid";
         throw error;
       }
+      validateEconomyDiplomacyMilitaryWorkerOutput({kind: "economy", sourceMap, binding, output, policy: getEconomyWorkerPatchPolicy(sourceMap, output.patch)});
     },
     createCommand: ({output, result, effects}) => attachEconomyWorkerHistory(createDomainPatchCommand({
       patch: output.patch,
@@ -11173,7 +11175,7 @@ async function applyMilitaryPolicyMutationViaWorker(state, documentRef, {request
     includeBindingInPayload: true,
     renderLayers,
     effects: command.effects,
-    assertOutput: ({state: currentState, sourceMap, output}) => {
+    assertOutput: ({state: currentState, sourceMap, binding, output}) => {
       if (currentState.map !== sourceMap) {
         const error = new Error(`${userLabel}准备结果已被新的地图状态取代`);
         error.code = "operation_obsolete";
@@ -11187,6 +11189,7 @@ async function applyMilitaryPolicyMutationViaWorker(state, documentRef, {request
         error.code = "military-policy-worker-result-invalid";
         throw error;
       }
+      validateEconomyDiplomacyMilitaryWorkerOutput({kind: "military-policy", sourceMap, binding, output, policy: getMilitaryPolicyWorkerPatchPolicy(sourceMap, output.patch)});
     },
     createCommand: ({output, result, effects}) => attachMilitaryPolicyWorkerHistory(createDomainPatchCommand({
       patch: output.patch,
@@ -12546,6 +12549,14 @@ async function regenerateMapAttributeViaWorker(state, documentRef, kind, options
               output,
               policy: getRegenerationPatchPolicy(targetKind)
             })
+          : ["diplomacy", "military"].includes(targetKind)
+            ? ({sourceMap, binding, output}) => validateEconomyDiplomacyMilitaryWorkerOutput({
+                kind: targetKind,
+                sourceMap,
+                binding,
+                output,
+                policy: getRegenerationPatchPolicy(targetKind)
+              })
       : undefined,
     createCommand: ({output, result, effects}) => createWorkerRegenerationPatchCommand(state.map, {
       patch: output.patch,
@@ -14875,7 +14886,7 @@ function regenerateMilitary(state, documentRef, options = {}) {
       variation,
       before,
       after,
-      preservedBattleEvents: previousEvents,
+      preservedBattleEvents: Number(commandResult.preservedBattleEvents) || previousEvents,
       affected: {
         summary: state.lastEditRefresh?.affected || "none",
         count: state.lastEditRefresh?.affectedCount || affected.length,

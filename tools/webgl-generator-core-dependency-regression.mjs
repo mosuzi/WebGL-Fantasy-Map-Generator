@@ -21,6 +21,9 @@ try {
   const {featuresManifest} = await vite.ssrLoadModule("/src/domains/features/manifest.ts");
   const {routesManifest} = await vite.ssrLoadModule("/src/domains/routes/manifest.ts");
   const {riversManifest} = await vite.ssrLoadModule("/src/domains/rivers/manifest.ts");
+  const {economyManifest} = await vite.ssrLoadModule("/src/domains/economy/manifest.ts");
+  const {diplomacyManifest} = await vite.ssrLoadModule("/src/domains/diplomacy/manifest.ts");
+  const {militaryManifest} = await vite.ssrLoadModule("/src/domains/military/manifest.ts");
   const targets = {
     "object-panels": ["ui"],
     "point-layers": ["renderer"],
@@ -51,7 +54,10 @@ try {
   registry.register(featuresManifest);
   registry.register(routesManifest);
   registry.register(riversManifest);
-  assert.deepEqual(registry.snapshot().ids, ["features.topology-projection", "foundation.climate", "foundation.height-topology", "foundation.ocean-current-layer", "labels.layout-projection", "markers.point-layer", "markers.resource-economy", "measurements.overlay-projection", "notes.object-panels", "population.downstream", "rivers.hydrology-projection", "routes.line-projection", "settlements.city-projection", "society-politics.administrative-mirror", "society-politics.social-assignment", "zones.region-projection"]);
+  registry.register(economyManifest);
+  registry.register(diplomacyManifest);
+  registry.register(militaryManifest);
+  assert.deepEqual(registry.snapshot().ids, ["diplomacy.relation-projection", "economy.market-projection", "features.topology-projection", "foundation.climate", "foundation.height-topology", "foundation.ocean-current-layer", "labels.layout-projection", "markers.point-layer", "markers.resource-economy", "measurements.overlay-projection", "military.force-projection", "notes.object-panels", "population.downstream", "rivers.hydrology-projection", "routes.line-projection", "settlements.city-projection", "society-politics.administrative-mirror", "society-politics.social-assignment", "zones.region-projection"]);
 
   const topologyFull = registry.planCanonical({writeSet: ["grid"]});
   assert.equal(topologyFull.mode, "full-rebuild");
@@ -119,6 +125,18 @@ try {
   assert.ok(riversFull.systems.includes("rivers.hydrology-projection"));
   assert.ok(riversFull.invalidated.includes("cell-colors"));
 
+  const economyFull = registry.planCanonical({writeSet: ["economy.markets"]});
+  assert.ok(economyFull.systems.includes("economy.market-projection"));
+  assert.ok(economyFull.invalidated.includes("economy-demand"));
+
+  const diplomacyFull = registry.planCanonical({writeSet: ["diplomacy"]});
+  assert.ok(diplomacyFull.systems.includes("diplomacy.relation-projection"));
+  assert.ok(diplomacyFull.invalidated.includes("cell-colors"));
+
+  const militaryFull = registry.planCanonical({writeSet: ["military"]});
+  assert.ok(militaryFull.systems.includes("military.force-projection"));
+  assert.ok(militaryFull.invalidated.includes("point-layers"));
+
   const unknown = registry.planCanonical({writeSet: ["unregistered.section"]});
   assert.equal(unknown.mode, "full-rebuild");
   assert.ok(unknown.fallbackReasons[0].includes("未声明写路径"));
@@ -158,12 +176,13 @@ try {
   console.log(JSON.stringify({
     ok: true,
     registry: registry.snapshot(),
-    modes: [notesLocal.mode, populationFull.mode, politicsFull.mode, religionFull.mode, settlementsFull.mode, zonesFull.mode, measurementsFull.mode, featuresFull.mode, routesFull.mode, riversFull.mode, presentation.mode, unknown.mode, exactRegistry.planCanonical({writeSet: ["document.title"]}).mode],
+    modes: [notesLocal.mode, populationFull.mode, politicsFull.mode, religionFull.mode, settlementsFull.mode, zonesFull.mode, measurementsFull.mode, featuresFull.mode, routesFull.mode, riversFull.mode, economyFull.mode, diplomacyFull.mode, militaryFull.mode, presentation.mode, unknown.mode, exactRegistry.planCanonical({writeSet: ["document.title"]}).mode],
     notes: {systems: notesLocal.systems, projections: notesLocal.projections},
     population: {systems: populationFull.systems, invalidated: populationFull.invalidated, projections: populationFull.projections},
     societyPolitics: {politics: politicsFull.systems, religion: religionFull.systems},
     settlementZonesAnnotations: {settlements: settlementsFull.systems, zones: zonesFull.systems, measurements: measurementsFull.systems},
     featuresNetworksResources: {features: featuresFull.systems, routes: routesFull.systems, rivers: riversFull.systems},
+    worldSystems: {economy: economyFull.systems, diplomacy: diplomacyFull.systems, military: militaryFull.systems},
     negative: ["missing-scope", "unknown-write", "duplicate-domain", "invalidatedBy-outside-reads", "invalid-projection", "missing-invalidation-target", "manifest-mutation-after-register"]
   }, null, 2));
 } finally {

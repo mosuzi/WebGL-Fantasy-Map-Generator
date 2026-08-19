@@ -53,14 +53,14 @@ planned → computed → validated → projections-prepared
 
 | 字段 | 内容 |
 | --- | --- |
-| 当前阶段 | `349-10d` routes / rivers / features / resource markers |
-| 冻结点 | `349-10c / 0.5.34` 已由同一评审智能体接受 |
-| 允许文件 | settlements / zones / labels / measurements Manifest / adapter、身份槽与锁契约、history / projection 专项、阶段文档 |
-| 禁止文件 | routes / rivers / features / economy / military 正式迁移、业务算法无关改写、`source/`、main、浏览器 |
-| 必须保持 | 单一 canonical owner；city / burg 与 zone identity 稳定；旧档、锁、history 和 view-only revision 语义不退化 |
-| 首个廉价门 | 继续盘点四域真实 command / regeneration / view / persistence owner 和精确写集；共享 Worker owner 阻断已由 10c0 闭合 |
-| 冻结门 | 四域 Manifest、身份槽 / 锁 / 旧数据、history、projection、相关 Worker、typecheck、build、评审 ACCEPT |
-| 停止条件 | settlements 必须与 routes 同事务才能维持正式引用，或 zones 无法与 diplomacy / military 分离出安全边界 |
+| 当前阶段 | `349-10e` economy / diplomacy / military checkpoint 待评审 |
+| 冻结点 | `349-10d / 0.5.39` 已由同一评审智能体接受 |
+| 允许文件 | 三域 Manifest / Worker pre-commit validator、军事事件归档、外交锁真实战争区域判定、专项与阶段文档 |
+| 禁止文件 | generation / import / adoption / export / headless 收口、legacy 删除、`source/`、main、浏览器 |
+| 必须保持 | 单一 canonical owner；三域 pack / politics 镜像、history、锁、旧数据和跨域引用语义不退化 |
+| 首个廉价门 | 四类 Worker result owner、精确 / 动态写集和三域真实镜像已冻结并进入独立协议门 |
+| 冻结门 | 三域协议、10k / 100k Worker、外交 / 军事锁和规则、economy、typecheck、build、评审 ACCEPT |
+| 停止条件 | 任何共享 result owner 未登记，或需要先改 adoption 才能验证三域正式输出 |
 
 ## 阶段结果
 
@@ -264,5 +264,8 @@ planned → computed → validated → projections-prepared
 
 - 冻结目标：为 economy / diplomacy / military 建立真实 Manifest、依赖描述与既有 Worker 结果 pre-commit 契约，覆盖三域跨国家 / 城市 / 路线引用、history 与旧数据；不收口 generation / import / adoption / export / headless profile。
 - 首个廉价门：盘点三域真实 command、regeneration result kind、canonical / mirror 写集和现有 Node 专项；任何未登记共享 result owner 或必须先改 adoption 的发现均先登记并重排。
+- checkpoint：三域 Manifest、`economy / diplomacy / military / military-policy` 四个 result owner 与正式 pre-commit validator 已接线，registry 为 `15 domains / 216 descriptors`、dependency 为 `15 domains / 19 systems`。协议拒绝 `12` 类 binding / 写集 / 镜像 / 引用 / 事件负例；10k / 100k Worker、三域规则 / 锁 / 显示与构建门通过。
+- 必需维护：恢复军事主动重生成的旧战报归档与 sequence，外交锁仅将 `Warzone` 视为战争派生，并更新已不再生成战线的固定样本种子。三项均直接阻断本阶段门，不扩大产品能力；未完成顺序复评仍为 `349-10f → 349-10g → 349-11`。
+- 版本：`0.5.40 → 0.5.41`；专题记录 `docs/task-notes/task-349-economy-diplomacy-military-core-slice.md`。当前冻结 checkpoint 待同一只读评审智能体审查，仅 `ACCEPT` 后进入 349-10f。
 
 阶段结果在每次 checkpoint 后更新，长日志只记录命令和 artifact 路径，不粘贴到本文。

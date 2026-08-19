@@ -108,7 +108,7 @@ assert(longColors.some(color => color[0] === 1 && color[1] === 0.23 && color[2] 
 assert(longColors.some(color => color[0] === 0.2 && color[1] === 0.58 && color[2] === 1), "正常防守线冷色箭头丢失");
 
 const realMap = generatePlaceholderMap({
-  seed: "military-regeneration-regression",
+  seed: "military-front-12",
   cellsTarget: 3000,
   graphWidth: 960,
   graphHeight: 640,

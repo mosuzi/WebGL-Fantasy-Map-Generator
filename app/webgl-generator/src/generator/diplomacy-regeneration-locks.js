@@ -34,7 +34,7 @@ export function captureDiplomacyRelationSnapshot(pack, subjectId, objectId) {
   const chronicleEntries = pairChronicleEntries(states[0]?.diplomacy, left, right);
   const militaryCampaigns = pairRecords(pack?.military?.campaigns, identity.leftId, identity.rightId);
   const fronts = pairRecords(pack?.military?.fronts, identity.leftId, identity.rightId);
-  const warzones = pairRecords(pack?.zones, identity.leftId, identity.rightId);
+  const warzones = pairWarzones(pack?.zones, identity.leftId, identity.rightId);
   validateWarDerived(identity.key, leftRelation, campaigns, militaryCampaigns, fronts, warzones);
   return {
     id: identity.key,
@@ -190,6 +190,10 @@ function pairRecords(records, leftId, rightId) {
     const second = Number(record?.defender ?? record?.toState);
     return diplomacyPairKey(first, second) === diplomacyPairKey(leftId, rightId);
   }));
+}
+
+function pairWarzones(zones, leftId, rightId) {
+  return pairRecords((zones || []).filter(zone => zone?.type === "Warzone"), leftId, rightId);
 }
 
 function inverseRelation(relation) {
