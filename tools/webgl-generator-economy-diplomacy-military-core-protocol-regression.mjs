@@ -89,6 +89,19 @@ try {
   delete generationLog.value;
   assertProtocol(() => validate("diplomacy", requiredDelete), "world-systems-worker-operation-value-invalid");
 
+  const generationLogShape = structuredClone(outputs.diplomacy.output);
+  operation(generationLogShape.patch, "generationLog").value = "not-an-array";
+  assertProtocol(() => validate("diplomacy", generationLogShape), "world-systems-worker-array-invalid");
+
+  const generationLogPrefix = structuredClone(outputs.diplomacy.output);
+  const generationLogPrefixValue = operation(generationLogPrefix.patch, "generationLog").value;
+  generationLogPrefixValue[0] = `${generationLogPrefixValue[0]}-changed`;
+  assertProtocol(() => validate("diplomacy", generationLogPrefix), "world-systems-worker-generation-log-invalid");
+
+  const generationCounter = structuredClone(outputs.military.output);
+  operation(generationCounter.patch, "metadata.regeneration.military").value = "2";
+  assertProtocol(() => validate("military", generationCounter), "world-systems-worker-generation-counter-invalid");
+
   const escape = structuredClone(outputs.economy.output);
   escape.patch.writeSet.push("pack.cells.h");
   escape.patch.operations.push({path: ["pack", "cells", "h"], exists: true, value: new Uint8Array(1)});
@@ -120,7 +133,8 @@ try {
   }
   const economyIdentityPolicy = structuredClone(outputs.economy.policy);
   economyIdentityPolicy.allowedPaths.push("pack.markets.1", "economy.markets.1");
-  assertProtocol(() => validateEconomyDiplomacyMilitaryWorkerOutput({kind: "economy", sourceMap: outputs.economy.sourceMap, binding, output: economyIdentity, policy: economyIdentityPolicy}), "economy-market-identity-invalid");
+  assert.throws(() => getEconomyWorkerPatchPolicy(outputs.economy.sourceMap, economyIdentity.patch), error => error?.code === "economy-worker-policy-path-invalid");
+  assertProtocol(() => validateEconomyDiplomacyMilitaryWorkerOutput({kind: "economy", sourceMap: outputs.economy.sourceMap, binding, output: economyIdentity, policy: economyIdentityPolicy}), "world-systems-worker-operation-value-invalid");
 
   const economyReference = structuredClone(outputs.economy.output);
   const invalidMarketReference = structuredClone(outputs.economy.sourceMap.pack.markets[1]);
@@ -132,7 +146,8 @@ try {
   }
   const economyReferencePolicy = structuredClone(outputs.economy.policy);
   economyReferencePolicy.allowedPaths.push("pack.markets.1", "economy.markets.1");
-  assertProtocol(() => validateEconomyDiplomacyMilitaryWorkerOutput({kind: "economy", sourceMap: outputs.economy.sourceMap, binding, output: economyReference, policy: economyReferencePolicy}), "economy-market-burg-reference-invalid");
+  assert.throws(() => getEconomyWorkerPatchPolicy(outputs.economy.sourceMap, economyReference.patch), error => error?.code === "economy-worker-policy-path-invalid");
+  assertProtocol(() => validateEconomyDiplomacyMilitaryWorkerOutput({kind: "economy", sourceMap: outputs.economy.sourceMap, binding, output: economyReference, policy: economyReferencePolicy}), "world-systems-worker-operation-value-invalid");
 
   const economyUnknownField = structuredClone(outputs.economy.output);
   for (const root of ["pack.markets", "economy.markets"]) {
@@ -144,6 +159,40 @@ try {
   economyUnknownPolicy.allowedPaths.push("pack.markets.1.protocolDrift", "economy.markets.1.protocolDrift");
   assert.throws(() => getEconomyWorkerPatchPolicy(outputs.economy.sourceMap, economyUnknownField.patch), error => error?.code === "economy-worker-policy-path-invalid");
   assertProtocol(() => validateEconomyDiplomacyMilitaryWorkerOutput({kind: "economy", sourceMap: outputs.economy.sourceMap, binding, output: economyUnknownField, policy: economyUnknownPolicy}), "world-systems-worker-operation-value-invalid");
+
+  const economyDealField = structuredClone(outputs.economy.output);
+  const packDeals = operation(economyDealField.patch, "pack.deals").value;
+  const economyDeals = operation(economyDealField.patch, "economy.deals").value;
+  const dealId = packDeals.findIndex(Boolean);
+  assert.ok(dealId >= 0, "经济交易字段负例缺少交易");
+  packDeals[dealId].protocolDrift = economyDeals[dealId].protocolDrift = true;
+  assertProtocol(() => validate("economy", economyDealField), "economy-deal-field-invalid");
+
+  const economyMetadataField = structuredClone(outputs.economy.output);
+  operation(economyMetadataField.patch, "economy.metadata").value.protocolDrift = true;
+  assertProtocol(() => validate("economy", economyMetadataField), "economy-metadata-field-invalid");
+
+  const economyCollection = structuredClone(outputs.economy.output);
+  const economyCollectionPath = "pack.markets";
+  economyCollection.patch.writeSet.push(economyCollectionPath);
+  economyCollection.patch.operations.push({path: economyCollectionPath.split("."), exists: true, value: structuredClone(outputs.economy.sourceMap.pack.markets)});
+  const economyCollectionPolicy = structuredClone(outputs.economy.policy);
+  economyCollectionPolicy.allowedPaths.push(economyCollectionPath);
+  assert.throws(() => getEconomyWorkerPatchPolicy(outputs.economy.sourceMap, economyCollection.patch), error => error?.code === "economy-worker-policy-path-invalid");
+  assertProtocol(() => validateEconomyDiplomacyMilitaryWorkerOutput({kind: "economy", sourceMap: outputs.economy.sourceMap, binding, output: economyCollection, policy: economyCollectionPolicy}), "world-systems-worker-operation-value-invalid");
+
+  const economyBurgObject = structuredClone(outputs.economy.output);
+  const burgId = outputs.economy.sourceMap.pack.burgs.find(item => item?.i && !item.removed)?.i;
+  assert.ok(burgId, "经济整对象负例缺少城市");
+  const burgObjectPath = `pack.burgs.${burgId}`;
+  const burgObject = structuredClone(outputs.economy.sourceMap.pack.burgs[burgId]);
+  burgObject.name = "request-scope-drift";
+  economyBurgObject.patch.writeSet.push(burgObjectPath);
+  economyBurgObject.patch.operations.push({path: burgObjectPath.split("."), exists: true, value: burgObject});
+  const economyBurgObjectPolicy = structuredClone(outputs.economy.policy);
+  economyBurgObjectPolicy.allowedPaths.push(burgObjectPath);
+  assert.throws(() => getEconomyWorkerPatchPolicy(outputs.economy.sourceMap, economyBurgObject.patch), error => error?.code === "economy-worker-policy-path-invalid");
+  assertProtocol(() => validateEconomyDiplomacyMilitaryWorkerOutput({kind: "economy", sourceMap: outputs.economy.sourceMap, binding, output: economyBurgObject, policy: economyBurgObjectPolicy}), "world-systems-worker-operation-value-invalid");
 
   const diplomacyMirror = structuredClone(outputs.diplomacy.output);
   const diplomacyPackStates = operation(diplomacyMirror.patch, "pack.states");
@@ -174,6 +223,30 @@ try {
   stateZoneRows.push(structuredClone(invalidWarzoneState));
   if (statePackZoneRows !== stateZoneRows) statePackZoneRows.push(structuredClone(invalidWarzoneState));
   assertProtocol(() => validate("diplomacy", diplomacyWarzoneState), "diplomacy-warzone-reference-invalid");
+
+  const diplomacyThirdStateCell = structuredClone(outputs.diplomacy.output);
+  const thirdStateStore = operation(diplomacyThirdStateCell.patch, "zones").value;
+  const thirdStateZoneRows = thirdStateStore.zones;
+  const thirdStatePackRows = operation(diplomacyThirdStateCell.patch, "pack.zones").value;
+  const thirdStateRows = operation(diplomacyThirdStateCell.patch, "pack.states").value;
+  const thirdStatePoliticsRows = operation(diplomacyThirdStateCell.patch, "politics.states").value;
+  const enemyPair = findActivePair(thirdStateRows);
+  thirdStateRows[enemyPair.left].diplomacy[enemyPair.right] = thirdStatePoliticsRows[enemyPair.left].diplomacy[enemyPair.right] = "Enemy";
+  thirdStateRows[enemyPair.right].diplomacy[enemyPair.left] = thirdStatePoliticsRows[enemyPair.right].diplomacy[enemyPair.left] = "Enemy";
+  const thirdCell = outputs.diplomacy.sourceMap.pack.cells.i.find(cell => {
+    const stateId = Number(outputs.diplomacy.sourceMap.pack.cells.state[cell]);
+    return stateId > 0 && stateId !== enemyPair.left && stateId !== enemyPair.right;
+  });
+  assert.ok(Number.isSafeInteger(thirdCell), "外交第三国 cell 负例缺少样本");
+  const thirdStateWarzone = {i: thirdStateZoneRows.length, type: "Warzone", cells: [thirdCell], attacker: enemyPair.left, defender: enemyPair.right};
+  thirdStateZoneRows.push(structuredClone(thirdStateWarzone));
+  if (thirdStatePackRows !== thirdStateZoneRows) thirdStatePackRows.push(structuredClone(thirdStateWarzone));
+  updateZoneMetadata(thirdStateStore.metadata, thirdStateZoneRows, outputs.diplomacy.sourceMap.pack.cells);
+  assertProtocol(() => validate("diplomacy", diplomacyThirdStateCell), "diplomacy-warzone-cell-state-invalid");
+
+  const diplomacyZoneMetadata = structuredClone(outputs.diplomacy.output);
+  operation(diplomacyZoneMetadata.patch, "zones").value.metadata.zones += 1;
+  assertProtocol(() => validate("diplomacy", diplomacyZoneMetadata), "diplomacy-zone-metadata-invalid");
 
   const militaryMirror = structuredClone(outputs.military.output);
   const militaryPack = operation(militaryMirror.patch, "pack.military");
@@ -256,7 +329,45 @@ try {
   policyWrongResult.result.stateId = policyWrongResult.plan.request.stateId = otherState.i;
   assertProtocol(() => validateEconomyDiplomacyMilitaryWorkerOutput({kind: "military-policy", sourceMap: policySource, binding, output: policyWrongResult, policy: outputs["military-policy"].policy, expectation: {stateId: request.stateId}}), "military-policy-worker-state-mismatch");
 
-  console.log(JSON.stringify({ok: true, manifests: ["economy", "diplomacy", "military"], workers: ["economy.compute", "regeneration.compute:diplomacy", "regeneration.compute:military", "military-policy.compute"], writes: {economyRoots: ECONOMY_WORKER_WRITE_SET.length, diplomacy: DIPLOMACY_WORKER_WRITE_SET.length, military: MILITARY_REGENERATION_WORKER_WRITE_SET.length, militaryPolicyRoots: MILITARY_POLICY_WORKER_WRITE_SET.length}, rejected: ["stale-binding", "partial-write-set", "required-delete", "path-escape", "data-view", "economy-mirror", "economy-identity", "economy-reference", "economy-unknown-field", "diplomacy-mirror", "diplomacy-relation", "diplomacy-warzone-cell", "diplomacy-warzone-state", "military-mirror", "military-reference", "military-event-archive", "military-event-content", "military-event-generation", "military-event-item-generation", "military-event-sequence", "military-policy-mirror", "military-policy-cross-state", "military-policy-result-state"], browserRuns: 0}, null, 2));
+  const policyEvent = structuredClone(outputs["military-policy"].output);
+  const policyEventMilitary = operation(policyEvent.patch, "military").value;
+  const policyEventPackMilitary = operation(policyEvent.patch, "pack.military").value;
+  const appendedEvent = {id: "policy:unrelated-event", kind: "battle", stateId: otherState.i};
+  policyEventMilitary.events.push(structuredClone(appendedEvent));
+  policyEventPackMilitary.events.push(structuredClone(appendedEvent));
+  policyEventMilitary.metadata.events = policyEventPackMilitary.metadata.events = policyEventMilitary.events.length;
+  assertProtocol(() => validate("military-policy", policyEvent), "military-policy-events-invalid");
+
+  const policyRootField = structuredClone(outputs["military-policy"].output);
+  operation(policyRootField.patch, "military").value.protocolDrift = true;
+  operation(policyRootField.patch, "pack.military").value.protocolDrift = true;
+  assertProtocol(() => validate("military-policy", policyRootField), "military-policy-root-scope-invalid");
+
+  const policyCampaign = structuredClone(outputs["military-policy"].output);
+  const policyCampaignMilitary = operation(policyCampaign.patch, "military").value;
+  const policyCampaignPackMilitary = operation(policyCampaign.patch, "pack.military").value;
+  const invalidCampaign = {id: "policy:unrelated-campaign", attacker: otherState.i, defender: 999999, frontIds: []};
+  policyCampaignMilitary.campaigns.push(structuredClone(invalidCampaign));
+  policyCampaignPackMilitary.campaigns.push(structuredClone(invalidCampaign));
+  policyCampaignMilitary.metadata.campaigns = policyCampaignPackMilitary.metadata.campaigns = policyCampaignMilitary.campaigns.length;
+  assertProtocol(() => validate("military-policy", policyCampaign), "military-campaign-reference-invalid");
+
+  const policyFront = structuredClone(outputs["military-policy"].output);
+  const policyFrontMilitary = operation(policyFront.patch, "military").value;
+  const policyFrontPackMilitary = operation(policyFront.patch, "pack.military").value;
+  const sourceFront = policyFrontMilitary.fronts[0];
+  if (sourceFront) {
+    sourceFront.borderCells = [999999];
+    policyFrontPackMilitary.fronts[0].borderCells = [999999];
+  } else {
+    const invalidFront = {id: "policy:unrelated-front", attacker: otherState.i, defender: 999999, borderCells: [999999], borderCellPairs: []};
+    policyFrontMilitary.fronts.push(structuredClone(invalidFront));
+    policyFrontPackMilitary.fronts.push(structuredClone(invalidFront));
+    policyFrontMilitary.metadata.fronts = policyFrontPackMilitary.metadata.fronts = policyFrontMilitary.fronts.length;
+  }
+  assertProtocol(() => validate("military-policy", policyFront), "military-front-reference-invalid");
+
+  console.log(JSON.stringify({ok: true, manifests: ["economy", "diplomacy", "military"], workers: ["economy.compute", "regeneration.compute:diplomacy", "regeneration.compute:military", "military-policy.compute"], writes: {economyRoots: ECONOMY_WORKER_WRITE_SET.length, diplomacy: DIPLOMACY_WORKER_WRITE_SET.length, military: MILITARY_REGENERATION_WORKER_WRITE_SET.length, militaryPolicyRoots: MILITARY_POLICY_WORKER_WRITE_SET.length}, rejected: ["stale-binding", "partial-write-set", "required-delete", "generation-log-shape", "generation-log-prefix", "generation-counter", "path-escape", "data-view", "economy-mirror", "economy-item-replacement", "economy-item-reference-replacement", "economy-unknown-field", "economy-deal-field", "economy-metadata-field", "economy-collection-replacement", "economy-burg-object-replacement", "diplomacy-mirror", "diplomacy-relation", "diplomacy-warzone-cell", "diplomacy-warzone-state", "diplomacy-warzone-third-state-cell", "diplomacy-zone-metadata", "military-mirror", "military-reference", "military-event-archive", "military-event-content", "military-event-generation", "military-event-item-generation", "military-event-sequence", "military-policy-mirror", "military-policy-cross-state", "military-policy-result-state", "military-policy-event-scope", "military-policy-root-scope", "military-policy-campaign-reference", "military-policy-front-reference"], browserRuns: 0}, null, 2));
 
   function validate(kind, output) {
     return validateEconomyDiplomacyMilitaryWorkerOutput({kind, sourceMap: outputs[kind].sourceMap, binding, output, policy: outputs[kind].policy, expectation: outputs[kind].expectation});
@@ -275,6 +386,21 @@ function findActivePair(states) {
   const ids = states.filter(item => item?.i && !item.removed).map(item => Number(item.i));
   assert.ok(ids.length >= 2, "外交协议负例缺少两个活动国家");
   return {left: ids[0], right: ids[1]};
+}
+function updateZoneMetadata(metadata, zones, cells) {
+  const types = {};
+  let cellCount = 0;
+  let invalidCells = 0;
+  for (const zone of zones) {
+    types[zone.type] = (types[zone.type] || 0) + 1;
+    cellCount += zone.cells?.length || 0;
+    for (const cell of zone.cells || []) if (!Number.isInteger(cell) || cell < 0 || cell >= (cells?.i?.length || 0)) invalidCells += 1;
+  }
+  metadata.zones = zones.length;
+  metadata.types = types;
+  metadata.cells = cellCount;
+  metadata.hidden = zones.filter(zone => zone.hidden).length;
+  metadata.invalidCells = invalidCells;
 }
 function assertProtocol(callback, code) {
   assert.throws(callback, error => error?.code === code, `应拒绝 ${code}`);

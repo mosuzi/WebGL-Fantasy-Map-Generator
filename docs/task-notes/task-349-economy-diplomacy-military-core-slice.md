@@ -14,8 +14,8 @@
 
 ## 验收证据
 
-- 新协议覆盖 4 个 Worker result owner，写集为 economy `14` 个根、diplomacy `17`、military `12`、military-policy `4` 个根；首轮评审修正后拒绝 stale binding、必需根删除、path escape、DataView、经济 identity / reference / 未声明字段、外交 Warzone cell / state、军事事件 before-image / generation、military-policy 跨国家等 `23` 类反例。
-- economy 与 military-policy 的 10k / 100k Worker 专项通过；100k 分别约 `2680.3ms / 6563 patch paths` 与 `1281.8ms / 5 changed paths`，输入 buffer 保持完整。军事比例调整明确冻结非目标国家，正式 patch 仅含请求国家的四类字段与全局军事镜像。
+- 新协议覆盖 4 个 Worker result owner，写集为 economy `14` 个根、diplomacy `17`、military `12`、military-policy `4` 个根；两轮评审修正后拒绝 stale binding、必需根删除、结果形状 / 日志前缀、path escape、DataView、经济整集合 / 整对象 / 未声明字段、外交 Warzone cell / 国家对 / 第三国 cell / metadata、军事事件 before-image / generation、military-policy 跨国家 / 战报 / 战役 / 战线等 `36` 类反例。
+- economy 与 military-policy 的 10k / 100k Worker 专项通过；100k 分别约 `2710.9ms / 6563 patch paths` 与 `1441.7ms / 5 changed paths`，输入 buffer 保持完整。军事比例调整明确冻结非目标国家，正式 patch 仅含请求国家的四类字段与全局军事镜像；全局军事根仍必须保持战报、未知根字段和非可变 metadata 不变。
 - diplomacy rules、diplomacy lock `210` 对全锁无操作、military regeneration / lock、warzone consistency、economy display / trade、core Manifest / dependency、`typecheck:core` 与 production build `1391 modules` 通过。
 - 战线渲染旧夹具使用的种子已不再生成战争；改用仍确定生成两条极近战线的固定种子后，既有 synthetic / real-sample 断言通过，产品逻辑未改。
 - `git diff --check` 通过；浏览器执行 `0`，`source/` 改动 `0`。
@@ -24,4 +24,4 @@
 
 军事事件归档缺失、外交锁对 `Invasion` 的误判和战线固定样本漂移都直接阻断本阶段已声明的历史、跨域引用或专项门，因此在 349-10e 内作最窄修正，不另立产品阶段。它们不改变后续依赖，未完成顺序仍为 `349-10f → 349-10g → 349-11`。
 
-`0.5.41` 首轮评审为 `BLOCK`，确认五项 P1：精确写集可伪造删除、economy identity / reference 未闭合、military-policy 可跨请求国家写入、外交 Warzone 引用未校验、军事归档未绑定 before-image 和 generation。`0.5.42` 逐项闭合并新增复现，待同一只读评审智能体 blocker-only 复审；通过前不得进入 349-10f。
+`0.5.41` 首轮评审为 `BLOCK`，确认五项 P1：精确写集可伪造删除、economy identity / reference 未闭合、military-policy 可跨请求国家写入、外交 Warzone 引用未校验、军事归档未绑定 before-image 和 generation。`0.5.42` 逐项闭合后，复审继续确认四类 P1：精确结果根缺少来源前缀与形状约束、economy 整集合 / 整对象路径绕过字段白名单、military-policy 全局军事根可改请求外事件、合法敌对国家对的 Warzone 仍可引用第三国 cell 且 metadata 可漂移。`0.5.43` 已加入精确日志 / 计数 / 类型门、经济叶字段-only 门、军事事件与未知根冻结、战役 / 战线引用和摘要门、Warzone cell 国家归属及 metadata 重算一致性门，并把负例扩至 `36` 类；待同一只读评审智能体 blocker-only 复审，通过前不得进入 349-10f。

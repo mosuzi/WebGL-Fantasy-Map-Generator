@@ -358,14 +358,14 @@ function collectIndexedChanges(root, before, after, output) {
 
 function assertEconomyPatchPath(map, path) {
   const value = String(path || "");
-  if (ECONOMY_FIXED_PATCH_PATHS.has(value) || ECONOMY_INDEXED_ROOTS.has(value)) return;
+  if (ECONOMY_FIXED_PATCH_PATHS.has(value)) return;
   const cellMatch = /^pack\.cells\.market\.(\d+)$/.exec(value);
   if (cellMatch) {
     assertIndexInRange(map?.pack?.cells?.market, Number(cellMatch[1]), value);
     return;
   }
   const match = /^(pack\.(?:goods|markets|burgs|states|provinces)|politics\.(?:states|provinces)|settlements\.cities|economy\.(?:goods|markets))\.(\d+)(?:\.([^.]+))?$/.exec(value);
-  if (!match || match[3] && (!isSafePathPart(match[3]) || !ECONOMY_FIELDS_BY_ROOT.get(match[1])?.has(match[3]))) {
+  if (!match || !match[3] || !isSafePathPart(match[3]) || !ECONOMY_FIELDS_BY_ROOT.get(match[1])?.has(match[3])) {
     throw taskError("economy-worker-policy-path-invalid", `经济 Worker 补丁越过领域写集：${value}`);
   }
   assertIndexInRange(readPath(map, match[1].split(".")).value, Number(match[2]), value);

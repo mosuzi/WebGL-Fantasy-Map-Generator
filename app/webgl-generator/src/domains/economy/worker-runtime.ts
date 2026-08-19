@@ -42,6 +42,8 @@ const cityEconomyFields = ["market", "production", "product", "treasury"] as con
 const burgEconomyFields = [...cityEconomyFields, "plaza"] as const;
 const goodMutableFields = new Set(["name", "visible", "color", "icon", "label", "value", "distribution", "biomeOutput", "demandCoverage"]);
 const marketMutableFields = new Set(["name", "color", "centerBurgId", "cell", "x", "y", "state", "goods", "resourceSupply", "resourceSupplySources", "demandSummary", "priceSummary"]);
+const dealFields = new Set(["i", "good", "sellerType", "seller", "buyerType", "buyer", "units", "basePrice", "price", "distance", "distanceCost", "distanceMultiplier", "tax", "source", "path"]);
+const economyMetadataFields = new Set(["assignedMarketCells", "burgsWithMarket", "burgsWithProduction", "deals", "demand", "goods", "hybridGoods", "manufacturedGoods", "markerEconomy", "markets", "pricePropagation", "rawGoods", "resourceCells", "resourcePopulation", "resourceTrade", "statesWithTaxes", "tradeDistance"]);
 const economyIndexedFields = new Map<string, ReadonlySet<string>>([
   ["pack.goods", goodMutableFields], ["economy.goods", goodMutableFields],
   ["pack.markets", marketMutableFields], ["economy.markets", marketMutableFields],
@@ -69,12 +71,12 @@ export function validateEconomyDiplomacyMilitaryWorkerOutput(input: {
   const result = record(output.result, "world-systems.output.result");
   if (typeof result.executed !== "boolean") throw protocolError("world-systems-worker-result-invalid", "经济外交军事 Worker 缺少 executed 结果");
   const expectedStateId = validateExpectation(input.kind, input.expectation, result, output.plan);
-  const patch = validatePatch(output.patch, input.kind, roots, input.policy, result.executed, expectedStateId);
+  const patch = validatePatch(output.patch, input.kind, roots, input.policy, result.executed, input.sourceMap, expectedStateId);
   if (result.executed) validateDomain(input.kind, patch, input.sourceMap, expectedStateId);
   return Object.freeze({binding: adaptBinding(input.kind, binding), kind: input.kind, writeSet: Object.freeze([...patch.keys()])});
 }
 
-function validatePatch(value: unknown, kind: EconomyDiplomacyMilitaryWorkerKind, roots: readonly string[], policyValue: unknown, executed: boolean, expectedStateId?: number): Map<string, UnknownRecord> {
+function validatePatch(value: unknown, kind: EconomyDiplomacyMilitaryWorkerKind, roots: readonly string[], policyValue: unknown, executed: boolean, sourceMapValue: unknown, expectedStateId?: number): Map<string, UnknownRecord> {
   const patch = record(value, "world-systems.patch");
   const policy = record(policyValue, "world-systems.policy");
   const domain = patchDomainByKind[kind];
@@ -92,11 +94,47 @@ function validatePatch(value: unknown, kind: EconomyDiplomacyMilitaryWorkerKind,
     const parts = stringArray(row.path, `world-systems.patch.operations.${index}.path`);
     if (row.exists !== true && row.exists !== false || parts.some(part => part.includes(".") || ["__proto__", "prototype", "constructor"].includes(part))) throw protocolError("world-systems-worker-operation-invalid", `${kind} patch operation 结构无效`);
     const path = parts.join(".");
-    if (!withinRoots(path, roots) || rows.has(path) || (!dynamic && row.exists !== true && !optionalDeletePathsByKind.get(kind)?.has(path)) || !validDynamicPath(kind, path, expectedStateId) || !validOperationValue(kind, path, row.value, row.exists)) throw protocolError("world-systems-worker-operation-value-invalid", `${kind} patch 的 ${path} 值、存在性或容器无效`);
+    const overlaps = [...rows.keys()].some(existing => path.startsWith(`${existing}.`) || existing.startsWith(`${path}.`));
+    if (!withinRoots(path, roots) || rows.has(path) || overlaps || (!dynamic && row.exists !== true && !optionalDeletePathsByKind.get(kind)?.has(path)) || !validDynamicPath(kind, path, expectedStateId) || !validOperationValue(kind, path, row.value, row.exists)) throw protocolError("world-systems-worker-operation-value-invalid", `${kind} patch 的 ${path} 值、存在性或容器无效`);
     rows.set(path, row);
   }
   if (!sameStringSet(writeSet, [...rows.keys()]) || rows.size !== writeSet.length) throw protocolError("world-systems-worker-write-set-mismatch", `${kind} patch writeSet 与 operations 不一致`);
+  if (executed && !dynamic) validateExactPatchSemantics(kind, rows, sourceMapValue);
   return rows;
+}
+
+function validateExactPatchSemantics(kind: EconomyDiplomacyMilitaryWorkerKind, rows: Map<string, UnknownRecord>, sourceMapValue: unknown): void {
+  const sourceMap = record(sourceMapValue, `${kind}.sourceMap`);
+  for (const [path, row] of rows) {
+    if (row.exists === false) continue;
+    const value = row.value;
+    if (path === "generationLog") {
+      const next = stringArray(value, `${kind}.generationLog`, true);
+      const previous = sourceMap.generationLog === undefined ? [] : stringArray(sourceMap.generationLog, `${kind}.sourceMap.generationLog`, true);
+      if (next.length !== previous.length + 1 || !previous.every((item, index) => item === next[index])) throw protocolError("world-systems-worker-generation-log-invalid", `${kind} generationLog 没有保留来源前缀并只追加一项`);
+      continue;
+    }
+    if (path === "options.diplomacyRegenerationSalt" || path === `metadata.regeneration.${kind}`) {
+      const previous = Number(readNestedPath(sourceMap, path) || 0);
+      if (!Number.isSafeInteger(value) || Number(value) !== previous + 1) throw protocolError("world-systems-worker-generation-counter-invalid", `${kind} ${path} 没有严格递增`);
+      continue;
+    }
+    if (path.endsWith(".metadata.stale")) {
+      if (typeof value !== "boolean") throw protocolError("world-systems-worker-stale-shape-invalid", `${kind} ${path} 必须是布尔值`);
+      continue;
+    }
+    if (path === "metadata.derivedStale") {
+      const stale = record(value, `${kind}.metadata.derivedStale`);
+      stringArray(stale.systems, `${kind}.metadata.derivedStale.systems`, true);
+      if (typeof stale.updatedAt !== "string" || !stale.updatedAt) throw protocolError("world-systems-worker-derived-stale-shape-invalid", `${kind} metadata.derivedStale 结构无效`);
+      continue;
+    }
+    if (["pack.states", "politics.states", "pack.zones"].includes(path)) {
+      array(value, `${kind}.${path}`);
+      continue;
+    }
+    if (["diplomacy", "pack.diplomacy", "military", "pack.military", "zones"].includes(path)) record(value, `${kind}.${path}`);
+  }
 }
 
 function validateDomain(kind: EconomyDiplomacyMilitaryWorkerKind, patch: Map<string, UnknownRecord>, sourceMapValue: unknown, expectedStateId?: number): void {
@@ -137,6 +175,7 @@ function validateEconomy(patch: Map<string, UnknownRecord>, sourceMapValue: unkn
   const cellStates = indexedValues(cells.state, "economy.pack.cells.state").map(Number);
   const cellNeighbors = indexedValues(cells.c, "economy.pack.cells.c");
   const states = indexedValues(pack.states, "economy.pack.states");
+  assertAllowedKeys(record(economy.metadata, "economy.metadata"), economyMetadataFields, "economy-metadata-field-invalid", "经济 metadata 包含未声明字段");
   for (let goodId = 1; goodId < goods.length; goodId++) {
     const goodValue = goods[goodId];
     if (!goodValue) continue;
@@ -170,6 +209,7 @@ function validateEconomy(patch: Map<string, UnknownRecord>, sourceMapValue: unkn
     const dealValue = deals[dealId];
     if (!dealValue) continue;
     const deal = record(dealValue, `economy.deal.${dealId}`);
+    assertAllowedKeys(deal, dealFields, "economy-deal-field-invalid", `交易 #${dealId} 包含未声明字段`);
     const goodId = Number(deal.good);
     if (Number(deal.i) !== dealId) throw protocolError("economy-deal-identity-invalid", `交易槽 #${dealId} 身份无效`);
     if (!Number.isSafeInteger(goodId) || goodId <= 0 || !isPlainRecord(goods[goodId])) throw protocolError("economy-deal-good-reference-invalid", `交易 #${dealId} 商品引用无效`);
@@ -201,25 +241,46 @@ function validateDiplomacy(values: Map<string, unknown>, sourceMapValue: unknown
   assertDeepEqual(values.get("diplomacy"), values.get("pack.diplomacy"), "diplomacy-pack-mirror-invalid", "diplomacy / pack 镜像不一致");
   assertDeepEqual(values.get("politics.states"), values.get("pack.states"), "diplomacy-state-mirror-invalid", "外交 politics / pack state 镜像不一致");
   assertDeepEqual(values.get("military"), values.get("pack.military"), "diplomacy-military-mirror-invalid", "外交 military / pack 镜像不一致");
-  assertDeepEqual(record(values.get("zones"), "diplomacy.zones").zones, values.get("pack.zones"), "diplomacy-zone-mirror-invalid", "外交 zones / pack 镜像不一致");
+  const zoneStore = record(values.get("zones"), "diplomacy.zones");
+  assertDeepEqual(zoneStore.zones, values.get("pack.zones"), "diplomacy-zone-mirror-invalid", "外交 zones / pack 镜像不一致");
   const states = indexedValues(values.get("pack.states"), "diplomacy.pack.states");
   validateDiplomacyRelations(states, values.get("diplomacy"));
   validateZoneMirrors(values, sourceMapValue);
-  validateDiplomacyWarzones(record(values.get("zones"), "diplomacy.zones").zones, states, sourceMapValue);
+  validateDiplomacyWarzones(zoneStore, states, sourceMapValue);
   validateMilitary(values.get("military"), values.get("pack.military"), values.get("politics.states"), values.get("pack.states"), sourceMapValue);
 }
 
-function validateDiplomacyWarzones(zonesValue: unknown, states: unknown[], sourceMapValue: unknown): void {
+function validateDiplomacyWarzones(zoneStore: UnknownRecord, states: unknown[], sourceMapValue: unknown): void {
   const sourceMap = record(sourceMapValue, "diplomacy.sourceMap");
   const sourcePack = record(sourceMap.pack, "diplomacy.sourceMap.pack");
   const pack = {states, cells: sourcePack.cells};
-  for (const zoneValue of indexedValues(zonesValue, "diplomacy.zones.zones")) {
+  const cellStates = indexedValues(record(sourcePack.cells, "diplomacy.sourceMap.pack.cells").state, "diplomacy.sourceMap.pack.cells.state").map(Number);
+  const zones = indexedValues(zoneStore.zones, "diplomacy.zones.zones");
+  for (const zoneValue of zones) {
     if (!zoneValue) continue;
     const zone = record(zoneValue, "diplomacy.zone");
     if (zone.removed || zone.type !== "Warzone") continue;
     const pair = resolveWarzoneStatePair(pack, zone);
     if (!pair || !isActiveEnemyPair(states, pair.attacker, pair.defender)) throw protocolError("diplomacy-warzone-reference-invalid", "外交重生成产生了无效战争区域国家对");
+    const zoneCells = array(zone.cells, "diplomacy.zone.cells").map(Number);
+    if (zoneCells.some(cell => cellStates[cell] !== pair.attacker && cellStates[cell] !== pair.defender)) throw protocolError("diplomacy-warzone-cell-state-invalid", "外交重生成产生了不属于战争双方的战争区域 cell");
   }
+  const metadata = record(zoneStore.metadata, "diplomacy.zones.metadata");
+  const activeZones = zones.filter(zone => isPlainRecord(zone) && !zone.removed) as UnknownRecord[];
+  const types: Record<string, number> = {};
+  let cellCount = 0;
+  let invalidCells = 0;
+  let hidden = 0;
+  for (const zone of activeZones) {
+    const type = String(zone.type ?? "");
+    types[type] = (types[type] || 0) + 1;
+    const zoneCells = Array.isArray(zone.cells) ? zone.cells : [];
+    cellCount += zoneCells.length;
+    if (zone.hidden) hidden += 1;
+    invalidCells += zoneCells.filter(cell => !Number.isSafeInteger(Number(cell)) || Number(cell) < 0 || Number(cell) >= cellStates.length).length;
+  }
+  if (Number(metadata.zones) !== activeZones.length || Number(metadata.cells) !== cellCount || Number(metadata.hidden) !== hidden || Number(metadata.invalidCells) !== invalidCells || !sameData(metadata.types, types)
+    || !Number.isSafeInteger(Number(metadata.target)) || Number(metadata.target) < 0 || !Number.isFinite(Number(metadata.buildMs)) || Number(metadata.buildMs) < 0) throw protocolError("diplomacy-zone-metadata-invalid", "外交重生成的地区 metadata 与实际地区不一致");
 }
 
 function validateDiplomacyRelations(states: unknown[], diplomacyValue: unknown): void {
@@ -268,6 +329,7 @@ function validateMilitary(militaryValue: unknown, packMilitaryValue: unknown, po
   if (Number(metadata.regiments) !== ids.size) throw protocolError("military-metadata-count-invalid", "军事 metadata.regiments 与军团集合不一致");
   const events = array(military.events ?? [], "military.events");
   if (Number(metadata.events || 0) !== events.length) throw protocolError("military-event-count-invalid", "军事 metadata.events 与战报集合不一致");
+  validateMilitaryCampaignsAndFronts(military, states, cellCount);
   if (requireArchivedEvents) {
     const sourceMilitary = isPlainRecord(sourceMap.military) ? sourceMap.military : {};
     const sourceEvents = array(sourceMilitary.events ?? [], "military.sourceMap.events");
@@ -280,6 +342,35 @@ function validateMilitary(militaryValue: unknown, packMilitaryValue: unknown, po
   }
 }
 
+function validateMilitaryCampaignsAndFronts(military: UnknownRecord, states: unknown[], cellCount: number): void {
+  const metadata = record(military.metadata, "military.metadata");
+  const campaigns = array(military.campaigns ?? [], "military.campaigns");
+  const fronts = array(military.fronts ?? [], "military.fronts");
+  if (Number(metadata.campaigns || 0) !== campaigns.length || Number(metadata.fronts || 0) !== fronts.length) throw protocolError("military-metadata-count-invalid", "军事 metadata 的战役或战线计数不一致");
+  const frontIds = new Set<string>();
+  for (const frontValue of fronts) {
+    const front = record(frontValue, "military.front");
+    const id = String(front.id ?? "");
+    const attacker = Number(front.attacker);
+    const defender = Number(front.defender);
+    if (!id || frontIds.has(id) || !isActiveEnemyPair(states, attacker, defender)) throw protocolError("military-front-reference-invalid", "军事战线身份或国家引用无效");
+    for (const cell of array(front.borderCells ?? [], "military.front.borderCells").map(Number)) if (!Number.isSafeInteger(cell) || cell < 0 || cell >= cellCount) throw protocolError("military-front-reference-invalid", "军事战线 cell 引用无效");
+    for (const pairValue of array(front.borderCellPairs ?? [], "military.front.borderCellPairs")) {
+      const pair = array(pairValue, "military.front.borderCellPair").map(Number);
+      if (pair.length !== 2 || pair.some(cell => !Number.isSafeInteger(cell) || cell < 0 || cell >= cellCount)) throw protocolError("military-front-reference-invalid", "军事战线 cell pair 引用无效");
+    }
+    frontIds.add(id);
+  }
+  const campaignIds = new Set<string>();
+  for (const campaignValue of campaigns) {
+    const campaign = record(campaignValue, "military.campaign");
+    const id = String(campaign.id ?? campaign.chainKey ?? "");
+    if (!id || campaignIds.has(id) || !isActiveEnemyPair(states, Number(campaign.attacker), Number(campaign.defender))) throw protocolError("military-campaign-reference-invalid", "军事战役身份或国家引用无效");
+    for (const frontId of stringArray(campaign.frontIds ?? [], "military.campaign.frontIds", true)) if (!frontIds.has(frontId)) throw protocolError("military-campaign-reference-invalid", "军事战役指向不存在的战线");
+    campaignIds.add(id);
+  }
+}
+
 function validateMilitaryPolicy(patch: Map<string, UnknownRecord>, sourceMapValue: unknown, expectedStateId?: number): void {
   if (!Number.isSafeInteger(expectedStateId) || Number(expectedStateId) <= 0) throw protocolError("military-policy-worker-expectation-invalid", "军事策略校验缺少目标国家");
   const source = record(sourceMapValue, "military-policy.sourceMap");
@@ -288,6 +379,19 @@ function validateMilitaryPolicy(patch: Map<string, UnknownRecord>, sourceMapValu
   const view = structuredClone({military: source.military, pack: {military: sourcePack.military, states: sourcePack.states}, politics: {states: sourcePolitics.states}});
   applyOperations(view, patch);
   validateMilitary(view.military, record(view.pack, "military-policy.pack").military, record(view.politics, "military-policy.politics").states, record(view.pack, "military-policy.pack").states, sourceMapValue);
+  const nextMilitary = record(view.military, "military-policy.military");
+  const sourceMilitary = record(source.military, "military-policy.sourceMap.military");
+  assertDeepEqual(nextMilitary.events ?? [], sourceMilitary.events ?? [], "military-policy-events-invalid", "军事策略结果改变了请求外战报");
+  const nextMetadata = record(nextMilitary.metadata, "military-policy.military.metadata");
+  const sourceMetadata = record(sourceMilitary.metadata, "military-policy.sourceMap.military.metadata");
+  for (const field of ["events", "eventSequence", "eventArchiveGeneration"]) assertDeepEqual(nextMetadata[field], sourceMetadata[field], "military-policy-events-invalid", `军事策略结果改变了战报元数据 ${field}`);
+  for (const field of new Set([...Object.keys(sourceMilitary), ...Object.keys(nextMilitary)])) {
+    if (!["campaigns", "fronts", "metadata", "events"].includes(field)) assertDeepEqual(nextMilitary[field], sourceMilitary[field], "military-policy-root-scope-invalid", `军事策略结果改变了请求外军事字段 ${field}`);
+  }
+  const mutableMetadata = new Set(["statesWithMilitary", "regiments", "troops", "navalRegiments", "campaigns", "fronts", "statuses", "buildMs"]);
+  for (const field of new Set([...Object.keys(sourceMetadata), ...Object.keys(nextMetadata)])) {
+    if (!mutableMetadata.has(field)) assertDeepEqual(nextMetadata[field], sourceMetadata[field], "military-policy-root-scope-invalid", `军事策略结果改变了请求外军事 metadata ${field}`);
+  }
 }
 
 function economyView(sourceMapValue: unknown): UnknownRecord {
@@ -334,6 +438,10 @@ function validateObjectFields(leftValue: unknown, rightValue: unknown, fields: r
     if (!isPlainRecord(a) || !isPlainRecord(b)) throw protocolError(code, `${code} 槽 #${index} 无效`);
     for (const field of fields) assertDeepEqual(a[field], b[field], code, `${code} 的 ${field} 不一致`);
   }
+}
+
+function assertAllowedKeys(value: UnknownRecord, allowed: ReadonlySet<string>, code: string, message: string): void {
+  if (Object.keys(value).some(key => !allowed.has(key))) throw protocolError(code, message);
 }
 
 function adaptBinding(kind: EconomyDiplomacyMilitaryWorkerKind, source: LegacyBinding): ComputeOperationBinding {
@@ -384,12 +492,20 @@ function validDynamicPath(kind: EconomyDiplomacyMilitaryWorkerKind, path: string
     const match = /^(?:pack|politics)\.states\.(\d+)\.(?:alert|military|militaryPolicy|militaryDiagnostics)$/u.exec(path);
     return Boolean(match && Number(match[1]) === expectedStateId);
   }
-  if (["pack.deals", "economy.deals", "economy.metadata"].includes(path) || economyIndexedFields.has(path)) return true;
+  if (["pack.deals", "economy.deals", "economy.metadata"].includes(path)) return true;
   if (/^pack\.cells\.market\.\d+$/u.test(path)) return true;
   const match = /^(pack\.(?:goods|markets|burgs|states|provinces)|politics\.(?:states|provinces)|settlements\.cities|economy\.(?:goods|markets))\.(\d+)(?:\.([^.]+))?$/u.exec(path);
   if (!match) return false;
-  if (!match[3]) return true;
-  return economyIndexedFields.get(match[1])?.has(match[3]) === true;
+  return Boolean(match[3] && economyIndexedFields.get(match[1])?.has(match[3]) === true);
+}
+
+function readNestedPath(root: UnknownRecord, path: string): unknown {
+  let value: unknown = root;
+  for (const part of path.split(".")) {
+    if (!isPlainRecord(value) || !Object.prototype.hasOwnProperty.call(value, part)) return undefined;
+    value = value[part];
+  }
+  return value;
 }
 
 function validCanonicalValue(value: unknown, exists: unknown): boolean {
