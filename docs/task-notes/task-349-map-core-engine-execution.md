@@ -252,5 +252,7 @@ planned → computed → validated → projections-prepared
 - 必需插入维护：路线面板门同步当前“路线修改影响”权威文案；Feature topology 夹具改用已接受的 city / burg ID 直接槽，并同步当前高度编辑保守失效语义；route quality 主动城镇重建显式开启既有省会镜像修复。另修复生成器与湖泊编辑器的真实兼容缺口：自然出口河流可从与湖直接相邻的岸上 spill cell 起步，不再被错误判为 invalid outlet。
 - 门禁：`typecheck:core`、core Manifest、core dependency、新地理网络资源协议、route edit / connectivity / quality / locked、river network / delete / locked / control points、Feature topology / patch / locked、marker resource economy、v1 migration、完整 world constraint、production build `1387 modules` 与 diff check 通过；浏览器执行 `0`，`source/` 改动 `0`。
 - 版本：`0.5.35 → 0.5.36`；专题记录 `docs/task-notes/task-349-features-networks-resources-core-slice.md`。下一步冻结 checkpoint，交同一只读评审智能体审查；仅 `ACCEPT` 后进入 `349-10e`。
+- 首轮评审：`9228dbd / 0.5.36` 为 `BLOCK`。P1 为 route-path Manifest 宽写集与真实 history roots 漂移、Feature 普通 route / city / marker 镜像及引用未闭合、route cell links 未消费、river path 邻接与 cell mirror 未闭合、岸上湖泊出口兼容会误接受入湖方向。
+- blocker-only 修正：route-path 改为两类真实 history roots 的 `21` 路径精确并集并由 Manifest 门静态对照；Feature 复用完整 route mirror，新增 city↔burg、marker↔pack 与全部普通直接 Feature 引用验证；routes 从 route.packCells 重建并核对 `pack.cells.routes`；rivers 校验相邻序列、末尾哨兵、正向 cell ref 与每条河流反向归属；岸上 outlet 必须不再进入该湖且匹配已有 overflow spill cell。专项拒绝集由 `16` 增至 `21` 类，既有 route-path 10k / 100k、路线 / 河流 / Feature / 完整约束门通过，版本 `0.5.36 → 0.5.37`，待同一评审智能体复审。
 
 阶段结果在每次 checkpoint 后更新，长日志只记录命令和 artifact 路径，不粘贴到本文。

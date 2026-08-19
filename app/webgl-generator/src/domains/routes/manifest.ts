@@ -7,6 +7,14 @@ export const ROUTES_WORKER_WRITE_SET = Object.freeze([
   "metadata.compatibility.settlementPortTopology", "generationLog"
 ] as const);
 
+export const ROUTE_PATH_WORKER_WRITE_SET = Object.freeze([
+  "settlements.routes", "settlements.metadata", "settlements.cities", "grid.cells.burg",
+  "pack.burgs", "pack.routes", "pack.states", "pack.provinces", "pack.markets",
+  "pack.cells.burg", "pack.cells.routes", "pack.cells.market",
+  "politics.states", "politics.provinces", "economy.markets", "economy.metadata",
+  "diplomacy.metadata", "military.metadata", "zones.metadata", "metadata.derivedStale", "notes"
+] as const);
+
 const VERIFY = "regress:features-networks-resources-core-protocol";
 const commands = ["create", "update", "delete", "setNote"] as const;
 
@@ -20,7 +28,7 @@ export const routesManifest = {
   regeneration: {id: "routes.regenerate", writeSet: ROUTES_WORKER_WRITE_SET, sourceRevision: "required", binding: "required", lockPolicy: "regeneration-lock-protection", replacementPolicy: "from-empty"},
   workerTasks: [
     {id: "routes.regeneration-worker", task: "regeneration.compute", resultKinds: ["routes"], writeSet: ROUTES_WORKER_WRITE_SET, bindingPolicy: "pre-commit", patchPolicy: "domain-policy-required"},
-    {id: "routes.path-worker", task: "route-path.compute", resultKinds: ["route-path"], writeSet: ["settlements", "politics", "economy", "grid.cells.burg", "pack.burgs", "pack.routes", "pack.states", "pack.provinces", "pack.markets", "pack.cells.burg", "pack.cells.routes", "pack.cells.market", "metadata.derivedStale", "military.metadata.stale", "zones.metadata.stale", "diplomacy.metadata.stale", "notes"], bindingPolicy: "pre-commit", patchPolicy: "domain-policy-required"}
+    {id: "routes.path-worker", task: "route-path.compute", resultKinds: ["route-path"], writeSet: ROUTE_PATH_WORKER_WRITE_SET, bindingPolicy: "pre-commit", patchPolicy: "domain-policy-required"}
   ],
   queries: [
     {id: "routes.inspectEdit", reads: ["settlements.routes", "pack.routes", "pack.cells.i"], profiles: ["interactive", "headless"]},

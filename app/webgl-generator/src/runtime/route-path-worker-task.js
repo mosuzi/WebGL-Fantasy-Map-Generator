@@ -17,14 +17,14 @@ import {
 export const ROUTE_PATH_WORKER_TASK = "route-path.compute";
 export const ROUTE_PATH_WORKER_PLAN_VERSION = 1;
 
-const ROUTE_PATH_HISTORY_ROOTS = Object.freeze([
+export const ROUTE_PATH_HISTORY_ROOTS = Object.freeze([
   "settlements.routes",
   "settlements.metadata",
   "pack.routes",
   "pack.cells.routes",
   "metadata.derivedStale"
 ]);
-const CITY_MOVE_HISTORY_ROOTS = Object.freeze([
+export const CITY_MOVE_HISTORY_ROOTS = Object.freeze([
   "settlements.cities",
   "settlements.routes",
   "settlements.metadata",

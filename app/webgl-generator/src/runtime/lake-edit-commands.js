@@ -132,7 +132,7 @@ export function inspectLakeOutletChange(map, lakeId, outletRiverId) {
   const river = findRiver(map, outlet);
   if (!river) return invalidLakeOutlet("missing-river", `找不到河流 #${outlet}`);
   const lakeCells = new Set(cellsWithFeature(map.pack?.cells, Number(lake.i ?? lake.id)));
-  if (!riverExitsLake(map.pack?.cells, river.cells || [], lakeCells)) return invalidLakeOutlet("invalid-outlet-path", `河流 #${outlet} 没有从该湖泊流向相邻陆地`);
+  if (!riverExitsLake(map.pack?.cells, river.cells || [], lakeCells, lake)) return invalidLakeOutlet("invalid-outlet-path", `河流 #${outlet} 没有从该湖泊流向相邻陆地`);
   return {
     valid: true,
     code: "ok",
@@ -567,7 +567,7 @@ function readRivers(map) {
   return map?.rivers?.rivers || map?.pack?.rivers || [];
 }
 
-function riverExitsLake(cells, riverCells, lakeCells) {
+function riverExitsLake(cells, riverCells, lakeCells, lake) {
   for (let index = 0; index < riverCells.length - 1; index++) {
     const current = Number(riverCells[index]);
     const next = Number(riverCells[index + 1]);
@@ -576,7 +576,11 @@ function riverExitsLake(cells, riverCells, lakeCells) {
   const source = Number(riverCells[0]);
   if (Number.isInteger(source) && Number(cells?.h?.[source]) >= WATER_LEVEL) {
     const neighbors = cells?.c?.[source] || [];
-    if (neighbors.some(cell => lakeCells.has(Number(cell)))) return true;
+    if (!neighbors.some(cell => lakeCells.has(Number(cell)))) return false;
+    if (riverCells.slice(1).some(cell => lakeCells.has(Number(cell)))) return false;
+    const spillCell = Number(lake?.overflow?.spillCell);
+    if (Number.isInteger(spillCell) && spillCell >= 0 && spillCell !== source) return false;
+    return true;
   }
   return false;
 }

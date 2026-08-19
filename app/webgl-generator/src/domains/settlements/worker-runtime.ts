@@ -130,7 +130,7 @@ export function validateSettlementCityMirrors(values: Map<string, unknown>, sour
   if (gridBurgs.length !== gridCellCount || packBurgs.length !== packCellCount) {
     throw protocolError("settlement-cell-mirror-length-invalid", "城镇单元镜像长度与源拓扑不一致");
   }
-  validateRouteMirrors(routes, denseArray(values.get("pack.routes"), "settlement-zone.patch.pack.routes"));
+  validateSettlementRouteMirrors(routes, denseArray(values.get("pack.routes"), "settlement-zone.patch.pack.routes"));
   assertDeepEqual(politics.states, values.get("pack.states"), "settlement-politics-mirror-invalid", "politics / pack state 镜像不一致");
   assertDeepEqual(politics.provinces, values.get("pack.provinces"), "settlement-politics-mirror-invalid", "politics / pack province 镜像不一致");
   validateSocietyPoliticsAdministrativeReferences({
@@ -206,7 +206,7 @@ export function validateSettlementCityMirrors(values: Map<string, unknown>, sour
   }
 }
 
-function validateRouteMirrors(routes: unknown[], packRoutes: unknown[]): void {
+export function validateSettlementRouteMirrors(routes: unknown[], packRoutes: unknown[]): void {
   if (routes.length !== packRoutes.length) throw protocolError("settlement-route-mirror-invalid", "settlements / pack route 槽数不一致");
   for (let index = 0; index < routes.length; index++) {
     const routeValue = routes[index];
@@ -220,7 +220,15 @@ function validateRouteMirrors(routes: unknown[], packRoutes: unknown[]): void {
     }
     if (Number(route.id) !== index || Number(pack.i) !== index
       || normalRouteType(route.type) !== normalRouteType(pack.group)
-      || Number(route.from) !== Number(pack.from) || Number(route.to) !== Number(pack.to)) {
+      || Number(route.from) !== Number(pack.from) || Number(route.to) !== Number(pack.to)
+      || Number(route.feature || 0) !== Number(pack.feature || 0)
+      || Number(route.state || 0) !== Number(pack.state || 0)
+      || Number(route.province || 0) !== Number(pack.province || 0)
+      || Boolean(route.fromProvincial) !== Boolean(pack.fromProvincial)
+      || Boolean(route.toProvincial) !== Boolean(pack.toProvincial)
+      || String(route.administrativePriority || "") !== String(pack.administrativePriority || "")
+      || Number(route.resourceCells || 0) !== Number(pack.resourceCells || 0)
+      || Number(route.markerResourceCells || 0) !== Number(pack.markerResourceCells || 0)) {
       throw protocolError("settlement-route-mirror-invalid", `route #${index} 身份或端点镜像不一致`);
     }
     const points = array(route.points, `settlement-zone.route.${index}.points`);

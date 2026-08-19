@@ -9,6 +9,7 @@ import {API_METHODS, buildApiContract} from "../app/webgl-generator/src/runtime/
 import {buildApiMethodDescriptionRegistry} from "../app/webgl-generator/src/runtime/api-schema-registry.js";
 import {HEADLESS_WRITE_METHODS} from "../app/webgl-generator/src/runtime/headless-write-api.js";
 import {listWorkerTasks} from "../app/webgl-generator/src/runtime/worker-task-registry.js";
+import {CITY_MOVE_HISTORY_ROOTS, ROUTE_PATH_HISTORY_ROOTS} from "../app/webgl-generator/src/runtime/route-path-worker-task.js";
 
 const compiledRoot = new URL("../.cache/core-manifest-test/", import.meta.url);
 const {DomainManifestError, createDomainManifestRegistry} = await import(new URL("core/domain-manifest-registry.js", compiledRoot));
@@ -22,7 +23,7 @@ const {zonesManifest} = await import(new URL("domains/zones/manifest.js", compil
 const {labelsManifest} = await import(new URL("domains/labels/manifest.js", compiledRoot));
 const {measurementsManifest} = await import(new URL("domains/measurements/manifest.js", compiledRoot));
 const {featuresManifest} = await import(new URL("domains/features/manifest.js", compiledRoot));
-const {routesManifest} = await import(new URL("domains/routes/manifest.js", compiledRoot));
+const {ROUTE_PATH_WORKER_WRITE_SET, routesManifest} = await import(new URL("domains/routes/manifest.js", compiledRoot));
 const {riversManifest} = await import(new URL("domains/rivers/manifest.js", compiledRoot));
 
 const workerTasks = new Set(listWorkerTasks());
@@ -76,6 +77,7 @@ assert.equal(registry.get("settlements").workerTasks[0].resultKinds[0], "cities"
 assert.equal(registry.get("zones").workerTasks[0].resultKinds[0], "zones");
 assert.equal(registry.get("features").workerTasks[0].resultKinds[0], "features");
 assert.equal(registry.get("routes").workerTasks[1].task, "route-path.compute");
+assert.deepEqual([...ROUTE_PATH_WORKER_WRITE_SET].sort(), [...new Set([...ROUTE_PATH_HISTORY_ROOTS, ...CITY_MOVE_HISTORY_ROOTS])].sort(), "route-path Manifest 必须精确覆盖两类真实 history roots 的并集");
 assert.equal(registry.get("rivers").workerTasks[0].resultKinds[0], "rivers");
 assert.equal(registry.get("markers").workerTasks[0].resultKinds[0], "markers");
 assert.equal(registry.get("labels").capabilities.worker, "not-required");
@@ -306,6 +308,7 @@ for (const [kind, writeSet] of Object.entries(SOCIETY_POLITICS_WRITE_SETS)) for 
 }
 for (const token of ["validateSettlementZoneWorkerOutput", "cities", "zones", "regeneration.compute"]) assert.ok(evidence.settlementZones.includes(token), `settlements-zones evidence 缺少 ${token}`);
 for (const token of ["validateFeaturesNetworksResourcesWorkerOutput", "features", "routes", "rivers", "markers", "route-path.compute", "regeneration.compute"]) assert.ok(evidence.featuresNetworksResources.includes(token), `features-networks-resources evidence 缺少 ${token}`);
+for (const pathValue of ROUTE_PATH_WORKER_WRITE_SET) assert.ok(evidence.featuresNetworksResources.includes(`"${pathValue}"`), `route-path Worker 源码未声明 ${pathValue}`);
 assert.ok(markersManifest.commands.find(command => command.id === "markers.delete").writeSet.includes("notes"), "markers.delete 必须覆盖真实备注删除写集");
 
 const headlessMethods = new Set(HEADLESS_WRITE_METHODS);

@@ -9,11 +9,11 @@
 - features、routes、rivers 新增领域 Manifest；markers 补齐真实 `regeneration.compute / markers` result owner。routes 另声明既有 `route-path.compute / route-path` owner。
 - 四类重生成结果在正式 history commit 前验证 request / output binding、Manifest 精确写集、operation 容器和领域镜像。Feature 覆盖 grid / pack identity、cell 引用、锁对象 / cell / 直接引用；路线覆盖 city / burg / politics / market 与路径邻接；河流覆盖双镜像、parent DAG 与 cell 引用；资源标记覆盖 pack、economy、politics 与 cell 边界。
 - 锁定 Feature 的历史港口墓碑在 from-empty 城镇重建前保留，其 counterpart 数值槽不再被活动对象复用；Feature topology 同一 owner 内对直接引用字段做 before-image 恢复，最终锁断言与 Worker pre-commit 双重把关。
-- 自然湖泊出口兼容两种既有表示：河流序列由湖格进入陆格，或由与该湖直接相邻的岸上 spill cell 起步。其它邻近但不相接的河流仍拒绝。
+- 自然湖泊出口兼容两种既有表示：河流序列由湖格进入陆格，或由与该湖直接相邻且匹配 overflow 元数据的岸上 spill cell 起步；岸上起步的后续路径不得再进入该湖，入湖方向和其它邻近河流仍拒绝。
 
 ## 验收证据
 
-- 新协议正例覆盖四个 Manifest，写路径分别为 features `25`、routes `21`、rivers `31`、markers `28`；拒绝 stale binding、缺写、DataView、policy drift、四域镜像 / identity / 边界 / parent / lock 漂移共 `16` 类负例。
+- 新协议正例覆盖四个 Manifest，写路径分别为 features `25`、routes `21`、rivers `31`、markers `28`，route-path 为两类真实 history roots 的 `21` 路径并集；首轮评审后补齐普通 Feature 引用、marker 镜像、route cell links、river topology / cell mirror，拒绝集共 `21` 类。
 - core registry：`12 domains / 175 descriptors`；dependency registry：`12 domains / 16 systems`。
 - 代表性 Node 门：路线 10k / 50k / 100k connectivity 与 quality、锁路线；五种子河网、50k / 100k 锁河、河道控制点；Feature topology / patch / lock；资源经济、v1 migration；完整 world constraint `11 stages / 15 locked kinds`。
 - production build：`1387 modules`；`git diff --check` 通过；浏览器执行 `0`，`source/` 改动 `0`。
@@ -21,3 +21,5 @@
 ## 计划外必需项与后续顺序
 
 本阶段内插入了既有测试夹具维护与自然湖泊出口兼容修复，因为它们直接阻断声明在四个 Manifest 中的验收门；没有扩展为新的独立产品能力阶段。依赖顺序复评后仍为 `349-10d → 349-10e → 349-10f → 349-10g → 349-11`。本 checkpoint 仅在同一只读评审智能体 `ACCEPT` 后进入 349-10e。
+
+首轮评审 `BLOCK` 的五项 P1 已在 `0.5.37` blocker-only 候选中按原边界闭合；没有新增阶段，未完成顺序不变。

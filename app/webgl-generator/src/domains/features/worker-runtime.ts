@@ -1,7 +1,7 @@
 import {adaptLegacyInteractiveRevision} from "../../core/adapters/identity-adapters.js";
 import type {ComputeOperationBinding} from "../../core/contracts/operation.js";
 import {validateOperationBinding} from "../../core/contracts/runtime-validators.js";
-import {validateSettlementCityMirrors} from "../settlements/worker-runtime.js";
+import {validateSettlementCityMirrors, validateSettlementRouteMirrors} from "../settlements/worker-runtime.js";
 import {FEATURES_WORKER_WRITE_SET, featuresManifest} from "./manifest.js";
 import {ROUTES_WORKER_WRITE_SET, routesManifest} from "../routes/manifest.js";
 import {RIVERS_WORKER_WRITE_SET, riversManifest} from "../rivers/manifest.js";
@@ -148,7 +148,66 @@ function validateFeatureMirrors(values: Map<string, unknown>, sourceMapValue: un
   }
   validateCellFeatureReferences(gridF, gridFeatures, "feature-grid-cell-reference-invalid");
   validateCellFeatureReferences(packF, packFeatures, "feature-pack-cell-reference-invalid");
+  validateFeatureObjectMirrors(values, sourceMap, packFeatures);
   validateLockedFeatureEnvelope(sourceMap, values);
+}
+
+function validateFeatureObjectMirrors(values: Map<string, unknown>, sourceMap: UnknownRecord, packFeatures: unknown[]): void {
+  const settlements = record(values.get("settlements"), "geography.patch.settlements");
+  const cities = denseArray(settlements.cities, "geography.patch.settlements.cities");
+  const routes = denseArray(settlements.routes, "geography.patch.settlements.routes");
+  const burgs = denseArray(values.get("pack.burgs"), "geography.patch.pack.burgs");
+  const packRoutes = denseArray(values.get("pack.routes"), "geography.patch.pack.routes");
+  const markers = denseArray(values.get("markers.markers"), "geography.patch.markers.markers");
+  const packMarkers = denseArray(values.get("pack.markers"), "geography.patch.pack.markers");
+  const sourceGrid = record(record(sourceMap.grid, "geography.sourceMap.grid").cells, "geography.sourceMap.grid.cells");
+  const sourcePack = record(record(sourceMap.pack, "geography.sourceMap.pack").cells, "geography.sourceMap.pack.cells");
+  const gridCount = indexedLength(sourceGrid.i ?? record(sourceMap.grid, "geography.sourceMap.grid").points, "geography.sourceMap.grid.cells.i");
+  const packCount = indexedLength(sourcePack.i, "geography.sourceMap.pack.cells.i");
+  validateSettlementRouteMirrors(routes, packRoutes);
+  assertDeepEqual(markers, packMarkers, "feature-marker-mirror-invalid", "markers / pack marker 镜像不一致");
+  const claimedBurgs = new Set<number>();
+  for (let cityId = 0; cityId < cities.length; cityId++) {
+    const value = cities[cityId];
+    if (!value) continue;
+    const city = record(value, `geography.city.${cityId}`);
+    if (city.removed) continue;
+    const burgId = Number(city.burgId);
+    const gridCell = Number(city.cell);
+    const packCell = Number(city.packCell);
+    if (Number(city.id) !== cityId || !Number.isSafeInteger(burgId) || burgId < 0 || claimedBurgs.has(burgId)
+      || !Number.isSafeInteger(gridCell) || gridCell < 0 || gridCell >= gridCount
+      || !Number.isSafeInteger(packCell) || packCell < 0 || packCell >= packCount) {
+      throw protocolError("feature-city-identity-invalid", `city #${cityId} 身份或 cell 无效`);
+    }
+    const burg = record(burgs[burgId], `geography.burg.${burgId}`);
+    if (Number(burg.i) !== burgId || Number(burg.id) !== burgId || Number(burg.cityId) !== cityId || Number(burg.cell) !== packCell) {
+      throw protocolError("feature-city-burg-mirror-invalid", `city #${cityId} 与 burg #${burgId} 身份镜像不一致`);
+    }
+    for (const key of ["name", "state", "province", "population", "capital", "provincial", "port"] as const) {
+      const cityValue = ["capital", "provincial", "port"].includes(key) ? Number(city[key] || 0) : city[key];
+      const burgValue = ["capital", "provincial", "port"].includes(key) ? Number(burg[key] || 0) : burg[key];
+      if (cityValue !== burgValue) throw protocolError("feature-city-burg-mirror-invalid", `city #${cityId} 与 burg #${burgId} 的 ${key} 镜像不一致`);
+    }
+    claimedBurgs.add(burgId);
+  }
+  for (let burgId = 1; burgId < burgs.length; burgId++) {
+    const value = burgs[burgId];
+    if (!value) continue;
+    const burg = record(value, `geography.burg.${burgId}`);
+    if (burg.removed) continue;
+    if (!claimedBurgs.has(burgId) || !cities[Number(burg.cityId)]) throw protocolError("feature-burg-city-mirror-invalid", `burg #${burgId} 没有唯一 city 镜像`);
+  }
+  const output = outputFeatureCollections(values);
+  for (const [collection, object] of featureReferenceObjects(output)) {
+    for (const [field, rawId] of [["feature", object.feature], ["port", object.port], ["data.feature", (object.data as UnknownRecord | undefined)?.feature]] as const) {
+      if (rawId === undefined || rawId === null || rawId === "") continue;
+      const id = Number(rawId);
+      if (!Number.isSafeInteger(id) || id < 0 || id > 0 && (!packFeatures[id] || record(packFeatures[id], `geography.feature.${id}`).removed)) {
+        throw protocolError("feature-object-reference-invalid", `${collection} 的 ${field} 指向无效 Feature #${String(rawId)}`);
+      }
+    }
+  }
 }
 
 function validateRouteDomain(values: Map<string, unknown>, sourceMap: unknown): void {
@@ -176,6 +235,28 @@ function validateRouteDomain(values: Map<string, unknown>, sourceMap: unknown): 
       if (!Array.isArray(neighbors?.[cells[index - 1]]) || !(neighbors?.[cells[index - 1]] as unknown[]).map(Number).includes(cells[index])) throw protocolError("route-topology-invalid", `route #${String(route.id)} 路径不连续`);
     }
   }
+  validateRouteCellLinks(routes, values.get("pack.cells.routes"), packCount);
+}
+
+function validateRouteCellLinks(routes: unknown[], linksValue: unknown, packCount: number): void {
+  const expected: UnknownRecord = {};
+  for (const value of routes) {
+    if (!value) continue;
+    const route = record(value, "geography.route-link.route");
+    if (route.removed) continue;
+    const id = Number(route.id);
+    const cells = array(route.packCells, `geography.route-link.${id}.cells`).map(Number);
+    for (let index = 0; index < cells.length - 1; index++) {
+      const from = cells[index];
+      const to = cells[index + 1];
+      if (!Number.isSafeInteger(from) || !Number.isSafeInteger(to) || from < 0 || to < 0 || from >= packCount || to >= packCount) throw protocolError("route-cell-link-invalid", `route #${id} cell link 越界`);
+      const fromLinks = isPlainRecord(expected[String(from)]) ? expected[String(from)] as UnknownRecord : (expected[String(from)] = {} as UnknownRecord);
+      const toLinks = isPlainRecord(expected[String(to)]) ? expected[String(to)] as UnknownRecord : (expected[String(to)] = {} as UnknownRecord);
+      fromLinks[String(to)] = id;
+      toLinks[String(from)] = id;
+    }
+  }
+  assertDeepEqual(linksValue, expected, "route-cell-link-mirror-invalid", "pack.cells.routes 与路线边镜像不一致");
 }
 
 function validateRiverMirrors(values: Map<string, unknown>, sourceMapValue: unknown): void {
@@ -187,6 +268,7 @@ function validateRiverMirrors(values: Map<string, unknown>, sourceMapValue: unkn
   const sourceMap = record(sourceMapValue, "geography.sourceMap");
   const sourceGridCells = record(record(sourceMap.grid, "geography.sourceMap.grid").cells, "geography.sourceMap.grid.cells");
   const sourcePackCells = record(record(sourceMap.pack, "geography.sourceMap.pack").cells, "geography.sourceMap.pack.cells");
+  const packNeighbors = sourcePackCells.c as unknown[] | undefined;
   const gridCount = indexedLength(sourceGridCells.i, "geography.sourceMap.grid.cells.i");
   const packCount = indexedLength(sourcePackCells.i, "geography.sourceMap.pack.cells.i");
   for (const path of ["grid.cells.biome", "grid.cells.s", "grid.cells.pop"]) if (indexedLength(values.get(path), `geography.patch.${path}`) !== gridCount) throw protocolError("river-cell-length-invalid", `${path} 长度与源拓扑不一致`);
@@ -201,7 +283,13 @@ function validateRiverMirrors(values: Map<string, unknown>, sourceMapValue: unkn
     if (!Number.isSafeInteger(id) || id <= 0 || ids.has(id)) throw protocolError("river-identity-invalid", "河流 ID 无效或重复");
     ids.add(id);
     const cells = array(river.cells, `geography.river.${id}.cells`).map(Number);
-    if (!cells.some(cell => cell >= 0) || cells.some(cell => !Number.isSafeInteger(cell) || cell < -1 || cell >= packCount)) throw protocolError("river-cell-invalid", `river #${id} cell 无效`);
+    if (!cells.some(cell => cell >= 0) || cells.some((cell, index) => !Number.isSafeInteger(cell) || cell < -1 || cell >= packCount || cell === -1 && index !== cells.length - 1)) throw protocolError("river-cell-invalid", `river #${id} cell 无效`);
+    for (let index = 1; index < cells.length; index++) {
+      const previous = cells[index - 1];
+      const current = cells[index];
+      if (current === -1) continue;
+      if (previous < 0 || !Array.isArray(packNeighbors?.[previous]) || !(packNeighbors[previous] as unknown[]).map(Number).includes(current)) throw protocolError("river-topology-invalid", `river #${id} 路径不连续`);
+    }
     const parent = Number(river.parent || 0);
     if (parent) parents.set(id, parent);
   }
@@ -211,10 +299,20 @@ function validateRiverMirrors(values: Map<string, unknown>, sourceMapValue: unkn
     for (let cursor = id; parents.has(cursor); cursor = parents.get(cursor) as number) if (visited.has(cursor)) throw protocolError("river-cycle-invalid", `河流 #${id} 父链成环`); else visited.add(cursor);
   }
   const cellRivers = indexedValues(values.get("pack.cells.r"), "geography.patch.pack.cells.r");
+  const riverCells = new Map<number, Set<number>>();
+  for (const value of rivers) {
+    if (!value) continue;
+    const river = record(value, "geography.river.mirror");
+    if (river.removed) continue;
+    riverCells.set(Number(river.i ?? river.id), new Set(array(river.cells, "geography.river.mirror.cells").map(Number).filter(cell => cell >= 0)));
+  }
+  const claimed = new Set<number>();
   for (let cell = 0; cell < cellRivers.length; cell++) {
     const id = Number(cellRivers[cell]);
-    if (id && !ids.has(id)) throw protocolError("river-cell-reference-invalid", `pack cell #${cell} 指向不存在 river #${id}`);
+    if (id && (!ids.has(id) || !riverCells.get(id)?.has(cell))) throw protocolError("river-cell-reference-invalid", `pack cell #${cell} 指向不包含该 cell 的 river #${id}`);
+    if (id) claimed.add(id);
   }
+  for (const id of ids) if (!claimed.has(id)) throw protocolError("river-cell-mirror-invalid", `river #${id} 没有 pack.cells.r 反向归属`);
 }
 
 function validateMarkerResourceMirrors(values: Map<string, unknown>, sourceMapValue: unknown): void {
@@ -300,6 +398,20 @@ function captureDirectFeatureReferences(map: UnknownRecord, id: number): unknown
     }
   }
   return references;
+}
+
+function featureReferenceObjects(map: UnknownRecord): Array<readonly [string, UnknownRecord]> {
+  const pack = isPlainRecord(map.pack) ? map.pack : {};
+  const settlements = isPlainRecord(map.settlements) ? map.settlements : {};
+  const markers = isPlainRecord(map.markers) ? map.markers : {};
+  const portDiagnostics = isPlainRecord(pack.portDiagnostics) ? pack.portDiagnostics : {};
+  const collections: Array<readonly [string, unknown]> = [
+    ["pack.burgs", pack.burgs], ["settlements.cities", settlements.cities], ["pack.routes", pack.routes],
+    ["settlements.routes", settlements.routes], ["markers.markers", markers.markers], ["pack.portDiagnostics.features", portDiagnostics.features]
+  ];
+  const objects: Array<readonly [string, UnknownRecord]> = [];
+  for (const [collection, value] of collections) for (const object of Array.isArray(value) ? value : []) if (isPlainRecord(object)) objects.push([collection, object]);
+  return objects;
 }
 
 function validateIdentitySlots(rows: unknown[], code: string): void {

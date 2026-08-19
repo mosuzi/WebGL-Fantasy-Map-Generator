@@ -11,7 +11,7 @@ const vite = await createServer({configFile: false, root: path.join(repoRoot, "a
 try {
   const {validateFeaturesNetworksResourcesWorkerOutput} = await vite.ssrLoadModule("/src/domains/features/worker-runtime.ts");
   const {FEATURES_WORKER_WRITE_SET, featuresManifest} = await vite.ssrLoadModule("/src/domains/features/manifest.ts");
-  const {ROUTES_WORKER_WRITE_SET, routesManifest} = await vite.ssrLoadModule("/src/domains/routes/manifest.ts");
+  const {ROUTES_WORKER_WRITE_SET, ROUTE_PATH_WORKER_WRITE_SET, routesManifest} = await vite.ssrLoadModule("/src/domains/routes/manifest.ts");
   const {RIVERS_WORKER_WRITE_SET, riversManifest} = await vite.ssrLoadModule("/src/domains/rivers/manifest.ts");
   const {MARKERS_WORKER_WRITE_SET, markersManifest} = await vite.ssrLoadModule("/src/domains/markers/manifest.ts");
   const {generatePlaceholderMap} = await vite.ssrLoadModule("/src/generator/index.js");
@@ -29,6 +29,7 @@ try {
     assert.deepEqual(manifest.workerTasks[0].writeSet, writes[kind], `${kind} Manifest 写集漂移`);
   }
   assert.equal(routesManifest.workerTasks[1].task, "route-path.compute");
+  assert.deepEqual(routesManifest.workerTasks[1].writeSet, ROUTE_PATH_WORKER_WRITE_SET, "route-path Manifest 写集漂移");
 
   const owner = new MapRevisionTracker({identityFactory: () => "geography-map"});
   owner.replaceMap();
@@ -83,11 +84,24 @@ try {
   lockedPackCells[foreignCell] = Number(lockedFeature.i);
   assertProtocol(() => validateFeaturesNetworksResourcesWorkerOutput({kind: "features", sourceMap: lockedFeatureMap, binding, output: lockedCells, policy: getRegenerationPatchPolicy("features")}), "feature-lock-cells-invalid");
   const lockedReference = structuredClone(lockedFeatureOutput);
-  const referencedBurg = operationValue(lockedReference.patch, "pack.burgs").find(burg => burg && (Number(burg.feature) === Number(lockedFeature.i) || Number(burg.port) === Number(lockedFeature.i)));
+  const referencedBurg = operationValue(lockedReference.patch, "pack.burgs").find(burg => burg && Number(burg.port) === Number(lockedFeature.i));
   assert(referencedBurg, "锁定 Feature 夹具缺少 burg 直接引用");
   referencedBurg.port = 0;
-  referencedBurg.feature = 0;
+  operationValue(lockedReference.patch, "settlements").cities[referencedBurg.cityId].port = 0;
   assertProtocol(() => validateFeaturesNetworksResourcesWorkerOutput({kind: "features", sourceMap: lockedFeatureMap, binding, output: lockedReference, policy: getRegenerationPatchPolicy("features")}), "feature-lock-references-invalid");
+
+  const featureRouteReference = structuredClone(outputs.features.output);
+  const featureRoute = operationValue(featureRouteReference.patch, "settlements").routes.find(route => route && !route.removed);
+  const featurePackRoute = operationValue(featureRouteReference.patch, "pack.routes")[featureRoute.id];
+  featureRoute.feature = featurePackRoute.feature = operationValue(featureRouteReference.patch, "pack.features").length + 1;
+  assertProtocol(() => validate("features", featureRouteReference), "feature-object-reference-invalid");
+
+  const featureMarkerMirror = structuredClone(outputs.features.output);
+  operation(featureMarkerMirror.patch, "pack.markers").value = structuredClone(operationValue(featureMarkerMirror.patch, "pack.markers"));
+  const featurePackMarker = operationValue(featureMarkerMirror.patch, "pack.markers").find(marker => marker && !marker.removed);
+  assert(featurePackMarker, "Feature 夹具缺少 marker 镜像");
+  featurePackMarker.name = "镜像漂移";
+  assertProtocol(() => validate("features", featureMarkerMirror), "feature-marker-mirror-invalid");
 
   const routeMirror = structuredClone(outputs.routes.output);
   operationValue(routeMirror.patch, "pack.routes")[0].to += 1;
@@ -99,6 +113,10 @@ try {
   route.from = packRoute.from = operationValue(routeEndpoint.patch, "pack.burgs").length + 3;
   assertProtocol(() => validate("routes", routeEndpoint), "route-endpoint-invalid");
 
+  const routeCellLinks = structuredClone(outputs.routes.output);
+  operation(routeCellLinks.patch, "pack.cells.routes").value = {};
+  assertProtocol(() => validate("routes", routeCellLinks), "route-cell-link-mirror-invalid");
+
   const riverMirror = structuredClone(outputs.rivers.output);
   operation(riverMirror.patch, "pack.rivers").value = structuredClone(operationValue(riverMirror.patch, "pack.rivers"));
   operationValue(riverMirror.patch, "pack.rivers")[0].name = "镜像漂移";
@@ -109,9 +127,23 @@ try {
   river.parent = operationValue(riverParent.patch, "pack.rivers")[0].parent = 999999;
   assertProtocol(() => validate("rivers", riverParent), "river-parent-invalid");
 
+  const riverTopology = structuredClone(outputs.rivers.output);
+  const topologyCells = outputs.rivers.sourceMap.pack.cells;
+  const nonAdjacent = findNonAdjacentCells(topologyCells);
+  const topologyRiver = operationValue(riverTopology.patch, "rivers").rivers[0];
+  const topologyPackRiver = operationValue(riverTopology.patch, "pack.rivers")[0];
+  topologyRiver.cells = topologyPackRiver.cells = nonAdjacent;
+  assertProtocol(() => validate("rivers", riverTopology), "river-topology-invalid");
+
   const riverCellReference = structuredClone(outputs.rivers.output);
   operationValue(riverCellReference.patch, "pack.cells.r")[0] = 65535;
   assertProtocol(() => validate("rivers", riverCellReference), "river-cell-reference-invalid");
+
+  const riverCellMirror = structuredClone(outputs.rivers.output);
+  const mirrorRiverId = Number(operationValue(riverCellMirror.patch, "rivers").rivers[0].i);
+  const riverAssignments = operationValue(riverCellMirror.patch, "pack.cells.r");
+  for (let cell = 0; cell < riverAssignments.length; cell++) if (Number(riverAssignments[cell]) === mirrorRiverId) riverAssignments[cell] = 0;
+  assertProtocol(() => validate("rivers", riverCellMirror), "river-cell-mirror-invalid");
 
   const markerMirror = structuredClone(outputs.markers.output);
   operation(markerMirror.patch, "pack.markers").value = structuredClone(operationValue(markerMirror.patch, "pack.markers"));
@@ -141,7 +173,7 @@ try {
   const appSource = await readFile(path.join(repoRoot, "app/webgl-generator/src/runtime/app.js"), "utf8");
   assert.match(appSource, /\["features", "routes", "rivers", "markers"\]\.includes\(targetKind\)[\s\S]*?validateFeaturesNetworksResourcesWorkerOutput/u, "正式地理网络 Worker 入口未接统一 pre-commit validator");
 
-  console.log(JSON.stringify({ok: true, manifests: Object.keys(manifests), writes: Object.fromEntries(Object.entries(writes).map(([kind, paths]) => [kind, paths.length])), tombstones: 16, commit: {revision: owner.getCoreSnapshot(), history: history.getStats()}, rejected: ["stale-binding", "partial-write-set", "data-view", "policy-drift", "feature-mirror", "feature-cell", "feature-lock-cells", "feature-lock-reference", "route-mirror", "route-endpoint", "river-mirror", "river-parent", "river-cell-reference", "marker-mirror", "marker-cell", "economy-mirror"], browserRuns: 0}, null, 2));
+  console.log(JSON.stringify({ok: true, manifests: Object.keys(manifests), writes: Object.fromEntries(Object.entries(writes).map(([kind, paths]) => [kind, paths.length])), routePathWrites: ROUTE_PATH_WORKER_WRITE_SET.length, tombstones: 16, commit: {revision: owner.getCoreSnapshot(), history: history.getStats()}, rejected: ["stale-binding", "partial-write-set", "data-view", "policy-drift", "feature-mirror", "feature-cell", "feature-lock-cells", "feature-lock-reference", "feature-route-reference", "feature-marker-mirror", "route-mirror", "route-endpoint", "route-cell-links", "river-mirror", "river-parent", "river-topology", "river-cell-reference", "river-cell-mirror", "marker-mirror", "marker-cell", "economy-mirror"], browserRuns: 0}, null, 2));
 
   function validate(kind, output) {
     return validateFeaturesNetworksResourcesWorkerOutput({kind, sourceMap: outputs[kind].sourceMap, binding, output, policy: outputs[kind].policy});
@@ -153,3 +185,10 @@ try {
 function operationValue(patch, pathValue) { return operation(patch, pathValue).value; }
 function operation(patch, pathValue) { const matched = patch.operations.find(item => item.path.join(".") === pathValue); assert(matched, `patch 缺少 ${pathValue}`); return matched; }
 function assertProtocol(callback, code) { assert.throws(callback, error => error?.code === code); }
+function findNonAdjacentCells(cells) {
+  const count = cells.i.length;
+  for (let left = 0; left < count; left++) for (let right = count - 1; right >= 0; right--) {
+    if (left !== right && !cells.c[left]?.includes(right)) return [left, right];
+  }
+  throw new Error("河流拓扑负例缺少不相邻 cell");
+}
