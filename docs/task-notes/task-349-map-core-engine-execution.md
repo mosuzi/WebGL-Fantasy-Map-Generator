@@ -24,8 +24,8 @@
 | 349-3a | canonical field registry、persisted / live presentation 分类、普通 document identity 定义 / 迁移与 identity adapters 闭合 | 五个遗漏字段、旧数据、checksum、patch、document identity 迁移和身份混用负例通过 | 不实现 Manifest、不接管 action | ACCEPT |
 | 349-4 | Capability-aware Domain Manifest、注册器与影子审计 | 不完整 manifest 拒绝；notes / markers / Worker 试点可登记 | 不改变运行路由 | ACCEPT |
 | 349-5 | 薄 `MapCoreEngine` 与 `MapRuntimeCoordinator` facade，影子产生 commit / projection 状态 | 旧 history / revision 行为不变；无第二 map owner | 不迁移复杂领域 | ACCEPT |
-| 349-6 | notes command / history / query / persistence / API 垂直切片 | 新增、编辑、删除、undo / redo、旧数据、save 回归 | 不伪造 Worker / regeneration / layer | checkpoint 待评审 |
-| 349-7 | markers presentation / layer / picking 垂直切片 | identity、draw、pick、export 的 Node / source 契约 | 不执行真实视觉浏览器门 | 待执行 |
+| 349-6 | notes command / history / query / persistence / API 垂直切片 | 新增、编辑、删除、undo / redo、旧数据、save 回归 | 不伪造 Worker / regeneration / layer | ACCEPT |
+| 349-7 | markers presentation / layer / picking 垂直切片 | identity、draw、pick、export 的 Node / source 契约 | 不执行真实视觉浏览器门 | 执行中 |
 | 349-8 | 一个真实 Worker task 的统一 binding / result / patch 切片 | checksum、stale、cancel、gap、restart 的专项回归 | 不批量迁移 Worker | 待执行 |
 | 349-9 | dependency registry、projection 状态和局部失效接线 | declared read/write、full rebuild 显式化、projection recovery | 不迁移未登记领域 | 待执行 |
 | 349-10a | terrain / grid / height-derived / climate / ocean / topology 基础域 | 旧数据、history、Worker、renderer source / Node 门 | 不迁移社会或行政域 | 待执行 |
@@ -52,14 +52,14 @@ planned → computed → validated → projections-prepared
 
 | 字段 | 内容 |
 | --- | --- |
-| 当前阶段 | `349-6` notes command / history / query / persistence / API 垂直切片 |
-| 冻结点 | `349-6` 修正候选版本 `0.5.17`：首轮评审的 post-commit projection P1 已补普通 command 与 undo 复现，等待 blocker-only 复审 |
-| 允许文件 | `domains/notes` runtime / manifest、notes 既有 UI / API 路由、备注摘要查询、专项 Node、阶段文档 |
-| 禁止文件 | 其他领域 command 收口、全图压缩保存重构、Worker / regeneration / view / layer、`source/`、main、浏览器 |
-| 必须保持 | `state.map` 与既有 `EditHistory / MapRevisionTracker` 仍是唯一 owner；不复制 notes 算法、不建第二 history；invalid / no-op 不产生 commit |
-| 首个廉价门 | `pnpm run regress:notes-core` |
-| 冻结门 | notes core、typecheck、Manifest / facade、备注导入、对象与 API 兼容、旧数据 migration、production build、评审 ACCEPT |
-| 停止条件 | notes 入口必须复制算法或建立第二 owner 才能接线，或同一专项夹具连续失败且无法窄修 |
+| 当前阶段 | `349-7` markers presentation / layer / picking 垂直切片 |
+| 冻结点 | `349-6@f71a0ff` / `0.5.18` 已接受；`349-7` 先定向冻结 marker canonical identity、draw source、picking identity 与导出入口 |
+| 允许文件 | `domains/markers` runtime / manifest、既有 marker presentation / renderer layer / picking / export 适配、专项 Node、阶段文档 |
+| 禁止文件 | marker 业务重生成迁移、Worker、其他领域 command、`source/`、main、浏览器 |
+| 必须保持 | 既有 marker canonical owner、command / history 与 renderer owner 不复制；普通 presentation 不推进 map revision；draw / pick / export identity 同源 |
+| 首个廉价门 | 定向盘点 marker identity、render preparation、pick payload 与 export source，冻结最小 adapter 设计 |
+| 冻结门 | marker identity / draw / pick / export 专项、typecheck、Manifest / facade、既有 marker 回归、production build、评审 ACCEPT |
+| 停止条件 | Node / source 契约不足以证明 draw / pick 同源，或必须执行浏览器才能声称视觉正确；此时只登记方案，不冒充通过 |
 
 ## 阶段结果
 
@@ -142,7 +142,10 @@ planned → computed → validated → projections-prepared
 - 契约：成功提交产生七步 lifecycle 和 persistence / UI settled projection；history 已提交后的 UI 失败仍记录 canonical commit 并把 UI projection 标为 degraded，不再冒充 no-op / rollback；invalid / no-op 保持 notes、revision、history 与 commit sequence 不变；query / persistence 返回冻结的 detached snapshot。
 - 兼容：当前 save round-trip 与 v1 旧备注保留通过；notes 不伪造 Worker、regeneration、view 或 render layer。既有 `regress:note-import` 的标题断言与 HEAD 文案漂移，已只修正测试期待，产品文案未改。
 - 首轮评审：`BLOCK` 一项 P1——legacy history 已提交后 UI 刷新异常会被 adapter 误判为提交前拒绝，留下 map / revision / history 已前进而 core commit 为 `0`。最窄修正按 revision + history 双事实识别已提交转换，普通 command 返回真实 `executed:true`，undo / redo 可继续抛刷新异常但 commit / persistence 保留、UI degraded。
-- 门禁：修正后 `regress:notes-core` 为 `11` 次单调 revision / commit，并覆盖 command 与 undo 两种 post-commit UI 失败；`typecheck:core`、core facade 通过。完整兼容门与 build 在 `0.5.17` checkpoint 重跑；浏览器执行 `0`。
-- 版本：首轮 `0.5.15 → 0.5.16`，评审修正 `0.5.16 → 0.5.17`；下一步 blocker-only 复审，未获 `ACCEPT` 不进入 `349-7`。
+- 首次 blocker-only 复审：`BLOCK` 一项同类 P1——抛异常型 post-commit command 虽已有 commit / degraded，却被外层 catch 删除 notes command 归属，使后续 undo 绕过 adapter。最终窄修只在没有 canonical transition 时删除 binding，并补“原异常保持、binding 保留、undo 仍产生 notes commit”专项。
+- 门禁：最终修正后 `regress:notes-core` 为 `13` 次单调 revision / commit，覆盖返回 error、undo 抛错、command 直接抛错与其后 undo；`typecheck:core` 通过。完整兼容门与 build 在 `0.5.18` checkpoint 重跑；浏览器执行 `0`。
+- 版本：首轮 `0.5.15 → 0.5.16`，首次修正 `0.5.16 → 0.5.17`，最终修正 `0.5.17 → 0.5.18`。
+- 终验：同一只读评审智能体最后一次 blocker-only 复审 `ACCEPT`；`source/` 零改动，浏览器启动 / 操作 / 验收均为 `0`。
+- 下一步：`349-7` 只迁移 markers presentation / layer / picking 垂直切片；先冻结 identity / draw / pick / export 真实入口，不伪造 Worker 或重生成能力。
 
 阶段结果在每次 checkpoint 后更新，长日志只记录命令和 artifact 路径，不粘贴到本文。

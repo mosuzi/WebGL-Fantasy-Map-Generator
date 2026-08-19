@@ -173,6 +173,35 @@ try {
     {projection: "ui", state: "degraded", detail: historyUiFailure.message}
   ]);
 
+  const throwingUiCommand = createStandaloneNoteCommand({id: "throwing-ui-failure", body: "直接抛出刷新失败", packCell: 1});
+  const throwingUiFailure = new Error("模拟 command 提交后直接抛出 UI 刷新失败");
+  assert.throws(() => runtime.executeCommand({
+    commandId: "notes.createStandalone",
+    command: throwingUiCommand,
+    execute: () => {
+      executeLegacy(history, map, throwingUiCommand);
+      throw throwingUiFailure;
+    }
+  }), error => error === throwingUiFailure);
+  assert.equal(runtime.get("note:throwing-ui-failure").body, "直接抛出刷新失败");
+  assert.equal(runtime.ownsCommand(throwingUiCommand), true, "已提交 command 即使 projection 抛错也必须保留 history 归属");
+  assert.equal(tracker.getSnapshot().mapRevision, 12);
+  assert.equal(commitSequence, 12);
+  assert.deepEqual(runtime.getLastCommit().projections, [
+    {projection: "persistence", state: "ready"},
+    {projection: "ui", state: "degraded", detail: throwingUiFailure.message}
+  ]);
+
+  runtime.executeHistory({
+    action: "undo",
+    command: history.peek("undo"),
+    execute: () => executeLegacyHistory(history, map, "undo")
+  });
+  assert.equal(runtime.get("note:throwing-ui-failure"), null);
+  assert.equal(tracker.getSnapshot().mapRevision, 13);
+  assert.equal(commitSequence, 13, "抛错 command 的 undo 仍必须由 notes runtime 记录");
+  assert.equal(runtime.getLastCommit().projections.every(item => item.state === "ready"), true);
+
   const oldDocumentText = await readFile(path.join(repoRoot, "tools/fixtures/webgl-map-v1-minimal.json"), "utf8");
   const oldMap = parseMapDocument(oldDocumentText).map;
   assert.deepEqual(oldMap.notes, {

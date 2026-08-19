@@ -46,6 +46,7 @@ export function createNotesDomainRuntime<TMap>(options: {
 }) {
   let sequence = 0;
   const commandBindings = new WeakMap<object, NotesCommandId>();
+  const committedCommands = new WeakSet<object>();
   const core = createMapCoreEngine({
     owner: {
       getMap: options.getMap,
@@ -92,7 +93,7 @@ export function createNotesDomainRuntime<TMap>(options: {
       if (!result.executed) commandBindings.delete(input.command);
       return result;
     } catch (error) {
-      commandBindings.delete(input.command);
+      if (!committedCommands.has(input.command)) commandBindings.delete(input.command);
       throw error;
     }
   }
@@ -189,6 +190,7 @@ export function createNotesDomainRuntime<TMap>(options: {
       rebuilt: [],
       timings: {legacyCommit: Math.max(0, now() - startedAt)}
     });
+    committedCommands.add(input.command);
     core.observePublished(commit.commitId);
     return commit;
   }

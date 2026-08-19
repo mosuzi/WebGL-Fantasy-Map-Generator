@@ -20,16 +20,16 @@ adapter 包裹原 command 的执行结果，不改变 API result 形状。国家
 
 ## 提交、查询与存档
 
-每个成功 legacy mutation 由 facade 观察为 `planned → computed → validated → projections-prepared → canonical-committed → published → projections-settled`。commit 前后 revision 与 history fingerprint 来自既有 owner；invalid / no-op 必须保持 notes fingerprint、revision、history 与 commit sequence 不变。若 history 与 revision 已推进而 UI 刷新失败，adapter 仍先记录并发布 canonical commit，persistence 保持 ready，UI 进入 degraded；不得把它误报成 no-op 或 rollback。
+每个成功 legacy mutation 由 facade 观察为 `planned → computed → validated → projections-prepared → canonical-committed → published → projections-settled`。commit 前后 revision 与 history fingerprint 来自既有 owner；invalid / no-op 必须保持 notes fingerprint、revision、history 与 commit sequence 不变。若 history 与 revision 已推进而 UI 刷新失败，adapter 仍先记录并发布 canonical commit，persistence 保持 ready，UI 进入 degraded；不得把它误报成 no-op 或 rollback。抛出的原 UI 异常可以继续交给调用方，但已提交 command 的 notes 归属必须保留，保证后续 undo / redo 仍进入同一 adapter。
 
 `list / get / persistenceSnapshot` 通过 getter-only core 读取 canonical notes，并返回冻结且与 owner 脱离的 JSON snapshot。备注面板和备注摘要 API 使用该 query；正式 map save 继续读取同一个 canonical map，专项回归要求其 notes 输出与 persistence snapshot 相等，并验证 save / load round-trip。全图压缩 Worker 路径不在本阶段改写。
 
 ## 验收证据
 
-- `pnpm run regress:notes-core`：五条 command、新增 / 编辑 / 删除 / 导入 / 批删、undo / redo、十一轮单调 revision / commit、detached query、persistence / UI settled、当前 save round-trip、v1 旧备注保留、invalid / no-op 不变式，以及普通 command / undo 提交后 UI 失败的 degraded 语义通过。
+- `pnpm run regress:notes-core`：五条 command、新增 / 编辑 / 删除 / 导入 / 批删、undo / redo、十三轮单调 revision / commit、detached query、persistence / UI settled、当前 save round-trip、v1 旧备注保留、invalid / no-op 不变式，以及返回 error、undo 抛错、command 直接抛错和其后 undo 的 post-commit 语义通过。
 - `pnpm run typecheck:core`、`regress:core-manifests`、`regress:core-facade` 通过；notes Manifest 为 `active`，未登记 Worker / regeneration / layer。
 - `regress:note-import`、`regress:object-creation`、`regress:auxiliary-object-creation`、`regress:object-details-edit`、`regress:api-data-compatibility`、`regress:map-migration` 通过。
-- `pnpm run build:app` 通过，`1368 modules`；修正 checkpoint 版本 `0.5.17`。
+- `pnpm run build:app` 通过，`1368 modules`；最终修正 checkpoint 版本 `0.5.18`。
 - 浏览器启动、操作和验收均为 `0`。
 
 ## 延后项
