@@ -8,3 +8,4 @@ export * from "./projection.js";
 export * from "./revision.js";
 export * from "./runtime-validators.js";
 export * from "./snapshot.js";
+export * from "./whole-map-profile.js";

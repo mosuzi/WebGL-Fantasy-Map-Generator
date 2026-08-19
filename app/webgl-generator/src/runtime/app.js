@@ -94,6 +94,11 @@ import {downloadBlob, downloadText, mapFileBaseName, normalizeGeoJsonExportRange
 import {prepareMapFileIoWorkerPayload} from "./map-file-io-worker-client.js";
 import {MAP_FILE_IO_WORKER_OPERATIONS, MAP_FILE_IO_WORKER_TASK_TYPE} from "./map-file-io-worker-task.js";
 import {materializeMapAdoptionHandoff} from "./map-adoption-handoff.js";
+import {
+  validateWholeMapAdoptionDocument,
+  validateWholeMapAdoptionEnvelope,
+  validateWholeMapExportResult
+} from "./whole-map-profile-protocol.js";
 import {createMapArchiveFilename, normalizeMapName} from "./map-filename.js";
 import {attachImportDiagnostic, createHeightmapSourceSummary, createImportFailureDiagnostic, createImportSuccessDiagnostic, createMapImportDiagnostic, formatMapImportDiagnosticLines, inspectGeoImportSource, stringifyMapImportDiagnostic} from "./map-import-diagnostics.js";
 import {createAddCityAtCellCommand, createDeleteCityCommand, createRenameCitiesFromNamebaseCommand, createResetCityVisualCommand, createSetCityNoteCommand, createSetCityPopulationCommand, createSetCityVisualCommand, createSyncCityOwnerToCellCommand, inspectCityCreation} from "./city-edit-commands.js";
@@ -5353,8 +5358,15 @@ async function generateMapOffMainThread(state, documentRef, options, generateId,
       });
     }
   });
+  validateWholeMapAdoptionEnvelope({
+    profile: "generation-adoption",
+    binding: requestBinding,
+    output,
+    renderBinding
+  });
   const handoffDecodeStartedAt = currentLoadTraceTime(documentRef.defaultView || window);
   const document = await materializeMapAdoptionHandoff(output.handoff, {yieldToMain: () => yieldMapHandoffDecode(documentRef)});
+  validateWholeMapAdoptionDocument({profile: "generation-adoption", metadata: output.metadata, document});
   return {
     ...output,
     document,
@@ -5661,6 +5673,7 @@ async function exportMapArchiveViaWorker(state, documentRef, {operation = null, 
     error.code = "worker_protocol_binding_mismatch";
     throw error;
   }
+  validateWholeMapExportResult({binding, output: output.archive, sourceMap: map});
   const worker = await commitRegenerationWorkerSession(state, output.worker, operation, {expectedRevisionDelta: 0});
   return {...output.archive, worker};
 }
@@ -5685,8 +5698,9 @@ async function parseMapDocumentViaWorker(state, documentRef, input, {operation =
     Blob: documentRef.defaultView?.Blob || Blob,
     yieldToMain: () => yieldToBrowser(documentRef)
   });
+  const requestBinding = createRegenerationWorkerBinding(state, operation);
   const output = await state.workerTaskCoordinator.run(MAP_FILE_IO_WORKER_TASK_TYPE, prepared.payload, {
-    binding: createRegenerationWorkerBinding(state, operation),
+    binding: requestBinding,
     signal: operation?.signal || null,
     sessionMode: "adopt-result-map",
     allowFallback: false,
@@ -5700,8 +5714,15 @@ async function parseMapDocumentViaWorker(state, documentRef, input, {operation =
     error.code = "operation_obsolete";
     throw error;
   }
+  validateWholeMapAdoptionEnvelope({
+    profile: "persistence-import",
+    binding: requestBinding,
+    output,
+    renderBinding
+  });
   const handoffDecodeStartedAt = currentLoadTraceTime(documentRef.defaultView || window);
   const document = await materializeMapAdoptionHandoff(output.handoff, {yieldToMain: () => yieldMapHandoffDecode(documentRef)});
+  validateWholeMapAdoptionDocument({profile: "persistence-import", metadata: output.metadata, document});
   return {
     document,
     preparedRender: output.preparedRender,

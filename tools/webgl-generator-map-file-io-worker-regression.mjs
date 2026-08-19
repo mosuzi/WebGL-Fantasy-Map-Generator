@@ -85,7 +85,7 @@ const renderedImport = await runTaskInWorker({
   }
 });
 assert.deepEqual(renderedImport.progress.map(item => item.stage), ["read", "parse", "render", "render-prepare", "complete"]);
-assert.deepEqual(renderedImport.result.preparedRender.binding, {mapIdentity: "import-fixture", mapRevision: 0});
+assert.deepEqual(renderedImport.result.preparedRender.binding, {mapIdentity: "import-fixture", mapRevision: 0, topologyRevision: 0});
 assert.deepEqual(Object.keys(renderedImport.result.preparedRender.layers), ["point"]);
 assert.ok(renderedImport.result.preparedRender.layers.point.vertices instanceof Float32Array);
 

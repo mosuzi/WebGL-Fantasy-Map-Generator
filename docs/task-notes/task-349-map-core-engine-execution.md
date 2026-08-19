@@ -271,10 +271,13 @@ planned → computed → validated → projections-prepared
 - 后续复审：`0.5.42` 的精确结果形状、经济整对象、全局军事根与第三国 Warzone cell 四类 P1 在 `0.5.43` 收紧；再由 `0.5.44` 冻结不涉及目标国家的 campaign / front，并从提交后军团重算军事汇总。协议负例最终为 `38` 类，10k / 100k 与全套静态 / Node 门通过。
 - 终验：同一只读评审智能体对 `9bfe682 / 0.5.44` 给出 `ACCEPT`；无剩余 P0 / P1，浏览器执行 `0`。下一步进入 349-10f。
 
-### 349-10f — 执行中
+### 349-10f — 待评审
 
 - 冻结目标：收口全图 generation、JSON / compressed import、adoption handoff、export persistence 与隔离 headless write profile，使新 session / revision、rollback、旧档 identity、checksum 与 projection 状态使用既有 core vocabulary；不删除未证明冗余的 legacy adapter。
 - 首个廉价门：盘点 generation.compute、map-file-io、map-adoption-handoff、archive export 与 headless-write 的真实 owner、binding、事务终态和现有 Node 专项；任何共享 result owner 未登记或必须改 canonical owner 的发现先登记并重排。
 - 禁止项：不执行浏览器脚本，不修改 `source/`，不接管第二 canonical owner，不提前做 349-10g legacy 删除或最终全门。
+- 实现：登记 generation / persistence import / persistence export / headless write 四个唯一 profile owner；新增 TypeScript receipt 契约和统一 runtime validator。生成 / 导入在 handoff 前后双门校验，导出在 Worker session commit 前校验 identity / checksum / byte receipt，headless 成功返回前校验 persisted identity 保持与 revision 精确 `+1`，失败沿既有事务回滚。
+- 门禁：专项覆盖 `4` 个 owner、`12` 类负例、新 session、v1 旧档、source 不变、checksum、真实 headless commit；map-file 100k、Worker adoption / archive、headless write / read、document identity、typecheck、build 和 diff check 通过。既有 map-file 夹具的 render binding 单行同步 `topologyRevision: 0`；浏览器执行 `0`。
+- 详细证据：[整图 profile 核心切片](./task-349-whole-map-profile-core-slice.md)。当前 checkpoint 待同一只读评审智能体复核；未完成顺序仍为 `349-10g → 349-11`。
 
 阶段结果在每次 checkpoint 后更新，长日志只记录命令和 artifact 路径，不粘贴到本文。

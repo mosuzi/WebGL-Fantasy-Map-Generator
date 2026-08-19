@@ -16,6 +16,7 @@ import {encodeWebfmgV3Document, gzipWebfmgV3Bytes} from "./webfmg-v3-container.j
 import {createMapAdoptionHandoff} from "./map-adoption-handoff.js";
 import {executeRenderPreparationTask} from "../renderer/render-preparation.js";
 import {mergeUserVisualThemes, normalizeVisualThemeId, resolveVisualTheme} from "../renderer/themes.js";
+import {createWholeMapDocumentMetadata} from "./whole-map-profile-protocol.js";
 
 export const MAP_FILE_IO_WORKER_TASK_TYPE = "map-file-io";
 export const MAP_FILE_IO_WORKER_OPERATIONS = Object.freeze({
@@ -101,7 +102,7 @@ async function importMapFile(payload, context) {
       binding: context.binding || null,
       handoff,
       preparedRender,
-      metadata: mapDocumentMetadata(document),
+      metadata: createWholeMapDocumentMetadata(document),
       timings: {
         parseMs,
         renderPrepareMs,
@@ -116,7 +117,7 @@ async function importMapFile(payload, context) {
     document,
     map: document.map,
     preparedRender,
-    metadata: mapDocumentMetadata(document),
+    metadata: createWholeMapDocumentMetadata(document),
     timings: {parseMs, renderPrepareMs, totalMs: roundTaskMs(taskNow() - startedAt)}
   };
 }
@@ -171,6 +172,7 @@ async function exportMapFile(payload, context) {
   reportTaskProgress(context, "complete", 1, "地图存档序列化完成");
   return {
     kind: "map-file-export-result",
+    binding: context.binding || null,
     encoding,
     resultType,
     mimeType: encoding === "webfmg-v3" || encoding === "gzip" ? "application/gzip" : "application/json;charset=utf-8",
@@ -178,7 +180,7 @@ async function exportMapFile(payload, context) {
     originalCharacters: text.length,
     bytes: blob.size,
     data,
-    metadata: mapDocumentMetadata(document),
+    metadata: createWholeMapDocumentMetadata(document),
     timings: {
       normalizeMs,
       stringifyMs,
@@ -299,21 +301,6 @@ async function createExportData(blob, text, resultType) {
   if (resultType === "blob") return blob;
   if (resultType === "text") return text;
   return new Uint8Array(await blob.arrayBuffer());
-}
-
-function mapDocumentMetadata(document) {
-  return {
-    type: String(document?.type || ""),
-    version: Number(document?.version) || 0,
-    documentId: String(document?.metadata?.documentId || ""),
-    documentIdentityVersion: Number(document?.metadata?.documentIdentityVersion) || 0,
-    name: String(document?.metadata?.name || document?.map?.metadata?.name || document?.map?.options?.mapName || ""),
-    schemaVersion: Number(document?.map?.metadata?.schemaVersion) || 0,
-    seed: String(document?.map?.metadata?.seed || document?.metadata?.seed || ""),
-    checksum: String(document?.map?.metadata?.checksum || document?.map?.summary?.checksum || document?.metadata?.checksum || ""),
-    gridCells: Number(document?.map?.metadata?.gridCells || document?.map?.grid?.metadata?.actualCells || document?.map?.grid?.cells?.i?.length || document?.map?.grid?.cells?.h?.length || 0),
-    packCells: Number(document?.map?.metadata?.packCells || document?.map?.pack?.metadata?.cells || document?.map?.pack?.cells?.i?.length || 0)
-  };
 }
 
 function taskNow() {

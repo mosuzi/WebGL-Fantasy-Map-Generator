@@ -7,6 +7,7 @@ import {parseMapDocument, stringifyMapDocument} from "./map-file-io.js";
 import {createRenameObjectCommand} from "./object-edit-commands.js";
 import {getObjectSnapshot} from "./object-query-api.js";
 import {buildPopulationAdjustmentPlan, createApplyPopulationAdjustmentCommand, inspectPopulationAdjustment} from "./population-adjustment-commands.js";
+import {captureWholeMapPersistedIdentity, validateHeadlessWriteCommit} from "./whole-map-profile-protocol.js";
 
 export const HEADLESS_WRITE_VERSION = "1.0.0";
 export const HEADLESS_WRITE_METHODS = Object.freeze([
@@ -82,6 +83,7 @@ export function createHeadlessWriteSession(document, options = {}) {
     if (!action.inspection.valid) throw codedError(action.inspection.code || "headless_inspection_invalid", action.inspection.reason || action.inspection.notice || "无头写入预检失败", action.inspection);
 
     const before = stringifyMapDocument(currentDocument);
+    const beforeIdentity = captureWholeMapPersistedIdentity(currentDocument);
     const revisionBefore = revision;
     const historySizeBefore = history.entries.length;
     try {
@@ -110,6 +112,14 @@ export function createHeadlessWriteSession(document, options = {}) {
       const after = stringifyMapDocument(currentDocument);
       history.record({before, after, result});
       persistHeadlessMetadata(currentDocument, {documentId, revision, requestResults, history});
+      validateHeadlessWriteCommit({
+        documentId,
+        revisionBefore,
+        revisionAfter: revision,
+        beforeIdentity,
+        afterDocument: currentDocument,
+        result
+      });
       return result;
     } catch (error) {
       currentDocument = parseMapDocument(before);

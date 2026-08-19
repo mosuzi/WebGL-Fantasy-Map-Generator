@@ -5,6 +5,7 @@ import {executeRenderPreparationTask} from "../renderer/render-preparation.js";
 import {createMapAdoptionHandoff} from "./map-adoption-handoff.js";
 import {createMapDocument} from "./map-file-io.js";
 import {collectWorkerTransferables} from "./worker-snapshot.js";
+import {createWholeMapDocumentMetadata} from "./whole-map-profile-protocol.js";
 
 export const GENERATION_WORKER_TASK = "generation.compute";
 
@@ -34,9 +35,11 @@ export async function runGenerationWorkerTask(payload = {}, context = {}) {
     context.adoptMap(map);
     checkpoint(context);
     return {
+      kind: "map-generation-adoption-result",
       binding: context.binding || null,
       handoff,
       preparedRender,
+      metadata: createWholeMapDocumentMetadata(document),
       timings: {handoffEncodeMs: roundTaskMs(taskNow() - handoffStartedAt)}
     };
   }
