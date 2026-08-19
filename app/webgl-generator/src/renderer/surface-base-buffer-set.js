@@ -14,9 +14,11 @@ export const SURFACE_BASE_MAX_SEGMENT_FLOATS = SURFACE_BASE_MAX_SEGMENT_VERTICES
 export function createSurfaceResourceOwner(binding, options = {}) {
   const mapIdentity = String(binding?.mapIdentity ?? "");
   const mapRevision = Number(binding?.mapRevision ?? 0);
+  const topologyRevision = Number(binding?.topologyRevision ?? 0);
   const surfaceFloatLength = Number(options.surfaceFloatLength ?? 0);
   const correctionWordLength = Number(options.correctionWordLength ?? 0);
   if (!mapIdentity || !Number.isSafeInteger(mapRevision) || mapRevision < 0
+    || !Number.isSafeInteger(topologyRevision) || topologyRevision < 0
     || !Number.isSafeInteger(surfaceFloatLength) || surfaceFloatLength < 0
     || surfaceFloatLength % SURFACE_SOURCE_FLOATS_PER_TRIANGLE !== 0
     || !Number.isSafeInteger(correctionWordLength) || correctionWordLength < 0 || correctionWordLength % 9 !== 0) {
@@ -25,6 +27,7 @@ export function createSurfaceResourceOwner(binding, options = {}) {
   return Object.freeze({
     mapIdentity,
     mapRevision,
+    topologyRevision,
     surfaceFloatLength,
     correctionWordLength,
     rangeFingerprint: fingerprintSurfaceCellRanges(options.surfaceCellRanges, surfaceFloatLength)

@@ -5992,7 +5992,8 @@ function createRendererSurfaceResourceOwner(renderer, map, bundle, binding = nul
     || "local-map");
   const previous = renderer.surfaceResourceOwner;
   const mapRevision = binding?.mapRevision ?? (previous?.mapIdentity === mapIdentity ? previous.mapRevision : 0);
-  return createSurfaceResourceOwner({mapIdentity, mapRevision}, {
+  const topologyRevision = binding?.topologyRevision ?? (previous?.mapIdentity === mapIdentity ? previous.topologyRevision : 0);
+  return createSurfaceResourceOwner({mapIdentity, mapRevision, topologyRevision}, {
     surfaceFloatLength: bundle?.base?.length || 0,
     correctionWordLength: bundle?.cellVisualCorrection?.length || 0,
     surfaceCellRanges: bundle?.surfaceCellRanges

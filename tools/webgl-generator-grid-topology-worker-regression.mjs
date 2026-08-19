@@ -292,7 +292,8 @@ function createTaskContext(binding, mode) {
 }
 
 function assertPreparedReplacement(output, {sourceCells, targetCells, refinement = true}) {
-  assert.deepEqual(Object.keys(output).sort(), ["action", "binding", "executed", "kind", "replacementMap", "result"], "Worker 结果只能携带完整 replacement，不得夹带 deep patch");
+  assert.deepEqual(Object.keys(output).sort(), ["action", "binding", "executed", "kind", "preparedRender", "replacementMap", "result"], "Worker 结果只能携带完整 replacement 与可选 renderer source，不得夹带 deep patch");
+  assert.equal(output.preparedRender, null, "未请求 renderer source 时必须显式返回 null");
   assert.equal(output.kind, "grid-topology-worker-result");
   assert.equal(output.executed, true);
   assert(output.replacementMap && typeof output.replacementMap === "object", "Worker 必须返回完整 replacementMap");

@@ -48,7 +48,7 @@ import {
 const cellsTarget = Number(process.argv.slice(2).find(value => /^\d+$/u.test(value)) || 10000);
 const full = process.argv.includes("--full");
 const map = generatePlaceholderMap({seed: "task322-render-preparation", cellsTarget, graphWidth: 1440, graphHeight: 960});
-const binding = {mapIdentity: `render-${cellsTarget}`, mapRevision: 7};
+const binding = {mapIdentity: `render-${cellsTarget}`, mapRevision: 7, topologyRevision: 3};
 const camera = {scale: 1, offsetX: 0, offsetY: 0};
 const canvas = {width: 1440, height: 960, clientWidth: 1440, clientHeight: 960};
 const visibility = {};
@@ -117,6 +117,7 @@ assert.equal(transfers.length, 3, "route / river / point 各自只应暴露一�
 assert.equal(new Set(transfers).size, transfers.length, "transfer list 不得包含重复 buffer");
 assertNoFormalMapBuffers(transfers, map);
 assert.throws(() => assertRenderPreparationBinding(actual, {...binding, mapRevision: 8}), error => error?.code === "render-result-stale");
+assert.throws(() => assertRenderPreparationBinding(actual, {...binding, topologyRevision: 4}), error => error?.code === "render-result-stale");
 
 const retainedRenderCache = Object.create(null);
 const firstSurface = await executeRenderPreparationTask({map, binding, camera, canvas, layers: ["surface"]}, {renderCache: retainedRenderCache});
@@ -164,10 +165,15 @@ assert.ok(oceanPatch.layers.surface.cellIds.length > 0 && oceanPatch.layers.surf
 assert.ok(oceanPatch.layers.surface.cellIds.every(cell => Number(map.grid.cells.h[cell]) < 20), "海底补丁不得包含陆地 cell");
 assert.equal("base" in oceanPatch.layers.surface, false, "surface color patch 不得回传完整 base geometry");
 assert.ok(collectRenderPreparationTransfers(oceanPatch).some(buffer => buffer === oceanPatch.layers.surface.colors.buffer), "surface color patch colors 必须可 transfer");
-const nextBinding = {...binding, mapRevision: binding.mapRevision + 1};
+const topologyBinding = {...binding, topologyRevision: binding.topologyRevision + 1};
+const nextTopologySurface = await executeRenderPreparationTask({map, binding: topologyBinding, camera, canvas, colorMode: "states", layers: ["surface"]}, {renderCache: retainedRenderCache});
+assert.equal(nextTopologySurface.cache.reused, false, "topology revision 变化必须拒绝旧渲染几何缓存");
+assert.ok(Object.entries(retainedRefs).every(([key, value]) => retainedRenderCache[key] !== value), "topology revision 变化必须重建全部地图绑定缓存");
+const topologyRefs = Object.fromEntries(["cellVisual", "shore", "statePaths", "provincePaths"].map(key => [key, retainedRenderCache[key]]));
+const nextBinding = {...topologyBinding, mapRevision: binding.mapRevision + 1};
 const nextRevisionSurface = await executeRenderPreparationTask({map, binding: nextBinding, camera, canvas, colorMode: "provinces", layers: ["surface"]}, {renderCache: retainedRenderCache});
 assert.equal(nextRevisionSurface.cache.reused, false, "revision 变化必须拒绝旧渲染几何缓存");
-assert.ok(Object.entries(retainedRefs).every(([key, value]) => retainedRenderCache[key] !== value), "revision 变化必须重建全部地图绑定缓存");
+assert.ok(Object.entries(topologyRefs).every(([key, value]) => retainedRenderCache[key] !== value), "revision 变化必须重建全部地图绑定缓存");
 
 const aborted = new AbortController();
 aborted.abort();
@@ -193,7 +199,7 @@ console.log(JSON.stringify({
   }])),
   routeDrawRanges: actual.layers.route.drawRanges,
   transfers: transfers.length,
-  retainedRenderCache: {first: firstSurface.cache, second: secondSurface.cache, nextRevision: nextRevisionSurface.cache},
+  retainedRenderCache: {first: firstSurface.cache, second: secondSurface.cache, nextTopology: nextTopologySurface.cache, nextRevision: nextRevisionSurface.cache},
   oceanPatch: {cells: oceanPatch.layers.surface.cellIds.length, bytes: oceanPatch.layers.surface.colors.byteLength, checksum: byteChecksum(oceanPatch.layers.surface.colors)},
   cacheSummary,
   pickingSummary,

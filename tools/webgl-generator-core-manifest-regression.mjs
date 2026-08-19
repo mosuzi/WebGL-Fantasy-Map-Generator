@@ -15,6 +15,7 @@ const {DomainManifestError, createDomainManifestRegistry} = await import(new URL
 const {notesManifest} = await import(new URL("domains/notes/manifest.js", compiledRoot));
 const {markersManifest} = await import(new URL("domains/markers/manifest.js", compiledRoot));
 const {populationManifest} = await import(new URL("domains/population/manifest.js", compiledRoot));
+const {foundationManifest} = await import(new URL("domains/foundation/manifest.js", compiledRoot));
 
 const workerTasks = new Set(listWorkerTasks());
 const repoRoot = path.resolve(new URL("..", import.meta.url).pathname.replace(/^\/(?:[A-Za-z]:)/u, value => value.slice(1)));
@@ -50,16 +51,17 @@ const context = {
   }
 };
 const registry = createDomainManifestRegistry(context);
-for (const manifest of [notesManifest, markersManifest, populationManifest]) registry.register(manifest);
+for (const manifest of [notesManifest, markersManifest, populationManifest, foundationManifest]) registry.register(manifest);
 
-assert.deepEqual(registry.snapshot().ids, ["markers", "notes", "population"]);
-assert.equal(registry.snapshot().domains, 3);
+assert.deepEqual(registry.snapshot().ids, ["foundation", "markers", "notes", "population"]);
+assert.equal(registry.snapshot().domains, 4);
 assert.equal(registry.get("notes"), registry.list().find(manifest => manifest.id === "notes"));
 assert.ok(Object.isFrozen(registry.get("notes")) && Object.isFrozen(registry.get("notes").commands));
 assert.equal(registry.get("notes").capabilities.worker, "not-required");
 assert.equal(registry.get("markers").layers[0].picking, true);
 assert.equal(registry.get("population").workerTasks[0].id, "population.compute");
-assert.equal(registry.snapshot().descriptors, 45);
+assert.equal(registry.get("foundation").workerTasks.length, 4);
+assert.equal(registry.snapshot().descriptors, 67);
 
 function expectManifestError(callback, code, pathValue) {
   assert.throws(callback, error => {

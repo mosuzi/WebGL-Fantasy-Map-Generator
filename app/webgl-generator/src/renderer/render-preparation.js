@@ -241,7 +241,7 @@ export function collectRenderPreparationTransfers(value) {
 export function assertRenderPreparationBinding(result, expected) {
   const actual = normalizeRenderBinding(result?.binding);
   const target = normalizeRenderBinding(expected);
-  if (actual.mapIdentity !== target.mapIdentity || actual.mapRevision !== target.mapRevision) {
+  if (actual.mapIdentity !== target.mapIdentity || actual.mapRevision !== target.mapRevision || actual.topologyRevision !== target.topologyRevision) {
     throw renderPreparationError("render-result-stale", "渲染准备结果不属于当前地图 revision", {actual, expected: target});
   }
   return result;
@@ -271,7 +271,7 @@ export function rebindShoreLinePathCache(dto, shoreVisualPaths, expectedBinding 
   if (expectedBinding !== null && expectedBinding !== undefined) {
     const actual = normalizeRenderBinding(dto.binding);
     const expected = normalizeRenderBinding(expectedBinding);
-    if (actual.mapIdentity !== expected.mapIdentity || actual.mapRevision !== expected.mapRevision) {
+    if (actual.mapIdentity !== expected.mapIdentity || actual.mapRevision !== expected.mapRevision || actual.topologyRevision !== expected.topologyRevision) {
       throw renderPreparationError("render-result-stale", "岸线路径顶点缓存不属于当前地图 revision", {actual, expected});
     }
   }
@@ -341,6 +341,7 @@ function resolveRenderPreparationCache(candidate, binding) {
   const previous = cache.renderBinding;
   const reused = previous?.mapIdentity === binding.mapIdentity
     && Number(previous?.mapRevision) === Number(binding.mapRevision)
+    && Number(previous?.topologyRevision) === Number(binding.topologyRevision)
     && Boolean(cache.cellVisual || cache.shore || cache.statePaths || cache.provincePaths);
   if (!reused) {
     for (const key of ["cellVisual", "shore", "statePaths", "provincePaths", "political"]) delete cache[key];
@@ -353,9 +354,11 @@ function resolveRenderPreparationCache(candidate, binding) {
 function normalizeRenderBinding(value = {}) {
   const mapIdentity = value.mapIdentity === null || value.mapIdentity === undefined ? null : String(value.mapIdentity);
   const mapRevision = Number(value.mapRevision);
+  const topologyRevision = Number(value.topologyRevision);
   return {
     mapIdentity,
-    mapRevision: Number.isSafeInteger(mapRevision) && mapRevision >= 0 ? mapRevision : 0
+    mapRevision: Number.isSafeInteger(mapRevision) && mapRevision >= 0 ? mapRevision : 0,
+    topologyRevision: Number.isSafeInteger(topologyRevision) && topologyRevision >= 0 ? topologyRevision : 0
   };
 }
 

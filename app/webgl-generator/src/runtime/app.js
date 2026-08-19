@@ -12,6 +12,7 @@ import {finalizeSettlements, rebuildRelocatedPopulationPointsAsync, regenerateSe
 import {createNotesDomainRuntime} from "../domains/notes/runtime.ts";
 import {createMarkersPresentationRuntime} from "../domains/markers/runtime.ts";
 import {validatePopulationWorkerOutput, validatePopulationWorkerPatch} from "../domains/population/worker-runtime.ts";
+import {validateFoundationWorkerOutput} from "../domains/foundation/worker-runtime.ts";
 import {reconcileSettlementCellIdentity} from "./settlement-cell-index.js";
 import {DEFAULT_OPTIONS, normalizeOptions} from "../generator/options.js";
 import {normalizeAtmosphereDirection, normalizeClimateLatitudeMode, normalizeWindProfile, windAngleFromDirection} from "../generator/climate-options.js";
@@ -7538,6 +7539,7 @@ async function applyClimateDownstreamRebuildViaApi(state, documentRef, options =
         ...REGENERATION_TRANSACTION_EFFECTS,
         affected: preview.selectedSystems.map(id => ({kind: "system", id}))
       },
+      assertOutput: ({binding, output}) => validateFoundationWorkerOutput({task: CLIMATE_DOWNSTREAM_WORKER_TASK, binding, output}),
       createCommand: ({output, result, effects}) => createWorkerRegenerationPatchCommand(state.map, {
         patch: output.patch,
         policy: getClimateDownstreamPatchPolicy(result.steps.filter(step => step.executed !== false).map(step => step.system)),
@@ -7622,6 +7624,7 @@ async function applyOceanCurrentWorldRebuildViaAction(state, documentRef, option
         ...REGENERATION_TRANSACTION_EFFECTS,
         affected: OCEAN_CURRENT_WORLD_REBUILD_ORDER.map(id => ({kind: "system", id}))
       },
+      assertOutput: ({binding, output}) => validateFoundationWorkerOutput({task: OCEAN_CURRENT_WORLD_WORKER_TASK, binding, output}),
       createCommand: ({output, result, effects}) => createMapReplacementCommand({
         replacementMap: output.replacementMap,
         label: seafloorPlan ? "重设海底并重算洋流世界" : "重算洋流与世界派生",
@@ -10943,6 +10946,7 @@ async function rebuildHeightDerivedViaAction(state, documentRef, scope, options 
       ...REGENERATION_TRANSACTION_EFFECTS,
       affected: kinds.map(id => ({kind: "system", id}))
     },
+    assertOutput: ({binding, output}) => validateFoundationWorkerOutput({task: HEIGHT_DERIVED_WORKER_TASK, binding, output}),
     createCommand: ({output, result, effects}) => createWorkerRegenerationPatchCommand(state.map, {
       patch: output.patch,
       policy: getHeightDerivedPatchPolicy(scope, result.changedKinds),
@@ -13895,6 +13899,7 @@ function createRegenerationWorkerBinding(state, operation = null) {
 function sameRegenerationWorkerBinding(left, right) {
   return left?.mapIdentity === right?.mapIdentity
     && Number(left?.mapRevision) === Number(right?.mapRevision)
+    && Number(left?.topologyRevision ?? 0) === Number(right?.topologyRevision ?? 0)
     && Number(left?.generationToken) === Number(right?.generationToken)
     && left?.lockFingerprint === right?.lockFingerprint
     && Number(left?.operationId) === Number(right?.operationId)
@@ -14097,6 +14102,7 @@ function createGridTopologyWorkerBinding(state, operation = null) {
 }
 
 function assertGridTopologyWorkerOutputCurrent(state, sourceMap, binding, action, output, operation = null) {
+  validateFoundationWorkerOutput({task: GRID_TOPOLOGY_WORKER_TASK, binding, output});
   if (state.map !== sourceMap
     || !sameRegenerationWorkerBinding(binding, createRegenerationWorkerBinding(state, operation))
     || binding.sourceFingerprint !== cachedGridStructureFingerprint(sourceMap.grid, binding)

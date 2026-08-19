@@ -12,6 +12,7 @@ try {
   const {notesManifest} = await vite.ssrLoadModule("/src/domains/notes/manifest.ts");
   const {markersManifest} = await vite.ssrLoadModule("/src/domains/markers/manifest.ts");
   const {populationManifest} = await vite.ssrLoadModule("/src/domains/population/manifest.ts");
+  const {foundationManifest} = await vite.ssrLoadModule("/src/domains/foundation/manifest.ts");
   const targets = {
     "object-panels": ["ui"],
     "point-layers": ["renderer"],
@@ -19,13 +20,26 @@ try {
     "economy-demand": ["ui"],
     "object-index": ["ui"],
     "population-stats": ["ui"],
-    labels: ["renderer"]
+    labels: ["renderer"],
+    "terrain-caches": ["renderer"],
+    "height-field": ["renderer"],
+    "render-mesh": ["renderer"],
+    "climate-statistics": ["ui"],
+    "line-layers": ["renderer"]
   };
   const registry = createDependencyRegistry({invalidationTargets: targets});
   registry.register(notesManifest);
   registry.register(markersManifest);
   registry.register(populationManifest);
-  assert.deepEqual(registry.snapshot().ids, ["markers.point-layer", "markers.resource-economy", "notes.object-panels", "population.downstream"]);
+  registry.register(foundationManifest);
+  assert.deepEqual(registry.snapshot().ids, ["foundation.climate", "foundation.height-topology", "foundation.ocean-current-layer", "markers.point-layer", "markers.resource-economy", "notes.object-panels", "population.downstream"]);
+
+  const topologyFull = registry.planCanonical({writeSet: ["grid"]});
+  assert.equal(topologyFull.mode, "full-rebuild");
+  assert.ok(topologyFull.systems.includes("foundation.height-topology"));
+  assert.ok(topologyFull.systems.includes("foundation.climate"));
+  assert.ok(topologyFull.systems.includes("foundation.ocean-current-layer"));
+  assert.ok(topologyFull.invalidated.includes("render-mesh"));
 
   const notesLocal = registry.planCanonical({writeSet: ["notes"], affected: {note: ["note-1"]}});
   assert.equal(notesLocal.mode, "local");
@@ -53,7 +67,7 @@ try {
   assert.equal(presentation.mode, "presentation-only");
   assert.deepEqual(presentation.projections, ["renderer", "ui"]);
   assert.equal(presentation.scheduledRebuilds.length, 0);
-  assert.equal(presentation.reusedAcrossPresentation.length, 4);
+  assert.equal(presentation.reusedAcrossPresentation.length, registry.snapshot().ids.length);
 
   const exactRegistry = createDependencyRegistry();
   exactRegistry.register({...notesManifest, id: "exact-domain", derivedSystems: [], commands: [{...notesManifest.commands[0], id: "exact.write", writeSet: ["document.title"]}], api: undefined});

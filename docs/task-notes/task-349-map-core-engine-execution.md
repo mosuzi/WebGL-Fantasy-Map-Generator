@@ -28,7 +28,7 @@
 | 349-7 | markers presentation / layer / picking 垂直切片 | identity、draw、pick、export 的 Node / source 契约 | 不执行真实视觉浏览器门 | ACCEPT |
 | 349-8 | 一个真实 Worker task 的统一 binding / result / patch 切片 | checksum、stale、cancel、gap、restart 的专项回归 | 不批量迁移 Worker | ACCEPT |
 | 349-9 | dependency registry、projection 状态和局部失效接线 | declared read/write、full rebuild 显式化、projection recovery | 不迁移未登记领域 | ACCEPT |
-| 349-10a | terrain / grid / height-derived / climate / ocean / topology 基础域 | 旧数据、history、Worker、renderer source / Node 门 | 不迁移社会或行政域 | 执行中 |
+| 349-10a | terrain / grid / height-derived / climate / ocean / topology 基础域 | 旧数据、history、Worker、renderer source / Node 门 | 不迁移社会或行政域 | CHECKPOINT 待评审 |
 | 349-10b | society / politics 与 pack mirror | mirror、行政引用、history、Worker 专项 | 不迁移城镇 / 路线 | 待执行 |
 | 349-10c | settlements / zones / labels / measurements | 身份槽、锁、旧数据、history、projection 专项 | 不迁移路线 / 经济 | 待执行 |
 | 349-10d | routes / rivers / features / resource markers | topology、引用、picking、Worker、history 专项 | 不迁移经济 / 军事 | 待执行 |
@@ -52,7 +52,7 @@ planned → computed → validated → projections-prepared
 
 | 字段 | 内容 |
 | --- | --- |
-| 当前阶段 | `349-10a` terrain / grid / height-derived / climate / ocean / topology 基础域 |
+| 当前阶段 | `349-10a` checkpoint 待评审；未接受前不进入 `349-10b` |
 | 冻结点 | `349-9@7bc5e27` / `0.5.25` 已由同一评审智能体接受 |
 | 允许文件 | 基础域 Manifest / adapter、四个既有基础 Worker task 的统一契约接线、dependency / renderer source 审计、专项 Node、阶段文档 |
 | 禁止文件 | society / politics / settlements / routes / economy / military 迁移、业务算法改写、`source/`、main、浏览器 |
@@ -186,5 +186,16 @@ planned → computed → validated → projections-prepared
 - 版本：初始 checkpoint `0.5.22 → 0.5.23`，首轮评审修正 `0.5.23 → 0.5.24`，第二轮评审修正 `0.5.24 → 0.5.25`；`source/` 与浏览器执行均为 `0`。
 - 终验：同一只读评审智能体最后一次 blocker-only 复审 `ACCEPT`，三项 P1 均闭合且无新增 P0 / P1。
 - 下一步：`349-10a` 只迁移 terrain / grid / height-derived / climate / ocean / topology 基础域，不迁移社会或行政域。
+
+### 349-10a — CHECKPOINT 待评审
+
+- 完成：新增 shadow foundation Manifest 与 TypeScript Worker adapter；高度派生、气候下游、洋流世界、网格拓扑四个正式入口在 canonical commit 前统一校验 legacy binding、result kind、patch / replacement 和 renderer source。
+- renderer：render preparation、render cache、picking DTO 与 surface owner 全链补入 `topologyRevision`；同 map revision 的 stale topology 结果拒绝，topology 改变会重建 retained cache。
+- owner 边界：`FOUNDATION_DOCUMENT_WRITE_SET` 只是既有整图 replacement / 跨域 patch 的保守事务包络，不成为第二 canonical owner；Manifest 保持 shadow，业务算法、旧 wire DTO 与唯一 `state.map` 不变。
+- 门禁：typecheck、Manifest `4 domains / 67 descriptors / 31 negative`、dependency、foundation protocol 组合、高度 brush history、grid `10004 → 100000` refinement、production build `1377 modules` 通过；浏览器执行 `0`。
+- 阶段外首败：既有 ocean world 完整夹具稳定拒绝省份 `110` 无合法省会候选和省份 `118` 省会不一致；约束 bundle 另缺一个锁国无省会样本。未改夹具、未放宽门、未声称通过；按依赖顺序把最小复现与归因放到紧邻 `349-10b` 首门。
+- 产品改动：`8` 文件，约 `+327 / -7` 行；工具改动：`5` 文件，约 `+156 / -12` 行；版本 `0.5.25 → 0.5.26`。
+- 专题记录：`docs/task-notes/task-349-foundation-core-slice.md`。
+- 下一步：冻结 checkpoint，交同一只读评审智能体；仅 `ACCEPT` 后进入 `349-10b` society / politics 与 pack mirror。
 
 阶段结果在每次 checkpoint 后更新，长日志只记录命令和 artifact 路径，不粘贴到本文。

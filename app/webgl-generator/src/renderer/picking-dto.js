@@ -520,7 +520,12 @@ function offsetsForLengths(lengths) {
 function normalizeBinding(value = {}) {
   const mapIdentity = value.mapIdentity === null || value.mapIdentity === undefined ? null : String(value.mapIdentity);
   const mapRevision = Number(value.mapRevision);
-  return {mapIdentity, mapRevision: Number.isSafeInteger(mapRevision) && mapRevision >= 0 ? mapRevision : 0};
+  const topologyRevision = Number(value.topologyRevision);
+  return {
+    mapIdentity,
+    mapRevision: Number.isSafeInteger(mapRevision) && mapRevision >= 0 ? mapRevision : 0,
+    topologyRevision: Number.isSafeInteger(topologyRevision) && topologyRevision >= 0 ? topologyRevision : 0
+  };
 }
 
 function createPickingChunkGate(options = {}) {
