@@ -40,6 +40,14 @@
 
 专项改为由真实 `MapRevisionTracker` 产生 binding，覆盖 topology 推进与 rollback；使用正规化完整地图验证 ocean / grid replacement，通过删除 politics 和破坏 notes 结构验证 pre-commit 拒绝，canonical、history 与 revision 均保持不变。
 
+## 第二轮评审与最窄修复
+
+同一只读评审智能体对 `88ecc40 / 0.5.27` 再次给出 `BLOCK`：正式 canonical commit 后的 renderer binding 仍由调用点手工只计算 `mapRevision + 1`，与实际同时推进 topology 的 owner 当场错位；replacement 虽要求顶层 section 齐全，却仍会接受 `economy: {}`、`oceanCurrents: {}` 等顶层存在但域内容被清空的结果。
+
+`0.5.28` 新增正式 post-commit binding helper：它只接受唯一 revision owner 的真实 core snapshot，并要求同一 map identity 下 map / topology revision 各恰好推进一次。通用 Worker map mutation 在 history commit 后立刻生成该 binding，renderer install、两次 commit assertion、UI settle 共同使用；grid fingerprint 不再提前猜测 revision，而在真实 commit 后按同一 binding 建立。专项以真实 `EditHistory + MapRevisionTracker` 覆盖 commit → renderer install → settle，并拒绝只推进单轴 revision。
+
+完整 replacement 校验改为逐域结构锚点：除 registry 全部必需顶层 section 外，继续验证 grid / pack 容器、基础与行政集合、economy / diplomacy / military / markers / zones、notes / measurements / labels / visual theme、summary mirror 等当前正式数组、记录、数值和字符串形状。ocean task 的空 `oceanCurrents`、grid task 的空 `grid`，以及两类 task 的空 `economy` 均在 pre-commit 拒绝，canonical、history 与 revision 不变。
+
 ## 已记录的阶段外首败
 
 既有 `regress:ocean-current-world` 在完整世界夹具中稳定拒绝两个省份一致性问题：省份 `110` 没有合法省会候选，省份 `118` 当前省会不一致。隔离复现结果相同；另一个世界约束 bundle 缺少“锁国无省会省份”样本。按仓库停止规则没有继续补夹具或重复全门，也没有把这些门写成通过。
@@ -50,10 +58,10 @@
 
 | 字段 | 内容 |
 | --- | --- |
-| 状态 | `BLOCK 修复完成，CHECKPOINT 待复审` |
-| 冻结点 | 首轮 `7669915 / 0.5.26`；修复候选 `0.5.27` |
+| 状态 | `ACCEPT`；同一评审智能体确认第二轮两项 P1 闭合，无新增 P0 / P1 |
+| 冻结点 | 首轮 `7669915 / 0.5.26`；第一轮修复 `88ecc40 / 0.5.27`；第二轮修复候选 `0.5.28` |
 | 产品改动 | `8` 个文件，约 `+327 / -7` 行 |
 | 工具改动 | `5` 个文件，约 `+156 / -12` 行 |
 | 配置 / 文档 | `package.json` 新增专项门并递增版本；本记录及权威状态同步 |
 | 首败 | ocean world 的两项既有行政一致性拒绝，转入 349-10b 首门，不声称通过 |
-| 下一步 | 同一评审智能体 `ACCEPT` 后进入 349-10b；首门为行政引用最小复现与归因 |
+| 下一步 | 进入 349-10b；首门为行政引用最小复现与归因 |

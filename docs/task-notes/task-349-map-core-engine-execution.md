@@ -28,8 +28,8 @@
 | 349-7 | markers presentation / layer / picking 垂直切片 | identity、draw、pick、export 的 Node / source 契约 | 不执行真实视觉浏览器门 | ACCEPT |
 | 349-8 | 一个真实 Worker task 的统一 binding / result / patch 切片 | checksum、stale、cancel、gap、restart 的专项回归 | 不批量迁移 Worker | ACCEPT |
 | 349-9 | dependency registry、projection 状态和局部失效接线 | declared read/write、full rebuild 显式化、projection recovery | 不迁移未登记领域 | ACCEPT |
-| 349-10a | terrain / grid / height-derived / climate / ocean / topology 基础域 | 旧数据、history、Worker、renderer source / Node 门 | 不迁移社会或行政域 | CHECKPOINT 待评审 |
-| 349-10b | society / politics 与 pack mirror | mirror、行政引用、history、Worker 专项 | 不迁移城镇 / 路线 | 待执行 |
+| 349-10a | terrain / grid / height-derived / climate / ocean / topology 基础域 | 旧数据、history、Worker、renderer source / Node 门 | 不迁移社会或行政域 | ACCEPT |
+| 349-10b | society / politics 与 pack mirror | mirror、行政引用、history、Worker 专项 | 不迁移城镇 / 路线 | 进行中 |
 | 349-10c | settlements / zones / labels / measurements | 身份槽、锁、旧数据、history、projection 专项 | 不迁移路线 / 经济 | 待执行 |
 | 349-10d | routes / rivers / features / resource markers | topology、引用、picking、Worker、history 专项 | 不迁移经济 / 军事 | 待执行 |
 | 349-10e | economy / diplomacy / military | 跨域引用、history、Worker、旧数据专项 | 不收口全图 adoption | 待执行 |
@@ -52,14 +52,14 @@ planned → computed → validated → projections-prepared
 
 | 字段 | 内容 |
 | --- | --- |
-| 当前阶段 | `349-10a` checkpoint 待评审；未接受前不进入 `349-10b` |
-| 冻结点 | `349-9@7bc5e27` / `0.5.25` 已由同一评审智能体接受 |
-| 允许文件 | 基础域 Manifest / adapter、四个既有基础 Worker task 的统一契约接线、dependency / renderer source 审计、专项 Node、阶段文档 |
-| 禁止文件 | society / politics / settlements / routes / economy / military 迁移、业务算法改写、`source/`、main、浏览器 |
-| 必须保持 | 单一 canonical owner；旧 Worker task 计算与 patch 语义不变；topology revision 与 renderer source 同一 binding；未知依赖显式 full rebuild；旧档缺字段有保守默认 |
-| 首个廉价门 | 盘点四个基础 Worker task、现有 write set / result kind / binding / renderer source 和对应非浏览器回归，冻结 Manifest 能力与 adapter 边界 |
-| 冻结门 | 基础域 Manifest、旧数据 / history、四 Worker binding / result / patch、dependency、renderer source、failure rollback、typecheck、build、评审 ACCEPT |
-| 停止条件 | 证明某基础 task 必须先迁移社会 / 行政域，或现有 task 无法在不改业务算法下提供来源 / 写集证据 |
+| 当前阶段 | `349-10b` society / politics 与 pack mirror；首门为既有行政引用夹具归因 |
+| 冻结点 | `349-10a / 0.5.28` 已由同一评审智能体接受 |
+| 允许文件 | society / politics Manifest / adapter、行政引用与 pack mirror 契约、相关 Worker / history 专项、阶段文档 |
+| 禁止文件 | settlements / routes / economy / military 正式迁移、业务算法无关改写、`source/`、main、浏览器 |
+| 必须保持 | 单一 canonical owner；society / politics 与 pack mirror 原子一致；旧档与锁语义不退化；未知依赖显式 full rebuild |
+| 首个廉价门 | 对省份 110 无合法省会候选、省份 118 省会不一致及锁国无省会样本做可重复最小复现，先判断产品一致性、夹具陈旧或约束误判 |
+| 冻结门 | society / politics Manifest、mirror / 行政引用、history、Worker、旧数据、failure rollback、typecheck、build、评审 ACCEPT |
+| 停止条件 | 归因证明必须先迁移 settlements 身份 owner，或现有行政约束无法在不改变产品语义下形成确定契约 |
 
 ## 阶段结果
 
@@ -187,7 +187,7 @@ planned → computed → validated → projections-prepared
 - 终验：同一只读评审智能体最后一次 blocker-only 复审 `ACCEPT`，三项 P1 均闭合且无新增 P0 / P1。
 - 下一步：`349-10a` 只迁移 terrain / grid / height-derived / climate / ocean / topology 基础域，不迁移社会或行政域。
 
-### 349-10a — CHECKPOINT 待评审
+### 349-10a — ACCEPT
 
 - 完成：新增 shadow foundation Manifest 与 TypeScript Worker adapter；高度派生、气候下游、洋流世界、网格拓扑四个正式入口在 canonical commit 前统一校验 legacy binding、result kind、patch / replacement 和 renderer source。
 - renderer：render preparation、render cache、picking DTO 与 surface owner 全链补入 `topologyRevision`；同 map revision 的 stale topology 结果拒绝，topology 改变会重建 retained cache。
@@ -198,6 +198,10 @@ planned → computed → validated → projections-prepared
 - 专题记录：`docs/task-notes/task-349-foundation-core-slice.md`。
 - 首轮评审：`7669915 / 0.5.26` 为 `BLOCK`。P1 一是正式 binding factory 未从 revision owner 取得 topology revision；P1 二是 replacement 只校验五个基础 section，可能把残缺整图交给 swap。
 - 最窄修复：内部 core revision snapshot 产生并保守单调推进 topology revision，失败快照同步回滚；正式 renderer request 保留该字段。replacement 改从唯一 canonical registry 要求全部非 optional 顶层 section 及关键集合结构；ocean / grid 残缺 replacement 在 pre-commit 拒绝且 canonical / history / revision 不变。
-- 修正版本：`0.5.26 → 0.5.27`；下一步冻结修正 checkpoint，交同一只读评审智能体 blocker-only 复审；仅 `ACCEPT` 后进入 `349-10b` society / politics 与 pack mirror。
+- 第一轮修正版本：`0.5.26 → 0.5.27`；`88ecc40 / 0.5.27` 第二轮复审仍为 `BLOCK`。P1 一是正式 commit 后只手工给 `mapRevision + 1`，实际 owner 同时推进 topology，renderer install 会立即判 stale；P1 二是顶层 section 虽齐全但 economy / diplomacy / military / markers / zones / heightmap / climate / ocean 等域可被替换成空对象。
+- 第二轮最窄修复：canonical history commit 后从唯一 revision owner 读取实际 core snapshot，统一 helper 要求 identity 稳定且 map / topology revision 各推进一次，renderer install、grid fingerprint 与 UI settle 共用该 binding；整图 replacement 除全部必需顶层 section 外，逐域校验数组、记录、数值和字符串结构锚点，ocean / grid 的顶层存在但内容清空结果在 pre-commit 原子拒绝。
+- 修正版本：`0.5.27 → 0.5.28`；下一步冻结修正 checkpoint，交同一只读评审智能体 blocker-only 复审；仅 `ACCEPT` 后进入 `349-10b` society / politics 与 pack mirror。
+- 终验：同一只读评审智能体对 `704a955 / 0.5.28` blocker-only 复审 `ACCEPT`，两项 P1 闭合且无新增 P0 / P1。
+- 下一步：进入 `349-10b`；先执行已冻结的行政引用最小复现与归因，不先放宽门或修改产品算法。
 
 阶段结果在每次 checkpoint 后更新，长日志只记录命令和 artifact 路径，不粘贴到本文。

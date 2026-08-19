@@ -11,6 +11,7 @@ const vite = await createServer({configFile: false, root: path.join(repoRoot, "a
 try {
   const {
     adaptFoundationWorkerBinding,
+    createCommittedFoundationWorkerBinding,
     createFoundationWorkerBinding,
     validateFoundationDocumentShape,
     validateFoundationWorkerOutput,
@@ -76,6 +77,31 @@ try {
   });
   assert.equal(topology.replacement, true);
 
+  const commitMap = structuredClone(replacementMap);
+  const commitHistory = new EditHistory({
+    onMutation: () => revisionOwner.advance(),
+    onSnapshot: () => revisionOwner.createSnapshot(),
+    onRestore: snapshot => revisionOwner.restoreSnapshot(snapshot)
+  });
+  commitHistory.execute({
+    label: "基础域提交安装回归",
+    domain: "foundation-regression",
+    apply: ({map}) => { map.status.message = "committed"; },
+    revert: ({map}) => { map.status.message = replacementMap.status.message; }
+  }, {map: commitMap});
+  const committedBinding = createCommittedFoundationWorkerBinding(binding, revisionOwner.getCoreSnapshot());
+  const installIsCurrent = () => committedBinding.mapIdentity === revisionOwner.getCoreSnapshot().mapIdentity
+    && committedBinding.mapRevision === revisionOwner.getCoreSnapshot().mapRevision
+    && committedBinding.topologyRevision === revisionOwner.getCoreSnapshot().topologyRevision;
+  assert.equal(installIsCurrent(), true, "canonical commit 后 renderer install binding 立即过期");
+  const settledRevision = revisionOwner.getCoreSnapshot();
+  assert.deepEqual(
+    {mapIdentity: committedBinding.mapIdentity, mapRevision: committedBinding.mapRevision, topologyRevision: committedBinding.topologyRevision},
+    settledRevision,
+    "renderer install settle 后 binding 未保持 owner 当前态"
+  );
+  assertProtocol(() => createCommittedFoundationWorkerBinding(binding, {...settledRevision, topologyRevision: binding.topologyRevision}), "foundation-worker-commit-revision-invalid");
+
   assertProtocol(() => adaptFoundationWorkerBinding("unknown.compute", binding), "foundation-worker-task-unknown");
   assertProtocol(() => adaptFoundationWorkerBinding("height-derived.compute", {...binding, topologyRevision: -1}), "foundation-worker-binding-invalid");
   assertProtocol(() => validateFoundationWorkerOutput({
@@ -97,6 +123,12 @@ try {
   }, "height-derived.compute", "height-derived"), "foundation-worker-patch-write-set-overlap");
   const partialReplacement = structuredClone(replacementMap);
   delete partialReplacement.politics;
+  const emptiedOceanReplacement = structuredClone(replacementMap);
+  emptiedOceanReplacement.oceanCurrents = {};
+  const emptiedGridReplacement = structuredClone(replacementMap);
+  emptiedGridReplacement.grid = {};
+  const emptiedEconomyReplacement = structuredClone(replacementMap);
+  emptiedEconomyReplacement.economy = {};
   const canonical = structuredClone(replacementMap);
   const canonicalBefore = structuredClone(canonical);
   const revisionBefore = revisionOwner.getCoreSnapshot();
@@ -108,6 +140,20 @@ try {
       binding,
       output: {kind, binding, executed: true, result: {executed: true}, replacementMap: partialReplacement, preparedRender}
     }), "foundation-worker-map-section-missing");
+  }
+  for (const [task, kind, invalidMap] of [
+    ["ocean-current-world.compute", "ocean-current-world", emptiedOceanReplacement],
+    ["grid-topology.prepare", "grid-topology-worker-result", emptiedGridReplacement],
+    ["ocean-current-world.compute", "ocean-current-world", emptiedEconomyReplacement],
+    ["grid-topology.prepare", "grid-topology-worker-result", emptiedEconomyReplacement]
+  ]) {
+    assertProtocol(() => validateFoundationWorkerOutput({
+      task,
+      binding,
+      output: {kind, binding, executed: true, result: {executed: true}, replacementMap: invalidMap, preparedRender}
+    }), task === "grid-topology.prepare" && invalidMap === emptiedGridReplacement
+      ? "foundation-worker-map-grid-missing"
+      : "foundation-worker-map-structure-invalid");
   }
   assert.deepEqual(canonical, canonicalBefore, "残缺 replacement pre-commit 拒绝后改写了 canonical map");
   assert.deepEqual(revisionOwner.getCoreSnapshot(), revisionBefore, "残缺 replacement pre-commit 拒绝后推进了 revision owner");
@@ -124,6 +170,8 @@ try {
   const appSource = await readFile(path.join(repoRoot, "app/webgl-generator/src/runtime/app.js"), "utf8");
   assert.equal((appSource.match(/validateFoundationWorkerOutput\(/g) || []).length, 4, "四个基础 Worker 正式入口必须经过统一 validator");
   assert.match(appSource, /createFoundationWorkerBinding\(\{[\s\S]*?getCoreSnapshot\(\)/u, "正式 Worker binding factory 未读取 revision owner 的 topology revision");
+  assert.match(appSource, /createCommittedFoundationWorkerBinding\(binding, state\.mapRevision\.getCoreSnapshot\(\)\)/u, "正式 commit 后未从 revision owner 创建 renderer install binding");
+  assert.doesNotMatch(appSource, /committedBinding = \{\.\.\.(?:binding|output\.binding), mapRevision:/u, "正式 commit 仍在手工预测单轴 revision");
   assert.match(appSource, /binding: \{mapIdentity: binding\.mapIdentity, mapRevision: binding\.mapRevision, topologyRevision: binding\.topologyRevision\}/u, "正式 renderer request 未携带 topology revision");
   assert.match(appSource, /topologyRevision \?\? 0\).*topologyRevision \?\? 0/s, "通用 Worker binding 必须比较 topology revision");
   for (const relative of [
@@ -142,7 +190,8 @@ try {
     topologyRevision: coreBinding.sourceRevision.topologyRevision,
     rendererSources: 4,
     legacyDefaults: legacy.legacyDefaults,
-    rejected: ["task", "binding", "worker-stale", "renderer-stale", "write", "overlap", "replacement", "replacement-atomicity", "strict-old-data"]
+    commitRenderSettle: settledRevision,
+    rejected: ["task", "binding", "worker-stale", "renderer-stale", "write", "overlap", "replacement", "emptied-domain", "replacement-atomicity", "commit-revision", "strict-old-data"]
   }, null, 2));
 } finally {
   await vite.close();

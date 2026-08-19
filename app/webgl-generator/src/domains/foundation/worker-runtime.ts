@@ -23,6 +23,120 @@ const patchDomainByTask = Object.freeze({
   "climate-downstream.compute": "climate-downstream"
 } as const);
 const requiredFoundationReplacementSections = Object.freeze(listCanonicalMapSections().filter(section => !section.optional).map(section => section.path));
+const requiredFoundationArrayPaths = Object.freeze([
+  "heightmap.steps",
+  "layers.background",
+  "layers.ocean",
+  "layers.land",
+  "layers.highland",
+  "grid.points",
+  "grid.boundary",
+  "grid.features",
+  "climate.biomes",
+  "oceanCurrents.currents",
+  "society.cultures",
+  "society.religions",
+  "politics.states",
+  "politics.provinces",
+  "politics.regions",
+  "settlements.cities",
+  "settlements.routes",
+  "settlements.populationPoints",
+  "economy.goods",
+  "economy.markets",
+  "economy.deals",
+  "diplomacy.chronicle",
+  "military.campaigns",
+  "military.fronts",
+  "military.events",
+  "markers.markers",
+  "zones.zones",
+  "pack.features",
+  "pack.rivers",
+  "pack.goods",
+  "pack.cultures",
+  "pack.religions",
+  "pack.burgs",
+  "pack.states",
+  "pack.provinces",
+  "pack.routes",
+  "pack.markers",
+  "pack.markets",
+  "pack.deals",
+  "pack.zones",
+  "features.features",
+  "rivers.rivers",
+  "regenerationLocks.entries",
+  "notes.notes",
+  "measurements.items",
+  "labels.custom",
+  "visualTheme.userThemes"
+]);
+const requiredFoundationRecordPaths = Object.freeze([
+  "metadata",
+  "options",
+  "layers",
+  "grid.cells",
+  "grid.vertices",
+  "grid.metadata",
+  "climate.mapCoordinates",
+  "climate.metadata",
+  "oceanCurrents.metadata",
+  "mapCoordinates",
+  "society.metadata",
+  "politics.metadata",
+  "settlements.metadata",
+  "economy.metadata",
+  "diplomacy.relations",
+  "diplomacy.metadata",
+  "military.metadata",
+  "markers.metadata",
+  "zones.metadata",
+  "pack.cells",
+  "pack.vertices",
+  "pack.metadata",
+  "pack.portDiagnostics",
+  "pack.diplomacy",
+  "pack.military",
+  "features.shore",
+  "features.metadata",
+  "rivers.metadata",
+  "summary.grid",
+  "summary.features",
+  "summary.climate",
+  "summary.pack",
+  "summary.rivers",
+  "summary.society",
+  "summary.politics",
+  "summary.diplomacy",
+  "summary.settlements",
+  "summary.markers",
+  "summary.military",
+  "summary.zones",
+  "summary.economy",
+  "notes.metadata",
+  "measurements.metadata",
+  "labels.hidden",
+  "labels.styles",
+  "labels.layout",
+  "labels.metadata",
+  "visualTheme.overrides"
+]);
+const requiredFoundationNumberPaths = Object.freeze([
+  "heightmap.seaLevel",
+  "mapCoordinates.latT",
+  "mapCoordinates.latN",
+  "mapCoordinates.latS",
+  "oceanCurrents.version",
+  "regenerationLocks.version",
+  "measurements.version",
+  "visualTheme.version"
+]);
+const requiredFoundationStringPaths = Object.freeze([
+  "options.mapName",
+  "status.message",
+  "visualTheme.preset"
+]);
 
 export function createFoundationWorkerBinding(input: {
   readonly revision: unknown;
@@ -40,6 +154,29 @@ export function createFoundationWorkerBinding(input: {
     operationId: Number(input.operation?.id) || 0,
     operationName: String(input.operation?.name || "")
   }, "foundation.binding");
+}
+
+export function createCommittedFoundationWorkerBinding(
+  value: unknown,
+  revisionValue: unknown
+): LegacyFoundationWorkerBinding {
+  const source = validateLegacyBinding(value, "foundation.commit.sourceBinding");
+  const revision = record(revisionValue, "foundation.commit.revision");
+  const committed = validateLegacyBinding({
+    ...source,
+    mapIdentity: revision.mapIdentity,
+    mapRevision: revision.mapRevision,
+    topologyRevision: revision.topologyRevision
+  }, "foundation.commit.binding");
+  if (committed.mapIdentity !== source.mapIdentity
+    || committed.mapRevision !== source.mapRevision + 1
+    || committed.topologyRevision !== source.topologyRevision + 1) {
+    throw protocolError(
+      "foundation-worker-commit-revision-invalid",
+      "基础域 canonical commit 后 identity 必须稳定且 map / topology revision 必须各推进一次"
+    );
+  }
+  return committed;
 }
 
 export function adaptFoundationWorkerBinding(task: string, value: unknown): ComputeOperationBinding {
@@ -160,24 +297,22 @@ export function validateFoundationDocumentShape(value: unknown, options: {readon
         record(map[section], `foundation.map.${section}`);
       }
     }
-    for (const [path, section, field] of [
-      ["foundation.map.pack.cells", "pack", "cells"],
-      ["foundation.map.society.cultures", "society", "cultures"],
-      ["foundation.map.society.religions", "society", "religions"],
-      ["foundation.map.politics.states", "politics", "states"],
-      ["foundation.map.politics.provinces", "politics", "provinces"],
-      ["foundation.map.settlements.cities", "settlements", "cities"],
-      ["foundation.map.settlements.routes", "settlements", "routes"],
-      ["foundation.map.features.features", "features", "features"],
-      ["foundation.map.rivers.rivers", "rivers", "rivers"],
-      ["foundation.map.regenerationLocks.entries", "regenerationLocks", "entries"],
-      ["foundation.map.notes.notes", "notes", "notes"],
-      ["foundation.map.measurements.items", "measurements", "items"],
-      ["foundation.map.labels.custom", "labels", "custom"]
-    ] as const) {
-      const container = record(map[section], `foundation.map.${section}`);
-      if (field === "cells") record(container[field], path);
-      else if (!Array.isArray(container[field])) throw protocolError("foundation-worker-map-structure-invalid", `${path} 必须是数组`);
+    for (const path of requiredFoundationArrayPaths) {
+      if (!Array.isArray(readPath(map, path))) {
+        throw protocolError("foundation-worker-map-structure-invalid", `foundation.map.${path} 必须是数组`);
+      }
+    }
+    for (const path of requiredFoundationRecordPaths) record(readPath(map, path), `foundation.map.${path}`);
+    for (const path of requiredFoundationNumberPaths) {
+      const value = readPath(map, path);
+      if (typeof value !== "number" || !Number.isFinite(value)) {
+        throw protocolError("foundation-worker-map-structure-invalid", `foundation.map.${path} 必须是有限数值`);
+      }
+    }
+    for (const path of requiredFoundationStringPaths) {
+      if (typeof readPath(map, path) !== "string") {
+        throw protocolError("foundation-worker-map-structure-invalid", `foundation.map.${path} 必须是字符串`);
+      }
     }
   }
   return Object.freeze({
@@ -193,6 +328,13 @@ export function validateFoundationDocumentShape(value: unknown, options: {readon
       topologyRevision: 0
     })
   });
+}
+
+function readPath(source: UnknownRecord, path: string): unknown {
+  return path.split(".").reduce<unknown>((value, key) => {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+    return (value as UnknownRecord)[key];
+  }, source);
 }
 
 function requireTask(task: string) {

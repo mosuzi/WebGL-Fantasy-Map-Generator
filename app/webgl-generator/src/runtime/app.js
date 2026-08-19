@@ -12,7 +12,11 @@ import {finalizeSettlements, rebuildRelocatedPopulationPointsAsync, regenerateSe
 import {createNotesDomainRuntime} from "../domains/notes/runtime.ts";
 import {createMarkersPresentationRuntime} from "../domains/markers/runtime.ts";
 import {validatePopulationWorkerOutput, validatePopulationWorkerPatch} from "../domains/population/worker-runtime.ts";
-import {createFoundationWorkerBinding, validateFoundationWorkerOutput} from "../domains/foundation/worker-runtime.ts";
+import {
+  createCommittedFoundationWorkerBinding,
+  createFoundationWorkerBinding,
+  validateFoundationWorkerOutput
+} from "../domains/foundation/worker-runtime.ts";
 import {reconcileSettlementCellIdentity} from "./settlement-cell-index.js";
 import {DEFAULT_OPTIONS, normalizeOptions} from "../generator/options.js";
 import {normalizeAtmosphereDirection, normalizeClimateLatitudeMode, normalizeWindProfile, windAngleFromDirection} from "../generator/climate-options.js";
@@ -12702,9 +12706,9 @@ async function executeWorkerMapMutation(state, documentRef, mutation, operation 
       state.workerSessionMutationGuard = false;
     }
     execution = {executed: true};
-    mutation.assertCommitted?.("domain");
+    const committedBinding = createCommittedFoundationWorkerBinding(binding, state.mapRevision.getCoreSnapshot());
+    mutation.assertCommitted?.("domain", committedBinding);
     commitInstallMs = roundWorkerTelemetryMs(readCommitTime() - commitStartedAt);
-    const committedBinding = {...binding, mapRevision: Number(binding.mapRevision) + 1};
     const installIsCurrent = () => isWorkerRegenerationRenderContextCurrent(state, targetKind, committedBinding, renderContextToken, 0);
     if (!installIsCurrent()) {
       const error = new Error("Worker 渲染安装前地图或视口已变化");
@@ -12742,7 +12746,7 @@ async function executeWorkerMapMutation(state, documentRef, mutation, operation 
     preparedInstall.commit();
     renderInstallCommitMs = roundWorkerTelemetryMs(readCommitTime() - renderCommitStartedAt);
     maybeInjectWorkerRegenerationRefreshFault(documentRef, {targetKind, stage: "after-render", phase: "forward"});
-    mutation.assertCommitted?.("world");
+    mutation.assertCommitted?.("world", committedBinding);
     await yieldToBrowser(documentRef);
     operation?.throwIfCancelled?.();
     if (!installIsCurrent()) {
@@ -12774,6 +12778,7 @@ async function executeWorkerMapMutation(state, documentRef, mutation, operation 
       result,
       output,
       command,
+      committedBinding,
       settleRenderContext: () => {
         expectedRenderContextToken = createWorkerRegenerationRenderContextToken(state, targetKind);
       }
@@ -14057,7 +14062,6 @@ async function applyGridTopologyViaApi(state, documentRef, {document = null, opt
     assertOutput: ({binding, output}) => assertGridTopologyWorkerOutputCurrent(state, sourceMap, binding, action, output, context),
     createCommand: ({output, result: workerResult, effects}) => {
       expectedTarget = workerResult.target;
-      primeGridStructureFingerprint(output.replacementMap.grid, {...output.binding, mapRevision: Number(output.binding.mapRevision) + 1}, expectedTarget.fingerprint);
       return createMapReplacementCommand({
         replacementMap: output.replacementMap,
         label: document ? "写入受控网格结构" : `细分网格至 ${workerResult.target.cells} cells`,
@@ -14069,19 +14073,23 @@ async function applyGridTopologyViaApi(state, documentRef, {document = null, opt
         }
       });
     },
-    assertCommitted: () => {
-      if (!expectedTarget
-        || state.map.grid.points.length !== Number(expectedTarget.cells)
-        || cachedGridStructureFingerprint(state.map.grid, state.mapRevision.getSnapshot()) !== expectedTarget.fingerprint) {
+    assertCommitted: (_phase, committedBinding) => {
+      if (!expectedTarget) {
+        const error = new Error("网格拓扑提交缺少 Worker 目标");
+        error.code = "grid-worker-commit-invalid";
+        throw error;
+      }
+      primeGridStructureFingerprint(state.map.grid, committedBinding, expectedTarget.fingerprint);
+      if (state.map.grid.points.length !== Number(expectedTarget.cells)
+        || cachedGridStructureFingerprint(state.map.grid, committedBinding) !== expectedTarget.fingerprint) {
         const error = new Error("网格拓扑提交结果与 Worker 目标不一致");
         error.code = "grid-worker-commit-invalid";
         throw error;
       }
     },
-    afterUiRefresh: async ({output}) => {
+    afterUiRefresh: async ({committedBinding}) => {
       state.options = state.map.options;
       syncGenerationInputs(documentRef, state.options);
-      const committedBinding = {...output.binding, mapRevision: Number(output.binding.mapRevision) + 1};
       await refreshRuntimeAfterMapLoadAsync(state, documentRef, {
         operation: context,
         isCurrent: () => state.map === sourceMap && validateRegenerationWorkerBinding(state, committedBinding)
