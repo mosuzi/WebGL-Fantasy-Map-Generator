@@ -32,8 +32,8 @@
 | 349-10b | society / politics 与 pack mirror | mirror、行政引用、history、Worker 专项 | 不迁移城镇 / 路线 | ACCEPT |
 | 349-10c0 | 分离领域 Worker binding id 与共享 transport task，按 result kind 唯一拥有 | disjoint result kind 可共享 task；重叠 owner 原子拒绝 | 不迁移任何业务领域 | ACCEPT |
 | 349-10c | settlements / zones / labels / measurements | 身份槽、锁、旧数据、history、projection 专项 | 不迁移路线 / 经济 | ACCEPT |
-| 349-10d | routes / rivers / features / resource markers | topology、引用、picking、Worker、history 专项 | 不迁移经济 / 军事 | 进行中 |
-| 349-10e | economy / diplomacy / military | 跨域引用、history、Worker、旧数据专项 | 不收口全图 adoption | 待执行 |
+| 349-10d | routes / rivers / features / resource markers | topology、引用、picking、Worker、history 专项 | 不迁移经济 / 军事 | ACCEPT |
+| 349-10e | economy / diplomacy / military | 跨域引用、history、Worker、旧数据专项 | 不收口全图 adoption | 进行中 |
 | 349-10f | generation / import / adoption / export / headless profile 收口 | 新 session、rollback、旧档、checksum、无 DOM headless 专项 | 不删除未证明冗余的 legacy adapter | 待执行 |
 | 349-10g | legacy adapter、重复 revision / history 路径与影子审计收口 | 正式入口清单无双写、无第二 owner、非浏览器全回归 | 不扩大产品能力 | 待执行 |
 | 349-11 | 非浏览器集成终验与浏览器验收方案 | build、typecheck、全量非浏览器回归、方案完整性评估 | 不执行浏览器方案 | 待执行 |
@@ -258,5 +258,11 @@ planned → computed → validated → projections-prepared
 - 第二轮最窄修正：Feature 输出的活动 city / burg 身份与 grid / pack cell 列表必须和 sourceMap 完全一致，marker 另校验唯一 ID、grid / pack cell 边界及 source identity；river 每个非终端陆格必须由自身或合法汇入子河占有，水域尾段允许零 owner，末端父河 / 同父汇流显式例外，保留每河至少一个 claim。专项新增 city move、marker 越界、部分 river owner 清空反例并增加 3 个 10k 河网 owner 正例，拒绝集增至 `23` 类；版本 `0.5.37 → 0.5.38`，待同一评审智能体复审。
 - 第三轮复审：`85bafdc / 0.5.38` 继续 `BLOCK` 一项 P1。水域零 owner 例外没有要求水域必须构成路径尾缀，会接受“陆地→水域→陆地”；子河 owner 例外也没有限制在子河终点，会接受子河越过真实汇流点后继续重叠父河。
 - 第三轮最窄修正：river validator 在逐段 owner 检查前冻结水域尾缀状态，进入水域后再出现陆格即拒绝；父河接纳 child owner 与同父支流接纳 sibling owner 时，均要求该 cell 是贡献河流的最后一个真实 cell。专项新增 land-water-land 与 child-overlap 两类反例，拒绝集增至 `25` 类；3 个额外 10k 河网 owner 正例继续通过，版本 `0.5.38 → 0.5.39`，待同一评审智能体复审。
+- 终验：同一只读评审智能体对 `65ea8b2 / 0.5.39` 给出 `ACCEPT`；最后一项 P1 已闭合且无新增 P0 / P1。下一步进入 349-10e。
+
+### 349-10e — 执行中
+
+- 冻结目标：为 economy / diplomacy / military 建立真实 Manifest、依赖描述与既有 Worker 结果 pre-commit 契约，覆盖三域跨国家 / 城市 / 路线引用、history 与旧数据；不收口 generation / import / adoption / export / headless profile。
+- 首个廉价门：盘点三域真实 command、regeneration result kind、canonical / mirror 写集和现有 Node 专项；任何未登记共享 result owner 或必须先改 adoption 的发现均先登记并重排。
 
 阶段结果在每次 checkpoint 后更新，长日志只记录命令和 artifact 路径，不粘贴到本文。
