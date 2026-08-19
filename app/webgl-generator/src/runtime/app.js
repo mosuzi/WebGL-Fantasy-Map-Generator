@@ -12,6 +12,7 @@ import {finalizeSettlements, rebuildRelocatedPopulationPointsAsync, regenerateSe
 import {createNotesDomainRuntime} from "../domains/notes/runtime.ts";
 import {createMarkersPresentationRuntime} from "../domains/markers/runtime.ts";
 import {validatePopulationWorkerOutput, validatePopulationWorkerPatch} from "../domains/population/worker-runtime.ts";
+import {validateSocietyPoliticsWorkerOutput} from "../domains/society-politics/worker-runtime.ts";
 import {
   createCommittedFoundationWorkerBinding,
   createFoundationWorkerBinding,
@@ -12519,6 +12520,14 @@ async function regenerateMapAttributeViaWorker(state, documentRef, kind, options
       ...(targetKind === "rivers" ? RIVER_REGENERATION_TRANSACTION_EFFECTS : REGENERATION_TRANSACTION_EFFECTS),
       affected: []
     },
+    assertOutput: ["religions", "states", "provinces"].includes(targetKind)
+      ? ({binding, output}) => validateSocietyPoliticsWorkerOutput({
+          kind: targetKind,
+          binding,
+          output,
+          policy: getRegenerationPatchPolicy(targetKind)
+        })
+      : undefined,
     createCommand: ({output, result, effects}) => createWorkerRegenerationPatchCommand(state.map, {
       patch: output.patch,
       policy: getRegenerationPatchPolicy(targetKind),

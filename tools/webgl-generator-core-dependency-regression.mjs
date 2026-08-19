@@ -13,6 +13,7 @@ try {
   const {markersManifest} = await vite.ssrLoadModule("/src/domains/markers/manifest.ts");
   const {populationManifest} = await vite.ssrLoadModule("/src/domains/population/manifest.ts");
   const {foundationManifest} = await vite.ssrLoadModule("/src/domains/foundation/manifest.ts");
+  const {societyPoliticsManifest} = await vite.ssrLoadModule("/src/domains/society-politics/manifest.ts");
   const targets = {
     "object-panels": ["ui"],
     "point-layers": ["renderer"],
@@ -25,14 +26,17 @@ try {
     "height-field": ["renderer"],
     "render-mesh": ["renderer"],
     "climate-statistics": ["ui"],
-    "line-layers": ["renderer"]
+    "line-layers": ["renderer"],
+    "cell-colors": ["renderer"],
+    "political-boundaries": ["renderer"]
   };
   const registry = createDependencyRegistry({invalidationTargets: targets});
   registry.register(notesManifest);
   registry.register(markersManifest);
   registry.register(populationManifest);
   registry.register(foundationManifest);
-  assert.deepEqual(registry.snapshot().ids, ["foundation.climate", "foundation.height-topology", "foundation.ocean-current-layer", "markers.point-layer", "markers.resource-economy", "notes.object-panels", "population.downstream"]);
+  registry.register(societyPoliticsManifest);
+  assert.deepEqual(registry.snapshot().ids, ["foundation.climate", "foundation.height-topology", "foundation.ocean-current-layer", "markers.point-layer", "markers.resource-economy", "notes.object-panels", "population.downstream", "society-politics.administrative-mirror", "society-politics.social-assignment"]);
 
   const topologyFull = registry.planCanonical({writeSet: ["grid"]});
   assert.equal(topologyFull.mode, "full-rebuild");
@@ -58,6 +62,16 @@ try {
   assert.ok(populationFull.systems.includes("population.downstream"));
   assert.ok(populationFull.systems.includes("markers.resource-economy"), "derived writes 必须继续传播下游 invalidation");
   assert.deepEqual(new Set(populationFull.projections), new Set(["worker", "renderer", "persistence", "ui"]));
+
+  const politicsFull = registry.planCanonical({writeSet: ["politics.provinces"], affected: {province: [1]}});
+  assert.equal(politicsFull.mode, "full-rebuild");
+  assert.ok(politicsFull.systems.includes("society-politics.administrative-mirror"));
+  assert.deepEqual(new Set(politicsFull.invalidated), new Set(["cell-colors", "political-boundaries", "labels", "object-index", "picking"]));
+
+  const religionFull = registry.planCanonical({writeSet: ["society.religions"], affected: {religion: [1]}});
+  assert.equal(religionFull.mode, "full-rebuild");
+  assert.ok(religionFull.systems.includes("society-politics.social-assignment"));
+  assert.deepEqual(new Set(religionFull.invalidated), new Set(["cell-colors", "labels", "object-index"]));
 
   const unknown = registry.planCanonical({writeSet: ["unregistered.section"]});
   assert.equal(unknown.mode, "full-rebuild");
@@ -98,9 +112,10 @@ try {
   console.log(JSON.stringify({
     ok: true,
     registry: registry.snapshot(),
-    modes: [notesLocal.mode, populationFull.mode, presentation.mode, unknown.mode, exactRegistry.planCanonical({writeSet: ["document.title"]}).mode],
+    modes: [notesLocal.mode, populationFull.mode, politicsFull.mode, religionFull.mode, presentation.mode, unknown.mode, exactRegistry.planCanonical({writeSet: ["document.title"]}).mode],
     notes: {systems: notesLocal.systems, projections: notesLocal.projections},
     population: {systems: populationFull.systems, invalidated: populationFull.invalidated, projections: populationFull.projections},
+    societyPolitics: {politics: politicsFull.systems, religion: religionFull.systems},
     negative: ["missing-scope", "unknown-write", "duplicate-domain", "invalidatedBy-outside-reads", "invalid-projection", "missing-invalidation-target", "manifest-mutation-after-register"]
   }, null, 2));
 } finally {

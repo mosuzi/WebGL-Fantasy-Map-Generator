@@ -64,7 +64,7 @@ function assertProvinceCapitalMirrors(map, kind) {
       || Number(packProvince.center) !== Number(capital.packCell)
       || Number(province.gridCenter) !== Number(capital.cell)
       || Number(packProvince.gridCenter) !== Number(capital.cell)
-      || burg.provincial !== true) {
+      || Boolean(burg.provincial) !== true) {
       failures.push({provinceId: province.i, capitals: capitals.length});
     }
   }

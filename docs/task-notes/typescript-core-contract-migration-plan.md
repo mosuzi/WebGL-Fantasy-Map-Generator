@@ -403,7 +403,7 @@ TypeScript 不再维护一套与引擎计划冲突的独立阶段。唯一顺序
 12. `349-10a` terrain / grid / height-derived / climate / ocean / topology；
 13. `349-10b` society / politics 与 pack mirror；
 14. `349-10c` settlements / zones / labels / measurements；
-15. `349-10d` routes / rivers / features / resource markers；
+15. `349-10d` routes / rivers / features / resource markers；首门覆盖锁定 Feature 的港口引用集合在 `cities-routes` 后 `382 → 366` 的稳定性，保留引用契约而非放宽锁快照；
 16. `349-10e` economy / diplomacy / military；
 17. `349-10f` generation / import / adoption / export / headless profile；
 18. `349-10g` legacy adapter、重复 revision / history 和影子双写收口；

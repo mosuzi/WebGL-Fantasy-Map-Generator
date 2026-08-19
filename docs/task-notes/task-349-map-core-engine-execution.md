@@ -29,7 +29,7 @@
 | 349-8 | 一个真实 Worker task 的统一 binding / result / patch 切片 | checksum、stale、cancel、gap、restart 的专项回归 | 不批量迁移 Worker | ACCEPT |
 | 349-9 | dependency registry、projection 状态和局部失效接线 | declared read/write、full rebuild 显式化、projection recovery | 不迁移未登记领域 | ACCEPT |
 | 349-10a | terrain / grid / height-derived / climate / ocean / topology 基础域 | 旧数据、history、Worker、renderer source / Node 门 | 不迁移社会或行政域 | ACCEPT |
-| 349-10b | society / politics 与 pack mirror | mirror、行政引用、history、Worker 专项 | 不迁移城镇 / 路线 | 进行中 |
+| 349-10b | society / politics 与 pack mirror | mirror、行政引用、history、Worker 专项 | 不迁移城镇 / 路线 | CHECKPOINT 待评审 |
 | 349-10c | settlements / zones / labels / measurements | 身份槽、锁、旧数据、history、projection 专项 | 不迁移路线 / 经济 | 待执行 |
 | 349-10d | routes / rivers / features / resource markers | topology、引用、picking、Worker、history 专项 | 不迁移经济 / 军事 | 待执行 |
 | 349-10e | economy / diplomacy / military | 跨域引用、history、Worker、旧数据专项 | 不收口全图 adoption | 待执行 |
@@ -52,12 +52,12 @@ planned → computed → validated → projections-prepared
 
 | 字段 | 内容 |
 | --- | --- |
-| 当前阶段 | `349-10b` society / politics 与 pack mirror；首门为既有行政引用夹具归因 |
-| 冻结点 | `349-10a / 0.5.28` 已由同一评审智能体接受 |
+| 当前阶段 | `349-10b` society / politics 与 pack mirror；`0.5.29` checkpoint 待评审 |
+| 冻结点 | `349-10a / 0.5.28` 已接受；`349-10b / 0.5.29` 待同一评审智能体确认 |
 | 允许文件 | society / politics Manifest / adapter、行政引用与 pack mirror 契约、相关 Worker / history 专项、阶段文档 |
 | 禁止文件 | settlements / routes / economy / military 正式迁移、业务算法无关改写、`source/`、main、浏览器 |
 | 必须保持 | 单一 canonical owner；society / politics 与 pack mirror 原子一致；旧档与锁语义不退化；未知依赖显式 full rebuild |
-| 首个廉价门 | 对省份 110 无合法省会候选、省份 118 省会不一致及锁国无省会样本做可重复最小复现，先判断产品一致性、夹具陈旧或约束误判 |
+| 首个廉价门 | 已完成：110 / 118 为世界重建漏开既有修复模式；锁国无省会为偶然夹具加越锁补首府，现有确定性反例闭合 |
 | 冻结门 | society / politics Manifest、mirror / 行政引用、history、Worker、旧数据、failure rollback、typecheck、build、评审 ACCEPT |
 | 停止条件 | 归因证明必须先迁移 settlements 身份 owner，或现有行政约束无法在不改变产品语义下形成确定契约 |
 
@@ -203,5 +203,15 @@ planned → computed → validated → projections-prepared
 - 修正版本：`0.5.27 → 0.5.28`；下一步冻结修正 checkpoint，交同一只读评审智能体 blocker-only 复审；仅 `ACCEPT` 后进入 `349-10b` society / politics 与 pack mirror。
 - 终验：同一只读评审智能体对 `704a955 / 0.5.28` blocker-only 复审 `ACCEPT`，两项 P1 闭合且无新增 P0 / P1。
 - 下一步：进入 `349-10b`；先执行已冻结的行政引用最小复现与归因，不先放宽门或修改产品算法。
+
+### 349-10b — CHECKPOINT 待评审
+
+- 首门归因：省份 `110 / 118` 的世界重建拒绝来自两处调用漏开既有行政修复模式；补齐后 10k / 50k / 100k 世界重建通过。锁国无省会改为从真实有效省份构造确定性反例，重建跳过锁定国家 / 省份的首府再生成，完整支撑包络保持不变；行政约束没有放宽。
+- 协议：新增 shadow `society-politics` Manifest 与 TypeScript 输出 validator。真实 `regeneration.compute` 的 religions / states / provinces 在 commit 前统一校验 binding、精确写集、patch operations、社会 / 行政双镜像与首府引用；真实 history 覆盖提交、撤销、重做及六类协议拒绝。
+- 依赖：Manifest 注册表为 `5 domains / 78 descriptors`，dependency 注册表为 `9 systems`；社会和行政写入分别失效 cell colors、政治边界、labels、object index 与 picking，并显式规划 full rebuild。
+- 阶段外首败：完整 world constraint 现稳定在锁定 Feature 港口引用 `382 → 366` 处拒绝，删除项来自 `pack.burgs`。该 owner 属于 routes / features，已登记为原定 `349-10d` 首门；重新评估后未完成阶段顺序不变。
+- 门禁：typecheck、Manifest、dependency、society / politics 组合专项、v1 migration、production build `1379 modules` 与 diff check 通过；完整 world constraint 的 10d 预期首败不冒充 10b 通过门。浏览器执行 `0`，`source/` 改动 `0`。
+- 规模：产品代码 `6` 文件，约 `+349 / -3` 行；工具代码 `6` 文件，约 `+244 / -36` 行；文档 / 配置同步 `8` 文件；版本 `0.5.28 → 0.5.29`。
+- 下一步：冻结 checkpoint 并交同一只读评审智能体；仅 `ACCEPT` 后进入 `349-10c`。
 
 阶段结果在每次 checkpoint 后更新，长日志只记录命令和 artifact 路径，不粘贴到本文。

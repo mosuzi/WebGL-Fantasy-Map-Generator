@@ -863,6 +863,8 @@ function rebuildPackSettlementsWithoutImplicitAnchors(grid, politics, pack, rand
   const previousBurgs = pack.burgs || [];
   const previousCities = settlements?.cities || [];
   const locked = prepareLockedCities(grid, pack, options, previousCities, previousBurgs);
+  const protectedStateIds = snapshotIds(options.lockedStates);
+  const protectedProvinceIds = snapshotIds(options.lockedProvinces);
   const cities = [];
   const burgs = [null];
   const cityIds = new Set();
@@ -904,6 +906,7 @@ function rebuildPackSettlementsWithoutImplicitAnchors(grid, politics, pack, rand
   for (const state of politics?.states || []) {
     const stateId = Number(state?.i ?? state?.id);
     if (!stateId || state?.removed || !targetStateIds.has(stateId)) continue;
+    if (protectedStateIds.has(stateId)) continue;
     const retainedCapital = cities.find(city => city && !city.removed && Number(city.state) === stateId && city.capital);
     if (retainedCapital) {
       synchronizeStateCapital(politics, pack, retainedCapital);
@@ -926,6 +929,7 @@ function rebuildPackSettlementsWithoutImplicitAnchors(grid, politics, pack, rand
   for (const province of politics?.provinces || []) {
     const provinceId = Number(province?.i ?? province?.id);
     if (!provinceId || province?.removed || !targetProvinceIds.has(provinceId)) continue;
+    if (protectedProvinceIds.has(provinceId)) continue;
     const retainedProvincial = cities.find(city => city && !city.removed && Number(city.province) === provinceId && city.provincial);
     if (retainedProvincial) {
       synchronizeProvinceCapital(politics, pack, retainedProvincial);

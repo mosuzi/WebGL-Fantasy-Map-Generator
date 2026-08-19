@@ -581,7 +581,7 @@ Manifest 声明：
 12. `349-10a`：迁移 terrain / grid / height-derived / climate / ocean / topology 基础域。
 13. `349-10b`：迁移 society / politics 与 pack mirror。
 14. `349-10c`：迁移 settlements / zones / labels / measurements。
-15. `349-10d`：迁移 routes / rivers / features / resource markers。
+15. `349-10d`：迁移 routes / rivers / features / resource markers；首门固定复现并修复锁定 Feature 的港口引用在 `cities-routes` 后从 `382 → 366` 的引用丢失，不得把引用集合从锁保护中删除。
 16. `349-10e`：迁移 economy / diplomacy / military。
 17. `349-10f`：收口 generation / import / adoption / export / headless profile。
 18. `349-10g`：移除已证明冗余的 legacy adapter、重复 revision / history 路径和影子双写。

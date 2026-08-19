@@ -891,7 +891,7 @@ function nearestGridCell(grid, point) {
 }
 
 function stableSnapshot(value) {
-  return JSON.stringify(sortPlain(clone(value)));
+  return JSON.stringify(sortPlain(clone(value))) ?? "undefined";
 }
 
 function sortPlain(value) {

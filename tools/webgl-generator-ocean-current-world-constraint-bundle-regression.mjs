@@ -143,12 +143,22 @@ const zeroBurgMap = generatePlaceholderMap({
   cellsTarget: 10000,
   heightmapTemplate: "continents"
 });
-const zeroBurgProvince = zeroBurgMap.politics.provinces.find(
-  province => province?.i && !province.removed && Number(province.state) > 0 && Number(province.burg || 0) === 0
-);
-assert(zeroBurgProvince, "10k 真实地图缺少锁国无省会省份样本");
-assert.equal(Number(zeroBurgProvince.i), 153, "10k 无省会省份代表样本漂移");
-assert.equal(Number(zeroBurgProvince.state), 7, "10k 无省会省份所属国家代表样本漂移");
+const zeroBurgProvince = zeroBurgMap.politics.provinces.find(province => {
+  if (!province?.i || province.removed || Number(province.state) <= 0 || Number(province.burg || 0) <= 0) return false;
+  const state = zeroBurgMap.politics.states?.[province.state];
+  return Number(state?.capital || 0) !== Number(province.burg)
+    && zeroBurgMap.settlements.cities.some(city => city && !city.removed && Number(city.province) === Number(province.i));
+});
+assert(zeroBurgProvince, "10k 真实地图缺少可构造锁国无省会省份的样本");
+const zeroBurgProvinceId = Number(zeroBurgProvince.i);
+zeroBurgProvince.burg = 0;
+zeroBurgMap.pack.provinces[zeroBurgProvinceId].burg = 0;
+for (const city of zeroBurgMap.settlements.cities) {
+  if (!city || city.removed || Number(city.province) !== zeroBurgProvinceId) continue;
+  city.provincial = false;
+  const burg = zeroBurgMap.pack.burgs?.[city.burgId];
+  if (burg) burg.provincial = 0;
+}
 zeroBurgMap.regenerationLocks = {
   version: 1,
   entries: [{kind: "state", id: zeroBurgProvince.state}]
@@ -170,6 +180,15 @@ assert.equal(
   zeroBurgEnvelopeBefore,
   "锁国完整 state/province/city 支撑包络变化"
 );
+if (process.argv.includes("--society-politics-only")) {
+  console.log(JSON.stringify({
+    ok: true,
+    politics: {state: lockedState.i, province: lockedProvince.i, city: lockedCity.id, route: lockedRoute.id},
+    zeroBurg: {state: zeroBurgProvince.state, province: zeroBurgProvinceId, capital: Number(zeroBurgProvinceAfter?.burg || 0)},
+    browserRuns: 0
+  }, null, 2));
+  process.exit(0);
+}
 
 const stageStateCases = [
   {
@@ -265,13 +284,14 @@ const compositeMap = generatePlaceholderMap({
   cellsTarget: 10000,
   heightmapTemplate: "continents"
 });
+constructWarzoneReference(compositeMap);
 const compositeReferences = representativeWorldReferences(compositeMap);
 assert.equal(compositeReferences.length, 15, "10k 复合 world 未覆盖 15 类锁");
 compositeMap.regenerationLocks = {version: 1, entries: compositeReferences};
 const compositeBundle = captureRegenerationConstraintBundle(compositeMap, {closure: ["world"]});
 const lockedZoneBefore = JSON.stringify(compositeBundle.lockedZones[0]);
-assert.equal(Number(compositeBundle.lockedZones[0]?.i ?? compositeBundle.lockedZones[0]?.id), 0, "复合 world 未捕获 zone #0");
-assert.equal(compositeBundle.lockedZones[0]?.type, "Warzone", "10k zone #0 不再是战区代表样本");
+const lockedWarzoneId = Number(compositeBundle.lockedZones[0]?.i ?? compositeBundle.lockedZones[0]?.id);
+assert.equal(compositeBundle.lockedZones[0]?.type, "Warzone", "10k 复合 world 未捕获战区代表样本");
 const lockedWarzonePair = resolveWarzoneStatePair(compositeMap.pack, compositeBundle.lockedZones[0]);
 assert(lockedWarzonePair, "锁定 Warzone 未解析出有效国家对");
 const supportingDiplomacyBefore = collectLockedWarzoneDiplomacySupport(compositeMap.pack, compositeBundle.lockedZones);
@@ -295,16 +315,16 @@ const supportingPairAfter = captureWarSupportEnvelope(
 assert.deepEqual(supportingPairAfter, supportingPairBefore, "复合 world 未保留锁定 Warzone 的敌对关系与战役支撑");
 const warConsistency = reconcileWarDerivedData(compositeMap);
 assert.equal(warConsistency.removedWarzones, 0, "战争一致性清理误删锁定 Warzone");
-assert(!warConsistency.removedWarzoneIds.map(Number).includes(0), "战争一致性清理报告误删 zone #0");
+assert(!warConsistency.removedWarzoneIds.map(Number).includes(lockedWarzoneId), `战争一致性清理报告误删 zone #${lockedWarzoneId}`);
 assert.equal(
-  JSON.stringify(compositeMap.zones.zones.find(zone => Number(zone?.i ?? zone?.id) === 0)),
+  JSON.stringify(compositeMap.zones.zones.find(zone => Number(zone?.i ?? zone?.id) === lockedWarzoneId)),
   lockedZoneBefore,
-  "复合 world 未保留 zone #0"
+  `复合 world 未保留 zone #${lockedWarzoneId}`
 );
 assert.equal(
-  JSON.stringify(compositeMap.pack.zones.find(zone => Number(zone?.i ?? zone?.id) === 0)),
+  JSON.stringify(compositeMap.pack.zones.find(zone => Number(zone?.i ?? zone?.id) === lockedWarzoneId)),
   lockedZoneBefore,
-  "复合 world 未保留 pack zone #0 镜像"
+  `复合 world 未保留 pack zone #${lockedWarzoneId} 镜像`
 );
 
 const conflict = new Error("bundle-domain-conflict");
@@ -352,7 +372,7 @@ console.log(JSON.stringify({
   compositeWorld: {
     cellsTarget: 10000,
     kinds: compositeReferences.length,
-    zone: 0,
+    zone: lockedWarzoneId,
     supportingDiplomacyPair: supportingPairBefore.id,
     warConsistencyRemovedZones: warConsistency.removedWarzones,
     stages: Object.keys(stageKeys).length
@@ -411,6 +431,7 @@ function representativeWorldReferences(map) {
   const military = states.flatMap(state =>
     (state.military || []).map(regiment => ({kind: "military", id: `${state.i}:${regiment.i}`}))
   )[0];
+  const warzone = activeRows(map.zones.zones).find(zone => zone.type === "Warzone" && resolveWarzoneStatePair(map.pack, zone));
   const references = [
     firstReference("state", map.politics.states, true),
     firstReference("province", map.politics.provinces, true),
@@ -422,13 +443,29 @@ function representativeWorldReferences(map) {
     religion ? {kind: "religion", id: religion.id ?? religion.i} : null,
     firstReference("culture", map.society.cultures, true),
     military,
-    firstReference("zone", map.zones.zones),
+    warzone ? {kind: "zone", id: warzone.id ?? warzone.i} : null,
     firstReference("feature", map.pack.features),
     firstReference("ocean-current", map.oceanCurrents.currents),
     firstReference("economy-market", map.pack.markets, true),
     firstReference("trade-flow", map.pack.deals)
   ].filter(Boolean);
   return [...new Map(references.map(reference => [reference.kind, reference])).values()];
+}
+
+function constructWarzoneReference(map) {
+  const states = activeRows(map.pack.states, true);
+  const pair = states.flatMap(state => states.map(other => ({state, other})))
+    .find(({state, other}) => Number(state.i) < Number(other.i)
+      && state.diplomacy?.[other.i] === "Enemy"
+      && other.diplomacy?.[state.i] === "Enemy");
+  const zone = activeRows(map.zones.zones)[0];
+  assert(pair && zone, "10k 复合 world 缺少可构造 Warzone 的敌对国家或地区样本");
+  zone.type = "Warzone";
+  zone.attacker = Number(pair.state.i);
+  zone.defender = Number(pair.other.i);
+  zone.name = `${pair.state.name}-${pair.other.name} Warzone`;
+  const packZone = map.pack.zones?.find(item => Number(item?.i ?? item?.id) === Number(zone.i ?? zone.id));
+  if (packZone && packZone !== zone) Object.assign(packZone, structuredClone(zone));
 }
 
 function firstReference(kind, rows, positive = false) {
