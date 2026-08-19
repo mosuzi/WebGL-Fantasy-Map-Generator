@@ -36,4 +36,5 @@
 - `regress:core-manifests`：三域 `45` descriptor、`31` 类负例；新增 dependency descriptor 缺字段、undeclared invalidation read 与未注册 verifier 拒绝。
 - `regress:core-facade`：projection retry / resync 成功、普通失败与空错误失败均回到 degraded，非法恢复模式不占用锁，最终可恢复 ready；失败时 revision / history 不变。
 - `regress:notes-core`：`13` 次 commit / revision，notes local plan 仍为 persistence / UI，旧数据与 post-commit UI degraded 行为保持。
-- `typecheck:core`、markers core、population core protocol 与 production build `1375 modules` 通过；评审指出的两项 P1 均已用窄回归闭合，浏览器执行为 `0`。
+- `regress:markers-resource-economy-core`：真实从零生成资源点，核对 `pack` 资源 cell、`economy` marker 资源供给 / 交易 / demand，组合 dependency regression 核对 `economy-demand / object-index` 失效计划，并在 resource-economy 阶段注入故障验证 markers / pack / politics / economy 原子恢复。
+- `typecheck:core`、markers core、population core protocol 与 production build `1375 modules` 通过；两轮评审指出的三项 P1 均已用窄回归闭合，浏览器执行为 `0`。

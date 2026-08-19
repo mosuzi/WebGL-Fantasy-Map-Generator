@@ -27,8 +27,8 @@
 | 349-6 | notes command / history / query / persistence / API 垂直切片 | 新增、编辑、删除、undo / redo、旧数据、save 回归 | 不伪造 Worker / regeneration / layer | ACCEPT |
 | 349-7 | markers presentation / layer / picking 垂直切片 | identity、draw、pick、export 的 Node / source 契约 | 不执行真实视觉浏览器门 | ACCEPT |
 | 349-8 | 一个真实 Worker task 的统一 binding / result / patch 切片 | checksum、stale、cancel、gap、restart 的专项回归 | 不批量迁移 Worker | ACCEPT |
-| 349-9 | dependency registry、projection 状态和局部失效接线 | declared read/write、full rebuild 显式化、projection recovery | 不迁移未登记领域 | CHECKPOINT 待评审 |
-| 349-10a | terrain / grid / height-derived / climate / ocean / topology 基础域 | 旧数据、history、Worker、renderer source / Node 门 | 不迁移社会或行政域 | 待执行 |
+| 349-9 | dependency registry、projection 状态和局部失效接线 | declared read/write、full rebuild 显式化、projection recovery | 不迁移未登记领域 | ACCEPT |
+| 349-10a | terrain / grid / height-derived / climate / ocean / topology 基础域 | 旧数据、history、Worker、renderer source / Node 门 | 不迁移社会或行政域 | 执行中 |
 | 349-10b | society / politics 与 pack mirror | mirror、行政引用、history、Worker 专项 | 不迁移城镇 / 路线 | 待执行 |
 | 349-10c | settlements / zones / labels / measurements | 身份槽、锁、旧数据、history、projection 专项 | 不迁移路线 / 经济 | 待执行 |
 | 349-10d | routes / rivers / features / resource markers | topology、引用、picking、Worker、history 专项 | 不迁移经济 / 军事 | 待执行 |
@@ -52,14 +52,14 @@ planned → computed → validated → projections-prepared
 
 | 字段 | 内容 |
 | --- | --- |
-| 当前阶段 | `349-9` dependency registry、projection 状态与局部失效接线，首轮评审 P1 已修正，等待 blocker-only 复审 |
-| 冻结点 | `349-8@4411e86` / `0.5.22` 已接受；349-9 修正候选版本 `0.5.24` |
-| 允许文件 | core dependency contract / registry / planner、coordinator 的最小 projection recovery 接线、三份已登记 Manifest、专项 Node、阶段文档 |
-| 禁止文件 | 未登记领域迁移、业务算法、renderer / Worker 大改、`source/`、main、浏览器 |
-| 必须保持 | dependency 只解释声明的 reads / writes；未知依赖显式 full rebuild；presentation-only 不污染 canonical revision；projection 失败不回滚已发布 history |
-| 首个廉价门 | 盘点三份 Manifest derivedSystems 与既有 effects / invalidation 字符串，冻结唯一 ID 和 full rebuild fallback |
-| 冻结门 | dependency plan 的 exact / local / presentation / explicit-full 分类、未声明读写拒绝、projection degraded → retry / resync、typecheck、Manifest、facade、production build、评审 ACCEPT |
-| 停止条件 | 必须迁移第四个领域才能证明 registry，或局部化需要改变业务算法 / 用户语义 |
+| 当前阶段 | `349-10a` terrain / grid / height-derived / climate / ocean / topology 基础域 |
+| 冻结点 | `349-9@7bc5e27` / `0.5.25` 已由同一评审智能体接受 |
+| 允许文件 | 基础域 Manifest / adapter、四个既有基础 Worker task 的统一契约接线、dependency / renderer source 审计、专项 Node、阶段文档 |
+| 禁止文件 | society / politics / settlements / routes / economy / military 迁移、业务算法改写、`source/`、main、浏览器 |
+| 必须保持 | 单一 canonical owner；旧 Worker task 计算与 patch 语义不变；topology revision 与 renderer source 同一 binding；未知依赖显式 full rebuild；旧档缺字段有保守默认 |
+| 首个廉价门 | 盘点四个基础 Worker task、现有 write set / result kind / binding / renderer source 和对应非浏览器回归，冻结 Manifest 能力与 adapter 边界 |
+| 冻结门 | 基础域 Manifest、旧数据 / history、四 Worker binding / result / patch、dependency、renderer source、failure rollback、typecheck、build、评审 ACCEPT |
+| 停止条件 | 证明某基础 task 必须先迁移社会 / 行政域，或现有 task 无法在不改业务算法下提供来源 / 写集证据 |
 
 ## 阶段结果
 
@@ -174,15 +174,17 @@ planned → computed → validated → projections-prepared
 - 终验：同一只读评审智能体最后一次 blocker-only 复审 `ACCEPT`；真实读取集、旧数据 goods fallback、binding / result / patch 与 coordinator owner 无 P0 / P1 偏差。
 - 下一步：`349-9` 只接 dependency registry、projection 状态与局部失效，不迁移未登记领域。
 
-### 349-9 — 首轮评审 P1 已修正，待 blocker-only 复审
+### 349-9 — ACCEPT
 
 - 完成：Manifest derived system 补齐 `invalidatedBy / scope / rebuild / reuseAcrossPresentation / verify`；新增冻结 descriptor snapshot 的 dependency registry / planner，沿 reads / writes 传播下游失效。
 - 分类：notes 带 affected object 为 `local`；无派生消费者的已知写入为 `exact`；theme / visibility 为 `presentation-only` 且只触发 renderer / UI；宽依赖、未知写、缺 affected scope 或缺 projection target 显式为 `full-rebuild` 并记录原因。
 - 接线：active notes runtime 的 projection 与 invalidated IDs 改由 planner 提供；commit `rebuilt` 不提前记录尚未完成的 UI projection。markers / population 只进入统一规划测试，未扩大 active 路由。
 - 恢复：coordinator 新增 degraded → retrying / resyncing → ready 的受控执行；失败带原因回到 degraded，已发布 revision / history 不回滚。首轮评审发现非法 runtime mode 可在清理边界外占锁、空错误消息可能滞留中间态，现已将模式校验与首转换纳入清理边界，并保证失败原因非空。
 - verifier：首轮评审发现 derived system 的 `verify` 只是未解析名称，现强制它属于本领域 `regression.gates`，而所有 gate 继续由 package script 注册门校验，notes / markers / population 均绑定真实专项门。
-- 门禁：修正后 core dependencies、Manifest `31` 类负例、facade recovery、notes core `13` commit / revision、markers core、population core protocol、typecheck 与 production build `1375 modules` 通过。
-- 版本：初始 checkpoint `0.5.22 → 0.5.23`，评审修正 `0.5.23 → 0.5.24`；`source/` 与浏览器执行均为 `0`。
-- 下一步：提交修正后交同一只读评审智能体做 blocker-only 复审；未获 `ACCEPT` 不进入 `349-10a`。
+- 资源 verifier：第二轮评审发现 markers resource-economy 误指向只覆盖普通 marker 的 auxiliary 门。现新增组合专项：真实资源点生成必须写入 `pack` resource cell、`economy` 资源供给 / 交易 / demand，dependency plan 必须包含 `economy-demand / object-index`，中途故障必须原子恢复四域。
+- 门禁：修正后 markers resource economy core、core dependencies、Manifest `31` 类负例、facade recovery、notes core `13` commit / revision、markers core、population core protocol、typecheck 与 production build `1375 modules` 通过。
+- 版本：初始 checkpoint `0.5.22 → 0.5.23`，首轮评审修正 `0.5.23 → 0.5.24`，第二轮评审修正 `0.5.24 → 0.5.25`；`source/` 与浏览器执行均为 `0`。
+- 终验：同一只读评审智能体最后一次 blocker-only 复审 `ACCEPT`，三项 P1 均闭合且无新增 P0 / P1。
+- 下一步：`349-10a` 只迁移 terrain / grid / height-derived / climate / ocean / topology 基础域，不迁移社会或行政域。
 
 阶段结果在每次 checkpoint 后更新，长日志只记录命令和 artifact 路径，不粘贴到本文。

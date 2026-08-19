@@ -10,7 +10,7 @@ export const markersManifest = {
   canonicalSections: ["markers", "notes", "pack", "economy"],
   derivedSystems: [
     {id: "markers.point-layer", reads: ["markers"], writes: [], invalidatedBy: ["markers"], invalidates: ["point-layers", "picking"], scope: "affected-objects", rebuild: "gpu-patch", reuseAcrossPresentation: true, verify: "regress:markers-core"},
-    {id: "markers.resource-economy", reads: ["markers", "pack", "economy"], writes: ["pack", "economy"], invalidatedBy: ["markers", "pack", "economy"], invalidates: ["economy-demand", "object-index"], scope: "full-map", rebuild: "main-thread", reuseAcrossPresentation: true, verify: "regress:auxiliary-object-creation"}
+    {id: "markers.resource-economy", reads: ["markers", "pack", "economy"], writes: ["pack", "economy"], invalidatedBy: ["markers", "pack", "economy"], invalidates: ["economy-demand", "object-index"], scope: "full-map", rebuild: "main-thread", reuseAcrossPresentation: true, verify: "regress:markers-resource-economy-core"}
   ],
   commands: markerCommands.map(id => ({id, writeSet: id === "markers.setNote" ? ["notes"] : id === "markers.setVisual" ? ["markers"] : id === "markers.delete" ? ["markers", "notes", "pack", "economy"] : ["markers", "pack", "economy"], undoPolicy: "required", profiles: ["interactive"]})),
   regeneration: {id: "markers.regenerateResources", writeSet: ["markers", "pack", "economy"], sourceRevision: "required", binding: "required", lockPolicy: "regeneration-lock-protection", replacementPolicy: "mixed"},
@@ -27,7 +27,7 @@ export const markersManifest = {
     {id: "markers.regenerationApi", method: "generate.regenerate", target: "markers.regenerateResources", schemaVersion: API_SCHEMA_VERSION, capability: "regeneration", capabilityGroup: "map.generate", mutates: "map-derived-data", undoable: true, requiresConfirm: true, errorCodes: DEFAULT_API_BUSINESS_CODES, documentation: API_DOCUMENTATION}
   ]},
   locks: {kinds: ["marker", "feature", "economy-market", "trade-flow"], policy: "regeneration-lock-protection"},
-  regression: {gates: ["regress:markers-core", "regress:auxiliary-object-creation", "regress:object-details-edit", "regress:api-data-compatibility"], coverage: ["save", "undo", "regeneration", "view", "layer", "failure"]},
+  regression: {gates: ["regress:markers-core", "regress:markers-resource-economy-core", "regress:auxiliary-object-creation", "regress:object-details-edit", "regress:api-data-compatibility"], coverage: ["save", "undo", "regeneration", "view", "layer", "failure"]},
   capabilities: {worker: "not-required", regeneration: "optional", view: "optional", renderLayer: "required"},
   capabilityReasons: {worker: "marker CRUD 当前由同步 command 提交；资源重生成继续沿用既有外层 Worker 编排"}
 } as const satisfies DomainModuleManifest;
