@@ -198,6 +198,11 @@ function validateFeatureObjectMirrors(values: Map<string, unknown>, sourceMap: U
     if (burg.removed) continue;
     if (!claimedBurgs.has(burgId) || !cities[Number(burg.cityId)]) throw protocolError("feature-burg-city-mirror-invalid", `burg #${burgId} 没有唯一 city 镜像`);
   }
+  const sourceSettlements = record(sourceMap.settlements, "geography.sourceMap.settlements");
+  const sourcePackDocument = record(sourceMap.pack, "geography.sourceMap.pack");
+  assertDeepEqual(cityIdentityRecords(cities), cityIdentityRecords(array(sourceSettlements.cities, "geography.sourceMap.settlements.cities")), "feature-settlement-identity-drift", "Feature Worker 改写了 city 身份或 cell");
+  assertDeepEqual(burgIdentityRecords(burgs), burgIdentityRecords(array(sourcePackDocument.burgs, "geography.sourceMap.pack.burgs")), "feature-settlement-identity-drift", "Feature Worker 改写了 burg 身份或 cell");
+  validateFeatureMarkerIdentity(markers, sourceMap, gridCount, packCount);
   const output = outputFeatureCollections(values);
   for (const [collection, object] of featureReferenceObjects(output)) {
     for (const [field, rawId] of [["feature", object.feature], ["port", object.port], ["data.feature", (object.data as UnknownRecord | undefined)?.feature]] as const) {
@@ -208,6 +213,51 @@ function validateFeatureObjectMirrors(values: Map<string, unknown>, sourceMap: U
       }
     }
   }
+}
+
+function cityIdentityRecords(values: unknown[]): unknown[] {
+  const result: unknown[] = [];
+  for (let index = 0; index < values.length; index++) {
+    const value = values[index];
+    if (!isPlainRecord(value) || value.removed) continue;
+    result.push({index, id: value.id, burgId: value.burgId, cell: value.cell, packCell: value.packCell});
+  }
+  return result;
+}
+
+function burgIdentityRecords(values: unknown[]): unknown[] {
+  const result: unknown[] = [];
+  for (let index = 0; index < values.length; index++) {
+    const value = values[index];
+    if (!isPlainRecord(value) || value.removed) continue;
+    result.push({index, i: value.i, id: value.id, cityId: value.cityId, cell: value.cell});
+  }
+  return result;
+}
+
+function validateFeatureMarkerIdentity(markers: unknown[], sourceMap: UnknownRecord, gridCount: number, packCount: number): void {
+  const ids = new Set<string>();
+  const identities: unknown[] = [];
+  for (let index = 0; index < markers.length; index++) {
+    const value = markers[index];
+    if (!value) continue;
+    const marker = record(value, `geography.feature-marker.${index}`);
+    if (marker.removed) continue;
+    const id = String(marker.id ?? marker.i ?? "");
+    const cell = Number(marker.cell);
+    const packCell = Number(marker.packCell);
+    if (!id || ids.has(id) || !Number.isSafeInteger(cell) || cell < 0 || cell >= gridCount || !Number.isSafeInteger(packCell) || packCell < 0 || packCell >= packCount) {
+      throw protocolError("feature-marker-identity-invalid", `marker #${id || index} 身份重复或 cell 越界`);
+    }
+    ids.add(id);
+    identities.push({index, id, cell, packCell});
+  }
+  const sourceMarkersDocument = record(sourceMap.markers, "geography.sourceMap.markers");
+  const sourceMarkers = array(sourceMarkersDocument.markers, "geography.sourceMap.markers.markers");
+  const sourceIdentities = sourceMarkers.flatMap((value, index) => isPlainRecord(value) && !value.removed
+    ? [{index, id: String(value.id ?? value.i ?? ""), cell: Number(value.cell), packCell: Number(value.packCell)}]
+    : []);
+  assertDeepEqual(identities, sourceIdentities, "feature-marker-identity-drift", "Feature Worker 改写了 marker 身份或 cell");
 }
 
 function validateRouteDomain(values: Map<string, unknown>, sourceMap: unknown): void {
@@ -300,17 +350,33 @@ function validateRiverMirrors(values: Map<string, unknown>, sourceMapValue: unkn
   }
   const cellRivers = indexedValues(values.get("pack.cells.r"), "geography.patch.pack.cells.r");
   const riverCells = new Map<number, Set<number>>();
+  const riverCellSequences = new Map<number, number[]>();
   for (const value of rivers) {
     if (!value) continue;
     const river = record(value, "geography.river.mirror");
     if (river.removed) continue;
-    riverCells.set(Number(river.i ?? river.id), new Set(array(river.cells, "geography.river.mirror.cells").map(Number).filter(cell => cell >= 0)));
+    const id = Number(river.i ?? river.id);
+    const cells = array(river.cells, "geography.river.mirror.cells").map(Number);
+    riverCells.set(id, new Set(cells.filter(cell => cell >= 0)));
+    riverCellSequences.set(id, cells);
   }
   const claimed = new Set<number>();
   for (let cell = 0; cell < cellRivers.length; cell++) {
     const id = Number(cellRivers[cell]);
     if (id && (!ids.has(id) || !riverCells.get(id)?.has(cell))) throw protocolError("river-cell-reference-invalid", `pack cell #${cell} 指向不包含该 cell 的 river #${id}`);
     if (id) claimed.add(id);
+  }
+  const heights = indexedValues(sourcePackCells.h, "geography.sourceMap.pack.cells.h");
+  for (const [id, cells] of riverCellSequences) for (let index = 0; index < cells.length; index++) {
+    const cell = cells[index];
+    if (cell < 0) continue;
+    const owner = Number(cellRivers[cell]);
+    if (owner === id) continue;
+    if (Number(heights[cell]) < 20 && owner === 0) continue;
+    if (owner > 0 && parents.get(owner) === id) continue;
+    const parent = parents.get(id) || 0;
+    if (index === cells.length - 1 && parent > 0 && (owner === parent || owner > 0 && parents.get(owner) === parent)) continue;
+    throw protocolError("river-cell-mirror-invalid", `river #${id} 的 cell #${cell} 缺少合法 pack.cells.r 归属`);
   }
   for (const id of ids) if (!claimed.has(id)) throw protocolError("river-cell-mirror-invalid", `river #${id} 没有 pack.cells.r 反向归属`);
 }

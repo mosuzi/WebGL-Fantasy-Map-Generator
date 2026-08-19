@@ -254,5 +254,7 @@ planned → computed → validated → projections-prepared
 - 版本：`0.5.35 → 0.5.36`；专题记录 `docs/task-notes/task-349-features-networks-resources-core-slice.md`。下一步冻结 checkpoint，交同一只读评审智能体审查；仅 `ACCEPT` 后进入 `349-10e`。
 - 首轮评审：`9228dbd / 0.5.36` 为 `BLOCK`。P1 为 route-path Manifest 宽写集与真实 history roots 漂移、Feature 普通 route / city / marker 镜像及引用未闭合、route cell links 未消费、river path 邻接与 cell mirror 未闭合、岸上湖泊出口兼容会误接受入湖方向。
 - blocker-only 修正：route-path 改为两类真实 history roots 的 `21` 路径精确并集并由 Manifest 门静态对照；Feature 复用完整 route mirror，新增 city↔burg、marker↔pack 与全部普通直接 Feature 引用验证；routes 从 route.packCells 重建并核对 `pack.cells.routes`；rivers 校验相邻序列、末尾哨兵、正向 cell ref 与每条河流反向归属；岸上 outlet 必须不再进入该湖且匹配已有 overflow spill cell。专项拒绝集由 `16` 增至 `21` 类，既有 route-path 10k / 100k、路线 / 河流 / Feature / 完整约束门通过，版本 `0.5.36 → 0.5.37`，待同一评审智能体复审。
+- 第二轮复审：`9e54ef2 / 0.5.37` 继续 `BLOCK` 两项 P1。Feature Worker 未把 city / burg / marker 身份位置与 source before-image 绑定；river mirror 只要求每条河至少一个 claim，部分清空仍可通过。
+- 第二轮最窄修正：Feature 输出的活动 city / burg 身份与 grid / pack cell 列表必须和 sourceMap 完全一致，marker 另校验唯一 ID、grid / pack cell 边界及 source identity；river 每个非终端陆格必须由自身或合法汇入子河占有，水域尾段允许零 owner，末端父河 / 同父汇流显式例外，保留每河至少一个 claim。专项新增 city move、marker 越界、部分 river owner 清空反例并增加 3 个 10k 河网 owner 正例，拒绝集增至 `23` 类；版本 `0.5.37 → 0.5.38`，待同一评审智能体复审。
 
 阶段结果在每次 checkpoint 后更新，长日志只记录命令和 artifact 路径，不粘贴到本文。
