@@ -403,7 +403,8 @@ export function createSetMilitaryRatiosCommand(stateId, ratios, {label = "调整
         state.militaryPolicy = {...(state.militaryPolicy || {}), unitRatios: normalizedRatios};
         context.map.military = buildMilitary(context.map.pack, {
           ...context.map.options,
-          lockedMilitaryRegiments: lockedSnapshots
+          lockedMilitaryRegiments: lockedSnapshots,
+          lockedStates: (context.map.pack.states || []).filter(candidate => candidate?.i && Number(candidate.i) !== normalizedStateId).map(candidate => ({i: Number(candidate.i)}))
         });
         syncMilitary(context.map);
         const currentLocked = prepareLockedMilitaryRegiments(context.map.pack, {lockedMilitaryRegiments: lockedSnapshots});

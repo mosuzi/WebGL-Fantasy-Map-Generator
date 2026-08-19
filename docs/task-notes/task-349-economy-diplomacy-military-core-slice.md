@@ -14,8 +14,8 @@
 
 ## 验收证据
 
-- 新协议覆盖 4 个 Worker result owner，写集为 economy `14` 个根、diplomacy `17`、military `12`、military-policy `4` 个根；拒绝 stale binding、partial write set、path escape、DataView、三域 mirror / relation / reference、军事事件归档与 sequence 等 `12` 类反例。
-- economy 与 military-policy 的 10k / 100k Worker 专项通过；100k 分别约 `2587.5ms / 6563 patch paths` 与 `1214.8ms / 7 changed paths`，输入 buffer 保持完整。
+- 新协议覆盖 4 个 Worker result owner，写集为 economy `14` 个根、diplomacy `17`、military `12`、military-policy `4` 个根；首轮评审修正后拒绝 stale binding、必需根删除、path escape、DataView、经济 identity / reference / 未声明字段、外交 Warzone cell / state、军事事件 before-image / generation、military-policy 跨国家等 `23` 类反例。
+- economy 与 military-policy 的 10k / 100k Worker 专项通过；100k 分别约 `2680.3ms / 6563 patch paths` 与 `1281.8ms / 5 changed paths`，输入 buffer 保持完整。军事比例调整明确冻结非目标国家，正式 patch 仅含请求国家的四类字段与全局军事镜像。
 - diplomacy rules、diplomacy lock `210` 对全锁无操作、military regeneration / lock、warzone consistency、economy display / trade、core Manifest / dependency、`typecheck:core` 与 production build `1391 modules` 通过。
 - 战线渲染旧夹具使用的种子已不再生成战争；改用仍确定生成两条极近战线的固定种子后，既有 synthetic / real-sample 断言通过，产品逻辑未改。
 - `git diff --check` 通过；浏览器执行 `0`，`source/` 改动 `0`。
@@ -24,4 +24,4 @@
 
 军事事件归档缺失、外交锁对 `Invasion` 的误判和战线固定样本漂移都直接阻断本阶段已声明的历史、跨域引用或专项门，因此在 349-10e 内作最窄修正，不另立产品阶段。它们不改变后续依赖，未完成顺序仍为 `349-10f → 349-10g → 349-11`。
 
-本 checkpoint 为 `0.5.41`，待同一只读评审智能体给出 `ACCEPT / BLOCK`；通过前不得进入 349-10f。
+`0.5.41` 首轮评审为 `BLOCK`，确认五项 P1：精确写集可伪造删除、economy identity / reference 未闭合、military-policy 可跨请求国家写入、外交 Warzone 引用未校验、军事归档未绑定 before-image 和 generation。`0.5.42` 逐项闭合并新增复现，待同一只读评审智能体 blocker-only 复审；通过前不得进入 349-10f。

@@ -71,10 +71,10 @@ export function syncMilitaryStateMirrors(map) {
   for (const state of politicsStates) {
     const source = packById.get(Number(state?.i));
     if (!state || !source || state === source) continue;
-    state.military = source.military;
-    state.militaryPolicy = source.militaryPolicy;
-    state.militaryDiagnostics = source.militaryDiagnostics;
-    state.alert = source.alert;
+    for (const field of ["military", "militaryPolicy", "militaryDiagnostics", "alert"]) {
+      if (Object.prototype.hasOwnProperty.call(source, field)) state[field] = source[field];
+      else delete state[field];
+    }
     synced += 1;
   }
   return synced;

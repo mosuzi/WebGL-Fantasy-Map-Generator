@@ -245,7 +245,7 @@ export function validateSettlementRouteMirrors(routes: unknown[], packRoutes: un
   }
 }
 
-function validateZoneMirrors(values: Map<string, unknown>, sourceMapValue: unknown): void {
+export function validateZoneMirrors(values: Map<string, unknown>, sourceMapValue: unknown): void {
   const zones = record(values.get("zones"), "settlement-zone.patch.zones");
   const rows = denseArray(zones.zones, "settlement-zone.patch.zones.zones");
   const packRows = denseArray(values.get("pack.zones"), "settlement-zone.patch.pack.zones");

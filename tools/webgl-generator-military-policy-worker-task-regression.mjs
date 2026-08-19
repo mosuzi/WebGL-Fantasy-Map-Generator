@@ -59,7 +59,7 @@ async function verifyTenThousandCells() {
   const history = new EditHistory();
   const patchCommand = createDomainPatchCommand({
     patch: output.patch,
-    policy: getMilitaryPolicyWorkerPatchPolicy(target, output.patch),
+    policy: getMilitaryPolicyWorkerPatchPolicy(target, output.patch, request.stateId),
     label: "应用 Worker 军事策略"
   });
   history.execute(patchCommand, {map: target});

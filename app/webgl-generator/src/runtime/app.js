@@ -11189,11 +11189,11 @@ async function applyMilitaryPolicyMutationViaWorker(state, documentRef, {request
         error.code = "military-policy-worker-result-invalid";
         throw error;
       }
-      validateEconomyDiplomacyMilitaryWorkerOutput({kind: "military-policy", sourceMap, binding, output, policy: getMilitaryPolicyWorkerPatchPolicy(sourceMap, output.patch)});
+      validateEconomyDiplomacyMilitaryWorkerOutput({kind: "military-policy", sourceMap, binding, output, policy: getMilitaryPolicyWorkerPatchPolicy(sourceMap, output.patch, request.stateId), expectation: {stateId: request.stateId}});
     },
     createCommand: ({output, result, effects}) => attachMilitaryPolicyWorkerHistory(createDomainPatchCommand({
       patch: output.patch,
-      policy: getMilitaryPolicyWorkerPatchPolicy(state.map, output.patch),
+      policy: getMilitaryPolicyWorkerPatchPolicy(state.map, output.patch, request.stateId),
       label: command.label,
       historyDomain: "military-policy",
       effects,

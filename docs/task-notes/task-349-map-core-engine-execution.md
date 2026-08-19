@@ -53,7 +53,7 @@ planned → computed → validated → projections-prepared
 
 | 字段 | 内容 |
 | --- | --- |
-| 当前阶段 | `349-10e` economy / diplomacy / military checkpoint 待评审 |
+| 当前阶段 | `349-10e` economy / diplomacy / military blocker-only 修正待复审 |
 | 冻结点 | `349-10d / 0.5.39` 已由同一评审智能体接受 |
 | 允许文件 | 三域 Manifest / Worker pre-commit validator、军事事件归档、外交锁真实战争区域判定、专项与阶段文档 |
 | 禁止文件 | generation / import / adoption / export / headless 收口、legacy 删除、`source/`、main、浏览器 |
@@ -264,8 +264,9 @@ planned → computed → validated → projections-prepared
 
 - 冻结目标：为 economy / diplomacy / military 建立真实 Manifest、依赖描述与既有 Worker 结果 pre-commit 契约，覆盖三域跨国家 / 城市 / 路线引用、history 与旧数据；不收口 generation / import / adoption / export / headless profile。
 - 首个廉价门：盘点三域真实 command、regeneration result kind、canonical / mirror 写集和现有 Node 专项；任何未登记共享 result owner 或必须先改 adoption 的发现均先登记并重排。
-- checkpoint：三域 Manifest、`economy / diplomacy / military / military-policy` 四个 result owner 与正式 pre-commit validator 已接线，registry 为 `15 domains / 216 descriptors`、dependency 为 `15 domains / 19 systems`。协议拒绝 `12` 类 binding / 写集 / 镜像 / 引用 / 事件负例；10k / 100k Worker、三域规则 / 锁 / 显示与构建门通过。
+- checkpoint：三域 Manifest、`economy / diplomacy / military / military-policy` 四个 result owner 与正式 pre-commit validator 已接线，registry 为 `15 domains / 216 descriptors`、dependency 为 `15 domains / 19 systems`。首轮协议拒绝 `12` 类 binding / 写集 / 镜像 / 引用 / 事件负例；10k / 100k Worker、三域规则 / 锁 / 显示与构建门通过。
 - 必需维护：恢复军事主动重生成的旧战报归档与 sequence，外交锁仅将 `Warzone` 视为战争派生，并更新已不再生成战线的固定样本种子。三项均直接阻断本阶段门，不扩大产品能力；未完成顺序复评仍为 `349-10f → 349-10g → 349-11`。
-- 版本：`0.5.40 → 0.5.41`；专题记录 `docs/task-notes/task-349-economy-diplomacy-military-core-slice.md`。当前冻结 checkpoint 待同一只读评审智能体审查，仅 `ACCEPT` 后进入 349-10f。
+- 首轮评审：`90f13ff / 0.5.41` 为 `BLOCK`。五项 P1 分别为精确写集任意删除、经济 identity / reference 缺口、military-policy 跨请求国家写入、外交 Warzone 引用缺口和军事事件归档 before-image / generation 缺口。
+- blocker-only 修正：完整重生成除真实可选 `metadata.derivedStale` 外均要求 `exists:true`；经济限制动态字段并校验 good / market / deal 槽与 market / cell / burg / state / deal 端点；外交复用正式 zone 身份 / cell 门并核对 Warzone 敌对国家对；军事事件逐项核对原内容、顺序与归档代次。军事比例命令冻结全部非目标国家，policy / validator 同时绑定请求 `stateId`，patch 从跨多个国家收敛为目标国家与必要军事镜像。协议负例增至 `23` 类，版本 `0.5.41 → 0.5.42`，待同一智能体复审；未完成顺序仍为 `349-10f → 349-10g → 349-11`。
 
 阶段结果在每次 checkpoint 后更新，长日志只记录命令和 artifact 路径，不粘贴到本文。

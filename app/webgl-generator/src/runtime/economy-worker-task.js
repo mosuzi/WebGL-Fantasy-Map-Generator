@@ -40,6 +40,18 @@ const ECONOMY_INDEXED_ROOTS = new Set([
   "economy.markets"
 ]);
 const ECONOMY_FIXED_PATCH_PATHS = new Set(["pack.deals", "economy.deals", "economy.metadata"]);
+const ECONOMY_OBJECT_FIELDS = new Set(["salesTax", "pollTax", "treasury", "resourcePower", "economicPower", "governmentEconomicModifier", "governmentTradeModifier", "populationPower", "territoryPower", "settlementPower", "powerScore", "militarySupply"]);
+const CITY_ECONOMY_FIELDS = new Set(["market", "production", "product", "treasury"]);
+const BURG_ECONOMY_FIELDS = new Set([...CITY_ECONOMY_FIELDS, "plaza"]);
+const GOOD_MUTABLE_FIELDS = new Set(["name", "visible", "color", "icon", "label", "value", "distribution", "biomeOutput", "demandCoverage"]);
+const MARKET_MUTABLE_FIELDS = new Set(["name", "color", "centerBurgId", "cell", "x", "y", "state", "goods", "resourceSupply", "resourceSupplySources", "demandSummary", "priceSummary"]);
+const ECONOMY_FIELDS_BY_ROOT = new Map([
+  ["pack.goods", GOOD_MUTABLE_FIELDS], ["economy.goods", GOOD_MUTABLE_FIELDS],
+  ["pack.markets", MARKET_MUTABLE_FIELDS], ["economy.markets", MARKET_MUTABLE_FIELDS],
+  ["pack.burgs", BURG_ECONOMY_FIELDS], ["settlements.cities", CITY_ECONOMY_FIELDS],
+  ["pack.states", ECONOMY_OBJECT_FIELDS], ["politics.states", ECONOMY_OBJECT_FIELDS],
+  ["pack.provinces", ECONOMY_OBJECT_FIELDS], ["politics.provinces", ECONOMY_OBJECT_FIELDS]
+]);
 
 export async function runEconomyWorkerTask(payload = {}, context = {}) {
   const map = payload.map;
@@ -353,7 +365,7 @@ function assertEconomyPatchPath(map, path) {
     return;
   }
   const match = /^(pack\.(?:goods|markets|burgs|states|provinces)|politics\.(?:states|provinces)|settlements\.cities|economy\.(?:goods|markets))\.(\d+)(?:\.([^.]+))?$/.exec(value);
-  if (!match || match[3] && !isSafePathPart(match[3])) {
+  if (!match || match[3] && (!isSafePathPart(match[3]) || !ECONOMY_FIELDS_BY_ROOT.get(match[1])?.has(match[3]))) {
     throw taskError("economy-worker-policy-path-invalid", `经济 Worker 补丁越过领域写集：${value}`);
   }
   assertIndexInRange(readPath(map, match[1].split(".")).value, Number(match[2]), value);

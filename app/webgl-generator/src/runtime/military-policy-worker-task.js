@@ -97,7 +97,7 @@ async function runMilitaryPolicyHistoryTransition(map, binding, payload, context
   const request = normalizeRequest(transition.request);
   const command = createDomainPatchCommand({
     patch: transition.patch,
-    policy: getMilitaryPolicyWorkerPatchPolicy(map, transition.patch),
+    policy: getMilitaryPolicyWorkerPatchPolicy(map, transition.patch, request.stateId),
     label: `军事策略${action === "undo" ? "撤销" : "重做"}`,
     historyDomain: "military-policy",
     effects: {},
@@ -133,11 +133,14 @@ function militaryPolicyRefresh() {
   };
 }
 
-export function getMilitaryPolicyWorkerPatchPolicy(map, patch) {
+export function getMilitaryPolicyWorkerPatchPolicy(map, patch, expectedStateId) {
   if (!patch || !Array.isArray(patch.writeSet)) {
     throw taskError("military-policy-worker-policy-patch-missing", "军事策略结果缺少待验证变更");
   }
-  for (const path of patch.writeSet) assertMilitaryPolicyPatchPath(map, path);
+  if (!Number.isSafeInteger(Number(expectedStateId)) || Number(expectedStateId) <= 0) {
+    throw taskError("military-policy-worker-policy-state-missing", "军事策略主线程策略缺少目标国家");
+  }
+  for (const path of patch.writeSet) assertMilitaryPolicyPatchPath(map, path, expectedStateId);
   return {
     domain: "military-policy",
     allowedPaths: [...patch.writeSet],
@@ -258,13 +261,16 @@ function lockedRegimentIds(map) {
     .filter(Boolean))].sort((left, right) => left.localeCompare(right, "en", {numeric: true}));
 }
 
-function assertMilitaryPolicyPatchPath(map, path) {
+function assertMilitaryPolicyPatchPath(map, path, expectedStateId) {
   const value = String(path || "");
   if (MILITARY_ROOTS.includes(value)) return;
   const match = /^(pack|politics)\.states\.(\d+)\.(alert|military|militaryPolicy|militaryDiagnostics)$/.exec(value);
   if (!match) throw taskError("military-policy-worker-policy-path-invalid", `军事策略结果越过允许范围：${value}`);
   const states = match[1] === "pack" ? map?.pack?.states : map?.politics?.states;
   const index = Number(match[2]);
+  if (Number.isSafeInteger(Number(expectedStateId)) && index !== Number(expectedStateId)) {
+    throw taskError("military-policy-worker-policy-state-invalid", `军事策略结果越过目标国家 #${expectedStateId}：${value}`);
+  }
   if (!Array.isArray(states) || index < 0 || index >= states.length || !states[index]) {
     throw taskError("military-policy-worker-policy-index-invalid", `军事策略结果索引越界：${value}`);
   }

@@ -4,6 +4,8 @@ import {validateOperationBinding} from "../../core/contracts/runtime-validators.
 import {ECONOMY_WORKER_WRITE_SET, economyManifest} from "./manifest.js";
 import {DIPLOMACY_WORKER_WRITE_SET, diplomacyManifest} from "../diplomacy/manifest.js";
 import {MILITARY_POLICY_WORKER_WRITE_SET, MILITARY_REGENERATION_WORKER_WRITE_SET, militaryManifest} from "../military/manifest.js";
+import {validateZoneMirrors} from "../settlements/worker-runtime.js";
+import {isActiveEnemyPair, resolveWarzoneStatePair} from "../../generator/war-consistency.js";
 
 type UnknownRecord = Record<string, unknown>;
 export type EconomyDiplomacyMilitaryWorkerKind = "economy" | "diplomacy" | "military" | "military-policy";
@@ -32,8 +34,21 @@ const writeSetByKind = Object.freeze({
 });
 const patchDomainByKind = Object.freeze({economy: "economy-mutation", diplomacy: "diplomacy", military: "military", "military-policy": "military-policy"});
 const dynamicKinds = new Set<EconomyDiplomacyMilitaryWorkerKind>(["economy", "military-policy"]);
+const optionalDeletePathsByKind = new Map<EconomyDiplomacyMilitaryWorkerKind, ReadonlySet<string>>([
+  ["diplomacy", new Set(["metadata.derivedStale"])]
+]);
 const economyObjectFields = ["salesTax", "pollTax", "treasury", "resourcePower", "economicPower", "governmentEconomicModifier", "governmentTradeModifier", "populationPower", "territoryPower", "settlementPower", "powerScore", "militarySupply"] as const;
 const cityEconomyFields = ["market", "production", "product", "treasury"] as const;
+const burgEconomyFields = [...cityEconomyFields, "plaza"] as const;
+const goodMutableFields = new Set(["name", "visible", "color", "icon", "label", "value", "distribution", "biomeOutput", "demandCoverage"]);
+const marketMutableFields = new Set(["name", "color", "centerBurgId", "cell", "x", "y", "state", "goods", "resourceSupply", "resourceSupplySources", "demandSummary", "priceSummary"]);
+const economyIndexedFields = new Map<string, ReadonlySet<string>>([
+  ["pack.goods", goodMutableFields], ["economy.goods", goodMutableFields],
+  ["pack.markets", marketMutableFields], ["economy.markets", marketMutableFields],
+  ["pack.burgs", new Set(burgEconomyFields)], ["settlements.cities", new Set(cityEconomyFields)],
+  ["pack.states", new Set(economyObjectFields)], ["politics.states", new Set(economyObjectFields)],
+  ["pack.provinces", new Set(economyObjectFields)], ["politics.provinces", new Set(economyObjectFields)]
+]);
 
 export function validateEconomyDiplomacyMilitaryWorkerOutput(input: {
   readonly kind: EconomyDiplomacyMilitaryWorkerKind;
@@ -41,6 +56,7 @@ export function validateEconomyDiplomacyMilitaryWorkerOutput(input: {
   readonly output: unknown;
   readonly policy: unknown;
   readonly sourceMap: unknown;
+  readonly expectation?: Readonly<{stateId?: number}>;
 }): Readonly<{binding: ComputeOperationBinding; kind: EconomyDiplomacyMilitaryWorkerKind; writeSet: readonly string[]}> {
   const descriptor = descriptorByKind[input.kind];
   const roots = writeSetByKind[input.kind];
@@ -52,12 +68,13 @@ export function validateEconomyDiplomacyMilitaryWorkerOutput(input: {
   validatePreparedRender(output.preparedRender, binding);
   const result = record(output.result, "world-systems.output.result");
   if (typeof result.executed !== "boolean") throw protocolError("world-systems-worker-result-invalid", "经济外交军事 Worker 缺少 executed 结果");
-  const patch = validatePatch(output.patch, input.kind, roots, input.policy, result.executed);
-  if (result.executed) validateDomain(input.kind, patch, input.sourceMap);
+  const expectedStateId = validateExpectation(input.kind, input.expectation, result, output.plan);
+  const patch = validatePatch(output.patch, input.kind, roots, input.policy, result.executed, expectedStateId);
+  if (result.executed) validateDomain(input.kind, patch, input.sourceMap, expectedStateId);
   return Object.freeze({binding: adaptBinding(input.kind, binding), kind: input.kind, writeSet: Object.freeze([...patch.keys()])});
 }
 
-function validatePatch(value: unknown, kind: EconomyDiplomacyMilitaryWorkerKind, roots: readonly string[], policyValue: unknown, executed: boolean): Map<string, UnknownRecord> {
+function validatePatch(value: unknown, kind: EconomyDiplomacyMilitaryWorkerKind, roots: readonly string[], policyValue: unknown, executed: boolean, expectedStateId?: number): Map<string, UnknownRecord> {
   const patch = record(value, "world-systems.patch");
   const policy = record(policyValue, "world-systems.policy");
   const domain = patchDomainByKind[kind];
@@ -75,19 +92,19 @@ function validatePatch(value: unknown, kind: EconomyDiplomacyMilitaryWorkerKind,
     const parts = stringArray(row.path, `world-systems.patch.operations.${index}.path`);
     if (row.exists !== true && row.exists !== false || parts.some(part => part.includes(".") || ["__proto__", "prototype", "constructor"].includes(part))) throw protocolError("world-systems-worker-operation-invalid", `${kind} patch operation 结构无效`);
     const path = parts.join(".");
-    if (!withinRoots(path, roots) || rows.has(path) || !validOperationValue(kind, path, row.value, row.exists)) throw protocolError("world-systems-worker-operation-value-invalid", `${kind} patch 的 ${path} 值或容器无效`);
+    if (!withinRoots(path, roots) || rows.has(path) || (!dynamic && row.exists !== true && !optionalDeletePathsByKind.get(kind)?.has(path)) || !validDynamicPath(kind, path, expectedStateId) || !validOperationValue(kind, path, row.value, row.exists)) throw protocolError("world-systems-worker-operation-value-invalid", `${kind} patch 的 ${path} 值、存在性或容器无效`);
     rows.set(path, row);
   }
   if (!sameStringSet(writeSet, [...rows.keys()]) || rows.size !== writeSet.length) throw protocolError("world-systems-worker-write-set-mismatch", `${kind} patch writeSet 与 operations 不一致`);
   return rows;
 }
 
-function validateDomain(kind: EconomyDiplomacyMilitaryWorkerKind, patch: Map<string, UnknownRecord>, sourceMapValue: unknown): void {
+function validateDomain(kind: EconomyDiplomacyMilitaryWorkerKind, patch: Map<string, UnknownRecord>, sourceMapValue: unknown, expectedStateId?: number): void {
   if (kind === "economy") return validateEconomy(patch, sourceMapValue);
   const values = new Map([...patch].map(([path, row]) => [path, row.value]));
   if (kind === "diplomacy") return validateDiplomacy(values, sourceMapValue);
   if (kind === "military") return validateMilitary(values.get("military"), values.get("pack.military"), values.get("politics.states"), values.get("pack.states"), sourceMapValue, true);
-  validateMilitaryPolicy(patch, sourceMapValue);
+  validateMilitaryPolicy(patch, sourceMapValue, expectedStateId);
 }
 
 function validateEconomy(patch: Map<string, UnknownRecord>, sourceMapValue: unknown): void {
@@ -112,7 +129,72 @@ function validateEconomy(patch: Map<string, UnknownRecord>, sourceMapValue: unkn
     for (const field of cityEconomyFields) assertDeepEqual(cityValue[field], burg[field], "economy-city-mirror-invalid", `经济 city / burg ${field} 镜像不一致`);
   }
   const markets = indexedValues(pack.markets, "economy.pack.markets");
-  for (const marketId of indexedValues(record(pack.cells, "economy.pack.cells").market, "economy.pack.cells.market").map(Number)) if (marketId && !isPlainRecord(markets[marketId])) throw protocolError("economy-market-cell-reference-invalid", `pack cell 指向不存在的市场 #${marketId}`);
+  const goods = indexedValues(pack.goods, "economy.pack.goods");
+  const deals = indexedValues(pack.deals, "economy.pack.deals");
+  const cells = record(pack.cells, "economy.pack.cells");
+  const cellIds = indexedValues(cells.i, "economy.pack.cells.i");
+  const cellMarkets = indexedValues(cells.market, "economy.pack.cells.market").map(Number);
+  const cellStates = indexedValues(cells.state, "economy.pack.cells.state").map(Number);
+  const cellNeighbors = indexedValues(cells.c, "economy.pack.cells.c");
+  const states = indexedValues(pack.states, "economy.pack.states");
+  for (let goodId = 1; goodId < goods.length; goodId++) {
+    const goodValue = goods[goodId];
+    if (!goodValue) continue;
+    const good = record(goodValue, `economy.good.${goodId}`);
+    if (Number(good.i) !== goodId) throw protocolError("economy-good-identity-invalid", `商品槽 #${goodId} 身份无效`);
+  }
+  const centers = new Set<number>();
+  for (let marketId = 1; marketId < markets.length; marketId++) {
+    const marketValue = markets[marketId];
+    if (!marketValue) continue;
+    const market = record(marketValue, `economy.market.${marketId}`);
+    const centerBurgId = Number(market.centerBurgId);
+    const cell = Number(market.cell);
+    const stateId = Number(market.state);
+    const burg = burgs[centerBurgId];
+    const state = states[stateId];
+    if (Number(market.i) !== marketId || Number(market.id) !== marketId) throw protocolError("economy-market-identity-invalid", `市场槽 #${marketId} 身份无效`);
+    if (!Number.isSafeInteger(centerBurgId) || centerBurgId <= 0 || centers.has(centerBurgId) || !isPlainRecord(burg) || burg.removed || Number(burg.i) !== centerBurgId || Number(burg.cell) !== cell) throw protocolError("economy-market-burg-reference-invalid", `市场 #${marketId} 中心城市引用无效`);
+    if (!Number.isSafeInteger(cell) || cell < 0 || cell >= cellIds.length) throw protocolError("economy-market-cell-reference-invalid", `市场 #${marketId} 中心 cell 引用无效`);
+    if (!Number.isSafeInteger(stateId) || stateId <= 0 || !isPlainRecord(state) || state.removed || Number(state.i) !== stateId || Number(burg.state) !== stateId || cellStates[cell] !== stateId) throw protocolError("economy-market-state-reference-invalid", `市场 #${marketId} 国家引用无效`);
+    const inventory = record(market.goods, `economy.market.${marketId}.goods`);
+    for (const [goodKey, itemValue] of Object.entries(inventory)) {
+      const goodId = Number(goodKey);
+      const item = record(itemValue, `economy.market.${marketId}.goods.${goodKey}`);
+      if (!Number.isSafeInteger(goodId) || goodId <= 0 || !isPlainRecord(goods[goodId]) || Number(item.good) !== goodId) throw protocolError("economy-market-good-reference-invalid", `市场 #${marketId} 商品引用无效`);
+    }
+    centers.add(centerBurgId);
+  }
+  for (const marketId of cellMarkets) if (marketId && !isPlainRecord(markets[marketId])) throw protocolError("economy-market-cell-reference-invalid", `pack cell 指向不存在的市场 #${marketId}`);
+  for (let dealId = 0; dealId < deals.length; dealId++) {
+    const dealValue = deals[dealId];
+    if (!dealValue) continue;
+    const deal = record(dealValue, `economy.deal.${dealId}`);
+    const goodId = Number(deal.good);
+    if (Number(deal.i) !== dealId) throw protocolError("economy-deal-identity-invalid", `交易槽 #${dealId} 身份无效`);
+    if (!Number.isSafeInteger(goodId) || goodId <= 0 || !isPlainRecord(goods[goodId])) throw protocolError("economy-deal-good-reference-invalid", `交易 #${dealId} 商品引用无效`);
+    validateEconomyDealParty(deal.sellerType, deal.seller, markets, burgs, dealId, "seller");
+    validateEconomyDealParty(deal.buyerType, deal.buyer, markets, burgs, dealId, "buyer");
+    if (deal.path !== undefined && deal.path !== null) validateEconomyDealPath(deal.path, cellIds.length, cellNeighbors, dealId);
+  }
+}
+
+function validateEconomyDealParty(typeValue: unknown, idValue: unknown, markets: unknown[], burgs: unknown[], dealId: number, side: string): void {
+  const type = String(typeValue);
+  const id = Number(idValue);
+  const valid = type === "market"
+    ? Number.isSafeInteger(id) && id > 0 && isPlainRecord(markets[id])
+    : type === "burg" && Number.isSafeInteger(id) && id > 0 && isPlainRecord(burgs[id]) && !burgs[id].removed && isPlainRecord(markets[Number(burgs[id].market)]);
+  if (!valid) throw protocolError("economy-deal-party-reference-invalid", `交易 #${dealId} ${side} 端点无效`);
+}
+
+function validateEconomyDealPath(pathValue: unknown, cellCount: number, neighbors: unknown[], dealId: number): void {
+  const path = array(pathValue, `economy.deal.${dealId}.path`).map(Number);
+  if (!path.length || path.some(cell => !Number.isSafeInteger(cell) || cell < 0 || cell >= cellCount)) throw protocolError("economy-deal-path-invalid", `交易 #${dealId} 路径 cell 无效`);
+  for (let index = 1; index < path.length; index++) {
+    const previousNeighbors = indexedValues(neighbors[path[index - 1]], `economy.pack.cells.c.${path[index - 1]}`).map(Number);
+    if (!previousNeighbors.includes(path[index])) throw protocolError("economy-deal-path-invalid", `交易 #${dealId} 路径不连续`);
+  }
 }
 
 function validateDiplomacy(values: Map<string, unknown>, sourceMapValue: unknown): void {
@@ -122,7 +204,22 @@ function validateDiplomacy(values: Map<string, unknown>, sourceMapValue: unknown
   assertDeepEqual(record(values.get("zones"), "diplomacy.zones").zones, values.get("pack.zones"), "diplomacy-zone-mirror-invalid", "外交 zones / pack 镜像不一致");
   const states = indexedValues(values.get("pack.states"), "diplomacy.pack.states");
   validateDiplomacyRelations(states, values.get("diplomacy"));
+  validateZoneMirrors(values, sourceMapValue);
+  validateDiplomacyWarzones(record(values.get("zones"), "diplomacy.zones").zones, states, sourceMapValue);
   validateMilitary(values.get("military"), values.get("pack.military"), values.get("politics.states"), values.get("pack.states"), sourceMapValue);
+}
+
+function validateDiplomacyWarzones(zonesValue: unknown, states: unknown[], sourceMapValue: unknown): void {
+  const sourceMap = record(sourceMapValue, "diplomacy.sourceMap");
+  const sourcePack = record(sourceMap.pack, "diplomacy.sourceMap.pack");
+  const pack = {states, cells: sourcePack.cells};
+  for (const zoneValue of indexedValues(zonesValue, "diplomacy.zones.zones")) {
+    if (!zoneValue) continue;
+    const zone = record(zoneValue, "diplomacy.zone");
+    if (zone.removed || zone.type !== "Warzone") continue;
+    const pair = resolveWarzoneStatePair(pack, zone);
+    if (!pair || !isActiveEnemyPair(states, pair.attacker, pair.defender)) throw protocolError("diplomacy-warzone-reference-invalid", "外交重生成产生了无效战争区域国家对");
+  }
 }
 
 function validateDiplomacyRelations(states: unknown[], diplomacyValue: unknown): void {
@@ -174,12 +271,17 @@ function validateMilitary(militaryValue: unknown, packMilitaryValue: unknown, po
   if (requireArchivedEvents) {
     const sourceMilitary = isPlainRecord(sourceMap.military) ? sourceMap.military : {};
     const sourceEvents = array(sourceMilitary.events ?? [], "military.sourceMap.events");
-    if (events.length !== sourceEvents.length || events.some(event => !isPlainRecord(event) || event.archived !== true || event.archiveReason !== "military-regeneration")) throw protocolError("military-event-archive-invalid", "军事重生成没有完整归档既有战报");
-    if (Number(metadata.eventSequence || 0) !== Number(isPlainRecord(sourceMilitary.metadata) ? sourceMilitary.metadata.eventSequence || 0 : 0)) throw protocolError("military-event-sequence-invalid", "军事重生成改变了战报序号");
+    const sourceMetadata = isPlainRecord(sourceMilitary.metadata) ? sourceMilitary.metadata : {};
+    const archiveGeneration = Number(sourceMetadata.eventArchiveGeneration || 0) + 1;
+    const expectedEvents = sourceEvents.map((event, index) => ({...structuredClone(record(event, `military.sourceMap.events.${index}`)), archived: true, archiveReason: "military-regeneration", archiveGeneration}));
+    if (!sameData(events, expectedEvents)) throw protocolError("military-event-archive-invalid", "军事重生成没有按原战报内容和顺序完整归档");
+    if (Number(metadata.eventSequence || 0) !== Number(sourceMetadata.eventSequence || 0)) throw protocolError("military-event-sequence-invalid", "军事重生成改变了战报序号");
+    if (Number(metadata.eventArchiveGeneration) !== archiveGeneration) throw protocolError("military-event-archive-generation-invalid", "军事重生成归档代次没有严格递增");
   }
 }
 
-function validateMilitaryPolicy(patch: Map<string, UnknownRecord>, sourceMapValue: unknown): void {
+function validateMilitaryPolicy(patch: Map<string, UnknownRecord>, sourceMapValue: unknown, expectedStateId?: number): void {
+  if (!Number.isSafeInteger(expectedStateId) || Number(expectedStateId) <= 0) throw protocolError("military-policy-worker-expectation-invalid", "军事策略校验缺少目标国家");
   const source = record(sourceMapValue, "military-policy.sourceMap");
   const sourcePack = record(source.pack, "military-policy.sourceMap.pack");
   const sourcePolitics = record(source.politics, "military-policy.sourceMap.politics");
@@ -194,7 +296,12 @@ function economyView(sourceMapValue: unknown): UnknownRecord {
   const politics = record(source.politics, "economy.sourceMap.politics");
   const settlements = record(source.settlements, "economy.sourceMap.settlements");
   return {
-    pack: {cells: {market: structuredClone(record(pack.cells, "economy.sourceMap.pack.cells").market)}, goods: structuredClone(pack.goods), markets: structuredClone(pack.markets), deals: structuredClone(pack.deals), burgs: structuredClone(pack.burgs), states: structuredClone(pack.states), provinces: structuredClone(pack.provinces)},
+    pack: {cells: structuredClone({
+      i: record(pack.cells, "economy.sourceMap.pack.cells").i,
+      c: record(pack.cells, "economy.sourceMap.pack.cells").c,
+      state: record(pack.cells, "economy.sourceMap.pack.cells").state,
+      market: record(pack.cells, "economy.sourceMap.pack.cells").market
+    }), goods: structuredClone(pack.goods), markets: structuredClone(pack.markets), deals: structuredClone(pack.deals), burgs: structuredClone(pack.burgs), states: structuredClone(pack.states), provinces: structuredClone(pack.provinces)},
     politics: {states: structuredClone(politics.states), provinces: structuredClone(politics.provinces)},
     settlements: {cities: structuredClone(settlements.cities)},
     economy: structuredClone(source.economy)
@@ -240,6 +347,16 @@ function validatePreparedRender(value: unknown, expected: LegacyBinding): void {
   if (prepared.binding !== null && prepared.binding !== undefined) assertSameBinding(prepared.binding, expected, "world-systems.output.preparedRender.binding");
 }
 
+function validateExpectation(kind: EconomyDiplomacyMilitaryWorkerKind, expectation: Readonly<{stateId?: number}> | undefined, result: UnknownRecord, planValue: unknown): number | undefined {
+  if (kind !== "military-policy") return undefined;
+  const stateId = Number(expectation?.stateId);
+  if (!Number.isSafeInteger(stateId) || stateId <= 0) throw protocolError("military-policy-worker-expectation-invalid", "军事策略校验缺少请求目标国家");
+  const plan = record(planValue, "military-policy.output.plan");
+  const request = record(plan.request, "military-policy.output.plan.request");
+  if (Number(result.stateId) !== stateId || Number(request.stateId) !== stateId) throw protocolError("military-policy-worker-state-mismatch", `军事策略结果越过请求国家 #${stateId}`);
+  return stateId;
+}
+
 function validateLegacyBinding(value: unknown, path: string): LegacyBinding {
   const binding = record(value, path);
   const result = {mapIdentity: String(binding.mapIdentity ?? ""), mapRevision: Number(binding.mapRevision), topologyRevision: Number(binding.topologyRevision), generationToken: Number(binding.generationToken), lockFingerprint: String(binding.lockFingerprint ?? ""), operationId: Number(binding.operationId), operationName: String(binding.operationName ?? "")};
@@ -258,6 +375,21 @@ function withinRoots(path: string, roots: readonly string[]): boolean {
 
 function effectiveExactPaths(roots: readonly string[]): string[] {
   return roots.filter(path => !roots.some(parent => parent !== path && path.startsWith(`${parent}.`)));
+}
+
+function validDynamicPath(kind: EconomyDiplomacyMilitaryWorkerKind, path: string, expectedStateId?: number): boolean {
+  if (kind === "diplomacy" || kind === "military") return true;
+  if (kind === "military-policy") {
+    if (path === "military" || path === "pack.military") return true;
+    const match = /^(?:pack|politics)\.states\.(\d+)\.(?:alert|military|militaryPolicy|militaryDiagnostics)$/u.exec(path);
+    return Boolean(match && Number(match[1]) === expectedStateId);
+  }
+  if (["pack.deals", "economy.deals", "economy.metadata"].includes(path) || economyIndexedFields.has(path)) return true;
+  if (/^pack\.cells\.market\.\d+$/u.test(path)) return true;
+  const match = /^(pack\.(?:goods|markets|burgs|states|provinces)|politics\.(?:states|provinces)|settlements\.cities|economy\.(?:goods|markets))\.(\d+)(?:\.([^.]+))?$/u.exec(path);
+  if (!match) return false;
+  if (!match[3]) return true;
+  return economyIndexedFields.get(match[1])?.has(match[3]) === true;
 }
 
 function validCanonicalValue(value: unknown, exists: unknown): boolean {
