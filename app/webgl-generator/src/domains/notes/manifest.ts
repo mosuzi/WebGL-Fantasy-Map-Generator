@@ -6,7 +6,7 @@ const noteCommands = ["notes.createStandalone", "notes.set", "notes.delete", "no
 export const notesManifest = {
   id: "notes",
   version: 1,
-  status: "shadow",
+  status: "active",
   canonicalSections: ["notes"],
   derivedSystems: [{id: "notes.object-panels", reads: ["notes"], writes: [], invalidates: ["object-panels"]}],
   commands: noteCommands.map(id => ({id, writeSet: ["notes"], undoPolicy: "required", profiles: ["interactive"]})),
@@ -29,7 +29,7 @@ export const notesManifest = {
     errorCodes: id === "notes.import" ? COLLECTION_IMPORT_API_BUSINESS_CODES : DEFAULT_API_BUSINESS_CODES,
     documentation: API_DOCUMENTATION
   }))},
-  regression: {gates: ["regress:object-creation", "regress:object-details-edit", "regress:api-data-compatibility"], coverage: ["save", "undo", "failure"]},
+  regression: {gates: ["regress:notes-core", "regress:object-creation", "regress:object-details-edit", "regress:api-data-compatibility"], coverage: ["save", "undo", "failure"]},
   capabilities: {worker: "not-required", regeneration: "unsupported", view: "not-required", renderLayer: "not-required"},
   capabilityReasons: {
     worker: "备注为小型同步文档，不需要业务 Worker",

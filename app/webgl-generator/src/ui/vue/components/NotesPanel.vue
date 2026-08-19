@@ -154,7 +154,7 @@ const columns = Object.freeze([
 
 const rows = computed(() => {
   props.state.version;
-  return noteRows(props.state.map);
+  return noteRows(props.state.map, props.state.notes);
 });
 const visibleRows = computed(() => sortRows(filterRows(rows.value, props.state.filter), props.state.sortKey, props.state.sortDir));
 const {selectedRowIds: selectedNoteIds, selectedRows: selectedNoteRows} = useVisibleRowSelection(visibleRows);
@@ -219,8 +219,8 @@ const importPreviewNote = computed(() => {
   return parts.join("；");
 });
 
-function noteRows(map) {
-  return (map?.notes?.notes || [])
+function noteRows(map, notes) {
+  return (notes || [])
     .filter(note => note?.id)
     .map(note => {
       const object = objectFromNote(note);

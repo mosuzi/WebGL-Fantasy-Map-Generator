@@ -9,6 +9,7 @@ import {finalizeSocietyReligions} from "../generator/society.js";
 import {buildZones} from "../generator/zones.js";
 import {reconcileWarDerivedData} from "../generator/war-consistency.js";
 import {finalizeSettlements, rebuildRelocatedPopulationPointsAsync, regenerateSettlementsWithinPolitics} from "../generator/settlements.js";
+import {createNotesDomainRuntime} from "../domains/notes/runtime.ts";
 import {reconcileSettlementCellIdentity} from "./settlement-cell-index.js";
 import {DEFAULT_OPTIONS, normalizeOptions} from "../generator/options.js";
 import {normalizeAtmosphereDirection, normalizeClimateLatitudeMode, normalizeWindProfile, windAngleFromDirection} from "../generator/climate-options.js";
@@ -532,6 +533,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     editingObject: null,
     editHistory,
     mapRevision,
+    notesDomain: null,
     editRefreshScheduler: null,
     brushCursorPreview: null,
     heightEdit: {
@@ -797,7 +799,9 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     onRename: (object, name) => {
       const context = {map: state.map};
       const command = createRenameObjectCommand(object, name);
-      executeEditCommand(state, documentRef, command, {context});
+      const execute = () => executeEditCommand(state, documentRef, command, {context});
+      if (object?.kind === OBJECT_KIND.NOTE) executeNotesDomainCommand(state, "notes.set", command, execute, "ui");
+      else execute();
       updateEditingInteractionLock(state, documentRef);
     },
     onRenameFromNamebase: object => {
@@ -1369,10 +1373,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     onNoteChange: (stateId, body) => {
       const stateItem = state.map?.politics?.states?.[stateId];
       const object = {kind: OBJECT_KIND.STATE, id: stateId};
-      const context = {map: state.map};
-      const command = createSetObjectNoteCommand(object, body, {name: stateItem?.fullName || stateItem?.name || `国家 #${stateId}`});
-      executeEditCommand(state, documentRef, command, {context});
-      updateEditingInteractionLock(state, documentRef);
+      runtimeActions.edit.notes.set(object, body, {name: stateItem?.fullName || stateItem?.name || `国家 #${stateId}`});
     },
     onInspectMerge: options => runtimeActions.edit.states.inspectMerge(options),
     onMerge: options => runtimeActions.edit.states.merge({...options, confirm: true}),
@@ -1516,10 +1517,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     onNoteChange: (provinceId, body) => {
       const province = state.map?.politics?.provinces?.[provinceId] || state.map?.pack?.provinces?.[provinceId];
       const object = {kind: OBJECT_KIND.PROVINCE, id: provinceId};
-      const context = {map: state.map};
-      const command = createSetObjectNoteCommand(object, body, {name: province?.fullName || province?.name || `省份 #${provinceId}`});
-      executeEditCommand(state, documentRef, command, {context});
-      updateEditingInteractionLock(state, documentRef);
+      runtimeActions.edit.notes.set(object, body, {name: province?.fullName || province?.name || `省份 #${provinceId}`});
     },
     onUndo: () => {
       return executeHistoryCommand(state, documentRef, "undo", {refresh: refreshAfterProvinceEdit});
@@ -1703,10 +1701,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     onNoteChange: (cultureId, body) => {
       const culture = state.map?.society?.cultures?.[cultureId] || state.map?.pack?.cultures?.[cultureId];
       const object = {kind: OBJECT_KIND.CULTURE, id: cultureId};
-      const context = {map: state.map};
-      const command = createSetObjectNoteCommand(object, body, {name: culture?.name || `文化 #${cultureId}`});
-      executeEditCommand(state, documentRef, command, {context});
-      updateEditingInteractionLock(state, documentRef);
+      runtimeActions.edit.notes.set(object, body, {name: culture?.name || `文化 #${cultureId}`});
     },
     onNamebaseBinding: cultureId => {
       state.panels.namebase.open(state.map, {cultureId, history: state.editHistory.getStats()});
@@ -1796,10 +1791,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     onNoteChange: (religionId, body) => {
       const religion = state.map?.society?.religions?.[religionId] || state.map?.pack?.religions?.[religionId];
       const object = {kind: OBJECT_KIND.RELIGION, id: religionId};
-      const context = {map: state.map};
-      const command = createSetObjectNoteCommand(object, body, {name: religion?.name || `宗教 #${religionId}`});
-      executeEditCommand(state, documentRef, command, {context});
-      updateEditingInteractionLock(state, documentRef);
+      runtimeActions.edit.notes.set(object, body, {name: religion?.name || `宗教 #${religionId}`});
     },
     onAssignmentActive: active => {
       if (active) enterCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.RELIGION_ASSIGN);
@@ -2229,6 +2221,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
   });
   state.panels.namebase = namebasePanel;
   notesPanel = createNotesPanel(documentRef, panelManager, {
+    listNotes: () => state.notesDomain?.list?.() || [],
     onCreateStandaloneMode: active => {
       if (active) enterCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.NOTE_ADD);
       else cancelCanvasToolMode(state, documentRef, CANVAS_TOOL_MODE.NOTE_ADD, "panel-toggle");
@@ -2253,25 +2246,22 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     getHighlightCount: () => persistentObjectHighlightCount(state),
     onDelete: row => {
       if (!row?.id) return;
-      const command = createDeleteNoteCommand(row.id, {name: row.name});
-      const result = executeEditCommand(state, documentRef, command, {
-        noopStatus: "备注不存在或已被删除。",
-        status: `已删除备注 ${row.name || row.id}。`
-      });
-      updateEditingInteractionLock(state, documentRef);
+      runtimeActions.edit.notes.delete(row.id, {name: row.name});
     },
     onRename: (row, name) => {
       if (!row?.object || row.orphan) {
         setFileOperationStatus(documentRef, `重命名备注关联对象失败：对象不存在、已删除或已成为孤儿。`);
         return;
       }
-      executeEditCommand(state, documentRef, createRenameObjectCommand(row.object, name), {context: {map: state.map}});
+      const command = createRenameObjectCommand(row.object, name);
+      const execute = () => executeEditCommand(state, documentRef, command, {context: {map: state.map}});
+      if (row.object.kind === OBJECT_KIND.NOTE) executeNotesDomainCommand(state, "notes.set", command, execute, "ui");
+      else execute();
       updateEditingInteractionLock(state, documentRef);
     },
     onNoteChange: (row, body) => {
       if (!row?.object || row.orphan) return;
-      executeEditCommand(state, documentRef, createSetObjectNoteCommand(row.object, body, {name: row.name}), {context: {map: state.map}});
-      updateEditingInteractionLock(state, documentRef);
+      runtimeActions.edit.notes.set(row.object, body, {name: row.name});
     },
     onExport: rows => exportNotesSummary(state, documentRef, rows, runtimeActions.data.exportNotes),
     onImportPreview: (file, mode) => previewNotesImport(state, documentRef, file, mode),
@@ -3077,6 +3067,11 @@ function restoreRuntimeDisplayControls(state, documentRef) {
 
 function createRuntimeActions(state, documentRef, options = {}) {
   const operation = state.runtimeOperation;
+  state.notesDomain ||= createNotesDomainRuntime({
+    getMap: () => state.map,
+    getLegacyRevision: () => state.mapRevision.getSnapshot(),
+    getHistoryFingerprint: () => JSON.stringify(state.editHistory.getStats({affectedLimit: 50}))
+  });
   const displayIntents = createLatestDisplayIntentQueue();
   const runDisplayMutation = (name, apply, rollback, {gpuResident = false} = {}) => displayIntents.run(async intent => {
     const activeName = state.runtimeOperationSnapshot?.current?.name || "";
@@ -8366,6 +8361,11 @@ function executeRegenerationLockCommand(state, documentRef, references, locked, 
   };
 }
 
+function executeNotesDomainCommand(state, commandId, command, execute, source = "api") {
+  if (!state.notesDomain) return execute();
+  return state.notesDomain.executeCommand({commandId, command, source, execute});
+}
+
 function executeEditCommand(state, documentRef, command, options = {}) {
   const context = options.context || {map: state.map};
   if (!command) return {executed: false, command: null, result: null, error: null};
@@ -8427,6 +8427,14 @@ export function executeHistoryCommand(state, documentRef, action, options = {}) 
     throw error;
   }
   const pendingCommand = state.editHistory.peek(action);
+  if (options.observeNotes !== false && state.notesDomain?.ownsCommand?.(pendingCommand)) {
+    return state.notesDomain.executeHistory({
+      action,
+      command: pendingCommand,
+      source: "ui",
+      execute: () => executeHistoryCommand(state, documentRef, action, {...options, observeNotes: false})
+    });
+  }
   if (pendingCommand?.workerHistory?.task === SOCIAL_EXPANSION_WORKER_TASK) {
     const verb = action === "undo" ? "撤销" : "重做";
     return state.runtimeOperation.run(
@@ -9012,11 +9020,11 @@ function deleteNoteViaApi(state, documentRef, noteId, options = {}) {
   const id = String(noteId || "").trim();
   const name = String(options.name || id);
   const command = createDeleteNoteCommand(id, {name});
-  const result = executeEditCommand(state, documentRef, command, {
+  const result = executeNotesDomainCommand(state, "notes.delete", command, () => executeEditCommand(state, documentRef, command, {
     noopStatus: "备注不存在或已被删除。",
     status: `已删除备注 ${name || id}。`,
     throwOnError: false
-  });
+  }));
   updateEditingInteractionLock(state, documentRef);
   return {
     executed: result.executed,
@@ -9040,12 +9048,12 @@ function importNotesViaApi(state, documentRef, document, options = {}) {
     mode: options.mode,
     label: options.label || "导入备注摘要"
   });
-  const result = executeEditCommand(state, documentRef, command, {
+  const result = executeNotesDomainCommand(state, "notes.import", command, () => executeEditCommand(state, documentRef, command, {
     context: {map: state.map},
     noopStatus: "导入备注与当前地图一致。",
     status: executed => `已${options.mode === "replace" ? "替换" : "追加"}导入 ${executed.getResult?.()?.valid || 0} 条备注。`,
     throwOnError: false
-  });
+  }));
   updateEditingInteractionLock(state, documentRef);
   return editApiResult(state, result);
 }
@@ -9073,12 +9081,12 @@ function deleteNotesBatchViaApi(state, documentRef, noteIds, options = {}) {
   if (options.inspectOnly === true) return namebaseInspectionResult(state, preview);
   if (preview.requiresConfirm && options.confirm !== true) throw createDeleteConfirmationRequiredError(preview);
   const command = createDeleteNotesBatchCommand(noteIds, {label: options.label || "批量删除备注"});
-  const result = executeEditCommand(state, documentRef, command, {
+  const result = executeNotesDomainCommand(state, "notes.deleteBatch", command, () => executeEditCommand(state, documentRef, command, {
     context: {map: state.map},
     noopStatus: "没有可删除的备注。",
     status: executed => `已批量删除 ${executed.getDeletedCount?.() || 0} 条备注。`,
     throwOnError: false
-  });
+  }));
   updateEditingInteractionLock(state, documentRef);
   return {...editApiResult(state, result), preview};
 }
@@ -9220,12 +9228,12 @@ function normalizeApiMeasurementSampling(value) {
 function setObjectNoteViaApi(state, documentRef, object, body, options = {}) {
   const target = normalizeApiObjectIdentifier(object);
   const command = createSetObjectNoteCommand(target, body, {name: options.name || ""});
-  const result = executeEditCommand(state, documentRef, command, {
+  const result = executeNotesDomainCommand(state, "notes.set", command, () => executeEditCommand(state, documentRef, command, {
     context: {map: state.map},
     noopStatus: "对象不存在或备注未变化。",
     status: `已更新 ${target.kind}#${target.id} 备注。`,
     throwOnError: false
-  });
+  }));
   updateRuntimePanel(documentRef, state);
   updateEditingInteractionLock(state, documentRef);
   return editApiResult(state, result);
@@ -9234,7 +9242,7 @@ function setObjectNoteViaApi(state, documentRef, object, body, options = {}) {
 function createStandaloneNoteViaApi(state, documentRef, options = {}) {
   if (!options || typeof options !== "object") throw new Error("独立备注创建参数必须是对象");
   const command = createStandaloneNoteCommand(options);
-  const result = executeEditCommand(state, documentRef, command, {
+  const result = executeNotesDomainCommand(state, "notes.createStandalone", command, () => executeEditCommand(state, documentRef, command, {
     context: {map: state.map},
     status: "已新增独立备注。",
     preparePanelRefresh: (targetState, executed, created) => {
@@ -9243,7 +9251,7 @@ function createStandaloneNoteViaApi(state, documentRef, options = {}) {
       targetState.selectionStore.setSelection({object: {kind: OBJECT_KIND.NOTE, id: created.objectId}});
     },
     throwOnError: false
-  });
+  }));
   updateRuntimePanel(documentRef, state);
   updateEditingInteractionLock(state, documentRef);
   return editApiResult(state, result);
@@ -11390,13 +11398,14 @@ function renameObjectViaApi(state, documentRef, kind, objectId, name, options = 
   const nextName = String(name || "").trim();
   if (!nextName) throw new Error("名称不能为空");
   const command = createRenameObjectCommand({kind, id}, nextName);
-  const result = executeEditCommand(state, documentRef, command, {
+  const execute = () => executeEditCommand(state, documentRef, command, {
     context: {map: state.map},
     refresh: options.refresh,
     noopStatus: options.noopStatus || "对象不存在或名称未变化。",
     status: typeof options.status === "function" ? options.status(id) : options.status,
     throwOnError: false
   });
+  const result = kind === OBJECT_KIND.NOTE ? executeNotesDomainCommand(state, "notes.set", command, execute) : execute();
   updateRuntimePanel(documentRef, state);
   updateEditingInteractionLock(state, documentRef);
   return editApiResult(state, result);

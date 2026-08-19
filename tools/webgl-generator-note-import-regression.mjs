@@ -16,7 +16,7 @@ assert.match(consoleApiSource, /notes\.import[\s\S]*notes\.deleteBatch/, "控制
 assert.match(appSource, /import: \(document, options = \{\}\) => importNotesViaApi[\s\S]*deleteBatch: \(noteIds, options = \{\}\) => deleteNotesBatchViaApi/, "备注 UI/API 没有共用运行时 action");
 assert.match(appSource, /onImportPreview:[\s\S]*runtimeActions\.edit\.notes\.import[\s\S]*onDeleteBatch:[\s\S]*runtimeActions\.edit\.notes\.deleteBatch/, "备注面板没有接入公共导入或批量删除 action");
 assert.match(notesPanelSource, /select-orphans[\s\S]*delete-batch/, "备注面板缺少只选孤儿或批量删除动作");
-assert.match(notesPanelSource, /备注导入预检[\s\S]*onConfirmImport/, "备注面板缺少导入预检确认区");
+assert.match(notesPanelSource, /备注导入影响[\s\S]*onConfirmImport/, "备注面板缺少导入影响确认区");
 assert.match(notesPanelWrapperSource, /pendingImportFile[\s\S]*onCancelImport/, "备注面板缺少可取消的待导入文件状态");
 const exportedDocument = {
   type: NOTES_SUMMARY_TYPE,

@@ -67,7 +67,7 @@
 
 ## 当前状态
 
-- 第 349 项进行中：`349-0`～`349-5` 已由同一只读评审智能体 `ACCEPT`；当前进入 `349-6` notes command / history / query / persistence / API 垂直切片，不伪造 Worker、regeneration 或 render layer。权威阶段、动态插入规则和无浏览器边界见 `docs/current-plan.md` 与 `docs/task-notes/task-349-map-core-engine-execution.md`。
+- 第 349 项进行中：`349-0`～`349-5` 已由同一只读评审智能体 `ACCEPT`；`349-6` notes command / history / query / persistence / API 垂直切片已形成 `0.5.16` checkpoint，当前待同一智能体评审，不伪造 Worker、regeneration 或 render layer。权威阶段、动态插入规则和无浏览器边界见 `docs/current-plan.md` 与 `docs/task-notes/task-349-map-core-engine-execution.md`。
 - 第 348 项已完成并归档：主动重生成保留高编号锁定对象时，cities / burgs / routes 身份槽显式稠密；正式导出可在不改写内存地图的前提下抢救旧 holey 数组。用户主动城镇 / 路线重生成允许事务内修复失效港口派生关系，TypedArray 行政候选恢复正确评分，城镇面板补齐结果反馈。用户精确 `5410` 标签页完成原图保存、`949 → 1194` 重生成、结果保存及两份 v3 UI 回读，最终恢复 `949 / 21 / 218`，holey / 保存 / 接纳 / WebGL 错误均为 `0`，版本为 `0.5.3`。
 - 第 347 项已完成并归档：开发模式匿名账本确认用户当前存档城镇重生成的主瓶颈为数十万路线拾取引用对象化回绑；城镇安装现校验 Worker DTO 摘要后从已提交新地图直接构建 `cities + routeSegments` 局部索引。固定 100k 为 `1276.4ms / picking 2.8ms / LongTask 0`；用户精确 5410 当前存档由 `9969ms` 降至 `1886.3ms`，`949 → 1017`、`from-empty / marineCities 0`，撤销恢复原 `949` 与名称序列，版本为 `0.5.2`。
 - 第 346 项已完成并归档：用户精确 5410 当前地图正式城镇重生成端到端墙钟为 `9.969s`；十一类 Loading 现按真实上游资料和单调阶段显示，迟到阶段不倒退、相同文案不重复刷新，普通界面不泄漏内部术语。新版 UI 正式重生成后撤销恢复浏览器原存档 `949` 城镇与原始名称序列，版本为 `0.5.1`。

@@ -15,6 +15,7 @@
 - 第 349-3a 阶段的五字段 registry 闭合、persisted / live presentation 边界、普通 document identity v1、旧图迁移与显式 identity adapters 见 [`task-349-registry-document-identity.md`](./task-349-registry-document-identity.md)。
 - 第 349-4 阶段的 capability-aware `DomainModuleManifest`、注册器拒绝规则、notes / markers / population 影子样本与真实 Worker 对照见 [`task-349-domain-manifest.md`](./task-349-domain-manifest.md)。
 - 第 349-5 阶段的 getter-only `MapCoreEngine`、七步影子 lifecycle、发布前 rollback 与发布后 projection degraded / retry / resync 见 [`task-349-core-facade.md`](./task-349-core-facade.md)。
+- 第 349-6 阶段的 notes command / history / query / persistence / API 垂直切片、旧 history 复用与无 Worker / regeneration / layer 边界见 [`task-349-notes-core-slice.md`](./task-349-notes-core-slice.md)。
 - 地图核心引擎化与领域模块接入实施计划见 [`map-core-engine-architecture-implementation-plan.md`](./map-core-engine-architecture-implementation-plan.md)：冻结 MapCoreEngine、MapRuntimeCoordinator、RenderEngine、Worker、revision、commit、dependency registry、DomainModuleManifest 与逐阶段验收边界。
 - TypeScript 核心契约与领域接入渐进式引入计划见 [`typescript-core-contract-migration-plan.md`](./typescript-core-contract-migration-plan.md)：只类型化核心契约、Worker DTO、领域 Manifest、事务 / patch、Render layer 和垂直切片，不一次性迁移现有 JavaScript。
 

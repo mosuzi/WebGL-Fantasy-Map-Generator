@@ -1822,7 +1822,8 @@ export function resolveGeoJsonRangeOptions(state, range) {
 export function exportNotesData(state, documentRef, options = {}) {
   const map = assertApiMap(state);
   const ids = normalizeApiIdFilter(options.noteIds ?? options.ids);
-  const notes = buildApiNoteRows(map, ids);
+  const canonicalNotes = state.notesDomain?.list?.() || map.notes?.notes || [];
+  const notes = buildApiNoteRows(map, ids, canonicalNotes);
   const payload = {
     type: "webgl-generator-notes-summary",
     version: 1,
@@ -1831,7 +1832,7 @@ export function exportNotesData(state, documentRef, options = {}) {
       seed: map.metadata?.seed || "",
       checksum: map.metadata?.checksum || "",
       notes: notes.length,
-      totalNotes: map.notes?.metadata?.notes || map.notes?.notes?.length || 0,
+      totalNotes: canonicalNotes.length,
       exportMode: ids ? "selected-notes" : "all-notes"
     },
     notes
@@ -1991,9 +1992,9 @@ function readPngExportOverlays(documentRef) {
   };
 }
 
-function buildApiNoteRows(map, ids = null) {
+function buildApiNoteRows(map, ids = null, canonicalNotes = map.notes?.notes || []) {
   const idSet = ids ? new Set(ids) : null;
-  return (map.notes?.notes || [])
+  return canonicalNotes
     .filter(note => note?.id && (!idSet || idSet.has(String(note.id))))
     .map(note => {
       const object = objectFromNote(note);

@@ -25,6 +25,7 @@ export function createNotesPanel(documentRef, manager, callbacks = {}) {
   const panelState = shallowReactive({
     open: false,
     map: null,
+    notes: [],
     selection: null,
     history: null,
     filter: listPreferences.filter,
@@ -141,10 +142,11 @@ export function createNotesPanel(documentRef, manager, callbacks = {}) {
   return {
     open(map, selection, history) {
       panelState.map = map ? markRaw(map) : null;
+      panelState.notes = markRaw(callbacks.listNotes?.() || []);
       panelState.selection = selection;
       panelState.history = history;
       syncPanelHighlightCount(panelState, callbacks);
-      if (!noteExists(map, panelState.selectedNoteId)) panelState.selectedNoteId = firstNoteId(map);
+      if (!noteExists(panelState.notes, panelState.selectedNoteId)) panelState.selectedNoteId = firstNoteId(panelState.notes);
       panelState.open = true;
       panelState.version++;
       manager.open("notes-panel");
@@ -152,14 +154,15 @@ export function createNotesPanel(documentRef, manager, callbacks = {}) {
     },
     update(map, selection, history) {
       panelState.map = map ? markRaw(map) : null;
+      panelState.notes = markRaw(callbacks.listNotes?.() || []);
       panelState.selection = selection;
       panelState.history = history;
       syncPanelHighlightCount(panelState, callbacks);
-      if (!noteExists(map, panelState.selectedNoteId)) panelState.selectedNoteId = firstNoteId(map);
+      if (!noteExists(panelState.notes, panelState.selectedNoteId)) panelState.selectedNoteId = firstNoteId(panelState.notes);
       panelState.version++;
     },
     setSelectedNoteId(noteId) {
-      if (noteExists(panelState.map, noteId)) panelState.selectedNoteId = noteId;
+      if (noteExists(panelState.notes, noteId)) panelState.selectedNoteId = noteId;
     },
     setCreateMode(active) {
       panelState.createMode = Boolean(active);
@@ -173,11 +176,11 @@ export function createNotesPanel(documentRef, manager, callbacks = {}) {
   };
 }
 
-function noteExists(map, noteId) {
+function noteExists(notes, noteId) {
   if (!noteId) return false;
-  return (map?.notes?.notes || []).some(note => note?.id === noteId);
+  return (notes || []).some(note => note?.id === noteId);
 }
 
-function firstNoteId(map) {
-  return (map?.notes?.notes || []).find(note => note?.id)?.id ?? null;
+function firstNoteId(notes) {
+  return (notes || []).find(note => note?.id)?.id ?? null;
 }

@@ -24,7 +24,7 @@
 | 349-3a | canonical field registry、persisted / live presentation 分类、普通 document identity 定义 / 迁移与 identity adapters 闭合 | 五个遗漏字段、旧数据、checksum、patch、document identity 迁移和身份混用负例通过 | 不实现 Manifest、不接管 action | ACCEPT |
 | 349-4 | Capability-aware Domain Manifest、注册器与影子审计 | 不完整 manifest 拒绝；notes / markers / Worker 试点可登记 | 不改变运行路由 | ACCEPT |
 | 349-5 | 薄 `MapCoreEngine` 与 `MapRuntimeCoordinator` facade，影子产生 commit / projection 状态 | 旧 history / revision 行为不变；无第二 map owner | 不迁移复杂领域 | ACCEPT |
-| 349-6 | notes command / history / query / persistence / API 垂直切片 | 新增、编辑、删除、undo / redo、旧数据、save 回归 | 不伪造 Worker / regeneration / layer | 执行中 |
+| 349-6 | notes command / history / query / persistence / API 垂直切片 | 新增、编辑、删除、undo / redo、旧数据、save 回归 | 不伪造 Worker / regeneration / layer | checkpoint 待评审 |
 | 349-7 | markers presentation / layer / picking 垂直切片 | identity、draw、pick、export 的 Node / source 契约 | 不执行真实视觉浏览器门 | 待执行 |
 | 349-8 | 一个真实 Worker task 的统一 binding / result / patch 切片 | checksum、stale、cancel、gap、restart 的专项回归 | 不批量迁移 Worker | 待执行 |
 | 349-9 | dependency registry、projection 状态和局部失效接线 | declared read/write、full rebuild 显式化、projection recovery | 不迁移未登记领域 | 待执行 |
@@ -53,13 +53,13 @@ planned → computed → validated → projections-prepared
 | 字段 | 内容 |
 | --- | --- |
 | 当前阶段 | `349-6` notes command / history / query / persistence / API 垂直切片 |
-| 冻结点 | `349-5` 最终版本 `0.5.15` 已接受；`349-6` 先定向冻结 notes 真实入口、旧数据与回滚不变量，再实施最小垂直接线 |
-| 允许文件 | facade / coordinator 类型与纯 runtime validator、影子记录 adapter、专项 Node、阶段文档 |
-| 禁止文件 | 旧 action 路由切换、领域行为迁移、第二 map store、`source/`、main、浏览器 |
-| 必须保持 | facade 只持有现有 canonical owner 的访问器；影子记录不得推进旧 revision / history、不得发布到 UI / API / persistence |
-| 首个廉价门 | 冻结 facade 的 owner accessor、legacy observation 输入、commit lifecycle 与 projection degraded / retry / resync 输出，不连接业务入口 |
-| 冻结门 | 缺字段 / 重复 domain / 未登记 path / capability 矛盾负例，三类示例登记与 shadow audit、typecheck、build、评审 ACCEPT |
-| 停止条件 | Manifest 无法由既有源码事实静态证明，或影子审计必须接管 runtime 路由才能成立 |
+| 冻结点 | `349-6` 候选版本 `0.5.16`：五条 notes command、同一 history / revision、只读 query 与 persistence / UI projection 已接线，等待同一智能体只读评审 |
+| 允许文件 | `domains/notes` runtime / manifest、notes 既有 UI / API 路由、备注摘要查询、专项 Node、阶段文档 |
+| 禁止文件 | 其他领域 command 收口、全图压缩保存重构、Worker / regeneration / view / layer、`source/`、main、浏览器 |
+| 必须保持 | `state.map` 与既有 `EditHistory / MapRevisionTracker` 仍是唯一 owner；不复制 notes 算法、不建第二 history；invalid / no-op 不产生 commit |
+| 首个廉价门 | `pnpm run regress:notes-core` |
+| 冻结门 | notes core、typecheck、Manifest / facade、备注导入、对象与 API 兼容、旧数据 migration、production build、评审 ACCEPT |
+| 停止条件 | notes 入口必须复制算法或建立第二 owner 才能接线，或同一专项夹具连续失败且无法窄修 |
 
 ## 阶段结果
 
@@ -134,5 +134,14 @@ planned → computed → validated → projections-prepared
 - 评审：首轮 `BLOCK` 四项 P1：嵌套 borrow 可写/逃逸、同一 legacy 转换可重复认领、rollback 后 operation 可复活、公开 projection update 可绕过 coordinator；另有根 `AGENTS.md` 当前状态滞后。`0.5.14` 首次 blocker-only 复审确认后三项和文档已闭合，但继续发现原生 callback、accessor descriptor 与 backing store 三条同类 borrow 绕过；用户按停止条件授权最后一次最窄修正，最终修正版本 `0.5.15` 已闭合三条复现。
 - 终验：最终 blocker-only 复审 `ACCEPT`；`typecheck:core`、`regress:core-facade`、`regress:core-contracts` 与 production build 通过，构建为 `1361 modules`，runtime import / source 改动 / 浏览器执行均为 `0`。
 - 下一步：`349-6` 只迁移 notes 的 command / history / query / persistence / API 垂直切片，不伪造 Worker、regeneration 或 render layer。
+
+### 349-6 — CHECKPOINT 待评审
+
+- 完成：新增 TypeScript notes runtime adapter；五条 Manifest command 进入 active 路由，复用既有 command、`EditHistory`、`MapRevisionTracker` 和唯一 `state.map`，不复制业务算法或建立第二 owner。
+- 入口：独立备注新增 / 重命名、对象备注正文、单条 / 批量删除、摘要导入、undo / redo、备注面板查询与备注摘要导出均经同一 adapter；全图压缩保存仍按 `349-10f` 保留既有路径。
+- 契约：成功提交产生七步 lifecycle 和 persistence / UI settled projection；invalid / no-op 保持 notes、revision、history 与 commit sequence 不变；query / persistence 返回冻结的 detached snapshot。
+- 兼容：当前 save round-trip 与 v1 旧备注保留通过；notes 不伪造 Worker、regeneration、view 或 render layer。既有 `regress:note-import` 的标题断言与 HEAD 文案漂移，已只修正测试期待，产品文案未改。
+- 门禁：`regress:notes-core`、`typecheck:core`、core Manifest / facade、note import、对象新增 / 详情、API 数据兼容、map migration 与 production build 通过；build 为 `1368 modules`；浏览器执行 `0`。
+- 版本：`0.5.15 → 0.5.16`；下一步只读评审本 checkpoint，未获 `ACCEPT` 不进入 `349-7`。
 
 阶段结果在每次 checkpoint 后更新，长日志只记录命令和 artifact 路径，不粘贴到本文。
