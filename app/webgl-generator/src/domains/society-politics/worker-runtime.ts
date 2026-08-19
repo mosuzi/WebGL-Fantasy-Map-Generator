@@ -112,10 +112,37 @@ function validateMirrors(kind: SocietyPoliticsWorkerKind, patchValue: unknown, s
   const packProvinces = array(values.get("pack.provinces"), "society-politics.patch.pack.provinces");
   assertDeepEqual(states, packStates, "society-politics-state-mirror-invalid", "politics / pack state 镜像不一致");
   assertDeepEqual(provinces, packProvinces, "society-politics-province-mirror-invalid", "politics / pack province 镜像不一致");
-  validateAdministrativeReferences(states, provinces, values, sourceMapValue);
+  validateSocietyPoliticsAdministrativeReferences({
+    states,
+    provinces,
+    settlements: values.get("settlements"),
+    burgs: values.get("pack.burgs"),
+    sourceMap: sourceMapValue
+  });
 }
 
-function validateAdministrativeReferences(states: unknown[], provinces: unknown[], values: Map<string, unknown>, sourceMapValue: unknown): void {
+export function validateSocietyPoliticsAdministrativeReferences(input: {
+  readonly states: unknown;
+  readonly provinces: unknown;
+  readonly settlements: unknown;
+  readonly burgs: unknown;
+  readonly sourceMap: unknown;
+  readonly allowUnclaimedZeroCapital?: boolean;
+}): void {
+  const values = new Map<string, unknown>([
+    ["settlements", input.settlements],
+    ["pack.burgs", input.burgs]
+  ]);
+  validateAdministrativeReferences(
+    array(input.states, "society-politics.patch.politics.states"),
+    array(input.provinces, "society-politics.patch.politics.provinces"),
+    values,
+    input.sourceMap,
+    Boolean(input.allowUnclaimedZeroCapital)
+  );
+}
+
+function validateAdministrativeReferences(states: unknown[], provinces: unknown[], values: Map<string, unknown>, sourceMapValue: unknown, allowUnclaimedZeroCapital = false): void {
   const sourceMap = record(sourceMapValue, "society-politics.sourceMap");
   const sourcePolitics = record(sourceMap.politics, "society-politics.sourceMap.politics");
   const sourceStates = indexAdministrativeRows(array(sourcePolitics.states, "society-politics.sourceMap.politics.states"));
@@ -158,7 +185,7 @@ function validateAdministrativeReferences(states: unknown[], provinces: unknown[
     const burgClaims = stateBurgClaims.get(id) || [];
     if (!burgId) {
       const source = sourceStates.get(id);
-      if (cityClaims.length || burgClaims.length || Number(source?.capital || 0) !== 0 || !protectedIds.states.has(id)) {
+      if (cityClaims.length || burgClaims.length || !allowUnclaimedZeroCapital && (Number(source?.capital || 0) !== 0 || !protectedIds.states.has(id))) {
         throw protocolError("society-politics-state-capital-invalid", `国家 #${id} 的零首都缺少受锁 before-image 或仍有首都反向引用`);
       }
       continue;
@@ -181,7 +208,7 @@ function validateAdministrativeReferences(states: unknown[], provinces: unknown[
     const burgClaims = provinceBurgClaims.get(id) || [];
     if (!burgId) {
       const source = sourceProvinces.get(id);
-      if (cityClaims.length || burgClaims.length || Number(source?.burg || 0) !== 0 || !protectedIds.provinces.has(id)) {
+      if (cityClaims.length || burgClaims.length || !allowUnclaimedZeroCapital && (Number(source?.burg || 0) !== 0 || !protectedIds.provinces.has(id))) {
         throw protocolError("society-politics-province-capital-invalid", `省份 #${id} 的零省会缺少受锁 before-image 或仍有省会反向引用`);
       }
       continue;

@@ -18,7 +18,7 @@
 - `docs/current-plan.md` 是唯一当前任务清单；README、开发日志、专题和归档不得另建当前待办。
 - 已批准的编号范围是封闭范围。达到该项最小验收后立即归档并转向下一项；不影响当前验收的新发现只记录，不顺手实施。
 - 第 349 项已获批准并在 `codex/map-core-engine-architecture-plan` 并行分支执行；当前阶段链含盘点后强制插入的 `349-3a`、10c 首门插入的共享 Worker result ownership `349-10c0`，以及拆分后的 `349-10a`～`349-10g`，每阶段冻结后由只读评审智能体验收。该分支不得合入 `main`，全阶段不得执行浏览器验收，只在最终阶段形成并评估浏览器验收方案。
-- `349-10c / 0.5.33` 已形成 settlements / zones / labels / measurements 候选 checkpoint，当前只待同一评审智能体只读验收；未获 `ACCEPT` 不进入 349-10d。349-10c 误触的 `regress:measurement` 实为 Playwright 脚本，已立即终止且不计验收。
+- `349-10c / 0.5.34` 已形成 settlements / zones / labels / measurements blocker-only 修正候选：首轮评审指出的行政首府、城镇 cell 镜像与 zone cell 边界三个 P1 已补 sourceMap 验证及负例，当前只待同一评审智能体复审；未获 `ACCEPT` 不进入 349-10d。349-10c 误触的 `regress:measurement` 实为 Playwright 脚本，已立即终止且不计验收。
 - 遇到范围歧义、需要产品决策、夹具连续两次失败或同一阻断再次出现时，必须冻结并请用户裁定；不得继续“补夹具—跑全门”循环。
 - 全部必需任务完成后停止，不得自行创造后续工作。
 

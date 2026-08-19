@@ -42,7 +42,7 @@ try {
     const sourceMap = generatePlaceholderMap({seed: `settlement-zone-${kind}`, cellsTarget: 2000, heightmapTemplate: "continents"});
     const output = await runRegenerationWorkerTask({map: sourceMap, kind}, {binding, checkpoint() {}, report() {}});
     const policy = getRegenerationPatchPolicy(kind);
-    const validated = validateSettlementZoneWorkerOutput({kind, binding, output, policy});
+    const validated = validateSettlementZoneWorkerOutput({kind, sourceMap, binding, output, policy});
     const expected = kind === "zones" ? ZONES_WORKER_WRITE_SET.filter(pathValue => pathValue !== "zones.metadata.stale") : SETTLEMENTS_WORKER_WRITE_SET;
     assert.deepEqual([...validated.writeSet].sort(), [...expected].sort(), `${kind} 实际 patch 写集不符合领域契约`);
     assert.equal(validated.binding.sourceRevision.topologyRevision, 1, `${kind} core binding 丢失 topology revision`);
@@ -51,59 +51,101 @@ try {
 
   const stale = structuredClone(outputs.cities.output);
   stale.binding.topologyRevision += 1;
-  assertProtocol(() => validateSettlementZoneWorkerOutput({kind: "cities", binding, output: stale, policy: outputs.cities.policy}), "settlement-zone-worker-binding-stale");
+  assertProtocol(() => validateSettlementZoneWorkerOutput({kind: "cities", sourceMap: outputs.cities.sourceMap, binding, output: stale, policy: outputs.cities.policy}), "settlement-zone-worker-binding-stale");
 
   const partial = structuredClone(outputs.cities.output);
   partial.patch.writeSet.pop();
   partial.patch.operations.pop();
-  assertProtocol(() => validateSettlementZoneWorkerOutput({kind: "cities", binding, output: partial, policy: outputs.cities.policy}), "settlement-zone-worker-write-set-incomplete");
+  assertProtocol(() => validateSettlementZoneWorkerOutput({kind: "cities", sourceMap: outputs.cities.sourceMap, binding, output: partial, policy: outputs.cities.policy}), "settlement-zone-worker-write-set-incomplete");
 
   const deleted = structuredClone(outputs.cities.output);
   const deletedOperation = operation(deleted.patch, "settlements");
   deletedOperation.exists = false;
   delete deletedOperation.value;
-  assertProtocol(() => validateSettlementZoneWorkerOutput({kind: "cities", binding, output: deleted, policy: outputs.cities.policy}), "settlement-zone-worker-operation-value-invalid");
+  assertProtocol(() => validateSettlementZoneWorkerOutput({kind: "cities", sourceMap: outputs.cities.sourceMap, binding, output: deleted, policy: outputs.cities.policy}), "settlement-zone-worker-operation-value-invalid");
 
   const dataView = structuredClone(outputs.cities.output);
   operation(dataView.patch, "grid.cells.burg").value = new DataView(new ArrayBuffer(8));
-  assertProtocol(() => validateSettlementZoneWorkerOutput({kind: "cities", binding, output: dataView, policy: outputs.cities.policy}), "settlement-zone-worker-operation-value-invalid");
+  assertProtocol(() => validateSettlementZoneWorkerOutput({kind: "cities", sourceMap: outputs.cities.sourceMap, binding, output: dataView, policy: outputs.cities.policy}), "settlement-zone-worker-operation-value-invalid");
 
   const nativeRecord = structuredClone(outputs.cities.output);
   operation(nativeRecord.patch, "settlements").value = new Map();
-  assertProtocol(() => validateSettlementZoneWorkerOutput({kind: "cities", binding, output: nativeRecord, policy: outputs.cities.policy}), "settlement-zone-worker-operation-value-invalid");
+  assertProtocol(() => validateSettlementZoneWorkerOutput({kind: "cities", sourceMap: outputs.cities.sourceMap, binding, output: nativeRecord, policy: outputs.cities.policy}), "settlement-zone-worker-operation-value-invalid");
 
   const cityMirror = structuredClone(outputs.cities.output);
   const city = operationValue(cityMirror.patch, "settlements").cities.find(row => row && !row.removed);
   operationValue(cityMirror.patch, "pack.burgs")[city.burgId].name = "镜像漂移";
-  assertProtocol(() => validateSettlementZoneWorkerOutput({kind: "cities", binding, output: cityMirror, policy: outputs.cities.policy}), "settlement-city-burg-mirror-invalid");
+  assertProtocol(() => validateSettlementZoneWorkerOutput({kind: "cities", sourceMap: outputs.cities.sourceMap, binding, output: cityMirror, policy: outputs.cities.policy}), "settlement-city-burg-mirror-invalid");
 
   const routeMirror = structuredClone(outputs.cities.output);
   const route = operationValue(routeMirror.patch, "settlements").routes.find(row => row && !row.removed);
   operationValue(routeMirror.patch, "pack.routes")[route.id].to = Number(route.to) + 1;
-  assertProtocol(() => validateSettlementZoneWorkerOutput({kind: "cities", binding, output: routeMirror, policy: outputs.cities.policy}), "settlement-route-mirror-invalid");
+  assertProtocol(() => validateSettlementZoneWorkerOutput({kind: "cities", sourceMap: outputs.cities.sourceMap, binding, output: routeMirror, policy: outputs.cities.policy}), "settlement-route-mirror-invalid");
 
   const cityHole = structuredClone(outputs.cities.output);
   delete operationValue(cityHole.patch, "settlements").cities[1];
-  assertProtocol(() => validateSettlementZoneWorkerOutput({kind: "cities", binding, output: cityHole, policy: outputs.cities.policy}), "settlement-zone-array-hole-invalid");
+  assertProtocol(() => validateSettlementZoneWorkerOutput({kind: "cities", sourceMap: outputs.cities.sourceMap, binding, output: cityHole, policy: outputs.cities.policy}), "settlement-zone-array-hole-invalid");
+
+  const danglingCapital = structuredClone(outputs.cities.output);
+  const danglingPolitics = operationValue(danglingCapital.patch, "politics");
+  const danglingPackStates = operationValue(danglingCapital.patch, "pack.states");
+  const danglingState = danglingPolitics.states.find(row => row && !row.removed && Number(row.i) > 0);
+  const danglingBurgId = operationValue(danglingCapital.patch, "pack.burgs").length + 10;
+  danglingState.capital = danglingBurgId;
+  danglingPackStates[danglingState.i].capital = danglingBurgId;
+  assertProtocol(() => validateSettlementZoneWorkerOutput({kind: "cities", sourceMap: outputs.cities.sourceMap, binding, output: danglingCapital, policy: outputs.cities.policy}), "society-politics-state-capital-invalid");
+
+  const zeroCapital = structuredClone(outputs.cities.output);
+  const zeroPolitics = operationValue(zeroCapital.patch, "politics");
+  const zeroPackStates = operationValue(zeroCapital.patch, "pack.states");
+  const zeroState = zeroPolitics.states.find(row => row && !row.removed && Number(row.capital) > 0);
+  zeroState.capital = 0;
+  zeroPackStates[zeroState.i].capital = 0;
+  assertProtocol(() => validateSettlementZoneWorkerOutput({kind: "cities", sourceMap: outputs.cities.sourceMap, binding, output: zeroCapital, policy: outputs.cities.policy}), "society-politics-state-capital-invalid");
+
+  const duplicateCapital = structuredClone(outputs.cities.output);
+  const duplicatePolitics = operationValue(duplicateCapital.patch, "politics");
+  const duplicateState = duplicatePolitics.states.find(row => row && !row.removed && Number(row.capital) > 0);
+  const duplicateCity = operationValue(duplicateCapital.patch, "settlements").cities.find(row => row && !row.removed && Number(row.state) === Number(duplicateState.i) && Number(row.burgId) !== Number(duplicateState.capital));
+  assert(duplicateCity, "夹具缺少可构造重复国家首都反向引用的非首都城市");
+  duplicateCity.capital = 1;
+  operationValue(duplicateCapital.patch, "pack.burgs")[duplicateCity.burgId].capital = 1;
+  assertProtocol(() => validateSettlementZoneWorkerOutput({kind: "cities", sourceMap: outputs.cities.sourceMap, binding, output: duplicateCapital, policy: outputs.cities.policy}), "society-politics-state-capital-invalid");
+
+  const gridCellMirror = structuredClone(outputs.cities.output);
+  const gridCity = operationValue(gridCellMirror.patch, "settlements").cities.find(row => row && !row.removed);
+  operationValue(gridCellMirror.patch, "grid.cells.burg")[gridCity.cell] = -1;
+  assertProtocol(() => validateSettlementZoneWorkerOutput({kind: "cities", sourceMap: outputs.cities.sourceMap, binding, output: gridCellMirror, policy: outputs.cities.policy}), "settlement-grid-cell-mirror-invalid");
+
+  const packCellMirror = structuredClone(outputs.cities.output);
+  const packCity = operationValue(packCellMirror.patch, "settlements").cities.find(row => row && !row.removed);
+  operationValue(packCellMirror.patch, "pack.cells.burg")[packCity.packCell] = 0;
+  assertProtocol(() => validateSettlementZoneWorkerOutput({kind: "cities", sourceMap: outputs.cities.sourceMap, binding, output: packCellMirror, policy: outputs.cities.policy}), "settlement-pack-cell-mirror-invalid");
 
   const zoneMirror = structuredClone(outputs.zones.output);
   const zoneMirrorOperation = operation(zoneMirror.patch, "pack.zones");
   zoneMirrorOperation.value = structuredClone(zoneMirrorOperation.value);
   zoneMirrorOperation.value[0].name = "镜像漂移";
-  assertProtocol(() => validateSettlementZoneWorkerOutput({kind: "zones", binding, output: zoneMirror, policy: outputs.zones.policy}), "zone-pack-mirror-invalid");
+  assertProtocol(() => validateSettlementZoneWorkerOutput({kind: "zones", sourceMap: outputs.zones.sourceMap, binding, output: zoneMirror, policy: outputs.zones.policy}), "zone-pack-mirror-invalid");
 
   const zoneIdentity = structuredClone(outputs.zones.output);
   operationValue(zoneIdentity.patch, "zones").zones[0].i = 7;
   operationValue(zoneIdentity.patch, "pack.zones")[0].i = 7;
-  assertProtocol(() => validateSettlementZoneWorkerOutput({kind: "zones", binding, output: zoneIdentity, policy: outputs.zones.policy}), "zone-identity-invalid");
+  assertProtocol(() => validateSettlementZoneWorkerOutput({kind: "zones", sourceMap: outputs.zones.sourceMap, binding, output: zoneIdentity, policy: outputs.zones.policy}), "zone-identity-invalid");
+
+  const zoneCellBounds = structuredClone(outputs.zones.output);
+  const zoneCellCount = outputs.zones.sourceMap.pack.cells.i.length;
+  operationValue(zoneCellBounds.patch, "zones").zones[0].cells[0] = zoneCellCount;
+  operationValue(zoneCellBounds.patch, "pack.zones")[0].cells[0] = zoneCellCount;
+  assertProtocol(() => validateSettlementZoneWorkerOutput({kind: "zones", sourceMap: outputs.zones.sourceMap, binding, output: zoneCellBounds, policy: outputs.zones.policy}), "zone-cells-invalid");
 
   const policyDrift = structuredClone(outputs.zones.policy);
   policyDrift.allowedPaths.pop();
-  assertProtocol(() => validateSettlementZoneWorkerOutput({kind: "zones", binding, output: outputs.zones.output, policy: policyDrift}), "settlement-zone-worker-policy-drift");
+  assertProtocol(() => validateSettlementZoneWorkerOutput({kind: "zones", sourceMap: outputs.zones.sourceMap, binding, output: outputs.zones.output, policy: policyDrift}), "settlement-zone-worker-policy-drift");
 
   const canonical = generatePlaceholderMap({seed: "settlement-zone-commit", cellsTarget: 2000, heightmapTemplate: "continents"});
   const commitOutput = await runRegenerationWorkerTask({map: structuredClone(canonical), kind: "cities"}, {binding, checkpoint() {}, report() {}});
-  validateSettlementZoneWorkerOutput({kind: "cities", binding, output: commitOutput, policy: getRegenerationPatchPolicy("cities")});
+  validateSettlementZoneWorkerOutput({kind: "cities", sourceMap: canonical, binding, output: commitOutput, policy: getRegenerationPatchPolicy("cities")});
   const history = new EditHistory({onMutation: () => owner.advance(), onSnapshot: () => owner.createSnapshot(), onRestore: snapshot => owner.restoreSnapshot(snapshot)});
   history.execute(createDomainPatchCommand({patch: commitOutput.patch, policy: getRegenerationPatchPolicy("cities"), label: "城镇 Worker 提交", historyDomain: "settlements", result: commitOutput.result}), {map: canonical});
   assert.equal(history.getStats().undo, 1, "城镇 Worker 提交没有形成单条历史");
@@ -138,7 +180,7 @@ try {
     manifests: [settlementsManifest.id, zonesManifest.id, labelsManifest.id, measurementsManifest.id],
     writes: {cities: SETTLEMENTS_WORKER_WRITE_SET.length, zones: outputs.zones.output.patch.writeSet.length},
     commit: {revision: owner.getCoreSnapshot(), history: history.getStats(), annotationsHistory: annotationHistory.getStats()},
-    rejected: ["stale-binding", "partial-write-set", "delete-required", "data-view", "native-record", "city-burg-mirror", "route-mirror", "city-hole", "zone-mirror", "zone-identity", "policy-drift"],
+    rejected: ["stale-binding", "partial-write-set", "delete-required", "data-view", "native-record", "city-burg-mirror", "route-mirror", "city-hole", "dangling-capital", "zero-capital", "duplicate-capital", "grid-cell-mirror", "pack-cell-mirror", "zone-mirror", "zone-identity", "zone-cell-bounds", "policy-drift"],
     browserRuns: 0
   }, null, 2));
 } finally {

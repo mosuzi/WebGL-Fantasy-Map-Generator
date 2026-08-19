@@ -12530,8 +12530,9 @@ async function regenerateMapAttributeViaWorker(state, documentRef, kind, options
           policy: getRegenerationPatchPolicy(targetKind)
         })
       : ["cities", "zones"].includes(targetKind)
-        ? ({binding, output}) => validateSettlementZoneWorkerOutput({
+        ? ({sourceMap, binding, output}) => validateSettlementZoneWorkerOutput({
             kind: targetKind,
+            sourceMap,
             binding,
             output,
             policy: getRegenerationPatchPolicy(targetKind)
