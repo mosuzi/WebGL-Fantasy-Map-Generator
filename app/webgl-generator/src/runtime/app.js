@@ -12521,8 +12521,9 @@ async function regenerateMapAttributeViaWorker(state, documentRef, kind, options
       affected: []
     },
     assertOutput: ["religions", "states", "provinces"].includes(targetKind)
-      ? ({binding, output}) => validateSocietyPoliticsWorkerOutput({
+      ? ({sourceMap, binding, output}) => validateSocietyPoliticsWorkerOutput({
           kind: targetKind,
+          sourceMap,
           binding,
           output,
           policy: getRegenerationPatchPolicy(targetKind)

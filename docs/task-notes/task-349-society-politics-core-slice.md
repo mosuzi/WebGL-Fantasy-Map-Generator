@@ -15,7 +15,7 @@
 - 新增耦合的 shadow `society-politics` Manifest。religions / states / provinces 共用真实 `regeneration.compute` task，因此由一份领域 Manifest 登记三个 result kind、三套精确写集及其 union，避免虚构三个重复 Worker owner。
 - 正式主线程只对这三个 kind 启用 TypeScript 输出 validator：核对 request / output / prepared renderer binding、精确 policy、完整 patch writeSet / operations、religions 和 states / provinces 的双镜像，以及活动国家 / 省份的首府引用。
 - 新增 social-assignment 与 administrative-mirror 两个 derived system；社会或行政写入显式规划 full rebuild，并失效 cell colors、政治边界、labels、object index 与 picking。
-- 专项以真实生成器和 Worker task 取得三类结果，用真实 `EditHistory + MapRevisionTracker` 应用 states patch 并覆盖 undo / redo；stale binding、部分写集、宗教镜像、省份镜像、首都引用和 policy 漂移六类结果在 commit 前拒绝。
+- 专项以真实生成器和 Worker task 取得三类结果，用真实 `EditHistory + MapRevisionTracker` 应用 states patch 并覆盖 undo / redo；stale binding、部分写集、删除值、undefined 值、宗教镜像、省份镜像、首都引用、首都清零和 policy 漂移九类结果在 commit 前拒绝。
 
 ## 计划外发现与顺序复评
 
@@ -26,7 +26,7 @@
 - `pnpm typecheck:core`
 - `pnpm regress:core-manifests`：`5` domains、`78` descriptors、`31` negative cases。
 - `pnpm regress:core-dependencies`：`9` derived systems，社会 / 行政写入进入各自显式 full rebuild。
-- `pnpm regress:society-politics-core-protocol`：三类真实 Worker 输出、六类拒绝、社会锁、行政引用、预检、10k / 50k / 100k 世界重建、确定性锁国无省会包络。
+- `pnpm regress:society-politics-core-protocol`：三类真实 Worker 输出、九类拒绝、社会锁、行政引用、预检、10k / 50k / 100k 世界重建、确定性锁国无省会包络。
 - `pnpm regress:map-migration`：v1 → v2 社会 / 行政旧数据迁移及当前文档幂等。
 - `pnpm build`：production build 通过，`1379` modules。
 - `git diff --check`；`source/` 改动 `0`；浏览器启动、操作和验收 `0`。
@@ -37,8 +37,14 @@
 
 | 字段 | 内容 |
 | --- | --- |
-| 状态 | `CHECKPOINT 待评审` |
-| 版本 | `0.5.29` |
+| 状态 | 首轮 `BLOCK` 两项 P1；`0.5.30` 修正 checkpoint 待复审 |
+| 版本 | 首轮 `0.5.29`；修正 `0.5.30` |
 | 唯一写者 | 主线程 |
 | 评审 | 复用同一只读评审智能体；`ACCEPT` 前不得进入 349-10c |
 | 下一步 | 评审本 checkpoint；若接受，进入 settlements / zones / labels / measurements |
+
+## 首轮评审与最窄修复
+
+同一只读评审智能体对 `2700d2b / 0.5.29` 给出 `BLOCK`：完整 writeSet 仍能把 operation 全部改成删除或 undefined 并通过镜像门；国家 / 省份首府清零后保留 city / burg 标记也能绕过仅正向引用检查。
+
+`0.5.30` 对 executed patch 的每个精确路径强制 `exists:true`，并按真实路径要求布尔、有限数值、数组 / TypedArray 或记录值；删除和 undefined 在 apply 前拒绝且 canonical source 不变。首府校验改为双向唯一引用：正向行政锚点、city 标记、burg 标记必须一一对应，孤立或重复反向引用拒绝。零首府仅在 before-image 已为零且省份自身或所属国家受锁时允许；专项同时覆盖普通首都清零拒绝和锁国既有零省会接受。

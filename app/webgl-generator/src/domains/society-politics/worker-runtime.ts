@@ -23,6 +23,7 @@ export function validateSocietyPoliticsWorkerOutput(input: {
   readonly binding: unknown;
   readonly output: unknown;
   readonly policy: unknown;
+  readonly sourceMap: unknown;
 }): Readonly<{binding: ComputeOperationBinding; kind: SocietyPoliticsWorkerKind; writeSet: readonly string[]}>
 {
   const expectedPaths = SOCIETY_POLITICS_WRITE_SETS[input.kind];
@@ -37,7 +38,7 @@ export function validateSocietyPoliticsWorkerOutput(input: {
   const result = record(output.result, "society-politics.output.result");
   if (typeof result.executed !== "boolean") throw protocolError("society-politics-worker-result-invalid", "社会行政 Worker 缺少 executed 结果");
   const writeSet = validatePatch(output.patch, input.kind, expectedPaths, input.policy, result.executed);
-  if (result.executed) validateMirrors(input.kind, output.patch);
+  if (result.executed) validateMirrors(input.kind, output.patch, input.sourceMap);
   return Object.freeze({binding: adaptBinding(sourceBinding), kind: input.kind, writeSet});
 }
 
@@ -78,7 +79,11 @@ function validatePatch(value: unknown, kind: SocietyPoliticsWorkerKind, expected
     if (row.exists !== true && row.exists !== false || parts.some(part => part.includes(".") || ["__proto__", "prototype", "constructor"].includes(part))) {
       throw protocolError("society-politics-worker-operation-invalid", "社会行政 Worker patch operation 结构无效");
     }
-    return parts.join(".");
+    const path = parts.join(".");
+    if (executed && (row.exists !== true || row.value === undefined || !validOperationValue(path, row.value))) {
+      throw protocolError("society-politics-worker-operation-value-invalid", `社会行政 Worker patch 的 ${path} 缺少现存的合法值`);
+    }
+    return path;
   });
   if (!sameStringSet(writeSet, operationPaths) || new Set(writeSet).size !== writeSet.length) {
     throw protocolError("society-politics-worker-write-set-mismatch", "社会行政 Worker patch writeSet 与 operations 不一致");
@@ -89,7 +94,7 @@ function validatePatch(value: unknown, kind: SocietyPoliticsWorkerKind, expected
   return Object.freeze([...writeSet]);
 }
 
-function validateMirrors(kind: SocietyPoliticsWorkerKind, patchValue: unknown): void {
+function validateMirrors(kind: SocietyPoliticsWorkerKind, patchValue: unknown, sourceMapValue: unknown): void {
   const patch = record(patchValue, "society-politics.patch");
   const values = new Map<string, unknown>();
   for (const operation of array(patch.operations, "society-politics.patch.operations")) {
@@ -107,29 +112,61 @@ function validateMirrors(kind: SocietyPoliticsWorkerKind, patchValue: unknown): 
   const packProvinces = array(values.get("pack.provinces"), "society-politics.patch.pack.provinces");
   assertDeepEqual(states, packStates, "society-politics-state-mirror-invalid", "politics / pack state 镜像不一致");
   assertDeepEqual(provinces, packProvinces, "society-politics-province-mirror-invalid", "politics / pack province 镜像不一致");
-  validateAdministrativeReferences(states, provinces, values);
+  validateAdministrativeReferences(states, provinces, values, sourceMapValue);
 }
 
-function validateAdministrativeReferences(states: unknown[], provinces: unknown[], values: Map<string, unknown>): void {
+function validateAdministrativeReferences(states: unknown[], provinces: unknown[], values: Map<string, unknown>, sourceMapValue: unknown): void {
+  const sourceMap = record(sourceMapValue, "society-politics.sourceMap");
+  const sourcePolitics = record(sourceMap.politics, "society-politics.sourceMap.politics");
+  const sourceStates = indexAdministrativeRows(array(sourcePolitics.states, "society-politics.sourceMap.politics.states"));
+  const sourceProvinces = indexAdministrativeRows(array(sourcePolitics.provinces, "society-politics.sourceMap.politics.provinces"));
+  const protectedIds = protectedAdministrativeIds(sourceMap, sourceProvinces);
   const settlements = record(values.get("settlements"), "society-politics.patch.settlements");
   const cities = array(settlements.cities, "society-politics.patch.settlements.cities");
   const burgs = array(values.get("pack.burgs"), "society-politics.patch.pack.burgs");
   const cityByBurg = new Map<number, UnknownRecord>();
+  const stateCityClaims = new Map<number, UnknownRecord[]>();
+  const provinceCityClaims = new Map<number, UnknownRecord[]>();
+  const stateBurgClaims = new Map<number, UnknownRecord[]>();
+  const provinceBurgClaims = new Map<number, UnknownRecord[]>();
   for (const value of cities) {
     if (!value || typeof value !== "object" || Array.isArray(value)) continue;
     const city = value as UnknownRecord;
     if (city.removed || !Number.isSafeInteger(Number(city.burgId))) continue;
-    cityByBurg.set(Number(city.burgId), city);
+    const burgId = Number(city.burgId);
+    if (cityByBurg.has(burgId)) throw protocolError("society-politics-capital-identity-invalid", `burg #${burgId} 被多个 city 身份占用`);
+    cityByBurg.set(burgId, city);
+    if (Boolean(city.capital)) addClaim(stateCityClaims, Number(city.state), city);
+    if (Boolean(city.provincial)) addClaim(provinceCityClaims, Number(city.province), city);
   }
+  for (const value of burgs) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) continue;
+    const burg = value as UnknownRecord;
+    if (burg.removed) continue;
+    if (Boolean(burg.capital)) addClaim(stateBurgClaims, Number(burg.state), burg);
+    if (Boolean(burg.provincial)) addClaim(provinceBurgClaims, Number(burg.province), burg);
+  }
+  const activeStates = indexAdministrativeRows(states);
+  const activeProvinces = indexAdministrativeRows(provinces);
   for (const value of states) {
     if (!value || typeof value !== "object" || Array.isArray(value)) continue;
     const state = value as UnknownRecord;
     const id = Number(state.i ?? state.id);
     const burgId = Number(state.capital || 0);
-    if (!id || state.removed || !burgId) continue;
+    if (!id || state.removed) continue;
+    const cityClaims = stateCityClaims.get(id) || [];
+    const burgClaims = stateBurgClaims.get(id) || [];
+    if (!burgId) {
+      const source = sourceStates.get(id);
+      if (cityClaims.length || burgClaims.length || Number(source?.capital || 0) !== 0 || !protectedIds.states.has(id)) {
+        throw protocolError("society-politics-state-capital-invalid", `国家 #${id} 的零首都缺少受锁 before-image 或仍有首都反向引用`);
+      }
+      continue;
+    }
     const city = cityByBurg.get(burgId);
     const burg = burgs[burgId] as UnknownRecord | null;
-    if (!city || !burg || Number(city.state) !== id || Number(burg.state) !== id || !Boolean(city.capital) || !Boolean(burg.capital)
+    if (!city || !burg || cityClaims.length !== 1 || burgClaims.length !== 1 || cityClaims[0] !== city || burgClaims[0] !== burg
+      || Number(city.state) !== id || Number(burg.state) !== id || !Boolean(city.capital) || !Boolean(burg.capital)
       || Number(state.center) !== Number(city.packCell) || Number(state.gridCenter) !== Number(city.cell)) {
       throw protocolError("society-politics-state-capital-invalid", `国家 #${id} 的首都与 city / burg / center 镜像不一致`);
     }
@@ -139,13 +176,77 @@ function validateAdministrativeReferences(states: unknown[], provinces: unknown[
     const province = value as UnknownRecord;
     const id = Number(province.i ?? province.id);
     const burgId = Number(province.burg || 0);
-    if (!id || province.removed || !burgId) continue;
+    if (!id || province.removed) continue;
+    const cityClaims = provinceCityClaims.get(id) || [];
+    const burgClaims = provinceBurgClaims.get(id) || [];
+    if (!burgId) {
+      const source = sourceProvinces.get(id);
+      if (cityClaims.length || burgClaims.length || Number(source?.burg || 0) !== 0 || !protectedIds.provinces.has(id)) {
+        throw protocolError("society-politics-province-capital-invalid", `省份 #${id} 的零省会缺少受锁 before-image 或仍有省会反向引用`);
+      }
+      continue;
+    }
     const city = cityByBurg.get(burgId);
     const burg = burgs[burgId] as UnknownRecord | null;
-    if (!city || !burg || Number(city.province) !== id || Number(burg.province) !== id || !Boolean(city.provincial) || !Boolean(burg.provincial)
+    if (!city || !burg || cityClaims.length !== 1 || burgClaims.length !== 1 || cityClaims[0] !== city || burgClaims[0] !== burg
+      || Number(city.province) !== id || Number(burg.province) !== id || !Boolean(city.provincial) || !Boolean(burg.provincial)
       || Number(province.state) !== Number(city.state) || Number(province.center) !== Number(city.packCell)
       || Number(province.gridCenter) !== Number(city.cell)) {
       throw protocolError("society-politics-province-capital-invalid", `省份 #${id} 的省会与 city / burg / center 镜像不一致`);
+    }
+  }
+  assertNoOrphanClaims(stateCityClaims, activeStates, "capital", "society-politics-state-capital-invalid");
+  assertNoOrphanClaims(stateBurgClaims, activeStates, "capital", "society-politics-state-capital-invalid");
+  assertNoOrphanClaims(provinceCityClaims, activeProvinces, "burg", "society-politics-province-capital-invalid");
+  assertNoOrphanClaims(provinceBurgClaims, activeProvinces, "burg", "society-politics-province-capital-invalid");
+}
+
+function validOperationValue(path: string, value: unknown): boolean {
+  if (path.endsWith(".metadata.stale")) return typeof value === "boolean";
+  if (path.startsWith("metadata.regeneration.")) return typeof value === "number" && Number.isFinite(value);
+  if (["generationLog", "society.religions", "pack.religions", "pack.states", "pack.provinces", "pack.burgs", "pack.routes"].includes(path)) return Array.isArray(value);
+  if (path.startsWith("grid.cells.") || path.startsWith("pack.cells.") && path !== "pack.cells.routes") return Array.isArray(value) || ArrayBuffer.isView(value);
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function indexAdministrativeRows(rows: unknown[]): Map<number, UnknownRecord> {
+  const indexed = new Map<number, UnknownRecord>();
+  for (const value of rows) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) continue;
+    const row = value as UnknownRecord;
+    const id = Number(row.i ?? row.id);
+    if (id > 0 && !row.removed) indexed.set(id, row);
+  }
+  return indexed;
+}
+
+function protectedAdministrativeIds(sourceMap: UnknownRecord, sourceProvinces: Map<number, UnknownRecord>): {states: Set<number>; provinces: Set<number>} {
+  const locks = record(sourceMap.regenerationLocks, "society-politics.sourceMap.regenerationLocks");
+  const entries = array(locks.entries, "society-politics.sourceMap.regenerationLocks.entries");
+  const states = new Set<number>();
+  const provinces = new Set<number>();
+  for (const value of entries) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) continue;
+    const entry = value as UnknownRecord;
+    const id = Number(entry.id);
+    if (entry.kind === "state" && id > 0) states.add(id);
+    if (entry.kind === "province" && id > 0) provinces.add(id);
+  }
+  for (const [id, province] of sourceProvinces) if (states.has(Number(province.state))) provinces.add(id);
+  return {states, provinces};
+}
+
+function addClaim(target: Map<number, UnknownRecord[]>, id: number, value: UnknownRecord): void {
+  if (!Number.isSafeInteger(id) || id <= 0) throw protocolError("society-politics-capital-reference-invalid", "首府标记缺少有效行政归属");
+  const claims = target.get(id) || [];
+  claims.push(value);
+  target.set(id, claims);
+}
+
+function assertNoOrphanClaims(claims: Map<number, UnknownRecord[]>, rows: Map<number, UnknownRecord>, field: "capital" | "burg", code: string): void {
+  for (const [id, values] of claims) {
+    if (!rows.has(id) || values.length !== 1 || Number(rows.get(id)?.[field] || 0) <= 0) {
+      throw protocolError(code, `行政对象 #${id} 存在孤立或重复首府反向引用`);
     }
   }
 }
