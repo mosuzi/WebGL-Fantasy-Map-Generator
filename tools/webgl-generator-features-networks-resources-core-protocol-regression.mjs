@@ -151,6 +151,26 @@ try {
   topologyRiver.cells = topologyPackRiver.cells = nonAdjacent;
   assertProtocol(() => validate("rivers", riverTopology), "river-topology-invalid");
 
+  const riverWaterTail = structuredClone(outputs.rivers.output);
+  const landWaterLand = findLandWaterLand(outputs.rivers.sourceMap.pack.cells);
+  const waterTailRiver = operationValue(riverWaterTail.patch, "rivers").rivers[0];
+  const waterTailRiverId = Number(waterTailRiver.i);
+  waterTailRiver.cells = landWaterLand;
+  operationValue(riverWaterTail.patch, "pack.rivers")[0].cells = [...landWaterLand];
+  const waterTailOwners = operationValue(riverWaterTail.patch, "pack.cells.r");
+  for (let cell = 0; cell < waterTailOwners.length; cell++) if (Number(waterTailOwners[cell]) === waterTailRiverId) waterTailOwners[cell] = 0;
+  waterTailOwners[landWaterLand[0]] = waterTailRiverId;
+  assertProtocol(() => validate("rivers", riverWaterTail), "river-water-tail-invalid");
+
+  const riverChildOverlap = structuredClone(outputs.rivers.output);
+  const childOverlap = findExtendableChildConfluence(operationValue(riverChildOverlap.patch, "rivers").rivers);
+  const childRiver = operationValue(riverChildOverlap.patch, "rivers").rivers.find(river => Number(river.i) === childOverlap.childId);
+  const childPackRiver = operationValue(riverChildOverlap.patch, "pack.rivers").find(river => Number(river.i) === childOverlap.childId);
+  const extendedChildCells = [...childRiver.cells, childOverlap.nextCell];
+  childRiver.cells = extendedChildCells;
+  childPackRiver.cells = [...extendedChildCells];
+  assertProtocol(() => validate("rivers", riverChildOverlap), "river-cell-mirror-invalid");
+
   const riverCellReference = structuredClone(outputs.rivers.output);
   operationValue(riverCellReference.patch, "pack.cells.r")[0] = 65535;
   assertProtocol(() => validate("rivers", riverCellReference), "river-cell-reference-invalid");
@@ -194,7 +214,7 @@ try {
   const appSource = await readFile(path.join(repoRoot, "app/webgl-generator/src/runtime/app.js"), "utf8");
   assert.match(appSource, /\["features", "routes", "rivers", "markers"\]\.includes\(targetKind\)[\s\S]*?validateFeaturesNetworksResourcesWorkerOutput/u, "正式地理网络 Worker 入口未接统一 pre-commit validator");
 
-  console.log(JSON.stringify({ok: true, manifests: Object.keys(manifests), writes: Object.fromEntries(Object.entries(writes).map(([kind, paths]) => [kind, paths.length])), routePathWrites: ROUTE_PATH_WORKER_WRITE_SET.length, riverOwnershipSeeds: 3, tombstones: 16, commit: {revision: owner.getCoreSnapshot(), history: history.getStats()}, rejected: ["stale-binding", "partial-write-set", "data-view", "policy-drift", "feature-mirror", "feature-cell", "feature-lock-cells", "feature-lock-reference", "feature-route-reference", "feature-marker-mirror", "feature-city-identity", "feature-marker-cell", "route-mirror", "route-endpoint", "route-cell-links", "river-mirror", "river-parent", "river-topology", "river-cell-reference", "river-cell-mirror", "marker-mirror", "marker-cell", "economy-mirror"], browserRuns: 0}, null, 2));
+  console.log(JSON.stringify({ok: true, manifests: Object.keys(manifests), writes: Object.fromEntries(Object.entries(writes).map(([kind, paths]) => [kind, paths.length])), routePathWrites: ROUTE_PATH_WORKER_WRITE_SET.length, riverOwnershipSeeds: 3, tombstones: 16, commit: {revision: owner.getCoreSnapshot(), history: history.getStats()}, rejected: ["stale-binding", "partial-write-set", "data-view", "policy-drift", "feature-mirror", "feature-cell", "feature-lock-cells", "feature-lock-reference", "feature-route-reference", "feature-marker-mirror", "feature-city-identity", "feature-marker-cell", "route-mirror", "route-endpoint", "route-cell-links", "river-mirror", "river-parent", "river-topology", "river-water-tail", "river-child-overlap", "river-cell-reference", "river-cell-mirror", "marker-mirror", "marker-cell", "economy-mirror"], browserRuns: 0}, null, 2));
 
   function validate(kind, output) {
     return validateFeaturesNetworksResourcesWorkerOutput({kind, sourceMap: outputs[kind].sourceMap, binding, output, policy: outputs[kind].policy});
@@ -212,4 +232,23 @@ function findNonAdjacentCells(cells) {
     if (left !== right && !cells.c[left]?.includes(right)) return [left, right];
   }
   throw new Error("河流拓扑负例缺少不相邻 cell");
+}
+function findLandWaterLand(cells) {
+  for (let water = 0; water < cells.i.length; water++) {
+    if (Number(cells.h[water]) >= 20) continue;
+    const land = (cells.c[water] || []).filter(cell => Number(cells.h[cell]) >= 20);
+    if (land.length >= 2 && cells.c[land[0]]?.includes(water) && cells.c[water]?.includes(land[1])) return [land[0], water, land[1]];
+  }
+  throw new Error("河流水域尾缀负例缺少陆水陆邻接夹具");
+}
+function findExtendableChildConfluence(rivers) {
+  const byId = new Map(rivers.filter(Boolean).map(river => [Number(river.i), river]));
+  for (const child of byId.values()) {
+    const parent = byId.get(Number(child.parent));
+    if (!parent || child.cells.length < 2) continue;
+    const confluence = Number(child.cells.at(-1));
+    const parentIndex = parent.cells.map(Number).indexOf(confluence);
+    if (parentIndex >= 0 && parentIndex < parent.cells.length - 1) return {childId: Number(child.i), nextCell: Number(parent.cells[parentIndex + 1])};
+  }
+  throw new Error("河流 child owner 负例缺少可延长汇流夹具");
 }

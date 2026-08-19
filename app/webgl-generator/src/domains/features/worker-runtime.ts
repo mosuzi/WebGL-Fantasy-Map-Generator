@@ -367,18 +367,30 @@ function validateRiverMirrors(values: Map<string, unknown>, sourceMapValue: unkn
     if (id) claimed.add(id);
   }
   const heights = indexedValues(sourcePackCells.h, "geography.sourceMap.pack.cells.h");
-  for (const [id, cells] of riverCellSequences) for (let index = 0; index < cells.length; index++) {
-    const cell = cells[index];
-    if (cell < 0) continue;
-    const owner = Number(cellRivers[cell]);
-    if (owner === id) continue;
-    if (Number(heights[cell]) < 20 && owner === 0) continue;
-    if (owner > 0 && parents.get(owner) === id) continue;
-    const parent = parents.get(id) || 0;
-    if (index === cells.length - 1 && parent > 0 && (owner === parent || owner > 0 && parents.get(owner) === parent)) continue;
-    throw protocolError("river-cell-mirror-invalid", `river #${id} 的 cell #${cell} 缺少合法 pack.cells.r 归属`);
+  for (const [id, cells] of riverCellSequences) {
+    let enteredWaterTail = false;
+    for (let index = 0; index < cells.length; index++) {
+      const cell = cells[index];
+      if (cell < 0) continue;
+      const water = Number(heights[cell]) < 20;
+      if (water) enteredWaterTail = true;
+      else if (enteredWaterTail) throw protocolError("river-water-tail-invalid", `river #${id} 从水域重新进入陆地`);
+      const owner = Number(cellRivers[cell]);
+      if (owner === id) continue;
+      if (water && owner === 0) continue;
+      if (owner > 0 && parents.get(owner) === id && lastRealCell(riverCellSequences.get(owner)) === cell) continue;
+      const parent = parents.get(id) || 0;
+      if (index === cells.length - 1 && parent > 0 && (owner === parent || owner > 0 && parents.get(owner) === parent && lastRealCell(riverCellSequences.get(owner)) === cell)) continue;
+      throw protocolError("river-cell-mirror-invalid", `river #${id} 的 cell #${cell} 缺少合法 pack.cells.r 归属`);
+    }
   }
   for (const id of ids) if (!claimed.has(id)) throw protocolError("river-cell-mirror-invalid", `river #${id} 没有 pack.cells.r 反向归属`);
+}
+
+function lastRealCell(cells: number[] | undefined): number {
+  if (!cells) return -1;
+  for (let index = cells.length - 1; index >= 0; index--) if (cells[index] >= 0) return cells[index];
+  return -1;
 }
 
 function validateMarkerResourceMirrors(values: Map<string, unknown>, sourceMapValue: unknown): void {
