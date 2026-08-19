@@ -30,7 +30,7 @@ export const populationManifest = {
   version: 1,
   status: "shadow",
   canonicalSections: ["grid", "pack", "settlements", "politics", "society", "economy", "metadata", "military", "diplomacy", "zones"],
-  derivedSystems: [{id: "population.downstream", reads: ["grid.cells.pop", "pack.cells.pop", "settlements.cities"], writes: ["metadata.derivedStale", "economy.metadata", "military.metadata.stale", "diplomacy.metadata.stale", "zones.metadata.stale"], invalidates: ["population-stats", "point-layers", "labels", "economy-demand", "object-index"]}],
+  derivedSystems: [{id: "population.downstream", reads: ["grid.cells.pop", "pack.cells.pop", "settlements.cities"], writes: ["metadata.derivedStale", "economy.metadata", "military.metadata.stale", "diplomacy.metadata.stale", "zones.metadata.stale"], invalidatedBy: ["grid.cells.pop", "pack.cells.pop", "settlements.cities"], invalidates: ["population-stats", "point-layers", "labels", "economy-demand", "object-index"], scope: "full-map", rebuild: "worker", reuseAcrossPresentation: true, verify: "verifyPopulationDownstream"}],
   commands: [
     {id: "population.applyAdjustment", writeSet: [...populationWriteSet], undoPolicy: "required", profiles: ["interactive", "headless"]},
     {id: "population.transfer", writeSet: [...populationWriteSet], undoPolicy: "required", profiles: ["interactive"]}

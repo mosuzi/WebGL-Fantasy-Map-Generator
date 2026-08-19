@@ -9,8 +9,8 @@ export const markersManifest = {
   status: "shadow",
   canonicalSections: ["markers", "notes", "pack", "economy"],
   derivedSystems: [
-    {id: "markers.point-layer", reads: ["markers"], writes: [], invalidates: ["point-layers", "picking"]},
-    {id: "markers.resource-economy", reads: ["markers", "pack", "economy"], writes: ["pack", "economy"], invalidates: ["economy-demand", "object-index"]}
+    {id: "markers.point-layer", reads: ["markers"], writes: [], invalidatedBy: ["markers"], invalidates: ["point-layers", "picking"], scope: "affected-objects", rebuild: "gpu-patch", reuseAcrossPresentation: true, verify: "verifyMarkerPointLayer"},
+    {id: "markers.resource-economy", reads: ["markers", "pack", "economy"], writes: ["pack", "economy"], invalidatedBy: ["markers", "pack", "economy"], invalidates: ["economy-demand", "object-index"], scope: "full-map", rebuild: "main-thread", reuseAcrossPresentation: true, verify: "verifyMarkerResourceEconomy"}
   ],
   commands: markerCommands.map(id => ({id, writeSet: id === "markers.setNote" ? ["notes"] : id === "markers.setVisual" ? ["markers"] : id === "markers.delete" ? ["markers", "notes", "pack", "economy"] : ["markers", "pack", "economy"], undoPolicy: "required", profiles: ["interactive"]})),
   regeneration: {id: "markers.regenerateResources", writeSet: ["markers", "pack", "economy"], sourceRevision: "required", binding: "required", lockPolicy: "regeneration-lock-protection", replacementPolicy: "mixed"},

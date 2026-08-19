@@ -14,7 +14,8 @@ export function createMapRuntimeCoordinator(options: {readonly core: CoreProject
     throw new CoreFacadeError("FACADE_OWNER_INVALID", "coordinator 必须接收 core projection observer");
   }
   const states = new Map<CommitId, Map<ProjectionStatus["projection"], ProjectionStatus>>();
-  return Object.freeze({attach, transition, getStatus, snapshot});
+  const recoveries = new Set<string>();
+  return Object.freeze({attach, transition, recover, getStatus, snapshot});
 
   function attach(commitId: CommitId): readonly ProjectionStatus[] {
     if (states.has(commitId)) throw new CoreFacadeError("FACADE_LIFECYCLE_INVALID", `commit ${commitId} 已接入 coordinator`);
@@ -44,8 +45,32 @@ export function createMapRuntimeCoordinator(options: {readonly core: CoreProject
     return Object.freeze([...commitStates.values()].map(status => Object.freeze({...status})));
   }
 
+  async function recover(
+    commitId: CommitId,
+    projection: ProjectionStatus["projection"],
+    mode: "retrying" | "resyncing",
+    attempt: () => unknown | Promise<unknown>
+  ): Promise<readonly ProjectionStatus[]> {
+    if (typeof attempt !== "function") throw new CoreFacadeError("FACADE_LIFECYCLE_INVALID", "projection recovery 缺少执行函数");
+    const current = states.get(commitId)?.get(projection);
+    if (current?.state !== "degraded") throw new CoreFacadeError("FACADE_LIFECYCLE_INVALID", `${projection} 只有 degraded 状态可以恢复`);
+    const key = `${commitId}:${projection}`;
+    if (recoveries.has(key)) throw new CoreFacadeError("FACADE_LIFECYCLE_INVALID", `${projection} 已有恢复任务运行中`);
+    recoveries.add(key);
+    transition(commitId, projection, mode);
+    try {
+      await attempt();
+      return transition(commitId, projection, "ready");
+    } catch (error) {
+      transition(commitId, projection, "degraded", error instanceof Error ? error.message : String(error));
+      throw error;
+    } finally {
+      recoveries.delete(key);
+    }
+  }
+
   function snapshot() {
-    return Object.freeze({commits: states.size, commitIds: Object.freeze([...states.keys()])});
+    return Object.freeze({commits: states.size, commitIds: Object.freeze([...states.keys()]), recoveries: recoveries.size});
   }
 
   function settleIfTerminal(commitId: CommitId): void {

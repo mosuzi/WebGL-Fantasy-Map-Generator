@@ -4,6 +4,8 @@ import type {CommitId, LockFingerprint, OperationId, TransactionId} from "../../
 import type {GenerationToken, InteractiveRevisionVector} from "../../core/contracts/revision.js";
 import {createMapCoreEngine} from "../../core/map-core-engine.js";
 import {createMapRuntimeCoordinator} from "../../core/map-runtime-coordinator.js";
+import {createDependencyRegistry, type DependencyPlan} from "../../core/dependency-registry.js";
+import {notesManifest} from "./manifest.js";
 
 export const NOTES_COMMAND_IDS = Object.freeze([
   "notes.createStandalone",
@@ -56,6 +58,8 @@ export function createNotesDomainRuntime<TMap>(options: {
     createCommitId: () => (options.createCommitId?.() || `notes-commit-${++sequence}`) as CommitId
   });
   const coordinator = createMapRuntimeCoordinator({core});
+  const dependencies = createDependencyRegistry({invalidationTargets: {"object-panels": ["ui"]}});
+  dependencies.register(notesManifest);
 
   return Object.freeze({
     executeCommand,
@@ -122,6 +126,7 @@ export function createNotesDomainRuntime<TMap>(options: {
     readonly execute: () => LegacyExecution;
   }): LegacyExecution {
     const before = currentRevision();
+    const dependencyPlan = dependencies.planCanonical({writeSet: ["notes"], affected: affectedRecord(input.command.effects?.affected)});
     const operationId = (options.createOperationId?.() || `notes-operation-${++sequence}`) as OperationId;
     const binding = {
       bindingPhase: "pre-commit" as const,
@@ -133,7 +138,7 @@ export function createNotesDomainRuntime<TMap>(options: {
       generationToken: 0 as GenerationToken,
       lockFingerprint: "notes:none" as LockFingerprint
     };
-    core.beginShadowOperation({binding, kind: input.kind, source: input.source, projections: ["persistence", "ui"]});
+    core.beginShadowOperation({binding, kind: input.kind, source: input.source, projections: dependencyPlan.projections});
     core.observeComputed(operationId);
     core.observeValidated(operationId);
     core.observeProjectionsPrepared(operationId);
@@ -146,7 +151,7 @@ export function createNotesDomainRuntime<TMap>(options: {
     } catch (error) {
       const committedAfter = detectCommittedTransition(before, historyBefore);
       if (committedAfter) {
-        const commit = observeCommittedMutation(operationId, input, committedAfter, startedAt);
+        const commit = observeCommittedMutation(operationId, input, committedAfter, startedAt, dependencyPlan);
         settleProjections(commit, error);
         throw error;
       }
@@ -157,7 +162,7 @@ export function createNotesDomainRuntime<TMap>(options: {
     if (!result?.executed) {
       const committedAfter = detectCommittedTransition(before, historyBefore);
       if (committedAfter) {
-        const commit = observeCommittedMutation(operationId, input, committedAfter, startedAt);
+        const commit = observeCommittedMutation(operationId, input, committedAfter, startedAt, dependencyPlan);
         settleProjections(commit, result?.error || new Error(`legacy ${input.operationName} projection failed`));
         return {
           ...result,
@@ -171,7 +176,7 @@ export function createNotesDomainRuntime<TMap>(options: {
       return result;
     }
     const after = currentRevision();
-    const commit = observeCommittedMutation(operationId, input, after, startedAt);
+    const commit = observeCommittedMutation(operationId, input, after, startedAt, dependencyPlan);
     settleProjections(commit);
     return result;
   }
@@ -180,13 +185,14 @@ export function createNotesDomainRuntime<TMap>(options: {
     operationId: OperationId,
     input: {readonly command: LegacyCommand; readonly operationName: string},
     after: InteractiveRevisionVector,
-    startedAt: number
+    startedAt: number,
+    dependencyPlan: DependencyPlan
   ): CommitEnvelope {
     const commit = core.observeCanonicalCommit(operationId, {
       after,
       writeSet: ["notes"],
       affected: affectedRecord(input.command.effects?.affected),
-      invalidated: ["object-panels"],
+      invalidated: dependencyPlan.invalidated,
       rebuilt: [],
       timings: {legacyCommit: Math.max(0, now() - startedAt)}
     });

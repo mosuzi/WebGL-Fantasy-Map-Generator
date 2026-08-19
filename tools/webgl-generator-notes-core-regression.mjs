@@ -62,6 +62,8 @@ try {
   assert.equal(runtime.get("note:core").body, "初始正文");
   assert.equal(runtime.getLastCommit().lifecycle, "projections-settled");
   assert.deepEqual(runtime.getLastCommit().writeSet, ["notes"]);
+  assert.deepEqual(runtime.getLastCommit().invalidated, ["object-panels"], "notes commit 必须采用 dependency plan invalidation");
+  assert.deepEqual(runtime.getLastCommit().rebuilt, [], "notes commit 不得把尚未完成的 UI projection 提前记为 rebuilt");
   assert.equal(runtime.getLastCommit().projections.every(item => item.state === "ready"), true);
 
   const detachedList = runtime.list();

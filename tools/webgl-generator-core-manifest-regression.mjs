@@ -83,6 +83,14 @@ const emptyWriteSet = clone(notesManifest);
 emptyWriteSet.commands[0].writeSet = [];
 expectManifestError(() => createDomainManifestRegistry(context).register(emptyWriteSet), "MANIFEST_INVALID", "manifest.commands[0].writeSet");
 
+const missingDependencyScope = clone(notesManifest);
+delete missingDependencyScope.derivedSystems[0].scope;
+expectManifestError(() => createDomainManifestRegistry(context).register(missingDependencyScope), "MANIFEST_INVALID", "manifest.derivedSystems[0].scope");
+
+const undeclaredInvalidationRead = clone(notesManifest);
+undeclaredInvalidationRead.derivedSystems[0].invalidatedBy = ["markers"];
+expectManifestError(() => createDomainManifestRegistry(context).register(undeclaredInvalidationRead), "MANIFEST_INVALID", "manifest.derivedSystems[0].invalidatedBy");
+
 const requiredWorkerMissing = clone(notesManifest);
 requiredWorkerMissing.capabilities.worker = "required";
 delete requiredWorkerMissing.capabilityReasons.worker;
@@ -242,7 +250,7 @@ console.log(JSON.stringify({
   domains: registry.list().map(manifest => ({id: manifest.id, status: manifest.status, capabilities: manifest.capabilities})),
   workerTaskVerified: "population.compute",
   runtimeRouteImports: 0,
-  negativeCases: 28
+  negativeCases: 30
 }, null, 2));
 
 async function joinSources(files) {

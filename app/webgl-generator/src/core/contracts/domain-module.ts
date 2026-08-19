@@ -9,7 +9,12 @@ export interface DerivedSystemDescriptor {
   readonly id: string;
   readonly reads: readonly string[];
   readonly writes: readonly string[];
+  readonly invalidatedBy: readonly string[];
   readonly invalidates: readonly string[];
+  readonly scope: "affected-objects" | "affected-cells" | "full-map";
+  readonly rebuild: "worker" | "main-thread" | "gpu-patch";
+  readonly reuseAcrossPresentation: boolean;
+  readonly verify: string;
 }
 
 export interface CommandDescriptor {

@@ -72,7 +72,7 @@ export function validateDomainModuleManifest(value: unknown, context: DomainMani
   const capabilityReasons = validateCapabilityReasons(source.capabilityReasons, "manifest.capabilityReasons");
 
   for (const item of [...derivedSystems, ...commands, ...(workerTasks || []), ...(queries || []), ...(views || []), ...(layers || [])]) {
-    for (const path of [...("reads" in item ? item.reads : []), ...("writes" in item ? item.writes : []), ...("writeSet" in item ? item.writeSet : [])]) {
+    for (const path of [...("reads" in item ? item.reads : []), ...("writes" in item ? item.writes : []), ...("invalidatedBy" in item ? item.invalidatedBy : []), ...("writeSet" in item ? item.writeSet : [])]) {
       assertRegisteredPath(path, context, `${id}.${item.id}.${path}`);
       if (!canonicalSections.some(section => covers(section, path))) {
         manifestError("MANIFEST_FIELD_UNREGISTERED", `${id}.${item.id}.${path}`, "路径未包含在本领域 canonicalSections");
@@ -164,7 +164,22 @@ export function createDomainManifestRegistry(context: DomainManifestValidationCo
 
 function validateDerivedSystem(value: unknown, path: string): DerivedSystemDescriptor {
   const source = record(value, path);
-  return {id: identifier(source.id, `${path}.id`), reads: uniqueStrings(source.reads, `${path}.reads`), writes: uniqueStrings(source.writes, `${path}.writes`), invalidates: uniqueStrings(source.invalidates, `${path}.invalidates`)};
+  const reads = uniqueStrings(source.reads, `${path}.reads`, {nonEmpty: true});
+  const invalidatedBy = uniqueStrings(source.invalidatedBy, `${path}.invalidatedBy`, {nonEmpty: true});
+  if (invalidatedBy.some(invalidation => !reads.some(read => covers(read, invalidation)))) {
+    manifestError("MANIFEST_INVALID", `${path}.invalidatedBy`, "invalidatedBy 必须由 reads 覆盖");
+  }
+  return {
+    id: identifier(source.id, `${path}.id`),
+    reads,
+    writes: uniqueStrings(source.writes, `${path}.writes`),
+    invalidatedBy,
+    invalidates: uniqueStrings(source.invalidates, `${path}.invalidates`, {nonEmpty: true}),
+    scope: enumValue(source.scope, ["affected-objects", "affected-cells", "full-map"] as const, `${path}.scope`),
+    rebuild: enumValue(source.rebuild, ["worker", "main-thread", "gpu-patch"] as const, `${path}.rebuild`),
+    reuseAcrossPresentation: booleanValue(source.reuseAcrossPresentation, `${path}.reuseAcrossPresentation`),
+    verify: nonEmptyString(source.verify, `${path}.verify`)
+  };
 }
 
 function validateCommand(value: unknown, path: string): CommandDescriptor {

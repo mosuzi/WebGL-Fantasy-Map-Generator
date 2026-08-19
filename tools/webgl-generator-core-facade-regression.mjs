@@ -120,12 +120,15 @@ expectFacadeError(() => core.observeRollback("operation-1", "renderer failed"), 
 assert.equal(revision.canonicalRevision, 1, "发布后投影失败不得反向修改 canonical revision");
 assert.equal(historyFingerprint, "history:1", "发布后投影失败不得反向修改 history");
 
-coordinator.transition(firstCommit.commitId, "worker", "retrying");
-coordinator.transition(firstCommit.commitId, "worker", "resyncing");
-coordinator.transition(firstCommit.commitId, "worker", "ready");
+await coordinator.recover(firstCommit.commitId, "worker", "resyncing", async () => {});
 coordinator.transition(firstCommit.commitId, "renderer", "degraded", "context lost");
-coordinator.transition(firstCommit.commitId, "renderer", "retrying");
-coordinator.transition(firstCommit.commitId, "renderer", "ready");
+await coordinator.recover(firstCommit.commitId, "renderer", "retrying", () => true);
+coordinator.transition(firstCommit.commitId, "worker", "degraded", "replica lost again");
+await assert.rejects(coordinator.recover(firstCommit.commitId, "worker", "retrying", async () => { throw new Error("retry failed"); }), /retry failed/);
+assert.equal(core.getCommit(firstCommit.commitId).projections.find(item => item.projection === "worker").state, "degraded");
+assert.equal(revision.canonicalRevision, 1, "projection recovery 失败不得回滚 canonical revision");
+assert.equal(historyFingerprint, "history:1", "projection recovery 失败不得回滚 history");
+await coordinator.recover(firstCommit.commitId, "worker", "resyncing", async () => {});
 assert.equal(core.getCommit(firstCommit.commitId).projections.every(item => item.state === "ready"), true);
 
 const secondBinding = binding("operation-2", revision);
