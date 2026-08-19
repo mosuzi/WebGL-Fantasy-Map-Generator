@@ -27,6 +27,30 @@ try {
   const request = {kind: "adjustment", target: {scope: "state", id: stateId}, delta: 15};
   const binding = createBinding(31);
   const sourceFingerprint = fingerprintPopulationSource(source, request);
+  const driftCases = [
+    ["settlement routes", map => map.settlements.routes.push({id: "drift-route", points: [[0, 0], [1, 1]], packCells: [0, 1]})],
+    ["grid points", map => { map.grid.points[0][0] += 0.25; }],
+    ["grid height", map => { map.grid.cells.h[0] = Number(map.grid.cells.h[0]) + 1; }],
+    ["grid burg", map => { map.grid.cells.burg[0] = Number(map.grid.cells.burg[0]) + 1; }],
+    ["grid feature", map => { map.grid.cells.f[0] = Number(map.grid.cells.f[0]) + 1; }],
+    ["features", map => { map.features.features[0] = {...map.features.features[0], land: !map.features.features[0]?.land}; }],
+    ["pack grid binding", map => { map.pack.cells.g[0] = Number(map.pack.cells.g[0]) + 1; }],
+    ["politics mirror", map => { map.politics.states = structuredClone(map.politics.states); map.politics.states[1].name += "-drift"; }],
+    ["society mirror", map => { map.society.cultures = structuredClone(map.society.cultures); map.society.cultures[1].name += "-drift"; }],
+    ["economy metadata", map => { map.economy.metadata = {...map.economy.metadata, demand: {drift: true}}; }],
+    ["stale metadata", map => { map.military.metadata = {...map.military.metadata, stale: !map.military.metadata?.stale}; }]
+  ];
+  for (const [label, mutate] of driftCases) {
+    const drifted = structuredClone(source);
+    mutate(drifted);
+    assert.notEqual(fingerprintPopulationSource(drifted, request), sourceFingerprint, `来源指纹漏掉 ${label}`);
+  }
+  const staleRouteMap = structuredClone(source);
+  driftCases[0][1](staleRouteMap);
+  await assert.rejects(
+    runPopulationWorkerTask({map: staleRouteMap, request, binding, sourceFingerprint}, taskContext(binding)),
+    error => error?.code === "population-worker-source-stale"
+  );
   const workerMap = structuredClone(source);
   const output = await runPopulationWorkerTask({map: workerMap, request, binding, sourceFingerprint}, taskContext(binding));
   const accepted = validatePopulationWorkerOutput({
@@ -117,7 +141,7 @@ try {
       phase: accepted.binding.bindingPhase,
       revision: accepted.binding.sourceRevision.canonicalRevision
     },
-    rejected: ["generation", "stale", "gap", "checksum", "result-kind", "unknown-write", "duplicate-write", "unsafe-write", "overlap-write", "cancel-rollback"]
+    rejected: ["generation", "stale", "gap", "checksum", "read-dependency-drift", "result-kind", "unknown-write", "duplicate-write", "unsafe-write", "overlap-write", "cancel-rollback"]
   }, null, 2));
 } finally {
   await vite.close();

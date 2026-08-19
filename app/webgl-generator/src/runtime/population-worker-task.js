@@ -188,25 +188,28 @@ export function getPopulationWorkerPatchPolicy(map, patch) {
 export function fingerprintPopulationSource(map, request = {}) {
   return stableFingerprint({
     request: publicRequest(normalizeRequest(request)),
-    grid: {h: map?.grid?.cells?.h, pop: map?.grid?.cells?.pop},
-    packCells: {
-      i: map?.pack?.cells?.i,
-      h: map?.pack?.cells?.h,
-      g: map?.pack?.cells?.g,
-      pop: map?.pack?.cells?.pop,
-      state: map?.pack?.cells?.state,
-      province: map?.pack?.cells?.province,
-      culture: map?.pack?.cells?.culture,
-      religion: map?.pack?.cells?.religion
+    writableRoots: Object.fromEntries(POPULATION_ROOTS.map(path => {
+      const captured = readPath(map, path.split("."));
+      return [path, {exists: captured.exists, value: captured.value}];
+    })),
+    readDependencies: {
+      gridPoints: map?.grid?.points,
+      gridCellHeight: map?.grid?.cells?.h,
+      gridCellBurg: map?.grid?.cells?.burg,
+      gridCellFeature: map?.grid?.cells?.f,
+      features: map?.features,
+      settlementRoutes: map?.settlements?.routes,
+      packCellIndex: map?.pack?.cells?.i,
+      packCellHeight: map?.pack?.cells?.h,
+      packCellGrid: map?.pack?.cells?.g,
+      packCellState: map?.pack?.cells?.state,
+      packCellProvince: map?.pack?.cells?.province,
+      packCellCulture: map?.pack?.cells?.culture,
+      packCellReligion: map?.pack?.cells?.religion,
+      packCellBurg: map?.pack?.cells?.burg,
+      packCellMarket: map?.pack?.cells?.market,
+      packGoods: map?.pack?.goods
     },
-    burgs: map?.pack?.burgs,
-    cities: map?.settlements?.cities,
-    states: map?.pack?.states,
-    provinces: map?.pack?.provinces,
-    cultures: map?.pack?.cultures,
-    religions: map?.pack?.religions,
-    markets: map?.pack?.markets,
-    economyMetadata: map?.economy?.metadata,
     locks: map?.regenerationLocks
   });
 }

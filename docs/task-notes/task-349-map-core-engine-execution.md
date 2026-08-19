@@ -165,9 +165,11 @@ planned → computed → validated → projections-prepared
 - binding：legacy 数字 operation id 保留在 wire DTO，并显式适配为核心 `compute / pre-commit` binding；不把 legacy DTO 假装成核心契约，不建立第二 Worker session 或 canonical owner。
 - patch：普通结果和 history 输入都过同一写集门；legacy v1 patch 缺少 base / target checksum 与 revision，故不伪造 `ComputedDomainPatch`，后续 wire format 升级仍留在逐域迁移阶段。
 - 原子性：专项拒绝 generation、stale revision、operation gap、source checksum、错误 result kind、未知 / 重复写路径；apply 后取消验证来源指纹完全恢复。通用 Worker 门继续覆盖 ACK、late reject、cancel terminate、rollback / recovery 与 restart / resync owner。
-- 门禁：population core protocol、typecheck、Manifest、人口增减 / 转移、10k / 100k population Worker、通用 Worker registry 和 production build `1373 modules` 通过；100k 为约 `627.7ms / 1560 patch paths`。
+- 首轮评审：`BLOCK` 一项 P1——原 source fingerprint 未覆盖 settlement routes、grid points / burg / feature、Feature 及独立 mirror 等真实读取依赖，同 revision 的漂移 Worker mirror 可绕过 checksum 并覆盖 `settlements.metadata`。
+- 最窄修正：来源指纹改为覆盖全部 population 可写根及算法额外读取集；专项逐项漂移 route、grid、Feature、pack-grid、politics / society mirror、economy / stale metadata，并以真实携旧指纹 task 验证 apply 前拒绝。
+- 门禁：修正后 population core protocol、typecheck、Manifest、人口 10k / 100k Worker、通用 Worker registry 与 production build `1373 modules` 通过；100k 为约 `966.5ms / 1560 patch paths`。
 - 既有首败：`regress:population-adjustment-ui-api` 在未改动的 HEAD 面板文案上仍期待“预检转移”，实际为“查看转移影响”；本阶段不改产品文案，未声称该门通过。
-- 版本：`0.5.19 → 0.5.20`；浏览器未启动、未操作、未执行。
-- 下一步：提交 checkpoint 后交同一只读评审智能体；未获 `ACCEPT` 不进入 `349-9`。
+- 版本：首轮 `0.5.19 → 0.5.20`，评审修正 `0.5.20 → 0.5.21`；浏览器未启动、未操作、未执行。
+- 下一步：提交修正 checkpoint 后交同一只读评审智能体 blocker-only 复审；未获 `ACCEPT` 不进入 `349-9`。
 
 阶段结果在每次 checkpoint 后更新，长日志只记录命令和 artifact 路径，不粘贴到本文。
