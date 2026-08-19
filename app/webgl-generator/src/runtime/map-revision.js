@@ -5,12 +5,14 @@ export class MapRevisionTracker {
     this.identityFactory = identityFactory;
     this.mapIdentity = null;
     this.mapRevision = 0;
+    this.topologyRevision = 0;
     this.cursorSecret = createOpaqueIdentity();
   }
 
   replaceMap() {
     this.mapIdentity = String(this.identityFactory());
     this.mapRevision = 0;
+    this.topologyRevision = 0;
     this.cursorSecret = createOpaqueIdentity();
     return this.getSnapshot();
   }
@@ -18,6 +20,9 @@ export class MapRevisionTracker {
   advance() {
     if (!this.mapIdentity) this.replaceMap();
     this.mapRevision += 1;
+    // 旧 command 尚未提供精确 topology write set；迁移期随 canonical revision
+    // 保守推进，确保任何真实 topology 变化都不会复用陈旧 renderer source。
+    this.topologyRevision += 1;
     return this.getSnapshot();
   }
 
@@ -28,9 +33,16 @@ export class MapRevisionTracker {
     };
   }
 
-  createSnapshot() {
+  getCoreSnapshot() {
     return {
       ...this.getSnapshot(),
+      topologyRevision: this.topologyRevision
+    };
+  }
+
+  createSnapshot() {
+    return {
+      ...this.getCoreSnapshot(),
       cursorSecret: this.cursorSecret
     };
   }
@@ -39,8 +51,10 @@ export class MapRevisionTracker {
     if (!snapshot || typeof snapshot !== "object") return this.getSnapshot();
     const identity = snapshot.mapIdentity;
     const revision = Number(snapshot.mapRevision);
+    const topologyRevision = Number(snapshot.topologyRevision);
     this.mapIdentity = identity === null || identity === undefined ? null : String(identity);
     this.mapRevision = Number.isSafeInteger(revision) && revision >= 0 ? revision : 0;
+    this.topologyRevision = Number.isSafeInteger(topologyRevision) && topologyRevision >= 0 ? topologyRevision : 0;
     if (typeof snapshot.cursorSecret === "string" && snapshot.cursorSecret) this.cursorSecret = snapshot.cursorSecret;
     return this.getSnapshot();
   }

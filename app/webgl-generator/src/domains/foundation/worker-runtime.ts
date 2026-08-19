@@ -1,6 +1,7 @@
 import {adaptLegacyInteractiveRevision} from "../../core/adapters/identity-adapters.js";
 import type {ComputeOperationBinding} from "../../core/contracts/operation.js";
 import {validateOperationBinding} from "../../core/contracts/runtime-validators.js";
+import {listCanonicalMapSections} from "../../runtime/canonical-map-field-registry.js";
 import {foundationManifest} from "./manifest.js";
 
 type UnknownRecord = Record<string, unknown>;
@@ -21,6 +22,25 @@ const patchDomainByTask = Object.freeze({
   "height-derived.compute": "height-derived",
   "climate-downstream.compute": "climate-downstream"
 } as const);
+const requiredFoundationReplacementSections = Object.freeze(listCanonicalMapSections().filter(section => !section.optional).map(section => section.path));
+
+export function createFoundationWorkerBinding(input: {
+  readonly revision: unknown;
+  readonly generationToken: number;
+  readonly lockFingerprint: string;
+  readonly operation?: Readonly<{id?: number; name?: string}> | null;
+}): LegacyFoundationWorkerBinding {
+  const revision = record(input.revision, "foundation.binding.revision");
+  return validateLegacyBinding({
+    mapIdentity: revision.mapIdentity,
+    mapRevision: revision.mapRevision,
+    topologyRevision: revision.topologyRevision,
+    generationToken: input.generationToken,
+    lockFingerprint: input.lockFingerprint,
+    operationId: Number(input.operation?.id) || 0,
+    operationName: String(input.operation?.name || "")
+  }, "foundation.binding");
+}
 
 export function adaptFoundationWorkerBinding(task: string, value: unknown): ComputeOperationBinding {
   const descriptor = requireTask(task);
@@ -130,10 +150,34 @@ export function validateFoundationDocumentShape(value: unknown, options: {readon
     throw protocolError("foundation-worker-map-grid-missing", "基础域地图缺少 grid.cells");
   }
   if (!options.allowLegacy) {
-    for (const section of ["heightmap", "climate", "oceanCurrents", "pack"] as const) {
-      if (!optionalRecord(map[section], `foundation.map.${section}`)) {
+    for (const section of requiredFoundationReplacementSections) {
+      if (!Object.prototype.hasOwnProperty.call(map, section) || map[section] === undefined || map[section] === null) {
         throw protocolError("foundation-worker-map-section-missing", `基础域结果缺少 ${section}`);
       }
+      if (section === "generationLog") {
+        if (!Array.isArray(map[section])) throw protocolError("foundation-worker-map-structure-invalid", "foundation.map.generationLog 必须是数组");
+      } else {
+        record(map[section], `foundation.map.${section}`);
+      }
+    }
+    for (const [path, section, field] of [
+      ["foundation.map.pack.cells", "pack", "cells"],
+      ["foundation.map.society.cultures", "society", "cultures"],
+      ["foundation.map.society.religions", "society", "religions"],
+      ["foundation.map.politics.states", "politics", "states"],
+      ["foundation.map.politics.provinces", "politics", "provinces"],
+      ["foundation.map.settlements.cities", "settlements", "cities"],
+      ["foundation.map.settlements.routes", "settlements", "routes"],
+      ["foundation.map.features.features", "features", "features"],
+      ["foundation.map.rivers.rivers", "rivers", "rivers"],
+      ["foundation.map.regenerationLocks.entries", "regenerationLocks", "entries"],
+      ["foundation.map.notes.notes", "notes", "notes"],
+      ["foundation.map.measurements.items", "measurements", "items"],
+      ["foundation.map.labels.custom", "labels", "custom"]
+    ] as const) {
+      const container = record(map[section], `foundation.map.${section}`);
+      if (field === "cells") record(container[field], path);
+      else if (!Array.isArray(container[field])) throw protocolError("foundation-worker-map-structure-invalid", `${path} 必须是数组`);
     }
   }
   return Object.freeze({

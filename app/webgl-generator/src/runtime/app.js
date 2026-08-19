@@ -12,7 +12,7 @@ import {finalizeSettlements, rebuildRelocatedPopulationPointsAsync, regenerateSe
 import {createNotesDomainRuntime} from "../domains/notes/runtime.ts";
 import {createMarkersPresentationRuntime} from "../domains/markers/runtime.ts";
 import {validatePopulationWorkerOutput, validatePopulationWorkerPatch} from "../domains/population/worker-runtime.ts";
-import {validateFoundationWorkerOutput} from "../domains/foundation/worker-runtime.ts";
+import {createFoundationWorkerBinding, validateFoundationWorkerOutput} from "../domains/foundation/worker-runtime.ts";
 import {reconcileSettlementCellIdentity} from "./settlement-cell-index.js";
 import {DEFAULT_OPTIONS, normalizeOptions} from "../generator/options.js";
 import {normalizeAtmosphereDirection, normalizeClimateLatitudeMode, normalizeWindProfile, windAngleFromDirection} from "../generator/climate-options.js";
@@ -3075,12 +3075,12 @@ function createRuntimeActions(state, documentRef, options = {}) {
   const operation = state.runtimeOperation;
   state.notesDomain ||= createNotesDomainRuntime({
     getMap: () => state.map,
-    getLegacyRevision: () => state.mapRevision.getSnapshot(),
+    getLegacyRevision: () => state.mapRevision.getCoreSnapshot(),
     getHistoryFingerprint: () => JSON.stringify(state.editHistory.getStats({affectedLimit: 50}))
   });
   state.markersDomain ||= createMarkersPresentationRuntime({
     getMap: () => state.map,
-    getLegacyRevision: () => state.mapRevision.getSnapshot(),
+    getLegacyRevision: () => state.mapRevision.getCoreSnapshot(),
     getHistoryFingerprint: () => JSON.stringify(state.editHistory.getStats({affectedLimit: 50}))
   });
   const displayIntents = createLatestDisplayIntentQueue();
@@ -13225,7 +13225,7 @@ function createWorkerRegenerationRenderRequest(state, targetKind, binding, layer
     ? "all"
     : null;
   return {
-    binding: {mapIdentity: binding.mapIdentity, mapRevision: binding.mapRevision},
+    binding: {mapIdentity: binding.mapIdentity, mapRevision: binding.mapRevision, topologyRevision: binding.topologyRevision},
     layers: requestedLayers,
     ...(pickingComponents.length ? {pickingComponents} : {}),
     ...(surfacePatchScope ? {surfacePatchScope} : {}),
@@ -13887,13 +13887,12 @@ function normalizeWorkerRegenerationOptions(options) {
 }
 
 function createRegenerationWorkerBinding(state, operation = null) {
-  return {
-    ...state.mapRevision.getSnapshot(),
+  return createFoundationWorkerBinding({
+    revision: state.mapRevision.getCoreSnapshot(),
     generationToken: Number(state.pendingGenerateId) || 0,
     lockFingerprint: regenerationLockFingerprint(state.map),
-    operationId: Number(operation?.id) || 0,
-    operationName: String(operation?.name || "")
-  };
+    operation
+  });
 }
 
 function sameRegenerationWorkerBinding(left, right) {

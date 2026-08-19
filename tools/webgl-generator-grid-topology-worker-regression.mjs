@@ -250,13 +250,14 @@ function createBinding(map, mapIdentity, mapRevision = 0) {
   return {
     mapIdentity,
     mapRevision,
+    topologyRevision: mapRevision,
     sourceFingerprint: fingerprintGridStructure(map.grid),
     lockFingerprint: fingerprintGridTopologyLocks(map)
   };
 }
 
 function revisionTracker(binding) {
-  return {getSnapshot: () => ({mapIdentity: binding.mapIdentity, mapRevision: binding.mapRevision})};
+  return {getSnapshot: () => ({mapIdentity: binding.mapIdentity, mapRevision: binding.mapRevision, topologyRevision: binding.topologyRevision})};
 }
 
 async function createRefinementRequest(map, binding, targetCells, options = {}) {

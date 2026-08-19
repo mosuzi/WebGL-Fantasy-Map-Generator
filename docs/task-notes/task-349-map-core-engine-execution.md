@@ -196,6 +196,8 @@ planned → computed → validated → projections-prepared
 - 阶段外首败：既有 ocean world 完整夹具稳定拒绝省份 `110` 无合法省会候选和省份 `118` 省会不一致；约束 bundle 另缺一个锁国无省会样本。未改夹具、未放宽门、未声称通过；按依赖顺序把最小复现与归因放到紧邻 `349-10b` 首门。
 - 产品改动：`8` 文件，约 `+327 / -7` 行；工具改动：`5` 文件，约 `+156 / -12` 行；版本 `0.5.25 → 0.5.26`。
 - 专题记录：`docs/task-notes/task-349-foundation-core-slice.md`。
-- 下一步：冻结 checkpoint，交同一只读评审智能体；仅 `ACCEPT` 后进入 `349-10b` society / politics 与 pack mirror。
+- 首轮评审：`7669915 / 0.5.26` 为 `BLOCK`。P1 一是正式 binding factory 未从 revision owner 取得 topology revision；P1 二是 replacement 只校验五个基础 section，可能把残缺整图交给 swap。
+- 最窄修复：内部 core revision snapshot 产生并保守单调推进 topology revision，失败快照同步回滚；正式 renderer request 保留该字段。replacement 改从唯一 canonical registry 要求全部非 optional 顶层 section 及关键集合结构；ocean / grid 残缺 replacement 在 pre-commit 拒绝且 canonical / history / revision 不变。
+- 修正版本：`0.5.26 → 0.5.27`；下一步冻结修正 checkpoint，交同一只读评审智能体 blocker-only 复审；仅 `ACCEPT` 后进入 `349-10b` society / politics 与 pack mirror。
 
 阶段结果在每次 checkpoint 后更新，长日志只记录命令和 artifact 路径，不粘贴到本文。

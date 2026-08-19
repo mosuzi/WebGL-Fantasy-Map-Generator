@@ -11,26 +11,37 @@ const vite = await createServer({configFile: false, root: path.join(repoRoot, "a
 try {
   const {
     adaptFoundationWorkerBinding,
+    createFoundationWorkerBinding,
     validateFoundationDocumentShape,
     validateFoundationWorkerOutput,
     validateFoundationWorkerPatch
   } = await vite.ssrLoadModule("/src/domains/foundation/worker-runtime.ts");
+  const {generatePlaceholderMap} = await vite.ssrLoadModule("/src/generator/index.js");
+  const {createMapDocument, parseMapDocument, stringifyMapDocument} = await vite.ssrLoadModule("/src/runtime/map-file-io.js");
+  const {EditHistory} = await vite.ssrLoadModule("/src/runtime/edit-history.js");
+  const {MapRevisionTracker} = await vite.ssrLoadModule("/src/runtime/map-revision.js");
 
-  const binding = Object.freeze({
-    mapIdentity: "foundation-map",
-    mapRevision: 7,
-    topologyRevision: 3,
+  const revisionOwner = new MapRevisionTracker({identityFactory: () => "foundation-map"});
+  revisionOwner.replaceMap();
+  for (let index = 0; index < 3; index++) revisionOwner.advance();
+  const ownerRollback = revisionOwner.createSnapshot();
+  revisionOwner.advance();
+  assert.equal(revisionOwner.getCoreSnapshot().topologyRevision, 4, "canonical mutation 没有推进 topology revision");
+  revisionOwner.restoreSnapshot(ownerRollback);
+  assert.deepEqual(revisionOwner.getCoreSnapshot(), {mapIdentity: "foundation-map", mapRevision: 3, topologyRevision: 3}, "事务 rollback 没有恢复 topology revision owner");
+  const binding = createFoundationWorkerBinding({
+    revision: revisionOwner.getCoreSnapshot(),
     generationToken: 2,
     lockFingerprint: "foundation-locks",
-    operationId: 9,
-    operationName: "foundation-regression"
+    operation: {id: 9, name: "foundation-regression"}
   });
   const preparedRender = Object.freeze({
     schemaVersion: 1,
     binding: {mapIdentity: binding.mapIdentity, mapRevision: binding.mapRevision, topologyRevision: binding.topologyRevision},
     layers: {}
   });
-  const replacementMap = Object.freeze({heightmap: {}, grid: {cells: {}}, climate: {}, oceanCurrents: {}, pack: {}});
+  const generatedMap = generatePlaceholderMap({seed: "foundation-complete-map", cellsTarget: 1_000});
+  const replacementMap = parseMapDocument(stringifyMapDocument(createMapDocument(generatedMap, generatedMap.options))).map;
 
   const coreBinding = adaptFoundationWorkerBinding("height-derived.compute", binding);
   assert.equal(coreBinding.bindingKind, "compute");
@@ -84,11 +95,26 @@ try {
     writeSet: ["grid", "grid.cells.h"],
     operations: [operation("grid"), operation("grid.cells.h")]
   }, "height-derived.compute", "height-derived"), "foundation-worker-patch-write-set-overlap");
-  assertProtocol(() => validateFoundationWorkerOutput({
-    task: "ocean-current-world.compute",
-    binding,
-    output: {kind: "ocean-current-world", binding, result: {executed: true}, replacementMap: {grid: {cells: {}}}, preparedRender}
-  }), "foundation-worker-map-section-missing");
+  const partialReplacement = structuredClone(replacementMap);
+  delete partialReplacement.politics;
+  const canonical = structuredClone(replacementMap);
+  const canonicalBefore = structuredClone(canonical);
+  const revisionBefore = revisionOwner.getCoreSnapshot();
+  const history = new EditHistory({onMutation: () => revisionOwner.advance(), onSnapshot: () => revisionOwner.createSnapshot(), onRestore: snapshot => revisionOwner.restoreSnapshot(snapshot)});
+  const historyBefore = history.getStats();
+  for (const [task, kind] of [["ocean-current-world.compute", "ocean-current-world"], ["grid-topology.prepare", "grid-topology-worker-result"]]) {
+    assertProtocol(() => validateFoundationWorkerOutput({
+      task,
+      binding,
+      output: {kind, binding, executed: true, result: {executed: true}, replacementMap: partialReplacement, preparedRender}
+    }), "foundation-worker-map-section-missing");
+  }
+  assert.deepEqual(canonical, canonicalBefore, "残缺 replacement pre-commit 拒绝后改写了 canonical map");
+  assert.deepEqual(revisionOwner.getCoreSnapshot(), revisionBefore, "残缺 replacement pre-commit 拒绝后推进了 revision owner");
+  assert.deepEqual(history.getStats(), historyBefore, "残缺 replacement pre-commit 拒绝后写入了 history");
+  const invalidStructure = structuredClone(replacementMap);
+  invalidStructure.notes.notes = null;
+  assertProtocol(() => validateFoundationDocumentShape(invalidStructure), "foundation-worker-map-structure-invalid");
 
   const oldDocument = JSON.parse(await readFile(path.join(repoRoot, "tools/fixtures/webgl-map-v1-minimal.json"), "utf8"));
   const legacy = validateFoundationDocumentShape(oldDocument.map, {allowLegacy: true});
@@ -97,6 +123,8 @@ try {
 
   const appSource = await readFile(path.join(repoRoot, "app/webgl-generator/src/runtime/app.js"), "utf8");
   assert.equal((appSource.match(/validateFoundationWorkerOutput\(/g) || []).length, 4, "四个基础 Worker 正式入口必须经过统一 validator");
+  assert.match(appSource, /createFoundationWorkerBinding\(\{[\s\S]*?getCoreSnapshot\(\)/u, "正式 Worker binding factory 未读取 revision owner 的 topology revision");
+  assert.match(appSource, /binding: \{mapIdentity: binding\.mapIdentity, mapRevision: binding\.mapRevision, topologyRevision: binding\.topologyRevision\}/u, "正式 renderer request 未携带 topology revision");
   assert.match(appSource, /topologyRevision \?\? 0\).*topologyRevision \?\? 0/s, "通用 Worker binding 必须比较 topology revision");
   for (const relative of [
     "app/webgl-generator/src/renderer/render-preparation.js",
@@ -114,7 +142,7 @@ try {
     topologyRevision: coreBinding.sourceRevision.topologyRevision,
     rendererSources: 4,
     legacyDefaults: legacy.legacyDefaults,
-    rejected: ["task", "binding", "worker-stale", "renderer-stale", "write", "overlap", "replacement", "strict-old-data"]
+    rejected: ["task", "binding", "worker-stale", "renderer-stale", "write", "overlap", "replacement", "replacement-atomicity", "strict-old-data"]
   }, null, 2));
 } finally {
   await vite.close();

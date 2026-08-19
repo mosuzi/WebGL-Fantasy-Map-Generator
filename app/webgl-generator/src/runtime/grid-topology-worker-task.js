@@ -24,7 +24,7 @@ export async function runGridTopologyWorkerTask(payload = {}, context = {}) {
   const sourceFingerprint = fingerprintGridStructure(map.grid);
   const sourceLockFingerprint = fingerprintGridTopologyLocks(map);
   const revisionTracker = {
-    getSnapshot: () => ({mapIdentity: binding.mapIdentity, mapRevision: binding.mapRevision})
+    getSnapshot: () => ({mapIdentity: binding.mapIdentity, mapRevision: binding.mapRevision, topologyRevision: binding.topologyRevision})
   };
   primeGridStructureFingerprint(map.grid, binding, sourceFingerprint);
   const options = clonePlainObject(payload.options);

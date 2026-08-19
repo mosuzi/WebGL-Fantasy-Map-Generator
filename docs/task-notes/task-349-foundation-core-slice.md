@@ -29,6 +29,17 @@
 - `pnpm run build`：production build 通过，`1377` modules。
 - `source/` 改动 `0`；浏览器启动、操作和验收均为 `0`。
 
+## 首轮评审与最窄修复
+
+同一只读评审智能体对 `7669915 / 0.5.26` 给出 `BLOCK`：
+
+1. `MapRevisionTracker.getSnapshot()` 仍只有旧兼容字段，正式 Worker binding factory 没有 topology revision；合成测试没有走真实 owner。
+2. replacement 只要求五个基础 section，残缺整图仍可能进入 `createMapReplacementCommand` 并删除其它 canonical section。
+
+`0.5.27` 修复保持公开旧 revision snapshot 形状不变，新增内部 `getCoreSnapshot()`；迁移期 topology revision 随 canonical revision 保守单调推进，换图归零，事务快照 / rollback 同步恢复。四个基础入口共用的真实 binding factory 和 renderer request 直接读取该内部 vector。正式 replacement 现在从唯一 canonical field registry 解析全部非 optional 顶层 section，要求每个 section 为当前对象 / 数组形态，并额外核对 pack cells、社会 / 行政镜像、城镇 / 路线、Feature / 河流、锁、notes / measurements / labels 关键集合。
+
+专项改为由真实 `MapRevisionTracker` 产生 binding，覆盖 topology 推进与 rollback；使用正规化完整地图验证 ocean / grid replacement，通过删除 politics 和破坏 notes 结构验证 pre-commit 拒绝，canonical、history 与 revision 均保持不变。
+
 ## 已记录的阶段外首败
 
 既有 `regress:ocean-current-world` 在完整世界夹具中稳定拒绝两个省份一致性问题：省份 `110` 没有合法省会候选，省份 `118` 当前省会不一致。隔离复现结果相同；另一个世界约束 bundle 缺少“锁国无省会省份”样本。按仓库停止规则没有继续补夹具或重复全门，也没有把这些门写成通过。
@@ -39,8 +50,8 @@
 
 | 字段 | 内容 |
 | --- | --- |
-| 状态 | `CHECKPOINT 待评审` |
-| 冻结点 | `0.5.26` 候选；checkpoint 提交后只读评审 |
+| 状态 | `BLOCK 修复完成，CHECKPOINT 待复审` |
+| 冻结点 | 首轮 `7669915 / 0.5.26`；修复候选 `0.5.27` |
 | 产品改动 | `8` 个文件，约 `+327 / -7` 行 |
 | 工具改动 | `5` 个文件，约 `+156 / -12` 行 |
 | 配置 / 文档 | `package.json` 新增专项门并递增版本；本记录及权威状态同步 |
