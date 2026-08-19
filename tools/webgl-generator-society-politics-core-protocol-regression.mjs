@@ -72,6 +72,18 @@ try {
   undefinedValue.patch.operations[0].value = undefined;
   assertProtocol(() => validateSocietyPoliticsWorkerOutput({kind: "states", sourceMap: outputs.states.sourceMap, binding, output: undefinedValue, policy: outputs.states.policy}), "society-politics-worker-operation-value-invalid");
 
+  const dataViewValue = structuredClone(outputs.religions.output);
+  operation(dataViewValue.patch, "grid.cells.religion").value = new DataView(new ArrayBuffer(8));
+  assertProtocol(() => validateSocietyPoliticsWorkerOutput({kind: "religions", sourceMap: outputs.religions.sourceMap, binding, output: dataViewValue, policy: outputs.religions.policy}), "society-politics-worker-operation-value-invalid");
+
+  const typedRecordValue = structuredClone(outputs.states.output);
+  operation(typedRecordValue.patch, "politics").value = new Uint8Array(8);
+  assertProtocol(() => validateSocietyPoliticsWorkerOutput({kind: "states", sourceMap: outputs.states.sourceMap, binding, output: typedRecordValue, policy: outputs.states.policy}), "society-politics-worker-operation-value-invalid");
+
+  const mapRecordValue = structuredClone(outputs.provinces.output);
+  operation(mapRecordValue.patch, "settlements").value = new Map([["cities", []]]);
+  assertProtocol(() => validateSocietyPoliticsWorkerOutput({kind: "provinces", sourceMap: outputs.provinces.sourceMap, binding, output: mapRecordValue, policy: outputs.provinces.policy}), "society-politics-worker-operation-value-invalid");
+
   const religionMirror = structuredClone(outputs.religions.output);
   const religionMirrorOperation = operation(religionMirror.patch, "pack.religions");
   religionMirrorOperation.value = structuredClone(religionMirrorOperation.value).slice(0, -1);
@@ -158,7 +170,7 @@ try {
     manifest: societyPoliticsManifest.id,
     cases,
     commit: {revision: owner.getCoreSnapshot(), history: history.getStats()},
-    rejected: ["stale-binding", "partial-write-set", "delete-write", "undefined-write", "religion-mirror", "province-mirror", "capital-reference", "capital-clear", "policy-drift"],
+    rejected: ["stale-binding", "partial-write-set", "delete-write", "undefined-write", "data-view", "typed-record", "map-record", "religion-mirror", "province-mirror", "capital-reference", "capital-clear", "policy-drift"],
     lockedZeroProvince: {state: lockedZeroStateId, province: lockedZeroProvinceId},
     browserRuns: 0
   }, null, 2));

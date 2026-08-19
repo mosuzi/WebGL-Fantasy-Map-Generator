@@ -29,8 +29,8 @@
 | 349-8 | 一个真实 Worker task 的统一 binding / result / patch 切片 | checksum、stale、cancel、gap、restart 的专项回归 | 不批量迁移 Worker | ACCEPT |
 | 349-9 | dependency registry、projection 状态和局部失效接线 | declared read/write、full rebuild 显式化、projection recovery | 不迁移未登记领域 | ACCEPT |
 | 349-10a | terrain / grid / height-derived / climate / ocean / topology 基础域 | 旧数据、history、Worker、renderer source / Node 门 | 不迁移社会或行政域 | ACCEPT |
-| 349-10b | society / politics 与 pack mirror | mirror、行政引用、history、Worker 专项 | 不迁移城镇 / 路线 | 修正 CHECKPOINT 待复审 |
-| 349-10c | settlements / zones / labels / measurements | 身份槽、锁、旧数据、history、projection 专项 | 不迁移路线 / 经济 | 待执行 |
+| 349-10b | society / politics 与 pack mirror | mirror、行政引用、history、Worker 专项 | 不迁移城镇 / 路线 | ACCEPT |
+| 349-10c | settlements / zones / labels / measurements | 身份槽、锁、旧数据、history、projection 专项 | 不迁移路线 / 经济 | 进行中 |
 | 349-10d | routes / rivers / features / resource markers | topology、引用、picking、Worker、history 专项 | 不迁移经济 / 军事 | 待执行 |
 | 349-10e | economy / diplomacy / military | 跨域引用、history、Worker、旧数据专项 | 不收口全图 adoption | 待执行 |
 | 349-10f | generation / import / adoption / export / headless profile 收口 | 新 session、rollback、旧档、checksum、无 DOM headless 专项 | 不删除未证明冗余的 legacy adapter | 待执行 |
@@ -52,14 +52,14 @@ planned → computed → validated → projections-prepared
 
 | 字段 | 内容 |
 | --- | --- |
-| 当前阶段 | `349-10b` society / politics 与 pack mirror；`0.5.30` 首轮 P1 修正 checkpoint 待复审 |
-| 冻结点 | `349-10a / 0.5.28` 已接受；`349-10b / 0.5.29` 首轮 BLOCK，`0.5.30` 待同一评审智能体确认 |
-| 允许文件 | society / politics Manifest / adapter、行政引用与 pack mirror 契约、相关 Worker / history 专项、阶段文档 |
-| 禁止文件 | settlements / routes / economy / military 正式迁移、业务算法无关改写、`source/`、main、浏览器 |
-| 必须保持 | 单一 canonical owner；society / politics 与 pack mirror 原子一致；旧档与锁语义不退化；未知依赖显式 full rebuild |
-| 首个廉价门 | 已完成：110 / 118 为世界重建漏开既有修复模式；锁国无省会为偶然夹具加越锁补首府，现有确定性反例闭合 |
-| 冻结门 | society / politics Manifest、mirror / 行政引用、history、Worker、旧数据、failure rollback、typecheck、build、评审 ACCEPT |
-| 停止条件 | 归因证明必须先迁移 settlements 身份 owner，或现有行政约束无法在不改变产品语义下形成确定契约 |
+| 当前阶段 | `349-10c` settlements / zones / labels / measurements |
+| 冻结点 | `349-10b / 0.5.31` 已由同一评审智能体接受 |
+| 允许文件 | settlements / zones / labels / measurements Manifest / adapter、身份槽与锁契约、history / projection 专项、阶段文档 |
+| 禁止文件 | routes / rivers / features / economy / military 正式迁移、业务算法无关改写、`source/`、main、浏览器 |
+| 必须保持 | 单一 canonical owner；city / burg 与 zone identity 稳定；旧档、锁、history 和 view-only revision 语义不退化 |
+| 首个廉价门 | 盘点四域真实 command / regeneration / view / persistence / Worker owner 和精确写集，重复 owner 或未知入口为阻断 |
+| 冻结门 | 四域 Manifest、身份槽 / 锁 / 旧数据、history、projection、相关 Worker、typecheck、build、评审 ACCEPT |
+| 停止条件 | 发现 settlements 必须与 routes 同事务才能维持正式引用，或 zones 无法与 diplomacy / military 分离出安全边界 |
 
 ## 阶段结果
 
@@ -211,9 +211,12 @@ planned → computed → validated → projections-prepared
 - 依赖：Manifest 注册表为 `5 domains / 78 descriptors`，dependency 注册表为 `9 systems`；社会和行政写入分别失效 cell colors、政治边界、labels、object index 与 picking，并显式规划 full rebuild。
 - 阶段外首败：完整 world constraint 现稳定在锁定 Feature 港口引用 `382 → 366` 处拒绝，删除项来自 `pack.burgs`。该 owner 属于 routes / features，已登记为原定 `349-10d` 首门；重新评估后未完成阶段顺序不变。
 - 门禁：typecheck、Manifest、dependency、society / politics 组合专项、v1 migration、production build `1379 modules` 与 diff check 通过；完整 world constraint 的 10d 预期首败不冒充 10b 通过门。浏览器执行 `0`，`source/` 改动 `0`。
-- 规模：产品代码 `6` 文件，约 `+451 / -3` 行；工具代码 `6` 文件，约 `+291 / -36` 行；文档 / 配置同步 `8` 文件；版本 `0.5.28 → 0.5.30`。
+- 规模：产品代码 `6` 文件，工具代码 `6` 文件，文档 / 配置同步 `8` 文件；版本 `0.5.28 → 0.5.31`。
 - 首轮评审：`2700d2b / 0.5.29` 为 `BLOCK`。P1 一是完整 writeSet 仍可把 18 个 operation 全部改成 `exists:false` 或 `value:undefined`，validator 会放行并由 patch 实际删除 canonical 路径；P1 二是国家 / 省份首府清零后保留 city / burg 标记可绕过仅正向引用检查。
 - 最窄修复：executed patch 的每个精确路径必须 `exists:true` 且值满足布尔、数值、数组 / TypedArray 或记录结构契约；删除与 undefined 在 pre-commit 原子拒绝。行政门改为国家 / 省份 ↔ city ↔ burg 双向唯一引用；零首府只允许 source before-image 已为零且对应国家 / 省份受锁，普通清零和孤立 / 重复反向标记拒绝，锁国既有零省会正例保留。
-- 修正版本：`0.5.29 → 0.5.30`；下一步冻结修正 checkpoint 并交同一评审智能体 blocker-only 复审，仅 `ACCEPT` 后进入 `349-10c`。
+- 第一轮修正版本：`0.5.29 → 0.5.30`。复审确认双向首府和受锁 zero before-image 已闭合，但继续 `BLOCK` 一项同类 P1：`ArrayBuffer.isView` 误接纳 DataView，通用记录判断也接纳 TypedArray、Map / Set / Date 等非 canonical 容器。
+- 第二轮最窄修复：cell 路径只接纳 Array 或非 DataView TypedArray；记录路径只接纳 plain / null-prototype object，排除 ArrayBuffer view、Map、Set、Date 等原生容器。专项新增 DataView cell、TypedArray politics 和 Map settlements 三类 pre-commit 拒绝，版本 `0.5.30 → 0.5.31`，待同一智能体复审。
+- 终验：同一只读评审智能体对第二轮修正 checkpoint `ACCEPT`；两轮 P1 全部闭合且无新增 P0 / P1。
+- 下一步：进入 `349-10c`，先盘点 settlements / zones / labels / measurements 的真实 owner 与边界，不提前迁移 routes / economy。
 
 阶段结果在每次 checkpoint 后更新，长日志只记录命令和 artifact 路径，不粘贴到本文。

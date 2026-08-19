@@ -205,8 +205,18 @@ function validOperationValue(path: string, value: unknown): boolean {
   if (path.endsWith(".metadata.stale")) return typeof value === "boolean";
   if (path.startsWith("metadata.regeneration.")) return typeof value === "number" && Number.isFinite(value);
   if (["generationLog", "society.religions", "pack.religions", "pack.states", "pack.provinces", "pack.burgs", "pack.routes"].includes(path)) return Array.isArray(value);
-  if (path.startsWith("grid.cells.") || path.startsWith("pack.cells.") && path !== "pack.cells.routes") return Array.isArray(value) || ArrayBuffer.isView(value);
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+  if (path.startsWith("grid.cells.") || path.startsWith("pack.cells.") && path !== "pack.cells.routes") return Array.isArray(value) || isTypedArray(value);
+  return isPlainRecord(value);
+}
+
+function isTypedArray(value: unknown): boolean {
+  return ArrayBuffer.isView(value) && !(value instanceof DataView);
+}
+
+function isPlainRecord(value: unknown): value is UnknownRecord {
+  if (!value || typeof value !== "object" || Array.isArray(value) || ArrayBuffer.isView(value)) return false;
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
 }
 
 function indexAdministrativeRows(rows: unknown[]): Map<number, UnknownRecord> {
