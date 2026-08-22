@@ -16,7 +16,7 @@ for (const method of ["population.inspectAdjustment", "population.applyAdjustmen
 for (const method of ["population.inspectTransfer", "population.transfer"]) assert(API_METHODS.edit.includes(method), `稳定 API 目录缺少 ${method}`);
 assert(!CONFIRM_REQUIRED_METHODS.includes("edit.population.inspectTransfer"), "人口转移预检不应要求确认");
 assert(CONFIRM_REQUIRED_METHODS.includes("edit.population.transfer"), "人口转移提交缺少显式确认");
-assert.equal(Object.values(API_METHODS).reduce((sum, methods) => sum + methods.length, 0), 328);
+assert.equal(Object.values(API_METHODS).reduce((sum, methods) => sum + methods.length, 0), 329);
 assert.equal(API_METHODS.edit.length, 179);
 
 const [appSource, consoleSource, controllerSource, panelSource] = await Promise.all([
@@ -37,7 +37,7 @@ for (const token of ["onAdjustmentDelta", "onInspectAdjustment", "onApplyAdjustm
 for (const text of ["区域人口增减", "人口增减量", "应用单次调整", "区域人口转移", "目标区域", "预检转移", "确认转移", "目标容量", "可通过历史撤销"]) assert(panelSource.includes(text), `人口面板缺少“${text}”`);
 
 const dynamic = await testDynamicRuntime();
-console.log(JSON.stringify({ok: true, methodCounts: {total: 328, edit: 179}, dynamic}, null, 2));
+console.log(JSON.stringify({ok: true, methodCounts: {total: 329, edit: 179}, dynamic}, null, 2));
 
 async function testDynamicRuntime() {
   const server = await createViteServer({

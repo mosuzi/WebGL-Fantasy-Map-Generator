@@ -148,7 +148,10 @@ export async function rebuildOceanCurrentWorldStage(map, system, {seed, signal, 
         ...stageConstraints.lockedRoutes,
         ...collectFeatureSupportObjects(map, constraintBundle?.lockedFeatures, "routes")
       ]);
-      synchronizePoliticalMirrorsForRebuild(map);
+      synchronizePoliticalMirrorsForRebuild(map, {
+        lockedStates: stageConstraints.lockedStates,
+        lockedProvinces
+      });
       const politics = reexpandPackPoliticsPreservingIdentity(map.grid, map.society, map.pack, map.settlements, {
         ...stageConstraints,
         lockedProvinces,
@@ -607,21 +610,25 @@ function snapshotIdentity(items = []) {
   return new Map(items.filter(item => item?.i && !item.removed).map(item => [Number(item.i), {name: item.name, fullName: item.fullName}]));
 }
 
-function synchronizePoliticalMirrorsForRebuild(map) {
+function synchronizePoliticalMirrorsForRebuild(map, {lockedStates = [], lockedProvinces = []} = {}) {
   map.politics ||= {};
   map.pack ||= {};
-  const states = mergePoliticalMirrors(map.politics.states, map.pack.states);
-  const provinces = mergePoliticalMirrors(map.politics.provinces, map.pack.provinces);
+  const states = mergePoliticalMirrors(map.politics.states, map.pack.states, lockedStates);
+  const provinces = mergePoliticalMirrors(map.politics.provinces, map.pack.provinces, lockedProvinces);
   map.politics.states = map.pack.states = states;
   map.politics.provinces = map.pack.provinces = provinces;
 }
 
-function mergePoliticalMirrors(politicalItems, packItems) {
+function mergePoliticalMirrors(politicalItems, packItems, lockedSnapshots = []) {
   const primary = Array.isArray(politicalItems) ? politicalItems : [];
   const fallback = Array.isArray(packItems) ? packItems : [];
   if (primary === fallback) return primary;
+  const lockedById = new Map((lockedSnapshots || []).map(snapshot => [Number(snapshot?.i ?? snapshot?.id), snapshot]));
   const size = Math.max(primary.length, fallback.length);
-  return Array.from({length: size}, (_, id) => mergePoliticalItem(primary[id], fallback[id], id));
+  return Array.from({length: size}, (_, id) => {
+    const locked = lockedById.get(id);
+    return locked ? structuredClone(locked) : mergePoliticalItem(primary[id], fallback[id], id);
+  });
 }
 
 function mergePoliticalItem(primary, fallback, id) {

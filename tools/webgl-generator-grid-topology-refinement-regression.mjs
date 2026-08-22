@@ -24,6 +24,7 @@ import {
 } from "../app/webgl-generator/src/runtime/grid-topology-worker-task.js";
 import {burgIdsAtPackCell, cityIdsAtGridCell, rebuildSettlementCellIndex} from "../app/webgl-generator/src/runtime/settlement-cell-index.js";
 import {pickGridCell} from "../app/webgl-generator/src/renderer/picking.js";
+import {createRenderResourceBinding} from "../app/webgl-generator/src/renderer/render-resource-binding.js";
 
 const appSource = readFileSync(new URL("../app/webgl-generator/src/runtime/app.js", import.meta.url), "utf8");
 const gridRefinementSource = readFileSync(new URL("../app/webgl-generator/src/generator/grid-refinement.js", import.meta.url), "utf8");
@@ -43,10 +44,18 @@ assert.equal(primeGridStructureFingerprint(cacheFixture.grid, {...cacheBinding, 
 assert.equal(cachedGridStructureFingerprint(cacheFixture.grid, {...cacheBinding, mapRevision: 3}), cacheFingerprint);
 
 const workerSource = generatePlaceholderMap({seed: "grid-topology-worker-parity", cellsTarget: 1_000});
-const workerRevision = {getSnapshot: () => ({mapIdentity: "grid-topology-worker-parity", mapRevision: 0})};
+const workerRevision = {getSnapshot: () => ({mapIdentity: "grid-topology-worker-parity", mapRevision: 0, topologyRevision: 0})};
 const workerInspection = inspectGridRefinement(workerSource, workerRevision, {targetCells: 2_000});
 const workerOptions = {targetCells: 2_000, confirm: true, inspectionToken: workerInspection.inspectionToken};
 const workerBinding = {...workerRevision.getSnapshot(), generationToken: 0, operationId: 1, operationName: "grid.refine", sourceFingerprint: fingerprintGridStructure(workerSource.grid), lockFingerprint: fingerprintGridTopologyLocks(workerSource)};
+const workerRenderBinding = createRenderResourceBinding({
+  mapIdentity: workerBinding.mapIdentity,
+  sourceRevision: workerBinding.mapRevision + 1,
+  topologyRevision: workerBinding.topologyRevision + 1
+}, {
+  renderPreparationId: "grid-topology-worker-parity:1",
+  renderGeneration: 1
+});
 const workerDirect = prepareGridRefinement(workerSource, workerRevision, workerOptions);
 const workerPayload = {
   map: workerSource,
@@ -54,7 +63,7 @@ const workerPayload = {
   options: workerOptions,
   binding: workerBinding,
   render: {
-    binding: {mapIdentity: workerBinding.mapIdentity, mapRevision: workerBinding.mapRevision},
+    binding: workerRenderBinding,
     layers: ["point"],
     camera: {scale: 1, offsetX: 0, offsetY: 0},
     canvas: {width: 1440, height: 960, clientWidth: 1440, clientHeight: 960},
@@ -65,6 +74,7 @@ const workerOutput = await runGridTopologyWorkerTask(workerPayload, {binding: wo
 assert.equal(workerOutput.executed, true);
 assert.equal(workerOutput.result.target.fingerprint, workerDirect.result.target.fingerprint, "Grid Worker 与主线程准备结果不同源");
 assert.ok(workerOutput.preparedRender?.layers?.point?.vertices instanceof Float32Array, "Grid Worker 未返回绑定的点图层准备结果");
+assert.deepEqual(workerOutput.preparedRender.binding, workerRenderBinding, "Grid Worker prepared render 必须保持目标 topology resource binding 同源");
 assert.ok(collectGridTopologyWorkerTransferables(workerOutput).includes(workerOutput.preparedRender.layers.point.vertices.buffer), "Grid Worker transfer 未覆盖渲染准备结果");
 assert.equal(fingerprintGridStructure(workerSource.grid), workerBinding.sourceFingerprint, "Grid Worker 改写了正式输入");
 await assert.rejects(

@@ -59,6 +59,19 @@ try {
   registry.register(militaryManifest);
   assert.deepEqual(registry.snapshot().ids, ["diplomacy.relation-projection", "economy.market-projection", "features.topology-projection", "foundation.climate", "foundation.height-topology", "foundation.ocean-current-layer", "labels.layout-projection", "markers.point-layer", "markers.resource-economy", "measurements.overlay-projection", "military.force-projection", "notes.object-panels", "population.downstream", "rivers.hydrology-projection", "routes.line-projection", "settlements.city-projection", "society-politics.administrative-mirror", "society-politics.social-assignment", "zones.region-projection"]);
 
+  const planWorkerChain = (manifest, task) => {
+    const workerTask = manifest.workerTasks.find(candidate => candidate.task === task);
+    assert.ok(workerTask, `缺少 ${task} Manifest Worker task`);
+    const plan = registry.planCanonical({writeSet: workerTask.writeSet});
+    assert.equal(plan.mode, "full-rebuild", `${task} 必须形成保守的全图依赖闭包`);
+    assert.deepEqual(new Set(plan.projections), new Set(["worker", "renderer", "persistence", "ui"]), `${task} 必须覆盖四类提交投影`);
+    return plan;
+  };
+
+  const assertSystemsIncluded = (plan, required, task) => {
+    for (const system of required) assert.ok(plan.systems.includes(system), `${task} 缺少跨域依赖 ${system}`);
+  };
+
   const topologyFull = registry.planCanonical({writeSet: ["grid"]});
   assert.equal(topologyFull.mode, "full-rebuild");
   assert.ok(topologyFull.systems.includes("foundation.height-topology"));
@@ -129,6 +142,15 @@ try {
   assert.ok(economyFull.systems.includes("economy.market-projection"));
   assert.ok(economyFull.invalidated.includes("economy-demand"));
 
+  const r2bPopulationChain = planWorkerChain(populationManifest, "population.compute");
+  assertSystemsIncluded(r2bPopulationChain, ["population.downstream", "society-politics.social-assignment", "society-politics.administrative-mirror", "economy.market-projection"], "population.compute");
+
+  const r2bSocialChain = planWorkerChain(societyPoliticsManifest, "social-expansion.compute");
+  assertSystemsIncluded(r2bSocialChain, ["society-politics.social-assignment", "society-politics.administrative-mirror", "population.downstream", "economy.market-projection"], "social-expansion.compute");
+
+  const r2bEconomyChain = planWorkerChain(economyManifest, "economy.compute");
+  assertSystemsIncluded(r2bEconomyChain, ["economy.market-projection", "society-politics.administrative-mirror", "population.downstream"], "economy.compute");
+
   const diplomacyFull = registry.planCanonical({writeSet: ["diplomacy"]});
   assert.ok(diplomacyFull.systems.includes("diplomacy.relation-projection"));
   assert.ok(diplomacyFull.invalidated.includes("cell-colors"));
@@ -183,6 +205,11 @@ try {
     settlementZonesAnnotations: {settlements: settlementsFull.systems, zones: zonesFull.systems, measurements: measurementsFull.systems},
     featuresNetworksResources: {features: featuresFull.systems, routes: routesFull.systems, rivers: riversFull.systems},
     worldSystems: {economy: economyFull.systems, diplomacy: diplomacyFull.systems, military: militaryFull.systems},
+    r2bWorkerChains: {
+      population: {systems: r2bPopulationChain.systems, invalidated: r2bPopulationChain.invalidated, projections: r2bPopulationChain.projections},
+      society: {systems: r2bSocialChain.systems, invalidated: r2bSocialChain.invalidated, projections: r2bSocialChain.projections},
+      economy: {systems: r2bEconomyChain.systems, invalidated: r2bEconomyChain.invalidated, projections: r2bEconomyChain.projections}
+    },
     negative: ["missing-scope", "unknown-write", "duplicate-domain", "invalidatedBy-outside-reads", "invalid-projection", "missing-invalidation-target", "manifest-mutation-after-register"]
   }, null, 2));
 } finally {

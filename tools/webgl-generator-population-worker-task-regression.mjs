@@ -17,6 +17,7 @@ import {
 import {
   collectPopulationWorkerTransferables,
   fingerprintPopulationSource,
+  fingerprintPopulationSourceAsync,
   getPopulationWorkerPatchPolicy,
   runPopulationWorkerTask
 } from "../app/webgl-generator/src/runtime/population-worker-task.js";
@@ -31,8 +32,16 @@ async function verifyTenThousandCells() {
   const binding = createBinding("population-worker-10k", 14);
   const [sourceState, targetState] = chooseStatePair(base, 120);
   const adjustmentRequest = {kind: "adjustment", target: {scope: "state", id: sourceState}, delta: 120};
+  let fingerprintYields = 0;
+  assert.equal(
+    await fingerprintPopulationSourceAsync(base, adjustmentRequest, {budgetMs: 1, yieldToMain: async () => { fingerprintYields++; }}),
+    fingerprintPopulationSource(base, adjustmentRequest),
+    "分片人口来源指纹与同步 Worker 指纹不一致"
+  );
+  assert.ok(fingerprintYields > 0, "分片人口来源指纹没有主动让出主线程");
   const sourceSnapshot = structuredClone(base);
   const sourcePackBuffer = base.pack.cells.pop.buffer;
+  await verifyDetachedMirrorFingerprint(base, binding, adjustmentRequest, sourceState);
 
   const adjustmentShadow = structuredClone(base);
   const shadowPackBuffer = adjustmentShadow.pack.cells.pop.buffer;
@@ -42,13 +51,16 @@ async function verifyTenThousandCells() {
     map: adjustmentShadow,
     request: adjustmentRequest,
     binding,
-    sourceFingerprint: fingerprintPopulationSource(adjustmentShadow, adjustmentRequest)
+    sourceFingerprint: fingerprintPopulationSource(adjustmentShadow, adjustmentRequest),
+    render: populationRenderRequest(binding)
   }, taskContext(binding));
   assert.equal(adjustmentOutput.result.executed, true, "10k 人口增减 Worker 未执行");
   assert.deepEqual(adjustmentOutput.inspection, expectedInspection, "人口 Worker 与正式 inspector 不同源");
   assert.equal(adjustmentOutput.plan.binding.mapRevision, binding.mapRevision, "人口 plan 未绑定 revision");
   assert.ok(adjustmentOutput.patch.writeSet.length > 0, "人口增减没有返回领域补丁");
   assert.equal(adjustmentOutput.patch.writeSet.some(path => path === "summary" || path.startsWith("summary.")), false, "人口补丁触碰 summary");
+  assert.deepEqual(adjustmentOutput.preparedRender?.layers?.picking?.components, ["cities"], "人口 Worker 必须只准备城市 picking 对象族");
+  assert.deepEqual(adjustmentOutput.preparedRender?.binding, populationRenderRequest(binding).binding, "人口 Worker picking binding 漂移");
   assert.equal(shadowPackBuffer.byteLength > 0, true, "人口 Worker 输入 buffer 被 detach");
   const adjustmentTransfers = collectPopulationWorkerTransferables(adjustmentOutput);
   assert.equal(adjustmentTransfers.includes(shadowPackBuffer), false, "人口输出复用了 Worker 输入 buffer");
@@ -116,7 +128,9 @@ async function verifyTenThousandCells() {
   const transferShadow = structuredClone(base);
   const transferInspection = inspectPopulationTransfer(transferShadow, transferRequest.source, transferRequest.target, {amount: transferRequest.amount});
   assert.equal(transferInspection.valid, true, transferInspection.reason);
-  const transferOutput = await runPopulationWorkerTask({map: transferShadow, request: transferRequest, binding}, taskContext(binding, "transfer"));
+  const transferOutput = await runPopulationWorkerTask({map: transferShadow, request: transferRequest, binding, render: populationRenderRequest(binding)}, taskContext(binding, "transfer"));
+  assert.deepEqual(transferOutput.preparedRender?.layers?.picking?.components, ["cities"], "人口转移 Worker 必须只准备城市 picking 对象族");
+  assert.deepEqual(transferOutput.preparedRender?.binding, populationRenderRequest(binding).binding, "人口转移 Worker picking binding 漂移");
   const transferFormal = structuredClone(base);
   const transferPlan = buildPopulationTransferPlan(transferFormal, transferRequest.source, transferRequest.target, {amount: transferRequest.amount});
   createApplyPopulationTransferCommand(transferPlan).apply({map: transferFormal});
@@ -152,9 +166,37 @@ async function verifyTenThousandCells() {
     objectIdentity: true,
     undoRedo: true,
     workerHistory: true,
+    chunkedFingerprintParity: true,
+    aliasInsensitiveSourceFingerprint: true,
     locksCancelFaultStale: true,
     zeroInputRejectedWithoutWrites: true
   };
+}
+
+async function verifyDetachedMirrorFingerprint(base, binding, request, stateId) {
+  const expected = fingerprintPopulationSource(base, request);
+  const detached = structuredClone(base);
+  detached.politics.states = structuredClone(detached.pack.states);
+  assert.notStrictEqual(detached.pack.states, detached.politics.states, "人口来源指纹反例没有分离 states 镜像引用");
+  assert.deepEqual(detached.pack.states, detached.politics.states, "人口来源指纹反例的 states 内容不一致");
+  assert.equal(fingerprintPopulationSource(detached, request), expected, "人口来源指纹错误依赖 states 镜像引用身份");
+  const accepted = await runPopulationWorkerTask({
+    map: detached,
+    request,
+    binding,
+    sourceFingerprint: expected
+  }, taskContext(binding, "detached-state-mirror"));
+  assert.equal(accepted.result.executed, true, "值一致的分离 states 镜像被人口 Worker 拒绝");
+  assert.deepEqual(detached.pack.states, detached.politics.states, "人口 Worker 改写后分离 states 镜像内容漂移");
+
+  const drift = structuredClone(base);
+  drift.politics.states = structuredClone(drift.pack.states);
+  drift.politics.states[stateId].rural = Number(drift.politics.states[stateId].rural || 0) + 1;
+  assert.notEqual(fingerprintPopulationSource(drift, request), expected, "states 镜像值漂移未改变人口来源指纹");
+  await assert.rejects(
+    runPopulationWorkerTask({map: drift, request, binding, sourceFingerprint: expected}, taskContext(binding, "drifted-state-mirror")),
+    error => error?.code === "population-worker-source-stale" && error?.details?.aliases?.states === false
+  );
 }
 
 async function verifyHundredThousandCells() {
@@ -168,13 +210,16 @@ async function verifyHundredThousandCells() {
     map,
     request,
     binding,
-    sourceFingerprint: fingerprintPopulationSource(map, request)
+    sourceFingerprint: fingerprintPopulationSource(map, request),
+    render: populationRenderRequest(binding)
   }, taskContext(binding, "100k"));
   const durationMs = Math.round((performance.now() - started) * 10) / 10;
   assert.equal(map.grid.cells.i.length, 99846, "100k 固定夹具 grid cell 数漂移");
   assert.ok(map.pack.cells.i.length >= 50000 && map.pack.cells.i.length <= 100000, "100k pack cell 数异常");
   assert.equal(output.result.executed, true, "100k 人口增减 Worker 未执行");
   assert.ok(output.patch.writeSet.length > 0, "100k 人口 Worker 没有领域补丁");
+  assert.deepEqual(output.preparedRender?.layers?.picking?.components, ["cities"], "100k 人口 Worker 必须准备城市 picking 对象族");
+  assert.deepEqual(output.preparedRender?.binding, populationRenderRequest(binding).binding, "100k 人口 Worker picking binding 漂移");
   assert.ok(durationMs < 30000, `100k 人口 Worker 超出 30s 预算：${durationMs}ms`);
   assert.equal(packBuffer.byteLength > 0, true, "100k 人口输入 buffer 被 detach");
   const transfers = collectPopulationWorkerTransferables(output);
@@ -400,6 +445,16 @@ function createMap(seed, cellsTarget) {
 
 function createBinding(mapIdentity, operationId) {
   return {mapIdentity, mapRevision: 6, generationToken: 4, lockFingerprint: `${mapIdentity}-locks`, operationId, operationName: "population.compute"};
+}
+
+function populationRenderRequest(binding) {
+  return {
+    binding: {mapIdentity: binding.mapIdentity, mapRevision: binding.mapRevision, topologyRevision: 2},
+    layers: ["picking"],
+    pickingComponents: ["cities"],
+    camera: {scale: 1, offsetX: 0, offsetY: 0},
+    canvas: {width: 1280, height: 820, clientWidth: 1280, clientHeight: 820}
+  };
 }
 
 function taskContext(binding, label = "worker") {

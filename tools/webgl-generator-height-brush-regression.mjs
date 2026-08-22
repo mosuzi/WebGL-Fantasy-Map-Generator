@@ -198,6 +198,7 @@ assert(restoredMap.pack.cells.h[0] === 14, "旧地图保存出的普通对象缓
 assert(restoredMap.__heightEditorPackCellsByGrid instanceof Map, "旧地图高度索引缓存没有重建为 Map");
 assert(!Object.keys(restoredMap).includes("__heightEditorPackCellsByGrid"), "高度索引缓存不应再次写入地图存档");
 
+
 const falloffStroke = {originals: new Map()};
 const falloff = getHeightBrushChanges(createSyntheticMap(), {x: 10, y: 0}, {action: "flatten", radius: 20, strength: 8, falloff: true}, falloffStroke);
 assert(!falloff.some(change => change.gridCell === 3), "整平衰减为零的边缘仍被计入变化");

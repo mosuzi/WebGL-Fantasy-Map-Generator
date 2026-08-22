@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import {createCommandMapReplicaPatch, listCommandMapReplicaPaths} from "../app/webgl-generator/src/runtime/map-replica-command-patch.js";
+import {captureCommandMapReplicaWrites, captureCommandMapReplicaWritesAsync, createCommandMapReplicaPatch, listCommandMapReplicaPaths} from "../app/webgl-generator/src/runtime/map-replica-command-patch.js";
 import {applyMapReplicaPatch} from "../app/webgl-generator/src/runtime/map-replica-journal.js";
 import {computeAppliedMapReplicaPatchTargetChecksum, computeCanonicalMapReplicaChecksum} from "../app/webgl-generator/src/runtime/map-replica-checksum.js";
 import {createRenameObjectCommand} from "../app/webgl-generator/src/runtime/object-edit-commands.js";
@@ -86,4 +86,49 @@ await assert.rejects(createCommandMapReplicaPatch({map: target, command: {domain
 assert.ok(listCommandMapReplicaPaths("politics").includes("grid.cells.province"));
 assert.deepEqual(listCommandMapReplicaPaths("unknown"), []);
 
-console.log(JSON.stringify({ok: true, visualWrites: visualPatch.writes.length, stateWrites: statePatch.writes.length, workerWrites: workerPatch.writes.length, cityWrites: cityPatch.writes.length, preciseCityWrites: precisePatch.writes.length}));
+const sharedStates = Array.from({length: 10_000}, (_, id) => ({id, name: `state-${id}`}));
+const asyncCaptureMap = {
+  politics: {states: sharedStates},
+  pack: {states: sharedStates},
+  grid: {cells: {state: new Uint16Array(10_000)}}
+};
+let asyncCaptureYields = 0;
+let asyncCapturePackets = 0;
+let asyncCaptureMaxPacketMs = 0;
+const asyncWrites = await captureCommandMapReplicaWritesAsync({
+  map: asyncCaptureMap,
+  command: {domain: "state", getReplicaPaths: () => ["politics.states", "pack.states", "grid.cells.state"]},
+  budgetMs: 1,
+  yieldToMain: async () => { asyncCaptureYields += 1; },
+  isCurrent: () => true,
+  onClone: ({packetStats}) => {
+    asyncCapturePackets = packetStats.length;
+    asyncCaptureMaxPacketMs = Math.max(0, ...packetStats.map(packet => packet.durationMs));
+  }
+});
+assert.ok(asyncCaptureYields > 0, "异步副本写集捕获没有按预算让出主线程");
+assert.ok(asyncCapturePackets > 1, "异步副本写集捕获没有形成分包");
+assert.ok(asyncCaptureMaxPacketMs < 20, `异步副本单包 structuredClone 超过同步预算：${asyncCaptureMaxPacketMs.toFixed(3)}ms`);
+assert.notEqual(asyncWrites[0].value, sharedStates, "异步副本写集捕获仍复用活动地图引用");
+assert.equal(asyncWrites[0].value, asyncWrites[1].value, "异步副本写集捕获没有保留跨路径共享引用");
+sharedStates[1].name = "mutated-after-capture";
+assert.equal(asyncWrites[0].value[1].name, "state-1", "异步副本写集捕获会被后续活动地图修改污染");
+const unregisteredCommand = {domain: "state", getReplicaPaths: () => ["__proto__.stale"]};
+assert.throws(
+  () => captureCommandMapReplicaWrites({map: asyncCaptureMap, command: unregisteredCommand}),
+  error => error?.code === "map_replica_path_unregistered"
+);
+await assert.rejects(
+  captureCommandMapReplicaWritesAsync({map: asyncCaptureMap, command: unregisteredCommand}),
+  error => error?.code === "map_replica_path_unregistered"
+);
+await assert.rejects(
+  captureCommandMapReplicaWritesAsync({
+    map: asyncCaptureMap,
+    command: {domain: "state", getReplicaPaths: () => ["politics.states"]},
+    isCurrent: () => false
+  }),
+  error => error?.code === "map_replica_patch_capture_obsolete"
+);
+
+console.log(JSON.stringify({ok: true, visualWrites: visualPatch.writes.length, stateWrites: statePatch.writes.length, workerWrites: workerPatch.writes.length, cityWrites: cityPatch.writes.length, preciseCityWrites: precisePatch.writes.length, asyncCaptureYields, asyncCapturePackets, asyncCaptureMaxPacketMs: Number(asyncCaptureMaxPacketMs.toFixed(3))}));

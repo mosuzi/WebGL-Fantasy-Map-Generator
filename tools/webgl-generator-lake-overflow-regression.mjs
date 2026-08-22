@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import assert from "node:assert/strict";
 import {generatePlaceholderMap} from "../app/webgl-generator/src/generator/index.js";
-import {buildRivers} from "../app/webgl-generator/src/generator/rivers.js";
+import {buildRivers, createRiverLakeDrainageExpectations} from "../app/webgl-generator/src/generator/rivers.js";
 import {
   activateOverflowRoute,
   applyLakeOverflowDiagnostics,
@@ -51,10 +51,19 @@ assert.equal(synthetic.lake.overflow.netFlux, 15_138);
 assert.equal(synthetic.lake.overflow.spillCell, 1);
 
 const integrated = createIntegratedOverflowFixture();
-const integratedRivers = buildRivers(integrated.grid, {features: integrated.pack.features}, integrated.pack, {
+const integratedOptions = {
   seed: "integrated-lake-overflow",
   cellsTarget: integrated.pack.cells.i.length,
   heightExponent: 2
+};
+const integratedExpectation = createRiverLakeDrainageExpectations(integrated.grid, integrated.pack, integratedOptions).lakes.get(1);
+assert.deepEqual(
+  {closed: integratedExpectation.closed, overflows: integratedExpectation.overflows, status: integratedExpectation.status, outCell: integratedExpectation.outCell},
+  {closed: true, overflows: true, status: "overflow-channel", outCell: 1},
+  "正式河流地形与湖泊水文共享流水线应识别闭流湖的可下切出口"
+);
+const integratedRivers = buildRivers(integrated.grid, {features: integrated.pack.features}, integrated.pack, {
+  ...integratedOptions
 });
 const integratedLake = integrated.pack.features[1];
 const outletRiver = integratedRivers.rivers.find(river => river.i === integratedLake.outlet);
@@ -124,6 +133,7 @@ console.log(JSON.stringify({
     estimatedFillTime: overflowing.estimatedFillTime
   },
   integrated: {
+    expectedStatus: integratedExpectation.status,
     lakeStatus: integratedLake.overflow.status,
     outletRiverId: outletRiver.id,
     outletCells: outletRiver.cells,

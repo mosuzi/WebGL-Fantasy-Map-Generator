@@ -225,15 +225,15 @@ export class CityIconWebglLayer {
     return changedIndices.length;
   }
 
-  draw({mapSize, camera, canvas, timeMs = 0, layerVisible = true, restoreState = true} = {}) {
+  draw({mapSize, camera, canvas, canvasSize = null, timeMs = 0, layerVisible = true, restoreState = true} = {}) {
     if (!layerVisible || !this.instances.length) {
       this.stats.lastDrawInstances = 0;
       return 0;
     }
-    const width = positiveNumber(canvas?.width, 1);
-    const height = positiveNumber(canvas?.height, 1);
-    const cssWidth = positiveNumber(canvas?.clientWidth, width);
-    const pixelRatio = width / cssWidth;
+    const width = positiveNumber(canvasSize?.width, 0) || positiveNumber(canvas?.width, 1);
+    const height = positiveNumber(canvasSize?.height, 0) || positiveNumber(canvas?.height, 1);
+    const cssWidth = positiveNumber(canvasSize?.cssWidth, 0) || positiveNumber(canvas?.clientWidth, width);
+    const pixelRatio = positiveNumber(canvasSize?.pixelRatio, 0) || width / cssWidth;
     const mapWidth = positiveNumber(mapSize?.width ?? mapSize?.graphWidth, 1);
     const mapHeight = positiveNumber(mapSize?.height ?? mapSize?.graphHeight, 1);
     const scale = positiveNumber(camera?.scale, 1);

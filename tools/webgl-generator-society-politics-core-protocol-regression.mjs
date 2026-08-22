@@ -12,11 +12,13 @@ try {
   const {validateSocietyPoliticsWorkerOutput} = await vite.ssrLoadModule("/src/domains/society-politics/worker-runtime.ts");
   const {SOCIETY_POLITICS_WRITE_SETS, societyPoliticsManifest} = await vite.ssrLoadModule("/src/domains/society-politics/manifest.ts");
   const {generatePlaceholderMap} = await vite.ssrLoadModule("/src/generator/index.js");
+  const {DEFAULT_OPTIONS} = await vite.ssrLoadModule("/src/generator/options.js");
   const {createFoundationWorkerBinding} = await vite.ssrLoadModule("/src/domains/foundation/worker-runtime.ts");
   const {runRegenerationWorkerTask, getRegenerationPatchPolicy} = await vite.ssrLoadModule("/src/runtime/regeneration-worker-task.js");
   const {createDomainPatchCommand} = await vite.ssrLoadModule("/src/runtime/domain-patch.js");
   const {MapRevisionTracker} = await vite.ssrLoadModule("/src/runtime/map-revision.js");
   const {EditHistory} = await vite.ssrLoadModule("/src/runtime/edit-history.js");
+  const {createRenderResourceBinding} = await vite.ssrLoadModule("/src/renderer/render-resource-binding.js");
 
   assert.deepEqual(societyPoliticsManifest.workerTasks[0].resultKinds, ["religions", "states", "provinces"]);
   const owner = new MapRevisionTracker({identityFactory: () => "society-politics-map"});
@@ -31,10 +33,20 @@ try {
   const cases = {};
   const outputs = {};
   for (const kind of ["religions", "states", "provinces"]) {
-    const workerMap = generatePlaceholderMap({seed: `society-politics-${kind}`, cellsTarget: 2000, heightmapTemplate: "continents"});
+    const sourceMap = generatePlaceholderMap({seed: `society-politics-${kind}`, cellsTarget: 2000, heightmapTemplate: "continents"});
+    if (kind === "provinces") {
+      sourceMap.politics.states = structuredClone(sourceMap.politics.states);
+      sourceMap.politics.provinces = structuredClone(sourceMap.politics.provinces);
+      assert.notEqual(sourceMap.politics.states, sourceMap.pack.states, "省份夹具必须覆盖非同引用国家镜像");
+      assert.notEqual(sourceMap.politics.provinces, sourceMap.pack.provinces, "省份夹具必须覆盖非同引用省份镜像");
+    }
+    const sourceBefore = structuredClone(sourceMap);
+    const workerMap = structuredClone(sourceMap);
     const output = await runRegenerationWorkerTask({map: workerMap, kind}, {binding, checkpoint() {}, report() {}});
     const policy = getRegenerationPatchPolicy(kind);
-    const validated = validateSocietyPoliticsWorkerOutput({kind, sourceMap: workerMap, binding, output, policy});
+    assert.deepEqual(sourceMap, sourceBefore, `${kind} Worker 执行前后改写了 canonical source`);
+    const validated = validateSocietyPoliticsWorkerOutput({kind, sourceMap, binding, output, policy});
+    assert.deepEqual(sourceMap, sourceBefore, `${kind} pre-commit validator 改写了 canonical source`);
     assert.deepEqual([...validated.writeSet].sort(), [...SOCIETY_POLITICS_WRITE_SETS[kind]].sort(), `${kind} validator 写集与 Manifest 不一致`);
     assert.equal(validated.binding.sourceRevision.topologyRevision, 1, `${kind} core binding 丢失 topology revision`);
     cases[kind] = {
@@ -43,8 +55,43 @@ try {
       provinces: workerMap.politics.provinces.filter(Boolean).length,
       religions: workerMap.society.religions.filter(Boolean).length
     };
-    outputs[kind] = {output, policy, sourceMap: workerMap};
+    outputs[kind] = {output, policy, sourceMap};
   }
+  const renderBinding = createRenderResourceBinding({
+    mapIdentity: binding.mapIdentity,
+    sourceRevision: binding.mapRevision + 1,
+    topologyRevision: binding.topologyRevision + 1
+  }, {renderPreparationId: "society-politics:render:1", renderGeneration: 3});
+  const renderedStates = structuredClone(outputs.states.output);
+  renderedStates.preparedRender = {schemaVersion: 1, binding: renderBinding, layers: {}};
+  validateSocietyPoliticsWorkerOutput({kind: "states", sourceMap: outputs.states.sourceMap, binding, renderBinding, output: renderedStates, policy: outputs.states.policy});
+  assertProtocol(() => validateSocietyPoliticsWorkerOutput({kind: "states", sourceMap: outputs.states.sourceMap, binding, output: renderedStates, policy: outputs.states.policy}), "society-politics-render-binding-invalid");
+  const staleRenderedStates = structuredClone(renderedStates);
+  staleRenderedStates.preparedRender.binding.renderPreparationId = "society-politics:forged";
+  assertProtocol(() => validateSocietyPoliticsWorkerOutput({kind: "states", sourceMap: outputs.states.sourceMap, binding, renderBinding, output: staleRenderedStates, policy: outputs.states.policy}), "society-politics-render-binding-stale");
+
+  const chainMap = generatePlaceholderMap({...DEFAULT_OPTIONS, seed: "states-chain-seed-5", cellsTarget: 2000, heightmapTemplate: "continents"});
+  await runRegenerationWorkerTask({map: chainMap, kind: "features"}, {binding, checkpoint() {}, report() {}});
+  const chainStatesSource = structuredClone(chainMap);
+  const chainStatesOutput = await runRegenerationWorkerTask({map: chainMap, kind: "states"}, {binding, checkpoint() {}, report() {}});
+  validateSocietyPoliticsWorkerOutput({
+    kind: "states",
+    sourceMap: chainStatesSource,
+    binding,
+    output: chainStatesOutput,
+    policy: getRegenerationPatchPolicy("states")
+  });
+  const chainCities = operationValue(chainStatesOutput.patch, "settlements").cities;
+  const chainBurgs = operationValue(chainStatesOutput.patch, "pack.burgs");
+  const sourceCitiesByBurg = new Map(chainStatesSource.settlements.cities.filter(Boolean).map(city => [Number(city.burgId), city]));
+  const clearedOrphanProvincial = chainCities.find(city => {
+    const sourceCity = sourceCitiesByBurg.get(Number(city?.burgId));
+    return city && !city.removed && sourceCity?.provincial && Number(sourceCity.province) > 0
+      && Number(city.province) === 0 && city.provincial === false;
+  });
+  assert(clearedOrphanProvincial, "features → states 连续夹具没有覆盖旧省会归入中立省份后的标记清理");
+  assert.equal(Number(chainBurgs[clearedOrphanProvincial.burgId]?.province), 0, "中立省份 burg 归属没有同步清零");
+  assert.equal(Number(chainBurgs[clearedOrphanProvincial.burgId]?.provincial), 0, "中立省份 burg 仍残留省会标记");
 
   assertProtocol(() => validateSocietyPoliticsWorkerOutput({
     kind: "religions",
@@ -170,6 +217,7 @@ try {
     manifest: societyPoliticsManifest.id,
     cases,
     commit: {revision: owner.getCoreSnapshot(), history: history.getStats()},
+    chain: {kind: "features->states", clearedOrphanProvincial: clearedOrphanProvincial.burgId},
     rejected: ["stale-binding", "partial-write-set", "delete-write", "undefined-write", "data-view", "typed-record", "map-record", "religion-mirror", "province-mirror", "capital-reference", "capital-clear", "policy-drift"],
     lockedZeroProvince: {state: lockedZeroStateId, province: lockedZeroProvinceId},
     browserRuns: 0

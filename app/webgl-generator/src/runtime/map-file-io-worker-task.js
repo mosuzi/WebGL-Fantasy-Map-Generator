@@ -13,7 +13,8 @@ import {
 } from "./browser-map-storage.js";
 import {isCompressedMapDocumentFilename} from "./map-filename.js";
 import {encodeWebfmgV3Document, gzipWebfmgV3Bytes} from "./webfmg-v3-container.js";
-import {createMapAdoptionHandoff} from "./map-adoption-handoff.js";
+import {createCanonicalMapAdoptionPackage} from "./map-adoption-handoff.js";
+import {normalizeMapForRuntimeAdoption} from "./map-runtime-adoption.js";
 import {executeRenderPreparationTask} from "../renderer/render-preparation.js";
 import {mergeUserVisualThemes, normalizeVisualThemeId, resolveVisualTheme} from "../renderer/themes.js";
 import {createWholeMapDocumentMetadata} from "./whole-map-profile-protocol.js";
@@ -80,9 +81,16 @@ async function importMapFile(payload, context) {
 
   reportTaskProgress(context, "parse", 0.45, "解析、迁移并校验地图文档");
   const parseStartedAt = taskNow();
-  const document = await parseImportSource(source, payload);
+  const parsedDocument = await parseImportSource(source, payload);
   const parseMs = roundTaskMs(taskNow() - parseStartedAt);
   await taskCheckpoint(context);
+
+  const adoption = typeof context.adoptMap === "function";
+  const handoffStartedAt = adoption ? taskNow() : 0;
+  const adoptionPackage = adoption ? createCanonicalMapAdoptionPackage(parsedDocument) : null;
+  const document = adoptionPackage?.document || parsedDocument;
+  normalizeMapForRuntimeAdoption(document.map);
+  const handoffEncodeMs = adoption ? roundTaskMs(taskNow() - handoffStartedAt) : 0;
 
   const renderPrepareStartedAt = taskNow();
   const preparedRender = payload.render
@@ -92,21 +100,19 @@ async function importMapFile(payload, context) {
   await taskCheckpoint(context);
 
   reportTaskProgress(context, "complete", 1, "地图存档解析完成");
-  if (typeof context.adoptMap === "function") {
-    const handoffStartedAt = taskNow();
-    const handoff = createMapAdoptionHandoff(document);
+  if (adoption) {
     context.adoptMap(document.map);
     await taskCheckpoint(context);
     return {
       kind: "map-file-import-result",
       binding: context.binding || null,
-      handoff,
+      handoff: adoptionPackage.handoff,
       preparedRender,
       metadata: createWholeMapDocumentMetadata(document),
       timings: {
         parseMs,
         renderPrepareMs,
-        handoffEncodeMs: roundTaskMs(taskNow() - handoffStartedAt),
+        handoffEncodeMs,
         totalMs: roundTaskMs(taskNow() - startedAt)
       }
     };
@@ -276,7 +282,7 @@ function normalizeExportDocument(payload) {
     return parseMapDocument(stringifyMapDocument(payload.document));
   }
   if (payload?.map && typeof payload.map === "object") {
-    const created = createMapDocument(payload.map, payload.options || payload.map.options || {});
+    const created = createMapDocument(payload.map, payload.options || payload.map.options || {}, payload.presentation || {});
     return validateMapDocumentForExport(created);
   }
   throw new Error("地图存档 Worker 导出缺少 document 或 map");

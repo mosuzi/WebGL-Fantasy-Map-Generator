@@ -69,7 +69,20 @@ export async function runPopulationWorkerTask(payload = {}, context = {}) {
 
   const sourceFingerprint = fingerprintPopulationSource(map, request);
   if (payload.sourceFingerprint !== undefined && String(payload.sourceFingerprint) !== sourceFingerprint) {
-    throw taskError("population-worker-source-stale", "人口 Worker 的来源快照已过期");
+    const error = taskError("population-worker-source-stale", "人口 Worker 的来源快照已过期", {
+      expected: String(payload.sourceFingerprint),
+      actual: sourceFingerprint,
+      aliases: {
+        states: map?.pack?.states === map?.politics?.states,
+        provinces: map?.pack?.provinces === map?.politics?.provinces,
+        cultures: map?.pack?.cultures === map?.society?.cultures,
+        religions: map?.pack?.religions === map?.society?.religions,
+        markets: map?.pack?.markets === map?.economy?.markets
+      }
+    });
+    error.stage = "worker-source";
+    error.suggestion = "重新同步当前地图后再重试人口操作。";
+    throw error;
   }
   if (request.kind === "transfer" && request.confirm !== true) {
     throw taskError("confirmation_required", "区域人口转移会同时改写两个区域，需要 confirm: true");
@@ -186,34 +199,78 @@ export function getPopulationWorkerPatchPolicy(map, patch) {
 }
 
 export function fingerprintPopulationSource(map, request = {}) {
+  const fingerprintValue = createStableValueFingerprinter();
   return stableFingerprint({
-    request: publicRequest(normalizeRequest(request)),
+    request: fingerprintValue(publicRequest(normalizeRequest(request))),
     writableRoots: Object.fromEntries(POPULATION_ROOTS.map(path => {
       const captured = readPath(map, path.split("."));
-      return [path, {exists: captured.exists, value: captured.value}];
+      return [path, {exists: captured.exists, fingerprint: captured.exists ? fingerprintValue(captured.value) : ""}];
     })),
-    readDependencies: {
-      gridPoints: map?.grid?.points,
-      gridCellHeight: map?.grid?.cells?.h,
-      gridCellBurg: map?.grid?.cells?.burg,
-      gridCellFeature: map?.grid?.cells?.f,
-      features: map?.features,
-      settlementRoutes: map?.settlements?.routes,
-      packCellIndex: map?.pack?.cells?.i,
-      packCellHeight: map?.pack?.cells?.h,
-      packCellGrid: map?.pack?.cells?.g,
-      packCellState: map?.pack?.cells?.state,
-      packCellProvince: map?.pack?.cells?.province,
-      packCellCulture: map?.pack?.cells?.culture,
-      packCellReligion: map?.pack?.cells?.religion,
-      packCellBurg: map?.pack?.cells?.burg,
-      packCellMarket: map?.pack?.cells?.market,
-      packGoods: map?.pack?.goods,
-      economyGoods: map?.economy?.goods,
-      effectiveGoods: map?.pack?.goods || map?.economy?.goods
-    },
-    locks: map?.regenerationLocks
+    readDependencies: Object.fromEntries(Object.entries(populationReadDependencies(map)).map(([name, value]) => [name, fingerprintValue(value)])),
+    locks: fingerprintValue(map?.regenerationLocks)
   });
+}
+
+export async function fingerprintPopulationSourceAsync(map, request = {}, options = {}) {
+  const fingerprintValue = createStableValueFingerprinterAsync(options);
+  const writableRoots = {};
+  for (const path of POPULATION_ROOTS) {
+    const captured = readPath(map, path.split("."));
+    writableRoots[path] = {exists: captured.exists, fingerprint: captured.exists ? await fingerprintValue(captured.value) : ""};
+  }
+  const readDependencies = {};
+  for (const [name, value] of Object.entries(populationReadDependencies(map))) {
+    readDependencies[name] = await fingerprintValue(value);
+  }
+  return stableFingerprint({
+    request: await fingerprintValue(publicRequest(normalizeRequest(request))),
+    writableRoots,
+    readDependencies,
+    locks: await fingerprintValue(map?.regenerationLocks)
+  });
+}
+
+function populationReadDependencies(map) {
+  return {
+    gridPoints: map?.grid?.points,
+    gridCellHeight: map?.grid?.cells?.h,
+    gridCellBurg: map?.grid?.cells?.burg,
+    gridCellFeature: map?.grid?.cells?.f,
+    features: map?.features,
+    settlementRoutes: map?.settlements?.routes,
+    packCellIndex: map?.pack?.cells?.i,
+    packCellHeight: map?.pack?.cells?.h,
+    packCellGrid: map?.pack?.cells?.g,
+    packCellState: map?.pack?.cells?.state,
+    packCellProvince: map?.pack?.cells?.province,
+    packCellCulture: map?.pack?.cells?.culture,
+    packCellReligion: map?.pack?.cells?.religion,
+    packCellBurg: map?.pack?.cells?.burg,
+    packCellMarket: map?.pack?.cells?.market,
+    packGoods: map?.pack?.goods,
+    economyGoods: map?.economy?.goods,
+    effectiveGoods: map?.pack?.goods || map?.economy?.goods
+  };
+}
+
+function createStableValueFingerprinter() {
+  const cache = new WeakMap();
+  return value => {
+    if (value !== null && typeof value === "object" && cache.has(value)) return cache.get(value);
+    const fingerprint = stableFingerprint(value);
+    if (value !== null && typeof value === "object") cache.set(value, fingerprint);
+    return fingerprint;
+  };
+}
+
+function createStableValueFingerprinterAsync(options) {
+  const cache = new WeakMap();
+  return async value => {
+    if (value !== null && typeof value === "object" && cache.has(value)) return cache.get(value);
+    const pending = stableFingerprintAsync(value, options);
+    if (value !== null && typeof value === "object") cache.set(value, pending);
+    return pending;
+  };
 }
 
 export function collectPopulationWorkerTransferables(result) {
@@ -478,6 +535,67 @@ function stableFingerprint(value) {
   return (hash >>> 0).toString(16).padStart(8, "0");
 }
 
+async function stableFingerprintAsync(value, {budgetMs = 6, yieldToMain = defaultFingerprintYield} = {}) {
+  let hash = 0x811c9dc5;
+  const seen = new WeakMap();
+  let nextId = 1;
+  const now = () => globalThis.performance?.now?.() ?? Date.now();
+  const budget = Math.max(1, Number(budgetMs) || 6);
+  let deadline = now() + budget;
+  const update = item => {
+    const text = String(item ?? "");
+    for (let index = 0; index < text.length; index++) {
+      hash ^= text.charCodeAt(index);
+      hash = Math.imul(hash, 0x01000193);
+    }
+  };
+  const checkpoint = async () => {
+    await yieldToMain();
+    deadline = now() + budget;
+  };
+  const stack = [{type: "visit", item: value}];
+  while (stack.length) {
+    const frame = stack.pop();
+    if (frame.type === "object") {
+      if (frame.index >= frame.keys.length) continue;
+      const key = frame.keys[frame.index++];
+      update(key);
+      stack.push(frame, {type: "visit", item: frame.item[key]});
+      if (now() >= deadline) await checkpoint();
+      continue;
+    }
+    const item = frame.item;
+    if (item === null || typeof item !== "object") {
+      update(`${typeof item}:${String(item)}`);
+      if (now() >= deadline) await checkpoint();
+      continue;
+    }
+    if (seen.has(item)) {
+      update(`ref:${seen.get(item)}`);
+      if (now() >= deadline) await checkpoint();
+      continue;
+    }
+    seen.set(item, nextId++);
+    update(item.constructor?.name || "Object");
+    if (ArrayBuffer.isView(item)) {
+      update(item.length);
+      for (let index = 0; index < item.length; index++) {
+        update(item[index]);
+        if (now() >= deadline) await checkpoint();
+      }
+    } else {
+      stack.push({type: "object", item, keys: Object.keys(item).sort(), index: 0});
+    }
+    if (now() >= deadline) await checkpoint();
+  }
+  return (hash >>> 0).toString(16).padStart(8, "0");
+}
+
+function defaultFingerprintYield() {
+  if (typeof globalThis.scheduler?.yield === "function") return globalThis.scheduler.yield();
+  return new Promise(resolve => setTimeout(resolve, 0));
+}
+
 async function taskCheckpoint(context, stage) {
   if (context.signal?.aborted) throw abortError(context.signal.reason || `人口 Worker 已在 ${stage} 取消`);
   const result = await context.checkpoint?.({phase: "population-worker", stage});
@@ -496,8 +614,9 @@ function abortError(message) {
   return new DOMException(String(message), "AbortError");
 }
 
-function taskError(code, message) {
+function taskError(code, message, details = undefined) {
   const error = new Error(message);
   error.code = code;
+  if (details !== undefined) error.details = details;
   return error;
 }

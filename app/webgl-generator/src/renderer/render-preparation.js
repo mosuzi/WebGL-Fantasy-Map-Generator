@@ -29,7 +29,13 @@ import {
   unpackShoreVisualPaths
 } from "./render-cache-dto.js";
 import {buildObjectPickingDto} from "./picking-dto.js";
+import {OBJECT_PICKING_COMPONENTS} from "./picking.js";
 import {normalizeUnitPreferences} from "../ui/display-units.js";
+import {
+  normalizeRenderResourceBinding,
+  sameRenderResourceBinding,
+  sameRenderResourceGeneration
+} from "./render-resource-binding.js";
 
 export const RENDER_PREPARATION_TASK = "render.prepare";
 export const RENDER_PREPARATION_SCHEMA_VERSION = 1;
@@ -63,7 +69,7 @@ const REGENERATION_RENDER_LAYERS = Object.freeze({
 });
 
 const REGENERATION_PICKING_COMPONENTS = Object.freeze({
-  features: Object.freeze(["cities", "markers", "military", "routeSegments", "riverSegments"]),
+  features: Object.freeze([...OBJECT_PICKING_COMPONENTS]),
   routes: Object.freeze(["cities", "routeSegments"]),
   rivers: Object.freeze(["riverSegments"]),
   cities: Object.freeze(["cities", "routeSegments"]),
@@ -73,7 +79,16 @@ const REGENERATION_PICKING_COMPONENTS = Object.freeze({
   diplomacy: Object.freeze(["military"]),
   religions: Object.freeze(["cities"]),
   military: Object.freeze(["military"]),
-  zones: Object.freeze([])
+  "military-policy": Object.freeze(["military"]),
+  population: Object.freeze(["cities"]),
+  economy: Object.freeze(["cities"]),
+  "culture-expansion": Object.freeze(["cities"]),
+  "religion-expansion": Object.freeze(["cities"]),
+  zones: Object.freeze([]),
+  "height-derived": Object.freeze([...OBJECT_PICKING_COMPONENTS]),
+  "climate-downstream": Object.freeze([...OBJECT_PICKING_COMPONENTS]),
+  "ocean-current-world": Object.freeze([...OBJECT_PICKING_COMPONENTS]),
+  "grid-topology": Object.freeze([...OBJECT_PICKING_COMPONENTS])
 });
 
 export function renderPreparationLayersForRegeneration(kind, presentation = {}) {
@@ -102,13 +117,14 @@ export function renderPreparationPickingComponentsForRegeneration(kind) {
 export async function executeRenderPreparationTask(payload = {}, context = {}) {
   const map = payload.map;
   if (!map || typeof map !== "object") throw renderPreparationError("render-map-required", "渲染准备缺少地图快照");
-  const binding = normalizeRenderBinding(payload.binding ?? context.binding);
+  const envelopeBinding = cloneRenderEnvelopeBinding(payload.binding ?? context.binding);
+  const binding = normalizeRenderBinding(envelopeBinding);
   const camera = normalizeCamera(payload.camera);
   const canvas = normalizeCanvas(payload.canvas);
   const requested = normalizeRequestedLayers(payload.layers);
   const result = {
     schemaVersion: RENDER_PREPARATION_SCHEMA_VERSION,
-    binding,
+    binding: envelopeBinding,
     presentation: {
       unitPreferences: normalizeUnitPreferences(payload.unitPreferences || {}),
       politicalMeshDebugMode: normalizePoliticalMeshDebugMode(payload.politicalMeshDebugMode)
@@ -241,7 +257,7 @@ export function collectRenderPreparationTransfers(value) {
 export function assertRenderPreparationBinding(result, expected) {
   const actual = normalizeRenderBinding(result?.binding);
   const target = normalizeRenderBinding(expected);
-  if (actual.mapIdentity !== target.mapIdentity || actual.mapRevision !== target.mapRevision || actual.topologyRevision !== target.topologyRevision) {
+  if (!sameRenderResourceBinding(actual, target)) {
     throw renderPreparationError("render-result-stale", "渲染准备结果不属于当前地图 revision", {actual, expected: target});
   }
   return result;
@@ -271,7 +287,7 @@ export function rebindShoreLinePathCache(dto, shoreVisualPaths, expectedBinding 
   if (expectedBinding !== null && expectedBinding !== undefined) {
     const actual = normalizeRenderBinding(dto.binding);
     const expected = normalizeRenderBinding(expectedBinding);
-    if (actual.mapIdentity !== expected.mapIdentity || actual.mapRevision !== expected.mapRevision || actual.topologyRevision !== expected.topologyRevision) {
+    if (!sameRenderResourceBinding(actual, expected)) {
       throw renderPreparationError("render-result-stale", "岸线路径顶点缓存不属于当前地图 revision", {actual, expected});
     }
   }
@@ -339,27 +355,22 @@ function ensurePoliticalMeshes(map, cache, payload = {}) {
 function resolveRenderPreparationCache(candidate, binding) {
   const cache = candidate && typeof candidate === "object" ? candidate : Object.create(null);
   const previous = cache.renderBinding;
-  const reused = previous?.mapIdentity === binding.mapIdentity
-    && Number(previous?.mapRevision) === Number(binding.mapRevision)
-    && Number(previous?.topologyRevision) === Number(binding.topologyRevision)
+  const reused = sameRenderResourceGeneration(previous, binding)
     && Boolean(cache.cellVisual || cache.shore || cache.statePaths || cache.provincePaths);
   if (!reused) {
     for (const key of ["cellVisual", "shore", "statePaths", "provincePaths", "political"]) delete cache[key];
-    cache.renderBinding = {...binding};
   }
+  cache.renderBinding = {...binding};
   delete cache.political;
   return {cache, reused};
 }
 
 function normalizeRenderBinding(value = {}) {
-  const mapIdentity = value.mapIdentity === null || value.mapIdentity === undefined ? null : String(value.mapIdentity);
-  const mapRevision = Number(value.mapRevision);
-  const topologyRevision = Number(value.topologyRevision);
-  return {
-    mapIdentity,
-    mapRevision: Number.isSafeInteger(mapRevision) && mapRevision >= 0 ? mapRevision : 0,
-    topologyRevision: Number.isSafeInteger(topologyRevision) && topologyRevision >= 0 ? topologyRevision : 0
-  };
+  return normalizeRenderResourceBinding(value, "renderPreparation.binding");
+}
+
+function cloneRenderEnvelopeBinding(value) {
+  return normalizeRenderResourceBinding(value, "renderPreparation.binding");
 }
 
 function normalizeCamera(value = {}) {

@@ -28,6 +28,11 @@ import {
   packCityIconInstances
 } from "../app/webgl-generator/src/renderer/city-icon-layer.js";
 import {PlaceholderMapRenderer} from "../app/webgl-generator/src/renderer/placeholder-renderer.js";
+import {adoptOverlayLabelResourceBinding} from "../app/webgl-generator/src/renderer/retained-render-resource-binding.js";
+import {
+  adoptRenderCacheResourceBinding,
+  RENDER_CACHE_RESOURCE_FAMILIES
+} from "../app/webgl-generator/src/renderer/render-cache-resource-binding.js";
 
 const source = await readFile(new URL("../app/webgl-generator/src/renderer/city-icon-layer.js", import.meta.url), "utf8");
 const shapeKeys = ["hamlet", "village", "town", "city", "capital", "provincial", "port", "fort", "camp"];
@@ -420,6 +425,17 @@ function testStandaloneStateContract() {
     lastDrawInstances: 1,
     uniformOnlyCameraFrames: 2
   }, "重复帧 stats 漂移");
+  const liveLayoutCanvas = {
+    get width() { throw new Error("不得读取 live canvas.width"); },
+    get height() { throw new Error("不得读取 live canvas.height"); },
+    get clientWidth() { throw new Error("不得读取 live canvas.clientWidth"); },
+    get clientHeight() { throw new Error("不得读取 live canvas.clientHeight"); }
+  };
+  assert.equal(optOut.draw(drawOptions({
+    canvas: liveLayoutCanvas,
+    canvasSize: {width: 800, height: 600, cssWidth: 400, cssHeight: 300, pixelRatio: 2},
+    restoreState: false
+  })), 1, "缓存 canvas size 未能独立驱动城镇 preview draw");
   const beforeHidden = optOut.snapshot();
   const hiddenCallCount = gl.calls.length;
   assert.equal(optOut.draw(drawOptions({layerVisible: false, restoreState: false})), 0);
@@ -445,8 +461,23 @@ function testPlaceholderDrawTailState() {
   const camera = {scale: 1, offsetX: 0, offsetY: 0};
   const renderer = Object.assign(Object.create(PlaceholderMapRenderer.prototype), {
     canvas: {width: 800, height: 600, clientWidth: 800, clientHeight: 600},
+    canvasSize: {width: 800, height: 600, cssWidth: 800, cssHeight: 600, pixelRatio: 1},
     gl,
+    webGlContextLost: false,
+    webGlContextResourceState: "ready",
+    retainedResourcePublishSuspended: 0,
+    retainedResourceState: "ready",
     map: {metadata: {width: 100, height: 80, graphWidth: 100, graphHeight: 80}, layers: {background: [0, 0, 0, 1]}},
+    surfaceResourceOwner: Object.freeze({
+      mapIdentity: "city-icon-integration",
+      mapRevision: 0,
+      sourceRevision: 0,
+      topologyRevision: 0,
+      renderPreparationId: "city-icon-integration",
+      renderGeneration: 0,
+      surfaceFloatLength: 18,
+      correctionWordLength: 0
+    }),
     visualTheme: {canvas: {background: [0, 0, 0, 1]}},
     camera,
     program: mainProgram,
@@ -500,11 +531,38 @@ function testPlaceholderDrawTailState() {
     selectionDrawRanges: {landMasked: {first: 0, count: 0}, ordinary: {first: 0, count: 0}},
     pointBuffer,
     pointVertexCount: 0,
+    labelItems: [],
+    cityIconItems: [],
+    cityIconItemsById: new Map(),
+    markerIconItems: [],
+    militaryIconItems: [],
     cityIconLayer,
     cityMovePreview: null,
     oceanCurrentLayerStats: {minWidth: 0, maxWidth: 0},
     lastDraw: null
   });
+  renderer.surfaceCellRanges = new Uint32Array(0);
+  renderer.cellVisualCorrectionGeometry = new Uint32Array(0);
+  renderer.cellAttributeStore = {};
+  renderer.surfaceVerticesOwner = renderer.surfaceResourceOwner;
+  renderer.surfaceCellRangesOwner = renderer.surfaceResourceOwner;
+  renderer.cellVisualCorrectionGeometryOwner = renderer.surfaceResourceOwner;
+  renderer.cellAttributeStoreOwner = renderer.surfaceResourceOwner;
+  renderer.surfaceBaseBufferSet = {owner: renderer.surfaceResourceOwner};
+  renderer.cellVisualCorrectionBufferSet = {owner: renderer.surfaceResourceOwner};
+  renderer.surfaceResourceBinding = {
+    owner: renderer.surfaceResourceOwner,
+    surfaceVertices: renderer.surfaceVertices,
+    surfaceCellRanges: renderer.surfaceCellRanges,
+    cellVisualCorrectionGeometry: renderer.cellVisualCorrectionGeometry,
+    cellAttributeStore: renderer.cellAttributeStore
+  };
+  renderer.renderCacheResourceOwners = Object.freeze({});
+  renderer.renderCacheResourceBindings = Object.freeze({});
+  for (const family of RENDER_CACHE_RESOURCE_FAMILIES) {
+    adoptRenderCacheResourceBinding(renderer, family, renderer.surfaceResourceOwner);
+  }
+  adoptOverlayLabelResourceBinding(renderer, renderer.surfaceResourceOwner);
   gl.resetCalls();
   gl.nextError = gl.INVALID_OPERATION;
   renderer.draw({updateDynamicBuffers: false, updateOverlay: false, drawDirtyDynamicBuffers: false, trackPerformance: false});

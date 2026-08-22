@@ -104,6 +104,7 @@ async function inspectCapabilities(page, {cells, seed, template, expectedConfirm
       "data.exportPNG": "download-or-export-result",
       "data.exportHeightmapPNG": "download-or-export-result",
       "debug.profileNextRender": "renderer-diagnostics",
+      "debug.simulateContextLoss": "renderer-diagnostics",
       "selection.locate": "camera-and-selection-state",
       "selection.highlight": "persistent-highlight-state",
       "selection.clearHighlights": "persistent-highlight-state",
@@ -143,7 +144,7 @@ async function inspectCapabilities(page, {cells, seed, template, expectedConfirm
     if (capabilities.contract?.stableCompatibility !== "same-major") failures.push("capabilities 缺少同主版本兼容策略");
     if (capabilities.contract?.deprecatedRemoval !== "next-major-only") failures.push("capabilities 缺少 deprecated 移除策略");
     if (Object.keys(capabilities.capabilityGroups || {}).length !== 21) failures.push("capabilities 能力组不是 21 个");
-    if (JSON.stringify(capabilities.stabilitySummary) !== JSON.stringify({stable: 317, experimental: 7, deprecated: 1})) failures.push("稳定等级统计不是 317 / 7 / 1");
+    if (JSON.stringify(capabilities.stabilitySummary) !== JSON.stringify({stable: 317, experimental: 8, deprecated: 1})) failures.push("稳定等级统计不是 317 / 8 / 1");
     if (!Object.prototype.hasOwnProperty.call(runtimeStats, "lastEditRefresh")) failures.push("runtimeStats 缺少 lastEditRefresh 字段");
     const coverage = capabilities.methodMetadataCoverage || {};
     if (coverage.complete !== true) failures.push("methodMetadataCoverage.complete 不是 true");

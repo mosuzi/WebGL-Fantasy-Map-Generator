@@ -1,5 +1,6 @@
 const EXIT_DELAY_MS = 280;
 export const STARTUP_LOADING_MIN_VISIBLE_MS = 2500;
+export const STARTUP_FAILURE_USER_MESSAGE = "启动失败：地图画卷未能打开，请刷新页面后重试。";
 
 const lifecycleTimers = new WeakMap();
 
@@ -57,17 +58,22 @@ function beginExit(screen, view, active = {view, waitTimer: null, exitTimer: nul
   lifecycleTimers.set(screen, active);
 }
 
-export function failStartupLoading(documentRef, error) {
+export function failStartupLoading(documentRef, error, options = {}) {
   const screen = documentRef.getElementById("app-loading-screen");
   if (!screen) return false;
   clearLifecycleTimers(screen);
-  const message = error instanceof Error ? error.message : String(error || "未知错误");
   screen.hidden = false;
   screen.dataset.state = "error";
   screen.classList.remove("is-leaving");
   screen.removeAttribute("aria-hidden");
-  updateText(documentRef, `启动失败：${message}`);
+  updateText(documentRef, startupFailureMessage(error, options));
   return true;
+}
+
+export function startupFailureMessage(error, options = {}) {
+  if (!options.debug) return STARTUP_FAILURE_USER_MESSAGE;
+  const detail = error instanceof Error ? error.message : String(error || "未知错误");
+  return `启动失败：${detail}`;
 }
 
 function updateText(documentRef, message) {

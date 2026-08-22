@@ -157,7 +157,7 @@ try {
   const headlessDirection = headless.analysis.getDirection(report.places.from, report.places.to);
   const applicationConsoleErrors = consoleErrors.slice(consoleStart).filter(message => !["operation-stall", "main-thread-long-task", "render-frame-gap", "input-handler-stall"].some(type => message.includes(`[FMG health] ${type}`)));
 
-  assert.equal(report.methodCount, 328);
+  assert.equal(report.methodCount, 329);
   assert.equal(report.cells, 100_000);
   for (const entry of [report.tenK, report.roundtrip, report.hundredK]) {
     assert.equal(entry.resolvedName.ok && entry.resolvedExact.ok && entry.distance.ok && entry.direction.ok, true);

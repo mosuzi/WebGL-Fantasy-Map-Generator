@@ -32,7 +32,7 @@ import {
   unpackPoliticalVisualPaths,
   unpackShoreVisualPaths
 } from "../app/webgl-generator/src/renderer/render-cache-dto.js";
-import {buildObjectPickingIndex, pickCity, pickRiver, pickRoute} from "../app/webgl-generator/src/renderer/picking.js";
+import {buildObjectPickingIndex, OBJECT_PICKING_COMPONENTS, pickCity, pickRiver, pickRoute} from "../app/webgl-generator/src/renderer/picking.js";
 import {buildObjectPickingDto, rebindObjectPickingDto, rebindObjectPickingDtoInChunks, rebuildObjectPickingIndexFromDto} from "../app/webgl-generator/src/renderer/picking-dto.js";
 import {applyPreparedPickingComponents} from "../app/webgl-generator/src/renderer/prepared-render-installer.js";
 import {createWorkerTaskCoordinator} from "../app/webgl-generator/src/runtime/worker-task-coordinator.js";
@@ -44,11 +44,15 @@ import {
   renderPreparationLayersForRegeneration,
   renderPreparationPickingComponentsForRegeneration
 } from "../app/webgl-generator/src/renderer/render-preparation.js";
+import {createRenderResourceBinding} from "../app/webgl-generator/src/renderer/render-resource-binding.js";
 
 const cellsTarget = Number(process.argv.slice(2).find(value => /^\d+$/u.test(value)) || 10000);
 const full = process.argv.includes("--full");
 const map = generatePlaceholderMap({seed: "task322-render-preparation", cellsTarget, graphWidth: 1440, graphHeight: 960});
-const binding = {mapIdentity: `render-${cellsTarget}`, mapRevision: 7, topologyRevision: 3};
+const binding = createRenderResourceBinding({mapIdentity: `render-${cellsTarget}`, mapRevision: 7, topologyRevision: 3}, {
+  renderPreparationId: `render-preparation:${cellsTarget}:1`,
+  renderGeneration: 4
+});
 const camera = {scale: 1, offsetX: 0, offsetY: 0};
 const canvas = {width: 1440, height: 960, clientWidth: 1440, clientHeight: 960};
 const visibility = {};
@@ -59,7 +63,24 @@ assert.deepEqual(renderPreparationPickingComponentsForRegeneration("routes"), ["
 assert.deepEqual(renderPreparationPickingComponentsForRegeneration("rivers"), ["riverSegments"]);
 assert.deepEqual(renderPreparationPickingComponentsForRegeneration("markers"), ["markers"]);
 assert.deepEqual(renderPreparationPickingComponentsForRegeneration("military"), ["military"]);
+assert.deepEqual(renderPreparationPickingComponentsForRegeneration("military-policy"), ["military"]);
+assert.deepEqual(renderPreparationPickingComponentsForRegeneration("population"), ["cities"]);
+assert.deepEqual(renderPreparationPickingComponentsForRegeneration("economy"), ["cities"]);
+assert.deepEqual(renderPreparationPickingComponentsForRegeneration("culture-expansion"), ["cities"]);
+assert.deepEqual(renderPreparationPickingComponentsForRegeneration("religion-expansion"), ["cities"]);
 assert.deepEqual(renderPreparationPickingComponentsForRegeneration("zones"), []);
+for (const kind of ["height-derived", "climate-downstream", "ocean-current-world", "grid-topology"]) {
+  assert.deepEqual(
+    renderPreparationPickingComponentsForRegeneration(kind),
+    [...OBJECT_PICKING_COMPONENTS],
+    `${kind} 完整地图派生任务必须准备全部 picking 对象族`
+  );
+}
+assert.throws(
+  () => renderPreparationPickingComponentsForRegeneration("unknown-composite"),
+  error => error?.code === "render-regeneration-kind-unsupported",
+  "未知复合任务不得静默退回全量 picking"
+);
 assert.equal(renderPreparationLayersForRegeneration("zones").includes("picking"), false, "地区重生成不应重建无关对象 picking");
 assert.deepEqual(
   renderPreparationLayersForRegeneration("provinces", {
@@ -116,13 +137,26 @@ const transfers = collectRenderPreparationTransfers(actual);
 assert.equal(transfers.length, 3, "route / river / point 各自只应暴露一个可 transfer buffer");
 assert.equal(new Set(transfers).size, transfers.length, "transfer list 不得包含重复 buffer");
 assertNoFormalMapBuffers(transfers, map);
-assert.throws(() => assertRenderPreparationBinding(actual, {...binding, mapRevision: 8}), error => error?.code === "render-result-stale");
-assert.throws(() => assertRenderPreparationBinding(actual, {...binding, topologyRevision: 4}), error => error?.code === "render-result-stale");
+assert.throws(() => assertRenderPreparationBinding(actual, nextResourceBinding(binding, {mapRevision: 8, renderPreparationId: "stale-revision"})), error => error?.code === "render-result-stale");
+assert.throws(() => assertRenderPreparationBinding(actual, nextResourceBinding(binding, {topologyRevision: 4, renderPreparationId: "stale-topology"})), error => error?.code === "render-result-stale");
+for (const incomplete of [
+  {mapIdentity: binding.mapIdentity, mapRevision: binding.mapRevision, topologyRevision: binding.topologyRevision},
+  {...binding, renderPreparationId: null},
+  {...binding, renderGeneration: null},
+  {...binding, topologyRevision: null}
+]) {
+  await assert.rejects(
+    executeRenderPreparationTask({map, binding: incomplete, camera, canvas, layers: ["point"]}),
+    error => error?.code === "render-resource-binding-invalid",
+    "不完整或 null resource binding 必须在 Worker 渲染准备入口拒绝"
+  );
+}
 
 const retainedRenderCache = Object.create(null);
 const firstSurface = await executeRenderPreparationTask({map, binding, camera, canvas, layers: ["surface"]}, {renderCache: retainedRenderCache});
 const retainedRefs = Object.fromEntries(["cellVisual", "shore", "statePaths", "provincePaths"].map(key => [key, retainedRenderCache[key]]));
-const secondSurface = await executeRenderPreparationTask({map, binding, camera, canvas, colorMode: "states", layers: ["surface"]}, {renderCache: retainedRenderCache});
+const presentationBinding = nextResourceBinding(binding, {renderPreparationId: `render-preparation:${cellsTarget}:2`});
+const secondSurface = await executeRenderPreparationTask({map, binding: presentationBinding, camera, canvas, colorMode: "states", layers: ["surface"]}, {renderCache: retainedRenderCache});
 assert.equal(firstSurface.cache.reused, false, "同 revision 首次 surface 准备不得虚报复用");
 assert.equal(secondSurface.cache.reused, true, "同 revision 第二次 surface 准备必须复用渲染几何缓存");
 for (const [key, value] of Object.entries(retainedRefs)) assert.equal(retainedRenderCache[key], value, `同 revision 不得重建 ${key}`);
@@ -165,12 +199,18 @@ assert.ok(oceanPatch.layers.surface.cellIds.length > 0 && oceanPatch.layers.surf
 assert.ok(oceanPatch.layers.surface.cellIds.every(cell => Number(map.grid.cells.h[cell]) < 20), "海底补丁不得包含陆地 cell");
 assert.equal("base" in oceanPatch.layers.surface, false, "surface color patch 不得回传完整 base geometry");
 assert.ok(collectRenderPreparationTransfers(oceanPatch).some(buffer => buffer === oceanPatch.layers.surface.colors.buffer), "surface color patch colors 必须可 transfer");
-const topologyBinding = {...binding, topologyRevision: binding.topologyRevision + 1};
+const topologyBinding = nextResourceBinding(binding, {
+  topologyRevision: binding.topologyRevision + 1,
+  renderPreparationId: `render-preparation:${cellsTarget}:topology`
+});
 const nextTopologySurface = await executeRenderPreparationTask({map, binding: topologyBinding, camera, canvas, colorMode: "states", layers: ["surface"]}, {renderCache: retainedRenderCache});
 assert.equal(nextTopologySurface.cache.reused, false, "topology revision 变化必须拒绝旧渲染几何缓存");
 assert.ok(Object.entries(retainedRefs).every(([key, value]) => retainedRenderCache[key] !== value), "topology revision 变化必须重建全部地图绑定缓存");
 const topologyRefs = Object.fromEntries(["cellVisual", "shore", "statePaths", "provincePaths"].map(key => [key, retainedRenderCache[key]]));
-const nextBinding = {...topologyBinding, mapRevision: binding.mapRevision + 1};
+const nextBinding = nextResourceBinding(topologyBinding, {
+  mapRevision: binding.mapRevision + 1,
+  renderPreparationId: `render-preparation:${cellsTarget}:revision`
+});
 const nextRevisionSurface = await executeRenderPreparationTask({map, binding: nextBinding, camera, canvas, colorMode: "provinces", layers: ["surface"]}, {renderCache: retainedRenderCache});
 assert.equal(nextRevisionSurface.cache.reused, false, "revision 变化必须拒绝旧渲染几何缓存");
 assert.ok(Object.entries(topologyRefs).every(([key, value]) => retainedRenderCache[key] !== value), "revision 变化必须重建全部地图绑定缓存");
@@ -206,6 +246,16 @@ console.log(JSON.stringify({
   labelSummary,
   coordinatorSummary
 }, null, 2));
+
+function nextResourceBinding(source, overrides = {}) {
+  const mapIdentity = overrides.mapIdentity ?? source.mapIdentity;
+  const mapRevision = overrides.mapRevision ?? source.sourceRevision ?? source.mapRevision;
+  const topologyRevision = overrides.topologyRevision ?? source.topologyRevision;
+  return createRenderResourceBinding({mapIdentity, mapRevision, topologyRevision}, {
+    renderPreparationId: overrides.renderPreparationId ?? source.renderPreparationId,
+    renderGeneration: overrides.renderGeneration ?? source.renderGeneration
+  });
+}
 
 async function verifyCoordinatorFallback() {
   const progress = [];

@@ -5,6 +5,8 @@ export function ensureSuitabilityStores(pack) {
   const cells = pack?.cells;
   const length = cells?.i?.length || cells?.s?.length || 0;
   if (!cells || !length) return {base: null, overrides: null};
+  if (!cells.s || cells.s.length !== length) cells.s = normalizeBaseStore(cells.s, cells.suitabilityBase, length);
+  if (!cells.pop || cells.pop.length !== length) cells.pop = normalizePopulationStore(cells.pop, length);
   cells.suitabilityBase = normalizeBaseStore(cells.suitabilityBase, cells.s, length);
   cells.suitabilityOverride = normalizeOverrideStore(cells.suitabilityOverride, length);
   return {base: cells.suitabilityBase, overrides: cells.suitabilityOverride};
@@ -85,6 +87,12 @@ function normalizeOverrideStore(source, length) {
     const value = Number(source?.[index]);
     if (Number.isFinite(value) && value >= SUITABILITY_VALUE_RANGE.min) values[index] = normalizeOverrideValue(value);
   }
+  return values;
+}
+
+function normalizePopulationStore(source, length) {
+  const values = new Float32Array(length);
+  for (let index = 0; index < length; index += 1) values[index] = Number(source?.[index]) || 0;
   return values;
 }
 

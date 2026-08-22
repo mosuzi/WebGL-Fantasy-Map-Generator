@@ -6,6 +6,7 @@ import {
 import {
   assertRegenerationLockKind,
   lockError,
+  normalizeRegenerationLockStore,
   REGENERATION_LOCK_KINDS
 } from "./regeneration-locks.js";
 
@@ -64,6 +65,24 @@ const KIND_SLICE_KEY = Object.freeze({
 });
 
 const EMPTY_ARRAY = Object.freeze([]);
+
+export function isRegenerationConstraintDomainFullyLocked(map, domain) {
+  const kinds = resolveDomainKinds(domain);
+  const selectedKinds = new Set(kinds);
+  const lockedIdsByKind = new Map(kinds.map(kind => [kind, new Set()]));
+  const entries = normalizeRegenerationLockStore(map?.regenerationLocks, map).store.entries;
+  for (const entry of entries) {
+    if (selectedKinds.has(entry.kind)) lockedIdsByKind.get(entry.kind).add(String(entry.id));
+  }
+  let activeCount = 0;
+  for (const kind of kinds) {
+    const activeIds = listActiveObjectIds(map, kind);
+    const lockedIds = lockedIdsByKind.get(kind);
+    activeCount += activeIds.length;
+    if (activeIds.some(id => !lockedIds.has(String(id)))) return false;
+  }
+  return activeCount > 0;
+}
 
 export function captureRegenerationConstraintBundle(map, {domains = null, closure = null} = {}) {
   const requestedDomains = normalizeRequestedDomains(domains, closure);

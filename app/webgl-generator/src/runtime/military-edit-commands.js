@@ -406,6 +406,7 @@ export function createSetMilitaryRatiosCommand(stateId, ratios, {label = "调整
           lockedMilitaryRegiments: lockedSnapshots,
           lockedStates: (context.map.pack.states || []).filter(candidate => candidate?.i && Number(candidate.i) !== normalizedStateId).map(candidate => ({i: Number(candidate.i)}))
         });
+        restoreMilitaryPolicyProtectedMetadata(context.map.military, snapshot.packMilitary || snapshot.military);
         syncMilitary(context.map);
         const currentLocked = prepareLockedMilitaryRegiments(context.map.pack, {lockedMilitaryRegiments: lockedSnapshots});
         assertLockedMilitaryRegiments(context.map.pack, currentLocked);
@@ -874,6 +875,18 @@ function snapshotMilitary(map) {
       alert: state.alert
     } : null)
   };
+}
+
+function restoreMilitaryPolicyProtectedMetadata(target, source) {
+  if (!target || typeof target !== "object" || !source || typeof source !== "object") return;
+  if (hasOwn(source, "events")) target.events = clonePlain(source.events);
+  else delete target.events;
+  target.metadata ||= {};
+  const sourceMetadata = source.metadata && typeof source.metadata === "object" ? source.metadata : {};
+  for (const field of ["events", "eventSequence", "eventArchiveGeneration", "stale"]) {
+    if (hasOwn(sourceMetadata, field)) target.metadata[field] = clonePlain(sourceMetadata[field]);
+    else delete target.metadata[field];
+  }
 }
 
 function restoreMilitary(map, snapshot) {

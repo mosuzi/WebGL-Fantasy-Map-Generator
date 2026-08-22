@@ -12,13 +12,14 @@ import {
   normalizeHeightTerrainTemplateProgram,
   parseHeightTerrainTemplateDocument,
   saveHeightTerrainTemplateRecycleRecord,
-  saveHeightTerrainTemplateDocument,
   stringifyHeightTerrainTemplateDocument
 } from "../../runtime/height-terrain-template-programs.js";
 
 const HEIGHT_RADIUS = readBrushRadiusContract(BRUSH_RADIUS_ID.HEIGHT);
 const HEIGHT_SELECTION_RADIUS = readBrushRadiusContract(BRUSH_RADIUS_ID.HEIGHT_SELECTION);
 export const HEIGHT_EDITOR_PREFERENCES_STORAGE_KEY = "webgl-generator-height-editor-preferences-v1";
+export const HEIGHT_TERRAIN_PROGRAM_STORAGE_USER_MESSAGE = "当前无法保存用户模板，请检查浏览器设置后重试。";
+export const HEIGHT_TERRAIN_PROGRAM_STORAGE_ERROR_CODE = "height_terrain_program_storage_unavailable";
 
 export function createHeightPanel(documentRef, manager, callbacks = {}) {
   const loadedPrograms = loadUserTerrainPrograms(documentRef);
@@ -253,8 +254,9 @@ export function createHeightPanel(documentRef, manager, callbacks = {}) {
         description: "由高度面板多步骤编排保存。",
         steps: panelState.terrainProgramDraftSteps
       }, {user: true});
-      userTerrainPrograms = [...userTerrainPrograms, template];
-      persistUserTerrainPrograms(documentRef, userTerrainPrograms);
+      const nextPrograms = [...userTerrainPrograms, template];
+      persistUserTerrainPrograms(documentRef, nextPrograms);
+      userTerrainPrograms = nextPrograms;
       panelState.terrainProgramId = template.id;
       panelState.terrainProgramDraftSteps = [];
       panelState.terrainProgramNotice = `已保存用户模板“${template.name}”。`;
@@ -262,8 +264,9 @@ export function createHeightPanel(documentRef, manager, callbacks = {}) {
       clearTerrainProgramPreview();
       return {ok: true, template};
     } catch (error) {
-      panelState.terrainProgramNotice = error.message;
-      return {ok: false, error: error.message};
+      const message = heightTerrainProgramFailureMessage(error);
+      panelState.terrainProgramNotice = message;
+      return {ok: false, error: message, diagnostic: error?.diagnostic || null};
     }
   }
 
@@ -298,7 +301,7 @@ export function createHeightPanel(documentRef, manager, callbacks = {}) {
       clearTerrainProgramPreview();
       return true;
     } catch (error) {
-      panelState.terrainProgramNotice = error.message;
+      panelState.terrainProgramNotice = heightTerrainProgramFailureMessage(error);
       return false;
     }
   }
@@ -336,7 +339,7 @@ export function createHeightPanel(documentRef, manager, callbacks = {}) {
         restoreStorageValue(storage, HEIGHT_TERRAIN_TEMPLATE_STORAGE_KEY, previousTemplates);
         restoreStorageValue(storage, HEIGHT_TERRAIN_TEMPLATE_RECYCLE_STORAGE_KEY, previousRecycle);
       }
-      panelState.terrainProgramNotice = error.message;
+      panelState.terrainProgramNotice = heightTerrainProgramFailureMessage(error);
       return false;
     }
   }
@@ -349,8 +352,9 @@ export function createHeightPanel(documentRef, manager, callbacks = {}) {
         text: stringifyHeightTerrainTemplateDocument(userTerrainPrograms)
       };
     } catch (error) {
-      panelState.terrainProgramNotice = error.message;
-      return {ok: false, error: error.message};
+      const message = heightTerrainProgramFailureMessage(error);
+      panelState.terrainProgramNotice = message;
+      return {ok: false, error: message};
     }
   }
 
@@ -368,8 +372,9 @@ export function createHeightPanel(documentRef, manager, callbacks = {}) {
       clearTerrainProgramPreview();
       return {ok: true, count: document.templates.length};
     } catch (error) {
-      panelState.terrainProgramNotice = error.message;
-      return {ok: false, error: error.message};
+      const message = heightTerrainProgramFailureMessage(error);
+      panelState.terrainProgramNotice = message;
+      return {ok: false, error: message};
     }
   }
 
@@ -471,6 +476,11 @@ export function createHeightPanel(documentRef, manager, callbacks = {}) {
     getTerrainProgram() {
       return structuredClone(selectedTerrainProgram());
     },
+    addTerrainProgramStep,
+    saveTerrainProgram,
+    getTerrainProgramNotice() {
+      return panelState.terrainProgramNotice;
+    },
     getTerrainProgramPreview() {
       return cloneTransformPreview(panelState.terrainProgramPreview);
     },
@@ -548,7 +558,7 @@ function loadUserTerrainPrograms(documentRef) {
     try {
       recycle = loadHeightTerrainTemplateRecycleRecord(storage);
     } catch (error) {
-      recycleNotice = `；上次删除记录未恢复：${error.message}`;
+      recycleNotice = `；上次删除记录未恢复：${heightTerrainProgramFailureMessage(error)}`;
     }
     if (!document.templates.length) {
       return {
@@ -563,7 +573,7 @@ function loadUserTerrainPrograms(documentRef) {
       notice: `已恢复 ${document.templates.length} 个用户模板${recycle ? "，并可恢复上次删除" : ""}${recycleNotice}。`
     };
   } catch (error) {
-    return {templates: [], recycle: null, notice: `用户模板未恢复：${error.message}`};
+    return {templates: [], recycle: null, notice: `用户模板未恢复：${heightTerrainProgramFailureMessage(error)}`};
   }
 }
 
@@ -596,13 +606,44 @@ function saveHeightEditorPreferences(documentRef, patch) {
 
 function persistUserTerrainPrograms(documentRef, templates) {
   const storage = terrainProgramStorage(documentRef);
-  saveHeightTerrainTemplateDocument(storage, templates, HEIGHT_TERRAIN_TEMPLATE_STORAGE_KEY);
+  const serialized = JSON.stringify(createHeightTerrainTemplateDocument(templates));
+  try {
+    storage.setItem(HEIGHT_TERRAIN_TEMPLATE_STORAGE_KEY, serialized);
+  } catch (cause) {
+    throw createTerrainProgramStorageError(cause);
+  }
 }
 
 function terrainProgramStorage(documentRef) {
-  const storage = documentRef.defaultView?.localStorage;
-  if (!storage) throw new Error("当前浏览器不支持 LocalStorage，无法保存用户模板。");
-  return storage;
+  try {
+    const storage = documentRef.defaultView?.localStorage;
+    if (storage) return storage;
+  } catch (cause) {
+    throw createTerrainProgramStorageError(cause);
+  }
+  throw createTerrainProgramStorageError();
+}
+
+function createTerrainProgramStorageError(cause) {
+  const error = new Error(HEIGHT_TERRAIN_PROGRAM_STORAGE_USER_MESSAGE, cause ? {cause} : undefined);
+  error.code = HEIGHT_TERRAIN_PROGRAM_STORAGE_ERROR_CODE;
+  error.diagnostic = Object.freeze({
+    backend: "localStorage",
+    causeName: String(cause?.name || ""),
+    causeMessage: String(cause?.message || "")
+  });
+  return error;
+}
+
+export function heightTerrainProgramFailureMessage(error, {debug = false} = {}) {
+  const raw = String(error?.message || error || "").trim();
+  if (debug) return raw || HEIGHT_TERRAIN_PROGRAM_STORAGE_USER_MESSAGE;
+  const technical = `${String(error?.name || "")} ${String(error?.code || "")} ${raw}`;
+  if (error?.code === HEIGHT_TERRAIN_PROGRAM_STORAGE_ERROR_CODE
+    || /localstorage|indexeddb|\bstorage\b|quotaexceedederror|securityerror/iu.test(technical)) {
+    return HEIGHT_TERRAIN_PROGRAM_STORAGE_USER_MESSAGE;
+  }
+  return raw || "用户模板操作失败，请检查输入后重试。";
 }
 
 function restoreStorageValue(storage, key, value) {

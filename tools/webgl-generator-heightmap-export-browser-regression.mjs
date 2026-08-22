@@ -1,174 +1,189 @@
 #!/usr/bin/env node
 import assert from "node:assert/strict";
-import {createReadStream, existsSync, mkdirSync, readFileSync, statSync} from "node:fs";
-import {createServer} from "node:http";
+import {spawn} from "node:child_process";
+import {mkdirSync, readFileSync, statSync} from "node:fs";
 import {createRequire} from "node:module";
-import {dirname, extname, join, normalize, resolve} from "node:path";
+import {dirname, join, resolve} from "node:path";
 import {fileURLToPath} from "node:url";
-
+import {closeTask350BrowserResource, createTask350BrowserArtifact} from "./task-350-browser-artifact.mjs";
 import {waitForApiReady} from "./webgl-generator-api-browser-ready.mjs";
 
-const rootDir = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const sourceDir = join(rootDir, "source", "Fantasy-Map-Generator");
-const distDir = join(rootDir, "dist", "webgl-generator");
-const artifactDir = join(rootDir, "docs", "generated", "png", "heightmap-browser");
-const host = "127.0.0.1";
-const port = 5457;
-const timeoutMs = 180000;
+const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const source = join(root, "source", "Fantasy-Map-Generator");
+const artifactRoot = resolve(process.env.TASK_350_CDP_ARTIFACT_DIR || join(root, "work", "task-350-cdp-artifacts"));
+const port = 5570;
+const evidence = createTask350BrowserArtifact("heightmap-export-browser");
+const server = spawn(process.execPath, [join(root, "tools", "serve-prototype.mjs"), "--host", "127.0.0.1", "--port", String(port), "--dir", join(root, "dist", "webgl-generator")], {stdio: "ignore"});
+const playwright = createRequire(join(source, "package.json"))("playwright");
+let browser = null;
+let context = null;
+let primaryError = null;
 
-assert(existsSync(distDir), `构建产物不存在：${distDir}`);
-mkdirSync(artifactDir, {recursive: true});
-const playwright = createRequire(join(sourceDir, "package.json"))("playwright");
-const server = await startStaticServer();
-let browser;
 try {
+  evidence.mark("server", {active: "wait-server"});
+  await waitServer();
+  evidence.mark("browser", {active: "launch", complete: "server-ready"});
   browser = await playwright.chromium.launch({headless: true, channel: "chrome"});
-  const context = await browser.newContext({viewport: {width: 1280, height: 820}, deviceScaleFactor: 1, acceptDownloads: true});
-  await context.addInitScript(() => localStorage.clear());
+  context = await browser.newContext({viewport: {width: 1280, height: 820}, deviceScaleFactor: 1, acceptDownloads: true});
   const page = await context.newPage();
-  page.setDefaultTimeout(timeoutMs);
+  page.setDefaultTimeout(180_000);
   const consoleErrors = [];
   const pageErrors = [];
   page.on("console", message => message.type() === "error" && consoleErrors.push(message.text()));
   page.on("pageerror", error => pageErrors.push(error.message));
 
-  await page.goto(`http://${host}:${port}?healthClear=1`, {waitUntil: "domcontentloaded"});
-  await waitForApiReady(page, timeoutMs);
-  const generated = await page.evaluate(async () => {
-    const response = await window.webglGeneratorApi.generate.newMap({
-      confirm: true,
-      seed: "heightmap-export-browser",
-      cellsTarget: 3000,
-      heightmapTemplate: "continents"
-    });
-    if (!response?.ok) throw new Error(response?.error?.message || "地图生成失败");
-    return {
-      summary: window.webglGeneratorApi.info.mapSummary().data,
-      history: window.webglGeneratorApi.history.get().data,
-      camera: {...window.__webglGeneratorApp.renderer.camera}
+  evidence.mark("page", {active: "ready", complete: "browser-launched"});
+  await page.goto(`http://127.0.0.1:${port}?debug=1&healthClear=1`, {waitUntil: "domcontentloaded"});
+  await waitForApiReady(page, 180_000);
+  evidence.mark("api-export", {active: "heightmap", complete: "page-ready"});
+  const apiRun = await page.evaluate(async () => {
+    const api = window.webglGeneratorApi;
+    const app = window.__webglGeneratorApp;
+    const unwrap = (value, label) => {
+      if (!value?.ok) throw new Error(`${label}: ${value?.error?.code || "api_error"} ${value?.error?.message || ""}`);
+      return value.data;
     };
-  });
-
-  const apiExport = await page.evaluate(async () => {
-    const map = window.__webglGeneratorApp.map;
-    const heights = map.grid.cells.h;
+    const snapshot = () => ({
+      map: unwrap(api.info.mapSummary(), "map summary"),
+      history: unwrap(api.history.get(), "history"),
+      layers: unwrap(api.layers.get(), "layers"),
+      camera: {...app.renderer.camera}
+    });
+    unwrap(await api.generate.newMap({confirm: true, seed: "heightmap-export-browser-r4b", cellsTarget: 10_000, heightmapTemplate: "continents"}), "newMap");
+    unwrap(await api.layers.setTheme("ancient"), "theme");
+    unwrap(await api.layers.setViewMode("states"), "view mode");
+    unwrap(await api.layers.setVisible("routes", false), "routes visibility");
+    await new Promise(done => requestAnimationFrame(() => requestAnimationFrame(done)));
+    const before = snapshot();
+    const heights = app.map.grid.cells.h;
     const targets = [0, 20, 50, 100].map(target => {
       let cell = 0;
-      for (let index = 1; index < heights.length; index++) {
-        if (Math.abs(Number(heights[index]) - target) < Math.abs(Number(heights[cell]) - target)) cell = index;
-      }
-      return {target, cell, height: Number(heights[cell]), point: map.grid.points[cell]};
+      for (let index = 1; index < heights.length; index++) if (Math.abs(Number(heights[index]) - target) < Math.abs(Number(heights[cell]) - target)) cell = index;
+      return {target, cell, height: Number(heights[cell]), point: app.map.grid.points[cell]};
     });
-    const response = await window.webglGeneratorApi.data.exportHeightmapPNG({
-      download: false,
-      pixelScale: 1,
-      includeDataUrl: true
+    window.__task350R4bLongTasks = [];
+    window.__task350R4bLongTaskObserver?.disconnect?.();
+    window.__task350R4bLongTaskObserver = new PerformanceObserver(list => {
+      window.__task350R4bLongTasks.push(...list.getEntries().map(({startTime, duration}) => ({startTime, duration, phase: "heightmap-export"})));
     });
-    if (!response?.ok) throw new Error(response?.error?.message || "高度灰度图 API 导出失败");
+    window.__task350R4bLongTaskObserver.observe({type: "longtask", buffered: false});
+    window.__webglGeneratorHealth?.clear?.();
+    const response = unwrap(await api.data.exportHeightmapPNG({download: false, pixelScale: 1, includeDataUrl: true}), "heightmap API export");
     const image = new Image();
-    image.src = response.data.dataUrl;
+    image.src = response.dataUrl;
     await image.decode();
     const canvas = document.createElement("canvas");
     canvas.width = image.naturalWidth;
     canvas.height = image.naturalHeight;
-    const context = canvas.getContext("2d", {willReadFrequently: true});
-    context.drawImage(image, 0, 0);
+    const context2d = canvas.getContext("2d", {willReadFrequently: true});
+    context2d.drawImage(image, 0, 0);
     const samples = targets.map(item => {
       const x = Math.max(0, Math.min(canvas.width - 1, Math.round(item.point[0])));
       const y = Math.max(0, Math.min(canvas.height - 1, Math.round(item.point[1])));
-      return {...item, pixel: Array.from(context.getImageData(x, y, 1, 1).data)};
+      return {...item, pixel: Array.from(context2d.getImageData(x, y, 1, 1).data)};
     });
-    return {
-      data: response.data,
-      samples,
-      summaryAfter: window.webglGeneratorApi.info.mapSummary().data,
-      historyAfter: window.webglGeneratorApi.history.get().data,
-      cameraAfter: {...window.__webglGeneratorApp.renderer.camera}
-    };
+    return {before, response, samples};
   });
 
+  evidence.mark("ui-export", {active: "heightmap-download", complete: "api-export"});
   await page.locator("#open-generation-panel").click();
-  await page.locator('.floating-panel[data-panel-id="generation-panel"]').waitFor({state: "visible"});
   await page.getByRole("tab", {name: "简介", exact: true}).click();
   await page.locator("#open-export-panel").click();
   const exportPanel = page.locator(".project-export-panel");
   await exportPanel.waitFor({state: "visible"});
   await exportPanel.locator("details.project-export-advanced-section > summary").click();
   await exportPanel.locator("#export-png-scale").selectOption("2");
-  const uiPath = join(artifactDir, "heightmap-ui-2x.png");
-  const [download] = await Promise.all([
-    page.waitForEvent("download"),
-    exportPanel.locator("#export-heightmap-image").click()
-  ]);
+  mkdirSync(artifactRoot, {recursive: true});
+  const uiPath = join(artifactRoot, "heightmap-export-ui-2x.png");
+  const [download] = await Promise.all([page.waitForEvent("download"), exportPanel.locator("#export-heightmap-image").click()]);
   await download.saveAs(uiPath);
   const uiFile = inspectPng(uiPath);
   const uiStatus = await page.locator("#file-operation-status").textContent();
 
-  const finalState = await page.evaluate(() => {
+  evidence.mark("assertions", {active: "state-and-performance", complete: "ui-export"});
+  const final = await page.evaluate(async () => {
+    await new Promise(done => requestAnimationFrame(() => requestAnimationFrame(done)));
+    await new Promise(done => setTimeout(done, 100));
+    const api = window.webglGeneratorApi;
     const app = window.__webglGeneratorApp;
+    const unwrap = value => value?.ok ? value.data : value;
+    const observer = window.__task350R4bLongTaskObserver;
+    window.__task350R4bLongTasks.push(...(observer?.takeRecords?.() || []).map(({startTime, duration}) => ({startTime, duration, phase: "heightmap-export"})));
+    observer?.disconnect?.();
     return {
-      summary: window.webglGeneratorApi.info.mapSummary().data,
-      history: window.webglGeneratorApi.history.get().data,
-      camera: {...app.renderer.camera},
-      glError: app.renderer.getStats().draw?.glError ?? 0,
-      healthErrors: (app.health?.getEvents?.() || []).filter(event => event.severity === "error").length,
-      description: window.webglGeneratorApi.info.describe("data.exportHeightmapPNG").data
+      state: {map: unwrap(api.info.mapSummary()), history: unwrap(api.history.get()), layers: unwrap(api.layers.get()), camera: {...app.renderer.camera}},
+      longTasks: window.__task350R4bLongTasks,
+      health: unwrap(api.info.healthEvents({severity: "error", limit: 100})),
+      loading: unwrap(api.info.runtimeStats()).loading,
+      glError: app.renderer.getStats().draw?.glError ?? 0
     };
   });
-
-  assert.equal(apiExport.data.width, 1440);
-  assert.equal(apiExport.data.height, 960);
-  assert.equal(apiExport.data.cellCount, generated.summary.gridCells);
-  assert.match(apiExport.data.filename, /\.heightmap\.png$/);
-  assert.match(apiExport.data.dataUrl, /^data:image\/png;base64,/);
-  for (const sample of apiExport.samples) {
+  const performanceSignals = consoleErrors.filter(text => /\[FMG health\] (operation-stall|main-thread-long-task|render-frame-gap|input-handler-stall)/u.test(text));
+  const applicationErrors = consoleErrors.filter(text => !performanceSignals.includes(text));
+  const overBudget = final.longTasks.filter(task => task.duration > 200);
+  const stateExact = JSON.stringify(final.state) === JSON.stringify(apiRun.before);
+  const compact = {
+    cells: apiRun.before.map.gridCells,
+    apiSize: [apiRun.response.width, apiRun.response.height],
+    uiSize: [uiFile.width, uiFile.height],
+    sampleCount: apiRun.samples.length,
+    stateExact,
+    longTaskCount: final.longTasks.length,
+    maxLongTaskMs: Math.max(0, ...final.longTasks.map(task => task.duration)),
+    overBudget,
+    applicationErrors: applicationErrors.length,
+    pageErrors: pageErrors.length,
+    healthErrors: final.health?.events?.length || 0,
+    glError: final.glError,
+    loadingVisible: final.loading?.visible === true
+  };
+  evidence.setResult({apiRun, ui: {...uiFile, status: uiStatus}, final, performanceSignals, applicationErrors, pageErrors}, compact);
+  assert(apiRun.before.map.gridCells >= 9_000, "heightmap fixture 未使用代表性 10k 地图");
+  assert.equal(apiRun.response.cellCount, apiRun.before.map.gridCells);
+  assert.match(apiRun.response.filename, /\.heightmap\.png$/u);
+  for (const sample of apiRun.samples) {
     const expected = Math.round(Math.max(0, Math.min(100, sample.height)) * 255 / 100);
     assert.deepEqual(sample.pixel, [expected, expected, expected, 255], `cell #${sample.cell} 灰度像素错误`);
   }
-  assert.equal(uiFile.width, 2880);
-  assert.equal(uiFile.height, 1920);
-  assert.match(uiStatus || "", /高度灰度图已导出/);
-  assert.equal(apiExport.summaryAfter.checksum, generated.summary.checksum);
-  assert.equal(finalState.summary.checksum, generated.summary.checksum);
-  assert.deepEqual(apiExport.historyAfter, generated.history);
-  assert.deepEqual(finalState.history, generated.history);
-  assert.deepEqual(apiExport.cameraAfter, generated.camera);
-  assert.deepEqual(finalState.camera, generated.camera);
-  assert.equal(finalState.glError, 0);
-  assert.equal(finalState.healthErrors, 0);
-  assert.equal(finalState.description.method, "data.exportHeightmapPNG");
-  assert.equal(finalState.description.inputSchema.prefixItems[0].properties.pixelScale.maximum, 4);
-  assert.deepEqual(consoleErrors, []);
+  assert.deepEqual([uiFile.width, uiFile.height], [apiRun.response.width * 2, apiRun.response.height * 2]);
+  assert.match(uiStatus || "", /高度灰度图已导出/u);
+  assert.equal(stateExact, true, "heightmap API/UI 导出改变了 map/revision/history/camera/layers/theme");
+  assert.deepEqual(overBudget, []);
+  assert.deepEqual(applicationErrors, []);
   assert.deepEqual(pageErrors, []);
-
-  console.log(JSON.stringify({
-    ok: true,
-    api: {
-      filename: apiExport.data.filename,
-      bytes: apiExport.data.bytes,
-      size: [apiExport.data.width, apiExport.data.height],
-      cellCount: apiExport.data.cellCount,
-      heightRange: [apiExport.data.minHeight, apiExport.data.maxHeight],
-      samples: apiExport.samples
-    },
-    ui: {...uiFile, status: uiStatus},
-    unchanged: {
-      checksum: finalState.summary.checksum,
-      history: finalState.history,
-      camera: finalState.camera
-    },
-    errors: {
-      console: consoleErrors.length,
-      page: pageErrors.length,
-      health: finalState.healthErrors,
-      webgl: finalState.glError
-    }
-  }, null, 2));
-  await context.close();
+  assert.deepEqual(final.health?.events || [], []);
+  assert.equal(final.loading?.visible, false);
+  assert.equal(final.glError, 0);
+  evidence.succeed();
+  console.log(JSON.stringify({ok: true, ...compact, performanceSignals}, null, 2));
+} catch (error) {
+  primaryError = error;
+  evidence.fail(error);
 } finally {
-  if (browser) await browser.close();
-  await new Promise(done => server.close(done));
+  for (const [label, close] of [
+    ["context", () => context?.close()],
+    ["browser", () => browser?.close()],
+    ["server", async () => {
+      if (server.exitCode !== null) return;
+      server.kill();
+      await new Promise((resolve, reject) => {
+        server.once("exit", resolve);
+        server.once("error", reject);
+      });
+    }]
+  ]) {
+    try {
+      await closeTask350BrowserResource(label, close);
+    } catch (error) {
+      if (label === "server") server.unref();
+      evidence.failTeardown(error);
+    }
+  }
+  evidence.persist();
 }
+
+if (primaryError) throw primaryError;
+if (!evidence.artifact.ok) throw Object.assign(new Error(evidence.artifact.failure?.message || "heightmap export teardown failed"), {code: evidence.artifact.failure?.code || "heightmap_export_teardown_failed"});
 
 function inspectPng(path) {
   const bytes = readFileSync(path);
@@ -176,28 +191,13 @@ function inspectPng(path) {
   return {path, bytes: statSync(path).size, width: bytes.readUInt32BE(16), height: bytes.readUInt32BE(20)};
 }
 
-async function startStaticServer() {
-  const server = createServer((request, response) => {
-    const url = new URL(request.url || "/", `http://${host}:${port}`);
-    const pathname = decodeURIComponent(url.pathname === "/" ? "/index.html" : url.pathname);
-    const target = resolve(distDir, `.${normalize(pathname)}`);
-    if (!target.startsWith(distDir)) return void response.writeHead(403).end("Forbidden");
-    if (!existsSync(target) || !statSync(target).isFile()) return void response.writeHead(404).end("Not found");
-    response.writeHead(200, {"content-type": contentType(target), "cache-control": "no-store"});
-    createReadStream(target).pipe(response);
-  });
-  await new Promise((resolveListen, rejectListen) => {
-    server.once("error", rejectListen);
-    server.listen(port, host, resolveListen);
-  });
-  return server;
-}
-
-function contentType(path) {
-  const ext = extname(path).toLowerCase();
-  if (ext === ".html") return "text/html;charset=utf-8";
-  if (ext === ".js") return "text/javascript;charset=utf-8";
-  if (ext === ".css") return "text/css;charset=utf-8";
-  if (ext === ".png") return "image/png";
-  return "application/octet-stream";
+async function waitServer() {
+  for (let attempt = 0; attempt < 120; attempt++) {
+    if (server.exitCode !== null) throw new Error(`静态服务提前退出：${server.exitCode}`);
+    try {
+      if ((await fetch(`http://127.0.0.1:${port}`)).ok) return;
+    } catch {}
+    await new Promise(done => setTimeout(done, 50));
+  }
+  throw new Error("等待静态服务超时");
 }

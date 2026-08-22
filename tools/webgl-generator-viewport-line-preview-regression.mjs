@@ -60,7 +60,18 @@ assert.equal(
   "同步与异步切图都必须同时清空道路 draw ranges、道路与河流顶点计数"
 );
 assert.match(rendererSource, /const shouldContinue = \(\) => this\.viewportCommitVersion === version/);
-assert.match(rendererSource, /drawViewportPreview\(\)[\s\S]*updateDynamicBuffers: false[\s\S]*drawDirtyDynamicBuffers: false/);
+const flushStart = rendererSource.indexOf("  flushViewportPreview() {");
+const flushEnd = rendererSource.indexOf("\n\n  suspendOverlayForInteraction()", flushStart);
+assert.ok(flushStart >= 0 && flushEnd > flushStart, "无法提取 flushViewportPreview 方法");
+const flushSource = rendererSource.slice(flushStart, flushEnd);
+const previewDrawPattern = /this\.draw\(\{\s*updateDynamicBuffers: false,\s*updateOverlay: false,\s*drawDirtyDynamicBuffers: false,\s*viewportPreview: true\s*\}\);/u;
+assert.equal((flushSource.match(/this\.draw\(/gu) || []).length, 1, "flushViewportPreview 必须只有一个直接 draw 调用");
+assert.match(flushSource, previewDrawPattern, "flushViewportPreview 没有把直接 draw 标记为 viewportPreview");
+const disabledPreviewMutation = flushSource.replace("viewportPreview: true", "viewportPreview: false");
+assert.notEqual(disabledPreviewMutation, flushSource, "viewportPreview true→false mutation 未命中");
+assert.doesNotMatch(disabledPreviewMutation, previewDrawPattern, "viewportPreview 被关闭后仍通过专项契约");
+assert.match(rendererSource, /const glErrorChecked = !viewportPreview;\s+const glError = glErrorChecked \? gl\.getError\(\) : Number\(this\.lastDraw\?\.glError \|\| 0\);/, "viewport preview 仍逐帧同步读取 GL error");
+assert.match(rendererSource, /this\.lastDraw = \{\s+sequence: event\.sequence,\s+drawMs,\s+glError,\s+glErrorChecked,/u, "draw stats 没有区分 GL error 是否本帧检查");
 assert.match(rendererSource, /matrix\(\$\{preview\.scale\}, 0, 0, \$\{preview\.scale\}, \$\{preview\.translateX\}, \$\{preview\.translateY\}\)/, "实际 overlay 矩阵没有消费设备像素对齐后的平移值");
 assert.match(rendererSource, /const VIEWPORT_LINE_OVERSCAN_RATIO = 0\.5;/, "道路与河流没有使用半个视口的自适应预取范围");
 assert.match(rendererSource, /const VIEWPORT_LINE_OVERSCAN_MAX_CSS_PX = 720;/, "道路与河流预取范围缺少显式性能上限");
@@ -74,5 +85,6 @@ console.log(JSON.stringify({
   pointCases: 5,
   staleCancellation: true,
   dirtyPreviewLayers: ["routes", "rivers"],
-  adaptiveOverscan: {ratio: 0.5, maxCssPx: 720}
+  adaptiveOverscan: {ratio: 0.5, maxCssPx: 720},
+  previewGlErrorSync: false
 }, null, 2));

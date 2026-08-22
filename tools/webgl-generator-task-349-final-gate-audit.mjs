@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
-import {existsSync, readFileSync} from "node:fs";
-import {dirname, extname, resolve} from "node:path";
+import {readFileSync} from "node:fs";
+import {resolve} from "node:path";
 import {fileURLToPath} from "node:url";
+import {extractLocalImports, findBrowserLaunchers, PACKAGE_BROWSER_FORBIDDEN} from "./tool-source-browser-launch-audit.mjs";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
 const packageJson = JSON.parse(readFileSync(`${root}/package.json`, "utf8"));
@@ -36,32 +37,47 @@ const finalGateScripts = Object.freeze([
   "typecheck:core",
   "build:app"
 ]);
+const allowedDependencyScripts = Object.freeze([
+  "regress:map-adoption-binding-owner"
+]);
 
-const forbidden = /browser|playwright|puppeteer|selenium|chrom(?:e|ium)|\bcdp\b|devtools|web-driver|webdriver|vite\s+(?:dev|preview)|--host\b/iu;
+const forbidden = PACKAGE_BROWSER_FORBIDDEN;
 const checkedScripts = new Set();
 const entrypoints = new Set();
 
+assert.equal(new Set(finalGateScripts).size, finalGateScripts.length, "终验顶层 package gate 不得重复");
 for (const name of finalGateScripts) inspectScript(name, []);
-assert.equal(checkedScripts.size, finalGateScripts.length, "终验脚本不得隐式扩展为未登记的 package script");
+assert.ok(finalGateScripts.every(name => checkedScripts.has(name)), "27 个终验顶层 package gate 必须全部进入递归审计");
+const dependencyScripts = [...checkedScripts]
+  .filter(name => !finalGateScripts.includes(name))
+  .sort();
+assert.deepEqual(dependencyScripts, [...allowedDependencyScripts].sort(), "终验递归依赖必须显式登记且保持精确");
+assert.match(scripts["regress:foundation-core-protocol"], /pnpm(?:\.cmd)?\s+(?:run\s+)?regress:map-adoption-binding-owner(?:\s|$)/u, "foundation 顶层门必须包含 adoption binding owner 子门");
 
 const scannedToolSources = new Set();
 for (const entrypoint of entrypoints) {
-  const findings = findBrowserLaunchers(resolve(root, entrypoint), scannedToolSources);
+  const findings = findBrowserLaunchers({root, entrypoint: resolve(root, entrypoint), scanned: scannedToolSources});
   assert.deepEqual(findings, [], `终验工具入口或本地工具导入链包含浏览器启动原语：${findings.join(", ")}`);
 }
 const rejectedCounterexample = "regress:measurement";
 assert.doesNotMatch(rejectedCounterexample, forbidden, "反例 package script 名应保持命名不可见性");
 assert.doesNotMatch(scripts[rejectedCounterexample], forbidden, "反例命令应保持命名不可见性");
 const counterexampleEntrypoint = resolve(root, "tools/webgl-generator-measurement-import-regression.mjs");
-assert.ok(findBrowserLaunchers(counterexampleEntrypoint, new Set()).length > 0, "防误触审计必须拒绝命名不可见但实际启动 Chromium 的已知反例");
+assert.ok(findBrowserLaunchers({root, entrypoint: counterexampleEntrypoint, scanned: new Set()}).length > 0, "防误触审计必须拒绝命名不可见但实际启动 Chromium 的已知反例");
+assert.deepEqual(extractLocalImports('import "./hidden-browser-launcher.mjs";'), ["./hidden-browser-launcher.mjs"], "防误触审计必须解析 side-effect import");
+const sideEffectCounterexampleEntrypoint = resolve(root, "tools/fixtures/task-350-side-effect-browser-entry.mjs");
+assert.ok(findBrowserLaunchers({root, entrypoint: sideEffectCounterexampleEntrypoint, scanned: new Set()}).length > 0, "防误触审计必须拒绝通过 side-effect import 隐藏的浏览器启动原语");
 
 console.log(JSON.stringify({
   status: "pass",
   gates: finalGateScripts.length,
+  scriptsChecked: checkedScripts.size,
   scripts: [...checkedScripts],
+  dependencyScripts,
   entrypoints: [...entrypoints].sort(),
   sourceFilesScanned: scannedToolSources.size,
   rejectedCounterexample,
+  rejectedSideEffectCounterexample: "tools/fixtures/task-350-side-effect-browser-entry.mjs",
   forbiddenTerms: ["browser", "browser drivers", "Chrome/CDP", "Vite dev/preview"],
   browserRuns: 0
 }, null, 2));
@@ -80,43 +96,4 @@ function inspectScript(name, stack) {
   for (const match of scripts[name].matchAll(/pnpm(?:\.cmd)?\s+(?:run\s+)?([\w:-]+)/gu)) {
     inspectScript(match[1], [...stack, name]);
   }
-}
-
-function findBrowserLaunchers(entrypoint, scanned) {
-  const findings = [];
-  scan(entrypoint);
-  return findings;
-
-  function scan(file) {
-    const path = resolveToolModule(file);
-    if (!path || scanned.has(path)) return;
-    scanned.add(path);
-    const source = readFileSync(path, "utf8");
-    for (const [label, pattern] of [
-      ["browser-driver-package", /["'](?:playwright(?:-core)?|puppeteer(?:-core)?|selenium-webdriver)["']/giu],
-      ["browser-launch", /\b(?:chromium|firefox|webkit|puppeteer)\s*\.\s*launch(?:PersistentContext)?\s*\(/giu],
-      ["cdp-session", /\b(?:connectOverCDP|createCDPSession)\s*\(/gu],
-      ["webdriver", /\b(?:WebDriver|webdriver)\b/gu],
-      ["browser-process", /\b(?:spawn|execFile)\s*\([^\n]*(?:chrome|chromium|msedge)/giu]
-    ]) {
-      if (pattern.test(source)) findings.push(`${label}:${path.slice(root.length + 1).replaceAll("\\", "/")}`);
-    }
-    for (const match of source.matchAll(/(?:from\s*|import\s*\(\s*|require\s*\(\s*)["'](\.{1,2}\/[^"']+)["']/gu)) {
-      const imported = resolve(dirname(path), match[1]);
-      if (isToolPath(imported)) scan(imported);
-    }
-  }
-}
-
-function resolveToolModule(path) {
-  for (const candidate of extname(path) ? [path] : [path, `${path}.mjs`, `${path}.js`, `${path}.ts`, resolve(path, "index.mjs"), resolve(path, "index.js")]) {
-    if (existsSync(candidate) && isToolPath(candidate)) return resolve(candidate);
-  }
-  return null;
-}
-
-function isToolPath(path) {
-  const toolsRoot = resolve(root, "tools");
-  const normalized = resolve(path);
-  return normalized === toolsRoot || normalized.startsWith(`${toolsRoot}\\`) || normalized.startsWith(`${toolsRoot}/`);
 }

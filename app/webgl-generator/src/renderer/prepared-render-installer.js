@@ -11,6 +11,7 @@ import {
   createSurfaceResourceOwner,
   flattenSurfaceBaseBufferSet,
   isSurfaceBaseBufferSetForVertices,
+  rebindSurfaceBaseBufferSetOwner,
   uploadSurfaceBaseBufferSetRanges
 } from "./surface-base-buffer-set.js";
 import {snapshotViewportCamera} from "./viewport-buffer-transform.js";
@@ -23,8 +24,22 @@ import {
 } from "./cell-attribute-store.js";
 import {
   createCellVisualCorrectionBufferSetAsync,
-  flattenCellVisualCorrectionBufferSet
+  flattenCellVisualCorrectionBufferSet,
+  rebindCellVisualCorrectionBufferSetOwner
 } from "./cell-visual-surface-correction.js";
+import {normalizeRenderResourceBinding, renderResourceBindingFromOwner, sameRenderResourceBinding} from "./render-resource-binding.js";
+import {
+  assertObjectPickingResourceBinding,
+  createObjectPickingResourceBindingEntries,
+  createOverlayLabelResourceBindingEntries,
+  objectPickingResourceBindingMismatch,
+  overlayLabelResourceBindingMismatch
+} from "./retained-render-resource-binding.js";
+import {
+  RENDER_CACHE_RESOURCE_FAMILIES,
+  createRenderCacheResourceBindingEntries,
+  renderCacheResourceBindingMismatch
+} from "./render-cache-resource-binding.js";
 
 const FLOATS_PER_VERTEX = 6;
 const DEFAULT_UPLOAD_SLICE_BYTES = 256 * 1024;
@@ -34,8 +49,10 @@ const cellVisualCorrectionBufferOwners = new WeakMap();
 
 export async function prepareRendererWorkerInstall(renderer, map, prepared, options = {}) {
   if (!renderer?.gl || !map || !prepared?.layers) throw renderInstallError("render-install-input", "Worker 渲染安装缺少 renderer、地图或准备结果");
-  const binding = options.binding || prepared.binding;
-  assertRenderPreparationBinding(prepared, binding);
+  const inputBinding = options.binding || prepared.binding;
+  assertRenderPreparationBinding(prepared, inputBinding);
+  const binding = normalizeRenderResourceBinding(inputBinding, "preparedInstall.binding");
+  assertRenderBindingLatest(renderer, binding);
   const signal = options.signal || null;
   const gate = createInstallGate(options);
   const layers = prepared.layers;
@@ -107,7 +124,7 @@ export async function prepareRendererWorkerInstall(renderer, map, prepared, opti
     if (layers.surface) {
       const inPlaceColorPatch = layers.surface.mode === "cell-colors" && options.inPlaceSurfaceColorPatch === true;
       if (inPlaceColorPatch) {
-        surfaceColorPatch = await prepareInPlaceSurfaceColorPatch(renderer, map, layers.surface, gate);
+        surfaceColorPatch = await prepareInPlaceSurfaceColorPatch(renderer, map, layers.surface, binding, gate);
         surfaceValues = layers.surface;
       } else {
         surfaceValues = layers.surface.mode === "cell-colors"
@@ -173,6 +190,7 @@ export async function prepareRendererWorkerInstall(renderer, map, prepared, opti
     if (layers.route) buffers.set("routeBuffer", await uploadPreparedBuffer(renderer.gl, layers.route.vertices, renderer.gl.DYNAMIC_DRAW, gate, "routeBuffer"));
     if (layers.river) buffers.set("riverBuffer", await uploadPreparedBuffer(renderer.gl, layers.river.vertices, renderer.gl.DYNAMIC_DRAW, gate, "riverBuffer"));
     gate.assertCurrent();
+    assertRenderBindingLatest(renderer, binding);
   } catch (error) {
     deletePreparedBuffers(renderer.gl, buffers.values());
     deleteUnownedSurfaceBaseBuffers(renderer.gl, surfaceBaseBufferSet, renderer.surfaceBaseBufferSet);
@@ -182,8 +200,10 @@ export async function prepareRendererWorkerInstall(renderer, map, prepared, opti
   }
 
   return createPreparedInstallTransaction(renderer, map, prepared, decoded, buffers, surfaceBaseBufferSet, cellVisualCorrectionBufferSet, surfaceValues, surfaceResourceOwner, cellAttributeStore, {
+    binding,
     preserveRoutePicking: options.preserveRoutePicking === true,
     resetViewport: options.resetViewport === true,
+    retainUnpreparedResources: options.retainUnpreparedResources !== false,
     deferOverlayLayout: options.deferOverlayLayout === true,
     surfaceColorPatch,
     yieldToMain: gate.yieldToMain,
@@ -204,6 +224,7 @@ function createPreparedInstallTransaction(renderer, map, prepared, decoded, buff
   let surfaceBaseBefore = null;
   const surfaceColorPatch = options.surfaceColorPatch || null;
   let surfaceColorPatchDirty = false;
+  let surfaceStructureRolledBack = false;
   let ownsPreparedSurfaceBase = Boolean(surfaceBaseBufferSet);
   let ownsPreviousSurfaceBase = false;
   let cellVisualCorrectionBefore = null;
@@ -216,7 +237,7 @@ function createPreparedInstallTransaction(renderer, map, prepared, decoded, buff
   if (ownsPreparedCellVisualCorrection) retainCellVisualCorrectionBufferSet(cellVisualCorrectionBufferSet);
   if (ownsPreparedCellAttributes) retainCellAttributeStore(cellAttributeStore);
 
-  return Object.freeze({
+  const transaction = Object.freeze({
     prepareCommit,
     commit,
     rollback,
@@ -224,23 +245,74 @@ function createPreparedInstallTransaction(renderer, map, prepared, decoded, buff
     finalize,
     get committed() { return committed; }
   });
+  return transaction;
 
   async function prepareCommit(runtimeOptions = {}) {
     if (!surfaceColorPatch) return false;
     if (committed || finalized || surfaceColorPatchDirty) throw renderInstallError("render-install-state", "Worker 渲染结果已提交、应用或释放");
-    assertInPlaceSurfaceOwner(renderer, map, surfaceColorPatch);
+    assertRenderBindingLatest(renderer, options.binding);
+    assertInPlaceSurfaceOwner(renderer, map, surfaceColorPatch, "source");
     surfaceColorPatchDirty = true;
     await applyInPlaceSurfaceColors(renderer, surfaceColorPatch, surfaceColorPatch.colors, {
       ...runtimeOptions,
       yieldToMain: options.yieldToMain,
       onProgress: options.onProgress
     });
+    assertRenderBindingLatest(renderer, options.binding);
+    assertInPlaceSurfaceOwner(renderer, map, surfaceColorPatch, "source");
     return true;
   }
 
   function commit() {
     if (committed || finalized) throw renderInstallError("render-install-state", "Worker 渲染结果已提交或释放");
     try {
+      assertRenderBindingLatest(renderer, options.binding);
+      if (surfaceColorPatch) assertInPlaceSurfaceOwner(renderer, map, surfaceColorPatch, "source");
+      const previousSurfaceBinding = renderer.surfaceResourceOwner
+        ? renderResourceBindingFromOwner(renderer.surfaceResourceOwner)
+        : null;
+      if (Boolean(layers.surface) && renderer.map !== map && previousSurfaceBinding
+        && previousSurfaceBinding.renderGeneration === options.binding.renderGeneration) {
+        throw renderInstallError(
+          "render-map-replacement-generation-stale",
+          "Worker 渲染安装替换地图对象时必须签发新的资源 generation"
+        );
+      }
+      const retainedSurfaceRebind = prepareRetainedSurfaceRebind(renderer, map, layers, options.binding, previousSurfaceBinding);
+      const canRebindRetainedResources = options.retainUnpreparedResources !== false
+        && Boolean(layers.surface || retainedSurfaceRebind)
+        && renderer.map === map
+        && previousSurfaceBinding?.mapIdentity === options.binding.mapIdentity;
+      const retainedCacheFamilies = [];
+      if (canRebindRetainedResources && renderer.renderCacheResourceOwners && renderer.renderCacheResourceBindings) {
+        const preparedFamilies = new Set([
+          layers.line && "line",
+          layers.point && "point",
+          layers.route && "route",
+          layers.river && "river"
+        ].filter(Boolean));
+        for (const family of RENDER_CACHE_RESOURCE_FAMILIES) {
+          if (preparedFamilies.has(family)) continue;
+          const mismatch = renderCacheResourceBindingMismatch(renderer, family);
+          if (mismatch) {
+            throw renderInstallError(
+              "render-cache-retain-source-mismatch",
+              `Worker 渲染安装不能保留混装的 ${family} cache：${mismatch}`
+            );
+          }
+          retainedCacheFamilies.push(family);
+        }
+      }
+      const canRebindPicking = canRebindRetainedResources
+        && !layers.picking
+        && objectPickingResourceBindingMismatch(renderer) === ""
+        && renderer.objectPickingResourceOwner?.renderGeneration === previousSurfaceBinding.renderGeneration;
+      const canRebindOverlay = canRebindRetainedResources
+        && !layers.labels
+        && overlayLabelResourceBindingMismatch(renderer) === ""
+        && renderer.overlayResourceOwner?.renderGeneration === previousSurfaceBinding.renderGeneration;
+      const previousTransaction = renderer.activePreparedRenderInstallTransaction;
+      if (previousTransaction && previousTransaction !== transaction) previousTransaction.finalize();
       if (layers.route) {
         routeRefreshWasPending = Boolean(renderer.routeRefreshTimer || renderer.routeRefreshActiveVersion);
         renderer.cancelScheduledRouteBufferRefresh?.();
@@ -265,10 +337,17 @@ function createPreparedInstallTransaction(renderer, map, prepared, decoded, buff
           : decoded.picking.components;
         if (components.length < OBJECT_PICKING_COMPONENTS.length) {
           if (!renderer.objectPickingIndex) throw renderInstallError("render-picking-partial-base-missing", "局部 picking 安装缺少正式基线");
+          assertObjectPickingResourceBinding(renderer);
           pickingMutation = applyPreparedPickingComponents(renderer.objectPickingIndex, decoded.picking, components);
         } else assign("objectPickingIndex", decoded.picking);
+        for (const [field, value] of createObjectPickingResourceBindingEntries(renderer, options.binding)) assign(field, value);
       }
       if (decoded.overlay) installOverlay(decoded.overlay);
+      if (retainedSurfaceRebind) {
+        assignReboundSurfaceBaseBufferSet(retainedSurfaceRebind.surfaceBaseBufferSet);
+        assign("cellVisualCorrectionBufferSet", retainedSurfaceRebind.cellVisualCorrectionBufferSet);
+        assignCommittedSurfaceOwner(retainedSurfaceRebind.owner);
+      }
       if (layers.surface) {
       if (!surfaceColorPatch) {
       assignSurfaceBaseBufferSet(surfaceBaseBufferSet);
@@ -276,6 +355,9 @@ function createPreparedInstallTransaction(renderer, map, prepared, decoded, buff
       assign("surfaceVertices", surfaceValues.base);
       assign("cellVisualCorrectionGeometry", surfaceValues.cellVisualCorrection || new Float32Array());
       assign("gpuResidentSmoothShoreSurfaceKey", surfaceValues.smoothShoreSurfaceKey || "");
+      } else {
+        assignReboundSurfaceBaseBufferSet(surfaceColorPatch.targetBufferSet);
+        assign("cellVisualCorrectionBufferSet", surfaceColorPatch.targetCorrectionBufferSet);
       }
       assign("landCorrectionVertices", surfaceValues.landCorrections);
       assign("waterCorrectionVertices", surfaceValues.waterCorrections);
@@ -288,20 +370,9 @@ function createPreparedInstallTransaction(renderer, map, prepared, decoded, buff
       assign("surfacePatchCells", new Set());
       assign("surfacePatchVertexCount", 0);
       if (!surfaceColorPatch) assign("vertexCount", vertexCount(surfaceValues.base));
-      if (!surfaceColorPatch) {
-        assign("surfaceVerticesOwner", surfaceResourceOwner);
-        assign("surfaceCellRangesOwner", surfaceResourceOwner);
-        assign("cellVisualCorrectionGeometryOwner", surfaceResourceOwner);
-        assign("cellAttributeStoreOwner", surfaceResourceOwner);
-        assign("surfaceResourceOwner", surfaceResourceOwner);
-        assign("surfaceResourceBinding", Object.freeze({
-          owner: surfaceResourceOwner,
-          surfaceVertices: renderer.surfaceVertices,
-          surfaceCellRanges: renderer.surfaceCellRanges,
-          cellVisualCorrectionGeometry: renderer.cellVisualCorrectionGeometry,
-          cellAttributeStore: renderer.cellAttributeStore
-        }));
-        assign("lastSurfaceResourceOwnerError", null);
+      {
+        const committedSurfaceOwner = surfaceColorPatch?.targetOwner || surfaceResourceOwner;
+        assignCommittedSurfaceOwner(committedSurfaceOwner);
       }
       assign("landCorrectionVertexCount", surfaceValues.shoreSurfaceEnabled !== false ? vertexCount(surfaceValues.landCorrections) : 0);
       assign("waterCorrectionVertexCount", surfaceValues.shoreSurfaceEnabled !== false ? vertexCount(surfaceValues.waterCorrections) : 0);
@@ -345,7 +416,30 @@ function createPreparedInstallTransaction(renderer, map, prepared, decoded, buff
         renderer[key] = buffer;
         assigned.push(key);
       }
+      const preparedCacheFamilies = new Set();
+      for (const [family, present] of [
+        ["line", layers.line],
+        ["point", layers.point],
+        ["route", layers.route],
+        ["river", layers.river]
+      ]) {
+        if (!present) continue;
+        preparedCacheFamilies.add(family);
+        for (const [field, value] of createRenderCacheResourceBindingEntries(renderer, family, options.binding)) assign(field, value);
+      }
+      if (canRebindRetainedResources) {
+        for (const family of retainedCacheFamilies) {
+          for (const [field, value] of createRenderCacheResourceBindingEntries(renderer, family, options.binding)) assign(field, value);
+        }
+        if (canRebindPicking) {
+          for (const [field, value] of createObjectPickingResourceBindingEntries(renderer, options.binding)) assign(field, value);
+        }
+        if (canRebindOverlay) {
+          for (const [field, value] of createOverlayLabelResourceBindingEntries(renderer, options.binding)) assign(field, value);
+        }
+      }
       committed = true;
+      renderer.activePreparedRenderInstallTransaction = transaction;
       return true;
     } catch (error) {
       committed = true;
@@ -363,12 +457,15 @@ function createPreparedInstallTransaction(renderer, map, prepared, decoded, buff
 
   function rollback() {
     if (finalized) return false;
+    if (surfaceStructureRolledBack) return false;
     if (!committed) {
       deletePreparedBuffers(renderer.gl, buffers.values());
       releasePreparedSurfaceBase();
       releasePreparedCellVisualCorrection();
       releasePreparedCellAttributes();
-      finalized = true;
+      surfaceStructureRolledBack = surfaceColorPatchDirty;
+      finalized = !surfaceStructureRolledBack;
+      if (renderer.activePreparedRenderInstallTransaction === transaction) renderer.activePreparedRenderInstallTransaction = null;
       return true;
     }
     const failures = [];
@@ -427,7 +524,9 @@ function createPreparedInstallTransaction(renderer, map, prepared, decoded, buff
       }
     }
     committed = false;
-    finalized = true;
+    surfaceStructureRolledBack = surfaceColorPatchDirty;
+    finalized = !surfaceStructureRolledBack;
+    if (renderer.activePreparedRenderInstallTransaction === transaction) renderer.activePreparedRenderInstallTransaction = null;
     if (failures.length) {
       const error = renderInstallError("render-install-rollback-failed", "Worker 渲染安装回滚未能完整恢复");
       error.cause = failures.length === 1 ? failures[0] : new AggregateError(failures, "Worker 渲染安装回滚存在多个失败");
@@ -437,41 +536,71 @@ function createPreparedInstallTransaction(renderer, map, prepared, decoded, buff
   }
 
   async function rollbackAsync(runtimeOptions = {}) {
-    const shouldRestoreSurface = surfaceColorPatchDirty && hasInPlaceSurfaceOwner(renderer, map, surfaceColorPatch);
+    if (finalized && !surfaceColorPatchDirty) return false;
+    if (surfaceColorPatchDirty && committed
+      && !hasInPlaceSurfaceOwner(renderer, map, surfaceColorPatch, "source")
+      && !hasInPlaceSurfaceOwner(renderer, map, surfaceColorPatch, "target")) {
+      finalize();
+      return false;
+    }
+    const shouldRestoreSurface = surfaceColorPatchDirty && hasInPlaceSurfaceOwner(
+      renderer,
+      map,
+      surfaceColorPatch,
+      committed ? "target" : "source"
+    );
     const failures = [];
-    try {
-      rollback();
-    } catch (error) {
-      failures.push(error);
+    let restoreSuperseded = false;
+    if (!surfaceStructureRolledBack) {
+      try {
+        rollback();
+      } catch (error) {
+        failures.push(error);
+      }
     }
     if (shouldRestoreSurface) {
       try {
         await applyInPlaceSurfaceColors(renderer, surfaceColorPatch, surfaceColorPatch.previousColors, {
-          ...runtimeOptions,
+          isCurrent: () => (
+            (typeof runtimeOptions.isCurrent !== "function" || runtimeOptions.isCurrent() === true)
+            && hasInPlaceSurfaceOwner(renderer, map, surfaceColorPatch, "source")
+          ),
+          budgetMs: runtimeOptions.budgetMs,
+          now: runtimeOptions.now,
           yieldToMain: options.yieldToMain,
           onProgress: options.onProgress
         });
         surfaceColorPatchDirty = false;
       } catch (error) {
-        failures.push(error);
+        if (error?.code === "render-install-obsolete"
+          && ((typeof runtimeOptions.isCurrent === "function" && runtimeOptions.isCurrent() !== true)
+            || !hasInPlaceSurfaceOwner(renderer, map, surfaceColorPatch, "source"))) {
+          restoreSuperseded = true;
+          surfaceColorPatchDirty = false;
+        } else failures.push(error);
       }
     }
+    if (!shouldRestoreSurface) surfaceColorPatchDirty = false;
     if (failures.length) {
       const error = renderInstallError("render-install-rollback-failed", "Worker 渲染安装回滚未能完整恢复");
       error.cause = failures.length === 1 ? failures[0] : new AggregateError(failures, "Worker 渲染安装回滚存在多个失败");
       throw error;
     }
-    return true;
+    surfaceStructureRolledBack = false;
+    finalized = true;
+    return !restoreSuperseded;
   }
 
   function finalize() {
     if (finalized) return false;
+    if (surfaceStructureRolledBack && surfaceColorPatchDirty) return false;
     if (!committed) {
       deletePreparedBuffersBestEffort(renderer.gl, buffers.values());
       releasePreparedSurfaceBaseBestEffort();
       releasePreparedCellVisualCorrectionBestEffort();
       releasePreparedCellAttributesBestEffort();
       finalized = true;
+      if (renderer.activePreparedRenderInstallTransaction === transaction) renderer.activePreparedRenderInstallTransaction = null;
       return true;
     }
     const activeBuffers = new Set([...buffers.keys()].map(key => renderer[key]).filter(Boolean));
@@ -485,20 +614,21 @@ function createPreparedInstallTransaction(renderer, map, prepared, decoded, buff
     releasePreparedCellAttributesBestEffort();
     surfaceColorPatchDirty = false;
     finalized = true;
+    if (renderer.activePreparedRenderInstallTransaction === transaction) renderer.activePreparedRenderInstallTransaction = null;
     return true;
   }
 
   function assign(key, value) {
     if (!before.has(key)) before.set(key, renderer[key]);
-    renderer[key] = value;
     if (!assigned.includes(key)) assigned.push(key);
+    renderer[key] = value;
   }
 
   function assignNested(field, child, value) {
     const key = `nested:${field}:${child}`;
     if (!before.has(key)) before.set(key, renderer[field]?.[child]);
-    renderer[field][child] = value;
     if (!assigned.includes(key)) assigned.push(key);
+    renderer[field][child] = value;
   }
 
   function assignSurfaceBaseBufferSet(bufferSet) {
@@ -515,6 +645,38 @@ function createPreparedInstallTransaction(renderer, map, prepared, decoded, buff
     assigned.push("surfaceBaseBufferSet");
     renderer.surfaceBaseBufferSet = bufferSet;
     renderer.vertexBuffer = buffers[0];
+  }
+
+  function assignReboundSurfaceBaseBufferSet(bufferSet) {
+    if (!bufferSet || !flattenSurfaceBaseBufferSet(bufferSet).length) {
+      throw renderInstallError("render-buffer-create", "surface base owner 重绑缺少正式 GPU buffer");
+    }
+    before.set("surfaceBaseBufferSet", {
+      bufferSet: renderer.surfaceBaseBufferSet,
+      vertexBuffer: renderer.vertexBuffer
+    });
+    if (!assigned.includes("surfaceBaseBufferSet")) assigned.push("surfaceBaseBufferSet");
+    renderer.surfaceBaseBufferSet = bufferSet;
+    renderer.vertexBuffer = bufferSet.segments[0]?.buffer || null;
+  }
+
+  function assignCommittedSurfaceOwner(owner) {
+    assign("surfaceVerticesOwner", owner);
+    assign("surfaceCellRangesOwner", owner);
+    assign("cellVisualCorrectionGeometryOwner", owner);
+    assign("cellAttributeStoreOwner", owner);
+    assign("surfaceResourceOwner", owner);
+    assign("activeRenderResourceBinding", renderResourceBindingFromOwner(owner));
+    assign("renderGeneration", owner.renderGeneration);
+    assign("nextRenderGeneration", Math.max(Number(renderer.nextRenderGeneration) || 0, owner.renderGeneration));
+    assign("surfaceResourceBinding", Object.freeze({
+      owner,
+      surfaceVertices: renderer.surfaceVertices,
+      surfaceCellRanges: renderer.surfaceCellRanges,
+      cellVisualCorrectionGeometry: renderer.cellVisualCorrectionGeometry,
+      cellAttributeStore: renderer.cellAttributeStore
+    }));
+    assign("lastSurfaceResourceOwnerError", null);
   }
 
   function assignCellVisualCorrectionBufferSet(bufferSet) {
@@ -613,7 +775,7 @@ function createPreparedInstallTransaction(renderer, map, prepared, decoded, buff
   }
 
   function installOverlay(bundle) {
-    if (!renderer.overlay || !bundle.fragment) return;
+    if (!renderer.overlay || !bundle.fragment) return false;
     for (const item of bundle.militaryIconItems || []) item.rendererUnitPreferences = renderer.unitPreferences;
     const fragment = options.deferOverlayLayout
       ? createDeferredOverlayInstallFragment(bundle.fragment, renderer.overlay.ownerDocument)
@@ -647,6 +809,8 @@ function createPreparedInstallTransaction(renderer, map, prepared, decoded, buff
       ["visibleMilitaryIconCount", 0]
     ]) assign(key, value);
     renderer.cityIconLayer?.setInstances(bundle.cityIconItems, {nowMs: performance.now()});
+    for (const [field, value] of createOverlayLabelResourceBindingEntries(renderer, options.binding)) assign(field, value);
+    return true;
   }
 
   function createDeferredOverlayInstallFragment(fragment, documentRef) {
@@ -787,14 +951,61 @@ async function materializePreparedSurfaceColorPatch(renderer, map, patch, gate) 
   };
 }
 
-async function prepareInPlaceSurfaceColorPatch(renderer, map, patch, gate) {
+function prepareRetainedSurfaceRebind(renderer, map, layers, binding, previousBinding) {
+  if (layers.surface || renderer.map !== map || !previousBinding) return null;
+  const target = normalizeRenderResourceBinding(binding, "preparedInstall.retainedSurface.binding");
+  if (target.mapIdentity === previousBinding.mapIdentity
+    && target.topologyRevision === previousBinding.topologyRevision
+    && target.renderGeneration === previousBinding.renderGeneration) return null;
+  if (target.mapIdentity !== previousBinding.mapIdentity
+    || target.topologyRevision !== previousBinding.topologyRevision
+    || target.renderGeneration <= previousBinding.renderGeneration) {
+    throw renderInstallError(
+      "render-partial-surface-rebind-binding",
+      "无 surface 的 Worker 渲染安装不能接续不同地图、topology 或倒退的资源 generation"
+    );
+  }
+  const owner = renderer.surfaceResourceOwner;
+  const resourceBinding = renderer.surfaceResourceBinding;
+  const surfaceBaseBufferSet = renderer.surfaceBaseBufferSet;
+  const cellVisualCorrectionBufferSet = renderer.cellVisualCorrectionBufferSet;
+  if (!owner || renderer.surfaceVerticesOwner !== owner || renderer.surfaceCellRangesOwner !== owner
+    || renderer.cellVisualCorrectionGeometryOwner !== owner || renderer.cellAttributeStoreOwner !== owner
+    || !isSurfaceBaseBufferSetForVertices(surfaceBaseBufferSet, renderer.surfaceVertices, owner)
+    || cellVisualCorrectionBufferSet?.owner !== owner
+    || cellVisualCorrectionBufferSet.wordLength !== renderer.cellVisualCorrectionGeometry?.length
+    || resourceBinding?.owner !== owner || resourceBinding.surfaceVertices !== renderer.surfaceVertices
+    || resourceBinding.surfaceCellRanges !== renderer.surfaceCellRanges
+    || resourceBinding.cellVisualCorrectionGeometry !== renderer.cellVisualCorrectionGeometry
+    || resourceBinding.cellAttributeStore !== renderer.cellAttributeStore
+    || renderer.vertexBuffer !== surfaceBaseBufferSet.segments[0]?.buffer) {
+    throw renderInstallError(
+      "render-partial-surface-rebind-source",
+      "无 surface 的 Worker 渲染安装不能从混装或漂移的 surface 资源接续 generation"
+    );
+  }
+  const targetOwner = createSurfaceResourceOwner(target, {
+    surfaceFloatLength: renderer.surfaceVertices?.length || 0,
+    correctionWordLength: renderer.cellVisualCorrectionGeometry?.length || 0,
+    surfaceCellRanges: renderer.surfaceCellRanges
+  });
+  return Object.freeze({
+    owner: targetOwner,
+    surfaceBaseBufferSet: rebindSurfaceBaseBufferSetOwner(surfaceBaseBufferSet, targetOwner),
+    cellVisualCorrectionBufferSet: rebindCellVisualCorrectionBufferSetOwner(cellVisualCorrectionBufferSet, targetOwner)
+  });
+}
+
+async function prepareInPlaceSurfaceColorPatch(renderer, map, patch, binding, gate) {
   const source = renderer.surfaceVertices;
   const ranges = renderer.surfaceCellRanges;
   const bufferSet = renderer.surfaceBaseBufferSet;
+  const correctionBufferSet = renderer.cellVisualCorrectionBufferSet;
   const owner = renderer.surfaceResourceOwner;
   const resourceBinding = renderer.surfaceResourceBinding;
   if (!(source instanceof Float32Array) || !source.length || !(ranges instanceof Map) || !ranges.size
     || !owner || renderer.surfaceVerticesOwner !== owner || renderer.surfaceCellRangesOwner !== owner
+    || renderer.cellVisualCorrectionGeometryOwner !== owner || correctionBufferSet?.owner !== owner
     || renderer.cellAttributeStoreOwner !== owner || !isSurfaceBaseBufferSetForVertices(bufferSet, source, owner)
     || resourceBinding?.owner !== owner || resourceBinding.surfaceVertices !== source
     || resourceBinding.surfaceCellRanges !== ranges || resourceBinding.cellAttributeStore !== renderer.cellAttributeStore
@@ -802,6 +1013,12 @@ async function prepareInPlaceSurfaceColorPatch(renderer, map, patch, gate) {
     || renderer.viewOptions?.smoothCellBorders === false || renderer.surfacePatchCells?.size) {
     throw renderInstallError("render-surface-color-patch-base", "当前 surface geometry 不支持原位颜色补丁");
   }
+  assertInPlaceSurfaceBindingTransition(owner, binding);
+  const targetOwner = createSurfaceResourceOwner(binding, {
+    surfaceFloatLength: source.length,
+    correctionWordLength: renderer.cellVisualCorrectionGeometry?.length || 0,
+    surfaceCellRanges: ranges
+  });
   if (patch.scope === "all" && patch.cellIds.length !== ranges.size) {
     throw renderInstallError("render-surface-color-patch-coverage", "Worker surface 全量颜色补丁未覆盖当前 geometry");
   }
@@ -839,6 +1056,11 @@ async function prepareInPlaceSurfaceColorPatch(renderer, map, patch, gate) {
     source,
     ranges,
     bufferSet,
+    correctionBufferSet,
+    sourceOwner: owner,
+    targetOwner,
+    targetBufferSet: rebindSurfaceBaseBufferSetOwner(bufferSet, targetOwner),
+    targetCorrectionBufferSet: rebindCellVisualCorrectionBufferSetOwner(correctionBufferSet, targetOwner),
     cellRanges,
     colors: patch.colors,
     previousColors
@@ -849,8 +1071,9 @@ async function applyInPlaceSurfaceColors(renderer, patch, colors, options = {}) 
   const signal = options.signal || null;
   const isCurrent = typeof options.isCurrent === "function" ? options.isCurrent : null;
   const yieldToMain = typeof options.yieldToMain === "function" ? options.yieldToMain : defaultYield;
+  const clock = typeof options.now === "function" ? options.now : now;
   const budgetMs = Math.max(1, Number(options.budgetMs) || 6);
-  let deadline = now() + budgetMs;
+  let deadline = clock() + budgetMs;
   const assertCurrent = () => {
     if (!signal?.aborted && (!isCurrent || isCurrent() === true)) return;
     const error = new Error(signal?.aborted ? "Worker 渲染安装已取消" : "Worker 渲染安装已因显示状态变化而过期");
@@ -874,11 +1097,11 @@ async function applyInPlaceSurfaceColors(renderer, patch, colors, options = {}) 
       patch.source[offset + 4] = blue;
       patch.source[offset + 5] = side;
     }
-    if ((index & 255) === 255 && now() >= deadline) {
+    if ((index & 255) === 255 && clock() >= deadline) {
       options.onProgress?.({phase: "cpu", completed: index + 1, total: cellCount});
       await yieldToMain();
       assertCurrent();
-      deadline = now() + budgetMs;
+      deadline = clock() + budgetMs;
     }
   }
   for (let index = 0; index < patch.bufferSet.segments.length; index++) {
@@ -896,22 +1119,42 @@ async function applyInPlaceSurfaceColors(renderer, patch, colors, options = {}) 
   }
 }
 
-function assertInPlaceSurfaceOwner(renderer, map, patch) {
-  if (!hasInPlaceSurfaceOwner(renderer, map, patch)) {
+function assertInPlaceSurfaceOwner(renderer, map, patch, phase = "source") {
+  if (!hasInPlaceSurfaceOwner(renderer, map, patch, phase)) {
     throw renderInstallError("render-surface-color-patch-obsolete", "surface 颜色补丁的正式缓冲已变化");
   }
 }
 
-function hasInPlaceSurfaceOwner(renderer, map, patch) {
+function hasInPlaceSurfaceOwner(renderer, map, patch, phase = "source") {
+  const target = phase === "target";
+  const expectedOwner = target ? patch?.targetOwner : patch?.sourceOwner;
+  const expectedBufferSet = target ? patch?.targetBufferSet : patch?.bufferSet;
+  const expectedCorrectionBufferSet = target ? patch?.targetCorrectionBufferSet : patch?.correctionBufferSet;
   const owner = renderer.surfaceResourceOwner;
   const resourceBinding = renderer.surfaceResourceBinding;
-  return Boolean(patch && owner && renderer.map === map && renderer.surfaceVertices === patch.source
-    && renderer.surfaceCellRanges === patch.ranges && renderer.surfaceBaseBufferSet === patch.bufferSet
+  return Boolean(patch && owner === expectedOwner && renderer.map === map && renderer.surfaceVertices === patch.source
+    && renderer.surfaceCellRanges === patch.ranges && renderer.surfaceBaseBufferSet === expectedBufferSet
+    && renderer.cellVisualCorrectionBufferSet === expectedCorrectionBufferSet
     && renderer.surfaceVerticesOwner === owner && renderer.surfaceCellRangesOwner === owner
-    && renderer.cellAttributeStoreOwner === owner && patch.bufferSet.owner === owner
+    && renderer.cellVisualCorrectionGeometryOwner === owner && renderer.cellAttributeStoreOwner === owner
+    && expectedBufferSet?.owner === owner && expectedCorrectionBufferSet?.owner === owner
     && resourceBinding?.owner === owner && resourceBinding.surfaceVertices === patch.source
     && resourceBinding.surfaceCellRanges === patch.ranges && resourceBinding.cellAttributeStore === renderer.cellAttributeStore
-    && renderer.vertexBuffer === patch.bufferSet.segments[0]?.buffer);
+    && renderer.vertexBuffer === expectedBufferSet?.segments[0]?.buffer);
+}
+
+function assertInPlaceSurfaceBindingTransition(owner, binding) {
+  const source = renderResourceBindingFromOwner(owner);
+  const target = normalizeRenderResourceBinding(binding, "preparedInstall.surfacePatch.binding");
+  const sourceDelta = target.sourceRevision - source.sourceRevision;
+  const topologyDelta = target.topologyRevision - source.topologyRevision;
+  if (target.mapIdentity !== source.mapIdentity
+    || target.renderGeneration !== source.renderGeneration
+    || !new Set([0, 1]).has(sourceDelta)
+    || !new Set([0, 1]).has(topologyDelta)
+    || sourceDelta !== topologyDelta) {
+    throw renderInstallError("render-surface-color-patch-binding", "surface 颜色补丁与正式资源 owner 不属于同一受控 revision");
+  }
 }
 
 function assertPreparedPoliticalCache(value, field, label) {
@@ -1284,8 +1527,19 @@ function countVisiblePointVertices(drawRanges, visibility) {
 }
 
 function sameBinding(left, right) {
-  return String(left?.mapIdentity ?? "") === String(right?.mapIdentity ?? "")
-    && Number(left?.mapRevision || 0) === Number(right?.mapRevision || 0);
+  return sameRenderResourceBinding(left, right);
+}
+
+function assertRenderBindingLatest(renderer, binding) {
+  const current = Math.max(Number(renderer?.renderGeneration) || 0, Number(renderer?.nextRenderGeneration) || 0);
+  if (binding.renderGeneration < current) {
+    throw renderInstallError("render-install-generation-stale", "Worker 渲染结果属于已淘汰的 GPU 资源代次");
+  }
+  const latest = renderer?.latestIssuedRenderBinding;
+  if (latest && !sameRenderResourceBinding(binding, latest)) {
+    throw renderInstallError("render-install-preparation-stale", "Worker 渲染结果已被更新的渲染准备请求取代");
+  }
+  return true;
 }
 
 function defaultYield() {

@@ -9,6 +9,7 @@ import {markerPresentationRecords} from "../app/webgl-generator/src/domains/mark
 import {buildPointLayer} from "../app/webgl-generator/src/renderer/placeholder-renderer.js";
 import {buildObjectPickingIndex, pickMarker} from "../app/webgl-generator/src/renderer/picking.js";
 import {buildObjectPickingDto, rebuildObjectPickingIndexFromDto} from "../app/webgl-generator/src/renderer/picking-dto.js";
+import {createRenderResourceBinding} from "../app/webgl-generator/src/renderer/render-resource-binding.js";
 import {createMapFeatureGeoJson} from "../app/webgl-generator/src/runtime/map-file-io.js";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -42,7 +43,10 @@ try {
   const picking = buildObjectPickingIndex(map, {components: ["markers"]});
   assert.equal(picking.markerCount, canonical.length);
   assert.equal(pickMarker(map, picking, target.x, target.y, 0.01)?.id, target.id);
-  const binding = {runtimeMapSessionId: "markers-session", canonicalRevision: 7, topologyRevision: 2};
+  const binding = createRenderResourceBinding(
+    {mapIdentity: "markers-session", mapRevision: 7, topologyRevision: 2},
+    {renderPreparationId: "markers-core:7", renderGeneration: 1}
+  );
   const dto = buildObjectPickingDto(map, binding, ["markers"]);
   const rebound = rebuildObjectPickingIndexFromDto(structuredClone(dto), map, binding);
   assert.equal(pickMarker(map, rebound, target.x, target.y, 0.01)?.id, target.id, "picking DTO 回绑 identity 漂移");

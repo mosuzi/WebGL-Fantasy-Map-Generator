@@ -5,22 +5,30 @@ import {createServer} from "node:http";
 import {createRequire} from "node:module";
 import {dirname, extname, join, normalize, resolve} from "node:path";
 import {fileURLToPath} from "node:url";
+import {closeTask350BrowserResource, createTask350BrowserArtifact} from "./task-350-browser-artifact.mjs";
 import {waitForApiReady} from "./webgl-generator-api-browser-ready.mjs";
 
 const rootDir = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const sourceDir = join(rootDir, "source", "Fantasy-Map-Generator");
+const appSourceDir = join(rootDir, "app", "webgl-generator", "src");
 const distDir = join(rootDir, "dist", "webgl-generator");
 const host = "127.0.0.1";
 const port = 5498;
 const timeoutMs = 240000;
-assert.ok(existsSync(distDir), `构建产物不存在：${distDir}`);
-
-const playwright = createRequire(join(sourceDir, "package.json"))("playwright");
-const server = await startStaticServer();
+const uiOnly = process.argv.includes("--ui-only");
+const profileUi = process.argv.includes("--profile-ui");
+const evidence = createTask350BrowserArtifact("map-transaction", {mode: uiOnly ? "browser-ui-only" : "browser-full"});
+let server;
 let browser;
 let context;
+let thrownError = null;
 
 try {
+  assert.ok(existsSync(distDir), `构建产物不存在：${distDir}`);
+  evidence.mark("server-start", {active: "map-transaction"});
+  const playwright = createRequire(join(sourceDir, "package.json"))("playwright");
+  server = await startStaticServer();
+  evidence.mark("browser-start", {active: "map-transaction", complete: "server-start"});
   browser = await playwright.chromium.launch({headless: true, channel: "chrome"});
   context = await browser.newContext({viewport: {width: 1280, height: 820}, deviceScaleFactor: 1});
   await context.addInitScript(() => localStorage.clear());
@@ -33,7 +41,8 @@ try {
 
   await page.goto(`http://${host}:${port}?healthClear=1`, {waitUntil: "domcontentloaded"});
   await waitForApiReady(page, timeoutMs);
-  const report = await page.evaluate(async () => {
+  evidence.mark("browser-evaluation", {active: "map-transaction", complete: "browser-start"});
+  const report = await page.evaluate(async ({uiOnly}) => {
     const api = window.webglGeneratorApi;
     const app = window.__webglGeneratorApp;
     unwrap(await api.generate.newMap({
@@ -42,7 +51,47 @@ try {
       cellsTarget: 1000,
       heightmapTemplate: "continents"
     }), "generate.newMap");
+    const {computeCanonicalMapReplicaChecksum} = await import("/__task350-source/runtime/map-replica-checksum.js");
+    window.__task350Fingerprint = () => computeCanonicalMapReplicaChecksum(app.map, {
+      revision: app.mapRevision.getSnapshot().mapRevision,
+      budgetMs: 4
+    });
+    window.__webglGeneratorHealth?.clear?.();
+    window.__task350LongTasks = [];
+    window.__task350PhaseMarks = [];
+    window.__task350SubphaseMarks = [];
+    window.__task350SubphaseSequence = 0;
+    window.__task350BeginSubphase = label => {
+      const mark = {id: ++window.__task350SubphaseSequence, label, startTime: performance.now(), endTime: null};
+      window.__task350SubphaseMarks.push(mark);
+      return mark.id;
+    };
+    window.__task350EndSubphase = id => {
+      const mark = window.__task350SubphaseMarks.find(item => item.id === id);
+      if (mark) mark.endTime = performance.now();
+    };
+    window.__task350LongTaskObserver = new PerformanceObserver(list => {
+      window.__task350LongTasks.push(...list.getEntries().map(entry => ({
+        startTime: entry.startTime,
+        duration: entry.duration,
+        name: entry.name
+      })));
+    });
+    window.__task350LongTaskObserver.observe({type: "longtask", buffered: false});
     const targetStartedAt = performance.now();
+
+    if (uiOnly) {
+      const stats = app.renderer?.getStats?.() || {};
+      return {
+        targetStartedAt,
+        regeneration: [],
+        height: [],
+        geo: null,
+        climate: null,
+        metadataUndoable: [],
+        glError: stats.draw?.glError ?? document.querySelector("canvas")?.getContext?.("webgl2")?.getError?.() ?? 0
+      };
+    }
 
     const regenerationKinds = ["features", "routes", "rivers", "cities", "states", "provinces", "markers", "diplomacy", "religions", "military", "zones"];
     const regeneration = [];
@@ -87,26 +136,31 @@ try {
       }
     );
 
-    const climateBefore = fingerprint(app.map);
+    const climateBefore = await traceStep("climate.applyDownstreamRebuild:fingerprint-before", () => fingerprint(app.map));
+    const climatePhase = {label: "climate.applyDownstreamRebuild", startTime: performance.now(), endTime: null};
+    window.__task350PhaseMarks.push(climatePhase);
     const climateOptionsReference = app.map.options;
     const historyBeforeClimate = app.editHistory.getStats();
-    const pendingClimate = api.climate.applyDownstreamRebuild({systems: ["cities"], confirm: true, seed: 202});
+    const pendingClimate = traceStep("climate.applyDownstreamRebuild:execute", () => api.climate.applyDownstreamRebuild({systems: ["cities"], confirm: true, seed: 202}));
     const busy = await api.generate.regenerate("cities", {confirm: true});
     if (busy?.ok !== false || busy?.error?.code !== "operation_busy") {
       throw new Error(`并发请求没有稳定返回 operation_busy：${JSON.stringify(busy)}`);
     }
     const climateData = unwrap(await pendingClimate, "climate.applyDownstreamRebuild");
     if (!climateData.executed) throw new Error("气候下游重算未执行");
-    const climateAfter = fingerprint(app.map);
+    const climateAfter = await traceStep("climate.applyDownstreamRebuild:fingerprint-after", () => fingerprint(app.map));
     const historyAfterClimate = app.editHistory.getStats();
     assertSingleHistory(historyBeforeClimate, historyAfterClimate, "climate.applyDownstreamRebuild");
-    unwrap(api.history.undo(), "history.undo.climate");
-    if (fingerprint(app.map) !== climateBefore) throw new Error("气候下游重算撤销没有恢复完整地图");
+    await traceStep("climate.applyDownstreamRebuild:undo", async () => unwrap(await api.history.undo(), "history.undo.climate"));
+    if (await traceStep("climate.applyDownstreamRebuild:fingerprint-undo", () => fingerprint(app.map)) !== climateBefore) throw new Error("气候下游重算撤销没有恢复完整地图");
     if (app.map.options !== climateOptionsReference) throw new Error("气候下游重算撤销替换了 map.options 引用");
-    unwrap(api.history.redo(), "history.redo.climate");
-    if (fingerprint(app.map) !== climateAfter) throw new Error("气候下游重算重做没有恢复完整地图");
+    await traceStep("climate.applyDownstreamRebuild:redo", async () => unwrap(await api.history.redo(), "history.redo.climate"));
+    if (await traceStep("climate.applyDownstreamRebuild:fingerprint-redo", () => fingerprint(app.map)) !== climateAfter) throw new Error("气候下游重算重做没有恢复完整地图");
     if (app.map.options !== climateOptionsReference) throw new Error("气候下游重算重做替换了 map.options 引用");
-    unwrap(api.history.undo(), "history.undo.climate-baseline");
+    await traceStep("climate.applyDownstreamRebuild:undo-baseline", async () => unwrap(await api.history.undo(), "history.undo.climate-baseline"));
+    if (await traceStep("climate.applyDownstreamRebuild:fingerprint-baseline", () => fingerprint(app.map)) !== climateBefore) throw new Error("气候下游重算最终撤销没有恢复基线地图");
+    if (app.map.options !== climateOptionsReference) throw new Error("气候下游重算最终撤销替换了 map.options 引用");
+    climatePhase.endTime = performance.now();
 
     const capabilities = unwrap(api.info.capabilities(), "info.capabilities");
     const expectedUndoable = [
@@ -139,25 +193,30 @@ try {
     };
 
     async function verifyRoundTrip(label, execute, readResult) {
+      const phase = {label, startTime: performance.now(), endTime: null};
+      window.__task350PhaseMarks.push(phase);
       const mapReference = app.map;
       const optionsReference = app.map.options;
-      const before = fingerprint(app.map);
+      const before = await traceStep(`${label}:fingerprint-before`, () => fingerprint(app.map));
       const historyBefore = app.editHistory.getStats();
-      const publicResult = await execute();
+      const publicResult = await traceStep(`${label}:execute`, execute);
       const result = readResult(publicResult);
-      const after = fingerprint(app.map);
+      const after = await traceStep(`${label}:fingerprint-after`, () => fingerprint(app.map));
       const historyAfter = app.editHistory.getStats();
       assertSingleHistory(historyBefore, historyAfter, label);
       if (after === before) throw new Error(`${label} 没有形成可观察地图变化`);
       if (app.map !== mapReference || app.map.options !== optionsReference) throw new Error(`${label} 替换了地图或 options 引用`);
-      unwrap(api.history.undo(), `history.undo.${label}`);
-      if (fingerprint(app.map) !== before) throw new Error(`${label} 单条撤销没有恢复完整地图`);
+      await traceStep(`${label}:undo`, async () => unwrap(await api.history.undo(), `history.undo.${label}`));
+      if (await traceStep(`${label}:fingerprint-undo`, () => fingerprint(app.map)) !== before) throw new Error(`${label} 单条撤销没有恢复完整地图`);
       if (app.map !== mapReference || app.map.options !== optionsReference) throw new Error(`${label} 撤销替换了地图或 options 引用`);
-      unwrap(api.history.redo(), `history.redo.${label}`);
-      const redone = fingerprint(app.map);
+      await traceStep(`${label}:redo`, async () => unwrap(await api.history.redo(), `history.redo.${label}`));
+      const redone = await traceStep(`${label}:fingerprint-redo`, () => fingerprint(app.map));
       if (redone !== after) throw new Error(`${label} 单条重做没有恢复完整地图：${describeFingerprintDifference(after, redone)}`);
       if (app.map !== mapReference || app.map.options !== optionsReference) throw new Error(`${label} 重做替换了地图或 options 引用`);
-      unwrap(api.history.undo(), `history.undo.${label}.baseline`);
+      await traceStep(`${label}:undo-baseline`, async () => unwrap(await api.history.undo(), `history.undo.${label}.baseline`));
+      if (await traceStep(`${label}:fingerprint-baseline`, () => fingerprint(app.map)) !== before) throw new Error(`${label} 最终撤销没有恢复基线地图`);
+      if (app.map !== mapReference || app.map.options !== optionsReference) throw new Error(`${label} 最终撤销替换了地图或 options 引用`);
+      phase.endTime = performance.now();
       return {
         label,
         historyDelta: historyAfter.undo - historyBefore.undo,
@@ -208,8 +267,17 @@ try {
       }
     }
 
-    function fingerprint(map) {
-      return JSON.stringify(map);
+    function fingerprint() {
+      return window.__task350Fingerprint();
+    }
+
+    async function traceStep(label, task) {
+      const id = window.__task350BeginSubphase(label);
+      try {
+        return await task();
+      } finally {
+        window.__task350EndSubphase(id);
+      }
     }
 
     function describeFingerprintDifference(expected, actual) {
@@ -238,18 +306,65 @@ try {
     function round(value) {
       return Math.round(Number(value || 0) * 1e6) / 1e6;
     }
-  });
+  }, {uiOnly});
+  const cdp = profileUi ? await context.newCDPSession(page) : null;
+  if (cdp) {
+    await cdp.send("Profiler.enable");
+    await cdp.send("Profiler.setSamplingInterval", {interval: 500});
+    await cdp.send("Profiler.start");
+    await installUiTimingProbes(page);
+  }
+  const uiStartedAt = await page.evaluate(() => performance.now());
   const uiTransaction = await verifyStateRegenerationUi(page);
+  const uiEndedAt = await page.evaluate(() => performance.now());
+  const cpuProfile = cdp ? (await cdp.send("Profiler.stop")).profile : null;
+  if (cdp) await cdp.send("Profiler.disable");
+  const productMethodTimings = profileUi ? await page.evaluate(() => window.__task350ProductMethodTimings || []) : [];
+  const cpuTop = summarizeCpuProfile(cpuProfile);
+  const performanceTrace = await page.evaluate(async ({uiStartedAt, uiEndedAt}) => {
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    const observer = window.__task350LongTaskObserver;
+    window.__task350LongTasks.push(...(observer?.takeRecords?.() || []).map(entry => ({
+      startTime: entry.startTime,
+      duration: entry.duration,
+      name: entry.name
+    })));
+    observer?.disconnect?.();
+    const phases = [...window.__task350PhaseMarks, {
+      label: "ui.generate.regenerate.states",
+      startTime: uiStartedAt,
+      endTime: uiEndedAt
+    }];
+    const subphases = window.__task350SubphaseMarks.map(mark => ({...mark}));
+    const longTasks = window.__task350LongTasks
+      .filter(entry => entry.startTime >= phases[0]?.startTime)
+      .map(entry => ({
+        ...entry,
+        phase: subphases.find(phase => entry.startTime < phase.endTime && entry.startTime + entry.duration > phase.startTime)?.label
+          || phases.find(phase => entry.startTime < phase.endTime && entry.startTime + entry.duration > phase.startTime)?.label
+          || "between-phases"
+      }));
+    const healthLongTasks = (window.__webglGeneratorHealth?.getEvents?.(240) || [])
+      .filter(event => event.type === "main-thread-long-task" && event.pageTimeMs >= phases[0]?.startTime);
+    return {phases, subphases, longTasks, healthLongTasks};
+  }, {uiStartedAt, uiEndedAt});
 
-  assert.equal(report.regeneration.length, 11);
-  assert.equal(report.height.length, 3);
-  assert.equal(report.geo.historyDelta, 1);
-  assert.equal(report.climate.historyDelta, 1);
-  assert.equal(report.climate.busyCode, "operation_busy");
+  if (!uiOnly) {
+    assert.equal(report.regeneration.length, 11);
+    assert.equal(report.height.length, 3);
+    assert.equal(report.geo.historyDelta, 1);
+    assert.equal(report.climate.historyDelta, 1);
+    assert.equal(report.climate.busyCode, "operation_busy");
+  }
   assert.equal(uiTransaction.historyDelta, 1);
   assert.equal(uiTransaction.undoRestored, true);
   assert.equal(uiTransaction.redoRestored, true);
+  assert.equal(uiTransaction.baselineRestored, true);
   assert.equal(report.glError, 0);
+  const hardLongTasks = performanceTrace.longTasks.filter(entry => entry.duration > 200);
+  const harnessLongTasks = hardLongTasks.filter(entry => entry.phase.includes(":fingerprint"));
+  const productLongTasks = hardLongTasks.filter(entry => !entry.phase.includes(":fingerprint"));
+  assert.deepEqual(productLongTasks, [], `目标时间窗出现产品 >200ms LongTask：${JSON.stringify({productLongTasks, harnessLongTasks, healthLongTasks: performanceTrace.healthLongTasks, productMethodTimings, cpuTop})}`);
   const healthPerformanceSignals = consoleErrors.filter(message => {
     if (/^\[FMG health\] (main-thread-long-task|render-frame-gap|input-handler-stall)\b/.test(message)) return true;
     if (!/^\[FMG health\] operation-stall\b/.test(message)) return false;
@@ -259,53 +374,191 @@ try {
   const applicationConsoleErrors = consoleErrors.filter(message => !healthPerformanceSignals.includes(message));
   assert.deepEqual(applicationConsoleErrors, []);
   assert.deepEqual(pageErrors, []);
-  console.log(JSON.stringify({ok: true, ...report, uiTransaction, healthPerformanceSignals, applicationConsoleErrors, pageErrors}, null, 2));
+  const finalReport = {ok: true, mode: uiOnly ? "ui-only" : "full", ...report, uiTransaction, performanceTrace, harnessLongTasks, productLongTasks, productMethodTimings, cpuTop, healthPerformanceSignals, applicationConsoleErrors, pageErrors};
+  const compactReport = {
+    mode: finalReport.mode,
+    regenerationCount: report.regeneration?.length ?? 0,
+    regeneration: report.regeneration?.map(({label, historyDelta, status}) => ({label, historyDelta, status})) ?? [],
+    heightCount: report.height?.length ?? 0,
+    height: report.height?.map(({label, historyDelta, status}) => ({label, historyDelta, status})) ?? [],
+    geo: report.geo ? {label: report.geo.label, historyDelta: report.geo.historyDelta, status: report.geo.status} : null,
+    climate: report.climate ? {
+      historyDelta: report.climate.historyDelta,
+      busyCode: report.climate.busyCode,
+      requestedSystems: report.climate.requestedSystems,
+      executionOrder: report.climate.executionOrder
+    } : null,
+    metadataUndoable: report.metadataUndoable,
+    uiTransaction,
+    glError: report.glError,
+    performance: {
+      longTaskCount: performanceTrace.longTasks.length,
+      healthLongTaskCount: performanceTrace.healthLongTasks.length,
+      harnessLongTasks,
+      productLongTasks
+    },
+    healthPerformanceSignals,
+    applicationConsoleErrors,
+    pageErrors
+  };
+  evidence.setResult(finalReport, compactReport);
+  evidence.succeed();
+  console.log(JSON.stringify(finalReport, null, 2));
+} catch (error) {
+  evidence.fail(error);
+  thrownError = error;
 } finally {
-  if (context) await Promise.race([context.close(), delay(5000)]);
-  if (browser) await Promise.race([browser.close(), delay(5000)]);
-  await new Promise(done => server.close(done));
+  for (const [label, close] of [
+    ["map-transaction-context", context ? () => context.close() : null],
+    ["map-transaction-browser", browser ? () => browser.close() : null],
+    ["map-transaction-server", server ? () => new Promise((resolveClose, rejectClose) => server.close(error => error ? rejectClose(error) : resolveClose())) : null]
+  ]) {
+    if (!close) continue;
+    try {
+      await closeTask350BrowserResource(label, close);
+    } catch (error) {
+      evidence.failTeardown(error);
+      if (!thrownError) thrownError = error;
+    }
+  }
+  evidence.persist();
+}
+if (thrownError) throw thrownError;
+
+async function installUiTimingProbes(page) {
+  await page.evaluate(() => {
+    const app = window.__webglGeneratorApp;
+    window.__task350ProductMethodTimings = [];
+    const wrap = (owner, name, label) => {
+      if (!owner || typeof owner[name] !== "function") return;
+      const original = owner[name];
+      owner[name] = function (...args) {
+        const startedAt = performance.now();
+        try {
+          return original.apply(this, args);
+        } finally {
+          window.__task350ProductMethodTimings.push({label, startTime: startedAt, duration: performance.now() - startedAt});
+        }
+      };
+    };
+    wrap(app.editHistory, "undo", "editHistory.undo");
+    wrap(app.editHistory, "redo", "editHistory.redo");
+    wrap(app.selectionStore, "batch", "selectionStore.batch");
+    wrap(app.selectionStore, "refresh", "selectionStore.refresh");
+    wrap(app.panels?.state, "update", "statePanel.update");
+    for (const name of [
+      "refreshPoliticalVisualCaches",
+      "refreshTerrainCaches",
+      "refreshLineLayers",
+      "refreshPointLayers",
+      "refreshObjectPickingIndex",
+      "refreshCellSurface",
+      "draw",
+      "refreshLabels",
+      "pickClientPoint"
+    ]) wrap(app.renderer, name, `renderer.${name}`);
+  });
+}
+
+function summarizeCpuProfile(profile) {
+  if (!profile?.samples?.length || !profile?.timeDeltas?.length) return [];
+  const nodes = new Map((profile.nodes || []).map(node => [node.id, node]));
+  const totals = new Map();
+  for (let index = 0; index < profile.samples.length; index += 1) {
+    const node = nodes.get(profile.samples[index]);
+    if (!node) continue;
+    const frame = node.callFrame || {};
+    const key = `${frame.functionName || "(anonymous)"}|${frame.url || ""}|${Number(frame.lineNumber) + 1}`;
+    totals.set(key, (totals.get(key) || 0) + Number(profile.timeDeltas[index] || 0) / 1000);
+  }
+  return [...totals.entries()]
+    .map(([key, selfMs]) => {
+      const [functionName, url, line] = key.split("|");
+      return {functionName, url, line: Number(line), selfMs: Number(selfMs.toFixed(3))};
+    })
+    .sort((left, right) => right.selfMs - left.selfMs)
+    .slice(0, 30);
 }
 
 async function verifyStateRegenerationUi(page) {
-  const before = await page.evaluate(() => ({
-    map: JSON.stringify(window.__webglGeneratorApp.map),
-    history: window.__webglGeneratorApp.editHistory.getStats()
-  }));
+  const before = await evaluateUiFingerprint(page, "ui.generate.regenerate.states:fingerprint-before");
   await page.keyboard.press("Shift+S");
   const panel = page.locator('.floating-panel[data-panel-id="state-panel"]:not(.hidden)');
   await panel.waitFor({state: "visible"});
   const regenerate = panel.getByRole("button", {name: "重新生成国家"});
   const undo = panel.getByRole("button", {name: "撤销"});
   const redo = panel.getByRole("button", {name: "重做"});
-  assert.equal(await regenerate.count(), 1, "国家面板缺少唯一重生成入口");
-  assert.equal(await undo.isDisabled(), true, "UI 事务夹具开始前不应有撤销历史");
-  await regenerate.click();
-  await page.waitForFunction(() => document.querySelector('.floating-panel[data-panel-id="state-panel"]:not(.hidden) button[aria-label="撤销"]')?.disabled === false);
-  const after = await page.evaluate(() => ({
-    map: JSON.stringify(window.__webglGeneratorApp.map),
-    history: window.__webglGeneratorApp.editHistory.getStats()
-  }));
+  const regenerateCount = await regenerate.count();
+  const initialUndoDisabled = await undo.isDisabled();
+  assert.equal(regenerateCount, 1, "国家面板缺少唯一重生成入口");
+  assert.equal(initialUndoDisabled, true, "UI 事务夹具开始前不应有撤销历史");
+  await traceUiStep(page, "ui.generate.regenerate.states:execute", async () => {
+    await regenerate.click();
+    await page.waitForFunction(() => document.querySelector('.floating-panel[data-panel-id="state-panel"]:not(.hidden) button[aria-label="撤销"]')?.disabled === false);
+  });
+  const after = await evaluateUiFingerprint(page, "ui.generate.regenerate.states:fingerprint-after");
+  const changed = after.map !== before.map;
   assert.notEqual(after.map, before.map, "国家面板重生成没有形成可观察地图变化");
-  await undo.click();
-  await page.waitForFunction(() => document.querySelector('.floating-panel[data-panel-id="state-panel"]:not(.hidden) button[aria-label="重做"]')?.disabled === false);
-  const afterUndo = await page.evaluate(() => JSON.stringify(window.__webglGeneratorApp.map));
-  await redo.click();
-  await page.waitForFunction(() => document.querySelector('.floating-panel[data-panel-id="state-panel"]:not(.hidden) button[aria-label="撤销"]')?.disabled === false);
-  const afterRedo = await page.evaluate(() => JSON.stringify(window.__webglGeneratorApp.map));
-  await undo.click();
+  await traceUiStep(page, "ui.generate.regenerate.states:undo", async () => {
+    await undo.click();
+    await page.waitForFunction(() => document.querySelector('.floating-panel[data-panel-id="state-panel"]:not(.hidden) button[aria-label="重做"]')?.disabled === false);
+  });
+  const afterUndo = (await evaluateUiFingerprint(page, "ui.generate.regenerate.states:fingerprint-undo")).map;
+  await traceUiStep(page, "ui.generate.regenerate.states:redo", async () => {
+    await redo.click();
+    await page.waitForFunction(() => document.querySelector('.floating-panel[data-panel-id="state-panel"]:not(.hidden) button[aria-label="撤销"]')?.disabled === false);
+  });
+  const afterRedo = (await evaluateUiFingerprint(page, "ui.generate.regenerate.states:fingerprint-redo")).map;
+  await traceUiStep(page, "ui.generate.regenerate.states:undo-baseline", async () => {
+    await undo.click();
+    await page.waitForFunction(() => document.querySelector('.floating-panel[data-panel-id="state-panel"]:not(.hidden) button[aria-label="重做"]')?.disabled === false);
+  });
+  const afterBaseline = await evaluateUiFingerprint(page, "ui.generate.regenerate.states:fingerprint-baseline");
+  const baselineRestored = afterBaseline.map === before.map && afterBaseline.history.undo === before.history.undo;
+  assert.equal(baselineRestored, true, "国家面板最终撤销没有恢复基线地图与 history");
   return {
+    regenerateCount,
+    initialUndoDisabled,
+    changed,
     historyDelta: after.history.undo - before.history.undo,
     undoRestored: afterUndo === before.map,
-    redoRestored: afterRedo === after.map
+    redoRestored: afterRedo === after.map,
+    baselineRestored
   };
+}
+
+function evaluateUiFingerprint(page, label) {
+  return page.evaluate(async labelValue => {
+    const id = window.__task350BeginSubphase(labelValue);
+    try {
+      return {
+        map: await window.__task350Fingerprint(),
+        history: window.__webglGeneratorApp.editHistory.getStats()
+      };
+    } finally {
+      window.__task350EndSubphase(id);
+    }
+  }, label);
+}
+
+async function traceUiStep(page, label, task) {
+  const id = await page.evaluate(labelValue => window.__task350BeginSubphase(labelValue), label);
+  try {
+    return await task();
+  } finally {
+    await page.evaluate(idValue => window.__task350EndSubphase(idValue), id);
+  }
 }
 
 async function startStaticServer() {
   const serverInstance = createServer((request, response) => {
     const pathname = decodeURIComponent(new URL(request.url, `http://${host}:${port}`).pathname);
-    let target = resolve(distDir, "." + normalize(pathname));
-    if (pathname === "/" || !existsSync(target) || statSync(target).isDirectory()) target = join(distDir, "index.html");
-    if (!target.startsWith(distDir) || !existsSync(target)) {
+    const sourceRequest = pathname.startsWith("/__task350-source/");
+    const root = sourceRequest ? appSourceDir : distDir;
+    const relativePath = sourceRequest ? pathname.slice("/__task350-source".length) : pathname;
+    let target = resolve(root, "." + normalize(relativePath));
+    if (!sourceRequest && (pathname === "/" || !existsSync(target) || statSync(target).isDirectory())) target = join(distDir, "index.html");
+    if (!target.startsWith(root) || !existsSync(target) || statSync(target).isDirectory()) {
       response.writeHead(404);
       response.end("Not found");
       return;
@@ -329,8 +582,4 @@ function contentType(file) {
     ".svg": "image/svg+xml",
     ".png": "image/png"
   })[extname(file).toLowerCase()] || "application/octet-stream";
-}
-
-function delay(ms) {
-  return new Promise(resolveDelay => setTimeout(resolveDelay, ms));
 }

@@ -91,6 +91,44 @@ export function resolvePoliticalLabelPlacement({item, screen, obstacles = [], pe
   return best || fallbackPlacement(item, screen, targetKind, rotation);
 }
 
+export function restorePoliticalLabelPlacementSnapshot(item, screen) {
+  const snapshot = item?.politicalPlacementSnapshot;
+  const offsetX = Number(item?.politicalOffsetX);
+  const offsetY = Number(item?.politicalOffsetY);
+  const boxOffset = snapshot?.boxOffset;
+  const rootSize = snapshot?.rootSize;
+  if (!snapshot
+    || !Number.isFinite(offsetX)
+    || !Number.isFinite(offsetY)
+    || !Number.isInteger(snapshot.candidateIndex)
+    || !Number.isFinite(snapshot.bend)
+    || !rootSize
+    || !Number.isFinite(rootSize.width)
+    || !Number.isFinite(rootSize.height)
+    || !Array.isArray(snapshot.glyphs)
+    || !boxOffset
+    || ![boxOffset.left, boxOffset.right, boxOffset.top, boxOffset.bottom].every(Number.isFinite)
+    || typeof snapshot.collides !== "boolean"
+    || typeof snapshot.cityCollides !== "boolean") return null;
+  const anchor = {x: finite(screen?.x) + offsetX, y: finite(screen?.y) + offsetY};
+  return {
+    anchor,
+    candidateIndex: snapshot.candidateIndex,
+    bend: snapshot.bend,
+    rootSize: snapshot.rootSize,
+    glyphs: snapshot.glyphs,
+    box: {
+      left: anchor.x + boxOffset.left,
+      right: anchor.x + boxOffset.right,
+      top: anchor.y + boxOffset.top,
+      bottom: anchor.y + boxOffset.bottom
+    },
+    collides: snapshot.collides,
+    cityCollides: snapshot.cityCollides,
+    peerCollides: false
+  };
+}
+
 function fallbackPlacement(item, screen, targetKind, rotation) {
   const layout = createPoliticalLabelGlyphLayout(item?.text, item?.resolvedStyle, {targetKind, rotation, bend: 0});
   const anchor = {x: finite(screen?.x), y: finite(screen?.y)};

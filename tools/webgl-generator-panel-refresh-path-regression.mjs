@@ -18,6 +18,9 @@ assertOrdered(executeEdit, [
 const executeHistory = functionBlock("executeHistoryCommand", "readEditCommandResult");
 assert.ok(executeHistory.includes('refreshPanelsForEdit(state, {derived: ["object-panels"]})'), "撤销 / 重做必须复用统一面板刷新入口并同步全局历史摘要");
 assert.ok(!executeHistory.includes("updateAllObjectPanels(state)"), "撤销 / 重做不得绕过统一面板刷新入口");
+const asyncRegenerationHistory = functionBlock("executeRegenerationHistoryCommand", "settleMilitaryPanelHistoryResult");
+assert.ok(asyncRegenerationHistory.includes("createCommittedHistoryGuard"), "异步重生成历史必须冻结提交后的 map revision");
+assert.ok(count(asyncRegenerationHistory, "assertCurrent();") >= 5, "异步重生成历史的 scheduler、panel、回调与最终返回缺少 revision checkpoint");
 
 const refreshPanels = functionBlock("refreshPanelsForEdit", "updatePanelForAffectedKind");
 assert.ok(refreshPanels.includes('derived.includes("object-panels")'));
@@ -58,6 +61,8 @@ for (const name of [
   assert.ok(!functionBlock(name).includes("refreshPanels: false"), `${name} 必须复用统一面板刷新入口`);
 }
 assert.ok(!functionBlock("refreshAfterNamebaseEdit").includes("panels.namebase.update"), "名称库领域后处理不得直接刷新面板");
+assert.ok(functionBlock("executeNamebaseHistoryCommand").includes("return settleHistoryActionResult(result, complete, fail)"), "名称库历史没有把异步结果返回 PanelManager");
+assert.equal(count(source, "settleMilitaryPanelHistoryResult(executeHistoryCommand"), 2, "军事面板 undo / redo 没有统一等待异步历史收尾");
 assert.ok(!functionBlock("deleteMarkerViaApi").includes("stopMarkerEditMode"), "删除当前编辑 marker 必须在统一刷新前清理编辑态");
 assert.ok(functionBlock("assignSocialCellsViaApi").includes("refreshPanelsForEdit(state, {affected: [{kind, id}]})"), "归属命令 no-op 后也必须经统一入口刷新影响数");
 assert.ok(callbackBlock("onDeleteProvince", "onSampleSelection").includes("preparePanelRefresh"), "省份面板删除必须在统一刷新前清理选择态");
@@ -68,6 +73,8 @@ console.log(JSON.stringify({
   updateAllObjectPanelsBranches: count(refreshPanels, "updateAllObjectPanels(state);"),
   unifiedEditRefresh: true,
   unifiedHistoryRefresh: true,
+  asyncHistoryRevisionGuard: true,
+  asyncHistoryConsumers: 2,
   preparedPanelRefresh: true,
   checkedPureApiPaths: 7
 }, null, 2));

@@ -20,6 +20,7 @@ try {
   const {createDomainPatchCommand} = await vite.ssrLoadModule("/src/runtime/domain-patch.js");
   const {MapRevisionTracker} = await vite.ssrLoadModule("/src/runtime/map-revision.js");
   const {EditHistory} = await vite.ssrLoadModule("/src/runtime/edit-history.js");
+  const {createRenderResourceBinding} = await vite.ssrLoadModule("/src/renderer/render-resource-binding.js");
   const {createAddCustomLabelCommand, createSetLabelNoteCommand} = await vite.ssrLoadModule("/src/runtime/label-edit-commands.js");
   const {createImportMeasurementsCommand, createSaveMeasurementCommand} = await vite.ssrLoadModule("/src/runtime/measurement-edit-commands.js");
 
@@ -40,14 +41,36 @@ try {
   const outputs = {};
   for (const kind of ["cities", "zones"]) {
     const sourceMap = generatePlaceholderMap({seed: `settlement-zone-${kind}`, cellsTarget: 2000, heightmapTemplate: "continents"});
-    const output = await runRegenerationWorkerTask({map: sourceMap, kind}, {binding, checkpoint() {}, report() {}});
+    if (kind === "cities") {
+      sourceMap.politics.states = structuredClone(sourceMap.politics.states);
+      sourceMap.politics.provinces = structuredClone(sourceMap.politics.provinces);
+      assert.notEqual(sourceMap.politics.states, sourceMap.pack.states, "城镇夹具必须覆盖非同引用国家镜像");
+      assert.notEqual(sourceMap.politics.provinces, sourceMap.pack.provinces, "城镇夹具必须覆盖非同引用省份镜像");
+    }
+    const sourceBefore = structuredClone(sourceMap);
+    const workerMap = structuredClone(sourceMap);
+    const output = await runRegenerationWorkerTask({map: workerMap, kind}, {binding, checkpoint() {}, report() {}});
     const policy = getRegenerationPatchPolicy(kind);
+    assert.deepEqual(sourceMap, sourceBefore, `${kind} Worker 执行前后改写了 canonical source`);
     const validated = validateSettlementZoneWorkerOutput({kind, sourceMap, binding, output, policy});
+    assert.deepEqual(sourceMap, sourceBefore, `${kind} pre-commit validator 改写了 canonical source`);
     const expected = kind === "zones" ? ZONES_WORKER_WRITE_SET.filter(pathValue => pathValue !== "zones.metadata.stale") : SETTLEMENTS_WORKER_WRITE_SET;
     assert.deepEqual([...validated.writeSet].sort(), [...expected].sort(), `${kind} 实际 patch 写集不符合领域契约`);
     assert.equal(validated.binding.sourceRevision.topologyRevision, 1, `${kind} core binding 丢失 topology revision`);
     outputs[kind] = {sourceMap, output, policy};
   }
+  const renderBinding = createRenderResourceBinding({
+    mapIdentity: binding.mapIdentity,
+    sourceRevision: binding.mapRevision + 1,
+    topologyRevision: binding.topologyRevision + 1
+  }, {renderPreparationId: "settlement-zone:render:1", renderGeneration: 3});
+  const renderedCities = structuredClone(outputs.cities.output);
+  renderedCities.preparedRender = {schemaVersion: 1, binding: renderBinding, layers: {}};
+  validateSettlementZoneWorkerOutput({kind: "cities", sourceMap: outputs.cities.sourceMap, binding, renderBinding, output: renderedCities, policy: outputs.cities.policy});
+  assertProtocol(() => validateSettlementZoneWorkerOutput({kind: "cities", sourceMap: outputs.cities.sourceMap, binding, output: renderedCities, policy: outputs.cities.policy}), "settlement-zone-render-binding-invalid");
+  const staleRenderedCities = structuredClone(renderedCities);
+  staleRenderedCities.preparedRender.binding.renderGeneration += 1;
+  assertProtocol(() => validateSettlementZoneWorkerOutput({kind: "cities", sourceMap: outputs.cities.sourceMap, binding, renderBinding, output: staleRenderedCities, policy: outputs.cities.policy}), "settlement-zone-render-binding-stale");
 
   const stale = structuredClone(outputs.cities.output);
   stale.binding.topologyRevision += 1;
@@ -129,9 +152,72 @@ try {
   assertProtocol(() => validateSettlementZoneWorkerOutput({kind: "zones", sourceMap: outputs.zones.sourceMap, binding, output: zoneMirror, policy: outputs.zones.policy}), "zone-pack-mirror-invalid");
 
   const zoneIdentity = structuredClone(outputs.zones.output);
-  operationValue(zoneIdentity.patch, "zones").zones[0].i = 7;
-  operationValue(zoneIdentity.patch, "pack.zones")[0].i = 7;
+  const zoneIdentityRows = operationValue(zoneIdentity.patch, "zones").zones;
+  const zoneIdentityPackRows = operationValue(zoneIdentity.patch, "pack.zones");
+  const duplicateZoneId = Number(zoneIdentityRows[1]?.i ?? zoneIdentityRows[1]?.id ?? zoneIdentityRows[0]?.i ?? 0);
+  assert.notEqual(duplicateZoneId, Number(zoneIdentityRows[0]?.i ?? zoneIdentityRows[0]?.id), "地区重复身份负例没有形成身份冲突");
+  zoneIdentityRows[0].i = duplicateZoneId;
+  if (zoneIdentityRows[0].id !== undefined) zoneIdentityRows[0].id = duplicateZoneId;
+  if (zoneIdentityPackRows !== zoneIdentityRows) {
+    zoneIdentityPackRows[0].i = duplicateZoneId;
+    if (zoneIdentityPackRows[0].id !== undefined) zoneIdentityPackRows[0].id = duplicateZoneId;
+  }
   assertProtocol(() => validateSettlementZoneWorkerOutput({kind: "zones", sourceMap: outputs.zones.sourceMap, binding, output: zoneIdentity, policy: outputs.zones.policy}), "zone-identity-invalid");
+
+  const negativeZoneIdentity = structuredClone(outputs.zones.output);
+  const negativeZoneRows = operationValue(negativeZoneIdentity.patch, "zones").zones;
+  const negativePackRows = operationValue(negativeZoneIdentity.patch, "pack.zones");
+  negativeZoneRows[0].i = -1;
+  if (negativeZoneRows[0].id !== undefined) negativeZoneRows[0].id = -1;
+  if (negativePackRows !== negativeZoneRows) {
+    negativePackRows[0].i = -1;
+    if (negativePackRows[0].id !== undefined) negativePackRows[0].id = -1;
+  }
+  assertProtocol(() => validateSettlementZoneWorkerOutput({kind: "zones", sourceMap: outputs.zones.sourceMap, binding, output: negativeZoneIdentity, policy: outputs.zones.policy}), "zone-identity-invalid");
+
+  const conflictingZoneIdentity = structuredClone(outputs.zones.output);
+  const conflictingZoneRows = operationValue(conflictingZoneIdentity.patch, "zones").zones;
+  const conflictingPackRows = operationValue(conflictingZoneIdentity.patch, "pack.zones");
+  const conflictingZoneId = Number(conflictingZoneRows[0].i ?? conflictingZoneRows[0].id);
+  conflictingZoneRows[0].i = conflictingZoneId;
+  conflictingZoneRows[0].id = conflictingZoneId + 1;
+  if (conflictingPackRows !== conflictingZoneRows) {
+    conflictingPackRows[0].i = conflictingZoneId;
+    conflictingPackRows[0].id = conflictingZoneId + 1;
+  }
+  assertProtocol(() => validateSettlementZoneWorkerOutput({kind: "zones", sourceMap: outputs.zones.sourceMap, binding, output: conflictingZoneIdentity, policy: outputs.zones.policy}), "zone-identity-invalid");
+
+  for (const [label, mutate] of [
+    ["missing", row => { delete row.i; delete row.id; }],
+    ["null", row => { row.i = null; if (row.id !== undefined) row.id = null; }],
+    ["boolean", row => { row.i = false; if (row.id !== undefined) row.id = false; }],
+    ["empty-string", row => { row.i = ""; if (row.id !== undefined) row.id = ""; }],
+    ["numeric-string", row => {
+      const stringId = String(row.i ?? row.id);
+      row.i = stringId;
+      if (row.id !== undefined) row.id = stringId;
+    }]
+  ]) {
+    const invalidZoneIdentity = structuredClone(outputs.zones.output);
+    const invalidZoneRows = operationValue(invalidZoneIdentity.patch, "zones").zones;
+    const invalidPackRows = operationValue(invalidZoneIdentity.patch, "pack.zones");
+    mutate(invalidZoneRows[0]);
+    if (invalidPackRows !== invalidZoneRows) mutate(invalidPackRows[0]);
+    assertProtocol(
+      () => validateSettlementZoneWorkerOutput({kind: "zones", sourceMap: outputs.zones.sourceMap, binding, output: invalidZoneIdentity, policy: outputs.zones.policy}),
+      "zone-identity-invalid",
+      `地区 ${label} 身份负例没有被拒绝`
+    );
+  }
+
+  const compactZones = structuredClone(outputs.zones.output);
+  const compactZoneRows = operationValue(compactZones.patch, "zones").zones;
+  const compactPackRows = operationValue(compactZones.patch, "pack.zones");
+  assert.ok(compactZoneRows.length > 1, "地区紧凑身份正例缺少多个地区");
+  compactZoneRows.shift();
+  if (compactPackRows !== compactZoneRows) compactPackRows.shift();
+  assert.notEqual(Number(compactZoneRows[0]?.i ?? compactZoneRows[0]?.id), 0, "地区紧凑身份正例首 id 没有形成非零值");
+  validateSettlementZoneWorkerOutput({kind: "zones", sourceMap: outputs.zones.sourceMap, binding, output: compactZones, policy: outputs.zones.policy});
 
   const zoneCellBounds = structuredClone(outputs.zones.output);
   const zoneCellCount = outputs.zones.sourceMap.pack.cells.i.length;
@@ -180,7 +266,7 @@ try {
     manifests: [settlementsManifest.id, zonesManifest.id, labelsManifest.id, measurementsManifest.id],
     writes: {cities: SETTLEMENTS_WORKER_WRITE_SET.length, zones: outputs.zones.output.patch.writeSet.length},
     commit: {revision: owner.getCoreSnapshot(), history: history.getStats(), annotationsHistory: annotationHistory.getStats()},
-    rejected: ["stale-binding", "partial-write-set", "delete-required", "data-view", "native-record", "city-burg-mirror", "route-mirror", "city-hole", "dangling-capital", "zero-capital", "duplicate-capital", "grid-cell-mirror", "pack-cell-mirror", "zone-mirror", "zone-identity", "zone-cell-bounds", "policy-drift"],
+    rejected: ["stale-binding", "partial-write-set", "delete-required", "data-view", "native-record", "city-burg-mirror", "route-mirror", "city-hole", "dangling-capital", "zero-capital", "duplicate-capital", "grid-cell-mirror", "pack-cell-mirror", "zone-mirror", "zone-identity-duplicate", "zone-identity-negative", "zone-identity-conflict", "zone-identity-missing", "zone-identity-null", "zone-identity-boolean", "zone-identity-empty-string", "zone-identity-numeric-string", "zone-cell-bounds", "policy-drift"],
     browserRuns: 0
   }, null, 2));
 } finally {
@@ -197,6 +283,6 @@ function operation(patch, pathValue) {
   return matched;
 }
 
-function assertProtocol(callback, code) {
-  assert.throws(callback, error => error?.code === code);
+function assertProtocol(callback, code, message) {
+  assert.throws(callback, error => error?.code === code, message);
 }

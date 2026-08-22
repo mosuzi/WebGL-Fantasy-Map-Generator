@@ -98,6 +98,7 @@ export class PanelManager {
       overlayId: `panel:${id}`,
       historyActions,
       headerButtons: {undo, redo},
+      historyActionPending: null,
       headerRefreshTimer: 0,
       headerStateKey: "",
       returnParentId: null,
@@ -126,14 +127,12 @@ export class PanelManager {
     undo.addEventListener("click", () => {
       refreshHeaderActions(record);
       if (undo.disabled) return;
-      record.historyActions?.onUndo?.();
-      refreshHeaderActions(record);
+      runPanelHistoryAction(record, "undo");
     });
     redo.addEventListener("click", () => {
       refreshHeaderActions(record);
       if (redo.disabled) return;
-      record.historyActions?.onRedo?.();
-      refreshHeaderActions(record);
+      runPanelHistoryAction(record, "redo");
     });
     refreshHeaderActions(record);
     record.cancelDrag = installDrag(this, panel, header);
@@ -672,11 +671,12 @@ function refreshHeaderActions(record) {
   const redoCount = Math.max(0, Number(history?.redo) || 0);
   const commandSummary = history ? formatHistoryCommand(history) : "none";
   const label = commandSummary && commandSummary !== "none" ? `：${commandSummary}` : "";
-  const undoDisabled = !actions.onUndo || undoCount <= 0;
-  const redoDisabled = !actions.onRedo || redoCount <= 0;
-  const undoTitle = undoDisabled ? "没有可撤销操作" : `撤销${label}`;
-  const redoTitle = redoDisabled ? "没有可重做操作" : `重做${label}`;
-  const stateKey = `visible|${undoDisabled}|${redoDisabled}|${undoTitle}|${redoTitle}`;
+  const pending = record.historyActionPending;
+  const undoDisabled = Boolean(pending) || !actions.onUndo || undoCount <= 0;
+  const redoDisabled = Boolean(pending) || !actions.onRedo || redoCount <= 0;
+  const undoTitle = pending ? "正在恢复历史" : undoDisabled ? "没有可撤销操作" : `撤销${label}`;
+  const redoTitle = pending ? "正在恢复历史" : redoDisabled ? "没有可重做操作" : `重做${label}`;
+  const stateKey = `visible|${pending || "idle"}|${undoDisabled}|${redoDisabled}|${undoTitle}|${redoTitle}`;
   if (
     record.headerStateKey === stateKey &&
     undo.hidden === false &&
@@ -695,6 +695,35 @@ function refreshHeaderActions(record) {
   redo.disabled = redoDisabled;
   undo.title = undoTitle;
   redo.title = redoTitle;
+}
+
+function runPanelHistoryAction(record, action) {
+  let result;
+  try {
+    result = action === "undo"
+      ? record.historyActions?.onUndo?.()
+      : record.historyActions?.onRedo?.();
+  } catch (error) {
+    refreshHeaderActions(record);
+    throw error;
+  }
+  if (!result || typeof result.then !== "function") {
+    refreshHeaderActions(record);
+    return;
+  }
+  record.historyActionPending = action;
+  refreshHeaderActions(record);
+  void Promise.resolve(result).then(
+    () => {
+      record.historyActionPending = null;
+      refreshHeaderActions(record);
+    },
+    error => {
+      record.historyActionPending = null;
+      refreshHeaderActions(record);
+      queueMicrotask(() => { throw error; });
+    }
+  );
 }
 
 function installDrag(manager, panel, handle) {

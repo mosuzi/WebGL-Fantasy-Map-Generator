@@ -356,6 +356,7 @@ export async function regenerateResourceMarkersInChunks(
       }
       else refreshPoliticalEconomicPower(map.pack);
     }, {chunks, now, yieldToMain});
+    syncMarkerPoliticalEconomyMirrors(map);
     return {executed: true, timings: {chunks}};
   } catch (error) {
     map.markers = snapshot.markers;
@@ -436,17 +437,67 @@ function createMarkerNoteSnapshot(target, body, {name, previous = null} = {}) {
 
 function captureMarkerSnapshot(map) {
   return {
-    markers: markerRows(map).map(cloneMarker),
-    metadata: cloneMarker(map?.markers?.metadata || {}),
+    resourceDomains: captureMarkerResourceDomains(map),
     notes: (map?.notes?.notes || []).filter(note => note?.kind === OBJECT_KIND.MARKER).map(cloneObjectNote)
   };
 }
 
-function restoreMarkerSnapshot(map, snapshot, constraintBundle = null, featureCapture = null) {
-  writeMarkerCollection(map, (snapshot?.markers || []).map(cloneMarker), constraintBundle, featureCapture);
-  map.markers.metadata = cloneMarker(snapshot?.metadata || map.markers.metadata);
+function restoreMarkerSnapshot(map, snapshot) {
+  restoreMarkerResourceDomains(map, snapshot?.resourceDomains);
   for (const note of [...(map?.notes?.notes || [])]) if (note?.kind === OBJECT_KIND.MARKER) deleteObjectNote(map, note.id);
   for (const note of snapshot?.notes || []) restoreObjectNote(map, note);
+}
+
+function captureMarkerResourceDomains(map) {
+  return structuredClone({
+    markers: map?.markers,
+    economy: map?.economy,
+    politics: {states: map?.politics?.states, provinces: map?.politics?.provinces},
+    pack: {
+      markers: map?.pack?.markers,
+      goods: map?.pack?.goods,
+      markets: map?.pack?.markets,
+      deals: map?.pack?.deals,
+      states: map?.pack?.states,
+      provinces: map?.pack?.provinces,
+      burgs: map?.pack?.burgs,
+      metadata: map?.pack?.metadata,
+      cells: {
+        good: map?.pack?.cells?.good,
+        goodSupply: map?.pack?.cells?.goodSupply,
+        goodSource: map?.pack?.cells?.goodSource,
+        market: map?.pack?.cells?.market,
+        pop: map?.pack?.cells?.pop,
+        s: map?.pack?.cells?.s,
+        suitabilityBase: map?.pack?.cells?.suitabilityBase,
+        suitabilityOverride: map?.pack?.cells?.suitabilityOverride
+      }
+    }
+  });
+}
+
+function restoreMarkerResourceDomains(map, snapshot) {
+  if (!snapshot || !map?.pack?.cells || !map?.politics) return;
+  map.markers = snapshot.markers;
+  map.economy = snapshot.economy;
+  map.politics.states = snapshot.politics.states;
+  map.politics.provinces = snapshot.politics.provinces;
+  map.pack.markers = snapshot.pack.markers;
+  map.pack.goods = snapshot.pack.goods;
+  map.pack.markets = snapshot.pack.markets;
+  map.pack.deals = snapshot.pack.deals;
+  map.pack.states = snapshot.pack.states;
+  map.pack.provinces = snapshot.pack.provinces;
+  map.pack.burgs = snapshot.pack.burgs;
+  map.pack.metadata = snapshot.pack.metadata;
+  map.pack.cells.good = snapshot.pack.cells.good;
+  map.pack.cells.goodSupply = snapshot.pack.cells.goodSupply;
+  map.pack.cells.goodSource = snapshot.pack.cells.goodSource;
+  map.pack.cells.market = snapshot.pack.cells.market;
+  map.pack.cells.pop = snapshot.pack.cells.pop;
+  map.pack.cells.s = snapshot.pack.cells.s;
+  map.pack.cells.suitabilityBase = snapshot.pack.cells.suitabilityBase;
+  map.pack.cells.suitabilityOverride = snapshot.pack.cells.suitabilityOverride;
 }
 
 function writeMarkerCollection(map, markers, constraintBundle = null, featureCapture = null) {
@@ -486,7 +537,14 @@ function writeMarkerCollection(map, markers, constraintBundle = null, featureCap
       }
     }
     else refreshPoliticalEconomicPower(map.pack);
+    syncMarkerPoliticalEconomyMirrors(map);
   }
+}
+
+function syncMarkerPoliticalEconomyMirrors(map) {
+  if (!map?.pack || !map?.politics) return;
+  if (Array.isArray(map.pack.states)) map.politics.states = map.pack.states;
+  if (Array.isArray(map.pack.provinces)) map.politics.provinces = map.pack.provinces;
 }
 
 function captureFeatureLocks(map, constraintBundle = null) {

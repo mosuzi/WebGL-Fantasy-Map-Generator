@@ -2,8 +2,9 @@ import {generatePlaceholderMap} from "../generator/index.js";
 import {createSampledHeightmapFromPayload} from "../generator/heightmap.js";
 import {createMapTemplateHeightmap} from "../generator/map-template-mapping.js";
 import {executeRenderPreparationTask} from "../renderer/render-preparation.js";
-import {createMapAdoptionHandoff} from "./map-adoption-handoff.js";
+import {createCanonicalMapAdoptionPackage} from "./map-adoption-handoff.js";
 import {createMapDocument} from "./map-file-io.js";
+import {normalizeMapForRuntimeAdoption} from "./map-runtime-adoption.js";
 import {collectWorkerTransferables} from "./worker-snapshot.js";
 import {createWholeMapDocumentMetadata} from "./whole-map-profile-protocol.js";
 
@@ -23,24 +24,27 @@ export async function runGenerationWorkerTask(payload = {}, context = {}) {
   });
   checkpoint(context);
   const adoption = typeof context.adoptMap === "function";
-  const document = adoption ? createMapDocument(generatedMap, generatedMap.options || options) : null;
-  const map = document?.map || generatedMap;
+  const handoffStartedAt = adoption ? taskNow() : 0;
+  const adoptionPackage = adoption
+    ? createCanonicalMapAdoptionPackage(createMapDocument(generatedMap, generatedMap.options || options))
+    : null;
+  const document = adoptionPackage?.document || null;
+  const map = normalizeMapForRuntimeAdoption(document?.map || generatedMap);
+  const handoffEncodeMs = adoption ? roundTaskMs(taskNow() - handoffStartedAt) : 0;
   const preparedRender = payload.render
     ? await executeRenderPreparationTask({...payload.render, map}, context)
     : null;
   checkpoint(context);
   if (adoption) {
-    const handoffStartedAt = taskNow();
-    const handoff = createMapAdoptionHandoff(document);
     context.adoptMap(map);
     checkpoint(context);
     return {
       kind: "map-generation-adoption-result",
       binding: context.binding || null,
-      handoff,
+      handoff: adoptionPackage.handoff,
       preparedRender,
       metadata: createWholeMapDocumentMetadata(document),
-      timings: {handoffEncodeMs: roundTaskMs(taskNow() - handoffStartedAt)}
+      timings: {handoffEncodeMs}
     };
   }
   return {

@@ -45,8 +45,10 @@ const historicalPartitions = [
 function parseTaskBlocks(markdown, source) {
   const lines = markdown.replaceAll("\r\n", "\n").split("\n");
   const tasks = [];
+  const taskHeadingPattern = /^- \*\*(?:权威任务)?第 (\d+) 项：(.+?)\*\* `([^`]+)`/;
+  const taskLikeHeadings = lines.filter(line => /^- \*\*(?:权威任务)?第 \d+ 项：/.test(line));
   for (let index = 0; index < lines.length; index += 1) {
-    const match = lines[index].match(/^- \*\*权威任务第 (\d+) 项：(.+?)\*\* `([^`]+)`/);
+    const match = lines[index].match(taskHeadingPattern);
     if (!match) continue;
     let end = index + 1;
     while (end < lines.length) {
@@ -58,10 +60,13 @@ function parseTaskBlocks(markdown, source) {
       number: Number(match[1]),
       title: match[2],
       status: match[3],
-      block: lines.slice(index, end).join("\n").trimEnd(),
+      block: lines.slice(index, end).join("\n").trimEnd().replace(/^- \*\*第 /, "- **权威任务第 "),
       source,
     });
     index = end - 1;
+  }
+  if (tasks.length !== taskLikeHeadings.length) {
+    throw new Error(`${source} 存在未识别任务标题：检测 ${taskLikeHeadings.length}，解析 ${tasks.length}`);
   }
   return tasks;
 }

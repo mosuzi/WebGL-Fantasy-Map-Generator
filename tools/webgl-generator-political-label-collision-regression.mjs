@@ -6,7 +6,8 @@ import {
   PROVINCE_COLLISION_OPACITY,
   automaticPoliticalLabelOrder,
   createPoliticalLabelGlyphLayout,
-  resolvePoliticalLabelPlacement
+  resolvePoliticalLabelPlacement,
+  restorePoliticalLabelPlacementSnapshot
 } from "../app/webgl-generator/src/renderer/political-label-layout.js";
 import {estimateLabelTextBox, resolveLabelStyle} from "../app/webgl-generator/src/runtime/label-style-registry.js";
 
@@ -46,6 +47,48 @@ const refreshedPreferred = resolvePoliticalLabelPlacement({item: stateItem, scre
 const retainedPreferred = resolvePoliticalLabelPlacement({item: stateItem, screen, obstacles: [cityObstacle], viewport, padding: 6, preferredCandidateIndex: 0, retainPreferred: true});
 assert.notEqual(refreshedPreferred.candidateIndex, 0, "普通同缩放布局更新不得粘住已碰撞的旧候选");
 assert.equal(retainedPreferred.candidateIndex, 0, "纯平移滞回应保留旧候选避免提交跳位");
+const snapshotItem = {
+  politicalOffsetX: 12,
+  politicalOffsetY: -4,
+  politicalPlacementSnapshot: {
+    candidateIndex: avoided.candidateIndex,
+    bend: avoided.bend,
+    rootSize: avoided.rootSize,
+    glyphs: avoided.glyphs,
+    boxOffset: {
+      left: avoided.box.left - avoided.anchor.x,
+      right: avoided.box.right - avoided.anchor.x,
+      top: avoided.box.top - avoided.anchor.y,
+      bottom: avoided.box.bottom - avoided.anchor.y
+    },
+    collides: avoided.collides,
+    cityCollides: avoided.cityCollides
+  }
+};
+const restoredSnapshot = restorePoliticalLabelPlacementSnapshot(snapshotItem, {x: 400, y: 250});
+assert.deepEqual(restoredSnapshot.anchor, {x: 412, y: 246}, "政治标签快照没有按新基础坐标平移");
+assert.equal(restoredSnapshot.candidateIndex, avoided.candidateIndex, "政治标签快照候选发生漂移");
+assert.equal(restoredSnapshot.bend, avoided.bend, "政治标签快照弯曲值发生漂移");
+assert.equal(restoredSnapshot.rootSize, avoided.rootSize, "政治标签快照误重建 root size");
+assert.equal(restoredSnapshot.glyphs, avoided.glyphs, "政治标签快照误重建 glyph layout");
+assert.equal(restoredSnapshot.box.left, 412 + snapshotItem.politicalPlacementSnapshot.boxOffset.left, "政治标签快照 box 未保持相对偏移");
+assert.equal(restoredSnapshot.collides, avoided.collides, "政治标签快照碰撞标记发生漂移");
+assert.equal(restoredSnapshot.cityCollides, avoided.cityCollides, "政治标签快照城市碰撞标记发生漂移");
+assert.equal(restoredSnapshot.peerCollides, false, "交互提交快照仍被旧 peer collision 阻断");
+assert.equal(restorePoliticalLabelPlacementSnapshot({}, screen), null, "缺失政治标签快照时未回退 resolver");
+for (const [name, mutate] of [
+  ["candidate", snapshot => delete snapshot.candidateIndex],
+  ["bend", snapshot => delete snapshot.bend],
+  ["rootSize", snapshot => delete snapshot.rootSize],
+  ["glyphs", snapshot => delete snapshot.glyphs],
+  ["boxOffset", snapshot => delete snapshot.boxOffset.bottom],
+  ["collides", snapshot => delete snapshot.collides],
+  ["cityCollides", snapshot => delete snapshot.cityCollides]
+]) {
+  const partial = structuredClone(snapshotItem);
+  mutate(partial.politicalPlacementSnapshot);
+  assert.equal(restorePoliticalLabelPlacementSnapshot(partial, screen), null, `部分快照 ${name} 未回退 resolver`);
+}
 
 const provinceItem = {targetKind: "province", targetId: 2, text: "霜原行省", rotation: 0, resolvedStyle: provinceStyle};
 const provinceStraight = createPoliticalLabelGlyphLayout(provinceItem.text, provinceStyle, {targetKind: "province", rotation: 0, bend: 0});
@@ -73,6 +116,11 @@ const [rendererSource, stylesSource, mapIoSource] = await Promise.all([
 ]);
 assert.match(rendererSource, /priorityLayout \? this\.labelItems : automaticPoliticalLabelOrder\(this\.labelItems\)/, "默认标签顺序没有切换为城市优先");
 assert.match(rendererSource, /preservePoliticalCandidate = this\.viewportInteractionKind === "pan" \|\| this\.viewportInteractionKind === "zoom"/, "政治标签候选滞回没有覆盖平移与缩放交互提交");
+assert.match(
+  rendererSource,
+  /const retainedPoliticalPlacement = politicalLabel && preservePoliticalCandidate && \(item\.visible \|\| item\.buffered\)[\s\S]*restorePoliticalLabelPlacementSnapshot\(item, baseScreen\)[\s\S]*let politicalPlacement = retainedPoliticalPlacement \|\| \(politicalLabel \? resolvePoliticalLabelPlacement/,
+  "政治标签交互提交仍先重算 resolver 再覆盖既有布局快照"
+);
 assert.match(rendererSource, /provinceLabel\s*\n\s*\? false/, "省份碰撞仍可能被自动布局完全隐藏");
 assert.match(rendererSource, /appendLabelNodeText[\s\S]*political-label-glyph/, "国家 / 省份名称没有拆分为逐字路径节点");
 assert.match(stylesSource, /\.province-label\.collision-fallback[\s\S]*z-index:\s*1/, "省份碰撞降级没有降低层级");

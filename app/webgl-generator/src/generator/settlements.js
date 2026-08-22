@@ -3065,8 +3065,12 @@ function mirrorGridBurgsToPack(pack, cities) {
 function syncPoliticalSettlementStats(pack, politics, cities, options = {}) {
   const protectedStateIds = snapshotIds(options.lockedStates);
   const protectedProvinceIds = snapshotIds(options.lockedProvinces);
-  syncStateSettlementStats(pack, politics?.states || [], protectedStateIds);
-  syncProvinceSettlementStats(pack, politics?.provinces || [], protectedProvinceIds);
+  for (const states of new Set([politics?.states, pack?.states].filter(Boolean))) {
+    syncStateSettlementStats(pack, states, protectedStateIds);
+  }
+  for (const provinces of new Set([politics?.provinces, pack?.provinces].filter(Boolean))) {
+    syncProvinceSettlementStats(pack, provinces, protectedProvinceIds);
+  }
   synchronizeSettlementPoliticalOwnership(pack, cities, options);
 }
 
@@ -3083,6 +3087,10 @@ function synchronizeSettlementPoliticalOwnership(pack, cities, options = {}) {
     city.state = burg.state;
     city.province = nextProvince;
     burg.province = city.province;
+    if (!(Number(city.province) > 0)) {
+      city.provincial = false;
+      burg.provincial = 0;
+    }
   }
 }
 

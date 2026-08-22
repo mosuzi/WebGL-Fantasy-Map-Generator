@@ -104,7 +104,7 @@
     },
     {
       "namespace": "debug",
-      "methodCount": 7,
+      "methodCount": 8,
       "aiHandbook": "docs/ai/README.md",
       "wikiPage": "docs/wiki/API与自动化.md"
     }

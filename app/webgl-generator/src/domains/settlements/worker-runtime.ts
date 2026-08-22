@@ -1,6 +1,7 @@
 import {adaptLegacyInteractiveRevision} from "../../core/adapters/identity-adapters.js";
 import type {ComputeOperationBinding} from "../../core/contracts/operation.js";
 import {validateOperationBinding} from "../../core/contracts/runtime-validators.js";
+import {validatePreparedWorkerRenderBinding} from "../worker-render-binding.js";
 import {SETTLEMENTS_WORKER_WRITE_SET, settlementsManifest} from "./manifest.js";
 import {ZONES_WORKER_WRITE_SET, zonesManifest} from "../zones/manifest.js";
 import {validateSocietyPoliticsAdministrativeReferences} from "../society-politics/worker-runtime.js";
@@ -27,6 +28,7 @@ const writeSetByKind = Object.freeze({cities: SETTLEMENTS_WORKER_WRITE_SET, zone
 export function validateSettlementZoneWorkerOutput(input: {
   readonly kind: SettlementZoneWorkerKind;
   readonly binding: unknown;
+  readonly renderBinding?: unknown;
   readonly output: unknown;
   readonly policy: unknown;
   readonly sourceMap: unknown;
@@ -40,7 +42,13 @@ export function validateSettlementZoneWorkerOutput(input: {
   const output = record(input.output, "settlement-zone.output");
   if (output.kind !== input.kind) throw protocolError("settlement-zone-worker-kind-mismatch", "城镇地区 Worker 结果类型与请求不一致");
   assertSameBinding(output.binding, sourceBinding, "settlement-zone.output.binding");
-  validatePreparedRender(output.preparedRender, sourceBinding);
+  validatePreparedWorkerRenderBinding(output.preparedRender, input.renderBinding, {
+    path: "settlement-zone.preparedRender",
+    schemaCode: "settlement-zone-render-schema-invalid",
+    invalidCode: "settlement-zone-render-binding-invalid",
+    staleCode: "settlement-zone-render-binding-stale",
+    label: "城镇地区"
+  });
   const result = record(output.result, "settlement-zone.output.result");
   if (typeof result.executed !== "boolean") throw protocolError("settlement-zone-worker-result-invalid", "城镇地区 Worker 缺少 executed 结果");
   const values = validatePatch(output.patch, input.kind, expectedPaths, input.policy, result.executed);
@@ -254,12 +262,24 @@ export function validateZoneMirrors(values: Map<string, unknown>, sourceMapValue
   const sourcePackCells = record(sourcePack.cells, "settlement-zone.sourceMap.pack.cells");
   const packCellCount = indexedLength(sourcePackCells.i, "settlement-zone.sourceMap.pack.cells.i");
   assertDeepEqual(rows, packRows, "zone-pack-mirror-invalid", "zones / pack zone 镜像不一致");
+  const zoneIds = new Set<number>();
   for (let index = 0; index < rows.length; index++) {
     const row = rows[index];
     if (!row) continue;
     const zone = record(row, `settlement-zone.zone.${index}`);
     if (zone.removed) continue;
-    if (Number(zone.i) !== index) throw protocolError("zone-identity-invalid", `zone #${index} 身份槽无效`);
+    const hasZoneI = zone.i !== undefined;
+    const hasZoneId = zone.id !== undefined;
+    if ((!hasZoneI && !hasZoneId)
+      || hasZoneI && (typeof zone.i !== "number" || !Number.isSafeInteger(zone.i) || zone.i < 0)
+      || hasZoneId && (typeof zone.id !== "number" || !Number.isSafeInteger(zone.id) || zone.id < 0)) {
+      throw protocolError("zone-identity-invalid", `zone row #${index} 身份无效`);
+    }
+    const zoneId = (hasZoneI ? zone.i : zone.id) as number;
+    if (zoneIds.has(zoneId) || hasZoneI && hasZoneId && zone.i !== zone.id) {
+      throw protocolError("zone-identity-invalid", `zone row #${index} 身份无效`);
+    }
+    zoneIds.add(zoneId);
     if (!Array.isArray(zone.cells) || new Set(zone.cells.map(Number)).size !== zone.cells.length
       || zone.cells.some(cell => !Number.isSafeInteger(Number(cell)) || Number(cell) < 0 || Number(cell) >= packCellCount)) {
       throw protocolError("zone-cells-invalid", `zone #${index} cells 无效`);
@@ -274,16 +294,6 @@ function indexedValues(value: unknown, path: string): ArrayLike<unknown> {
 
 function indexedLength(value: unknown, path: string): number {
   return indexedValues(value, path).length;
-}
-
-function validatePreparedRender(value: unknown, expected: LegacyBinding): void {
-  if (value === undefined || value === null) return;
-  const prepared = record(value, "settlement-zone.preparedRender");
-  if (prepared.schemaVersion !== 1) throw protocolError("settlement-zone-render-schema-invalid", "城镇地区 renderer source schema 无效");
-  const binding = record(prepared.binding, "settlement-zone.preparedRender.binding");
-  for (const key of ["mapIdentity", "mapRevision", "topologyRevision"] as const) {
-    if ((binding[key] ?? "") !== (expected[key] ?? "")) throw protocolError("settlement-zone-render-binding-stale", `renderer source ${key} 与请求不一致`);
-  }
 }
 
 function validateLegacyBinding(value: unknown, path: string): LegacyBinding {

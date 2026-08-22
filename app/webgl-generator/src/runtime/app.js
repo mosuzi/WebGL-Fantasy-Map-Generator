@@ -3,31 +3,36 @@ import {buildClimate} from "../generator/climate.js";
 import {createGenerationSummary} from "../generator/index.js";
 import {createNamebaseImportPreview, NAMEBASE_BINDING_TARGETS, parseNamebaseDocument} from "../generator/namebase-store.js";
 import {buildMilitary, MILITARY_STATUSES} from "../generator/military.js";
-import {backfillRiverHydrology, buildRivers, renameHydronymsByCulture} from "../generator/rivers.js";
+import {buildRivers, renameHydronymsByCulture} from "../generator/rivers.js";
 import {regeneratePackProvincesWithinStates, regeneratePackStatesAndProvinces} from "../generator/politics.js";
 import {finalizeSocietyReligions} from "../generator/society.js";
 import {buildZones} from "../generator/zones.js";
-import {reconcileWarDerivedData} from "../generator/war-consistency.js";
 import {finalizeSettlements, rebuildRelocatedPopulationPointsAsync, regenerateSettlementsWithinPolitics} from "../generator/settlements.js";
 import {createNotesDomainRuntime} from "../domains/notes/runtime.ts";
 import {createMarkersPresentationRuntime} from "../domains/markers/runtime.ts";
 import {validatePopulationWorkerOutput, validatePopulationWorkerPatch} from "../domains/population/worker-runtime.ts";
 import {validateSocietyPoliticsWorkerOutput} from "../domains/society-politics/worker-runtime.ts";
 import {validateSettlementZoneWorkerOutput} from "../domains/settlements/worker-runtime.ts";
-import {validateFeaturesNetworksResourcesWorkerOutput} from "../domains/features/worker-runtime.ts";
+import {
+  validateFeaturesNetworksResourcesWorkerOutput,
+  validateFeaturesNetworksResourcesWorkerOutputAsync
+} from "../domains/features/worker-runtime.ts";
 import {validateEconomyDiplomacyMilitaryWorkerOutput} from "../domains/economy/worker-runtime.ts";
 import {
   createCommittedFoundationWorkerBinding,
   createFoundationWorkerBinding,
   validateFoundationWorkerOutput
 } from "../domains/foundation/worker-runtime.ts";
+import {createMapAdoptionBindingOwner, finalizeCommittedMapAdoptionInstall} from "./map-adoption-binding-owner.js";
+import {maybeInjectMapReplaceDebugFault} from "./map-replace-debug-fault.js";
 import {reconcileSettlementCellIdentity} from "./settlement-cell-index.js";
 import {DEFAULT_OPTIONS, normalizeOptions} from "../generator/options.js";
 import {normalizeAtmosphereDirection, normalizeClimateLatitudeMode, normalizeWindProfile, windAngleFromDirection} from "../generator/climate-options.js";
 import {createRandom, createRandomSeed} from "../generator/random.js";
 import {PlaceholderMapRenderer} from "../renderer/placeholder-renderer.js";
 import {prepareRendererWorkerInstall} from "../renderer/prepared-render-installer.js";
-import {RENDER_PREPARATION_LAYERS, renderPreparationLayersForRegeneration, renderPreparationPickingComponentsForRegeneration} from "../renderer/render-preparation.js";
+import {assertRenderPreparationBinding, RENDER_PREPARATION_LAYERS, renderPreparationLayersForRegeneration, renderPreparationPickingComponentsForRegeneration} from "../renderer/render-preparation.js";
+import {createRenderRequestSourceBinding, createRenderResourceBinding} from "../renderer/render-resource-binding.js";
 import {
   createUserVisualThemeDocument,
   exportVisualThemeDocument,
@@ -94,6 +99,7 @@ import {downloadBlob, downloadText, mapFileBaseName, normalizeGeoJsonExportRange
 import {prepareMapFileIoWorkerPayload} from "./map-file-io-worker-client.js";
 import {MAP_FILE_IO_WORKER_OPERATIONS, MAP_FILE_IO_WORKER_TASK_TYPE} from "./map-file-io-worker-task.js";
 import {materializeMapAdoptionHandoff} from "./map-adoption-handoff.js";
+import {normalizeMapForRuntimeAdoption} from "./map-runtime-adoption.js";
 import {
   validateWholeMapAdoptionDocument,
   validateWholeMapAdoptionEnvelope,
@@ -105,9 +111,9 @@ import {createAddCityAtCellCommand, createDeleteCityCommand, createRenameCitiesF
 import {createMoveCityCommand, importCityMovePreflight, inspectCityMoveFast} from "./city-relocation.js";
 import {bindCityRelocationDrag, resolveCityRelocationPointerCityId} from "./city-relocation-drag.js";
 import {createAddCultureCommand, createApplyCultureAssignmentCommand, createDeleteCultureCommand, createSetCultureColorCommand, createSetCultureParentCommand} from "./culture-edit-commands.js";
-import {createApplySocialExpansionCommand, inspectSocialExpansion, normalizeSocialExpansionMap} from "./social-expansion-edit-commands.js";
+import {createApplySocialExpansionCommand, inspectSocialExpansion} from "./social-expansion-edit-commands.js";
 import {applyBiomeAssignmentPreview, BIOME_ASSIGNMENT_PREVIEW_EFFECTS, buildBiomeAssignmentChanges, createApplyBiomeAssignmentCommand, getBiomeBrushChanges, inspectBiomeAssignment} from "./biome-edit-commands.js";
-import {applySuitabilityPreview, buildSuitabilityChanges, buildSuitabilityStrokeChanges, createApplySuitabilityCommand, getSuitabilityBrushChanges, inspectSuitabilityEdit, normalizeSuitabilityMap, restoreSuitabilityPreview, SUITABILITY_PREVIEW_EFFECTS} from "./suitability-edit-commands.js";
+import {applySuitabilityPreview, buildSuitabilityChanges, buildSuitabilityStrokeChanges, createApplySuitabilityCommand, getSuitabilityBrushChanges, inspectSuitabilityEdit, restoreSuitabilityPreview, SUITABILITY_PREVIEW_EFFECTS} from "./suitability-edit-commands.js";
 import {
   buildPopulationAdjustmentPlan,
   buildPopulationTransferPlan,
@@ -227,7 +233,8 @@ import {inspectClimateDownstreamRebuild} from "./climate-downstream-rebuild.js";
 import {CLIMATE_DOWNSTREAM_WORKER_TASK, getClimateDownstreamPatchPolicy} from "./climate-downstream-worker-task.js";
 import {captureMapMutationSnapshot, executeMapSnapshotTransaction, restoreMapMutationSnapshot} from "./map-snapshot-transaction.js";
 import {createDomainPatchCommand, createMapReplacementCommand} from "./domain-patch.js";
-import {captureCommandMapReplicaWrites, createCommandMapReplicaPatch} from "./map-replica-command-patch.js";
+import {captureCommandMapReplicaWritesAsync, createCommandMapReplicaPatch} from "./map-replica-command-patch.js";
+import {createCommittedHistoryGuard, settleHistoryActionResult} from "./history-async-boundary.js";
 import {getHeightDerivedPatchPolicy, HEIGHT_DERIVED_WORKER_TASK} from "./height-derived-worker-task.js";
 import {getRegenerationPatchPolicy, REGENERATION_WORKER_TASK} from "./regeneration-worker-task.js";
 import {createWorkerTaskCoordinator} from "./worker-task-coordinator.js";
@@ -250,7 +257,7 @@ import {
   getEconomyWorkerPatchPolicy
 } from "./economy-worker-task.js";
 import {
-  fingerprintPopulationSource,
+  fingerprintPopulationSourceAsync,
   getPopulationWorkerPatchPolicy,
   POPULATION_WORKER_TASK
 } from "./population-worker-task.js";
@@ -292,9 +299,10 @@ import {
   allRegenerationObjectsLocked,
   assertLockedRegenerationSnapshots,
   captureLockedRegenerationObjects,
+  mergeLockedRiverFeatureSnapshots,
   regenerationLockConflict
 } from "./regeneration-lock-protection.js";
-import {captureRegenerationConstraintBundle} from "./regeneration-constraint-bundle.js";
+import {captureRegenerationConstraintBundle, isRegenerationConstraintDomainFullyLocked} from "./regeneration-constraint-bundle.js";
 import {installRegenerationLockUiSession} from "./regeneration-lock-ui-session.js";
 import {
   diplomacyRelationReferenceAtPoliticalPick,
@@ -310,6 +318,7 @@ import {createRegenerationUserError, regenerationErrorMessage, regenerationLoadi
 import {LABEL_TARGET_KIND, OBJECT_KIND, OBJECT_KIND_LABEL} from "./object-kinds.js";
 import {reconcileSettlementPortTopology} from "./settlement-port-topology.js";
 import ComputeWorker from "./compute-worker.js?worker";
+import HeightmapExportWorker from "./heightmap-export-worker.js?worker";
 import {GENERATION_WORKER_TASK} from "./generation-worker-task.js";
 import {getWebglGeneratorHealthMonitor} from "./health-monitor.js";
 import {createRuntimeOperationError, createRuntimeOperationManager} from "./runtime-operation.js";
@@ -658,6 +667,8 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     panelManager,
     pendingGenerateId: 0,
     pendingGenerateRequestId: 0,
+    pendingMapAdoptionBindingOwner: null,
+    lastMapAdoptionBindingReceipt: null,
     heightmapImportId: 0,
     healthMonitor,
     runtimeOperation: null,
@@ -1995,20 +2006,10 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       updateEditingInteractionLock(state, documentRef);
     },
     onUndo: () => {
-      const result = executeHistoryCommand(state, documentRef, "undo");
-      if (result.executed) {
-        refreshGenerationSummary(state.map);
-      }
-      updateRuntimePanel(documentRef, state);
-      return result;
+      return settleMilitaryPanelHistoryResult(executeHistoryCommand(state, documentRef, "undo"), state, documentRef);
     },
     onRedo: () => {
-      const result = executeHistoryCommand(state, documentRef, "redo");
-      if (result.executed) {
-        refreshGenerationSummary(state.map);
-      }
-      updateRuntimePanel(documentRef, state);
-      return result;
+      return settleMilitaryPanelHistoryResult(executeHistoryCommand(state, documentRef, "redo"), state, documentRef);
     }
   });
   state.panels.military = militaryPanel;
@@ -2997,24 +2998,29 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
 
 function queueCommandMapReplicaPatch(state, mutation, before, after, {includeCompute = true} = {}) {
   if (!includeCompute) return;
-  let capturedWrites;
-  try {
-    capturedWrites = captureCommandMapReplicaWrites({map: state?.map, command: mutation?.command});
-  } catch {
-    invalidateMapReplicaCoordinators(state, includeCompute, "map-revision-patch-capture-failed");
-    return;
-  }
-  if (!capturedWrites.length) {
-    invalidateMapReplicaCoordinators(state, includeCompute, "map-revision-unpatchable");
-    return;
-  }
   const previous = state.mapReplicaPatchQueue || Promise.resolve();
   const coordinators = [state.mapWorkerCoordinator || state.workerTaskCoordinator];
   const active = coordinators.map(coordinator => ({coordinator, session: coordinator?.getSessionSnapshot?.()}))
     .filter(({session}) => session && ["idle", "patching"].includes(session.status) && session.binding?.mapIdentity === after.mapIdentity);
   if (!active.length) return;
+  const sourceMap = state.map;
+  const capturedWritesOutcome = captureCommandMapReplicaWritesAsync({
+    map: sourceMap,
+    command: mutation?.command,
+    budgetMs: 4,
+    isCurrent: () => state.map === sourceMap && state.mapRevision.getSnapshot().mapRevision === after.mapRevision
+  }).then(
+    value => ({ok: true, value}),
+    error => ({ok: false, error})
+  );
   const nextBinding = {...createRegenerationWorkerBinding(state), mapRevision: after.mapRevision};
   const patchPromise = previous.catch(() => {}).then(async () => {
+    const capturedWrites = await capturedWritesOutcome;
+    if (!capturedWrites.ok) throw capturedWrites.error;
+    if (!capturedWrites.value.length) {
+      invalidateMapReplicaCoordinators(state, includeCompute, "map-revision-unpatchable");
+      throw Object.assign(new Error("地图副本 mutation 没有可同步写集"), {code: "map_replica_patch_capture_empty"});
+    }
     const sessions = active.map(({coordinator}) => coordinator.getSessionSnapshot?.()).filter(Boolean);
     const checksums = new Set(sessions.map(session => session.checksum).filter(Boolean));
     if (sessions.length !== active.length || checksums.size !== 1 || sessions.some(session => !session.checksum || Number(session.binding?.mapRevision) !== Number(before.mapRevision))) {
@@ -3029,7 +3035,7 @@ function queueCommandMapReplicaPatch(state, mutation, before, after, {includeCom
       targetRevision: after.mapRevision,
       patchId: `history:${mutation?.action || "mutation"}:${after.mapRevision}`,
       baseChecksum: sessions[0].checksum,
-      capturedWrites
+      capturedWrites: capturedWrites.value
     });
   });
   const operations = active.map(({coordinator, session}) => coordinator.applySessionPatch(session.id, patchPromise, nextBinding)
@@ -3100,7 +3106,7 @@ function createRuntimeActions(state, documentRef, options = {}) {
   const runDisplayMutation = (name, apply, rollback, {gpuResident = false} = {}) => displayIntents.run(async intent => {
     const activeName = state.runtimeOperationSnapshot?.current?.name || "";
     const onCommitted = () => {
-      if (intent.isCurrent()) restoreRuntimeDisplayControls(state, documentRef);
+      if (intent.isCurrent() && !(state.renderer?.workerRenderInstallSuspended > 0)) restoreRuntimeDisplayControls(state, documentRef);
     };
     if (state.renderer?.workerRenderInstallSuspended > 0 && !activeName.startsWith("layers.")) {
       const result = apply();
@@ -3149,10 +3155,12 @@ function createRuntimeActions(state, documentRef, options = {}) {
   });
   const runMapReplace = (name, task, message, overrides = {}) => {
     let loadingOwner = "";
+    let mapReplaceOperationId = null;
     const config = {
       message,
       loading: false,
       snapshot: async context => {
+        mapReplaceOperationId = context.id;
         loadingOwner = `map-replace:${context.id}`;
         setMythicGenerationLoading(documentRef, true, message, loadingOwner);
         try {
@@ -3167,6 +3175,9 @@ function createRuntimeActions(state, documentRef, options = {}) {
       ...overrides
     };
     return operation.run(name, task, config).finally(() => {
+      if (mapReplaceOperationId !== null) {
+        invalidatePendingMapAdoptionBindingOwner(state, `${name}-finalize`, mapReplaceOperationId);
+      }
       if (loadingOwner) clearOwnedGenerationLoading(documentRef, loadingOwner);
     });
   };
@@ -3402,7 +3413,12 @@ function createRuntimeActions(state, documentRef, options = {}) {
       }, {message: "正在导出 PNG"}),
       exportHeightmapPNG: (options = {}) => operation.run("data.exportHeightmapPNG", context => {
         context.report("render-export", {message: "正在导出高度灰度图"});
-        return exportHeightmapPngData(state, documentRef, options);
+        return exportHeightmapPngData(state, documentRef, {
+          ...options,
+          ...(typeof documentRef.defaultView?.Worker === "function" && typeof documentRef.defaultView?.OffscreenCanvas === "function"
+            ? {heightmapExportWorkerFactory: () => new HeightmapExportWorker()}
+            : {})
+        });
       }, {message: "正在导出高度灰度图"}),
       exportNotes: (options = {}) => exportNotesData(state, documentRef, options),
       exportMeasurements: (options = {}) => exportMeasurementsData(state, documentRef, options),
@@ -4065,9 +4081,9 @@ function setRuntimeVisualTheme(state, documentRef, themeId, {gpuResident = false
   if (!rawThemeId) throw new Error("缺少视觉主题");
   const nextThemeId = normalizeVisualThemeId(rawThemeId);
   if (nextThemeId !== rawThemeId) throw new Error(`未知视觉主题：${themeId}`);
+  const useGpuResident = gpuResident && !(state.renderer?.workerRenderInstallSuspended > 0);
   return measureHealthOperation(state, "set-visual-theme", {visualTheme: nextThemeId}, () => {
-    syncMapVisualThemeStore(state.map, nextThemeId);
-    const applied = applyRuntimeVisualThemeState(state, documentRef, nextThemeId, {gpuResident});
+    const applied = applyRuntimeVisualThemeState(state, documentRef, nextThemeId, {gpuResident: useGpuResident});
     if (applied && typeof applied.then === "function") {
       return applied.then(() => runtimeDisplayActionResult(state, documentRef, ["display-preference", "renderer", "runtime-panel"]));
     }
@@ -4101,7 +4117,12 @@ function createRuntimeVisualTheme(state, documentRef, options = {}) {
   const document = createUserVisualThemeDocument({label: options.label, baseThemeId: isUserVisualTheme(baseThemeId) ? exportVisualThemeDocument(baseThemeId).base : baseThemeId});
   if (isUserVisualTheme(baseThemeId)) document.colors = {...exportVisualThemeDocument(baseThemeId).colors};
   const before = captureVisualThemeState(state.map, currentVisualThemeId(documentRef));
-  const after = {preset: document.id, userThemes: [...before.userThemes, document]};
+  const after = {
+    preset: document.id,
+    presentationPreset: document.id,
+    userThemes: upsertVisualThemeDocuments(before.userThemes, document),
+    registryUserThemes: upsertVisualThemeDocuments(before.registryUserThemes, document)
+  };
   return executeVisualThemeCommand(state, documentRef, createSetUserVisualThemesCommand(before, after, {label: `创建用户主题 ${document.label}`}));
 }
 
@@ -4109,25 +4130,30 @@ function importRuntimeVisualTheme(state, documentRef, source, options = {}) {
   ensureThemeEditableMap(state.map);
   const document = normalizeVisualThemeDocument(source);
   const before = captureVisualThemeState(state.map, currentVisualThemeId(documentRef));
-  const existingIndex = before.userThemes.findIndex(theme => theme.id === document.id);
-  if (existingIndex >= 0 && options.replace !== true) throw new Error(`用户主题已存在：${document.id}`);
-  const userThemes = before.userThemes.map(theme => ({...theme, colors: {...theme.colors}}));
-  if (existingIndex >= 0) userThemes.splice(existingIndex, 1, document);
-  else userThemes.push(document);
-  const after = {preset: options.select === false ? before.preset : document.id, userThemes};
+  const alreadyExists = before.registryUserThemes.some(theme => theme.id === document.id)
+    || before.userThemes.some(theme => theme.id === document.id);
+  if (alreadyExists && options.replace !== true) throw new Error(`用户主题已存在：${document.id}`);
+  const after = {
+    preset: options.select === false ? before.preset : document.id,
+    presentationPreset: options.select === false ? before.presentationPreset : document.id,
+    userThemes: upsertVisualThemeDocuments(before.userThemes, document),
+    registryUserThemes: upsertVisualThemeDocuments(before.registryUserThemes, document)
+  };
   return executeVisualThemeCommand(state, documentRef, createSetUserVisualThemesCommand(before, after, {label: `导入用户主题 ${document.label}`}));
 }
 
 function updateRuntimeVisualTheme(state, documentRef, themeId, colors = {}) {
   ensureThemeEditableMap(state.map);
   const id = String(themeId || currentVisualThemeId(documentRef));
-  const document = updateUserVisualThemeDocument(id, colors);
+  const updatedDocument = updateUserVisualThemeDocument(id, colors);
   const before = captureVisualThemeState(state.map, currentVisualThemeId(documentRef));
   const after = {
     preset: id,
-    userThemes: before.userThemes.map(theme => theme.id === id ? document : theme)
+    presentationPreset: id,
+    userThemes: upsertVisualThemeDocuments(before.userThemes, updatedDocument),
+    registryUserThemes: upsertVisualThemeDocuments(before.registryUserThemes, updatedDocument)
   };
-  return executeVisualThemeCommand(state, documentRef, createSetUserVisualThemesCommand(before, after, {label: `编辑用户主题 ${document.label}`}));
+  return executeVisualThemeCommand(state, documentRef, createSetUserVisualThemesCommand(before, after, {label: `编辑用户主题 ${updatedDocument.label}`}));
 }
 
 function deleteRuntimeVisualTheme(state, documentRef, themeId) {
@@ -4137,7 +4163,9 @@ function deleteRuntimeVisualTheme(state, documentRef, themeId) {
   const before = captureVisualThemeState(state.map, currentVisualThemeId(documentRef));
   const after = {
     preset: before.preset === id ? "default" : before.preset,
-    userThemes: before.userThemes.filter(theme => theme.id !== id)
+    presentationPreset: before.presentationPreset === id ? "default" : before.presentationPreset,
+    userThemes: removeVisualThemeDocument(before.userThemes, id),
+    registryUserThemes: removeVisualThemeDocument(before.registryUserThemes, id)
   };
   return executeVisualThemeCommand(state, documentRef, createSetUserVisualThemesCommand(before, after, {label: `删除用户主题 ${id}`}));
 }
@@ -4153,7 +4181,6 @@ function executeVisualThemeCommand(state, documentRef, command) {
 
 function applyRuntimeVisualThemeState(state, documentRef, themeId, {force = false, preparedPresentation = false, gpuResident = false} = {}) {
   const id = normalizeVisualThemeId(themeId);
-  syncMapVisualThemeStore(state.map, id);
   persistUserVisualThemes(documentRef.defaultView?.localStorage);
   documentRef.dispatchEvent(new CustomEvent("webgl-generator-visual-themes-changed", {
     detail: {current: id, options: visualThemeOptions(), userTheme: isUserVisualTheme(id) ? exportVisualThemeDocument(id) : null}
@@ -4173,20 +4200,23 @@ function applyRuntimeVisualThemeState(state, documentRef, themeId, {force = fals
   return applied;
 }
 
-function syncMapVisualThemeStore(map, preset) {
-  if (!map) return;
-  map.visualTheme = {
-    ...(map.visualTheme || {}),
-    version: 2,
-    preset,
-    overrides: map.visualTheme?.overrides && typeof map.visualTheme.overrides === "object" ? {...map.visualTheme.overrides} : {},
-    userThemes: listUserVisualThemeDocuments()
-  };
-  map.options = {...(map.options || {}), visualTheme: preset};
-}
-
 function ensureThemeEditableMap(map) {
   if (!map) throw new Error("当前没有可编辑的地图");
+}
+
+function upsertVisualThemeDocuments(documents, document) {
+  const next = (documents || []).map(theme => ({...theme, colors: {...(theme?.colors || {})}}));
+  const normalized = {...document, colors: {...(document?.colors || {})}};
+  const index = next.findIndex(theme => theme.id === normalized.id);
+  if (index >= 0) next.splice(index, 1, normalized);
+  else next.push(normalized);
+  return next;
+}
+
+function removeVisualThemeDocument(documents, themeId) {
+  return (documents || [])
+    .filter(theme => theme.id !== themeId)
+    .map(theme => ({...theme, colors: {...(theme?.colors || {})}}));
 }
 
 async function importVisualThemeFile(state, documentRef, file, importTheme) {
@@ -4851,7 +4881,11 @@ async function loadMapIntoRuntime(state, documentRef, map, {
   operation?.report("prepare-map", {message: "正在打开新地图"});
   let preparedInstall = null;
   try {
-  if (preparedRender) {
+    if (workerAdoption?.session?.id) {
+      beginPendingMapAdoptionLoad(state, workerAdoption, renderBinding || preparedRender?.binding);
+    }
+    normalizeMapForRuntimeAdoption(map);
+    if (preparedRender) {
     operation?.report("prepare-map-render", {message: "正在准备地图画面"});
     const installProfile = {startedAt: performance.now(), stages: []};
     state.lastPreparedMapInstallProfile = installProfile;
@@ -4891,11 +4925,6 @@ async function loadMapIntoRuntime(state, documentRef, map, {
   if (!workerAdoption?.session?.id) invalidateMapReplicaCoordinators(state, true, "map-replaced");
   state.map = map;
   state.regenerationLockUiSession?.clear({keepContext: false});
-  normalizeSocialExpansionMap(state.map);
-  normalizeSuitabilityMap(state.map);
-  ensureLabelStore(state.map);
-  reconcileWarDerivedData(state.map);
-  ensureRiverHydrology(state.map);
   state.pick = null;
   state.editHistory.clear();
   state.heightEdit.activeStroke = null;
@@ -4952,6 +4981,8 @@ async function loadMapIntoRuntime(state, documentRef, map, {
   state.measurement.editingMeasurementId = null;
   ensureMeasurementStore(state.map);
   state.lastEditRefresh = null;
+  const runtimeMapIdentity = renderBinding?.mapIdentity || preparedRender?.binding?.mapIdentity || null;
+  state.mapRevision.replaceMap(runtimeMapIdentity);
   if (loadingMessages[0]) {
     updateGenerationLoading(documentRef, true, loadingMessages[0]);
     await yieldToBrowser(documentRef, {debugDelay: true});
@@ -4979,6 +5010,10 @@ async function loadMapIntoRuntime(state, documentRef, map, {
     },
     yieldToBrowser: options => yieldToBrowser(documentRef, options),
     revealPreparedOverlay: Boolean(preparedInstall),
+    binding: preparedRender
+      ? (renderBinding || preparedRender.binding)
+      : state.renderer?.issueRenderResourceBinding?.(state.mapRevision.getCoreSnapshot(), {replaceResources: true})
+        || createFallbackRenderResourceBinding(state.mapRevision.getCoreSnapshot(), "map-load"),
     signal: operation?.signal || null,
     isCurrent
   };
@@ -5002,8 +5037,9 @@ async function loadMapIntoRuntime(state, documentRef, map, {
       preparedInstall.rollback();
       preparedInstall = null;
     }
-    state.renderer.loadMap(state.map);
+    state.renderer.loadMap(state.map, rendererLoadOptions.binding);
   }
+  maybeInjectMapReplaceDebugFault(documentRef, {stage: "after-renderer-load", operationName: operation?.name || ""});
   emitLoadTrace(documentRef, {phase: "start", id: "panel-refresh", message: loadingMessage("panel-refresh"), delayMs: readDebugLoadDelayMs(documentRef)});
   operation?.report("panel-refresh", {message: loadingMessage("panel-refresh")});
   if (loadingMessages[1]) {
@@ -5019,9 +5055,9 @@ async function loadMapIntoRuntime(state, documentRef, map, {
   state.panels.cloudStorage?.updateFilenamePreview?.();
   syncSaveFilenameTemplateUi(documentRef, state);
   syncLabelStylesUi(state, documentRef);
-  state.mapRevision.replaceMap();
   if (workerAdoption?.session?.id) {
-    const adoptedBinding = createRegenerationWorkerBinding(state, operation);
+    const adoptedBinding = createCanonicalRegenerationWorkerBinding(state, operation);
+    beginPendingMapAdoptionCommit(state, adoptedBinding);
     const adopted = await state.mapWorkerCoordinator.commitSession(workerAdoption.session.id, adoptedBinding, {adoptResultMap: true});
     if (!adopted) {
       const error = new Error("地图 Worker owner 接纳新地图失败");
@@ -5029,6 +5065,7 @@ async function loadMapIntoRuntime(state, documentRef, map, {
       throw error;
     }
     workerAdoption.session = {...workerAdoption.session, pending: false, committed: true, invalidated: false};
+    completePendingMapAdoptionBindingOwner(state);
   }
   emitLoadTrace(documentRef, {phase: "end", id: "panel-refresh", message: loadingMessage("panel-refresh")});
   emitLoadTrace(documentRef, {phase: "end", id: "load-map", message: "接入地图运行时"});
@@ -5043,8 +5080,12 @@ async function loadMapIntoRuntime(state, documentRef, map, {
   updateGenerationLoading(documentRef, false);
   showMapToast(documentRef, completionToast);
   scheduleLazyPanelsAfterMapReady(state, documentRef);
-  preparedInstall?.finalize();
+  const installFinalization = finalizeCommittedMapAdoptionInstall(preparedInstall);
+  if (installFinalization.error) {
+    state.healthMonitor?.record?.("map-adoption-finalize-failed", {message: installFinalization.error?.message || String(installFinalization.error)}, "warning");
+  }
   } catch (error) {
+    invalidatePendingMapAdoptionBindingOwner(state, "map-adoption-failed");
     if (workerAdoption?.session?.id && workerAdoption.session.committed !== true) {
       state.mapWorkerCoordinator.invalidateSession("map-adoption-failed");
       workerAdoption.session = {...workerAdoption.session, pending: false, committed: false, invalidated: true};
@@ -5139,6 +5180,103 @@ function captureMapReplaceSnapshot(state, documentRef) {
   };
 }
 
+async function restoreMapReplaceRendererAsync(state, documentRef, map, operation) {
+  const renderer = state.renderer;
+  const reportStage = stage => {
+    const message = `正在恢复地图：${loadingMessage(stage)}`;
+    operation?.report(stage.id || "rollback-renderer", {message});
+    setMythicGenerationLoading(documentRef, true, message);
+  };
+  const rendererLoadOptions = {
+    onStage: reportStage,
+    yieldToBrowser: options => yieldToBrowser(documentRef, options)
+  };
+  const canPrepareRollbackRender = typeof renderer?.completePreparedMapLoadAsync === "function"
+    && typeof state.workerTaskCoordinator?.run === "function";
+  if (!canPrepareRollbackRender) {
+    const restoredRevision = state.mapRevision.createSnapshot();
+    const fallbackBinding = renderer?.issueRenderResourceBinding?.(restoredRevision, {replaceResources: true})
+      || createFallbackRenderResourceBinding(restoredRevision, "map-rollback");
+    if (typeof renderer?.loadMapAsync === "function") {
+      await renderer.loadMapAsync(map, {...rendererLoadOptions, binding: fallbackBinding});
+    } else renderer?.loadMap?.(map, fallbackBinding);
+    return;
+  }
+
+  const binding = createRegenerationWorkerBinding(state, operation);
+  const renderRequest = createWorkerRegenerationRenderRequest(state, "generation", binding, [...RENDER_PREPARATION_LAYERS]);
+  const isCurrent = () => state.map === map && validateRegenerationWorkerBinding(state, binding);
+  operation?.report("rollback-render-prepare", {message: "正在恢复地图显示"});
+  const staged = await createStagedWorkerSnapshot(map, {
+    signal: operation?.signal || null,
+    yieldToMain: () => yieldToBrowser(documentRef),
+    budgetMs: 6,
+    sliceBytes: 256 * 1024
+  });
+  operation?.throwIfCancelled?.();
+  if (!isCurrent()) throw runtimeDisplayObsoleteError("rollback-render-snapshot");
+  const prepared = await state.workerTaskCoordinator.run("render.prepare", {
+    map: staged.snapshot,
+    ...renderRequest
+  }, {
+    binding,
+    signal: operation?.signal || null,
+    allowFallback: false,
+    payloadIsolated: true,
+    streamBudgetMs: 6,
+    streamSliceBytes: 256 * 1024,
+    onProgress: () => operation?.report("rollback-render-prepare", {message: "正在恢复地图显示"})
+  });
+  if (prepared.worker?.mode !== "worker" || prepared.worker?.session) {
+    const error = new Error("地图替换回滚未使用独立 Worker 渲染任务");
+    error.code = "worker_protocol_session_stale";
+    throw error;
+  }
+  operation?.throwIfCancelled?.();
+  if (!isCurrent()) throw runtimeDisplayObsoleteError("rollback-render-worker");
+
+  let install = null;
+  try {
+    operation?.report("rollback-render-install", {message: "正在安装恢复后的地图显示"});
+    install = await prepareRendererWorkerInstall(renderer, map, prepared, {
+      binding: renderRequest.binding,
+      signal: operation?.signal || null,
+      isCurrent,
+      resetViewport: true,
+      retainUnpreparedResources: false,
+      deferOverlayLayout: true,
+      onProgress: () => operation?.report("rollback-render-install", {message: "正在安装恢复后的地图显示"})
+    });
+    operation?.throwIfCancelled?.();
+    if (!isCurrent()) throw runtimeDisplayObsoleteError("rollback-render-install");
+    install.commit();
+    await renderer.completePreparedMapLoadAsync(map, {
+      ...rendererLoadOptions,
+      revealPreparedOverlay: true,
+      binding: renderRequest.binding,
+      signal: operation?.signal || null,
+      isCurrent
+    });
+    const finalization = finalizeCommittedMapAdoptionInstall(install);
+    install = null;
+    if (finalization.error) {
+      state.healthMonitor?.record?.("map-rollback-finalize-failed", {message: finalization.error?.message || String(finalization.error)}, "warning");
+    }
+  } catch (error) {
+    if (install) {
+      try {
+        install.rollback();
+      } catch (rollbackError) {
+        const failure = new Error(`地图替换回滚显示安装失败且资源恢复未完成：${error?.message || error}`);
+        failure.code = "operation_rollback_failed";
+        failure.cause = new AggregateError([error, rollbackError], "地图替换回滚显示安装与资源恢复均失败");
+        throw failure;
+      }
+    }
+    throw error;
+  }
+}
+
 async function restoreMapReplaceSnapshot(state, documentRef, snapshot, _error, operation) {
   const rollbackMessage = "正在恢复任务前的地图状态";
   operation?.report("rollback", {message: rollbackMessage});
@@ -5150,25 +5288,23 @@ async function restoreMapReplaceSnapshot(state, documentRef, snapshot, _error, o
     state.options = cloneGenerationOptions(snapshot.options);
     state.pendingGenerateId = snapshot.pendingGenerateId;
     state.lastEditRefresh = snapshot.lastEditRefresh;
-    syncGenerationInputs(documentRef, state.options);
-    updateControlPreferences(documentRef, {units: snapshot.unitPreferences});
-    state.renderer?.setUnitPreferences?.(snapshot.unitPreferences);
-    replaceUserVisualThemes(snapshot.userVisualThemes || []);
-    applyRuntimeVisualThemeState(state, documentRef, snapshot.visualTheme, {force: true});
-    if (mapChanged && snapshot.map) {
-      if (typeof state.renderer.loadMapAsync === "function") {
-        await state.renderer.loadMapAsync(snapshot.map, {
-          onStage: stage => {
-            const message = `正在恢复地图：${loadingMessage(stage)}`;
-            operation?.report(stage.id || "rollback-renderer", {message});
-            setMythicGenerationLoading(documentRef, true, message);
-          },
-          yieldToBrowser: options => yieldToBrowser(documentRef, options)
-        });
-      } else state.renderer.loadMap(snapshot.map);
-    }
     state.mapRevision.restoreSnapshot(snapshot.mapRevision);
     state.editHistory.restoreSnapshot(snapshot.history);
+    syncGenerationInputs(documentRef, state.options);
+    updateControlPreferences(documentRef, {units: snapshot.unitPreferences});
+    replaceUserVisualThemes(snapshot.userVisualThemes || []);
+    const canPreparePresentation = typeof state.renderer?.setPreparedPresentation === "function";
+    if (mapChanged && snapshot.map && canPreparePresentation) {
+      applyRuntimeVisualThemeState(state, documentRef, snapshot.visualTheme, {force: true, preparedPresentation: true});
+      state.renderer.setPreparedPresentation({unitPreferences: snapshot.unitPreferences});
+    }
+    if (mapChanged && snapshot.map) {
+      await restoreMapReplaceRendererAsync(state, documentRef, snapshot.map, operation);
+    }
+    if (!mapChanged || !snapshot.map || !canPreparePresentation) {
+      state.renderer?.setUnitPreferences?.(snapshot.unitPreferences);
+      applyRuntimeVisualThemeState(state, documentRef, snapshot.visualTheme, {force: true});
+    }
     state.selectionStore.batch(() => {
       const selected = snapshot.selection?.selection;
       if (selected) state.selectionStore.setSelection(selected);
@@ -5191,23 +5327,6 @@ function restoreCanvasToolMode(state, documentRef, snapshotMode) {
   if (activeMode?.id === snapshotMode.id && activeMode.context === snapshotMode.context) return;
   if (activeMode?.id) cancelCanvasToolMode(state, documentRef, activeMode.id, "map-replace-rollback");
   enterCanvasToolMode(state, documentRef, snapshotMode.id, snapshotMode.context);
-}
-
-function ensureRiverHydrology(map) {
-  if (!map?.rivers?.rivers?.length) return;
-  const result = backfillRiverHydrology(map.grid, map.features, map.pack, map.rivers, riverHydrologyBackfillOptions(map));
-  if (!result.changed) return;
-  appendGenerationLog(map, `backfill river hydrology: ${result.changed}/${result.total} rivers, regenerated=${result.regenerated}`);
-}
-
-function riverHydrologyBackfillOptions(map) {
-  const salt = map.metadata?.regeneration?.rivers ?? map.rivers?.metadata?.variationSalt ?? "";
-  const riverRegenerationSalt = salt === "" || salt === null || salt === undefined || Number(salt) === 0 ? undefined : salt;
-  return {
-    ...(map.options || {}),
-    namebases: map.namebases,
-    riverRegenerationSalt
-  };
 }
 
 function restorePersistedPanels(state) {
@@ -5324,15 +5443,15 @@ function yieldMapHandoffDecode(documentRef) {
 }
 
 async function generateMapOffMainThread(state, documentRef, options, generateId, operation = null, overrides = {}) {
-  const requestBinding = createRegenerationWorkerBinding(state, operation);
   const renderBinding = {mapIdentity: `generated:${generateId}`, mapRevision: 0, topologyRevision: 0};
-  const render = createWorkerRegenerationRenderRequest(state, "generation", renderBinding, [...RENDER_PREPARATION_LAYERS]);
-  render.camera = {scale: 1, offsetX: 0, offsetY: 0};
-  render.selection = null;
-  render.objectHighlights = [];
-  render.oceanCurrentHighlightIds = [];
+  const requestBinding = beginPendingMapAdoptionBindingOwner(state, {kind: "generation", targetMapIdentity: renderBinding.mapIdentity, operation});
   let output = null;
   try {
+    const render = createWorkerRegenerationRenderRequest(state, "generation", renderBinding, [...RENDER_PREPARATION_LAYERS]);
+    render.camera = {scale: 1, offsetX: 0, offsetY: 0};
+    render.selection = null;
+    render.objectHighlights = [];
+    render.oceanCurrentHighlightIds = [];
     output = await state.workerTaskCoordinator.run(GENERATION_WORKER_TASK, {
       options,
       heightmapPayload: overrides.heightmapPayload || null,
@@ -5368,6 +5487,7 @@ async function generateMapOffMainThread(state, documentRef, options, generateId,
       output,
       renderBinding
     });
+    acceptPendingMapAdoptionWorkerResult(state, output, renderBinding);
     const handoffDecodeStartedAt = currentLoadTraceTime(documentRef.defaultView || window);
     const document = await materializeMapAdoptionHandoff(output.handoff, {yieldToMain: () => yieldMapHandoffDecode(documentRef)});
     validateWholeMapAdoptionDocument({profile: "generation-adoption", metadata: output.metadata, document});
@@ -5661,6 +5781,11 @@ async function exportMapArchiveViaWorker(state, documentRef, {operation = null, 
       visualTheme: currentVisualThemeId(documentRef),
       display: {units}
     },
+    presentation: {
+      visualThemeDocument: isUserVisualTheme(currentVisualThemeId(documentRef))
+        ? exportVisualThemeDocument(currentVisualThemeId(documentRef))
+        : null
+    },
     encoding,
     resultType
   };
@@ -5710,7 +5835,7 @@ async function parseMapDocumentViaWorker(state, documentRef, input, {operation =
     Blob: documentRef.defaultView?.Blob || Blob,
     yieldToMain: () => yieldToBrowser(documentRef)
   });
-  const requestBinding = createRegenerationWorkerBinding(state, operation);
+  const requestBinding = beginPendingMapAdoptionBindingOwner(state, {kind: "import", targetMapIdentity: renderBinding.mapIdentity, operation});
   let output = null;
   try {
     output = await state.workerTaskCoordinator.run(MAP_FILE_IO_WORKER_TASK_TYPE, prepared.payload, {
@@ -5734,6 +5859,7 @@ async function parseMapDocumentViaWorker(state, documentRef, input, {operation =
       output,
       renderBinding
     });
+    acceptPendingMapAdoptionWorkerResult(state, output, renderBinding);
     const handoffDecodeStartedAt = currentLoadTraceTime(documentRef.defaultView || window);
     const document = await materializeMapAdoptionHandoff(output.handoff, {yieldToMain: () => yieldMapHandoffDecode(documentRef)});
     validateWholeMapAdoptionDocument({profile: "persistence-import", metadata: output.metadata, document});
@@ -5755,10 +5881,13 @@ async function parseMapDocumentViaWorker(state, documentRef, input, {operation =
 }
 
 function invalidatePendingWholeMapWorkerSession(state, output, reason) {
-  if (output?.worker?.session?.pending !== true) return false;
-  state.workerTaskCoordinator.invalidateSession(reason);
-  output.worker.session = {...output.worker.session, pending: false, committed: false, invalidated: true};
-  return true;
+  let invalidated = invalidatePendingMapAdoptionBindingOwner(state, reason);
+  if (output?.worker?.session?.pending === true) {
+    state.workerTaskCoordinator.invalidateSession(reason);
+    output.worker.session = {...output.worker.session, pending: false, committed: false, invalidated: true};
+    invalidated = true;
+  }
+  return invalidated;
 }
 
 function storageClock(documentRef) {
@@ -5919,19 +6048,25 @@ function redoNamebaseEdit(state, documentRef) {
 }
 
 function executeNamebaseHistoryCommand(state, documentRef, action) {
-  try {
-    const result = executeHistoryCommand(state, documentRef, action, {
-      refresh: (state, command) => refreshAfterNamebaseHistoryCommand(state, documentRef, command)
-    });
-    if (!result.executed) {
+  const complete = result => {
+    if (!result?.executed) {
       setFileOperationStatus(documentRef, action === "redo" ? "没有可重做的名称库编辑。" : "没有可撤销的名称库编辑。");
       return null;
     }
     setFileOperationStatus(documentRef, `已${action === "redo" ? "重做" : "撤销"}：${result.label}。`);
     return result;
-  } catch (error) {
+  };
+  const fail = error => {
     reportFileOperationError(documentRef, action === "redo" ? "重做名称库编辑失败" : "撤销名称库编辑失败", error);
     return null;
+  };
+  try {
+    const result = executeHistoryCommand(state, documentRef, action, {
+      refresh: (state, command) => refreshAfterNamebaseHistoryCommand(state, documentRef, command)
+    });
+    return settleHistoryActionResult(result, complete, fail);
+  } catch (error) {
+    return fail(error);
   }
 }
 
@@ -7597,7 +7732,7 @@ async function applyClimateDownstreamRebuildViaApi(state, documentRef, options =
         ...REGENERATION_TRANSACTION_EFFECTS,
         affected: preview.selectedSystems.map(id => ({kind: "system", id}))
       },
-      assertOutput: ({binding, output}) => validateFoundationWorkerOutput({task: CLIMATE_DOWNSTREAM_WORKER_TASK, binding, output}),
+      assertOutput: ({binding, renderBinding, output}) => validateFoundationWorkerOutput({task: CLIMATE_DOWNSTREAM_WORKER_TASK, binding, renderBinding, output}),
       createCommand: ({output, result, effects}) => createWorkerRegenerationPatchCommand(state.map, {
         patch: output.patch,
         policy: getClimateDownstreamPatchPolicy(result.steps.filter(step => step.executed !== false).map(step => step.system)),
@@ -7670,7 +7805,8 @@ async function applyOceanCurrentWorldRebuildViaAction(state, documentRef, option
   const map = state.map;
   const identity = snapshotOceanCurrentWorldIdentity(map);
   const seafloorPlan = options.seafloorPlan || null;
-  const constraintBundle = captureRegenerationConstraintBundle(map, {closure: ["world"]});
+  const worldFullyLocked = isRegenerationConstraintDomainFullyLocked(map, "world");
+  const constraintBundle = worldFullyLocked ? null : captureRegenerationConstraintBundle(map, {closure: ["world"]});
   try {
     return await executeWorkerMapMutation(state, documentRef, {
       task: OCEAN_CURRENT_WORLD_WORKER_TASK,
@@ -7682,7 +7818,12 @@ async function applyOceanCurrentWorldRebuildViaAction(state, documentRef, option
         ...REGENERATION_TRANSACTION_EFFECTS,
         affected: OCEAN_CURRENT_WORLD_REBUILD_ORDER.map(id => ({kind: "system", id}))
       },
-      assertOutput: ({binding, output}) => validateFoundationWorkerOutput({task: OCEAN_CURRENT_WORLD_WORKER_TASK, binding, output}),
+      assertOutput: ({binding, renderBinding, output}) => {
+        validateFoundationWorkerOutput({task: OCEAN_CURRENT_WORLD_WORKER_TASK, binding, renderBinding, output});
+        if (worldFullyLocked && output?.result?.executed !== false) {
+          throw apiActionError("worker_ocean_current_world_full_lock_mismatch", "全锁预检与 Worker 洋流世界结果不一致");
+        }
+      },
       createCommand: ({output, result, effects}) => createMapReplacementCommand({
         replacementMap: output.replacementMap,
         label: seafloorPlan ? "重设海底并重算洋流世界" : "重算洋流与世界派生",
@@ -7694,6 +7835,7 @@ async function applyOceanCurrentWorldRebuildViaAction(state, documentRef, option
         }
       }),
       assertCommitted: () => {
+        if (!constraintBundle) throw apiActionError("worker_ocean_current_world_full_lock_mismatch", "全锁预检结果不得进入洋流世界提交");
         assertOceanCurrentWorldIdentity(state.map, identity);
         constraintBundle.assertDomain(state.map, "world", "after");
       },
@@ -8259,16 +8401,31 @@ function handleSelectionPanel(state, selection, editingObject, context) {
   return SELECTION_PANEL_HANDLERS[object.kind]?.(state, selection, editingObject, context) || false;
 }
 
-function refreshAfterEdit(state, commandOrEffects) {
-  state.editRefreshScheduler.run(commandOrEffects);
+function refreshAfterEdit(state, commandOrEffects, binding = null) {
+  state.editRefreshScheduler.run(commandOrEffects, {binding});
+}
+
+function refreshAfterHeightApiEdit(state, commandOrEffects, binding = null) {
+  const effects = commandOrEffects?.effects || commandOrEffects || {};
+  state.editRefreshScheduler.run({...effects, runtimeStats: false, pickPanel: false}, {binding});
 }
 
 function refreshCityRelocationAfterEdit(state, command) {
-  state.editRefreshScheduler.run(command);
+  const binding = issueCurrentRetainedRenderBinding(state);
+  state.editRefreshScheduler.run(command, {binding});
   const affected = command?.effects?.affected || [];
   const cityIds = affected.filter(item => item?.kind === OBJECT_KIND.CITY).map(item => Number(item.id));
   const routeIds = affected.filter(item => item?.kind === OBJECT_KIND.ROUTE).map(item => Number(item.id));
-  state.renderer?.refreshRelocatedCities?.(cityIds, {routeIds});
+  state.renderer?.refreshRelocatedCities?.(cityIds, {routeIds, binding});
+}
+
+function issueCurrentRetainedRenderBinding(state, {refreshesSurface = false} = {}) {
+  if (!state?.map || !state.renderer?.issueRenderResourceBinding || !state.mapRevision?.getCoreSnapshot) return null;
+  const source = state.mapRevision.getCoreSnapshot();
+  const topologyRevision = refreshesSurface
+    ? source.topologyRevision
+    : state.renderer.surfaceResourceOwner?.topologyRevision ?? source.topologyRevision;
+  return state.renderer.issueRenderResourceBinding({...source, topologyRevision});
 }
 
 function executeDeleteWithPreflight(state, documentRef, {
@@ -8546,6 +8703,14 @@ export function executeHistoryCommand(state, documentRef, action, options = {}) 
       {message: `正在${verb}${pendingCommand.workerHistory.label}结果`}
     );
   }
+  if (pendingCommand?.domain === "regeneration") {
+    const verb = action === "undo" ? "撤销" : "重做";
+    return state.runtimeOperation.run(
+      `history.${action}`,
+      operation => executeRegenerationHistoryCommand(state, documentRef, action, operation, options),
+      {message: `正在${verb}${pendingCommand.label || "重生成结果"}`}
+    );
+  }
   const command = action === "redo"
     ? state.editHistory.redo({map: state.map})
     : state.editHistory.undo({map: state.map});
@@ -8589,6 +8754,57 @@ export function executeHistoryCommand(state, documentRef, action, options = {}) 
   };
 }
 
+async function executeRegenerationHistoryCommand(state, documentRef, action, operation, options = {}) {
+  const sourceMap = state.map;
+  const command = action === "redo"
+    ? state.editHistory.redo({map: state.map})
+    : state.editHistory.undo({map: state.map});
+  if (!command) {
+    return {executed: false, action, label: "", history: state.editHistory.getStats()};
+  }
+  const assertCurrent = createCommittedHistoryGuard({
+    state,
+    sourceMap,
+    revision: state.mapRevision.getSnapshot(),
+    operation
+  });
+  assertCurrent();
+  if (options.refresh === refreshAfterStateEdit) updateStatePickAtLastPointer(state);
+  if (options.refresh === refreshAfterProvinceEdit) updateProvincePickAtLastPointer(state);
+  state.selectionStore.batch(() => reconcilePersistentObjectHighlights(state, documentRef, {refreshUi: false}));
+  await state.editRefreshScheduler.runAsync(command, {
+    yieldToMain: () => yieldToBrowser(documentRef),
+    assertCurrent
+  });
+  assertCurrent();
+  if (options.refreshPanels !== false) refreshPanelsForEdit(state, {derived: ["object-panels"]});
+  assertCurrent();
+  options.afterRefresh?.(state, command);
+  assertCurrent();
+  if (command.effects?.derived?.includes("labels")) syncLabelStylesUi(state, documentRef);
+  (options.updateEditingInteractionLock || updateEditingInteractionLock)(state, documentRef);
+  await yieldToBrowser(documentRef);
+  assertCurrent();
+  return {
+    executed: true,
+    action,
+    label: command.label || "",
+    history: state.editHistory.getStats()
+  };
+}
+
+function settleMilitaryPanelHistoryResult(result, state, documentRef) {
+  const complete = settled => {
+    if (settled?.executed) refreshGenerationSummary(state.map);
+    updateRuntimePanel(documentRef, state);
+    return settled;
+  };
+  return settleHistoryActionResult(result, complete, error => {
+    updateRuntimePanel(documentRef, state);
+    throw error;
+  });
+}
+
 async function executeSocialExpansionWorkerHistory(state, documentRef, action, command, operation) {
   const metadata = command.workerHistory;
   const patch = command.getHistoryPatch(action);
@@ -8608,7 +8824,7 @@ async function executeSocialExpansionWorkerHistory(state, documentRef, action, c
     includeBindingInPayload: true,
     renderLayers: metadata.renderLayers,
     effects: command.effects,
-    assertOutput: ({state: currentState, sourceMap, binding, output}) => {
+    assertOutput: ({state: currentState, sourceMap, binding, renderBinding, output}) => {
       if (currentState.map !== sourceMap || currentState.editHistory.peek(action) !== command) {
         const error = new Error(`${verb}${metadata.label}结果已被新的地图状态取代`);
         error.code = "operation_obsolete";
@@ -10629,7 +10845,7 @@ function applyHeightChangesViaApi(state, documentRef, changes, options = {}) {
   const command = createApplyHeightBrushCommand(normalized, {label});
   const result = executeEditCommand(state, documentRef, command, {
     context: {map: state.map},
-    refresh: refreshAfterEdit,
+    refresh: refreshAfterHeightApiEdit,
     noopStatus: "没有需要更新的高度。",
     status: `已通过 API 更新 ${normalized.length} 个 grid cells 的高度。`,
     throwOnError: false
@@ -10640,6 +10856,7 @@ function applyHeightChangesViaApi(state, documentRef, changes, options = {}) {
     state.heightEdit.lastDelta = result.executed ? summarizeChangedHeightDelta(normalized) : "none";
   }
   updateRuntimePanel(documentRef, state);
+  updatePickPanel(documentRef, state);
   updateEditingInteractionLock(state, documentRef);
   return editApiResult(state, result);
 }
@@ -10927,7 +11144,19 @@ async function applyPopulationMutationViaWorker(state, documentRef, {request, op
     affected: systemAffected("population-adjustment", targets.map(target => ({kind: target.scope, id: target.id}))),
     derived: ["population-carrying", "population-stats", "point-layers", "labels", "object-panels", "economy-demand", "derived-stale"]
   };
-  const sourceFingerprint = fingerprintPopulationSource(state.map, request);
+  const sourceMap = state.map;
+  const sourceRevision = state.mapRevision.getCoreSnapshot();
+  const sourceFingerprint = await fingerprintPopulationSourceAsync(sourceMap, request);
+  operationContext?.throwIfCancelled?.();
+  const currentRevision = state.mapRevision.getCoreSnapshot();
+  if (state.map !== sourceMap
+    || currentRevision.mapIdentity !== sourceRevision.mapIdentity
+    || Number(currentRevision.mapRevision) !== Number(sourceRevision.mapRevision)
+    || Number(currentRevision.topologyRevision) !== Number(sourceRevision.topologyRevision)) {
+    const error = new Error(`${userLabel}来源在指纹计算期间已发生变化`);
+    error.code = "operation_obsolete";
+    throw error;
+  }
   return executeWorkerMapMutation(state, documentRef, {
     task: POPULATION_WORKER_TASK,
     targetKind: "population",
@@ -11004,7 +11233,7 @@ async function rebuildHeightDerivedViaAction(state, documentRef, scope, options 
       ...REGENERATION_TRANSACTION_EFFECTS,
       affected: kinds.map(id => ({kind: "system", id}))
     },
-    assertOutput: ({binding, output}) => validateFoundationWorkerOutput({task: HEIGHT_DERIVED_WORKER_TASK, binding, output}),
+    assertOutput: ({binding, renderBinding, output}) => validateFoundationWorkerOutput({task: HEIGHT_DERIVED_WORKER_TASK, binding, renderBinding, output}),
     createCommand: ({output, result, effects}) => createWorkerRegenerationPatchCommand(state.map, {
       patch: output.patch,
       policy: getHeightDerivedPatchPolicy(scope, result.changedKinds),
@@ -11096,7 +11325,7 @@ async function applyEconomyMutationViaWorker(state, documentRef, {request, comma
     includeBindingInPayload: true,
     renderLayers,
     effects: command.effects,
-    assertOutput: ({state: currentState, sourceMap, output}) => {
+    assertOutput: ({state: currentState, sourceMap, binding, renderBinding, output}) => {
       if (currentState.map !== sourceMap) {
         const error = new Error(`${userLabel}准备结果已被新的地图状态取代`);
         error.code = "operation_obsolete";
@@ -11110,7 +11339,7 @@ async function applyEconomyMutationViaWorker(state, documentRef, {request, comma
         error.code = "economy-worker-result-invalid";
         throw error;
       }
-      validateEconomyDiplomacyMilitaryWorkerOutput({kind: "economy", sourceMap, binding, output, policy: getEconomyWorkerPatchPolicy(sourceMap, output.patch)});
+      validateEconomyDiplomacyMilitaryWorkerOutput({kind: "economy", sourceMap, binding, renderBinding, output, policy: getEconomyWorkerPatchPolicy(sourceMap, output.patch)});
     },
     createCommand: ({output, result, effects}) => attachEconomyWorkerHistory(createDomainPatchCommand({
       patch: output.patch,
@@ -11225,7 +11454,7 @@ async function applyMilitaryPolicyMutationViaWorker(state, documentRef, {request
     includeBindingInPayload: true,
     renderLayers,
     effects: command.effects,
-    assertOutput: ({state: currentState, sourceMap, binding, output}) => {
+    assertOutput: ({state: currentState, sourceMap, binding, renderBinding, output}) => {
       if (currentState.map !== sourceMap) {
         const error = new Error(`${userLabel}准备结果已被新的地图状态取代`);
         error.code = "operation_obsolete";
@@ -11239,7 +11468,7 @@ async function applyMilitaryPolicyMutationViaWorker(state, documentRef, {request
         error.code = "military-policy-worker-result-invalid";
         throw error;
       }
-      validateEconomyDiplomacyMilitaryWorkerOutput({kind: "military-policy", sourceMap, binding, output, policy: getMilitaryPolicyWorkerPatchPolicy(sourceMap, output.patch, request.stateId), expectation: {stateId: request.stateId}});
+      validateEconomyDiplomacyMilitaryWorkerOutput({kind: "military-policy", sourceMap, binding, renderBinding, output, policy: getMilitaryPolicyWorkerPatchPolicy(sourceMap, output.patch, request.stateId), expectation: {stateId: request.stateId}});
     },
     createCommand: ({output, result, effects}) => attachMilitaryPolicyWorkerHistory(createDomainPatchCommand({
       patch: output.patch,
@@ -12449,9 +12678,9 @@ function regenerateFeatures(state, documentRef, options = {}) {
   if (activeFeatures.length && allRegenerationObjectsLocked(map, OBJECT_KIND.FEATURE, activeFeatures)) {
     return regenerationResult("features", "未执行", "当前 Feature 已全部锁定且拓扑一致，未推进扰动序号。");
   }
-  const featureLocks = constraintBundle
-    ? {snapshots: constraintBundle.lockedFeatures}
-    : captureLockedRegenerationObjects(map, OBJECT_KIND.FEATURE);
+  const lockedFeatures = constraintBundle ? constraintBundle.lockedFeatures : captureLockedRegenerationObjects(map, OBJECT_KIND.FEATURE).snapshots;
+  const lockedRivers = constraintBundle ? constraintBundle.lockedRivers : captureLockedRegenerationObjects(map, OBJECT_KIND.RIVER).snapshots;
+  const featureLocks = {snapshots: mergeLockedRiverFeatureSnapshots(map, lockedFeatures, lockedRivers)};
   const before = map.features?.metadata?.featureCount || 0;
   const previousSalt = captureRegenerationSalt(map, "features");
   let result;
@@ -12576,34 +12805,50 @@ async function regenerateMapAttributeViaWorker(state, documentRef, kind, options
       affected: []
     },
     assertOutput: ["religions", "states", "provinces"].includes(targetKind)
-      ? ({sourceMap, binding, output}) => validateSocietyPoliticsWorkerOutput({
+      ? ({sourceMap, binding, renderBinding, output}) => validateSocietyPoliticsWorkerOutput({
           kind: targetKind,
           sourceMap,
           binding,
+          renderBinding,
           output,
           policy: getRegenerationPatchPolicy(targetKind)
         })
       : ["cities", "zones"].includes(targetKind)
-        ? ({sourceMap, binding, output}) => validateSettlementZoneWorkerOutput({
+        ? ({sourceMap, binding, renderBinding, output}) => validateSettlementZoneWorkerOutput({
             kind: targetKind,
             sourceMap,
             binding,
+            renderBinding,
             output,
             policy: getRegenerationPatchPolicy(targetKind)
           })
         : ["features", "routes", "rivers", "markers"].includes(targetKind)
-          ? ({sourceMap, binding, output}) => validateFeaturesNetworksResourcesWorkerOutput({
-              kind: targetKind,
-              sourceMap,
-              binding,
-              output,
-              policy: getRegenerationPatchPolicy(targetKind)
-            })
-          : ["diplomacy", "military"].includes(targetKind)
-            ? ({sourceMap, binding, output}) => validateEconomyDiplomacyMilitaryWorkerOutput({
+          ? ({state: currentState, sourceMap, binding, renderBinding, output, operation: currentOperation}) => targetKind === "rivers"
+            ? validateFeaturesNetworksResourcesWorkerOutputAsync({
                 kind: targetKind,
                 sourceMap,
                 binding,
+                renderBinding,
+                output,
+                policy: getRegenerationPatchPolicy(targetKind)
+              }, {
+                yieldToMain: () => yieldToBrowser(documentRef),
+                assertCurrent: () => assertWorkerRegenerationOutputCurrent(currentState, binding, output, currentOperation)
+              })
+            : validateFeaturesNetworksResourcesWorkerOutput({
+                kind: targetKind,
+                sourceMap,
+                binding,
+                renderBinding,
+                output,
+                policy: getRegenerationPatchPolicy(targetKind)
+              })
+          : ["diplomacy", "military"].includes(targetKind)
+            ? ({sourceMap, binding, renderBinding, output}) => validateEconomyDiplomacyMilitaryWorkerOutput({
+                kind: targetKind,
+                sourceMap,
+                binding,
+                renderBinding,
                 output,
                 policy: getRegenerationPatchPolicy(targetKind)
               })
@@ -12633,7 +12878,10 @@ async function executeWorkerMapMutation(state, documentRef, mutation, operation 
   const taskPayload = mutation.includeBindingInPayload === true ? {...payload, binding} : payload;
   operation?.report("stream-input", {message: `正在整理${userLabel}所需资料`});
   operation?.throwIfCancelled?.();
-  const renderRequest = createWorkerRegenerationRenderRequest(state, targetKind, binding, mutation.renderLayers);
+  const renderRequest = createWorkerRegenerationRenderRequest(state, targetKind, binding, mutation.renderLayers, {
+    sourceRevisionDelta: 1,
+    topologyRevisionDelta: 1
+  });
   const renderContextToken = createWorkerRegenerationRenderContextToken(state, targetKind);
   let output;
   try {
@@ -12675,18 +12923,17 @@ async function executeWorkerMapMutation(state, documentRef, mutation, operation 
     throw error;
   }
   try {
-    operation?.throwIfCancelled?.();
-    if (!validateRegenerationWorkerBinding(state, binding)) {
-      const error = new Error("Worker 结果已因地图、revision、generation token 或锁变化而过期");
-      error.code = "operation_obsolete";
-      throw error;
+    assertWorkerRegenerationOutputCurrent(state, binding, output, operation);
+    if (output?.preparedRender !== undefined && output.preparedRender !== null) {
+      assertRenderPreparationBinding(output.preparedRender, renderRequest.binding);
     }
-    if (!sameRegenerationWorkerBinding(output?.binding, binding)) {
-      const error = new Error("Worker 结果绑定与当前请求不一致");
-      error.code = "worker_protocol_binding_mismatch";
-      throw error;
+    if (typeof mutation.assertOutput === "function") {
+      await yieldToBrowser(documentRef);
+      assertWorkerRegenerationOutputCurrent(state, binding, output, operation);
+      await mutation.assertOutput({state, sourceMap, binding, renderBinding: renderRequest.binding, output, operation});
+      await yieldToBrowser(documentRef);
+      assertWorkerRegenerationOutputCurrent(state, binding, output, operation);
     }
-    await mutation.assertOutput?.({state, sourceMap, binding, output, operation});
   } catch (error) {
     state.workerTaskCoordinator.invalidateSession("result-obsolete");
     if (state.map === sourceMap) restoreCityIconLayerStatistics(state.renderer, operationStartCityIconLayerStats);
@@ -13091,6 +13338,20 @@ async function executeWorkerMapMutation(state, documentRef, mutation, operation 
   }
 }
 
+function assertWorkerRegenerationOutputCurrent(state, binding, output, operation) {
+  operation?.throwIfCancelled?.();
+  if (!validateRegenerationWorkerBinding(state, binding)) {
+    const error = new Error("Worker 结果已因地图、revision、generation token 或锁变化而过期");
+    error.code = "operation_obsolete";
+    throw error;
+  }
+  if (!sameRegenerationWorkerBinding(output?.binding, binding)) {
+    const error = new Error("Worker 结果绑定与当前请求不一致");
+    error.code = "worker_protocol_binding_mismatch";
+    throw error;
+  }
+}
+
 async function commitRegenerationWorkerSession(state, worker, operation, {expectedRevisionDelta = 1} = {}) {
   const sessionId = worker?.session?.id;
   if (!sessionId) return worker;
@@ -13303,7 +13564,10 @@ function rebuildGenerationSummary(map) {
   );
 }
 
-function createWorkerRegenerationRenderRequest(state, targetKind, binding, layers = null) {
+function createWorkerRegenerationRenderRequest(state, targetKind, binding, layers = null, {
+  sourceRevisionDelta = 0,
+  topologyRevisionDelta = 0
+} = {}) {
   const renderer = state.renderer;
   const canvasSize = renderer?.canvasSize || {};
   const requestedLayers = Array.isArray(layers) ? [...layers] : renderPreparationLayersForRegeneration(targetKind);
@@ -13318,8 +13582,17 @@ function createWorkerRegenerationRenderRequest(state, targetKind, binding, layer
     && renderer?.canPrepareSurfaceColorPatch?.("all")
     ? "all"
     : null;
+  const replaceResources = requestedLayers.includes("surface") && !surfacePatchScope;
+  const targetBinding = createRenderRequestSourceBinding(binding, {
+    sourceRevisionDelta,
+    topologyRevisionDelta,
+    replacesSurface: replaceResources,
+    surfaceOwner: renderer?.surfaceResourceOwner || null
+  });
+  const renderBinding = renderer?.issueRenderResourceBinding?.(targetBinding, {replaceResources})
+    || createFallbackRenderResourceBinding(targetBinding, `regeneration:${targetKind}`);
   return {
-    binding: {mapIdentity: binding.mapIdentity, mapRevision: binding.mapRevision, topologyRevision: binding.topologyRevision},
+    binding: renderBinding,
     layers: requestedLayers,
     ...(pickingComponents.length ? {pickingComponents} : {}),
     ...(surfacePatchScope ? {surfacePatchScope} : {}),
@@ -13346,6 +13619,16 @@ function createWorkerRegenerationRenderRequest(state, targetKind, binding, layer
 function workerRenderObject(object) {
   if (!object?.kind || object.id === undefined || object.id === null) return null;
   return {kind: String(object.kind), id: object.id};
+}
+
+function createFallbackRenderResourceBinding(source, label) {
+  const mapIdentity = String(source?.mapIdentity || source?.runtimeMapSessionId || "local-map");
+  const sourceRevision = Number(source?.sourceRevision ?? source?.mapRevision);
+  const topologyRevision = Number(source?.topologyRevision);
+  return createRenderResourceBinding({mapIdentity, sourceRevision, topologyRevision}, {
+    renderGeneration: 0,
+    renderPreparationId: `fallback:${label}:${mapIdentity}:${sourceRevision}:${topologyRevision}`
+  });
 }
 
 function createWorkerRegenerationRenderContextToken(state, targetKind, {includeViewport = true} = {}) {
@@ -13981,12 +14264,88 @@ function normalizeWorkerRegenerationOptions(options) {
 }
 
 function createRegenerationWorkerBinding(state, operation = null) {
+  const pendingBinding = state.pendingMapAdoptionBindingOwner?.currentBinding(operation?.id ?? null);
+  if (pendingBinding) return pendingBinding;
+  return createCanonicalRegenerationWorkerBinding(state, operation);
+}
+
+function createCanonicalRegenerationWorkerBinding(state, operation = null) {
   return createFoundationWorkerBinding({
     revision: state.mapRevision.getCoreSnapshot(),
     generationToken: Number(state.pendingGenerateId) || 0,
     lockFingerprint: regenerationLockFingerprint(state.map),
     operation
   });
+}
+
+function beginPendingMapAdoptionBindingOwner(state, {kind, targetMapIdentity, operation}) {
+  if (state.pendingMapAdoptionBindingOwner) {
+    const error = new Error("已有地图接纳 binding owner 尚未结束");
+    error.code = "map_adoption_owner_busy";
+    throw error;
+  }
+  const sourceRevision = state.mapRevision.getCoreSnapshot();
+  const requestBinding = createFoundationWorkerBinding({
+    revision: sourceRevision.mapIdentity ? sourceRevision : {...sourceRevision, mapIdentity: targetMapIdentity},
+    generationToken: Number(state.pendingGenerateId) || 0,
+    lockFingerprint: regenerationLockFingerprint(state.map),
+    operation
+  });
+  state.pendingMapAdoptionBindingOwner = createMapAdoptionBindingOwner({
+    kind,
+    targetMapIdentity,
+    requestBinding,
+    operationId: requestBinding.operationId
+  });
+  state.lastMapAdoptionBindingReceipt = null;
+  return requestBinding;
+}
+
+function acceptPendingMapAdoptionWorkerResult(state, output, renderBinding) {
+  const owner = requirePendingMapAdoptionBindingOwner(state);
+  return owner.acceptWorkerResult({
+    sessionId: output?.worker?.session?.id,
+    binding: output?.binding,
+    targetMapIdentity: renderBinding?.mapIdentity
+  });
+}
+
+function beginPendingMapAdoptionLoad(state, workerAdoption, renderBinding) {
+  const owner = requirePendingMapAdoptionBindingOwner(state);
+  return owner.beginLoad({
+    sessionId: workerAdoption?.session?.id,
+    targetMapIdentity: renderBinding?.mapIdentity
+  });
+}
+
+function beginPendingMapAdoptionCommit(state, binding) {
+  return requirePendingMapAdoptionBindingOwner(state).beginCommit(binding);
+}
+
+function completePendingMapAdoptionBindingOwner(state) {
+  const owner = requirePendingMapAdoptionBindingOwner(state);
+  const receipt = owner.commit();
+  state.lastMapAdoptionBindingReceipt = receipt;
+  state.pendingMapAdoptionBindingOwner = null;
+  return receipt;
+}
+
+function invalidatePendingMapAdoptionBindingOwner(state, reason, operationId = null) {
+  const owner = state.pendingMapAdoptionBindingOwner;
+  if (!owner) return false;
+  const receipt = operationId === null ? owner.invalidate(reason) : owner.invalidateForOperation(operationId, reason);
+  if (receipt.status !== "invalidated") return false;
+  state.lastMapAdoptionBindingReceipt = receipt;
+  state.pendingMapAdoptionBindingOwner = null;
+  return true;
+}
+
+function requirePendingMapAdoptionBindingOwner(state) {
+  const owner = state.pendingMapAdoptionBindingOwner;
+  if (owner) return owner;
+  const error = new Error("地图接纳 binding owner 不存在");
+  error.code = "map_adoption_owner_missing";
+  throw error;
 }
 
 function sameRegenerationWorkerBinding(left, right) {
@@ -14039,7 +14398,8 @@ function restoreRiverRouteIdentity(map, snapshot) {
 function refreshRiverMutationRollback(state, documentRef, routeIdentity, lockStoreIdentity) {
   restoreRiverRouteIdentity(state.map, routeIdentity);
   if (lockStoreIdentity) state.map.regenerationLocks = lockStoreIdentity;
-  state.renderer?.refreshObjectPickingIndexPreservingRoutes?.();
+  const retainedBinding = issueCurrentRetainedRenderBinding(state);
+  state.renderer?.refreshObjectPickingIndexPreservingRoutes?.(retainedBinding);
   refreshRegeneratedLayers(state, documentRef, {
     derived: ["river-mesh", "river-width-stats", "cell-colors", "point-layers", "object-panels"],
     affected: systemAffected("rivers", collectionAffected(OBJECT_KIND.RIVER, state.map.rivers?.rivers)),
@@ -14100,11 +14460,12 @@ function regenerateMapAttributeCoreViaApi(state, documentRef, kind, options = {}
 function refreshMapMutationRollback(state, documentRef) {
   state.options = state.map.options;
   syncGenerationInputs(documentRef, state.options);
-  state.renderer?.refreshObjectPickingIndex?.();
+  const binding = issueCurrentRetainedRenderBinding(state, {refreshesSurface: true});
+  state.renderer?.refreshObjectPickingIndex?.(binding);
   const effects = {effects: REGENERATION_TRANSACTION_EFFECTS};
   state.selectionStore.batch(() => {
     reconcilePersistentObjectHighlights(state, documentRef, {refreshUi: false});
-    refreshAfterEdit(state, effects);
+    refreshAfterEdit(state, effects, binding);
   });
   refreshPanelsForEdit(state, effects);
   updateHeightPanel(state);
@@ -14148,7 +14509,7 @@ async function applyGridTopologyViaApi(state, documentRef, {document = null, opt
       pickPanel: true,
       derived: ["render-mesh", "terrain-caches", "political-boundaries", "line-layers", "point-layers", "labels", "object-index", "object-panels"]
     },
-    assertOutput: ({binding, output}) => assertGridTopologyWorkerOutputCurrent(state, sourceMap, binding, action, output, context),
+    assertOutput: ({binding, renderBinding, output}) => assertGridTopologyWorkerOutputCurrent(state, sourceMap, binding, renderBinding, action, output, context),
     createCommand: ({output, result: workerResult, effects}) => {
       expectedTarget = workerResult.target;
       return createMapReplacementCommand({
@@ -14197,8 +14558,8 @@ function createGridTopologyWorkerBinding(state, operation = null) {
   };
 }
 
-function assertGridTopologyWorkerOutputCurrent(state, sourceMap, binding, action, output, operation = null) {
-  validateFoundationWorkerOutput({task: GRID_TOPOLOGY_WORKER_TASK, binding, output});
+function assertGridTopologyWorkerOutputCurrent(state, sourceMap, binding, renderBinding, action, output, operation = null) {
+  validateFoundationWorkerOutput({task: GRID_TOPOLOGY_WORKER_TASK, binding, renderBinding, output});
   if (state.map !== sourceMap
     || !sameRegenerationWorkerBinding(binding, createRegenerationWorkerBinding(state, operation))
     || binding.sourceFingerprint !== cachedGridStructureFingerprint(sourceMap.grid, binding)
@@ -15066,6 +15427,7 @@ function regenerateDiplomacy(state, documentRef, options = {}) {
   const beforePairs = map.diplomacy?.metadata?.pairs || 0;
   const beforeEnemies = map.diplomacy?.metadata?.enemies || 0;
   const previousSalt = captureRegenerationSalt(map, "diplomacy");
+  const militaryStale = captureMilitaryStaleShape(map);
   let salt;
   try {
     salt = nextRegenerationSalt(map, "diplomacy");
@@ -15075,6 +15437,7 @@ function regenerateDiplomacy(state, documentRef, options = {}) {
       refresh: refreshAfterEdit,
       preparePanelRefresh: targetState => {
         markDerivedFresh(targetState.map, ["diplomacy"]);
+        restoreMilitaryStaleShape(targetState.map, militaryStale);
         refreshGenerationSummary(targetState.map);
       }
     });
@@ -15098,9 +15461,12 @@ function regenerateDiplomacy(state, documentRef, options = {}) {
   );
 }
 
-function refreshRegeneratedLayers(state, documentRef, {derived, affected, picking = "all", onPhase = null}) {
-  if (picking === "rivers") state.renderer.refreshRiverPickingIndex?.();
-  else if (picking !== "none") state.renderer.refreshObjectPickingIndex?.();
+function refreshRegeneratedLayers(state, documentRef, {derived, affected, picking = "all", onPhase = null, binding = null}) {
+  const retainedBinding = binding || issueCurrentRetainedRenderBinding(state, {
+    refreshesSurface: derived.includes("cell-colors") || derived.includes("terrain-caches")
+  });
+  if (picking === "rivers") state.renderer.refreshRiverPickingIndex?.(retainedBinding);
+  else if (picking !== "none") state.renderer.refreshObjectPickingIndex?.(retainedBinding);
   onPhase?.("after-picking");
   const highlightsChanged = reconcilePersistentObjectHighlights(state, documentRef, {refreshUi: false}).changed;
   refreshAfterEdit(state, {
@@ -15110,7 +15476,7 @@ function refreshRegeneratedLayers(state, documentRef, {derived, affected, pickin
     pickPanel: true,
     derived,
     affected
-  });
+  }, retainedBinding);
   onPhase?.("after-render");
   refreshPanelsForEdit(state, highlightsChanged ? {derived: ["object-panels"]} : {derived, affected});
   updateHeightPanel(state);
@@ -15217,6 +15583,18 @@ function markDerivedFresh(map, systems) {
   if (map?.markers?.metadata) map.markers.metadata.stale = nextSystems.includes("markers");
   if (map?.economy?.metadata) map.economy.metadata.stale = nextSystems.includes("economy");
   if (map?.diplomacy?.metadata) map.diplomacy.metadata.stale = nextSystems.includes("diplomacy");
+}
+
+function captureMilitaryStaleShape(map) {
+  const metadata = map?.military?.metadata;
+  return {exists: Boolean(metadata && Object.prototype.hasOwnProperty.call(metadata, "stale")), value: metadata?.stale};
+}
+
+function restoreMilitaryStaleShape(map, snapshot) {
+  const metadata = map?.military?.metadata;
+  if (!metadata) return;
+  if (snapshot.exists) metadata.stale = snapshot.value;
+  else delete metadata.stale;
 }
 
 function clearGeneratedCityLabelHides(map, cityIds = null) {

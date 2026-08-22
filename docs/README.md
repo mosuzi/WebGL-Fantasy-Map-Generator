@@ -19,6 +19,7 @@
   - `architecture/vue-floating-panel-pattern.md`：Vue SFC 面板复用规范。
   - `architecture/laboratory-prototypes.md`：四个独立实验室 / 原型的职责、入口、验证、部署和正式应用边界。
 - `plans/`：总体验收计划和复刻路线。
+  - `plans/task-350-engine-integration-rebaseline.md`：第 350 项在前五个入口高返工率后重新冻结的 17 类典型场景、16 项共同不变量、20 入口映射及 R0～R7 整体修补顺序。
 - `milestones/`：里程碑说明。
 - `performance/`：性能基线说明和长期性能对照。
   - `performance/canvas-performance-investigation-report.md`：权威任务第 269 项正式画布性能实际调查，记录冷 / 暖态、连续视口、idle commit、消融、状态动作、Trace、盲区和分级优化建议。

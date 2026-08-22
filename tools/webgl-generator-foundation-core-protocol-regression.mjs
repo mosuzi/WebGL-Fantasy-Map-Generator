@@ -21,6 +21,7 @@ try {
   const {createMapDocument, parseMapDocument, stringifyMapDocument} = await vite.ssrLoadModule("/src/runtime/map-file-io.js");
   const {EditHistory} = await vite.ssrLoadModule("/src/runtime/edit-history.js");
   const {MapRevisionTracker} = await vite.ssrLoadModule("/src/runtime/map-revision.js");
+  const {createRenderResourceBinding} = await vite.ssrLoadModule("/src/renderer/render-resource-binding.js");
 
   const revisionOwner = new MapRevisionTracker({identityFactory: () => "foundation-map"});
   revisionOwner.replaceMap();
@@ -36,9 +37,14 @@ try {
     lockFingerprint: "foundation-locks",
     operation: {id: 9, name: "foundation-regression"}
   });
+  const renderBinding = createRenderResourceBinding({
+    mapIdentity: binding.mapIdentity,
+    sourceRevision: binding.mapRevision + 1,
+    topologyRevision: binding.topologyRevision + 1
+  }, {renderPreparationId: "foundation:render:1", renderGeneration: 4});
   const preparedRender = Object.freeze({
     schemaVersion: 1,
-    binding: {mapIdentity: binding.mapIdentity, mapRevision: binding.mapRevision, topologyRevision: binding.topologyRevision},
+    binding: renderBinding,
     layers: {}
   });
   const generatedMap = generatePlaceholderMap({seed: "foundation-complete-map", cellsTarget: 1_000});
@@ -52,6 +58,7 @@ try {
   const height = validateFoundationWorkerOutput({
     task: "height-derived.compute",
     binding,
+    renderBinding,
     output: workerPatchOutput("height-derived", "height-derived", "grid.cells.h", binding, preparedRender)
   });
   assert.deepEqual(height.writeSet, ["grid.cells.h"]);
@@ -59,6 +66,7 @@ try {
   const climate = validateFoundationWorkerOutput({
     task: "climate-downstream.compute",
     binding,
+    renderBinding,
     output: workerPatchOutput("climate-downstream", "climate-downstream", "climate", binding, preparedRender)
   });
   assert.deepEqual(climate.writeSet, ["climate"]);
@@ -66,6 +74,7 @@ try {
   const ocean = validateFoundationWorkerOutput({
     task: "ocean-current-world.compute",
     binding,
+    renderBinding,
     output: {kind: "ocean-current-world", binding, result: {executed: true}, replacementMap, preparedRender}
   });
   assert.equal(ocean.replacement, true);
@@ -73,6 +82,7 @@ try {
   const topology = validateFoundationWorkerOutput({
     task: "grid-topology.prepare",
     binding,
+    renderBinding,
     output: {kind: "grid-topology-worker-result", binding, executed: true, result: {executed: true}, replacementMap, preparedRender}
   });
   assert.equal(topology.replacement, true);
@@ -107,12 +117,14 @@ try {
   assertProtocol(() => validateFoundationWorkerOutput({
     task: "height-derived.compute",
     binding,
+    renderBinding,
     output: workerPatchOutput("height-derived", "height-derived", "grid.cells.h", {...binding, topologyRevision: 4}, preparedRender)
   }), "foundation-worker-binding-stale");
   assertProtocol(() => validateFoundationWorkerOutput({
     task: "height-derived.compute",
     binding,
-    output: workerPatchOutput("height-derived", "height-derived", "grid.cells.h", binding, {...preparedRender, binding: {...preparedRender.binding, topologyRevision: 4}})
+    renderBinding,
+    output: workerPatchOutput("height-derived", "height-derived", "grid.cells.h", binding, {...preparedRender, binding: {...preparedRender.binding, topologyRevision: renderBinding.topologyRevision + 1}})
   }), "foundation-worker-render-binding-stale");
   assertProtocol(() => validateFoundationWorkerPatch(domainPatch("height-derived", "rogue.path"), "height-derived.compute", "height-derived"), "foundation-worker-patch-write-set-violation");
   assertProtocol(() => validateFoundationWorkerPatch({
@@ -138,6 +150,7 @@ try {
     assertProtocol(() => validateFoundationWorkerOutput({
       task,
       binding,
+      renderBinding,
       output: {kind, binding, executed: true, result: {executed: true}, replacementMap: partialReplacement, preparedRender}
     }), "foundation-worker-map-section-missing");
   }
@@ -150,6 +163,7 @@ try {
     assertProtocol(() => validateFoundationWorkerOutput({
       task,
       binding,
+      renderBinding,
       output: {kind, binding, executed: true, result: {executed: true}, replacementMap: invalidMap, preparedRender}
     }), task === "grid-topology.prepare" && invalidMap === emptiedGridReplacement
       ? "foundation-worker-map-grid-missing"
@@ -172,16 +186,17 @@ try {
   assert.match(appSource, /createFoundationWorkerBinding\(\{[\s\S]*?getCoreSnapshot\(\)/u, "正式 Worker binding factory 未读取 revision owner 的 topology revision");
   assert.match(appSource, /createCommittedFoundationWorkerBinding\(binding, state\.mapRevision\.getCoreSnapshot\(\)\)/u, "正式 commit 后未从 revision owner 创建 renderer install binding");
   assert.doesNotMatch(appSource, /committedBinding = \{\.\.\.(?:binding|output\.binding), mapRevision:/u, "正式 commit 仍在手工预测单轴 revision");
-  assert.match(appSource, /binding: \{mapIdentity: binding\.mapIdentity, mapRevision: binding\.mapRevision, topologyRevision: binding\.topologyRevision\}/u, "正式 renderer request 未携带 topology revision");
+  assert.match(appSource, /createRenderRequestSourceBinding\(binding, \{[\s\S]*?sourceRevisionDelta,[\s\S]*?topologyRevisionDelta,[\s\S]*?surfaceOwner:/u, "正式 renderer request 未从 compute binding 构造目标 source revision");
+  assert.match(appSource, /issueRenderResourceBinding\?\.\(targetBinding, \{replaceResources\}\)/u, "正式 renderer request 未签发完整 resource binding");
   assert.match(appSource, /topologyRevision \?\? 0\).*topologyRevision \?\? 0/s, "通用 Worker binding 必须比较 topology revision");
-  for (const relative of [
-    "app/webgl-generator/src/renderer/render-preparation.js",
-    "app/webgl-generator/src/renderer/render-cache-dto.js",
-    "app/webgl-generator/src/renderer/picking-dto.js",
-    "app/webgl-generator/src/renderer/surface-base-buffer-set.js"
+  for (const [relative, contract] of [
+    ["app/webgl-generator/src/renderer/render-preparation.js", /normalizeRenderResourceBinding/],
+    ["app/webgl-generator/src/renderer/render-cache-dto.js", /normalizeRenderResourceBinding/],
+    ["app/webgl-generator/src/renderer/picking-dto.js", /normalizeRenderResourceBinding/],
+    ["app/webgl-generator/src/renderer/surface-base-buffer-set.js", /normalizeRenderResourceBinding/]
   ]) {
     const source = await readFile(path.join(repoRoot, relative), "utf8");
-    assert.match(source, /topologyRevision/, `${relative} 未携带 topology revision`);
+    assert.match(source, contract, `${relative} 未通过完整 resource binding 携带 topology revision`);
   }
 
   console.log(JSON.stringify({

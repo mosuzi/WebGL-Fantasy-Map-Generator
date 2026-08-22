@@ -49,7 +49,14 @@ export async function computeMapReplicaPatchTargetChecksum(baseChecksum, writes,
 
 export async function computeAppliedMapReplicaPatchTargetChecksum(map, patch, options = {}) {
   const writes = patch.writes.map(write => {
-    const value = resolvePath(map, write.path);
+    const resolved = resolvePathState(map, write.path);
+    if (write.mode === "delete") {
+      return resolved.found
+        ? {path: write.path, mode: write.mode, present: true, value: resolved.value}
+        : {path: write.path, mode: write.mode};
+    }
+    if (!resolved.found) throw checksumError("map_replica_path_invalid", `地图副本 path 不存在：${write.path}`);
+    const value = resolved.value;
     if (write.mode === "replace") return {path: write.path, mode: write.mode, value};
     return {
       path: write.path,
@@ -162,12 +169,18 @@ async function checkpoint(state) {
 }
 
 function resolvePath(root, path) {
+  const resolved = resolvePathState(root, path);
+  if (!resolved.found) throw checksumError("map_replica_path_invalid", `地图副本 path 不存在：${path}`);
+  return resolved.value;
+}
+
+function resolvePathState(root, path) {
   let value = root;
   for (const part of String(path || "").split(".")) {
-    if (!value || typeof value !== "object" || !Object.hasOwn(value, part)) throw checksumError("map_replica_path_invalid", `地图副本 path 不存在：${path}`);
+    if (!value || typeof value !== "object" || !Object.hasOwn(value, part)) return {found: false, value: undefined};
     value = value[part];
   }
-  return value;
+  return {found: true, value};
 }
 
 function resolveOptionalPath(root, path) {

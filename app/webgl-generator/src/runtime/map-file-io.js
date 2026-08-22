@@ -67,12 +67,16 @@ const TYPED_ARRAYS = Object.freeze({
   BigUint64Array: typeof BigUint64Array === "function" ? BigUint64Array : null
 });
 
-export function createMapDocument(map, options = {}) {
+export function createMapDocument(map, options = {}, presentation = {}) {
   if (!map) throw new Error("当前没有可导出的地图");
   const documentOptions = {...(options || {})};
   const display = documentOptions.display;
   delete documentOptions.display;
-  const normalizedMap = normalizeMapSchemaV2(map, {...documentOptions, display});
+  const normalizedMap = projectDocumentPresentation(
+    normalizeMapSchemaV2(map, {...documentOptions, display}),
+    documentOptions,
+    presentation
+  );
   return {
     type: MAP_DOCUMENT_TYPE,
     version: MAP_DOCUMENT_VERSION,
@@ -90,6 +94,36 @@ export function createMapDocument(map, options = {}) {
     options: documentOptions,
     map: normalizedMap
   };
+}
+
+function projectDocumentPresentation(map, documentOptions = {}, presentation = {}) {
+  const visualTheme = typeof documentOptions.visualTheme === "string" ? documentOptions.visualTheme.trim() : "";
+  if (!visualTheme) return map;
+  const userThemes = Array.isArray(map.visualTheme?.userThemes)
+    ? map.visualTheme.userThemes.map(cloneVisualThemeDocument)
+    : [];
+  if (presentation?.visualThemeDocument) {
+    const activeDocument = normalizeVisualThemeDocument(presentation.visualThemeDocument);
+    if (activeDocument.id !== visualTheme) throw new Error("存档主题定义与当前视觉主题不一致");
+    const existing = userThemes.findIndex(document => document.id === activeDocument.id);
+    if (existing >= 0) userThemes.splice(existing, 1, activeDocument);
+    else userThemes.push(activeDocument);
+  }
+  return {
+    ...map,
+    options: {...(map.options || {}), visualTheme},
+    visualTheme: {
+      ...(map.visualTheme || {}),
+      version: 2,
+      preset: visualTheme,
+      overrides: map.visualTheme?.overrides && typeof map.visualTheme.overrides === "object" ? {...map.visualTheme.overrides} : {},
+      userThemes
+    }
+  };
+}
+
+function cloneVisualThemeDocument(document) {
+  return {...document, colors: {...(document?.colors || {})}};
 }
 
 export function stringifyMapDocument(document) {
@@ -483,14 +517,141 @@ export async function downloadHeightmapPng(documentRef, map, filename, options =
 }
 
 export async function createHeightmapPngBlob(documentRef, map, options = {}) {
-  const result = createHeightmapCanvas(documentRef, map, options);
+  if (typeof options.heightmapExportWorkerFactory === "function") {
+    try {
+      return await createHeightmapPngBlobWithWorker(documentRef, map, options);
+    } catch (error) {
+      if (error?.code !== "heightmap_export_worker_unsupported") throw error;
+    }
+  }
+  const result = await createHeightmapCanvasForBlob(documentRef, map, options);
   return {
     ...result,
     blob: await canvasToBlob(result.canvas)
   };
 }
 
+async function createHeightmapPngBlobWithWorker(documentRef, map, options) {
+  const request = createHeightmapExportWorkerRequest(map, options);
+  let worker = null;
+  try {
+    worker = options.heightmapExportWorkerFactory();
+    if (!worker || typeof worker.postMessage !== "function") throw new Error("高度图导出 Worker 启动失败");
+    return await waitForHeightmapExportWorker(documentRef, worker, request);
+  } finally {
+    worker?.terminate?.();
+  }
+}
+
+function createHeightmapExportWorkerRequest(map, options) {
+  if (!map) throw new Error("当前没有可导出的地图");
+  const graphWidth = Number(map.metadata?.graphWidth ?? map.options?.graphWidth);
+  const graphHeight = Number(map.metadata?.graphHeight ?? map.options?.graphHeight);
+  if (!(graphWidth > 0) || !(graphHeight > 0)) throw new Error("当前地图缺少有效世界尺寸");
+  const cellVertices = map.grid?.cells?.v;
+  const heights = map.grid?.cells?.h;
+  const vertices = map.grid?.vertices?.p;
+  if (!Array.isArray(cellVertices) || !heights || !Array.isArray(vertices) || cellVertices.length !== heights.length) {
+    throw new Error("当前地图缺少完整的 Grid 高度或 Voronoi 几何");
+  }
+  const pixelScale = normalizePngPixelScale(options.pixelScale);
+  return {
+    type: "heightmap-export",
+    map: {
+      metadata: {graphWidth, graphHeight},
+      grid: {cells: {h: heights, v: cellVertices}, vertices: {p: vertices}}
+    },
+    options: {pixelScale}
+  };
+}
+
+function waitForHeightmapExportWorker(documentRef, worker, request) {
+  const view = documentRef?.defaultView;
+  const scheduleTimeout = typeof view?.setTimeout === "function" ? view.setTimeout.bind(view) : globalThis.setTimeout;
+  const cancelTimeout = typeof view?.clearTimeout === "function" ? view.clearTimeout.bind(view) : globalThis.clearTimeout;
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const timeoutId = scheduleTimeout(() => finish(reject, createHeightmapWorkerError({code: "heightmap_export_worker_timeout", message: "高度图导出 Worker 超时"})), 120_000);
+    const finish = (complete, value) => {
+      if (settled) return;
+      settled = true;
+      cancelTimeout(timeoutId);
+      worker.onmessage = null;
+      worker.onerror = null;
+      complete(value);
+    };
+    worker.onmessage = event => {
+      const message = event?.data;
+      if (message?.type !== "heightmap-export-result") {
+        finish(reject, createHeightmapWorkerError({code: "heightmap_export_worker_protocol", message: "高度图导出 Worker 返回了无效消息"}));
+        return;
+      }
+      if (message.ok !== true) {
+        finish(reject, createHeightmapWorkerError(message.error));
+        return;
+      }
+      try {
+        finish(resolve, validateHeightmapWorkerResult(message.result, request));
+      } catch (error) {
+        finish(reject, error);
+      }
+    };
+    worker.onerror = event => {
+      event?.preventDefault?.();
+      finish(reject, createHeightmapWorkerError({code: "heightmap_export_worker_error", message: event?.message || "高度图导出 Worker 运行失败"}));
+    };
+    try {
+      worker.postMessage(request);
+    } catch (error) {
+      finish(reject, error);
+    }
+  });
+}
+
+function validateHeightmapWorkerResult(result, request) {
+  const expectedWidth = Math.max(1, Math.round(request.map.metadata.graphWidth * request.options.pixelScale));
+  const expectedHeight = Math.max(1, Math.round(request.map.metadata.graphHeight * request.options.pixelScale));
+  const expectedCellCount = request.map.grid.cells.v.length;
+  if (
+    !result?.blob
+    || typeof result.blob.size !== "number"
+    || typeof result.blob.type !== "string"
+    || typeof result.blob.arrayBuffer !== "function"
+    || typeof result.blob.slice !== "function"
+  ) {
+    throw createHeightmapWorkerError({code: "heightmap_export_worker_protocol", message: "高度图导出 Worker 未返回 PNG Blob"});
+  }
+  if (result.width !== expectedWidth || result.height !== expectedHeight || result.pixelScale !== request.options.pixelScale || result.cellCount !== expectedCellCount) {
+    throw createHeightmapWorkerError({code: "heightmap_export_worker_protocol", message: "高度图导出 Worker 返回的尺寸或 cell 数不一致"});
+  }
+  if (result.encoding !== "linear-height-0-100-to-gray-0-255" || !Number.isFinite(result.minHeight) || !Number.isFinite(result.maxHeight)) {
+    throw createHeightmapWorkerError({code: "heightmap_export_worker_protocol", message: "高度图导出 Worker 返回的高度元数据无效"});
+  }
+  return result;
+}
+
+function createHeightmapWorkerError(detail = {}) {
+  const error = new Error(String(detail?.message || "高度图导出 Worker 失败"));
+  error.name = String(detail?.name || "Error");
+  error.code = String(detail?.code || "heightmap_export_worker_error");
+  return error;
+}
+
 export function createHeightmapCanvas(documentRef, map, options = {}) {
+  const prepared = prepareHeightmapCanvas(documentRef, map, options);
+  drawHeightmapBuckets(prepared.context, prepared.shadeBuckets, prepared.cellVertices, prepared.vertices);
+  prepared.context.restore();
+  return prepared.result;
+}
+
+async function createHeightmapCanvasForBlob(documentRef, map, options = {}) {
+  const prepared = prepareHeightmapCanvas(documentRef, map, options, (width, height) => createHeightmapBlobCanvas(documentRef, width, height));
+  await drawHeightmapBucketsInBatches(documentRef, prepared.context, prepared.shadeBuckets, prepared.cellVertices, prepared.vertices);
+  prepared.context.restore();
+  return prepared.result;
+}
+
+function prepareHeightmapCanvas(documentRef, map, options = {}, createCanvas = null) {
   if (!map) throw new Error("当前没有可导出的地图");
   const graphWidth = Number(map.metadata?.graphWidth ?? map.options?.graphWidth);
   const graphHeight = Number(map.metadata?.graphHeight ?? map.options?.graphHeight);
@@ -507,7 +668,7 @@ export function createHeightmapCanvas(documentRef, map, options = {}) {
   const pixelScale = normalizePngPixelScale(options.pixelScale);
   const width = Math.max(1, Math.round(graphWidth * pixelScale));
   const height = Math.max(1, Math.round(graphHeight * pixelScale));
-  const canvas = documentRef.createElement("canvas");
+  const canvas = typeof createCanvas === "function" ? createCanvas(width, height) : documentRef.createElement("canvas");
   canvas.width = width;
   canvas.height = height;
   const context = canvas.getContext("2d");
@@ -531,29 +692,70 @@ export function createHeightmapCanvas(documentRef, map, options = {}) {
     shadeBuckets[heightToGrayscaleByte(heightValue)].push(cell);
   }
 
+  return {
+    context,
+    shadeBuckets,
+    cellVertices,
+    vertices,
+    result: {
+      canvas,
+      width,
+      height,
+      pixelScale,
+      cellCount: cellVertices.length,
+      minHeight,
+      maxHeight,
+      encoding: "linear-height-0-100-to-gray-0-255"
+    }
+  };
+}
+
+function drawHeightmapBuckets(context, shadeBuckets, cellVertices, vertices) {
   for (let shade = 0; shade < shadeBuckets.length; shade++) {
     const cells = shadeBuckets[shade];
     if (!cells.length) continue;
-    context.beginPath();
-    for (const cell of cells) appendHeightmapCellPath(context, cellVertices[cell], vertices, cell);
-    const color = `rgb(${shade}, ${shade}, ${shade})`;
-    context.fillStyle = color;
-    context.strokeStyle = color;
-    context.fill();
-    context.stroke();
+    drawHeightmapBucketRange(context, shade, cells, 0, cells.length, cellVertices, vertices);
   }
-  context.restore();
+}
 
-  return {
-    canvas,
-    width,
-    height,
-    pixelScale,
-    cellCount: cellVertices.length,
-    minHeight,
-    maxHeight,
-    encoding: "linear-height-0-100-to-gray-0-255"
-  };
+async function drawHeightmapBucketsInBatches(documentRef, context, shadeBuckets, cellVertices, vertices) {
+  const cellBatchSize = 256;
+  for (let shade = 0; shade < shadeBuckets.length; shade++) {
+    const cells = shadeBuckets[shade];
+    for (let start = 0; start < cells.length; start += cellBatchSize) {
+      drawHeightmapBucketRange(context, shade, cells, start, Math.min(cells.length, start + cellBatchSize), cellVertices, vertices);
+      await yieldHeightmapExport(documentRef);
+    }
+  }
+}
+
+function drawHeightmapBucketRange(context, shade, cells, start, end, cellVertices, vertices) {
+  context.beginPath();
+  for (let index = start; index < end; index++) {
+    const cell = cells[index];
+    appendHeightmapCellPath(context, cellVertices[cell], vertices, cell);
+  }
+  const color = `rgb(${shade}, ${shade}, ${shade})`;
+  context.fillStyle = color;
+  context.strokeStyle = color;
+  context.fill();
+  context.stroke();
+}
+
+function yieldHeightmapExport(documentRef) {
+  const view = documentRef?.defaultView;
+  if (typeof view?.scheduler?.yield === "function") return view.scheduler.yield();
+  if (typeof view?.setTimeout === "function") return new Promise(resolve => view.setTimeout(resolve, 0));
+  return Promise.resolve();
+}
+
+function createHeightmapBlobCanvas(documentRef, width, height) {
+  const OffscreenCanvasConstructor = documentRef?.defaultView?.OffscreenCanvas;
+  if (typeof OffscreenCanvasConstructor === "function") {
+    const canvas = new OffscreenCanvasConstructor(width, height);
+    if (typeof canvas.convertToBlob === "function") return canvas;
+  }
+  return documentRef.createElement("canvas");
 }
 
 export function heightToGrayscaleByte(height) {
@@ -2182,7 +2384,13 @@ function normalizePngPixelScale(value) {
   return Math.max(1, Math.min(4, Math.round(number)));
 }
 
-function canvasToBlob(canvas) {
+async function canvasToBlob(canvas) {
+  if (typeof canvas?.convertToBlob === "function") {
+    const blob = await canvas.convertToBlob({type: "image/png"});
+    if (!blob) throw new Error("图片导出失败");
+    return blob;
+  }
+  if (typeof canvas?.toBlob !== "function") throw new Error("当前浏览器不支持 canvas 图片导出");
   return new Promise((resolve, reject) => {
     canvas.toBlob(blob => {
       if (!blob) {

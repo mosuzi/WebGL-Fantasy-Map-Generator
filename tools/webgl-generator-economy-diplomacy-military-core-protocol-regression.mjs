@@ -20,12 +20,15 @@ try {
   const {runEconomyWorkerTask, getEconomyWorkerPatchPolicy} = await vite.ssrLoadModule("/src/runtime/economy-worker-task.js");
   const {runMilitaryPolicyWorkerTask, getMilitaryPolicyWorkerPatchPolicy} = await vite.ssrLoadModule("/src/runtime/military-policy-worker-task.js");
   const {MapRevisionTracker} = await vite.ssrLoadModule("/src/runtime/map-revision.js");
+  const {createRenderResourceBinding} = await vite.ssrLoadModule("/src/renderer/render-resource-binding.js");
 
   assert.deepEqual(economyManifest.workerTasks[0].writeSet, ECONOMY_WORKER_WRITE_SET);
   assert.deepEqual(diplomacyManifest.workerTasks[0].writeSet, DIPLOMACY_WORKER_WRITE_SET);
   assert.deepEqual(militaryManifest.workerTasks[0].writeSet, MILITARY_REGENERATION_WORKER_WRITE_SET);
   assert.deepEqual(militaryManifest.workerTasks[1].writeSet, MILITARY_POLICY_WORKER_WRITE_SET);
   const appSource = await readFile(path.join(repoRoot, "app/webgl-generator/src/runtime/app.js"), "utf8");
+  const economyWorkerEntry = appSource.slice(appSource.indexOf("async function applyEconomyMutationViaWorker"), appSource.indexOf("function attachEconomyWorkerHistory"));
+  assert.match(economyWorkerEntry, /assertOutput: \(\{state: currentState, sourceMap, binding, renderBinding, output\}\) =>/, "经济正式 pre-commit 回调必须分别接收 compute 与 render binding");
   assert.match(appSource, /\["diplomacy", "military"\]\.includes\(targetKind\)[\s\S]*?validateEconomyDiplomacyMilitaryWorkerOutput/u, "外交 / 军事重生成未接统一 pre-commit validator");
   assert.match(appSource, /kind: "economy"[\s\S]*?getEconomyWorkerPatchPolicy/u, "经济 Worker 未接统一 pre-commit validator");
   assert.match(appSource, /kind: "military-policy"[\s\S]*?getMilitaryPolicyWorkerPatchPolicy/u, "军事策略 Worker 未接统一 pre-commit validator");
@@ -33,6 +36,11 @@ try {
   const owner = new MapRevisionTracker({identityFactory: () => "world-systems-map"});
   owner.replaceMap(); owner.advance();
   const binding = createFoundationWorkerBinding({revision: owner.getCoreSnapshot(), generationToken: 12, lockFingerprint: "world-systems-locks", operation: {id: 51, name: "world-systems-regression"}});
+  const renderBinding = createRenderResourceBinding({
+    mapIdentity: binding.mapIdentity,
+    sourceRevision: binding.mapRevision + 1,
+    topologyRevision: binding.topologyRevision + 1
+  }, {renderPreparationId: "world-systems:render:1", renderGeneration: 2});
   const outputs = {};
 
   for (const kind of ["diplomacy", "military"]) {
@@ -44,33 +52,103 @@ try {
       sourceMap.pack.military = sourceMap.military;
     }
     const workerMap = structuredClone(sourceMap);
-    const output = await runRegenerationWorkerTask({map: workerMap, kind}, context(binding));
+    const render = kind === "diplomacy" ? renderRequest(renderBinding) : null;
+    const output = await runRegenerationWorkerTask({map: workerMap, kind, ...(render ? {render} : {})}, context(binding));
     const policy = getRegenerationPatchPolicy(kind);
-    const validated = validateEconomyDiplomacyMilitaryWorkerOutput({kind, sourceMap, binding, output, policy});
+    const validated = validateEconomyDiplomacyMilitaryWorkerOutput({kind, sourceMap, binding, ...(render ? {renderBinding} : {}), output, policy});
     assert.deepEqual([...validated.writeSet].sort(), [...output.patch.writeSet].sort());
+    if (kind === "diplomacy") assert.equal(Object.hasOwn(operation(output.patch, "military").value.metadata, "stale"), false, "fresh 外交结果不应把缺失 stale 规范化为 false");
     if (kind === "military") {
       const militaryResult = operation(output.patch, "military").value;
       assert.equal(militaryResult.events[0].archiveReason, "military-regeneration");
       assert.equal(militaryResult.metadata.eventSequence, 9);
     }
-    outputs[kind] = {sourceMap, output, policy};
+    outputs[kind] = {sourceMap, output, policy, ...(render ? {renderBinding} : {})};
   }
+
+  const staleMilitaryChainMap = generatePlaceholderMap({seed: "worker-regeneration-browser-chain", cellsTarget: 10000, heightmapTemplate: "continents"});
+  for (const kind of ["features", "states", "provinces", "cities", "routes", "rivers", "markers"]) {
+    await runRegenerationWorkerTask({map: staleMilitaryChainMap, kind}, context(binding));
+  }
+  const staleMilitaryStates = staleMilitaryChainMap.pack.states.filter(item => item?.i && !item.removed);
+  assert.ok(staleMilitaryStates.length >= 2, "外交 stale 军事链缺少活动国家");
+  assert.ok(staleMilitaryStates.every(state => !Array.isArray(state.military)), "外交 stale 军事链没有形成国家重生成后的缺失军团数组");
+  assert.equal(staleMilitaryChainMap.military.metadata.stale, true, "外交 stale 军事链没有保持军事待派生状态");
+  const staleMilitarySource = structuredClone(staleMilitaryChainMap);
+  const staleMilitaryOutput = await runRegenerationWorkerTask({map: staleMilitaryChainMap, kind: "diplomacy"}, context(binding));
+  const staleMilitaryPolicy = getRegenerationPatchPolicy("diplomacy");
+  validateEconomyDiplomacyMilitaryWorkerOutput({kind: "diplomacy", sourceMap: staleMilitarySource, binding, output: staleMilitaryOutput, policy: staleMilitaryPolicy});
+  assert.equal(operation(staleMilitaryOutput.patch, "military").value.metadata.stale, true, "外交重生成错误刷新了 stale 军事数据");
+
+  const staleMilitaryStateDrift = structuredClone(staleMilitaryOutput);
+  const staleStateId = staleMilitaryStates[0].i;
+  operation(staleMilitaryStateDrift.patch, "pack.states").value[staleStateId].military = [];
+  operation(staleMilitaryStateDrift.patch, "politics.states").value[staleStateId].military = [];
+  assertProtocol(() => validateEconomyDiplomacyMilitaryWorkerOutput({kind: "diplomacy", sourceMap: staleMilitarySource, binding, output: staleMilitaryStateDrift, policy: staleMilitaryPolicy}), "diplomacy-military-state-scope-invalid");
+
+  const staleMilitaryMetadataDrift = structuredClone(staleMilitaryOutput);
+  operation(staleMilitaryMetadataDrift.patch, "military").value.metadata.troops += 1;
+  operation(staleMilitaryMetadataDrift.patch, "pack.military").value.metadata.troops += 1;
+  assertProtocol(() => validateEconomyDiplomacyMilitaryWorkerOutput({kind: "diplomacy", sourceMap: staleMilitarySource, binding, output: staleMilitaryMetadataDrift, policy: staleMilitaryPolicy}), "diplomacy-military-metadata-scope-invalid");
+
+  const staleMilitaryFreshDrift = structuredClone(staleMilitaryOutput);
+  operation(staleMilitaryFreshDrift.patch, "military").value.metadata.stale = false;
+  operation(staleMilitaryFreshDrift.patch, "pack.military").value.metadata.stale = false;
+  assertProtocol(() => validateEconomyDiplomacyMilitaryWorkerOutput({kind: "diplomacy", sourceMap: staleMilitarySource, binding, output: staleMilitaryFreshDrift, policy: staleMilitaryPolicy}), "diplomacy-military-stale-scope-invalid");
+
+  const undefinedStaleDrift = structuredClone(outputs.diplomacy.output);
+  operation(undefinedStaleDrift.patch, "military").value.metadata.stale = 0;
+  operation(undefinedStaleDrift.patch, "pack.military").value.metadata.stale = 0;
+  assertProtocol(() => validate("diplomacy", undefinedStaleDrift), "diplomacy-military-stale-scope-invalid");
+
+  const falseStaleSource = structuredClone(outputs.diplomacy.sourceMap);
+  falseStaleSource.military.metadata.stale = false;
+  falseStaleSource.pack.military.metadata.stale = false;
+  const falseStaleDrift = structuredClone(outputs.diplomacy.output);
+  operation(falseStaleDrift.patch, "military").value.metadata.stale = null;
+  operation(falseStaleDrift.patch, "pack.military").value.metadata.stale = null;
+  assertProtocol(() => validateEconomyDiplomacyMilitaryWorkerOutput({kind: "diplomacy", sourceMap: falseStaleSource, binding, renderBinding, output: falseStaleDrift, policy: outputs.diplomacy.policy}), "diplomacy-military-stale-scope-invalid");
+
+  const trueStaleValidSource = structuredClone(outputs.diplomacy.sourceMap);
+  trueStaleValidSource.military.metadata.stale = true;
+  trueStaleValidSource.pack.military.metadata.stale = true;
+  const trueStaleTypeDrift = structuredClone(outputs.diplomacy.output);
+  operation(trueStaleTypeDrift.patch, "military").value.metadata.stale = 1;
+  operation(trueStaleTypeDrift.patch, "pack.military").value.metadata.stale = 1;
+  assertProtocol(() => validateEconomyDiplomacyMilitaryWorkerOutput({kind: "diplomacy", sourceMap: trueStaleValidSource, binding, renderBinding, output: trueStaleTypeDrift, policy: outputs.diplomacy.policy}), "diplomacy-military-stale-scope-invalid");
 
   const economySource = generatePlaceholderMap({seed: "world-systems-economy", cellsTarget: 10000, heightmapTemplate: "continents"});
   const economyMap = structuredClone(economySource);
   const economyOutput = await runEconomyWorkerTask({map: economyMap, request: {kind: "rebuild", confirm: true}, binding}, context(binding));
   const economyPolicy = getEconomyWorkerPatchPolicy(economySource, economyOutput.patch);
+  const economySourceBeforeValidation = structuredClone(economySource);
+  const economyValidationStartedAt = performance.now();
   validateEconomyDiplomacyMilitaryWorkerOutput({kind: "economy", sourceMap: economySource, binding, output: economyOutput, policy: economyPolicy});
+  const economyValidationMs = Math.round((performance.now() - economyValidationStartedAt) * 10) / 10;
+  assert.deepEqual(economySource, economySourceBeforeValidation, "经济 pre-commit validator 不得改写 sourceMap");
   outputs.economy = {sourceMap: economySource, output: economyOutput, policy: economyPolicy};
 
   const policySource = generatePlaceholderMap({seed: "world-systems-military-policy", cellsTarget: 10000, heightmapTemplate: "continents"});
   policySource.politics.states = structuredClone(policySource.pack.states);
   const state = policySource.pack.states.find(item => item?.i && !item.removed && item.military?.length);
   assert.ok(state, "军事策略协议缺少活动军团样本");
+  const preservedPolicyEvent = {id: "military-policy:preserved-event", kind: "battle", stateId: state.i, sequence: 7};
+  policySource.military.events = [structuredClone(preservedPolicyEvent)];
+  policySource.military.metadata.events = 1;
+  policySource.military.metadata.eventSequence = 7;
+  policySource.military.metadata.eventArchiveGeneration = 3;
+  policySource.military.metadata.stale = false;
+  policySource.pack.military = policySource.military;
   const ratios = normalizeUnitRatios(state.militaryPolicy?.unitRatios || {});
   const request = {stateId: state.i, ratios: normalizeUnitRatios({...ratios, infantry: ratios.infantry + 0.7, cavalry: ratios.cavalry * 0.35}), confirm: true};
   const policyMap = structuredClone(policySource);
   const policyOutput = await runMilitaryPolicyWorkerTask({map: policyMap, request, binding}, context(binding));
+  assert.deepEqual(policyMap.military.events, policySource.military.events, "军事策略 Worker 改写了既有战报 archive");
+  for (const field of ["events", "eventSequence", "eventArchiveGeneration"]) {
+    assert.equal(policyMap.military.metadata[field], policySource.military.metadata[field], `军事策略 Worker 改写了战报元数据 ${field}`);
+  }
+  assert.equal(Object.hasOwn(policyMap.military.metadata, "stale"), true, "军事策略 Worker 丢失了 stale 键形状");
+  assert.equal(policyMap.military.metadata.stale, policySource.military.metadata.stale, "军事策略 Worker 改写了 stale 值");
   const militaryPolicy = getMilitaryPolicyWorkerPatchPolicy(policySource, policyOutput.patch, request.stateId);
   validateEconomyDiplomacyMilitaryWorkerOutput({kind: "military-policy", sourceMap: policySource, binding, output: policyOutput, policy: militaryPolicy, expectation: {stateId: request.stateId}});
   outputs["military-policy"] = {sourceMap: policySource, output: policyOutput, policy: militaryPolicy, expectation: {stateId: request.stateId}};
@@ -78,6 +156,26 @@ try {
   const stale = structuredClone(outputs.diplomacy.output);
   stale.binding.mapRevision += 1;
   assertProtocol(() => validate("diplomacy", stale), "world-systems-worker-binding-stale");
+
+  const staleRender = structuredClone(outputs.diplomacy.output);
+  staleRender.preparedRender.binding.topologyRevision += 1;
+  assertProtocol(() => validate("diplomacy", staleRender), "world-systems-render-binding-stale");
+
+  const incompleteRender = structuredClone(outputs.diplomacy.output);
+  delete incompleteRender.preparedRender.binding.topologyRevision;
+  assertProtocol(() => validate("diplomacy", incompleteRender), "world-systems-render-binding-invalid");
+
+  const missingRenderBinding = structuredClone(outputs.diplomacy.output);
+  delete missingRenderBinding.preparedRender.binding;
+  assertProtocol(() => validate("diplomacy", missingRenderBinding), "world-systems-render-binding-invalid");
+
+  const nullRenderRevision = structuredClone(outputs.diplomacy.output);
+  nullRenderRevision.preparedRender.binding.topologyRevision = null;
+  assertProtocol(() => validate("diplomacy", nullRenderRevision), "world-systems-render-binding-invalid");
+
+  const stringRenderRevision = structuredClone(outputs.diplomacy.output);
+  stringRenderRevision.preparedRender.binding.mapRevision = String(binding.mapRevision);
+  assertProtocol(() => validate("diplomacy", stringRenderRevision), "world-systems-render-binding-invalid");
 
   const partial = structuredClone(outputs.military.output);
   partial.patch.writeSet.pop(); partial.patch.operations.pop();
@@ -199,6 +297,17 @@ try {
   diplomacyPackStates.value = structuredClone(diplomacyPackStates.value);
   diplomacyPackStates.value[1].name = "mirror-drift";
   assertProtocol(() => validate("diplomacy", diplomacyMirror), "diplomacy-state-mirror-invalid");
+
+  const diplomacyCompactZones = structuredClone(outputs.diplomacy.output);
+  const diplomacyCompactStore = operation(diplomacyCompactZones.patch, "zones").value;
+  const diplomacyCompactRows = diplomacyCompactStore.zones;
+  const diplomacyCompactPackRows = operation(diplomacyCompactZones.patch, "pack.zones").value;
+  assert.ok(diplomacyCompactRows.length > 1, "外交地区紧凑身份正例缺少多个地区");
+  diplomacyCompactRows.shift();
+  if (diplomacyCompactPackRows !== diplomacyCompactRows) diplomacyCompactPackRows.shift();
+  assert.notEqual(Number(diplomacyCompactRows[0]?.i ?? diplomacyCompactRows[0]?.id), 0, "外交地区紧凑身份正例首 id 没有形成非零值");
+  updateZoneMetadata(diplomacyCompactStore.metadata, diplomacyCompactRows, outputs.diplomacy.sourceMap.pack.cells);
+  validate("diplomacy", diplomacyCompactZones);
 
   const diplomacyRelation = structuredClone(outputs.diplomacy.output);
   const relationStates = operation(diplomacyRelation.patch, "pack.states").value;
@@ -389,16 +498,34 @@ try {
   unrelatedPackMilitary.fronts[unrelatedFrontIndex].label = "request-scope-drift";
   assertProtocol(() => validateEconomyDiplomacyMilitaryWorkerOutput({kind: "military-policy", sourceMap: unrelatedSource, binding, output: unrelatedFrontOutput, policy: unrelatedPolicy, expectation: {stateId: unrelatedRequest.stateId}}), "military-policy-front-scope-invalid");
 
-  console.log(JSON.stringify({ok: true, manifests: ["economy", "diplomacy", "military"], workers: ["economy.compute", "regeneration.compute:diplomacy", "regeneration.compute:military", "military-policy.compute"], writes: {economyRoots: ECONOMY_WORKER_WRITE_SET.length, diplomacy: DIPLOMACY_WORKER_WRITE_SET.length, military: MILITARY_REGENERATION_WORKER_WRITE_SET.length, militaryPolicyRoots: MILITARY_POLICY_WORKER_WRITE_SET.length}, rejected: ["stale-binding", "partial-write-set", "required-delete", "generation-log-shape", "generation-log-prefix", "generation-counter", "path-escape", "data-view", "economy-mirror", "economy-item-replacement", "economy-item-reference-replacement", "economy-unknown-field", "economy-deal-field", "economy-metadata-field", "economy-collection-replacement", "economy-burg-object-replacement", "diplomacy-mirror", "diplomacy-relation", "diplomacy-warzone-cell", "diplomacy-warzone-state", "diplomacy-warzone-third-state-cell", "diplomacy-zone-metadata", "military-mirror", "military-reference", "military-event-archive", "military-event-content", "military-event-generation", "military-event-item-generation", "military-event-sequence", "military-policy-mirror", "military-policy-cross-state", "military-policy-result-state", "military-policy-event-scope", "military-policy-root-scope", "military-policy-metadata-summary", "military-policy-campaign-reference", "military-policy-front-reference", "military-policy-unrelated-front"], browserRuns: 0}, null, 2));
+  console.log(JSON.stringify({ok: true, manifests: ["economy", "diplomacy", "military"], workers: ["economy.compute", "regeneration.compute:diplomacy", "regeneration.compute:military", "military-policy.compute"], writes: {economyRoots: ECONOMY_WORKER_WRITE_SET.length, diplomacy: DIPLOMACY_WORKER_WRITE_SET.length, military: MILITARY_REGENERATION_WORKER_WRITE_SET.length, militaryPolicyRoots: MILITARY_POLICY_WORKER_WRITE_SET.length}, performance: {economyOperations: economyOutput.patch.operations.length, economyValidationMs}, rejected: ["stale-binding", "stale-render-binding", "incomplete-render-binding", "missing-render-binding", "partial-write-set", "required-delete", "generation-log-shape", "generation-log-prefix", "generation-counter", "path-escape", "data-view", "economy-mirror", "economy-item-replacement", "economy-item-reference-replacement", "economy-unknown-field", "economy-deal-field", "economy-metadata-field", "economy-collection-replacement", "economy-burg-object-replacement", "diplomacy-mirror", "diplomacy-relation", "diplomacy-stale-military-state-scope", "diplomacy-stale-military-metadata-scope", "diplomacy-stale-military-freshness-scope", "diplomacy-warzone-cell", "diplomacy-warzone-state", "diplomacy-warzone-third-state-cell", "diplomacy-zone-metadata", "military-mirror", "military-reference", "military-event-archive", "military-event-content", "military-event-generation", "military-event-item-generation", "military-event-sequence", "military-policy-mirror", "military-policy-cross-state", "military-policy-result-state", "military-policy-event-scope", "military-policy-root-scope", "military-policy-metadata-summary", "military-policy-campaign-reference", "military-policy-front-reference", "military-policy-unrelated-front"], browserRuns: 0}, null, 2));
 
   function validate(kind, output) {
-    return validateEconomyDiplomacyMilitaryWorkerOutput({kind, sourceMap: outputs[kind].sourceMap, binding, output, policy: outputs[kind].policy, expectation: outputs[kind].expectation});
+    return validateEconomyDiplomacyMilitaryWorkerOutput({kind, sourceMap: outputs[kind].sourceMap, binding, renderBinding: outputs[kind].renderBinding, output, policy: outputs[kind].policy, expectation: outputs[kind].expectation});
   }
 } finally {
   await vite.close();
 }
 
 function context(binding) { return {binding, checkpoint() {}, report() {}}; }
+function renderRequest(binding) {
+  return {
+    binding,
+    layers: ["picking"],
+    pickingComponents: ["military"],
+    camera: {scale: 1, offsetX: 0, offsetY: 0},
+    canvas: {width: 800, height: 600, clientWidth: 800, clientHeight: 600},
+    selection: null,
+    objectHighlights: [],
+    visualTheme: {},
+    unitPreferences: {},
+    politicalMeshDebugMode: "none",
+    visibility: {},
+    colorMode: "height",
+    viewOptions: {},
+    labelOptions: {}
+  };
+}
 function operation(patch, pathValue) {
   const row = patch.operations.find(item => item.path.join(".") === pathValue);
   assert.ok(row, `缺少 patch operation ${pathValue}`);

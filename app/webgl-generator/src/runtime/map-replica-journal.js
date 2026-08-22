@@ -128,6 +128,12 @@ function normalizeWrite(write, index, paths) {
   paths.add(path);
   const mode = String(write.mode || "replace");
   if (mode === "replace") return Object.freeze({path, mode, value: write.value});
+  if (mode === "delete") {
+    if (Object.hasOwn(write, "value") || Object.hasOwn(write, "ranges")) {
+      throw replicaError("map_replica_delete_payload_invalid", `地图副本 delete 不得携带 payload：${path}`);
+    }
+    return Object.freeze({path, mode});
+  }
   if (mode === "ranges") {
     if (!Array.isArray(write.ranges) || !write.ranges.length) throw replicaError("map_replica_ranges_invalid", `地图副本 ranges 为空：${path}`);
     const ranges = write.ranges.map(range => {
@@ -144,6 +150,10 @@ function normalizeWrite(write, index, paths) {
 }
 
 function applyWrite(map, write) {
+  if (write.mode === "delete") {
+    deleteWritePath(map, write.path);
+    return;
+  }
   const {parent, key} = resolveParent(map, write.path);
   if (write.mode === "replace") {
     parent[key] = write.value;
@@ -157,6 +167,10 @@ function applyWrite(map, write) {
 }
 
 function validateWriteTarget(map, write) {
+  if (write.mode === "delete") {
+    validateDeleteWritePath(map, write.path);
+    return;
+  }
   const {parent, key} = resolveParent(map, write.path);
   if (write.mode === "replace") return;
   const target = parent[key];
@@ -166,6 +180,29 @@ function validateWriteTarget(map, write) {
   for (const range of write.ranges) {
     if (range.start + range.values.length > target.length) throw replicaError("map_replica_range_bounds", `地图副本 range 越界：${write.path}`);
   }
+}
+
+function validateDeleteWritePath(root, path) {
+  const parts = path.split(".");
+  parts.pop();
+  let parent = root;
+  for (const part of parts) {
+    if (!Object.hasOwn(parent, part)) return;
+    parent = parent[part];
+    if (!parent || typeof parent !== "object") throw replicaError("map_replica_path_invalid", `地图副本 path 不存在：${path}`);
+  }
+}
+
+function deleteWritePath(root, path) {
+  const parts = path.split(".");
+  const key = parts.pop();
+  let parent = root;
+  for (const part of parts) {
+    if (!Object.hasOwn(parent, part)) return;
+    parent = parent[part];
+    if (!parent || typeof parent !== "object") throw replicaError("map_replica_path_invalid", `地图副本 path 不存在：${path}`);
+  }
+  delete parent[key];
 }
 
 function resolveParent(root, path) {

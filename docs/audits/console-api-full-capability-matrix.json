@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sourceDigest": "0bad52212b5afe3dca0cbeba4f883b279b6444bd69c36503175a618445e39c39",
+  "sourceDigest": "5d99eb6ecd2377a006c841e1dff51ff0719ece662b90c348fc85f653d3570699",
   "sourceRoots": [
     "app/webgl-generator/index.html",
     "app/webgl-generator/src/**/*.{js,vue}",
@@ -14,7 +14,7 @@
     "runtimeActions": 269,
     "apiActionBindings": 267,
     "commandAndInspectorExports": 216,
-    "publicApiMethods": 328
+    "publicApiMethods": 329
   },
   "statusPolicy": {
     "covered": "公共 API 已存在且与底层 action / command 或只读 helper 共路径",
@@ -23,8 +23,8 @@
     "gap": "适合参数化且没有公共 API，必须在第 200 项关闭"
   },
   "totals": {
-    "rows": 1228,
-    "covered": 1154,
+    "rows": 1229,
+    "covered": 1155,
     "excluded": 74,
     "deferred-owned": 0,
     "gap": 0,
@@ -17564,6 +17564,37 @@
       "commandOrInspector": "",
       "apiMethods": [
         "debug.renderer"
+      ],
+      "inputSpace": "info.describe(method)",
+      "mutates": "map-or-persistent-data",
+      "preflight": "由 info.describe(method) 与领域 inspector 发现",
+      "businessCodes": [],
+      "confirm": "由 methodMetadata.requiresConfirm 发现",
+      "undoOrRollback": "由 methodMetadata.undoable 与结果 metadata 发现",
+      "async": false,
+      "compatibility": "受 API 主版本和方法稳定性契约保护",
+      "evidence": [
+        "tools/webgl-generator-api-capabilities-regression.mjs",
+        "tools/webgl-generator-api-stability-contract-regression.mjs"
+      ],
+      "status": "covered",
+      "owner": "",
+      "exclusionReason": ""
+    },
+    {
+      "matrixId": "api:debug.simulateContextLoss",
+      "capabilityId": "debug.simulateContextLoss",
+      "title": "公共 API debug.simulateContextLoss",
+      "sourceKind": "public-api",
+      "sourceFiles": [
+        "app/webgl-generator/src/runtime/api-contract.js",
+        "app/webgl-generator/src/runtime/console-api.js"
+      ],
+      "uiEntry": "",
+      "action": "debug.simulateContextLoss",
+      "commandOrInspector": "",
+      "apiMethods": [
+        "debug.simulateContextLoss"
       ],
       "inputSpace": "info.describe(method)",
       "mutates": "map-or-persistent-data",
@@ -40114,6 +40145,7 @@
         "debug.health",
         "debug.profileNextRender",
         "debug.renderer",
+        "debug.simulateContextLoss",
         "debug.snapshot",
         "info.healthEvents",
         "info.runtimeStats"

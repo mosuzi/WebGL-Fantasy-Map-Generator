@@ -79,10 +79,27 @@ function normalizeChanges(changes) {
 
 function applyHeights(map, changes, key) {
   if (!map?.grid?.cells?.h) return;
+  const cachedPackCellsByGrid = map.__heightEditorPackCellsByGrid;
+  if (!(cachedPackCellsByGrid instanceof Map) && !Object.hasOwn(map, "__heightEditorPackCellsByGrid")) {
+    const valuesByGridCell = new Map();
+    for (const change of changes) {
+      const value = clampHeight(change[key]);
+      map.grid.cells.h[change.gridCell] = value;
+      valuesByGridCell.set(change.gridCell, value);
+    }
+    const packGridCells = map.pack?.cells?.g;
+    const packHeights = map.pack?.cells?.h;
+    for (let packCell = 0; packCell < (packGridCells?.length || 0); packCell++) {
+      const value = valuesByGridCell.get(packGridCells[packCell]);
+      if (value !== undefined && packHeights) packHeights[packCell] = value;
+    }
+    return;
+  }
+  const packCellsByGrid = cachedPackCellsByGrid instanceof Map ? cachedPackCellsByGrid : ensurePackCellsByGrid(map);
   for (const change of changes) {
     const value = clampHeight(change[key]);
     map.grid.cells.h[change.gridCell] = value;
-    for (const packCell of getPackCellsForGrid(map, change.gridCell)) {
+    for (const packCell of packCellsByGrid?.get(change.gridCell) || []) {
       map.pack.cells.h[packCell] = value;
     }
   }
@@ -100,10 +117,6 @@ function markHeightDependentDerivedStale(map) {
   if (map.markers?.metadata) map.markers.metadata.stale = true;
   if (map.economy?.metadata) map.economy.metadata.stale = true;
   if (map.diplomacy?.metadata) map.diplomacy.metadata.stale = true;
-}
-
-function getPackCellsForGrid(map, gridCell) {
-  return ensurePackCellsByGrid(map)?.get(gridCell) || [];
 }
 
 function clampHeight(value) {

@@ -53,6 +53,7 @@ import {
 const binding = {
   mapIdentity: "composite-fixture",
   mapRevision: 7,
+  topologyRevision: 2,
   generationToken: 3,
   lockFingerprint: "fixture-locks",
   operationId: 11,
@@ -89,7 +90,7 @@ console.log("[composite-worker] 正在验证整图生成与渲染准备同源输
 const generationPayload = {
   options: {seed: "generation-worker-result", cellsTarget: 512, heightmapTemplate: "continents"},
   render: {
-    binding: {mapIdentity: "generated:fixture", mapRevision: 0},
+    binding: {mapIdentity: "generated:fixture", mapRevision: 0, topologyRevision: 0},
     layers: [...RENDER_PREPARATION_LAYERS],
     camera: {scale: 1, offsetX: 0, offsetY: 0},
     canvas: {width: 1024, height: 768, clientWidth: 1024, clientHeight: 768},
@@ -682,13 +683,50 @@ async function verifyHeightRiverLocks(sourceMap) {
   assert(rivers.length > 0, "高度锁夹具缺少河流");
   lockObjects(map, OBJECT_KIND.RIVER, rivers);
   const before = new Map(rivers.map(item => [objectId(item), structuredClone(item)]));
+  const beforeLakeEdges = captureLockedRiverLakeEdges(map, new Set(before.keys()));
+  assert(beforeLakeEdges.length > 0, "高度锁夹具缺少河流 lake in/out 镜像");
   const salt = Number(map.metadata?.regeneration?.rivers || 0);
   const output = await getWorkerTaskHandler(HEIGHT_DERIVED_WORKER_TASK)({map, scope: "base"}, context([]));
   const after = activeObjects(map.rivers?.rivers).filter(item => before.has(objectId(item)));
   assert.equal(after.length, before.size);
   for (const item of after) assert.deepEqual(item, before.get(objectId(item)), `锁定河流 #${objectId(item)} 被高度重建改写`);
+  assert.deepEqual(captureLockedRiverLakeEdges(map, new Set(before.keys())), beforeLakeEdges, "高度 Feature 前序移除了锁定河流 lake in/out 镜像");
   assert.equal(Number(map.metadata?.regeneration?.rivers || 0), salt, "全河锁时高度重建推进了 rivers salt");
-  return {locked: before.size, preserved: after.length, salt, executed: output.result.executed};
+
+  const unsafeMap = structuredClone(sourceMap);
+  const unsafeRivers = activeObjects(unsafeMap.rivers?.rivers);
+  lockObjects(unsafeMap, OBJECT_KIND.RIVER, unsafeRivers);
+  const unsafeRiverIds = new Set(unsafeRivers.map(objectId));
+  const unsafeLakeId = captureLockedRiverLakeEdges(unsafeMap, unsafeRiverIds)[0]?.id;
+  assert(Number.isSafeInteger(unsafeLakeId), "高度锁负例缺少关联湖泊");
+  const unsafePackCells = [];
+  for (let cell = 0; cell < (unsafeMap.pack?.cells?.f?.length || 0); cell++) {
+    if (Number(unsafeMap.pack.cells.f[cell]) === unsafeLakeId) unsafePackCells.push(cell);
+  }
+  assert(unsafePackCells.length > 0, "高度锁负例的关联湖泊缺少 pack cells");
+  const unsafeGridCells = new Set(unsafePackCells.map(cell => Number(unsafeMap.pack.cells.g[cell])));
+  for (const cell of unsafePackCells) unsafeMap.pack.cells.h[cell] = 20;
+  for (const cell of unsafeGridCells) unsafeMap.grid.cells.h[cell] = 20;
+  const unsafeError = await getWorkerTaskHandler(HEIGHT_DERIVED_WORKER_TASK)({map: unsafeMap, scope: "base"}, context([])).then(() => null, error => error);
+  assert.equal(unsafeError?.code, "regeneration_lock_conflict", "关联湖泊拓扑不安全时没有在提交前结构化拒绝");
+  assert.equal(unsafeError?.details?.kind, "feature", `关联湖泊拓扑拒绝领域不精确：${JSON.stringify(unsafeError?.details || {})}`);
+  assert.equal(unsafeError?.details?.reason, "locked-feature-topology-changed", `关联湖泊拓扑拒绝原因不精确：${JSON.stringify(unsafeError?.details || {})}`);
+  return {locked: before.size, preserved: after.length, lakeEdges: beforeLakeEdges.length, unsafeCode: unsafeError.code, unsafeReason: unsafeError.details.reason, salt, executed: output.result.executed};
+}
+
+function captureLockedRiverLakeEdges(map, lockedRiverIds) {
+  return (map?.pack?.features || []).filter(feature => feature?.type === "lake").flatMap(feature => {
+    const river = Number(feature.river);
+    const outlet = Number(feature.outlet);
+    const inlets = [...new Set((feature.inlets || []).map(Number).filter(id => lockedRiverIds.has(id)))].sort((a, b) => a - b);
+    if (!lockedRiverIds.has(river) && !lockedRiverIds.has(outlet) && !inlets.length) return [];
+    return [{
+      id: Number(feature.i ?? feature.id),
+      river: lockedRiverIds.has(river) ? river : 0,
+      outlet: lockedRiverIds.has(outlet) ? outlet : 0,
+      inlets
+    }];
+  }).sort((a, b) => a.id - b.id);
 }
 
 async function verifyClimateZoneLocks(sourceMap) {
@@ -794,7 +832,7 @@ async function verifyObsoleteFallback(sourceMap) {
 
 function createRenderRequest() {
   return {
-    binding: {mapIdentity: binding.mapIdentity, mapRevision: binding.mapRevision},
+    binding: {mapIdentity: binding.mapIdentity, mapRevision: binding.mapRevision, topologyRevision: binding.topologyRevision},
     layers: ["point"],
     camera: {scale: 1, offsetX: 0, offsetY: 0},
     canvas: {width: 1200, height: 720, clientWidth: 1200, clientHeight: 720},
@@ -811,7 +849,8 @@ function assertPreparedOutput(output, label) {
   assert(output.preparedRender, `${label} 缺少 preparedRender`);
   assert.deepEqual(output.preparedRender.binding, {
     mapIdentity: binding.mapIdentity,
-    mapRevision: binding.mapRevision
+    mapRevision: binding.mapRevision,
+    topologyRevision: binding.topologyRevision
   }, `${label} preparedRender 绑定不精确`);
   assert(output.preparedRender.layers.point?.vertices instanceof Float32Array, `${label} 缺少 point 渲染准备结果`);
 }

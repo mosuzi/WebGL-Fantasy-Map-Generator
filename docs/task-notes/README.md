@@ -8,7 +8,8 @@
 
 > 分支执行约束：本专题已于 2026-08-19 获用户明确批准为第 349 项，只在 `codex/map-core-engine-architecture-plan` 并行分支逐阶段实施；不得将本分支合入 `main`。全阶段不执行浏览器验收，最终只形成并评估浏览器验收方案。
 
-- 第 350 项获准执行第 349 项未运行的 CDP 浏览器方案；五阶段顺序、20 个固定入口、artifact、性能阻断与防空转规则见 [`task-350-map-core-engine-cdp-acceptance.md`](./task-350-map-core-engine-cdp-acceptance.md)。分支仍不得合入 `main`。
+- 第 350 项在前五个固定入口高返工率后已获准重新基线；17 类典型场景、16 项共同不变量、20 入口重新覆盖及 R0～R7 整体修补顺序见 [`../plans/task-350-engine-integration-rebaseline.md`](../plans/task-350-engine-integration-rebaseline.md)。原 CDP 执行记录、artifact 与失败证据继续保存在 [`task-350-map-core-engine-cdp-acceptance.md`](./task-350-map-core-engine-cdp-acceptance.md)，不得用旧通过结果免除重新复查。分支仍不得合入 `main`。
+- R0～R7 各阶段的精简冻结点、门禁和评审交接统一写入 [`task-350-engine-integration-rebaseline-handoffs.md`](./task-350-engine-integration-rebaseline-handoffs.md)，不把长日志或完整矩阵重复搬入权威计划。
 - 第 349 项统一阶段、checkpoint、只读评审与动态插入记录见 [`task-349-map-core-engine-execution.md`](./task-349-map-core-engine-execution.md)。
 - 第 349-1 阶段的现有 canonical owner、五类事务、`13` 个 Worker task、snapshot / buffer ownership、身份命名空间和强制插入 `349-3a` 的 ADR 见 [`task-349-core-architecture-inventory.md`](./task-349-core-architecture-inventory.md)。
 - 第 349-2 阶段的受限 `tsconfig.core.json`、TypeScript 版本、`typecheck:core` 与同版本 production build 摘要见 [`task-349-typescript-toolchain.md`](./task-349-typescript-toolchain.md)。

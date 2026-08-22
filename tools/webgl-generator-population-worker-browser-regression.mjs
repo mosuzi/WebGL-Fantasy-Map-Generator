@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import assert from "node:assert/strict";
 import {spawn} from "node:child_process";
+import {mkdirSync, writeFileSync} from "node:fs";
 import {createRequire} from "node:module";
 import {dirname, join, resolve} from "node:path";
 import {fileURLToPath} from "node:url";
@@ -12,20 +13,39 @@ const port = 5564;
 const server = spawn(process.execPath, [join(root, "tools", "serve-prototype.mjs"), "--host", "127.0.0.1", "--port", String(port), "--dir", join(root, "dist", "webgl-generator")], {stdio: "ignore"});
 const playwright = createRequire(join(source, "package.json"))("playwright");
 let browser;
+const artifact = {
+  ok: false,
+  progress: {phase: "start", active: null, completed: []},
+  evaluation: null,
+  result: null,
+  failure: null
+};
 
 try {
   await waitServer();
+  artifact.progress.completed.push("server-ready");
+  artifact.progress.phase = "browser-launch";
   browser = await playwright.chromium.launch({headless: true, channel: "chrome"});
+  artifact.progress.completed.push("browser-launched");
+  artifact.progress.phase = "page-ready";
   const page = await browser.newPage({viewport: {width: 1280, height: 820}});
   const consoleErrors = [], pageErrors = [];
   page.on("console", message => message.type() === "error" && consoleErrors.push(message.text()));
   page.on("pageerror", error => pageErrors.push(error.message));
   await page.goto(`http://127.0.0.1:${port}?healthClear=1`, {waitUntil: "domcontentloaded"});
   await waitForApiReady(page, 180_000);
-  const report = await page.evaluate(async forbiddenSource => {
+  artifact.progress.completed.push("page-ready");
+  artifact.progress.phase = "browser-evaluation";
+  const evaluation = await page.evaluate(async forbiddenSource => {
     const api = window.webglGeneratorApi, app = window.__webglGeneratorApp, coordinator = app.workerTaskCoordinator;
-    const unwrap = (value, label) => { if (!value?.ok) throw new Error(`${label}: ${value?.error?.code || "api_error"} ${value?.error?.message || ""}`); return value.data; };
-    unwrap(await api.generate.newMap({confirm: true, seed: "population-worker-browser", cellsTarget: 10_000, heightmapTemplate: "continents"}), "newMap");
+    const trace = {runs: [], commits: [], messages: [], longTasks: [], spans: []};
+    const progress = {phase: "new-map", active: "newMap", completed: []};
+    const unwrap = (value, label) => { if (!value?.ok) throw new Error(`${label}: ${value?.error?.code || "api_error"} ${value?.error?.message || ""}${value?.error?.details ? ` ${JSON.stringify(value.error.details)}` : ""}`); return value.data; };
+    try {
+      unwrap(await api.generate.newMap({confirm: true, seed: "population-worker-browser", cellsTarget: 10_000, heightmapTemplate: "continents"}), "newMap");
+      progress.completed.push("newMap");
+      progress.phase = "fixture-selection";
+      progress.active = "inspect-targets";
     const stateIds = app.map.pack.states.filter(item => item?.i && !item.removed).map(item => Number(item.i));
     let sourceId = 0, targetId = 0;
     for (const source of stateIds) {
@@ -40,7 +60,9 @@ try {
     }
     if (!sourceId || !targetId) throw new Error("10k 人口夹具缺少可调整与转移的国家对");
 
-    const trace = {runs: [], commits: [], messages: [], longTasks: [], spans: []};
+    progress.completed.push("inspect-targets");
+    progress.phase = "operations";
+    progress.active = null;
     const originalRun = coordinator.run, originalCommit = coordinator.commitSession;
     const refs = {map: app.map, packPop: app.map.pack.cells.pop, gridPop: app.map.grid.cells.pop, cities: app.map.settlements.cities, burgs: app.map.pack.burgs};
     const digest = name => {
@@ -61,8 +83,13 @@ try {
     };
     const runApi = async (name, task) => {
       const start = performance.now();
+      progress.active = name;
       try { return unwrap(await task(), name); }
-      finally { trace.spans.push({name: `api:${name}`, start, end: performance.now()}); }
+      finally {
+        trace.spans.push({name: `api:${name}`, start, end: performance.now()});
+        progress.completed.push(name);
+        progress.active = null;
+      }
     };
     const before = digest("digest:before"), historyBefore = app.editHistory.getStats();
     app.workerTaskCoordinator = {
@@ -99,19 +126,63 @@ try {
       await new Promise(done => requestAnimationFrame(() => requestAnimationFrame(done))); await new Promise(done => setTimeout(done, 100));
       trace.longTasks.push(...observer.takeRecords().map(({startTime, duration}) => ({startTime, duration}))); sample();
       const health = unwrap(api.info.healthEvents({severity: "error", limit: 100}), "health"), stats = unwrap(api.info.runtimeStats(), "stats");
-      return {
+      progress.phase = "complete";
+      return {ok: true, progress, report: {
         sourceId, targetId, adjustment: adjustment.executed, transfer: transfer.executed,
         historyDelta: historyAfter.undo - historyBefore.undo,
         exact: {undoTransfer: undoTransfer === afterAdjustment, undoAdjustment: undoAdjustment === before, redoAdjustment: redoAdjustment === afterAdjustment, redoTransfer: redoTransfer === afterTransfer},
         refs: app.map === refs.map && app.map.pack.cells.pop === refs.packPop && app.map.grid.cells.pop === refs.gridPop && app.map.settlements.cities === refs.cities && app.map.pack.burgs === refs.burgs,
         trace, finalSession: coordinator.getSessionSnapshot(), loading: stats.loading, glError: app.renderer.getStats().draw?.glError ?? 0, health,
         forbidden: [...new Set(trace.messages)].filter(text => forbidden.test(text))
-      };
+      }};
     } finally { observer.disconnect(); mutations.disconnect(); app.workerTaskCoordinator = coordinator; }
+    } catch (error) {
+      return {
+        ok: false,
+        progress,
+        trace,
+        failure: {
+          name: error?.name || "Error",
+          code: error?.code || "",
+          message: error?.message || String(error),
+          stack: error?.stack || ""
+        }
+      };
+    }
   }, String.raw`\bWorker\b|\bworker\b|线程|任务会话|消息包|结构化克隆|\bbuffer\b|LocalStorage|sessionStorage|IndexedDB|\bBlob\b|缓存后端`);
+  artifact.evaluation = evaluation;
+  artifact.progress.completed.push("browser-evaluation");
+  if (!evaluation?.ok) {
+    const error = new Error(evaluation?.failure?.message || "population browser evaluation failed");
+    error.code = evaluation?.failure?.code || "population_browser_evaluation_failed";
+    throw error;
+  }
+  const report = evaluation.report;
 
   const performanceSignals = consoleErrors.filter(text => /\[FMG health\] (operation-stall|main-thread-long-task|render-frame-gap|input-handler-stall)/.test(text));
   const applicationErrors = consoleErrors.filter(text => !performanceSignals.includes(text));
+  const classifiedLongTasks = report.trace.longTasks.map(task => ({
+    ...task,
+    phases: report.trace.spans
+      .filter(span => span.start < task.startTime + task.duration && span.end > task.startTime)
+      .map(span => span.name)
+  }));
+  const overBudgetLongTasks = classifiedLongTasks.filter(task => task.duration > 200);
+  const compactSummary = {
+    operations: report.trace.runs.length,
+    commits: report.trace.commits.length,
+    sessionId: report.finalSession?.id || "",
+    maxLongTaskMs: Math.max(0, ...classifiedLongTasks.map(task => task.duration)),
+    overBudgetLongTasks,
+    classifiedLongTasks,
+    applicationErrors: applicationErrors.length,
+    pageErrors: pageErrors.length,
+    healthErrors: report.health?.events?.length || 0,
+    glError: report.glError,
+    loadingVisible: report.loading?.visible === true
+  };
+  artifact.result = {classifiedLongTasks, overBudgetLongTasks, performanceSignals, applicationErrors, pageErrors, compactSummary};
+  artifact.progress.phase = "assertions";
   assert.equal(report.adjustment && report.transfer && report.refs && Object.values(report.exact).every(Boolean), true);
   assert.equal(report.historyDelta, 2); assert.equal(report.trace.runs.length, 6); assert.equal(report.trace.commits.length, 6);
   for (const run of report.trace.runs) {
@@ -120,12 +191,45 @@ try {
     assert.ok(run.telemetry?.inputPackets > 0 && run.telemetry?.outputPackets > 0);
   }
   assert.ok(report.trace.runs.slice(1).every(run => run.session?.reused)); assert.deepEqual(report.trace.commits.map(item => item.delta), [1, 1, 1, 1, 1, 1]); assert.ok(report.trace.commits.every(item => item.result));
-  assert.equal(report.finalSession?.status, "idle"); assert.deepEqual(report.trace.longTasks, []); assert.equal(report.loading.visible, false); assert.equal(report.glError, 0);
+  assert.equal(report.finalSession?.status, "idle"); assert.deepEqual(overBudgetLongTasks, []); assert.equal(report.loading.visible, false); assert.equal(report.glError, 0);
   assert.deepEqual(report.health?.events, []); assert.deepEqual(report.forbidden, []); assert.deepEqual(applicationErrors, []); assert.deepEqual(pageErrors, []);
-  console.log(JSON.stringify({ok: true, sourceId: report.sourceId, targetId: report.targetId, operations: report.trace.runs.length, sessionId: report.finalSession.id, longTasks: report.trace.longTasks, spans: report.trace.spans, performanceSignals}, null, 2));
+  artifact.ok = true;
+  artifact.progress.completed.push("assertions");
+  artifact.progress.phase = "complete";
+  console.log(JSON.stringify({ok: true, sourceId: report.sourceId, targetId: report.targetId, ...compactSummary, spans: report.trace.spans, performanceSignals}, null, 2));
+} catch (error) {
+  artifact.failure = serializeError(error);
+  artifact.progress.phase = "failed";
+  throw error;
 } finally {
-  await browser?.close(); server.kill();
-  await Promise.race([new Promise(done => server.once("exit", done)), new Promise(done => setTimeout(done, 5000))]);
+  try {
+    persistArtifact(artifact);
+  } finally {
+    await browser?.close(); server.kill();
+    await Promise.race([new Promise(done => server.once("exit", done)), new Promise(done => setTimeout(done, 5000))]);
+  }
+}
+
+function persistArtifact(value) {
+  const artifactDir = process.env.TASK_350_CDP_ARTIFACT_DIR;
+  if (!artifactDir) return;
+  mkdirSync(artifactDir, {recursive: true});
+  writeFileSync(join(artifactDir, "population-worker-browser-full.json"), JSON.stringify(value, null, 2));
+  writeFileSync(join(artifactDir, "population-worker-browser-summary.json"), JSON.stringify({
+    ok: value.ok,
+    progress: value.progress,
+    failure: value.failure,
+    ...(value.result?.compactSummary || {})
+  }, null, 2));
+}
+
+function serializeError(error) {
+  return {
+    name: error?.name || "Error",
+    code: error?.code || "",
+    message: error?.message || String(error),
+    stack: error?.stack || ""
+  };
 }
 
 async function waitServer() {

@@ -1,6 +1,7 @@
 import {adaptLegacyInteractiveRevision} from "../../core/adapters/identity-adapters.js";
 import type {ComputeOperationBinding} from "../../core/contracts/operation.js";
 import {validateOperationBinding} from "../../core/contracts/runtime-validators.js";
+import {validatePreparedWorkerRenderBinding} from "../worker-render-binding.js";
 import {SOCIETY_POLITICS_WRITE_SETS, societyPoliticsManifest} from "./manifest.js";
 
 type UnknownRecord = Record<string, unknown>;
@@ -21,6 +22,7 @@ const workerTask = societyPoliticsManifest.workerTasks[0];
 export function validateSocietyPoliticsWorkerOutput(input: {
   readonly kind: SocietyPoliticsWorkerKind;
   readonly binding: unknown;
+  readonly renderBinding?: unknown;
   readonly output: unknown;
   readonly policy: unknown;
   readonly sourceMap: unknown;
@@ -34,7 +36,13 @@ export function validateSocietyPoliticsWorkerOutput(input: {
   const output = record(input.output, "society-politics.output");
   if (output.kind !== input.kind) throw protocolError("society-politics-worker-kind-mismatch", "社会行政 Worker 结果类型与请求不一致");
   assertSameBinding(output.binding, sourceBinding, "society-politics.output.binding");
-  validatePreparedRender(output.preparedRender, sourceBinding);
+  validatePreparedWorkerRenderBinding(output.preparedRender, input.renderBinding, {
+    path: "society-politics.output.preparedRender",
+    schemaCode: "society-politics-render-schema-invalid",
+    invalidCode: "society-politics-render-binding-invalid",
+    staleCode: "society-politics-render-binding-stale",
+    label: "社会行政"
+  });
   const result = record(output.result, "society-politics.output.result");
   if (typeof result.executed !== "boolean") throw protocolError("society-politics-worker-result-invalid", "社会行政 Worker 缺少 executed 结果");
   const writeSet = validatePatch(output.patch, input.kind, expectedPaths, input.policy, result.executed);
@@ -285,16 +293,6 @@ function assertNoOrphanClaims(claims: Map<number, UnknownRecord[]>, rows: Map<nu
     if (!rows.has(id) || values.length !== 1 || Number(rows.get(id)?.[field] || 0) <= 0) {
       throw protocolError(code, `行政对象 #${id} 存在孤立或重复首府反向引用`);
     }
-  }
-}
-
-function validatePreparedRender(value: unknown, expected: LegacyBinding): void {
-  if (value === undefined || value === null) return;
-  const prepared = record(value, "society-politics.output.preparedRender");
-  if (prepared.schemaVersion !== 1) throw protocolError("society-politics-render-schema-invalid", "社会行政 renderer source schema 无效");
-  const binding = record(prepared.binding, "society-politics.output.preparedRender.binding");
-  for (const key of ["mapIdentity", "mapRevision", "topologyRevision"] as const) {
-    if ((binding[key] ?? "") !== expected[key]) throw protocolError("society-politics-render-binding-stale", `社会行政 renderer source ${key} 与请求不一致`);
   }
 }
 

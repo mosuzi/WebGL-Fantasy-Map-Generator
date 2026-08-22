@@ -2,11 +2,13 @@ import assert from "node:assert/strict";
 import {readFileSync} from "node:fs";
 import {runInNewContext} from "node:vm";
 import {generatePlaceholderMap} from "../app/webgl-generator/src/generator/index.js";
+import {fingerprintPopulationSource} from "../app/webgl-generator/src/runtime/population-worker-task.js";
 import {runGenerationWorkerTask} from "../app/webgl-generator/src/runtime/generation-worker-task.js";
 import {createHeadlessWriteSession} from "../app/webgl-generator/src/runtime/headless-write-api.js";
 import {materializeMapAdoptionHandoff} from "../app/webgl-generator/src/runtime/map-adoption-handoff.js";
 import {stringifyMapDocument} from "../app/webgl-generator/src/runtime/map-file-io.js";
 import {runMapFileIoWorkerTask} from "../app/webgl-generator/src/runtime/map-file-io-worker-task.js";
+import {normalizeMapForRuntimeAdoption} from "../app/webgl-generator/src/runtime/map-runtime-adoption.js";
 import {
   WHOLE_MAP_PROFILE_OWNERS,
   validateHeadlessWriteCommit,
@@ -34,12 +36,15 @@ const duplicateResult = WHOLE_MAP_PROFILE_OWNERS.map((item, index) => index === 
   : item);
 assertProtocol(() => validateWholeMapProfileOwnerRegistry(duplicateResult), "whole-map-profile-result-owner-duplicate");
 
+let retainedGenerationMap = null;
 const generation = await runGenerationWorkerTask({
   options: {seed: "whole-map-generation", cellsTarget: 1000, heightmapTemplate: "continents"}
-}, {binding, checkpoint() {}, adoptMap() {}});
+}, {binding, checkpoint() {}, adoptMap(map) { retainedGenerationMap = map; }});
 validateWholeMapAdoptionEnvelope({profile: "generation-adoption", binding, output: generation});
 const generatedDocument = await materializeMapAdoptionHandoff(generation.handoff);
 const generationReceipt = validateWholeMapAdoptionDocument({profile: "generation-adoption", metadata: generation.metadata, document: generatedDocument});
+normalizeMapForRuntimeAdoption(generatedDocument.map);
+assertCanonicalAdoptionPopulationSource(retainedGenerationMap, generatedDocument.map, "generation");
 assert.equal(generationReceipt.effect, "new-session");
 assert.equal(generationReceipt.binding.documentId, generatedDocument.metadata.documentId);
 
@@ -51,10 +56,13 @@ assert.equal(exportReceipt.effect, "read-only");
 assert.equal(exportReceipt.bytes, new TextEncoder().encode(exported.data).byteLength);
 assert.equal(stringifyMapDocument({map: sourceMap}), sourceBeforeExport, "整图导出改写了 canonical map");
 
-const imported = await runMapFileIoWorkerTask({operation: "import", input: exported.data}, {binding, checkpoint() {}, adoptMap() {}});
+let retainedImportMap = null;
+const imported = await runMapFileIoWorkerTask({operation: "import", input: exported.data}, {binding, checkpoint() {}, adoptMap(map) { retainedImportMap = map; }});
 validateWholeMapAdoptionEnvelope({profile: "persistence-import", binding, output: imported});
 const importedDocument = await materializeMapAdoptionHandoff(imported.handoff);
 const importReceipt = validateWholeMapAdoptionDocument({profile: "persistence-import", metadata: imported.metadata, document: importedDocument});
+normalizeMapForRuntimeAdoption(importedDocument.map);
+assertCanonicalAdoptionPopulationSource(retainedImportMap, importedDocument.map, "import");
 assert.equal(importReceipt.checksum, exportReceipt.checksum);
 assert.equal(importReceipt.binding.documentId, exportReceipt.binding.documentId);
 
@@ -69,6 +77,39 @@ validateWholeMapAdoptionEnvelope({profile: "persistence-import", binding, output
 const legacyDocument = await materializeMapAdoptionHandoff(legacyImported.handoff);
 validateWholeMapAdoptionDocument({profile: "persistence-import", metadata: legacyImported.metadata, document: legacyDocument});
 assert.match(legacyDocument.metadata.documentId, /^fmg-doc-v1-/u);
+
+function assertCanonicalAdoptionPopulationSource(workerMap, mainMap, label) {
+  assert.ok(workerMap && mainMap, `${label} adoption 缺少 Worker / 主线程地图`);
+  assert.notStrictEqual(workerMap, mainMap, `${label} adoption 未建立隔离地图`);
+  const stateId = mainMap.pack.states.find(item => item?.i && !item.removed)?.i;
+  assert.ok(Number.isInteger(stateId) && stateId > 0, `${label} adoption 人口来源夹具缺少国家`);
+  const request = {kind: "adjustment", target: {scope: "state", id: stateId}, delta: 1};
+  assert.equal(
+    fingerprintPopulationSource(workerMap, request),
+    fingerprintPopulationSource(mainMap, request),
+    `${label} adoption commit 前 Worker / 主线程人口来源不一致`
+  );
+  assert.deepEqual(
+    adoptionAliasProfile(workerMap),
+    adoptionAliasProfile(mainMap),
+    `${label} adoption commit 前 Worker / 主线程镜像拓扑不一致`
+  );
+  assert.equal(
+    stringifyMapDocument({map: workerMap}),
+    stringifyMapDocument({map: mainMap}),
+    `${label} adoption commit 前 Worker / 主线程 canonical 值不一致`
+  );
+}
+
+function adoptionAliasProfile(map) {
+  return {
+    states: map?.pack?.states === map?.politics?.states,
+    provinces: map?.pack?.provinces === map?.politics?.provinces,
+    cultures: map?.pack?.cultures === map?.society?.cultures,
+    religions: map?.pack?.religions === map?.society?.religions,
+    markets: map?.pack?.markets === map?.economy?.markets
+  };
+}
 
 const staleBinding = structuredClone(await generationEnvelopeFixture());
 staleBinding.binding.mapRevision += 1;
@@ -180,7 +221,8 @@ const cleanupCalls = [];
 const cleanupOutput = {worker: {session: {id: "pending-whole-map", pending: true}}};
 runInNewContext(`${cleanupSource}\ninvalidatePendingWholeMapWorkerSession(state, output, "fixture-invalid");`, {
   state: {workerTaskCoordinator: {invalidateSession: reason => cleanupCalls.push(reason)}},
-  output: cleanupOutput
+  output: cleanupOutput,
+  invalidatePendingMapAdoptionBindingOwner: () => false
 });
 assert.deepEqual(cleanupCalls, ["fixture-invalid"]);
 assert.equal(JSON.stringify(cleanupOutput.worker.session), JSON.stringify({id: "pending-whole-map", pending: false, committed: false, invalidated: true}));

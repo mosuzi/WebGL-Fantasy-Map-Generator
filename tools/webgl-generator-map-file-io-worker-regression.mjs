@@ -4,6 +4,7 @@ import {readFile} from "node:fs/promises";
 import {Worker} from "node:worker_threads";
 import {generatePlaceholderMap} from "../app/webgl-generator/src/generator/index.js";
 import {PlaceholderMapRenderer} from "../app/webgl-generator/src/renderer/placeholder-renderer.js";
+import {createRenderResourceBinding} from "../app/webgl-generator/src/renderer/render-resource-binding.js";
 
 import {
   MAP_FILE_IO_WORKER_OPERATIONS,
@@ -66,6 +67,8 @@ assert.equal(directImport.document.version, 2);
 assert.equal(workerImport.result.document.version, 2);
 assert.ok(directImport.map.grid.cells.h instanceof Uint8Array, "fallback plain JSON 没有恢复 typed array");
 assert.ok(workerImport.result.map.grid.cells.h instanceof Uint8Array, "Worker plain JSON 没有恢复 typed array");
+assert.equal(directImport.map.pack.cells.s.length, directImport.map.pack.cells.i.length, "极简旧档没有补齐 pack suitability");
+assert.equal(directImport.map.pack.cells.pop.length, directImport.map.pack.cells.i.length, "极简旧档没有补齐 pack population");
 assert.deepEqual([...workerImport.result.map.grid.cells.h], [...directImport.map.grid.cells.h]);
 assert.equal(directImport.map, directImport.document.map, "fallback import DTO 没有保留 document/map 别名");
 assert.equal(workerImport.result.map, workerImport.result.document.map, "Worker import DTO 没有保留 document/map 别名");
@@ -74,18 +77,22 @@ assert.deepEqual(workerImport.progress.map(item => item.stage), directProgress.m
 
 const renderMap = generatePlaceholderMap({seed: "task322-map-file-render", cellsTarget: 1000, graphWidth: 800, graphHeight: 600});
 const renderDocument = await runMapFileIoWorkerTask({operation: "export", map: renderMap, encoding: "plain", resultType: "text"});
+const renderBinding = createRenderResourceBinding(
+  {mapIdentity: "import-fixture", mapRevision: 0, topologyRevision: 0},
+  {renderPreparationId: "map-file-import:fixture:1", renderGeneration: 1}
+);
 const renderedImport = await runTaskInWorker({
   operation: MAP_FILE_IO_WORKER_OPERATIONS.IMPORT,
   input: renderDocument.data,
   render: {
-    binding: {mapIdentity: "import-fixture", mapRevision: 0},
+    binding: renderBinding,
     layers: ["point"],
     unitPreferences: {distanceUnit: "mi"},
     visualTheme: {id: "default"}
   }
 });
 assert.deepEqual(renderedImport.progress.map(item => item.stage), ["read", "parse", "render", "render-prepare", "complete"]);
-assert.deepEqual(renderedImport.result.preparedRender.binding, {mapIdentity: "import-fixture", mapRevision: 0, topologyRevision: 0});
+assert.deepEqual(renderedImport.result.preparedRender.binding, renderBinding);
 assert.deepEqual(Object.keys(renderedImport.result.preparedRender.layers), ["point"]);
 assert.ok(renderedImport.result.preparedRender.layers.point.vertices instanceof Float32Array);
 

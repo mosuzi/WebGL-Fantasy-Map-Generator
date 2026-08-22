@@ -43,11 +43,12 @@ export function normalizeRegenerationLockStore(source, map = null, {strict = fal
   const normalized = [];
   const rejected = [];
   const seen = new Set();
+  const existenceIndex = map ? new Map() : null;
 
   for (let index = 0; index < entries.length; index++) {
     try {
       const entry = normalizeRegenerationLockReference(entries[index]);
-      if (map && !regenerationLockObjectExists(map, entry)) throw lockError("object_not_found", `找不到可锁定对象：${entry.kind} #${entry.id}`, {entry, index});
+      if (map && !regenerationLockObjectExists(map, entry, existenceIndex)) throw lockError("object_not_found", `找不到可锁定对象：${entry.kind} #${entry.id}`, {entry, index});
       const key = regenerationLockKey(entry);
       if (seen.has(key)) continue;
       seen.add(key);
@@ -149,8 +150,9 @@ function isCanonicalRegenerationLockStore(source, normalized) {
   });
 }
 
-export function regenerationLockObjectExists(map, reference) {
+export function regenerationLockObjectExists(map, reference, existenceIndex = null) {
   const {kind, id} = normalizeRegenerationLockReference(reference);
+  if (existenceIndex) return regenerationLockExistenceSet(map, kind, existenceIndex).has(existenceKey(kind, id));
   if (kind === OBJECT_KIND.STATE) return activeIndexed(map?.politics?.states, id);
   if (kind === OBJECT_KIND.PROVINCE) return activeIndexed(map?.politics?.provinces, id);
   if (kind === OBJECT_KIND.CITY) return findById(map?.settlements?.cities, id);
@@ -174,6 +176,103 @@ export function regenerationLockObjectExists(map, reference) {
     return Boolean(state && !state.removed && (state.military || []).some(item => Number(item?.i) === regimentId || String(item?.id) === String(id)));
   }
   return false;
+}
+
+function regenerationLockExistenceSet(map, kind, existenceIndex) {
+  const cached = existenceIndex.get(kind);
+  if (cached) return cached;
+  let values;
+  if (kind === OBJECT_KIND.STATE) values = activeIndexedIds(map?.politics?.states);
+  else if (kind === OBJECT_KIND.PROVINCE) values = activeIndexedIds(map?.politics?.provinces);
+  else if (kind === OBJECT_KIND.CITY) values = objectIds(map?.settlements?.cities);
+  else if (kind === OBJECT_KIND.ROUTE) values = objectIds(map?.settlements?.routes);
+  else if (kind === OBJECT_KIND.RIVER) values = objectIds(map?.rivers?.rivers);
+  else if (kind === OBJECT_KIND.MARKER) values = objectIds(map?.markers?.markers);
+  else if (kind === OBJECT_KIND.CULTURE) values = activeIndexedIds(map?.society?.cultures);
+  else if (kind === OBJECT_KIND.RELIGION) values = activeIndexedIds(map?.society?.religions);
+  else if (kind === OBJECT_KIND.ZONE) values = objectIds(map?.zones?.zones || map?.pack?.zones);
+  else if (kind === OBJECT_KIND.FEATURE) values = activeIndexedIds(map?.pack?.features);
+  else if (kind === OBJECT_KIND.OCEAN_CURRENT) values = stringIds(map?.oceanCurrents?.currents);
+  else if (kind === OBJECT_KIND.ECONOMY_MARKET) values = activeIndexedIds(map?.pack?.markets || map?.economy?.markets);
+  else if (kind === OBJECT_KIND.TRADE_FLOW) values = objectIds(map?.pack?.deals);
+  else if (kind === OBJECT_KIND.DIPLOMACY_RELATION) values = diplomacyPairIds(map, existenceIndex);
+  else if (kind === OBJECT_KIND.MILITARY) values = militaryIds(map);
+  else values = new Set();
+  existenceIndex.set(kind, values);
+  return values;
+}
+
+function activeIndexedIds(items) {
+  const ids = new Set();
+  const occupiedSlots = new Set();
+  for (let index = 0; index < (items?.length || 0); index++) {
+    const item = items[index];
+    if (!item) continue;
+    occupiedSlots.add(index);
+    if (!item.removed) ids.add(index);
+  }
+  const matchedIds = new Set();
+  for (const item of items || []) {
+    if (!item) continue;
+    const id = Number(item.id ?? item.i);
+    if (!Number.isInteger(id) || occupiedSlots.has(id) || matchedIds.has(id)) continue;
+    matchedIds.add(id);
+    if (!item.removed) ids.add(id);
+  }
+  return ids;
+}
+
+function objectIds(items) {
+  const ids = new Set();
+  for (const item of items || []) {
+    if (!item || item.removed) continue;
+    const id = Number(item.id ?? item.i);
+    if (Number.isInteger(id)) ids.add(id);
+  }
+  return ids;
+}
+
+function stringIds(items) {
+  const ids = new Set();
+  for (const item of items || []) {
+    if (!item) continue;
+    const id = String(item.id ?? "").trim();
+    if (id) ids.add(id);
+  }
+  return ids;
+}
+
+function diplomacyPairIds(map, existenceIndex) {
+  const stateIds = regenerationLockExistenceSet(map, OBJECT_KIND.STATE, existenceIndex);
+  const ids = [...stateIds].filter(id => Number.isInteger(id) && id > 0).sort((left, right) => left - right);
+  const pairs = new Set();
+  for (let left = 0; left < ids.length; left++) {
+    for (let right = left + 1; right < ids.length; right++) pairs.add(`${ids[left]}:${ids[right]}`);
+  }
+  return pairs;
+}
+
+function militaryIds(map) {
+  const ids = new Set();
+  const politicsStates = map?.politics?.states;
+  const packStates = map?.pack?.states;
+  const length = Math.max(politicsStates?.length || 0, packStates?.length || 0);
+  for (let stateId = 0; stateId < length; stateId++) {
+    const state = politicsStates?.[stateId] || packStates?.[stateId];
+    if (!state || state.removed) continue;
+    for (const regiment of state.military || []) {
+      const regimentId = Number(regiment?.i);
+      if (Number.isInteger(regimentId) && regimentId >= 0) ids.add(`${stateId}:${regimentId}`);
+      const storedId = String(regiment?.id ?? "");
+      if (storedId.startsWith(`${stateId}:`)) ids.add(storedId);
+    }
+  }
+  return ids;
+}
+
+function existenceKey(kind, id) {
+  if (kind === OBJECT_KIND.DIPLOMACY_RELATION || kind === OBJECT_KIND.MILITARY || kind === OBJECT_KIND.OCEAN_CURRENT) return String(id);
+  return Number(id);
 }
 
 export function regenerationLockKey(reference) {

@@ -18,7 +18,7 @@ import {createRegenerateMilitaryCommand} from "./military-edit-commands.js";
 import {compareMilitaryVariation, snapshotMilitaryVariation} from "./military-regeneration-variation.js";
 import {LABEL_TARGET_KIND, OBJECT_KIND} from "./object-kinds.js";
 import {captureRegenerationConstraintBundle} from "./regeneration-constraint-bundle.js";
-import {allRegenerationObjectsLocked, assertLockedRegenerationSnapshots, captureLockedRegenerationObjects, regenerationLockConflict} from "./regeneration-lock-protection.js";
+import {allRegenerationObjectsLocked, assertLockedRegenerationSnapshots, captureLockedRegenerationObjects, mergeLockedRiverFeatureSnapshots, regenerationLockConflict} from "./regeneration-lock-protection.js";
 import {reconcileSettlementCellIdentity} from "./settlement-cell-index.js";
 import {reconcileSettlementPortTopology} from "./settlement-port-topology.js";
 import {regenerateProvincesForStates, withScopedProvinceRegenerationOptions} from "./state-topology-commands.js";
@@ -282,7 +282,9 @@ function regenerateFeatures(map, options = {}) {
     return regenerationResult("features", "未执行", "当前 Feature 已全部锁定且拓扑一致，未推进扰动序号。");
   }
   const constraintBundle = options.constraintBundle;
-  const locks = constraintBundle ? {snapshots: constraintBundle.lockedFeatures} : captureLockedRegenerationObjects(map, OBJECT_KIND.FEATURE);
+  const featureLocks = constraintBundle ? constraintBundle.lockedFeatures : captureLockedRegenerationObjects(map, OBJECT_KIND.FEATURE).snapshots;
+  const riverLocks = constraintBundle ? constraintBundle.lockedRivers : captureLockedRegenerationObjects(map, OBJECT_KIND.RIVER).snapshots;
+  const locks = {snapshots: mergeLockedRiverFeatureSnapshots(map, featureLocks, riverLocks)};
   const before = map.features?.metadata?.featureCount || 0;
   nextRegenerationSalt(map, "features");
   const result = rebuildFeatureTopology(map, {lockedFeatures: locks.snapshots, resetUnlockedIdentity: true});
@@ -582,7 +584,9 @@ function regenerateDiplomacy(map, options = {}) {
   command.apply({map});
   if (options.constraintBundle) options.constraintBundle.assertDomain(map, "diplomacy", "diplomacy-build");
   else assertLockedRegenerationSnapshots(map, lockCapture);
+  const militaryStale = captureMilitaryStaleShape(map);
   markDerivedFresh(map, ["diplomacy"]);
+  restoreMilitaryStaleShape(map, militaryStale);
   refreshGenerationSummary(map);
   appendGenerationLog(map, `regenerate diplomacy: salt=${salt}, pairs=${map.diplomacy.metadata.pairs}, enemies=${map.diplomacy.metadata.enemies}`);
   return regenerationResult("diplomacy", `外交已按当前国家邻接、文化、宗教、国力、资源竞争和海洋势力重算（扰动 #${salt}）：关系 ${beforePairs} -> ${map.diplomacy.metadata.pairs}；战争 ${beforeEnemies} -> ${map.diplomacy.metadata.enemies}`, "外交重算不会改写国家边界、城镇、经济或军队；战争状态只保留为外交记录和静态军事摘要上下文。");
@@ -845,6 +849,18 @@ function markDerivedFresh(map, systems) {
   if (map?.markers?.metadata) map.markers.metadata.stale = nextSystems.includes("markers");
   if (map?.economy?.metadata) map.economy.metadata.stale = nextSystems.includes("economy");
   if (map?.diplomacy?.metadata) map.diplomacy.metadata.stale = nextSystems.includes("diplomacy");
+}
+
+function captureMilitaryStaleShape(map) {
+  const metadata = map?.military?.metadata;
+  return {exists: Boolean(metadata && Object.prototype.hasOwnProperty.call(metadata, "stale")), value: metadata?.stale};
+}
+
+function restoreMilitaryStaleShape(map, snapshot) {
+  const metadata = map?.military?.metadata;
+  if (!metadata) return;
+  if (snapshot.exists) metadata.stale = snapshot.value;
+  else delete metadata.stale;
 }
 
 function appendGenerationLog(map, message) {

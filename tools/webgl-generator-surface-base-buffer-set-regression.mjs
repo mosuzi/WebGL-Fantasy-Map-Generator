@@ -18,6 +18,7 @@ import {
 import {buildGridCellSurfacePatchFromBase, pushGridCells} from "../app/webgl-generator/src/renderer/cell-surface-layer.js";
 import {buildCellVisualMesh, countCellVisualTriangulationLeaks} from "../app/webgl-generator/src/renderer/cell-visual-layer.js";
 import {stabilizeResolvedGridVertexPoints} from "../app/webgl-generator/src/renderer/grid-vertex-geometry.js";
+import {createRenderResourceBinding} from "../app/webgl-generator/src/renderer/render-resource-binding.js";
 
 class FakeGl {
   constructor() {
@@ -79,12 +80,20 @@ const ranges = new Map([
   [19, {start: 0, end: SURFACE_BASE_MAX_SEGMENT_FLOATS}],
   [27, {start: SURFACE_BASE_MAX_SEGMENT_FLOATS, end: source.length}]
 ]);
-const ownerA = createSurfaceResourceOwner({mapIdentity: "same-size-a", mapRevision: 7}, {
+const ownerBindingA = createRenderResourceBinding({mapIdentity: "same-size-a", sourceRevision: 7, topologyRevision: 7}, {
+  renderPreparationId: "surface-base:same-size-a:7",
+  renderGeneration: 7
+});
+const ownerBindingB = createRenderResourceBinding({mapIdentity: "same-size-b", sourceRevision: 7, topologyRevision: 7}, {
+  renderPreparationId: "surface-base:same-size-b:7",
+  renderGeneration: 7
+});
+const ownerA = createSurfaceResourceOwner(ownerBindingA, {
   surfaceFloatLength: source.length,
   correctionWordLength: 0,
   surfaceCellRanges: ranges
 });
-const ownerB = createSurfaceResourceOwner({mapIdentity: "same-size-b", mapRevision: 7}, {
+const ownerB = createSurfaceResourceOwner(ownerBindingB, {
   surfaceFloatLength: source.length,
   correctionWordLength: 0,
   surfaceCellRanges: new Map(ranges)
@@ -111,6 +120,7 @@ assert.equal(isSurfaceBaseBufferSetForVertices(bufferSet, source), true);
 assert.equal(isSurfaceBaseBufferSetForVertices(bufferSet, source, ownerA), true);
 assert.equal(isSurfaceBaseBufferSetForVertices(bufferSet, source, ownerB), false, "同长度不同地图 owner 不得复用 surface buffer");
 assert.equal(isSurfaceBaseBufferSetForVertices(bufferSet, new Float32Array(18)), false);
+
 
 const reconstructedPositions = [];
 const reconstructedIdentities = [];
@@ -222,6 +232,33 @@ assert.equal(invalidVisualMesh.triangulationCanonicalOrderFallbackCells, 1, "平
 assert.equal(countCellVisualTriangulationLeaks(invalidVisualMesh.cells[0].points), 0, "canonical 环序恢复不得产生越界三角");
 const collapsedMap = {metadata: {graphWidth: 4, graphHeight: 4}, grid: {points: [[2, 0]], cells: {i: [0], c: [[]], p: [0], v: [[0, 1, 2]], h: [30]}, vertices: {p: [[0, 0], [2, 0], [4, 0]], c: [[], [], []]}}, features: {features: [{land: true}]}, layers: {ocean: [0, 0, 1, 1]}};
 assert.throws(() => pushGridCells([], {map: collapsedMap}, "height", {}), error => error?.code === "grid-cell-surface-unfilled", "无法恢复的 cell 必须 fail-closed，不能提交零长度 range");
+
+const boundaryTwoNeighborCollapsedMap = {
+  metadata: {graphWidth: 1440, graphHeight: 960},
+  grid: {
+    points: [[1015.4687658258441, 959.999], [1015.62, 959.98], [1015.2376958420851, 959.999]],
+    cells: {i: [0], c: [[1, 2], [0], [0]], p: [0], v: [[0, 1, 2]], h: [1, 1, 1]},
+    vertices: {p: [[1015, 962], [1015, 958], [1015, 962]], c: [[], [], []]}
+  },
+  features: {features: [{land: false}]},
+  layers: {ocean: [0, 0, 1, 1]}
+};
+const boundarySingleNeighborCollapsedMap = structuredClone(boundaryTwoNeighborCollapsedMap);
+boundarySingleNeighborCollapsedMap.grid.cells.c = [[1], [0], []];
+assert.throws(() => pushGridCells([], {map: boundarySingleNeighborCollapsedMap}, "height", {}),
+  error => error?.code === "grid-cell-surface-unfilled",
+  "地图边界单邻居退化 cell 仍必须 fail-closed，不能以半幅地图冒充安全表面");
+const boundaryRecoveredVertices = [], boundaryRecoveredRanges = new Map();
+pushGridCells(boundaryRecoveredVertices, {map: boundaryTwoNeighborCollapsedMap}, "height", {}, () => true, color => color,
+  (cell, range) => boundaryRecoveredRanges.set(cell, range));
+assert.ok(boundaryRecoveredVertices.length > 0 && boundaryRecoveredVertices.length % 18 === 0,
+  "地图边界双邻居退化 cell 必须由 Voronoi 半平面恢复为安全三角");
+assert.deepEqual([...boundaryRecoveredRanges], [[0, {start: 0, end: boundaryRecoveredVertices.length}]],
+  "地图边界双邻居恢复必须形成非空连续 hard surface range");
+const boundaryRecoveredVisualMesh = buildCellVisualMesh(boundaryTwoNeighborCollapsedMap);
+assert.equal(boundaryRecoveredVisualMesh.triangulationUnfilledCells, 0, "地图边界双邻居恢复不得留下平滑表面缺面");
+assert.equal(countCellVisualTriangulationLeaks(boundaryRecoveredVisualMesh.cells[0].points), 0,
+  "地图边界双邻居恢复三角不得越界");
 
 const recoverableCollapsedMap = {
   metadata: {graphWidth: 10, graphHeight: 10},

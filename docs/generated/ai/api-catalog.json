@@ -3,7 +3,7 @@
     "generatedAt": "由 sync 脚本生成；时间不参与一致性比较",
     "apiVersion": "1.0.0",
     "plannerRecipeSchemaVersion": "1.0.0",
-    "browserMethods": 328,
+    "browserMethods": 329,
     "headlessMethods": 26,
     "headlessWriteVersion": "1.0.0",
     "headlessWriteMethods": 6,
@@ -3623,6 +3623,17 @@
       "requiresConfirm": false,
       "capabilityGroup": "debug",
       "schemaDiscovery": "window.webglGeneratorApi.info.describe(\"debug.profileNextRender\")",
+      "handbook": "docs/ai/runtime-and-loading.md"
+    },
+    {
+      "method": "debug.simulateContextLoss",
+      "stability": "experimental",
+      "mutates": "runtime-or-ui-state",
+      "undoable": false,
+      "async": false,
+      "requiresConfirm": false,
+      "capabilityGroup": "debug",
+      "schemaDiscovery": "window.webglGeneratorApi.info.describe(\"debug.simulateContextLoss\")",
       "handbook": "docs/ai/runtime-and-loading.md"
     }
   ],

@@ -3,6 +3,7 @@ import {strict as assert} from "node:assert";
 import {performance} from "node:perf_hooks";
 import {generatePlaceholderMap} from "../app/webgl-generator/src/generator/index.js";
 import {normalizeUnitRatios} from "../app/webgl-generator/src/generator/military.js";
+import {createRenderResourceBinding} from "../app/webgl-generator/src/renderer/render-resource-binding.js";
 import {createDomainPatchCommand} from "../app/webgl-generator/src/runtime/domain-patch.js";
 import {EditHistory} from "../app/webgl-generator/src/runtime/edit-history.js";
 import {createSetMilitaryRatiosCommand} from "../app/webgl-generator/src/runtime/military-edit-commands.js";
@@ -48,6 +49,7 @@ async function verifyTenThousandCells() {
   for (const layer of ["point", "line", "labels", "picking"]) {
     assert.ok(output.preparedRender?.layers?.[layer], `军事策略 Worker 缺少 ${layer} prepared render`);
   }
+  assert.deepEqual(output.preparedRender.binding, createRenderRequest(binding).binding, "军事策略 prepared render binding 与请求不同源");
 
   const formal = structuredClone(base);
   createSetMilitaryRatiosCommand(state.i, request.ratios).apply({map: formal});
@@ -87,6 +89,7 @@ async function verifyTenThousandCells() {
     render: createRenderRequest(undoBinding)
   }, taskContext(undoBinding, "history-undo"));
   assert.equal(workerUndo.kind, "military-policy-history", "军事策略撤销未走 Worker 历史模式");
+  assert.deepEqual(workerUndo.preparedRender.binding, createRenderRequest(undoBinding).binding, "军事策略撤销 prepared binding 与请求不同源");
   assert.deepEqual(normalizeVolatile(militarySnapshot(historyShadow)), normalizeVolatile(before), "军事策略 Worker 镜像撤销不精确");
   const redoBinding = {...undoBinding, mapRevision: undoBinding.mapRevision + 1, operationId: undoBinding.operationId + 1};
   const workerRedo = await runMilitaryPolicyWorkerTask({
@@ -96,6 +99,7 @@ async function verifyTenThousandCells() {
     render: createRenderRequest(redoBinding)
   }, taskContext(redoBinding, "history-redo"));
   assert.equal(workerRedo.kind, "military-policy-history", "军事策略重做未走 Worker 历史模式");
+  assert.deepEqual(workerRedo.preparedRender.binding, createRenderRequest(redoBinding).binding, "军事策略重做 prepared binding 与请求不同源");
   assert.deepEqual(normalizeVolatile(militarySnapshot(historyShadow)), normalizeVolatile(applied), "军事策略 Worker 镜像重做不精确");
   for (const transition of [workerUndo, workerRedo]) {
     for (const layer of ["point", "line", "labels", "picking"]) assert.ok(transition.preparedRender?.layers?.[layer], `军事策略历史缺少 ${layer} prepared render`);
@@ -211,7 +215,7 @@ function createChangedRequest(state) {
 }
 
 function createBinding(mapIdentity, mapRevision) {
-  return {mapIdentity, mapRevision, generationToken: 3, lockFingerprint: "military-locks", operationId: 32, operationName: "military-policy.compute"};
+  return {mapIdentity, mapRevision, topologyRevision: 2, generationToken: 3, lockFingerprint: "military-locks", operationId: 32, operationName: "military-policy.compute"};
 }
 
 function taskContext(binding, source) {
@@ -220,7 +224,14 @@ function taskContext(binding, source) {
 
 function createRenderRequest(binding) {
   return {
-    binding: {mapIdentity: binding.mapIdentity, mapRevision: binding.mapRevision},
+    binding: createRenderResourceBinding({
+      mapIdentity: binding.mapIdentity,
+      sourceRevision: binding.mapRevision + 1,
+      topologyRevision: binding.topologyRevision + 1
+    }, {
+      renderPreparationId: `military-policy:${binding.mapIdentity}:${binding.operationId}`,
+      renderGeneration: binding.operationId
+    }),
     layers: ["point", "line", "labels", "picking"],
     camera: {scale: 1, offsetX: 0, offsetY: 0},
     canvas: {width: 1200, height: 720, clientWidth: 1200, clientHeight: 720},

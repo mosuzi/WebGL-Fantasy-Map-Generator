@@ -9,8 +9,11 @@ export class MapRevisionTracker {
     this.cursorSecret = createOpaqueIdentity();
   }
 
-  replaceMap() {
-    this.mapIdentity = String(this.identityFactory());
+  replaceMap(mapIdentity = null) {
+    this.mapIdentity = mapIdentity === null || mapIdentity === undefined
+      ? String(this.identityFactory())
+      : String(mapIdentity);
+    if (!this.mapIdentity) throw new TypeError("map identity 不能为空");
     this.mapRevision = 0;
     this.topologyRevision = 0;
     this.cursorSecret = createOpaqueIdentity();

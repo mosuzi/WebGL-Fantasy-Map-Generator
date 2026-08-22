@@ -6,14 +6,18 @@ const ROUTE_WORLD_WIDTHS = Object.freeze({
 
 export const ROUTE_SELECTION_HALO_CSS_PX = 2.4;
 
-export function createLineWidthProjection({map, camera, canvas} = {}) {
+export function createLineWidthProjection({map, camera, canvas, canvasSize = null} = {}) {
   const scale = positive(camera?.scale, 1);
   const mapWidth = positive(map?.metadata?.graphWidth, 1);
   const mapHeight = positive(map?.metadata?.graphHeight, 1);
-  const clientWidth = positive(canvas?.clientWidth, positive(canvas?.width, 1));
-  const clientHeight = positive(canvas?.clientHeight, positive(canvas?.height, 1));
-  const backingWidth = positive(canvas?.width, clientWidth);
-  const backingHeight = positive(canvas?.height, clientHeight);
+  const cachedCssWidth = positive(canvasSize?.cssWidth, 0);
+  const cachedCssHeight = positive(canvasSize?.cssHeight, 0);
+  const cachedBackingWidth = positive(canvasSize?.width, 0);
+  const cachedBackingHeight = positive(canvasSize?.height, 0);
+  const clientWidth = cachedCssWidth || positive(canvas?.clientWidth, positive(canvas?.width, 1));
+  const clientHeight = cachedCssHeight || positive(canvas?.clientHeight, positive(canvas?.height, 1));
+  const backingWidth = cachedBackingWidth || positive(canvas?.width, clientWidth);
+  const backingHeight = cachedBackingHeight || positive(canvas?.height, clientHeight);
   const cssPerWorldX = scale * clientWidth / mapWidth;
   const cssPerWorldY = scale * clientHeight / mapHeight;
   const backingPerCssX = backingWidth / clientWidth;

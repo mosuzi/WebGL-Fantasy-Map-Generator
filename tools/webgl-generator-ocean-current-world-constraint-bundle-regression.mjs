@@ -106,6 +106,10 @@ assert.equal(
 );
 
 const politicsMap = generatePlaceholderMap({seed: "ocean-current-world-bundle-politics", cellsTarget: 2000, heightmapTemplate: "continents"});
+politicsMap.politics.states = structuredClone(politicsMap.politics.states);
+politicsMap.politics.provinces = structuredClone(politicsMap.politics.provinces);
+assert.notEqual(politicsMap.politics.states, politicsMap.pack.states, "政治红门必须模拟分离国家镜像");
+assert.notEqual(politicsMap.politics.provinces, politicsMap.pack.provinces, "政治红门必须模拟分离省份镜像");
 const lockedState = politicsMap.politics.states.find(state => state?.i && !state.removed);
 const lockedProvince = politicsMap.politics.provinces.find(province => province?.i && !province.removed);
 const lockedCity = politicsMap.settlements.cities.find(city => city && !city.removed);
@@ -133,8 +137,12 @@ const politicsResult = await rebuildOceanCurrentWorldStage(politicsMap, "states-
 });
 assert.equal(politicsResult.executed, true, "真实政治 stage 未执行");
 politicsBundle.assertDomain(politicsMap, "states-provinces", "after");
+assert.equal(politicsMap.politics.states, politicsMap.pack.states, "政治 stage 未重新统一国家镜像 owner");
+assert.equal(politicsMap.politics.provinces, politicsMap.pack.provinces, "政治 stage 未重新统一省份镜像 owner");
 assert.equal(JSON.stringify(politicsMap.politics.states[lockedState.i]), politicsBefore.state, "锁定国家完整快照变化");
 assert.equal(JSON.stringify(politicsMap.politics.provinces[lockedProvince.i]), politicsBefore.province, "锁定省份完整快照变化");
+assert.equal(JSON.stringify(politicsMap.pack.states[lockedState.i]), politicsBefore.state, "锁定国家 pack 镜像完整快照变化");
+assert.equal(JSON.stringify(politicsMap.pack.provinces[lockedProvince.i]), politicsBefore.province, "锁定省份 pack 镜像完整快照变化");
 assert.equal(JSON.stringify(politicsMap.settlements.cities.find(city => city?.id === lockedCity.id)), politicsBefore.city, "锁定城镇完整快照变化");
 assert.equal(JSON.stringify(politicsMap.settlements.routes.find(route => route?.id === lockedRoute.id)), politicsBefore.route, "锁定道路完整快照变化");
 

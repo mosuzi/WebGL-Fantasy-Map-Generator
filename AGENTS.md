@@ -18,7 +18,7 @@
 - `docs/current-plan.md` 是唯一当前任务清单；README、开发日志、专题和归档不得另建当前待办。
 - 已批准的编号范围是封闭范围。达到该项最小验收后立即归档并转向下一项；不影响当前验收的新发现只记录，不顺手实施。
 - 第 349 项已在 `codex/map-core-engine-architecture-plan` 并行分支完成并归档；`349-0`～`349-11`（含动态插入 `349-3a / 349-10c0 / 349-10g-a`）均经独立只读评审 `ACCEPT`。该分支不得合入 `main`，全任务未执行浏览器验收，只形成并评估了待单独获批的浏览器方案。
-- 第 350 项为当前唯一活动权威任务，当前 `BLOCK`：干净 10k 冷启动 generation binding 在两轮限定补齐后仍被拒绝，产品尝试均已撤回。继续前必须冻结显式 pending adoption binding owner 方案，禁止继续堆叠局部 fallback；分支仍不得合入 `main`。
+- 第 350 项已完成并归档：`R6b` 固定入口 `20 / 20` 与 `R7` 五个代表面 `5 / 5` 全部通过，最终冻结聚合和 25 组正式 artifact 已核实；任务级 blocker-only 复审为 `ACCEPT / P0 0 / P1 0 / P2 0`。当前没有活动权威任务，分支仍不得合入 `main`。
 - 遇到范围歧义、需要产品决策、夹具连续两次失败或同一阻断再次出现时，必须冻结并请用户裁定；不得继续“补夹具—跑全门”循环。
 - 全部必需任务完成后停止，不得自行创造后续工作。
 
@@ -68,7 +68,7 @@
 
 ## 当前状态
 
-- 第 350 项 `350-0` 静态门通过；直接页面与干净 10k 事务门均在首次 `generate.newMap` 被 foundation binding 拒绝。动态插入的 `350-0a` 两轮目标补齐仍失败并已撤回，后续 19 个浏览器门未执行；当前等待显式 pending adoption binding owner 设计裁定。详细证据见 `docs/task-notes/task-350-map-core-engine-cdp-acceptance.md`。
+- 第 350 项已完成并归档：`R6b 20 / 20`、`R7 5 / 5` 全部 PASS，五个 R7 面均无 `>200ms` 产品 LongTask；最终冻结聚合为 `16 invariants / 17 scenarios / 20 entries / 19 fixtures`，typecheck 与 `1401 modules` build PASS，25 组 artifact 的 full/summary 均存在且 `ok=true`。最终独立复核为 `ACCEPT / P0 0 / P1 0 / P2 0`，分支 `codex/map-core-engine-architecture-plan` 保持未合入 `main`，版本为 `0.5.58`。
 - 第 349 项已完成并归档：受限 TypeScript 核心契约、唯一 map / revision / history owner、15 个 capability-aware Manifest、逐域 Worker pre-commit validator、dependency / projection 与 whole-map profile receipt 已建立。27 / 27 非浏览器门通过，防误触审计递归扫描 36 个 Node 入口并拒绝真实命名不可见 Chromium 反例；浏览器方案已评估但未执行。分支保持 `codex/map-core-engine-architecture-plan` 并行且不得合入 `main`，版本为 `0.5.56`。
 - 第 348 项已完成并归档：主动重生成保留高编号锁定对象时，cities / burgs / routes 身份槽显式稠密；正式导出可在不改写内存地图的前提下抢救旧 holey 数组。用户主动城镇 / 路线重生成允许事务内修复失效港口派生关系，TypedArray 行政候选恢复正确评分，城镇面板补齐结果反馈。用户精确 `5410` 标签页完成原图保存、`949 → 1194` 重生成、结果保存及两份 v3 UI 回读，最终恢复 `949 / 21 / 218`，holey / 保存 / 接纳 / WebGL 错误均为 `0`，版本为 `0.5.3`。
 - 第 347 项已完成并归档：开发模式匿名账本确认用户当前存档城镇重生成的主瓶颈为数十万路线拾取引用对象化回绑；城镇安装现校验 Worker DTO 摘要后从已提交新地图直接构建 `cities + routeSegments` 局部索引。固定 100k 为 `1276.4ms / picking 2.8ms / LongTask 0`；用户精确 5410 当前存档由 `9969ms` 降至 `1886.3ms`，`949 → 1017`、`from-empty / marineCities 0`，撤销恢复原 `949` 与名称序列，版本为 `0.5.2`。

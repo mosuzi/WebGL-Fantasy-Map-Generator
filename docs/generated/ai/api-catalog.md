@@ -2,7 +2,7 @@
 
 > 由 `pnpm run sync:ai-docs` 生成，请勿手工修改。
 
-## 浏览器 API（328）
+## 浏览器 API（329）
 
 | 方法 | 稳定性 | 副作用 | 确认 | AI 手册 |
 |---|---|---|---|---|
@@ -334,6 +334,7 @@
 | `debug.renderer` | experimental | none-or-export-result | 否 | `docs/ai/runtime-and-loading.md` |
 | `debug.health` | experimental | none-or-export-result | 否 | `docs/ai/runtime-and-loading.md` |
 | `debug.profileNextRender` | experimental | runtime-or-ui-state | 否 | `docs/ai/runtime-and-loading.md` |
+| `debug.simulateContextLoss` | experimental | runtime-or-ui-state | 否 | `docs/ai/runtime-and-loading.md` |
 
 ## 无头只读 API（26）
 

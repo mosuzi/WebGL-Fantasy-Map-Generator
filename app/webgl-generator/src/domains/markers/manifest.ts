@@ -18,9 +18,9 @@ export const markersManifest = {
   canonicalSections: ["markers", "notes", "pack", "economy", "politics", "military", "zones", "diplomacy", "metadata", "generationLog"],
   derivedSystems: [
     {id: "markers.point-layer", reads: ["markers"], writes: [], invalidatedBy: ["markers"], invalidates: ["point-layers", "picking"], scope: "affected-objects", rebuild: "gpu-patch", reuseAcrossPresentation: true, verify: "regress:markers-core"},
-    {id: "markers.resource-economy", reads: ["markers", "pack", "economy"], writes: ["pack", "economy"], invalidatedBy: ["markers", "pack", "economy"], invalidates: ["economy-demand", "object-index"], scope: "full-map", rebuild: "main-thread", reuseAcrossPresentation: true, verify: "regress:markers-resource-economy-core"}
+    {id: "markers.resource-economy", reads: ["markers", "pack", "economy", "politics"], writes: ["pack", "economy", "politics"], invalidatedBy: ["markers", "pack", "economy"], invalidates: ["economy-demand", "object-index"], scope: "full-map", rebuild: "main-thread", reuseAcrossPresentation: true, verify: "regress:markers-resource-economy-core"}
   ],
-  commands: markerCommands.map(id => ({id, writeSet: id === "markers.setNote" ? ["notes"] : id === "markers.setVisual" ? ["markers"] : id === "markers.delete" ? ["markers", "notes", "pack", "economy"] : ["markers", "pack", "economy"], undoPolicy: "required", profiles: ["interactive"]})),
+  commands: markerCommands.map(id => ({id, writeSet: id === "markers.setNote" ? ["notes"] : id === "markers.setVisual" ? ["markers"] : id === "markers.delete" ? ["markers", "notes", "pack", "economy", "politics"] : ["markers", "pack", "economy", "politics"], undoPolicy: "required", profiles: ["interactive"]})),
   regeneration: {id: "markers.regenerateResources", writeSet: MARKERS_WORKER_WRITE_SET, sourceRevision: "required", binding: "required", lockPolicy: "regeneration-lock-protection", replacementPolicy: "mixed"},
   workerTasks: [{id: "markers.regeneration-worker", task: "regeneration.compute", resultKinds: ["markers"], writeSet: MARKERS_WORKER_WRITE_SET, bindingPolicy: "pre-commit", patchPolicy: "domain-policy-required"}],
   queries: [

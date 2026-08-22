@@ -80,6 +80,13 @@ export function replaceCellVisualCorrectionBufferSet(gl, current, replacement) {
   return replacement;
 }
 
+export function rebindCellVisualCorrectionBufferSetOwner(bufferSet, owner) {
+  const current = assertBufferSet(bufferSet);
+  if (!owner || typeof owner !== "object") throw new TypeError("平滑边界 correction owner 无效");
+  if (current.owner === owner) return current;
+  return freezeBufferSet(current.wordLength, current.segments, owner);
+}
+
 export function summarizeCellVisualCorrectionBufferSet(bufferSet) {
   const set = assertBufferSet(bufferSet);
   return {segmentCount: set.segments.length, vertexCount: set.vertexCount, triangleCount: set.triangleCount, byteLength: set.byteLength, maxSegmentBytes: CELL_VISUAL_CORRECTION_MAX_SEGMENT_BYTES};

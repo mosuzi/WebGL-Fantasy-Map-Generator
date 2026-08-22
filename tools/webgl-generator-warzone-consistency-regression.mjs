@@ -75,7 +75,7 @@ const appSource = await readFile(new URL("../app/webgl-generator/src/runtime/app
 assert.match(zonesSource, /isActiveEnemyPair\(pack\.states, item\.attacker, item\.defender\)/, "front 生成 Warzone 前应复核当前关系");
 assert.match(zonesSource, /attacker: front\.attacker, defender: front\.defender/, "新 Warzone 应写入参与国");
 assert.match(militarySource, /isActiveEnemyPair\(pack\.states, campaign\.attacker, campaign\.defender\)/, "军事 front/campaign 应复核当前关系");
-assert.match(appSource, /reconcileWarDerivedData\(state\.map\)/, "旧地图进入运行时前应执行战争派生一致性修复");
+assert.match(appSource, /normalizeMapForRuntimeAdoption\(map\)/, "旧地图进入运行时前应执行共享 adoption 规范化");
 
 console.log(JSON.stringify({
   ok: true,

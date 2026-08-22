@@ -4,46 +4,69 @@ import {createRequire} from "node:module";
 import {join, resolve} from "node:path";
 import {fileURLToPath} from "node:url";
 import {createServer as createViteServer} from "vite";
+import {closeTask350BrowserResource, createTask350BrowserArtifact} from "./task-350-browser-artifact.mjs";
 import {waitForApiReady} from "./webgl-generator-api-browser-ready.mjs";
 
 const rootDir = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const sourceDir = join(rootDir, "source", "Fantasy-Map-Generator");
-const playwright = createRequire(join(sourceDir, "package.json"))("playwright");
 const host = "127.0.0.1";
 const port = 5526;
 const baseUrl = `http://${host}:${port}`;
 const timeoutMs = 180000;
 const targets = [10000, 100000];
-const vite = await createViteServer({
-  configFile: join(rootDir, "vite.config.mjs"),
-  server: {host, port, strictPort: true},
-  logLevel: "error"
-});
+const evidence = createTask350BrowserArtifact("city-picking");
+let vite;
 let browser;
+let context;
+let page;
+let thrownError = null;
+let activeTarget = 10000;
+let activePhase = "startup";
+const reports = [];
+const consoleErrors = [];
+const healthErrors = [];
+const pageErrors = [];
+const navigationEvents = [];
+const browserLifecycle = [];
 
 try {
+  evidence.mark("server-start", {active: "city-picking"});
+  const playwright = createRequire(join(sourceDir, "package.json"))("playwright");
+  vite = await createViteServer({
+    configFile: join(rootDir, "vite.config.mjs"),
+    server: {host, port, strictPort: true, hmr: false},
+    logLevel: "error"
+  });
   await vite.listen();
+  evidence.mark("browser-start", {active: "city-picking", complete: "server-start"});
   browser = await playwright.chromium.launch({headless: true, channel: "chrome"});
-  const context = await browser.newContext({viewport: {width: 1440, height: 900}, deviceScaleFactor: 1});
-  const page = await context.newPage();
+  context = await browser.newContext({viewport: {width: 1440, height: 900}, deviceScaleFactor: 1});
+  page = await context.newPage();
   page.setDefaultTimeout(timeoutMs);
-  const consoleErrors = [];
-  const healthErrors = [];
-  const pageErrors = [];
   page.on("console", message => {
+    browserLifecycle.push({type: `console:${message.type()}`, text: message.text().slice(0, 500), target: activeTarget, phase: activePhase});
     if (message.type() !== "error") return;
     if (message.text().startsWith("[FMG health]")) healthErrors.push(message.text());
     else consoleErrors.push(message.text());
   });
   page.on("pageerror", error => pageErrors.push(error.message));
+  page.on("framenavigated", frame => {
+    if (frame === page.mainFrame()) navigationEvents.push({event: "framenavigated", url: frame.url(), target: activeTarget, phase: activePhase});
+  });
+  page.on("domcontentloaded", () => navigationEvents.push({event: "domcontentloaded", url: page.url(), target: activeTarget, phase: activePhase}));
+  page.on("load", () => navigationEvents.push({event: "load", url: page.url(), target: activeTarget, phase: activePhase}));
+  page.on("request", request => {
+    if (request.resourceType() === "document") navigationEvents.push({event: "document-request", url: request.url(), target: activeTarget, phase: activePhase});
+  });
 
   await page.goto(`${baseUrl}/?debug=1&healthClear=1`, {waitUntil: "domcontentloaded"});
   await waitForApiReady(page, timeoutMs);
   await waitForMapReady(page);
-  const reports = [];
-
+  evidence.mark("browser-evaluation", {active: "city-picking", complete: "browser-start"});
   for (const cellsTarget of targets) {
+    activeTarget = cellsTarget;
     if (cellsTarget !== 10000) {
+      activePhase = "new-map";
       await page.evaluate(async target => window.webglGeneratorApi.generate.newMap({
         confirm: true,
         seed: `city-picking-browser-${target}`,
@@ -53,6 +76,7 @@ try {
       await page.waitForFunction(target => window.__webglGeneratorApp?.map?.metadata?.cellsTarget === target, cellsTarget);
       await waitForMapReady(page);
     }
+    activePhase = "picking";
     await page.waitForFunction(() => window.__webglGeneratorApp?.renderer?.getStats?.().routeRefreshPending === false);
     const picking = await verifyFixedScreenPicking(page, cellsTarget);
     const activationFixture = await findExpandedMoveFixture(page);
@@ -110,12 +134,59 @@ try {
 
   assert.deepEqual(consoleErrors, [], `城镇热区浏览器回归出现 console error：${consoleErrors.join(" | ")}`);
   assert.deepEqual(pageErrors, [], `城镇热区浏览器回归出现 page error：${pageErrors.join(" | ")}`);
-  console.log(JSON.stringify({ok: true, reports, consoleErrors, pageErrors}, null, 2));
-  await context.close();
+  const finalReport = {ok: true, reports, consoleErrors, pageErrors, navigationEvents};
+  const compactReport = {
+    reports: reports.map(row => ({
+      cellsTarget: row.cellsTarget,
+      picking: row.picking,
+      activation: row.activation,
+      diagnostics: {
+        longTasks: row.diagnostics.longTasks,
+        handlerSamples: row.diagnostics.handlerSamples,
+        handlerP95Ms: row.diagnostics.handlerP95Ms,
+        handlerMaxMs: row.diagnostics.handlerMaxMs,
+        healthErrors: row.diagnostics.healthErrors,
+        glError: row.diagnostics.glError
+      }
+    })),
+    consoleErrors,
+    pageErrors,
+    navigationEvents
+  };
+  evidence.setResult(finalReport, compactReport);
+  evidence.succeed();
+  console.log(JSON.stringify(finalReport, null, 2));
+} catch (error) {
+  evidence.setResult({ok: false, reports, consoleErrors, healthErrors, pageErrors, navigationEvents, browserLifecycle, activeTarget, activePhase}, {
+    reports: reports.map(row => ({cellsTarget: row.cellsTarget})),
+    consoleErrors,
+    healthErrors,
+    pageErrors,
+    navigationEvents,
+    browserLifecycle: browserLifecycle.slice(-40),
+    activeTarget,
+    activePhase,
+    url: page && !page.isClosed() ? page.url() : ""
+  });
+  evidence.fail(error);
+  thrownError = error;
 } finally {
-  if (browser) await Promise.race([browser.close(), delay(5000)]);
-  await vite.close();
+  for (const [label, close] of [
+    ["city-picking-context", context ? () => context.close() : null],
+    ["city-picking-browser", browser ? () => browser.close() : null],
+    ["city-picking-vite", vite ? () => vite.close() : null]
+  ]) {
+    if (!close) continue;
+    try {
+      await closeTask350BrowserResource(label, close);
+    } catch (error) {
+      evidence.failTeardown(error);
+      if (!thrownError) thrownError = error;
+    }
+  }
+  evidence.persist();
 }
+if (thrownError) throw thrownError;
 
 async function waitForMapReady(page) {
   await page.waitForFunction(() => window.webglGeneratorApi?.info?.mapSummary?.()?.data?.ready === true);
@@ -287,8 +358,4 @@ async function dispatchCityPointer(page, type, point, {buttons}) {
       canvas.setPointerCapture = capture;
     }
   }, {type, point, buttons});
-}
-
-function delay(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms));
 }

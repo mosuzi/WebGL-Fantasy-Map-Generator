@@ -39,7 +39,7 @@ export const API_METHODS = Object.freeze({
     "list", "export", "import", "create", "copyBuiltin", "update", "delete", "clear", "bind", "renameObjects",
     "inspectBindAndRename", "bindAndRename", "inspectReplacement", "replace"
   ]),
-  debug: Object.freeze(["enable", "disable", "snapshot", "dumpState", "renderer", "health", "profileNextRender"])
+  debug: Object.freeze(["enable", "disable", "snapshot", "dumpState", "renderer", "health", "profileNextRender", "simulateContextLoss"])
 });
 
 export const CONFIRM_REQUIRED_METHODS = Object.freeze([

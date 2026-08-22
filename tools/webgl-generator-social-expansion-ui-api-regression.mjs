@@ -13,7 +13,7 @@ import {SelectionStore} from "../app/webgl-generator/src/runtime/selection-store
 for (const method of ["cultures.inspectExpansion", "cultures.applyExpansion", "religions.inspectExpansion", "religions.applyExpansion"]) {
   assert(API_METHODS.edit.includes(method), `稳定 API 目录缺少 ${method}`);
 }
-assert.equal(Object.values(API_METHODS).reduce((sum, methods) => sum + methods.length, 0), 328);
+assert.equal(Object.values(API_METHODS).reduce((sum, methods) => sum + methods.length, 0), 329);
 assert.equal(API_METHODS.edit.length, 179);
 assert(!CONFIRM_REQUIRED_METHODS.includes("edit.cultures.inspectExpansion"), "文化扩张只读预检不应要求确认");
 assert(!CONFIRM_REQUIRED_METHODS.includes("edit.religions.inspectExpansion"), "宗教扩张只读预检不应要求确认");
@@ -47,15 +47,15 @@ for (const action of ["undo", "redo"]) {
 assert(consoleSource.includes('conditionalConfirm: "mode=reexpand"'), "API metadata 缺少重扩条件确认声明");
 for (const token of ["CULTURE_CENTER", "RELIGION_CENTER", "setExpansionCenter", "centerPickActive"]) assert(appSource.includes(token) || cultureController.includes(token) || religionController.includes(token), `中心单次拾取缺少 ${token}`);
 for (const source of [culturePanel, religionPanel]) {
-  for (const text of ["中心与扩张", "从画布拾取一次", "只读预检", "仅保存", "确认并重新扩张"]) assert(source.includes(text), `社会扩张面板缺少“${text}”`);
+  for (const text of ["中心与扩张", "从画布拾取一次", "查看影响范围", "仅保存", "确认并重新扩张"]) assert(source.includes(text), `社会扩张面板缺少“${text}”`);
   assert(source.includes("UiActionDock"), "社会扩张编辑没有复用 UiActionDock");
   assert(source.includes("onExpansionDraftChange"), "扩张草稿变化后没有清除过期预检");
 }
-assert(culturePanel.includes("同事务联动宗教（默认关闭）"), "文化面板缺少默认关闭的宗教联动开关");
+assert(culturePanel.includes("同时更新宗教分布（默认关闭）"), "文化面板缺少默认关闭的宗教联动开关");
 assert(religionPanel.includes("Folk 固定为文化范围"), "宗教面板缺少 Folk 固定规则提示");
 
 const dynamic = await testDynamicRuntime();
-console.log(JSON.stringify({ok: true, methodCounts: {total: 328, edit: 179}, dynamic}, null, 2));
+console.log(JSON.stringify({ok: true, methodCounts: {total: 329, edit: 179}, dynamic}, null, 2));
 
 async function testDynamicRuntime() {
   const server = await createViteServer({

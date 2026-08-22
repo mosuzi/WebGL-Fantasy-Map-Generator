@@ -253,6 +253,7 @@ export function regeneratePackProvincesWithinStates(grid, society, options, pack
   grid.cells.province = profile.stage("provinces-mirror-grid", "镜像省份到 grid", () => mirrorPackProvinceToGrid(grid, pack, locked.gridOwners, locked.ids));
   const timing = profile.finish();
   return {
+    states: pack.states,
     provinces,
     timing,
     provinceTiming: provinces.timing || null,

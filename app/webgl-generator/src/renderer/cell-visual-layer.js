@@ -539,7 +539,7 @@ export function buildVoronoiRecoveredCellVisualBoundary(map, cell) {
     seen.add(key);
     neighborPoints.push(point);
   }
-  if (neighborPoints.length < 3) return [];
+  if (neighborPoints.length < 2) return [];
 
   let boundary = [[0, 0], [width, 0], [width, height], [0, height]];
   for (const neighbor of neighborPoints) {

@@ -1,3 +1,5 @@
+import {normalizeRenderResourceBinding} from "./render-resource-binding.js";
+
 export const SURFACE_SOURCE_FLOATS_PER_VERTEX = 6;
 export const SURFACE_SOURCE_FLOATS_PER_TRIANGLE = SURFACE_SOURCE_FLOATS_PER_VERTEX * 3;
 export const SURFACE_BASE_WORDS_PER_VERTEX = 3;
@@ -12,22 +14,16 @@ export const SURFACE_BASE_FLOATS_PER_TRIANGLE = SURFACE_SOURCE_FLOATS_PER_TRIANG
 export const SURFACE_BASE_MAX_SEGMENT_FLOATS = SURFACE_BASE_MAX_SEGMENT_VERTICES * SURFACE_SOURCE_FLOATS_PER_VERTEX;
 
 export function createSurfaceResourceOwner(binding, options = {}) {
-  const mapIdentity = String(binding?.mapIdentity ?? "");
-  const mapRevision = Number(binding?.mapRevision ?? 0);
-  const topologyRevision = Number(binding?.topologyRevision ?? 0);
+  const resourceBinding = normalizeRenderResourceBinding(binding, "surfaceResourceOwner.binding");
   const surfaceFloatLength = Number(options.surfaceFloatLength ?? 0);
   const correctionWordLength = Number(options.correctionWordLength ?? 0);
-  if (!mapIdentity || !Number.isSafeInteger(mapRevision) || mapRevision < 0
-    || !Number.isSafeInteger(topologyRevision) || topologyRevision < 0
-    || !Number.isSafeInteger(surfaceFloatLength) || surfaceFloatLength < 0
+  if (!Number.isSafeInteger(surfaceFloatLength) || surfaceFloatLength < 0
     || surfaceFloatLength % SURFACE_SOURCE_FLOATS_PER_TRIANGLE !== 0
     || !Number.isSafeInteger(correctionWordLength) || correctionWordLength < 0 || correctionWordLength % 9 !== 0) {
     throw new TypeError("surface resource owner 绑定无效");
   }
   return Object.freeze({
-    mapIdentity,
-    mapRevision,
-    topologyRevision,
+    ...resourceBinding,
     surfaceFloatLength,
     correctionWordLength,
     rangeFingerprint: fingerprintSurfaceCellRanges(options.surfaceCellRanges, surfaceFloatLength)
@@ -37,24 +33,48 @@ export function createSurfaceResourceOwner(binding, options = {}) {
 export function fingerprintSurfaceCellRanges(ranges, floatLength) {
   if (!(ranges instanceof Map)) throw new TypeError("surface resource owner 缺少 cell ranges");
   let hash = 0x811c9dc5;
-  const mix = value => {
-    hash ^= Number(value) >>> 0;
-    hash = Math.imul(hash, 0x01000193) >>> 0;
-  };
-  mix(floatLength);
-  mix(ranges.size);
+  hash = mixSurfaceCellRangeFingerprint(hash, floatLength);
+  hash = mixSurfaceCellRangeFingerprint(hash, ranges.size);
+  let previousCellId = -1;
+  for (const [rawCellId, range] of ranges) {
+    const cellId = Number(rawCellId);
+    const start = Number(range?.start);
+    const end = Number(range?.end);
+    assertSurfaceCellRangeFingerprintEntry(cellId, start, end, floatLength);
+    if (cellId < previousCellId) return fingerprintSortedSurfaceCellRanges(ranges, floatLength);
+    previousCellId = cellId;
+    hash = mixSurfaceCellRangeFingerprint(hash, cellId);
+    hash = mixSurfaceCellRangeFingerprint(hash, start);
+    hash = mixSurfaceCellRangeFingerprint(hash, end);
+  }
+  return hash.toString(16).padStart(8, "0");
+}
+
+function fingerprintSortedSurfaceCellRanges(ranges, floatLength) {
+  let hash = 0x811c9dc5;
+  hash = mixSurfaceCellRangeFingerprint(hash, floatLength);
+  hash = mixSurfaceCellRangeFingerprint(hash, ranges.size);
   const entries = [...ranges].map(([cellId, range]) => [Number(cellId), Number(range?.start), Number(range?.end)])
     .sort((left, right) => left[0] - right[0]);
   for (const [cellId, start, end] of entries) {
-    if (!Number.isSafeInteger(cellId) || cellId < 0 || !Number.isSafeInteger(start) || !Number.isSafeInteger(end)
-      || start < 0 || end < start || end > floatLength) {
-      throw new RangeError("surface resource owner cell range 无效");
-    }
-    mix(cellId);
-    mix(start);
-    mix(end);
+    assertSurfaceCellRangeFingerprintEntry(cellId, start, end, floatLength);
+    hash = mixSurfaceCellRangeFingerprint(hash, cellId);
+    hash = mixSurfaceCellRangeFingerprint(hash, start);
+    hash = mixSurfaceCellRangeFingerprint(hash, end);
   }
   return hash.toString(16).padStart(8, "0");
+}
+
+function assertSurfaceCellRangeFingerprintEntry(cellId, start, end, floatLength) {
+  if (!Number.isSafeInteger(cellId) || cellId < 0 || !Number.isSafeInteger(start) || !Number.isSafeInteger(end)
+    || start < 0 || end < start || end > floatLength) {
+    throw new RangeError("surface resource owner cell range 无效");
+  }
+}
+
+function mixSurfaceCellRangeFingerprint(hash, value) {
+  hash ^= Number(value) >>> 0;
+  return Math.imul(hash, 0x01000193) >>> 0;
 }
 
 export function createSurfaceBaseBufferSet(gl, vertices, options = {}) {
@@ -113,6 +133,13 @@ export function replaceSurfaceBaseBufferSet(gl, current, replacement) {
   const keep = new Set(flattenSurfaceBaseBufferSet(replacement));
   deleteSurfaceBaseBufferSet(gl, current, {preserve: keep});
   return replacement;
+}
+
+export function rebindSurfaceBaseBufferSetOwner(bufferSet, owner) {
+  const current = assertBufferSet(bufferSet);
+  if (!owner || typeof owner !== "object") throw new TypeError("surface base owner 无效");
+  if (current.owner === owner) return current;
+  return buildBufferSet(current.floatLength, current.segments, owner);
 }
 
 export function uploadSurfaceBaseBufferSetRanges(gl, bufferSet, vertices, ranges) {

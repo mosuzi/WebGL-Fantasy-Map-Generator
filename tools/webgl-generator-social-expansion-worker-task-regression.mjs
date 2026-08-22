@@ -27,6 +27,7 @@ console.log(JSON.stringify({
 
 async function verifyTenThousandCells() {
   const base = createMap("social-expansion-worker-10k", 10000);
+  const sourceSnapshot = structuredClone(base);
   const culture = active(base.society.cultures)[0];
   const religion = active(base.society.religions).find(item => item.type !== "Folk");
   assert.ok(culture && religion, "10k 缺少文化或非 Folk 宗教样本");
@@ -51,7 +52,8 @@ async function verifyTenThousandCells() {
       map: shadow,
       request: cultureRequest,
       binding,
-      sourceFingerprint: fingerprintSocialExpansionSource(shadow, cultureRequest)
+      sourceFingerprint: fingerprintSocialExpansionSource(shadow, cultureRequest),
+      render: socialRenderRequest(binding)
     },
     taskContext(binding, "worker")
   );
@@ -64,6 +66,8 @@ async function verifyTenThousandCells() {
   assert.equal(output.patch.writeSet.some(path => path.startsWith("routes") || path.startsWith("rivers")), false, "社会扩张补丁触碰路线或河流");
   assert.equal(countRanges(output.result.affected.packCells.culture), output.result.changedPackCells, "文化 affected ranges 与结果计数不一致");
   assert.equal(countRanges(output.result.affected.packCells.religion), output.result.linkedReligionPackCells, "宗教联动 affected ranges 与结果计数不一致");
+  assert.deepEqual(output.preparedRender?.layers?.picking?.components, ["cities"], "文化扩张 Worker 必须只准备城市 picking 对象族");
+  assert.deepEqual(output.preparedRender?.binding, socialRenderRequest(binding).binding, "文化扩张 Worker picking binding 漂移");
 
   const transfers = collectSocialExpansionWorkerTransferables(output);
   assert.equal(sourceCultureBuffer.byteLength > 0 && sourceReligionBuffer.byteLength > 0, true, "Worker 输入 buffer 被 detach");
@@ -124,9 +128,11 @@ async function verifyTenThousandCells() {
   };
   const religionShadow = structuredClone(base);
   const religionOutput = await runSocialExpansionWorkerTask(
-    {map: religionShadow, request: religionRequest, binding},
+    {map: religionShadow, request: religionRequest, binding, render: socialRenderRequest(binding)},
     taskContext(binding, "worker")
   );
+  assert.deepEqual(religionOutput.preparedRender?.layers?.picking?.components, ["cities"], "宗教扩张 Worker 必须只准备城市 picking 对象族");
+  assert.deepEqual(religionOutput.preparedRender?.binding, socialRenderRequest(binding).binding, "宗教扩张 Worker picking binding 漂移");
   const religionFormal = structuredClone(base);
   createApplyReligionExpansionCommand(religionRequest.id, religionRequest).apply({map: religionFormal});
   assert.deepEqual(normalizeVolatile(dataSnapshot(religionShadow)), normalizeVolatile(dataSnapshot(religionFormal)), "宗教 Worker 与 legacy formal command 不一致");
@@ -134,6 +140,7 @@ async function verifyTenThousandCells() {
 
   await assertLockSemantics(base, binding, cultureRequest);
   await assertCancelFaultAndStale(base, binding, cultureRequest);
+  assert.deepEqual(base, sourceSnapshot, "社会扩张 Worker 测试改写了正式源图");
 
   return {
     cells: base.grid.points.length,
@@ -166,7 +173,7 @@ async function verifyHundredThousandCells() {
   const sourceReligionBuffer = map.pack.cells.religion.buffer;
   const started = performance.now();
   const output = await runSocialExpansionWorkerTask(
-    {map, request, binding, sourceFingerprint: fingerprintSocialExpansionSource(map, request)},
+    {map, request, binding, sourceFingerprint: fingerprintSocialExpansionSource(map, request), render: socialRenderRequest(binding)},
     taskContext(binding, "worker-100k")
   );
   const durationMs = Math.round((performance.now() - started) * 10) / 10;
@@ -176,6 +183,8 @@ async function verifyHundredThousandCells() {
   assert.equal(countRanges(output.result.affected.packCells.culture), output.result.changedPackCells, "100k 文化 affected 不精确");
   assert.equal(countRanges(output.result.affected.packCells.religion), output.result.linkedReligionPackCells, "100k 宗教 affected 不精确");
   assert.ok(output.patch.writeSet.length > 0, "100k 没有领域补丁");
+  assert.deepEqual(output.preparedRender?.layers?.picking?.components, ["cities"], "100k 社会扩张 Worker 必须准备城市 picking 对象族");
+  assert.deepEqual(output.preparedRender?.binding, socialRenderRequest(binding).binding, "100k 社会扩张 Worker picking binding 漂移");
   return {
     cells: map.grid.points.length,
     packCells: map.pack.cells.i.length,
@@ -300,6 +309,16 @@ function createBinding(mapIdentity, mapRevision) {
   };
 }
 
+function socialRenderRequest(binding) {
+  return {
+    binding: {mapIdentity: binding.mapIdentity, mapRevision: binding.mapRevision, topologyRevision: 2},
+    layers: ["picking"],
+    pickingComponents: ["cities"],
+    camera: {scale: 1, offsetX: 0, offsetY: 0},
+    canvas: {width: 1280, height: 820, clientWidth: 1280, clientHeight: 820}
+  };
+}
+
 function taskContext(binding, source) {
   return {binding, source, checkpoint: () => true, report: () => {}};
 }
@@ -379,6 +398,7 @@ function normalizeInspection(value) {
 
 function normalizeVolatile(value) {
   const copy = structuredClone(value);
+  if (copy && Object.prototype.hasOwnProperty.call(copy, "preparedRender")) delete copy.preparedRender;
   stripUpdatedAt(copy);
   return copy;
 }

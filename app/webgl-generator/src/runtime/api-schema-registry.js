@@ -58,6 +58,16 @@ const REFERENCE_RULES = Object.freeze([
 ]);
 
 const METHOD_OVERRIDES = Object.freeze({
+  "debug.simulateContextLoss": {
+    arguments: [argument("options", {
+      type: "object",
+      properties: {restoreDelayMs: {type: "integer", minimum: 0, maximum: 5000, default: 50}},
+      additionalProperties: false
+    }, false)],
+    result: objectSchema(["restored", "beforeBinding", "afterBinding", "drawDelta", "resourceState", "retainedState"]),
+    examples: [[{restoreDelayMs: 50}]],
+    businessCodes: ["ok", "invalid_argument", "render-context-loss-unsupported", "render-context-loss-busy", "render-context-loss-timeout", "render-context-loss-receipt-invalid", "render-cache-resource-owner-mismatch", "render-retained-resource-owner-mismatch"]
+  },
   "analysis.resolvePlace": {
     arguments: [
       argument("reference", placeReferenceSchema()),

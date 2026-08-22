@@ -3,6 +3,20 @@ import {readdir, readFile} from "node:fs/promises";
 import path from "node:path";
 import {fileURLToPath} from "node:url";
 
+import {DEFAULT_DELAYED_OPERATION_MESSAGE} from "../app/webgl-generator/src/runtime/delayed-operation-feedback.js";
+import {STARTUP_FAILURE_USER_MESSAGE} from "../app/webgl-generator/src/ui/startup-loading.js";
+import {browserMapSaveLoadingMessage} from "../app/webgl-generator/src/ui/map-storage-user-copy.js";
+import {
+  HEIGHT_TERRAIN_PROGRAM_STORAGE_USER_MESSAGE,
+  heightTerrainProgramFailureMessage
+} from "../app/webgl-generator/src/ui/panels/height-panel.js";
+import {
+  REGENERATION_KIND_LABELS,
+  regenerationErrorMessage,
+  regenerationLoadingMessage,
+  regenerationResultMessage
+} from "../app/webgl-generator/src/ui/regeneration-user-copy.js";
+
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const matrixPath = path.join(root, "docs/audits/ui-copy-audit-matrix.json");
 const matrix = JSON.parse(await readFile(matrixPath, "utf8"));
@@ -14,6 +28,10 @@ assert.equal(matrix.task, 330);
 assert.equal(matrix.policy.operationDelayMs, 420);
 assert.equal(matrix.policy.panelDelayMs, 180);
 assert.equal(matrix.policy.debugKeepsTechnicalTerms, true);
+assert.deepEqual(matrix.policy.ordinaryForbiddenTerms, [
+  "cell", "grid", "pack", "feature", "Worker", "session", "packet", "buffer", "revision", "checksum",
+  "LocalStorage", "IndexedDB", "结构化克隆", "线程", "会话", "消息包", "镜像", "补丁", "派生", "运行时", "同事务"
+], "普通界面禁词策略未覆盖当前 Worker / persistence 技术边界");
 
 const actualPanels = (await readdir(componentsDir)).filter(name => name.endsWith("Panel.vue")).sort();
 const matrixPanels = matrix.panels.map(item => item.component).sort();
@@ -55,14 +73,36 @@ const delayedSource = await readFile(path.join(root, "app/webgl-generator/src/ru
 assert.match(delayedSource, /DEFAULT_DELAYED_OPERATION_MS\s*=\s*420/);
 
 let lazyAdapterCount = 0;
+const ordinaryCopySamples = [DEFAULT_DELAYED_OPERATION_MESSAGE, STARTUP_FAILURE_USER_MESSAGE, HEIGHT_TERRAIN_PROGRAM_STORAGE_USER_MESSAGE];
+const rawHeightStorageError = new Error("LocalStorage access denied by SecurityError");
+ordinaryCopySamples.push(heightTerrainProgramFailureMessage(rawHeightStorageError));
+assert.equal(heightTerrainProgramFailureMessage(rawHeightStorageError, {debug: true}), rawHeightStorageError.message, "高度模板显式 debug 诊断丢失原始存储错误");
 for (const name of actualAdapters) {
   const source = await readFile(path.join(adaptersDir, name), "utf8");
   if (!source.includes("loading:")) continue;
   lazyAdapterCount++;
   assert.ok(!source.includes("正在加载"), `${name} 仍使用旧加载句式`);
   assert.match(source, /loading:\s*"正在打开.+，请稍候片刻。"/u, `${name} 未使用统一慢打开句式`);
+  for (const match of source.matchAll(/loading:\s*"([^"]+)"/gu)) ordinaryCopySamples.push(match[1]);
 }
 assert.equal(lazyAdapterCount, 26, "按需加载适配器数量漂移");
+
+for (const stage of ["initial", "input-stream-complete", "normalize", "stringify", "compress", "package", "result-stream-complete", "storage-write", "complete"]) {
+  ordinaryCopySamples.push(browserMapSaveLoadingMessage(stage));
+}
+for (const kind of Object.keys(REGENERATION_KIND_LABELS)) {
+  for (const stage of ["initial", "stream-input", "render-prepare", "result-stream", "commit", "render-install", "complete", "cancel", "failure"]) {
+    ordinaryCopySamples.push(regenerationLoadingMessage(kind, stage));
+  }
+  ordinaryCopySamples.push(regenerationResultMessage(kind, {executed: true}));
+  ordinaryCopySamples.push(regenerationResultMessage(kind, {executed: false}));
+}
+for (const code of ["operation_busy", "operation_cancelled", "operation_obsolete", "operation_invalid_input", "regeneration_lock_conflict", "operation_rollback_failed", "operation_failed"]) {
+  ordinaryCopySamples.push(regenerationErrorMessage(code));
+}
+ordinaryCopySamples.push(...matrix.transformations.map(item => item.recommended));
+const ordinaryForbidden = new RegExp(matrix.policy.ordinaryForbiddenTerms.map(escapeRegExp).join("|"), "iu");
+for (const copy of ordinaryCopySamples) assert.doesNotMatch(copy, ordinaryForbidden, `普通界面文案泄漏技术术语：${copy}`);
 
 const loadingLegacyPhrases = [
   "正在装配地图引擎", "正在写入受控网格结构", "正在重算气候下游内容", "正在接入地图运行时",
@@ -90,5 +130,11 @@ console.log(JSON.stringify({
   adapters: actualAdapters.length,
   lazyAdapters: lazyAdapterCount,
   loadingSources: matrix.loadingSources.length,
-  transformations: matrix.transformations.length
+  transformations: matrix.transformations.length,
+  ordinaryCopySamples: ordinaryCopySamples.length,
+  forbiddenTerms: matrix.policy.ordinaryForbiddenTerms.length
 }, null, 2));
+
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+}

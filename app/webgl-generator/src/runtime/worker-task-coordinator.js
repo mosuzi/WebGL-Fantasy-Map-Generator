@@ -37,7 +37,7 @@ export function createWorkerTaskCoordinator({createWorker, getBinding, validateB
 
   async function runNow(task, payload, options = {}) {
     if (typeof beforeRun === "function") await beforeRun();
-    if (pendingSessionPatch) await pendingSessionPatch;
+    if (pendingSessionPatch) await pendingSessionPatch.catch(() => {});
     const binding = clonePlain(options.binding ?? getBinding?.() ?? null);
     const signal = options.signal || null;
     if (signal?.aborted) throw abortError(signal.reason);
@@ -156,13 +156,27 @@ export function createWorkerTaskCoordinator({createWorker, getBinding, validateB
   }
 
   function applySessionPatch(sessionId, patch, binding, options = {}) {
-    const operation = (pendingSessionPatch || Promise.resolve()).then(async () => applySessionPatchNow(sessionId, await patch, await binding, options));
+    const patchOutcome = capturePromiseOutcome(patch);
+    const bindingOutcome = capturePromiseOutcome(binding);
+    const operation = (pendingSessionPatch || Promise.resolve()).catch(() => {}).then(async () => {
+      const [resolvedPatch, resolvedBinding] = await Promise.all([patchOutcome, bindingOutcome]);
+      if (!resolvedPatch.ok) throw resolvedPatch.error;
+      if (!resolvedBinding.ok) throw resolvedBinding.error;
+      return applySessionPatchNow(sessionId, resolvedPatch.value, resolvedBinding.value, options);
+    });
     let tracked;
     tracked = operation.finally(() => {
       if (pendingSessionPatch === tracked) pendingSessionPatch = null;
     });
     pendingSessionPatch = tracked;
     return tracked;
+  }
+
+  function capturePromiseOutcome(value) {
+    return Promise.resolve(value).then(
+      result => ({ok: true, value: result}),
+      error => ({ok: false, error})
+    );
   }
 
   function applySessionPatchNow(sessionId, patch, binding, options = {}) {

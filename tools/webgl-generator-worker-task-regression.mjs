@@ -4,7 +4,10 @@ import {runInNewContext} from "node:vm";
 import {createGenerationSummary, generatePlaceholderMap} from "../app/webgl-generator/src/generator/index.js";
 import {buildZones} from "../app/webgl-generator/src/generator/zones.js";
 import {PlaceholderMapRenderer} from "../app/webgl-generator/src/renderer/placeholder-renderer.js";
+import {createRenderResourceBinding} from "../app/webgl-generator/src/renderer/render-resource-binding.js";
+import {RENDER_CACHE_RESOURCE_FAMILIES} from "../app/webgl-generator/src/renderer/render-cache-resource-binding.js";
 import {createDomainPatchCommand} from "../app/webgl-generator/src/runtime/domain-patch.js";
+import {EditHistory} from "../app/webgl-generator/src/runtime/edit-history.js";
 import {collectRegenerationWorkerTransferables, getRegenerationPatchPolicy, REGENERATION_WORKER_KINDS, runRegenerationWorkerTask} from "../app/webgl-generator/src/runtime/regeneration-worker-task.js";
 import {createWorkerTaskCoordinator} from "../app/webgl-generator/src/runtime/worker-task-coordinator.js";
 import {getWorkerTaskHandler} from "../app/webgl-generator/src/runtime/worker-task-registry.js";
@@ -14,6 +17,7 @@ import {createWorkerGraphDecoder, encodeWorkerGraph} from "../app/webgl-generato
 import {createStagedWorkerSnapshot} from "../app/webgl-generator/src/runtime/worker-snapshot.js";
 import {runMapFileIoWorkerTask} from "../app/webgl-generator/src/runtime/map-file-io-worker-task.js";
 import {materializeMapAdoptionHandoff} from "../app/webgl-generator/src/runtime/map-adoption-handoff.js";
+import {MapRevisionTracker} from "../app/webgl-generator/src/runtime/map-revision.js";
 import {
   createWorkerTaskExecution,
   createWorkerTaskMessage,
@@ -269,8 +273,9 @@ class FakeWorker {
 if (process.argv.includes("--app-replay-static")) {
   console.log(JSON.stringify({
     ok: true,
-    appDeferredReplayStaticSummary: verifyAppDeferredReplayStaticContract(),
-    deferredRendererSummary: verifyDeferredRendererReplay()
+    appDeferredReplayStaticSummary: await verifyAppDeferredReplayStaticContract(),
+    deferredRendererSummary: verifyDeferredRendererReplay(),
+    webGlContextRestoreFaultSummary: await verifyWebGlContextRestoreFault()
   }, null, 2));
   process.exit(0);
 }
@@ -409,6 +414,14 @@ for (const key of ["setupMs", "domainComputeMs", "patchCaptureMs", "renderPrepar
 assert.ok(firstSessionResult.timings.totalTaskMs >= firstSessionResult.timings.domainComputeMs, "领域计算时间大于 Worker 任务总时间");
 applyWorkerPatch(sessionFormal, "zones", firstSessionResult.patch);
 sessionBinding = {...sessionBinding, mapRevision: 1};
+const renderOnlyBinding = createRenderResourceBinding({
+  mapIdentity: sessionBinding.mapIdentity,
+  sourceRevision: sessionBinding.mapRevision,
+  topologyRevision: sessionBinding.mapRevision
+}, {
+  renderPreparationId: "worker-task-render-only:1",
+  renderGeneration: 1
+});
 const renderOnlyFormalBefore = structuredClone(sessionFormal);
 let queuedRenderOnlySettled = false;
 const queuedRenderOnly = sessionCoordinator.run("regeneration.compute", {
@@ -416,7 +429,7 @@ const queuedRenderOnly = sessionCoordinator.run("regeneration.compute", {
   mode: "render-only",
   kind: "must-not-be-normalized",
   render: {
-    binding: sessionBinding,
+    binding: renderOnlyBinding,
     camera: {scale: 1, offsetX: 0, offsetY: 0},
     canvas: {width: 800, height: 600, clientWidth: 800, clientHeight: 600},
     visibility: {},
@@ -437,6 +450,8 @@ assert.equal(renderOnlyResult.mode, "render-only");
 assert.equal(renderOnlyResult.worker.session.reused, true);
 assert.equal(renderOnlyResult.worker.session.id, firstSessionResult.worker.session.id);
 assert.equal(renderOnlyResult.worker.session.pending, true);
+assert.deepEqual(renderOnlyResult.binding, renderOnlyBinding);
+assert.deepEqual(renderOnlyResult.preparedRender?.binding, renderOnlyBinding);
 assert.ok(renderOnlyResult.preparedRender?.layers?.point?.vertices instanceof Float32Array);
 for (const forbidden of ["patch", "result", "summary", "generationLog", "refresh"]) {
   assert.equal(Object.prototype.hasOwnProperty.call(renderOnlyResult, forbidden), false, `render-only 不得返回 ${forbidden}`);
@@ -699,6 +714,45 @@ await assert.rejects(
   error => error?.code === "worker_protocol_session_patch_invalid"
 );
 assert.equal(driftCoordinator.getSessionSnapshot(), null, "checksum 漂移必须销毁 Worker 副本");
+
+const failedQueueCoordinator = createWorkerTaskCoordinator({
+  createWorker: () => new FakeWorker(),
+  validateBinding: () => true
+});
+const failedQueueMap = structuredClone(sessionFormal);
+let failedQueueBinding = {mapIdentity: "failed-patch-queue", mapRevision: 0, generationToken: 1, lockFingerprint: "locks", operationId: 1, operationName: "generate.regenerate"};
+const failedQueueResult = await failedQueueCoordinator.run("regeneration.compute", {map: failedQueueMap, kind: "zones"}, {binding: failedQueueBinding, sessionMode: "map-mirror"});
+applyWorkerPatch(failedQueueMap, "zones", failedQueueResult.patch);
+failedQueueBinding = {...failedQueueBinding, mapRevision: 1};
+assert.equal(await failedQueueCoordinator.commitSession(failedQueueResult.worker.session.id, failedQueueBinding, {expectedRevisionDelta: 1}), true);
+const failedQueueBaseChecksum = failedQueueCoordinator.getSessionSnapshot().checksum;
+const failedQueueBadPatch = createMapReplicaPatch({
+  mapIdentity: failedQueueBinding.mapIdentity,
+  patchId: "failed-queue-bad",
+  baseRevision: 1,
+  targetRevision: 2,
+  baseChecksum: failedQueueBaseChecksum,
+  targetChecksum: "r1:0000000000000000",
+  writes: [{path: "metadata.name", mode: "replace", value: "bad"}]
+});
+const failedQueueFollowupWrites = [{path: "metadata.generatorStage", mode: "replace", value: "ignored-after-resync"}];
+const failedQueueFollowupPatch = createMapReplicaPatch({
+  mapIdentity: failedQueueBinding.mapIdentity,
+  patchId: "failed-queue-followup",
+  baseRevision: 2,
+  targetRevision: 3,
+  baseChecksum: failedQueueBadPatch.targetChecksum,
+  targetChecksum: await computeMapReplicaPatchTargetChecksum(failedQueueBadPatch.targetChecksum, failedQueueFollowupWrites, {yieldToMain: async () => {}}),
+  writes: failedQueueFollowupWrites
+});
+const queuedFailure = new Error("queued patch source failed");
+const failedQueueFirst = failedQueueCoordinator.applySessionPatch(failedQueueResult.worker.session.id, failedQueueBadPatch, {...failedQueueBinding, mapRevision: 2});
+const failedQueueSecond = failedQueueCoordinator.applySessionPatch(failedQueueResult.worker.session.id, failedQueueFollowupPatch, {...failedQueueBinding, mapRevision: 3});
+const failedQueueThird = failedQueueCoordinator.applySessionPatch(failedQueueResult.worker.session.id, Promise.reject(queuedFailure), {...failedQueueBinding, mapRevision: 4});
+await assert.rejects(failedQueueFirst, error => error?.code === "worker_protocol_session_patch_invalid");
+assert.equal(await failedQueueSecond, false, "前项 patch 失败后后续已解析 patch 必须收敛为副本失效，而非复用旧拒绝");
+await assert.rejects(failedQueueThird, error => error === queuedFailure, "排队 patch 自身拒绝必须被当前调用消费，不能成为未处理 Promise");
+assert.equal(failedQueueCoordinator.getSessionSnapshot(), null, "失败 patch 队列结束后不得保留半连续副本");
 const resynced = await driftCoordinator.run("regeneration.compute", {map: driftMap, kind: "zones"}, {binding: driftBinding, sessionMode: "map-mirror"});
 assert.equal(resynced.worker.session.reused, false, "checksum 漂移后的下一次请求必须完整重同步");
 assert.equal(driftWorkers.length, 2);
@@ -1011,7 +1065,8 @@ assert.ok(smallBufferYields < 128, `大量小 buffer 不得逐个等待浏览器
 assert.deepEqual(stagedSmallBuffers.snapshot.map(view => view[0]), manySmallBuffers.map(view => view[0]));
 
 const deferredRendererSummary = verifyDeferredRendererReplay();
-const appDeferredReplayStaticSummary = verifyAppDeferredReplayStaticContract();
+const appDeferredReplayStaticSummary = await verifyAppDeferredReplayStaticContract();
+const webGlContextRestoreFaultSummary = await verifyWebGlContextRestoreFault();
 const computeWorkerOutputNumericBatchValues = verifyComputeWorkerOutputBatchContract();
 
 const allKindParity = {};
@@ -1098,6 +1153,7 @@ console.log(JSON.stringify({
   representativeRegenerationNumeric,
   deferredRendererSummary,
   appDeferredReplayStaticSummary,
+  webGlContextRestoreFaultSummary,
   allKindParity
 }, null, 2));
 
@@ -1172,7 +1228,7 @@ async function inspectNumericPackets(value, numericBatchValues, streamId) {
   return {packets, maxPacketValues};
 }
 
-function verifyAppDeferredReplayStaticContract() {
+async function verifyAppDeferredReplayStaticContract() {
   const source = readFileSync(new URL("../app/webgl-generator/src/runtime/app.js", import.meta.url), "utf8");
   const decisionMatch = source.match(/function decideWorkerRegenerationDeferredReplay\(contextCurrent, sequenceCurrent\) \{[\s\S]*?\n\}/u);
   assert.ok(decisionMatch, "app 必须保留可独立验证的 replay 决策函数");
@@ -1262,6 +1318,12 @@ function verifyAppDeferredReplayStaticContract() {
   assert.match(regenerationFlow, /inPlaceSurfaceColorPatch/u, "省份颜色重生成必须允许复用正式 surface geometry");
   assert.ok(regenerationFlow.indexOf("preparedInstall.prepareCommit") < regenerationFlow.indexOf("preparedInstall.commit()"), "surface 颜色补丁必须先准备后提交");
   assert.match(regenerationFlow, /await preparedInstall\.rollbackAsync\(\{isCurrent:/u, "失败回滚必须恢复原位 surface 颜色");
+  const regenerationRenderRequestFlow = source.slice(
+    source.indexOf("function createWorkerRegenerationRenderRequest"),
+    source.indexOf("function workerRenderObject")
+  );
+  assert.match(regenerationRenderRequestFlow, /createRenderRequestSourceBinding\(binding, \{[\s\S]*?sourceRevisionDelta,[\s\S]*?topologyRevisionDelta,[\s\S]*?replacesSurface: replaceResources,[\s\S]*?surfaceOwner: renderer\?\.surfaceResourceOwner \|\| null/u, "局部 prepared request 必须沿用实际 surface topology owner");
+  assert.doesNotMatch(regenerationRenderRequestFlow, /topologyRevision:\s*Number\(binding\.topologyRevision\)\s*\+\s*Number\(topologyRevisionDelta\)/u, "无 surface 的 prepared request 不得无条件推进 topology owner");
   const deferredRequestFlow = source.slice(
     source.indexOf("function createWorkerRegenerationDeferredRenderRequest"),
     source.indexOf("function isWorkerRegenerationDeferredReplayContextCurrent")
@@ -1532,6 +1594,209 @@ function verifyAppDeferredReplayStaticContract() {
   assert.match(loadFlow, /commitSession\(workerAdoption\.session\.id, adoptedBinding, \{adoptResultMap: true\}\)/u, "装载后必须显式提交 adopted owner");
   assert.match(loadFlow, /invalidateSession\("map-adoption-failed"\)/u, "adoption 失败不得残留 pending owner");
 
+  const restoreStart = source.indexOf("async function restoreMapReplaceRendererAsync");
+  const restoreEnd = source.indexOf("\nfunction restoreCanvasToolMode", restoreStart);
+  assert.ok(restoreStart >= 0 && restoreEnd > restoreStart, "app 必须保留可执行的换图 renderer + snapshot rollback helpers");
+  const restoreSource = source.slice(restoreStart, restoreEnd);
+  const oldMap = {id: "rollback-old-map"};
+  const newMap = {id: "rollback-new-map"};
+  const reloadFault = new Error("renderer-reload-fault");
+  const reloadCalls = [];
+  const reloadRevision = new MapRevisionTracker({identityFactory: () => "unused-reload-map"});
+  reloadRevision.replaceMap(oldMap.id);
+  reloadRevision.advance();
+  reloadRevision.advance();
+  reloadRevision.advance();
+  const reloadRevisionSnapshot = reloadRevision.createSnapshot();
+  reloadRevision.replaceMap(newMap.id);
+  reloadRevision.advance();
+  const reloadHistory = new EditHistory();
+  const oldHistoryCommand = {label: "rollback-old-history", domain: "fixture", apply() {}, revert() {}};
+  const newHistoryCommand = {label: "rollback-new-history", domain: "fixture", apply() {}, revert() {}};
+  reloadHistory.execute(oldHistoryCommand, {});
+  const reloadHistorySnapshot = reloadHistory.createSnapshot();
+  reloadHistory.clear();
+  reloadHistory.execute(newHistoryCommand, {});
+  const reloadSnapshot = {
+    map: oldMap,
+    options: {seed: "old"},
+    pendingGenerateId: 4,
+    mapRevision: reloadRevisionSnapshot,
+    history: reloadHistorySnapshot,
+    selection: null,
+    canvasToolMode: null,
+    unitPreferences: {distance: "metric"},
+    lastEditRefresh: {id: "old-refresh"},
+    visualTheme: "default",
+    userVisualThemes: []
+  };
+  const expectedRollbackBinding = createRenderResourceBinding(reloadRevisionSnapshot, {
+    renderPreparationId: "rollback:1",
+    renderGeneration: 1
+  });
+  const originalRestoreRevision = reloadRevision.restoreSnapshot.bind(reloadRevision);
+  reloadRevision.restoreSnapshot = value => {
+    reloadCalls.push(["revision", value]);
+    assert.deepEqual(value, reloadRevisionSnapshot, "rollback 必须把正式 revision before-image 原样交给 tracker");
+    return originalRestoreRevision(value);
+  };
+  const originalRestoreHistory = reloadHistory.restoreSnapshot.bind(reloadHistory);
+  reloadHistory.restoreSnapshot = value => {
+    reloadCalls.push(["history", value]);
+    assert.equal(value, reloadHistorySnapshot, "rollback 必须把正式 history before-image 原样交给 tracker");
+    return originalRestoreHistory(value);
+  };
+  const assertHistoryRestored = () => {
+    const current = reloadHistory.createSnapshot();
+    assert.deepEqual(current.undoStack, reloadHistorySnapshot.undoStack);
+    assert.deepEqual(current.redoStack, reloadHistorySnapshot.redoStack);
+    assert.equal(current.commandAffected, reloadHistorySnapshot.commandAffected);
+    assert.equal(current.lastLabel, reloadHistorySnapshot.lastLabel);
+    assert.equal(current.lastDomain, reloadHistorySnapshot.lastDomain);
+    assert.deepEqual(current.lastAffected, reloadHistorySnapshot.lastAffected);
+    assert.equal(current.externalSnapshot, reloadHistorySnapshot.externalSnapshot);
+  };
+  const reloadState = {
+    map: newMap,
+    options: {seed: "new"},
+    pendingGenerateId: 9,
+    lastEditRefresh: {id: "new-refresh"},
+    mapRevision: reloadRevision,
+    editHistory: reloadHistory,
+    renderer: {
+      setUnitPreferences(value) { reloadCalls.push(["units", value]); },
+      issueRenderResourceBinding(value) {
+        reloadCalls.push(["binding", value, reloadState.map]);
+        assert.deepEqual(value, reloadRevisionSnapshot, "renderer binding 必须由恢复后的正式 revision snapshot 发行");
+        assert.deepEqual(reloadRevision.createSnapshot(), reloadRevisionSnapshot, "binding 发行前 tracker 必须已恢复");
+        return createRenderResourceBinding(value, {renderPreparationId: "rollback:1", renderGeneration: 1});
+      },
+      async loadMapAsync(map, {binding} = {}) {
+        reloadCalls.push(["load", map, reloadState.map, binding]);
+        assert.equal(map, oldMap);
+        assert.equal(reloadState.map, oldMap, "renderer reload 执行时 canonical map 必须已恢复");
+        assert.deepEqual(reloadRevision.createSnapshot(), reloadRevisionSnapshot, "renderer reload 前 revision/topology/cursor 必须精确恢复");
+        assertHistoryRestored();
+        assert.deepEqual(binding, expectedRollbackBinding, "renderer reload 必须使用严格完整 rollback resource binding");
+        throw reloadFault;
+      }
+    },
+    selectionStore: {batch() { throw new Error("renderer reload fault 后不得继续恢复 selection"); }},
+    canvasToolModes: {getActive: () => null}
+  };
+  const loadingStates = [];
+  const reloadPromise = runInNewContext(`${restoreSource}\nrestoreMapReplaceSnapshot(state, documentRef, snapshot, fault, operation)`, {
+    state: reloadState,
+    documentRef: {},
+    snapshot: reloadSnapshot,
+    fault: reloadFault,
+    operation: {report: (stage, details) => reloadCalls.push(["report", stage, details?.message])},
+    cloneGenerationOptions: value => ({...value}),
+    setMythicGenerationLoading: () => {},
+    yieldToBrowser: async () => {},
+    syncGenerationInputs: () => {},
+    updateControlPreferences: () => {},
+    replaceUserVisualThemes: () => {},
+    applyRuntimeVisualThemeState: () => {},
+    createFallbackRenderResourceBinding: () => { throw new Error("正式 renderer binding 存在时不得 fallback"); },
+    loadingMessage: stage => stage?.id || "stage",
+    restoreCanvasToolMode: () => {},
+    refreshRuntimeAfterMapLoad: () => {},
+    updateGenerationLoading: (_documentRef, value) => loadingStates.push(value)
+  });
+  await assert.rejects(reloadPromise, error => error === reloadFault, "renderer reload fault 必须向外保留原错");
+  assert.equal(reloadState.map, oldMap, "renderer reload fault 前必须先恢复 canonical map");
+  assert.deepEqual(reloadState.options, reloadSnapshot.options);
+  assert.equal(reloadState.pendingGenerateId, reloadSnapshot.pendingGenerateId);
+  assert.equal(reloadState.lastEditRefresh, reloadSnapshot.lastEditRefresh);
+  assert.deepEqual(reloadCalls.filter(([kind]) => kind === "revision" || kind === "history").map(([kind]) => kind), ["revision", "history"]);
+  assert.deepEqual(reloadRevision.createSnapshot(), reloadRevisionSnapshot);
+  assertHistoryRestored();
+  const reloadCall = reloadCalls.find(([kind]) => kind === "load");
+  assert.equal(reloadCall?.[1], oldMap);
+  assert.equal(reloadCall?.[2], oldMap, "renderer reload 执行时 canonical owner 必须已经恢复");
+  assert.deepEqual(reloadCall?.[3], expectedRollbackBinding);
+  assert.deepEqual(loadingStates, [false], "renderer reload fault 仍必须关闭 rollback loading");
+
+  const preparedMap = {id: "rollback-prepared-map"};
+  const preparedCalls = [];
+  const preparedBinding = {mapIdentity: preparedMap.id, mapRevision: 4, topologyRevision: 4};
+  const preparedRenderBinding = createRenderResourceBinding(preparedBinding, {renderPreparationId: "rollback-prepared:1", renderGeneration: 1});
+  let preparedCompletionFault = null;
+  const preparedState = {
+    map: preparedMap,
+    mapRevision: {createSnapshot: () => preparedBinding},
+    renderer: {
+      async loadMapAsync() { throw new Error("prepared rollback 不得退回主线程 loadMapAsync"); },
+      async completePreparedMapLoadAsync(map, options) {
+        preparedCalls.push(["complete", map, options.binding, options.revealPreparedOverlay, options.isCurrent()]);
+        if (preparedCompletionFault) throw preparedCompletionFault;
+      }
+    },
+    workerTaskCoordinator: {
+      async run(task, payload, options) {
+        preparedCalls.push(["worker", task, payload.map, payload.binding, options.payloadIsolated]);
+        return {worker: {mode: "worker"}, prepared: true};
+      }
+    }
+  };
+  const preparedOperation = {
+    signal: null,
+    report: stage => preparedCalls.push(["report", stage]),
+    throwIfCancelled: () => preparedCalls.push(["current"])
+  };
+  const preparedContext = {
+    state: preparedState,
+    documentRef: {},
+    map: preparedMap,
+    operation: preparedOperation,
+    RENDER_PREPARATION_LAYERS: ["surface", "line", "point", "picking", "labels"],
+    loadingMessage: stage => stage?.id || "stage",
+    setMythicGenerationLoading: () => {},
+    yieldToBrowser: async () => preparedCalls.push(["yield"]),
+    createRegenerationWorkerBinding: () => preparedBinding,
+    createWorkerRegenerationRenderRequest: (_state, targetKind, binding, layers) => {
+      preparedCalls.push(["request", targetKind, binding, [...layers]]);
+      return {binding: preparedRenderBinding, layers: [...layers]};
+    },
+    createStagedWorkerSnapshot: async (map, options) => {
+      preparedCalls.push(["snapshot", map, options.budgetMs, options.sliceBytes]);
+      await options.yieldToMain();
+      return {snapshot: {staged: map.id}};
+    },
+    validateRegenerationWorkerBinding: () => true,
+    runtimeDisplayObsoleteError: stage => Object.assign(new Error(stage), {code: "operation_obsolete"}),
+    prepareRendererWorkerInstall: async (_renderer, map, prepared, options) => {
+      preparedCalls.push(["install", map, prepared.prepared, options.binding, options.resetViewport, options.deferOverlayLayout, options.isCurrent()]);
+      return {
+        commit: () => preparedCalls.push(["commit"]),
+        rollback: () => preparedCalls.push(["rollback"]),
+        finalize: () => preparedCalls.push(["install-finalize"])
+      };
+    },
+    finalizeCommittedMapAdoptionInstall: install => {
+      preparedCalls.push(["finalize"]);
+      install.finalize();
+      return {finalized: true, error: null};
+    }
+  };
+  await runInNewContext(`${restoreSource}\nrestoreMapReplaceRendererAsync(state, documentRef, map, operation)`, preparedContext);
+  assert.deepEqual(preparedCalls.filter(([kind]) => ["snapshot", "worker", "install", "commit", "complete", "finalize", "install-finalize"].includes(kind)).map(([kind]) => kind), [
+    "snapshot", "worker", "install", "commit", "complete", "finalize", "install-finalize"
+  ], "prepared rollback 必须按 staged snapshot → worker → install → complete → finalize 执行");
+  assert.equal(preparedCalls.some(([kind]) => kind === "rollback"), false, "prepared rollback 成功后不得回滚 install");
+  const preparedComplete = preparedCalls.find(([kind]) => kind === "complete");
+  assert.deepEqual(preparedComplete?.slice(1), [preparedMap, preparedRenderBinding, true, true], "prepared completion 必须保留 map/binding/reveal/current 契约");
+
+  preparedCalls.length = 0;
+  preparedCompletionFault = new Error("prepared-completion-fault");
+  await assert.rejects(
+    runInNewContext(`${restoreSource}\nrestoreMapReplaceRendererAsync(state, documentRef, map, operation)`, preparedContext),
+    error => error === preparedCompletionFault,
+    "prepared completion fault 必须向外保留原错"
+  );
+  assert.deepEqual(preparedCalls.filter(([kind]) => ["commit", "complete", "rollback", "finalize"].includes(kind)).map(([kind]) => kind), ["commit", "complete", "rollback"], "prepared completion fault 必须回滚且不得 finalize");
+
   return {
     decision: "context-first",
     displayRenderSession: "shared-map-worker",
@@ -1545,8 +1810,312 @@ function verifyAppDeferredReplayStaticContract() {
     detachedTransactionCleanup: [...detachedCalls],
     sameMapRollbackOrder: [...sameMapCalls],
     detachedRecoveryCleanup: [...recoveryCleanupCalls],
-    mapAdoption: "generation-import-owner"
+    mapAdoption: "generation-import-owner",
+    mapReloadFaultCanonicalFirst: true,
+    mapRollbackPreparedRender: true
   };
+}
+
+async function verifyWebGlContextRestoreFault() {
+  const rendererModuleSource = readFileSync(new URL("../app/webgl-generator/src/renderer/placeholder-renderer.js", import.meta.url), "utf8");
+  assert.match(rendererModuleSource, /addEventListener\("webglcontextrestored"[\s\S]*?restoreWebGlContextUntilCurrent\(\)/u, "context restored 事件必须由 latest-aware restore owner 持有");
+  const restoreMethod = PlaceholderMapRenderer.prototype.restoreWebGlContext.toString();
+  const surfaceAdoptIndex = restoreMethod.indexOf("adoptRendererSurfaceResourceOwner");
+  const retainedAdoptIndex = restoreMethod.indexOf("adoptRendererRetainedResourceBindings");
+  const readyIndex = restoreMethod.indexOf('this.webGlContextResourceState = "ready"');
+  const drawIndex = restoreMethod.indexOf("this.draw({updateDynamicBuffers: false})");
+  const catchCleanupIndex = restoreMethod.lastIndexOf("cleanupInitializedWebGlResources");
+  const catchInvalidateIndex = restoreMethod.lastIndexOf("invalidateInitializedWebGlResources");
+  assert.ok(surfaceAdoptIndex >= 0 && retainedAdoptIndex > surfaceAdoptIndex && readyIndex > retainedAdoptIndex && drawIndex > readyIndex, "context restore 必须先接纳 surface/retained owners，再切 ready 并执行唯一正式 draw");
+  assert.ok(catchCleanupIndex >= 0 && catchInvalidateIndex > catchCleanupIndex, "context restore fault 必须先清 staged resources 再 invalid");
+
+  const fault = new Error("context-staged-buffer-fault");
+  const gl = createContextRestoreFaultGl(fault);
+  let drawCalls = 0;
+  const renderer = {
+    gl,
+    map: null,
+    program: {id: "old-program"},
+    surfaceProgram: {id: "old-surface-program"},
+    surfaceResourceOwner: {id: "old-owner"},
+    surfaceResourceBinding: {id: "old-binding"},
+    activeRenderResourceBinding: {id: "old-active"},
+    webGlContextLost: false,
+    webGlContextResourceState: "ready",
+    lastWebGlContextRestoreError: null,
+    draw() { drawCalls += 1; },
+    onViewChange() {}
+  };
+  await assert.rejects(
+    PlaceholderMapRenderer.prototype.restoreWebGlContext.call(renderer),
+    error => error === fault,
+    "staged WebGL resource fault 必须向外保留原错"
+  );
+  assert.equal(renderer.webGlContextLost, true);
+  assert.equal(renderer.webGlContextResourceState, "invalid");
+  assert.equal(renderer.lastWebGlContextRestoreError, fault);
+  assert.equal(renderer.program, null);
+  assert.equal(renderer.surfaceProgram, null);
+  assert.equal(renderer.surfaceResourceOwner, null);
+  assert.equal(renderer.surfaceResourceBinding, null);
+  assert.equal(renderer.activeRenderResourceBinding, null);
+  assert.equal(renderer.objectPickingResourceOwner, null);
+  assert.equal(renderer.objectPickingResourceBinding, null);
+  assert.equal(renderer.labelLayoutResourceOwner, null);
+  assert.equal(renderer.labelLayoutResourceBinding, null);
+  assert.equal(renderer.overlayResourceOwner, null);
+  assert.equal(renderer.overlayResourceBinding, null);
+  assert.equal(renderer.lastSurfaceResourceOwnerError, "webgl-context-restore-invalid");
+  assert.equal(renderer.lastRetainedResourceOwnerError, "webgl-context-restore-invalid");
+  assert.equal(drawCalls, 0, "staged restore fault 不得绘制半初始化资源");
+  assert.equal(gl.deletedPrograms.length, 3, "fault 前创建的 main/surface/city programs 必须清理");
+  assert.equal(gl.deletedBuffers.length, 2, "fault 前创建的 city buffers 必须清理");
+  assert.equal(gl.deletedVertexArrays.length, 1, "fault 前创建的 city VAO 必须清理");
+
+  const takeoverGl = createContextRestoreControlGl();
+  const oldProgram = {kind: "program", id: "old-main"};
+  const oldSurfaceProgram = {kind: "program", id: "old-surface"};
+  const surfaceVertices = new Float32Array((32 * 1024 + 1) * 18);
+  const takeoverMap = generatePlaceholderMap({seed: "context-restore-takeover", cellsTarget: 1000, heightmapTemplate: "continents"});
+  const initialBinding = createRenderResourceBinding(
+    {mapIdentity: "restore-map", mapRevision: 2, topologyRevision: 1},
+    {renderPreparationId: "restore:initial", renderGeneration: 1}
+  );
+  const takeoverRenderer = {
+    gl: takeoverGl,
+    map: takeoverMap,
+    canvas: {
+      width: 1000,
+      height: 700,
+      clientWidth: 1000,
+      clientHeight: 700,
+      ownerDocument: {defaultView: {requestAnimationFrame: callback => callback()}},
+      getBoundingClientRect: () => ({left: 0, top: 0, width: 1000, height: 700})
+    },
+    program: oldProgram,
+    surfaceProgram: oldSurfaceProgram,
+    surfaceVertices,
+    cellVisualCorrectionGeometry: new Float32Array(),
+    surfaceCellRanges: new Map([[0, {start: 0, end: surfaceVertices.length}]]),
+    surfacePatchVertices: new Float32Array(),
+    landCorrectionVertices: new Float32Array(),
+    waterCorrectionVertices: new Float32Array(),
+    landCoverVertices: new Float32Array(),
+    waterCoverVertices: new Float32Array(),
+    oceanCurrentVertices: new Float32Array(),
+    lineVertices: new Float32Array(),
+    shoreLineVertices: new Float32Array(),
+    surfaceResourceOwner: initialBinding,
+    activeRenderResourceBinding: initialBinding,
+    latestIssuedRenderBinding: initialBinding,
+    renderGeneration: 1,
+    nextRenderGeneration: 1,
+    renderPreparationSequence: 0,
+    webGlContextLost: false,
+    webGlContextResourceState: "ready",
+    lastWebGlContextRestoreError: null,
+    cellAttributeStore: null,
+    camera: {scale: 1, offsetX: 0, offsetY: 0},
+    layerVisibility: {population: true, cities: true, markers: true, resources: true, military: true, routes: true, rivers: true},
+    visualTheme: {},
+    cityIconItems: [],
+    cityIconItemsById: new Map(),
+    markerIconItems: [],
+    militaryIconItems: [],
+    labelItems: [],
+    objectPickingIndex: {id: "restore-picking"},
+    objectPickingResourceOwner: initialBinding,
+    objectPickingResourceBinding: {owner: initialBinding, index: null},
+    labelLayoutResourceOwner: initialBinding,
+    labelLayoutResourceBinding: {owner: initialBinding, labelItems: null},
+    overlayResourceOwner: initialBinding,
+    overlayResourceBinding: {owner: initialBinding},
+    overlay: null,
+    politicalVisualMeshes: null,
+    politicalMeshDebugMode: "none",
+    selection: null,
+    locateFlash: null,
+    objectHighlights: [],
+    riverWaypointPreview: null,
+    dynamicBuffersDirty: {routes: true, rivers: true, tradeFlows: true, selection: true},
+    renderCacheResourceOwners: Object.freeze({}),
+    renderCacheResourceBindings: Object.freeze({}),
+    onViewChange() {},
+    issueRenderResourceBinding(value, options) {
+      issuedBindings.push({source: value, options});
+      return PlaceholderMapRenderer.prototype.issueRenderResourceBinding.call(this, value, options);
+    },
+    draw() { successfulRestoreDraws++; }
+  };
+  let controlledYields = 0;
+  let takeoverBinding = null;
+  const issuedBindings = [];
+  let successfulRestoreDraws = 0;
+  takeoverRenderer.restoreWebGlContext = options => PlaceholderMapRenderer.prototype.restoreWebGlContext.call(takeoverRenderer, options);
+  let stagedOnlyCleanupObserved = false;
+  assert.equal(await PlaceholderMapRenderer.prototype.restoreWebGlContextUntilCurrent.call(takeoverRenderer, {
+    yieldToMain: async () => {
+      controlledYields++;
+      if (!takeoverBinding) {
+        takeoverBinding = takeoverRenderer.issueRenderResourceBinding(
+          {mapIdentity: "restore-map", mapRevision: 3, topologyRevision: 1},
+          {replaceResources: true}
+        );
+        return;
+      }
+      if (!stagedOnlyCleanupObserved) {
+        assert.equal(takeoverRenderer.webGlContextResourceState, "restoring");
+        assert.equal(takeoverGl.deletedPrograms.includes(oldProgram), false, "A obsolete cleanup 不得清 current program");
+        assert.equal(takeoverGl.deletedPrograms.includes(oldSurfaceProgram), false, "A obsolete cleanup 不得清 current surface program");
+        stagedOnlyCleanupObserved = true;
+      }
+    }
+  }), true, "context restore owner 必须自动重试 obsolete attempt 并最终 ready");
+  assert.ok(controlledYields > 0);
+  assert.equal(stagedOnlyCleanupObserved, true);
+  const restoreAttempts = issuedBindings.length - 1;
+  assert.equal(restoreAttempts, 2);
+  assert.equal(successfulRestoreDraws, 1, "B 接管后只能有一次成功恢复 draw");
+  assert.equal(takeoverRenderer.webGlContextLost, false);
+  assert.equal(takeoverRenderer.webGlContextResourceState, "ready");
+  const finalBinding = takeoverRenderer.latestIssuedRenderBinding;
+  assert.notEqual(finalBinding, takeoverBinding, "context resource replacement 必须从 B 派生新的 C generation");
+  assert.equal(finalBinding.sourceRevision, takeoverBinding.sourceRevision);
+  assert.equal(finalBinding.topologyRevision, takeoverBinding.topologyRevision);
+  assert.ok(finalBinding.renderGeneration > takeoverBinding.renderGeneration);
+  assert.equal(takeoverRenderer.surfaceResourceOwner.mapIdentity, finalBinding.mapIdentity);
+  assert.equal(takeoverRenderer.surfaceResourceOwner.sourceRevision, finalBinding.sourceRevision);
+  assert.equal(takeoverRenderer.surfaceResourceOwner.topologyRevision, finalBinding.topologyRevision);
+  assert.equal(takeoverRenderer.surfaceResourceOwner.renderGeneration, finalBinding.renderGeneration);
+  for (const family of RENDER_CACHE_RESOURCE_FAMILIES) {
+    assert.equal(takeoverRenderer.renderCacheResourceOwners[family].renderPreparationId, finalBinding.renderPreparationId);
+  }
+  assert.equal(takeoverRenderer.objectPickingResourceOwner.renderPreparationId, finalBinding.renderPreparationId);
+  assert.equal(takeoverRenderer.overlayResourceOwner.renderPreparationId, finalBinding.renderPreparationId);
+  assert.ok(takeoverGl.deletedPrograms.includes(oldProgram), "成功 C restore 必须最终释放旧 current program");
+  assert.ok(takeoverGl.deletedPrograms.includes(oldSurfaceProgram), "成功 C restore 必须最终释放旧 current surface program");
+  const terminalFault = new Error("terminal-context-restore-fault");
+  let terminalAttempts = 0;
+  await assert.rejects(
+    PlaceholderMapRenderer.prototype.restoreWebGlContextUntilCurrent.call({
+      async restoreWebGlContext() {
+        terminalAttempts++;
+        throw terminalFault;
+      }
+    }),
+    error => error === terminalFault,
+    "restore owner 只能重试结构化 obsolete，真实 fault 必须保留"
+  );
+  assert.equal(terminalAttempts, 1);
+  return {
+    stagedFault: true,
+    resourceState: renderer.webGlContextResourceState,
+    deletedPrograms: gl.deletedPrograms.length,
+    deletedBuffers: gl.deletedBuffers.length,
+    deletedVertexArrays: gl.deletedVertexArrays.length,
+    drawCalls,
+    lateRestoreRejected: true,
+    stagedTakeoverYields: controlledYields,
+    restoreAttempts,
+    successfulRestoreDraws,
+    takeoverTransition: {
+      sourceRevision: takeoverBinding.sourceRevision,
+      topologyRevision: takeoverBinding.topologyRevision,
+      fromGeneration: takeoverBinding.renderGeneration,
+      toGeneration: finalBinding.renderGeneration,
+      ownersAligned: true
+    }
+  };
+}
+
+function createContextRestoreFaultGl(fault) {
+  const gl = {
+    fault,
+    bufferCount: 0,
+    programCount: 0,
+    shaderCount: 0,
+    vertexArrayCount: 0,
+    deletedPrograms: [],
+    deletedBuffers: [],
+    deletedVertexArrays: [],
+    VERTEX_SHADER: 0x8B31,
+    FRAGMENT_SHADER: 0x8B30,
+    COMPILE_STATUS: 0x8B81,
+    LINK_STATUS: 0x8B82,
+    ARRAY_BUFFER: 0x8892,
+    STATIC_DRAW: 0x88E4,
+    FLOAT: 0x1406,
+    createShader() { return {kind: "shader", id: ++this.shaderCount}; },
+    shaderSource() {},
+    compileShader() {},
+    getShaderParameter() { return true; },
+    getShaderInfoLog() { return ""; },
+    createProgram() { return {kind: "program", id: ++this.programCount}; },
+    attachShader() {},
+    linkProgram() {},
+    getProgramParameter() { return true; },
+    getProgramInfoLog() { return ""; },
+    getAttribLocation() { return 0; },
+    getUniformLocation() { return {}; },
+    createVertexArray() { return {kind: "vao", id: ++this.vertexArrayCount}; },
+    bindVertexArray() {},
+    createBuffer() {
+      this.bufferCount += 1;
+      if (this.bufferCount === 3) throw this.fault;
+      return {kind: "buffer", id: this.bufferCount};
+    },
+    bindBuffer() {},
+    bufferData() {},
+    enableVertexAttribArray() {},
+    vertexAttribPointer() {},
+    vertexAttribDivisor() {},
+    deleteProgram(resource) { this.deletedPrograms.push(resource); },
+    deleteBuffer(resource) { this.deletedBuffers.push(resource); },
+    deleteVertexArray(resource) { this.deletedVertexArrays.push(resource); }
+  };
+  return gl;
+}
+
+function createContextRestoreControlGl() {
+  const gl = createContextRestoreFaultGl(null);
+  Object.assign(gl, {
+    TEXTURE_2D: 0x0DE1,
+    TEXTURE_MIN_FILTER: 0x2801,
+    TEXTURE_MAG_FILTER: 0x2800,
+    TEXTURE_WRAP_S: 0x2802,
+    TEXTURE_WRAP_T: 0x2803,
+    NEAREST: 0x2600,
+    CLAMP_TO_EDGE: 0x812F,
+    RGBA32UI: 0x8D70,
+    RGBA_INTEGER: 0x8D99,
+    UNSIGNED_INT: 0x1405,
+    RGBA32F: 0x8814,
+    RGBA: 0x1908,
+    RGBA8: 0x8058,
+    UNSIGNED_BYTE: 0x1401,
+    MAX_TEXTURE_SIZE: 0x0D33,
+    textureCount: 0,
+    deletedTextures: []
+  });
+  gl.createBuffer = function createBuffer() {
+    return {kind: "buffer", id: ++this.bufferCount, bytes: new Uint8Array()};
+  };
+  gl.bufferData = function bufferData(_target, source) {
+    const length = typeof source === "number" ? source : source?.byteLength || 0;
+    this.boundBuffer.bytes = new Uint8Array(length);
+  };
+  gl.bindBuffer = function bindBuffer(_target, buffer) { this.boundBuffer = buffer; };
+  gl.bufferSubData = function bufferSubData(_target, byteOffset, source) {
+    this.boundBuffer.bytes.set(new Uint8Array(source.buffer, source.byteOffset, source.byteLength), byteOffset);
+  };
+  gl.createTexture = function createTexture() { return {kind: "texture", id: ++this.textureCount}; };
+  gl.bindTexture = function bindTexture(_target, texture) { this.boundTexture = texture; };
+  gl.texParameteri = function texParameteri() {};
+  gl.texImage2D = function texImage2D() {};
+  gl.getParameter = function getParameter(parameter) { return parameter === this.MAX_TEXTURE_SIZE ? 4096 : null; };
+  gl.deleteTexture = function deleteTexture(texture) { this.deletedTextures.push(texture); };
+  gl.DYNAMIC_DRAW = 0x88E8;
+  return gl;
 }
 
 function verifyDeferredRendererReplay() {
@@ -1676,6 +2245,8 @@ function verifyDeferredRendererReplay() {
   highlightRenderer.dynamicBuffersDirty = {selection: false, routes: false};
   highlightRenderer.workerRenderInstallSuspended = 1;
   highlightRenderer.workerRenderInstallPendingDraw = false;
+  highlightRenderer.webGlContextLost = false;
+  highlightRenderer.webGlContextResourceState = "ready";
   highlightRenderer.updateRouteBuffer = () => { throw new Error("suspended highlight 不得构建 route mesh"); };
   highlightRenderer.updateSelectionBuffer = () => { throw new Error("suspended highlight 不得构建 selection mesh"); };
   highlightRenderer.setObjectHighlights([{kind: "route", id: 0, from: "当前起点", to: "当前终点"}]);

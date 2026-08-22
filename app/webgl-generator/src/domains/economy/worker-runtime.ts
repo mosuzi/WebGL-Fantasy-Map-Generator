@@ -6,6 +6,7 @@ import {DIPLOMACY_WORKER_WRITE_SET, diplomacyManifest} from "../diplomacy/manife
 import {MILITARY_POLICY_WORKER_WRITE_SET, MILITARY_REGENERATION_WORKER_WRITE_SET, militaryManifest} from "../military/manifest.js";
 import {validateZoneMirrors} from "../settlements/worker-runtime.js";
 import {isActiveEnemyPair, resolveWarzoneStatePair} from "../../generator/war-consistency.js";
+import {validatePreparedWorkerRenderBinding} from "../worker-render-binding.js";
 
 type UnknownRecord = Record<string, unknown>;
 export type EconomyDiplomacyMilitaryWorkerKind = "economy" | "diplomacy" | "military" | "military-policy";
@@ -55,6 +56,7 @@ const economyIndexedFields = new Map<string, ReadonlySet<string>>([
 export function validateEconomyDiplomacyMilitaryWorkerOutput(input: {
   readonly kind: EconomyDiplomacyMilitaryWorkerKind;
   readonly binding: unknown;
+  readonly renderBinding?: unknown;
   readonly output: unknown;
   readonly policy: unknown;
   readonly sourceMap: unknown;
@@ -67,7 +69,13 @@ export function validateEconomyDiplomacyMilitaryWorkerOutput(input: {
   const output = record(input.output, "world-systems.output");
   if (output.kind !== input.kind) throw protocolError("world-systems-worker-kind-mismatch", "经济外交军事 Worker 结果类型与请求不一致");
   assertSameBinding(output.binding, binding, "world-systems.output.binding");
-  validatePreparedRender(output.preparedRender, binding);
+  validatePreparedWorkerRenderBinding(output.preparedRender, input.renderBinding, {
+    path: "world-systems.output.preparedRender",
+    schemaCode: "world-systems-render-schema-invalid",
+    invalidCode: "world-systems-render-binding-invalid",
+    staleCode: "world-systems-render-binding-stale",
+    label: "经济外交军事"
+  });
   const result = record(output.result, "world-systems.output.result");
   if (typeof result.executed !== "boolean") throw protocolError("world-systems-worker-result-invalid", "经济外交军事 Worker 缺少 executed 结果");
   const expectedStateId = validateExpectation(input.kind, input.expectation, result, output.plan);
@@ -89,14 +97,17 @@ function validatePatch(value: unknown, kind: EconomyDiplomacyMilitaryWorkerKind,
   if (executed ? dynamic ? writeSet.some(path => !withinRoots(path, roots)) : !sameStringSet(writeSet, exactPaths) : writeSet.length !== 0) throw protocolError("world-systems-worker-write-set-incomplete", `${kind} patch 没有合法覆盖正式写集`);
   const operations = array(patch.operations, "world-systems.patch.operations");
   const rows = new Map<string, UnknownRecord>();
+  const descendantAncestors = new Set<string>();
   for (let index = 0; index < operations.length; index++) {
     const row = record(operations[index], `world-systems.patch.operations.${index}`);
     const parts = stringArray(row.path, `world-systems.patch.operations.${index}.path`);
     if (row.exists !== true && row.exists !== false || parts.some(part => part.includes(".") || ["__proto__", "prototype", "constructor"].includes(part))) throw protocolError("world-systems-worker-operation-invalid", `${kind} patch operation 结构无效`);
     const path = parts.join(".");
-    const overlaps = [...rows.keys()].some(existing => path.startsWith(`${existing}.`) || existing.startsWith(`${path}.`));
+    const ancestors = pathAncestors(parts);
+    const overlaps = ancestors.some(ancestor => rows.has(ancestor)) || descendantAncestors.has(path);
     if (!withinRoots(path, roots) || rows.has(path) || overlaps || (!dynamic && row.exists !== true && !optionalDeletePathsByKind.get(kind)?.has(path)) || !validDynamicPath(kind, path, expectedStateId) || !validOperationValue(kind, path, row.value, row.exists)) throw protocolError("world-systems-worker-operation-value-invalid", `${kind} patch 的 ${path} 值、存在性或容器无效`);
     rows.set(path, row);
+    for (const ancestor of ancestors) descendantAncestors.add(ancestor);
   }
   if (!sameStringSet(writeSet, [...rows.keys()]) || rows.size !== writeSet.length) throw protocolError("world-systems-worker-write-set-mismatch", `${kind} patch writeSet 与 operations 不一致`);
   if (executed && !dynamic) validateExactPatchSemantics(kind, rows, sourceMapValue);
@@ -241,13 +252,42 @@ function validateDiplomacy(values: Map<string, unknown>, sourceMapValue: unknown
   assertDeepEqual(values.get("diplomacy"), values.get("pack.diplomacy"), "diplomacy-pack-mirror-invalid", "diplomacy / pack 镜像不一致");
   assertDeepEqual(values.get("politics.states"), values.get("pack.states"), "diplomacy-state-mirror-invalid", "外交 politics / pack state 镜像不一致");
   assertDeepEqual(values.get("military"), values.get("pack.military"), "diplomacy-military-mirror-invalid", "外交 military / pack 镜像不一致");
+  validateDiplomacyMilitaryScope(values, sourceMapValue);
   const zoneStore = record(values.get("zones"), "diplomacy.zones");
   assertDeepEqual(zoneStore.zones, values.get("pack.zones"), "diplomacy-zone-mirror-invalid", "外交 zones / pack 镜像不一致");
   const states = indexedValues(values.get("pack.states"), "diplomacy.pack.states");
   validateDiplomacyRelations(states, values.get("diplomacy"));
   validateZoneMirrors(values, sourceMapValue);
   validateDiplomacyWarzones(zoneStore, states, sourceMapValue);
-  validateMilitary(values.get("military"), values.get("pack.military"), values.get("politics.states"), values.get("pack.states"), sourceMapValue);
+  validateMilitary(values.get("military"), values.get("pack.military"), values.get("politics.states"), values.get("pack.states"), sourceMapValue, false, true);
+}
+
+function validateDiplomacyMilitaryScope(values: Map<string, unknown>, sourceMapValue: unknown): void {
+  const sourceMap = record(sourceMapValue, "diplomacy.sourceMap");
+  const sourcePack = record(sourceMap.pack, "diplomacy.sourceMap.pack");
+  validateObjectFields(
+    values.get("pack.states"),
+    sourcePack.states,
+    ["alert", "military", "militaryPolicy", "militaryDiagnostics"],
+    "diplomacy-military-state-scope-invalid"
+  );
+
+  const nextMilitary = record(values.get("military"), "diplomacy.military");
+  const sourceMilitary = record(sourceMap.military ?? sourcePack.military, "diplomacy.sourceMap.military");
+  for (const field of new Set([...Object.keys(sourceMilitary), ...Object.keys(nextMilitary)])) {
+    if (["campaigns", "fronts", "metadata"].includes(field)) continue;
+    assertDeepEqual(nextMilitary[field], sourceMilitary[field], "diplomacy-military-root-scope-invalid", `外交重生成改变了军事字段 ${field}`);
+  }
+  const nextMetadata = record(nextMilitary.metadata, "diplomacy.military.metadata");
+  const sourceMetadata = record(sourceMilitary.metadata, "diplomacy.sourceMap.military.metadata");
+  for (const field of new Set([...Object.keys(sourceMetadata), ...Object.keys(nextMetadata)])) {
+    if (["campaigns", "fronts"].includes(field)) continue;
+    if (field === "stale") {
+      assertDeepEqual(nextMetadata.stale, sourceMetadata.stale, "diplomacy-military-stale-scope-invalid", "外交重生成改变了军事 stale 状态");
+      continue;
+    }
+    assertDeepEqual(nextMetadata[field], sourceMetadata[field], "diplomacy-military-metadata-scope-invalid", `外交重生成改变了军事 metadata.${field}`);
+  }
 }
 
 function validateDiplomacyWarzones(zoneStore: UnknownRecord, states: unknown[], sourceMapValue: unknown): void {
@@ -304,13 +344,18 @@ function validateDiplomacyRelations(states: unknown[], diplomacyValue: unknown):
   assertDeepEqual(diplomacy.chronicle, neutral.diplomacy, "diplomacy-chronicle-mirror-invalid", "外交史与中立槽镜像不一致");
 }
 
-function validateMilitary(militaryValue: unknown, packMilitaryValue: unknown, politicsStatesValue: unknown, packStatesValue: unknown, sourceMapValue: unknown, requireArchivedEvents = false): void {
+function validateMilitary(militaryValue: unknown, packMilitaryValue: unknown, politicsStatesValue: unknown, packStatesValue: unknown, sourceMapValue: unknown, requireArchivedEvents = false, allowStaleRegiments = false): void {
   assertDeepEqual(militaryValue, packMilitaryValue, "military-pack-mirror-invalid", "military / pack 镜像不一致");
   validateObjectFields(packStatesValue, politicsStatesValue, ["alert", "military", "militaryPolicy", "militaryDiagnostics"], "military-state-mirror-invalid");
   const sourceMap = record(sourceMapValue, "military.sourceMap");
   const sourcePack = record(sourceMap.pack, "military.sourceMap.pack");
   const cellCount = indexedLength(record(sourcePack.cells, "military.sourceMap.pack.cells").i, "military.sourceMap.pack.cells.i");
   const states = indexedValues(packStatesValue, "military.pack.states");
+  const military = record(militaryValue, "military.document");
+  const metadata = record(military.metadata, "military.metadata");
+  const sourceMilitary = record(sourceMap.military ?? sourcePack.military, "military.sourceMap.military");
+  const sourceMetadata = record(sourceMilitary.metadata, "military.sourceMap.military.metadata");
+  const staleRegiments = allowStaleRegiments && sourceMetadata.stale === true;
   const ids = new Set<string>();
   let statesWithMilitary = 0;
   let troops = 0;
@@ -320,6 +365,7 @@ function validateMilitary(militaryValue: unknown, packMilitaryValue: unknown, po
     const state = states[stateId];
     if (!isPlainRecord(state) || state.removed) continue;
     if (Number(state.i) !== stateId) throw protocolError("military-state-identity-invalid", `军事国家槽 #${stateId} 身份无效`);
+    if (staleRegiments) continue;
     const regiments = array(state.military, `military.state.${stateId}.regiments`);
     if (regiments.length) statesWithMilitary += 1;
     for (const regimentValue of regiments) {
@@ -334,17 +380,13 @@ function validateMilitary(militaryValue: unknown, packMilitaryValue: unknown, po
       statuses[status] = (statuses[status] || 0) + 1;
     }
   }
-  const military = record(militaryValue, "military.document");
-  const metadata = record(military.metadata, "military.metadata");
-  if (metadata.statesWithMilitary !== statesWithMilitary || metadata.regiments !== ids.size || metadata.troops !== Math.round(troops) || metadata.navalRegiments !== navalRegiments || !sameData(metadata.statuses, statuses)
-    || typeof metadata.buildMs !== "number" || !Number.isFinite(metadata.buildMs) || metadata.buildMs < 0) throw protocolError("military-metadata-count-invalid", "军事 metadata 与实际军团汇总不一致");
+  if (!staleRegiments && (metadata.statesWithMilitary !== statesWithMilitary || metadata.regiments !== ids.size || metadata.troops !== Math.round(troops) || metadata.navalRegiments !== navalRegiments || !sameData(metadata.statuses, statuses)
+    || typeof metadata.buildMs !== "number" || !Number.isFinite(metadata.buildMs) || metadata.buildMs < 0)) throw protocolError("military-metadata-count-invalid", "军事 metadata 与实际军团汇总不一致");
   const events = array(military.events ?? [], "military.events");
   if (Number(metadata.events || 0) !== events.length) throw protocolError("military-event-count-invalid", "军事 metadata.events 与战报集合不一致");
   validateMilitaryCampaignsAndFronts(military, states, cellCount);
   if (requireArchivedEvents) {
-    const sourceMilitary = isPlainRecord(sourceMap.military) ? sourceMap.military : {};
     const sourceEvents = array(sourceMilitary.events ?? [], "military.sourceMap.events");
-    const sourceMetadata = isPlainRecord(sourceMilitary.metadata) ? sourceMilitary.metadata : {};
     const archiveGeneration = Number(sourceMetadata.eventArchiveGeneration || 0) + 1;
     const expectedEvents = sourceEvents.map((event, index) => ({...structuredClone(record(event, `military.sourceMap.events.${index}`)), archived: true, archiveReason: "military-regeneration", archiveGeneration}));
     if (!sameData(events, expectedEvents)) throw protocolError("military-event-archive-invalid", "军事重生成没有按原战报内容和顺序完整归档");
@@ -421,31 +463,53 @@ function economyView(sourceMapValue: unknown): UnknownRecord {
   const politics = record(source.politics, "economy.sourceMap.politics");
   const settlements = record(source.settlements, "economy.sourceMap.settlements");
   return {
-    pack: {cells: structuredClone({
+    pack: {cells: {
       i: record(pack.cells, "economy.sourceMap.pack.cells").i,
       c: record(pack.cells, "economy.sourceMap.pack.cells").c,
       state: record(pack.cells, "economy.sourceMap.pack.cells").state,
       market: record(pack.cells, "economy.sourceMap.pack.cells").market
-    }), goods: structuredClone(pack.goods), markets: structuredClone(pack.markets), deals: structuredClone(pack.deals), burgs: structuredClone(pack.burgs), states: structuredClone(pack.states), provinces: structuredClone(pack.provinces)},
-    politics: {states: structuredClone(politics.states), provinces: structuredClone(politics.provinces)},
-    settlements: {cities: structuredClone(settlements.cities)},
-    economy: structuredClone(source.economy)
+    }, goods: pack.goods, markets: pack.markets, deals: pack.deals, burgs: pack.burgs, states: pack.states, provinces: pack.provinces},
+    politics: {states: politics.states, provinces: politics.provinces},
+    settlements: {cities: settlements.cities},
+    economy: source.economy
   };
 }
 
 function applyOperations(target: UnknownRecord, operations: Map<string, UnknownRecord>): void {
+  const owned = new WeakSet<object>([target]);
   for (const [path, row] of operations) {
     const parts = path.split(".");
     let owner: UnknownRecord = target;
     for (let index = 0; index < parts.length - 1; index++) {
       const key = parts[index];
-      if (!owner[key] || typeof owner[key] !== "object") owner[key] = {};
-      owner = owner[key] as UnknownRecord;
+      const value = owner[key];
+      if (!value || typeof value !== "object") {
+        const created = {};
+        owner[key] = created;
+        owned.add(created);
+        owner = created;
+        continue;
+      }
+      if (owned.has(value)) {
+        owner = value as UnknownRecord;
+        continue;
+      }
+      const copy = cloneContainer(value);
+      owner[key] = copy;
+      owned.add(copy);
+      owner = copy as UnknownRecord;
     }
     const key = parts.at(-1) as string;
-    if (row.exists === true) owner[key] = structuredClone(row.value);
+    if (row.exists === true) owner[key] = row.value;
     else delete owner[key];
   }
+}
+
+function cloneContainer(value: object): object {
+  if (Array.isArray(value)) return [...value];
+  if (isTypedArray(value)) return structuredClone(value);
+  if (isPlainRecord(value)) return {...value};
+  return {};
 }
 
 function validateObjectFields(leftValue: unknown, rightValue: unknown, fields: readonly string[], code: string): void {
@@ -468,12 +532,6 @@ function assertAllowedKeys(value: UnknownRecord, allowed: ReadonlySet<string>, c
 function adaptBinding(kind: EconomyDiplomacyMilitaryWorkerKind, source: LegacyBinding): ComputeOperationBinding {
   const operationId = `${kind}:${source.operationId}`;
   return validateOperationBinding({bindingPhase: "pre-commit", bindingKind: "compute", operationId, transactionId: `${source.mapIdentity}:${operationId}:${source.mapRevision}:${source.topologyRevision}:${source.generationToken}`, operationName: source.operationName || `${kind}.compute`, sourceRevision: adaptLegacyInteractiveRevision({mapIdentity: source.mapIdentity, mapRevision: source.mapRevision, topologyRevision: source.topologyRevision, domainRevisions: {[kind]: source.mapRevision}}), generationToken: source.generationToken, lockFingerprint: source.lockFingerprint}, "world-systems.binding.core") as ComputeOperationBinding;
-}
-
-function validatePreparedRender(value: unknown, expected: LegacyBinding): void {
-  if (value === null || value === undefined) return;
-  const prepared = record(value, "world-systems.output.preparedRender");
-  if (prepared.binding !== null && prepared.binding !== undefined) assertSameBinding(prepared.binding, expected, "world-systems.output.preparedRender.binding");
 }
 
 function validateExpectation(kind: EconomyDiplomacyMilitaryWorkerKind, expectation: Readonly<{stateId?: number}> | undefined, result: UnknownRecord, planValue: unknown): number | undefined {
@@ -577,7 +635,20 @@ function isPlainRecord(value: unknown): value is UnknownRecord {
 }
 
 function sameStringSet(left: readonly string[], right: readonly string[]): boolean {
-  return left.length === right.length && new Set(left).size === left.length && left.every(value => right.includes(value));
+  if (left.length !== right.length) return false;
+  const leftSet = new Set(left);
+  const rightSet = new Set(right);
+  return leftSet.size === left.length && rightSet.size === right.length && left.every(value => rightSet.has(value));
+}
+
+function pathAncestors(parts: readonly string[]): string[] {
+  const result: string[] = [];
+  let path = "";
+  for (let index = 0; index < parts.length - 1; index++) {
+    path = path ? `${path}.${parts[index]}` : parts[index];
+    result.push(path);
+  }
+  return result;
 }
 
 function assertDeepEqual(left: unknown, right: unknown, code: string, message: string): void {
@@ -592,12 +663,17 @@ function sameDataPair(left: unknown, right: unknown, seen: WeakMap<object, objec
   if (Object.is(left, right)) return true;
   if (left === null || right === null || typeof left !== "object" || typeof right !== "object") return false;
   if (left.constructor !== right.constructor) return false;
-  if (isTypedArray(left) && isTypedArray(right)) return left.byteLength === right.byteLength && new Uint8Array(left.buffer, left.byteOffset, left.byteLength).every((value, index) => value === new Uint8Array(right.buffer, right.byteOffset, right.byteLength)[index]);
+  if (isTypedArray(left) && isTypedArray(right)) {
+    if (left.byteLength !== right.byteLength) return false;
+    const leftBytes = new Uint8Array(left.buffer, left.byteOffset, left.byteLength);
+    const rightBytes = new Uint8Array(right.buffer, right.byteOffset, right.byteLength);
+    return leftBytes.every((value, index) => value === rightBytes[index]);
+  }
   if (seen.get(left) === right) return true;
   seen.set(left, right);
-  const leftKeys = Object.keys(left).sort();
-  const rightKeys = Object.keys(right).sort();
-  return leftKeys.length === rightKeys.length && leftKeys.every((key, index) => key === rightKeys[index] && sameDataPair((left as UnknownRecord)[key], (right as UnknownRecord)[key], seen));
+  const leftKeys = Object.keys(left);
+  const rightKeys = Object.keys(right);
+  return leftKeys.length === rightKeys.length && leftKeys.every(key => Object.prototype.hasOwnProperty.call(right, key) && sameDataPair((left as UnknownRecord)[key], (right as UnknownRecord)[key], seen));
 }
 
 function isCanonicalTree(value: unknown, visiting = new WeakSet<object>(), done = new WeakSet<object>()): boolean {

@@ -23,6 +23,7 @@ import {getPlannerRecipe, listPlannerRecipes} from "./planner-recipe-registry.js
 import {buildMapSummary as buildSharedMapSummary} from "./read-only-map-core.js";
 import {compareAnalysisRegions, compareRegionPower, defineAnalysisRegion, describeAnalysisRegion, diagnoseRegionPopulation, diagnoseRegionTerrain, explainRegionPrecipitation} from "./map-analysis-api.js";
 import {getPlaceDirection, measurePlaceDistance, resolvePlace} from "./place-analysis-api.js";
+import {exportVisualThemeDocument, isUserVisualTheme} from "../renderer/themes.js";
 
 export function installConsoleApi(documentRef, state, options = {}) {
   const view = documentRef.defaultView || window;
@@ -474,7 +475,8 @@ export function createConsoleApi(documentRef, state, actions = {}) {
       dumpState: (options = {}) => apiCall(() => buildDebugStateDump(state, documentRef, options, api)),
       renderer: () => apiCall(() => buildDebugRendererSnapshot(state)),
       health: (options = {}) => apiCall(() => buildDebugHealthSnapshot(state, options)),
-      profileNextRender: (options = {}) => apiCall(() => profileDebugNextRender(state, options))
+      profileNextRender: (options = {}) => apiCall(() => profileDebugNextRender(state, options)),
+      simulateContextLoss: (options = {}) => apiCall(() => simulateDebugContextLoss(state, options))
     })
   };
   methodDescriptions = buildApiMethodDescriptionRegistry(API_METHODS, methodMetadata, api);
@@ -892,7 +894,8 @@ export function buildMethodMetadata() {
       dumpState: {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
       renderer: {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
       health: {stable: "draft", mutates: "none", undoable: false, async: false, requiresConfirm: false},
-      profileNextRender: {stable: "draft", mutates: "renderer-diagnostics", undoable: false, async: false, requiresConfirm: false}
+      profileNextRender: {stable: "draft", mutates: "renderer-diagnostics", undoable: false, async: false, requiresConfirm: false},
+      simulateContextLoss: {stable: "draft", mutates: "renderer-diagnostics", undoable: false, async: true, requiresConfirm: false}
     }
   };
 }
@@ -1252,6 +1255,22 @@ function profileDebugNextRender(state, options = {}) {
       selectionHighlightMode: afterStats.selectionHighlightMode || ""
     }
   };
+}
+
+export function simulateDebugContextLoss(state, options = {}) {
+  const renderer = state?.renderer;
+  if (typeof renderer?.simulateContextLoss !== "function") {
+    const error = new Error("当前 renderer 不支持 WebGL context loss 模拟");
+    error.code = "render-context-loss-unsupported";
+    throw error;
+  }
+  const normalized = normalizePublicOptions(options, ["restoreDelayMs"], "debug.simulateContextLoss ");
+  if (normalized.restoreDelayMs !== undefined && (!Number.isSafeInteger(normalized.restoreDelayMs) || normalized.restoreDelayMs < 0 || normalized.restoreDelayMs > 5000)) {
+    const error = new TypeError("debug.simulateContextLoss restoreDelayMs 必须是 0～5000 的安全整数");
+    error.code = "invalid_argument";
+    throw error;
+  }
+  return renderer.simulateContextLoss(normalized);
 }
 
 function normalizeDebugRenderOptions(options = {}) {
@@ -1671,10 +1690,13 @@ function normalizeNamebaseApiBaseIds(baseIds) {
 export function exportAllMapData(state, documentRef, options = {}) {
   const map = assertApiMap(state);
   const units = normalizeUnitPreferences(readControlPreferences(documentRef).units);
+  const visualTheme = currentVisualThemeId(state, documentRef);
   const document = createMapDocument(map, {
     ...(state.options || {}),
-    visualTheme: currentVisualThemeId(state, documentRef),
+    visualTheme,
     display: {units}
+  }, {
+    visualThemeDocument: isUserVisualTheme(visualTheme) ? exportVisualThemeDocument(visualTheme) : null
   });
   const text = stringifyMapDocument(document);
   const filename = `${mapFileBaseName(map)}.webgl-map.json`;
@@ -1726,10 +1748,13 @@ export function exportPackGeoJson(state, documentRef, options = {}) {
 export async function exportCompressedAllMapData(state, documentRef, options = {}) {
   const map = assertApiMap(state);
   const units = normalizeUnitPreferences(readControlPreferences(documentRef).units);
+  const visualTheme = currentVisualThemeId(state, documentRef);
   const document = createMapDocument(map, {
     ...(state.options || {}),
-    visualTheme: currentVisualThemeId(state, documentRef),
+    visualTheme,
     display: {units}
+  }, {
+    visualThemeDocument: isUserVisualTheme(visualTheme) ? exportVisualThemeDocument(visualTheme) : null
   });
   const filename = createMapArchiveFilename(map, {
     template: options.filenameTemplate === undefined ? "{name}.{ext}" : options.filenameTemplate
@@ -1938,7 +1963,10 @@ export async function exportHeightmapPngData(state, documentRef, options = {}) {
   const map = assertApiMap(state);
   const filename = `${mapFileBaseName(map)}.heightmap.png`;
   const pixelScale = normalizePngApiScale(options.pixelScale ?? options.scale ?? readPngExportScale(documentRef));
-  const pngOptions = {pixelScale};
+  const pngOptions = {
+    pixelScale,
+    ...(typeof options.heightmapExportWorkerFactory === "function" ? {heightmapExportWorkerFactory: options.heightmapExportWorkerFactory} : {})
+  };
   if (options.download === true) {
     const result = await downloadHeightmapPng(documentRef, map, filename, pngOptions);
     return {

@@ -4,7 +4,7 @@
   "policy": {
     "operationDelayMs": 420,
     "panelDelayMs": 180,
-    "ordinaryForbiddenTerms": ["cell", "grid", "pack", "feature", "Worker", "buffer", "revision", "checksum", "镜像", "补丁", "派生", "运行时", "同事务"],
+    "ordinaryForbiddenTerms": ["cell", "grid", "pack", "feature", "Worker", "session", "packet", "buffer", "revision", "checksum", "LocalStorage", "IndexedDB", "结构化克隆", "线程", "会话", "消息包", "镜像", "补丁", "派生", "运行时", "同事务"],
     "debugKeepsTechnicalTerms": true
   },
   "loadingSources": [

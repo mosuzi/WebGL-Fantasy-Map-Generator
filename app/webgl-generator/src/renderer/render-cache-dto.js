@@ -1,3 +1,5 @@
+import {normalizeRenderResourceBinding, sameRenderResourceBinding} from "./render-resource-binding.js";
+
 export const RENDER_CACHE_SCHEMA_VERSION = 1;
 const CELL_VISUAL_CHECKPOINT_INTERVAL = 32;
 
@@ -187,7 +189,7 @@ export function assertCacheBinding(dto, expected, cacheKind = "render") {
   if (expected === null || expected === undefined) return dto;
   const actualBinding = normalizeBinding(dto.binding);
   const expectedBinding = normalizeBinding(expected);
-  if (actualBinding.mapIdentity !== expectedBinding.mapIdentity || actualBinding.mapRevision !== expectedBinding.mapRevision || actualBinding.topologyRevision !== expectedBinding.topologyRevision) {
+  if (!sameRenderResourceBinding(actualBinding, expectedBinding)) {
     throw cacheError("render-cache-stale", `${cacheKind} cache 不属于当前地图 revision`, {cacheKind, actual: actualBinding, expected: expectedBinding});
   }
   return dto;
@@ -558,14 +560,7 @@ function compareEdgePair(left, right) {
 }
 
 function normalizeBinding(value = {}) {
-  const mapIdentity = value.mapIdentity === null || value.mapIdentity === undefined ? null : String(value.mapIdentity);
-  const mapRevision = Number(value.mapRevision);
-  const topologyRevision = Number(value.topologyRevision);
-  return {
-    mapIdentity,
-    mapRevision: Number.isSafeInteger(mapRevision) && mapRevision >= 0 ? mapRevision : 0,
-    topologyRevision: Number.isSafeInteger(topologyRevision) && topologyRevision >= 0 ? topologyRevision : 0
-  };
+  return normalizeRenderResourceBinding(value, "renderCache.binding");
 }
 
 function structuredCloneSafe(value) {

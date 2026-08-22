@@ -81,6 +81,18 @@ const dpr1 = projectWorldLineWidth(routeWorldWidth("primary"), projection(2, 1))
 const dpr2 = projectWorldLineWidth(routeWorldWidth("primary"), projection(2, 2));
 assert.equal(dpr1.cssWidth, dpr2.cssWidth, "DPR 不得改变 CSS 语义宽度");
 assert.equal(dpr2.backingWidth, dpr1.backingWidth * 2, "DPR 只应改变 backing 宽度");
+const cachedProjection = createLineWidthProjection({
+  map,
+  camera: {scale: 2},
+  canvas: {
+    get width() { throw new Error("不得读取 live canvas.width"); },
+    get height() { throw new Error("不得读取 live canvas.height"); },
+    get clientWidth() { throw new Error("不得读取 live canvas.clientWidth"); },
+    get clientHeight() { throw new Error("不得读取 live canvas.clientHeight"); }
+  },
+  canvasSize: {width: 2000, height: 1200, cssWidth: 1000, cssHeight: 600, pixelRatio: 2}
+});
+assert.deepEqual(cachedProjection, projection(2, 2), "缓存 canvas size 改变了线宽投影语义");
 
 for (const scale of [1, 2, 4]) {
   const base = projectWorldLineWidth(routeWorldWidth("secondary"), projection(scale));
@@ -95,6 +107,8 @@ const selectionSource = await readFile(new URL("../app/webgl-generator/src/rende
 const pngSource = await readFile(new URL("../app/webgl-generator/src/runtime/map-file-io.js", import.meta.url), "utf8");
 
 assert.match(rendererSource, /createLineWidthProjection\(\{map, camera, canvas\}\)/, "道路与河流 build context 必须共用世界宽度投影");
+assert.match(rendererSource, /cityIconLayer\.draw\(\{[\s\S]{0,300}?canvasSize: this\.canvasSize/u, "正式 draw 没有向城镇层传入缓存 canvas size");
+assert.match(rendererSource, /createLineWidthProjection\(\{map: this\.map, camera: this\.camera, canvas: this\.canvas, canvasSize: this\.canvasSize\}\)/u, "正式 draw 尾部仍依赖 live canvas 尺寸");
 assert.equal(countMatches(rendererSource, /createRouteMeshBuild\(/g), 3, "同步 / 异步道路 builder 必须共用 createRouteMeshBuild");
 assert.equal(countMatches(rendererSource, /createRiverMeshBuild\(/g), 3, "同步 / 异步河流 builder 必须共用 createRiverMeshBuild");
 assert.doesNotMatch(rendererSource, /width:\s*3\.6|width:\s*2\.6|width:\s*1\.8/, "renderer 不得保留固定 CSS 道路宽度");

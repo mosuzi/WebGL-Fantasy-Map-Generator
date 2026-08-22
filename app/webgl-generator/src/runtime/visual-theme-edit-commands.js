@@ -1,16 +1,20 @@
 import {listUserVisualThemeDocuments, replaceUserVisualThemes} from "../renderer/themes.js";
 import {systemAffected} from "./edit-command-effects.js";
 
-export function captureVisualThemeState(map, preset) {
+export function captureVisualThemeState(map, presentationPreset) {
+  const preset = String(map?.visualTheme?.preset || map?.options?.visualTheme || "default");
   return {
-    preset: String(preset || map?.visualTheme?.preset || "default"),
-    userThemes: listUserVisualThemeDocuments()
+    preset,
+    presentationPreset: String(presentationPreset || preset),
+    userThemes: Array.isArray(map?.visualTheme?.userThemes) ? map.visualTheme.userThemes.map(cloneDocument) : [],
+    registryUserThemes: listUserVisualThemeDocuments()
   };
 }
 
 export function createSetUserVisualThemesCommand(before, after, {label = "更新用户主题"} = {}) {
   const beforeState = normalizeState(before);
   const afterState = normalizeState(after);
+  let activeState = beforeState;
   return {
     label,
     domain: "visual-theme",
@@ -27,18 +31,23 @@ export function createSetUserVisualThemesCommand(before, after, {label = "更新
     },
     apply(context) {
       applyState(context?.map, afterState);
+      activeState = afterState;
     },
     revert(context) {
       applyState(context?.map, beforeState);
+      activeState = beforeState;
     },
     getResult() {
       return {preset: afterState.preset, userThemes: afterState.userThemes.length};
+    },
+    getPresentationPreset() {
+      return activeState.presentationPreset;
     }
   };
 }
 
 function applyState(map, state) {
-  replaceUserVisualThemes(state.userThemes);
+  replaceUserVisualThemes(state.registryUserThemes);
   if (!map) return;
   map.visualTheme = {
     ...(map.visualTheme || {}),
@@ -51,9 +60,13 @@ function applyState(map, state) {
 }
 
 function normalizeState(state) {
+  const preset = String(state?.preset || "default");
+  const userThemes = Array.isArray(state?.userThemes) ? state.userThemes.map(cloneDocument) : [];
   return {
-    preset: String(state?.preset || "default"),
-    userThemes: Array.isArray(state?.userThemes) ? state.userThemes.map(cloneDocument) : []
+    preset,
+    presentationPreset: String(state?.presentationPreset || preset),
+    userThemes,
+    registryUserThemes: Array.isArray(state?.registryUserThemes) ? state.registryUserThemes.map(cloneDocument) : userThemes.map(cloneDocument)
   };
 }
 

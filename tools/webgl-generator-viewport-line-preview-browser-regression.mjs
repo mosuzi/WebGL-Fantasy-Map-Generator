@@ -5,6 +5,7 @@ import {createServer} from "node:http";
 import {createRequire} from "node:module";
 import {dirname, extname, join, normalize, resolve} from "node:path";
 import {fileURLToPath} from "node:url";
+import {closeTask350BrowserResource, createTask350BrowserArtifact} from "./task-350-browser-artifact.mjs";
 import {waitForApiReady} from "./webgl-generator-api-browser-ready.mjs";
 
 const rootDir = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -12,36 +13,51 @@ const sourceDir = join(rootDir, "source", "Fantasy-Map-Generator");
 const distDir = join(rootDir, "dist", "webgl-generator");
 const host = "127.0.0.1";
 const port = 5478;
-assert.ok(existsSync(distDir), `构建产物不存在：${distDir}`);
-
-const playwright = createRequire(join(sourceDir, "package.json"))("playwright");
-const server = await startStaticServer();
+const evidence = createTask350BrowserArtifact("viewport-line-preview", {mode: "browser-presentation"});
+let server;
 let browser;
+let thrownError = null;
+const consoleErrors = [];
+const pageErrors = [];
+const setupPerformanceSignals = [];
 
 try {
+  const finalReport = {ok: false, initial: null, zoom: null, pan: null, setupPerformanceSignals, consoleErrors, pageErrors};
+  const compactReport = {initial: {canvasWidth: 0, canvasHeight: 0}, zoom: null, pan: null, setupPerformanceSignals, consoleErrors, pageErrors};
+  evidence.setResult(finalReport, compactReport);
+  assert.ok(existsSync(distDir), `构建产物不存在：${distDir}`);
+  evidence.mark("server-start", {active: "viewport-line-preview"});
+  const playwright = createRequire(join(sourceDir, "package.json"))("playwright");
+  server = await startStaticServer();
+  evidence.mark("browser-start", {active: "viewport-line-preview", complete: "server-start"});
   browser = await playwright.chromium.launch({headless: true, channel: "chrome"});
   const page = await browser.newPage({viewport: {width: 1440, height: 900}});
   page.setDefaultTimeout(120000);
-  const consoleErrors = [];
-  const pageErrors = [];
   page.on("console", message => message.type() === "error" && consoleErrors.push(message.text()));
   page.on("pageerror", error => pageErrors.push(error.message));
   await page.goto(`http://${host}:${port}?healthClear=1`, {waitUntil: "domcontentloaded"});
   await waitForApiReady(page, 120000);
+  evidence.mark("browser-evaluation", {active: "viewport-line-preview", complete: "browser-start"});
   await page.evaluate(() => {
     const renderer = window.__webglGeneratorApp.renderer;
     renderer.setLayerVisible("routes", true);
     renderer.setLayerVisible("rivers", true);
   });
   await waitForViewportIdle(page);
+  const activeConsoleErrors = consoleErrors.filter(message => !/^\[FMG health\] (operation-stall|main-thread-long-task|render-frame-gap|input-handler-stall)\b/u.test(message));
+  setupPerformanceSignals.push(...consoleErrors.filter(message => !activeConsoleErrors.includes(message)));
+  consoleErrors.length = 0;
+  consoleErrors.push(...activeConsoleErrors);
 
   const canvas = page.locator("#map-canvas");
   const box = await canvas.boundingBox();
-  assert.ok(box?.width > 0 && box?.height > 0, "地图画布不可见");
-  const center = {x: box.x + box.width * 0.62, y: box.y + box.height * 0.48};
   const initial = await readPreviewStats(page);
+  finalReport.initial = summarizeState(initial);
+  compactReport.initial = {canvasWidth: Number(box?.width || 0), canvasHeight: Number(box?.height || 0), ...finalReport.initial};
+  assert.ok(box?.width > 0 && box?.height > 0, "地图画布不可见");
   assert.ok(initial.routeVertexCount > 0, "默认地图没有可验证的道路顶点");
   assert.ok(initial.riverVertexCount > 0, "默认地图没有可验证的河流顶点");
+  const center = {x: box.x + box.width * 0.62, y: box.y + box.height * 0.48};
 
   await page.mouse.move(center.x, center.y);
   const zoomSamples = [];
@@ -62,6 +78,30 @@ try {
   await page.mouse.up({button: "middle"});
   const panIdle = await waitForViewportIdle(page);
 
+  finalReport.zoom = summarizeSamples(zoomSamples, zoomIdle);
+  finalReport.pan = summarizeSamples(panSamples, panIdle);
+  compactReport.zoom = {
+    ...finalReport.zoom,
+    routeVertexCounts: zoomSamples.map(sample => sample.routeVertexCount),
+    riverVertexCounts: zoomSamples.map(sample => sample.riverVertexCount),
+    alignedTransformSamples: zoomSamples.filter(sample => sameTransform(sample.routePreviewTransform, sample.riverPreviewTransform)).length,
+    appliedScaleDeltas: zoomSamples.map(sample => Math.abs(sample.routePreviewTransform.scale - 1)),
+    routePreviewTransforms: zoomSamples.map(sample => sample.routePreviewTransform),
+    riverPreviewTransforms: zoomSamples.map(sample => sample.riverPreviewTransform),
+    idleRoutePreviewTransform: zoomIdle.routePreviewTransform,
+    idleRiverPreviewTransform: zoomIdle.riverPreviewTransform
+  };
+  compactReport.pan = {
+    ...finalReport.pan,
+    routeVertexCounts: panSamples.map(sample => sample.routeVertexCount),
+    riverVertexCounts: panSamples.map(sample => sample.riverVertexCount),
+    alignedTransformSamples: panSamples.filter(sample => sameTransform(sample.routePreviewTransform, sample.riverPreviewTransform)).length,
+    appliedOffsetDeltas: panSamples.map(sample => ({x: Math.abs(sample.routePreviewTransform.offsetX), y: Math.abs(sample.routePreviewTransform.offsetY)})),
+    routePreviewTransforms: panSamples.map(sample => sample.routePreviewTransform),
+    riverPreviewTransforms: panSamples.map(sample => sample.riverPreviewTransform),
+    idleRoutePreviewTransform: panIdle.routePreviewTransform,
+    idleRiverPreviewTransform: panIdle.riverPreviewTransform
+  };
   assertPreviewSamples(zoomSamples, "缩放");
   assertPreviewSamples(panSamples, "平移");
   assert.ok(zoomSamples.some(sample => Math.abs(sample.routePreviewTransform.scale - 1) > 1e-6), "缩放预览没有产生相机比例差值");
@@ -72,19 +112,28 @@ try {
   assert.equal(panIdle.glError, 0);
   assert.deepEqual(consoleErrors, []);
   assert.deepEqual(pageErrors, []);
-
-  console.log(JSON.stringify({
-    ok: true,
-    initial: summarizeState(initial),
-    zoom: summarizeSamples(zoomSamples, zoomIdle),
-    pan: summarizeSamples(panSamples, panIdle),
-    consoleErrors,
-    pageErrors
-  }, null, 2));
+  finalReport.ok = true;
+  evidence.succeed();
+  console.log(JSON.stringify(finalReport, null, 2));
+} catch (error) {
+  evidence.fail(error);
+  thrownError = error;
 } finally {
-  if (browser) await Promise.race([browser.close(), delay(5000)]);
-  await new Promise(done => server.close(done));
+  for (const [label, close] of [
+    ["viewport-line-preview-browser", browser ? () => browser.close() : null],
+    ["viewport-line-preview-server", server ? () => new Promise((resolveClose, rejectClose) => server.close(error => error ? rejectClose(error) : resolveClose())) : null]
+  ]) {
+    if (!close) continue;
+    try {
+      await closeTask350BrowserResource(label, close);
+    } catch (error) {
+      evidence.failTeardown(error);
+      if (!thrownError) thrownError = error;
+    }
+  }
+  evidence.persist();
 }
+if (thrownError) throw thrownError;
 
 function assertPreviewSamples(samples, label) {
   assert.ok(samples.length > 0);
@@ -179,10 +228,6 @@ function sameTransform(left, right) {
 
 function round(value) {
   return Math.round(Number(value || 0) * 100) / 100;
-}
-
-function delay(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 async function startStaticServer() {

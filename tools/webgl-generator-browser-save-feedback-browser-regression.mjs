@@ -5,24 +5,32 @@ import {join, resolve} from "node:path";
 import {fileURLToPath} from "node:url";
 import {createServer as createViteServer} from "vite";
 
+import {closeTask350BrowserResource, createTask350BrowserArtifact} from "./task-350-browser-artifact.mjs";
+import {collectTask350LongTaskWindow, prepareTask350LongTaskObserver, resetTask350LongTaskWindow, summarizeTask350LongTasks} from "./task-350-browser-long-task.mjs";
 import {waitForApiReady} from "./webgl-generator-api-browser-ready.mjs";
 
 const rootDir = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const sourceDir = join(rootDir, "source", "Fantasy-Map-Generator");
-const playwright = createRequire(join(sourceDir, "package.json"))("playwright");
 const host = "127.0.0.1";
 const timeoutMs = 180000;
-const vite = await createViteServer({configFile: join(rootDir, "vite.config.mjs"), server: {host, port: 0}, logLevel: "error"});
+const evidence = createTask350BrowserArtifact("browser-save-feedback", {mode: "browser-feedback"});
+let vite;
 let browser;
 let context;
+let thrownError = null;
 
 try {
+  evidence.mark("server-start", {active: "browser-save-feedback"});
+  const playwright = createRequire(join(sourceDir, "package.json"))("playwright");
+  vite = await createViteServer({configFile: join(rootDir, "vite.config.mjs"), server: {host, port: 0}, logLevel: "error"});
   await vite.listen();
   const port = vite.httpServer.address().port;
+  evidence.mark("browser-start", {active: "browser-save-feedback", complete: "server-start"});
   browser = await playwright.chromium.launch({headless: true, channel: "chrome"});
   context = await browser.newContext({viewport: {width: 1280, height: 820}, deviceScaleFactor: 1});
   await context.addInitScript(() => localStorage.clear());
   const page = await context.newPage();
+  await prepareTask350LongTaskObserver(page);
   page.setDefaultTimeout(timeoutMs);
   const consoleErrors = [];
   const pageErrors = [];
@@ -41,6 +49,8 @@ try {
   await page.locator("#open-generation-panel").click();
   await page.locator('[data-control-tab="about"]').locator("..").click();
   await page.locator(".project-save-dropdown button").waitFor({state: "visible"});
+  evidence.mark("browser-evaluation", {active: "browser-save-feedback", complete: "browser-start"});
+  await resetTask350LongTaskWindow(page);
 
   await page.evaluate(() => {
     const status = document.getElementById("file-operation-status");
@@ -70,9 +80,11 @@ try {
   assert.match(failure.toast.text, /保存到浏览器失败：浏览器存储故障注入/);
   assert.equal(failure.toast.tone, "error", "失败 toast 色调错误");
   await page.waitForTimeout(5500);
-  assert.equal((await readFeedback(page)).toast.hidden, false, "失败提示未持续至少 6 秒");
+  const failureAt5500 = await readFeedback(page);
+  assert.equal(failureAt5500.toast.hidden, false, "失败提示未持续至少 6 秒");
   await page.waitForTimeout(800);
-  assert.equal((await readFeedback(page)).toast.hidden, true, "失败提示超过约 6 秒仍未关闭");
+  const failureAt6300 = await readFeedback(page);
+  assert.equal(failureAt6300.toast.hidden, true, "失败提示超过约 6 秒仍未关闭");
   await page.evaluate(() => {
     const app = window.__webglGeneratorApp;
     app.runtimeActions.data.saveBrowserMap = window.__browserSaveFeedbackOriginal;
@@ -80,12 +92,35 @@ try {
   });
   assert.deepEqual(consoleErrors, [], "浏览器保存反馈产生 application console error");
   assert.deepEqual(pageErrors, [], "浏览器保存反馈产生 page error");
-  console.log(JSON.stringify({ok: true, success, failure, consoleErrors, pageErrors}, null, 2));
+  const longTasks = await collectTask350LongTaskWindow(page, "save-feedback");
+  const performance = summarizeTask350LongTasks(longTasks, 200);
+  const overBudget = performance.overBudget;
+  assert.deepEqual(overBudget, [], `浏览器保存反馈目标窗口出现 >200ms LongTask：${JSON.stringify(overBudget)}`);
+  const finalReport = {ok: true, success, failure, consoleErrors, pageErrors, longTasks, performance};
+  const compactReport = {...finalReport, failureAt5500, failureAt6300, performance};
+  evidence.setResult(finalReport, compactReport);
+  evidence.succeed();
+  console.log(JSON.stringify(finalReport, null, 2));
+} catch (error) {
+  evidence.fail(error);
+  thrownError = error;
 } finally {
-  if (context) await Promise.race([context.close(), delay(5000)]);
-  if (browser) await Promise.race([browser.close(), delay(5000)]);
-  await vite.close();
+  for (const [label, close] of [
+    ["browser-save-feedback-context", context ? () => context.close() : null],
+    ["browser-save-feedback-browser", browser ? () => browser.close() : null],
+    ["browser-save-feedback-vite", vite ? () => vite.close() : null]
+  ]) {
+    if (!close) continue;
+    try {
+      await closeTask350BrowserResource(label, close);
+    } catch (error) {
+      evidence.failTeardown(error);
+      if (!thrownError) thrownError = error;
+    }
+  }
+  evidence.persist();
 }
+if (thrownError) throw thrownError;
 
 async function triggerBrowserSave(page) {
   await page.locator(".project-save-dropdown button").click();
@@ -103,8 +138,4 @@ function readFeedback(page) {
       toast: {hidden: Boolean(toast?.hidden), text: toast?.textContent || "", tone: toast?.dataset.tone || null}
     };
   });
-}
-
-function delay(milliseconds) {
-  return new Promise(resolveDelay => setTimeout(resolveDelay, milliseconds));
 }

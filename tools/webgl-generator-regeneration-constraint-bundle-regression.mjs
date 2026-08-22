@@ -1,9 +1,11 @@
 #!/usr/bin/env node
 import assert from "node:assert/strict";
+import {readFileSync} from "node:fs";
 
 import {generatePlaceholderMap} from "../app/webgl-generator/src/generator/index.js";
 import {
   captureRegenerationConstraintBundle,
+  isRegenerationConstraintDomainFullyLocked,
   REGENERATION_CONSTRAINT_DOMAIN_KINDS
 } from "../app/webgl-generator/src/runtime/regeneration-constraint-bundle.js";
 import {REGENERATION_LOCK_KINDS} from "../app/webgl-generator/src/runtime/regeneration-locks.js";
@@ -94,12 +96,42 @@ const fullIds = full.ids("route");
 compositeMap.regenerationLocks.entries = [];
 assert.deepEqual(full.ids("route"), fullIds, "捕获后锁仓变化污染组合 bundle");
 
+const fastWorldMap = generatePlaceholderMap({
+  seed: "lock-compound-noop",
+  cellsTarget: 2000,
+  heightmapTemplate: "continents"
+});
+const fastWorldReferences = allReferences(fastWorldMap);
+assert(fastWorldReferences.length > 10_000, `全锁 fast precheck 未达到万级样本：${fastWorldReferences.length}`);
+fastWorldMap.regenerationLocks = {version: 1, entries: fastWorldReferences};
+const fastWorldStore = fastWorldMap.regenerationLocks;
+const fastWorldStartedAt = performance.now();
+assert.equal(isRegenerationConstraintDomainFullyLocked(fastWorldMap, "world"), true, "15 类全锁 world 未被 fast precheck 识别");
+const fastWorldMs = performance.now() - fastWorldStartedAt;
+assert(fastWorldMs < 200, `15 类全锁 fast precheck 超过 200ms：${fastWorldMs.toFixed(1)}ms`);
+assert.equal(fastWorldMap.regenerationLocks, fastWorldStore, "fast precheck 改写了锁仓 owner");
+const removedFastReference = fastWorldMap.regenerationLocks.entries.pop();
+assert(removedFastReference, "fast precheck 部分锁反例缺少可移除引用");
+assert.equal(isRegenerationConstraintDomainFullyLocked(fastWorldMap, "world"), false, "缺少一个活动引用的 world 被误判为全锁");
+fastWorldMap.regenerationLocks.entries.push(removedFastReference);
+
+const appSource = readFileSync(new URL("../app/webgl-generator/src/runtime/app.js", import.meta.url), "utf8");
+const worldActionSource = appSource.slice(
+  appSource.indexOf("async function applyOceanCurrentWorldRebuildViaAction"),
+  appSource.indexOf("function normalizeClimateApiPatch")
+);
+assert.match(worldActionSource, /const worldFullyLocked = isRegenerationConstraintDomainFullyLocked\(map, "world"\)/u, "world action 未使用无快照全锁预检");
+assert.match(worldActionSource, /const constraintBundle = worldFullyLocked \? null : captureRegenerationConstraintBundle\(map, \{closure: \["world"\]\}\)/u, "world action 全锁时仍捕获完整主线程 bundle");
+assert.match(worldActionSource, /worldFullyLocked && output\?\.result\?\.executed !== false/u, "world fast precheck 与 Worker 执行矛盾时未在提交前拒绝");
+assert.match(worldActionSource, /if \(!constraintBundle\) throw /u, "world 实际提交未强制持有完整 constraint bundle");
+
 console.log(JSON.stringify({
   ok: true,
   capturedKinds: bundle.selectedKinds.length,
   immutable: true,
   exactSlices: ["states-provinces", "economy"],
   compositeFullLock: true,
+  fastWorld: {locks: fastWorldReferences.length, durationMs: Number(fastWorldMs.toFixed(1)), partialRejected: true},
   conflict: "regeneration_lock_conflict"
 }, null, 2));
 
@@ -147,4 +179,32 @@ function active(rows, positive = false) {
 
 function findById(rows, id) {
   return (rows || []).find(object => String(object?.id ?? object?.i) === String(id));
+}
+
+function allReferences(value) {
+  const states = active(value.politics?.states, true);
+  const references = [
+    ...active(value.politics?.states, true).map(object => ({kind: "state", id: object.i})),
+    ...active(value.politics?.provinces, true).map(object => ({kind: "province", id: object.i})),
+    ...active(value.settlements?.cities).map(object => ({kind: "city", id: object.id ?? object.i})),
+    ...active(value.settlements?.routes).map(object => ({kind: "route", id: object.id ?? object.i})),
+    ...active(value.rivers?.rivers).map(object => ({kind: "river", id: object.id ?? object.i})),
+    ...active(value.markers?.markers).map(object => ({kind: "marker", id: object.id ?? object.i})),
+    ...active(value.society?.religions, true).map(object => ({kind: "religion", id: object.i})),
+    ...active(value.society?.cultures, true).map(object => ({kind: "culture", id: object.i})),
+    ...active(value.zones?.zones).map(object => ({kind: "zone", id: object.id ?? object.i})),
+    ...active(value.pack?.features).map(object => ({kind: "feature", id: object.id ?? object.i})),
+    ...active(value.oceanCurrents?.currents).map(object => ({kind: "ocean-current", id: object.id})),
+    ...active(value.pack?.markets, true).map(object => ({kind: "economy-market", id: object.i})),
+    ...active(value.pack?.deals).map(object => ({kind: "trade-flow", id: object.id ?? object.i}))
+  ];
+  for (let left = 0; left < states.length; left++) {
+    for (let right = left + 1; right < states.length; right++) {
+      references.push({kind: "diplomacy-relation", id: `${states[left].i}:${states[right].i}`});
+    }
+  }
+  for (const state of states) {
+    for (const regiment of active(state.military)) references.push({kind: "military", id: `${state.i}:${regiment.i}`});
+  }
+  return references;
 }

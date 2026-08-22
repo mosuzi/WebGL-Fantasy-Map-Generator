@@ -2,6 +2,8 @@
 import assert from "node:assert/strict";
 import {readFile, readdir} from "node:fs/promises";
 import path from "node:path";
+import {generatePlaceholderMap} from "../app/webgl-generator/src/generator/index.js";
+import {runSocialExpansionWorkerTask} from "../app/webgl-generator/src/runtime/social-expansion-worker-task.js";
 import {createServer} from "vite";
 
 import {resolveCanonicalMapWriteDescriptor} from "../app/webgl-generator/src/runtime/canonical-map-field-registry.js";
@@ -17,7 +19,7 @@ const {notesManifest} = await import(new URL("domains/notes/manifest.js", compil
 const {markersManifest} = await import(new URL("domains/markers/manifest.js", compiledRoot));
 const {populationManifest} = await import(new URL("domains/population/manifest.js", compiledRoot));
 const {foundationManifest} = await import(new URL("domains/foundation/manifest.js", compiledRoot));
-const {SOCIETY_POLITICS_WRITE_SETS, societyPoliticsManifest} = await import(new URL("domains/society-politics/manifest.js", compiledRoot));
+const {SOCIETY_POLITICS_WRITE_SETS, SOCIAL_EXPANSION_WORKER_WRITE_SET, societyPoliticsManifest} = await import(new URL("domains/society-politics/manifest.js", compiledRoot));
 const {settlementsManifest} = await import(new URL("domains/settlements/manifest.js", compiledRoot));
 const {zonesManifest} = await import(new URL("domains/zones/manifest.js", compiledRoot));
 const {labelsManifest} = await import(new URL("domains/labels/manifest.js", compiledRoot));
@@ -76,6 +78,8 @@ assert.equal(registry.get("population").workerTasks[0].task, "population.compute
 assert.equal(registry.get("foundation").workerTasks.length, 4);
 assert.equal(registry.get("society-politics").workerTasks[0].id, "society-politics.regeneration-worker");
 assert.equal(registry.get("society-politics").workerTasks[0].task, "regeneration.compute");
+assert.equal(registry.get("society-politics").workerTasks[1].id, "society-politics.social-expansion-worker");
+assert.equal(registry.get("society-politics").workerTasks[1].task, "social-expansion.compute");
 assert.equal(registry.get("settlements").workerTasks[0].resultKinds[0], "cities");
 assert.equal(registry.get("zones").workerTasks[0].resultKinds[0], "zones");
 assert.equal(registry.get("features").workerTasks[0].resultKinds[0], "features");
@@ -88,7 +92,7 @@ assert.equal(registry.get("diplomacy").workerTasks[0].resultKinds[0], "diplomacy
 assert.equal(registry.get("military").workerTasks[1].task, "military-policy.compute");
 assert.equal(registry.get("labels").capabilities.worker, "not-required");
 assert.equal(registry.get("measurements").capabilities.regeneration, "unsupported");
-assert.equal(registry.snapshot().descriptors, 216);
+assert.equal(registry.snapshot().descriptors, 225);
 
 function expectManifestError(callback, code, pathValue) {
   assert.throws(callback, error => {
@@ -144,6 +148,8 @@ sharedWorkerManifest.id = "settlements-worker-test";
 sharedWorkerManifest.derivedSystems = [];
 sharedWorkerManifest.commands = [];
 delete sharedWorkerManifest.regeneration;
+delete sharedWorkerManifest.api;
+sharedWorkerManifest.workerTasks = [sharedWorkerManifest.workerTasks[0]];
 sharedWorkerManifest.workerTasks[0].id = "settlements-worker-test.regeneration-worker";
 sharedWorkerManifest.workerTasks[0].resultKinds = ["cities"];
 sharedWorkerManifest.queries = [];
@@ -287,6 +293,7 @@ const evidence = {
   ]),
   societyPolitics: await joinSources([
     "app/webgl-generator/src/runtime/regeneration-worker-task.js",
+    "app/webgl-generator/src/runtime/social-expansion-worker-task.js",
     "app/webgl-generator/src/runtime/app.js",
     "app/webgl-generator/src/generator/settlements.js",
     "app/webgl-generator/src/generator/ocean-current-world.js"
@@ -315,9 +322,32 @@ for (const token of ["createAddMarkerCommand", "createDeleteMarkerCommand", "cre
 for (const token of ["POPULATION_WORKER_TASK", "population.compute", "kind: \"population\"", "getPopulationWorkerPatchPolicy", "edit.population.applyAdjustment", "createPopulationPanel"]) assert.ok(evidence.population.includes(token), `population shadow evidence 缺少 ${token}`);
 for (const pathValue of populationManifest.workerTasks[0].writeSet) assert.ok(evidence.population.includes(`\"${pathValue}\"`), `population Worker 源码未声明 ${pathValue}`);
 for (const token of ["regeneration.compute", "getRegenerationPatchPolicy", "validateSocietyPoliticsWorkerOutput", "repairInconsistentProvincialCapitals"]) assert.ok(evidence.societyPolitics.includes(token), `society-politics evidence 缺少 ${token}`);
+for (const token of ["SOCIAL_EXPANSION_WORKER_TASK", "social-expansion.compute", "getSocialExpansionPatchPolicy", "edit.cultures.applyExpansion", "edit.religions.applyExpansion"]) assert.ok(evidence.societyPolitics.includes(token), `society-politics social-expansion evidence 缺少 ${token}`);
 for (const [kind, writeSet] of Object.entries(SOCIETY_POLITICS_WRITE_SETS)) for (const pathValue of writeSet) {
   assert.ok(evidence.societyPolitics.includes(`\"${pathValue}\"`), `${kind} Worker 源码未声明 ${pathValue}`);
   assert.ok(societyPoliticsManifest.regeneration.writeSet.includes(pathValue), `${kind} 写集未纳入 manifest union: ${pathValue}`);
+}
+const socialExpansionMap = generatePlaceholderMap({seed: "core-manifest-social-expansion", cellsTarget: 1000, heightmapTemplate: "continents"});
+socialExpansionMap.pack.cultures = structuredClone(socialExpansionMap.society.cultures);
+socialExpansionMap.pack.religions = structuredClone(socialExpansionMap.society.religions);
+socialExpansionMap.pack.states = structuredClone(socialExpansionMap.politics.states);
+socialExpansionMap.pack.provinces = structuredClone(socialExpansionMap.politics.provinces);
+const socialExpansionCulture = socialExpansionMap.society.cultures.find(item => item?.i && !item.removed);
+assert.ok(socialExpansionCulture, "social-expansion manifest fixture 缺少文化");
+const socialExpansionOutput = await runSocialExpansionWorkerTask({
+  map: socialExpansionMap,
+  request: {kind: "culture", id: socialExpansionCulture.i, mode: "reexpand", expansionism: socialExpansionCulture.expansionism >= 9.5 ? 0.2 : 9.5, includeReligions: true, confirm: true},
+  binding: {mapIdentity: "core-manifest-social-expansion", mapRevision: 1, generationToken: 1, lockFingerprint: "core-manifest-social-locks", operationId: 1, operationName: "social-expansion.compute"}
+}, {checkpoint() {}, report() {}});
+assert.ok(socialExpansionOutput.patch.writeSet.length > 0, "social-expansion manifest fixture 没有真实写路径");
+for (const pathValue of socialExpansionOutput.patch.writeSet) {
+  assert.ok(SOCIAL_EXPANSION_WORKER_WRITE_SET.some(root => pathValue === root || pathValue.startsWith(`${root}.`)), `social-expansion 实际写路径未进入 Manifest：${pathValue}`);
+}
+for (const root of SOCIAL_EXPANSION_WORKER_WRITE_SET) {
+  assert.ok(socialExpansionOutput.patch.writeSet.some(pathValue => pathValue === root || pathValue.startsWith(`${root}.`)), `social-expansion 最大正例未命中 Manifest owner：${root}`);
+}
+for (const method of ["edit.cultures.inspectExpansion", "edit.cultures.applyExpansion", "edit.religions.inspectExpansion", "edit.religions.applyExpansion"]) {
+  assert.ok(societyPoliticsManifest.api.methods.some(item => item.method === method), `society-politics Manifest 缺少正式 API ${method}`);
 }
 for (const token of ["validateSettlementZoneWorkerOutput", "cities", "zones", "regeneration.compute"]) assert.ok(evidence.settlementZones.includes(token), `settlements-zones evidence 缺少 ${token}`);
 for (const token of ["validateFeaturesNetworksResourcesWorkerOutput", "features", "routes", "rivers", "markers", "route-path.compute", "regeneration.compute"]) assert.ok(evidence.featuresNetworksResources.includes(token), `features-networks-resources evidence 缺少 ${token}`);
@@ -347,7 +377,8 @@ console.log(JSON.stringify({
   ok: true,
   registry: registry.snapshot(),
   domains: registry.list().map(manifest => ({id: manifest.id, status: manifest.status, capabilities: manifest.capabilities})),
-  workerTasksVerified: ["population.compute", "regeneration.compute", "route-path.compute", "economy.compute", "military-policy.compute"],
+  workerTasksVerified: ["population.compute", "regeneration.compute", "social-expansion.compute", "route-path.compute", "economy.compute", "military-policy.compute"],
+  socialExpansionManifestCoverage: {roots: SOCIAL_EXPANSION_WORKER_WRITE_SET.length, patchPaths: socialExpansionOutput.patch.writeSet.length, detachedMirrors: 4},
   runtimeRouteImports: 0,
   sharedWorkerTransport: {task: "regeneration.compute", owners: ["society-politics", "settlements", "zones", "features", "routes", "rivers", "markers", "diplomacy", "military"], resultKinds: ["religions", "states", "provinces", "cities", "zones", "features", "routes", "rivers", "markers", "diplomacy", "military"], overlappingResultRejected: "states"},
   negativeCases: 35

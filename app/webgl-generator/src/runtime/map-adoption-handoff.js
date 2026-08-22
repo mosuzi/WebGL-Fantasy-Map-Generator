@@ -1,4 +1,5 @@
 import {
+  decodeWebfmgV3Document,
   decodeWebfmgV3DocumentChunksAsync,
   encodeWebfmgV3Document,
   inspectWebfmgV3Container
@@ -10,6 +11,20 @@ export const MAP_ADOPTION_HANDOFF_CHUNK_BYTES = 256 * 1024;
 
 export function createMapAdoptionHandoff(document) {
   const bytes = encodeWebfmgV3Document(document);
+  return createMapAdoptionHandoffFromBytes(bytes);
+}
+
+export function createCanonicalMapAdoptionPackage(document) {
+  const bytes = encodeWebfmgV3Document(document);
+  const canonicalDocument = decodeWebfmgV3Document(bytes);
+  applyMainThreadMapProjection(canonicalDocument.map);
+  return {
+    document: canonicalDocument,
+    handoff: createMapAdoptionHandoffFromBytes(bytes)
+  };
+}
+
+function createMapAdoptionHandoffFromBytes(bytes) {
   const container = inspectWebfmgV3Container(bytes);
   return {
     kind: MAP_ADOPTION_HANDOFF_KIND,

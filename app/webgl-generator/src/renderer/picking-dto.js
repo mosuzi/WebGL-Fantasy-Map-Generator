@@ -1,6 +1,7 @@
 import {buildObjectPickingIndex, OBJECT_PICKING_COMPONENTS, riverPickingPoints} from "./picking.js";
 import {assertCacheBinding} from "./render-cache-dto.js";
 import {markerPresentationRecords} from "../domains/markers/presentation.js";
+import {normalizeRenderResourceBinding} from "./render-resource-binding.js";
 
 export const PICKING_DTO_SCHEMA_VERSION = 1;
 
@@ -518,14 +519,7 @@ function offsetsForLengths(lengths) {
 }
 
 function normalizeBinding(value = {}) {
-  const mapIdentity = value.mapIdentity === null || value.mapIdentity === undefined ? null : String(value.mapIdentity);
-  const mapRevision = Number(value.mapRevision);
-  const topologyRevision = Number(value.topologyRevision);
-  return {
-    mapIdentity,
-    mapRevision: Number.isSafeInteger(mapRevision) && mapRevision >= 0 ? mapRevision : 0,
-    topologyRevision: Number.isSafeInteger(topologyRevision) && topologyRevision >= 0 ? topologyRevision : 0
-  };
+  return normalizeRenderResourceBinding(value, "picking.binding");
 }
 
 function createPickingChunkGate(options = {}) {

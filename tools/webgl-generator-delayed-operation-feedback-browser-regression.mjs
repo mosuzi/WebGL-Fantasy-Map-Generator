@@ -4,23 +4,34 @@ import {createRequire} from "node:module";
 import {join, resolve} from "node:path";
 import {fileURLToPath} from "node:url";
 import {createServer as createViteServer} from "vite";
+
+import {closeTask350BrowserResource, createTask350BrowserArtifact} from "./task-350-browser-artifact.mjs";
+import {collectTask350LongTaskWindow, prepareTask350LongTaskObserver, resetTask350LongTaskWindow, summarizeTask350LongTasks} from "./task-350-browser-long-task.mjs";
 import {waitForApiReady} from "./webgl-generator-api-browser-ready.mjs";
 
 const rootDir = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const sourceDir = join(rootDir, "source", "Fantasy-Map-Generator");
-const playwright = createRequire(join(sourceDir, "package.json"))("playwright");
 const host = "127.0.0.1";
 const timeoutMs = 180000;
-const vite = await createViteServer({configFile: join(rootDir, "vite.config.mjs"), server: {host, port: 0}, logLevel: "error"});
+const evidence = createTask350BrowserArtifact("delayed-operation-feedback", {mode: "browser-feedback"});
+let vite;
 let browser;
+let context;
+let recoveryContext;
+let thrownError = null;
 
 try {
+  evidence.mark("server-start", {active: "delayed-operation-feedback"});
+  const playwright = createRequire(join(sourceDir, "package.json"))("playwright");
+  vite = await createViteServer({configFile: join(rootDir, "vite.config.mjs"), server: {host, port: 0}, logLevel: "error"});
   await vite.listen();
   const port = vite.httpServer.address().port;
+  evidence.mark("browser-start", {active: "delayed-operation-feedback", complete: "server-start"});
   browser = await playwright.chromium.launch({headless: true, channel: "chrome"});
-  const context = await browser.newContext({viewport: {width: 1280, height: 800}, deviceScaleFactor: 1});
+  context = await browser.newContext({viewport: {width: 1280, height: 800}, deviceScaleFactor: 1});
   await context.addInitScript(() => localStorage.clear());
   const page = await context.newPage();
+  await prepareTask350LongTaskObserver(page);
   page.setDefaultTimeout(timeoutMs);
   const consoleErrors = [];
   const pageErrors = [];
@@ -41,6 +52,8 @@ try {
     window.__webglGeneratorApp?.healthMonitor?.clear?.();
     window.__webglGeneratorHealth?.clear?.();
   });
+  evidence.mark("browser-evaluation", {active: "delayed-operation-feedback", complete: "browser-start"});
+  await resetTask350LongTaskWindow(page);
   const fast = await page.evaluate(async () => {
     let animationStarts = 0;
     const bubble = document.getElementById("operation-loading");
@@ -70,7 +83,8 @@ try {
   assert.equal(asyncVisible.ariaHidden, "false", "慢异步 operation 没有进入可播报状态");
   assert.match(asyncVisible.text, /誊清诸域/);
   await page.evaluate(() => window.__operationFeedbackAsyncPromise);
-  assert.equal((await readFeedback(page)).hidden, true, "慢异步 operation 完成后没有清理");
+  const asyncFinished = await readFeedback(page);
+  assert.equal(asyncFinished.hidden, true, "慢异步 operation 完成后没有清理");
 
   await page.evaluate(() => {
     const manager = window.__webglGeneratorApp.runtimeOperation;
@@ -83,7 +97,8 @@ try {
   await page.evaluate(() => window.__webglGeneratorApp.runtimeOperation.cancelCurrent("浏览器门取消"));
   const cancelledCode = await page.evaluate(() => window.__operationFeedbackCancelPromise);
   assert.equal(cancelledCode, "operation_cancelled", "取消任务错误码漂移");
-  assert.equal((await readFeedback(page)).hidden, true, "取消任务后提示没有清理");
+  const cancelledFinished = await readFeedback(page);
+  assert.equal(cancelledFinished.hidden, true, "取消任务后提示没有清理");
 
   await page.evaluate(() => {
     const manager = window.__webglGeneratorApp.runtimeOperation;
@@ -96,7 +111,8 @@ try {
   assert.equal((await readFeedback(page)).hidden, false, "失败前的慢任务没有显示提示");
   const failureCode = await page.evaluate(() => window.__operationFeedbackFailurePromise);
   assert.equal(failureCode, "operation_failed", "失败任务错误码漂移");
-  assert.equal((await readFeedback(page)).hidden, true, "失败任务后提示没有清理");
+  const failureFinished = await readFeedback(page);
+  assert.equal(failureFinished.hidden, true, "失败任务后提示没有清理");
 
   const coexist = await page.evaluate(async () => {
     const generation = document.getElementById("generation-loading");
@@ -138,14 +154,39 @@ try {
   assert.deepEqual(consoleErrors, [], "延迟操作提示产生 console error");
   assert.deepEqual(pageErrors, [], "延迟操作提示产生 page error");
   assert.equal(glError, 0, "延迟操作提示产生 WebGL error");
+  const longTasks = await collectTask350LongTaskWindow(page, "delayed-operation-feedback");
   const chunkRecovery = await verifyPanelChunkRecovery(browser, port);
+  longTasks.push(...chunkRecovery.longTasks);
+  const performance = summarizeTask350LongTasks(longTasks, 200);
+  const overBudget = performance.overBudget;
+  assert.deepEqual(overBudget, [], `延迟操作提示目标窗口出现 >200ms LongTask：${JSON.stringify(overBudget)}`);
 
-  console.log(JSON.stringify({ok: true, fast, asyncVisible, cancelledCode, failureCode, coexist, narrow, chunkRecovery, healthErrors, consoleErrors, pageErrors, glError}, null, 2));
-  await context.close();
+  const finalReport = {ok: true, fast, asyncVisible, cancelledCode, failureCode, coexist, narrow, chunkRecovery, healthErrors, consoleErrors, pageErrors, glError, longTasks, performance};
+  const compactReport = {...finalReport, asyncFinished, cancelledFinished, failureFinished};
+  evidence.setResult(finalReport, compactReport);
+  evidence.succeed();
+  console.log(JSON.stringify(finalReport, null, 2));
+} catch (error) {
+  evidence.fail(error);
+  thrownError = error;
 } finally {
-  if (browser) await Promise.race([browser.close(), delay(5000)]);
-  await vite.close();
+  for (const [label, close] of [
+    ["delayed-operation-feedback-recovery-context", recoveryContext ? () => recoveryContext.close() : null],
+    ["delayed-operation-feedback-context", context ? () => context.close() : null],
+    ["delayed-operation-feedback-browser", browser ? () => browser.close() : null],
+    ["delayed-operation-feedback-vite", vite ? () => vite.close() : null]
+  ]) {
+    if (!close) continue;
+    try {
+      await closeTask350BrowserResource(label, close);
+    } catch (error) {
+      evidence.failTeardown(error);
+      if (!thrownError) thrownError = error;
+    }
+  }
+  evidence.persist();
 }
+if (thrownError) throw thrownError;
 
 async function readFeedback(page) {
   return page.evaluate(() => {
@@ -160,9 +201,10 @@ async function readFeedback(page) {
 }
 
 async function verifyPanelChunkRecovery(browser, port) {
-  const context = await browser.newContext({viewport: {width: 1280, height: 800}, deviceScaleFactor: 1});
-  await context.addInitScript(() => localStorage.clear());
-  const page = await context.newPage();
+  recoveryContext = await browser.newContext({viewport: {width: 1280, height: 800}, deviceScaleFactor: 1});
+  await recoveryContext.addInitScript(() => localStorage.clear());
+  const page = await recoveryContext.newPage();
+  await prepareTask350LongTaskObserver(page);
   let intercepted = 0;
   const pattern = "**/StatePanel.vue*";
   await page.route(pattern, route => {
@@ -171,26 +213,26 @@ async function verifyPanelChunkRecovery(browser, port) {
   });
   await page.goto(`http://127.0.0.1:${port}/`, {waitUntil: "domcontentloaded"});
   await waitForApiReady(page, timeoutMs);
+  await resetTask350LongTaskWindow(page);
   await page.evaluate(() => document.getElementById("open-state-panel")?.click());
   const recovery = page.locator('.floating-panel[data-panel-id="state-panel"] .lazy-panel-recovery[data-error-kind="module-fetch"]');
   await recovery.waitFor({state: "visible"});
   const text = await recovery.innerText();
   assert.match(text, /页面版本可能已经更新/);
   assert.match(text, /先保存尚未保存的地图/);
-  assert.deepEqual(await recovery.locator("button").allTextContents(), ["刷新页面"]);
+  const buttons = await recovery.locator("button").allTextContents();
+  assert.deepEqual(buttons, ["刷新页面"]);
+  const longTasks = await collectTask350LongTaskWindow(page, "feedback-chunk-failure");
   await page.unroute(pattern);
   await Promise.all([
     page.waitForNavigation({waitUntil: "domcontentloaded"}),
     recovery.getByRole("button", {name: "刷新页面"}).click()
   ]);
   await waitForApiReady(page, timeoutMs);
+  await resetTask350LongTaskWindow(page);
   await page.evaluate(() => document.getElementById("open-state-panel")?.click());
   await page.locator('.floating-panel[data-panel-id="state-panel"] .state-panel-controls').waitFor({state: "visible"});
   assert.ok(intercepted >= 1, "没有命中国家面板分包故障注入");
-  await context.close();
-  return {intercepted, recovered: true};
-}
-
-function delay(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms));
+  longTasks.push(...await collectTask350LongTaskWindow(page, "feedback-chunk-recovery"));
+  return {intercepted, recovered: true, text, buttons, longTasks};
 }

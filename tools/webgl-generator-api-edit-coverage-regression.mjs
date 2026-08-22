@@ -175,7 +175,7 @@ assert(consoleApiSource.includes("buildDebugStateDump(state, documentRef, option
 assert.equal(expectedMethods.length, 20, "第 29 项冻结方法数量漂移");
 const declaredCounts = countDeclaredMethods(API_METHODS);
 assert.equal(declaredCounts.edit, 179, "edit capabilities 方法数不是 179");
-assert.equal(declaredCounts.total, 328, "公开 capabilities 方法总数不是 328");
+assert.equal(declaredCounts.total, 329, "公开 capabilities 方法总数不是 329");
 
 console.log(JSON.stringify({
   ok: true,

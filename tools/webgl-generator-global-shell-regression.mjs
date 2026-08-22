@@ -6,7 +6,9 @@ import {readFile} from "node:fs/promises";
 import {
   completeStartupLoading,
   failStartupLoading,
+  STARTUP_FAILURE_USER_MESSAGE,
   STARTUP_LOADING_MIN_VISIBLE_MS,
+  startupFailureMessage,
   updateStartupLoadingStatus
 } from "../app/webgl-generator/src/ui/startup-loading.js";
 
@@ -88,8 +90,10 @@ assert.match(indexSource, /\.app-loading-screen\.is-leaving\s*\{/, "画卷加载
 assert.match(indexSource, /\.app-loading-screen\[data-state="error"\] \.app-loading-status/, "画卷加载页没有保留错误态样式");
 assert.match(indexSource, /startupLoading\?\.dataset\.state !== "error"/, "预启动超时会覆盖已经记录的真实启动错误");
 assert.match(viteSource, /html\.replaceAll\("__FMG_APP_VERSION__", packageJson\.version\)/, "构建没有从根 package.json 注入版本号");
-assert.match(mainSource, /updateStartupLoadingStatus\(document, "正在装配地图引擎"\)/, "主模块装配没有更新启动加载状态");
+assert.match(mainSource, /updateStartupLoadingStatus\(document, "正在展开地图画卷"\)/, "主模块装配没有使用当前启动加载文案");
 assert.match(mainSource, /failStartupLoading\(document, error\)/, "同步启动失败没有保留错误加载页");
+assert.match(mainSource, /status\.textContent = startupFailureMessage\(error\)/, "普通 app status 没有复用雅化启动错误");
+assert.doesNotMatch(mainSource, /status\.textContent = `启动失败：\$\{message\}`/, "普通 app status 仍直接显示原始启动异常");
 assert.match(panelSource, /if \(visible\) updateStartupLoadingStatus\(documentRef, message\)/, "生成与恢复阶段没有同步到启动加载页");
 assert.match(appSource, /completeStartupLoading\(documentRef\);\s+updateGenerationLoading\(documentRef, false\);/, "地图 ready 没有关闭启动加载页");
 assert.match(appSource, /if \(!state\.map\) failStartupLoading\(documentRef, error\)/, "首次异步生成失败没有进入启动错误态");
@@ -158,7 +162,7 @@ for (const now of [2500, 3100]) {
   assert.equal(updateStartupLoadingStatus(fakeDocument, "不应覆盖错误"), false);
   assert.equal(fakeDocument.clock.pendingCount(), 0, "等待期错误没有清除最短可见计时器");
   fakeDocument.clock.advanceBy(3000);
-  assertErrorState(fakeDocument, "启动失败：等待期错误");
+  assertErrorState(fakeDocument, STARTUP_FAILURE_USER_MESSAGE);
 }
 
 {
@@ -168,7 +172,17 @@ for (const now of [2500, 3100]) {
   assert.equal(failStartupLoading(fakeDocument, new Error("淡出期错误")), true);
   assert.equal(fakeDocument.clock.pendingCount(), 0, "淡出期错误没有清除隐藏计时器");
   fakeDocument.clock.advanceBy(500);
-  assertErrorState(fakeDocument, "启动失败：淡出期错误");
+  assertErrorState(fakeDocument, STARTUP_FAILURE_USER_MESSAGE);
+}
+
+{
+  const technicalError = new Error("Worker session buffer checksum mismatch");
+  const fakeDocument = createFakeDocument({now: 0, startedAt: 0});
+  assert.equal(failStartupLoading(fakeDocument, technicalError), true);
+  assertErrorState(fakeDocument, STARTUP_FAILURE_USER_MESSAGE);
+  assert.doesNotMatch(fakeDocument.status.textContent, /Worker|session|buffer|checksum/i, "普通启动错误泄漏内部术语");
+  assert.equal(startupFailureMessage(technicalError), STARTUP_FAILURE_USER_MESSAGE);
+  assert.equal(startupFailureMessage(technicalError, {debug: true}), "启动失败：Worker session buffer checksum mismatch");
 }
 
 {

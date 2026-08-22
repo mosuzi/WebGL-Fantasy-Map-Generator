@@ -12,7 +12,7 @@ import {
   normalizeRegenerationLockStore,
   validateRegenerationLockStore
 } from "../app/webgl-generator/src/runtime/regeneration-locks.js";
-import {createSetRegenerationLockCommand, createSetRegenerationLocksCommand} from "../app/webgl-generator/src/runtime/regeneration-lock-commands.js";
+import {createClearRegenerationLocksCommand, createSetRegenerationLockCommand, createSetRegenerationLocksCommand} from "../app/webgl-generator/src/runtime/regeneration-lock-commands.js";
 
 const map = fixtureMap();
 const allReferences = [
@@ -163,6 +163,72 @@ assert.equal(getObjectSnapshot(map, {kind: "ocean-current", id: "current-1"}).te
 assert.equal(getObjectSnapshot(map, {kind: "economy-market", id: 1}).centerBurg, "测试城");
 assert.equal(getObjectSnapshot(map, {kind: "city", id: 1}).regenerationLocked, true);
 
+const scaleMap = fixtureMap();
+scaleMap.pack.deals = Array.from({length: 12_000}, (_, index) => ({
+  i: index + 1,
+  id: index + 1,
+  good: 1,
+  sellerType: "burg",
+  seller: 1,
+  buyerType: "burg",
+  buyer: 1
+}));
+const scaleReferences = scaleMap.pack.deals.map(deal => ({kind: "trade-flow", id: deal.i}));
+const normalizeStartedAt = performance.now();
+const scaleNormalized = normalizeRegenerationLockReferences(scaleReferences, scaleMap);
+const normalizeMs = performance.now() - normalizeStartedAt;
+assert.equal(scaleNormalized.length, scaleReferences.length);
+assert.ok(normalizeMs < 200, `12k trade-flow 批量引用规范化超过 200ms：${normalizeMs.toFixed(1)}ms`);
+const storeStartedAt = performance.now();
+const scaleStore = normalizeRegenerationLockStore({version: 1, entries: scaleNormalized}, scaleMap, {strict: true});
+const storeMs = performance.now() - storeStartedAt;
+assert.equal(scaleStore.diagnostics.kept, scaleReferences.length);
+assert.ok(storeMs < 200, `12k trade-flow 锁仓规范化超过 200ms：${storeMs.toFixed(1)}ms`);
+assert.throws(
+  () => normalizeRegenerationLockReferences([...scaleReferences, {kind: "trade-flow", id: 12_001}], scaleMap),
+  error => error.code === "lock_batch_invalid" && error.details.rejected[0].index === 12_000 && error.details.rejected[0].code === "object_not_found"
+);
+const scaleHistory = new EditHistory();
+const setManyStartedAt = performance.now();
+const commandReferences = normalizeRegenerationLockReferences(scaleReferences, scaleMap);
+const scaleInspection = createRegenerationLockInspection(scaleMap, 0, commandReferences, true);
+const scaleCommand = createSetRegenerationLocksCommand(commandReferences, true);
+scaleHistory.execute(scaleCommand, {map: scaleMap});
+const setManyMs = performance.now() - setManyStartedAt;
+assert.equal(scaleInspection.changed, scaleReferences.length);
+assert.equal(scaleCommand.getResult().changed, scaleReferences.length);
+assert.equal(scaleMap.regenerationLocks.entries.length, scaleReferences.length);
+assert.ok(setManyMs < 200, `12k trade-flow setMany 核心链超过 200ms：${setManyMs.toFixed(1)}ms`);
+const clearStartedAt = performance.now();
+const clearCommand = createClearRegenerationLocksCommand("trade-flow");
+scaleHistory.execute(clearCommand, {map: scaleMap});
+const clearMs = performance.now() - clearStartedAt;
+assert.equal(clearCommand.getResult().changed, scaleReferences.length);
+assert.equal(scaleMap.regenerationLocks.entries.length, 0);
+assert.ok(clearMs < 200, `12k trade-flow clearKind 核心链超过 200ms：${clearMs.toFixed(1)}ms`);
+
+const removedCurrentMap = fixtureMap();
+removedCurrentMap.oceanCurrents.currents[0].removed = true;
+assert.deepEqual(
+  normalizeRegenerationLockReferences([{kind: "ocean-current", id: "current-1"}], removedCurrentMap),
+  [{kind: "ocean-current", id: "current-1"}],
+  "ocean-current 索引不得改变既有 removed 字段忽略语义"
+);
+
+const slotPriorityMap = fixtureMap();
+slotPriorityMap.politics.states[1].removed = true;
+slotPriorityMap.politics.states[3] = {i: 1, id: 1, name: "重复甲国", fullName: "重复甲国", removed: false, military: [], diplomacy: []};
+assert.throws(
+  () => getRegenerationLockStatus(slotPriorityMap, {kind: "state", id: 1}),
+  error => error.code === "object_not_found",
+  "单引用必须保持 removed 槽位优先"
+);
+assert.throws(
+  () => normalizeRegenerationLockReferences([{kind: "state", id: 1}], slotPriorityMap),
+  error => error.code === "lock_batch_invalid" && error.details.rejected[0].code === "object_not_found",
+  "批量索引不得绕过 removed 槽位回退到重复 id"
+);
+
 
 console.log(JSON.stringify({
   ok: true,
@@ -170,7 +236,14 @@ console.log(JSON.stringify({
   normalized: normalized.store.entries.length,
   cleaned: normalized.diagnostics.removed,
   history: history.getStats(),
-  revision: tracker.getSnapshot()
+  revision: tracker.getSnapshot(),
+  scale: {
+    references: scaleReferences.length,
+    normalizeMs: Number(normalizeMs.toFixed(1)),
+    storeMs: Number(storeMs.toFixed(1)),
+    setManyMs: Number(setManyMs.toFixed(1)),
+    clearMs: Number(clearMs.toFixed(1))
+  }
 }, null, 2));
 
 function fixtureMap() {

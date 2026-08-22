@@ -31,6 +31,19 @@ export function lockedRegenerationObjects(map, kind) {
   return captureLockedRegenerationObjects(map, kind).snapshots;
 }
 
+export function mergeLockedRiverFeatureSnapshots(map, lockedFeatures = [], lockedRivers = []) {
+  const byId = new Map();
+  const add = feature => {
+    const id = Number(feature?.i ?? feature?.id);
+    if (Number.isSafeInteger(id) && id > 0 && !byId.has(id)) byId.set(id, clone(feature));
+  };
+  for (const feature of lockedFeatures || []) add(feature);
+  if (!(lockedRivers || []).length) return [...byId.values()];
+  const riverConstraints = prepareRiverRegenerationLocks(map?.pack, lockedRivers);
+  for (const lakeId of riverConstraints.lakeGuards.keys()) add(map?.pack?.features?.[lakeId]);
+  return [...byId.values()];
+}
+
 export function allRegenerationObjectsLocked(map, kind, objects = null) {
   const rows = objects || listRegenerationObjects(map, kind);
   if (!rows.length) return false;

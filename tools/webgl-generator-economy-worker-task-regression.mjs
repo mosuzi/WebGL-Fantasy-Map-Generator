@@ -35,11 +35,14 @@ async function verifyTenThousandCells() {
     map: rebuildShadow,
     request: rebuildRequest,
     binding,
-    sourceFingerprint: fingerprintEconomySource(rebuildShadow, rebuildRequest)
+    sourceFingerprint: fingerprintEconomySource(rebuildShadow, rebuildRequest),
+    render: economyRenderRequest(binding)
   }, taskContext(binding));
   assert.equal(rebuildOutput.result.executed, true, "10k 经济重算 Worker 未执行");
   assert.equal(rebuildOutput.plan.binding.mapRevision, binding.mapRevision, "经济 plan 未绑定 revision");
   assert.equal(rebuildOutput.patch.writeSet.some(path => path === "summary" || path.startsWith("summary.")), false, "经济补丁触碰 summary");
+  assert.deepEqual(rebuildOutput.preparedRender?.layers?.picking?.components, ["cities"], "经济 Worker 必须只准备城市 picking 对象族");
+  assert.deepEqual(rebuildOutput.preparedRender?.binding, economyRenderRequest(binding).binding, "经济 Worker picking binding 漂移");
   assert.equal(rebuildInputBuffer.byteLength > 0, true, "经济 Worker 输入 buffer 被 detach");
   assert.equal(collectEconomyWorkerTransferables(rebuildOutput).includes(rebuildInputBuffer), false, "经济输出复用了 Worker 输入 buffer");
 
@@ -55,10 +58,13 @@ async function verifyTenThousandCells() {
     map: assignmentShadow,
     request: assignmentRequest,
     binding,
-    sourceFingerprint: fingerprintEconomySource(assignmentShadow, assignmentRequest)
+    sourceFingerprint: fingerprintEconomySource(assignmentShadow, assignmentRequest),
+    render: economyRenderRequest(binding)
   }, taskContext(binding));
   assert.equal(assignmentOutput.result.executed, true, "10k 市场归属 Worker 未执行");
   assert.ok(assignmentOutput.patch.writeSet.length > 0, "市场归属没有返回精确补丁");
+  assert.deepEqual(assignmentOutput.preparedRender?.layers?.picking?.components, ["cities"], "市场归属 Worker 必须只准备城市 picking 对象族");
+  assert.deepEqual(assignmentOutput.preparedRender?.binding, economyRenderRequest(binding).binding, "市场归属 Worker picking binding 漂移");
   assert.equal(collectEconomyWorkerTransferables(assignmentOutput).includes(assignmentBuffer), false, "市场归属输出复用了输入 buffer");
 
   const assignmentFormal = structuredClone(base);
@@ -138,13 +144,16 @@ async function verifyHundredThousandCells() {
     map,
     request,
     binding,
-    sourceFingerprint: fingerprintEconomySource(map, request)
+    sourceFingerprint: fingerprintEconomySource(map, request),
+    render: economyRenderRequest(binding)
   }, taskContext(binding, "100k"));
   const durationMs = Math.round((performance.now() - started) * 10) / 10;
   assert.equal(map.grid.cells.i.length, 99846, "100k 固定夹具 grid cell 数漂移");
   assert.ok(map.pack.cells.i.length >= 50000 && map.pack.cells.i.length <= 100000, "100k pack cell 数异常");
   assert.equal(output.result.executed, true, "100k 市场归属 / 经济 rebuild 未执行");
   assert.ok(output.patch.writeSet.length > 0, "100k 经济 Worker 没有领域补丁");
+  assert.deepEqual(output.preparedRender?.layers?.picking?.components, ["cities"], "100k 经济 Worker 必须准备城市 picking 对象族");
+  assert.deepEqual(output.preparedRender?.binding, economyRenderRequest(binding).binding, "100k 经济 Worker picking binding 漂移");
   assert.ok(durationMs < 30000, `100k 经济 Worker 超出 30s 预算：${durationMs}ms`);
   assert.equal(inputBuffer.byteLength > 0, true, "100k 输入 buffer 被 detach");
   assert.equal(collectEconomyWorkerTransferables(output).includes(inputBuffer), false, "100k 输出错误复用输入 buffer");
@@ -341,6 +350,16 @@ function createMap(seed, cellsTarget) {
 
 function createBinding(mapIdentity, operationId) {
   return {mapIdentity, mapRevision: 5, generationToken: 3, lockFingerprint: `${mapIdentity}-locks`, operationId, operationName: "economy.compute"};
+}
+
+function economyRenderRequest(binding) {
+  return {
+    binding: {mapIdentity: binding.mapIdentity, mapRevision: binding.mapRevision, topologyRevision: 2},
+    layers: ["picking"],
+    pickingComponents: ["cities"],
+    camera: {scale: 1, offsetX: 0, offsetY: 0},
+    canvas: {width: 1280, height: 820, clientWidth: 1280, clientHeight: 820}
+  };
 }
 
 function taskContext(binding, label = "worker") {

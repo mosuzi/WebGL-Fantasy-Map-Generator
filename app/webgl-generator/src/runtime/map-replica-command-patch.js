@@ -1,5 +1,7 @@
 import {createMapReplicaPatch} from "./map-replica-journal.js";
 import {computeMapReplicaPatchTargetChecksum} from "./map-replica-checksum.js";
+import {cloneWorkerGraphByPackets} from "./worker-graph-stream.js";
+import {resolveCanonicalMapWriteDescriptor} from "./canonical-map-field-registry.js";
 
 const DOMAIN_PATHS = Object.freeze({
   "visual-theme": ["visualTheme"],
@@ -55,6 +57,28 @@ export async function createCommandMapReplicaPatch({map, command, action = "exec
 }
 
 export function captureCommandMapReplicaWrites({map, command} = {}) {
+  return structuredClone(collectCommandMapReplicaWrites({map, command}));
+}
+
+export async function captureCommandMapReplicaWritesAsync({
+  map,
+  command,
+  budgetMs = 4,
+  yieldToMain,
+  isCurrent = null,
+  onClone = null
+} = {}) {
+  const writes = collectCommandMapReplicaWrites({map, command});
+  if (!writes.length) return [];
+  const cloned = await cloneWorkerGraphByPackets(writes, {budgetMs, yieldToMain});
+  if (typeof isCurrent === "function" && isCurrent() !== true) {
+    throw patchError("map_replica_patch_capture_obsolete", "地图副本 patch 捕获已被新的地图状态取代");
+  }
+  onClone?.({packetStats: cloned.packetStats});
+  return cloned.value;
+}
+
+function collectCommandMapReplicaWrites({map, command} = {}) {
   if (!map || typeof map !== "object" || !command) return [];
   const domain = String(command.domain || "none");
   const commandPaths = typeof command.getReplicaPaths === "function" ? command.getReplicaPaths(map) : null;
@@ -62,10 +86,15 @@ export function captureCommandMapReplicaWrites({map, command} = {}) {
   if (!paths) return [];
   const writes = [];
   for (const path of paths) {
+    if (!resolveCanonicalMapWriteDescriptor(path)) {
+      throw patchError("map_replica_path_unregistered", `地图副本 write path 未登记：${path}`);
+    }
     const resolved = resolvePath(map, path);
-    if (resolved.found) writes.push({path, mode: "replace", value: resolved.value});
+    writes.push(resolved.found
+      ? {path, mode: "replace", value: resolved.value}
+      : {path, mode: "delete"});
   }
-  return structuredClone(writes);
+  return writes;
 }
 
 export function listCommandMapReplicaPaths(domain) {
@@ -79,4 +108,10 @@ function resolvePath(root, path) {
     value = value[part];
   }
   return {found: true, value};
+}
+
+function patchError(code, message) {
+  const error = new Error(message);
+  error.code = code;
+  return error;
 }

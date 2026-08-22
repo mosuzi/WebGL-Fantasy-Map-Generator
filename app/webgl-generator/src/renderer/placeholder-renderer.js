@@ -65,7 +65,8 @@ import {hasManualLabelPriorities, resolveLabelLayout, sortLabelItemsByPriority} 
 import {
   PROVINCE_COLLISION_OPACITY,
   automaticPoliticalLabelOrder,
-  resolvePoliticalLabelPlacement
+  resolvePoliticalLabelPlacement,
+  restorePoliticalLabelPlacementSnapshot
 } from "./political-label-layout.js";
 import {resolveStateLabelPlacement} from "./state-label-territory.js";
 import {formatMilitary, normalizeUnitPreferences} from "../ui/display-units.js";
@@ -90,18 +91,41 @@ import {
   createSurfaceBaseBufferSet,
   createSurfaceBaseBufferSetAsync,
   createSurfaceResourceOwner,
+  deleteSurfaceBaseBufferSet,
   fingerprintSurfaceCellRanges,
   flattenSurfaceBaseBufferSet,
   isSurfaceBaseBufferSetForVertices,
+  rebindSurfaceBaseBufferSetOwner,
   replaceSurfaceBaseBufferSet,
   summarizeSurfaceBaseBufferSet,
   uploadSurfaceBaseBufferSetRanges
 } from "./surface-base-buffer-set.js";
 import {
+  createRenderResourceBinding,
+  normalizeRenderSourceBinding,
+  normalizeRenderResourceBinding,
+  renderResourceBindingFromOwner,
+  sameRenderResourceBinding
+} from "./render-resource-binding.js";
+import {
+  adoptObjectPickingResourceBinding,
+  adoptOverlayLabelResourceBinding,
+  objectPickingResourceBindingMismatch,
+  overlayLabelResourceBindingMismatch
+} from "./retained-render-resource-binding.js";
+import {
+  RENDER_CACHE_RESOURCE_FAMILIES,
+  adoptRenderCacheResourceBinding,
+  assertRenderCacheResourceBindings,
+  invalidateRenderCacheResourceBindings
+} from "./render-cache-resource-binding.js";
+import {
   buildCellVisualSurfaceCorrection,
   createCellVisualCorrectionBufferSet,
   createCellVisualCorrectionBufferSetAsync,
+  deleteCellVisualCorrectionBufferSet,
   flattenCellVisualCorrectionBufferSet,
+  rebindCellVisualCorrectionBufferSetOwner,
   replaceCellVisualCorrectionBufferSet,
   summarizeCellVisualCorrectionBufferSet
 } from "./cell-visual-surface-correction.js";
@@ -153,6 +177,7 @@ const POPULATION_UNIT_PEOPLE = 1000;
 const MAX_OVERLAY_COLLISION_BOXES = 900;
 const ROUTE_BUILD_SLICE_MS = 5;
 const RIVER_BUILD_SLICE_MS = 5;
+const DEBUG_CONTEXT_RESTORE_TIMEOUT_MS = 120_000;
 const MAX_ROUTE_RENDER_POINTS_PER_ROUTE = 4096;
 const MAX_ROUTE_RENDER_POINTS_TOTAL = 90000;
 const MAX_ROUTE_RENDER_VERTICES = 900000;
@@ -334,6 +359,18 @@ const MARKER_ICON_PALETTES = Object.freeze({
   mystery: {fill: "#715cc7", stroke: "#271f51", symbol: "#f7f1ff"}
 });
 
+const WEBGL_DIRECT_BUFFER_KEYS = Object.freeze([
+  "surfacePatchBuffer", "landCorrectionBuffer", "waterCorrectionBuffer", "landCoverBuffer", "waterCoverBuffer",
+  "routeBuffer", "tradeFlowBuffer", "riverBuffer", "selectionBuffer", "heightTransformPreviewBuffer",
+  "heightCellSelectionBuffer", "oceanCurrentBuffer", "lineBuffer", "shoreLineBuffer", "pointBuffer",
+  "politicalMeshDebugBuffer", "gridCellDiagnosticsBuffer", "gridCellDiagnosticFillBuffer", "gridCellDiagnosticLineBuffer"
+]);
+
+const WEBGL_INITIALIZED_RESOURCE_KEYS = Object.freeze([
+  "program", "surfaceProgram", "cityIconLayer", "locations", "surfaceLocations", "surfaceBaseBufferSet",
+  "vertexBuffer", "cellVisualCorrectionBufferSet", ...WEBGL_DIRECT_BUFFER_KEYS
+]);
+
 function initializeWebGlResources(renderer) {
   const gl = renderer.gl;
   renderer.program = createProgram(gl, vertexShaderSource, fragmentShaderSource);
@@ -358,7 +395,61 @@ function initializeWebGlResources(renderer) {
   renderer.surfaceBaseBufferSet = createSurfaceBaseBufferSet(gl, new Float32Array(), {usage: gl.STATIC_DRAW});
   renderer.vertexBuffer = flattenSurfaceBaseBufferSet(renderer.surfaceBaseBufferSet)[0];
   renderer.cellVisualCorrectionBufferSet = createCellVisualCorrectionBufferSet(gl, new Float32Array(), gl.STATIC_DRAW);
-  for (const key of ["surfacePatchBuffer", "landCorrectionBuffer", "waterCorrectionBuffer", "landCoverBuffer", "waterCoverBuffer", "routeBuffer", "tradeFlowBuffer", "riverBuffer", "selectionBuffer", "heightTransformPreviewBuffer", "heightCellSelectionBuffer", "oceanCurrentBuffer", "lineBuffer", "shoreLineBuffer", "pointBuffer", "politicalMeshDebugBuffer", "gridCellDiagnosticsBuffer", "gridCellDiagnosticFillBuffer", "gridCellDiagnosticLineBuffer"]) renderer[key] = gl.createBuffer();
+  for (const key of WEBGL_DIRECT_BUFFER_KEYS) renderer[key] = gl.createBuffer();
+}
+
+function captureInitializedWebGlResources(renderer) {
+  const snapshot = {cellAttributeStore: renderer.cellAttributeStore || null};
+  for (const key of WEBGL_INITIALIZED_RESOURCE_KEYS) snapshot[key] = renderer[key] || null;
+  return snapshot;
+}
+
+function assignInitializedWebGlResources(renderer, source) {
+  for (const key of WEBGL_INITIALIZED_RESOURCE_KEYS) renderer[key] = source[key] || null;
+}
+
+function cleanupInitializedWebGlResources(gl, resources) {
+  if (!resources) return;
+  const run = task => {
+    try { task(); } catch {}
+  };
+  run(() => deleteCellAttributeStore(gl, resources.cellAttributeStore));
+  run(() => deleteSurfaceBaseBufferSet(gl, resources.surfaceBaseBufferSet));
+  run(() => deleteCellVisualCorrectionBufferSet(gl, resources.cellVisualCorrectionBufferSet));
+  const seen = new Set();
+  for (const key of WEBGL_DIRECT_BUFFER_KEYS) {
+    const buffer = resources[key];
+    if (!buffer || seen.has(buffer)) continue;
+    seen.add(buffer);
+    run(() => gl.deleteBuffer(buffer));
+  }
+  run(() => resources.cityIconLayer?.destroy?.());
+  run(() => resources.program && gl.deleteProgram(resources.program));
+  run(() => resources.surfaceProgram && gl.deleteProgram(resources.surfaceProgram));
+}
+
+function invalidateInitializedWebGlResources(renderer) {
+  for (const key of WEBGL_INITIALIZED_RESOURCE_KEYS) renderer[key] = null;
+  renderer.cellAttributeStore = null;
+  renderer.surfaceResourceOwner = null;
+  renderer.surfaceResourceBinding = null;
+  renderer.activeRenderResourceBinding = null;
+  renderer.objectPickingResourceOwner = null;
+  renderer.objectPickingResourceBinding = null;
+  renderer.labelLayoutResourceOwner = null;
+  renderer.labelLayoutResourceBinding = null;
+  renderer.overlayResourceOwner = null;
+  renderer.overlayResourceBinding = null;
+  invalidateRenderCacheResourceBindings(renderer);
+  renderer.retainedResourcePublishSuspended = 0;
+  renderer.retainedResourcePublishPendingDraw = false;
+  renderer.retainedResourceState = "invalid";
+  renderer.lastRetainedResourceOwnerError = "webgl-context-restore-invalid";
+  renderer.surfaceVerticesOwner = null;
+  renderer.surfaceCellRangesOwner = null;
+  renderer.cellVisualCorrectionGeometryOwner = null;
+  renderer.cellAttributeStoreOwner = null;
+  renderer.lastSurfaceResourceOwnerError = "webgl-context-restore-invalid";
 }
 
 export class PlaceholderMapRenderer {
@@ -409,6 +500,24 @@ export class PlaceholderMapRenderer {
     this.cellVisualCorrectionGeometry = new Float32Array();
     this.surfaceResourceOwner = null;
     this.surfaceResourceBinding = null;
+    this.activeRenderResourceBinding = null;
+    this.objectPickingResourceOwner = null;
+    this.objectPickingResourceBinding = null;
+    this.labelLayoutResourceOwner = null;
+    this.labelLayoutResourceBinding = null;
+    this.overlayResourceOwner = null;
+    this.overlayResourceBinding = null;
+    this.renderCacheResourceOwners = Object.freeze({});
+    this.renderCacheResourceBindings = Object.freeze({});
+    this.retainedResourcePublishSuspended = 0;
+    this.retainedResourcePublishPendingDraw = false;
+    this.retainedResourceState = "empty";
+    this.lastRetainedResourceOwnerError = null;
+    this.renderGeneration = 0;
+    this.nextRenderGeneration = 0;
+    this.renderPreparationSequence = 0;
+    this.latestIssuedRenderBinding = null;
+    this.activePreparedRenderInstallTransaction = null;
     this.surfaceVerticesOwner = null;
     this.surfaceCellRangesOwner = null;
     this.cellVisualCorrectionGeometryOwner = null;
@@ -579,21 +688,43 @@ export class PlaceholderMapRenderer {
       this.endViewportPointerInteraction(interaction);
     }, () => ({width: this.canvasSize.cssWidth, height: this.canvasSize.cssHeight}));
     this.webGlContextLost = false;
+    this.webGlContextResourceState = "ready";
     this.webGlContextRestorePromise = null;
+    this.debugContextLossPromise = null;
     this.lastWebGlContextRestoreError = null;
-    this.canvas.addEventListener("webglcontextlost", event => {
-      event.preventDefault();
-      this.webGlContextLost = true;
-    });
-    this.canvas.addEventListener("webglcontextrestored", () => {
-      if (this.webGlContextRestorePromise) return;
-      this.webGlContextRestorePromise = this.restoreWebGlContext().catch(error => {
-        this.lastWebGlContextRestoreError = error;
-      }).finally(() => {
-        this.webGlContextRestorePromise = null;
-      });
-    });
+    this.webGlContextLifecycleInstalled = false;
+    this.installWebGlContextLifecycleHandlers();
     this.installDisplayResizeObserver();
+  }
+
+  installWebGlContextLifecycleHandlers() {
+    if (this.webGlContextLifecycleInstalled) return false;
+    if (!this.canvas || typeof this.canvas.addEventListener !== "function") {
+      const error = new Error("renderer canvas 不支持 context 生命周期监听");
+      error.code = "render-context-loss-unsupported";
+      throw error;
+    }
+    this.canvas.addEventListener("webglcontextlost", event => this.handleWebGlContextLost(event));
+    this.canvas.addEventListener("webglcontextrestored", () => this.handleWebGlContextRestored());
+    this.webGlContextLifecycleInstalled = true;
+    return true;
+  }
+
+  handleWebGlContextLost(event) {
+    event?.preventDefault?.();
+    this.webGlContextLost = true;
+    this.webGlContextResourceState = "lost";
+  }
+
+  handleWebGlContextRestored() {
+    if (this.webGlContextRestorePromise) return this.webGlContextRestorePromise;
+    const operation = this.restoreWebGlContextUntilCurrent().catch(error => {
+      this.lastWebGlContextRestoreError = error;
+    }).finally(() => {
+      if (this.webGlContextRestorePromise === operation) this.webGlContextRestorePromise = null;
+    });
+    this.webGlContextRestorePromise = operation;
+    return operation;
   }
 
   beginPerformanceEvent(key, details = {}, startedAt = performance.now()) {
@@ -656,45 +787,296 @@ export class PlaceholderMapRenderer {
     view.addEventListener("resize", this.handleDisplayResize, {passive: true});
   }
 
-  async restoreWebGlContext() {
-    const map = this.map;
-    initializeWebGlResources(this);
-    if (map) {
-      const surfaceOwner = this.surfaceResourceOwner || createRendererSurfaceResourceOwner(this, map, {
-        base: this.surfaceVertices,
-        cellVisualCorrection: this.cellVisualCorrectionGeometry,
-        surfaceCellRanges: this.surfaceCellRanges
-      });
-      const view = this.canvas.ownerDocument?.defaultView || globalThis;
-      const yieldToBrowser = () => new Promise(resolve => view.requestAnimationFrame(() => resolve()));
-      const upload = async (buffer, values, usage) => {
-        this.gl.bindBuffer(this.gl.ARRAY_BUFFER, buffer);
-        this.gl.bufferData(this.gl.ARRAY_BUFFER, values, usage);
-        await yieldToBrowser();
-      };
-      installSurfaceBaseBufferSet(this, await createSurfaceBaseBufferSetAsync(this.gl, this.surfaceVertices, {usage: this.gl.STATIC_DRAW, surfaceCellRanges: this.surfaceCellRanges, owner: surfaceOwner, yieldToMain: yieldToBrowser}));
-      installCellVisualCorrectionBufferSet(this, await createCellVisualCorrectionBufferSetAsync(this.gl, this.cellVisualCorrectionGeometry, {usage: this.gl.STATIC_DRAW, owner: surfaceOwner, yieldToMain: yieldToBrowser}));
-      this.restoreCellAttributeStore();
-      adoptRendererSurfaceResourceOwner(this, surfaceOwner);
-      await upload(this.surfacePatchBuffer, this.surfacePatchVertices, this.gl.DYNAMIC_DRAW);
-      for (const [buffer, values] of [[this.landCorrectionBuffer, this.landCorrectionVertices], [this.waterCorrectionBuffer, this.waterCorrectionVertices], [this.landCoverBuffer, this.landCoverVertices], [this.waterCoverBuffer, this.waterCoverVertices], [this.oceanCurrentBuffer, this.oceanCurrentVertices], [this.lineBuffer, this.lineVertices], [this.shoreLineBuffer, this.shoreLineVertices]]) await upload(buffer, values, this.gl.STATIC_DRAW);
-      const pointLayer = buildPointLayer(map);
-      this.pointDrawRanges = pointLayer.drawRanges;
-      this.pointBufferVertexCount = pointLayer.vertices.length / 6;
-      this.pointVertexCount = countVisiblePointVertices(this.pointDrawRanges, this.layerVisibility);
-      await upload(this.pointBuffer, pointLayer.vertices, this.gl.STATIC_DRAW);
-      this.cityIconLayer.setInstances(this.cityIconItems);
-      this.updatePoliticalMeshDebugBuffer();
-      this.markViewportBuffersDirty();
-      await this.updateRouteBufferAsync({yieldToBrowser});
-      this.updateRiverBuffer();
-      this.updateSelectionBuffer();
-      this.draw({updateDynamicBuffers: false});
-      this.onViewChange();
+  issueRenderResourceBinding(binding, {replaceResources = false} = {}) {
+    const source = normalizeRenderSourceBinding(binding, "renderer.renderRequest");
+    const active = this.activeRenderResourceBinding
+      || (this.surfaceResourceOwner ? renderResourceBindingFromOwner(this.surfaceResourceOwner) : null);
+    const currentGeneration = Math.max(
+      Number(this.renderGeneration) || 0,
+      Number(active?.renderGeneration) || 0
+    );
+    const identityChanged = Boolean(active && active.mapIdentity !== source.mapIdentity);
+    const shouldAdvance = replaceResources || !active || identityChanged;
+    const renderGeneration = shouldAdvance
+      ? Math.max(currentGeneration, Number(this.nextRenderGeneration) || 0) + 1
+      : Math.max(currentGeneration, Number(this.nextRenderGeneration) || 0);
+    this.nextRenderGeneration = Math.max(Number(this.nextRenderGeneration) || 0, renderGeneration);
+    this.renderPreparationSequence = Math.max(0, Number(this.renderPreparationSequence) || 0) + 1;
+    const issued = createRenderResourceBinding(source, {
+      renderGeneration,
+      renderPreparationId: `render:${source.mapIdentity}:${source.sourceRevision}:${source.topologyRevision}:${renderGeneration}:${this.renderPreparationSequence}`
+    });
+    this.latestIssuedRenderBinding = issued;
+    return issued;
+  }
+
+  async restoreWebGlContextUntilCurrent(options = {}) {
+    let retryBinding = options.binding || null;
+    while (true) {
+      try {
+        return await this.restoreWebGlContext({...options, binding: retryBinding});
+      } catch (error) {
+        if (error?.code !== "render-context-restore-obsolete") throw error;
+        await Promise.resolve();
+        retryBinding = this.latestIssuedRenderBinding || retryBinding;
+      }
     }
-    this.webGlContextLost = false;
-    this.lastWebGlContextRestoreError = null;
-    return true;
+  }
+
+  simulateContextLoss({restoreDelayMs = 50} = {}) {
+    if (!Number.isSafeInteger(restoreDelayMs) || restoreDelayMs < 0 || restoreDelayMs > 5000) {
+      const error = new TypeError("restoreDelayMs 必须是 0～5000 的安全整数");
+      error.code = "invalid_argument";
+      throw error;
+    }
+    if (this.debugContextLossPromise || this.webGlContextRestorePromise || this.webGlContextLost || this.webGlContextResourceState !== "ready") {
+      const error = new Error("WebGL context loss 模拟正在进行或 renderer 未就绪");
+      error.code = "render-context-loss-busy";
+      throw error;
+    }
+    const operation = this.runContextLossSimulation({restoreDelayMs});
+    this.debugContextLossPromise = operation;
+    return operation.finally(() => {
+      if (this.debugContextLossPromise === operation) this.debugContextLossPromise = null;
+    });
+  }
+
+  async runContextLossSimulation({restoreDelayMs}) {
+    if (!this.map) {
+      const error = new Error("当前没有可恢复的地图");
+      error.code = "render-context-loss-unsupported";
+      throw error;
+    }
+    const extension = this.gl?.getExtension?.("WEBGL_lose_context");
+    if (!extension || typeof extension.loseContext !== "function" || typeof extension.restoreContext !== "function") {
+      const error = new Error("当前 WebGL2 实现不支持 WEBGL_lose_context");
+      error.code = "render-context-loss-unsupported";
+      throw error;
+    }
+    const map = this.map;
+    const beforeBinding = assertContextLossSimulationOwners(this);
+    const beforeDraw = Number(this.lastDraw?.sequence) || 0;
+    const lostEvent = createRendererCanvasEventWaiter(this, "webglcontextlost", DEBUG_CONTEXT_RESTORE_TIMEOUT_MS);
+    try {
+      extension.loseContext();
+    } catch (cause) {
+      lostEvent.cancel();
+      throw contextLossReceiptError("WEBGL_lose_context.loseContext 调用失败", cause);
+    }
+    await lostEvent.promise;
+    if (!this.webGlContextLost && this.gl?.isContextLost?.() !== true) {
+      throw contextLossReceiptError("WebGL context loss 事件未进入 lost 状态");
+    }
+    await waitForRendererDelay(this, restoreDelayMs);
+    const restoredEvent = createRendererCanvasEventWaiter(this, "webglcontextrestored", DEBUG_CONTEXT_RESTORE_TIMEOUT_MS);
+    try {
+      extension.restoreContext();
+    } catch (cause) {
+      restoredEvent.cancel();
+      throw contextLossReceiptError("WEBGL_lose_context.restoreContext 调用失败", cause);
+    }
+    await restoredEvent.promise;
+    const restorePromise = this.webGlContextRestorePromise;
+    if (!restorePromise) throw contextLossReceiptError("WebGL context restore 事件没有建立恢复 owner");
+    await restorePromise;
+    if (this.map !== map) throw contextLossReceiptError("WebGL context restore 期间地图引用发生变化");
+    const afterBinding = assertContextLossSimulationOwners(this);
+    const drawDelta = (Number(this.lastDraw?.sequence) || 0) - beforeDraw;
+    if (afterBinding.mapIdentity !== beforeBinding.mapIdentity
+      || afterBinding.sourceRevision !== beforeBinding.sourceRevision
+      || afterBinding.topologyRevision !== beforeBinding.topologyRevision
+      || afterBinding.renderGeneration !== beforeBinding.renderGeneration + 1
+      || drawDelta !== 1
+      || this.webGlContextLost
+      || this.gl?.isContextLost?.() === true
+      || this.webGlContextResourceState !== "ready"
+      || this.retainedResourceState !== "ready") {
+      throw contextLossReceiptError("WebGL context restore receipt 与资源终态不一致");
+    }
+    return Object.freeze({
+      restored: true,
+      beforeBinding: contextLossReceiptBinding(beforeBinding),
+      afterBinding: contextLossReceiptBinding(afterBinding),
+      drawDelta,
+      resourceState: this.webGlContextResourceState,
+      retainedState: this.retainedResourceState
+    });
+  }
+
+  async restoreWebGlContext({yieldToMain = null, binding = null} = {}) {
+    const map = this.map;
+    const staged = {gl: this.gl};
+    let stagedCommitted = false;
+    let restoreBinding = null;
+    this.webGlContextLost = true;
+    this.webGlContextResourceState = "restoring";
+    const isRestoreCurrent = () => this.map === map
+      && (!restoreBinding || sameRenderResourceBinding(this.latestIssuedRenderBinding, restoreBinding));
+    const assertRestoreCurrent = () => {
+      if (isRestoreCurrent()) return true;
+      const error = new Error("WebGL context restore 已被更新的地图或资源代际取代");
+      error.code = "render-context-restore-obsolete";
+      throw error;
+    };
+    try {
+      initializeWebGlResources(staged);
+      if (map) {
+        restoreBinding = this.issueRenderResourceBinding(binding || this.latestIssuedRenderBinding || this.surfaceResourceOwner || {
+          mapIdentity: map?.metadata?.mapIdentity || map?.metadata?.id || map?.metadata?.seed || "local-map",
+          mapRevision: 0,
+          topologyRevision: 0
+        }, {replaceResources: true});
+        assertRestoreCurrent();
+        const surfaceOwner = createRendererSurfaceResourceOwner(this, map, {
+          base: this.surfaceVertices,
+          cellVisualCorrection: this.cellVisualCorrectionGeometry,
+          surfaceCellRanges: this.surfaceCellRanges
+        }, restoreBinding);
+        const view = this.canvas.ownerDocument?.defaultView || globalThis;
+        const yieldRestore = typeof yieldToMain === "function"
+          ? yieldToMain
+          : () => new Promise(resolve => view.requestAnimationFrame(() => resolve()));
+        const yieldToBrowser = async () => {
+          await yieldRestore();
+          assertRestoreCurrent();
+        };
+        const upload = async (buffer, values, usage) => {
+          assertRestoreCurrent();
+          this.gl.bindBuffer(this.gl.ARRAY_BUFFER, buffer);
+          this.gl.bufferData(this.gl.ARRAY_BUFFER, values, usage);
+          await yieldToBrowser();
+        };
+        installSurfaceBaseBufferSet(staged, await createSurfaceBaseBufferSetAsync(this.gl, this.surfaceVertices, {
+          usage: this.gl.STATIC_DRAW,
+          surfaceCellRanges: this.surfaceCellRanges,
+          owner: surfaceOwner,
+          yieldToMain: yieldToBrowser,
+          assertCurrent: assertRestoreCurrent
+        }));
+        installCellVisualCorrectionBufferSet(staged, await createCellVisualCorrectionBufferSetAsync(this.gl, this.cellVisualCorrectionGeometry, {
+          usage: this.gl.STATIC_DRAW,
+          owner: surfaceOwner,
+          yieldToMain: yieldToBrowser,
+          assertCurrent: assertRestoreCurrent
+        }));
+        assertRestoreCurrent();
+        staged.cellAttributeStore = createCellAttributeStore(this.gl, map);
+        await upload(staged.surfacePatchBuffer, this.surfacePatchVertices, this.gl.DYNAMIC_DRAW);
+        for (const [buffer, values] of [[staged.landCorrectionBuffer, this.landCorrectionVertices], [staged.waterCorrectionBuffer, this.waterCorrectionVertices], [staged.landCoverBuffer, this.landCoverVertices], [staged.waterCoverBuffer, this.waterCoverVertices], [staged.oceanCurrentBuffer, this.oceanCurrentVertices], [staged.lineBuffer, this.lineVertices], [staged.shoreLineBuffer, this.shoreLineVertices]]) await upload(buffer, values, this.gl.STATIC_DRAW);
+        const pointLayer = buildPointLayer(map);
+        staged.pointDrawRanges = pointLayer.drawRanges;
+        staged.pointBufferVertexCount = pointLayer.vertices.length / 6;
+        staged.pointVertexCount = countVisiblePointVertices(staged.pointDrawRanges, this.layerVisibility);
+        await upload(staged.pointBuffer, pointLayer.vertices, this.gl.STATIC_DRAW);
+        staged.cityIconLayer.setInstances(this.cityIconItems);
+
+        const debugVertices = politicalMeshDebugCache(this.politicalVisualMeshes, this.politicalMeshDebugMode)?.vertices || new Float32Array();
+        staged.politicalMeshDebugVertexCount = debugVertices.length / 6;
+        await upload(staged.politicalMeshDebugBuffer, debugVertices, this.gl.STATIC_DRAW);
+
+        const camera = snapshotCamera(this.camera);
+        const selection = this.selection ? {...this.selection} : null;
+        const objectHighlights = this.objectHighlights.map(item => ({...item}));
+        const routeStartedAt = performance.now();
+        const routeLayer = await buildRouteMeshVerticesAsync(map, camera, this.canvas, selection, objectHighlights, {
+          yieldToBrowser,
+          sliceMs: ROUTE_BUILD_SLICE_MS,
+          shouldContinue: isRestoreCurrent
+        }, this.visualTheme);
+        assertRestoreCurrent();
+        if (routeLayer.stats.aborted) assertRestoreCurrent();
+        staged.routeVertexCount = routeLayer.vertices.length / 6;
+        staged.routeDrawRanges = routeLayer.drawRanges;
+        staged.routeRenderStats = routeLayer.stats;
+        staged.routeBufferCamera = snapshotViewportCamera(camera);
+        staged.routeBuildMs = roundMs(performance.now() - routeStartedAt);
+        await upload(staged.routeBuffer, routeLayer.vertices, this.gl.DYNAMIC_DRAW);
+
+        const riverStartedAt = performance.now();
+        const riverLayer = buildRiverMeshVertices(map, camera, this.canvas);
+        staged.riverVertexCount = riverLayer.vertices.length / 6;
+        staged.riverWidthStats = riverLayer.stats;
+        staged.riverBufferCamera = snapshotViewportCamera(camera);
+        staged.riverBuildMs = roundMs(performance.now() - riverStartedAt);
+        await upload(staged.riverBuffer, riverLayer.vertices, this.gl.DYNAMIC_DRAW);
+
+        staged.tradeFlowVertexCount = 0;
+        staged.tradeFlowPickItems = [];
+        staged.tradeFlowRenderStats = emptyTradeFlowRenderStats();
+        staged.tradeFlowBuildMs = 0;
+        await upload(staged.tradeFlowBuffer, new Float32Array(), this.gl.DYNAMIC_DRAW);
+
+        const selectionStartedAt = performance.now();
+        const selectionLayer = buildSelectionMeshBundle(map, camera, this.canvas, this.selection, this.locateFlash, this.objectHighlights, this.riverWaypointPreview);
+        staged.selectionVertexCount = selectionLayer.vertices.length / 6;
+        staged.selectionDrawRanges = selectionLayer.drawRanges;
+        staged.selectionBuildMs = roundMs(performance.now() - selectionStartedAt);
+        await upload(staged.selectionBuffer, selectionLayer.vertices, this.gl.DYNAMIC_DRAW);
+        assertRestoreCurrent();
+
+        const previous = captureInitializedWebGlResources(this);
+        assignInitializedWebGlResources(this, staged);
+        this.cellAttributeStore = staged.cellAttributeStore;
+        this.pointDrawRanges = staged.pointDrawRanges;
+        this.pointBufferVertexCount = staged.pointBufferVertexCount;
+        this.pointVertexCount = staged.pointVertexCount;
+        this.politicalMeshDebugVertexCount = staged.politicalMeshDebugVertexCount;
+        this.routeVertexCount = staged.routeVertexCount;
+        this.routeDrawRanges = staged.routeDrawRanges;
+        this.routeRenderStats = staged.routeRenderStats;
+        this.routeBufferCamera = staged.routeBufferCamera;
+        this.routeBuildMs = staged.routeBuildMs;
+        this.riverVertexCount = staged.riverVertexCount;
+        this.riverWidthStats = staged.riverWidthStats;
+        this.riverBufferCamera = staged.riverBufferCamera;
+        this.riverBuildMs = staged.riverBuildMs;
+        this.tradeFlowVertexCount = staged.tradeFlowVertexCount;
+        this.tradeFlowPickItems = staged.tradeFlowPickItems;
+        this.tradeFlowRenderStats = staged.tradeFlowRenderStats;
+        this.tradeFlowBuildMs = staged.tradeFlowBuildMs;
+        this.selectionVertexCount = staged.selectionVertexCount;
+        this.selectionDrawRanges = staged.selectionDrawRanges;
+        this.selectionBuildMs = staged.selectionBuildMs;
+        stagedCommitted = true;
+        adoptRendererSurfaceResourceOwner(this, surfaceOwner);
+        const restoredBinding = renderResourceBindingFromOwner(surfaceOwner);
+        adoptRendererRetainedResourceBindings(this, restoredBinding);
+        for (const family of RENDER_CACHE_RESOURCE_FAMILIES) adoptRenderCacheResourceBinding(this, family, restoredBinding);
+        this.dynamicBuffersDirty.routes = false;
+        this.dynamicBuffersDirty.rivers = false;
+        this.dynamicBuffersDirty.tradeFlows = false;
+        this.dynamicBuffersDirty.selection = false;
+        this.webGlContextLost = false;
+        this.webGlContextResourceState = "ready";
+        this.draw({updateDynamicBuffers: false});
+        this.onViewChange();
+        cleanupInitializedWebGlResources(this.gl, previous);
+      } else {
+        assertRestoreCurrent();
+        const previous = captureInitializedWebGlResources(this);
+        assignInitializedWebGlResources(this, staged);
+        stagedCommitted = true;
+        cleanupInitializedWebGlResources(this.gl, previous);
+      }
+      this.webGlContextLost = false;
+      this.webGlContextResourceState = "ready";
+      this.lastWebGlContextRestoreError = null;
+      return true;
+    } catch (error) {
+      if (error?.code === "render-context-restore-obsolete") {
+        if (!stagedCommitted) cleanupInitializedWebGlResources(this.gl, staged);
+        this.webGlContextLost = true;
+        this.webGlContextResourceState = "lost";
+        this.lastWebGlContextRestoreError = null;
+        throw error;
+      }
+      cleanupInitializedWebGlResources(this.gl, stagedCommitted ? this : staged);
+      invalidateInitializedWebGlResources(this);
+      this.webGlContextLost = true;
+      this.webGlContextResourceState = "invalid";
+      this.lastWebGlContextRestoreError = error;
+      throw error;
+    }
   }
 
   resizeToDisplaySize({draw = true} = {}) {
@@ -721,7 +1103,7 @@ export class PlaceholderMapRenderer {
     return true;
   }
 
-  loadMap(map) {
+  loadMap(map, binding = null) {
     const profile = createRendererLoadProfile();
     this.cancelScheduledRouteBufferRefresh();
     this.map = map;
@@ -738,7 +1120,7 @@ export class PlaceholderMapRenderer {
     profile.stage("political-meshes", "构建政治视觉 mesh", () => this.rebuildPoliticalVisualMeshesIfNeeded());
     const surfaceBundle = profile.stage("surface-vertices", "构建 surface 顶点", () => buildPlaceholderSurfaceBundle(map, this.colorMode, this.viewOptions, this.shoreVisualPaths, this.stateVisualPaths, this.provinceVisualPaths, this.politicalVisualMeshes, this.cellVisualMesh));
     const vertices = surfaceBundle.base;
-    const surfaceOwner = createRendererSurfaceResourceOwner(this, map, surfaceBundle);
+    const surfaceOwner = createRendererSurfaceResourceOwner(this, map, surfaceBundle, binding);
     const lineLayer = profile.stage("line-vertices", "构建线层顶点", () => buildLineVertices(map, this.layerVisibility, this.colorMode, this.shoreVisualPaths, this.stateVisualPaths, this.provinceVisualPaths, this.cellVisualMesh, this.viewOptions));
     const lineVertices = lineLayer.vertices;
     const shoreLineVertices = lineLayer.shoreVertices;
@@ -827,7 +1209,15 @@ export class PlaceholderMapRenderer {
       }, {bufferGroup: "static-map"});
     });
     adoptRendererSurfaceResourceOwner(this, surfaceOwner);
+    const renderCacheBinding = renderResourceBindingFromOwner(surfaceOwner);
+    adoptRenderCacheResourceBinding(this, "line", renderCacheBinding);
+    adoptRenderCacheResourceBinding(this, "point", renderCacheBinding);
+    adoptRenderCacheResourceBinding(this, "route", renderCacheBinding);
+    adoptRenderCacheResourceBinding(this, "river", renderCacheBinding);
+    adoptRenderCacheResourceBinding(this, "tradeFlow", renderCacheBinding);
+    adoptRenderCacheResourceBinding(this, "selection", renderCacheBinding);
     profile.stage("labels", "构建标签", () => this.buildLabels(map));
+    adoptRendererRetainedResourceBindings(this, renderCacheBinding);
     this.markAllDynamicBuffersDirty();
     profile.stage("fit-draw", "适配视图并绘制", () => this.fitToView({quick: true}));
     profile.stage("route-screen-mesh", "构建道路屏幕 mesh", () => {
@@ -841,7 +1231,7 @@ export class PlaceholderMapRenderer {
     this.lastLoad = profile.finish();
   }
 
-  async loadMapAsync(map, {onStage = () => {}, onStageEnd = () => {}, yieldToBrowser = () => Promise.resolve()} = {}) {
+  async loadMapAsync(map, {onStage = () => {}, onStageEnd = () => {}, yieldToBrowser = () => Promise.resolve(), binding = null} = {}) {
     this.cancelScheduledRouteBufferRefresh();
     const profile = createRendererLoadProfile();
     const stage = async (id, label, task) => {
@@ -873,7 +1263,7 @@ export class PlaceholderMapRenderer {
     await stage("political-meshes", "构建政治视觉 mesh", () => this.rebuildPoliticalVisualMeshesIfNeeded());
     const surfaceBundle = await stage("surface-vertices", "构建 surface 顶点", () => buildPlaceholderSurfaceBundle(map, this.colorMode, this.viewOptions, this.shoreVisualPaths, this.stateVisualPaths, this.provinceVisualPaths, this.politicalVisualMeshes, this.cellVisualMesh));
     const vertices = surfaceBundle.base;
-    const surfaceOwner = createRendererSurfaceResourceOwner(this, map, surfaceBundle);
+    const surfaceOwner = createRendererSurfaceResourceOwner(this, map, surfaceBundle, binding);
     const lineLayer = await stage("line-vertices", "构建线层顶点", () => buildLineVertices(map, this.layerVisibility, this.colorMode, this.shoreVisualPaths, this.stateVisualPaths, this.provinceVisualPaths, this.cellVisualMesh, this.viewOptions));
     const lineVertices = lineLayer.vertices;
     const shoreLineVertices = lineLayer.shoreVertices;
@@ -969,7 +1359,15 @@ export class PlaceholderMapRenderer {
       }, {bufferGroup: "static-map"});
     });
     adoptRendererSurfaceResourceOwner(this, surfaceOwner);
+    const renderCacheBinding = renderResourceBindingFromOwner(surfaceOwner);
+    adoptRenderCacheResourceBinding(this, "line", renderCacheBinding);
+    adoptRenderCacheResourceBinding(this, "point", renderCacheBinding);
+    adoptRenderCacheResourceBinding(this, "route", renderCacheBinding);
+    adoptRenderCacheResourceBinding(this, "river", renderCacheBinding);
+    adoptRenderCacheResourceBinding(this, "tradeFlow", renderCacheBinding);
+    adoptRenderCacheResourceBinding(this, "selection", renderCacheBinding);
     await stage("labels", "构建标签", () => this.buildLabels(map));
+    adoptRendererRetainedResourceBindings(this, renderCacheBinding);
     this.markAllDynamicBuffersDirty();
     await stage("fit-draw", "适配视图并绘制", () => this.fitToView({quick: true}));
     await stage("route-screen-mesh", "构建道路屏幕 mesh", () => {
@@ -1026,6 +1424,9 @@ export class PlaceholderMapRenderer {
     this.heightCellSelectionVertexCount = 0;
     this.heightCellSelectionBuildMs = 0;
     this.heightCellSelectionStats = emptyHeightCellSelectionStats();
+    const renderCacheBinding = this.activeRenderResourceBinding || this.surfaceResourceOwner;
+    adoptRenderCacheResourceBinding(this, "tradeFlow", renderCacheBinding);
+    adoptRenderCacheResourceBinding(this, "selection", renderCacheBinding);
     this.markAllDynamicBuffersDirty();
     this.dynamicBuffersDirty.routes = false;
     this.dynamicBuffersDirty.rivers = false;
@@ -1307,17 +1708,32 @@ export class PlaceholderMapRenderer {
     this.refreshLabels();
   }
 
-  refreshCellSurface({draw = true} = {}) {
+  refreshCellSurface({draw = true, binding = null} = {}) {
     if (!this.map) return;
+    const previousSurfaceBinding = this.surfaceResourceOwner
+      ? renderResourceBindingFromOwner(this.surfaceResourceOwner)
+      : null;
+    const surfaceBinding = binding
+      ? normalizeRenderResourceBinding(binding, "renderer.editedSurface.binding")
+      : this.issueRenderResourceBinding({
+        mapIdentity: previousSurfaceBinding?.mapIdentity
+          || this.map?.metadata?.mapIdentity
+          || this.map?.metadata?.id
+          || this.map?.metadata?.seed
+          || "local-map",
+        sourceRevision: previousSurfaceBinding?.sourceRevision ?? 0,
+        topologyRevision: previousSurfaceBinding?.topologyRevision ?? 0
+      }, {replaceResources: true});
     const startedAt = performance.now();
     const event = this.beginPerformanceEvent("surfaceRefresh", {drawRequested: draw, colorMode: this.colorMode}, startedAt);
     try {
+      assertEditedRendererResourcePreflight(this, surfaceBinding, previousSurfaceBinding);
       const geometryReused = canReuseCellVisualSurfaceGeometry(this);
       const surfaceBundle = geometryReused
         ? recolorCellVisualSurfaceBundle(this)
         : buildPlaceholderSurfaceBundle(this.map, this.colorMode, this.viewOptions, this.shoreVisualPaths, this.stateVisualPaths, this.provinceVisualPaths, this.politicalVisualMeshes, this.cellVisualMesh);
       const vertices = surfaceBundle.base;
-      const surfaceOwner = createRendererSurfaceResourceOwner(this, this.map, surfaceBundle);
+      const surfaceOwner = createRendererSurfaceResourceOwner(this, this.map, surfaceBundle, surfaceBinding);
       this.surfaceVertices = vertices;
       this.cellVisualCorrectionGeometry = surfaceBundle.cellVisualCorrection;
       this.gpuResidentSmoothShoreSurfaceKey = surfaceBundle.smoothShoreSurfaceKey;
@@ -1348,12 +1764,17 @@ export class PlaceholderMapRenderer {
         uploadShoreSurfaceBuffers(this.gl, this, surfaceBundle);
       }, {bufferGroup: "surface"});
       adoptRendererSurfaceResourceOwner(this, surfaceOwner);
+      this.rebindEditedRendererResources(renderResourceBindingFromOwner(surfaceOwner), previousSurfaceBinding);
       if (draw) this.draw();
       this.completePerformanceEvent(event, {uploadMs: upload.ms, vertexCount: this.vertexCount, geometryReused}, performance.now());
     } catch (error) {
       this.failPerformanceEvent(event, error, {}, performance.now());
       throw error;
     }
+  }
+
+  rebindEditedRendererResources(binding, previousBinding = null) {
+    return rebindEditedRendererResources(this, binding, previousBinding);
   }
 
   refreshCellSurfaceCells(gridCells, {draw = true} = {}) {
@@ -1546,17 +1967,18 @@ export class PlaceholderMapRenderer {
     }
   }
 
-  refreshHeightCells(gridCells, {draw = true, deferTopology = false} = {}) {
+  refreshHeightCells(gridCells, {draw = true, deferTopology = false, binding = null} = {}) {
     const normalizedCells = [...new Set((gridCells || []).map(Number).filter(cell => Number.isInteger(cell) && cell >= 0))].sort((a, b) => a - b);
     if (!this.map || !normalizedCells.length) return {incremental: false, cells: 0, spans: 0};
     if (this.colorMode !== "height" || !(this.surfaceVertices instanceof Float32Array)) {
-      this.refreshCellSurface({draw});
+      this.refreshCellSurface({draw, binding});
       return {incremental: false, cells: normalizedCells.length, spans: 1};
     }
     if (!this.surfaceCellRanges.size) {
       if (this.viewOptions?.smoothCellBorders === false) {
         const patch = this.refreshHardCellSurfacePatchCells(normalizedCells, {draw: false});
         if (patch) {
+          if (binding) rebindEditedRendererResources(this, binding);
           if (draw) this.draw();
           return {
             incremental: true,
@@ -1570,7 +1992,7 @@ export class PlaceholderMapRenderer {
           };
         }
       }
-      this.refreshCellSurface({draw});
+      this.refreshCellSurface({draw, binding});
       return {incremental: false, cells: normalizedCells.length, spans: 1};
     }
     const requiresShoreRebuild = !deferTopology && normalizedCells.some(gridCell => {
@@ -1591,9 +2013,10 @@ export class PlaceholderMapRenderer {
           // 局部 span 长度不稳定时必须回退完整重建，不能以旧几何冒充已完成视觉更新。
           this.surfaceVertices = null;
           this.surfaceCellRanges = new Map();
-          this.refreshCellSurface({draw: false});
+          this.refreshCellSurface({draw: false, binding});
         }
         this.refreshShoreLineLayer({draw: false});
+        if (binding) rebindEditedRendererResources(this, binding);
         if (draw) this.draw();
         return {
           incremental: true,
@@ -1609,7 +2032,7 @@ export class PlaceholderMapRenderer {
       }
       this.rebuildCellVisualMesh();
       this.rebuildShoreVisualCache();
-      this.refreshCellSurface({draw});
+      this.refreshCellSurface({draw, binding});
       return {incremental: false, cells: normalizedCells.length, spans: 1, reason: "shore-or-land-water-change"};
     }
 
@@ -1627,20 +2050,26 @@ export class PlaceholderMapRenderer {
       spans.push(range);
       changedCells++;
     }
-    if (!spans.length) return {incremental: true, cells: 0, spans: 0};
+    if (!spans.length) {
+      if (binding) rebindEditedRendererResources(this, binding);
+      return {incremental: true, cells: 0, spans: 0};
+    }
 
     const merged = mergeSurfaceRanges(spans);
     uploadSurfaceBaseRanges(this, merged);
     const patchCells = normalizedCells.filter(gridCell => this.surfacePatchCells.has(gridCell));
     if (patchCells.length) refreshSurfacePatchCellColors(this, patchCells);
     const shoreSpans = refreshShoreSurfaceCellColors(this, normalizedCells);
+    if (binding) rebindEditedRendererResources(this, binding);
     if (draw) this.draw();
     return {incremental: true, cells: changedCells, spans: merged.length, shoreSpans};
   }
 
-  refreshLabels() {
+  refreshLabels(binding = null) {
     if (!this.map) return;
+    const resourceBinding = binding || this.labelLayoutResourceOwner || this.activeRenderResourceBinding || this.surfaceResourceOwner;
     this.buildLabels(this.map);
+    if (resourceBinding) adoptOverlayLabelResourceBinding(this, resourceBinding);
     this.updateLabels();
   }
 
@@ -1661,15 +2090,15 @@ export class PlaceholderMapRenderer {
     };
   }
 
-  refreshTerrainCaches({draw = true} = {}) {
+  refreshTerrainCaches({draw = true, refreshSurface = true, refreshLines = true} = {}) {
     if (!this.map) return;
     this.rebuildCellVisualMesh();
     this.rebuildShoreVisualCache();
     this.rebuildStateVisualCache();
     this.rebuildProvinceVisualCache();
     this.rebuildPoliticalVisualMeshesIfNeeded();
-    this.refreshCellSurface({draw: false});
-    this.refreshLineLayers({draw: false});
+    if (refreshSurface) this.refreshCellSurface({draw: false});
+    if (refreshLines) this.refreshLineLayers({draw: false});
     if (draw) this.draw();
   }
 
@@ -1712,7 +2141,7 @@ export class PlaceholderMapRenderer {
     this.updateLabels();
   }
 
-  refreshLineLayers({draw = true} = {}) {
+  refreshLineLayers({draw = true, binding = null} = {}) {
     if (!this.map) return;
     const startedAt = performance.now();
     const event = this.beginPerformanceEvent("lineRefresh", {drawRequested: draw}, startedAt);
@@ -1740,6 +2169,7 @@ export class PlaceholderMapRenderer {
         this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.shoreLineBuffer);
         this.gl.bufferData(this.gl.ARRAY_BUFFER, shoreLineVertices, this.gl.STATIC_DRAW);
       }, {bufferGroup: "line-and-ocean-current"});
+      adoptRenderCacheResourceBinding(this, "line", currentRendererRenderCacheBinding(this, binding));
       if (draw) this.draw();
       this.completePerformanceEvent(event, {uploadMs: upload.ms, lineVertexCount: this.lineVertexCount, oceanCurrentVertexCount: this.oceanCurrentVertexCount}, performance.now());
     } catch (error) {
@@ -1748,7 +2178,7 @@ export class PlaceholderMapRenderer {
     }
   }
 
-  refreshShoreLineLayer({draw = true} = {}) {
+  refreshShoreLineLayer({draw = true, binding = null} = {}) {
     if (!this.map) return;
     const startedAt = performance.now();
     const event = this.beginPerformanceEvent("shoreLineRefresh", {drawRequested: draw}, startedAt);
@@ -1763,6 +2193,7 @@ export class PlaceholderMapRenderer {
           this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.shoreLineBuffer);
           this.gl.bufferData(this.gl.ARRAY_BUFFER, cached, this.gl.STATIC_DRAW);
         }, {bufferGroup: "shore-line"});
+        adoptRenderCacheResourceBinding(this, "line", currentRendererRenderCacheBinding(this, binding));
         if (draw) this.draw();
         this.completePerformanceEvent(event, {uploadMs: upload.ms, shoreLineVertexCount: this.shoreLineVertexCount, rebuiltPaths: 0, gpuResidentCache: true}, performance.now());
         return;
@@ -1777,6 +2208,7 @@ export class PlaceholderMapRenderer {
         this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.shoreLineBuffer);
         this.gl.bufferData(this.gl.ARRAY_BUFFER, shoreLineVertices, this.gl.STATIC_DRAW);
       }, {bufferGroup: "shore-line"});
+      adoptRenderCacheResourceBinding(this, "line", currentRendererRenderCacheBinding(this, binding));
       if (draw) this.draw();
       this.completePerformanceEvent(event, {uploadMs: upload.ms, shoreLineVertexCount: this.shoreLineVertexCount, rebuiltPaths: shoreLineLayer.rebuiltPaths}, performance.now());
     } catch (error) {
@@ -1792,7 +2224,7 @@ export class PlaceholderMapRenderer {
     this.rebuildPoliticalVisualMeshesIfNeeded();
   }
 
-  refreshPointLayers({draw = true} = {}) {
+  refreshPointLayers({draw = true, binding = null} = {}) {
     if (!this.map) return;
     const startedAt = performance.now();
     const event = this.beginPerformanceEvent("pointRefresh", {drawRequested: draw}, startedAt);
@@ -1806,6 +2238,7 @@ export class PlaceholderMapRenderer {
         this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.pointBuffer);
         this.gl.bufferData(this.gl.ARRAY_BUFFER, pointVertices, this.gl.STATIC_DRAW);
       }, {bufferGroup: "point"});
+      adoptRenderCacheResourceBinding(this, "point", currentRendererRenderCacheBinding(this, binding));
       if (draw) this.draw();
       this.completePerformanceEvent(event, {uploadMs: upload.ms, pointVertexCount: this.pointVertexCount}, performance.now());
     } catch (error) {
@@ -1823,19 +2256,27 @@ export class PlaceholderMapRenderer {
     this.refreshLineLayers({draw});
   }
 
-  refreshObjectPickingIndex() {
+  refreshObjectPickingIndex(binding = null) {
     if (!this.map) return;
+    const resourceBinding = binding || this.objectPickingResourceOwner || this.activeRenderResourceBinding || this.surfaceResourceOwner;
     this.objectPickingIndex = buildObjectPickingIndex(this.map);
+    if (resourceBinding) adoptObjectPickingResourceBinding(this, resourceBinding);
   }
 
-  refreshRiverPickingIndex() {
+  refreshRiverPickingIndex(binding = null) {
     if (!this.map) return false;
-    return refreshRiversInPickingIndex(this.objectPickingIndex, this.map.rivers?.rivers || []);
+    assertRendererRetainedResourceBindings(this, {picking: true});
+    const refreshed = refreshRiversInPickingIndex(this.objectPickingIndex, this.map.rivers?.rivers || []);
+    if (binding) adoptObjectPickingResourceBinding(this, binding);
+    return refreshed;
   }
 
-  refreshObjectPickingIndexPreservingRoutes() {
+  refreshObjectPickingIndexPreservingRoutes(binding = null) {
     if (!this.map) return false;
-    return refreshNonRoutePickingIndexPreservingRoutes(this.objectPickingIndex, this.map);
+    assertRendererRetainedResourceBindings(this, {picking: true});
+    const refreshed = refreshNonRoutePickingIndexPreservingRoutes(this.objectPickingIndex, this.map);
+    if (binding) adoptObjectPickingResourceBinding(this, binding);
+    return refreshed;
   }
 
   rebuildCellVisualMesh() {
@@ -2418,6 +2859,34 @@ export class PlaceholderMapRenderer {
     return true;
   }
 
+  beginRetainedResourcePublish() {
+    this.retainedResourcePublishSuspended = Math.max(0, Number(this.retainedResourcePublishSuspended) || 0) + 1;
+    this.retainedResourceState = "suspended";
+    return this.retainedResourcePublishSuspended;
+  }
+
+  commitRetainedResourcePublish() {
+    if (this.retainedResourcePublishSuspended <= 0) return false;
+    this.retainedResourcePublishSuspended -= 1;
+    if (this.retainedResourcePublishSuspended > 0) return false;
+    assertRendererRetainedResourceBindings(this, {picking: true, overlay: true});
+    this.retainedResourceState = "ready";
+    const pendingDraw = Boolean(this.retainedResourcePublishPendingDraw);
+    this.retainedResourcePublishPendingDraw = false;
+    return pendingDraw;
+  }
+
+  invalidateRetainedResourcePublish(error = null) {
+    this.retainedResourcePublishSuspended = 0;
+    this.retainedResourcePublishPendingDraw = false;
+    this.retainedResourceState = "invalid";
+    this.lastRetainedResourceOwnerError = Object.freeze({
+      code: "render-retained-resource-publish-invalid",
+      message: String(error?.message || error || "retained resource publish 失败")
+    });
+    return true;
+  }
+
   cancelViewportCommitForWorkerInstall() {
     const view = this.canvas.ownerDocument?.defaultView || globalThis;
     this.viewportCommitVersion += 1;
@@ -2430,11 +2899,18 @@ export class PlaceholderMapRenderer {
   }
 
   draw({updateDynamicBuffers = true, updateOverlay = true, drawDirtyDynamicBuffers = true, drawCityIcons = true, viewportPreview = false, trackPerformance = true} = {}) {
+    if (this.webGlContextLost || this.webGlContextResourceState !== "ready") return;
+    if (this.retainedResourcePublishSuspended > 0) {
+      this.retainedResourcePublishPendingDraw = true;
+      return;
+    }
+    if (this.retainedResourceState === "invalid") return;
     if (this.workerRenderInstallSuspended > 0) {
       this.workerRenderInstallPendingDraw = true;
       return;
     }
     if (!this.map || !this.vertexCount) return;
+    assertRendererRetainedResourceBindings(this, {overlay: true});
     const startedAt = performance.now();
     const event = trackPerformance
       ? this.beginPerformanceEvent("draw", {updateDynamicBuffers, updateOverlay, drawDirtyDynamicBuffers, viewportPreview}, startedAt)
@@ -2452,6 +2928,7 @@ export class PlaceholderMapRenderer {
     if (updateDynamicBuffers && this.dynamicBuffersDirty.tradeFlows && this.layerVisibility.tradeFlows) this.updateTradeFlowBuffer();
     if (updateDynamicBuffers && this.dynamicBuffersDirty.rivers && this.layerVisibility.rivers) this.updateRiverBuffer();
     if (updateDynamicBuffers && this.dynamicBuffersDirty.selection) this.updateSelectionBuffer();
+    assertRenderCacheResourceBindings(this);
 
     const gl = this.gl;
     gl.viewport(0, 0, this.canvas.width, this.canvas.height);
@@ -2618,6 +3095,7 @@ export class PlaceholderMapRenderer {
       mapSize: this.map.metadata,
       camera: this.camera,
       canvas: this.canvas,
+      canvasSize: this.canvasSize,
       timeMs: performance.now(),
       layerVisible: drawCityIcons && this.layerVisibility.cities !== false,
       restoreState: false
@@ -2632,13 +3110,15 @@ export class PlaceholderMapRenderer {
     if (cityIconInstances > 0) layerOrder.push("cityIcons");
     const cityMoveGhostInstances = this.cityMovePreview ? 1 : 0;
 
-    const oceanCurrentProjection = createLineWidthProjection({map: this.map, camera: this.camera, canvas: this.canvas});
+    const oceanCurrentProjection = createLineWidthProjection({map: this.map, camera: this.camera, canvas: this.canvas, canvasSize: this.canvasSize});
     const drawMs = roundMs(performance.now() - startedAt);
-    const glError = gl.getError();
+    const glErrorChecked = !viewportPreview;
+    const glError = glErrorChecked ? gl.getError() : Number(this.lastDraw?.glError || 0);
     this.lastDraw = {
       sequence: event.sequence,
       drawMs,
       glError,
+      glErrorChecked,
       layerOrder,
       gridCellsDrawCalls,
       cityIconInstances,
@@ -2818,6 +3298,8 @@ export class PlaceholderMapRenderer {
 
   pickClientPoint(clientX, clientY, {cycleCities = false} = {}) {
     if (!this.map) return null;
+    if (this.retainedResourcePublishSuspended > 0 || this.retainedResourceState === "invalid") return null;
+    assertRendererRetainedResourceBindings(this, {picking: true, overlay: true});
     const label = this.pickLabel(clientX, clientY);
     const markerIcon = this.pickMarkerIcon(clientX, clientY);
     const militaryIcon = this.pickMilitaryIcon(clientX, clientY);
@@ -2885,7 +3367,7 @@ export class PlaceholderMapRenderer {
     return {x: mapX, y: mapY};
   }
 
-  updateRouteBuffer() {
+  updateRouteBuffer(binding = null) {
     const startedAt = performance.now();
     const event = this.beginPerformanceEvent("routeMesh", {mode: "sync"}, startedAt);
     try {
@@ -2899,6 +3381,7 @@ export class PlaceholderMapRenderer {
         this.gl.bufferData(this.gl.ARRAY_BUFFER, routeVertices, this.gl.DYNAMIC_DRAW);
       }, {bufferGroup: "route"});
       this.routeBufferCamera = snapshotViewportCamera(camera);
+      adoptRenderCacheResourceBinding(this, "route", currentRendererRenderCacheBinding(this, binding));
       this.routeBuildMs = roundMs(performance.now() - startedAt);
       this.dynamicBuffersDirty.routes = false;
       this.completePerformanceEvent(event, {ms: this.routeBuildMs, uploadMs: upload.ms, vertexCount: this.routeVertexCount, aborted: false}, performance.now());
@@ -2908,11 +3391,12 @@ export class PlaceholderMapRenderer {
     }
   }
 
-  async updateRouteBufferAsync({yieldToBrowser = () => Promise.resolve(), sliceMs = ROUTE_BUILD_SLICE_MS, shouldContinue = () => true} = {}) {
+  async updateRouteBufferAsync({yieldToBrowser = () => Promise.resolve(), sliceMs = ROUTE_BUILD_SLICE_MS, shouldContinue = () => true, binding = null} = {}) {
     const startedAt = performance.now();
     const event = this.beginPerformanceEvent("routeMesh", {mode: "async", sliceMs}, startedAt);
     try {
       const camera = snapshotCamera(this.camera);
+      const resourceBinding = currentRendererRenderCacheBinding(this, binding);
       const selection = this.selection ? {...this.selection} : null;
       const objectHighlights = this.objectHighlights.map(item => ({...item}));
       const {vertices: routeVertices, stats, drawRanges} = await buildRouteMeshVerticesAsync(this.map, camera, this.canvas, selection, objectHighlights, {
@@ -2920,7 +3404,7 @@ export class PlaceholderMapRenderer {
         sliceMs,
         shouldContinue
       }, this.visualTheme);
-      if (stats.aborted || !shouldContinue()) {
+      if (stats.aborted || !shouldContinue() || !isCurrentRendererRenderCacheBinding(this, resourceBinding)) {
         this.cancelPerformanceEvent(event, stats.aborted ? "builder-aborted" : "viewport-superseded", {ms: roundMs(performance.now() - startedAt), aborted: Boolean(stats.aborted)}, performance.now());
         return false;
       }
@@ -2932,6 +3416,7 @@ export class PlaceholderMapRenderer {
         this.gl.bufferData(this.gl.ARRAY_BUFFER, routeVertices, this.gl.DYNAMIC_DRAW);
       }, {bufferGroup: "route"});
       this.routeBufferCamera = snapshotViewportCamera(camera);
+      adoptRenderCacheResourceBinding(this, "route", resourceBinding);
       this.routeBuildMs = roundMs(performance.now() - startedAt);
       this.dynamicBuffersDirty.routes = false;
       this.completePerformanceEvent(event, {ms: this.routeBuildMs, uploadMs: upload.ms, vertexCount: this.routeVertexCount, aborted: false}, performance.now());
@@ -2981,7 +3466,7 @@ export class PlaceholderMapRenderer {
     this.routeRefreshVersion++;
   }
 
-  clearRouteBuffer() {
+  clearRouteBuffer(binding = null) {
     this.routeVertexCount = 0;
     this.routeDrawRanges = emptyRouteDrawRanges();
     this.routeRenderStats = normalizeRouteRenderStats(emptyRouteRenderStats());
@@ -2990,21 +3475,23 @@ export class PlaceholderMapRenderer {
       this.gl.bufferData(this.gl.ARRAY_BUFFER, new Float32Array(), this.gl.DYNAMIC_DRAW);
     }, {bufferGroup: "route"});
     this.routeBufferCamera = snapshotViewportCamera(this.camera);
+    adoptRenderCacheResourceBinding(this, "route", currentRendererRenderCacheBinding(this, binding));
     this.routeBuildMs = 0;
     this.dynamicBuffersDirty.routes = false;
   }
 
-  clearTradeFlowBuffer() {
+  clearTradeFlowBuffer(binding = null) {
     this.tradeFlowVertexCount = 0;
     this.tradeFlowPickItems = [];
     this.tradeFlowRenderStats = emptyTradeFlowRenderStats();
     this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.tradeFlowBuffer);
     this.gl.bufferData(this.gl.ARRAY_BUFFER, new Float32Array(), this.gl.DYNAMIC_DRAW);
+    adoptRenderCacheResourceBinding(this, "tradeFlow", currentRendererRenderCacheBinding(this, binding));
     this.tradeFlowBuildMs = 0;
     this.dynamicBuffersDirty.tradeFlows = false;
   }
 
-  updateTradeFlowBuffer() {
+  updateTradeFlowBuffer(binding = null) {
     const startedAt = performance.now();
     const {vertices, stats, pickItems} = buildTradeFlowMeshVertices(this.map, this.camera, this.canvas);
     this.tradeFlowVertexCount = vertices.length / 6;
@@ -3012,12 +3499,14 @@ export class PlaceholderMapRenderer {
     this.tradeFlowRenderStats = stats;
     this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.tradeFlowBuffer);
     this.gl.bufferData(this.gl.ARRAY_BUFFER, vertices, this.gl.DYNAMIC_DRAW);
+    adoptRenderCacheResourceBinding(this, "tradeFlow", currentRendererRenderCacheBinding(this, binding));
     this.tradeFlowBuildMs = roundMs(performance.now() - startedAt);
     this.dynamicBuffersDirty.tradeFlows = false;
   }
 
   pickTradeFlow(worldX, worldY, maxDistance) {
     if (!this.tradeFlowPickItems.length) return null;
+    assertRenderCacheResourceBindings(this, ["tradeFlow"]);
     let best = null;
     let candidateCount = 0;
     for (const item of this.tradeFlowPickItems) {
@@ -3060,7 +3549,7 @@ export class PlaceholderMapRenderer {
     return pickCompositeConnector(this.map, [this.selection, ...this.objectHighlights], worldX, worldY, maxDistance);
   }
 
-  updateRiverBuffer() {
+  updateRiverBuffer(binding = null) {
     const startedAt = performance.now();
     const event = this.beginPerformanceEvent("riverMesh", {mode: "sync"}, startedAt);
     try {
@@ -3073,6 +3562,7 @@ export class PlaceholderMapRenderer {
         this.gl.bufferData(this.gl.ARRAY_BUFFER, vertices, this.gl.DYNAMIC_DRAW);
       }, {bufferGroup: "river"});
       this.riverBufferCamera = snapshotViewportCamera(camera);
+      adoptRenderCacheResourceBinding(this, "river", currentRendererRenderCacheBinding(this, binding));
       this.riverBuildMs = roundMs(performance.now() - startedAt);
       this.dynamicBuffersDirty.rivers = false;
       this.completePerformanceEvent(event, {ms: this.riverBuildMs, uploadMs: upload.ms, vertexCount: this.riverVertexCount, aborted: false}, performance.now());
@@ -3082,17 +3572,18 @@ export class PlaceholderMapRenderer {
     }
   }
 
-  async updateRiverBufferAsync({yieldToBrowser = () => Promise.resolve(), sliceMs = RIVER_BUILD_SLICE_MS, shouldContinue = () => true} = {}) {
+  async updateRiverBufferAsync({yieldToBrowser = () => Promise.resolve(), sliceMs = RIVER_BUILD_SLICE_MS, shouldContinue = () => true, binding = null} = {}) {
     const startedAt = performance.now();
     const event = this.beginPerformanceEvent("riverMesh", {mode: "async", sliceMs}, startedAt);
     try {
       const camera = snapshotCamera(this.camera);
+      const resourceBinding = currentRendererRenderCacheBinding(this, binding);
       const {vertices, stats} = await buildRiverMeshVerticesAsync(this.map, camera, this.canvas, {
         yieldToBrowser,
         sliceMs,
         shouldContinue
       });
-      if (stats.aborted || !shouldContinue()) {
+      if (stats.aborted || !shouldContinue() || !isCurrentRendererRenderCacheBinding(this, resourceBinding)) {
         this.cancelPerformanceEvent(event, stats.aborted ? "builder-aborted" : "viewport-superseded", {ms: roundMs(performance.now() - startedAt), aborted: Boolean(stats.aborted)}, performance.now());
         return false;
       }
@@ -3103,6 +3594,7 @@ export class PlaceholderMapRenderer {
         this.gl.bufferData(this.gl.ARRAY_BUFFER, vertices, this.gl.DYNAMIC_DRAW);
       }, {bufferGroup: "river"});
       this.riverBufferCamera = snapshotViewportCamera(camera);
+      adoptRenderCacheResourceBinding(this, "river", resourceBinding);
       this.riverBuildMs = roundMs(performance.now() - startedAt);
       this.dynamicBuffersDirty.rivers = false;
       this.completePerformanceEvent(event, {ms: this.riverBuildMs, uploadMs: upload.ms, vertexCount: this.riverVertexCount, aborted: false}, performance.now());
@@ -3113,7 +3605,7 @@ export class PlaceholderMapRenderer {
     }
   }
 
-  updateSelectionBuffer() {
+  updateSelectionBuffer(binding = null) {
     const startedAt = performance.now();
     const event = this.beginPerformanceEvent("selectionMesh", {mode: "sync"}, startedAt);
     try {
@@ -3124,6 +3616,7 @@ export class PlaceholderMapRenderer {
         this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.selectionBuffer);
         this.gl.bufferData(this.gl.ARRAY_BUFFER, selectionVertices, this.gl.DYNAMIC_DRAW);
       }, {bufferGroup: "selection"});
+      adoptRenderCacheResourceBinding(this, "selection", currentRendererRenderCacheBinding(this, binding));
       this.selectionBuildMs = roundMs(performance.now() - startedAt);
       this.dynamicBuffersDirty.selection = false;
       this.completePerformanceEvent(event, {ms: this.selectionBuildMs, uploadMs: upload.ms, vertexCount: this.selectionVertexCount}, performance.now());
@@ -3180,8 +3673,9 @@ export class PlaceholderMapRenderer {
     this.setObjectHighlights([], options);
   }
 
-  refreshRelocatedCities(cityIds, {draw = true, routeIds = []} = {}) {
+  refreshRelocatedCities(cityIds, {draw = true, routeIds = [], binding = null} = {}) {
     if (!this.map) return {updated: 0};
+    assertRendererRetainedResourceBindings(this, {picking: true, overlay: true});
     const ids = [...new Set((Array.isArray(cityIds) ? cityIds : [cityIds]).map(Number).filter(Number.isInteger))];
     const iconChanges = [];
     const rect = this.canvas.getBoundingClientRect();
@@ -3209,6 +3703,10 @@ export class PlaceholderMapRenderer {
     }
     if (iconChanges.length) this.cityIconLayer.updateInstanceStates(iconChanges, {nowMs: performance.now()});
     refreshRoutesInPickingIndex(this.objectPickingIndex, this.map.settlements?.routes || [], routeIds);
+    if (binding) {
+      adoptObjectPickingResourceBinding(this, binding);
+      adoptOverlayLabelResourceBinding(this, binding);
+    }
     if (this.dynamicBuffersDirty.routes && this.layerVisibility.routes) {
       if (routeIds.length) this.scheduleRouteBufferRefresh();
       else this.dynamicBuffersDirty.routes = false;
@@ -3526,7 +4024,9 @@ export class PlaceholderMapRenderer {
       this.resumeOverlayAfterInteraction();
       return;
     }
-    const shouldContinue = () => this.viewportCommitVersion === version;
+    const resourceBinding = currentRendererRenderCacheBinding(this);
+    const shouldContinue = () => this.viewportCommitVersion === version
+      && isCurrentRendererRenderCacheBinding(this, resourceBinding);
     try {
       const rebuilt = await this.rebuildViewportDynamicBuffersAsync(shouldContinue);
       if (!rebuilt || !shouldContinue()) {
@@ -4000,7 +4500,10 @@ export class PlaceholderMapRenderer {
       }
       const baseScreen = this.worldToScreen(item.x, item.y, rect);
       const politicalPrewarm = provinceLabel ? Math.min(labelPrewarm, PROVINCE_LABEL_PREWARM_MAX_CSS_PX) : labelPrewarm;
-      let politicalPlacement = politicalLabel ? resolvePoliticalLabelPlacement({
+      const retainedPoliticalPlacement = politicalLabel && preservePoliticalCandidate && (item.visible || item.buffered)
+        ? restorePoliticalLabelPlacementSnapshot(item, baseScreen)
+        : null;
+      let politicalPlacement = retainedPoliticalPlacement || (politicalLabel ? resolvePoliticalLabelPlacement({
         item,
         screen: baseScreen,
         obstacles: occupied,
@@ -4013,10 +4516,7 @@ export class PlaceholderMapRenderer {
         anchorAllowed: stateLabel && !item.layout?.locked && item.componentCellSet?.size
           ? anchor => stateLabelAnchorAllowed(this, item, anchor, rect)
           : null
-      }) : null;
-      if (politicalPlacement && preservePoliticalCandidate && (item.visible || item.buffered)) {
-        politicalPlacement = retainPoliticalPlacementOffset(item, politicalPlacement, baseScreen);
-      }
+      }) : null);
       const screen = politicalPlacement?.anchor || baseScreen;
       const labelAnchor = politicalLabel ? screen : overlayLabelAnchor(this, item, screen, scale);
       const box = politicalPlacement?.box || labelBoxForItem(item, screen, labelAnchor);
@@ -4978,33 +5478,6 @@ function applyPoliticalLabelPlacement(item, placement, baseScreen = placement.an
     setStylePropertyIfChanged(glyph, "--glyph-y", overlayCoordinateValue(layout.y));
     setStylePropertyIfChanged(glyph, "--label-rotation", `${layout.angle}deg`);
   }
-}
-
-function retainPoliticalPlacementOffset(item, placement, baseScreen) {
-  const snapshot = item.politicalPlacementSnapshot;
-  if (!snapshot || !Number.isFinite(item.politicalOffsetX) || !Number.isFinite(item.politicalOffsetY)) return placement;
-  const anchor = {
-    x: baseScreen.x + item.politicalOffsetX,
-    y: baseScreen.y + item.politicalOffsetY
-  };
-  return {
-    ...placement,
-    anchor,
-    candidateIndex: snapshot.candidateIndex,
-    bend: snapshot.bend,
-    rootSize: snapshot.rootSize,
-    glyphs: snapshot.glyphs,
-    box: {
-      ...placement.box,
-      left: anchor.x + snapshot.boxOffset.left,
-      right: anchor.x + snapshot.boxOffset.right,
-      top: anchor.y + snapshot.boxOffset.top,
-      bottom: anchor.y + snapshot.boxOffset.bottom
-    },
-    collides: snapshot.collides,
-    cityCollides: snapshot.cityCollides,
-    peerCollides: false
-  };
 }
 
 function applyFixedScreenLabelPlacement(node, baseScreen, visualAnchor) {
@@ -5984,6 +6457,25 @@ function currentCellVisualCorrectionBufferSet(renderer) {
     && bufferSet.wordLength === renderer.cellVisualCorrectionGeometry?.length ? bufferSet : null;
 }
 
+function currentRendererRenderCacheBinding(renderer, binding = null) {
+  return normalizeRenderResourceBinding(
+    binding
+      || renderer?.objectPickingResourceOwner
+      || renderer?.labelLayoutResourceOwner
+      || renderer?.activeRenderResourceBinding
+      || renderer?.surfaceResourceOwner,
+    "renderer.renderCache.binding"
+  );
+}
+
+function isCurrentRendererRenderCacheBinding(renderer, expected) {
+  try {
+    return sameRenderResourceBinding(currentRendererRenderCacheBinding(renderer), expected);
+  } catch {
+    return false;
+  }
+}
+
 function createRendererSurfaceResourceOwner(renderer, map, bundle, binding = null) {
   const mapIdentity = String(binding?.mapIdentity
     || map?.metadata?.mapIdentity
@@ -5991,9 +6483,14 @@ function createRendererSurfaceResourceOwner(renderer, map, bundle, binding = nul
     || map?.metadata?.seed
     || "local-map");
   const previous = renderer.surfaceResourceOwner;
-  const mapRevision = binding?.mapRevision ?? (previous?.mapIdentity === mapIdentity ? previous.mapRevision : 0);
-  const topologyRevision = binding?.topologyRevision ?? (previous?.mapIdentity === mapIdentity ? previous.topologyRevision : 0);
-  return createSurfaceResourceOwner({mapIdentity, mapRevision, topologyRevision}, {
+  const sourceRevision = binding?.sourceRevision ?? binding?.mapRevision
+    ?? (previous?.mapIdentity === mapIdentity ? previous.sourceRevision : 0);
+  const topologyRevision = binding?.topologyRevision
+    ?? (previous?.mapIdentity === mapIdentity ? previous.topologyRevision : 0);
+  const resourceBinding = binding
+    ? normalizeRenderResourceBinding(binding, "renderer.surface.binding")
+    : renderer.issueRenderResourceBinding({mapIdentity, sourceRevision, topologyRevision}, {replaceResources: true});
+  return createSurfaceResourceOwner(resourceBinding, {
     surfaceFloatLength: bundle?.base?.length || 0,
     correctionWordLength: bundle?.cellVisualCorrection?.length || 0,
     surfaceCellRanges: bundle?.surfaceCellRanges
@@ -6012,6 +6509,9 @@ function adoptRendererSurfaceResourceOwner(renderer, owner) {
   renderer.cellVisualCorrectionGeometryOwner = owner;
   renderer.cellAttributeStoreOwner = owner;
   renderer.surfaceResourceOwner = owner;
+  renderer.activeRenderResourceBinding = renderResourceBindingFromOwner(owner);
+  renderer.renderGeneration = owner.renderGeneration;
+  renderer.nextRenderGeneration = Math.max(Number(renderer.nextRenderGeneration) || 0, owner.renderGeneration);
   renderer.surfaceResourceBinding = Object.freeze({
     owner,
     surfaceVertices: renderer.surfaceVertices,
@@ -6021,6 +6521,243 @@ function adoptRendererSurfaceResourceOwner(renderer, owner) {
   });
   renderer.lastSurfaceResourceOwnerError = null;
   return owner;
+}
+
+function rebindEditedRendererResources(renderer, binding, previousBinding = null) {
+  const normalized = normalizeRenderResourceBinding(binding, "renderer.editedSurface.binding");
+  const current = renderer.surfaceResourceOwner ? renderResourceBindingFromOwner(renderer.surfaceResourceOwner) : null;
+  assertEditedRendererResourcePreflight(renderer, normalized, previousBinding);
+  const fields = [
+    "surfaceBaseBufferSet", "vertexBuffer", "cellVisualCorrectionBufferSet",
+    "surfaceVerticesOwner", "surfaceCellRangesOwner", "cellVisualCorrectionGeometryOwner", "cellAttributeStoreOwner",
+    "surfaceResourceOwner", "activeRenderResourceBinding", "renderGeneration", "nextRenderGeneration",
+    "surfaceResourceBinding", "lastSurfaceResourceOwnerError",
+    "objectPickingResourceOwner", "objectPickingResourceBinding",
+    "labelLayoutResourceOwner", "labelLayoutResourceBinding",
+    "overlayResourceOwner", "overlayResourceBinding", "lastRetainedResourceOwnerError",
+    "renderCacheResourceOwners", "renderCacheResourceBindings"
+  ];
+  const before = new Map(fields.map(field => [field, renderer[field]]));
+  try {
+    if (!current || !sameRenderResourceBinding(current, normalized)) {
+      const owner = createSurfaceResourceOwner(normalized, {
+        surfaceFloatLength: renderer.surfaceVertices?.length || 0,
+        correctionWordLength: renderer.cellVisualCorrectionGeometry?.length || 0,
+        surfaceCellRanges: renderer.surfaceCellRanges
+      });
+      renderer.surfaceBaseBufferSet = rebindSurfaceBaseBufferSetOwner(renderer.surfaceBaseBufferSet, owner);
+      renderer.vertexBuffer = renderer.surfaceBaseBufferSet.segments[0]?.buffer || null;
+      renderer.cellVisualCorrectionBufferSet = rebindCellVisualCorrectionBufferSetOwner(renderer.cellVisualCorrectionBufferSet, owner);
+      adoptRendererSurfaceResourceOwner(renderer, owner);
+    }
+    adoptRendererRetainedResourceBindings(renderer, normalized);
+    for (const family of RENDER_CACHE_RESOURCE_FAMILIES) adoptRenderCacheResourceBinding(renderer, family, normalized);
+  } catch (error) {
+    for (const [field, value] of before) renderer[field] = value;
+    throw error;
+  }
+  return normalized;
+}
+
+function assertEditedRendererResourcePreflight(renderer, targetBinding, previousBinding = null) {
+  const previous = previousBinding
+    ? normalizeRenderResourceBinding(previousBinding, "renderer.editedSurface.previousBinding")
+    : editedRendererPreviousResourceBinding(renderer, targetBinding);
+  const mismatches = [];
+  const hasTrackedCaches = RENDER_CACHE_RESOURCE_FAMILIES.some(family => (
+    renderer.renderCacheResourceOwners?.[family] || renderer.renderCacheResourceBindings?.[family]
+  ));
+  if (!previous && hasTrackedCaches) mismatches.push("previous:owner-missing");
+  else if (previous && String(previous.mapIdentity) !== String(targetBinding.mapIdentity)) mismatches.push("previous:owner-map-identity");
+
+  for (const family of RENDER_CACHE_RESOURCE_FAMILIES) {
+    collectEditedResourceWrapperMismatches(
+      renderer,
+      family,
+      renderer.renderCacheResourceOwners?.[family],
+      renderer.renderCacheResourceBindings?.[family],
+      previous,
+      targetBinding,
+      mismatches
+    );
+  }
+  if (!mismatches.length) return true;
+  const error = new Error(`edited render resource preflight 不一致：${mismatches.join(", ")}`);
+  error.code = "render-edited-resource-preflight-mismatch";
+  error.mismatches = mismatches;
+  throw error;
+}
+
+function editedRendererPreviousResourceBinding(renderer, targetBinding) {
+  const owners = RENDER_CACHE_RESOURCE_FAMILIES
+    .map(family => renderer.renderCacheResourceOwners?.[family])
+    .filter(Boolean);
+  const candidate = owners.find(owner => !editedResourceOwnerMatchesGeneration(owner, targetBinding)) || owners[0];
+  if (!candidate) return null;
+  try {
+    return normalizeRenderResourceBinding(candidate, "renderer.editedSurface.previousOwner");
+  } catch {
+    return null;
+  }
+}
+
+function collectEditedResourceWrapperMismatches(
+  renderer,
+  family,
+  owner,
+  wrapper,
+  previous,
+  target,
+  mismatches
+) {
+  if (!owner && !wrapper) return;
+  const ownerMismatch = editedResourceOwnerCompatibilityMismatch(owner, previous, target);
+  if (ownerMismatch) mismatches.push(`${family}:${ownerMismatch}`);
+  if (!wrapper || wrapper.owner !== owner) {
+    mismatches.push(`${family}:wrapper-owner`);
+    return;
+  }
+  const references = Object.fromEntries(Object.keys(wrapper)
+    .filter(field => field !== "owner")
+    .map(field => [field, field]));
+  for (const [wrapperField, rendererField] of Object.entries(references)) {
+    if (wrapper[wrapperField] !== renderer[rendererField]) mismatches.push(`${family}:${rendererField}-reference`);
+  }
+}
+
+function editedResourceOwnerCompatibilityMismatch(owner, previous, target) {
+  if (!owner) return "owner-missing";
+  if (editedResourceOwnerMatchesGeneration(owner, target)) return "";
+  if (previous && editedResourceOwnerMatchesGeneration(owner, previous)) return "";
+  if (String(owner.mapIdentity) !== String(target?.mapIdentity)) return "owner-map-identity";
+  const allowedTopologies = new Set([target?.topologyRevision, previous?.topologyRevision].filter(Number.isSafeInteger));
+  if (!allowedTopologies.has(Number(owner.topologyRevision))) return "owner-topology-revision";
+  return "owner-render-generation";
+}
+
+function editedResourceOwnerMatchesGeneration(owner, expected) {
+  if (!owner || !expected) return false;
+  return String(owner.mapIdentity) === String(expected.mapIdentity)
+    && Number(owner.topologyRevision) === Number(expected.topologyRevision)
+    && Number(owner.renderGeneration) === Number(expected.renderGeneration);
+}
+
+function adoptRendererRetainedResourceBindings(renderer, binding) {
+  adoptObjectPickingResourceBinding(renderer, binding);
+  adoptOverlayLabelResourceBinding(renderer, binding);
+  if (renderer.retainedResourcePublishSuspended <= 0) renderer.retainedResourceState = "ready";
+  renderer.lastRetainedResourceOwnerError = null;
+  return binding;
+}
+
+function assertRendererRetainedResourceBindings(renderer, {picking = false, overlay = false} = {}) {
+  if (!renderer?.map) return true;
+  const mismatches = [];
+  if (picking) {
+    const reason = objectPickingResourceBindingMismatch(renderer);
+    if (reason) mismatches.push(`picking:${reason}`);
+  }
+  if (overlay) {
+    const reason = overlayLabelResourceBindingMismatch(renderer);
+    if (reason) mismatches.push(`overlay-label:${reason}`);
+  }
+  if (!mismatches.length) {
+    renderer.lastRetainedResourceOwnerError = null;
+    return true;
+  }
+  const error = new Error(`retained render resource owner 不一致：${mismatches.join(", ")}`);
+  error.code = "render-retained-resource-owner-mismatch";
+  error.mismatches = mismatches;
+  renderer.lastRetainedResourceOwnerError = Object.freeze({code: error.code, mismatches: [...mismatches]});
+  throw error;
+}
+
+function assertContextLossSimulationOwners(renderer) {
+  const surfaceMismatch = surfaceResourceOwnerMismatch(renderer);
+  if (surfaceMismatch) throw contextLossReceiptError(`context loss 起点 surface owner 不一致：${surfaceMismatch}`);
+  assertRenderCacheResourceBindings(renderer);
+  assertRendererRetainedResourceBindings(renderer, {picking: true, overlay: true});
+  const binding = renderResourceBindingFromOwner(renderer.surfaceResourceOwner);
+  const owners = [
+    ...RENDER_CACHE_RESOURCE_FAMILIES.map(family => [`cache:${family}`, renderer.renderCacheResourceOwners?.[family]]),
+    ["picking", renderer.objectPickingResourceOwner],
+    ["label", renderer.labelLayoutResourceOwner],
+    ["overlay", renderer.overlayResourceOwner]
+  ];
+  const mismatches = owners.filter(([, owner]) => !sameRenderResourceBinding(owner, binding)).map(([name]) => name);
+  if (mismatches.length) throw contextLossReceiptError(`context loss resource binding 不一致：${mismatches.join(", ")}`);
+  return binding;
+}
+
+function createRendererCanvasEventWaiter(renderer, type, timeoutMs) {
+  const canvas = renderer?.canvas;
+  if (!canvas || typeof canvas.addEventListener !== "function" || typeof canvas.removeEventListener !== "function") {
+    const error = new Error("renderer canvas 不支持 context 事件监听");
+    error.code = "render-context-loss-unsupported";
+    throw error;
+  }
+  const view = canvas.ownerDocument?.defaultView || globalThis;
+  const schedule = typeof view.setTimeout === "function" ? view.setTimeout.bind(view) : globalThis.setTimeout.bind(globalThis);
+  const cancel = typeof view.clearTimeout === "function" ? view.clearTimeout.bind(view) : globalThis.clearTimeout.bind(globalThis);
+  let settled = false;
+  let resolvePromise;
+  let timeoutId;
+  const cleanup = () => {
+    if (timeoutId !== undefined) cancel(timeoutId);
+    canvas.removeEventListener(type, onEvent);
+  };
+  const onEvent = event => {
+    if (settled) return;
+    settled = true;
+    cleanup();
+    resolvePromise(event);
+  };
+  const promise = new Promise((resolve, reject) => {
+    resolvePromise = resolve;
+    timeoutId = schedule(() => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      const error = new Error(`${type} 等待超过 ${timeoutMs}ms`);
+      error.code = "render-context-loss-timeout";
+      reject(error);
+    }, timeoutMs);
+    canvas.addEventListener(type, onEvent, {once: true});
+  });
+  return Object.freeze({
+    promise,
+    cancel() {
+      if (settled) return false;
+      settled = true;
+      cleanup();
+      resolvePromise(null);
+      return true;
+    }
+  });
+}
+
+function waitForRendererDelay(renderer, delayMs) {
+  if (!delayMs) return Promise.resolve();
+  const view = renderer?.canvas?.ownerDocument?.defaultView || globalThis;
+  const schedule = typeof view.setTimeout === "function" ? view.setTimeout.bind(view) : globalThis.setTimeout.bind(globalThis);
+  return new Promise(resolve => schedule(resolve, delayMs));
+}
+
+function contextLossReceiptError(message, cause = undefined) {
+  const error = new Error(message);
+  error.code = "render-context-loss-receipt-invalid";
+  if (cause !== undefined) error.cause = cause;
+  return error;
+}
+
+function contextLossReceiptBinding(binding) {
+  return Object.freeze({
+    mapIdentity: binding.mapIdentity,
+    sourceRevision: binding.sourceRevision,
+    topologyRevision: binding.topologyRevision,
+    renderPreparationId: binding.renderPreparationId,
+    renderGeneration: binding.renderGeneration
+  });
 }
 
 function surfaceResourceOwnerMismatch(renderer) {

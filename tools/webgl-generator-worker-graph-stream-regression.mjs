@@ -161,7 +161,9 @@ assert.deepEqual(boundedClone, boundedBuffers, "有界 buffer 分片往返漂移
 assert.ok(boundedPackets > boundedBuffers.length, "大 buffer 没有实际分片输出");
 assert.ok(maxBoundedPacketBytes <= 256 * 1024, `有界 buffer 包超过 256KiB：${maxBoundedPacketBytes}`);
 
-const cellsTarget = Math.max(1000, Number(process.env.FMG_WORKER_GRAPH_CELLS) || 10000);
+const cellsTarget = process.argv.includes("--100k")
+  ? 100000
+  : Math.max(1000, Number(process.env.FMG_WORKER_GRAPH_CELLS) || 10000);
 const map = generatePlaceholderMap({seed: "worker-graph-stream", cellsTarget, heightmapTemplate: "continents"});
 const sourceGridBuffer = map.grid.cells.i.buffer;
 const packetDurations = [];
@@ -201,10 +203,10 @@ const clonedPayload = decoder.finish();
 assert.deepEqual(clonedPayload, {map, kind: "zones"}, `${cellsTarget} 地图分包往返必须保持语义`);
 assert.equal(clonedPayload.map.grid.cells.i.buffer === sourceGridBuffer, false, "Worker 快照必须使用独立 buffer");
 assert.equal(sourceGridBuffer.byteLength, map.grid.cells.i.byteLength, "正式地图 buffer 不得脱离");
-assert.ok(packets > 20, `10k 地图不得退化为少量大包：${packets}`);
+assert.ok(packets > 20, `${cellsTarget} 地图不得退化为少量大包：${packets}`);
 assert.ok(maxRecords <= 4096, `单包记录数超限：${maxRecords}`);
 assert.ok(yields > 0, "图发现与 buffer 复制必须向主线程让步");
-assert.ok(yieldsByPhase.definitions > 0, "节点定义编码阶段必须向浏览器宏任务让步");
+for (const [phaseName, phaseYields] of Object.entries(yieldsByPhase)) assert.ok(phaseYields > 0, `${phaseName} 编码阶段必须向主线程宏任务让步`);
 assert.ok(eventLoopTicks > 0, "图流编码期间事件循环必须获得执行窗口");
 
 const malformedDecoder = createWorkerGraphDecoder({streamId: "malformed"});
@@ -253,6 +255,7 @@ await assert.rejects(async () => {
 assert.ok(abortYields > 0);
 
 const maxPacketDurationMs = Math.max(...packetDurations);
+assert.ok(maxPacketDurationMs < 50, `${cellsTarget} 单包 structuredClone 超过 50ms：${maxPacketDurationMs.toFixed(3)}ms`);
 console.log(JSON.stringify({
   status: "PASS",
   cellsTarget,

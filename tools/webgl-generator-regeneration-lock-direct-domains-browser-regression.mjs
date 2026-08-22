@@ -6,21 +6,26 @@ import {createRequire} from "node:module";
 import {dirname, extname, join, normalize, resolve} from "node:path";
 import {fileURLToPath} from "node:url";
 import {waitForApiReady} from "./webgl-generator-api-browser-ready.mjs";
+import {closeTask350BrowserResource, createTask350BrowserArtifact} from "./task-350-browser-artifact.mjs";
 
 const rootDir = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const sourceDir = join(rootDir, "source", "Fantasy-Map-Generator");
+const appSourceDir = join(rootDir, "app", "webgl-generator", "src");
 const distDir = join(rootDir, "dist", "webgl-generator");
 const host = "127.0.0.1";
 const port = 5529;
 const timeoutMs = 240000;
-assert.ok(existsSync(distDir), `构建产物不存在：${distDir}`);
-
-const playwright = createRequire(join(sourceDir, "package.json"))("playwright");
-const server = await startStaticServer();
+const evidence = createTask350BrowserArtifact("regeneration-lock-direct-domains-browser");
+let server;
 let browser;
 let context;
+let thrown = null;
 
 try {
+  assert.ok(existsSync(distDir), `构建产物不存在：${distDir}`);
+  const playwright = createRequire(join(sourceDir, "package.json"))("playwright");
+  server = await startStaticServer();
+  evidence.mark("browser-launch", {complete: "server-ready"});
   browser = await playwright.chromium.launch({headless: true, channel: "chrome"});
   context = await browser.newContext({viewport: {width: 1280, height: 820}, deviceScaleFactor: 1});
   await context.addInitScript(() => localStorage.clear());
@@ -32,6 +37,7 @@ try {
   page.on("pageerror", error => pageErrors.push(error.message));
   await page.goto(`http://${host}:${port}?healthClear=1`, {waitUntil: "domcontentloaded"});
   await waitForApiReady(page, timeoutMs);
+  evidence.mark("browser-evaluation", {active: "direct-domain-locks", complete: "page-ready"});
 
   const report = await page.evaluate(async () => {
     const api = window.webglGeneratorApi;
@@ -44,6 +50,14 @@ try {
       cellsTarget: 5000,
       heightmapTemplate: "continents"
     }), "new map");
+    const {computeCanonicalMapReplicaChecksum} = await import("/__task350-source/runtime/map-replica-checksum.js");
+    let snapshotAuditRevision = 0;
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    const longTasks = [];
+    const observer = typeof PerformanceObserver === "function"
+      ? new PerformanceObserver(list => longTasks.push(...list.getEntries().map(entry => ({startTime: entry.startTime, duration: entry.duration, name: entry.name}))))
+      : null;
+    observer?.observe({entryTypes: ["longtask"]});
 
     const states = activeStates();
     if (states.length < 3) throw new Error("固定图不足三个有效国家");
@@ -62,19 +76,19 @@ try {
     assertSingleTransaction(diplomacyTxBefore, transactionSnapshot("diplomacy"), "外交重生成");
 
     app.editHistory.clear();
-    const stateConflictBefore = transactionSnapshot("states");
+    const stateConflictBefore = await noWriteTransactionSnapshot("states");
     const stateConflict = await api.generate.regenerate("states", {confirm: true});
     if (stateConflict?.ok !== false || stateConflict?.error?.code !== "regeneration_lock_conflict") {
       throw new Error(`锁外交下国家重生成没有写前拒绝：${JSON.stringify(stateConflict)}`);
     }
-    assertSameTransaction(stateConflictBefore, transactionSnapshot("states"), "锁外交国家重生成冲突");
+    assertSameTransaction(stateConflictBefore, await noWriteTransactionSnapshot("states"), "锁外交国家重生成冲突");
 
     unwrap(api.regenerationLocks.setMany(allDiplomacyPairs().map(id => ({kind: "diplomacy-relation", id})), true), "lock all diplomacy");
     app.editHistory.clear();
-    const diplomacyNoopBefore = transactionSnapshot("diplomacy");
+    const diplomacyNoopBefore = await noWriteTransactionSnapshot("diplomacy");
     const diplomacyNoop = unwrap(await api.generate.regenerate("diplomacy", {confirm: true}), "all diplomacy noop");
     if (diplomacyNoop.executed !== false) throw new Error("外交全锁没有返回 no-op");
-    assertSameTransaction(diplomacyNoopBefore, transactionSnapshot("diplomacy"), "外交全锁 no-op");
+    assertSameTransaction(diplomacyNoopBefore, await noWriteTransactionSnapshot("diplomacy"), "外交全锁 no-op");
     result.diplomacy = {lockedPair, allPairs: allDiplomacyPairs().length};
     unwrap(api.regenerationLocks.clearKind("diplomacy-relation"), "clear diplomacy locks");
 
@@ -100,24 +114,25 @@ try {
     app.editHistory.clear();
     const ratioLockedBefore = militaryEnvelope(firstRegiment.id);
     const ratioTxBefore = transactionSnapshot("military");
-    const ratioResult = unwrap(api.edit.military.setRatios(firstRegiment.stateId, ratios), "set military ratios");
+    const ratioResult = unwrap(await api.edit.military.setRatios(firstRegiment.stateId, ratios), "set military ratios");
     if (!ratioResult.executed) throw new Error("兵种比例命令未执行");
     assertDeepEqual(militaryEnvelope(firstRegiment.id), ratioLockedBefore, "兵种比例联动锁军团");
     assertSingleTransaction(ratioTxBefore, transactionSnapshot("military"), "兵种比例命令", {salt: false});
 
     unwrap(api.regenerationLocks.setMany(activeRegiments().map(item => ({kind: "military", id: item.id})), true), "lock all military");
     app.editHistory.clear();
-    const militaryNoopBefore = transactionSnapshot("military");
+    const militaryNoopBefore = await noWriteTransactionSnapshot("military");
     const militaryNoop = unwrap(await api.generate.regenerate("military", {confirm: true}), "all military noop");
     if (militaryNoop.executed !== false) throw new Error("军团全锁没有返回 no-op");
-    assertSameTransaction(militaryNoopBefore, transactionSnapshot("military"), "军团全锁 no-op");
+    assertSameTransaction(militaryNoopBefore, await noWriteTransactionSnapshot("military"), "军团全锁 no-op");
     result.military = {lockedRegiment: firstRegiment.id, allRegiments: activeRegiments().length};
     unwrap(api.regenerationLocks.clearKind("military"), "clear military locks");
 
     const lockedMarket = activeMarkets()[0];
-    const lockedDeal = activeDeals()[0];
+    const economyDeals = activeDeals();
+    const lockedDeal = economyDeals[0];
     const otherMarkets = activeMarkets().filter(market => market.i !== lockedMarket.i);
-    if (!lockedMarket || !lockedDeal || otherMarkets.length < 2) throw new Error("固定图缺少经济锁样本");
+    if (!lockedMarket || !lockedDeal || otherMarkets.length < 2 || economyDeals.length < 2) throw new Error("固定图缺少经济锁样本");
     unwrap(api.regenerationLocks.setMany([
       {kind: "economy-market", id: lockedMarket.i},
       {kind: "trade-flow", id: lockedDeal.i}
@@ -128,43 +143,66 @@ try {
     const reassignedCell = app.map.pack.cells.i.find(cell => Number(app.map.pack.cells.market[cell]) === Number(otherMarkets[0].i));
     if (!Number.isInteger(reassignedCell)) throw new Error("固定图缺少未锁市场归属样本");
     const assignmentTxBefore = transactionSnapshot("economy");
-    const assignment = unwrap(api.edit.economy.assignCells(otherMarkets[1].i, [reassignedCell], {confirm: true}), "assign unlocked market cell");
+    const assignment = unwrap(await api.edit.economy.assignCells(otherMarkets[1].i, [reassignedCell], {confirm: true}), "assign unlocked market cell");
     if (!assignment.executed) throw new Error("未锁市场归属没有执行");
     assertDeepEqual(marketEnvelope(lockedMarket.i), marketBefore, "市场归属锁市场");
     assertDeepEqual(tradeEnvelope(lockedDeal.i), dealBefore, "市场归属锁交易");
     if (Number(app.map.pack.cells.market[reassignedCell]) !== Number(otherMarkets[1].i)) throw new Error("未锁市场归属没有变化");
     assertSingleTransaction(assignmentTxBefore, transactionSnapshot("economy"), "市场归属命令", {salt: false});
 
-    const rebuildTxBefore = transactionSnapshot("economy");
-    const rebuild = unwrap(api.edit.economy.rebuild({confirm: true}), "rebuild economy");
-    if (!rebuild.executed) throw new Error("经济链正式重算未执行");
+    const rebuildTxBefore = await noWriteTransactionSnapshot("economy");
+    const rebuild = unwrap(await api.edit.economy.rebuild({confirm: true}), "rebuild economy");
+    if (rebuild.executed !== false) throw new Error("紧邻市场归属的确定性经济重算没有返回空 patch no-op");
+    if (rebuild.operation?.name !== "edit.economy.rebuild" || rebuild.operation?.status !== "success" || rebuild.changedPaths?.length !== 0) {
+      throw new Error(`经济重算空 patch receipt 漂移：${JSON.stringify(rebuild)}`);
+    }
+    if (rebuild.worker?.session?.committed !== true || rebuild.worker?.session?.pending !== false) throw new Error("经济重算空 patch Worker session 未提交");
     assertDeepEqual(marketEnvelope(lockedMarket.i), marketBefore, "经济重算锁市场");
     assertDeepEqual(tradeEnvelope(lockedDeal.i), dealBefore, "经济重算锁交易");
-    assertSingleTransaction(rebuildTxBefore, transactionSnapshot("economy"), "经济重算", {salt: false});
+    assertSameTransaction(rebuildTxBefore, await noWriteTransactionSnapshot("economy"), "经济重算空 patch no-op");
 
     unwrap(api.regenerationLocks.setMany([
       ...activeMarkets().map(market => ({kind: "economy-market", id: market.i})),
       ...activeDeals().map(deal => ({kind: "trade-flow", id: deal.i}))
     ], true), "lock all economy");
     app.editHistory.clear();
-    const economyNoopBefore = transactionSnapshot("economy");
-    const economyNoop = unwrap(api.edit.economy.rebuild({confirm: true}), "all economy noop");
+    const economyNoopBefore = await noWriteTransactionSnapshot("economy");
+    const economyNoop = unwrap(await api.edit.economy.rebuild({confirm: true}), "all economy noop");
     if (economyNoop.executed !== false) throw new Error("经济双域全锁没有返回 no-op");
-    assertSameTransaction(economyNoopBefore, transactionSnapshot("economy"), "经济双域全锁 no-op");
+    assertSameTransaction(economyNoopBefore, await noWriteTransactionSnapshot("economy"), "经济双域全锁 no-op");
 
     unwrap(api.regenerationLocks.clearKind("trade-flow"), "clear trade locks");
     unwrap(api.regenerationLocks.clearKind("economy-market"), "clear market locks");
     unwrap(api.regenerationLocks.set({kind: "economy-market", id: lockedMarket.i}, true), "lock conflict market");
     app.editHistory.clear();
     const lockedCell = marketEnvelope(lockedMarket.i).ownedCells[0];
-    const conflictBefore = transactionSnapshot("economy");
-    const conflict = api.edit.economy.assignCells(otherMarkets[0].i, [lockedCell], {confirm: true});
+    const conflictBefore = await noWriteTransactionSnapshot("economy");
+    const conflict = await api.edit.economy.assignCells(otherMarkets[0].i, [lockedCell], {confirm: true});
     if (conflict?.ok !== false || conflict?.error?.code !== "regeneration_lock_conflict") {
       throw new Error(`市场归属冲突没有稳定拒绝：${JSON.stringify(conflict)}`);
     }
-    assertSameTransaction(conflictBefore, transactionSnapshot("economy"), "市场归属冲突回滚");
-    result.economy = {lockedMarket: lockedMarket.i, lockedDeal: lockedDeal.i, allMarkets: activeMarkets().length, allDeals: activeDeals().length};
+    assertSameTransaction(conflictBefore, await noWriteTransactionSnapshot("economy"), "市场归属冲突回滚");
+    result.economy = {
+      lockedMarket: lockedMarket.i,
+      lockedDeal: lockedDeal.i,
+      allMarkets: activeMarkets().length,
+      allDeals: activeDeals().length,
+      deterministicRebuildNoop: rebuild.executed === false,
+      rebuildChangedPaths: rebuild.changedPaths.length,
+      rebuildOperation: rebuild.operation.name,
+      rebuildSessionCommitted: rebuild.worker.session.committed
+    };
     result.conflict = {state: stateConflict.error.code, economy: conflict.error.code};
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    longTasks.push(...(observer?.takeRecords?.() || []).map(entry => ({startTime: entry.startTime, duration: entry.duration, name: entry.name})));
+    observer?.disconnect();
+    result.longTasks = longTasks;
+    result.final = {
+      session: app.workerTaskCoordinator.getSessionSnapshot(),
+      glError: app.renderer?.getStats?.().draw?.glError ?? 0,
+      loadingVisible: Boolean(document.getElementById("generation-loading") && !document.getElementById("generation-loading").hidden)
+        || Boolean(document.getElementById("operation-loading") && !document.getElementById("operation-loading").hidden)
+    };
     return result;
 
     function activeStates() {
@@ -279,10 +317,19 @@ try {
     }
     function transactionSnapshot(kind) {
       return {
-        map: JSON.stringify(app.map),
         history: app.editHistory.getStats(),
         salt: Number(app.map.metadata?.regeneration?.[kind]) || 0,
         revision: app.mapRevision.getSnapshot()
+      };
+    }
+    async function noWriteTransactionSnapshot(kind) {
+      const transaction = transactionSnapshot(kind);
+      return {
+        ...transaction,
+        map: await computeCanonicalMapReplicaChecksum(app.map, {
+          revision: ++snapshotAuditRevision,
+          budgetMs: 4
+        })
       };
     }
     function assertSingleTransaction(before, after, label, {salt = true} = {}) {
@@ -305,23 +352,69 @@ try {
     }
   });
 
-  const healthPerformanceSignals = consoleErrors.filter(message => /^\[FMG health\] (main-thread-long-task|render-frame-gap|input-handler-stall)\b/.test(message));
+  const healthPerformanceSignals = consoleErrors.filter(message => /^\[FMG health\] (main-thread-long-task|render-frame-gap|operation-stall|input-handler-stall)\b/.test(message));
   const applicationConsoleErrors = consoleErrors.filter(message => !healthPerformanceSignals.includes(message));
+  const overBudgetLongTasks = report.longTasks.filter(task => task.duration > 200);
   assert.deepEqual(applicationConsoleErrors, []);
   assert.deepEqual(pageErrors, []);
-  console.log(JSON.stringify({ok: true, ...report, healthPerformanceSignals, applicationConsoleErrors, pageErrors}, null, 2));
+  assert.deepEqual(overBudgetLongTasks, [], "直接领域锁门出现 >200ms LongTask");
+  assert.ok(
+    report.final.session === null || (report.final.session?.status === "idle" && report.final.session?.pending !== true),
+    "直接领域锁门结束后 Worker session 未释放或 idle"
+  );
+  assert.equal(report.final.glError, 0, "直接领域锁门出现 WebGL error");
+  assert.equal(report.final.loadingVisible, false, "直接领域锁门结束后 Loading 未清理");
+  const fullResult = {ok: true, ...report, healthPerformanceSignals, applicationConsoleErrors, pageErrors};
+  const compactResult = {
+    diplomacy: report.diplomacy,
+    military: report.military,
+    economy: report.economy,
+    conflict: report.conflict,
+    sessionId: report.final.session?.id || "",
+    sessionStatus: report.final.session?.status || "",
+    longTaskCount: report.longTasks.length,
+    maxLongTaskMs: Math.max(0, ...report.longTasks.map(task => task.duration)),
+    overBudgetLongTasks,
+    performanceSignals: healthPerformanceSignals.length,
+    applicationErrors: applicationConsoleErrors.length,
+    pageErrors: pageErrors.length,
+    glError: report.final.glError,
+    loadingVisible: report.final.loadingVisible
+  };
+  evidence.setResult(fullResult, compactResult);
+  evidence.mark("assertions", {complete: "browser-evaluation"});
+  evidence.succeed();
+} catch (error) {
+  thrown = error;
+  evidence.fail(error);
 } finally {
-  if (context) await Promise.race([context.close(), delay(5000)]);
-  if (browser) await Promise.race([browser.close(), delay(5000)]);
-  await new Promise(done => server.close(done));
+  for (const [label, close] of [
+    ["context", context && (() => context.close())],
+    ["browser", browser && (() => browser.close())],
+    ["server", server && (() => new Promise((resolveClose, rejectClose) => server.close(error => error ? rejectClose(error) : resolveClose())))]
+  ]) {
+    if (!close) continue;
+    try {
+      await closeTask350BrowserResource(label, close);
+    } catch (error) {
+      thrown ||= error;
+      evidence.failTeardown(error);
+    }
+  }
+  const persisted = evidence.persist();
+  console.log(JSON.stringify(persisted.summary, null, 2));
 }
+if (thrown) throw thrown;
 
 async function startStaticServer() {
   const serverInstance = createServer((request, response) => {
     const pathname = decodeURIComponent(new URL(request.url, `http://${host}:${port}`).pathname);
-    let target = resolve(distDir, "." + normalize(pathname));
-    if (pathname === "/" || !existsSync(target) || statSync(target).isDirectory()) target = join(distDir, "index.html");
-    if (!target.startsWith(distDir) || !existsSync(target)) {
+    const sourceRequest = pathname.startsWith("/__task350-source/");
+    const root = sourceRequest ? appSourceDir : distDir;
+    const relativePath = sourceRequest ? pathname.slice("/__task350-source".length) : pathname;
+    let target = resolve(root, "." + normalize(relativePath));
+    if (!sourceRequest && (pathname === "/" || !existsSync(target) || statSync(target).isDirectory())) target = join(distDir, "index.html");
+    if (!target.startsWith(root) || !existsSync(target)) {
       response.writeHead(404);
       response.end("Not found");
       return;
@@ -345,8 +438,4 @@ function contentType(pathname) {
     ".png": "image/png",
     ".svg": "image/svg+xml"
   })[extname(pathname)] || "application/octet-stream";
-}
-
-function delay(ms) {
-  return new Promise(resolveDelay => setTimeout(resolveDelay, ms));
 }

@@ -42,11 +42,7 @@ export function buildRivers(grid, features, pack, options = {}) {
   const riverPaths = new Map();
   const riverParents = new Map();
   let incisedTransitions = 0;
-  const variation = profile.stage("variation", "生成河流扰动", () => createRiverVariation(cells, options));
-  let effectiveHeights = profile.stage("alter-heights", "构建河流有效高度", () => alterHeights(cells, variation));
-  profile.stage("detect-closed-lakes", "识别闭合湖泊", () => detectCloseLakes(pack, effectiveHeights));
-  const depressionMode = normalizeDepressionMode(options.riverDepressionMode);
-  effectiveHeights = profile.stage("resolve-depressions", "消解洼地", () => resolveDepressions(pack, effectiveHeights, variation, {mode: depressionMode}));
+  const {variation, effectiveHeights, depressionMode} = prepareRiverTerrain(pack, options, profile);
 
   profile.stage("init-buffers", "初始化河流 buffer", () => {
     cells.fl = new Uint16Array(cells.i.length);
@@ -55,7 +51,7 @@ export function buildRivers(grid, features, pack, options = {}) {
     seedFrozenRiverState(lockContext, cells, riverPaths, riverParents);
   });
   const hydrology = profile.stage("init-hydrology", "初始化河流水文诊断", () => createHydrologyBuffers(cells));
-  const lakeDrainage = profile.stage("lake-climate", "计算湖泊水文与溢流路径", () => defineLakeClimateData(grid, pack, effectiveHeights, options, variation));
+  const lakeDrainage = prepareRiverLakeDrainage(grid, pack, effectiveHeights, options, variation, profile);
   initializeGuardedLakeReferences(pack, lockContext);
 
   const cellsNumberModifier = Math.max(1, (Number(options.cellsTarget || grid.metadata.cellsDesired || grid.points.length) / 10000) ** 0.25);
@@ -185,6 +181,75 @@ export function buildRivers(grid, features, pack, options = {}) {
       buildMs: timing.totalMs
     }
   };
+}
+
+export function prepareRiverTerrain(pack, options = {}, profile = null) {
+  const stage = (id, label, task) => profile?.stage ? profile.stage(id, label, task) : task();
+  const variation = stage("variation", "生成河流扰动", () => createRiverVariation(pack.cells, options));
+  let effectiveHeights = stage("alter-heights", "构建河流有效高度", () => alterHeights(pack.cells, variation));
+  stage("detect-closed-lakes", "识别闭合湖泊", () => detectCloseLakes(pack, effectiveHeights));
+  const depressionMode = normalizeDepressionMode(options.riverDepressionMode);
+  effectiveHeights = stage("resolve-depressions", "消解洼地", () => resolveDepressions(pack, effectiveHeights, variation, {mode: depressionMode}));
+  return {variation, effectiveHeights, depressionMode};
+}
+
+export function prepareRiverLakeDrainage(grid, pack, effectiveHeights, options = {}, variation = null, profile = null) {
+  const task = () => defineLakeClimateData(grid, pack, effectiveHeights, options, variation);
+  return profile?.stage ? profile.stage("lake-climate", "计算湖泊水文与溢流路径", task) : task();
+}
+
+export function createRiverLakeDrainageExpectations(grid, pack, options = {}) {
+  const expectationPack = {...pack, features: structuredClone(pack?.features || [])};
+  const {variation, effectiveHeights, depressionMode} = prepareRiverTerrain(expectationPack, options);
+  const drainage = prepareRiverLakeDrainage(grid, expectationPack, effectiveHeights, options, variation);
+  return collectRiverLakeDrainageExpectations(expectationPack, drainage, effectiveHeights, variation, depressionMode);
+}
+
+export async function createRiverLakeDrainageExpectationsAsync(grid, pack, options = {}, control = {}) {
+  await checkpointRiverLakeDrainageExpectation(control, "before-clone");
+  const expectationPack = {...pack, features: structuredClone(pack?.features || [])};
+  await checkpointRiverLakeDrainageExpectation(control, "after-clone");
+  const variation = createRiverVariation(expectationPack.cells, options);
+  await checkpointRiverLakeDrainageExpectation(control, "after-variation");
+  let effectiveHeights = alterHeights(expectationPack.cells, variation);
+  await checkpointRiverLakeDrainageExpectation(control, "after-effective-heights");
+  detectCloseLakes(expectationPack, effectiveHeights);
+  await checkpointRiverLakeDrainageExpectation(control, "after-closed-lakes");
+  const depressionMode = normalizeDepressionMode(options.riverDepressionMode);
+  effectiveHeights = resolveDepressions(expectationPack, effectiveHeights, variation, {mode: depressionMode});
+  await checkpointRiverLakeDrainageExpectation(control, "after-depressions");
+  const drainage = prepareRiverLakeDrainage(grid, expectationPack, effectiveHeights, options, variation);
+  await checkpointRiverLakeDrainageExpectation(control, "after-lake-drainage");
+  const expectations = collectRiverLakeDrainageExpectations(expectationPack, drainage, effectiveHeights, variation, depressionMode);
+  await checkpointRiverLakeDrainageExpectation(control, "after-expectations");
+  return expectations;
+}
+
+function collectRiverLakeDrainageExpectations(expectationPack, drainage, effectiveHeights, variation, depressionMode) {
+  const entriesByLakeId = new Map();
+  for (const entries of drainage.plansByOutCell.values()) for (const entry of entries) {
+    entriesByLakeId.set(Number(entry.lake.i ?? entry.lake.id), entry);
+  }
+  const lakes = new Map();
+  for (const lake of expectationPack.features || []) {
+    if (!lake || lake.type !== "lake") continue;
+    const lakeId = Number(lake.i ?? lake.id);
+    const entry = entriesByLakeId.get(lakeId) || null;
+    lakes.set(lakeId, {
+      lakeId,
+      closed: Boolean(lake.closed),
+      outCell: entry?.plan?.outCell ?? null,
+      overflows: Boolean(entry?.evaluation?.overflows),
+      status: entry?.evaluation?.status || lake.overflow?.status || "no-escape",
+      overflow: structuredClone(lake.overflow || null)
+    });
+  }
+  return {lakes, effectiveHeights, variationSalt: variation?.salt || null, depressionMode};
+}
+
+async function checkpointRiverLakeDrainageExpectation(control, id) {
+  if (typeof control.yieldToMain === "function") await control.yieldToMain({id});
+  if (typeof control.assertCurrent === "function") control.assertCurrent({id});
 }
 
 function summarizeLakeOverflow(features) {

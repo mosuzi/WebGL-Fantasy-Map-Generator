@@ -1,6 +1,8 @@
 import {adaptLegacyInteractiveRevision} from "../../core/adapters/identity-adapters.js";
 import type {ComputeOperationBinding} from "../../core/contracts/operation.js";
 import {validateOperationBinding} from "../../core/contracts/runtime-validators.js";
+import {createRiverLakeDrainageExpectations, createRiverLakeDrainageExpectationsAsync} from "../../generator/rivers.js";
+import {validatePreparedWorkerRenderBinding} from "../worker-render-binding.js";
 import {validateSettlementCityMirrors, validateSettlementRouteMirrors} from "../settlements/worker-runtime.js";
 import {FEATURES_WORKER_WRITE_SET, featuresManifest} from "./manifest.js";
 import {ROUTES_WORKER_WRITE_SET, routesManifest} from "../routes/manifest.js";
@@ -9,6 +11,26 @@ import {MARKERS_WORKER_WRITE_SET, markersManifest} from "../markers/manifest.js"
 
 type UnknownRecord = Record<string, unknown>;
 export type FeaturesNetworksResourcesWorkerKind = "features" | "routes" | "rivers" | "markers";
+
+type FeaturesNetworksResourcesWorkerValidationInput = Readonly<{
+  kind: FeaturesNetworksResourcesWorkerKind;
+  binding: unknown;
+  renderBinding?: unknown;
+  output: unknown;
+  policy: unknown;
+  sourceMap: unknown;
+}>;
+
+type FeaturesNetworksResourcesWorkerValidationReceipt = Readonly<{
+  binding: ComputeOperationBinding;
+  kind: FeaturesNetworksResourcesWorkerKind;
+  writeSet: readonly string[];
+}>;
+
+type AsyncRiverValidationControl = Readonly<{
+  yieldToMain?: (stage: Readonly<{id: string}>) => void | Promise<void>;
+  assertCurrent?: (stage: Readonly<{id: string}>) => void;
+}>;
 
 type LegacyBinding = Readonly<{
   mapIdentity: string;
@@ -33,13 +55,29 @@ const writeSetByKind = Object.freeze({
   markers: MARKERS_WORKER_WRITE_SET
 });
 
-export function validateFeaturesNetworksResourcesWorkerOutput(input: {
-  readonly kind: FeaturesNetworksResourcesWorkerKind;
-  readonly binding: unknown;
-  readonly output: unknown;
-  readonly policy: unknown;
-  readonly sourceMap: unknown;
-}): Readonly<{binding: ComputeOperationBinding; kind: FeaturesNetworksResourcesWorkerKind; writeSet: readonly string[]}> {
+export function validateFeaturesNetworksResourcesWorkerOutput(input: FeaturesNetworksResourcesWorkerValidationInput): FeaturesNetworksResourcesWorkerValidationReceipt {
+  const prepared = prepareFeaturesNetworksResourcesWorkerOutput(input);
+  if (prepared.executed) validateDomainMirrors(input.kind, prepared.values, input.sourceMap);
+  return createFeaturesNetworksResourcesWorkerValidationReceipt(input.kind, prepared.sourceBinding, prepared.values);
+}
+
+export async function validateFeaturesNetworksResourcesWorkerOutputAsync(
+  input: FeaturesNetworksResourcesWorkerValidationInput,
+  control: AsyncRiverValidationControl = {}
+): Promise<FeaturesNetworksResourcesWorkerValidationReceipt> {
+  const prepared = prepareFeaturesNetworksResourcesWorkerOutput(input);
+  if (prepared.executed) {
+    if (input.kind === "rivers") await validateRiverMirrorsAsync(prepared.values, input.sourceMap, control);
+    else validateDomainMirrors(input.kind, prepared.values, input.sourceMap);
+  }
+  return createFeaturesNetworksResourcesWorkerValidationReceipt(input.kind, prepared.sourceBinding, prepared.values);
+}
+
+function prepareFeaturesNetworksResourcesWorkerOutput(input: FeaturesNetworksResourcesWorkerValidationInput): Readonly<{
+  executed: boolean;
+  sourceBinding: LegacyBinding;
+  values: Map<string, unknown>;
+}> {
   const descriptor = descriptorByKind[input.kind];
   const expectedPaths = writeSetByKind[input.kind];
   if (!descriptor || !expectedPaths || !descriptor.resultKinds.includes(input.kind as never)) {
@@ -49,12 +87,25 @@ export function validateFeaturesNetworksResourcesWorkerOutput(input: {
   const output = record(input.output, "geography.output");
   if (output.kind !== input.kind) throw protocolError("geography-worker-kind-mismatch", "地理网络 Worker 结果类型与请求不一致");
   assertSameBinding(output.binding, sourceBinding, "geography.output.binding");
-  validatePreparedRender(output.preparedRender, sourceBinding);
+  validatePreparedWorkerRenderBinding(output.preparedRender, input.renderBinding, {
+    path: "geography.preparedRender",
+    schemaCode: "geography-render-schema-invalid",
+    invalidCode: "geography-render-binding-invalid",
+    staleCode: "geography-render-binding-stale",
+    label: "地理网络"
+  });
   const result = record(output.result, "geography.output.result");
   if (typeof result.executed !== "boolean") throw protocolError("geography-worker-result-invalid", "地理网络 Worker 缺少 executed 结果");
   const values = validatePatch(output.patch, input.kind, expectedPaths, input.policy, result.executed);
-  if (result.executed) validateDomainMirrors(input.kind, values, input.sourceMap);
-  return Object.freeze({binding: adaptBinding(input.kind, sourceBinding), kind: input.kind, writeSet: Object.freeze([...values.keys()])});
+  return Object.freeze({executed: result.executed, sourceBinding, values});
+}
+
+function createFeaturesNetworksResourcesWorkerValidationReceipt(
+  kind: FeaturesNetworksResourcesWorkerKind,
+  sourceBinding: LegacyBinding,
+  values: Map<string, unknown>
+): FeaturesNetworksResourcesWorkerValidationReceipt {
+  return Object.freeze({binding: adaptBinding(kind, sourceBinding), kind, writeSet: Object.freeze([...values.keys()])});
 }
 
 function adaptBinding(kind: FeaturesNetworksResourcesWorkerKind, source: LegacyBinding): ComputeOperationBinding {
@@ -309,15 +360,29 @@ function validateRouteCellLinks(routes: unknown[], linksValue: unknown, packCoun
   assertDeepEqual(linksValue, expected, "route-cell-link-mirror-invalid", "pack.cells.routes 与路线边镜像不一致");
 }
 
-function validateRiverMirrors(values: Map<string, unknown>, sourceMapValue: unknown): void {
+async function validateRiverMirrorsAsync(values: Map<string, unknown>, sourceMapValue: unknown, control: AsyncRiverValidationControl): Promise<void> {
+  const expectationInput = createRiverLakeDrainageExpectationInput(values, sourceMapValue);
+  const lakeExpectations = await createRiverLakeDrainageExpectationsAsync(
+    expectationInput.sourceGrid,
+    expectationInput.sourcePack,
+    {...expectationInput.sourceOptions, riverRegenerationSalt: expectationInput.expectedRiverSalt},
+    control
+  );
+  validateRiverMirrors(values, sourceMapValue, lakeExpectations.lakes as Map<number, UnknownRecord>);
+}
+
+function validateRiverMirrors(values: Map<string, unknown>, sourceMapValue: unknown, providedLakeExpectations: Map<number, UnknownRecord> | null = null): void {
   const riversDocument = record(values.get("rivers"), "geography.patch.rivers");
   const rivers = denseArray(riversDocument.rivers, "geography.patch.rivers.rivers");
   const packRivers = denseArray(values.get("pack.rivers"), "geography.patch.pack.rivers");
   assertDeepEqual(rivers, packRivers, "river-pack-mirror-invalid", "rivers / pack river 镜像不一致");
   assertDeepEqual(values.get("economy.goods"), values.get("pack.goods"), "river-goods-mirror-invalid", "economy / pack goods 镜像不一致");
   const sourceMap = record(sourceMapValue, "geography.sourceMap");
-  const sourceGridCells = record(record(sourceMap.grid, "geography.sourceMap.grid").cells, "geography.sourceMap.grid.cells");
-  const sourcePackCells = record(record(sourceMap.pack, "geography.sourceMap.pack").cells, "geography.sourceMap.pack.cells");
+  const sourceGrid = record(sourceMap.grid, "geography.sourceMap.grid");
+  const sourceGridCells = record(sourceGrid.cells, "geography.sourceMap.grid.cells");
+  const sourcePack = record(sourceMap.pack, "geography.sourceMap.pack");
+  const sourcePackCells = record(sourcePack.cells, "geography.sourceMap.pack.cells");
+  const outputPackFeatures = denseArray(values.get("pack.features"), "geography.patch.pack.features");
   const packNeighbors = sourcePackCells.c as unknown[] | undefined;
   const gridCount = indexedLength(sourceGridCells.i, "geography.sourceMap.grid.cells.i");
   const packCount = indexedLength(sourcePackCells.i, "geography.sourceMap.pack.cells.i");
@@ -367,6 +432,13 @@ function validateRiverMirrors(values: Map<string, unknown>, sourceMapValue: unkn
     if (id) claimed.add(id);
   }
   const heights = indexedValues(sourcePackCells.h, "geography.sourceMap.pack.cells.h");
+  const featureIds = indexedValues(sourcePackCells.f, "geography.sourceMap.pack.cells.f");
+  const expectationInput = createRiverLakeDrainageExpectationInput(values, sourceMapValue);
+  const lakeExpectations = providedLakeExpectations || createRiverLakeDrainageExpectations(
+    expectationInput.sourceGrid,
+    expectationInput.sourcePack,
+    {...expectationInput.sourceOptions, riverRegenerationSalt: expectationInput.expectedRiverSalt}
+  ).lakes as Map<number, UnknownRecord>;
   for (const [id, cells] of riverCellSequences) {
     let enteredWaterTail = false;
     for (let index = 0; index < cells.length; index++) {
@@ -374,7 +446,28 @@ function validateRiverMirrors(values: Map<string, unknown>, sourceMapValue: unkn
       if (cell < 0) continue;
       const water = Number(heights[cell]) < 20;
       if (water) enteredWaterTail = true;
-      else if (enteredWaterTail) throw protocolError("river-water-tail-invalid", `river #${id} 从水域重新进入陆地`);
+      else if (enteredWaterTail) {
+        const previousCell = cells[index - 1];
+        const lakeId = Number(featureIds[previousCell]);
+        const outputLake = isPlainRecord(outputPackFeatures[lakeId]) ? outputPackFeatures[lakeId] as UnknownRecord : null;
+        const overflow = outputLake && isPlainRecord(outputLake.overflow) ? outputLake.overflow as UnknownRecord : null;
+        const expectation = lakeExpectations.get(lakeId);
+        const validLakeOutlet = Number.isSafeInteger(previousCell)
+          && previousCell >= 0
+          && outputLake?.type === "lake"
+          && hasStrictIdentity(outputLake, lakeId)
+          && expectation?.overflows === true
+          && expectation.outCell === cell
+          && outputLake.outlet === id
+          && typeof outputLake.outlet === "number"
+          && Number.isSafeInteger(outputLake.outlet)
+          && overflow?.spillCell === cell
+          && typeof overflow.spillCell === "number"
+          && Number.isSafeInteger(overflow.spillCell)
+          && JSON.stringify(normalizeValue(overflow)) === JSON.stringify(normalizeValue(expectation.overflow));
+        if (!validLakeOutlet) throw protocolError("river-water-tail-invalid", `river #${id} 从水域重新进入陆地`);
+        enteredWaterTail = false;
+      }
       const owner = Number(cellRivers[cell]);
       if (owner === id) continue;
       if (water && owner === 0) continue;
@@ -385,6 +478,32 @@ function validateRiverMirrors(values: Map<string, unknown>, sourceMapValue: unkn
     }
   }
   for (const id of ids) if (!claimed.has(id)) throw protocolError("river-cell-mirror-invalid", `river #${id} 没有 pack.cells.r 反向归属`);
+}
+
+function createRiverLakeDrainageExpectationInput(values: Map<string, unknown>, sourceMapValue: unknown): Readonly<{
+  expectedRiverSalt: number;
+  sourceGrid: UnknownRecord;
+  sourceOptions: UnknownRecord;
+  sourcePack: UnknownRecord;
+}> {
+  const sourceMap = record(sourceMapValue, "geography.sourceMap");
+  const sourceGrid = record(sourceMap.grid, "geography.sourceMap.grid");
+  const sourcePack = record(sourceMap.pack, "geography.sourceMap.pack");
+  const sourceRegeneration = isPlainRecord(sourceMap.metadata) && isPlainRecord(sourceMap.metadata.regeneration) ? sourceMap.metadata.regeneration as UnknownRecord : {};
+  const expectedRiverSalt = (Number(sourceRegeneration.rivers) || 0) + 1;
+  const outputRiverSalt = values.get("metadata.regeneration.rivers");
+  if (typeof outputRiverSalt !== "number" || !Number.isSafeInteger(outputRiverSalt) || outputRiverSalt !== expectedRiverSalt) throw protocolError("river-regeneration-salt-invalid", "河流重生成扰动序号与源地图不一致");
+  const sourceOptions = isPlainRecord(sourceMap.options) ? sourceMap.options : {};
+  return Object.freeze({expectedRiverSalt, sourceGrid, sourceOptions, sourcePack});
+}
+
+function hasStrictIdentity(value: UnknownRecord, expected: number): boolean {
+  const hasI = Object.prototype.hasOwnProperty.call(value, "i");
+  const hasId = Object.prototype.hasOwnProperty.call(value, "id");
+  if (!hasI && !hasId) return false;
+  if (hasI && (typeof value.i !== "number" || !Number.isSafeInteger(value.i) || value.i < 0 || value.i !== expected)) return false;
+  if (hasId && (typeof value.id !== "number" || !Number.isSafeInteger(value.id) || value.id < 0 || value.id !== expected)) return false;
+  return true;
 }
 
 function lastRealCell(cells: number[] | undefined): number {
@@ -507,14 +626,6 @@ function validateCellFeatureReferences(cells: ArrayLike<unknown>, features: unkn
     const id = Number(cells[cell]);
     if (!Number.isSafeInteger(id) || id < 0 || id >= features.length || id > 0 && (!features[id] || record(features[id], `geography.feature.${id}`).removed)) throw protocolError(code, `cell #${cell} 指向无效 Feature #${id}`);
   }
-}
-
-function validatePreparedRender(value: unknown, expected: LegacyBinding): void {
-  if (value === undefined || value === null) return;
-  const prepared = record(value, "geography.preparedRender");
-  if (prepared.schemaVersion !== 1) throw protocolError("geography-render-schema-invalid", "地理网络 renderer source schema 无效");
-  const binding = record(prepared.binding, "geography.preparedRender.binding");
-  for (const key of ["mapIdentity", "mapRevision", "topologyRevision"] as const) if ((binding[key] ?? "") !== (expected[key] ?? "")) throw protocolError("geography-render-binding-stale", `renderer source ${key} 与请求不一致`);
 }
 
 function validateLegacyBinding(value: unknown, path: string): LegacyBinding {

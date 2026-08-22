@@ -1,6 +1,7 @@
 import {adaptLegacyInteractiveRevision} from "../../core/adapters/identity-adapters.js";
 import type {ComputeOperationBinding} from "../../core/contracts/operation.js";
 import {validateOperationBinding} from "../../core/contracts/runtime-validators.js";
+import {validatePreparedWorkerRenderBinding} from "../worker-render-binding.js";
 import {listCanonicalMapSections} from "../../runtime/canonical-map-field-registry.js";
 import {foundationManifest} from "./manifest.js";
 
@@ -204,6 +205,7 @@ export function adaptFoundationWorkerBinding(task: string, value: unknown): Comp
 export function validateFoundationWorkerOutput(input: {
   readonly task: string;
   readonly binding: unknown;
+  readonly renderBinding?: unknown;
   readonly output: unknown;
 }): Readonly<{
   task: string;
@@ -220,7 +222,13 @@ export function validateFoundationWorkerOutput(input: {
     throw protocolError("foundation-worker-result-kind-invalid", `${descriptor.id} 返回了未登记结果类型`);
   }
   assertSameLegacyBinding(output.binding, legacyBinding, `${descriptor.id}.output.binding`);
-  validatePreparedRenderBinding(output.preparedRender, legacyBinding, descriptor.id);
+  validatePreparedWorkerRenderBinding(output.preparedRender, input.renderBinding, {
+    path: `${descriptor.id}.preparedRender`,
+    schemaCode: "foundation-worker-render-schema-invalid",
+    invalidCode: "foundation-worker-render-binding-invalid",
+    staleCode: "foundation-worker-render-binding-stale",
+    label: descriptor.id
+  });
 
   const result = record(output.result, `${descriptor.id}.output.result`);
   const executed = result.executed === true || output.executed === true;
@@ -341,18 +349,6 @@ function requireTask(task: string) {
   const descriptor = taskById.get(String(task || ""));
   if (!descriptor) throw protocolError("foundation-worker-task-unknown", `未登记基础域 Worker task ${String(task || "(empty)")}`);
   return descriptor;
-}
-
-function validatePreparedRenderBinding(value: unknown, expected: LegacyFoundationWorkerBinding, task: string): void {
-  if (value === undefined || value === null) return;
-  const prepared = record(value, `${task}.preparedRender`);
-  if (prepared.schemaVersion !== 1) throw protocolError("foundation-worker-render-schema-invalid", `${task} renderer source schema 无效`);
-  const binding = record(prepared.binding, `${task}.preparedRender.binding`);
-  for (const key of ["mapIdentity", "mapRevision", "topologyRevision"] as const) {
-    if ((binding[key] ?? "") !== (expected[key] ?? "")) {
-      throw protocolError("foundation-worker-render-binding-stale", `${task} renderer source ${key} 与 Worker 请求不一致`);
-    }
-  }
 }
 
 function validateLegacyBinding(value: unknown, path: string): LegacyFoundationWorkerBinding {
