@@ -19,7 +19,7 @@ operation-failed：surface 颜色补丁与正式资源 owner 不属于同一受�
 | 字段 | 内容 |
 | --- | --- |
 | 最终任务 | 修复七类视图不能提交、十二类颜色视图全部 GPU 快切，并在正式数据提交后预热仍需几何计算的共享缓存 |
-| 当前阶段 | 351-3：本地终验已通过，等待任务分支部署后的用户精确标签页复核 |
+| 当前阶段 | 已完成：本地终验与用户精确预览标签页复核均通过 |
 | 最小验收 | 十二类 10k / 100k cold / warm 达标；latest-revision 只接纳最新结果；错误面为 0 |
 | 非目标 | 不修改生成算法、存档 schema、canonical 地图或视觉配色语义 |
 | 唯一写者 | 主线程；runtime、renderer、专项夹具与本文档 |
@@ -84,4 +84,12 @@ shader 对水域、主题、平滑边界和 height fallback 的像素语义必�
 - `351-2`：后台只生成 `height / states / provinces` 三份岸线 correction，不复制完整 surface。独立可丢弃 ComputeWorker 避免阻塞或终止长期 MapWorker；同键调度与无任务 cancel 幂等。专项实际证明 running `A` 被新 revision 取消，只有 `B` 接纳；queued `C` 被前台抢占且未启动。
 - `351-3`：生产构建固定 `10004` cells 的 cold `13.0～26.2ms`、warm `12.7～16.3ms`；固定 `99846` cells 的 cold `15.5～29.1ms`、warm `15.4～19.2ms`。十二类逐项 `localGpu=true`、Worker input/output `0`、surface/line/picking/labels rebuild `0`、正式资源引用稳定、LongTask `0`，最终 Loading / application / page / health / WebGL error 全 `0`。
 - 调度观测噪声已收敛：重复空 cancel 不再递增 sequence，10k 真实入口从旧的 `4163` 收敛为 `3`。正式 artifact 位于 `work/task351-all-view-modes-10000/result.json` 与 `work/task351-all-view-modes-100000/result.json`，不入库。
-- 静态与专项最终通过：`git diff --check`、scheduler、cell attribute store、render preparation、GPU display mutation、prepared installer、Worker task、`typecheck:core` 与 `1402 modules` production build。当前只剩推送后在用户精确 `https://preview-fmg.mosuzi.top/` 标签页对应新构建复核，不在该标签页生成替代地图。
+- 静态与专项最终通过：`git diff --check`、scheduler、cell attribute store、render preparation、GPU display mutation、prepared installer、Worker task、`typecheck:core` 与 `1402 modules` production build。
+
+## 7. 2026-08-23 用户精确标签页终验
+
+- 精确接管并刷新用户原标签页 `294256474 / https://preview-fmg.mosuzi.top/`；刷新后页面恢复浏览器保存的原地图，没有生成新地图或打开替代验收页。
+- 通过可见控制面板依次进入高度、温度、降水、生物群系、文化、宗教、外交、政体、国家、省份、区域、人口十二类视图；每批终态的选中控件与 `activeMode` 一致，人口与高度画面完成视觉检查，最终恢复高度视图。
+- 各批次切换结束后 `generation-loading=false / operation-loading=false`；目标复验以 `2026-08-23T13:02:56.831Z` 为界执行高度→温度，`activeMode=temperature`、新增 error / warn `0`，随后温度→高度同样新增 error / warn `0`，终态为 `height / startup ready / Loading 0`。
+- 刷新后的存档恢复阶段曾单列一条 `operation-stall` 与一条 `main-thread-long-task`；两者早于目标视图复验窗口，未在任何后续视图切换中重现，归入既有 100k 存档恢复性能边界，不据此误判视图切换回归。
+- Chrome 可见界面通道每次动作约 `5.27s` 的固定往返不计入产品渲染耗时；产品性能结论继续以正式 10k / 100k 浏览器夹具的 `15.5～29.1ms cold / 15.4～19.2ms warm`、LongTask `0` 为准。
