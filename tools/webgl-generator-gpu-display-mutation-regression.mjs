@@ -71,4 +71,12 @@ const appSource = readFileSync(new URL("../app/webgl-generator/src/runtime/app.j
 for (const pattern of [/setTheme:[\s\S]+canApplyGpuResidentVisualTheme/, /setShowOceanHeight:[\s\S]+canApplyGpuResidentOceanHeight/,
   /setSmoothCellBorders:[\s\S]+canApplyGpuResidentSmoothCellBorders/, /setVisible:[\s\S]+canApplyGpuResidentLayerVisibility/,
   /const result = await apply\(\)/, /await rollback\?\.\(\)/]) assert.match(appSource, pattern);
-console.log(JSON.stringify({ok: true, directLayers: 3, oceanDraws, smoothRefreshes, themeCalls: calls.length}));
+const rendererSource = readFileSync(new URL("../app/webgl-generator/src/renderer/placeholder-renderer.js", import.meta.url), "utf8");
+for (const [mode, code] of Object.entries({
+  height: 1, biomes: 2, population: 3, states: 4, provinces: 5, temperature: 6,
+  precipitation: 7, cultures: 8, religions: 9, regions: 10, governments: 11, diplomacy: 12
+})) assert.match(rendererSource, new RegExp(`${mode}: ${code}`), `${mode} 未登记 GPU 常驻模式`);
+for (const code of [6, 7, 8, 9, 10, 11, 12]) assert.match(rendererSource, new RegExp(`u_cellColorMode == ${code}`), `shader 缺少 GPU 模式 ${code}`);
+assert.match(rendererSource, /mode === "diplomacy"\) refreshCellAttributePalette/u, "首次外交切换必须按当前主体刷新小 palette");
+assert.match(rendererSource, /canPresentGpuResidentColorMode\("diplomacy"\)[\s\S]*?refreshCellAttributePalette[\s\S]*?this\.draw\(\)/u, "外交主体变化不得重建完整 surface");
+console.log(JSON.stringify({ok: true, directLayers: 3, gpuColorModes: 12, oceanDraws, smoothRefreshes, themeCalls: calls.length}));

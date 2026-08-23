@@ -1,5 +1,6 @@
 import {
   buildLineVertices,
+  buildGpuResidentShoreSurfacePrewarm,
   buildPlaceholderSurfaceBundle,
   buildPlaceholderSurfaceColorPatch,
   buildPointLayer,
@@ -51,7 +52,8 @@ export const RENDER_PREPARATION_LAYERS = Object.freeze([
   "labels",
   "route",
   "river",
-  "point"
+  "point",
+  "gpu-shore-surface"
 ]);
 
 const REGENERATION_RENDER_LAYERS = Object.freeze({
@@ -203,6 +205,16 @@ export async function executeRenderPreparationTask(payload = {}, context = {}) {
           prepared.cellVisual
         );
       }
+    } else if (layer === "gpu-shore-surface") {
+      cache.shore ||= payload.caches?.shore
+        ? unpackShoreVisualPaths(payload.caches.shore, binding)
+        : buildShoreVisualPaths(map);
+      result.layers.gpuShoreSurface = buildGpuResidentShoreSurfacePrewarm(
+        map,
+        payload.gpuShoreSurfaceModes || ["height", "states", "provinces"],
+        payload.viewOptions || {},
+        cache.shore
+      );
     } else if (layer === "line") {
       const prepared = ensureRenderCaches(map, binding, payload.caches, cache);
       const line = buildLineVertices(

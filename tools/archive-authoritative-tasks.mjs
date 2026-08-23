@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import {fileURLToPath} from "node:url";
+import {parseTaskBlocks} from "./authoritative-task-parser.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const currentPlanPath = path.join(root, "docs", "current-plan.md");
@@ -41,35 +42,6 @@ const historicalPartitions = [
     note: "首轮归档时第 284、298 项仍为暂缓任务，未进入本卷；其后若完成，必须按实际完成日期进入新时间卷。",
   },
 ];
-
-function parseTaskBlocks(markdown, source) {
-  const lines = markdown.replaceAll("\r\n", "\n").split("\n");
-  const tasks = [];
-  const taskHeadingPattern = /^- \*\*(?:权威任务)?第 (\d+) 项：(.+?)\*\* `([^`]+)`/;
-  const taskLikeHeadings = lines.filter(line => /^- \*\*(?:权威任务)?第 \d+ 项：/.test(line));
-  for (let index = 0; index < lines.length; index += 1) {
-    const match = lines[index].match(taskHeadingPattern);
-    if (!match) continue;
-    let end = index + 1;
-    while (end < lines.length) {
-      const line = lines[end];
-      if (line.trim() && !line.startsWith("  ")) break;
-      end += 1;
-    }
-    tasks.push({
-      number: Number(match[1]),
-      title: match[2],
-      status: match[3],
-      block: lines.slice(index, end).join("\n").trimEnd().replace(/^- \*\*第 /, "- **权威任务第 "),
-      source,
-    });
-    index = end - 1;
-  }
-  if (tasks.length !== taskLikeHeadings.length) {
-    throw new Error(`${source} 存在未识别任务标题：检测 ${taskLikeHeadings.length}，解析 ${tasks.length}`);
-  }
-  return tasks;
-}
 
 function isActive(task) {
   if (/已完成|Completed|完成统一验收|纠错完成|梳理完成|取代|移除/.test(task.status)) return false;
@@ -135,7 +107,7 @@ function renderArchive(partition, tasks) {
 
 ## 任务条目
 
-${tasks.map(task => task.block).join("\n\n")}
+${tasks.map(task => task.archiveBlock || task.block).join("\n\n")}
 `;
 }
 

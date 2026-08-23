@@ -135,6 +135,7 @@ import {
   createCellAttributeStore,
   deleteCellAttributeStore,
   prepareCellAttributePatch,
+  refreshCellAttributePalette,
   restoreCellAttributeStore as restoreGpuCellAttributeStore,
   summarizeCellAttributeStore
 } from "./cell-attribute-store.js";
@@ -198,7 +199,10 @@ const VIEWPORT_LINE_OVERSCAN_RATIO = 0.5;
 const VIEWPORT_LINE_OVERSCAN_MIN_CSS_PX = 256;
 const VIEWPORT_LINE_OVERSCAN_MAX_CSS_PX = 720;
 const RETIRED_MAP_LAYERS = new Set(["tradeFlows"]);
-const GPU_RESIDENT_COLOR_MODES = Object.freeze({height: 1, biomes: 2, population: 3, states: 4, provinces: 5});
+const GPU_RESIDENT_COLOR_MODES = Object.freeze({
+  height: 1, biomes: 2, population: 3, states: 4, provinces: 5, temperature: 6,
+  precipitation: 7, cultures: 8, religions: 9, regions: 10, governments: 11, diplomacy: 12
+});
 const HEIGHT_COLOR_TABLE_SIZE = 101;
 
 function normalizeRequestedLayerVisibility(layerVisibility, entries) {
@@ -524,6 +528,8 @@ export class PlaceholderMapRenderer {
     this.cellAttributeStoreOwner = null;
     this.lastSurfaceResourceOwnerError = null;
     this.gpuResidentSmoothShoreSurfaceKey = "";
+    this.gpuResidentShoreSurfaceCacheOwnerKey = "";
+    this.gpuResidentShoreSurfaceCache = new Map();
     this.cellAttributeStore = null;
     this.surfaceHeightColorTable = null;
     this.surfaceHeightColorTableKey = "";
@@ -960,7 +966,7 @@ export class PlaceholderMapRenderer {
           assertCurrent: assertRestoreCurrent
         }));
         assertRestoreCurrent();
-        staged.cellAttributeStore = createCellAttributeStore(this.gl, map);
+        staged.cellAttributeStore = createCellAttributeStore(this.gl, map, this.viewOptions);
         await upload(staged.surfacePatchBuffer, this.surfacePatchVertices, this.gl.DYNAMIC_DRAW);
         for (const [buffer, values] of [[staged.landCorrectionBuffer, this.landCorrectionVertices], [staged.waterCorrectionBuffer, this.waterCorrectionVertices], [staged.landCoverBuffer, this.landCoverVertices], [staged.waterCoverBuffer, this.waterCoverVertices], [staged.oceanCurrentBuffer, this.oceanCurrentVertices], [staged.lineBuffer, this.lineVertices], [staged.shoreLineBuffer, this.shoreLineVertices]]) await upload(buffer, values, this.gl.STATIC_DRAW);
         const pointLayer = buildPointLayer(map);
@@ -1107,7 +1113,7 @@ export class PlaceholderMapRenderer {
     const profile = createRendererLoadProfile();
     this.cancelScheduledRouteBufferRefresh();
     this.map = map;
-    profile.stage("cell-attribute-store", "建立 cell attribute store", () => installRendererCellAttributeStore(this, createCellAttributeStore(this.gl, map)));
+    profile.stage("cell-attribute-store", "建立 cell attribute store", () => installRendererCellAttributeStore(this, createCellAttributeStore(this.gl, map, this.viewOptions)));
     this.invalidateGridCellDiagnostics();
     this.objectHighlights = [];
     this.oceanCurrentHighlights = new Set();
@@ -1250,7 +1256,7 @@ export class PlaceholderMapRenderer {
     };
 
     this.map = map;
-    await stage("cell-attribute-store", "建立 cell attribute store", () => installRendererCellAttributeStore(this, createCellAttributeStore(this.gl, map)));
+    await stage("cell-attribute-store", "建立 cell attribute store", () => installRendererCellAttributeStore(this, createCellAttributeStore(this.gl, map, this.viewOptions)));
     this.invalidateGridCellDiagnostics();
     this.objectHighlights = [];
     this.oceanCurrentHighlights = new Set();
@@ -1468,8 +1474,9 @@ export class PlaceholderMapRenderer {
     if (this.colorMode === mode) return;
     if (this.canPresentGpuResidentColorMode(mode)) {
       const previous = this.colorMode;
-      this.colorMode = mode;
       try {
+        if (mode === "diplomacy") refreshCellAttributePalette(this.gl, this.cellAttributeStore, this.map, mode, this.viewOptions);
+        this.colorMode = mode;
         if (this.viewOptions.smoothCellBorders !== false) this.refreshGpuResidentShoreSurface();
         this.draw();
       } catch (error) {
@@ -1536,8 +1543,20 @@ export class PlaceholderMapRenderer {
     if (this.deferWorkerRenderMutation("diplomacy-subject", stateId, {apply: value => this.setDiplomacySubjectId(value)})) return;
     const nextId = normalizePositiveId(stateId);
     if (this.viewOptions.diplomacySubjectId === nextId) return;
-    this.viewOptions = {...this.viewOptions, diplomacySubjectId: nextId};
+    const previousOptions = this.viewOptions;
+    this.viewOptions = {...previousOptions, diplomacySubjectId: nextId};
     if (!this.map || this.colorMode !== "diplomacy") return;
+    if (this.canPresentGpuResidentColorMode("diplomacy")) {
+      try {
+        refreshCellAttributePalette(this.gl, this.cellAttributeStore, this.map, "diplomacy", this.viewOptions);
+        this.draw();
+      } catch (error) {
+        this.viewOptions = previousOptions;
+        try { refreshCellAttributePalette(this.gl, this.cellAttributeStore, this.map, "diplomacy", previousOptions); } catch {}
+        throw error;
+      }
+      return;
+    }
     this.refreshCellSurface({draw: false});
     this.draw();
   }
@@ -1589,7 +1608,11 @@ export class PlaceholderMapRenderer {
       this.waterCoverVertexCount = this.waterCoverVertices.length / 6;
       return null;
     }
-    const surfaceBundle = buildShoreSurfaceVertexLayers(createRenderContext(this.map), this.colorMode, this.viewOptions, this.shoreVisualPaths);
+    const ownerKey = gpuResidentShoreSurfaceOwnerKey(this.surfaceResourceOwner);
+    const cached = this.gpuResidentShoreSurfaceCacheOwnerKey === ownerKey
+      ? this.gpuResidentShoreSurfaceCache.get(key)
+      : null;
+    const surfaceBundle = cached || buildShoreSurfaceVertexLayers(createRenderContext(this.map), this.colorMode, this.viewOptions, this.shoreVisualPaths);
     this.landCorrectionVertices = surfaceBundle.landCorrections;
     this.waterCorrectionVertices = surfaceBundle.waterCorrections;
     this.landCoverVertices = surfaceBundle.landCovers;
@@ -1602,6 +1625,31 @@ export class PlaceholderMapRenderer {
     this.waterCoverVertexCount = surfaceBundle.waterCovers.length / 6;
     uploadShoreSurfaceBuffers(this.gl, this, surfaceBundle);
     return surfaceBundle;
+  }
+
+  needsGpuResidentShoreSurfacePrewarm(mode) {
+    if (!shouldDrawShoreVisualBands(mode) || this.viewOptions?.smoothCellBorders === false || !this.map || !this.surfaceResourceOwner) return false;
+    const key = gpuResidentShoreSurfaceKey(mode, this.viewOptions);
+    const ownerKey = gpuResidentShoreSurfaceOwnerKey(this.surfaceResourceOwner);
+    return this.gpuResidentShoreSurfaceCacheOwnerKey !== ownerKey || !this.gpuResidentShoreSurfaceCache.has(key);
+  }
+
+  installGpuResidentShoreSurfacePrewarm(prepared, binding) {
+    const normalized = normalizeRenderResourceBinding(binding, "renderer.gpuShorePrewarm.binding");
+    if (!sameRenderResourceBinding(normalized, this.surfaceResourceOwner)) return false;
+    const ownerKey = gpuResidentShoreSurfaceOwnerKey(normalized);
+    if (this.gpuResidentShoreSurfaceCacheOwnerKey !== ownerKey) {
+      this.gpuResidentShoreSurfaceCache.clear();
+      this.gpuResidentShoreSurfaceCacheOwnerKey = ownerKey;
+    }
+    let installed = 0;
+    for (const entry of prepared?.entries || []) {
+      if (!entry?.key || !shouldDrawShoreVisualBands(entry.mode)) continue;
+      if (![entry.landCorrections, entry.waterCorrections, entry.landCovers, entry.waterCovers].every(value => value instanceof Float32Array)) continue;
+      this.gpuResidentShoreSurfaceCache.set(entry.key, entry);
+      installed++;
+    }
+    return installed > 0;
   }
 
   setVisualTheme(themeId, {force = false} = {}) {
@@ -6361,6 +6409,24 @@ function gpuResidentShoreSurfaceKey(colorMode, viewOptions) {
   ]);
 }
 
+function gpuResidentShoreSurfaceOwnerKey(binding) {
+  return binding ? JSON.stringify([
+    binding.mapIdentity, Number(binding.sourceRevision), Number(binding.topologyRevision), Number(binding.renderGeneration)
+  ]) : "";
+}
+
+export function buildGpuResidentShoreSurfacePrewarm(map, modes, viewOptions = {}, shoreVisualPaths = null) {
+  const context = createRenderContext(map);
+  const shore = shoreVisualPaths || buildShoreVisualPaths(map);
+  const entries = [];
+  for (const mode of [...new Set((modes || []).map(String))]) {
+    if (!shouldDrawShoreVisualBands(mode)) continue;
+    const bundle = buildShoreSurfaceVertexLayers(context, mode, viewOptions, shore);
+    entries.push({mode, key: gpuResidentShoreSurfaceKey(mode, viewOptions), ...bundle});
+  }
+  return {entries};
+}
+
 function buildSurfaceCellRanges(colorMode, viewOptions, cellVisualMesh, surfaceFloatLength) {
   if (viewOptions?.smoothCellBorders === false || !cellVisualMesh?.cells?.length || !Number.isFinite(surfaceFloatLength)) return new Map();
   const ranges = new Map();
@@ -6859,7 +6925,9 @@ function configureGpuResidentSurfaceColors(gl, renderer) {
   const store = renderer.cellAttributeStore;
   gl.uniform1i(renderer.surfaceLocations.cellColorMode, mode && store ? mode : 0);
   if (!mode || !store) return;
-  const paletteMode = renderer.colorMode === "states" || renderer.colorMode === "provinces" ? renderer.colorMode : "biomes";
+  const paletteMode = ["states", "provinces", "cultures", "religions", "regions", "governments", "diplomacy"].includes(renderer.colorMode)
+    ? renderer.colorMode
+    : "biomes";
   const palette = store.textures.palettes[paletteMode];
   gl.uniform1ui(renderer.surfaceLocations.cellCount, store.snapshot.cellCount);
   gl.uniform2i(renderer.surfaceLocations.cellTextureSize, store.layout.width, store.layout.height);
@@ -8329,17 +8397,33 @@ vec4 resolveCellColor(uint cellId) {
   uvec4 terrain = texelFetch(u_terrainTexture, coord, 0);
   uint height = min(terrain.r, 100u);
   vec4 heightColor = u_heightColors[int(height)];
+  vec4 numeric = texelFetch(u_numericTexture, coord, 0);
+  if (u_cellColorMode == 6) {
+    float amount = clamp((numeric.g + 18.0) / 54.0, 0.0, 1.0);
+    return mix(vec4(0.2, 0.38, 0.72, 1.0), vec4(0.82, 0.32, 0.2, 1.0), amount);
+  }
   if (terrain.a == 0u || u_cellColorMode == 1) return heightColor;
+  if (u_cellColorMode == 7) {
+    float amount = clamp(numeric.b / 100.0, 0.0, 1.0);
+    return mix(vec4(0.72, 0.62, 0.36, 1.0), vec4(0.16, 0.48, 0.68, 1.0), amount);
+  }
   if (u_cellColorMode == 2) {
     uint paletteIndex = terrain.g + 1u;
     return paletteIndex < u_paletteWidth ? texelFetch(u_paletteTexture, ivec2(int(paletteIndex), 0), 0) : a_color;
   }
-  if (u_cellColorMode == 4 || u_cellColorMode == 5) {
+  if (u_cellColorMode == 4 || u_cellColorMode == 5 || u_cellColorMode == 8 || u_cellColorMode == 9 || u_cellColorMode == 11 || u_cellColorMode == 12) {
     uvec4 identities = texelFetch(u_identityTexture, coord, 0);
-    uint paletteIndex = u_cellColorMode == 4 ? identities.r : identities.g;
+    uint paletteIndex = u_cellColorMode == 5 ? identities.g
+      : u_cellColorMode == 8 ? identities.b
+      : u_cellColorMode == 9 ? identities.a
+      : identities.r;
     return paletteIndex < u_paletteWidth ? texelFetch(u_paletteTexture, ivec2(int(paletteIndex), 0), 0) : a_color;
   }
-  float population = texelFetch(u_numericTexture, coord, 0).r;
+  if (u_cellColorMode == 10) {
+    uint paletteIndex = uint(max(0.0, round(numeric.a) + 1.0));
+    return paletteIndex < u_paletteWidth ? texelFetch(u_paletteTexture, ivec2(int(paletteIndex), 0), 0) : a_color;
+  }
+  float population = numeric.r;
   if (population <= 0.0) return mix(u_oceanColor, vec4(0.06, 0.1, 0.08, 1.0), 0.4);
   float amount = sqrt(min(1.0, population / max(1.0, u_maxPopulation)));
   return mix(vec4(0.2, 0.36, 0.24, 1.0), vec4(0.92, 0.72, 0.34, 1.0), amount);

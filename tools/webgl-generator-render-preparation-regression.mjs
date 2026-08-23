@@ -160,6 +160,21 @@ const secondSurface = await executeRenderPreparationTask({map, binding: presenta
 assert.equal(firstSurface.cache.reused, false, "同 revision 首次 surface 准备不得虚报复用");
 assert.equal(secondSurface.cache.reused, true, "同 revision 第二次 surface 准备必须复用渲染几何缓存");
 for (const [key, value] of Object.entries(retainedRefs)) assert.equal(retainedRenderCache[key], value, `同 revision 不得重建 ${key}`);
+const shorePrewarm = await executeRenderPreparationTask({
+  map,
+  binding: presentationBinding,
+  camera,
+  canvas,
+  viewOptions: {smoothCellBorders: true},
+  gpuShoreSurfaceModes: ["height", "states", "provinces"],
+  layers: ["gpu-shore-surface"]
+}, {renderCache: retainedRenderCache});
+assert.deepEqual(shorePrewarm.layers.gpuShoreSurface.entries.map(entry => entry.mode), ["height", "states", "provinces"]);
+for (const entry of shorePrewarm.layers.gpuShoreSurface.entries) {
+  assert.ok(entry.key && entry.landCorrections instanceof Float32Array && entry.waterCorrections instanceof Float32Array, `${entry.mode} 岸线预热结构无效`);
+  assert.equal("base" in entry, false, `${entry.mode} 岸线预热不得生成完整 surface`);
+}
+assert.ok(collectRenderPreparationTransfers(shorePrewarm).length >= 4, "岸线预热结果必须 transfer typed arrays");
 const expectedOceanPatch = buildPlaceholderSurfaceColorPatch(
   map,
   "height",
@@ -241,6 +256,7 @@ console.log(JSON.stringify({
   transfers: transfers.length,
   retainedRenderCache: {first: firstSurface.cache, second: secondSurface.cache, nextTopology: nextTopologySurface.cache, nextRevision: nextRevisionSurface.cache},
   oceanPatch: {cells: oceanPatch.layers.surface.cellIds.length, bytes: oceanPatch.layers.surface.colors.byteLength, checksum: byteChecksum(oceanPatch.layers.surface.colors)},
+  shorePrewarm: {modes: shorePrewarm.layers.gpuShoreSurface.entries.map(entry => entry.mode), transfers: collectRenderPreparationTransfers(shorePrewarm).length},
   cacheSummary,
   pickingSummary,
   labelSummary,

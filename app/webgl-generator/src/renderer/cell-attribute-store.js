@@ -1,11 +1,13 @@
-import {colorForCell} from "./color-modes.js";
+import {colorForCell, isLandCell} from "./color-modes.js";
 
 export const CELL_ATTRIBUTE_CHANNELS = 4;
-export const CELL_ATTRIBUTE_PALETTE_MODES = Object.freeze(["states", "provinces", "biomes", "cultures", "religions"]);
+export const CELL_ATTRIBUTE_PALETTE_MODES = Object.freeze([
+  "states", "provinces", "biomes", "cultures", "religions", "regions", "governments", "diplomacy"
+]);
 const cellTextures = new WeakSet();
 const cellAttributeStoreOwners = new WeakMap();
 
-export function buildCellAttributeSnapshot(map) {
+export function buildCellAttributeSnapshot(map, viewOptions = {}) {
   const cells = map?.grid?.cells;
   const cellCount = Number(cells?.i?.length || cells?.h?.length || 0);
   if (!Number.isInteger(cellCount) || cellCount < 1) throw new TypeError("cell attribute store 缺少有效地图 cells");
@@ -13,12 +15,12 @@ export function buildCellAttributeSnapshot(map) {
   const terrain = new Uint32Array(cellCount * CELL_ATTRIBUTE_CHANNELS);
   const numeric = new Float32Array(cellCount * CELL_ATTRIBUTE_CHANNELS);
   for (let cell = 0; cell < cellCount; cell++) writeCellAttributes(map, cell, identities, terrain, numeric, cell * CELL_ATTRIBUTE_CHANNELS);
-  const palettes = Object.fromEntries(CELL_ATTRIBUTE_PALETTE_MODES.map(mode => [mode, buildPalette(map, mode, cellCount)]));
+  const palettes = Object.fromEntries(CELL_ATTRIBUTE_PALETTE_MODES.map(mode => [mode, buildPalette(map, mode, cellCount, viewOptions)]));
   return Object.freeze({mapIdentity: String(map.metadata?.mapIdentity || map.metadata?.id || ""), cellCount, identities, terrain, numeric, palettes: Object.freeze(palettes)});
 }
 
-export function createCellAttributeStore(gl, mapOrSnapshot) {
-  const snapshot = mapOrSnapshot?.identities instanceof Uint32Array ? assertSnapshot(mapOrSnapshot) : buildCellAttributeSnapshot(mapOrSnapshot);
+export function createCellAttributeStore(gl, mapOrSnapshot, viewOptions = {}) {
+  const snapshot = mapOrSnapshot?.identities instanceof Uint32Array ? assertSnapshot(mapOrSnapshot) : buildCellAttributeSnapshot(mapOrSnapshot, viewOptions);
   const layout = textureLayout(gl, snapshot.cellCount);
   const textures = {};
   try {
@@ -57,6 +59,24 @@ export function applyCellAttributePatch(gl, patch) {
 
 export function rollbackCellAttributePatch(gl, patch) {
   return writeCellAttributePatch(gl, patch, patch.before, false);
+}
+
+export function refreshCellAttributePalette(gl, store, map, mode, viewOptions = {}) {
+  const current = assertStore(store);
+  if (!CELL_ATTRIBUTE_PALETTE_MODES.includes(mode)) throw new RangeError(`不支持的 cell attribute palette：${mode}`);
+  if (String(map?.metadata?.mapIdentity || map?.metadata?.id || "") !== current.snapshot.mapIdentity) throw new Error("cell attribute palette 地图 identity 已变化");
+  const previous = current.snapshot.palettes[mode];
+  const next = buildPalette(map, mode, current.snapshot.cellCount, viewOptions);
+  if (next.length !== previous.length) throw new RangeError("cell attribute palette 尺寸已变化，必须重建 store");
+  gl.bindTexture(gl.TEXTURE_2D, current.textures.palettes[mode]);
+  try {
+    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, next.length / 4, 1, gl.RGBA, gl.UNSIGNED_BYTE, next);
+  } catch (error) {
+    try { gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, previous.length / 4, 1, gl.RGBA, gl.UNSIGNED_BYTE, previous); } catch {}
+    throw error;
+  }
+  previous.set(next);
+  return true;
 }
 
 export function deleteCellAttributeStore(gl, store, {preserve = null} = {}) {
@@ -199,8 +219,11 @@ function writeCellAttributes(map, cell, identities, terrain, numeric, offset) {
   ], offset);
 }
 
-function buildPalette(map, mode, cellCount) {
-  const field = ({states: "state", provinces: "province", biomes: "biome", cultures: "culture", religions: "religion"})[mode];
+function buildPalette(map, mode, cellCount, viewOptions = {}) {
+  const field = ({
+    states: "state", provinces: "province", biomes: "biome", cultures: "culture", religions: "religion",
+    regions: "region", governments: "state", diplomacy: "state"
+  })[mode];
   const ids = map.grid.cells[field] || [];
   let maxId = 0;
   const representative = new Map();
@@ -208,12 +231,13 @@ function buildPalette(map, mode, cellCount) {
     const id = Number(ids[cell]);
     if (!Number.isInteger(id)) continue;
     maxId = Math.max(maxId, id);
-    if (!representative.has(id)) representative.set(id, cell);
+    const previous = representative.get(id);
+    if (previous === undefined || (!isLandCell(previous, map) && isLandCell(cell, map))) representative.set(id, cell);
   }
   const palette = new Uint8Array((maxId + 2) * 4);
   for (let id = -1; id <= maxId; id++) {
     const cell = representative.get(id);
-    const color = cell === undefined ? [0.5, 0.5, 0.5, 1] : colorForCell(cell, map, mode);
+    const color = cell === undefined ? [0.5, 0.5, 0.5, 1] : colorForCell(cell, map, mode, viewOptions);
     for (let channel = 0; channel < 4; channel++) palette[(id + 1) * 4 + channel] = colorByte(color[channel]);
   }
   return palette;
@@ -267,7 +291,7 @@ function assertSnapshot(snapshot) {
 function assertStore(store) {
   if (!store?.layout || !store?.textures) throw new TypeError("cell attribute store 结构无效");
   assertSnapshot(store.snapshot);
-  if (collectCellAttributeTextures(store).length !== 8) throw new TypeError("cell attribute store texture 不完整");
+  if (collectCellAttributeTextures(store).length !== 3 + CELL_ATTRIBUTE_PALETTE_MODES.length) throw new TypeError("cell attribute store texture 不完整");
   return store;
 }
 

@@ -1323,12 +1323,15 @@ async function verifyAppDeferredReplayStaticContract() {
     source.indexOf("function workerRenderObject")
   );
   assert.match(regenerationRenderRequestFlow, /createRenderRequestSourceBinding\(binding, \{[\s\S]*?sourceRevisionDelta,[\s\S]*?topologyRevisionDelta,[\s\S]*?replacesSurface: replaceResources,[\s\S]*?surfaceOwner: renderer\?\.surfaceResourceOwner \|\| null/u, "局部 prepared request 必须沿用实际 surface topology owner");
+  assert.match(regenerationRenderRequestFlow, /surfacePatchScope: requestedSurfacePatchScope = null[\s\S]*?const surfacePatchScope = requestedLayers\.includes\("surface"\)[\s\S]*?requestedSurfacePatchScope \|\| regenerationSurfacePatchScope[\s\S]*?const replaceResources = requestedLayers\.includes\("surface"\) && !surfacePatchScope/u, "最终 surface patch scope 必须先于 replacement binding 判定");
   assert.doesNotMatch(regenerationRenderRequestFlow, /topologyRevision:\s*Number\(binding\.topologyRevision\)\s*\+\s*Number\(topologyRevisionDelta\)/u, "无 surface 的 prepared request 不得无条件推进 topology owner");
   const deferredRequestFlow = source.slice(
     source.indexOf("function createWorkerRegenerationDeferredRenderRequest"),
     source.indexOf("function isWorkerRegenerationDeferredReplayContextCurrent")
   );
   assert.match(deferredRequestFlow, /const presentation = snapshot\?\.finalPresentation \|\| \{\}/u, "deferred render request 必须以目标展示快照为权威");
+  assert.match(deferredRequestFlow, /createWorkerRegenerationRenderRequest\(state, targetKind, binding, layers, \{surfacePatchScope\}\)/u, "deferred display 必须在发放 binding 前传入最终 surface patch scope");
+  assert.doesNotMatch(deferredRequestFlow, /oceanCurrentHighlightIds:[^\n]*\n\s*\.\.\.\(surfacePatchScope/u, "deferred display 不得在 binding 发放后才覆盖 surface patch scope");
   for (const field of ["visualTheme", "unitPreferences", "politicalMeshDebugMode", "visibility", "colorMode", "viewOptions", "labelOptions", "oceanCurrentHighlightIds"]) {
     assert.match(deferredRequestFlow, new RegExp(`${field}:`), `deferred render request 缺少目标 ${field}`);
   }

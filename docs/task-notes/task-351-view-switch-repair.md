@@ -19,10 +19,10 @@ operation-failed：surface 颜色补丁与正式资源 owner 不属于同一受�
 | 字段 | 内容 |
 | --- | --- |
 | 最终任务 | 修复七类视图不能提交、十二类颜色视图全部 GPU 快切，并在正式数据提交后预热仍需几何计算的共享缓存 |
-| 当前阶段 | 351-0：deferred display 原位 surface patch binding 窄修 |
-| 最小验收 | 正例保持 generation；replacement 推进 generation；identity / revision / topology / generation 负例继续拒绝；现有 installer 与 Worker 专项通过 |
-| 非目标 | 当前阶段不扩 shader、不加预热、不修改视觉或地图数据 |
-| 唯一写者 | 主线程；`runtime/app.js`、renderer binding / installer 专项、本文档 |
+| 当前阶段 | 351-3：本地终验已通过，等待任务分支部署后的用户精确标签页复核 |
+| 最小验收 | 十二类 10k / 100k cold / warm 达标；latest-revision 只接纳最新结果；错误面为 0 |
+| 非目标 | 不修改生成算法、存档 schema、canonical 地图或视觉配色语义 |
+| 唯一写者 | 主线程；runtime、renderer、专项夹具与本文档 |
 | 独立角色 | 无；用户未要求四级流程或子智能体 |
 | 首个廉价门 | `node --check`、prepared installer 专项、Worker task 专项 |
 | 冻结门 | 一次小数据正式视图切换，文化视图成功且 owner / GL / Loading / health error 为 0 |
@@ -76,3 +76,12 @@ shader 对水域、主题、平滑边界和 height fallback 的像素语义必�
 - 不改 canonical map、存档、生成、颜色语义、对象和 `source/`。
 - 不在用户标签页生成新地图；最终只在用户确认的精确标签页对应构建做受控视图验收。
 - 本分支叠加于第 349～350 项未合入架构分支，完成后只推送任务分支，不直接合入 `main`。
+
+## 6. 2026-08-23 本地验收 checkpoint
+
+- `351-0`：deferred display 在发放 binding 前解析最终 `surfacePatchScope`，原位 `cell-colors` 不再误推进 render generation；严格 identity / revision / topology / generation / owner 门未放宽。prepared installer `21` cases、Worker task 与静态反例通过。
+- `351-1`：GPU 常驻模式扩展为十二类；温度 / 降水使用 numeric texture，文化 / 宗教 / 地区 / 政体 / 外交使用对应 identity 与小 palette。外交主体变化只刷新 palette，地图装载时也按当前主体创建初始 palette。
+- `351-2`：后台只生成 `height / states / provinces` 三份岸线 correction，不复制完整 surface。独立可丢弃 ComputeWorker 避免阻塞或终止长期 MapWorker；同键调度与无任务 cancel 幂等。专项实际证明 running `A` 被新 revision 取消，只有 `B` 接纳；queued `C` 被前台抢占且未启动。
+- `351-3`：生产构建固定 `10004` cells 的 cold `13.0～26.2ms`、warm `12.7～16.3ms`；固定 `99846` cells 的 cold `15.5～29.1ms`、warm `15.4～19.2ms`。十二类逐项 `localGpu=true`、Worker input/output `0`、surface/line/picking/labels rebuild `0`、正式资源引用稳定、LongTask `0`，最终 Loading / application / page / health / WebGL error 全 `0`。
+- 调度观测噪声已收敛：重复空 cancel 不再递增 sequence，10k 真实入口从旧的 `4163` 收敛为 `3`。正式 artifact 位于 `work/task351-all-view-modes-10000/result.json` 与 `work/task351-all-view-modes-100000/result.json`，不入库。
+- 静态与专项最终通过：`git diff --check`、scheduler、cell attribute store、render preparation、GPU display mutation、prepared installer、Worker task、`typecheck:core` 与 `1402 modules` production build。当前只剩推送后在用户精确 `https://preview-fmg.mosuzi.top/` 标签页对应新构建复核，不在该标签页生成替代地图。

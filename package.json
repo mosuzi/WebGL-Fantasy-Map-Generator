@@ -1,6 +1,6 @@
 {
   "name": "fmg-webgl-reimplementation",
-  "version": "0.5.59",
+  "version": "0.5.60",
   "description": "由 mosuzi 创作并完全通过 Codex + GPT 生成的 WebGL 幻想地图生成器。",
   "private": true,
   "author": "mosuzi",
@@ -261,6 +261,9 @@
     "regress:visual-theme-boundary": "node --no-warnings ./tools/webgl-generator-visual-theme-boundary-regression.mjs",
     "regress:visual-theme-registry-boundary": "node --no-warnings ./tools/webgl-generator-visual-theme-registry-boundary-regression.mjs",
     "regress:gpu-display-mutation": "node --no-warnings ./tools/webgl-generator-gpu-display-mutation-regression.mjs",
+    "regress:all-view-modes-browser": "node --no-warnings ./tools/webgl-generator-all-view-modes-browser.mjs",
+    "regress:latest-prewarm-scheduler": "node --no-warnings ./tools/webgl-generator-latest-prewarm-scheduler-regression.mjs",
+    "regress:authoritative-task-parser": "node --no-warnings ./tools/authoritative-task-parser-regression.mjs",
     "regress:render-cache-resource-binding": "node --no-warnings ./tools/webgl-generator-render-cache-resource-binding-regression.mjs",
     "regress:r4b-fixture-contract": "node --no-warnings ./tools/webgl-generator-r4b-fixture-contract-regression.mjs",
     "regress:r4b-artifact-helper": "node --no-warnings ./tools/webgl-generator-r4b-artifact-helper-regression.mjs",

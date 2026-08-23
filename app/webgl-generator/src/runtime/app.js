@@ -32,7 +32,7 @@ import {createRandom, createRandomSeed} from "../generator/random.js";
 import {PlaceholderMapRenderer} from "../renderer/placeholder-renderer.js";
 import {prepareRendererWorkerInstall} from "../renderer/prepared-render-installer.js";
 import {assertRenderPreparationBinding, RENDER_PREPARATION_LAYERS, renderPreparationLayersForRegeneration, renderPreparationPickingComponentsForRegeneration} from "../renderer/render-preparation.js";
-import {createRenderRequestSourceBinding, createRenderResourceBinding} from "../renderer/render-resource-binding.js";
+import {createRenderRequestSourceBinding, createRenderResourceBinding, sameRenderResourceBinding} from "../renderer/render-resource-binding.js";
 import {
   createUserVisualThemeDocument,
   exportVisualThemeDocument,
@@ -238,6 +238,7 @@ import {createCommittedHistoryGuard, settleHistoryActionResult} from "./history-
 import {getHeightDerivedPatchPolicy, HEIGHT_DERIVED_WORKER_TASK} from "./height-derived-worker-task.js";
 import {getRegenerationPatchPolicy, REGENERATION_WORKER_TASK} from "./regeneration-worker-task.js";
 import {createWorkerTaskCoordinator} from "./worker-task-coordinator.js";
+import {createLatestPrewarmScheduler} from "./latest-prewarm-scheduler.js";
 import {createStagedWorkerSnapshot} from "./worker-snapshot.js";
 import {OCEAN_CURRENT_WORLD_WORKER_TASK} from "./ocean-current-world-worker-task.js";
 import {cachedGridStructureFingerprint, primeGridStructureFingerprint} from "../generator/grid-refinement.js";
@@ -676,6 +677,8 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     mapWorkerCoordinator: null,
     workerTaskCoordinator: null,
     renderTaskCoordinator: null,
+    viewPrewarmScheduler: null,
+    viewPrewarmStats: null,
     operationFeedback: null,
     canvasToolModes: createCanvasToolModeManager({declaredModeIds: CANVAS_TOOL_MODE_IDS}),
     lazyPanelPreloadScheduled: false,
@@ -2723,6 +2726,8 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     recordHealth: (type, detail, severity) => healthMonitor?.record?.(type, detail, severity),
     onStateChange: snapshot => {
       state.runtimeOperationSnapshot = snapshot;
+      if (snapshot.busy) state.viewPrewarmScheduler?.cancel("foreground-operation");
+      else scheduleGpuViewPrewarm(state, documentRef);
       state.keyboardShortcuts?.refreshAvailability?.();
       state.panels.oceanCurrent?.updateWorldRebuild?.(snapshot);
     }
@@ -2736,6 +2741,18 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
   });
   state.workerTaskCoordinator = state.mapWorkerCoordinator;
   state.renderTaskCoordinator = state.mapWorkerCoordinator;
+  state.viewPrewarmScheduler = createLatestPrewarmScheduler({
+    delayMs: 350,
+    run: (task, signal) => runGpuViewPrewarmTask(state, documentRef, task, signal),
+    isCurrent: task => isGpuViewPrewarmTaskCurrent(state, task),
+    onAccepted: (result, task) => {
+      const installed = state.renderer?.installGpuResidentShoreSurfacePrewarm?.(result?.layers?.gpuShoreSurface, task.renderBinding) === true;
+      state.viewPrewarmStats = {status: installed ? "ready" : "discarded", key: task.key, modes: [...task.modes], worker: result?.worker || null};
+    },
+    onDiscarded: (task, reason) => {
+      state.viewPrewarmStats = {status: "discarded", key: task?.key || "", modes: [...(task?.modes || [])], reason};
+    }
+  });
   runtimeActions = createRuntimeActions(state, documentRef, {
     locateObject: (object, locateOptions = {}) => locateAndSelectObject(null, object, {
       locate: target => state.renderer.locateObject(target, locateOptions)
@@ -3049,6 +3066,66 @@ function queueCommandMapReplicaPatch(state, mutation, before, after, {includeCom
 function invalidateMapReplicaCoordinators(state, includeCompute, reason) {
   if (!includeCompute) return;
   (state?.mapWorkerCoordinator || state?.workerTaskCoordinator)?.invalidateSession?.(reason);
+}
+
+function scheduleGpuViewPrewarm(state, documentRef) {
+  const scheduler = state?.viewPrewarmScheduler;
+  if (!scheduler || !state?.map || !state?.renderer || state.runtimeOperationSnapshot?.busy) return false;
+  const modes = ["height", "states", "provinces"].filter(mode => state.renderer.needsGpuResidentShoreSurfacePrewarm?.(mode));
+  if (!modes.length) {
+    scheduler.schedule(null);
+    return false;
+  }
+  const workerBinding = createRegenerationWorkerBinding(state);
+  const renderBinding = state.renderer.surfaceResourceOwner;
+  if (!renderBinding) return false;
+  const viewOptions = structuredClone(state.renderer.viewOptions || {});
+  const key = JSON.stringify([
+    workerBinding.mapIdentity, workerBinding.mapRevision, workerBinding.topologyRevision,
+    renderBinding.renderGeneration, viewOptions.showOceanHeight, viewOptions.smoothCellBorders,
+    viewOptions.visualTheme?.id || "default", modes
+  ]);
+  scheduler.schedule({key, map: state.map, workerBinding, renderBinding: {...renderBinding}, modes, viewOptions, documentRef});
+  state.viewPrewarmStats = {status: "queued", key, modes: [...modes]};
+  return true;
+}
+
+function isGpuViewPrewarmTaskCurrent(state, task) {
+  return state?.map === task?.map
+    && validateRegenerationWorkerBinding(state, task.workerBinding)
+    && sameRenderResourceBinding(state.renderer?.surfaceResourceOwner, task.renderBinding)
+    && task.modes.some(mode => state.renderer?.needsGpuResidentShoreSurfacePrewarm?.(mode));
+}
+
+async function runGpuViewPrewarmTask(state, documentRef, task, signal) {
+  const coordinator = createWorkerTaskCoordinator({
+    createWorker: () => new ComputeWorker(),
+    getBinding: () => task.workerBinding,
+    validateBinding: binding => sameRegenerationWorkerBinding(binding, task.workerBinding) && isGpuViewPrewarmTaskCurrent(state, task)
+  });
+  const renderer = state.renderer;
+  const size = renderer.canvasSize || {};
+  return coordinator.run("render.prepare", {
+    map: task.map,
+    binding: task.renderBinding,
+    layers: ["gpu-shore-surface"],
+    gpuShoreSurfaceModes: task.modes,
+    viewOptions: task.viewOptions,
+    camera: {...(renderer.camera || {})},
+    canvas: {
+      width: Number(renderer.canvas?.width || size.width) || 1,
+      height: Number(renderer.canvas?.height || size.height) || 1,
+      clientWidth: Number(size.cssWidth || renderer.canvas?.width) || 1,
+      clientHeight: Number(size.cssHeight || renderer.canvas?.height) || 1
+    }
+  }, {
+    binding: task.workerBinding,
+    signal,
+    allowFallback: false,
+    streamBudgetMs: 4,
+    streamSliceBytes: 128 * 1024,
+    streamYieldToMain: () => yieldToBrowser(documentRef)
+  });
 }
 
 function invokeRuntimeDisplayActionFromUi(state, documentRef, task) {
@@ -5080,6 +5157,7 @@ async function loadMapIntoRuntime(state, documentRef, map, {
   updateGenerationLoading(documentRef, false);
   showMapToast(documentRef, completionToast);
   scheduleLazyPanelsAfterMapReady(state, documentRef);
+  scheduleGpuViewPrewarm(state, documentRef);
   const installFinalization = finalizeCommittedMapAdoptionInstall(preparedInstall);
   if (installFinalization.error) {
     state.healthMonitor?.record?.("map-adoption-finalize-failed", {message: installFinalization.error?.message || String(installFinalization.error)}, "warning");
@@ -13566,7 +13644,8 @@ function rebuildGenerationSummary(map) {
 
 function createWorkerRegenerationRenderRequest(state, targetKind, binding, layers = null, {
   sourceRevisionDelta = 0,
-  topologyRevisionDelta = 0
+  topologyRevisionDelta = 0,
+  surfacePatchScope: requestedSurfacePatchScope = null
 } = {}) {
   const renderer = state.renderer;
   const canvasSize = renderer?.canvasSize || {};
@@ -13576,11 +13655,14 @@ function createWorkerRegenerationRenderRequest(state, targetKind, binding, layer
       ? renderPreparationPickingComponentsForRegeneration(targetKind)
       : ["cities", "markers", "military", "routeSegments", "riverSegments"]
     : [];
-  const surfacePatchScope = targetKind === "provinces"
+  const regenerationSurfacePatchScope = targetKind === "provinces"
     && requestedLayers.includes("surface")
     && String(renderer?.colorMode || "height") === "provinces"
     && renderer?.canPrepareSurfaceColorPatch?.("all")
     ? "all"
+    : null;
+  const surfacePatchScope = requestedLayers.includes("surface")
+    ? requestedSurfacePatchScope || regenerationSurfacePatchScope
     : null;
   const replaceResources = requestedLayers.includes("surface") && !surfacePatchScope;
   const targetBinding = createRenderRequestSourceBinding(binding, {
@@ -13687,7 +13769,7 @@ function createWorkerRegenerationDeferredRenderRequest(state, targetKind, bindin
     : null;
   const presentation = snapshot?.finalPresentation || {};
   return {
-    ...createWorkerRegenerationRenderRequest(state, targetKind, binding, layers),
+    ...createWorkerRegenerationRenderRequest(state, targetKind, binding, layers, {surfacePatchScope}),
     layers,
     visualTheme: structuredClone(presentation.visualTheme || {}),
     unitPreferences: structuredClone(presentation.unitPreferences || {}),
@@ -13696,8 +13778,7 @@ function createWorkerRegenerationDeferredRenderRequest(state, targetKind, bindin
     colorMode: String(presentation.colorMode || "height"),
     viewOptions: structuredClone(presentation.viewOptions || {}),
     labelOptions: structuredClone(presentation.labelOptions || {}),
-    oceanCurrentHighlightIds: [...(presentation.oceanCurrentHighlights || [])],
-    ...(surfacePatchScope ? {surfacePatchScope} : {})
+    oceanCurrentHighlightIds: [...(presentation.oceanCurrentHighlights || [])]
   };
 }
 

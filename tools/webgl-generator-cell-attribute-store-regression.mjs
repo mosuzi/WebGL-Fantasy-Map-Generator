@@ -6,6 +6,7 @@ import {
   createCellAttributeStore,
   deleteCellAttributeStore,
   prepareCellAttributePatch,
+  refreshCellAttributePalette,
   restoreCellAttributeStore,
   rollbackCellAttributePatch,
   summarizeCellAttributeStore
@@ -51,6 +52,9 @@ assert.deepEqual([...snapshot.terrain.subarray(0, 8)], [10, 0, 1, 0, 30, 1, 2, 1
 assert.deepEqual([...snapshot.numeric.subarray(0, 8)], [0, -2, 10, 0, 5, 3, 20, 1]);
 assert.equal(snapshot.palettes.states.length, 16);
 assert.deepEqual([...snapshot.palettes.states.subarray(8, 12)], [17, 34, 51, 255]);
+for (const mode of ["cultures", "religions", "regions", "governments", "diplomacy"]) assert.ok(snapshot.palettes[mode] instanceof Uint8Array, `${mode} palette 缺失`);
+const alternateDiplomacySnapshot = buildCellAttributeSnapshot(map, {diplomacySubjectId: 2});
+assert.notDeepEqual(alternateDiplomacySnapshot.palettes.diplomacy, snapshot.palettes.diplomacy, "初始外交 palette 必须服从当前主体");
 
 const thresholdMap = createMap();
 thresholdMap.grid.cells.h = Float32Array.from([19.99, 20.01, 19.5, 20.5, 0, -1, 100]);
@@ -66,9 +70,9 @@ const store = createCellAttributeStore(gl, snapshot);
 assert.deepEqual(summarizeCellAttributeStore(store), {
   cellCount: 7, width: 3, height: 3,
   identityBytes: 112, terrainBytes: 112, numericBytes: 112,
-  paletteBytes: Object.values(snapshot.palettes).reduce((total, palette) => total + palette.byteLength, 0), textureCount: 8
+  paletteBytes: Object.values(snapshot.palettes).reduce((total, palette) => total + palette.byteLength, 0), textureCount: 11
 });
-assert.equal(collectCellAttributeTextures(store).length, 8);
+assert.equal(collectCellAttributeTextures(store).length, 11);
 assert.deepEqual([...store.textures.identities.values.subarray(0, snapshot.identities.length)], [...snapshot.identities]);
 
 const before = cloneArrays(snapshot);
@@ -107,6 +111,11 @@ gl.failSubImageAt = 0;
 assertArraysEqual(snapshot, cpuBeforeFault);
 assert.deepEqual(store.textures.identities.values, gpuBeforeFault);
 
+const diplomacyBefore = snapshot.palettes.diplomacy.slice();
+assert.equal(refreshCellAttributePalette(gl, store, map, "diplomacy", {diplomacySubjectId: 2}), true);
+assert.notDeepEqual(snapshot.palettes.diplomacy, diplomacyBefore, "外交主体变化必须刷新小型 palette");
+assert.throws(() => refreshCellAttributePalette(gl, store, {...map, metadata: {mapIdentity: "other"}}, "diplomacy"), /identity/);
+
 const restoredGl = new FakeGl({maxTextureSize: 8});
 const restored = restoreCellAttributeStore(restoredGl, snapshot);
 assert.deepEqual(summarizeCellAttributeStore(restored), {...summarizeCellAttributeStore(store), width: 3, height: 3});
@@ -114,11 +123,11 @@ for (const key of ["identities", "terrain", "numeric"]) assert.deepEqual(restore
 
 const preserved = new Set(collectCellAttributeTextures(restored));
 assert.equal(deleteCellAttributeStore(restoredGl, restored, {preserve: preserved}), 0);
-assert.equal(deleteCellAttributeStore(restoredGl, restored), 8);
+assert.equal(deleteCellAttributeStore(restoredGl, restored), 11);
 assert.ok(collectCellAttributeTextures(restored).every(texture => texture.deleted));
 assert.throws(() => createCellAttributeStore(new FakeGl({maxTextureSize: 1}), snapshot), /尺寸上限/);
 
-console.log(JSON.stringify({ok: true, cells: snapshot.cellCount, textures: 8, patchRuns: 9, contextRestore: true}));
+console.log(JSON.stringify({ok: true, cells: snapshot.cellCount, textures: 11, patchRuns: 9, diplomacyPalette: true, contextRestore: true}));
 
 function createMap() {
   return {
@@ -132,7 +141,7 @@ function createMap() {
       prec: Uint8Array.from([10, 20, 30, 40, 50, 60, 70]), region: Int16Array.from([0, 1, 1, 2, 2, 3, 3])
     }},
     features: {features: [{land: false}, {land: true}, {land: true}]},
-    politics: {states: [{i: 0}, {i: 1, color: "#112233"}, {i: 2, color: "#445566"}], provinces: [{i: 0}, {i: 1, color: "#778899"}, {i: 2, color: "#aabbcc"}]},
+    politics: {states: [{i: 0}, {i: 1, color: "#112233", governmentFamily: "monarchy", diplomacy: ["x", "Ally", "Enemy"]}, {i: 2, color: "#445566", governmentFamily: "republic", diplomacy: ["x", "Enemy", "Ally"]}], provinces: [{i: 0}, {i: 1, color: "#778899"}, {i: 2, color: "#aabbcc"}]},
     society: {cultures: [{i: 0}, {i: 1, color: "#123456"}, {i: 2, color: "#654321"}], religions: [{i: 0}, {i: 1, color: "#223344"}, {i: 2, color: "#443322"}]},
     climate: {biomes: [{i: 0, color: [0.1, 0.2, 0.3, 1]}, {i: 1, color: [0.3, 0.4, 0.5, 1]}, {i: 2, color: [0.5, 0.6, 0.7, 1]}]},
     layers: {ocean: [0.2, 0.4, 0.6, 1]}, settlements: {metadata: {maxPopulation: 10}}

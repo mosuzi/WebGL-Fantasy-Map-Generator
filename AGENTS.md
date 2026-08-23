@@ -68,7 +68,7 @@
 
 ## 当前状态
 
-- 第 351 项进行中：100k 精确预览标签页的七类非 GPU 视图因 deferred surface patch 错发 replacement generation，被严格 owner 门拒绝并回滚；五类既有 GPU 模式仍有约 `2～3s` 首次卡顿。当前先修 binding 发放顺序，再扩展十二类 GPU 快切，最后实现 latest-revision 后台共享几何预热与真实浏览器终验。
+- 第 351 项本地实现与固定 10k / 100k 终验已通过：十二类视图 cold 分别为 `13.0～26.2ms / 15.5～29.1ms`，warm 为 `12.7～16.3ms / 15.4～19.2ms`；Worker 包、四类重建、LongTask 与最终错误面均为 `0`。latest-revision 调度只接纳最新结果且前台可抢占；当前只剩推送任务分支，并在用户精确预览标签页对应新部署上复核后归档。
 - 第 350 项已完成并归档：`R6b 20 / 20`、`R7 5 / 5` 全部 PASS，五个 R7 面均无 `>200ms` 产品 LongTask；最终冻结聚合为 `16 invariants / 17 scenarios / 20 entries / 19 fixtures`，typecheck 与 `1401 modules` build PASS，25 组 artifact 的 full/summary 均存在且 `ok=true`。最终独立复核为 `ACCEPT / P0 0 / P1 0 / P2 0`，分支 `codex/map-core-engine-architecture-plan` 保持未合入 `main`，版本为 `0.5.58`。
 - 第 349 项已完成并归档：受限 TypeScript 核心契约、唯一 map / revision / history owner、15 个 capability-aware Manifest、逐域 Worker pre-commit validator、dependency / projection 与 whole-map profile receipt 已建立。27 / 27 非浏览器门通过，防误触审计递归扫描 36 个 Node 入口并拒绝真实命名不可见 Chromium 反例；浏览器方案已评估但未执行。分支保持 `codex/map-core-engine-architecture-plan` 并行且不得合入 `main`，版本为 `0.5.56`。
 - 第 348 项已完成并归档：主动重生成保留高编号锁定对象时，cities / burgs / routes 身份槽显式稠密；正式导出可在不改写内存地图的前提下抢救旧 holey 数组。用户主动城镇 / 路线重生成允许事务内修复失效港口派生关系，TypedArray 行政候选恢复正确评分，城镇面板补齐结果反馈。用户精确 `5410` 标签页完成原图保存、`949 → 1194` 重生成、结果保存及两份 v3 UI 回读，最终恢复 `949 / 21 / 218`，holey / 保存 / 接纳 / WebGL 错误均为 `0`，版本为 `0.5.3`。

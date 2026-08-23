@@ -69,7 +69,7 @@ export async function prepareRendererWorkerInstall(renderer, map, prepared, opti
     validatePreparedLayerShapes(layers);
     if (renderer.map !== map) {
       gate.assertCurrent();
-      cellAttributeStore = createCellAttributeStore(renderer.gl, map);
+      cellAttributeStore = createCellAttributeStore(renderer.gl, map, renderer.viewOptions);
       gate.assertCurrent();
     }
     if (layers.cellVisual) {
