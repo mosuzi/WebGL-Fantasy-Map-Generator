@@ -170,15 +170,26 @@ function writeIntegerArray(writer, value) {
 function writeRaggedIntegerArray(writer, rows) {
   writer.u8(TAG.RAGGED_INTEGER);
   writer.varuint(rows.length);
-  const flat = [];
-  const first = [];
-  const deltas = [];
+  let flatLength = 0;
+  let populatedRows = 0;
   for (const row of rows) {
     writer.varuint(row.length);
-    flat.push(...row);
-    if (row.length) {
-      first.push(row[0]);
-      for (let index = 1; index < row.length; index += 1) deltas.push(row[index] - row[index - 1]);
+    flatLength += row.length;
+    if (row.length) populatedRows += 1;
+  }
+  const flat = new Array(flatLength);
+  const first = new Array(populatedRows);
+  const deltas = new Array(flatLength - populatedRows);
+  let flatIndex = 0;
+  let firstIndex = 0;
+  let deltaIndex = 0;
+  for (const row of rows) {
+    if (!row.length) continue;
+    first[firstIndex++] = row[0];
+    flat[flatIndex++] = row[0];
+    for (let index = 1; index < row.length; index += 1) {
+      flat[flatIndex++] = row[index];
+      deltas[deltaIndex++] = row[index] - row[index - 1];
     }
   }
   const flatProfile = integerProfile(flat);
@@ -483,14 +494,26 @@ function integerProfile(values) {
 
 function sparseIntegerProfile(values, profile) {
   if (values.length < 64) return null;
-  const counts = new Map();
-  for (const value of values) counts.set(value, (counts.get(value) || 0) + 1);
   let defaultValue = 0;
   let defaultCount = 0;
-  for (const [value, count] of counts) {
-    if (count > defaultCount) {
+  const range = profile.max - profile.min;
+  if (range <= 4096) {
+    const counts = new Uint32Array(range + 1);
+    for (const value of values) counts[value - profile.min] += 1;
+    for (const count of counts) if (count > defaultCount) defaultCount = count;
+    for (const value of values) {
+      if (counts[value - profile.min] !== defaultCount) continue;
       defaultValue = value;
-      defaultCount = count;
+      break;
+    }
+  } else {
+    const counts = new Map();
+    for (const value of values) counts.set(value, (counts.get(value) || 0) + 1);
+    for (const [value, count] of counts) {
+      if (count > defaultCount) {
+        defaultValue = value;
+        defaultCount = count;
+      }
     }
   }
   if (defaultCount / values.length < 0.55) return null;
@@ -519,6 +542,38 @@ function decimalProfile(values) {
 
 function packIntegers(values, min, bits) {
   const output = new Uint8Array(Math.ceil(values.length * bits / 8));
+  if (bits <= 25) {
+    let accumulator = 0;
+    let available = 0;
+    let offset = 0;
+    for (const value of values) {
+      accumulator |= (value - min) << available;
+      available += bits;
+      while (available >= 8) {
+        output[offset++] = accumulator & 255;
+        accumulator >>>= 8;
+        available -= 8;
+      }
+    }
+    if (available) output[offset] = accumulator & 255;
+    return output;
+  }
+  if (bits <= 46) {
+    let accumulator = 0;
+    let available = 0;
+    let offset = 0;
+    for (const value of values) {
+      accumulator += (value - min) * (2 ** available);
+      available += bits;
+      while (available >= 8) {
+        output[offset++] = accumulator % 256;
+        accumulator = Math.floor(accumulator / 256);
+        available -= 8;
+      }
+    }
+    if (available) output[offset] = accumulator;
+    return output;
+  }
   let accumulator = 0n;
   let available = 0;
   let offset = 0;
@@ -675,12 +730,26 @@ class BinaryWriter {
   bytes(value) { this.ensure(value.length); this.buffer.set(value, this.length); this.length += value.length; }
   f64(value) { this.ensure(8); new DataView(this.buffer.buffer).setFloat64(this.length, value, true); this.length += 8; }
   varuint(value) {
-    let remaining = BigInt(value);
-    if (remaining < 0n) throw codecError("compact_binary_integer_invalid", "varuint 不得为负数");
+    let remaining = Number(value);
+    if (!Number.isSafeInteger(remaining) || remaining < 0) throw codecError("compact_binary_integer_invalid", "varuint 必须是非负安全整数");
+    while (remaining >= 128) {
+      this.u8((remaining % 128) | 128);
+      remaining = Math.floor(remaining / 128);
+    }
+    this.u8(remaining);
+  }
+  svarint(value) {
+    const number = Number(value);
+    if (!Number.isSafeInteger(number)) throw codecError("compact_binary_integer_invalid", "svarint 必须是安全整数");
+    if (Math.abs(number) <= Number.MAX_SAFE_INTEGER / 2) {
+      this.varuint(number < 0 ? (-number * 2) - 1 : number * 2);
+      return;
+    }
+    const big = BigInt(number);
+    let remaining = big < 0n ? (-big * 2n) - 1n : big * 2n;
     while (remaining >= 128n) { this.u8(Number(remaining & 127n) | 128); remaining >>= 7n; }
     this.u8(Number(remaining));
   }
-  svarint(value) { const number = BigInt(value); this.varuint(number < 0n ? (-number * 2n) - 1n : number * 2n); }
   text(value) { const bytes = this.encoder.encode(value); this.varuint(bytes.length); this.bytes(bytes); }
   finish() { return this.buffer.slice(0, this.length); }
 }

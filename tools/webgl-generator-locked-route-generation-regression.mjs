@@ -76,15 +76,22 @@ const duplicateMap = generatePlaceholderMap({seed: "locked-route-duplicate", cel
 const duplicateSource = duplicateMap.settlements.routes.find(route => route?.packCells?.length >= 3);
 assert(duplicateSource, "重复边用例应存在道路");
 const duplicate = {...clone(duplicateSource), id: Number(duplicateSource.id) + 1000};
-assert.throws(
-  () => finalizeSettlements(duplicateMap.grid, duplicateMap.features, duplicateMap.politics, duplicateMap.settlements, duplicateMap.pack, {
-    ...duplicateMap.options,
-    routeRegenerationSalt: 44,
-    lockedRoutes: [clone(duplicateSource), duplicate]
-  }),
-  error => error?.code === "regeneration_lock_conflict" && error?.details?.reason === "duplicate-edge",
-  "锁路互相占用同一边必须稳定返回冲突"
-);
+const duplicateOwnerBefore = duplicateMap.pack.cells.routes[duplicateSource.packCells[0]][duplicateSource.packCells[1]];
+const duplicateSourceBefore = clone(duplicateSource);
+const duplicateBefore = clone(duplicate);
+finalizeSettlements(duplicateMap.grid, duplicateMap.features, duplicateMap.politics, duplicateMap.settlements, duplicateMap.pack, {
+  ...duplicateMap.options,
+  routeRegenerationSalt: 44,
+  lockedRoutes: [clone(duplicateSource), duplicate]
+});
+assert.deepEqual(duplicateMap.settlements.routes.find(route => route.id === duplicateSource.id), duplicateSourceBefore, "共享边的原锁路必须完整保留");
+assert.deepEqual(duplicateMap.settlements.routes.find(route => route.id === duplicate.id), duplicateBefore, "共享边的第二条锁路必须完整保留");
+for (let index = 0; index < duplicateSource.packCells.length - 1; index++) {
+  const from = duplicateSource.packCells[index];
+  const to = duplicateSource.packCells[index + 1];
+  assert.equal(duplicateMap.pack.cells.routes[from][to], duplicateOwnerBefore, "共享锁路边必须保留既有镜像所有者");
+  assert.equal(duplicateMap.pack.cells.routes[to][from], duplicateOwnerBefore, "共享锁路边的反向镜像必须稳定");
+}
 
 console.log(JSON.stringify({
   ok: true,
@@ -93,7 +100,8 @@ console.log(JSON.stringify({
   reservedEdges: lockedEdges.size,
   sparseMirror: Boolean(map.pack.routes[sparseId]),
   aliases: ["lockedRoutes", "preservedRoutes"],
-  conflicts: ["disconnected-path", "duplicate-edge"]
+  conflicts: ["disconnected-path"],
+  sharedLockedEdge: {routes: [duplicateSource.id, duplicate.id], owner: duplicateOwnerBefore}
 }, null, 2));
 
 function routeEdges(route) {

@@ -9,7 +9,8 @@ import {waitForApiReady} from "./webgl-generator-api-browser-ready.mjs";
 
 const rootDir = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const sourceDir = join(rootDir, "source", "Fantasy-Map-Generator");
-const playwright = createRequire(join(sourceDir, "package.json"))("playwright");
+const playwrightRoot = process.env.FMG_PLAYWRIGHT_ROOT ? resolve(process.env.FMG_PLAYWRIGHT_ROOT) : sourceDir;
+const playwright = createRequire(join(playwrightRoot, "package.json"))("playwright");
 const host = "127.0.0.1";
 const timeoutMs = 180000;
 const vite = await createViteServer({configFile: join(rootDir, "vite.config.mjs"), server: {host, port: 0}, logLevel: "error"});

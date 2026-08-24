@@ -46,6 +46,8 @@ try {
     assert.equal(report.draws[0].lineSignature, report.draws[1].lineSignature, "首帧与稳定帧的政治边界顶点发生变化");
     assert.equal(report.draws[0].pixelHash, report.draws[1].pixelHash, "首帧与稳定帧的 WebGL 像素发生变化");
     assert.ok(report.longTasks.every(item => item.duration <= 200), `出现超过 200ms 的产品 LongTask：${JSON.stringify(report.longTasks)}`);
+    if (options.saveRuns) report.saves = await profileMapSaves(page, options.saveRuns);
+    if (options.routeRegenerate) report.routeRegeneration = await verifyRouteRegeneration(page);
     runReports.push(report);
 
     if (options.visual && index === options.runs - 1) {
@@ -55,6 +57,7 @@ try {
   }
 
   const totals = runReports.map(report => report.totalMs);
+  const saveTotals = runReports.flatMap(report => report.saves?.map(save => save.totalMs) || []);
   const result = {
     ok: true,
     file: basename(options.file),
@@ -64,6 +67,7 @@ try {
     medianMs: median(totals),
     minMs: Math.min(...totals),
     maxMs: Math.max(...totals),
+    saveMedianMs: saveTotals.length ? median(saveTotals) : null,
     visuals: visualReports
   };
   const json = `${JSON.stringify(result, null, 2)}\n`;
@@ -73,6 +77,126 @@ try {
   if (browser) await Promise.race([browser.close(), delay(5000)]);
   server.kill();
   await Promise.race([new Promise(done => server.once("exit", done)), delay(5000)]);
+}
+
+async function profileMapSaves(page, runs) {
+  const reports = await page.evaluate(async count => {
+    const app = window.__webglGeneratorApp;
+    const beforeMap = app.map;
+    const beforeChecksum = app.map.metadata.checksum;
+    const beforeHistory = app.editHistory.getStats();
+    const output = [];
+    for (let index = 0; index < count; index++) {
+      const longTasks = [];
+      const observer = new PerformanceObserver(list => {
+        for (const entry of list.getEntries()) longTasks.push({startTime: entry.startTime, duration: entry.duration});
+      });
+      observer.observe({entryTypes: ["longtask"]});
+      const startedAt = performance.now();
+      const result = await app.runtimeActions.data.exportCompressedAll({
+        download: false,
+        includeBase64: false,
+        includeBlob: true
+      });
+      const endedAt = performance.now();
+      await new Promise(done => requestAnimationFrame(() => requestAnimationFrame(done)));
+      for (const entry of observer.takeRecords()) longTasks.push({startTime: entry.startTime, duration: entry.duration});
+      observer.disconnect();
+      output.push({
+        run: index + 1,
+        totalMs: Number((endedAt - startedAt).toFixed(1)),
+        originalBytes: result.originalBytes,
+        compressedBytes: result.compressedBytes,
+        blobBytes: result.blob?.size || 0,
+        checksum: result.metadata?.checksum || null,
+        worker: result.worker && typeof result.worker === "object" ? {...result.worker} : result.worker || null,
+        sameMap: app.map === beforeMap,
+        history: app.editHistory.getStats(),
+        glError: app.renderer.getStats().draw?.glError ?? 0,
+        longTasks: longTasks.filter(item => item.startTime >= startedAt && item.startTime <= endedAt)
+      });
+    }
+    return {beforeChecksum, beforeHistory, reports: output};
+  }, runs);
+  for (const report of reports.reports) {
+    assert.equal(report.checksum, reports.beforeChecksum, "保存结果 checksum 漂移");
+    assert.equal(report.sameMap, true, "保存替换了当前内存地图");
+    assert.deepEqual(report.history, reports.beforeHistory, "保存改写了历史初态");
+    assert.equal(report.blobBytes, report.compressedBytes, "保存 Blob 长度漂移");
+    assert.equal(report.glError, 0, "保存产生 WebGL error");
+    assert.ok(report.longTasks.every(item => item.duration <= 200), `保存出现超过 200ms 的产品 LongTask：${JSON.stringify(report.longTasks)}`);
+  }
+  return reports.reports;
+}
+
+async function verifyRouteRegeneration(page) {
+  const report = await page.evaluate(async () => {
+    const api = window.webglGeneratorApi;
+    const app = window.__webglGeneratorApp;
+    const checksumBefore = app.map.metadata.checksum;
+    const historyBefore = app.editHistory.getStats();
+    const lockSnapshotBefore = lockedRouteCitySnapshot(app.map);
+    const unlockedRoutesBefore = JSON.stringify((app.map.settlements?.routes || []).filter(route => route && !lockedRouteIds(app.map).has(Number(route.id))));
+    const routesBefore = (app.map.settlements?.routes || []).filter(Boolean).length;
+    const longTasks = [];
+    const observer = new PerformanceObserver(list => {
+      for (const entry of list.getEntries()) longTasks.push({startTime: entry.startTime, duration: entry.duration});
+    });
+    observer.observe({entryTypes: ["longtask"]});
+    const startedAt = performance.now();
+    const response = await api.generate.regenerate("routes", {confirm: true});
+    const endedAt = performance.now();
+    await new Promise(done => requestAnimationFrame(() => requestAnimationFrame(done)));
+    for (const entry of observer.takeRecords()) longTasks.push({startTime: entry.startTime, duration: entry.duration});
+    observer.disconnect();
+    if (!response?.ok) throw new Error(`用户存档路线重生成失败：${response?.error?.code || "unknown"} ${response?.error?.message || ""}`);
+    return {
+      executed: response.data?.executed,
+      totalMs: Number((endedAt - startedAt).toFixed(1)),
+      checksumBefore,
+      checksumAfter: app.map.metadata.checksum,
+      historyBefore,
+      historyAfter: app.editHistory.getStats(),
+      lockSnapshotBefore,
+      lockSnapshotAfter: lockedRouteCitySnapshot(app.map),
+      unlockedChanged: JSON.stringify((app.map.settlements?.routes || []).filter(route => route && !lockedRouteIds(app.map).has(Number(route.id)))) !== unlockedRoutesBefore,
+      routesBefore,
+      routesAfter: (app.map.settlements?.routes || []).filter(Boolean).length,
+      city8Province: app.map.settlements?.cities?.[8]?.province ?? null,
+      city8PackProvince: app.map.pack?.cells?.province?.[app.map.settlements?.cities?.[8]?.packCell] ?? null,
+      glError: app.renderer.getStats().draw?.glError ?? 0,
+      longTasks: longTasks.filter(item => item.startTime >= startedAt && item.startTime <= endedAt)
+    };
+
+    function lockedRouteIds(map) {
+      return new Set((map.regenerationLocks?.entries || []).filter(entry => entry.kind === "route").map(entry => Number(entry.id)));
+    }
+
+    function lockedRouteCitySnapshot(map) {
+      const entries = structuredClone(map.regenerationLocks?.entries || []);
+      return JSON.stringify({
+        entries,
+        cities: entries.filter(entry => entry.kind === "city").map(entry => {
+          const city = map.settlements?.cities?.[Number(entry.id)] || null;
+          return {city, burg: city ? map.pack?.burgs?.[Number(city.burgId)] || null : null};
+        }),
+        routes: entries.filter(entry => entry.kind === "route").map(entry => {
+          const route = (map.settlements?.routes || []).find(item => Number(item?.id) === Number(entry.id)) || null;
+          const links = (route?.packCells || []).slice(1).map((cell, index) => [route.packCells[index], cell, map.pack?.cells?.routes?.[route.packCells[index]]?.[cell] ?? null]);
+          return {route, packRoute: route ? map.pack?.routes?.[Number(route.id)] || null : null, links};
+        })
+      });
+    }
+  });
+  assert.equal(report.executed, true, "用户存档路线重生成没有执行");
+  assert.equal(report.checksumAfter, report.checksumBefore, "路线重生成改变了地图 checksum");
+  assert.equal(report.lockSnapshotAfter, report.lockSnapshotBefore, "路线重生成改变了锁定城镇 / 路线或其镜像");
+  assert.equal(report.unlockedChanged, true, "未锁路线没有重新生成");
+  assert.equal(report.historyAfter.undo, report.historyBefore.undo + 1, "路线重生成没有形成单一撤销记录");
+  assert.equal(report.historyAfter.redo, 0, "路线重生成后 redo 非空");
+  assert.equal(report.glError, 0, "路线重生成产生 WebGL error");
+  assert.ok(report.longTasks.every(item => item.duration <= 200), `路线重生成出现超过 200ms 的产品 LongTask：${JSON.stringify(report.longTasks)}`);
+  return report;
 }
 
 async function prepareImportCapture(page) {
@@ -312,6 +436,8 @@ function readOptions(args) {
     artifactDir,
     output: values.get("output") ? resolve(String(values.get("output"))) : "",
     playwrightRoot: values.get("playwright-root") ? resolve(String(values.get("playwright-root"))) : "",
+    saveRuns: Math.max(0, Math.min(5, Number(values.get("save-runs")) || 0)),
+    routeRegenerate: values.get("route-regenerate") === true || values.get("route-regenerate") === "true",
     visual: values.get("visual") === true || values.get("visual") === "true"
   };
 }

@@ -301,14 +301,15 @@ function regenerateRoutes(map) {
     return regenerationResult("routes", "未执行", "当前道路已全部锁定，未推进扰动序号。");
   }
   const before = currentRoutes.length;
-  reconcileSettlementCellIdentity(map);
-  const portTopology = reconcileSettlementPortTopology(map, {mode: "routes", repairProtectedDerived: true});
   const routeLocks = captureLockedRegenerationObjects(map, OBJECT_KIND.ROUTE);
   const cityLocks = captureLockedRegenerationObjects(map, OBJECT_KIND.CITY);
+  reconcileSettlementCellIdentity(map);
+  const portTopology = reconcileSettlementPortTopology(map, {mode: "routes", preserveProtected: true});
   const routeSalt = nextRegenerationSalt(map, "routes");
   finalizeSettlements(map.grid, map.features, map.politics, map.settlements, map.pack, {
     ...map.options,
     routeRegenerationSalt: routeSalt,
+    lockedCities: cityLocks.snapshots,
     lockedRoutes: routeLocks.snapshots
   });
   assertLockedRegenerationSnapshots(map, routeLocks);

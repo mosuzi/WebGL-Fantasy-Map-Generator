@@ -14506,14 +14506,15 @@ function regenerateRoutes(state, documentRef) {
   let routeSalt;
   let portTopology;
   try {
-    reconcileSettlementCellIdentity(map);
-    portTopology = reconcileSettlementPortTopology(map, {mode: "routes", repairProtectedDerived: true});
     const routeLocks = captureLockedRegenerationObjects(map, OBJECT_KIND.ROUTE);
     const cityLocks = captureLockedRegenerationObjects(map, OBJECT_KIND.CITY);
+    reconcileSettlementCellIdentity(map);
+    portTopology = reconcileSettlementPortTopology(map, {mode: "routes", preserveProtected: true});
     routeSalt = nextRegenerationSalt(map, "routes");
     finalizeSettlements(map.grid, map.features, map.politics, map.settlements, map.pack, {
       ...map.options,
       routeRegenerationSalt: routeSalt,
+      lockedCities: cityLocks.snapshots,
       lockedRoutes: routeLocks.snapshots
     });
     assertLockedRegenerationSnapshots(map, routeLocks);

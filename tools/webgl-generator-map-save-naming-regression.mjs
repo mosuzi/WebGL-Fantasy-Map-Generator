@@ -102,7 +102,7 @@ assert.match(controlSource, /accept="\.webfmg,/);
 assert.match(panelSource, /mapName: documentRef\.getElementById\("map-name-input"\)/);
 assert.match(cloudPanelSource, /文件名模板在控制面板的“生成”页统一设置[\s\S]*?filenamePreview/);
 assert.match(appSource, /onCreatePayload: async \(\{filenameTemplate\} = \{\}\)[\s\S]*?exportCompressedAll\(\{[\s\S]*?filenameTemplate[\s\S]*?filename: exported\.filename/);
-assert.match(appSource, /refreshRuntimeAfterMapLoad\(state, documentRef, \{restorePanels: true\}\);\s*state\.panels\.cloudStorage\?\.updateFilenamePreview\?\.\(\);/);
+assert.match(appSource, /await refreshRuntimeAfterMapLoadAsync\(state, documentRef, \{[\s\S]{0,200}?restorePanels: true,[\s\S]{0,300}?\}\);\s*state\.panels\.cloudStorage\?\.updateFilenamePreview\?\.\(\);/);
 assert.match(appSource, /onSaveLocalFile:[\s\S]{0,180}?runtimeActions\.data\.exportCompressedAll/);
 assert.match(appSource, /async function saveMapToLocalFile[\s\S]{0,400}?filenameTemplate: readCloudFilenameTemplate/);
 assert.match(appSource, /async function exportCompressedMapData[\s\S]{0,400}?filenameTemplate: readCloudFilenameTemplate/);

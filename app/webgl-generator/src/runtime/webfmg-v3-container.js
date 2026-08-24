@@ -9,6 +9,7 @@ const HEADER_BYTES = 16;
 const DIRECTORY_BYTES = 24;
 const CODEC_COMPACT_VALUE = 1;
 const TOPOLOGY_MARKER = "webfmg-derived-vertex-topology-v1";
+const derivedVertexEncodingCache = new WeakMap();
 const KNOWN_ALIASES = Object.freeze([
   ["pack.deals", "economy.deals"], ["pack.markets", "economy.markets"], ["pack.goods", "economy.goods"],
   ["pack.states", "politics.states"], ["pack.provinces", "politics.provinces"],
@@ -17,18 +18,31 @@ const KNOWN_ALIASES = Object.freeze([
   ["grid.points", "grid.cells.p"]
 ]);
 
-export function encodeWebfmgV3Document(document) {
+export function encodeWebfmgV3Document(document, options = {}) {
   if (!document?.map || typeof document.map !== "object") throw containerError("webfmg_v3_document_invalid", "v3 地图文档缺少 map");
+  const profile = Array.isArray(options.profile) ? options.profile : null;
   const sections = listCanonicalMapSections();
   const aliases = collectAliases(document.map);
   const header = {...document, map: undefined, aliases};
   delete header.map;
-  const entries = [{id: 0, name: "document", payload: encodeCompactBinaryValue(header)}];
+  const headerStartedAt = profile ? containerNow() : 0;
+  const headerPayload = encodeCompactBinaryValue(header);
+  if (profile) profile.push({name: "document", prepareMs: 0, encodeMs: roundProfileMs(containerNow() - headerStartedAt), bytes: headerPayload.byteLength});
+  const entries = [{id: 0, name: "document", payload: headerPayload}];
   for (let index = 0; index < sections.length; index += 1) {
     const descriptor = sections[index];
     if (!Object.hasOwn(document.map, descriptor.path)) continue;
+    const prepareStartedAt = profile ? containerNow() : 0;
     const sectionValue = prepareSectionForEncoding(descriptor.path, document.map[descriptor.path], aliases);
-    entries.push({id: index + 1, name: descriptor.path, payload: encodeCompactBinaryValue(sectionValue)});
+    const encodeStartedAt = profile ? containerNow() : 0;
+    const payload = encodeCompactBinaryValue(sectionValue);
+    if (profile) profile.push({
+      name: descriptor.path,
+      prepareMs: roundProfileMs(encodeStartedAt - prepareStartedAt),
+      encodeMs: roundProfileMs(containerNow() - encodeStartedAt),
+      bytes: payload.byteLength
+    });
+    entries.push({id: index + 1, name: descriptor.path, payload});
   }
   const directorySize = entries.length * DIRECTORY_BYTES;
   const totalBytes = HEADER_BYTES + directorySize + entries.reduce((total, entry) => total + entry.payload.byteLength, 0);
@@ -260,12 +274,13 @@ function prepareSectionForEncoding(name, value, aliases) {
     delete section.points;
   }
   if ((name === "grid" || name === "pack") && section?.cells?.v && section?.vertices?.c && section?.vertices?.v) {
+    const topology = encodeDerivedVertexTopology(section.cells.v, section.vertices.c, section.vertices.v);
     section = {
       ...section,
       vertices: {
         ...section.vertices,
-        c: encodeDerivedVertexRows(section.cells.v, section.vertices.c, "cells"),
-        v: encodeDerivedVertexRows(section.cells.v, section.vertices.v, "vertices")
+        c: topology.cells,
+        v: topology.vertices
       }
     };
   }
@@ -322,22 +337,40 @@ function releaseChunk(chunks, sourceChunks, index, consume) {
 
 function restoreDecodedSection(name, value) {
   if ((name === "grid" || name === "pack") && value?.cells?.v) {
-    value.vertices.c = decodeDerivedVertexRows(value.cells.v, value.vertices.c, "cells", value.vertices.p?.length || 0);
-    value.vertices.v = decodeDerivedVertexRows(value.cells.v, value.vertices.v, "vertices", value.vertices.p?.length || 0);
+    const cellDescriptor = value.vertices.c;
+    const vertexDescriptor = value.vertices.v;
+    value.vertices.c = decodeDerivedVertexRows(value.cells.v, cellDescriptor, "cells", value.vertices.p?.length || 0);
+    value.vertices.v = decodeDerivedVertexRows(value.cells.v, vertexDescriptor, "vertices", value.vertices.p?.length || 0);
+    primeDerivedVertexEncodingCache(value.cells.v, value.vertices.c, value.vertices.v, cellDescriptor, vertexDescriptor);
   }
   return value;
 }
 
 async function restoreDecodedSectionAsync(name, value, checkpoint) {
   if ((name === "grid" || name === "pack") && value?.cells?.v) {
-    value.vertices.c = await decodeDerivedVertexRowsAsync(value.cells.v, value.vertices.c, "cells", value.vertices.p?.length || 0, checkpoint);
-    value.vertices.v = await decodeDerivedVertexRowsAsync(value.cells.v, value.vertices.v, "vertices", value.vertices.p?.length || 0, checkpoint);
+    const cellDescriptor = value.vertices.c;
+    const vertexDescriptor = value.vertices.v;
+    value.vertices.c = await decodeDerivedVertexRowsAsync(value.cells.v, cellDescriptor, "cells", value.vertices.p?.length || 0, checkpoint);
+    value.vertices.v = await decodeDerivedVertexRowsAsync(value.cells.v, vertexDescriptor, "vertices", value.vertices.p?.length || 0, checkpoint);
+    primeDerivedVertexEncodingCache(value.cells.v, value.vertices.c, value.vertices.v, cellDescriptor, vertexDescriptor);
   }
   return value;
 }
 
-function encodeDerivedVertexRows(cellVertices, rows, kind) {
-  const derived = deriveVertexRows(cellVertices, rows.length, kind);
+function encodeDerivedVertexTopology(cellVertices, cellRows, vertexRows) {
+  const fingerprint = derivedVertexTopologyFingerprint(cellVertices, cellRows, vertexRows);
+  const cached = derivedVertexEncodingCache.get(cellVertices);
+  if (cached?.cellRows === cellRows && cached?.vertexRows === vertexRows && cached.fingerprint === fingerprint) {
+    return {cells: cached.cellDescriptor, vertices: cached.vertexDescriptor};
+  }
+  const derived = deriveVertexTopologyRows(cellVertices, Math.max(cellRows.length, vertexRows.length));
+  const cells = encodeDerivedVertexRows(cellRows, derived.cells, "cells");
+  const vertices = encodeDerivedVertexRows(vertexRows, derived.vertices, "vertices");
+  primeDerivedVertexEncodingCache(cellVertices, cellRows, vertexRows, cells, vertices, fingerprint);
+  return {cells, vertices};
+}
+
+function encodeDerivedVertexRows(rows, derived, kind) {
   const permutations = new Uint8Array(rows.length).fill(255);
   const exceptions = [];
   for (let index = 0; index < rows.length; index += 1) {
@@ -348,6 +381,36 @@ function encodeDerivedVertexRows(cellVertices, rows, kind) {
     else permutations[index] = permutation;
   }
   return {format: TOPOLOGY_MARKER, kind, rows: rows.length, permutations, exceptions};
+}
+
+function primeDerivedVertexEncodingCache(cellVertices, cellRows, vertexRows, cellDescriptor, vertexDescriptor, fingerprint = null) {
+  if (!cellVertices || typeof cellVertices !== "object") return;
+  derivedVertexEncodingCache.set(cellVertices, {
+    cellRows,
+    vertexRows,
+    cellDescriptor,
+    vertexDescriptor,
+    fingerprint: fingerprint ?? derivedVertexTopologyFingerprint(cellVertices, cellRows, vertexRows)
+  });
+}
+
+function derivedVertexTopologyFingerprint(...collections) {
+  let first = 2166136261;
+  let second = 0x9e3779b9;
+  const mix = value => {
+    const number = Number(value) | 0;
+    first = Math.imul(first ^ number, 16777619);
+    second = Math.imul(second ^ number, 0x85ebca6b);
+    second = (second << 13) | (second >>> 19);
+  };
+  for (const rows of collections) {
+    mix(rows?.length || 0);
+    for (const row of rows || []) {
+      mix(row?.length || 0);
+      for (const value of row || []) mix(value);
+    }
+  }
+  return `${first >>> 0}:${second >>> 0}`;
 }
 
 function decodeDerivedVertexRows(cellVertices, descriptor, kind, rows) {
@@ -404,6 +467,29 @@ function deriveVertexRows(cellVertices, count, kind) {
     if (kind === "vertices" && row.length === 2) row.unshift(-1);
     return row;
   });
+}
+
+function deriveVertexTopologyRows(cellVertices, count) {
+  const cellSets = Array.from({length: count}, () => new Set());
+  const vertexSets = Array.from({length: count}, () => new Set());
+  for (let cell = 0; cell < cellVertices.length; cell += 1) {
+    const vertices = cellVertices[cell];
+    for (let index = 0; index < vertices.length; index += 1) {
+      const vertex = vertices[index];
+      if (!cellSets[vertex]) continue;
+      cellSets[vertex].add(cell);
+      vertexSets[vertex].add(vertices[(index + vertices.length - 1) % vertices.length]);
+      vertexSets[vertex].add(vertices[(index + 1) % vertices.length]);
+    }
+  }
+  return {
+    cells: cellSets.map(set => [...set].sort((left, right) => left - right)),
+    vertices: vertexSets.map(set => {
+      const row = [...set].sort((left, right) => left - right);
+      if (row.length === 2) row.unshift(-1);
+      return row;
+    })
+  };
 }
 
 async function deriveVertexRowsAsync(cellVertices, count, kind, checkpoint) {
@@ -494,11 +580,20 @@ function writePath(root, path, value) {
 
 function checksumBytes(bytes) {
   let checksum = 0x811c9dc5;
-  for (const byte of bytes) {
-    checksum ^= byte;
-    checksum = Math.imul(checksum, 0x01000193) >>> 0;
+  let index = 0;
+  const unrolledLength = bytes.length - (bytes.length % 8);
+  for (; index < unrolledLength; index += 8) {
+    checksum = Math.imul(checksum ^ bytes[index], 0x01000193);
+    checksum = Math.imul(checksum ^ bytes[index + 1], 0x01000193);
+    checksum = Math.imul(checksum ^ bytes[index + 2], 0x01000193);
+    checksum = Math.imul(checksum ^ bytes[index + 3], 0x01000193);
+    checksum = Math.imul(checksum ^ bytes[index + 4], 0x01000193);
+    checksum = Math.imul(checksum ^ bytes[index + 5], 0x01000193);
+    checksum = Math.imul(checksum ^ bytes[index + 6], 0x01000193);
+    checksum = Math.imul(checksum ^ bytes[index + 7], 0x01000193);
   }
-  return checksum;
+  for (; index < bytes.length; index += 1) checksum = Math.imul(checksum ^ bytes[index], 0x01000193);
+  return checksum >>> 0;
 }
 
 async function checksumBytesAsync(bytes, checkpoint) {
@@ -529,6 +624,10 @@ function defaultAsyncYield() {
 
 function containerNow() {
   return globalThis.performance?.now?.() ?? Date.now();
+}
+
+function roundProfileMs(value) {
+  return Math.round(Number(value || 0) * 10) / 10;
 }
 
 function containerError(code, message) {

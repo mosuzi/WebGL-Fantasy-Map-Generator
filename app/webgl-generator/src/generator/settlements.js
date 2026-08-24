@@ -1913,7 +1913,7 @@ function buildPackRoutes(grid, pack, cities, options = {}) {
   }
 
   pack.routes = buildPackRouteMirror(routes);
-  pack.cells.routes = buildPackRouteLinks(routes);
+  pack.cells.routes = buildPackRouteLinks(routes, locked.edgeOwners);
   return routes;
 }
 
@@ -1962,6 +1962,7 @@ function prepareLockedRoutes(pack, options) {
   const ids = new Set();
   const connections = new Set();
   const waterConnections = new Set();
+  const lockedEdgeCandidates = new Map();
   const edgeKeyMultiplier = pack.cells.i.length + 1;
 
   for (const source of provided) {
@@ -1991,11 +1992,16 @@ function prepareLockedRoutes(pack, options) {
         throw routeLockConflict(`锁定道路 #${id} 的路径不连续`, {reason: "disconnected-path", id, from: previous, to: cell});
       }
       const edge = routeEdgeKey(previous, cell, edgeKeyMultiplier);
-      if (connections.has(edge)) {
-        throw routeLockConflict(`锁定道路 #${id} 与其它锁路占用同一边`, {reason: "duplicate-edge", id, from: previous, to: cell});
-      }
       connections.add(edge);
       if (route.type === "searoute") waterConnections.add(edge);
+      const candidate = lockedEdgeCandidates.get(edge) || {
+        from: previous,
+        to: cell,
+        ids: [],
+        currentOwner: Number(pack.cells.routes?.[previous]?.[cell])
+      };
+      candidate.ids.push(id);
+      lockedEdgeCandidates.set(edge, candidate);
     }
 
     route.id = id;
@@ -2003,7 +2009,14 @@ function prepareLockedRoutes(pack, options) {
     routes.push(route);
   }
 
-  return {routes, ids, connections, waterConnections};
+  const edgeOwners = [...lockedEdgeCandidates.values()].map(candidate => ({
+    from: candidate.from,
+    to: candidate.to,
+    routeId: candidate.ids.includes(candidate.currentOwner)
+      ? candidate.currentOwner
+      : Math.min(...candidate.ids)
+  }));
+  return {routes, ids, connections, waterConnections, edgeOwners};
 }
 
 function createRouteIdAllocator(reservedIds) {
@@ -2851,7 +2864,7 @@ function burgProvinceKey(burg) {
   return burgStateKey(burg);
 }
 
-function buildPackRouteLinks(routes) {
+function buildPackRouteLinks(routes, protectedEdgeOwners = []) {
   const links = {};
   for (const route of routes) {
     for (let index = 0; index < route.packCells.length - 1; index++) {
@@ -2862,6 +2875,12 @@ function buildPackRouteLinks(routes) {
       links[from][to] = route.id;
       links[to][from] = route.id;
     }
+  }
+  for (const {from, to, routeId} of protectedEdgeOwners) {
+    if (!links[from]) links[from] = {};
+    if (!links[to]) links[to] = {};
+    links[from][to] = routeId;
+    links[to][from] = routeId;
   }
   return links;
 }
