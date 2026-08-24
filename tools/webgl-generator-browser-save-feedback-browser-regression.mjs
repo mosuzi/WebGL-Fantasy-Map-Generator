@@ -11,6 +11,8 @@ import {waitForApiReady} from "./webgl-generator-api-browser-ready.mjs";
 
 const rootDir = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const sourceDir = join(rootDir, "source", "Fantasy-Map-Generator");
+const playwrightRoot = process.env.FMG_PLAYWRIGHT_ROOT ? resolve(process.env.FMG_PLAYWRIGHT_ROOT) : sourceDir;
+const playwright = createRequire(join(playwrightRoot, "package.json"))("playwright");
 const host = "127.0.0.1";
 const timeoutMs = 180000;
 const evidence = createTask350BrowserArtifact("browser-save-feedback", {mode: "browser-feedback"});
@@ -21,7 +23,6 @@ let thrownError = null;
 
 try {
   evidence.mark("server-start", {active: "browser-save-feedback"});
-  const playwright = createRequire(join(sourceDir, "package.json"))("playwright");
   vite = await createViteServer({configFile: join(rootDir, "vite.config.mjs"), server: {host, port: 0}, logLevel: "error"});
   await vite.listen();
   const port = vite.httpServer.address().port;

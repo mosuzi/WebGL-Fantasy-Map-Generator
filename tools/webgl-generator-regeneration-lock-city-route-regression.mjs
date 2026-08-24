@@ -5,6 +5,7 @@ import {readFile} from "node:fs/promises";
 import {createGenerationSummary, generatePlaceholderMap} from "../app/webgl-generator/src/generator/index.js";
 import {regenerateSettlementsWithinPolitics} from "../app/webgl-generator/src/generator/settlements.js";
 import {createMapDocument, createMapFeatureGeoJson} from "../app/webgl-generator/src/runtime/map-file-io.js";
+import {regenerateMapAttributeForWorker} from "../app/webgl-generator/src/runtime/regeneration-worker-task.js";
 import {
   assertLockedRegenerationSnapshots,
   captureLockedRegenerationObjects
@@ -18,12 +19,13 @@ const options = {
   graphHeight: 760,
   heightmapTemplate: "continents"
 };
-const report = {ok: true, full: {}, scoped: {}, conflict: {}, contract: {}};
+const report = {ok: true, full: {}, scoped: {}, routeLockedCity: {}, overlap: {}, contract: {}};
 
 testFullRegeneration();
 testLegacyRouteMirrorBackfill();
 testScopedRegeneration();
-testConflict();
+testRouteRegenerationPreservesLockedCity();
+testOverlappingLockedRoutes();
 await testFormalEntryContract();
 
 console.log(JSON.stringify(report, null, 2));
@@ -160,21 +162,46 @@ function testScopedRegeneration() {
   report.scoped = {stateId: scope.id, lockedCity: lockedCity.id, outside: outsideBefore.length, unlocked: unlockedBefore.length};
 }
 
-function testConflict() {
-  const map = generatePlaceholderMap({...options, seed: `${options.seed}:conflict`});
+function testRouteRegenerationPreservesLockedCity() {
+  const map = generatePlaceholderMap({...options, seed: `${options.seed}:route-city`});
+  const city = activeCities(map).find(item => !item.capital && !item.provincial && !item.port);
+  const alternateProvince = activeProvinces(map).find(province => Number(province.i) !== Number(city?.province));
+  assert(city && alternateProvince, "路线锁城用例缺少普通城镇或替代省份");
+  city.province = Number(alternateProvince.i);
+  map.pack.burgs[city.burgId].province = Number(alternateProvince.i);
+  map.regenerationLocks = {version: 1, entries: [{kind: "city", id: city.id}]};
+  const capture = captureLockedRegenerationObjects(map, "city");
+  const routesBefore = JSON.stringify(activeRoutes(map));
+
+  const result = regenerateMapAttributeForWorker(map, "routes");
+
+  assert.equal(result.executed, true, "存在锁定城镇时路线重生成仍应执行");
+  assertLockedRegenerationSnapshots(map, capture);
+  assert.notEqual(JSON.stringify(activeRoutes(map)), routesBefore, "未锁道路必须继续发生变化");
+  report.routeLockedCity = {
+    cityId: city.id,
+    preservedProvince: city.province,
+    packProvince: Number(map.pack.cells.province[city.packCell]),
+    routes: activeRoutes(map).length
+  };
+}
+
+function testOverlappingLockedRoutes() {
+  const map = generatePlaceholderMap({...options, seed: `${options.seed}:overlap`});
   const route = activeRoutes(map).find(item => item.packCells?.length >= 3);
-  assert(route, "冲突地图缺少道路");
+  assert(route, "共享边地图缺少道路");
   const duplicate = {...clone(route), id: Math.max(...activeRoutes(map).map(item => item.id)) + 100};
-  assert.throws(
-    () => regenerateSettlementsWithinPolitics(map.grid, map.features, map.politics, map.settlements, map.pack, {
-      ...map.options,
-      settlementRegenerationSalt: 29,
-      routeRegenerationSalt: 29,
-      lockedRoutes: [clone(route), duplicate]
-    }),
-    error => error?.code === "regeneration_lock_conflict" && error?.details?.reason === "duplicate-edge"
-  );
-  report.conflict = {code: "regeneration_lock_conflict", reason: "duplicate-edge"};
+  const owner = map.pack.cells.routes[route.packCells[0]][route.packCells[1]];
+  regenerateSettlementsWithinPolitics(map.grid, map.features, map.politics, map.settlements, map.pack, {
+    ...map.options,
+    settlementRegenerationSalt: 29,
+    routeRegenerationSalt: 29,
+    lockedRoutes: [clone(route), duplicate]
+  });
+  assert.deepEqual(activeRoutes(map).find(item => item.id === route.id), route, "共享边的原锁路必须保留");
+  assert.deepEqual(activeRoutes(map).find(item => item.id === duplicate.id), duplicate, "共享边的第二条锁路必须保留");
+  assert.equal(map.pack.cells.routes[route.packCells[0]][route.packCells[1]], owner, "共享边必须保留既有镜像所有者");
+  report.overlap = {routeIds: [route.id, duplicate.id], owner};
 }
 
 async function testFormalEntryContract() {
@@ -182,7 +209,7 @@ async function testFormalEntryContract() {
     readFile(new URL("../app/webgl-generator/src/runtime/app.js", import.meta.url), "utf8"),
     readFile(new URL("../package.json", import.meta.url), "utf8")
   ]);
-  assert.match(appSource, /function regenerateRoutes[\s\S]*allRegenerationObjectsLocked\(map, OBJECT_KIND\.ROUTE[\s\S]*captureLockedRegenerationObjects\(map, OBJECT_KIND\.ROUTE\)[\s\S]*lockedRoutes: routeLocks\.snapshots[\s\S]*assertLockedRegenerationSnapshots\(map, routeLocks\)/);
+  assert.match(appSource, /function regenerateRoutes[\s\S]*allRegenerationObjectsLocked\(map, OBJECT_KIND\.ROUTE[\s\S]*captureLockedRegenerationObjects\(map, OBJECT_KIND\.ROUTE\)[\s\S]*lockedCities: cityLocks\.snapshots,[\s\S]*lockedRoutes: routeLocks\.snapshots[\s\S]*assertLockedRegenerationSnapshots\(map, routeLocks\)/);
   assert.match(appSource, /function regenerateCities[\s\S]*allRegenerationObjectsLocked\(map, OBJECT_KIND\.CITY[\s\S]*captureLockedRegenerationObjects\(map, OBJECT_KIND\.CITY\)[\s\S]*lockedCities: cityLocks\.snapshots,[\s\S]*lockedRoutes: routeLocks\.snapshots[\s\S]*assertLockedRegenerationSnapshots\(map, cityLocks\)/);
   assert.match(appSource, /function regenerateMapAttributeViaApi[\s\S]*executeMapSnapshotTransaction/);
   assert.match(packageSource, /regress:regeneration-lock-route-generator/);

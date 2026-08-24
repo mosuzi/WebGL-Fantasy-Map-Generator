@@ -15,7 +15,8 @@ const port = 5517;
 const timeoutMs = 240000;
 assert.ok(existsSync(distDir), `构建产物不存在：${distDir}`);
 
-const playwright = createRequire(join(sourceDir, "package.json"))("playwright");
+const playwrightRoot = process.env.FMG_PLAYWRIGHT_ROOT ? resolve(process.env.FMG_PLAYWRIGHT_ROOT) : sourceDir;
+const playwright = createRequire(join(playwrightRoot, "package.json"))("playwright");
 const server = await startStaticServer();
 let browser;
 let context;
@@ -36,7 +37,7 @@ try {
   const report = await page.evaluate(async () => {
     const api = window.webglGeneratorApi;
     const app = window.__webglGeneratorApp;
-    const result = {fullCityNoop: {}, city: {}, scoped: {}, route: {}, conflict: {}};
+    const result = {fullCityNoop: {}, city: {}, scoped: {}, route: {}, overlap: {}};
 
     await newMap("lock-city-all");
     const allCities = activeCities();
@@ -111,20 +112,26 @@ try {
       points: structuredClone(first.points)
     });
     app.map.pack.routes[second.id] = {
-      ...structuredClone(app.map.pack.routes[first.id]),
-      i: second.id
+      ...structuredClone(app.map.pack.routes[second.id]),
+      i: second.id,
+      points: structuredClone(app.map.pack.routes[first.id].points)
     };
     app.workerTaskCoordinator.invalidateSession("fixture-route-conflict-direct-map-mutation");
     unwrap(api.regenerationLocks.setMany(conflicts.map(item => ({kind: "route", id: item.id})), true), "lock conflict routes");
     app.editHistory.clear();
-    const conflictBefore = transactionSnapshot("routes");
-    const failed = await api.generate.regenerate("routes", {confirm: true});
-    if (failed?.ok !== false || failed?.error?.code !== "regeneration_lock_conflict") {
-      throw new Error(`道路冲突没有稳定拒绝：${JSON.stringify(failed)}`);
-    }
-    const conflictAfter = transactionSnapshot("routes");
-    assertSameTransaction(conflictBefore, conflictAfter, "道路冲突回滚");
-    result.conflict = {code: failed.error.code, history: conflictAfter.history.undo, salt: conflictAfter.salt};
+    const firstBefore = routeEnvelope(first.id);
+    const secondBefore = routeEnvelope(second.id);
+    const ownerBefore = app.map.pack.cells.routes[first.packCells[0]][first.packCells[1]];
+    const overlapBefore = transactionSnapshot("routes");
+    const overlapResult = unwrap(await api.generate.regenerate("routes", {confirm: true}), "regenerate overlapping locked routes");
+    if (!overlapResult.executed) throw new Error("共享边锁路没有执行路线重生成");
+    assertDeepEqual(routeEnvelope(first.id), firstBefore, "共享边第一条锁路完整镜像");
+    assertDeepEqual(routeEnvelope(second.id), secondBefore, "共享边第二条锁路完整镜像");
+    const overlapAfter = transactionSnapshot("routes");
+    assertSingleHistory(overlapBefore, overlapAfter, "共享边锁路重生成");
+    const ownerAfter = app.map.pack.cells.routes[first.packCells[0]][first.packCells[1]];
+    if (ownerAfter !== ownerBefore) throw new Error(`共享边镜像所有者改变：${ownerBefore} -> ${ownerAfter}`);
+    result.overlap = {routeIds: [first.id, second.id], owner: ownerAfter, historyDelta: 1};
 
     return result;
 

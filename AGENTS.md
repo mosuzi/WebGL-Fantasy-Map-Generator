@@ -18,7 +18,7 @@
 - `docs/current-plan.md` 是唯一当前任务清单；README、开发日志、专题和归档不得另建当前待办。
 - 已批准的编号范围是封闭范围。达到该项最小验收后立即归档并转向下一项；不影响当前验收的新发现只记录，不顺手实施。
 - 第 349 项已在 `codex/map-core-engine-architecture-plan` 并行分支完成并归档；`349-0`～`349-11`（含动态插入 `349-3a / 349-10c0 / 349-10g-a`）均经独立只读评审 `ACCEPT`。该分支不得合入 `main`，全任务未执行浏览器验收，只形成并评估了待单独获批的浏览器方案。
-- 第 351 项已完成并归档；修复分支 `codex/task-351-view-switch-repair` 叠加于未合入 `main` 的架构分支，只推送任务分支，不得直接合入 `main`。当前没有活动权威任务。
+- 第 353 项已移植到 `codex/map-core-engine-architecture-plan`；第 351 项与第 353 项均已完成并归档。当前没有活动权威任务，重构分支只允许推送自身，不得合入或改写 `main`。
 - 遇到范围歧义、需要产品决策、夹具连续两次失败或同一阻断再次出现时，必须冻结并请用户裁定；不得继续“补夹具—跑全门”循环。
 - 全部必需任务完成后停止，不得自行创造后续工作。
 
@@ -68,6 +68,7 @@
 
 ## 当前状态
 
+- 第 353 项已并入引擎重构分支：路线重生成现在先捕获锁，锁定城市与路线完整传入生成器；共享边锁路全部保留，route link 稳定沿用既有锁 owner。v3 保存复用带双指纹失效门的派生拓扑，并优化整数位打包、ragged 数组、稀疏统计和 checksum；原修复分支用户存档正式保存中位数由 `2889.8ms` 降至 `1841.3ms`（`-36.28%`），版本在重构分支续升为 `0.5.62`。
 - 第 351 项已完成并归档：十二类视图本地 10k / 100k cold 分别为 `13.0～26.2ms / 15.5～29.1ms`，warm 为 `12.7～16.3ms / 15.4～19.2ms`；Worker 包、四类重建、LongTask 与最终错误面均为 `0`。用户精确标签页 `294256474` 刷新恢复原地图后十二类逐项成功，目标高度→温度→高度复验新增 error / warn 为 `0`，终态恢复 `height / startup ready / Loading 0`；版本为 `0.5.61`。
 - 第 350 项已完成并归档：`R6b 20 / 20`、`R7 5 / 5` 全部 PASS，五个 R7 面均无 `>200ms` 产品 LongTask；最终冻结聚合为 `16 invariants / 17 scenarios / 20 entries / 19 fixtures`，typecheck 与 `1401 modules` build PASS，25 组 artifact 的 full/summary 均存在且 `ok=true`。最终独立复核为 `ACCEPT / P0 0 / P1 0 / P2 0`，分支 `codex/map-core-engine-architecture-plan` 保持未合入 `main`，版本为 `0.5.58`。
 - 第 349 项已完成并归档：受限 TypeScript 核心契约、唯一 map / revision / history owner、15 个 capability-aware Manifest、逐域 Worker pre-commit validator、dependency / projection 与 whole-map profile receipt 已建立。27 / 27 非浏览器门通过，防误触审计递归扫描 36 个 Node 入口并拒绝真实命名不可见 Chromium 反例；浏览器方案已评估但未执行。分支保持 `codex/map-core-engine-architecture-plan` 并行且不得合入 `main`，版本为 `0.5.56`。

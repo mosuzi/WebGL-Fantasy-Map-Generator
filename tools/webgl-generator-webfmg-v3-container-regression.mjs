@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import {createHash} from "node:crypto";
 import {generatePlaceholderMap} from "../app/webgl-generator/src/generator/index.js";
 import {createMapDocument, migrateMapDocument, parseMapDocument, stringifyMapDocument} from "../app/webgl-generator/src/runtime/map-file-io.js";
 import {decodeCompactBinaryValue, decodeCompactBinaryValueAsync, encodeCompactBinaryValue} from "../app/webgl-generator/src/runtime/compact-binary-value-codec.js";
@@ -29,6 +30,15 @@ const fixture = {
 assert.deepEqual(decodeCompactBinaryValue(encodeCompactBinaryValue(fixture)), fixture);
 assert.deepEqual(await decodeCompactBinaryValueAsync(encodeCompactBinaryValue(fixture)), fixture);
 assert.throws(() => encodeCompactBinaryValue(new Array(8)), error => error?.code === "compact_binary_holey_array");
+const integerPackingFixture = {
+  small: [0, 1, 2, 3, -4, 5, 6, 7],
+  medium: [0, 255, 256, 65535, 1048575, -12345, 54321, 77],
+  high: [0, 2 ** 32 - 1, 2 ** 40 - 1, 2 ** 45 - 1, 2 ** 46 - 1, 2 ** 47 - 1, 9, 17],
+  negative: [0, -(2 ** 32), -(2 ** 40), -(2 ** 45), -(2 ** 46), -(2 ** 47), -9, -17]
+};
+const integerPackingBytes = encodeCompactBinaryValue(integerPackingFixture);
+assert.equal(createHash("sha256").update(integerPackingBytes).digest("hex"), "d0a33c21f4f687eb05019b5f2ecd53fcc14ff2dcd1d96b0f52a297768528764b", "整数快路径改变了既有紧凑二进制格式");
+assert.deepEqual(decodeCompactBinaryValue(integerPackingBytes), integerPackingFixture);
 
 const map = generatePlaceholderMap({seed: `canonical-map-registry-${target}`, cellsTarget: target, heightmapTemplate: "continents"});
 const holeyMap = structuredClone(map);
@@ -51,6 +61,12 @@ const raw = encodeWebfmgV3Document(document);
 const encodedAt = performance.now();
 const gzip = await gzipWebfmgV3Bytes(raw);
 const decoded = decodeWebfmgV3Document(raw);
+const mutableDecoded = decodeWebfmgV3Document(raw);
+const mutableVertex = mutableDecoded.map.grid.vertices.c.findIndex(row => row?.length > 1);
+assert(mutableVertex >= 0, "拓扑缓存失效用例缺少多 cell 顶点");
+mutableDecoded.map.grid.vertices.c[mutableVertex].reverse();
+const mutableRoundTrip = decodeWebfmgV3Document(encodeWebfmgV3Document(mutableDecoded));
+assert.deepEqual(mutableRoundTrip.map.grid.vertices.c[mutableVertex], mutableDecoded.map.grid.vertices.c[mutableVertex], "拓扑数组原地变化后仍复用了过期编码缓存");
 let asyncYields = 0;
 const decodedAsync = await decodeWebfmgV3DocumentAsync(raw, {yieldToMain: async () => { asyncYields++; }});
 assert.deepEqual(decodedAsync, decoded, "v3 async decode 必须与同步兼容入口同源");

@@ -183,6 +183,18 @@ assert.deepEqual(portPositionFacts(activeCityLocked, activeCityLockedId), active
 assert.equal(Number(activeCityLocked.settlements.cities[activeCityLockedId].port), 0, "锁定城镇失效 city.port 未清理");
 assert.equal(Number(activeCityLocked.pack.burgs[activeCityLocked.settlements.cities[activeCityLockedId].burgId].port), 0, "锁定城镇失效 burg.port 未清理");
 
+const preservedCityLocked = makeInvalidPortFixture(fixture).map;
+const preservedCityLockedId = stale.cityId;
+preservedCityLocked.regenerationLocks = {version: 1, entries: [{kind: OBJECT_KIND.CITY, id: preservedCityLockedId}]};
+const preservedCityLockedBefore = structuredClone(preservedCityLocked.settlements.cities[preservedCityLockedId]);
+const preservedBurgLockedBefore = structuredClone(preservedCityLocked.pack.burgs[preservedCityLockedBefore.burgId]);
+const preservedLocksBefore = structuredClone(preservedCityLocked.regenerationLocks);
+const preservedCityLockedReport = reconcileSettlementPortTopology(preservedCityLocked, {mode: "routes", preserveProtected: true});
+assert.equal(preservedCityLockedReport.skipped, 1, "锁定最高优先模式没有报告跳过失效锁定港口");
+assert.deepEqual(preservedCityLocked.settlements.cities[preservedCityLockedId], preservedCityLockedBefore, "锁定最高优先模式改写了锁定城镇");
+assert.deepEqual(preservedCityLocked.pack.burgs[preservedCityLockedBefore.burgId], preservedBurgLockedBefore, "锁定最高优先模式改写了锁定 burg 镜像");
+assert.deepEqual(preservedCityLocked.regenerationLocks, preservedLocksBefore, "锁定最高优先模式改写了锁存储");
+
 const lockedEndpoint = makeInvalidLockedSeaEndpoint(fixture);
 const lockedEndpointBefore = structuredClone(lockedEndpoint);
 assert.throws(
