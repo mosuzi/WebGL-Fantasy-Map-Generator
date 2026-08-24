@@ -48,6 +48,11 @@ import {
   summarizePoliticalVisualMeshes,
   summarizePoliticalVisualPaths
 } from "./political-layer.js";
+import {
+  DEFAULT_POLITICAL_BOUNDARY_SOFTNESS,
+  normalizePoliticalBoundarySoftness,
+  resolvePoliticalBoundaryStroke
+} from "./political-boundary-style.js";
 import {LABEL_TARGET_KIND, OBJECT_KIND, POLITICAL_OBJECT_FIELD, isPointObjectKind, isPoliticalObjectKind} from "../runtime/object-kinds.js";
 import {markDynamicCanvasTextNode, semanticLabelClassName, setDynamicCanvasTextContent} from "../runtime/canvas-text-contract.js";
 import {compositeConnectorPoints, pickCompositeConnector} from "./composite-connectors.js";
@@ -262,9 +267,11 @@ function evaluateDeferredWorkerRenderSnapshot(renderer, entries) {
     } else if (mutation.key === "view-options") {
       const nextOptions = value || {};
       if (!hasShallowPresentationChange(presentation.viewOptions, nextOptions)) continue;
-      if (Object.prototype.hasOwnProperty.call(nextOptions, "smoothCellBorders")) effects.lines = true;
+      if (Object.prototype.hasOwnProperty.call(nextOptions, "smoothCellBorders")
+        || Object.prototype.hasOwnProperty.call(nextOptions, "politicalBoundarySoftness")) effects.lines = true;
       presentation.viewOptions = {...presentation.viewOptions, ...nextOptions};
       const changedKeys = Object.keys(nextOptions).filter(key => renderer.viewOptions?.[key] !== nextOptions[key]);
+      if (changedKeys.length && changedKeys.every(key => key === "politicalBoundarySoftness")) continue;
       const patchScope = changedKeys.includes("smoothCellBorders")
         ? "unavailable"
         : changedKeys.every(key => key === "showOceanHeight") ? "water" : "all";
@@ -527,7 +534,13 @@ export class PlaceholderMapRenderer {
     this.locateFlashFrame = 0;
     this.colorMode = "height";
     this.visualTheme = resolveVisualTheme(DEFAULT_VISUAL_THEME_ID);
-    this.viewOptions = {showOceanHeight: false, smoothCellBorders: true, diplomacySubjectId: null, visualTheme: this.visualTheme};
+    this.viewOptions = {
+      showOceanHeight: false,
+      smoothCellBorders: true,
+      politicalBoundarySoftness: DEFAULT_POLITICAL_BOUNDARY_SOFTNESS,
+      diplomacySubjectId: null,
+      visualTheme: this.visualTheme
+    };
     this.labelOptions = {maxCityLabels: DEFAULT_MAX_CITY_LABELS};
     this.unitPreferences = normalizeUnitPreferences();
     this.layerVisibility = createDefaultLayerVisibility();
@@ -1149,8 +1162,13 @@ export class PlaceholderMapRenderer {
     const optionKeys = Object.keys(options || {});
     const gpuResidentOceanHeight = optionKeys.length === 1 && optionKeys[0] === "showOceanHeight" && this.canApplyGpuResidentOceanHeight();
     const gpuResidentSmoothBorders = optionKeys.length === 1 && optionKeys[0] === "smoothCellBorders" && this.canApplyGpuResidentSmoothCellBorders();
-    const shouldRefreshLineLayers = Object.prototype.hasOwnProperty.call(options, "smoothCellBorders");
-    this.viewOptions = {...this.viewOptions, ...options};
+    const shouldRefreshLineLayers = Object.prototype.hasOwnProperty.call(options, "smoothCellBorders")
+      || Object.prototype.hasOwnProperty.call(options, "politicalBoundarySoftness");
+    const nextOptions = Object.prototype.hasOwnProperty.call(options, "politicalBoundarySoftness")
+      ? {...options, politicalBoundarySoftness: normalizePoliticalBoundarySoftness(options.politicalBoundarySoftness)}
+      : options;
+    const politicalBoundaryOnly = optionKeys.length === 1 && optionKeys[0] === "politicalBoundarySoftness";
+    this.viewOptions = {...this.viewOptions, ...nextOptions};
     if (!this.map) return;
     if (gpuResidentOceanHeight) {
       this.draw();
@@ -1158,6 +1176,11 @@ export class PlaceholderMapRenderer {
     }
     if (gpuResidentSmoothBorders) {
       this.refreshGpuResidentSmoothCellBorders();
+      return;
+    }
+    if (politicalBoundaryOnly) {
+      this.refreshLineLayers({draw: false});
+      this.draw();
       return;
     }
     this.refreshCellSurface({draw: false});
@@ -1271,7 +1294,10 @@ export class PlaceholderMapRenderer {
       this.refreshLineLayers({draw: false});
       return {reused: false};
     }
-    recolorThemeLineVertices(this.lineVertices, previousTheme, nextTheme, {shore: false});
+    recolorThemeLineVertices(this.lineVertices, previousTheme, nextTheme, {
+      shore: false,
+      politicalBoundarySoftness: this.viewOptions.politicalBoundarySoftness
+    });
     for (const vertices of new Set([this.shoreLineVertices, this.gpuResidentSmoothShoreLineVertices, this.gpuResidentHardShoreLineVertices])) {
       if (vertices instanceof Float32Array) recolorThemeLineVertices(vertices, previousTheme, nextTheme, {shore: true});
     }
@@ -1284,13 +1310,22 @@ export class PlaceholderMapRenderer {
     return {reused: true, uploadMs: upload.ms};
   }
 
-  setPreparedPresentation({visualTheme, unitPreferences} = {}) {
+  setPreparedPresentation({visualTheme, unitPreferences, viewOptions} = {}) {
     if (visualTheme !== undefined) {
       const theme = resolveVisualTheme(visualTheme);
       this.visualTheme = theme;
       this.viewOptions = {...this.viewOptions, visualTheme: theme};
     }
     if (unitPreferences !== undefined) this.unitPreferences = normalizeUnitPreferences(unitPreferences);
+    if (viewOptions && typeof viewOptions === "object") {
+      this.viewOptions = {
+        ...this.viewOptions,
+        ...viewOptions,
+        ...(Object.prototype.hasOwnProperty.call(viewOptions, "politicalBoundarySoftness")
+          ? {politicalBoundarySoftness: normalizePoliticalBoundarySoftness(viewOptions.politicalBoundarySoftness)}
+          : {})
+      };
+    }
   }
 
   setLabelOptions(options = {}) {
@@ -2254,9 +2289,10 @@ export class PlaceholderMapRenderer {
       } else if (mutation.key === "view-options") {
         const nextOptions = value || {};
         if (!hasShallowPresentationChange(this.viewOptions, nextOptions)) continue;
-        if (Object.prototype.hasOwnProperty.call(nextOptions, "smoothCellBorders")) refreshLines = true;
+        if (Object.prototype.hasOwnProperty.call(nextOptions, "smoothCellBorders")
+          || Object.prototype.hasOwnProperty.call(nextOptions, "politicalBoundarySoftness")) refreshLines = true;
         this.viewOptions = {...this.viewOptions, ...nextOptions};
-        refreshSurface = true;
+        if (Object.keys(nextOptions).some(key => key !== "politicalBoundarySoftness")) refreshSurface = true;
       } else if (mutation.key === "visual-theme") {
         const theme = resolveVisualTheme(value?.themeId);
         if (!value?.force && this.visualTheme.id === theme.id) continue;
@@ -6194,13 +6230,24 @@ export function buildLineVertices(map, visibility = {}, colorMode = "height", sh
   const statePaths = stateVisualPaths || buildStateVisualPaths(map);
   const provincePaths = provinceVisualPaths || buildProvinceVisualPaths(map);
   const themeLines = viewOptions.visualTheme?.lines || {};
+  const politicalBoundarySoftness = normalizePoliticalBoundarySoftness(viewOptions.politicalBoundarySoftness);
+  const provinceBoundary = resolvePoliticalBoundaryStroke(
+    PROVINCE_VISUAL_STYLE,
+    themeLines.provinceBorder || PROVINCE_VISUAL_STYLE.borderStroke,
+    politicalBoundarySoftness
+  );
+  const stateBoundary = resolvePoliticalBoundaryStroke(
+    STATE_VISUAL_STYLE,
+    themeLines.stateBorder || STATE_VISUAL_STYLE.borderStroke,
+    politicalBoundarySoftness
+  );
   pushMapEdgeFade(vertices, context, map, viewOptions.visualTheme);
   const shoreLineLayer = buildShoreLineVerticesCached(map, visibility, colorMode, shoreVisualPaths, cellVisualMesh, viewOptions);
   const gpuResidentShoreLines = buildGpuResidentShoreLinePair(map, visibility, colorMode, shoreVisualPaths, cellVisualMesh, viewOptions, shoreLineLayer);
   pushZoneTextureLayer(vertices, context, map, visibility);
   const oceanCurrents = pushOceanCurrentLayer(oceanCurrentVertices, context, map, visibility, oceanCurrentHighlights);
-  if (visibility.provinceBorders !== false) pushPoliticalBoundaryStrokes(vertices, provincePaths, context, themeLines.provinceBorder || PROVINCE_VISUAL_STYLE.borderStroke, PROVINCE_VISUAL_STYLE.borderWidthWorld, PROVINCE_VISUAL_STYLE.borderDashWorld);
-  if (visibility.stateBorders !== false) pushPoliticalBoundaryStrokes(vertices, statePaths, context, themeLines.stateBorder || STATE_VISUAL_STYLE.borderStroke, STATE_VISUAL_STYLE.borderWidthWorld);
+  if (visibility.provinceBorders !== false) pushPoliticalBoundaryStrokes(vertices, provincePaths, context, provinceBoundary.color, provinceBoundary.widthWorld, PROVINCE_VISUAL_STYLE.borderDashWorld);
+  if (visibility.stateBorders !== false) pushPoliticalBoundaryStrokes(vertices, statePaths, context, stateBoundary.color, stateBoundary.widthWorld);
   if (visibility.warFronts !== false) pushMilitaryFrontLayer(vertices, context, map);
   return {
     vertices: new Float32Array(vertices),
@@ -7241,7 +7288,7 @@ function withAlpha(color, alpha) {
   return [color?.[0] ?? 0, color?.[1] ?? 0, color?.[2] ?? 0, alpha];
 }
 
-function recolorThemeLineVertices(vertices, previousTheme, nextTheme, {shore = false} = {}) {
+function recolorThemeLineVertices(vertices, previousTheme, nextTheme, {shore = false, politicalBoundarySoftness = DEFAULT_POLITICAL_BOUNDARY_SOFTNESS} = {}) {
   const previousLines = previousTheme?.lines || {};
   const nextLines = nextTheme?.lines || {};
   const replacements = shore
@@ -7250,8 +7297,14 @@ function recolorThemeLineVertices(vertices, previousTheme, nextTheme, {shore = f
         [previousLines.lakeShore, nextLines.lakeShore]
       ]
     : [
-        [previousLines.stateBorder, nextLines.stateBorder],
-        [previousLines.provinceBorder, nextLines.provinceBorder]
+        [
+          resolvePoliticalBoundaryStroke(STATE_VISUAL_STYLE, previousLines.stateBorder || STATE_VISUAL_STYLE.borderStroke, politicalBoundarySoftness).color,
+          resolvePoliticalBoundaryStroke(STATE_VISUAL_STYLE, nextLines.stateBorder || STATE_VISUAL_STYLE.borderStroke, politicalBoundarySoftness).color
+        ],
+        [
+          resolvePoliticalBoundaryStroke(PROVINCE_VISUAL_STYLE, previousLines.provinceBorder || PROVINCE_VISUAL_STYLE.borderStroke, politicalBoundarySoftness).color,
+          resolvePoliticalBoundaryStroke(PROVINCE_VISUAL_STYLE, nextLines.provinceBorder || PROVINCE_VISUAL_STYLE.borderStroke, politicalBoundarySoftness).color
+        ]
       ];
   const previousBackground = previousTheme?.canvas?.background;
   const nextBackground = nextTheme?.canvas?.background;

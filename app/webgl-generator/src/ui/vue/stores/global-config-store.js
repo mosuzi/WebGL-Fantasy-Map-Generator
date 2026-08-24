@@ -3,6 +3,7 @@ import {defineStore} from "pinia";
 import {normalizeVisualThemeId} from "../../../renderer/themes.js";
 import {DEFAULT_UNIT_PREFERENCES, normalizeUnitPreferences} from "../../display-units.js";
 import {DEFAULT_MAX_CITY_LABELS} from "../../../runtime/display-defaults.js";
+import {DEFAULT_POLITICAL_BOUNDARY_SOFTNESS, normalizePoliticalBoundarySoftness} from "../../../renderer/political-boundary-style.js";
 
 export const CONTROL_PREFERENCES_KEY = "webgl-generator-control-preferences";
 
@@ -12,6 +13,7 @@ const DEFAULT_CONTROL_PREFERENCES = Object.freeze({
   visualTheme: "default",
   showOceanHeight: false,
   smoothCellBorders: true,
+  politicalBoundarySoftness: DEFAULT_POLITICAL_BOUNDARY_SOFTNESS,
   showHoverInfo: true,
   toolbarCollapsed: false,
   climateRangeRatioLocked: true,
@@ -67,6 +69,7 @@ function normalizePreferences(input = {}) {
     visualTheme: normalizeVisualThemeId(input.visualTheme),
     showOceanHeight: typeof input.showOceanHeight === "boolean" ? input.showOceanHeight : DEFAULT_CONTROL_PREFERENCES.showOceanHeight,
     smoothCellBorders: typeof input.smoothCellBorders === "boolean" ? input.smoothCellBorders : DEFAULT_CONTROL_PREFERENCES.smoothCellBorders,
+    politicalBoundarySoftness: normalizePoliticalBoundarySoftness(input.politicalBoundarySoftness),
     showHoverInfo: typeof input.showHoverInfo === "boolean"
       ? input.showHoverInfo
       : typeof input.showHoverOverlay === "boolean"

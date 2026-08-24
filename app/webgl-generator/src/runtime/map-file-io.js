@@ -1,5 +1,6 @@
 import {readObjectNote} from "./object-notes.js";
 import {normalizeVisualThemeDocument} from "../renderer/themes.js";
+import {normalizePoliticalBoundarySoftness} from "../renderer/political-boundary-style.js";
 import {normalizeLabelStyleStore, validateLabelStyleStore} from "./label-style-registry.js";
 import {normalizeLabelLayoutStore, validateLabelLayoutStore} from "./label-layout-registry.js";
 import {PNG_FIXED_TEXT_ELEMENT_IDS, PNG_MILITARY_TEXT_SELECTOR, PNG_SEMANTIC_LABEL_SELECTORS} from "./canvas-text-contract.js";
@@ -65,20 +66,29 @@ export function createMapDocument(map, options = {}) {
   const display = documentOptions.display;
   delete documentOptions.display;
   const normalizedMap = normalizeMapSchemaV2(map, {...documentOptions, display});
+  const storedMap = normalizedMap.display
+    ? {
+        ...normalizedMap,
+        metadata: {
+          ...(normalizedMap.metadata || {}),
+          display: normalizeMapDisplayConfig(normalizedMap.display)
+        }
+      }
+    : normalizedMap;
   return {
     type: MAP_DOCUMENT_TYPE,
     version: MAP_DOCUMENT_VERSION,
     exportedAt: new Date().toISOString(),
     app: "fmg-webgl-reimplementation",
     metadata: {
-      name: normalizedMap.metadata?.name || normalizedMap.options?.mapName,
-      seed: normalizedMap.metadata?.seed || documentOptions.seed,
-      checksum: normalizedMap.metadata?.checksum || null,
-      generatorStage: normalizedMap.metadata?.generatorStage || null,
+      name: storedMap.metadata?.name || storedMap.options?.mapName,
+      seed: storedMap.metadata?.seed || documentOptions.seed,
+      checksum: storedMap.metadata?.checksum || null,
+      generatorStage: storedMap.metadata?.generatorStage || null,
       mapSchemaVersion: MAP_SCHEMA_VERSION
     },
     options: documentOptions,
-    map: normalizedMap
+    map: storedMap
   };
 }
 
@@ -724,7 +734,7 @@ function normalizeCurrentMapSchemaV2(map, documentOptions = {}) {
   const cellsTarget = normalizeMapCellTarget(source.options?.cellsTarget ?? documentOptions?.cellsTarget ?? source.metadata?.cellsTarget, {fallback: fallbackCells});
   const options = {...(documentOptions || {}), ...(source.options || {}), cellsTarget};
   delete options.display;
-  const displaySource = documentOptions.display ?? source.display;
+  const displaySource = documentOptions.display ?? source.display ?? source.metadata?.display;
   const normalizedRiverStore = normalizeRiverStore(source.rivers, source.pack);
   return synchronizeMapName({
     ...source,
@@ -793,7 +803,7 @@ function applyRegenerationLockCompatibility(map, source) {
 }
 
 function normalizeMapDocumentDisplay(document) {
-  const display = document?.map?.display ?? document?.display;
+  const display = document?.map?.display ?? document?.map?.metadata?.display ?? document?.display;
   if (!display || typeof display !== "object") return document;
   return {
     ...document,
@@ -808,7 +818,8 @@ function normalizeMapDisplayConfig(input = {}) {
   const source = input && typeof input === "object" ? input : {};
   return {
     ...source,
-    units: normalizeUnitPreferences(source.units)
+    units: normalizeUnitPreferences(source.units),
+    politicalBoundarySoftness: normalizePoliticalBoundarySoftness(source.politicalBoundarySoftness)
   };
 }
 

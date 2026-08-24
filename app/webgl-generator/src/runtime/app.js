@@ -16,6 +16,7 @@ import {createRandom, createRandomSeed} from "../generator/random.js";
 import {PlaceholderMapRenderer} from "../renderer/placeholder-renderer.js";
 import {prepareRendererWorkerInstall} from "../renderer/prepared-render-installer.js";
 import {RENDER_PREPARATION_LAYERS, renderPreparationLayersForRegeneration, renderPreparationPickingComponentsForRegeneration} from "../renderer/render-preparation.js";
+import {DEFAULT_POLITICAL_BOUNDARY_SOFTNESS, normalizePoliticalBoundarySoftness} from "../renderer/political-boundary-style.js";
 import {
   createUserVisualThemeDocument,
   exportVisualThemeDocument,
@@ -2792,6 +2793,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     onFitView: () => runtimeActions.layers.fitView(),
     onShowOceanHeight: showOceanHeight => invokeRuntimeDisplayActionFromUi(state, documentRef, () => runtimeActions.layers.setShowOceanHeight(showOceanHeight)),
     onSmoothCellBorders: smoothCellBorders => invokeRuntimeDisplayActionFromUi(state, documentRef, () => runtimeActions.layers.setSmoothCellBorders(smoothCellBorders)),
+    onPoliticalBoundarySoftness: softness => invokeRuntimeDisplayActionFromUi(state, documentRef, () => runtimeActions.layers.setPoliticalBoundarySoftness(softness)),
     onVisualTheme: visualTheme => invokeRuntimeDisplayActionFromUi(state, documentRef, () => runtimeActions.layers.setTheme(visualTheme)),
     onCreateVisualTheme: () => runtimeActions.layers.createTheme(),
     onExportVisualTheme: () => runtimeActions.layers.exportTheme(currentVisualThemeId(documentRef), {download: true}),
@@ -3058,13 +3060,15 @@ function restoreRuntimeDisplayControls(state, documentRef) {
   const visualTheme = renderer?.visualTheme?.id || "default";
   const showOceanHeight = Boolean(renderer?.viewOptions?.showOceanHeight);
   const smoothCellBorders = renderer?.viewOptions?.smoothCellBorders !== false;
+  const politicalBoundarySoftness = normalizePoliticalBoundarySoftness(renderer?.viewOptions?.politicalBoundarySoftness);
   const maxCityLabels = Number(renderer?.labelOptions?.maxCityLabels) || DEFAULT_MAX_CITY_LABELS;
   setActiveModeButton(documentRef, colorMode);
   syncRuntimeControlValue(documentRef, "visual-theme-preset", visualTheme);
   syncRuntimeBooleanControl(documentRef.getElementById("show-ocean-height"), showOceanHeight);
   syncRuntimeBooleanControl(documentRef.getElementById("smooth-cell-borders"), smoothCellBorders);
+  syncRuntimeControlValue(documentRef, "political-boundary-softness", politicalBoundarySoftness);
   syncRuntimeControlValue(documentRef, "max-city-labels", maxCityLabels);
-  updateControlPreferences(documentRef, {colorMode, visualTheme, showOceanHeight, smoothCellBorders, maxCityLabels});
+  updateControlPreferences(documentRef, {colorMode, visualTheme, showOceanHeight, smoothCellBorders, politicalBoundarySoftness, maxCityLabels});
   for (const control of documentRef.querySelectorAll("[data-layer]")) {
     const layer = control.dataset.layer;
     if (!Object.prototype.hasOwnProperty.call(rendererLayers, layer)) continue;
@@ -3294,6 +3298,15 @@ function createRuntimeActions(state, documentRef, options = {}) {
           () => setRuntimeSmoothCellBorders(state, documentRef, enabled),
           () => setRuntimeSmoothCellBorders(state, documentRef, previous),
           {gpuResident: state.renderer?.canApplyGpuResidentSmoothCellBorders?.() === true}
+        );
+      },
+      setPoliticalBoundarySoftness: value => {
+        const previous = normalizePoliticalBoundarySoftness(readControlPreferences(documentRef).politicalBoundarySoftness);
+        return runDisplayMutation(
+          "layers.setPoliticalBoundarySoftness",
+          () => setRuntimePoliticalBoundarySoftness(state, documentRef, value),
+          () => setRuntimePoliticalBoundarySoftness(state, documentRef, previous),
+          {gpuResident: true}
         );
       },
       setShowHoverInfo: visible => setRuntimeHoverInfoVisible(state, documentRef, visible),
@@ -4212,6 +4225,17 @@ function setRuntimeSmoothCellBorders(state, documentRef, enabled) {
   });
 }
 
+function setRuntimePoliticalBoundarySoftness(state, documentRef, value) {
+  const softness = normalizePoliticalBoundarySoftness(value);
+  return measureHealthOperation(state, "set-political-boundary-softness", {politicalBoundarySoftness: softness}, () => {
+    syncRuntimeControlValue(documentRef, "political-boundary-softness", softness);
+    updateControlPreferences(documentRef, {politicalBoundarySoftness: softness});
+    state.renderer?.setViewOptions?.({politicalBoundarySoftness: softness});
+    updateRuntimePanel(documentRef, state);
+    return runtimeDisplayActionResult(state, documentRef, ["display-preference", "renderer", "runtime-panel"]);
+  });
+}
+
 function setRuntimeHoverInfoVisible(state, documentRef, visible) {
   const nextVisible = Boolean(visible);
   return measureHealthOperation(state, "set-hover-info-visibility", {showHoverInfo: nextVisible}, () => {
@@ -4256,6 +4280,7 @@ function runtimeDisplayActionResult(state, documentRef, effects) {
     display: {
       showOceanHeight: Boolean(preferences.showOceanHeight),
       smoothCellBorders: Boolean(preferences.smoothCellBorders),
+      politicalBoundarySoftness: normalizePoliticalBoundarySoftness(preferences.politicalBoundarySoftness),
       showHoverInfo: Boolean(preferences.showHoverInfo),
       maxCityLabels: Number(preferences.maxCityLabels) || DEFAULT_MAX_CITY_LABELS
     },
@@ -4292,6 +4317,7 @@ function applyControlPreferencesToRenderer(documentRef, renderer) {
     if (typeof preferences.visualTheme === "string") renderer.setVisualTheme?.(preferences.visualTheme);
     if (typeof preferences.showOceanHeight === "boolean") renderer.setViewOptions({showOceanHeight: preferences.showOceanHeight});
     if (typeof preferences.smoothCellBorders === "boolean") renderer.setViewOptions({smoothCellBorders: preferences.smoothCellBorders});
+    renderer.setViewOptions({politicalBoundarySoftness: normalizePoliticalBoundarySoftness(preferences.politicalBoundarySoftness)});
     if (typeof preferences.maxCityLabels === "number") renderer.setLabelOptions({maxCityLabels: preferences.maxCityLabels});
     renderer.setUnitPreferences(preferences.units);
     const layers = normalizeLayerVisibilityPreferences(preferences.layers || {});
@@ -5103,6 +5129,7 @@ function runtimeAfterMapLoadGroups(state, documentRef, restorePanels) {
 }
 
 function captureMapReplaceSnapshot(state, documentRef) {
+  const preferences = readControlPreferences(documentRef);
   return {
     map: state.map,
     options: cloneGenerationOptions(state.options),
@@ -5111,7 +5138,8 @@ function captureMapReplaceSnapshot(state, documentRef) {
     history: state.editHistory.createSnapshot(),
     selection: state.selectionStore.getSnapshot(),
     canvasToolMode: state.canvasToolModes.getActive(),
-    unitPreferences: normalizeUnitPreferences(readControlPreferences(documentRef).units),
+    unitPreferences: normalizeUnitPreferences(preferences.units),
+    politicalBoundarySoftness: normalizePoliticalBoundarySoftness(preferences.politicalBoundarySoftness),
     lastEditRefresh: state.lastEditRefresh,
     visualTheme: currentVisualThemeId(documentRef),
     userVisualThemes: listUserVisualThemeDocuments()
@@ -5130,8 +5158,12 @@ async function restoreMapReplaceSnapshot(state, documentRef, snapshot, _error, o
     state.pendingGenerateId = snapshot.pendingGenerateId;
     state.lastEditRefresh = snapshot.lastEditRefresh;
     syncGenerationInputs(documentRef, state.options);
-    updateControlPreferences(documentRef, {units: snapshot.unitPreferences});
+    updateControlPreferences(documentRef, {
+      units: snapshot.unitPreferences,
+      politicalBoundarySoftness: snapshot.politicalBoundarySoftness
+    });
     state.renderer?.setUnitPreferences?.(snapshot.unitPreferences);
+    state.renderer?.setViewOptions?.({politicalBoundarySoftness: snapshot.politicalBoundarySoftness});
     replaceUserVisualThemes(snapshot.userVisualThemes || []);
     applyRuntimeVisualThemeState(state, documentRef, snapshot.visualTheme, {force: true});
     if (mapChanged && snapshot.map) {
@@ -5619,13 +5651,15 @@ async function exportPackGeoJsonViaWorker(state, documentRef, options = {}, rang
 async function exportMapArchiveViaWorker(state, documentRef, {operation = null, encoding = "webfmg-v3", resultType = "bytes", progressMessage = null} = {}) {
   assertMapAvailable(state);
   const map = state.map;
-  const units = normalizeUnitPreferences(readControlPreferences(documentRef).units);
+  const preferences = readControlPreferences(documentRef);
+  const units = normalizeUnitPreferences(preferences.units);
+  const politicalBoundarySoftness = normalizePoliticalBoundarySoftness(preferences.politicalBoundarySoftness);
   const archive = {
     operation: MAP_FILE_IO_WORKER_OPERATIONS.EXPORT,
     options: {
       ...(state.options || {}),
       visualTheme: currentVisualThemeId(documentRef),
-      display: {units}
+      display: {units, politicalBoundarySoftness}
     },
     encoding,
     resultType
@@ -6939,6 +6973,12 @@ async function importParsedMapDocumentViaApi(state, documentRef, document, optio
       updateControlPreferences(documentRef, {units});
       state.renderer?.setPreparedPresentation?.({unitPreferences: units});
     }
+    const politicalBoundarySoftness = normalizePoliticalBoundarySoftness(
+      document.map.display?.politicalBoundarySoftness,
+      DEFAULT_POLITICAL_BOUNDARY_SOFTNESS
+    );
+    updateControlPreferences(documentRef, {politicalBoundarySoftness});
+    state.renderer?.setPreparedPresentation?.({viewOptions: {politicalBoundarySoftness}});
     applyPersistedVisualTheme(state, documentRef, document, {preparedPresentation: true});
     syncGenerationInputs(documentRef, normalizedOptions);
     operation?.report("load-map", {message: loadingMessage("map-import-render")});

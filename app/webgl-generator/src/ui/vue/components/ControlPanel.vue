@@ -422,6 +422,20 @@
     </div>
 
     <div class="control-panel-section label-style-panel" data-control-panel="styles" :hidden="activeTab !== 'styles'">
+      <section class="political-boundary-style" aria-labelledby="political-boundary-style-title">
+        <h2 id="political-boundary-style-title">政治边界</h2>
+        <UiSliderField
+          label="疆界柔化"
+          input-id="political-boundary-softness"
+          :model-value="preferences.politicalBoundarySoftness"
+          :min="POLITICAL_BOUNDARY_SOFTNESS_MIN"
+          :max="POLITICAL_BOUNDARY_SOFTNESS_MAX"
+          :step="1"
+          unit-label="%"
+          @change="commitPoliticalBoundarySoftness"
+        />
+        <p class="label-style-inheritance">0 为清晰描线，50 保留旧存档观感，100 更轻柔朦胧；只影响国界与省界。</p>
+      </section>
       <UiSelectField
         label="标签类型"
         input-id="label-style-type"
@@ -702,6 +716,7 @@ import {Lock, Setting, Unlock} from "@element-plus/icons-vue";
 import {useDraggableFloatingPanel} from "../composables/use-draggable-floating-panel.js";
 import {useManagedOverlay} from "../composables/use-managed-overlay.js";
 import {visualThemeOptions} from "../../../renderer/themes.js";
+import {POLITICAL_BOUNDARY_SOFTNESS_MAX, POLITICAL_BOUNDARY_SOFTNESS_MIN, normalizePoliticalBoundarySoftness} from "../../../renderer/political-boundary-style.js";
 import {LABEL_FONT_FAMILIES, LABEL_STYLE_TYPES, LOCAL_LABEL_FONT_ID, hasVisibleLabelShadow, normalizeLocalFontFamilyName, resolveLabelStyle} from "../../../runtime/label-style-registry.js";
 import {DEFAULT_LAYER_VISIBILITY} from "../../../runtime/display-defaults.js";
 import {createLocalFontFamilyOptions} from "../../../runtime/local-font-catalog.js";
@@ -1430,6 +1445,12 @@ async function requestRegeneration() {
 function commitLabelStyle(field, value) {
   document.dispatchEvent(new CustomEvent("webgl-generator-label-style-patch", {
     detail: {styleType: selectedLabelStyleType.value, patch: {[field]: value}}
+  }));
+}
+
+function commitPoliticalBoundarySoftness(value) {
+  document.dispatchEvent(new CustomEvent("webgl-generator-political-boundary-softness", {
+    detail: {value: normalizePoliticalBoundarySoftness(value)}
   }));
 }
 

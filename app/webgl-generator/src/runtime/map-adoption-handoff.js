@@ -4,12 +4,18 @@ import {
   inspectWebfmgV3Container
 } from "./webfmg-v3-container.js";
 import {applyMainThreadMapProjection} from "./main-thread-map-projection.js";
+import {migrateMapDocument} from "./map-file-io.js";
 
 export const MAP_ADOPTION_HANDOFF_KIND = "map-adoption-v3-sections";
 export const MAP_ADOPTION_HANDOFF_CHUNK_BYTES = 256 * 1024;
 
 export function createMapAdoptionHandoff(document) {
   const bytes = encodeWebfmgV3Document(document);
+  return createMapAdoptionHandoffFromBytes(bytes);
+}
+
+export function createMapAdoptionHandoffFromBytes(source, {remigrate = false} = {}) {
+  const bytes = normalizeBytes(source);
   const container = inspectWebfmgV3Container(bytes);
   return {
     kind: MAP_ADOPTION_HANDOFF_KIND,
@@ -17,7 +23,8 @@ export function createMapAdoptionHandoff(document) {
     byteLength: bytes.byteLength,
     chunks: splitBytes(bytes),
     sections: container.sections,
-    schemaVersion: container.schemaVersion
+    schemaVersion: container.schemaVersion,
+    remigrate: Boolean(remigrate)
   };
 }
 
@@ -35,7 +42,7 @@ export async function materializeMapAdoptionHandoff(handoff, options = {}) {
   }
   const yieldToMain = typeof options.yieldToMain === "function" ? options.yieldToMain : defaultYield;
   try {
-    const document = await decodeWebfmgV3DocumentChunksAsync(handoff.chunks, {
+    const decoded = await decodeWebfmgV3DocumentChunksAsync(handoff.chunks, {
       ...options,
       byteLength,
       expectedSections: Number(handoff.sections),
@@ -43,6 +50,7 @@ export async function materializeMapAdoptionHandoff(handoff, options = {}) {
       consumeChunks: true,
       yieldToMain
     });
+    const document = handoff.remigrate === true ? migrateMapDocument(decoded) : decoded;
     applyMainThreadMapProjection(document.map);
     return document;
   } finally {
@@ -53,7 +61,7 @@ export async function materializeMapAdoptionHandoff(handoff, options = {}) {
 function splitBytes(bytes) {
   const chunks = [];
   for (let offset = 0; offset < bytes.byteLength; offset += MAP_ADOPTION_HANDOFF_CHUNK_BYTES) {
-    chunks.push(bytes.slice(offset, Math.min(bytes.byteLength, offset + MAP_ADOPTION_HANDOFF_CHUNK_BYTES)));
+    chunks.push(bytes.subarray(offset, Math.min(bytes.byteLength, offset + MAP_ADOPTION_HANDOFF_CHUNK_BYTES)));
   }
   return chunks.length ? chunks : [new Uint8Array(0)];
 }

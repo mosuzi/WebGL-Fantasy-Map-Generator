@@ -4,6 +4,8 @@ import {readFile} from "node:fs/promises";
 import {Worker} from "node:worker_threads";
 import {generatePlaceholderMap} from "../app/webgl-generator/src/generator/index.js";
 import {PlaceholderMapRenderer} from "../app/webgl-generator/src/renderer/placeholder-renderer.js";
+import {DEFAULT_POLITICAL_BOUNDARY_SOFTNESS} from "../app/webgl-generator/src/renderer/political-boundary-style.js";
+import {materializeMapAdoptionHandoff} from "../app/webgl-generator/src/runtime/map-adoption-handoff.js";
 
 import {
   MAP_FILE_IO_WORKER_OPERATIONS,
@@ -34,11 +36,13 @@ const preparedPresentationReceiver = {
 };
 PlaceholderMapRenderer.prototype.setPreparedPresentation.call(preparedPresentationReceiver, {
   visualTheme: "ancient",
-  unitPreferences: {militaryScale: 1.625}
+  unitPreferences: {militaryScale: 1.625},
+  viewOptions: {politicalBoundarySoftness: 73}
 });
 assert.equal(preparedPresentationReceiver.visualTheme.id, "ancient");
 assert.equal(preparedPresentationReceiver.viewOptions.visualTheme, preparedPresentationReceiver.visualTheme);
 assert.equal(preparedPresentationReceiver.unitPreferences.militaryScale, 1.6);
+assert.equal(preparedPresentationReceiver.viewOptions.politicalBoundarySoftness, 73);
 const chunks = splitText(fixtureText, 7);
 const clientLargeText = fixtureText.repeat(1000);
 const preparedText = await prepareMapFileIoWorkerPayload({operation: "import", input: clientLargeText}, {chunkChars: 16 * 1024});
@@ -175,6 +179,17 @@ const gzipWorker = await runTaskInWorker({
 assert.equal(gzipFallback.metadata.checksum, directImport.metadata.checksum);
 assert.equal(gzipWorker.result.metadata.checksum, directImport.metadata.checksum);
 assert.ok(gzipWorker.result.map.grid.cells.h instanceof Uint8Array);
+const adoptedV3 = await runMapFileIoWorkerTask({
+  operation: MAP_FILE_IO_WORKER_OPERATIONS.IMPORT,
+  input: {kind: "bytes", bytes: gzipBytes, mimeType: "application/gzip"},
+  filename: "adopted.webfmg"
+}, {adoptMap: () => {}});
+const adoptedDocument = await materializeMapAdoptionHandoff(adoptedV3.handoff, {yieldToMain: () => Promise.resolve()});
+assert.equal(adoptedV3.timings.handoffMode, "reuse-v3-sections", "当前 v3 导入仍执行重复接纳编码");
+assert.ok(adoptedV3.timings.handoffEncodeMs < Math.max(20, adoptedV3.timings.parseMs * 0.1), "v3 分区复用没有消除重复编码主耗时");
+assert.equal(adoptedDocument.metadata.checksum, gzipFallback.document.metadata.checksum);
+assert.deepEqual(adoptedDocument.map, gzipFallback.document.map, "复用原 v3 分区后的主线程迁移结果漂移");
+assert.equal(adoptedDocument.map.display?.politicalBoundarySoftness ?? DEFAULT_POLITICAL_BOUNDARY_SOFTNESS, DEFAULT_POLITICAL_BOUNDARY_SOFTNESS);
 
 const browserEnvelope = createBrowserMapStorageEnvelope(exportedText, directImport.map, {
   encoding: "gzip-base64",
@@ -275,7 +290,9 @@ console.log(JSON.stringify({
     webfmgBytes: gzipBytes.byteLength,
     blob: gzipExport.result.data.constructor.name,
     gzipBase64: true,
-    browserEnvelope: browserEnvelope.type === BROWSER_MAP_STORAGE_TYPE
+    browserEnvelope: browserEnvelope.type === BROWSER_MAP_STORAGE_TYPE,
+    adoptionHandoffMode: adoptedV3.timings.handoffMode,
+    adoptionHandoffMs: adoptedV3.timings.handoffEncodeMs
   },
   failures: {
     damagedJson: damagedJson.message,

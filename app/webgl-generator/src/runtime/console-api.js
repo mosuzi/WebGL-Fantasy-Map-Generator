@@ -23,6 +23,7 @@ import {getPlannerRecipe, listPlannerRecipes} from "./planner-recipe-registry.js
 import {buildMapSummary as buildSharedMapSummary} from "./read-only-map-core.js";
 import {compareAnalysisRegions, compareRegionPower, defineAnalysisRegion, describeAnalysisRegion, diagnoseRegionPopulation, diagnoseRegionTerrain, explainRegionPrecipitation} from "./map-analysis-api.js";
 import {getPlaceDirection, measurePlaceDistance, resolvePlace} from "./place-analysis-api.js";
+import {normalizePoliticalBoundarySoftness} from "../renderer/political-boundary-style.js";
 
 export function installConsoleApi(documentRef, state, options = {}) {
   const view = documentRef.defaultView || window;
@@ -1670,11 +1671,13 @@ function normalizeNamebaseApiBaseIds(baseIds) {
 
 export function exportAllMapData(state, documentRef, options = {}) {
   const map = assertApiMap(state);
-  const units = normalizeUnitPreferences(readControlPreferences(documentRef).units);
+  const preferences = readControlPreferences(documentRef);
+  const units = normalizeUnitPreferences(preferences.units);
+  const politicalBoundarySoftness = normalizePoliticalBoundarySoftness(preferences.politicalBoundarySoftness);
   const document = createMapDocument(map, {
     ...(state.options || {}),
     visualTheme: currentVisualThemeId(state, documentRef),
-    display: {units}
+    display: {units, politicalBoundarySoftness}
   });
   const text = stringifyMapDocument(document);
   const filename = `${mapFileBaseName(map)}.webgl-map.json`;
@@ -1725,11 +1728,13 @@ export function exportPackGeoJson(state, documentRef, options = {}) {
 
 export async function exportCompressedAllMapData(state, documentRef, options = {}) {
   const map = assertApiMap(state);
-  const units = normalizeUnitPreferences(readControlPreferences(documentRef).units);
+  const preferences = readControlPreferences(documentRef);
+  const units = normalizeUnitPreferences(preferences.units);
+  const politicalBoundarySoftness = normalizePoliticalBoundarySoftness(preferences.politicalBoundarySoftness);
   const document = createMapDocument(map, {
     ...(state.options || {}),
     visualTheme: currentVisualThemeId(state, documentRef),
-    display: {units}
+    display: {units, politicalBoundarySoftness}
   });
   const filename = createMapArchiveFilename(map, {
     template: options.filenameTemplate === undefined ? "{name}.{ext}" : options.filenameTemplate

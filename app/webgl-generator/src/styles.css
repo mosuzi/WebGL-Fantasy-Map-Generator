@@ -391,6 +391,21 @@ select {
   gap: 10px;
 }
 
+.political-boundary-style {
+  display: grid;
+  gap: 8px;
+  border: 1px solid rgba(189, 206, 213, 0.16);
+  border-radius: 8px;
+  padding: 10px;
+  background: rgba(9, 14, 17, 0.46);
+}
+
+.political-boundary-style h2 {
+  margin: 0;
+  color: #dbe6ea;
+  font-size: 13px;
+}
+
 .label-style-panel .ui-slider-field {
   grid-template-columns: 72px minmax(0, 1fr) 84px;
 }

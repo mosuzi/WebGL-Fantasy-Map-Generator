@@ -25,6 +25,7 @@ import {regenerationPanelCopy} from "./regeneration-user-copy.js";
 import {buildShortcutDisplayModel} from "../runtime/keyboard-shortcuts.js";
 import {DEFAULT_MAX_CITY_LABELS} from "../runtime/display-defaults.js";
 import {MAP_CELLS_MAX, MAP_CELLS_MIN, normalizeMapCellTarget} from "../generator/map-size.js";
+import {normalizePoliticalBoundarySoftness} from "../renderer/political-boundary-style.js";
 
 export const CONTROL_PREFERENCES_KEY = "webgl-generator-control-preferences";
 export const VIEW_MODE_SELECTOR = ".ui-segmented-mode-bridge[data-mode]";
@@ -115,6 +116,11 @@ export function bindRuntimePanel(documentRef, handlers) {
   });
   documentRef.addEventListener("webgl-generator-label-style-patch", event => {
     handlers.onPatchLabelStyle?.(event.detail?.styleType, event.detail?.patch || {});
+  });
+  documentRef.addEventListener("webgl-generator-political-boundary-softness", event => {
+    const value = normalizePoliticalBoundarySoftness(event.detail?.value);
+    updateControlPreferences(documentRef, {politicalBoundarySoftness: value});
+    handlers.onPoliticalBoundarySoftness?.(value);
   });
   documentRef.addEventListener("webgl-generator-label-style-reset", event => {
     handlers.onResetLabelStyle?.(event.detail?.styleType);
@@ -600,6 +606,7 @@ function normalizeControlPreferences(preferences) {
   if (!preferences || typeof preferences !== "object") return {};
   const normalized = {...preferences};
   normalized.visualTheme = normalizeVisualThemeId(normalized.visualTheme);
+  normalized.politicalBoundarySoftness = normalizePoliticalBoundarySoftness(normalized.politicalBoundarySoftness);
   normalized.units = normalizeUnitPreferences(normalized.units);
   if (normalized.layers && typeof normalized.layers === "object") {
     normalized.layers = {...normalized.layers};
