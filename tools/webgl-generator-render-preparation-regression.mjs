@@ -12,7 +12,7 @@ import {
   buildRouteMeshVertices
 } from "../app/webgl-generator/src/renderer/placeholder-renderer.js";
 import {buildLabelLayoutDescriptors, unpackLabelLayoutDescriptors} from "../app/webgl-generator/src/renderer/label-layout-descriptor.js";
-import {buildCellVisualMesh, summarizeCellVisualMesh} from "../app/webgl-generator/src/renderer/cell-visual-layer.js";
+import {buildCellVisualMesh, refreshCellVisualMeshCells, summarizeCellVisualMesh} from "../app/webgl-generator/src/renderer/cell-visual-layer.js";
 import {buildShoreVisualPaths, summarizeShoreVisualPaths} from "../app/webgl-generator/src/renderer/shore-layer.js";
 import {
   PROVINCE_VISUAL_STYLE,
@@ -516,6 +516,18 @@ async function verifyPackedCaches() {
     statePaths: packPoliticalVisualPaths(statePaths, binding, "state"),
     provincePaths: packPoliticalVisualPaths(provincePaths, binding, "province")
   };
+  const compactCellVisual = packCellVisualMesh(cellVisual, binding, {transferMode: "runtime-compact"});
+  const compactUnpacked = await unpackCellVisualMeshInChunks(compactCellVisual, binding, {chunkUnits: 512});
+  const fullTransferBytes = collectRenderPreparationTransfers(caches.cellVisual).reduce((sum, buffer) => sum + buffer.byteLength, 0);
+  const compactTransferBytes = collectRenderPreparationTransfers(compactCellVisual).reduce((sum, buffer) => sum + buffer.byteLength, 0);
+  assert.equal(compactCellVisual.transferMode, "runtime-compact");
+  assert.ok(compactTransferBytes < fullTransferBytes * 0.75, `compact cell visual 传输字节没有实质下降：${compactTransferBytes}/${fullTransferBytes}`);
+  assert.ok(compactUnpacked.cells.every(cell => cell.points.length === 0 && cell.boundaryPointCount > 0), "compact cell visual 仍携带逐 cell 边界点，或遗漏边界点计数");
+  assert.equal(compactUnpacked.edgeCurves.size, 0, "compact cell visual 仍携带可确定性重建的 edge curve");
+  assert.equal(compactUnpacked.shoreEdges.size, 0, "compact cell visual 仍携带可确定性重建的 shore edge");
+  assert.deepEqual(summarizeCellVisualMesh(compactUnpacked), summarizeCellVisualMesh(cellVisual));
+  const compactRefresh = refreshCellVisualMeshCells(map, compactUnpacked, [map.grid.cells.i[0]]);
+  assert.ok(compactRefresh?.mesh && compactRefresh.mesh.cells.length === cellVisual.cells.length, "compact cell visual 无法在首次局部拓扑更新时按地图重建中间态");
   const unpacked = {
     cellVisual: unpackCellVisualMesh(caches.cellVisual, binding),
     shore: unpackShoreVisualPaths(caches.shore, binding),

@@ -156,7 +156,9 @@ export async function executeRenderPreparationTask(payload = {}, context = {}) {
       cache.cellVisual ||= payload.caches?.cellVisual
         ? unpackCellVisualMesh(payload.caches.cellVisual, binding)
         : buildCellVisualMesh(map);
-      result.layers.cellVisual = packCellVisualMesh(cache.cellVisual, binding);
+      result.layers.cellVisual = packCellVisualMesh(cache.cellVisual, binding, {
+        transferMode: payload.cellVisualTransferMode
+      });
     } else if (layer === "shore") {
       cache.shore ||= payload.caches?.shore
         ? unpackShoreVisualPaths(payload.caches.shore, binding)

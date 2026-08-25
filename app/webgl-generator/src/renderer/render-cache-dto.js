@@ -2,17 +2,30 @@ import {normalizeRenderResourceBinding, sameRenderResourceBinding} from "./rende
 
 export const RENDER_CACHE_SCHEMA_VERSION = 1;
 const CELL_VISUAL_CHECKPOINT_INTERVAL = 32;
+const CELL_VISUAL_TRANSFER_MODE_FULL = "full";
+const CELL_VISUAL_TRANSFER_MODE_RUNTIME_COMPACT = "runtime-compact";
 
-export function packCellVisualMesh(mesh, binding = {}) {
+export function packCellVisualMesh(mesh, binding = {}, options = {}) {
   const cells = (mesh?.cells || []).filter(Boolean);
-  const cellPoints = packPointLists(cells.map(cell => cell.points || []));
+  const transferMode = options.transferMode === CELL_VISUAL_TRANSFER_MODE_RUNTIME_COMPACT
+    ? CELL_VISUAL_TRANSFER_MODE_RUNTIME_COMPACT
+    : CELL_VISUAL_TRANSFER_MODE_FULL;
+  const compact = transferMode === CELL_VISUAL_TRANSFER_MODE_RUNTIME_COMPACT;
+  const cellPoints = compact
+    ? {offsets: new Uint32Array(cells.length + 1), values: new Float64Array()}
+    : packPointLists(cells.map(cell => cell.points || []));
   const cellTriangles = packFloatLists(cells.map(cell => cell.ndcTriangles || []), Float32Array);
-  const edgeEntries = [...(mesh?.edgeCurves instanceof Map ? mesh.edgeCurves : new Map())].sort((a, b) => a[0].localeCompare(b[0]));
+  const edgeEntries = compact
+    ? []
+    : [...(mesh?.edgeCurves instanceof Map ? mesh.edgeCurves : new Map())].sort((a, b) => a[0].localeCompare(b[0]));
   const edgePoints = packPointLists(edgeEntries.map(([, points]) => points || []));
-  const shoreEdges = [...(mesh?.shoreEdges instanceof Set ? mesh.shoreEdges : new Set())]
+  const shoreEdges = (compact ? [] : [...(mesh?.shoreEdges instanceof Set ? mesh.shoreEdges : new Set())])
     .map(parseEdgeKey)
     .filter(Boolean)
     .sort(compareEdgePair);
+  const fallbackEntries = compact
+    ? cells.map((cell, index) => [index, cell.triangulationFallback ?? null]).filter(([, fallback]) => fallback !== null)
+    : [];
   const summary = {};
   for (const [key, value] of Object.entries(mesh || {})) {
     if (["cells", "edgeCurves", "shoreEdges"].includes(key)) continue;
@@ -21,14 +34,18 @@ export function packCellVisualMesh(mesh, binding = {}) {
   return {
     schemaVersion: RENDER_CACHE_SCHEMA_VERSION,
     binding: normalizeBinding(binding),
+    transferMode,
     cellIds: Int32Array.from(cells.map(cell => Number(cell.cell))),
     centers: Float64Array.from(cells.flatMap(cell => [Number(cell.center?.[0]) || 0, Number(cell.center?.[1]) || 0])),
+    boundaryPointCounts: Uint32Array.from(cells.map(cell => Number(cell.points?.length) || 0)),
     cellPointOffsets: cellPoints.offsets,
     cellPoints: cellPoints.values,
     triangleOffsets: cellTriangles.offsets,
     ndcTriangles: cellTriangles.values,
     triangleCounts: Uint32Array.from(cells.map(cell => Number(cell.triangleCount) || 0)),
-    triangulationFallbacks: cells.map(cell => structuredCloneSafe(cell.triangulationFallback ?? null)),
+    triangulationFallbacks: compact ? [] : cells.map(cell => structuredCloneSafe(cell.triangulationFallback ?? null)),
+    fallbackCellIndexes: Int32Array.from(fallbackEntries.map(([index]) => index)),
+    fallbackKinds: fallbackEntries.map(([, fallback]) => structuredCloneSafe(fallback)),
     edgeCells: Int32Array.from(edgeEntries.flatMap(([key]) => parseEdgeKey(key) || [-1, -1])),
     edgePointOffsets: edgePoints.offsets,
     edgePoints: edgePoints.values,
@@ -41,15 +58,18 @@ export function unpackCellVisualMesh(dto, expectedBinding = null) {
   assertCacheBinding(dto, expectedBinding, "cell-visual");
   validateOffsetSpecs(assertCellVisualMeshDtoShape(dto));
   validateCellTriangleSpans(dto);
+  const compact = cellVisualTransferMode(dto) === CELL_VISUAL_TRANSFER_MODE_RUNTIME_COMPACT;
+  const compactFallbacks = compactCellVisualFallbacks(dto);
   const cells = [];
   for (let index = 0; index < dto.cellIds.length; index++) {
     cells.push({
       cell: dto.cellIds[index],
       center: [dto.centers[index * 2], dto.centers[index * 2 + 1]],
-      points: unpackPointList(dto.cellPoints, dto.cellPointOffsets, index),
+      points: compact ? [] : unpackPointList(dto.cellPoints, dto.cellPointOffsets, index),
+      boundaryPointCount: dto.boundaryPointCounts?.[index] ?? 0,
       ndcTriangles: dto.ndcTriangles.slice(dto.triangleOffsets[index], dto.triangleOffsets[index + 1]),
       triangleCount: dto.triangleCounts[index],
-      triangulationFallback: structuredCloneSafe(dto.triangulationFallbacks?.[index] ?? null)
+      triangulationFallback: structuredCloneSafe(compact ? compactFallbacks.get(index) ?? null : dto.triangulationFallbacks?.[index] ?? null)
     });
   }
   const edgeCurves = new Map();
@@ -68,15 +88,18 @@ export async function unpackCellVisualMeshInChunks(dto, expectedBinding = null, 
   const gate = createRenderChunkGate(options);
   await validateOffsetSpecsInChunks(assertCellVisualMeshDtoShape(dto), gate, "cell-visual-shape");
   await validateCellTriangleSpansInChunks(dto, gate);
+  const compact = cellVisualTransferMode(dto) === CELL_VISUAL_TRANSFER_MODE_RUNTIME_COMPACT;
+  const compactFallbacks = compactCellVisualFallbacks(dto);
   const cells = [];
   for (let index = 0; index < dto.cellIds.length; index++) {
     cells.push({
       cell: dto.cellIds[index],
       center: [dto.centers[index * 2], dto.centers[index * 2 + 1]],
-      points: unpackPointList(dto.cellPoints, dto.cellPointOffsets, index),
+      points: compact ? [] : unpackPointList(dto.cellPoints, dto.cellPointOffsets, index),
+      boundaryPointCount: dto.boundaryPointCounts?.[index] ?? 0,
       ndcTriangles: dto.ndcTriangles.slice(dto.triangleOffsets[index], dto.triangleOffsets[index + 1]),
       triangleCount: dto.triangleCounts[index],
-      triangulationFallback: structuredCloneSafe(dto.triangulationFallbacks?.[index] ?? null)
+      triangulationFallback: structuredCloneSafe(compact ? compactFallbacks.get(index) ?? null : dto.triangulationFallbacks?.[index] ?? null)
     });
     if (isCellVisualCheckpoint(index + 1, dto.cellIds.length)) await gate.checkpoint("cells", index + 1, dto.cellIds.length);
   }
@@ -196,15 +219,23 @@ export function assertCacheBinding(dto, expected, cacheKind = "render") {
 }
 
 function assertCellVisualMeshDtoShape(dto) {
+  const compact = cellVisualTransferMode(dto) === CELL_VISUAL_TRANSFER_MODE_RUNTIME_COMPACT;
   assertTypedArray(dto.cellIds, Int32Array, "cell-visual.cellIds");
   const cellCount = dto.cellIds.length;
   assertTypedArrayLength(dto.centers, Float64Array, cellCount * 2, "cell-visual.centers");
+  if (dto.boundaryPointCounts !== undefined) assertTypedArrayLength(dto.boundaryPointCounts, Uint32Array, cellCount, "cell-visual.boundaryPointCounts");
   assertTypedArray(dto.cellPoints, Float64Array, "cell-visual.cellPoints");
   assertEvenLength(dto.cellPoints, "cell-visual.cellPoints");
   assertTypedArray(dto.ndcTriangles, Float32Array, "cell-visual.ndcTriangles");
   assertTypedArrayLength(dto.triangleCounts, Uint32Array, cellCount, "cell-visual.triangleCounts");
-  if (!Array.isArray(dto.triangulationFallbacks) || dto.triangulationFallbacks.length !== cellCount) {
+  if (!Array.isArray(dto.triangulationFallbacks) || (!compact && dto.triangulationFallbacks.length !== cellCount)) {
     throw cacheShapeError("cell-visual.triangulationFallbacks", "cell visual triangulation fallback 数量无效");
+  }
+  if (compact) {
+    assertTypedArray(dto.fallbackCellIndexes, Int32Array, "cell-visual.fallbackCellIndexes");
+    if (!Array.isArray(dto.fallbackKinds) || dto.fallbackKinds.length !== dto.fallbackCellIndexes.length) {
+      throw cacheShapeError("cell-visual.fallbackKinds", "compact cell visual fallback 数量无效");
+    }
   }
   assertTypedArray(dto.edgeCells, Int32Array, "cell-visual.edgeCells");
   assertEvenLength(dto.edgeCells, "cell-visual.edgeCells");
@@ -217,6 +248,25 @@ function assertCellVisualMeshDtoShape(dto) {
     assertOffsetSpec(dto.triangleOffsets, cellCount, dto.ndcTriangles.length, "cell-visual.triangleOffsets"),
     assertOffsetSpec(dto.edgePointOffsets, dto.edgeCells.length / 2, dto.edgePoints.length / 2, "cell-visual.edgePointOffsets")
   ];
+}
+
+function cellVisualTransferMode(dto) {
+  return dto?.transferMode === CELL_VISUAL_TRANSFER_MODE_RUNTIME_COMPACT
+    ? CELL_VISUAL_TRANSFER_MODE_RUNTIME_COMPACT
+    : CELL_VISUAL_TRANSFER_MODE_FULL;
+}
+
+function compactCellVisualFallbacks(dto) {
+  if (cellVisualTransferMode(dto) !== CELL_VISUAL_TRANSFER_MODE_RUNTIME_COMPACT) return new Map();
+  const fallbacks = new Map();
+  for (let index = 0; index < dto.fallbackCellIndexes.length; index++) {
+    const cellIndex = dto.fallbackCellIndexes[index];
+    if (!Number.isInteger(cellIndex) || cellIndex < 0 || cellIndex >= dto.cellIds.length || fallbacks.has(cellIndex)) {
+      throw cacheShapeError("cell-visual.fallbackCellIndexes", "compact cell visual fallback 索引无效");
+    }
+    fallbacks.set(cellIndex, dto.fallbackKinds[index]);
+  }
+  return fallbacks;
 }
 
 function assertShoreVisualPathsDtoShape(dto) {

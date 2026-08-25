@@ -11,6 +11,7 @@ import {
   assertLockedRegenerationSnapshots,
   captureLockedRegenerationObjects
 } from "../app/webgl-generator/src/runtime/regeneration-lock-protection.js";
+import {regenerateMapAttributeForWorker} from "../app/webgl-generator/src/runtime/regeneration-worker-task.js";
 import {reconcileSettlementCellIdentity} from "../app/webgl-generator/src/runtime/settlement-cell-index.js";
 
 const map = generatePlaceholderMap({seed: "settlement-route-identity", cellsTarget: 10_000, heightmapTemplate: "continents"});
@@ -238,7 +239,32 @@ assert.doesNotMatch(riverBlock, /finalizeSettlements|routeLocks|lockedRoutes|OBJ
 assert.match(riverBlock, /picking: "rivers"/, "河流重算没有使用只更新河流的 picking 路径");
 assert.doesNotMatch(riverBlock, /"object-index"/, "河流重算仍触发全量对象 picking 重建");
 const routeBlock = sourceFunctionBlock(appSource, "regenerateRoutes", "regenerateRivers");
-assert.match(routeBlock, /allRegenerationObjectsLocked[\s\S]*reconcileSettlementCellIdentity\(map\)[\s\S]*reconcileSettlementPortTopology\(map, \{mode: "routes", repairProtectedDerived: true\}\)[\s\S]*captureLockedRegenerationObjects\(map, OBJECT_KIND\.CITY\)/, "显式道路重算没有在全锁 no-op 后、锁快照前统一修复城镇与港口身份");
+assert.match(routeBlock, /allRegenerationObjectsLocked[\s\S]*captureLockedRegenerationObjects\(map, OBJECT_KIND\.ROUTE\)[\s\S]*captureLockedRegenerationObjects\(map, OBJECT_KIND\.CITY\)[\s\S]*reconcileSettlementCellIdentity\(map\)[\s\S]*reconcileSettlementPortTopology\(map, \{mode: "routes", preserveProtected: true\}\)/, "显式道路重算没有在全锁 no-op 后先冻结道路/城镇锁快照，再只修复未保护的派生身份");
+
+const legacyPoliticalMirror = generatePlaceholderMap({seed: "route-legacy-political-mirror", cellsTarget: 3_000, heightmapTemplate: "continents"});
+const legacyLockedRoute = legacyPoliticalMirror.settlements.routes.find(route => route?.packCells?.length >= 3);
+const legacyLockedState = legacyPoliticalMirror.politics.states.find(state => state?.i && !state.removed);
+assert(legacyLockedRoute && legacyLockedState, "旧政治镜像固定图缺少可锁道路或国家");
+legacyPoliticalMirror.politics.states = structuredClone(legacyPoliticalMirror.pack.states);
+legacyPoliticalMirror.politics.provinces = structuredClone(legacyPoliticalMirror.pack.provinces);
+legacyPoliticalMirror.pack.states[legacyLockedState.i] = {
+  ...structuredClone(legacyPoliticalMirror.pack.states[legacyLockedState.i]),
+  cells: Number(legacyPoliticalMirror.pack.states[legacyLockedState.i].cells || 0) + 1
+};
+legacyPoliticalMirror.pack.provinces[0] = {
+  ...structuredClone(legacyPoliticalMirror.pack.provinces[0]),
+  area: Number(legacyPoliticalMirror.pack.provinces[0]?.area || 0) + 1
+};
+legacyPoliticalMirror.regenerationLocks = {
+  version: 1,
+  entries: [{kind: OBJECT_KIND.ROUTE, id: legacyLockedRoute.id}]
+};
+const legacyLockedRouteBefore = structuredClone(legacyLockedRoute);
+const legacyResult = regenerateMapAttributeForWorker(legacyPoliticalMirror, "routes");
+assert.equal(legacyResult.executed, true, "旧 politics / pack 镜像不一致时路线重生成未执行");
+assert.deepEqual(legacyPoliticalMirror.politics.states, legacyPoliticalMirror.pack.states, "路线重生成未归一旧 state 镜像");
+assert.deepEqual(legacyPoliticalMirror.politics.provinces, legacyPoliticalMirror.pack.provinces, "路线重生成未归一旧 province 镜像");
+assert.deepEqual(legacyPoliticalMirror.settlements.routes[legacyLockedRoute.id], legacyLockedRouteBefore, "旧镜像修复改写了锁定路线");
 
 console.log(JSON.stringify({
   ok: true,
@@ -247,7 +273,13 @@ console.log(JSON.stringify({
   routeAudit,
   sharedReport,
   sharedRouteAudit,
-  stalePackCellCleared: staleCell !== loadedCity.packCell
+  stalePackCellCleared: staleCell !== loadedCity.packCell,
+  legacyPoliticalMirror: {
+    routeId: legacyLockedRoute.id,
+    stateId: legacyLockedState.i,
+    statesShared: legacyPoliticalMirror.politics.states === legacyPoliticalMirror.pack.states,
+    provincesShared: legacyPoliticalMirror.politics.provinces === legacyPoliticalMirror.pack.provinces
+  }
 }, null, 2));
 
 function assertSettlementIdentity(target, label) {

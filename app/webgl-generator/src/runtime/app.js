@@ -13689,6 +13689,7 @@ function createWorkerRegenerationRenderRequest(state, targetKind, binding, layer
   return {
     binding: renderBinding,
     layers: requestedLayers,
+    ...(targetKind === "generation" ? {cellVisualTransferMode: "runtime-compact"} : {}),
     ...(pickingComponents.length ? {pickingComponents} : {}),
     ...(surfacePatchScope ? {surfacePatchScope} : {}),
     camera: {...(renderer?.camera || {})},

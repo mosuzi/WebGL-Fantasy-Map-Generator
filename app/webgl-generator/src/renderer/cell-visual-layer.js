@@ -263,7 +263,7 @@ export function refreshCellVisualMeshCells(map, previousMesh, changedGridCells) 
     ...refreshedCells.filter(cellMesh => cellMesh.triangulationFallback === "emergency-hard-surface-fan"),
     ...refreshedCells.filter(cellMesh => cellMesh.triangulationFallback !== "emergency-hard-surface-fan")
   ];
-  const boundaryPoints = nextCells.reduce((sum, cellMesh) => sum + cellMesh.points.length, 0);
+  const boundaryPoints = nextCells.reduce((sum, cellMesh) => sum + (cellMesh.points?.length || cellMesh.boundaryPointCount || 0), 0);
   const triangleCount = nextCells.reduce((sum, cellMesh) => sum + cellMesh.triangleCount, 0);
   return {
     mesh: {
@@ -678,9 +678,17 @@ function cellVisualTriangleArea(points) {
 function cellVisualBoundarySelfIntersects(points) {
   for (let first = 0; first < points.length; first++) {
     const firstNext = (first + 1) % points.length;
+    const firstMinX = Math.min(points[first][0], points[firstNext][0]);
+    const firstMaxX = Math.max(points[first][0], points[firstNext][0]);
+    const firstMinY = Math.min(points[first][1], points[firstNext][1]);
+    const firstMaxY = Math.max(points[first][1], points[firstNext][1]);
     for (let second = first + 1; second < points.length; second++) {
       const secondNext = (second + 1) % points.length;
       if (first === second || firstNext === second || secondNext === first) continue;
+      if (firstMaxX < Math.min(points[second][0], points[secondNext][0])
+        || firstMinX > Math.max(points[second][0], points[secondNext][0])
+        || firstMaxY < Math.min(points[second][1], points[secondNext][1])
+        || firstMinY > Math.max(points[second][1], points[secondNext][1])) continue;
       if (segmentsProperlyIntersect(points[first], points[firstNext], points[second], points[secondNext])) return true;
     }
   }

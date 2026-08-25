@@ -318,6 +318,7 @@ function regenerateRoutes(map, options = {}) {
   const constraintBundle = options.constraintBundle;
   const routeLocks = constraintBundle ? {snapshots: constraintBundle.lockedRoutes} : captureLockedRegenerationObjects(map, OBJECT_KIND.ROUTE);
   const cityLocks = constraintBundle ? {snapshots: constraintBundle.lockedCities} : captureLockedRegenerationObjects(map, OBJECT_KIND.CITY);
+  reconcileRoutePoliticalMirrors(map);
   reconcileSettlementCellIdentity(map);
   const portTopology = reconcileSettlementPortTopology(map, {mode: "routes", preserveProtected: true});
   const routeSalt = nextRegenerationSalt(map, "routes");
@@ -340,6 +341,24 @@ function regenerateRoutes(map, options = {}) {
   refreshGenerationSummary(map);
   appendGenerationLog(map, `regenerate routes: salt=${routeSalt}, routes=${map.settlements.metadata.routes}, segments=${map.settlements.metadata.routeSegments}, ports-moved=${portTopology?.moved || 0}, ports-cleared=${portTopology?.cleared || 0}`);
   return regenerationResult("routes", `道路已按当前国家、城镇、港口和陆海约束重算（扰动 #${routeSalt}）：${before} -> ${after}`, `港口拓扑迁移 ${portTopology?.moved || 0}、清除 ${portTopology?.cleared || 0}、保守跳过 ${portTopology?.skipped || 0}；陆路仍通过 pack 邻接寻路并避开水域，海路只连接同水体港口。`);
+}
+
+function reconcileRoutePoliticalMirrors(map) {
+  if (!map?.politics || !map?.pack) return;
+  map.politics.states = map.pack.states = reconcileRoutePoliticalStore(map.pack.states, map.politics.states);
+  map.politics.provinces = map.pack.provinces = reconcileRoutePoliticalStore(map.pack.provinces, map.politics.provinces);
+}
+
+function reconcileRoutePoliticalStore(packRows, politicsRows) {
+  const pack = Array.isArray(packRows) ? packRows : [];
+  const politics = Array.isArray(politicsRows) ? politicsRows : [];
+  const size = Math.max(pack.length, politics.length);
+  const reconciled = new Array(size);
+  for (let id = 0; id < size; id++) {
+    const source = pack[id] || politics[id];
+    if (source !== undefined) reconciled[id] = structuredClone(source);
+  }
+  return reconciled;
 }
 
 function regenerateRivers(map, options = {}) {
