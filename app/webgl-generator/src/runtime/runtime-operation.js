@@ -254,7 +254,20 @@ export function normalizeRuntimeOperationError(error, stage = "run") {
   if (error instanceof SyntaxError || /confirm|必须|缺少|未知|无效|不支持|找不到|当前没有|不能为空|范围/i.test(message)) {
     return new RuntimeOperationError("operation_invalid_input", message, {stage, cause: error, expected: true});
   }
-  return new RuntimeOperationError("operation_failed", message, {stage, cause: error});
+  return new RuntimeOperationError("operation_failed", message, {
+    stage,
+    cause: error,
+    details: fallbackOperationFailureDetails(error)
+  });
+}
+
+function fallbackOperationFailureDetails(error) {
+  const source = error?.details && typeof error.details === "object" && !Array.isArray(error.details)
+    ? {...error.details}
+    : {};
+  const internalCode = typeof error?.code === "string" ? error.code.trim() : "";
+  if (internalCode && internalCode !== "operation_failed") source.internalCode ||= internalCode;
+  return Object.keys(source).length ? source : undefined;
 }
 
 function attachOperationSummary(result, summary) {

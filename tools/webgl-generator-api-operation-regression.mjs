@@ -116,6 +116,16 @@ assert.equal(failed.error.code, "operation_failed");
 assert.equal(transactionValue, "before");
 assert.equal(loading.at(-1).visible, false);
 
+const codedFailure = await apiCall(() => manager.run("coded-runtime-failure", () => {
+  const error = new Error("surface install rejected");
+  error.code = "render-install-shape";
+  error.details = {layer: "surface"};
+  throw error;
+}));
+assert.equal(codedFailure.ok, false);
+assert.equal(codedFailure.error.code, "operation_failed");
+assert.deepEqual(codedFailure.error.details, {layer: "surface", internalCode: "render-install-shape"}, "通用 operation 包装丢失原始内部错误码");
+
 let snapshotTaskRan = false;
 const snapshotFailed = await apiCall(() => manager.run("snapshot-failure", () => {
   snapshotTaskRan = true;
@@ -252,7 +262,7 @@ assert.match(rollbackRendererSource, /completePreparedMapLoadAsync\(map,[\s\S]*?
 assert.doesNotMatch(restoreSource, /state\.renderer\.loadMapAsync\(snapshot\.map/u, "现代地图替换回滚仍直接在主线程重建旧地图");
 
 console.log(JSON.stringify({
-  scenarios: ["success", "noop", "invalid-input", "obsolete", "busy-conflict", "cancelled", "runtime-failure", "snapshot-failure", "rollback-failure", "retry", "non-loading-health", "late-report", "map-replace-debug-fault"],
+  scenarios: ["success", "noop", "invalid-input", "obsolete", "busy-conflict", "cancelled", "runtime-failure", "coded-runtime-failure", "snapshot-failure", "rollback-failure", "retry", "non-loading-health", "late-report", "map-replace-debug-fault"],
   loadingClosed: loading.at(-1).visible === false,
   stableErrorCodes: [invalid.error.code, obsolete.error.code, busy.error.code, cancelled.error.code, failed.error.code, snapshotFailed.error.code, rollbackFailed.error.code],
   healthRule: {expected: "info", unexpected: "error"},

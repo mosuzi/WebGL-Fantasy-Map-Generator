@@ -93,10 +93,28 @@ export function regenerationFeedbackMessage(kind, response, {debug = false} = {}
   if (debug) {
     return response?.ok
       ? response.data?.status || "重设完成"
-      : `重设失败：${response?.error?.message || "未知错误"}${debugRegenerationErrorDetails(response?.error)}`;
+      : `重设失败${debugRegenerationErrorCodes(response?.error)}：${response?.error?.message || "未知错误"}${debugRegenerationErrorDetails(response?.error)}`;
   }
   if (response?.ok) return regenerationResultMessage(kind, response.data);
   return regenerationErrorMessage(response?.error?.code);
+}
+
+function debugRegenerationErrorCodes(error) {
+  const publicCode = normalizedDebugErrorCode(error?.code) || "operation_failed";
+  const details = error?.details;
+  const internalCodes = [
+    details?.internalCode,
+    details?.worker?.code,
+    details?.worker?.details?.internalCode,
+    details?.cause?.code
+  ]
+    .map(normalizedDebugErrorCode)
+    .filter((code, index, codes) => code && code !== publicCode && codes.indexOf(code) === index);
+  return `（错误码：${publicCode}${internalCodes.length ? `；内部码：${internalCodes.join(" → ")}` : ""}）`;
+}
+
+function normalizedDebugErrorCode(value) {
+  return typeof value === "string" ? value.trim() : "";
 }
 
 function debugRegenerationErrorDetails(error) {

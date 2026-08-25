@@ -17,8 +17,8 @@
 
 - `docs/current-plan.md` 是唯一当前任务清单；README、开发日志、专题和归档不得另建当前待办。
 - 已批准的编号范围是封闭范围。达到该项最小验收后立即归档并转向下一项；不影响当前验收的新发现只记录，不顺手实施。
-- 第 349 项已在 `codex/map-core-engine-architecture-plan` 并行分支完成并归档；`349-0`～`349-11`（含动态插入 `349-3a / 349-10c0 / 349-10g-a`）均经独立只读评审 `ACCEPT`。该分支不得合入 `main`，全任务未执行浏览器验收，只形成并评估了待单独获批的浏览器方案。
-- 第 353、354 项已移植到 `codex/map-core-engine-architecture-plan`；第 351、353、354 项均已完成并归档。当前没有活动权威任务，重构分支只允许推送自身，不得合入或改写 `main`。
+- 第 349～354 项所在的 `codex/map-core-engine-architecture-plan` 已经用户重新批准并以 `dd6bb03` 合入 `main`；此前“不得合入 main”的边界已经失效，不得再据此阻止后续主线修复。
+- 第 355 项已完成并归档，完成版本为 `0.5.64`。当前没有活动权威任务；新任务必须从包含 `dd6bb03` 的最新 `main` 建立独立分支。
 - 遇到范围歧义、需要产品决策、夹具连续两次失败或同一阻断再次出现时，必须冻结并请用户裁定；不得继续“补夹具—跑全门”循环。
 - 全部必需任务完成后停止，不得自行创造后续工作。
 
@@ -68,11 +68,12 @@
 
 ## 当前状态
 
-- 第 354 项已并入引擎重构分支：十一类正式重生成与高度 / 气候 / 洋流 / 海底复合入口统一落实锁定最高优先级；正常锁及其支撑闭包只约束生成空间，全部锁定时成功 no-op，只有损坏结构精确拒绝。原修复分支交叉矩阵 `165` 组中 `164` 组执行、`1` 组 no-op、失败 `0`；移植保留 MapCoreEngine 的 owner、revision、提交前校验和 GPU 快切约束，版本在重构分支续升为 `0.5.63`。
-- 第 353 项已并入引擎重构分支：路线重生成现在先捕获锁，锁定城市与路线完整传入生成器；共享边锁路全部保留，route link 稳定沿用既有锁 owner。v3 保存复用带双指纹失效门的派生拓扑，并优化整数位打包、ragged 数组、稀疏统计和 checksum；原修复分支用户存档正式保存中位数由 `2889.8ms` 降至 `1841.3ms`（`-36.28%`），版本在重构分支续升为 `0.5.62`。
+- 第 355 项已完成并归档：调试模式的重新生成失败反馈显示公开错误码，并显示被通用 `operation_failed` 包装前保留的内部码链；普通模式继续只显示友好文案。专项、UI 文案审计、`1403 modules` 构建与真实浏览器 `operation_busy` 双模式失败态通过，新增应用错误为 `0`，完成版本为 `0.5.64`。
+- 第 354 项已随 `dd6bb03` 合入 `main`：十一类正式重生成与高度 / 气候 / 洋流 / 海底复合入口统一落实锁定最高优先级；正常锁及其支撑闭包只约束生成空间，全部锁定时成功 no-op，只有损坏结构精确拒绝。原修复分支交叉矩阵 `165` 组中 `164` 组执行、`1` 组 no-op、失败 `0`。
+- 第 353 项已随 `9935d7c` 合入 `main`：路线重生成先捕获锁，锁定城市与路线完整传入生成器；共享边锁路全部保留，route link 稳定沿用既有锁 owner。v3 保存复用带双指纹失效门的派生拓扑，并优化整数位打包、ragged 数组、稀疏统计和 checksum；原修复分支用户存档正式保存中位数由 `2889.8ms` 降至 `1841.3ms`（`-36.28%`）。
 - 第 351 项已完成并归档：十二类视图本地 10k / 100k cold 分别为 `13.0～26.2ms / 15.5～29.1ms`，warm 为 `12.7～16.3ms / 15.4～19.2ms`；Worker 包、四类重建、LongTask 与最终错误面均为 `0`。用户精确标签页 `294256474` 刷新恢复原地图后十二类逐项成功，目标高度→温度→高度复验新增 error / warn 为 `0`，终态恢复 `height / startup ready / Loading 0`；版本为 `0.5.61`。
-- 第 350 项已完成并归档：`R6b 20 / 20`、`R7 5 / 5` 全部 PASS，五个 R7 面均无 `>200ms` 产品 LongTask；最终冻结聚合为 `16 invariants / 17 scenarios / 20 entries / 19 fixtures`，typecheck 与 `1401 modules` build PASS，25 组 artifact 的 full/summary 均存在且 `ok=true`。最终独立复核为 `ACCEPT / P0 0 / P1 0 / P2 0`，分支 `codex/map-core-engine-architecture-plan` 保持未合入 `main`，版本为 `0.5.58`。
-- 第 349 项已完成并归档：受限 TypeScript 核心契约、唯一 map / revision / history owner、15 个 capability-aware Manifest、逐域 Worker pre-commit validator、dependency / projection 与 whole-map profile receipt 已建立。27 / 27 非浏览器门通过，防误触审计递归扫描 36 个 Node 入口并拒绝真实命名不可见 Chromium 反例；浏览器方案已评估但未执行。分支保持 `codex/map-core-engine-architecture-plan` 并行且不得合入 `main`，版本为 `0.5.56`。
+- 第 350 项已完成并归档：`R6b 20 / 20`、`R7 5 / 5` 全部 PASS，五个 R7 面均无 `>200ms` 产品 LongTask；最终冻结聚合为 `16 invariants / 17 scenarios / 20 entries / 19 fixtures`，typecheck 与 `1401 modules` build PASS，25 组 artifact 的 full/summary 均存在且 `ok=true`。最终独立复核为 `ACCEPT / P0 0 / P1 0 / P2 0`，相关成果现已包含在 `main`。
+- 第 349 项已完成并归档：受限 TypeScript 核心契约、唯一 map / revision / history owner、15 个 capability-aware Manifest、逐域 Worker pre-commit validator、dependency / projection 与 whole-map profile receipt 已建立。27 / 27 非浏览器门通过，防误触审计递归扫描 36 个 Node 入口并拒绝真实命名不可见 Chromium 反例；相关成果现已包含在 `main`。
 - 第 348 项已完成并归档：主动重生成保留高编号锁定对象时，cities / burgs / routes 身份槽显式稠密；正式导出可在不改写内存地图的前提下抢救旧 holey 数组。用户主动城镇 / 路线重生成允许事务内修复失效港口派生关系，TypedArray 行政候选恢复正确评分，城镇面板补齐结果反馈。用户精确 `5410` 标签页完成原图保存、`949 → 1194` 重生成、结果保存及两份 v3 UI 回读，最终恢复 `949 / 21 / 218`，holey / 保存 / 接纳 / WebGL 错误均为 `0`，版本为 `0.5.3`。
 - 第 347 项已完成并归档：开发模式匿名账本确认用户当前存档城镇重生成的主瓶颈为数十万路线拾取引用对象化回绑；城镇安装现校验 Worker DTO 摘要后从已提交新地图直接构建 `cities + routeSegments` 局部索引。固定 100k 为 `1276.4ms / picking 2.8ms / LongTask 0`；用户精确 5410 当前存档由 `9969ms` 降至 `1886.3ms`，`949 → 1017`、`from-empty / marineCities 0`，撤销恢复原 `949` 与名称序列，版本为 `0.5.2`。
 - 第 346 项已完成并归档：用户精确 5410 当前地图正式城镇重生成端到端墙钟为 `9.969s`；十一类 Loading 现按真实上游资料和单调阶段显示，迟到阶段不倒退、相同文案不重复刷新，普通界面不泄漏内部术语。新版 UI 正式重生成后撤销恢复浏览器原存档 `949` 城镇与原始名称序列，版本为 `0.5.1`。

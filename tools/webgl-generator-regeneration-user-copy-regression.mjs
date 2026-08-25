@@ -115,8 +115,23 @@ for (const code of errorCodes) {
 }
 assert.equal(
   regenerationFeedbackMessage("rivers", {ok: false, error: {code: "operation_failed", message: technicalMessage}}, {debug: true}),
-  `重设失败：${technicalMessage}`,
+  `重设失败（错误码：operation_failed）：${technicalMessage}`,
   "开发模式没有保留底层错误诊断"
+);
+assert.equal(
+  regenerationFeedbackMessage("routes", {
+    ok: false,
+    error: {
+      code: "operation_failed",
+      message: "路线画面提交失败",
+      details: {
+        internalCode: "render-install-shape",
+        worker: {code: "worker_regeneration_render_missing"}
+      }
+    }
+  }, {debug: true}),
+  "重设失败（错误码：operation_failed；内部码：render-install-shape → worker_regeneration_render_missing）：路线画面提交失败",
+  "开发模式没有显示公开错误码与内部错误码"
 );
 assert.equal(
   regenerationFeedbackMessage("states", {ok: true, data: {status: technicalMessage}}, {debug: true}),
@@ -151,6 +166,14 @@ const ordinaryOutputs = [
   ...errorCodes.map(regenerationErrorMessage)
 ];
 for (const output of ordinaryOutputs) assert.doesNotMatch(output, forbidden, `普通文案泄漏技术词：${output}`);
+assert.doesNotMatch(
+  regenerationFeedbackMessage("routes", {
+    ok: false,
+    error: {code: "operation_failed", message: technicalMessage, details: {internalCode: "render-install-shape"}}
+  }),
+  /operation_failed|render-install-shape/,
+  "普通模式泄漏错误码"
+);
 
 const ordinaryPanelCopy = regenerationPanelCopy({
   kind: "features",
