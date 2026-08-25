@@ -30,8 +30,8 @@ assert.throws(
 
 const appWithoutCoreBundle = replaceExactlyOnce(
   appSource,
-  "        constraintBundle,\n        rejectLockedDiplomacy: targetKind === \"states\" && !options.constraintBundle",
-  "        rejectLockedDiplomacy: targetKind === \"states\" && !options.constraintBundle"
+  "        ...options,\n        constraintBundle\n      });",
+  "        ...options\n      });"
 );
 assert.throws(
   () => validateSources(appWithoutCoreBundle, workerSource, regenerationWorkerSource),
@@ -99,8 +99,7 @@ function validateSources(currentAppSource, currentWorkerSource, currentRegenerat
   const fullyLockedCheck = ["constraintBundle", ".", "isDomainFullyLocked", "(", "domain", ")"];
   const actualRegeneration = [
     "regenerateMapAttributeForWorker", "(", "map", ",", "kind", ",", "{",
-    "scope", ":", '"all"', ",", "constraintBundle", ",", "rejectLockedDiplomacy", ":",
-    "kind", "===", '"states"', "}", ")"
+    "scope", ":", '"all"', ",", "constraintBundle", "}", ")"
   ];
   assertSequenceCount(heightWorker, workerCapture, 1, "worker bundle capture");
   assertSequenceCount(heightWorker, domainLookup, 1, "worker domain mapping read");
@@ -120,14 +119,13 @@ function validateSources(currentAppSource, currentWorkerSource, currentRegenerat
 
   const stateTransaction = functionTokens(currentAppSource, appAst, "regenerateMapAttributeViaApi");
   const transactionCapture = [
-    "const", "constraintBundle", "=", "targetKind", "===", '"states"', "?",
+    "const", "constraintBundle", "=", "options", ".", "constraintBundle", "||",
     "captureRegenerationConstraintBundle", "(", "state", ".", "map", ",", "{",
-    "closure", ":", "[", '"world"', "]", "}", ")", ":", "options", ".", "constraintBundle", "||", "null", ";"
+    "closure", ":", "[", '"world"', "]", "}", ")", ";"
   ];
   const transactionCore = [
     "regenerateMapAttributeCoreViaApi", "(", "state", ",", "documentRef", ",", "targetKind", ",", "{",
-    "...", "options", ",", "constraintBundle", ",", "rejectLockedDiplomacy", ":",
-    "targetKind", "===", '"states"', "&&", "!", "options", ".", "constraintBundle", "}", ")"
+    "...", "options", ",", "constraintBundle", "}", ")"
   ];
   assertSequenceCount(stateTransaction, transactionCapture, 1, "state transaction bundle capture");
   assertSequenceCount(stateTransaction, transactionCore, 1, "state transaction core call");
@@ -142,18 +140,9 @@ function validateSources(currentAppSource, currentWorkerSource, currentRegenerat
   const mainState = functionTokens(currentAppSource, appAst, "regenerateStates");
   const workerState = functionTokens(currentRegenerationWorkerSource, regenerationWorkerAst, "regenerateStates");
   for (const [label, tokens] of [["main", mainState], ["worker", workerState]]) {
-    for (const field of ["lockedStates", "lockedProvinces", "lockedCities", "lockedRoutes", "lockedDiplomacyRelations"]) {
+    for (const field of ["lockedStates", "lockedProvinces", "lockedCities", "lockedRoutes"]) {
       assertSequenceCount(tokens, ["constraintBundle", ".", field], 1, `${label} state ${field}`);
     }
-    assertSequenceCount(
-      tokens,
-      [
-        "regenerationLockConflict", "(", "OBJECT_KIND", ".", "DIPLOMACY_RELATION", ",", "{",
-        "kind", ":", "OBJECT_KIND", ".", "DIPLOMACY_RELATION", ",", "id", ":"
-      ],
-      1,
-      `${label} state diplomacy conflict`
-    );
   }
   assertSequenceCount(
     mainState,
@@ -177,8 +166,8 @@ function validateSources(currentAppSource, currentWorkerSource, currentRegenerat
     },
     state: {
       bundleCaptures: countSequence(stateTransaction, transactionCapture),
-      protectedSlices: 5,
-      prewriteConflict: "state-regeneration-cannot-preserve-diplomacy",
+      protectedSlices: 4,
+      diplomacyLockPriority: "preserve-and-regenerate",
       rollback: "salt"
     }
   };

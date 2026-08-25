@@ -64,8 +64,7 @@ export async function runHeightDerivedWorkerTask(payload, context = {}) {
     failAt(payload?.faultAt, `before:${kind}`);
     const result = regenerateMapAttributeForWorker(map, kind, {
       scope: "all",
-      constraintBundle,
-      rejectLockedDiplomacy: kind === "states"
+      constraintBundle
     });
     steps.push({kind, result});
     if (result?.executed) changedKinds.push(kind);

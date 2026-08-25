@@ -25,7 +25,7 @@ try {
   const playwright = createRequire(join(sourceDir, "package.json"))("playwright");
   server = await startStaticServer();
   evidence.mark("browser-launch", {complete: "server-ready"});
-  browser = await playwright.chromium.launch({headless: true, channel: "chrome"});
+  browser = await playwright.chromium.launch({headless: true, channel: process.env.FMG_BROWSER_CHANNEL || "chrome"});
   context = await browser.newContext({viewport: {width: 1280, height: 820}, deviceScaleFactor: 1});
   await context.addInitScript(() => localStorage.clear());
   const page = await context.newPage();
@@ -189,6 +189,7 @@ try {
 
     await newMap("lock-compound-noop");
     markTimeline("noop:new-map-ready");
+    unwrap(await api.generate.regenerate("zones", {confirm: true}), "normalize noop zones");
     const allLocks = allReferences();
     markTimeline("noop:references-ready");
     if (!allLocks.length) throw new Error("完整 closure 固定图没有锁对象");
@@ -276,7 +277,7 @@ try {
         ...refs("marker", app.map.markers?.markers),
         ...refs("religion", app.map.society?.religions, true),
         ...refs("culture", app.map.society?.cultures, true),
-        ...refs("zone", app.map.zones?.zones),
+        ...refs("zone", validZones()),
         ...refs("feature", app.map.pack?.features),
         ...refs("ocean-current", app.map.oceanCurrents?.currents),
         ...refs("economy-market", app.map.pack?.markets, true),
@@ -293,6 +294,20 @@ try {
         }
       }
       return references;
+    }
+
+    function validZones() {
+      return active(app.map.zones?.zones).filter(zone => {
+        if (!Array.isArray(zone.cells) || !zone.cells.length) return false;
+        return [zone.attacker, zone.defender].every(value => {
+          const stateId = Number(value);
+          if (!stateId) return true;
+          const state = app.map.politics?.states?.[stateId] || app.map.pack?.states?.[stateId];
+          return Boolean(state && !state.removed);
+        });
+      }).sort((left, right) => (
+        Number(Boolean(left.attacker || left.defender)) - Number(Boolean(right.attacker || right.defender))
+      ));
     }
 
     function refs(kind, rows, positive = false) {
@@ -408,7 +423,18 @@ try {
     }
 
     function assertDeepEqual(actual, expected, label) {
-      if (JSON.stringify(actual) !== JSON.stringify(expected)) throw new Error(`${label}发生变化`);
+      if (stableSerialize(actual) !== stableSerialize(expected)) {
+        const changed = Object.keys({...expected, ...actual}).filter(key => stableSerialize(actual[key]) !== stableSerialize(expected[key]));
+        throw new Error(`${label}发生变化：${changed.join(", ")}`);
+      }
+    }
+
+    function stableSerialize(value) {
+      if (Array.isArray(value)) return `[${value.map(stableSerialize).join(",")}]`;
+      if (value && typeof value === "object") {
+        return `{${Object.keys(value).sort().map(key => `${JSON.stringify(key)}:${stableSerialize(value[key])}`).join(",")}}`;
+      }
+      return JSON.stringify(value);
     }
 
     function clone(value) {

@@ -182,6 +182,7 @@ function rebuildFeatureTopologyInternal(map, locked, options = {}) {
   const beforePack = captureFeatureIdentity(map?.pack?.features, map?.pack?.cells?.f, map?.pack?.cells);
   const spatialReferencesBefore = captureSpatialFeatureState(map);
   const lockedReferencesBefore = captureLockedFeatureReferenceState(map, locked.pack?.ids);
+  const protectedReferences = prepareProtectedFeatureReferences(options);
   const gridShared = map.grid?.features === map.features?.features;
   const gridTopology = buildComponents(map.grid.cells, null);
   const rawGridFeatures = createGridFeatures(gridTopology, map.grid);
@@ -206,8 +207,8 @@ function rebuildFeatureTopologyInternal(map, locked, options = {}) {
     map.pack.cells.type[cell] = map.pack.features[map.pack.cells.f[cell]]?.type || "unknown";
   }
   refreshPackFeatureMetadata(map);
-  remapFeatureReferences(map, stablePack.redirects);
-  syncSpatialFeatureReferences(map, spatialReferencesBefore);
+  remapFeatureReferences(map, stablePack.redirects, protectedReferences);
+  syncSpatialFeatureReferences(map, spatialReferencesBefore, protectedReferences);
   restoreFeatureReferences(lockedReferencesBefore);
   assertLockedFeatureConstraints(map, locked);
   return {
@@ -769,20 +770,21 @@ function refreshPackFeatureMetadata(map) {
   map.pack.metadata.harborCells = countPositive(map.pack.cells.harbor);
 }
 
-function remapFeatureReferences(map, redirects) {
+function remapFeatureReferences(map, redirects, protectedReferences = null) {
   if (!redirects.size) return;
   const remap = object => {
     if (!object || typeof object !== "object") return;
     if (redirects.has(Number(object.feature))) object.feature = redirects.get(Number(object.feature));
     if (object.data && redirects.has(Number(object.data.feature))) object.data.feature = redirects.get(Number(object.data.feature));
   };
-  for (const collection of [map.pack?.burgs, map.pack?.routes, map.settlements?.cities, map.settlements?.routes, map.markers?.markers, map.pack?.portDiagnostics?.features]) {
-    for (const object of collection || []) remap(object);
+  for (const [kind, collection] of [["burg", map.pack?.burgs], ["route", map.pack?.routes], ["city", map.settlements?.cities], ["route", map.settlements?.routes], ["marker", map.markers?.markers], ["diagnostic", map.pack?.portDiagnostics?.features]]) {
+    for (const object of collection || []) if (!protectedReferences?.matches(kind, object)) remap(object);
   }
 }
 
-function syncSpatialFeatureReferences(map, before = new Map()) {
-  const sync = (object, cell) => {
+function syncSpatialFeatureReferences(map, before = new Map(), protectedReferences = null) {
+  const sync = (kind, object, cell) => {
+    if (protectedReferences?.matches(kind, object)) return;
     if (cell === null || !(map.pack.cells.f?.[cell] > 0)) return;
     const next = Number(map.pack.cells.f[cell]);
     const current = Number(object?.feature) || 0;
@@ -793,17 +795,34 @@ function syncSpatialFeatureReferences(map, before = new Map()) {
   for (const collection of uniqueCollections(map.settlements?.cities, map.pack?.burgs)) {
     for (const object of collection) {
       const cell = objectPackCell(object);
-      sync(object, cell);
+      sync(collection === map.pack?.burgs ? "burg" : "city", object, cell);
     }
   }
   for (const marker of map.markers?.markers || []) {
     const cell = numberCell(marker?.packCell);
-    sync(marker, cell);
+    sync("marker", marker, cell);
   }
   for (const route of uniqueCollections(map.settlements?.routes, map.pack?.routes).flat()) {
     const cell = orderedUniqueIntegers(route?.packCells)[0];
-    sync(route, cell ?? null);
+    sync("route", route, cell ?? null);
   }
+}
+
+function prepareProtectedFeatureReferences(options = {}) {
+  const cityIds = new Set((options.lockedCities || []).map(city => String(city?.id ?? city?.i)));
+  const burgIds = new Set((options.lockedCities || []).map(city => String(city?.burgId)).filter(id => id !== "undefined"));
+  const routeIds = new Set((options.lockedRoutes || []).map(route => String(route?.id ?? route?.i)));
+  const markerIds = new Set((options.lockedMarkers || []).map(marker => String(marker?.id ?? marker?.i)));
+  return {
+    matches(kind, object) {
+      const id = String(object?.id ?? object?.i);
+      if (kind === "city") return cityIds.has(id);
+      if (kind === "burg") return burgIds.has(id);
+      if (kind === "route") return routeIds.has(id);
+      if (kind === "marker") return markerIds.has(id);
+      return false;
+    }
+  };
 }
 
 function captureSpatialFeatureState(map) {

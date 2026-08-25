@@ -61,7 +61,7 @@ export function finalizeSettlements(grid, features, politics, settlements, pack,
     synchronizeSettlementPoliticalOwnership(pack, settlements.cities, options);
     ensureProvinceCityCandidates(grid, pack, politics, settlements, options);
   }
-  if (options.pruneNeutralSettlements) pruneNeutralSettlements(grid, settlements, pack);
+  if (options.pruneNeutralSettlements) pruneNeutralSettlements(grid, settlements, pack, options);
   if (pack?.cells) {
     reconcileSettlementCellIdentity({grid, pack, settlements});
     syncPoliticalSettlementStats(pack, politics, settlements.cities, options);
@@ -3033,13 +3033,26 @@ function buildPopulationPoints(grid, features, population) {
     .slice(0, Math.min(2400, Math.round(grid.points.length * 0.22)));
 }
 
-function pruneNeutralSettlements(grid, settlements, pack) {
+function pruneNeutralSettlements(grid, settlements, pack, options = {}) {
   const kept = [];
+  const protectedCityIds = snapshotIds(options.lockedCities || options.preservedCities);
+  const reservedIds = new Set();
+  for (const city of settlements.cities || []) {
+    if (!city || city.removed || (city.state || 0) <= 0 || !protectedCityIds.has(Number(city.id))) continue;
+    const id = Number(city.id);
+    kept[id] = city;
+    reservedIds.add(id);
+  }
+  let nextId = 0;
   for (const city of settlements.cities || []) {
     if (!city) continue;
     if ((city.state || 0) > 0) {
-      city.id = kept.length;
-      kept.push(city);
+      if (!protectedCityIds.has(Number(city.id))) {
+        while (reservedIds.has(nextId) || kept[nextId]) nextId++;
+        city.id = nextId;
+        kept[nextId] = city;
+        nextId++;
+      }
       const burg = pack?.burgs?.[city.burgId];
       if (burg) burg.cityId = city.id;
       continue;
@@ -3210,9 +3223,12 @@ function snapshotIds(snapshots = []) {
 function collectProtectedSettlementCells(pack, options = {}) {
   const protectedStates = snapshotIds(options.lockedStates);
   const protectedProvinces = snapshotIds(options.lockedProvinces);
+  const protectedFeatures = snapshotIds(options.lockedFeatures);
   const cells = new Set();
   for (const cell of pack?.cells?.i || []) {
-    if (protectedStates.has(Number(pack.cells.state?.[cell])) || protectedProvinces.has(Number(pack.cells.province?.[cell]))) {
+    if (protectedStates.has(Number(pack.cells.state?.[cell]))
+      || protectedProvinces.has(Number(pack.cells.province?.[cell]))
+      || protectedFeatures.has(Number(pack.cells.f?.[cell]))) {
       cells.add(cell);
     }
   }

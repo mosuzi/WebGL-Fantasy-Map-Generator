@@ -92,7 +92,7 @@ const profiles = [
     artifactName: "browser-save-feedback",
     assertionCount: 13,
     hardCheckDigest: "0dfc53bec9a098ced10589508b7cd14130d1d2c9f1f1c15ada22ff3e23be6ef8",
-    compactDigest: "734bec95c04f813ae9630d0799bc71783109faefa06b8fb5608c8067e4f875e1",
+    compactDigest: "3f0b18b367393aa351447026233850fb8c1ad01c274647fe36ec9f55a3a146a0",
     compactVariable: "compactReport",
     compactBindings: ["finalReport", "compactReport"],
     compactFunctions: [],

@@ -440,7 +440,7 @@ function copyReligionField(target, snapshot) {
   else delete target.religion;
 }
 
-function collectPoliticalSupportCities(map, lockedStates = [], lockedProvinces = [], lockedCities = []) {
+export function collectPoliticalSupportCities(map, lockedStates = [], lockedProvinces = [], lockedCities = []) {
   const byId = new Map();
   const add = city => {
     const id = city?.id ?? city?.i;
@@ -463,7 +463,7 @@ function collectPoliticalSupportCities(map, lockedStates = [], lockedProvinces =
   return [...byId.values()];
 }
 
-function collectPoliticalSupportProvinces(map, lockedStates = [], lockedProvinces = []) {
+export function collectPoliticalSupportProvinces(map, lockedStates = [], lockedProvinces = []) {
   const byId = new Map();
   const add = province => {
     const id = Number(province?.i ?? province?.id);
@@ -477,7 +477,7 @@ function collectPoliticalSupportProvinces(map, lockedStates = [], lockedProvince
   return [...byId.values()];
 }
 
-function collectEconomicSupportCities(map, lockedMarkets = [], lockedDeals = []) {
+export function collectEconomicSupportCities(map, lockedMarkets = [], lockedDeals = []) {
   const burgIds = new Set();
   const marketById = new Map((map?.pack?.markets || map?.economy?.markets || [])
     .filter(Boolean)
@@ -500,7 +500,7 @@ function collectEconomicSupportCities(map, lockedMarkets = [], lockedDeals = [])
     .map(city => structuredClone(city));
 }
 
-function collectEconomicSupportMarkets(map, lockedMarkets = [], lockedDeals = []) {
+export function collectEconomicSupportMarkets(map, lockedMarkets = [], lockedDeals = []) {
   const byId = new Map();
   const add = market => {
     const id = Number(market?.i ?? market?.id);
@@ -518,7 +518,7 @@ function collectEconomicSupportMarkets(map, lockedMarkets = [], lockedDeals = []
   return [...byId.values()];
 }
 
-function collectFeatureSupportObjects(map, lockedFeatures = [], kind) {
+export function collectFeatureSupportObjects(map, lockedFeatures = [], kind) {
   const featureIds = new Set((lockedFeatures || [])
     .map(feature => Number(feature?.i ?? feature?.id))
     .filter(Number.isInteger));
@@ -542,7 +542,7 @@ function collectFeatureSupportObjects(map, lockedFeatures = [], kind) {
   return objects.filter(object => object && !object.removed && matches(object)).map(object => structuredClone(object));
 }
 
-function mergeSupportSnapshots(snapshots) {
+export function mergeSupportSnapshots(snapshots) {
   const byId = new Map();
   for (const snapshot of snapshots || []) {
     const id = snapshot?.id ?? snapshot?.i;

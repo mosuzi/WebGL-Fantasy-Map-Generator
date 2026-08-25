@@ -34,8 +34,7 @@ export function captureDiplomacyRelationSnapshot(pack, subjectId, objectId) {
   const chronicleEntries = pairChronicleEntries(states[0]?.diplomacy, left, right);
   const militaryCampaigns = pairRecords(pack?.military?.campaigns, identity.leftId, identity.rightId);
   const fronts = pairRecords(pack?.military?.fronts, identity.leftId, identity.rightId);
-  const warzones = pairWarzones(pack?.zones, identity.leftId, identity.rightId);
-  validateWarDerived(identity.key, leftRelation, campaigns, militaryCampaigns, fronts, warzones);
+  const warzones = pairRecords(pack?.zones, identity.leftId, identity.rightId);
   return {
     id: identity.key,
     leftId: identity.leftId,
@@ -129,7 +128,6 @@ function normalizeProvidedSnapshot(source, identity, current) {
     fronts: clonePlain(source.fronts ?? current.fronts),
     warzones: clonePlain(source.warzones ?? current.warzones)
   };
-  validateWarDerived(identity.key, leftRelation, snapshot.campaigns, snapshot.militaryCampaigns, snapshot.fronts, snapshot.warzones);
   return snapshot;
 }
 
@@ -149,16 +147,6 @@ function validateInverseRelations(left, right, key) {
   const rightRelation = normalizeDiplomacyRelation(right);
   if (!leftRelation || !rightRelation || inverseRelation(leftRelation) !== rightRelation || inverseRelation(rightRelation) !== leftRelation) {
     throw diplomacyLockConflict(`外交锁 ${key} 的双向关系不互逆`, {reason: "non-reciprocal", pair: key, left, right});
-  }
-}
-
-function validateWarDerived(key, relation, campaigns, militaryCampaigns, fronts, warzones) {
-  const derivedCount = campaigns.length + militaryCampaigns.length + fronts.length + warzones.length;
-  if (relation !== "Enemy" && derivedCount) {
-    throw diplomacyLockConflict(`外交锁 ${key} 的非战争关系仍有战争派生`, {reason: "war-derived-conflict", pair: key});
-  }
-  if (relation === "Enemy" && campaigns.length === 0) {
-    throw diplomacyLockConflict(`外交锁 ${key} 的战争关系缺少国家战役`, {reason: "war-derived-conflict", pair: key});
   }
 }
 

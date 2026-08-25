@@ -90,7 +90,14 @@ console.log("[composite-worker] 正在验证整图生成与渲染准备同源输
 const generationPayload = {
   options: {seed: "generation-worker-result", cellsTarget: 512, heightmapTemplate: "continents"},
   render: {
-    binding: {mapIdentity: "generated:fixture", mapRevision: 0, topologyRevision: 0},
+    binding: {
+      mapIdentity: "generated:fixture",
+      mapRevision: 0,
+      sourceRevision: 0,
+      topologyRevision: 0,
+      renderPreparationId: "generated:fixture:render:0",
+      renderGeneration: 0
+    },
     layers: [...RENDER_PREPARATION_LAYERS],
     camera: {scale: 1, offsetX: 0, offsetY: 0},
     canvas: {width: 1024, height: 768, clientWidth: 1024, clientHeight: 768},
@@ -108,7 +115,7 @@ assertStableMapEqual(generationWorker.output.map, generationFallback.output.map,
 const generationPreparedLayerKeys = Object.keys(generationWorker.output.preparedRender.layers);
 assert.deepEqual(generationPreparedLayerKeys, [
   "cellVisual", "shore", "statePaths", "provincePaths", "political", "politicalDebug",
-  "surface", "line", "picking", "labels", "route", "river", "point"
+  "surface", "line", "picking", "labels", "route", "river", "point", "gpuShoreSurface"
 ], "整图生成没有返回完整渲染准备结果");
 assert.equal(Object.hasOwn(generationWorker.output.preparedRender.layers, "cell-visual"), false, "整图生成错误保留了请求层 ID");
 assert.equal(Object.hasOwn(generationWorker.output.preparedRender.layers, "politicalDebug"), true, "整图生成漏掉政治调试准备结果");
@@ -465,6 +472,7 @@ async function verifyFormalRuntimeWiring() {
   const generationAction = extractTopLevelFunctionSource(appSource, "generateMapOffMainThread");
   const mapLoadAction = extractTopLevelFunctionSource(appSource, "loadMapIntoRuntime");
   const coordinator = extractTopLevelFunctionSource(appSource, "executeWorkerMapMutation");
+  const outputBindingAssertion = extractTopLevelFunctionSource(appSource, "assertWorkerRegenerationOutputCurrent");
   assert.match(heightAction, /executeWorkerMapMutation\(state, documentRef, \{/);
   assert.match(heightAction, /task: HEIGHT_DERIVED_WORKER_TASK/);
   assert.match(climateAction, /executeWorkerMapMutation\(state, documentRef, \{/);
@@ -481,7 +489,8 @@ async function verifyFormalRuntimeWiring() {
   assert.match(mapLoadAction, /revealPreparedOverlay:\s*Boolean\(preparedInstall\)/);
   assert.doesNotMatch(appSource, /GenerationWorker from "\.\/generation-worker\.js\?worker"/);
   assert.match(coordinator, /state\.workerTaskCoordinator\.run\(task,/);
-  assert.match(coordinator, /sameRegenerationWorkerBinding\(output\?\.binding, binding\)/);
+  assert.match(coordinator, /assertWorkerRegenerationOutputCurrent\(state, binding, output, operation\)/);
+  assert.match(outputBindingAssertion, /sameRegenerationWorkerBinding\(output\?\.binding, binding\)/);
 
   return {
     height: heightEntries.map(([, scope]) => scope),
@@ -558,8 +567,7 @@ function runLegacyHeight(map, scope = "all") {
     }
     const result = regenerateMapAttributeForWorker(map, kind, {
       scope: "all",
-      constraintBundle,
-      rejectLockedDiplomacy: kind === "states"
+      constraintBundle
     });
     constraintBundle.assertDomain(map, domain, "after");
     return result;
@@ -621,8 +629,7 @@ function executeClimateSystem(map, system, constraintBundle) {
   assert.notEqual(system, "economy", "economy 独立分支不应从现有气候公开链到达");
   return regenerateMapAttributeForWorker(map, system, {
     scope: "all",
-    constraintBundle,
-    rejectLockedDiplomacy: system === "states"
+    constraintBundle
   });
 }
 
@@ -832,7 +839,14 @@ async function verifyObsoleteFallback(sourceMap) {
 
 function createRenderRequest() {
   return {
-    binding: {mapIdentity: binding.mapIdentity, mapRevision: binding.mapRevision, topologyRevision: binding.topologyRevision},
+    binding: {
+      mapIdentity: binding.mapIdentity,
+      mapRevision: binding.mapRevision,
+      sourceRevision: binding.mapRevision,
+      topologyRevision: binding.topologyRevision,
+      renderPreparationId: "composite-fixture:render:7",
+      renderGeneration: binding.generationToken
+    },
     layers: ["point"],
     camera: {scale: 1, offsetX: 0, offsetY: 0},
     canvas: {width: 1200, height: 720, clientWidth: 1200, clientHeight: 720},
@@ -850,7 +864,10 @@ function assertPreparedOutput(output, label) {
   assert.deepEqual(output.preparedRender.binding, {
     mapIdentity: binding.mapIdentity,
     mapRevision: binding.mapRevision,
-    topologyRevision: binding.topologyRevision
+    sourceRevision: binding.mapRevision,
+    topologyRevision: binding.topologyRevision,
+    renderPreparationId: "composite-fixture:render:7",
+    renderGeneration: binding.generationToken
   }, `${label} preparedRender 绑定不精确`);
   assert(output.preparedRender.layers.point?.vertices instanceof Float32Array, `${label} 缺少 point 渲染准备结果`);
 }

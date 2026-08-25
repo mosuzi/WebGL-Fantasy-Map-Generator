@@ -58,7 +58,7 @@ const ERROR_MESSAGES = Object.freeze({
   operation_cancelled: "本次重新生成已取消。",
   operation_obsolete: "地图已发生变化，本次结果未应用，请重新操作。",
   operation_invalid_input: "无法开始重新生成，请检查所选范围和条件。",
-  regeneration_lock_conflict: "部分锁定内容与本次重新生成冲突，请调整锁定范围后重试。",
+  regeneration_lock_conflict: "锁定数据本身已损坏或缺少依赖，请检查对应对象后重试。",
   operation_rollback_failed: "重新生成失败，地图恢复未能完整完成，请重新载入当前地图后检查。",
   operation_failed: "重新生成失败，当前地图未应用本次更改。"
 });

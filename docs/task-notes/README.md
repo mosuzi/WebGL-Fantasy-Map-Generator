@@ -28,6 +28,7 @@
 - 地图核心引擎化与领域模块接入实施计划见 [`map-core-engine-architecture-implementation-plan.md`](./map-core-engine-architecture-implementation-plan.md)：冻结 MapCoreEngine、MapRuntimeCoordinator、RenderEngine、Worker、revision、commit、dependency registry、DomainModuleManifest 与逐阶段验收边界。
 - TypeScript 核心契约与领域接入渐进式引入计划见 [`typescript-core-contract-migration-plan.md`](./typescript-core-contract-migration-plan.md)：只类型化核心契约、Worker DTO、领域 Manifest、事务 / patch、Render layer 和垂直切片，不一次性迁移现有 JavaScript。
 
+- 第 354 项的全部重生成锁优先闭包、`11 × 15 = 165` 交叉矩阵、复合重建回滚和真实浏览器验收记录于 [`task-354-regeneration-lock-priority.md`](./task-354-regeneration-lock-priority.md)；合法锁定内容只能约束生成空间，不能阻塞主动重生成。
 - 第 353 项的用户 100k 原档保存瓶颈、v3 编码优化、路线锁定优先、共享锁路边 owner 与正式浏览器验收记录于 [`task-353-map-save-route-lock-priority.md`](./task-353-map-save-route-lock-priority.md)；锁定对象只要结构可读就原样保留，新路线绕开，不再以派生陈旧或共享边要求用户解锁。
 - 第 347 项的 100k 城镇完全重生成端到端账本、picking 安装热点优化、`9969ms → 1886.3ms` 和用户原图撤销验收记录于 [`task-347-city-regeneration-performance.md`](./task-347-city-regeneration-performance.md)；没有以 Loading 文案、降数量、删依赖层或放宽语义换取成绩。
 - 第 346 项的用户当前地图真实重生成 Profile、阶段耗时拆解和 Loading 文案优化冻结于 [`task-346-regeneration-profile-loading-copy.md`](./task-346-regeneration-profile-loading-copy.md)；Profile 后必须撤销恢复原图，普通界面不得泄漏内部实现概念。

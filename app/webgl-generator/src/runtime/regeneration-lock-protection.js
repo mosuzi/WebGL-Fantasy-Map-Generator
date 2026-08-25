@@ -628,7 +628,7 @@ function captureDirectFeatureReferences(map, id) {
   for (const [collection, objects] of collections) {
     for (let index = 0; index < (objects?.length || 0); index++) {
       const object = objects[index];
-      if (!object) continue;
+      if (!object || object.removed) continue;
       if (Number(object.feature) !== id && Number(object.port) !== id && Number(object.data?.feature) !== id) continue;
       const record = {
         collection,
@@ -726,7 +726,7 @@ function summarizeTopLevelChanges(before, after) {
         }]))
       }];
     }
-    return [field, {before: stableSnapshot(previous).slice(0, 240), after: stableSnapshot(current).slice(0, 240)}];
+    return [field, {before: String(stableSnapshot(previous)).slice(0, 240), after: String(stableSnapshot(current)).slice(0, 240)}];
   }));
 }
 

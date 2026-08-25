@@ -5,12 +5,13 @@ export function isActiveEnemyPair(states, leftId, rightId) {
   return left.diplomacy?.[right.i] === "Enemy" && right.diplomacy?.[left.i] === "Enemy";
 }
 
-export function reconcileWarDerivedData(mapOrPack) {
+export function reconcileWarDerivedData(mapOrPack, {protectedPairs = []} = {}) {
   const map = mapOrPack?.pack ? mapOrPack : null;
   const pack = map?.pack || mapOrPack;
   const states = pack?.states || map?.politics?.states || [];
+  const protectedPairKeys = new Set([...protectedPairs].map(String));
   const result = {
-    removedStateCampaigns: pruneStateCampaigns(states),
+    removedStateCampaigns: pruneStateCampaigns(states, protectedPairKeys),
     removedMilitaryCampaigns: 0,
     removedFronts: 0,
     removedWarzones: 0,
@@ -22,8 +23,10 @@ export function reconcileWarDerivedData(mapOrPack) {
   if (military) {
     const campaigns = Array.isArray(military.campaigns) ? military.campaigns : [];
     const fronts = Array.isArray(military.fronts) ? military.fronts : [];
-    military.campaigns = campaigns.filter(campaign => isActiveEnemyPair(states, campaign?.attacker, campaign?.defender));
-    military.fronts = fronts.filter(front => isActiveEnemyPair(states, front?.attacker, front?.defender));
+    military.campaigns = campaigns.filter(campaign => protectedPairKeys.has(statePairKey(campaign?.attacker, campaign?.defender))
+      || isActiveEnemyPair(states, campaign?.attacker, campaign?.defender));
+    military.fronts = fronts.filter(front => protectedPairKeys.has(statePairKey(front?.attacker, front?.defender))
+      || isActiveEnemyPair(states, front?.attacker, front?.defender));
     result.removedMilitaryCampaigns = campaigns.length - military.campaigns.length;
     result.removedFronts = fronts.length - military.fronts.length;
     if (military.metadata) {
@@ -43,6 +46,10 @@ export function reconcileWarDerivedData(mapOrPack) {
       continue;
     }
     const pair = resolveWarzoneStatePair(pack, zone);
+    if (pair && protectedPairKeys.has(statePairKey(pair.attacker, pair.defender))) {
+      nextZones.push(zone);
+      continue;
+    }
     if (!pair || !isActiveEnemyPair(states, pair.attacker, pair.defender)) {
       result.removedWarzones += 1;
       result.removedWarzoneIds.push(zone?.i ?? zone?.id);
@@ -77,15 +84,23 @@ export function resolveWarzoneStatePair(pack, zone) {
   return {attacker: stateIds[0], defender: stateIds[1]};
 }
 
-function pruneStateCampaigns(states) {
+function pruneStateCampaigns(states, protectedPairs = new Set()) {
   let removed = 0;
   for (const state of states || []) {
     if (!state || !Array.isArray(state.campaigns)) continue;
     const previous = state.campaigns;
-    state.campaigns = previous.filter(campaign => isActiveEnemyPair(states, campaign?.attacker, campaign?.defender));
+    state.campaigns = previous.filter(campaign => protectedPairs.has(statePairKey(campaign?.attacker, campaign?.defender))
+      || isActiveEnemyPair(states, campaign?.attacker, campaign?.defender));
     removed += previous.length - state.campaigns.length;
   }
   return removed;
+}
+
+function statePairKey(leftId, rightId) {
+  const left = Number(leftId);
+  const right = Number(rightId);
+  if (!Number.isInteger(left) || !Number.isInteger(right) || left <= 0 || right <= 0 || left === right) return "";
+  return left < right ? `${left}:${right}` : `${right}:${left}`;
 }
 
 function updateZoneMetadata(metadata, zones, cells) {
