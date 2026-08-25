@@ -32,6 +32,7 @@ import {
 } from "../app/webgl-generator/src/runtime/height-derived-rebuild.js";
 import {ensureLabelStore} from "../app/webgl-generator/src/runtime/label-edit-commands.js";
 import {GENERATION_WORKER_TASK} from "../app/webgl-generator/src/runtime/generation-worker-task.js";
+import {normalizeMapForRuntimeAdoption} from "../app/webgl-generator/src/runtime/map-runtime-adoption.js";
 import {syncMilitaryStateMirrors} from "../app/webgl-generator/src/runtime/military-regeneration-variation.js";
 import {LABEL_TARGET_KIND, OBJECT_KIND} from "../app/webgl-generator/src/runtime/object-kinds.js";
 import {OCEAN_CURRENT_WORLD_WORKER_TASK} from "../app/webgl-generator/src/runtime/ocean-current-world-worker-task.js";
@@ -130,7 +131,7 @@ report.generation = {
 };
 
 console.log("[composite-worker] 正在生成 1k 对拍夹具");
-const source = generatePlaceholderMap({seed: "composite-worker", cellsTarget: 1000, heightmapTemplate: "continents"});
+const source = normalizeMapForRuntimeAdoption(generatePlaceholderMap({seed: "composite-worker", cellsTarget: 1000, heightmapTemplate: "continents"}));
 const sourceSnapshot = structuredClone(source);
 const sourceHeightCapture = captureTyped(source.pack.cells.h);
 

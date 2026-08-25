@@ -50,6 +50,14 @@ findRegiment(invalidCellMap, sparseId).cell = invalidCellMap.pack.cells.i.length
 mirrorMilitaryState(invalidCellMap, land.state.i);
 assertConflict(() => createRegenerateMilitaryCommand().apply({map: invalidCellMap}), "invalid-cell");
 
+const waterStationMap = structuredClone(base);
+const waterStation = findRegiment(waterStationMap, sparseId);
+waterStation.cell = waterStationMap.pack.cells.i.find(cell => waterStationMap.pack.cells.h[cell] < 20);
+mirrorMilitaryState(waterStationMap, land.state.i);
+const waterStationBefore = captureMilitaryRegimentSnapshot(waterStationMap.pack, {id: sparseId});
+createRegenerateMilitaryCommand({seed: "regeneration-lock-military:water-station"}).apply({map: waterStationMap});
+assertDeepEqual(captureMilitaryRegimentSnapshot(waterStationMap.pack, {id: sparseId}), waterStationBefore, "水域或跨国驻地锁军团没有原样直通");
+
 const duplicateMap = structuredClone(base);
 const duplicateSnapshot = captureMilitaryRegimentSnapshot(duplicateMap.pack, {id: sparseId});
 const duplicateSame = createRegenerateMilitaryCommand({
@@ -124,6 +132,7 @@ console.log(JSON.stringify({
     locked: [...coLocatedIds],
     protectedOccupants: postRegenerationOccupants
   },
+  bypassedGenerationConstraints: ["water-or-foreign-station"],
   conflicts: ["missing-state", "invalid-cell", "duplicate-id", "campaign-reference-conflict"],
   rollback: "after-events"
 }, null, 2));

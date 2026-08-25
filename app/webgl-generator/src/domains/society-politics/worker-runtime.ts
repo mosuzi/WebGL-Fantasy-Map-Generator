@@ -155,7 +155,6 @@ function validateAdministrativeReferences(states: unknown[], provinces: unknown[
   const sourcePolitics = record(sourceMap.politics, "society-politics.sourceMap.politics");
   const sourceStates = indexAdministrativeRows(array(sourcePolitics.states, "society-politics.sourceMap.politics.states"));
   const sourceProvinces = indexAdministrativeRows(array(sourcePolitics.provinces, "society-politics.sourceMap.politics.provinces"));
-  const protectedIds = protectedAdministrativeIds(sourceMap, sourceProvinces);
   const settlements = record(values.get("settlements"), "society-politics.patch.settlements");
   const cities = array(settlements.cities, "society-politics.patch.settlements.cities");
   const burgs = array(values.get("pack.burgs"), "society-politics.patch.pack.burgs");
@@ -193,7 +192,7 @@ function validateAdministrativeReferences(states: unknown[], provinces: unknown[
     const burgClaims = stateBurgClaims.get(id) || [];
     if (!burgId) {
       const source = sourceStates.get(id);
-      if (cityClaims.length || burgClaims.length || !allowUnclaimedZeroCapital && (Number(source?.capital || 0) !== 0 || !protectedIds.states.has(id))) {
+      if (cityClaims.length || burgClaims.length || !allowUnclaimedZeroCapital && Number(source?.capital || 0) !== 0) {
         throw protocolError("society-politics-state-capital-invalid", `国家 #${id} 的零首都缺少受锁 before-image 或仍有首都反向引用`);
       }
       continue;
@@ -216,7 +215,7 @@ function validateAdministrativeReferences(states: unknown[], provinces: unknown[
     const burgClaims = provinceBurgClaims.get(id) || [];
     if (!burgId) {
       const source = sourceProvinces.get(id);
-      if (cityClaims.length || burgClaims.length || !allowUnclaimedZeroCapital && (Number(source?.burg || 0) !== 0 || !protectedIds.provinces.has(id))) {
+      if (cityClaims.length || burgClaims.length || !allowUnclaimedZeroCapital && Number(source?.burg || 0) !== 0) {
         throw protocolError("society-politics-province-capital-invalid", `省份 #${id} 的零省会缺少受锁 before-image 或仍有省会反向引用`);
       }
       continue;
@@ -263,22 +262,6 @@ function indexAdministrativeRows(rows: unknown[]): Map<number, UnknownRecord> {
     if (id > 0 && !row.removed) indexed.set(id, row);
   }
   return indexed;
-}
-
-function protectedAdministrativeIds(sourceMap: UnknownRecord, sourceProvinces: Map<number, UnknownRecord>): {states: Set<number>; provinces: Set<number>} {
-  const locks = record(sourceMap.regenerationLocks, "society-politics.sourceMap.regenerationLocks");
-  const entries = array(locks.entries, "society-politics.sourceMap.regenerationLocks.entries");
-  const states = new Set<number>();
-  const provinces = new Set<number>();
-  for (const value of entries) {
-    if (!value || typeof value !== "object" || Array.isArray(value)) continue;
-    const entry = value as UnknownRecord;
-    const id = Number(entry.id);
-    if (entry.kind === "state" && id > 0) states.add(id);
-    if (entry.kind === "province" && id > 0) provinces.add(id);
-  }
-  for (const [id, province] of sourceProvinces) if (states.has(Number(province.state))) provinces.add(id);
-  return {states, provinces};
 }
 
 function addClaim(target: Map<number, UnknownRecord[]>, id: number, value: UnknownRecord): void {

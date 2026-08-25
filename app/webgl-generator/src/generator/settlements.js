@@ -3069,12 +3069,13 @@ function pruneNeutralSettlements(grid, settlements, pack, options = {}) {
   settlements.cities = kept;
   if (pack?.cells?.burg) {
     for (const city of kept) {
+      if (!city) continue;
       if (Number.isInteger(city.packCell) && city.packCell >= 0) pack.cells.burg[city.packCell] = city.burgId;
     }
   }
   if (grid?.cells?.burg) {
     grid.cells.burg = new Array(grid.points.length).fill(-1);
-    for (const city of kept) grid.cells.burg[city.cell] = city.id;
+    for (const city of kept) if (city) grid.cells.burg[city.cell] = city.id;
   }
 }
 

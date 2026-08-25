@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 
 import {generatePlaceholderMap} from "../app/webgl-generator/src/generator/index.js";
 import {regeneratePackStatesAndProvinces} from "../app/webgl-generator/src/generator/politics.js";
+import {OBJECT_KIND} from "../app/webgl-generator/src/runtime/object-kinds.js";
+import {captureLockedRegenerationObjects} from "../app/webgl-generator/src/runtime/regeneration-lock-protection.js";
 
 const options = {
   seed: "regeneration-lock-state",
@@ -11,7 +13,7 @@ const options = {
   provincesRatio: 45
 };
 
-const report = {ok: true, locked: {}, provinceParentSlot: {}, conflictCodes: []};
+const report = {ok: true, locked: {}, provinceParentSlot: {}, bypassedGenerationConstraints: [], conflictCodes: []};
 
 testLockedSparseStateAndProvince();
 testLockedProvinceParentSlot();
@@ -125,9 +127,19 @@ function testConflicts() {
   const waterState = selectStateCandidate(waterMap);
   const waterCell = waterMap.pack.cells.i.find(cell => waterMap.pack.cells.h[cell] < 20);
   assert.ok(Number.isInteger(waterCell), "冲突样本缺少水域 cell");
-  assertConflict(waterMap, {
-    lockedStates: [{...structuredClone(waterState), center: waterCell}]
-  }, "invalid-center");
+  waterMap.politics.states[waterState.i].center = waterCell;
+  waterMap.regenerationLocks = {version: 1, entries: [{kind: OBJECT_KIND.STATE, id: waterState.i}]};
+  const waterSnapshot = captureLockedRegenerationObjects(waterMap, OBJECT_KIND.STATE).snapshots[0];
+  const waterResult = regeneratePackStatesAndProvinces(
+    waterMap.grid,
+    waterMap.society,
+    {...waterMap.options, lockedStates: [waterSnapshot]},
+    waterMap.pack,
+    waterMap.settlements,
+    {salt: 9}
+  );
+  assert.deepEqual(waterResult.states[waterState.i], waterSnapshot, "水域中心锁国没有原样直通");
+  report.bypassedGenerationConstraints.push("water-center");
 
   const duplicateMap = generatePlaceholderMap({...options, seed: "regeneration-lock-state-duplicate"});
   const duplicateState = selectStateCandidate(duplicateMap);

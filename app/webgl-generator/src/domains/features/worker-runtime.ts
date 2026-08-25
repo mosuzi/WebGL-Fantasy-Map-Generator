@@ -554,7 +554,6 @@ function validateLockedFeatureEnvelope(sourceMap: UnknownRecord, values: Map<str
     ] as const) {
       assertDeepEqual(cellsForFeature(sourceCells, id), cellsForFeature(outputCells, id), "feature-lock-cells-invalid", `锁定 Feature #${id} 的 ${label} cell 归属被改写`);
     }
-    assertDeepEqual(captureDirectFeatureReferences(sourceMap, id), captureDirectFeatureReferences(output, id), "feature-lock-references-invalid", `锁定 Feature #${id} 直接引用集合被改写`);
   }
 }
 
@@ -574,27 +573,6 @@ function outputFeatureCollections(values: Map<string, unknown>): UnknownRecord {
     settlements,
     markers
   };
-}
-
-function captureDirectFeatureReferences(map: UnknownRecord, id: number): unknown[] {
-  const pack = isPlainRecord(map.pack) ? map.pack : {};
-  const settlements = isPlainRecord(map.settlements) ? map.settlements : {};
-  const markers = isPlainRecord(map.markers) ? map.markers : {};
-  const portDiagnostics = isPlainRecord(pack.portDiagnostics) ? pack.portDiagnostics : {};
-  const collections: Array<readonly [string, unknown]> = [
-    ["pack.burgs", pack.burgs], ["settlements.cities", settlements.cities], ["pack.routes", pack.routes],
-    ["settlements.routes", settlements.routes], ["markers.markers", markers.markers], ["pack.portDiagnostics.features", portDiagnostics.features]
-  ];
-  const references: unknown[] = [];
-  for (const [collection, value] of collections) {
-    const objects = Array.isArray(value) ? value : [];
-    for (let index = 0; index < objects.length; index++) {
-      const object = objects[index];
-      if (!isPlainRecord(object) || Number(object.feature) !== id && Number(object.port) !== id && Number((object.data as UnknownRecord | undefined)?.feature) !== id) continue;
-      references.push({collection, id: object.id ?? object.i ?? null, feature: object.feature, port: object.port, dataFeature: (object.data as UnknownRecord | undefined)?.feature, ...(!["pack.routes", "settlements.routes", "markers.markers"].includes(collection) ? {index} : {})});
-    }
-  }
-  return references;
 }
 
 function featureReferenceObjects(map: UnknownRecord): Array<readonly [string, UnknownRecord]> {

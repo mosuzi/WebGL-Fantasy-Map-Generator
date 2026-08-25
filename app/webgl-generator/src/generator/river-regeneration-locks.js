@@ -125,8 +125,8 @@ function validateLockedRiver(pack, river, byId) {
   if (!Number.isInteger(id) || id <= 0) throw conflict(river, "invalid_river_id", "锁定河流缺少有效 ID");
   if (!Array.isArray(path) || path.length < 2) throw conflict(river, "invalid_path", `锁定河流 #${id} 路径不足`);
   const source = path.find(cell => Number.isInteger(cell) && cell >= 0);
-  if (!Number.isInteger(source) || Number(pack?.cells?.h?.[source]) < WATER_LEVEL) {
-    throw conflict(river, "source_became_water", `锁定河流 #${id} 的源头已变为水域`);
+  if (!Number.isInteger(source) || source >= Number(pack?.cells?.i?.length || 0)) {
+    throw conflict(river, "invalid_source", `锁定河流 #${id} 的源头越界`);
   }
   for (let index = 0; index < path.length - 1; index++) {
     const from = path[index];

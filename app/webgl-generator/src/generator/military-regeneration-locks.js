@@ -83,14 +83,6 @@ function validateRegimentPlacement(pack, state, regiment, identity) {
   const cell = Number(regiment.cell);
   const count = pack?.cells?.i?.length || pack?.cells?.h?.length || 0;
   if (!Number.isInteger(cell) || cell < 0 || cell >= count) throw militaryLockConflict(`锁定军团 ${identity.id} 的驻地越界`, {reason: "invalid-cell", id: identity.id});
-  if (Number(pack.cells.state?.[cell]) !== Number(state.i)) throw militaryLockConflict(`锁定军团 ${identity.id} 的驻地不属于所属国家`, {reason: "state-ownership", id: identity.id, cell});
-  if (Number(pack.cells.h?.[cell]) < 20) throw militaryLockConflict(`锁定军团 ${identity.id} 的驻地位于水域`, {reason: "land-water-conflict", id: identity.id, cell});
-  if (regiment.n || regiment.type === "fleet") {
-    const haven = Number(pack.cells.haven?.[cell]);
-    if (!Number.isInteger(haven) || haven < 0 || Number(pack.cells.h?.[haven]) >= 20 || !pack.cells.p?.[haven]) {
-      throw militaryLockConflict(`锁定舰队 ${identity.id} 缺少合法港湾`, {reason: "land-water-conflict", id: identity.id, cell});
-    }
-  }
   if (!Number.isFinite(Number(regiment.x)) || !Number.isFinite(Number(regiment.y))) {
     throw militaryLockConflict(`锁定军团 ${identity.id} 缺少有效坐标`, {reason: "invalid-position", id: identity.id});
   }

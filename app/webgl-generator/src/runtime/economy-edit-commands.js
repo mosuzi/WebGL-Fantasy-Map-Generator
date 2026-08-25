@@ -457,8 +457,18 @@ function cloneTypedArray(value) {
 }
 
 function restoreTypedArray(owner, key, snapshot) {
-  if (owner[key]?.constructor === snapshot.constructor && owner[key].length === snapshot.length) owner[key].set(snapshot);
-  else owner[key] = cloneTypedArray(snapshot);
+  const target = owner[key];
+  if (ArrayBuffer.isView(target) && ArrayBuffer.isView(snapshot)
+    && target.constructor === snapshot.constructor && target.length === snapshot.length) {
+    target.set(snapshot);
+    return;
+  }
+  if (Array.isArray(target) && Array.isArray(snapshot)) {
+    target.length = snapshot.length;
+    for (let index = 0; index < snapshot.length; index++) target[index] = snapshot[index];
+    return;
+  }
+  owner[key] = cloneTypedArray(snapshot);
 }
 
 function cloneValue(value) {

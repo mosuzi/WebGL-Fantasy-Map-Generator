@@ -3,8 +3,10 @@ import {reconcileWarDerivedData} from "../generator/war-consistency.js";
 import {ensureLabelStore} from "./label-edit-commands.js";
 import {normalizeSocialExpansionMap} from "./social-expansion-edit-commands.js";
 import {normalizeSuitabilityMap} from "./suitability-edit-commands.js";
+import {normalizeRegenerationWorkingCopy} from "./regeneration-working-copy.js";
 
 export function normalizeMapForRuntimeAdoption(map) {
+  normalizeRegenerationWorkingCopy(map);
   normalizeSocialExpansionMap(map);
   normalizeSuitabilityMap(map);
   ensureLabelStore(map);

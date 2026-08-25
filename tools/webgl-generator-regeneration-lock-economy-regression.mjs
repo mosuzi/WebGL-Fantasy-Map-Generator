@@ -16,6 +16,7 @@ testPartialLocksAcrossFullBuildAndRebuild();
 testSparseIds();
 testSingleDomainFullLocks();
 testEmptyOwnedMarketLock();
+testBypassedGenerationConstraints();
 testBothDomainsLockedCommandNoop();
 testAssignmentConflictAndFailureRollback();
 
@@ -134,6 +135,35 @@ function testEmptyOwnedMarketLock() {
   assert.deepEqual(map.pack.markets[lockedMarket.i], snapshot, "空 owned cells 市场完整快照被改写");
   assert.deepEqual(ownedCells(map.pack.cells.market, lockedMarket.i), [], "空 owned cells 市场被意外分配 cell");
   report.cases.push("empty-owned-market-lock");
+}
+
+function testBypassedGenerationConstraints() {
+  const map = generatePlaceholderMap({...options, seed: `${options.seed}-bypass`});
+  const lockedMarket = map.pack.markets.find(Boolean);
+  const lockedDeal = map.pack.deals.find(Boolean);
+  const mismatchedCell = map.pack.cells.i.find(cell => Number(cell) !== Number(map.pack.burgs[lockedMarket.centerBurgId]?.cell));
+  const disconnectedPair = map.pack.cells.i.find(from =>
+    map.pack.cells.i.some(to => to !== from && !(map.pack.cells.c[from] || []).includes(to))
+  );
+  const disconnectedTarget = map.pack.cells.i.find(to =>
+    to !== disconnectedPair && !(map.pack.cells.c[disconnectedPair] || []).includes(to)
+  );
+  assert.ok(Number.isInteger(mismatchedCell) && Number.isInteger(disconnectedPair) && Number.isInteger(disconnectedTarget), "缺少经济限制直通样本");
+  lockedMarket.cell = mismatchedCell;
+  lockedDeal.path = [disconnectedPair, disconnectedTarget];
+  const marketSnapshot = structuredClone(lockedMarket);
+  const dealSnapshot = structuredClone(lockedDeal);
+  const marketCells = ownedCells(map.pack.cells.market, lockedMarket.i);
+  map.regenerationLocks = {
+    version: 1,
+    entries: [
+      {kind: "economy-market", id: lockedMarket.i},
+      {kind: "trade-flow", id: lockedDeal.i}
+    ]
+  };
+  createRebuildEconomyCommand().apply({map});
+  assertLockedEconomy(map.pack, marketSnapshot, dealSnapshot, marketCells);
+  report.cases.push("bypass-center-and-path-generation-constraints");
 }
 
 function testBothDomainsLockedCommandNoop() {

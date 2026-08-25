@@ -20,6 +20,7 @@ import {LABEL_TARGET_KIND, OBJECT_KIND} from "./object-kinds.js";
 import {captureRegenerationConstraintBundle} from "./regeneration-constraint-bundle.js";
 import {createRegenerationLockPriorityBundle} from "./regeneration-lock-priority.js";
 import {allRegenerationObjectsLocked, assertLockedRegenerationSnapshots, captureLockedRegenerationObjects, mergeLockedRiverFeatureSnapshots, regenerationLockConflict} from "./regeneration-lock-protection.js";
+import {normalizeRegenerationWorkingCopy} from "./regeneration-working-copy.js";
 import {reconcileSettlementCellIdentity} from "./settlement-cell-index.js";
 import {reconcileSettlementPortTopology} from "./settlement-port-topology.js";
 import {regenerateProvincesForStates, withScopedProvinceRegenerationOptions} from "./state-topology-commands.js";
@@ -123,6 +124,7 @@ export async function runRegenerationWorkerTask(payload, context = {}) {
     return {mode: "render-only", binding, preparedRender};
   }
   const kind = normalizeRegenerationKind(payload?.kind);
+  normalizeRegenerationWorkingCopy(map);
   const setupStartedAt = regenerationTaskNow();
   context.checkpoint?.();
   context.report?.("compute", {message: `正在 Worker 中重算 ${kind}`, progress: 0.15});
@@ -207,6 +209,7 @@ function regenerateMapAttribute(map, kind, options) {
 
 export function regenerateMapAttributeForWorker(map, kind, options = {}) {
   const normalizedKind = normalizeRegenerationKind(kind);
+  normalizeRegenerationWorkingCopy(map);
   const scope = normalizeRegenerationScope(map, normalizedKind, options);
   const constraintBundle = options.constraintBundle || captureRegenerationConstraintBundle(map, {closure: ["world"]});
   const result = regenerateMapAttribute(map, normalizedKind, {...options, ...scope, constraintBundle});

@@ -74,6 +74,11 @@ export function buildOceanCurrents(map, {seed, preservedCurrents = []} = {}) {
     currents.push(...buildBasinCurrents(map, basin, coastDistance, spatialIndex, random, resolvedSeed, basinPreserved));
   }
 
+  const mergedCurrents = new Map(currents.map(current => [String(current.id), current]));
+  for (const current of preserved) mergedCurrents.set(String(current.id), structuredClone(current));
+  currents.length = 0;
+  currents.push(...mergedCurrents.values());
+
   return {
     version: OCEAN_CURRENT_MODEL_VERSION,
     algorithm: OCEAN_CURRENT_ALGORITHM,

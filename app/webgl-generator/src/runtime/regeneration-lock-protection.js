@@ -176,13 +176,11 @@ function validateState(map, reference, state) {
   if (!Number.isInteger(id) || id <= 0 || !map?.pack?.states?.[id] || map.pack.states[id].removed) {
     throw regenerationLockConflict(reference.kind, reference, "invalid_state_mirror", "锁定国家缺少一致的 pack 对象", {id});
   }
-  if (!Number.isInteger(center) || center < 0 || center >= Number(map?.pack?.cells?.i?.length || 0) || map.pack.cells.h?.[center] < 20) {
+  if (!Number.isInteger(center) || center < 0 || center >= Number(map?.pack?.cells?.i?.length || 0)) {
     throw regenerationLockConflict(reference.kind, reference, "invalid_state_center", "锁定国家引用了无效中心", {id, center});
   }
-  const emptyState = capital === 0;
-  if ((!emptyState && (!Number.isInteger(capital) || capital <= 0 || !burg || burg.removed || Number(burg.cell) !== center))
-    || Number(map.pack.cells.state?.[center]) !== id) {
-    throw regenerationLockConflict(reference.kind, reference, "invalid_state_capital", "锁定国家缺少一致的首都与领土镜像", {id, capital, center});
+  if (capital !== 0 && (!Number.isInteger(capital) || capital <= 0 || !burg || burg.removed)) {
+    throw regenerationLockConflict(reference.kind, reference, "invalid_state_capital", "锁定国家引用了不存在的首都", {id, capital});
   }
 }
 
@@ -197,13 +195,13 @@ function validateProvince(map, reference, province) {
   if (!map?.pack?.states?.[stateId] || map.pack.states[stateId].removed) {
     throw regenerationLockConflict(reference.kind, reference, "invalid_province_parent", "锁定省份引用了无效父国", {id, stateId});
   }
-  if (!Number.isInteger(center) || center < 0 || center >= Number(map?.pack?.cells?.i?.length || 0) || map.pack.cells.h?.[center] < 20 || Number(map.pack.cells.state?.[center]) !== stateId || Number(map.pack.cells.province?.[center]) !== id) {
-    throw regenerationLockConflict(reference.kind, reference, "invalid_province_center", "锁定省份缺少一致的中心与领土镜像", {id, stateId, center});
+  if (!Number.isInteger(center) || center < 0 || center >= Number(map?.pack?.cells?.i?.length || 0)) {
+    throw regenerationLockConflict(reference.kind, reference, "invalid_province_center", "锁定省份引用了无效中心", {id, stateId, center});
   }
   if (burgId) {
     const burg = map?.pack?.burgs?.[burgId];
-    if (!burg || burg.removed || Number(burg.cell) !== center) {
-      throw regenerationLockConflict(reference.kind, reference, "invalid_province_burg", "锁定省份缺少一致的省会 burg", {id, burgId, center});
+    if (!burg || burg.removed) {
+      throw regenerationLockConflict(reference.kind, reference, "invalid_province_burg", "锁定省份引用了不存在的省会 burg", {id, burgId});
     }
   }
 }
@@ -254,49 +252,15 @@ function validateFeature(map, reference, feature) {
     throw regenerationLockConflict(reference.kind, reference, "invalid_feature_mirror", "锁定 Feature 对象与 pack 镜像不一致", {id});
   }
   const gridIds = [...new Set(packCells.map(cell => Number(map?.grid?.cells?.f?.[map?.pack?.cells?.g?.[cell]])).filter(value => value > 0))];
-  if (gridIds.length !== 1) {
-    throw regenerationLockConflict(reference.kind, reference, "invalid_feature_grid_mirror", "锁定 Feature 缺少唯一 grid 镜像", {id, gridIds});
+  if (!gridIds.length) {
+    throw regenerationLockConflict(reference.kind, reference, "invalid_feature_grid_mirror", "锁定 Feature 缺少可读取的 grid 镜像", {id, gridIds});
   }
-  const gridId = gridIds[0];
-  const gridFeature = map?.features?.features?.[gridId] || map?.grid?.features?.[gridId];
-  const gridCells = memberCells(map?.grid?.cells?.f, gridId);
-  if (!gridFeature || gridFeature.removed || !gridCells.length
-    || Boolean(gridFeature.land) !== Boolean(packFeature.land)
-    || String(gridFeature.type) !== String(packFeature.type)) {
-    throw regenerationLockConflict(reference.kind, reference, "invalid_feature_grid_mirror", "锁定 Feature 的 pack / grid 类型或成员镜像不一致", {id, gridId});
-  }
-  for (const cell of packCells) validateFeatureCell(map, reference, packFeature, cell);
-  for (const cell of gridCells) {
-    const land = Number(map?.grid?.cells?.h?.[cell]) >= 20;
-    if (land !== Boolean(gridFeature.land)) {
-      throw regenerationLockConflict(reference.kind, reference, "invalid_feature_terrain", "锁定 Feature 的 grid 水陆成员矛盾", {id, gridId, cell});
+  for (const gridId of gridIds) {
+    const gridFeature = map?.features?.features?.[gridId] || map?.grid?.features?.[gridId];
+    const gridCells = memberCells(map?.grid?.cells?.f, gridId);
+    if (!gridFeature || gridFeature.removed || !gridCells.length || Boolean(gridFeature.land) !== Boolean(packFeature.land)) {
+      throw regenerationLockConflict(reference.kind, reference, "invalid_feature_grid_mirror", "锁定 Feature 的 pack / grid 对象镜像不一致", {id, gridId});
     }
-  }
-}
-
-function validateFeatureCell(map, reference, feature, cell) {
-  const land = Number(map?.pack?.cells?.h?.[cell]) >= 20;
-  if (land !== Boolean(feature.land) || String(map?.pack?.cells?.type?.[cell] || "") !== String(feature.type || "")) {
-    throw regenerationLockConflict(reference.kind, reference, "invalid_feature_terrain", "锁定 Feature 的 pack 水陆或类型成员矛盾", {
-      id: Number(feature.i ?? feature.id),
-      cell
-    });
-  }
-  const haven = Number(map?.pack?.cells?.haven?.[cell]);
-  const harbor = Number(map?.pack?.cells?.harbor?.[cell]);
-  if (!Number.isFinite(haven) || !Number.isFinite(harbor)) {
-    throw regenerationLockConflict(reference.kind, reference, "invalid_feature_harbor", "锁定 Feature 的 haven / harbor assignment 无效", {
-      id: Number(feature.i ?? feature.id),
-      cell
-    });
-  }
-  if (harbor > 0 && (!Number.isInteger(haven) || haven < 0 || haven >= Number(map?.pack?.cells?.h?.length || 0) || Number(map.pack.cells.h[haven]) >= 20)) {
-    throw regenerationLockConflict(reference.kind, reference, "invalid_feature_harbor", "锁定 Feature 的港湾没有有效水域 haven", {
-      id: Number(feature.i ?? feature.id),
-      cell,
-      haven,
-      harbor
-    });
   }
 }
 
@@ -392,8 +356,8 @@ function validateEconomyMarket(map, reference, market) {
   const burg = map?.pack?.burgs?.[centerBurgId];
   if (!Number.isInteger(id) || id <= 0 || !Number.isInteger(centerBurgId) || centerBurgId <= 0
     || !Number.isInteger(cell) || cell < 0 || cell >= Number(map?.pack?.cells?.i?.length || 0)
-    || !burg?.i || burg.removed || Number(burg.cell) !== cell) {
-    throw regenerationLockConflict(reference.kind, reference, "invalid-market-center", "锁定市场缺少一致的中心城市", {
+    || !burg?.i || burg.removed) {
+    throw regenerationLockConflict(reference.kind, reference, "invalid-market-center", "锁定市场引用了不存在的中心城市或越界 cell", {
       marketId: id,
       centerBurgId,
       cell
@@ -418,13 +382,6 @@ function validateTradeFlow(map, reference, deal) {
     if (!Number.isInteger(cell) || cell < 0 || cell >= Number(map?.pack?.cells?.i?.length || 0)) {
       throw regenerationLockConflict(reference.kind, reference, "invalid-deal-path-cell", "锁定交易路径包含无效 cell", {dealId: id, cell});
     }
-    if (index && !(map?.pack?.cells?.c?.[deal.path[index - 1]] || []).includes(cell)) {
-      throw regenerationLockConflict(reference.kind, reference, "disconnected-deal-path", "锁定交易路径不连续", {
-        dealId: id,
-        from: deal.path[index - 1],
-        to: cell
-      });
-    }
   }
 }
 
@@ -434,7 +391,7 @@ function validateTradeParty(map, reference, deal, side) {
   if (type === "market" && findNumericObject(map?.pack?.markets, id)) return;
   if (type === "burg") {
     const burg = map?.pack?.burgs?.[id];
-    if (burg?.i && !burg.removed && findNumericObject(map?.pack?.markets, Number(burg.market))) return;
+    if (burg?.i && !burg.removed) return;
   }
   throw regenerationLockConflict(reference.kind, reference, type === "burg" ? "missing-deal-burg" : "missing-deal-market", "锁定交易引用了无效端点", {
     dealId: Number(deal?.i ?? deal?.id),
@@ -606,42 +563,12 @@ function captureFeatureMirrors(map, feature) {
     shore: {
       pack: clone(map?.pack?.features?.[id]?.shoreline || null),
       grid: clone((map?.features?.features?.[gridId] || map?.grid?.features?.[gridId])?.shoreline || null)
-    },
-    references: captureDirectFeatureReferences(map, id)
+    }
   };
 }
 
 function captureCellAssignments(cells, members, fields) {
   return Object.fromEntries(fields.map(field => [field, members.map(cell => clone(cells?.[field]?.[cell]))]));
-}
-
-function captureDirectFeatureReferences(map, id) {
-  const references = [];
-  const collections = [
-    ["pack.burgs", map?.pack?.burgs],
-    ["settlements.cities", map?.settlements?.cities],
-    ["pack.routes", map?.pack?.routes],
-    ["settlements.routes", map?.settlements?.routes],
-    ["markers.markers", map?.markers?.markers],
-    ["pack.portDiagnostics.features", map?.pack?.portDiagnostics?.features]
-  ];
-  for (const [collection, objects] of collections) {
-    for (let index = 0; index < (objects?.length || 0); index++) {
-      const object = objects[index];
-      if (!object || object.removed) continue;
-      if (Number(object.feature) !== id && Number(object.port) !== id && Number(object.data?.feature) !== id) continue;
-      const record = {
-        collection,
-        id: clone(object.id ?? object.i ?? null),
-        feature: clone(object.feature),
-        port: clone(object.port),
-        dataFeature: clone(object.data?.feature)
-      };
-      if (!["pack.routes", "settlements.routes", "markers.markers"].includes(collection)) record.index = index;
-      references.push(record);
-    }
-  }
-  return references;
 }
 
 function captureStateMirrors(map, state) {
@@ -837,7 +764,7 @@ function validateMarker(map, reference, marker) {
 
 function validateZone(map, reference, zone) {
   const cellCount = Number(map?.pack?.cells?.i?.length || 0);
-  if (!Array.isArray(zone.cells) || !zone.cells.length || zone.cells.some(cell => !Number.isInteger(cell) || cell < 0 || cell >= cellCount)) {
+  if (!Array.isArray(zone.cells) || zone.cells.some(cell => !Number.isInteger(cell) || cell < 0 || cell >= cellCount)) {
     throw regenerationLockConflict(reference.kind, reference, "invalid_zone_cells", "锁定地区包含无效地形 cell");
   }
   for (const field of ["attacker", "defender"]) {
@@ -853,8 +780,8 @@ function validateZone(map, reference, zone) {
 function validateOceanCurrent(map, reference, current) {
   const features = map?.features?.features || map?.grid?.features || [];
   const basin = features?.[Number(current.basinFeatureId)];
-  if (!basin || basin.type !== "ocean") {
-    throw regenerationLockConflict(reference.kind, reference, "invalid_current_basin", "锁定洋流引用了无效海盆", {basinFeatureId: current.basinFeatureId});
+  if (!basin) {
+    throw regenerationLockConflict(reference.kind, reference, "invalid_current_basin", "锁定洋流引用了不存在的 Feature", {basinFeatureId: current.basinFeatureId});
   }
   const segments = current?.path?.segments;
   if (!Array.isArray(segments) || !segments.length || segments.some(segment =>
@@ -863,44 +790,6 @@ function validateOceanCurrent(map, reference, current) {
   ))) {
     throw regenerationLockConflict(reference.kind, reference, "invalid_current_path", "锁定洋流缺少有效路径");
   }
-  for (const segment of segments) {
-    for (let step = 0; step <= 16; step++) {
-      const point = sampleCubic(segment, step / 16);
-      const cell = nearestGridCell(map?.grid, point);
-      const featureId = Number(map?.grid?.cells?.f?.[cell]);
-      if (cell === null || Number(map?.grid?.cells?.h?.[cell]) >= 20 || featureId !== Number(current.basinFeatureId)) {
-        throw regenerationLockConflict(reference.kind, reference, "invalid_current_terrain", "锁定洋流路径离开了有效海盆", {
-          basinFeatureId: current.basinFeatureId,
-          point
-        });
-      }
-    }
-  }
-}
-
-function sampleCubic(segment, t) {
-  const mt = 1 - t;
-  const weights = [mt ** 3, 3 * mt * mt * t, 3 * mt * t * t, t ** 3];
-  const points = [segment.start, segment.control1, segment.control2, segment.end];
-  return [
-    points.reduce((sum, point, index) => sum + Number(point[0]) * weights[index], 0),
-    points.reduce((sum, point, index) => sum + Number(point[1]) * weights[index], 0)
-  ];
-}
-
-function nearestGridCell(grid, point) {
-  if (!grid?.points?.length) return null;
-  let best = null;
-  let bestDistance = Infinity;
-  for (let cell = 0; cell < Number(grid.cells?.h?.length || 0); cell++) {
-    const gridPoint = grid.points[grid.cells?.p?.[cell] ?? cell] || grid.points[cell];
-    if (!gridPoint) continue;
-    const distance = (Number(gridPoint[0]) - point[0]) ** 2 + (Number(gridPoint[1]) - point[1]) ** 2;
-    if (distance >= bestDistance) continue;
-    best = cell;
-    bestDistance = distance;
-  }
-  return best;
 }
 
 function stableSnapshot(value) {

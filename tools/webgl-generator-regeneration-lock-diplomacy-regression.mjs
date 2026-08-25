@@ -79,7 +79,9 @@ const inverseMap = structuredClone(base);
 inverseMap.pack.states[left.i].diplomacy[right.i] = "Vassal";
 inverseMap.pack.states[right.i].diplomacy[left.i] = "Vassal";
 mirrorPair(inverseMap, left.i, right.i);
-assertConflict(() => createRegenerateDiplomacyCommand({salt: 2}).apply({map: inverseMap}), "non-reciprocal");
+const inverseBefore = captureDiplomacyRelationSnapshot(inverseMap.pack, left.i, right.i);
+createRegenerateDiplomacyCommand({salt: 2}).apply({map: inverseMap});
+assertDeepEqual(captureDiplomacyRelationSnapshot(inverseMap.pack, left.i, right.i), inverseBefore, "非互逆锁定外交没有原样直通");
 
 const derivedMap = structuredClone(base);
 const derivedPair = diplomacyPairKey(left.i, third.i);
@@ -108,7 +110,17 @@ for (const overlord of [firstOverlord, secondOverlord]) {
     id: diplomacyPairKey(lockedVassal.i, overlord.i)
   });
 }
-assertConflict(() => createRegenerateDiplomacyCommand({salt: 4}).apply({map: hierarchyLockMap}), "locked-derived-changed");
+const hierarchyLockedBefore = [firstOverlord, secondOverlord].map(overlord =>
+  captureDiplomacyRelationSnapshot(hierarchyLockMap.pack, lockedVassal.i, overlord.i)
+);
+createRegenerateDiplomacyCommand({salt: 4}).apply({map: hierarchyLockMap});
+for (const snapshot of hierarchyLockedBefore) {
+  assertDeepEqual(
+    captureDiplomacyRelationSnapshot(hierarchyLockMap.pack, snapshot.leftId, snapshot.rightId),
+    snapshot,
+    `多宗主锁定外交 ${snapshot.id} 没有原样直通`
+  );
+}
 
 const faultMap = structuredClone(base);
 const faultBefore = fullSnapshot(faultMap);
@@ -135,7 +147,8 @@ console.log(JSON.stringify({
     deterministic: true,
     validGeneration: true
   },
-  conflicts: ["missing-state", "non-reciprocal", "locked-derived-changed"],
+  bypassedGenerationConstraints: ["non-reciprocal", "multiple-overlords"],
+  conflicts: ["missing-state"],
   preservedReadableWarDerived: derivedPair,
   rollback: "after-war-derived"
 }, null, 2));

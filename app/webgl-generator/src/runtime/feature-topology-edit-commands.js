@@ -223,9 +223,12 @@ function captureLockedFeatureReferenceState(map, lockedFeatureIds = new Set()) {
   const entries = [];
   const capture = object => {
     if (!object || typeof object !== "object") return;
-    if (!lockedFeatureIds.has(Number(object.feature)) && !lockedFeatureIds.has(Number(object.port)) && !lockedFeatureIds.has(Number(object.data?.feature))) return;
-    for (const key of ["feature", "port"]) entries.push({target: object, key, present: Object.prototype.hasOwnProperty.call(object, key), value: object[key]});
-    if (object.data) entries.push({target: object.data, key: "feature", present: Object.prototype.hasOwnProperty.call(object.data, "feature"), value: object.data.feature});
+    for (const key of ["feature", "port"]) {
+      if (lockedFeatureIds.has(Number(object[key]))) entries.push({target: object, key, present: Object.prototype.hasOwnProperty.call(object, key), value: object[key]});
+    }
+    if (object.data && lockedFeatureIds.has(Number(object.data.feature))) {
+      entries.push({target: object.data, key: "feature", present: Object.prototype.hasOwnProperty.call(object.data, "feature"), value: object.data.feature});
+    }
   };
   for (const collection of [map.pack?.burgs, map.settlements?.cities, map.pack?.routes, map.settlements?.routes, map.markers?.markers, map.pack?.portDiagnostics?.features]) {
     for (const object of collection || []) capture(object);
@@ -457,17 +460,8 @@ function prepareLockedFeatureConstraints(map, options = {}) {
     const packCells = memberCells(map.pack.cells.f, id);
     const projectedGridCells = uniqueIntegers(packCells.map(cell => map.pack.cells.g?.[cell]));
     const gridIds = uniquePositiveIntegers(projectedGridCells.map(cell => map.grid.cells.f?.[cell]));
-    if (!packCells.length || gridIds.length !== 1) {
-      throw featureLockConflict(`锁定 Feature #${id} 缺少唯一的 grid 空间镜像`, {reason: "missing-members", id, gridIds});
-    }
-    const gridId = gridIds[0];
-    const gridFeature = map.features?.features?.[gridId];
-    const gridCells = memberCells(map.grid.cells.f, gridId);
-    if (!gridFeature || gridFeature.removed || !gridCells.length) {
-      throw featureLockConflict(`锁定 Feature #${id} 缺少 grid 对象或成员 cell`, {reason: "missing-feature", id, gridId});
-    }
-    if (Boolean(gridFeature.land) !== Boolean(packFeature.land) || String(gridFeature.type) !== String(packFeature.type)) {
-      throw featureLockConflict(`锁定 Feature #${id} 的 grid / pack 类型不一致`, {reason: "type-mismatch", id, gridId});
+    if (!packCells.length || !gridIds.length) {
+      throw featureLockConflict(`锁定 Feature #${id} 缺少可读取的 grid 空间镜像`, {reason: "missing-members", id, gridIds});
     }
     const sourceLand = Boolean(source.land);
     const sourceType = String(source.type || "");
@@ -475,18 +469,28 @@ function prepareLockedFeatureConstraints(map, options = {}) {
       throw featureLockConflict(`锁定 Feature #${id} 的对象类型与当前拓扑不一致`, {reason: "type-mismatch", id});
     }
 
-    if (gridEntries.has(gridId)) {
-      throw featureLockConflict(`锁定 Feature #${id} 与另一锁对象复用 grid Feature #${gridId}`, {reason: "overlapping-grid-feature", id, gridId});
+    for (const gridId of gridIds) {
+      const gridFeature = map.features?.features?.[gridId];
+      const gridCells = memberCells(map.grid.cells.f, gridId);
+      if (!gridFeature || gridFeature.removed || !gridCells.length) {
+        throw featureLockConflict(`锁定 Feature #${id} 缺少 grid 对象或成员 cell`, {reason: "missing-feature", id, gridId});
+      }
+      if (Boolean(gridFeature.land) !== Boolean(packFeature.land)) {
+        throw featureLockConflict(`锁定 Feature #${id} 的 grid / pack 水陆类型不一致`, {reason: "type-mismatch", id, gridId});
+      }
+      if (gridEntries.has(gridId)) {
+        throw featureLockConflict(`锁定 Feature #${id} 与另一锁对象复用 grid Feature #${gridId}`, {reason: "overlapping-grid-feature", id, gridId});
+      }
+      gridEntries.set(gridId, {
+        id: gridId,
+        sourceId: id,
+        feature: clonePlain(gridFeature),
+        cells: gridCells,
+        land: Boolean(gridFeature.land),
+        type: String(gridFeature.type),
+        fields: captureLockedCellAssignments(map.grid.cells, gridCells, ["f"])
+      });
     }
-    gridEntries.set(gridId, {
-      id: gridId,
-      sourceId: id,
-      feature: clonePlain(gridFeature),
-      cells: gridCells,
-      land: Boolean(gridFeature.land),
-      type: String(gridFeature.type),
-      fields: captureLockedCellAssignments(map.grid.cells, gridCells, ["f"])
-    });
     packEntries.set(id, {
       id,
       feature: clonePlain(packFeature),
@@ -791,6 +795,11 @@ function syncSpatialFeatureReferences(map, before = new Map(), protectedReferenc
     const previousSpatial = Number(before.get(object)) || 0;
     const currentFeature = map.pack.features?.[current];
     if (!currentFeature || currentFeature.removed || current === previousSpatial && next !== previousSpatial) object.feature = next;
+    if (object.data) {
+      const dataFeature = Number(object.data.feature) || 0;
+      const currentDataFeature = map.pack.features?.[dataFeature];
+      if (!currentDataFeature || currentDataFeature.removed) object.data.feature = next;
+    }
   };
   for (const collection of uniqueCollections(map.settlements?.cities, map.pack?.burgs)) {
     for (const object of collection) {

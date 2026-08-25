@@ -8,6 +8,8 @@
 
 > 分支执行约束：本专题已于 2026-08-19 获用户明确批准为第 349 项，只在 `codex/map-core-engine-architecture-plan` 并行分支逐阶段实施；不得将本分支合入 `main`。全阶段不执行浏览器验收，最终只形成并评估浏览器验收方案。
 
+- 第 357 项统一 `22` 个重生成入口的旧数据 canonical working copy、锁定对象最小结构校验、未锁对象受限生成、锁快照优先合并和单次最终领域校验；阶段冻结与最终验收记录见 [`task-357-unified-regeneration-contract.md`](./task-357-unified-regeneration-contract.md)。
+
 - 第 351 项已于 2026-08-23 完成：`codex/task-351-view-switch-repair` 修复 100k 全视图切换、扩展十二类 GPU 常驻颜色模式并建立 latest-revision 后台预热；用户精确预览标签页十二类视图终验通过并恢复高度视图。该分支叠加于未合入 `main` 的第 349～350 项架构分支，仍不得直接合入 `main`。根因、设计、本地性能与精确 Chrome 证据见 [`task-351-view-switch-repair.md`](./task-351-view-switch-repair.md)。
 - 第 350 项在前五个固定入口高返工率后已获准重新基线；17 类典型场景、16 项共同不变量、20 入口重新覆盖及 R0～R7 整体修补顺序见 [`../plans/task-350-engine-integration-rebaseline.md`](../plans/task-350-engine-integration-rebaseline.md)。原 CDP 执行记录、artifact 与失败证据继续保存在 [`task-350-map-core-engine-cdp-acceptance.md`](./task-350-map-core-engine-cdp-acceptance.md)，不得用旧通过结果免除重新复查。分支仍不得合入 `main`。
 - R0～R7 各阶段的精简冻结点、门禁和评审交接统一写入 [`task-350-engine-integration-rebaseline-handoffs.md`](./task-350-engine-integration-rebaseline-handoffs.md)，不把长日志或完整矩阵重复搬入权威计划。

@@ -277,7 +277,8 @@ export function reexpandPackPoliticsPreservingIdentity(grid, society, pack, sett
   restoreProtectedPoliticalSnapshots(provinces, options.lockedProvinces);
   const stateIdentity = snapshotPoliticalIdentity(states);
   const provinceIdentity = snapshotPoliticalIdentity(provinces);
-  repairStateCapitalAnchors(pack, states, lockedStates.ids);
+  const unanchoredStateIds = repairStateCapitalAnchors(pack, states, lockedStates.requiredIds);
+  for (const stateId of unanchoredStateIds) lockedStates.requiredIds.add(stateId);
   const stateAnchors = preservedProvinceStateAnchors(pack, provinces);
   const protectedStateCells = new Set([...stateAnchors.cells, ...lockedStates.packCells]);
   expandPackStates(pack, states, society, stateAnchors, lockedStates);
@@ -300,7 +301,7 @@ export function reexpandPackPoliticsPreservingIdentity(grid, society, pack, sett
   pack.cells.province = provinceIds;
   pack.provinces = provinces;
   grid.cells.province = mirrorPackProvinceToGrid(grid, pack, lockedProvinces.gridOwners, lockedProvinces.ids);
-  syncBurgProvinces(pack);
+  syncBurgProvinces(pack, lockedStates.protectedBurgIds);
   assertPoliticalIdentity(states, stateIdentity, "国家");
   assertPoliticalIdentity(provinces, provinceIdentity, "省份");
   assertProtectedPoliticalSnapshots(states, options.lockedStates, "国家");
@@ -334,6 +335,7 @@ function preservedProvinceStateAnchors(pack, provinces) {
 function repairStateCapitalAnchors(pack, states, protectedIds = new Set()) {
   const oldStateByBurg = new Map((pack.burgs || []).filter(burg => burg?.i && !burg.removed).map(burg => [burg.i, Number(burg.state) || 0]));
   const used = new Set();
+  const unanchored = new Set();
   for (const state of states) {
     if (!state?.i || state.removed) continue;
     if (protectedIds.has(Number(state.i))) {
@@ -350,13 +352,17 @@ function repairStateCapitalAnchors(pack, states, protectedIds = new Set()) {
         .filter(burg => burg?.i && !burg.removed && pack.cells.h[burg.cell] >= 20 && !used.has(burg.cell) && oldStateByBurg.get(burg.i) === state.i)
         .sort((a, b) => Number(b.population || 0) - Number(a.population || 0))[0];
     }
-    if (!capital) throw new Error(`国家 #${state.i} 没有可保留的首都锚点`);
+    if (!capital) {
+      unanchored.add(Number(state.i));
+      continue;
+    }
     state.capital = capital.i;
     state.center = capital.cell;
     state.gridCenter = pack.cells.g?.[capital.cell] ?? state.gridCenter;
     capital.capital = 1;
     used.add(capital.cell);
   }
+  return unanchored;
 }
 
 function seedPreservedProvinceCenters(pack, states, provinces, lockedProvinces = null, lockedStates = null) {
@@ -427,9 +433,9 @@ function fillPreservedProvinceGaps(pack, provinces, provinceIds) {
   }
 }
 
-function syncBurgProvinces(pack) {
+function syncBurgProvinces(pack, protectedBurgIds = new Set()) {
   for (const burg of pack.burgs || []) {
-    if (!burg?.i || burg.removed) continue;
+    if (!burg?.i || burg.removed || protectedBurgIds.has(Number(burg.i))) continue;
     burg.province = pack.cells.province?.[burg.cell] || 0;
   }
 }
@@ -587,17 +593,11 @@ function prepareLockedStates(grid, pack, options = {}, lockedProvinces = null) {
     }
     const burg = pack.burgs?.[capital];
     const emptyState = capital === 0;
-    if (!emptyState && (!Number.isInteger(capital) || capital <= 0 || !burg || burg.removed || !burg.capital)) {
+    if (!emptyState && (!Number.isInteger(capital) || capital <= 0 || !burg || burg.removed)) {
       throw stateLockConflict(`锁定国家 #${id} 缺少有效首都`, {reason: "invalid-capital", id, capital});
     }
-    if (!Number.isInteger(center) || center < 0 || center >= pack.cells.i.length || pack.cells.h?.[center] < 20) {
-      throw stateLockConflict(`锁定国家 #${id} 引用了无效或水域中心`, {reason: "invalid-center", id, center});
-    }
-    if ((!emptyState && Number(burg.cell) !== center) || Number(pack.cells.state?.[center]) !== id) {
-      throw stateLockConflict(`锁定国家 #${id} 的首都、中心或领土镜像不一致`, {reason: "capital-center-mismatch", id, capital, center});
-    }
-    if (centers.has(center) || !emptyState && capitalBurgIds.has(capital)) {
-      throw stateLockConflict(`锁定国家 #${id} 与其它约束复用首都或中心`, {reason: "duplicate-capital", id, capital, center});
+    if (!Number.isInteger(center) || center < 0 || center >= pack.cells.i.length) {
+      throw stateLockConflict(`锁定国家 #${id} 引用了无效中心`, {reason: "invalid-center", id, center});
     }
     states[id] = state;
     requiredIds.add(id);
@@ -621,21 +621,23 @@ function prepareLockedStates(grid, pack, options = {}, lockedProvinces = null) {
     if (!requiredIds.has(stateId)) addState(previous[stateId]);
   }
 
+  for (const city of lockedCities) {
+    const stateId = Number(city?.state || 0);
+    if (!stateId || requiredIds.has(stateId)) continue;
+    if (!previous[stateId] || previous[stateId].removed) {
+      throw stateLockConflict(`锁定城市 #${city?.id ?? city?.burgId ?? "?"} 的父国不存在`, {reason: "locked-city-parent-missing", stateId});
+    }
+    addState(previous[stateId]);
+  }
+
   for (const cell of pack.cells.i) {
     const stateId = Number(pack.cells.state?.[cell]) || 0;
     if (!ids.has(stateId)) continue;
-    if (pack.cells.h?.[cell] < 20 || packOwners.has(cell)) {
-      throw stateLockConflict(`锁定国家 #${stateId} 包含水域或重叠领土`, {reason: "overlapping-territory", stateId, cell});
-    }
     packOwners.set(cell, stateId);
   }
   for (const [cell, provinceId] of lockedProvinces?.packOwners || []) {
     const stateId = Number(lockedProvinces.provinces[provinceId]?.state);
-    const current = packOwners.get(cell);
-    if (current && current !== stateId) {
-      throw stateLockConflict(`锁定省份 #${provinceId} 与锁国领土冲突`, {reason: "overlapping-territory", provinceId, stateId, cell});
-    }
-    packOwners.set(cell, stateId);
+    if (!packOwners.has(cell)) packOwners.set(cell, stateId);
   }
 
   for (let gridCell = 0; gridCell < (grid.cells.state?.length || 0); gridCell++) {
@@ -1000,8 +1002,15 @@ function expandPackStates(pack, states, society, preservedAnchors = null, locked
   for (const state of states) {
     if (!state?.i) continue;
     const capital = burgs[state.capital];
-    const capitalCell = capital?.i && !capital.removed ? capital.cell : Number(state.center);
-    if (!Number.isInteger(capitalCell) || cells.h?.[capitalCell] < 20) throw new Error(`国家 #${state.i} 缺少合法扩张中心`);
+    let capitalCell = capital?.i && !capital.removed ? capital.cell : Number(state.center);
+    const fixedState = locked?.requiredIds?.has(Number(state.i));
+    if ((!Number.isInteger(capitalCell) || cells.h?.[capitalCell] < 20) && fixedState) {
+      capitalCell = [...(locked?.packOwners || [])].find(([cell, stateId]) => stateId === Number(state.i) && cells.h?.[cell] >= 20)?.[0];
+    }
+    if (!Number.isInteger(capitalCell) || cells.h?.[capitalCell] < 20) {
+      if (fixedState) continue;
+      throw new Error(`国家 #${state.i} 缺少合法扩张中心`);
+    }
     const cultureCenter = society.cultures[state.culture]?.center ?? capitalCell;
     const nativeBiome = cells.biome[cultureCenter] ?? cells.biome[capitalCell];
     nativeBiomes.set(state.i, nativeBiome);
@@ -1421,17 +1430,9 @@ function collectLockedStateProvinceSnapshots(pack, options = {}) {
     const stateId = Number(source?.id ?? source?.i);
     const state = pack.states?.[stateId];
     if (!state || state.removed) continue;
-    for (const provinceId of source.provinces || state.provinces || []) {
-      const id = Number(provinceId);
-      if (!Number.isInteger(id) || id <= 0 || seen.has(id)) continue;
-      const province = pack.provinces?.[id];
-      if (!province || province.removed || Number(province.state) !== stateId) {
-        throw stateLockConflict(`锁定国家 #${stateId} 引用了缺失或父国不一致的省份 #${id}`, {
-          reason: "locked-state-province-missing",
-          stateId,
-          provinceId: id
-        });
-      }
+    for (const province of pack.provinces || []) {
+      const id = Number(province?.i ?? province?.id);
+      if (!province || province.removed || Number(province.state) !== stateId || !Number.isInteger(id) || id <= 0 || seen.has(id)) continue;
       snapshots.push(structuredClone(province));
       seen.add(id);
     }
@@ -1452,7 +1453,9 @@ function prepareLockedProvinces(grid, pack, options = {}, supporting = []) {
   const provinces = [null];
   const ids = new Set();
   const centers = new Set();
-  const burgIds = new Set();
+  const burgIds = new Set((options.lockedCities ?? options.preservedCities ?? [])
+    .map(city => Number(city?.burgId))
+    .filter(id => Number.isInteger(id) && id > 0));
   const packOwners = new Map();
   const gridOwners = new Map();
   const previous = pack.provinces || [];
@@ -1474,40 +1477,20 @@ function prepareLockedProvinces(grid, pack, options = {}, supporting = []) {
     if (!Number.isInteger(stateId) || stateId <= 0 || !pack.states?.[stateId] || pack.states[stateId].removed) {
       throw provinceLockConflict(`锁定省份 #${id} 引用了无效父国`, {reason: "invalid-parent-state", id, stateId});
     }
-    if (!Number.isInteger(center) || center < 0 || center >= pack.cells.i.length || pack.cells.h?.[center] < 20) {
-      throw provinceLockConflict(`锁定省份 #${id} 引用了无效或水域中心`, {reason: "invalid-center", id, center});
-    }
-    if (Number(pack.cells.state?.[center]) !== stateId) {
-      throw provinceLockConflict(`锁定省份 #${id} 的中心不属于父国`, {reason: "center-parent-mismatch", id, stateId, center});
-    }
-    if (centers.has(center)) {
-      throw provinceLockConflict(`锁定省份 #${id} 与其它锁省中心重叠`, {reason: "overlapping-center", id, center});
+    if (!Number.isInteger(center) || center < 0 || center >= pack.cells.i.length) {
+      throw provinceLockConflict(`锁定省份 #${id} 引用了无效中心`, {reason: "invalid-center", id, center});
     }
     if (burgId) {
       const burg = pack.burgs?.[burgId];
-      if (!Number.isInteger(burgId) || burgId <= 0 || !burg || burg.removed || Number(burg.cell) !== center) {
-        throw provinceLockConflict(`锁定省份 #${id} 缺少一致的省会 burg`, {reason: "invalid-burg", id, burgId, center});
-      }
-      if (burgIds.has(burgId)) {
-        throw provinceLockConflict(`锁定省份 #${id} 与其它锁省复用省会 burg`, {reason: "overlapping-burg", id, burgId});
+      if (!Number.isInteger(burgId) || burgId <= 0 || !burg || burg.removed) {
+        throw provinceLockConflict(`锁定省份 #${id} 引用了不存在的省会 burg`, {reason: "invalid-burg", id, burgId});
       }
       burgIds.add(burgId);
     }
 
-    let cellCount = 0;
     for (const cell of pack.cells.i) {
       if (Number(pack.cells.province?.[cell]) !== id) continue;
-      if (pack.cells.h?.[cell] < 20 || Number(pack.cells.state?.[cell]) !== stateId) {
-        throw provinceLockConflict(`锁定省份 #${id} 包含水域或跨国 cell`, {reason: "invalid-territory", id, cell, stateId});
-      }
-      if (packOwners.has(cell)) {
-        throw provinceLockConflict(`锁定省份 #${id} 与其它锁省领土重叠`, {reason: "overlapping-territory", id, cell});
-      }
       packOwners.set(cell, id);
-      cellCount++;
-    }
-    if (!cellCount || Number(pack.cells.province?.[center]) !== id) {
-      throw provinceLockConflict(`锁定省份 #${id} 缺少包含中心的领土镜像`, {reason: "missing-territory", id, center});
     }
 
     provinces[id] = province;
@@ -1518,9 +1501,6 @@ function prepareLockedProvinces(grid, pack, options = {}, supporting = []) {
   for (let gridCell = 0; gridCell < (grid.cells.province?.length || 0); gridCell++) {
     const id = Number(grid.cells.province[gridCell]);
     if (!ids.has(id)) continue;
-    if (grid.cells.h?.[gridCell] < 20) {
-      throw provinceLockConflict(`锁定省份 #${id} 的 grid 镜像落在水域`, {reason: "invalid-grid-territory", id, gridCell});
-    }
     gridOwners.set(gridCell, id);
   }
 

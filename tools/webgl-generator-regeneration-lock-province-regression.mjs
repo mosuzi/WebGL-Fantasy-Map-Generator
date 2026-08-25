@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 
 import {generatePlaceholderMap} from "../app/webgl-generator/src/generator/index.js";
 import {regeneratePackProvincesWithinStates} from "../app/webgl-generator/src/generator/politics.js";
+import {OBJECT_KIND} from "../app/webgl-generator/src/runtime/object-kinds.js";
+import {captureLockedRegenerationObjects} from "../app/webgl-generator/src/runtime/regeneration-lock-protection.js";
 
 const options = {
   seed: "regeneration-lock-province",
@@ -14,6 +16,7 @@ const options = {
 const report = {
   ok: true,
   locked: {},
+  bypassedGenerationConstraints: [],
   conflictCodes: []
 };
 
@@ -85,15 +88,38 @@ function testConflicts() {
   const waterProvince = selectLockCandidate(waterMap);
   const waterCell = waterMap.pack.cells.i.find(cell => waterMap.pack.cells.h[cell] < 20);
   assert.ok(Number.isInteger(waterCell), "冲突样本缺少水域 cell");
-  assertConflict(waterMap, [{...structuredClone(waterProvince), center: waterCell, burg: 0}], "invalid-center");
+  waterMap.politics.provinces[waterProvince.i].center = waterCell;
+  waterMap.politics.provinces[waterProvince.i].burg = 0;
+  waterMap.regenerationLocks = {version: 1, entries: [{kind: OBJECT_KIND.PROVINCE, id: waterProvince.i}]};
+  const waterSnapshot = captureLockedRegenerationObjects(waterMap, OBJECT_KIND.PROVINCE).snapshots[0];
+  const waterResult = regeneratePackProvincesWithinStates(
+    waterMap.grid,
+    waterMap.society,
+    {...waterMap.options, lockedProvinces: [waterSnapshot]},
+    waterMap.pack,
+    {salt: 5}
+  );
+  assert.deepEqual(waterResult.provinces[waterProvince.i], waterSnapshot, "水域中心锁省没有原样直通");
+  report.bypassedGenerationConstraints.push("water-center");
 
   const overlapMap = generatePlaceholderMap({...options, seed: "regeneration-lock-province-overlap"});
   const [first, second] = selectSameStatePair(overlapMap);
   assert.ok(first && second, "冲突样本缺少同国双省");
-  assertConflict(overlapMap, [
-    structuredClone(first),
-    {...structuredClone(second), center: first.center, burg: 0}
-  ], "overlapping-center");
+  overlapMap.politics.provinces[second.i].center = first.center;
+  overlapMap.politics.provinces[second.i].burg = 0;
+  overlapMap.regenerationLocks = {version: 1, entries: [first, second].map(province => ({kind: OBJECT_KIND.PROVINCE, id: province.i}))};
+  const overlapSnapshots = captureLockedRegenerationObjects(overlapMap, OBJECT_KIND.PROVINCE).snapshots;
+  const overlapResult = regeneratePackProvincesWithinStates(
+    overlapMap.grid,
+    overlapMap.society,
+    {...overlapMap.options, lockedProvinces: overlapSnapshots},
+    overlapMap.pack,
+    {salt: 5}
+  );
+  for (const snapshot of overlapSnapshots) {
+    assert.deepEqual(overlapResult.provinces[snapshot.i], snapshot, `重叠中心锁省 #${snapshot.i} 没有原样直通`);
+  }
+  report.bypassedGenerationConstraints.push("overlapping-center");
 }
 
 function assertConflict(map, lockedProvinces, reason) {

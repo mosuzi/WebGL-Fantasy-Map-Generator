@@ -22,10 +22,11 @@ assert.ok(fixture.oceanCurrents.currents.length > 1, "固定图缺少洋流对�
 const markerResult = verifyMarkerProtection(structuredClone(fixture));
 const zoneResult = verifyZoneProtection(structuredClone(fixture));
 const currentResult = verifyOceanCurrentProtection(structuredClone(fixture));
+const bypassResult = verifyC1GenerationConstraintBypass(structuredClone(fixture));
 const markerRollback = await verifyChunkedMarkerRollback(structuredClone(fixture));
 const featureMarker = await verifyFeatureMarkerProtection(structuredClone(fixture));
 
-console.log(JSON.stringify({ok: true, marker: markerResult, zone: zoneResult, oceanCurrent: currentResult, markerRollback, featureMarker}, null, 2));
+console.log(JSON.stringify({ok: true, marker: markerResult, zone: zoneResult, oceanCurrent: currentResult, bypass: bypassResult, markerRollback, featureMarker}, null, 2));
 
 function verifyMarkerProtection(map) {
   const resources = map.markers.markers.filter(marker => marker.category === "resource");
@@ -97,6 +98,26 @@ function verifyOceanCurrentProtection(map) {
   return {lockedId: locked.id, changed: true, allLockedNoop: true};
 }
 
+function verifyC1GenerationConstraintBypass(map) {
+  const zone = map.zones.zones.find(item => item?.i !== undefined);
+  zone.cells = [];
+  map.pack.zones = map.zones.zones;
+  map.regenerationLocks = store([{kind: "zone", id: zone.i}]);
+  const zoneCapture = captureLockedRegenerationObjects(map, "zone");
+  map.zones = buildZones(map.pack, {...map.options, preservedZones: zoneCapture.snapshots});
+  assertLockedRegenerationSnapshots(map, zoneCapture);
+
+  const current = map.oceanCurrents.currents[0];
+  const landFeature = (map.features?.features || map.grid?.features || []).find(feature => feature?.i && feature.land);
+  assert.ok(current && landFeature, "固定图缺少洋流或陆地 Feature 直通样本");
+  current.basinFeatureId = landFeature.i;
+  map.regenerationLocks = store([{kind: "ocean-current", id: current.id}]);
+  const currentCapture = captureLockedRegenerationObjects(map, "ocean-current");
+  createRegenerateOceanCurrentsCommand(map, {seed: "regeneration-lock-c1:bypass"}).apply({map});
+  assertLockedRegenerationSnapshots(map, currentCapture);
+  return {zone: "empty-cells", oceanCurrent: "land-basin"};
+}
+
 async function verifyChunkedMarkerRollback(map) {
   const before = stable({
     markers: map.markers,
@@ -127,28 +148,24 @@ async function verifyFeatureMarkerProtection(fixtureMap) {
   const directMap = structuredClone(fixtureMap);
   directMap.regenerationLocks = store([{kind: "feature", id: lockedFeatureId}]);
   const directCapture = captureLockedRegenerationObjects(directMap, "feature");
-  const directBefore = featureMarkerEnvelope(directMap, lockedFeatureId);
   new EditHistory().execute(createRegenerateResourceMarkersCommand({salt: 91}), {map: directMap});
   assertLockedRegenerationSnapshots(directMap, directCapture);
-  assert.equal(featureMarkerEnvelope(directMap, lockedFeatureId), directBefore, "同步资源点重算改写锁定 feature 的 marker 引用");
 
   const chunkMap = structuredClone(fixtureMap);
   chunkMap.regenerationLocks = store([{kind: "feature", id: lockedFeatureId}]);
   const bundle = captureRegenerationConstraintBundle(chunkMap, {closure: ["world"]});
-  const chunkBefore = featureMarkerEnvelope(chunkMap, lockedFeatureId);
   const chunked = await regenerateResourceMarkersInChunks(chunkMap, {
     salt: 92,
     constraintBundle: bundle
   });
   assert.equal(chunked.executed, true, "分块资源点重算未执行");
   bundle.assertDomain(chunkMap, "feature", "after");
-  assert.equal(featureMarkerEnvelope(chunkMap, lockedFeatureId), chunkBefore, "分块资源点重算改写锁定 feature 的 marker 引用");
 
   return {
     featureId: lockedFeatureId,
-    markers: JSON.parse(directBefore).length,
-    directFallbackProtected: true,
-    chunkBundleProtected: true
+    directFeatureProtected: true,
+    chunkFeatureProtected: true,
+    incomingReferencesRemainUnlocked: true
   };
 }
 
@@ -161,12 +178,6 @@ function selectMarkerFeatureId(map) {
   });
   assert(candidate, "固定图缺少可锁定 feature 的资源点样本");
   return Number(candidate.data.feature);
-}
-
-function featureMarkerEnvelope(map, featureId) {
-  return stable((map.markers?.markers || [])
-    .filter(marker => Number(marker?.data?.feature) === featureId)
-    .map(marker => structuredClone(marker)));
 }
 
 function store(entries) {

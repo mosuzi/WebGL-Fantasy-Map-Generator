@@ -84,6 +84,7 @@ export function buildDiplomacy(pack, society, options = {}) {
     const context = createDiplomacyContext(pack, society, validStates);
     assignPairRelations({pack, society, states, validStates, random, context, locked});
     normalizeDiplomacyHierarchy(states);
+    restoreLockedDiplomacyMatrix(states, locked);
     declareRivalWars({states, validStates, random, context, chronicle, options, locked});
   }
 
@@ -93,6 +94,13 @@ export function buildDiplomacy(pack, society, options = {}) {
   if (pack) pack.diplomacy = diplomacy;
   assertLockedDiplomacyRelations(pack, locked);
   return diplomacy;
+}
+
+function restoreLockedDiplomacyMatrix(states, locked) {
+  for (const snapshot of locked.pairs.values()) {
+    states[snapshot.leftId].diplomacy[snapshot.rightId] = snapshot.leftRelation;
+    states[snapshot.rightId].diplomacy[snapshot.leftId] = snapshot.rightRelation;
+  }
 }
 
 export function setDiplomacyRelation(pack, subjectId, objectId, relation, {record = true, reason = "manual"} = {}) {

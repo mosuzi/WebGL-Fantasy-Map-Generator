@@ -16,6 +16,7 @@ import {
 import {EditHistory} from "../app/webgl-generator/src/runtime/edit-history.js";
 import {createSetRegenerationLockCommand} from "../app/webgl-generator/src/runtime/regeneration-lock-commands.js";
 import {OBJECT_KIND} from "../app/webgl-generator/src/runtime/object-kinds.js";
+import {createRenderResourceBinding} from "../app/webgl-generator/src/renderer/render-resource-binding.js";
 
 const tenK = await verifyTenThousandCells();
 const hundredK = await verifyHundredThousandCells();
@@ -354,7 +355,14 @@ function createBinding(mapIdentity, operationId) {
 
 function economyRenderRequest(binding) {
   return {
-    binding: {mapIdentity: binding.mapIdentity, mapRevision: binding.mapRevision, topologyRevision: 2},
+    binding: createRenderResourceBinding({
+      mapIdentity: binding.mapIdentity,
+      sourceRevision: binding.mapRevision + 1,
+      topologyRevision: 2
+    }, {
+      renderPreparationId: `economy:${binding.mapIdentity}:${binding.operationId}`,
+      renderGeneration: binding.operationId
+    }),
     layers: ["picking"],
     pickingComponents: ["cities"],
     camera: {scale: 1, offsetX: 0, offsetY: 0},

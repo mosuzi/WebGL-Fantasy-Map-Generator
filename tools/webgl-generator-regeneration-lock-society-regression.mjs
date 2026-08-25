@@ -99,10 +99,6 @@ const religionMirrorBoundary = verifyReligionGridMirrorBoundary(structuredClone(
 const cultureMirrorBoundary = verifyCultureGridMirrorBoundary(structuredClone(mirrorBoundaryBase));
 
 for (const conflict of [
-  ["water-center", map => {
-    const water = map.pack.cells.i.find(cell => Number(map.pack.cells.h[cell]) < 20);
-    setMirrored(map, "religion", lockedReligion.i, {center: water, gridCenter: map.pack.cells.g[water]});
-  }],
   ["missing-parent", map => setMirrored(map, "religion", lockedReligion.i, {parent: 99999, origins: [99999]})],
   ["mirror-mismatch", map => {
     map.pack.religions = structuredClone(map.pack.religions);
@@ -118,6 +114,14 @@ for (const conflict of [
   );
 }
 
+const waterCenterMap = structuredClone(base);
+lock(waterCenterMap, "religion", lockedReligion.i);
+const water = waterCenterMap.pack.cells.i.find(cell => Number(waterCenterMap.pack.cells.h[cell]) < 20);
+setMirrored(waterCenterMap, "religion", lockedReligion.i, {center: water, gridCenter: waterCenterMap.pack.cells.g[water]});
+const waterCenterBefore = structuralSnapshot(waterCenterMap, "religion", lockedReligion.i);
+createApplyReligionExpansionCommand(unlockedReligion.i, {mode: "reexpand", expansionism: 9, confirm: true}).apply({map: waterCenterMap});
+assertDeepEqual(structuralSnapshot(waterCenterMap, "religion", lockedReligion.i), waterCenterBefore, "水域中心锁定宗教未原样加入重算结果");
+
 const overlapMap = structuredClone(base);
 const secondLockedReligion = religions.find(item => item.i !== lockedReligion.i);
 lock(overlapMap, "religion", lockedReligion.i);
@@ -126,10 +130,13 @@ setMirrored(overlapMap, "religion", secondLockedReligion.i, {
   center: overlapMap.society.religions[lockedReligion.i].center,
   gridCenter: overlapMap.society.religions[lockedReligion.i].gridCenter
 });
-assertConflict(
-  () => createApplyReligionExpansionCommand(unlockedReligion.i, {mode: "reexpand", expansionism: 9, confirm: true}).apply({map: overlapMap}),
-  "overlap-center"
-);
+const overlapBefore = [
+  structuralSnapshot(overlapMap, "religion", lockedReligion.i),
+  structuralSnapshot(overlapMap, "religion", secondLockedReligion.i)
+];
+createApplyReligionExpansionCommand(unlockedReligion.i, {mode: "reexpand", expansionism: 9, confirm: true}).apply({map: overlapMap});
+assertDeepEqual(structuralSnapshot(overlapMap, "religion", lockedReligion.i), overlapBefore[0], "重叠中心的首个锁定宗教被改写");
+assertDeepEqual(structuralSnapshot(overlapMap, "religion", secondLockedReligion.i), overlapBefore[1], "重叠中心的第二个锁定宗教被改写");
 
 const faultMap = structuredClone(base);
 lock(faultMap, "culture", lockedCulture.i);
@@ -157,7 +164,8 @@ console.log(JSON.stringify({
     religion: religionMirrorBoundary,
     culture: cultureMirrorBoundary
   },
-  conflicts: ["water-center", "missing-parent", "mirror-mismatch", "overlap-center"],
+  bypassedGenerationConstraints: ["water-center", "overlap-center"],
+  structuralConflicts: ["missing-parent", "mirror-mismatch"],
   rollback: "after-ownership"
 }, null, 2));
 

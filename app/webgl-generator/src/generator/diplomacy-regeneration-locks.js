@@ -29,7 +29,6 @@ export function captureDiplomacyRelationSnapshot(pack, subjectId, objectId) {
   }
   const leftRelation = left.diplomacy?.[identity.rightId];
   const rightRelation = right.diplomacy?.[identity.leftId];
-  validateInverseRelations(leftRelation, rightRelation, identity.key);
   const campaigns = pairCampaigns(left, right, identity.leftId, identity.rightId);
   const chronicleEntries = pairChronicleEntries(states[0]?.diplomacy, left, right);
   const militaryCampaigns = pairRecords(pack?.military?.campaigns, identity.leftId, identity.rightId);
@@ -112,7 +111,6 @@ function normalizeProvidedSnapshot(source, identity, current) {
   const directional = relationFromSource(source, identity);
   const leftRelation = directional.leftRelation || current.leftRelation;
   const rightRelation = directional.rightRelation || current.rightRelation;
-  validateInverseRelations(leftRelation, rightRelation, identity.key);
   if (leftRelation !== current.leftRelation || rightRelation !== current.rightRelation) {
     throw diplomacyLockConflict(`锁定外交关系 ${identity.key} 与当前矩阵矛盾`, {reason: "matrix-mismatch", pair: identity.key});
   }
@@ -140,14 +138,6 @@ function relationFromSource(source, identity) {
   if (!relation) return {};
   if (identity.subjectId === identity.leftId) return {leftRelation: relation, rightRelation: inverse || inverseRelation(relation)};
   return {leftRelation: inverse || inverseRelation(relation), rightRelation: relation};
-}
-
-function validateInverseRelations(left, right, key) {
-  const leftRelation = normalizeDiplomacyRelation(left);
-  const rightRelation = normalizeDiplomacyRelation(right);
-  if (!leftRelation || !rightRelation || inverseRelation(leftRelation) !== rightRelation || inverseRelation(rightRelation) !== leftRelation) {
-    throw diplomacyLockConflict(`外交锁 ${key} 的双向关系不互逆`, {reason: "non-reciprocal", pair: key, left, right});
-  }
 }
 
 function pairCampaigns(left, right, leftId, rightId) {

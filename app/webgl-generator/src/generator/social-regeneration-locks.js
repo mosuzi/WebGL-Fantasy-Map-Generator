@@ -45,27 +45,12 @@ export function prepareSocialRegenerationLocks({grid, pack, objects = [], field,
   }
 
   validateInheritanceGraph(snapshots, protectedIds, label, field);
-  const usedCenters = new Map();
   for (const id of protectedIds) {
     if (!explicitIds.has(id)) continue;
     const object = snapshots.get(id);
     const center = Number(object?.center);
     if (!Number.isInteger(center) || center < 0 || center >= packLength) {
       throw createRegenerationLockConflict(`${label} #${id} 的中心越界`, {field, id, center});
-    }
-    if (Number(pack?.cells?.h?.[center]) < 20) {
-      throw createRegenerationLockConflict(`${label} #${id} 的中心位于水域`, {field, id, center});
-    }
-    if (Number(packValues?.[center]) !== id) {
-      throw createRegenerationLockConflict(`${label} #${id} 的中心归属镜像矛盾`, {field, id, center, owner: Number(packValues?.[center]) || 0});
-    }
-    const previous = usedCenters.get(center);
-    if (previous) throw createRegenerationLockConflict(`${label} #${id} 与 #${previous} 的中心重叠`, {field, id, previous, center});
-    usedCenters.set(center, id);
-    const gridCenter = Number(object?.gridCenter);
-    const mirroredGridCenter = Number(pack?.cells?.g?.[center]);
-    if (Number.isInteger(gridCenter) && gridCenter >= 0 && Number.isInteger(mirroredGridCenter) && gridCenter !== mirroredGridCenter) {
-      throw createRegenerationLockConflict(`${label} #${id} 的 grid 中心镜像矛盾`, {field, id, center, gridCenter, mirroredGridCenter});
     }
   }
 

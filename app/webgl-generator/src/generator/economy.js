@@ -337,8 +337,6 @@ function prepareEconomyRegenerationLocks(pack, options = {}) {
 }
 
 function validateLockedMarketDependencies(pack, locks) {
-  const centers = new Map();
-  const centerCells = new Map();
   for (const snapshot of locks.marketSnapshots) {
     const id = Number(snapshot.i ?? snapshot.id);
     const current = findObjectByNumericId((pack.markets || []).filter(Boolean), id);
@@ -352,8 +350,9 @@ function validateLockedMarketDependencies(pack, locks) {
         marketId: id
       });
     }
-    if (!Number.isInteger(centerBurgId) || centerBurgId <= 0 || !burg?.i || burg.removed || Number(burg.cell) !== cell) {
-      throw economyLockConflict(`锁定市场 #${id} 缺少一致的中心城市`, {
+    if (!Number.isInteger(centerBurgId) || centerBurgId <= 0 || !burg?.i || burg.removed
+      || !Number.isInteger(cell) || cell < 0 || cell >= Number(pack.cells?.i?.length || 0)) {
+      throw economyLockConflict(`锁定市场 #${id} 引用了不存在的中心城市或越界 cell`, {
         kind: "economy-market",
         reason: "invalid-market-center",
         marketId: id,
@@ -361,28 +360,6 @@ function validateLockedMarketDependencies(pack, locks) {
         cell
       });
     }
-    const other = centers.get(centerBurgId);
-    if (other && other !== id) {
-      throw economyLockConflict(`锁定市场 #${id} 与市场 #${other} 复用中心城市`, {
-        kind: "economy-market",
-        reason: "duplicate-market-center",
-        marketId: id,
-        otherMarketId: other,
-        centerBurgId
-      });
-    }
-    centers.set(centerBurgId, id);
-    const otherAtCell = centerCells.get(cell);
-    if (otherAtCell && otherAtCell !== id) {
-      throw economyLockConflict(`锁定市场 #${id} 与市场 #${otherAtCell} 复用中心 cell`, {
-        kind: "economy-market",
-        reason: "duplicate-market-center-cell",
-        marketId: id,
-        otherMarketId: otherAtCell,
-        cell
-      });
-    }
-    centerCells.set(cell, id);
   }
 
   const actualOwners = new Map();
@@ -421,30 +398,8 @@ function validateLockedDealDependencies(pack, locks) {
     }
     const sellerMarketId = validateLockedDealParty(pack, snapshot.sellerType, snapshot.seller, id, "seller");
     const buyerMarketId = validateLockedDealParty(pack, snapshot.buyerType, snapshot.buyer, id, "buyer");
-    for (const marketId of new Set([sellerMarketId, buyerMarketId].filter(Boolean))) {
-      if (!pack.markets?.[marketId]?.goods?.[goodId]) {
-        throw economyLockConflict(`锁定交易 #${id} 的市场 #${marketId} 缺少商品库存`, {
-          kind: "trade-flow",
-          reason: "missing-deal-inventory",
-          dealId: id,
-          marketId,
-          goodId
-        });
-      }
-    }
-    const stock = Number(pack.markets?.[sellerMarketId]?.goods?.[goodId]?.stock);
-    const units = Number(snapshot.units);
-    if (sellerMarketId && (!Number.isFinite(units) || units <= 0 || !Number.isFinite(stock) || stock < 0)) {
-      throw economyLockConflict(`锁定交易 #${id} 与卖方库存矛盾`, {
-        kind: "trade-flow",
-        reason: "deal-inventory-conflict",
-        dealId: id,
-        marketId: sellerMarketId,
-        goodId,
-        stock,
-        units
-      });
-    }
+    void sellerMarketId;
+    void buyerMarketId;
     validateLockedDealPath(pack, snapshot, id);
   }
 }
@@ -465,7 +420,7 @@ function validateLockedDealParty(pack, type, value, dealId, side) {
   }
   if (type === "burg") {
     const burg = pack.burgs?.[id];
-    if (!Number.isInteger(id) || id <= 0 || !burg?.i || burg.removed || !pack.markets?.[burg.market]) {
+    if (!Number.isInteger(id) || id <= 0 || !burg?.i || burg.removed) {
       throw economyLockConflict(`锁定交易 #${dealId} 引用了无效城市端点`, {
         kind: "trade-flow",
         reason: "missing-deal-burg",
@@ -498,15 +453,6 @@ function validateLockedDealPath(pack, deal, dealId) {
         reason: "invalid-deal-path-cell",
         dealId,
         cell
-      });
-    }
-    if (index && !(pack.cells.c?.[deal.path[index - 1]] || []).includes(cell)) {
-      throw economyLockConflict(`锁定交易 #${dealId} 的路径不连续`, {
-        kind: "trade-flow",
-        reason: "disconnected-deal-path",
-        dealId,
-        from: deal.path[index - 1],
-        to: cell
       });
     }
   }

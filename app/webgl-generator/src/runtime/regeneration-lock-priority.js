@@ -2,7 +2,6 @@ import {captureDiplomacyRelationSnapshot, diplomacyPairKey} from "../generator/d
 import {captureMilitaryRegimentSnapshot} from "../generator/military-regeneration-locks.js";
 import {
   collectEconomicSupportCities,
-  collectFeatureSupportObjects,
   collectLockedWarzoneDiplomacySupport,
   collectPoliticalSupportCities,
   collectPoliticalSupportProvinces,
@@ -38,7 +37,6 @@ export function createRegenerationLockPriorityBundle(map, constraintBundle) {
     ...explicitFeatures,
     ...collectRiverSupportFeatures(map, constraintBundle.lockedRivers)
   ]);
-  const featureCities = collectFeatureSupportObjects(map, structuralFeatures, "cities");
   const economyCities = collectEconomicSupportCities(
     map,
     constraintBundle.lockedMarkets,
@@ -57,15 +55,9 @@ export function createRegenerationLockPriorityBundle(map, constraintBundle) {
   const anchorSupport = collectCityAnchorSupport(map, politicalCities);
   const lockedStates = mergeSupportSnapshots([...explicitStates, ...anchorSupport.states]);
   const lockedProvinces = mergeSupportSnapshots([...structuralProvinces, ...anchorSupport.provinces]);
-  const lockedCities = mergeSupportSnapshots([...politicalCities, ...featureCities]);
-  const lockedRoutes = mergeSupportSnapshots([
-    ...(constraintBundle.lockedRoutes || []),
-    ...collectFeatureSupportObjects(map, structuralFeatures, "routes")
-  ]);
-  const lockedMarkers = mergeSupportSnapshots([
-    ...(constraintBundle.lockedMarkers || []),
-    ...collectFeatureSupportObjects(map, structuralFeatures, "markers")
-  ]);
+  const lockedCities = politicalCities;
+  const lockedRoutes = mergeSupportSnapshots(constraintBundle.lockedRoutes || []);
+  const lockedMarkers = mergeSupportSnapshots(constraintBundle.lockedMarkers || []);
   const lockedFeatures = mergeSupportSnapshots([
     ...structuralFeatures,
     ...collectReferencedFeatures(map, [...lockedCities, ...lockedRoutes, ...lockedMarkers])

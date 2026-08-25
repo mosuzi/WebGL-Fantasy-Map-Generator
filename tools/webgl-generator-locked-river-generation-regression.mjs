@@ -98,12 +98,14 @@ assertConflict(() => {
   buildRivers(map.grid, map.features, map.pack, {...map.options, lockedRivers: [river]});
 }, "不连续锁河路径没有拒绝");
 
-assertConflict(() => {
-  const map = structuredClone(fixture);
-  const river = structuredClone(root);
-  map.pack.cells.h[river.source] = 10;
-  buildRivers(map.grid, map.features, map.pack, {...map.options, lockedRivers: [river]});
-}, "锁河源头变为水域没有拒绝");
+const waterSourceMap = structuredClone(fixture);
+const waterSourceRiver = structuredClone(root);
+waterSourceMap.pack.cells.h[waterSourceRiver.source] = 10;
+const waterSourceResult = buildRivers(waterSourceMap.grid, waterSourceMap.features, waterSourceMap.pack, {
+  ...waterSourceMap.options,
+  lockedRivers: [waterSourceRiver]
+});
+assert.deepEqual(waterSourceResult.rivers.find(river => river.i === waterSourceRiver.i), waterSourceRiver, "水域源头锁河没有原样直通");
 
 assertConflict(() => {
   const map = structuredClone(fixture);
@@ -129,6 +131,7 @@ console.log(JSON.stringify({
   branch: branch.i,
   parent: branch.parent,
   sparseId,
+  bypassedGenerationConstraints: ["water-source"],
   scaleMirrorResults
 }, null, 2));
 
