@@ -90,7 +90,11 @@ derivedMap.pack.states[left.i].campaigns.push(structuredClone(invalidCampaign));
 derivedMap.pack.states[third.i].campaigns.push(structuredClone(invalidCampaign));
 mirrorPair(derivedMap, left.i, third.i);
 derivedMap.regenerationLocks.entries = [{kind: "diplomacy-relation", id: derivedPair}];
-assertConflict(() => createRegenerateDiplomacyCommand({salt: 3}).apply({map: derivedMap}), "war-derived-conflict");
+const derivedBefore = captureDiplomacyRelationSnapshot(derivedMap.pack, left.i, third.i);
+const derivedUnlockedBefore = pairMatrix(derivedMap.pack.states, derivedPair);
+createRegenerateDiplomacyCommand({salt: 3}).apply({map: derivedMap});
+assertDeepEqual(captureDiplomacyRelationSnapshot(derivedMap.pack, left.i, third.i), derivedBefore, "锁定外交的既有战争派生没有原样保留");
+assert(anyPairChanged(derivedUnlockedBefore, pairMatrix(derivedMap.pack.states, derivedPair)), "既有战争派生锁定时其它国家对没有重生成");
 
 const hierarchyLockMap = generatePlaceholderMap({seed: "regeneration-lock-diplomacy-hierarchy", cellsTarget: 3000, heightmapTemplate: "continents"});
 const hierarchyLockStates = activeStates(hierarchyLockMap).slice(0, 3);
@@ -131,7 +135,8 @@ console.log(JSON.stringify({
     deterministic: true,
     validGeneration: true
   },
-  conflicts: ["missing-state", "non-reciprocal", "war-derived-conflict", "locked-derived-changed"],
+  conflicts: ["missing-state", "non-reciprocal", "locked-derived-changed"],
+  preservedReadableWarDerived: derivedPair,
   rollback: "after-war-derived"
 }, null, 2));
 

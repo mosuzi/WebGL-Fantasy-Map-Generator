@@ -275,9 +275,9 @@ import {
   allRegenerationObjectsLocked,
   assertLockedRegenerationSnapshots,
   captureLockedRegenerationObjects,
-  regenerationLockConflict
 } from "./regeneration-lock-protection.js";
 import {captureRegenerationConstraintBundle} from "./regeneration-constraint-bundle.js";
+import {createRegenerationLockPriorityBundle, restoreExplicitLockedSocialSnapshots} from "./regeneration-lock-priority.js";
 import {installRegenerationLockUiSession} from "./regeneration-lock-ui-session.js";
 import {
   diplomacyRelationReferenceAtPoliticalPick,
@@ -7580,6 +7580,7 @@ async function applyClimateDownstreamRebuildViaApi(state, documentRef, options =
         historyDomain: "climate-downstream",
         effects,
         result,
+        restoreLockedSnapshots: currentMap => restoreExplicitLockedSocialSnapshots(currentMap, constraintBundle),
         affectedFactory: () => preview.selectedSystems.map(id => ({kind: "system", id}))
       }),
       assertCommitted: () => constraintBundle.assertDomain(state.map, "world", "after"),
@@ -7651,7 +7652,7 @@ async function applyOceanCurrentWorldRebuildViaAction(state, documentRef, option
       task: OCEAN_CURRENT_WORLD_WORKER_TASK,
       targetKind: "ocean-current-world",
       userLabel: "洋流与世界内容",
-      payload: {seed: options.seed, seafloorPlan},
+      payload: {seed: options.seed, seafloorPlan, faultAt: options.faultAt},
       renderLayers: [...RENDER_PREPARATION_LAYERS],
       effects: {
         ...REGENERATION_TRANSACTION_EFFECTS,
@@ -7664,6 +7665,7 @@ async function applyOceanCurrentWorldRebuildViaAction(state, documentRef, option
         effects,
         result,
         afterSwap: currentMap => {
+          restoreExplicitLockedSocialSnapshots(currentMap, constraintBundle);
           state.options = currentMap.options;
         }
       }),
@@ -10975,6 +10977,7 @@ async function rebuildHeightDerivedViaAction(state, documentRef, scope, options 
       historyDomain: "height-derived",
       effects,
       result,
+      restoreLockedSnapshots: currentMap => restoreExplicitLockedSocialSnapshots(currentMap, constraintBundle),
       affectedFactory: () => kinds.map(id => ({kind: "system", id}))
     }),
     assertCommitted: () => constraintBundle.assertDomain(state.map, "world", "after")
@@ -10993,7 +10996,7 @@ async function rebuildHeightDerivedViaAction(state, documentRef, scope, options 
 function heightDerivedRebuildFailureMessage(error) {
   if (error?.name === "AbortError" || error?.code === "operation_cancelled") return "高度派生重建已取消。";
   if (error?.code === "operation_obsolete") return "地图已发生变化，本次高度派生结果未应用。";
-  if (error?.code === "regeneration_lock_conflict") return "部分锁定内容与本次高度派生重建冲突，请调整锁定范围后重试。";
+  if (error?.code === "regeneration_lock_conflict") return "锁定数据本身已损坏或缺少依赖，请检查对应对象后重试。";
   return "高度派生重建失败，当前地图未应用本次更改。";
 }
 
@@ -12372,29 +12375,31 @@ function refreshAfterProvinceEdit(state, commandOrEffects) {
 
 function regenerateMapAttribute(state, kind, documentRef, options = {}) {
   if (!state.map) return regenerationResult(kind, "未执行", "当前没有可重算的地图。");
+  const constraintBundle = createRegenerationLockPriorityBundle(state.map, options.constraintBundle);
+  const protectedOptions = constraintBundle ? {...options, constraintBundle} : options;
   switch (kind) {
     case "features":
-      return regenerateFeatures(state, documentRef, options);
+      return regenerateFeatures(state, documentRef, protectedOptions);
     case "routes":
-      return regenerateRoutes(state, documentRef);
+      return regenerateRoutes(state, documentRef, protectedOptions);
     case "rivers":
-      return regenerateRivers(state, documentRef, options);
+      return regenerateRivers(state, documentRef, protectedOptions);
     case "cities":
-      return regenerateCities(state, documentRef, options);
+      return regenerateCities(state, documentRef, protectedOptions);
     case "states":
-      return regenerateStates(state, documentRef, options);
+      return regenerateStates(state, documentRef, protectedOptions);
     case "provinces":
-      return regenerateProvinces(state, documentRef, options);
+      return regenerateProvinces(state, documentRef, protectedOptions);
     case "markers":
-      return regenerateMarkerResources(state, documentRef, options);
+      return regenerateMarkerResources(state, documentRef, protectedOptions);
     case "diplomacy":
-      return regenerateDiplomacy(state, documentRef, options);
+      return regenerateDiplomacy(state, documentRef, protectedOptions);
     case "religions":
-      return regenerateReligions(state, documentRef, options);
+      return regenerateReligions(state, documentRef, protectedOptions);
     case "military":
-      return regenerateMilitary(state, documentRef, options);
+      return regenerateMilitary(state, documentRef, protectedOptions);
     case "zones":
-      return regenerateZones(state, documentRef, options);
+      return regenerateZones(state, documentRef, protectedOptions);
     default:
       break;
   }
@@ -12417,7 +12422,13 @@ function regenerateFeatures(state, documentRef, options = {}) {
   let result;
   try {
     nextRegenerationSalt(map, "features");
-    result = rebuildFeatureTopology(map, {lockedFeatures: featureLocks.snapshots, resetUnlockedIdentity: true});
+    result = rebuildFeatureTopology(map, {
+      lockedFeatures: featureLocks.snapshots,
+      lockedCities: constraintBundle?.lockedCities || [],
+      lockedRoutes: constraintBundle?.lockedRoutes || [],
+      lockedMarkers: constraintBundle?.lockedMarkers || [],
+      resetUnlockedIdentity: true
+    });
     if (constraintBundle) constraintBundle.assertDomain(map, "features", "feature-topology");
     else assertLockedRegenerationSnapshots(map, featureLocks);
   } catch (error) {
@@ -12465,13 +12476,11 @@ function regenerateMapAttributeViaApi(state, documentRef, kind, options = {}) {
       const populationSnapshot = options?.preservePopulation === true
         ? captureClimatePopulation(state.map)
         : null;
-      const constraintBundle = targetKind === "states"
-        ? captureRegenerationConstraintBundle(state.map, {closure: ["world"]})
-        : options.constraintBundle || null;
+      const constraintBundle = options.constraintBundle
+        || captureRegenerationConstraintBundle(state.map, {closure: ["world"]});
       const result = regenerateMapAttributeCoreViaApi(state, documentRef, targetKind, {
         ...options,
-        constraintBundle,
-        rejectLockedDiplomacy: targetKind === "states" && !options.constraintBundle
+        constraintBundle
       });
       if (populationSnapshot) restoreClimatePopulation(state.map, populationSnapshot);
       if (constraintBundle) constraintBundle.assertDomain(state.map, "world", "after");
@@ -12516,6 +12525,7 @@ async function regenerateMapAttributeViaWorker(state, documentRef, kind, options
   if (options?.preservePopulation === true && !["features", "routes", "rivers"].includes(targetKind)) {
     throw new Error("preservePopulation 仅支持 features、routes 和 rivers 地理派生重算");
   }
+  const constraintBundle = options.constraintBundle || captureRegenerationConstraintBundle(state.map, {closure: ["world"]});
   const workerOptions = normalizeWorkerRegenerationOptions(options);
   return executeWorkerMapMutation(state, documentRef, {
     task: "regeneration.compute",
@@ -12542,9 +12552,10 @@ async function regenerateMapAttributeViaWorker(state, documentRef, kind, options
       historyDomain: targetKind === "rivers" ? "river-regeneration" : "regeneration",
       effects,
       result,
+      restoreLockedSnapshots: map => restoreExplicitLockedSocialSnapshots(map, constraintBundle),
       affectedFactory: map => workerRegenerationAffected(map, targetKind)
     }),
-    assertCommitted: phase => assertWorkerRegenerationConstraint(options?.constraintBundle, state.map, targetKind, phase)
+    assertCommitted: phase => assertWorkerRegenerationConstraint(constraintBundle, state.map, targetKind, phase)
   }, operation);
 }
 
@@ -13134,7 +13145,7 @@ function cloneWorkerMutationEffects(effects = REGENERATION_TRANSACTION_EFFECTS) 
 }
 
 function createWorkerRegenerationPatchCommand(map, options) {
-  const {affectedFactory, ...domainOptions} = options;
+  const {affectedFactory, restoreLockedSnapshots, ...domainOptions} = options;
   const domainCommand = createDomainPatchCommand(domainOptions);
   const beforeSummary = map.summary;
   let afterSummary = null;
@@ -13147,6 +13158,7 @@ function createWorkerRegenerationPatchCommand(map, options) {
       try {
         domainCommand.apply(context);
         domainApplied = true;
+        restoreLockedSnapshots?.(context.map);
         afterSummary ||= rebuildGenerationSummary(context.map);
         context.map.summary = afterSummary;
         if (typeof affectedFactory === "function") {
@@ -14003,8 +14015,7 @@ function regenerateMapAttributeCoreViaApi(state, documentRef, kind, options = {}
   const scope = normalizeRegenerationScope(state.map, targetKind, options);
   const result = regenerateMapAttribute(state, targetKind, documentRef, {
     ...scope,
-    constraintBundle: options.constraintBundle || null,
-    rejectLockedDiplomacy: Boolean(options.rejectLockedDiplomacy)
+    constraintBundle: options.constraintBundle || null
   });
   updateRegenerationSection(documentRef, result);
   updateEditingInteractionLock(state, documentRef);
@@ -14281,18 +14292,6 @@ function regenerateStates(state, documentRef, options = {}) {
   const routeLocks = constraintBundle
     ? {snapshots: constraintBundle.lockedRoutes}
     : captureLockedRegenerationObjects(map, OBJECT_KIND.ROUTE);
-  const diplomacyLocks = constraintBundle
-    ? constraintBundle.lockedDiplomacyRelations
-    : captureLockedRegenerationObjects(map, OBJECT_KIND.DIPLOMACY_RELATION).snapshots;
-  if (diplomacyLocks.length && options.rejectLockedDiplomacy) {
-    const firstDiplomacyLock = diplomacyLocks[0];
-    throw regenerationLockConflict(
-      OBJECT_KIND.DIPLOMACY_RELATION,
-      {kind: OBJECT_KIND.DIPLOMACY_RELATION, id: firstDiplomacyLock.id},
-      "state-regeneration-cannot-preserve-diplomacy",
-      "国家重生成无法保证锁定外交关系的国家端点，已在写入前中止"
-    );
-  }
   const beforeStates = map.politics?.metadata?.states || 0;
   const beforeProvinces = map.politics?.metadata?.provinces || 0;
   const beforeRoutes = map.settlements?.routes?.length || 0;
@@ -14306,6 +14305,7 @@ function regenerateStates(state, documentRef, options = {}) {
       namebases: map.namebases,
       lockedStates: stateLocks.snapshots,
       lockedProvinces: lockedPoliticalProvinces,
+      lockedFeatures: constraintBundle?.lockedFeatures || [],
       lockedCities: lockedPoliticalCities,
       lockedRoutes: routeLocks.snapshots,
       reassessProvincialCapitals: true,
@@ -14323,9 +14323,11 @@ function regenerateStates(state, documentRef, options = {}) {
       routeRegenerationSalt: stateSalt,
       lockedStates: stateLocks.snapshots,
       lockedProvinces: lockedPoliticalProvinces,
+      lockedFeatures: constraintBundle?.lockedFeatures || [],
       lockedCities: lockedPoliticalCities,
       lockedRoutes: routeLocks.snapshots,
-      reassessProvincialCapitals: true
+      reassessProvincialCapitals: true,
+      repairInconsistentProvincialCapitals: true
     });
     if (constraintBundle) constraintBundle.assertDomain(map, "states-provinces", "politics-settlements");
     else {
@@ -14457,6 +14459,7 @@ function regenerateProvinces(state, documentRef, scope = {kind: "all"}) {
       namebases: map.namebases,
       routeRegenerationSalt: provinceSalt,
       lockedProvinces: provinceLocks.snapshots,
+      lockedFeatures: constraintBundle?.lockedFeatures || [],
       lockedCities: lockedPoliticalCities,
       lockedRoutes: routeLocks.snapshots,
       settlementScope: scope.kind === "state" ? {kind: "state", id: scope.id} : null,
@@ -14495,7 +14498,7 @@ function regenerateProvinces(state, documentRef, scope = {kind: "all"}) {
   );
 }
 
-function regenerateRoutes(state, documentRef) {
+function regenerateRoutes(state, documentRef, options = {}) {
   const map = state.map;
   const currentRoutes = map.settlements?.routes || [];
   if (currentRoutes.length && allRegenerationObjectsLocked(map, OBJECT_KIND.ROUTE, currentRoutes)) {
@@ -14506,19 +14509,26 @@ function regenerateRoutes(state, documentRef) {
   let routeSalt;
   let portTopology;
   try {
-    const routeLocks = captureLockedRegenerationObjects(map, OBJECT_KIND.ROUTE);
-    const cityLocks = captureLockedRegenerationObjects(map, OBJECT_KIND.CITY);
+  const constraintBundle = options.constraintBundle;
+  const routeLocks = constraintBundle ? {snapshots: constraintBundle.lockedRoutes} : captureLockedRegenerationObjects(map, OBJECT_KIND.ROUTE);
+  const cityLocks = constraintBundle ? {snapshots: constraintBundle.lockedCities} : captureLockedRegenerationObjects(map, OBJECT_KIND.CITY);
     reconcileSettlementCellIdentity(map);
     portTopology = reconcileSettlementPortTopology(map, {mode: "routes", preserveProtected: true});
     routeSalt = nextRegenerationSalt(map, "routes");
     finalizeSettlements(map.grid, map.features, map.politics, map.settlements, map.pack, {
       ...map.options,
       routeRegenerationSalt: routeSalt,
+      lockedStates: constraintBundle?.lockedStates || [],
+      lockedProvinces: constraintBundle?.lockedProvinces || [],
+      lockedFeatures: constraintBundle?.lockedFeatures || [],
       lockedCities: cityLocks.snapshots,
       lockedRoutes: routeLocks.snapshots
     });
-    assertLockedRegenerationSnapshots(map, routeLocks);
-    assertLockedRegenerationSnapshots(map, cityLocks);
+    if (constraintBundle) constraintBundle.assertDomain(map, "world", "routes-finalize");
+    else {
+      assertLockedRegenerationSnapshots(map, routeLocks);
+      assertLockedRegenerationSnapshots(map, cityLocks);
+    }
   } catch (error) {
     restoreRegenerationSalt(map, previousSalt);
     throw error;
@@ -14689,6 +14699,9 @@ function regenerateCities(state, documentRef, scope = {kind: "all"}) {
       settlementRegenerationSalt: citySalt,
       routeRegenerationSalt: citySalt,
       settlementScope,
+      lockedStates: constraintBundle?.lockedStates || [],
+      lockedProvinces: constraintBundle?.lockedProvinces || [],
+      lockedFeatures: constraintBundle?.lockedFeatures || [],
       lockedCities: cityLocks.snapshots,
       lockedRoutes: routeLocks.snapshots,
       reassessProvincialCapitals: true,
@@ -14819,7 +14832,8 @@ function regenerateMilitary(state, documentRef, options = {}) {
     const seed = `${map.options?.seed || "map"}:regenerate-military:${salt}`;
     const command = createRegenerateMilitaryCommand({
       seed,
-      preservedRegiments: lockCapture.snapshots
+      preservedRegiments: lockCapture.snapshots,
+      lockedStates: constraintBundle?.lockedStates || []
     });
     const execution = executeEditCommand(state, documentRef, command, {
       context: {map},
@@ -14992,7 +15006,11 @@ function regenerateDiplomacy(state, documentRef, options = {}) {
   let salt;
   try {
     salt = nextRegenerationSalt(map, "diplomacy");
-    const command = createRegenerateDiplomacyCommand({salt, preservedRelations: lockCapture.snapshots});
+    const command = createRegenerateDiplomacyCommand({
+      salt,
+      preservedRelations: lockCapture.snapshots,
+      lockedStates: constraintBundle?.explicitLockedStates || constraintBundle?.lockedStates || []
+    });
     const result = executeEditCommand(state, documentRef, command, {
       context: {map},
       refresh: refreshAfterEdit,

@@ -132,8 +132,12 @@ export function restoreLockedSocialStructure(store, lockContext) {
   for (const [id, snapshot] of lockContext.snapshots) {
     const object = store?.[id];
     if (!object) throw createRegenerationLockConflict(`${lockContext.label} #${id} 在生成过程中丢失`, {field: lockContext.field, id});
+    if (lockContext.explicitIds.has(id)) {
+      for (const key of Object.keys(object)) if (!Object.prototype.hasOwnProperty.call(snapshot, key)) delete object[key];
+      for (const [key, value] of Object.entries(snapshot)) object[key] = clonePlain(value);
+      continue;
+    }
     const structuralKeys = ["center", "gridCenter", "parent", "origins", "culture"];
-    if (lockContext.explicitIds.has(id)) structuralKeys.push("children");
     for (const key of structuralKeys) {
       if (Object.prototype.hasOwnProperty.call(snapshot, key)) object[key] = clonePlain(snapshot[key]);
       else delete object[key];

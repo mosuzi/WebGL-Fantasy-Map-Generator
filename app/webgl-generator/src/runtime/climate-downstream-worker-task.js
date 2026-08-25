@@ -174,8 +174,7 @@ function executeSystem(map, system, constraintBundle) {
   }
   return regenerateMapAttributeForWorker(map, system, {
     scope: "all",
-    constraintBundle,
-    rejectLockedDiplomacy: system === "states"
+    constraintBundle
   });
 }
 

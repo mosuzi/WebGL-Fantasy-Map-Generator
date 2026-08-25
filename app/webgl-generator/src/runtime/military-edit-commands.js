@@ -282,7 +282,8 @@ export function createRegenerateMilitaryCommand({
   label = "重生成军事",
   faultAt = "",
   preservedRegiments = [],
-  lockedMilitaryRegiments = []
+  lockedMilitaryRegiments = [],
+  lockedStates = []
 } = {}) {
   let snapshot = null;
   let result = null;
@@ -315,6 +316,7 @@ export function createRegenerateMilitaryCommand({
           context.map.military = buildMilitary(context.map.pack, {
             ...context.map.options,
             seed: attemptSeed,
+            lockedStates,
             lockedMilitaryRegiments: lockedSnapshots
           });
           injectMilitaryRegenerationFault(faultAt, "after-build");

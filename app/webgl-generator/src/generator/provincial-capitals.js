@@ -177,12 +177,11 @@ function evaluateProvince(map, province, lockKeys, request) {
       summary: `省份 #${id} 的 province.burg 找不到对应城市，拒绝静默覆盖。`
     });
   }
-  if (request.repairInconsistentCurrent === true
-    && (lockKeys.has(`province:${id}`) || (currentCity && lockKeys.has(`city:${Number(currentCity.id)}`)))) {
+  if (lockKeys.has(`province:${id}`) && !currentCity) {
     return evaluationBase(province, currentCity, {
       status: "protected",
-      code: lockKeys.has(`province:${id}`) ? "province-locked" : "capital-city-locked",
-      summary: `省份 #${id} 或当前省会受到锁保护，重生成将保留该对象并继续处理其余省份。`
+      code: "province-locked",
+      summary: `省份 #${id} 已锁定且当前没有省会，重生成将保留这一状态并继续处理其余省份。`
     });
   }
   const lockedCapitalConflicts = (map?.settlements?.cities || []).filter(city => {
@@ -247,9 +246,9 @@ function evaluateProvince(map, province, lockKeys, request) {
   if (nationalCapital) {
     if (lockKeys.has(`city:${nationalCapital.cityId}`) && nationalCapital.cityId !== Number(currentCity?.id)) {
       return evaluationBase(province, currentCity, {
-        status: request.repairInconsistentCurrent === true ? "protected" : "rejected",
+        status: "protected",
         code: "national-capital-locked-conflict",
-        summary: `国家首都城市 #${nationalCapital.cityId} 已锁定且不是当前省会。`
+        summary: `国家首都城市 #${nationalCapital.cityId} 已锁定且不是当前省会，本省本轮保持不变。`
       });
     }
     return selectedEvaluation(province, currentCity, nationalCapital, candidates, {
@@ -266,9 +265,9 @@ function evaluateProvince(map, province, lockKeys, request) {
   const selectable = band.filter(candidate => !lockedBandCandidates.includes(candidate));
   if (!selectable.length) {
     return evaluationBase(province, currentCity, {
-      status: request.repairInconsistentCurrent === true ? "protected" : "rejected",
+      status: "protected",
       code: "candidate-locked-conflict",
-      summary: `省份 #${id} 的前列候选均受到城市锁保护。`
+      summary: `省份 #${id} 的前列候选均受到城市锁保护，本省本轮保持不变。`
     });
   }
   scoreCandidates(selectable);

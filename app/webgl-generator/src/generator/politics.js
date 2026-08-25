@@ -272,6 +272,8 @@ export function reexpandPackPoliticsPreservingIdentity(grid, society, pack, sett
   const supportingProvinces = collectLockedStateProvinceSnapshots(pack, options);
   const lockedProvinces = prepareLockedProvinces(grid, pack, options, supportingProvinces);
   const lockedStates = prepareLockedStates(grid, pack, options, lockedProvinces);
+  restoreProtectedPoliticalSnapshots(states, options.lockedStates);
+  restoreProtectedPoliticalSnapshots(provinces, options.lockedProvinces);
   const stateIdentity = snapshotPoliticalIdentity(states);
   const provinceIdentity = snapshotPoliticalIdentity(provinces);
   repairStateCapitalAnchors(pack, states, lockedStates.ids);
@@ -446,14 +448,33 @@ function assertPoliticalIdentity(items, snapshot, label) {
 function assertProtectedPoliticalSnapshots(items, snapshots = [], label) {
   for (const snapshot of snapshots || []) {
     const id = Number(snapshot?.i ?? snapshot?.id);
-    if (JSON.stringify(items[id]) !== JSON.stringify(snapshot)) {
+    if (stablePoliticalSnapshot(items[id]) !== stablePoliticalSnapshot(snapshot)) {
       const conflict = label === "省份" ? provinceLockConflict : stateLockConflict;
       throw conflict(`锁定${label} #${id} 的完整快照在重扩张中被改写`, {
         reason: "locked-snapshot-changed",
-        id
+        id,
+        changedFields: Object.keys({...snapshot, ...items[id]}).filter(key => (
+          stablePoliticalSnapshot(snapshot?.[key]) !== stablePoliticalSnapshot(items[id]?.[key])
+        ))
       });
     }
   }
+}
+
+function restoreProtectedPoliticalSnapshots(items, snapshots = []) {
+  for (const snapshot of snapshots || []) {
+    const id = Number(snapshot?.i ?? snapshot?.id);
+    if (!Number.isInteger(id) || id <= 0 || !items?.[id]) continue;
+    items[id] = structuredClone(snapshot);
+  }
+}
+
+function stablePoliticalSnapshot(value) {
+  if (Array.isArray(value)) return `[${value.map(stablePoliticalSnapshot).join(",")}]`;
+  if (value && typeof value === "object") {
+    return `{${Object.keys(value).sort().map(key => `${JSON.stringify(key)}:${stablePoliticalSnapshot(value[key])}`).join(",")}}`;
+  }
+  return JSON.stringify(value);
 }
 
 function buildPackPolitics(grid, features, society, rivers, random, options, pack) {
@@ -625,7 +646,7 @@ function prepareLockedStates(grid, pack, options = {}, lockedProvinces = null) {
     const current = gridOwners.get(gridCell);
     if (ids.has(stateId) && current === undefined) continue;
     if (current && current !== stateId) {
-      throw stateLockConflict(`锁定省份 #${provinceId} 与锁国 grid 领土冲突`, {reason: "overlapping-grid-territory", provinceId, stateId, gridCell});
+      continue;
     }
     gridOwners.set(gridCell, stateId);
   }

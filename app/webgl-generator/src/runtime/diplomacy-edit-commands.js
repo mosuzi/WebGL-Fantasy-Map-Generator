@@ -693,7 +693,8 @@ export function createRegenerateDiplomacyCommand({
   label = "重生成外交",
   faultAt = "",
   preservedRelations = [],
-  lockedDiplomacyRelations = []
+  lockedDiplomacyRelations = [],
+  lockedStates = []
 } = {}) {
   let snapshot = null;
   let result = null;
@@ -717,12 +718,13 @@ export function createRegenerateDiplomacyCommand({
         context.map.options = {...context.map.options, diplomacyRegenerationSalt: salt};
         context.map.diplomacy = buildDiplomacy(context.map.pack, context.map.society, {
           ...context.map.options,
-          lockedDiplomacyRelations: lockedSnapshots
+          lockedDiplomacyRelations: lockedSnapshots,
+          lockedStates
         });
         injectFault(faultAt, "after-build");
         syncDiplomacy(context.map);
         injectFault(faultAt, "after-sync");
-        reconcileWarDerivedData(context.map);
+        reconcileWarDerivedData(context.map, {protectedPairs: locked.ids});
         injectFault(faultAt, "after-war-derived");
         const currentLocked = prepareLockedDiplomacyRelations(context.map.pack, {lockedDiplomacyRelations: lockedSnapshots});
         assertLockedDiplomacyRelations(context.map.pack, currentLocked);

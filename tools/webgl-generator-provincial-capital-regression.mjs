@@ -329,17 +329,28 @@ const collisionMap = generatePlaceholderMap({
   heightmapTemplate: "continents",
   provincesRatio: 45
 });
-const collisionProvince = collisionMap.politics.provinces[348];
-const collisionCapital = collisionMap.settlements.cities.find(city => city && city.province === 348 && city.provincial);
-const collisionRelocatedCity = collisionMap.settlements.cities[122];
-assert(collisionProvince && collisionCapital, "共用 grid 落点的极小省份没有获得唯一省会");
+const collisionSample = collisionMap.politics.provinces
+  .filter(province => province?.i && !province.removed)
+  .map(province => {
+    const packCells = collisionMap.pack.cells.i.filter(cell => Number(collisionMap.pack.cells.province[cell]) === Number(province.i));
+    const capital = collisionMap.settlements.cities.find(city => city && Number(city.province) === Number(province.i) && city.provincial);
+    const siblingPackCells = capital
+      ? collisionMap.pack.cells.i.filter(cell => cell !== capital.packCell && Number(collisionMap.pack.cells.g[cell]) === Number(capital.cell))
+      : [];
+    return {province, capital, packCells, siblingPackCells};
+  })
+  .find(sample => sample.packCells.length === 1 && sample.capital && sample.siblingPackCells.length);
+assert(collisionSample, "共用 grid 落点的极小省份没有获得唯一省会");
+const {province: collisionProvince, capital: collisionCapital, siblingPackCells} = collisionSample;
 assert.equal(collisionProvince.burg, collisionCapital.burgId);
-assert.equal(collisionCapital.packCell, 3329);
-assert.equal(collisionCapital.cell, 4315);
-assert.equal(collisionRelocatedCity.id, 122);
-assert.equal(collisionRelocatedCity.population, 10.806, "落点腾挪改写了既有城市人口");
-assert.equal(collisionRelocatedCity.visual.manual, false);
-assert.notEqual(collisionRelocatedCity.packCell, 3330, "阻塞城市没有确定性腾出极小省份的唯一 grid 落点");
+assert.equal(collisionProvince.center, collisionCapital.packCell);
+assert.equal(collisionProvince.gridCenter, collisionCapital.cell);
+assert.deepEqual(
+  collisionMap.settlements.cities.filter(city => city && Number(city.cell) === Number(collisionCapital.cell)).map(city => city.id),
+  [collisionCapital.id],
+  "阻塞城市没有确定性腾出极小省份的共用 grid 落点"
+);
+assert(!collisionMap.settlements.cities.some(city => city && siblingPackCells.includes(Number(city.packCell))), "共用 grid 的相邻 pack 落点仍残留阻塞城市");
 
 const legacyFinalizeMap = generatePlaceholderMap({
   seed: "provincial-capital-legacy-finalize",
@@ -452,8 +463,8 @@ console.log(JSON.stringify({
   collisionResolution: {
     provinceId: collisionProvince.i,
     capitalCityId: collisionCapital.id,
-    relocatedCityId: collisionRelocatedCity.id,
-    relocatedPackCell: collisionRelocatedCity.packCell
+    capitalPackCell: collisionCapital.packCell,
+    sharedGridSiblings: siblingPackCells
   },
   generationMatrix
 }, null, 2));

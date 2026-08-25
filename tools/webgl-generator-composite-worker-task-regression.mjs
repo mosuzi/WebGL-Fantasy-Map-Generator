@@ -557,8 +557,7 @@ function runLegacyHeight(map, scope = "all") {
     }
     const result = regenerateMapAttributeForWorker(map, kind, {
       scope: "all",
-      constraintBundle,
-      rejectLockedDiplomacy: kind === "states"
+      constraintBundle
     });
     constraintBundle.assertDomain(map, domain, "after");
     return result;
@@ -620,8 +619,7 @@ function executeClimateSystem(map, system, constraintBundle) {
   assert.notEqual(system, "economy", "economy 独立分支不应从现有气候公开链到达");
   return regenerateMapAttributeForWorker(map, system, {
     scope: "all",
-    constraintBundle,
-    rejectLockedDiplomacy: system === "states"
+    constraintBundle
   });
 }
 

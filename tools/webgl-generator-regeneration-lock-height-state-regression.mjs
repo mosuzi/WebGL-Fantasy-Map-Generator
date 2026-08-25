@@ -6,11 +6,15 @@ const appSource = await readFile(
   new URL("../app/webgl-generator/src/runtime/app.js", import.meta.url),
   "utf8"
 );
+const heightWorkerSource = await readFile(
+  new URL("../app/webgl-generator/src/runtime/height-derived-worker-task.js", import.meta.url),
+  "utf8"
+);
 
 const heightSource = functionSource(
   appSource,
   "function rebuildHeightDerivedViaAction",
-  "function heightRegenerationConstraintDomain"
+  "function heightDerivedRebuildFailureMessage"
 );
 const stateTransactionSource = functionSource(
   appSource,
@@ -26,22 +30,22 @@ const stateSource = functionSource(
 assert.equal(
   count(heightSource, 'captureRegenerationConstraintBundle(state.map, {closure: ["world"]})'),
   1,
-  "高度复合事务必须且只能在 execute 首部捕获一次完整 world bundle"
+  "高度复合事务主线程必须且只能捕获一次完整 world bundle"
 );
 assert.match(
   heightSource,
-  /execute: \(\) => \{\s*const constraintBundle = captureRegenerationConstraintBundle/,
-  "高度复合事务必须在首个阶段写入前捕获 bundle"
+  /const constraintBundle = captureRegenerationConstraintBundle[\s\S]*executeWorkerMapMutation/,
+  "高度复合事务必须在发起 Worker 写入前捕获 bundle"
 );
 assert.match(
-  heightSource,
-  /constraintBundle\.assertDomain\(state\.map, domain, "before"\)[\s\S]*constraintBundle\.isDomainFullyLocked\(domain\)/,
-  "高度复合阶段必须先校验约束，再执行完整锁定 no-op"
+  heightWorkerSource,
+  /constraintBundle\.assertDomain\(map, domain, "before"\)[\s\S]*constraintBundle\.isDomainFullyLocked\(domain\)/,
+  "高度复合 Worker 阶段必须先校验约束，再执行完整锁定 no-op"
 );
 assert.match(
-  heightSource,
-  /regenerateMapAttributeCoreViaApi\(state, documentRef, kind, \{confirm: true, constraintBundle\}\)/,
-  "高度复合阶段必须向实际子生成器透传同一 bundle"
+  heightWorkerSource,
+  /regenerateMapAttributeForWorker\(map, kind, \{\s*scope: "all",\s*constraintBundle\s*\}\)/,
+  "高度复合 Worker 必须向实际子生成器透传同一 bundle"
 );
 assert.match(
   heightSource,
@@ -58,23 +62,23 @@ for (const wiring of [
   'military: "military"',
   'zones: "zones"'
 ]) {
-  assert(appSource.includes(wiring), `高度派生阶段缺少 bundle domain 映射：${wiring}`);
+  assert(heightWorkerSource.includes(wiring), `高度派生阶段缺少 bundle domain 映射：${wiring}`);
 }
 
 assert.equal(
   count(stateTransactionSource, 'captureRegenerationConstraintBundle(state.map, {closure: ["world"]})'),
   1,
-  "国家正式入口必须且只能捕获一次完整 world bundle"
+  "正式重生成入口必须且只能捕获一次完整 world bundle"
 );
 assert.match(
   stateTransactionSource,
-  /execute: \(\) => \{\s*const constraintBundle = targetKind === "states"/,
-  "国家正式入口必须在核心重生成前捕获 bundle"
+  /execute: \(\) => \{[\s\S]*const constraintBundle = options\.constraintBundle\s*\|\| captureRegenerationConstraintBundle/,
+  "正式重生成入口必须在核心重生成前捕获 bundle"
 );
 assert.match(
   stateTransactionSource,
-  /regenerateMapAttributeCoreViaApi\(state, documentRef, targetKind, \{\s*\.\.\.options,\s*constraintBundle,\s*rejectLockedDiplomacy:\s*targetKind === "states" && !options\.constraintBundle\s*\}\)/,
-  "国家正式入口必须透传同一 bundle，并仅在直接入口写前拒绝锁定外交"
+  /regenerateMapAttributeCoreViaApi\(state, documentRef, targetKind, \{\s*\.\.\.options,\s*constraintBundle\s*\}\)/,
+  "正式重生成入口必须向实际子生成器透传同一 bundle"
 );
 assert.match(
   stateTransactionSource,
@@ -85,16 +89,12 @@ for (const slice of [
   "constraintBundle.lockedStates",
   "constraintBundle.lockedProvinces",
   "constraintBundle.lockedCities",
-  "constraintBundle.lockedRoutes",
-  "constraintBundle.lockedDiplomacyRelations"
+  "constraintBundle.lockedRoutes"
 ]) {
   assert(stateSource.includes(slice), `国家重生成缺少同一 bundle slice：${slice}`);
 }
-assert.match(
-  stateSource,
-  /state-regeneration-cannot-preserve-diplomacy/,
-  "国家重生成对无法安全保留的外交锁必须在写入前稳定冲突"
-);
+assert(!appSource.includes("state-regeneration-cannot-preserve-diplomacy"), "合法外交锁不得再阻塞国家重生成");
+assert(!appSource.includes("rejectLockedDiplomacy"), "正式入口不得保留外交锁写前拒绝开关");
 assert.match(
   stateSource,
   /restoreRegenerationSalt\(map, previousSalt\);\s*throw error;/,
@@ -110,8 +110,8 @@ console.log(JSON.stringify({
   },
   state: {
     bundleCaptures: 1,
-    protectedSlices: 5,
-    prewriteConflict: "state-regeneration-cannot-preserve-diplomacy"
+    protectedSlices: 4,
+    diplomacyLockPriority: "preserve-and-regenerate"
   }
 }, null, 2));
 

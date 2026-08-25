@@ -73,7 +73,10 @@ const REGENERATION_PICKING_COMPONENTS = Object.freeze({
   diplomacy: Object.freeze(["military"]),
   religions: Object.freeze(["cities"]),
   military: Object.freeze(["military"]),
-  zones: Object.freeze([])
+  zones: Object.freeze([]),
+  "height-derived": Object.freeze(["cities", "markers", "military", "routeSegments", "riverSegments"]),
+  "climate-downstream": Object.freeze(["cities", "markers", "military", "routeSegments", "riverSegments"]),
+  "ocean-current-world": Object.freeze(["cities", "markers", "military", "routeSegments", "riverSegments"])
 });
 
 export function renderPreparationLayersForRegeneration(kind, presentation = {}) {

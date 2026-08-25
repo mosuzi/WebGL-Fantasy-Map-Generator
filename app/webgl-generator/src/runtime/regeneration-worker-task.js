@@ -18,7 +18,8 @@ import {createRegenerateMilitaryCommand} from "./military-edit-commands.js";
 import {compareMilitaryVariation, snapshotMilitaryVariation} from "./military-regeneration-variation.js";
 import {LABEL_TARGET_KIND, OBJECT_KIND} from "./object-kinds.js";
 import {captureRegenerationConstraintBundle} from "./regeneration-constraint-bundle.js";
-import {allRegenerationObjectsLocked, assertLockedRegenerationSnapshots, captureLockedRegenerationObjects, regenerationLockConflict} from "./regeneration-lock-protection.js";
+import {createRegenerationLockPriorityBundle} from "./regeneration-lock-priority.js";
+import {allRegenerationObjectsLocked, assertLockedRegenerationSnapshots, captureLockedRegenerationObjects} from "./regeneration-lock-protection.js";
 import {reconcileSettlementCellIdentity} from "./settlement-cell-index.js";
 import {reconcileSettlementPortTopology} from "./settlement-port-topology.js";
 import {regenerateProvincesForStates, withScopedProvinceRegenerationOptions} from "./state-topology-commands.js";
@@ -127,14 +128,14 @@ export async function runRegenerationWorkerTask(payload, context = {}) {
   context.report?.("compute", {message: `正在 Worker 中重算 ${kind}`, progress: 0.15});
   const before = regenerationSummary(map);
   const scope = normalizeRegenerationScope(map, kind, payload?.options || {});
-  const constraintBundle = kind === "states" ? captureRegenerationConstraintBundle(map, {closure: ["world"]}) : null;
+  const constraintBundle = captureRegenerationConstraintBundle(map, {closure: ["world"]});
   const populationSnapshot = payload?.options?.preservePopulation === true ? captureClimatePopulation(map) : null;
   if (populationSnapshot && !["features", "routes", "rivers"].includes(kind)) {
     throw taskError("worker_regeneration_option_invalid", "preservePopulation 仅支持 features、routes 和 rivers 地理派生重算");
   }
   const setupMs = regenerationTaskMs(regenerationTaskNow() - setupStartedAt);
   const domainStartedAt = regenerationTaskNow();
-  const result = regenerateMapAttribute(map, kind, {...scope, constraintBundle, rejectLockedDiplomacy: kind === "states"});
+  const result = regenerateMapAttribute(map, kind, {...scope, constraintBundle});
   if (populationSnapshot) restoreClimatePopulation(map, populationSnapshot);
   if (constraintBundle) constraintBundle.assertDomain(map, "world", "after");
   const domainComputeMs = regenerationTaskMs(regenerationTaskNow() - domainStartedAt);
@@ -186,18 +187,20 @@ function regenerationTaskMs(value) {
 }
 
 function regenerateMapAttribute(map, kind, options) {
+  const constraintBundle = createRegenerationLockPriorityBundle(map, options?.constraintBundle);
+  const protectedOptions = constraintBundle ? {...options, constraintBundle} : options;
   switch (kind) {
-    case "features": return regenerateFeatures(map, options);
-    case "routes": return regenerateRoutes(map, options);
-    case "rivers": return regenerateRivers(map, options);
-    case "cities": return regenerateCities(map, options);
-    case "states": return regenerateStates(map, options);
-    case "provinces": return regenerateProvinces(map, options);
-    case "markers": return regenerateMarkers(map, options);
-    case "diplomacy": return regenerateDiplomacy(map, options);
-    case "religions": return regenerateReligions(map, options);
-    case "military": return regenerateMilitary(map, options);
-    case "zones": return regenerateZones(map, options);
+    case "features": return regenerateFeatures(map, protectedOptions);
+    case "routes": return regenerateRoutes(map, protectedOptions);
+    case "rivers": return regenerateRivers(map, protectedOptions);
+    case "cities": return regenerateCities(map, protectedOptions);
+    case "states": return regenerateStates(map, protectedOptions);
+    case "provinces": return regenerateProvinces(map, protectedOptions);
+    case "markers": return regenerateMarkers(map, protectedOptions);
+    case "diplomacy": return regenerateDiplomacy(map, protectedOptions);
+    case "religions": return regenerateReligions(map, protectedOptions);
+    case "military": return regenerateMilitary(map, protectedOptions);
+    case "zones": return regenerateZones(map, protectedOptions);
     default: throw taskError("worker_regeneration_kind_unsupported", `重生成 Worker 不支持 ${kind || "(empty)"}`);
   }
 }
@@ -205,7 +208,10 @@ function regenerateMapAttribute(map, kind, options) {
 export function regenerateMapAttributeForWorker(map, kind, options = {}) {
   const normalizedKind = normalizeRegenerationKind(kind);
   const scope = normalizeRegenerationScope(map, normalizedKind, options);
-  return regenerateMapAttribute(map, normalizedKind, {...options, ...scope});
+  const constraintBundle = options.constraintBundle || captureRegenerationConstraintBundle(map, {closure: ["world"]});
+  const result = regenerateMapAttribute(map, normalizedKind, {...options, ...scope, constraintBundle});
+  constraintBundle.assertDomain(map, "world", "after");
+  return result;
 }
 
 function normalizeRegenerationKind(kind) {
@@ -285,7 +291,13 @@ function regenerateFeatures(map, options = {}) {
   const locks = constraintBundle ? {snapshots: constraintBundle.lockedFeatures} : captureLockedRegenerationObjects(map, OBJECT_KIND.FEATURE);
   const before = map.features?.metadata?.featureCount || 0;
   nextRegenerationSalt(map, "features");
-  const result = rebuildFeatureTopology(map, {lockedFeatures: locks.snapshots, resetUnlockedIdentity: true});
+  const result = rebuildFeatureTopology(map, {
+    lockedFeatures: locks.snapshots,
+    lockedCities: constraintBundle?.lockedCities || [],
+    lockedRoutes: constraintBundle?.lockedRoutes || [],
+    lockedMarkers: constraintBundle?.lockedMarkers || [],
+    resetUnlockedIdentity: true
+  });
   if (constraintBundle) constraintBundle.assertDomain(map, "features", "feature-topology");
   else assertLockedRegenerationSnapshots(map, locks);
   markDerivedFresh(map, ["features"]);
@@ -295,25 +307,32 @@ function regenerateFeatures(map, options = {}) {
   return regenerationResult("features", `Feature 与岸线已按当前海平面重建：${before} -> ${map.features?.metadata?.featureCount || 0}`, "已先刷新水陆连通、岸线、haven / harbor 和 Feature 身份；河流、道路、国家、省份等后续步骤将继续按顺序重算。");
 }
 
-function regenerateRoutes(map) {
+function regenerateRoutes(map, options = {}) {
   const currentRoutes = map.settlements?.routes || [];
   if (currentRoutes.length && allRegenerationObjectsLocked(map, OBJECT_KIND.ROUTE, currentRoutes)) {
     return regenerationResult("routes", "未执行", "当前道路已全部锁定，未推进扰动序号。");
   }
   const before = currentRoutes.length;
-  const routeLocks = captureLockedRegenerationObjects(map, OBJECT_KIND.ROUTE);
-  const cityLocks = captureLockedRegenerationObjects(map, OBJECT_KIND.CITY);
+  const constraintBundle = options.constraintBundle;
+  const routeLocks = constraintBundle ? {snapshots: constraintBundle.lockedRoutes} : captureLockedRegenerationObjects(map, OBJECT_KIND.ROUTE);
+  const cityLocks = constraintBundle ? {snapshots: constraintBundle.lockedCities} : captureLockedRegenerationObjects(map, OBJECT_KIND.CITY);
   reconcileSettlementCellIdentity(map);
   const portTopology = reconcileSettlementPortTopology(map, {mode: "routes", preserveProtected: true});
   const routeSalt = nextRegenerationSalt(map, "routes");
   finalizeSettlements(map.grid, map.features, map.politics, map.settlements, map.pack, {
     ...map.options,
     routeRegenerationSalt: routeSalt,
+    lockedStates: constraintBundle?.lockedStates || [],
+    lockedProvinces: constraintBundle?.lockedProvinces || [],
+    lockedFeatures: constraintBundle?.lockedFeatures || [],
     lockedCities: cityLocks.snapshots,
     lockedRoutes: routeLocks.snapshots
   });
-  assertLockedRegenerationSnapshots(map, routeLocks);
-  assertLockedRegenerationSnapshots(map, cityLocks);
+  if (constraintBundle) constraintBundle.assertDomain(map, "world", "routes-finalize");
+  else {
+    assertLockedRegenerationSnapshots(map, routeLocks);
+    assertLockedRegenerationSnapshots(map, cityLocks);
+  }
   const after = map.settlements?.routes?.length || 0;
   markDerivedFresh(map, ["routes"]);
   refreshGenerationSummary(map);
@@ -370,6 +389,9 @@ function regenerateCities(map, options = {}) {
     settlementRegenerationSalt: citySalt,
     routeRegenerationSalt: citySalt,
     settlementScope,
+    lockedStates: constraintBundle?.lockedStates || [],
+    lockedProvinces: constraintBundle?.lockedProvinces || [],
+    lockedFeatures: constraintBundle?.lockedFeatures || [],
     lockedCities: cityLocks.snapshots,
     lockedRoutes: routeLocks.snapshots,
     reassessProvincialCapitals: true,
@@ -412,11 +434,6 @@ function regenerateStates(map, options = {}) {
   const cityLocks = constraintBundle ? {snapshots: mergeLockedEconomicCities(map, capturedCityLocks.snapshots, constraintBundle)} : capturedCityLocks;
   const lockedCities = mergeLockedPoliticalCities(map, stateLocks.snapshots, lockedProvinces, cityLocks.snapshots);
   const routeLocks = constraintBundle ? {snapshots: constraintBundle.lockedRoutes} : captureLockedRegenerationObjects(map, OBJECT_KIND.ROUTE);
-  const diplomacyLocks = constraintBundle ? constraintBundle.lockedDiplomacyRelations : captureLockedRegenerationObjects(map, OBJECT_KIND.DIPLOMACY_RELATION).snapshots;
-  if (diplomacyLocks.length && options.rejectLockedDiplomacy) {
-    const first = diplomacyLocks[0];
-    throw regenerationLockConflict(OBJECT_KIND.DIPLOMACY_RELATION, {kind: OBJECT_KIND.DIPLOMACY_RELATION, id: first.id}, "state-regeneration-cannot-preserve-diplomacy", "国家重生成无法保证锁定外交关系的国家端点，已在写入前中止");
-  }
   const beforeStates = map.politics?.metadata?.states || 0;
   const beforeProvinces = map.politics?.metadata?.provinces || 0;
   const beforeRoutes = map.settlements?.routes?.length || 0;
@@ -427,6 +444,7 @@ function regenerateStates(map, options = {}) {
     namebases: map.namebases,
     lockedStates: stateLocks.snapshots,
     lockedProvinces,
+    lockedFeatures: constraintBundle?.lockedFeatures || [],
     lockedCities,
     lockedRoutes: routeLocks.snapshots,
     reassessProvincialCapitals: true,
@@ -444,9 +462,11 @@ function regenerateStates(map, options = {}) {
     routeRegenerationSalt: salt,
     lockedStates: stateLocks.snapshots,
     lockedProvinces,
+    lockedFeatures: constraintBundle?.lockedFeatures || [],
     lockedCities,
     lockedRoutes: routeLocks.snapshots,
-    reassessProvincialCapitals: true
+    reassessProvincialCapitals: true,
+    repairInconsistentProvincialCapitals: true
   });
   if (constraintBundle) constraintBundle.assertDomain(map, "states-provinces", "politics-settlements");
   else for (const capture of [stateLocks, provinceLocks, cityLocks, routeLocks]) assertLockedRegenerationSnapshots(map, capture);
@@ -493,6 +513,7 @@ function regenerateProvinces(map, options = {}) {
     namebases: map.namebases,
     routeRegenerationSalt: salt,
     lockedProvinces: provinceLocks.snapshots,
+    lockedFeatures: constraintBundle?.lockedFeatures || [],
     lockedCities,
     lockedRoutes: routeLocks.snapshots,
     settlementScope: scope.kind === "state" ? {kind: "state", id: scope.id} : null,
@@ -577,7 +598,11 @@ function regenerateDiplomacy(map, options = {}) {
   const beforePairs = map.diplomacy?.metadata?.pairs || 0;
   const beforeEnemies = map.diplomacy?.metadata?.enemies || 0;
   const salt = peekRegenerationSalt(map, "diplomacy");
-  const command = createRegenerateDiplomacyCommand({salt, preservedRelations: lockCapture.snapshots});
+  const command = createRegenerateDiplomacyCommand({
+    salt,
+    preservedRelations: lockCapture.snapshots,
+    lockedStates: options.constraintBundle?.explicitLockedStates || options.constraintBundle?.lockedStates || []
+  });
   if (command.isNoop?.({map})) return regenerationResult("diplomacy", "未执行", "当前外交国家对已全部锁定，未推进扰动序号。");
   nextRegenerationSalt(map, "diplomacy");
   command.apply({map});
@@ -601,7 +626,11 @@ function regenerateMilitary(map, options = {}) {
   const previousEvents = Number(map.military?.events?.length || 0);
   const salt = peekRegenerationSalt(map, "military");
   const seed = `${map.options?.seed || "map"}:regenerate-military:${salt}`;
-  const command = createRegenerateMilitaryCommand({seed, preservedRegiments: lockCapture.snapshots});
+  const command = createRegenerateMilitaryCommand({
+    seed,
+    preservedRegiments: lockCapture.snapshots,
+    lockedStates: options.constraintBundle?.lockedStates || []
+  });
   if (command.isNoop?.({map})) return regenerationResult("military", "未执行", "当前军事数据不存在或全部军团已锁定，未推进扰动序号。");
   nextRegenerationSalt(map, "military");
   command.apply({map});

@@ -81,13 +81,13 @@ try {
     const diplomacyLock = {kind: "diplomacy-relation", id: pairKey(states[0].i, states.at(-1).i)};
     unwrap(api.regenerationLocks.set(diplomacyLock, true), "lock diplomacy before state");
     app.editHistory.clear();
-    const conflictBefore = transactionSnapshot();
-    const conflict = await api.generate.regenerate("states", {confirm: true});
-    if (conflict?.ok !== false || conflict?.error?.code !== "regeneration_lock_conflict") {
-      throw new Error(`国家无法保留外交锁时没有稳定冲突：${JSON.stringify(conflict)}`);
-    }
-    assertSameTransaction(conflictBefore, transactionSnapshot(), "国家外交锁冲突回滚");
-    result.conflict = {reference: diplomacyLock.id, code: conflict.error.code};
+    const diplomacyBefore = snapshotReferences([diplomacyLock]);
+    const stateWithDiplomacyTxBefore = transactionSnapshot();
+    const stateWithDiplomacy = unwrap(await api.generate.regenerate("states", {confirm: true}), "state regenerate with diplomacy lock");
+    if (!stateWithDiplomacy.executed) throw new Error("锁外交下国家重生成没有执行");
+    assertDeepEqual(snapshotReferences([diplomacyLock]), diplomacyBefore, "国家重生成锁定外交关系");
+    assertSingleTransaction(stateWithDiplomacyTxBefore, transactionSnapshot(), "国家外交锁优先重生成", "states");
+    result.conflict = {reference: diplomacyLock.id, outcome: "preserved-and-regenerated"};
     return result;
 
     async function newMap(seed, cellsTarget) {
@@ -251,7 +251,19 @@ try {
     }
 
     function assertDeepEqual(actual, expected, label) {
-      if (JSON.stringify(actual) !== JSON.stringify(expected)) throw new Error(`${label}发生变化`);
+      if (stableSerialize(actual) !== stableSerialize(expected)) {
+        const changed = Object.keys({...expected, ...actual}).filter(key => stableSerialize(actual[key]) !== stableSerialize(expected[key]));
+        const detail = Object.fromEntries(changed.map(key => [key, {before: expected[key], after: actual[key]}]));
+        throw new Error(`${label}发生变化：${JSON.stringify(detail)}`);
+      }
+    }
+
+    function stableSerialize(value) {
+      if (Array.isArray(value)) return `[${value.map(stableSerialize).join(",")}]`;
+      if (value && typeof value === "object") {
+        return `{${Object.keys(value).sort().map(key => `${JSON.stringify(key)}:${stableSerialize(value[key])}`).join(",")}}`;
+      }
+      return JSON.stringify(value);
     }
 
     function clone(value) {
@@ -267,7 +279,7 @@ try {
   });
 
   const healthPerformanceSignals = consoleErrors.filter(message =>
-    /^\[FMG health\] (main-thread-long-task|render-frame-gap|input-handler-stall)\b/.test(message)
+    /^\[FMG health\] (main-thread-long-task|operation-stall|render-frame-gap|input-handler-stall)\b/.test(message)
   );
   const applicationConsoleErrors = consoleErrors.filter(message => !healthPerformanceSignals.includes(message));
   assert.deepEqual(applicationConsoleErrors, []);

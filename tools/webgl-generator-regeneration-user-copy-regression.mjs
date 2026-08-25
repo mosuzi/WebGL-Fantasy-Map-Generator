@@ -192,7 +192,7 @@ assert.match(regenerateActionSource, /nextLoading\.message !== visibleLoading\.m
 assert.doesNotMatch(regenerateActionSource, /updateGenerationLoading\([^;]+detail\.message/s, "Loading 仍采信底层 detail.message");
 assert.match(regenerateActionSource, /regenerationLoadingMessage\(kind, "complete"\)/, "Loading 缺少完成阶段");
 assert.match(regenerateActionSource, /\? "cancel" : "failure"/, "Loading 缺少取消阶段");
-const zoneCallbackSource = sliceBetween(appSource, "onRegenerate: async () => {", "    onUndo: () => {");
+const zoneCallbackSource = sliceBetween(appSource, "zonePanel = createZonePanel", "state.panels.zone = zonePanel");
 assert.match(zoneCallbackSource, /runtimeActions\.generate\.regenerate\("zones", \{confirm: true\}\)/, "地区面板没有调用正式重新生成入口");
 assert.match(zoneCallbackSource, /createRegenerationUserError\("zones", error\)/, "地区面板错误没有经过用户文案映射");
 

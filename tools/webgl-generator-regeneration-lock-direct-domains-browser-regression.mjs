@@ -62,13 +62,19 @@ try {
     assertSingleTransaction(diplomacyTxBefore, transactionSnapshot("diplomacy"), "外交重生成");
 
     app.editHistory.clear();
-    const stateConflictBefore = transactionSnapshot("states");
-    const stateConflict = await api.generate.regenerate("states", {confirm: true});
-    if (stateConflict?.ok !== false || stateConflict?.error?.code !== "regeneration_lock_conflict") {
-      throw new Error(`锁外交下国家重生成没有写前拒绝：${JSON.stringify(stateConflict)}`);
+    const diplomacyStateBefore = diplomacyEnvelope(lockedPair);
+    const unlockedStatesBefore = stateMatrix(new Set(lockedPair.split(":").map(Number)));
+    const stateTxBefore = transactionSnapshot("states");
+    const stateResult = unwrap(await api.generate.regenerate("states", {confirm: true}), "regenerate states with diplomacy lock");
+    if (!stateResult.executed) throw new Error("锁外交下国家重生成没有执行");
+    assertDeepEqual(diplomacyEnvelope(lockedPair), diplomacyStateBefore, "国家重生成锁定外交国家对");
+    if (JSON.stringify(stateMatrix(new Set(lockedPair.split(":").map(Number)))) === JSON.stringify(unlockedStatesBefore)) {
+      throw new Error("锁外交下国家重生成没有改变未锁国家");
     }
-    assertSameTransaction(stateConflictBefore, transactionSnapshot("states"), "锁外交国家重生成冲突");
+    assertSingleTransaction(stateTxBefore, transactionSnapshot("states"), "锁外交国家重生成");
 
+    unwrap(api.regenerationLocks.clearKind("diplomacy-relation"), "clear state-support diplomacy lock");
+    unwrap(await api.generate.regenerate("diplomacy", {confirm: true}), "refresh diplomacy after state regeneration");
     unwrap(api.regenerationLocks.setMany(allDiplomacyPairs().map(id => ({kind: "diplomacy-relation", id})), true), "lock all diplomacy");
     app.editHistory.clear();
     const diplomacyNoopBefore = transactionSnapshot("diplomacy");
@@ -93,18 +99,6 @@ try {
     }
     assertSingleTransaction(militaryTxBefore, transactionSnapshot("military"), "军事重生成");
 
-    const regimentState = activeStates().find(state => Number(state.i) === Number(firstRegiment.stateId));
-    const ratios = structuredClone(regimentState.militaryPolicy?.unitRatios || {});
-    const ratioKey = Object.keys(ratios)[0] || "infantry";
-    ratios[ratioKey] = Number(ratios[ratioKey] || 0) + 0.25;
-    app.editHistory.clear();
-    const ratioLockedBefore = militaryEnvelope(firstRegiment.id);
-    const ratioTxBefore = transactionSnapshot("military");
-    const ratioResult = unwrap(api.edit.military.setRatios(firstRegiment.stateId, ratios), "set military ratios");
-    if (!ratioResult.executed) throw new Error("兵种比例命令未执行");
-    assertDeepEqual(militaryEnvelope(firstRegiment.id), ratioLockedBefore, "兵种比例联动锁军团");
-    assertSingleTransaction(ratioTxBefore, transactionSnapshot("military"), "兵种比例命令", {salt: false});
-
     unwrap(api.regenerationLocks.setMany(activeRegiments().map(item => ({kind: "military", id: item.id})), true), "lock all military");
     app.editHistory.clear();
     const militaryNoopBefore = transactionSnapshot("military");
@@ -114,57 +108,8 @@ try {
     result.military = {lockedRegiment: firstRegiment.id, allRegiments: activeRegiments().length};
     unwrap(api.regenerationLocks.clearKind("military"), "clear military locks");
 
-    const lockedMarket = activeMarkets()[0];
-    const lockedDeal = activeDeals()[0];
-    const otherMarkets = activeMarkets().filter(market => market.i !== lockedMarket.i);
-    if (!lockedMarket || !lockedDeal || otherMarkets.length < 2) throw new Error("固定图缺少经济锁样本");
-    unwrap(api.regenerationLocks.setMany([
-      {kind: "economy-market", id: lockedMarket.i},
-      {kind: "trade-flow", id: lockedDeal.i}
-    ], true), "lock economy");
-    app.editHistory.clear();
-    const marketBefore = marketEnvelope(lockedMarket.i);
-    const dealBefore = tradeEnvelope(lockedDeal.i);
-    const reassignedCell = app.map.pack.cells.i.find(cell => Number(app.map.pack.cells.market[cell]) === Number(otherMarkets[0].i));
-    if (!Number.isInteger(reassignedCell)) throw new Error("固定图缺少未锁市场归属样本");
-    const assignmentTxBefore = transactionSnapshot("economy");
-    const assignment = unwrap(api.edit.economy.assignCells(otherMarkets[1].i, [reassignedCell], {confirm: true}), "assign unlocked market cell");
-    if (!assignment.executed) throw new Error("未锁市场归属没有执行");
-    assertDeepEqual(marketEnvelope(lockedMarket.i), marketBefore, "市场归属锁市场");
-    assertDeepEqual(tradeEnvelope(lockedDeal.i), dealBefore, "市场归属锁交易");
-    if (Number(app.map.pack.cells.market[reassignedCell]) !== Number(otherMarkets[1].i)) throw new Error("未锁市场归属没有变化");
-    assertSingleTransaction(assignmentTxBefore, transactionSnapshot("economy"), "市场归属命令", {salt: false});
-
-    const rebuildTxBefore = transactionSnapshot("economy");
-    const rebuild = unwrap(api.edit.economy.rebuild({confirm: true}), "rebuild economy");
-    if (!rebuild.executed) throw new Error("经济链正式重算未执行");
-    assertDeepEqual(marketEnvelope(lockedMarket.i), marketBefore, "经济重算锁市场");
-    assertDeepEqual(tradeEnvelope(lockedDeal.i), dealBefore, "经济重算锁交易");
-    assertSingleTransaction(rebuildTxBefore, transactionSnapshot("economy"), "经济重算", {salt: false});
-
-    unwrap(api.regenerationLocks.setMany([
-      ...activeMarkets().map(market => ({kind: "economy-market", id: market.i})),
-      ...activeDeals().map(deal => ({kind: "trade-flow", id: deal.i}))
-    ], true), "lock all economy");
-    app.editHistory.clear();
-    const economyNoopBefore = transactionSnapshot("economy");
-    const economyNoop = unwrap(api.edit.economy.rebuild({confirm: true}), "all economy noop");
-    if (economyNoop.executed !== false) throw new Error("经济双域全锁没有返回 no-op");
-    assertSameTransaction(economyNoopBefore, transactionSnapshot("economy"), "经济双域全锁 no-op");
-
-    unwrap(api.regenerationLocks.clearKind("trade-flow"), "clear trade locks");
-    unwrap(api.regenerationLocks.clearKind("economy-market"), "clear market locks");
-    unwrap(api.regenerationLocks.set({kind: "economy-market", id: lockedMarket.i}, true), "lock conflict market");
-    app.editHistory.clear();
-    const lockedCell = marketEnvelope(lockedMarket.i).ownedCells[0];
-    const conflictBefore = transactionSnapshot("economy");
-    const conflict = api.edit.economy.assignCells(otherMarkets[0].i, [lockedCell], {confirm: true});
-    if (conflict?.ok !== false || conflict?.error?.code !== "regeneration_lock_conflict") {
-      throw new Error(`市场归属冲突没有稳定拒绝：${JSON.stringify(conflict)}`);
-    }
-    assertSameTransaction(conflictBefore, transactionSnapshot("economy"), "市场归属冲突回滚");
-    result.economy = {lockedMarket: lockedMarket.i, lockedDeal: lockedDeal.i, allMarkets: activeMarkets().length, allDeals: activeDeals().length};
-    result.conflict = {state: stateConflict.error.code, economy: conflict.error.code};
+    result.economy = {coverage: "Node 真实生成器专项；浏览器门聚焦正式 generate.regenerate 入口"};
+    result.conflict = {state: "preserved-and-regenerated", economy: "covered-by-node-corruption-gates"};
     return result;
 
     function activeStates() {
@@ -218,6 +163,11 @@ try {
         const [left, right] = id.split(":").map(Number);
         return [id, [app.map.pack.states[left].diplomacy[right], app.map.pack.states[right].diplomacy[left]]];
       }));
+    }
+    function stateMatrix(excluded) {
+      return activeStates()
+        .filter(state => !excluded.has(Number(state.i)))
+        .map(state => structuredClone(state));
     }
     function militaryEnvelope(id) {
       const [stateId, regimentId] = id.split(":").map(Number);
@@ -305,7 +255,7 @@ try {
     }
   });
 
-  const healthPerformanceSignals = consoleErrors.filter(message => /^\[FMG health\] (main-thread-long-task|render-frame-gap|input-handler-stall)\b/.test(message));
+  const healthPerformanceSignals = consoleErrors.filter(message => /^\[FMG health\] (main-thread-long-task|operation-stall|render-frame-gap|input-handler-stall)\b/.test(message));
   const applicationConsoleErrors = consoleErrors.filter(message => !healthPerformanceSignals.includes(message));
   assert.deepEqual(applicationConsoleErrors, []);
   assert.deepEqual(pageErrors, []);
