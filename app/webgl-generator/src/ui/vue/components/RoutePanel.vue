@@ -36,6 +36,15 @@
     @action="handleRouteAction"
   />
 
+  <UiStateBanner
+    v-if="regenerationStatus !== 'idle'"
+    id="route-regeneration-status"
+    :data-route-regeneration-state="regenerationStatus"
+    :kind="regenerationBannerKind"
+    :title="regenerationBannerTitle"
+    :message="regenerationMessage"
+  />
+
   <UiDetailGrid class-name="route-panel-details" empty-text="未选中路线" :rows="detailRows" />
 
   <UiActionDock v-if="selected" host-id="RoutePanel" v-model:active="activeAction" :actions="routeActions">
@@ -100,7 +109,7 @@
 </template>
 
 <script setup>
-import {computed, ref, watch} from "vue";
+import {computed, onBeforeUnmount, onMounted, ref, watch} from "vue";
 import UiActionDock from "./base/UiActionDock.vue";
 import UiButton from "./base/UiButton.vue";
 import UiDetailGrid from "./base/UiDetailGrid.vue";
@@ -114,6 +123,8 @@ import UiSelectField from "./base/UiSelectField.vue";
 import UiStateBanner from "./base/UiStateBanner.vue";
 import {formatDistance, formatNumber} from "../../display-units.js";
 import {findByObjectId} from "../../object-id.js";
+import {regenerationFeedbackMessage, regenerationLoadingMessage} from "../../regeneration-user-copy.js";
+import {normalizeRouteRegenerationError, normalizeRouteRegenerationResponse, routeTopologySummary} from "../../route-regeneration-state.js";
 import {compareRowsByKey} from "../../sort-utils.js";
 import {readObjectNote} from "../../../runtime/object-notes.js";
 import {useUnitPreferences} from "../composables/use-unit-preferences.js";
@@ -167,6 +178,14 @@ const regenerationLocks = useRegenerationLockSelection({panelId: "route-panel", 
 const {selectedRowIds: selectedRouteIds} = useVisibleRowSelection(visibleRows);
 const selectedRouteRows = regenerationLocks.selectedRows;
 const selected = computed(() => findByObjectId(rows.value, props.state.selectedRouteId));
+const regenerationPending = ref(false);
+const runtimeOperationBusy = ref(false);
+const regenerationStatus = ref("idle");
+const regenerationMessage = ref("");
+let regenerationRequestId = 0;
+const regenerationActionBusy = computed(() => regenerationPending.value || runtimeOperationBusy.value);
+const regenerationBannerKind = computed(() => regenerationStatus.value === "failure" ? "error" : regenerationStatus.value === "pending" ? "preview" : "success");
+const regenerationBannerTitle = computed(() => regenerationStatus.value === "failure" ? "道路重算失败" : regenerationStatus.value === "pending" ? "正在重算道路" : "道路重算完成");
 const routeTypeOptions = Object.freeze([
   {value: "road", label: "道路"},
   {value: "trail", label: "小径"},
@@ -200,7 +219,7 @@ const routeListActions = computed(() => [
   {key: "clear-highlights", label: `清除高亮 ${formatNumberValue(props.state.highlightCount || 0)}`, icon: "○", disabled: !props.state.highlightCount},
   {key: "delete-selected", label: `批量删除选中 ${formatNumberValue(selectedRouteRows.value.length)}`, icon: "删", disabled: !selectedRouteRows.value.length},
   {key: "delete", label: "删除路线", icon: "×", disabled: !selected.value},
-  {key: "regenerate", label: "重算道路", icon: "↻"}
+  {key: "regenerate", label: "重算道路", icon: "↻", disabled: regenerationActionBusy.value}
 ]);
 const totalLength = computed(() => rows.value.reduce((sum, row) => sum + row.length, 0));
 
@@ -240,6 +259,17 @@ watch(activeAction, (next, previous) => {
 watch(() => props.state.editRequestId, requestId => {
   if (requestId > 0 && selected.value) activeAction.value = "edit";
 }, {immediate: true});
+
+onMounted(() => {
+  const snapshot = globalThis.window?.__webglGeneratorApp?.runtimeOperationSnapshot;
+  runtimeOperationBusy.value = Boolean(snapshot?.busy);
+  globalThis.document?.addEventListener("webgl-generator-runtime-operation", handleRuntimeOperationChanged);
+});
+
+onBeforeUnmount(() => {
+  regenerationRequestId++;
+  globalThis.document?.removeEventListener("webgl-generator-runtime-operation", handleRuntimeOperationChanged);
+});
 
 function handleRouteEditApply() {
   if (!props.state.editPreview?.valid || !props.state.editPreview?.changed) return;
@@ -312,11 +342,68 @@ function handleRouteAction(key) {
   if (key === "create") props.callbacks.onCreateMode?.(!props.state.createMode);
   if (key === "highlight-selected") props.callbacks.onHighlight?.(selectedRouteRows.value);
   if (key === "clear-highlights") props.callbacks.onClearHighlights?.();
-  if (key === "regenerate") props.callbacks.onRegenerateRoutes?.();
+  if (key === "regenerate") {
+    void handleRouteRegeneration();
+    return;
+  }
   if (key === "delete-selected") props.callbacks.onDeleteMany?.(selectedRouteRows.value.map(row => row.id));
   if (!selected.value) return;
   if (key === "locate") props.callbacks.onLocate?.(selected.value);
   if (key === "delete") props.callbacks.onDelete?.(selected.value);
+}
+
+async function handleRouteRegeneration() {
+  if (regenerationActionBusy.value) {
+    settleRegenerationFailure({code: "operation_busy", message: "当前还有操作正在进行，请稍后再试。"});
+    return;
+  }
+  const regenerate = props.callbacks.onRegenerateRoutes;
+  if (typeof regenerate !== "function") {
+    settleRegenerationFailure({code: "operation_failed", message: "道路重算服务尚未就绪。"});
+    return;
+  }
+  const requestId = ++regenerationRequestId;
+  const before = routeTopologySummary(props.state.map);
+  regenerationPending.value = true;
+  regenerationStatus.value = "pending";
+  regenerationMessage.value = regenerationLoadingMessage("routes", "initial");
+  try {
+    const response = normalizeRouteRegenerationResponse(await regenerate());
+    if (requestId !== regenerationRequestId) return;
+    if (!response.ok) {
+      settleRegenerationFailure(response.error, requestId);
+      return;
+    }
+    const after = routeTopologySummary(props.state.map);
+    regenerationStatus.value = "success";
+    regenerationMessage.value = `${regenerationFeedbackMessage("routes", response, {debug: debugModeEnabled()})}${routeTopologyTransition(before, after)}${response.data?.executed === false ? "" : "；可以撤销。"}`;
+  } catch (error) {
+    settleRegenerationFailure(error, requestId);
+  } finally {
+    if (requestId === regenerationRequestId) regenerationPending.value = false;
+  }
+}
+
+function settleRegenerationFailure(error, requestId = regenerationRequestId) {
+  if (requestId !== regenerationRequestId) return;
+  regenerationStatus.value = "failure";
+  regenerationMessage.value = regenerationFeedbackMessage("routes", {
+    ok: false,
+    error: normalizeRouteRegenerationError(error)
+  }, {debug: debugModeEnabled()});
+  regenerationPending.value = false;
+}
+
+function handleRuntimeOperationChanged(event) {
+  runtimeOperationBusy.value = Boolean(event?.detail?.busy);
+}
+
+function routeTopologyTransition(before, after) {
+  return `（${formatNumberValue(before.routes)} 条 / ${formatNumberValue(before.segments)} 段 → ${formatNumberValue(after.routes)} 条 / ${formatNumberValue(after.segments)} 段）`;
+}
+
+function debugModeEnabled() {
+  return Boolean(globalThis.window?.__webglGeneratorDebug?.enabled);
 }
 
 function routeLength(route) {

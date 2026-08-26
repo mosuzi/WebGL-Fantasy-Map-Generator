@@ -4,7 +4,7 @@
 
 - 唯一完成输入仍为 `C:\Users\mosuzi\Downloads\krichars (3).webfmg`，SHA-256 `CF7402BC2BEA22AD1FCDE441444479F880DC0DB15D55520EF5A1A399D335DA61`。
 - 用户入口固定为“路线管理 → 重算道路”。中央控制面板只能验证共享 command 一致性，不能替代专用面板。
-- 主线程唯一写者；任务分支计划为 `codex/task-360-route-regeneration-transaction`，必须从第 359 项已合入并推送的最新 `main` 创建。
+- 主线程唯一写者；任务分支为 `codex/task-360-route-regeneration-transaction`，按用户要求从第 359 项完成提交顺序创建，只推送自身，不合入 `main`。
 - 本项只负责路线专用入口及由其真实首败证明的最窄道路核心问题，不扩散到其它对象面板。
 
 ## 已知基线与根因边界
@@ -38,3 +38,24 @@
 4. 中央入口执行同一流程时返回相同结构化字段和错误语义。
 5. 注入一例道路失败：普通模式只有友好说明，`?debug=1` 同时显示公开错误码和内部码链；无未处理 Promise rejection。
 6. 目标操作窗口无新增 health、console 或 WebGL error；随机地图不作为完成证据。
+
+## 完成记录（2026-08-27）
+
+### 真实首败与修复边界
+
+- `v0.5.68` production preview 的指定存档上，专用按钮单击后 `273 / 352 / 822ms` 三个观测点均保持 enabled、没有结果区，路线仍为 `442 / 7976`；约 `2423ms` 后才无提示地变为 `273 / 3645` 并新增一条历史。这证明真实首败是 RoutePanel 丢弃 Promise，不是道路生成器拒绝。
+- `RoutePanel` 现在用本地 request identity 在同一事件循环立即进入 pending，并订阅共享 `webgl-generator-runtime-operation` busy。按钮在本地请求或任一前台地图事务期间禁用；快速双击只能启动一次 command。
+- 专用面板把 runtime 原始结果与公共 API 结构化结果归一到同一 `{ok,data/error}` 语义；成功横幅显示前后路线 / 段数和可撤销提示，失败横幅复用统一重生成文案。普通模式只显示友好错误；调试模式保留公开码和被包装前的内部码链。
+- 指定存档的道路核心两次均成功，因此 360-C 按冻结规则不触碰路线生成算法、锁契约、owner、revision 或提交校验。
+
+### 指定存档浏览器验收
+
+- 唯一输入仍为 `C:\Users\mosuzi\Downloads\krichars (3).webfmg`。最终 `v0.5.69` 专用入口双击后立即得到 `pending / button disabled`，约 `3s` 后显示“已完成 / 道路重算完成”，结果 `442 routes / 7976 segments → 273 / 3645`，history 仅为 `undo 1 / redo 0`。
+- 中央入口在重新导入的同一原档上得到相同扰动 `#2`、相同 `442 / 7976 → 273 / 3645`、相同一条 history，墙钟约 `2682ms`；两入口没有各自复制道路命令。
+- 通过正式 UI 主动锁定路线 `#0` 及其端点城市 `#7 丰柏 / #18 霜寒` 后，专用入口双击只让 history 从 `undo 3` 变为 `undo 4`，结果 `442 / 7976 → 83 / 1230`。路线 `#0` 仍为 `丰柏 → 霜寒 / primary / 65 资源区域 / 1,388.1 千米`；城市 `#7` 与 `#18` 的角色、国家、省份、资源和人口 before-image 逐字段不变。
+- 一次撤销恢复 `442 / 7976` 和 `undo 3 / redo 1`，重做恢复 `83 / 1230`；两次状态均 `WebGL error 0`。目标页面 console error / warn 为 `0`，操作窗口没有新增 health error。
+
+### 故障语义与门禁
+
+- 路线响应归一专项注入 `operation_failed ← worker_regeneration_refresh_fault`：普通文案只有“重新生成失败，当前地图未应用本次更改。”，调试文案精确包含 `错误码：operation_failed；内部码：worker_regeneration_refresh_fault`。RoutePanel 动态路径直接调用同一 `regenerationFeedbackMessage`，未另建错误码映射。
+- route edit / pending、regeneration user copy、route + city lock、typecheck、`1405 modules` production build 与差异门通过。完成版本 `0.5.69`；分支只推送，不合入 `main`，第 361 项从本完成提交继续创建。

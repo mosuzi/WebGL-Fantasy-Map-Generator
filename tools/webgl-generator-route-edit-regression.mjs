@@ -6,6 +6,8 @@ import {generatePlaceholderMap} from "../app/webgl-generator/src/generator/index
 import {createMapFeatureGeoJson} from "../app/webgl-generator/src/runtime/map-file-io.js";
 import {EditHistory} from "../app/webgl-generator/src/runtime/edit-history.js";
 import {createEditRouteCommand, inspectRouteEdit} from "../app/webgl-generator/src/runtime/route-edit-commands.js";
+import {normalizeRouteRegenerationResponse, routeTopologySummary} from "../app/webgl-generator/src/ui/route-regeneration-state.js";
+import {regenerationFeedbackMessage} from "../app/webgl-generator/src/ui/regeneration-user-copy.js";
 
 const map = generatePlaceholderMap({seed: "route-edit-regression", cellsTarget: 3000, heightmapTemplate: "continents"});
 const target = findRerouteTarget(map);
@@ -80,8 +82,26 @@ assert.match(appSource, /ROUTE_EDIT_WAYPOINT/, "路线改线画布模式未接�
 assert.match(appSource, /setEditWaypoint/, "路线面板未接收画布改线点");
 assert.match(appSource, /createEditRouteCommand/, "路线 UI 未共用路线编辑命令");
 assert.match(panelSource, /在地图选择改线点[\s\S]*路线修改影响[\s\S]*应用路线修改/, "路线面板缺少改线、影响预览或应用入口");
+assert.match(panelSource, /regenerationPending\.value = true[\s\S]*await regenerate\(\)[\s\S]*finally[\s\S]*regenerationPending\.value = false/, "路线专用入口没有同步进入 pending 并等待重算 Promise 终态");
+assert.match(panelSource, /disabled: regenerationActionBusy\.value/, "路线专用入口没有在本地请求或共享 runtime operation 期间禁用");
+assert.match(panelSource, /webgl-generator-runtime-operation[\s\S]*handleRuntimeOperationChanged/, "路线专用入口没有订阅共享 runtime operation busy 状态");
+assert.match(panelSource, /regenerationFeedbackMessage\("routes"[\s\S]*debugModeEnabled\(\)/, "路线专用入口没有复用普通 / 调试双模式错误文案");
+assert.match(panelSource, /routeTopologyTransition\(before, after\)[\s\S]*可以撤销/, "路线专用入口成功终态没有展示前后拓扑摘要与撤销提示");
 assert.match(consoleSource, /routes\.inspectEdit[\s\S]*routes\.update/, "控制台 API 缺少路线预检或更新方法");
 assert.match(pickingSource, /map\?\.settlements\?\.routes[\s\S]*Array\.isArray\(route\?\.points\)/, "路线 picking 未读取编辑后的 points");
+
+const rawSuccess = {executed: true, status: "道路完成"};
+assert.deepEqual(normalizeRouteRegenerationResponse(rawSuccess), {ok: true, data: rawSuccess}, "路线面板没有把 runtime 原始成功结果归一成结构化响应");
+const rawBusy = {executed: false, busy: true, error: {code: "operation_busy", message: "busy"}};
+assert.equal(normalizeRouteRegenerationResponse(rawBusy).error.code, "operation_busy", "路线面板丢失共享 busy 错误码");
+const internalFault = Object.assign(new Error("Worker refresh fault"), {code: "worker_regeneration_refresh_fault"});
+const wrappedFault = Object.assign(new Error("重新生成失败"), {code: "operation_failed", cause: internalFault});
+const normalizedFault = normalizeRouteRegenerationResponse({error: wrappedFault});
+assert.equal(normalizedFault.error.code, "operation_failed");
+assert.equal(normalizedFault.error.details.internalCode, "worker_regeneration_refresh_fault");
+assert.equal(regenerationFeedbackMessage("routes", normalizedFault), "重新生成失败，当前地图未应用本次更改。", "路线面板普通模式泄漏了内部诊断");
+assert.match(regenerationFeedbackMessage("routes", normalizedFault, {debug: true}), /错误码：operation_failed；内部码：worker_regeneration_refresh_fault/, "路线面板调试模式没有显示公开码与内部码链");
+assert.deepEqual(routeTopologySummary({settlements: {routes: [{id: 0, points: [[0, 0], [1, 1]]}, {id: 1, removed: true}], metadata: {routeSegments: 7}}}), {routes: 1, segments: 7});
 
 console.log(JSON.stringify({
   ok: true,

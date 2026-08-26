@@ -5368,6 +5368,11 @@ select:disabled {
   background: rgba(88, 54, 126, 0.25);
 }
 
+.ui-state-banner.is-success {
+  border-color: rgba(92, 190, 139, 0.5);
+  background: rgba(35, 104, 68, 0.24);
+}
+
 .ui-state-banner.is-stale {
   border-color: rgba(222, 173, 81, 0.5);
   background: rgba(112, 77, 18, 0.24);
@@ -5418,6 +5423,11 @@ select:disabled {
 .ui-state-banner.is-preview .ui-state-token {
   color: #ead8ff;
   background: rgba(142, 91, 205, 0.35);
+}
+
+.ui-state-banner.is-success .ui-state-token {
+  color: #d5ffe8;
+  background: rgba(55, 155, 103, 0.34);
 }
 
 .ui-state-banner.is-stale .ui-state-token {

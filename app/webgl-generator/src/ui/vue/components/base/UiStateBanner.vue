@@ -24,7 +24,7 @@ const props = defineProps({
   kind: {
     type: String,
     required: true,
-    validator: value => ["selected", "editing", "preview", "stale", "empty", "error", "orphan"].includes(value)
+    validator: value => ["selected", "editing", "preview", "success", "stale", "empty", "error", "orphan"].includes(value)
   },
   title: {
     type: String,
@@ -49,6 +49,7 @@ const stateLabel = computed(() => ({
   selected: "已选中",
   editing: "编辑中",
   preview: "预览中",
+  success: "已完成",
   stale: "待派生",
   empty: "暂无数据",
   error: "操作失败",
