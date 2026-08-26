@@ -24,6 +24,15 @@ export function createCanonicalMapAdoptionPackage(document) {
   };
 }
 
+export function createParsedMapAdoptionPackage(document) {
+  const bytes = encodeWebfmgV3Document(document);
+  applyMainThreadMapProjection(document.map);
+  return {
+    document,
+    handoff: createMapAdoptionHandoffFromBytes(bytes)
+  };
+}
+
 function createMapAdoptionHandoffFromBytes(bytes) {
   const container = inspectWebfmgV3Container(bytes);
   return {

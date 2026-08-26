@@ -397,6 +397,7 @@ const LOADING_MESSAGES = Object.freeze({
 const STATE_TOPOLOGY_UI_HISTORY = new WeakMap();
 
 const LOAD_TRACE_EVENT_NAME = "webgl-generator-load-stage";
+const INITIAL_MAP_IMPORT_RENDER_LAYERS = Object.freeze(RENDER_PREPARATION_LAYERS.filter(layer => !["cell-visual", "gpu-shore-surface"].includes(layer)));
 const LOAD_TRACE_DELAY_PARAMS = Object.freeze(["loadStepDelay", "debugLoadDelay", "loadTraceDelay"]);
 const MAX_DEBUG_LOAD_DELAY_MS = 2000;
 const BROWSER_STORAGE_SAVE_ERROR_TOAST_DURATION_MS = 6000;
@@ -1326,7 +1327,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
         afterSelect: target => setStatePanelTarget(state, target.id)
       });
     },
-    onRegenerate: () => runtimeActions.generate.regenerate("states", {confirm: true}),
+    onRegenerate: () => invokeRuntimeRegenerationFromUi(state, documentRef, () => runtimeActions.generate.regenerate("states", {confirm: true})),
     onHighlight: objects => setPersistentObjectHighlights(state, documentRef, objects),
     onClearHighlights: () => clearPersistentObjectHighlights(state, documentRef),
     getHighlightCount: () => persistentObjectHighlightCount(state),
@@ -1499,7 +1500,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       if (!result.executed) return;
       updateEditingInteractionLock(state, documentRef);
     },
-    onRegenerate: () => runtimeActions.generate.regenerate("provinces", {confirm: true}),
+    onRegenerate: () => invokeRuntimeRegenerationFromUi(state, documentRef, () => runtimeActions.generate.regenerate("provinces", {confirm: true})),
     onPreviewCapitalReassessment: request => inspectProvincialCapitalsViaApi(state, request),
     onConfirmCapitalReassessment: (request, preview) => executeProvincialCapitalsViaApi(state, documentRef, request, {
       confirm: true,
@@ -1572,7 +1573,8 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     },
     onRegenerate: async () => {
       try {
-        const result = await runtimeActions.generate.regenerate("cities", {confirm: true});
+        const result = await invokeRuntimeRegenerationFromUi(state, documentRef, () => runtimeActions.generate.regenerate("cities", {confirm: true}));
+        if (result?.busy) return result;
         showMapToast(documentRef, regenerationResultMessage("cities", result));
         return result;
       } catch (error) {
@@ -1873,7 +1875,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       }
       updateEditingInteractionLock(state, documentRef);
     },
-    onRegenerate: () => runtimeActions.generate.regenerate("diplomacy", {confirm: true}),
+    onRegenerate: () => invokeRuntimeRegenerationFromUi(state, documentRef, () => runtimeActions.generate.regenerate("diplomacy", {confirm: true})),
     onShowTheme: stateId => {
       setDiplomacyThemeSubject(state, documentRef, stateId);
     },
@@ -1923,7 +1925,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
         afterSelect: target => militaryPanel.setSelectedRegimentId(target.id)
       });
     },
-    onRegenerate: () => runtimeActions.generate.regenerate("military", {confirm: true}),
+    onRegenerate: () => invokeRuntimeRegenerationFromUi(state, documentRef, () => runtimeActions.generate.regenerate("military", {confirm: true})),
     onHighlight: objects => setPersistentObjectHighlights(state, documentRef, objects),
     onClearHighlights: () => clearPersistentObjectHighlights(state, documentRef),
     getHighlightCount: () => persistentObjectHighlightCount(state),
@@ -2082,7 +2084,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       updateEditingInteractionLock(state, documentRef);
       return result;
     },
-    onRegenerateRoutes: () => runtimeActions.generate.regenerate("routes", {confirm: true}),
+    onRegenerateRoutes: () => invokeRuntimeRegenerationFromUi(state, documentRef, () => runtimeActions.generate.regenerate("routes", {confirm: true})),
     onUndo: () => {
       return executeHistoryCommand(state, documentRef, "undo");
     },
@@ -2139,7 +2141,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       applyMarkerCollectionCommand(state, documentRef, command);
       if (state.markerEdit.markerId === markerId) stopMarkerEditMode(state, documentRef);
     },
-    onRegenerateResources: () => runtimeActions.generate.regenerate("markers", {confirm: true}),
+    onRegenerateResources: () => invokeRuntimeRegenerationFromUi(state, documentRef, () => runtimeActions.generate.regenerate("markers", {confirm: true})),
     onCancelEdit: () => {
       stopMarkerEditMode(state, documentRef);
     },
@@ -2362,7 +2364,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
         afterSelect: target => riverPanel.setSelection({object: target}, state.editingObject)
       });
     },
-    onRegenerate: () => runtimeActions.generate.regenerate("rivers", {confirm: true}),
+    onRegenerate: () => invokeRuntimeRegenerationFromUi(state, documentRef, () => runtimeActions.generate.regenerate("rivers", {confirm: true})),
     onHighlight: objects => setPersistentObjectHighlights(state, documentRef, objects),
     onClearHighlights: () => clearPersistentObjectHighlights(state, documentRef),
     getHighlightCount: () => persistentObjectHighlightCount(state),
@@ -2470,7 +2472,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       refreshRuntimeAndPickPanels(documentRef, state);
     },
     onRename: (currentId, name) => runtimeActions.oceanCurrents.rename(currentId, name),
-    onRegenerate: () => runtimeActions.oceanCurrents.regenerate(),
+    onRegenerate: () => invokeRuntimeRegenerationFromUi(state, documentRef, () => runtimeActions.oceanCurrents.regenerate()),
     onWorldRebuild: async () => {
       const confirmed = documentRef.defaultView?.confirm?.("完整重算会更新气候、河流、人口、城镇、政区、外交和军事，并保留现有文化、国家、省份与宗教的名称和 ID。是否继续？") ?? false;
       if (!confirmed) return false;
@@ -2617,7 +2619,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     },
     onRegenerate: async () => {
       try {
-        return await runtimeActions.generate.regenerate("zones", {confirm: true});
+        return await invokeRuntimeRegenerationFromUi(state, documentRef, () => runtimeActions.generate.regenerate("zones", {confirm: true}));
       } catch (error) {
         throw createRegenerationUserError("zones", error);
       }
@@ -2727,6 +2729,13 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     recordHealth: (type, detail, severity) => healthMonitor?.record?.(type, detail, severity),
     onStateChange: snapshot => {
       state.runtimeOperationSnapshot = snapshot;
+      documentRef.dispatchEvent(new CustomEvent("webgl-generator-runtime-operation", {
+        detail: {
+          busy: Boolean(snapshot.busy),
+          name: String(snapshot.current?.name || ""),
+          message: String(snapshot.current?.message || "")
+        }
+      }));
       if (snapshot.busy) state.viewPrewarmScheduler?.cancel("foreground-operation");
       else scheduleGpuViewPrewarm(state, documentRef);
       state.keyboardShortcuts?.refreshAvailability?.();
@@ -2820,6 +2829,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     onFitView: () => runtimeActions.layers.fitView(),
     onShowOceanHeight: showOceanHeight => invokeRuntimeDisplayActionFromUi(state, documentRef, () => runtimeActions.layers.setShowOceanHeight(showOceanHeight)),
     onSmoothCellBorders: smoothCellBorders => invokeRuntimeDisplayActionFromUi(state, documentRef, () => runtimeActions.layers.setSmoothCellBorders(smoothCellBorders)),
+    onMapEdgeFade: mapEdgeFade => invokeRuntimeDisplayActionFromUi(state, documentRef, () => runtimeActions.layers.setMapEdgeFade(mapEdgeFade)),
     onVisualTheme: visualTheme => invokeRuntimeDisplayActionFromUi(state, documentRef, () => runtimeActions.layers.setTheme(visualTheme)),
     onCreateVisualTheme: () => runtimeActions.layers.createTheme(),
     onExportVisualTheme: () => runtimeActions.layers.exportTheme(currentVisualThemeId(documentRef), {download: true}),
@@ -2991,7 +3001,11 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     onImportMapData: file => importMapData(state, documentRef, file, runtimeActions.data.importMap),
     onImportGeoData: file => importGeoData(state, documentRef, file, runtimeActions.data.importGEO),
     onImportHeightmapImage: payload => importHeightmapImage(state, documentRef, payload, runtimeActions.data.importHeightmap),
-    onRegenerate: (kind, regenerationOptions = {}) => runtimeActions.generate.regenerate(kind, {confirm: true, ...regenerationOptions}),
+    onRegenerate: (kind, regenerationOptions = {}) => invokeRuntimeRegenerationFromUi(
+      state,
+      documentRef,
+      () => runtimeActions.generate.regenerate(kind, {confirm: true, ...regenerationOptions})
+    ),
     onDebugModeChange: () => updatePickPanel(documentRef, state),
     onMode: mode => invokeRuntimeDisplayActionFromUi(state, documentRef, () => runtimeActions.layers.setViewMode(mode))
   };
@@ -3137,6 +3151,17 @@ function invokeRuntimeDisplayActionFromUi(state, documentRef, task) {
   });
 }
 
+function invokeRuntimeRegenerationFromUi(state, documentRef, task) {
+  if (!state.runtimeOperationSnapshot?.busy) return task();
+  const message = "地图正在载入或更新，完成后即可重新生成。";
+  showMapToast(documentRef, message, 2400);
+  return Promise.resolve({
+    executed: false,
+    busy: true,
+    error: {code: "operation_busy", message}
+  });
+}
+
 function runtimeDisplayActionErrorMessage(error) {
   if (error?.code === "operation_busy") return "当前已有地图操作正在进行，请稍后再试";
   if (error?.code === "operation_obsolete") return "地图状态已变化，请重新设置";
@@ -3151,13 +3176,15 @@ function restoreRuntimeDisplayControls(state, documentRef) {
   const visualTheme = renderer?.visualTheme?.id || "default";
   const showOceanHeight = Boolean(renderer?.viewOptions?.showOceanHeight);
   const smoothCellBorders = renderer?.viewOptions?.smoothCellBorders !== false;
+  const mapEdgeFade = renderer?.viewOptions?.mapEdgeFade !== false;
   const maxCityLabels = Number(renderer?.labelOptions?.maxCityLabels) || DEFAULT_MAX_CITY_LABELS;
   setActiveModeButton(documentRef, colorMode);
   syncRuntimeControlValue(documentRef, "visual-theme-preset", visualTheme);
   syncRuntimeBooleanControl(documentRef.getElementById("show-ocean-height"), showOceanHeight);
   syncRuntimeBooleanControl(documentRef.getElementById("smooth-cell-borders"), smoothCellBorders);
+  syncRuntimeBooleanControl(documentRef.getElementById("map-edge-fade"), mapEdgeFade);
   syncRuntimeControlValue(documentRef, "max-city-labels", maxCityLabels);
-  updateControlPreferences(documentRef, {colorMode, visualTheme, showOceanHeight, smoothCellBorders, maxCityLabels});
+  updateControlPreferences(documentRef, {colorMode, visualTheme, showOceanHeight, smoothCellBorders, mapEdgeFade, maxCityLabels});
   for (const control of documentRef.querySelectorAll("[data-layer]")) {
     const layer = control.dataset.layer;
     if (!Object.prototype.hasOwnProperty.call(rendererLayers, layer)) continue;
@@ -3402,6 +3429,14 @@ function createRuntimeActions(state, documentRef, options = {}) {
           () => setRuntimeSmoothCellBorders(state, documentRef, enabled),
           () => setRuntimeSmoothCellBorders(state, documentRef, previous),
           {gpuResident: state.renderer?.canApplyGpuResidentSmoothCellBorders?.() === true}
+        );
+      },
+      setMapEdgeFade: enabled => {
+        const previous = readControlPreferences(documentRef).mapEdgeFade !== false;
+        return runDisplayMutation(
+          "layers.setMapEdgeFade",
+          () => setRuntimeMapEdgeFade(state, documentRef, enabled),
+          () => setRuntimeMapEdgeFade(state, documentRef, previous)
         );
       },
       setShowHoverInfo: visible => setRuntimeHoverInfoVisible(state, documentRef, visible),
@@ -4339,6 +4374,16 @@ function setRuntimeSmoothCellBorders(state, documentRef, enabled) {
   });
 }
 
+function setRuntimeMapEdgeFade(state, documentRef, enabled) {
+  return setRuntimeBooleanDisplayPreference(state, documentRef, {
+    id: "map-edge-fade",
+    key: "mapEdgeFade",
+    value: enabled,
+    operation: "set-map-edge-fade",
+    apply: value => state.renderer?.setViewOptions?.({mapEdgeFade: value})
+  });
+}
+
 function setRuntimeHoverInfoVisible(state, documentRef, visible) {
   const nextVisible = Boolean(visible);
   return measureHealthOperation(state, "set-hover-info-visibility", {showHoverInfo: nextVisible}, () => {
@@ -4383,6 +4428,7 @@ function runtimeDisplayActionResult(state, documentRef, effects) {
     display: {
       showOceanHeight: Boolean(preferences.showOceanHeight),
       smoothCellBorders: Boolean(preferences.smoothCellBorders),
+      mapEdgeFade: preferences.mapEdgeFade !== false,
       showHoverInfo: Boolean(preferences.showHoverInfo),
       maxCityLabels: Number(preferences.maxCityLabels) || DEFAULT_MAX_CITY_LABELS
     },
@@ -4419,6 +4465,7 @@ function applyControlPreferencesToRenderer(documentRef, renderer) {
     if (typeof preferences.visualTheme === "string") renderer.setVisualTheme?.(preferences.visualTheme);
     if (typeof preferences.showOceanHeight === "boolean") renderer.setViewOptions({showOceanHeight: preferences.showOceanHeight});
     if (typeof preferences.smoothCellBorders === "boolean") renderer.setViewOptions({smoothCellBorders: preferences.smoothCellBorders});
+    if (typeof preferences.mapEdgeFade === "boolean") renderer.setViewOptions({mapEdgeFade: preferences.mapEdgeFade});
     if (typeof preferences.maxCityLabels === "number") renderer.setLabelOptions({maxCityLabels: preferences.maxCityLabels});
     renderer.setUnitPreferences(preferences.units);
     const layers = normalizeLayerVisibilityPreferences(preferences.layers || {});
@@ -5898,7 +5945,12 @@ async function parseMapDocumentViaWorker(state, documentRef, input, {operation =
   const importId = (state.pendingMapImportId || 0) + 1;
   state.pendingMapImportId = importId;
   const renderBinding = {mapIdentity: `imported:${importId}`, mapRevision: 0, topologyRevision: 0};
-  const render = createWorkerRegenerationRenderRequest(state, "generation", renderBinding, [...RENDER_PREPARATION_LAYERS]);
+  // 首屏已经由 surface / line 使用 Worker 内的 cell visual cache 完整生成；
+  // 34MB 左右的编辑期三角缓存改为后续真正需要 surface 重建时再交接，避免阻塞存档进入可交互状态。
+  const render = createWorkerRegenerationRenderRequest(state, "generation", renderBinding, [...INITIAL_MAP_IMPORT_RENDER_LAYERS]);
+  render.cellVisualGeometryMode = "boundary-only";
+  render.linePathTransferMode = "reuse-shore-vertices";
+  render.lineResidentMode = "current-shore-only";
   render.camera = {scale: 1, offsetX: 0, offsetY: 0};
   render.selection = null;
   render.objectHighlights = [];
@@ -13663,6 +13715,12 @@ function createWorkerRegenerationRenderRequest(state, targetKind, binding, layer
   const renderer = state.renderer;
   const canvasSize = renderer?.canvasSize || {};
   const requestedLayers = Array.isArray(layers) ? [...layers] : renderPreparationLayersForRegeneration(targetKind);
+  if (targetKind !== "generation"
+    && requestedLayers.includes("surface")
+    && !requestedLayers.includes("cell-visual")
+    && !state.renderer?.cellVisualMesh?.cells?.length) {
+    requestedLayers.unshift("cell-visual");
+  }
   const pickingComponents = requestedLayers.includes("picking")
     ? renderer?.objectPickingIndex && targetKind !== "generation"
       ? renderPreparationPickingComponentsForRegeneration(targetKind)

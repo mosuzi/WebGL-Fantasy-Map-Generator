@@ -418,6 +418,7 @@
       <div class="preference-toggle-grid">
         <UiSwitchField label="显示海底" input-id="show-ocean-height" :checked="preferences.showOceanHeight" button-style />
         <UiSwitchField label="平滑边界" input-id="smooth-cell-borders" :checked="preferences.smoothCellBorders" button-style />
+        <UiSwitchField label="地图边缘渐隐" input-id="map-edge-fade" :checked="preferences.mapEdgeFade" button-style />
       </div>
     </div>
 
@@ -665,7 +666,7 @@
             :data-regeneration-scope="selectedRegenerationScope"
             :data-regeneration-state-id="selectedRegenerationScope === 'state' ? selectedRegenerationStateId : undefined"
             :data-regeneration-province-id="selectedRegenerationScope === 'province' ? selectedRegenerationProvinceId : undefined"
-            :disabled="regenerationTargetMissing"
+            :disabled="regenerationBusy || regenerationTargetMissing"
             @click="requestRegeneration"
           >
             重新生成{{ selectedRegenerationAction.label }}
@@ -1077,6 +1078,8 @@ const regenerationScopeOptions = computed(() => {
 const regenerationTargetMissing = computed(() => (selectedRegenerationScope.value === "state" && !selectedRegenerationStateId.value)
   || (selectedRegenerationScope.value === "province" && !selectedRegenerationProvinceId.value));
 const regenerationFeedback = ref("");
+const regenerationBusy = ref(false);
+const regenerationBusyFeedback = "地图正在载入或更新，完成后即可重新生成。";
 
 function isLayerVisible(layer) {
   const preferred = preferences.value.layers?.[layer];
@@ -1410,6 +1413,10 @@ function handleRegenerationTargetsChanged(event) {
 }
 
 async function requestRegeneration() {
+  if (regenerationBusy.value) {
+    regenerationFeedback.value = regenerationBusyFeedback;
+    return;
+  }
   const regenerate = globalThis.window?.webglGeneratorApi?.generate?.regenerate;
   if (typeof regenerate !== "function") {
     regenerationFeedback.value = "重设服务尚未就绪";
@@ -1425,6 +1432,16 @@ async function requestRegeneration() {
   regenerationFeedback.value = regenerationFeedbackMessage(selectedRegenerationKind.value, response, {
     debug: Boolean(globalThis.window?.__webglGeneratorDebug?.enabled)
   });
+}
+
+function handleRuntimeOperationChanged(event) {
+  const detail = event.detail || {};
+  regenerationBusy.value = Boolean(detail.busy);
+  if (regenerationBusy.value && detail.name !== "generate.regenerate") {
+    regenerationFeedback.value = regenerationBusyFeedback;
+  } else if (!regenerationBusy.value && regenerationFeedback.value === regenerationBusyFeedback) {
+    regenerationFeedback.value = "";
+  }
 }
 
 function commitLabelStyle(field, value) {
@@ -1556,6 +1573,8 @@ onMounted(() => {
   document.addEventListener("webgl-generator-visual-themes-changed", handleVisualThemesChanged);
   document.addEventListener("webgl-generator-label-styles-changed", handleLabelStylesChanged);
   document.addEventListener("webgl-generator-regeneration-targets", handleRegenerationTargetsChanged);
+  document.addEventListener("webgl-generator-runtime-operation", handleRuntimeOperationChanged);
+  handleRuntimeOperationChanged({detail: globalThis.window?.__webglGeneratorApp?.runtimeOperationSnapshot || {}});
   window.addEventListener("resize", handleExportPanelReposition);
   window.addEventListener("scroll", handleExportPanelReposition, true);
 });
@@ -1566,6 +1585,7 @@ onBeforeUnmount(() => {
   document.removeEventListener("webgl-generator-visual-themes-changed", handleVisualThemesChanged);
   document.removeEventListener("webgl-generator-label-styles-changed", handleLabelStylesChanged);
   document.removeEventListener("webgl-generator-regeneration-targets", handleRegenerationTargetsChanged);
+  document.removeEventListener("webgl-generator-runtime-operation", handleRuntimeOperationChanged);
   window.removeEventListener("resize", handleExportPanelReposition);
   window.removeEventListener("scroll", handleExportPanelReposition, true);
 });

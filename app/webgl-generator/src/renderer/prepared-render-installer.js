@@ -6,6 +6,7 @@ import {
   unpackShoreVisualPathsInChunks
 } from "./render-cache-dto.js";
 import {assertRenderPreparationBinding} from "./render-preparation.js";
+import {emptyCellVisualMesh} from "./cell-visual-layer.js";
 import {
   createSurfaceBaseBufferSetAsync,
   createSurfaceResourceOwner,
@@ -323,9 +324,11 @@ function createPreparedInstallTransaction(renderer, map, prepared, decoded, buff
         assignNested("camera", "offsetX", 0);
         assignNested("camera", "offsetY", 0);
       }
+      const replacingMap = renderer.map !== map;
       assign("map", map);
       assignCellAttributeStore(cellAttributeStore);
       if (decoded.cellVisual) assign("cellVisualMesh", decoded.cellVisual);
+      else if (replacingMap) assign("cellVisualMesh", emptyCellVisualMesh());
       if (decoded.shore) assign("shoreVisualPaths", decoded.shore);
       if (decoded.statePaths) assign("stateVisualPaths", decoded.statePaths);
       if (decoded.provincePaths) assign("provinceVisualPaths", decoded.provincePaths);

@@ -113,6 +113,7 @@ export function buildCellVisualMesh(map) {
   }
 
   return {
+    geometryMode: "full",
     cells,
     edgeCurves,
     shoreEdges,
@@ -139,8 +140,68 @@ export function buildCellVisualMesh(map) {
   };
 }
 
+// GPU 常驻 surface 的首屏只需要 cell 中心与共享边曲线来构建 correction；
+// 每格 earcut 三角留到真正请求 cell-visual 图层时再计算。
+export function buildCellVisualBoundaryMesh(map) {
+  const startedAt = performance.now();
+  const cells = [];
+  const edgeCurves = new Map();
+  const shoreEdges = collectShoreCellVisualEdges(map);
+  let boundaryPoints = 0;
+  let skippedCells = 0;
+
+  for (const cell of map?.grid?.cells?.i || []) {
+    const vertices = map?.grid?.cells?.v?.[cell] || [];
+    if (vertices.length < 3) {
+      skippedCells++;
+      continue;
+    }
+    for (let index = 0; index < vertices.length; index++) {
+      cellVisualEdgeCurve(map, vertices[index], vertices[(index + 1) % vertices.length], edgeCurves, shoreEdges);
+    }
+    cells.push({
+      cell,
+      center: cellCenterPoint(map.grid, cell),
+      points: [],
+      boundaryPointCount: vertices.length,
+      ndcTriangles: new Float32Array(),
+      triangleCount: 0,
+      triangulationFallback: null
+    });
+    boundaryPoints += vertices.length;
+  }
+
+  return {
+    geometryMode: "boundary-only",
+    cells,
+    edgeCurves,
+    shoreEdges,
+    cellCount: cells.length,
+    skippedCells,
+    boundaryPoints,
+    triangleCount: 0,
+    triangulationMode: "boundary-only",
+    triangulationFallbackCells: 0,
+    triangulationRetriedCells: 0,
+    triangulationSkippedCells: 0,
+    triangulationHardFallbackCells: 0,
+    triangulationHardFanFallbackCells: 0,
+    triangulationEmergencyHardFanCells: 0,
+    triangulationCanonicalOrderFallbackCells: 0,
+    triangulationVoronoiRecoveryCells: 0,
+    triangulationVoronoiRecoveryCellIds: [],
+    triangulationUnfilledCells: 0,
+    triangulationFailures: [],
+    edgeCurveCount: edgeCurves.size,
+    shoreEdgeCount: shoreEdges.size,
+    style: CELL_VISUAL_STYLE,
+    buildMs: roundMs(performance.now() - startedAt)
+  };
+}
+
 export function emptyCellVisualMesh() {
   return {
+    geometryMode: "empty",
     cells: [],
     edgeCurves: new Map(),
     shoreEdges: new Set(),
@@ -285,6 +346,7 @@ export function refreshCellVisualMeshCells(map, previousMesh, changedGridCells) 
 
 export function summarizeCellVisualMesh(mesh) {
   return {
+    geometryMode: mesh?.geometryMode || "full",
     cellCount: mesh?.cellCount || 0,
     skippedCells: mesh?.skippedCells || 0,
     boundaryPoints: mesh?.boundaryPoints || 0,

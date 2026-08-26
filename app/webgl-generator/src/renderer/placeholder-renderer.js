@@ -292,13 +292,16 @@ function evaluateDeferredWorkerRenderSnapshot(renderer, entries) {
     } else if (mutation.key === "view-options") {
       const nextOptions = value || {};
       if (!hasShallowPresentationChange(presentation.viewOptions, nextOptions)) continue;
-      if (Object.prototype.hasOwnProperty.call(nextOptions, "smoothCellBorders")) effects.lines = true;
+      if (["smoothCellBorders", "mapEdgeFade"].some(key => Object.prototype.hasOwnProperty.call(nextOptions, key))) effects.lines = true;
       presentation.viewOptions = {...presentation.viewOptions, ...nextOptions};
       const changedKeys = Object.keys(nextOptions).filter(key => renderer.viewOptions?.[key] !== nextOptions[key]);
-      const patchScope = changedKeys.includes("smoothCellBorders")
-        ? "unavailable"
-        : changedKeys.every(key => key === "showOceanHeight") ? "water" : "all";
-      requestDeferredSurfaceEffect(effects, patchScope);
+      const surfaceKeys = changedKeys.filter(key => key !== "mapEdgeFade");
+      if (surfaceKeys.length) {
+        const patchScope = surfaceKeys.includes("smoothCellBorders")
+          ? "unavailable"
+          : surfaceKeys.every(key => key === "showOceanHeight") ? "water" : "all";
+        requestDeferredSurfaceEffect(effects, patchScope);
+      }
     } else if (mutation.key === "visual-theme") {
       const theme = resolveVisualTheme(value?.themeId);
       if (!value?.force && presentation.visualTheme?.id === theme.id) continue;
@@ -643,7 +646,7 @@ export class PlaceholderMapRenderer {
     this.locateFlashFrame = 0;
     this.colorMode = "height";
     this.visualTheme = resolveVisualTheme(DEFAULT_VISUAL_THEME_ID);
-    this.viewOptions = {showOceanHeight: false, smoothCellBorders: true, diplomacySubjectId: null, visualTheme: this.visualTheme};
+    this.viewOptions = {showOceanHeight: false, smoothCellBorders: true, mapEdgeFade: false, diplomacySubjectId: null, visualTheme: this.visualTheme};
     this.labelOptions = {maxCityLabels: DEFAULT_MAX_CITY_LABELS};
     this.unitPreferences = normalizeUnitPreferences();
     this.layerVisibility = createDefaultLayerVisibility();
@@ -1570,7 +1573,8 @@ export class PlaceholderMapRenderer {
     const optionKeys = Object.keys(options || {});
     const gpuResidentOceanHeight = optionKeys.length === 1 && optionKeys[0] === "showOceanHeight" && this.canApplyGpuResidentOceanHeight();
     const gpuResidentSmoothBorders = optionKeys.length === 1 && optionKeys[0] === "smoothCellBorders" && this.canApplyGpuResidentSmoothCellBorders();
-    const shouldRefreshLineLayers = Object.prototype.hasOwnProperty.call(options, "smoothCellBorders");
+    const lineOnly = optionKeys.length === 1 && optionKeys[0] === "mapEdgeFade";
+    const shouldRefreshLineLayers = ["smoothCellBorders", "mapEdgeFade"].some(key => Object.prototype.hasOwnProperty.call(options, key));
     this.viewOptions = {...this.viewOptions, ...options};
     if (!this.map) return;
     if (gpuResidentOceanHeight) {
@@ -1579,6 +1583,11 @@ export class PlaceholderMapRenderer {
     }
     if (gpuResidentSmoothBorders) {
       this.refreshGpuResidentSmoothCellBorders();
+      return;
+    }
+    if (lineOnly) {
+      this.refreshLineLayers({draw: false});
+      this.draw();
       return;
     }
     this.refreshCellSurface({draw: false});
@@ -2234,7 +2243,7 @@ export class PlaceholderMapRenderer {
       const cached = this.viewOptions.smoothCellBorders !== false
         ? this.gpuResidentSmoothShoreLineVertices
         : this.gpuResidentHardShoreLineVertices;
-      if (this.canApplyGpuResidentSmoothCellBorders() && cached instanceof Float32Array) {
+      if (this.canApplyGpuResidentSmoothCellBorders() && cached instanceof Float32Array && cached.length) {
         this.shoreLineVertices = cached;
         this.shoreLineVertexCount = cached.length / 6;
         const upload = this.recordBufferUpload("shore-line-refresh", () => {
@@ -2251,6 +2260,10 @@ export class PlaceholderMapRenderer {
       this.shoreLineVertices = shoreLineVertices;
       this.shoreLinePathVertices = shoreLineLayer.pathVertices;
       this.shoreLinePathObjectVertices = shoreLineLayer.pathObjectVertices;
+      if (GPU_RESIDENT_COLOR_MODES[this.colorMode]) {
+        if (this.viewOptions.smoothCellBorders !== false) this.gpuResidentSmoothShoreLineVertices = shoreLineVertices;
+        else this.gpuResidentHardShoreLineVertices = shoreLineVertices;
+      }
       this.shoreLineVertexCount = shoreLineVertices.length / 6;
       const upload = this.recordBufferUpload("shore-line-refresh", () => {
         this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.shoreLineBuffer);
@@ -6994,16 +7007,16 @@ function drawSurfaceDepthBatch(gl, renderer, buffer, vertexCount, depthFunction)
   gl.drawArrays(gl.TRIANGLES, 0, vertexCount);
 }
 
-export function buildLineVertices(map, visibility = {}, colorMode = "height", shoreVisualPaths = null, stateVisualPaths = null, provinceVisualPaths = null, cellVisualMesh = null, viewOptions = {}, oceanCurrentHighlights = new Set()) {
+export function buildLineVertices(map, visibility = {}, colorMode = "height", shoreVisualPaths = null, stateVisualPaths = null, provinceVisualPaths = null, cellVisualMesh = null, viewOptions = {}, oceanCurrentHighlights = new Set(), preparationOptions = {}) {
   const context = createRenderContext(map);
   const vertices = [];
   const oceanCurrentVertices = [];
   const statePaths = stateVisualPaths || buildStateVisualPaths(map);
   const provincePaths = provinceVisualPaths || buildProvinceVisualPaths(map);
   const themeLines = viewOptions.visualTheme?.lines || {};
-  pushMapEdgeFade(vertices, context, map, viewOptions.visualTheme);
+  if (viewOptions.mapEdgeFade !== false) pushMapEdgeFade(vertices, context, map, viewOptions.visualTheme);
   const shoreLineLayer = buildShoreLineVerticesCached(map, visibility, colorMode, shoreVisualPaths, cellVisualMesh, viewOptions);
-  const gpuResidentShoreLines = buildGpuResidentShoreLinePair(map, visibility, colorMode, shoreVisualPaths, cellVisualMesh, viewOptions, shoreLineLayer);
+  const gpuResidentShoreLines = buildGpuResidentShoreLinePair(map, visibility, colorMode, shoreVisualPaths, cellVisualMesh, viewOptions, shoreLineLayer, preparationOptions);
   pushZoneTextureLayer(vertices, context, map, visibility);
   const oceanCurrents = pushOceanCurrentLayer(oceanCurrentVertices, context, map, visibility, oceanCurrentHighlights);
   if (visibility.provinceBorders !== false) pushPoliticalBoundaryStrokes(vertices, provincePaths, context, themeLines.provinceBorder || PROVINCE_VISUAL_STYLE.borderStroke, PROVINCE_VISUAL_STYLE.borderWidthWorld, PROVINCE_VISUAL_STYLE.borderDashWorld);
@@ -7021,8 +7034,13 @@ export function buildLineVertices(map, visibility = {}, colorMode = "height", sh
   };
 }
 
-function buildGpuResidentShoreLinePair(map, visibility, colorMode, shoreVisualPaths, cellVisualMesh, viewOptions, current) {
+function buildGpuResidentShoreLinePair(map, visibility, colorMode, shoreVisualPaths, cellVisualMesh, viewOptions, current, preparationOptions = {}) {
   if (!GPU_RESIDENT_COLOR_MODES[colorMode]) return {smooth: new Float32Array(), hard: new Float32Array()};
+  if (preparationOptions.currentShoreOnly === true) {
+    return viewOptions.smoothCellBorders !== false
+      ? {smooth: current.vertices, hard: new Float32Array()}
+      : {smooth: new Float32Array(), hard: current.vertices};
+  }
   const smooth = viewOptions.smoothCellBorders !== false
     ? current.vertices
     : buildShoreLineVerticesCached(map, visibility, colorMode, shoreVisualPaths, cellVisualMesh, {...viewOptions, smoothCellBorders: true}).vertices;

@@ -13,7 +13,7 @@ import {
 } from "./browser-map-storage.js";
 import {isCompressedMapDocumentFilename} from "./map-filename.js";
 import {encodeWebfmgV3Document, gzipWebfmgV3Bytes} from "./webfmg-v3-container.js";
-import {createCanonicalMapAdoptionPackage} from "./map-adoption-handoff.js";
+import {createParsedMapAdoptionPackage} from "./map-adoption-handoff.js";
 import {normalizeMapForRuntimeAdoption} from "./map-runtime-adoption.js";
 import {executeRenderPreparationTask} from "../renderer/render-preparation.js";
 import {mergeUserVisualThemes, normalizeVisualThemeId, resolveVisualTheme} from "../renderer/themes.js";
@@ -87,7 +87,7 @@ async function importMapFile(payload, context) {
 
   const adoption = typeof context.adoptMap === "function";
   const handoffStartedAt = adoption ? taskNow() : 0;
-  const adoptionPackage = adoption ? createCanonicalMapAdoptionPackage(parsedDocument) : null;
+  const adoptionPackage = adoption ? createParsedMapAdoptionPackage(parsedDocument) : null;
   const document = adoptionPackage?.document || parsedDocument;
   normalizeMapForRuntimeAdoption(document.map);
   const handoffEncodeMs = adoption ? roundTaskMs(taskNow() - handoffStartedAt) : 0;

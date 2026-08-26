@@ -12,6 +12,7 @@ const DEFAULT_CONTROL_PREFERENCES = Object.freeze({
   visualTheme: "default",
   showOceanHeight: false,
   smoothCellBorders: true,
+  mapEdgeFade: false,
   showHoverInfo: true,
   toolbarCollapsed: false,
   climateRangeRatioLocked: true,
@@ -67,6 +68,7 @@ function normalizePreferences(input = {}) {
     visualTheme: normalizeVisualThemeId(input.visualTheme),
     showOceanHeight: typeof input.showOceanHeight === "boolean" ? input.showOceanHeight : DEFAULT_CONTROL_PREFERENCES.showOceanHeight,
     smoothCellBorders: typeof input.smoothCellBorders === "boolean" ? input.smoothCellBorders : DEFAULT_CONTROL_PREFERENCES.smoothCellBorders,
+    mapEdgeFade: typeof input.mapEdgeFade === "boolean" ? input.mapEdgeFade : DEFAULT_CONTROL_PREFERENCES.mapEdgeFade,
     showHoverInfo: typeof input.showHoverInfo === "boolean"
       ? input.showHoverInfo
       : typeof input.showHoverOverlay === "boolean"

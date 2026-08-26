@@ -97,6 +97,10 @@ export function bindRuntimePanel(documentRef, handlers) {
     updateControlPreferences(documentRef, {smoothCellBorders: event.target.checked});
     handlers.onSmoothCellBorders?.(event.target.checked);
   });
+  documentRef.getElementById("map-edge-fade")?.addEventListener("change", event => {
+    updateControlPreferences(documentRef, {mapEdgeFade: event.target.checked});
+    handlers.onMapEdgeFade?.(event.target.checked);
+  });
   documentRef.getElementById("visual-theme-preset")?.addEventListener("change", event => {
     const visualTheme = normalizeVisualThemeId(event.target.value);
     updateControlPreferences(documentRef, {visualTheme});
@@ -408,6 +412,10 @@ function applyControlPreferences(documentRef) {
   if (typeof preferences.smoothCellBorders === "boolean") {
     const input = documentRef.getElementById("smooth-cell-borders");
     if (input) input.checked = preferences.smoothCellBorders;
+  }
+  if (typeof preferences.mapEdgeFade === "boolean") {
+    const input = documentRef.getElementById("map-edge-fade");
+    if (input) input.checked = preferences.mapEdgeFade;
   }
   if (typeof preferences.visualTheme === "string") {
     const input = documentRef.getElementById("visual-theme-preset");
@@ -730,6 +738,7 @@ export function updateRuntimePanel(documentRef, state) {
     statRow(documentRef, "视图", stats.colorMode),
     statRow(documentRef, "海底高度", stats.viewOptions?.showOceanHeight ? "显示" : "隐藏"),
     statRow(documentRef, "单元格边界", stats.cellSurfaceMode === "visual-cells" ? "平滑" : "硬边界"),
+    statRow(documentRef, "地图边缘渐隐", stats.viewOptions?.mapEdgeFade === false ? "关闭" : "开启"),
     statRow(documentRef, "边界线来源", formatBoundaryLineMode(stats.boundaryLineMode)),
     statRow(documentRef, "图层", formatLayerVisibility(stats.layerVisibility)),
     statRow(documentRef, "GPU 顶点", stats.vertexCount),
