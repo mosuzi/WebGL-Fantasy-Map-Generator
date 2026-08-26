@@ -70,6 +70,7 @@ import {
 } from "./political-label-layout.js";
 import {resolveStateLabelPlacement} from "./state-label-territory.js";
 import {formatMilitary, normalizeUnitPreferences} from "../ui/display-units.js";
+import {createPreparedDisplayIntent, gpuResidentShoreSurfaceKey} from "./prepared-display-intent.js";
 import {militaryIconLabelForVariant, normalizeMilitaryIconVariant} from "./military-icon-assets.js";
 import {
   markerIconSvg as renderMarkerIconSvg,
@@ -3212,6 +3213,24 @@ export class PlaceholderMapRenderer {
   getStats() {
     const surfaceBaseBuffers = summarizeRendererSurfaceBase(this);
     const cellVisualCorrectionBuffers = summarizeRendererCellVisualCorrection(this);
+    const surfaceBinding = this.surfaceResourceOwner ? renderResourceBindingFromOwner(this.surfaceResourceOwner) : null;
+    const boundaryDisplayIntent = surfaceBinding ? createPreparedDisplayIntent({
+      binding: surfaceBinding,
+      colorMode: this.colorMode,
+      viewOptions: this.viewOptions
+    }, surfaceBinding) : null;
+    const smoothCellBorders = this.viewOptions.smoothCellBorders !== false;
+    const gpuResidentBoundaryMode = Boolean(GPU_RESIDENT_COLOR_MODES[this.colorMode] && this.cellAttributeStore);
+    const boundaryPresentationCanonical = smoothCellBorders
+      ? !gpuResidentBoundaryMode || (
+        this.gpuResidentSmoothShoreSurfaceKey === boundaryDisplayIntent?.shoreSurfaceKey
+        && this.shoreLineVertices === this.gpuResidentSmoothShoreLineVertices
+      )
+      : this.landCorrectionVertexCount === 0
+        && this.waterCorrectionVertexCount === 0
+        && this.landCoverVertexCount === 0
+        && this.waterCoverVertexCount === 0
+        && (!gpuResidentBoundaryMode || this.shoreLineVertices === this.gpuResidentHardShoreLineVertices);
     return {
       metadata: this.map?.metadata,
       grid: this.map?.grid?.metadata,
@@ -3230,6 +3249,18 @@ export class PlaceholderMapRenderer {
         waterCoverVertexCount: this.waterCoverVertexCount,
         drawCount: surfaceBaseBuffers.segmentCount + cellVisualCorrectionBuffers.segmentCount + 4,
         clearDepth: 0.5
+      },
+      boundaryPresentation: {
+        state: smoothCellBorders ? "smooth" : "hard",
+        canonical: boundaryPresentationCanonical,
+        displayFingerprint: boundaryDisplayIntent?.fingerprint || "",
+        shoreSurfaceKey: this.gpuResidentSmoothShoreSurfaceKey,
+        surfaceRangeFingerprint: this.surfaceResourceOwner?.rangeFingerprint || "",
+        correctionWordLength: this.surfaceResourceOwner?.correctionWordLength || 0,
+        shoreLineVertexCount: this.shoreLineVertexCount,
+        smoothShoreLineVertexCount: this.gpuResidentSmoothShoreLineVertices.length / 6,
+        hardShoreLineVertexCount: this.gpuResidentHardShoreLineVertices.length / 6,
+        binding: surfaceBinding
       },
       routeVertexCount: this.routeVertexCount,
       routeTriangleCount: this.routeVertexCount / 3,
@@ -6419,17 +6450,6 @@ function emptyShoreSurfaceVertexLayers() {
     waterCovers: new Float32Array(),
     cellRanges: emptyShoreSurfaceCellRanges()
   };
-}
-
-function gpuResidentShoreSurfaceKey(colorMode, viewOptions) {
-  return JSON.stringify([
-    colorMode,
-    Boolean(viewOptions?.showOceanHeight),
-    viewOptions?.visualTheme?.id || "default",
-    viewOptions?.visualTheme?.water?.fill || null,
-    viewOptions?.visualTheme?.land?.fill || null,
-    viewOptions?.visualTheme?.terrain?.heightRamp || null
-  ]);
 }
 
 function gpuResidentShoreSurfaceOwnerKey(binding) {

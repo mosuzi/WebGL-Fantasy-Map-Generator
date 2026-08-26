@@ -43,6 +43,7 @@ import {
   createRenderCacheResourceBindingEntries,
   renderCacheResourceBindingMismatch
 } from "./render-cache-resource-binding.js";
+import {assertPreparedDisplayIntent} from "./prepared-display-intent.js";
 
 const FLOATS_PER_VERTEX = 6;
 const DEFAULT_UPLOAD_SLICE_BYTES = 256 * 1024;
@@ -55,6 +56,11 @@ export async function prepareRendererWorkerInstall(renderer, map, prepared, opti
   const inputBinding = options.binding || prepared.binding;
   assertRenderPreparationBinding(prepared, inputBinding);
   const binding = normalizeRenderResourceBinding(inputBinding, "preparedInstall.binding");
+  assertPreparedDisplayIntent(prepared.presentation?.display, {
+    binding,
+    colorMode: renderer.colorMode,
+    viewOptions: renderer.viewOptions
+  }, binding, {required: options.requireDisplayIntent === true});
   assertRenderBindingLatest(renderer, binding);
   const signal = options.signal || null;
   const gate = createInstallGate(options);

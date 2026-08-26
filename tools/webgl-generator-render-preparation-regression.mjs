@@ -121,6 +121,9 @@ const actual = await executeRenderPreparationTask({map, binding, camera, canvas,
 });
 
 assertRenderPreparationBinding(actual, binding);
+assert.equal(actual.presentation.display.colorMode, "height", "prepared render 必须携带颜色模式显示意图");
+assert.equal(actual.presentation.display.smoothCellBorders, true, "prepared render 必须携带平滑边界显示意图");
+assert.ok(actual.presentation.display.fingerprint, "prepared render 必须携带不可空显示指纹");
 assert.deepEqual(actual.layers.route.drawRanges, expected.route.drawRanges);
 assert.deepEqual(actual.layers.route.stats, expected.route.stats);
 assert.deepEqual(actual.layers.river.stats, expected.river.stats);

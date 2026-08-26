@@ -740,6 +740,9 @@ export function updateRuntimePanel(documentRef, state) {
     statRow(documentRef, "单元格边界", stats.cellSurfaceMode === "visual-cells" ? "平滑" : "硬边界"),
     statRow(documentRef, "地图边缘渐隐", stats.viewOptions?.mapEdgeFade === false ? "关闭" : "开启"),
     statRow(documentRef, "边界线来源", formatBoundaryLineMode(stats.boundaryLineMode)),
+    statRow(documentRef, "边界资源", stats.boundaryPresentation?.canonical
+      ? `${stats.boundaryPresentation.state} / canonical`
+      : `${stats.boundaryPresentation?.state || "unknown"} / mismatch`),
     statRow(documentRef, "图层", formatLayerVisibility(stats.layerVisibility)),
     statRow(documentRef, "GPU 顶点", stats.vertexCount),
     statRow(documentRef, "道路三角形", stats.routeTriangleCount),

@@ -34,6 +34,7 @@ import {OBJECT_PICKING_COMPONENTS} from "./picking.js";
 import {normalizeUnitPreferences} from "../ui/display-units.js";
 import {createRenderContext} from "./render-context.js";
 import {compactSurfaceBaseGeometry} from "./surface-base-buffer-set.js";
+import {createPreparedDisplayIntent} from "./prepared-display-intent.js";
 import {
   normalizeRenderResourceBinding,
   sameRenderResourceBinding,
@@ -132,7 +133,8 @@ export async function executeRenderPreparationTask(payload = {}, context = {}) {
     binding: envelopeBinding,
     presentation: {
       unitPreferences: normalizeUnitPreferences(payload.unitPreferences || {}),
-      politicalMeshDebugMode: normalizePoliticalMeshDebugMode(payload.politicalMeshDebugMode)
+      politicalMeshDebugMode: normalizePoliticalMeshDebugMode(payload.politicalMeshDebugMode),
+      display: createPreparedDisplayIntent(payload, binding)
     },
     layers: {}
   };

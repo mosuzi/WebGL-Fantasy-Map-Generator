@@ -31,6 +31,7 @@ import {normalizeAtmosphereDirection, normalizeClimateLatitudeMode, normalizeWin
 import {createRandom, createRandomSeed} from "../generator/random.js";
 import {PlaceholderMapRenderer} from "../renderer/placeholder-renderer.js";
 import {prepareRendererWorkerInstall} from "../renderer/prepared-render-installer.js";
+import {assertMatchingPreparedDisplayIntents} from "../renderer/prepared-display-intent.js";
 import {assertRenderPreparationBinding, RENDER_PREPARATION_LAYERS, renderPreparationLayersForRegeneration, renderPreparationPickingComponentsForRegeneration} from "../renderer/render-preparation.js";
 import {createRenderRequestSourceBinding, createRenderResourceBinding, sameRenderResourceBinding} from "../renderer/render-resource-binding.js";
 import {
@@ -5056,6 +5057,7 @@ async function loadMapIntoRuntime(state, documentRef, map, {
         resetViewport: true,
         rebuildPickingFromMap: true,
         deferOverlayLayout: true,
+        requireDisplayIntent: true,
         onProgress: (stage, detail = {}) => {
           installProfile.stages.push({stage, at: performance.now(), completed: detail.completed ?? null, total: detail.total ?? null});
           operation?.report("prepare-map-render", {...detail, message: "正在准备地图画面"});
@@ -6162,6 +6164,7 @@ function mergeParallelMapImportPreparedRender(primary, secondary) {
     error.code = "worker_protocol_parallel_render_invalid";
     throw error;
   }
+  assertMatchingPreparedDisplayIntents(primary.presentation?.display, secondary.presentation?.display);
   const primaryLayers = {...primary.layers};
   delete primaryLayers.shoreSurface;
   const line = {
@@ -6178,7 +6181,8 @@ function mergeParallelMapImportPreparedRender(primary, secondary) {
     landCovers: shoreSurface.landCovers,
     waterCovers: shoreSurface.waterCovers,
     shoreSurfaceCellRanges: shoreSurface.cellRanges,
-    shoreSurfaceEnabled: true
+    smoothShoreSurfaceKey: primary.presentation.display.shoreSurfaceKey,
+    shoreSurfaceEnabled: primary.presentation.display.smoothCellBorders
   };
   return {
     ...primary,
