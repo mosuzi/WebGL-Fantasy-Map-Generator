@@ -503,7 +503,7 @@ function renderLoadTrace(documentRef, trace) {
     return;
   }
 
-  const items = trace.slice(-14).reverse().map(event => {
+  const items = trace.slice(-30).reverse().map(event => {
     const item = documentRef.createElement("li");
     item.textContent = formatLoadTraceEvent(event);
     return item;

@@ -10,7 +10,7 @@ import {
 } from "./placeholder-renderer.js";
 import {buildLabelLayoutDescriptors} from "./label-layout-descriptor.js";
 import {buildCellVisualBoundaryMesh, buildCellVisualMesh} from "./cell-visual-layer.js";
-import {buildShoreVisualPaths} from "./shore-layer.js";
+import {buildShoreSurfaceVertexLayers, buildShoreVisualPaths} from "./shore-layer.js";
 import {
   PROVINCE_VISUAL_STYLE,
   STATE_VISUAL_STYLE,
@@ -32,6 +32,8 @@ import {
 import {buildObjectPickingDto} from "./picking-dto.js";
 import {OBJECT_PICKING_COMPONENTS} from "./picking.js";
 import {normalizeUnitPreferences} from "../ui/display-units.js";
+import {createRenderContext} from "./render-context.js";
+import {compactSurfaceBaseGeometry} from "./surface-base-buffer-set.js";
 import {
   normalizeRenderResourceBinding,
   sameRenderResourceBinding,
@@ -43,6 +45,7 @@ export const RENDER_PREPARATION_SCHEMA_VERSION = 1;
 export const RENDER_PREPARATION_LAYERS = Object.freeze([
   "cell-visual",
   "shore",
+  "shore-surface",
   "state-paths",
   "province-paths",
   "political",
@@ -158,19 +161,21 @@ export async function executeRenderPreparationTask(payload = {}, context = {}) {
         transferMode: payload.cellVisualTransferMode
       });
     } else if (layer === "shore") {
-      cache.shore ||= payload.caches?.shore
-        ? unpackShoreVisualPaths(payload.caches.shore, binding)
-        : buildShoreVisualPaths(map);
+      ensureShoreCache(map, binding, payload.caches, cache);
       result.layers.shore = packShoreVisualPaths(cache.shore, binding);
+    } else if (layer === "shore-surface") {
+      ensureShoreCache(map, binding, payload.caches, cache);
+      result.layers.shoreSurface = buildShoreSurfaceVertexLayers(
+        createRenderContext(map),
+        payload.colorMode || "height",
+        payload.viewOptions || {},
+        cache.shore
+      );
     } else if (layer === "state-paths") {
-      cache.statePaths ||= payload.caches?.statePaths
-        ? unpackPoliticalVisualPaths(payload.caches.statePaths, binding)
-        : buildStateVisualPaths(map);
+      ensureStatePathsCache(map, binding, payload.caches, cache);
       result.layers.statePaths = packPoliticalVisualPaths(cache.statePaths, binding, "state");
     } else if (layer === "province-paths") {
-      cache.provincePaths ||= payload.caches?.provincePaths
-        ? unpackPoliticalVisualPaths(payload.caches.provincePaths, binding)
-        : buildProvinceVisualPaths(map);
+      ensureProvincePathsCache(map, binding, payload.caches, cache);
       result.layers.provincePaths = packPoliticalVisualPaths(cache.provincePaths, binding, "province");
     } else if (layer === "political") {
       const prepared = ensureRenderCaches(map, binding, payload.caches, cache, payload);
@@ -182,7 +187,16 @@ export async function executeRenderPreparationTask(payload = {}, context = {}) {
         vertices: politicalMeshDebugCache(political, debugMode)?.vertices || new Float32Array()
       };
     } else if (layer === "surface") {
-      const prepared = ensureRenderCaches(map, binding, payload.caches, cache, payload);
+      ensureCellVisualCache(map, binding, payload.caches, cache, {
+        boundaryOnly: payload.cellVisualGeometryMode === "boundary-only"
+      });
+      const coreOnly = payload.surfaceComposition === "core";
+      if (!coreOnly) ensureShoreCache(map, binding, payload.caches, cache);
+      const needsStatePaths = !coreOnly || String(payload.colorMode || "height") === "states";
+      const needsProvincePaths = !coreOnly || String(payload.colorMode || "height") === "provinces";
+      if (needsStatePaths) ensureStatePathsCache(map, binding, payload.caches, cache);
+      if (needsProvincePaths) ensureProvincePathsCache(map, binding, payload.caches, cache);
+      const prepared = cache;
       if (payload.surfacePatchScope === "all" || payload.surfacePatchScope === "water") {
         result.layers.surface = buildPlaceholderSurfaceColorPatch(
           map,
@@ -193,17 +207,22 @@ export async function executeRenderPreparationTask(payload = {}, context = {}) {
           payload.surfacePatchScope
         );
       } else {
-        const political = ensurePoliticalMeshes(map, prepared, payload);
-        result.layers.surface = buildPlaceholderSurfaceBundle(
+        const political = !coreOnly || String(payload.colorMode || "height") === "states" || String(payload.colorMode || "height") === "provinces"
+          ? ensurePoliticalMeshes(map, prepared, payload)
+          : emptyPoliticalVisualMeshes();
+        const surface = buildPlaceholderSurfaceBundle(
           map,
           payload.colorMode || "height",
           payload.viewOptions || {},
-          prepared.shore,
+          coreOnly ? null : prepared.shore,
           prepared.statePaths,
           prepared.provincePaths,
           political,
           prepared.cellVisual
         );
+        result.layers.surface = payload.surfaceTransferMode === "gpu-resident-compact"
+          ? compactPreparedSurface(surface)
+          : surface;
       }
     } else if (layer === "gpu-shore-surface") {
       cache.shore ||= payload.caches?.shore
@@ -216,7 +235,18 @@ export async function executeRenderPreparationTask(payload = {}, context = {}) {
         cache.shore
       );
     } else if (layer === "line") {
-      const prepared = ensureRenderCaches(map, binding, payload.caches, cache, payload);
+      const lineComposition = String(payload.lineComposition || "all");
+      if (lineComposition !== "core") ensureShoreCache(map, binding, payload.caches, cache);
+      if (lineComposition !== "shore") {
+        ensureStatePathsCache(map, binding, payload.caches, cache);
+        ensureProvincePathsCache(map, binding, payload.caches, cache);
+      }
+      if (lineComposition !== "core" && (payload.viewOptions?.smoothCellBorders === false || !cache.shore?.topology)) {
+        ensureCellVisualCache(map, binding, payload.caches, cache, {
+          boundaryOnly: payload.cellVisualGeometryMode === "boundary-only"
+        });
+      }
+      const prepared = cache;
       const line = buildLineVertices(
         map,
         payload.visibility || {},
@@ -227,7 +257,10 @@ export async function executeRenderPreparationTask(payload = {}, context = {}) {
         prepared.cellVisual,
         payload.viewOptions || {},
         new Set((payload.oceanCurrentHighlightIds || []).map(String)),
-        {currentShoreOnly: payload.lineResidentMode === "current-shore-only"}
+        {
+          currentShoreOnly: payload.lineResidentMode === "current-shore-only",
+          composition: lineComposition
+        }
       );
       result.layers.line = {
         vertices: line.vertices,
@@ -358,6 +391,33 @@ function ensureRenderCaches(map, binding, input = {}, cache = {}, payload = {}) 
   cache.statePaths ||= input?.statePaths ? unpackPoliticalVisualPaths(input.statePaths, binding) : buildStateVisualPaths(map);
   cache.provincePaths ||= input?.provincePaths ? unpackPoliticalVisualPaths(input.provincePaths, binding) : buildProvinceVisualPaths(map);
   return cache;
+}
+
+function ensureShoreCache(map, binding, input = {}, cache = {}) {
+  cache.shore ||= input?.shore ? unpackShoreVisualPaths(input.shore, binding) : buildShoreVisualPaths(map);
+  return cache.shore;
+}
+
+function ensureStatePathsCache(map, binding, input = {}, cache = {}) {
+  cache.statePaths ||= input?.statePaths ? unpackPoliticalVisualPaths(input.statePaths, binding) : buildStateVisualPaths(map);
+  return cache.statePaths;
+}
+
+function ensureProvincePathsCache(map, binding, input = {}, cache = {}) {
+  cache.provincePaths ||= input?.provincePaths ? unpackPoliticalVisualPaths(input.provincePaths, binding) : buildProvinceVisualPaths(map);
+  return cache.provincePaths;
+}
+
+function compactPreparedSurface(surface) {
+  const geometry = compactSurfaceBaseGeometry(surface.base, surface.surfaceCellRanges);
+  const result = {
+    ...surface,
+    mode: "gpu-resident-compact",
+    geometry,
+    sourceFloatLength: surface.base.length
+  };
+  delete result.base;
+  return result;
 }
 
 function ensureCellVisualCache(map, binding, input = {}, cache = {}, {boundaryOnly = false, requireFull = false} = {}) {

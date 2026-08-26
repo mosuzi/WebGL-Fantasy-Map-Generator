@@ -5,6 +5,7 @@ import {
   inspectWebfmgV3Container
 } from "./webfmg-v3-container.js";
 import {applyMainThreadMapProjection} from "./main-thread-map-projection.js";
+import {migrateMapDocument} from "./map-file-io.js";
 
 export const MAP_ADOPTION_HANDOFF_KIND = "map-adoption-v3-sections";
 export const MAP_ADOPTION_HANDOFF_CHUNK_BYTES = 256 * 1024;
@@ -24,16 +25,21 @@ export function createCanonicalMapAdoptionPackage(document) {
   };
 }
 
-export function createParsedMapAdoptionPackage(document) {
-  const bytes = encodeWebfmgV3Document(document);
+export function createParsedMapAdoptionPackage(document, options = {}) {
+  const sourceBytes = options.adoptionBytes;
+  const bytes = sourceBytes instanceof Uint8Array
+    ? sourceBytes
+    : encodeWebfmgV3Document(document);
   applyMainThreadMapProjection(document.map);
   return {
     document,
-    handoff: createMapAdoptionHandoffFromBytes(bytes)
+    handoff: createMapAdoptionHandoffFromBytes(bytes, {
+      migrateOnMaterialize: sourceBytes instanceof Uint8Array
+    })
   };
 }
 
-function createMapAdoptionHandoffFromBytes(bytes) {
+function createMapAdoptionHandoffFromBytes(bytes, options = {}) {
   const container = inspectWebfmgV3Container(bytes);
   return {
     kind: MAP_ADOPTION_HANDOFF_KIND,
@@ -41,7 +47,8 @@ function createMapAdoptionHandoffFromBytes(bytes) {
     byteLength: bytes.byteLength,
     chunks: splitBytes(bytes),
     sections: container.sections,
-    schemaVersion: container.schemaVersion
+    schemaVersion: container.schemaVersion,
+    migrateOnMaterialize: options.migrateOnMaterialize === true
   };
 }
 
@@ -59,7 +66,7 @@ export async function materializeMapAdoptionHandoff(handoff, options = {}) {
   }
   const yieldToMain = typeof options.yieldToMain === "function" ? options.yieldToMain : defaultYield;
   try {
-    const document = await decodeWebfmgV3DocumentChunksAsync(handoff.chunks, {
+    let document = await decodeWebfmgV3DocumentChunksAsync(handoff.chunks, {
       ...options,
       byteLength,
       expectedSections: Number(handoff.sections),
@@ -67,6 +74,7 @@ export async function materializeMapAdoptionHandoff(handoff, options = {}) {
       consumeChunks: true,
       yieldToMain
     });
+    if (handoff.migrateOnMaterialize === true) document = migrateMapDocument(document);
     applyMainThreadMapProjection(document.map);
     return document;
   } finally {
@@ -77,7 +85,7 @@ export async function materializeMapAdoptionHandoff(handoff, options = {}) {
 function splitBytes(bytes) {
   const chunks = [];
   for (let offset = 0; offset < bytes.byteLength; offset += MAP_ADOPTION_HANDOFF_CHUNK_BYTES) {
-    chunks.push(bytes.slice(offset, Math.min(bytes.byteLength, offset + MAP_ADOPTION_HANDOFF_CHUNK_BYTES)));
+    chunks.push(bytes.subarray(offset, Math.min(bytes.byteLength, offset + MAP_ADOPTION_HANDOFF_CHUNK_BYTES)));
   }
   return chunks.length ? chunks : [new Uint8Array(0)];
 }

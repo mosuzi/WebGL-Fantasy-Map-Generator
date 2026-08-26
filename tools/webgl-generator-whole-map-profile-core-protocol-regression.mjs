@@ -6,7 +6,8 @@ import {fingerprintPopulationSource} from "../app/webgl-generator/src/runtime/po
 import {runGenerationWorkerTask} from "../app/webgl-generator/src/runtime/generation-worker-task.js";
 import {createHeadlessWriteSession} from "../app/webgl-generator/src/runtime/headless-write-api.js";
 import {materializeMapAdoptionHandoff} from "../app/webgl-generator/src/runtime/map-adoption-handoff.js";
-import {stringifyMapDocument} from "../app/webgl-generator/src/runtime/map-file-io.js";
+import {parseMapDocument, stringifyMapDocument} from "../app/webgl-generator/src/runtime/map-file-io.js";
+import {applyMainThreadMapProjection} from "../app/webgl-generator/src/runtime/main-thread-map-projection.js";
 import {runMapFileIoWorkerTask} from "../app/webgl-generator/src/runtime/map-file-io-worker-task.js";
 import {normalizeMapForRuntimeAdoption} from "../app/webgl-generator/src/runtime/map-runtime-adoption.js";
 import {
@@ -66,6 +67,34 @@ assertCanonicalAdoptionPopulationSource(retainedImportMap, importedDocument.map,
 assert.equal(importReceipt.checksum, exportReceipt.checksum);
 assert.equal(importReceipt.binding.documentId, exportReceipt.binding.documentId);
 
+let retainedExternalCanonicalMap = null;
+const externalCanonicalImport = await runMapFileIoWorkerTask({
+  operation: "import",
+  input: exported.data,
+  omitAdoptionHandoff: true
+}, {
+  binding,
+  checkpoint() {},
+  adoptMap(map) { retainedExternalCanonicalMap = map; }
+});
+validateWholeMapAdoptionEnvelope({
+  profile: "persistence-import",
+  binding,
+  output: externalCanonicalImport,
+  externalCanonical: true
+});
+assert.equal(externalCanonicalImport.handoff, null);
+assert.equal(externalCanonicalImport.canonicalDocumentMode, "parallel-main-decode");
+const externalCanonicalDocument = parseMapDocument(exported.data);
+applyMainThreadMapProjection(externalCanonicalDocument.map);
+normalizeMapForRuntimeAdoption(externalCanonicalDocument.map);
+validateWholeMapAdoptionDocument({
+  profile: "persistence-import",
+  metadata: externalCanonicalImport.metadata,
+  document: externalCanonicalDocument
+});
+assertCanonicalAdoptionPopulationSource(retainedExternalCanonicalMap, externalCanonicalDocument.map, "external canonical import");
+
 const legacy = structuredClone(importedDocument);
 legacy.version = 1;
 delete legacy.metadata.documentId;
@@ -94,9 +123,11 @@ function assertCanonicalAdoptionPopulationSource(workerMap, mainMap, label) {
     adoptionAliasProfile(mainMap),
     `${label} adoption commit 前 Worker / 主线程镜像拓扑不一致`
   );
-  assert.equal(
-    stringifyMapDocument({map: workerMap}),
-    stringifyMapDocument({map: mainMap}),
+  const workerText = stringifyMapDocument({map: workerMap});
+  const mainText = stringifyMapDocument({map: mainMap});
+  assert.deepEqual(
+    JSON.parse(workerText),
+    JSON.parse(mainText),
     `${label} adoption commit 前 Worker / 主线程 canonical 值不一致`
   );
 }
@@ -209,8 +240,10 @@ const generationFlow = appSource.slice(appSource.indexOf("async function generat
 assert.ok(generationFlow.indexOf("validateWholeMapAdoptionEnvelope") < generationFlow.indexOf("materializeMapAdoptionHandoff"), "生成必须先验 envelope 再解包");
 assert.ok(generationFlow.indexOf("materializeMapAdoptionHandoff") < generationFlow.indexOf("validateWholeMapAdoptionDocument"), "生成必须在解包后核对文档回执");
 const importFlow = appSource.slice(appSource.indexOf("async function parseMapDocumentViaWorker"), appSource.indexOf("function storageClock"));
-assert.ok(importFlow.indexOf("validateWholeMapAdoptionEnvelope") < importFlow.indexOf("materializeMapAdoptionHandoff"), "导入必须先验 envelope 再解包");
-assert.ok(importFlow.indexOf("materializeMapAdoptionHandoff") < importFlow.indexOf("validateWholeMapAdoptionDocument"), "导入必须在解包后核对文档回执");
+assert.ok(importFlow.indexOf("parseMapDocumentPayloadAsync") < importFlow.indexOf("validateWholeMapAdoptionEnvelope"), "导入必须并行启动主线程 canonical 解析");
+assert.ok(importFlow.indexOf("validateWholeMapAdoptionEnvelope") < importFlow.indexOf("validateWholeMapAdoptionDocument"), "导入必须先验 envelope 再核对外部 canonical 文档");
+assert.match(importFlow, /omitAdoptionHandoff:\s*true/u, "导入 Worker 不得重复编码 canonical handoff");
+assert.match(importFlow, /externalCanonical:\s*true/u, "导入必须显式声明外部 canonical 文档契约");
 const exportFlow = appSource.slice(appSource.indexOf("async function exportMapArchiveViaWorker"), appSource.indexOf("async function parseMapDocumentViaWorker"));
 assert.ok(exportFlow.indexOf("validateWholeMapExportResult") < exportFlow.indexOf("commitRegenerationWorkerSession"), "导出必须在 session commit 前校验整图回执");
 assert.match(generationFlow, /catch \(error\)[\s\S]*invalidatePendingWholeMapWorkerSession\(state, output, "generation-adoption-preload-failed"\)/u, "生成 preload 失败必须释放 pending session");

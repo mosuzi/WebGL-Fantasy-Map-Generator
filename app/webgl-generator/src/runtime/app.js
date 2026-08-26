@@ -95,10 +95,11 @@ import {EditHistory} from "./edit-history.js";
 import {MapRevisionTracker} from "./map-revision.js";
 import {getPublicMapTemplate, listPublicMapTemplates, prepareMapTemplateGeneration} from "./map-template-runtime.js";
 import {createGrayscaleHeightmapFromImage, createPaletteHeightmapFromImage, normalizeHeightmapImportPayload} from "./heightmap-import.js";
-import {downloadBlob, downloadText, mapFileBaseName, normalizeGeoJsonExportRange, parseGeoJsonMeasurements} from "./map-file-io.js";
+import {downloadBlob, downloadText, mapFileBaseName, normalizeGeoJsonExportRange, parseGeoJsonMeasurements, parseMapDocumentPayloadAsync} from "./map-file-io.js";
 import {prepareMapFileIoWorkerPayload} from "./map-file-io-worker-client.js";
 import {MAP_FILE_IO_WORKER_OPERATIONS, MAP_FILE_IO_WORKER_TASK_TYPE} from "./map-file-io-worker-task.js";
 import {materializeMapAdoptionHandoff} from "./map-adoption-handoff.js";
+import {applyMainThreadMapProjection} from "./main-thread-map-projection.js";
 import {normalizeMapForRuntimeAdoption} from "./map-runtime-adoption.js";
 import {
   validateWholeMapAdoptionDocument,
@@ -679,6 +680,8 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     mapWorkerCoordinator: null,
     workerTaskCoordinator: null,
     renderTaskCoordinator: null,
+    prewarmedComputeWorkers: [],
+    computeWorkerPrewarmHandle: null,
     viewPrewarmScheduler: null,
     viewPrewarmStats: null,
     operationFeedback: null,
@@ -2743,7 +2746,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     }
   });
   state.mapWorkerCoordinator = createWorkerTaskCoordinator({
-    createWorker: () => new ComputeWorker(),
+    createWorker: () => takePrewarmedComputeWorker(state),
     getBinding: () => createRegenerationWorkerBinding(state),
     validateBinding: binding => validateRegenerationWorkerBinding(state, binding),
     beforeRun: () => state.mapReplicaPatchQueue,
@@ -3083,6 +3086,33 @@ function invalidateMapReplicaCoordinators(state, includeCompute, reason) {
   (state?.mapWorkerCoordinator || state?.workerTaskCoordinator)?.invalidateSession?.(reason);
 }
 
+function takePrewarmedComputeWorker(state) {
+  const worker = state.prewarmedComputeWorkers?.shift?.();
+  return worker || new ComputeWorker();
+}
+
+function scheduleComputeWorkerPrewarm(state, documentRef) {
+  if (!state?.map || state.prewarmedComputeWorkers?.length >= 2 || state.computeWorkerPrewarmHandle) return false;
+  const view = documentRef.defaultView || window;
+  const prewarm = () => {
+    state.computeWorkerPrewarmHandle = null;
+    if (!state.map) return;
+    while (state.prewarmedComputeWorkers.length < 2) {
+      try {
+        state.prewarmedComputeWorkers.push(new ComputeWorker());
+      } catch {
+        break;
+      }
+    }
+  };
+  if (typeof view.requestIdleCallback === "function") {
+    state.computeWorkerPrewarmHandle = {kind: "idle", id: view.requestIdleCallback(prewarm, {timeout: 1000})};
+  } else {
+    state.computeWorkerPrewarmHandle = {kind: "timeout", id: view.setTimeout(prewarm, 0)};
+  }
+  return true;
+}
+
 function scheduleGpuViewPrewarm(state, documentRef) {
   const scheduler = state?.viewPrewarmScheduler;
   if (!scheduler || !state?.map || !state?.renderer || state.runtimeOperationSnapshot?.busy) return false;
@@ -3264,6 +3294,9 @@ function createRuntimeActions(state, documentRef, options = {}) {
     const config = {
       message,
       loading: false,
+      // 整图替换由 loading / load-stage / LongTask 三套门分别监控；
+      // 不能再把 Worker 等待的整段墙钟当成一次同步 operation stall。
+      measureHealthOperation: false,
       snapshot: async context => {
         mapReplaceOperationId = context.id;
         loadingOwner = `map-replace:${context.id}`;
@@ -5010,24 +5043,40 @@ async function loadMapIntoRuntime(state, documentRef, map, {
       beginPendingMapAdoptionLoad(state, workerAdoption, renderBinding || preparedRender?.binding);
     }
     normalizeMapForRuntimeAdoption(map);
-    if (preparedRender) {
+  if (preparedRender) {
     operation?.report("prepare-map-render", {message: "正在准备地图画面"});
     const installProfile = {startedAt: performance.now(), stages: []};
     state.lastPreparedMapInstallProfile = installProfile;
+    emitLoadTrace(documentRef, {phase: "start", id: "prepared-install", message: "安装首屏资源"});
     try {
       preparedInstall = await prepareRendererWorkerInstall(state.renderer, map, preparedRender, {
         binding: renderBinding || preparedRender.binding,
         signal: operation?.signal || null,
         isCurrent,
         resetViewport: true,
+        rebuildPickingFromMap: true,
         deferOverlayLayout: true,
         onProgress: (stage, detail = {}) => {
           installProfile.stages.push({stage, at: performance.now(), completed: detail.completed ?? null, total: detail.total ?? null});
           operation?.report("prepare-map-render", {...detail, message: "正在准备地图画面"});
-        }
+        },
+        onProfile: isLoadTraceEnabled(documentRef)
+          ? (stage, detail = {}) => emitLoadTrace(documentRef, {
+            phase: "metric",
+            id: `prepared-install:${stage}`,
+            message: `安装首屏资源：${stage}`,
+            ms: detail.ms
+          })
+          : null
       });
     } finally {
       installProfile.endedAt = performance.now();
+      emitLoadTrace(documentRef, {
+        phase: "end",
+        id: "prepared-install",
+        message: "安装首屏资源",
+        ms: installProfile.endedAt - installProfile.startedAt
+      });
     }
   }
   if (preparedInstall) {
@@ -5206,6 +5255,7 @@ async function loadMapIntoRuntime(state, documentRef, map, {
   showMapToast(documentRef, completionToast);
   scheduleLazyPanelsAfterMapReady(state, documentRef);
   scheduleGpuViewPrewarm(state, documentRef);
+  scheduleComputeWorkerPrewarm(state, documentRef);
   const installFinalization = finalizeCommittedMapAdoptionInstall(preparedInstall);
   if (installFinalization.error) {
     state.healthMonitor?.record?.("map-adoption-finalize-failed", {message: installFinalization.error?.message || String(installFinalization.error)}, "warning");
@@ -5237,6 +5287,7 @@ function refreshRuntimeAfterMapLoad(state, documentRef, {restorePanels = false} 
 async function refreshRuntimeAfterMapLoadAsync(state, documentRef, {restorePanels = false, operation = null, isCurrent = null} = {}) {
   const profile = [];
   state.lastRuntimeRefreshProfile = profile;
+  let lastYieldAt = performance.now();
   for (const entry of runtimeAfterMapLoadGroups(state, documentRef, restorePanels)) {
     operation?.throwIfCancelled?.();
     if (typeof isCurrent === "function" && isCurrent() !== true) {
@@ -5248,7 +5299,10 @@ async function refreshRuntimeAfterMapLoadAsync(state, documentRef, {restorePanel
     profile.push(sample);
     entry.run();
     sample.syncEndedAt = performance.now();
-    await yieldToBrowser(documentRef);
+    if (sample.syncEndedAt - lastYieldAt >= 8) {
+      await yieldToBrowser(documentRef);
+      lastYieldAt = performance.now();
+    }
     sample.endedAt = performance.now();
   }
 }
@@ -5948,13 +6002,15 @@ async function parseMapDocumentViaWorker(state, documentRef, input, {operation =
   // 首屏已经由 surface / line 使用 Worker 内的 cell visual cache 完整生成；
   // 34MB 左右的编辑期三角缓存改为后续真正需要 surface 重建时再交接，避免阻塞存档进入可交互状态。
   const render = createWorkerRegenerationRenderRequest(state, "generation", renderBinding, [...INITIAL_MAP_IMPORT_RENDER_LAYERS]);
-  render.cellVisualGeometryMode = "boundary-only";
-  render.linePathTransferMode = "reuse-shore-vertices";
-  render.lineResidentMode = "current-shore-only";
-  render.camera = {scale: 1, offsetX: 0, offsetY: 0};
-  render.selection = null;
-  render.objectHighlights = [];
-  render.oceanCurrentHighlightIds = [];
+  Object.assign(render, {
+    cellVisualGeometryMode: "boundary-only",
+    linePathTransferMode: "reuse-shore-vertices",
+    lineResidentMode: "current-shore-only",
+    camera: {scale: 1, offsetX: 0, offsetY: 0},
+    selection: null,
+    objectHighlights: [],
+    oceanCurrentHighlightIds: []
+  });
   const prepared = await prepareMapFileIoWorkerPayload({
     operation: MAP_FILE_IO_WORKER_OPERATIONS.IMPORT,
     input,
@@ -5967,48 +6023,173 @@ async function parseMapDocumentViaWorker(state, documentRef, input, {operation =
     yieldToMain: () => yieldToBrowser(documentRef)
   });
   const requestBinding = beginPendingMapAdoptionBindingOwner(state, {kind: "import", targetMapIdentity: renderBinding.mapIdentity, operation});
+  const secondaryCoordinator = createWorkerTaskCoordinator({
+    createWorker: () => takePrewarmedComputeWorker(state),
+    getBinding: () => requestBinding
+  });
+  const canonicalInput = clonePreparedMapImportInput(prepared.payload.input);
+  const secondaryInput = clonePreparedMapImportInput(prepared.payload.input);
+  const primaryRender = {
+    ...render,
+    layers: ["shore", "shore-surface", "line"],
+    lineComposition: "shore"
+  };
+  const secondaryRender = {
+    ...render,
+    layers: ["state-paths", "province-paths", "surface", "line", "picking", "labels", "route", "river", "point",
+      ...(render.politicalMeshDebugMode !== "none" ? ["political"] : [])],
+    lineComposition: "core",
+    surfaceComposition: "core",
+    surfaceTransferMode: "gpu-resident-compact"
+  };
+  const parallelDecodeStartedAt = currentLoadTraceTime(documentRef.defaultView || window);
+  const canonicalDocumentPromise = parseMapDocumentPayloadAsync(
+    documentRef,
+    unwrapPreparedMapImportInput(canonicalInput),
+    {budgetMs: 4, yieldToMain: () => yieldMapHandoffDecode(documentRef)}
+  ).then(document => {
+    applyMainThreadMapProjection(document.map);
+    return document;
+  });
   let output = null;
   try {
-    output = await state.workerTaskCoordinator.run(MAP_FILE_IO_WORKER_TASK_TYPE, prepared.payload, {
+    const primaryPromise = state.workerTaskCoordinator.run(MAP_FILE_IO_WORKER_TASK_TYPE, {
+      ...prepared.payload,
+      render: primaryRender,
+      omitAdoptionHandoff: true
+    }, {
       binding: requestBinding,
       signal: operation?.signal || null,
       sessionMode: "adopt-result-map",
       allowFallback: false,
+      readyTimeoutMs: 10000,
       onProgress: (stage, detail = {}) => operation?.report(stage, {
         ...detail,
         message: detail.message || (stage === "render-prepare" ? "正在准备地图画面" : "正在辨读地图存档")
       })
     });
+    const secondaryPromise = secondaryCoordinator.run(MAP_FILE_IO_WORKER_TASK_TYPE, {
+      ...prepared.payload,
+      input: secondaryInput,
+      render: secondaryRender,
+      renderOnly: true
+    }, {
+      binding: requestBinding,
+      signal: operation?.signal || null,
+      allowFallback: false,
+      readyTimeoutMs: 10000,
+      onProgress: (stage, detail = {}) => operation?.report(stage, {
+        ...detail,
+        message: detail.message || (stage === "render-prepare" ? "正在并行准备地图交互资源" : "正在并行辨读地图存档")
+      })
+    });
+    const [primaryOutput, secondaryOutput, document] = await Promise.all([
+      primaryPromise,
+      secondaryPromise,
+      canonicalDocumentPromise
+    ]);
+    output = primaryOutput;
     if (state.pendingMapImportId !== importId) {
       const error = new Error("地图导入结果已被新的请求取代");
       error.code = "operation_obsolete";
       throw error;
     }
+    validateParallelMapImportRenderResult(secondaryOutput, requestBinding, secondaryRender.binding);
     validateWholeMapAdoptionEnvelope({
       profile: "persistence-import",
       binding: requestBinding,
       output,
-      renderBinding
+      renderBinding,
+      externalCanonical: true
     });
     acceptPendingMapAdoptionWorkerResult(state, output, renderBinding);
-    const handoffDecodeStartedAt = currentLoadTraceTime(documentRef.defaultView || window);
-    const document = await materializeMapAdoptionHandoff(output.handoff, {yieldToMain: () => yieldMapHandoffDecode(documentRef)});
     validateWholeMapAdoptionDocument({profile: "persistence-import", metadata: output.metadata, document});
+    const preparedRender = mergeParallelMapImportPreparedRender(output.preparedRender, secondaryOutput.preparedRender);
+    output.handoff?.chunks?.fill?.(null);
     return {
       document,
-      preparedRender: output.preparedRender,
+      preparedRender,
       worker: output.worker || null,
       timings: {
         ...(output.timings || {}),
-        handoffDecodeMs: roundLoadTraceMs(currentLoadTraceTime(documentRef.defaultView || window) - handoffDecodeStartedAt)
+        handoffDecodeMs: 0,
+        parallelDecodeMs: roundLoadTraceMs(currentLoadTraceTime(documentRef.defaultView || window) - parallelDecodeStartedAt),
+        secondaryWorker: secondaryOutput.timings || null,
+        secondaryTelemetry: secondaryOutput.worker || null
       },
       source,
       isCurrent: () => state.pendingMapImportId === importId
     };
   } catch (error) {
+    secondaryCoordinator.invalidateSession?.("map-import-preload-failed");
     invalidatePendingWholeMapWorkerSession(state, output, "map-import-preload-failed");
     throw error;
   }
+}
+
+function clonePreparedMapImportInput(input) {
+  if (input?.kind === "bytes" && input.bytes instanceof Uint8Array) {
+    return {...input, bytes: input.bytes.slice()};
+  }
+  if (input?.kind === "text-chunks" && Array.isArray(input.chunks)) {
+    return {...input, chunks: [...input.chunks]};
+  }
+  return structuredClone(input);
+}
+
+function unwrapPreparedMapImportInput(input) {
+  if (input?.kind === "bytes") return input.bytes;
+  if (input?.kind === "text-chunks") return input.chunks.join("");
+  return input;
+}
+
+function validateParallelMapImportRenderResult(output, requestBinding, renderBinding) {
+  if (output?.kind !== "map-file-import-render-result"
+    || !sameRegenerationWorkerBinding(output.binding, requestBinding)
+    || !sameRenderResourceBinding(output.preparedRender?.binding, renderBinding)
+    || !output.preparedRender?.layers?.surface) {
+    const error = new Error("地图导入并行渲染结果无效");
+    error.code = "worker_protocol_parallel_render_invalid";
+    throw error;
+  }
+  return true;
+}
+
+function mergeParallelMapImportPreparedRender(primary, secondary) {
+  const shoreSurface = primary?.layers?.shoreSurface;
+  if (!primary?.layers || !secondary?.layers || !shoreSurface || !secondary.layers.surface) {
+    const error = new Error("地图导入并行渲染结果缺少 surface 分区");
+    error.code = "worker_protocol_parallel_render_invalid";
+    throw error;
+  }
+  const primaryLayers = {...primary.layers};
+  delete primaryLayers.shoreSurface;
+  const line = {
+    ...(secondary.layers.line || {}),
+    shoreVertices: primary.layers.line?.shoreVertices,
+    gpuResidentSmoothShoreVertices: primary.layers.line?.gpuResidentSmoothShoreVertices,
+    gpuResidentHardShoreVertices: primary.layers.line?.gpuResidentHardShoreVertices,
+    shorePathCache: primary.layers.line?.shorePathCache
+  };
+  const surface = {
+    ...secondary.layers.surface,
+    landCorrections: shoreSurface.landCorrections,
+    waterCorrections: shoreSurface.waterCorrections,
+    landCovers: shoreSurface.landCovers,
+    waterCovers: shoreSurface.waterCovers,
+    shoreSurfaceCellRanges: shoreSurface.cellRanges,
+    shoreSurfaceEnabled: true
+  };
+  return {
+    ...primary,
+    presentation: secondary.presentation || primary.presentation,
+    layers: {...primaryLayers, ...secondary.layers, line, surface},
+    cache: {
+      ...(primary.cache || {}),
+      ...(secondary.cache || {}),
+      reused: Boolean(primary.cache?.reused && secondary.cache?.reused)
+    }
+  };
 }
 
 function invalidatePendingWholeMapWorkerSession(state, output, reason) {
@@ -7219,7 +7400,14 @@ async function importMapDocumentViaApi(state, documentRef, document, options = {
   operation?.report("validate", {message: "正在校验地图导入参数"});
   if (options?.confirm !== true) throw new Error("导入完整地图会替换当前地图并清空编辑历史，需要显式传入 {confirm: true}");
   const source = options.source === "ui" ? "ui" : "api";
+  const sourceLabel = source === "ui" ? "" : "通过 API ";
+  resetLoadTrace(documentRef);
   state.lastMapImportDiagnostic = null;
+  clearFileOperationDetails(documentRef);
+  emitLoadTrace(documentRef, {phase: "request", id: `${source === "ui" ? "" : "api-"}map-import-read`, message: loadingMessage("map-import-read")});
+  emitLoadTrace(documentRef, {phase: "start", id: "map-import-prepare", message: "解析存档并准备首屏资源"});
+  setFileOperationStatus(documentRef, `正在${sourceLabel}导入地图数据...`);
+  setMythicGenerationLoading(documentRef, true, "map-import-read");
   state.pendingGenerateId = (state.pendingGenerateId || 0) + 1;
   let parsed;
   try {
@@ -7229,6 +7417,19 @@ async function importMapDocumentViaApi(state, documentRef, document, options = {
       source: options.source === "ui" ? "ui" : "api",
       sourceFile: options.sourceFile || (document instanceof Blob ? document : null)
     });
+    emitLoadTrace(documentRef, {
+      phase: "end",
+      id: "map-import-prepare",
+      message: "解析存档并准备首屏资源",
+      ms: parsed.timings?.parallelDecodeMs
+    });
+    for (const [id, timing] of [
+      ["map-import-primary-worker", parsed.timings],
+      ["map-import-secondary-worker", parsed.timings?.secondaryWorker]
+    ]) {
+      if (!Number.isFinite(timing?.totalMs)) continue;
+      emitLoadTrace(documentRef, {phase: "metric", id, message: id, ms: timing.totalMs});
+    }
   } catch (error) {
     if (!operation) updateGenerationLoading(documentRef, false);
     reportMapImportError(state, documentRef, error, source === "ui" ? document : null, {source, prefix: source === "ui" ? "地图数据导入失败" : "API 导入地图数据失败"});
@@ -7241,7 +7442,8 @@ async function importMapDocumentViaApi(state, documentRef, document, options = {
     renderBinding: parsed.preparedRender?.binding,
     isCurrent: parsed.isCurrent,
     worker: parsed.worker,
-    workerTimings: parsed.timings
+    workerTimings: parsed.timings,
+    traceStarted: true
   }, operation);
 }
 
@@ -7250,12 +7452,14 @@ async function importParsedMapDocumentViaApi(state, documentRef, document, optio
   const sourceLabel = source === "ui" ? "" : "通过 API ";
   const startedAt = currentLoadTraceTime(documentRef.defaultView || window);
   try {
-    resetLoadTrace(documentRef);
-    state.lastMapImportDiagnostic = null;
-    clearFileOperationDetails(documentRef);
-    emitLoadTrace(documentRef, {phase: "request", id: `${source === "ui" ? "" : "api-"}map-import-read`, message: loadingMessage("map-import-read")});
-    setFileOperationStatus(documentRef, `正在${sourceLabel}导入地图数据...`);
-    setMythicGenerationLoading(documentRef, true, "map-import-read");
+    if (options.traceStarted !== true) {
+      resetLoadTrace(documentRef);
+      state.lastMapImportDiagnostic = null;
+      clearFileOperationDetails(documentRef);
+      emitLoadTrace(documentRef, {phase: "request", id: `${source === "ui" ? "" : "api-"}map-import-read`, message: loadingMessage("map-import-read")});
+      setFileOperationStatus(documentRef, `正在${sourceLabel}导入地图数据...`);
+      setMythicGenerationLoading(documentRef, true, "map-import-read");
+    }
     const normalizedOptions = normalizeOptions(document.map.options || document.options || state.options);
     document.map.options = normalizedOptions;
     state.options = normalizedOptions;
@@ -7641,6 +7845,12 @@ function fileOperationFeedbackState(message) {
 }
 
 function reportMapImportError(state, documentRef, error, file, options = {}) {
+  if (isLoadTraceEnabled(documentRef) && error?.cause) {
+    const cause = error.cause;
+    documentRef.defaultView?.console?.error?.(
+      `[FMG import cause] ${String(cause.code || cause.name || "unknown")}: ${String(cause.message || cause)}`
+    );
+  }
   const diagnostic = createMapImportDiagnostic(error, file, {source: options.source});
   reportImportDiagnostic(state, documentRef, diagnostic, options.prefix || "地图数据导入失败");
 }

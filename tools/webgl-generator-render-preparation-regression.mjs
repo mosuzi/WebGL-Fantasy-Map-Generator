@@ -160,6 +160,63 @@ const secondSurface = await executeRenderPreparationTask({map, binding: presenta
 assert.equal(firstSurface.cache.reused, false, "同 revision 首次 surface 准备不得虚报复用");
 assert.equal(secondSurface.cache.reused, true, "同 revision 第二次 surface 准备必须复用渲染几何缓存");
 for (const [key, value] of Object.entries(retainedRefs)) assert.equal(retainedRenderCache[key], value, `同 revision 不得重建 ${key}`);
+const fullLine = buildLineVertices(
+  map,
+  visibility,
+  "height",
+  retainedRenderCache.shore,
+  retainedRenderCache.statePaths,
+  retainedRenderCache.provincePaths,
+  retainedRenderCache.cellVisual,
+  {smoothCellBorders: true},
+  new Set(),
+  {composition: "all"}
+);
+const shoreLine = buildLineVertices(
+  map,
+  visibility,
+  "height",
+  retainedRenderCache.shore,
+  null,
+  null,
+  retainedRenderCache.cellVisual,
+  {smoothCellBorders: true},
+  new Set(),
+  {composition: "shore"}
+);
+const coreLine = buildLineVertices(
+  map,
+  visibility,
+  "height",
+  null,
+  retainedRenderCache.statePaths,
+  retainedRenderCache.provincePaths,
+  null,
+  {smoothCellBorders: true},
+  new Set(),
+  {composition: "core"}
+);
+assert.equal(byteChecksum(coreLine.vertices), byteChecksum(fullLine.vertices), "core line 分区必须完整保留非岸线顶点");
+assert.equal(byteChecksum(coreLine.oceanCurrentVertices), byteChecksum(fullLine.oceanCurrentVertices), "core line 分区必须完整保留洋流顶点");
+assert.deepEqual(coreLine.oceanCurrents, fullLine.oceanCurrents, "core line 分区必须完整保留洋流统计");
+assert.equal(byteChecksum(shoreLine.shoreVertices), byteChecksum(fullLine.shoreVertices), "shore line 分区必须完整保留当前岸线顶点");
+assert.equal(byteChecksum(shoreLine.gpuResidentSmoothShoreVertices), byteChecksum(fullLine.gpuResidentSmoothShoreVertices), "shore line 分区必须完整保留平滑岸线常驻顶点");
+assert.equal(byteChecksum(shoreLine.gpuResidentHardShoreVertices), byteChecksum(fullLine.gpuResidentHardShoreVertices), "shore line 分区必须完整保留硬边岸线常驻顶点");
+assert.equal(shoreLine.shoreLinePathVertices.size, fullLine.shoreLinePathVertices.size, "shore line 分区必须完整保留岸线路径缓存");
+const compactSurface = await executeRenderPreparationTask({
+  map,
+  binding: presentationBinding,
+  camera,
+  canvas,
+  colorMode: "height",
+  surfaceTransferMode: "gpu-resident-compact",
+  layers: ["surface"]
+}, {renderCache: retainedRenderCache});
+assert.equal(compactSurface.layers.surface.mode, "gpu-resident-compact");
+assert.equal("base" in compactSurface.layers.surface, false, "compact surface 不得继续 transfer 完整交错 base");
+assert.ok(compactSurface.layers.surface.geometry instanceof Float32Array, "compact surface 必须 transfer 紧凑 geometry");
+assert.equal(compactSurface.layers.surface.geometry.length * 2, compactSurface.layers.surface.sourceFloatLength, "compact surface 几何长度必须能还原源 float 长度");
+assert.equal(compactSurface.layers.surface.sourceFloatLength, firstSurface.layers.surface.base.length, "compact surface 不得改变首屏三角形数量");
 const shorePrewarm = await executeRenderPreparationTask({
   map,
   binding: presentationBinding,

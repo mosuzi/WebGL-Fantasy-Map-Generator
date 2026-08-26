@@ -69,7 +69,7 @@ export function captureWholeMapPersistedIdentity(document) {
   return Object.freeze({documentId: identity.documentId, version: identity.version});
 }
 
-export function validateWholeMapAdoptionEnvelope({profile, binding, output, renderBinding = null}) {
+export function validateWholeMapAdoptionEnvelope({profile, binding, output, renderBinding = null, externalCanonical = false}) {
   const expectedKind = ADOPTION_RESULT_KIND[profile];
   if (!expectedKind) throw protocolError("whole-map-adoption-profile-invalid", `未知整图 adoption profile：${String(profile || "")}`);
   const expectedBinding = validateLegacyBinding(binding, "wholeMap.adoption.requestBinding");
@@ -79,7 +79,13 @@ export function validateWholeMapAdoptionEnvelope({profile, binding, output, rend
   if (Object.hasOwn(result, "map") || Object.hasOwn(result, "document") || Object.hasOwn(result, "replacementMap")) {
     throw protocolError("whole-map-adoption-full-document-leak", "整图 adoption 结果不得重复携带 map / document");
   }
-  validateAdoptionHandoff(result.handoff);
+  if (externalCanonical) {
+    if (result.canonicalDocumentMode !== "parallel-main-decode" || result.handoff !== null) {
+      throw protocolError("whole-map-adoption-canonical-mode-invalid", "整图 adoption 外部 canonical 文档契约无效");
+    }
+  } else {
+    validateAdoptionHandoff(result.handoff);
+  }
   validateDocumentMetadataShape(result.metadata, "wholeMap.adoption.output.metadata");
   validatePreparedRender(result.preparedRender, renderBinding);
   validateTimings(result.timings, "wholeMap.adoption.output.timings");

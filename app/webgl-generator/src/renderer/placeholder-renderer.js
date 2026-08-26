@@ -90,6 +90,7 @@ import {resizeCanvasToDisplaySize} from "./canvas-display-size.js";
 import {
   createSurfaceBaseBufferSet,
   createSurfaceBaseBufferSetAsync,
+  createSurfaceBaseBufferSetFromCompactGeometryAsync,
   createSurfaceResourceOwner,
   deleteSurfaceBaseBufferSet,
   fingerprintSurfaceCellRanges,
@@ -538,6 +539,8 @@ export class PlaceholderMapRenderer {
     this.surfaceHeightColorTableKey = "";
     this.vertexCount = 0;
     this.surfaceVertices = new Float32Array();
+    this.surfaceSourceFloatLength = 0;
+    this.surfaceCompactGeometry = new Float32Array();
     this.lineVertices = new Float32Array();
     this.shoreLineVertices = new Float32Array();
     this.oceanCurrentVertices = new Float32Array();
@@ -938,6 +941,7 @@ export class PlaceholderMapRenderer {
         assertRestoreCurrent();
         const surfaceOwner = createRendererSurfaceResourceOwner(this, map, {
           base: this.surfaceVertices,
+          sourceFloatLength: rendererSurfaceFloatLength(this),
           cellVisualCorrection: this.cellVisualCorrectionGeometry,
           surfaceCellRanges: this.surfaceCellRanges
         }, restoreBinding);
@@ -955,13 +959,19 @@ export class PlaceholderMapRenderer {
           this.gl.bufferData(this.gl.ARRAY_BUFFER, values, usage);
           await yieldToBrowser();
         };
-        installSurfaceBaseBufferSet(staged, await createSurfaceBaseBufferSetAsync(this.gl, this.surfaceVertices, {
+        const surfaceUploadOptions = {
           usage: this.gl.STATIC_DRAW,
           surfaceCellRanges: this.surfaceCellRanges,
           owner: surfaceOwner,
           yieldToMain: yieldToBrowser,
           assertCurrent: assertRestoreCurrent
-        }));
+        };
+        installSurfaceBaseBufferSet(staged, this.surfaceVertices.length
+          ? await createSurfaceBaseBufferSetAsync(this.gl, this.surfaceVertices, surfaceUploadOptions)
+          : await createSurfaceBaseBufferSetFromCompactGeometryAsync(this.gl, this.surfaceCompactGeometry, {
+            ...surfaceUploadOptions,
+            sourceFloatLength: rendererSurfaceFloatLength(this)
+          }));
         installCellVisualCorrectionBufferSet(staged, await createCellVisualCorrectionBufferSetAsync(this.gl, this.cellVisualCorrectionGeometry, {
           usage: this.gl.STATIC_DRAW,
           owner: surfaceOwner,
@@ -6244,8 +6254,8 @@ function pointerInteractionMode(event) {
 
 export function buildPlaceholderSurfaceBundle(map, colorMode, viewOptions, shoreVisualPaths = null, stateVisualPaths = null, provinceVisualPaths = null, politicalVisualMeshes = null, cellVisualMesh = null) {
   const context = createRenderContext(map);
-  const statePaths = stateVisualPaths || buildStateVisualPaths(map);
-  const provincePaths = provinceVisualPaths || buildProvinceVisualPaths(map);
+  const statePaths = colorMode === "states" ? stateVisualPaths || buildStateVisualPaths(map) : stateVisualPaths;
+  const provincePaths = colorMode === "provinces" ? provinceVisualPaths || buildProvinceVisualPaths(map) : provinceVisualPaths;
   const politicalSurface = politicalSurfaceMeshForMode(colorMode, politicalVisualMeshes);
   const smoothCellBorders = viewOptions.smoothCellBorders !== false;
   if (smoothCellBorders && Number(cellVisualMesh?.triangulationUnfilledCells) > 0) {
@@ -6530,6 +6540,12 @@ function currentSurfaceBaseBufferSet(renderer) {
   return bufferSet;
 }
 
+function rendererSurfaceFloatLength(renderer) {
+  return renderer.surfaceVertices instanceof Float32Array && renderer.surfaceVertices.length
+    ? renderer.surfaceVertices.length
+    : Number(renderer.surfaceSourceFloatLength) || 0;
+}
+
 function currentCellVisualCorrectionBufferSet(renderer) {
   const bufferSet = renderer.cellVisualCorrectionBufferSet;
   return bufferSet?.owner === renderer.surfaceResourceOwner
@@ -6570,16 +6586,17 @@ function createRendererSurfaceResourceOwner(renderer, map, bundle, binding = nul
     ? normalizeRenderResourceBinding(binding, "renderer.surface.binding")
     : renderer.issueRenderResourceBinding({mapIdentity, sourceRevision, topologyRevision}, {replaceResources: true});
   return createSurfaceResourceOwner(resourceBinding, {
-    surfaceFloatLength: bundle?.base?.length || 0,
+    surfaceFloatLength: bundle?.base?.length || Number(bundle?.sourceFloatLength) || 0,
     correctionWordLength: bundle?.cellVisualCorrection?.length || 0,
     surfaceCellRanges: bundle?.surfaceCellRanges
   });
 }
 
 function adoptRendererSurfaceResourceOwner(renderer, owner) {
-  if (!owner || owner.surfaceFloatLength !== renderer.surfaceVertices?.length
+  const surfaceFloatLength = rendererSurfaceFloatLength(renderer);
+  if (!owner || owner.surfaceFloatLength !== surfaceFloatLength
     || owner.correctionWordLength !== renderer.cellVisualCorrectionGeometry?.length
-    || owner.rangeFingerprint !== fingerprintSurfaceCellRanges(renderer.surfaceCellRanges, renderer.surfaceVertices?.length || 0)
+    || owner.rangeFingerprint !== fingerprintSurfaceCellRanges(renderer.surfaceCellRanges, surfaceFloatLength)
     || renderer.surfaceBaseBufferSet?.owner !== owner || renderer.cellVisualCorrectionBufferSet?.owner !== owner) {
     throw new Error("surface resource owner 无法接纳当前资源组");
   }
@@ -6594,6 +6611,7 @@ function adoptRendererSurfaceResourceOwner(renderer, owner) {
   renderer.surfaceResourceBinding = Object.freeze({
     owner,
     surfaceVertices: renderer.surfaceVertices,
+    surfaceCompactGeometry: renderer.surfaceCompactGeometry,
     surfaceCellRanges: renderer.surfaceCellRanges,
     cellVisualCorrectionGeometry: renderer.cellVisualCorrectionGeometry,
     cellAttributeStore: renderer.cellAttributeStore
@@ -6620,7 +6638,7 @@ function rebindEditedRendererResources(renderer, binding, previousBinding = null
   try {
     if (!current || !sameRenderResourceBinding(current, normalized)) {
       const owner = createSurfaceResourceOwner(normalized, {
-        surfaceFloatLength: renderer.surfaceVertices?.length || 0,
+        surfaceFloatLength: rendererSurfaceFloatLength(renderer),
         correctionWordLength: renderer.cellVisualCorrectionGeometry?.length || 0,
         surfaceCellRanges: renderer.surfaceCellRanges
       });
@@ -6845,6 +6863,7 @@ function surfaceResourceOwnerMismatch(renderer) {
   if (!owner) return "missing-owner";
   if (!binding || binding.owner !== owner) return "missing-binding";
   if (binding.surfaceVertices !== renderer.surfaceVertices) return "surface-vertices-reference";
+  if (binding.surfaceCompactGeometry !== renderer.surfaceCompactGeometry) return "surface-compact-geometry-reference";
   if (binding.surfaceCellRanges !== renderer.surfaceCellRanges) return "surface-cell-ranges-reference";
   if (binding.cellVisualCorrectionGeometry !== renderer.cellVisualCorrectionGeometry) return "cell-visual-correction-reference";
   if (binding.cellAttributeStore !== renderer.cellAttributeStore) return "cell-attribute-store-reference";
@@ -6854,7 +6873,7 @@ function surfaceResourceOwnerMismatch(renderer) {
   if (renderer.cellAttributeStoreOwner !== owner) return "cell-attribute-store";
   if (renderer.surfaceBaseBufferSet?.owner !== owner) return "surface-base-buffer-set";
   if (renderer.cellVisualCorrectionBufferSet?.owner !== owner) return "cell-visual-correction-buffer-set";
-  if (owner.surfaceFloatLength !== renderer.surfaceVertices?.length) return "surface-float-length";
+  if (owner.surfaceFloatLength !== rendererSurfaceFloatLength(renderer)) return "surface-float-length";
   if (owner.correctionWordLength !== renderer.cellVisualCorrectionGeometry?.length) return "correction-word-length";
   return "";
 }
@@ -6891,9 +6910,14 @@ function drawSurfaceBase(gl, renderer, depthFunction) {
     gl.vertexAttribPointer(renderer.surfaceLocations.position, 2, gl.FLOAT, false, 3 * Float32Array.BYTES_PER_ELEMENT, 0);
     gl.enableVertexAttribArray(renderer.surfaceLocations.identity);
     gl.vertexAttribIPointer(renderer.surfaceLocations.identity, 1, gl.UNSIGNED_INT, 3 * Float32Array.BYTES_PER_ELEMENT, 2 * Float32Array.BYTES_PER_ELEMENT);
-    gl.bindBuffer(gl.ARRAY_BUFFER, segment.colorBuffer);
-    gl.enableVertexAttribArray(renderer.surfaceLocations.color);
-    gl.vertexAttribPointer(renderer.surfaceLocations.color, 3, gl.FLOAT, false, 3 * Float32Array.BYTES_PER_ELEMENT, 0);
+    if (segment.colorBuffer) {
+      gl.bindBuffer(gl.ARRAY_BUFFER, segment.colorBuffer);
+      gl.enableVertexAttribArray(renderer.surfaceLocations.color);
+      gl.vertexAttribPointer(renderer.surfaceLocations.color, 3, gl.FLOAT, false, 3 * Float32Array.BYTES_PER_ELEMENT, 0);
+    } else {
+      gl.disableVertexAttribArray(renderer.surfaceLocations.color);
+      gl.vertexAttrib3f(renderer.surfaceLocations.color, 0, 0, 0);
+    }
     gl.drawArrays(gl.TRIANGLES, 0, segment.vertexCount);
   }
   gl.useProgram(renderer.program);
@@ -6925,7 +6949,6 @@ function drawCellVisualCorrection(gl, renderer) {
     gl.vertexAttribIPointer(renderer.surfaceLocations.identity, 1, gl.UNSIGNED_INT, 3 * Float32Array.BYTES_PER_ELEMENT, 2 * Float32Array.BYTES_PER_ELEMENT);
     gl.drawArrays(gl.TRIANGLES, 0, segment.vertexCount);
   }
-  gl.enableVertexAttribArray(renderer.surfaceLocations.color);
   gl.useProgram(renderer.program);
   gl.uniform1i(renderer.locations.pointMode, 0);
   gl.uniform1i(renderer.locations.surfaceSideMode, 1);
@@ -7011,17 +7034,26 @@ export function buildLineVertices(map, visibility = {}, colorMode = "height", sh
   const context = createRenderContext(map);
   const vertices = [];
   const oceanCurrentVertices = [];
-  const statePaths = stateVisualPaths || buildStateVisualPaths(map);
-  const provincePaths = provinceVisualPaths || buildProvinceVisualPaths(map);
+  const composition = String(preparationOptions.composition || "all");
+  const includeShore = composition !== "core";
+  const includeCore = composition !== "shore";
+  const statePaths = includeCore ? stateVisualPaths || buildStateVisualPaths(map) : null;
+  const provincePaths = includeCore ? provinceVisualPaths || buildProvinceVisualPaths(map) : null;
   const themeLines = viewOptions.visualTheme?.lines || {};
-  if (viewOptions.mapEdgeFade !== false) pushMapEdgeFade(vertices, context, map, viewOptions.visualTheme);
-  const shoreLineLayer = buildShoreLineVerticesCached(map, visibility, colorMode, shoreVisualPaths, cellVisualMesh, viewOptions);
-  const gpuResidentShoreLines = buildGpuResidentShoreLinePair(map, visibility, colorMode, shoreVisualPaths, cellVisualMesh, viewOptions, shoreLineLayer, preparationOptions);
-  pushZoneTextureLayer(vertices, context, map, visibility);
-  const oceanCurrents = pushOceanCurrentLayer(oceanCurrentVertices, context, map, visibility, oceanCurrentHighlights);
-  if (visibility.provinceBorders !== false) pushPoliticalBoundaryStrokes(vertices, provincePaths, context, themeLines.provinceBorder || PROVINCE_VISUAL_STYLE.borderStroke, PROVINCE_VISUAL_STYLE.borderWidthWorld, PROVINCE_VISUAL_STYLE.borderDashWorld);
-  if (visibility.stateBorders !== false) pushPoliticalBoundaryStrokes(vertices, statePaths, context, themeLines.stateBorder || STATE_VISUAL_STYLE.borderStroke, STATE_VISUAL_STYLE.borderWidthWorld);
-  if (visibility.warFronts !== false) pushMilitaryFrontLayer(vertices, context, map);
+  if (includeCore && viewOptions.mapEdgeFade !== false) pushMapEdgeFade(vertices, context, map, viewOptions.visualTheme);
+  const shoreLineLayer = includeShore
+    ? buildShoreLineVerticesCached(map, visibility, colorMode, shoreVisualPaths, cellVisualMesh, viewOptions)
+    : {vertices: new Float32Array(), pathVertices: new Map(), pathObjectVertices: new WeakMap()};
+  const gpuResidentShoreLines = includeShore
+    ? buildGpuResidentShoreLinePair(map, visibility, colorMode, shoreVisualPaths, cellVisualMesh, viewOptions, shoreLineLayer, preparationOptions)
+    : {smooth: new Float32Array(), hard: new Float32Array()};
+  if (includeCore) pushZoneTextureLayer(vertices, context, map, visibility);
+  const oceanCurrents = includeCore
+    ? pushOceanCurrentLayer(oceanCurrentVertices, context, map, visibility, oceanCurrentHighlights)
+    : 0;
+  if (includeCore && visibility.provinceBorders !== false) pushPoliticalBoundaryStrokes(vertices, provincePaths, context, themeLines.provinceBorder || PROVINCE_VISUAL_STYLE.borderStroke, PROVINCE_VISUAL_STYLE.borderWidthWorld, PROVINCE_VISUAL_STYLE.borderDashWorld);
+  if (includeCore && visibility.stateBorders !== false) pushPoliticalBoundaryStrokes(vertices, statePaths, context, themeLines.stateBorder || STATE_VISUAL_STYLE.borderStroke, STATE_VISUAL_STYLE.borderWidthWorld);
+  if (includeCore && visibility.warFronts !== false) pushMilitaryFrontLayer(vertices, context, map);
   return {
     vertices: new Float32Array(vertices),
     shoreVertices: shoreLineLayer.vertices,

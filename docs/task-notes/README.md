@@ -8,6 +8,10 @@
 
 > 分支执行约束：本专题已于 2026-08-19 获用户明确批准为第 349 项，只在 `codex/map-core-engine-architecture-plan` 并行分支逐阶段实施；不得将本分支合入 `main`。全阶段不执行浏览器验收，最终只形成并评估浏览器验收方案。
 
+- 第 359 项以用户指定 `krichars (3).webfmg` 为唯一完成输入，重构解析、adoption handoff、首屏 prepared layer 与可取消惰性任务，按绝对 `6.0s / 7.5s` 和 `>200ms = 0` 门验收；见 [`task-359-real-archive-load-critical-path.md`](./task-359-real-archive-load-critical-path.md)。
+- 第 360 项只修“路线管理 → 重算道路”的 Promise、busy、结果 / 错误码与真实道路首败，中央入口不得替代专用入口；见 [`task-360-route-regeneration-transaction.md`](./task-360-route-regeneration-transaction.md)。
+- 第 361 项把首次不可通过平滑开关恢复的疆界柔化定义为非法第三态，以 `F0 / Foff / Fon` 像素和 surface / shore / line 资源指纹收敛首次导入与运行时切换；见 [`task-361-initial-boundary-third-state.md`](./task-361-initial-boundary-third-state.md)。
+
 - 第 357 项统一 `22` 个重生成入口的旧数据 canonical working copy、锁定对象最小结构校验、未锁对象受限生成、锁快照优先合并和单次最终领域校验；阶段冻结与最终验收记录见 [`task-357-unified-regeneration-contract.md`](./task-357-unified-regeneration-contract.md)。
 
 - 第 351 项已于 2026-08-23 完成：`codex/task-351-view-switch-repair` 修复 100k 全视图切换、扩展十二类 GPU 常驻颜色模式并建立 latest-revision 后台预热；用户精确预览标签页十二类视图终验通过并恢复高度视图。该分支叠加于未合入 `main` 的第 349～350 项架构分支，仍不得直接合入 `main`。根因、设计、本地性能与精确 Chrome 证据见 [`task-351-view-switch-repair.md`](./task-351-view-switch-repair.md)。

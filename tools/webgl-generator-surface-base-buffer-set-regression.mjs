@@ -4,8 +4,10 @@ import {
   SURFACE_BASE_INVALID_CELL_ID,
   SURFACE_BASE_MAX_SEGMENT_BYTES,
   SURFACE_BASE_MAX_SEGMENT_FLOATS,
+  compactSurfaceBaseGeometry,
   createSurfaceBaseBufferSet,
   createSurfaceBaseBufferSetAsync,
+  createSurfaceBaseBufferSetFromCompactGeometryAsync,
   createSurfaceResourceOwner,
   deleteSurfaceBaseBufferSet,
   flattenSurfaceBaseBufferSet,
@@ -194,6 +196,25 @@ assert.ok(yields > 2);
 assert.ok(currentChecks > yields);
 assert.deepEqual(progress.map(value => [value.completed, value.total]), [[1, 2], [2, 2]]);
 assert.ok(asyncGl.bufferSubDataCalls.every(call => call.bytes.byteLength <= SURFACE_BASE_ASYNC_UPLOAD_SLICE_BYTES));
+
+const compactGeometry = compactSurfaceBaseGeometry(source, ranges);
+const compactGl = new FakeGl();
+const compactSet = await createSurfaceBaseBufferSetFromCompactGeometryAsync(compactGl, compactGeometry, {
+  sourceFloatLength: source.length,
+  yieldToMain: async () => {}
+});
+assert.equal(compactGeometry.length * 2, source.length);
+assert.equal(compactSet.floatLength, source.length);
+assert.ok(compactSet.segments.every(segment => segment.compact === true && segment.colorBuffer === null));
+assert.equal(flattenSurfaceBaseBufferSet(compactSet).length, compactSet.segments.length, "compact surface 每段只能持有一份 geometry buffer");
+assert.equal(summarizeSurfaceBaseBufferSet(compactSet).totalGpuByteLength, compactGeometry.byteLength, "compact surface GPU 初始上传不得重复颜色");
+
+const compactFailingGl = new FakeGl();
+await assert.rejects(createSurfaceBaseBufferSetFromCompactGeometryAsync(compactFailingGl, compactGeometry, {
+  sourceFloatLength: source.length,
+  yieldToMain: async () => { throw new Error("task359-compact-yield-fault"); }
+}), /task359-compact-yield-fault/);
+assert.ok(compactFailingGl.buffers.every(buffer => buffer.deleted), "compact surface 上传失败不得泄漏未登记 GPU buffer");
 
 const failingGl = new FakeGl();
 await assert.rejects(createSurfaceBaseBufferSetAsync(failingGl, source, {

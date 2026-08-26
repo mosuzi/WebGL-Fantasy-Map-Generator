@@ -7,8 +7,10 @@ import {
 } from "./render-cache-dto.js";
 import {assertRenderPreparationBinding} from "./render-preparation.js";
 import {emptyCellVisualMesh} from "./cell-visual-layer.js";
+import {emptyPoliticalVisualMeshes} from "./political-layer.js";
 import {
   createSurfaceBaseBufferSetAsync,
+  createSurfaceBaseBufferSetFromCompactGeometryAsync,
   createSurfaceResourceOwner,
   flattenSurfaceBaseBufferSet,
   isSurfaceBaseBufferSetForVertices,
@@ -68,11 +70,14 @@ export async function prepareRendererWorkerInstall(renderer, map, prepared, opti
 
   try {
     validatePreparedLayerShapes(layers);
+    let profileStartedAt = now();
     if (renderer.map !== map) {
       gate.assertCurrent();
       cellAttributeStore = createCellAttributeStore(renderer.gl, map, renderer.viewOptions);
       gate.assertCurrent();
     }
+    reportInstallProfile(options, "cell-attributes", profileStartedAt);
+    profileStartedAt = now();
     if (layers.cellVisual) {
       decoded.cellVisual = await unpackCellVisualMeshInChunks(layers.cellVisual, binding, gate.options("cell-visual"));
     }
@@ -86,6 +91,8 @@ export async function prepareRendererWorkerInstall(renderer, map, prepared, opti
       decoded.provincePaths = await unpackPoliticalVisualPathsInChunks(layers.provincePaths, binding, gate.options("province-paths"));
     }
     if (layers.political) decoded.political = layers.political;
+    reportInstallProfile(options, "render-cache-decode", profileStartedAt);
+    profileStartedAt = now();
     if (layers.picking) {
       if (options.rebuildPickingFromMap === true) {
         gate.assertCurrent();
@@ -99,6 +106,8 @@ export async function prepareRendererWorkerInstall(renderer, map, prepared, opti
         });
       }
     }
+    reportInstallProfile(options, "picking", profileStartedAt);
+    profileStartedAt = now();
     if (layers.labels) {
       decoded.labels = await unpackLabelLayoutDescriptorsInChunks(layers.labels, map, gate.options("labels"));
       decoded.overlay = await renderer.prepareOverlayBundleFromDescriptors?.(map, decoded.labels, {
@@ -106,6 +115,7 @@ export async function prepareRendererWorkerInstall(renderer, map, prepared, opti
         unitPreferences: prepared.presentation?.unitPreferences
       });
     }
+    reportInstallProfile(options, "labels-overlay", profileStartedAt);
     if (layers.political && !layers.politicalDebug) {
       throw renderInstallError("render-political-debug-missing", "Worker 政治网格缺少绑定的调试网格结果");
     }
@@ -122,6 +132,7 @@ export async function prepareRendererWorkerInstall(renderer, map, prepared, opti
 
     const shorePaths = decoded.shore || renderer.shoreVisualPaths;
     if (layers.line?.shorePathCache) decoded.shoreLine = rebindShorePathCache(layers.line.shorePathCache, shorePaths, binding);
+    profileStartedAt = now();
     if (layers.surface) {
       const inPlaceColorPatch = layers.surface.mode === "cell-colors" && options.inPlaceSurfaceColorPatch === true;
       if (inPlaceColorPatch) {
@@ -136,7 +147,7 @@ export async function prepareRendererWorkerInstall(renderer, map, prepared, opti
         ? renderer.surfaceCellRanges
         : await normalizePreparedSurfaceCellRanges(
           surfaceValues.surfaceCellRanges,
-          surfaceValues.base?.length || 0,
+          preparedSurfaceFloatLength(surfaceValues),
           surfaceValues.surfaceCellRangesMode,
           decoded.cellVisual || renderer.cellVisualMesh,
           gridCellCount(map),
@@ -149,19 +160,26 @@ export async function prepareRendererWorkerInstall(renderer, map, prepared, opti
         gate
       );
       if (!inPlaceColorPatch) {
+        const surfaceFloatLength = preparedSurfaceFloatLength(surfaceValues);
         surfaceResourceOwner = createSurfaceResourceOwner(binding, {
-          surfaceFloatLength: surfaceValues.base?.length || 0,
+          surfaceFloatLength,
           correctionWordLength: surfaceValues.cellVisualCorrection?.length || 0,
           surfaceCellRanges: decoded.surfaceCellRanges
         });
-        surfaceBaseBufferSet = await createSurfaceBaseBufferSetAsync(renderer.gl, surfaceValues.base, {
+        const surfaceBufferOptions = {
           usage: renderer.gl.STATIC_DRAW,
           surfaceCellRanges: decoded.surfaceCellRanges,
           owner: surfaceResourceOwner,
           yieldToMain: gate.yieldToMain,
           assertCurrent: gate.assertCurrent,
           onProgress: detail => gate.onProgress("gpu:surfaceBaseBufferSet", detail)
-        });
+        };
+        surfaceBaseBufferSet = surfaceValues.mode === "gpu-resident-compact"
+          ? await createSurfaceBaseBufferSetFromCompactGeometryAsync(renderer.gl, surfaceValues.geometry, {
+            ...surfaceBufferOptions,
+            sourceFloatLength: surfaceFloatLength
+          })
+          : await createSurfaceBaseBufferSetAsync(renderer.gl, surfaceValues.base, surfaceBufferOptions);
         if (surfaceValues.cellVisualCorrection instanceof Float32Array) {
           cellVisualCorrectionBufferSet = await createCellVisualCorrectionBufferSetAsync(renderer.gl, surfaceValues.cellVisualCorrection, {
             usage: renderer.gl.STATIC_DRAW,
@@ -180,6 +198,8 @@ export async function prepareRendererWorkerInstall(renderer, map, prepared, opti
       ]) buffers.set(key, await uploadPreparedBuffer(renderer.gl, values, renderer.gl.STATIC_DRAW, gate, key));
       buffers.set("surfacePatchBuffer", await uploadPreparedBuffer(renderer.gl, new Float32Array(), renderer.gl.DYNAMIC_DRAW, gate, "surfacePatchBuffer"));
     }
+    reportInstallProfile(options, "surface", profileStartedAt);
+    profileStartedAt = now();
     if (layers.line) {
       for (const [key, values] of [
         ["lineBuffer", layers.line.vertices],
@@ -190,6 +210,7 @@ export async function prepareRendererWorkerInstall(renderer, map, prepared, opti
     if (layers.point) buffers.set("pointBuffer", await uploadPreparedBuffer(renderer.gl, layers.point.vertices, renderer.gl.STATIC_DRAW, gate, "pointBuffer"));
     if (layers.route) buffers.set("routeBuffer", await uploadPreparedBuffer(renderer.gl, layers.route.vertices, renderer.gl.DYNAMIC_DRAW, gate, "routeBuffer"));
     if (layers.river) buffers.set("riverBuffer", await uploadPreparedBuffer(renderer.gl, layers.river.vertices, renderer.gl.DYNAMIC_DRAW, gate, "riverBuffer"));
+    reportInstallProfile(options, "visible-buffers", profileStartedAt);
     gate.assertCurrent();
     assertRenderBindingLatest(renderer, binding);
   } catch (error) {
@@ -210,6 +231,10 @@ export async function prepareRendererWorkerInstall(renderer, map, prepared, opti
     yieldToMain: gate.yieldToMain,
     onProgress: detail => gate.onProgress("gpu:surfaceColorPatch", detail)
   });
+}
+
+function reportInstallProfile(options, stage, startedAt) {
+  options.onProfile?.(stage, {ms: Math.round((now() - startedAt) * 10) / 10});
 }
 
 function createPreparedInstallTransaction(renderer, map, prepared, decoded, buffers, surfaceBaseBufferSet, cellVisualCorrectionBufferSet, surfaceValues, surfaceResourceOwner, cellAttributeStore, options) {
@@ -333,6 +358,7 @@ function createPreparedInstallTransaction(renderer, map, prepared, decoded, buff
       if (decoded.statePaths) assign("stateVisualPaths", decoded.statePaths);
       if (decoded.provincePaths) assign("provinceVisualPaths", decoded.provincePaths);
       if (decoded.political) assign("politicalVisualMeshes", decoded.political);
+      else if (replacingMap) assign("politicalVisualMeshes", emptyPoliticalVisualMeshes());
       if (layers.politicalDebug) assign("politicalMeshDebugVertexCount", vertexCount(layers.politicalDebug.vertices));
       if (decoded.picking) {
         const components = options.preserveRoutePicking
@@ -355,7 +381,9 @@ function createPreparedInstallTransaction(renderer, map, prepared, decoded, buff
       if (!surfaceColorPatch) {
       assignSurfaceBaseBufferSet(surfaceBaseBufferSet);
       assignCellVisualCorrectionBufferSet(cellVisualCorrectionBufferSet);
-      assign("surfaceVertices", surfaceValues.base);
+      assign("surfaceVertices", surfaceValues.mode === "gpu-resident-compact" ? new Float32Array() : surfaceValues.base);
+      assign("surfaceSourceFloatLength", surfaceValues.mode === "gpu-resident-compact" ? surfaceValues.sourceFloatLength : 0);
+      assign("surfaceCompactGeometry", surfaceValues.mode === "gpu-resident-compact" ? surfaceValues.geometry : new Float32Array());
       assign("cellVisualCorrectionGeometry", surfaceValues.cellVisualCorrection || new Float32Array());
       assign("gpuResidentSmoothShoreSurfaceKey", surfaceValues.smoothShoreSurfaceKey || "");
       } else {
@@ -372,7 +400,7 @@ function createPreparedInstallTransaction(renderer, map, prepared, decoded, buff
       assign("surfacePatchCellRanges", new Map());
       assign("surfacePatchCells", new Set());
       assign("surfacePatchVertexCount", 0);
-      if (!surfaceColorPatch) assign("vertexCount", vertexCount(surfaceValues.base));
+      if (!surfaceColorPatch) assign("vertexCount", preparedSurfaceFloatLength(surfaceValues) / FLOATS_PER_VERTEX);
       {
         const committedSurfaceOwner = surfaceColorPatch?.targetOwner || surfaceResourceOwner;
         assignCommittedSurfaceOwner(committedSurfaceOwner);
@@ -675,6 +703,7 @@ function createPreparedInstallTransaction(renderer, map, prepared, decoded, buff
     assign("surfaceResourceBinding", Object.freeze({
       owner,
       surfaceVertices: renderer.surfaceVertices,
+      surfaceCompactGeometry: renderer.surfaceCompactGeometry,
       surfaceCellRanges: renderer.surfaceCellRanges,
       cellVisualCorrectionGeometry: renderer.cellVisualCorrectionGeometry,
       cellAttributeStore: renderer.cellAttributeStore
@@ -821,7 +850,9 @@ function createPreparedInstallTransaction(renderer, map, prepared, decoded, buff
     while (fragment.firstChild) {
       const batch = documentRef.createElement("div");
       batch.className = "map-overlay-install-batch";
-      for (let index = 0; index < 32 && fragment.firstChild; index++) batch.append(fragment.firstChild);
+      // 首屏只按足以守住 LongTask 的块切分；过小的块会让每 32 个节点都触发一次
+      // 样式计算与下一帧等待，在大存档上反而形成数百毫秒的空转。
+      for (let index = 0; index < 128 && fragment.firstChild; index++) batch.append(fragment.firstChild);
       staged.append(batch);
     }
     return staged;
@@ -855,6 +886,7 @@ function validatePreparedLayerShapes(layers) {
   }
   if (layers.surface) {
     const colorPatch = layers.surface.mode === "cell-colors";
+    const compact = layers.surface.mode === "gpu-resident-compact";
     if (colorPatch) {
       if (!(layers.surface.cellIds instanceof Uint32Array) || !(layers.surface.colors instanceof Float32Array)
         || layers.surface.colors.length !== layers.surface.cellIds.length * 4
@@ -862,7 +894,14 @@ function validatePreparedLayerShapes(layers) {
         throw renderInstallError("render-surface-color-patch-shape", "Worker surface color patch 结构无效");
       }
     }
-    for (const key of [...(colorPatch ? [] : ["base"]), "landCorrections", "waterCorrections", "landCovers", "waterCovers"]) {
+    if (compact) {
+      if (!(layers.surface.geometry instanceof Float32Array) || layers.surface.geometry.length % 9 !== 0
+        || !Number.isSafeInteger(layers.surface.sourceFloatLength)
+        || layers.surface.sourceFloatLength !== layers.surface.geometry.length * 2) {
+        throw renderInstallError("render-surface-compact-shape", "Worker compact surface geometry 结构无效");
+      }
+    }
+    for (const key of [...(colorPatch || compact ? [] : ["base"]), "landCorrections", "waterCorrections", "landCovers", "waterCovers"]) {
       assertPreparedVertexArray(layers.surface[key], `surface.${key}`);
     }
   }
@@ -893,6 +932,11 @@ function validatePreparedLayerShapes(layers) {
       }
     }
   }
+}
+
+function preparedSurfaceFloatLength(surface) {
+  if (surface?.mode === "gpu-resident-compact") return Number(surface.sourceFloatLength) || 0;
+  return surface?.base?.length || 0;
 }
 
 async function materializePreparedSurfaceColorPatch(renderer, map, patch, gate) {
@@ -978,6 +1022,7 @@ function prepareRetainedSurfaceRebind(renderer, map, layers, binding, previousBi
     || cellVisualCorrectionBufferSet?.owner !== owner
     || cellVisualCorrectionBufferSet.wordLength !== renderer.cellVisualCorrectionGeometry?.length
     || resourceBinding?.owner !== owner || resourceBinding.surfaceVertices !== renderer.surfaceVertices
+    || resourceBinding.surfaceCompactGeometry !== renderer.surfaceCompactGeometry
     || resourceBinding.surfaceCellRanges !== renderer.surfaceCellRanges
     || resourceBinding.cellVisualCorrectionGeometry !== renderer.cellVisualCorrectionGeometry
     || resourceBinding.cellAttributeStore !== renderer.cellAttributeStore
@@ -988,7 +1033,7 @@ function prepareRetainedSurfaceRebind(renderer, map, layers, binding, previousBi
     );
   }
   const targetOwner = createSurfaceResourceOwner(target, {
-    surfaceFloatLength: renderer.surfaceVertices?.length || 0,
+    surfaceFloatLength: rendererSurfaceFloatLength(renderer),
     correctionWordLength: renderer.cellVisualCorrectionGeometry?.length || 0,
     surfaceCellRanges: renderer.surfaceCellRanges
   });
@@ -997,6 +1042,12 @@ function prepareRetainedSurfaceRebind(renderer, map, layers, binding, previousBi
     surfaceBaseBufferSet: rebindSurfaceBaseBufferSetOwner(surfaceBaseBufferSet, targetOwner),
     cellVisualCorrectionBufferSet: rebindCellVisualCorrectionBufferSetOwner(cellVisualCorrectionBufferSet, targetOwner)
   });
+}
+
+function rendererSurfaceFloatLength(renderer) {
+  return renderer.surfaceVertices instanceof Float32Array && renderer.surfaceVertices.length
+    ? renderer.surfaceVertices.length
+    : Number(renderer.surfaceSourceFloatLength) || 0;
 }
 
 async function prepareInPlaceSurfaceColorPatch(renderer, map, patch, binding, gate) {

@@ -127,6 +127,76 @@ export async function createSurfaceBaseBufferSetAsync(gl, vertices, options = {}
   }
 }
 
+export function compactSurfaceBaseGeometry(vertices, surfaceCellRanges) {
+  const source = assertSurfaceVertices(vertices);
+  const spans = normalizeCellRanges(surfaceCellRanges, source.length);
+  const geometry = new Float32Array(source.length / 2);
+  const identities = new Uint32Array(geometry.buffer);
+  let spanIndex = 0;
+  for (let vertex = 0; vertex < source.length / SURFACE_SOURCE_FLOATS_PER_VERTEX; vertex++) {
+    const sourceOffset = vertex * SURFACE_SOURCE_FLOATS_PER_VERTEX;
+    while (spanIndex < spans.length && spans[spanIndex].end <= sourceOffset) spanIndex++;
+    const geometryOffset = vertex * SURFACE_BASE_WORDS_PER_VERTEX;
+    geometry[geometryOffset] = source[sourceOffset];
+    geometry[geometryOffset + 1] = source[sourceOffset + 1];
+    const span = spans[spanIndex];
+    const cellId = span && sourceOffset >= span.start && sourceOffset < span.end
+      ? span.cellId
+      : SURFACE_BASE_INVALID_CELL_ID;
+    const water = source[sourceOffset + 5] >= 0.5 ? 1 : 0;
+    identities[geometryOffset + 2] = ((cellId & SURFACE_BASE_INVALID_CELL_ID) << 1 | water) >>> 0;
+  }
+  return geometry;
+}
+
+export async function createSurfaceBaseBufferSetFromCompactGeometryAsync(gl, geometry, options = {}) {
+  const sourceFloatLength = Number(options.sourceFloatLength);
+  if (!(geometry instanceof Float32Array) || geometry.length % SURFACE_BASE_WORDS_PER_TRIANGLE !== 0
+    || !Number.isSafeInteger(sourceFloatLength) || sourceFloatLength < 0
+    || sourceFloatLength % SURFACE_SOURCE_FLOATS_PER_TRIANGLE !== 0
+    || geometry.length * 2 !== sourceFloatLength) {
+    throw new TypeError("compact surface base geometry 无效");
+  }
+  const usage = options.usage ?? gl?.STATIC_DRAW;
+  const yieldToMain = typeof options.yieldToMain === "function" ? options.yieldToMain : defaultYield;
+  const assertCurrent = typeof options.assertCurrent === "function" ? options.assertCurrent : () => {};
+  const uploadSliceBytes = Math.max(256 * 1024, Number(options.uploadSliceBytes) || SURFACE_BASE_ASYNC_UPLOAD_SLICE_BYTES);
+  const ranges = surfaceBaseSegmentRanges(sourceFloatLength);
+  const segments = [];
+  try {
+    for (let index = 0; index < ranges.length; index++) {
+      assertCurrent();
+      const range = ranges[index];
+      const geometryStart = range.start / 2;
+      const geometryEnd = range.end / 2;
+      const geometryBuffer = gl.createBuffer();
+      if (!geometryBuffer) throw new Error("无法创建 compact surface base GPU buffer");
+      let retainedBySegment = false;
+      try {
+        await uploadTypedArrayAsync(
+          gl,
+          geometryBuffer,
+          geometry.subarray(geometryStart, geometryEnd),
+          usage,
+          uploadSliceBytes,
+          yieldToMain,
+          assertCurrent
+        );
+        segments.push(createSegmentDescriptor(range, geometryBuffer, null, {compact: true}));
+        retainedBySegment = true;
+      } finally {
+        if (!retainedBySegment) gl.deleteBuffer(geometryBuffer);
+      }
+      options.onProgress?.({completed: index + 1, total: ranges.length, floatEnd: range.end, floatLength: sourceFloatLength});
+      if (index + 1 < ranges.length) await yieldToMain();
+    }
+    return buildBufferSet(sourceFloatLength, segments, options.owner || null);
+  } catch (error) {
+    deleteBuffers(gl, segments.flatMap(segmentBuffers));
+    throw error;
+  }
+}
+
 export function replaceSurfaceBaseBufferSet(gl, current, replacement) {
   assertBufferSet(replacement);
   if (current === replacement) return replacement;
@@ -208,6 +278,12 @@ export function isSurfaceBaseBufferSetForVertices(bufferSet, vertices, owner = n
   if (!(vertices instanceof Float32Array)) return false;
   try {
     const set = assertBufferSet(bufferSet);
+    if (set.compact) {
+      return Boolean(owner)
+        && set.owner === owner
+        && owner.surfaceFloatLength === set.floatLength
+        && vertices.length === 0;
+    }
     return (!owner || set.owner === owner)
       && set.floatLength === vertices.length
       && set.vertexCount === vertices.length / SURFACE_SOURCE_FLOATS_PER_VERTEX;
@@ -287,18 +363,20 @@ async function uploadTypedArrayAsync(gl, buffer, source, usage, uploadSliceBytes
   }
 }
 
-function createSegmentDescriptor(range, geometryBuffer, colorBuffer) {
+function createSegmentDescriptor(range, geometryBuffer, colorBuffer, options = {}) {
   const vertexCount = (range.end - range.start) / SURFACE_SOURCE_FLOATS_PER_VERTEX;
+  const compact = options.compact === true;
   return Object.freeze({
     buffer: geometryBuffer,
     geometryBuffer,
     colorBuffer,
+    compact,
     floatStart: range.start,
     floatEnd: range.end,
     floatLength: range.end - range.start,
     byteLength: vertexCount * SURFACE_BASE_WORDS_PER_VERTEX * Float32Array.BYTES_PER_ELEMENT,
-    colorByteLength: vertexCount * 3 * Float32Array.BYTES_PER_ELEMENT,
-    totalGpuByteLength: vertexCount * (SURFACE_BASE_WORDS_PER_VERTEX + 3) * Float32Array.BYTES_PER_ELEMENT,
+    colorByteLength: compact ? 0 : vertexCount * 3 * Float32Array.BYTES_PER_ELEMENT,
+    totalGpuByteLength: vertexCount * (SURFACE_BASE_WORDS_PER_VERTEX + (compact ? 0 : 3)) * Float32Array.BYTES_PER_ELEMENT,
     vertexCount,
     triangleCount: vertexCount / 3
   });
@@ -310,6 +388,7 @@ function buildBufferSet(floatLength, segments, owner) {
   const colorByteLength = segments.reduce((total, segment) => total + segment.colorByteLength, 0);
   return Object.freeze({
     owner,
+    compact: segments.every(segment => segment.compact === true),
     segments: Object.freeze([...segments]),
     floatLength,
     byteLength,
@@ -454,7 +533,8 @@ function assertBufferSet(bufferSet) {
   let geometryBytes = 0;
   let colorBytes = 0;
   for (const segment of bufferSet.segments) {
-    if (!segment?.geometryBuffer || segment.buffer !== segment.geometryBuffer || !segment.colorBuffer
+    if (!segment?.geometryBuffer || segment.buffer !== segment.geometryBuffer
+      || (segment.compact ? segment.colorBuffer !== null : !segment.colorBuffer)
       || segment.floatStart !== cursor || segment.floatEnd < segment.floatStart || segment.floatEnd > bufferSet.floatLength
       || segment.floatStart % SURFACE_SOURCE_FLOATS_PER_TRIANGLE !== 0
       || segment.floatEnd % SURFACE_SOURCE_FLOATS_PER_TRIANGLE !== 0
@@ -462,7 +542,7 @@ function assertBufferSet(bufferSet) {
       || segment.vertexCount !== segment.floatLength / SURFACE_SOURCE_FLOATS_PER_VERTEX
       || segment.triangleCount !== segment.vertexCount / 3
       || segment.byteLength !== segment.vertexCount * SURFACE_BASE_WORDS_PER_VERTEX * Float32Array.BYTES_PER_ELEMENT
-      || segment.colorByteLength !== segment.vertexCount * 3 * Float32Array.BYTES_PER_ELEMENT
+      || segment.colorByteLength !== (segment.compact ? 0 : segment.vertexCount * 3 * Float32Array.BYTES_PER_ELEMENT)
       || segment.totalGpuByteLength !== segment.byteLength + segment.colorByteLength
       || segment.byteLength > SURFACE_BASE_MAX_SEGMENT_BYTES) {
       throw new TypeError("surface base buffer segment 结构无效");
@@ -471,7 +551,10 @@ function assertBufferSet(bufferSet) {
     geometryBytes += segment.byteLength;
     colorBytes += segment.colorByteLength;
   }
-  if (cursor !== bufferSet.floatLength || bufferSet.byteLength !== geometryBytes
+  const compact = bufferSet.segments.every(segment => segment.compact === true);
+  if (bufferSet.segments.some(segment => segment.compact !== compact)
+    || bufferSet.compact !== compact
+    || cursor !== bufferSet.floatLength || bufferSet.byteLength !== geometryBytes
     || bufferSet.colorByteLength !== colorBytes || bufferSet.totalGpuByteLength !== geometryBytes + colorBytes) {
     throw new TypeError("surface base buffer segments 未完整覆盖顶点");
   }

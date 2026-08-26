@@ -37,6 +37,7 @@ import {
 } from "./persisted-document-identity.js";
 import {
   decodeWebfmgV3Document,
+  decodeWebfmgV3DocumentAsync,
   encodeWebfmgV3Document,
   gunzipWebfmgV3Bytes,
   gzipWebfmgV3Bytes,
@@ -136,25 +137,57 @@ export function parseMapDocument(text) {
 }
 
 export async function parseMapDocumentPayload(documentRef, payload) {
-  if (typeof payload === "string") return parseMapDocument(payload);
-  if (payload instanceof ArrayBuffer || ArrayBuffer.isView(payload)) return parseBinaryMapDocumentPayload(documentRef, payload);
-  if (isMapDocumentFileLike(payload)) return parseMapDocumentFile(documentRef, payload);
+  return (await parseMapDocumentPayloadWithAdoptionBytes(documentRef, payload)).document;
+}
+
+export async function parseMapDocumentPayloadWithAdoptionBytes(documentRef, payload) {
+  if (typeof payload === "string") return {document: parseMapDocument(payload), adoptionBytes: null};
+  if (payload instanceof ArrayBuffer || ArrayBuffer.isView(payload)) return parseBinaryMapDocumentPayloadWithAdoptionBytes(documentRef, payload);
+  if (isMapDocumentFileLike(payload)) return parseMapDocumentFileWithAdoptionBytes(documentRef, payload);
   if (isGzipBase64MapPayload(payload)) {
     const data = payload.base64 ?? payload.data;
-    return parseBinaryMapDocumentPayload(documentRef, await decompressGzipBase64Bytes(documentRef, data));
+    return parseBinaryMapDocumentPayloadWithAdoptionBytes(documentRef, await decompressGzipBase64Bytes(documentRef, data));
   }
-  if (payload?.encoding === "plain") return parseMapDocument(String(payload.data || ""));
+  if (payload?.encoding === "plain") return {document: parseMapDocument(String(payload.data || "")), adoptionBytes: null};
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
     throw new Error("地图导入文档必须是 JSON 字符串、对象、File/Blob 或 gzip-base64 payload");
   }
-  return parseMapDocument(JSON.stringify(payload));
+  return {document: parseMapDocument(JSON.stringify(payload)), adoptionBytes: null};
+}
+
+export async function parseMapDocumentPayloadAsync(documentRef, payload, options = {}) {
+  const view = documentRef?.defaultView || globalThis;
+  if (isMapDocumentFileLike(payload) && typeof payload.arrayBuffer === "function") {
+    return parseMapDocumentPayloadAsync(documentRef, await payload.arrayBuffer(), options);
+  }
+  if (isGzipBase64MapPayload(payload)) {
+    const data = payload.base64 ?? payload.data;
+    return parseMapDocumentPayloadAsync(documentRef, await decompressGzipBase64Bytes(documentRef, data), options);
+  }
+  if (payload instanceof ArrayBuffer || ArrayBuffer.isView(payload)) {
+    const bytes = payload instanceof Uint8Array
+      ? payload
+      : payload instanceof ArrayBuffer
+        ? new Uint8Array(payload)
+        : new Uint8Array(payload.buffer, payload.byteOffset, payload.byteLength);
+    const decodedBytes = isGzipBytes(bytes) ? await gunzipWebfmgV3Bytes(bytes, view) : bytes;
+    if (isWebfmgV3Bytes(decodedBytes)) {
+      const document = await decodeWebfmgV3DocumentAsync(decodedBytes, options);
+      return migrateMapDocument(document);
+    }
+  }
+  return parseMapDocumentPayload(documentRef, payload);
 }
 
 export async function parseMapDocumentFile(documentRef, file) {
+  return (await parseMapDocumentFileWithAdoptionBytes(documentRef, file)).document;
+}
+
+async function parseMapDocumentFileWithAdoptionBytes(documentRef, file) {
   if (!file) throw new Error("未选择地图文件");
-  if (typeof file.arrayBuffer === "function") return parseBinaryMapDocumentPayload(documentRef, await file.arrayBuffer());
+  if (typeof file.arrayBuffer === "function") return parseBinaryMapDocumentPayloadWithAdoptionBytes(documentRef, await file.arrayBuffer());
   const text = isCompressedMapDocumentFile(file) ? await decompressMapDocumentFile(documentRef, file) : await file.text();
-  return parseMapDocument(text);
+  return {document: parseMapDocument(text), adoptionBytes: null};
 }
 
 export async function downloadCompressedMapDocument(documentRef, document, filename) {
@@ -180,19 +213,27 @@ export async function createCompressedMapDocumentBlob(documentRef, document) {
 }
 
 export async function parseBinaryMapDocumentPayload(documentRef, source) {
+  return (await parseBinaryMapDocumentPayloadWithAdoptionBytes(documentRef, source)).document;
+}
+
+async function parseBinaryMapDocumentPayloadWithAdoptionBytes(documentRef, source) {
   const view = documentRef?.defaultView || globalThis;
   const bytes = source instanceof Uint8Array
     ? source
     : source instanceof ArrayBuffer
       ? new Uint8Array(source)
       : new Uint8Array(source.buffer, source.byteOffset, source.byteLength);
-  if (isWebfmgV3Bytes(bytes)) return migrateMapDocument(decodeWebfmgV3Document(bytes));
+  if (isWebfmgV3Bytes(bytes)) {
+    return {document: migrateMapDocument(decodeWebfmgV3Document(bytes)), adoptionBytes: bytes};
+  }
   if (isGzipBytes(bytes)) {
     const decompressed = await gunzipWebfmgV3Bytes(bytes, view);
-    if (isWebfmgV3Bytes(decompressed)) return migrateMapDocument(decodeWebfmgV3Document(decompressed));
-    return parseMapDocument(new view.TextDecoder().decode(decompressed));
+    if (isWebfmgV3Bytes(decompressed)) {
+      return {document: migrateMapDocument(decodeWebfmgV3Document(decompressed)), adoptionBytes: decompressed};
+    }
+    return {document: parseMapDocument(new view.TextDecoder().decode(decompressed)), adoptionBytes: null};
   }
-  return parseMapDocument(new view.TextDecoder().decode(bytes));
+  return {document: parseMapDocument(new view.TextDecoder().decode(bytes)), adoptionBytes: null};
 }
 
 export async function createCompressedMapTextBlob(documentRef, text) {
