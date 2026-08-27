@@ -50,7 +50,7 @@ import {
 import {PanelManager} from "../ui/panel-manager.js";
 import {captureControlPanelLaunchGeometry} from "../ui/control-panel-launch-geometry.js";
 import {createBrushCursorPreview} from "../ui/brush-cursor-preview.js";
-import {bindRuntimePanel, readControlPreferences, readOptionsFromPanel, setActiveModeButton, setEditingInteractionLock, setGenerationLoading, setSeedInput, syncLayerGroupControls, updateControlPreferences, updateLayerPreference, updatePickPanel, updateRegenerationSection, updateRuntimePanel, VIEW_MODE_SELECTOR} from "../ui/panel.js";
+import {bindRuntimePanel, readControlPreferences, readOptionsFromPanel, setActiveModeButton, setEditingInteractionLock, setGenerationLoading, setSeedInput, syncLayerGroupControls, updateControlPreferences, updateLayerPreference, updatePickPanel, updateRegenerationSection, updateRuntimeDisplayPreferenceStats, updateRuntimePanel, VIEW_MODE_SELECTOR} from "../ui/panel.js";
 import {DEFAULT_MAX_CITY_LABELS} from "./display-defaults.js";
 import {createDisplayWorkerLedger, scheduleDisplayWorkerFrames} from "./display-worker-ledger.js";
 import {formatArea as formatDisplayArea, formatDistance as formatDisplayDistance, normalizeUnitPreferences} from "../ui/display-units.js";
@@ -425,6 +425,15 @@ const REGENERATION_TRANSACTION_EFFECTS = Object.freeze({
   pickPanel: true,
   derived: Object.freeze(["terrain-caches", "height-field", "cell-colors", "political-boundaries", "point-layers", "line-layers", "labels", "river-mesh", "route-mesh", "object-panels", "object-index"])
 });
+const ROUTE_REGENERATION_TRANSACTION_EFFECTS = Object.freeze({
+  render: "draw",
+  selection: "refresh",
+  runtimeStats: true,
+  pickPanel: true,
+  derived: Object.freeze(["route-mesh", "route-picking", "object-panels"])
+});
+// 后台标签页的 rAF 可能被节流；导入安装仍逐段让出，但不再为每个短步骤空等 120ms。
+const MAP_LOAD_YIELD_FALLBACK_MS = 24;
 const RIVER_REGENERATION_TRANSACTION_EFFECTS = Object.freeze({
   render: "draw",
   selection: "refresh",
@@ -666,6 +675,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       editingMeasurementId: null
     },
     lastEditRefresh: null,
+    lastHistoryPerformance: null,
     lastMapImportDiagnostic: null,
     selectionStore: null,
     renderer: null,
@@ -3040,12 +3050,12 @@ function queueCommandMapReplicaPatch(state, mutation, before, after, {includeCom
     .filter(({session}) => session && ["idle", "patching"].includes(session.status) && session.binding?.mapIdentity === after.mapIdentity);
   if (!active.length) return;
   const sourceMap = state.map;
-  const capturedWritesOutcome = captureCommandMapReplicaWritesAsync({
+  const capturedWritesOutcome = new Promise(resolve => globalThis.setTimeout(resolve, 0)).then(() => captureCommandMapReplicaWritesAsync({
     map: sourceMap,
     command: mutation?.command,
     budgetMs: 4,
     isCurrent: () => state.map === sourceMap && state.mapRevision.getSnapshot().mapRevision === after.mapRevision
-  }).then(
+  })).then(
     value => ({ok: true, value}),
     error => ({ok: false, error})
   );
@@ -4443,18 +4453,40 @@ function setRuntimeMaxCityLabels(state, documentRef, limit) {
 
 function setRuntimeBooleanDisplayPreference(state, documentRef, {id, key, value, operation, apply}) {
   const nextValue = Boolean(value);
-  return measureHealthOperation(state, operation, {[key]: nextValue}, () => {
-    syncRuntimeBooleanControl(documentRef.getElementById(id), nextValue);
-    updateControlPreferences(documentRef, {[key]: nextValue});
-    apply(nextValue);
-    updateRuntimePanel(documentRef, state);
-    return runtimeDisplayActionResult(state, documentRef, ["display-preference", "renderer", "runtime-panel"]);
+  const healthDetail = {[key]: nextValue, timings: {}};
+  const timed = (name, task) => {
+    const startedAt = performance.now();
+    try {
+      return task();
+    } finally {
+      healthDetail.timings[name] = Math.round((performance.now() - startedAt) * 10) / 10;
+    }
+  };
+  return measureHealthOperation(state, operation, healthDetail, () => {
+    timed("control", () => syncRuntimeBooleanControl(documentRef.getElementById(id), nextValue));
+    timed("preferences", () => updateControlPreferences(documentRef, {[key]: nextValue}));
+    timed("renderer", () => apply(nextValue));
+    if (key === "smoothCellBorders" && state.renderer?.lastBoundaryRefreshTimings) {
+      for (const [name, durationMs] of Object.entries(state.renderer.lastBoundaryRefreshTimings)) {
+        healthDetail.timings[`renderer-${name}`] = durationMs;
+      }
+    }
+    timed("panel", () => {
+      if (key === "smoothCellBorders" || key === "mapEdgeFade") updateRuntimeDisplayPreferenceStats(documentRef, state, key);
+      else updateRuntimePanel(documentRef, state);
+    });
+    return timed("result", () => runtimeDisplayActionResult(state, documentRef, ["display-preference", "renderer", "runtime-panel"]));
   });
 }
 
 function runtimeDisplayActionResult(state, documentRef, effects) {
   const preferences = readControlPreferences(documentRef);
-  const stats = state.renderer?.getStats?.() || {};
+  const stats = state.renderer?.getDisplayState?.() || {
+    colorMode: state.renderer?.colorMode,
+    viewOptions: state.renderer?.viewOptions,
+    layerVisibility: state.renderer?.layerVisibility,
+    camera: state.renderer?.camera
+  };
   return {
     colorMode: preferences.colorMode || stats.colorMode || "height",
     visualTheme: preferences.visualTheme || stats.viewOptions?.visualTheme?.id || state.options?.visualTheme || "default",
@@ -5088,7 +5120,7 @@ async function loadMapIntoRuntime(state, documentRef, map, {
       error.code = "operation_obsolete";
       throw error;
     }
-    await yieldToBrowser(documentRef);
+    await yieldMapLoadToBrowser(documentRef);
   }
   cancelAllDirectManipulationSessions("map-replace");
   cancelCityPopulationPointRefresh(state, documentRef);
@@ -5161,7 +5193,7 @@ async function loadMapIntoRuntime(state, documentRef, map, {
   state.mapRevision.replaceMap(runtimeMapIdentity);
   if (loadingMessages[0]) {
     updateGenerationLoading(documentRef, true, loadingMessages[0]);
-    await yieldToBrowser(documentRef, {debugDelay: true});
+    await yieldMapLoadToBrowser(documentRef, {debugDelay: true});
   }
   const rendererLoadOptions = {
     onStage: stage => {
@@ -5184,7 +5216,7 @@ async function loadMapIntoRuntime(state, documentRef, map, {
         ms: stage.ms
       });
     },
-    yieldToBrowser: options => yieldToBrowser(documentRef, options),
+    yieldToBrowser: options => yieldMapLoadToBrowser(documentRef, options),
     revealPreparedOverlay: Boolean(preparedInstall),
     binding: preparedRender
       ? (renderBinding || preparedRender.binding)
@@ -5220,7 +5252,7 @@ async function loadMapIntoRuntime(state, documentRef, map, {
   operation?.report("panel-refresh", {message: loadingMessage("panel-refresh")});
   if (loadingMessages[1]) {
     updateGenerationLoading(documentRef, true, loadingMessages[1]);
-    await yieldToBrowser(documentRef, {debugDelay: true});
+    await yieldMapLoadToBrowser(documentRef, {debugDelay: true});
   }
   state.selectionStore.clear();
   await refreshRuntimeAfterMapLoadAsync(state, documentRef, {
@@ -5559,14 +5591,7 @@ function scheduleLazyPanelsAfterMapReady(state, documentRef) {
   if (state.lazyPanelPreloadScheduled) return;
   state.lazyPanelPreloadScheduled = true;
   scheduleAfterPaint(documentRef, () => {
-    scheduleLazyVuePanelPreload(documentRef, {
-      reason: "map-ready",
-      firstDelayMs: 2400,
-      gapMs: 220,
-      quietInputMs: 1400,
-      quietRetryMs: 900,
-      timeoutMs: 1800
-    });
+    scheduleLazyVuePanelPreload(documentRef, {reason: "map-ready", execute: false});
   });
 }
 
@@ -5605,7 +5630,8 @@ function yieldToBrowser(documentRef, options = {}) {
       }
       resolve();
     };
-    const fallback = view.setTimeout(finish, 120);
+    const fallbackMs = Number.isFinite(Number(options.fallbackMs)) ? Math.max(0, Number(options.fallbackMs)) : 120;
+    const fallback = view.setTimeout(finish, fallbackMs);
     const finishAfterPaint = () => {
       view.clearTimeout(fallback);
       finish();
@@ -5616,6 +5642,10 @@ function yieldToBrowser(documentRef, options = {}) {
     }
     view.setTimeout(finishAfterPaint, 0);
   });
+}
+
+function yieldMapLoadToBrowser(documentRef, options = {}) {
+  return yieldToBrowser(documentRef, {...options, fallbackMs: MAP_LOAD_YIELD_FALLBACK_MS});
 }
 
 function yieldMapHandoffDecode(documentRef) {
@@ -6007,7 +6037,7 @@ async function parseMapDocumentViaWorker(state, documentRef, input, {operation =
   Object.assign(render, {
     cellVisualGeometryMode: "boundary-only",
     linePathTransferMode: "reuse-shore-vertices",
-    lineResidentMode: "current-shore-only",
+    lineResidentMode: "smooth-hard-pair",
     camera: {scale: 1, offsetX: 0, offsetY: 0},
     selection: null,
     objectHighlights: [],
@@ -9102,13 +9132,22 @@ export function executeHistoryCommand(state, documentRef, action, options = {}) 
 }
 
 async function executeRegenerationHistoryCommand(state, documentRef, action, operation, options = {}) {
+  const historyStartedAt = performance.now();
+  const historyTimings = {};
   const sourceMap = state.map;
+  const mutationStartedAt = performance.now();
   const command = action === "redo"
     ? state.editHistory.redo({map: state.map})
     : state.editHistory.undo({map: state.map});
+  historyTimings.mutationMs = roundWorkerTelemetryMs(performance.now() - mutationStartedAt);
   if (!command) {
     return {executed: false, action, label: "", history: state.editHistory.getStats()};
   }
+  state.lastHistoryPerformance = {
+    action,
+    label: command.label || "",
+    timings: {...historyTimings}
+  };
   const assertCurrent = createCommittedHistoryGuard({
     state,
     sourceMap,
@@ -9119,10 +9158,17 @@ async function executeRegenerationHistoryCommand(state, documentRef, action, ope
   if (options.refresh === refreshAfterStateEdit) updateStatePickAtLastPointer(state);
   if (options.refresh === refreshAfterProvinceEdit) updateProvincePickAtLastPointer(state);
   state.selectionStore.batch(() => reconcilePersistentObjectHighlights(state, documentRef, {refreshUi: false}));
+  const refreshStartedAt = performance.now();
   await state.editRefreshScheduler.runAsync(command, {
     yieldToMain: () => yieldToBrowser(documentRef),
     assertCurrent
   });
+  historyTimings.refreshMs = roundWorkerTelemetryMs(performance.now() - refreshStartedAt);
+  state.lastHistoryPerformance = {
+    action,
+    label: command.label || "",
+    timings: {...historyTimings}
+  };
   assertCurrent();
   if (options.refreshPanels !== false) refreshPanelsForEdit(state, {derived: ["object-panels"]});
   assertCurrent();
@@ -9132,6 +9178,12 @@ async function executeRegenerationHistoryCommand(state, documentRef, action, ope
   (options.updateEditingInteractionLock || updateEditingInteractionLock)(state, documentRef);
   await yieldToBrowser(documentRef);
   assertCurrent();
+  historyTimings.totalMs = roundWorkerTelemetryMs(performance.now() - historyStartedAt);
+  state.lastHistoryPerformance = {
+    action,
+    label: command.label || "",
+    timings: historyTimings
+  };
   return {
     executed: true,
     action,
@@ -13156,7 +13208,11 @@ async function regenerateMapAttributeViaWorker(state, documentRef, kind, options
     preserveRoutePicking: targetKind === "rivers",
     rebuildPickingFromMap: targetKind === "cities",
     effects: {
-      ...(targetKind === "rivers" ? RIVER_REGENERATION_TRANSACTION_EFFECTS : REGENERATION_TRANSACTION_EFFECTS),
+      ...(targetKind === "rivers"
+        ? RIVER_REGENERATION_TRANSACTION_EFFECTS
+        : targetKind === "routes"
+          ? ROUTE_REGENERATION_TRANSACTION_EFFECTS
+          : REGENERATION_TRANSACTION_EFFECTS),
       affected: []
     },
     assertOutput: ["religions", "states", "provinces"].includes(targetKind)

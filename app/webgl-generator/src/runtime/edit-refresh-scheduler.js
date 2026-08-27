@@ -85,6 +85,9 @@ export function createEditRefreshScheduler({state, documentRef, updateRuntimePan
       if (effects.derived.includes("river-picking") && typeof state.renderer.refreshRiverPickingIndex === "function") {
         state.renderer.refreshRiverPickingIndex(retainedBinding);
       }
+      if (effects.derived.includes("route-picking") && typeof state.renderer.refreshRoutePickingIndex === "function") {
+        state.renderer.refreshRoutePickingIndex(retainedBinding);
+      }
 
       if (effects.derived.includes("cell-colors") && changedGridCells.length && typeof state.renderer.refreshHeightCells === "function") {
         const trace = state.heightEdit?.activeCommitTrace;
@@ -193,6 +196,9 @@ export function createEditRefreshScheduler({state, documentRef, updateRuntimePan
       if (effects.derived.includes("river-picking") && typeof state.renderer.refreshRiverPickingIndex === "function") {
         await runStep(() => state.renderer.refreshRiverPickingIndex(retainedBinding));
       }
+      if (effects.derived.includes("route-picking") && typeof state.renderer.refreshRoutePickingIndex === "function") {
+        await runStep(() => state.renderer.refreshRoutePickingIndex(retainedBinding));
+      }
 
       if (effects.derived.includes("cell-colors") && changedGridCells.length && typeof state.renderer.refreshHeightCells === "function") {
         await runStep(() => state.renderer.refreshHeightCells(changedGridCells, {deferTopology: effects.deferTerrainRefresh, draw: effects.render === "draw", binding: retainedBinding}));
@@ -231,7 +237,7 @@ function presentationPresetForRefresh(commandOrEffects, map) {
 function issueRetainedRefreshBinding(state, effects) {
   if (!state?.map || !state.renderer?.issueRenderResourceBinding || !state.mapRevision?.getCoreSnapshot) return null;
   const refreshesSurface = effects.derived.includes("cell-colors") || effects.derived.includes("terrain-caches");
-  if (!refreshesSurface && !effects.derived.some(item => item === "object-index" || item === "river-picking" || item === "labels")) return null;
+  if (!refreshesSurface && !effects.derived.some(item => item === "object-index" || item === "river-picking" || item === "route-picking" || item === "labels")) return null;
   const source = state.mapRevision.getCoreSnapshot();
   const topologyRevision = refreshesSurface
     ? source.topologyRevision

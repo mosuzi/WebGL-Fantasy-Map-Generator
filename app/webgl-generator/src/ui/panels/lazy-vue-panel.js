@@ -208,11 +208,15 @@ export function scheduleLazyVuePanelPreload(documentRef, options = {}) {
   const inputTracker = ensureLazyPreloadInputTracker(view);
 
   const entries = Array.from(lazyVuePanelEntries).filter(entry => !entry.isDisposed());
-  const queue = entries.filter(entry => shouldPreloadEntry(entry));
-  const items = queue.map(entry => ({id: entry.id, status: "pending", ms: 0}));
+  const execute = options.execute !== false;
+  const queue = execute ? entries.filter(entry => shouldPreloadEntry(entry)) : [];
+  const items = execute
+    ? queue.map(entry => ({id: entry.id, status: "pending", ms: 0}))
+    : entries.filter(entry => shouldPreloadEntry(entry)).map(entry => ({id: entry.id, status: "on-demand", ms: 0}));
   const state = {
     started: true,
     reason: options.reason || "map-ready",
+    mode: execute ? "background" : "on-demand",
     startedAt: currentTime(view),
     finishedAt: 0,
     total: queue.length,
@@ -226,6 +230,7 @@ export function scheduleLazyVuePanelPreload(documentRef, options = {}) {
       return {
         started: this.started,
         reason: this.reason,
+        mode: this.mode,
         startedAt: this.startedAt,
         finishedAt: this.finishedAt,
         total: this.total,

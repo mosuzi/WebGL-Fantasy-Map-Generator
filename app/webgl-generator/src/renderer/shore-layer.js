@@ -88,6 +88,8 @@ function pushShoreLines(vertices, context, options) {
     return;
   }
 
+  if (pushSourceEdgeShoreLines(vertices, context, paths, {drawCoastline, drawLakeShore, visualTheme})) return;
+
   for (const cell of cells.i || []) {
     for (const neighbor of cells.c[cell] || []) {
       if (neighbor <= cell) continue;
@@ -107,6 +109,21 @@ function pushShoreLines(vertices, context, options) {
       if (edge) pushWorldPolylineMesh(vertices, context, edge, color, widthWorld, {joinMode: "caps"});
     }
   }
+}
+
+function pushSourceEdgeShoreLines(vertices, context, paths, {drawCoastline, drawLakeShore, visualTheme}) {
+  if (!paths?.topology) return false;
+  const groups = [
+    [drawCoastline, paths.coastline, visualTheme?.lines?.coastline || SHORE_VISUAL_STYLE.coastlineStroke, SHORE_VISUAL_STYLE.coastlineWidthWorld],
+    [drawLakeShore, paths.lakeShore, visualTheme?.lines?.lakeShore || SHORE_VISUAL_STYLE.lakeShoreStroke, SHORE_VISUAL_STYLE.lakeShoreWidthWorld]
+  ].filter(([enabled]) => enabled);
+  if (groups.some(([, shorePaths]) => !Array.isArray(shorePaths) || shorePaths.some(path => !Array.isArray(path?.sourceEdges) || path.sourceEdges.some(edge => !isWorldPoint(edge?.a) || !isWorldPoint(edge?.b))))) return false;
+  for (const [, shorePaths, color, widthWorld] of groups) {
+    for (const path of shorePaths || []) {
+      for (const edge of path.sourceEdges) pushWorldPolylineMesh(vertices, context, [edge.a, edge.b], color, widthWorld, {joinMode: "caps"});
+    }
+  }
+  return true;
 }
 
 function pushSnapshotShoreLines(vertices, paths, context, color, widthWorld) {

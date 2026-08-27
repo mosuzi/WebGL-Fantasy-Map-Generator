@@ -1,4 +1,4 @@
-import {buildObjectPickingIndex, CITY_PICK_RADIUS_CSS_PX, pickCity, pickGridCell, pickMarker, pickMilitary, pickPoliticalObject, pickRiver, pickRiverControlPoint, pickRoute, refreshNonRoutePickingIndexPreservingRoutes, refreshRiversInPickingIndex, refreshRoutesInPickingIndex, relocateCityInPickingIndex} from "./picking.js";
+import {buildObjectPickingIndex, CITY_PICK_RADIUS_CSS_PX, pickCity, pickGridCell, pickMarker, pickMilitary, pickPoliticalObject, pickRiver, pickRiverControlPoint, pickRoute, rebuildRoutesInPickingIndex, refreshNonRoutePickingIndexPreservingRoutes, refreshRiversInPickingIndex, refreshRoutesInPickingIndex, relocateCityInPickingIndex} from "./picking.js";
 import {goodDisplayName} from "../generator/economy-display-properties.js";
 import {isSharedCubicCurve, sampleCentripetalCatmullRom} from "../geometry/cubic-path.js";
 import {bindVertexBuffer, createProgram} from "./gl-utils.js";
@@ -1607,9 +1607,17 @@ export class PlaceholderMapRenderer {
   }
 
   refreshGpuResidentSmoothCellBorders() {
+    const timings = {};
+    let startedAt = performance.now();
     this.refreshGpuResidentShoreSurface();
+    timings.surface = Math.round((performance.now() - startedAt) * 10) / 10;
+    startedAt = performance.now();
     this.refreshShoreLineLayer({draw: false});
-    this.draw();
+    timings.line = Math.round((performance.now() - startedAt) * 10) / 10;
+    startedAt = performance.now();
+    this.draw({updateDynamicBuffers: false, updateOverlay: false});
+    timings.draw = Math.round((performance.now() - startedAt) * 10) / 10;
+    this.lastBoundaryRefreshTimings = timings;
   }
 
   refreshGpuResidentShoreSurface() {
@@ -2339,6 +2347,15 @@ export class PlaceholderMapRenderer {
     if (!this.map) return false;
     assertRendererRetainedResourceBindings(this, {picking: true});
     const refreshed = refreshRiversInPickingIndex(this.objectPickingIndex, this.map.rivers?.rivers || []);
+    if (binding) adoptObjectPickingResourceBinding(this, binding);
+    return refreshed;
+  }
+
+  refreshRoutePickingIndex(binding = null) {
+    if (!this.map) return false;
+    assertRendererRetainedResourceBindings(this, {picking: true});
+    const routes = this.map.settlements?.routes || [];
+    const refreshed = rebuildRoutesInPickingIndex(this.objectPickingIndex, routes);
     if (binding) adoptObjectPickingResourceBinding(this, binding);
     return refreshed;
   }
@@ -3213,24 +3230,7 @@ export class PlaceholderMapRenderer {
   getStats() {
     const surfaceBaseBuffers = summarizeRendererSurfaceBase(this);
     const cellVisualCorrectionBuffers = summarizeRendererCellVisualCorrection(this);
-    const surfaceBinding = this.surfaceResourceOwner ? renderResourceBindingFromOwner(this.surfaceResourceOwner) : null;
-    const boundaryDisplayIntent = surfaceBinding ? createPreparedDisplayIntent({
-      binding: surfaceBinding,
-      colorMode: this.colorMode,
-      viewOptions: this.viewOptions
-    }, surfaceBinding) : null;
-    const smoothCellBorders = this.viewOptions.smoothCellBorders !== false;
-    const gpuResidentBoundaryMode = Boolean(GPU_RESIDENT_COLOR_MODES[this.colorMode] && this.cellAttributeStore);
-    const boundaryPresentationCanonical = smoothCellBorders
-      ? !gpuResidentBoundaryMode || (
-        this.gpuResidentSmoothShoreSurfaceKey === boundaryDisplayIntent?.shoreSurfaceKey
-        && this.shoreLineVertices === this.gpuResidentSmoothShoreLineVertices
-      )
-      : this.landCorrectionVertexCount === 0
-        && this.waterCorrectionVertexCount === 0
-        && this.landCoverVertexCount === 0
-        && this.waterCoverVertexCount === 0
-        && (!gpuResidentBoundaryMode || this.shoreLineVertices === this.gpuResidentHardShoreLineVertices);
+    const displayState = this.getDisplayState();
     return {
       metadata: this.map?.metadata,
       grid: this.map?.grid?.metadata,
@@ -3250,18 +3250,7 @@ export class PlaceholderMapRenderer {
         drawCount: surfaceBaseBuffers.segmentCount + cellVisualCorrectionBuffers.segmentCount + 4,
         clearDepth: 0.5
       },
-      boundaryPresentation: {
-        state: smoothCellBorders ? "smooth" : "hard",
-        canonical: boundaryPresentationCanonical,
-        displayFingerprint: boundaryDisplayIntent?.fingerprint || "",
-        shoreSurfaceKey: this.gpuResidentSmoothShoreSurfaceKey,
-        surfaceRangeFingerprint: this.surfaceResourceOwner?.rangeFingerprint || "",
-        correctionWordLength: this.surfaceResourceOwner?.correctionWordLength || 0,
-        shoreLineVertexCount: this.shoreLineVertexCount,
-        smoothShoreLineVertexCount: this.gpuResidentSmoothShoreLineVertices.length / 6,
-        hardShoreLineVertexCount: this.gpuResidentHardShoreLineVertices.length / 6,
-        binding: surfaceBinding
-      },
+      boundaryPresentation: displayState.boundaryPresentation,
       routeVertexCount: this.routeVertexCount,
       routeTriangleCount: this.routeVertexCount / 3,
       routeBuildMs: this.routeBuildMs,
@@ -3308,8 +3297,8 @@ export class PlaceholderMapRenderer {
       lineTriangleCount: this.lineVertexCount / 3,
       oceanCurrentVertexCount: this.oceanCurrentVertexCount,
       cellVisualMesh: summarizeCellVisualMesh(this.cellVisualMesh),
-      cellSurfaceMode: this.viewOptions.smoothCellBorders !== false ? "visual-cells" : "hard-cells",
-      boundaryLineMode: boundaryLineModeForOptions(this.viewOptions, this.cellVisualMesh, this.shoreVisualPaths),
+      cellSurfaceMode: displayState.cellSurfaceMode,
+      boundaryLineMode: displayState.boundaryLineMode,
       shoreVisual: summarizeShoreVisualPaths(this.shoreVisualPaths),
       stateVisual: summarizePoliticalVisualPaths(this.stateVisualPaths, STATE_VISUAL_STYLE),
       provinceVisual: summarizePoliticalVisualPaths(this.provinceVisualPaths, PROVINCE_VISUAL_STYLE),
@@ -3387,6 +3376,47 @@ export class PlaceholderMapRenderer {
         riverPreviewTransform: viewportBufferTransform(this.riverBufferCamera, this.camera)
       },
       webgl2: true
+    };
+  }
+
+  getDisplayState() {
+    const surfaceBinding = this.surfaceResourceOwner ? renderResourceBindingFromOwner(this.surfaceResourceOwner) : null;
+    const boundaryDisplayIntent = surfaceBinding ? createPreparedDisplayIntent({
+      binding: surfaceBinding,
+      colorMode: this.colorMode,
+      viewOptions: this.viewOptions
+    }, surfaceBinding) : null;
+    const smoothCellBorders = this.viewOptions.smoothCellBorders !== false;
+    const gpuResidentBoundaryMode = Boolean(GPU_RESIDENT_COLOR_MODES[this.colorMode] && this.cellAttributeStore);
+    const canonical = smoothCellBorders
+      ? !gpuResidentBoundaryMode || (
+        this.gpuResidentSmoothShoreSurfaceKey === boundaryDisplayIntent?.shoreSurfaceKey
+        && this.shoreLineVertices === this.gpuResidentSmoothShoreLineVertices
+      )
+      : this.landCorrectionVertexCount === 0
+        && this.waterCorrectionVertexCount === 0
+        && this.landCoverVertexCount === 0
+        && this.waterCoverVertexCount === 0
+        && (!gpuResidentBoundaryMode || this.shoreLineVertices === this.gpuResidentHardShoreLineVertices);
+    return {
+      colorMode: this.colorMode,
+      viewOptions: {...this.viewOptions},
+      layerVisibility: {...this.layerVisibility},
+      camera: {...this.camera},
+      cellSurfaceMode: smoothCellBorders ? "visual-cells" : "hard-cells",
+      boundaryLineMode: boundaryLineModeForOptions(this.viewOptions, this.cellVisualMesh, this.shoreVisualPaths),
+      boundaryPresentation: {
+        state: smoothCellBorders ? "smooth" : "hard",
+        canonical,
+        displayFingerprint: boundaryDisplayIntent?.fingerprint || "",
+        shoreSurfaceKey: this.gpuResidentSmoothShoreSurfaceKey,
+        surfaceRangeFingerprint: this.surfaceResourceOwner?.rangeFingerprint || "",
+        correctionWordLength: this.surfaceResourceOwner?.correctionWordLength || 0,
+        shoreLineVertexCount: this.shoreLineVertexCount,
+        smoothShoreLineVertexCount: this.gpuResidentSmoothShoreLineVertices.length / 6,
+        hardShoreLineVertexCount: this.gpuResidentHardShoreLineVertices.length / 6,
+        binding: surfaceBinding
+      }
     };
   }
 

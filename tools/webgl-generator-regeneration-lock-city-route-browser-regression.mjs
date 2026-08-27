@@ -100,7 +100,23 @@ try {
     if (stableJson(activeRoutes().filter(item => item.id !== directRoute.id)) === routesBefore) throw new Error("未锁道路没有变化");
     const routeTxAfter = transactionSnapshot("routes");
     assertSingleHistory(routeTxBefore, routeTxAfter, "道路重生成");
-    result.route = {routeId: directRoute.id, historyDelta: 1, saltDelta: routeTxAfter.salt - routeTxBefore.salt};
+    const routesAfter = stableJson(activeRoutes());
+    const pickingAfter = routePickingAudit();
+    if (pickingAfter.staleSegments !== 0) throw new Error(`道路重生成后 picking 遗留 ${pickingAfter.staleSegments} 段旧路线`);
+    unwrap(await api.history.undo(), "undo route regeneration");
+    const pickingUndo = routePickingAudit();
+    if (pickingUndo.staleSegments !== 0) throw new Error(`道路撤销后 picking 遗留 ${pickingUndo.staleSegments} 段旧路线`);
+    unwrap(await api.history.redo(), "redo route regeneration");
+    if (stableJson(activeRoutes()) !== routesAfter) throw new Error("道路重做没有恢复已提交路线集合");
+    assertDeepEqual(routeEnvelope(directRoute.id), directBefore, "重做后的直接锁路完整镜像");
+    const pickingRedo = routePickingAudit();
+    if (pickingRedo.staleSegments !== 0) throw new Error(`道路重做后 picking 遗留 ${pickingRedo.staleSegments} 段旧路线`);
+    result.route = {
+      routeId: directRoute.id,
+      historyDelta: 1,
+      saltDelta: routeTxAfter.salt - routeTxBefore.salt,
+      picking: {after: pickingAfter, undo: pickingUndo, redo: pickingRedo}
+    };
 
     await newMap("lock-route-conflict");
     const conflicts = activeRoutes().filter(item => item.packCells?.length >= 3).slice(0, 2);
@@ -155,6 +171,19 @@ try {
 
     function activeStates() {
       return (app.map.politics?.states || []).filter(item => item?.i && !item.removed);
+    }
+
+    function routePickingAudit() {
+      const routeIds = new Set(activeRoutes().map(routeRow => Number(routeRow.id)));
+      let bucketSegments = 0;
+      let staleSegments = 0;
+      for (const bucket of app.renderer.objectPickingIndex?.buckets?.values?.() || []) {
+        for (const segment of bucket.routeSegments || []) {
+          bucketSegments++;
+          if (!routeIds.has(Number(segment?.route?.id))) staleSegments++;
+        }
+      }
+      return {routes: routeIds.size, bucketSegments, staleSegments};
     }
 
     function cityEnvelope(id) {

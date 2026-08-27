@@ -6,7 +6,8 @@ import {
   LAZY_PANEL_ERROR_KIND,
   classifyLazyVuePanelError,
   createLazyVuePanel,
-  getLazyVuePanelPreloadStats
+  getLazyVuePanelPreloadStats,
+  scheduleLazyVuePanelPreload
 } from "../app/webgl-generator/src/ui/panels/lazy-vue-panel.js";
 
 const rootDir = new URL("../", import.meta.url);
@@ -65,6 +66,31 @@ async function verifyDelayedLoading() {
   await loading;
   assert.notEqual(slow.root.textContent, "正在打开测试面板，请稍候片刻。", "面板挂载后等待文案未清理");
   slowPanel.unmount();
+}
+
+async function verifyOnDemandPreload() {
+  const fixture = createDocumentFixture();
+  let preloadCalls = 0;
+  const panel = createLazyVuePanel(
+    fixture.documentRef,
+    fixture.root,
+    () => {
+      preloadCalls += 1;
+      return {name: "OnDemandPanel"};
+    },
+    {},
+    {id: "on-demand-preload"},
+    {createApp: createMountFixture()}
+  );
+  const state = scheduleLazyVuePanelPreload(fixture.documentRef, {reason: "map-ready", execute: false});
+  assert.equal(state.mode, "on-demand");
+  assert.equal(state.pending, 0);
+  assert.ok(state.finishedAt, "按需模式没有立即结束后台预热队列");
+  assert.equal(preloadCalls, 0, "map-ready 后仍执行了动态模块后台预热");
+  assert.equal(state.getStats().items.find(item => item.id === "on-demand-preload")?.status, "on-demand");
+  await panel.load();
+  assert.equal(preloadCalls, 1, "首次正式打开没有加载按需面板");
+  panel.unmount();
 }
 
 async function verifyModuleFetchRecovery() {
@@ -253,9 +279,10 @@ await verifyModuleFetchRecovery();
 await verifyComponentFailure();
 await verifyMountFailureRetry();
 await verifyDelayedLoading();
+await verifyOnDemandPreload();
 
 console.log(JSON.stringify({
   ok: true,
   bundledWithEntry: ["ZonePanel", "CloudStoragePanel"],
-  recovery: {moduleFetch: true, component: true, mountRetry: true, delayedLoading: true, mountCount: 2, automaticReload: false, boundedMessage: 240}
+  recovery: {moduleFetch: true, component: true, mountRetry: true, delayedLoading: true, onDemandPreload: true, mountCount: 2, automaticReload: false, boundedMessage: 240}
 }, null, 2));

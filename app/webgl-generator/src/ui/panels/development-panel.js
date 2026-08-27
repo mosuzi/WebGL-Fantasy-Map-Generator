@@ -562,7 +562,11 @@ function formatHealthEvent(event) {
   const detail = event.detail || {};
   const duration = Number.isFinite(detail.durationMs) ? `，${detail.durationMs}ms` : "";
   const gap = Number.isFinite(detail.gapMs) ? `，间隔 ${detail.gapMs}ms` : "";
+  const timings = detail.timings && typeof detail.timings === "object"
+    ? Object.entries(detail.timings).map(([name, value]) => `${name} ${value}ms`).join(" / ")
+    : "";
+  const timingSuffix = timings ? `，步骤 ${timings}` : "";
   const message = detail.message || detail.loadingText || detail.operation || detail.eventName || detail.seed || "";
   const suffix = message ? `：${message}` : "";
-  return `${pageTime} ${event.severity.toUpperCase()} ${event.type}${suffix}${duration}${gap}`.trim();
+  return `${pageTime} ${event.severity.toUpperCase()} ${event.type}${suffix}${duration}${gap}${timingSuffix}`.trim();
 }

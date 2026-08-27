@@ -1115,11 +1115,13 @@ function buildRuntimeStats(state, documentRef) {
   const health = buildHealthEventsSnapshot(state, {limit: 20}).events;
   const loading = documentRef.getElementById("generation-loading");
   return {
+    revision: state?.mapRevision?.getSnapshot?.() || null,
     renderer: rendererStats,
     editHistory: history,
     lastEditRefresh: state?.lastEditRefresh || null,
     selection: buildSelectionSnapshot(state),
     health: {
+      thresholds: state?.healthMonitor?.thresholds || null,
       events: health.length,
       latest: health.slice(-5)
     },

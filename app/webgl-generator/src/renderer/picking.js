@@ -175,7 +175,20 @@ export function refreshRoutesInPickingIndex(index, routes, routeIds) {
     }
   }
   index.routeSegmentCount = (routes || []).reduce((total, route) => total + Math.max(0, (Array.isArray(route?.points) ? route.points.length : 0) - 1), 0);
+  refreshPickingIndexStats(index);
   return true;
+}
+
+export function rebuildRoutesInPickingIndex(index, routes) {
+  if (!index) return false;
+  for (const bucket of index.buckets.values()) bucket.routeSegments = [];
+  index.routeSegmentCount = 0;
+  const routeIds = (routes || []).map(route => route?.id);
+  if (!routeIds.length) {
+    refreshPickingIndexStats(index);
+    return true;
+  }
+  return refreshRoutesInPickingIndex(index, routes, routeIds);
 }
 
 export function refreshRiversInPickingIndex(index, rivers) {
@@ -196,12 +209,16 @@ export function refreshRiversInPickingIndex(index, rivers) {
     }
   }
   index.riverSegmentCount = riverSegmentCount;
+  refreshPickingIndexStats(index);
+  return true;
+}
+
+function refreshPickingIndexStats(index) {
   index.bucketCount = index.buckets.size;
   index.maxBucketItems = 0;
   for (const bucket of index.buckets.values()) {
     index.maxBucketItems = Math.max(index.maxBucketItems, bucket.cities.length + bucket.markers.length + bucket.military.length + bucket.routeSegments.length + bucket.riverSegments.length);
   }
-  return true;
 }
 
 export function refreshNonRoutePickingIndexPreservingRoutes(index, map) {

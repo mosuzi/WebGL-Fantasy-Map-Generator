@@ -686,6 +686,8 @@ export function updateRuntimePanel(documentRef, state) {
   const {map, renderer} = state;
   if (!map || !renderer) return;
   const stats = renderer.getStats();
+  const revision = state.mapRevision?.getSnapshot?.() || {};
+  const longTaskThresholdMs = state.healthMonitor?.thresholds?.longTaskMs;
   const unitPreferences = readControlPreferences(documentRef).units;
   syncLabelLimitControlBounds(documentRef, map, stats);
   documentRef.getElementById("app-status").textContent = `${map.status.message}，seed ${map.metadata.seed}`;
@@ -702,6 +704,8 @@ export function updateRuntimePanel(documentRef, state) {
     statRow(documentRef, "生成耗时", formatGenerationTiming(map.metadata.generationTiming)),
     statRow(documentRef, "WebGL 加载", formatGenerationTiming(stats.loadMap)),
     statRow(documentRef, "Seed", map.metadata.seed),
+    statRow(documentRef, "地图版本", `${revision.mapIdentity || "none"} / r${revision.mapRevision ?? 0}`),
+    statRow(documentRef, "LongTask 门", Number.isFinite(longTaskThresholdMs) ? `${longTaskThresholdMs}ms` : "unknown"),
     statRow(documentRef, "自动随机", map.options.randomSeed ? "是" : "否"),
     statRow(documentRef, "地形模板", map.heightmap.name),
     statRow(documentRef, "目标 cells", map.metadata.cellsTarget),
@@ -736,13 +740,14 @@ export function updateRuntimePanel(documentRef, state) {
     statRow(documentRef, "摘要校验", map.summary.checksum),
     statRow(documentRef, "随机预览", map.summary.randomPreview.join(", ")),
     statRow(documentRef, "视图", stats.colorMode),
-    statRow(documentRef, "海底高度", stats.viewOptions?.showOceanHeight ? "显示" : "隐藏"),
-    statRow(documentRef, "单元格边界", stats.cellSurfaceMode === "visual-cells" ? "平滑" : "硬边界"),
-    statRow(documentRef, "地图边缘渐隐", stats.viewOptions?.mapEdgeFade === false ? "关闭" : "开启"),
-    statRow(documentRef, "边界线来源", formatBoundaryLineMode(stats.boundaryLineMode)),
+    statRow(documentRef, "海底高度", stats.viewOptions?.showOceanHeight ? "显示" : "隐藏", {statKey: "show-ocean-height"}),
+    statRow(documentRef, "单元格边界", stats.cellSurfaceMode === "visual-cells" ? "平滑" : "硬边界", {statKey: "cell-surface-mode"}),
+    statRow(documentRef, "地图边缘渐隐", stats.viewOptions?.mapEdgeFade === false ? "关闭" : "开启", {statKey: "map-edge-fade"}),
+    statRow(documentRef, "边界线来源", formatBoundaryLineMode(stats.boundaryLineMode), {statKey: "boundary-line-mode"}),
     statRow(documentRef, "边界资源", stats.boundaryPresentation?.canonical
       ? `${stats.boundaryPresentation.state} / canonical`
-      : `${stats.boundaryPresentation?.state || "unknown"} / mismatch`),
+      : `${stats.boundaryPresentation?.state || "unknown"} / mismatch`, {statKey: "boundary-resource"}),
+    statRow(documentRef, "边界刷新", formatBoundaryRefreshTimings(renderer.lastBoundaryRefreshTimings), {statKey: "boundary-refresh-timings"}),
     statRow(documentRef, "图层", formatLayerVisibility(stats.layerVisibility)),
     statRow(documentRef, "GPU 顶点", stats.vertexCount),
     statRow(documentRef, "道路三角形", stats.routeTriangleCount),
@@ -755,6 +760,7 @@ export function updateRuntimePanel(documentRef, state) {
     statRow(documentRef, "选中高亮", `${stats.selectionHighlightMode}, ${stats.selectionTriangleCount} tris, ${stats.selectionBuildMs}ms`),
     statRow(documentRef, "定位状态", stats.locateStatus),
     statRow(documentRef, "编辑历史", formatEditHistory(state.editHistory?.getStats())),
+    statRow(documentRef, "历史动作耗时", formatHistoryPerformance(state.lastHistoryPerformance)),
     statRow(documentRef, "编辑刷新", formatEditRefresh(state.lastEditRefresh)),
     statRow(documentRef, "派生过期", formatDerivedStale(map)),
     statRow(documentRef, "对象索引", stats.objectPickingIndex ? `${stats.objectPickingIndex.buckets} buckets / ${stats.objectPickingIndex.markers} markers / ${stats.objectPickingIndex.routeSegments} routes / ${stats.objectPickingIndex.riverSegments} rivers` : "none"),
@@ -772,6 +778,23 @@ export function updateRuntimePanel(documentRef, state) {
     statRow(documentRef, "快照依赖", map.status.snapshotDependency ? "是" : "否"),
     statRow(documentRef, "生成日志", map.generationLog.join("\n"), {className: "development-generation-log"})
   );
+}
+
+export function updateRuntimeDisplayPreferenceStats(documentRef, state, key) {
+  const display = state.renderer?.getDisplayState?.();
+  if (!display) return;
+  if (key === "smoothCellBorders") {
+    setRuntimeStatValue(documentRef, "cell-surface-mode", display.cellSurfaceMode === "visual-cells" ? "平滑" : "硬边界");
+    setRuntimeStatValue(documentRef, "boundary-line-mode", formatBoundaryLineMode(display.boundaryLineMode));
+    setRuntimeStatValue(documentRef, "boundary-resource", display.boundaryPresentation?.canonical
+      ? `${display.boundaryPresentation.state} / canonical`
+      : `${display.boundaryPresentation?.state || "unknown"} / mismatch`);
+    setRuntimeStatValue(documentRef, "boundary-refresh-timings", formatBoundaryRefreshTimings(state.renderer?.lastBoundaryRefreshTimings));
+  }
+  if (key === "mapEdgeFade") {
+    setRuntimeStatValue(documentRef, "map-edge-fade", display.viewOptions?.mapEdgeFade === false ? "关闭" : "开启");
+    setRuntimeStatValue(documentRef, "boundary-line-mode", formatBoundaryLineMode(display.boundaryLineMode));
+  }
 }
 
 function dispatchRegenerationTargets(documentRef, map) {
@@ -1188,6 +1211,12 @@ function formatEditRefresh(refresh) {
   return `${refresh.render} / ${refresh.selection} / ${refresh.derived} / ${refresh.affected}${pending}`;
 }
 
+function formatHistoryPerformance(profile) {
+  if (!profile?.timings) return "none";
+  const timings = profile.timings;
+  return `${profile.action || "history"} / mutation ${timings.mutationMs || 0}ms / refresh ${timings.refreshMs || 0}ms / total ${timings.totalMs || 0}ms`;
+}
+
 function formatDerivedStale(map) {
   const systems = map.metadata?.derivedStale?.systems || [];
   return systems.length ? systems.map(system => DERIVED_STALE_LABELS[system] || system).join("、") : "none";
@@ -1271,15 +1300,29 @@ function formatBoundaryLineMode(mode) {
   return mode || "未知";
 }
 
+function formatBoundaryRefreshTimings(timings) {
+  if (!timings || typeof timings !== "object") return "none";
+  return ["surface", "line", "draw"]
+    .filter(key => Number.isFinite(timings[key]))
+    .map(key => `${key} ${timings[key]}ms`)
+    .join(" / ") || "none";
+}
+
 function statRow(documentRef, label, value, options = {}) {
   const row = documentRef.createElement("div");
   if (options.className) row.className = options.className;
+  if (options.statKey) row.dataset.statKey = options.statKey;
   const term = documentRef.createElement("dt");
   const desc = documentRef.createElement("dd");
   term.textContent = label;
   desc.textContent = formatStatValue(documentRef, value);
   row.append(term, desc);
   return row;
+}
+
+function setRuntimeStatValue(documentRef, key, value) {
+  const description = documentRef.querySelector(`#runtime-stats [data-stat-key="${key}"] dd`);
+  if (description) description.textContent = formatStatValue(documentRef, value);
 }
 
 function formatStatValue(documentRef, value) {

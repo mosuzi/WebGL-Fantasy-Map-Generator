@@ -340,7 +340,8 @@ function validateRouteDomain(values: Map<string, unknown>, sourceMap: unknown): 
 }
 
 function validateRouteCellLinks(routes: unknown[], linksValue: unknown, packCount: number): void {
-  const expected: UnknownRecord = {};
+  const expectedOwners = new Map<string, Set<number>>();
+  const expectedCells = new Set<string>();
   for (const value of routes) {
     if (!value) continue;
     const route = record(value, "geography.route-link.route");
@@ -351,13 +352,36 @@ function validateRouteCellLinks(routes: unknown[], linksValue: unknown, packCoun
       const from = cells[index];
       const to = cells[index + 1];
       if (!Number.isSafeInteger(from) || !Number.isSafeInteger(to) || from < 0 || to < 0 || from >= packCount || to >= packCount) throw protocolError("route-cell-link-invalid", `route #${id} cell link 越界`);
-      const fromLinks = isPlainRecord(expected[String(from)]) ? expected[String(from)] as UnknownRecord : (expected[String(from)] = {} as UnknownRecord);
-      const toLinks = isPlainRecord(expected[String(to)]) ? expected[String(to)] as UnknownRecord : (expected[String(to)] = {} as UnknownRecord);
-      fromLinks[String(to)] = id;
-      toLinks[String(from)] = id;
+      const edgeKey = from <= to ? `${from}:${to}` : `${to}:${from}`;
+      const owners = expectedOwners.get(edgeKey) || new Set<number>();
+      owners.add(id);
+      expectedOwners.set(edgeKey, owners);
+      expectedCells.add(String(from));
+      expectedCells.add(String(to));
     }
   }
-  assertDeepEqual(linksValue, expected, "route-cell-link-mirror-invalid", "pack.cells.routes 与路线边镜像不一致");
+  const links = record(linksValue, "geography.patch.pack.cells.routes");
+  const fail = (): never => { throw protocolError("route-cell-link-mirror-invalid", "pack.cells.routes 与路线边镜像不一致"); };
+  const actualCells = Object.keys(links);
+  if (actualCells.length !== expectedCells.size || actualCells.some(cell => !expectedCells.has(cell))) fail();
+  const actualEdges = new Set<string>();
+  for (const fromKey of actualCells) {
+    const from = Number(fromKey);
+    if (!Number.isSafeInteger(from) || from < 0 || from >= packCount) fail();
+    const fromLinks = record(links[fromKey], `geography.patch.pack.cells.routes.${fromKey}`);
+    for (const [toKey, ownerValue] of Object.entries(fromLinks)) {
+      const to = Number(toKey);
+      const owner = Number(ownerValue);
+      if (!Number.isSafeInteger(to) || to < 0 || to >= packCount || typeof ownerValue !== "number" || !Number.isSafeInteger(owner)) fail();
+      const edgeKey = from <= to ? `${from}:${to}` : `${to}:${from}`;
+      const owners = expectedOwners.get(edgeKey);
+      if (!owners?.has(owner)) fail();
+      const reverse = record(links[toKey], `geography.patch.pack.cells.routes.${toKey}`);
+      if (reverse[fromKey] !== ownerValue) fail();
+      actualEdges.add(edgeKey);
+    }
+  }
+  if (actualEdges.size !== expectedOwners.size || [...expectedOwners.keys()].some(edgeKey => !actualEdges.has(edgeKey))) fail();
 }
 
 async function validateRiverMirrorsAsync(values: Map<string, unknown>, sourceMapValue: unknown, control: AsyncRiverValidationControl): Promise<void> {

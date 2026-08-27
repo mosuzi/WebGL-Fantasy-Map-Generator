@@ -4,7 +4,7 @@ const EVENT_LIMIT = 180;
 const INPUT_EVENTS = Object.freeze(["pointerdown", "click", "keydown", "input", "change"]);
 
 const DEFAULT_THRESHOLDS = Object.freeze({
-  longTaskMs: 250,
+  longTaskMs: 200,
   frameGapMs: 2000,
   inputDelayMs: 120,
   inputHandlerMs: 250,
