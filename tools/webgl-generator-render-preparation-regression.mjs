@@ -38,6 +38,7 @@ import {applyPreparedPickingComponents} from "../app/webgl-generator/src/rendere
 import {createWorkerTaskCoordinator} from "../app/webgl-generator/src/runtime/worker-task-coordinator.js";
 import {
   assertRenderPreparationBinding,
+  buildCompatibleCompactSurface,
   collectRenderPreparationTransfers,
   executeRenderPreparationTask,
   rebindShoreLinePathCache,
@@ -244,6 +245,53 @@ assert.equal("base" in compactSurface.layers.surface, false, "compact surface �
 assert.ok(compactSurface.layers.surface.geometry instanceof Float32Array, "compact surface 必须 transfer 紧凑 geometry");
 assert.equal(compactSurface.layers.surface.geometry.length * 2, compactSurface.layers.surface.sourceFloatLength, "compact surface 几何长度必须能还原源 float 长度");
 assert.equal(compactSurface.layers.surface.sourceFloatLength, firstSurface.layers.surface.base.length, "compact surface 不得改变首屏三角形数量");
+const expectedCompactSurface = compactSurface.layers.surface;
+const compactRecoveryFixtures = [
+  ["ranges-missing", surface => ({...surface, surfaceCellRangesMode: "unavailable", surfaceCellRanges: new Map()})],
+  ["ranges-gap", surface => {
+    const ranges = new Map(surface.surfaceCellRanges);
+    const target = [...ranges].find(([, range]) => range.end > range.start);
+    ranges.set(target[0], {...target[1], start: target[1].start + 6});
+    return {...surface, surfaceCellRanges: ranges};
+  }],
+  ["ranges-tail-truncated", surface => {
+    const ranges = new Map(surface.surfaceCellRanges);
+    const target = [...ranges].reverse().find(([, range]) => range.end > range.start);
+    ranges.set(target[0], {...target[1], end: target[1].end - 18});
+    return {...surface, surfaceCellRanges: ranges};
+  }],
+  ["geometry-missing", surface => {
+    const damaged = {...surface};
+    delete damaged.geometry;
+    delete damaged.base;
+    return damaged;
+  }],
+  ["identity-missing", surface => {
+    const geometry = new Float32Array(surface.geometry);
+    new Uint32Array(geometry.buffer)[2] = (SURFACE_BASE_INVALID_CELL_ID << 1) >>> 0;
+    return {...surface, geometry};
+  }]
+];
+for (const [fixtureName, damage] of compactRecoveryFixtures) {
+  const mapRefs = [map.grid, map.grid.cells, map.pack];
+  const recovered = buildCompatibleCompactSurface(map, damage(expectedCompactSurface), "height", {smoothCellBorders: true});
+  assert.equal(byteChecksum(recovered.geometry), byteChecksum(expectedCompactSurface.geometry), `${fixtureName} 必须从 canonical grid 补建相同紧凑几何`);
+  assert.deepEqual([...recovered.surfaceCellRanges], [...expectedCompactSurface.surfaceCellRanges], `${fixtureName} 必须补齐全部 canonical cell ranges`);
+  assert.deepEqual([map.grid, map.grid.cells, map.pack], mapRefs, `${fixtureName} 补建不得替换 canonical map owner`);
+}
+const brokenCanonicalMap = structuredClone(map);
+brokenCanonicalMap.grid.cells.v = null;
+assert.throws(
+  () => buildCompatibleCompactSurface(
+    brokenCanonicalMap,
+    compactRecoveryFixtures[0][1](expectedCompactSurface),
+    "height",
+    {smoothCellBorders: true}
+  ),
+  error => error?.code === "render-surface-compact-rebuild-failed"
+    && error?.details?.rebuildCode === "grid-cell-surface-source-invalid",
+  "canonical grid 自身损坏时才允许补建失败，并保留精确底层错误码"
+);
 for (const colorMode of ["states", "provinces"]) {
   const legacyCoreSurface = await executeRenderPreparationTask({
     map,

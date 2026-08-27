@@ -34,7 +34,7 @@ import {buildObjectPickingDto} from "./picking-dto.js";
 import {OBJECT_PICKING_COMPONENTS} from "./picking.js";
 import {normalizeUnitPreferences} from "../ui/display-units.js";
 import {createRenderContext} from "./render-context.js";
-import {compactSurfaceBaseGeometry} from "./surface-base-buffer-set.js";
+import {SURFACE_BASE_INVALID_CELL_ID, compactSurfaceBaseGeometry} from "./surface-base-buffer-set.js";
 import {createPreparedDisplayIntent} from "./prepared-display-intent.js";
 import {
   normalizeRenderResourceBinding,
@@ -201,8 +201,12 @@ export async function executeRenderPreparationTask(payload = {}, context = {}) {
           )
         : null;
       if (compactSurface) {
-        assertCompactSurfaceCoverage(compactSurface);
-        result.layers.surface = compactSurface;
+        result.layers.surface = buildCompatibleCompactSurface(
+          map,
+          compactSurface,
+          payload.colorMode || "height",
+          payload.viewOptions || {}
+        );
       } else {
         ensureCellVisualCache(map, binding, payload.caches, cache, {
           boundaryOnly: payload.cellVisualGeometryMode === "boundary-only"
@@ -237,7 +241,12 @@ export async function executeRenderPreparationTask(payload = {}, context = {}) {
             prepared.cellVisual
           );
           result.layers.surface = payload.surfaceTransferMode === "gpu-resident-compact"
-            ? compactPreparedSurface(surface)
+            ? buildCompatibleCompactSurface(
+                map,
+                surface,
+                payload.colorMode || "height",
+                payload.viewOptions || {}
+              )
             : surface;
         }
       }
@@ -426,20 +435,40 @@ function ensureProvincePathsCache(map, binding, input = {}, cache = {}) {
   return cache.provincePaths;
 }
 
-function compactPreparedSurface(surface) {
-  assertCompactSurfaceCoverage(surface);
-  const geometry = compactSurfaceBaseGeometry(surface.base, surface.surfaceCellRanges);
-  const result = {
-    ...surface,
-    mode: "gpu-resident-compact",
-    geometry,
-    sourceFloatLength: surface.base.length
-  };
-  delete result.base;
-  return result;
+export function buildCompatibleCompactSurface(map, surface, colorMode = "height", viewOptions = {}) {
+  try {
+    assertCompactSurfaceCoverage(surface, map);
+    if (surface.geometry instanceof Float32Array) return surface;
+    const geometry = compactSurfaceBaseGeometry(surface.base, surface.surfaceCellRanges);
+    const result = {
+      ...surface,
+      mode: "gpu-resident-compact",
+      geometry,
+      sourceFloatLength: surface.base.length
+    };
+    delete result.base;
+    return result;
+  } catch (initialError) {
+    if (!String(initialError?.code || "").startsWith("render-surface-compact-")) throw initialError;
+    let rebuilt;
+    try {
+      rebuilt = buildPlaceholderCompactSurfaceBundle(map, colorMode, viewOptions);
+      if (!rebuilt) {
+        throw renderPreparationError("render-surface-compact-rebuild-unsupported", `颜色模式 ${colorMode} 不支持 canonical grid 紧凑 surface 补建`);
+      }
+      assertCompactSurfaceCoverage(rebuilt, map);
+    } catch (rebuildError) {
+      throw renderPreparationError("render-surface-compact-rebuild-failed", "紧凑 surface 覆盖缺失且无法从 canonical grid 补建", {
+        initialCode: initialError.code || null,
+        rebuildCode: rebuildError?.code || null,
+        rebuildMessage: rebuildError?.message || String(rebuildError)
+      });
+    }
+    return rebuilt;
+  }
 }
 
-function assertCompactSurfaceCoverage(surface) {
+function assertCompactSurfaceCoverage(surface, map = null) {
   const base = surface?.base;
   const directGeometry = surface?.geometry;
   const sourceFloatLength = base instanceof Float32Array
@@ -449,10 +478,18 @@ function assertCompactSurfaceCoverage(surface) {
     throw renderPreparationError("render-surface-compact-base-invalid", "紧凑 surface 缺少基础几何");
   }
   if (!Number.isSafeInteger(sourceFloatLength) || sourceFloatLength < 0
-    || directGeometry instanceof Float32Array && directGeometry.length * 2 !== sourceFloatLength) {
+    || base instanceof Float32Array && base.length % 18 !== 0
+    || directGeometry instanceof Float32Array && (directGeometry.length % 9 !== 0 || directGeometry.length * 2 !== sourceFloatLength)) {
     throw renderPreparationError("render-surface-compact-base-invalid", "紧凑 surface 基础几何长度无效");
   }
-  if (!sourceFloatLength) return;
+  if (!sourceFloatLength) {
+    if (map?.grid?.cells?.i?.length) {
+      throw renderPreparationError("render-surface-compact-ranges-incomplete", "紧凑 surface 为空但 canonical grid 仍含 cells", {
+        expectedCells: map.grid.cells.i.length
+      });
+    }
+    return;
+  }
   const ranges = surface.surfaceCellRanges;
   if (surface.surfaceCellRangesMode === "unavailable" || !(ranges instanceof Map) || !ranges.size) {
     throw renderPreparationError("render-surface-compact-ranges-unavailable", "紧凑 surface 缺少可用的 cell ranges", {
@@ -462,11 +499,17 @@ function assertCompactSurfaceCoverage(surface) {
     });
   }
   let coveredUntil = 0;
+  const expectedCellIds = map?.grid?.cells?.i ? new Set(Array.from(map.grid.cells.i, Number)) : null;
+  const seenCellIds = new Set();
   for (const [cellId, range] of ranges) {
+    const normalizedCellId = Number(cellId);
     const start = Number(range?.start);
     const end = Number(range?.end);
-    if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end)
-      || start !== coveredUntil || end < start || end > sourceFloatLength) {
+    if (!Number.isInteger(normalizedCellId) || normalizedCellId < 0 || seenCellIds.has(normalizedCellId)
+      || expectedCellIds && !expectedCellIds.has(normalizedCellId)
+      || !Number.isSafeInteger(start) || !Number.isSafeInteger(end)
+      || start !== coveredUntil || end < start || end > sourceFloatLength
+      || start % 6 !== 0 || end % 6 !== 0 || (end - start) % 18 !== 0) {
       throw renderPreparationError("render-surface-compact-ranges-incomplete", "紧凑 surface 的 cell ranges 未连续覆盖基础几何", {
         cellId,
         expectedStart: coveredUntil,
@@ -475,6 +518,7 @@ function assertCompactSurfaceCoverage(surface) {
         surfaceFloatLength: sourceFloatLength
       });
     }
+    seenCellIds.add(normalizedCellId);
     coveredUntil = end;
   }
   if (coveredUntil !== sourceFloatLength) {
@@ -483,6 +527,31 @@ function assertCompactSurfaceCoverage(surface) {
       surfaceFloatLength: sourceFloatLength,
       rangeCount: ranges.size
     });
+  }
+  if (expectedCellIds && (seenCellIds.size !== expectedCellIds.size || [...expectedCellIds].some(cellId => !seenCellIds.has(cellId)))) {
+    throw renderPreparationError("render-surface-compact-ranges-incomplete", "紧凑 surface 的 cell ranges 未覆盖全部 canonical grid cells", {
+      expectedCells: expectedCellIds.size,
+      actualCells: seenCellIds.size
+    });
+  }
+  if (directGeometry instanceof Float32Array) assertCompactGeometryIdentity(directGeometry, expectedCellIds);
+}
+
+function assertCompactGeometryIdentity(geometry, expectedCellIds) {
+  const words = new Uint32Array(geometry.buffer, geometry.byteOffset, geometry.length);
+  for (let offset = 0; offset < geometry.length; offset += 3) {
+    const x = geometry[offset];
+    const y = geometry[offset + 1];
+    const identity = words[offset + 2];
+    const cellId = identity >>> 1;
+    if (!Number.isFinite(x) || !Number.isFinite(y)
+      || cellId === SURFACE_BASE_INVALID_CELL_ID
+      || expectedCellIds && !expectedCellIds.has(cellId)) {
+      throw renderPreparationError("render-surface-compact-identity-invalid", "紧凑 surface 含缺失或无效的 cell identity", {
+        vertex: offset / 3,
+        cellId
+      });
+    }
   }
 }
 

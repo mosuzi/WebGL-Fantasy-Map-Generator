@@ -34,8 +34,13 @@ export function buildCompactGridCellSurfaceGeometry(context) {
   const vertexPoints = resolvedGridVertexPoints(grid);
   const graphWidth = Number(map.metadata.graphWidth);
   const graphHeight = Number(map.metadata.graphHeight);
+  assertCompactGridSurfaceSource(grid, vertexPoints, graphWidth, graphHeight);
   let estimatedWords = 0;
-  for (const vertexIds of grid.cells.v) estimatedWords += Math.max(0, vertexIds.length - 2) * 9;
+  for (const rawCell of grid.cells.i) {
+    const cellIndex = Number(rawCell);
+    const vertexIds = grid.cells.v[cellIndex];
+    estimatedWords += Math.max(0, (vertexIds?.length || 0) - 2) * 9;
+  }
   let geometry = new Float32Array(Math.max(estimatedWords, 9));
   let identities = new Uint32Array(geometry.buffer);
   const surfaceCellRanges = new Map();
@@ -50,9 +55,9 @@ export function buildCompactGridCellSurfaceGeometry(context) {
     identities = new Uint32Array(replacement.buffer);
   };
 
-  for (let cellIndex = 0; cellIndex < grid.cells.v.length; cellIndex++) {
-    const vertexIds = grid.cells.v[cellIndex];
-    if (vertexIds.length < 3) continue;
+  for (const rawCell of grid.cells.i) {
+    const cellIndex = Number(rawCell);
+    const vertexIds = grid.cells.v[cellIndex] || [];
     const triangulation = triangulateGridCellSurface(map, cellIndex, vertexIds, vertexPoints);
     if (triangulation.status !== "ok") {
       const error = new Error(`grid cell ${cellIndex} 无法形成安全表面`);
@@ -79,6 +84,31 @@ export function buildCompactGridCellSurfaceGeometry(context) {
     sourceFloatLength: wordOffset * 2,
     surfaceCellRanges
   };
+}
+
+function assertCompactGridSurfaceSource(grid, vertexPoints, graphWidth, graphHeight) {
+  const cellIds = grid?.cells?.i;
+  if (!cellIds || typeof cellIds[Symbol.iterator] !== "function"
+    || !Array.isArray(grid?.cells?.v)
+    || !grid?.cells?.h
+    || !Array.isArray(grid?.vertices?.p)
+    || !Array.isArray(vertexPoints)
+    || !Number.isFinite(graphWidth) || graphWidth <= 0
+    || !Number.isFinite(graphHeight) || graphHeight <= 0) {
+    const error = new Error("canonical grid 缺少可补建紧凑 surface 的基础容器");
+    error.code = "grid-cell-surface-source-invalid";
+    throw error;
+  }
+  const seen = new Set();
+  for (const rawCell of cellIds) {
+    const cell = Number(rawCell);
+    if (!Number.isInteger(cell) || cell < 0 || cell >= grid.cells.v.length || cell >= grid.cells.h.length || seen.has(cell)) {
+      const error = new Error(`canonical grid cell identity 无效：${rawCell}`);
+      error.code = "grid-cell-surface-source-invalid";
+      throw error;
+    }
+    seen.add(cell);
+  }
 }
 
 function triangulateGridCellSurface(map, cellIndex, vertexIds, vertexPoints) {
