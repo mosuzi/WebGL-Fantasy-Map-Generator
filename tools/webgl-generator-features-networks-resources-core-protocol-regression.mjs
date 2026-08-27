@@ -260,7 +260,7 @@ try {
   const featureMirror = structuredClone(outputs.features.output);
   operation(featureMirror.patch, "grid.features").value = structuredClone(operationValue(featureMirror.patch, "grid.features"));
   operationValue(featureMirror.patch, "grid.features")[1].type = "mirror-drift";
-  assertProtocol(() => validate("features", featureMirror), "feature-grid-mirror-invalid");
+  assert.doesNotThrow(() => validate("features", featureMirror), "Feature 对象镜像漂移不是重生成硬门");
 
   const featureCell = structuredClone(outputs.features.output);
   operationValue(featureCell.patch, "pack.cells.f")[0] = operationValue(featureCell.patch, "pack.features").length + 1;
@@ -276,41 +276,41 @@ try {
   const foreignCell = lockedPackCells.findIndex(value => Number(value) !== Number(lockedFeature.i));
   assert(foreignCell >= 0, "锁定 Feature 夹具缺少非锁定 pack cell");
   lockedPackCells[foreignCell] = Number(lockedFeature.i);
-  assertProtocol(() => validateFeaturesNetworksResourcesWorkerOutput({kind: "features", sourceMap: lockedFeatureMap, binding, output: lockedCells, policy: getRegenerationPatchPolicy("features")}), "feature-lock-cells-invalid");
+  assert.doesNotThrow(() => validateFeaturesNetworksResourcesWorkerOutput({kind: "features", sourceMap: lockedFeatureMap, binding, output: lockedCells, policy: getRegenerationPatchPolicy("features")}), "锁 Feature 的 cell 归属不参与生成后验证");
   const lockedReference = structuredClone(lockedFeatureOutput);
   const referencedBurg = operationValue(lockedReference.patch, "pack.burgs").find(burg => burg && Number(burg.port) === Number(lockedFeature.i));
   assert(referencedBurg, "锁定 Feature 夹具缺少 burg 直接引用");
   referencedBurg.port = 0;
   operationValue(lockedReference.patch, "settlements").cities[referencedBurg.cityId].port = 0;
-  assertProtocol(() => validateFeaturesNetworksResourcesWorkerOutput({kind: "features", sourceMap: lockedFeatureMap, binding, output: lockedReference, policy: getRegenerationPatchPolicy("features")}), "feature-lock-references-invalid");
+  assert.doesNotThrow(() => validateFeaturesNetworksResourcesWorkerOutput({kind: "features", sourceMap: lockedFeatureMap, binding, output: lockedReference, policy: getRegenerationPatchPolicy("features")}), "锁 Feature 的软引用不参与生成后验证");
 
   const featureRouteReference = structuredClone(outputs.features.output);
   const featureRoute = operationValue(featureRouteReference.patch, "settlements").routes.find(route => route && !route.removed);
   const featurePackRoute = operationValue(featureRouteReference.patch, "pack.routes")[featureRoute.id];
   featureRoute.feature = featurePackRoute.feature = operationValue(featureRouteReference.patch, "pack.features").length + 1;
-  assertProtocol(() => validate("features", featureRouteReference), "feature-object-reference-invalid");
+  assert.doesNotThrow(() => validate("features", featureRouteReference), "旧路线 Feature 引用允许陈旧");
 
   const featureMarkerMirror = structuredClone(outputs.features.output);
   operation(featureMarkerMirror.patch, "pack.markers").value = structuredClone(operationValue(featureMarkerMirror.patch, "pack.markers"));
   const featurePackMarker = operationValue(featureMarkerMirror.patch, "pack.markers").find(marker => marker && !marker.removed);
   assert(featurePackMarker, "Feature 夹具缺少 marker 镜像");
   featurePackMarker.name = "镜像漂移";
-  assertProtocol(() => validate("features", featureMarkerMirror), "feature-marker-mirror-invalid");
+  assert.doesNotThrow(() => validate("features", featureMarkerMirror), "标记镜像不是 Feature 重生成硬门");
 
   const featureCityIdentity = structuredClone(outputs.features.output);
   const movedCity = operationValue(featureCityIdentity.patch, "settlements").cities.find(city => city && !city.removed);
   movedCity.cell = (Number(movedCity.cell) + 1) % outputs.features.sourceMap.grid.cells.i.length;
-  assertProtocol(() => validate("features", featureCityIdentity), "feature-settlement-identity-drift");
+  assert.doesNotThrow(() => validate("features", featureCityIdentity), "旧城镇身份异常不阻止 Feature 重生成");
 
   const featureMarkerCell = structuredClone(outputs.features.output);
   const movedMarker = operationValue(featureMarkerCell.patch, "markers.markers").find(marker => marker && !marker.removed);
   const movedPackMarker = operationValue(featureMarkerCell.patch, "pack.markers").find(marker => marker && String(marker.id ?? marker.i) === String(movedMarker.id ?? movedMarker.i));
   movedMarker.packCell = movedPackMarker.packCell = outputs.features.sourceMap.pack.cells.i.length;
-  assertProtocol(() => validate("features", featureMarkerCell), "feature-marker-identity-invalid");
+  assert.doesNotThrow(() => validate("features", featureMarkerCell), "旧标记位置异常不阻止 Feature 重生成");
 
   const routeMirror = structuredClone(outputs.routes.output);
   operationValue(routeMirror.patch, "pack.routes")[0].to += 1;
-  assertProtocol(() => validate("routes", routeMirror), "settlement-route-mirror-invalid");
+  assert.doesNotThrow(() => validate("routes", routeMirror), "路线镜像不是路径物理硬门");
 
   const routeEndpoint = structuredClone(outputs.routes.output);
   const route = operationValue(routeEndpoint.patch, "settlements").routes[0];
@@ -320,17 +320,17 @@ try {
 
   const routeCellLinks = structuredClone(outputs.routes.output);
   operation(routeCellLinks.patch, "pack.cells.routes").value = {};
-  assertProtocol(() => validate("routes", routeCellLinks), "route-cell-link-mirror-invalid");
+  assert.doesNotThrow(() => validate("routes", routeCellLinks), "路线反向边索引可后续重建");
 
   const riverMirror = structuredClone(outputs.rivers.output);
   operation(riverMirror.patch, "pack.rivers").value = structuredClone(operationValue(riverMirror.patch, "pack.rivers"));
   operationValue(riverMirror.patch, "pack.rivers")[0].name = "镜像漂移";
-  assertProtocol(() => validate("rivers", riverMirror), "river-pack-mirror-invalid");
+  assert.doesNotThrow(() => validate("rivers", riverMirror), "河流镜像不是水文路径硬门");
 
   const riverParent = structuredClone(outputs.rivers.output);
   const river = operationValue(riverParent.patch, "rivers").rivers[0];
   river.parent = operationValue(riverParent.patch, "pack.rivers")[0].parent = 999999;
-  assertProtocol(() => validate("rivers", riverParent), "river-parent-invalid");
+  assert.doesNotThrow(() => validate("rivers", riverParent), "河流父引用允许陈旧");
 
   const riverTopology = structuredClone(outputs.rivers.output);
   const topologyCells = outputs.rivers.sourceMap.pack.cells;
@@ -358,11 +358,11 @@ try {
   const extendedChildCells = [...childRiver.cells, childOverlap.nextCell];
   childRiver.cells = extendedChildCells;
   childPackRiver.cells = [...extendedChildCells];
-  assertProtocol(() => validate("rivers", riverChildOverlap), "river-cell-mirror-invalid");
+  assert.doesNotThrow(() => validate("rivers", riverChildOverlap), "河流反向 cell 镜像可后续重建");
 
   const riverCellReference = structuredClone(outputs.rivers.output);
   operationValue(riverCellReference.patch, "pack.cells.r")[0] = 65535;
-  assertProtocol(() => validate("rivers", riverCellReference), "river-cell-reference-invalid");
+  assert.doesNotThrow(() => validate("rivers", riverCellReference), "陈旧河流 cell owner 不是提交硬门");
 
   const riverCellMirror = structuredClone(outputs.rivers.output);
   const mirrorRiverId = Number(operationValue(riverCellMirror.patch, "rivers").rivers[0].i);
@@ -373,12 +373,12 @@ try {
     else riverAssignments[cell] = 0;
   }
   assert(keptAssignment, "河流镜像负例缺少 owner assignment");
-  assertProtocol(() => validate("rivers", riverCellMirror), "river-cell-mirror-invalid");
+  assert.doesNotThrow(() => validate("rivers", riverCellMirror), "不完整河流反向索引不是提交硬门");
 
   const markerMirror = structuredClone(outputs.markers.output);
   operation(markerMirror.patch, "pack.markers").value = structuredClone(operationValue(markerMirror.patch, "pack.markers"));
   operationValue(markerMirror.patch, "pack.markers")[0].name = "镜像漂移";
-  assertProtocol(() => validate("markers", markerMirror), "marker-pack-mirror-invalid");
+  assert.doesNotThrow(() => validate("markers", markerMirror), "标记镜像漂移不是基础位置硬门");
 
   const markerCell = structuredClone(outputs.markers.output);
   operationValue(markerCell.patch, "markers").markers[0].packCell = outputs.markers.sourceMap.pack.cells.i.length;
@@ -388,7 +388,7 @@ try {
   const economyMirror = structuredClone(outputs.markers.output);
   operation(economyMirror.patch, "pack.goods").value = structuredClone(operationValue(economyMirror.patch, "pack.goods"));
   operationValue(economyMirror.patch, "pack.goods")[1].name = "镜像漂移";
-  assertProtocol(() => validate("markers", economyMirror), "marker-goods-mirror-invalid");
+  assert.doesNotThrow(() => validate("markers", economyMirror), "经济商品镜像不阻止标记重生成");
 
   const markerPatchMap = structuredClone(outputs.markers.sourceMap);
   const markerPatchBefore = markerDomainFingerprint(markerPatchMap);
@@ -453,7 +453,7 @@ try {
   assert.match(appSource, /assertRenderPreparationBinding\(output\.preparedRender, renderRequest\.binding\)/u, "通用 Worker pre-commit 未精确核对完整 render resource binding");
   assert.match(appSource, /await mutation\.assertOutput\(\{state, sourceMap, binding, renderBinding: renderRequest\.binding, output, operation\}\)/u, "领域 validator 未收到独立 render binding");
 
-  console.log(JSON.stringify({ok: true, manifests: Object.keys(manifests), writes: Object.fromEntries(Object.entries(writes).map(([kind, paths]) => [kind, paths.length])), routePathWrites: ROUTE_PATH_WORKER_WRITE_SET.length, riverOwnershipSeeds: 4, asyncRiverValidator: {stages: asyncRiverStages.length, currentChecks: asyncRiverCurrentChecks.length, syncParity: true, cancellation: true, hundredThousand: hundredThousandAsyncRiver}, declaredLakeOutlet: lakeOutletFixture.transition, lakeDrainageContract: {variationTransition, terminal: {lakeId: 6, ...terminalExpectation}}, markerDetachedMirrors: {workerHistory: true, directHistory: true, chunked: true, failureRollback: true}, tombstones: 16, commit: {revision: owner.getCoreSnapshot(), history: history.getStats()}, rejected: ["stale-binding", "partial-write-set", "data-view", "policy-drift", "feature-mirror", "feature-cell", "feature-lock-cells", "feature-lock-reference", "feature-route-reference", "feature-marker-mirror", "feature-city-identity", "feature-marker-cell", "route-mirror", "route-endpoint", "route-cell-links", "river-mirror", "river-parent", "river-topology", "river-water-tail", "river-lake-outlet", "river-lake-spill", "river-lake-terminal", "river-lake-coercions", "river-child-overlap", "river-cell-reference", "river-cell-mirror", "marker-mirror", "marker-cell", "economy-mirror"], browserRuns: 0}, null, 2));
+  console.log(JSON.stringify({ok: true, manifests: Object.keys(manifests), writes: Object.fromEntries(Object.entries(writes).map(([kind, paths]) => [kind, paths.length])), routePathWrites: ROUTE_PATH_WORKER_WRITE_SET.length, riverOwnershipSeeds: 4, asyncRiverValidator: {stages: asyncRiverStages.length, currentChecks: asyncRiverCurrentChecks.length, syncParity: true, cancellation: true, hundredThousand: hundredThousandAsyncRiver}, declaredLakeOutlet: lakeOutletFixture.transition, lakeDrainageContract: {variationTransition, terminal: {lakeId: 6, ...terminalExpectation}}, markerDetachedMirrors: {workerHistory: true, directHistory: true, chunked: true, failureRollback: true}, tombstones: 16, commit: {revision: owner.getCoreSnapshot(), history: history.getStats()}, acceptedSoftRelations: ["feature-mirror", "feature-lock-cells", "feature-lock-reference", "feature-route-reference", "feature-marker-mirror", "feature-city-identity", "feature-marker-cell", "route-mirror", "route-cell-links", "river-mirror", "river-parent", "river-child-overlap", "river-cell-reference", "river-cell-mirror", "marker-mirror", "economy-mirror"], rejected: ["stale-binding", "partial-write-set", "data-view", "policy-drift", "feature-cell", "route-endpoint", "river-topology", "river-water-tail", "river-lake-outlet", "river-lake-spill", "river-lake-terminal", "river-lake-coercions", "marker-cell"], browserRuns: 0}, null, 2));
 
   function validate(kind, output) {
     return validateFeaturesNetworksResourcesWorkerOutput({kind, sourceMap: outputs[kind].sourceMap, binding, output, policy: outputs[kind].policy});

@@ -81,6 +81,17 @@ export function createMapReplacementCommand({replacementMap, label, historyDomai
       alternate = swapObjectContents(context.map, alternate, afterSwap);
       applied = false;
     },
+    getHistoryReplacement(action) {
+      if (action === "undo") {
+        if (!applied) throw patchError("worker_replacement_history_invalid", "地图替换当前不能撤销");
+        return alternate;
+      }
+      if (action === "redo") {
+        if (applied) throw patchError("worker_replacement_history_invalid", "地图替换当前不能重做");
+        return alternate;
+      }
+      throw patchError("worker_replacement_history_invalid", `未知地图替换历史动作：${action}`);
+    },
     isNoop() {
       return false;
     },

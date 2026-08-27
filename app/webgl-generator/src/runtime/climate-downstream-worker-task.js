@@ -6,7 +6,7 @@ import {
 } from "./climate-downstream-rebuild.js";
 import {createDomainPatch} from "./domain-patch.js";
 import {rebuildMapEconomy} from "./economy-edit-commands.js";
-import {captureRegenerationConstraintBundle} from "./regeneration-constraint-bundle.js";
+import {createRegenerationPostMergeSession} from "./regeneration-constraint-bundle.js";
 import {
   getRegenerationPatchPolicy,
   regenerateMapAttributeForWorker
@@ -61,7 +61,9 @@ export async function runClimateDownstreamWorkerTask(payload, context = {}) {
     return emptyResult(preview, context.binding);
   }
 
-  const constraintBundle = captureRegenerationConstraintBundle(map, {closure: ["world"]});
+  const lockSession = createRegenerationPostMergeSession(map, {closure: ["world"]});
+  const constraintBundle = lockSession.generation;
+  try {
   if (stepsFullyLocked(constraintBundle, preview.steps)) {
     return emptyResult(preview, context.binding, "domain-fully-locked");
   }
@@ -103,6 +105,8 @@ export async function runClimateDownstreamWorkerTask(payload, context = {}) {
   markSelectedFresh(map, preview.selectedSystems);
   refreshGenerationSummary(map);
   constraintBundle.assertDomain(map, "world", "after");
+  lockSession.commit("climate-downstream-after");
+  lockSession.close();
   const policy = getClimateDownstreamPatchPolicy(changedSystems);
   const patch = createDomainPatch(policy.domain, policy.allowedPaths, map);
   report(context, "patch", "正在生成气候下游领域补丁", 0.93);
@@ -138,6 +142,9 @@ export async function runClimateDownstreamWorkerTask(payload, context = {}) {
     },
     preparedRender
   };
+  } finally {
+    lockSession.close();
+  }
 }
 
 export function getClimateDownstreamPatchPolicy(systems = []) {

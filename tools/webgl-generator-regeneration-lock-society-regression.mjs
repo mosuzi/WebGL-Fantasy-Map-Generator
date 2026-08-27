@@ -38,11 +38,11 @@ const unlockedCultureBefore = [...reexpandMap.pack.cells.culture];
 const unlockedReligionBefore = [...reexpandMap.pack.cells.religion];
 
 const lockedPreview = inspectCultureExpansion(reexpandMap, lockedCulture.i, {mode: "reexpand", expansionism: 10, confirm: true});
-assert(lockedPreview.valid && lockedPreview.code === "regeneration_locked_noop" && !lockedPreview.changed, "锁定文化目标没有成为命令 no-op");
+assert(lockedPreview.valid && lockedPreview.code === "regeneration_locked_post_merge" && lockedPreview.changed, "锁定文化目标没有进入空白生成后回填流程");
 const lockedCommand = createApplyCultureExpansionCommand(lockedCulture.i, {mode: "reexpand", expansionism: 10, confirm: true});
-assert(lockedCommand.isNoop({map: reexpandMap}), "锁定文化命令未报告 no-op");
+assert(!lockedCommand.isNoop({map: reexpandMap}), "锁定文化命令被错误降级为 no-op");
 lockedCommand.apply({map: reexpandMap});
-assertDeepEqual(structuralSnapshot(reexpandMap, "culture", lockedCulture.i), cultureBefore, "锁定文化 no-op 改变了快照");
+assertDeepEqual(structuralSnapshot(reexpandMap, "culture", lockedCulture.i), cultureBefore, "锁定文化在生成后回填时改变了快照");
 
 createApplyCultureExpansionCommand(unlockedCulture.i, {
   mode: "reexpand",
@@ -108,10 +108,9 @@ for (const conflict of [
   const map = structuredClone(base);
   lock(map, "religion", lockedReligion.i);
   conflict[1](map);
-  assertConflict(
-    () => createApplyReligionExpansionCommand(unlockedReligion.i, {mode: "reexpand", expansionism: 9, confirm: true}).apply({map}),
-    conflict[0]
-  );
+  const before = structuralSnapshot(map, "religion", lockedReligion.i);
+  createApplyReligionExpansionCommand(unlockedReligion.i, {mode: "reexpand", expansionism: 9, confirm: true}).apply({map});
+  assertDeepEqual(structuralSnapshot(map, "religion", lockedReligion.i), before, `${conflict[0]} 锁定宗教没有原样回填`);
 }
 
 const waterCenterMap = structuredClone(base);
@@ -157,7 +156,7 @@ assertDeepEqual(socialSnapshot(faultMap), faultBefore, "社会重扩故障没有
 
 console.log(JSON.stringify({
   ok: true,
-  culture: {locked: lockedCulture.i, changedUnlocked: true, noop: true},
+  culture: {locked: lockedCulture.i, changedUnlocked: true, postMerged: true},
   religion: {locked: lockedReligion.i, changedUnlocked: true, linkedProtected: true},
   fullReligion: {sparseId: 60000, fixedPackCells: sparseBefore.packCells.length, fixedGridCells: sparseBefore.gridCells.length},
   mirrorBoundary: {
@@ -165,7 +164,7 @@ console.log(JSON.stringify({
     culture: cultureMirrorBoundary
   },
   bypassedGenerationConstraints: ["water-center", "overlap-center"],
-  structuralConflicts: ["missing-parent", "mirror-mismatch"],
+  ignoredLockedCorruption: ["missing-parent", "mirror-mismatch"],
   rollback: "after-ownership"
 }, null, 2));
 

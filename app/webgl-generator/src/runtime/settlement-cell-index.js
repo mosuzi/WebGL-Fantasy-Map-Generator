@@ -202,6 +202,72 @@ export function reconcileSettlementCellIdentity(map) {
   };
 }
 
+export function discardInvalidSettlementCellObjects(map) {
+  const grid = map?.grid;
+  const pack = map?.pack;
+  const settlements = map?.settlements;
+  if (!grid?.points || !pack?.cells?.g || !Array.isArray(settlements?.cities) || !Array.isArray(pack?.burgs)) {
+    return {discardedCities: 0, discardedBurgs: 0, reason: "missing-store"};
+  }
+  const gridCount = Number(grid.points.length);
+  const packCount = Number(pack.cells.i?.length ?? pack.cells.g.length);
+  const sourceCities = settlements.cities;
+  const sourceBurgs = pack.burgs;
+  const burgById = new Map();
+  const invalidBurgIds = new Set();
+  for (const burg of sourceBurgs) {
+    if (!burg || burg.removed) continue;
+    const id = Number(burg.i ?? burg.id);
+    const cell = Number(burg.cell);
+    if (!Number.isInteger(id) || id <= 0 || burgById.has(id)
+      || !Number.isInteger(cell) || cell < 0 || cell >= packCount) {
+      if (Number.isInteger(id) && id > 0) invalidBurgIds.add(id);
+      continue;
+    }
+    burgById.set(id, burg);
+  }
+
+  const nextCities = [];
+  const nextBurgs = [];
+  if (sourceBurgs[0] !== undefined) nextBurgs[0] = sourceBurgs[0];
+  const cityIds = new Set();
+  const burgIds = new Set();
+  let discardedCities = 0;
+  for (const city of sourceCities) {
+    if (!city || city.removed) continue;
+    const cityId = Number(city.id ?? city.i);
+    const burgId = Number(city.burgId);
+    const gridCell = Number(city.cell);
+    const packCell = Number(city.packCell);
+    const burg = burgById.get(burgId);
+    const valid = Number.isInteger(cityId) && cityId >= 0 && !cityIds.has(cityId)
+      && Number.isInteger(burgId) && burgId > 0 && !burgIds.has(burgId)
+      && Number.isInteger(gridCell) && gridCell >= 0 && gridCell < gridCount
+      && Number.isInteger(packCell) && packCell >= 0 && packCell < packCount
+      && Number(pack.cells.g[packCell]) === gridCell
+      && Number(pack.cells.h?.[packCell]) >= 20
+      && burg && Number(burg.cell) === packCell
+      && Number.isFinite(Number(city.x)) && Number.isFinite(Number(city.y));
+    if (!valid) {
+      discardedCities += 1;
+      continue;
+    }
+    cityIds.add(cityId);
+    burgIds.add(burgId);
+    nextCities[cityId] = city;
+    nextBurgs[burgId] = burg;
+  }
+  const activeSourceBurgs = sourceBurgs.filter(burg => burg && !burg.removed && Number(burg.i ?? burg.id) > 0).length;
+  settlements.cities = nextCities;
+  pack.burgs = nextBurgs;
+  invalidateSettlementCellIndex(map);
+  return {
+    discardedCities,
+    discardedBurgs: Math.max(0, activeSourceBurgs - burgIds.size),
+    invalidBurgIds: [...invalidBurgIds]
+  };
+}
+
 export function invalidateSettlementCellIndex(map) {
   if (map && typeof map === "object") INDEX_BY_MAP.delete(map);
 }

@@ -1,7 +1,10 @@
 import {OBJECT_KIND} from "./object-kinds.js";
 import {
   assertLockedRegenerationSnapshots,
-  captureLockedRegenerationObjects
+  captureLockedRegenerationObjects,
+  hideLockedRegenerationSnapshots,
+  hideRegenerationLocks,
+  restoreLockedRegenerationSnapshots
 } from "./regeneration-lock-protection.js";
 import {
   assertRegenerationLockKind,
@@ -100,7 +103,8 @@ export function captureRegenerationConstraintBundle(map, {domains = null, closur
       const immutableCapture = deepFreeze({
         kind,
         entries: captured.entries,
-        snapshots: captured.snapshots
+        snapshots: captured.snapshots,
+        staleLockReferences: captured.staleLockReferences
       });
       captures.set(kind, immutableCapture);
       snapshotsByKind.set(kind, immutableCapture.snapshots);
@@ -132,6 +136,14 @@ export function captureRegenerationConstraintBundle(map, {domains = null, closur
     ...topLevelSlices,
     snapshots: snapshotFor,
     ids: idsFor,
+    restore(targetMap = map) {
+      for (const capture of captures.values()) restoreLockedRegenerationSnapshots(targetMap, capture);
+      return targetMap;
+    },
+    hide(targetMap = map) {
+      for (const capture of captures.values()) hideLockedRegenerationSnapshots(targetMap, capture);
+      return targetMap;
+    },
     isDomainFullyLocked(domain) {
       const kinds = resolveDomainKinds(domain);
       let activeCount = 0;
@@ -155,6 +167,28 @@ export function captureRegenerationConstraintBundle(map, {domains = null, closur
   };
 
   return deepFreeze(bundle);
+}
+
+export function createRegenerationPostMergeSession(map, options = {closure: ["world"]}) {
+  const preserved = captureRegenerationConstraintBundle(map, options);
+  const restoreLockStore = hideRegenerationLocks(map);
+  preserved.hide(map);
+  const generation = captureRegenerationConstraintBundle(map, options);
+  let closed = false;
+  return {
+    preserved,
+    generation,
+    commit(phase = "after") {
+      preserved.restore(map);
+      preserved.assertDomain(map, "world", phase);
+      return map;
+    },
+    close() {
+      if (closed) return;
+      closed = true;
+      restoreLockStore();
+    }
+  };
 }
 
 function normalizeRequestedDomains(domains, closure) {

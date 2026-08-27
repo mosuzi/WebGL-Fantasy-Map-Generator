@@ -105,19 +105,20 @@ function statePairKey(leftId, rightId) {
 
 function updateZoneMetadata(metadata, zones, cells) {
   if (!metadata) return;
+  const activeZones = (zones || []).filter(zone => zone && !zone.removed);
   const types = {};
   let cellCount = 0;
   let invalidCells = 0;
-  for (const zone of zones) {
+  for (const zone of activeZones) {
     types[zone.type] = (types[zone.type] || 0) + 1;
     cellCount += zone.cells?.length || 0;
     for (const cell of zone.cells || []) {
       if (!Number.isInteger(cell) || cell < 0 || cell >= (cells?.i?.length || 0)) invalidCells += 1;
     }
   }
-  metadata.zones = zones.length;
+  metadata.zones = activeZones.length;
   metadata.types = types;
   metadata.cells = cellCount;
-  metadata.hidden = zones.filter(zone => zone.hidden).length;
+  metadata.hidden = activeZones.filter(zone => zone.hidden).length;
   metadata.invalidCells = invalidCells;
 }

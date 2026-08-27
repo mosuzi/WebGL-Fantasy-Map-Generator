@@ -601,7 +601,7 @@ export function reexpandSocietyReligions(grid, pack, religions, settlements = nu
 function spreadFolkReligions(pack, religions) {
   const religionIds = new Uint16Array(pack.cells.i.length);
   const cultureToReligion = new Map(
-    religions.filter(religion => religion.type === "Folk" && !religion.removed).map(religion => [religion.culture, religion.i])
+    religions.filter(religion => religion?.type === "Folk" && !religion.removed).map(religion => [religion.culture, religion.i])
   );
 
   for (const cell of pack.cells.i) {

@@ -1,5 +1,5 @@
 import {OBJECT_KIND} from "./object-kinds.js";
-import {listRegenerationLocks, lockError} from "./regeneration-locks.js";
+import {listRegenerationLocks, lockError, normalizeRegenerationLockReference} from "./regeneration-locks.js";
 import {
   captureDiplomacyRelationSnapshot,
   diplomacyPairKey,
@@ -11,20 +11,43 @@ import {prepareSocialRegenerationLocks} from "../generator/social-regeneration-l
 import {burgIdsAtPackCell, cityIdsAtGridCell} from "./settlement-cell-index.js";
 
 export function captureLockedRegenerationObjects(map, kind, {filter = null} = {}) {
-  const references = listRegenerationLocks(map, {kind});
+  const references = rawRegenerationLockReferences(map, kind);
+  const staleLockReferences = [];
   const entries = references.map(reference => {
     const object = resolveProtectedObject(map, reference);
-    if (!object) throw regenerationLockConflict(kind, reference, "locked_object_missing", "锁定对象已不存在");
+    if (!object) {
+      staleLockReferences.push({...reference});
+      return null;
+    }
     if (filter && !filter(object, reference)) return null;
-    validateProtectedObject(map, reference, object);
     return {reference: {...reference}, snapshot: clone(object), related: captureRelatedSnapshot(map, reference, object)};
   }).filter(Boolean);
   return {
     kind,
     entries,
     ids: new Set(entries.map(entry => String(entry.reference.id))),
-    snapshots: entries.map(entry => clone(entry.snapshot))
+    snapshots: entries.map(entry => clone(entry.snapshot)),
+    staleLockReferences
   };
+}
+
+function rawRegenerationLockReferences(map, kind) {
+  if (!Array.isArray(map?.regenerationLocks?.entries)) return listRegenerationLocks(map, {kind});
+  const references = [];
+  const seen = new Set();
+  for (const source of map.regenerationLocks.entries) {
+    try {
+      const reference = normalizeRegenerationLockReference(source);
+      if (reference.kind !== kind) continue;
+      const key = `${reference.kind}\u0000${String(reference.id)}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      references.push(reference);
+    } catch {
+      // 损坏的锁元数据不是用户主动重生成的前置条件。
+    }
+  }
+  return references;
 }
 
 export function lockedRegenerationObjects(map, kind) {
@@ -54,6 +77,7 @@ export function allRegenerationObjectsLocked(map, kind, objects = null) {
 export function assertLockedRegenerationSnapshots(map, capture) {
   for (const entry of capture?.entries || []) {
     const object = resolveProtectedObject(map, entry.reference);
+    if (!object && isSoftOrphanedCompositeLock(map, entry)) continue;
     if (!object) throw regenerationLockConflict(capture.kind, entry.reference, "locked_object_removed", "重生成结果删除了锁定对象");
     if (stableSnapshot(object) !== stableSnapshot(entry.snapshot)) {
       throw regenerationLockConflict(capture.kind, entry.reference, "locked_snapshot_changed", "重生成结果改写了锁定对象快照", {
@@ -61,15 +85,44 @@ export function assertLockedRegenerationSnapshots(map, capture) {
         changedSummary: summarizeTopLevelChanges(entry.snapshot, object)
       });
     }
-    const related = captureRelatedSnapshot(map, entry.reference, object);
-    if (stableSnapshot(related) !== stableSnapshot(entry.related)) {
-      throw regenerationLockConflict(capture.kind, entry.reference, "locked_mirror_changed", "重生成结果改写了锁定对象镜像", {
-        changedFields: changedTopLevelFields(entry.related, related),
-        changedSummary: summarizeTopLevelChanges(entry.related, related)
-      });
-    }
   }
   return true;
+}
+
+function isSoftOrphanedCompositeLock(map, entry) {
+  const activeState = (states, id) => Boolean(states?.[id] && !states[id].removed);
+  const stateCollections = [map?.pack?.states, map?.politics?.states];
+  if (entry?.reference?.kind === OBJECT_KIND.DIPLOMACY_RELATION) {
+    const identity = parseDiplomacyPairIdentity(entry.reference);
+    if (!identity) return false;
+    return !stateCollections.some(states => activeState(states, identity.leftId) && activeState(states, identity.rightId));
+  }
+  if (entry?.reference?.kind === OBJECT_KIND.MILITARY) {
+    const stateId = Number(entry?.snapshot?.stateId);
+    return !stateCollections.some(states => activeState(states, stateId));
+  }
+  return false;
+}
+
+export function hideRegenerationLocks(map) {
+  const hadStore = Object.prototype.hasOwnProperty.call(map || {}, "regenerationLocks");
+  const store = map?.regenerationLocks;
+  if (map && typeof map === "object") map.regenerationLocks = {version: 1, entries: []};
+  return () => {
+    if (!map || typeof map !== "object") return;
+    if (hadStore) map.regenerationLocks = store;
+    else delete map.regenerationLocks;
+  };
+}
+
+export function restoreLockedRegenerationSnapshots(map, capture) {
+  for (const entry of capture?.entries || []) restoreLockedRegenerationEntry(map, entry);
+  return map;
+}
+
+export function hideLockedRegenerationSnapshots(map, capture) {
+  for (const entry of capture?.entries || []) hideLockedRegenerationEntry(map, entry);
+  return map;
 }
 
 export function assignReservedNumericIds(generated, reservedIds, {getId = item => item?.id ?? item?.i, setId = (item, id) => {
@@ -122,18 +175,465 @@ function listRegenerationObjects(map, kind) {
 function resolveProtectedObject(map, reference) {
   if (reference.kind === OBJECT_KIND.DIPLOMACY_RELATION) {
     const identity = parseDiplomacyPairIdentity(reference);
-    return identity ? captureDiplomacyRelationSnapshot(map?.pack, identity.leftId, identity.rightId) : null;
+    return identity ? captureDiplomacyRelationSnapshotLoose(map, identity) : null;
   }
   if (reference.kind === OBJECT_KIND.MILITARY) {
-    try {
-      return captureMilitaryRegimentSnapshot(map?.pack, reference);
-    } catch (error) {
-      if (error?.code === "regeneration_lock_conflict" && error?.details?.reason === "missing-regiment") return null;
-      throw error;
-    }
+    return captureMilitaryRegimentSnapshotLoose(map, reference);
   }
   return listRegenerationObjects(map, reference.kind)
     .find(object => String(objectId(reference.kind, object)) === String(reference.id)) || null;
+}
+
+function captureDiplomacyRelationSnapshotLoose(map, identity) {
+  const left = map?.pack?.states?.[identity.leftId] || map?.politics?.states?.[identity.leftId];
+  const right = map?.pack?.states?.[identity.rightId] || map?.politics?.states?.[identity.rightId];
+  if (!left || !right) return null;
+  const belongsToPair = record => diplomacyPairKey(record?.attacker ?? record?.fromState, record?.defender ?? record?.toState) === identity.key;
+  const campaigns = [...(Array.isArray(left.campaigns) ? left.campaigns : []), ...(Array.isArray(right.campaigns) ? right.campaigns : [])]
+    .filter(belongsToPair);
+  return {
+    id: identity.key,
+    leftId: identity.leftId,
+    rightId: identity.rightId,
+    leftRelation: left.diplomacy?.[identity.rightId],
+    rightRelation: right.diplomacy?.[identity.leftId],
+    campaigns: uniqueSnapshots(campaigns),
+    chronicleEntries: [],
+    militaryCampaigns: clone((map?.military?.campaigns || map?.pack?.military?.campaigns || []).filter(belongsToPair)),
+    fronts: clone((map?.military?.fronts || map?.pack?.military?.fronts || []).filter(belongsToPair)),
+    warzones: clone((map?.zones?.zones || map?.pack?.zones || []).filter(zone => zone?.type === "Warzone" && belongsToPair(zone)))
+  };
+}
+
+function captureMilitaryRegimentSnapshotLoose(map, reference) {
+  const [storedStateId, storedRegimentId] = String(reference?.id || "").split(":");
+  const stateId = Number(reference?.stateId ?? storedStateId);
+  const regimentId = Number(reference?.regimentId ?? storedRegimentId);
+  if (!Number.isInteger(stateId) || stateId <= 0 || !Number.isInteger(regimentId) || regimentId < 0) return null;
+  const state = map?.pack?.states?.[stateId] || map?.politics?.states?.[stateId];
+  const regiment = (Array.isArray(state?.military) ? state.military : [])
+    .find(item => Number(item?.i) === regimentId || String(item?.id) === `${stateId}:${regimentId}`);
+  if (!regiment) return null;
+  const events = map?.military?.events || map?.pack?.military?.events || [];
+  return {
+    id: `${stateId}:${regimentId}`,
+    stateId,
+    regimentId,
+    regiment: clone(regiment),
+    globalEvents: clone((Array.isArray(events) ? events : []).filter(event =>
+      String(event?.regimentObjectId || "") === `${stateId}:${regimentId}`
+      || Number(event?.stateId) === stateId && Number(event?.regimentId) === regimentId
+    ))
+  };
+}
+
+function restoreLockedRegenerationEntry(map, entry) {
+  const {reference, snapshot, related} = entry;
+  if (reference.kind === OBJECT_KIND.STATE) {
+    restoreIndexedObject(map?.politics?.states, snapshot);
+    restoreIndexedObject(map?.pack?.states, snapshot);
+    restoreMemberAssignments(map?.pack?.cells?.state, related?.packCells, Number(snapshot?.i ?? snapshot?.id));
+    restoreMemberAssignments(map?.grid?.cells?.state, related?.gridCells, Number(snapshot?.i ?? snapshot?.id));
+    return;
+  }
+  if (reference.kind === OBJECT_KIND.PROVINCE) {
+    restoreIndexedObject(map?.politics?.provinces, snapshot);
+    restoreIndexedObject(map?.pack?.provinces, snapshot);
+    restoreMemberAssignments(map?.pack?.cells?.province, related?.packCells, Number(snapshot?.i ?? snapshot?.id));
+    restoreMemberAssignments(map?.grid?.cells?.province, related?.gridCells, Number(snapshot?.i ?? snapshot?.id));
+    return;
+  }
+  if (reference.kind === OBJECT_KIND.CITY) {
+    restoreIndexedObject(map?.settlements?.cities, snapshot, Number(snapshot?.id ?? snapshot?.i));
+    if (related?.packBurg) restoreIndexedObject(map?.pack?.burgs, related.packBurg);
+    restoreCellValue(map?.pack?.cells?.burg, Number(snapshot?.packCell), related?.packCellBurg);
+    restoreCellValue(map?.grid?.cells?.burg, Number(snapshot?.cell), related?.gridCellBurg);
+    restorePoliticalAnchor(map, snapshot, related);
+    return;
+  }
+  if (reference.kind === OBJECT_KIND.ROUTE) {
+    restoreIndexedObject(map?.settlements?.routes, snapshot, Number(snapshot?.id ?? snapshot?.i));
+    restoreIndexedValue(map?.pack?.routes, Number(snapshot?.id ?? snapshot?.i), related?.packRoute);
+    for (const [from, to, value] of related?.links || []) restoreRouteLink(map?.pack?.cells?.routes, from, to, value);
+    restoreNotes(map, reference, related?.notes);
+    return;
+  }
+  if (reference.kind === OBJECT_KIND.RIVER) {
+    restoreCollectionObject(map?.rivers?.rivers, snapshot, reference.kind);
+    const riverId = Number(snapshot?.id ?? snapshot?.i);
+    restoreCollectionObject(map?.pack?.rivers, related?.packRiver || snapshot, reference.kind);
+    for (const cell of related?.cells || []) {
+      restoreCellValue(map?.pack?.cells?.r, cell.cell, cell.r);
+      restoreCellValue(map?.pack?.cells?.fl, cell.cell, cell.fl);
+      restoreCellValue(map?.pack?.cells?.conf, cell.cell, cell.conf);
+    }
+    for (const edge of related?.lakeEdges || []) {
+      const feature = map?.pack?.features?.[edge.id];
+      if (!feature) continue;
+      if (edge.river) feature.river = riverId;
+      if (edge.outlet) feature.outlet = riverId;
+      if (edge.inlet) feature.inlets = [...new Set([...(Array.isArray(feature.inlets) ? feature.inlets : []), riverId])];
+    }
+    restoreNotes(map, reference, related?.notes);
+    return;
+  }
+  if (reference.kind === OBJECT_KIND.CULTURE || reference.kind === OBJECT_KIND.RELIGION) {
+    const plural = reference.kind === OBJECT_KIND.CULTURE ? "cultures" : "religions";
+    const field = reference.kind === OBJECT_KIND.CULTURE ? "culture" : "religion";
+    restoreIndexedObject(map?.society?.[plural], snapshot);
+    restoreIndexedObject(map?.pack?.[plural], snapshot);
+    const id = Number(snapshot?.i ?? snapshot?.id);
+    restoreMemberAssignments(map?.pack?.cells?.[field], related?.packCells, id);
+    restoreMemberAssignments(map?.grid?.cells?.[field], related?.gridCells, id);
+    return;
+  }
+  if (reference.kind === OBJECT_KIND.FEATURE) {
+    const id = Number(snapshot?.i ?? snapshot?.id);
+    restoreIndexedObject(map?.pack?.features, snapshot);
+    if (related?.gridId > 0 && related?.gridFeature) {
+      restoreIndexedObject(map?.features?.features, related.gridFeature, related.gridId);
+      restoreIndexedObject(map?.grid?.features, related.gridFeature, related.gridId);
+    }
+    restoreCellAssignments(map?.pack?.cells, related?.packCells, related?.packAssignments);
+    restoreCellAssignments(map?.grid?.cells, related?.gridCells, related?.gridAssignments);
+    if (map?.pack?.features?.[id] && related?.shore?.pack !== undefined) map.pack.features[id].shoreline = clone(related.shore.pack);
+    return;
+  }
+  if (reference.kind === OBJECT_KIND.MARKER) {
+    restoreCollectionObject(map?.markers?.markers, snapshot, reference.kind);
+    restoreCollectionObject(map?.pack?.markers, related?.packMarker || snapshot, reference.kind);
+    return;
+  }
+  if (reference.kind === OBJECT_KIND.ZONE) {
+    restoreCollectionObject(map?.zones?.zones, snapshot, reference.kind);
+    restoreCollectionObject(map?.pack?.zones, related?.packZone || snapshot, reference.kind);
+    return;
+  }
+  if (reference.kind === OBJECT_KIND.OCEAN_CURRENT) {
+    restoreCollectionObject(map?.oceanCurrents?.currents, snapshot, reference.kind);
+    return;
+  }
+  if (reference.kind === OBJECT_KIND.ECONOMY_MARKET) {
+    restoreIndexedObject(map?.pack?.markets, snapshot);
+    restoreIndexedObject(map?.economy?.markets, snapshot);
+    restoreMemberAssignments(map?.pack?.cells?.market, related?.ownedCells, Number(snapshot?.i ?? snapshot?.id));
+    return;
+  }
+  if (reference.kind === OBJECT_KIND.TRADE_FLOW) {
+    restoreIndexedObject(map?.pack?.deals, snapshot, Number(snapshot?.i ?? snapshot?.id));
+    restoreIndexedObject(map?.economy?.deals, snapshot, Number(snapshot?.i ?? snapshot?.id));
+    return;
+  }
+  if (reference.kind === OBJECT_KIND.DIPLOMACY_RELATION) {
+    restoreDiplomacyRelation(map, snapshot, related);
+    return;
+  }
+  if (reference.kind === OBJECT_KIND.MILITARY) restoreMilitaryRegiment(map, snapshot, related);
+}
+
+function hideLockedRegenerationEntry(map, entry) {
+  const {reference, snapshot, related} = entry;
+  const id = Number(snapshot?.i ?? snapshot?.id);
+  if (reference.kind === OBJECT_KIND.STATE) {
+    hideIndexedObject(map?.politics?.states, id);
+    hideIndexedObject(map?.pack?.states, id);
+    clearMemberAssignments(map?.pack?.cells?.state, id, 0);
+    clearMemberAssignments(map?.grid?.cells?.state, id, 0);
+    return;
+  }
+  if (reference.kind === OBJECT_KIND.PROVINCE) {
+    hideIndexedObject(map?.politics?.provinces, id);
+    hideIndexedObject(map?.pack?.provinces, id);
+    clearMemberAssignments(map?.pack?.cells?.province, id, 0);
+    clearMemberAssignments(map?.grid?.cells?.province, id, 0);
+    return;
+  }
+  if (reference.kind === OBJECT_KIND.CITY) {
+    hideCollectionObject(map?.settlements?.cities, reference.kind, reference.id);
+    const burgId = Number(snapshot?.burgId ?? related?.packBurg?.i ?? related?.packBurg?.id);
+    hideIndexedObject(map?.pack?.burgs, burgId);
+    clearMemberAssignments(map?.pack?.cells?.burg, burgId, 0);
+    clearMemberAssignments(map?.grid?.cells?.burg, Number(snapshot?.id), -1);
+    return;
+  }
+  if (reference.kind === OBJECT_KIND.ROUTE) {
+    hideCollectionObject(map?.settlements?.routes, reference.kind, reference.id);
+    hideIndexedObject(map?.pack?.routes, id);
+    clearRouteOwner(map?.pack?.cells?.routes, id);
+    return;
+  }
+  if (reference.kind === OBJECT_KIND.RIVER) {
+    hideCollectionObject(map?.rivers?.rivers, reference.kind, reference.id);
+    hideCollectionObject(map?.pack?.rivers, reference.kind, reference.id);
+    clearMemberAssignments(map?.pack?.cells?.r, id, 0);
+    return;
+  }
+  if (reference.kind === OBJECT_KIND.CULTURE || reference.kind === OBJECT_KIND.RELIGION) {
+    const plural = reference.kind === OBJECT_KIND.CULTURE ? "cultures" : "religions";
+    const field = reference.kind === OBJECT_KIND.CULTURE ? "culture" : "religion";
+    hideIndexedObject(map?.society?.[plural], id);
+    hideIndexedObject(map?.pack?.[plural], id);
+    clearMemberAssignments(map?.pack?.cells?.[field], id, 0);
+    clearMemberAssignments(map?.grid?.cells?.[field], id, 0);
+    return;
+  }
+  if (reference.kind === OBJECT_KIND.FEATURE) {
+    hideIndexedObject(map?.pack?.features, id);
+    const gridId = Number(related?.gridId);
+    hideIndexedObject(map?.features?.features, gridId);
+    hideIndexedObject(map?.grid?.features, gridId);
+    return;
+  }
+  if (reference.kind === OBJECT_KIND.MARKER) {
+    hideCollectionObject(map?.markers?.markers, reference.kind, reference.id);
+    hideCollectionObject(map?.pack?.markers, reference.kind, reference.id);
+    return;
+  }
+  if (reference.kind === OBJECT_KIND.ZONE) {
+    hideCollectionObject(map?.zones?.zones, reference.kind, reference.id);
+    hideCollectionObject(map?.pack?.zones, reference.kind, reference.id);
+    return;
+  }
+  if (reference.kind === OBJECT_KIND.OCEAN_CURRENT) {
+    hideCollectionObject(map?.oceanCurrents?.currents, reference.kind, reference.id);
+    return;
+  }
+  if (reference.kind === OBJECT_KIND.ECONOMY_MARKET) {
+    hideIndexedObject(map?.pack?.markets, id);
+    hideIndexedObject(map?.economy?.markets, id);
+    clearMemberAssignments(map?.pack?.cells?.market, id, 0);
+    return;
+  }
+  if (reference.kind === OBJECT_KIND.TRADE_FLOW) {
+    hideCollectionObject(map?.pack?.deals, reference.kind, reference.id);
+    hideCollectionObject(map?.economy?.deals, reference.kind, reference.id);
+    return;
+  }
+  if (reference.kind === OBJECT_KIND.DIPLOMACY_RELATION) {
+    hideDiplomacyRelation(map, snapshot);
+    return;
+  }
+  if (reference.kind === OBJECT_KIND.MILITARY) hideMilitaryRegiment(map, snapshot);
+}
+
+function hideDiplomacyRelation(map, snapshot) {
+  const leftId = Number(snapshot?.leftId);
+  const rightId = Number(snapshot?.rightId);
+  for (const states of [map?.pack?.states, map?.politics?.states]) {
+    const left = states?.[leftId];
+    const right = states?.[rightId];
+    if (Array.isArray(left?.diplomacy)) left.diplomacy[rightId] = "x";
+    if (Array.isArray(right?.diplomacy)) right.diplomacy[leftId] = "x";
+    if (left) left.campaigns = replacePairRecords(left.campaigns, [], leftId, rightId);
+    if (right) right.campaigns = replacePairRecords(right.campaigns, [], leftId, rightId);
+  }
+  for (const military of [map?.military, map?.pack?.military]) {
+    if (!military) continue;
+    military.campaigns = replacePairRecords(military.campaigns, [], leftId, rightId);
+    military.fronts = replacePairRecords(military.fronts, [], leftId, rightId);
+  }
+  for (const zones of [map?.zones?.zones, map?.pack?.zones]) replacePairCollection(zones, [], leftId, rightId);
+}
+
+function hideMilitaryRegiment(map, snapshot) {
+  const stateId = Number(snapshot?.stateId);
+  const regimentId = Number(snapshot?.regimentId);
+  for (const states of [map?.pack?.states, map?.politics?.states]) {
+    const state = states?.[stateId];
+    if (!state || !Array.isArray(state.military)) continue;
+    state.military = state.military.filter(item => Number(item?.i) !== regimentId && String(item?.id) !== snapshot.id);
+  }
+  for (const military of [map?.military, map?.pack?.military]) {
+    if (!military || !Array.isArray(military.events)) continue;
+    military.events = military.events.filter(event => !(String(event?.regimentObjectId || "") === snapshot.id
+      || Number(event?.stateId) === stateId && Number(event?.regimentId) === regimentId));
+  }
+}
+
+function hideIndexedObject(collection, id) {
+  if (!Array.isArray(collection) || !Number.isInteger(id) || id < 0 || id >= collection.length) return;
+  collection[id] = null;
+}
+
+function hideCollectionObject(collection, kind, id) {
+  if (!Array.isArray(collection)) return;
+  const index = collection.findIndex(item => item && String(objectId(kind, item)) === String(id));
+  if (index >= 0) collection[index] = null;
+}
+
+function clearMemberAssignments(values, id, replacement) {
+  if (!values) return;
+  for (let index = 0; index < values.length; index++) if (Number(values[index]) === Number(id)) values[index] = replacement;
+}
+
+function clearRouteOwner(routes, routeId) {
+  if (!routes || typeof routes !== "object") return;
+  for (const [from, links] of Object.entries(routes)) {
+    if (!links || typeof links !== "object") continue;
+    for (const [to, owner] of Object.entries(links)) if (Number(owner) === Number(routeId)) delete links[to];
+    if (!Object.keys(links).length) delete routes[from];
+  }
+}
+
+function restoreDiplomacyRelation(map, snapshot, related) {
+  const leftId = Number(snapshot?.leftId);
+  const rightId = Number(snapshot?.rightId);
+  let restored = false;
+  for (const states of [map?.pack?.states, map?.politics?.states]) {
+    const left = states?.[leftId];
+    const right = states?.[rightId];
+    if (!left || left.removed || !right || right.removed) continue;
+    restored = true;
+    left.diplomacy ||= [];
+    right.diplomacy ||= [];
+    left.diplomacy[rightId] = clone(snapshot.leftRelation);
+    right.diplomacy[leftId] = clone(snapshot.rightRelation);
+    left.campaigns = replacePairRecords(left.campaigns, snapshot.campaigns, leftId, rightId);
+    right.campaigns = replacePairRecords(right.campaigns, snapshot.campaigns, leftId, rightId);
+  }
+  if (!restored) return;
+  for (const military of [map?.military, map?.pack?.military]) {
+    if (!military) continue;
+    military.campaigns = replacePairRecords(military.campaigns, snapshot.militaryCampaigns, leftId, rightId);
+    military.fronts = replacePairRecords(military.fronts, snapshot.fronts, leftId, rightId);
+  }
+  for (const zones of [map?.zones?.zones, map?.pack?.zones]) replacePairCollection(zones, snapshot.warzones, leftId, rightId);
+}
+
+function restoreMilitaryRegiment(map, snapshot, related) {
+  const stateId = Number(snapshot?.stateId);
+  const regimentId = Number(snapshot?.regimentId);
+  let restored = false;
+  for (const states of [map?.pack?.states, map?.politics?.states]) {
+    const state = states?.[stateId];
+    if (!state || state.removed) continue;
+    restored = true;
+    state.military = Array.isArray(state.military) ? state.military : [];
+    const index = state.military.findIndex(item => Number(item?.i) === regimentId || String(item?.id) === snapshot.id);
+    if (index >= 0) state.military[index] = clone(snapshot.regiment);
+    else state.military.push(clone(snapshot.regiment));
+  }
+  if (!restored) return;
+  for (const military of [map?.military, map?.pack?.military]) {
+    if (!military) continue;
+    const current = Array.isArray(military.events) ? military.events : [];
+    military.events = [
+      ...current.filter(event => !(String(event?.regimentObjectId || "") === snapshot.id
+        || Number(event?.stateId) === stateId && Number(event?.regimentId) === regimentId)),
+      ...(snapshot.globalEvents || []).map(clone)
+    ];
+  }
+}
+
+function ensureStateEnvelope(states, id, identity = null) {
+  if (!Array.isArray(states) || !Number.isInteger(id) || id <= 0) return null;
+  if (!states[id]) {
+    states[id] = {
+      i: id,
+      id,
+      name: String(identity?.name || `#${id}`),
+      fullName: String(identity?.name || `#${id}`),
+      center: Number(identity?.center) || 0,
+      capital: Number(identity?.capital) || 0,
+      removed: false,
+      diplomacy: [],
+      campaigns: [],
+      military: [],
+      provinces: []
+    };
+  }
+  return states[id];
+}
+
+function restorePoliticalAnchor(map, snapshot, related) {
+  const burgId = Number(snapshot?.burgId);
+  const stateId = Number(snapshot?.state);
+  const provinceId = Number(snapshot?.province);
+  if (related?.stateAnchor) for (const states of [map?.politics?.states, map?.pack?.states]) {
+    const state = states?.[stateId];
+    if (state) Object.assign(state, clone(related.stateAnchor), {capital: burgId});
+  }
+  if (related?.provinceAnchor) for (const provinces of [map?.politics?.provinces, map?.pack?.provinces]) {
+    const province = provinces?.[provinceId];
+    if (province) Object.assign(province, clone(related.provinceAnchor), {burg: burgId});
+  }
+}
+
+function replacePairRecords(current, snapshots, leftId, rightId) {
+  const retained = (Array.isArray(current) ? current : []).filter(record =>
+    diplomacyPairKey(record?.attacker ?? record?.fromState, record?.defender ?? record?.toState) !== diplomacyPairKey(leftId, rightId)
+  );
+  return [...retained, ...(Array.isArray(snapshots) ? snapshots.map(clone) : [])];
+}
+
+function replacePairCollection(collection, snapshots, leftId, rightId) {
+  if (!Array.isArray(collection)) return;
+  const next = replacePairRecords(collection, snapshots, leftId, rightId);
+  collection.splice(0, collection.length, ...next);
+}
+
+function restoreCollectionObject(collection, snapshot, kind) {
+  if (!Array.isArray(collection) || !snapshot) return;
+  const id = String(objectId(kind, snapshot));
+  const index = collection.findIndex(item => item && String(objectId(kind, item)) === id);
+  if (index >= 0) collection[index] = clone(snapshot);
+  else collection.push(clone(snapshot));
+}
+
+function restoreIndexedObject(collection, snapshot, explicitId = null) {
+  if (!Array.isArray(collection) || !snapshot) return;
+  const id = explicitId ?? Number(snapshot?.i ?? snapshot?.id);
+  if (!Number.isInteger(Number(id)) || Number(id) < 0) return;
+  collection[Number(id)] = clone(snapshot);
+}
+
+function restoreIndexedValue(collection, id, value) {
+  if (!Array.isArray(collection) || !Number.isInteger(id) || id < 0) return;
+  collection[id] = clone(value);
+}
+
+function restoreMemberAssignments(values, members, id) {
+  if (!values || !Array.isArray(members)) return;
+  for (const cell of members) restoreCellValue(values, cell, id);
+}
+
+function restoreCellAssignments(cells, members, assignments) {
+  if (!cells || !Array.isArray(members) || !assignments) return;
+  for (const [field, values] of Object.entries(assignments)) {
+    for (let index = 0; index < members.length; index++) restoreCellValue(cells[field], members[index], values?.[index]);
+  }
+}
+
+function restoreCellValue(values, cell, value) {
+  const index = Number(cell);
+  if (!values || !Number.isInteger(index) || index < 0 || index >= values.length) return;
+  values[index] = clone(value);
+}
+
+function restoreRouteLink(routes, from, to, value) {
+  if (!routes || !Number.isInteger(Number(from)) || !Number.isInteger(Number(to))) return;
+  routes[from] ||= {};
+  if (value === null || value === undefined) delete routes[from][to];
+  else routes[from][to] = clone(value);
+}
+
+function restoreNotes(map, reference, snapshots) {
+  const notes = map?.notes?.notes;
+  if (!Array.isArray(notes) || !Array.isArray(snapshots)) return;
+  const retained = notes.filter(note => !(note?.kind === reference.kind && String(note?.objectId) === String(reference.id)));
+  notes.splice(0, notes.length, ...retained, ...snapshots.map(clone));
+}
+
+function uniqueSnapshots(values) {
+  const seen = new Set();
+  const result = [];
+  for (const value of values || []) {
+    const key = stableSnapshot(value);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(clone(value));
+  }
+  return result;
 }
 
 function objectId(kind, object) {
@@ -530,7 +1030,7 @@ function captureGoodIdentity(good) {
 
 function captureSocialMirrors(map, object, field, plural) {
   const id = Number(object?.i ?? object?.id);
-  const references = [Number(object?.parent) || 0, ...(object?.origins || []).map(Number)]
+  const references = [Number(object?.parent) || 0, ...(Array.isArray(object?.origins) ? object.origins : []).map(Number)]
     .filter(reference => Number.isInteger(reference) && reference >= 0);
   return {
     societyObject: clone(map?.society?.[plural]?.[id] || null),
@@ -580,7 +1080,7 @@ function captureStateMirrors(map, state) {
     gridCells: memberCells(map?.grid?.cells?.state, id),
     capitalBurg: clone(map?.pack?.burgs?.[capital] || null),
     supportingCities: capturePoliticalCities(map, {stateId: id}),
-    supportingProvinces: (state.provinces || []).map(provinceId => {
+    supportingProvinces: (Array.isArray(state.provinces) ? state.provinces : []).map(provinceId => {
       const province = map?.pack?.provinces?.[provinceId] || map?.politics?.provinces?.[provinceId];
       return {
         province: clone(province || null),
@@ -672,7 +1172,7 @@ function capturePoliticalCities(map, {stateId = null, provinceId = null} = {}) {
 
 function captureRiverMirrors(map, river) {
   const id = Number(river.id ?? river.i);
-  const memberCells = (river.cells || []).filter(cell => Number.isInteger(cell) && cell >= 0);
+  const memberCells = (Array.isArray(river.cells) ? river.cells : []).filter(cell => Number.isInteger(cell) && cell >= 0);
   const notes = (map?.notes?.notes || []).filter(note => note?.kind === OBJECT_KIND.RIVER && String(note.objectId) === String(id));
   const lakeEdges = (map?.pack?.features || []).filter(feature => feature?.type === "lake" && (
     Number(feature.river) === id || Number(feature.outlet) === id || (feature.inlets || []).map(Number).includes(id)
@@ -727,10 +1227,11 @@ function captureCityMirrors(map, city) {
 
 function captureRouteMirrors(map, route) {
   const id = Number(route.id ?? route.i);
+  const packCells = Array.isArray(route.packCells) ? route.packCells : [];
   const links = [];
-  for (let index = 0; index < route.packCells.length - 1; index++) {
-    const from = route.packCells[index];
-    const to = route.packCells[index + 1];
+  for (let index = 0; index < packCells.length - 1; index++) {
+    const from = packCells[index];
+    const to = packCells[index + 1];
     links.push([from, to, map?.pack?.cells?.routes?.[from]?.[to] ?? null]);
   }
   const notes = (map?.notes?.notes || []).filter(note => note?.kind === OBJECT_KIND.ROUTE && String(note.objectId) === String(id));

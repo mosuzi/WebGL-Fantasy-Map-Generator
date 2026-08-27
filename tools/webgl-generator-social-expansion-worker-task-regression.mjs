@@ -199,6 +199,9 @@ async function verifyHundredThousandCells() {
 async function assertLockSemantics(base, binding, request) {
   const lockedTarget = structuredClone(base);
   lock(lockedTarget, "culture", request.id);
+  const corruptedLockedCulture = lockedTarget.society.cultures.find(item => Number(item?.i) === Number(request.id));
+  corruptedLockedCulture.center = -1;
+  corruptedLockedCulture.parent = 999999;
   const lockedBefore = dataSnapshot(lockedTarget);
   const lockedOutput = await runSocialExpansionWorkerTask(
     {map: lockedTarget, request, binding},
@@ -311,7 +314,14 @@ function createBinding(mapIdentity, mapRevision) {
 
 function socialRenderRequest(binding) {
   return {
-    binding: {mapIdentity: binding.mapIdentity, mapRevision: binding.mapRevision, topologyRevision: 2},
+    binding: {
+      mapIdentity: binding.mapIdentity,
+      mapRevision: binding.mapRevision,
+      sourceRevision: binding.mapRevision,
+      topologyRevision: 2,
+      renderPreparationId: `${binding.mapIdentity}:render:${binding.mapRevision}`,
+      renderGeneration: binding.generationToken
+    },
     layers: ["picking"],
     pickingComponents: ["cities"],
     camera: {scale: 1, offsetX: 0, offsetY: 0},

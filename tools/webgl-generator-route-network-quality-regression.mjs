@@ -10,6 +10,7 @@ import {
   selectSeaRouteNetworkBurgs,
   selectTrailRouteNetworkBurgs,
   selectSparseRouteNetworkEdges,
+  traceSettlementRoutePath,
   traceSettlementWaterRoutePath
 } from "../app/webgl-generator/src/generator/settlements.js";
 
@@ -22,6 +23,7 @@ const previous10kObserved = {roads: [5, 28], trails: [430, 564], searoutes: [73,
 const report = [];
 
 auditPureSparseSelection();
+auditZeroHabitabilityLandPassage();
 
 for (const testCase of cases) {
   const startedAt = performance.now();
@@ -109,6 +111,24 @@ function auditPairedGroupSelection() {
   const pack = {cells: {h: [30, 30, 30, 30, 30, 30], f: [1, 1, 1, 1, 1, 1]}};
   const selectedTrail = selectTrailRouteNetworkBurgs(trailBurgs, pack, 4);
   assert.deepEqual(countBy(selectedTrail, burg => burg.province), new Map([[2, 2], [3, 2], [1, 2]]), "trail 预算不足时仍必须覆盖每个可路由省份的成对骨架");
+}
+
+function auditZeroHabitabilityLandPassage() {
+  const pack = {
+    cells: {
+      i: [0, 1, 2],
+      h: new Uint8Array([30, 30, 30]),
+      c: [[1], [0, 2], [1]],
+      p: [[0, 0], [1, 0], [2, 0]],
+      biome: new Uint8Array([4, 11, 4]),
+      burg: new Uint16Array(3),
+      good: new Uint16Array(3),
+      goodSource: new Uint8Array(3),
+      goodSupply: new Float32Array(3)
+    },
+    goods: []
+  };
+  assert.deepEqual(traceSettlementRoutePath(pack, 0, 2), [0, 1, 2], "连续陆地不得因零适居度群系被道路寻路视为断裂");
 }
 
 function auditRouteNetwork(map, label) {

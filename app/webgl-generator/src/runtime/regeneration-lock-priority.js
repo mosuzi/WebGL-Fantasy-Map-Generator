@@ -30,56 +30,15 @@ const SLICE_BY_KIND = Object.freeze({
 export function createRegenerationLockPriorityBundle(map, constraintBundle) {
   if (!constraintBundle) return null;
   const explicitStates = constraintBundle.lockedStates || [];
-  const explicitProvinces = constraintBundle.lockedProvinces || [];
-  const explicitCities = constraintBundle.lockedCities || [];
-  const explicitFeatures = constraintBundle.lockedFeatures || [];
-  const structuralFeatures = mergeSupportSnapshots([
-    ...explicitFeatures,
-    ...collectRiverSupportFeatures(map, constraintBundle.lockedRivers)
-  ]);
-  const economyCities = collectEconomicSupportCities(
-    map,
-    constraintBundle.lockedMarkets,
-    constraintBundle.lockedDeals
-  );
-  const baseCities = mergeSupportSnapshots([
-    ...explicitCities,
-    ...economyCities
-  ]);
-  const structuralProvinces = collectPoliticalSupportProvinces(
-    map,
-    explicitStates,
-    explicitProvinces
-  );
-  const politicalCities = collectPoliticalSupportCities(map, explicitStates, structuralProvinces, baseCities);
-  const anchorSupport = collectCityAnchorSupport(map, politicalCities);
-  const lockedStates = mergeSupportSnapshots([...explicitStates, ...anchorSupport.states]);
-  const lockedProvinces = mergeSupportSnapshots([...structuralProvinces, ...anchorSupport.provinces]);
-  const lockedCities = politicalCities;
-  const lockedRoutes = mergeSupportSnapshots(constraintBundle.lockedRoutes || []);
-  const lockedMarkers = mergeSupportSnapshots(constraintBundle.lockedMarkers || []);
-  const lockedFeatures = mergeSupportSnapshots([
-    ...structuralFeatures,
-    ...collectReferencedFeatures(map, [...lockedCities, ...lockedRoutes, ...lockedMarkers])
-  ]);
-  const lockedDiplomacyRelations = mergeSupportSnapshots([
-    ...(constraintBundle.lockedDiplomacyRelations || []),
-    ...collectStateDiplomacySupport(map, explicitStates),
-    ...collectLockedWarzoneDiplomacySupport(map.pack, constraintBundle.lockedZones)
-  ]);
-  const lockedMilitaryRegiments = mergeSupportSnapshots([
-    ...(constraintBundle.lockedMilitaryRegiments || []),
-    ...collectStateMilitarySupport(map, explicitStates)
-  ]);
   const slices = {
-    lockedStates,
-    lockedProvinces,
-    lockedCities,
-    lockedRoutes,
-    lockedFeatures,
-    lockedMarkers,
-    lockedDiplomacyRelations,
-    lockedMilitaryRegiments
+    lockedStates: explicitStates,
+    lockedProvinces: constraintBundle.lockedProvinces || [],
+    lockedCities: constraintBundle.lockedCities || [],
+    lockedRoutes: constraintBundle.lockedRoutes || [],
+    lockedFeatures: constraintBundle.lockedFeatures || [],
+    lockedMarkers: constraintBundle.lockedMarkers || [],
+    lockedDiplomacyRelations: constraintBundle.lockedDiplomacyRelations || [],
+    lockedMilitaryRegiments: constraintBundle.lockedMilitaryRegiments || []
   };
   const ids = kind => {
     const key = SLICE_BY_KIND[kind];

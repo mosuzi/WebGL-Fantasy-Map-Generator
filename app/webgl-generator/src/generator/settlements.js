@@ -389,7 +389,7 @@ export function inspectRelocatedSettlementPort(grid, pack, packCell, {wasPort = 
   const point = [...(pack?.cells?.p?.[packCell] || [0, 0])];
   if (!wasPort) return {port: 0, source: "none", anchor: point, routePackCell: null, reason: "非港城不会自动升级"};
 
-  const riversById = new Map((pack?.rivers || []).map(river => [river.i, river]));
+  const riversById = new Map((pack?.rivers || []).filter(Boolean).map(river => [river.i, river]));
   const existingBurg = pack?.burgs?.[burgId] || (pack?.burgs || []).find(burg => Number(burg?.i) === Number(burgId));
   const relocatedBurg = existingBurg ? {...existingBurg, cell: packCell, capital: Number(capital)} : {i: burgId, cell: packCell, capital: Number(capital)};
   const candidate = createSettlementPortCandidate(grid, pack, relocatedBurg, riversById, options);
@@ -1378,7 +1378,7 @@ function shiftPortsAndRiverBurgs(grid, pack, cities, burgs, nameGenerator, optio
     .map(item => structuredClone(item));
   const featurePortCandidates = new Map();
   const selectedPortCandidates = [];
-  const riversById = new Map((pack.rivers || []).map(river => [river.i, river]));
+  const riversById = new Map((pack.rivers || []).filter(Boolean).map(river => [river.i, river]));
   const addCandidate = candidate => {
     if (!candidate.portFeatureId) return;
     if (protectedFeatureIds.has(Number(candidate.portFeatureId))) return;
@@ -2418,8 +2418,7 @@ function packRouteStepCost(pack, current, next, water, connections, variation = 
   }
 
   if (height < 20) return Infinity;
-  const habitability = BIOMES[pack.cells.biome?.[next]]?.habitability || 0;
-  if (!habitability) return Infinity;
+  const habitability = Math.max(0, Number(BIOMES[pack.cells.biome?.[next]]?.habitability) || 0);
   const habitabilityModifier = 1 + Math.max(100 - habitability, 0) / 1000;
   const heightModifier = 1 + Math.max(height - 25, 25) / 25;
   const burgModifier = pack.cells.burg?.[next] ? 1 : 3;

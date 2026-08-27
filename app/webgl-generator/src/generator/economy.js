@@ -190,11 +190,26 @@ export function rebuildEconomyFromMarketAssignments(pack, options = {}) {
   const manufacturedGoods = goods.filter(good => good?.recipes?.length);
   const aliveBurgs = (pack.burgs || []).filter(burg => burg?.i && !burg.removed);
   const states = (pack.states || []).filter(state => state?.i && !state.removed);
-  const validMarketIds = new Set((pack.markets || []).filter(Boolean).map(market => Number(market.i ?? market.id)));
-  if (!validMarketIds.size) throw new Error("当前地图没有可用于经济重算的市场");
+  const validMarkets = (pack.markets || []).filter(market => {
+    const center = pack.burgs?.[Number(market?.centerBurgId)];
+    return market && Number(market.i ?? market.id) > 0 && center?.i && !center.removed;
+  });
+  const validMarketIds = new Set(validMarkets.map(market => Number(market.i ?? market.id)));
+  if (!validMarketIds.size) {
+    if (pack.cells?.market?.fill) pack.cells.market.fill(0);
+    else if (Array.isArray(pack.cells?.market)) pack.cells.market = new Array(pack.cells.i?.length || 0).fill(0);
+    pack.markets = [];
+    pack.deals = [];
+    return buildEconomy(pack, options);
+  }
+  const marketStore = Array.isArray(pack.markets) ? pack.markets : [];
+  for (let index = 0; index < marketStore.length; index++) {
+    const market = marketStore[index];
+    if (market && !validMarketIds.has(Number(market.i ?? market.id))) marketStore[index] = undefined;
+  }
   for (const cell of pack.cells?.i || []) {
     const marketId = Number(pack.cells.market?.[cell] || 0);
-    if (marketId && !validMarketIds.has(marketId)) throw new Error(`pack cell #${cell} 指向不存在的市场 #${marketId}`);
+    if (marketId && !validMarketIds.has(marketId)) pack.cells.market[cell] = 0;
   }
 
   resetMarketsForEconomicRebuild(pack, goods, options, locks.marketIds);

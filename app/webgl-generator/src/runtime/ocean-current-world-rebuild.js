@@ -1,6 +1,6 @@
 import {cloneMapSnapshotInChunks, restoreMapSnapshot} from "./climate-downstream-rebuild.js";
 import {systemAffected} from "./edit-command-effects.js";
-import {captureRegenerationConstraintBundle} from "./regeneration-constraint-bundle.js";
+import {createRegenerationPostMergeSession} from "./regeneration-constraint-bundle.js";
 
 export const OCEAN_CURRENT_WORLD_REBUILD_ORDER = Object.freeze([
   "ocean-currents",
@@ -67,21 +67,19 @@ export async function executeOceanCurrentWorldRebuild({
   if (typeof executeStage !== "function" || typeof executeCommand !== "function") throw new Error("洋流世界重算缺少阶段或命令执行器");
   const preview = inspectOceanCurrentWorldRebuild(map, {seed, includeSeafloor: Boolean(executePrepare)});
   if (!preview.valid) return {executed: false, preview, steps: [], command: null};
-  const constraintBundle = captureRegenerationConstraintBundle(map, {closure: ["world"]});
-  if (constraintBundle.isDomainFullyLocked("world")) {
-    return {executed: false, reason: "domain-fully-locked", preview, steps: [], command: null};
-  }
-
   const startedAt = now();
   const chunks = [];
   const historySnapshot = editHistory.createSnapshot();
   const steps = [];
   let before = null;
+  let session = null;
   try {
     ensureActive(signal, assertCurrent, "snapshot-before");
     onProgress?.({phase: "snapshot-before", message: "正在保存重算前状态"});
     before = await cloneMapSnapshotInChunks(map, {id: "world-snapshot-before", chunks, now, yieldToMain});
     ensureActive(signal, assertCurrent, "snapshot-before");
+    session = createRegenerationPostMergeSession(map, {closure: ["world"]});
+    const constraintBundle = session.generation;
 
     if (executePrepare) {
       onProgress?.({phase: "prepare", message: "正在应用海底重设"});
@@ -108,8 +106,9 @@ export async function executeOceanCurrentWorldRebuild({
       await yieldToMain({id: `world:${system}`, blockingMs: durationMs});
     }
 
+    session.commit("ocean-current-world");
+    session.close();
     refreshSummary?.(map);
-    constraintBundle.assertDomain(map, "world", "after");
     ensureActive(signal, assertCurrent, "snapshot-after");
     onProgress?.({phase: "snapshot-after", message: "正在保存重算结果"});
     const after = await cloneMapSnapshotInChunks(map, {id: "world-snapshot-after", chunks, now, yieldToMain});
@@ -136,6 +135,8 @@ export async function executeOceanCurrentWorldRebuild({
     error.preview = preview;
     error.timings = summarizeTimings(chunks, now() - startedAt);
     throw error;
+  } finally {
+    session?.close();
   }
 }
 

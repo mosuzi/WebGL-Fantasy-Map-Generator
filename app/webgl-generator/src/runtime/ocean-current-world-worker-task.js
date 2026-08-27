@@ -13,7 +13,7 @@ import {
   OCEAN_CURRENT_WORLD_REBUILD_ORDER,
   inspectOceanCurrentWorldRebuild
 } from "./ocean-current-world-rebuild.js";
-import {captureRegenerationConstraintBundle} from "./regeneration-constraint-bundle.js";
+import {createRegenerationPostMergeSession} from "./regeneration-constraint-bundle.js";
 import {createResetSeafloorCommand} from "./seafloor-reset.js";
 import {collectWorkerTransferables} from "./worker-snapshot.js";
 
@@ -33,7 +33,9 @@ export async function runOceanCurrentWorldWorkerTask(payload, context = {}) {
   if (!preview.valid) {
     return emptyResult(preview, context.binding, "world-input-invalid");
   }
-  const constraintBundle = captureRegenerationConstraintBundle(map, {closure: ["world"]});
+  const lockSession = createRegenerationPostMergeSession(map, {closure: ["world"]});
+  const constraintBundle = lockSession.generation;
+  try {
   if (constraintBundle.isDomainFullyLocked("world")) {
     return emptyResult(preview, context.binding, "domain-fully-locked");
   }
@@ -87,6 +89,8 @@ export async function runOceanCurrentWorldWorkerTask(payload, context = {}) {
   refreshGenerationSummary(map);
   appendGenerationLog(map, `rebuild ocean current world: seed=${payload?.seed || "auto"}, seafloor=${Boolean(seafloorPlan)}`);
   constraintBundle.assertDomain(map, "world", "after");
+  lockSession.commit("ocean-current-world-after");
+  lockSession.close();
   checkpoint(context);
   report(context, "replacement", "正在准备洋流世界替换结果", 0.95);
   const preparedRender = payload?.render
@@ -134,6 +138,9 @@ export async function runOceanCurrentWorldWorkerTask(payload, context = {}) {
     },
     preparedRender
   };
+  } finally {
+    lockSession.close();
+  }
 }
 
 export function collectOceanCurrentWorldWorkerTransferables(result) {

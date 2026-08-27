@@ -1,9 +1,13 @@
 import {rebuildInheritanceTree, summarizeInheritanceTree} from "../generator/inheritance.js";
 import {reexpandSocietyCultures, reexpandSocietyReligions} from "../generator/society.js";
-import {prepareSocialRegenerationLocks} from "../generator/social-regeneration-locks.js";
 import {objectAffected, systemAffected} from "./edit-command-effects.js";
 import {OBJECT_KIND} from "./object-kinds.js";
-import {assertLockedRegenerationSnapshots, captureLockedRegenerationObjects} from "./regeneration-lock-protection.js";
+import {
+  assertLockedRegenerationSnapshots,
+  captureLockedRegenerationObjects,
+  hideLockedRegenerationSnapshots,
+  restoreLockedRegenerationSnapshots
+} from "./regeneration-lock-protection.js";
 
 export const CULTURE_EXPANSION_TYPES = Object.freeze(["Generic", "Hunting", "Highland", "River", "Lake", "Naval", "Nomadic"]);
 export const RELIGION_EXPANSION_SCOPES = Object.freeze(["culture", "state", "global"]);
@@ -25,8 +29,7 @@ export function inspectSocialExpansion(map, request = {}) {
   const item = store?.[normalized.id];
   if (!item || item.removed || normalized.id <= 0) return invalidInspection(normalized, `${config.label}不存在或已删除`, "missing-object");
   if (normalized.mode === SOCIAL_EXPANSION_MODE.REEXPAND && isSocialObjectLocked(map, normalized.kind, normalized.id)) {
-    validateLockedSocialDomain(map, normalized.kind);
-    return lockedNoopInspection(normalized, item, config);
+    return lockedPostMergeInspection(normalized, item, config);
   }
 
   const patchResult = normalizePatch(item, normalized, config, {strict: true});
@@ -117,7 +120,11 @@ export function createApplySocialExpansionCommand(request, {label = null} = {}) 
       snapshot ??= captureSnapshot(context.map);
       try {
         const locked = captureSocialRegenerationState(context.map);
-        applyPatchToStores(context.map, config, inspection.id, inspection.next);
+        const targetCapture = config.kind === "culture" ? locked.cultures : locked.religions;
+        const targetLocked = targetCapture.ids.has(String(inspection.id));
+        hideLockedRegenerationSnapshots(context.map, locked.cultures);
+        hideLockedRegenerationSnapshots(context.map, locked.religions);
+        if (!targetLocked) applyPatchToStores(context.map, config, inspection.id, inspection.next);
         failAt(initialRequest, "after-parameters");
         const expansion = inspection.mode === SOCIAL_EXPANSION_MODE.REEXPAND
           ? applyReexpansion(context.map, inspection, locked)
@@ -125,6 +132,8 @@ export function createApplySocialExpansionCommand(request, {label = null} = {}) 
         failAt(initialRequest, "after-ownership");
         appliedAt ??= new Date().toISOString();
         repairSocialState(context.map, config.kind, inspection.mode, inspection.includeReligions, appliedAt);
+        restoreLockedRegenerationSnapshots(context.map, locked.cultures);
+        restoreLockedRegenerationSnapshots(context.map, locked.religions);
         assertLockedRegenerationSnapshots(context.map, locked.cultures);
         assertLockedRegenerationSnapshots(context.map, locked.religions);
         failAt(initialRequest, "after-references");
@@ -133,8 +142,8 @@ export function createApplySocialExpansionCommand(request, {label = null} = {}) 
           id: inspection.id,
           mode: inspection.mode,
           includeReligions: inspection.includeReligions,
-          parameterChanges: [...inspection.parameterChanges],
-          centerChanged: inspection.centerChanged,
+          parameterChanges: targetLocked ? [] : [...inspection.parameterChanges],
+          centerChanged: targetLocked ? false : inspection.centerChanged,
           ...expansion
         };
       } catch (error) {
@@ -287,25 +296,30 @@ function changedParameterNames(item, patch, config) {
 function simulateReexpansion(map, request, patch) {
   const shadow = createExpansionShadow(map);
   const config = socialConfig(request.kind);
-  applyPatchToStores(shadow, config, request.id, patch);
+  const locked = captureSocialRegenerationState(shadow);
+  const targetCapture = config.kind === "culture" ? locked.cultures : locked.religions;
+  const targetLocked = targetCapture.ids.has(String(request.id));
+  hideLockedRegenerationSnapshots(shadow, locked.cultures);
+  hideLockedRegenerationSnapshots(shadow, locked.religions);
+  if (!targetLocked) applyPatchToStores(shadow, config, request.id, patch);
   const beforePack = Array.from(map.pack.cells[config.field] || []);
   const beforeGrid = Array.from(map.grid.cells[config.field] || []);
   let linkedReligionPackCells = 0;
-  const cultureLocks = getLockedSocialObjects(map, "culture");
-  const religionLocks = getLockedSocialObjects(map, "religion");
   if (request.kind === "culture") {
-    reexpandSocietyCultures(shadow.grid, shadow.pack, shadow.society.cultures, {lockedCultures: cultureLocks});
-    repairCenters(shadow, config, new Set(cultureLocks.map(item => Number(item.i ?? item.id))));
+    reexpandSocietyCultures(shadow.grid, shadow.pack, shadow.society.cultures, {lockedCultures: []});
+    repairCenters(shadow, config);
     if (request.includeReligions) {
       const beforeReligion = Array.from(map.pack.cells.religion || []);
-      reexpandSocietyReligions(shadow.grid, shadow.pack, shadow.society.religions, shadow.settlements, {lockedReligions: religionLocks});
-      repairCenters(shadow, socialConfig("religion"), new Set(religionLocks.map(item => Number(item.i ?? item.id))));
+      reexpandSocietyReligions(shadow.grid, shadow.pack, shadow.society.religions, shadow.settlements, {lockedReligions: []});
+      repairCenters(shadow, socialConfig("religion"));
       linkedReligionPackCells = countChanged(beforeReligion, shadow.pack.cells.religion);
     }
   } else {
-    reexpandSocietyReligions(shadow.grid, shadow.pack, shadow.society.religions, shadow.settlements, {lockedReligions: religionLocks});
-    repairCenters(shadow, config, new Set(religionLocks.map(item => Number(item.i ?? item.id))));
+    reexpandSocietyReligions(shadow.grid, shadow.pack, shadow.society.religions, shadow.settlements, {lockedReligions: []});
+    repairCenters(shadow, config);
   }
+  restoreLockedRegenerationSnapshots(shadow, locked.cultures);
+  restoreLockedRegenerationSnapshots(shadow, locked.religions);
   return {
     changedPackCells: countChanged(beforePack, shadow.pack.cells[config.field]),
     changedGridCells: countChanged(beforeGrid, shadow.grid.cells[config.field]),
@@ -350,18 +364,16 @@ function applyPatchToStores(map, config, id, patch) {
 }
 
 function applyReexpansion(map, inspection, locked = captureSocialRegenerationState(map)) {
-  const cultureLocks = locked.cultures.snapshots;
-  const religionLocks = locked.religions.snapshots;
   if (inspection.kind === "culture") {
-    const cultureResult = reexpandSocietyCultures(map.grid, map.pack, getPrimaryStore(map, socialConfig("culture")), {lockedCultures: cultureLocks});
+    const cultureResult = reexpandSocietyCultures(map.grid, map.pack, getPrimaryStore(map, socialConfig("culture")), {lockedCultures: []});
     let linkedReligionPackCells = 0;
     if (inspection.includeReligions) {
-      const religionResult = reexpandSocietyReligions(map.grid, map.pack, getPrimaryStore(map, socialConfig("religion")), map.settlements, {lockedReligions: religionLocks});
+      const religionResult = reexpandSocietyReligions(map.grid, map.pack, getPrimaryStore(map, socialConfig("religion")), map.settlements, {lockedReligions: []});
       linkedReligionPackCells = religionResult.changedPackCells;
     }
     return {...cultureResult, linkedReligionPackCells};
   }
-  return {...reexpandSocietyReligions(map.grid, map.pack, getPrimaryStore(map, socialConfig("religion")), map.settlements, {lockedReligions: religionLocks}), linkedReligionPackCells: 0};
+  return {...reexpandSocietyReligions(map.grid, map.pack, getPrimaryStore(map, socialConfig("religion")), map.settlements, {lockedReligions: []}), linkedReligionPackCells: 0};
 }
 
 function captureSocialRegenerationState(map) {
@@ -376,10 +388,8 @@ function repairSocialState(map, kind, mode, includeReligions, updatedAt) {
   const kinds = kind === "culture" && includeReligions ? ["culture", "religion"] : [kind];
   for (const currentKind of kinds) {
     const config = socialConfig(currentKind);
-    const lockedObjects = getLockedSocialObjects(map, currentKind);
-    const lockedIds = new Set(lockedObjects.map(item => Number(item.i ?? item.id)));
-    repairCenters(map, config, lockedIds);
-    repairTreePreservingOrigins(getPrimaryStore(map, config), lockedObjects);
+    repairCenters(map, config);
+    repairTreePreservingOrigins(getPrimaryStore(map, config), []);
     syncStoreMirrors(map, config);
     syncReferences(map, config);
     refreshMetadata(map, config);
@@ -602,17 +612,17 @@ function invalidInspection(request, reason, code) {
   return {valid: false, code, reason, kind: request.kind, id: request.id, mode: request.mode, includeReligions: request.includeReligions, requiresConfirm: request.mode === SOCIAL_EXPANSION_MODE.REEXPAND, changed: false, request: {...request}};
 }
 
-function lockedNoopInspection(request, item, config) {
+function lockedPostMergeInspection(request, item, config) {
   const current = currentEditableValues(item, config);
   return {
     valid: true,
-    code: "regeneration_locked_noop",
-    reason: `${config.label} #${request.id} 已锁定，重新扩张未执行`,
+    code: "regeneration_locked_post_merge",
+    reason: `${config.label} #${request.id} 将在空白扩张完成后原样合回`,
     kind: request.kind,
     id: request.id,
     mode: request.mode,
     includeReligions: request.includeReligions,
-    requiresConfirm: false,
+    requiresConfirm: true,
     current,
     next: {...current},
     parameterChanges: [],
@@ -620,41 +630,13 @@ function lockedNoopInspection(request, item, config) {
     changedPackCells: 0,
     changedGridCells: 0,
     linkedReligionPackCells: 0,
-    changed: false,
+    changed: true,
     request: {...request}
   };
 }
 
 function isSocialObjectLocked(map, kind, id) {
   return (map?.regenerationLocks?.entries || []).some(entry => entry?.kind === kind && Number(entry.id) === Number(id));
-}
-
-function getLockedSocialObjects(map, kind) {
-  const config = socialConfig(kind);
-  const store = getPrimaryStore(map, config);
-  const objects = [];
-  const seen = new Set();
-  for (const entry of map?.regenerationLocks?.entries || []) {
-    if (entry?.kind !== kind) continue;
-    const id = Number(entry.id);
-    if (seen.has(id)) continue;
-    const item = store?.[id];
-    if (item && !item.removed) objects.push(clonePlain(item));
-    seen.add(id);
-  }
-  return objects;
-}
-
-function validateLockedSocialDomain(map, kind) {
-  const config = socialConfig(kind);
-  prepareSocialRegenerationLocks({
-    grid: map.grid,
-    pack: map.pack,
-    objects: getLockedSocialObjects(map, kind),
-    field: config.field,
-    plural: config.plural,
-    label: config.label
-  });
 }
 
 function failAt(request, stage) {

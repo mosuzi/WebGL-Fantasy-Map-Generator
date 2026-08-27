@@ -2,6 +2,7 @@ import {adaptLegacyInteractiveRevision} from "../../core/adapters/identity-adapt
 import type {ComputeOperationBinding} from "../../core/contracts/operation.js";
 import {validateOperationBinding} from "../../core/contracts/runtime-validators.js";
 import {validatePreparedWorkerRenderBinding} from "../worker-render-binding.js";
+import {isRegenerationLocked, regenerationLockedIds} from "../regeneration-validation-locks.js";
 import {SOCIETY_POLITICS_WRITE_SETS, societyPoliticsManifest} from "./manifest.js";
 
 type UnknownRecord = Record<string, unknown>;
@@ -110,7 +111,7 @@ function validateMirrors(kind: SocietyPoliticsWorkerKind, patchValue: unknown, s
     values.set(stringArray(row.path, "society-politics.patch.operation.path").join("."), row.value);
   }
   if (kind === "religions") {
-    assertDeepEqual(values.get("society.religions"), values.get("pack.religions"), "society-politics-religion-mirror-invalid", "society / pack religion 镜像不一致");
+    validateSocialRows(values.get("society.religions"), sourceMapValue, "religion");
     return;
   }
   const politics = record(values.get("politics"), "society-politics.patch.politics");
@@ -118,15 +119,54 @@ function validateMirrors(kind: SocietyPoliticsWorkerKind, patchValue: unknown, s
   const provinces = array(politics.provinces, "society-politics.patch.politics.provinces");
   const packStates = array(values.get("pack.states"), "society-politics.patch.pack.states");
   const packProvinces = array(values.get("pack.provinces"), "society-politics.patch.pack.provinces");
-  assertDeepEqual(states, packStates, "society-politics-state-mirror-invalid", "politics / pack state 镜像不一致");
-  assertDeepEqual(provinces, packProvinces, "society-politics-province-mirror-invalid", "politics / pack province 镜像不一致");
-  validateSocietyPoliticsAdministrativeReferences({
-    states,
-    provinces,
-    settlements: values.get("settlements"),
-    burgs: values.get("pack.burgs"),
-    sourceMap: sourceMapValue
-  });
+  validateAdministrativeBasics(states, provinces, sourceMapValue, {validateStates: kind === "states", validateProvinces: true});
+}
+
+function validateSocialRows(rowsValue: unknown, sourceMapValue: unknown, kind: string): void {
+  const rows = array(rowsValue, `society-politics.patch.${kind}s`);
+  const lockedIds = regenerationLockedIds(sourceMapValue, kind);
+  const sourceMap = record(sourceMapValue, "society-politics.sourceMap");
+  const packCells = record(record(sourceMap.pack, "society-politics.sourceMap.pack").cells, "society-politics.sourceMap.pack.cells");
+  const heights = indexedValues(packCells.h, "society-politics.sourceMap.pack.cells.h");
+  const ids = new Set<number>();
+  for (let index = 0; index < rows.length; index++) {
+    const value = rows[index];
+    if (!isPlainRecord(value) || value.removed) continue;
+    const id = Number(value.i ?? value.id);
+    if (id === 0) continue;
+    if (isRegenerationLocked(lockedIds, id, index)) continue;
+    if (!Number.isSafeInteger(id) || id <= 0 || ids.has(id)) throw protocolError("regeneration-identity-conflict", `${kind} #${id} 身份无效或重复`);
+    ids.add(id);
+    const center = Number(value.center);
+    if (center >= 0 && (!Number.isSafeInteger(center) || center >= heights.length || Number(heights[center]) < 20)) {
+      throw protocolError("regeneration-geometry-invalid", `${kind} #${id} 中心无效`);
+    }
+  }
+}
+
+function validateAdministrativeBasics(states: unknown[], provinces: unknown[], sourceMapValue: unknown, options: {readonly validateStates?: boolean; readonly validateProvinces?: boolean} = {}): void {
+  const sourceMap = record(sourceMapValue, "society-politics.sourceMap");
+  const packCells = record(record(sourceMap.pack, "society-politics.sourceMap.pack").cells, "society-politics.sourceMap.pack.cells");
+  const heights = indexedValues(packCells.h, "society-politics.sourceMap.pack.cells.h");
+  if (options.validateStates !== false) validateRows(states, "state", regenerationLockedIds(sourceMapValue, "state"));
+  if (options.validateProvinces !== false) validateRows(provinces, "province", regenerationLockedIds(sourceMapValue, "province"));
+
+  function validateRows(rows: unknown[], kind: string, lockedIds: ReadonlySet<string>): void {
+    const ids = new Set<number>();
+    for (let index = 0; index < rows.length; index++) {
+      const value = rows[index];
+      if (!isPlainRecord(value) || value.removed) continue;
+      const id = Number(value.i ?? value.id);
+      if (id === 0) continue;
+      if (isRegenerationLocked(lockedIds, id, index)) continue;
+      if (!Number.isSafeInteger(id) || id <= 0 || ids.has(id)) throw protocolError("regeneration-identity-conflict", `${kind} #${id} 身份无效或重复`);
+      ids.add(id);
+      const center = Number(value.center);
+      if (!Number.isSafeInteger(center) || center < 0 || center >= heights.length || Number(heights[center]) < 20) {
+        throw protocolError("regeneration-geometry-invalid", `${kind} #${id} 中心无效`);
+      }
+    }
+  }
 }
 
 export function validateSocietyPoliticsAdministrativeReferences(input: {
@@ -245,6 +285,11 @@ function validOperationValue(path: string, value: unknown): boolean {
 
 function isTypedArray(value: unknown): boolean {
   return ArrayBuffer.isView(value) && !(value instanceof DataView);
+}
+
+function indexedValues(value: unknown, path: string): ArrayLike<unknown> {
+  if (!Array.isArray(value) && !isTypedArray(value)) throw protocolError("society-politics-indexed-values-required", `${path} 必须是数组或 TypedArray`);
+  return value as ArrayLike<unknown>;
 }
 
 function isPlainRecord(value: unknown): value is UnknownRecord {

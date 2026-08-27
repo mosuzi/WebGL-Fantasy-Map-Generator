@@ -7,7 +7,7 @@ import {
   rebuildHeightBaseDerived,
   rebuildHeightDownstreamDerived
 } from "./height-derived-rebuild.js";
-import {captureRegenerationConstraintBundle} from "./regeneration-constraint-bundle.js";
+import {createRegenerationPostMergeSession} from "./regeneration-constraint-bundle.js";
 import {
   getRegenerationPatchPolicy,
   regenerateMapAttributeForWorker
@@ -34,7 +34,9 @@ export async function runHeightDerivedWorkerTask(payload, context = {}) {
   if (payload?.mode === "render-only") return renderOnly(payload, map, context);
   const scope = normalizeScope(payload?.scope);
   const kinds = scopeKinds(scope);
-  const constraintBundle = captureRegenerationConstraintBundle(map, {closure: ["world"]});
+  const lockSession = createRegenerationPostMergeSession(map, {closure: ["world"]});
+  const constraintBundle = lockSession.generation;
+  try {
   const steps = [];
   const changedKinds = [];
 
@@ -75,6 +77,8 @@ export async function runHeightDerivedWorkerTask(payload, context = {}) {
   }
 
   constraintBundle.assertDomain(map, "world", "after");
+  lockSession.commit("height-derived-after");
+  lockSession.close();
   const aggregate = buildAggregate(scope, steps);
   if (!aggregate.executed && changedKinds.length) {
     throw taskError("worker_height_derived_incomplete", `${aggregate.action}未完整执行，Worker 结果已拒绝提交`);
@@ -114,6 +118,9 @@ export async function runHeightDerivedWorkerTask(payload, context = {}) {
     },
     preparedRender
   };
+  } finally {
+    lockSession.close();
+  }
 }
 
 export function getHeightDerivedPatchPolicy(scope = "all", changedKinds = null) {

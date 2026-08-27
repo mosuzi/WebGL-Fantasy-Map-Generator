@@ -1,5 +1,8 @@
+import {discardInvalidSettlementCellObjects} from "./settlement-cell-index.js";
+
 export function normalizeRegenerationWorkingCopy(map) {
   if (!map || typeof map !== "object") return map;
+  discardInvalidSettlementCellObjects(map);
   normalizePoliticalMirrors(map);
   normalizeMarkerMirrors(map);
   normalizeSocialMirrors(map);

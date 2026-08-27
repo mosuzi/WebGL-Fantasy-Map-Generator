@@ -6,6 +6,8 @@ import {
   inspectSocialExpansion
 } from "./social-expansion-edit-commands.js";
 import {collectWorkerTransferables} from "./worker-snapshot.js";
+import {captureRegenerationConstraintBundle} from "./regeneration-constraint-bundle.js";
+import {hideRegenerationLocks} from "./regeneration-lock-protection.js";
 
 export const SOCIAL_EXPANSION_WORKER_TASK = "social-expansion.compute";
 export const SOCIAL_EXPANSION_WORKER_PLAN_VERSION = 1;
@@ -33,59 +35,72 @@ export async function runSocialExpansionWorkerTask(payload = {}, context = {}) {
   if (payload.sourceFingerprint !== undefined && String(payload.sourceFingerprint) !== sourceFingerprint) {
     throw taskError("social-expansion-worker-source-stale", "文化 / 宗教扩张 Worker 的来源快照已过期");
   }
-  const inspection = inspectSocialExpansion(map, request);
   const plan = createPlan(binding, request, sourceFingerprint);
-  if (!inspection.valid) return emptyResult(binding, plan, inspection, "inspection-rejected");
-  if (!inspection.changed) {
-    const reason = inspection.code === "regeneration_locked_noop" ? "regeneration-locked-noop" : "no-op";
-    return emptyResult(binding, plan, inspection, reason);
+  const preserved = captureRegenerationConstraintBundle(map, {closure: ["world"]});
+  if (preserved.ids(request.kind).includes(String(request.id))) {
+    return emptyResult(binding, plan, lockedTargetInspection(request), "regeneration-locked-noop");
   }
-  if (inspection.requiresConfirm && request.confirm !== true) {
-    throw taskError("confirmation_required", `${request.kind === "culture" ? "文化" : "宗教"}重新扩张需要 confirm: true`);
-  }
-
-  const policy = getSocialExpansionPatchPolicy(map, request);
-  const before = capturePathValues(map, policy.allowedPaths);
-  const coverageBefore = captureCoverage(map, request);
-  await taskCheckpoint(context, "inspect");
-  report(context, "apply", `正在${request.mode === "reexpand" ? "重新扩张" : "保存"}${request.kind === "culture" ? "文化" : "宗教"}`, 0.35);
-
-  const command = request.kind === "culture"
-    ? createApplyCultureExpansionCommand(request.id, request)
-    : createApplyReligionExpansionCommand(request.id, request);
-  let applied = false;
+  const restoreLockStore = hideRegenerationLocks(map);
   try {
-    command.apply({map});
-    applied = true;
-    failAt(payload.faultAt, "after-apply");
-    await taskCheckpoint(context, "patch");
+    preserved.hide(map);
+    const inspection = inspectSocialExpansion(map, request);
+    if (!inspection.valid) return emptyResult(binding, plan, inspection, "inspection-rejected");
+    if (!inspection.changed) {
+      const reason = inspection.code === "regeneration_locked_noop" ? "regeneration-locked-noop" : "no-op";
+      return emptyResult(binding, plan, inspection, reason);
+    }
+    if (inspection.requiresConfirm && request.confirm !== true) {
+      throw taskError("confirmation_required", `${request.kind === "culture" ? "文化" : "宗教"}重新扩张需要 confirm: true`);
+    }
 
-    const changedPaths = changedPathValues(map, before);
-    const patch = createDomainPatch("social-expansion", changedPaths, map);
-    const affected = buildAffected(map, request, coverageBefore, patch);
-    const result = command.getResult?.() || null;
-    const preparedRender = payload.render
-      ? await executeRenderPreparationTask({...payload.render, map}, context)
-      : null;
-    report(context, "complete", "文化 / 宗教扩张结果已准备", 1);
-    return {
-      kind: "social-expansion",
-      binding,
-      plan,
-      inspection: publicInspection(inspection),
-      result: {
-        ...(result || {}),
-        executed: true,
-        sourceFingerprint,
-        affected
-      },
-      patch,
-      preparedRender,
-      refresh: socialExpansionRefresh(request)
-    };
-  } catch (error) {
-    if (applied) command.revert({map});
-    throw error;
+    const policy = getSocialExpansionPatchPolicy(map, request);
+    const before = capturePathValues(map, policy.allowedPaths);
+    const coverageBefore = captureCoverage(map, request);
+    await taskCheckpoint(context, "inspect");
+    report(context, "apply", `正在${request.mode === "reexpand" ? "重新扩张" : "保存"}${request.kind === "culture" ? "文化" : "宗教"}`, 0.35);
+
+    const command = request.kind === "culture"
+      ? createApplyCultureExpansionCommand(request.id, request)
+      : createApplyReligionExpansionCommand(request.id, request);
+    let applied = false;
+    try {
+      command.apply({map});
+      applied = true;
+      failAt(payload.faultAt, "after-apply");
+      await taskCheckpoint(context, "patch");
+      preserved.restore(map);
+      preserved.assertDomain(map, "world", "after");
+
+      const changedPaths = changedPathValues(map, before);
+      const patch = createDomainPatch("social-expansion", changedPaths, map);
+      const affected = buildAffected(map, request, coverageBefore, patch);
+      const result = command.getResult?.() || null;
+      const preparedRender = payload.render
+        ? await executeRenderPreparationTask({...payload.render, map}, context)
+        : null;
+      report(context, "complete", "文化 / 宗教扩张结果已准备", 1);
+      return {
+        kind: "social-expansion",
+        binding,
+        plan,
+        inspection: publicInspection(inspection),
+        result: {
+          ...(result || {}),
+          executed: true,
+          sourceFingerprint,
+          affected
+        },
+        patch,
+        preparedRender,
+        refresh: socialExpansionRefresh(request)
+      };
+    } catch (error) {
+      if (applied) command.revert({map});
+      throw error;
+    }
+  } finally {
+    preserved.restore(map);
+    restoreLockStore();
   }
 }
 
@@ -216,6 +231,28 @@ function emptyResult(binding, plan, inspection, reason) {
     patch: createDomainPatch("social-expansion", [], {}),
     preparedRender: null,
     refresh: {derived: [], picking: "none"}
+  };
+}
+
+function lockedTargetInspection(request) {
+  return {
+    valid: true,
+    code: "regeneration_locked_noop",
+    reason: "目标对象已锁定，本次扩张忽略该对象",
+    kind: request.kind,
+    id: request.id,
+    mode: request.mode,
+    includeReligions: request.includeReligions,
+    requiresConfirm: false,
+    current: null,
+    next: null,
+    parameterChanges: [],
+    centerChanged: false,
+    changedPackCells: 0,
+    changedGridCells: 0,
+    linkedReligionPackCells: 0,
+    changed: false,
+    request: {...request}
   };
 }
 

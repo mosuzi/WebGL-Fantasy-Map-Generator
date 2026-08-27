@@ -78,7 +78,7 @@ export function applyMapTemplateHistoricalPolitics(grid, society, settlements, p
   if (!definition) return null;
 
   const coreBurg = selectHistoricalCapital(pack, political, definition.coreClasses);
-  if (!coreBurg) throw new Error(`${definition.name}缺少历史疆域内的首都候选`);
+  if (!coreBurg) return null;
   const selectedCapitals = [coreBurg.i];
   const coreStateId = positiveStateId(coreBurg.state, 1);
   let clientStateId = 0;
@@ -93,6 +93,10 @@ export function applyMapTemplateHistoricalPolitics(grid, society, settlements, p
   }
 
   const previousStates = pack.states || [];
+  const mappedCoreCells = [...pack.cells.i].filter(cell =>
+    pack.cells.h[cell] >= 20 && definition.coreClasses.includes(political[pack.cells.g[cell]] || 0)
+  ).length;
+  if (!mappedCoreCells) return null;
   const states = [{id: 0, i: 0, name: "中立", center: 0, culture: 0, type: "Neutral", expansionism: 0}];
   states[coreStateId] = createHistoricalState(previousStates[coreStateId], coreStateId, coreBurg, pack.cells.g[coreBurg.cell], definition.name, definition.formName);
   if (clientStateId) states[clientStateId] = createHistoricalState(previousStates[clientStateId], clientStateId, clientBurg, pack.cells.g[clientBurg.cell], definition.clientName, "属邦");
@@ -115,7 +119,7 @@ export function applyMapTemplateHistoricalPolitics(grid, society, settlements, p
       clientCells++;
     } else pack.cells.state[cell] = 0;
   }
-  if (!coreCells) throw new Error(`${definition.name}没有映射到有效陆地 cell`);
+  if (!coreCells) return null;
 
   applyCapitalSelection(pack, settlements, new Set(selectedCapitals));
   syncBurgStates(pack);
@@ -387,7 +391,11 @@ function seedPreservedProvinceCenters(pack, states, provinces, lockedProvinces =
     if (!province?.i || province.removed) continue;
     if (lockedProvinces?.ids?.has(Number(province.i))) continue;
     const stateCells = (landCellsByState.get(province.state) || []).filter(cell => !used.has(cell));
-    if (!stateCells.length) throw new Error(`省份 #${province.i} 的所属国家没有可用中心`);
+    if (!stateCells.length) {
+      province.removed = true;
+      province.burg = 0;
+      continue;
+    }
     const originalPoint = pack.cells.p?.[province.center] || pack.cells.p?.[states[province.state]?.center] || [0, 0];
     const center = stateCells.includes(province.center)
       ? province.center
@@ -1009,7 +1017,9 @@ function expandPackStates(pack, states, society, preservedAnchors = null, locked
     }
     if (!Number.isInteger(capitalCell) || cells.h?.[capitalCell] < 20) {
       if (fixedState) continue;
-      throw new Error(`国家 #${state.i} 缺少合法扩张中心`);
+      state.removed = true;
+      state.provinces = [];
+      continue;
     }
     const cultureCenter = society.cultures[state.culture]?.center ?? capitalCell;
     const nativeBiome = cells.biome[cultureCenter] ?? cells.biome[capitalCell];

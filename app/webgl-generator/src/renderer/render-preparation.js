@@ -72,7 +72,8 @@ const REGENERATION_RENDER_LAYERS = Object.freeze({
   diplomacy: Object.freeze(["surface", "line", "picking"]),
   religions: Object.freeze(["surface", "picking"]),
   military: Object.freeze(["point", "line", "labels", "picking"]),
-  zones: Object.freeze(["surface", "line", "labels"])
+  zones: Object.freeze(["surface", "line", "labels"]),
+  "ocean-current": Object.freeze(["line"])
 });
 
 const REGENERATION_PICKING_COMPONENTS = Object.freeze({
@@ -92,6 +93,7 @@ const REGENERATION_PICKING_COMPONENTS = Object.freeze({
   "culture-expansion": Object.freeze(["cities"]),
   "religion-expansion": Object.freeze(["cities"]),
   zones: Object.freeze([]),
+  "ocean-current": Object.freeze([]),
   "height-derived": Object.freeze([...OBJECT_PICKING_COMPONENTS]),
   "climate-downstream": Object.freeze([...OBJECT_PICKING_COMPONENTS]),
   "ocean-current-world": Object.freeze([...OBJECT_PICKING_COMPONENTS]),

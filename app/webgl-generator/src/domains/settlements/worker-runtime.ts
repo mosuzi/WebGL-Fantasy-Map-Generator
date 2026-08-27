@@ -4,7 +4,7 @@ import {validateOperationBinding} from "../../core/contracts/runtime-validators.
 import {validatePreparedWorkerRenderBinding} from "../worker-render-binding.js";
 import {SETTLEMENTS_WORKER_WRITE_SET, settlementsManifest} from "./manifest.js";
 import {ZONES_WORKER_WRITE_SET, zonesManifest} from "../zones/manifest.js";
-import {validateSocietyPoliticsAdministrativeReferences} from "../society-politics/worker-runtime.js";
+import {isRegenerationLocked, regenerationLockedIds} from "../regeneration-validation-locks.js";
 
 type UnknownRecord = Record<string, unknown>;
 export type SettlementZoneWorkerKind = "cities" | "zones";
@@ -122,10 +122,8 @@ function validOperationValue(path: string, exists: unknown, value: unknown): boo
 
 export function validateSettlementCityMirrors(values: Map<string, unknown>, sourceMapValue: unknown): void {
   const settlements = record(values.get("settlements"), "settlement-zone.patch.settlements");
-  const politics = record(values.get("politics"), "settlement-zone.patch.politics");
-  const cities = denseArray(settlements.cities, "settlement-zone.patch.settlements.cities");
-  const routes = denseArray(settlements.routes, "settlement-zone.patch.settlements.routes");
-  const burgs = denseArray(values.get("pack.burgs"), "settlement-zone.patch.pack.burgs");
+  const cities = array(settlements.cities, "settlement-zone.patch.settlements.cities");
+  array(values.get("pack.burgs"), "settlement-zone.patch.pack.burgs");
   const gridBurgs = indexedValues(values.get("grid.cells.burg"), "settlement-zone.patch.grid.cells.burg");
   const packBurgs = indexedValues(values.get("pack.cells.burg"), "settlement-zone.patch.pack.cells.burg");
   const sourceMap = record(sourceMapValue, "settlement-zone.sourceMap");
@@ -135,88 +133,38 @@ export function validateSettlementCityMirrors(values: Map<string, unknown>, sour
   const sourcePackCells = record(sourcePack.cells, "settlement-zone.sourceMap.pack.cells");
   const gridCellCount = indexedLength(sourceGridCells.i ?? sourceGrid.points, "settlement-zone.sourceMap.grid.cells.i");
   const packCellCount = indexedLength(sourcePackCells.i, "settlement-zone.sourceMap.pack.cells.i");
+  const lockedCityIds = regenerationLockedIds(sourceMapValue, "city");
   if (gridBurgs.length !== gridCellCount || packBurgs.length !== packCellCount) {
     throw protocolError("settlement-cell-mirror-length-invalid", "城镇单元镜像长度与源拓扑不一致");
   }
-  validateSettlementRouteMirrors(routes, denseArray(values.get("pack.routes"), "settlement-zone.patch.pack.routes"));
-  assertDeepEqual(politics.states, values.get("pack.states"), "settlement-politics-mirror-invalid", "politics / pack state 镜像不一致");
-  assertDeepEqual(politics.provinces, values.get("pack.provinces"), "settlement-politics-mirror-invalid", "politics / pack province 镜像不一致");
-  validateSocietyPoliticsAdministrativeReferences({
-    states: politics.states,
-    provinces: politics.provinces,
-    settlements,
-    burgs,
-    sourceMap,
-    allowUnclaimedZeroCapital: true
-  });
   const claimedBurgs = new Set<number>();
-  const claimedGridCells = new Set<number>();
-  const claimedPackCells = new Set<number>();
   for (let cityId = 0; cityId < cities.length; cityId++) {
     const value = cities[cityId];
     if (!value) continue;
+    if (isRegenerationLocked(lockedCityIds, cityId)) continue;
     const city = record(value, `settlement-zone.city.${cityId}`);
     if (city.removed) continue;
     const burgId = Number(city.burgId);
     if (Number(city.id) !== cityId || !Number.isSafeInteger(burgId) || burgId < 0 || claimedBurgs.has(burgId)) {
       throw protocolError("settlement-city-identity-invalid", `city #${cityId} 身份槽或 burg 引用无效`);
     }
-    const burg = record(burgs[burgId], `settlement-zone.burg.${burgId}`);
     const gridCell = Number(city.cell);
     const packCell = Number(city.packCell);
-    if (Number(burg.i) !== burgId || Number(burg.id) !== burgId || Number(burg.cityId) !== cityId || packCell !== Number(burg.cell)) {
-      throw protocolError("settlement-city-burg-mirror-invalid", `city #${cityId} 与 burg #${burgId} 身份镜像不一致`);
+    const x = Number(city.x);
+    const y = Number(city.y);
+    if (!Number.isSafeInteger(gridCell) || gridCell < 0 || gridCell >= gridCellCount
+      || !Number.isSafeInteger(packCell) || packCell < 0 || packCell >= packCellCount) throw protocolError("regeneration-geometry-invalid", `新生成 city #${cityId} cell 无效`);
+    if (Number(indexedValues(sourcePackCells.h, "settlement-zone.sourceMap.pack.cells.h")[packCell]) < 20) {
+      throw protocolError("city-regeneration-water-anchor", `新生成 city #${cityId} 位于水域`);
     }
-    if (!Number.isSafeInteger(gridCell) || gridCell < 0 || gridCell >= gridCellCount || claimedGridCells.has(gridCell)
-      || Number(gridBurgs[gridCell]) !== cityId) {
-      throw protocolError("settlement-grid-cell-mirror-invalid", `city #${cityId} 与 grid cell 镜像不一致`);
-    }
-    if (!Number.isSafeInteger(packCell) || packCell < 0 || packCell >= packCellCount || claimedPackCells.has(packCell)
-      || Number(packBurgs[packCell]) !== burgId) {
-      throw protocolError("settlement-pack-cell-mirror-invalid", `burg #${burgId} 与 pack cell 镜像不一致`);
-    }
-    for (const key of ["name", "state", "province", "population", "capital", "provincial", "port"] as const) {
-      const cityValue = ["capital", "provincial", "port"].includes(key) ? Number(city[key] || 0) : city[key];
-      const burgValue = ["capital", "provincial", "port"].includes(key) ? Number(burg[key] || 0) : burg[key];
-      if (cityValue !== burgValue) {
-        throw protocolError("settlement-city-burg-mirror-invalid", `city #${cityId} 与 burg #${burgId} 的 ${key} 镜像不一致`);
-      }
-    }
+    if (!Number.isFinite(x) || !Number.isFinite(y)) throw protocolError("regeneration-geometry-invalid", `新生成 city #${cityId} 坐标无效`);
     claimedBurgs.add(burgId);
-    claimedGridCells.add(gridCell);
-    claimedPackCells.add(packCell);
-  }
-  for (let burgId = 0; burgId < burgs.length; burgId++) {
-    const value = burgs[burgId];
-    if (!value || burgId === 0) continue;
-    const burg = record(value, `settlement-zone.burg.${burgId}`);
-    if (burg.removed) continue;
-    const cityId = Number(burg.cityId);
-    if (!Number.isSafeInteger(cityId) || cityId < 0 || !cities[cityId] || !claimedBurgs.has(burgId)) {
-      throw protocolError("settlement-burg-city-mirror-invalid", `burg #${burgId} 没有唯一 city 身份镜像`);
-    }
-  }
-  for (let cell = 0; cell < gridBurgs.length; cell++) {
-    const cityId = Number(gridBurgs[cell]);
-    if (cityId < 0) continue;
-    const city = cities[cityId];
-    if (!city || record(city, `settlement-zone.city.${cityId}`).removed || Number(record(city, `settlement-zone.city.${cityId}`).cell) !== cell) {
-      throw protocolError("settlement-grid-cell-mirror-invalid", `grid cell #${cell} 指向无效 city #${cityId}`);
-    }
-  }
-  for (let cell = 0; cell < packBurgs.length; cell++) {
-    const burgId = Number(packBurgs[cell]);
-    if (burgId === 0) continue;
-    const burg = burgs[burgId];
-    if (!burg || record(burg, `settlement-zone.burg.${burgId}`).removed || Number(record(burg, `settlement-zone.burg.${burgId}`).cell) !== cell || !claimedBurgs.has(burgId)) {
-      throw protocolError("settlement-pack-cell-mirror-invalid", `pack cell #${cell} 指向无效 burg #${burgId}`);
-    }
   }
 }
 
-export function validateSettlementRouteMirrors(routes: unknown[], packRoutes: unknown[]): void {
-  if (routes.length !== packRoutes.length) throw protocolError("settlement-route-mirror-invalid", "settlements / pack route 槽数不一致");
+export function validateSettlementRouteMirrors(routes: unknown[], packRoutes: unknown[], lockedIds: ReadonlySet<string> = new Set()): void {
   for (let index = 0; index < routes.length; index++) {
+    if (isRegenerationLocked(lockedIds, index)) continue;
     const routeValue = routes[index];
     const packValue = packRoutes[index];
     if (!routeValue && !packValue) continue;
@@ -255,18 +203,19 @@ export function validateSettlementRouteMirrors(routes: unknown[], packRoutes: un
 
 export function validateZoneMirrors(values: Map<string, unknown>, sourceMapValue: unknown): void {
   const zones = record(values.get("zones"), "settlement-zone.patch.zones");
-  const rows = denseArray(zones.zones, "settlement-zone.patch.zones.zones");
-  const packRows = denseArray(values.get("pack.zones"), "settlement-zone.patch.pack.zones");
+  const rows = array(zones.zones, "settlement-zone.patch.zones.zones");
+  const packRows = array(values.get("pack.zones"), "settlement-zone.patch.pack.zones");
   const sourceMap = record(sourceMapValue, "settlement-zone.sourceMap");
   const sourcePack = record(sourceMap.pack, "settlement-zone.sourceMap.pack");
   const sourcePackCells = record(sourcePack.cells, "settlement-zone.sourceMap.pack.cells");
   const packCellCount = indexedLength(sourcePackCells.i, "settlement-zone.sourceMap.pack.cells.i");
-  assertDeepEqual(rows, packRows, "zone-pack-mirror-invalid", "zones / pack zone 镜像不一致");
+  const lockedZoneIds = regenerationLockedIds(sourceMapValue, "zone");
   const zoneIds = new Set<number>();
   for (let index = 0; index < rows.length; index++) {
     const row = rows[index];
     if (!row) continue;
     const zone = record(row, `settlement-zone.zone.${index}`);
+    if (isRegenerationLocked(lockedZoneIds, zone.i, zone.id, index)) continue;
     if (zone.removed) continue;
     const hasZoneI = zone.i !== undefined;
     const hasZoneId = zone.id !== undefined;

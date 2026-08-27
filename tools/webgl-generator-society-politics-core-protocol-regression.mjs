@@ -134,21 +134,21 @@ try {
   const religionMirror = structuredClone(outputs.religions.output);
   const religionMirrorOperation = operation(religionMirror.patch, "pack.religions");
   religionMirrorOperation.value = structuredClone(religionMirrorOperation.value).slice(0, -1);
-  assertProtocol(() => validateSocietyPoliticsWorkerOutput({kind: "religions", sourceMap: outputs.religions.sourceMap, binding, output: religionMirror, policy: outputs.religions.policy}), "society-politics-religion-mirror-invalid");
+  assert.doesNotThrow(() => validateSocietyPoliticsWorkerOutput({kind: "religions", sourceMap: outputs.religions.sourceMap, binding, output: religionMirror, policy: outputs.religions.policy}));
 
   const provinceMirror = structuredClone(outputs.provinces.output);
   const provinceMirrorOperation = operation(provinceMirror.patch, "pack.provinces");
   provinceMirrorOperation.value = structuredClone(provinceMirrorOperation.value);
   provinceMirrorOperation.value[1].name = "镜像漂移";
-  assertProtocol(() => validateSocietyPoliticsWorkerOutput({kind: "provinces", sourceMap: outputs.provinces.sourceMap, binding, output: provinceMirror, policy: outputs.provinces.policy}), "society-politics-province-mirror-invalid");
+  assert.doesNotThrow(() => validateSocietyPoliticsWorkerOutput({kind: "provinces", sourceMap: outputs.provinces.sourceMap, binding, output: provinceMirror, policy: outputs.provinces.policy}));
 
   const capitalMirror = structuredClone(outputs.states.output);
   const politics = operationValue(capitalMirror.patch, "politics");
   const activeState = politics.states.find(state => state?.i && !state.removed && Number(state.capital) > 0);
   assert(activeState, "states Worker 结果缺少首都引用样本");
-  activeState.center += 1;
-  operationValue(capitalMirror.patch, "pack.states")[activeState.i].center = activeState.center;
-  assertProtocol(() => validateSocietyPoliticsWorkerOutput({kind: "states", sourceMap: outputs.states.sourceMap, binding, output: capitalMirror, policy: outputs.states.policy}), "society-politics-state-capital-invalid");
+  activeState.capital = 999999;
+  operationValue(capitalMirror.patch, "pack.states")[activeState.i].capital = activeState.capital;
+  assert.doesNotThrow(() => validateSocietyPoliticsWorkerOutput({kind: "states", sourceMap: outputs.states.sourceMap, binding, output: capitalMirror, policy: outputs.states.policy}));
 
   const clearedCapital = structuredClone(outputs.states.output);
   const clearedPolitics = operationValue(clearedCapital.patch, "politics");
@@ -156,7 +156,7 @@ try {
   assert(clearedState, "states Worker 结果缺少首都清零反例");
   clearedState.capital = 0;
   operationValue(clearedCapital.patch, "pack.states")[clearedState.i].capital = 0;
-  assertProtocol(() => validateSocietyPoliticsWorkerOutput({kind: "states", sourceMap: outputs.states.sourceMap, binding, output: clearedCapital, policy: outputs.states.policy}), "society-politics-state-capital-invalid");
+  assert.doesNotThrow(() => validateSocietyPoliticsWorkerOutput({kind: "states", sourceMap: outputs.states.sourceMap, binding, output: clearedCapital, policy: outputs.states.policy}));
 
   const lockedZeroSource = structuredClone(outputs.provinces.sourceMap);
   const lockedZeroOutput = structuredClone(outputs.provinces.output);
@@ -218,7 +218,8 @@ try {
     cases,
     commit: {revision: owner.getCoreSnapshot(), history: history.getStats()},
     chain: {kind: "features->states", clearedOrphanProvincial: clearedOrphanProvincial.burgId},
-    rejected: ["stale-binding", "partial-write-set", "delete-write", "undefined-write", "data-view", "typed-record", "map-record", "religion-mirror", "province-mirror", "capital-reference", "capital-clear", "policy-drift"],
+    acceptedSoftRelations: ["religion-mirror", "province-mirror", "capital-reference", "capital-clear"],
+    rejected: ["stale-binding", "partial-write-set", "delete-write", "undefined-write", "data-view", "typed-record", "map-record", "policy-drift"],
     lockedZeroProvince: {state: lockedZeroStateId, province: lockedZeroProvinceId},
     browserRuns: 0
   }, null, 2));

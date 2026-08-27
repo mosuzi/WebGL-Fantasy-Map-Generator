@@ -238,7 +238,7 @@ import {createDomainPatchCommand, createMapReplacementCommand} from "./domain-pa
 import {captureCommandMapReplicaWritesAsync, createCommandMapReplicaPatch} from "./map-replica-command-patch.js";
 import {createCommittedHistoryGuard, settleHistoryActionResult} from "./history-async-boundary.js";
 import {getHeightDerivedPatchPolicy, HEIGHT_DERIVED_WORKER_TASK} from "./height-derived-worker-task.js";
-import {getRegenerationPatchPolicy, REGENERATION_WORKER_TASK} from "./regeneration-worker-task.js";
+import {getRegenerationPatchPolicy, REGENERATION_WORKER_TASK, validateOceanCurrentRegenerationOutput} from "./regeneration-worker-task.js";
 import {createWorkerTaskCoordinator} from "./worker-task-coordinator.js";
 import {createLatestPrewarmScheduler} from "./latest-prewarm-scheduler.js";
 import {createStagedWorkerSnapshot} from "./worker-snapshot.js";
@@ -302,11 +302,13 @@ import {
   allRegenerationObjectsLocked,
   assertLockedRegenerationSnapshots,
   captureLockedRegenerationObjects,
+  hideRegenerationLocks,
   mergeLockedRiverFeatureSnapshots,
   regenerationLockConflict
 } from "./regeneration-lock-protection.js";
 import {captureRegenerationConstraintBundle, isRegenerationConstraintDomainFullyLocked} from "./regeneration-constraint-bundle.js";
 import {createRegenerationLockPriorityBundle, restoreExplicitLockedSocialSnapshots} from "./regeneration-lock-priority.js";
+import {normalizeRegenerationWorkingCopy} from "./regeneration-working-copy.js";
 import {installRegenerationLockUiSession} from "./regeneration-lock-ui-session.js";
 import {
   diplomacyRelationReferenceAtPoliticalPick,
@@ -3526,7 +3528,11 @@ function createRuntimeActions(state, documentRef, options = {}) {
     },
     oceanCurrents: {
       rename: (currentId, name) => renameOceanCurrentViaApi(state, documentRef, currentId, name),
-      regenerate: (currentOptions = {}) => regenerateOceanCurrentsViaApi(state, documentRef, currentOptions),
+      regenerate: (currentOptions = {}) => operation.run(
+        "oceanCurrents.regenerate",
+        context => regenerateOceanCurrentsViaApi(state, documentRef, currentOptions, context),
+        {message: "正在重新计算洋流"}
+      ),
       inspectWorldRebuild: (options = {}) => inspectOceanCurrentWorldRebuild(state.map, options),
       rebuildWorld: (options = {}) => operation.run("oceanCurrents.rebuildWorld", context => applyOceanCurrentWorldRebuildViaAction(state, documentRef, options, context), {
         message: "正在更新洋流及其影响的地图内容"
@@ -8096,13 +8102,14 @@ async function applyClimateDownstreamRebuildViaApi(state, documentRef, options =
   const systems = options.systems || options.selectedSystems || [];
   const preview = inspectClimateDownstreamRebuild(map, {systems, seed: options.seed});
   const constraintBundle = captureRegenerationConstraintBundle(map, {closure: ["world"]});
+  const renderLayers = [...RENDER_PREPARATION_LAYERS];
   try {
     const response = await executeWorkerMapMutation(state, documentRef, {
       task: CLIMATE_DOWNSTREAM_WORKER_TASK,
       targetKind: "climate-downstream",
       userLabel: "气候下游内容",
       payload: {systems, seed: options.seed},
-      renderLayers: [...RENDER_PREPARATION_LAYERS],
+      renderLayers,
       effects: {
         ...REGENERATION_TRANSACTION_EFFECTS,
         affected: preview.selectedSystems.map(id => ({kind: "system", id}))
@@ -8115,6 +8122,13 @@ async function applyClimateDownstreamRebuildViaApi(state, documentRef, options =
         historyDomain: "climate-downstream",
         effects,
         result,
+        workerHistory: {
+          task: REGENERATION_WORKER_TASK,
+          kind: "climate-downstream",
+          label: "气候下游重算",
+          renderLayers,
+          refresh: output.refresh
+        },
         restoreLockedSnapshots: currentMap => restoreExplicitLockedSocialSnapshots(currentMap, constraintBundle),
         affectedFactory: () => preview.selectedSystems.map(id => ({kind: "system", id}))
       }),
@@ -8161,18 +8175,17 @@ function renameOceanCurrentViaApi(state, documentRef, currentId, name) {
   return editApiResult(state, result);
 }
 
-function regenerateOceanCurrentsViaApi(state, documentRef, options = {}) {
+async function regenerateOceanCurrentsViaApi(state, documentRef, options = {}, operationContext = null) {
   assertMapAvailable(state);
   if (!options || typeof options !== "object" || Array.isArray(options)) throw apiActionError("invalid_argument", "洋流重生成参数必须是对象");
-  const result = executeEditCommand(state, documentRef, createRegenerateOceanCurrentsCommand(state.map, {seed: options.seed}), {
-    context: {map: state.map},
-    status: command => `已重新计算 ${command.getResult?.().currents || 0} 条洋流。`,
-    noopStatus: "当前洋流无需重新计算。",
-    throwOnError: false
-  });
+  const result = await regenerateMapAttributeViaWorker(state, documentRef, "ocean-current", {
+    confirm: true,
+    seed: options.seed
+  }, operationContext);
   updateOceanCurrentPanel(state);
   updateEditingInteractionLock(state, documentRef);
-  return editApiResult(state, result);
+  setFileOperationStatus(documentRef, result.executed ? `已重新计算 ${result.currents || 0} 条洋流。` : "当前洋流无需重新计算。");
+  return result;
 }
 
 async function applyOceanCurrentWorldRebuildViaAction(state, documentRef, options = {}, operationContext) {
@@ -8181,38 +8194,45 @@ async function applyOceanCurrentWorldRebuildViaAction(state, documentRef, option
   const map = state.map;
   const identity = snapshotOceanCurrentWorldIdentity(map);
   const seafloorPlan = options.seafloorPlan || null;
-  const worldFullyLocked = isRegenerationConstraintDomainFullyLocked(map, "world");
-  const constraintBundle = worldFullyLocked ? null : captureRegenerationConstraintBundle(map, {closure: ["world"]});
+  const constraintBundle = captureRegenerationConstraintBundle(map, {closure: ["world"]});
+  const renderLayers = [...RENDER_PREPARATION_LAYERS];
+  const label = seafloorPlan ? "重设海底并重算洋流世界" : "重算洋流与世界派生";
   try {
     return await executeWorkerMapMutation(state, documentRef, {
       task: OCEAN_CURRENT_WORLD_WORKER_TASK,
       targetKind: "ocean-current-world",
       userLabel: "洋流与世界内容",
       payload: {seed: options.seed, seafloorPlan, faultAt: options.faultAt},
-      renderLayers: [...RENDER_PREPARATION_LAYERS],
+      renderLayers,
       effects: {
         ...REGENERATION_TRANSACTION_EFFECTS,
         affected: OCEAN_CURRENT_WORLD_REBUILD_ORDER.map(id => ({kind: "system", id}))
       },
       assertOutput: ({binding, renderBinding, output}) => {
         validateFoundationWorkerOutput({task: OCEAN_CURRENT_WORLD_WORKER_TASK, binding, renderBinding, output});
-        if (worldFullyLocked && output?.result?.executed !== false) {
-          throw apiActionError("worker_ocean_current_world_full_lock_mismatch", "全锁预检与 Worker 洋流世界结果不一致");
-        }
       },
-      createCommand: ({output, result, effects}) => createMapReplacementCommand({
-        replacementMap: output.replacementMap,
-        label: seafloorPlan ? "重设海底并重算洋流世界" : "重算洋流与世界派生",
-        historyDomain: "ocean-current-world",
-        effects,
-        result,
-        afterSwap: currentMap => {
-          restoreExplicitLockedSocialSnapshots(currentMap, constraintBundle);
-          state.options = currentMap.options;
+      createCommand: ({output, result, effects}) => attachRegenerationReplacementWorkerHistory(
+        createMapReplacementCommand({
+          replacementMap: output.replacementMap,
+          label,
+          historyDomain: "ocean-current-world",
+          effects,
+          result,
+          afterSwap: currentMap => {
+            restoreExplicitLockedSocialSnapshots(currentMap, constraintBundle);
+            state.options = currentMap.options;
+          }
+        }),
+        {
+          task: REGENERATION_WORKER_TASK,
+          kind: "ocean-current-world",
+          label,
+          replacement: true,
+          renderLayers,
+          refresh: output.refresh
         }
-      }),
+      ),
       assertCommitted: () => {
-        if (!constraintBundle) throw apiActionError("worker_ocean_current_world_full_lock_mismatch", "全锁预检结果不得进入洋流世界提交");
         assertOceanCurrentWorldIdentity(state.map, identity);
         constraintBundle.assertDomain(state.map, "world", "after");
       },
@@ -9080,6 +9100,14 @@ export function executeHistoryCommand(state, documentRef, action, options = {}) 
       {message: `正在${verb}${pendingCommand.workerHistory.label}结果`}
     );
   }
+  if (pendingCommand?.workerHistory?.task === REGENERATION_WORKER_TASK) {
+    const verb = action === "undo" ? "撤销" : "重做";
+    return state.runtimeOperation.run(
+      `history.${action}`,
+      operation => executeRegenerationWorkerHistory(state, documentRef, action, pendingCommand, operation),
+      {message: `正在${verb}${pendingCommand.workerHistory.label}结果`}
+    );
+  }
   if (pendingCommand?.domain === "regeneration") {
     const verb = action === "undo" ? "撤销" : "重做";
     return state.runtimeOperation.run(
@@ -9250,6 +9278,72 @@ async function executeSocialExpansionWorkerHistory(state, documentRef, action, c
       else command.revert({map});
     },
     afterUiRefresh: () => setFileOperationStatus(documentRef, `已${verb}${metadata.label}。`)
+  }, operation);
+}
+
+async function executeRegenerationWorkerHistory(state, documentRef, action, command, operation) {
+  const metadata = command.workerHistory;
+  const replacement = metadata.replacement === true;
+  const patch = replacement ? null : command.getHistoryPatch(action);
+  const replacementMap = replacement ? command.getHistoryReplacement(action) : null;
+  const verb = action === "undo" ? "撤销" : "重做";
+  return executeWorkerMapMutation(state, documentRef, {
+    task: metadata.task,
+    targetKind: metadata.kind,
+    userLabel: `${verb}${metadata.label}结果`,
+    payload: replacement
+      ? {replacementTransition: {
+          action,
+          kind: metadata.kind,
+          label: command.label,
+          replacementMap,
+          refresh: metadata.refresh
+        }}
+      : {historyTransition: {
+          action,
+          kind: metadata.kind,
+          label: command.label,
+          patch,
+          policy: metadata.policy,
+          refresh: metadata.refresh
+        }},
+    renderLayers: metadata.renderLayers,
+    preserveRoutePicking: metadata.preserveRoutePicking,
+    rebuildPickingFromMap: metadata.rebuildPickingFromMap,
+    effects: command.effects,
+    assertOutput: ({state: currentState, sourceMap, output}) => {
+      if (currentState.map !== sourceMap || currentState.editHistory.peek(action) !== command) {
+        const error = new Error(`${verb}${metadata.label}结果已被新的地图状态取代`);
+        error.code = "operation_obsolete";
+        throw error;
+      }
+      const outputWriteSet = output?.history?.writeSet;
+      if (output?.kind !== (replacement ? "regeneration-replacement-history" : "regeneration-history")
+        || output?.history?.action !== action
+        || output?.history?.kind !== metadata.kind
+        || !replacement && (!Array.isArray(outputWriteSet)
+          || outputWriteSet.length !== patch.writeSet.length
+          || outputWriteSet.some(path => !patch.writeSet.includes(path)))) {
+        const error = new Error(`${verb}${metadata.label}准备结果结构无效`);
+        error.code = "worker_regeneration_history_result_invalid";
+        throw error;
+      }
+    },
+    createCommand: () => command,
+    commitCommand: ({state: currentState}) => {
+      const moved = action === "undo"
+        ? currentState.editHistory.undo({map: currentState.map})
+        : currentState.editHistory.redo({map: currentState.map});
+      if (moved !== command) throw new Error(`${verb}${metadata.label}时历史栈已变化`);
+    },
+    rollbackCommand: ({map}) => {
+      if (action === "undo") command.apply({map});
+      else command.revert({map});
+    },
+    afterUiRefresh: () => {
+      updateRuntimePanel(documentRef, state);
+      setFileOperationStatus(documentRef, `已${verb}${metadata.label}。`);
+    }
   }, operation);
 }
 
@@ -11622,12 +11716,13 @@ async function rebuildHeightDerivedViaAction(state, documentRef, scope, options 
       : [...HEIGHT_DOWNSTREAM_REBUILD_STEPS];
   const constraintBundle = captureRegenerationConstraintBundle(state.map, {closure: ["world"]});
   const label = `高度${scope === "all" ? "全部" : scope === "base" ? "基础" : "下游"}派生重建`;
+  const renderLayers = [...RENDER_PREPARATION_LAYERS];
   const response = await executeWorkerMapMutation(state, documentRef, {
     task: HEIGHT_DERIVED_WORKER_TASK,
     targetKind: "height-derived",
     userLabel: label,
     payload: {scope},
-    renderLayers: [...RENDER_PREPARATION_LAYERS],
+    renderLayers,
     effects: {
       ...REGENERATION_TRANSACTION_EFFECTS,
       affected: kinds.map(id => ({kind: "system", id}))
@@ -11640,6 +11735,13 @@ async function rebuildHeightDerivedViaAction(state, documentRef, scope, options 
       historyDomain: "height-derived",
       effects,
       result,
+      workerHistory: {
+        task: REGENERATION_WORKER_TASK,
+        kind: "height-derived",
+        label,
+        renderLayers,
+        refresh: output.refresh
+      },
       restoreLockedSnapshots: currentMap => restoreExplicitLockedSocialSnapshots(currentMap, constraintBundle),
       affectedFactory: () => kinds.map(id => ({kind: "system", id}))
     }),
@@ -13041,36 +13143,37 @@ function refreshAfterProvinceEdit(state, commandOrEffects) {
 
 function regenerateMapAttribute(state, kind, documentRef, options = {}) {
   if (!state.map) return regenerationResult(kind, "未执行", "当前没有可重算的地图。");
-  const constraintBundle = createRegenerationLockPriorityBundle(state.map, options.constraintBundle);
-  const protectedOptions = constraintBundle ? {...options, constraintBundle} : options;
-  switch (kind) {
-    case "features":
-      return regenerateFeatures(state, documentRef, protectedOptions);
-    case "routes":
-      return regenerateRoutes(state, documentRef, protectedOptions);
-    case "rivers":
-      return regenerateRivers(state, documentRef, protectedOptions);
-    case "cities":
-      return regenerateCities(state, documentRef, protectedOptions);
-    case "states":
-      return regenerateStates(state, documentRef, protectedOptions);
-    case "provinces":
-      return regenerateProvinces(state, documentRef, protectedOptions);
-    case "markers":
-      return regenerateMarkerResources(state, documentRef, protectedOptions);
-    case "diplomacy":
-      return regenerateDiplomacy(state, documentRef, protectedOptions);
-    case "religions":
-      return regenerateReligions(state, documentRef, protectedOptions);
-    case "military":
-      return regenerateMilitary(state, documentRef, protectedOptions);
-    case "zones":
-      return regenerateZones(state, documentRef, protectedOptions);
-    default:
-      break;
+  const explicitBundle = options.constraintBundle || captureRegenerationConstraintBundle(state.map, {closure: ["world"]});
+  const restoreLockStore = hideRegenerationLocks(state.map);
+  try {
+    explicitBundle.hide(state.map);
+    normalizeRegenerationWorkingCopy(state.map);
+    const generationBundle = createRegenerationLockPriorityBundle(
+      state.map,
+      captureRegenerationConstraintBundle(state.map, {closure: ["world"]})
+    );
+    const generationOptions = {...options, constraintBundle: generationBundle};
+    let result;
+    switch (kind) {
+      case "features": result = regenerateFeatures(state, documentRef, generationOptions); break;
+      case "routes": result = regenerateRoutes(state, documentRef, generationOptions); break;
+      case "rivers": result = regenerateRivers(state, documentRef, generationOptions); break;
+      case "cities": result = regenerateCities(state, documentRef, generationOptions); break;
+      case "states": result = regenerateStates(state, documentRef, generationOptions); break;
+      case "provinces": result = regenerateProvinces(state, documentRef, generationOptions); break;
+      case "markers": result = regenerateMarkerResources(state, documentRef, generationOptions); break;
+      case "diplomacy": result = regenerateDiplomacy(state, documentRef, generationOptions); break;
+      case "religions": result = regenerateReligions(state, documentRef, generationOptions); break;
+      case "military": result = regenerateMilitary(state, documentRef, generationOptions); break;
+      case "zones": result = regenerateZones(state, documentRef, generationOptions); break;
+      default: result = regenerationResult(kind, "暂未执行", "该属性尚未接入受约束重算。");
+    }
+    explicitBundle.restore(state.map);
+    explicitBundle.assertDomain(state.map, "world", "after");
+    return result;
+  } finally {
+    restoreLockStore();
   }
-
-  return regenerationResult(kind, "暂未执行", "该属性尚未接入受约束重算。");
 }
 
 function regenerateFeatures(state, documentRef, options = {}) {
@@ -13193,18 +13296,19 @@ async function regenerateMapAttributeViaWorker(state, documentRef, kind, options
   }
   const constraintBundle = options.constraintBundle || captureRegenerationConstraintBundle(state.map, {closure: ["world"]});
   const workerOptions = normalizeWorkerRegenerationOptions(options);
+  const renderLayers = renderPreparationLayersForRegeneration(targetKind, {
+    colorMode: state.renderer?.colorMode,
+    visibility: state.renderer?.layerVisibility,
+    viewOptions: state.renderer?.viewOptions,
+    politicalMeshDebugMode: state.renderer?.politicalMeshDebugMode,
+    hasCellVisual: Boolean(state.renderer?.cellVisualMesh?.cells?.length)
+  });
   return executeWorkerMapMutation(state, documentRef, {
     task: "regeneration.compute",
     targetKind,
     userLabel: targetKind,
     payload: {kind: targetKind, options: workerOptions},
-    renderLayers: renderPreparationLayersForRegeneration(targetKind, {
-      colorMode: state.renderer?.colorMode,
-      visibility: state.renderer?.layerVisibility,
-      viewOptions: state.renderer?.viewOptions,
-      politicalMeshDebugMode: state.renderer?.politicalMeshDebugMode,
-      hasCellVisual: Boolean(state.renderer?.cellVisualMesh?.cells?.length)
-    }),
+    renderLayers,
     preserveRoutePicking: targetKind === "rivers",
     rebuildPickingFromMap: targetKind === "cities",
     effects: {
@@ -13215,7 +13319,9 @@ async function regenerateMapAttributeViaWorker(state, documentRef, kind, options
           : REGENERATION_TRANSACTION_EFFECTS),
       affected: []
     },
-    assertOutput: ["religions", "states", "provinces"].includes(targetKind)
+    assertOutput: targetKind === "ocean-current"
+      ? ({sourceMap, binding, output}) => validateOceanCurrentRegenerationOutput({sourceMap, binding, output, policy: getRegenerationPatchPolicy(targetKind)})
+      : ["religions", "states", "provinces"].includes(targetKind)
       ? ({sourceMap, binding, renderBinding, output}) => validateSocietyPoliticsWorkerOutput({
           kind: targetKind,
           sourceMap,
@@ -13271,6 +13377,15 @@ async function regenerateMapAttributeViaWorker(state, documentRef, kind, options
       historyDomain: targetKind === "rivers" ? "river-regeneration" : "regeneration",
       effects,
       result,
+      workerHistory: {
+        task: REGENERATION_WORKER_TASK,
+        kind: targetKind,
+        label: targetKind,
+        renderLayers,
+        preserveRoutePicking: targetKind === "rivers",
+        rebuildPickingFromMap: targetKind === "cities",
+        refresh: output.refresh
+      },
       restoreLockedSnapshots: map => restoreExplicitLockedSocialSnapshots(map, constraintBundle),
       affectedFactory: map => workerRegenerationAffected(map, targetKind)
     }),
@@ -13881,11 +13996,11 @@ function cloneWorkerMutationEffects(effects = REGENERATION_TRANSACTION_EFFECTS) 
 }
 
 function createWorkerRegenerationPatchCommand(map, options) {
-  const {affectedFactory, restoreLockedSnapshots, ...domainOptions} = options;
+  const {affectedFactory, restoreLockedSnapshots, workerHistory, ...domainOptions} = options;
   const domainCommand = createDomainPatchCommand(domainOptions);
   const beforeSummary = map.summary;
   let afterSummary = null;
-  return {
+  const command = {
     label: domainCommand.label,
     domain: domainCommand.domain,
     effects: domainCommand.effects,
@@ -13912,8 +14027,33 @@ function createWorkerRegenerationPatchCommand(map, options) {
     },
     isNoop: context => domainCommand.isNoop(context),
     getResult: () => domainCommand.getResult(),
-    getReplicaPaths: () => domainCommand.getReplicaPaths()
+    getReplicaPaths: () => domainCommand.getReplicaPaths(),
+    getHistoryPatch: action => domainCommand.getHistoryPatch(action)
   };
+  if (workerHistory) {
+    Object.defineProperty(command, "workerHistory", {
+      value: Object.freeze({
+        ...workerHistory,
+        policy: Object.freeze({
+          ...domainOptions.policy,
+          allowedPaths: Object.freeze([...(domainOptions.policy?.allowedPaths || [])]),
+          forbiddenPaths: Object.freeze([...(domainOptions.policy?.forbiddenPaths || [])])
+        }),
+        renderLayers: Object.freeze([...(workerHistory.renderLayers || [])])
+      })
+    });
+  }
+  return command;
+}
+
+function attachRegenerationReplacementWorkerHistory(command, workerHistory) {
+  Object.defineProperty(command, "workerHistory", {
+    value: Object.freeze({
+      ...workerHistory,
+      renderLayers: Object.freeze([...(workerHistory.renderLayers || [])])
+    })
+  });
+  return command;
 }
 
 function workerRegenerationAffected(map, kind) {
@@ -13952,6 +14092,8 @@ function workerRegenerationAffected(map, kind) {
       return systemAffected("military", collectionAffected(OBJECT_KIND.MILITARY, militaryRegiments(map)));
     case "zones":
       return systemAffected("zones", collectionAffected(OBJECT_KIND.ZONE, map?.zones?.zones));
+    case "ocean-current":
+      return systemAffected("ocean-currents", objectAffected(OBJECT_KIND.OCEAN_CURRENT, "all"));
     default:
       return systemAffected(kind);
   }
@@ -14680,7 +14822,7 @@ function restoreWorkerRegenerationStatus(documentRef, snapshot) {
 
 function normalizeWorkerRegenerationOptions(options) {
   const normalized = {};
-  for (const key of ["scope", "regenerationScope", "stateId", "provinceId", "id", "preservePopulation"]) {
+  for (const key of ["scope", "regenerationScope", "stateId", "provinceId", "id", "preservePopulation", "seed"]) {
     if (options?.[key] !== undefined) normalized[key] = structuredClone(options[key]);
   }
   return normalized;
@@ -15016,7 +15158,8 @@ function normalizeApiRegenerationKind(kind) {
   if (["religion", "religions"].includes(value)) return "religions";
   if (["military", "army", "armies"].includes(value)) return "military";
   if (["zone", "zones", "region-event", "region-events"].includes(value)) return "zones";
-  throw new Error("受约束重算类型必须是 features / routes / rivers / cities / states / provinces / markers / diplomacy / religions / military / zones");
+  if (["ocean-current", "ocean-currents", "current", "currents"].includes(value)) return "ocean-current";
+  throw new Error("受约束重算类型必须是 features / routes / rivers / cities / states / provinces / markers / diplomacy / religions / military / zones / ocean-current");
 }
 
 function normalizeRegenerationScope(map, kind, options = {}) {

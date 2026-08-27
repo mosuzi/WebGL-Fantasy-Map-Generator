@@ -10,16 +10,17 @@ import {executeRenderPreparationTask} from "../renderer/render-preparation.js";
 import {captureClimatePopulation, restoreClimatePopulation} from "./climate-population-preservation.js";
 import {createRegenerateDiplomacyCommand} from "./diplomacy-edit-commands.js";
 import {rebuildFeatureTopology} from "./feature-topology-edit-commands.js";
-import {createDomainPatch} from "./domain-patch.js";
+import {createDomainPatch, createDomainPatchCommand, createMapReplacementCommand} from "./domain-patch.js";
 import {createRegenerationResult} from "./height-derived-rebuild.js";
 import {ensureLabelStore} from "./label-edit-commands.js";
 import {createRegenerateResourceMarkersCommand} from "./marker-edit-commands.js";
 import {createRegenerateMilitaryCommand} from "./military-edit-commands.js";
 import {compareMilitaryVariation, snapshotMilitaryVariation} from "./military-regeneration-variation.js";
 import {LABEL_TARGET_KIND, OBJECT_KIND} from "./object-kinds.js";
+import {createRegenerateOceanCurrentsCommand} from "./ocean-current-edit-commands.js";
 import {captureRegenerationConstraintBundle} from "./regeneration-constraint-bundle.js";
 import {createRegenerationLockPriorityBundle} from "./regeneration-lock-priority.js";
-import {allRegenerationObjectsLocked, assertLockedRegenerationSnapshots, captureLockedRegenerationObjects, mergeLockedRiverFeatureSnapshots, regenerationLockConflict} from "./regeneration-lock-protection.js";
+import {assertLockedRegenerationSnapshots, captureLockedRegenerationObjects, hideRegenerationLocks, mergeLockedRiverFeatureSnapshots, regenerationLockConflict} from "./regeneration-lock-protection.js";
 import {normalizeRegenerationWorkingCopy} from "./regeneration-working-copy.js";
 import {reconcileSettlementCellIdentity} from "./settlement-cell-index.js";
 import {reconcileSettlementPortTopology} from "./settlement-port-topology.js";
@@ -39,7 +40,7 @@ export function collectRegenerationWorkerTransferables(result) {
 }
 
 export const REGENERATION_WORKER_KINDS = Object.freeze([
-  "features", "routes", "rivers", "cities", "states", "provinces", "markers", "diplomacy", "religions", "military", "zones"
+  "features", "routes", "rivers", "cities", "states", "provinces", "markers", "diplomacy", "religions", "military", "zones", "ocean-current"
 ]);
 
 const RIVER_FORBIDDEN_WRITE_SET = Object.freeze(["settlements.routes", "pack.routes", "pack.cells.routes"]);
@@ -99,7 +100,8 @@ const WRITE_SETS = Object.freeze({
   ]),
   zones: Object.freeze([
     "zones", "pack.zones", ...SYSTEM_STALE_WRITE_SET, "metadata.regeneration.zones", "metadata.derivedStale", ...COMMON_WRITE_SET
-  ])
+  ]),
+  "ocean-current": Object.freeze(["oceanCurrents"])
 });
 
 export async function runRegenerationWorkerTask(payload, context = {}) {
@@ -123,23 +125,41 @@ export async function runRegenerationWorkerTask(payload, context = {}) {
     context.checkpoint?.();
     return {mode: "render-only", binding, preparedRender};
   }
-  const kind = normalizeRegenerationKind(payload?.kind);
-  normalizeRegenerationWorkingCopy(map);
-  const setupStartedAt = regenerationTaskNow();
-  context.checkpoint?.();
-  context.report?.("compute", {message: `正在 Worker 中重算 ${kind}`, progress: 0.15});
-  const before = regenerationSummary(map);
-  const scope = normalizeRegenerationScope(map, kind, payload?.options || {});
-  const constraintBundle = captureRegenerationConstraintBundle(map, {closure: ["world"]});
-  const populationSnapshot = payload?.options?.preservePopulation === true ? captureClimatePopulation(map) : null;
-  if (populationSnapshot && !["features", "routes", "rivers"].includes(kind)) {
-    throw taskError("worker_regeneration_option_invalid", "preservePopulation 仅支持 features、routes 和 rivers 地理派生重算");
+  if (payload?.historyTransition) {
+    return runRegenerationHistoryTransition(map, payload, context);
   }
-  const setupMs = regenerationTaskMs(regenerationTaskNow() - setupStartedAt);
+  if (payload?.replacementTransition) {
+    return runRegenerationReplacementHistoryTransition(map, payload, context);
+  }
+  const kind = normalizeRegenerationKind(payload?.kind);
+  const constraintBundle = captureRegenerationConstraintBundle(map, {closure: ["world"]});
+  const restoreLockStore = hideRegenerationLocks(map);
+  const setupStartedAt = regenerationTaskNow();
+  const before = regenerationSummary(map);
+  let scope;
+  let populationSnapshot;
+  let result;
+  let setupMs;
   const domainStartedAt = regenerationTaskNow();
-  const result = regenerateMapAttribute(map, kind, {...scope, constraintBundle});
-  if (populationSnapshot) restoreClimatePopulation(map, populationSnapshot);
-  if (constraintBundle) constraintBundle.assertDomain(map, "world", "after");
+  try {
+    constraintBundle.hide(map);
+    normalizeRegenerationWorkingCopy(map);
+    context.checkpoint?.();
+    context.report?.("compute", {message: `正在 Worker 中重算 ${kind}`, progress: 0.15});
+    scope = normalizeRegenerationScope(map, kind, payload?.options || {});
+    const generationBundle = captureRegenerationConstraintBundle(map, {closure: ["world"]});
+    populationSnapshot = payload?.options?.preservePopulation === true ? captureClimatePopulation(map) : null;
+    if (populationSnapshot && !["features", "routes", "rivers"].includes(kind)) {
+      throw taskError("worker_regeneration_option_invalid", "preservePopulation 仅支持 features、routes 和 rivers 地理派生重算");
+    }
+    setupMs = regenerationTaskMs(regenerationTaskNow() - setupStartedAt);
+    result = regenerateMapAttribute(map, kind, {...scope, constraintBundle: generationBundle});
+    if (populationSnapshot) restoreClimatePopulation(map, populationSnapshot);
+    constraintBundle.restore(map);
+    constraintBundle.assertDomain(map, "world", "after");
+  } finally {
+    restoreLockStore();
+  }
   const domainComputeMs = regenerationTaskMs(regenerationTaskNow() - domainStartedAt);
   context.checkpoint?.();
   context.report?.("patch", {message: `正在生成 ${kind} 领域补丁`, progress: 0.85});
@@ -180,6 +200,101 @@ export async function runRegenerationWorkerTask(payload, context = {}) {
   };
 }
 
+async function runRegenerationHistoryTransition(map, payload, context) {
+  const transition = payload.historyTransition;
+  const action = transition?.action === "redo" ? "redo" : transition?.action === "undo" ? "undo" : "";
+  if (!action) throw taskError("worker_regeneration_history_action_invalid", "重生成历史动作无效");
+  const kind = String(transition?.kind || "").trim();
+  if (!kind) throw taskError("worker_regeneration_history_kind_invalid", "重生成历史领域无效");
+  const command = createDomainPatchCommand({
+    patch: transition.patch,
+    policy: transition.policy,
+    label: `${kind} ${action === "undo" ? "撤销" : "重做"}`,
+    historyDomain: "regeneration-history",
+    effects: {},
+    result: null
+  });
+  let applied = false;
+  try {
+    command.apply({map});
+    applied = true;
+    context.checkpoint?.();
+    context.report?.("render", {message: `正在准备 ${kind} ${action === "undo" ? "撤销" : "重做"}画面`, progress: 0.75});
+    const preparedRender = payload.render
+      ? await executeRenderPreparationTask({
+          ...payload.render,
+          map,
+          binding: payload.render.binding || context.binding || null
+        }, context)
+      : null;
+    context.checkpoint?.();
+    return {
+      kind: "regeneration-history",
+      binding: context.binding || null,
+      history: {action, kind, writeSet: [...transition.patch.writeSet]},
+      result: {
+        executed: true,
+        action,
+        kind,
+        label: String(transition.label || `受约束重生成 ${kind}`)
+      },
+      refresh: transition.refresh || {derived: ["object-panels", "object-index"], picking: "all"},
+      preparedRender
+    };
+  } catch (error) {
+    if (applied) command.revert({map});
+    throw error;
+  }
+}
+
+async function runRegenerationReplacementHistoryTransition(map, payload, context) {
+  const transition = payload.replacementTransition;
+  const action = transition?.action === "redo" ? "redo" : transition?.action === "undo" ? "undo" : "";
+  if (!action) throw taskError("worker_regeneration_replacement_history_action_invalid", "整图重生成历史动作无效");
+  const kind = String(transition?.kind || "").trim();
+  if (!kind || !transition?.replacementMap || typeof transition.replacementMap !== "object") {
+    throw taskError("worker_regeneration_replacement_history_invalid", "整图重生成历史目标无效");
+  }
+  const command = createMapReplacementCommand({
+    replacementMap: transition.replacementMap,
+    label: `${kind} ${action === "undo" ? "撤销" : "重做"}`,
+    historyDomain: "regeneration-replacement-history",
+    effects: {},
+    result: null
+  });
+  let applied = false;
+  try {
+    command.apply({map});
+    applied = true;
+    context.checkpoint?.();
+    context.report?.("render", {message: `正在准备 ${kind} ${action === "undo" ? "撤销" : "重做"}画面`, progress: 0.75});
+    const preparedRender = payload.render
+      ? await executeRenderPreparationTask({
+          ...payload.render,
+          map,
+          binding: payload.render.binding || context.binding || null
+        }, context)
+      : null;
+    context.checkpoint?.();
+    return {
+      kind: "regeneration-replacement-history",
+      binding: context.binding || null,
+      history: {action, kind},
+      result: {
+        executed: true,
+        action,
+        kind,
+        label: String(transition.label || kind)
+      },
+      refresh: transition.refresh || {derived: ["object-panels", "object-index"], picking: "all"},
+      preparedRender
+    };
+  } catch (error) {
+    if (applied) command.revert({map});
+    throw error;
+  }
+}
+
 function regenerationTaskNow() {
   return globalThis.performance?.now?.() ?? Date.now();
 }
@@ -203,18 +318,27 @@ function regenerateMapAttribute(map, kind, options) {
     case "religions": return regenerateReligions(map, protectedOptions);
     case "military": return regenerateMilitary(map, protectedOptions);
     case "zones": return regenerateZones(map, protectedOptions);
+    case "ocean-current": return regenerateOceanCurrents(map, protectedOptions);
     default: throw taskError("worker_regeneration_kind_unsupported", `重生成 Worker 不支持 ${kind || "(empty)"}`);
   }
 }
 
 export function regenerateMapAttributeForWorker(map, kind, options = {}) {
   const normalizedKind = normalizeRegenerationKind(kind);
-  normalizeRegenerationWorkingCopy(map);
-  const scope = normalizeRegenerationScope(map, normalizedKind, options);
   const constraintBundle = options.constraintBundle || captureRegenerationConstraintBundle(map, {closure: ["world"]});
-  const result = regenerateMapAttribute(map, normalizedKind, {...options, ...scope, constraintBundle});
-  constraintBundle.assertDomain(map, "world", "after");
-  return result;
+  const restoreLockStore = hideRegenerationLocks(map);
+  try {
+    constraintBundle.hide(map);
+    normalizeRegenerationWorkingCopy(map);
+    const scope = normalizeRegenerationScope(map, normalizedKind, options);
+    const generationBundle = captureRegenerationConstraintBundle(map, {closure: ["world"]});
+    const result = regenerateMapAttribute(map, normalizedKind, {...options, ...scope, constraintBundle: generationBundle});
+    constraintBundle.restore(map);
+    constraintBundle.assertDomain(map, "world", "after");
+    return result;
+  } finally {
+    restoreLockStore();
+  }
 }
 
 function normalizeRegenerationKind(kind) {
@@ -227,7 +351,8 @@ function normalizeRegenerationKind(kind) {
     state: "states", country: "states", countries: "states", nation: "states", nations: "states",
     province: "provinces", marker: "markers", resource: "markers", resources: "markers",
     diplomatic: "diplomacy", relations: "diplomacy", religion: "religions",
-    army: "military", armies: "military", zone: "zones", "region-event": "zones", "region-events": "zones"
+    army: "military", armies: "military", zone: "zones", "region-event": "zones", "region-events": "zones",
+    "ocean-current": "ocean-current", "ocean-currents": "ocean-current", current: "ocean-current", currents: "ocean-current"
   };
   const normalized = aliases[value] || value;
   if (!REGENERATION_WORKER_KINDS.includes(normalized)) {
@@ -268,6 +393,44 @@ export function getRegenerationPatchPolicy(kind) {
   };
 }
 
+export function validateOceanCurrentRegenerationOutput({sourceMap, binding, output, policy}) {
+  if (output?.kind !== "ocean-current") throw taskError("worker_ocean_current_kind_invalid", "洋流重生成 Worker 结果类型无效");
+  if (binding && output?.binding) {
+    for (const key of ["mapIdentity", "mapRevision", "generationToken", "lockFingerprint", "operationId", "operationName"]) {
+      if (String(output.binding[key] ?? "") !== String(binding[key] ?? "")) throw taskError("worker_ocean_current_binding_stale", `洋流重生成 Worker 绑定的 ${key} 已过期`);
+    }
+  }
+  const expected = [...(policy?.allowedPaths || [])].sort();
+  const actual = [...(output?.patch?.writeSet || [])].sort();
+  if (expected.length !== actual.length || expected.some((path, index) => path !== actual[index])) {
+    throw taskError("worker_ocean_current_write_set_invalid", "洋流重生成 Worker 写集无效");
+  }
+  const operation = (output?.patch?.operations || []).find(row => row?.path?.join?.(".") === "oceanCurrents");
+  if (!operation?.exists || !operation.value || typeof operation.value !== "object" || !Array.isArray(operation.value.currents)) {
+    throw taskError("worker_ocean_current_model_invalid", "洋流重生成 Worker 没有返回可提交洋流模型");
+  }
+  const lockedIds = new Set((sourceMap?.regenerationLocks?.entries || [])
+    .filter(entry => entry?.kind === OBJECT_KIND.OCEAN_CURRENT)
+    .map(entry => String(entry.id)));
+  const ids = new Set();
+  for (const current of operation.value.currents) {
+    const id = String(current?.id || "");
+    if (lockedIds.has(id)) continue;
+    if (!id || ids.has(id)) throw taskError("worker_ocean_current_identity_invalid", "新生成洋流 ID 缺失或重复");
+    ids.add(id);
+    if (!Number.isFinite(Number(current?.strength))) throw taskError("worker_ocean_current_strength_invalid", `新生成洋流 ${id} 强度无效`);
+    const segments = current?.path?.segments;
+    if (!Array.isArray(segments) || !segments.length) throw taskError("worker_ocean_current_path_invalid", `新生成洋流 ${id} 缺少路径`);
+    for (const segment of segments) for (const key of ["start", "control1", "control2", "end"]) {
+      const point = segment?.[key];
+      if (!Array.isArray(point) || point.length < 2 || !Number.isFinite(Number(point[0])) || !Number.isFinite(Number(point[1]))) {
+        throw taskError("worker_ocean_current_geometry_invalid", `新生成洋流 ${id} 存在无效控制点`);
+      }
+    }
+  }
+  return true;
+}
+
 function regenerationRefresh(kind) {
   const descriptors = {
     features: {derived: ["terrain-caches", "height-field", "cell-colors", "line-layers", "point-layers", "labels", "object-panels", "object-index"], picking: "all"},
@@ -280,16 +443,13 @@ function regenerationRefresh(kind) {
     diplomacy: {derived: ["cell-colors", "line-layers", "object-panels", "object-index"], picking: "all"},
     religions: {derived: ["cell-colors", "object-panels", "object-index"], picking: "all"},
     military: {derived: ["point-layers", "line-layers", "labels", "object-panels", "object-index"], picking: "all"},
-    zones: {derived: ["cell-colors", "line-layers", "labels", "object-panels", "object-index"], picking: "all"}
+    zones: {derived: ["cell-colors", "line-layers", "labels", "object-panels", "object-index"], picking: "all"},
+    "ocean-current": {derived: ["line-layers"], picking: "none"}
   };
   return descriptors[kind];
 }
 
 function regenerateFeatures(map, options = {}) {
-  const activeFeatures = (map?.pack?.features || []).filter(feature => feature?.i && !feature.removed);
-  if (activeFeatures.length && allRegenerationObjectsLocked(map, OBJECT_KIND.FEATURE, activeFeatures)) {
-    return regenerationResult("features", "未执行", "当前 Feature 已全部锁定且拓扑一致，未推进扰动序号。");
-  }
   const constraintBundle = options.constraintBundle;
   const featureLocks = constraintBundle ? constraintBundle.lockedFeatures : captureLockedRegenerationObjects(map, OBJECT_KIND.FEATURE).snapshots;
   const riverLocks = constraintBundle ? constraintBundle.lockedRivers : captureLockedRegenerationObjects(map, OBJECT_KIND.RIVER).snapshots;
@@ -314,9 +474,6 @@ function regenerateFeatures(map, options = {}) {
 
 function regenerateRoutes(map, options = {}) {
   const currentRoutes = map.settlements?.routes || [];
-  if (currentRoutes.length && allRegenerationObjectsLocked(map, OBJECT_KIND.ROUTE, currentRoutes)) {
-    return regenerationResult("routes", "未执行", "当前道路已全部锁定，未推进扰动序号。");
-  }
   const before = currentRoutes.length;
   const constraintBundle = options.constraintBundle;
   const routeLocks = constraintBundle ? {snapshots: constraintBundle.lockedRoutes} : captureLockedRegenerationObjects(map, OBJECT_KIND.ROUTE);
@@ -366,9 +523,6 @@ function reconcileRoutePoliticalStore(packRows, politicsRows) {
 
 function regenerateRivers(map, options = {}) {
   const currentRivers = map.rivers?.rivers || [];
-  if (currentRivers.length && allRegenerationObjectsLocked(map, OBJECT_KIND.RIVER, currentRivers)) {
-    return regenerationResult("rivers", "未执行", "当前河流已全部锁定，未推进扰动序号。");
-  }
   const constraintBundle = options.constraintBundle;
   const riverLocks = constraintBundle
     ? {snapshots: constraintBundle.lockedRivers, ids: new Set(constraintBundle.ids(OBJECT_KIND.RIVER))}
@@ -396,9 +550,6 @@ function regenerateCities(map, options = {}) {
   const constraintBundle = options.constraintBundle;
   const settlementScope = scope.kind === "all" ? null : {kind: scope.kind, id: scope.id};
   const targetCities = (map.settlements?.cities || []).filter(city => city && !city.removed && (!settlementScope || settlementScopeContainsCity(map, settlementScope, city)));
-  if (targetCities.length && allRegenerationObjectsLocked(map, OBJECT_KIND.CITY, targetCities)) {
-    return regenerationResult("cities", "未执行", `${regenerationScopeLabel(map, scope)}城镇已全部锁定，未推进扰动序号。`);
-  }
   const cityLocks = constraintBundle ? {snapshots: constraintBundle.lockedCities} : captureLockedRegenerationObjects(map, OBJECT_KIND.CITY);
   const routeLocks = constraintBundle ? {snapshots: constraintBundle.lockedRoutes} : captureLockedRegenerationObjects(map, OBJECT_KIND.ROUTE);
   const scopedLockedIds = new Set(cityLocks.snapshots.filter(city => !settlementScope || settlementScopeContainsCity(map, settlementScope, city)).map(city => Number(city.id)));
@@ -446,10 +597,6 @@ function assertRegeneratedCitiesOnLand(map, settlementScope, lockedIds) {
 
 function regenerateStates(map, options = {}) {
   const constraintBundle = options.constraintBundle;
-  const currentStates = (map.politics?.states || []).filter(item => item?.i && !item.removed);
-  if (currentStates.length && allRegenerationObjectsLocked(map, OBJECT_KIND.STATE, currentStates)) {
-    return regenerationResult("states", "未执行", "当前国家已全部锁定，未推进扰动序号。");
-  }
   const capturedStateLocks = constraintBundle ? {snapshots: constraintBundle.lockedStates} : captureLockedRegenerationObjects(map, OBJECT_KIND.STATE);
   const stateLocks = constraintBundle ? {snapshots: mergeLockedEconomicStates(map, capturedStateLocks.snapshots, constraintBundle)} : capturedStateLocks;
   const provinceLocks = constraintBundle ? {snapshots: constraintBundle.lockedProvinces} : captureLockedRegenerationObjects(map, OBJECT_KIND.PROVINCE);
@@ -504,10 +651,6 @@ function regenerateStates(map, options = {}) {
 function regenerateProvinces(map, options = {}) {
   const scope = options;
   const constraintBundle = options.constraintBundle;
-  const targetProvinces = (map.politics?.provinces || []).filter(province => province?.i && !province.removed && (scope.kind === "all" || Number(province.state) === scope.id));
-  if (targetProvinces.length && allRegenerationObjectsLocked(map, OBJECT_KIND.PROVINCE, targetProvinces)) {
-    return regenerationResult("provinces", "未执行", `${regenerationScopeLabel(map, scope)}省份已全部锁定，未推进扰动序号。`);
-  }
   const provinceLocks = constraintBundle ? {snapshots: constraintBundle.lockedProvinces} : captureLockedRegenerationObjects(map, OBJECT_KIND.PROVINCE);
   const cityLocks = constraintBundle ? {snapshots: constraintBundle.lockedCities} : captureLockedRegenerationObjects(map, OBJECT_KIND.CITY);
   const lockedCities = mergeLockedPoliticalCities(map, [], provinceLocks.snapshots, cityLocks.snapshots);
@@ -556,10 +699,6 @@ function regenerateProvinces(map, options = {}) {
 function regenerateReligions(map, options = {}) {
   const constraintBundle = options.constraintBundle;
   if (!map?.pack?.cells?.s || !map?.society || !map?.settlements) return regenerationResult("religions", "未执行", "当前地图缺少 pack 社会、文化或城镇数据，无法重新扩张宗教。");
-  const active = (map.society?.religions || map.pack?.religions || []).filter(religion => religion?.i && !religion.removed);
-  if (active.length && allRegenerationObjectsLocked(map, OBJECT_KIND.RELIGION, active)) {
-    return regenerationResult("religions", "未执行", "当前宗教已全部锁定，未推进扰动序号。");
-  }
   const religionLocks = constraintBundle ? {snapshots: constraintBundle.lockedReligions} : captureLockedRegenerationObjects(map, OBJECT_KIND.RELIGION);
   const cultureLocks = constraintBundle ? {snapshots: constraintBundle.lockedCultures} : captureLockedRegenerationObjects(map, OBJECT_KIND.CULTURE);
   const lockedProvinces = constraintBundle ? mergeLockedPoliticalProvinces(map, constraintBundle.lockedStates, constraintBundle.lockedProvinces) : [];
@@ -592,9 +731,8 @@ function regenerateReligions(map, options = {}) {
 }
 
 function regenerateMarkers(map, options = {}) {
-  const resources = (map?.markers?.markers || []).filter(marker => marker?.category === "resource");
-  if (!map?.pack?.cells?.i?.length || !Array.isArray(map?.markers?.markers) || resources.length > 0 && allRegenerationObjectsLocked(map, OBJECT_KIND.MARKER, resources)) {
-    return regenerationResult("markers", "未执行", "当前资源点已全部锁定，未推进扰动序号。");
+  if (!map?.pack?.cells?.i?.length || !Array.isArray(map?.markers?.markers)) {
+    return regenerationResult("markers", "未执行", "当前地图缺少可生成资源点的 pack cells 或标记容器。");
   }
   const beforeResources = map.markers?.metadata?.resourceMarkers || 0;
   const beforePotential = map.markers?.metadata?.resourcePotential || 0;
@@ -613,11 +751,6 @@ function regenerateMarkers(map, options = {}) {
 function regenerateDiplomacy(map, options = {}) {
   const states = (map?.pack?.states || map?.politics?.states || []).filter(item => item?.i && !item.removed);
   if (states.length < 2) return regenerationResult("diplomacy", "未执行", "当前地图至少需要两个有效国家才能重生成外交。");
-  const pairs = [];
-  for (let left = 0; left < states.length; left++) for (let right = left + 1; right < states.length; right++) pairs.push({id: `${Math.min(states[left].i, states[right].i)}:${Math.max(states[left].i, states[right].i)}`});
-  if (pairs.length && allRegenerationObjectsLocked(map, OBJECT_KIND.DIPLOMACY_RELATION, pairs)) {
-    return regenerationResult("diplomacy", "未执行", "当前外交国家对已全部锁定，未推进扰动序号。");
-  }
   const lockCapture = options.constraintBundle ? {snapshots: options.constraintBundle.lockedDiplomacyRelations} : captureLockedRegenerationObjects(map, OBJECT_KIND.DIPLOMACY_RELATION);
   const beforePairs = map.diplomacy?.metadata?.pairs || 0;
   const beforeEnemies = map.diplomacy?.metadata?.enemies || 0;
@@ -627,7 +760,7 @@ function regenerateDiplomacy(map, options = {}) {
     preservedRelations: lockCapture.snapshots,
     lockedStates: options.constraintBundle?.explicitLockedStates || options.constraintBundle?.lockedStates || []
   });
-  if (command.isNoop?.({map})) return regenerationResult("diplomacy", "未执行", "当前外交国家对已全部锁定，未推进扰动序号。");
+  if (command.isNoop?.({map})) return regenerationResult("diplomacy", "未执行", "当前国家不足两个或外交结果没有变化。");
   nextRegenerationSalt(map, "diplomacy");
   command.apply({map});
   if (options.constraintBundle) options.constraintBundle.assertDomain(map, "diplomacy", "diplomacy-build");
@@ -643,10 +776,6 @@ function regenerateDiplomacy(map, options = {}) {
 function regenerateMilitary(map, options = {}) {
   const validStates = (map?.pack?.states || []).filter(state => state?.i && !state.removed);
   if (!map?.pack?.cells?.i?.length || !validStates.length) return regenerationResult("military", "未执行", "当前地图缺少 pack cells 或有效国家数据，无法重建军事。");
-  const regiments = militaryRegiments(map);
-  if (regiments.length && allRegenerationObjectsLocked(map, OBJECT_KIND.MILITARY, regiments)) {
-    return regenerationResult("military", "未执行", "当前军团已全部锁定，未推进扰动序号。");
-  }
   const lockCapture = options.constraintBundle ? {snapshots: options.constraintBundle.lockedMilitaryRegiments} : captureLockedRegenerationObjects(map, OBJECT_KIND.MILITARY);
   const before = militaryCounts(map);
   const previousEvents = Number(map.military?.events?.length || 0);
@@ -657,7 +786,7 @@ function regenerateMilitary(map, options = {}) {
     preservedRegiments: lockCapture.snapshots,
     lockedStates: options.constraintBundle?.lockedStates || []
   });
-  if (command.isNoop?.({map})) return regenerationResult("military", "未执行", "当前军事数据不存在或全部军团已锁定，未推进扰动序号。");
+  if (command.isNoop?.({map})) return regenerationResult("military", "未执行", "当前地图没有可生成军团的国家资料。");
   nextRegenerationSalt(map, "military");
   command.apply({map});
   const commandResult = command.getResult?.() || {};
@@ -675,10 +804,6 @@ function regenerateMilitary(map, options = {}) {
 
 function regenerateZones(map) {
   if (!map?.pack?.cells?.i?.length) return regenerationResult("zones", "未执行", "当前地图缺少 pack cells，无法重建地区。");
-  const currentZones = map.zones?.zones || map.pack?.zones || [];
-  if (currentZones.length > 0 && allRegenerationObjectsLocked(map, OBJECT_KIND.ZONE, currentZones)) {
-    return regenerationResult("zones", "未执行", "当前地区已全部锁定，未推进扰动序号。");
-  }
   const lockCapture = captureLockedRegenerationObjects(map, OBJECT_KIND.ZONE);
   const before = Number(map.zones?.metadata?.zones) || 0;
   const salt = nextRegenerationSalt(map, "zones");
@@ -689,6 +814,17 @@ function regenerateZones(map) {
   refreshGenerationSummary(map);
   appendGenerationLog(map, `regenerate zones: salt=${salt}, zones=${map.zones.metadata.zones}, cells=${map.zones.metadata.cells}`);
   return regenerationResult("zones", `地区已按当前战争、宗教、军事与地形上下文重算（扰动 #${salt}）：${before} -> ${map.zones.metadata.zones}`, "已刷新地区覆盖、名称、统计和对象索引。");
+}
+
+function regenerateOceanCurrents(map, options = {}) {
+  const command = createRegenerateOceanCurrentsCommand(map, {seed: options.seed});
+  if (command.isNoop?.({map})) return regenerationResult("ocean-current", "未执行", "当前洋流无需重新计算。");
+  command.apply({map});
+  const currentResult = command.getResult?.() || {};
+  return {
+    ...regenerationResult("ocean-current", `洋流已按当前海陆与气候资料重算：${currentResult.currents || 0} 条`, "只重建洋流自身；气候与社会派生不会在本入口隐式重算。"),
+    ...currentResult
+  };
 }
 
 function mergeLockedPoliticalProvinces(map, lockedStates = [], lockedProvinces = []) {

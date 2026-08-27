@@ -174,13 +174,11 @@ async function verifyLocksCancellationFaultsAndStale(base, binding, assignmentRe
   const lockedAssignment = structuredClone(base);
   const lockedMarket = Number(lockedAssignment.pack.cells.market[assignmentRequest.changes[0].packCell]);
   createSetRegenerationLockCommand({kind: OBJECT_KIND.ECONOMY_MARKET, id: lockedMarket}, true).apply({map: lockedAssignment});
-  const lockedAssignmentBefore = structuredClone(lockedAssignment);
-  await assert.rejects(
-    runEconomyWorkerTask({map: lockedAssignment, request: assignmentRequest, binding}, taskContext(binding, "locked-assignment")),
-    error => error?.code === "regeneration_lock_conflict"
-  );
-  assert.deepEqual(lockedAssignment, lockedAssignmentBefore, "锁定市场冲突没有回滚 shadow");
-  assertEconomyAliases(lockedAssignment, "锁冲突回滚");
+  const lockedMarketBefore = structuredClone(lockedAssignment.pack.markets[lockedMarket]);
+  const lockedAssignmentOutput = await runEconomyWorkerTask({map: lockedAssignment, request: assignmentRequest, binding}, taskContext(binding, "locked-assignment"));
+  assert.equal(lockedAssignmentOutput.result.executed, true, "锁定市场错误阻断了市场归属重算");
+  assert.deepEqual(lockedAssignment.pack.markets[lockedMarket], lockedMarketBefore, "市场归属重算改写了锁定市场对象");
+  assertEconomyAliases(lockedAssignment, "锁定市场归属重算");
 
   const guarded = structuredClone(base);
   const guardedMarket = guarded.pack.markets.find(Boolean);
@@ -203,11 +201,15 @@ async function verifyLocksCancellationFaultsAndStale(base, binding, assignmentRe
       ...fullyLocked.pack.deals.filter(Boolean).map(item => ({kind: OBJECT_KIND.TRADE_FLOW, id: Number(item.i ?? item.id)}))
     ]
   };
-  const fullyLockedBefore = structuredClone(fullyLocked);
+  const fullyLockedMarketsBefore = new Map(fullyLocked.pack.markets.filter(Boolean).map(item => [Number(item.i ?? item.id), structuredClone(item)]));
+  const fullyLockedDealsBefore = new Map(fullyLocked.pack.deals.filter(Boolean).map(item => [Number(item.i ?? item.id), structuredClone(item)]));
   const fullyLockedOutput = await runEconomyWorkerTask({map: fullyLocked, request: guardedRequest, binding}, taskContext(binding, "fully-locked"));
-  assert.equal(fullyLockedOutput.result.executed, false, "全锁经济领域仍执行重算");
-  assert.equal(fullyLockedOutput.patch.operations.length, 0, "全锁经济领域返回了补丁");
-  assert.deepEqual(fullyLocked, fullyLockedBefore, "全锁 no-op 改写地图");
+  assert.equal(fullyLockedOutput.result.executed, true, "全锁经济领域被错误降级为 no-op");
+  for (const [id, before] of fullyLockedMarketsBefore) assert.deepEqual(fullyLocked.pack.markets[id], before, `全锁经济重算改写市场 #${id}`);
+  for (const [id, before] of fullyLockedDealsBefore) {
+    assert.deepEqual(fullyLocked.pack.deals.find(item => Number(item?.i ?? item?.id) === id), before, `全锁经济重算改写交易流 #${id}`);
+  }
+  assertEconomyAliases(fullyLocked, "全锁经济重算");
 
   const emptyAssignment = structuredClone(base);
   const emptyBefore = structuredClone(emptyAssignment);
