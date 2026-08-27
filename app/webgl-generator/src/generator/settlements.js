@@ -1912,7 +1912,6 @@ function buildRoutes(grid, features, politics, cities, pack, options = {}) {
 
 function buildPackRoutes(grid, pack, cities, options = {}) {
   const locked = prepareLockedRoutes(pack, options);
-  const protectedFeatureIds = snapshotIds(options.lockedFeatures);
   const connections = locked.connections;
   const waterConnections = locked.waterConnections;
   const routes = locked.routes;
@@ -1935,20 +1934,20 @@ function buildPackRoutes(grid, pack, cities, options = {}) {
   const portsByFeature = groupBurgs(seaBurgs, burg => burg.port);
   const landNetworkCells = collectLandNetworkCells(routes, pack);
 
-  const roadSegments = mergeRouteSegments(generateRouteSegments({pack, connections, groups: capitalBurgs, water: false, routeType: "road", variation, search, edgeKeyMultiplier, riverEdges, maxVisited: pack.cells.i.length, excludedGroupIds: protectedFeatureIds}));
+  const roadSegments = mergeRouteSegments(generateRouteSegments({pack, connections, groups: capitalBurgs, water: false, routeType: "road", variation, search, edgeKeyMultiplier, riverEdges, maxVisited: pack.cells.i.length}));
   for (const segment of roadSegments) {
     addPackRoute({routes, pack, segment, type: "road", pointsArray, cityByBurg, allocateRouteId});
     registerLandNetworkCells(landNetworkCells, pack, segment.cells);
   }
 
-  const seaSegments = mergeRouteSegments(generateRouteSegments({pack, connections, groups: portsByFeature, water: true, routeType: "searoute", variation, search, edgeKeyMultiplier, riverEdges, excludedGroupIds: protectedFeatureIds}));
+  const seaSegments = mergeRouteSegments(generateRouteSegments({pack, connections, groups: portsByFeature, water: true, routeType: "searoute", variation, search, edgeKeyMultiplier, riverEdges}));
   for (const segment of seaSegments) {
     addPackRoute({routes, pack, segment, type: "searoute", pointsArray, cityByBurg, allocateRouteId});
     addConnections(segment.cells, waterConnections, edgeKeyMultiplier);
   }
 
   for (const {feature, burgs: provinceBurgs} of burgsByProvinceAndLand) {
-    if (!provinceBurgs.length || protectedFeatureIds.has(feature)) continue;
+    if (!provinceBurgs.length) continue;
     const anchoredBurgs = addLandNetworkAnchor(provinceBurgs, feature, landNetworkCells, pack, landBurgAnchors);
     if (anchoredBurgs.length < 2) continue;
     const groups = new Map([[feature, anchoredBurgs]]);
@@ -2095,14 +2094,12 @@ function generateRouteSegments({
   edgeKeyMultiplier,
   riverEdges = null,
   maxVisited = null,
-  excludedGroupIds = new Set(),
   blockedConnections = null
 }) {
   const routeSegments = [];
   const entries = [...groups.entries()].sort(([a], [b]) => Number(a) - Number(b));
 
   for (const [feature, burgs] of entries) {
-    if (excludedGroupIds.has(Number(feature))) continue;
     const points = burgs.map(burg => routeCandidatePoint(burg, variation, water));
     const edges = selectRouteEdges(calculateUrquhartEdges(points), points, water, routeType);
 

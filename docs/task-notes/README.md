@@ -12,6 +12,7 @@
 - 第 360 项只修“路线管理 → 重算道路”的 Promise、busy、结果 / 错误码与真实道路首败，中央入口不得替代专用入口；见 [`task-360-route-regeneration-transaction.md`](./task-360-route-regeneration-transaction.md)。
 - 第 361 项把首次不可通过平滑开关恢复的疆界柔化定义为非法第三态，以 `F0 / Foff / Fon` 像素和 surface / shore / line 资源指纹收敛首次导入与运行时切换；见 [`task-361-initial-boundary-third-state.md`](./task-361-initial-boundary-third-state.md)。
 - 第 362 项闭合第 359～361 项三名独立验收者实际返回的 LongTask、浏览器选择和固定坐标像素证据阻断，并以三份重新采证的 `ACCEPT` 作为唯一合入门；见 [`task-362-independent-acceptance-blockers.md`](./task-362-independent-acceptance-blockers.md)。
+- 第 364 项用用户指定 `krichars (3).webfmg` 冻结道路重生成的陆地分区覆盖，修复锁定首都的支撑 feature 被误当成整片路线禁区，并以西陆道路、目标首都接入和陆路不入海作结果门；见 [`task-364-route-geographic-coverage.md`](./task-364-route-geographic-coverage.md)。
 
 - 第 357 项统一 `22` 个重生成入口的旧数据 canonical working copy、锁定对象最小结构校验、未锁对象受限生成、锁快照优先合并和单次最终领域校验；阶段冻结与最终验收记录见 [`task-357-unified-regeneration-contract.md`](./task-357-unified-regeneration-contract.md)。
 

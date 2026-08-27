@@ -19,12 +19,13 @@ const options = {
   graphHeight: 760,
   heightmapTemplate: "continents"
 };
-const report = {ok: true, full: {}, scoped: {}, routeLockedCity: {}, overlap: {}, contract: {}};
+const report = {ok: true, full: {}, scoped: {}, routeLockedCity: {}, geographicCoverage: {}, overlap: {}, contract: {}};
 
 testFullRegeneration();
 testLegacyRouteMirrorBackfill();
 testScopedRegeneration();
 testRouteRegenerationPreservesLockedCity();
+testLockedCapitalKeepsLandFeatureConnected();
 testOverlappingLockedRoutes();
 await testFormalEntryContract();
 
@@ -183,6 +184,42 @@ function testRouteRegenerationPreservesLockedCity() {
     preservedProvince: city.province,
     packProvince: Number(map.pack.cells.province[city.packCell]),
     routes: activeRoutes(map).length
+  };
+}
+
+function testLockedCapitalKeepsLandFeatureConnected() {
+  const map = generatePlaceholderMap({...options, seed: `${options.seed}:locked-capital-coverage`});
+  const capitalGroups = new Map();
+  for (const city of activeCities(map).filter(item => item.capital)) {
+    const burg = map.pack.burgs?.[city.burgId];
+    const feature = Number(map.pack.cells.f?.[burg?.cell]) || 0;
+    if (!feature || Number(map.pack.cells.h?.[burg.cell]) < 20) continue;
+    if (!capitalGroups.has(feature)) capitalGroups.set(feature, []);
+    capitalGroups.get(feature).push({city, burg});
+  }
+  const target = [...capitalGroups.entries()]
+    .map(([feature, capitals]) => ({feature, capitals}))
+    .find(item => item.capitals.length >= 2 && activeRoutes(map).some(route => route.type === "road" && Number(route.feature) === item.feature));
+  assert(target, "固定地图缺少多首都且已有干道的陆地要素");
+
+  const lockedCity = target.capitals[0].city;
+  map.regenerationLocks = {version: 1, entries: [{kind: "city", id: lockedCity.id}]};
+  const capture = captureLockedRegenerationObjects(map, "city");
+  const result = regenerateMapAttributeForWorker(map, "routes");
+
+  assert.equal(result.executed, true, "锁定首都所在大陆的路线重生成仍应执行");
+  assertLockedRegenerationSnapshots(map, capture);
+  const featureRoads = activeRoutes(map).filter(route => route.type === "road" && Number(route.feature) === target.feature);
+  assert(featureRoads.length > 0, `锁定首都不得让陆地要素 ${target.feature} 的干道整片归零`);
+  const roadCells = new Set(featureRoads.flatMap(route => route.packCells || []));
+  const untouchedCapitals = target.capitals.filter(({burg}) => !roadCells.has(Number(burg.cell)));
+  assert.equal(untouchedCapitals.length, 0, `陆地要素 ${target.feature} 的目标首都必须全部接入干道`);
+  report.geographicCoverage = {
+    feature: target.feature,
+    lockedCity: lockedCity.id,
+    targetCapitals: target.capitals.length,
+    featureRoads: featureRoads.length,
+    untouchedCapitals: untouchedCapitals.length
   };
 }
 

@@ -18,7 +18,7 @@
 - `docs/current-plan.md` 是唯一当前任务清单；README、开发日志、专题和归档不得另建当前待办。
 - 已批准的编号范围是封闭范围。达到该项最小验收后立即归档并转向下一项；不影响当前验收的新发现只记录，不顺手实施。
 - 第 349～354 项所在的 `codex/map-core-engine-architecture-plan` 已经用户重新批准并以 `dd6bb03` 合入 `main`；此前“不得合入 main”的边界已经失效，不得再据此阻止后续主线修复。
-- 第 363 项已撤销第 362 项只看耗时而未检查完整画面的加载结论，并以用户指定真实存档把速度、完整 canvas、identity / revision、Loading、WebGL 与健康事件合并验收。当前没有活动权威任务，不得自行恢复第 362 项旧加载结论或创造后续工作。
+- 第 364 项已修复锁定首都的支撑 feature 被道路生成器误当成整片路线禁区；指定存档西陆恢复 `110` 条陆路、`6 / 6` 首都接入，正式 UI 两入口、锁路、撤销 / 重做与全图视觉均通过。当前没有活动权威任务，不得自行恢复旧道路完成结论或创造后续工作。
 - 遇到范围歧义、需要产品决策、夹具连续两次失败或同一阻断再次出现时，必须冻结并请用户裁定；不得继续“补夹具—跑全门”循环。
 - 全部必需任务完成后停止，不得自行创造后续工作。
 
@@ -68,6 +68,7 @@
 
 ## 当前状态
 
+- 第 364 项已完成：道路生成不再用锁优先级闭包中的只读支撑 feature 排除 road / trail / searoute 分组，锁路边与 owner 保持。指定存档西陆从错误的 `0` 恢复为 `110` 条陆路、`1448` 道路格、触达 `209` 城市，`6 / 6` 首都接入且陆路水格 `0`；production 中央 / 专用均为 `442 / 7976 → 432 / 7615`，撤销 / 重做精确，锁路线 `#0` 再重算仍原样保留。全图视觉确认西陆道路网恢复，浏览器 error / warn、WebGL error、Loading 与 busy 均为 `0`，版本 `0.5.73`。
 - 第 363 项已完成：compact GPU surface 不再混装缺失 cell identity 的 legacy political band，100k ranges 与无效 identity fail closed；真实存档五轮 production 联合导入中位 `5433ms`、最大 `5947ms`，每轮完整彩色 surface、`imported:n / r0`、10 万格、`smooth / canonical`、Loading `0`、WebGL error `0` 与健康窗同时通过。地图边缘渐隐开关位于 `控制面板 → 视图`，开→关改变 `11.1817%` 目标区域像素，关→开逐像素恢复且只需 `draw 0.7ms`。完成版本 `0.5.72`。
 - 第 362 项已完成：用户指定存档五轮独立 production 冷导入中位 `5654ms`、最大 `7056ms`，目标健康事件均为 `0`；道路中央 / 专用、无锁 / 加锁十二个 after / undo / redo 相位逐 picking bucket 的外部 ID、stale、missing、wrong reference 均为 `0`；边界 F0=F1、H0=H1 零像素差，smooth / hard 差异 `11.083879%`，首次关闭平滑 `0 / 0.6 / 4.6ms`。原三名验收者全部 `ACCEPT`，完成版本 `0.5.71`。
 - 第 361 项已完成并归档：prepared render 显示意图覆盖 map / revision / topology / generation、视图、平滑、edge fade 与主题，双 Worker 合并和首次安装均 fail closed 校验；指定存档平滑 `F0 / F1200 / 两次关开` 像素完全相等，硬边界 `F0 / F1200 / 开关` 完全相等，分别稳定为同一 smooth / hard 指纹且调试摘要均为 canonical。五轮冷导入 `4733～5447ms`，身份 `100000 / 43419 / 1251 / 442 / 7976`、WebGL error `0`，版本 `0.5.70`；分支只推送自身，不合入 `main`。
