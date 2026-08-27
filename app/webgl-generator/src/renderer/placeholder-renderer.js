@@ -3141,7 +3141,7 @@ export class PlaceholderMapRenderer {
     bindVertexBuffer(gl, this.locations);
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-    const lineFirst = this.viewOptions.mapEdgeFade === false ? this.mapEdgeFadeVertexCount : 0;
+    const lineFirst = this.viewOptions.mapEdgeFade === true ? 0 : this.mapEdgeFadeVertexCount;
     const visibleLineVertexCount = Math.max(0, this.lineVertexCount - lineFirst);
     gl.drawArrays(gl.TRIANGLES, lineFirst, visibleLineVertexCount);
     if (visibleLineVertexCount > 0) layerOrder.push("lines");

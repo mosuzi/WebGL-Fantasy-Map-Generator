@@ -926,7 +926,13 @@ function nearestPathProjection(point, source, spatialIndex = null) {
 }
 
 function nearestPathProjectionFromSegments(point, source, segmentIndexes) {
-  let best = {point: source[0], sourceIndex: 0, t: 0, distance: Infinity, tangent: [0, 0]};
+  let bestDistanceSquared = Infinity;
+  let bestSourceIndex = 0;
+  let bestT = 0;
+  let bestX = source[0][0];
+  let bestY = source[0][1];
+  let bestTangentX = 0;
+  let bestTangentY = 0;
   const indexes = segmentIndexes || Array.from({length: source.length - 1}, (_, index) => index);
   for (const index of indexes) {
     const a = source[index];
@@ -938,10 +944,23 @@ function nearestPathProjectionFromSegments(point, source, segmentIndexes) {
     const projected = [a[0] + dx * t, a[1] + dy * t];
     const distanceX = point[0] - projected[0];
     const distanceY = point[1] - projected[1];
-    const distance = Math.sqrt(distanceX * distanceX + distanceY * distanceY);
-    if (distance < best.distance) best = {point: projected, sourceIndex: index, t, distance, tangent: [dx, dy]};
+    const distanceSquared = distanceX * distanceX + distanceY * distanceY;
+    if (distanceSquared >= bestDistanceSquared) continue;
+    bestDistanceSquared = distanceSquared;
+    bestSourceIndex = index;
+    bestT = t;
+    bestX = projected[0];
+    bestY = projected[1];
+    bestTangentX = dx;
+    bestTangentY = dy;
   }
-  return best;
+  return {
+    point: [bestX, bestY],
+    sourceIndex: bestSourceIndex,
+    t: bestT,
+    distance: Math.sqrt(bestDistanceSquared),
+    tangent: [bestTangentX, bestTangentY]
+  };
 }
 
 function createSegmentSpatialIndex(line, cellSize = 7) {
@@ -963,14 +982,31 @@ function createSegmentSpatialIndex(line, cellSize = 7) {
     minRow = Math.min(minRow, firstRow);
     maxRow = Math.max(maxRow, lastRow);
     for (let column = firstColumn; column <= lastColumn; column++) {
+      let rows = buckets.get(column);
+      if (!rows) {
+        rows = new Map();
+        buckets.set(column, rows);
+      }
       for (let row = firstRow; row <= lastRow; row++) {
-        const key = `${column}:${row}`;
-        if (!buckets.has(key)) buckets.set(key, []);
-        buckets.get(key).push(index);
+        let segments = rows.get(row);
+        if (!segments) {
+          segments = [];
+          rows.set(row, segments);
+        }
+        segments.push(index);
       }
     }
   }
-  return {buckets, cellSize: size, minColumn, maxColumn, minRow, maxRow};
+  return {
+    buckets,
+    cellSize: size,
+    minColumn,
+    maxColumn,
+    minRow,
+    maxRow,
+    visitedSegments: new Uint32Array(Math.max(0, (line?.length || 0) - 1)),
+    visitGeneration: 0
+  };
 }
 
 function nearestIndexedPathProjection(point, source, index) {
@@ -982,46 +1018,67 @@ function nearestIndexedPathProjection(point, source, index) {
     Math.abs(row - index.minRow),
     Math.abs(row - index.maxRow)
   );
-  const visited = new Set();
-  let best = null;
-  for (let ring = 0; ring <= maxRing; ring++) {
-    forEachRingCell(column, row, ring, (cellColumn, cellRow) => {
-      for (const segmentIndex of index.buckets.get(`${cellColumn}:${cellRow}`) || []) {
-        if (visited.has(segmentIndex)) continue;
-        visited.add(segmentIndex);
-        const candidate = projectPointToPathSegment(point, source, segmentIndex);
-        if (!best || candidate.distance < best.distance) best = candidate;
-      }
-    });
-    if (best && Math.max(0, ring - 1) * index.cellSize > best.distance) return best;
+  let generation = (index.visitGeneration + 1) >>> 0;
+  if (generation === 0) {
+    index.visitedSegments.fill(0);
+    generation = 1;
   }
-  return best || nearestPathProjectionFromSegments(point, source, null);
-}
-
-function projectPointToPathSegment(point, source, index) {
-  const a = source[index];
-  const b = source[index + 1];
-  const dx = b[0] - a[0];
-  const dy = b[1] - a[1];
-  const lengthSquared = dx * dx + dy * dy;
-  const t = lengthSquared <= EPSILON ? 0 : clamp(((point[0] - a[0]) * dx + (point[1] - a[1]) * dy) / lengthSquared, 0, 1);
-  const projected = [a[0] + dx * t, a[1] + dy * t];
-  const distanceX = point[0] - projected[0];
-  const distanceY = point[1] - projected[1];
-  return {
-    point: projected,
-    sourceIndex: index,
-    t,
-    distance: Math.sqrt(distanceX * distanceX + distanceY * distanceY),
-    tangent: [dx, dy]
+  index.visitGeneration = generation;
+  let bestDistanceSquared = Infinity;
+  let bestSourceIndex = 0;
+  let bestT = 0;
+  let bestX = source[0][0];
+  let bestY = source[0][1];
+  let bestTangentX = 0;
+  let bestTangentY = 0;
+  const visitCell = (cellColumn, cellRow) => {
+    for (const segmentIndex of index.buckets.get(cellColumn)?.get(cellRow) || []) {
+      if (index.visitedSegments[segmentIndex] === generation) continue;
+      index.visitedSegments[segmentIndex] = generation;
+      const a = source[segmentIndex];
+      const b = source[segmentIndex + 1];
+      const tangentX = b[0] - a[0];
+      const tangentY = b[1] - a[1];
+      const lengthSquared = tangentX * tangentX + tangentY * tangentY;
+      const t = lengthSquared <= EPSILON
+        ? 0
+        : clamp(((point[0] - a[0]) * tangentX + (point[1] - a[1]) * tangentY) / lengthSquared, 0, 1);
+      const projectedX = a[0] + tangentX * t;
+      const projectedY = a[1] + tangentY * t;
+      const distanceX = point[0] - projectedX;
+      const distanceY = point[1] - projectedY;
+      const distanceSquared = distanceX * distanceX + distanceY * distanceY;
+      if (distanceSquared >= bestDistanceSquared) continue;
+      bestDistanceSquared = distanceSquared;
+      bestSourceIndex = segmentIndex;
+      bestT = t;
+      bestX = projectedX;
+      bestY = projectedY;
+      bestTangentX = tangentX;
+      bestTangentY = tangentY;
+    }
   };
+  for (let ring = 0; ring <= maxRing; ring++) {
+    forEachRingCell(column, row, ring, visitCell);
+    const searchedDistance = Math.max(0, ring - 1) * index.cellSize;
+    if (bestDistanceSquared < Infinity && searchedDistance * searchedDistance > bestDistanceSquared) break;
+  }
+  return bestDistanceSquared < Infinity
+    ? {
+        point: [bestX, bestY],
+        sourceIndex: bestSourceIndex,
+        t: bestT,
+        distance: Math.sqrt(bestDistanceSquared),
+        tangent: [bestTangentX, bestTangentY]
+      }
+    : nearestPathProjectionFromSegments(point, source, null);
 }
 
 function querySegmentIndexesByBounds(index, bounds) {
   const result = new Set();
   if (!index?.buckets) return result;
   forEachBoundsCell(bounds, index.cellSize, (column, row) => {
-    for (const segmentIndex of index.buckets.get(`${column}:${row}`) || []) result.add(segmentIndex);
+    for (const segmentIndex of index.buckets.get(column)?.get(row) || []) result.add(segmentIndex);
   });
   return result;
 }

@@ -14,6 +14,7 @@
 - 第 362 项闭合第 359～361 项三名独立验收者实际返回的 LongTask、浏览器选择和固定坐标像素证据阻断，并以三份重新采证的 `ACCEPT` 作为唯一合入门；见 [`task-362-independent-acceptance-blockers.md`](./task-362-independent-acceptance-blockers.md)。
 - 第 364 项用用户指定 `krichars (3).webfmg` 冻结道路重生成的陆地分区覆盖，修复锁定首都的支撑 feature 被误当成整片路线禁区，并以西陆道路、目标首都接入和陆路不入海作结果门；见 [`task-364-route-geographic-coverage.md`](./task-364-route-geographic-coverage.md)。
 - 第 365 项已完成普通生成 / 重生成的数据关系与最小硬门长期文档，并统一落实目标从空重建、错误对象删除、锁定对象后置原样合并和软上游容错；见 [`task-365-regeneration-validation-model.md`](./task-365-regeneration-validation-model.md)。
+- 第 366 项只用用户指定真实存档和原 Chrome 标签页闭合加载、道路全陆地结果与两层柔化控制，记录五轮正式加载、道路西陆定量 / 画面 / 撤销及像素往返；见 [`task-366-real-tab-regression-closure.md`](./task-366-real-tab-regression-closure.md)。
 
 - 第 357 项统一 `22` 个重生成入口的旧数据 canonical working copy、锁定对象最小结构校验、未锁对象受限生成、锁快照优先合并和单次最终领域校验；阶段冻结与最终验收记录见 [`task-357-unified-regeneration-contract.md`](./task-357-unified-regeneration-contract.md)。
 

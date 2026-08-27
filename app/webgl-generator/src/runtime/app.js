@@ -3219,7 +3219,7 @@ function restoreRuntimeDisplayControls(state, documentRef) {
   const visualTheme = renderer?.visualTheme?.id || "default";
   const showOceanHeight = Boolean(renderer?.viewOptions?.showOceanHeight);
   const smoothCellBorders = renderer?.viewOptions?.smoothCellBorders !== false;
-  const mapEdgeFade = renderer?.viewOptions?.mapEdgeFade !== false;
+  const mapEdgeFade = renderer?.viewOptions?.mapEdgeFade === true;
   const maxCityLabels = Number(renderer?.labelOptions?.maxCityLabels) || DEFAULT_MAX_CITY_LABELS;
   setActiveModeButton(documentRef, colorMode);
   syncRuntimeControlValue(documentRef, "visual-theme-preset", visualTheme);
@@ -3478,7 +3478,7 @@ function createRuntimeActions(state, documentRef, options = {}) {
         );
       },
       setMapEdgeFade: enabled => {
-        const previous = readControlPreferences(documentRef).mapEdgeFade !== false;
+        const previous = readControlPreferences(documentRef).mapEdgeFade === true;
         return runDisplayMutation(
           "layers.setMapEdgeFade",
           () => setRuntimeMapEdgeFade(state, documentRef, enabled),
@@ -4500,7 +4500,7 @@ function runtimeDisplayActionResult(state, documentRef, effects) {
     display: {
       showOceanHeight: Boolean(preferences.showOceanHeight),
       smoothCellBorders: Boolean(preferences.smoothCellBorders),
-      mapEdgeFade: preferences.mapEdgeFade !== false,
+      mapEdgeFade: preferences.mapEdgeFade === true,
       showHoverInfo: Boolean(preferences.showHoverInfo),
       maxCityLabels: Number(preferences.maxCityLabels) || DEFAULT_MAX_CITY_LABELS
     },
@@ -5096,6 +5096,8 @@ async function loadMapIntoRuntime(state, documentRef, map, {
         rebuildPickingFromMap: true,
         deferOverlayLayout: true,
         requireDisplayIntent: true,
+        budgetMs: 16,
+        uploadSliceBytes: 1024 * 1024,
         onProgress: (stage, detail = {}) => {
           installProfile.stages.push({stage, at: performance.now(), completed: detail.completed ?? null, total: detail.total ?? null});
           operation?.report("prepare-map-render", {...detail, message: "正在准备地图画面"});
@@ -6081,12 +6083,15 @@ async function parseMapDocumentViaWorker(state, documentRef, input, {operation =
     surfaceTransferMode: "gpu-resident-compact"
   };
   const parallelDecodeStartedAt = currentLoadTraceTime(documentRef.defaultView || window);
+  const canonicalDecodeStartedAt = parallelDecodeStartedAt;
+  let canonicalDecodeMs = 0;
   const canonicalDocumentPromise = parseMapDocumentPayloadAsync(
     documentRef,
     unwrapPreparedMapImportInput(canonicalInput),
     {budgetMs: 4, yieldToMain: () => yieldMapHandoffDecode(documentRef)}
   ).then(document => {
     applyMainThreadMapProjection(document.map);
+    canonicalDecodeMs = roundLoadTraceMs(currentLoadTraceTime(documentRef.defaultView || window) - canonicalDecodeStartedAt);
     return document;
   });
   let output = null;
@@ -6152,6 +6157,7 @@ async function parseMapDocumentViaWorker(state, documentRef, input, {operation =
         ...(output.timings || {}),
         handoffDecodeMs: 0,
         parallelDecodeMs: roundLoadTraceMs(currentLoadTraceTime(documentRef.defaultView || window) - parallelDecodeStartedAt),
+        canonicalDecodeMs,
         secondaryWorker: secondaryOutput.timings || null,
         secondaryTelemetry: secondaryOutput.worker || null
       },
@@ -7467,8 +7473,14 @@ async function importMapDocumentViaApi(state, documentRef, document, options = {
       ["map-import-primary-worker", parsed.timings],
       ["map-import-secondary-worker", parsed.timings?.secondaryWorker]
     ]) {
-      if (!Number.isFinite(timing?.totalMs)) continue;
-      emitLoadTrace(documentRef, {phase: "metric", id, message: id, ms: timing.totalMs});
+      if (!timing || typeof timing !== "object") continue;
+      for (const [suffix, key] of [["", "totalMs"], [":parse", "parseMs"], [":render", "renderPrepareMs"]]) {
+        if (!Number.isFinite(timing[key])) continue;
+        emitLoadTrace(documentRef, {phase: "metric", id: `${id}${suffix}`, message: `${id}${suffix}`, ms: timing[key]});
+      }
+    }
+    if (Number.isFinite(parsed.timings?.canonicalDecodeMs)) {
+      emitLoadTrace(documentRef, {phase: "metric", id: "map-import-canonical-main", message: "map-import-canonical-main", ms: parsed.timings.canonicalDecodeMs});
     }
   } catch (error) {
     if (!operation) updateGenerationLoading(documentRef, false);

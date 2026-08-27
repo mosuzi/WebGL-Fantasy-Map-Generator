@@ -6508,6 +6508,13 @@ select:disabled {
   grid-template-columns: minmax(0, 1fr);
 }
 
+.preference-toggle-note {
+  margin: 8px 0 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
 .unit-settings {
   display: grid;
   gap: 8px;

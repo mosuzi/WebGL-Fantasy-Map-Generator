@@ -16,7 +16,7 @@ export function createPreparedDisplayIntent(payload = {}, inputBinding = payload
     colorMode,
     showOceanHeight: Boolean(viewOptions.showOceanHeight),
     smoothCellBorders,
-    mapEdgeFade: viewOptions.mapEdgeFade !== false,
+    mapEdgeFade: viewOptions.mapEdgeFade === true,
     visualThemeFingerprint: visualThemeFingerprint(viewOptions.visualTheme),
     shoreSurfaceKey: smoothCellBorders ? gpuResidentShoreSurfaceKey(colorMode, viewOptions) : ""
   };
@@ -82,7 +82,7 @@ function preparedDisplayIntentFingerprint(intent) {
     String(intent?.colorMode || "height"),
     Boolean(intent?.showOceanHeight),
     intent?.smoothCellBorders !== false,
-    intent?.mapEdgeFade !== false,
+    intent?.mapEdgeFade === true,
     String(intent?.visualThemeFingerprint || ""),
     String(intent?.shoreSurfaceKey || "")
   ]);

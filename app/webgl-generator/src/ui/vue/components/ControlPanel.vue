@@ -417,9 +417,10 @@
       <UiSegmented class="view-mode-segmented" label="视图" :options="themes" :model-value="preferences.colorMode" data-mode />
       <div class="preference-toggle-grid">
         <UiSwitchField label="显示海底" input-id="show-ocean-height" :checked="preferences.showOceanHeight" button-style />
-        <UiSwitchField label="平滑边界" input-id="smooth-cell-borders" :checked="preferences.smoothCellBorders" button-style />
-        <UiSwitchField label="地图边缘渐隐" input-id="map-edge-fade" :checked="preferences.mapEdgeFade" button-style />
+        <UiSwitchField label="疆界柔化（海岸/行政）" input-id="smooth-cell-borders" :checked="preferences.smoothCellBorders" button-style />
+        <UiSwitchField label="整图外框柔化" input-id="map-edge-fade" :checked="preferences.mapEdgeFade" button-style />
       </div>
+      <p class="preference-toggle-note">“疆界柔化”处理海岸与行政边界；“整图外框柔化”只控制整张地图四周的渐隐。</p>
     </div>
 
     <div class="control-panel-section label-style-panel" data-control-panel="styles" :hidden="activeTab !== 'styles'">

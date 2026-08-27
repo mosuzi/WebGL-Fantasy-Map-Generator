@@ -741,8 +741,8 @@ export function updateRuntimePanel(documentRef, state) {
     statRow(documentRef, "随机预览", map.summary.randomPreview.join(", ")),
     statRow(documentRef, "视图", stats.colorMode),
     statRow(documentRef, "海底高度", stats.viewOptions?.showOceanHeight ? "显示" : "隐藏", {statKey: "show-ocean-height"}),
-    statRow(documentRef, "单元格边界", stats.cellSurfaceMode === "visual-cells" ? "平滑" : "硬边界", {statKey: "cell-surface-mode"}),
-    statRow(documentRef, "地图边缘渐隐", stats.viewOptions?.mapEdgeFade === false ? "关闭" : "开启", {statKey: "map-edge-fade"}),
+    statRow(documentRef, "疆界柔化", stats.cellSurfaceMode === "visual-cells" ? "开启" : "关闭", {statKey: "cell-surface-mode"}),
+    statRow(documentRef, "整图外框柔化", stats.viewOptions?.mapEdgeFade === true ? "开启" : "关闭", {statKey: "map-edge-fade"}),
     statRow(documentRef, "边界线来源", formatBoundaryLineMode(stats.boundaryLineMode), {statKey: "boundary-line-mode"}),
     statRow(documentRef, "边界资源", stats.boundaryPresentation?.canonical
       ? `${stats.boundaryPresentation.state} / canonical`
@@ -792,7 +792,7 @@ export function updateRuntimeDisplayPreferenceStats(documentRef, state, key) {
     setRuntimeStatValue(documentRef, "boundary-refresh-timings", formatBoundaryRefreshTimings(state.renderer?.lastBoundaryRefreshTimings));
   }
   if (key === "mapEdgeFade") {
-    setRuntimeStatValue(documentRef, "map-edge-fade", display.viewOptions?.mapEdgeFade === false ? "关闭" : "开启");
+    setRuntimeStatValue(documentRef, "map-edge-fade", display.viewOptions?.mapEdgeFade === true ? "开启" : "关闭");
     setRuntimeStatValue(documentRef, "boundary-line-mode", formatBoundaryLineMode(display.boundaryLineMode));
     setRuntimeStatValue(documentRef, "boundary-refresh-timings", formatBoundaryRefreshTimings(state.renderer?.lastBoundaryRefreshTimings));
   }
