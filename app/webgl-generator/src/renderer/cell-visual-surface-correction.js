@@ -1,5 +1,6 @@
 import {createRenderContext, worldToNdcPoint} from "./render-context.js";
 import {SURFACE_BASE_INVALID_CELL_ID} from "./surface-base-buffer-set.js";
+import {visitCellVisualCorrectionEdges} from "./cell-visual-layer.js";
 
 export const CELL_VISUAL_CORRECTION_WORDS_PER_VERTEX = 3;
 export const CELL_VISUAL_CORRECTION_WORDS_PER_TRIANGLE = 9;
@@ -18,7 +19,7 @@ export function buildCellVisualSurfaceCorrection(map, cellVisualMesh) {
     if (shoreEdges.has(key) || !Array.isArray(curve) || curve.length < 3) continue;
     const edgeOwners = owners.get(key);
     if (edgeOwners?.length !== 2) continue;
-    const targetCell = correctionTargetCell(curve, edgeOwners, centers);
+    const targetCell = correctionTargetCell(curve, edgeOwners, cell => centers.get(cell));
     if (!Number.isInteger(targetCell)) continue;
     const water = Number(map?.grid?.cells?.h?.[targetCell]) < 20;
     const identity = packCellVisualCorrectionIdentity(targetCell, water);
@@ -27,6 +28,23 @@ export function buildCellVisualSurfaceCorrection(map, cellVisualMesh) {
       pushPackedTriangle(triangles, start, worldToNdcPoint(context, curve[index]), worldToNdcPoint(context, curve[index + 1]), identity);
     }
   }
+  return new Float32Array(triangles);
+}
+
+export function buildCellVisualSurfaceCorrectionFromMap(map) {
+  const context = createRenderContext(map);
+  const triangles = [];
+  const centerForCell = cell => map?.grid?.points?.[map?.grid?.cells?.p?.[cell]] || [0, 0];
+  visitCellVisualCorrectionEdges(map, (_key, curve, owners) => {
+    const targetCell = correctionTargetCell(curve, owners, centerForCell);
+    if (!Number.isInteger(targetCell)) return;
+    const water = Number(map?.grid?.cells?.h?.[targetCell]) < 20;
+    const identity = packCellVisualCorrectionIdentity(targetCell, water);
+    const start = worldToNdcPoint(context, curve[0]);
+    for (let index = 1; index + 1 < curve.length; index++) {
+      pushPackedTriangle(triangles, start, worldToNdcPoint(context, curve[index]), worldToNdcPoint(context, curve[index + 1]), identity);
+    }
+  });
   return new Float32Array(triangles);
 }
 
@@ -131,12 +149,12 @@ function collectEdgeOwners(map) {
   return result;
 }
 
-function correctionTargetCell(curve, owners, centers) {
+function correctionTargetCell(curve, owners, centerForCell) {
   const start = curve[0], end = curve[curve.length - 1], middle = curve[Math.floor(curve.length / 2)];
   const curveSide = Math.sign(cross(start, end, middle));
   if (!curveSide) return null;
-  const firstSide = Math.sign(cross(start, end, centers.get(owners[0])));
-  const secondSide = Math.sign(cross(start, end, centers.get(owners[1])));
+  const firstSide = Math.sign(cross(start, end, centerForCell(owners[0])));
+  const secondSide = Math.sign(cross(start, end, centerForCell(owners[1])));
   if (!firstSide || !secondSide || firstSide === secondSide) return null;
   return firstSide === curveSide ? owners[1] : owners[0];
 }

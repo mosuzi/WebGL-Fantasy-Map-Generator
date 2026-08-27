@@ -426,6 +426,7 @@ function createPreparedInstallTransaction(renderer, map, prepared, decoded, buff
       assign("oceanCurrentLayerStats", layers.line.oceanCurrents);
       assign("oceanCurrentVertices", layers.line.oceanCurrentVertices);
       assign("lineVertexCount", vertexCount(layers.line.vertices));
+      assign("mapEdgeFadeVertexCount", Number(layers.line.mapEdgeFadeVertexCount) || 0);
       assign("shoreLineVertexCount", vertexCount(layers.line.shoreVertices));
       assign("oceanCurrentVertexCount", vertexCount(layers.line.oceanCurrentVertices));
       }

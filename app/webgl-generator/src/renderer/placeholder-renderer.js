@@ -4,7 +4,7 @@ import {isSharedCubicCurve, sampleCentripetalCatmullRom} from "../geometry/cubic
 import {bindVertexBuffer, createProgram} from "./gl-utils.js";
 import {createRenderContext, worldToNdcPoint, worldToScreenPixel} from "./render-context.js";
 import {colorForCell, colorForHeight, isLandCell} from "./color-modes.js";
-import {buildGridCellSurfacePatchFromBase, politicalSurfaceMeshForMode, pushGridCells, pushMeshSurfaceVertices, shouldDrawGridCellUnderPoliticalMesh} from "./cell-surface-layer.js";
+import {buildCompactGridCellSurfaceGeometry, buildGridCellSurfacePatchFromBase, politicalSurfaceMeshForMode, pushGridCells, pushMeshSurfaceVertices, shouldDrawGridCellUnderPoliticalMesh} from "./cell-surface-layer.js";
 import {buildCellVisualGridVertices, buildCellVisualMesh, emptyCellVisualMesh, refreshCellVisualMeshCells, summarizeCellVisualMesh} from "./cell-visual-layer.js";
 import {buildSelectionMeshBundle, drawSelectionMeshBatches, emptySelectionDrawRanges, selectionHighlightMode} from "./selection-layer.js";
 import {buildHeightCellSelectionMesh, buildHeightTransformPreviewMesh, emptyHeightCellSelectionStats, emptyHeightTransformPreviewStats} from "./height-transform-preview-layer.js";
@@ -123,6 +123,7 @@ import {
 } from "./render-cache-resource-binding.js";
 import {
   buildCellVisualSurfaceCorrection,
+  buildCellVisualSurfaceCorrectionFromMap,
   createCellVisualCorrectionBufferSet,
   createCellVisualCorrectionBufferSetAsync,
   deleteCellVisualCorrectionBufferSet,
@@ -294,7 +295,7 @@ function evaluateDeferredWorkerRenderSnapshot(renderer, entries) {
     } else if (mutation.key === "view-options") {
       const nextOptions = value || {};
       if (!hasShallowPresentationChange(presentation.viewOptions, nextOptions)) continue;
-      if (["smoothCellBorders", "mapEdgeFade"].some(key => Object.prototype.hasOwnProperty.call(nextOptions, key))) effects.lines = true;
+      if (Object.prototype.hasOwnProperty.call(nextOptions, "smoothCellBorders")) effects.lines = true;
       presentation.viewOptions = {...presentation.viewOptions, ...nextOptions};
       const changedKeys = Object.keys(nextOptions).filter(key => renderer.viewOptions?.[key] !== nextOptions[key]);
       const surfaceKeys = changedKeys.filter(key => key !== "mapEdgeFade");
@@ -581,6 +582,7 @@ export class PlaceholderMapRenderer {
     this.heightCellSelectionStats = emptyHeightCellSelectionStats();
     this.oceanCurrentVertexCount = 0;
     this.lineVertexCount = 0;
+    this.mapEdgeFadeVertexCount = 0;
     this.shoreLineVertexCount = 0;
     this.shoreLinePathVertices = new Map();
     this.shoreLinePathObjectVertices = new WeakMap();
@@ -1190,6 +1192,7 @@ export class PlaceholderMapRenderer {
     this.heightCellSelectionStats = emptyHeightCellSelectionStats();
     this.oceanCurrentVertexCount = oceanCurrentVertices.length / 6;
     this.lineVertexCount = lineVertices.length / 6;
+    this.mapEdgeFadeVertexCount = lineLayer.mapEdgeFadeVertexCount;
     this.shoreLineVertexCount = shoreLineVertices.length / 6;
     this.pointDrawRanges = pointLayer.drawRanges;
     this.pointBufferVertexCount = pointVertices.length / 6;
@@ -1333,6 +1336,7 @@ export class PlaceholderMapRenderer {
     this.heightCellSelectionStats = emptyHeightCellSelectionStats();
     this.oceanCurrentVertexCount = oceanCurrentVertices.length / 6;
     this.lineVertexCount = lineVertices.length / 6;
+    this.mapEdgeFadeVertexCount = lineLayer.mapEdgeFadeVertexCount;
     this.shoreLineVertexCount = shoreLineVertices.length / 6;
     this.pointDrawRanges = pointLayer.drawRanges;
     this.pointBufferVertexCount = pointVertices.length / 6;
@@ -1597,8 +1601,11 @@ export class PlaceholderMapRenderer {
       return;
     }
     if (lineOnly) {
-      this.refreshLineLayers({draw: false});
-      this.draw();
+      const startedAt = performance.now();
+      this.draw({updateDynamicBuffers: false, updateOverlay: false, drawDirtyDynamicBuffers: false});
+      this.lastBoundaryRefreshTimings = {
+        draw: Math.round((performance.now() - startedAt) * 10) / 10
+      };
       return;
     }
     this.refreshCellSurface({draw: false});
@@ -2236,6 +2243,7 @@ export class PlaceholderMapRenderer {
       this.oceanCurrentLayerStats = lineLayer.oceanCurrents;
       this.oceanCurrentVertexCount = oceanCurrentVertices.length / 6;
       this.lineVertexCount = lineVertices.length / 6;
+      this.mapEdgeFadeVertexCount = lineLayer.mapEdgeFadeVertexCount;
       this.shoreLineVertexCount = shoreLineVertices.length / 6;
       const upload = this.recordBufferUpload("line-refresh", () => {
         this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.oceanCurrentBuffer);
@@ -2755,12 +2763,13 @@ export class PlaceholderMapRenderer {
     const deferred = [...this.workerRenderInstallDeferredMutations.values()].sort((left, right) => left.sequence - right.sequence);
     if (!deferred.length) return {count: 0, keys: []};
     this.workerRenderInstallApplyingDeferred = true;
+    let result;
     try {
-      this.applyWorkerRenderMutationBatch(deferred);
+      result = this.applyWorkerRenderMutationBatch(deferred);
     } finally {
       this.workerRenderInstallApplyingDeferred = false;
     }
-    return {count: deferred.length, keys: deferred.map(mutation => mutation.key)};
+    return {count: deferred.length, keys: deferred.map(mutation => mutation.key), ...result};
   }
 
   applyWorkerRenderMutationBatch(mutations) {
@@ -2771,23 +2780,32 @@ export class PlaceholderMapRenderer {
     let refreshUnits = false;
     let refreshPoliticalDebug = false;
     let ensureGridDiagnostics = false;
+    let mapEdgeFadeChanged = false;
+    let otherPresentationChanged = false;
     for (const mutation of mutations) {
       const value = mutation.value;
       if (mutation.key === "color-mode") {
         if (this.colorMode === value) continue;
         this.colorMode = value;
         refreshSurface = true;
+        otherPresentationChanged = true;
       } else if (mutation.key === "diplomacy-subject") {
         const nextId = normalizePositiveId(value);
         if (this.viewOptions.diplomacySubjectId === nextId) continue;
         this.viewOptions = {...this.viewOptions, diplomacySubjectId: nextId};
         if (this.colorMode === "diplomacy") refreshSurface = true;
+        otherPresentationChanged = true;
       } else if (mutation.key === "view-options") {
         const nextOptions = value || {};
         if (!hasShallowPresentationChange(this.viewOptions, nextOptions)) continue;
-        if (Object.prototype.hasOwnProperty.call(nextOptions, "smoothCellBorders")) refreshLines = true;
+        const changedKeys = Object.keys(nextOptions).filter(key => this.viewOptions?.[key] !== nextOptions[key]);
+        if (changedKeys.includes("smoothCellBorders")) refreshLines = true;
+        if (changedKeys.includes("mapEdgeFade")) mapEdgeFadeChanged = true;
+        if (changedKeys.some(key => key !== "mapEdgeFade")) {
+          refreshSurface = true;
+          otherPresentationChanged = true;
+        }
         this.viewOptions = {...this.viewOptions, ...nextOptions};
-        refreshSurface = true;
       } else if (mutation.key === "visual-theme") {
         const theme = resolveVisualTheme(value?.themeId);
         if (!value?.force && this.visualTheme.id === theme.id) continue;
@@ -2798,30 +2816,36 @@ export class PlaceholderMapRenderer {
         refreshLines = true;
         refreshLabels = true;
         this.dynamicBuffersDirty.routes = true;
+        otherPresentationChanged = true;
       } else if (mutation.key === "label-options") {
         const maxCityLabels = normalizeMaxCityLabels(value?.maxCityLabels, this.labelOptions.maxCityLabels);
         if (maxCityLabels === this.labelOptions.maxCityLabels) continue;
         this.labelOptions = {...this.labelOptions, maxCityLabels};
         refreshLabels = true;
+        otherPresentationChanged = true;
       } else if (mutation.key === "unit-preferences") {
         const next = normalizeUnitPreferences(value);
         if (JSON.stringify(next) === JSON.stringify(this.unitPreferences)) continue;
         this.unitPreferences = next;
         refreshUnits = true;
+        otherPresentationChanged = true;
       } else if (mutation.key === "ocean-current-highlights") {
         const next = new Set((value?.ids || []).map(String));
         if (sameStringSet(next, this.oceanCurrentHighlights)) continue;
         this.oceanCurrentHighlights = next;
         refreshLines = true;
+        otherPresentationChanged = true;
       } else if (mutation.key === "political-debug") {
         const nextMode = normalizePoliticalMeshDebugMode(value);
         if (this.politicalMeshDebugMode === nextMode) continue;
         this.politicalMeshDebugMode = nextMode;
         refreshPoliticalDebug = true;
+        otherPresentationChanged = true;
       } else if (mutation.key === "layer-visibility") {
         for (const [layer, visible] of value || []) {
           if (this.layerVisibility[layer] === visible) continue;
           this.layerVisibility[layer] = visible;
+          otherPresentationChanged = true;
           if (layer === "gridCells" && visible) ensureGridDiagnostics = true;
           if (layer === "tradeFlows") {
             if (visible) this.dynamicBuffersDirty.tradeFlows = true;
@@ -2843,6 +2867,7 @@ export class PlaceholderMapRenderer {
     else if (refreshUnits) this.refreshMilitaryIconLabels();
     if (ensureGridDiagnostics) this.workerRenderInstallEnsureGridDiagnostics = true;
     this.workerRenderInstallPendingDraw = true;
+    return {mapEdgeFadeOnly: mapEdgeFadeChanged && !otherPresentationChanged};
   }
 
   resumeWorkerRenderInstall({draw = true, preserveRoutes = false} = {}) {
@@ -2855,7 +2880,7 @@ export class PlaceholderMapRenderer {
     const viewportChanged = Boolean(this.workerRenderInstallViewportChanged);
     const pendingDraw = Boolean(this.workerRenderInstallPendingDraw);
     try {
-      this.applyDeferredWorkerRenderMutations();
+      const deferred = this.applyDeferredWorkerRenderMutations();
       this.workerRenderInstallSuspended = 0;
       if (viewportChanged) {
         this.workerRenderInstallViewportChanged = false;
@@ -2869,7 +2894,17 @@ export class PlaceholderMapRenderer {
         if (this.dynamicBuffersDirty.selection) this.updateSelectionBuffer();
         if (!preserveRoutes && this.dynamicBuffersDirty.routes && this.layerVisibility.routes) this.scheduleRouteBufferRefresh();
         this.workerRenderInstallPendingDraw = false;
-        if (draw && (pendingDraw || deferredCount)) this.draw({updateDynamicBuffers: false});
+        if (draw && (pendingDraw || deferredCount)) {
+          const startedAt = performance.now();
+          this.draw(deferred.mapEdgeFadeOnly
+            ? {updateDynamicBuffers: false, updateOverlay: false, drawDirtyDynamicBuffers: false}
+            : {updateDynamicBuffers: false});
+          if (deferred.mapEdgeFadeOnly) {
+            this.lastBoundaryRefreshTimings = {
+              draw: Math.round((performance.now() - startedAt) * 10) / 10
+            };
+          }
+        }
       }
       if (deferredCount) this.onViewChange({phase: "worker-render-context"});
       this.workerRenderInstallDeferredMutations.clear();
@@ -3106,12 +3141,14 @@ export class PlaceholderMapRenderer {
     bindVertexBuffer(gl, this.locations);
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-    gl.drawArrays(gl.TRIANGLES, 0, this.lineVertexCount);
-    if (this.lineVertexCount > 0) layerOrder.push("lines");
+    const lineFirst = this.viewOptions.mapEdgeFade === false ? this.mapEdgeFadeVertexCount : 0;
+    const visibleLineVertexCount = Math.max(0, this.lineVertexCount - lineFirst);
+    gl.drawArrays(gl.TRIANGLES, lineFirst, visibleLineVertexCount);
+    if (visibleLineVertexCount > 0) layerOrder.push("lines");
     gl.bindBuffer(gl.ARRAY_BUFFER, this.shoreLineBuffer);
     bindVertexBuffer(gl, this.locations);
     gl.drawArrays(gl.TRIANGLES, 0, this.shoreLineVertexCount);
-    if (this.shoreLineVertexCount > 0 && this.lineVertexCount === 0) layerOrder.push("lines");
+    if (this.shoreLineVertexCount > 0 && visibleLineVertexCount === 0) layerOrder.push("lines");
     gl.disable(gl.BLEND);
     const riverPreviewTransform = viewportBufferTransform(this.riverBufferCamera, this.camera);
     gl.bindBuffer(gl.ARRAY_BUFFER, this.riverBuffer);
@@ -6356,7 +6393,7 @@ export function buildPlaceholderSurfaceBundle(map, colorMode, viewOptions, shore
   const shoreLayers = (smoothCellBorders || useGpuResidentSurface) && shouldDrawShoreVisualBands(colorMode) && shoreVisualPaths
     ? buildShoreSurfaceVertexLayers(context, colorMode, viewOptions, shoreVisualPaths)
     : emptyShoreSurfaceVertexLayers();
-  if (smoothCellBorders && !useCellVisualMesh) {
+  if (smoothCellBorders && !useCellVisualMesh && !useGpuResidentSurface) {
     const politicalBandStart = vertices.length;
     if (colorMode === "states") pushPoliticalVisualBands(vertices, context, statePaths, STATE_VISUAL_STYLE);
     if (colorMode === "provinces") pushPoliticalVisualBands(vertices, context, provincePaths, PROVINCE_VISUAL_STYLE);
@@ -6380,6 +6417,24 @@ export function buildPlaceholderSurfaceBundle(map, colorMode, viewOptions, shore
     surfaceCellRanges: useCellVisualMesh
       ? buildSurfaceCellRanges(colorMode, viewOptions, cellVisualMesh, base.length)
       : completeGridSurfaceRanges ? gridSurfaceCellRanges : new Map(),
+    shoreSurfaceCellRanges
+  };
+}
+
+export function buildPlaceholderCompactSurfaceBundle(map, colorMode, viewOptions) {
+  const useGpuResidentSurface = Boolean(GPU_RESIDENT_COLOR_MODES[colorMode]);
+  if (!useGpuResidentSurface) return null;
+  const context = createRenderContext(map);
+  const compact = buildCompactGridCellSurfaceGeometry(context);
+  const {cellRanges: shoreSurfaceCellRanges, ...shoreVertices} = emptyShoreSurfaceVertexLayers();
+  return {
+    mode: "gpu-resident-compact",
+    ...compact,
+    cellVisualCorrection: buildCellVisualSurfaceCorrectionFromMap(map),
+    shoreSurfaceEnabled: viewOptions.smoothCellBorders !== false,
+    smoothShoreSurfaceKey: gpuResidentShoreSurfaceKey(colorMode, viewOptions),
+    ...shoreVertices,
+    surfaceCellRangesMode: "grid-cells",
     shoreSurfaceCellRanges
   };
 }
@@ -7090,7 +7145,9 @@ export function buildLineVertices(map, visibility = {}, colorMode = "height", sh
   const statePaths = includeCore ? stateVisualPaths || buildStateVisualPaths(map) : null;
   const provincePaths = includeCore ? provinceVisualPaths || buildProvinceVisualPaths(map) : null;
   const themeLines = viewOptions.visualTheme?.lines || {};
-  if (includeCore && viewOptions.mapEdgeFade !== false) pushMapEdgeFade(vertices, context, map, viewOptions.visualTheme);
+  const mapEdgeFadeStart = vertices.length;
+  if (includeCore) pushMapEdgeFade(vertices, context, map, viewOptions.visualTheme);
+  const mapEdgeFadeVertexCount = (vertices.length - mapEdgeFadeStart) / 6;
   const shoreLineLayer = includeShore
     ? buildShoreLineVerticesCached(map, visibility, colorMode, shoreVisualPaths, cellVisualMesh, viewOptions)
     : {vertices: new Float32Array(), pathVertices: new Map(), pathObjectVertices: new WeakMap()};
@@ -7106,6 +7163,7 @@ export function buildLineVertices(map, visibility = {}, colorMode = "height", sh
   if (includeCore && visibility.warFronts !== false) pushMilitaryFrontLayer(vertices, context, map);
   return {
     vertices: new Float32Array(vertices),
+    mapEdgeFadeVertexCount,
     shoreVertices: shoreLineLayer.vertices,
     shoreLinePathVertices: shoreLineLayer.pathVertices,
     shoreLinePathObjectVertices: shoreLineLayer.pathObjectVertices,

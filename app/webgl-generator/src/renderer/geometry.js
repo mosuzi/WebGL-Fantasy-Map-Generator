@@ -1,5 +1,7 @@
 export function worldDistance(a, b) {
-  return Math.hypot(a[0] - b[0], a[1] - b[1]);
+  const dx = a[0] - b[0];
+  const dy = a[1] - b[1];
+  return Math.sqrt(dx * dx + dy * dy);
 }
 
 export function normalizeWorldVector(x, y) {
@@ -32,19 +34,19 @@ export function polygonArea(points) {
 }
 
 export function segmentsIntersect(a, b, c, d) {
-  const abC = orient(a, b, c);
-  const abD = orient(a, b, d);
-  const cdA = orient(c, d, a);
-  const cdB = orient(c, d, b);
+  const abX = b[0] - a[0];
+  const abY = b[1] - a[1];
+  const cdX = d[0] - c[0];
+  const cdY = d[1] - c[1];
+  const abC = abX * (c[1] - a[1]) - abY * (c[0] - a[0]);
+  const abD = abX * (d[1] - a[1]) - abY * (d[0] - a[0]);
+  const cdA = cdX * (a[1] - c[1]) - cdY * (a[0] - c[0]);
+  const cdB = cdX * (b[1] - c[1]) - cdY * (b[0] - c[0]);
   if (Math.abs(abC) <= 0.000001 && pointOnSegment(c, a, b)) return true;
   if (Math.abs(abD) <= 0.000001 && pointOnSegment(d, a, b)) return true;
   if (Math.abs(cdA) <= 0.000001 && pointOnSegment(a, c, d)) return true;
   if (Math.abs(cdB) <= 0.000001 && pointOnSegment(b, c, d)) return true;
   return (abC > 0) !== (abD > 0) && (cdA > 0) !== (cdB > 0);
-}
-
-function orient(a, b, c) {
-  return (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
 }
 
 function pointOnSegment(point, a, b) {

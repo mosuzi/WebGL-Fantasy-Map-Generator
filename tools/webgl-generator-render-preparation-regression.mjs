@@ -45,6 +45,8 @@ import {
   renderPreparationPickingComponentsForRegeneration
 } from "../app/webgl-generator/src/renderer/render-preparation.js";
 import {createRenderResourceBinding} from "../app/webgl-generator/src/renderer/render-resource-binding.js";
+import {SURFACE_BASE_INVALID_CELL_ID, compactSurfaceBaseGeometry} from "../app/webgl-generator/src/renderer/surface-base-buffer-set.js";
+import {buildCellVisualSurfaceCorrection, buildCellVisualSurfaceCorrectionFromMap} from "../app/webgl-generator/src/renderer/cell-visual-surface-correction.js";
 
 const cellsTarget = Number(process.argv.slice(2).find(value => /^\d+$/u.test(value)) || 10000);
 const full = process.argv.includes("--full");
@@ -58,6 +60,13 @@ const canvas = {width: 1440, height: 960, clientWidth: 1440, clientHeight: 960};
 const visibility = {};
 const visualTheme = {};
 const checkpoints = [];
+
+const fullCellVisual = buildCellVisualMesh(map);
+assert.equal(
+  byteChecksum(buildCellVisualSurfaceCorrectionFromMap(map)),
+  byteChecksum(buildCellVisualSurfaceCorrection(map, fullCellVisual)),
+  "首屏直写 correction 必须与完整 boundary mesh 逐字一致"
+);
 
 assert.deepEqual(renderPreparationPickingComponentsForRegeneration("routes"), ["cities", "routeSegments"]);
 assert.deepEqual(renderPreparationPickingComponentsForRegeneration("rivers"), ["riverSegments"]);
@@ -199,7 +208,22 @@ const coreLine = buildLineVertices(
   new Set(),
   {composition: "core"}
 );
+const coreLineWithoutEdgeFade = buildLineVertices(
+  map,
+  visibility,
+  "height",
+  null,
+  retainedRenderCache.statePaths,
+  retainedRenderCache.provincePaths,
+  null,
+  {smoothCellBorders: true, mapEdgeFade: false},
+  new Set(),
+  {composition: "core"}
+);
 assert.equal(byteChecksum(coreLine.vertices), byteChecksum(fullLine.vertices), "core line 分区必须完整保留非岸线顶点");
+assert.equal(coreLine.mapEdgeFadeVertexCount, 48, "core line 必须常驻地图边缘渐隐几何");
+assert.equal(shoreLine.mapEdgeFadeVertexCount, 0, "shore line 分区不得混入地图边缘渐隐几何");
+assert.equal(byteChecksum(coreLineWithoutEdgeFade.vertices), byteChecksum(coreLine.vertices), "渐隐开关不得改变常驻 core line 几何");
 assert.equal(byteChecksum(coreLine.oceanCurrentVertices), byteChecksum(fullLine.oceanCurrentVertices), "core line 分区必须完整保留洋流顶点");
 assert.deepEqual(coreLine.oceanCurrents, fullLine.oceanCurrents, "core line 分区必须完整保留洋流统计");
 assert.equal(byteChecksum(shoreLine.shoreVertices), byteChecksum(fullLine.shoreVertices), "shore line 分区必须完整保留当前岸线顶点");
@@ -220,6 +244,43 @@ assert.equal("base" in compactSurface.layers.surface, false, "compact surface �
 assert.ok(compactSurface.layers.surface.geometry instanceof Float32Array, "compact surface 必须 transfer 紧凑 geometry");
 assert.equal(compactSurface.layers.surface.geometry.length * 2, compactSurface.layers.surface.sourceFloatLength, "compact surface 几何长度必须能还原源 float 长度");
 assert.equal(compactSurface.layers.surface.sourceFloatLength, firstSurface.layers.surface.base.length, "compact surface 不得改变首屏三角形数量");
+for (const colorMode of ["states", "provinces"]) {
+  const legacyCoreSurface = await executeRenderPreparationTask({
+    map,
+    binding: presentationBinding,
+    camera,
+    canvas,
+    colorMode,
+    viewOptions: {smoothCellBorders: true},
+    surfaceComposition: "core",
+    layers: ["surface"]
+  }, {renderCache: retainedRenderCache});
+  const smoothPoliticalSurface = await executeRenderPreparationTask({
+    map,
+    binding: presentationBinding,
+    camera,
+    canvas,
+    colorMode,
+    viewOptions: {smoothCellBorders: true},
+    surfaceComposition: "core",
+    surfaceTransferMode: "gpu-resident-compact",
+    layers: ["surface"]
+  }, {renderCache: retainedRenderCache});
+  const surface = smoothPoliticalSurface.layers.surface;
+  assert.equal(surface.mode, "gpu-resident-compact", `${colorMode} 平滑首帧必须使用紧凑 GPU surface`);
+  assert.equal(surface.surfaceCellRangesMode, "grid-cells", `${colorMode} 平滑首帧必须保留基础 cell ranges`);
+  assert.equal(surface.surfaceCellRanges.size, map.grid.cells.i.length, `${colorMode} 平滑首帧必须覆盖全部基础 cell`);
+  assert.equal(surface.sourceFloatLength, legacyCoreSurface.layers.surface.base.length, `${colorMode} 紧凑直写不得改变基础三角形数量`);
+  const expectedCompactGeometry = compactSurfaceBaseGeometry(
+    legacyCoreSurface.layers.surface.base,
+    legacyCoreSurface.layers.surface.surfaceCellRanges
+  );
+  assert.equal(byteChecksum(surface.geometry), byteChecksum(expectedCompactGeometry), `${colorMode} 紧凑直写必须与安全基础几何逐字一致`);
+  const identities = new Uint32Array(surface.geometry.buffer);
+  for (let offset = 2; offset < identities.length; offset += 3) {
+    assert.notEqual(identities[offset] >>> 1, SURFACE_BASE_INVALID_CELL_ID, `${colorMode} 平滑首帧不得把基础顶点编码为无效 cell`);
+  }
+}
 const shorePrewarm = await executeRenderPreparationTask({
   map,
   binding: presentationBinding,
@@ -648,6 +709,7 @@ async function verifyPackedCaches() {
     assertTypedFingerprint(prepared.layers.line[key], expectedLine[key], `line.${key}`);
   }
   assert.deepEqual(prepared.layers.line.oceanCurrents, expectedLine.oceanCurrents);
+  assert.equal(prepared.layers.line.mapEdgeFadeVertexCount, expectedLine.mapEdgeFadeVertexCount);
   const reboundShoreCache = rebindShoreLinePathCache(prepared.layers.line.shorePathCache, unpacked.shore, binding);
   assert.equal(reboundShoreCache.pathVertices.size, expectedLine.shoreLinePathVertices.size, "岸线路径稳定键缓存数量必须一致");
   for (const [key, expectedVertices] of expectedLine.shoreLinePathVertices) {

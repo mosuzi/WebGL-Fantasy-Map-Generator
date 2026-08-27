@@ -794,6 +794,7 @@ export function updateRuntimeDisplayPreferenceStats(documentRef, state, key) {
   if (key === "mapEdgeFade") {
     setRuntimeStatValue(documentRef, "map-edge-fade", display.viewOptions?.mapEdgeFade === false ? "关闭" : "开启");
     setRuntimeStatValue(documentRef, "boundary-line-mode", formatBoundaryLineMode(display.boundaryLineMode));
+    setRuntimeStatValue(documentRef, "boundary-refresh-timings", formatBoundaryRefreshTimings(state.renderer?.lastBoundaryRefreshTimings));
   }
 }
 

@@ -2,6 +2,7 @@ import {colorForCell, isLandCell} from "./color-modes.js";
 import {resolvedGridVertexPoints} from "./grid-vertex-geometry.js";
 import {pushWorldVertex} from "./mesh-writer.js";
 import {buildCanonicalOrderedCellVisualBoundary, buildVoronoiRecoveredCellVisualBoundary, triangulateCellVisualBoundarySafely} from "./cell-visual-layer.js";
+import {SURFACE_BASE_INVALID_CELL_ID} from "./surface-base-buffer-set.js";
 
 export function pushGridCells(vertices, context, colorMode, viewOptions, shouldDrawCell = () => true, transformColor = color => color, onCellRange = null) {
   const {map} = context;
@@ -13,20 +14,7 @@ export function pushGridCells(vertices, context, colorMode, viewOptions, shouldD
     if (vertexIds.length < 3) continue;
     const start = vertices.length;
     const color = transformColor(colorForCell(cellIndex, map, colorMode, viewOptions), cellIndex);
-    const points = vertexIds.map(vertex => vertexPoints[vertex]);
-    let triangulation = triangulateCellVisualBoundarySafely(points);
-    if (triangulation.status !== "ok") {
-      triangulation = triangulateCellVisualBoundarySafely(vertexIds.map(vertex => grid.vertices.p[vertex]));
-    }
-    if (triangulation.status !== "ok") {
-      triangulation = triangulateCellVisualBoundarySafely(buildCanonicalOrderedCellVisualBoundary(map, cellIndex, true));
-    }
-    if (triangulation.status !== "ok") {
-      triangulation = triangulateCellVisualBoundarySafely(buildCanonicalOrderedCellVisualBoundary(map, cellIndex, false));
-    }
-    if (triangulation.status !== "ok") {
-      triangulation = triangulateCellVisualBoundarySafely(buildVoronoiRecoveredCellVisualBoundary(map, cellIndex));
-    }
+    const triangulation = triangulateGridCellSurface(map, cellIndex, vertexIds, vertexPoints);
     if (triangulation.status === "ok") {
       for (const index of triangulation.indices) pushWorldVertex(vertices, context, triangulation.points[index], color);
     } else {
@@ -36,6 +24,78 @@ export function pushGridCells(vertices, context, colorMode, viewOptions, shouldD
     }
     onCellRange?.(cellIndex, {start, end: vertices.length});
   }
+}
+
+// GPU 常驻 surface 的颜色来自 cell 属性纹理。导入时直接生成位置与 cell identity，
+// 避免先构造六字颜色顶点、再完整扫描压缩成三字 geometry。
+export function buildCompactGridCellSurfaceGeometry(context) {
+  const {map} = context;
+  const grid = map.grid;
+  const vertexPoints = resolvedGridVertexPoints(grid);
+  const graphWidth = Number(map.metadata.graphWidth);
+  const graphHeight = Number(map.metadata.graphHeight);
+  let estimatedWords = 0;
+  for (const vertexIds of grid.cells.v) estimatedWords += Math.max(0, vertexIds.length - 2) * 9;
+  let geometry = new Float32Array(Math.max(estimatedWords, 9));
+  let identities = new Uint32Array(geometry.buffer);
+  const surfaceCellRanges = new Map();
+  let wordOffset = 0;
+
+  const ensureWords = additionalWords => {
+    const required = wordOffset + additionalWords;
+    if (required <= geometry.length) return;
+    const replacement = new Float32Array(Math.max(required, geometry.length * 2));
+    replacement.set(geometry);
+    geometry = replacement;
+    identities = new Uint32Array(replacement.buffer);
+  };
+
+  for (let cellIndex = 0; cellIndex < grid.cells.v.length; cellIndex++) {
+    const vertexIds = grid.cells.v[cellIndex];
+    if (vertexIds.length < 3) continue;
+    const triangulation = triangulateGridCellSurface(map, cellIndex, vertexIds, vertexPoints);
+    if (triangulation.status !== "ok") {
+      const error = new Error(`grid cell ${cellIndex} 无法形成安全表面`);
+      error.code = "grid-cell-surface-unfilled";
+      throw error;
+    }
+    const start = wordOffset * 2;
+    ensureWords(triangulation.indices.length * 3);
+    const water = Number(grid.cells.h[cellIndex]) < 20 ? 1 : 0;
+    const identity = ((cellIndex & SURFACE_BASE_INVALID_CELL_ID) << 1 | water) >>> 0;
+    for (const index of triangulation.indices) {
+      const point = triangulation.points[index];
+      geometry[wordOffset] = (point[0] / graphWidth) * 2 - 1;
+      geometry[wordOffset + 1] = 1 - (point[1] / graphHeight) * 2;
+      identities[wordOffset + 2] = identity;
+      wordOffset += 3;
+    }
+    surfaceCellRanges.set(cellIndex, {start, end: wordOffset * 2});
+  }
+
+  const compactGeometry = wordOffset === geometry.length ? geometry : geometry.slice(0, wordOffset);
+  return {
+    geometry: compactGeometry,
+    sourceFloatLength: wordOffset * 2,
+    surfaceCellRanges
+  };
+}
+
+function triangulateGridCellSurface(map, cellIndex, vertexIds, vertexPoints) {
+  let triangulation = triangulateCellVisualBoundarySafely(vertexIds.map(vertex => vertexPoints[vertex]));
+  if (triangulation.status !== "ok") {
+    triangulation = triangulateCellVisualBoundarySafely(vertexIds.map(vertex => map.grid.vertices.p[vertex]));
+  }
+  if (triangulation.status !== "ok") {
+    triangulation = triangulateCellVisualBoundarySafely(buildCanonicalOrderedCellVisualBoundary(map, cellIndex, true));
+  }
+  if (triangulation.status !== "ok") {
+    triangulation = triangulateCellVisualBoundarySafely(buildCanonicalOrderedCellVisualBoundary(map, cellIndex, false));
+  }
+  if (triangulation.status !== "ok") {
+    triangulation = triangulateCellVisualBoundarySafely(buildVoronoiRecoveredCellVisualBoundary(map, cellIndex));
+  }
+  return triangulation;
 }
 
 export function buildGridCellSurfacePatchFromBase(surfaceVertices, context, colorMode, viewOptions, cellIndices, cachedLayout = null, transformColor = color => color, surfaceCellRanges = null) {

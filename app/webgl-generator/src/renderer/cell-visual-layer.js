@@ -199,6 +199,38 @@ export function buildCellVisualBoundaryMesh(map) {
   };
 }
 
+// 首屏 GPU correction 只需要共享非岸边及其两个 owner。直接遍历一次网格，
+// 避免为了这份只写几何创建 10 万个 boundary-only cell 对象和第二份 owner Map。
+export function visitCellVisualCorrectionEdges(map, visitor) {
+  if (typeof visitor !== "function") throw new TypeError("cell visual correction visitor 必须是函数");
+  const records = new Map();
+  const cells = map?.grid?.cells;
+  if (!cells?.i || !cells?.v || !cells?.h) return 0;
+  for (const rawCell of cells.i) {
+    const cell = Number(rawCell);
+    const vertices = cells.v[cell] || [];
+    for (let index = 0; index < vertices.length; index++) {
+      const first = Math.min(Number(vertices[index]), Number(vertices[(index + 1) % vertices.length]));
+      const second = Math.max(Number(vertices[index]), Number(vertices[(index + 1) % vertices.length]));
+      const key = `${first}:${second}`;
+      const record = records.get(key);
+      if (!record) records.set(key, {first, second, owners: [cell]});
+      else if (record.owners.at(-1) !== cell && record.owners.length < 3) record.owners.push(cell);
+    }
+  }
+  let visited = 0;
+  for (const [key, record] of records) {
+    if (record.owners.length !== 2) continue;
+    const [firstCell, secondCell] = record.owners;
+    if ((Number(cells.h[firstCell]) < 20) !== (Number(cells.h[secondCell]) < 20)) continue;
+    const curve = createCellVisualEdgeCurve(map, record.first, record.second, key, false);
+    if (curve.length < 3) continue;
+    visitor(key, curve, record.owners);
+    visited++;
+  }
+  return visited;
+}
+
 export function emptyCellVisualMesh() {
   return {
     geometryMode: "empty",
@@ -805,38 +837,32 @@ function cellVisualEdgeCurve(map, a, b, edgeCurves, shoreEdges) {
   const cached = edgeCurves.get(key);
   if (cached) return cached;
 
+  const curve = createCellVisualEdgeCurve(map, first, second, key, shoreEdges.has(key));
+  edgeCurves.set(key, curve);
+  return curve;
+}
+
+function createCellVisualEdgeCurve(map, first, second, key, shore) {
   const start = resolvedGridVertexPoint(map?.grid, first);
   const end = resolvedGridVertexPoint(map?.grid, second);
   if (!isWorldPoint(start) || !isWorldPoint(end)) {
-    const fallback = [];
-    edgeCurves.set(key, fallback);
-    return fallback;
+    return [];
   }
 
   const length = worldDistance(start, end);
   if (length <= 0.001) {
-    const point = [[start[0], start[1]]];
-    edgeCurves.set(key, point);
-    return point;
+    return [[start[0], start[1]]];
   }
-  if (shoreEdges.has(key)) {
-    const edge = [start, end];
-    edgeCurves.set(key, edge);
-    return edge;
-  }
+  if (shore) return [start, end];
 
   const normal = normalizeWorldVector(-(end[1] - start[1]), end[0] - start[0]);
   const mid = midpoint(start, end);
   const offset = cellVisualEdgeOffset(key, mid, length);
   const control = [mid[0] + normal.x * offset, mid[1] + normal.y * offset];
   if (!isWorldPoint(control)) {
-    const fallback = [start, end];
-    edgeCurves.set(key, fallback);
-    return fallback;
+    return [start, end];
   }
-  const curve = sampleQuadraticWorldPath(start, control, end, CELL_VISUAL_STYLE.segmentsPerEdge);
-  edgeCurves.set(key, curve);
-  return curve;
+  return sampleQuadraticWorldPath(start, control, end, CELL_VISUAL_STYLE.segmentsPerEdge);
 }
 
 function collectShoreCellVisualEdges(map) {

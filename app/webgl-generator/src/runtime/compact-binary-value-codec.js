@@ -592,6 +592,22 @@ function packIntegers(values, min, bits) {
 
 function unpackIntegers(bytes, length, min, bits) {
   const output = new Array(length);
+  if (bits <= 46) {
+    const divisor = 2 ** bits;
+    let accumulator = 0;
+    let available = 0;
+    let offset = 0;
+    for (let index = 0; index < length; index += 1) {
+      while (available < bits) {
+        accumulator += bytes[offset++] * (2 ** available);
+        available += 8;
+      }
+      output[index] = min + (accumulator % divisor);
+      accumulator = Math.floor(accumulator / divisor);
+      available -= bits;
+    }
+    return output;
+  }
   const mask = (1n << BigInt(bits)) - 1n;
   let accumulator = 0n;
   let available = 0;
@@ -610,6 +626,23 @@ function unpackIntegers(bytes, length, min, bits) {
 
 async function unpackIntegersAsync(bytes, length, min, bits, checkpoint) {
   const output = new Array(length);
+  if (bits <= 46) {
+    const divisor = 2 ** bits;
+    let accumulator = 0;
+    let available = 0;
+    let offset = 0;
+    for (let index = 0; index < length; index += 1) {
+      while (available < bits) {
+        accumulator += bytes[offset++] * (2 ** available);
+        available += 8;
+      }
+      output[index] = min + (accumulator % divisor);
+      accumulator = Math.floor(accumulator / divisor);
+      available -= bits;
+      if (!(index & 1023)) await checkpoint();
+    }
+    return output;
+  }
   const mask = (1n << BigInt(bits)) - 1n;
   let accumulator = 0n;
   let available = 0;

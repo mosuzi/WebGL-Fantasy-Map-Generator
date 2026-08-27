@@ -51,6 +51,35 @@ const smoothRenderer = {viewOptions: {smoothCellBorders: false}, map: {}, deferW
 prototype.setViewOptions.call(smoothRenderer, {smoothCellBorders: true});
 assert.deepEqual([smoothRenderer.viewOptions.smoothCellBorders, smoothRefreshes], [true, 1]);
 
+let edgeDraws = 0, edgeDrawOptions = null;
+const edgeRenderer = {viewOptions: {mapEdgeFade: false}, map: {}, deferWorkerRenderMutation: () => false,
+  canApplyGpuResidentOceanHeight: () => false, canApplyGpuResidentSmoothCellBorders: () => false,
+  refreshCellSurface: () => assert.fail("地图边缘渐隐不得刷新 surface"), refreshLineLayers: () => assert.fail("地图边缘渐隐不得重建 line"),
+  draw: options => { edgeDraws++; edgeDrawOptions = options; }};
+prototype.setViewOptions.call(edgeRenderer, {mapEdgeFade: true});
+assert.deepEqual([edgeRenderer.viewOptions.mapEdgeFade, edgeDraws], [true, 1]);
+assert.deepEqual(edgeDrawOptions, {updateDynamicBuffers: false, updateOverlay: false, drawDirtyDynamicBuffers: false}, "地图边缘渐隐不得顺带刷新动态路线、河流或 overlay");
+
+let deferredEdgeDraws = 0, deferredEdgeDrawOptions = null, deferredEdgeSurfaceRefreshes = 0, deferredEdgeLineRefreshes = 0;
+const deferredEdgeRenderer = {
+  viewOptions: {mapEdgeFade: false}, map: {}, colorMode: "states", visualTheme: resolveVisualTheme("default"),
+  labelOptions: {}, unitPreferences: {}, layerVisibility: {routes: false, tradeFlows: false}, oceanCurrentHighlights: new Set(),
+  politicalMeshDebugMode: "off", dynamicBuffersDirty: {tradeFlows: false, selection: false, routes: false},
+  workerRenderInstallSuspended: 1, workerRenderInstallApplyingDeferred: false, workerRenderInstallPendingDraw: true,
+  workerRenderInstallViewportChanged: false, workerRenderInstallEnsureGridDiagnostics: false,
+  workerRenderInstallDeferredMutations: new Map([["view-options", {key: "view-options", value: {mapEdgeFade: true}, sequence: 1}]]),
+  applyDeferredWorkerRenderMutations: prototype.applyDeferredWorkerRenderMutations,
+  applyWorkerRenderMutationBatch: prototype.applyWorkerRenderMutationBatch,
+  refreshCellSurface: () => deferredEdgeSurfaceRefreshes++, refreshLineLayers: () => deferredEdgeLineRefreshes++,
+  draw: options => { deferredEdgeDraws++; deferredEdgeDrawOptions = options; }, onViewChange() {},
+  clearTradeFlowBuffer() {}, updateTradeFlowBuffer() {}, updateSelectionBuffer() {}, scheduleRouteBufferRefresh() {}, cancelViewportCommitForWorkerInstall() {}
+};
+assert.equal(prototype.resumeWorkerRenderInstall.call(deferredEdgeRenderer, {draw: true}), true);
+assert.deepEqual([
+  deferredEdgeRenderer.viewOptions.mapEdgeFade, deferredEdgeSurfaceRefreshes, deferredEdgeLineRefreshes, deferredEdgeDraws
+], [true, 0, 0, 1], "延迟合并的地图边缘渐隐也不得重建 surface 或 line");
+assert.deepEqual(deferredEdgeDrawOptions, {updateDynamicBuffers: false, updateOverlay: false, drawDirtyDynamicBuffers: false}, "延迟边缘渐隐不得顺带刷新动态层或 overlay");
+
 const calls = [], themeRenderer = {map: {layers: {background: [0, 0, 0, 1]}}, stage: {style: {backgroundColor: "", setProperty() {}, removeProperty() {}}},
   visualTheme: {id: "default"}, viewOptions: {smoothCellBorders: false}, layerVisibility: {routes: false}, dynamicBuffersDirty: {routes: false},
   canApplyGpuResidentVisualTheme: () => true, refreshVisualThemeLineColors: () => calls.push(["lines"]),
@@ -79,4 +108,4 @@ for (const [mode, code] of Object.entries({
 for (const code of [6, 7, 8, 9, 10, 11, 12]) assert.match(rendererSource, new RegExp(`u_cellColorMode == ${code}`), `shader 缺少 GPU 模式 ${code}`);
 assert.match(rendererSource, /mode === "diplomacy"\) refreshCellAttributePalette/u, "首次外交切换必须按当前主体刷新小 palette");
 assert.match(rendererSource, /canPresentGpuResidentColorMode\("diplomacy"\)[\s\S]*?refreshCellAttributePalette[\s\S]*?this\.draw\(\)/u, "外交主体变化不得重建完整 surface");
-console.log(JSON.stringify({ok: true, directLayers: 3, gpuColorModes: 12, oceanDraws, smoothRefreshes, themeCalls: calls.length}));
+console.log(JSON.stringify({ok: true, directLayers: 3, gpuColorModes: 12, oceanDraws, smoothRefreshes, edgeDraws, themeCalls: calls.length}));

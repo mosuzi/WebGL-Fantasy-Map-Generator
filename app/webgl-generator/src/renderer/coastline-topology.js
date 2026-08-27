@@ -716,8 +716,12 @@ function inspectObjectShoreRelation(objectPoints, shorePoints, shoreIndex, dista
       const d = shorePoints[shoreSegmentIndex + 1];
       if (!segmentBoundsIntersect(bounds, segmentBounds(c, d))) continue;
       const intersects = segmentsIntersect(a, b, c, d);
-      if (intersects) crossings++;
-      if (intersects || segmentSegmentDistance(a, b, c, d) <= distance + EPSILON) near = true;
+      if (intersects) {
+        crossings++;
+        near = true;
+      } else if (!near && segmentSegmentDistance(a, b, c, d, true) <= distance + EPSILON) {
+        near = true;
+      }
     }
   }
   return {near, crossings};
@@ -932,7 +936,9 @@ function nearestPathProjectionFromSegments(point, source, segmentIndexes) {
     const lengthSquared = dx * dx + dy * dy;
     const t = lengthSquared <= EPSILON ? 0 : clamp(((point[0] - a[0]) * dx + (point[1] - a[1]) * dy) / lengthSquared, 0, 1);
     const projected = [a[0] + dx * t, a[1] + dy * t];
-    const distance = worldDistance(point, projected);
+    const distanceX = point[0] - projected[0];
+    const distanceY = point[1] - projected[1];
+    const distance = Math.sqrt(distanceX * distanceX + distanceY * distanceY);
     if (distance < best.distance) best = {point: projected, sourceIndex: index, t, distance, tangent: [dx, dy]};
   }
   return best;
@@ -1000,11 +1006,13 @@ function projectPointToPathSegment(point, source, index) {
   const lengthSquared = dx * dx + dy * dy;
   const t = lengthSquared <= EPSILON ? 0 : clamp(((point[0] - a[0]) * dx + (point[1] - a[1]) * dy) / lengthSquared, 0, 1);
   const projected = [a[0] + dx * t, a[1] + dy * t];
+  const distanceX = point[0] - projected[0];
+  const distanceY = point[1] - projected[1];
   return {
     point: projected,
     sourceIndex: index,
     t,
-    distance: worldDistance(point, projected),
+    distance: Math.sqrt(distanceX * distanceX + distanceY * distanceY),
     tangent: [dx, dy]
   };
 }
@@ -1060,22 +1068,24 @@ function segmentBoundsIntersect(a, b) {
   return a.minX <= b.maxX && a.maxX >= b.minX && a.minY <= b.maxY && a.maxY >= b.minY;
 }
 
-function segmentSegmentDistance(a, b, c, d) {
-  if (segmentsIntersect(a, b, c, d)) return 0;
-  return Math.min(
-    pointSegmentDistance(a, c, d),
-    pointSegmentDistance(b, c, d),
-    pointSegmentDistance(c, a, b),
-    pointSegmentDistance(d, a, b)
-  );
+function segmentSegmentDistance(a, b, c, d, knownDisjoint = false) {
+  if (!knownDisjoint && segmentsIntersect(a, b, c, d)) return 0;
+  return Math.sqrt(Math.min(
+    pointSegmentDistanceSquared(a, c, d),
+    pointSegmentDistanceSquared(b, c, d),
+    pointSegmentDistanceSquared(c, a, b),
+    pointSegmentDistanceSquared(d, a, b)
+  ));
 }
 
-function pointSegmentDistance(point, a, b) {
+function pointSegmentDistanceSquared(point, a, b) {
   const dx = b[0] - a[0];
   const dy = b[1] - a[1];
   const lengthSquared = dx * dx + dy * dy;
   const t = lengthSquared <= EPSILON ? 0 : clamp(((point[0] - a[0]) * dx + (point[1] - a[1]) * dy) / lengthSquared, 0, 1);
-  return worldDistance(point, [a[0] + dx * t, a[1] + dy * t]);
+  const distanceX = point[0] - (a[0] + dx * t);
+  const distanceY = point[1] - (a[1] + dy * t);
+  return distanceX * distanceX + distanceY * distanceY;
 }
 
 function maximumSegmentLength(points) {

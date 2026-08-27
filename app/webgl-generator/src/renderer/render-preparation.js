@@ -1,6 +1,7 @@
 import {
   buildLineVertices,
   buildGpuResidentShoreSurfacePrewarm,
+  buildPlaceholderCompactSurfaceBundle,
   buildPlaceholderSurfaceBundle,
   buildPlaceholderSurfaceColorPatch,
   buildPointLayer,
@@ -189,42 +190,54 @@ export async function executeRenderPreparationTask(payload = {}, context = {}) {
         vertices: politicalMeshDebugCache(political, debugMode)?.vertices || new Float32Array()
       };
     } else if (layer === "surface") {
-      ensureCellVisualCache(map, binding, payload.caches, cache, {
-        boundaryOnly: payload.cellVisualGeometryMode === "boundary-only"
-      });
       const coreOnly = payload.surfaceComposition === "core";
-      if (!coreOnly) ensureShoreCache(map, binding, payload.caches, cache);
-      const needsStatePaths = !coreOnly || String(payload.colorMode || "height") === "states";
-      const needsProvincePaths = !coreOnly || String(payload.colorMode || "height") === "provinces";
-      if (needsStatePaths) ensureStatePathsCache(map, binding, payload.caches, cache);
-      if (needsProvincePaths) ensureProvincePathsCache(map, binding, payload.caches, cache);
-      const prepared = cache;
-      if (payload.surfacePatchScope === "all" || payload.surfacePatchScope === "water") {
-        result.layers.surface = buildPlaceholderSurfaceColorPatch(
-          map,
-          payload.colorMode || "height",
-          payload.viewOptions || {},
-          prepared.shore,
-          prepared.cellVisual,
-          payload.surfacePatchScope
-        );
+      const compactSurface = payload.surfaceTransferMode === "gpu-resident-compact" && coreOnly
+        ? buildPlaceholderCompactSurfaceBundle(
+            map,
+            payload.colorMode || "height",
+            payload.viewOptions || {}
+          )
+        : null;
+      if (compactSurface) {
+        assertCompactSurfaceCoverage(compactSurface);
+        result.layers.surface = compactSurface;
       } else {
-        const political = !coreOnly || String(payload.colorMode || "height") === "states" || String(payload.colorMode || "height") === "provinces"
-          ? ensurePoliticalMeshes(map, prepared, payload)
-          : emptyPoliticalVisualMeshes();
-        const surface = buildPlaceholderSurfaceBundle(
-          map,
-          payload.colorMode || "height",
-          payload.viewOptions || {},
-          coreOnly ? null : prepared.shore,
-          prepared.statePaths,
-          prepared.provincePaths,
-          political,
-          prepared.cellVisual
-        );
-        result.layers.surface = payload.surfaceTransferMode === "gpu-resident-compact"
-          ? compactPreparedSurface(surface)
-          : surface;
+        ensureCellVisualCache(map, binding, payload.caches, cache, {
+          boundaryOnly: payload.cellVisualGeometryMode === "boundary-only"
+        });
+        if (!coreOnly) ensureShoreCache(map, binding, payload.caches, cache);
+        const needsStatePaths = !coreOnly || String(payload.colorMode || "height") === "states";
+        const needsProvincePaths = !coreOnly || String(payload.colorMode || "height") === "provinces";
+        if (needsStatePaths) ensureStatePathsCache(map, binding, payload.caches, cache);
+        if (needsProvincePaths) ensureProvincePathsCache(map, binding, payload.caches, cache);
+        const prepared = cache;
+        if (payload.surfacePatchScope === "all" || payload.surfacePatchScope === "water") {
+          result.layers.surface = buildPlaceholderSurfaceColorPatch(
+            map,
+            payload.colorMode || "height",
+            payload.viewOptions || {},
+            prepared.shore,
+            prepared.cellVisual,
+            payload.surfacePatchScope
+          );
+        } else {
+          const political = !coreOnly || String(payload.colorMode || "height") === "states" || String(payload.colorMode || "height") === "provinces"
+            ? ensurePoliticalMeshes(map, prepared, payload)
+            : emptyPoliticalVisualMeshes();
+          const surface = buildPlaceholderSurfaceBundle(
+            map,
+            payload.colorMode || "height",
+            payload.viewOptions || {},
+            coreOnly ? null : prepared.shore,
+            prepared.statePaths,
+            prepared.provincePaths,
+            political,
+            prepared.cellVisual
+          );
+          result.layers.surface = payload.surfaceTransferMode === "gpu-resident-compact"
+            ? compactPreparedSurface(surface)
+            : surface;
+        }
       }
     } else if (layer === "gpu-shore-surface") {
       cache.shore ||= payload.caches?.shore
@@ -266,6 +279,7 @@ export async function executeRenderPreparationTask(payload = {}, context = {}) {
       );
       result.layers.line = {
         vertices: line.vertices,
+        mapEdgeFadeVertexCount: line.mapEdgeFadeVertexCount,
         shoreVertices: line.shoreVertices,
         gpuResidentSmoothShoreVertices: line.gpuResidentSmoothShoreVertices,
         gpuResidentHardShoreVertices: line.gpuResidentHardShoreVertices,
@@ -411,6 +425,7 @@ function ensureProvincePathsCache(map, binding, input = {}, cache = {}) {
 }
 
 function compactPreparedSurface(surface) {
+  assertCompactSurfaceCoverage(surface);
   const geometry = compactSurfaceBaseGeometry(surface.base, surface.surfaceCellRanges);
   const result = {
     ...surface,
@@ -420,6 +435,53 @@ function compactPreparedSurface(surface) {
   };
   delete result.base;
   return result;
+}
+
+function assertCompactSurfaceCoverage(surface) {
+  const base = surface?.base;
+  const directGeometry = surface?.geometry;
+  const sourceFloatLength = base instanceof Float32Array
+    ? base.length
+    : Number(surface?.sourceFloatLength);
+  if (!(base instanceof Float32Array) && !(directGeometry instanceof Float32Array)) {
+    throw renderPreparationError("render-surface-compact-base-invalid", "紧凑 surface 缺少基础几何");
+  }
+  if (!Number.isSafeInteger(sourceFloatLength) || sourceFloatLength < 0
+    || directGeometry instanceof Float32Array && directGeometry.length * 2 !== sourceFloatLength) {
+    throw renderPreparationError("render-surface-compact-base-invalid", "紧凑 surface 基础几何长度无效");
+  }
+  if (!sourceFloatLength) return;
+  const ranges = surface.surfaceCellRanges;
+  if (surface.surfaceCellRangesMode === "unavailable" || !(ranges instanceof Map) || !ranges.size) {
+    throw renderPreparationError("render-surface-compact-ranges-unavailable", "紧凑 surface 缺少可用的 cell ranges", {
+      surfaceCellRangesMode: surface.surfaceCellRangesMode,
+      surfaceFloatLength: sourceFloatLength,
+      rangeCount: ranges instanceof Map ? ranges.size : null
+    });
+  }
+  let coveredUntil = 0;
+  for (const [cellId, range] of ranges) {
+    const start = Number(range?.start);
+    const end = Number(range?.end);
+    if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end)
+      || start !== coveredUntil || end < start || end > sourceFloatLength) {
+      throw renderPreparationError("render-surface-compact-ranges-incomplete", "紧凑 surface 的 cell ranges 未连续覆盖基础几何", {
+        cellId,
+        expectedStart: coveredUntil,
+        actualStart: start,
+        actualEnd: end,
+        surfaceFloatLength: sourceFloatLength
+      });
+    }
+    coveredUntil = end;
+  }
+  if (coveredUntil !== sourceFloatLength) {
+    throw renderPreparationError("render-surface-compact-ranges-incomplete", "紧凑 surface 的 cell ranges 未覆盖基础几何末尾", {
+      coveredUntil,
+      surfaceFloatLength: sourceFloatLength,
+      rangeCount: ranges.size
+    });
+  }
 }
 
 function ensureCellVisualCache(map, binding, input = {}, cache = {}, {boundaryOnly = false, requireFull = false} = {}) {
