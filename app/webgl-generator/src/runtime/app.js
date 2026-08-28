@@ -47,6 +47,7 @@ import {
   updateUserVisualThemeDocument,
   visualThemeOptions
 } from "../renderer/themes.js";
+import {normalizeStateBorderBlendStyle} from "../renderer/state-border-blend-style.js";
 import {PanelManager} from "../ui/panel-manager.js";
 import {captureControlPanelLaunchGeometry} from "../ui/control-panel-launch-geometry.js";
 import {createBrushCursorPreview} from "../ui/brush-cursor-preview.js";
@@ -2864,6 +2865,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     onExportVisualTheme: () => runtimeActions.layers.exportTheme(currentVisualThemeId(documentRef), {download: true}),
     onImportVisualTheme: file => importVisualThemeFile(state, documentRef, file, runtimeActions.layers.importTheme),
     onUpdateVisualTheme: (token, color) => runtimeActions.layers.updateTheme(currentVisualThemeId(documentRef), {[token]: color}),
+    onStateBorderBlend: patch => invokeRuntimeDisplayActionFromUi(state, documentRef, () => runtimeActions.layers.setStateBorderBlend(patch)),
     onDeleteVisualTheme: () => runtimeActions.layers.deleteTheme(currentVisualThemeId(documentRef)),
     onShowHoverInfo: showHoverInfo => runtimeActions.layers.setShowHoverInfo(showHoverInfo),
     onMaxCityLabels: maxCityLabels => invokeRuntimeDisplayActionFromUi(state, documentRef, () => runtimeActions.layers.setMaxCityLabels(maxCityLabels)),
@@ -3233,6 +3235,7 @@ function restoreRuntimeDisplayControls(state, documentRef) {
   const showOceanHeight = Boolean(renderer?.viewOptions?.showOceanHeight);
   const smoothCellBorders = renderer?.viewOptions?.smoothCellBorders !== false;
   const mapEdgeFade = renderer?.viewOptions?.mapEdgeFade === true;
+  const stateBorderBlend = normalizeStateBorderBlendStyle(renderer?.viewOptions?.stateBorderBlend);
   const maxCityLabels = Number(renderer?.labelOptions?.maxCityLabels) || DEFAULT_MAX_CITY_LABELS;
   setActiveModeButton(documentRef, colorMode);
   syncRuntimeControlValue(documentRef, "visual-theme-preset", visualTheme);
@@ -3240,7 +3243,7 @@ function restoreRuntimeDisplayControls(state, documentRef) {
   syncRuntimeBooleanControl(documentRef.getElementById("smooth-cell-borders"), smoothCellBorders);
   syncRuntimeBooleanControl(documentRef.getElementById("map-edge-fade"), mapEdgeFade);
   syncRuntimeControlValue(documentRef, "max-city-labels", maxCityLabels);
-  updateControlPreferences(documentRef, {colorMode, visualTheme, showOceanHeight, smoothCellBorders, mapEdgeFade, maxCityLabels});
+  updateControlPreferences(documentRef, {colorMode, visualTheme, showOceanHeight, smoothCellBorders, mapEdgeFade, stateBorderBlend, maxCityLabels});
   for (const control of documentRef.querySelectorAll("[data-layer]")) {
     const layer = control.dataset.layer;
     if (!Object.prototype.hasOwnProperty.call(rendererLayers, layer)) continue;
@@ -3498,6 +3501,7 @@ function createRuntimeActions(state, documentRef, options = {}) {
           () => setRuntimeMapEdgeFade(state, documentRef, previous)
         );
       },
+      setStateBorderBlend: patch => setRuntimeStateBorderBlend(state, documentRef, patch),
       setShowHoverInfo: visible => setRuntimeHoverInfoVisible(state, documentRef, visible),
       setMaxCityLabels: limit => {
         const previous = Number(readControlPreferences(documentRef).maxCityLabels) || DEFAULT_MAX_CITY_LABELS;
@@ -4381,8 +4385,8 @@ function ensureThemeEditableMap(map) {
 }
 
 function upsertVisualThemeDocuments(documents, document) {
-  const next = (documents || []).map(theme => ({...theme, colors: {...(theme?.colors || {})}}));
-  const normalized = {...document, colors: {...(document?.colors || {})}};
+  const next = (documents || []).map(cloneRuntimeVisualThemeDocument);
+  const normalized = cloneRuntimeVisualThemeDocument(document);
   const index = next.findIndex(theme => theme.id === normalized.id);
   if (index >= 0) next.splice(index, 1, normalized);
   else next.push(normalized);
@@ -4392,7 +4396,11 @@ function upsertVisualThemeDocuments(documents, document) {
 function removeVisualThemeDocument(documents, themeId) {
   return (documents || [])
     .filter(theme => theme.id !== themeId)
-    .map(theme => ({...theme, colors: {...(theme?.colors || {})}}));
+    .map(cloneRuntimeVisualThemeDocument);
+}
+
+function cloneRuntimeVisualThemeDocument(document) {
+  return {...document, colors: {...(document?.colors || {})}};
 }
 
 async function importVisualThemeFile(state, documentRef, file, importTheme) {
@@ -4444,6 +4452,17 @@ function setRuntimeMapEdgeFade(state, documentRef, enabled) {
     value: enabled,
     operation: "set-map-edge-fade",
     apply: value => state.renderer?.setViewOptions?.({mapEdgeFade: value})
+  });
+}
+
+function setRuntimeStateBorderBlend(state, documentRef, patch = {}) {
+  const current = normalizeStateBorderBlendStyle(readControlPreferences(documentRef).stateBorderBlend);
+  const next = normalizeStateBorderBlendStyle({...current, ...(patch || {})});
+  return measureHealthOperation(state, "set-state-border-blend", {stateBorderBlend: next, timings: {}}, () => {
+    updateControlPreferences(documentRef, {stateBorderBlend: next});
+    state.renderer?.setViewOptions?.({stateBorderBlend: next});
+    updateRuntimePanel(documentRef, state);
+    return runtimeDisplayActionResult(state, documentRef, ["display-preference", "renderer", "runtime-panel"]);
   });
 }
 
@@ -4514,6 +4533,7 @@ function runtimeDisplayActionResult(state, documentRef, effects) {
       showOceanHeight: Boolean(preferences.showOceanHeight),
       smoothCellBorders: Boolean(preferences.smoothCellBorders),
       mapEdgeFade: preferences.mapEdgeFade === true,
+      stateBorderBlend: normalizeStateBorderBlendStyle(preferences.stateBorderBlend),
       showHoverInfo: Boolean(preferences.showHoverInfo),
       maxCityLabels: Number(preferences.maxCityLabels) || DEFAULT_MAX_CITY_LABELS
     },
@@ -4551,6 +4571,7 @@ function applyControlPreferencesToRenderer(documentRef, renderer) {
     if (typeof preferences.showOceanHeight === "boolean") renderer.setViewOptions({showOceanHeight: preferences.showOceanHeight});
     if (typeof preferences.smoothCellBorders === "boolean") renderer.setViewOptions({smoothCellBorders: preferences.smoothCellBorders});
     if (typeof preferences.mapEdgeFade === "boolean") renderer.setViewOptions({mapEdgeFade: preferences.mapEdgeFade});
+    renderer.setViewOptions({stateBorderBlend: normalizeStateBorderBlendStyle(preferences.stateBorderBlend)});
     if (typeof preferences.maxCityLabels === "number") renderer.setLabelOptions({maxCityLabels: preferences.maxCityLabels});
     renderer.setUnitPreferences(preferences.units);
     const layers = normalizeLayerVisibilityPreferences(preferences.layers || {});

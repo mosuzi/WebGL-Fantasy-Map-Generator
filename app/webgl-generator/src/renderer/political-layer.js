@@ -43,6 +43,78 @@ export function pushPoliticalVisualBands(vertices, context, paths, style) {
   for (const path of paths.boundaries) pushPoliticalVisualBand(vertices, path, context, style);
 }
 
+const POLITICAL_COLOR_FEATHER_PROFILE = Object.freeze([
+  Object.freeze({offset: -1, alpha: 0}),
+  Object.freeze({offset: -0.82, alpha: 0.025}),
+  Object.freeze({offset: -0.58, alpha: 0.1}),
+  Object.freeze({offset: -0.3, alpha: 0.26}),
+  Object.freeze({offset: 0, alpha: 0.42}),
+  Object.freeze({offset: 0.3, alpha: 0.26}),
+  Object.freeze({offset: 0.58, alpha: 0.1}),
+  Object.freeze({offset: 0.82, alpha: 0.025}),
+  Object.freeze({offset: 1, alpha: 0})
+]);
+
+export function pushPoliticalColorFeather(vertices, context, paths, style) {
+  for (const path of paths?.boundaries || []) pushPoliticalColorFeatherPath(vertices, path, context, style);
+}
+
+function pushPoliticalColorFeatherPath(vertices, path, context, style) {
+  const tracks = POLITICAL_COLOR_FEATHER_PROFILE.map(sample => buildPoliticalColorFeatherTrack(path, context.map, style, sample));
+  if (tracks.some(track => !track || track.points.length < 2)) return;
+  const pointCount = tracks[0].points.length;
+  if (tracks.some(track => track.points.length !== pointCount)) return;
+
+  for (let trackIndex = 0; trackIndex < tracks.length - 1; trackIndex++) {
+    const inner = tracks[trackIndex];
+    const outer = tracks[trackIndex + 1];
+    for (let pointIndex = 0; pointIndex < pointCount - 1; pointIndex++) {
+      pushFeatherQuad(vertices, context, inner, outer, pointIndex);
+    }
+  }
+}
+
+function buildPoliticalColorFeatherTrack(path, map, style, sample) {
+  if (!path.points?.length || path.points.length !== path.sideVectors?.length) return null;
+  const offsetWorld = style.bandWidthWorld * 0.5 * sample.offset;
+  const points = [];
+  const colors = [];
+  for (let index = 0; index < path.points.length; index++) {
+    const point = path.points[index];
+    const side = path.sideVectors[index] || {x: 0, y: 0};
+    const colorA = style.colorForValue(path.valuesA[index], map);
+    const colorB = style.colorForValue(path.valuesB[index], map);
+    points.push([point[0] + side.x * offsetWorld, point[1] + side.y * offsetWorld]);
+    colors.push(sample.offset < 0 ? colorA : sample.offset > 0 ? colorB : averageRgb(colorA, colorB));
+  }
+  const track = smoothWorldPathAndColors(points, colors, style.smoothing);
+  const alpha = Math.max(0, Math.min(1, (Number(style.featherStrength) || 0) * sample.alpha));
+  track.colors = track.colors.map(color => withAlpha(color, alpha));
+  return track;
+}
+
+function pushFeatherQuad(vertices, context, first, second, index) {
+  const a0 = first.points[index];
+  const a1 = first.points[index + 1];
+  const b0 = second.points[index];
+  const b1 = second.points[index + 1];
+  pushWorldVertex(vertices, context, a0, first.colors[index]);
+  pushWorldVertex(vertices, context, b0, second.colors[index]);
+  pushWorldVertex(vertices, context, b1, second.colors[index + 1]);
+  pushWorldVertex(vertices, context, a0, first.colors[index]);
+  pushWorldVertex(vertices, context, b1, second.colors[index + 1]);
+  pushWorldVertex(vertices, context, a1, first.colors[index + 1]);
+}
+
+function averageRgb(a, b) {
+  return [
+    ((a?.[0] ?? 0) + (b?.[0] ?? 0)) / 2,
+    ((a?.[1] ?? 0) + (b?.[1] ?? 0)) / 2,
+    ((a?.[2] ?? 0) + (b?.[2] ?? 0)) / 2,
+    1
+  ];
+}
+
 function pushPoliticalVisualBand(vertices, path, context, style) {
   const {map} = context;
   const visual = buildSmoothedPoliticalVisual(path, map, style);
@@ -83,9 +155,15 @@ function buildSmoothedPoliticalVisual(path, map, style) {
     colorsB.push(style.colorForValue(path.valuesB[index], map));
   }
 
+  const a = smoothWorldPathAndColors(pointsA, colorsA, style.smoothing);
+  const b = smoothWorldPathAndColors(pointsB, colorsB, style.smoothing);
+  if (Number.isFinite(style.bandAlpha)) {
+    a.colors = a.colors.map(color => withAlpha(color, style.bandAlpha));
+    b.colors = b.colors.map(color => withAlpha(color, style.bandAlpha));
+  }
   return {
-    a: smoothWorldPathAndColors(pointsA, colorsA, style.smoothing),
-    b: smoothWorldPathAndColors(pointsB, colorsB, style.smoothing)
+    a,
+    b
   };
 }
 

@@ -417,13 +417,45 @@
       <UiSegmented class="view-mode-segmented" label="视图" :options="themes" :model-value="preferences.colorMode" data-mode />
       <div class="preference-toggle-grid">
         <UiSwitchField label="显示海底" input-id="show-ocean-height" :checked="preferences.showOceanHeight" button-style />
-        <UiSwitchField label="疆界柔化（海岸/行政）" input-id="smooth-cell-borders" :checked="preferences.smoothCellBorders" button-style />
+        <UiSwitchField label="海岸与格边平滑" input-id="smooth-cell-borders" :checked="preferences.smoothCellBorders" button-style />
         <UiSwitchField label="整图外框柔化" input-id="map-edge-fade" :checked="preferences.mapEdgeFade" button-style />
       </div>
-      <p class="preference-toggle-note">“疆界柔化”处理海岸与行政边界；“整图外框柔化”只控制整张地图四周的渐隐。</p>
+      <p class="preference-toggle-note">“海岸与格边平滑”处理海岸、湖岸与单元格边缘；“整图外框柔化”只控制整张地图四周的渐隐。国界颜色过渡请在“样式”中调整。</p>
     </div>
 
     <div class="control-panel-section label-style-panel" data-control-panel="styles" :hidden="activeTab !== 'styles'">
+      <section class="state-border-blend-editor" aria-labelledby="state-border-blend-title">
+        <div class="visual-theme-editor-header">
+          <strong id="state-border-blend-title">国界晕染</strong>
+          <span>独立显示样式</span>
+        </div>
+        <UiSwitchField
+          label="启用国界颜色过渡"
+          input-id="state-border-blend-enabled"
+          :checked="preferences.stateBorderBlend.enabled"
+          @change="value => applyStateBorderBlendPatch({enabled: value})"
+        />
+        <UiSliderField
+          label="晕染宽度"
+          input-id="state-border-blend-width"
+          :model-value="preferences.stateBorderBlend.widthWorld"
+          :min="1"
+          :max="24"
+          :step="0.5"
+          unit-label="地图单位"
+          @change="value => applyStateBorderBlendPatch({widthWorld: value})"
+        />
+        <UiSliderField
+          label="晕染强度"
+          input-id="state-border-blend-strength"
+          :model-value="preferences.stateBorderBlend.strength"
+          :min="0"
+          :max="1"
+          :step="0.05"
+          @change="value => applyStateBorderBlendPatch({strength: value})"
+        />
+        <p class="visual-theme-editor-note">两侧国家色沿国界向外羽化至透明；只影响国家视图，不改变国界线、海岸、主题或地图数据。</p>
+      </section>
       <UiSelectField
         label="标签类型"
         input-id="label-style-type"
@@ -1529,6 +1561,12 @@ function findLocalFont(family) {
 function applyVisualThemeColor(color) {
   document.dispatchEvent(new CustomEvent("webgl-generator-visual-theme-color", {
     detail: {token: selectedThemeColorKey.value, color}
+  }));
+}
+
+function applyStateBorderBlendPatch(patch) {
+  document.dispatchEvent(new CustomEvent("webgl-generator-state-border-blend", {
+    detail: {patch}
   }));
 }
 

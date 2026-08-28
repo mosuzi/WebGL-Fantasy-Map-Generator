@@ -2,8 +2,9 @@ import {
   normalizeRenderResourceBinding,
   sameRenderResourceBinding
 } from "./render-resource-binding.js";
+import {normalizeStateBorderBlendStyle} from "./state-border-blend-style.js";
 
-export const PREPARED_DISPLAY_INTENT_SCHEMA_VERSION = 1;
+export const PREPARED_DISPLAY_INTENT_SCHEMA_VERSION = 2;
 
 export function createPreparedDisplayIntent(payload = {}, inputBinding = payload.binding) {
   const binding = normalizeRenderResourceBinding(inputBinding, "preparedDisplayIntent.binding");
@@ -17,6 +18,7 @@ export function createPreparedDisplayIntent(payload = {}, inputBinding = payload
     showOceanHeight: Boolean(viewOptions.showOceanHeight),
     smoothCellBorders,
     mapEdgeFade: viewOptions.mapEdgeFade === true,
+    stateBorderBlendFingerprint: stateBorderBlendFingerprint(viewOptions.stateBorderBlend),
     visualThemeFingerprint: visualThemeFingerprint(viewOptions.visualTheme),
     shoreSurfaceKey: smoothCellBorders ? gpuResidentShoreSurfaceKey(colorMode, viewOptions) : ""
   };
@@ -61,7 +63,7 @@ export function gpuResidentShoreSurfaceKey(colorMode, viewOptions = {}) {
 function preparedDisplayIntentMismatch(actual, expected) {
   if (Number(actual?.schemaVersion) !== PREPARED_DISPLAY_INTENT_SCHEMA_VERSION) return "schema-version";
   if (!sameRenderResourceBinding(actual?.binding, expected?.binding)) return "binding";
-  for (const key of ["colorMode", "showOceanHeight", "smoothCellBorders", "mapEdgeFade", "visualThemeFingerprint", "shoreSurfaceKey"]) {
+  for (const key of ["colorMode", "showOceanHeight", "smoothCellBorders", "mapEdgeFade", "stateBorderBlendFingerprint", "visualThemeFingerprint", "shoreSurfaceKey"]) {
     if (actual?.[key] !== expected?.[key]) return key;
   }
   const actualFingerprint = String(actual?.fingerprint || "");
@@ -83,9 +85,15 @@ function preparedDisplayIntentFingerprint(intent) {
     Boolean(intent?.showOceanHeight),
     intent?.smoothCellBorders !== false,
     intent?.mapEdgeFade === true,
+    String(intent?.stateBorderBlendFingerprint || ""),
     String(intent?.visualThemeFingerprint || ""),
     String(intent?.shoreSurfaceKey || "")
   ]);
+}
+
+function stateBorderBlendFingerprint(source) {
+  const style = normalizeStateBorderBlendStyle(source);
+  return JSON.stringify([style.enabled, style.widthWorld, style.strength]);
 }
 
 function visualThemeFingerprint(theme) {

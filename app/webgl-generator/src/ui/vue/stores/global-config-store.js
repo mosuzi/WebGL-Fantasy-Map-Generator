@@ -3,6 +3,7 @@ import {defineStore} from "pinia";
 import {normalizeVisualThemeId} from "../../../renderer/themes.js";
 import {DEFAULT_UNIT_PREFERENCES, normalizeUnitPreferences} from "../../display-units.js";
 import {DEFAULT_MAX_CITY_LABELS} from "../../../runtime/display-defaults.js";
+import {DEFAULT_STATE_BORDER_BLEND, normalizeStateBorderBlendStyle} from "../../../renderer/state-border-blend-style.js";
 
 export const CONTROL_PREFERENCES_KEY = "webgl-generator-control-preferences";
 
@@ -13,6 +14,7 @@ const DEFAULT_CONTROL_PREFERENCES = Object.freeze({
   showOceanHeight: false,
   smoothCellBorders: true,
   mapEdgeFade: false,
+  stateBorderBlend: Object.freeze({...DEFAULT_STATE_BORDER_BLEND}),
   showHoverInfo: true,
   toolbarCollapsed: false,
   climateRangeRatioLocked: true,
@@ -57,6 +59,9 @@ function mergePreferences(current = {}, patch = {}) {
     ...current,
     ...patch,
     units: patch.units ? normalizeUnitPreferences({...current.units, ...patch.units}) : normalizeUnitPreferences(current.units),
+    stateBorderBlend: patch.stateBorderBlend
+      ? normalizeStateBorderBlendStyle({...current.stateBorderBlend, ...patch.stateBorderBlend})
+      : normalizeStateBorderBlendStyle(current.stateBorderBlend),
     layers: patch.layers ? {...(current.layers || {}), ...patch.layers} : current.layers || {}
   };
 }
@@ -69,6 +74,7 @@ function normalizePreferences(input = {}) {
     showOceanHeight: typeof input.showOceanHeight === "boolean" ? input.showOceanHeight : DEFAULT_CONTROL_PREFERENCES.showOceanHeight,
     smoothCellBorders: typeof input.smoothCellBorders === "boolean" ? input.smoothCellBorders : DEFAULT_CONTROL_PREFERENCES.smoothCellBorders,
     mapEdgeFade: typeof input.mapEdgeFade === "boolean" ? input.mapEdgeFade : DEFAULT_CONTROL_PREFERENCES.mapEdgeFade,
+    stateBorderBlend: normalizeStateBorderBlendStyle(input.stateBorderBlend),
     showHoverInfo: typeof input.showHoverInfo === "boolean"
       ? input.showHoverInfo
       : typeof input.showHoverOverlay === "boolean"

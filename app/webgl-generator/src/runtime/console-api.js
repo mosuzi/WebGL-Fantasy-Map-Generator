@@ -24,6 +24,7 @@ import {buildMapSummary as buildSharedMapSummary} from "./read-only-map-core.js"
 import {compareAnalysisRegions, compareRegionPower, defineAnalysisRegion, describeAnalysisRegion, diagnoseRegionPopulation, diagnoseRegionTerrain, explainRegionPrecipitation} from "./map-analysis-api.js";
 import {getPlaceDirection, measurePlaceDistance, resolvePlace} from "./place-analysis-api.js";
 import {exportVisualThemeDocument, isUserVisualTheme} from "../renderer/themes.js";
+import {normalizeStateBorderBlendStyle} from "../renderer/state-border-blend-style.js";
 
 export function installConsoleApi(documentRef, state, options = {}) {
   const view = documentRef.defaultView || window;
@@ -1366,6 +1367,8 @@ function buildLayerSnapshot(state, documentRef) {
     display: {
       showOceanHeight: Boolean(preferences.showOceanHeight),
       smoothCellBorders: Boolean(preferences.smoothCellBorders),
+      mapEdgeFade: preferences.mapEdgeFade === true,
+      stateBorderBlend: normalizeStateBorderBlendStyle(preferences.stateBorderBlend),
       showHoverInfo: Boolean(preferences.showHoverInfo),
       maxCityLabels: Number(preferences.maxCityLabels) || DEFAULT_MAX_CITY_LABELS
     },

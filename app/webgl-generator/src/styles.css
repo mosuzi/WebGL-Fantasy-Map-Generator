@@ -391,6 +391,15 @@ select {
   gap: 10px;
 }
 
+.state-border-blend-editor {
+  display: grid;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid rgba(189, 206, 213, 0.16);
+  border-radius: 8px;
+  background: rgba(9, 14, 17, 0.46);
+}
+
 .label-style-panel .ui-slider-field {
   grid-template-columns: 72px minmax(0, 1fr) 84px;
 }

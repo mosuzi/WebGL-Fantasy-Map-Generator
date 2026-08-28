@@ -117,6 +117,9 @@ export function bindRuntimePanel(documentRef, handlers) {
   documentRef.addEventListener("webgl-generator-visual-theme-color", event => {
     handlers.onUpdateVisualTheme?.(event.detail?.token, event.detail?.color);
   });
+  documentRef.addEventListener("webgl-generator-state-border-blend", event => {
+    handlers.onStateBorderBlend?.(event.detail?.patch || {});
+  });
   documentRef.addEventListener("webgl-generator-label-style-patch", event => {
     handlers.onPatchLabelStyle?.(event.detail?.styleType, event.detail?.patch || {});
   });
