@@ -81,6 +81,29 @@
       </div>
     </template>
 
+    <template #province-suffix>
+      <div class="state-province-suffix-field">
+        <UiSelectField
+          label="省份后缀"
+          class-name="state-province-suffix-select"
+          :model-value="provinceSuffixDraft"
+          :options="provinceSuffixOptions"
+          :disabled="!provinceSuffixOptions.length"
+          @update:model-value="provinceSuffixDraft = $event"
+        />
+        <UiSwitchField
+          label="覆盖手工定制全名"
+          field-class="state-province-suffix-overwrite"
+          compact-hit-area
+          :checked="overwriteCustomProvinceNames"
+          @change="overwriteCustomProvinceNames = $event"
+        />
+        <UiButton variant="secondary" :disabled="!provinceSuffixDraft" @click="submitProvinceSuffix">调整辖下全部省份</UiButton>
+        <p v-if="provinceSuffixResult" class="state-province-suffix-result">{{ provinceSuffixResult.summary }}</p>
+        <p class="state-province-suffix-note">默认保留手工定制的省份全名；此操作不改变省界、归属、省会或基础名称，也不会与政体修改自动联动。</p>
+      </div>
+    </template>
+
     <template #capital>
       <div class="state-capital-field">
         <UiSelectField
@@ -203,12 +226,14 @@ import UiPanelIoActions from "./base/UiPanelIoActions.vue";
 import UiRegenerationLockActions from "./base/UiRegenerationLockActions.vue";
 import UiSelectField from "./base/UiSelectField.vue";
 import UiSliderField from "./base/UiSliderField.vue";
+import UiSwitchField from "./base/UiSwitchField.vue";
 import UiTextEditField from "./base/UiTextEditField.vue";
 import {formatArea, formatMilitary, formatNumber as formatDisplayNumber, formatPopulation} from "../../display-units.js";
 import {findByObjectId, sameObjectId} from "../../object-id.js";
 import {compareRowsByKey} from "../../sort-utils.js";
 import {buildStateCapitalOptions} from "../../state-capital-options.js";
 import {GOVERNMENT_OPTIONS, governmentSuffixOptions as readGovernmentSuffixOptions} from "../../../generator/governments.js";
+import {provinceFormForState, provinceFormsForState} from "../../../generator/province-naming.js";
 import {readObjectNote} from "../../../runtime/object-notes.js";
 import {useUnitPreferences} from "../composables/use-unit-preferences.js";
 import {useVisibleRowSelection} from "../composables/use-visible-row-selection.js";
@@ -267,6 +292,10 @@ const renameRequestId = ref(null);
 const capitalDraft = ref(0);
 const governmentDraft = ref("monarchy");
 const governmentSuffixDraft = ref("王国");
+const provinceSuffixDraft = ref("");
+const overwriteCustomProvinceNames = ref(false);
+const provinceSuffixResult = ref(null);
+const provinceSuffixStateId = ref(null);
 const topologySourceStateId = ref(null);
 const mergeOtherStateId = ref(null);
 const mergeSurvivorStateId = ref(null);
@@ -303,6 +332,16 @@ const governmentOptions = computed(() => GOVERNMENT_OPTIONS.map(option => ({
 })));
 const governmentSuffixOptions = computed(() => readGovernmentSuffixOptions(governmentDraft.value).map(value => ({value, label: value})));
 const governmentNote = computed(() => selected.value?.governmentEffectSummary || "政体影响税收、外交倾向和军事动员；国号后缀可在当前政体允许范围内独立选择。");
+const selectedStateItem = computed(() => props.state.map?.politics?.states?.[selected.value?.id] || null);
+const provinceSuffixValues = computed(() => provinceFormsForState(
+  selectedStateItem.value,
+  props.state.map?.society?.cultures || props.state.map?.pack?.cultures || []
+));
+const provinceSuffixOptions = computed(() => provinceSuffixValues.value.map(value => ({value, label: value})));
+const suggestedProvinceSuffix = computed(() => provinceFormForState(
+  selectedStateItem.value,
+  props.state.map?.society?.cultures || props.state.map?.pack?.cultures || []
+) || provinceSuffixValues.value[0] || "");
 const topologySourceName = computed(() => formatStateName(props.state.map, topologySourceStateId.value));
 const mergeNeighborOptions = computed(() => activeStateNeighbors(props.state.map, topologySourceStateId.value));
 const mergeSurvivorOptions = computed(() => [topologySourceStateId.value, mergeOtherStateId.value]
@@ -323,6 +362,7 @@ const stateActions = computed(() => [
   {key: "rename", resultClass: "open-secondary", label: "重命名", icon: "✎", disabled: modalActionActive.value || !canDeleteSelected.value},
   {key: "color", resultClass: "open-secondary", label: "调整颜色", icon: "◐", disabled: modalActionActive.value || !canDeleteSelected.value},
   {key: "government", resultClass: "open-secondary", label: "调整政体", icon: "⚖", panelWidth: 620, disabled: modalActionActive.value || !canDeleteSelected.value},
+  {key: "province-suffix", resultClass: "open-secondary", label: "调整辖下省份后缀", icon: "缀", panelWidth: 520, disabled: modalActionActive.value || !canDeleteSelected.value || !provinceSuffixOptions.value.length},
   {key: "capital", resultClass: "open-secondary", label: "设置首都", icon: "♛", disabled: modalActionActive.value || !canDeleteSelected.value || !capitalOptions.value.length},
   {key: "note", resultClass: "open-secondary", label: "编辑备注", icon: "☰", disabled: modalActionActive.value || !canDeleteSelected.value},
   {key: "merge", resultClass: "open-secondary", label: "合并相邻国家", icon: "⇄", panelWidth: 380, panelHeight: 390, disabled: modalActionActive.value || !canDeleteSelected.value || !activeStateNeighbors(props.state.map, selected.value?.id).length},
@@ -383,6 +423,17 @@ watch(governmentDraft, governmentKey => {
   if (suffixes.includes(governmentSuffixDraft.value)) return;
   governmentSuffixDraft.value = suffixes[0];
 });
+
+watch(() => [selected.value?.id, props.state.version], ([stateId]) => {
+  if (!sameObjectId(provinceSuffixStateId.value, stateId)) {
+    provinceSuffixStateId.value = stateId ?? null;
+    provinceSuffixDraft.value = suggestedProvinceSuffix.value;
+    overwriteCustomProvinceNames.value = false;
+    provinceSuffixResult.value = null;
+    return;
+  }
+  if (!provinceSuffixValues.value.includes(provinceSuffixDraft.value)) provinceSuffixDraft.value = suggestedProvinceSuffix.value;
+}, {immediate: true});
 
 watch(() => props.state.map, () => {
   activeAction.value = null;
@@ -584,6 +635,16 @@ function submitTopology(execute) {
   } catch (error) {
     topologyError.value = error?.message || String(error);
   }
+}
+
+function submitProvinceSuffix() {
+  if (!selected.value || !provinceSuffixDraft.value) return;
+  const execution = props.callbacks.onProvinceSuffixChange?.(
+    selected.value.id,
+    provinceSuffixDraft.value,
+    overwriteCustomProvinceNames.value
+  );
+  provinceSuffixResult.value = execution?.result || null;
 }
 
 function invalidateTopologyPreview() {

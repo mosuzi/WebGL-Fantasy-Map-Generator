@@ -1,6 +1,6 @@
 import {GOVERNMENT_BY_KEY, applyStateGovernment, governmentAllowsSuffix, setStateGovernment} from "../generator/governments.js";
 import {createChineseNameGenerator, getStateFullName} from "../generator/names.js";
-import {provinceFormForState} from "../generator/province-naming.js";
+import {provinceFormForState, provinceFormsForState} from "../generator/province-naming.js";
 import {createRandom} from "../generator/random.js";
 import {createCityScaleContext, defaultCityVisual, deriveCityScale, refreshCityScaleVisuals} from "./city-visuals.js";
 import {namebaseRenameAffected, newObjectAffected, objectAffected, systemAffected} from "./edit-command-effects.js";
@@ -55,6 +55,14 @@ const STATE_GOVERNMENT_EFFECTS = Object.freeze({
 });
 
 const STATE_NAME_BATCH_EFFECTS = Object.freeze({
+  render: "draw",
+  selection: "refresh",
+  runtimeStats: true,
+  pickPanel: true,
+  derived: Object.freeze(["object-name", "labels", "object-panels"])
+});
+
+const STATE_PROVINCE_SUFFIX_EFFECTS = Object.freeze({
   render: "draw",
   selection: "refresh",
   runtimeStats: true,
@@ -213,6 +221,42 @@ export function createSetStatesGovernmentBatchCommand(stateIds, governmentKey, {
         const state = context.map?.politics?.states?.[stateId] || context.map?.pack?.states?.[stateId];
         return !state || state.removed || state.governmentKey === normalizedGovernmentKey;
       });
+    }
+  };
+}
+
+export function createSetStateProvinceSuffixCommand(stateId, formName, {overwriteCustom = false, label = "调整辖下省份后缀"} = {}) {
+  const normalizedStateId = normalizeStateId(stateId);
+  const normalizedFormName = String(formName || "").trim();
+  const shouldOverwriteCustom = Boolean(overwriteCustom);
+  let plan = null;
+
+  return {
+    label: `${label} #${normalizedStateId}`,
+    domain: "province",
+    effects: {
+      ...STATE_PROVINCE_SUFFIX_EFFECTS,
+      affected: systemAffected("state-province-suffix", [{kind: "state", id: normalizedStateId}])
+    },
+    apply(context) {
+      plan ??= buildStateProvinceSuffixPlan(context.map, normalizedStateId, normalizedFormName, shouldOverwriteCustom);
+      if (!plan.valid || !plan.changes.length) throw new Error(plan.summary);
+      for (const change of plan.changes) writeProvinceNameFields(context.map, change.provinceId, change.after);
+      this.effects.affected = systemAffected("state-province-suffix", [
+        {kind: "state", id: normalizedStateId},
+        ...plan.changes.map(change => ({kind: "province", id: change.provinceId}))
+      ]);
+    },
+    revert(context) {
+      if (!plan?.changes?.length) throw new Error("缺少可撤销的省份后缀快照");
+      for (const change of plan.changes) restoreProvinceNameFields(context.map, change.provinceId, change.before);
+    },
+    isNoop(context) {
+      plan ??= buildStateProvinceSuffixPlan(context.map, normalizedStateId, normalizedFormName, shouldOverwriteCustom);
+      return !plan.valid || !plan.changes.length;
+    },
+    getResult() {
+      return plan ? provinceSuffixPlanResult(plan) : null;
     }
   };
 }
@@ -1260,6 +1304,103 @@ function snapshotStateGovernment(map, stateId) {
     politics: snapshotGovernmentFields(map?.politics?.states?.[stateId]),
     pack: map?.pack?.states?.[stateId] === map?.politics?.states?.[stateId] ? null : snapshotGovernmentFields(map?.pack?.states?.[stateId])
   };
+}
+
+function buildStateProvinceSuffixPlan(map, stateId, formName, overwriteCustom) {
+  const state = map?.politics?.states?.[stateId] || map?.pack?.states?.[stateId];
+  const cultures = map?.society?.cultures || map?.pack?.cultures || [];
+  const allowedForms = state ? provinceFormsForState(state, cultures) : [];
+  if (stateId <= 0 || !state || state.removed) {
+    return provinceSuffixPlan(false, stateId, formName, overwriteCustom, [], 0, 0, "目标国家不存在。");
+  }
+  if (!formName || !allowedForms.includes(formName)) {
+    return provinceSuffixPlan(false, stateId, formName, overwriteCustom, [], 0, 0, "所选后缀不属于该国当前文化的省份后缀集合。");
+  }
+
+  const provinces = map?.politics?.provinces || map?.pack?.provinces || [];
+  const changes = [];
+  let unchanged = 0;
+  let skippedCustom = 0;
+  let total = 0;
+  for (const province of provinces) {
+    const provinceId = normalizeProvinceId(province?.id ?? province?.i);
+    if (!provinceId || !province || province.removed || normalizeStateId(province.state) !== stateId) continue;
+    total++;
+    const name = String(province.name || "").trim();
+    const currentFormName = String(province.formName || "").trim();
+    const currentFullName = String(province.fullName || "").trim();
+    const standardFullName = `${name}${currentFormName}`;
+    const customFullName = Boolean(currentFullName && currentFullName !== standardFullName);
+    if (customFullName && !overwriteCustom) {
+      skippedCustom++;
+      continue;
+    }
+    const next = {formName, fullName: `${name}${formName}`};
+    if (currentFormName === next.formName && currentFullName === next.fullName) {
+      unchanged++;
+      continue;
+    }
+    changes.push({
+      provinceId,
+      before: snapshotProvinceNameFields(map, provinceId),
+      after: next
+    });
+  }
+  const summary = changes.length
+    ? `将更新 ${changes.length} 个省份，${unchanged} 个无需变化，${skippedCustom} 个定制全名保持不变。`
+    : `没有需要更新的省份：${unchanged} 个无需变化，${skippedCustom} 个定制全名保持不变。`;
+  return provinceSuffixPlan(true, stateId, formName, overwriteCustom, changes, unchanged, skippedCustom, summary, total);
+}
+
+function provinceSuffixPlan(valid, stateId, formName, overwriteCustom, changes, unchanged, skippedCustom, summary, total = 0) {
+  return {valid, stateId, formName, overwriteCustom, changes, unchanged, skippedCustom, total, summary};
+}
+
+function provinceSuffixPlanResult(plan) {
+  return {
+    valid: plan.valid,
+    stateId: plan.stateId,
+    formName: plan.formName,
+    overwriteCustom: plan.overwriteCustom,
+    total: plan.total,
+    changed: plan.changes.length,
+    unchanged: plan.unchanged,
+    skippedCustom: plan.skippedCustom,
+    summary: plan.summary
+  };
+}
+
+function snapshotProvinceNameFields(map, provinceId) {
+  const politicsProvince = map?.politics?.provinces?.[provinceId];
+  const packProvince = map?.pack?.provinces?.[provinceId];
+  return {
+    politics: provinceNameFields(politicsProvince),
+    pack: packProvince === politicsProvince ? null : provinceNameFields(packProvince)
+  };
+}
+
+function provinceNameFields(province) {
+  if (!province) return null;
+  return {formName: province.formName, fullName: province.fullName};
+}
+
+function writeProvinceNameFields(map, provinceId, fields) {
+  applyProvinceNameFields(map?.politics?.provinces?.[provinceId], fields);
+  const packProvince = map?.pack?.provinces?.[provinceId];
+  if (packProvince && packProvince !== map?.politics?.provinces?.[provinceId]) applyProvinceNameFields(packProvince, fields);
+}
+
+function restoreProvinceNameFields(map, provinceId, snapshot) {
+  applyProvinceNameFields(map?.politics?.provinces?.[provinceId], snapshot?.politics);
+  if (snapshot?.pack) applyProvinceNameFields(map?.pack?.provinces?.[provinceId], snapshot.pack);
+}
+
+function applyProvinceNameFields(province, fields) {
+  if (!province || !fields) return;
+  for (const key of ["formName", "fullName"]) {
+    if (fields[key] === undefined) delete province[key];
+    else province[key] = fields[key];
+  }
 }
 
 function snapshotBatchStateGovernments(map, stateIds, governmentKey) {

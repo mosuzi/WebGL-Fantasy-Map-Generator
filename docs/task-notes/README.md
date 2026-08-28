@@ -8,6 +8,7 @@
 
 > 分支执行约束：本专题已于 2026-08-19 获用户明确批准为第 349 项，只在 `codex/map-core-engine-architecture-plan` 并行分支逐阶段实施；不得将本分支合入 `main`。全阶段不执行浏览器验收，最终只形成并评估浏览器验收方案。
 
+- 第 368 项在国家管理界面增加独立的辖下省份后缀批量事务，默认保护手工定制全名并保持政体修改不联动；见 [`task-368-province-suffix-batch.md`](./task-368-province-suffix-batch.md)。
 - 第 359 项以用户指定 `krichars (3).webfmg` 为唯一完成输入，重构解析、adoption handoff、首屏 prepared layer 与可取消惰性任务，按绝对 `6.0s / 7.5s` 和 `>200ms = 0` 门验收；见 [`task-359-real-archive-load-critical-path.md`](./task-359-real-archive-load-critical-path.md)。
 - 第 360 项只修“路线管理 → 重算道路”的 Promise、busy、结果 / 错误码与真实道路首败，中央入口不得替代专用入口；见 [`task-360-route-regeneration-transaction.md`](./task-360-route-regeneration-transaction.md)。
 - 第 361 项把首次不可通过平滑开关恢复的疆界柔化定义为非法第三态，以 `F0 / Foff / Fon` 像素和 surface / shore / line 资源指纹收敛首次导入与运行时切换；见 [`task-361-initial-boundary-third-state.md`](./task-361-initial-boundary-third-state.md)。

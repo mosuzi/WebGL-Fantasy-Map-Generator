@@ -123,6 +123,7 @@ export function createStatePanel(documentRef, manager, callbacks = {}) {
     },
     onColorChange: (stateId, color) => callbacks.onColorChange?.(stateId, color),
     onGovernmentChange: (stateId, governmentKey, formName) => callbacks.onGovernmentChange?.(stateId, governmentKey, formName),
+    onProvinceSuffixChange: (stateId, formName, overwriteCustom) => callbacks.onProvinceSuffixChange?.(stateId, formName, overwriteCustom),
     onCapitalChange: (stateId, burgId) => callbacks.onCapitalChange?.(stateId, burgId),
     onNoteChange: (stateId, body) => callbacks.onNoteChange?.(stateId, body),
     onInspectMerge: options => callbacks.onInspectMerge?.(options),

@@ -22,7 +22,7 @@ const FIELD_WHITELISTS = Object.freeze({
   [OBJECT_KIND.MILITARY]: ["kind", "id", "regimentId", "stateId", "name", "state", "type", "status", "statusLabel", "dominantUnit", "dominantUnitLabel", "troops", "units", "icon", "iconVariant", "iconLabel", "x", "y", "cell", "suitability", "movementSpeed"],
   [OBJECT_KIND.DIPLOMACY_RELATION]: ["kind", "id", "subjectId", "objectId", "subjectName", "objectName", "name", "relation", "relationLabel", "relationColor", "relationPolarity", "from", "to"],
   [OBJECT_KIND.STATE]: ["kind", "id", "name", "fullName", "formName", "governmentKey", "government", "capitalId", "capitalName", "cultureId", "culture", "religionId", "religion", "centerCell", "emblem"],
-  [OBJECT_KIND.PROVINCE]: ["kind", "id", "name", "state", "stateId", "centerCell", "pole"],
+  [OBJECT_KIND.PROVINCE]: ["kind", "id", "name", "fullName", "formName", "state", "stateId", "centerCell", "pole"],
   [OBJECT_KIND.CULTURE]: ["kind", "id", "name", "type", "nameStyle", "centerCell", "gridCenterCell", "cells", "population"],
   [OBJECT_KIND.RELIGION]: ["kind", "id", "name", "type", "form", "cultureId", "culture", "centerCell", "gridCenterCell", "cells", "population"],
   [OBJECT_KIND.REGION]: ["kind", "id", "name", "type"],

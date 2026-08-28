@@ -12,7 +12,7 @@ const [panelSource, dockSource, styles] = await Promise.all([
   readFile(new URL("../app/webgl-generator/src/styles.css", import.meta.url), "utf8")
 ]);
 
-const governmentAction = panelSource.match(/\{key: "government", label: "调整政体", icon: "⚖", panelWidth: (\d+), disabled:/);
+const governmentAction = panelSource.match(/\{key: "government",[^\r\n]*label: "调整政体",[^\r\n]*panelWidth: (\d+),/);
 assert(governmentAction, "国家政体动作必须声明专用面板宽度");
 const panelWidth = Number(governmentAction[1]);
 assert(panelWidth >= 620, "国家政体面板宽度不得小于 620px");

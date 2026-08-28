@@ -38,15 +38,22 @@ export function provinceFormsForCultureType({state = null, culture = null, cultu
   return CULTURE_TYPE_PROVINCE_FORMS_BY_KEY[provinceCultureType({state, culture, cultureType})] || EMPTY_PROVINCE_FORMS;
 }
 
-export function provinceFormForState(state, cultures = [], options = {}) {
-  const stateId = politicalId(state);
+export function provinceFormsForState(state, cultures = [], options = {}) {
   const culture = options.culture || cultures?.[Number(state?.culture) || 0] || null;
   const style = options.nameStyle || state?.nameStyle || culture?.nameStyle || "oriental";
   let forms = cultureNamingStyleConfig(style)?.provinceForms || [];
   if (isChineseProvinceNamingStyle({state, culture, nameStyle: style})) forms = CHINESE_PROVINCE_FORMS;
   const cultureTypeForms = provinceFormsForCultureType({state, culture, cultureType: options.cultureType});
   if (cultureTypeForms.length) forms = cultureTypeForms;
-  if (!forms.length) return normalizeForm(options.fallbackForm) || null;
+  if (forms.length) return forms;
+  const fallbackForm = normalizeForm(options.fallbackForm);
+  return fallbackForm ? Object.freeze([fallbackForm]) : EMPTY_PROVINCE_FORMS;
+}
+
+export function provinceFormForState(state, cultures = [], options = {}) {
+  const stateId = politicalId(state);
+  const forms = provinceFormsForState(state, cultures, options);
+  if (!forms.length) return null;
   const index = Math.abs((stateId > 0 ? stateId - 1 : stateId) % forms.length);
   return forms[index];
 }

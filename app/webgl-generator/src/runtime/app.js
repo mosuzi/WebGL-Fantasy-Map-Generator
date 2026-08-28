@@ -275,7 +275,7 @@ import {
 import {SelectionStore} from "./selection-store.js";
 import {decideSelectionPanelRoute, SELECTION_PANEL_BINDINGS, SELECTION_PANEL_ROUTE} from "./selection-panel-policy.js";
 import {installKeyboardShortcuts} from "./keyboard-shortcuts.js";
-import {applyStateBrushPreview, createAddStateAtCellCommand, createApplyStateBrushCommand, createDeleteStateCommand, createRenameStatesFromNamebaseCommand, createSetStateColorCommand, createSetStateGovernmentCommand, createSetStatesGovernmentBatchCommand, inspectStateCreation, STATE_BRUSH_PREVIEW_EFFECTS} from "./state-edit-commands.js";
+import {applyStateBrushPreview, createAddStateAtCellCommand, createApplyStateBrushCommand, createDeleteStateCommand, createRenameStatesFromNamebaseCommand, createSetStateColorCommand, createSetStateGovernmentCommand, createSetStateProvinceSuffixCommand, createSetStatesGovernmentBatchCommand, inspectStateCreation, STATE_BRUSH_PREVIEW_EFFECTS} from "./state-edit-commands.js";
 import {issueCellInspectionToken, normalizeCellCreateInput, validateCellInspectionToken} from "./cell-inspection-token.js";
 import {
   createEnsureProvinceAssignmentCommand,
@@ -1413,6 +1413,19 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       const command = createSetStateGovernmentCommand(stateId, governmentKey, {formName});
       executeEditCommand(state, documentRef, command, {context, refresh: refreshAfterStateEdit});
       updateEditingInteractionLock(state, documentRef);
+    },
+    onProvinceSuffixChange: (stateId, formName, overwriteCustom) => {
+      const context = {map: state.map};
+      const command = createSetStateProvinceSuffixCommand(stateId, formName, {overwriteCustom});
+      const execution = executeEditCommand(state, documentRef, command, {
+        context,
+        refresh: refreshAfterStateEdit,
+        noopStatus: executed => executed.getResult?.()?.summary || "没有需要更新的省份后缀。",
+        status: executed => executed.getResult?.()?.summary || "省份后缀已更新。",
+        throwOnError: false
+      });
+      updateEditingInteractionLock(state, documentRef);
+      return {...execution, result: execution.result || command.getResult?.() || null};
     },
     onCapitalChange: (stateId, burgId) => {
       const context = {map: state.map};

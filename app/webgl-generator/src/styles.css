@@ -4216,6 +4216,7 @@ select:disabled {
 .state-color-field,
 .state-capital-field,
 .state-government-field,
+.state-province-suffix-field,
 .state-range-field {
   display: grid;
   grid-template-columns: 64px minmax(0, 1fr) 84px;
@@ -4248,6 +4249,33 @@ select:disabled {
 
 .state-government-field > .el-button {
   grid-column: 1 / -1;
+}
+
+.state-province-suffix-field {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.state-province-suffix-field > .ui-select-field {
+  grid-template-columns: 88px minmax(0, 1fr);
+}
+
+.state-province-suffix-field > .el-button {
+  width: 100%;
+}
+
+.state-province-suffix-overwrite {
+  min-height: 32px;
+}
+
+.state-province-suffix-result,
+.state-province-suffix-note {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.state-province-suffix-result {
+  color: var(--text);
 }
 
 .state-government-note {
