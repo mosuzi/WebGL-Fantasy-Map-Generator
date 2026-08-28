@@ -89,7 +89,7 @@ import CloudStoragePanelComponent from "../ui/vue/components/CloudStoragePanel.v
 import ZonePanelComponent from "../ui/vue/components/ZonePanel.vue";
 import {EDIT_REFRESH_PRESETS} from "./edit-refresh-scheduler.js";
 import {createEditRefreshScheduler} from "./edit-refresh-scheduler.js";
-import {BROWSER_MAP_STORAGE_KEY, encodeBrowserMapStorageBytesPayload, readBrowserMapStorage, shouldWriteBrowserMapStorageBinary, writeBrowserMapStorage, writeBrowserMapStorageBinary} from "./browser-map-storage.js";
+import {BROWSER_MAP_STORAGE_KEY, decodeBrowserMapStorageImportPayload, encodeBrowserMapStorageBytesPayload, readBrowserMapStorage, shouldWriteBrowserMapStorageBinary, writeBrowserMapStorage, writeBrowserMapStorageBinary} from "./browser-map-storage.js";
 import {createCloudStorageRegistry} from "./cloud-storage.js";
 import {createImportFmgCellsHeightCommand} from "./fmg-cells-geojson-import.js";
 import {EditHistory} from "./edit-history.js";
@@ -6097,23 +6097,26 @@ async function parseMapDocumentViaWorker(state, documentRef, input, {operation =
   };
   const parallelDecodeStartedAt = currentLoadTraceTime(documentRef.defaultView || window);
   const canonicalDecodeStartedAt = parallelDecodeStartedAt;
+  const useWorkerCanonicalHandoff = shouldUseMapImportWorkerCanonicalHandoff(canonicalInput);
   let canonicalDecodeMs = 0;
-  const canonicalDocumentPromise = parseMapDocumentPayloadAsync(
-    documentRef,
-    unwrapPreparedMapImportInput(canonicalInput),
-    {budgetMs: 4, yieldToMain: () => yieldMapHandoffDecode(documentRef)}
-  ).then(document => {
-    applyMainThreadMapProjection(document.map);
-    canonicalDecodeMs = roundLoadTraceMs(currentLoadTraceTime(documentRef.defaultView || window) - canonicalDecodeStartedAt);
-    return document;
-  });
+  const canonicalDocumentPromise = useWorkerCanonicalHandoff
+    ? Promise.resolve(null)
+    : unwrapPreparedMapImportInput(documentRef, canonicalInput)
+      .then(canonicalPayload => parseMapDocumentPayloadAsync(
+        documentRef,
+        canonicalPayload,
+        {budgetMs: 4, yieldToMain: () => yieldMapHandoffDecode(documentRef)}
+      )).then(document => {
+        applyMainThreadMapProjection(document.map);
+        canonicalDecodeMs = roundLoadTraceMs(currentLoadTraceTime(documentRef.defaultView || window) - canonicalDecodeStartedAt);
+        return document;
+      });
   let output = null;
   try {
-    const primaryPromise = state.workerTaskCoordinator.run(MAP_FILE_IO_WORKER_TASK_TYPE, {
-      ...prepared.payload,
-      render: primaryRender,
-      omitAdoptionHandoff: true
-    }, {
+    const primaryPayload = useWorkerCanonicalHandoff
+      ? {...prepared.payload, render: primaryRender}
+      : {...prepared.payload, render: primaryRender, omitAdoptionHandoff: true};
+    const primaryPromise = state.workerTaskCoordinator.run(MAP_FILE_IO_WORKER_TASK_TYPE, primaryPayload, {
       binding: requestBinding,
       signal: operation?.signal || null,
       sessionMode: "adopt-result-map",
@@ -6139,7 +6142,7 @@ async function parseMapDocumentViaWorker(state, documentRef, input, {operation =
         message: detail.message || (stage === "render-prepare" ? "正在并行准备地图交互资源" : "正在并行辨读地图存档")
       })
     });
-    const [primaryOutput, secondaryOutput, document] = await Promise.all([
+    const [primaryOutput, secondaryOutput, externalCanonicalDocument] = await Promise.all([
       primaryPromise,
       secondaryPromise,
       canonicalDocumentPromise
@@ -6151,14 +6154,25 @@ async function parseMapDocumentViaWorker(state, documentRef, input, {operation =
       throw error;
     }
     validateParallelMapImportRenderResult(secondaryOutput, requestBinding, secondaryRender.binding);
-    validateWholeMapAdoptionEnvelope({
-      profile: "persistence-import",
-      binding: requestBinding,
-      output,
-      renderBinding,
-      externalCanonical: true
-    });
+    if (useWorkerCanonicalHandoff) {
+      validateWholeMapAdoptionEnvelope({profile: "persistence-import", binding: requestBinding, output, renderBinding});
+    } else {
+      validateWholeMapAdoptionEnvelope({
+        profile: "persistence-import",
+        binding: requestBinding,
+        output,
+        renderBinding,
+        externalCanonical: true
+      });
+    }
     acceptPendingMapAdoptionWorkerResult(state, output, renderBinding);
+    const handoffDecodeStartedAt = currentLoadTraceTime(documentRef.defaultView || window);
+    const document = useWorkerCanonicalHandoff
+      ? await materializeMapAdoptionHandoff(output.handoff, {yieldToMain: () => yieldMapHandoffDecode(documentRef)})
+      : externalCanonicalDocument;
+    const handoffDecodeMs = useWorkerCanonicalHandoff
+      ? roundLoadTraceMs(currentLoadTraceTime(documentRef.defaultView || window) - handoffDecodeStartedAt)
+      : 0;
     validateWholeMapAdoptionDocument({profile: "persistence-import", metadata: output.metadata, document});
     const preparedRender = mergeParallelMapImportPreparedRender(output.preparedRender, secondaryOutput.preparedRender);
     output.handoff?.chunks?.fill?.(null);
@@ -6168,7 +6182,7 @@ async function parseMapDocumentViaWorker(state, documentRef, input, {operation =
       worker: output.worker || null,
       timings: {
         ...(output.timings || {}),
-        handoffDecodeMs: 0,
+        handoffDecodeMs,
         parallelDecodeMs: roundLoadTraceMs(currentLoadTraceTime(documentRef.defaultView || window) - parallelDecodeStartedAt),
         canonicalDecodeMs,
         secondaryWorker: secondaryOutput.timings || null,
@@ -6194,10 +6208,19 @@ function clonePreparedMapImportInput(input) {
   return structuredClone(input);
 }
 
-function unwrapPreparedMapImportInput(input) {
-  if (input?.kind === "bytes") return input.bytes;
-  if (input?.kind === "text-chunks") return input.chunks.join("");
-  return input;
+function shouldUseMapImportWorkerCanonicalHandoff(input) {
+  if (input?.kind === "bytes" && input.bytes instanceof Uint8Array) return false;
+  if (input instanceof ArrayBuffer || ArrayBuffer.isView(input)) return false;
+  return true;
+}
+
+async function unwrapPreparedMapImportInput(documentRef, input) {
+  const unwrapped = input?.kind === "bytes"
+    ? input.bytes
+    : input?.kind === "text-chunks"
+      ? input.chunks.join("")
+      : input;
+  return decodeBrowserMapStorageImportPayload(documentRef, unwrapped);
 }
 
 function validateParallelMapImportRenderResult(output, requestBinding, renderBinding) {

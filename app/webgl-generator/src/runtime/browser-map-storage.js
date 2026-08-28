@@ -70,6 +70,16 @@ export async function decodeBrowserMapStoragePayload(documentRef, raw) {
   return envelope.data;
 }
 
+export async function decodeBrowserMapStorageImportPayload(documentRef, payload) {
+  const text = typeof payload === "string"
+    ? payload
+    : payload?.type === BROWSER_MAP_STORAGE_TYPE
+      ? JSON.stringify(payload)
+      : null;
+  if (text === null || !text.includes(BROWSER_MAP_STORAGE_TYPE)) return payload;
+  return decodeBrowserMapStoragePayload(documentRef, text);
+}
+
 export async function writeBrowserMapStorage(documentRef, raw) {
   const view = documentRef.defaultView || window;
   const storage = safeLocalStorage(view);

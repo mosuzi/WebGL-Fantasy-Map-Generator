@@ -6,6 +6,7 @@ import {apiCall} from "../app/webgl-generator/src/runtime/api-result.js";
 import {
   BROWSER_MAP_STORAGE_TYPE,
   createBrowserMapStorageEnvelope,
+  decodeBrowserMapStorageImportPayload,
   decodeBrowserMapStoragePayload,
   encodeBrowserMapStoragePayload,
   parseBrowserMapStorageEnvelope
@@ -62,6 +63,9 @@ assert.equal(plainEnvelope.encoding, "plain");
 const envelopeText = JSON.stringify(plainEnvelope);
 assert.equal(await decodeBrowserMapStoragePayload(fakeDocument, envelopeText), stringifyMapDocument(currentDocument));
 assert.equal(await decodeBrowserMapStoragePayload(fakeDocument, fixtureText), fixtureText);
+assert.equal(await decodeBrowserMapStorageImportPayload(fakeDocument, envelopeText), stringifyMapDocument(currentDocument));
+assert.equal(await decodeBrowserMapStorageImportPayload(fakeDocument, plainEnvelope), stringifyMapDocument(currentDocument));
+assert.equal(await decodeBrowserMapStorageImportPayload(fakeDocument, fixtureText), fixtureText);
 assert.equal(parseBrowserMapStorageEnvelope(envelopeText).legacy, false);
 assert.equal(parseBrowserMapStorageEnvelope(fixtureText).legacy, true);
 assert.throws(() => parseBrowserMapStorageEnvelope(JSON.stringify({...plainEnvelope, version: 99})), /暂不支持的浏览器存档版本：99/);
@@ -74,6 +78,7 @@ if (["CompressionStream", "DecompressionStream", "Response", "Blob", "btoa", "at
   const compressedEnvelope = await encodeBrowserMapStoragePayload(compressedDocument, fixtureText, oldImported.map);
   assert.equal(compressedEnvelope.encoding, "gzip-base64");
   assert.equal(await decodeBrowserMapStoragePayload(compressedDocument, JSON.stringify(compressedEnvelope)), fixtureText);
+  assert.equal(await decodeBrowserMapStorageImportPayload(compressedDocument, JSON.stringify(compressedEnvelope)), fixtureText);
   compressedEnvelopeVerified = true;
 }
 
@@ -115,6 +120,9 @@ assert.match(appSource, /importMap: \(document, options = \{\}\) => runMapReplac
 assert.match(appSource, /MAP_FILE_IO_WORKER_TASK_TYPE/);
 assert.match(appSource, /exportMapArchiveViaWorker\(state, documentRef/);
 assert.match(appSource, /parseMapDocumentViaWorker\(state, documentRef/);
+assert.match(appSource, /decodeBrowserMapStorageImportPayload\(documentRef, unwrapped\)/, "主线程 canonical 解析没有复用浏览器存档解包入口");
+assert.match(appSource, /shouldUseMapImportWorkerCanonicalHandoff\(canonicalInput\)/, "非二进制旧档没有切换到可分片 canonical handoff");
+assert.match(appSource, /materializeMapAdoptionHandoff\(output\.handoff/, "非二进制旧档没有复用分片 handoff 解码");
 assert.match(appSource, /encodeBrowserMapStorageBytesPayload\(documentRef, exported\.data/);
 assert.doesNotMatch(appSource, /const exported = exportAllMapData\(state, documentRef, \{download: false, includeText: true\}\)/);
 assert.match(appSource, /restoreBrowserMap\(\{confirm: true, startup: true, toast: false\}\)/, "启动恢复没有使用非破坏性参数");

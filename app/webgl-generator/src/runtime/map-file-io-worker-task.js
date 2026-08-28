@@ -8,8 +8,7 @@ import {
   validateMapDocumentForExport
 } from "./map-file-io.js";
 import {
-  BROWSER_MAP_STORAGE_TYPE,
-  decodeBrowserMapStoragePayload
+  decodeBrowserMapStorageImportPayload
 } from "./browser-map-storage.js";
 import {isCompressedMapDocumentFilename} from "./map-filename.js";
 import {encodeWebfmgV3Document, gzipWebfmgV3Bytes} from "./webfmg-v3-container.js";
@@ -260,14 +259,11 @@ function normalizeImportSource(payload) {
 
 async function parseImportSource(source, payload) {
   const view = runtimeView();
-  if (typeof source === "string") {
-    const decoded = await decodeBrowserStorageEnvelope(source, view);
-    return parseMapDocumentPayloadWithAdoptionBytes({defaultView: view}, decoded);
+  const decodedBrowserStorage = await decodeBrowserMapStorageImportPayload({defaultView: view}, source);
+  if (decodedBrowserStorage !== source) {
+    return parseMapDocumentPayloadWithAdoptionBytes({defaultView: view}, decodedBrowserStorage);
   }
-  if (source?.type === BROWSER_MAP_STORAGE_TYPE) {
-    const decoded = await decodeBrowserMapStoragePayload({defaultView: view}, JSON.stringify(source));
-    return parseMapDocumentPayloadWithAdoptionBytes({defaultView: view}, decoded);
-  }
+  if (typeof source === "string") return parseMapDocumentPayloadWithAdoptionBytes({defaultView: view}, source);
   if (isBinarySource(source)) {
     const bytes = binarySourceBytes(source);
     if (source?.kind === "bytes" && !isBinarySourceValue(bytes)) throw new Error("地图存档字节 packet 缺少有效 bytes");
@@ -290,11 +286,6 @@ async function parseImportSource(source, payload) {
     return {document: parseMapDocument(stringifyMapDocument(source)), adoptionBytes: null};
   }
   throw new Error("地图存档输入必须是 JSON、File/Blob、字节或分片字符串");
-}
-
-async function decodeBrowserStorageEnvelope(text, view) {
-  if (!text.includes(BROWSER_MAP_STORAGE_TYPE)) return text;
-  return decodeBrowserMapStoragePayload({defaultView: view}, text);
 }
 
 function normalizeExportDocument(payload) {
