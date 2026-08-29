@@ -8,6 +8,7 @@
 
 > 分支执行约束：本专题已于 2026-08-19 获用户明确批准为第 349 项，只在 `codex/map-core-engine-architecture-plan` 并行分支逐阶段实施；不得将本分支合入 `main`。全阶段不执行浏览器验收，最终只形成并评估浏览器验收方案。
 
+- 第 374 项只在共享边界实验室为屏幕空间朦胧增加 `0～100%` 衰减柔和度，并以原边界锚定、归一化邻边和总混合量不叠加收敛三国交汇；正式 renderer 保持只读；见 [`task-374-political-blend-decay-softness-lab.md`](./task-374-political-blend-decay-softness-lab.md)。
 - 第 373 项把“样式”页内的国界效果与地图标签拆为互斥二级类别，明确全局显示偏好和当前地图样式的不同控制范围；见 [`task-373-style-panel-hierarchy.md`](./task-373-style-panel-hierarchy.md)。
 - 第 372 项把版本准备前移到任务分支提交前，并以严格高于主线的只读门禁保证 `main` 快进合入后不再手工补版本；见 [`task-372-project-version-merge-gate.md`](./task-372-project-version-merge-gate.md)。
 - 第 371 项以 `1af5381 / v0.5.4` 需求前基线复现存档载入国界颜色过渡，再在共享边界实验室的独立页签中以四个合法行政夹具联动比较旧颜色带、现九轨与连续朦胧候选；用户确认前不改正式 renderer；见 [`task-371-state-border-blend-lab.md`](./task-371-state-border-blend-lab.md)。

@@ -4,6 +4,13 @@ import {composeRawRing} from "./topology.js";
 const VIEW_WIDTH = 760;
 const VIEW_HEIGHT = 340;
 const EPSILON = 1e-6;
+const MIN_DECAY_BLUR_PX = 0.75;
+const MAX_DECAY_BLUR_RATIO = 0.42;
+const MIN_COLOR_BLUR_RATIO = 0.08;
+const MAX_COLOR_BLUR_RATIO = 0.58;
+const BASE_COLOR = "#dce5e8";
+const JUNCTION_INFLUENCE_POWER = 2;
+const SCREEN_HAZE_SOURCE_CACHE = new WeakMap();
 const COLORS = Object.freeze({west: "#dfa9ce", east: "#f0d49a", south: "#a7d8d3"});
 const FEATHER_PROFILE = Object.freeze([
   Object.freeze({offset: -1, alpha: 0}),
@@ -17,7 +24,7 @@ const FEATHER_PROFILE = Object.freeze([
   Object.freeze({offset: 1, alpha: 0})
 ]);
 
-export const POLITICAL_BLEND_OPTIONS = Object.freeze({width: 24, strength: 1, smoothness: 2});
+export const POLITICAL_BLEND_OPTIONS = Object.freeze({width: 24, strength: 1, smoothness: 2, decaySoftness: 0.65});
 
 const topBoundary = freezePoints([[385, 0], [358, 28], [410, 54], [348, 80], [415, 109], [350, 138], [380, 170]]);
 const leftBoundary = freezePoints([[380, 170], [338, 190], [357, 213], [304, 239], [329, 263], [274, 291], [245, 340]]);
@@ -104,7 +111,7 @@ export function evaluatePoliticalBlendCandidates(input = {}, fixtureOrId = POLIT
     options,
     candidates: POLITICAL_BLEND_CANDIDATES.map(candidate => {
       if (candidate.id === "screen-haze") {
-        return {...candidate, tracks: 0, invertedTriangles: 0, degenerateTriangles: 0, widthVariation: 0, junctionMode: "round-mask", finite: true};
+        return {...candidate, tracks: 0, invertedTriangles: 0, degenerateTriangles: 0, widthVariation: 0, junctionMode: "normalized-adjacent", anchorMode: "raw-ownership-boundary", decayMask: resolveScreenHazeDecayMask(options), finite: true};
       }
       const reports = fixture.paths.map(path => analyzeCandidatePath(path, candidate.id, options));
       return {
@@ -131,12 +138,14 @@ export function mountPoliticalBlendLab(root = document) {
   const controls = {
     width: root.getElementById("blend-width"),
     strength: root.getElementById("blend-strength"),
-    smoothness: root.getElementById("blend-smoothness")
+    smoothness: root.getElementById("blend-smoothness"),
+    decaySoftness: root.getElementById("blend-decay-softness")
   };
   const outputs = {
     width: root.getElementById("blend-width-value"),
     strength: root.getElementById("blend-strength-value"),
-    smoothness: root.getElementById("blend-smoothness-value")
+    smoothness: root.getElementById("blend-smoothness-value"),
+    decaySoftness: root.getElementById("blend-decay-softness-value")
   };
   let scheduled = false;
   const render = () => {
@@ -150,7 +159,7 @@ export function mountPoliticalBlendLab(root = document) {
     }
     const current = report.candidates[0];
     const continuous = report.candidates[2];
-    root.getElementById("blend-lab-note").textContent = `九轨基线：反向三角 ${current.invertedTriangles}、截面宽度突变 ${(current.widthVariation * 100).toFixed(1)}%；连续中心线：反向三角 ${continuous.invertedTriangles}、截面宽度突变 ${(continuous.widthVariation * 100).toFixed(1)}%。屏幕空间候选使用圆角联合蒙版，不生成偏移网格。`;
+    root.getElementById("blend-lab-note").textContent = `九轨基线：反向三角 ${current.invertedTriangles}、截面宽度突变 ${(current.widthVariation * 100).toFixed(1)}%；连续中心线：反向三角 ${continuous.invertedTriangles}、截面宽度突变 ${(continuous.widthVariation * 100).toFixed(1)}%。屏幕空间候选按原始国家边界归一化相邻边影响，总混合量不随交汇边数叠加。`;
     root.getElementById("blend-fixture-summary").innerHTML = `<strong>${fixture.name}</strong><span>${fixture.description}</span><br><span class="${report.topology.valid ? "pass" : "fail"}">${report.topology.valid ? "拓扑合法" : "拓扑非法"} · 国界 ${fixture.paths.length} 条 · 交汇 ${fixture.junctions.filter(item => item.pathIds.length >= 3).length} 处</span>`;
     root.dispatchEvent(new CustomEvent("boundarylab:blendchange", {detail: {
       text: `${fixture.name} · ${report.topology.valid ? "拓扑合法" : "拓扑非法"}`,
@@ -202,13 +211,17 @@ function drawCandidate(canvas, candidateId, options, fixture) {
   if (candidateId === "nine-track") drawNineTrack(context, options, fixture);
   if (candidateId === "historical-band") drawHistoricalBand(context, options, fixture);
   if (candidateId === "continuous-ribbon") drawContinuousRibbon(context, options, fixture);
-  if (candidateId === "screen-haze") drawScreenHaze(context, options, fixture);
-  drawBoundaryInk(context, fixture);
+  if (candidateId === "screen-haze") {
+    drawBoundaryInk(context, fixture);
+    drawScreenHaze(context, options, fixture);
+  } else {
+    drawBoundaryInk(context, fixture);
+  }
   drawJunctions(context, fixture);
 }
 
 function drawBase(context, fixture) {
-  context.fillStyle = "#dce5e8";
+  context.fillStyle = BASE_COLOR;
   context.fillRect(0, 0, VIEW_WIDTH, VIEW_HEIGHT);
   for (const region of fixture.regions) fillPolygon(context, region.points, region.color);
 }
@@ -257,34 +270,150 @@ function drawContinuousRibbon(context, options, fixture) {
 }
 
 function drawScreenHaze(context, options, fixture) {
+  const decayMask = resolveScreenHazeDecayMask(options);
+  const overlay = makeCanvas();
+  const overlayContext = overlay.getContext("2d");
+  const overlayImage = overlayContext.createImageData(VIEW_WIDTH, VIEW_HEIGHT);
+  const source = resolveScreenHazeSource(fixture);
+  const {palette, regionByPixel} = source;
+  const paths = resolveScreenHazePaths(fixture, source);
+  const pathDistanceSquared = paths.map(() => {
+    const distances = new Float32Array(VIEW_WIDTH * VIEW_HEIGHT);
+    distances.fill(Number.POSITIVE_INFINITY);
+    return distances;
+  });
+  for (let pathIndex = 0; pathIndex < paths.length; pathIndex++) {
+    const path = paths[pathIndex];
+    for (let segmentIndex = 0; segmentIndex < path.points.length - 1; segmentIndex++) {
+      rasterizeAdjacentSegmentDistance({
+        a: path.points[segmentIndex],
+        b: path.points[segmentIndex + 1],
+        colorAIndex: path.colorAIndex,
+        colorBIndex: path.colorBIndex,
+        radius: decayMask.effectiveHalfExtentPx,
+        regionByPixel,
+        pathDistanceSquared: pathDistanceSquared[pathIndex]
+      });
+    }
+  }
+  const coreHalfWidth = decayMask.coreWidthPx * 0.5;
+  for (let pixelIndex = 0; pixelIndex < regionByPixel.length; pixelIndex++) {
+    const ownColorIndex = regionByPixel[pixelIndex];
+    let minimumDistance = Number.POSITIVE_INFINITY;
+    let totalWeight = 0;
+    let neighborRed = 0;
+    let neighborGreen = 0;
+    let neighborBlue = 0;
+    for (let pathIndex = 0; pathIndex < paths.length; pathIndex++) {
+      const distanceSquared = pathDistanceSquared[pathIndex][pixelIndex];
+      if (!Number.isFinite(distanceSquared)) continue;
+      const path = paths[pathIndex];
+      const distanceToPath = Math.sqrt(distanceSquared);
+      minimumDistance = Math.min(minimumDistance, distanceToPath);
+      const influence = screenHazeInfluence(distanceToPath, decayMask.colorBlurPx);
+      if (influence <= 0) continue;
+      const weight = influence ** JUNCTION_INFLUENCE_POWER;
+      const neighborColorIndex = ownColorIndex === path.colorAIndex ? path.colorBIndex : path.colorAIndex;
+      const neighbor = palette[neighborColorIndex].rgb;
+      totalWeight += weight;
+      neighborRed += neighbor[0] * weight;
+      neighborGreen += neighbor[1] * weight;
+      neighborBlue += neighbor[2] * weight;
+    }
+    if (!Number.isFinite(minimumDistance)) continue;
+    const distanceToBoundary = minimumDistance;
+    if (distanceToBoundary > decayMask.effectiveHalfExtentPx) continue;
+    const colorMix = 0.5 * screenHazeInfluence(distanceToBoundary, decayMask.colorBlurPx);
+    const maskAlpha = distanceToBoundary <= coreHalfWidth
+      ? 1
+      : 1 - smoothstep(coreHalfWidth, decayMask.effectiveHalfExtentPx, distanceToBoundary);
+    const own = palette[ownColorIndex].rgb;
+    const neighbor = totalWeight > EPSILON
+      ? [neighborRed / totalWeight, neighborGreen / totalWeight, neighborBlue / totalWeight]
+      : own;
+    const offset = pixelIndex * 4;
+    overlayImage.data[offset] = Math.round(own[0] * (1 - colorMix) + neighbor[0] * colorMix);
+    overlayImage.data[offset + 1] = Math.round(own[1] * (1 - colorMix) + neighbor[1] * colorMix);
+    overlayImage.data[offset + 2] = Math.round(own[2] * (1 - colorMix) + neighbor[2] * colorMix);
+    overlayImage.data[offset + 3] = Math.round(255 * options.strength * maskAlpha);
+  }
+  overlayContext.putImageData(overlayImage, 0, 0);
+  context.drawImage(overlay, 0, 0);
+}
+
+function resolveScreenHazeSource(fixture) {
+  const cached = SCREEN_HAZE_SOURCE_CACHE.get(fixture);
+  if (cached) return cached;
   const source = makeCanvas();
   const sourceContext = source.getContext("2d");
-  for (const region of fixture.regions) fillPolygon(sourceContext, region.points, region.color);
-  const haze = makeCanvas();
-  const hazeContext = haze.getContext("2d");
-  hazeContext.filter = `blur(${Math.max(2, options.width * 0.32).toFixed(1)}px)`;
-  hazeContext.drawImage(source, 0, 0);
-  hazeContext.filter = "none";
-  const mask = makeCanvas();
-  const maskContext = mask.getContext("2d");
-  maskContext.strokeStyle = "#fff";
-  maskContext.lineWidth = options.width * 1.7;
-  maskContext.lineJoin = "round";
-  maskContext.lineCap = "round";
-  for (const path of fixture.paths) strokePath(maskContext, chaikin(path.points, options.smoothness, 0.2));
-  maskContext.fillStyle = "#fff";
-  for (const item of fixture.junctions.filter(candidate => candidate.pathIds.length >= 3)) {
-    maskContext.beginPath();
-    maskContext.arc(item.point[0], item.point[1], options.width, 0, Math.PI * 2);
-    maskContext.fill();
+  drawBase(sourceContext, fixture);
+  const sourceImage = sourceContext.getImageData(0, 0, VIEW_WIDTH, VIEW_HEIGHT);
+  const palette = [...new Set([...fixture.regions.map(region => region.color), BASE_COLOR])].map(color => ({color, rgb: hexToRgb(color)}));
+  const value = {
+    palette,
+    paletteIndex: new Map(palette.map((entry, index) => [entry.color, index])),
+    paths: null,
+    regionByPixel: classifySourcePixels(sourceImage.data, palette)
+  };
+  SCREEN_HAZE_SOURCE_CACHE.set(fixture, value);
+  return value;
+}
+
+function resolveScreenHazePaths(fixture, source) {
+  if (source.paths) return source.paths;
+  source.paths = fixture.paths.map(path => ({
+    colorAIndex: source.paletteIndex.get(path.colorA),
+    colorBIndex: source.paletteIndex.get(path.colorB),
+    points: path.points
+  }));
+  return source.paths;
+}
+
+function classifySourcePixels(sourcePixels, palette) {
+  const result = new Uint8Array(VIEW_WIDTH * VIEW_HEIGHT);
+  for (let pixelIndex = 0; pixelIndex < result.length; pixelIndex++) {
+    const offset = pixelIndex * 4;
+    let bestIndex = 0;
+    let bestDistance = Number.POSITIVE_INFINITY;
+    for (let paletteIndex = 0; paletteIndex < palette.length; paletteIndex++) {
+      const rgb = palette[paletteIndex].rgb;
+      const dr = sourcePixels[offset] - rgb[0];
+      const dg = sourcePixels[offset + 1] - rgb[1];
+      const db = sourcePixels[offset + 2] - rgb[2];
+      const colorDistance = dr * dr + dg * dg + db * db;
+      if (colorDistance >= bestDistance) continue;
+      bestDistance = colorDistance;
+      bestIndex = paletteIndex;
+    }
+    result[pixelIndex] = bestIndex;
   }
-  hazeContext.globalCompositeOperation = "destination-in";
-  hazeContext.drawImage(mask, 0, 0);
-  hazeContext.globalCompositeOperation = "source-over";
-  context.save();
-  context.globalAlpha = Math.min(0.92, options.strength * 0.88);
-  context.drawImage(haze, 0, 0);
-  context.restore();
+  return result;
+}
+
+function rasterizeAdjacentSegmentDistance({a, b, colorAIndex, colorBIndex, radius, regionByPixel, pathDistanceSquared}) {
+  const minimumX = Math.max(0, Math.floor(Math.min(a[0], b[0]) - radius));
+  const maximumX = Math.min(VIEW_WIDTH - 1, Math.ceil(Math.max(a[0], b[0]) + radius));
+  const minimumY = Math.max(0, Math.floor(Math.min(a[1], b[1]) - radius));
+  const maximumY = Math.min(VIEW_HEIGHT - 1, Math.ceil(Math.max(a[1], b[1]) + radius));
+  const radiusSquared = radius * radius;
+  const dx = b[0] - a[0];
+  const dy = b[1] - a[1];
+  const lengthSquared = Math.max(EPSILON, dx * dx + dy * dy);
+  for (let y = minimumY; y <= maximumY; y++) {
+    for (let x = minimumX; x <= maximumX; x++) {
+      const pixelIndex = y * VIEW_WIDTH + x;
+      const regionIndex = regionByPixel[pixelIndex];
+      if (regionIndex !== colorAIndex && regionIndex !== colorBIndex) continue;
+      const px = x + 0.5;
+      const py = y + 0.5;
+      const ratio = clamp(((px - a[0]) * dx + (py - a[1]) * dy) / lengthSquared, 0, 1);
+      const offsetX = px - (a[0] + dx * ratio);
+      const offsetY = py - (a[1] + dy * ratio);
+      const distanceSquared = offsetX * offsetX + offsetY * offsetY;
+      if (distanceSquared > radiusSquared || distanceSquared >= pathDistanceSquared[pixelIndex]) continue;
+      pathDistanceSquared[pixelIndex] = distanceSquared;
+    }
+  }
 }
 
 function drawBoundaryInk(context, fixture) {
@@ -510,8 +639,8 @@ function makeCanvas() {
 
 function metricsMarkup(candidate) {
   const triangleValue = candidate.geometry === "raster-mask" ? "无网格" : String(candidate.invertedTriangles);
-  const offsetValue = candidate.geometry === "raster-mask" ? "连续蒙版" : `${(candidate.widthVariation * 100).toFixed(1)}%`;
-  const junctionValue = candidate.junctionMode === "round-mask" ? "圆角蒙版" : candidate.junctionMode === "round-union" ? "圆角联合" : "独立端帽";
+  const offsetValue = candidate.geometry === "raster-mask" ? "连续像素带" : `${(candidate.widthVariation * 100).toFixed(1)}%`;
+  const junctionValue = candidate.junctionMode === "normalized-adjacent" ? "归一化邻边" : candidate.junctionMode === "round-union" ? "圆角联合" : "独立端帽";
   return `<div><dt>反向三角</dt><dd>${triangleValue}</dd></div><div><dt>宽度突变</dt><dd>${offsetValue}</dd></div><div><dt>三方交汇</dt><dd>${junctionValue}</dd></div>`;
 }
 
@@ -519,14 +648,48 @@ function updateOutputs(outputs, options) {
   outputs.width.value = `${options.width.toFixed(0)} px`;
   outputs.strength.value = options.strength.toFixed(2);
   outputs.smoothness.value = `${options.smoothness.toFixed(0)} 轮`;
+  outputs.decaySoftness.value = `${Math.round(options.decaySoftness * 100)}%`;
 }
 
 function normalizeOptions(input) {
   return {
     width: clamp(Number(input.width ?? POLITICAL_BLEND_OPTIONS.width), 8, 56),
     strength: clamp(Number(input.strength ?? POLITICAL_BLEND_OPTIONS.strength), 0, 1),
-    smoothness: Math.round(clamp(Number(input.smoothness ?? POLITICAL_BLEND_OPTIONS.smoothness), 0, 3))
+    smoothness: Math.round(clamp(Number(input.smoothness ?? POLITICAL_BLEND_OPTIONS.smoothness), 0, 3)),
+    decaySoftness: clamp(Number(input.decaySoftness ?? POLITICAL_BLEND_OPTIONS.decaySoftness), 0, 1)
   };
+}
+
+export function resolveScreenHazeDecayMask(input = POLITICAL_BLEND_OPTIONS) {
+  const options = normalizeOptions(input);
+  const easedSoftness = options.decaySoftness * options.decaySoftness * (3 - 2 * options.decaySoftness);
+  const targetHalfExtent = options.width * 0.85;
+  const maximumBlur = Math.max(MIN_DECAY_BLUR_PX, options.width * MAX_DECAY_BLUR_RATIO);
+  const blurPx = MIN_DECAY_BLUR_PX + (maximumBlur - MIN_DECAY_BLUR_PX) * easedSoftness;
+  const colorBlurPx = options.width * (MIN_COLOR_BLUR_RATIO + (MAX_COLOR_BLUR_RATIO - MIN_COLOR_BLUR_RATIO) * easedSoftness);
+  const coreWidthPx = Math.max(2, (targetHalfExtent - blurPx) * 2);
+  const effectiveHalfExtentPx = coreWidthPx * 0.5 + blurPx;
+  return Object.freeze({
+    softness: options.decaySoftness,
+    blurPx,
+    colorBlurPx,
+    coreWidthPx,
+    effectiveHalfExtentPx,
+    junctionCoreRadiusPx: coreWidthPx * 0.5,
+    junctionEffectiveRadiusPx: effectiveHalfExtentPx
+  });
+}
+
+export function resolveScreenHazeJunctionWeights(distances = [], colorBlurPx = 1) {
+  const normalizedDistances = distances.map(distanceValue => Math.max(0, Number.isFinite(distanceValue) ? distanceValue : Number.POSITIVE_INFINITY));
+  const influences = normalizedDistances.map(distanceValue => screenHazeInfluence(distanceValue, colorBlurPx));
+  const rawWeights = influences.map(influence => influence ** JUNCTION_INFLUENCE_POWER);
+  const totalWeight = rawWeights.reduce((total, weight) => total + weight, 0);
+  const minimumDistance = normalizedDistances.reduce((minimum, distanceValue) => Math.min(minimum, distanceValue), Number.POSITIVE_INFINITY);
+  return Object.freeze({
+    weights: Object.freeze(rawWeights.map(weight => totalWeight > EPSILON ? weight / totalWeight : 0)),
+    totalNeighborMix: 0.5 * screenHazeInfluence(minimumDistance, colorBlurPx)
+  });
 }
 
 function freezePoints(points) {
@@ -603,6 +766,11 @@ function rgba(hex, alpha) {
   return `rgba(${number >> 16}, ${(number >> 8) & 255}, ${number & 255}, ${clamp(alpha, 0, 1).toFixed(4)})`;
 }
 
+function hexToRgb(hex) {
+  const value = Number.parseInt(hex.slice(1), 16);
+  return Object.freeze([value >> 16, (value >> 8) & 255, value & 255]);
+}
+
 function mixHex(first, second, ratio) {
   const a = Number.parseInt(first.slice(1), 16);
   const b = Number.parseInt(second.slice(1), 16);
@@ -622,6 +790,15 @@ function mixMany(colors) {
 
 function clamp(value, minimum, maximum) {
   return Math.min(maximum, Math.max(minimum, Number.isFinite(value) ? value : minimum));
+}
+
+function smoothstep(minimum, maximum, value) {
+  const ratio = clamp((value - minimum) / Math.max(EPSILON, maximum - minimum), 0, 1);
+  return ratio * ratio * (3 - 2 * ratio);
+}
+
+function screenHazeInfluence(distanceValue, radius) {
+  return 1 - smoothstep(0, Math.max(EPSILON, radius), distanceValue);
 }
 
 function sum(values, key) {

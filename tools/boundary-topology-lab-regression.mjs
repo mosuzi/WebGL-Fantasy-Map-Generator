@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import {readFileSync} from "node:fs";
 import {ALGORITHMS, DEFAULT_OPTIONS, samePoint} from "../prototype/boundary-topology-lab/src/algorithms.js";
 import {FIXTURES} from "../prototype/boundary-topology-lab/src/fixtures.js";
-import {analyzePoliticalBlendFixtureTopology, evaluatePoliticalBlendCandidates, POLITICAL_BLEND_CANDIDATES, POLITICAL_BLEND_FIXTURE, POLITICAL_BLEND_FIXTURES} from "../prototype/boundary-topology-lab/src/political-blend-lab.js";
+import {analyzePoliticalBlendFixtureTopology, evaluatePoliticalBlendCandidates, POLITICAL_BLEND_CANDIDATES, POLITICAL_BLEND_FIXTURE, POLITICAL_BLEND_FIXTURES, resolveScreenHazeDecayMask, resolveScreenHazeJunctionWeights} from "../prototype/boundary-topology-lab/src/political-blend-lab.js";
 import {buildIndependentComparison, buildSharedSnapshot, composeRawRing, measureIndependentSeamError, measureIndependentSeamErrorDetails, sharedArcRefs} from "../prototype/boundary-topology-lab/src/topology.js";
 import {analyzeBandTriangleGeometry, analyzeCellFanGeometry, analyzePixelParityGeometry, analyzeStressComparison, analyzeVertexCollapseGeometry, bidirectionalHausdorff, HAUSDORFF_LIMITS, inspectRingGeometry, runAllFixtures, validateFixture} from "../prototype/boundary-topology-lab/src/validation.js";
 import {collectShapeDiagnostics, maximumDeviationZoomViewBox, mergeVisualDiagnostics, resolveComparisonPresentation} from "../prototype/boundary-topology-lab/src/visual-diagnostics.js";
@@ -63,6 +63,35 @@ assert.ok(politicalBlendById.get("historical-band").invertedTriangles > 0, "需�
 assert.ok(politicalBlendById.get("continuous-ribbon").widthVariation < 1e-9, "连续中心线候选必须消除截面宽度突变");
 assert.equal(politicalBlendById.get("screen-haze").tracks, 0, "屏幕空间朦胧不得生成偏移轨道");
 assert.equal(politicalBlendById.get("screen-haze").invertedTriangles, 0, "屏幕空间朦胧不得产生反向三角");
+assert.equal(politicalBlendById.get("screen-haze").junctionMode, "normalized-adjacent", "屏幕空间朦胧必须在交汇处归一化相邻国界影响");
+assert.equal(politicalBlendById.get("screen-haze").anchorMode, "raw-ownership-boundary", "屏幕空间朦胧必须锚定原始国家色边界");
+assert.equal(politicalBlendReport.options.decaySoftness, 0.65, "屏幕空间朦胧默认衰减柔和度漂移");
+const hardDecayMask = resolveScreenHazeDecayMask({...politicalBlendReport.options, decaySoftness: 0});
+const softDecayMask = resolveScreenHazeDecayMask({...politicalBlendReport.options, decaySoftness: 1});
+assert.ok(hardDecayMask.blurPx < softDecayMask.blurPx, "衰减柔和度没有扩大软蒙版 blur");
+assert.ok(hardDecayMask.colorBlurPx < softDecayMask.colorBlurPx, "衰减柔和度没有扩大国家色扩散半径");
+assert.ok(hardDecayMask.coreWidthPx > softDecayMask.coreWidthPx, "衰减柔和度没有同步缩窄实色核心");
+assert.ok(Math.abs(hardDecayMask.effectiveHalfExtentPx - softDecayMask.effectiveHalfExtentPx) < 1e-9, "柔和度改变了屏幕朦胧总体半宽");
+assert.ok(Math.abs(hardDecayMask.junctionEffectiveRadiusPx - softDecayMask.junctionEffectiveRadiusPx) < 1e-9, "柔和度改变了三方节点总体半径");
+assert.equal(hardDecayMask.junctionEffectiveRadiusPx, hardDecayMask.effectiveHalfExtentPx, "三方节点不得额外扩大抹开作用域");
+assert.equal(softDecayMask.junctionEffectiveRadiusPx, softDecayMask.effectiveHalfExtentPx, "柔和三方节点不得额外扩大抹开作用域");
+const equalJunctionWeights = resolveScreenHazeJunctionWeights([8, 8], softDecayMask.colorBlurPx);
+assert.deepEqual(equalJunctionWeights.weights, [0.5, 0.5], "等距相邻国界必须平分交汇影响");
+assert.ok(equalJunctionWeights.totalNeighborMix <= 0.5, "交汇外来颜色总量不得超过普通双边界中心值");
+const junctionLeft = resolveScreenHazeJunctionWeights([7.99, 8.01], softDecayMask.colorBlurPx);
+const junctionRight = resolveScreenHazeJunctionWeights([8.01, 7.99], softDecayMask.colorBlurPx);
+assert.ok(Math.abs(junctionLeft.weights[0] - junctionRight.weights[1]) < 1e-12, "交汇权重切换必须镜像连续");
+assert.ok(Math.abs(junctionLeft.weights[0] - junctionRight.weights[0]) < 0.01, "交汇权重不得在最近边切换处突变");
+const fourWayJunction = resolveScreenHazeJunctionWeights([0, 0, 0, 0], softDecayMask.colorBlurPx);
+assert.equal(fourWayJunction.totalNeighborMix, 0.5, "多国交汇不得按边数累计抹开强度");
+assert.ok(Math.abs(fourWayJunction.weights.reduce((total, weight) => total + weight, 0) - 1) < 1e-12, "多国交汇权重必须归一化");
+const hardDecayCandidates = evaluatePoliticalBlendCandidates({...politicalBlendReport.options, decaySoftness: 0}).candidates;
+const softDecayCandidates = evaluatePoliticalBlendCandidates({...politicalBlendReport.options, decaySoftness: 1}).candidates;
+assert.deepEqual(hardDecayCandidates.slice(0, 3), softDecayCandidates.slice(0, 3), "衰减柔和度污染了另外三张对照候选");
+assert.notDeepEqual(hardDecayCandidates[3].decayMask, softDecayCandidates[3].decayMask, "屏幕空间候选没有消费衰减柔和度");
+const rawPathScreenCandidate = evaluatePoliticalBlendCandidates({...politicalBlendReport.options, smoothness: 0}).candidates[3];
+const smoothPathScreenCandidate = evaluatePoliticalBlendCandidates({...politicalBlendReport.options, smoothness: 3}).candidates[3];
+assert.deepEqual(rawPathScreenCandidate, smoothPathScreenCandidate, "路径柔顺度不得移动屏幕空间抹开的真实边界锚点");
 assert.equal(politicalBlendReport.candidates.every(candidate => candidate.finite), true, "国界颜色过渡候选必须保持有限诊断");
 for (const fixture of POLITICAL_BLEND_FIXTURES) {
   const topology = analyzePoliticalBlendFixtureTopology(fixture);
@@ -403,12 +432,15 @@ const styleSource = readFileSync(new URL("../prototype/boundary-topology-lab/src
 for (const contract of ["id=\"independent-title\"", "id=\"shared-status\"", "id=\"visual-legend\"", "id=\"current-issues\"", "绿色仅表示共享同源", "受保护城镇", "受保护道路", "受保护河流", "锚定河口", "海岸形状超限仅提示"]) {
   assert.ok(indexSource.includes(contract), `静态 UI 缺少契约：${contract}`);
 }
-for (const contract of ["role=\"tablist\"", "id=\"blend-tab\"", "id=\"topology-tab\"", "id=\"blend-workbench\"", "id=\"topology-workbench\"", "id=\"blend-fixture-list\"", "id=\"political-blend-lab\"", "id=\"blend-nine-track\"", "id=\"blend-historical-band\"", "id=\"blend-continuous-ribbon\"", "id=\"blend-screen-haze\"", "四种方案始终使用左侧同一个国界夹具", "只比较视觉算法，不写入正式地图"]) {
+for (const contract of ["role=\"tablist\"", "id=\"blend-tab\"", "id=\"topology-tab\"", "id=\"blend-workbench\"", "id=\"topology-workbench\"", "id=\"blend-fixture-list\"", "id=\"political-blend-lab\"", "id=\"blend-nine-track\"", "id=\"blend-historical-band\"", "id=\"blend-continuous-ribbon\"", "id=\"blend-screen-haze\"", "id=\"blend-decay-softness\"", "路径柔顺度", "衰减柔和度（仅屏幕朦胧）", "只作用于前三种几何方案", "不会与锯齿原边界分离", "归一化邻边权重", "总混合量不叠加", "四种方案始终使用左侧同一个国界夹具", "只比较视觉算法，不写入正式地图"]) {
   assert.ok(indexSource.includes(contract), `国界颜色过渡 UI 缺少契约：${contract}`);
 }
-for (const contract of ["POLITICAL_BLEND_FIXTURES", "data-blend-fixture", "selectFixture", "FEATHER_PROFILE", "0.25 * options.strength", "chaikin(path.points, options.smoothness", "destination-in", "round-mask", "boundaryPoliticalBlendLab"]) {
+for (const contract of ["POLITICAL_BLEND_FIXTURES", "data-blend-fixture", "selectFixture", "FEATHER_PROFILE", "0.25 * options.strength", "chaikin(path.points, options.smoothness", "resolveScreenHazeDecayMask", "resolveScreenHazeJunctionWeights", "drawBase(sourceContext, fixture)", "classifySourcePixels", "rasterizeAdjacentSegmentDistance", "regionIndex !== colorAIndex && regionIndex !== colorBIndex", "255 * options.strength * maskAlpha", "normalized-adjacent", "raw-ownership-boundary", "points: path.points", "连续像素带", "归一化邻边", "boundaryPoliticalBlendLab"]) {
   assert.ok(politicalBlendSource.includes(contract), `国界颜色过渡实验缺少实现契约：${contract}`);
 }
+assert.equal(politicalBlendSource.includes("Math.min(0.92, options.strength * 0.88)"), false, "屏幕空间候选不得继续用固定低透明度削弱原色抹开");
+assert.equal(politicalBlendSource.includes("destination-in"), false, "屏幕空间候选不得通过交汇处重叠蒙版继续叠加三国模糊色面");
+assert.match(politicalBlendSource, /if \(candidateId === "screen-haze"\) \{\s*drawBoundaryInk\(context, fixture\);\s*drawScreenHaze\(context, options, fixture\);/u, "屏幕空间候选必须让原国界线位于抹开层下方");
 for (const contract of ["activeWorkbench: \"blend\"", "setActiveWorkbench(", "boundarylab:blendchange", "fixtureId: \"tri-state-junction\"", "resolveComparisonPresentation(", "mergeVisualDiagnostics(", "maximumDeviationZoomViewBox(", "deviationMarkup(result.comparison)", "protectedObjectsMarkup(fixture)", "surfaceMismatchMarkup(", "bandTriangleMarkup(", "cellFanMarkup(", "legacy-closed-anchor", "legacy-surface", "legacy-band", "legacy-cell-fan", "earcut-cell-surface", "metrics.shapePolicy === \"notice\"", "当前验收与形状诊断", "result.ok ? \"pass\" : \"fail\""]) {
   assert.ok(appSource.includes(contract), `交互逻辑缺少契约：${contract}`);
 }

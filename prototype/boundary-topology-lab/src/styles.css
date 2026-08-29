@@ -49,6 +49,7 @@ h2 { font-size: 16px; }
 .controls label { display: grid; grid-template-columns: 1fr auto; gap: 5px; color: var(--muted); font-size: 11px; margin: 10px 0; }
 .controls input { grid-column: 1 / -1; width: 100%; accent-color: var(--accent); }
 .controls output { color: #e4d49f; }
+.controls .control-hint { margin: 5px 0 0; color: #7f897f; font-size: 10px; line-height: 1.55; }
 .toggle-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; color: var(--muted); font-size: 11px; }
 .toggle-grid input { accent-color: var(--accent); }
 .run-button { width: 100%; padding: 10px; border: 1px solid #9a814c; background: #d1b56d; color: #1d1a12; border-radius: 5px; cursor: pointer; font-weight: 700; }
