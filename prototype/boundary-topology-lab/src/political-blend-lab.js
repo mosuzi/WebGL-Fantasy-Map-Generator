@@ -14,11 +14,11 @@ const FEATHER_PROFILE = Object.freeze([
   Object.freeze({offset: 1, alpha: 0})
 ]);
 
-export const POLITICAL_BLEND_OPTIONS = Object.freeze({width: 30, strength: 0.75, smoothness: 2});
+export const POLITICAL_BLEND_OPTIONS = Object.freeze({width: 24, strength: 1, smoothness: 2});
 
-const topBoundary = freezePoints([[370, 0], [350, 27], [409, 50], [325, 77], [419, 103], [330, 132], [380, 170]]);
-const leftBoundary = freezePoints([[380, 170], [326, 184], [405, 208], [294, 234], [370, 261], [247, 289], [230, 340]]);
-const rightBoundary = freezePoints([[380, 170], [438, 187], [367, 214], [492, 238], [414, 264], [540, 291], [560, 340]]);
+const topBoundary = freezePoints([[385, 0], [358, 28], [410, 54], [348, 80], [415, 109], [350, 138], [380, 170]]);
+const leftBoundary = freezePoints([[380, 170], [338, 190], [357, 213], [304, 239], [329, 263], [274, 291], [245, 340]]);
+const rightBoundary = freezePoints([[380, 170], [425, 190], [404, 216], [464, 240], [441, 266], [510, 292], [550, 340]]);
 const junction = Object.freeze([380, 170]);
 
 export const POLITICAL_BLEND_FIXTURE = Object.freeze({
@@ -43,15 +43,47 @@ export const POLITICAL_BLEND_FIXTURE = Object.freeze({
 
 export const POLITICAL_BLEND_CANDIDATES = Object.freeze([
   Object.freeze({id: "nine-track", name: "第 370 项九轨", geometry: "offset-before-smooth"}),
-  Object.freeze({id: "historical-band", name: "v0.5.67 历史单带", geometry: "two-rail-offset-before-smooth"}),
+  Object.freeze({id: "historical-band", name: "v0.5.4 需求前基线", geometry: "two-rail-offset-before-smooth"}),
   Object.freeze({id: "continuous-ribbon", name: "连续中心线色带", geometry: "smooth-before-offset"}),
   Object.freeze({id: "screen-haze", name: "屏幕空间朦胧", geometry: "raster-mask"})
 ]);
+
+export function analyzePoliticalBlendFixtureTopology(fixture = POLITICAL_BLEND_FIXTURE) {
+  const unexpectedIntersections = [];
+  let junctionPairIntersections = 0;
+  for (let firstPathIndex = 0; firstPathIndex < fixture.paths.length; firstPathIndex++) {
+    const firstPath = fixture.paths[firstPathIndex];
+    unexpectedIntersections.push(...selfIntersections(firstPath.points).map(hit => ({...hit, paths: [firstPath.id, firstPath.id]})));
+    for (let secondPathIndex = firstPathIndex + 1; secondPathIndex < fixture.paths.length; secondPathIndex++) {
+      const secondPath = fixture.paths[secondPathIndex];
+      for (let firstSegment = 0; firstSegment < firstPath.points.length - 1; firstSegment++) {
+        for (let secondSegment = 0; secondSegment < secondPath.points.length - 1; secondSegment++) {
+          const first = [firstPath.points[firstSegment], firstPath.points[firstSegment + 1]];
+          const second = [secondPath.points[secondSegment], secondPath.points[secondSegment + 1]];
+          if (!segmentsIntersect(first[0], first[1], second[0], second[1])) continue;
+          if (segmentsShareOnlyJunction(first, second, junction)) {
+            junctionPairIntersections++;
+            continue;
+          }
+          unexpectedIntersections.push({paths: [firstPath.id, secondPath.id], segments: [firstSegment, secondSegment]});
+        }
+      }
+    }
+  }
+  const regionSelfIntersections = fixture.regions.flatMap(region => selfIntersections(region.points, true).map(hit => ({...hit, region: region.id})));
+  return {
+    valid: unexpectedIntersections.length === 0 && regionSelfIntersections.length === 0 && junctionPairIntersections === 3,
+    junctionPairIntersections,
+    unexpectedIntersections,
+    regionSelfIntersections
+  };
+}
 
 export function evaluatePoliticalBlendCandidates(input = {}) {
   const options = normalizeOptions(input);
   return {
     fixtureId: POLITICAL_BLEND_FIXTURE.id,
+    topology: analyzePoliticalBlendFixtureTopology(),
     options,
     candidates: POLITICAL_BLEND_CANDIDATES.map(candidate => {
       if (candidate.id === "screen-haze") {
@@ -112,7 +144,7 @@ export function mountPoliticalBlendLab(root = document) {
   }
   updateOutputs(outputs, options);
   render();
-  const api = Object.freeze({fixture: POLITICAL_BLEND_FIXTURE, candidates: POLITICAL_BLEND_CANDIDATES, evaluate: evaluatePoliticalBlendCandidates});
+  const api = Object.freeze({fixture: POLITICAL_BLEND_FIXTURE, candidates: POLITICAL_BLEND_CANDIDATES, evaluate: evaluatePoliticalBlendCandidates, inspectTopology: analyzePoliticalBlendFixtureTopology});
   window.boundaryPoliticalBlendLab = api;
   return api;
 }
@@ -207,8 +239,8 @@ function drawScreenHaze(context, options) {
 
 function drawBoundaryInk(context) {
   context.save();
-  context.strokeStyle = "rgba(99, 90, 83, 0.72)";
-  context.lineWidth = 1.2;
+  context.strokeStyle = "rgba(78, 72, 66, 0.34)";
+  context.lineWidth = 0.8;
   context.lineJoin = "round";
   context.lineCap = "round";
   for (const path of POLITICAL_BLEND_FIXTURE.paths) strokePath(context, path.points);
@@ -400,6 +432,51 @@ function distance(a, b) {
 
 function dot(a, b) {
   return a[0] * b[0] + a[1] * b[1];
+}
+
+function selfIntersections(points, closed = false) {
+  const normalizedPoints = closed && points.length > 1 && samePoint(points[0], points.at(-1)) ? points.slice(0, -1) : points;
+  const segments = [];
+  for (let index = 0; index < normalizedPoints.length - 1; index++) segments.push([normalizedPoints[index], normalizedPoints[index + 1]]);
+  if (closed) segments.push([normalizedPoints.at(-1), normalizedPoints[0]]);
+  const intersections = [];
+  for (let first = 0; first < segments.length; first++) {
+    for (let second = first + 1; second < segments.length; second++) {
+      if (second === first + 1 || (closed && first === 0 && second === segments.length - 1)) continue;
+      if (segmentsIntersect(segments[first][0], segments[first][1], segments[second][0], segments[second][1])) intersections.push({segments: [first, second]});
+    }
+  }
+  return intersections;
+}
+
+function segmentsShareOnlyJunction(first, second, point) {
+  const firstTouches = first.some(endpoint => samePoint(endpoint, point));
+  const secondTouches = second.some(endpoint => samePoint(endpoint, point));
+  return firstTouches && secondTouches;
+}
+
+function segmentsIntersect(a, b, c, d) {
+  const abC = signedArea(a, b, c);
+  const abD = signedArea(a, b, d);
+  const cdA = signedArea(c, d, a);
+  const cdB = signedArea(c, d, b);
+  if (((abC > EPSILON && abD < -EPSILON) || (abC < -EPSILON && abD > EPSILON))
+    && ((cdA > EPSILON && cdB < -EPSILON) || (cdA < -EPSILON && cdB > EPSILON))) return true;
+  return (Math.abs(abC) <= EPSILON && pointOnSegment(c, a, b))
+    || (Math.abs(abD) <= EPSILON && pointOnSegment(d, a, b))
+    || (Math.abs(cdA) <= EPSILON && pointOnSegment(a, c, d))
+    || (Math.abs(cdB) <= EPSILON && pointOnSegment(b, c, d));
+}
+
+function pointOnSegment(point, a, b) {
+  return point[0] >= Math.min(a[0], b[0]) - EPSILON
+    && point[0] <= Math.max(a[0], b[0]) + EPSILON
+    && point[1] >= Math.min(a[1], b[1]) - EPSILON
+    && point[1] <= Math.max(a[1], b[1]) + EPSILON;
+}
+
+function samePoint(a, b) {
+  return Math.abs(a[0] - b[0]) <= EPSILON && Math.abs(a[1] - b[1]) <= EPSILON;
 }
 
 function rgba(hex, alpha) {

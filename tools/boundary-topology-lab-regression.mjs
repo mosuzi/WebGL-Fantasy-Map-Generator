@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import {readFileSync} from "node:fs";
 import {ALGORITHMS, DEFAULT_OPTIONS, samePoint} from "../prototype/boundary-topology-lab/src/algorithms.js";
 import {FIXTURES} from "../prototype/boundary-topology-lab/src/fixtures.js";
-import {evaluatePoliticalBlendCandidates, POLITICAL_BLEND_CANDIDATES, POLITICAL_BLEND_FIXTURE} from "../prototype/boundary-topology-lab/src/political-blend-lab.js";
+import {analyzePoliticalBlendFixtureTopology, evaluatePoliticalBlendCandidates, POLITICAL_BLEND_CANDIDATES, POLITICAL_BLEND_FIXTURE} from "../prototype/boundary-topology-lab/src/political-blend-lab.js";
 import {buildIndependentComparison, buildSharedSnapshot, composeRawRing, measureIndependentSeamError, measureIndependentSeamErrorDetails, sharedArcRefs} from "../prototype/boundary-topology-lab/src/topology.js";
 import {analyzeBandTriangleGeometry, analyzeCellFanGeometry, analyzePixelParityGeometry, analyzeStressComparison, analyzeVertexCollapseGeometry, bidirectionalHausdorff, HAUSDORFF_LIMITS, inspectRingGeometry, runAllFixtures, validateFixture} from "../prototype/boundary-topology-lab/src/validation.js";
 import {collectShapeDiagnostics, maximumDeviationZoomViewBox, mergeVisualDiagnostics, resolveComparisonPresentation} from "../prototype/boundary-topology-lab/src/visual-diagnostics.js";
@@ -48,12 +48,17 @@ assert.deepEqual(ALGORITHMS.map(algorithm => algorithm.id), ["raw", "douglas-peu
 
 const politicalBlendReport = evaluatePoliticalBlendCandidates();
 const politicalBlendById = new Map(politicalBlendReport.candidates.map(candidate => [candidate.id, candidate]));
+const politicalBlendTopology = analyzePoliticalBlendFixtureTopology();
 assert.equal(POLITICAL_BLEND_FIXTURE.id, "administrative-acute-junction", "国界颜色过渡必须固定匿名锐角 / 凹角 / 三方交汇夹具");
 assert.deepEqual(POLITICAL_BLEND_CANDIDATES.map(candidate => candidate.id), ["nine-track", "historical-band", "continuous-ribbon", "screen-haze"], "国界颜色过渡对照缺少历史或候选算法");
+assert.equal(politicalBlendTopology.valid, true, `国界颜色过渡夹具拓扑非法：${JSON.stringify(politicalBlendTopology)}`);
+assert.equal(politicalBlendTopology.junctionPairIntersections, 3, "三条国界必须只在唯一三方节点两两相接");
+assert.equal(politicalBlendTopology.unexpectedIntersections.length, 0, "国界不得在三方节点之外相交");
+assert.equal(politicalBlendTopology.regionSelfIntersections.length, 0, "三国填色区域不得自交");
 assert.equal(politicalBlendById.get("nine-track").tracks, 9, "第 370 项基线必须精确保留九道轨道");
-assert.equal(politicalBlendById.get("historical-band").tracks, 2, "v0.5.67 历史路径必须精确复现双边单带");
+assert.equal(politicalBlendById.get("historical-band").tracks, 2, "v0.5.4 需求前路径必须精确复现双边单带");
 assert.ok(politicalBlendById.get("nine-track").invertedTriangles > politicalBlendById.get("historical-band").invertedTriangles, "九轨基线必须放大同一锐角夹具的翻面数量");
-assert.ok(politicalBlendById.get("historical-band").invertedTriangles > 0, "历史单带仍须如实暴露偏移后平滑的几何风险");
+assert.ok(politicalBlendById.get("historical-band").invertedTriangles > 0, "需求前颜色带仍须如实暴露偏移后平滑的几何风险");
 assert.ok(politicalBlendById.get("continuous-ribbon").widthVariation < 1e-9, "连续中心线候选必须消除截面宽度突变");
 assert.equal(politicalBlendById.get("screen-haze").tracks, 0, "屏幕空间朦胧不得生成偏移轨道");
 assert.equal(politicalBlendById.get("screen-haze").invertedTriangles, 0, "屏幕空间朦胧不得产生反向三角");
@@ -584,6 +589,7 @@ console.log(JSON.stringify({
   reverseOffsetMaximum: reverseOffsetMaximum.distance,
   finiteZoomViewBox: true,
   invalidZoomInputsRejected: 3,
+  politicalBlendTopology,
   politicalBlendCandidates: politicalBlendReport.candidates.map(candidate => ({
     id: candidate.id,
     tracks: candidate.tracks,
