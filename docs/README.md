@@ -30,7 +30,7 @@
   - `audits/ui-function-and-information-architecture-audit.md`：现有功能入口、复杂度、分组、低优先级能力和浮层遮挡审计。
   - `audits/interaction-usability-audit-results.md`：权威任务第 101～107 项的交互总表、真实浏览器证据摘要、问题账本、跨系统原则和功能变更附录。
   - `audits/compound-semantic-action-matrix.md`：权威任务第 204 项全游戏复合语义规则事务、AI 规划器配方和公开 API / Cell 动作覆盖矩阵。
-- `deployment/`：部署说明和线上环境约定。
+- `deployment/`：部署说明和线上环境约定；任务分支版本准备、合入前校验和快进主线流程见 [`deployment/version-management.md`](./deployment/version-management.md)。
 - `task-archives/`：已完成权威任务的时间分卷与编号索引；接手执行默认不读，需要追溯历史决策时再按日期或编号检索。
 - `development-logs/`：开发历史的日期分卷与迁移完整性索引；默认不整目录读取。
 - `task-notes/`：可入库的专题计划、评估记录、执行细则和功能积压。新增专题前先读 `task-notes/README.md`，并同步更新该索引。
