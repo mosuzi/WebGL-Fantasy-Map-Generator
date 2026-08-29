@@ -5,10 +5,16 @@ import {validateFixture, runAllFixtures} from "./validation.js";
 import {maximumDeviationZoomViewBox, mergeVisualDiagnostics, resolveComparisonPresentation} from "./visual-diagnostics.js";
 
 const state = {
+  activeWorkbench: "blend",
   fixtureId: "tri-state-junction",
   algorithmId: "recommended",
   options: {...DEFAULT_OPTIONS},
   layers: {raw: true, nodes: true, ids: false, error: true}
+};
+
+const workbenchStatus = {
+  blend: {text: "国界夹具等待绘制", passed: true},
+  topology: {text: "拓扑夹具等待验证", passed: true}
 };
 
 const elements = Object.fromEntries([
@@ -16,12 +22,14 @@ const elements = Object.fromEntries([
   "max-displacement", "displacement-value", "show-raw", "show-nodes", "show-ids", "show-error",
   "run-all", "global-status", "case-category", "case-name", "case-description", "independent-view",
   "shared-view", "metrics", "result-grid", "result-summary", "independent-card", "independent-title",
-  "independent-note", "shared-card", "shared-title", "shared-status", "current-issues"
+  "independent-note", "shared-card", "shared-title", "shared-status", "current-issues", "blend-workbench",
+  "topology-workbench", "blend-tab", "topology-tab"
 ].map(id => [id, document.getElementById(id)]));
 
 initialize();
 
 function initialize() {
+  bindWorkbenchTabs();
   elements["fixture-list"].innerHTML = FIXTURES.map((fixture, index) => `<button class="fixture-button" data-fixture="${fixture.id}"><span>${fixture.name}</span><small>${String(index + 1).padStart(2, "0")}</small></button>`).join("");
   elements["algorithm-list"].innerHTML = ALGORITHMS.map(algorithm => `<button class="algorithm-button" data-algorithm="${algorithm.id}">${algorithm.name}</button>`).join("");
   elements["fixture-list"].addEventListener("click", event => {
@@ -44,9 +52,42 @@ function initialize() {
   bindLayer("show-ids", "ids");
   bindLayer("show-error", "error");
   elements["run-all"].addEventListener("click", renderAllResults);
+  document.addEventListener("boundarylab:blendchange", event => {
+    workbenchStatus.blend = {text: event.detail.text, passed: event.detail.passed};
+    if (state.activeWorkbench === "blend") renderGlobalStatus();
+  });
   render();
   renderAllResults();
+  setActiveWorkbench(state.activeWorkbench);
   window.boundaryTopologyLab = Object.freeze({FIXTURES, ALGORITHMS, validateFixture, runAllFixtures});
+}
+
+function bindWorkbenchTabs() {
+  const tabs = [elements["blend-tab"], elements["topology-tab"]];
+  for (const tab of tabs) {
+    tab.addEventListener("click", () => setActiveWorkbench(tab.dataset.workbench));
+    tab.addEventListener("keydown", event => {
+      if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+      event.preventDefault();
+      const next = tab === tabs[0] ? tabs[1] : tabs[0];
+      setActiveWorkbench(next.dataset.workbench);
+      next.focus();
+    });
+  }
+}
+
+function setActiveWorkbench(workbench) {
+  if (workbench !== "blend" && workbench !== "topology") return;
+  state.activeWorkbench = workbench;
+  for (const name of ["blend", "topology"]) {
+    const active = name === workbench;
+    elements[`${name}-workbench`].hidden = !active;
+    elements[`${name}-workbench`].classList.toggle("active", active);
+    elements[`${name}-tab`].classList.toggle("active", active);
+    elements[`${name}-tab`].setAttribute("aria-selected", String(active));
+    elements[`${name}-tab`].tabIndex = active ? 0 : -1;
+  }
+  renderGlobalStatus();
 }
 
 function bindRange(elementId, optionKey, outputId, format) {
@@ -665,8 +706,14 @@ function renderAllResults() {
 }
 
 function setStatus(text, passed) {
-  elements["global-status"].textContent = text;
-  elements["global-status"].className = `status-pill ${passed ? "pass" : "fail"}`;
+  workbenchStatus.topology = {text, passed};
+  if (state.activeWorkbench === "topology") renderGlobalStatus();
+}
+
+function renderGlobalStatus() {
+  const status = workbenchStatus[state.activeWorkbench];
+  elements["global-status"].textContent = status.text;
+  elements["global-status"].className = `status-pill ${status.passed ? "pass" : "fail"}`;
 }
 
 function round(value) {

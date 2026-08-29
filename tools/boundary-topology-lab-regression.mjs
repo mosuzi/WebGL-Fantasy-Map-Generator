@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import {readFileSync} from "node:fs";
 import {ALGORITHMS, DEFAULT_OPTIONS, samePoint} from "../prototype/boundary-topology-lab/src/algorithms.js";
 import {FIXTURES} from "../prototype/boundary-topology-lab/src/fixtures.js";
-import {analyzePoliticalBlendFixtureTopology, evaluatePoliticalBlendCandidates, POLITICAL_BLEND_CANDIDATES, POLITICAL_BLEND_FIXTURE} from "../prototype/boundary-topology-lab/src/political-blend-lab.js";
+import {analyzePoliticalBlendFixtureTopology, evaluatePoliticalBlendCandidates, POLITICAL_BLEND_CANDIDATES, POLITICAL_BLEND_FIXTURE, POLITICAL_BLEND_FIXTURES} from "../prototype/boundary-topology-lab/src/political-blend-lab.js";
 import {buildIndependentComparison, buildSharedSnapshot, composeRawRing, measureIndependentSeamError, measureIndependentSeamErrorDetails, sharedArcRefs} from "../prototype/boundary-topology-lab/src/topology.js";
 import {analyzeBandTriangleGeometry, analyzeCellFanGeometry, analyzePixelParityGeometry, analyzeStressComparison, analyzeVertexCollapseGeometry, bidirectionalHausdorff, HAUSDORFF_LIMITS, inspectRingGeometry, runAllFixtures, validateFixture} from "../prototype/boundary-topology-lab/src/validation.js";
 import {collectShapeDiagnostics, maximumDeviationZoomViewBox, mergeVisualDiagnostics, resolveComparisonPresentation} from "../prototype/boundary-topology-lab/src/visual-diagnostics.js";
@@ -50,6 +50,7 @@ const politicalBlendReport = evaluatePoliticalBlendCandidates();
 const politicalBlendById = new Map(politicalBlendReport.candidates.map(candidate => [candidate.id, candidate]));
 const politicalBlendTopology = analyzePoliticalBlendFixtureTopology();
 assert.equal(POLITICAL_BLEND_FIXTURE.id, "administrative-acute-junction", "国界颜色过渡必须固定匿名锐角 / 凹角 / 三方交汇夹具");
+assert.deepEqual(POLITICAL_BLEND_FIXTURES.map(fixture => fixture.id), ["administrative-acute-junction", "tri-state-junction", "cross-state-province", "map-boundary"], "国界颜色过渡必须提供独立且可联动的行政夹具列表");
 assert.deepEqual(POLITICAL_BLEND_CANDIDATES.map(candidate => candidate.id), ["nine-track", "historical-band", "continuous-ribbon", "screen-haze"], "国界颜色过渡对照缺少历史或候选算法");
 assert.equal(politicalBlendTopology.valid, true, `国界颜色过渡夹具拓扑非法：${JSON.stringify(politicalBlendTopology)}`);
 assert.equal(politicalBlendTopology.junctionPairIntersections, 3, "三条国界必须只在唯一三方节点两两相接");
@@ -63,6 +64,13 @@ assert.ok(politicalBlendById.get("continuous-ribbon").widthVariation < 1e-9, "�
 assert.equal(politicalBlendById.get("screen-haze").tracks, 0, "屏幕空间朦胧不得生成偏移轨道");
 assert.equal(politicalBlendById.get("screen-haze").invertedTriangles, 0, "屏幕空间朦胧不得产生反向三角");
 assert.equal(politicalBlendReport.candidates.every(candidate => candidate.finite), true, "国界颜色过渡候选必须保持有限诊断");
+for (const fixture of POLITICAL_BLEND_FIXTURES) {
+  const topology = analyzePoliticalBlendFixtureTopology(fixture);
+  const report = evaluatePoliticalBlendCandidates({}, fixture);
+  assert.equal(topology.valid, true, `${fixture.name} 国界颜色夹具拓扑非法：${JSON.stringify(topology)}`);
+  assert.equal(report.fixtureId, fixture.id, `${fixture.name} 未驱动国界颜色对照`);
+  assert.equal(report.candidates.every(candidate => candidate.finite), true, `${fixture.name} 产生非有限候选诊断`);
+}
 
 const algorithmReports = [];
 const algorithmResultById = new Map();
@@ -395,13 +403,13 @@ const styleSource = readFileSync(new URL("../prototype/boundary-topology-lab/src
 for (const contract of ["id=\"independent-title\"", "id=\"shared-status\"", "id=\"visual-legend\"", "id=\"current-issues\"", "绿色仅表示共享同源", "受保护城镇", "受保护道路", "受保护河流", "锚定河口", "海岸形状超限仅提示"]) {
   assert.ok(indexSource.includes(contract), `静态 UI 缺少契约：${contract}`);
 }
-for (const contract of ["id=\"political-blend-lab\"", "id=\"blend-nine-track\"", "id=\"blend-historical-band\"", "id=\"blend-continuous-ribbon\"", "id=\"blend-screen-haze\"", "只比较视觉算法，不写入正式地图"]) {
+for (const contract of ["role=\"tablist\"", "id=\"blend-tab\"", "id=\"topology-tab\"", "id=\"blend-workbench\"", "id=\"topology-workbench\"", "id=\"blend-fixture-list\"", "id=\"political-blend-lab\"", "id=\"blend-nine-track\"", "id=\"blend-historical-band\"", "id=\"blend-continuous-ribbon\"", "id=\"blend-screen-haze\"", "四种方案始终使用左侧同一个国界夹具", "只比较视觉算法，不写入正式地图"]) {
   assert.ok(indexSource.includes(contract), `国界颜色过渡 UI 缺少契约：${contract}`);
 }
-for (const contract of ["FEATHER_PROFILE", "0.25 * options.strength", "chaikin(path.points, options.smoothness", "destination-in", "round-mask", "boundaryPoliticalBlendLab"]) {
+for (const contract of ["POLITICAL_BLEND_FIXTURES", "data-blend-fixture", "selectFixture", "FEATHER_PROFILE", "0.25 * options.strength", "chaikin(path.points, options.smoothness", "destination-in", "round-mask", "boundaryPoliticalBlendLab"]) {
   assert.ok(politicalBlendSource.includes(contract), `国界颜色过渡实验缺少实现契约：${contract}`);
 }
-for (const contract of ["fixtureId: \"tri-state-junction\"", "resolveComparisonPresentation(", "mergeVisualDiagnostics(", "maximumDeviationZoomViewBox(", "deviationMarkup(result.comparison)", "protectedObjectsMarkup(fixture)", "surfaceMismatchMarkup(", "bandTriangleMarkup(", "cellFanMarkup(", "legacy-closed-anchor", "legacy-surface", "legacy-band", "legacy-cell-fan", "earcut-cell-surface", "metrics.shapePolicy === \"notice\"", "当前验收与形状诊断", "result.ok ? \"pass\" : \"fail\""]) {
+for (const contract of ["activeWorkbench: \"blend\"", "setActiveWorkbench(", "boundarylab:blendchange", "fixtureId: \"tri-state-junction\"", "resolveComparisonPresentation(", "mergeVisualDiagnostics(", "maximumDeviationZoomViewBox(", "deviationMarkup(result.comparison)", "protectedObjectsMarkup(fixture)", "surfaceMismatchMarkup(", "bandTriangleMarkup(", "cellFanMarkup(", "legacy-closed-anchor", "legacy-surface", "legacy-band", "legacy-cell-fan", "earcut-cell-surface", "metrics.shapePolicy === \"notice\"", "当前验收与形状诊断", "result.ok ? \"pass\" : \"fail\""]) {
   assert.ok(appSource.includes(contract), `交互逻辑缺少契约：${contract}`);
 }
 assert.ok(appSource.includes("zoom.distance.toFixed(2)"), "UI 最大偏差文案必须使用归一化有限距离");
@@ -417,7 +425,7 @@ for (const contract of [
 ]) {
   assert.ok(appSource.includes(contract), `实验室缺少高风险左右对照 markup 契约：${contract}`);
 }
-for (const contract of [".usage-side.side-first", ".usage-side.side-second", ".same-source-line", ".closed-seam-defect", ".deviation-connector", ".zoom-shell", ".result-card.fail", ".protected-town", ".protected-road", ".protected-river", ".protected-mouth", ".legacy-repair-band", ".surface-mismatch", ".band-triangle.flipped", ".band-centerline", ".cell-fan-triangle.leaked", ".cell-fan-boundary", ".cell-fan-status.fail", ".metric.notice"]) {
+for (const contract of [".lab-tabs", ".lab-workbench", ".blend-fixture-summary", ".usage-side.side-first", ".usage-side.side-second", ".same-source-line", ".closed-seam-defect", ".deviation-connector", ".zoom-shell", ".result-card.fail", ".protected-town", ".protected-road", ".protected-river", ".protected-mouth", ".legacy-repair-band", ".surface-mismatch", ".band-triangle.flipped", ".band-centerline", ".cell-fan-triangle.leaked", ".cell-fan-boundary", ".cell-fan-status.fail", ".metric.notice"]) {
   assert.ok(styleSource.includes(contract), `诊断样式缺少契约：${contract}`);
 }
 
@@ -590,6 +598,7 @@ console.log(JSON.stringify({
   finiteZoomViewBox: true,
   invalidZoomInputsRejected: 3,
   politicalBlendTopology,
+  politicalBlendFixtures: POLITICAL_BLEND_FIXTURES.map(fixture => fixture.id),
   politicalBlendCandidates: politicalBlendReport.candidates.map(candidate => ({
     id: candidate.id,
     tracks: candidate.tracks,

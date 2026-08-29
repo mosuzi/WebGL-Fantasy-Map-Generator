@@ -1,3 +1,6 @@
+import {FIXTURE_BY_ID} from "./fixtures.js";
+import {composeRawRing} from "./topology.js";
+
 const VIEW_WIDTH = 760;
 const VIEW_HEIGHT = 340;
 const EPSILON = 1e-6;
@@ -24,10 +27,11 @@ const junction = Object.freeze([380, 170]);
 export const POLITICAL_BLEND_FIXTURE = Object.freeze({
   id: "administrative-acute-junction",
   name: "行政锐角、凹角与三方交汇",
+  description: "专门放大九轨方案在连续锐角、凹角与三方交汇处的几何突变。",
   paths: Object.freeze([
-    boundary("top", topBoundary, "west", "east", [80, 90]),
-    boundary("left", leftBoundary, "west", "south", [80, 270]),
-    boundary("right", rightBoundary, "south", "east", [680, 265])
+    boundary("top", topBoundary, COLORS.west, COLORS.east, [80, 90]),
+    boundary("left", leftBoundary, COLORS.west, COLORS.south, [80, 270]),
+    boundary("right", rightBoundary, COLORS.south, COLORS.east, [680, 265])
   ]),
   regions: Object.freeze([
     Object.freeze({id: "west", color: COLORS.west, points: freezePoints([[0, 0], ...topBoundary, ...leftBoundary.slice(1), [0, VIEW_HEIGHT]])}),
@@ -38,8 +42,18 @@ export const POLITICAL_BLEND_FIXTURE = Object.freeze({
     Object.freeze({id: "south", color: COLORS.south, points: freezePoints([
       leftBoundary.at(-1), ...leftBoundary.slice(0, -1).toReversed(), ...rightBoundary.slice(1)
     ])})
-  ])
+  ]),
+  junctions: Object.freeze([Object.freeze({point: junction, pathIds: Object.freeze(["top", "left", "right"])})])
 });
+
+export const POLITICAL_BLEND_FIXTURES = Object.freeze([
+  POLITICAL_BLEND_FIXTURE,
+  adaptTopologyFixture("tri-state-junction", "三国交界"),
+  adaptTopologyFixture("cross-state-province", "跨国省界"),
+  adaptTopologyFixture("map-boundary", "贴图边缘国界")
+]);
+
+const POLITICAL_BLEND_FIXTURE_BY_ID = new Map(POLITICAL_BLEND_FIXTURES.map(fixture => [fixture.id, fixture]));
 
 export const POLITICAL_BLEND_CANDIDATES = Object.freeze([
   Object.freeze({id: "nine-track", name: "第 370 项九轨", geometry: "offset-before-smooth"}),
@@ -61,7 +75,7 @@ export function analyzePoliticalBlendFixtureTopology(fixture = POLITICAL_BLEND_F
           const first = [firstPath.points[firstSegment], firstPath.points[firstSegment + 1]];
           const second = [secondPath.points[secondSegment], secondPath.points[secondSegment + 1]];
           if (!segmentsIntersect(first[0], first[1], second[0], second[1])) continue;
-          if (segmentsShareOnlyJunction(first, second, junction)) {
+          if (fixture.junctions.some(item => item.pathIds.includes(firstPath.id) && item.pathIds.includes(secondPath.id) && segmentsShareOnlyJunction(first, second, item.point))) {
             junctionPairIntersections++;
             continue;
           }
@@ -71,25 +85,28 @@ export function analyzePoliticalBlendFixtureTopology(fixture = POLITICAL_BLEND_F
     }
   }
   const regionSelfIntersections = fixture.regions.flatMap(region => selfIntersections(region.points, true).map(hit => ({...hit, region: region.id})));
+  const expectedJunctionPairIntersections = fixture.junctions.reduce((total, item) => total + item.pathIds.length * (item.pathIds.length - 1) / 2, 0);
   return {
-    valid: unexpectedIntersections.length === 0 && regionSelfIntersections.length === 0 && junctionPairIntersections === 3,
+    valid: unexpectedIntersections.length === 0 && regionSelfIntersections.length === 0 && junctionPairIntersections === expectedJunctionPairIntersections,
     junctionPairIntersections,
+    expectedJunctionPairIntersections,
     unexpectedIntersections,
     regionSelfIntersections
   };
 }
 
-export function evaluatePoliticalBlendCandidates(input = {}) {
+export function evaluatePoliticalBlendCandidates(input = {}, fixtureOrId = POLITICAL_BLEND_FIXTURE) {
+  const fixture = resolveFixture(fixtureOrId);
   const options = normalizeOptions(input);
   return {
-    fixtureId: POLITICAL_BLEND_FIXTURE.id,
-    topology: analyzePoliticalBlendFixtureTopology(),
+    fixtureId: fixture.id,
+    topology: analyzePoliticalBlendFixtureTopology(fixture),
     options,
     candidates: POLITICAL_BLEND_CANDIDATES.map(candidate => {
       if (candidate.id === "screen-haze") {
         return {...candidate, tracks: 0, invertedTriangles: 0, degenerateTriangles: 0, widthVariation: 0, junctionMode: "round-mask", finite: true};
       }
-      const reports = POLITICAL_BLEND_FIXTURE.paths.map(path => analyzeCandidatePath(path, candidate.id, options));
+      const reports = fixture.paths.map(path => analyzeCandidatePath(path, candidate.id, options));
       return {
         ...candidate,
         tracks: candidate.id === "nine-track" ? FEATHER_PROFILE.length : candidate.id === "continuous-ribbon" ? 3 : 2,
@@ -108,6 +125,9 @@ export function mountPoliticalBlendLab(root = document) {
   if (!host || host.dataset.mounted === "true") return null;
   host.dataset.mounted = "true";
   const options = {...POLITICAL_BLEND_OPTIONS};
+  let fixtureId = POLITICAL_BLEND_FIXTURE.id;
+  const fixtureList = root.getElementById("blend-fixture-list");
+  fixtureList.innerHTML = POLITICAL_BLEND_FIXTURES.map((fixture, index) => `<button class="fixture-button" data-blend-fixture="${fixture.id}"><span>${fixture.name}</span><small>${String(index + 1).padStart(2, "0")}</small></button>`).join("");
   const controls = {
     width: root.getElementById("blend-width"),
     strength: root.getElementById("blend-strength"),
@@ -121,14 +141,21 @@ export function mountPoliticalBlendLab(root = document) {
   let scheduled = false;
   const render = () => {
     scheduled = false;
-    const report = evaluatePoliticalBlendCandidates(options);
+    const fixture = resolveFixture(fixtureId);
+    const report = evaluatePoliticalBlendCandidates(options, fixture);
+    root.querySelectorAll("[data-blend-fixture]").forEach(button => button.classList.toggle("active", button.dataset.blendFixture === fixture.id));
     for (const candidate of report.candidates) {
-      drawCandidate(root.getElementById(`blend-${candidate.id}`), candidate.id, report.options);
+      drawCandidate(root.getElementById(`blend-${candidate.id}`), candidate.id, report.options, fixture);
       root.getElementById(`blend-${candidate.id}-metrics`).innerHTML = metricsMarkup(candidate);
     }
     const current = report.candidates[0];
     const continuous = report.candidates[2];
     root.getElementById("blend-lab-note").textContent = `九轨基线：反向三角 ${current.invertedTriangles}、截面宽度突变 ${(current.widthVariation * 100).toFixed(1)}%；连续中心线：反向三角 ${continuous.invertedTriangles}、截面宽度突变 ${(continuous.widthVariation * 100).toFixed(1)}%。屏幕空间候选使用圆角联合蒙版，不生成偏移网格。`;
+    root.getElementById("blend-fixture-summary").innerHTML = `<strong>${fixture.name}</strong><span>${fixture.description}</span><br><span class="${report.topology.valid ? "pass" : "fail"}">${report.topology.valid ? "拓扑合法" : "拓扑非法"} · 国界 ${fixture.paths.length} 条 · 交汇 ${fixture.junctions.filter(item => item.pathIds.length >= 3).length} 处</span>`;
+    root.dispatchEvent(new CustomEvent("boundarylab:blendchange", {detail: {
+      text: `${fixture.name} · ${report.topology.valid ? "拓扑合法" : "拓扑非法"}`,
+      passed: report.topology.valid
+    }}));
   };
   const schedule = () => {
     if (scheduled) return;
@@ -142,76 +169,97 @@ export function mountPoliticalBlendLab(root = document) {
       schedule();
     });
   }
+  fixtureList.addEventListener("click", event => {
+    const button = event.target.closest("[data-blend-fixture]");
+    if (!button || !POLITICAL_BLEND_FIXTURE_BY_ID.has(button.dataset.blendFixture)) return;
+    fixtureId = button.dataset.blendFixture;
+    schedule();
+  });
   updateOutputs(outputs, options);
   render();
-  const api = Object.freeze({fixture: POLITICAL_BLEND_FIXTURE, candidates: POLITICAL_BLEND_CANDIDATES, evaluate: evaluatePoliticalBlendCandidates, inspectTopology: analyzePoliticalBlendFixtureTopology});
+  const api = Object.freeze({
+    fixtures: POLITICAL_BLEND_FIXTURES,
+    candidates: POLITICAL_BLEND_CANDIDATES,
+    evaluate: evaluatePoliticalBlendCandidates,
+    inspectTopology: analyzePoliticalBlendFixtureTopology,
+    currentFixture: () => resolveFixture(fixtureId),
+    selectFixture: nextFixtureId => {
+      if (!POLITICAL_BLEND_FIXTURE_BY_ID.has(nextFixtureId)) return false;
+      fixtureId = nextFixtureId;
+      render();
+      return true;
+    }
+  });
   window.boundaryPoliticalBlendLab = api;
   return api;
 }
 
-function drawCandidate(canvas, candidateId, options) {
+function drawCandidate(canvas, candidateId, options, fixture) {
   if (!canvas) return;
   const context = canvas.getContext("2d");
   context.clearRect(0, 0, VIEW_WIDTH, VIEW_HEIGHT);
-  drawBase(context);
-  if (candidateId === "nine-track") drawNineTrack(context, options);
-  if (candidateId === "historical-band") drawHistoricalBand(context, options);
-  if (candidateId === "continuous-ribbon") drawContinuousRibbon(context, options);
-  if (candidateId === "screen-haze") drawScreenHaze(context, options);
-  drawBoundaryInk(context);
-  drawJunction(context);
+  drawBase(context, fixture);
+  if (candidateId === "nine-track") drawNineTrack(context, options, fixture);
+  if (candidateId === "historical-band") drawHistoricalBand(context, options, fixture);
+  if (candidateId === "continuous-ribbon") drawContinuousRibbon(context, options, fixture);
+  if (candidateId === "screen-haze") drawScreenHaze(context, options, fixture);
+  drawBoundaryInk(context, fixture);
+  drawJunctions(context, fixture);
 }
 
-function drawBase(context) {
+function drawBase(context, fixture) {
   context.fillStyle = "#dce5e8";
   context.fillRect(0, 0, VIEW_WIDTH, VIEW_HEIGHT);
-  for (const region of POLITICAL_BLEND_FIXTURE.regions) fillPolygon(context, region.points, region.color);
+  for (const region of fixture.regions) fillPolygon(context, region.points, region.color);
 }
 
-function drawNineTrack(context, options) {
-  for (const path of POLITICAL_BLEND_FIXTURE.paths) {
+function drawNineTrack(context, options, fixture) {
+  for (const path of fixture.paths) {
     const tracks = FEATHER_PROFILE.map(sample => ({
       points: chaikin(offsetPath(path.points, path.sidePointA, options.width * 0.5 * sample.offset), 1, 0.18),
-      color: sample.offset < 0 ? COLORS[path.colorA] : sample.offset > 0 ? COLORS[path.colorB] : mixHex(COLORS[path.colorA], COLORS[path.colorB], 0.5),
+      color: sample.offset < 0 ? path.colorA : sample.offset > 0 ? path.colorB : mixHex(path.colorA, path.colorB, 0.5),
       alpha: options.strength * sample.alpha
     }));
     fillTrackSet(context, tracks);
   }
 }
 
-function drawHistoricalBand(context, options) {
-  for (const path of POLITICAL_BLEND_FIXTURE.paths) {
+function drawHistoricalBand(context, options, fixture) {
+  for (const path of fixture.paths) {
     fillTrackSet(context, [
-      {points: chaikin(offsetPath(path.points, path.sidePointA, options.width * 0.5), 1, 0.18), color: COLORS[path.colorA], alpha: 0.25 * options.strength},
-      {points: chaikin(offsetPath(path.points, path.sidePointA, -options.width * 0.5), 1, 0.18), color: COLORS[path.colorB], alpha: 0.25 * options.strength}
+      {points: chaikin(offsetPath(path.points, path.sidePointA, options.width * 0.5), 1, 0.18), color: path.colorA, alpha: 0.25 * options.strength},
+      {points: chaikin(offsetPath(path.points, path.sidePointA, -options.width * 0.5), 1, 0.18), color: path.colorB, alpha: 0.25 * options.strength}
     ]);
   }
 }
 
-function drawContinuousRibbon(context, options) {
-  for (const path of POLITICAL_BLEND_FIXTURE.paths) {
+function drawContinuousRibbon(context, options, fixture) {
+  for (const path of fixture.paths) {
     const center = chaikin(path.points, options.smoothness, 0.2);
     fillTrackSet(context, [
-      {points: offsetPath(center, path.sidePointA, -options.width * 0.5), color: COLORS[path.colorA], alpha: 0},
-      {points: center, color: mixHex(COLORS[path.colorA], COLORS[path.colorB], 0.5), alpha: 0.34 * options.strength},
-      {points: offsetPath(center, path.sidePointA, options.width * 0.5), color: COLORS[path.colorB], alpha: 0}
+      {points: offsetPath(center, path.sidePointA, -options.width * 0.5), color: path.colorA, alpha: 0},
+      {points: center, color: mixHex(path.colorA, path.colorB, 0.5), alpha: 0.34 * options.strength},
+      {points: offsetPath(center, path.sidePointA, options.width * 0.5), color: path.colorB, alpha: 0}
     ]);
   }
-  const radius = options.width * 0.52;
-  const mixed = mixHex(mixHex(COLORS.west, COLORS.east, 0.5), COLORS.south, 1 / 3);
-  const gradient = context.createRadialGradient(junction[0], junction[1], 0, junction[0], junction[1], radius);
-  gradient.addColorStop(0, rgba(mixed, 0.28 * options.strength));
-  gradient.addColorStop(1, rgba(mixed, 0));
-  context.fillStyle = gradient;
-  context.beginPath();
-  context.arc(junction[0], junction[1], radius, 0, Math.PI * 2);
-  context.fill();
+  for (const item of fixture.junctions.filter(candidate => candidate.pathIds.length >= 3)) {
+    const radius = options.width * 0.52;
+    const colors = fixture.paths.filter(path => item.pathIds.includes(path.id)).flatMap(path => [path.colorA, path.colorB]);
+    const mixed = mixMany(colors);
+    const gradient = context.createRadialGradient(item.point[0], item.point[1], 0, item.point[0], item.point[1], radius);
+    gradient.addColorStop(0, rgba(mixed, 0.28 * options.strength));
+    gradient.addColorStop(1, rgba(mixed, 0));
+    context.fillStyle = gradient;
+    context.beginPath();
+    context.arc(item.point[0], item.point[1], radius, 0, Math.PI * 2);
+    context.fill();
+  }
 }
 
-function drawScreenHaze(context, options) {
+function drawScreenHaze(context, options, fixture) {
   const source = makeCanvas();
   const sourceContext = source.getContext("2d");
-  for (const region of POLITICAL_BLEND_FIXTURE.regions) fillPolygon(sourceContext, region.points, region.color);
+  for (const region of fixture.regions) fillPolygon(sourceContext, region.points, region.color);
   const haze = makeCanvas();
   const hazeContext = haze.getContext("2d");
   hazeContext.filter = `blur(${Math.max(2, options.width * 0.32).toFixed(1)}px)`;
@@ -223,11 +271,13 @@ function drawScreenHaze(context, options) {
   maskContext.lineWidth = options.width * 1.7;
   maskContext.lineJoin = "round";
   maskContext.lineCap = "round";
-  for (const path of POLITICAL_BLEND_FIXTURE.paths) strokePath(maskContext, chaikin(path.points, options.smoothness, 0.2));
+  for (const path of fixture.paths) strokePath(maskContext, chaikin(path.points, options.smoothness, 0.2));
   maskContext.fillStyle = "#fff";
-  maskContext.beginPath();
-  maskContext.arc(junction[0], junction[1], options.width, 0, Math.PI * 2);
-  maskContext.fill();
+  for (const item of fixture.junctions.filter(candidate => candidate.pathIds.length >= 3)) {
+    maskContext.beginPath();
+    maskContext.arc(item.point[0], item.point[1], options.width, 0, Math.PI * 2);
+    maskContext.fill();
+  }
   hazeContext.globalCompositeOperation = "destination-in";
   hazeContext.drawImage(mask, 0, 0);
   hazeContext.globalCompositeOperation = "source-over";
@@ -237,25 +287,27 @@ function drawScreenHaze(context, options) {
   context.restore();
 }
 
-function drawBoundaryInk(context) {
+function drawBoundaryInk(context, fixture) {
   context.save();
   context.strokeStyle = "rgba(78, 72, 66, 0.34)";
   context.lineWidth = 0.8;
   context.lineJoin = "round";
   context.lineCap = "round";
-  for (const path of POLITICAL_BLEND_FIXTURE.paths) strokePath(context, path.points);
+  for (const path of fixture.paths) strokePath(context, path.points);
   context.restore();
 }
 
-function drawJunction(context) {
+function drawJunctions(context, fixture) {
   context.save();
   context.fillStyle = "rgba(255,255,255,0.92)";
   context.strokeStyle = "rgba(57,76,83,0.72)";
   context.lineWidth = 1;
-  context.beginPath();
-  context.arc(junction[0], junction[1], 3.3, 0, Math.PI * 2);
-  context.fill();
-  context.stroke();
+  for (const item of fixture.junctions.filter(candidate => candidate.pathIds.length >= 3)) {
+    context.beginPath();
+    context.arc(item.point[0], item.point[1], 3.3, 0, Math.PI * 2);
+    context.fill();
+    context.stroke();
+  }
   context.restore();
 }
 
@@ -360,6 +412,73 @@ function chaikin(points, iterations, factor) {
     result = next;
   }
   return result;
+}
+
+function adaptTopologyFixture(sourceId, name) {
+  const source = FIXTURE_BY_ID.get(sourceId);
+  if (!source) throw new Error(`缺少国界夹具来源：${sourceId}`);
+  const sourceRegions = source.regions.map((region, index) => {
+    const group = region.state || region.id;
+    const points = composeRawRing(region.rings[0], source);
+    return {...region, group, points, index};
+  });
+  const groupOrder = [...new Set(sourceRegions.map(region => region.group))];
+  const palette = [COLORS.west, COLORS.east, COLORS.south, "#baa7d9"];
+  const groupColors = new Map(groupOrder.map((group, index) => [group, palette[index % palette.length]]));
+  const transform = point => {
+    const scale = VIEW_HEIGHT / 220;
+    const offsetX = (VIEW_WIDTH - 320 * scale) * 0.5;
+    return [offsetX + point[0] * scale, point[1] * scale];
+  };
+  const regions = sourceRegions.map(region => Object.freeze({
+    id: region.id,
+    color: groupColors.get(region.group),
+    points: freezePoints(region.points.map(transform))
+  }));
+  const stateArcs = source.arcs.filter(arcItem => arcItem.kind === "state");
+  const paths = stateArcs.map(arcItem => {
+    const adjacent = sourceRegions.filter(region => region.rings.flat().some(arcRef => arcRef.arcId === arcItem.id));
+    if (adjacent.length !== 2) throw new Error(`${sourceId}/${arcItem.id} 必须恰有两个行政侧`);
+    return boundary(
+      arcItem.id,
+      freezePoints(arcItem.points.map(transform)),
+      groupColors.get(adjacent[0].group),
+      groupColors.get(adjacent[1].group),
+      transform(polygonCentroid(adjacent[0].points))
+    );
+  });
+  if (!paths.length) throw new Error(`${sourceId} 不含可用于颜色过渡的 state arc`);
+  const endpointGroups = new Map();
+  for (const path of paths) {
+    for (const point of [path.points[0], path.points.at(-1)]) {
+      const key = `${point[0].toFixed(6)},${point[1].toFixed(6)}`;
+      const item = endpointGroups.get(key) || {point, pathIds: []};
+      item.pathIds.push(path.id);
+      endpointGroups.set(key, item);
+    }
+  }
+  const junctions = [...endpointGroups.values()]
+    .filter(item => item.pathIds.length >= 2)
+    .map(item => Object.freeze({point: Object.freeze([...item.point]), pathIds: Object.freeze([...item.pathIds])}));
+  return Object.freeze({
+    id: source.id,
+    name,
+    description: source.description,
+    paths: Object.freeze(paths),
+    regions: Object.freeze(regions),
+    junctions: Object.freeze(junctions)
+  });
+}
+
+function resolveFixture(fixtureOrId) {
+  if (typeof fixtureOrId === "string") return POLITICAL_BLEND_FIXTURE_BY_ID.get(fixtureOrId) || POLITICAL_BLEND_FIXTURE;
+  return fixtureOrId?.paths?.length ? fixtureOrId : POLITICAL_BLEND_FIXTURE;
+}
+
+function polygonCentroid(points) {
+  const unique = points.length > 1 && samePoint(points[0], points.at(-1)) ? points.slice(0, -1) : points;
+  const total = unique.reduce((result, point) => [result[0] + point[0], result[1] + point[1]], [0, 0]);
+  return [total[0] / unique.length, total[1] / unique.length];
 }
 
 function boundary(id, points, colorA, colorB, sidePointA) {
@@ -489,6 +608,16 @@ function mixHex(first, second, ratio) {
   const b = Number.parseInt(second.slice(1), 16);
   const mix = shift => Math.round(((a >> shift) & 255) * (1 - ratio) + ((b >> shift) & 255) * ratio);
   return `#${[16, 8, 0].map(shift => mix(shift).toString(16).padStart(2, "0")).join("")}`;
+}
+
+function mixMany(colors) {
+  const unique = [...new Set(colors)];
+  if (!unique.length) return "#b8c8ca";
+  const total = unique.reduce((result, color) => {
+    const value = Number.parseInt(color.slice(1), 16);
+    return [result[0] + (value >> 16), result[1] + ((value >> 8) & 255), result[2] + (value & 255)];
+  }, [0, 0, 0]);
+  return `#${total.map(value => Math.round(value / unique.length).toString(16).padStart(2, "0")).join("")}`;
 }
 
 function clamp(value, minimum, maximum) {
