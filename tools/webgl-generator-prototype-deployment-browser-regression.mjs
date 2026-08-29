@@ -23,7 +23,7 @@ try {
   browser = await playwright.chromium.launch({headless: true, channel: "chrome"});
   const reports = [];
   for (const laboratory of [
-    {path: "/prototype/boundary-topology-lab/", api: "boundaryTopologyLab", fixtureSelector: "#fixture-list [data-fixture]", additionalSelector: "#algorithm-list [data-algorithm]", matrixSelector: "#result-grid .result-item", expected: {fixtures: 20, additionalCases: 7, matrix: 20}},
+    {path: "/prototype/boundary-topology-lab/", api: "boundaryTopologyLab", fixtureSelector: "#fixture-list [data-fixture]", additionalSelector: "#algorithm-list [data-algorithm]", matrixSelector: "#result-grid .result-item", workbenchTab: "拓扑回归", blendFixtureSelector: "#blend-fixture-list [data-blend-fixture]", expected: {fixtures: 20, additionalCases: 7, matrix: 20, blendFixtures: 4}},
     {path: "/prototype/river-network-lab/", api: "riverNetworkLab", fixtureSelector: "#fixture-list [data-case]", additionalSelector: "#generated-list [data-case]", matrixSelector: "#matrix .matrix-item", expected: {fixtures: 8, additionalCases: 3, matrix: 8}}
   ]) {
     const context = await browser.newContext({viewport: {width: 1280, height: 820}});
@@ -37,16 +37,20 @@ try {
     page.on("pageerror", error => pageErrors.push(error.message));
     await page.goto(`${baseUrl}${laboratory.path}`, {waitUntil: "networkidle"});
     await page.waitForFunction(({fixtureSelector, api}) => document.querySelectorAll(fixtureSelector).length > 0 && Boolean(window[api]), laboratory);
+    if (laboratory.workbenchTab) await page.getByRole("tab", {name: laboratory.workbenchTab, exact: true}).click();
     await page.getByRole("button", {name: /运行全部/}).click();
     await page.waitForFunction(selector => document.querySelectorAll(selector).length > 0, laboratory.matrixSelector);
-    const state = await page.evaluate(({fixtureSelector, additionalSelector, matrixSelector, api}) => ({
+    const state = await page.evaluate(({fixtureSelector, additionalSelector, matrixSelector, blendFixtureSelector, api}) => ({
       fixtures: document.querySelectorAll(fixtureSelector).length,
       additionalCases: document.querySelectorAll(additionalSelector).length,
       matrix: document.querySelectorAll(matrixSelector).length,
+      blendFixtures: blendFixtureSelector ? document.querySelectorAll(blendFixtureSelector).length : undefined,
       apiReady: Boolean(window[api]),
       appSourceRequests: performance.getEntriesByType("resource").map(entry => entry.name).filter(name => name.includes("/app/webgl-generator/src/"))
     }), laboratory);
-    assert.deepEqual({fixtures: state.fixtures, additionalCases: state.additionalCases, matrix: state.matrix}, laboratory.expected, `${laboratory.path} 固定用例或矩阵数量漂移`);
+    const actualCounts = {fixtures: state.fixtures, additionalCases: state.additionalCases, matrix: state.matrix};
+    if (laboratory.blendFixtureSelector) actualCounts.blendFixtures = state.blendFixtures;
+    assert.deepEqual(actualCounts, laboratory.expected, `${laboratory.path} 固定用例或矩阵数量漂移`);
     assert.equal(state.apiReady, true, `${laboratory.path} 实验室 API 没有初始化`);
     assert.deepEqual(state.appSourceRequests, [], `${laboratory.path} 仍请求未部署的正式源码`);
     assert.deepEqual(consoleErrors, [], `${laboratory.path} 出现 console error`);

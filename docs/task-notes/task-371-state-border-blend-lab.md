@@ -49,5 +49,5 @@
 - 页签与联动在默认窗口及 `1280 × 800` 桌面窗口复验：桌面左栏固定 `244px`，右侧工作区从 `x = 244` 开始，水平重叠为 `0`；四个国界夹具选择分别产生不同可见帧。切到拓扑页时国界工作台不可见，切回后仍保留最后所选夹具，console warning / error 为 `0`。
 - 可见结果与诊断一致：九轨仍在尖角形成离散色块，需求前颜色带较连续但保留偏移几何风险，连续中心线宽度稳定却仍依赖几何端帽，屏幕空间候选形成没有硬外沿的连续雾化。实验室页面 console error / warn 为 `0`。
 - 修正后的真实旧版近景、合法夹具顶部和四候选对照截图位于 `Z:\tmp\codex\2026-08-29\task-371-state-border-blend-lab\artifacts\corrected\`；首轮 `artifacts\lab\` 与 `artifacts\old-60584a5\` 仅保留为已作废反例，不再作为结论证据。
-- production build 通过，`1408 modules transformed`；`regress:prototype-deployment-browser` 同时通过边界实验室 `20 / 7 / 20` 与河流实验室 `8 / 3 / 8`，两页 `appSourceRequests / consoleErrors / pageErrors` 均为 `0`。
+- production build 通过，`1408 modules transformed`；`regress:prototype-deployment-browser` 先切入拓扑页再运行矩阵，同时通过边界实验室 `20 / 7 / 20 + 4` 个国界夹具与河流实验室 `8 / 3 / 8`，两页 `appSourceRequests / consoleErrors / pageErrors` 均为 `0`。
 - 当前停止于产品选择门：建议以“屏幕空间朦胧”为正式集成方向，需求前颜色带只作来源与观感参考，连续中心线保留为不推荐的几何对照。用户已授权提交并推送本实验室分支；用户确认视觉方向前保持正式 renderer `0` 改动，不合入 `main`。
