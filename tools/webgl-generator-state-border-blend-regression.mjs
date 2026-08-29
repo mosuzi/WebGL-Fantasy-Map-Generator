@@ -93,7 +93,9 @@ assert.notEqual(disabledIntent.fingerprint, enabledIntent.fingerprint, "首屏�
 const controlPanelSource = await readFile(new URL("../app/webgl-generator/src/ui/vue/components/ControlPanel.vue", import.meta.url), "utf8");
 const configStoreSource = await readFile(new URL("../app/webgl-generator/src/ui/vue/stores/global-config-store.js", import.meta.url), "utf8");
 const rendererSource = await readFile(new URL("../app/webgl-generator/src/renderer/placeholder-renderer.js", import.meta.url), "utf8");
-assert.match(controlPanelSource, /id="state-border-blend-title">国界晕染<[\s\S]*>独立显示样式<[\s\S]*:checked="preferences\.stateBorderBlend\.enabled"/, "内置主题下没有直接提供独立国界晕染控件");
+assert.match(controlPanelSource, /\{value: "borders", label: "国界效果"\}[\s\S]*\{value: "labels", label: "地图标签"\}/, "样式页没有区分国界效果与地图标签二级入口");
+assert.match(controlPanelSource, /v-show="activeStyleSection === 'borders'"[\s\S]*id="state-border-blend-title">国界晕染<[\s\S]*>全局显示偏好 · 仅国家视图<[\s\S]*:checked="preferences\.stateBorderBlend\.enabled"/, "国界晕染没有归入独立的国家视图效果层级");
+assert.match(controlPanelSource, /const activeStyleSection = ref\("labels"\)[\s\S]*function selectStyleSection\(value\)/, "样式类别切换没有保持本地选择且可能误触配置事件");
 assert.doesNotMatch(controlPanelSource, /activeUserThemeDocument\.stateBorderBlend|复制为用户主题，再调整晕染参数/, "国界晕染仍被用户主题门禁阻断");
 assert.match(configStoreSource, /stateBorderBlend:[\s\S]*normalizeStateBorderBlendStyle/, "独立显示偏好没有持久化与兼容归一化");
 assert.match(rendererSource, /pushPoliticalColorFeather\(vertices, context, statePaths, stateBorderBlend\)/, "正式国家线层没有使用羽化绘制入口");

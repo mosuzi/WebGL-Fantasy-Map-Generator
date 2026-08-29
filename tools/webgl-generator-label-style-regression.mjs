@@ -240,6 +240,8 @@ assert.match(rendererSource, /getLabelStates\(map\), \.\.\.getLabelProvinces\(ma
 assert.match(rendererSource, /isWorldPoint\(province\.pole\)[\s\S]*province\.center/, "省份标签没有 pole→center 回退");
 assert.match(rendererSource, /provinceLabel[\s\S]*boxesOverlapAny\(occupiedStates/, "省份标签没有避让国家名称");
 assert.match(controlPanelSource, /data-control-panel="styles"[\s\S]*reset-all-label-styles/, "样式页或全部重置入口缺失");
+assert.match(controlPanelSource, /v-show="activeStyleSection === 'labels'"[^>]*class="style-category-card label-style-editor"[\s\S]*id="label-style-editor-title">地图标签<[\s\S]*>当前地图样式 · 按标签类型</, "标签控件没有归入独立的当前地图样式层级");
+assert.match(controlPanelSource, /调整地图上的国家、省份、城市等文字外观；不会改变国界颜色过渡/, "标签样式没有明确与国界效果分离");
 assert.match(controlPanelSource, /\{value: "zone", label: "地区名称"\}/, "样式页没有地区名称类型");
 assert.match(controlPanelSource, /load-local-label-fonts[\s\S]*queryLocalFonts/, "样式页没有用户触发的本机字体读取入口");
 assert.match(controlPanelSource, /本机未检测到[\s\S]*系统字体/, "样式页没有缺失字体 fallback 状态");
@@ -260,6 +262,8 @@ assert.equal(stylePanelSource.match(/unit-label="px"/g)?.length, 6, "样式页 p
 assert.match(stylesSource, /\.label-style-panel \.ui-slider-field\s*\{[^}]*grid-template-columns:\s*72px minmax\(0, 1fr\) 84px;/, "样式页无单位滑动条没有为长标签保留列宽");
 assert.match(stylesSource, /\.label-style-panel \.ui-slider-field-has-unit\s*\{[^}]*grid-template-columns:\s*72px minmax\(0, 1fr\) 84px max-content;/, "样式页带单位滑动条没有保持数值与单位独立列");
 assert.match(stylesSource, /\.label-style-panel \.ui-slider-field > span:first-child\s*\{[^}]*white-space:\s*nowrap;/, "样式页滑动条标签仍可能折行");
+assert.match(stylesSource, /\.style-scope-navigation,\s*\.style-category-card\s*\{[^}]*min-width:\s*0;/, "二级样式层级没有防止窄面板横向溢出");
+assert.match(stylesSource, /\.state-border-blend-editor\s*\{[^}]*border-color:[^}]*box-shadow:[^}]*\}[\s\S]*\.label-style-editor\s*\{[^}]*border-color:[^}]*box-shadow:/, "国界与标签样式卡没有形成可辨识的视觉层级");
 assert.match(stylesSource, /\.custom-label \.map-label-content\s*\{[^}]*padding:\s*2px 5px;[^}]*border-radius:\s*2px;/, "手工标签没有使用现代图册窄注记底板");
 assert.ok(PNG_SEMANTIC_LABEL_SELECTORS.includes(".province-label.visible"), "PNG overlay 没有纳入省份名称");
 assert.ok(PNG_SEMANTIC_LABEL_SELECTORS.includes(".zone-label.visible"), "PNG overlay 没有纳入地区名称");

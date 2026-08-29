@@ -424,11 +424,26 @@
     </div>
 
     <div class="control-panel-section label-style-panel" data-control-panel="styles" :hidden="activeTab !== 'styles'">
-      <section class="state-border-blend-editor" aria-labelledby="state-border-blend-title">
+      <section class="style-scope-navigation" aria-labelledby="style-scope-navigation-title">
+        <div class="style-scope-copy">
+          <strong id="style-scope-navigation-title">选择样式类别</strong>
+          <span>边界效果与地图文字分别调整，互不改变。</span>
+        </div>
+        <UiSegmented
+          class="style-scope-segmented"
+          label="样式类别"
+          :options="styleSectionOptions"
+          :model-value="activeStyleSection"
+          @select="selectStyleSection"
+        />
+      </section>
+
+      <section v-show="activeStyleSection === 'borders'" class="style-category-card state-border-blend-editor" aria-labelledby="state-border-blend-title">
         <div class="visual-theme-editor-header">
           <strong id="state-border-blend-title">国界晕染</strong>
-          <span>独立显示样式</span>
+          <span>全局显示偏好 · 仅国家视图</span>
         </div>
+        <p class="style-category-summary">调整相邻国家颜色在国界两侧的过渡；不处理文字标签、边界线或海岸几何。</p>
         <UiSwitchField
           label="启用国界颜色过渡"
           input-id="state-border-blend-enabled"
@@ -456,40 +471,48 @@
         />
         <p class="visual-theme-editor-note">两侧国家色沿国界向外羽化至透明；只影响国家视图，不改变国界线、海岸、主题或地图数据。</p>
       </section>
-      <UiSelectField
-        label="标签类型"
-        input-id="label-style-type"
-        :model-value="selectedLabelStyleType"
-        :options="labelStyleTypeOptions"
-        @update:model-value="value => selectedLabelStyleType = value"
-      />
-      <div class="label-style-preview" :style="labelStylePreviewCss" aria-live="polite">山河有名 · {{ activeLabelStyleLabel }}</div>
-      <p class="label-style-inheritance">{{ labelStyleInheritanceHint }}</p>
-      <div class="label-font-source-row">
-        <UiSelectField label="字体" input-id="label-style-font" :model-value="activeLabelFontValue" :options="labelFontOptions" @update:model-value="commitLabelFont" />
-        <UiButton id="load-local-label-fonts" variant="secondary" :disabled="localFontsLoading" @click="loadLocalLabelFonts">
-          {{ localFontsLoading ? "读取中" : "读取本机字体" }}
-        </UiButton>
-      </div>
-      <p class="label-font-status" role="status">{{ labelFontStatus }}</p>
-      <UiSelectField label="字重" input-id="label-style-weight" :model-value="String(activeLabelStyle.fontWeight)" :options="labelWeightOptions" @update:model-value="value => commitLabelStyle('fontWeight', Number(value))" />
-      <UiSwitchField label="斜体" input-id="label-style-italic" field-class="generation-check-row label-style-italic-switch" compact-hit-area :checked="activeLabelStyle.italic" @change="value => commitLabelStyle('italic', value)" />
-      <UiSliderField label="字号" input-id="label-style-font-size" :model-value="activeLabelStyle.fontSize" :min="8" :max="72" :step="1" unit-label="px" @change="value => commitLabelStyle('fontSize', value)" />
-      <UiSliderField label="字距" input-id="label-style-letter-spacing" :model-value="activeLabelStyle.letterSpacing" :min="-2" :max="12" :step="0.1" unit-label="px" @change="value => commitLabelStyle('letterSpacing', value)" />
-      <UiSliderField label="不透明度" input-id="label-style-opacity" :model-value="activeLabelStyle.opacity" :min="0" :max="1" :step="0.05" @change="value => commitLabelStyle('opacity', value)" />
-      <div class="label-style-color-grid">
-        <label>文字色<input id="label-style-color" type="color" :value="activeLabelStyle.color" @change="event => commitLabelStyle('color', event.target.value)" /></label>
-        <label>描边色<input id="label-style-stroke-color" type="color" :value="activeLabelStyle.strokeColor" @change="event => commitLabelStyle('strokeColor', event.target.value)" /></label>
-        <label>阴影色<input id="label-style-shadow-color" type="color" :value="activeLabelStyle.shadowColor" @change="event => commitLabelStyle('shadowColor', event.target.value)" /></label>
-      </div>
-      <UiSliderField label="描边" input-id="label-style-stroke-width" :model-value="activeLabelStyle.strokeWidth" :min="0" :max="8" :step="0.01" unit-label="px" @change="value => commitLabelStyle('strokeWidth', value)" />
-      <UiSliderField label="阴影横移" input-id="label-style-shadow-x" :model-value="activeLabelStyle.shadowOffsetX" :min="-20" :max="20" :step="0.1" unit-label="px" @change="value => commitLabelStyle('shadowOffsetX', value)" />
-      <UiSliderField label="阴影纵移" input-id="label-style-shadow-y" :model-value="activeLabelStyle.shadowOffsetY" :min="-20" :max="20" :step="0.1" unit-label="px" @change="value => commitLabelStyle('shadowOffsetY', value)" />
-      <UiSliderField label="阴影模糊" input-id="label-style-shadow-blur" :model-value="activeLabelStyle.shadowBlur" :min="0" :max="30" :step="0.1" unit-label="px" @change="value => commitLabelStyle('shadowBlur', value)" />
-      <div class="visual-theme-action-row">
-        <UiButton id="reset-current-label-style" variant="secondary" @click="resetCurrentLabelStyle">重置当前类型</UiButton>
-        <UiButton id="reset-all-label-styles" variant="danger" @click="resetAllLabelStyles">重置全部</UiButton>
-      </div>
+
+      <section v-show="activeStyleSection === 'labels'" class="style-category-card label-style-editor" aria-labelledby="label-style-editor-title">
+        <div class="visual-theme-editor-header">
+          <strong id="label-style-editor-title">地图标签</strong>
+          <span>当前地图样式 · 按标签类型</span>
+        </div>
+        <p class="style-category-summary">调整地图上的国家、省份、城市等文字外观；不会改变国界颜色过渡。</p>
+        <UiSelectField
+          label="标签类型"
+          input-id="label-style-type"
+          :model-value="selectedLabelStyleType"
+          :options="labelStyleTypeOptions"
+          @update:model-value="value => selectedLabelStyleType = value"
+        />
+        <div class="label-style-preview" :style="labelStylePreviewCss" aria-live="polite">山河有名 · {{ activeLabelStyleLabel }}</div>
+        <p class="label-style-inheritance">{{ labelStyleInheritanceHint }}</p>
+        <div class="label-font-source-row">
+          <UiSelectField label="字体" input-id="label-style-font" :model-value="activeLabelFontValue" :options="labelFontOptions" @update:model-value="commitLabelFont" />
+          <UiButton id="load-local-label-fonts" variant="secondary" :disabled="localFontsLoading" @click="loadLocalLabelFonts">
+            {{ localFontsLoading ? "读取中" : "读取本机字体" }}
+          </UiButton>
+        </div>
+        <p class="label-font-status" role="status">{{ labelFontStatus }}</p>
+        <UiSelectField label="字重" input-id="label-style-weight" :model-value="String(activeLabelStyle.fontWeight)" :options="labelWeightOptions" @update:model-value="value => commitLabelStyle('fontWeight', Number(value))" />
+        <UiSwitchField label="斜体" input-id="label-style-italic" field-class="generation-check-row label-style-italic-switch" compact-hit-area :checked="activeLabelStyle.italic" @change="value => commitLabelStyle('italic', value)" />
+        <UiSliderField label="字号" input-id="label-style-font-size" :model-value="activeLabelStyle.fontSize" :min="8" :max="72" :step="1" unit-label="px" @change="value => commitLabelStyle('fontSize', value)" />
+        <UiSliderField label="字距" input-id="label-style-letter-spacing" :model-value="activeLabelStyle.letterSpacing" :min="-2" :max="12" :step="0.1" unit-label="px" @change="value => commitLabelStyle('letterSpacing', value)" />
+        <UiSliderField label="不透明度" input-id="label-style-opacity" :model-value="activeLabelStyle.opacity" :min="0" :max="1" :step="0.05" @change="value => commitLabelStyle('opacity', value)" />
+        <div class="label-style-color-grid">
+          <label>文字色<input id="label-style-color" type="color" :value="activeLabelStyle.color" @change="event => commitLabelStyle('color', event.target.value)" /></label>
+          <label>描边色<input id="label-style-stroke-color" type="color" :value="activeLabelStyle.strokeColor" @change="event => commitLabelStyle('strokeColor', event.target.value)" /></label>
+          <label>阴影色<input id="label-style-shadow-color" type="color" :value="activeLabelStyle.shadowColor" @change="event => commitLabelStyle('shadowColor', event.target.value)" /></label>
+        </div>
+        <UiSliderField label="描边" input-id="label-style-stroke-width" :model-value="activeLabelStyle.strokeWidth" :min="0" :max="8" :step="0.01" unit-label="px" @change="value => commitLabelStyle('strokeWidth', value)" />
+        <UiSliderField label="阴影横移" input-id="label-style-shadow-x" :model-value="activeLabelStyle.shadowOffsetX" :min="-20" :max="20" :step="0.1" unit-label="px" @change="value => commitLabelStyle('shadowOffsetX', value)" />
+        <UiSliderField label="阴影纵移" input-id="label-style-shadow-y" :model-value="activeLabelStyle.shadowOffsetY" :min="-20" :max="20" :step="0.1" unit-label="px" @change="value => commitLabelStyle('shadowOffsetY', value)" />
+        <UiSliderField label="阴影模糊" input-id="label-style-shadow-blur" :model-value="activeLabelStyle.shadowBlur" :min="0" :max="30" :step="0.1" unit-label="px" @change="value => commitLabelStyle('shadowBlur', value)" />
+        <div class="visual-theme-action-row">
+          <UiButton id="reset-current-label-style" variant="secondary" @click="resetCurrentLabelStyle">重置当前类型</UiButton>
+          <UiButton id="reset-all-label-styles" variant="danger" @click="resetAllLabelStyles">重置全部</UiButton>
+        </div>
+      </section>
     </div>
 
     <div class="control-panel-section unit-control-panel" data-control-panel="units" :hidden="activeTab !== 'units'">
@@ -871,6 +894,12 @@ const tabs = Object.freeze([
   {id: "management", label: "管理"},
   {id: "units", label: "单位"}
 ]);
+
+const styleSectionOptions = Object.freeze([
+  {value: "borders", label: "国界效果"},
+  {value: "labels", label: "地图标签"}
+]);
+const activeStyleSection = ref("labels");
 
 const laboratories = Object.freeze([
   {id: "web-cells", label: "WebGL 单元格实验室", url: "https://fmg.mosuzi.top/prototype/web-cells/"},
@@ -1568,6 +1597,10 @@ function applyStateBorderBlendPatch(patch) {
   document.dispatchEvent(new CustomEvent("webgl-generator-state-border-blend", {
     detail: {patch}
   }));
+}
+
+function selectStyleSection(value) {
+  if (styleSectionOptions.some(option => option.value === value)) activeStyleSection.value = value;
 }
 
 function requestDeleteVisualTheme() {
