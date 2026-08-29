@@ -151,6 +151,7 @@ import {drawRouteMeshBatches, emptyRouteDrawRanges, resolveRouteStyle, SELECTED_
 import {emptyOceanCurrentLayerStats, pushOceanCurrentLayer} from "./ocean-current-layer.js";
 import {pushMilitaryFrontLayer} from "./military-front-layer.js";
 import {snapshotViewportCamera, viewportBufferTransform} from "./viewport-buffer-transform.js";
+import {installViewportInputController, normalizeNavigationInputMode} from "./viewport-input-controller.js";
 import {wildernessLabelAnchor} from "../runtime/zone-wilderness.js";
 import {
   buildGridCellDiagnosticHighlight,
@@ -704,17 +705,26 @@ export class PlaceholderMapRenderer {
     this.routeRefreshTimer = 0;
     this.routeRefreshVersion = 0;
     this.routeRefreshActiveVersion = 0;
-    installCanvasInteractions(this.canvas, this.camera, interaction => {
-      this.requestViewportPreview(interaction);
-    }, event => {
-      this.onHover(this.pickClientPoint(event.clientX, event.clientY));
-    }, event => {
-      this.onSelect(this.pickClientPoint(event.clientX, event.clientY, {cycleCities: true}));
-    }, interaction => {
-      this.beginViewportPointerInteraction(interaction);
-    }, interaction => {
-      this.endViewportPointerInteraction(interaction);
-    }, () => ({width: this.canvasSize.cssWidth, height: this.canvasSize.cssHeight}));
+    this.viewportInputController = installViewportInputController({
+      canvas: this.canvas,
+      camera: this.camera,
+      onChange: interaction => {
+        this.requestViewportPreview(interaction);
+      },
+      onHover: event => {
+        this.onHover(this.pickClientPoint(event.clientX, event.clientY));
+      },
+      onSelect: event => {
+        this.onSelect(this.pickClientPoint(event.clientX, event.clientY, {cycleCities: true}));
+      },
+      onInteractionStart: interaction => {
+        this.beginViewportPointerInteraction(interaction);
+      },
+      onInteractionEnd: interaction => {
+        this.endViewportPointerInteraction(interaction);
+      },
+      getViewportSize: () => ({width: this.canvasSize.cssWidth, height: this.canvasSize.cssHeight})
+    });
     this.webGlContextLost = false;
     this.webGlContextResourceState = "ready";
     this.webGlContextRestorePromise = null;
@@ -736,6 +746,20 @@ export class PlaceholderMapRenderer {
     this.canvas.addEventListener("webglcontextrestored", () => this.handleWebGlContextRestored());
     this.webGlContextLifecycleInstalled = true;
     return true;
+  }
+
+  setNavigationInputMode(mode) {
+    return this.viewportInputController?.setInputMode(normalizeNavigationInputMode(mode)) || normalizeNavigationInputMode(mode);
+  }
+
+  getNavigationInputState() {
+    return this.viewportInputController?.snapshot?.() || {
+      inputMode: normalizeNavigationInputMode(),
+      pointerCount: 0,
+      interactionActive: false,
+      spacePanActive: false,
+      wheelIntent: null
+    };
   }
 
   handleWebGlContextLost(event) {
@@ -3430,6 +3454,7 @@ export class PlaceholderMapRenderer {
         requests: this.viewportPreviewRequests,
         coalesced: this.viewportPreviewCoalesced
       },
+      navigationInput: this.getNavigationInputState(),
       dynamicMeshCache: {
         routesDirty: this.dynamicBuffersDirty.routes,
         tradeFlowsDirty: this.dynamicBuffersDirty.tradeFlows,
@@ -6276,107 +6301,6 @@ function summarizeObjectHighlight(object) {
     ...(object.targetId !== undefined ? {targetId: object.targetId} : {}),
     name: object.name || ""
   };
-}
-
-function installCanvasInteractions(canvas, camera, onChange, onHover, onSelect, onInteractionStart, onInteractionEnd, getViewportSize = () => canvas.getBoundingClientRect()) {
-  let activePointer = null;
-  let lastX = 0;
-  let lastY = 0;
-  let startX = 0;
-  let startY = 0;
-
-  canvas.addEventListener("pointerdown", event => {
-    const mode = pointerInteractionMode(event);
-    if (!mode) return;
-    if (mode === "pan") event.preventDefault();
-    activePointer = {
-      id: event.pointerId,
-      mode,
-      moved: false
-    };
-    if (mode === "pan") onInteractionStart?.({kind: "pan", pointerId: event.pointerId});
-    lastX = event.clientX;
-    lastY = event.clientY;
-    startX = event.clientX;
-    startY = event.clientY;
-    canvas.setPointerCapture(event.pointerId);
-  });
-
-  canvas.addEventListener("pointermove", event => {
-    if (!activePointer || activePointer.id !== event.pointerId) {
-      onHover(event);
-      return;
-    }
-    if (activePointer.mode === "select") {
-      if (Math.hypot(event.clientX - startX, event.clientY - startY) > 3) activePointer.moved = true;
-      onHover(event);
-      return;
-    }
-    event.preventDefault();
-    const rect = getViewportSize();
-    const dx = event.clientX - lastX;
-    const dy = event.clientY - lastY;
-    if (Math.hypot(event.clientX - startX, event.clientY - startY) > 3) activePointer.moved = true;
-    lastX = event.clientX;
-    lastY = event.clientY;
-    camera.offsetX += (dx / rect.width) * 2;
-    camera.offsetY -= (dy / rect.height) * 2;
-    onChange({kind: "pan"});
-  });
-
-  canvas.addEventListener("pointerup", event => {
-    if (!activePointer || activePointer.id !== event.pointerId) return;
-    const pointer = activePointer;
-    activePointer = null;
-    if (pointer.mode === "select" && !pointer.moved) onSelect(event);
-    if (pointer.mode === "pan") {
-      onInteractionEnd?.({kind: "pan", pointerId: event.pointerId});
-      onHover(event);
-    }
-    canvas.releasePointerCapture(event.pointerId);
-  });
-
-  canvas.addEventListener("pointercancel", event => {
-    if (activePointer?.mode === "pan") onInteractionEnd?.({kind: "pan", pointerId: event.pointerId});
-    activePointer = null;
-  });
-
-  canvas.addEventListener("contextmenu", event => {
-    event.preventDefault();
-  });
-
-  canvas.addEventListener("auxclick", event => {
-    if (event.button === 1 || event.button === 2) event.preventDefault();
-  });
-
-  canvas.addEventListener(
-    "wheel",
-    event => {
-      event.preventDefault();
-      const rect = canvas.getBoundingClientRect();
-      const cursorX = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-      const cursorY = 1 - ((event.clientY - rect.top) / rect.height) * 2;
-      const previousScale = camera.scale;
-      const nextScale = Math.max(0.5, Math.min(12, previousScale * Math.exp(-event.deltaY * 0.001)));
-      const worldX = (cursorX - camera.offsetX) / previousScale;
-      const worldY = (cursorY - camera.offsetY) / previousScale;
-      camera.scale = nextScale;
-      camera.offsetX = cursorX - worldX * nextScale;
-      camera.offsetY = cursorY - worldY * nextScale;
-      onChange({kind: "zoom"});
-    },
-    {passive: false}
-  );
-}
-
-function pointerInteractionMode(event) {
-  if (event.pointerType === "mouse") {
-    if (event.button === 0) return "select";
-    if (event.button === 1) return "pan";
-    if (event.button === 2) return "pan";
-    return null;
-  }
-  return event.button === 0 ? "pan" : null;
 }
 
 export function buildPlaceholderSurfaceBundle(map, colorMode, viewOptions, shoreVisualPaths = null, stateVisualPaths = null, provinceVisualPaths = null, politicalVisualMeshes = null, cellVisualMesh = null) {

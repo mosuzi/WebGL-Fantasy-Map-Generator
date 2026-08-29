@@ -2860,6 +2860,10 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     onShowOceanHeight: showOceanHeight => invokeRuntimeDisplayActionFromUi(state, documentRef, () => runtimeActions.layers.setShowOceanHeight(showOceanHeight)),
     onSmoothCellBorders: smoothCellBorders => invokeRuntimeDisplayActionFromUi(state, documentRef, () => runtimeActions.layers.setSmoothCellBorders(smoothCellBorders)),
     onMapEdgeFade: mapEdgeFade => invokeRuntimeDisplayActionFromUi(state, documentRef, () => runtimeActions.layers.setMapEdgeFade(mapEdgeFade)),
+    onNavigationInputMode: navigationInputMode => {
+      renderer.setNavigationInputMode(navigationInputMode);
+      updateRuntimePanel(documentRef, state);
+    },
     onVisualTheme: visualTheme => invokeRuntimeDisplayActionFromUi(state, documentRef, () => runtimeActions.layers.setTheme(visualTheme)),
     onCreateVisualTheme: () => runtimeActions.layers.createTheme(),
     onExportVisualTheme: () => runtimeActions.layers.exportTheme(currentVisualThemeId(documentRef), {download: true}),
@@ -4571,6 +4575,7 @@ function applyControlPreferencesToRenderer(documentRef, renderer) {
     if (typeof preferences.showOceanHeight === "boolean") renderer.setViewOptions({showOceanHeight: preferences.showOceanHeight});
     if (typeof preferences.smoothCellBorders === "boolean") renderer.setViewOptions({smoothCellBorders: preferences.smoothCellBorders});
     if (typeof preferences.mapEdgeFade === "boolean") renderer.setViewOptions({mapEdgeFade: preferences.mapEdgeFade});
+    renderer.setNavigationInputMode(preferences.navigationInputMode);
     renderer.setViewOptions({stateBorderBlend: normalizeStateBorderBlendStyle(preferences.stateBorderBlend)});
     if (typeof preferences.maxCityLabels === "number") renderer.setLabelOptions({maxCityLabels: preferences.maxCityLabels});
     renderer.setUnitPreferences(preferences.units);

@@ -25,6 +25,7 @@ import {regenerationPanelCopy} from "./regeneration-user-copy.js";
 import {buildShortcutDisplayModel} from "../runtime/keyboard-shortcuts.js";
 import {DEFAULT_MAX_CITY_LABELS} from "../runtime/display-defaults.js";
 import {MAP_CELLS_MAX, MAP_CELLS_MIN, normalizeMapCellTarget} from "../generator/map-size.js";
+import {normalizeNavigationInputMode} from "../renderer/viewport-input-controller.js";
 
 export const CONTROL_PREFERENCES_KEY = "webgl-generator-control-preferences";
 export const VIEW_MODE_SELECTOR = ".ui-segmented-mode-bridge[data-mode]";
@@ -100,6 +101,11 @@ export function bindRuntimePanel(documentRef, handlers) {
   documentRef.getElementById("map-edge-fade")?.addEventListener("change", event => {
     updateControlPreferences(documentRef, {mapEdgeFade: event.target.checked});
     handlers.onMapEdgeFade?.(event.target.checked);
+  });
+  documentRef.getElementById("navigation-input-mode")?.addEventListener("change", event => {
+    const navigationInputMode = normalizeNavigationInputMode(event.target.value);
+    updateControlPreferences(documentRef, {navigationInputMode});
+    handlers.onNavigationInputMode?.(navigationInputMode);
   });
   documentRef.getElementById("visual-theme-preset")?.addEventListener("change", event => {
     const visualTheme = normalizeVisualThemeId(event.target.value);
@@ -420,6 +426,8 @@ function applyControlPreferences(documentRef) {
     const input = documentRef.getElementById("map-edge-fade");
     if (input) input.checked = preferences.mapEdgeFade;
   }
+  const navigationInput = documentRef.getElementById("navigation-input-mode");
+  if (navigationInput) navigationInput.value = normalizeNavigationInputMode(preferences.navigationInputMode);
   if (typeof preferences.visualTheme === "string") {
     const input = documentRef.getElementById("visual-theme-preset");
     if (input) input.value = normalizeVisualThemeId(preferences.visualTheme);
@@ -611,6 +619,7 @@ function normalizeControlPreferences(preferences) {
   if (!preferences || typeof preferences !== "object") return {};
   const normalized = {...preferences};
   normalized.visualTheme = normalizeVisualThemeId(normalized.visualTheme);
+  normalized.navigationInputMode = normalizeNavigationInputMode(normalized.navigationInputMode);
   normalized.units = normalizeUnitPreferences(normalized.units);
   if (normalized.layers && typeof normalized.layers === "object") {
     normalized.layers = {...normalized.layers};

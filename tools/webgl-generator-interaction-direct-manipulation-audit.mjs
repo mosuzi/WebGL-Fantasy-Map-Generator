@@ -13,6 +13,7 @@ const FILES = Object.freeze({
   modeManager: "app/webgl-generator/src/runtime/canvas-tool-mode-manager.js",
   shortcuts: "app/webgl-generator/src/runtime/keyboard-shortcuts.js",
   renderer: "app/webgl-generator/src/renderer/placeholder-renderer.js",
+  viewportInput: "app/webgl-generator/src/renderer/viewport-input-controller.js",
   brushCursor: "app/webgl-generator/src/ui/brush-cursor-preview.js",
   styles: "app/webgl-generator/src/styles.css",
   cityDrag: "app/webgl-generator/src/runtime/city-relocation-drag.js",
@@ -351,20 +352,22 @@ function expandedDirectDefinitions(inventory) {
   const treeHosts = inventory.rows.filter(row => row.included && row.surfaceId.startsWith("fixed-overlay:tree:")).map(row => row.surfaceId).sort();
   const tableHosts = tableInstanceHosts();
   return [
-    direct("DM-01", "基础画布左键点击选择", "canvas-navigation", ["canvas:map-canvas"], 1, {
-      start: "鼠标左键 pointerdown 建立 select 指针并捕获", move: "移动超过 3px 标记 moved，仅更新 hover", complete: "pointerup 且未移动调用 onSelect", clickNoMove: "执行一次对象 / cell 选择", cancel: "无键盘取消；pointerup 结束", pointerCancel: "清空 activePointer，不执行选择", captureLost: "未监听 lostpointercapture；依赖 pointercancel", conflicts: "活动画布工具先拦截左键，未锁定时才到 renderer", history: "选择不写地图历史", recovery: "下一次 pointerdown 可重新开始", refs: [[FILES.renderer, ["mode === \"select\"", "onSelect(event)", "activePointer = null"]]]
+    direct("DM-01", "基础画布主键选择 / 阈值平移", "canvas-navigation", ["canvas:map-canvas"], 1, {
+      start: "鼠标 / 笔主键 pointerdown 建立 select 候选并捕获；空格主键立即进入 pan", move: "阈值内只更新 hover，超过 5px 后同一手势转为平移", complete: "未移动 pointerup 调用 onSelect；平移 pointerup 完成视口提交", clickNoMove: "执行一次对象 / cell 选择", cancel: "窗口失焦或主动销毁清空指针；pointerup 正常结束", pointerCancel: "清空全部导航指针，不执行选择", captureLost: "lostpointercapture 走同一清理并结束活动平移", conflicts: "活动画布工具优先拦截普通主键；中性浏览态才由 renderer 选择 / 平移", history: "选择与相机变化均不写地图历史", recovery: "取消后下一次 pointerdown 从当前相机重新开始", refs: [[FILES.viewportInput, ["pointer.mode === \"select\"", "pointerDistance(pointer)", "onSelect(event)", "lostpointercapture"]]]
     }),
     canvasPan("DM-02", "基础画布鼠标中键平移", "event.button === 1"),
     canvasPan("DM-03", "基础画布鼠标右键平移", "event.button === 2"),
-    canvasPan("DM-04", "基础画布非鼠标主指针平移", "return event.button === 0 ? \"pan\" : null"),
-    direct("DM-05", "基础画布滚轮锚点缩放", "canvas-navigation", ["canvas:map-canvas"], 1, {
-      start: "wheel 读取光标、画布矩形和旧 scale", move: "单次事件计算 0.5～12 的新 scale", complete: "保持光标对应世界点并调用 onChange", clickNoMove: "零 delta 不产生可见变化", cancel: "无跨事件草稿", pointerCancel: "不适用", captureLost: "不使用指针捕获", conflicts: "活动编辑锁默认拦截 wheel", history: "相机变化不写地图历史", recovery: "每次 wheel 独立从当前相机计算", refs: [[FILES.renderer, ["\"wheel\"", "previousScale", "worldX"]], [FILES.runtime, ["\"pointercancel\", \"wheel\""]]]
+    direct("DM-04", "基础画布触屏单指 / 双指导航", "canvas-navigation", ["canvas:map-canvas"], 1, {
+      start: "单触点建立选择候选；第二触点到达后转为质心 / 距离手势", move: "单指超过 8px 平移；双指同时更新质心平移与连续缩放", complete: "单指未移动可选择；双指退回单指后继续平移，末指抬起完成", clickNoMove: "单指轻点执行一次对象 / cell 选择", cancel: "pointercancel、窗口失焦或销毁统一清空多指状态", pointerCancel: "取消全部触点并结束活动导航", captureLost: "任一活动触点 lostpointercapture 时统一清理", conflicts: "仅中性浏览态消费；活动编辑工具继续由编辑锁优先", history: "触摸选择与相机变化均不写地图历史", recovery: "取消后下一触摸序列从当前相机重新开始", refs: [[FILES.viewportInput, ["enterTouchGesture", "applyTouchGesture", "touchPointers()", "lostpointercapture"]], [FILES.styles, ["touch-action: none"]]]
+    }),
+    direct("DM-05", "基础画布鼠标 / 触摸板滚轮导航", "canvas-navigation", ["canvas:map-canvas"], 1, {
+      start: "wheel 按浏览器输入偏好和 ctrlKey 分类为平移或缩放，并锁定短 burst 意图", move: "鼠标缩放保持光标世界锚点；触摸板普通 wheel 消费双轴 delta 平移", complete: "每次事件更新相机并请求预览，短 burst 结束后按现有延时提交", clickNoMove: "零 delta 不产生相机变化", cancel: "模式切换清空 wheel burst；事件本身无跨帧草稿", pointerCancel: "不适用", captureLost: "不使用指针捕获", conflicts: "活动编辑锁默认拦截 wheel；ctrlKey pinch 始终缩放", history: "相机变化不写地图历史", recovery: "新 burst 从当前模式与相机重新分类", refs: [[FILES.viewportInput, ["classifyViewportWheelIntent", "zoomCameraAtClientPoint", "wheelBurst", "panCamera(-delta.x, -delta.y"]], [FILES.runtime, ["\"pointercancel\", \"wheel\""]]]
     }),
     direct("DM-06", "基础画布右键菜单抑制", "canvas-navigation", ["canvas:map-canvas"], 1, {
-      start: "contextmenu 到达 canvas", move: "不适用", complete: "preventDefault 抑制浏览器菜单", clickNoMove: "右键点击不打开菜单", cancel: "无状态", pointerCancel: "不适用", captureLost: "不使用指针捕获", conflicts: "与右键平移共享鼠标右键序列", history: "不写地图历史", recovery: "每次事件独立", refs: [[FILES.renderer, ["\"contextmenu\"", "event.preventDefault()"]]]
+      start: "contextmenu 到达 canvas", move: "不适用", complete: "preventDefault 抑制浏览器菜单", clickNoMove: "右键点击不打开菜单", cancel: "无状态", pointerCancel: "不适用", captureLost: "不使用指针捕获", conflicts: "与右键平移共享鼠标右键序列", history: "不写地图历史", recovery: "每次事件独立", refs: [[FILES.viewportInput, ["\"contextmenu\"", "suppressContextMenu", "event.preventDefault()"]]]
     }),
     direct("DM-07", "基础画布中 / 右键 auxclick 抑制", "canvas-navigation", ["canvas:map-canvas"], 1, {
-      start: "auxclick 到达 canvas", move: "不适用", complete: "button 1 / 2 时 preventDefault", clickNoMove: "不触发浏览器默认中键或右键动作", cancel: "无状态", pointerCancel: "不适用", captureLost: "不使用指针捕获", conflicts: "与中 / 右键平移共享按键序列", history: "不写地图历史", recovery: "每次事件独立", refs: [[FILES.renderer, ["\"auxclick\"", "event.button === 1 || event.button === 2"]]]
+      start: "auxclick 到达 canvas", move: "不适用", complete: "button 1 / 2 时 preventDefault", clickNoMove: "不触发浏览器默认中键或右键动作", cancel: "无状态", pointerCancel: "不适用", captureLost: "不使用指针捕获", conflicts: "与中 / 右键平移共享按键序列", history: "不写地图历史", recovery: "每次事件独立", refs: [[FILES.viewportInput, ["\"auxclick\"", "event.button === 1 || event.button === 2"]]]
     }),
     labelDrag("DM-08", "手工标签首次放置并拖动", true),
     labelDrag("DM-09", "已有手工标签拖动", false),
@@ -404,7 +407,7 @@ function expandedDirectDefinitions(inventory) {
 
 function canvasPan(id, label, evidenceToken) {
   return direct(id, label, "canvas-navigation", ["canvas:map-canvas"], 1, {
-    start: "对应指针主序列进入 pan 并捕获", move: "按画布尺寸增量更新 camera offset", complete: "pointerup 清理并释放捕获", clickNoMove: "不改变相机且不触发选择", cancel: "pointercancel 清空 activePointer", pointerCancel: "停止平移，已产生相机增量保留", captureLost: "未监听 lostpointercapture", conflicts: "编辑锁放行鼠标中 / 右键，触控主键可能被活动工具拦截", history: "相机变化不写地图历史", recovery: "下一次从当前相机继续", refs: [[FILES.renderer, ["pointerInteractionMode", evidenceToken, "camera.offsetX"]], [FILES.runtime, ["isMouseButtonNavigationEvent"]]]
+    start: "对应鼠标按键立即进入 pan、捕获指针并启动视口交互", move: "按画布尺寸增量更新 camera offset", complete: "pointerup 清理、释放捕获并完成视口提交", clickNoMove: "不改变相机且不触发选择", cancel: "pointercancel 或窗口失焦清空全部导航指针", pointerCancel: "停止平移，已产生相机增量保留", captureLost: "lostpointercapture 走同一清理并结束活动平移", conflicts: "编辑锁继续放行鼠标中 / 右键，编辑工具只消费主键", history: "相机变化不写地图历史", recovery: "下一次从当前相机继续", refs: [[FILES.viewportInput, [evidenceToken, "beginInteraction", "panCamera", "lostpointercapture"]], [FILES.runtime, ["isMouseButtonNavigationEvent"]]]
   });
 }
 
