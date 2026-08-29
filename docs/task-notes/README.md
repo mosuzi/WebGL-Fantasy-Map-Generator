@@ -8,6 +8,7 @@
 
 > 分支执行约束：本专题已于 2026-08-19 获用户明确批准为第 349 项，只在 `codex/map-core-engine-architecture-plan` 并行分支逐阶段实施；不得将本分支合入 `main`。全阶段不执行浏览器验收，最终只形成并评估浏览器验收方案。
 
+- 第 371 项先在隔离旧提交中复现首次国界颜色过渡，再只在共享边界实验室比较历史单带、现九轨与连续朦胧候选；用户确认前不改正式 renderer；见 [`task-371-state-border-blend-lab.md`](./task-371-state-border-blend-lab.md)。
 - 第 370 项把初次载入时曾短暂出现的国界两侧颜色过渡正式实现为独立“国界晕染”样式，并与海岸几何平滑彻底分离；见 [`task-370-state-border-color-blend-style.md`](./task-370-state-border-color-blend-style.md)。
 - 第 368 项在国家管理界面增加独立的辖下省份后缀批量事务，默认保护手工定制全名并保持政体修改不联动；见 [`task-368-province-suffix-batch.md`](./task-368-province-suffix-batch.md)。
 - 第 359 项以用户指定 `krichars (3).webfmg` 为唯一完成输入，重构解析、adoption handoff、首屏 prepared layer 与可取消惰性任务，按绝对 `6.0s / 7.5s` 和 `>200ms = 0` 门验收；见 [`task-359-real-archive-load-critical-path.md`](./task-359-real-archive-load-critical-path.md)。

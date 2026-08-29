@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {readFileSync} from "node:fs";
 import {ALGORITHMS, DEFAULT_OPTIONS, samePoint} from "../prototype/boundary-topology-lab/src/algorithms.js";
 import {FIXTURES} from "../prototype/boundary-topology-lab/src/fixtures.js";
+import {evaluatePoliticalBlendCandidates, POLITICAL_BLEND_CANDIDATES, POLITICAL_BLEND_FIXTURE} from "../prototype/boundary-topology-lab/src/political-blend-lab.js";
 import {buildIndependentComparison, buildSharedSnapshot, composeRawRing, measureIndependentSeamError, measureIndependentSeamErrorDetails, sharedArcRefs} from "../prototype/boundary-topology-lab/src/topology.js";
 import {analyzeBandTriangleGeometry, analyzeCellFanGeometry, analyzePixelParityGeometry, analyzeStressComparison, analyzeVertexCollapseGeometry, bidirectionalHausdorff, HAUSDORFF_LIMITS, inspectRingGeometry, runAllFixtures, validateFixture} from "../prototype/boundary-topology-lab/src/validation.js";
 import {collectShapeDiagnostics, maximumDeviationZoomViewBox, mergeVisualDiagnostics, resolveComparisonPresentation} from "../prototype/boundary-topology-lab/src/visual-diagnostics.js";
@@ -44,6 +45,19 @@ const expectedAlgorithmPasses = new Map([
 assert.equal(FIXTURES.length, 20, "必须固定覆盖二十类拓扑夹具");
 assert.deepEqual(new Map(FIXTURES.map(fixture => [fixture.id, fixture.category])), expectedCases, "夹具 id 与案例分类必须保持稳定");
 assert.deepEqual(ALGORITHMS.map(algorithm => algorithm.id), ["raw", "douglas-peucker", "visvalingam", "chaikin", "catmull-rom", "b-spline", "recommended"], "算法矩阵不完整");
+
+const politicalBlendReport = evaluatePoliticalBlendCandidates();
+const politicalBlendById = new Map(politicalBlendReport.candidates.map(candidate => [candidate.id, candidate]));
+assert.equal(POLITICAL_BLEND_FIXTURE.id, "administrative-acute-junction", "国界颜色过渡必须固定匿名锐角 / 凹角 / 三方交汇夹具");
+assert.deepEqual(POLITICAL_BLEND_CANDIDATES.map(candidate => candidate.id), ["nine-track", "historical-band", "continuous-ribbon", "screen-haze"], "国界颜色过渡对照缺少历史或候选算法");
+assert.equal(politicalBlendById.get("nine-track").tracks, 9, "第 370 项基线必须精确保留九道轨道");
+assert.equal(politicalBlendById.get("historical-band").tracks, 2, "v0.5.67 历史路径必须精确复现双边单带");
+assert.ok(politicalBlendById.get("nine-track").invertedTriangles > politicalBlendById.get("historical-band").invertedTriangles, "九轨基线必须放大同一锐角夹具的翻面数量");
+assert.ok(politicalBlendById.get("historical-band").invertedTriangles > 0, "历史单带仍须如实暴露偏移后平滑的几何风险");
+assert.ok(politicalBlendById.get("continuous-ribbon").widthVariation < 1e-9, "连续中心线候选必须消除截面宽度突变");
+assert.equal(politicalBlendById.get("screen-haze").tracks, 0, "屏幕空间朦胧不得生成偏移轨道");
+assert.equal(politicalBlendById.get("screen-haze").invertedTriangles, 0, "屏幕空间朦胧不得产生反向三角");
+assert.equal(politicalBlendReport.candidates.every(candidate => candidate.finite), true, "国界颜色过渡候选必须保持有限诊断");
 
 const algorithmReports = [];
 const algorithmResultById = new Map();
@@ -371,9 +385,16 @@ assert.ok(normalizedDistanceZoom.width > 0 && normalizedDistanceZoom.height > 0,
 
 const indexSource = readFileSync(new URL("../prototype/boundary-topology-lab/index.html", import.meta.url), "utf8");
 const appSource = readFileSync(new URL("../prototype/boundary-topology-lab/src/app.js", import.meta.url), "utf8");
+const politicalBlendSource = readFileSync(new URL("../prototype/boundary-topology-lab/src/political-blend-lab.js", import.meta.url), "utf8");
 const styleSource = readFileSync(new URL("../prototype/boundary-topology-lab/src/styles.css", import.meta.url), "utf8");
 for (const contract of ["id=\"independent-title\"", "id=\"shared-status\"", "id=\"visual-legend\"", "id=\"current-issues\"", "绿色仅表示共享同源", "受保护城镇", "受保护道路", "受保护河流", "锚定河口", "海岸形状超限仅提示"]) {
   assert.ok(indexSource.includes(contract), `静态 UI 缺少契约：${contract}`);
+}
+for (const contract of ["id=\"political-blend-lab\"", "id=\"blend-nine-track\"", "id=\"blend-historical-band\"", "id=\"blend-continuous-ribbon\"", "id=\"blend-screen-haze\"", "只比较视觉算法，不写入正式地图"]) {
+  assert.ok(indexSource.includes(contract), `国界颜色过渡 UI 缺少契约：${contract}`);
+}
+for (const contract of ["FEATHER_PROFILE", "0.25 * options.strength", "chaikin(path.points, options.smoothness", "destination-in", "round-mask", "boundaryPoliticalBlendLab"]) {
+  assert.ok(politicalBlendSource.includes(contract), `国界颜色过渡实验缺少实现契约：${contract}`);
 }
 for (const contract of ["fixtureId: \"tri-state-junction\"", "resolveComparisonPresentation(", "mergeVisualDiagnostics(", "maximumDeviationZoomViewBox(", "deviationMarkup(result.comparison)", "protectedObjectsMarkup(fixture)", "surfaceMismatchMarkup(", "bandTriangleMarkup(", "cellFanMarkup(", "legacy-closed-anchor", "legacy-surface", "legacy-band", "legacy-cell-fan", "earcut-cell-surface", "metrics.shapePolicy === \"notice\"", "当前验收与形状诊断", "result.ok ? \"pass\" : \"fail\""]) {
   assert.ok(appSource.includes(contract), `交互逻辑缺少契约：${contract}`);
@@ -563,6 +584,13 @@ console.log(JSON.stringify({
   reverseOffsetMaximum: reverseOffsetMaximum.distance,
   finiteZoomViewBox: true,
   invalidZoomInputsRejected: 3,
+  politicalBlendCandidates: politicalBlendReport.candidates.map(candidate => ({
+    id: candidate.id,
+    tracks: candidate.tracks,
+    invertedTriangles: candidate.invertedTriangles,
+    widthVariation: candidate.widthVariation,
+    junctionMode: candidate.junctionMode
+  })),
   normalizedZoomDistance: normalizedDistanceZoom.distance,
   staticUiContracts: true,
   destructiveCounterexamples: 10,

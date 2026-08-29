@@ -45,6 +45,48 @@
       </aside>
 
       <div class="workspace">
+        <section class="political-blend-lab" id="political-blend-lab" aria-labelledby="political-blend-title">
+          <header class="blend-lab-head">
+            <div>
+              <p class="eyebrow">STATE COLOR TRANSITION · TASK 371</p>
+              <h2 id="political-blend-title">国界颜色过渡对照</h2>
+            </div>
+            <p>同一匿名夹具固定锐角、凹角与三方交汇；只比较视觉算法，不写入正式地图。</p>
+          </header>
+          <div class="blend-controls" aria-label="国界颜色过渡参数">
+            <label>宽度 <output id="blend-width-value"></output><input id="blend-width" type="range" min="8" max="56" step="1" value="30"></label>
+            <label>强度 <output id="blend-strength-value"></output><input id="blend-strength" type="range" min="0" max="1" step="0.05" value="0.75"></label>
+            <label>柔顺度 <output id="blend-smoothness-value"></output><input id="blend-smoothness" type="range" min="0" max="3" step="1" value="2"></label>
+          </div>
+          <div class="blend-comparison-grid">
+            <article class="blend-card rejected" data-blend-candidate="nine-track">
+              <header><div><span class="card-index">1</span><h3>第 370 项九轨</h3></div><span class="blend-state">已否决基线</span></header>
+              <canvas id="blend-nine-track" width="760" height="340" aria-label="第 370 项九轨羽化对照"></canvas>
+              <p>先沿原始折线偏移九条轨道，再分别平滑；用来稳定复现锐角三角与宽度突变。</p>
+              <dl id="blend-nine-track-metrics"></dl>
+            </article>
+            <article class="blend-card historical" data-blend-candidate="historical-band">
+              <header><div><span class="card-index">2</span><h3>v0.5.67 历史单带</h3></div><span class="blend-state">历史复现</span></header>
+              <canvas id="blend-historical-band" width="760" height="340" aria-label="旧提交单带颜色过渡对照"></canvas>
+              <p>精确保留两侧偏移、一次 Chaikin 与整带低透明度，颜色在同一条带内连续插值。</p>
+              <dl id="blend-historical-band-metrics"></dl>
+            </article>
+            <article class="blend-card candidate" data-blend-candidate="continuous-ribbon">
+              <header><div><span class="card-index">3</span><h3>连续中心线色带</h3></div><span class="blend-state">几何候选</span></header>
+              <canvas id="blend-continuous-ribbon" width="760" height="340" aria-label="连续中心线颜色过渡对照"></canvas>
+              <p>先平滑共享中心线，再按连续切线重算法向；截面不再继承原始折线的法向突变。</p>
+              <dl id="blend-continuous-ribbon-metrics"></dl>
+            </article>
+            <article class="blend-card preferred" data-blend-candidate="screen-haze">
+              <header><div><span class="card-index">4</span><h3>屏幕空间朦胧</h3></div><span class="blend-state">雾化候选</span></header>
+              <canvas id="blend-screen-haze" width="760" height="340" aria-label="屏幕空间朦胧颜色过渡对照"></canvas>
+              <p>先模糊完整国家色面，再用圆角国界邻域裁切；没有偏移轨道，也不会生成几何尖片。</p>
+              <dl id="blend-screen-haze-metrics"></dl>
+            </article>
+          </div>
+          <p class="blend-lab-note" id="blend-lab-note" aria-live="polite"></p>
+        </section>
+
         <section class="case-head">
           <div><p class="eyebrow" id="case-category"></p><h2 id="case-name"></h2></div>
           <p id="case-description"></p>
@@ -90,5 +132,6 @@
     <script src="./vendor/earcut.min.mjs"></script>
     <script src="./vendor/polygon-clipping.umd.min.mjs"></script>
     <script type="module" src="./src/app.js"></script>
+    <script type="module" src="./src/political-blend-lab.js"></script>
   </body>
 </html>
