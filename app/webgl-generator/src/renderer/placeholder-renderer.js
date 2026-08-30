@@ -44,7 +44,6 @@ import {
   normalizePoliticalMeshDebugMode,
   politicalMeshDebugCache,
   pushPoliticalBoundaryStrokes,
-  pushPoliticalColorFeather,
   summarizePoliticalVisualMeshes,
   summarizePoliticalVisualPaths
 } from "./political-layer.js";
@@ -88,6 +87,7 @@ import {
   createCityIconWebglLayer
 } from "./city-icon-layer.js";
 import {resizeCanvasToDisplaySize} from "./canvas-display-size.js";
+import {createStateBorderHazeCompositor} from "./state-border-haze-compositor.js";
 import {
   createSurfaceBaseBufferSet,
   createSurfaceBaseBufferSetAsync,
@@ -302,7 +302,7 @@ function evaluateDeferredWorkerRenderSnapshot(renderer, entries) {
     } else if (mutation.key === "view-options") {
       const nextOptions = normalizeRendererViewOptionPatch(value);
       if (!hasShallowPresentationChange(presentation.viewOptions, nextOptions)) continue;
-      if (["smoothCellBorders", "stateBorderBlend"].some(key => Object.prototype.hasOwnProperty.call(nextOptions, key))) effects.lines = true;
+      if (Object.prototype.hasOwnProperty.call(nextOptions, "smoothCellBorders")) effects.lines = true;
       presentation.viewOptions = {...presentation.viewOptions, ...nextOptions};
       const changedKeys = Object.keys(nextOptions).filter(key => presentationValueChanged(renderer.viewOptions, key, nextOptions[key]));
       const surfaceKeys = changedKeys.filter(key => !["mapEdgeFade", "stateBorderBlend"].includes(key));
@@ -384,7 +384,7 @@ const WEBGL_DIRECT_BUFFER_KEYS = Object.freeze([
 ]);
 
 const WEBGL_INITIALIZED_RESOURCE_KEYS = Object.freeze([
-  "program", "surfaceProgram", "cityIconLayer", "locations", "surfaceLocations", "surfaceBaseBufferSet",
+  "program", "surfaceProgram", "cityIconLayer", "stateBorderHazeCompositor", "locations", "surfaceLocations", "surfaceBaseBufferSet",
   "vertexBuffer", "cellVisualCorrectionBufferSet", ...WEBGL_DIRECT_BUFFER_KEYS
 ]);
 
@@ -393,6 +393,7 @@ function initializeWebGlResources(renderer) {
   renderer.program = createProgram(gl, vertexShaderSource, fragmentShaderSource);
   renderer.surfaceProgram = createProgram(gl, surfaceVertexShaderSource, fragmentShaderSource);
   renderer.cityIconLayer = createCityIconWebglLayer(gl);
+  renderer.stateBorderHazeCompositor = createStateBorderHazeCompositor(gl, renderer.canvas);
   renderer.locations = {
     position: gl.getAttribLocation(renderer.program, "a_position"), color: gl.getAttribLocation(renderer.program, "a_color"),
     scale: gl.getUniformLocation(renderer.program, "u_scale"), offset: gl.getUniformLocation(renderer.program, "u_offset"),
@@ -441,6 +442,7 @@ function cleanupInitializedWebGlResources(gl, resources) {
     run(() => gl.deleteBuffer(buffer));
   }
   run(() => resources.cityIconLayer?.destroy?.());
+  run(() => resources.stateBorderHazeCompositor?.destroy?.());
   run(() => resources.program && gl.deleteProgram(resources.program));
   run(() => resources.surfaceProgram && gl.deleteProgram(resources.surfaceProgram));
 }
@@ -1523,18 +1525,15 @@ export class PlaceholderMapRenderer {
     if (this.deferWorkerRenderMutation("color-mode", mode, {apply: value => this.setColorMode(value)})) return;
     if (this.colorMode === mode) return;
     const previous = this.colorMode;
-    const refreshStateBorderBlend = colorModeChangesStateBorderBlend(previous, mode, this.viewOptions.stateBorderBlend);
     if (this.canPresentGpuResidentColorMode(mode)) {
       try {
         if (mode === "diplomacy") refreshCellAttributePalette(this.gl, this.cellAttributeStore, this.map, mode, this.viewOptions);
         this.colorMode = mode;
         if (this.viewOptions.smoothCellBorders !== false) this.refreshGpuResidentShoreSurface();
-        if (refreshStateBorderBlend) this.refreshLineLayers({draw: false});
         this.draw();
       } catch (error) {
         this.colorMode = previous;
         if (this.viewOptions.smoothCellBorders !== false) this.refreshGpuResidentShoreSurface();
-        if (refreshStateBorderBlend) this.refreshLineLayers({draw: false});
         this.draw();
         throw error;
       }
@@ -1543,7 +1542,6 @@ export class PlaceholderMapRenderer {
     this.colorMode = mode;
     if (!this.map) return;
     this.refreshCellSurface({draw: false});
-    if (refreshStateBorderBlend) this.refreshLineLayers({draw: false});
     this.draw();
   }
 
@@ -1627,7 +1625,7 @@ export class PlaceholderMapRenderer {
     const gpuResidentSmoothBorders = optionKeys.length === 1 && optionKeys[0] === "smoothCellBorders" && this.canApplyGpuResidentSmoothCellBorders();
     const mapEdgeFadeOnly = optionKeys.length === 1 && optionKeys[0] === "mapEdgeFade";
     const stateBorderBlendOnly = optionKeys.length === 1 && optionKeys[0] === "stateBorderBlend";
-    const shouldRefreshLineLayers = ["smoothCellBorders", "mapEdgeFade", "stateBorderBlend"].some(key => Object.prototype.hasOwnProperty.call(normalizedOptions, key));
+    const shouldRefreshLineLayers = ["smoothCellBorders", "mapEdgeFade"].some(key => Object.prototype.hasOwnProperty.call(normalizedOptions, key));
     const stateBorderBlendChanged = Object.prototype.hasOwnProperty.call(normalizedOptions, "stateBorderBlend")
       && !sameStateBorderBlendStyle(this.viewOptions.stateBorderBlend, normalizedOptions.stateBorderBlend);
     this.viewOptions = {...this.viewOptions, ...normalizedOptions};
@@ -1650,7 +1648,6 @@ export class PlaceholderMapRenderer {
     }
     if (stateBorderBlendOnly) {
       if (!stateBorderBlendChanged) return;
-      this.refreshLineLayers({draw: false});
       this.draw({updateDynamicBuffers: false, updateOverlay: false, drawDirtyDynamicBuffers: false});
       return;
     }
@@ -1760,8 +1757,7 @@ export class PlaceholderMapRenderer {
     this.viewOptions = {...this.viewOptions, visualTheme: theme};
     applyMapStageBackground(this.stage, map, theme);
     if (this.viewOptions.smoothCellBorders !== false) this.refreshGpuResidentShoreSurface();
-    if (resolveStateBorderBlendStyle(this.colorMode, this.viewOptions.stateBorderBlend)) this.refreshLineLayers({draw: false});
-    else this.refreshVisualThemeLineColors(previousTheme, theme);
+    this.refreshVisualThemeLineColors(previousTheme, theme);
     await yieldToMain();
     await this.refreshLabelThemeStyles({yieldToMain});
     if (this.layerVisibility.routes) {
@@ -2846,7 +2842,7 @@ export class PlaceholderMapRenderer {
         const nextOptions = normalizeRendererViewOptionPatch(value);
         if (!hasShallowPresentationChange(this.viewOptions, nextOptions)) continue;
         const changedKeys = Object.keys(nextOptions).filter(key => presentationValueChanged(this.viewOptions, key, nextOptions[key]));
-        if (changedKeys.some(key => ["smoothCellBorders", "stateBorderBlend"].includes(key))) refreshLines = true;
+        if (changedKeys.includes("smoothCellBorders")) refreshLines = true;
         if (changedKeys.includes("mapEdgeFade")) mapEdgeFadeChanged = true;
         if (changedKeys.includes("stateBorderBlend")) otherPresentationChanged = true;
         if (changedKeys.some(key => !["mapEdgeFade", "stateBorderBlend"].includes(key))) {
@@ -3125,6 +3121,18 @@ export class PlaceholderMapRenderer {
     gl.depthMask(false);
     gl.uniform1i(this.locations.surfaceSideMode, 0);
     const layerOrder = ["surface"];
+    const stateBorderHaze = this.stateBorderHazeCompositor.render({
+      map: this.map,
+      paths: this.stateVisualPaths,
+      camera: this.camera,
+      style: resolveStateBorderBlendStyle(this.colorMode, this.viewOptions.stateBorderBlend)
+    });
+    gl.useProgram(this.program);
+    gl.uniform1i(this.locations.pointMode, 0);
+    gl.uniform1i(this.locations.surfaceSideMode, 0);
+    gl.uniform1f(this.locations.scale, this.camera.scale);
+    gl.uniform2f(this.locations.offset, this.camera.offsetX, this.camera.offsetY);
+    if (stateBorderHaze.enabled) layerOrder.push("stateBorderHaze");
     if (this.oceanCurrentVertexCount > 0) {
       gl.bindBuffer(gl.ARRAY_BUFFER, this.oceanCurrentBuffer);
       gl.uniform1f(this.locations.scale, this.camera.scale);
@@ -3336,6 +3344,7 @@ export class PlaceholderMapRenderer {
         clearDepth: 0.5
       },
       boundaryPresentation: displayState.boundaryPresentation,
+      stateBorderHaze: this.stateBorderHazeCompositor?.getLastReceipt?.() || null,
       routeVertexCount: this.routeVertexCount,
       routeTriangleCount: this.routeVertexCount / 3,
       routeBuildMs: this.routeBuildMs,
@@ -7089,8 +7098,6 @@ export function buildLineVertices(map, visibility = {}, colorMode = "height", sh
   const mapEdgeFadeStart = vertices.length;
   if (includeCore) pushMapEdgeFade(vertices, context, map, viewOptions.visualTheme);
   const mapEdgeFadeVertexCount = (vertices.length - mapEdgeFadeStart) / 6;
-  const stateBorderBlend = resolveStateBorderBlendStyle(colorMode, viewOptions.stateBorderBlend);
-  if (includeCore && stateBorderBlend) pushPoliticalColorFeather(vertices, context, statePaths, stateBorderBlend);
   const shoreLineLayer = includeShore
     ? buildShoreLineVerticesCached(map, visibility, colorMode, shoreVisualPaths, cellVisualMesh, viewOptions)
     : {vertices: new Float32Array(), pathVertices: new Map(), pathObjectVertices: new WeakMap()};
@@ -7121,12 +7128,7 @@ function resolveStateBorderBlendStyle(colorMode, source) {
   if (colorMode !== "states") return null;
   const normalized = normalizeStateBorderBlendStyle(source);
   if (!normalized.enabled || normalized.strength <= 0) return null;
-  return {...STATE_VISUAL_STYLE, bandWidthWorld: normalized.widthWorld, featherStrength: normalized.strength};
-}
-
-function colorModeChangesStateBorderBlend(previousMode, nextMode, source) {
-  if ((previousMode === "states") === (nextMode === "states")) return false;
-  return Boolean(resolveStateBorderBlendStyle("states", source));
+  return normalized;
 }
 
 function buildGpuResidentShoreLinePair(map, visibility, colorMode, shoreVisualPaths, cellVisualMesh, viewOptions, current, preparationOptions = {}) {
