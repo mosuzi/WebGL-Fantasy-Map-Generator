@@ -151,7 +151,7 @@ import {drawRouteMeshBatches, emptyRouteDrawRanges, resolveRouteStyle, SELECTED_
 import {emptyOceanCurrentLayerStats, pushOceanCurrentLayer} from "./ocean-current-layer.js";
 import {pushMilitaryFrontLayer} from "./military-front-layer.js";
 import {snapshotViewportCamera, viewportBufferTransform} from "./viewport-buffer-transform.js";
-import {installViewportInputController, normalizeNavigationInputMode} from "./viewport-input-controller.js";
+import {installViewportInputController} from "./viewport-input-controller.js";
 import {wildernessLabelAnchor} from "../runtime/zone-wilderness.js";
 import {
   buildGridCellDiagnosticHighlight,
@@ -748,13 +748,8 @@ export class PlaceholderMapRenderer {
     return true;
   }
 
-  setNavigationInputMode(mode) {
-    return this.viewportInputController?.setInputMode(normalizeNavigationInputMode(mode)) || normalizeNavigationInputMode(mode);
-  }
-
   getNavigationInputState() {
     return this.viewportInputController?.snapshot?.() || {
-      inputMode: normalizeNavigationInputMode(),
       pointerCount: 0,
       interactionActive: false,
       spacePanActive: false,

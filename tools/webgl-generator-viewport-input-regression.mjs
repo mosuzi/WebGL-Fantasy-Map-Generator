@@ -1,10 +1,8 @@
 import assert from "node:assert/strict";
 import {readFile} from "node:fs/promises";
 import {
-  NAVIGATION_INPUT_MODE,
   classifyViewportWheelIntent,
   installViewportInputController,
-  normalizeNavigationInputMode,
   normalizeViewportWheelDelta
 } from "../app/webgl-generator/src/renderer/viewport-input-controller.js";
 
@@ -68,13 +66,12 @@ class FakeCanvas extends FakeTarget {
   }
 }
 
-assert.equal(normalizeNavigationInputMode("trackpad"), "trackpad");
-assert.equal(normalizeNavigationInputMode("unknown"), "auto");
-assert.equal(classifyViewportWheelIntent({ctrlKey: true, deltaMode: 0, deltaX: 0}, "trackpad"), "zoom");
-assert.equal(classifyViewportWheelIntent({ctrlKey: false, deltaMode: 0, deltaX: 3}, "auto"), "pan");
-assert.equal(classifyViewportWheelIntent({ctrlKey: false, deltaMode: 1, deltaX: 3}, "auto"), "zoom");
-assert.equal(classifyViewportWheelIntent({ctrlKey: false, deltaMode: 0, deltaX: 3}, "mouse"), "zoom");
-assert.equal(classifyViewportWheelIntent({ctrlKey: false, deltaMode: 0, deltaX: 0}, "trackpad"), "pan");
+assert.equal(classifyViewportWheelIntent({ctrlKey: true, deltaMode: 0, deltaX: 0, deltaY: 12}), "zoom");
+assert.equal(classifyViewportWheelIntent({ctrlKey: false, deltaMode: 0, deltaX: 3, deltaY: 100}), "pan");
+assert.equal(classifyViewportWheelIntent({ctrlKey: false, deltaMode: 1, deltaX: 3, deltaY: 1}), "zoom");
+assert.equal(classifyViewportWheelIntent({ctrlKey: false, deltaMode: 0, deltaX: 0, deltaY: 12}), "pan");
+assert.equal(classifyViewportWheelIntent({ctrlKey: false, deltaMode: 0, deltaX: 0, deltaY: 60.5}), "pan");
+assert.equal(classifyViewportWheelIntent({ctrlKey: false, deltaMode: 0, deltaX: 0, deltaY: 100}), "zoom");
 assert.deepEqual(normalizeViewportWheelDelta({deltaMode: 1, deltaX: 2, deltaY: -3}, {height: 600}), {x: 32, y: -48});
 assert.deepEqual(normalizeViewportWheelDelta({deltaMode: 2, deltaX: 0, deltaY: 3}, {height: 600}), {x: 0, y: 1200});
 
@@ -117,9 +114,9 @@ space.canvas.emit("pointerup", pointer({pointerId: 3, clientX: 60, clientY: 55})
 space.documentRef.emit("keyup", {code: "Space", target: {tagName: "BODY"}});
 assert.equal(space.selections.length, 0, "空格拖动不得选择对象");
 
-const wheel = createHarness({inputMode: NAVIGATION_INPUT_MODE.TRACKPAD});
+const wheel = createHarness();
 const scaleBeforePan = wheel.camera.scale;
-wheel.canvas.emit("wheel", wheelEvent({deltaY: 40, timeStamp: 10}));
+wheel.canvas.emit("wheel", wheelEvent({deltaY: 12, timeStamp: 10}));
 assert.equal(wheel.camera.scale, scaleBeforePan, "触摸板普通滚动不得缩放");
 assert.notEqual(wheel.camera.offsetY, 0, "触摸板纵向滚动应平移");
 const anchorRect = wheel.canvas.getBoundingClientRect();
@@ -129,7 +126,6 @@ wheel.canvas.emit("wheel", wheelEvent({ctrlKey: true, deltaY: -80, clientX: anch
 const worldAfter = worldAtClient(wheel.camera, anchorRect, anchorClient);
 assert.ok(wheel.camera.scale > scaleBeforePan, "触摸板捏合应缩放");
 assert.ok(Math.abs(worldBefore.x - worldAfter.x) < 1e-9 && Math.abs(worldBefore.y - worldAfter.y) < 1e-9, "捏合缩放应保持指针锚点");
-wheel.controller.setInputMode("mouse");
 const mouseScale = wheel.camera.scale;
 wheel.canvas.emit("wheel", wheelEvent({deltaY: 100, timeStamp: 400}));
 assert.ok(wheel.camera.scale < mouseScale, "鼠标滚轮应保持缩放");
@@ -163,7 +159,6 @@ const cancelled = createHarness();
 cancelled.canvas.emit("pointerdown", pointer({pointerId: 20, button: 1, buttons: 4}));
 cancelled.canvas.emit("lostpointercapture", pointer({pointerId: 20, button: 1, buttons: 0}));
 assert.deepEqual(cancelled.controller.snapshot(), {
-  inputMode: "auto",
   pointerCount: 0,
   interactionActive: false,
   spacePanActive: false,
@@ -180,23 +175,23 @@ const [rendererSource, storeSource, panelSource, controlSource, appSource, style
   readFile(new URL("../app/webgl-generator/src/styles.css", import.meta.url), "utf8")
 ]);
 assert.match(rendererSource, /installViewportInputController/u, "renderer 未接入统一导航控制器");
-assert.match(rendererSource, /setNavigationInputMode/u, "renderer 未暴露输入模式设置");
-assert.match(storeSource, /navigationInputMode:\s*NAVIGATION_INPUT_MODE\.AUTO/u, "全局偏好缺少自动默认值");
-assert.match(panelSource, /navigation-input-mode[\s\S]*?onNavigationInputMode/u, "旧 UI bridge 未接入输入模式");
-assert.match(controlSource, /当前浏览器 · 不写入地图/u, "控制面板未说明偏好作用域");
-assert.match(appSource, /renderer\.setNavigationInputMode\(preferences\.navigationInputMode\)/u, "启动恢复未把偏好应用到 renderer");
+assert.doesNotMatch(rendererSource, /setNavigationInputMode/u, "renderer 不应暴露输入模式设置");
+assert.doesNotMatch(storeSource, /navigationInputMode/u, "全局偏好不应保存输入模式");
+assert.doesNotMatch(panelSource, /navigation-input-mode|onNavigationInputMode/u, "旧 UI bridge 不应绑定输入模式控件");
+assert.doesNotMatch(controlSource, /navigation-input-mode|navigationInputModeOptions|地图导航/u, "控制面板不应展示输入模式配置");
+assert.doesNotMatch(appSource, /setNavigationInputMode|onNavigationInputMode/u, "runtime 不应应用输入模式偏好");
 assert.match(stylesSource, /#map-canvas\s*\{[\s\S]*?touch-action:\s*none/u, "touch-action 未限制在地图 canvas");
 
 for (const harness of [mouse, mouseButtons, space, wheel, touch, touchSingle, cancelled]) harness.controller.destroy();
 
 console.log(JSON.stringify({
   ok: true,
-  wheel: {mode: wheel.controller.getInputMode(), changes: wheel.changes.length},
+  wheel: {intent: wheel.controller.snapshot().wheelIntent, changes: wheel.changes.length},
   mouse: {selections: mouse.selections.length, starts: mouse.starts.length, ends: mouse.ends.length},
   touch: {starts: touch.starts.length, ends: touch.ends.length, scale: touch.camera.scale}
 }, null, 2));
 
-function createHarness({inputMode = "auto"} = {}) {
+function createHarness() {
   const view = new FakeTarget();
   view.performance = {now: () => 1};
   const documentRef = new FakeTarget();
@@ -210,7 +205,6 @@ function createHarness({inputMode = "auto"} = {}) {
   const controller = installViewportInputController({
     canvas,
     camera,
-    inputMode,
     onChange: event => changes.push(event),
     onSelect: event => selections.push(event),
     onInteractionStart: event => starts.push(event),

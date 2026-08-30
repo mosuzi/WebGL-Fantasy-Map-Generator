@@ -6607,11 +6607,6 @@ select:disabled {
   line-height: 1.55;
 }
 
-.navigation-input-editor {
-  margin-top: 10px;
-  border-color: rgba(112, 174, 198, 0.28);
-}
-
 .unit-settings {
   display: grid;
   gap: 8px;

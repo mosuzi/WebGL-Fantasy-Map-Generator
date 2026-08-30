@@ -1,26 +1,19 @@
-export const NAVIGATION_INPUT_MODE = Object.freeze({
-  AUTO: "auto",
-  MOUSE: "mouse",
-  TRACKPAD: "trackpad"
-});
-
 const POINTER_MOUSE_THRESHOLD_CSS_PX = 5;
 const POINTER_TOUCH_THRESHOLD_CSS_PX = 8;
 const WHEEL_BURST_GAP_MS = 140;
+const TRACKPAD_PIXEL_DELTA_THRESHOLD = 48;
 const MIN_CAMERA_SCALE = 0.5;
 const MAX_CAMERA_SCALE = 12;
 
-export function normalizeNavigationInputMode(value) {
-  return Object.values(NAVIGATION_INPUT_MODE).includes(value) ? value : NAVIGATION_INPUT_MODE.AUTO;
-}
-
-export function classifyViewportWheelIntent(event, inputMode = NAVIGATION_INPUT_MODE.AUTO) {
+export function classifyViewportWheelIntent(event) {
   if (event?.ctrlKey) return "zoom";
-  const mode = normalizeNavigationInputMode(inputMode);
-  if (mode === NAVIGATION_INPUT_MODE.MOUSE) return "zoom";
-  if (mode === NAVIGATION_INPUT_MODE.TRACKPAD) return "pan";
-  const pixelMode = Number(event?.deltaMode) === 0;
-  return pixelMode && Math.abs(Number(event?.deltaX) || 0) >= 0.5 ? "pan" : "zoom";
+  if (Number(event?.deltaMode) !== 0) return "zoom";
+  const deltaX = Math.abs(Number(event?.deltaX) || 0);
+  const deltaY = Math.abs(Number(event?.deltaY) || 0);
+  if (deltaX >= 0.5) return "pan";
+  if (!deltaY) return "zoom";
+  const fractional = Math.abs(deltaY - Math.round(deltaY)) > 0.001;
+  return fractional || deltaY < TRACKPAD_PIXEL_DELTA_THRESHOLD ? "pan" : "zoom";
 }
 
 export function normalizeViewportWheelDelta(event, viewport = {}) {
@@ -40,13 +33,11 @@ export function installViewportInputController({
   onSelect = () => {},
   onInteractionStart = () => {},
   onInteractionEnd = () => {},
-  getViewportSize = () => canvas.getBoundingClientRect(),
-  inputMode = NAVIGATION_INPUT_MODE.AUTO
+  getViewportSize = () => canvas.getBoundingClientRect()
 }) {
   const pointers = new Map();
   const documentRef = canvas.ownerDocument;
   const view = documentRef?.defaultView || globalThis;
-  let navigationInputMode = normalizeNavigationInputMode(inputMode);
   let pointerOver = false;
   let spacePanActive = false;
   let interactionActive = false;
@@ -74,16 +65,8 @@ export function installViewportInputController({
 
   return {
     destroy,
-    getInputMode: () => navigationInputMode,
     isSpacePanActive: () => spacePanActive,
-    setInputMode(value) {
-      navigationInputMode = normalizeNavigationInputMode(value);
-      wheelBurst = null;
-      syncCanvasState();
-      return navigationInputMode;
-    },
     snapshot: () => ({
-      inputMode: navigationInputMode,
       pointerCount: pointers.size,
       interactionActive,
       spacePanActive,
@@ -218,13 +201,12 @@ export function installViewportInputController({
     const delta = normalizeViewportWheelDelta(event, viewport);
     if (!delta.x && !delta.y) return;
     const now = eventTimestamp(event, view);
-    const classified = classifyViewportWheelIntent(event, navigationInputMode);
+    const classified = classifyViewportWheelIntent(event);
     const burstCompatible = wheelBurst
-      && wheelBurst.mode === navigationInputMode
       && wheelBurst.ctrlKey === Boolean(event.ctrlKey)
       && now - wheelBurst.at <= WHEEL_BURST_GAP_MS;
     const intent = burstCompatible ? wheelBurst.intent : classified;
-    wheelBurst = {intent, mode: navigationInputMode, ctrlKey: Boolean(event.ctrlKey), at: now};
+    wheelBurst = {intent, ctrlKey: Boolean(event.ctrlKey), at: now};
     if (intent === "pan") {
       panCamera(-delta.x, -delta.y, viewport, {wheel: true});
       return;
@@ -334,7 +316,6 @@ export function installViewportInputController({
   }
 
   function syncCanvasState() {
-    if (canvas.dataset) canvas.dataset.navigationInputMode = navigationInputMode;
     canvas.classList?.toggle("map-canvas--space-pan", spacePanActive);
   }
 

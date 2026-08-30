@@ -421,19 +421,6 @@
         <UiSwitchField label="整图外框柔化" input-id="map-edge-fade" :checked="preferences.mapEdgeFade" button-style />
       </div>
       <p class="preference-toggle-note">“海岸与格边平滑”处理海岸、湖岸与单元格边缘；“整图外框柔化”只控制整张地图四周的渐隐。国界颜色过渡请在“样式”中调整。</p>
-      <section class="visual-theme-editor navigation-input-editor" aria-labelledby="navigation-input-title">
-        <div class="visual-theme-editor-header">
-          <strong id="navigation-input-title">地图导航</strong>
-          <span>当前浏览器 · 不写入地图</span>
-        </div>
-        <UiSelectField
-          label="输入方式"
-          input-id="navigation-input-mode"
-          :model-value="preferences.navigationInputMode"
-          :options="navigationInputModeOptions"
-        />
-        <p class="visual-theme-editor-note">自动模式保留鼠标滚轮缩放，并识别带横向分量的触摸板滚动；触摸板模式用双指滚动平移、捏合缩放。中性浏览时，主键拖动或空格 + 主键也可平移。</p>
-      </section>
     </div>
 
     <div class="control-panel-section label-style-panel" data-control-panel="styles" :hidden="activeTab !== 'styles'">
@@ -911,11 +898,6 @@ const tabs = Object.freeze([
 const styleSectionOptions = Object.freeze([
   {value: "borders", label: "国界效果"},
   {value: "labels", label: "地图标签"}
-]);
-const navigationInputModeOptions = Object.freeze([
-  {value: "auto", label: "自动（兼容鼠标）"},
-  {value: "mouse", label: "鼠标"},
-  {value: "trackpad", label: "触摸板"}
 ]);
 const activeStyleSection = ref("labels");
 
