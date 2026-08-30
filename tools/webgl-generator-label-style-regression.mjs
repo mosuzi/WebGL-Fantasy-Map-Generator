@@ -266,7 +266,12 @@ assert.match(stylesSource, /\.label-style-panel \.ui-slider-field-has-unit\s*\{[
 assert.match(stylesSource, /\.label-style-panel \.ui-slider-field > span:first-child\s*\{[^}]*white-space:\s*nowrap;/, "样式页滑动条标签仍可能折行");
 assert.match(stylesSource, /\.style-scope-navigation,\s*\.style-category-card\s*\{[^}]*min-width:\s*0;/, "二级样式层级没有防止窄面板横向溢出");
 assert.match(stylesSource, /\.style-scope-navigation\s*\{[^}]*display:\s*flex;[^}]*flex-wrap:\s*wrap;[^}]*padding:\s*2px 0 4px;/, "样式类别入口没有使用低占位的可换行布局");
-assert.match(stylesSource, /\.style-scope-segmented\s*\{[^}]*flex:\s*0 1 216px;[^}]*--ui-segmented-height:\s*26px;/, "样式类别按钮没有压缩到紧凑尺寸");
+assert.match(stylesSource, /\.control-panel-tabs,\s*\.style-scope-segmented\s*\{[^}]*--control-panel-tab-height:\s*30px;[^}]*--control-panel-tab-gap:\s*6px;[^}]*--control-panel-tab-border:\s*#33444f;[^}]*--control-panel-tab-radius:\s*6px;[^}]*--control-panel-tab-active-background:\s*#2b2415;/, "两级 tab 没有共享同一套视觉 token");
+assert.match(stylesSource, /\.style-scope-segmented\s*\{[^}]*flex:\s*0 1 216px;[^}]*--ui-segmented-height:\s*var\(--control-panel-tab-height\);/, "样式类别按钮没有保持紧凑宽度并对齐顶层 tab 高度");
+assert.match(stylesSource, /\.style-scope-segmented \.ui-segmented-el\s*\{[^}]*padding:\s*0;[^}]*background:\s*transparent;/, "二级 tab 最外层容器与标签之间仍有空隙");
+assert.match(stylesSource, /\.style-scope-segmented \.ui-segmented-el \.el-segmented__group\s*\{[^}]*gap:\s*var\(--control-panel-tab-gap\);[^}]*padding:\s*0;[^}]*border:\s*0;[^}]*background:\s*transparent;/, "二级 tab 容器与首尾标签之间仍有内缩空隙");
+assert.match(stylesSource, /\.style-scope-segmented \.ui-segmented-el \.el-segmented__item\s*\{[^}]*padding:\s*0;/, "二级 tab 项仍保留组件默认的左右内缩空隙");
+assert.match(stylesSource, /\.style-scope-segmented \.ui-segmented-el \.el-segmented__item-label\s*\{[^}]*height:\s*var\(--control-panel-tab-height\);[^}]*border-color:\s*var\(--control-panel-tab-border\);[^}]*border-radius:\s*var\(--control-panel-tab-radius\);[^}]*background:\s*var\(--control-panel-tab-background\) !important;[^}]*font-weight:\s*700;[^}]*line-height:\s*calc\(var\(--control-panel-tab-height\) - 2px\);/, "二级 tab 标签没有复用顶层描边按钮样式与真实高度");
 assert.match(stylesSource, /\.state-border-blend-editor\s*\{[^}]*border-color:[^}]*box-shadow:[^}]*\}[\s\S]*\.label-style-editor\s*\{[^}]*border-color:[^}]*box-shadow:/, "国界与标签样式卡没有形成可辨识的视觉层级");
 assert.match(stylesSource, /\.custom-label \.map-label-content\s*\{[^}]*padding:\s*2px 5px;[^}]*border-radius:\s*2px;/, "手工标签没有使用现代图册窄注记底板");
 assert.ok(PNG_SEMANTIC_LABEL_SELECTORS.includes(".province-label.visible"), "PNG overlay 没有纳入省份名称");
