@@ -393,29 +393,33 @@ select {
 
 .style-scope-navigation,
 .style-category-card {
+  min-width: 0;
+}
+
+.style-category-card {
   display: grid;
   gap: 10px;
-  min-width: 0;
   border: 1px solid rgba(189, 206, 213, 0.16);
   border-radius: 8px;
   padding: 10px;
 }
 
 .style-scope-navigation {
-  background: rgba(19, 29, 34, 0.74);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 10px;
+  padding: 2px 0 4px;
 }
 
-.style-scope-copy {
-  display: grid;
-  gap: 3px;
+.style-scope-navigation > strong {
+  color: #9fadb3;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
 }
 
-.style-scope-copy strong {
-  color: #e4edf0;
-  font-size: 13px;
-}
-
-.style-scope-copy span,
 .style-category-summary {
   color: #9fadb3;
   font-size: 12px;
@@ -423,9 +427,23 @@ select {
 }
 
 .style-scope-segmented {
-  --ui-segmented-height: 34px;
-  --ui-segmented-min-width: 0;
-  --ui-segmented-font-size: 13px;
+  flex: 0 1 216px;
+  width: min(216px, 100%);
+  --ui-segmented-height: 26px;
+  --ui-segmented-min-width: 82px;
+  --ui-segmented-font-size: 12px;
+}
+
+.style-scope-segmented .ui-segmented-el .el-segmented__group {
+  gap: 2px;
+  padding: 2px;
+  border-color: rgba(189, 206, 213, 0.14);
+  background: rgba(9, 14, 17, 0.42);
+}
+
+.style-scope-segmented .ui-segmented-el .el-segmented__item-label {
+  border-radius: 4px;
+  font-weight: 600;
 }
 
 .style-category-card {

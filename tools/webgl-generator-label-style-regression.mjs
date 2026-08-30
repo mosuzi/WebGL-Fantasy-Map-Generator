@@ -240,6 +240,8 @@ assert.match(rendererSource, /getLabelStates\(map\), \.\.\.getLabelProvinces\(ma
 assert.match(rendererSource, /isWorldPoint\(province\.pole\)[\s\S]*province\.center/, "省份标签没有 pole→center 回退");
 assert.match(rendererSource, /provinceLabel[\s\S]*boxesOverlapAny\(occupiedStates/, "省份标签没有避让国家名称");
 assert.match(controlPanelSource, /data-control-panel="styles"[\s\S]*reset-all-label-styles/, "样式页或全部重置入口缺失");
+assert.match(controlPanelSource, /class="style-scope-navigation"[\s\S]*id="style-scope-navigation-title">编辑内容<[\s\S]*class="style-scope-segmented"/, "样式类别没有收敛为紧凑内联入口");
+assert.doesNotMatch(controlPanelSource, /选择样式类别|边界效果与地图文字分别调整，互不改变/, "样式类别仍保留占位过大的标题说明块");
 assert.match(controlPanelSource, /v-show="activeStyleSection === 'labels'"[^>]*class="style-category-card label-style-editor"[\s\S]*id="label-style-editor-title">地图标签<[\s\S]*>当前地图样式 · 按标签类型</, "标签控件没有归入独立的当前地图样式层级");
 assert.match(controlPanelSource, /调整地图上的国家、省份、城市等文字外观；不会改变国界颜色过渡/, "标签样式没有明确与国界效果分离");
 assert.match(controlPanelSource, /\{value: "zone", label: "地区名称"\}/, "样式页没有地区名称类型");
@@ -263,6 +265,8 @@ assert.match(stylesSource, /\.label-style-panel \.ui-slider-field\s*\{[^}]*grid-
 assert.match(stylesSource, /\.label-style-panel \.ui-slider-field-has-unit\s*\{[^}]*grid-template-columns:\s*72px minmax\(0, 1fr\) 84px max-content;/, "样式页带单位滑动条没有保持数值与单位独立列");
 assert.match(stylesSource, /\.label-style-panel \.ui-slider-field > span:first-child\s*\{[^}]*white-space:\s*nowrap;/, "样式页滑动条标签仍可能折行");
 assert.match(stylesSource, /\.style-scope-navigation,\s*\.style-category-card\s*\{[^}]*min-width:\s*0;/, "二级样式层级没有防止窄面板横向溢出");
+assert.match(stylesSource, /\.style-scope-navigation\s*\{[^}]*display:\s*flex;[^}]*flex-wrap:\s*wrap;[^}]*padding:\s*2px 0 4px;/, "样式类别入口没有使用低占位的可换行布局");
+assert.match(stylesSource, /\.style-scope-segmented\s*\{[^}]*flex:\s*0 1 216px;[^}]*--ui-segmented-height:\s*26px;/, "样式类别按钮没有压缩到紧凑尺寸");
 assert.match(stylesSource, /\.state-border-blend-editor\s*\{[^}]*border-color:[^}]*box-shadow:[^}]*\}[\s\S]*\.label-style-editor\s*\{[^}]*border-color:[^}]*box-shadow:/, "国界与标签样式卡没有形成可辨识的视觉层级");
 assert.match(stylesSource, /\.custom-label \.map-label-content\s*\{[^}]*padding:\s*2px 5px;[^}]*border-radius:\s*2px;/, "手工标签没有使用现代图册窄注记底板");
 assert.ok(PNG_SEMANTIC_LABEL_SELECTORS.includes(".province-label.visible"), "PNG overlay 没有纳入省份名称");

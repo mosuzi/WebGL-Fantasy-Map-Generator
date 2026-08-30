@@ -425,10 +425,7 @@
 
     <div class="control-panel-section label-style-panel" data-control-panel="styles" :hidden="activeTab !== 'styles'">
       <section class="style-scope-navigation" aria-labelledby="style-scope-navigation-title">
-        <div class="style-scope-copy">
-          <strong id="style-scope-navigation-title">选择样式类别</strong>
-          <span>边界效果与地图文字分别调整，互不改变。</span>
-        </div>
+        <strong id="style-scope-navigation-title">编辑内容</strong>
         <UiSegmented
           class="style-scope-segmented"
           label="样式类别"
