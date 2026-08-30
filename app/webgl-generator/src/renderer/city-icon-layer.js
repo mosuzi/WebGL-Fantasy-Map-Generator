@@ -41,7 +41,8 @@ const FLOAT_BYTES = Float32Array.BYTES_PER_ELEMENT;
 const INSTANCE_STRIDE_BYTES = CITY_ICON_INSTANCE_STRIDE_BYTES;
 const DARK_OUTLINE = Object.freeze([0.055, 0.075, 0.085, 1]);
 const WHITE_INNER_LINE = Object.freeze([0.985, 0.992, 1, 1]);
-const SELECTED_INNER_LINE = Object.freeze([1, 0.86, 0.32, 1]);
+const SELECTED_OUTER_LINE = Object.freeze([0.38, 0.005, 0.03, 1]);
+const SELECTED_INNER_LINE = Object.freeze([1, 0.18, 0.24, 1]);
 const ROLE_OUTLINE_EXTENT = 0.879;
 const SHAPE_OUTLINE_EXTENTS = Object.freeze({
   hamlet: 0.48,
@@ -146,6 +147,7 @@ export class CityIconWebglLayer {
       scaleFadeWidth: gl.getUniformLocation(this.program, "u_scaleFadeWidth"),
       darkOutline: gl.getUniformLocation(this.program, "u_darkOutline"),
       whiteInner: gl.getUniformLocation(this.program, "u_whiteInner"),
+      selectedOuter: gl.getUniformLocation(this.program, "u_selectedOuter"),
       selectedInner: gl.getUniformLocation(this.program, "u_selectedInner")
     };
     configureCityIconVertexArray(gl, this.vao, this.quadBuffer, this.instanceBuffer);
@@ -255,6 +257,7 @@ export class CityIconWebglLayer {
     gl.uniform1f(this.locations.scaleFadeWidth, this.scaleFadeWidth);
     gl.uniform4fv(this.locations.darkOutline, DARK_OUTLINE);
     gl.uniform4fv(this.locations.whiteInner, WHITE_INNER_LINE);
+    gl.uniform4fv(this.locations.selectedOuter, SELECTED_OUTER_LINE);
     gl.uniform4fv(this.locations.selectedInner, SELECTED_INNER_LINE);
     gl.disable(gl.DEPTH_TEST);
     gl.depthMask(false);
@@ -507,6 +510,7 @@ uniform float u_transitionMs;
 uniform float u_scaleFadeWidth;
 uniform vec4 u_darkOutline;
 uniform vec4 u_whiteInner;
+uniform vec4 u_selectedOuter;
 uniform vec4 u_selectedInner;
 
 in vec2 v_iconUv;
@@ -601,7 +605,8 @@ void main() {
   float targetVisibility = mix(v_visibilityFrom, v_visibilityTarget, transitionProgress);
   float alpha = outerCoverage * scaleVisibility * targetVisibility;
   if (alpha <= 0.001) discard;
+  vec4 outerColor = v_selected > 0.5 ? u_selectedOuter : u_darkOutline;
   vec4 innerColor = v_selected > 0.5 ? u_selectedInner : u_whiteInner;
-  vec3 color = mix(u_darkOutline.rgb, innerColor.rgb, innerCoverage);
+  vec3 color = mix(outerColor.rgb, innerColor.rgb, innerCoverage);
   outColor = vec4(color, alpha);
 }`;

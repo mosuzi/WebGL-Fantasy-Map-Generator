@@ -4927,6 +4927,7 @@ export class PlaceholderMapRenderer {
       markers: this.markerIconItems,
       military: this.militaryIconItems
     });
+    if (this.selectionMarker) this.selectionMarker.classList.toggle("selection-marker--city", this.selection?.kind === OBJECT_KIND.CITY);
     if (!this.selectionMarker || !shouldShow) {
       if (this.selectionMarker) this.selectionMarker.style.display = "none";
       return;

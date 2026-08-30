@@ -1845,6 +1845,11 @@ select:disabled {
   z-index: 3;
 }
 
+.city-label .map-label-content {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
 .city-label.visible,
 .custom-label.visible,
 .province-label.visible,
@@ -1901,11 +1906,21 @@ select:disabled {
   color: inherit;
 }
 
-.city-label.selected .map-label-content,
 .custom-label.selected .map-label-content,
 .zone-label.selected .map-label-content {
   background: rgba(29, 43, 54, 0.92);
   color: #f8fafb;
+}
+
+.city-label.selected .map-label-content {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  color: #ff2f45;
+  font-weight: 800;
+  -webkit-text-stroke: 0.65px rgba(255, 247, 240, 0.96);
+  text-shadow: 0 0 1px rgba(86, 0, 9, 0.96), 0 0 5px rgba(255, 40, 62, 0.96), 0 0 10px rgba(205, 8, 30, 0.72);
 }
 
 .zone-label {
@@ -2130,7 +2145,7 @@ select:disabled {
 }
 
 .city-map-icon.selected {
-  filter: drop-shadow(0 0 4px rgba(255, 226, 130, 0.95));
+  filter: drop-shadow(0 0 5px rgba(255, 40, 62, 0.96));
 }
 
 .city-map-icon.selected .city-icon-fill,
@@ -2138,12 +2153,12 @@ select:disabled {
 .city-map-icon.selected .city-icon-roof,
 .city-map-icon.selected .city-icon-sail,
 .city-map-icon.selected .city-icon-tent {
-  stroke: #ffe282;
+  stroke: #ff2f45;
   stroke-width: 1.45;
 }
 
 .city-map-icon.selected .city-icon-line {
-  stroke: #ffe282;
+  stroke: #ff2f45;
   stroke-width: 2.45;
 }
 
@@ -2383,6 +2398,12 @@ select:disabled {
   transform: translate(var(--overlay-x, 0px), var(--overlay-y, 0px)) translate(-50%, -50%);
   will-change: transform;
   z-index: 8;
+}
+
+.selection-marker.selection-marker--city {
+  border-color: #ff2f45;
+  background: rgba(255, 47, 69, 0.08);
+  box-shadow: 0 0 0 2px rgba(55, 0, 8, 0.78), 0 0 16px rgba(255, 40, 62, 0.72);
 }
 
 .floating-panel-layer {

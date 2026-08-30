@@ -161,7 +161,9 @@ assert.match(CITY_ICON_FRAGMENT_SHADER_SOURCE, /smoothstep\(1\.0 - antialiasWidt
 assert.match(CITY_ICON_FRAGMENT_SHADER_SOURCE, /smoothstep\(0\.5 - antialiasWidth, 0\.5 \+ antialiasWidth, distancePx\)/, "白色线芯没有同步校准");
 assert.match(CITY_ICON_FRAGMENT_SHADER_SOURCE, /u_darkOutline/, "图标缺少深色硬外轮廓");
 assert.match(CITY_ICON_FRAGMENT_SHADER_SOURCE, /u_whiteInner/, "图标缺少纯白内线");
-assert.match(CITY_ICON_FRAGMENT_SHADER_SOURCE, /u_selectedInner/, "选中态没有独立金线");
+assert.match(CITY_ICON_FRAGMENT_SHADER_SOURCE, /u_selectedOuter/, "选中态没有独立红色外沿");
+assert.match(CITY_ICON_FRAGMENT_SHADER_SOURCE, /u_selectedInner/, "选中态没有独立红色内线");
+assert.match(CITY_ICON_FRAGMENT_SHADER_SOURCE, /outerColor = v_selected > 0\.5 \? u_selectedOuter : u_darkOutline/, "选中态没有同时替换图标外沿");
 assert.match(CITY_ICON_FRAGMENT_SHADER_SOURCE, /smoothstep\(v_minScale - u_scaleFadeWidth, v_minScale \+ u_scaleFadeWidth, u_cameraScale\)/, "minScale 没有在 shader 内平滑显隐");
 assert.match(CITY_ICON_FRAGMENT_SHADER_SOURCE, /mix\(v_visibilityFrom, v_visibilityTarget, transitionProgress\)/, "visibility target 仍会硬切换");
 assert.match(CITY_ICON_FRAGMENT_SHADER_SOURCE, /roleShapeDistance/, "多角色附加小符号没有进入解析式距离场");
@@ -371,7 +373,7 @@ function createLayerHarness(gl, instanceCount = 1) {
     },
     locations: Object.fromEntries([
       "mapSize", "viewportBacking", "pixelRatio", "baseSizeCss", "cameraScale", "cameraOffset", "timeMs",
-      "transitionMs", "scaleFadeWidth", "darkOutline", "whiteInner", "selectedInner"
+      "transitionMs", "scaleFadeWidth", "darkOutline", "whiteInner", "selectedOuter", "selectedInner"
     ].map((name, index) => [name, index]))
   });
   return layer;
@@ -479,6 +481,8 @@ function testPlaceholderDrawTailState() {
       correctionWordLength: 0
     }),
     visualTheme: {canvas: {background: [0, 0, 0, 1]}},
+    colorMode: "height",
+    viewOptions: {},
     camera,
     program: mainProgram,
     locations: {position: 0, color: 1, scale: 2, offset: 3, pointMode: 4, surfaceSideMode: 5},
@@ -537,6 +541,7 @@ function testPlaceholderDrawTailState() {
     markerIconItems: [],
     militaryIconItems: [],
     cityIconLayer,
+    stateBorderHazeCompositor: {render: () => ({enabled: false})},
     cityMovePreview: null,
     oceanCurrentLayerStats: {minWidth: 0, maxWidth: 0},
     lastDraw: null
@@ -608,5 +613,5 @@ console.log(JSON.stringify({
   visibilitySamples,
   instancedDrawCallsPerFrame: 1,
   cameraFrameInstanceUploads: 0,
-  colors: {outer: "dark-hard-outline", inner: "white", selected: "gold"}
+  colors: {outer: "dark-hard-outline", inner: "white", selected: "red-double-line"}
 }, null, 2));

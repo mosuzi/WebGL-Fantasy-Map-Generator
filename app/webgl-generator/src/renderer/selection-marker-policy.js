@@ -15,9 +15,8 @@ export function shouldShowDefaultSelectionMarker(selection, items = {}) {
   if (selection.kind === OBJECT_KIND.NOTE) return true;
 
   if (selection.kind === OBJECT_KIND.CITY) {
-    const cityVisible = hasVisibleItem(items.cities, item => sameObjectId(selection.id, item.id));
     const labelVisible = hasVisibleItem(items.labels, item => isSelectionForLabelItem(selection, item));
-    return !cityVisible && !labelVisible;
+    return !labelVisible;
   }
   if (selection.kind === OBJECT_KIND.LABEL) {
     return !hasVisibleItem(items.labels, item => isSelectionForLabelItem(selection, item));
