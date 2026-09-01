@@ -19,7 +19,7 @@
   - `architecture/vue-floating-panel-pattern.md`：Vue SFC 面板复用规范。
   - `architecture/laboratory-prototypes.md`：四个独立实验室 / 原型的职责、入口、验证、部署和正式应用边界。
   - `architecture/generation-validation-relations.md`：普通生成与全部重生成的数据关系分类、锁后置合并和最小提交硬门。
-- `plans/`：总体验收计划和复刻路线。
+- `plans/`：总体验收计划和复刻路线；其中早期路线只保留历史语义，不是当前执行入口。
   - `plans/task-350-engine-integration-rebaseline.md`：第 350 项在前五个入口高返工率后重新冻结的 17 类典型场景、16 项共同不变量、20 入口映射及 R0～R7 整体修补顺序。
 - `milestones/`：里程碑说明。
 - `performance/`：性能基线说明和长期性能对照。
@@ -33,7 +33,7 @@
 - `deployment/`：部署说明和线上环境约定；任务分支版本准备、合入前校验和快进主线流程见 [`deployment/version-management.md`](./deployment/version-management.md)。
 - `task-archives/`：已完成权威任务的时间分卷与编号索引；接手执行默认不读，需要追溯历史决策时再按日期或编号检索。
 - `development-logs/`：开发历史的日期分卷与迁移完整性索引；默认不整目录读取。
-- `task-notes/`：可入库的专题计划、评估记录、执行细则和功能积压。新增专题前先读 `task-notes/README.md`，并同步更新该索引。
+- `task-notes/`：可入库的专题计划、评估记录、执行细则和已完成任务证据。该目录不是候选池；新增专题前先读 `task-notes/README.md`，并同步更新该索引。
 - `assets/readme/`：由仓库内确定性工具生成、需要随中英文 README 长期入库的展示图片；本地调查截图仍放在 `generated/`。
 - `wiki/assets/`：由固定 `mountains-and-seas` 夹具和隔离系统 Chrome 确定性生成、随中文 Wiki 长期入库的功能说明截图；场景、alt 与图注以 `wiki/screenshot-manifest.json` 为准，审计要求每处 Markdown 引用与之完全一致。
 

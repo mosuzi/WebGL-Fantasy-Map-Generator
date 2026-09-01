@@ -1,18 +1,22 @@
 # task-notes 专题索引
 
-`task-notes/` 用来保存需要入库的专题计划、评估记录、执行细则和功能积压。这里的文档不是生成产物；新增或移动专题文档时，必须同步更新本索引。
+`task-notes/` 用来保存需要入库的专题计划、评估记录、执行细则和已完成任务证据。这里的文档不是生成产物；新增或移动专题文档时，必须同步更新本索引。
 
-专题文档中的“下一步”“缺口”只表示候选方向，不自动成为活动任务。当前批准范围和顺序统一查看 [`../current-plan.md`](../current-plan.md#权威任务清单)。
+本目录不是候选池。专题正文中的“下一步”“缺口”“待验证”和旧分支约束只保留其成文时的历史语义，既不构成当前候选，也不得据此恢复任务。当前批准范围只看 [`../current-plan.md`](../current-plan.md#权威任务清单)；有当前证据但尚未获批的事项只看根目录 [`../../FOLLOWUPS.md`](../../FOLLOWUPS.md)。
 
-## 专题映射
+## 最近文档治理专题
 
-> 分支执行约束：本专题已于 2026-08-19 获用户明确批准为第 349 项，只在 `codex/map-core-engine-architecture-plan` 并行分支逐阶段实施；不得将本分支合入 `main`。全阶段不执行浏览器验收，最终只形成并评估浏览器验收方案。
+- 第 381 项已完成现行文档候选源清理；判定、阶段边界与验收矩阵见 [`task-381-document-candidate-cleanup.md`](./task-381-document-candidate-cleanup.md)。
 
-- 第 375 项在独立实验分支以无需设置的自动分类统一鼠标、触摸板与中性触屏浏览态地图导航；不包含手机布局和编辑工具全面触控化，用户确认前不合入 `main`；见 [`task-375-desktop-input-navigation.md`](./task-375-desktop-input-navigation.md)。
-- 第 374 项只在共享边界实验室为屏幕空间朦胧增加 `0～100%` 衰减柔和度，并以原边界锚定、归一化邻边和总混合量不叠加收敛三国交汇；正式 renderer 保持只读；见 [`task-374-political-blend-decay-softness-lab.md`](./task-374-political-blend-decay-softness-lab.md)。
+## 已完成任务与历史专题映射
+
+以下编号任务均已完成并进入权威归档；条目只用于定位专题证据，文字中的实施时边界不代表当前状态。
+
+- 第 375 项已完成无需设置的自动分类，统一鼠标、触摸板与中性触屏浏览态地图导航；不包含手机布局和编辑工具全面触控化；见 [`task-375-desktop-input-navigation.md`](./task-375-desktop-input-navigation.md)。
+- 第 374 项已在共享边界实验室完成屏幕空间朦胧 `0～100%` 衰减柔和度实验，并保持正式 renderer 未改；见 [`task-374-political-blend-decay-softness-lab.md`](./task-374-political-blend-decay-softness-lab.md)。
 - 第 373 项把“样式”页内的国界效果与地图标签拆为互斥二级类别，明确全局显示偏好和当前地图样式的不同控制范围；见 [`task-373-style-panel-hierarchy.md`](./task-373-style-panel-hierarchy.md)。
 - 第 372 项把版本准备前移到任务分支提交前，并以严格高于主线的只读门禁保证 `main` 快进合入后不再手工补版本；见 [`task-372-project-version-merge-gate.md`](./task-372-project-version-merge-gate.md)。
-- 第 371 项以 `1af5381 / v0.5.4` 需求前基线复现存档载入国界颜色过渡，再在共享边界实验室的独立页签中以四个合法行政夹具联动比较旧颜色带、现九轨与连续朦胧候选；用户确认前不改正式 renderer；见 [`task-371-state-border-blend-lab.md`](./task-371-state-border-blend-lab.md)。
+- 第 371 项已以 `1af5381 / v0.5.4` 基线完成四种国界颜色过渡对照，正式 renderer 未改；见 [`task-371-state-border-blend-lab.md`](./task-371-state-border-blend-lab.md)。
 - 第 370 项把初次载入时曾短暂出现的国界两侧颜色过渡正式实现为独立“国界晕染”样式，并与海岸几何平滑彻底分离；见 [`task-370-state-border-color-blend-style.md`](./task-370-state-border-color-blend-style.md)。
 - 第 368 项在国家管理界面增加独立的辖下省份后缀批量事务，默认保护手工定制全名并保持政体修改不联动；见 [`task-368-province-suffix-batch.md`](./task-368-province-suffix-batch.md)。
 - 第 359 项以用户指定 `krichars (3).webfmg` 为唯一完成输入，重构解析、adoption handoff、首屏 prepared layer 与可取消惰性任务，按绝对 `6.0s / 7.5s` 和 `>200ms = 0` 门验收；见 [`task-359-real-archive-load-critical-path.md`](./task-359-real-archive-load-critical-path.md)。
@@ -26,8 +30,8 @@
 
 - 第 357 项统一 `22` 个重生成入口的旧数据 canonical working copy、锁定对象最小结构校验、未锁对象受限生成、锁快照优先合并和单次最终领域校验；阶段冻结与最终验收记录见 [`task-357-unified-regeneration-contract.md`](./task-357-unified-regeneration-contract.md)。
 
-- 第 351 项已于 2026-08-23 完成：`codex/task-351-view-switch-repair` 修复 100k 全视图切换、扩展十二类 GPU 常驻颜色模式并建立 latest-revision 后台预热；用户精确预览标签页十二类视图终验通过并恢复高度视图。该分支叠加于未合入 `main` 的第 349～350 项架构分支，仍不得直接合入 `main`。根因、设计、本地性能与精确 Chrome 证据见 [`task-351-view-switch-repair.md`](./task-351-view-switch-repair.md)。
-- 第 350 项在前五个固定入口高返工率后已获准重新基线；17 类典型场景、16 项共同不变量、20 入口重新覆盖及 R0～R7 整体修补顺序见 [`../plans/task-350-engine-integration-rebaseline.md`](../plans/task-350-engine-integration-rebaseline.md)。原 CDP 执行记录、artifact 与失败证据继续保存在 [`task-350-map-core-engine-cdp-acceptance.md`](./task-350-map-core-engine-cdp-acceptance.md)，不得用旧通过结果免除重新复查。分支仍不得合入 `main`。
+- 第 351 项已完成 100k 全视图切换、十二类 GPU 常驻颜色模式与 latest-revision 后台预热，并随第 349～354 项成果进入 `main`；根因、设计、本地性能与精确 Chrome 证据见 [`task-351-view-switch-repair.md`](./task-351-view-switch-repair.md)。
+- 第 350 项已按重新基线完成 17 类典型场景、16 项共同不变量、20 入口与 R0～R7 整体复验；计划见 [`../plans/task-350-engine-integration-rebaseline.md`](../plans/task-350-engine-integration-rebaseline.md)，CDP 执行记录与历史失败证据见 [`task-350-map-core-engine-cdp-acceptance.md`](./task-350-map-core-engine-cdp-acceptance.md)。
 - R0～R7 各阶段的精简冻结点、门禁和评审交接统一写入 [`task-350-engine-integration-rebaseline-handoffs.md`](./task-350-engine-integration-rebaseline-handoffs.md)，不把长日志或完整矩阵重复搬入权威计划。
 - 第 349 项统一阶段、checkpoint、只读评审与动态插入记录见 [`task-349-map-core-engine-execution.md`](./task-349-map-core-engine-execution.md)。
 - 第 349-1 阶段的现有 canonical owner、五类事务、`13` 个 Worker task、snapshot / buffer ownership、身份命名空间和强制插入 `349-3a` 的 ADR 见 [`task-349-core-architecture-inventory.md`](./task-349-core-architecture-inventory.md)。
@@ -69,7 +73,7 @@
 - 权威任务第 302 项的历史方案见 [`task-302-city-manual-relocation.md`](./task-302-city-manual-relocation.md)；其失效的交互 / 性能和旧政治门禁已由完成并归档的第 306 项纠正。
 - 权威任务第 303 项的历史方案见 [`task-303-river-multi-control-points.md`](./task-303-river-multi-control-points.md)；其失效的新增 / 拖动 / 双击删除和曲线结论已由完成并归档的第 305 项纠正。
 
-- 权威任务第 284 项对应 [`task-284-100k-performance-investigation-and-plan.md`](./task-284-100k-performance-investigation-and-plan.md)：先记录精确用户标签页的存档、100k 高度编辑和 renderer / overlay 证据，再拆分 284-A～284-E；调查与方案已完成，284-A～284-D 的存档、编辑、renderer / overlay / picking、导出与 base64 内存优化已验收，当前进入 284-E。
+- 权威任务第 284 项对应 [`task-284-100k-performance-investigation-and-plan.md`](./task-284-100k-performance-investigation-and-plan.md)：调查、284-A～284-E 实施与统一验收均已完成，历史存档、编辑、renderer / overlay / picking、导出与内存证据保留在专题和归档中。
 
 - 权威任务第 298 项对应 [`grid-topology-refinement-and-controlled-api.md`](./grid-topology-refinement-and-controlled-api.md)，现已完成：冻结受控网格快照、母子映射、派生迁移、事务回滚与 10k → 100k 验收门禁，并以系统 Chrome 完成生产链复验。
 
@@ -98,28 +102,28 @@
 - 权威任务第 71～81 项统一登记于 `promoted-quasi-authoritative-tasks.md`，并分别复用 `ui-system-audit-gate.md`、`editor-and-stat-panel-inventory.md`、`height-terrain-template-programs.md`、`label-type-style-system.md` 与 `export-capability-matrix.md` 的领域证据；原 `Q-01～Q-11` 已全部按顺序转正，不再是候选池。第 73 项另有 `city-relocation-product-rules.md`；第 74 项另有 `state-merge-split-product-rules.md`；第 75 项另有 `coastline-feature-topology-product-rules.md`；第 76 项另有 `culture-religion-expansion-product-rules.md`；第 77 项另有 `suitability-brush-product-rules.md`；第 78 项另有 `population-adjustment-product-rules.md`，冻结区域增减、非守恒总量、比例分摊、零人口和事务边界。
 - 权威任务第 82～86 项统一登记于 `authoritative-tasks-82-86.md`：依次处理管理面板首次左侧落点、湖泊名称中“湖”的多数分布、地图 overlay 文本禁止选中、主题导入 / 导出按钮文字规格统一，以及水体与地貌统计详情区紧凑排版。
 - 权威任务第 87 项登记于 `authoritative-task-87.md`：只修正悬停菜单被国家、省份名称标签遮挡的堆叠层级，不扩展为全局浮层重构。
-- 权威任务第 88～93 项来源登记于 `next-quasi-authoritative-tasks-2026-07-18.md`：原 `Q-12～Q-17` 已获用户整体批准并按顺序转正；当前状态与验收以权威任务清单为准。
-- 权威任务第 101～107 项来源登记于 `next-quasi-authoritative-interaction-audit-tasks-2026-07-19.md`：原 `Q-18～Q-24` 已获用户整体批准并按顺序转正，依次冻结交互分母与夹具、审计高频闭环、直接操控、复杂面板、危险恢复、键盘响应式，并在最后统一进行浏览器验证。
-- 第 101～107 项完成后形成的下一批交互整改来源登记于 `next-quasi-authoritative-interaction-remediation-tasks-2026-07-20.md`：`Q-25～Q-27` 已转为权威任务第 201～203 项并完成；`Q-28～Q-33` 于 2026-07-29 获批，按依赖转为权威任务第 211～216 项，其中第 216 项增加管理 Tab 编辑弹框高度预算验收。
+- 权威任务第 88～93 项的 `Q-12～Q-17` 来源与转正映射见 [`candidate-promotion-history-2026-07-18.md`](./candidate-promotion-history-2026-07-18.md)；六项均已完成。
+- 权威任务第 101～107 项的 `Q-18～Q-24` 来源与转正映射见 [`interaction-audit-promotion-history-2026-07-19.md`](./interaction-audit-promotion-history-2026-07-19.md)；七项均已完成。
+- 权威任务第 201～203、211～216 项的 `Q-25～Q-33` 来源与转正映射见 [`interaction-remediation-promotion-history-2026-07-20.md`](./interaction-remediation-promotion-history-2026-07-20.md)；九项均已完成。
 - 权威任务第 217～218 项对应 `city-scale-and-provincial-capital-consistency.md`：先统一人口规模、图标、提示、手工视觉与行政角色语义，再在最终城市人口形成后确定性重评省会；旧地图加载不静默改视觉或迁都，现有地图只通过显式预览 / 确认事务重评。
 - 权威任务第 128、159 项对应 `boundary-smoothing-topology-research.md`：比较边界简化 / spline / coverage 算法，冻结共享弧线数据结构、填充与描边同源不变量、缓存失效、编辑提交时序、许可边界和海岸线 → 国界 → 省界的分阶段建议，并链接已完成的独立拓扑实验室；不改正式 renderer。
 - 权威任务第 205 项对应 `regeneration-object-lock-system.md`：为 14 个可重生成对象列表、15 类稳定列表行建立逐行锁定、列表 / 地图批量选择、持久化锁仓和全重生成入口保护，并按锁仓 API、共享 UI、领域生成器与复合链分阶段实施。
 - 权威任务第 206 项对应 `river-network-parent-and-confluence-integrity.md`：把 `parent` 收敛为真实陆地汇流关系，补生成后河网门禁、旧图非破坏性归一化，以及列表、详情、悬停和对象查询中的直接干流信息。
 
-以上只是专题入口映射，范围、顺序和验收仍以权威任务清单为准。
+以上只用于历史专题定位，不表示当前范围或执行顺序。
 
 ## Source 对照与生成质量
 
 - `source-first-recovery-execution-plan.md`：source 优先复位整改总纲。
 - `source-first-detailed-task-plan.md`：source 优先复位整改详细施工图。
-- `source-feature-backlog.md`：对照原版后整理的功能积压。
+- `source-feature-review-history.md`：2026-07-16 对照原版功能的完成、暂缓与排除决定；不再是候选源。
 - `chinese-naming-library-evaluation.md`：中文命名库评估记录。
 - `heightmap-image-converter-plan.md`：高度图图片导入工作台计划。
 
 ## 编辑器与用户外壳
 
 - `interaction-usability-audit-plan.md`：全功能交互与可用性专项审计方案；以真实用户任务链排查冗余、无效、流程、状态、样式、恢复、键盘和响应式问题，纯交互建议与需要功能变更的提案分开，未获批准前不形成权威任务。
-- `next-quasi-authoritative-interaction-remediation-tasks-2026-07-20.md`：统一交互审计形成的 `Q-25～Q-33` 来源问题、功能变化边界和最小验收；`Q-25～Q-27` 已转为权威任务第 201～203 项并完成，`Q-28～Q-33` 已于 2026-07-29 按依赖转为权威任务第 211～216 项。
+- `interaction-remediation-promotion-history-2026-07-20.md`：统一交互审计形成的 `Q-25～Q-33` 来源问题、功能变化边界、转正映射与完成状态。
 - `city-scale-and-provincial-capital-consistency.md`：权威任务第 217～218 项的真实浏览器反例、单一城市规模契约、行政角色附加表达、最终省会重评、锁定保护、旧图兼容和统一验收矩阵。
 - `zone-semantics-natural-regions-and-wilderness.md`：权威任务第 220～222 项施工图，冻结事件参与方、自然 / 自定义地区、中性基础影响、自动无人区连通分块、名称继承、标签与旧图兼容边界。
 - `layer-controls-zone-naming-and-cloud-storage.md`：权威任务第 236～241、262 项施工图，冻结复合图层、无人区语义命名、共享下拉框，以及两类云存储的兼容、会话恢复和安全边界。
@@ -152,8 +156,8 @@
 - `promoted-quasi-authoritative-tasks.md`：原准权威 `Q-01～Q-11` 转为第 71～81 项的编号映射、依赖、产品规则门禁和排除边界。
 - `authoritative-tasks-82-86.md`：用户 2026-07-18 批准的五项新权威任务来源、顺序、共享执行方式和明确排除边界。
 - `authoritative-task-87.md`：用户 2026-07-18 反馈的悬停菜单与国家 / 省份标签层级问题、最小范围和验收边界。
-- `next-quasi-authoritative-tasks-2026-07-18.md`：原 `Q-12～Q-17` 的调查来源、排除项和转正映射；现对应权威任务第 88～93 项。
-- `next-quasi-authoritative-interaction-audit-tasks-2026-07-19.md`：原 `Q-18～Q-24` 转为权威任务第 101～107 项的来源、依赖、最小验收、统一浏览器验证和禁止越界范围。
+- `candidate-promotion-history-2026-07-18.md`：原 `Q-12～Q-17` 的调查来源、排除项和转正映射；对应权威任务第 88～93 项并已完成。
+- `interaction-audit-promotion-history-2026-07-19.md`：原 `Q-18～Q-24` 转为权威任务第 101～107 项的来源、依赖、最小验收、统一浏览器验证和禁止越界范围；七项已完成。
 - `city-relocation-product-rules.md`：权威任务第 73 项已确认的归属跟随、港口失效、首都 / 省会限制、路线局部重寻和事务边界冻结稿。
 - `state-merge-split-product-rules.md`：权威任务第 74 项已确认的国家合并 / 完整旧省拆分、ID 与 tombstone、首都继承、局部重新分省、外交军事经济联动、回滚兼容和排除边界冻结稿。
 - `coastline-feature-topology-product-rules.md`：权威任务第 75 项已确认的海岸雕刻、填岸、开 / 闭海峡、湖海开渠、整湖填平、派生 Feature split / merge、高度跨海平面、ID 与回滚兼容边界冻结稿。
@@ -193,7 +197,7 @@
 - `namebase-editor-plan.md`：名称库编辑器计划。
 - `namebase-generation-binding-plan.md`：名称库绑定生成计划。
 
-## 世界系统与后续大功能
+## 已完成或明确未推进的世界系统专题
 
 - `economy-market-trade-plan.md`：市场、商品与贸易流计划。
 - `government-system-and-state-title-plan.md`：政体系统、国家国号后缀和政体影响规则。

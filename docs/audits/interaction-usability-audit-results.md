@@ -2,7 +2,7 @@
 
 ## 文档状态
 
-本文是权威任务第 107 项的最终审计交付物。它汇总第 101～106 项的代码证据与本项统一浏览器证据，只提出整改候选，不修改正式应用，也不把候选自动写入权威任务清单。
+本文是权威任务第 107 项的历史审计交付物。它汇总第 101～106 项的代码证据与本项统一浏览器证据；当时提出的 `Q-25～Q-33` 已全部转为第 201～203、211～216 项并完成，本文件不再提供当前整改候选。
 
 ## 验证结论
 
@@ -400,6 +400,6 @@
 - IA-106-002 Escape 结果随焦点是否位于可编辑控件而改变，内部 popup 还缺应用侧可证明优先级 → Q-25
 - IA-106-005 22 个 role=dialog 的 managed fixed overlay 都不会暂停全局快捷键 → Q-25
 
-## 后续入口
+## 历史整改入口
 
-下一批准权威整改候选见 [next-quasi-authoritative-interaction-remediation-tasks-2026-07-20.md](../task-notes/next-quasi-authoritative-interaction-remediation-tasks-2026-07-20.md)。用户批准前不得实施。
+当时的整改来源、转正映射与完成状态见 [Q-25～Q-33 交互整改转正历史](../task-notes/interaction-remediation-promotion-history-2026-07-20.md)。当前活动任务与未批准事项分别只看 [`../current-plan.md`](../current-plan.md#权威任务清单) 和根目录 [`../../FOLLOWUPS.md`](../../FOLLOWUPS.md)。
