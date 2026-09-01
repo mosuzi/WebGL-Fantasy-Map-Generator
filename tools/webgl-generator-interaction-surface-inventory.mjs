@@ -269,6 +269,7 @@ function buildGlobalEventRows() {
     {path: "app/webgl-generator/src/ui/vue/composables/use-debug-mode.js", entry: "内部 debug 状态同步", result: "Vue debug 状态", included: false, reason: "内部状态同步，不是直接用户交互表面"},
     {path: "app/webgl-generator/src/ui/vue/composables/use-draggable-floating-panel.js", entry: "局部浮层拖动 window 捕获", result: "浮层拖动", included: false, reason: "拖动生命周期已归入 shared / fixed-overlay，不重复计入全局分母"},
     {path: "app/webgl-generator/src/ui/vue/components/base/UiActionDock.vue", entry: "动作坞 document 外部点击", result: "二级面板关闭", included: false, reason: "局部行为已按 18 个 fixed-overlay 宿主展开，不重复计入全局分母"},
+    {path: "app/webgl-generator/src/ui/vue/components/RoutePanel.vue", entry: "道路面板运行时操作状态同步", result: "道路重生成按钮忙碌态", included: false, reason: "局部运行时状态已归入道路面板，不重复计入全局分母"},
     {path: "app/webgl-generator/src/ui/vue/components/ControlPanel.vue", entry: "导出浮层 document / window 监听", result: "外部关闭与重排", included: false, reason: "局部行为已归入 fixed-overlay:project-export，不重复计入全局分母"},
     {path: "app/webgl-generator/src/runtime/app.js", id: "worker-generation", entry: "生成 worker message / error / messageerror", result: "内部生成消息与主线程回退", included: false, reason: "worker 内部桥接事件不直接呈现为用户交互表面；用户可见加载反馈已归入 canvas:generation-feedback"}
   ];

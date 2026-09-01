@@ -11,7 +11,7 @@ assert.deepEqual(Object.keys(inventory.totals.bySourceType), SOURCE_TYPES, "来�
 assert.ok(SOURCE_TYPES.every(type => inventory.totals.bySourceType[type] > 0), "七类来源都必须有发现项");
 
 const includedPanelRows = inventory.rows.filter(row => row.included && ["vue-panel-detail", "non-vue-panel"].includes(row.sourceType));
-assert.equal(includedPanelRows.length, 28, "当前 PanelManager 分母应为 27 个 Vue 面板加 1 个非 Vue 开发面板");
+assert.equal(includedPanelRows.length, 29, "当前 PanelManager 分母应为 26 个 Vue 面板加 3 个非 Vue 面板");
 assert.ok(includedPanelRows.every(row => row.panelIdentity?.role && typeof row.panelIdentity.persistOpen === "boolean" && row.panelIdentity.closeBehavior && row.panelIdentity.stateSource && row.panelIdentity.mainState.length), "每个面板必须冻结 role、persistOpen、关闭行为、状态来源和主要状态");
 assert.equal(inventory.rows.filter(row => row.surfaceId.startsWith("fixed-overlay:action-dock:")).length, 18, "动作坞必须按 18 个宿主上下文展开");
 assert.equal(inventory.rows.filter(row => row.surfaceId.startsWith("fixed-overlay:tree:")).length, 2, "树状浮层必须按文化和宗教两个宿主展开");

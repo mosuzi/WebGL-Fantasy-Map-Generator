@@ -15,8 +15,10 @@ const FILES = Object.freeze({
   panelBindings: "app/webgl-generator/src/ui/panel.js",
   panelManager: "app/webgl-generator/src/ui/panel-manager.js",
   runtime: "app/webgl-generator/src/runtime/app.js",
+  browserStorage: "app/webgl-generator/src/runtime/browser-map-storage.js",
   history: "app/webgl-generator/src/runtime/edit-history.js",
   renderer: "app/webgl-generator/src/renderer/placeholder-renderer.js",
+  viewportInput: "app/webgl-generator/src/renderer/viewport-input-controller.js",
   shortcuts: "app/webgl-generator/src/runtime/keyboard-shortcuts.js",
   selectionPolicy: "app/webgl-generator/src/runtime/selection-panel-policy.js",
   cityVue: "app/webgl-generator/src/ui/vue/components/CityPanel.vue",
@@ -90,7 +92,7 @@ function definitions() {
   return [
     flow("HF-01", "启动时恢复浏览器地图，否则生成新地图", {
       surfaces: ["canvas:generation-feedback", "panel:generation-panel"],
-      actions: [visibleAction("startup", "打开应用", [sourceRef(FILES.main, ["createGeneratorApp(document, {healthMonitor})", "启动失败"])])],
+      actions: [visibleAction("startup", "打开应用", [sourceRef(FILES.main, ["createGeneratorApp(document, {healthMonitor})", "startupFailureMessage(error)"])])],
       entry: "打开应用",
       preconditions: "浏览器可能有、没有或持有损坏存档",
       chain: [
@@ -121,7 +123,7 @@ function definitions() {
         step("DOM 接线", FILES.panelBindings, ["getElementById(\"generate-map\").addEventListener(\"click\", handlers.onGenerate)"]),
         step("runtime handler", FILES.runtime, ["onGenerate: () => requestGenerate", "function requestGenerate"]),
         step("公开动作", FILES.runtime, ["generate.newMap", "generateNewMapViaApi", "confirm: true"]),
-        step("事务", FILES.runtime, ["const mapReplaceConfig", "captureMapReplaceSnapshot", "restoreMapReplaceSnapshot"]),
+        step("事务", FILES.runtime, ["const runMapReplace", "captureMapReplaceSnapshot", "restoreMapReplaceSnapshot"]),
         step("结果", FILES.runtime, ["generateMapViaApi", "effects: [\"replace-map\", \"clear-history\""]),
         step("失败反馈", FILES.runtime, ["reportGenerateError(documentRef, error)"])
       ],
@@ -141,7 +143,7 @@ function definitions() {
       preconditions: "地图已加载",
       chain: [
         step("入口", FILES.control, ["command=\"local-file\"", "保存到本地"]),
-        step("Vue 事件", FILES.control, ["project-map-save", "detail: {target}"]),
+        step("Vue 事件", FILES.control, ["handleSaveCommand(target)", "project-map-save"]),
         step("DOM 接线", FILES.panelBindings, ["target === \"local-file\"", "handlers.onSaveLocalFile"]),
         step("runtime handler", FILES.runtime, ["onSaveLocalFile: () => {", "saveMapToLocalFile", "runtimeActions.data.exportCompressedAll"]),
         step("序列化与下载", FILES.runtime, ["exportAllMapData(state, documentRef", "download: true", "includeText: false"]),
@@ -169,7 +171,7 @@ function definitions() {
         step("快捷键", FILES.shortcuts, ["file.save-browser", "data.saveBrowserMap"]),
         step("DOM 接线", FILES.panelBindings, ["target === \"browser-storage\"", "handlers.onSaveBrowserStorage"]),
         step("runtime handler", FILES.runtime, ["onSaveBrowserStorage", "saveMapToBrowserStorage"]),
-        step("编码与持久化", FILES.runtime, ["saveMapToBrowserStorageViaApi", "storage.setItem(BROWSER_MAP_STORAGE_KEY", "storageKey: BROWSER_MAP_STORAGE_KEY"]),
+        step("编码与持久化", FILES.browserStorage, ["writeBrowserMapStorage", "storage.setItem(BROWSER_MAP_STORAGE_KEY", "storageKey: BROWSER_MAP_STORAGE_KEY"]),
         step("反馈", FILES.runtime, ["showMapToast(documentRef, \"保存成功\")", "BROWSER_STORAGE_SAVE_ERROR_TOAST_DURATION_MS"])
       ],
       expectedResult: "把当前完整地图编码写入固定浏览器存储键",
@@ -200,7 +202,7 @@ function definitions() {
         step("DOM 接线", FILES.panelBindings, ["getElementById(\"import-map-file\")", "handlers.onImportMapData"]),
         step("runtime handler", FILES.runtime, ["onImportMapData: file => importMapData", "runtimeActions.data.importMap"]),
         step("解析与替换", FILES.runtime, ["async function importMapData", "importParsedMapDocumentViaApi"]),
-        step("事务回滚", FILES.runtime, ["mapReplaceConfig", "restoreMapReplaceSnapshot"]),
+        step("事务回滚", FILES.runtime, ["runMapReplace", "restoreMapReplaceSnapshot"]),
         step("历史与选择", FILES.runtime, ["state.editHistory.clear()", "state.selectionStore.clear()"]),
         step("反馈与诊断", FILES.runtime, ["reportMapImportError", "正在${sourceLabel}导入地图数据", "导入地图数据：seed"])
       ],
@@ -272,19 +274,20 @@ function definitions() {
     flow("HF-08", "平移和缩放地图", {
       surfaces: ["canvas:map-canvas", "canvas:map-overlay", "canvas:map-scale-bar"],
       actions: [
-        visibleAction("pan-middle", "中键拖动平移", [sourceRef(FILES.renderer, ["event.button === 1"])]),
-        visibleAction("pan-right", "右键拖动平移", [sourceRef(FILES.renderer, ["event.button === 2"])]),
-        visibleAction("pan-nonmouse", "触控 / 非鼠标主指针平移", [sourceRef(FILES.renderer, ["return event.button === 0 ? \"pan\" : null"])]),
-        visibleAction("zoom-wheel", "滚轮锚点缩放", [sourceRef(FILES.renderer, ["\"wheel\"", "camera.scale = nextScale"])])
+        visibleAction("pan-middle", "中键拖动平移", [sourceRef(FILES.viewportInput, ["event.button === 1 || event.button === 2", "return \"pan\""])]),
+        visibleAction("pan-right", "右键拖动平移", [sourceRef(FILES.viewportInput, ["event.button === 1 || event.button === 2", "return \"pan\""])]),
+        visibleAction("pan-primary", "空格加主键或触屏拖动平移", [sourceRef(FILES.viewportInput, ["spacePanActive ? \"pan\" : \"select\"", "pointer.mode = \"pan\""])]),
+        visibleAction("pan-wheel", "触摸板滚动平移", [sourceRef(FILES.viewportInput, ["classifyViewportWheelIntent", "panCamera(-delta.x, -delta.y"])]),
+        visibleAction("zoom-wheel", "滚轮或触摸板捏合锚点缩放", [sourceRef(FILES.viewportInput, ["zoomCameraAtClientPoint", "source: event.ctrlKey ? \"pinch\" : \"wheel\""])])
       ],
-      entry: "中键 / 右键拖动、触控指针拖动或滚轮",
+      entry: "中键 / 右键拖动、空格加主键、触屏拖动或滚轮 / 触摸板",
       preconditions: "指针位于画布且没有更高优先级工具消费事件",
       chain: [
-        step("输入", FILES.renderer, ["canvas.addEventListener(\"pointerdown\"", "canvas.addEventListener(\"pointermove\""]),
-        step("平移", FILES.renderer, ["camera.offsetX +=", "camera.offsetY -="]),
-        step("缩放", FILES.renderer, ["canvas.addEventListener(", "camera.scale = nextScale"]),
-        step("结束与取消", FILES.renderer, ["pointerup", "pointercancel"]),
-        step("重绘", FILES.renderer, ["onChange", "drawViewportPreview"])
+        step("输入", FILES.viewportInput, ["[canvas, \"pointerdown\", handlePointerDown]", "[canvas, \"pointermove\", handlePointerMove]"]),
+        step("平移", FILES.viewportInput, ["camera.offsetX +=", "camera.offsetY -="]),
+        step("缩放", FILES.viewportInput, ["classifyViewportWheelIntent", "zoomCameraAtClientPoint"]),
+        step("结束与取消", FILES.viewportInput, ["handlePointerUp", "handlePointerCancel", "handleLostPointerCapture"]),
+        step("重绘", FILES.viewportInput, ["onChange({kind: \"pan\"", "onChange({kind: \"zoom\""])
       ],
       expectedResult: "相机变换并同步 WebGL 与 HTML / SVG overlay",
       history: "导航不写编辑历史",
