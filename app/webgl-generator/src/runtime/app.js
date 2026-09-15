@@ -58,6 +58,7 @@ import {formatArea as formatDisplayArea, formatDistance as formatDisplayDistance
 import {sameObjectId} from "../ui/object-id.js";
 import {createBiomePanel} from "../ui/panels/biome-panel.js";
 import {createCityPanel} from "../ui/panels/city-panel.js";
+import {createSetCityAttributeCommand} from "./city-attribute-commands.js";
 import {createClimatePanel} from "../ui/panels/climate-panel.js";
 import {createCloudStoragePanel, readCloudFilenameTemplate} from "../ui/panels/cloud-storage-panel.js";
 import {createCulturePanel} from "../ui/panels/culture-panel.js";
@@ -1665,6 +1666,13 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       const command = createSetCityPopulationCommand(cityId, population);
       executeEditCommand(state, documentRef, command, {context});
       updateEditingInteractionLock(state, documentRef);
+    },
+    onAttributeChange: (cityId, key, enabled) => {
+      if (state.runtimeOperationSnapshot?.busy || state.workerAtomicCommitGuard) return {executed: false, message: "当前还有操作正在进行，请稍后再试。"};
+      const command = createSetCityAttributeCommand(cityId, key, enabled);
+      const execution = executeEditCommand(state, documentRef, command, {context: {map: state.map}, throwOnError: false});
+      updateEditingInteractionLock(state, documentRef);
+      return {...execution, message: execution.error?.message || (execution.executed ? `${command.label}，可撤销。` : "属性未改变。")};
     },
     onSyncOwnerToCell: cityId => {
       const context = {map: state.map};

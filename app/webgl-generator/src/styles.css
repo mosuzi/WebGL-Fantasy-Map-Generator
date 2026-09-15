@@ -7879,6 +7879,37 @@ input.ui-switch-native {
   border-top: 1px solid rgba(189, 206, 213, 0.12);
 }
 
+.city-attribute-shortcuts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin: 10px 0;
+}
+
+.city-attribute-name {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  color: #ffe0a1;
+}
+
+.city-attribute-button svg {
+  display: block;
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.city-attribute-feedback {
+  flex-basis: 100%;
+  font-size: 12px;
+  color: #c6d4da;
+}
+
 .city-panel-details div {
   display: grid;
   gap: 3px;

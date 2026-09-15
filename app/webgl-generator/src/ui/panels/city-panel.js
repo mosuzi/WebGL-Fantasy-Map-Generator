@@ -107,6 +107,7 @@ export function createCityPanel(documentRef, manager, callbacks = {}) {
     },
     onDeleteCity: cityId => callbacks.onDeleteCity?.(cityId),
     onPopulationChange: (cityId, population) => callbacks.onPopulationChange?.(cityId, population),
+    onAttributeChange: (cityId, key, enabled) => callbacks.onAttributeChange?.(cityId, key, enabled),
     onSyncOwnerToCell: cityId => callbacks.onSyncOwnerToCell?.(cityId),
     onVisualChange: (cityId, patch) => callbacks.onVisualChange?.(cityId, patch),
     onVisualReset: cityId => callbacks.onVisualReset?.(cityId),

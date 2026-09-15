@@ -41,6 +41,26 @@
     @action="handleHighlightAction"
   />
 
+  <section v-if="selected" class="city-attribute-shortcuts">
+    <strong class="city-attribute-name">{{ selected.rawName }}</strong>
+    <div class="ui-action-icon-row" role="group" aria-label="城市属性">
+      <UiButton
+        v-for="action in attributeActions"
+        :key="action.key"
+        class="ui-icon-action city-attribute-button"
+        :active="action.active"
+        :disabled="action.disabled || modalActionActive || attributeBusy"
+        :title="action.title"
+        :aria-label="action.label"
+        :aria-pressed="action.active ? 'true' : 'false'"
+        @click="handleAttributeChange(action)"
+      >
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path :d="action.path" /></svg>
+      </UiButton>
+    </div>
+    <span v-if="attributeFeedback" class="city-attribute-feedback" role="status">{{ attributeFeedback }}</span>
+  </section>
+
   <UiDetailGrid class-name="city-panel-details" empty-text="未选中城市" :rows="detailRows" />
 
   <section v-if="state.moveMode || state.movePreview" class="city-move-preview" :data-valid="state.movePreview?.valid === true">
@@ -102,6 +122,7 @@
 
 <script setup>
 import {computed, nextTick, reactive, ref, watch} from "vue";
+import {readCityAttributeActions} from "../../../runtime/city-attribute-commands.js";
 import UiActionDock from "./base/UiActionDock.vue";
 import UiButton from "./base/UiButton.vue";
 import UiDetailGrid from "./base/UiDetailGrid.vue";
@@ -190,6 +211,13 @@ const selected = computed(() => {
   return refreshRelocatedSelectedCityRow(props.state.map, row, props.state.selectedCityId);
 });
 const modalActionActive = computed(() => Boolean(props.state.addMode || props.state.deleteMode || props.state.moveMode));
+const attributeBusy = ref(false);
+const attributeFeedback = ref("");
+const attributeActions = computed(() => {
+  props.state.version;
+  props.state.relocationVersion;
+  return selected.value ? readCityAttributeActions(props.state.map, selected.value.id) : [];
+});
 const visualDraft = reactive({
   silhouette: "town"
 });
@@ -254,6 +282,7 @@ const detailRows = computed(() => selected.value ? [
 watch(() => selected.value?.id, syncVisualDraft, {immediate: true});
 watch(() => selected.value?.id, id => {
   activeAction.value = null;
+  attributeFeedback.value = "";
   if (!sameObjectId(renameRequestId.value, id)) return;
   renameRequestId.value = null;
   nextTick(() => {
@@ -380,6 +409,22 @@ function handleEmptyAction(key) {
   if (key === "clear-filter") props.callbacks.onFilter?.("");
 }
 
+async function handleAttributeChange(action) {
+  if (!selected.value || action.disabled || modalActionActive.value || attributeBusy.value) return;
+  const cityId = selected.value.id;
+  attributeBusy.value = true;
+  attributeFeedback.value = "";
+  try {
+    const result = await props.callbacks.onAttributeChange?.(cityId, action.key, action.key === "capital" || !action.active);
+    if (!sameObjectId(selected.value?.id, cityId)) return;
+    attributeFeedback.value = result?.message || (result?.executed ? `已${action.active ? "取消" : "设置"}${action.label}` : "属性未改变。");
+  } catch {
+    if (sameObjectId(selected.value?.id, cityId)) attributeFeedback.value = "属性设置失败，请稍后重试。";
+  } finally {
+    attributeBusy.value = false;
+  }
+}
+
 function handleHighlightAction(key) {
   if (key === "highlight-selected") props.callbacks.onHighlight?.(selectedCityRows.value);
   if (key === "clear-highlights") props.callbacks.onClearHighlights?.();
@@ -464,10 +509,10 @@ function cityFlags(city, burg) {
   if (city.capital || burg?.capital) flags.push("首都");
   if (city.provincial) flags.push("省会");
   if (city.port || burg?.port) flags.push("港口");
-  if (city.citadel || burg?.citadel) flags.push("堡垒");
-  if (city.walls || burg?.walls) flags.push("城墙");
-  if (city.plaza || burg?.plaza) flags.push("广场");
-  if (city.temple || burg?.temple) flags.push("神庙");
+  if (city.citadel ?? burg?.citadel) flags.push("要塞");
+  if (city.walls ?? burg?.walls) flags.push("城墙");
+  if (city.plaza ?? burg?.plaza) flags.push("贸易中心");
+  if (city.temple ?? burg?.temple) flags.push("神庙");
   return flags;
 }
 
