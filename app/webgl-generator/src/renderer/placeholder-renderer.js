@@ -2191,10 +2191,10 @@ export class PlaceholderMapRenderer {
     return {incremental: true, cells: changedCells, spans: merged.length, shoreSpans};
   }
 
-  refreshLabels(binding = null) {
+  refreshLabels(binding = null, options = {}) {
     if (!this.map) return;
     const resourceBinding = binding || this.labelLayoutResourceOwner || this.activeRenderResourceBinding || this.surfaceResourceOwner;
-    this.buildLabels(this.map);
+    this.buildLabels(this.map, options);
     if (resourceBinding) adoptOverlayLabelResourceBinding(this, resourceBinding);
     this.updateLabels();
   }
@@ -4531,7 +4531,7 @@ export class PlaceholderMapRenderer {
     };
   }
 
-  buildLabels(map) {
+  buildLabels(map, {cityRolesOnly = false, stateIds = []} = {}) {
     if (!this.overlay) {
       this.gridCellIdLayer = null;
       this.labelItems = [];
@@ -4556,10 +4556,31 @@ export class PlaceholderMapRenderer {
       this.visibleMilitaryIconCount = 0;
       return;
     }
-    this.overlay.replaceChildren();
+    // 城市角色改变排名与图标；只有迁都会改变所属国家的领土标签锚点。
+    // 保留其他标签和标记，避免每次点击重新遍历全部国家领土并重建整个覆盖层。
+    const scoped = cityRolesOnly && Boolean(this.selectionMarker?.parentNode === this.overlay);
+    const stateIdSet = new Set(stateIds.map(Number));
+    const sourceLabels = scoped
+      ? [
+        ...[...this.labelItems.filter(item => item.targetKind === LABEL_TARGET_KIND.STATE && !stateIdSet.has(Number(item.targetId))), ...getLabelStates(map, stateIdSet)].sort((a, b) => b.priority - a.priority || a.rank - b.rank),
+        ...this.labelItems.filter(item => item.targetKind === LABEL_TARGET_KIND.PROVINCE).sort((a, b) => b.priority - a.priority || a.rank - b.rank),
+        ...getLabelCities(map, this.labelOptions),
+        ...this.labelItems.filter(item => item.targetKind === LABEL_TARGET_KIND.ZONE).sort((a, b) => a.rank - b.rank),
+        ...this.labelItems.filter(item => item.targetKind === LABEL_TARGET_KIND.CUSTOM).sort((a, b) => a.rank - b.rank)
+      ]
+      : [...getLabelStates(map), ...getLabelProvinces(map), ...getLabelCities(map, this.labelOptions), ...getLabelZones(map), ...getCustomLabels(map)];
+    if (scoped) {
+      for (const item of this.labelItems) {
+        if (item.targetKind === LABEL_TARGET_KIND.CITY || (item.targetKind === LABEL_TARGET_KIND.STATE && stateIdSet.has(Number(item.targetId)))) item.node.remove();
+      }
+    } else this.overlay.replaceChildren();
     const documentRef = this.overlay.ownerDocument || document;
     const fragment = documentRef.createDocumentFragment();
-    const labels = [...getLabelStates(map), ...getLabelProvinces(map), ...getLabelCities(map, this.labelOptions), ...getLabelZones(map), ...getCustomLabels(map)].map(item => {
+    const labels = sourceLabels.map(item => {
+      if (scoped && item.node) {
+        fragment.append(item.node);
+        return item;
+      }
       const node = documentRef.createElement("span");
       const styleType = labelStyleTypeForTarget(item.targetKind, item.city);
       node.className = semanticLabelClassName(item.targetKind, item.city);
@@ -4608,6 +4629,15 @@ export class PlaceholderMapRenderer {
     }));
     this.cityIconItemsById = new Map(this.cityIconItems.map(item => [String(item.id), item]));
     this.cityIconLayer.setInstances(this.cityIconItems, {nowMs: performance.now()});
+    if (scoped) {
+      const firstMarker = this.markerIconItems[0]?.node || this.militaryIconItems[0]?.node || this.selectionMarker;
+      this.overlay.insertBefore(fragment, firstMarker);
+      this.labelCount = this.labelItems.length;
+      this.cityLabelCount = this.labelItems.filter(item => item.targetKind === LABEL_TARGET_KIND.CITY).length;
+      this.stateLabelCount = this.labelItems.filter(item => item.targetKind === LABEL_TARGET_KIND.STATE).length;
+      this.cityIconCount = this.cityIconItems.length;
+      return;
+    }
     this.markerIconItems = getMarkerIconItems(map).map(item => {
       const node = documentRef.createElement("span");
       node.className = markerIconClassName(item);
@@ -5786,11 +5816,12 @@ function getLabelCities(map, labelOptions = {}) {
     }));
 }
 
-function getLabelStates(map) {
+function getLabelStates(map, stateIds = null) {
   return (map?.politics?.states || [])
     .filter(state => state && (state.i || state.id) && !state.removed)
     .filter(state => !isGeneratedLabelHidden(map, LABEL_TARGET_KIND.STATE, state.i ?? state.id))
     .map((state, rank) => {
+      if (stateIds && !stateIds.has(Number(state.i ?? state.id))) return null;
       const text = state.fullName || state.name || `国家 #${state.i ?? state.id}`;
       const placement = stateLabelPlacement(map, state, text);
       return placement ? {
@@ -7793,8 +7824,12 @@ function finalizeRouteMeshBuild(build) {
   const ordinaryCount = build.vertices.length / 6;
   const seaLandCount = build.seaLandVertices.length / 6;
   const seaWaterCount = build.seaWaterVertices.length / 6;
+  const vertices = new Float32Array(build.vertices.length + build.seaLandVertices.length + build.seaWaterVertices.length);
+  vertices.set(build.vertices);
+  vertices.set(build.seaLandVertices, build.vertices.length);
+  vertices.set(build.seaWaterVertices, build.vertices.length + build.seaLandVertices.length);
   return {
-    vertices: new Float32Array([...build.vertices, ...build.seaLandVertices, ...build.seaWaterVertices]),
+    vertices,
     drawRanges: {
       ordinary: {first: 0, count: ordinaryCount},
       seaLand: {first: ordinaryCount, count: seaLandCount},

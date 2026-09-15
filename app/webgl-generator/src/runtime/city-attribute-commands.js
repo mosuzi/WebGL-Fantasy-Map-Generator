@@ -55,7 +55,7 @@ export function createSetCityAttributeCommand(cityId, key, enabled, {faultInject
     label: `${enabled ? "设置" : "取消"}${label} #${cityId}`,
     domain: "city",
     effects: {render: changesMapRole ? "draw" : "none", selection: "refresh", runtimeStats: true, pickPanel: true,
-      derived: ["object-panels", ...(changesMapRole ? ["point-layers", "labels"] : []), ...(key === "capital" ? ["state-capital"] : [])],
+      derived: ["object-panels", ...(changesMapRole ? ["point-layers", "labels", "city-role-labels"] : []), ...(key === "capital" ? ["state-capital"] : [])],
       affected: objectAffected("city", cityId)},
     isNoop({map}) {
       const inspection = inspectCityAttribute(map, cityId, key, enabled);

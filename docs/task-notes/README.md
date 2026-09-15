@@ -6,7 +6,7 @@
 
 ## 最近文档治理专题
 
-- 第 382 项城市属性快捷按钮的实施与冻结证据见 [`task-382-city-attribute-shortcuts.md`](./task-382-city-attribute-shortcuts.md)；活动状态仅见当前权威计划。
+- 第 382 项城市属性快捷按钮、分步发布及性能修复证据见 [`task-382-city-attribute-shortcuts.md`](./task-382-city-attribute-shortcuts.md)；活动状态仅见当前权威计划。
 
 - 第 381 项已完成现行文档候选源清理；判定、阶段边界与验收矩阵见 [`task-381-document-candidate-cleanup.md`](./task-381-document-candidate-cleanup.md)。
 

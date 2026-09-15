@@ -110,7 +110,7 @@ export function createEditRefreshScheduler({state, documentRef, updateRuntimePan
       }
 
       if (effects.derived.includes("labels") && typeof state.renderer.refreshLabels === "function") {
-        state.renderer.refreshLabels(retainedBinding);
+        state.renderer.refreshLabels(retainedBinding, labelRefreshOptions(effects));
       }
 
       if (effects.selection === "refresh") {
@@ -208,7 +208,7 @@ export function createEditRefreshScheduler({state, documentRef, updateRuntimePan
         await runStep(() => state.renderer.draw());
       }
       if (effects.derived.includes("labels") && typeof state.renderer.refreshLabels === "function") {
-        await runStep(() => state.renderer.refreshLabels(retainedBinding));
+        await runStep(() => state.renderer.refreshLabels(retainedBinding, labelRefreshOptions(effects)));
       }
       if (effects.selection === "refresh") {
         await runStep(() => state.selectionStore.refresh());
@@ -224,6 +224,15 @@ export function createEditRefreshScheduler({state, documentRef, updateRuntimePan
         throw error;
       }
     }
+  };
+}
+
+function labelRefreshOptions(effects) {
+  return {
+    cityRolesOnly: effects.derived.includes("city-role-labels"),
+    stateIds: effects.derived.includes("state-capital")
+      ? effects.affected.filter(target => target.kind === "state").map(target => Number(target.id))
+      : []
   };
 }
 
