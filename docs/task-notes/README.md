@@ -6,6 +6,8 @@
 
 ## 最近文档治理专题
 
+- 第 385 项城市发展参与国力的算法、边界与验收见 [`城市国力贡献`](./task-385-city-national-power.md)。
+
 - 第 383、384 项的实施前设计与验收口径见 [`城市属性生成作用`](./task-383-city-generation-effects.md)、[`城市人口直接编辑`](./task-384-city-population-editing.md)；活动顺序仅由当前计划管理。
 
 - 第 382 项城市属性快捷按钮、分步发布及性能修复证据见 [`task-382-city-attribute-shortcuts.md`](./task-382-city-attribute-shortcuts.md)；活动状态仅见当前权威计划。

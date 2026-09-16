@@ -1,5 +1,6 @@
 import {createRandom} from "./random.js";
 import {cityDevelopmentEffects} from "./city-development.js";
+import {collectCityPower} from "./city-power.js";
 import {applySuitabilityOverrides, captureSuitabilityBase, restoreSuitabilityBase} from "./suitability.js";
 import {getGovernmentEffects} from "./governments.js";
 import {defaultGoodDisplayProperties, defaultMarketDisplayProperties} from "./economy-display-properties.js";
@@ -1650,8 +1651,9 @@ export function refreshPoliticalEconomicPower(
   const markerEconomy = pack.metadata?.markerResourceEconomy || {};
   const states = (pack.states || []).filter(state => state?.i && !state.removed);
   const provinces = (pack.provinces || []).filter(province => province?.i && !province.removed);
-  const stateAverages = politicalAverages(states);
-  const provinceAverages = politicalAverages(provinces);
+  const cityPower = collectCityPower(pack);
+  const stateAverages = politicalAverages(states, cityPower.states);
+  const provinceAverages = politicalAverages(provinces, cityPower.provinces);
   let statesWithResources = 0;
   let provincesWithResources = 0;
 
@@ -1661,7 +1663,7 @@ export function refreshPoliticalEconomicPower(
         kind: "state",
         treasury: Number(state.treasury || 0),
         population: Number(state.rural || 0) + Number(state.urban || 0),
-        burgs: Number(state.burgs || 0),
+        settlementDevelopment: cityPower.states.get(state.i)?.weight || 0,
         area: Number(state.area || state.cells || 0)
       });
     }
@@ -1675,7 +1677,7 @@ export function refreshPoliticalEconomicPower(
         kind: "province",
         treasury: populationBase * 0.2,
         population: populationBase,
-        burgs: Number(province.burgs || province.cityCount || 0),
+        settlementDevelopment: cityPower.provinces.get(province.i)?.weight || 0,
         area: Number(province.area || province.cells || 0)
       });
     }
@@ -1724,11 +1726,11 @@ function collectProtectedEconomyBurgIds(pack, locks, options = {}) {
   return ids;
 }
 
-function politicalAverages(groups) {
+function politicalAverages(groups, cityPower) {
   return {
     population: average(groups.map(group => Number(group?.rural || 0) + Number(group?.urban || 0))),
     area: average(groups.map(group => Number(group?.area || group?.cells || 0))),
-    burgs: average(groups.map(group => Number(group?.burgs || group?.cityCount || 0))),
+    burgs: average(groups.map(group => cityPower.get(group.i)?.count || 0)),
     economy: average(groups.map(group => {
       const population = Number(group?.rural || 0) + Number(group?.urban || 0);
       const base = Number(group?.treasury || 0) || population * 0.2;
@@ -1745,7 +1747,7 @@ function applyPoliticalPowerFields(group, averages, context) {
   const economicPower = (Number(context.treasury || 0) + markerPotential) * governmentEconomyModifier;
   const populationScore = relativeScore(context.population, averages.population, 42);
   const territoryScore = relativeScore(context.area, averages.area, context.kind === "state" ? 18 : 14);
-  const settlementScore = relativeScore(context.burgs, averages.burgs, context.kind === "state" ? 20 : 16);
+  const settlementScore = relativeScore(context.settlementDevelopment, averages.burgs, context.kind === "state" ? 20 : 16);
   const economyScore = relativeScore(economicPower, averages.economy, context.kind === "state" ? 28 : 22);
   const resourceScore = Math.sqrt(Math.max(0, resourcePotential)) * (context.kind === "state" ? 5.5 : 4.5);
   const markerScore = Math.sqrt(Math.max(0, markerPotential)) * 2;

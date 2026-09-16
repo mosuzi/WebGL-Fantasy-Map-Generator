@@ -498,6 +498,7 @@ function handleEmptyAction() {
 }
 
 function handleScroll() {
+  if (!virtualEnabled.value) return;
   const view = tableWrap.value?.ownerDocument?.defaultView;
   if (!view?.requestAnimationFrame) {
     refreshScrollMetrics();
@@ -531,6 +532,8 @@ function tableViewportInsets(scroller) {
 }
 
 function refreshScrollMetrics() {
+  // 非虚拟列表不消费这些尺寸，避免挂载时为无用读取强制布局。
+  if (!virtualEnabled.value) return;
   const wrap = tableWrap.value;
   if (!wrap) return;
   scrollTop.value = wrap.scrollTop || 0;
