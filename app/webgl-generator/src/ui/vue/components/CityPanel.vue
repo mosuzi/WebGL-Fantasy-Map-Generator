@@ -64,6 +64,16 @@
 
   <UiDetailGrid class-name="city-panel-details" empty-text="未选中城市" :rows="detailRows" />
 
+  <section v-if="selected" class="city-population-controls" aria-label="城市人口编辑">
+    <form @submit.prevent="applyPopulation(false)">
+      <label>人口（人）<input ref="populationInput" v-model="populationDraft" aria-label="城市人口（人）" type="number" min="0" max="1000000000" step="1" :disabled="populationDisabled" /></label>
+      <UiButton :disabled="populationDisabled" @click="applyPopulation(false)">应用人口</UiButton>
+      <UiButton variant="secondary" :disabled="populationDisabled" @click="applyPopulation(true)">按条件重算人口</UiButton>
+    </form>
+    <span>潜在人口：{{ formatPopulationValue(populationPotential) }}，不限制手工人口。应用后同步所属地区人口；经济、道路和军队需另行重算。</span>
+    <span v-if="populationFeedback" role="status">{{ populationFeedback }}</span>
+  </section>
+
   <section v-if="state.moveMode || state.movePreview" class="city-move-preview" :data-valid="state.movePreview?.valid === true">
     <strong>{{ state.moveMode ? "连续拖动城市到目标位置" : "最近一次移动影响" }}</strong>
     <span>{{ state.movePreview?.summary || "请从地图上所选城市的橙色圆环内按下并拖动；提交后可继续拖动，点击别处或手动退出结束。" }}</span>
@@ -80,20 +90,6 @@
         :model-value="selected.rawName"
         :max-length="48"
         @apply="name => callbacks.onRename(selected.id, name)"
-      />
-    </template>
-
-    <template #population>
-      <p>潜在人口：{{ formatPopulationValue(populationPotential) }}。按当前地理与属性估算，不限制手工人口。</p>
-      <UiButton variant="secondary" :disabled="modalActionActive" @click="callbacks.onPopulationRecalculate?.(selected.id)">按条件重算人口</UiButton>
-      <UiNumberField
-        class-name="city-name-editor city-population-editor"
-        label="人口"
-        action-label="应用人口"
-        :model-value="selected.population"
-        :min="0"
-        :step="0.001"
-        @apply="population => callbacks.onPopulationChange(selected.id, population)"
       />
     </template>
 
@@ -124,7 +120,7 @@
 </template>
 
 <script setup>
-import {computed, nextTick, reactive, ref, watch} from "vue";
+import {computed, nextTick, onMounted, onBeforeUnmount, reactive, ref, watch} from "vue";
 import {readCityAttributeActions} from "../../../runtime/city-attribute-commands.js";
 import {estimateCityPopulationPotential} from "../../../generator/city-development.js";
 import UiActionDock from "./base/UiActionDock.vue";
@@ -133,7 +129,6 @@ import UiDetailGrid from "./base/UiDetailGrid.vue";
 import UiFilterInput from "./base/UiFilterInput.vue";
 import UiMetricGrid from "./base/UiMetricGrid.vue";
 import UiNoteField from "./base/UiNoteField.vue";
-import UiNumberField from "./base/UiNumberField.vue";
 import UiObjectTable from "./base/UiObjectTable.vue";
 import UiPanelIoActions from "./base/UiPanelIoActions.vue";
 import UiRegenerationLockActions from "./base/UiRegenerationLockActions.vue";
@@ -149,7 +144,7 @@ import {
   deriveCityScale,
   resolveCityVisual
 } from "../../../runtime/city-visuals.js";
-import {formatHeight, formatNumber, formatPopulation} from "../../display-units.js";
+import {formatHeight, formatNumber, formatPopulation, populationUnitsToPeople, peopleToPopulationUnits} from "../../display-units.js";
 import {findByObjectId, sameObjectId} from "../../object-id.js";
 import {compareRowsByKey} from "../../sort-utils.js";
 import {readObjectNote} from "../../../runtime/object-notes.js";
@@ -222,6 +217,36 @@ const selected = computed(() => {
 const modalActionActive = computed(() => Boolean(props.state.addMode || props.state.deleteMode || props.state.moveMode));
 const attributeBusy = ref(false);
 const attributeFeedback = ref("");
+const populationInput = ref(null);
+const populationDraft = ref("");
+const populationFeedback = ref("");
+const populationPending = ref(false);
+const runtimeOperationBusy = ref(false);
+const populationDisabled = computed(() => modalActionActive.value || populationPending.value || runtimeOperationBusy.value);
+watch(() => [selected.value?.id, selected.value?.population, unitPreferences.value.populationScale], () => {
+  populationDraft.value = selected.value ? String(Math.round(populationUnitsToPeople(selected.value.population, unitPreferences.value))) : "";
+  populationFeedback.value = "";
+}, {immediate: true});
+onMounted(() => {
+  runtimeOperationBusy.value = Boolean(globalThis.window?.__webglGeneratorApp?.runtimeOperationSnapshot?.busy);
+  globalThis.document?.addEventListener("webgl-generator-runtime-operation", handlePopulationBusy);
+});
+onBeforeUnmount(() => globalThis.document?.removeEventListener("webgl-generator-runtime-operation", handlePopulationBusy));
+function handlePopulationBusy(event) {runtimeOperationBusy.value = Boolean(event.detail?.busy);}
+async function applyPopulation(recalculate) {
+  if (!selected.value || populationDisabled.value) return;
+  const id = selected.value.id;
+  const value = peopleToPopulationUnits(populationDraft.value, unitPreferences.value);
+  if (!recalculate && !Number.isFinite(value)) {populationFeedback.value = "请输入 0～1,000,000,000 的整数人数。"; return;}
+  populationPending.value = true;
+  try {
+    const result = await (recalculate ? props.callbacks.onPopulationRecalculate?.(id) : props.callbacks.onPopulationChange?.(id, value));
+    await nextTick();
+    if (sameObjectId(selected.value?.id, id)) populationFeedback.value = result?.message || "人口未改变。";
+  } catch {
+    if (sameObjectId(selected.value?.id, id)) populationFeedback.value = "人口更新失败，请稍后重试。";
+  } finally {populationPending.value = false;}
+}
 const attributeActions = computed(() => {
   props.state.version;
   props.state.relocationVersion;
@@ -242,7 +267,7 @@ const cityActions = computed(() => [
   {key: "delete", resultClass: "toggle-canvas-mode", label: props.state.deleteMode ? "取消删除城市" : "删除城市：下一次点击地图城市", icon: "×", panel: false, active: props.state.deleteMode, disabled: props.state.addMode || props.state.moveMode},
   {key: "move", resultClass: "toggle-canvas-mode", label: props.state.moveMode ? "退出移动城市" : "移动城市：在地图上拖动所选城市", icon: "↗", panel: false, active: props.state.moveMode, disabled: props.state.addMode || props.state.deleteMode || !selected.value},
   {key: "rename", resultClass: "open-secondary", label: "重命名", icon: "✎", disabled: modalActionActive.value || !selected.value},
-  {key: "population", resultClass: "open-secondary", label: "调整人口", icon: "#", disabled: modalActionActive.value || !selected.value},
+  {key: "population", resultClass: "direct", label: "调整人口", icon: "#", panel: false, disabled: populationDisabled.value || !selected.value},
   {key: "owner", resultClass: "open-secondary", label: "同步归属", icon: "⇄", disabled: modalActionActive.value || !selected.value?.canSyncOwner},
   {key: "visual", resultClass: "open-secondary", label: "调整剪影", icon: "▣", disabled: modalActionActive.value || !selected.value},
   {key: "note", resultClass: "open-secondary", label: "编辑备注", icon: "☰", disabled: modalActionActive.value || !selected.value}
@@ -461,6 +486,7 @@ function sortRows(rows, key, direction) {
 }
 
 function handleActionSelect(key) {
+  if (key === "population") {populationInput.value?.focus(); return;}
   if (key === "add") {
     props.callbacks.onAddMode?.(!props.state.addMode);
     return;

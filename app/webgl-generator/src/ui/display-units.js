@@ -167,6 +167,14 @@ export function populationUnitsToPeople(value, preferences = {}) {
   return numberOrZero(value) * INTERNAL_POPULATION_UNIT_PEOPLE * units.populationScale;
 }
 
+export function peopleToPopulationUnits(value, preferences = {}) {
+  const units = normalizeUnitPreferences(preferences);
+  if (value == null || String(value).trim() === "") return NaN;
+  const people = Number(value);
+  if (!Number.isInteger(people) || people < 0 || people > 1000000000) return NaN;
+  return Number((people / (INTERNAL_POPULATION_UNIT_PEOPLE * units.populationScale)).toFixed(9));
+}
+
 export function formatMilitary(value, preferences = {}) {
   const units = normalizeUnitPreferences(preferences);
   return formatNumber(militaryUnitsToPower(value, units), units, {maximumFractionDigits: 1});

@@ -7879,6 +7879,12 @@ input.ui-switch-native {
   border-top: 1px solid rgba(189, 206, 213, 0.12);
 }
 
+.city-population-controls { display: grid; gap: 8px; margin: 12px 0; font-size: 12px; }
+.city-population-controls form { display: flex; flex-wrap: wrap; align-items: end; gap: 8px; }
+.city-population-controls label { display: grid; gap: 4px; max-width: 100%; }
+.city-population-controls input { width: 150px; max-width: 100%; padding: 6px 8px; color: inherit; background: #18222e; border: 1px solid #546171; border-radius: 4px; }
+.city-population-controls > span { opacity: .85; overflow-wrap: anywhere; }
+
 .city-attribute-shortcuts {
   display: flex;
   flex-wrap: wrap;

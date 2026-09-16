@@ -5,6 +5,7 @@ import {join, resolve} from "node:path";
 import {fileURLToPath} from "node:url";
 import {preview} from "vite";
 import {waitForApiReady} from "./webgl-generator-api-browser-ready.mjs";
+import {verifyCityPopulation} from "./webgl-generator-city-population-browser-check.mjs";
 
 const root = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const output = process.env.CITY_ATTRIBUTES_OUTPUT || join(root, "docs/generated/city-attributes");
@@ -108,6 +109,7 @@ try {
     assert.equal(await button("港口").isDisabled(), true);
     assert.match(await button("港口").getAttribute("title"), /港口条件/);
     const developmentResult = development ? await verifyDevelopment(candidate.id) : null;
+    const populationResult = process.env.CITY_POPULATION_CHECK === "1" ? await verifyCityPopulation(page, panel, select) : null;
     await select(candidate.id);
     await button("要塞").focus();
     const keyboardBefore = await snapshot();
@@ -130,7 +132,7 @@ try {
       writeFileSync(join(output, `${target}-stages.json`), JSON.stringify(detail, null, 2));
     }
     const diagnostics = await page.evaluate(() => ({longTasks: window.__cityAttributeLongTasks, gl: window.__webglGeneratorApp.renderer.canvas.getContext("webgl2").getError(), health: (window.__webglGeneratorHealth?.getEvents?.(200) || []).filter(item => item.severity === "error" || item.level === "error")}));
-    const report = {target, size, toggled, developmentResult, candidate: candidate.id, portCandidate: portCandidate.id, invalidPort: invalidPort.id, layout, diagnostics, errors: [...errors]};
+    const report = {target, size, toggled, developmentResult, populationResult, candidate: candidate.id, portCandidate: portCandidate.id, invalidPort: invalidPort.id, layout, diagnostics, errors: [...errors]};
     reports.push(report);
     writeFileSync(join(output, "report.json"), JSON.stringify({reports}, null, 2));
     assert.equal(diagnostics.gl, 0);
@@ -185,7 +187,7 @@ async function verifyDevelopment(id) {
     if (!result.ok) throw new Error(JSON.stringify(result.error));
   }, id);
   await button("调整人口").click();
-  const dialog = page.getByRole("dialog", {name: "调整人口", exact: true});
+  const dialog = panel.locator(".city-population-controls");
   await dialog.getByRole("button", {name: "按条件重算人口", exact: true}).click();
   const regenerated = await read();
   assert.notEqual(regenerated.population, 543.21);
@@ -197,7 +199,6 @@ async function verifyDevelopment(id) {
   await dialog.getByRole("button", {name: "按条件重算人口", exact: true}).click();
   assert.equal((await read()).population, regenerated.population, "重复重算不复利");
   assert.equal(await page.evaluate(() => window.__webglGeneratorApp.editHistory.getStats().undo), historyCount);
-  await dialog.getByRole("button", {name: "关闭二级编辑面板"}).click();
   const results = [];
   for (const kind of ["economy", "routes", "military"]) {
     const result = await page.evaluate(async kind => kind === "economy"

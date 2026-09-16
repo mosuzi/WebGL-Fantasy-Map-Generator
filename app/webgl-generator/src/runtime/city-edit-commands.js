@@ -1,16 +1,15 @@
 import {
-  captureCityScaleVisualSnapshot,
   createCityScaleContext,
   defaultCityVisual,
   deriveCityScale,
   normalizeCityVisualPatch,
   refreshCityScaleVisuals,
-  restoreCityScaleVisualSnapshot,
   resolveCityVisual
 } from "./city-visuals.js";
 import {namebaseRenameAffected, newObjectAffected, objectAffected} from "./edit-command-effects.js";
 import {cloneObjectNote, deleteObjectNote, objectNoteId, readObjectNote, restoreObjectNote} from "./object-notes.js";
 import {OBJECT_KIND} from "./object-kinds.js";
+import {createCityPopulationTransaction, CITY_POPULATION_REPLICA_PATHS} from "./city-population-transaction.js";
 import {createChineseNameGenerator} from "../generator/names.js";
 
 const CITY_POPULATION_EFFECTS = Object.freeze({
@@ -151,11 +150,8 @@ export function createDeleteCityCommand(cityId, {label = "删除城市"} = {}) {
   };
 }
 
-export function createSetCityPopulationCommand(cityId, nextPopulation, {label = "城市人口"} = {}) {
+export function createSetCityPopulationCommand(cityId, nextPopulation, {label = "城市人口", faultInjector} = {}) {
   const normalizedCityId = normalizeCityId(cityId);
-  const after = normalizePopulation(nextPopulation);
-  let snapshot = null;
-  let scaleVisualSnapshot = null;
 
   return {
     label: `${label} #${normalizedCityId}`,
@@ -164,28 +160,8 @@ export function createSetCityPopulationCommand(cityId, nextPopulation, {label = 
       ...CITY_POPULATION_EFFECTS,
       affected: objectAffected(OBJECT_KIND.CITY, normalizedCityId)
     },
-    apply(context) {
-      if (after === null) throw new Error("城市人口必须是非负有限数");
-      snapshot ??= captureCitySnapshot(context.map, normalizedCityId);
-      if (!snapshot) throw new Error(`找不到城市 #${normalizedCityId}`);
-      scaleVisualSnapshot ??= captureCityScaleVisualSnapshot(context.map);
-      writeCityPopulation(context.map, normalizedCityId, after);
-      refreshCityScaleVisuals(context.map);
-      refreshSettlementDerivedStats(context.map);
-    },
-    revert(context) {
-      if (!snapshot) throw new Error("缺少可撤销的城市人口快照");
-      restoreCityPopulation(context.map, snapshot);
-      restoreCityScaleVisualSnapshot(context.map, scaleVisualSnapshot);
-      refreshSettlementDerivedStats(context.map);
-    },
-    isNoop(context) {
-      if (after === null) throw new Error("城市人口必须是非负有限数");
-      const city = context.map?.settlements?.cities?.[normalizedCityId];
-      if (!city) return true;
-      const burg = findBurgForCity(context.map, city);
-      return normalizePopulation(city.population) === after && (!burg || normalizePopulation(burg.population) === after);
-    }
+    getReplicaPaths: () => CITY_POPULATION_REPLICA_PATHS,
+    ...createCityPopulationTransaction(normalizedCityId, nextPopulation, {faultInjector})
   };
 }
 
@@ -588,21 +564,6 @@ function writeCityVisual(city, burg, visual) {
   if (burg) burg.visual = cloneVisual(next);
 }
 
-function writeCityPopulation(map, cityId, population) {
-  const city = map?.settlements?.cities?.[cityId];
-  if (!city) throw new Error(`找不到城市 #${cityId}`);
-  city.population = population;
-  const burg = findBurgForCity(map, city);
-  if (burg) burg.population = population;
-}
-
-function restoreCityPopulation(map, snapshot) {
-  const city = map?.settlements?.cities?.[snapshot.cityId];
-  if (city) city.population = snapshot.city.population;
-  const burg = map?.pack?.burgs?.[snapshot.burgId] || findBurgForCity(map, city);
-  if (burg && snapshot.burg) burg.population = snapshot.burg.population;
-}
-
 function readCellOwner(map, cityId) {
   const city = map?.settlements?.cities?.[cityId];
   if (!city) return null;
@@ -781,13 +742,6 @@ function nextBurgId(map) {
 function normalizeCityId(value) {
   const numeric = Number(value);
   return Number.isInteger(numeric) ? numeric : -1;
-}
-
-function normalizePopulation(value) {
-  if (typeof value === "string" && value.trim() === "") return null;
-  const numeric = Number(value);
-  if (!Number.isFinite(numeric) || numeric < 0) return null;
-  return Math.round(numeric * 1000) / 1000;
 }
 
 function normalizeOwnerId(value) {

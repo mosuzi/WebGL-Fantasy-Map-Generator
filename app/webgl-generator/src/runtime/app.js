@@ -1663,19 +1663,22 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       updateEditingInteractionLock(state, documentRef);
     },
     onPopulationChange: (cityId, population) => {
+      if (state.runtimeOperationSnapshot?.busy || state.workerAtomicCommitGuard) return {executed: false, message: "当前还有操作正在进行，请稍后再试。"};
       const context = {map: state.map};
       const command = createSetCityPopulationCommand(cityId, population);
-      executeEditCommand(state, documentRef, command, {context});
+      const execution = executeEditCommand(state, documentRef, command, {context, throwOnError: false});
       updateEditingInteractionLock(state, documentRef);
+      return {...execution, message: execution.error ? "人口更新失败，请重新选择城市后重试。" : execution.executed ? "人口已更新，所属地区统计已同步，可撤销。" : "人口未改变。"};
     },
     onPopulationRecalculate: cityId => {
-      if (state.runtimeOperationSnapshot?.busy || state.workerAtomicCommitGuard) return;
+      if (state.runtimeOperationSnapshot?.busy || state.workerAtomicCommitGuard) return {executed: false, message: "当前还有操作正在进行，请稍后再试。"};
       const city = state.map?.settlements?.cities?.[cityId];
       if (!city || city.removed) return;
       const population = estimateCityPopulationPotential(state.map.pack, city, state.map.options?.seed);
       const command = createSetCityPopulationCommand(cityId, population, {label: "按条件重算城市人口"});
-      executeEditCommand(state, documentRef, command, {context: {map: state.map}, throwOnError: false});
+      const execution = executeEditCommand(state, documentRef, command, {context: {map: state.map}, throwOnError: false});
       updateEditingInteractionLock(state, documentRef);
+      return {...execution, message: execution.error ? "人口重算失败，请重新选择城市后重试。" : execution.executed ? "人口已重算，所属地区统计已同步，可撤销。" : "人口未改变。"};
     },
     onAttributeChange: (cityId, key, enabled) => {
       if (state.runtimeOperationSnapshot?.busy || state.workerAtomicCommitGuard) return {executed: false, message: "当前还有操作正在进行，请稍后再试。"};
