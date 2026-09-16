@@ -1,4 +1,5 @@
 import {createRandom} from "./random.js";
+import {cityDevelopmentEffects} from "./city-development.js";
 import {isActiveEnemyPair} from "./war-consistency.js";
 import {getGovernmentEffects} from "./governments.js";
 import {
@@ -424,7 +425,7 @@ function getUrbanTroops(pack, state, burg, unit, alert, random, policy) {
   const terrain = getCellType(pack.cells, burg.cell);
   const terrainModifier = TERRAIN_MODIFIERS[terrain]?.[unit.type] || 1;
   const stateModifier = STATE_MODIFIERS[unit.type]?.[state.type || "Generic"] || 1;
-  const capitalModifier = burg.capital ? 1.25 : 1;
+  const capitalModifier = (burg.capital ? 1.25 : 1) * (unit.type === "naval" ? 1 : cityDevelopmentEffects(burg).landRecruitment);
   const civilizationModifier = getCivilizationRecruitmentModifier(burg.civilizationType);
   const ratioModifier = getPolicyUnitMultiplier(policy, unit);
   const cultureModifier = burg.culture === state.culture ? 1 : 0.55;
@@ -792,7 +793,7 @@ function getRegimentStatus(pack, state, lead, dominantUnit, policy, random) {
   if (hasWar && border && random.next() < 0.5) return "marching";
   if (hasWar && (burg?.capital || policy.posture === "mobilized") && random.next() < 0.55) return "mustering";
   if (suitability.total < 0.42) return "resting";
-  if (burg?.capital || burg?.group === "fort") return "garrisoned";
+  if (burg?.capital || burg?.citadel || burg?.group === "fort") return "garrisoned";
   if (border || policy.diplomacyPressure > 1.2 || policy.resourcePressure > 1.08) return "patrolling";
   return random.next() < 0.28 ? "resting" : "garrisoned";
 }

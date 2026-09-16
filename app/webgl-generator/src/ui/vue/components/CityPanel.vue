@@ -59,6 +59,7 @@
       </UiButton>
     </div>
     <span v-if="attributeFeedback" class="city-attribute-feedback" role="status">{{ attributeFeedback }}</span>
+    <span class="city-attribute-feedback">属性影响相关数据的下次重算，不立即改变当前人口、经济或道路。</span>
   </section>
 
   <UiDetailGrid class-name="city-panel-details" empty-text="未选中城市" :rows="detailRows" />
@@ -83,6 +84,8 @@
     </template>
 
     <template #population>
+      <p>潜在人口：{{ formatPopulationValue(populationPotential) }}。按当前地理与属性估算，不限制手工人口。</p>
+      <UiButton variant="secondary" :disabled="modalActionActive" @click="callbacks.onPopulationRecalculate?.(selected.id)">按条件重算人口</UiButton>
       <UiNumberField
         class-name="city-name-editor city-population-editor"
         label="人口"
@@ -123,6 +126,7 @@
 <script setup>
 import {computed, nextTick, reactive, ref, watch} from "vue";
 import {readCityAttributeActions} from "../../../runtime/city-attribute-commands.js";
+import {estimateCityPopulationPotential} from "../../../generator/city-development.js";
 import UiActionDock from "./base/UiActionDock.vue";
 import UiButton from "./base/UiButton.vue";
 import UiDetailGrid from "./base/UiDetailGrid.vue";
@@ -188,6 +192,11 @@ const columns = Object.freeze([
 ]);
 
 const unitPreferences = useUnitPreferences();
+const populationPotential = computed(() => {
+  props.state.version;
+  const map = props.state.map;
+  return estimateCityPopulationPotential(map?.pack, map?.settlements?.cities?.[props.state.selectedCityId], map?.options?.seed);
+});
 const activeAction = ref(null);
 const renameRequestId = ref(null);
 const lastCitySelect = {

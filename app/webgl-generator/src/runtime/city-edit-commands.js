@@ -18,7 +18,7 @@ const CITY_POPULATION_EFFECTS = Object.freeze({
   selection: "refresh",
   runtimeStats: true,
   pickPanel: true,
-  derived: Object.freeze(["city-population", "point-layers", "labels", "object-panels"])
+  derived: Object.freeze(["city-population", "point-layers", "labels", "city-role-labels", "object-panels"])
 });
 
 const CITY_OWNER_SYNC_EFFECTS = Object.freeze({

@@ -1,4 +1,5 @@
 import {createRandom} from "./random.js";
+import {cityDevelopmentEffects} from "./city-development.js";
 import {applySuitabilityOverrides, captureSuitabilityBase, restoreSuitabilityBase} from "./suitability.js";
 import {getGovernmentEffects} from "./governments.js";
 import {defaultGoodDisplayProperties, defaultMarketDisplayProperties} from "./economy-display-properties.js";
@@ -935,7 +936,6 @@ function assignMarketsToBurgs(
       ? cellMarket || stateMarkets.get(burg.state) || validMarkets[0]
       : stateMarkets.get(burg.state) || cellMarket || validMarkets[0];
     burg.market = market.i;
-    burg.plaza = Number(market.centerBurgId === burg.i);
   }
 
   for (const market of validMarkets) {
@@ -944,7 +944,6 @@ function assignMarketsToBurgs(
     if (!center?.i || center.removed) continue;
     if (protectedBurgIds.has(Number(center.i))) continue;
     center.market = market.i;
-    center.plaza = 1;
   }
 }
 
@@ -1308,18 +1307,19 @@ function createProductionAndDeals(pack, aliveBurgs, goods, rawGoods, manufacture
   for (const burg of aliveBurgs) {
     if (protectedBurgIds.has(Number(burg.i))) continue;
     burg.production = [];
+    const development = cityDevelopmentEffects(burg).economy;
     const localMarket = pack.markets?.[burg.market];
     const localGood = selectMarketDealGood(localMarket, rawGoods, burg.i, 0, rawGoods[(burg.i * 7) % rawGoods.length]);
     const localGoodId = pack.cells.good?.[burg.cell] || localGood.good.i;
     if (shouldCreateLocalProduction(burg.i, localProductionRate)) {
-      burg.production.push({goodId: localGoodId, units: round(1 + (burg.population || 0) * 0.25)});
+      burg.production.push({goodId: localGoodId, units: round((1 + (burg.population || 0) * 0.25) * development)});
     }
 
     for (let index = 0; index < 7; index++) {
       const good = manufacturedGoods[(burg.i * 5 + index * 11) % manufacturedGoods.length];
       burg.production.push({
         goodId: good.i,
-        units: round(0.6 + (burg.population || 0) * 0.08 + index * 0.05),
+        units: round((0.6 + (burg.population || 0) * 0.08 + index * 0.05) * development),
         recipe: productionRecipe(good)
       });
     }
@@ -1336,7 +1336,7 @@ function createProductionAndDeals(pack, aliveBurgs, goods, rawGoods, manufacture
         seller: burg.market,
         buyerType: "burg",
         buyer: burg.i,
-        units: 1,
+        units: development,
         price: marketPrice(localMarket, selectedGood.good.i),
         valueScale: dealValueScale,
         source: selectedGood.source,
@@ -1360,7 +1360,7 @@ function createProductionAndDeals(pack, aliveBurgs, goods, rawGoods, manufacture
         seller: burg.i,
         buyerType: "market",
         buyer: burg.market,
-        units: 0.8 + (index % 2) * 0.2,
+        units: (0.8 + (index % 2) * 0.2) * development,
         price: marketPrice(localMarket, goodId) * 0.75,
         valueScale: dealValueScale,
         source: selectedGood.source,
@@ -1370,8 +1370,9 @@ function createProductionAndDeals(pack, aliveBurgs, goods, rawGoods, manufacture
       if (deal) burg.production.push({dealId: deal.i});
     }
 
-    burg.product = calculateBurgProduct(burg, dealProductWeight);
-    burg.treasury = round(burg.product * 0.35 + (burg.population || 0) * 0.5);
+    const baseProduct = calculateBurgProduct(burg, dealProductWeight);
+    burg.product = round(baseProduct * development);
+    burg.treasury = round((baseProduct * 0.35 + (burg.population || 0) * 0.5) * development);
   }
 
   for (let marketIndex = 0; marketIndex < markets.length; marketIndex++) {

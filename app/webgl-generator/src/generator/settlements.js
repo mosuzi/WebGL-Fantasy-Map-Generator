@@ -6,6 +6,7 @@ import {createRandom} from "./random.js";
 import {reassessGeneratedProvincialCapitals} from "./provincial-capitals.js";
 import {createCityScaleContext, defaultCityVisual, deriveCityScale, resolveCityVisual} from "../runtime/city-visuals.js";
 import {reconcileSettlementCellIdentity} from "../runtime/settlement-cell-index.js";
+import {cityDevelopmentEffects, cityRoadPriority, estimateCityPopulationPotential} from "./city-development.js";
 
 const MIN_PASSABLE_SEA_TEMP = -4;
 const MIN_NAVIGABLE_FLUX = 100;
@@ -830,7 +831,7 @@ function buildPackSettlements(grid, features, politics, random, pack, options) {
   pack.burgs = burgs;
   shiftPortsAndRiverBurgs(grid, pack, cities, burgs, nameGenerator, options);
   defineCityTypes(pack, cities, burgs);
-  specifyBurgs(pack, cities, burgs, nameGenerator);
+  specifyBurgs(pack, cities, burgs, nameGenerator, options);
   return {cities};
 }
 
@@ -1653,12 +1654,18 @@ function defineCityTypes(pack, cities, burgs, options = {}) {
 
 function specifyBurgs(pack, cities, burgs, nameGenerator, options = {}) {
   const preservedBurgIds = new Set(options.preservedBurgIds || []);
-  const scaleContext = createCityScaleContext(cities, burgs);
   for (const city of cities) {
     if (!city || preservedBurgIds.has(Number(city.burgId))) continue;
     const burg = burgs[city.burgId];
     if (!burg?.i || burg.removed) continue;
     defineBurgFeatures(pack, burg);
+    city.population = burg.population = estimateCityPopulationPotential(pack, burg, options.seed);
+  }
+  const scaleContext = createCityScaleContext(cities, burgs);
+  for (const city of cities) {
+    if (!city || preservedBurgIds.has(Number(city.burgId))) continue;
+    const burg = burgs[city.burgId];
+    if (!burg?.i || burg.removed) continue;
     burg.group = defineBurgGroup(burg, scaleContext);
     burg.coa = nameGenerator.makeEmblem({
       id: burg.i,
@@ -2291,7 +2298,7 @@ function compareRouteNetworkBurgs(left, right) {
   return Number(Boolean(right.capital)) - Number(Boolean(left.capital))
     || Number(Boolean(right.provincial)) - Number(Boolean(left.provincial))
     || Number(Boolean(right.port)) - Number(Boolean(left.port))
-    || Number(right.population || 0) - Number(left.population || 0)
+    || cityRoadPriority(right) - cityRoadPriority(left)
     || Number(left.i) - Number(right.i);
 }
 
@@ -2815,6 +2822,13 @@ function groupCapitalBurgs(burgs, grid, pack) {
   const capitals = burgs.filter(burg => burg?.capital);
   if (getGridLandRatio(grid) < 0.09) capitals.sort((a, b) => (b.population || 0) - (a.population || 0)).splice(18);
   const groups = groupBurgs(capitals, burg => landFeatureAtBurg(pack, burg));
+  for (const [feature, localBurgs] of groupBurgs(burgs, burg => landFeatureAtBurg(pack, burg))) {
+    const anchors = groups.get(feature) || [];
+    const budget = Math.min(24, Math.max(2, Math.ceil(Math.sqrt(localBurgs.length))));
+    const hubs = localBurgs.filter(burg => !burg.capital && cityDevelopmentEffects(burg).majorRoadCandidate)
+      .sort((a, b) => cityRoadPriority(b) - cityRoadPriority(a) || a.i - b.i).slice(0, budget);
+    groups.set(feature, [...anchors, ...hubs]);
+  }
   for (const [feature, featureCapitals] of groups) {
     if (featureCapitals.length < 2) groups.delete(feature);
   }

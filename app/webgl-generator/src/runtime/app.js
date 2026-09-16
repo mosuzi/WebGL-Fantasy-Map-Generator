@@ -8,6 +8,7 @@ import {regeneratePackProvincesWithinStates, regeneratePackStatesAndProvinces} f
 import {finalizeSocietyReligions} from "../generator/society.js";
 import {buildZones} from "../generator/zones.js";
 import {finalizeSettlements, rebuildRelocatedPopulationPointsAsync, regenerateSettlementsWithinPolitics} from "../generator/settlements.js";
+import {estimateCityPopulationPotential} from "../generator/city-development.js";
 import {createNotesDomainRuntime} from "../domains/notes/runtime.ts";
 import {createMarkersPresentationRuntime} from "../domains/markers/runtime.ts";
 import {validatePopulationWorkerOutput, validatePopulationWorkerPatch} from "../domains/population/worker-runtime.ts";
@@ -1665,6 +1666,15 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       const context = {map: state.map};
       const command = createSetCityPopulationCommand(cityId, population);
       executeEditCommand(state, documentRef, command, {context});
+      updateEditingInteractionLock(state, documentRef);
+    },
+    onPopulationRecalculate: cityId => {
+      if (state.runtimeOperationSnapshot?.busy || state.workerAtomicCommitGuard) return;
+      const city = state.map?.settlements?.cities?.[cityId];
+      if (!city || city.removed) return;
+      const population = estimateCityPopulationPotential(state.map.pack, city, state.map.options?.seed);
+      const command = createSetCityPopulationCommand(cityId, population, {label: "按条件重算城市人口"});
+      executeEditCommand(state, documentRef, command, {context: {map: state.map}, throwOnError: false});
       updateEditingInteractionLock(state, documentRef);
     },
     onAttributeChange: (cityId, key, enabled) => {

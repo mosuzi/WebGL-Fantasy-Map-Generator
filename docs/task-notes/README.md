@@ -6,6 +6,8 @@
 
 ## 最近文档治理专题
 
+- 第 383、384 项的实施前设计与验收口径见 [`城市属性生成作用`](./task-383-city-generation-effects.md)、[`城市人口直接编辑`](./task-384-city-population-editing.md)；活动顺序仅由当前计划管理。
+
 - 第 382 项城市属性快捷按钮、分步发布及性能修复证据见 [`task-382-city-attribute-shortcuts.md`](./task-382-city-attribute-shortcuts.md)；活动状态仅见当前权威计划。
 
 - 第 381 项已完成现行文档候选源清理；判定、阶段边界与验收矩阵见 [`task-381-document-candidate-cleanup.md`](./task-381-document-candidate-cleanup.md)。

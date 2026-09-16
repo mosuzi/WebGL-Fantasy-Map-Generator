@@ -1,6 +1,7 @@
 import {inspectRelocatedSettlementPort} from "../generator/settlements.js";
 import {objectAffected} from "./edit-command-effects.js";
 import {createSetStateCapitalCommand} from "./object-edit-commands.js";
+import {CITY_DEVELOPMENT_DESCRIPTIONS} from "../generator/city-development.js";
 
 export const CITY_ATTRIBUTE_OPTIONS = Object.freeze([
   {key: "capital", label: "首都", path: "m3 6 4 4 5-7 5 7 4-4-2 13H5Z"},
@@ -18,7 +19,7 @@ export function readCityAttributeActions(map, cityId) {
     const active = attributeActive(city, burg, option.key);
     const inspection = inspectCityAttribute(map, cityId, option.key, option.key === "capital" || !active);
     return {...option, active, disabled: !inspection.valid || !inspection.changed,
-      title: inspection.reason || `${active ? "取消" : "设置"}${option.label}`};
+      title: `${inspection.reason || `${active ? "取消" : "设置"}${option.label}`}；${CITY_DEVELOPMENT_DESCRIPTIONS[option.key]}。相关数据重算时生效。`};
   });
 }
 
