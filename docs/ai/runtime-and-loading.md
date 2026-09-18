@@ -52,7 +52,8 @@ node --no-warnings .\tools\webgl-generator-ai-bridge-cli.mjs call analysis.descr
 
 ## 格式、迁移与不变性
 
-- 支持完整地图 JSON、`.json.gz` 和模块入口的 `gzip-base64` payload。
+- 当前默认 `.webfmg` 为 gzip 压缩的 v3 二进制容器，逻辑地图 schema 仍为 v2；同时支持完整地图 JSON、旧 gzip JSON / `.json.gz` 和模块入口的 plain / `gzip-base64` payload。不得将容器版本与逻辑 schema 混为一谈；按真实字节内容分派解析。
+- 浏览器手动保存优先采用压缩二进制记录，兼容旧包装；完整存档和浏览器恢复均不保存或恢复本次编辑历史栈。现行实现依据为 `map-file-io.js`、`webfmg-v3-container.js` 和 `browser-map-storage.js`。
 - 加载统一经过 `parseMapDocument / migrateMapDocument`，恢复 typed array 并执行 v1→v2 迁移与兼容归一化。
 - 无头运行时不访问 DOM、renderer、相机、浏览器存储或网络，不创建历史，也没有任何写方法。
 - 读取前后应比较输入文件哈希或地图 checksum；分析不能改变原文件。

@@ -8,7 +8,7 @@
 |---|---|---|---|---|---|
 | 导出图片 | `.png` | PNG | WebGL 画布、1x～4x、视口/全幅/像素/世界坐标裁剪、七类 overlay 白名单、图外透明 | 否 | 已完成裁剪与细粒度 overlay |
 | 导出地图数据 | `.webgl-map.json` | JSON | `webgl-generator-map v2` 完整文档：options、map 全量数据、typed arrays、notes 等 | 是 | 已完成跨版本迁移 |
-| 导出压缩地图数据 | `.webgl-map.json.gz` | gzip JSON | 与完整地图 JSON 相同，使用浏览器 `CompressionStream` 压缩 | 是 | 已完成第一刀 |
+| 导出压缩地图数据 / 保存 | `.webfmg` | gzip 压缩的 v3 二进制容器 | 恢复为逻辑 schema v2 完整地图；旧 gzip JSON 仍可读取 | 是 | 当前默认压缩格式 |
 | 导出 GeoJSON | `.geojson` | GeoJSON FeatureCollection | pack cell Polygon，每个 cell 带高度、水陆、国家、省份、文化、宗教、生物群系和人口等属性；生物群系保留数值 ID 并附中文名称与英文 canonical name | 否 | 已完成第一刀 |
 | 导出要素 GeoJSON | `.features.geojson` | GeoJSON FeatureCollection | city Point、route/river LineString、marker Point、zone/state/province MultiPolygon；可选图层与政治面 dissolve | 否 | 已完成外部 GIS 验证 |
 | 导出备注摘要 | `.notes.json` | JSON | `webgl-generator-notes-summary v1`：当前筛选备注、正文、对象 id、孤儿状态和时间戳 | 否 | 已完成第一刀 |
@@ -42,8 +42,9 @@
 
 已验证：
 
-- 本地文件导出可额外输出 `.webgl-map.json.gz`，导入地图数据入口可读取 `.webgl-map.json` 和 `.webgl-map.json.gz`。
-- LocalStorage 继续使用既有 gzip-base64 存档；本地文件压缩格式不改变默认纯 JSON 导出。
+- 当前压缩导出使用 `.webfmg` v3 二进制容器；导入继续读取旧 `.webgl-map.json` 和 `.webgl-map.json.gz`。
+- 浏览器保存使用压缩二进制记录或兼容包装，既有 plain / gzip-base64 记录仍可读取；不能把当前浏览器存档一律视为 gzip-base64。未压缩完整 JSON 仍作为独立交换入口保留。
+- 容器 v3 与逻辑 schema v2 分开版本化；完整文件和浏览器恢复保存当前内容，不包含撤销 / 重做栈。现行编码依据为 `runtime/map-file-io.js`、`runtime/webfmg-v3-container.js` 和 `runtime/browser-map-storage.js`。
 
 缺口：
 
