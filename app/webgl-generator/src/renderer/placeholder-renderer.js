@@ -4314,6 +4314,11 @@ export class PlaceholderMapRenderer {
     await new Promise(resolve => setTimeout(resolve, 0));
   }
 
+  canLocateObject(object) {
+    const bounds = getObjectBounds(this.map, object);
+    return Boolean(bounds && Object.values(bounds).every(value => typeof value !== "number" || Number.isFinite(value)));
+  }
+
   locateObject(object, options = {}) {
     const bounds = getObjectBounds(this.map, object);
     if (!bounds) {
@@ -5503,6 +5508,21 @@ function selectionPoint(map, selection) {
 
 function getObjectBounds(map, object) {
   if (!map || !object) return null;
+  if (object.kind === OBJECT_KIND.FEATURE) {
+    const feature = map.pack?.features?.find(item => item && !item.removed && Number(item.i ?? item.id) === Number(object.id));
+    const point = map.pack?.cells?.p?.[feature?.firstCell];
+    return isWorldPoint(point) ? pointBounds(point[0], point[1], 48) : null;
+  }
+  if (object.kind === OBJECT_KIND.ECONOMY_MARKET) {
+    const market = (map.pack?.markets || map.economy?.markets || []).find(item => item && !item.removed && Number(item.i ?? item.id) === Number(object.id));
+    const point = map.pack?.cells?.p?.[market?.cell];
+    return isWorldPoint(point) ? pointBounds(point[0], point[1], 48) : null;
+  }
+  if (object.kind === OBJECT_KIND.OCEAN_CURRENT || object.kind === OBJECT_KIND.MEASUREMENT) {
+    const items = object.kind === OBJECT_KIND.OCEAN_CURRENT ? map.oceanCurrents?.currents : map.measurements?.items;
+    const item = items?.find(item => String(item?.id) === String(object.id));
+    return item?.points?.length ? pointsBounds(item.points, 42) : null;
+  }
   if (object.kind === OBJECT_KIND.LABEL && object.targetKind === LABEL_TARGET_KIND.STATE) {
     return politicalBounds(map, {kind: OBJECT_KIND.STATE, id: object.targetId ?? object.id}, 48);
   }

@@ -1,0 +1,14 @@
+import assert from "node:assert/strict";
+import {searchIndex, buildSearchIndex, SEARCH_TYPES} from "../app/webgl-generator/src/runtime/map-content-search.js";
+const items = Array.from({length: 260}, (_, id) => ({key: String(id), type: "city", ref: {kind: "city", id}, name: `城${id}`, names: [`城${id}`, String(id)], text: "所属王国", body: ""}));
+assert.equal(searchIndex(items, {query: "城"}).total, 260);
+assert.equal(searchIndex(items, {query: "城", page: 5}).items.length, 10);
+assert.equal(searchIndex(items, {query: "城25"}).items[0].name, "城25");
+assert.equal(searchIndex(items, {query: "0"}).items[0].ref.id, 0);
+assert.equal(searchIndex(items, {query: "城", type: "note"}).total, 0);
+const map = {notes: {notes: [{id: "city:999", kind: "city", objectId: 999, name: "失落", body: "<b>密林</b>"}]}};
+const index = await buildSearchIndex(map);
+assert.equal(searchIndex(index, {query: "密林"}).items[0].body, "<b>密林</b>");
+assert.equal(await buildSearchIndex(map, () => false), null);
+assert.equal(SEARCH_TYPES.length, 20);
+console.log("地图内容搜索：全量分页、排序、ID 0、类型、孤儿正文、过期构建通过");

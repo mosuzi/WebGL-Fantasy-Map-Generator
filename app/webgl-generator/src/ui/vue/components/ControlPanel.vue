@@ -1,4 +1,5 @@
 <template>
+  <MapContentSearch />
   <UiTabs v-model="activeTab" :tabs="tabs" />
 
   <div class="control-panel-tab-panels">
@@ -754,6 +755,7 @@ import UiSelectField from "./base/UiSelectField.vue";
 import UiSliderField from "./base/UiSliderField.vue";
 import UiSwitchField from "./base/UiSwitchField.vue";
 import MapRecoveryControls from "./MapRecoveryControls.vue";
+import MapContentSearch from "./MapContentSearch.vue";
 import UiTabs from "./base/UiTabs.vue";
 import {Lock, Setting, Unlock} from "@element-plus/icons-vue";
 import {useDraggableFloatingPanel} from "../composables/use-draggable-floating-panel.js";

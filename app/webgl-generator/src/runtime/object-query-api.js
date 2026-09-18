@@ -118,7 +118,7 @@ export function assertJsonSafeObjectSnapshot(value) {
   return true;
 }
 
-function collectObjectReferences(map, type) {
+export function collectObjectReferences(map, type) {
   if (type === OBJECT_KIND.CITY) return compactArray(map?.settlements?.cities).map(item => reference(type, item.id ?? item.i));
   if (type === OBJECT_KIND.MARKER) return compactArray(map?.markers?.markers).map(item => reference(type, item.id ?? item.i));
   if (type === OBJECT_KIND.ROUTE) return compactArray(map?.settlements?.routes).map(item => reference(type, item.id ?? item.i));
