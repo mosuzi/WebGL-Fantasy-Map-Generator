@@ -1,5 +1,6 @@
 <template>
   <div class="ui-panel-io-actions" :class="className" role="toolbar" :aria-label="label">
+    <span v-if="exportActions.length || importActions.length" class="ui-panel-io-group" role="group" aria-label="导入与导出">
     <ElDropdown
       v-if="exportActions.length"
       trigger="click"
@@ -30,17 +31,11 @@
       </template>
     </ElDropdown>
 
+    <ElDropdown v-if="importActions.length" trigger="click" popper-class="ui-panel-io-dropdown" :disabled="importActions.every(action => action.disabled)" @command="triggerImport">
+      <ElButton class="ui-icon-action ui-panel-io-button" title="导入" aria-label="导入" :disabled="importActions.every(action => action.disabled)"><ElIcon><Upload /></ElIcon></ElButton>
+      <template #dropdown><ElDropdownMenu><ElDropdownItem v-for="action in importActions" :key="action.key" :command="action.key" :disabled="action.disabled">{{ action.label }}</ElDropdownItem></ElDropdownMenu></template>
+    </ElDropdown>
     <span v-for="action in importActions" :key="action.key" class="ui-panel-io-file-action">
-      <ElButton
-        class="ui-icon-action ui-panel-io-button"
-        :disabled="action.disabled"
-        circle
-        :title="action.label"
-        :aria-label="action.label"
-        @click="triggerImport(action.key)"
-      >
-        <ElIcon><Upload /></ElIcon>
-      </ElButton>
       <input
         :ref="element => setFileInput(action.key, element)"
         type="file"
@@ -49,7 +44,9 @@
         @change="event => handleImportChange(action.key, event)"
       />
     </span>
+    </span>
 
+    <span v-if="safeActions.length" class="ui-panel-io-group" role="group" :aria-label="label">
     <ElButton
       v-for="action in safeActions"
       :key="action.key"
@@ -59,11 +56,13 @@
       circle
       :title="action.label"
       :aria-label="action.label"
+      :aria-pressed="action.active === undefined ? undefined : String(Boolean(action.active))"
       @click="emit('action', action.key)"
     >
       <ElIcon v-if="resolveActionIcon(action)" aria-hidden="true"><component :is="resolveActionIcon(action)" /></ElIcon>
       <span v-else aria-hidden="true">{{ action.icon || "..." }}</span>
     </ElButton>
+    </span>
 
     <span v-if="dangerActions.length && hasSafeToolbarActions" class="ui-panel-action-divider" aria-hidden="true"></span>
 
@@ -73,13 +72,13 @@
       class="ui-icon-action ui-panel-io-button ui-panel-danger-action"
       :class="{active: action.active}"
       :disabled="action.disabled"
-      circle
       :title="action.label"
       :aria-label="action.label"
       @click="emit('action', action.key)"
     >
       <ElIcon v-if="resolveActionIcon(action)" aria-hidden="true"><component :is="resolveActionIcon(action)" /></ElIcon>
       <span v-else aria-hidden="true">{{ action.icon || "..." }}</span>
+      <span>{{ action.label }}</span>
     </ElButton>
   </div>
 </template>

@@ -9,7 +9,7 @@
       @apply="callbacks.onRename"
     />
     <div class="object-details-actions" :class="{ 'object-details-actions-city': isCity }">
-      <UiButton v-if="actionPolicy.canLocate" variant="secondary" @click="callbacks.onLocate">定位</UiButton>
+      <UiButton v-if="actionPolicy.canLocate" class="ui-icon-action" title="定位到地图" aria-label="定位到地图" variant="secondary" @click="callbacks.onLocate"><span aria-hidden="true">⌖</span></UiButton>
       <UiButton v-if="isCity" variant="secondary" @click="callbacks.onOpenCityPanel?.()">打开城市管理</UiButton>
       <UiButton
         v-if="canRenameFromNamebase"

@@ -453,8 +453,6 @@
   </details>
 
   <div v-if="debugEnabled" class="height-history-actions">
-    <UiButton variant="secondary" :disabled="!state.history?.undo" @click="callbacks.onUndo?.()">撤销上次</UiButton>
-    <UiButton variant="secondary" :disabled="!state.history?.redo" @click="callbacks.onRedo?.()">重做上次</UiButton>
     <UiButton v-if="debugEnabled" variant="secondary" @click="callbacks.onRegenerateRivers?.()">重算河流</UiButton>
     <UiButton variant="secondary" @click="callbacks.onRegenerateBase?.()">重建地貌与聚落</UiButton>
     <UiButton variant="secondary" @click="callbacks.onRegenerateDownstream?.()">重建世界内容</UiButton>

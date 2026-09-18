@@ -66,10 +66,10 @@ onBeforeUnmount(stop);
 
 <style scoped>
 .map-search-open{width:100%;margin-bottom:8px;min-height:32px}
-.map-search-dialog{width:min(680px,calc(100vw - 32px));max-height:85vh;box-sizing:border-box;padding:16px;border:1px solid #bcc8d2;border-radius:12px;color:#213547;background:#fff;overflow:auto}
+.map-search-dialog{width:min(680px,calc(100vw - 32px));max-height:85vh;box-sizing:border-box;padding:16px;border: 1px solid var(--panel-border);border-radius:12px;color: var(--panel-text);background: var(--panel-surface);overflow:auto}
 .map-search-dialog::backdrop{background:#172b4d55}
 header,.map-search-filters,.map-search-pages{display:flex;gap:8px;align-items:center;flex-wrap:wrap}header{justify-content:space-between;margin-bottom:12px}
-input{flex:1;min-width:160px}input,select,button{font:inherit;min-height:32px;border:1px solid #c3cdd6;border-radius:6px;padding:5px 9px;background:#f8fafc;color:inherit}
-button{cursor:pointer}button:disabled{opacity:.5;cursor:default}button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid #2878c4;outline-offset:2px}
-.map-search-results{list-style:none;padding:0;margin:8px 0;max-height:35vh;overflow:auto}.map-search-results button{display:flex;flex-direction:column;text-align:left;width:100%;gap:4px;margin-bottom:5px;overflow-wrap:anywhere}.map-search-results .selected{background:#e9f3ff;border-color:#3984c5}small{color:#526778}.map-search-detail{border-top:1px solid #d6dee5;margin-top:12px;padding-top:12px}pre{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit;max-height:25vh;overflow:auto}
+input{flex:1;min-width:160px}input,select,button{font:inherit;min-height:32px;border: 1px solid var(--panel-border);border-radius:6px;padding:5px 9px;background: var(--panel-surface);color:inherit}
+button{cursor:pointer}button:disabled{opacity:.5;cursor:default}button:focus-visible,input:focus-visible,select:focus-visible{outline: 2px solid var(--panel-accent);outline-offset:2px}
+.map-search-results{list-style:none;padding:0;margin:8px 0;max-height:35vh;overflow:auto}.map-search-results button{display:flex;flex-direction:column;text-align:left;width:100%;gap:4px;margin-bottom:5px;overflow-wrap:anywhere}.map-search-results .selected{background: var(--panel-accent-soft);border-color:#3984c5}small{color:#526778}.map-search-detail{border-top: 1px solid var(--panel-border);margin-top:12px;padding-top:12px}pre{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit;max-height:25vh;overflow:auto}
 </style>

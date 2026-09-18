@@ -4,6 +4,7 @@ import {initializeVueStateBridge} from "./ui/vue/state-bridge.js";
 import {failStartupLoading, startupFailureMessage, updateStartupLoadingStatus} from "./ui/startup-loading.js";
 import {loadUserVisualThemes} from "./runtime/visual-theme-storage.js";
 import "./styles.css";
+import "./panel-theme.css";
 
 const healthMonitor = installWebglGeneratorHealthMonitor(document);
 

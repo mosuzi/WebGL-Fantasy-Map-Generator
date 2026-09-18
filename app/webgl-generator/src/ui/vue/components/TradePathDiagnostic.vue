@@ -13,4 +13,4 @@ async function inspect() { const ticket = ++sequence; busy.value = true;
   finally { if (ticket === sequence) busy.value = false; }
 }
 </script>
-<style scoped>.trade-path-diagnostic{padding:10px;border:1px solid var(--panel-border,#ced8e0);border-radius:8px;margin:8px 0}.trade-path-diagnostic p{margin:8px 0 0;line-height:1.5}.trade-path-diagnostic button{min-height:32px}</style>
+<style scoped>.trade-path-diagnostic{padding:10px;border: 1px solid var(--panel-border,var(--panel-border));border-radius:8px;margin:8px 0}.trade-path-diagnostic p{margin:8px 0 0;line-height:1.5}.trade-path-diagnostic button{min-height:32px}</style>

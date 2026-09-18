@@ -436,19 +436,19 @@ function isPoint(point) {
   display: grid;
   gap: 8px;
   padding: 10px 12px;
-  border: 1px solid rgba(244, 171, 64, 0.58);
+  border: 1px solid var(--panel-border);
   border-radius: 8px;
-  background: rgba(39, 31, 20, 0.98);
-  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.28);
+  background: var(--panel-surface);
+  box-shadow: 0 8px 18px rgba(30, 48, 64, 0.13);
 }
 
 .river-waypoint-draft.is-error {
-  border-color: rgba(255, 92, 78, 0.88);
-  background: rgba(61, 25, 25, 0.98);
+  border-color: var(--panel-danger);
+  background: var(--panel-danger-soft);
 }
 
 .river-waypoint-draft.is-valid {
-  border-color: rgba(244, 171, 64, 0.88);
+  border-color: var(--panel-border);
 }
 
 .river-waypoint-draft-heading {
@@ -459,7 +459,7 @@ function isPoint(point) {
 }
 
 .river-waypoint-draft-heading span {
-  color: var(--panel-muted, #c7bda9);
+  color: var(--panel-muted, var(--panel-text));
   font-size: 12px;
   white-space: nowrap;
 }
@@ -467,18 +467,18 @@ function isPoint(point) {
 .river-waypoint-steps {
   margin: 0;
   padding-left: 20px;
-  color: var(--panel-muted, #c7bda9);
+  color: var(--panel-muted, var(--panel-text));
   line-height: 1.45;
 }
 
 .river-waypoint-draft p {
   margin: 0;
-  color: var(--panel-muted, #c7bda9);
+  color: var(--panel-muted, var(--panel-text));
   line-height: 1.5;
 }
 
 .river-waypoint-draft .river-waypoint-error {
-  color: #ffaaa0;
+  color: var(--panel-danger);
   font-weight: 650;
 }
 

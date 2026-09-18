@@ -14,4 +14,4 @@ function act(action){request({action,name:action==='save'?name.value:selected.va
 function refreshSize(){request({action:'size'});}
 onMounted(()=>{request({action:'list'});timer=setInterval(refreshSize,1500);});onBeforeUnmount(()=>clearInterval(timer));
 </script>
-<style scoped>.png-presets{padding:10px;border:1px solid var(--panel-border,#cbd5de);border-radius:8px;margin:8px 0}.png-preset-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:8px}.png-preset-row input,.png-preset-row select{min-width:0;max-width:100%;flex:1}.png-presets input[type=number]{width:90px}.png-presets button,.png-presets select,.png-presets input:not([type=checkbox]){min-height:30px}</style>
+<style scoped>.png-presets{padding:10px;border: 1px solid var(--panel-border,var(--panel-border));border-radius:8px;margin:8px 0}.png-preset-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:8px}.png-preset-row input,.png-preset-row select{min-width:0;max-width:100%;flex:1}.png-presets input[type=number]{width:90px}.png-presets button,.png-presets select,.png-presets input:not([type=checkbox]){min-height:30px}</style>

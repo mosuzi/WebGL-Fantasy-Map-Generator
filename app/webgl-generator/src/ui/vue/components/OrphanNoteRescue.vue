@@ -19,4 +19,4 @@ const targets = computed(() => { void props.version; const values = kind.value =
 watch([kind, () => props.map, () => props.note.id], () => { targetId.value = ""; });
 function rescue(patch) { props.onRescue?.(props.note, patch, props.map); }
 </script>
-<style scoped>.orphan-rescue{border-top:1px solid var(--panel-border,#cad4dd);padding-top:10px}.orphan-rescue-target{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}.orphan-rescue-target>*{min-height:32px;max-width:100%}.orphan-rescue-target input{flex:1;min-width:140px}</style>
+<style scoped>.orphan-rescue{border-top: 1px solid var(--panel-border,var(--panel-border));padding-top:10px}.orphan-rescue-target{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}.orphan-rescue-target>*{min-height:32px;max-width:100%}.orphan-rescue-target input{flex:1;min-width:140px}</style>

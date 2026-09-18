@@ -1,0 +1,152 @@
+/* 界面主题独立于地图颜色；挂到 body 的弹层共享同一组语义色。 */
+:root {
+  color-scheme: light;
+  --panel-surface: #ffffff;
+  --panel-surface-alt: #f3f6f9;
+  --panel-text: #243648;
+  --panel-muted: #566a7c;
+  --panel-border: #ccd6e0;
+  --panel-accent: #236fae;
+  --panel-accent-soft: #e7f2fc;
+  --panel-danger: #b12c3b;
+  --panel-danger-soft: #fff0f1;
+  --panel-warning: #855d08;
+  --panel-warning-soft: #fff7df;
+  --panel-success: #247246;
+  --panel-success-soft: #eaf7ef;
+  --el-color-primary: var(--panel-accent);
+  --el-color-primary-light-1: #3980b9;
+  --el-color-primary-light-2: #518fc2;
+  --el-color-primary-light-3: #6e9fca;
+  --el-color-primary-light-4: #8bb2d5;
+  --el-color-primary-light-5: #a5c5e0;
+  --el-color-primary-light-6: #bed5e9;
+  --el-color-primary-light-7: #d3e3f1;
+  --el-color-primary-light-8: #e2edf7;
+  --el-color-primary-light-9: #eff6fc;
+  --el-color-primary-dark-2: #195988;
+  --el-color-success: var(--panel-success);
+  --el-color-warning: var(--panel-warning);
+  --el-color-danger: var(--panel-danger);
+  --el-color-error: var(--panel-danger);
+  --el-color-info: var(--panel-muted);
+  --el-color-success-light-3: #70a787;
+  --el-color-success-light-5: #a0c6af;
+  --el-color-success-light-7: #cce3d5;
+  --el-color-success-light-9: var(--panel-success-soft);
+  --el-color-warning-light-3: #b6a060;
+  --el-color-warning-light-5: #d6c99f;
+  --el-color-warning-light-7: #ebe2c5;
+  --el-color-warning-light-9: var(--panel-warning-soft);
+  --el-color-danger-light-3: #ce7b84;
+  --el-color-danger-light-5: #e3aab0;
+  --el-color-danger-light-7: #f1ced2;
+  --el-color-danger-light-9: var(--panel-danger-soft);
+  --el-color-info-light-3: #8a9aaa;
+  --el-color-info-light-5: #b3bfca;
+  --el-color-info-light-7: #d5dde5;
+  --el-color-info-light-9: var(--panel-surface-alt);
+  --el-bg-color: var(--panel-surface);
+  --el-bg-color-page: var(--panel-surface-alt);
+  --el-bg-color-overlay: var(--panel-surface);
+  --el-fill-color: #edf2f6;
+  --el-fill-color-dark: #dce5ec;
+  --el-fill-color-darker: #ccd8e2;
+  --el-fill-color-light: #f3f6f9;
+  --el-fill-color-lighter: #f7f9fb;
+  --el-fill-color-extra-light: #fbfcfd;
+  --el-fill-color-blank: #fff;
+  --el-text-color-primary: var(--panel-text);
+  --el-text-color-regular: var(--panel-text);
+  --el-text-color-secondary: var(--panel-muted);
+  --el-text-color-placeholder: #697d8e;
+  --el-text-color-disabled: #8595a3;
+  --el-border-color: var(--panel-border);
+  --el-border-color-dark: #a4b5c4;
+  --el-border-color-darker: #869cab;
+  --el-border-color-light: #dce3ea;
+  --el-border-color-lighter: #e5ebf0;
+  --el-border-color-extra-light: #edf1f5;
+  --el-border-color-hover: #91aabe;
+  --el-disabled-bg-color: #f1f4f7;
+  --el-disabled-text-color: #81909f;
+  --el-disabled-border-color: #dde5eb;
+  --el-box-shadow: 0 12px 36px #233d5826;
+  --el-box-shadow-light: 0 8px 24px #233d581f;
+  --el-box-shadow-lighter: 0 4px 16px #233d5817;
+  --el-button-bg-color: #fff;
+  --el-button-border-color: var(--panel-border);
+  --el-button-text-color: var(--panel-text);
+  --el-button-hover-bg-color: var(--panel-accent-soft);
+  --el-button-hover-border-color: #7da8cd;
+  --el-button-hover-text-color: var(--panel-accent);
+  --el-button-active-bg-color: var(--panel-accent-soft);
+  --el-button-active-border-color: var(--panel-accent);
+  --el-button-active-text-color: var(--panel-accent);
+  --el-button-disabled-bg-color: var(--el-disabled-bg-color);
+  --el-button-disabled-border-color: var(--el-disabled-border-color);
+  --el-button-disabled-text-color: var(--el-disabled-text-color);
+  --el-input-bg-color: #fff;
+  --el-input-border-color: var(--panel-border);
+  --el-input-hover-border-color: #91aabe;
+  --el-input-focus-border-color: var(--panel-accent);
+  --el-input-text-color: var(--panel-text);
+  --el-input-placeholder-color: var(--el-text-color-placeholder);
+  --el-input-icon-color: var(--panel-muted);
+  --el-select-input-focus-border-color: var(--panel-accent);
+  --el-popper-bg-color: #fff;
+  --el-popper-border-color: var(--panel-border);
+  --el-slider-main-bg-color: var(--panel-accent);
+  --el-slider-runway-bg-color: #dce5ec;
+  --el-slider-stop-bg-color: #dce5ec;
+  --el-slider-disabled-color: #a7b6c3;
+  --el-switch-on-color: var(--panel-accent);
+  --el-switch-off-color: #a7b6c3;
+  --el-segmented-bg-color: var(--panel-surface-alt);
+  --el-segmented-color: var(--panel-text);
+  --el-segmented-item-selected-bg-color: var(--panel-accent-soft);
+  --el-segmented-item-selected-color: var(--panel-accent);
+  --el-segmented-item-hover-bg-color: #e9eff5;
+  --el-segmented-item-hover-color: var(--panel-accent);
+  --el-table-bg-color: #fff;
+  --el-table-tr-bg-color: #fff;
+  --el-table-header-bg-color: var(--panel-surface-alt);
+  --el-table-border-color: #e1e7ed;
+  --el-table-border: 1px solid #e1e7ed;
+  --el-table-text-color: var(--panel-text);
+  --el-table-header-text-color: var(--panel-muted);
+  --el-table-row-hover-bg-color: #f1f7fc;
+  --el-table-current-row-bg-color: var(--panel-accent-soft);
+  --el-message-bg-color: #fff;
+  --el-message-border-color: var(--panel-border);
+  --el-notification-bg-color: #fff;
+  --el-notification-border-color: var(--panel-border);
+  --el-popover-bg-color: #fff;
+  --el-popover-border-color: var(--panel-border);
+  --el-dropdown-menuItem-hover-fill: var(--panel-accent-soft);
+  --el-dropdown-menuItem-hover-color: var(--panel-accent);
+}
+.floating-panel,.ui-secondary-action-panel,.el-dialog,.el-message-box,.el-popper{color:var(--panel-text);background:var(--panel-surface);border-color:var(--panel-border)}
+.floating-panel{box-shadow:0 12px 32px #233d5826;border-radius:10px}
+.floating-panel-body{padding:12px;min-width:0;overflow:auto}
+.floating-panel *,.ui-secondary-action-panel *{text-shadow:none}
+.floating-panel-body>*+*,.ui-secondary-action-body>*+*{margin-top:12px}
+.floating-panel-body :is(input,select,textarea,button),.ui-secondary-action-body :is(input,select,textarea,button){max-width:100%;box-sizing:border-box}
+.floating-panel-body :is(input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=color]),select,textarea),.ui-secondary-action-body :is(input,select,textarea){color:var(--panel-text);background:var(--panel-surface);border-color:var(--panel-border)}
+.floating-panel :is(.el-button,button:not(.el-slider__button)),.ui-secondary-action-panel .el-button{min-height:32px;height:auto;white-space:normal;line-height:1.35;padding-block:6px}
+.floating-panel .el-button>span{white-space:normal;overflow-wrap:anywhere}
+.floating-panel .el-button+.el-button,.ui-secondary-action-panel .el-button+.el-button{margin-left:0}
+.floating-panel :is([class$=-controls],[class$=-actions],[class$=-toolbar]),.ui-secondary-action-panel [class$=-actions]{gap:8px;flex-wrap:wrap;min-width:0}
+.ui-action-icon-row,.ui-panel-io-actions,.regeneration-lock-actions{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+.ui-panel-io-group{display:inline-flex;align-items:center;flex-wrap:wrap;gap:4px;padding:3px;border:1px solid var(--panel-border);border-radius:8px;background:var(--panel-surface-alt)}
+.ui-icon-action.el-button,.floating-panel-history-button,.floating-panel-close{min-width:32px;min-height:32px;width:32px;height:32px;flex:0 0 32px;padding:5px!important;border-radius:6px}
+.ui-panel-danger-action.el-button{width:auto;flex:0 1 auto;gap:5px;padding-inline:9px!important}
+.floating-panel :is(button,input,select,textarea):focus-visible,.ui-secondary-action-panel :is(button,input,select,textarea):focus-visible{outline:2px solid var(--panel-accent);outline-offset:2px}
+.floating-panel :is([class$=-grid],[class$=-editor],[class$=-field]){min-width:0}
+.floating-panel :is(.ui-key-value-value,.ui-state-banner-message,[role=status]){overflow-wrap:anywhere;line-height:1.5}
+.floating-panel input[type=number]{min-width:64px}
+.ui-panel-io-file-action{display:none}
+.ui-secondary-action-panel{max-width:calc(100vw - 24px)}
+.floating-panel .el-button.is-disabled,.ui-secondary-action-panel .el-button.is-disabled{color:var(--el-disabled-text-color);background:var(--el-disabled-bg-color);border-color:var(--el-disabled-border-color)}
+.floating-panel .danger-action.el-button:active{color:var(--panel-danger);background:var(--panel-danger-soft)}
+@media(max-width:720px){.floating-panel-body{padding:10px}.floating-panel-header{gap:6px}.floating-panel-body :is([class$=-controls],[class$=-actions]){align-items:stretch}.floating-panel .ui-filter-input{flex:1 1 180px;min-width:0}}

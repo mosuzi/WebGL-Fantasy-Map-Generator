@@ -59,7 +59,6 @@
       </UiButton>
     </div>
     <span v-if="attributeFeedback" class="city-attribute-feedback" role="status">{{ attributeFeedback }}</span>
-    <span class="city-attribute-feedback">属性影响相关数据的下次重算，不立即改变当前人口、经济或道路。</span>
   </section>
 
   <UiDetailGrid class-name="city-panel-details" empty-text="未选中城市" :rows="detailRows" />
