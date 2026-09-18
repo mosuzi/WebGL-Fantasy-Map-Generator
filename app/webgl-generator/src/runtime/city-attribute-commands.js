@@ -54,6 +54,7 @@ export function createSetCityAttributeCommand(cityId, key, enabled, {faultInject
   let after = null;
   return {
     label: `${enabled ? "设置" : "取消"}${label} #${cityId}`,
+    cityUpdateGuidance: {cityId, attribute: key, reason: `${enabled ? "设置" : "取消"}${label}`},
     domain: "city",
     effects: {render: changesMapRole ? "draw" : "none", selection: "refresh", runtimeStats: true, pickPanel: true,
       derived: ["object-panels", ...(changesMapRole ? ["point-layers", "labels", "city-role-labels"] : []), ...(key === "capital" ? ["state-capital"] : [])],

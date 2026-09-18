@@ -335,6 +335,7 @@ import {createLatestDisplayIntentQueue, isSupersededDisplayIntent} from "./displ
 import {createDelayedOperationFeedback} from "./delayed-operation-feedback.js";
 import {MapSaveState, installMapSaveStatus} from "./map-save-state.js";
 import {installMapRecovery} from "./map-recovery.js";
+import {CityUpdateGuidance, CITY_GUIDANCE_EVENT} from "./city-update-guidance.js";
 import {createCanvasToolModeManager} from "./canvas-tool-mode-manager.js";
 import {beginDirectManipulationSession, cancelAllDirectManipulationSessions} from "./direct-manipulation-session.js";
 import {BRUSH_RADIUS_ID, normalizeBrushRadius} from "./brush-radius-contract.js";
@@ -566,17 +567,20 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
         themeDocument: isUserVisualTheme(theme) ? exportVisualThemeDocument(theme) : null};
     }
   });
+  const cityGuidance = new CityUpdateGuidance({getIdentity: () => mapRevision.mapIdentity, getMap: () => state?.map,
+    notify: () => documentRef.dispatchEvent(new CustomEvent(CITY_GUIDANCE_EVENT))});
   const editHistory = new EditHistory({
     onMutation: mutation => {
       saveState.mutation(mutation);
+      cityGuidance.mutation(mutation);
       const before = mapRevision.getSnapshot();
       const after = mapRevision.advance();
       queueCommandMapReplicaPatch(state, mutation, before, after, {
         includeCompute: !state?.workerSessionMutationGuard
       });
     },
-    onSnapshot: () => ({...mapRevision.createSnapshot(), saveContent: saveState.snapshot()}),
-    onRestore: snapshot => { mapRevision.restoreSnapshot(snapshot); saveState.restorePosition(snapshot?.saveContent); }
+    onSnapshot: () => ({...mapRevision.createSnapshot(), saveContent: saveState.snapshot(), cityGuidance: cityGuidance.snapshot()}),
+    onRestore: snapshot => { mapRevision.restoreSnapshot(snapshot); saveState.restorePosition(snapshot?.saveContent); cityGuidance.restore(snapshot?.cityGuidance); }
   });
   state = {
     options: {...DEFAULT_OPTIONS},
@@ -590,6 +594,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     editHistory,
     mapRevision,
     saveState,
+    cityGuidance,
     notesDomain: null,
     markersDomain: null,
     editRefreshScheduler: null,
@@ -1606,6 +1611,11 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
   });
   state.panels.province = provincePanel;
   cityPanel = createCityPanel(documentRef, panelManager, {
+    readUpdateGuidance: id => cityGuidance.read(id),
+    onOpenUpdateDomain: domain => {
+      if (domain === "population") documentRef.querySelector(".city-population-controls input")?.focus();
+      else state.panels[{economy: "economy", routes: "route", military: "military"}[domain]]?.open(state.map, state.selection, state.editHistory.getStats());
+    },
     onSelect: object => {
       selectFromPanel("city-panel", object);
       cityPanel.setSelectedCityId(object.id);
@@ -1687,8 +1697,9 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
       const city = state.map?.settlements?.cities?.[cityId];
       if (!city || city.removed) return;
       const population = estimateCityPopulationPotential(state.map.pack, city, state.map.options?.seed);
-      const command = createSetCityPopulationCommand(cityId, population, {label: "按条件重算城市人口"});
+      const command = createSetCityPopulationCommand(cityId, population, {label: "按条件重算城市人口", recalculated: true});
       const execution = executeEditCommand(state, documentRef, command, {context: {map: state.map}, throwOnError: false});
+      if (!execution.error) cityGuidance.acknowledgePopulation(cityId);
       updateEditingInteractionLock(state, documentRef);
       return {...execution, message: execution.error ? "人口重算失败，请重新选择城市后重试。" : execution.executed ? "人口已重算，所属地区统计已同步，可撤销。" : "人口未改变。"};
     },

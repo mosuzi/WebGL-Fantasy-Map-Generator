@@ -63,6 +63,7 @@
   </section>
 
   <UiDetailGrid class-name="city-panel-details" empty-text="未选中城市" :rows="detailRows" />
+  <CityUpdateGuidance v-if="selected" :city-id="selected.id" :read="callbacks.readUpdateGuidance" @open="callbacks.onOpenUpdateDomain" />
 
   <section v-if="selected" class="city-population-controls" aria-label="城市人口编辑">
     <form @submit.prevent="applyPopulation(false)">
@@ -122,6 +123,7 @@
 <script setup>
 import {computed, nextTick, onMounted, onBeforeUnmount, reactive, ref, watch} from "vue";
 import {readCityAttributeActions} from "../../../runtime/city-attribute-commands.js";
+import CityUpdateGuidance from "./CityUpdateGuidance.vue";
 import {estimateCityPopulationPotential} from "../../../generator/city-development.js";
 import UiActionDock from "./base/UiActionDock.vue";
 import UiButton from "./base/UiButton.vue";

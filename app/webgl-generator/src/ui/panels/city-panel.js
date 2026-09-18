@@ -43,6 +43,8 @@ export function createCityPanel(documentRef, manager, callbacks = {}) {
     version: 0
   });
   const panelCallbacks = {
+    readUpdateGuidance: id => callbacks.readUpdateGuidance?.(id),
+    onOpenUpdateDomain: domain => callbacks.onOpenUpdateDomain?.(domain),
     onFilter: value => {
       panelState.filter = value;
       updatePanelListPreferences(documentRef, CITY_PANEL_ID, {filter: value}, CITY_LIST_DEFAULTS);

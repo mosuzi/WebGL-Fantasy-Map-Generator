@@ -150,11 +150,12 @@ export function createDeleteCityCommand(cityId, {label = "删除城市"} = {}) {
   };
 }
 
-export function createSetCityPopulationCommand(cityId, nextPopulation, {label = "城市人口", faultInjector} = {}) {
+export function createSetCityPopulationCommand(cityId, nextPopulation, {label = "城市人口", faultInjector, recalculated = false} = {}) {
   const normalizedCityId = normalizeCityId(cityId);
 
   return {
     label: `${label} #${normalizedCityId}`,
+    cityUpdateGuidance: {cityId: normalizedCityId, attribute: "population", recalculated, reason: recalculated ? "重算人口" : "编辑人口"},
     domain: OBJECT_KIND.CITY,
     effects: {
       ...CITY_POPULATION_EFFECTS,
