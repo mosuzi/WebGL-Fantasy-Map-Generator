@@ -5,6 +5,7 @@ import {normalizeLabelStyleStore, validateLabelStyleStore} from "./label-style-r
 import {normalizeLabelLayoutStore, validateLabelLayoutStore} from "./label-layout-registry.js";
 import {PNG_FIXED_TEXT_ELEMENT_IDS, PNG_MILITARY_TEXT_SELECTOR, PNG_SEMANTIC_LABEL_SELECTORS} from "./canvas-text-contract.js";
 import {pngOutputSize, assertPngBudget} from "./png-export-size.js";
+import {preparePngDrawingResolution} from "./png-export-resolution.js";
 import {normalizeSocialExpansionMap} from "./social-expansion-edit-commands.js";
 import {backfillEconomyDisplayProperties, normalizeEconomyDisplayMap} from "../generator/economy-display-properties.js";
 import {resolveBiomeDescriptor} from "../generator/biome-registry.js";
@@ -2260,8 +2261,7 @@ export function downloadBlob(documentRef, blob, filename) {
 
 async function composeMapExportCanvas(documentRef, canvas, options = {}) {
   const exportFrame = preparePngExportFrame(canvas, options.renderer, options.crop);
-  const previousBacking = {width: canvas.width, height: canvas.height, size: options.renderer?.canvasSize};
-  let resized = false;
+  let restoreResolution = null;
   try {
     const output = documentRef.createElement("canvas");
     const pixelScale = normalizePngPixelScale(options.pixelScale);
@@ -2271,17 +2271,7 @@ async function composeMapExportCanvas(documentRef, canvas, options = {}) {
       : {width: Math.max(1, Math.round(exportFrame.sourceRect.width * pixelScale)), height: Math.max(1, Math.round(exportFrame.sourceRect.height * pixelScale))};
     assertPngBudget(size.width, size.height);
     if (options.outputWidth != null) {
-      const renderer = options.renderer;
-      if (!renderer?.gl || !renderer.canvasSize) throw new Error("明确像素尺寸需要可用的地图渲染器。");
-      const factor = Math.max(size.width / exportFrame.sourceRect.width, size.height / exportFrame.sourceRect.height);
-      const width = Math.ceil(canvas.width * factor), height = Math.ceil(canvas.height * factor);
-      const gl = renderer.gl;
-      const gpuLimit = Math.min(gl.getParameter(gl.MAX_TEXTURE_SIZE), gl.getParameter(gl.MAX_RENDERBUFFER_SIZE), ...gl.getParameter(gl.MAX_VIEWPORT_DIMS));
-      assertPngBudget(width, height, gpuLimit);
-      resized = true;
-      canvas.width = width; canvas.height = height;
-      renderer.canvasSize = {...previousBacking.size, width, height, pixelRatio: width / previousBacking.size.cssWidth};
-      renderer.markViewportBuffersDirty?.(); renderer.draw({updateDynamicBuffers: true, updateOverlay: true});
+      restoreResolution = preparePngDrawingResolution(canvas, options.renderer, exportFrame.sourceRect, size);
       exportFrame.sourceRect = cssRectToBackingRect(exportFrame.cssRect, exportFrame.fullDomRect, canvas);
     }
     output.width = size.width;
@@ -2307,13 +2297,9 @@ async function composeMapExportCanvas(documentRef, canvas, options = {}) {
     if (options.transparentBackground) clearOutsideMapBounds(context, options.renderer, exportFrame.fullDomRect, scale, exportFrame.cssRect);
     return {canvas: output, crop: exportFrame.crop};
   } finally {
-    if (resized) {
-      canvas.width = previousBacking.width; canvas.height = previousBacking.height;
-      options.renderer.canvasSize = previousBacking.size;
-      options.renderer.markViewportBuffersDirty?.();
-    }
+    restoreResolution?.();
     exportFrame.restore();
-    if (resized) options.renderer.draw({updateDynamicBuffers: true, updateOverlay: true});
+    if (restoreResolution) options.renderer.draw({updateDynamicBuffers: true, updateOverlay: true});
   }
 }
 
