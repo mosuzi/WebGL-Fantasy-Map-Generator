@@ -334,6 +334,7 @@ import {createRuntimeOperationError, createRuntimeOperationManager} from "./runt
 import {createLatestDisplayIntentQueue, isSupersededDisplayIntent} from "./display-intent-queue.js";
 import {createDelayedOperationFeedback} from "./delayed-operation-feedback.js";
 import {MapSaveState, installMapSaveStatus} from "./map-save-state.js";
+import {installMapRecovery} from "./map-recovery.js";
 import {createCanvasToolModeManager} from "./canvas-tool-mode-manager.js";
 import {beginDirectManipulationSession, cancelAllDirectManipulationSessions} from "./direct-manipulation-session.js";
 import {BRUSH_RADIUS_ID, normalizeBrushRadius} from "./brush-radius-contract.js";
@@ -2832,6 +2833,13 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
   });
   state.runtimeActions = runtimeActions;
   state.saveStatusUi = installMapSaveStatus(documentRef, saveState);
+  state.recovery = installMapRecovery(documentRef, {
+    getMap: () => state.map,
+    getStatus: () => saveState.getStatus(),
+    canRun: () => !state.runtimeOperationSnapshot?.busy && !state.workerAtomicCommitGuard,
+    createPayload: () => runtimeActions.data.exportCompressedAll({download: false, includeBase64: false, includeBlob: true}),
+    restore: blob => runtimeActions.data.importMap(blob, {confirm: true, source: "recovery", toast: true})
+  });
   const cloudStorageRegistry = createCloudStorageRegistry({view: documentRef.defaultView || window});
   state.panels.cloudStorage = createCloudStoragePanel(documentRef, panelManager, cloudStorageRegistry, CloudStoragePanelComponent, {
     onCreatePayload: async ({filenameTemplate} = {}) => {

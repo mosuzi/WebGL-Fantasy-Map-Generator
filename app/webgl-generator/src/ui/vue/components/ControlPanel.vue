@@ -68,6 +68,7 @@
         </div>
         <p id="file-operation-status" class="file-operation-status" aria-live="polite"></p>
         <p id="map-save-status" class="file-operation-status" role="status" aria-live="polite"></p>
+        <MapRecoveryControls />
         <pre id="file-operation-error-details" class="file-operation-error-details" hidden></pre>
         <UiButton id="file-operation-clear-error" class="file-operation-recovery" variant="secondary" @click="clearFileOperationFeedback">清除错误并重试</UiButton>
         <UiButton id="export-map-import-diagnostic" variant="secondary" hidden>导出诊断</UiButton>
@@ -752,6 +753,7 @@ import UiSegmented from "./base/UiSegmented.vue";
 import UiSelectField from "./base/UiSelectField.vue";
 import UiSliderField from "./base/UiSliderField.vue";
 import UiSwitchField from "./base/UiSwitchField.vue";
+import MapRecoveryControls from "./MapRecoveryControls.vue";
 import UiTabs from "./base/UiTabs.vue";
 import {Lock, Setting, Unlock} from "@element-plus/icons-vue";
 import {useDraggableFloatingPanel} from "../composables/use-draggable-floating-panel.js";
