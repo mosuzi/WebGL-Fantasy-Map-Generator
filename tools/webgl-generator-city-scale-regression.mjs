@@ -81,7 +81,7 @@ for (const city of generated.settlements.cities.filter(Boolean)) {
   if (!city.visual?.manual) assert.equal(city.visual?.silhouette, expected, `生成城市 #${city.id} 自动剪影未使用统一规模`);
 }
 const generatedScaleCounts = Object.fromEntries(["hamlet", "village", "town", "city"].map(scale => [scale, generated.settlements.cities.filter(city => city?.group === scale).length]));
-assert.ok(Object.values(generatedScaleCounts).every(count => count > 0), `真实 10k 生成图必须覆盖四级城镇分母：${JSON.stringify(generatedScaleCounts)}`);
+assert.equal(Object.values(generatedScaleCounts).reduce((sum, count) => sum + count, 0), generated.settlements.cities.filter(Boolean).length, "所有生成城市必须落入合法规模；四档边界由固定人口夹具覆盖，不要求每个种子生成四档");
 
 const topologyMap = generatePlaceholderMap({seed: "state-topology-regression", cellsTarget: 3000, heightmapTemplate: "continents"});
 const topologyBefore = groupVisualFingerprint(topologyMap);

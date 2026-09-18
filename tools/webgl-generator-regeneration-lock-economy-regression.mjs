@@ -176,8 +176,21 @@ function testBothDomainsLockedCommandNoop() {
     ]
   };
   const command = createRebuildEconomyCommand();
-  assert.equal(command.isNoop({map}), true, "市场与交易双域全锁时 command 未返回 no-op");
-  report.cases.push("both-domains-command-noop");
+  const before = economySnapshot(map);
+  const lockedMarkets = structuredClone(map.pack.markets);
+  const lockedDeals = structuredClone(map.pack.deals);
+  const lockedMarketCells = Array.from(map.pack.cells.market);
+  assert.equal(command.isNoop({map}), false, "市场与交易锁不等于城市产出、税收与经济摘要全部锁定");
+  command.apply({map});
+  assert.deepEqual(map.pack.markets, lockedMarkets, "全锁市场必须保持原像");
+  assert.deepEqual(map.pack.deals, lockedDeals, "全锁交易必须保持原像");
+  assert.deepEqual(Array.from(map.pack.cells.market), lockedMarketCells, "全锁市场归属必须保持");
+  const after = economySnapshot(map);
+  command.revert({map});
+  assert.equal(economySnapshot(map), before, "双域锁经济重算撤销必须恢复完整写集");
+  command.apply({map});
+  assert.equal(economySnapshot(map), after, "双域锁经济重做必须恢复同一结果");
+  report.cases.push("both-domains-lock-preservation-and-history");
 }
 
 function testAssignmentConflictAndFailureRollback() {

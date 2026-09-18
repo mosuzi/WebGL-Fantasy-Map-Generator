@@ -213,6 +213,32 @@ function testLockedCapitalKeepsLandFeatureConnected() {
   assert(featureRoads.length > 0, `锁定首都不得让陆地要素 ${target.feature} 的干道整片归零`);
   const roadCells = new Set(featureRoads.flatMap(route => route.packCells || []));
   const untouchedCapitals = target.capitals.filter(({burg}) => !roadCells.has(Number(burg.cell)));
+  const landRoutes = activeRoutes(map).filter(route => ["road", "trail"].includes(route.type));
+  const edges = new Map();
+  for (const route of landRoutes) {
+    const cells = route.packCells || [];
+    for (let i = 1; i < cells.length; i++) {
+      const a = Number(cells[i - 1]);
+      const b = Number(cells[i]);
+      if (!edges.has(a)) edges.set(a, new Set());
+      if (!edges.has(b)) edges.set(b, new Set());
+      edges.get(a).add(b);
+      edges.get(b).add(a);
+    }
+  }
+  const reachable = new Set(roadCells);
+  const queue = [...roadCells];
+  for (let i = 0; i < queue.length; i++) for (const neighbor of edges.get(queue[i]) || []) {
+    if (!reachable.has(neighbor)) { reachable.add(neighbor); queue.push(neighbor); }
+  }
+  const coverage = target.capitals.map(({city, burg}) => ({
+    cityId: city.id,
+    locked: city.id === lockedCity.id,
+    currentCapital: Boolean(map.settlements.cities.find(item => item?.id === city.id)?.capital),
+    access: roadCells.has(Number(burg.cell)) ? "trunk" : reachable.has(Number(burg.cell)) ? "branch" : "unreachable"
+  }));
+  console.log(JSON.stringify({capitalCoverage: coverage}));
+  // 保留旧失败信号；统一功能验收根据连通分类裁定，不凭静态推断放宽生成要求。
   assert.equal(untouchedCapitals.length, 0, `陆地要素 ${target.feature} 的目标首都必须全部接入干道`);
   report.geographicCoverage = {
     feature: target.feature,

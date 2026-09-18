@@ -9,6 +9,7 @@ import {
   SELECTED_ROUTE_COLOR
 } from "../app/webgl-generator/src/renderer/route-style.js";
 import {OBJECT_KIND} from "../app/webgl-generator/src/runtime/object-kinds.js";
+import {buildObjectPickingIndex, pickRoute} from "../app/webgl-generator/src/renderer/picking.js";
 
 const theme = {
   lines: {
@@ -90,7 +91,6 @@ assert.equal(maskedSeaColors(hardSurfaceDepth).at(-1), "land", "终点港口的�
 assert.deepEqual(routes, before, "路线样式与 batch 构建不得修改 points、cells 或其它 canonical 路线数据");
 
 const rendererSource = await readFile(new URL("../app/webgl-generator/src/renderer/placeholder-renderer.js", import.meta.url), "utf8");
-const pickingSource = await readFile(new URL("../app/webgl-generator/src/renderer/picking.js", import.meta.url), "utf8");
 const drawSource = sourceBetween(rendererSource, "draw({updateDynamicBuffers", "pickClientPoint(clientX");
 const shaderSource = sourceBetween(rendererSource, "const vertexShaderSource", "const fragmentShaderSource");
 assert.match(shaderSource, /float z = u_surfaceSideMode \? \(a_color\.a < 0\.5 \? -0\.5 : 0\.5\) : 0\.0/, "surface 必须继续把陆地、水面和路线分别写入 -0.5 / +0.5 / 0 depth");
@@ -98,7 +98,19 @@ assert.match(drawSource, /gl\.clearDepth\(0\.5\)/, "depth 基准必须保持在�
 assert.ok(drawSource.indexOf("drawSurfaceDepthBatch") < drawSource.indexOf("drawRouteMeshBatches"), "最终 surface depth 必须先于路线遮罩绘制");
 assert.match(sourceBetween(rendererSource, "setViewOptions(options", "setVisualTheme"), /refreshCellSurface\(\{draw: false\}\)/, "平滑开关必须先刷新同源 surface depth");
 assert.match(sourceBetween(rendererSource, "refreshHeightCells(gridCells", "refreshLabels()"), /rebuildShoreVisualCache\(\)[\s\S]{0,120}?refreshCellSurface/, "岸线变化必须同步刷新最终 surface depth");
-assert.match(pickingSource, /for \(let index = 0; index < route\.points\.length - 1; index\+\+\)/, "路线 picking 必须继续读取 canonical points");
+const pickingRoute = {id: 909, type: "road", points: [[100, 100], [300, 100], [300, 300]]};
+const pickingMap = {metadata: {graphWidth: 500, graphHeight: 500}, settlements: {cities: [], routes: [pickingRoute]}};
+let pickingIndex = buildObjectPickingIndex(pickingMap, {components: ["routeSegments"]});
+for (const index of [null, pickingIndex]) {
+  assert.equal(pickRoute(pickingMap, index, 200, 100, 4)?.id, 909, "有无索引都必须命中 canonical 折线");
+  assert.equal(pickRoute(pickingMap, index, 200, 200, 4), null, "端点弦线不得冒充 canonical 折线");
+}
+pickingRoute.points = [[100, 400], [300, 400]];
+pickingIndex = buildObjectPickingIndex(pickingMap, {components: ["routeSegments"]});
+for (const index of [null, pickingIndex]) {
+  assert.equal(pickRoute(pickingMap, index, 200, 100, 4), null, "重建后旧路径不得继续命中");
+  assert.equal(pickRoute(pickingMap, index, 200, 400, 4)?.id, 909, "重建后必须命中新 canonical 路径");
+}
 
 console.log(JSON.stringify({
   ok: true,
