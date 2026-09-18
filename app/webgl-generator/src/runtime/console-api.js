@@ -1694,6 +1694,7 @@ function normalizeNamebaseApiBaseIds(baseIds) {
 
 export function exportAllMapData(state, documentRef, options = {}) {
   const map = assertApiMap(state);
+  const saveTicket = state.saveState?.capture();
   const units = normalizeUnitPreferences(readControlPreferences(documentRef).units);
   const visualTheme = currentVisualThemeId(state, documentRef);
   const document = createMapDocument(map, {
@@ -1707,6 +1708,7 @@ export function exportAllMapData(state, documentRef, options = {}) {
   const filename = `${mapFileBaseName(map)}.webgl-map.json`;
   if (options.download === true) {
     downloadText(documentRef, text, filename, "application/json;charset=utf-8");
+    state.saveState?.record(saveTicket, "download", filename);
   }
   return withOptionalText(options, {
     filename,

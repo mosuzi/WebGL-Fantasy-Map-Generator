@@ -333,6 +333,7 @@ import {getWebglGeneratorHealthMonitor} from "./health-monitor.js";
 import {createRuntimeOperationError, createRuntimeOperationManager} from "./runtime-operation.js";
 import {createLatestDisplayIntentQueue, isSupersededDisplayIntent} from "./display-intent-queue.js";
 import {createDelayedOperationFeedback} from "./delayed-operation-feedback.js";
+import {MapSaveState, installMapSaveStatus} from "./map-save-state.js";
 import {createCanvasToolModeManager} from "./canvas-tool-mode-manager.js";
 import {beginDirectManipulationSession, cancelAllDirectManipulationSessions} from "./direct-manipulation-session.js";
 import {BRUSH_RADIUS_ID, normalizeBrushRadius} from "./brush-radius-contract.js";
@@ -556,16 +557,25 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
   const panelManager = new PanelManager(documentRef, documentRef.querySelector(".map-stage"));
   const mapRevision = new MapRevisionTracker();
   let state = null;
+  const saveState = new MapSaveState({
+    getIdentity: () => state?.map ? mapRevision.getSnapshot().mapIdentity : null,
+    getPresentation: () => {
+      const theme = currentVisualThemeId(documentRef);
+      return {options: state?.options || {}, units: normalizeUnitPreferences(readControlPreferences(documentRef).units), theme,
+        themeDocument: isUserVisualTheme(theme) ? exportVisualThemeDocument(theme) : null};
+    }
+  });
   const editHistory = new EditHistory({
     onMutation: mutation => {
+      saveState.mutation(mutation);
       const before = mapRevision.getSnapshot();
       const after = mapRevision.advance();
       queueCommandMapReplicaPatch(state, mutation, before, after, {
         includeCompute: !state?.workerSessionMutationGuard
       });
     },
-    onSnapshot: () => mapRevision.createSnapshot(),
-    onRestore: snapshot => mapRevision.restoreSnapshot(snapshot)
+    onSnapshot: () => ({...mapRevision.createSnapshot(), saveContent: saveState.snapshot()}),
+    onRestore: snapshot => { mapRevision.restoreSnapshot(snapshot); saveState.restorePosition(snapshot?.saveContent); }
   });
   state = {
     options: {...DEFAULT_OPTIONS},
@@ -578,6 +588,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     editingObject: null,
     editHistory,
     mapRevision,
+    saveState,
     notesDomain: null,
     markersDomain: null,
     editRefreshScheduler: null,
@@ -2820,12 +2831,14 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     })
   });
   state.runtimeActions = runtimeActions;
+  state.saveStatusUi = installMapSaveStatus(documentRef, saveState);
   const cloudStorageRegistry = createCloudStorageRegistry({view: documentRef.defaultView || window});
   state.panels.cloudStorage = createCloudStoragePanel(documentRef, panelManager, cloudStorageRegistry, CloudStoragePanelComponent, {
     onCreatePayload: async ({filenameTemplate} = {}) => {
       const exported = await runtimeActions.data.exportCompressedAll({download: false, includeBase64: false, includeBlob: true, filenameTemplate});
-      return {filename: exported.filename, blob: exported.blob, metadata: exported.metadata};
+      return {filename: exported.filename, blob: exported.blob, metadata: exported.metadata, saveTicket: exported.saveTicket};
     },
+    onSaved: (payload, file) => saveState.record(payload.saveTicket, "cloud", file.name || ""),
     onPreviewFilename: filenameTemplate => createMapArchiveFilename(state.map, {template: filenameTemplate}),
     onLoadPayload: (payload, sourceFile) => runtimeActions.data.importMap(payload, {confirm: true, source: "ui", sourceFile, toast: true})
   });
@@ -5933,6 +5946,7 @@ async function saveMapToBrowserStorage(state, documentRef, saveAction = state.ru
 
 async function saveMapToBrowserStorageViaApi(state, documentRef, _options = {}, operation = null) {
   assertMapAvailable(state);
+  const saveTicket = state.saveState?.capture();
   const exported = await exportMapArchiveViaWorker(state, documentRef, {
     operation,
     encoding: "webfmg-v3",
@@ -5956,6 +5970,7 @@ async function saveMapToBrowserStorageViaApi(state, documentRef, _options = {}, 
     : await writeBrowserMapStorage(documentRef, raw);
   const writeMs = elapsedStorageMs(documentRef, writeStartedAt);
   const storedMetadata = stored.record?.metadata || payload?.metadata || {};
+  state.saveState?.record(saveTicket, "browser");
   return {
     saved: true,
     storageKey: stored.storageKey || BROWSER_MAP_STORAGE_KEY,
@@ -5986,6 +6001,7 @@ async function saveMapToBrowserStorageViaApi(state, documentRef, _options = {}, 
 
 async function exportCompressedAllMapDataViaWorker(state, documentRef, options = {}, operation = null) {
   assertMapAvailable(state);
+  const saveTicket = state.saveState?.capture();
   const map = state.map;
   const exported = await exportMapArchiveViaWorker(state, documentRef, {
     operation,
@@ -5996,7 +6012,10 @@ async function exportCompressedAllMapDataViaWorker(state, documentRef, options =
     template: options.filenameTemplate === undefined ? "{name}.{ext}" : options.filenameTemplate
   });
   const blob = new Blob([exported.data], {type: exported.mimeType});
-  if (options.download === true) downloadBlob(documentRef, blob, filename);
+  if (options.download === true) {
+    downloadBlob(documentRef, blob, filename);
+    state.saveState?.record(saveTicket, "download", filename);
+  }
   const result = {
     filename,
     mimeType: exported.mimeType,
@@ -6013,6 +6032,7 @@ async function exportCompressedAllMapDataViaWorker(state, documentRef, options =
   if (options.includeBlob === true) result.blob = blob;
   if (options.includeBase64 !== false && options.download !== true) result.base64 = await blobToBase64(documentRef, blob);
   Object.defineProperty(result, "worker", {enumerable: false, value: exported.worker || null});
+  Object.defineProperty(result, "saveTicket", {enumerable: false, value: saveTicket});
   return result;
 }
 
@@ -7612,6 +7632,7 @@ async function importParsedMapDocumentViaApi(state, documentRef, document, optio
       isCurrent: options.isCurrent || (() => true)
     });
     const persistedNamebases = createGenerationNamebaseSnapshot(state.map) ? persistNamebasePreferences(state, documentRef) : false;
+    state.saveState?.record(state.saveState.capture(), options.source === "browser-storage" ? "browser" : "imported");
     updateGenerationLoading(documentRef, false);
     clearFileOperationDetails(documentRef);
     setFileOperationStatus(documentRef, `已${sourceLabel}导入地图数据：seed ${document.map.metadata?.seed || normalizedOptions.seed || "未知"}`);

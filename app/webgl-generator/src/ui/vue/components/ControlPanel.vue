@@ -67,6 +67,7 @@
           </label>
         </div>
         <p id="file-operation-status" class="file-operation-status" aria-live="polite"></p>
+        <p id="map-save-status" class="file-operation-status" role="status" aria-live="polite"></p>
         <pre id="file-operation-error-details" class="file-operation-error-details" hidden></pre>
         <UiButton id="file-operation-clear-error" class="file-operation-recovery" variant="secondary" @click="clearFileOperationFeedback">清除错误并重试</UiButton>
         <UiButton id="export-map-import-diagnostic" variant="secondary" hidden>导出诊断</UiButton>

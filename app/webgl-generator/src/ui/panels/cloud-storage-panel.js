@@ -74,6 +74,7 @@ export function createCloudStoragePanel(documentRef, manager, registry, componen
       const payload = await callbacks.onCreatePayload?.({filenameTemplate: effectiveFilenameTemplate(panelState.filenameTemplate)});
       if (!payload?.blob) throw new Error("未能生成完整地图存档");
       const created = await provider.createFile(payload);
+      callbacks.onSaved?.(payload, created);
       if (!operation.isCurrent()) return;
       panelState.status = `已创建“${created.name}”。`;
       await refreshFilesForProvider(provider, {quiet: true, selectId: created.id, operation});
@@ -87,6 +88,7 @@ export function createCloudStoragePanel(documentRef, manager, registry, componen
         const payload = await callbacks.onCreatePayload?.();
         if (!payload?.blob) throw new Error("未能生成完整地图存档");
         const updated = await provider.overwriteFile(file, payload);
+        callbacks.onSaved?.(payload, updated);
         if (!operation.isCurrent()) return;
         panelState.status = `已覆盖“${updated.name || file.name}”。`;
         await refreshFilesForProvider(provider, {quiet: true, selectId: updated.id || file.id, operation});
