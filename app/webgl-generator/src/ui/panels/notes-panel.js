@@ -101,6 +101,7 @@ export function createNotesPanel(documentRef, manager, callbacks = {}) {
     onCreateStandaloneMode: active => callbacks.onCreateStandaloneMode?.(active),
     onRename: (row, name) => callbacks.onRename?.(row, name),
     onNoteChange: (row, body) => callbacks.onNoteChange?.(row, body),
+    onRescue: (row, patch, map) => callbacks.onRescue?.(row, patch, map),
     onExport: rows => callbacks.onExport?.(rows),
     onHighlight: rows => highlightPanelRows(panelState, callbacks, rows, row => row.object),
     onClearHighlights: () => clearPanelHighlights(panelState, callbacks),

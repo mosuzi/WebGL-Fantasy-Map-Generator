@@ -193,6 +193,7 @@ import {
 import {compareMilitaryVariation, snapshotMilitaryVariation, syncMilitaryStateMirrors} from "./military-regeneration-variation.js";
 import {createClearUserNamebasesCommand, createCopyBuiltinNamebaseCommand, createCreateUserNamebaseCommand, createDeleteUserNamebaseCommand, createImportNamebasesCommand, createRenameUserNamebaseCommand, createSetNamebaseBindingCommand, createUpdateUserNamebaseCommand, createUpdateUserNamebaseOptionsCommand, createUpdateUserNamebaseSourceCommand} from "./namebase-edit-commands.js";
 import {createDeleteNoteCommand, createStandaloneNoteCommand} from "./note-edit-commands.js";
+import {createRescueOrphanNoteCommand} from "./orphan-note-commands.js";
 import {createDeleteNotesBatchCommand, createImportNotesCommand, inspectNotesImport} from "./note-import.js";
 import {applyMarketAssignmentPreview, buildMarketAssignmentChanges, createApplyMarketAssignmentCommand, createRebuildEconomyCommand, createSetGoodDisplayCommand, createSetMarketDisplayCommand, getMarketAssignmentBrushChanges, inspectMarketAssignment, MARKET_ASSIGNMENT_PREVIEW_EFFECTS, restoreMarketAssignmentPreview} from "./economy-edit-commands.js";
 import {createRenameNamedObjectsFromNamebaseCommand, createRenameObjectCommand, createSetObjectNoteCommand, createSetProvinceColorCommand, createSetStateCapitalCommand} from "./object-edit-commands.js";
@@ -2363,6 +2364,13 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
     onNoteChange: (row, body) => {
       if (!row?.object || row.orphan) return;
       runtimeActions.edit.notes.set(row.object, body, {name: row.name});
+    },
+    onRescue: (row, patch, map) => {
+      if (!row?.id || !map) return;
+      const command = createRescueOrphanNoteCommand(map, row.id, patch);
+      const result = executeNotesDomainCommand(state, "notes.set", command,
+        () => executeEditCommand(state, documentRef, command, {context: {map: state.map}}), "ui");
+      if (result?.executed && patch.target) notesPanel.setSelectedNoteId(`${patch.target.kind}:${patch.target.id}`);
     },
     onExport: rows => exportNotesSummary(state, documentRef, rows, runtimeActions.data.exportNotes),
     onImportPreview: (file, mode) => previewNotesImport(state, documentRef, file, mode),

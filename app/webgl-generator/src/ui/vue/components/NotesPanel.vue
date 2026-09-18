@@ -70,7 +70,7 @@
     v-if="selected?.orphan"
     kind="orphan"
     title="原对象已不存在"
-    message="这条备注仍可导出保留，但不能定位或继续编辑；如不再需要，可从当前地图删除。"
+    message="正文仍可编辑、保存或导出；也可以重新绑定到现有国家、省份或城市。"
     action-label="删除这条孤儿备注"
     @action="callbacks.onDelete?.(selected)"
   />
@@ -78,6 +78,7 @@
   <div v-if="selected" class="notes-panel-preview">
     {{ selected.body || "空备注" }}
   </div>
+  <OrphanNoteRescue v-if="selected?.orphan" :map="state.map" :note="selected" :version="state.version" :on-rescue="callbacks.onRescue" />
 
   <UiActionDock v-if="selected && !selected.orphan" host-id="NotesPanel" v-model:active="activeAction" :actions="noteActions">
     <template #rename>
@@ -91,6 +92,7 @@
 
 <script setup>
 import {computed, ref, watch} from "vue";
+import OrphanNoteRescue from "./OrphanNoteRescue.vue";
 import {OBJECT_KIND_LABEL} from "../../../runtime/object-kinds.js";
 import {isPersistentHighlightObjectKind} from "../../../runtime/persistent-highlights.js";
 import {resolveObject} from "../../../runtime/object-resolver.js";
