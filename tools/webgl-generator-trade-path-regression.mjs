@@ -1,0 +1,13 @@
+import assert from "node:assert/strict";
+import {diagnoseTradePath} from "../app/webgl-generator/src/runtime/trade-path-diagnostics.js";
+const map = {pack: {cells: {p: [[0,0],[3,0],[3,4],[9,9]], h: [30,30,30,30], c: [[1],[0,2],[1],[]]}, burgs: [null,{cell:0},{cell:2}], markets: [{i:0,centerBurgId:1}], deals: [{i:0,sellerType:"market",seller:0,buyerType:"burg",buyer:2}]}, settlements:{routes:[{id:0,type:"road",packCells:[0,1]},{id:1,type:"trail",packCells:[1,2]},{id:2,type:"road",packCells:[0,1]}]}};
+const before = JSON.stringify(map);
+assert.equal((await diagnoseTradePath(map, 0)).length, 7);
+assert.equal(JSON.stringify(map), before);
+map.settlements.routes.splice(1,1);
+assert.equal((await diagnoseTradePath(map, 0)).status, "unreachable");
+map.settlements.routes.push({id:3,packCells:[0,2]});
+assert.equal((await diagnoseTradePath(map, 0)).status, "unknown");
+map.pack.markets[0].centerBurgId = 999;
+assert.equal((await diagnoseTradePath(map, 0)).status, "unknown");
+console.log("交易路径：市场中心、支路、共享边、长度、断路、损坏、只读通过");

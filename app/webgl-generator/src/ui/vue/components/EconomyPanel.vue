@@ -200,6 +200,7 @@
       @action="handleDealLocateAction"
     />
 
+    <TradePathDiagnostic v-if="state.tab === 'deals' && selectedDeal" :map="state.map" :deal-id="state.selectedDealId ?? selectedDeal.id" :version="state.version" />
     <UiKeyValueGrid
       class-name="economy-detail-highlights"
       :items="economyDetail.highlights"
@@ -260,6 +261,7 @@ import {useRegenerationLockSelection} from "../composables/use-regeneration-lock
 import {BRUSH_RADIUS_ID, readBrushRadiusContract} from "../../../runtime/brush-radius-contract.js";
 import {goodDisplayName, normalizeGoodDisplayProperties, normalizeMarketDisplayProperties} from "../../../generator/economy-display-properties.js";
 import {buildTradeQueryOptions, EMPTY_TRADE_QUERY, queryTradeDeals} from "../../economy-trade-query.js";
+import TradePathDiagnostic from "./TradePathDiagnostic.vue";
 
 const brushRadius = readBrushRadiusContract(BRUSH_RADIUS_ID.ECONOMY_MARKET);
 
