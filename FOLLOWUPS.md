@@ -30,3 +30,13 @@ S 为本轮讨论编号，不预占权威编号。源码依据、与已批准项
 | D-05 | 单一领域的局部道路 / 经济重算 | 先定义跨界对象、范围外影响、锁、稳定 ID 与失败历史；不与 S-05 的交互引导混作一个任务，不一并批准多步统一更新 |
 
 可执行赔款和交战预测模型未恢复；制造约束及动态结算以本次最新批注为准。此前撤回记录保留历史语义，不再用旧静态边界拒绝讨论 D-02 / D-03，也不视为模型已获批实施。
+
+## 2026-09-19 批末阶段外发现
+
+以下仅登记现有问题，不在第 386～397 项内扩修；本批自身未通过项仍只列当前计划。
+
+| 编号 | 证据与边界 |
+| --- | --- |
+| T-01 | Dropbox 上传中文地图名时，`cloud-storage.js` 将 Unicode 名称直接写入 `Dropbox-API-Arg`，浏览器在请求发出前报 `String contains non ISO-8859-1 code point`。ASCII 名称的模拟正式上传与保存回执通过；需另行修复请求头的 JSON 字符转义，并覆盖创建 / 覆盖 / 下载等同类参数。证据：本批 `batch-ui-cloud-diagnostic.json` |
+| T-02 | 全能力矩阵复验发现 `action:layers.setMapEdgeFade`、`action:layers.setStateBorderBlend` 两项无对应公开方法；当前统计 1239 行、covered 1156 / excluded 81 / gap 2。未将可参数化能力伪分类排除，未擅自新增 API；需单独决定补齐公开能力或调整正式边界 |
+| T-03 | 完整玩法配方浏览器在 `scenario.colonize-region.create-route` 首败：`operation_invalid_input / 没有 route-path 的 picking 准备范围`，后续战争和平链未到达。相关外交正式浏览器及 10 配方 / 43 步静态检查通过；另行归因道路入口，不能删去链或改种子宣称全量通过。证据：本批 `planner-browser.log` |

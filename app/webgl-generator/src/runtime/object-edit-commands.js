@@ -192,6 +192,7 @@ export function createSetStateCapitalCommand(stateId, nextBurgId) {
   return {
     label: `更换国家 #${normalizedStateId} 首都`,
     domain: OBJECT_KIND.STATE,
+    cityUpdateGuidance: {attribute: "capital", reason: "更换首都", cityIds: []},
     effects: {
       ...STATE_CAPITAL_EFFECTS,
       affected: [
@@ -201,6 +202,8 @@ export function createSetStateCapitalCommand(stateId, nextBurgId) {
     },
     apply(context) {
       previous ??= readStateCapitalSnapshot(context.map, normalizedStateId, normalizedBurgId);
+      this.cityUpdateGuidance.cityIds = [normalizedBurgId, previous.previousBurgId]
+        .map(id => findCityByBurg(context.map, id)?.id).filter(Number.isInteger);
       writeStateCapital(context.map, normalizedStateId, normalizedBurgId);
     },
     revert(context) {

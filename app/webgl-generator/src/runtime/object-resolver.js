@@ -189,8 +189,7 @@ function resolveRoute(map, object) {
   };
 }
 
-function resolveTradeFlow(map, object) {
-  const deal = (map?.pack?.deals || []).find(item => item?.i === Number(object.id));
+export function resolveTradeFlow(map, object, deal = (map?.pack?.deals || []).find(item => item?.i === Number(object.id))) {
   if (!deal) return null;
   const good = map.pack?.goods?.find(item => item?.i === deal.good) || map.pack?.goods?.[deal.good];
   const seller = tradePartyInfo(map, deal.sellerType, deal.seller);

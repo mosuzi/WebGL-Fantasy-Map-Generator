@@ -1,6 +1,6 @@
 <template>
   <button class="map-search-open" @click="openSearch">⌕ 搜索地图内容</button>
-  <dialog ref="dialog" class="map-search-dialog" @close="stop" @keydown.esc="stop">
+  <dialog ref="dialog" class="map-search-dialog" aria-modal="true" aria-label="搜索地图内容" @close="stop" @keydown.esc="stop">
     <header><strong>搜索地图内容</strong><button aria-label="关闭搜索" title="关闭搜索" @click="dialog.close()">×</button></header>
     <div class="map-search-filters">
       <input ref="input" v-model="query" aria-label="地图搜索关键词" placeholder="名称、编号、标签或备注正文" @compositionstart="composing = true" @compositionend="composing = false; schedule()" @keydown="navigate" />

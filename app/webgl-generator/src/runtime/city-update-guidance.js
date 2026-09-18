@@ -39,8 +39,8 @@ export class CityUpdateGuidance {
       for (const [id, record] of after) after.set(id, {...record, pending: record.pending.filter(item => item !== domain)});
     }
     if (change) {
-      const ids = change.attribute === "capital"
-        ? (command.effects?.affected || []).filter(item => item.kind === "city").map(item => Number(item.id)) : [Number(change.cityId)];
+      const ids = change.cityIds || (change.attribute === "capital"
+        ? (command.effects?.affected || []).filter(item => item.kind === "city").map(item => Number(item.id)) : [Number(change.cityId)]);
       for (const id of ids) {
         const previous = after.get(id) || {pending: [], reasons: []};
         const impacted = change.attribute === "population" ? ["economy", "routes", "military"]

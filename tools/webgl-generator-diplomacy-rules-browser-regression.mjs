@@ -379,7 +379,7 @@ try {
     url,
     actions: [
       "edit.diplomacy.inspectDeclareWar -> declareWar",
-      "edit.diplomacy.inspectPeace -> makePeace(record-only terms)",
+      "edit.diplomacy.inspectPeace -> makePeace(普通文本备注)",
       "edit.diplomacy.inspectOverlordChange -> changeOverlord(vassalize)"
     ],
     ...report,

@@ -46,12 +46,12 @@ try {
     await page.setViewportSize({width: viewport.width, height: viewport.height});
     await page.waitForTimeout(120);
     const metrics = await measureCloudStoragePanel(page);
-    assert.deepEqual(metrics.cardBackgrounds, ["rgb(16, 23, 27)", "rgb(16, 23, 27)", "rgb(16, 23, 27)"], `${viewport.label} 云存储卡片没有统一深色背景`);
-    assert.deepEqual(metrics.cardBorders, ["rgb(51, 68, 79)", "rgb(51, 68, 79)", "rgb(51, 68, 79)"], `${viewport.label} 云存储卡片没有统一深色边框`);
-    assert.equal(metrics.titleColor, "rgb(237, 244, 246)", `${viewport.label} 云存储标题颜色错误`);
-    assert.equal(metrics.mutedColor, "rgb(159, 176, 186)", `${viewport.label} 云存储说明文字颜色错误`);
-    assert.equal(metrics.codeBackground, "rgb(23, 33, 39)", `${viewport.label} 环境变量代码标签没有使用深色背景`);
-    assert.equal(metrics.linkColor, "rgb(215, 168, 79)", `${viewport.label} 配置说明链接颜色错误`);
+    assert.deepEqual(metrics.cardBackgrounds, Array(3).fill("rgb(243, 246, 249)"), `${viewport.label} 云存储卡片没有统一明亮背景`);
+    assert.deepEqual(metrics.cardBorders, Array(3).fill("rgb(204, 214, 224)"), `${viewport.label} 云存储卡片边框错误`);
+    assert.equal(metrics.titleColor, "rgb(36, 54, 72)", `${viewport.label} 云存储标题颜色错误`);
+    assert.equal(metrics.mutedColor, "rgb(86, 106, 124)", `${viewport.label} 云存储说明文字颜色错误`);
+    assert.equal(metrics.codeBackground, "rgb(237, 242, 246)", `${viewport.label} 环境变量代码标签背景错误`);
+    assert.equal(metrics.linkColor, "rgb(35, 111, 174)", `${viewport.label} 配置说明链接颜色错误`);
     assert.equal(metrics.documentOverflow, 0, `${viewport.label} document 出现横向溢出`);
     assert.equal(metrics.contentOverflow, 0, `${viewport.label} 云存储正文出现横向溢出`);
     assert.ok(metrics.panel.left >= 0 && metrics.panel.right <= viewport.width + 1, `${viewport.label} 云存储面板横向越界`);

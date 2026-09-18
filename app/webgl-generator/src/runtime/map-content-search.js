@@ -1,14 +1,20 @@
 import {collectObjectReferences, listObjectTypes} from "./object-query-api.js";
-import {resolveObject} from "./object-resolver.js";
+import {resolveObject, resolveTradeFlow} from "./object-resolver.js";
 
 export const MAP_SEARCH_EVENT = "webfmg-map-search";
 export const SEARCH_TYPES = listObjectTypes().map(({type, label}) => ({type, label: type === "note" ? "备注" : label}));
 const TEXT_FIELDS = ["name", "fullName", "text", "label", "targetName", "state", "province", "from", "to", "sellerName", "buyerName", "goodName", "centerBurg", "subjectName", "objectName", "description", "statusLabel", "relationLabel", "categoryLabel", "resourceLabel"];
 const pause = () => new Promise(resolve => setTimeout(resolve, 0));
 const normalized = value => String(value ?? "").trim().toLocaleLowerCase();
+const compareNames = new Intl.Collator("zh-CN").compare;
 
 export async function buildSearchIndex(map, isCurrent = () => true) {
+  await pause();
+  if (!isCurrent()) return null;
   const result = [];
+  // 搜索逐条读取大量交易时复用 ID 索引，避免反复从交易列表头扫描。
+  const deals = new Map();
+  for (const deal of map?.pack?.deals || []) if (deal && !deals.has(Number(deal.i))) deals.set(Number(deal.i), deal);
   let deadline = performance.now() + 8;
   for (const {type, label} of SEARCH_TYPES) {
     if (type === "note") continue;
@@ -19,7 +25,7 @@ export async function buildSearchIndex(map, isCurrent = () => true) {
         deadline = performance.now() + 8;
       }
       let value;
-      try { value = resolveObject(map, ref); } catch { continue; }
+      try { value = type === "trade-flow" ? resolveTradeFlow(map, ref, deals.get(Number(ref.id))) : resolveObject(map, ref); } catch { continue; }
       if (!value || value.removed) continue;
       const text = TEXT_FIELDS.map(field => value[field]).filter(item => typeof item === "string" && item);
       const name = value.fullName || value.name || value.text || value.label || text.join(" · ") || `${label} #${ref.id}`;
@@ -47,7 +53,7 @@ export function searchIndex(index, {query = "", type = "", page = 0, limit = 50}
     const at = Math.max(0, normalized(item.body).indexOf(needle) - 40);
     matches.push({...item, rank, snippet: item.body ? item.body.slice(at, at + 200) : item.text});
   }
-  matches.sort((a, b) => a.rank - b.rank || a.name.localeCompare(b.name, "zh-CN") || a.key.localeCompare(b.key));
+  matches.sort((a, b) => a.rank - b.rank || compareNames(a.name, b.name) || a.key.localeCompare(b.key));
   const last = Math.max(0, Math.ceil(matches.length / limit) - 1);
   page = Math.min(last, Math.max(0, page));
   return {total: matches.length, page, pages: last + 1, items: matches.slice(page * limit, (page + 1) * limit)};

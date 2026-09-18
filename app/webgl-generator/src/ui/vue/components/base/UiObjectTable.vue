@@ -16,6 +16,7 @@
               />
             </label>
           </th>
+          <th v-if="showRegenerationLock" class="object-table-lock-column">重生成锁</th>
           <th
             v-for="column in columns"
             :key="column.key"
@@ -46,7 +47,6 @@
               @pointerdown.stop.prevent="startColumnResize($event, column)"
             ></button>
           </th>
-          <th v-if="showRegenerationLock" class="object-table-lock-column">重生成锁</th>
           <th v-if="showLocateAction" class="object-table-action-column">定位</th>
         </tr>
       </thead>

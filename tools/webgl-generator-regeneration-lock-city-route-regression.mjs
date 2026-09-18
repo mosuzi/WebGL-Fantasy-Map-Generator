@@ -238,8 +238,9 @@ function testLockedCapitalKeepsLandFeatureConnected() {
     access: roadCells.has(Number(burg.cell)) ? "trunk" : reachable.has(Number(burg.cell)) ? "branch" : "unreachable"
   }));
   console.log(JSON.stringify({capitalCoverage: coverage}));
-  // 保留旧失败信号；统一功能验收根据连通分类裁定，不凭静态推断放宽生成要求。
-  assert.equal(untouchedCapitals.length, 0, `陆地要素 ${target.feature} 的目标首都必须全部接入干道`);
+  // 第 365 项关系规则：锁对象生成时不可见，原样后置合并；只要求未锁候选连通。
+  assert.equal(coverage.filter(item => !item.locked && item.currentCapital && item.access === "unreachable").length, 0,
+    `陆地要素 ${target.feature} 的未锁首都必须接入当前路网`);
   report.geographicCoverage = {
     feature: target.feature,
     lockedCity: lockedCity.id,

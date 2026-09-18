@@ -257,6 +257,11 @@ function buildSharedComponentRows() {
 
 function buildGlobalEventRows() {
   const definitions = [
+    {path: "app/webgl-generator/src/runtime/map-content-search.js", entry: "地图内容搜索请求", result: "索引查询和结果定位", included: false, reason: "用户入口已归入控制面板，内部请求转发不重复计入"},
+    {path: "app/webgl-generator/src/runtime/map-recovery.js", entry: "恢复点请求与状态", result: "保存与恢复处理", included: false, reason: "用户入口已归入控制面板，存储服务事件不重复计入"},
+    {path: "app/webgl-generator/src/runtime/png-export-presets.js", entry: "PNG 预设请求", result: "预设保存应用及尺寸预览", included: false, reason: "用户入口已归入导出浮层，请求转发不重复计入"},
+    {path: "app/webgl-generator/src/ui/vue/components/CityUpdateGuidance.vue", entry: "城市关联更新状态", result: "只读提示刷新", included: false, reason: "用户入口已归入城市面板，局部状态同步不重复计入"},
+    {path: "app/webgl-generator/src/ui/vue/components/MapRecoveryControls.vue", entry: "恢复点状态同步", result: "恢复点控件刷新", included: false, reason: "用户入口已归入控制面板，局部状态同步不重复计入"},
     {path: "app/webgl-generator/src/runtime/keyboard-shortcuts.js", entry: "全局与焦点内快捷键", result: "快捷键执行、提示和输入抑制", included: true},
     {path: "app/webgl-generator/src/ui/overlay-registry.js", entry: "固定浮层全局 Esc 与 resize", result: "最内层浮层关闭、重排和焦点返回", included: true},
     {path: "app/webgl-generator/src/ui/panel-manager.js", entry: "浮动面板全局 resize", result: "面板越界恢复与布局更新", included: true},

@@ -1930,7 +1930,8 @@ export async function exportPngData(state, documentRef, options = {}) {
   const transparentBackground = options.transparentBackground ?? (documentRef.getElementById("export-png-transparent")?.checked === true);
   const crop = options.crop ?? readPngExportCrop(documentRef);
   const overlays = options.overlays ?? readPngExportOverlays(documentRef);
-  const outputWidth = options.outputWidth ?? (documentRef.getElementById("export-png-explicit-size")?.checked ? Number(documentRef.getElementById("export-png-output-width")?.value) : undefined);
+  const explicitScale = options.pixelScale !== undefined || options.scale !== undefined;
+  const outputWidth = options.outputWidth ?? (!explicitScale && documentRef.getElementById("export-png-explicit-size")?.checked ? Number(documentRef.getElementById("export-png-output-width")?.value) : undefined);
   const pngOptions = {includeMapOverlays, transparentBackground, pixelScale, crop, overlays, outputWidth, outputHeight: options.outputHeight, renderer: state.renderer};
   return withRiverWaypointPreviewSuppressed(state.renderer, async () => {
     if (options.download === true) {

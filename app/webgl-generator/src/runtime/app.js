@@ -2872,8 +2872,9 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
   const cloudStorageRegistry = createCloudStorageRegistry({view: documentRef.defaultView || window});
   state.panels.cloudStorage = createCloudStoragePanel(documentRef, panelManager, cloudStorageRegistry, CloudStoragePanelComponent, {
     onCreatePayload: async ({filenameTemplate} = {}) => {
+      const saveTicket = saveState.capture();
       const exported = await runtimeActions.data.exportCompressedAll({download: false, includeBase64: false, includeBlob: true, filenameTemplate});
-      return {filename: exported.filename, blob: exported.blob, metadata: exported.metadata, saveTicket: exported.saveTicket};
+      return {filename: exported.filename, blob: exported.blob, metadata: exported.metadata, saveTicket};
     },
     onSaved: (payload, file) => saveState.record(payload.saveTicket, "cloud", file.name || ""),
     onPreviewFilename: filenameTemplate => createMapArchiveFilename(state.map, {template: filenameTemplate}),
@@ -5922,7 +5923,8 @@ async function exportMapImage(state, documentRef, exportAction = state.runtimeAc
     const includeMapOverlays = documentRef.getElementById("export-png-overlays")?.checked !== false;
     const transparentBackground = documentRef.getElementById("export-png-transparent")?.checked === true;
     setFileOperationStatus(documentRef, "正在导出图片...");
-    const result = await exportAction({download: true, includeMapOverlays, transparentBackground, pixelScale});
+    const outputWidth = documentRef.getElementById("export-png-explicit-size")?.checked ? Number(documentRef.getElementById("export-png-output-width")?.value) : undefined;
+    const result = await exportAction({download: true, includeMapOverlays, transparentBackground, pixelScale, outputWidth});
     setFileOperationStatus(documentRef, `图片已导出：${result.width} x ${result.height}px，倍率 ${result.pixelScale}x，标注${result.includeMapOverlays ? "包含" : "关闭"}，背景${result.transparentBackground ? "图外透明" : "保持画布"}，${formatStorageBytes(result.bytes)}。`);
     return result;
   } catch (error) {
@@ -7580,7 +7582,7 @@ async function importMapData(state, documentRef, file, importAction = state.runt
 async function importMapDocumentViaApi(state, documentRef, document, options = {}, operation = null) {
   operation?.report("validate", {message: "正在校验地图导入参数"});
   if (options?.confirm !== true) throw new Error("导入完整地图会替换当前地图并清空编辑历史，需要显式传入 {confirm: true}");
-  const source = options.source === "ui" ? "ui" : "api";
+  const source = ["ui", "recovery"].includes(options.source) ? options.source : "api";
   const sourceLabel = source === "ui" ? "" : "通过 API ";
   resetLoadTrace(documentRef);
   state.lastMapImportDiagnostic = null;
@@ -7669,7 +7671,7 @@ async function importParsedMapDocumentViaApi(state, documentRef, document, optio
       isCurrent: options.isCurrent || (() => true)
     });
     const persistedNamebases = createGenerationNamebaseSnapshot(state.map) ? persistNamebasePreferences(state, documentRef) : false;
-    state.saveState?.record(state.saveState.capture(), options.source === "browser-storage" ? "browser" : "imported");
+    if (options.source !== "recovery") state.saveState?.record(state.saveState.capture(), options.source === "browser-storage" ? "browser" : "imported");
     updateGenerationLoading(documentRef, false);
     clearFileOperationDetails(documentRef);
     setFileOperationStatus(documentRef, `已${sourceLabel}导入地图数据：seed ${document.map.metadata?.seed || normalizedOptions.seed || "未知"}`);
