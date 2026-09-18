@@ -129,6 +129,7 @@
             <label><span>宽</span><input id="export-png-crop-width" type="number" value="800" min="0" step="any" /></label>
             <label><span>高</span><input id="export-png-crop-height" type="number" value="600" min="0" step="any" /></label>
           </div>
+          <PngExportPresets />
           <section class="feature-export-layers" aria-label="PNG 导出选项">
             <UiSwitchField label="包含地图标注" input-id="export-png-overlays" field-class="feature-export-layer-switch" :checked="true" />
             <UiSwitchField label="图外透明背景" input-id="export-png-transparent" field-class="feature-export-layer-switch" />
@@ -756,6 +757,7 @@ import UiSliderField from "./base/UiSliderField.vue";
 import UiSwitchField from "./base/UiSwitchField.vue";
 import MapRecoveryControls from "./MapRecoveryControls.vue";
 import MapContentSearch from "./MapContentSearch.vue";
+import PngExportPresets from "./PngExportPresets.vue";
 import UiTabs from "./base/UiTabs.vue";
 import {Lock, Setting, Unlock} from "@element-plus/icons-vue";
 import {useDraggableFloatingPanel} from "../composables/use-draggable-floating-panel.js";

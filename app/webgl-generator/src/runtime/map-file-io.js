@@ -4,6 +4,7 @@ import {normalizeVisualThemeDocument} from "../renderer/themes.js";
 import {normalizeLabelStyleStore, validateLabelStyleStore} from "./label-style-registry.js";
 import {normalizeLabelLayoutStore, validateLabelLayoutStore} from "./label-layout-registry.js";
 import {PNG_FIXED_TEXT_ELEMENT_IDS, PNG_MILITARY_TEXT_SELECTOR, PNG_SEMANTIC_LABEL_SELECTORS} from "./canvas-text-contract.js";
+import {pngOutputSize, assertPngBudget} from "./png-export-size.js";
 import {normalizeSocialExpansionMap} from "./social-expansion-edit-commands.js";
 import {backfillEconomyDisplayProperties, normalizeEconomyDisplayMap} from "../generator/economy-display-properties.js";
 import {resolveBiomeDescriptor} from "../generator/biome-registry.js";
@@ -843,6 +844,7 @@ export function normalizePngExportOptions(options = {}) {
   const includeMapOverlays = options.includeMapOverlays !== false;
   return {
     pixelScale: normalizePngPixelScale(options.pixelScale),
+    ...(options.outputWidth != null ? {outputWidth: options.outputWidth, outputHeight: options.outputHeight} : {}),
     includeMapOverlays,
     transparentBackground: options.transparentBackground === true,
     crop: normalizePngCropOptions(options.crop),
@@ -2258,13 +2260,34 @@ export function downloadBlob(documentRef, blob, filename) {
 
 async function composeMapExportCanvas(documentRef, canvas, options = {}) {
   const exportFrame = preparePngExportFrame(canvas, options.renderer, options.crop);
+  const previousBacking = {width: canvas.width, height: canvas.height, size: options.renderer?.canvasSize};
+  let resized = false;
   try {
     const output = documentRef.createElement("canvas");
     const pixelScale = normalizePngPixelScale(options.pixelScale);
-    output.width = Math.max(1, exportFrame.sourceRect.width * pixelScale);
-    output.height = Math.max(1, exportFrame.sourceRect.height * pixelScale);
+    const world = ["map", "world"].includes(exportFrame.crop.mode);
+    const ratioRect = world ? exportFrame.crop.rect : exportFrame.cssRect;
+    const size = options.outputWidth != null ? pngOutputSize(options.outputWidth, options.outputHeight, ratioRect.width / ratioRect.height)
+      : {width: Math.max(1, Math.round(exportFrame.sourceRect.width * pixelScale)), height: Math.max(1, Math.round(exportFrame.sourceRect.height * pixelScale))};
+    assertPngBudget(size.width, size.height);
+    if (options.outputWidth != null) {
+      const renderer = options.renderer;
+      if (!renderer?.gl || !renderer.canvasSize) throw new Error("明确像素尺寸需要可用的地图渲染器。");
+      const factor = Math.max(size.width / exportFrame.sourceRect.width, size.height / exportFrame.sourceRect.height);
+      const width = Math.ceil(canvas.width * factor), height = Math.ceil(canvas.height * factor);
+      const gl = renderer.gl;
+      const gpuLimit = Math.min(gl.getParameter(gl.MAX_TEXTURE_SIZE), gl.getParameter(gl.MAX_RENDERBUFFER_SIZE), ...gl.getParameter(gl.MAX_VIEWPORT_DIMS));
+      assertPngBudget(width, height, gpuLimit);
+      resized = true;
+      canvas.width = width; canvas.height = height;
+      renderer.canvasSize = {...previousBacking.size, width, height, pixelRatio: width / previousBacking.size.cssWidth};
+      renderer.markViewportBuffersDirty?.(); renderer.draw({updateDynamicBuffers: true, updateOverlay: true});
+      exportFrame.sourceRect = cssRectToBackingRect(exportFrame.cssRect, exportFrame.fullDomRect, canvas);
+    }
+    output.width = size.width;
+    output.height = size.height;
     const context = output.getContext("2d");
-    if (!context) return {canvas, crop: exportFrame.crop};
+    if (!context) throw new Error("无法创建 PNG 输出画布，请缩小输出尺寸。");
     if (!copyWebglCanvasTo2d(context, canvas, options.renderer, exportFrame.sourceRect, options.overlays?.cityIcons !== false)) {
       context.drawImage(canvas, exportFrame.sourceRect.x, exportFrame.sourceRect.y, exportFrame.sourceRect.width, exportFrame.sourceRect.height, 0, 0, output.width, output.height);
     }
@@ -2284,7 +2307,13 @@ async function composeMapExportCanvas(documentRef, canvas, options = {}) {
     if (options.transparentBackground) clearOutsideMapBounds(context, options.renderer, exportFrame.fullDomRect, scale, exportFrame.cssRect);
     return {canvas: output, crop: exportFrame.crop};
   } finally {
+    if (resized) {
+      canvas.width = previousBacking.width; canvas.height = previousBacking.height;
+      options.renderer.canvasSize = previousBacking.size;
+      options.renderer.markViewportBuffersDirty?.();
+    }
     exportFrame.restore();
+    if (resized) options.renderer.draw({updateDynamicBuffers: true, updateOverlay: true});
   }
 }
 

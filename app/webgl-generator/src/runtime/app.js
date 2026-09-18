@@ -337,6 +337,7 @@ import {createDelayedOperationFeedback} from "./delayed-operation-feedback.js";
 import {MapSaveState, installMapSaveStatus} from "./map-save-state.js";
 import {installMapRecovery} from "./map-recovery.js";
 import {installMapContentSearch} from "./map-content-search.js";
+import {installPngPresets} from "./png-export-presets.js";
 import {CityUpdateGuidance, CITY_GUIDANCE_EVENT} from "./city-update-guidance.js";
 import {createCanvasToolModeManager} from "./canvas-tool-mode-manager.js";
 import {beginDirectManipulationSession, cancelAllDirectManipulationSessions} from "./direct-manipulation-session.js";
@@ -2853,6 +2854,7 @@ export function createGeneratorApp(documentRef, {healthMonitor = getWebglGenerat
   });
   state.runtimeActions = runtimeActions;
   state.saveStatusUi = installMapSaveStatus(documentRef, saveState);
+  state.pngPresets = installPngPresets(documentRef, () => state.map);
   state.contentSearch = installMapContentSearch(documentRef, {
     getMap: () => state.map,
     getBinding: () => mapRevision.getSnapshot(),
