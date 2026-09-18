@@ -75,7 +75,7 @@ export function inspectMakePeace(map, input = {}) {
   if (!PEACE_RELATIONS.has(relation)) {
     return rejectedRule("invalid-peace-relation", "战后关系必须是受支持的非战争、非宗藩关系");
   }
-  const terms = normalizePeaceTerms(input.terms, leftStateId, rightStateId);
+  const terms = normalizePeaceTerms(input.terms);
   if (!terms.valid) return rejectedRule(terms.code, terms.summary);
   return allowedRule({
     operation: "make-peace",
@@ -253,41 +253,17 @@ function applyOverlordChange(map, plan, options) {
   return diplomacyRuleResult(plan, reconciliation);
 }
 
-function normalizePeaceTerms(value, leftStateId, rightStateId) {
+function normalizePeaceTerms(value) {
   if (value === undefined || value === null) return {valid: true, value: null};
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return {valid: false, code: "invalid-peace-terms", summary: "和平条款必须是结构化对象"};
   }
-  const unsupported = Object.keys(value).filter(key => !["reparations", "note"].includes(key));
+  const unsupported = Object.keys(value).filter(key => key !== "note");
   if (unsupported.length) {
-    return {valid: false, code: "peace-term-rejected", summary: `首版不安全执行条款：${unsupported.join("、")}`};
+    return {valid: false, code: "peace-term-rejected", summary: "和平条款只支持文本备注，不支持赔款或其它结构化条件"};
   }
   const note = normalizeText(value.note, 240);
-  let reparations = null;
-  if (value.reparations !== undefined) {
-    const source = value.reparations;
-    if (!source || typeof source !== "object" || Array.isArray(source)) {
-      return {valid: false, code: "invalid-peace-terms", summary: "赔款条款必须是对象"};
-    }
-    const fromStateId = positiveInteger(source.fromStateId);
-    const toStateId = positiveInteger(source.toStateId);
-    const amount = Number(source.amount);
-    if (![leftStateId, rightStateId].includes(fromStateId)
-      || ![leftStateId, rightStateId].includes(toStateId)
-      || fromStateId === toStateId
-      || !Number.isFinite(amount)
-      || amount <= 0) {
-      return {valid: false, code: "invalid-peace-terms", summary: "赔款双方必须是议和双方且金额为正数"};
-    }
-    reparations = {
-      fromStateId,
-      toStateId,
-      amount: Math.round(amount * 100) / 100,
-      unit: normalizeText(source.unit, 40) || "记账单位",
-      note: normalizeText(source.note, 160)
-    };
-  }
-  return {valid: true, value: note || reparations ? {reparations, note} : null};
+  return {valid: true, value: note ? {note} : null};
 }
 
 function prepareDiplomacyRuleMap(map) {
@@ -348,8 +324,7 @@ function recordPeaceTerms(map, plan) {
       leftStateId: plan.leftStateId,
       rightStateId: plan.rightStateId,
       relation: plan.relation,
-      terms: plan.terms,
-      economicSettlement: "record-only"
+      terms: plan.terms
     })
   ]);
   map.pack.diplomacy.chronicle = chronicle;

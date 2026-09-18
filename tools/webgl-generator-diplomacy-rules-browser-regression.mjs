@@ -66,14 +66,7 @@ try {
     }
 
     const peaceTerms = {
-      note: "系统 Chrome 记录型和平条款",
-      reparations: {
-        fromStateId: setupRequest.attackerStateId,
-        toStateId: setupRequest.defenderStateId,
-        amount: 12.5,
-        unit: "金币",
-        note: "仅记录，不结算经济库存"
-      }
+      note: "系统 Chrome 文本和平备注"
     };
     const peace = await verifyTransaction({
       label: "make-peace",
@@ -94,9 +87,9 @@ try {
         const chronicle = app.map.diplomacy?.chronicle || [];
         const recordOnly = chronicle.some(entry =>
           String(entry?.[0]) === "和平条款"
-          && String(entry?.[1]).includes('"economicSettlement":"record-only"')
+          && String(entry?.[1]).includes('系统 Chrome 文本和平备注')
         );
-        if (!recordOnly) throw new Error("make-peace 未记录 record-only 和平条款");
+        if (!recordOnly) throw new Error("make-peace 未记录文本和平备注");
         return {...context, recordOnly};
       }
     });

@@ -12,6 +12,13 @@ import {
 import {EditHistory} from "../app/webgl-generator/src/runtime/edit-history.js";
 
 const warMap = createFixture();
+const rejectedMap = createFixture();
+setDiplomacyRelation(rejectedMap.pack, 1, 2, "Enemy");
+const rejectedBefore = JSON.stringify(rejectedMap);
+const unsupportedPeace = {leftStateId: 1, rightStateId: 2, terms: {reparations: {amount: 25, fromStateId: 2, toStateId: 1}}};
+assert.equal(inspectMakePeace(rejectedMap, unsupportedPeace).allowed, false);
+assert.throws(() => createMakePeaceCommand(unsupportedPeace).apply({map: rejectedMap}));
+assert.equal(JSON.stringify(rejectedMap), rejectedBefore);
 warMap.summary = {checksum: "before-diplomacy-rule", marker: "original"};
 const warBefore = snapshot(warMap);
 const warBeforeChecksum = warMap.summary.checksum;
@@ -67,7 +74,7 @@ const peaceInspection = inspectMakePeace(warMap, {
   leftStateId: 1,
   rightStateId: 2,
   relation: "Friendly",
-  terms: {reparations: {fromStateId: 2, toStateId: 1, amount: 25, unit: "金衡"}, note: "边境复原"}
+  terms: {note: "边境复原"}
 });
 assert.equal(peaceInspection.allowed, true);
 const peaceBefore = snapshot(warMap);
@@ -78,7 +85,8 @@ assert.equal(warMap.pack.states[1].campaigns.length, 0);
 assert.equal(warMap.military.campaigns.length, 0);
 assert.equal(warMap.military.fronts.length, 0);
 assert.equal(warMap.pack.zones.some(zone => zone.type === "Warzone"), false);
-assert.match(warMap.diplomacy.chronicle.at(-1)[1], /economicSettlement/);
+assert.match(warMap.diplomacy.chronicle.at(-1)[1], /边境复原/);
+assert.doesNotMatch(warMap.diplomacy.chronicle.at(-1)[1], /economicSettlement|reparations/);
 assertMirrors(warMap);
 const peaceAfter = snapshot(warMap);
 peaceHistory.undo({map: warMap});

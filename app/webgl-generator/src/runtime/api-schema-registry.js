@@ -1896,18 +1896,6 @@ function diplomacyRuleMethodOverrides() {
     },
     additionalProperties: false
   };
-  const reparations = {
-    type: "object",
-    required: ["fromStateId", "toStateId", "amount"],
-    properties: {
-      fromStateId: {type: "integer", minimum: 1},
-      toStateId: {type: "integer", minimum: 1},
-      amount: {type: "number", exclusiveMinimum: 0},
-      unit: {type: "string", maxLength: 40},
-      note: {type: "string", maxLength: 160}
-    },
-    additionalProperties: false
-  };
   const peaceRequest = {
     type: "object",
     required: ["leftStateId", "rightStateId"],
@@ -1918,7 +1906,6 @@ function diplomacyRuleMethodOverrides() {
       terms: {
         type: "object",
         properties: {
-          reparations,
           note: {type: "string", maxLength: 240}
         },
         additionalProperties: false

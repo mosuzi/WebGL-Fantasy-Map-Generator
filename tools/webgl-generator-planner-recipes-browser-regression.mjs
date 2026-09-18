@@ -175,14 +175,7 @@ try {
         rightStateId: setup.defender.stateId,
         relation: "Neutral",
         terms: {
-          note: "AI 配方系统 Chrome 议和",
-          reparations: {
-            fromStateId: setup.defender.stateId,
-            toStateId: setup.attacker.stateId,
-            amount: 1,
-            unit: "金币",
-            note: "验收仅记录"
-          }
+          note: "AI 配方系统 Chrome 议和"
         }
       }), "edit.diplomacy.inspectPeace");
       const peace = await commitRule({

@@ -863,11 +863,11 @@ const RULE_ACTIONS = Object.freeze([
     title: "议和并结算战争结果",
     domain: "diplomacy",
     status: "existing-transaction",
-    intent: "结束战争，处理领土、赔款、附庸、军队状态和纪事。",
+    intent: "结束战争，同步战后关系、军队状态和纪事；可附文本备注。",
     api: ["objects.get", "edit.diplomacy.inspectPeace", "edit.diplomacy.makePeace"],
     inspect: "edit.diplomacy.inspectPeace",
     execute: "edit.diplomacy.makePeace",
-    branches: ["战争不存在", "无条件和平", "领土割让", "附庸/赔款与战后状态"],
+    branches: ["战争不存在", "无条件和平", "文本备注", "不支持的结构化条款原子拒绝"],
     sourceRefs: ["app/webgl-generator/src/runtime/diplomacy-edit-commands.js", "app/webgl-generator/src/runtime/state-topology-commands.js"]
   }),
   rule({
